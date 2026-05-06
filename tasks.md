@@ -22,12 +22,12 @@ Status: `[ ]` planned · `[~]` in progress · `[x]` done · `[!]` blocked
 Detail in `./docs/drafts/20260507-0134-recreate-ymake-plan.md`. One line per PR here; sub-tasks stay in the plan doc.
 
 - [x] **PR-01** — Bootstrap: `go.mod`, `main.go`, subcommand router (`gen`/`compare`/`inspect`/`help`). Stdlib-only.
-- [ ] **PR-02** — `node.go`, `emitter.go`, `uid.go`: Node type, Emitter interface, BufferedEmitter, Merkle UID finalizer.
+- [x] **PR-02** — `node.go`, `emitter.go`, `uid.go`: Node type, Emitter interface, BufferedEmitter, Merkle UID finalizer.
 - [ ] **PR-03** — `gjson.go`: streaming reader for the reference g.json.
 - [ ] **PR-04** — `compare.go` + `compare_topology.go`: comparator L0 (topology fingerprint).
 - [ ] **PR-05** — `compare_props.go`: comparator L1 (kv.p, module_*, outputs) + L2 (inputs, tags, requirements).
 - [ ] **PR-06** — `compare_cmd.go`: comparator L3 (cmd_args + env byte-exact).
-- [ ] **PR-07** — `yamake.go`: minimal ya.make parser (LIBRARY/PROGRAM/PEERDIR/SRCS/SET/END).
+- [x] **PR-07** — `yamake.go`: minimal ya.make parser (LIBRARY/PROGRAM/PEERDIR/SRCS/SET/END).
 - [ ] **PR-08** — `cc.go`, `flags.go`, `toolchain.go`: minimal CC rule with hardcoded flag bundles.
 - [ ] **PR-09** — `ar.go`: minimal AR rule.
 - [ ] **PR-10** — `gen.go`: gen subcommand wires PR-07/08/09; emits 2-node subgraph; integrated comparator pass shows L3 = 100% on the slice.
@@ -51,6 +51,7 @@ Detail in `./docs/drafts/20260507-0134-recreate-ymake-plan.md`. One line per PR 
 - [x] **D13** — Stdlib-only through M1. Vendor decision deferred to M3 (open question Q2).
 - [x] **D14** — Determinism: NO `range` over `map[...]X` in any code path that emits node fields. `sort.Strings` before serialize. `json.Encoder.SetEscapeHTML(false)`.
 - [x] **D15** — `inputs`/`conf` in our generator output may be empty; comparator only reads `graph` + `result`. Revocable.
+- [x] **D16** — JSON serializer in PR-04 (and any future graph-writing code) MUST use `json.Encoder` with `SetEscapeHTML(false)` to produce output bytes that match `canonicalNodeBytes` from PR-02. Otherwise default `json.Marshal` HTML-escapes (`<` → `<` etc.), producing on-disk bytes the Merkle hash never saw, breaking comparator. Pinning test landed in PR-02 (`TestCanonicalNodeBytes_VsDefaultJSONMarshal`). Origin: PR-02-D08.
 - [ ] **Q1** — Pick the M1 leaf module (smallest LIBRARY with zero PEERDIR in the reference graph). Default: `build/cow/on` if it qualifies. To be decided when PR-10 starts; an inspection subagent will scan g.json and confirm.
 - [ ] **Q2** — Vendor third-party Go deps from M3 onward, or stay stdlib-only through M6. Default: stdlib-only; revisit at M3.
 
@@ -70,3 +71,44 @@ Detail in `./docs/drafts/20260507-0134-recreate-ymake-plan.md`. One line per PR 
   - **Flag-mode choice for stubs vs. real subcommands:** `flag.ExitOnError` shipped to satisfy spec letter, but is dangerous for stubs because it short-circuits `-h` to `os.Exit(0)`. PR-10 should use `flag.ContinueOnError` (or override `fs.Usage` + `SetOutput`) so the subcommand body retains control of exit semantics. This pattern will recur for every subcommand that adds flags — codify it in the PR-10 brief.
   - **Exit-code domain split:** `1` = recognised-but-not-implemented; `2` = yatool's argument-level errors (no subcommand, unknown subcommand). Future subcommands' real argument errors should also exit `2`; their domain-specific failures should exit `1` or `>2` (TBD). Keep the split visible.
   - **Review-brief hygiene:** Future review briefs MUST enumerate expected ledger churn (`tasks.md` `[~]` flip, `defects.md` round entries) so reviewers don't flag legitimate orchestrator bookkeeping as undeclared scope drift (D04).
+
+- **PR-02** (2026-05-07) — Foundation types: `Node` (mirrors on-disk JSON exactly, snake_case tags, `omitempty` on `host_platform`/`foreign_deps` only, internal `*Refs` fields with `json:"-"`), `Cmd` (cmd_args + env), `NodeRef` (id-based placeholder), `Emitter` interface with `Emit`/`Result`, `BufferedEmitter` impl, `Graph` wrapper, `Finalize` (topological Kahn's sort with stable tie-break, Merkle-style UID computation, sorted+deduped Deps/ForeignDeps, dedupe of identical-UID nodes and duplicate Result calls, second-call rejection via `finalized` flag, pre-populated Deps/ForeignDeps rejection). `computeUID = base64url(sha1(canonicalBytes))[:22]`. `canonicalNodeBytes` zeroes UID/SelfUID/StatsUID and marshals with `SetEscapeHTML(false)`. Files: `node.go`, `emitter.go`, `uid.go` + 3 test files. Verification: `go build/vet/gofmt` clean; `go test -count=1` 26/26 PASS.
+  Two review rounds. Round 1 (8 defects, 0 major):
+  - **D01 (minor)** — test pinned wrong `SelfUID == UID` invariant (real graph has 101 nodes where they differ). **Fixed** by switching to `t.Logf` placeholder + `// TODO(future-PR)` at SelfUID assignment.
+  - **D02 (minor)** — pre-set `Node.Deps`/`Node.ForeignDeps` silently corrupted Merkle hash. **Fixed** by rejecting at Finalize entry with concrete error; tests `TestFinalize_RejectsPreSet{Deps,ForeignDeps}`.
+  - **D03 (minor)** — no UID-dedupe in `Graph.Graph` (two identical emits → two entries with same UID). **Fixed** by `seen map[string]struct{}` skip in final loop; test `TestFinalize_DedupesIdenticalEmits`.
+  - **D04 (nit)** — comment claimed re-Finalize would "observe missing input" — false. **Fixed** by adding `finalized bool` to BufferedEmitter, returning error on second Finalize; test `TestFinalize_SecondCallErrors`. Comment updated to match.
+  - **D05 (nit)** — empty-value `ForeignDepRefs` key serialized as `foreign_deps:{key:[]}`. **Fixed** by skipping empty resolved keys; nil ForeignDeps drops via omitempty; test `TestFinalize_DropsEmptyForeignDepsKey`.
+  - **D06 (nit)** — duplicate `Result(ref)` calls produced duplicate UIDs. **Fixed** by dedupe in Finalize preserving first-seen order; test `TestFinalize_DedupesDuplicateResultCalls`.
+  - **D07 (nit, deferred)** — O(n²) topo tie-break linear scan. Deferred to a profiling-driven PR (replace queue with `container/heap` if it shows in profile).
+  - **D08 (minor)** — PR-04 must use `SetEscapeHTML(false)` to match `canonicalNodeBytes` output. **Fixed** by adding cross-cutting note D16 in tasks.md + pinning test `TestCanonicalNodeBytes_VsDefaultJSONMarshal` that asserts default `json.Marshal` and `canonicalNodeBytes` produce DIFFERENT bytes for HTML special chars (locks the contract in code).
+  Round 2 (2 nits, both deferred):
+  - **D09 (nit, deferred)** — `Emit`/`Result` don't check `finalized`; silent post-Finalize mutation. Defer-trigger: when Emitter interface is revisited (M3 streaming-emitter is the natural pivot).
+  - **D10 (nit, deferred)** — partial-empty `ForeignDepRefs` (one key empty, one not) untested. Defer-trigger: when comparator catches a real `foreign_deps` divergence in M2.
+  Surprises / constraints future PRs must respect:
+  - **D16 cross-cutting (PR-04 escape contract):** any code that serializes a `*Node` to JSON for on-disk emission MUST use `json.Encoder.SetEscapeHTML(false)`. Default `json.Marshal` HTML-escapes `<`/`>`/`&` → bytes the Merkle hash never saw → comparator divergence with no apparent root cause. Pinning test in PR-02 (`TestCanonicalNodeBytes_VsDefaultJSONMarshal`) will fail loudly if any future serializer drifts.
+  - **JSON key order from struct field declaration order:** Go's `encoding/json` orders fields by struct declaration order. The Node struct declares fields ALPHABETICALLY (verified by inspection of g.json — that's the on-disk order). Any new field added to Node must be inserted in alphabetical position; otherwise serialized output diverges from g.json key order, breaking byte-exact comparator at L3.
+  - **`Requirements` is `map[string]interface{}`, not `map[string]string`** — g.json mixes int/str values (`{cpu: 1, network: "restricted", ram: 32}`). Any rule emitting Requirements must use the interface type. Tests catch wrong type at compile time.
+  - **`stats_uid` is empty string placeholder.** Real g.json has 32-char MD5-hex values. When real semantics land, `D01`'s placeholder test guard converts back to invariant assertion.
+  - **Pre-populated `Node.Deps`/`Node.ForeignDeps` is a hard error, not a warning.** Rules MUST use `DepRefs`/`ForeignDepRefs` only. Diagnostic: `finalize: node N has pre-populated Deps; rules must use DepRefs only`.
+  - **`BufferedEmitter` is single-use.** Cannot be re-finalized. M3's streaming emitter will need its own lifecycle semantics.
+
+- **PR-07** (2026-05-07) — Hand-rolled `ya.make` parser. Lexer (1-based line/col tracking, `\r`/`\n`/`\r\n` all bump line by 1, `#`-comments only at whitespace boundary, raw strings with no escape processing) + recursive-descent parser. Recognized macros: `PROGRAM`/`LIBRARY` → `ModuleStmt`; `PEERDIR` → `PeerdirStmt`; `SRCS` → `SrcsStmt`; `SET(name value)` (arity 2 enforced) → `SetStmt`; `END` → `EndStmt`. Anything else (lower/mixed-case macros included, e.g. `lowercase_macro()`) → `UnknownStmt` (permissive parsing). API: `Parse(name, src)` and `ParseFile(path)`. Errors via `*ParseError{File, Line, Col, Message}`. Files: `yamake.go`, `yamake_test.go`. Verification: `go build/vet/gofmt` clean; 16 test functions PASS (incl. CRLF/CR/LF line-ending subtests, mixed-case macro routing, `isWordByte` boundary probe).
+  Two review rounds. Round 1 (10 defects, 2 major):
+  - **D01 (major)** — unit tests hard-coded `/home/pg/monorepo/yatool_orig/...` paths; D11 says unit tests use synthetic inputs. **Fixed** by inlining ya.make snippets as Go raw strings; one optional disk-read smoke test (`TestParseArchiverYaMakeOnDisk`) gated by `t.Skip` when file missing.
+  - **D02 (major)** — `\r` (lone CR / Mac-classic line endings) not bumping line counter; CRLF column off. **Fixed** in `advance` — `\r` and `\n` both bump line by 1 reset col, `\r\n` swallows the `\n`. Tests cover all three line endings.
+  - **D03 (minor)** — strings span newlines silently (missing close-quote swallows downstream). **Fixed** by rejecting `\n`/`\r` in string body with `unterminated string` pinned at opening quote.
+  - **D04 (minor)** — mixed-case macro names (`Foo()`, `lowercase()`) hard-erred instead of routing to `UnknownStmt`. **Fixed** via `isIdentShapedName` helper that accepts ident-shaped tokens followed by `(` as macro names.
+  - **D05 (minor)** — `isWordByte` too permissive (`` ` ; | & ^ < > [ ] ' `` accepted). **Fixed** by trimming to `_ - . / + : = * ? $ % ~ , ! { } #` (kept `{}` for `${VAR}`, kept `#` because `skipTrivia` gates).
+  - **D06 (minor)** — `# mid-word` started a comment. **Fixed** via `commentBoundary` helper consulting `prevByte` (whitespace/SOF/`(` only).
+  - **D07 (nit, deferred)** — `nil` vs `[]string{}` for empty arg lists undocumented. AST internal; revisit when JSON-serializing AST.
+  - **D08 (minor)** — backslash-in-string semantics ambiguous, no test. **Fixed** by KEEPING "no escape processing" + pinning test `TestStringHasNoEscapeProcessing` + code comment.
+  - **D09 (nit, deferred)** — multi-line macro EOF position robustness untested (correct by inspection).
+  - **D10 (nit, deferred)** — `foo"bar"baz` lexes as 3 tokens (greedy lexing, surprising but no real-world hit).
+  Round 2: NO NEW DEFECTS.
+  Surprises / constraints future PRs must respect:
+  - **`# mid-word` is now part of the word.** A bare `a/b#x` parses as one word ending at the `#` is no longer the case — it's all word bytes. Comments only fire at whitespace boundary. Macros embedding hash literals work; macros with mid-arg comments do NOT (write the comment after whitespace).
+  - **No string escape processing.** `"\X"` is 2 literal bytes (`\`, `X`); `\"` closes the string. If escape is needed later, change `readString` AND update `TestStringHasNoEscapeProcessing` (the test name encodes the contract).
+  - **Mixed-case macros become `UnknownStmt`, not errors.** Permissive-parsing-of-unknowns lets us ignore macros we haven't taught the rule emitter yet (e.g. `RECURSE_FOR_TESTS`, `NO_LINT`). Adding a new typed Stmt later just means flipping that name from `UnknownStmt` to a typed branch.
+  - **`SET` arity is enforced as exactly 2.** `SET(only_one)` errors. Real ya.make may have `SET(NAME val1 val2)` for list values — if encountered, change to permissive arity and let the consuming rule decide what to do with the args.
+  - **Optional on-disk smoke test (`TestParseArchiverYaMakeOnDisk`) only pins archiver, not library.** If `library/cpp/archive/ya.make` upstream drifts, the inlined library fixture will silently diverge. Acceptable nit-tier coverage gap.

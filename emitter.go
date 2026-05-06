@@ -1,0 +1,361 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"sort"
+)
+
+// emitter.go — the Emitter interface, NodeRef placeholder, BufferedEmitter
+// implementation, the Graph wrapper type, and the Finalize Merkle pass.
+//
+// Design (D6/D7):
+//
+//   - Rule authors call Emitter.Emit(*Node) and get back a NodeRef. The
+//     ref is opaque — it carries an integer index into the emitter's
+//     internal buffer, not the node's UID, because the UID isn't known
+//     until every transitive dependency has been hashed.
+//   - Rules wire dependencies by storing NodeRefs in a node's DepRefs /
+//     ForeignDepRefs. The emitter never asks for `[]string` UIDs from a
+//     rule.
+//   - Result(NodeRef) marks a node as a final output; the resulting
+//     Graph's `result` array contains those nodes' UIDs in the order
+//     Result was called.
+//   - Finalize topologically sorts the buffered nodes, then walks them
+//     in dependency-first order computing each node's UID from a
+//     canonicalised serialisation that already has its children's UIDs
+//     filled in (a Merkle hash). Cycles are an error. Per D14 the
+//     resolved Deps slice and each ForeignDeps[key] slice are sorted
+//     alphabetically before the canonicalisation step so the hash is
+//     order-independent.
+
+// NodeRef is the indirection that lets rules express "this node depends
+// on that node" without knowing yet what the dependee's UID will be.
+// The id is a monotonic index assigned by Emit.
+type NodeRef struct {
+	id int64
+}
+
+// Emitter is the interface rules use to publish nodes and mark results.
+type Emitter interface {
+	Emit(n *Node) NodeRef
+	Result(NodeRef)
+}
+
+// BufferedEmitter accumulates nodes and result refs in memory; Finalize
+// turns the buffer into a Graph.
+type BufferedEmitter struct {
+	nodes     []*Node
+	results   []int64
+	finalized bool
+}
+
+// NewBufferedEmitter constructs an empty BufferedEmitter.
+func NewBufferedEmitter() *BufferedEmitter {
+	return &BufferedEmitter{}
+}
+
+// Emit appends n to the buffer and returns a NodeRef whose id is the
+// node's index in the buffer. The same *Node pointer is retained — the
+// rule may keep mutating it until Finalize is called, but that is bad
+// practice and not relied upon.
+func (e *BufferedEmitter) Emit(n *Node) NodeRef {
+	id := int64(len(e.nodes))
+	e.nodes = append(e.nodes, n)
+	return NodeRef{id: id}
+}
+
+// Result marks the referenced node as a final output of the graph. The
+// order of Result calls is preserved in the resulting Graph's `result`
+// list (after Finalize translates ids to UIDs).
+func (e *BufferedEmitter) Result(r NodeRef) {
+	e.results = append(e.results, r.id)
+}
+
+// Graph is the top-level on-disk shape: { conf, graph, inputs, result }.
+//
+// Field order matches the reference g.json (also alphabetical), so that
+// encoding/json emits keys in the same order as the upstream tool. For
+// PR-02, Conf and Inputs are empty maps per D15 (later PRs may populate
+// them).
+type Graph struct {
+	Conf   map[string]interface{} `json:"conf"`
+	Graph  []*Node                `json:"graph"`
+	Inputs map[string]interface{} `json:"inputs"`
+	Result []string               `json:"result"`
+}
+
+// Finalize converts a BufferedEmitter into a *Graph: topologically sorts
+// the buffered nodes, walks them dependency-first computing each node's
+// UID (Merkle-style; SelfUID gets the same algorithm; StatsUID is left
+// empty for now), populates each node's serialised Deps/ForeignDeps
+// slices from the resolved children's UIDs (sorted, per D14), clears the
+// internal *Refs fields so they don't accidentally outlive Finalize, and
+// returns a Graph whose `Result` array is the result-ref ids translated
+// into UIDs in call order.
+//
+// Errors: a cycle in DepRefs/ForeignDepRefs returns an error mentioning
+// one of the offending node ids; a NodeRef pointing outside the buffer
+// (id < 0 or id >= len(nodes)) is also an error.
+func Finalize(e *BufferedEmitter) (*Graph, error) {
+	if e.finalized {
+		return nil, errors.New("finalize: emitter already finalized")
+	}
+	n := len(e.nodes)
+
+	// Reject pre-populated Deps/ForeignDeps. Rules express dependencies via
+	// DepRefs/ForeignDepRefs; allowing the public slices to be set up-front
+	// would silently corrupt the Merkle hash because Finalize would either
+	// overwrite them (for nodes with refs) or leave them to participate in
+	// canonicalisation without ref-resolution (for nodes without refs).
+	for id, node := range e.nodes {
+		if len(node.Deps) > 0 {
+			return nil, fmt.Errorf("finalize: node %d has pre-populated Deps; rules must use DepRefs only", id)
+		}
+		if len(node.ForeignDeps) > 0 {
+			return nil, fmt.Errorf("finalize: node %d has pre-populated ForeignDeps; rules must use ForeignDepRefs only", id)
+		}
+	}
+
+	// Validate every NodeRef references a real buffered node.
+	checkRef := func(owner int, r NodeRef) error {
+		if r.id < 0 || r.id >= int64(n) {
+			return fmt.Errorf("node %d references out-of-range NodeRef id=%d (buffer size %d)", owner, r.id, n)
+		}
+		return nil
+	}
+	for i, node := range e.nodes {
+		for _, r := range node.DepRefs {
+			if err := checkRef(i, r); err != nil {
+				return nil, err
+			}
+		}
+		// Iterate ForeignDepRefs in sorted-key order: this loop is
+		// validation-only (no output bytes), but we keep the discipline
+		// (D14) so reviewers don't have to second-guess.
+		fkeys := make([]string, 0, len(node.ForeignDepRefs))
+		for k := range node.ForeignDepRefs {
+			fkeys = append(fkeys, k)
+		}
+		sort.Strings(fkeys)
+		for _, k := range fkeys {
+			for _, r := range node.ForeignDepRefs[k] {
+				if err := checkRef(i, r); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	for i, rid := range e.results {
+		if rid < 0 || rid >= int64(n) {
+			return nil, fmt.Errorf("result %d references out-of-range NodeRef id=%d (buffer size %d)", i, rid, n)
+		}
+	}
+
+	// Topological sort (Kahn's algorithm) by combined DepRefs +
+	// ForeignDepRefs edges. Edge: child -> parent (i.e. an edge from a
+	// dependee to its dependant). Scheduling by ascending in-degree
+	// emits leaves first, which is what we need to compute UIDs Merkle-
+	// style. Within equal in-degree we fall back to the buffer index
+	// order — that keeps the topo order deterministic for any given
+	// emit sequence.
+	indeg := make([]int, n)
+	// children[i] = nodes that depend on node i (i.e. nodes whose
+	// DepRefs/ForeignDepRefs include i). When i is finalised, each
+	// child's in-degree drops by one.
+	children := make([][]int, n)
+	addEdge := func(child, parent int) {
+		// "parent depends on child" — edge from child to parent for
+		// scheduling purposes. The parent's in-degree counts how many
+		// of its dependencies are still unresolved.
+		children[child] = append(children[child], parent)
+		indeg[parent]++
+	}
+	for i, node := range e.nodes {
+		// Use a set to dedupe: a node may legitimately list the same
+		// child twice (e.g. through Deps and ForeignDeps), and we must
+		// not double-count its in-degree or topo will deadlock.
+		seen := make(map[int64]struct{})
+		for _, r := range node.DepRefs {
+			if _, ok := seen[r.id]; ok {
+				continue
+			}
+			seen[r.id] = struct{}{}
+			addEdge(int(r.id), i)
+		}
+		fkeys := make([]string, 0, len(node.ForeignDepRefs))
+		for k := range node.ForeignDepRefs {
+			fkeys = append(fkeys, k)
+		}
+		sort.Strings(fkeys)
+		for _, k := range fkeys {
+			for _, r := range node.ForeignDepRefs[k] {
+				if _, ok := seen[r.id]; ok {
+					continue
+				}
+				seen[r.id] = struct{}{}
+				addEdge(int(r.id), i)
+			}
+		}
+	}
+
+	// Seed the queue with every zero-in-degree node, in buffer-index
+	// order so the topo result is deterministic.
+	queue := make([]int, 0, n)
+	for i := 0; i < n; i++ {
+		if indeg[i] == 0 {
+			queue = append(queue, i)
+		}
+	}
+	order := make([]int, 0, n)
+	for len(queue) > 0 {
+		// Pop the smallest index in the queue (stable tie-break). The
+		// queue is small enough in practice that a linear scan beats
+		// importing container/heap.
+		minPos := 0
+		for j := 1; j < len(queue); j++ {
+			if queue[j] < queue[minPos] {
+				minPos = j
+			}
+		}
+		i := queue[minPos]
+		queue = append(queue[:minPos], queue[minPos+1:]...)
+		order = append(order, i)
+		for _, c := range children[i] {
+			indeg[c]--
+			if indeg[c] == 0 {
+				queue = append(queue, c)
+			}
+		}
+	}
+	if len(order) != n {
+		// Find one node still with indeg > 0 to name in the error.
+		for i, d := range indeg {
+			if d > 0 {
+				return nil, fmt.Errorf("cycle detected involving node %d", i)
+			}
+		}
+		return nil, fmt.Errorf("cycle detected (could not order all %d nodes; ordered %d)", n, len(order))
+	}
+
+	// Walk in topo order, fill Deps/ForeignDeps from resolved children,
+	// then hash. Because we go dependency-first, every child's UID is
+	// known by the time we hash a parent.
+	uids := make([]string, n)
+	for _, i := range order {
+		node := e.nodes[i]
+
+		// Resolve Deps. Dedupe + sort per D14 so the canonicalisation
+		// is order-independent and the hash is stable across emit
+		// orderings that produce the same set of edges.
+		if len(node.DepRefs) > 0 {
+			depSet := make(map[string]struct{}, len(node.DepRefs))
+			for _, r := range node.DepRefs {
+				depSet[uids[r.id]] = struct{}{}
+			}
+			deps := make([]string, 0, len(depSet))
+			for u := range depSet {
+				deps = append(deps, u)
+			}
+			sort.Strings(deps)
+			node.Deps = deps
+		} else if node.Deps == nil {
+			// Ensure the field serialises as [] not null.
+			node.Deps = []string{}
+		}
+
+		// Resolve ForeignDeps. Same dedupe+sort treatment per key. We
+		// only emit the foreign_deps map at all if the rule author
+		// actually populated ForeignDepRefs with at least one non-empty
+		// key — that preserves the `omitempty` behaviour for nodes that
+		// have no foreign deps and avoids serialising
+		// `foreign_deps:{key:[]}` for empty-value keys.
+		if len(node.ForeignDepRefs) > 0 {
+			fkeys := make([]string, 0, len(node.ForeignDepRefs))
+			for k := range node.ForeignDepRefs {
+				fkeys = append(fkeys, k)
+			}
+			sort.Strings(fkeys)
+			resolved := make(map[string][]string, len(fkeys))
+			for _, k := range fkeys {
+				set := make(map[string]struct{})
+				for _, r := range node.ForeignDepRefs[k] {
+					set[uids[r.id]] = struct{}{}
+				}
+				if len(set) == 0 {
+					// Skip keys whose deduped+resolved slice is empty —
+					// they would otherwise serialize as `key:[]`, which
+					// is not what the reference output produces.
+					continue
+				}
+				vals := make([]string, 0, len(set))
+				for u := range set {
+					vals = append(vals, u)
+				}
+				sort.Strings(vals)
+				resolved[k] = vals
+			}
+			if len(resolved) > 0 {
+				node.ForeignDeps = resolved
+			}
+			// else: leave node.ForeignDeps nil so omitempty drops the field.
+		}
+
+		// Hash the (now child-resolved) node. The canonical form has
+		// UID/SelfUID/StatsUID zeroed, ensuring hash-of-content not
+		// hash-of-identity.
+		canon, err := canonicalNodeBytes(node)
+		if err != nil {
+			return nil, fmt.Errorf("canonicalise node %d: %w", i, err)
+		}
+		u := computeUID(canon)
+		node.UID = u
+		// TODO(future-PR): SelfUID is currently set to the same value as UID
+		// as a PR-02 placeholder. A future PR must compute a distinct value
+		// (per ymake semantics, derived from this node's content only,
+		// excluding child UIDs). Tests pin the placeholder behaviour with a
+		// t.Logf rather than t.Errorf so this can be tightened later.
+		node.SelfUID = u
+		node.StatsUID = "" // explicit; refined in a later PR.
+		uids[i] = u
+
+		// Drop the internal *Refs so they do not leak past Finalize. The
+		// emitter's `finalized` flag (set below) is the actual safety
+		// net against re-Finalize; clearing the refs is hygiene only.
+		node.DepRefs = nil
+		node.ForeignDepRefs = nil
+	}
+
+	// Build the output Graph. `Graph` is the topo-ordered list of
+	// nodes deduped by UID (two emits that hash to the same UID are
+	// the same node and must appear once); `Result` is the UIDs
+	// corresponding to the Result() refs in call order, also deduped
+	// (duplicate Result(ref) calls are idempotent).
+	out := &Graph{
+		Conf:   map[string]interface{}{},
+		Inputs: map[string]interface{}{},
+		Graph:  make([]*Node, 0, n),
+		Result: make([]string, 0, len(e.results)),
+	}
+	seenNode := map[string]struct{}{}
+	for _, i := range order {
+		u := uids[i]
+		if _, ok := seenNode[u]; ok {
+			continue
+		}
+		seenNode[u] = struct{}{}
+		out.Graph = append(out.Graph, e.nodes[i])
+	}
+	seenResult := map[string]struct{}{}
+	for _, rid := range e.results {
+		u := uids[rid]
+		if _, ok := seenResult[u]; ok {
+			continue
+		}
+		seenResult[u] = struct{}{}
+		out.Result = append(out.Result, u)
+	}
+
+	e.finalized = true
+	return out, nil
+}
