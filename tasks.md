@@ -21,7 +21,7 @@ Status: `[ ]` planned · `[~]` in progress · `[x]` done · `[!]` blocked
 
 Detail in `./docs/drafts/20260507-0134-recreate-ymake-plan.md`. One line per PR here; sub-tasks stay in the plan doc.
 
-- [ ] **PR-01** — Bootstrap: `go.mod`, `main.go`, subcommand router (`gen`/`compare`/`inspect`/`help`). Stdlib-only.
+- [x] **PR-01** — Bootstrap: `go.mod`, `main.go`, subcommand router (`gen`/`compare`/`inspect`/`help`). Stdlib-only.
 - [ ] **PR-02** — `node.go`, `emitter.go`, `uid.go`: Node type, Emitter interface, BufferedEmitter, Merkle UID finalizer.
 - [ ] **PR-03** — `gjson.go`: streaming reader for the reference g.json.
 - [ ] **PR-04** — `compare.go` + `compare_topology.go`: comparator L0 (topology fingerprint).
@@ -58,4 +58,15 @@ Detail in `./docs/drafts/20260507-0134-recreate-ymake-plan.md`. One line per PR 
 
 ## Completed
 
-(none yet)
+- **PR-01** (2026-05-07) — Bootstrap of the Go module and subcommand router. Files added: `go.mod` (`module yatool`, `go 1.25`, no `require`/`toolchain`); `main.go` (single file, `package main`, hand-written switch dispatcher on `os.Args[1]` per D3, four subcommands `gen`/`compare`/`inspect`/`help`, three stub bodies that print `<name>: not implemented yet` and return 1, top-level help on stdout exit 0, no-args/unknown-subcommand exit 2 with usage on stderr).
+  Verification: `go build ./...` 0; `go vet ./...` clean; `gofmt -l *.go` empty; `./yatool help`→0; `./yatool`→2; `./yatool gen`→1; `./yatool gen -h`→1 (post-fix); `./yatool gen --help`→1; `./yatool gen --foobar`→1; `./yatool gen foo bar`→1; `./yatool compare -h`→1; `./yatool inspect --foobar`→1; `./yatool wat`→2; `./yatool --help`→0; `./yatool -h`→0.
+  Two review rounds. Round 1 (4 defects):
+  - **D01 (major)** + **D02 (minor)** + **D03 (nit)** — `flag.NewFlagSet(name, flag.ExitOnError).Parse(args)` in stubs short-circuited `-h`/`--help`/unknown-flag paths to flag's auto-usage and exited 0/2 BEFORE the stub message printed. **Fixed** by removing `fs.Parse(args)` from all three stubs and switching the parameter to `_ []string` (`main.go:50-69`).
+  - **D04 (nit)** — orchestrator's `tasks.md` `[ ]` → `[~]` flip was uncommitted at review time; reviewer flagged correctly per brief. **Resolved** by staging `tasks.md` with the PR commit (this entry).
+  Round 2 (1 nit):
+  - **D05 (nit)** — surviving `_ = flag.NewFlagSet(...)` in stubs is dead ceremony; `"flag"` import is dead-loaded. **Deferred to PR-10** which will rewrite stubs to register real flags and naturally remove the ceremony.
+  Surprises / constraints future PRs must respect:
+  - **D3 letter vs. spirit:** "each subcommand uses `flag.NewFlagSet`" was preserved in PR-01 only as `_ = flag.NewFlagSet(...)`. PR-10 (`gen` driver) MUST replace these three lines with real flag registration + Parse, and either keep `"flag"` as a load-bearing import or drop it. Failure to do so leaves dead code in `main.go`.
+  - **Flag-mode choice for stubs vs. real subcommands:** `flag.ExitOnError` shipped to satisfy spec letter, but is dangerous for stubs because it short-circuits `-h` to `os.Exit(0)`. PR-10 should use `flag.ContinueOnError` (or override `fs.Usage` + `SetOutput`) so the subcommand body retains control of exit semantics. This pattern will recur for every subcommand that adds flags — codify it in the PR-10 brief.
+  - **Exit-code domain split:** `1` = recognised-but-not-implemented; `2` = yatool's argument-level errors (no subcommand, unknown subcommand). Future subcommands' real argument errors should also exit `2`; their domain-specific failures should exit `1` or `>2` (TBD). Keep the split visible.
+  - **Review-brief hygiene:** Future review briefs MUST enumerate expected ledger churn (`tasks.md` `[~]` flip, `defects.md` round entries) so reviewers don't flag legitimate orchestrator bookkeeping as undeclared scope drift (D04).
