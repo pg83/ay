@@ -1,0 +1,11 @@
+# Build artifacts
+/yatool
+*.test
+*.out
+
+# Generated
+/our.json
+/tmp_*
+
+# OS
+.DS_Store
