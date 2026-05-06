@@ -31,6 +31,7 @@ Detail in `./docs/drafts/20260507-0134-recreate-ymake-plan.md`. One line per PR 
 - [ ] **PR-08** — `cc.go`, `flags.go`, `toolchain.go`: minimal CC rule with hardcoded flag bundles.
 - [ ] **PR-09** — `ar.go`: minimal AR rule.
 - [ ] **PR-10** — `gen.go`: gen subcommand wires PR-07/08/09; emits 2-node subgraph; integrated comparator pass shows L3 = 100% on the slice.
+- [ ] **PR-11** — Retrofit existing code to STYLE.md (`throw.go` for non-discriminated errors; formatting per "Blank lines around control blocks" / "Blank lines before return" / "Logical grouping"). Touches `main.go`, `node.go`, `emitter.go`, `uid.go`, `yamake.go` and their tests where blocking. Acceptance: tests still pass; reviewer audit confirms STYLE.md compliance. **Must land BEFORE PR-03** so the comparator/parser PRs are authored over compliant base.
 
 ---
 
@@ -52,6 +53,8 @@ Detail in `./docs/drafts/20260507-0134-recreate-ymake-plan.md`. One line per PR 
 - [x] **D14** — Determinism: NO `range` over `map[...]X` in any code path that emits node fields. `sort.Strings` before serialize. `json.Encoder.SetEscapeHTML(false)`.
 - [x] **D15** — `inputs`/`conf` in our generator output may be empty; comparator only reads `graph` + `result`. Revocable.
 - [x] **D16** — JSON serializer in PR-04 (and any future graph-writing code) MUST use `json.Encoder` with `SetEscapeHTML(false)` to produce output bytes that match `canonicalNodeBytes` from PR-02. Otherwise default `json.Marshal` HTML-escapes (`<` → `<` etc.), producing on-disk bytes the Merkle hash never saw, breaking comparator. Pinning test landed in PR-02 (`TestCanonicalNodeBytes_VsDefaultJSONMarshal`). Origin: PR-02-D08.
+- [x] **D17** — All error handling goes through `throw.go` per `STYLE.md` "Error handling". Pass-through `if err != nil { return err }` is forbidden — use `Throw`/`Throw2`/`Throw3`/`ThrowFmt`. Functions return `error` only when (a) interface obligation (e.g. `flag.Value.Set`, `json.Unmarshaler`), (b) error is a domain signal the caller discriminates via `errors.As`/`errors.Is`, or (c) external boundary (CLI/RPC). Top-level `main` and each goroutine entry MUST wrap body in `Try(...).Catch(...)`. Retrofit of existing code lands in PR-11. Reviewers MUST flag any pass-through that doesn't fit the three exception categories.
+- [x] **D18** — Code follows `STYLE.md` "Formatting": blank lines around control blocks (`if`/`for`/`switch`/`select`/`go`/`defer`) except first/last in a `{}`; blank line before `return` except first stmt after `{`; consecutive one-liners that form one logical operation stay together (no blanks), separate ops get a blank between. Reviewers MUST run a quick visual check; nit-tier defects but accumulate into a noisy diff if missed. Retrofit of existing code lands in PR-11.
 - [ ] **Q1** — Pick the M1 leaf module (smallest LIBRARY with zero PEERDIR in the reference graph). Default: `build/cow/on` if it qualifies. To be decided when PR-10 starts; an inspection subagent will scan g.json and confirm.
 - [ ] **Q2** — Vendor third-party Go deps from M3 onward, or stay stdlib-only through M6. Default: stdlib-only; revisit at M3.
 
