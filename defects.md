@@ -508,3 +508,42 @@ Codify same shape for PR-10.
 **Location:** compare_props_test.go:130-136
 **Description:** Round-1 pinned `strings.Contains(r.L1Note, "2 of 2")` (numerator + denominator). Round-2 D03/D04/D06 fix swapped to `strings.Contains(r.L1Note, "matched")` — only checks the literal word. Regression to `"matched"` with no digits or `"0 matched / 0 pairs / ..."` after counter regression would still pass. Defensible-but-loose substring.
 **Fix:** Deferred. Replace with `strings.Contains(r.L1Note, "2 matched")` + `strings.Contains(r.L2Note, "2 matched")` — restores count-pinning, still stable across denom-formula changes.
+
+---
+
+## PR-06
+
+### [PR-06-D01] L3 test for per-cmd Env equality is missing
+**Status:** resolved
+**Severity:** minor
+**Location:** compare_cmd_test.go:75-102
+**Description:** `l3Match` checks 3 things: (a) per-cmd CmdArgs slice-equal, (b) per-cmd Env map-equal, (c) top-level node Env map-equal. Tests cover (a) and (c). Branch (b) — `reflect.DeepEqual(want.Cmds[i].Env, got.Cmds[i].Env)` — has no isolating test. Future refactor accidentally dropping per-cmd Env check would not be caught: real-graph self-match symmetric, no synthetic test isolates this branch.
+**Suggested fix:** Add `TestCompareL3_DifferentCmdEnvDropsBelow1` mirroring TestCompareL3_DifferentEnvDropsBelow1 but mutating `got.Graph[0].Cmds[0].Env["X"] = "y"` instead of top-level Env. Same L0/L1/L2 == 1.0, L3 < 1.0 assertions.
+
+### [PR-06-D02] cloneNode in compare_props_test.go shallow-copies Cmd internals — CmdArgs slice header reuse + Env map aliased
+**Status:** resolved
+**Severity:** minor
+**Location:** compare_props_test.go:84-103 (cloneNode), specifically L87 `cp.Cmds = append([]Cmd{}, n.Cmds...)`
+**Description:** `cloneNode` deep-copies Node's slices/maps but `Cmds` gets `append([]Cmd{}, n.Cmds...)` — only allocates new backing array of `Cmd` values. Each `Cmd` value still contains `CmdArgs []string` (slice header → original backing array) and `Env map[string]string` (reference → original map). Current PR-06 tests sidestep by reassigning Cmds wholesale. But D01's natural fix (mutate `got.Graph[0].Cmds[0].Env["X"] = "y"` in place) would trigger the alias and silently mutate `want` too — false positive, hides the bug L3 was supposed to detect.
+**Suggested fix:** In cloneNode after `cp.Cmds = append(...)`, deep-copy each element's CmdArgs and Env: `for i := range cp.Cmds { cp.Cmds[i].CmdArgs = append([]string{}, n.Cmds[i].CmdArgs...); cp.Cmds[i].Env = copyStringMap(n.Cmds[i].Env) }`. WHY-comment: "Cmd contains slice + map reference fields; shallow copy would alias them across want/got and silently mask L3 mismatches."
+
+### [PR-06-D03] L3 nil-vs-empty Env map false-negative risk vs. emitter output (forward-looking, blocks PR-10)
+**Status:** resolved
+**Severity:** minor
+**Location:** compare_cmd.go:80, :85
+**Description:** `reflect.DeepEqual(nil, map[string]string{})` returns FALSE. PR-06 real-graph self-match (L3 = 100.00%) doesn't exercise this — both sides go through identical `json.Unmarshal`. But L3's purpose is comparing JSON-decoded reference vs emitter-built graph (PR-10 vertical slice). Today's emitters (cc.go, ar.go) populate Env with non-nil literals so safe. But: any future emitter setting `Env: nil` for a no-env cmd would silently fail L3 against `"env": {}` decoded as `map[string]string{}`. Comparator would report "every cmd's env differs", obscuring real diff. CmdArgs already safe via `stringSliceEqual` helper.
+**Suggested fix:** Add `stringMapEqual(a, b map[string]string) bool` in compare_cmd.go treating nil and empty as equal: `if len(a) != len(b) { return false }; for k, v := range a { if b[k] != v { return false } }; return true`. Use in `l3Match` for both Env checks (per-cmd at L80, top-level at L85). Discipline parallel to `stringSliceEqual`. Add a simple unit test: `stringMapEqual(nil, map[string]string{}) == true`.
+
+### [PR-06-D04] stringMapEqual treats two same-size maps with different keys as equal when differing value is empty string (REGRESSION from D03 fix)
+**Status:** resolved
+**Severity:** minor
+**Location:** compare_cmd.go:98-110
+**Description:** Round-2 D03 fix replaced `reflect.DeepEqual` with `stringMapEqual` for nil/empty handling. New helper uses `b[k] != v`, which returns zero value `""` for keys not present in `b`. When `len(a) == len(b)` but with different keys whose values are empty strings, `"" != ""` evaluates false → function wrongly returns true. Probe: `stringMapEqual({"x": ""}, {"y": ""})` → true (should be false). `reflect.DeepEqual` did NOT have this bug. Real-graph self-match 100% doesn't catch it (symmetric). Latent regression that would mask Env diffs in PR-10's emitter-vs-reference comparison.
+**Suggested fix:** Use two-value map index: `for k, v := range a { if v2, ok := b[k]; !ok || v2 != v { return false } }`. Add test case to TestStringMapEqual_NilVsEmpty (or rename): `if stringMapEqual({"x": ""}, {"y": ""}) { t.Error("...") }`.
+
+### [PR-06-D05] Missing blank line before `// ...` comment + `for` block in cloneNode
+**Status:** resolved
+**Severity:** nit
+**Location:** compare_props_test.go:92-96
+**Description:** D02 fix added comment + for-loop directly after `cp.Cmds = append(...)` with no blank line. STYLE.md mandates blank before `for`.
+**Suggested fix:** Insert blank line between `cp.Cmds = append(...)` and the `// Cmd contains slice + map reference fields...` comment.

@@ -81,10 +81,24 @@ func cloneGraph(g *Graph) *Graph {
 	return out
 }
 
+// cloneNode deep-copies a Node so callers can safely mutate any field
+// (including Cmds[i].CmdArgs and Cmds[i].Env) on the clone without
+// affecting the original. The shallow Cmds append is followed by a
+// per-element deep-copy of CmdArgs and Env, because those fields are
+// slice/map references that would otherwise alias the source.
 func cloneNode(n *Node) *Node {
 	cp := *n
 
 	cp.Cmds = append([]Cmd{}, n.Cmds...)
+
+	// Cmd contains slice + map reference fields; shallow copy would alias
+	// them across want/got and silently mask L3 mismatches when a test
+	// mutates Cmds[i].CmdArgs[j] or Cmds[i].Env[k] in place.
+	for i := range cp.Cmds {
+		cp.Cmds[i].CmdArgs = append([]string{}, n.Cmds[i].CmdArgs...)
+		cp.Cmds[i].Env = copyStringMap(n.Cmds[i].Env)
+	}
+
 	cp.Deps = append([]string{}, n.Deps...)
 	cp.Inputs = append([]string{}, n.Inputs...)
 	cp.Outputs = append([]string{}, n.Outputs...)
@@ -387,9 +401,10 @@ func TestCompareL1L2_LevelGating(t *testing.T) {
 		t.Errorf("Compare(_,_,1) populated L2 (=%v, note=%q); should be zero/empty", r1.L2, r1.L2Note)
 	}
 
-	// --level=3 requests one unimplemented level: 3.
-	r3 := Compare(g, g, 3)
-	if len(r3.Skipped) != 1 || r3.Skipped[0] != 3 {
-		t.Errorf("Compare(_,_,3).Skipped = %v, want [3]", r3.Skipped)
+	// PR-06 bumped highestImplementedLevel to 3, so --level=4 is now
+	// the lowest request that puts a level into Skipped.
+	r4 := Compare(g, g, 4)
+	if len(r4.Skipped) != 1 || r4.Skipped[0] != 4 {
+		t.Errorf("Compare(_,_,4).Skipped = %v, want [4]", r4.Skipped)
 	}
 }
