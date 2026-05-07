@@ -30,6 +30,7 @@ const uidLength = 22
 // This is the entire UID derivation: stable, content-only, no salt.
 func computeUID(canonicalBytes []byte) string {
 	sum := sha1.Sum(canonicalBytes)
+
 	return base64.RawURLEncoding.EncodeToString(sum[:])[:uidLength]
 }
 
@@ -37,13 +38,18 @@ func computeUID(canonicalBytes []byte) string {
 // UID. It marshals a copy of n with the three identity fields cleared so
 // the hash depends only on content; HTML escaping is disabled so '<', '>',
 // '&' survive verbatim (they appear in command lines and would otherwise
-// be turned into < etc., causing two callers that produce semantically
+// be turned into &lt; etc., causing two callers that produce semantically
 // identical input to disagree on the hash if one of them happens to use a
 // non-default encoder elsewhere).
 //
 // The trailing newline that json.Encoder.Encode appends is stripped before
 // hashing so the canonical form is exactly the marshalled object.
-func canonicalNodeBytes(n *Node) ([]byte, error) {
+//
+// Encoding errors from json.Encoder.Encode are essentially impossible for
+// the *Node shape (no channels, funcs, or recursive cycles in the type)
+// and no caller discriminates on them, so we Throw rather than return an
+// error.
+func canonicalNodeBytes(n *Node) []byte {
 	clone := *n
 	clone.UID = ""
 	clone.SelfUID = ""
@@ -52,14 +58,15 @@ func canonicalNodeBytes(n *Node) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
-	if err := enc.Encode(&clone); err != nil {
-		return nil, err
-	}
+	Throw(enc.Encode(&clone))
+
 	out := buf.Bytes()
+
 	// Encode appends '\n'; trim it so the canonical bytes are exactly the
 	// marshalled object.
 	if n := len(out); n > 0 && out[n-1] == '\n' {
 		out = out[:n-1]
 	}
-	return out, nil
+
+	return out
 }

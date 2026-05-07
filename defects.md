@@ -202,3 +202,91 @@ Entry schema:
 **Description:** `foo"bar"baz` inside a macro arg list lexes as 3 separate tokens. Real ya.make doesn't do this; surprising relative to "args are space-separated" mental model.
 **Fix:** Deferred. If reviewer of a future PR cares, add a one-line test pinning the current behavior + a code comment documenting "tokens do not require whitespace separation".
 
+
+---
+
+## PR-11
+
+### [PR-11-D01] Missing blank lines around `if _, ok := seenNode[u]; ok { continue }` inside Finalize output loop
+**Status:** resolved
+**Severity:** minor
+**Location:** emitter.go:357-361, :368-372
+**Description:** STYLE.md mandates blank lines BEFORE and AFTER every control block (`if`/`for`/`switch`/`select`/`go`/`defer`) unless first/last in `{}`. In `Finalize`'s output construction loop, `u := uids[i]` is followed directly by `if _, ok := seenNode[u]; ok { continue }` (no blank), then closing `}` followed directly by `seenNode[u] = struct{}{}` (no blank). Same shape at `:368-372` for `seenResult`. Pre-existing PR-02 shapes that PR-11 was supposed to clean up.
+**Suggested fix:** Insert blank line BEFORE each `if _, ok := ...` and AFTER its closing `}` at both sites.
+
+### [PR-11-D02] Missing blank line before `if indeg[c] == 0 { ... }` in inner Kahn-step loop
+**Status:** resolved
+**Severity:** minor
+**Location:** emitter.go:233-238
+**Description:** Inside the inner loop body `for _, c := range children[i] { indeg[c]--; if indeg[c] == 0 { ... } }` the `if` is immediately preceded by `indeg[c]--` with no blank. The `if` is neither first nor last in the for-body so STYLE.md exemption doesn't apply.
+**Suggested fix:** Insert blank line between `indeg[c]--` and `if indeg[c] == 0 { queue = append(queue, c) }`. (No blank after needed — `if` IS last in the for-body.)
+
+### [PR-11-D03] Missing blank lines around dedupe `if`-blocks in Emit's DepRefs/ForeignDepRefs walks
+**Status:** resolved
+**Severity:** minor
+**Location:** emitter.go:183-189, :197-205
+**Description:** Inside `for i, node := range e.nodes`, the inner blocks `for _, r := range node.DepRefs { if _, ok := seen[r.id]; ok { continue }; seen[r.id] = struct{}{}; addEdge(...) }` omit blanks around the `if`. Same at the ForeignDepRefs walk (:197-205).
+**Suggested fix:** Insert blank line BEFORE `if _, ok := seen[r.id]` and AFTER its closing `}` in both loops.
+
+### [PR-11-D04] Missing blank line before `if n := len(out); n > 0 && out[n-1] == '\n'` in canonicalNodeBytes
+**Status:** resolved
+**Severity:** minor
+**Location:** uid.go:63-68
+**Description:** `out := buf.Bytes()` then a comment then `if n := len(out); ... { out = out[:n-1] }` — no blank between assignment and the if-comment block. A comment line does NOT satisfy STYLE.md's blank-line requirement; the `if` is the second statement in the function so the "first stmt" exemption doesn't apply.
+**Suggested fix:** Insert blank line between `out := buf.Bytes()` and the comment preceding the `if`.
+
+### [PR-11-D05] Missing blank line before `if absErr != nil` inside ParseFile's Try body
+**Status:** resolved
+**Severity:** minor
+**Location:** yamake.go:97-101
+**Description:** Inside `Try(func() { ... })`, `abs, absErr := filepath.Abs(path)` is immediately followed by `if absErr != nil { ... }`. The `if` is the third statement in the closure body — neither first nor last.
+**Suggested fix:** Insert blank line between `abs, absErr := filepath.Abs(path)` and `if absErr != nil { ... }`.
+
+### [PR-11-D06] Missing blank line before `if tok.kind == tokEOF { break }` in parseInternal loop
+**Status:** resolved
+**Severity:** minor
+**Location:** yamake.go:491-494
+**Description:** `for { tok := p.lex.next(); if tok.kind == tokEOF { break }; ... }` — `tok := p.lex.next()` directly precedes the `if` with no blank. Inconsistent with line 561-563 (same file) where the same pattern IS correctly blanked.
+**Suggested fix:** Insert blank line between `tok := p.lex.next()` and `if tok.kind == tokEOF { break }`.
+
+### [PR-11-D07] Missing blank line between `b := l.src[l.pos]` and first `if b == '"'` in readString loop
+**Status:** resolved
+**Severity:** minor
+**Location:** yamake.go:379-388
+**Description:** Inside the `for {}` loop in `readString`, `b := l.src[l.pos]` is immediately followed by `if b == '"' { ... }`. Subsequent if-blocks within the same loop body ARE correctly blank-separated (so the missing blank is only at the top of the body).
+**Suggested fix:** Insert blank line between line 379 (`b := l.src[l.pos]`) and line 380 (`if b == '"' {`).
+
+### [PR-11-D08] Missing blank lines around `if isIdentCont(b)` / `if isWordByte(b)` arms in readIdentOrWord
+**Status:** resolved
+**Severity:** minor
+**Location:** yamake.go:413-429
+**Description:** `for l.pos < len(l.src) { b := l.src[l.pos]; if isIdentCont(b) {...continue}; if isWordByte(b) {...continue}; break }` — the `b := ...` directly precedes the first `if` (no blank) and the consecutive `if {...continue}` arms touch each other (no blank). At minimum the assignment-to-first-if blank is required by STYLE.md; blanks between the two `if` arms is judgment but reads cleaner.
+**Suggested fix:** Insert blank line BEFORE first `if isIdentCont(b)`. Optional: also insert a blank between the two `if` arms (they're distinct branches, not one logical operation).
+
+### [PR-11-D09] Missing blank lines after several `for {...}` blocks in emitter_test.go
+**Status:** resolved
+**Severity:** nit
+**Location:** emitter_test.go:212-214, :325-327, :455-457 (and similar)
+**Description:** Recurring pattern: `for _, n := range g.Graph { if n.KV["name"] == "A" { aNode = n } }` immediately followed by `if aNode == nil { ... }` with no blank between the for-block's closing `}` and the next `if`. Inconsistent with other sites in the same file where the blank IS present (e.g. line 170-172).
+**Suggested fix:** Walk every `for {...}` in `emitter_test.go` and insert a blank line after the closing `}` unless the for-block is the last statement in its enclosing `{}`.
+
+### [PR-11-D10] `errors.As` reassignment in Parse/ParseFile is logically inert (no-op against today's throw paths)
+**Status:** resolved
+**Severity:** nit
+**Location:** yamake.go:106-115 (ParseFile), :469-481 (Parse)
+**Description:** `err = exc.AsError(); var pe *ParseError; if errors.As(err, &pe) { err = pe }`. For throw paths we control, `exc.AsError()` returns `*ParseError` directly (because `throwParse` constructs `New(pe)`), so `errors.As(err, &pe)` succeeds and reassigns `err = pe` — but `err`'s dynamic type is already `*ParseError`. The reassignment is defensive against a future `fmt.Errorf("...: %w", pe)` wrap path that doesn't exist yet.
+**Suggested fix:** Add a one-line comment noting the reassignment is "defensive against future fmt.Errorf wrapping" — OR delete the `var pe / if errors.As / err = pe` block as dead-code-today (preferred — it's three lines of dead code; resurrect when a wrapper actually appears).
+
+### [PR-11-D11] `dispatch` extraction comment over-promises "contract above keeps working unchanged" while os.Exit-on-success bypasses any future Try defers
+**Status:** resolved
+**Severity:** minor
+**Location:** main.go:31-51
+**Description:** `dispatch` calls `os.Exit(cmdGen(...))` etc. Today this is harmless (stubs print + return 1; panics in cmdGen propagate up to Try correctly). But on a CLEAN exit (`os.Exit(0)`), any deferred cleanup placed by the outer Try is silently skipped. Future PR adding profile flush / log close / etc. in `main` would lose it on success exits. Comment over-promises invariance.
+**Suggested fix:** Add a one-line caveat to the dispatch comment: "Note: `os.Exit` from a subcommand bypasses any defers placed by the outer Try; only panics propagate. If success-path cleanup needs to fire from Try, dispatch must return an exit code instead of calling os.Exit." No code change required.
+
+### [PR-11-D12] `finalizeExc` test helper docstring doesn't warn against wrapping success-path tests
+**Status:** resolved
+**Severity:** nit
+**Location:** emitter_test.go:62-72
+**Description:** Helper is correctly used only in error-expecting tests; success-path tests call `Finalize(e)` directly so unexpected panics surface as test failures. Future contributor might mistakenly wrap a success-path test in `finalizeExc`, defeating the panic-catches-bugs property.
+**Suggested fix:** Append to docstring: "Success-path tests should call `Finalize(e)` directly so that an unexpected panic surfaces as a test failure rather than being silently captured by Try."
