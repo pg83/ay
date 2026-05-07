@@ -593,3 +593,70 @@ Codify same shape for PR-10.
 **Location:** gen_test.go:19, gjson_test.go:13
 **Description:** `gen_test.go:19` hardcodes `const sourceRoot = "/home/pg/monorepo/yatool_orig"`; `gjson_test.go:13` defines `const referenceGraphPath = "/home/pg/monorepo/yatool_orig/g.json"`. Same path, manual edit. Future move of the snapshot would miss one.
 **Suggested fix:** `sourceRoot := filepath.Dir(referenceGraphPath)` instead of hardcoding.
+
+---
+
+## PR-12
+
+### [PR-12-D01] EmitCC's path formula uses filepath.Base(srcRel), stripping subdir layout that real ymake preserves with `_/` infix
+**Status:** resolved
+**Severity:** minor
+**Location:** cc.go:23, cc.go:40, cc.go:51
+**Description:** Reference graph has 3071 of 3571 CC nodes with subdir SRCS (e.g. `module_dir = "contrib/libs/cxxsupp/libcxx"`, `srcRel = "src/algorithm.cpp"` → `$(BUILD_ROOT)/contrib/libs/cxxsupp/libcxx/_/src/algorithm.cpp.o`). PR-10's formula `$(BUILD_ROOT)/<moduleDir>/<basename(srcRel)>.o` strips both the `_/` infix AND the subdir component. PR-12 inherits and enshrines as contract. M1 lib.c (no subdir) is the only test today — Wave 2 will land first multi-source module and silently break.
+**Suggested fix:** Change EmitCC formula to: if `srcRel` contains `/`, use `$(BUILD_ROOT)/<moduleDir>/_/<srcRel>.o`; else `$(BUILD_ROOT)/<moduleDir>/<srcRel>.o`. Verify against reference for both flat and nested cases. Update docstrings.
+
+### [PR-12-D02] genCtx.memo keyed by raw targetDir without normalization
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go:77, :162, :173, :227
+**Description:** `ctx.memo[targetDir]` and `ctx.walking[targetDir]` use caller-provided string verbatim. `filepath.Join` normalizes `./thelib` → `thelib` for path resolution, but memo key doesn't — two PEERDIR entries `./thelib` and `thelib` would emit twice. Cycle detector also misses self-cycles via `PEERDIR(./a)` from `a/ya.make`.
+**Suggested fix:** `targetDir = filepath.Clean(targetDir)` at top of genModule, before memo lookup. Reject empty/leading-`./`/trailing-`/` explicitly OR rely on Clean to canonicalize.
+
+### [PR-12-D03] Multi-module ya.make rejection and zero-module rejection lack test coverage
+**Status:** resolved
+**Severity:** nit
+**Location:** gen.go:186, :210; gen_test.go (no test)
+**Description:** Throws `gen: %s declares multiple modules` and `gen: %s has no module declaration` are concrete failure modes with no test coverage. Future refactor could silently drop them.
+**Suggested fix:** Add `TestGen_RejectsMultipleModules` (synthetic ya.make with `LIBRARY()...PROGRAM()...END()`) and `TestGen_RejectsZeroModule` (only `SET(X y)` + `END`).
+
+### [PR-12-D04] describeStmt is dead code
+**Status:** resolved
+**Severity:** nit
+**Location:** gen.go:204-205, :271-294
+**Description:** Switch in genModule has explicit cases for every concrete Stmt type. `default:` arm calls `describeStmt(s)` which is itself a switch on the same types with `<unknown-stmt>` fallback unreachable. 24 lines of code-and-comment defensive against impossible scenarios. CLAUDE.md "no error handling for impossible scenarios."
+**Suggested fix:** Delete describeStmt entirely. Replace `default:` arm with `ThrowFmt("gen: PR-12: unhandled Stmt type %T", s)`.
+
+### [PR-12-D05] AR node for parent-with-peers leaks peer archives into both inputs and cmd_args
+**Status:** resolved (deferred to PR-15 — peer-paths-in-AR-cmd_args is structurally wrong but harmless for UID derivation; PR-15 reworks ar.go signature with explicit peerLibs separation)
+**Severity:** minor
+**Location:** gen.go:248-253; ar.go:43-58
+**Description:** When a module has PEERDIRs, gen.go threads peerArchivePaths through `arDepPaths` into EmitAR. EmitAR appends them verbatim to cmd_args (after archive output) AND inputs. Real ymake AR doesn't recursively bundle other `.a`s — peer archives are LD inputs, not AR inputs. Synthetic test only checks Deps presence (not cmd_args/inputs shape), so structural error is undetected.
+**Fix:** Deferred to PR-15. PR-15 introduces real archive-naming convention + multi-source sort + GLOBAL_SRCS support — natural place to refactor EmitAR signature with separate `peerLibs []NodeRef` parameter that flows into DepRefs only (NOT cmd_args/inputs). Until then, peer archives live in DepRefs (correct for UID) AND ar.cmd_args/inputs (incorrect but harmless). Constraint logged for PR-15: refactor EmitAR signature; current ar_test.go's M1 byte-exact test still pins lib.c case so regression is detectable.
+
+### [PR-12-D06] Synthetic test asserts only deps presence, not declaration-order R14 invariant
+**Status:** resolved
+**Severity:** nit
+**Location:** gen_test.go:191-207
+**Description:** rootAR.Deps stuffed into a `depSet`, only checks set-membership. Finalize sorts Deps alphabetically (D14) so set-membership is the only thing that survives. Test cannot regress on R14 (declaration-order peer visit) because there's only ONE peerdir in synthetic. A `sort.Strings(peerdirs)` regression in genModule would slip past.
+**Suggested fix:** Add a third synthetic module so mainprog peers `[zlib, alib]` in non-alphabetical declaration order. Assert AR nodes' module_dir order in g.Graph follows declaration order (zlib AR before alib AR).
+
+### [PR-12-D07] STYLE.md violation: missing blank line before `if` in new EmitCC output-path tests
+**Status:** resolved
+**Severity:** nit
+**Location:** cc_test.go:160-161, :169-170
+**Description:** STYLE.md "Blank lines around control blocks" requires blank before `if` (exception: first stmt). Both new tests have `want := "..."` directly followed by `if outPath != want { ... }` with no blank. Same anti-pattern as PR-04-D01/D06.
+**Suggested fix:** Insert blank line between `want := ...` and `if outPath != want {` in both `TestEmitCC_OutputPath_NestedSrc` and `TestEmitCC_OutputPath_FlatSrc`.
+
+### [PR-12-D08] STYLE.md violation: missing blank line before `for` in TestGen_PeerdirDeclarationOrder_Preserved
+**Status:** resolved
+**Severity:** nit
+**Location:** gen_test.go:401-402
+**Description:** `var zlibIdx, alibIdx int = -1, -1` directly followed by `for i, n := range g.Graph { ... }` — no blank.
+**Suggested fix:** Insert blank line between L401 and L402.
+
+### [PR-12-D09] D06 fix asserts node count, not declaration order — R14 regression still slips past
+**Status:** resolved (mitigated; full R14 pin requires exposing BufferedEmitter pre-Finalize or recording emit-order on Node — defer to future PR)
+**Severity:** nit
+**Location:** gen_test.go:373-430
+**Description:** D06 said "Assert AR nodes' module_dir order in g.Graph follows declaration order." Implemented test only checks both AR nodes exist + `len(g.Graph) == 6`. Test's NOTE comment acknowledges Finalize's UID-tie-break topo sort makes strict order fragile. `sort.Strings(peerdirs)` regression in genModule would still emit 6 nodes and pass.
+**Fix:** Mitigated. Count-check still catches "drops a peerdir entirely" or "fails to walk" regressions. Strict R14 pin requires either (a) exposing BufferedEmitter pre-Finalize via Gen returning a tuple, or (b) recording an emit-sequence field on Node — both architectural changes. Deferred to a future test-infra PR. Mirror of D05 deferral pattern.

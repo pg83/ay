@@ -78,7 +78,11 @@ func TestEmitCC_BuildCowOnLibC_ByteExact(t *testing.T) {
 	}
 
 	emit := NewBufferedEmitter()
-	EmitCC(TargetCfg, "build/cow/on", "lib.c", emit)
+	_, outPath := EmitCC(TargetCfg, "build/cow/on", "lib.c", emit)
+
+	if outPath != "$(BUILD_ROOT)/build/cow/on/lib.c.o" {
+		t.Errorf("outPath = %q, want %q", outPath, "$(BUILD_ROOT)/build/cow/on/lib.c.o")
+	}
 
 	if len(emit.nodes) != 1 {
 		t.Fatalf("emitter buffered %d nodes, want 1", len(emit.nodes))
@@ -147,5 +151,25 @@ func TestEmitCC_BuildCowOnLibC_ByteExact(t *testing.T) {
 
 	if len(ref.Deps) != 0 {
 		t.Errorf("reference deps: got %d entries, want 0 (sanity check)", len(ref.Deps))
+	}
+}
+
+func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
+	e := NewBufferedEmitter()
+	_, outPath := EmitCC(TargetCfg, "contrib/libs/cxxsupp/libcxx", "src/algorithm.cpp", e)
+	want := "$(BUILD_ROOT)/contrib/libs/cxxsupp/libcxx/_/src/algorithm.cpp.o"
+
+	if outPath != want {
+		t.Errorf("outPath = %q, want %q", outPath, want)
+	}
+}
+
+func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
+	e := NewBufferedEmitter()
+	_, outPath := EmitCC(TargetCfg, "build/cow/on", "lib.c", e)
+	want := "$(BUILD_ROOT)/build/cow/on/lib.c.o"
+
+	if outPath != want {
+		t.Errorf("outPath = %q, want %q", outPath, want)
 	}
 }
