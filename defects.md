@@ -290,3 +290,108 @@ Entry schema:
 **Location:** emitter_test.go:62-72
 **Description:** Helper is correctly used only in error-expecting tests; success-path tests call `Finalize(e)` directly so unexpected panics surface as test failures. Future contributor might mistakenly wrap a success-path test in `finalizeExc`, defeating the panic-catches-bugs property.
 **Suggested fix:** Append to docstring: "Success-path tests should call `Finalize(e)` directly so that an unexpected panic surfaces as a test failure rather than being silently captured by Try."
+
+---
+
+## PR-03
+
+### [PR-03-D01] `./yatool inspect -h` and `--help` exit 1 with cryptic "flag: help requested" instead of printing usage and exiting 0
+**Status:** resolved
+**Severity:** minor
+**Location:** main.go:100-102 (cmdInspect's flag.Parse + missing flag.ErrHelp handling)
+**Description:** `flag.ContinueOnError` returns the sentinel `flag.ErrHelp` after printing "Usage of inspect:" to stderr. Current code does `Throw(fs.Parse(args))`, so the sentinel becomes a panic carrying "flag: help requested" that main's Catch prints to stderr and the process exits 1. User explicitly asked for help; exit 1 mis-signals "you did something wrong". PR-01-D05 deferred constraint expected the subcommand body to "retain control of exit semantics" — adopted ContinueOnError but didn't actually take control. PR-10's `cmdGen`/`cmdCompare` will inherit this UX unless solved here.
+**Suggested fix:** In cmdInspect, discriminate `flag.ErrHelp` (STYLE.md "Discriminate" pattern):
+```go
+fs.SetOutput(os.Stdout) // help is not an error → stdout
+err := fs.Parse(args)
+if errors.Is(err, flag.ErrHelp) {
+    return 0
+}
+Throw(err)
+```
+Codify same shape for PR-10.
+
+### [PR-03-D02] `./yatool inspect -bogus` prints unknown-flag error twice on stderr
+**Status:** resolved
+**Severity:** minor
+**Location:** main.go:100-102 (cmdInspect)
+**Description:** With `flag.ContinueOnError`, the flag package writes "flag provided but not defined: -bogus" to fs.Output() (stderr), then calls fs.Usage() ("Usage of inspect:" same stream), then returns the error. Throw panics with that error, main's Catch prints it again. Result: duplicated error line on stderr.
+**Suggested fix:** `fs.SetOutput(io.Discard)` before Parse so throw path owns all diagnostics. Combine with D01: in the ErrHelp branch route usage to stdout via `fmt.Fprint(os.Stdout, ...)` or temporarily `fs.SetOutput(os.Stdout); fs.Usage()`. Add tests for both flag-help and unknown-flag paths.
+
+---
+
+## PR-08
+
+### [PR-08-D01] cc_test.go has stray blank lines after opening braces, violating D18
+**Status:** under fix
+**Severity:** nit
+**Location:** cc_test.go:42-43, 54-56, 105-107
+**Description:** STYLE.md "Formatting" / D18: no blank line if statement is first inside `{}`. Three spots in cc_test.go violate: `if err != nil {\n\n\tif os.IsNotExist(err) {`, `for _, n := range g.Graph {\n\n\tif len(n.Outputs) > 0`, `for i := range wantArgs {\n\n\tif got.Cmds[0].CmdArgs[i] != wantArgs[i]`. PR-11 enforced this style on existing tree; PR-08 reintroduces 3 regressions.
+**Suggested fix:** Delete the blank line immediately after each `{` opening so the nested statement is the first line of the block. Three single-line deletions.
+
+### [PR-08-D02] env map literal shared between Cmds[0].Env and top-level Env (aliasing footgun)
+**Status:** resolved (deferred — latent footgun, no current bug; addressing-or-deferring decision: defer, document)
+**Severity:** nit
+**Location:** cc.go:82-94
+**Description:** Single `map[string]string` literal assigned to BOTH `node.Cmds[0].Env` and `node.Env`. Maps are reference types — any future code mutating one mutates the other. EmitCC is single-shot so latent today. Reference's two fields are identical maps, so semantically the alias is a faithful representation.
+**Fix:** Deferred. Add to PR-08 closing notes a constraint: "future PRs that add post-emit Node mutation must clone Cmds[i].Env and Env before mutating either. EmitCC currently aliases them; comment noting this is left in cc.go for future maintainers."
+
+### [PR-08-D03] EmitCC unconditionally applies no-libc bundle even for inputs that aren't NO_LIBC modules
+**Status:** resolved (deferred — TODO already in code; M2 work)
+**Severity:** nit
+**Location:** cc.go:73-75 (TODO at cc.go:44-48), flags.go:158-160
+**Description:** Brief explicitly accepts that EmitCC need only be byte-exact for `build/cow/on/lib.c`. Function hardwires no-libc bundle (twice) + CATBOOST_OPENSOURCE define unconditionally; calling EmitCC for a non-NO_LIBC module produces mismatched flags. TODO present in code.
+**Fix:** Deferred. M2 work. When next CC leaf without NO_UTIL/NO_LIBC/NO_RUNTIME lands, gate `noLibcUndebugBlock` and `catboostOpenSourceDefine` on a module-flavor flag. Logged.
+
+---
+
+## PR-09
+
+### [PR-09-D01] Archive-naming convention docstring overstates generality — `replace("/", "-")` only matches reference for ≤3-component module_dirs
+**Status:** under fix
+**Severity:** minor
+**Location:** ar.go:5-9 (docstring), ar.go:23 (impl)
+**Description:** `EmitAR` derives archive name as `"lib" + strings.ReplaceAll(moduleDir, "/", "-") + ".a"`. Works for `build/cow/on` (M1 leaf). Inspection of 48 AR nodes in g.json shows real ymake convention is NOT a uniform path-to-dash transform: `contrib/libs/...` drops leading `contrib`; `library/...` drops leading `library`; `util` becomes `libyutil.a` (special `y` prefix). Docstring claims this is "yatool's convention", misleading for PR-10+.
+**Suggested fix:** Tighten docstring: scope to M1 leaf only, add `// TODO(M2)` pointing at future generic naming function. No code change needed for PR-09 byte-exactness.
+
+### [PR-09-D02] `cmd_args` and `inputs` preserve caller order rather than sorting `.o` paths — multi-source modules will not be byte-exact
+**Status:** resolved (deferred to M2 multi-source PR)
+**Severity:** minor
+**Location:** ar.go:48, :52-54, docstring:18-21
+**Description:** Multi-source AR nodes in g.json (e.g. `contrib/libs/base64/avx2` with 2 .o inputs) emit cmd_args trailing .o paths AND inputs in alphabetical order. EmitAR currently does `append(cmdArgs, objPaths...)` and `append(inputs, objPaths...)` — caller order preserved. Single-source M1 leaf passes; multi-source will silently fail byte-exact. Docstring overpromises generality.
+**Fix:** Deferred to M2 multi-source PR. When implementing multi-source, sort `objPaths` (and `objRefs` in lockstep) before composition. PR-09 docstring will be tightened (D01 same edit) to scope correctly.
+
+### [PR-09-D03] EmitAR does not validate `len(objRefs) == len(objPaths)`
+**Status:** under fix
+**Severity:** minor
+**Location:** ar.go:22-92
+**Description:** Brief: "caller is responsible for keeping the two slices in step." Today's only caller passes len==1 for both, but PR-10's `gen` driver wiring CC outputs to AR could easily slip silently — adding a .o to objPaths without matching objRef yields an AR node whose inputs reference a .o not in deps. Violates throw-style discipline (STYLE.md): such precondition violations should `ThrowFmt`.
+**Suggested fix:** At top of EmitAR: `if len(objRefs) != len(objPaths) { ThrowFmt("EmitAR: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths)) }`. Cheap, throw-style, protects PR-10's wiring.
+
+### [PR-09-D04] Hardcoded environment-specific Python path `/ix/realm/pg/bin/python3` has no TODO marker
+**Status:** under fix
+**Severity:** minor
+**Location:** ar.go:36
+**Description:** `cmd_args[0]` hardcoded to reference graph's value `/ix/realm/pg/bin/python3` — clearly user/host-specific. Byte-exactness requires this exact string today. No TODO flags this as future templating point — anyone extending EmitAR to a different host will hit confusing byte-mismatch.
+**Suggested fix:** Add comment immediately above the python3 string: `// TODO(portability): python3 path captured from reference build; future work must template from TargetCfg or detect from $PATH.` No code change for byte-exactness.
+
+### [PR-09-D05] Test omits any assertion on the deps relationship (DepRefs count)
+**Status:** under fix
+**Severity:** nit
+**Location:** ar_test.go:83-167
+**Description:** Test bypasses `Finalize` (correct — UID would diverge) and doesn't compare Deps UID-for-UID. But it ALSO never asserts `len(got.DepRefs) == len(ref.Deps)` — reference has 1 dep; executor passes 1 objRef; nothing pins this 1:1. Regression where EmitAR forgot to populate DepRefs (or populated twice) would slip past byte-exact test.
+**Suggested fix:** Add `if len(got.DepRefs) != len(ref.Deps) { t.Errorf("DepRefs len = %d, want %d (ref Deps count)", len(got.DepRefs), len(ref.Deps)) }` after existing assertions.
+
+### [PR-09-D06] `cmdEnv` and `topEnv` are duplicate map literals — sharing-vs-duplication intent undocumented
+**Status:** resolved (deferred — current duplication is intentionally safe; comment-only improvement)
+**Severity:** nit
+**Location:** ar.go:27-30, :56-59
+**Description:** Two separate map[string]string literals with IDENTICAL key-value contents (`ARCADIA_ROOT_DISTBUILD`, `DYLD_LIBRARY_PATH`). Sharing one map would be a future bug if either gets mutated downstream. Duplication isn't documented as deliberate; future "DRY it up" maintainer might re-introduce shared-map bug.
+**Fix:** Deferred. Optional one-line comment above the first literal could note "Built as separate literals (not a shared variable) so downstream mutation of one map can't leak into the other." No behavioral change.
+
+### [PR-03-D03] Test name `TestCmdInspect_UnknownFlag_PanicsWithSingleErrorMessage` overstates what the test asserts
+**Status:** resolved (deferred — nit-tier; honest behaviour pinned manually in verification transcript)
+**Severity:** nit
+**Location:** gjson_test.go:208-220
+**Description:** Test name + comment promise a "single error message" / "no duplicate output" guarantee, but the body only asserts `strings.Contains(exc.Error(), "flag provided but not defined")`. The exception payload contains the message exactly once REGARDLESS of whether stderr was double-written; the duplicate (D02) manifests on stderr. So the test would still pass if D02 regressed (e.g. `SetOutput(io.Discard)` removed). The actual single-message guarantee is verified only by the manual `./yatool inspect -bogus 2>&1` probe in the verification transcript, not by automated test.
+**Fix:** Deferred. Two paths to harden: (a) rename the test to honestly describe what it checks (`TestCmdInspect_UnknownFlag_ThrowsExceptionContainingFlagError`) and trim the "no duplicate" language, or (b) shell out to the built binary with `os/exec`, capture combined output, assert `strings.Count(out, "flag provided but not defined") == 1`. Path (b) is the correct hardening but adds a build-step dependency to test runs. Both deferred to a future test-infrastructure PR. Constraint logged: D02's regression-guard is currently manual.
