@@ -7,6 +7,7 @@
 /our.json
 /tmp_*
 /out/
+/.tmp/
 
 # OS
 .DS_Store

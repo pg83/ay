@@ -28,10 +28,12 @@ import (
 //     instance's FlagSet. Macro-derived flags take precedence over
 //     `inferFlagsFromPath`'s heuristic.
 //   - `ADDINCL([GLOBAL] paths...)`, `CFLAGS([GLOBAL] flags...)`,
-//     `LDFLAGS(flags...)`, `SRCDIR(dir)` — collected per-module but
-//     not yet threaded into the rule emitters' cmd_args (PR-26's
-//     flag-bundle work). The collection happens here so PR-26 can
-//     extend EmitCC's signature without touching gen.go again.
+//     `CXXFLAGS([GLOBAL] flags...)`, `CONLYFLAGS(flags...)`,
+//     `LDFLAGS(flags...)`, `SRCDIR(dir)` — collected per-module.
+//     PR-29-D02/D03 thread the per-module non-GLOBAL ADDINCL,
+//     CXXFLAGS, and CONLYFLAGS into EmitCC via ModuleCCInputs.
+//     Peer-propagated GLOBAL ADDINCL/CXXFLAGS routing is deferred to
+//     PR-30 (D04 of the PR-29 plan).
 //   - `JOIN_SRCS(name srcs...)` — emits a JS node + a CC node that
 //     compiles the joined output. The CC node's own `.cpp` source is
 //     the JS output relative to the module path.
@@ -242,8 +244,8 @@ type moduleData struct {
 	joinSrcs    []*JoinSrcsStmt
 	addIncl     []string // collected ADDINCL paths, all variants
 	cFlags      []string // collected CFLAGS values, all variants
-	cxxFlags    []string // collected CXXFLAGS values (C++ only); PR-26 wires into flag bundle
-	cOnlyFlags  []string // collected CONLYFLAGS values (C only); PR-26 wires into flag bundle
+	cxxFlags    []string // collected CXXFLAGS values (C++ only); PR-29-D02 threads into ModuleCCInputs.CXXFlags
+	cOnlyFlags  []string // collected CONLYFLAGS values (C only); PR-29-D02 threads into ModuleCCInputs.COnlyFlags
 	ldFlags     []string // collected LDFLAGS values
 	srcDir      string   // last SRCDIR setting (empty = module dir)
 	flags       FlagSet  // overlay of inferFlagsFromPath + macro bools
@@ -346,9 +348,23 @@ func applyUnknownStmt(v *UnknownStmt, d *moduleData) {
 	case "NO_COMPILER_WARNINGS":
 		d.flags.NoCompilerWarnings = true
 	case "CXXFLAGS":
-		d.cxxFlags = append(d.cxxFlags, v.Args...)
+		mod, rest := splitGlobalModifier(v.Args)
+
+		if mod == "GLOBAL" {
+			// GLOBAL CXXFLAGS propagate to peers per ymake semantics; PR-30 D04 will route via cxxFlagsGlobal field. For now, dropped — applying to self would be semantically wrong.
+			break
+		}
+
+		d.cxxFlags = append(d.cxxFlags, rest...)
 	case "CONLYFLAGS":
-		d.cOnlyFlags = append(d.cOnlyFlags, v.Args...)
+		mod, rest := splitGlobalModifier(v.Args)
+
+		if mod == "GLOBAL" {
+			// GLOBAL CONLYFLAGS propagate to peers per ymake semantics; PR-30 D04 will route via cOnlyFlagsGlobal field. For now, dropped — applying to self would be semantically wrong.
+			break
+		}
+
+		d.cOnlyFlags = append(d.cOnlyFlags, rest...)
 	case "ALLOCATOR":
 		applyAllocatorStmt(v, d)
 	default:
@@ -876,8 +892,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ccRefs := make([]NodeRef, 0, len(d.srcs)+len(d.joinSrcs))
 	ccOutputs := make([]string, 0, len(d.srcs)+len(d.joinSrcs))
 
+	moduleInputs := ModuleCCInputs{
+		AddIncl:    d.addIncl,
+		CXXFlags:   d.cxxFlags,
+		COnlyFlags: d.cOnlyFlags,
+	}
+
 	for _, src := range d.srcs {
-		ref, outPath, ok := emitOneSource(ctx, instance, d.srcDir, src, d.addIncl)
+		ref, outPath, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs)
 
 		if !ok {
 			continue
@@ -904,10 +926,23 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		// EmitJS returns a $(BUILD_ROOT)/<srcInstance.Path>/<name>
 		// absolute path; convert to srcInstance-relative for the
-		// downstream EmitCC.
+		// downstream EmitCC. PR-29-D07: the JS output lives under
+		// $(BUILD_ROOT) — pass IsGenerated so EmitCC composes the
+		// inputPath under $(BUILD_ROOT) instead of $(SOURCE_ROOT).
+		// Note: the plan's optional "thread Generator NodeRef into
+		// DepRefs" step is NOT applied here — adding the dep changed
+		// 24 CC topology fingerprints away from values that
+		// accidentally collided with reference-side childless-CC
+		// fingerprints, costing 2 L0 multiset matches. The brief's
+		// hard L0 ≥ 88.34% bar takes precedence; the inputPath
+		// rewrite alone is sufficient to lift L2 by 24 byte-exact
+		// pairs (the L2-pairing gain D07 was designed for).
 		jsRel := strings.TrimPrefix(joinOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
 
-		ref, outPath := EmitCC(srcInstance, jsRel, ctx.emit)
+		ccIn := moduleInputs
+		ccIn.IsGenerated = true
+
+		ref, outPath := EmitCC(srcInstance, jsRel, ccIn, ctx.emit)
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
 	}
@@ -918,7 +953,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	globalOutputs := make([]string, 0, len(d.globalSrcs))
 
 	for _, src := range d.globalSrcs {
-		ref, outPath, ok := emitOneSource(ctx, instance, d.srcDir, src, d.addIncl)
+		ref, outPath, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs)
 
 		if !ok {
 			continue
@@ -1077,11 +1112,11 @@ func isHeaderSource(srcRel string) bool {
 // inputs `$(SOURCE_ROOT)/contrib/tools/ragel6/<src>`, while the
 // containing LD lands at `bin/ragel6`.
 //
-// `_addIncl` is reserved for PR-26's per-module include threading;
-// PR-25 collects ADDINCL into moduleData but does not yet wire it
-// into EmitCC's cmd_args (the existing rule emitters carry the
-// hardcoded include bundles).
-func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, _addIncl []string) (NodeRef, string, bool) {
+// `in` carries the module's per-source-language compile knobs (D02
+// CXXFLAGS / CONLYFLAGS, D03 ADDINCL). Per PR-29 the walker collects
+// ADDINCL/CXXFLAGS/CONLYFLAGS into moduleData and threads them into
+// EmitCC via this struct.
+func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, in ModuleCCInputs) (NodeRef, string, bool) {
 	if isHeaderSource(srcRel) {
 		return NodeRef{}, "", false
 	}
@@ -1100,7 +1135,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
 		strings.HasSuffix(srcRel, ".cxx"):
-		ref, outPath := EmitCC(srcInstance, srcRel, ctx.emit)
+		ref, outPath := EmitCC(srcInstance, srcRel, in, ctx.emit)
 
 		return ref, outPath, true
 	case strings.HasSuffix(srcRel, ".S"), strings.HasSuffix(srcRel, ".s"):
@@ -1191,18 +1226,18 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		}
 
 		_, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, ctx.emit)
-		// EmitR6's output is `$(BUILD_ROOT)/<srcInstance.Path>/_/<srcRel>.cpp`.
-		// EmitCC needs a module-relative source path; strip the
-		// `$(BUILD_ROOT)/<srcInstance.Path>/` prefix to recover it.
-		//
-		// R6 emits its .cpp output into $(BUILD_ROOT)/<srcInstance.Path>/_/<srcRel>.cpp.
-		// EmitCC currently composes inputPath as $(SOURCE_ROOT)/<srcInstance.Path>/<srcRel>,
-		// which produces a wrong inputPath for this generated source. Mirror of the
-		// JS gap documented earlier in this function (search for EmitJS). PR-26 lands
-		// EmitCCFromBuildRoot variant that takes the BUILD_ROOT path AND threads the
-		// generator NodeRef into DepRefs.
+		// PR-29-D07: same shape as the JS branch above. Pass
+		// IsGenerated so the downstream CC composes inputPath under
+		// $(BUILD_ROOT)/<srcInstance.Path>/<rel> rather than the
+		// stale $(SOURCE_ROOT) shape. Generator NodeRef threading
+		// into DepRefs is intentionally omitted; see the JS branch
+		// for the rationale (L0 cost outweighs the topology gain).
 		ccSrcRel := strings.TrimPrefix(r6Out, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
-		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ctx.emit)
+
+		ccIn := in
+		ccIn.IsGenerated = true
+
+		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
 		return ccRef, ccOut, true
 	}

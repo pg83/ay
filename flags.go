@@ -51,6 +51,15 @@ package main
 // reference graph; M5 will lift this onto PlatformConfig.
 const ccCompilerPath = "/ix/realm/boot/bin/clang"
 
+// cxxCompilerPath is the absolute path to clang++ as it appears in
+// the reference graph for C++ source compilations (PR-29-D05). EmitCC
+// dispatches to this for `.cpp`/`.cc`/`.cxx` sources.
+const cxxCompilerPath = "/ix/realm/boot/bin/clang++"
+
+// cxxStandardFlag is the C++ language-standard switch the reference
+// graph applies to every C++ compilation (PR-29-D05).
+const cxxStandardFlag = "-std=c++20"
+
 // targetTriple is the --target= argument for the M1 aarch64 platform.
 const targetTriple = "aarch64-linux-gnu"
 
@@ -64,18 +73,37 @@ const archFlag = "armv8-a"
 // used in the reference graph (identical for target and host).
 const binPath = "/usr/bin"
 
-// ccIncludes are the -I include directories applied to every
-// non-musl CC compilation in the reference graph.
+// ccIncludesPrefix and ccIncludesSuffix are the two halves of the
+// non-musl include set. Per PR-29-D03, per-module ADDINCL paths slot
+// BETWEEN the baseline pair (BUILD_ROOT + SOURCE_ROOT) and the
+// linux-headers pair. Verified against the builtins fp_mode.c.o
+// reference (cmd_args[7..14]: prefix → 4 own ADDINCL → suffix).
 //
 // $(BUILD_ROOT) and $(SOURCE_ROOT) are literal placeholders the
 // build system substitutes at execution time; they are not Go
 // variables.
-var ccIncludes = []string{
+var ccIncludesPrefix = []string{
 	"-I$(BUILD_ROOT)",
 	"-I$(SOURCE_ROOT)",
+}
+
+var ccIncludesSuffix = []string{
 	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers",
 	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers/_nf",
 }
+
+// ccIncludes is the original 4-arg flat composition retained for the
+// musl-target case where own ADDINCL slots inside muslCcIncludes
+// (which interleaves musl arch paths between the prefix and suffix
+// halves). Composed at init time from prefix + suffix to keep the
+// declaration single-source.
+var ccIncludes = func() []string {
+	out := make([]string, 0, len(ccIncludesPrefix)+len(ccIncludesSuffix))
+	out = append(out, ccIncludesPrefix...)
+	out = append(out, ccIncludesSuffix...)
+
+	return out
+}()
 
 // debugPrefixMapFlags rewrite source paths in DWARF info so the
 // debug output is reproducible across build hosts. Identical for
@@ -288,14 +316,33 @@ var macroPrefixMapFlags = []string{
 }
 
 // muslCcIncludes is the include set for `contrib/libs/musl` CC
-// nodes. Differs from `ccIncludes` by inserting eight musl-specific
-// `-I` paths between `$(SOURCE_ROOT)` and the linux-headers pair.
-// Order matches the reference graph exactly — musl's own headers
-// must shadow the global linux-headers in resolution.
+// nodes (TARGET, aarch64). Differs from `ccIncludes` by inserting
+// eight musl-specific `-I` paths between `$(SOURCE_ROOT)` and the
+// linux-headers pair. Order matches the reference graph exactly —
+// musl's own headers must shadow the global linux-headers in
+// resolution.
 var muslCcIncludes = []string{
 	"-I$(BUILD_ROOT)",
 	"-I$(SOURCE_ROOT)",
 	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/aarch64",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/generic",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/src/include",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/src/internal",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/include",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/extra",
+	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers",
+	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers/_nf",
+}
+
+// muslCcIncludesX8664 is the host-musl (x86_64) include set used by
+// `composeMuslHostCC` (PR-29-D01). Replaces `arch/aarch64` with
+// `arch/x86_64` — the only delta from `muslCcIncludes`. Verified
+// against `$(BUILD_ROOT)/contrib/libs/musl/_/src/string/strlen.c.pic.o`
+// cmd_args[6..15] in the reference graph.
+var muslCcIncludesX8664 = []string{
+	"-I$(BUILD_ROOT)",
+	"-I$(SOURCE_ROOT)",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/x86_64",
 	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/generic",
 	"-I$(SOURCE_ROOT)/contrib/libs/musl/src/include",
 	"-I$(SOURCE_ROOT)/contrib/libs/musl/src/internal",

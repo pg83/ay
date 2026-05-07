@@ -518,11 +518,11 @@ func TestGen_DualInstantiation_BuildCowOn(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	tInstance := targetInstance(targetDir)
-	tCCRef, tCCOut := EmitCC(tInstance, "lib.c", e)
+	tCCRef, tCCOut := EmitCC(tInstance, "lib.c", ModuleCCInputs{}, e)
 	EmitAR(tInstance, []NodeRef{tCCRef}, []string{tCCOut}, nil, e)
 
 	hInstance := hostInstance(targetDir)
-	hCCRef, hCCOut := EmitCC(hInstance, "lib.c", e)
+	hCCRef, hCCOut := EmitCC(hInstance, "lib.c", ModuleCCInputs{}, e)
 	EmitAR(hInstance, []NodeRef{hCCRef}, []string{hCCOut}, nil, e)
 
 	if len(e.nodes) != 4 {
@@ -1939,6 +1939,146 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		if !foundInput {
 			t.Errorf("JS inputs = %v, want to contain %q", jsNode.Inputs, wantInput)
+		}
+	})
+}
+
+// TestGen_CXXFLAGS_GLOBAL_NotLeakedToOwnCmdArgs pins PR-29-D01: the
+// GLOBAL modifier on CXXFLAGS / CONLYFLAGS must NOT be forwarded to
+// the module's own cmd_args (neither the literal "GLOBAL" token nor
+// the flag that follows it). GLOBAL-prefixed flags propagate to peer
+// modules per ymake semantics; applying them to self would be
+// semantically wrong. PR-30 D04 will route them via cxxFlagsGlobal.
+//
+// This test exercises the full parser→applyUnknownStmt→moduleData
+// →ModuleCCInputs→EmitCC pipeline (D02: same shape, resolved by D01's
+// test per the brief).
+func TestGen_CXXFLAGS_GLOBAL_NotLeakedToOwnCmdArgs(t *testing.T) {
+	t.Run("CXXFLAGS_GLOBAL_not_in_cmd_args", func(t *testing.T) {
+		root := t.TempDir()
+		modDir := filepath.Join(root, "testlib")
+		Throw(os.MkdirAll(modDir, 0o755))
+
+		// CXXFLAGS(GLOBAL -nostdinc++) — the GLOBAL modifier marks this
+		// for peer propagation; the own CC node must receive neither
+		// "GLOBAL" nor "-nostdinc++".
+		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCXXFLAGS(GLOBAL -nostdinc++)\nSRCS(foo.cpp)\nEND()\n")
+		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+
+		g := Gen(TargetCfg, root, "testlib")
+
+		var ccNode *Node
+
+		for _, n := range g.Graph {
+			if n.KV["p"] == "CC" {
+				ccNode = n
+
+				break
+			}
+		}
+
+		if ccNode == nil {
+			t.Fatal("no CC node emitted")
+		}
+
+		if len(ccNode.Cmds) == 0 {
+			t.Fatal("CC node has no Cmds")
+		}
+
+		for _, arg := range ccNode.Cmds[0].CmdArgs {
+			if arg == "GLOBAL" {
+				t.Errorf("CC cmd_args contains literal %q — GLOBAL modifier leaked into own node", arg)
+			}
+
+			if arg == "-nostdinc++" {
+				t.Errorf("CC cmd_args contains %q — GLOBAL-prefixed flag leaked into own node (should be dropped until PR-30)", arg)
+			}
+		}
+	})
+
+	t.Run("CONLYFLAGS_GLOBAL_not_in_cmd_args", func(t *testing.T) {
+		root := t.TempDir()
+		modDir := filepath.Join(root, "testlib")
+		Throw(os.MkdirAll(modDir, 0o755))
+
+		// CONLYFLAGS(GLOBAL -Dfoo) — GLOBAL modifier on C-only flags;
+		// the own CC node (compiling a .c source) must receive neither
+		// "GLOBAL" nor "-Dfoo".
+		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCONLYFLAGS(GLOBAL -Dfoo)\nSRCS(bar.c)\nEND()\n")
+		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+
+		g := Gen(TargetCfg, root, "testlib")
+
+		var ccNode *Node
+
+		for _, n := range g.Graph {
+			if n.KV["p"] == "CC" {
+				ccNode = n
+
+				break
+			}
+		}
+
+		if ccNode == nil {
+			t.Fatal("no CC node emitted")
+		}
+
+		if len(ccNode.Cmds) == 0 {
+			t.Fatal("CC node has no Cmds")
+		}
+
+		for _, arg := range ccNode.Cmds[0].CmdArgs {
+			if arg == "GLOBAL" {
+				t.Errorf("CC cmd_args contains literal %q — GLOBAL modifier leaked into own node", arg)
+			}
+
+			if arg == "-Dfoo" {
+				t.Errorf("CC cmd_args contains %q — GLOBAL-prefixed flag leaked into own node (should be dropped until PR-30)", arg)
+			}
+		}
+	})
+
+	t.Run("CXXFLAGS_non_GLOBAL_still_applied", func(t *testing.T) {
+		root := t.TempDir()
+		modDir := filepath.Join(root, "testlib")
+		Throw(os.MkdirAll(modDir, 0o755))
+
+		// CXXFLAGS(-DMINE) without GLOBAL — must reach cmd_args.
+		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCXXFLAGS(-DMINE)\nSRCS(foo.cpp)\nEND()\n")
+		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+
+		g := Gen(TargetCfg, root, "testlib")
+
+		var ccNode *Node
+
+		for _, n := range g.Graph {
+			if n.KV["p"] == "CC" {
+				ccNode = n
+
+				break
+			}
+		}
+
+		if ccNode == nil {
+			t.Fatal("no CC node emitted")
+		}
+
+		if len(ccNode.Cmds) == 0 {
+			t.Fatal("CC node has no Cmds")
+		}
+
+		found := false
+
+		for _, arg := range ccNode.Cmds[0].CmdArgs {
+			if arg == "-DMINE" {
+				found = true
+
+				break
+			}
+		}
+
+		if !found {
+			t.Errorf("CC cmd_args missing %q — non-GLOBAL CXXFLAGS must be applied to own node", "-DMINE")
 		}
 	})
 }
