@@ -1,6 +1,9 @@
 package main
 
 import (
+	"errors"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -339,6 +342,137 @@ func derivePeerInstance(parent ModuleInstance, peerPath string) ModuleInstance {
 	}
 }
 
+// defaultPeerdirsFor returns the implicit DEFAULT_PEERDIRs ymake
+// adds automatically based on language + module flavor. PR-26 hard-
+// codes the upstream `_BUILTIN_PEERDIR` mechanism for CPP modules
+// because reproducing it from `build/conf/` in a faithful evaluator
+// is M5+ work and the gap between the explicit-only walker (50 nodes
+// for tools/archiver) and the reference (3,730 nodes) is dominated
+// by these implicit peers (musl alone is 2,656 nodes).
+//
+// Suppression model: ymake's `NO_PLATFORM` is the umbrella switch
+// that disables every implicit peer below; the more granular flags
+// (`NO_LIBC` / `NO_RUNTIME` / `NO_UTIL`) each disable one piece.
+// A module that sets all three granular flags is effectively
+// platform-less even if it does not type the `NO_PLATFORM` macro
+// itself — that is how `build/cow/on` (the M1 leaf) ends up with
+// zero peer deps in the reference graph despite never typing
+// `NO_PLATFORM()`. The helper treats the combination as an
+// effective `NO_PLATFORM` via `effectiveNoPlatform`.
+//
+// CPP modules implicitly PEERDIR (unless suppressed):
+//
+//   - contrib/libs/musl              — suppressed by NO_LIBC or
+//     effective NO_PLATFORM
+//   - contrib/libs/cxxsupp/builtins  — suppressed by NO_RUNTIME or
+//     effective NO_PLATFORM
+//   - library/cpp/malloc/api         — suppressed by effective
+//     NO_PLATFORM
+//
+// The list is intentionally smaller than the upstream `_BUILTIN_PEERDIR`
+// emits. The full upstream set also includes:
+//
+//   - contrib/libs/cxxsupp/libcxx
+//   - contrib/libs/cxxsupp/libcxxrt
+//   - contrib/libs/libunwind
+//   - util
+//
+// Those four are deferred for two orthogonal reasons captured in the
+// PR-26 Completed entry:
+//
+//  1. libcxx / libcxxrt / libunwind contain `IF (X == "Y")` predicates
+//     that the PR-13 macros parser does not recognise (the predicate
+//     ADT is bool-only — ExprIdent / ExprNot / ExprAnd / ExprOr).
+//     Walking them throws at parse time. Adding equality is parser
+//     work, deferred to a later PR.
+//
+//  2. util peers `contrib/libs/libc_compat`, whose ya.make uses
+//     `IF (ANDROID_API < 28)` (a `<` operator). Same parser gap; same
+//     deferral.
+//
+// Without those four the closure is incomplete vs the reference, but
+// adding the three above takes tools/archiver from 50 → ~1,500+ nodes,
+// which clears the PR-26 ≥150 acceptance bar and is correct (just
+// short of the full upstream set) for the modules it does emit.
+//
+// Cycle prevention: the helper guards against adding a module as its
+// own peer via the `instance.Path != "..."` checks (and a prefix
+// match for musl, which has sub-modules under `contrib/libs/musl/`).
+// The walker's own `walking` stack catches deeper cycles.
+//
+// Returns empty for non-CPP languages — proto / go / py / java will
+// get their own helpers in M5+.
+func defaultPeerdirsFor(instance ModuleInstance) []string {
+	if instance.Language != LangCPP {
+		return nil
+	}
+
+	noPlatform := effectiveNoPlatform(instance.Flags)
+
+	var peers []string
+
+	if !instance.Flags.NoLibc && !noPlatform {
+		// Don't peer musl from any contrib/libs/musl[/...] module —
+		// musl provides itself, and the PR-13 path heuristic already
+		// sets NoLibc for those, so this is belt-and-braces against
+		// a future heuristic regression.
+		if instance.Path != "contrib/libs/musl" && !strings.HasPrefix(instance.Path, "contrib/libs/musl/") {
+			peers = append(peers, "contrib/libs/musl")
+		}
+	}
+
+	if !instance.Flags.NoRuntime && !noPlatform {
+		if instance.Path != "contrib/libs/cxxsupp/builtins" {
+			peers = append(peers, "contrib/libs/cxxsupp/builtins")
+		}
+	}
+
+	if !noPlatform {
+		if instance.Path != "library/cpp/malloc/api" {
+			peers = append(peers, "library/cpp/malloc/api")
+		}
+	}
+
+	return peers
+}
+
+// effectiveNoPlatform reports true when the FlagSet's combination
+// behaves as `NO_PLATFORM` in upstream ymake — i.e., NoLibc + NoUtil +
+// NoRuntime all set. The M1 leaf `build/cow/on` exhibits this pattern
+// via the `inferFlagsFromPath` heuristic (module.go:161-165), which
+// seeds the triple from the path alone. Macro-driven examples (a real
+// ya.make that types all three NO_* without typing NO_PLATFORM) await
+// a future closure module.
+func effectiveNoPlatform(f FlagSet) bool {
+	if f.NoPlatform {
+		return true
+	}
+
+	return f.NoLibc && f.NoRuntime && f.NoUtil
+}
+
+// peerYaMakeExists reports whether `<sourceRoot>/<peerPath>/ya.make`
+// is a regular file. Used by the default-peer walk to skip implicit
+// peers that are not present in the (possibly synthetic) source root,
+// rather than throwing the parser's "no such file" error. Explicit
+// PEERDIRs do not go through this filter — a missing explicit peer
+// is a real bug.
+func peerYaMakeExists(sourceRoot, peerPath string) bool {
+	_, err := os.Stat(filepath.Join(sourceRoot, peerPath, "ya.make"))
+
+	if err == nil {
+		return true
+	}
+
+	if errors.Is(err, fs.ErrNotExist) {
+		return false
+	}
+
+	ThrowFmt("gen: failed to stat default-peer ya.make %q: %v", filepath.Join(sourceRoot, peerPath, "ya.make"), err)
+
+	return false // unreachable
+}
+
 // genModule emits the subgraph for `instance` and returns its
 // `*moduleEmitResult`. Memoised: a second call for the same
 // instance returns the cached result without re-emitting.
@@ -406,16 +540,54 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ThrowFmt("gen: %s has no compilable sources (after IF/header filter)", instance.Path)
 	}
 
-	// Recurse into peers in declaration order (R14). Each peer's
-	// own ya.make is parsed for macro-derived flags inside the
-	// recursive call.
-	peerArchiveRefs := make([]NodeRef, 0, len(d.peerdirs))
-	peerArchivePaths := make([]string, 0, len(d.peerdirs))
-	peerGlobalRefs := make([]NodeRef, 0, len(d.peerdirs))
-	peerGlobalPaths := make([]string, 0, len(d.peerdirs))
+	// Recurse into peers. Implicit DEFAULT_PEERDIRs (PR-26) are
+	// prepended to the explicit `PEERDIR(...)` list before the walk
+	// so a module's transitive closure includes the runtime / libc /
+	// allocator scaffolding ymake adds via `_BUILTIN_PEERDIR`. The
+	// declaration-order R14 invariant for the explicit set is kept
+	// — defaults sort first, then explicit in source order.
+	//
+	// Defaults are tolerant of a missing ya.make: synthetic test
+	// fixtures populate only the modules they care about, and a
+	// helper-supplied default (musl / builtins / malloc/api) will
+	// not exist in those trees. A missing EXPLICIT peer is still a
+	// hard error — the test author declared it, so its absence is a
+	// fixture bug, not an "implicit ymake plumbing" no-op.
+	defaults := defaultPeerdirsFor(instance)
+
+	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
+	allPeers := make([]string, 0, len(defaults)+len(d.peerdirs))
+
+	for _, p := range defaults {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+		seen[p] = struct{}{}
+		allPeers = append(allPeers, p)
+	}
 
 	for _, p := range d.peerdirs {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+		seen[p] = struct{}{}
+		allPeers = append(allPeers, p)
+	}
+
+	peerArchiveRefs := make([]NodeRef, 0, len(allPeers))
+	peerArchivePaths := make([]string, 0, len(allPeers))
+	peerGlobalRefs := make([]NodeRef, 0, len(allPeers))
+	peerGlobalPaths := make([]string, 0, len(allPeers))
+
+	for i, p := range allPeers {
 		peerPath := filepath.Clean(p)
+
+		isDefault := i < len(defaults)
+
+		if isDefault && !peerYaMakeExists(ctx.sourceRoot, peerPath) {
+			continue
+		}
+
 		peerInstance := derivePeerInstance(instance, peerPath)
 		peerResult := genModule(ctx, peerInstance)
 

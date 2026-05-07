@@ -6,6 +6,7 @@
 # Generated
 /our.json
 /tmp_*
+/out/
 
 # OS
 .DS_Store

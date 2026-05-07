@@ -1008,3 +1008,49 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 **Location:** gen.go:611-614
 **Description:** D10 fix rewrote stale line numbers but picked wrong scope. R6 comment is in `emitOneSource`; EmitJS is in `genModule` — different function. "search for EmitJS" still finds it via file-wide grep.
 **Fix:** Deferred. Replace "this function" with "this file" or "in genModule" in next gen.go edit.
+
+---
+
+## PR-26
+
+### [PR-26-D01] musl self-guard `strings.HasPrefix(instance.Path, "contrib/libs/musl")` matches musl_extra
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go:417
+**Description:** Self-cycle guard uses HasPrefix without trailing slash. Matches musl, musl/full, AND musl_extra (false positive). PR-23 fixed same bug for `inferModuleFlavor` via `path == "contrib/libs/musl" || strings.HasPrefix(path, "contrib/libs/musl/")`. Latent today (musl_extra not in current closure).
+**Suggested fix:** Use exact-match-or-trailing-slash convention. Add `musl_extra_not_self` test case.
+
+### [PR-26-D02] 5 of 8 new DefaultIfEnv bindings speculative (not consulted by PR-26 walk)
+**Status:** resolved
+**Severity:** minor
+**Location:** macros.go:68-70, 82, 84
+**Description:** Reviewer empirically verified: removing OS_CYGWIN, CYGWIN, SUN, USE_STL_SYSTEM, FUZZING does NOT break tests (those modules — util, libcxx, libcxxrt — aren't walked). Violates "concrete observed gap" rule. Comments claim modules that PR-26 doesn't walk. The 3 needed (USE_EAT_MY_DATA, ARCH_ARM6, WITH_MAPKIT) confirmed.
+**Suggested fix:** Remove the 5 speculative bindings. Re-add when actual walk encounters them (D27 throw is the signal).
+
+### [PR-26-D03] Explicit-PEERDIR-of-default produces duplicate archive references in AR/LD
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go:543-576
+**Description:** Walker prepends defaults then iterates allPeers. Module that explicitly PEERDIR(musl) without NO_LIBC duplicates musl. Memo returns same NodeRef both times — peerArchiveRefs/Paths gets twice. AR/LD see duplicate. Latent (no current closure module hits).
+**Suggested fix:** De-dup via seen map before walking. Add test: explicit PEERDIR of default → exactly one archive in peer list.
+
+### [PR-26-D04] TestGen_DefaultPeerdirs_HelperSuppression missing no_util_only and musl_extra cases
+**Status:** resolved
+**Severity:** nit
+**Location:** gen_test.go:1254-1352
+**Description:** 9-case table covers most combinations but missing: (a) `no_util_only` — NoUtil alone suppresses nothing (per docstring); regression invisible. (b) `musl_extra_not_self` paired with D01.
+**Suggested fix:** Add both cases.
+
+### [PR-26-D05] peerYaMakeExists silently elides defaults on any os.Stat error (not just NotExist)
+**Status:** resolved
+**Severity:** nit
+**Location:** gen.go:457-461, :558-560
+**Description:** Returns false for any err. Conflates "synthetic test missing stub" with "production tree corrupted". Operator has no signal at gen time.
+**Suggested fix:** Discriminate: only ENOENT silences; other errors throw via `errors.Is(err, fs.ErrNotExist)`.
+
+### [PR-26-D06] effectiveNoPlatform docstring example misleading
+**Status:** resolved
+**Severity:** nit
+**Location:** gen.go:437-442
+**Description:** Comment says build/cow/on demos this pattern via "ya.make never types NO_PLATFORM but reference has zero peer deps". But build/cow/on gets the triple from inferFlagsFromPath HEURISTIC (module.go:161-165), NOT from ya.make declarations. Conflates path-heuristic source with macro-derived source.
+**Suggested fix:** Reword to clarify the source is the path heuristic; macro-driven examples await a future closure module.
