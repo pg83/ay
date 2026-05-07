@@ -9,8 +9,12 @@ package main
 //     DAG have the same shape, modulo UID renumbering? Implemented by
 //     compare_topology.go via Merkle-style fingerprints over (kv.p,
 //     sorted child fingerprints).
-//   - L1/L2/L3 (PR-05/PR-06): added later. Stubs in CompareReport leave
-//     space for them.
+//   - L1 (PR-05, compare_props.go): per-pair match on kv["p"],
+//     target_properties, outputs. Pairing is keyed by
+//     (outputs[0], platform) — see compare_props.go for the rationale.
+//   - L2 (PR-05, compare_props.go): per-pair match on inputs, tags,
+//     requirements. Reuses the same pairing as L1.
+//   - L3 (PR-06): added later.
 //
 // The L0 result is a percentage, not a yes/no. A value of 1.0 means
 // the multisets of fingerprints are identical; anything below 1.0
@@ -24,20 +28,29 @@ package main
 
 // CompareReport is the result of comparing two graphs at one or more
 // levels. Each implemented level reports a percentage in [0.0, 1.0]
-// and an optional one-line diagnostic note. PR-04 ships only the L0
-// fields; PR-05/PR-06 add L1/L2/L3 alongside.
+// and an optional one-line diagnostic note. PR-04 shipped L0; PR-05
+// adds L1 and L2; PR-06 will add L3.
 //
-// Skipped lists levels that were requested by the caller but are not
-// yet implemented. PR-04 fills it whenever maxLevel > 0.
+// Per-level fields are populated only when the caller's maxLevel
+// reached that level — e.g. Compare(_, _, 0) leaves L1/L2 at zero
+// values, with L1Note/L2Note empty. Callers that need to know which
+// levels actually ran should consult Skipped (levels requested but
+// not yet implemented) and the maxLevel they passed in.
 type CompareReport struct {
-	L0      float64 // topology match (modulo UID renumbering); 1.0 == identical multisets
-	L0Note  string  // human-readable summary, e.g. "3729 of 3730 fingerprints matched"
-	Skipped []int   // levels requested but not yet implemented
+	L0       float64  // topology match (modulo UID renumbering); 1.0 == identical multisets
+	L0Note   string   // human-readable summary, e.g. "3729 of 3730 fingerprints matched"
+	L1       float64  // per-pair match on kv.p, target_properties, outputs (PR-05)
+	L1Note   string   // human-readable summary, e.g. "3729 of 3730 pairs match"
+	L2       float64  // per-pair match on inputs, tags, requirements (PR-05)
+	L2Note   string   // human-readable summary
+	WantOnly []string // UIDs in want that have no pair in got (sorted)
+	GotOnly  []string // UIDs in got that have no pair in want (sorted)
+	Skipped  []int    // levels requested but not yet implemented
 }
 
 // highestImplementedLevel is the largest level value Compare currently
-// computes. Bumped by PR-05 (to 1 or 2) and PR-06 (to 3).
-const highestImplementedLevel = 0
+// computes. PR-05 bumps it to 2; PR-06 will bump it to 3.
+const highestImplementedLevel = 2
 
 // Compare runs the requested levels (currently only level 0; later
 // levels are added in PR-05/PR-06) on two *Graph instances and returns
@@ -66,6 +79,26 @@ func Compare(want, got *Graph, maxLevel int) *CompareReport {
 	l0, note := compareTopology(want, got)
 	report.L0 = l0
 	report.L0Note = note
+
+	// L1 and L2 share the same pairing (computed once). Building it
+	// is O(N) over both graphs and dominates none of the per-level
+	// work, but doing it twice would still be wasteful and would
+	// risk drift if the pairing logic ever evolved between calls.
+	if maxLevel >= 1 {
+		pairs, wantOnly, gotOnly := pairByOutput(want, got)
+		report.WantOnly = wantOnly
+		report.GotOnly = gotOnly
+
+		l1, l1Note := compareL1(want, got, pairs, wantOnly, gotOnly)
+		report.L1 = l1
+		report.L1Note = l1Note
+
+		if maxLevel >= 2 {
+			l2, l2Note := compareL2(want, got, pairs, wantOnly, gotOnly)
+			report.L2 = l2
+			report.L2Note = l2Note
+		}
+	}
 
 	for lvl := highestImplementedLevel + 1; lvl <= maxLevel; lvl++ {
 		report.Skipped = append(report.Skipped, lvl)

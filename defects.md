@@ -448,3 +448,63 @@ Codify same shape for PR-10.
 **Location:** compare_topology_test.go:65-67
 **Description:** Inside outer `for _, n := range got.Graph` loop, `for k, vals := range n.ForeignDeps {` is followed by blank line then nested `for i, d := range vals {`. Same class as D01 but in test file (D01 swept production only). One missed line.
 **Fix:** Deferred. Trivial one-line deletion when next editing compare_topology_test.go (e.g. PR-05's L1+L2 work will likely touch the file).
+
+---
+
+## PR-05
+
+### [PR-05-D01] `indexByUID` docstring claims throw on duplicate UIDs but body silently overwrites
+**Status:** resolved
+**Severity:** minor
+**Location:** compare_props.go:225-235
+**Description:** Doc says "Throws on duplicate UIDs (same defensive posture as compare_topology.go's byUID build)" but body has no duplicate check — `out[n.UID] = n` overwrites silently. In production unreachable (compareTopology checks first), but bypassable through any direct call (future test, debugger, --strict mode). PR-04 set defensive duplicate-check as project standard.
+**Suggested fix:** Add the throw to match docstring: `if existing, dup := out[n.UID]; dup { ThrowFmt("compare: graph has duplicate UID %q", n.UID) }`. (Preferred over docstring weakening.)
+
+### [PR-05-D02] `--level` flag usage string lies — still says "PR-04 implements L0 only" after PR-05 added L1+L2
+**Status:** resolved
+**Severity:** minor
+**Location:** main.go:107
+**Description:** `level := fs.Int("level", 3, "highest comparator level to run (0=topology; PR-04 implements L0 only)")` — parenthetical is stale. PR-05 implemented L1+L2; user sees this in `compare --help`. The longer `printCompareUsage` block IS up-to-date — only the short flag-default text drifted.
+**Suggested fix:** Replace parenthetical with `"highest comparator level to run (0=topology, 1=props/outputs, 2=inputs/tags/reqs; 3+ reserved for PR-06)"`.
+
+### [PR-05-D03] L1Note/L2Note phrasing "X of Y pairs match" misrepresents Y when graphs have unpaired nodes
+**Status:** resolved
+**Severity:** minor
+**Location:** compare_props.go:151, 178
+**Description:** Note format: `"%d of %d pairs match"` where `denom = max(len(want.Graph), len(got.Graph))` (total node count, NOT pair count). For PR-05 self-match (3730/3730) wording incidentally correct; latent bug triggers when graphs actually differ (PR-10's vertical slice would print "L3=100%-of-2-nodes" — exact case). Reader can't distinguish "230 mismatched pairs" from "100 mismatched + 130 unpaired".
+**Suggested fix:** Combine with D04 — thread `wantOnly`/`gotOnly` from `pairByOutput` into `CompareReport`, then format note as `"%d matched / %d pairs / %d unpaired-want / %d unpaired-got"` or similar. Make the denominator's meaning explicit.
+
+### [PR-05-D04] `wantOnly`/`gotOnly` returned by `pairByOutput` are computed and discarded
+**Status:** resolved
+**Severity:** minor
+**Location:** compare.go:86 (caller), compare_props.go:57-97 (callee)
+**Description:** Caller `pairs, _, _ := pairByOutput(want, got)` discards both unpaired lists. Callee spends two append loops + two sorts to produce them — pure waste. Test `TestPairByOutput_UnmatchedReportedSeparately` exercises an API nothing else consumes.
+**Suggested fix:** Thread `wantOnly`/`gotOnly` into `CompareReport` (new fields `WantOnly []string`, `GotOnly []string` or counts). cmdCompare can include them in output. Fixes D03 in same stroke.
+
+### [PR-05-D05] Comment claims inputs alphabetically ordered in g.json — false (7 nodes break it)
+**Status:** resolved
+**Severity:** nit
+**Location:** compare_props.go:206-208
+**Description:** `l2Match` docstring: "Inputs are alphabetically ordered in g.json and tags are preserved in declaration order." Empirical: 7 of 3730 nodes have inputs in non-alphabetical order (e.g. nodes mixing `$(BUILD_ROOT)/...` and `$(SOURCE_ROOT)/...` paths with `vcs_info.py` slotted mid-list). Outputs and tags ARE alphabetical. Order-sensitive comparison still correct, but rationale stated wrong — future PR-08+/PR-10 emitter author will trust docstring instead of inspecting data.
+**Suggested fix:** Replace with: `"Inputs and tags are emitted in a ymake-deterministic order (mostly alphabetical for inputs, with some ymake-internal grouping; tags follow declaration order). Order-sensitive comparison is correct because the yatool emitter must reproduce that same order — a permutation indicates emitter drift, not comparator noise."`
+
+### [PR-05-D06] `compareL1` docstring claims note summarises "unpaired nodes on either side" but note doesn't
+**Status:** resolved
+**Severity:** nit
+**Location:** compare_props.go:128-129
+**Description:** Doc says "Returns the percentage and a one-line note summarising matched pairs and unpaired nodes on either side." Actual: only `"%d of %d pairs match"`. Doc lies. Same issue inherited by `compareL2`.
+**Suggested fix:** Same edit as D03/D04 — actually include unpaired counts in note; docstring becomes accurate.
+
+### [PR-05-D07] CompareReport.L1Note inline-comment example shows pre-D03 format
+**Status:** resolved (deferred — pure doc drift; fix when next editing compare.go)
+**Severity:** nit
+**Location:** compare.go:43
+**Description:** L1Note field comment reads `// human-readable summary, e.g. "3729 of 3730 pairs match"` — pre-D03 format. Misleads reader inspecting struct definition. L2Note line 45 just says "human-readable summary" so it's accurate.
+**Fix:** Deferred. Replace example with `// human-readable summary, e.g. "3729 matched / 3730 pairs / 0 unpaired-want / 1 unpaired-got"`. Sweep when next editing compare.go (likely PR-06's L3 addition).
+
+### [PR-05-D08] L1Note/L2Note format-pinning tests weakened from "2 of 2" to bare "matched"
+**Status:** resolved (deferred — nit-tier honesty regression; fix when next editing compare_props_test.go)
+**Severity:** nit
+**Location:** compare_props_test.go:130-136
+**Description:** Round-1 pinned `strings.Contains(r.L1Note, "2 of 2")` (numerator + denominator). Round-2 D03/D04/D06 fix swapped to `strings.Contains(r.L1Note, "matched")` — only checks the literal word. Regression to `"matched"` with no digits or `"0 matched / 0 pairs / ..."` after counter regression would still pass. Defensible-but-loose substring.
+**Fix:** Deferred. Replace with `strings.Contains(r.L1Note, "2 matched")` + `strings.Contains(r.L2Note, "2 matched")` — restores count-pinning, still stable across denom-formula changes.
