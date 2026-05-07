@@ -4,7 +4,7 @@ package main
 //
 // Field declaration order matters: encoding/json emits fields in the order
 // they are declared in the struct, and the reference output in
-// /home/pg/monorepo/yatool_orig/g.json lists keys alphabetically
+// /home/pg/monorepo/yatool_orig/sg.json lists keys alphabetically
 // (cmds, deps, env, foreign_deps, host_platform, inputs, kv, outputs,
 // platform, requirements, self_uid, stats_uid, tags, target_properties, uid).
 // Keep the field ordering below in lockstep with that observation.

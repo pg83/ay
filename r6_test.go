@@ -15,7 +15,7 @@ import (
 // the edge from `ForeignDepRefs["tool"]` to `DepRefs` to match the
 // reference shape: `deps=[ragel6 host LD UID]`, no foreign_deps),
 // and that cmd_args/kv/tags/requirements match the reference shape
-// observed in /home/pg/monorepo/yatool_orig/g.json.
+// observed in /home/pg/monorepo/yatool_orig/sg.json.
 func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	e := NewBufferedEmitter()
 

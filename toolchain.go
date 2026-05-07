@@ -38,7 +38,7 @@ type PlatformConfig struct {
 
 // DefaultLinuxConfig is the canonical M2 (target=aarch64, host=x86_64)
 // configuration. Mirrors the platform pair in
-// /home/pg/monorepo/yatool_orig/g.json: 1,930 target nodes on
+// /home/pg/monorepo/yatool_orig/sg.json: 1,930 target nodes on
 // `default-linux-aarch64`, ~1,800 host nodes on `default-linux-x86_64`,
 // 27 cross-platform foreign-dep edges between them.
 var DefaultLinuxConfig = PlatformConfig{

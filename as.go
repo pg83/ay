@@ -49,10 +49,15 @@ var asWnoEverything = []string{"-Wno-everything"}
 // reads only deps; foreign-deps-only shape diverged for asmlib's 25
 // AS nodes).
 //
+// `includeInputs` (PR-31 D11) is the resolved transitive header
+// closure for assembly sources that #include `.h`/`.inc` files
+// (e.g. cxxsupp/builtins/chkstk.S → assembly.h). Empty for the
+// common case where the source has no transitive headers.
+//
 // Returns (NodeRef, outputPath) so the caller can wire the AS node
 // as a dependency of the AR step and avoid re-deriving the output
 // path.
-func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *NodeRef, emit Emitter) (NodeRef, string) {
+func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *NodeRef, includeInputs []string, emit Emitter) (NodeRef, string) {
 	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + ".o"
 	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
 
@@ -101,6 +106,10 @@ func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *N
 		"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
 	}
 
+	allInputs := make([]string, 0, 1+len(includeInputs))
+	allInputs = append(allInputs, inputPath)
+	allInputs = append(allInputs, includeInputs...)
+
 	node := &Node{
 		Cmds: []Cmd{
 			{
@@ -110,7 +119,7 @@ func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *N
 			},
 		},
 		Env:     env,
-		Inputs:  []string{inputPath},
+		Inputs:  allInputs,
 		Outputs: []string{outputPath},
 		KV: map[string]string{
 			"p":  "AS",

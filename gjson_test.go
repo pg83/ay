@@ -10,11 +10,18 @@ import (
 // Path to the on-disk reference graph used as the high-fidelity smoke
 // for LoadReference. Tests that depend on this file skip cleanly in
 // environments where it is not present (per STYLE.md filter pattern).
-const referenceGraphPath = "/home/pg/monorepo/yatool_orig/g.json"
-
-// Counts pinned against the upstream g.json at the time PR-03 landed:
 //
-//	$ python3 -c "import json; d=json.load(open('.../g.json')); \
+// PR-31 D01: switched from g.json to sg.json. sg.json is the
+// upstream-emitted graph WITH parsed `#include` transitive closures
+// expanded as additional `inputs` per CC node. The L2 acceptance
+// gate (≥70%) is computed against this reference; the include
+// scanner (PR-31 D03) populates each CC node's IncludeInputs to
+// match.
+const referenceGraphPath = "/home/pg/monorepo/yatool_orig/sg.json"
+
+// Counts pinned against the upstream sg.json:
+//
+//	$ python3 -c "import json; d=json.load(open('.../sg.json')); \
 //	    print(len(d['graph']), len(d['result']))"
 //	3730 1
 //

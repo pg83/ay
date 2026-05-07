@@ -72,11 +72,19 @@ import (
 //
 // D04 (peer-propagated GLOBAL ADDINCL/CXXFLAGS) is deferred to PR-31.
 type ModuleCCInputs struct {
-	AddIncl     []string
-	CXXFlags    []string
-	COnlyFlags  []string
-	IsGenerated bool
-	Generator   NodeRef
+	AddIncl []string
+	// PeerAddInclGlobal is the union of every PEERDIR's transitive
+	// ADDINCL(GLOBAL ...) contributions in declaration order
+	// (PR-31 D06). Slotted in cmd_args AFTER own AddIncl and BEFORE
+	// the ccIncludesSuffix (linux-headers pair). The include scanner
+	// also queries this slice as a search-path fallback when a
+	// `<header>` does not resolve from own AddIncl. Empty for
+	// modules whose PEERDIR closure declares no GLOBAL ADDINCL.
+	PeerAddInclGlobal []string
+	CXXFlags          []string
+	COnlyFlags        []string
+	IsGenerated       bool
+	Generator         NodeRef
 	// HasGenerator distinguishes "no generator" from "generator that
 	// happens to have a zero-valued NodeRef.id" (BufferedEmitter
 	// assigns ids starting at 0, so a nil-check on the bare struct is
@@ -99,6 +107,13 @@ type ModuleCCInputs struct {
 	// disables the local-existence check entirely (used by synthetic
 	// tests that pin the SRCDIR-rebased shape directly).
 	SourceRoot string
+	// IncludeInputs is the resolved transitive header set produced
+	// by the include scanner (PR-31 D08). EmitCC appends this slice
+	// to node.Inputs after the primary source path, in DFS-discovery
+	// order. Empty for synthetic test paths that bypass the walker
+	// or for IsGenerated CCs where the scanner is intentionally
+	// skipped (generated CCs use a separate input shape).
+	IncludeInputs []string
 }
 
 // EmitCC emits a CC node for compiling `srcRel` (a path relative to
@@ -150,15 +165,26 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	// -D_musl_=1 which is peer-propagated; D04 territory).
 	muslOwnExtras := []string(nil)
 
+	// PR-31 D06: for non-musl flavours, peer-propagated GLOBAL
+	// ADDINCL slots after the module's own ADDINCL — both feed
+	// appendAddIncl (single concatenation in declaration order:
+	// own first, then peers). For musl flavours, BOTH own AddIncl
+	// and PeerAddInclGlobal are dropped: musl's `-nostdinc` +
+	// `muslCcIncludes` set defines the entire include search path
+	// by design, and adding peer-GLOBAL `-I` would conflict with
+	// the musl-self-isolation invariant.
+	combinedAddIncl := append([]string(nil), in.AddIncl...)
+	combinedAddIncl = append(combinedAddIncl, in.PeerAddInclGlobal...)
+
 	switch {
 	case isMusl && instance.Flags.PIC:
 		cmdArgs = composeMuslHostCC(outputPath, inputPath, nil, muslOwnExtras, isCxx)
 	case isMusl:
 		cmdArgs = composeMuslCC(outputPath, inputPath, nil, muslOwnExtras, isCxx)
 	case instance.Flags.PIC:
-		cmdArgs = composeHostCC(outputPath, inputPath, in.AddIncl, ownExtras, isCxx, instance.Flags.NoCompilerWarnings)
+		cmdArgs = composeHostCC(outputPath, inputPath, combinedAddIncl, ownExtras, isCxx, instance.Flags.NoCompilerWarnings)
 	default:
-		cmdArgs = composeTargetCC(outputPath, inputPath, in.AddIncl, ownExtras, isCxx, instance.Flags.NoCompilerWarnings)
+		cmdArgs = composeTargetCC(outputPath, inputPath, combinedAddIncl, ownExtras, isCxx, instance.Flags.NoCompilerWarnings)
 	}
 
 	// The reference graph carries the same env map at both the cmd
@@ -170,6 +196,14 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 		"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
 	}
 
+	// PR-31 D09: prepend the resolved transitive header set to
+	// node.Inputs after the primary source path. The order is
+	// primary source first, then include-inputs in DFS-discovery
+	// order (the scanner does no sorting; L2 compares as multiset).
+	allInputs := make([]string, 0, 1+len(in.IncludeInputs))
+	allInputs = append(allInputs, inputPath)
+	allInputs = append(allInputs, in.IncludeInputs...)
+
 	node := &Node{
 		Cmds: []Cmd{
 			{
@@ -178,7 +212,7 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 			},
 		},
 		Env:     env,
-		Inputs:  []string{inputPath},
+		Inputs:  allInputs,
 		Outputs: []string{outputPath},
 		KV: map[string]string{
 			"p":  "CC",
@@ -435,7 +469,7 @@ func appendCxxStdAndOwn(cmdArgs []string, isCxx bool, noCompilerWarnings bool, i
 // composeTargetCC composes the cmd_args bundle for a TARGET-flavoured
 // no-libc CC compilation. Pinned byte-exact (101 args, no per-module
 // extras) against build/cow/on/lib.c.o in
-// /home/pg/monorepo/yatool_orig/g.json.
+// /home/pg/monorepo/yatool_orig/sg.json.
 func composeTargetCC(outputPath, inputPath string, addIncl, ownExtras []string, isCxx, noCompilerWarnings bool) []string {
 	cmdArgs := make([]string, 0, 101+len(addIncl)+len(ownExtras)+2)
 	cmdArgs = append(cmdArgs,
@@ -469,7 +503,7 @@ func composeTargetCC(outputPath, inputPath string, addIncl, ownExtras []string, 
 // composeHostCC composes the cmd_args bundle for a HOST-flavoured PIC
 // CC compilation. Pinned byte-exact (105 args, no per-module extras)
 // against build/cow/on/lib.c.pic.o in
-// /home/pg/monorepo/yatool_orig/g.json.
+// /home/pg/monorepo/yatool_orig/sg.json.
 //
 // Differs from target in:
 //   - No `-march=` (host is generic x86_64; the architecture is

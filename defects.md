@@ -1290,3 +1290,100 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 **Location:** gen.go:747
 **Description:** Comment added in D04 reads `Caller (defaultPeerdirsFor in gen.go:932) gates on !isRuntimeAncestor(...)`. Actual caller is `genModule` (defined at gen.go:835); line 932 is inside genModule's body, not inside defaultPeerdirsFor. Line number correct; function name not.
 **Fix:** Deferred. One-token edit (`defaultPeerdirsFor` → `genModule`); will pick up in next gen.go cleanup PR or M3 work.
+
+---
+
+## PR-31
+
+### [PR-31-D01] include scanner BaseSearchPaths omits $(SOURCE_ROOT), missing all repo-rooted system-form includes
+**Status:** resolved
+**Severity:** major
+**Location:** gen.go:1656-1700 (includeScannerBasePaths); scanner.go:380-388 (resolve fallback chain)
+**Description:** CC compiler invocations include `-I$(SOURCE_ROOT)` in cmd_args, enabling `<util/folder/path.h>`, `<library/cpp/...>`, `<contrib/...>` resolution against source-tree root. Scanner's BasePaths originally only had linux-headers prefix.
+**Fix:** includeScannerBasePaths prepends empty-string entry (resolves to source root) for non-musl flavours. main.cpp.o went from 17 → 1002 inputs (vs ref 1009). L2 itself stayed at 79.92% (multiset comparison requires exact match, and the residual 7-input gap from D12 dominates), but the structural input recovery is real.
+
+### [PR-31-D02] PR brief reports a target/host shift that did not occur
+**Status:** resolved (orchestrator-acknowledged; brief's "1985→1916 / 1733→1802" framing was based on a stale baseline)
+**Severity:** minor
+**Location:** PR-31 commit message + Completed-entry draft (only)
+**Description:** Brief stated target dropped 69 (1985→1916) and host gained 69 (1733→1802). Reviewer verified by building parent commit cc3c60b: pre-PR-31 already produces target=1916, host=1802. The "1985+1733" baseline is from an earlier point in the codebase, not the immediate parent (probably PR-30 measurement against g.json). No 69-node re-platforming caused by PR-31.
+**Fix:** No code change. Orchestrator's PR-31 Completed entry will use correct framing: "target/host counts unchanged from pre-PR-31 (1916/1802); the older 1985+1733 baseline cited in some PR-30 prep notes was stale (measured before later closure refinements)."
+
+### [PR-31-D03] Relaxed JS/LD prefix tests pass silently on the actual regression mode
+**Status:** resolved
+**Severity:** major
+**Location:** js_test.go:98-110; ld_test.go:247-249
+**Description:** Both tests document a "known regression" where the emitter underproduces inputs (got=8, ref=941 in JS; got=10, ref ~1052 in LD). Their relaxed check reads `if len(ref.Inputs) < len(got.Inputs) { t.Errorf("regression?") }` — fires only when our output is LARGER than reference. Per-element loop iterates `got.Inputs` indices and breaks at `i >= len(ref.Inputs)`. Future regression dropping got to 5 inputs (still a prefix of ref) passes silently. Tests give appearance of meaningful regression check but check almost nothing.
+**Suggested fix:** Hard-pin `len(got) == K` for explicit current-emitter K (8 for JS, 10 for LD), with comment "documented prefix subset; PR-32+ extends to full set". Future drops below K then fail. Or convert to `t.Skip(...)`.
+
+### [PR-31-D04] gen.go:142-143 comment falsely claims the two scanners share a parsed-includes cache
+**Status:** resolved
+**Severity:** nit
+**Location:** gen.go:141-149
+**Description:** Comment says "scannerTarget … scannerHost … They share the same parsed-includes cache via the file-system layer". Implementation in scanner.go:92-99 (`NewIncludeScanner`) constructs a fresh `parsed map[string][]includeDirective` for each scanner — nothing shared.
+**Suggested fix:** Rewrite comment: "Each scanner has its own parsed-includes cache (the OS page cache amortises rereads). Each also has its own SysInclSet because linux-musl-<arch>.yml mappings differ between platforms."
+
+### [PR-31-D05] Dead `isPrimary` parameter in scanner.go:dfs
+**Status:** resolved
+**Severity:** nit
+**Location:** scanner.go:199, 213, 216
+**Description:** dfs's `isPrimary bool` parameter never consulted; body has `_ = isPrimary` to silence unused-parameter warning. Source-itself filtering happens in WalkClosure's post-walk loop. isPrimary is set true initial / false thereafter; nothing branches on it.
+**Suggested fix:** Remove the parameter from `dfs` signature and the two call sites.
+
+### [PR-31-D06] Dead `searchPathFound` terminal write in scanner.go:resolve
+**Status:** resolved
+**Severity:** nit
+**Location:** scanner.go:380-390
+**Description:** Inside BaseSearchPaths loop the variable is set to true at line 383 but never read after; line 390 silences the warning. Relic from earlier shape that gated sysincl on `!searchPathFound`; current code unconditionally appends sysincl matches.
+**Suggested fix:** Replace the BaseSearchPaths body's `searchPathFound = true; break` with a bare `break`; delete line 390.
+
+### [PR-31-D07] gen_test.go:2544 still loads g.json instead of sg.json (D01 incomplete)
+**Status:** resolved
+**Severity:** minor
+**Location:** gen_test.go:2538-2549
+**Description:** D01 mandated referenceGraphPath switch to sg.json across all tests. TestGen_ToolsArchiver_L0_AtLeast95's doc-comment names sg.json but body skips on `os.Stat(filepath.Join(sourceRoot, "g.json"))` and calls `LoadReference(filepath.Join(sourceRoot, "g.json"))`. Test still passes (g.json present, topology nearly identical) but skip-gate, reference, doc-comment disagree.
+**Suggested fix:** Replace both literal "g.json" references with "sg.json".
+
+### [PR-31-D08] JS-emitter include-closure regression not recorded in defects.md
+**Status:** resolved (deferred — JS emitter scope expansion to PR-32+)
+**Severity:** minor
+**Location:** js.go::EmitJS; js_test.go:90-110 inline comment; PR-31 plan doc
+**Description:** PR-31 acknowledges (commit message, plan doc, js_test.go inline comment) that JS emitter doesn't fold per-source include closure into JS-derived CC node inputs (~941 entries missing per JS-derived CC; 23 such CCs; util/all_charset.cpp.o produces 1 input vs reference 1176). CLAUDE.md requires every reviewer-acknowledged gap to land as a structured defects.md entry.
+**Suggested fix:** This entry IS the defects.md record (now). Mark `resolved (deferred — js.go scope expansion in PR-32+)` after the round-2 fix lands.
+
+### [PR-31-D09] LD-emitter peer-archive + member-input passthrough regression not recorded in defects.md
+**Status:** resolved (deferred — LD emitter scope expansion to PR-32+)
+**Severity:** minor
+**Location:** ld.go::composeLDInputs; ld_test.go:236-249 inline comment
+**Description:** Same pattern as D08. ld.go::composeLDInputs doesn't fold peer-archive paths or per-member-CC include closures into LD inputs; relaxed test (itself defective per D03) acknowledges deferral.
+**Suggested fix:** This entry IS the defects.md record. Mark `resolved (deferred — ld.go scope expansion in PR-32+)` after round-2 fix lands.
+
+### [PR-31-D10] sysincl_test.go contains dead `var _ = fmt.Sprintf` / `var _ = strings.Contains` declarations
+**Status:** resolved
+**Severity:** nit
+**Location:** sysincl_test.go:222-225
+**Description:** Comment reads "debug helper used during development; kept as a non-test func to avoid pulling fmt unconditionally if go vet flags it" but body is two `var _ = …` placeholders existing only to consume imports.
+**Suggested fix:** Remove sysincl_test.go:223-225 plus any imports of fmt/strings that have no other consumer in the file.
+
+### [PR-31-D11] AR member-input aggregation produces near-correct but consistently-incomplete inputs (35 of 38 AR nodes diverge)
+**Status:** resolved (deferred — downstream of D12; auto-resolves when PR-32 musl refactor + ARCH-IF evaluator close the upstream CC input gap)
+**Severity:** minor
+**Location:** ar.go::EmitAR memberInputs aggregation; gen.go:1107-1118 walker accumulator
+**Description:** Of 38 archiver-target AR nodes, only 3 have exact input-set match. Shape is correct; residual divergence is downstream of incomplete CC member resolutions (D12). Round-2 D01 fix (empty-prefix BasePaths) lifted main.cpp.o from 17→1002 inputs but residual 7-input-per-node musl-arch gap remained, blocking AR exact match too.
+**Fix:** Deferred to PR-32. Once PR-32's flag-driven musl PEERDIR mechanism + narrow ARCH-IF evaluator close D12, AR aggregation will become exact (no AR-side code change needed; AR already correctly aggregates whatever CC inputs it gets).
+
+### [PR-31-D12] Non-musl CC nodes missing 4 musl-arch -I flags; explains L2 stagnation at 79.92%
+**Status:** resolved (deferred — to PR-32 musl refactor; implementing here would bake more musl-hardcoding before the architectural refactor)
+**Severity:** major
+**Location:** gen.go (TARGET module construction; missing auto-PEERDIR seeding mirroring ymake.core.conf:781); contrib/libs/musl/include/ya.make handling missing
+**Description:** Every non-musl TARGET CC node in reference graph emits 4 -I flags: `-I$(SOURCE_ROOT)/contrib/libs/musl/{arch/aarch64, arch/generic, include, extra}`. Our gen emits ZERO. Reproduced: 0 of 112 paired non-musl .cpp.o nodes have byte-exact cmd_args; 1287 of 18031 missing inputs are musl/linux-headers-namespaced. **This is the load-bearing reason L2 sits at 79.92%** — the matching input headers (bits/fcntl.h, sys/select.h, sched.h, alloca.h, strings.h, etc.) cannot be resolved without corresponding -I paths in scanner BasePaths. Estimated lift if fixed: ~110 of 112 non-musl .cpp.o pairs gain L2-exact + L3-exact, with knock-on lifts for dependent LDs. L2 ceiling 90%+ if combined with closing JS-joined-source scan gap (D08).
+**Root cause:** Two-part. (a) `build/ymake.core.conf:781` auto-PEERDIRs every TARGET module on linux-musl to `contrib/libs/musl/include` (similar shape to `when ($NOUTIL != "yes") { PEERDIR+=util }` we already mirror). Our gen doesn't seed it. (b) `contrib/libs/musl/include/ya.make` declares the 4 -I-paths via `IF(ARCH_AARCH64) ADDINCL(GLOBAL ...)` etc. Our IF-blind walker at gen.go:343 (`taken := v.Then`) never evaluates ARCH_* predicates, so even if (a) were fixed, the GLOBAL ADDINCL contributions would still be dropped.
+**Fix:** Deferred to **PR-32 (musl refactor)**. The orchestrator's rationale: implementing the auto-PEERDIR for `contrib/libs/musl/include` here would add MORE musl-hardcoding (a hardcoded "MUSL=yes → PEERDIR(musl/include) for every TARGET module" rule) right before the dedicated PR-32 refactor that establishes the flag-driven mechanism per the user's directive (musl is selected by CLI -D flag; should NOT be hardcoded). PR-32 will naturally handle this via the new mechanism. The narrow ARCH-IF evaluator part is independent and could land separately if needed; for M2-acceptance purposes it is unnecessary (L2=79.92% > 70% gate).
+
+### [PR-31-D13] Spurious -I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxx/src on non-musl CC nodes consuming libcxx
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go (peer-GLOBAL ADDINCL collection — walkPeersForGlobalAddIncl / effectiveAddInclGlobal at gen.go:1066-1088)
+**Description:** main.cpp.o emitted `-I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxx/src` as the 4th -I flag. Reference has this only on libcxx's OWN nodes (module-own ADDINCL), NOT consumers (only GLOBAL propagates). Caused byte-mismatch on every non-musl CC consuming libcxx (~110 nodes).
+**Root cause:** Case A — collector leak in ADDINCL per-path GLOBAL handling. AddInclStmt struct used statement-level `Modifier` string; splitGlobalModifier stripped leading `GLOBAL` token and treated ALL remaining args as global. For libcxx: `ADDINCL(GLOBAL .../include  .../src)` — `src` ended up in addInclGlobal too, propagating to all consumers.
+**Fix:** Replaced `AddInclStmt.{Modifier, Paths}` with `{GlobalPaths, OwnPaths}`. New `splitAddInclPaths` applies per-path GLOBAL prefix semantics: a path token immediately following the literal `GLOBAL` keyword goes to GlobalPaths; all others to OwnPaths. gen.go routes GlobalPaths → d.addInclGlobal, OwnPaths → d.addIncl. Verified empirically: zero non-libcxx CC nodes emit `-I libcxx/src`; libffi (mixed GLOBAL+bare paths) and linux-headers (multiple GLOBAL prefixes) both handled correctly.

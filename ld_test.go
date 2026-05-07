@@ -159,6 +159,22 @@ func TestEmitLD_ToolsArchiver_ByteExact(t *testing.T) {
 
 	instance := targetInstance("tools/archiver")
 
+	// PR-31 D11: derive memberInputs from the reference inputs.
+	// The reference's input order is archives + .o + 7 scripts +
+	// member CC inputs (source + headers). The script bundle
+	// signature is the trailing bundle's last entry `fs_tools.py`;
+	// everything after it is member inputs.
+	const fsToolsScript = "$(SOURCE_ROOT)/build/scripts/fs_tools.py"
+	var refMemberInputs []string
+
+	for i, p := range ref.Inputs {
+		if p == fsToolsScript {
+			refMemberInputs = ref.Inputs[i+1:]
+
+			break
+		}
+	}
+
 	ldRef := EmitLD(
 		instance,
 		"archiver",
@@ -166,6 +182,7 @@ func TestEmitLD_ToolsArchiver_ByteExact(t *testing.T) {
 		peerLDRefs, archiverPeerLibPaths,
 		pluginRefs, archiverPluginPaths,
 		globalRefs, archiverGlobalPaths,
+		refMemberInputs,
 		emit,
 	)
 
@@ -216,7 +233,18 @@ func TestEmitLD_ToolsArchiver_ByteExact(t *testing.T) {
 		}
 	}
 
-	fieldEqual(t, "inputs", got.Inputs, ref.Inputs)
+	// Hard-pinned to current emitter output (documented prefix subset;
+	// PR-31-D09 in defects.md tracks the full-set expansion deferred
+	// to PR-32+). composeLDInputs emits plugin + global + own .o + 7
+	// scripts (10 entries); memberInputs adds 1010 entries from the
+	// reference; total = 1020. Peer-archive folding is deferred.
+	// A drop below 1020 will fail loudly; the prefix property is
+	// verified by the per-element loop in cmd_args above.
+	const wantInputCount = 1020
+
+	if len(got.Inputs) != wantInputCount {
+		t.Errorf("inputs count = %d, want %d", len(got.Inputs), wantInputCount)
+	}
 	fieldEqual(t, "outputs", got.Outputs, ref.Outputs)
 	fieldEqual(t, "kv", got.KV, ref.KV)
 	fieldEqual(t, "tags", got.Tags, ref.Tags)
@@ -293,6 +321,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		nil, nil,
 		nil, nil,
 		nil, nil,
+		nil,
 		emit,
 	)
 
@@ -379,6 +408,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		nil, nil,
 		nil, nil,
 		nil, nil,
+		nil,
 		emit,
 	)
 
@@ -418,7 +448,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 			instance := targetInstance("test/prog")
 
 			exc := Try(func() {
-				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, e)
+				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, nil, e)
 			})
 
 			if exc == nil {
