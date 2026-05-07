@@ -691,42 +691,87 @@ func TestParseJoinSrcs_RejectsEmpty(t *testing.T) {
 	}
 }
 
-// TestParseAddIncl_Global pins ADDINCL with the GLOBAL modifier.
-func TestParseAddIncl_Global(t *testing.T) {
-	mf, err := Parse("test.input", []byte("ADDINCL(GLOBAL include1 include2)\n"))
+// TestParseAddIncl_AllGlobal pins ADDINCL where every path is prefixed
+// with GLOBAL (e.g. ADDINCL(GLOBAL include1 GLOBAL include2)).
+func TestParseAddIncl_AllGlobal(t *testing.T) {
+	mf, err := Parse("test.input", []byte("ADDINCL(GLOBAL include1 GLOBAL include2)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	if len(mf.Stmts) != 1 {
 		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 	}
+
 	a, ok := mf.Stmts[0].(*AddInclStmt)
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
-	if a.Modifier != "GLOBAL" {
-		t.Errorf("Modifier = %q, want %q", a.Modifier, "GLOBAL")
+
+	if !equalStrings(a.GlobalPaths, []string{"include1", "include2"}) {
+		t.Errorf("GlobalPaths = %v, want [include1 include2]", a.GlobalPaths)
 	}
-	if !equalStrings(a.Paths, []string{"include1", "include2"}) {
-		t.Errorf("Paths = %v, want [include1 include2]", a.Paths)
+
+	if len(a.OwnPaths) != 0 {
+		t.Errorf("OwnPaths = %v, want empty", a.OwnPaths)
 	}
 }
 
-// TestParseAddIncl_NoModifier pins ADDINCL without the GLOBAL prefix.
-func TestParseAddIncl_NoModifier(t *testing.T) {
+// TestParseAddIncl_NoGlobal pins ADDINCL without any GLOBAL prefix.
+func TestParseAddIncl_NoGlobal(t *testing.T) {
 	mf, err := Parse("test.input", []byte("ADDINCL(include1)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	a, ok := mf.Stmts[0].(*AddInclStmt)
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
-	if a.Modifier != "" {
-		t.Errorf("Modifier = %q, want empty", a.Modifier)
+
+	if len(a.GlobalPaths) != 0 {
+		t.Errorf("GlobalPaths = %v, want empty", a.GlobalPaths)
 	}
-	if !equalStrings(a.Paths, []string{"include1"}) {
-		t.Errorf("Paths = %v, want [include1]", a.Paths)
+
+	if !equalStrings(a.OwnPaths, []string{"include1"}) {
+		t.Errorf("OwnPaths = %v, want [include1]", a.OwnPaths)
+	}
+}
+
+// TestParseAddIncl_Mixed pins the per-path GLOBAL split (PR-31 D13):
+// a single ADDINCL call may carry both GLOBAL and module-own paths.
+// The libcxx ya.make pattern:
+//
+//	ADDINCL(
+//	    GLOBAL contrib/libs/cxxsupp/libcxx/include
+//	    contrib/libs/cxxsupp/libcxx/src
+//	)
+//
+// Only the path immediately following the GLOBAL keyword is global;
+// the remaining paths are module-own and must NOT propagate to peers.
+func TestParseAddIncl_Mixed(t *testing.T) {
+	src := "ADDINCL(\n    GLOBAL libcxx/include\n    libcxx/src\n)\n"
+	mf, err := Parse("test.input", []byte(src))
+
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if len(mf.Stmts) != 1 {
+		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
+	}
+
+	a, ok := mf.Stmts[0].(*AddInclStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
+	}
+
+	if !equalStrings(a.GlobalPaths, []string{"libcxx/include"}) {
+		t.Errorf("GlobalPaths = %v, want [libcxx/include]", a.GlobalPaths)
+	}
+
+	if !equalStrings(a.OwnPaths, []string{"libcxx/src"}) {
+		t.Errorf("OwnPaths = %v, want [libcxx/src]", a.OwnPaths)
 	}
 }
 

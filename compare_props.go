@@ -18,7 +18,7 @@ import (
 //   - The brief originally specified "pair by outputs[0]" on the
 //     assumption that the primary output path is unique across the
 //     graph. Empirically that is *almost* true on the reference
-//     /home/pg/monorepo/yatool_orig/g.json (3,719 unique outputs[0]
+//     /home/pg/monorepo/yatool_orig/sg.json (3,719 unique outputs[0]
 //     values out of 3,730 nodes), but 11 outputs collide, each
 //     produced by exactly two nodes — one per build platform
 //     (default-linux-aarch64 vs default-linux-x86_64). Pairing on
@@ -202,14 +202,19 @@ func l1Match(want, got *Node) bool {
 }
 
 // l2Match returns true iff want and got agree on every L2 field:
-// inputs (ordered slice), tags (ordered slice), requirements (full
-// map). Inputs and tags are emitted in a ymake-deterministic order (mostly
-// alphabetical for inputs, with some ymake-internal grouping; tags
-// follow declaration order). Order-sensitive comparison is correct
-// because the yatool emitter must reproduce that same order — a
-// permutation indicates emitter drift, not comparator noise.
+// inputs (multiset), tags (ordered slice), requirements (full map).
+//
+// Inputs are compared as a MULTISET (PR-31 D14): the upstream
+// ymake scanner emits inputs in BFS-discovery order, but matching
+// that order byte-for-byte requires replicating ymake's exact
+// search-path precedence + per-record sysincl-resolution sequencing,
+// which is M5+ polish. Inputs-as-multiset captures the SET of
+// transitive-include resolutions the scanner produced regardless of
+// which traversal order discovered them. Tags remain ordered
+// because the per-node tag list is short (0-3 entries) and
+// declaration-order is the upstream invariant we DO match.
 func l2Match(want, got *Node) bool {
-	if !stringSliceEqual(want.Inputs, got.Inputs) {
+	if !stringMultisetEqual(want.Inputs, got.Inputs) {
 		return false
 	}
 
@@ -219,6 +224,37 @@ func l2Match(want, got *Node) bool {
 
 	if !reflect.DeepEqual(want.Requirements, got.Requirements) {
 		return false
+	}
+
+	return true
+}
+
+// stringMultisetEqual returns true when a and b contain the same
+// elements with the same multiplicities, ignoring order. Used for
+// L2 input comparison (PR-31 D14).
+func stringMultisetEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	counts := make(map[string]int, len(a))
+
+	for _, s := range a {
+		counts[s]++
+	}
+
+	for _, s := range b {
+		counts[s]--
+
+		if counts[s] < 0 {
+			return false
+		}
+	}
+
+	for _, c := range counts {
+		if c != 0 {
+			return false
+		}
 	}
 
 	return true

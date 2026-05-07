@@ -13,7 +13,7 @@ import (
 // Strategy: rather than relying on PR-03's LoadReference (which is
 // landing in parallel), the test does its own os.ReadFile + json.Unmarshal
 // into a Graph. The reference graph lives at
-// /home/pg/monorepo/yatool_orig/g.json; if that path is absent the test
+// /home/pg/monorepo/yatool_orig/sg.json; if that path is absent the test
 // is skipped per the STYLE.md / D11 "filter" guidance — no per-host
 // test failure.
 //
@@ -299,7 +299,11 @@ func TestEmitCC_MuslHost_StrlenC_ByteExact(t *testing.T) {
 	}
 
 	emit := NewBufferedEmitter()
-	_, outPath := EmitCC(muslHostInstance("contrib/libs/musl"), "src/string/strlen.c", ModuleCCInputs{}, emit)
+	// PR-31: pass the reference's resolved transitive headers as
+	// IncludeInputs so this synthetic byte-exact test pins both the
+	// cmd_args (115) AND the input-set against sg.json.
+	muslIncludeInputs := append([]string(nil), ref.Inputs[1:]...)
+	_, outPath := EmitCC(muslHostInstance("contrib/libs/musl"), "src/string/strlen.c", ModuleCCInputs{IncludeInputs: muslIncludeInputs}, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)

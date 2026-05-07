@@ -11,7 +11,7 @@ import (
 // These tests pin down the contract that PR-04 (the JSON serializer) and
 // PR-12 (the comparator) will rely on:
 //   - Field order in the marshalled object matches the alphabetical key
-//     order observed in /home/pg/monorepo/yatool_orig/g.json.
+//     order observed in /home/pg/monorepo/yatool_orig/sg.json.
 //   - host_platform and foreign_deps are omitted when zero (per D5).
 //   - All other fields are present even when empty (no omitempty), so
 //     empty arrays/maps render as []/{}.

@@ -94,12 +94,28 @@ type JoinSrcsStmt struct {
 	Line       int
 }
 
-// AddInclStmt represents `ADDINCL([GLOBAL] paths...)`. Modifier is
-// either "GLOBAL" or "" (no modifier).
+// AddInclStmt represents `ADDINCL(paths...)` where individual paths
+// may be prefixed with GLOBAL. GlobalPaths holds paths that were
+// immediately preceded by the GLOBAL keyword and will be propagated
+// to consumers via PEERDIR. OwnPaths holds the remaining paths that
+// are local to the declaring module only.
+//
+// In ymake syntax, GLOBAL is a per-path modifier, not a
+// statement-level modifier. For example:
+//
+//	ADDINCL(
+//	    GLOBAL contrib/libs/cxxsupp/libcxx/include  # → GlobalPaths
+//	    contrib/libs/cxxsupp/libcxx/src             # → OwnPaths
+//	)
+//
+// PR-31 D13: previously this struct carried a statement-level
+// Modifier and a flat Paths list; the per-path split was missing,
+// causing the bare (non-GLOBAL) path to leak into the GLOBAL set
+// and propagate spuriously to consumers.
 type AddInclStmt struct {
-	Modifier string
-	Paths    []string
-	Line     int
+	GlobalPaths []string
+	OwnPaths    []string
+	Line        int
 }
 
 // CFlagsStmt represents `CFLAGS([GLOBAL] flags...)`. Same modifier
@@ -860,9 +876,9 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 
 		return &JoinSrcsStmt{OutputName: args[0], Sources: sources, Line: nameTok.line}
 	case "ADDINCL":
-		mod, paths := splitGlobalModifier(args)
+		globalPaths, ownPaths := splitAddInclPaths(args)
 
-		return &AddInclStmt{Modifier: mod, Paths: paths, Line: nameTok.line}
+		return &AddInclStmt{GlobalPaths: globalPaths, OwnPaths: ownPaths, Line: nameTok.line}
 	case "CFLAGS":
 		mod, flags := splitGlobalModifier(args)
 
@@ -883,16 +899,51 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 }
 
 // splitGlobalModifier extracts a leading "GLOBAL" pseudo-arg from an
-// arg list (used by ADDINCL and CFLAGS). Returns ("GLOBAL", rest) when
-// the first arg is exactly "GLOBAL"; otherwise ("", args) — the
-// uppercase match is deliberate, mirroring the upstream macro syntax
-// where a lowercase "global" is a regular path token, not a modifier.
+// arg list (used by CFLAGS). Returns ("GLOBAL", rest) when the first
+// arg is exactly "GLOBAL"; otherwise ("", args) — the uppercase match
+// is deliberate, mirroring the upstream macro syntax where a lowercase
+// "global" is a regular token, not a modifier.
 func splitGlobalModifier(args []string) (string, []string) {
 	if len(args) > 0 && args[0] == "GLOBAL" {
 		return "GLOBAL", append([]string(nil), args[1:]...)
 	}
 
 	return "", append([]string(nil), args...)
+}
+
+// splitAddInclPaths separates ADDINCL args into global and own path
+// lists. In ymake syntax, GLOBAL is a per-path modifier: a path token
+// immediately following the literal "GLOBAL" is added to the
+// propagated (global) set; all other path tokens go to the module-own
+// set. For example, given:
+//
+//	ADDINCL(
+//	    GLOBAL contrib/libs/cxxsupp/libcxx/include
+//	    contrib/libs/cxxsupp/libcxx/src
+//	)
+//
+// args = ["GLOBAL", "contrib/libs/cxxsupp/libcxx/include",
+// "contrib/libs/cxxsupp/libcxx/src"] and the return is
+// (["contrib/libs/cxxsupp/libcxx/include"],
+// ["contrib/libs/cxxsupp/libcxx/src"]).
+//
+// PR-31 D13: replaces the old statement-level splitGlobalModifier for
+// ADDINCL, which incorrectly treated all paths after a leading GLOBAL
+// as global, leaking module-own paths to consumers.
+func splitAddInclPaths(args []string) (globalPaths, ownPaths []string) {
+	for i := 0; i < len(args); i++ {
+		if args[i] == "GLOBAL" {
+			i++
+
+			if i < len(args) {
+				globalPaths = append(globalPaths, args[i])
+			}
+		} else {
+			ownPaths = append(ownPaths, args[i])
+		}
+	}
+
+	return globalPaths, ownPaths
 }
 
 // parseIf is invoked with the `IF` name token already consumed. It

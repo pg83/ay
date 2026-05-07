@@ -11,7 +11,7 @@ import (
 //
 // D7: UID = base64url(sha1(canonical-node-bytes))[:22]. The 22-character
 // length is verified against the on-disk reference (every uid/self_uid in
-// /home/pg/monorepo/yatool_orig/g.json is exactly 22 characters of
+// /home/pg/monorepo/yatool_orig/sg.json is exactly 22 characters of
 // base64url alphabet). stats_uid is a different beast (32-char MD5 hex)
 // and is left empty by PR-02 per the plan; later PRs will fill it.
 //

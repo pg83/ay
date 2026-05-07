@@ -97,6 +97,7 @@ func EmitLD(
 	pluginPaths []string,
 	globalRefs []NodeRef,
 	globalPaths []string,
+	memberInputs []string,
 	emit Emitter,
 ) NodeRef {
 	if len(ccRefs) != len(ccPaths) {
@@ -163,6 +164,24 @@ func EmitLD(
 	}
 
 	inputs := composeLDInputs(instance.Path, ccPaths, pluginPaths, globalPaths)
+
+	// PR-31 D11: append the per-CC member inputs (source + headers)
+	// after the script bundle, deduplicated against the existing set.
+	// Matches the sg.json LD shape: archives + .o (interleaved by
+	// composeLDInputs) + 7 scripts + UNION-of-CC-inputs.
+	inputSet := map[string]struct{}{}
+	for _, p := range inputs {
+		inputSet[p] = struct{}{}
+	}
+
+	for _, p := range memberInputs {
+		if _, dup := inputSet[p]; dup {
+			continue
+		}
+
+		inputSet[p] = struct{}{}
+		inputs = append(inputs, p)
+	}
 
 	// DepRefs capture every node whose UID flows into the LD's
 	// content hash: own .cpp.o files, plugin inputs, global

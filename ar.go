@@ -72,8 +72,12 @@ func globalArchiveName(moduleDir string) string {
 // archives are link-time inputs for LD.
 //
 // objPaths must be in caller (declaration) order — they are used
-// as-is in cmd_args. inputs uses a separately sorted copy so that
-// node UIDs are stable and byte-exact with the reference graph.
+// as-is in cmd_args. PR-31 D11 reshapes inputs against sg.json: the
+// archive's `inputs` is `.o files (declaration order, deduped) +
+// link script + memberInputs (union of every CC member's inputs in
+// DFS-discovery order, deduped, dropping any path that already
+// appears in the .o set)`. memberInputs are the per-CC source paths
+// + IncludeInputs the walker accumulated.
 //
 // `instance` provides platform + path + Flags.PIC. host_platform is
 // set when Flags.PIC=true and "tool" is appended to tags
@@ -89,6 +93,7 @@ func emitARNode(
 	objRefs []NodeRef,
 	objPaths []string,
 	peerArchiveRefs []NodeRef,
+	memberInputs []string,
 	emit Emitter,
 ) NodeRef {
 	scriptPath := "$(SOURCE_ROOT)/build/scripts/link_lib.py"
@@ -122,17 +127,34 @@ func emitARNode(
 
 	cmdArgs = append(cmdArgs, objPaths...)
 
-	// inputs: .o paths sorted alphabetically, then the script path
-	// at the end. The reference graph always has inputs .o section
-	// sorted regardless of the declaration order used in cmd_args.
-	// Sort a local copy so objPaths (used for cmd_args above) is
-	// not mutated.
+	// inputs: .o paths sorted alphabetically, then the script path,
+	// then memberInputs (PR-31 D11; sg.json union of every member
+	// CC's source + headers). Sort the .o copy so objPaths used for
+	// cmd_args above is not mutated.
 	sortedObjPaths := append([]string{}, objPaths...)
 	sort.Strings(sortedObjPaths)
 
-	inputs := make([]string, 0, len(sortedObjPaths)+1)
+	inputs := make([]string, 0, len(sortedObjPaths)+1+len(memberInputs))
 	inputs = append(inputs, sortedObjPaths...)
 	inputs = append(inputs, scriptPath)
+	// memberInputs may legitimately repeat across members (a header
+	// included from two .c files). Dedup against the union including
+	// the .o set so an unexpected collision (e.g. a .o path that
+	// also somehow appears as a member input) doesn't double up.
+	objSet := map[string]struct{}{}
+	for _, p := range sortedObjPaths {
+		objSet[p] = struct{}{}
+	}
+	objSet[scriptPath] = struct{}{}
+
+	for _, p := range memberInputs {
+		if _, dup := objSet[p]; dup {
+			continue
+		}
+
+		objSet[p] = struct{}{}
+		inputs = append(inputs, p)
+	}
 
 	// Built as separate literals (not a shared variable) so
 	// downstream mutation of one map can't leak into the other.
@@ -208,6 +230,11 @@ func emitARNode(
 // (SRCS) order — cmd_args preserves that order. inputs sorts them
 // alphabetically internally.
 //
+// memberInputs is the union of every member CC's inputs (primary
+// source + transitive headers; PR-31 D11). The walker accumulates
+// this in DFS-discovery order across the SRCS list; the emitter
+// folds it into the AR node's `inputs` per the sg.json shape.
+//
 // peerArchiveRefs are the NodeRefs for peer-module archives (from
 // PEERDIR). They are wired as DepRefs so the AR node's UID accounts
 // for them, but they are NOT added to cmd_args or inputs — ar(1)
@@ -223,6 +250,7 @@ func EmitAR(
 	objRefs []NodeRef,
 	objPaths []string,
 	peerArchiveRefs []NodeRef,
+	memberInputs []string,
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
@@ -231,7 +259,7 @@ func EmitAR(
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + ArchiveName(instance.Path)
 
-	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, emit)
+	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, emit)
 }
 
 // EmitARGlobal emits a second AR node for a module's GLOBAL_SRCS,
@@ -250,6 +278,7 @@ func EmitARGlobal(
 	instance ModuleInstance,
 	objRefs []NodeRef,
 	objPaths []string,
+	memberInputs []string,
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
@@ -258,5 +287,5 @@ func EmitARGlobal(
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + globalArchiveName(instance.Path)
 
-	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, emit)
+	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, emit)
 }

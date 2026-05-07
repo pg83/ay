@@ -103,6 +103,13 @@ type moduleEmitResult struct {
 	LDPath     string
 	GlobalRef  *NodeRef // non-nil when the module has GLOBAL_SRCS (EmitARGlobal was called)
 	GlobalPath string   // BUILD_ROOT-relative path to the .global.a archive; empty when GlobalRef is nil
+	// AddInclGlobal is the union of this module's own GLOBAL ADDINCL
+	// paths PLUS the transitive peer-GLOBAL ADDINCL contributions
+	// from every PEERDIR (PR-31 D05). Consumers use this set for both
+	// (a) cmd_args -I emission (peer-propagated -I flags slotted
+	// after the module's own ADDINCL) and (b) the include scanner's
+	// resolution search path. SOURCE_ROOT-relative paths.
+	AddInclGlobal []string
 }
 
 // genCtx threads state through the recursive walk. `emit`
@@ -131,6 +138,14 @@ type genCtx struct {
 	memo            map[ModuleInstance]*moduleEmitResult
 	walking         map[ModuleInstance]bool
 	cyclesTolerated int
+	// scannerTarget is the include-resolver for TARGET (aarch64) CC
+	// nodes; scannerHost is the host (x86_64) variant. Each scanner
+	// has its own parsed-includes cache (the OS page cache amortises
+	// rereads). Each also has its own SysInclSet because
+	// linux-musl-<arch>.yml mappings differ between platforms (e.g.
+	// bits/alltypes.h resolves arch-specifically).
+	scannerTarget *IncludeScanner
+	scannerHost   *IncludeScanner
 }
 
 // asmlibYasmModules lists module paths whose host `.S`/`.s` sources
@@ -211,11 +226,13 @@ var whitelistedMetadataMacros = map[string]struct{}{
 // graph's `result` is target-only).
 func Gen(cfg PlatformConfig, sourceRoot string, targetDir string) *Graph {
 	ctx := &genCtx{
-		cfg:        cfg,
-		sourceRoot: sourceRoot,
-		emit:       NewBufferedEmitter(),
-		memo:       make(map[ModuleInstance]*moduleEmitResult),
-		walking:    make(map[ModuleInstance]bool),
+		cfg:           cfg,
+		sourceRoot:    sourceRoot,
+		emit:          NewBufferedEmitter(),
+		memo:          make(map[ModuleInstance]*moduleEmitResult),
+		walking:       make(map[ModuleInstance]bool),
+		scannerTarget: NewIncludeScanner(sourceRoot, LoadSysInclSetFor(sourceRoot, "aarch64")),
+		scannerHost:   NewIncludeScanner(sourceRoot, LoadSysInclSetFor(sourceRoot, "x86_64")),
 	}
 
 	seed := ModuleInstance{
@@ -238,21 +255,22 @@ func Gen(cfg PlatformConfig, sourceRoot string, targetDir string) *Graph {
 // inlined macros. The `flags` field starts from the path-based
 // heuristic and is overlaid with macro-derived bools (NO_LIBC etc.).
 type moduleData struct {
-	moduleStmt   *ModuleStmt
-	srcs         []string
-	globalSrcs   []string
-	peerdirs     []string
-	joinSrcs     []*JoinSrcsStmt
-	addIncl      []string // collected ADDINCL paths, all variants
-	cFlags       []string // collected CFLAGS values, all variants
-	cxxFlags     []string // collected CXXFLAGS values (C++ only); PR-29-D02 threads into ModuleCCInputs.CXXFlags
-	cOnlyFlags   []string // collected CONLYFLAGS values (C only); PR-29-D02 threads into ModuleCCInputs.COnlyFlags
-	ldFlags      []string // collected LDFLAGS values
-	srcDir       string   // last SRCDIR setting (empty = module dir)
-	flags        FlagSet  // overlay of inferFlagsFromPath + macro bools
-	hadAllocator bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
-	muslLite     bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
-	conflictMod  *ModuleStmt
+	moduleStmt    *ModuleStmt
+	srcs          []string
+	globalSrcs    []string
+	peerdirs      []string
+	joinSrcs      []*JoinSrcsStmt
+	addIncl       []string // collected non-GLOBAL ADDINCL paths
+	addInclGlobal []string // PR-31 D04: collected ADDINCL(GLOBAL ...) paths; peer-propagated to consumers
+	cFlags        []string // collected CFLAGS values, all variants
+	cxxFlags      []string // collected CXXFLAGS values (C++ only); PR-29-D02 threads into ModuleCCInputs.CXXFlags
+	cOnlyFlags    []string // collected CONLYFLAGS values (C only); PR-29-D02 threads into ModuleCCInputs.COnlyFlags
+	ldFlags       []string // collected LDFLAGS values
+	srcDir        string   // last SRCDIR setting (empty = module dir)
+	flags         FlagSet  // overlay of inferFlagsFromPath + macro bools
+	hadAllocator  bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
+	muslLite      bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
+	conflictMod   *ModuleStmt
 }
 
 // collectModule walks `mf.Stmts` (after IF branches have been
@@ -300,7 +318,16 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 		case *JoinSrcsStmt:
 			d.joinSrcs = append(d.joinSrcs, v)
 		case *AddInclStmt:
-			d.addIncl = append(d.addIncl, v.Paths...)
+			// PR-31 D04/D13: route per-path GLOBAL ADDINCL into a
+			// separate slot (peer-propagated to consumers via PEERDIR
+			// walk); non-GLOBAL paths go into the per-module own-ADDINCL
+			// slot that EmitCC's appendAddIncl emits as -I args.
+			// D13 fix: GlobalPaths and OwnPaths are split by
+			// splitAddInclPaths so a single ADDINCL call can carry both
+			// GLOBAL and module-own paths (e.g. libcxx: GLOBAL include +
+			// bare src — only include propagates to consumers).
+			d.addInclGlobal = append(d.addInclGlobal, v.GlobalPaths...)
+			d.addIncl = append(d.addIncl, v.OwnPaths...)
 		case *CFlagsStmt:
 			d.cFlags = append(d.cFlags, v.Flags...)
 		case *LDFlagsStmt:
@@ -895,14 +922,36 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ThrowFmt("gen: %s has no compilable sources (after IF/header filter)", instance.Path)
 		}
 
-		result := &moduleEmitResult{headerOnly: true}
-		ctx.memo[instance] = result
+		// Header-only LIBRARYs may declare ADDINCL(GLOBAL ...) that
+		// peer-propagates without emitting an AR. Walk peers (so
+		// transitive sanitizer/include peerdirs reach genModule) and
+		// aggregate own + peer GLOBAL ADDINCL so consumers see the
+		// closure. PR-31 D05.
+		peerGlobal := walkPeersForGlobalAddIncl(ctx, instance, d)
 
-		// Still walk the peers so their downstream emission happens
-		// — sanitizer/include peers nothing that emits, so this is
-		// effectively a no-op today, but the invariant matters when
-		// future header-only libs declare PEERDIR.
-		walkPeersForSideEffects(ctx, instance, d)
+		seen := map[string]struct{}{}
+		eff := make([]string, 0, len(d.addInclGlobal)+len(peerGlobal))
+
+		for _, p := range d.addInclGlobal {
+			if _, dup := seen[p]; dup {
+				continue
+			}
+
+			seen[p] = struct{}{}
+			eff = append(eff, p)
+		}
+
+		for _, p := range peerGlobal {
+			if _, dup := seen[p]; dup {
+				continue
+			}
+
+			seen[p] = struct{}{}
+			eff = append(eff, p)
+		}
+
+		result := &moduleEmitResult{headerOnly: true, AddInclGlobal: eff}
+		ctx.memo[instance] = result
 
 		return result
 	}
@@ -957,6 +1006,23 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	peerGlobalRefs := make([]NodeRef, 0, len(allPeers))
 	peerGlobalPaths := make([]string, 0, len(allPeers))
 
+	// PR-31 D05: aggregate peer-GLOBAL ADDINCL transitively. The
+	// dedup map preserves DECLARATION order across the PEERDIR walk
+	// (R14 — first peer's declarations come first in cmd_args).
+	peerAddInclSeen := map[string]struct{}{}
+	peerAddInclGlobal := make([]string, 0, 16)
+
+	addPeerGlobal := func(paths []string) {
+		for _, p := range paths {
+			if _, dup := peerAddInclSeen[p]; dup {
+				continue
+			}
+
+			peerAddInclSeen[p] = struct{}{}
+			peerAddInclGlobal = append(peerAddInclGlobal, p)
+		}
+	}
+
 	for i, p := range allPeers {
 		peerPath := filepath.Clean(p)
 
@@ -968,6 +1034,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		peerInstance := derivePeerInstance(instance, peerPath)
 		peerResult := genModule(ctx, peerInstance)
+
+		// PR-31 D05: every peer (including header-only) contributes
+		// its accumulated GLOBAL ADDINCL to the consumer's effective
+		// search path. The transitive aggregation means a peer's
+		// peer-GLOBAL set is already folded into peerResult.AddInclGlobal,
+		// so a single union here yields the full closure without a
+		// separate BFS pass.
+		addPeerGlobal(peerResult.AddInclGlobal)
 
 		if peerResult.isPROGRAM {
 			ThrowFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path, peerPath)
@@ -990,6 +1064,31 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
+	// PR-31 D05: this module's effective AddInclGlobal is its OWN
+	// GLOBAL ADDINCL plus the union of every peer's transitive set.
+	// Stored on the result so transitive consumers see the closure
+	// in one shot.
+	effectiveAddInclGlobal := make([]string, 0, len(d.addInclGlobal)+len(peerAddInclGlobal))
+	effectiveSeen := map[string]struct{}{}
+
+	for _, p := range d.addInclGlobal {
+		if _, dup := effectiveSeen[p]; dup {
+			continue
+		}
+
+		effectiveSeen[p] = struct{}{}
+		effectiveAddInclGlobal = append(effectiveAddInclGlobal, p)
+	}
+
+	for _, p := range peerAddInclGlobal {
+		if _, dup := effectiveSeen[p]; dup {
+			continue
+		}
+
+		effectiveSeen[p] = struct{}{}
+		effectiveAddInclGlobal = append(effectiveAddInclGlobal, p)
+	}
+
 	// Per-source dispatch. JoinSrcs entries become JS+CC pairs
 	// folded in alongside regular SRCS. Header sources (`.h` /
 	// `.hpp`) are skipped. PR-25 keeps own-source ordering
@@ -999,13 +1098,33 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// regular `.a`).
 	ccRefs := make([]NodeRef, 0, len(d.srcs)+len(d.joinSrcs))
 	ccOutputs := make([]string, 0, len(d.srcs)+len(d.joinSrcs))
+	// PR-31 D11: accumulate the union of every CC member's inputs
+	// (primary source + IncludeInputs, deduped, in DFS-discovery
+	// order) so the downstream AR/LD step can fold these into its
+	// own `inputs` slice per the sg.json shape (AR includes the
+	// source files of its archived .o files, plus their resolved
+	// header closures).
+	memberInputs := make([]string, 0, 64)
+	memberInputsSeen := map[string]struct{}{}
+
+	addMemberInputs := func(paths []string) {
+		for _, p := range paths {
+			if _, dup := memberInputsSeen[p]; dup {
+				continue
+			}
+
+			memberInputsSeen[p] = struct{}{}
+			memberInputs = append(memberInputs, p)
+		}
+	}
 
 	moduleInputs := ModuleCCInputs{
-		AddIncl:    d.addIncl,
-		CXXFlags:   d.cxxFlags,
-		COnlyFlags: d.cOnlyFlags,
-		SrcDir:     d.srcDir,
-		SourceRoot: ctx.sourceRoot,
+		AddIncl:           d.addIncl,
+		PeerAddInclGlobal: peerAddInclGlobal,
+		CXXFlags:          d.cxxFlags,
+		COnlyFlags:        d.cOnlyFlags,
+		SrcDir:            d.srcDir,
+		SourceRoot:        ctx.sourceRoot,
 	}
 
 	// PR-30 D06: ancestor-only SRCDIR rebase. The "PROGRAM with SRCDIR
@@ -1017,7 +1136,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ancestorRebase := d.srcDir != "" && d.moduleStmt.Name == "PROGRAM" && isAncestorPath(d.srcDir, instance.Path)
 
 	for _, src := range d.srcs {
-		ref, outPath, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs, ancestorRebase)
+		ref, outPath, ccIns, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs, ancestorRebase)
 
 		if !ok {
 			continue
@@ -1025,6 +1144,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
+		addMemberInputs(ccIns)
 	}
 
 	for _, js := range d.joinSrcs {
@@ -1064,6 +1184,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ref, outPath := EmitCC(srcInstance, jsRel, ccIn, ctx.emit)
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
+		// JS-derived CC: input is the BUILD_ROOT-rooted joined .cpp.
+		jsGenInput := "$(BUILD_ROOT)/" + srcInstance.Path + "/" + jsRel
+		addMemberInputs([]string{jsGenInput})
 	}
 
 	// GLOBAL_SRCS get their own CC nodes and a separate AR pass
@@ -1071,8 +1194,13 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	globalRefs := make([]NodeRef, 0, len(d.globalSrcs))
 	globalOutputs := make([]string, 0, len(d.globalSrcs))
 
+	// PR-31 D11: GLOBAL_SRCS contribute their own member-inputs slice
+	// to the .global.a archive (separate accumulator from regular AR).
+	globalMemberInputs := make([]string, 0, 16)
+	globalMemberInputsSeen := map[string]struct{}{}
+
 	for _, src := range d.globalSrcs {
-		ref, outPath, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs, ancestorRebase)
+		ref, outPath, ccIns, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs, ancestorRebase)
 
 		if !ok {
 			continue
@@ -1080,6 +1208,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		globalRefs = append(globalRefs, ref)
 		globalOutputs = append(globalOutputs, outPath)
+
+		for _, p := range ccIns {
+			if _, dup := globalMemberInputsSeen[p]; dup {
+				continue
+			}
+
+			globalMemberInputsSeen[p] = struct{}{}
+			globalMemberInputs = append(globalMemberInputs, p)
+		}
 	}
 
 	if d.moduleStmt.Name == "PROGRAM" {
@@ -1103,16 +1240,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			peerArchiveRefs, peerArchivePaths,
 			nil, nil,
 			peerGlobalRefs, peerGlobalPaths,
+			memberInputs,
 			ctx.emit,
 		)
 		ldPath := LDOutputPath(instance, binaryName)
 
 		result := &moduleEmitResult{
-			ARRef:     ldRef,
-			ARPath:    ldPath,
-			isPROGRAM: true,
-			LDRef:     ldRef,
-			LDPath:    ldPath,
+			ARRef:         ldRef,
+			ARPath:        ldPath,
+			isPROGRAM:     true,
+			LDRef:         ldRef,
+			LDPath:        ldPath,
+			AddInclGlobal: effectiveAddInclGlobal,
 		}
 		ctx.memo[instance] = result
 
@@ -1127,20 +1266,21 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// shape on 24 paired AR pairs. Peer archives correctly flow into
 	// the consumer's downstream LD via the `peerArchiveRefs` slot in
 	// `EmitLD`'s call site below — only the LIBRARY AR drops them.
-	arRef := EmitAR(instance, ccRefs, ccOutputs, nil, ctx.emit)
+	arRef := EmitAR(instance, ccRefs, ccOutputs, nil, memberInputs, ctx.emit)
 	_ = peerArchiveRefs // retained as a loop accumulator for the PROGRAM LD branch above; intentionally unused for the LIBRARY AR.
 	arPath := "$(BUILD_ROOT)/" + instance.Path + "/" + ArchiveName(instance.Path)
 
 	result := &moduleEmitResult{
-		ARRef:     arRef,
-		ARPath:    arPath,
-		isPROGRAM: false,
-		LDRef:     arRef,
-		LDPath:    arPath,
+		ARRef:         arRef,
+		ARPath:        arPath,
+		isPROGRAM:     false,
+		LDRef:         arRef,
+		LDPath:        arPath,
+		AddInclGlobal: effectiveAddInclGlobal,
 	}
 
 	if len(globalRefs) > 0 {
-		globalRef := EmitARGlobal(instance, globalRefs, globalOutputs, ctx.emit)
+		globalRef := EmitARGlobal(instance, globalRefs, globalOutputs, globalMemberInputs, ctx.emit)
 		result.GlobalRef = &globalRef
 		result.GlobalPath = instance.Path + "/" + globalArchiveName(instance.Path)
 	}
@@ -1150,16 +1290,30 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	return result
 }
 
-// walkPeersForSideEffects recurses into the peers of a header-only
-// LIBRARY so their transitive closure is still discovered (PR-27).
-// The header-only module emits nothing itself, so the per-peer
-// archive refs are dropped on the floor; we only care that the
-// peer's `genModule` runs (its memo entry then makes the peer
-// available to other consumers in the closure).
-func walkPeersForSideEffects(ctx *genCtx, instance ModuleInstance, d *moduleData) {
+// walkPeersForGlobalAddIncl walks the peers of a header-only LIBRARY
+// (PR-27) to ensure their transitive closure is discovered (genModule
+// memoises so other consumers can pick them up later) AND returns the
+// union of every peer's transitive AddInclGlobal contribution
+// (PR-31 D05). The header-only module emits no AR, so the per-peer
+// archive refs are intentionally dropped; only the GLOBAL ADDINCL
+// peer-propagation is preserved.
+func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
 	defaults := defaultPeerdirsFor(ctx, instance)
 
 	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
+	pathSeen := map[string]struct{}{}
+	out := make([]string, 0, 16)
+
+	add := func(paths []string) {
+		for _, p := range paths {
+			if _, dup := pathSeen[p]; dup {
+				continue
+			}
+
+			pathSeen[p] = struct{}{}
+			out = append(out, p)
+		}
+	}
 
 	for _, p := range defaults {
 		if _, dup := seen[p]; dup {
@@ -1174,7 +1328,7 @@ func walkPeersForSideEffects(ctx *genCtx, instance ModuleInstance, d *moduleData
 		}
 
 		peerInstance := derivePeerInstance(instance, peerPath)
-		genModule(ctx, peerInstance)
+		add(genModule(ctx, peerInstance).AddInclGlobal)
 	}
 
 	for _, p := range d.peerdirs {
@@ -1186,8 +1340,10 @@ func walkPeersForSideEffects(ctx *genCtx, instance ModuleInstance, d *moduleData
 
 		peerPath := filepath.Clean(p)
 		peerInstance := derivePeerInstance(instance, peerPath)
-		genModule(ctx, peerInstance)
+		add(genModule(ctx, peerInstance).AddInclGlobal)
 	}
+
+	return out
 }
 
 // hasCompilableSource reports whether the module has at least one
@@ -1222,10 +1378,14 @@ func isHeaderSource(srcRel string) bool {
 }
 
 // emitOneSource dispatches a single source by extension. Returns
-// `(ref, outputPath, true)` when a node was emitted; `(_, _, false)`
-// for headers (silently skipped). Throws on unknown extensions so a
-// new source kind surfaces during integration rather than being
-// silently dropped.
+// `(ref, outputPath, ccInputs, true)` when a node was emitted (the
+// 3rd return is the CC node's input list — primary source path
+// followed by IncludeInputs — so the caller's downstream AR/LD step
+// can fold these into its own `inputs` aggregate per the sg.json
+// AR/LD shape, PR-31 D11). For headers (silently skipped) returns
+// `(_, _, nil, false)`. Throws on unknown extensions so a new source
+// kind surfaces during integration rather than being silently
+// dropped.
 //
 // `srcDir` is the module's `SRCDIR(...)` setting (empty when none).
 // Per PR-28-D02, when non-empty it relocates the per-source emitter's
@@ -1243,9 +1403,9 @@ func isHeaderSource(srcRel string) bool {
 // CXXFLAGS / CONLYFLAGS, D03 ADDINCL). Per PR-29 the walker collects
 // ADDINCL/CXXFLAGS/CONLYFLAGS into moduleData and threads them into
 // EmitCC via this struct.
-func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, in ModuleCCInputs, ancestorRebase bool) (NodeRef, string, bool) {
+func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, in ModuleCCInputs, ancestorRebase bool) (NodeRef, string, []string, bool) {
 	if isHeaderSource(srcRel) {
-		return NodeRef{}, "", false
+		return NodeRef{}, "", nil, false
 	}
 
 	// PR-30 D06: SRCDIR rebase is now ancestor-only and only fires when
@@ -1277,9 +1437,24 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
 		strings.HasSuffix(srcRel, ".cxx"):
+		// PR-31 D08: resolve the transitive include closure for
+		// non-generated sources. Generated sources (handled in the
+		// JS / R6 branches below — NOT this site) skip the scanner:
+		// their primary input lives under $(BUILD_ROOT) and doesn't
+		// exist on disk at scan time. The walker passes the
+		// scanner-aware srcIn down to EmitCC.
+		srcIn.IncludeInputs = scanIncludesForSource(ctx, srcInstance, srcRel, srcIn)
+
 		ref, outPath := EmitCC(srcInstance, srcRel, srcIn, ctx.emit)
 
-		return ref, outPath, true
+		// AR/LD aggregate the per-CC inputs (primary source +
+		// resolved headers) into their own inputs slice per the
+		// sg.json shape (PR-31 D11). Compose the input list here
+		// (matching what EmitCC itself does internally).
+		inputPath := emittedSourceInputPath(srcInstance, srcRel, srcIn, ctx.sourceRoot)
+		ccInputs := append([]string{inputPath}, srcIn.IncludeInputs...)
+
+		return ref, outPath, ccInputs, true
 	case strings.HasSuffix(srcRel, ".S"),
 		strings.HasSuffix(srcRel, ".s"),
 		strings.HasSuffix(srcRel, ".asm"):
@@ -1315,9 +1490,18 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			yasmRef = &ldRef
 		}
 
-		ref, outPath := EmitAS(srcInstance, srcRel, nil, yasmRef, ctx.emit)
+		// PR-31 D11: scan transitive headers for AS sources too. A
+		// small subset of `.S` sources include `.h`/`.inc` headers
+		// (e.g. cxxsupp/builtins/chkstk.S → assembly.h +
+		// int_endianness.h); the scanner populates the AS node's
+		// inputs and feeds the downstream AR's memberInputs aggregator.
+		asIncludeInputs := scanIncludesForSource(ctx, srcInstance, srcRel, srcIn)
+		ref, outPath := EmitAS(srcInstance, srcRel, nil, yasmRef, asIncludeInputs, ctx.emit)
 
-		return ref, outPath, true
+		asInputPath := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
+		asInputs := append([]string{asInputPath}, asIncludeInputs...)
+
+		return ref, outPath, asInputs, true
 	case strings.HasSuffix(srcRel, ".rl6"):
 		// Host-ragel6 recursion (D31, eager per PR-28). The recursion
 		// happens here so the resulting LD's outputs[0] can be
@@ -1386,10 +1570,152 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
-		return ccRef, ccOut, true
+		// R6-derived CC: primary input is the BUILD_ROOT-rooted .cpp
+		// generated by ragel6. No scanner pass (the .cpp doesn't exist
+		// on disk at scan time). Inputs are the .cpp path only.
+		genInputPath := "$(BUILD_ROOT)/" + srcInstance.Path + "/" + ccSrcRel
+
+		return ccRef, ccOut, []string{genInputPath}, true
 	}
 
 	ThrowFmt("gen: %s: unsupported source extension in %q", instance.Path, srcRel)
 
-	return NodeRef{}, "", false
+	return NodeRef{}, "", nil, false
+}
+
+// emittedSourceInputPath mirrors composeCCPaths' inputPath logic so
+// the walker can compose the AR/LD inputs aggregator without having
+// to round-trip through EmitCC's emitted node. Returns the
+// `$(SOURCE_ROOT)/...` (or `$(BUILD_ROOT)/...` for IsGenerated)
+// path the CC node will use as its primary input.
+func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCInputs, sourceRoot string) string {
+	if in.IsGenerated {
+		return "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel
+	}
+
+	if in.SrcDir != "" && in.SrcDir != instance.Path {
+		localCandidate := filepath.Join(sourceRoot, instance.Path, srcRel)
+		info, err := os.Stat(localCandidate)
+
+		if err != nil || info.IsDir() {
+			return "$(SOURCE_ROOT)/" + in.SrcDir + "/" + srcRel
+		}
+	}
+
+	return "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
+}
+
+// scanIncludesForSource resolves the source's actual on-disk path
+// (matching composeCCPaths' SRCDIR-aware semantics) and invokes the
+// include scanner. Returns the SOURCE_ROOT-relative include set the
+// scanner produces, or nil when the scanner is unavailable, the
+// source has no on-disk file, or the scanner produces an empty
+// closure.
+//
+// PR-31 D08 — the source-rel and ScanContext that drives the
+// scanner per CC node. The own-AddIncl + peer-GLOBAL-AddIncl
+// search path mirrors what cmd_args -I uses, plus a baseline set
+// for the linux-headers / musl-arch include paths the cc bundle
+// includes implicitly.
+func scanIncludesForSource(ctx *genCtx, srcInstance ModuleInstance, srcRel string, in ModuleCCInputs) []string {
+	scanner := ctx.scannerTarget
+
+	if srcInstance.Flags.PIC {
+		scanner = ctx.scannerHost
+	}
+
+	if scanner == nil {
+		return nil
+	}
+
+	// Mirror composeCCPaths' source-resolution logic so the scanner
+	// hashes the same on-disk file as the cc compiler will read.
+	srcRelOnDisk := srcInstance.Path + "/" + srcRel
+
+	if in.SrcDir != "" && in.SrcDir != srcInstance.Path {
+		// SRCDIR override: the source resolves under SRCDIR when no
+		// local file at instance.Path/<srcRel> exists.
+		localCandidate := filepath.Join(ctx.sourceRoot, srcInstance.Path, srcRel)
+		info, err := os.Stat(localCandidate)
+
+		if err != nil || info.IsDir() {
+			srcRelOnDisk = in.SrcDir + "/" + srcRel
+		}
+	}
+
+	scanCtx := ScanContext{
+		SourceRel:       srcRelOnDisk,
+		OwnAddIncl:      in.AddIncl,
+		PeerAddInclSet:  in.PeerAddInclGlobal,
+		BaseSearchPaths: includeScannerBasePaths(srcInstance),
+	}
+
+	return scanner.WalkClosure(scanCtx)
+}
+
+// includeScannerBasePaths returns the implicit include search path
+// that the cc bundle adds via cmd_args (SOURCE_ROOT + linux-headers +
+// musl arch when applicable). The scanner uses these as fallback
+// resolution candidates so headers like `<util/folder/path.h>` (repo-
+// rooted system-form includes) and `<linux/types.h>` (linux-headers)
+// resolve in the same way the compiler would.
+//
+// Non-musl flavours: an empty-string entry is prepended first,
+// representing the SOURCE_ROOT itself. The resolver treats an empty
+// prefix as "resolve directly against SOURCE_ROOT" — so `<util/foo.h>`
+// tries $(SOURCE_ROOT)/util/foo.h before the linux-headers subtree.
+// This mirrors the `-I$(SOURCE_ROOT)` flag the compiler receives via
+// cmd_args for every non-musl CC node.
+//
+// Musl flavours (composeMuslCC / composeMuslHostCC paths) MUST NOT get
+// the empty prefix — they use `-nostdinc` and have a fully explicit
+// include search path via muslCcIncludes. Adding SOURCE_ROOT there
+// would cause false resolution of system-form includes against the
+// repo root, silently expanding the musl CC input sets incorrectly.
+func includeScannerBasePaths(instance ModuleInstance) []string {
+	base := []string{
+		"contrib/libs/linux-headers",
+		"contrib/libs/linux-headers/_nf",
+	}
+
+	isMusl := instance.Path == "contrib/libs/musl" || strings.HasPrefix(instance.Path, "contrib/libs/musl/")
+
+	if isMusl {
+		// Mirror muslCcIncludes / muslCcIncludesX8664: arch + generic
+		// + src/include + src/internal + include + extra. Use the
+		// instance's PIC flag to pick aarch64 vs x86_64 (the same
+		// switch composeMuslCC vs composeMuslHostCC uses).
+		var arch string
+
+		if instance.Flags.PIC {
+			arch = "x86_64"
+		} else {
+			arch = "aarch64"
+		}
+
+		muslPaths := []string{
+			"contrib/libs/musl/arch/" + arch,
+			"contrib/libs/musl/arch/generic",
+			"contrib/libs/musl/src/include",
+			"contrib/libs/musl/src/internal",
+			"contrib/libs/musl/include",
+			"contrib/libs/musl/extra",
+		}
+
+		// Musl paths come BEFORE linux-headers in the cmd_args ordering.
+		out := make([]string, 0, len(muslPaths)+len(base))
+		out = append(out, muslPaths...)
+		out = append(out, base...)
+
+		return out
+	}
+
+	// Non-musl: prepend the empty-prefix entry (SOURCE_ROOT itself) so
+	// repo-rooted system-form includes like `<util/folder/path.h>`
+	// resolve against $(SOURCE_ROOT)/util/folder/path.h.
+	out := make([]string, 0, 1+len(base))
+	out = append(out, "")
+	out = append(out, base...)
+
+	return out
 }

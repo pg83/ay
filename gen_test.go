@@ -519,11 +519,11 @@ func TestGen_DualInstantiation_BuildCowOn(t *testing.T) {
 
 	tInstance := targetInstance(targetDir)
 	tCCRef, tCCOut := EmitCC(tInstance, "lib.c", ModuleCCInputs{}, e)
-	EmitAR(tInstance, []NodeRef{tCCRef}, []string{tCCOut}, nil, e)
+	EmitAR(tInstance, []NodeRef{tCCRef}, []string{tCCOut}, nil, nil, e)
 
 	hInstance := hostInstance(targetDir)
 	hCCRef, hCCOut := EmitCC(hInstance, "lib.c", ModuleCCInputs{}, e)
-	EmitAR(hInstance, []NodeRef{hCCRef}, []string{hCCOut}, nil, e)
+	EmitAR(hInstance, []NodeRef{hCCRef}, []string{hCCOut}, nil, nil, e)
 
 	if len(e.nodes) != 4 {
 		t.Errorf("dual emission produced %d nodes, want 4", len(e.nodes))
@@ -2535,18 +2535,99 @@ END()
 	}
 }
 
+// TestGen_AddInclMixed_OwnPathStaysOwn pins PR-31 D13: a single
+// ADDINCL call carrying both a GLOBAL path and a module-own path must
+// NOT propagate the module-own path to consumers via PEERDIR.
+//
+// Setup: lib declares ADDINCL(GLOBAL lib/include\nlib/src). Consumer
+// peers lib. The consumer's CC node must have -I lib/include (from
+// the GLOBAL path) but must NOT have -I lib/src (the module-own path).
+func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
+	root := t.TempDir()
+
+	// lib/ya.make: LIBRARY with mixed ADDINCL — GLOBAL include, bare src.
+	libDir := filepath.Join(root, "lib")
+	Throw(os.MkdirAll(libDir, 0o755))
+	Throw(os.WriteFile(filepath.Join(libDir, "ya.make"), []byte(
+		"LIBRARY()\nADDINCL(\n    GLOBAL lib/include\n    lib/src\n)\nSRCS(lib.cpp)\nEND()\n",
+	), 0o644))
+
+	// consumer/ya.make: LIBRARY that peers lib.
+	consDir := filepath.Join(root, "consumer")
+	Throw(os.MkdirAll(consDir, 0o755))
+	Throw(os.WriteFile(filepath.Join(consDir, "ya.make"), []byte(
+		"LIBRARY()\nPEERDIR(lib)\nSRCS(main.cpp)\nEND()\n",
+	), 0o644))
+
+	g := Gen(TargetCfg, root, "consumer")
+
+	// Find the CC node for main.cpp (the consumer's own source).
+	var consumerCC *Node
+
+	for _, n := range g.Graph {
+		if n.KV["p"] == "CC" {
+			for _, out := range n.Outputs {
+				if strings.Contains(out, "main.cpp.o") {
+					consumerCC = n
+					break
+				}
+			}
+		}
+	}
+
+	if consumerCC == nil {
+		t.Fatal("consumer CC node for main.cpp not found")
+	}
+
+	// Collect -I flags from the first cmd's cmd_args.
+	var iFlags []string
+
+	if len(consumerCC.Cmds) > 0 {
+		for _, arg := range consumerCC.Cmds[0].CmdArgs {
+			if strings.HasPrefix(arg, "-I") {
+				iFlags = append(iFlags, arg)
+			}
+		}
+	}
+
+	// GLOBAL path must propagate.
+	wantGlobal := "-I$(SOURCE_ROOT)/lib/include"
+	foundGlobal := false
+
+	for _, f := range iFlags {
+		if f == wantGlobal {
+			foundGlobal = true
+			break
+		}
+	}
+
+	if !foundGlobal {
+		t.Errorf("consumer CC -I flags = %v; want %q (GLOBAL ADDINCL must propagate to peers)", iFlags, wantGlobal)
+	}
+
+	// Module-own path must NOT propagate.
+	wantAbsent := "-I$(SOURCE_ROOT)/lib/src"
+
+	for _, f := range iFlags {
+		if f == wantAbsent {
+			t.Errorf("consumer CC -I flags = %v; must NOT contain %q (module-own ADDINCL must stay module-own, PR-31 D13)", iFlags, wantAbsent)
+			break
+		}
+	}
+}
+
 // TestGen_ToolsArchiver_L0_AtLeast95 is the M2 acceptance closer: PR-30
 // must lift L0 ≥ 95% on the tools/archiver target against the reference
-// graph at /home/pg/monorepo/yatool_orig/g.json.
+// graph at /home/pg/monorepo/yatool_orig/sg.json.
 func TestGen_ToolsArchiver_L0_AtLeast95(t *testing.T) {
 	const sourceRoot = "/home/pg/monorepo/yatool_orig"
 
-	if _, err := os.Stat(filepath.Join(sourceRoot, "g.json")); err != nil {
-		t.Skipf("reference graph not available at %s/g.json: %v", sourceRoot, err)
+	if _, err := os.Stat(filepath.Join(sourceRoot, "sg.json")); err != nil {
+		t.Skipf("reference graph not available at %s/sg.json: %v", sourceRoot, err)
 	}
 
 	our := Gen(TargetCfg, sourceRoot, "tools/archiver")
-	ref := LoadReference(filepath.Join(sourceRoot, "g.json"))
+	ref := LoadReference(filepath.Join(sourceRoot, "sg.json"))
 
 	l0, note := compareTopology(ref, our)
 
