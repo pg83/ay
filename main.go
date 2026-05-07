@@ -92,11 +92,10 @@ func cmdGen(_ []string) int {
 // so that -h / --help exits 0 with usage on stdout (PR-03-D01).
 //
 // --level controls the highest level computed. PR-04 implemented L0;
-// PR-05 added L1 and L2; PR-06 will add L3. Levels above the highest
-// implemented are recorded in the report's Skipped slice (printed as
-// a tail line) and currently have no functional effect. The default of
-// 3 anticipates the full L0..L3 ladder — picking a lower default now
-// would silently skip later levels once they exist.
+// PR-05 added L1 and L2; PR-06 added L3 (byte-exact cmds + env).
+// Levels above the highest implemented are recorded in the report's
+// Skipped slice (printed as a tail line) and currently have no
+// functional effect. The default of 3 covers the full L0..L3 ladder.
 //
 // Exit code: always 0 on a successful comparison. The comparator is
 // observational by default; a future --strict flag (out of scope for
@@ -104,7 +103,7 @@ func cmdGen(_ []string) int {
 func cmdCompare(args []string) int {
 	fs := flag.NewFlagSet("compare", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	level := fs.Int("level", 3, "highest comparator level to run (0=topology, 1=props/outputs, 2=inputs/tags/reqs; 3+ reserved for PR-06)")
+	level := fs.Int("level", 3, "highest comparator level to run (0=topology, 1=props/outputs, 2=inputs/tags/reqs, 3=byte-exact cmd_args + env)")
 
 	err := fs.Parse(args)
 
@@ -135,6 +134,10 @@ func cmdCompare(args []string) int {
 		fmt.Printf("L2: %.2f%%  (%s)\n", report.L2*100, report.L2Note)
 	}
 
+	if *level >= 3 {
+		fmt.Printf("L3: %.2f%%  (%s)\n", report.L3*100, report.L3Note)
+	}
+
 	if len(report.Skipped) > 0 {
 		parts := make([]string, 0, len(report.Skipped))
 
@@ -156,8 +159,9 @@ Levels:
     0 — topology (DAG shape modulo UID renumbering, plus per-node kv.p kind)
     1 — per-pair match on kv.p, target_properties, outputs
     2 — per-pair match on inputs, tags, requirements
+    3 — per-pair byte-exact match on cmd_args + env (per-cmd and top-level)
 
-Higher levels (3) are reserved for later PRs and are listed as
+Higher levels (4+) are reserved for later PRs and are listed as
 "skipped" in the report when --level requests them.
 `)
 }
