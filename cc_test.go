@@ -28,7 +28,7 @@ import (
 //      precise diff, which beats reflect.DeepEqual on a 100+ element
 //      Cmd struct returning a single boolean.
 
-const referenceGraphPath = "/home/pg/monorepo/yatool_orig/g.json"
+// referenceGraphPath declared in gjson_test.go; both files compile in `package main`.
 const referenceCCOutput = "$(BUILD_ROOT)/build/cow/on/lib.c.o"
 
 // loadReferenceCCNode reads the on-disk reference graph and returns the

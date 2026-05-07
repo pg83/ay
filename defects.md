@@ -395,3 +395,10 @@ Codify same shape for PR-10.
 **Location:** gjson_test.go:208-220
 **Description:** Test name + comment promise a "single error message" / "no duplicate output" guarantee, but the body only asserts `strings.Contains(exc.Error(), "flag provided but not defined")`. The exception payload contains the message exactly once REGARDLESS of whether stderr was double-written; the duplicate (D02) manifests on stderr. So the test would still pass if D02 regressed (e.g. `SetOutput(io.Discard)` removed). The actual single-message guarantee is verified only by the manual `./yatool inspect -bogus 2>&1` probe in the verification transcript, not by automated test.
 **Fix:** Deferred. Two paths to harden: (a) rename the test to honestly describe what it checks (`TestCmdInspect_UnknownFlag_ThrowsExceptionContainingFlagError`) and trim the "no duplicate" language, or (b) shell out to the built binary with `os/exec`, capture combined output, assert `strings.Count(out, "flag provided but not defined") == 1`. Path (b) is the correct hardening but adds a build-step dependency to test runs. Both deferred to a future test-infrastructure PR. Constraint logged: D02's regression-guard is currently manual.
+
+### [PR-08-D04] D02 fix comment lines exceed repo's ~78-char wrap width
+**Status:** resolved (deferred — cosmetic; reflow when next touching cc.go)
+**Severity:** nit
+**Location:** cc.go:82-85
+**Description:** The 4-line D02 comment wraps at 87/83/82 chars; every other comment in cc.go and across the project wraps at <=78. Visually inconsistent inside the same comment block (the pre-existing "carries the same env map" comment above wraps at ~64 chars). Mechanically harmless.
+**Fix:** Deferred. Re-wrap to ~72 chars when next editing cc.go (e.g. when D03's no-libc gating lands in M2). One-time mechanical reflow.
