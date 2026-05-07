@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -77,11 +78,90 @@ func cmdHelp(_ []string) int {
 	return 0
 }
 
-func cmdGen(_ []string) int {
-	_ = flag.NewFlagSet("gen", flag.ExitOnError)
-	fmt.Fprintln(os.Stderr, "gen: not implemented yet")
+// cmdGen parses a ya.make and writes the resulting build graph as JSON.
+// Per the PR-03 pattern (D17), we use ContinueOnError + SetOutput(io.Discard)
+// so all diagnostics are owned by this function and the outer Catch.
+// flag.ErrHelp is discriminated explicitly so that -h / --help exits 0
+// with usage on stdout (PR-03-D01).
+//
+// Retires the PR-01-D05 ceremony: `flag.NewFlagSet` is now load-bearing
+// (real flag registration), no `_ =` discard.
+//
+// --target is the module-relative ya.make directory (e.g. build/cow/on).
+// --out is the output JSON path; "-" writes to stdout.
+// --source-root defaults to the upstream snapshot used by PR-03's
+// LoadReference test; override for a different checkout.
+//
+// Exit code: 0 on success. Argument errors and IO/parse failures throw,
+// propagating to main()'s top-level Catch which prints to stderr and
+// exits 1.
+func cmdGen(args []string) int {
+	fs := flag.NewFlagSet("gen", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
 
-	return 1
+	target := fs.String("target", "", "module-relative path to the ya.make directory (e.g. build/cow/on)")
+	out := fs.String("out", "", "path to write the generated JSON (use '-' for stdout)")
+	sourceRoot := fs.String("source-root", "/home/pg/monorepo/yatool_orig", "absolute path to the source tree (defaults to the upstream snapshot)")
+
+	err := fs.Parse(args)
+
+	if errors.Is(err, flag.ErrHelp) {
+		printGenUsage(os.Stdout)
+
+		return 0
+	}
+
+	Throw(err)
+
+	if *target == "" {
+		ThrowFmt("gen: --target is required")
+	}
+
+	if *out == "" {
+		ThrowFmt("gen: --out is required (use '-' for stdout)")
+	}
+
+	g := Gen(TargetCfg, *sourceRoot, *target)
+
+	writeGraph(*out, g)
+
+	return 0
+}
+
+func printGenUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage: yatool gen --target <module-dir> --out <path|-> [--source-root <path>]
+Parse <source-root>/<module-dir>/ya.make and write the resulting build graph as JSON.
+
+Flags:
+    --target <path>        Module-relative ya.make directory (e.g. build/cow/on). Required.
+    --out <path|->         Output JSON path; "-" writes to stdout. Required.
+    --source-root <path>   Absolute source-tree root. Defaults to /home/pg/monorepo/yatool_orig.
+`)
+}
+
+// writeGraph encodes g as JSON to the given path (or stdout when path
+// is "-"). Uses json.Encoder with SetEscapeHTML(false) so the on-disk
+// bytes match what canonicalNodeBytes hashed during Finalize (D16
+// cross-cutting constraint — without it, '<', '>', '&' would render
+// as '<' etc. and break byte-exact comparisons).
+func writeGraph(out string, g *Graph) {
+	var w io.Writer
+
+	if out == "-" {
+		w = os.Stdout
+	} else {
+		f := Throw2(os.Create(out))
+		defer func() {
+			Throw(f.Close())
+		}()
+		w = f
+	}
+
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+
+	Throw(enc.Encode(g))
 }
 
 // cmdCompare loads two reference g.json files and prints the

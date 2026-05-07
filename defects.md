@@ -547,3 +547,49 @@ Codify same shape for PR-10.
 **Location:** compare_props_test.go:92-96
 **Description:** D02 fix added comment + for-loop directly after `cp.Cmds = append(...)` with no blank line. STYLE.md mandates blank before `for`.
 **Suggested fix:** Insert blank line between `cp.Cmds = append(...)` and the `// Cmd contains slice + map reference fields...` comment.
+
+---
+
+## PR-10
+
+### [PR-10-D01] printGenUsage Usage line has double-space before `[--source-root`
+**Status:** resolved
+**Severity:** nit
+**Location:** main.go:132
+**Description:** First line of `printGenUsage`: `Usage: yatool gen --target <module-dir> --out <path|->  [--source-root <path>]` — two spaces between `>` and `[`.
+**Suggested fix:** Collapse to single space.
+
+### [PR-10-D02] cmdGen has no automated tests for flag handling
+**Status:** resolved
+**Severity:** minor
+**Location:** main.go:98-129; companion test slot expected as new tests in gen_test.go or main_test.go
+**Description:** TestCmdInspect_HelpFlag/UnknownFlag exist; no equivalent TestCmdGen_*. Future regression that re-introduces ExitOnError or drops SetOutput(io.Discard) would silently slip past CI. Smoke checks confirm runtime behavior but only as long as someone re-runs them.
+**Suggested fix:** Add `TestCmdGen_HelpFlag_PrintsUsageAndExits0`, `TestCmdGen_UnknownFlag_PanicsWithSingleErrorMessage`, `TestCmdGen_MissingTargetThrows`, `TestCmdGen_MissingOutThrows`. Mirror the cmdInspect test shapes.
+
+### [PR-10-D03] CC output-path formula duplicated between cc.go:50 and gen.go:89 (REFACTOR)
+**Status:** resolved (deferred to early M2 — scope-creep into PR-08 territory)
+**Severity:** minor
+**Location:** cc.go:50, gen.go:89
+**Description:** Both compose `"$(BUILD_ROOT)/" + moduleDir + "/" + filepath.Base(srcRel) + ".o"`. Documented "MUST stay in sync" comment in gen.go is a known anti-pattern.
+**Fix:** Deferred. Refactor EmitCC's signature to `(NodeRef, string)` returning `(emit.Emit(node), outputPath)`, update gen.go to consume both. PR-10's fix-subagent scope explicitly excludes cc.go modifications; the refactor lands in an early-M2 cleanup PR. Constraint logged for whoever picks it up: EmitCC has exactly one caller (gen.go) and one direct test (cc_test.go) — refactor is small.
+
+### [PR-10-D04] writeGraph drops f.Close() error
+**Status:** resolved
+**Severity:** nit
+**Location:** main.go:154
+**Description:** `defer f.Close()` ignores error. JSON encoder doesn't buffer, but Close errors on NFS / FUSE / full-disk-flushed-at-close are still possible. Project idiom otherwise uses Throw for IO.
+**Suggested fix:** Replace with `defer func() { Throw(f.Close()) }()` so Close error propagates to outer Catch.
+
+### [PR-10-D05] Diagnostics ordering: empty-SRCS check fires before PEERDIR-present check
+**Status:** resolved
+**Severity:** nit
+**Location:** gen.go:72-78
+**Description:** For hypothetical PEERDIR-only LIBRARY (rare), user gets "PR-10 requires at least one source" instead of more accurate "PR-10 does not support PEERDIR yet". Real-world impact low; no PEERDIR-only LIBRARYs found in first 200 ya.make scanned.
+**Suggested fix:** Swap order — PEERDIR-present check before SRCS-empty check. Clearer rejection message for the rare case.
+
+### [PR-10-D06] sourceRoot constant in gen_test.go duplicates referenceGraphPath's prefix
+**Status:** resolved
+**Severity:** nit
+**Location:** gen_test.go:19, gjson_test.go:13
+**Description:** `gen_test.go:19` hardcodes `const sourceRoot = "/home/pg/monorepo/yatool_orig"`; `gjson_test.go:13` defines `const referenceGraphPath = "/home/pg/monorepo/yatool_orig/g.json"`. Same path, manual edit. Future move of the snapshot would miss one.
+**Suggested fix:** `sourceRoot := filepath.Dir(referenceGraphPath)` instead of hardcoding.
