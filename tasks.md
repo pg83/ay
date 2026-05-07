@@ -39,7 +39,7 @@ Detail in `./docs/drafts/20260507-0134-recreate-ymake-plan.md`. One line per PR 
 
 Detail in `./docs/drafts/20260507-0549-m2-plan.md`. One line per PR here.
 
-- [~] **PR-12** — Generalize `Gen()` for recursive PEERDIR walk; accept PROGRAM; refactor EmitCC signature `(NodeRef) → (NodeRef, string)`. **Wave 1 — blocks all Wave 2.**
+- [x] **PR-12** — Generalize `Gen()` for recursive PEERDIR walk; accept PROGRAM; refactor EmitCC signature `(NodeRef) → (NodeRef, string)`. **Wave 1 — blocks all Wave 2.**
 - [ ] **PR-13** — Parser extension + macro evaluator (IF/INCLUDE/JOIN_SRCS/ADDINCL/CFLAGS/LDFLAGS/SRCDIR/GLOBAL_SRCS). [Wave 2, parallel]
 - [ ] **PR-14** — `flags.go` second bundle (musl-flavor) + module-flavor flag for CC; resolves PR-08-D03/D04. [Wave 2, parallel]
 - [ ] **PR-15** — `ar.go` real archive-naming + multi-source sort + GLOBAL_SRCS; resolves PR-09-D01/D02. [Wave 2, parallel]

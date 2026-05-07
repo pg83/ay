@@ -1,7 +1,7 @@
 package main
 
 import (
-	"path/filepath"
+	"strings"
 )
 
 // cc.go — emitter for CC compilation nodes.
@@ -19,10 +19,19 @@ import (
 // function suffices.
 
 // EmitCC emits a CC node for compiling `srcRel` (a path relative to the
-// module dir, e.g. "lib.c") inside `moduleDir` (e.g. "build/cow/on")
-// into `$(BUILD_ROOT)/<moduleDir>/<basename(srcRel)>.o`. It returns the
-// NodeRef so the caller (typically the AR/link step) can wire it as an
-// input.
+// module dir, e.g. "lib.c" or "src/algorithm.cpp") inside `moduleDir`
+// (e.g. "build/cow/on") into an object file. The output path formula
+// mirrors ymake's convention:
+//   - Flat source (no directory component): `$(BUILD_ROOT)/<moduleDir>/<srcRel>.o`
+//   - Nested source (contains "/"): `$(BUILD_ROOT)/<moduleDir>/_/<srcRel>.o`
+//
+// The `_/` infix in the nested case ensures that sources from different
+// subdirectories do not collide in the output tree.
+//
+// It returns the NodeRef so the caller (typically the AR/link step) can
+// wire it as an input, plus the output path string so the caller does not
+// have to re-derive it (PR-10-D03 / PR-12: keep the path-formula in one
+// place).
 //
 // The emitted node mirrors the reference graph for `build/cow/on/lib.c`
 // byte-for-byte:
@@ -36,7 +45,7 @@ import (
 //   - platform: <cfg.Name>.
 //   - requirements: {"cpu": 1, "network": "restricted", "ram": 32}.
 //   - inputs: ["$(SOURCE_ROOT)/<moduleDir>/<srcRel>"].
-//   - outputs: ["$(BUILD_ROOT)/<moduleDir>/<basename(srcRel)>.o"].
+//   - outputs: ["$(BUILD_ROOT)/<moduleDir>/<srcRel>.o" or "$(BUILD_ROOT)/<moduleDir>/_/<srcRel>.o" for nested sources].
 //   - host_platform: false (target-side compile, not a host tool).
 //   - foreign_deps: nil (CC node has no host-tool deps).
 //   - DepRefs: empty (leaf compile, no upstream nodes).
@@ -46,8 +55,13 @@ import (
 // LIBRARY() with NO_UTIL/NO_LIBC/NO_RUNTIME. When a leaf without those
 // macros lands, gate noLibcUndebugBlock + catboostOpenSourceDefine on a
 // module flag.
-func EmitCC(cfg PlatformConfig, moduleDir string, srcRel string, emit Emitter) NodeRef {
-	outputPath := "$(BUILD_ROOT)/" + moduleDir + "/" + filepath.Base(srcRel) + ".o"
+func EmitCC(cfg PlatformConfig, moduleDir string, srcRel string, emit Emitter) (NodeRef, string) {
+	var outputPath string
+	if strings.Contains(srcRel, "/") {
+		outputPath = "$(BUILD_ROOT)/" + moduleDir + "/_/" + srcRel + ".o"
+	} else {
+		outputPath = "$(BUILD_ROOT)/" + moduleDir + "/" + srcRel + ".o"
+	}
 	inputPath := "$(SOURCE_ROOT)/" + moduleDir + "/" + srcRel
 
 	// Compose the 101-element cmd_args. Each `append` corresponds to a
@@ -121,5 +135,5 @@ func EmitCC(cfg PlatformConfig, moduleDir string, srcRel string, emit Emitter) N
 		},
 	}
 
-	return emit.Emit(node)
+	return emit.Emit(node), outputPath
 }
