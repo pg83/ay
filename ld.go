@@ -107,10 +107,15 @@ func EmitLD(
 		ThrowFmt("EmitLD: globalRefs/globalPaths length mismatch (%d vs %d)", len(globalRefs), len(globalPaths))
 	}
 
-	if instance.Flags.PIC {
-		ThrowFmt("EmitLD: PR-24 does not support host (PIC) PROGRAM modules; got %s", instance)
-	}
-
+	// PR-25 lifts PR-24's host-PIC guard so the cross-platform
+	// recursion mechanism (D31) can build host PROGRAM modules
+	// (ragel6/yasm tools). The cmd_args composition still uses
+	// the target-flavoured bundle — PR-26's flag-bundle work will
+	// compose a host-flavoured LD bundle when a host PROGRAM
+	// turns out to need different toolchain invocation. For the
+	// PR-25 acceptance tests (synthetic host ragel6 PROGRAM) the
+	// target-shape LD is structurally sufficient; byte-exact host
+	// LD pinning is PR-26+ scope.
 	binaryName := lastPathComponent(instance.Path)
 	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + binaryName
 	vcsCPath := "$(BUILD_ROOT)/" + instance.Path + "/__vcs_version__.c"
@@ -174,6 +179,16 @@ func EmitLD(
 			"module_type": "bin",
 		},
 		DepRefs: depRefs,
+	}
+
+	// PR-25: host PROGRAM modules (cross-platform recursion D31)
+	// must carry `host_platform=true` and `tags=["tool"]` to match
+	// the convention CC/AR use for host nodes. PR-24's
+	// target-only LD never tripped this branch; PR-26 verifies the
+	// full host LD bundle byte-exact.
+	if instance.Flags.PIC {
+		n.HostPlatform = true
+		n.Tags = []string{"tool"}
 	}
 
 	return emit.Emit(n)
