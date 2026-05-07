@@ -141,6 +141,28 @@ type ModuleCCInputs struct {
 	// from PeerCFlagsGlobal so the source/from-where is auditable;
 	// merged at cmd_args slot time.
 	AutoPeerCFlags []string
+	// CFlags is the module's own non-GLOBAL CFLAGS (PR-33 D03).
+	// Applies to BOTH C and C++ sources of this module (mirror of
+	// upstream's CFLAGS-applies-to-both rule). Slotted in cmd_args
+	// between commonDefines and the first noLibcUndebugBlock copy —
+	// empirical reference (libcxx algorithm.cpp.o cmd_args[51]:
+	// `-DLIBCXXRT` between `commonDefines` and `noLibcUndebugBlock`).
+	CFlags []string
+	// OwnCFlagsGlobal is the module's own GLOBAL CFLAGS (PR-33 D02).
+	// Emitted on the module's OWN compiles via the bucket model in
+	// composeTargetCC / composeHostCC (`(own GLOBAL ∪ peer GLOBAL)`
+	// slot, twice flanking the catboost-redux). Also peer-propagates
+	// to consumers via PeerCFlagsGlobal — but the consumer-side
+	// propagation is the responsibility of the walker's two-phase
+	// aggregation (PR-32 D07), not this slot.
+	OwnCFlagsGlobal []string
+	// OwnCXXFlagsGlobal is the module's own GLOBAL CXXFLAGS (PR-33
+	// D02). Same bucket-model emission as OwnCFlagsGlobal but C++
+	// only. libcxx's `CXXFLAGS(GLOBAL -nostdinc++)` lands here.
+	OwnCXXFlagsGlobal []string
+	// OwnCOnlyFlagsGlobal is the module's own GLOBAL CONLYFLAGS
+	// (PR-33 D02). C / .S sources only.
+	OwnCOnlyFlagsGlobal []string
 }
 
 // EmitCC emits a CC node for compiling `srcRel` (a path relative to
@@ -219,11 +241,13 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	// For musl flavours BOTH slots stay empty (musl-self-isolation
 	// invariant — see Q6). The `-D_musl_=1` musl-self CFLAG comes from
 	// `muslExtraDefines` inside composeMuslCC / composeMuslHostCC.
-	var autoPeerCFlags, peerExtras []string
+	var autoPeerCFlags, peerExtras, ownGlobalBucket, ownCFlags []string
 
 	if !isMusl {
 		autoPeerCFlags = in.AutoPeerCFlags
 		peerExtras = composePeerExtras(in, isCxx)
+		ownGlobalBucket = composeOwnAndPeerGlobalBucket(in, isCxx)
+		ownCFlags = in.CFlags
 	}
 
 	switch {
@@ -232,9 +256,9 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	case isMusl:
 		cmdArgs = composeMuslCC(outputPath, inputPath, nil, muslOwnExtras, isCxx)
 	case instance.Flags.PIC:
-		cmdArgs = composeHostCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownExtras, autoPeerCFlags, peerExtras, isCxx, instance.Flags.NoCompilerWarnings)
+		cmdArgs = composeHostCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, isCxx, instance.Flags.NoCompilerWarnings)
 	default:
-		cmdArgs = composeTargetCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownExtras, autoPeerCFlags, peerExtras, isCxx, instance.Flags.NoCompilerWarnings)
+		cmdArgs = composeTargetCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, isCxx, instance.Flags.NoCompilerWarnings)
 	}
 
 	// The reference graph carries the same env map at both the cmd
@@ -470,44 +494,45 @@ func pickWarningFlags(noCompilerWarnings bool) []string {
 }
 
 // appendCxxStdAndOwn appends the per-source-language tail that sits
-// AFTER the second suppression-block copy and BEFORE
-// builtinMacroDateTime: `-std=c++20` for C++ sources (D05) followed by
-// the module's own CXXFLAGS / CONLYFLAGS (D02). For libcxx-style
-// modules the reference graph also injects `-Wno-everything` here as
-// the cxx-warning-bundle slot's NoCompilerWarnings replacement; the
-// helper handles both shapes.
+// AFTER the second suppression-block copy and BEFORE the bucket /
+// peerExtras / builtinMacroDateTime trailer: `-std=c++20` for C++
+// sources (D05), then for C++ either the cxxStandardWarnings bundle
+// (PR-33 D04) or its NoCompilerWarnings replacement
+// `-Wno-everything`, then the module's own non-GLOBAL CXXFLAGS /
+// CONLYFLAGS (D02).
 //
-// `injectCxxWarningBundle` controls whether the `-Wno-everything`
-// cxx-warning-bundle is injected when isCxx && noCompilerWarnings.
-// Pass true for target/host composers (current behaviour); pass false
-// for musl composers that already added muslWarningFlags earlier to
-// suppress duplicate injection.
+// `injectCxxWarningBundle` controls whether the cxx-warning bundle
+// (or its NoCompilerWarnings replacement) is injected. Pass true for
+// target/host composers (current behaviour); pass false for musl
+// composers that already added muslWarningFlags earlier to suppress
+// duplicate injection.
 //
 // Slot ordering verified against:
 //   - libcxx algorithm.cpp.o cmd_args[98..100]:
 //     `-std=c++20 -Wno-everything -D_LIBCPP_BUILDING_LIBRARY`
-//     (NoCompilerWarnings=true; cxxStandardFlag, then cxx warning
-//     bundle replacement, then own CXXFLAGS).
-//   - getopt/small completer.cpp.o cmd_args[104..]:
-//     `-std=c++20` followed by peer-propagated cxx warning extension
-//     bundle (D04 deferred) then peer-propagated GLOBAL CXXFLAGS
-//     (D04 deferred). Own CXXFLAGS slot is between -std=c++20 and
-//     the peer-GLOBAL pieces.
-//
-// The peer-GLOBAL pieces (libcxx's cxx warning extension bundle,
-// `-nostdinc++`, second `-DCATBOOST_OPENSOURCE=yes`) are D04 and
-// out-of-scope here. Their absence keeps libcxx own-CXXFLAGS at L3
-// divergent until PR-30.
+//     (NoCompilerWarnings=true → -Wno-everything replaces the bundle).
+//   - util/charset/all_charset.cpp.o cmd_args[101..111]:
+//     `-std=c++20` then the 10-arg cxxStandardWarnings bundle
+//     (NoCompilerWarnings=false → full bundle).
+//   - getopt/small completer.cpp.o cmd_args[104..]: similar pattern.
 func appendCxxStdAndOwn(cmdArgs []string, isCxx bool, noCompilerWarnings bool, injectCxxWarningBundle bool, ownExtras []string) []string {
 	if isCxx {
 		cmdArgs = append(cmdArgs, cxxStandardFlag)
 
-		if injectCxxWarningBundle && noCompilerWarnings {
-			// libcxx slot: cxx-warning-bundle peer-GLOBAL (D04
-			// deferred) is replaced by `-Wno-everything` when the
-			// consumer module sets NO_COMPILER_WARNINGS. Reference:
-			// libcxx algorithm.cpp.o cmd_args[99] = `-Wno-everything`.
-			cmdArgs = append(cmdArgs, muslWarningFlags...)
+		if injectCxxWarningBundle {
+			if noCompilerWarnings {
+				// libcxx-style slot: the cxx-warning-bundle is
+				// replaced by `-Wno-everything` when the module sets
+				// NO_COMPILER_WARNINGS. Reference: libcxx
+				// algorithm.cpp.o cmd_args[99] = `-Wno-everything`.
+				cmdArgs = append(cmdArgs, muslWarningFlags...)
+			} else {
+				// PR-33 D04: every clang C++ compile without
+				// NO_COMPILER_WARNINGS gets the 10-arg
+				// cxxStandardWarnings bundle. Reference:
+				// util/charset/all_charset.cpp.o cmd_args[102..111].
+				cmdArgs = append(cmdArgs, cxxStandardWarnings...)
+			}
 		}
 	}
 
@@ -544,6 +569,68 @@ func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
 	return out
 }
 
+// composeOwnAndPeerGlobalBucket assembles the (own GLOBAL ∪ peer
+// GLOBAL) CFLAGS / CXXFLAGS / CONLYFLAGS contribution per
+// source-language axis for the PR-33 D02 redux slot. C++ sources emit
+// this bucket TWICE flanking a `-DCATBOOST_OPENSOURCE=yes` token (the
+// catboost-redux); C sources emit no redux (and so the bucket is
+// only consulted via composePeerExtras for the existing single
+// peerExtras slot).
+//
+// Order: own GLOBAL CFLAGS, peer GLOBAL CFLAGS, then own/peer GLOBAL
+// CXXFLAGS or CONLYFLAGS depending on source language. Deduplication
+// is first-occurrence-wins (R14): an own GLOBAL flag also present in
+// peer GLOBAL appears once, in the own slot.
+//
+// Empirical anchors:
+//   - libcxx algorithm.cpp.o cmd_args[101] + [103]: bucket =
+//     [-nostdinc++] (own GLOBAL CXXFLAGS = [-nostdinc++], peer GLOBAL
+//     CXXFLAGS = [-nostdinc++ from libcxxabi-parts], deduped).
+//   - util/charset/all_charset.cpp.o cmd_args[112] + [114]: bucket =
+//     [-nostdinc++] (own GLOBAL = [], peer GLOBAL = [-nostdinc++]).
+//   - abseil casts.cc.o cmd_args[99] + [101]: bucket = [-nostdinc++]
+//     (own GLOBAL = [], peer GLOBAL = [-nostdinc++]).
+//
+// Known gap: libcxxrt's own non-GLOBAL `CXXFLAGS(-nostdinc++)` is
+// emitted twice in the reference (slots 96 + 98) but the bucket
+// model produces an empty bucket because libcxxrt has no own GLOBAL
+// and no peer GLOBAL. The 4 libcxxrt target + 4 host CC nodes stay
+// L3-divergent until upstream's "non-GLOBAL CXXFLAGS doubled on
+// runtime-stack modules" mechanism is identified (planner's open
+// question; PR-33 self-recover guidance: implement naive bucket and
+// document the gap).
+func composeOwnAndPeerGlobalBucket(in ModuleCCInputs, isCxx bool) []string {
+	out := make([]string, 0,
+		len(in.OwnCFlagsGlobal)+len(in.PeerCFlagsGlobal)+
+			len(in.OwnCXXFlagsGlobal)+len(in.PeerCXXFlagsGlobal)+
+			len(in.OwnCOnlyFlagsGlobal)+len(in.PeerCOnlyFlagsGlobal))
+	seen := make(map[string]struct{}, cap(out))
+
+	addEach := func(src []string) {
+		for _, x := range src {
+			if _, dup := seen[x]; dup {
+				continue
+			}
+
+			seen[x] = struct{}{}
+			out = append(out, x)
+		}
+	}
+
+	addEach(in.OwnCFlagsGlobal)
+	addEach(in.PeerCFlagsGlobal)
+
+	if isCxx {
+		addEach(in.OwnCXXFlagsGlobal)
+		addEach(in.PeerCXXFlagsGlobal)
+	} else {
+		addEach(in.OwnCOnlyFlagsGlobal)
+		addEach(in.PeerCOnlyFlagsGlobal)
+	}
+
+	return out
+}
+
 // composeTargetCC composes the cmd_args bundle for a TARGET-flavoured
 // no-libc CC compilation. Pinned byte-exact (101 args, no per-module
 // extras) against build/cow/on/lib.c.o in
@@ -553,13 +640,25 @@ func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
 // the SECOND noLibcUndebugBlock copy. Verified against
 // util/charset/all_charset.cpp.o cmd_args[78] in the reference.
 //
-// PR-32 D08: `peerExtras` is the peer-propagated GLOBAL CFLAGS /
-// CXXFLAGS / CONLYFLAGS slice (composed by composePeerExtras). It
-// slots AFTER own CXXFLAGS / CONLYFLAGS and BEFORE
-// builtinMacroDateTime — matches the empirical reference slot for
-// `-nostdinc++` propagation in libcxx-consuming CC nodes.
-func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownExtras, autoPeerCFlags, peerExtras []string, isCxx, noCompilerWarnings bool) []string {
-	cmdArgs := make([]string, 0, 101+len(ownAddIncl)+len(peerAddIncl)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2)
+// PR-33 D02 + D03 + D04 (slot anchoring):
+//
+//   - `ownCFlags` is the module's own non-GLOBAL CFLAGS — slot
+//     BETWEEN commonDefines and the first noLibcUndebugBlock copy.
+//     Empirical: libcxx algorithm.cpp.o cmd_args[51] = `-DLIBCXXRT`.
+//   - For C++ sources: emit `ownGlobalBucket` (own ∪ peer GLOBAL
+//     CFLAGS/CXXFLAGS) twice flanking a second
+//     `-DCATBOOST_OPENSOURCE=yes` (catboost-redux), AFTER own
+//     CXXFLAGS / CONLYFLAGS and BEFORE builtinMacroDateTime.
+//     Empirical: libcxx algorithm.cpp.o cmd_args[101..103] =
+//     `-nostdinc++ -DCATBOOST_OPENSOURCE=yes -nostdinc++`.
+//   - For C sources: emit `peerExtras` once (the existing single
+//     peerExtras slot) — no catboost-redux. Empirical: tcmalloc
+//     aligned_alloc.c.o has no second catboost.
+//   - cxxStandardWarnings bundle (D04) is injected by
+//     `appendCxxStdAndOwn` for C++ sources without
+//     NoCompilerWarnings.
+func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket []string, isCxx, noCompilerWarnings bool) []string {
+	cmdArgs := make([]string, 0, 101+len(ownAddIncl)+len(peerAddIncl)+len(ownCFlags)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2*len(ownGlobalBucket)+3)
 	cmdArgs = append(cmdArgs,
 		pickCompiler(isCxx),
 		"--target="+targetTriple,
@@ -578,12 +677,26 @@ func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownE
 	cmdArgs = append(cmdArgs, commonCFlags...)
 	cmdArgs = append(cmdArgs, pickWarningFlags(noCompilerWarnings)...)
 	cmdArgs = append(cmdArgs, commonDefines...)
+	cmdArgs = append(cmdArgs, ownCFlags...)
 	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
 	cmdArgs = append(cmdArgs, autoPeerCFlags...)
 	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
 	cmdArgs = appendCxxStdAndOwn(cmdArgs, isCxx, noCompilerWarnings, true, ownExtras)
-	cmdArgs = append(cmdArgs, peerExtras...)
+
+	if isCxx {
+		cmdArgs = append(cmdArgs, ownGlobalBucket...)
+		cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
+		cmdArgs = append(cmdArgs, ownGlobalBucket...)
+	} else {
+		// C source: empirical reference shows no catboost-redux for
+		// C compiles (build/cow/on lib.c.o, tcmalloc aligned_alloc.c.o).
+		// peerExtras is sufficient (own GLOBAL CFLAGS / CONLYFLAGS for
+		// C are unused in the M2 closure; if a future closure
+		// surfaces such a case, revisit).
+		cmdArgs = append(cmdArgs, peerExtras...)
+	}
+
 	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
 	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, inputPath)
@@ -605,8 +718,13 @@ func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownE
 //     define block (host libunwind shim).
 //   - Inserts `hostSseFeatures` (7 args) between the two ndebugPicBlock
 //     copies, in addition to `catboostOpenSourceDefine`.
-func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownExtras, autoPeerCFlags, peerExtras []string, isCxx, noCompilerWarnings bool) []string {
-	cmdArgs := make([]string, 0, 105+len(ownAddIncl)+len(peerAddIncl)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2)
+//
+// PR-33 D02 + D03 + D04: same own-CFLAGS / cxxStandardWarnings /
+// own-GLOBAL-bucket × 2 redux pattern as composeTargetCC. C++
+// sources emit the bucket twice flanking the catboost-redux; C
+// sources emit peerExtras once.
+func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket []string, isCxx, noCompilerWarnings bool) []string {
+	cmdArgs := make([]string, 0, 105+len(ownAddIncl)+len(peerAddIncl)+len(ownCFlags)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2*len(ownGlobalBucket)+3)
 	cmdArgs = append(cmdArgs,
 		pickCompiler(isCxx),
 		"--target="+hostTriple,
@@ -624,6 +742,7 @@ func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownExt
 	cmdArgs = append(cmdArgs, hostCFlags...)
 	cmdArgs = append(cmdArgs, pickWarningFlags(noCompilerWarnings)...)
 	cmdArgs = append(cmdArgs, hostDefines...)
+	cmdArgs = append(cmdArgs, ownCFlags...)
 	cmdArgs = append(cmdArgs, ndebugPicBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
 	// PR-32 D09: autoPeerCFlags (-D_musl_) slots BETWEEN catboost
@@ -636,7 +755,15 @@ func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownExt
 	cmdArgs = append(cmdArgs, hostSseFeatures...)
 	cmdArgs = append(cmdArgs, ndebugPicBlock...)
 	cmdArgs = appendCxxStdAndOwn(cmdArgs, isCxx, noCompilerWarnings, true, ownExtras)
-	cmdArgs = append(cmdArgs, peerExtras...)
+
+	if isCxx {
+		cmdArgs = append(cmdArgs, ownGlobalBucket...)
+		cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
+		cmdArgs = append(cmdArgs, ownGlobalBucket...)
+	} else {
+		cmdArgs = append(cmdArgs, peerExtras...)
+	}
+
 	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
 	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, inputPath)

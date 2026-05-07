@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -364,33 +365,43 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 		case *JoinSrcsStmt:
 			d.joinSrcs = append(d.joinSrcs, v)
 		case *AddInclStmt:
-			// PR-31 D04/D13: route per-path GLOBAL ADDINCL into a
-			// separate slot (peer-propagated to consumers via PEERDIR
-			// walk); non-GLOBAL paths go into the per-module own-ADDINCL
-			// slot that EmitCC's appendAddIncl emits as -I args.
-			// D13 fix: GlobalPaths and OwnPaths are split by
-			// splitAddInclPaths so a single ADDINCL call can carry both
-			// GLOBAL and module-own paths (e.g. libcxx: GLOBAL include +
-			// bare src — only include propagates to consumers).
+			// PR-31 D04/D13: GLOBAL paths peer-propagate to consumers
+			// via the PEERDIR walk (kept in `d.addInclGlobal`).
+			// PR-33 D02: own-cmd_args emission uses `d.addIncl` which
+			// includes BOTH GLOBAL and non-GLOBAL paths in declaration
+			// order — empirically the reference graph emits a module's
+			// own GLOBAL ADDINCL paths on the module's own CC compiles
+			// (libcxx algorithm.cpp.o cmd_args[9..11] shows
+			// `libcxx/include` + `libcxx/src` + `libcxxrt/include` in
+			// stmt declaration order, where include and libcxxrt/include
+			// are GLOBAL and src is non-GLOBAL).
 			d.addInclGlobal = append(d.addInclGlobal, v.GlobalPaths...)
+			d.addIncl = append(d.addIncl, v.GlobalPaths...)
 			d.addIncl = append(d.addIncl, v.OwnPaths...)
 		case *CFlagsStmt:
-			// PR-32 D04: route per-path GLOBAL/own split into separate
-			// slots. Non-GLOBAL flags apply to this module's own C+C++
-			// sources; GLOBAL flags propagate to peers' compilations.
+			// PR-32 D04: GLOBAL flags peer-propagate to consumers via
+			// PEERDIR (kept in `d.cFlagsGlobal`); non-GLOBAL flags apply
+			// to this module's own C+C++ sources only (kept in
+			// `d.cFlags`). PR-33 D02 emits the GLOBAL set separately on
+			// the module's own CC compiles via the bucket model in
+			// composeTargetCC / composeHostCC (own GLOBAL ∪ peer
+			// GLOBAL slot, twice flanking the catboost-redux).
 			d.cFlagsGlobal = append(d.cFlagsGlobal, v.GlobalFlags...)
 			d.cFlags = append(d.cFlags, v.OwnFlags...)
 		case *CXXFlagsStmt:
-			// PR-32 D05: per-path GLOBAL/own split for CXXFLAGS. Non-
-			// GLOBAL flags apply to this module's own C++ sources only;
-			// GLOBAL flags propagate to peers' C++ compilations only
-			// (not to peers' C / .S sources — see Q6).
+			// PR-32 D05: GLOBAL CXXFLAGS peer-propagate to consumers'
+			// C++ compiles (kept in `d.cxxFlagsGlobal`); non-GLOBAL
+			// CXXFLAGS apply to this module's own C++ sources only
+			// (kept in `d.cxxFlags`). PR-33 D02 emits the GLOBAL set
+			// separately on own compiles via the bucket model.
 			d.cxxFlagsGlobal = append(d.cxxFlagsGlobal, v.GlobalFlags...)
 			d.cxxFlags = append(d.cxxFlags, v.OwnFlags...)
 		case *CONLYFlagsStmt:
-			// PR-32 D06: per-path GLOBAL/own split for CONLYFLAGS. Non-
-			// GLOBAL flags apply to this module's own C / .S sources;
-			// GLOBAL flags propagate to peers' C / .S compilations only.
+			// PR-32 D06: GLOBAL CONLYFLAGS peer-propagate to consumers'
+			// C / .S compiles (kept in `d.cOnlyFlagsGlobal`); non-GLOBAL
+			// CONLYFLAGS apply to this module's own C / .S sources only
+			// (kept in `d.cOnlyFlags`). PR-33 D02 emits GLOBAL via the
+			// bucket model.
 			d.cOnlyFlagsGlobal = append(d.cOnlyFlagsGlobal, v.GlobalFlags...)
 			d.cOnlyFlags = append(d.cOnlyFlags, v.OwnFlags...)
 		case *LDFlagsStmt:
@@ -618,20 +629,96 @@ func isAncestorPath(srcDir, instancePath string) bool {
 }
 
 // isRuntimeAncestor reports whether instance.Path is a runtime
-// ancestor (see runtimeAncestorPaths) or sits inside a runtime
-// ancestor's subtree (e.g. `contrib/libs/musl/full`, `util/charset`).
+// ancestor (literal entry in `runtimeAncestorPaths`).
+//
+// PR-33 D01: dropped the `HasPrefix(prefix+"/")` subtree extension that
+// also classified subtree members (e.g. `util/charset`,
+// `contrib/libs/musl/full`, `libcxxabi-parts`) as runtime ancestors.
+// The literal entries already self-suppress via the `instance.Path !=
+// "..."` guards inside `defaultPeerdirsFor`, so the subtree extension
+// was only blocking subtree members from auto-peering libcxx /
+// libcxxrt / util / etc. Empirical cycle re-test (probe 2026-05-07):
+// rc=0, cycle count = 7 (unchanged), L0/L1 unchanged at 98.77% /
+// 98.74%; util/charset gains its libcxx/libcxxrt -I + -nostdinc++
+// peer-GLOBAL contributions.
 func isRuntimeAncestor(path string) bool {
-	if runtimeAncestorPaths[path] {
-		return true
+	return runtimeAncestorPaths[path]
+}
+
+// runtimeStackAddInclPaths is the set of peer-GLOBAL ADDINCL `-I…`
+// paths the upstream `_BUILTIN_PEERDIR` machinery hoists to the FRONT
+// of a consumer's peer-GLOBAL include bundle, ahead of the musl/arch
+// group and the user-PEERDIR contributions. These are the runtime-
+// stack header roots: libcxx, libcxxrt, libcxxabi, libunwind. The
+// reference graph emits these slots immediately after the linux-
+// headers ccIncludesSuffix in every non-musl CC node — both for
+// modules that declare these as direct peers (tools/archiver,
+// util/charset) and for modules where they only reach the cmd_args
+// transitively via a user PEERDIR's walk (util/_/digest/city.cpp.o,
+// util's other CC nodes).
+//
+// PR-33 C01: declared explicitly here so `hoistRuntimeStackAddIncl`
+// preserves the relative order across runtime ancestors when they
+// appear as peer-GLOBAL contributions, regardless of which Phase
+// (own-first vs transitive-second) actually picked them up.
+// Paths are SOURCE_ROOT-relative — `appendAddIncl` (cc.go:867) adds
+// the literal `-I$(SOURCE_ROOT)/` prefix at emit time. Match the same
+// representation here.
+var runtimeStackAddInclPaths = map[string]int{
+	"contrib/libs/cxxsupp/libcxx/include":    0,
+	"contrib/libs/cxxsupp/libcxxrt/include":  1,
+	"contrib/libs/cxxsupp/libcxxabi/include": 2,
+	"contrib/libs/libunwind/include":         3,
+}
+
+// hoistRuntimeStackAddIncl returns `paths` with any entries from the
+// runtime-stack ADDINCL set (libcxx/include, libcxxrt/include,
+// libcxxabi/include, libunwind/include) moved to the front while
+// preserving the canonical relative order between them. Non-runtime-
+// stack entries keep their original relative order behind the
+// hoisted prefix. The input is not mutated.
+//
+// PR-33 C01: util (a runtime-ancestor with empty default peer set
+// other than musl/include) only picks up libcxx/libcxxrt -I via the
+// transitive Phase 2 walk through user PEERDIRs (util/charset, zlib,
+// double-conversion, libc_compat). Without hoisting, those slots
+// land at the TAIL of util's peerAddInclGlobal — after musl-arch
+// and the user paths — diverging from the reference. Modules that
+// already declare libcxx/libcxxrt as direct peers (tools/archiver,
+// util/charset) see no change because the hoist preserves the
+// already-front ordering.
+func hoistRuntimeStackAddIncl(paths []string) []string {
+	if len(paths) == 0 {
+		return paths
 	}
 
-	for prefix := range runtimeAncestorPaths {
-		if strings.HasPrefix(path, prefix+"/") {
-			return true
+	hoisted := make([]string, 0, len(paths))
+	rest := make([]string, 0, len(paths))
+
+	for _, p := range paths {
+		if _, ok := runtimeStackAddInclPaths[p]; ok {
+			hoisted = append(hoisted, p)
+		} else {
+			rest = append(rest, p)
 		}
 	}
 
-	return false
+	if len(hoisted) == 0 {
+		return paths
+	}
+
+	// Sort hoisted by canonical relative order (libcxx < libcxxrt <
+	// libcxxabi < libunwind). The dedup invariant in the caller keeps
+	// each path at most once, so this is a stable selection sort.
+	sort.SliceStable(hoisted, func(i, j int) bool {
+		return runtimeStackAddInclPaths[hoisted[i]] < runtimeStackAddInclPaths[hoisted[j]]
+	})
+
+	out := make([]string, 0, len(paths))
+	out = append(out, hoisted...)
+	out = append(out, rest...)
+
+	return out
 }
 
 // defaultPeerdirsFor returns the implicit DEFAULT_PEERDIRs ymake
@@ -1223,6 +1310,38 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		addEach(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
 	}
 
+	// PR-33 C01: hoist runtime-stack include paths (libcxx/include,
+	// libcxxrt/include, libcxxabi/include, libunwind/include) to the
+	// FRONT of the aggregated peer-GLOBAL ADDINCL slice so they slot
+	// immediately after the linux-headers ccIncludesSuffix in
+	// composeTargetCC / composeHostCC.
+	//
+	// The hoist only fires when THIS module is itself a runtime
+	// ancestor (`util`, `library/cpp/malloc/api`, ...). The reason:
+	// upstream propagates the libcxx/libcxxrt header search paths to
+	// runtime-ancestor consumers as if they were direct GLOBAL peers,
+	// even though `defaultPeerdirsFor` returns only
+	// `[contrib/libs/musl/include]` for them (zero peer-archive deps
+	// is a LINK-closure invariant, not a header-include one). Without
+	// the hoist util's own CC nodes (util/_/digest/city.cpp.o + 15
+	// siblings) get libcxx/libcxxrt at the tail of peerAddInclGlobal,
+	// arriving via the Phase 2 transitive walk through util's user
+	// PEERDIRs (util/charset, zlib, double-conversion, libc_compat).
+	//
+	// Non-runtime-ancestor consumers do NOT get the hoist:
+	//   - Modules with no NO_RUNTIME (tools/archiver, util/charset,
+	//     ragel6/bin) already see libcxx/libcxxrt as direct defaults
+	//     via Phase 1 and emit them at the head naturally.
+	//   - Modules with NO_RUNTIME (yasm — host PROGRAM with explicit
+	//     NO_RUNTIME) intentionally pick up libcxx/libcxxrt at the
+	//     TAIL via transitive walks through musl_extra / jemalloc.
+	//     The reference confirms yasm libyasm/assocdat.c.pic.o has
+	//     libcxx/libcxxrt at slots 17-18, AFTER the musl-arch group.
+	//     Hoisting unconditionally would regress this case.
+	if isRuntimeAncestor(instance.Path) {
+		peerAddInclGlobal = hoistRuntimeStackAddIncl(peerAddInclGlobal)
+	}
+
 	// CFLAGS / CXXFLAGS / CONLYFLAGS: today no module in the M2
 	// closure has both own-GLOBAL and transitive peer-GLOBAL on the
 	// same axis (musl-self CFLAGS are suppressed; libcxx's
@@ -1303,11 +1422,64 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// `_BASE_UNIT` is gated off there by upstream NO_PLATFORM.
 	autoPeerCFlags := defaultPeerCFlags(ctx, instance, d)
 
+	// PR-33 D02 + D03: thread the module's own non-GLOBAL CFLAGS and
+	// own GLOBAL CFLAGS / CXXFLAGS / CONLYFLAGS into ModuleCCInputs so
+	// the composer emits them on this module's own CC compiles.
+	// LibcMusl-self modules zero them out: musl's CFLAGS are folded
+	// into `muslExtraDefines` and the musl composers do not consult
+	// these slots (mirror of the existing `ownCFlagsGlobal = nil`
+	// branch above for the peer-propagation path).
+	ownCFlags := d.cFlags
+	ownCFlagsGlobalSelf := d.cFlagsGlobal
+	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
+	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
+
+	if instance.Flags.LibcMusl {
+		ownCFlags = nil
+		ownCFlagsGlobalSelf = nil
+		ownCXXFlagsGlobalSelf = nil
+		ownCOnlyFlagsGlobalSelf = nil
+	}
+
+	// PR-33 C02: PROGRAM-only `-D_musl_=1` injection. The musl GLOBAL
+	// CFLAG `-D_musl_=1` (`contrib/libs/musl/ya.make:52`) reaches a
+	// PROGRAM consumer's ownCFlags slot — appended AFTER the module's
+	// own CFLAGS, BEFORE the noLibcUndebugBlock / ndebugPicBlock that
+	// follows. LIBRARY consumers (util, util/charset, libcxxrt, ...)
+	// do NOT receive this flag, only the consumer-side `-D_musl_`
+	// sentinel from `defaultPeerCFlags` (which slots after catboost).
+	//
+	// The PROGRAM-vs-LIBRARY discrimination is empirical: tools/
+	// archiver/main.cpp.o (target PROGRAM, slot 60), yasm libyasm/
+	// assocdat.c.pic.o (host PROGRAM, slot 52), ragel6/all_cd.cpp.
+	// pic.o (host PROGRAM, slot 51) all carry `-D_musl_=1`, while
+	// util/_/digest/city.cpp.o (target LIBRARY) and util/charset/
+	// all_charset.cpp.o (target LIBRARY) and libcxxrt/auxhelper.cc.o
+	// (LIBRARY) do not.
+	//
+	// Suppressed for LibcMusl-self (ownCFlags is already nil, but
+	// guard explicitly for clarity) and for effectively-NO_PLATFORM
+	// modules (mirror of the consumer-sentinel gate in
+	// `defaultPeerCFlags`).
+	if d.moduleStmt.Name == "PROGRAM" && cliMuslOn(ctx) && !instance.Flags.LibcMusl && !effectiveNoPlatform(instance.Flags) {
+		// Copy before append: `ownCFlags = d.cFlags` aliases the
+		// underlying array, and a future caller iterating d.cFlags
+		// directly must not see the injected flag.
+		ownCFlagsWithMusl := make([]string, 0, len(ownCFlags)+1)
+		ownCFlagsWithMusl = append(ownCFlagsWithMusl, ownCFlags...)
+		ownCFlagsWithMusl = append(ownCFlagsWithMusl, "-D_musl_=1")
+		ownCFlags = ownCFlagsWithMusl
+	}
+
 	moduleInputs := ModuleCCInputs{
 		AddIncl:              d.addIncl,
 		PeerAddInclGlobal:    peerAddInclGlobal,
+		CFlags:               ownCFlags,
 		CXXFlags:             d.cxxFlags,
 		COnlyFlags:           d.cOnlyFlags,
+		OwnCFlagsGlobal:      ownCFlagsGlobalSelf,
+		OwnCXXFlagsGlobal:    ownCXXFlagsGlobalSelf,
+		OwnCOnlyFlagsGlobal:  ownCOnlyFlagsGlobalSelf,
 		PeerCFlagsGlobal:     peerCFlagsGlobal,
 		PeerCXXFlagsGlobal:   peerCXXFlagsGlobal,
 		PeerCOnlyFlagsGlobal: peerCOnlyFlagsGlobal,
@@ -1598,6 +1770,14 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		seen[p] = struct{}{}
 		walk(filepath.Clean(p))
 	}
+
+	// PR-33 C01: header-only LIBRARYs (musl/include, etc.) keep the
+	// natural Phase 1+2 order — none of the M2-closure header-only
+	// modules are runtime ancestors that consume libcxx/libcxxrt as
+	// transitive header-only contributions. The hoist gate in the
+	// main walker (genModule) is keyed on `isRuntimeAncestor`; a
+	// header-only LIBRARY that ever needs the same treatment can flip
+	// this to mirror the main walker's gate.
 
 	return out
 }
