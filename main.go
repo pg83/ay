@@ -84,11 +84,72 @@ func cmdGen(_ []string) int {
 	return 1
 }
 
-func cmdCompare(_ []string) int {
-	_ = flag.NewFlagSet("compare", flag.ExitOnError)
-	fmt.Fprintln(os.Stderr, "compare: not implemented yet")
+// cmdCompare loads two reference g.json files and prints the
+// comparator's report. Per the PR-03 pattern (D17), we use
+// ContinueOnError + SetOutput(io.Discard) so all diagnostics are owned
+// by this function and the outer Catch — the duplicate-output bug
+// (PR-03-D02) cannot recur. flag.ErrHelp is discriminated explicitly
+// so that -h / --help exits 0 with usage on stdout (PR-03-D01).
+//
+// --level controls the highest level computed; PR-04 only implements
+// L0, so anything higher is recorded in the report's Skipped slice
+// (printed as a tail line) and currently has no functional effect.
+// The default of 3 anticipates the full L0..L3 ladder that PR-05 and
+// PR-06 will land — picking a lower default now would silently skip
+// later levels once they exist.
+//
+// Exit code: always 0 on a successful comparison. The comparator is
+// observational by default; a future --strict flag (out of scope for
+// PR-04) may exit non-zero on L0 < 1.0.
+func cmdCompare(args []string) int {
+	fs := flag.NewFlagSet("compare", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	level := fs.Int("level", 3, "highest comparator level to run (0=topology; PR-04 implements L0 only)")
 
-	return 1
+	err := fs.Parse(args)
+
+	if errors.Is(err, flag.ErrHelp) {
+		printCompareUsage(os.Stdout)
+
+		return 0
+	}
+
+	Throw(err)
+
+	if fs.NArg() != 2 {
+		ThrowFmt("compare: expected exactly 2 positional args (path-to-want.json path-to-got.json), got %d", fs.NArg())
+	}
+
+	want := LoadReference(fs.Arg(0))
+	got := LoadReference(fs.Arg(1))
+
+	report := Compare(want, got, *level)
+
+	fmt.Printf("L0: %.2f%%  (%s)\n", report.L0*100, report.L0Note)
+
+	if len(report.Skipped) > 0 {
+		parts := make([]string, 0, len(report.Skipped))
+
+		for _, lvl := range report.Skipped {
+			parts = append(parts, fmt.Sprintf("L%d", lvl))
+		}
+
+		fmt.Printf("skipped (not yet implemented): %s\n", strings.Join(parts, ", "))
+	}
+
+	return 0
+}
+
+func printCompareUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage: yatool compare [--level N] <path-to-want.json> <path-to-got.json>
+Compare two graph files and print a per-level match report.
+
+Levels:
+    0 — topology (DAG shape modulo UID renumbering, plus per-node kv.p kind)
+
+Higher levels (1..3) are reserved for later PRs and are listed as
+"skipped" in the report when --level requests them.
+`)
 }
 
 // cmdInspect loads a reference g.json and prints a one-line summary

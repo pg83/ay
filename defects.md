@@ -323,7 +323,7 @@ Codify same shape for PR-10.
 ## PR-08
 
 ### [PR-08-D01] cc_test.go has stray blank lines after opening braces, violating D18
-**Status:** under fix
+**Status:** resolved
 **Severity:** nit
 **Location:** cc_test.go:42-43, 54-56, 105-107
 **Description:** STYLE.md "Formatting" / D18: no blank line if statement is first inside `{}`. Three spots in cc_test.go violate: `if err != nil {\n\n\tif os.IsNotExist(err) {`, `for _, n := range g.Graph {\n\n\tif len(n.Outputs) > 0`, `for i := range wantArgs {\n\n\tif got.Cmds[0].CmdArgs[i] != wantArgs[i]`. PR-11 enforced this style on existing tree; PR-08 reintroduces 3 regressions.
@@ -348,7 +348,7 @@ Codify same shape for PR-10.
 ## PR-09
 
 ### [PR-09-D01] Archive-naming convention docstring overstates generality — `replace("/", "-")` only matches reference for ≤3-component module_dirs
-**Status:** under fix
+**Status:** resolved
 **Severity:** minor
 **Location:** ar.go:5-9 (docstring), ar.go:23 (impl)
 **Description:** `EmitAR` derives archive name as `"lib" + strings.ReplaceAll(moduleDir, "/", "-") + ".a"`. Works for `build/cow/on` (M1 leaf). Inspection of 48 AR nodes in g.json shows real ymake convention is NOT a uniform path-to-dash transform: `contrib/libs/...` drops leading `contrib`; `library/...` drops leading `library`; `util` becomes `libyutil.a` (special `y` prefix). Docstring claims this is "yatool's convention", misleading for PR-10+.
@@ -362,21 +362,21 @@ Codify same shape for PR-10.
 **Fix:** Deferred to M2 multi-source PR. When implementing multi-source, sort `objPaths` (and `objRefs` in lockstep) before composition. PR-09 docstring will be tightened (D01 same edit) to scope correctly.
 
 ### [PR-09-D03] EmitAR does not validate `len(objRefs) == len(objPaths)`
-**Status:** under fix
+**Status:** resolved
 **Severity:** minor
 **Location:** ar.go:22-92
 **Description:** Brief: "caller is responsible for keeping the two slices in step." Today's only caller passes len==1 for both, but PR-10's `gen` driver wiring CC outputs to AR could easily slip silently — adding a .o to objPaths without matching objRef yields an AR node whose inputs reference a .o not in deps. Violates throw-style discipline (STYLE.md): such precondition violations should `ThrowFmt`.
 **Suggested fix:** At top of EmitAR: `if len(objRefs) != len(objPaths) { ThrowFmt("EmitAR: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths)) }`. Cheap, throw-style, protects PR-10's wiring.
 
 ### [PR-09-D04] Hardcoded environment-specific Python path `/ix/realm/pg/bin/python3` has no TODO marker
-**Status:** under fix
+**Status:** resolved
 **Severity:** minor
 **Location:** ar.go:36
 **Description:** `cmd_args[0]` hardcoded to reference graph's value `/ix/realm/pg/bin/python3` — clearly user/host-specific. Byte-exactness requires this exact string today. No TODO flags this as future templating point — anyone extending EmitAR to a different host will hit confusing byte-mismatch.
 **Suggested fix:** Add comment immediately above the python3 string: `// TODO(portability): python3 path captured from reference build; future work must template from TargetCfg or detect from $PATH.` No code change for byte-exactness.
 
 ### [PR-09-D05] Test omits any assertion on the deps relationship (DepRefs count)
-**Status:** under fix
+**Status:** resolved
 **Severity:** nit
 **Location:** ar_test.go:83-167
 **Description:** Test bypasses `Finalize` (correct — UID would diverge) and doesn't compare Deps UID-for-UID. But it ALSO never asserts `len(got.DepRefs) == len(ref.Deps)` — reference has 1 dep; executor passes 1 objRef; nothing pins this 1:1. Regression where EmitAR forgot to populate DepRefs (or populated twice) would slip past byte-exact test.
@@ -402,3 +402,49 @@ Codify same shape for PR-10.
 **Location:** cc.go:82-85
 **Description:** The 4-line D02 comment wraps at 87/83/82 chars; every other comment in cc.go and across the project wraps at <=78. Visually inconsistent inside the same comment block (the pre-existing "carries the same env map" comment above wraps at ~64 chars). Mechanically harmless.
 **Fix:** Deferred. Re-wrap to ~72 chars when next editing cc.go (e.g. when D03's no-libc gating lands in M2). One-time mechanical reflow.
+
+---
+
+## PR-04
+
+### [PR-04-D01] blank-line-after-`{` violations across compare_topology.go (recurrence of PR-11 D01-D08 pattern)
+**Status:** resolved
+**Severity:** minor
+**Location:** compare_topology.go:89-90, 183-184, 189-190, 212-213, 246-247, 271-272
+**Description:** STYLE.md exception "no blank line if block is first statement inside `{}`" violated in 6 spots: `for {` <blank> `if/switch/comment` followed by code. PR-11 D01-D08 spent eight defect IDs eradicating exactly this pattern; reintroducing is regression of established convention.
+**Suggested fix:** Drop the blank line immediately after each `{` in the six locations. Re-run `gofmt -w` + verify.
+
+### [PR-04-D02] Dead defensive `if maxLevel >= 0` after a negative-level reject above
+**Status:** resolved
+**Severity:** nit
+**Location:** compare.go:56-66
+**Description:** L56-58 throws when `maxLevel < 0`, so L62's `if maxLevel >= 0` guard always evaluates true. Dead defensive code; future reader may assume L0 might be skipped under some maxLevel value (it cannot).
+**Suggested fix:** Drop `if maxLevel >= 0 { ... }` wrapper, call `compareTopology(want, got)` unconditionally.
+
+### [PR-04-D03] Renumbered-UID test passes vacuously when `rename` is the identity
+**Status:** resolved
+**Severity:** minor
+**Location:** compare_topology_test.go:43-82
+**Description:** TestCompareL0_RenumberedUIDsStillMatch is the only test pinning UID-rename invariance (the comparator's headline property). Builds two identical 3-node graphs, renames every UID/SelfUID/Deps/Result via `rename(uid) = "X-" + uid`, asserts L0==1.0. But never asserts UIDs ACTUALLY differ between want and got after rename — if a future refactor turned `rename` into identity (or short-circuited), test would still pass for wrong reason. Real-graph self-match cannot catch this because both want/got are the same `*Graph` pointer.
+**Suggested fix:** Add setup-sanity assertion before `Compare`: `if want.Graph[0].UID == got.Graph[0].UID { t.Fatalf("test setup broken: rename did not change UIDs") }`. Optionally also assert `got.Graph[0].UID == "X-"+want.Graph[0].UID`.
+
+### [PR-04-D04] Nil-graph diagnostic prints inverted booleans (`want=false` for nil)
+**Status:** resolved
+**Severity:** nit
+**Location:** compare.go:52-54
+**Description:** `ThrowFmt("compare: nil graph (want=%v got=%v)", want != nil, got != nil)` prints `want=false got=true` when want==nil, got!=nil. Reader has to mentally invert. Confusing diagnostic precisely when someone is debugging.
+**Suggested fix:** Replace with two single-fact throws: `if want == nil { ThrowFmt("compare: want graph is nil") }; if got == nil { ThrowFmt("compare: got graph is nil") }`.
+
+### [PR-04-D05] Missing blank line before `for` populating byUID — inconsistent with project convention
+**Status:** resolved
+**Severity:** nit
+**Location:** compare_topology.go:88-89
+**Description:** `byUID := make(...)` directly followed by `for _, node := range g.Graph {` without blank. STYLE.md mandates blank before `for` (not first/last in `{}`). "Logical grouping" exception covers consecutive one-liners; a `for` loop is not a one-liner. Other sites in same project (compare.go:131-133, main.go:195-196) DO have the blank — local inconsistency.
+**Suggested fix:** Insert blank line between L88 (`byUID := ...`) and L89 (`for _, node := range g.Graph {`).
+
+### [PR-04-D06] Blank line between `{` and nested `for` in renumbered-UID test
+**Status:** resolved (deferred — same pattern as D01, single blank line; sweep in next compare-test edit)
+**Severity:** nit
+**Location:** compare_topology_test.go:65-67
+**Description:** Inside outer `for _, n := range got.Graph` loop, `for k, vals := range n.ForeignDeps {` is followed by blank line then nested `for i, d := range vals {`. Same class as D01 but in test file (D01 swept production only). One missed line.
+**Fix:** Deferred. Trivial one-line deletion when next editing compare_topology_test.go (e.g. PR-05's L1+L2 work will likely touch the file).
