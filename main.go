@@ -1,10 +1,13 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"sort"
+	"strings"
 )
 
 func main() {
@@ -88,9 +91,59 @@ func cmdCompare(_ []string) int {
 	return 1
 }
 
-func cmdInspect(_ []string) int {
-	_ = flag.NewFlagSet("inspect", flag.ExitOnError)
-	fmt.Fprintln(os.Stderr, "inspect: not implemented yet")
+// cmdInspect loads a reference g.json and prints a one-line summary
+// (node count, result count, sorted platform list). Per the PR-01-D05
+// deferred constraint, we use ContinueOnError so subcommand parse
+// failures route through this function's throw-style error path rather
+// than calling os.Exit from inside flag itself. Argument errors and IO
+// errors throw; the panic propagates to main()'s top-level Catch which
+// prints to stderr and exits 1. The 0 return is the success-only path.
+//
+// fs.SetOutput(io.Discard) suppresses flag's built-in error/usage output
+// so that all diagnostics are owned exclusively by this function and the
+// outer Catch — preventing the duplicate-output bug (PR-03-D02). The
+// flag.ErrHelp sentinel is handled explicitly before Throw so that -h /
+// --help exits 0 with usage on stdout (PR-03-D01).
+func cmdInspect(args []string) int {
+	fs := flag.NewFlagSet("inspect", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
 
-	return 1
+	err := fs.Parse(args)
+
+	if errors.Is(err, flag.ErrHelp) {
+		printInspectUsage(os.Stdout)
+
+		return 0
+	}
+
+	Throw(err)
+
+	if fs.NArg() != 1 {
+		ThrowFmt("inspect: expected exactly 1 positional arg (path to g.json), got %d", fs.NArg())
+	}
+
+	g := LoadReference(fs.Arg(0))
+
+	// Collect distinct platforms via a set, then sort the keys (D14:
+	// never range a map for output).
+	platSet := make(map[string]struct{})
+	for _, n := range g.Graph {
+		platSet[n.Platform] = struct{}{}
+	}
+
+	platforms := make([]string, 0, len(platSet))
+	for p := range platSet {
+		platforms = append(platforms, p)
+	}
+	sort.Strings(platforms)
+
+	fmt.Printf("nodes: %d  results: %d  platforms: %s\n", len(g.Graph), len(g.Result), strings.Join(platforms, ","))
+
+	return 0
+}
+
+func printInspectUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage: yatool inspect <path-to-g.json>
+Print stats about a graph file: nodes, results, platforms.
+`)
 }
