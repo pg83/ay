@@ -920,3 +920,91 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 **Location:** ld.go:69-77 docstring; :282-333 composeLDCmdLinkExe; :375-407 composeLDInputs
 **Description:** pluginPaths already $(BUILD_ROOT)/-prefixed; globalPaths BUILD_ROOT-relative. Asymmetric convention documented but not enforced.
 **Fix:** Deferred. PR-25's macro evaluator will be the first real consumer; if convention proves error-prone, PR-25 normalizes inputs.
+
+---
+
+## PR-25
+
+### [PR-25-D01] CXXFLAGS/CONLYFLAGS treated as no-op metadata silently drops compile flags
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go:111-143 (whitelist), :270-287 (applyUnknownStmt)
+**Description:** Whitelist treats CXXFLAGS/CONLYFLAGS as no-op. Per upstream ymake.core.conf they `SET_APPEND_WITH_GLOBAL(USER_CXXFLAGS/CONLYFLAGS ...)`. base64/avx2 etc. use these. Asymmetric vs CFLAGS (typed CFlagsStmt collected into moduleData.cFlags).
+**Suggested fix:** In applyUnknownStmt, add explicit cases for CXXFLAGS → `d.cxxFlags = append(d.cxxFlags, v.Args...)` and CONLYFLAGS → `d.cOnlyFlags = append(...)`. Add fields to moduleData. Consumer is PR-26.
+
+### [PR-25-D02] SRCDIR collected but never consumed by emitOneSource
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go:189, :244-245, :552-596
+**Description:** `*SrcDirStmt` collected into moduleData.srcDir but emitOneSource always passes srcRel verbatim. SRCDIR shifts source resolution base; today `inputPath` would be wrong for SRCDIR-using modules (none in current closure). Comment-less variable disuse reads as oversight.
+**Suggested fix:** Add explicit comment in gen.go documenting SRCDIR as deferred-to-PR-26 (mirror existing ADDINCL/CFLAGS comments at :548-551). Pure documentation fix.
+
+### [PR-25-D03] Peer LIBRARY's global archive (.global.a) dropped from PROGRAM's LD globalRefs/globalPaths
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go:84-90 (moduleEmitResult), :469-476 (EmitLD call passes nil/nil), :495-497 (EmitARGlobal return discarded)
+**Description:** When LIBRARY peer declares GLOBAL_SRCS, gen emits `.global.a` via EmitARGlobal but discards return. PROGRAM's EmitLD call hardcodes `nil, nil` for globalRefs/globalPaths. Reference tools/archiver LD wires tcmalloc's .global.a via `-Wl,--whole-archive`. PR-26 widening will surface this.
+**Suggested fix:** Extend moduleEmitResult with `globalRef *NodeRef, globalPath string`. Capture from EmitARGlobal return. PROGRAM aggregates peer globals (transitive — global archives propagate through PEERDIR per ymake whole-archive convention) and passes to EmitLD.
+
+### [PR-25-D04] TestGen_ToolsArchiver_DoesNotCrash silently passes regardless of outcome
+**Status:** resolved
+**Severity:** minor
+**Location:** gen_test.go:1004-1020
+**Description:** Test wraps Gen in Try; on non-nil exception calls only t.Logf. Passes whether Gen returns successfully OR throws. Today's actual behavior is rc=0, 50 nodes — should pin THAT.
+**Suggested fix:** Replace t.Logf with t.Fatalf on exception. Add `if len(g.Graph) < 50 { t.Errorf(...) }` to pin minimum coverage. Optionally pin len(g.Result) > 0.
+
+### [PR-25-D05] pr12SupportedUnknownMacros var name stale; PR-25 owns it now
+**Status:** resolved
+**Severity:** nit
+**Location:** gen.go:105-143, :284
+**Description:** Whitelist named after PR-12; PR-25 extended membership significantly. Future grep for "PR-25 macro whitelist" misses this.
+**Suggested fix:** Rename to `whitelistedMetadataMacros` (or similar). Update doc comment + error message at line 284.
+
+### [PR-25-D06] TestEmitLD_AcceptsHostPIC asserts only platform string; misses HostPlatform/Tags wiring
+**Status:** resolved
+**Severity:** nit
+**Location:** ld_test.go:362-387
+**Description:** Test verifies guard removal but doesn't assert `HostPlatform=true` or `Tags=["tool"]` from EmitLD. Future regression that drops those would slip.
+**Suggested fix:** Add `if !got.HostPlatform { t.Errorf("host_platform = false, want true") }` and `if len(got.Tags) != 1 || got.Tags[0] != "tool" { ... }`.
+
+### [PR-25-D07] R6-generated .cpp wired through EmitCC produces SOURCE_ROOT path for a BUILD_ROOT-located file
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go:583-590; cc.go:59
+**Description:** `.rl6` source is dispatched: EmitR6 produces `$(BUILD_ROOT)/<modulePath>/_/<srcRel>.cpp`. Then PR-25 strips prefix to `_/<srcRel>.cpp`, feeds to EmitCC which composes `inputPath=$(SOURCE_ROOT)/<modulePath>/_/<srcRel>.cpp` — wrong path (file lives in BUILD_ROOT). Mirror of documented JS deferral.
+**Suggested fix:** Add explicit defer comment mirroring JS gap at gen.go:444-446. PR-26 lands `EmitCCFromBuildRoot` variant. Pure documentation for now.
+
+### [PR-25-D08] Peer GlobalPath has $(BUILD_ROOT)/ prefix violating EmitLD contract — produces double-prefixed inputs and malformed cmd_args (REGRESSION from D03 fix)
+**Status:** resolved
+**Severity:** major
+**Location:** gen.go:524; surfaces via composeLDInputs (ld.go:405) and composeLDCmdLinkExe (ld.go:329)
+**Description:** D03 fix constructed `result.GlobalPath = "$(BUILD_ROOT)/" + instance.Path + "/" + globalArchiveName(instance.Path)`. EmitLD's globalPaths param is BUILD_ROOT-RELATIVE per ld.go:74-77 (same as peerLibPaths). Result: composeLDInputs prepends $(BUILD_ROOT)/ → double-prefix `$(BUILD_ROOT)/$(BUILD_ROOT)/peerlib/lib...global.a`. composeLDCmdLinkExe emits `$(BUILD_ROOT)/...global.a` literal between --ya-start/end-command-file. TestGen_PeerGlobalArchive_ThreadsToLD missed because only checks refs/counts, not path strings.
+**Suggested fix:** `gen.go:524` change to `result.GlobalPath = instance.Path + "/" + globalArchiveName(instance.Path)` (NO $(BUILD_ROOT)/ prefix). Strengthen TestGen_PeerGlobalArchive_ThreadsToLD: assert inputs contains exactly `"$(BUILD_ROOT)/peerlib/libpeerlib.global.a"` (single prefix); assert cmd_args between --ya-start-command-file and --ya-end-command-file contains `"peerlib/libpeerlib.global.a"` (no prefix).
+
+### [PR-25-D09] Stale `pr12SupportedUnknownMacros` reference in TestGen_RejectsUnsupportedMacro doc comment
+**Status:** resolved
+**Severity:** nit
+**Location:** gen_test.go:330
+**Description:** D05 renamed to whitelistedMetadataMacros in production code; test comment missed.
+**Suggested fix:** s/pr12SupportedUnknownMacros/whitelistedMetadataMacros/ in the doc comment.
+
+### [PR-25-D10] D07's R6 comment cites wrong line range for JS gap mirror
+**Status:** resolved
+**Severity:** nit
+**Location:** gen.go:612
+**Description:** Comment says "Mirror of the JS gap documented at gen.go:444-446" but actual JS-related EmitCC code lives at gen.go:456-468. Line refs drift between drafts.
+**Suggested fix:** Either correct line number OR rewrite to "Mirror of the JS gap documented earlier in this function" to survive future drift.
+
+### [PR-25-D11] peerGlobalRefs/peerGlobalPaths missing capacity hint inconsistent with peerArchive*
+**Status:** resolved
+**Severity:** nit
+**Location:** gen.go:414-415
+**Description:** peerArchiveRefs/Paths use `make([]X, 0, len(d.peerdirs))`. peerGlobal* use `make([]X, 0)`. Style inconsistency.
+**Suggested fix:** Add capacity hint to match.
+
+### [PR-25-D12] R6 comment misattributes EmitJS scope ("this function" — actually different function)
+**Status:** resolved (deferred — one-word cosmetic; "search for EmitJS" hint still works file-wide)
+**Severity:** nit
+**Location:** gen.go:611-614
+**Description:** D10 fix rewrote stale line numbers but picked wrong scope. R6 comment is in `emitOneSource`; EmitJS is in `genModule` — different function. "search for EmitJS" still finds it via file-wide grep.
+**Fix:** Deferred. Replace "this function" with "this file" or "in genModule" in next gen.go edit.

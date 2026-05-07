@@ -359,27 +359,38 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	}
 }
 
-// TestEmitLD_RejectsHostPIC pins that PR-24 rejects host PROGRAM
-// modules. PR-24 only ships the target LD path; a future PR that
-// needs host LD support must remove this guard explicitly so the
-// expansion is reviewed.
-func TestEmitLD_RejectsHostPIC(t *testing.T) {
+// TestEmitLD_AcceptsHostPIC verifies PR-25's lift of PR-24's
+// host-PIC guard. Cross-platform recursion (D31) requires building
+// host PROGRAM modules (ragel6/yasm), so EmitLD now accepts
+// `Flags.PIC=true`. The cmd_args bundle is still the target shape;
+// byte-exact host LD pinning is PR-26+ scope. This test only
+// asserts the call no longer throws and the resulting node carries
+// `host_platform=true`.
+func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 	emit := NewBufferedEmitter()
 	stub := emit.Emit(&Node{KV: map[string]string{"p": "STUB"}})
 
-	exc := Try(func() {
-		EmitLD(
-			hostInstance("some/prog"),
-			[]NodeRef{stub}, []string{"$(BUILD_ROOT)/some/prog/main.cpp.o"},
-			nil, nil,
-			nil, nil,
-			nil, nil,
-			emit,
-		)
-	})
+	ref := EmitLD(
+		hostInstance("some/prog"),
+		[]NodeRef{stub}, []string{"$(BUILD_ROOT)/some/prog/main.cpp.o"},
+		nil, nil,
+		nil, nil,
+		nil, nil,
+		emit,
+	)
 
-	if exc == nil {
-		t.Fatal("expected exception for host LD, got nil")
+	got := emit.nodes[ref.id]
+
+	if got.Platform != string(PlatformDefaultLinuxX8664) {
+		t.Errorf("platform = %q, want %q", got.Platform, PlatformDefaultLinuxX8664)
+	}
+
+	if !got.HostPlatform {
+		t.Errorf("host_platform = false, want true")
+	}
+
+	if len(got.Tags) != 1 || got.Tags[0] != "tool" {
+		t.Errorf("tags = %v, want [\"tool\"]", got.Tags)
 	}
 }
 
