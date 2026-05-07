@@ -118,12 +118,36 @@ type AddInclStmt struct {
 	Line        int
 }
 
-// CFlagsStmt represents `CFLAGS([GLOBAL] flags...)`. Same modifier
-// shape as AddInclStmt.
+// CFlagsStmt represents `CFLAGS([GLOBAL] flags...)` with per-path
+// GLOBAL semantics (PR-32 D04, mirror of AddInclStmt's PR-31 D13
+// shape). A flag token immediately following the literal `GLOBAL`
+// keyword goes to GlobalFlags; all other flag tokens go to OwnFlags.
+// `CFLAGS(GLOBAL -DBAR)` puts -DBAR in GlobalFlags; `CFLAGS(-DBAZ)`
+// puts -DBAZ in OwnFlags. GlobalFlags propagates to consumers via
+// PEERDIR; OwnFlags applies only to the declaring module.
 type CFlagsStmt struct {
-	Modifier string
-	Flags    []string
-	Line     int
+	GlobalFlags []string
+	OwnFlags    []string
+	Line        int
+}
+
+// CXXFlagsStmt represents `CXXFLAGS([GLOBAL] flags...)`. Identical
+// per-path GLOBAL semantics to CFlagsStmt; the distinction is the
+// language axis: CXXFLAGS apply only to C++ sources (.cpp/.cc/.cxx),
+// while CFLAGS apply to both C and C++ sources. PR-32 D05.
+type CXXFlagsStmt struct {
+	GlobalFlags []string
+	OwnFlags    []string
+	Line        int
+}
+
+// CONLYFlagsStmt represents `CONLYFLAGS([GLOBAL] flags...)`. C-only
+// counterpart to CXXFlagsStmt: applies only to C / .S sources.
+// PR-32 D06.
+type CONLYFlagsStmt struct {
+	GlobalFlags []string
+	OwnFlags    []string
+	Line        int
 }
 
 // LDFlagsStmt represents `LDFLAGS(flags...)`. No modifier — LDFLAGS in
@@ -157,6 +181,8 @@ func (*IncludeStmt) stmtMarker()    {}
 func (*JoinSrcsStmt) stmtMarker()   {}
 func (*AddInclStmt) stmtMarker()    {}
 func (*CFlagsStmt) stmtMarker()     {}
+func (*CXXFlagsStmt) stmtMarker()   {}
+func (*CONLYFlagsStmt) stmtMarker() {}
 func (*LDFlagsStmt) stmtMarker()    {}
 func (*SrcDirStmt) stmtMarker()     {}
 func (*GlobalSrcsStmt) stmtMarker() {}
@@ -880,9 +906,17 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 
 		return &AddInclStmt{GlobalPaths: globalPaths, OwnPaths: ownPaths, Line: nameTok.line}
 	case "CFLAGS":
-		mod, flags := splitGlobalModifier(args)
+		globalFlags, ownFlags := splitFlagsByGlobal(args)
 
-		return &CFlagsStmt{Modifier: mod, Flags: flags, Line: nameTok.line}
+		return &CFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: nameTok.line}
+	case "CXXFLAGS":
+		globalFlags, ownFlags := splitFlagsByGlobal(args)
+
+		return &CXXFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: nameTok.line}
+	case "CONLYFLAGS":
+		globalFlags, ownFlags := splitFlagsByGlobal(args)
+
+		return &CONLYFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: nameTok.line}
 	case "LDFLAGS":
 		return &LDFlagsStmt{Flags: append([]string(nil), args...), Line: nameTok.line}
 	case "SRCDIR":
@@ -909,6 +943,32 @@ func splitGlobalModifier(args []string) (string, []string) {
 	}
 
 	return "", append([]string(nil), args...)
+}
+
+// splitFlagsByGlobal separates CFLAGS / CXXFLAGS / CONLYFLAGS args
+// into a global and own slice using per-path GLOBAL semantics
+// (PR-32 D04). A flag token immediately following the literal
+// `GLOBAL` keyword goes to globalFlags; all other tokens go to
+// ownFlags. Mirrors `splitAddInclPaths`. Empirical M2 closure
+// verifies all GLOBAL CFLAGS / CXXFLAGS callsites take the
+// single-arg `(GLOBAL -DX)` shape, so the per-path vs statement-
+// level distinction has no observable difference today; the
+// per-path shape future-proofs against later mixed-token call
+// sites.
+func splitFlagsByGlobal(args []string) (globalFlags, ownFlags []string) {
+	for i := 0; i < len(args); i++ {
+		if args[i] == "GLOBAL" {
+			i++
+
+			if i < len(args) {
+				globalFlags = append(globalFlags, args[i])
+			}
+		} else {
+			ownFlags = append(ownFlags, args[i])
+		}
+	}
+
+	return globalFlags, ownFlags
 }
 
 // splitAddInclPaths separates ADDINCL args into global and own path

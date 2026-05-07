@@ -110,6 +110,24 @@ type moduleEmitResult struct {
 	// after the module's own ADDINCL) and (b) the include scanner's
 	// resolution search path. SOURCE_ROOT-relative paths.
 	AddInclGlobal []string
+	// OwnAddInclGlobal is this module's OWN GLOBAL ADDINCL declarations
+	// only — no transitive peer contributions. PR-32: the consumer
+	// walker uses this to compose its peerAddInclGlobal in two phases
+	// (own-first across all peers, transitive-second), matching the
+	// reference cmd_args ordering where libcxx/include +
+	// libcxxrt/include come BEFORE musl-arch (which propagates
+	// transitively through their peers' auto-PEERDIR of musl/include).
+	OwnAddInclGlobal []string
+	// CFlagsGlobal / CXXFlagsGlobal / COnlyFlagsGlobal are the unions
+	// of this module's own GLOBAL CFLAGS / CXXFLAGS / CONLYFLAGS plus
+	// the transitive peer-GLOBAL contributions (PR-32 D07). Consumers
+	// receive these via ModuleCCInputs.PeerCFlagsGlobal /
+	// PeerCXXFlagsGlobal / PeerCOnlyFlagsGlobal at compile time.
+	// Declaration-order preserved across the PEERDIR walk; duplicates
+	// dropped (mirror of AddInclGlobal aggregation).
+	CFlagsGlobal     []string
+	CXXFlagsGlobal   []string
+	COnlyFlagsGlobal []string
 }
 
 // genCtx threads state through the recursive walk. `emit`
@@ -146,6 +164,14 @@ type genCtx struct {
 	// bits/alltypes.h resolves arch-specifically).
 	scannerTarget *IncludeScanner
 	scannerHost   *IncludeScanner
+	// cliDefines mirrors the user-facing `--define KEY=VALUE` (PR-32
+	// D01). Read by the auto-PEERDIR machinery in defaultPeerdirsFor /
+	// defaultProgramPeerdirsFor and the auto-CFLAG injection in
+	// defaultPeerCFlags. The single load-bearing key today is `MUSL`
+	// (= "yes" mirrors `build/ymake.core.conf:781`'s
+	// `when ($MUSL == "yes") { PEERDIR+=contrib/libs/musl/include }`).
+	// Read-only after Gen seeds it; never mutated mid-walk.
+	cliDefines map[string]string
 }
 
 // asmlibYasmModules lists module paths whose host `.S`/`.s` sources
@@ -201,6 +227,8 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"SRC_C_SSE41":           {}, // PR-27: util/charset (arch-specific compile-flag wrapper)
 	"NO_CLANG_COVERAGE":     {}, // PR-30: contrib/tools/yasm
 	"NO_PROFILE_RUNTIME":    {}, // PR-30: contrib/tools/yasm
+	"LD_PLUGIN":             {}, // PR-32 D03: contrib/libs/musl/include — directs ymake to invoke musl.py during link, no per-module compile-time effect we model.
+	"WITHOUT_VERSION":       {}, // PR-32 D03: contrib/libs/musl/include neighbours; metadata-only.
 }
 
 // Gen produces the build graph rooted at `targetDir`. PR-23 wraps
@@ -225,6 +253,20 @@ var whitelistedMetadataMacros = map[string]struct{}{
 // NOT added to the result roots (per F3 of the PR-28 plan: reference
 // graph's `result` is target-only).
 func Gen(cfg PlatformConfig, sourceRoot string, targetDir string) *Graph {
+	return GenWith(cfg, sourceRoot, targetDir, nil)
+}
+
+// GenWith is the PR-32 D01 entry point that threads `cliDefines`
+// through to `genCtx`. A nil `cliDefines` defaults to
+// `{"MUSL": "yes"}` so back-compat callers (`Gen(cfg, root, target)`
+// → `GenWith(cfg, root, target, nil)`) preserve M2 behaviour. Pass a
+// non-nil empty map to opt out of all defaults (useful for test
+// fixtures that pin the no-defaults shape).
+func GenWith(cfg PlatformConfig, sourceRoot string, targetDir string, cliDefines map[string]string) *Graph {
+	if cliDefines == nil {
+		cliDefines = map[string]string{"MUSL": "yes"}
+	}
+
 	ctx := &genCtx{
 		cfg:           cfg,
 		sourceRoot:    sourceRoot,
@@ -233,6 +275,7 @@ func Gen(cfg PlatformConfig, sourceRoot string, targetDir string) *Graph {
 		walking:       make(map[ModuleInstance]bool),
 		scannerTarget: NewIncludeScanner(sourceRoot, LoadSysInclSetFor(sourceRoot, "aarch64")),
 		scannerHost:   NewIncludeScanner(sourceRoot, LoadSysInclSetFor(sourceRoot, "x86_64")),
+		cliDefines:    cliDefines,
 	}
 
 	seed := ModuleInstance{
@@ -255,22 +298,25 @@ func Gen(cfg PlatformConfig, sourceRoot string, targetDir string) *Graph {
 // inlined macros. The `flags` field starts from the path-based
 // heuristic and is overlaid with macro-derived bools (NO_LIBC etc.).
 type moduleData struct {
-	moduleStmt    *ModuleStmt
-	srcs          []string
-	globalSrcs    []string
-	peerdirs      []string
-	joinSrcs      []*JoinSrcsStmt
-	addIncl       []string // collected non-GLOBAL ADDINCL paths
-	addInclGlobal []string // PR-31 D04: collected ADDINCL(GLOBAL ...) paths; peer-propagated to consumers
-	cFlags        []string // collected CFLAGS values, all variants
-	cxxFlags      []string // collected CXXFLAGS values (C++ only); PR-29-D02 threads into ModuleCCInputs.CXXFlags
-	cOnlyFlags    []string // collected CONLYFLAGS values (C only); PR-29-D02 threads into ModuleCCInputs.COnlyFlags
-	ldFlags       []string // collected LDFLAGS values
-	srcDir        string   // last SRCDIR setting (empty = module dir)
-	flags         FlagSet  // overlay of inferFlagsFromPath + macro bools
-	hadAllocator  bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
-	muslLite      bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
-	conflictMod   *ModuleStmt
+	moduleStmt       *ModuleStmt
+	srcs             []string
+	globalSrcs       []string
+	peerdirs         []string
+	joinSrcs         []*JoinSrcsStmt
+	addIncl          []string // collected non-GLOBAL ADDINCL paths
+	addInclGlobal    []string // PR-31 D04: collected ADDINCL(GLOBAL ...) paths; peer-propagated to consumers
+	cFlags           []string // collected non-GLOBAL CFLAGS values (apply to module's own C+C++ sources)
+	cFlagsGlobal     []string // PR-32 D04: collected CFLAGS(GLOBAL ...) values; peer-propagated to consumers' C+C++ sources
+	cxxFlags         []string // collected non-GLOBAL CXXFLAGS values (C++ only); PR-29-D02 threads into ModuleCCInputs.CXXFlags
+	cxxFlagsGlobal   []string // PR-32 D05: collected CXXFLAGS(GLOBAL ...) values; peer-propagated to consumers' C++ sources
+	cOnlyFlags       []string // collected non-GLOBAL CONLYFLAGS values (C only); PR-29-D02 threads into ModuleCCInputs.COnlyFlags
+	cOnlyFlagsGlobal []string // PR-32 D06: collected CONLYFLAGS(GLOBAL ...) values; peer-propagated to consumers' C / .S sources
+	ldFlags          []string // collected LDFLAGS values
+	srcDir           string   // last SRCDIR setting (empty = module dir)
+	flags            FlagSet  // overlay of inferFlagsFromPath + macro bools
+	hadAllocator     bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
+	muslLite         bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
+	conflictMod      *ModuleStmt
 }
 
 // collectModule walks `mf.Stmts` (after IF branches have been
@@ -329,7 +375,24 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 			d.addInclGlobal = append(d.addInclGlobal, v.GlobalPaths...)
 			d.addIncl = append(d.addIncl, v.OwnPaths...)
 		case *CFlagsStmt:
-			d.cFlags = append(d.cFlags, v.Flags...)
+			// PR-32 D04: route per-path GLOBAL/own split into separate
+			// slots. Non-GLOBAL flags apply to this module's own C+C++
+			// sources; GLOBAL flags propagate to peers' compilations.
+			d.cFlagsGlobal = append(d.cFlagsGlobal, v.GlobalFlags...)
+			d.cFlags = append(d.cFlags, v.OwnFlags...)
+		case *CXXFlagsStmt:
+			// PR-32 D05: per-path GLOBAL/own split for CXXFLAGS. Non-
+			// GLOBAL flags apply to this module's own C++ sources only;
+			// GLOBAL flags propagate to peers' C++ compilations only
+			// (not to peers' C / .S sources — see Q6).
+			d.cxxFlagsGlobal = append(d.cxxFlagsGlobal, v.GlobalFlags...)
+			d.cxxFlags = append(d.cxxFlags, v.OwnFlags...)
+		case *CONLYFlagsStmt:
+			// PR-32 D06: per-path GLOBAL/own split for CONLYFLAGS. Non-
+			// GLOBAL flags apply to this module's own C / .S sources;
+			// GLOBAL flags propagate to peers' C / .S compilations only.
+			d.cOnlyFlagsGlobal = append(d.cOnlyFlagsGlobal, v.GlobalFlags...)
+			d.cOnlyFlags = append(d.cOnlyFlags, v.OwnFlags...)
 		case *LDFlagsStmt:
 			d.ldFlags = append(d.ldFlags, v.Flags...)
 		case *SrcDirStmt:
@@ -377,24 +440,6 @@ func applyUnknownStmt(v *UnknownStmt, d *moduleData) {
 		d.flags.NoPlatform = true
 	case "NO_COMPILER_WARNINGS":
 		d.flags.NoCompilerWarnings = true
-	case "CXXFLAGS":
-		mod, rest := splitGlobalModifier(v.Args)
-
-		if mod == "GLOBAL" {
-			// GLOBAL CXXFLAGS propagate to peers per ymake semantics; PR-30 D04 will route via cxxFlagsGlobal field. For now, dropped — applying to self would be semantically wrong.
-			break
-		}
-
-		d.cxxFlags = append(d.cxxFlags, rest...)
-	case "CONLYFLAGS":
-		mod, rest := splitGlobalModifier(v.Args)
-
-		if mod == "GLOBAL" {
-			// GLOBAL CONLYFLAGS propagate to peers per ymake semantics; PR-30 D04 will route via cOnlyFlagsGlobal field. For now, dropped — applying to self would be semantically wrong.
-			break
-		}
-
-		d.cOnlyFlags = append(d.cOnlyFlags, rest...)
 	case "ALLOCATOR":
 		applyAllocatorStmt(v, d)
 	case "ENABLE":
@@ -650,33 +695,34 @@ func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
 		return nil
 	}
 
-	// PR-27: runtime ancestor modules (libcxx, libcxxrt, libunwind,
-	// musl, malloc/api, util, ...) get zero implicit peers — matches
-	// upstream ymake's `_BUILTIN_PEERDIR` exclusion list and breaks
-	// the otherwise-unavoidable mutual cycle between malloc/api and
-	// libcxxrt (each had the other as a default).
-	//
-	// INVARIANT: every path enumerated in the per-platform branches below
-	// MUST appear in runtimeAncestorPaths so that the early-exit above
-	// catches the self-cycle case before we recurse. The per-path
-	// instance.Path != "..." guards on lines ~484-520 are redundant
-	// defense-in-depth — kept to make the suppression intent visible at
-	// the call site, not because they are reachable when runtimeAncestorPaths
-	// is complete.
-	if isRuntimeAncestor(instance.Path) {
-		return nil
-	}
-
+	// PR-27 + PR-32 D03: runtime-ancestor modules (libcxx, libcxxrt,
+	// libunwind, musl, malloc/api, util, ...) get zero RUNTIME-stack
+	// implicit peers AND the musl/include auto-PEERDIR (when MUSL=yes
+	// and not LibcMusl-self). The two-phase peer-aggregation in the
+	// walker (own-first, transitive-second) ensures the musl-arch
+	// paths from these runtime-ancestors propagate AFTER the libcxx-
+	// include / libcxxrt-include paths libcxx and libcxxrt themselves
+	// declare, matching the reference cmd_args ordering.
 	noPlatform := effectiveNoPlatform(instance.Flags)
+
+	if isRuntimeAncestor(instance.Path) {
+		var only []string
+
+		if !noPlatform && !instance.Flags.LibcMusl && cliMuslOn(ctx) {
+			only = append(only, "contrib/libs/musl/include")
+		}
+
+		return only
+	}
 
 	var peers []string
 
-	if !instance.Flags.NoLibc && !noPlatform {
-		// Don't peer musl from any contrib/libs/musl[/...] module —
-		// musl provides itself, and the PR-13 path heuristic already
-		// sets NoLibc for those, so this is belt-and-braces against
-		// a future heuristic regression.
-		if instance.Path != "contrib/libs/musl" && !strings.HasPrefix(instance.Path, "contrib/libs/musl/") {
+	if !instance.Flags.NoLibc && !noPlatform && cliMuslOn(ctx) {
+		// PR-32 D02: musl-self-suppression keys off Flags.LibcMusl
+		// (was a path-prefix test). The flag is set by the M2 shim
+		// in inferFlagsFromPath; consumer modules never have it set
+		// even if their path happens to match a musl-prefix string.
+		if !instance.Flags.LibcMusl {
 			peers = append(peers, "contrib/libs/musl")
 		}
 	}
@@ -728,8 +774,71 @@ func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
 		}
 	}
 
+	// PR-32 D03: mirror `build/ymake.core.conf:781`'s
+	// `when ($MUSL == "yes") { PEERDIR+=contrib/libs/musl/include }`.
+	// Every TARGET LIBRARY/PROGRAM that is not NO_PLATFORM gets an
+	// implicit peer on `contrib/libs/musl/include`. The peer is
+	// header-only (PR-31 path) so its 4 GLOBAL ADDINCL paths
+	// (musl/arch/{x86_64,aarch64,generic}, musl/include, musl/extra,
+	// the linux-headers pair) propagate to consumers' CC cmd_args
+	// AND scanner search paths, closing the L2-stagnation gap
+	// PR-31-D12 identified.
+	//
+	// Suppression model:
+	//   - musl-self subtree → caught by `isRuntimeAncestor` early-exit above.
+	//   - Effective NO_PLATFORM → suppressed (matches `_BASE_UNIT`'s
+	//     gate; build/cow/on is the M1 example).
+	//   - MUSL != "yes" in cliDefines → suppressed entirely.
+	if !noPlatform && cliMuslOn(ctx) {
+		peers = append(peers, "contrib/libs/musl/include")
+	}
+
 	return peers
 }
+
+// cliMuslOn reports whether the CLI bound `MUSL` to `"yes"` (PR-32
+// D01/D03). Centralises the check so the auto-PEERDIR rule and the
+// `-D_musl_` peer-CFLAG injection consult the same predicate. A nil
+// `ctx` (synthetic test path) defaults to the M2 canonical state
+// (MUSL=yes) so existing direct-call tests of `defaultPeerdirsFor`
+// see the same auto-peer set as the real walker.
+func cliMuslOn(ctx *genCtx) bool {
+	if ctx == nil {
+		return true
+	}
+
+	return ctx.cliDefines["MUSL"] == "yes"
+}
+
+// defaultPeerCFlags returns the auto-injected peer-CFLAG set the
+// walker contributes to ModuleCCInputs.AutoPeerCFlags (PR-32 D09).
+// Mirrors `_BASE_UNIT`'s `when ($MUSL == "yes") { CFLAGS+=-D_musl_ }`
+// (build/ymake.core.conf:781). The `-D_musl_` sentinel (no `=1`)
+// applies to consumers; musl-self CC nodes get `-D_musl_=1` from
+// `muslExtraDefines` instead and are gated off this auto-injection
+// via the LibcMusl + effective-NO_PLATFORM checks. Returns nil when
+// the gate is closed so the slot stays empty in cmd_args.
+func defaultPeerCFlags(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
+	if !cliMuslOn(ctx) {
+		return nil
+	}
+
+	if instance.Flags.LibcMusl {
+		return nil
+	}
+
+	if effectiveNoPlatform(d.flags) {
+		return nil
+	}
+
+	return []string{muslConsumerSentinel}
+}
+
+// muslConsumerSentinel is the `-D_musl_` flag that
+// `_BASE_UNIT`'s `when ($MUSL == "yes")` rule auto-injects into every
+// non-NO_PLATFORM module's CFLAGS. Distinct from `-D_musl_=1` (which
+// is musl-self only and lives in `muslExtraDefines`). PR-32 D09.
+const muslConsumerSentinel = "-D_musl_"
 
 // defaultProgramPeerdirsFor returns the implicit DEFAULT_PEERDIRs that
 // upstream `_BASE_PROGRAM` (`build/ymake.core.conf:1219-1253`) attaches
@@ -758,13 +867,22 @@ func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
 // program-default peers from this helper — `genModule` callers can
 // suppress by checking `isRuntimeAncestor` themselves if a future
 // closure surfaces such a case.
-func defaultProgramPeerdirsFor(instance ModuleInstance, hadAllocator bool, muslLiteOverride bool) []string {
+func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocator bool, muslLiteOverride bool) []string {
 	if instance.Language != LangCPP {
 		return nil
 	}
 
 	env := buildIfEnv(instance)
+	// PR-32 D02: MUSL gate reads from cliDefines (CLI -DMUSL=yes/no);
+	// fall back to env.Bool("MUSL") when ctx is nil so the unit-test
+	// helper path keeps working. The default in `Gen` seeds MUSL=yes
+	// so back-compat callers see no change.
 	muslOn := env.Bool("MUSL")
+
+	if ctx != nil {
+		muslOn = ctx.cliDefines["MUSL"] == "yes"
+	}
+
 	muslLite := env.Bool("MUSL_LITE") || muslLiteOverride
 	osLinux := env.Bool("OS_LINUX")
 
@@ -922,35 +1040,34 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ThrowFmt("gen: %s has no compilable sources (after IF/header filter)", instance.Path)
 		}
 
-		// Header-only LIBRARYs may declare ADDINCL(GLOBAL ...) that
-		// peer-propagates without emitting an AR. Walk peers (so
-		// transitive sanitizer/include peerdirs reach genModule) and
-		// aggregate own + peer GLOBAL ADDINCL so consumers see the
-		// closure. PR-31 D05.
-		peerGlobal := walkPeersForGlobalAddIncl(ctx, instance, d)
+		// Header-only LIBRARYs may declare ADDINCL(GLOBAL ...) /
+		// CFLAGS(GLOBAL ...) / CXXFLAGS(GLOBAL ...) / CONLYFLAGS(GLOBAL
+		// ...) that peer-propagate without emitting an AR. Walk peers
+		// (so their transitive closures reach genModule) and aggregate
+		// own + peer GLOBAL contributions per axis so consumers see the
+		// full closure. PR-31 D05 (ADDINCL) + PR-32 D07 (CFLAGS axes).
+		peerContribs := walkPeersForGlobalAddIncl(ctx, instance, d)
 
-		seen := map[string]struct{}{}
-		eff := make([]string, 0, len(d.addInclGlobal)+len(peerGlobal))
+		// PR-32 D09 follow-on: drop musl-self GLOBAL CFLAGS contributions
+		// from the propagated set (mirror of the main-walker gate above).
+		ownCFlagsGlobalH := d.cFlagsGlobal
+		ownCXXFlagsGlobalH := d.cxxFlagsGlobal
+		ownCOnlyFlagsGlobalH := d.cOnlyFlagsGlobal
 
-		for _, p := range d.addInclGlobal {
-			if _, dup := seen[p]; dup {
-				continue
-			}
-
-			seen[p] = struct{}{}
-			eff = append(eff, p)
+		if instance.Flags.LibcMusl {
+			ownCFlagsGlobalH = nil
+			ownCXXFlagsGlobalH = nil
+			ownCOnlyFlagsGlobalH = nil
 		}
 
-		for _, p := range peerGlobal {
-			if _, dup := seen[p]; dup {
-				continue
-			}
-
-			seen[p] = struct{}{}
-			eff = append(eff, p)
+		result := &moduleEmitResult{
+			headerOnly:       true,
+			AddInclGlobal:    mergeDedup(d.addInclGlobal, peerContribs.addIncl),
+			OwnAddInclGlobal: append([]string(nil), d.addInclGlobal...),
+			CFlagsGlobal:     mergeDedup(ownCFlagsGlobalH, peerContribs.cFlags),
+			CXXFlagsGlobal:   mergeDedup(ownCXXFlagsGlobalH, peerContribs.cxxFlags),
+			COnlyFlagsGlobal: mergeDedup(ownCOnlyFlagsGlobalH, peerContribs.cOnlyFlags),
 		}
-
-		result := &moduleEmitResult{headerOnly: true, AddInclGlobal: eff}
 		ctx.memo[instance] = result
 
 		return result
@@ -978,7 +1095,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// `hadAllocator` flag suppresses the allocator-default when the
 	// PROGRAM declared `ALLOCATOR(NAME)` itself.
 	if d.moduleStmt.Name == "PROGRAM" && !isRuntimeAncestor(instance.Path) {
-		programDefaults := defaultProgramPeerdirsFor(instance, d.hadAllocator, d.muslLite)
+		programDefaults := defaultProgramPeerdirsFor(ctx, instance, d.hadAllocator, d.muslLite)
 		defaults = append(defaults, programDefaults...)
 	}
 
@@ -1006,22 +1123,57 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	peerGlobalRefs := make([]NodeRef, 0, len(allPeers))
 	peerGlobalPaths := make([]string, 0, len(allPeers))
 
-	// PR-31 D05: aggregate peer-GLOBAL ADDINCL transitively. The
-	// dedup map preserves DECLARATION order across the PEERDIR walk
-	// (R14 — first peer's declarations come first in cmd_args).
-	peerAddInclSeen := map[string]struct{}{}
+	// PR-31 D05 + PR-32 D07: aggregate peer-GLOBAL contributions
+	// transitively across all four axes (ADDINCL / CFLAGS / CXXFLAGS /
+	// CONLYFLAGS). The aggregation uses a TWO-PHASE traversal so the
+	// reference's observed ordering is preserved:
+	//
+	//   Phase 1 — for each peer in declaration order, collect that
+	//             peer's OWN GLOBAL declarations (no transitive).
+	//   Phase 2 — for each peer in declaration order, collect that
+	//             peer's TRANSITIVE peer-GLOBAL contributions
+	//             (everything except its own).
+	//
+	// Empirical motivation: tools/archiver/main.cpp.o cmd_args[11..16]
+	// in sg.json shows libcxx-include + libcxxrt-include (own GLOBAL
+	// of libcxx and libcxxrt) BEFORE the musl-arch paths (which
+	// transitively propagate through libcxx's auto-PEERDIR of
+	// musl/include). A single-phase DFS-completion aggregation puts
+	// musl-arch FIRST (because builtins is walked before libcxx and
+	// already has musl-arch via its musl/include peer); two-phase
+	// puts libcxx/include and libcxxrt/include first because they
+	// are own-declarations.
+	addInclSeen := map[string]struct{}{}
 	peerAddInclGlobal := make([]string, 0, 16)
 
-	addPeerGlobal := func(paths []string) {
-		for _, p := range paths {
-			if _, dup := peerAddInclSeen[p]; dup {
+	cFlagsSeen := map[string]struct{}{}
+	peerCFlagsGlobal := make([]string, 0, 16)
+
+	cxxFlagsSeen := map[string]struct{}{}
+	peerCXXFlagsGlobal := make([]string, 0, 16)
+
+	cOnlyFlagsSeen := map[string]struct{}{}
+	peerCOnlyFlagsGlobal := make([]string, 0, 16)
+
+	addEach := func(seenSet map[string]struct{}, dst *[]string, src []string) {
+		for _, x := range src {
+			if _, dup := seenSet[x]; dup {
 				continue
 			}
 
-			peerAddInclSeen[p] = struct{}{}
-			peerAddInclGlobal = append(peerAddInclGlobal, p)
+			seenSet[x] = struct{}{}
+			*dst = append(*dst, x)
 		}
 	}
+
+	// Phase 0: resolve every peer's *moduleEmitResult once and stash
+	// it; Phase 1 + Phase 2 then iterate the cached results.
+	type resolvedPeer struct {
+		path   string
+		result *moduleEmitResult
+	}
+
+	resolved := make([]resolvedPeer, 0, len(allPeers))
 
 	for i, p := range allPeers {
 		peerPath := filepath.Clean(p)
@@ -1035,22 +1187,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerInstance := derivePeerInstance(instance, peerPath)
 		peerResult := genModule(ctx, peerInstance)
 
-		// PR-31 D05: every peer (including header-only) contributes
-		// its accumulated GLOBAL ADDINCL to the consumer's effective
-		// search path. The transitive aggregation means a peer's
-		// peer-GLOBAL set is already folded into peerResult.AddInclGlobal,
-		// so a single union here yields the full closure without a
-		// separate BFS pass.
-		addPeerGlobal(peerResult.AddInclGlobal)
-
 		if peerResult.isPROGRAM {
 			ThrowFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path, peerPath)
 		}
 
-		// PR-27: a header-only peer (e.g. library/cpp/sanitizer/include)
-		// emits no AR; skip the archive-dep wiring so the caller
-		// does not pin a zero-valued NodeRef. The peer's transitive
-		// closure was already walked by the recursive genModule call.
+		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult})
+
+		// PR-27: header-only peers contribute peer-GLOBAL flags but no
+		// archive-dep refs. Non-header peers contribute archive refs.
 		if peerResult.headerOnly {
 			continue
 		}
@@ -1064,30 +1208,62 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
+	// Phase 1: each peer's OWN GLOBAL declarations, in declaration
+	// order across peers.
+	for _, rp := range resolved {
+		addEach(addInclSeen, &peerAddInclGlobal, rp.result.OwnAddInclGlobal)
+	}
+
+	// Phase 2: each peer's TRANSITIVE peer-GLOBAL contributions
+	// (their own AddInclGlobal minus the bits already added above).
+	// Since AddInclGlobal includes own + transitive, the dedup table
+	// drops the duplicates from Phase 1 and keeps only the transitive
+	// portion in declaration order.
+	for _, rp := range resolved {
+		addEach(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
+	}
+
+	// CFLAGS / CXXFLAGS / CONLYFLAGS: today no module in the M2
+	// closure has both own-GLOBAL and transitive peer-GLOBAL on the
+	// same axis (musl-self CFLAGS are suppressed; libcxx's
+	// `-nostdinc++` is GLOBAL-CXXFLAGS but its peers don't add
+	// further). The two-phase pattern is still applied for symmetry
+	// and forward-compatibility.
+	for _, rp := range resolved {
+		addEach(cFlagsSeen, &peerCFlagsGlobal, rp.result.CFlagsGlobal)
+		addEach(cxxFlagsSeen, &peerCXXFlagsGlobal, rp.result.CXXFlagsGlobal)
+		addEach(cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, rp.result.COnlyFlagsGlobal)
+	}
+
 	// PR-31 D05: this module's effective AddInclGlobal is its OWN
 	// GLOBAL ADDINCL plus the union of every peer's transitive set.
 	// Stored on the result so transitive consumers see the closure
 	// in one shot.
-	effectiveAddInclGlobal := make([]string, 0, len(d.addInclGlobal)+len(peerAddInclGlobal))
-	effectiveSeen := map[string]struct{}{}
+	effectiveAddInclGlobal := mergeDedup(d.addInclGlobal, peerAddInclGlobal)
 
-	for _, p := range d.addInclGlobal {
-		if _, dup := effectiveSeen[p]; dup {
-			continue
-		}
+	// PR-32 D07: same shape for CFLAGS / CXXFLAGS / CONLYFLAGS.
+	// PR-32 D09 follow-on: musl-self modules' GLOBAL CFLAGS (which
+	// include `-D_musl_=1` from `contrib/libs/musl/ya.make`) are
+	// NOT propagated to non-musl consumers. The empirical reference
+	// shows only one M2 closure module (tools/archiver/main.cpp.o)
+	// carries `-D_musl_=1`, suggesting upstream has additional
+	// gating beyond plain GLOBAL CFLAGS propagation. The
+	// `-D_musl_` (no `=1`) consumer-side sentinel comes via
+	// AutoPeerCFlags from D09 instead. Suppression is keyed on
+	// Flags.LibcMusl (data, not path) per the user directive.
+	ownCFlagsGlobal := d.cFlagsGlobal
+	ownCXXFlagsGlobal := d.cxxFlagsGlobal
+	ownCOnlyFlagsGlobal := d.cOnlyFlagsGlobal
 
-		effectiveSeen[p] = struct{}{}
-		effectiveAddInclGlobal = append(effectiveAddInclGlobal, p)
+	if instance.Flags.LibcMusl {
+		ownCFlagsGlobal = nil
+		ownCXXFlagsGlobal = nil
+		ownCOnlyFlagsGlobal = nil
 	}
 
-	for _, p := range peerAddInclGlobal {
-		if _, dup := effectiveSeen[p]; dup {
-			continue
-		}
-
-		effectiveSeen[p] = struct{}{}
-		effectiveAddInclGlobal = append(effectiveAddInclGlobal, p)
-	}
+	effectiveCFlagsGlobal := mergeDedup(ownCFlagsGlobal, peerCFlagsGlobal)
+	effectiveCXXFlagsGlobal := mergeDedup(ownCXXFlagsGlobal, peerCXXFlagsGlobal)
+	effectiveCOnlyFlagsGlobal := mergeDedup(ownCOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
 
 	// Per-source dispatch. JoinSrcs entries become JS+CC pairs
 	// folded in alongside regular SRCS. Header sources (`.h` /
@@ -1118,13 +1294,26 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
+	// PR-32 D09: auto-injected peer-CFLAG -D_musl_ for every TARGET
+	// module that is not effectively NO_PLATFORM, when the CLI says
+	// MUSL=yes. Mirrors `_BASE_UNIT`'s
+	// `when ($MUSL == "yes") { CFLAGS+=-D_musl_ }`. Suppressed for
+	// musl-self (LibcMusl=true) modules — those receive `-D_musl_=1`
+	// from `muslExtraDefines` instead, and the extra `-D_musl_` from
+	// `_BASE_UNIT` is gated off there by upstream NO_PLATFORM.
+	autoPeerCFlags := defaultPeerCFlags(ctx, instance, d)
+
 	moduleInputs := ModuleCCInputs{
-		AddIncl:           d.addIncl,
-		PeerAddInclGlobal: peerAddInclGlobal,
-		CXXFlags:          d.cxxFlags,
-		COnlyFlags:        d.cOnlyFlags,
-		SrcDir:            d.srcDir,
-		SourceRoot:        ctx.sourceRoot,
+		AddIncl:              d.addIncl,
+		PeerAddInclGlobal:    peerAddInclGlobal,
+		CXXFlags:             d.cxxFlags,
+		COnlyFlags:           d.cOnlyFlags,
+		PeerCFlagsGlobal:     peerCFlagsGlobal,
+		PeerCXXFlagsGlobal:   peerCXXFlagsGlobal,
+		PeerCOnlyFlagsGlobal: peerCOnlyFlagsGlobal,
+		AutoPeerCFlags:       autoPeerCFlags,
+		SrcDir:               d.srcDir,
+		SourceRoot:           ctx.sourceRoot,
 	}
 
 	// PR-30 D06: ancestor-only SRCDIR rebase. The "PROGRAM with SRCDIR
@@ -1241,17 +1430,22 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			nil, nil,
 			peerGlobalRefs, peerGlobalPaths,
 			memberInputs,
+			cliMuslOn(ctx),
 			ctx.emit,
 		)
 		ldPath := LDOutputPath(instance, binaryName)
 
 		result := &moduleEmitResult{
-			ARRef:         ldRef,
-			ARPath:        ldPath,
-			isPROGRAM:     true,
-			LDRef:         ldRef,
-			LDPath:        ldPath,
-			AddInclGlobal: effectiveAddInclGlobal,
+			ARRef:            ldRef,
+			ARPath:           ldPath,
+			isPROGRAM:        true,
+			LDRef:            ldRef,
+			LDPath:           ldPath,
+			AddInclGlobal:    effectiveAddInclGlobal,
+			OwnAddInclGlobal: append([]string(nil), d.addInclGlobal...),
+			CFlagsGlobal:     effectiveCFlagsGlobal,
+			CXXFlagsGlobal:   effectiveCXXFlagsGlobal,
+			COnlyFlagsGlobal: effectiveCOnlyFlagsGlobal,
 		}
 		ctx.memo[instance] = result
 
@@ -1271,12 +1465,16 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	arPath := "$(BUILD_ROOT)/" + instance.Path + "/" + ArchiveName(instance.Path)
 
 	result := &moduleEmitResult{
-		ARRef:         arRef,
-		ARPath:        arPath,
-		isPROGRAM:     false,
-		LDRef:         arRef,
-		LDPath:        arPath,
-		AddInclGlobal: effectiveAddInclGlobal,
+		ARRef:            arRef,
+		ARPath:           arPath,
+		isPROGRAM:        false,
+		LDRef:            arRef,
+		LDPath:           arPath,
+		AddInclGlobal:    effectiveAddInclGlobal,
+		OwnAddInclGlobal: append([]string(nil), d.addInclGlobal...),
+		CFlagsGlobal:     effectiveCFlagsGlobal,
+		CXXFlagsGlobal:   effectiveCXXFlagsGlobal,
+		COnlyFlagsGlobal: effectiveCOnlyFlagsGlobal,
 	}
 
 	if len(globalRefs) > 0 {
@@ -1290,29 +1488,91 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	return result
 }
 
+// mergeDedup returns the concatenation `a ++ b` with duplicates
+// dropped, preserving declaration order (R14 — first occurrence
+// wins). Used by genModule to compose this module's effective
+// peer-GLOBAL slices: own contributions first, then transitive peer
+// contributions. PR-32 D07 introduced the helper to keep the per-axis
+// composition uniform across ADDINCL / CFLAGS / CXXFLAGS / CONLYFLAGS.
+func mergeDedup(a, b []string) []string {
+	out := make([]string, 0, len(a)+len(b))
+	seen := make(map[string]struct{}, len(a)+len(b))
+
+	for _, x := range a {
+		if _, dup := seen[x]; dup {
+			continue
+		}
+
+		seen[x] = struct{}{}
+		out = append(out, x)
+	}
+
+	for _, x := range b {
+		if _, dup := seen[x]; dup {
+			continue
+		}
+
+		seen[x] = struct{}{}
+		out = append(out, x)
+	}
+
+	return out
+}
+
+// peerGlobalContribs is the per-axis aggregation of a header-only
+// LIBRARY's peer-walk (PR-27 + PR-32 D07). All four axes share the
+// same declaration-order + dedup discipline as the main walker.
+//
+// Two-phase collection (PR-32): for each peer, collect its OWN
+// declarations FIRST (across all peers), then collect each peer's
+// transitive contributions. This gives the reference's observed
+// ordering: own-from-peer1, own-from-peer2, ..., transitive-from-peer1,
+// transitive-from-peer2, ... — empirically matches util/charset and
+// tools/archiver/main.cpp.o cmd_args[11..16] where libcxx/include +
+// libcxxrt/include come BEFORE the musl-arch propagation chain.
+type peerGlobalContribs struct {
+	addIncl    []string
+	cFlags     []string
+	cxxFlags   []string
+	cOnlyFlags []string
+}
+
 // walkPeersForGlobalAddIncl walks the peers of a header-only LIBRARY
 // (PR-27) to ensure their transitive closure is discovered (genModule
 // memoises so other consumers can pick them up later) AND returns the
-// union of every peer's transitive AddInclGlobal contribution
-// (PR-31 D05). The header-only module emits no AR, so the per-peer
-// archive refs are intentionally dropped; only the GLOBAL ADDINCL
-// peer-propagation is preserved.
-func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
+// per-axis union of every peer's transitive *Global contribution
+// (PR-31 D05 + PR-32 D07: ADDINCL, CFLAGS, CXXFLAGS, CONLYFLAGS).
+// The header-only module emits no AR, so the per-peer archive refs
+// are intentionally dropped; only the GLOBAL peer-propagation is
+// preserved.
+func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleData) peerGlobalContribs {
 	defaults := defaultPeerdirsFor(ctx, instance)
 
 	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
-	pathSeen := map[string]struct{}{}
-	out := make([]string, 0, 16)
+	out := peerGlobalContribs{}
+	addInclSeen := map[string]struct{}{}
+	cFlagsSeen := map[string]struct{}{}
+	cxxFlagsSeen := map[string]struct{}{}
+	cOnlyFlagsSeen := map[string]struct{}{}
 
-	add := func(paths []string) {
-		for _, p := range paths {
-			if _, dup := pathSeen[p]; dup {
+	addEach := func(seenSet map[string]struct{}, dst *[]string, src []string) {
+		for _, x := range src {
+			if _, dup := seenSet[x]; dup {
 				continue
 			}
 
-			pathSeen[p] = struct{}{}
-			out = append(out, p)
+			seenSet[x] = struct{}{}
+			*dst = append(*dst, x)
 		}
+	}
+
+	walk := func(peerPath string) {
+		peerInstance := derivePeerInstance(instance, peerPath)
+		peerResult := genModule(ctx, peerInstance)
+		addEach(addInclSeen, &out.addIncl, peerResult.AddInclGlobal)
+		addEach(cFlagsSeen, &out.cFlags, peerResult.CFlagsGlobal)
+		addEach(cxxFlagsSeen, &out.cxxFlags, peerResult.CXXFlagsGlobal)
+		addEach(cOnlyFlagsSeen, &out.cOnlyFlags, peerResult.COnlyFlagsGlobal)
 	}
 
 	for _, p := range defaults {
@@ -1327,8 +1587,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 			continue
 		}
 
-		peerInstance := derivePeerInstance(instance, peerPath)
-		add(genModule(ctx, peerInstance).AddInclGlobal)
+		walk(peerPath)
 	}
 
 	for _, p := range d.peerdirs {
@@ -1337,10 +1596,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		}
 
 		seen[p] = struct{}{}
-
-		peerPath := filepath.Clean(p)
-		peerInstance := derivePeerInstance(instance, peerPath)
-		add(genModule(ctx, peerInstance).AddInclGlobal)
+		walk(filepath.Clean(p))
 	}
 
 	return out
@@ -1678,9 +1934,8 @@ func includeScannerBasePaths(instance ModuleInstance) []string {
 		"contrib/libs/linux-headers/_nf",
 	}
 
-	isMusl := instance.Path == "contrib/libs/musl" || strings.HasPrefix(instance.Path, "contrib/libs/musl/")
-
-	if isMusl {
+	// PR-32 D02: dispatch via Flags.LibcMusl, not path-prefix.
+	if instance.Flags.LibcMusl {
 		// Mirror muslCcIncludes / muslCcIncludesX8664: arch + generic
 		// + src/include + src/internal + include + extra. Use the
 		// instance's PIC flag to pick aarch64 vs x86_64 (the same

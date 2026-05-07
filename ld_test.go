@@ -183,6 +183,7 @@ func TestEmitLD_ToolsArchiver_ByteExact(t *testing.T) {
 		pluginRefs, archiverPluginPaths,
 		globalRefs, archiverGlobalPaths,
 		refMemberInputs,
+		true, // PR-32 D10: archiver pin runs MUSL=yes (M2 default)
 		emit,
 	)
 
@@ -322,6 +323,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		nil, nil,
 		nil, nil,
 		nil,
+		true, // PR-32 D10: synthetic test pin runs MUSL=yes
 		emit,
 	)
 
@@ -409,6 +411,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		nil, nil,
 		nil, nil,
 		nil,
+		true, // PR-32 D10: host pin runs MUSL=yes (M2 default)
 		emit,
 	)
 
@@ -448,7 +451,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 			instance := targetInstance("test/prog")
 
 			exc := Try(func() {
-				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, nil, e)
+				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, nil, true, e)
 			})
 
 			if exc == nil {

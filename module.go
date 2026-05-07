@@ -75,6 +75,15 @@ type FlagSet struct {
 	NoCompilerWarnings bool
 	IsCpp              bool
 	PIC                bool
+	// LibcMusl marks an instance as a member of the musl-libc subtree
+	// (PR-32 D02). It is the dispatch key for the musl flavours of
+	// EmitCC's composer pick (replaces the old path-prefix test
+	// `instance.Path == "contrib/libs/musl" || HasPrefix(...musl/)`).
+	// Today seeded heuristically by `inferFlagsFromPath` for any path
+	// at or under `contrib/libs/musl`; M5+ will replace the heuristic
+	// with macro-driven inference (parsing NO_PLATFORM + SET(MUSL no)
+	// in the ya.make).
+	LibcMusl bool
 	// Extra carries opaque per-instance digests that two
 	// ModuleInstances with otherwise-equal fields use to
 	// disambiguate. Stored as a `\n`-joined sorted token
@@ -164,10 +173,17 @@ func inferFlagsFromPath(path string, isPIC bool) FlagSet {
 		fs.NoRuntime = true
 	}
 
+	// PR-32 D02: musl-prefix path heuristic doubles as the M2-stopgap
+	// seed for `Flags.LibcMusl`. The path test is the SOLE remaining
+	// musl-path-prefix dispatch in the codebase — every other call
+	// site reads `Flags.LibcMusl` instead. Documented removable in
+	// M5+ when ya.make-driven flag inference (parsing NO_PLATFORM +
+	// path-conditional SET(MUSL no) etc.) replaces this heuristic.
 	if path == "contrib/libs/musl" || strings.HasPrefix(path, "contrib/libs/musl/") {
 		fs.NoLibc = true
 		fs.NoUtil = true
 		fs.NoRuntime = true
+		fs.LibcMusl = true
 	}
 
 	return fs

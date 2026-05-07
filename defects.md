@@ -1387,3 +1387,28 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 **Description:** main.cpp.o emitted `-I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxx/src` as the 4th -I flag. Reference has this only on libcxx's OWN nodes (module-own ADDINCL), NOT consumers (only GLOBAL propagates). Caused byte-mismatch on every non-musl CC consuming libcxx (~110 nodes).
 **Root cause:** Case A — collector leak in ADDINCL per-path GLOBAL handling. AddInclStmt struct used statement-level `Modifier` string; splitGlobalModifier stripped leading `GLOBAL` token and treated ALL remaining args as global. For libcxx: `ADDINCL(GLOBAL .../include  .../src)` — `src` ended up in addInclGlobal too, propagating to all consumers.
 **Fix:** Replaced `AddInclStmt.{Modifier, Paths}` with `{GlobalPaths, OwnPaths}`. New `splitAddInclPaths` applies per-path GLOBAL prefix semantics: a path token immediately following the literal `GLOBAL` keyword goes to GlobalPaths; all others to OwnPaths. gen.go routes GlobalPaths → d.addInclGlobal, OwnPaths → d.addIncl. Verified empirically: zero non-libcxx CC nodes emit `-I libcxx/src`; libffi (mixed GLOBAL+bare paths) and linux-headers (multiple GLOBAL prefixes) both handled correctly.
+
+---
+
+## PR-32
+
+### [PR-32-D01] Executor's "single outlier `-D_musl_=1`" claim understates scope by ~89×
+**Status:** resolved (orchestrator-amended — Completed entry will state correct 89-instance scope)
+**Severity:** minor
+**Location:** docs/drafts/20260507-2137-pr32-musl-refactor.md (executor's review summary), gen.go:1244-1262 (musl-self GLOBAL CFLAGS suppression site)
+**Description:** Executor reported "single outlier `-D_musl_=1` in tools/archiver/main.cpp.o slot 60". Empirical: 89 missed `-D_musl_=1` occurrences in CC nodes (yasm 79 host CC + ragel6 9 host CC + archiver 1 target CC). Origin is yasm/ragel6 ya.makes' own `IF (MUSL) CFLAGS(-D_musl_=1)` branch, NOT the peer-propagation suppression site. Operationally L2/L3 ceiling territory, not a PR-32 regression — but the audit characterisation is imprecise.
+**Fix:** PR-32 Completed entry uses correct empirical 89-instance scope.
+
+### [PR-32-D02] `--define MUSL=no` produces internally inconsistent graph
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go:720-728 (NoLibc-only gate on `contrib/libs/musl` peerdir), gen.go:792 (cliMuslOn-gated `contrib/libs/musl/include`)
+**Description:** When `--define MUSL=no`, `defaultPeerdirsFor` still adds `contrib/libs/musl` (the source-bearing peer; PR-26 default) because that gate keys only on `instance.Flags.NoLibc` and `noPlatform`, not on `cliMuslOn(ctx)`. Meanwhile `contrib/libs/musl/include` auto-PEERDIR (line 792) IS gated on `cliMuslOn` so it disappears, and `defaultPeerCFlags` returns nil. Result: musl source library still walked but no peer-propagation. Today moot (M2 only supports MUSL=yes), but the `--define` flag is partially load-bearing.
+**Fix:** gen.go:720 gate extended with `&& cliMuslOn(ctx)` so MUSL=no produces musl-free graph (665 nodes vs MUSL=yes 3718 nodes; verified). cliMuslOn returns true when ctx==nil (preserves direct-test-call back-compat) or `cliDefines["MUSL"] == "yes"`.
+
+### [PR-32-D03] `_artifacts/` is untracked; not in `.gitignore`
+**Status:** resolved
+**Severity:** nit
+**Location:** .gitignore (does not list _artifacts/ or debug/)
+**Description:** PR-32 sessions produced 600MB+ of artifacts under `_artifacts/`. `git status` lists as untracked; future `git add -A` slip would commit ~600MB of binary JSON.
+**Fix:** `.gitignore` extended with `/_artifacts/` and `/debug/` entries.

@@ -103,6 +103,15 @@ func cmdGen(args []string) int {
 	out := fs.String("out", "", "path to write the generated JSON (use '-' for stdout)")
 	sourceRoot := fs.String("source-root", "/home/pg/monorepo/yatool_orig", "absolute path to the source tree (defaults to the upstream snapshot)")
 
+	// PR-32 D01: --define KEY=VALUE is the user-facing CLI flag that
+	// drives flag-conditional auto-PEERDIRs and peer-CFLAGs (e.g.
+	// `--define MUSL=yes` mirrors `build/ymake.core.conf:781`'s
+	// `when ($MUSL == "yes") { PEERDIR+=contrib/libs/musl/include }`).
+	// Repeatable; bare KEY (without "=") is rejected.
+	var defines stringMapValue
+
+	fs.Var(&defines, "define", "ymake-style -D KEY=VALUE; repeatable; default: -DMUSL=yes")
+
 	err := fs.Parse(args)
 
 	if errors.Is(err, flag.ErrHelp) {
@@ -121,21 +130,69 @@ func cmdGen(args []string) int {
 		ThrowFmt("gen: --out is required (use '-' for stdout)")
 	}
 
-	g := Gen(TargetCfg, *sourceRoot, *target)
+	g := GenWith(TargetCfg, *sourceRoot, *target, defines.toMap())
 
 	writeGraph(*out, g)
 
 	return 0
 }
 
+// stringMapValue implements flag.Value for repeatable
+// `--define KEY=VALUE` arguments. The Set method splits on the first
+// `=`; bare KEY (no `=`) returns an error rather than silently binding
+// the key to an empty string. Used by cmdGen's `--define` plumbing
+// (PR-32 D01).
+type stringMapValue struct {
+	pairs []string
+}
+
+func (s *stringMapValue) String() string {
+	return strings.Join(s.pairs, ",")
+}
+
+func (s *stringMapValue) Set(v string) error {
+	idx := strings.IndexByte(v, '=')
+
+	if idx < 0 {
+		return fmt.Errorf("--define expects KEY=VALUE, got %q", v)
+	}
+
+	if idx == 0 {
+		return fmt.Errorf("--define expects KEY=VALUE with non-empty KEY, got %q", v)
+	}
+
+	s.pairs = append(s.pairs, v)
+
+	return nil
+}
+
+// toMap returns the accumulated KEY=VALUE pairs as a freshly-allocated
+// map. Returns nil when no `--define` was supplied so callers can
+// discriminate "no flag" (apply defaults) from "explicit empty".
+func (s *stringMapValue) toMap() map[string]string {
+	if len(s.pairs) == 0 {
+		return nil
+	}
+
+	out := make(map[string]string, len(s.pairs))
+
+	for _, p := range s.pairs {
+		idx := strings.IndexByte(p, '=')
+		out[p[:idx]] = p[idx+1:]
+	}
+
+	return out
+}
+
 func printGenUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage: yatool gen --target <module-dir> --out <path|-> [--source-root <path>]
+	fmt.Fprint(w, `Usage: yatool gen --target <module-dir> --out <path|-> [--source-root <path>] [--define KEY=VALUE]...
 Parse <source-root>/<module-dir>/ya.make and write the resulting build graph as JSON.
 
 Flags:
     --target <path>        Module-relative ya.make directory (e.g. build/cow/on). Required.
     --out <path|->         Output JSON path; "-" writes to stdout. Required.
     --source-root <path>   Absolute source-tree root. Defaults to /home/pg/monorepo/yatool_orig.
+    --define KEY=VALUE     Repeatable. Mirrors ymake's -D flag. Default when omitted: MUSL=yes.
 `)
 }
 
