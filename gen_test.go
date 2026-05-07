@@ -106,17 +106,18 @@ func TestGen_BuildCowOn_TwoNodeSubgraph_L3MatchesReference(t *testing.T) {
 	t.Logf("L3 note: %s", r.L3Note)
 }
 
-// TestGen_AcceptsProgramModule_Synthetic verifies PR-12's two
-// architectural pivots in one shot:
-//   - PROGRAM() modules are accepted (M1 only allowed LIBRARY);
-//   - PEERDIR(...) is recursively walked, with the parent module's
-//     archive node carrying its peer's archive UID as a dependency.
+// TestGen_AcceptsProgramModule_Synthetic verifies PR-24's PROGRAM →
+// LD wiring on a synthetic source tree:
+//   - PROGRAM() modules are accepted and emit an LD node (PR-24);
+//   - PEERDIR(...) is recursively walked, with the parent PROGRAM's
+//     LD node carrying the peer LIBRARY's AR UID as a dependency
+//     (peerLDRefs flow through to LD's DepRefs).
 //
 // The synthetic source tree has two modules — `mainprog` (PROGRAM
 // peering thelib) and `thelib` (LIBRARY) — each with a single
 // source. The expected closure is 4 nodes: thelib's CC + AR, then
-// mainprog's CC + AR. The root result is mainprog's AR (which today
-// is also its LD ref; PR-19 will distinguish them).
+// mainprog's CC + LD. The root result is mainprog's LD (the binary
+// `$(BUILD_ROOT)/mainprog/mainprog`).
 func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	root := t.TempDir()
 
@@ -145,7 +146,7 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	g := Gen(TargetCfg, root, "mainprog")
 
 	if len(g.Graph) != 4 {
-		t.Fatalf("Gen produced %d nodes, want 4 (2 CC + 2 AR)", len(g.Graph))
+		t.Fatalf("Gen produced %d nodes, want 4 (2 CC + 1 AR + 1 LD)", len(g.Graph))
 	}
 
 	if len(g.Result) != 1 {
@@ -165,46 +166,120 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	}
 
 	const (
-		libCCOut  = "$(BUILD_ROOT)/thelib/lib.cpp.o"
-		libARout  = "$(BUILD_ROOT)/thelib/libthelib.a"
-		mainCCOut = "$(BUILD_ROOT)/mainprog/main.cpp.o"
-		mainARout = "$(BUILD_ROOT)/mainprog/libmainprog.a"
+		libCCOut    = "$(BUILD_ROOT)/thelib/lib.cpp.o"
+		libARout    = "$(BUILD_ROOT)/thelib/libthelib.a"
+		mainCCOut   = "$(BUILD_ROOT)/mainprog/main.cpp.o"
+		mainBinPath = "$(BUILD_ROOT)/mainprog/mainprog"
 	)
 
-	for _, key := range []string{libCCOut, libARout, mainCCOut, mainARout} {
+	for _, key := range []string{libCCOut, libARout, mainCCOut, mainBinPath} {
 		if _, ok := nodesByOutput[key]; !ok {
 			t.Fatalf("graph is missing expected output %q", key)
 		}
 	}
 
-	rootAR := nodesByOutput[mainARout]
+	rootLD := nodesByOutput[mainBinPath]
 
-	// Result must point at the root AR node (PR-19 will swap this
-	// to the LD UID; today they coincide).
-	if g.Result[0] != rootAR.UID {
-		t.Errorf("result UID = %q, want mainprog AR uid %q", g.Result[0], rootAR.UID)
+	// Verify it really is an LD node, not an AR aliased to the
+	// binary path.
+	if rootLD.KV["p"] != "LD" {
+		t.Errorf("root node kv.p = %q, want LD", rootLD.KV["p"])
 	}
 
-	if rootAR.TargetProperties["module_dir"] != "mainprog" {
-		t.Errorf("root AR module_dir = %q, want %q", rootAR.TargetProperties["module_dir"], "mainprog")
+	if len(rootLD.Cmds) != 4 {
+		t.Errorf("root LD Cmds = %d, want 4", len(rootLD.Cmds))
 	}
 
-	// Root AR must depend on BOTH its own CC node AND the peer's
-	// AR node — that is the wiring contract PR-12 commits to.
+	// Result must point at the root LD node.
+	if g.Result[0] != rootLD.UID {
+		t.Errorf("result UID = %q, want mainprog LD uid %q", g.Result[0], rootLD.UID)
+	}
+
+	if rootLD.TargetProperties["module_dir"] != "mainprog" {
+		t.Errorf("root LD module_dir = %q, want %q", rootLD.TargetProperties["module_dir"], "mainprog")
+	}
+
+	if rootLD.TargetProperties["module_type"] != "bin" {
+		t.Errorf("root LD module_type = %q, want bin", rootLD.TargetProperties["module_type"])
+	}
+
+	// Root LD must depend on BOTH its own CC node AND the peer's
+	// AR node — that is the wiring contract PR-24 commits to.
 	mainCC := nodesByOutput[mainCCOut]
 	libAR := nodesByOutput[libARout]
 
-	depSet := make(map[string]struct{}, len(rootAR.Deps))
-	for _, d := range rootAR.Deps {
+	depSet := make(map[string]struct{}, len(rootLD.Deps))
+	for _, d := range rootLD.Deps {
 		depSet[d] = struct{}{}
 	}
 
 	if _, ok := depSet[mainCC.UID]; !ok {
-		t.Errorf("root AR deps %v missing main.cpp.o uid %q", rootAR.Deps, mainCC.UID)
+		t.Errorf("root LD deps %v missing main.cpp.o uid %q", rootLD.Deps, mainCC.UID)
 	}
 
 	if _, ok := depSet[libAR.UID]; !ok {
-		t.Errorf("root AR deps %v missing thelib AR uid %q", rootAR.Deps, libAR.UID)
+		t.Errorf("root LD deps %v missing thelib AR uid %q", rootLD.Deps, libAR.UID)
+	}
+}
+
+// TestGen_SyntheticPROGRAM_EmitsLD verifies a PROGRAM module with
+// one source and zero PEERDIR emits exactly 2 nodes (1 CC + 1 LD)
+// per the PR-24 brief's synthetic-test acceptance line. The LD node
+// has 4 cmds and is the graph result.
+func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
+	root := t.TempDir()
+
+	progDir := filepath.Join(root, "lone")
+	if err := os.MkdirAll(progDir, 0o755); err != nil {
+		t.Fatalf("mkdir lone: %v", err)
+	}
+
+	yamake := []byte("PROGRAM()\nSRCS(main.cpp)\nEND()\n")
+	if err := os.WriteFile(filepath.Join(progDir, "ya.make"), yamake, 0o644); err != nil {
+		t.Fatalf("write lone/ya.make: %v", err)
+	}
+
+	g := Gen(TargetCfg, root, "lone")
+
+	if len(g.Graph) != 2 {
+		t.Fatalf("Gen produced %d nodes, want 2 (1 CC + 1 LD)", len(g.Graph))
+	}
+
+	if len(g.Result) != 1 {
+		t.Fatalf("Gen produced %d results, want 1", len(g.Result))
+	}
+
+	// Locate nodes by kv.p.
+	var ld, cc *Node
+
+	for _, n := range g.Graph {
+		switch n.KV["p"] {
+		case "LD":
+			ld = n
+		case "CC":
+			cc = n
+		}
+	}
+
+	if ld == nil {
+		t.Fatal("Gen produced no LD node for PROGRAM module")
+	}
+
+	if cc == nil {
+		t.Fatal("Gen produced no CC node for PROGRAM module")
+	}
+
+	if len(ld.Cmds) != 4 {
+		t.Errorf("LD Cmds = %d, want 4", len(ld.Cmds))
+	}
+
+	wantOut := "$(BUILD_ROOT)/lone/lone"
+	if len(ld.Outputs) != 1 || ld.Outputs[0] != wantOut {
+		t.Errorf("LD outputs = %#v, want [%q]", ld.Outputs, wantOut)
+	}
+
+	if g.Result[0] != ld.UID {
+		t.Errorf("result UID = %q, want LD uid %q", g.Result[0], ld.UID)
 	}
 }
 
@@ -323,6 +398,33 @@ END()
 	}
 
 	if !strings.Contains(exc.Error(), "no module declaration") {
+		t.Errorf("unexpected error: %v", exc)
+	}
+}
+
+func TestGen_RejectsProgramAsPeer(t *testing.T) {
+	tmp := t.TempDir()
+	Throw(os.MkdirAll(filepath.Join(tmp, "peerprog"), 0755))
+	Throw(os.MkdirAll(filepath.Join(tmp, "caller"), 0755))
+	Throw(os.WriteFile(filepath.Join(tmp, "peerprog", "ya.make"), []byte(`PROGRAM()
+SRCS(peer_main.cpp)
+END()
+`), 0644))
+	Throw(os.WriteFile(filepath.Join(tmp, "caller", "ya.make"), []byte(`PROGRAM()
+PEERDIR(peerprog)
+SRCS(caller_main.cpp)
+END()
+`), 0644))
+
+	exc := Try(func() {
+		Gen(DefaultLinuxConfig, tmp, "caller")
+	})
+
+	if exc == nil {
+		t.Fatal("expected exception")
+	}
+
+	if !strings.Contains(exc.Error(), "peers PROGRAM module") {
 		t.Errorf("unexpected error: %v", exc)
 	}
 }
@@ -524,10 +626,11 @@ END()
 	// mainprog (they're its deps). The strongest declaration-order assertion that survives
 	// Finalize is by checking the BufferedEmitter directly... but Gen doesn't expose it.
 	//
-	// Pragmatic check: the synthetic produces 6 nodes (3 CC + 3 AR).
+	// Pragmatic check: the synthetic produces 6 nodes (3 CC + 2 AR + 1 LD;
+	// mainprog is PROGRAM so closes with LD, two peer LIBRARYs close with AR).
 	// Verify count — catches regressions where a sort.Strings(peerdirs) collapses or
 	// breaks the walk.
 	if len(g.Graph) != 6 {
-		t.Errorf("expected 6 nodes (3 CC + 3 AR), got %d", len(g.Graph))
+		t.Errorf("expected 6 nodes (3 CC + 2 AR + 1 LD), got %d", len(g.Graph))
 	}
 }

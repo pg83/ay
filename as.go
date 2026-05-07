@@ -97,6 +97,7 @@ func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *N
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
+				Cwd:     "$(BUILD_ROOT)",
 				Env:     env,
 			},
 		},

@@ -874,3 +874,49 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 **Location:** emitter.go:50-54, :89-91
 **Description:** Doc says BufferedEmitter no-op but doesn't tell M3 author that StreamingEmitter MUST switch to per-NodeRef channels.
 **Suggested fix:** Add to interface comment: "BufferedEmitter returns one shared channel that closes at Finalize for any input ref. StreamingEmitter (M3) MUST close a per-ref channel as each node's deps resolve — the shared-channel shortcut is buffered-only."
+
+---
+
+## PR-24
+
+### [PR-24-D01] AS emitter does not set Cwd despite reference graph carrying cwd: $(BUILD_ROOT) on 58/83 AS nodes
+**Status:** resolved
+**Severity:** minor
+**Location:** as.go:96-102; as_test.go:119
+**Description:** PR-24 added Cmd.Cwd field. Reference graph has `cwd: $(BUILD_ROOT)` on 58/83 AS nodes. AS emitter never sets it. Pre-PR-24 the divergence was hidden because Cwd field didn't exist. Now detectable; PR-25's wider reference comparison will fail at L3 unless fixed.
+**Suggested fix:** Set `Cwd: "$(BUILD_ROOT)"` in EmitAS. Pin in `TestEmitAS_CxxsuppBuiltinsChkstk_ByteExact` via explicit `if got.Cmds[0].Cwd != ref.Cmds[0].Cwd` assertion.
+
+### [PR-24-D02] PROGRAM-as-peer rejection diagnostic uncovered by tests
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go:242-244
+**Description:** Throw `gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable (PR-24 limitation)` triggers when PROGRAM encountered as PEERDIR. No test exercises this branch.
+**Suggested fix:** Add `TestGen_RejectsProgramAsPeer` modeled on `TestGen_PeerdirCycle_Throws`. Synthetic: `peerprog` is PROGRAM, `caller` is PROGRAM with PEERDIR(peerprog). Assert exception with substring "peers PROGRAM module".
+
+### [PR-24-D03] EmitLD length-mismatch checks for peerLD/plugin/global slices have no test coverage
+**Status:** resolved
+**Severity:** minor
+**Location:** ld.go:98-108; ld_test.go:387-405
+**Description:** EmitLD has 4 length-mismatch throws; only ccRefs/ccPaths is tested. Other 3 (peerLDRefs/peerLibPaths, pluginRefs/pluginPaths, globalRefs/globalPaths) untested.
+**Suggested fix:** Extend `TestEmitLD_LengthMismatchPanics` to drive all 4 mismatch cases via table-driven sub-tests.
+
+### [PR-24-D04] Stale comment in TestGen_PeerdirDeclarationOrder_Preserved claims "3 CC + 3 AR"
+**Status:** resolved
+**Severity:** nit
+**Location:** gen_test.go:602-606
+**Description:** Comment + error message say "3 CC + 3 AR" but PROGRAM mainprog now closes with LD, not AR. Actual: 3 CC + 2 AR + 1 LD.
+**Suggested fix:** Update comment and error message to reflect the new structure.
+
+### [PR-24-D05] Local variable `cap` shadows builtin in composeLDCmdLinkExe
+**Status:** resolved
+**Severity:** nit
+**Location:** ld.go:285-291
+**Description:** `cap := 2 + 6 + ...` shadows `cap()` builtin. Future edit needing real `cap(...)` would silently use the int.
+**Suggested fix:** Rename to `argCap` or `expectedCap`.
+
+### [PR-24-D06] EmitLD plugin/global path-prefix convention asymmetric, not enforced
+**Status:** resolved (deferred to PR-25 — convention documented; PR-25's wiring will exercise both paths and reveal mistakes)
+**Severity:** nit
+**Location:** ld.go:69-77 docstring; :282-333 composeLDCmdLinkExe; :375-407 composeLDInputs
+**Description:** pluginPaths already $(BUILD_ROOT)/-prefixed; globalPaths BUILD_ROOT-relative. Asymmetric convention documented but not enforced.
+**Fix:** Deferred. PR-25's macro evaluator will be the first real consumer; if convention proves error-prone, PR-25 normalizes inputs.

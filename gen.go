@@ -7,16 +7,19 @@ import (
 // gen.go — top-level "parse a ya.make and emit its build subgraph"
 // driver. PR-23 retrofitted memo keys / cycle keys / rule call sites
 // from `string` to `ModuleInstance` (D34) and threaded
-// `ModuleInstance` through every emitter call. The walker shape is
-// otherwise unchanged from PR-12: depth-first, post-order recursion
-// driven by PEERDIR, declaration-order traversal so R14 link order
-// is preserved.
+// `ModuleInstance` through every emitter call. PR-24 swapped in
+// `EmitLD` for PROGRAM modules; LIBRARY modules continue to close
+// with `EmitAR`. The walker shape is otherwise unchanged from PR-12:
+// depth-first, post-order recursion driven by PEERDIR, declaration-
+// order traversal so R14 link order is preserved.
 //
-// Scope discipline (PR-23):
+// Scope discipline (PR-24):
 //
-//   - Modules accepted: LIBRARY() and PROGRAM(). PROGRAM is treated
-//     structurally identically to LIBRARY for now — closed by EmitAR.
-//     PR-24 swaps in EmitLD for PROGRAM modules.
+//   - Modules accepted: LIBRARY() and PROGRAM(). LIBRARY closes with
+//     EmitAR; PROGRAM closes with EmitLD. PR-24 wires LD via the
+//     simplest possible peer shape: peer LIBRARY archives flow into
+//     EmitLD's `peerLibPaths` in declaration walk order. PR-25 wires
+//     plugins/globals and host-tool recursion (ragel6/yasm).
 //   - Macros accepted: SRCS, PEERDIR, END, SET, plus the
 //     pr12SupportedUnknownMacros whitelist of metadata/no-op macros.
 //   - PR-13's typed Stmts (IF / INCLUDE / JOIN_SRCS / ADDINCL /
@@ -35,18 +38,27 @@ import (
 //   - Cycle detection per-instance: revisiting an instance that
 //     is currently on the stack throws.
 //
-// PR-23 acceptance scope: Gen(DefaultLinuxConfig, root, "build/cow/on")
-// must still emit 2 nodes (1 CC + 1 AR) byte-exact against the
-// reference target subgraph for `build/cow/on`. Host-tool recursion
-// (D31) is wired in PR-25 via the macro evaluator (which gates host
-// instance creation on detecting tool-style PEERDIRs and module
-// attributes).
+// PR-24 acceptance scope: M1 regression preserved (build/cow/on
+// emits 2 nodes byte-exact at L0/L1/L2/L3). PROGRAM modules emit
+// 1 LD + N CC + transitive peer ARs through the same recursion. The
+// full `tools/archiver` peer closure (1,926 nodes target-only) is
+// PR-25's keystone (macro evaluator + plugin/global wiring + host-
+// tool recursion); PR-24 ships only the LD emitter and the gen.go
+// dispatch — `TestEmitLD_ToolsArchiver_ByteExact` exercises the LD
+// rule directly with hand-supplied peer paths.
 
 // moduleEmitResult is the per-instance "what did we emit?" record
-// kept by `genCtx.memo`. Splitting AR vs LD even though they
-// coincide today makes the PR-24 swap mechanical: replacing the LD
-// fields with EmitLD's outputs is a one-line change in `genModule`
-// and zero changes elsewhere.
+// kept by `genCtx.memo`. PR-24 distinguishes ARRef/LDRef:
+//
+//   - LIBRARY modules populate ARRef (the .a archive); LDRef/LDPath
+//     alias to ARRef/ARPath so PROGRAM modules peering this LIBRARY
+//     can wire it as a peer-archive input through the AR fields.
+//   - PROGRAM modules populate LDRef (the linked binary); ARRef/ARPath
+//     alias to LDRef/LDPath defensively but in practice no LIBRARY
+//     peers a PROGRAM, so the ARRef of a PROGRAM is never read.
+//
+// `isPROGRAM` records the module-shape so the caller (`Gen`) knows
+// whether to mark `LDRef` or `ARRef` as the graph result.
 type moduleEmitResult struct {
 	ARRef     NodeRef
 	ARPath    string
@@ -207,17 +219,36 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// Peer instance inherits the parent's platform and PIC axis;
 	// the per-path flag derivation runs against the peer's own
 	// path (so e.g. a musl peer gets its own NoLibc flags).
+	//
+	// For PROGRAM modules, peerArchivePaths carries the BUILD_ROOT-
+	// relative archive path (e.g. "build/cow/on/libbuild-cow-on.a")
+	// in declaration walk order — link_exe.py expects unprefixed
+	// paths because it chdirs to $(BUILD_ROOT) before invoking the
+	// linker. LIBRARY modules ignore peerArchivePaths (peer archives
+	// are AR's DepRefs only, never argv).
 	peerArchiveRefs := make([]NodeRef, 0, len(peerdirs))
+	peerArchivePaths := make([]string, 0, len(peerdirs))
 
 	for _, p := range peerdirs {
+		peerPath := filepath.Clean(p)
 		peerInstance := ModuleInstance{
-			Path:     filepath.Clean(p),
+			Path:     peerPath,
 			Language: instance.Language,
 			Target:   instance.Target,
-			Flags:    inferFlagsFromPath(filepath.Clean(p), instance.Flags.PIC),
+			Flags:    inferFlagsFromPath(peerPath, instance.Flags.PIC),
 		}
 		peerResult := genModule(ctx, peerInstance)
+
+		if peerResult.isPROGRAM {
+			ThrowFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable (PR-24 limitation)", instance.Path, peerPath)
+		}
+
 		peerArchiveRefs = append(peerArchiveRefs, peerResult.ARRef)
+		// Strip the "$(BUILD_ROOT)/" prefix to get the link_exe.py-
+		// shaped peer-archive path. The reference graph stores
+		// archive paths as $(BUILD_ROOT)/<rel>; cmd[2] expects
+		// <rel> only.
+		peerArchivePaths = append(peerArchivePaths, peerPath+"/"+ArchiveName(peerPath))
 	}
 
 	// Emit CC nodes in source declaration order. EmitCC returns
@@ -231,19 +262,48 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccOutputs = append(ccOutputs, outPath)
 	}
 
-	// Emit AR closing the module. Peer archives are wired as
-	// DepRefs (NOT cmd_args inputs) so the UID flow accounts for
-	// PEERDIR linkage; ar(1) only sees own .o files.
+	if moduleStmt.Name == "PROGRAM" {
+		// PR-24 wires the simplest PROGRAM shape: own CC + peer
+		// LIBRARY archives, no plugins, no globals, no host-tool
+		// recursion. PR-25 extends with plugins (musl pyplugin),
+		// globals (whole-archive injections), and host-tool deps
+		// (ragel6/yasm).
+		ldRef := EmitLD(
+			instance,
+			ccRefs, ccOutputs,
+			peerArchiveRefs, peerArchivePaths,
+			nil, nil,
+			nil, nil,
+			ctx.emit,
+		)
+		ldPath := LDOutputPath(instance)
+
+		result := &moduleEmitResult{
+			ARRef:     ldRef,
+			ARPath:    ldPath,
+			isPROGRAM: true,
+			LDRef:     ldRef,
+			LDPath:    ldPath,
+		}
+		ctx.memo[instance] = result
+
+		return result
+	}
+
+	// LIBRARY: Emit AR closing the module. Peer archives are wired
+	// as DepRefs (NOT cmd_args inputs) so the UID flow accounts
+	// for PEERDIR linkage; ar(1) only sees own .o files.
 	arRef := EmitAR(instance, ccRefs, ccOutputs, peerArchiveRefs, ctx.emit)
 	arPath := "$(BUILD_ROOT)/" + instance.Path + "/" + ArchiveName(instance.Path)
 
 	result := &moduleEmitResult{
 		ARRef:     arRef,
 		ARPath:    arPath,
-		isPROGRAM: moduleStmt.Name == "PROGRAM",
-		// PR-23: LD ref/path alias to AR. PR-24 will set these
-		// from EmitLD for PROGRAM modules; LIBRARY modules will
-		// continue to alias.
+		isPROGRAM: false,
+		// LIBRARY modules: LD ref/path alias to AR so a downstream
+		// PROGRAM peering this LIBRARY can read either field
+		// uniformly. The aliasing has no observable effect — Gen
+		// only marks `LDRef` as the result for PROGRAM seeds.
 		LDRef:  arRef,
 		LDPath: arPath,
 	}
