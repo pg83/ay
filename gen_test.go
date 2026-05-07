@@ -1092,17 +1092,21 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 }
 
 // TestGen_ToolsArchiver_DoesNotCrash exercises the walker against
-// the real `tools/archiver` PEERDIR closure. PR-25's acceptance
-// only requires that Gen does not panic at the walker's call site —
-// the full byte-exact L0/L3 acceptance gates land in PR-26 once the
-// flag-bundle and host-tool gaps are filled. Skipped when
-// /home/pg/monorepo/yatool_orig is not present.
+// the real `tools/archiver` PEERDIR closure. PR-25 only required
+// "does not panic" + ≥50 nodes (the explicit-PEERDIR closure).
+// PR-26 hardcodes the implicit DEFAULT_PEERDIRs (musl / builtins /
+// malloc/api), so the closure now reaches ≥150 nodes (in practice
+// ~1500). The full byte-exact L0/L3 acceptance gates land in a
+// later PR once the flag-bundle and host-tool gaps are filled.
+// Skipped when /home/pg/monorepo/yatool_orig is not present.
 //
 // The call may still throw a *ParseError or a domain error from a
-// deeply-peered ya.make whose macros PR-25 cannot evaluate (e.g.
-// `IF (USE_PREBUILT_TOOLS) INCLUDE(${ARCADIA_ROOT}/...)`); the test
-// records whichever surface the walker actually hits so PR-26 has a
-// concrete starting point. A panic that escapes Try IS a regression.
+// deeply-peered ya.make whose macros PR-26 cannot evaluate (e.g.
+// libcxx / libcxxrt / libunwind use `IF (X == "Y")` which the
+// parser does not yet understand). Those are kept out of
+// `defaultPeerdirsFor`; if the test starts throwing again, a new
+// transitive gap has appeared. A panic that escapes Try IS a
+// regression.
 func TestGen_ToolsArchiver_DoesNotCrash(t *testing.T) {
 	if _, err := os.Stat(sourceRoot + "/tools/archiver/ya.make"); err != nil {
 		t.Skipf("tools/archiver not present in source tree: %v", err)
@@ -1118,11 +1122,309 @@ func TestGen_ToolsArchiver_DoesNotCrash(t *testing.T) {
 		t.Fatalf("Gen against tools/archiver must not throw; got: %v", exc)
 	}
 
-	if len(g.Graph) < 50 {
-		t.Errorf("expected at least 50 nodes (PR-25 baseline), got %d", len(g.Graph))
+	if len(g.Graph) < 150 {
+		t.Errorf("expected at least 150 nodes (PR-26 acceptance), got %d", len(g.Graph))
 	}
 
 	if len(g.Result) == 0 {
 		t.Error("expected non-empty Result")
+	}
+}
+
+// TestGen_DefaultPeerdirs_BuildCowOnUnaffected pins the M1 invariant
+// against the PR-26 default-peerdir machinery: build/cow/on declares
+// NO_LIBC + NO_RUNTIME + NO_UTIL (effective NO_PLATFORM per
+// `effectiveNoPlatform`), which suppresses every implicit default.
+// The 2-node CC+AR closure must remain byte-exact even after the
+// helper is wired into the walker.
+func TestGen_DefaultPeerdirs_BuildCowOnUnaffected(t *testing.T) {
+	const targetDir = "build/cow/on"
+
+	if _, err := os.Stat(sourceRoot + "/" + targetDir + "/ya.make"); err != nil {
+		t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+	}
+
+	g := Gen(TargetCfg, sourceRoot, targetDir)
+
+	if len(g.Graph) != 2 {
+		t.Errorf("Gen produced %d nodes, want 2 (defaults must be suppressed)", len(g.Graph))
+	}
+
+	// Belt-and-braces unit assertion: the helper itself returns
+	// nothing for an effectively-no-platform CPP module.
+	bcOn := ModuleInstance{
+		Path:     targetDir,
+		Language: LangCPP,
+		Target:   PlatformDefaultLinuxAArch64,
+		Flags:    inferFlagsFromPath(targetDir, false),
+	}
+
+	got := defaultPeerdirsFor(bcOn)
+
+	if len(got) != 0 {
+		t.Errorf("defaultPeerdirsFor(build/cow/on) = %v, want []", got)
+	}
+}
+
+// TestGen_DefaultPeerdirs_SimpleLibrary verifies that a synthetic
+// LIBRARY without any NO_* macro receives the full set of implicit
+// default peers. The synthetic source tree contains stubbed
+// musl / builtins / malloc/api ya.makes (each a minimal LIBRARY)
+// so the walker can recurse into them. This is the only test in
+// the file that exercises the actual emit path of defaults; the
+// real-tree coverage lives in TestGen_ToolsArchiver_DoesNotCrash.
+func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
+	root := t.TempDir()
+
+	// Minimal ya.make for each default peer. They each declare
+	// effective NO_PLATFORM so they don't recursively trigger
+	// further defaults (which would require deeper stub trees).
+	stubLib := "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(stub.cpp)\nEND()\n"
+
+	for _, path := range []string{
+		"contrib/libs/musl",
+		"contrib/libs/cxxsupp/builtins",
+		"library/cpp/malloc/api",
+	} {
+		dir := filepath.Join(root, path)
+
+		Throw(os.MkdirAll(dir, 0o755))
+		Throw(os.WriteFile(filepath.Join(dir, "ya.make"), []byte(stubLib), 0o644))
+	}
+
+	// Helper assertion: defaultPeerdirsFor returns exactly the
+	// three paths for a fresh CPP LIBRARY with zero NO_* flags.
+	plain := ModuleInstance{
+		Path:     "consumer",
+		Language: LangCPP,
+		Target:   PlatformDefaultLinuxAArch64,
+		Flags:    FlagSet{},
+	}
+
+	wantDefaults := []string{
+		"contrib/libs/musl",
+		"contrib/libs/cxxsupp/builtins",
+		"library/cpp/malloc/api",
+	}
+
+	gotDefaults := defaultPeerdirsFor(plain)
+
+	if !stringSlicesEqual(gotDefaults, wantDefaults) {
+		t.Errorf("defaultPeerdirsFor(plain CPP) = %v, want %v", gotDefaults, wantDefaults)
+	}
+
+	// End-to-end: walk a consumer LIBRARY and confirm the three
+	// stubs were emitted.
+	consumerDir := filepath.Join(root, "consumer")
+
+	Throw(os.MkdirAll(consumerDir, 0o755))
+	Throw(os.WriteFile(filepath.Join(consumerDir, "ya.make"), []byte("LIBRARY()\nSRCS(main.cpp)\nEND()\n"), 0o644))
+
+	g := Gen(TargetCfg, root, "consumer")
+
+	emittedDirs := make(map[string]bool)
+
+	for _, n := range g.Graph {
+		if md, ok := n.TargetProperties["module_dir"]; ok {
+			emittedDirs[md] = true
+		}
+	}
+
+	for _, want := range []string{
+		"consumer",
+		"contrib/libs/musl",
+		"contrib/libs/cxxsupp/builtins",
+		"library/cpp/malloc/api",
+	} {
+		if !emittedDirs[want] {
+			t.Errorf("graph missing module_dir %q; got %v", want, emittedDirs)
+		}
+	}
+}
+
+// TestGen_DefaultPeerdirs_HelperSuppression exercises the full
+// suppression matrix of `defaultPeerdirsFor`:
+//
+//   - effective NO_PLATFORM (NoLibc+NoRuntime+NoUtil)  → empty set
+//   - explicit NO_PLATFORM                            → empty set
+//   - NO_LIBC only                                    → drops musl
+//   - NO_RUNTIME only                                 → drops builtins
+//   - non-CPP language                                → empty set
+//   - self-instance for each default                  → drops self
+func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
+	cases := []struct {
+		name string
+		mi   ModuleInstance
+		want []string
+	}{
+		{
+			name: "effective_no_platform",
+			mi: ModuleInstance{
+				Path:     "x",
+				Language: LangCPP,
+				Flags:    FlagSet{NoLibc: true, NoRuntime: true, NoUtil: true},
+			},
+			want: nil,
+		},
+		{
+			name: "explicit_no_platform",
+			mi: ModuleInstance{
+				Path:     "x",
+				Language: LangCPP,
+				Flags:    FlagSet{NoPlatform: true},
+			},
+			want: nil,
+		},
+		{
+			name: "no_libc_only",
+			mi: ModuleInstance{
+				Path:     "x",
+				Language: LangCPP,
+				Flags:    FlagSet{NoLibc: true},
+			},
+			want: []string{"contrib/libs/cxxsupp/builtins", "library/cpp/malloc/api"},
+		},
+		{
+			name: "no_runtime_only",
+			mi: ModuleInstance{
+				Path:     "x",
+				Language: LangCPP,
+				Flags:    FlagSet{NoRuntime: true},
+			},
+			want: []string{"contrib/libs/musl", "library/cpp/malloc/api"},
+		},
+		{
+			name: "non_cpp",
+			mi: ModuleInstance{
+				Path:     "x",
+				Language: LangProto,
+				Flags:    FlagSet{},
+			},
+			want: nil,
+		},
+		{
+			name: "self_musl",
+			mi: ModuleInstance{
+				Path:     "contrib/libs/musl",
+				Language: LangCPP,
+				Flags:    FlagSet{},
+			},
+			want: []string{"contrib/libs/cxxsupp/builtins", "library/cpp/malloc/api"},
+		},
+		{
+			name: "self_musl_subdir",
+			mi: ModuleInstance{
+				Path:     "contrib/libs/musl/full",
+				Language: LangCPP,
+				Flags:    FlagSet{},
+			},
+			want: []string{"contrib/libs/cxxsupp/builtins", "library/cpp/malloc/api"},
+		},
+		{
+			name: "no_util_only",
+			mi:   ModuleInstance{Path: "x", Language: LangCPP, Flags: FlagSet{NoUtil: true}},
+			want: []string{"contrib/libs/musl", "contrib/libs/cxxsupp/builtins", "library/cpp/malloc/api"},
+		},
+		{
+			name: "musl_extra_not_self",
+			mi:   ModuleInstance{Path: "contrib/libs/musl_extra", Language: LangCPP, Flags: FlagSet{}},
+			want: []string{"contrib/libs/musl", "contrib/libs/cxxsupp/builtins", "library/cpp/malloc/api"},
+		},
+		{
+			name: "self_builtins",
+			mi: ModuleInstance{
+				Path:     "contrib/libs/cxxsupp/builtins",
+				Language: LangCPP,
+				Flags:    FlagSet{},
+			},
+			want: []string{"contrib/libs/musl", "library/cpp/malloc/api"},
+		},
+		{
+			name: "self_malloc_api",
+			mi: ModuleInstance{
+				Path:     "library/cpp/malloc/api",
+				Language: LangCPP,
+				Flags:    FlagSet{},
+			},
+			want: []string{"contrib/libs/musl", "contrib/libs/cxxsupp/builtins"},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := defaultPeerdirsFor(c.mi)
+
+			if !stringSlicesEqual(got, c.want) {
+				t.Errorf("defaultPeerdirsFor(%+v) = %v, want %v", c.mi, got, c.want)
+			}
+		})
+	}
+}
+
+// stringSlicesEqual compares two []string by length+order. nil and
+// empty are treated as equal.
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func TestGen_DefaultPeerdirs_ExplicitDuplicateDeduped(t *testing.T) {
+	tmp := t.TempDir()
+	Throw(os.MkdirAll(filepath.Join(tmp, "lib1"), 0755))
+	Throw(os.WriteFile(filepath.Join(tmp, "lib1", "ya.make"), []byte(`LIBRARY()
+PEERDIR(contrib/libs/musl)
+SRCS(a.cpp)
+END()
+`), 0644))
+
+	// Set up a stub musl ya.make so the recursion can resolve.
+	Throw(os.MkdirAll(filepath.Join(tmp, "contrib/libs/musl"), 0755))
+	Throw(os.WriteFile(filepath.Join(tmp, "contrib/libs/musl", "ya.make"), []byte(`LIBRARY()
+NO_LIBC()
+NO_UTIL()
+NO_RUNTIME()
+NO_PLATFORM()
+SRCS(stub.c)
+END()
+`), 0644))
+
+	g := Gen(DefaultLinuxConfig, tmp, "lib1")
+
+	// Find lib1's AR; check its DepRefs.
+	var lib1AR *Node
+	for _, n := range g.Graph {
+		if n.KV["p"] == "AR" && n.TargetProperties["module_dir"] == "lib1" {
+			lib1AR = n
+			break
+		}
+	}
+
+	if lib1AR == nil {
+		t.Fatal("lib1 AR not found")
+	}
+
+	// Count distinct musl AR refs in DepRefs.
+	muslCount := 0
+	for _, ref := range lib1AR.Deps {
+		// Find the node by UID
+		for _, n := range g.Graph {
+			if n.UID == ref && n.KV["p"] == "AR" && n.TargetProperties["module_dir"] == "contrib/libs/musl" {
+				muslCount++
+				break
+			}
+		}
+	}
+
+	if muslCount != 1 {
+		t.Errorf("expected exactly 1 musl AR in lib1's deps, got %d", muslCount)
 	}
 }

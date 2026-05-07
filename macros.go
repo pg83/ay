@@ -50,6 +50,14 @@ func EvalCond(e Expr, env map[string]bool) bool {
 // throw exactly when a real ya.make in the archiver closure
 // references something we have not bound, at which point the env
 // gets a new entry — not the evaluator a new fallback.
+//
+// PR-26 extension: when the walker reaches DEFAULT_PEERDIR closure
+// (musl / builtins / malloc/api) it encounters identifiers the
+// PR-25 set did not bind because no explicit-PEERDIR module in
+// `tools/archiver` referenced them. Each addition below is a
+// concrete observed gap; the value is `false` in every case (the
+// M2 target is musl / linux / aarch64 / clang, none of these
+// alternative-build markers apply).
 var DefaultIfEnv = map[string]bool{
 	"OS_LINUX":                          true,
 	"OS_WINDOWS":                        false,
@@ -62,11 +70,14 @@ var DefaultIfEnv = map[string]bool{
 	"ARCH_I386":                         false,
 	"ARCH_ARM7":                         false,
 	"ARCH_ARM64":                        false,
+	"ARCH_ARM6":                         false, // PR-26: contrib/libs/cxxsupp/builtins
 	"CLANG":                             true,
 	"CLANG_CL":                          false,
 	"GCC":                               false,
 	"MSVC":                              false,
 	"MUSL":                              true,
+	"USE_EAT_MY_DATA":                   false, // PR-26: contrib/libs/musl
+	"WITH_MAPKIT":                       false, // PR-26: contrib/libs/cxxsupp/builtins (Yandex MapKit toggle)
 	"WITH_VALGRIND":                     false,
 	"TSTRING_IS_STD_STRING":             false,
 	"NO_CUSTOM_CHAR_PTR_STD_COMPARATOR": false,
