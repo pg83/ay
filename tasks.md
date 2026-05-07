@@ -24,7 +24,7 @@ Detail in `./docs/drafts/20260507-0134-recreate-ymake-plan.md`. One line per PR 
 - [x] **PR-01** — Bootstrap: `go.mod`, `main.go`, subcommand router (`gen`/`compare`/`inspect`/`help`). Stdlib-only.
 - [x] **PR-02** — `node.go`, `emitter.go`, `uid.go`: Node type, Emitter interface, BufferedEmitter, Merkle UID finalizer.
 - [x] **PR-03** — `gjson.go`: streaming reader for the reference g.json.
-- [ ] **PR-04** — `compare.go` + `compare_topology.go`: comparator L0 (topology fingerprint).
+- [x] **PR-04** — `compare.go` + `compare_topology.go`: comparator L0 (topology fingerprint).
 - [ ] **PR-05** — `compare_props.go`: comparator L1 (kv.p, module_*, outputs) + L2 (inputs, tags, requirements).
 - [ ] **PR-06** — `compare_cmd.go`: comparator L3 (cmd_args + env byte-exact).
 - [x] **PR-07** — `yamake.go`: minimal ya.make parser (LIBRARY/PROGRAM/PEERDIR/SRCS/SET/END).
@@ -159,3 +159,15 @@ Detail in `./docs/drafts/20260507-0134-recreate-ymake-plan.md`. One line per PR 
   - **`EmitAR` panics on `len(objRefs) != len(objPaths)`.** PR-10's `gen` driver wiring CC outputs to AR depends on lockstep parallel slices — a slip (e.g. adding a path without matching ref) is now a hard error, not a silent malformed Node.
   - **`cmdEnv` and `topEnv` are SEPARATE map literals** (NOT aliased like PR-08's CC). Reference's two fields are identical maps; we duplicate to avoid mutate-leak risk. PR-09-D06 deferred suggests an explanatory comment in a future polish pass.
   - **`Cmd.Env` for AR has 2 entries** (`ARCADIA_ROOT_DISTBUILD`, `DYLD_LIBRARY_PATH`); CC's has 1 (`ARCADIA_ROOT_DISTBUILD` only). Different rules emit different env shapes — pin per-rule, not globally.
+
+- **PR-04** (2026-05-07) — Comparator L0 (topology). `compare.go` defines `CompareReport{L0, L0Note, Skipped[]int}` + `Compare(want, got *Graph, maxLevel int) *CompareReport`. `compare_topology.go` implements the algorithm: per-node fingerprint = `sha1(kv.p || NUL || sorted(child fingerprints joined by NUL) || NUL)` truncated to 22-char base64url, computed in topological order (Kahn's BFS over UID→Node lookup, sorted-UID seeding for determinism, sorted children before enqueue). `L0 = matched / max(len(wantFPs), len(gotFPs))` via lockstep walk over two pre-sorted slices. Cycle in input → `ThrowFmt("cycle ...")`. `cmdCompare` rewired per PR-03 pattern (ContinueOnError + SetOutput(io.Discard) + errors.Is(flag.ErrHelp) + 2 positional args + `--level` int default 3 + `printCompareUsage` helper). Files: `compare.go`, `compare_topology.go`, `compare_topology_test.go`, modified `main.go`. Verification: `go build/vet/gofmt` clean; 6 new tests PASS (60 total); **real-graph self-match `L0: 100.00%` (3730 of 3730 fingerprints matched), byte-deterministic across runs** — load-bearing acceptance signal hit.
+  Two review rounds. Round 1 (5 defects, 0 major): D01 6 blank-after-`{` regressions in compare_topology.go (PR-11 D01-D08 pattern recurrence); D02 dead `if maxLevel >= 0` wrapper after negative-level reject; D03 renumbered-UID test passed vacuously without sanity-asserting UIDs differed; D04 nil-graph diagnostic with inverted booleans (`want=false` for nil); D05 missing blank before `for byUID`. **All 5 fixed**. Round 2 (1 nit, deferred): D06 same blank-after-`{` pattern in compare_topology_test.go (test file, missed by D01 sweep) — defer to next compare-test edit.
+  Surprises / constraints future PRs must respect:
+  - **Fingerprint algorithm pinned**: `sha1(kv.p || NUL || sorted-children-joined-by-NUL || NUL)`, base64url-truncated 22-char. NUL separator prevents `kv.p="AB"+children=["C","DE"]` colliding with `kv.p="ABC"+children=["","DE"]`. PR-05/PR-06 must NOT change this — comparator-level invariance depends on it.
+  - **`--level` default = 3**: anticipates full L0..L3 ladder. PR-05 adds L1+L2; PR-06 adds L3. Each unimplemented level shows in `Skipped []int` until wired.
+  - **L0 algorithm uses `kv.p` ONLY** for kindness; other `kv` keys belong to L1/L2/L3 territory. PR-05 (L1) introduces them.
+  - **Cycle detection in comparator** is defensive — real ymake graphs are DAGs. Throws on cycle so a malformed input fails loud, not silent.
+  - **Empty-graph branch** returns vacuous L0=1.0 (denom=0 path); unreachable in production because `LoadReference` rejects empty graphs upstream.
+  - **`cmdCompare` pattern** is now the second `cmdInspect`-shape subcommand; PR-10's `cmdGen` MUST adopt the same flag-handling pattern (D17 cross-cutting reaffirmed).
+  - **D14 audit shape**: every `range` over a map in compare_topology.go either feeds a `sort.Strings`'d output OR is a presence-check / counter. No raw map iteration in the determinism-critical hash inputs.
+  - **`Compare(nil, ...)` and `Compare(..., nil)`** throw with specific "want graph is nil" / "got graph is nil" messages (D04 fix). Catch at boundary.
