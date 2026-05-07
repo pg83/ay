@@ -776,6 +776,9 @@ func TestParseAddIncl_Mixed(t *testing.T) {
 }
 
 // TestParseCFlags_Global pins CFLAGS with the GLOBAL modifier.
+// PR-32 D04: per-path GLOBAL semantics — flag immediately following
+// the literal `GLOBAL` keyword goes to GlobalFlags; later flags
+// without their own GLOBAL prefix go to OwnFlags.
 func TestParseCFlags_Global(t *testing.T) {
 	mf, err := Parse("test.input", []byte("CFLAGS(GLOBAL -O2 -Wall)\n"))
 	if err != nil {
@@ -785,11 +788,11 @@ func TestParseCFlags_Global(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *CFlagsStmt", mf.Stmts[0])
 	}
-	if c.Modifier != "GLOBAL" {
-		t.Errorf("Modifier = %q, want %q", c.Modifier, "GLOBAL")
+	if !equalStrings(c.GlobalFlags, []string{"-O2"}) {
+		t.Errorf("GlobalFlags = %v, want [-O2]", c.GlobalFlags)
 	}
-	if !equalStrings(c.Flags, []string{"-O2", "-Wall"}) {
-		t.Errorf("Flags = %v, want [-O2 -Wall]", c.Flags)
+	if !equalStrings(c.OwnFlags, []string{"-Wall"}) {
+		t.Errorf("OwnFlags = %v, want [-Wall]", c.OwnFlags)
 	}
 }
 
@@ -803,11 +806,70 @@ func TestParseCFlags_NoModifier(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *CFlagsStmt", mf.Stmts[0])
 	}
-	if c.Modifier != "" {
-		t.Errorf("Modifier = %q, want empty", c.Modifier)
+	if len(c.GlobalFlags) != 0 {
+		t.Errorf("GlobalFlags = %v, want empty", c.GlobalFlags)
 	}
-	if !equalStrings(c.Flags, []string{"-O2"}) {
-		t.Errorf("Flags = %v, want [-O2]", c.Flags)
+	if !equalStrings(c.OwnFlags, []string{"-O2"}) {
+		t.Errorf("OwnFlags = %v, want [-O2]", c.OwnFlags)
+	}
+}
+
+// TestParseCFlags_PerPathGlobal pins per-path GLOBAL semantics: each
+// flag preceded immediately by `GLOBAL` goes to GlobalFlags; tokens
+// without `GLOBAL` go to OwnFlags. Mirror of TestParseAddIncl_PerPath
+// (PR-31 D13).
+func TestParseCFlags_PerPathGlobal(t *testing.T) {
+	mf, err := Parse("test.input", []byte("CFLAGS(GLOBAL -DA -DB GLOBAL -DC)\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	c, ok := mf.Stmts[0].(*CFlagsStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *CFlagsStmt", mf.Stmts[0])
+	}
+	if !equalStrings(c.GlobalFlags, []string{"-DA", "-DC"}) {
+		t.Errorf("GlobalFlags = %v, want [-DA -DC]", c.GlobalFlags)
+	}
+	if !equalStrings(c.OwnFlags, []string{"-DB"}) {
+		t.Errorf("OwnFlags = %v, want [-DB]", c.OwnFlags)
+	}
+}
+
+// TestParseCXXFlags_Global pins CXXFLAGS dispatch to *CXXFlagsStmt
+// with per-path GLOBAL semantics (PR-32 D05).
+func TestParseCXXFlags_Global(t *testing.T) {
+	mf, err := Parse("test.input", []byte("CXXFLAGS(GLOBAL -nostdinc++)\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	c, ok := mf.Stmts[0].(*CXXFlagsStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *CXXFlagsStmt", mf.Stmts[0])
+	}
+	if !equalStrings(c.GlobalFlags, []string{"-nostdinc++"}) {
+		t.Errorf("GlobalFlags = %v, want [-nostdinc++]", c.GlobalFlags)
+	}
+	if len(c.OwnFlags) != 0 {
+		t.Errorf("OwnFlags = %v, want empty", c.OwnFlags)
+	}
+}
+
+// TestParseCONLYFlags_Own pins CONLYFLAGS dispatch to *CONLYFlagsStmt
+// (PR-32 D06).
+func TestParseCONLYFlags_Own(t *testing.T) {
+	mf, err := Parse("test.input", []byte("CONLYFLAGS(-Wno-pointer-sign)\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	c, ok := mf.Stmts[0].(*CONLYFlagsStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *CONLYFlagsStmt", mf.Stmts[0])
+	}
+	if len(c.GlobalFlags) != 0 {
+		t.Errorf("GlobalFlags = %v, want empty", c.GlobalFlags)
+	}
+	if !equalStrings(c.OwnFlags, []string{"-Wno-pointer-sign"}) {
+		t.Errorf("OwnFlags = %v, want [-Wno-pointer-sign]", c.OwnFlags)
 	}
 }
 

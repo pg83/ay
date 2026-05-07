@@ -98,6 +98,7 @@ func EmitLD(
 	globalRefs []NodeRef,
 	globalPaths []string,
 	memberInputs []string,
+	muslOn bool,
 	emit Emitter,
 ) NodeRef {
 	if len(ccRefs) != len(ccPaths) {
@@ -140,7 +141,7 @@ func EmitLD(
 	vcsOPath := "$(BUILD_ROOT)/" + instance.Path + "/__vcs_version__.c.o"
 
 	cmd0 := composeLDCmdVcsInfo(vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath)
+	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath, muslOn)
 	cmd2 := composeLDCmdLinkExe(outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths)
 	cmd3 := composeLDCmdLinkOrCopy(instance.Path)
 
@@ -289,9 +290,17 @@ func composeLDCmdVcsInfo(vcsCPath string) []string {
 //     second half — verified entry-by-entry against
 //     `tools/archiver/__vcs_version__.c.o`).
 //
+// PR-32 D10: the musl-specific D-flag pair (`-D_musl_=1` and
+// `-D_musl_`) is now driven by the CLI's `--define MUSL=...` value
+// instead of unconditional injection. The `muslOn` parameter
+// reflects `cliMuslOn(ctx)` from the walker; when MUSL=no the two
+// sentinels collapse to a bare double-`noLibcUndebugBlock`. The
+// flag-bundle data (the literal `-D_musl_=1` / `-D_musl_` strings)
+// stays here as the documented musl-internal vcs-compile shape.
+//
 // Output and input are passed in (output `__vcs_version__.c.o`, input
 // `__vcs_version__.c`).
-func composeLDCmdVcsCompile(vcsCPath, vcsOPath string) []string {
+func composeLDCmdVcsCompile(vcsCPath, vcsOPath string, muslOn bool) []string {
 	cmdArgs := make([]string, 0, 94)
 	cmdArgs = append(cmdArgs,
 		ccCompilerPath,
@@ -309,14 +318,30 @@ func composeLDCmdVcsCompile(vcsCPath, vcsOPath string) []string {
 	cmdArgs = append(cmdArgs, commonCFlags...)
 	cmdArgs = append(cmdArgs, warningFlags...)
 	cmdArgs = append(cmdArgs, commonDefines...)
-	cmdArgs = append(cmdArgs, "-D_musl_=1")
+
+	if muslOn {
+		cmdArgs = append(cmdArgs, ldVcsMuslSelfDefine)
+	}
+
 	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-	cmdArgs = append(cmdArgs, "-D_musl_")
+
+	if muslOn {
+		cmdArgs = append(cmdArgs, muslConsumerSentinel)
+	}
+
 	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
 
 	return cmdArgs
 }
+
+// ldVcsMuslSelfDefine is the `-D_musl_=1` flag the LD vcs_version
+// compile injects between commonDefines and the first
+// noLibcUndebugBlock copy when MUSL=yes (PR-32 D10). The =1 form
+// matches `muslExtraDefines`'s musl-self CFLAG; the bare `-D_musl_`
+// (consumer-side sentinel) is `muslConsumerSentinel` defined in
+// gen.go and shared with the EmitCC AutoPeerCFlags path.
+const ldVcsMuslSelfDefine = "-D_musl_=1"
 
 // composeLDCmdLinkExe composes cmd[2]: the link_exe.py invocation
 // that runs clang++ over the assembled object/archive set. Layout:

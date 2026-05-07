@@ -14,7 +14,7 @@ package main
 // Extending the struct does not require updating every call site —
 // that is the whole point of switching from a positional signature.
 //
-// PR-23/25 history:
+// PR-23/25/32 history:
 //
 //   - PR-23 retrofitted the signature to take a `ModuleInstance`
 //     instead of a (PlatformConfig, moduleDir) pair.
@@ -23,6 +23,11 @@ package main
 //   - PR-29 adds a fourth flavor (`composeMuslHostCC`) for host-musl
 //     PIC nodes — the dominant L3 lift lever (1297 nodes in the
 //     archiver closure flip from "diverges" to "byte-exact").
+//   - PR-32 flips the composer dispatch from path-prefix
+//     (`HasPrefix(instance.Path, "contrib/libs/musl")`) to flag-
+//     driven (`instance.Flags.LibcMusl`). The flag is the
+//     architectural anchor — musl is just a libc flavour selected
+//     by a CLI -D flag, not a special-cased module class.
 //
 // Output path convention is unchanged from PR-12:
 //
@@ -114,6 +119,28 @@ type ModuleCCInputs struct {
 	// or for IsGenerated CCs where the scanner is intentionally
 	// skipped (generated CCs use a separate input shape).
 	IncludeInputs []string
+	// PeerCFlagsGlobal is the transitive union of every PEERDIR's
+	// GLOBAL CFLAGS contribution (PR-32 D08). Applies to BOTH C and
+	// C++ sources of the consumer, slotted in cmd_args AFTER own
+	// CXXFLAGS / CONLYFLAGS and BEFORE builtinMacroDateTime. Empty
+	// for modules whose PEERDIR closure declares no GLOBAL CFLAGS.
+	PeerCFlagsGlobal []string
+	// PeerCXXFlagsGlobal is the transitive union of every PEERDIR's
+	// GLOBAL CXXFLAGS contribution (PR-32 D08). Applies to C++
+	// sources only (.cpp/.cc/.cxx).
+	PeerCXXFlagsGlobal []string
+	// PeerCOnlyFlagsGlobal is the transitive union of every PEERDIR's
+	// GLOBAL CONLYFLAGS contribution (PR-32 D08). Applies to C / .S
+	// sources only.
+	PeerCOnlyFlagsGlobal []string
+	// AutoPeerCFlags is the auto-injected peer-CFLAG set the walker
+	// adds based on cliDefines + module flags (PR-32 D09). The single
+	// load-bearing entry today is `-D_musl_` (mirror of
+	// `build/ymake.core.conf:781`'s
+	// `when ($MUSL == "yes") { CFLAGS+=-D_musl_ }`). Kept separate
+	// from PeerCFlagsGlobal so the source/from-where is auditable;
+	// merged at cmd_args slot time.
+	AutoPeerCFlags []string
 }
 
 // EmitCC emits a CC node for compiling `srcRel` (a path relative to
@@ -138,7 +165,10 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 
 	outputPath, inputPath := composeCCPaths(instance, srcRel, in, suffix)
 
-	isMusl := instance.Path == "contrib/libs/musl" || strings.HasPrefix(instance.Path, "contrib/libs/musl/")
+	// PR-32 D02: dispatch via Flags.LibcMusl, not the path-prefix
+	// test. The flag is seeded by `inferFlagsFromPath` for the M2
+	// shim; macro-driven inference replaces the heuristic in M5+.
+	isMusl := instance.Flags.LibcMusl
 	isCxx := isCxxSource(srcRel)
 
 	// Filter own per-source extras by source language. CXXFLAGS apply
@@ -165,16 +195,36 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	// -D_musl_=1 which is peer-propagated; D04 territory).
 	muslOwnExtras := []string(nil)
 
-	// PR-31 D06: for non-musl flavours, peer-propagated GLOBAL
-	// ADDINCL slots after the module's own ADDINCL — both feed
-	// appendAddIncl (single concatenation in declaration order:
-	// own first, then peers). For musl flavours, BOTH own AddIncl
-	// and PeerAddInclGlobal are dropped: musl's `-nostdinc` +
-	// `muslCcIncludes` set defines the entire include search path
-	// by design, and adding peer-GLOBAL `-I` would conflict with
-	// the musl-self-isolation invariant.
-	combinedAddIncl := append([]string(nil), in.AddIncl...)
-	combinedAddIncl = append(combinedAddIncl, in.PeerAddInclGlobal...)
+	// PR-31 D06 + PR-32: own ADDINCL slots BEFORE ccIncludesSuffix
+	// (linux-headers); peer-propagated GLOBAL ADDINCL slots AFTER it.
+	// Empirical reference (util/charset/all_charset.cpp.o cmd_args[7..16])
+	// shows this ordering: prefix → linux-headers suffix → libcxx-include
+	// + libcxxrt-include + musl-arch (peer-GLOBAL paths). For musl
+	// flavours BOTH own AddIncl and PeerAddInclGlobal are dropped:
+	// musl's `-nostdinc` + `muslCcIncludes` set defines the entire
+	// include search path by design, and adding peer-GLOBAL `-I` would
+	// conflict with the musl-self-isolation invariant.
+
+	// PR-32 D08/D09: split the peer/auto-CFLAG injection into two
+	// slots, matching the empirical reference shape:
+	//
+	//   - autoPeerCFlags (`-D_musl_`) sits BETWEEN the catboost flag
+	//     and the SECOND noLibcUndebugBlock copy. Verified against
+	//     util/charset/all_charset.cpp.o cmd_args[78].
+	//   - peerExtras (PeerCFlagsGlobal + per-language peer-GLOBAL set)
+	//     sits at the existing cxx-extras tail (AFTER own CXXFLAGS and
+	//     BEFORE builtinMacroDateTime). Verified against the
+	//     `-nostdinc++` peer-propagation pattern.
+	//
+	// For musl flavours BOTH slots stay empty (musl-self-isolation
+	// invariant — see Q6). The `-D_musl_=1` musl-self CFLAG comes from
+	// `muslExtraDefines` inside composeMuslCC / composeMuslHostCC.
+	var autoPeerCFlags, peerExtras []string
+
+	if !isMusl {
+		autoPeerCFlags = in.AutoPeerCFlags
+		peerExtras = composePeerExtras(in, isCxx)
+	}
 
 	switch {
 	case isMusl && instance.Flags.PIC:
@@ -182,9 +232,9 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	case isMusl:
 		cmdArgs = composeMuslCC(outputPath, inputPath, nil, muslOwnExtras, isCxx)
 	case instance.Flags.PIC:
-		cmdArgs = composeHostCC(outputPath, inputPath, combinedAddIncl, ownExtras, isCxx, instance.Flags.NoCompilerWarnings)
+		cmdArgs = composeHostCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownExtras, autoPeerCFlags, peerExtras, isCxx, instance.Flags.NoCompilerWarnings)
 	default:
-		cmdArgs = composeTargetCC(outputPath, inputPath, combinedAddIncl, ownExtras, isCxx, instance.Flags.NoCompilerWarnings)
+		cmdArgs = composeTargetCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownExtras, autoPeerCFlags, peerExtras, isCxx, instance.Flags.NoCompilerWarnings)
 	}
 
 	// The reference graph carries the same env map at both the cmd
@@ -466,12 +516,50 @@ func appendCxxStdAndOwn(cmdArgs []string, isCxx bool, noCompilerWarnings bool, i
 	return cmdArgs
 }
 
+// composePeerExtras assembles the peer-propagated GLOBAL CFLAGS /
+// CXXFLAGS / CONLYFLAGS contribution per source-language axis (PR-32
+// D08). Source-language filtering follows ymake's CFLAGS-applies-to-
+// both rule:
+//
+//   - PeerCFlagsGlobal applies to both C and C++ sources.
+//   - PeerCXXFlagsGlobal applies only to C++ sources.
+//   - PeerCOnlyFlagsGlobal applies only to C / .S sources.
+//
+// AutoPeerCFlags (e.g. -D_musl_) is NOT included here — it slots at
+// a different cmd_args position (between catboost and 2nd
+// noLibcUndebugBlock); see the dedicated `autoPeerCFlags` argument
+// to the composers. Mirror of the PR-31 `combinedAddIncl` ordering
+// (peer contributions in declaration order; no own contributions
+// here — those are appended via appendCxxStdAndOwn).
+func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
+	out := make([]string, 0, len(in.PeerCFlagsGlobal)+len(in.PeerCXXFlagsGlobal)+len(in.PeerCOnlyFlagsGlobal))
+	out = append(out, in.PeerCFlagsGlobal...)
+
+	if isCxx {
+		out = append(out, in.PeerCXXFlagsGlobal...)
+	} else {
+		out = append(out, in.PeerCOnlyFlagsGlobal...)
+	}
+
+	return out
+}
+
 // composeTargetCC composes the cmd_args bundle for a TARGET-flavoured
 // no-libc CC compilation. Pinned byte-exact (101 args, no per-module
 // extras) against build/cow/on/lib.c.o in
 // /home/pg/monorepo/yatool_orig/sg.json.
-func composeTargetCC(outputPath, inputPath string, addIncl, ownExtras []string, isCxx, noCompilerWarnings bool) []string {
-	cmdArgs := make([]string, 0, 101+len(addIncl)+len(ownExtras)+2)
+//
+// PR-32 D09: `autoPeerCFlags` slots BETWEEN the catboost flag and
+// the SECOND noLibcUndebugBlock copy. Verified against
+// util/charset/all_charset.cpp.o cmd_args[78] in the reference.
+//
+// PR-32 D08: `peerExtras` is the peer-propagated GLOBAL CFLAGS /
+// CXXFLAGS / CONLYFLAGS slice (composed by composePeerExtras). It
+// slots AFTER own CXXFLAGS / CONLYFLAGS and BEFORE
+// builtinMacroDateTime — matches the empirical reference slot for
+// `-nostdinc++` propagation in libcxx-consuming CC nodes.
+func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownExtras, autoPeerCFlags, peerExtras []string, isCxx, noCompilerWarnings bool) []string {
+	cmdArgs := make([]string, 0, 101+len(ownAddIncl)+len(peerAddIncl)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2)
 	cmdArgs = append(cmdArgs,
 		pickCompiler(isCxx),
 		"--target="+targetTriple,
@@ -482,8 +570,9 @@ func composeTargetCC(outputPath, inputPath string, addIncl, ownExtras []string, 
 		outputPath,
 	)
 	cmdArgs = append(cmdArgs, ccIncludesPrefix...)
-	cmdArgs = appendAddIncl(cmdArgs, addIncl)
+	cmdArgs = appendAddIncl(cmdArgs, ownAddIncl)
 	cmdArgs = append(cmdArgs, ccIncludesSuffix...)
+	cmdArgs = appendAddIncl(cmdArgs, peerAddIncl)
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
 	cmdArgs = append(cmdArgs, commonCFlags...)
@@ -491,8 +580,10 @@ func composeTargetCC(outputPath, inputPath string, addIncl, ownExtras []string, 
 	cmdArgs = append(cmdArgs, commonDefines...)
 	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
+	cmdArgs = append(cmdArgs, autoPeerCFlags...)
 	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
 	cmdArgs = appendCxxStdAndOwn(cmdArgs, isCxx, noCompilerWarnings, true, ownExtras)
+	cmdArgs = append(cmdArgs, peerExtras...)
 	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
 	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, inputPath)
@@ -514,8 +605,8 @@ func composeTargetCC(outputPath, inputPath string, addIncl, ownExtras []string, 
 //     define block (host libunwind shim).
 //   - Inserts `hostSseFeatures` (7 args) between the two ndebugPicBlock
 //     copies, in addition to `catboostOpenSourceDefine`.
-func composeHostCC(outputPath, inputPath string, addIncl, ownExtras []string, isCxx, noCompilerWarnings bool) []string {
-	cmdArgs := make([]string, 0, 105+len(addIncl)+len(ownExtras)+2)
+func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownExtras, autoPeerCFlags, peerExtras []string, isCxx, noCompilerWarnings bool) []string {
+	cmdArgs := make([]string, 0, 105+len(ownAddIncl)+len(peerAddIncl)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2)
 	cmdArgs = append(cmdArgs,
 		pickCompiler(isCxx),
 		"--target="+hostTriple,
@@ -525,8 +616,9 @@ func composeHostCC(outputPath, inputPath string, addIncl, ownExtras []string, is
 		outputPath,
 	)
 	cmdArgs = append(cmdArgs, ccIncludesPrefix...)
-	cmdArgs = appendAddIncl(cmdArgs, addIncl)
+	cmdArgs = appendAddIncl(cmdArgs, ownAddIncl)
 	cmdArgs = append(cmdArgs, ccIncludesSuffix...)
+	cmdArgs = appendAddIncl(cmdArgs, peerAddIncl)
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
 	cmdArgs = append(cmdArgs, hostCFlags...)
@@ -534,9 +626,17 @@ func composeHostCC(outputPath, inputPath string, addIncl, ownExtras []string, is
 	cmdArgs = append(cmdArgs, hostDefines...)
 	cmdArgs = append(cmdArgs, ndebugPicBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
+	// PR-32 D09: autoPeerCFlags (-D_musl_) slots BETWEEN catboost
+	// and the SECOND ndebugPicBlock; for host the `hostSseFeatures`
+	// block sits between them so the precise slot is BEFORE the SSE
+	// bundle on host. Empirical host probe via tools/archiver host
+	// CC nodes confirms the same shape (catboost → -D_musl_ →
+	// hostSseFeatures → 2nd ndebugPicBlock).
+	cmdArgs = append(cmdArgs, autoPeerCFlags...)
 	cmdArgs = append(cmdArgs, hostSseFeatures...)
 	cmdArgs = append(cmdArgs, ndebugPicBlock...)
 	cmdArgs = appendCxxStdAndOwn(cmdArgs, isCxx, noCompilerWarnings, true, ownExtras)
+	cmdArgs = append(cmdArgs, peerExtras...)
 	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
 	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, inputPath)
