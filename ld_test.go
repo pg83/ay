@@ -161,6 +161,7 @@ func TestEmitLD_ToolsArchiver_ByteExact(t *testing.T) {
 
 	ldRef := EmitLD(
 		instance,
+		"archiver",
 		[]NodeRef{mainCCRef}, []string{mainCCPath},
 		peerLDRefs, archiverPeerLibPaths,
 		pluginRefs, archiverPluginPaths,
@@ -287,6 +288,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 
 	ldRef := EmitLD(
 		instance,
+		"", // empty falls back to lastPathComponent → "prog"
 		[]NodeRef{mainRef}, []string{mainPath},
 		nil, nil,
 		nil, nil,
@@ -372,6 +374,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 
 	ref := EmitLD(
 		hostInstance("some/prog"),
+		"", // empty falls back to lastPathComponent → "prog"
 		[]NodeRef{stub}, []string{"$(BUILD_ROOT)/some/prog/main.cpp.o"},
 		nil, nil,
 		nil, nil,
@@ -415,7 +418,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 			instance := targetInstance("test/prog")
 
 			exc := Try(func() {
-				EmitLD(instance, tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, e)
+				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, e)
 			})
 
 			if exc == nil {

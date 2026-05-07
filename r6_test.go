@@ -11,7 +11,9 @@ import (
 
 // TestEmitR6_RagelHostRecursion_Synthetic emits a fake host ragel6
 // LD node, then calls EmitR6 with the resulting NodeRef. Asserts
-// the R6 node's `ForeignDepRefs["tool"]` contains exactly that ref,
+// the R6 node's `DepRefs` contains exactly that ref (PR-28 D04 moved
+// the edge from `ForeignDepRefs["tool"]` to `DepRefs` to match the
+// reference shape: `deps=[ragel6 host LD UID]`, no foreign_deps),
 // and that cmd_args/kv/tags/requirements match the reference shape
 // observed in /home/pg/monorepo/yatool_orig/g.json.
 func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
@@ -35,8 +37,11 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 
 	// Emit the R6 node against the util module's
 	// `datetime/parser.rl6` source (matches the only R6 node in
-	// the reference graph).
-	r6Ref, outPath := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, e)
+	// the reference graph). The hardcoded ragel6 binary path matches
+	// the stub LD's outputs[0] above; PR-28-D01 makes this the
+	// caller's responsibility (the gen.go walker derives it from the
+	// host LD's own emission).
+	r6Ref, outPath := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6", e)
 
 	wantOut := "$(BUILD_ROOT)/util/_/datetime/parser.rl6.cpp"
 	if outPath != wantOut {
@@ -87,18 +92,18 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		t.Errorf("host_platform = true, want false")
 	}
 
-	// foreign_deps.tool must contain exactly the ragel6LD ref.
-	tool, ok := got.ForeignDepRefs["tool"]
-	if !ok {
-		t.Fatalf("ForeignDepRefs[tool] missing")
+	// PR-28 D04: ragel6 host LD edge lives in DepRefs (not
+	// ForeignDepRefs["tool"]) to match the empirical reference shape.
+	if len(got.DepRefs) != 1 {
+		t.Fatalf("DepRefs len = %d, want 1", len(got.DepRefs))
 	}
 
-	if len(tool) != 1 {
-		t.Fatalf("ForeignDepRefs[tool] len = %d, want 1", len(tool))
+	if got.DepRefs[0] != ragel6LD {
+		t.Errorf("DepRefs[0] = %v, want %v", got.DepRefs[0], ragel6LD)
 	}
 
-	if tool[0] != ragel6LD {
-		t.Errorf("ForeignDepRefs[tool][0] = %v, want %v", tool[0], ragel6LD)
+	if len(got.ForeignDepRefs) != 0 {
+		t.Errorf("ForeignDepRefs = %v, want empty (PR-28 D04 dropped placeholder)", got.ForeignDepRefs)
 	}
 
 	// requirements must include cpu/network/ram (matching reference).

@@ -51,11 +51,18 @@ import (
 // Inputs the caller must provide:
 //
 //   - `instance`: the PROGRAM module's ModuleInstance. `instance.Path`
-//     names the module's directory; the linked binary's name is the
-//     last component of `instance.Path` (e.g. "tools/archiver" →
-//     "archiver"). For target builds (`Flags.PIC=false`) the binary is
-//     emitted to `$(BUILD_ROOT)/<path>/<name>`; PR-24 does not handle
-//     host LD.
+//     names the module's directory. For target builds
+//     (`Flags.PIC=false`) the binary is emitted to
+//     `$(BUILD_ROOT)/<path>/<binaryName>`; PR-24 does not handle host
+//     LD specially.
+//   - `binaryName`: the linker output's basename. Per PR-28-D01, this
+//     comes from the parsed `PROGRAM(name)` macro's argument
+//     (`ModuleStmt.Args[0]`); when empty the helper falls back to
+//     `lastPathComponent(instance.Path)`. For most PROGRAMs the macro
+//     argument matches the directory's trailing component (e.g.
+//     `tools/archiver` declares `PROGRAM(archiver)`); the divergent case
+//     is `contrib/tools/ragel6/bin/ya.make` which declares
+//     `PROGRAM(ragel6)` — the binary is `bin/ragel6` not `bin/bin`.
 //   - `ccRefs` / `ccPaths`: the module's own .cpp.o files (typically
 //     just `main.cpp.o`), one entry per source. Order matters for
 //     cmd[2] argv composition: the entries are emitted between the
@@ -77,10 +84,11 @@ import (
 //     as peerLibPaths). Pass nil when none.
 //
 // Returns the LD NodeRef. The output path is
-// `$(BUILD_ROOT)/<instance.Path>/<binaryName(instance.Path)>`; the
-// caller can re-derive it via `LDOutputPath(instance)` if needed.
+// `$(BUILD_ROOT)/<instance.Path>/<binaryName>`; the caller can
+// re-derive it via `LDOutputPath(instance, binaryName)` if needed.
 func EmitLD(
 	instance ModuleInstance,
+	binaryName string,
 	ccRefs []NodeRef,
 	ccPaths []string,
 	peerLDRefs []NodeRef,
@@ -116,7 +124,16 @@ func EmitLD(
 	// PR-25 acceptance tests (synthetic host ragel6 PROGRAM) the
 	// target-shape LD is structurally sufficient; byte-exact host
 	// LD pinning is PR-26+ scope.
-	binaryName := lastPathComponent(instance.Path)
+	//
+	// PR-28-D01: the binary name comes from PROGRAM(name)'s parsed
+	// argument. When the caller did not supply it, fall back to the
+	// last path component for backwards compatibility with synthetic
+	// tests that construct ModuleInstance directly without parsing a
+	// ya.make.
+	if binaryName == "" {
+		binaryName = lastPathComponent(instance.Path)
+	}
+
 	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + binaryName
 	vcsCPath := "$(BUILD_ROOT)/" + instance.Path + "/__vcs_version__.c"
 	vcsOPath := "$(BUILD_ROOT)/" + instance.Path + "/__vcs_version__.c.o"
@@ -197,8 +214,16 @@ func EmitLD(
 // LDOutputPath returns the binary output path for a PROGRAM
 // `instance`. Exposed so callers (gen.go) can stash the path in
 // `moduleEmitResult` without re-deriving the binary-name rule.
-func LDOutputPath(instance ModuleInstance) string {
-	return "$(BUILD_ROOT)/" + instance.Path + "/" + lastPathComponent(instance.Path)
+//
+// PR-28-D01: `binaryName` parameter mirrors EmitLD's contract — comes
+// from PROGRAM(name)'s parsed argument; when empty falls back to the
+// last path component.
+func LDOutputPath(instance ModuleInstance, binaryName string) string {
+	if binaryName == "" {
+		binaryName = lastPathComponent(instance.Path)
+	}
+
+	return "$(BUILD_ROOT)/" + instance.Path + "/" + binaryName
 }
 
 // lastPathComponent returns the trailing path segment of `p`. Empty

@@ -943,10 +943,15 @@ END()
 func TestGen_HostToolRecursion_R6(t *testing.T) {
 	root := t.TempDir()
 
-	// Synthetic host ragel6 module — just enough to walk.
-	ragelDir := filepath.Join(root, "contrib/tools/ragel6")
+	// Synthetic host ragel6 module at the real path
+	// `contrib/tools/ragel6/bin` (PR-28 D03 — the parent
+	// `contrib/tools/ragel6/ya.make` uses INCLUDE(${ARCADIA_ROOT}/...)
+	// which the parser does not yet expand). The PROGRAM(ragel6) macro
+	// argument pins PR-28-D01: the LD's binary name comes from the
+	// macro, not from the directory's last component ("bin").
+	ragelDir := filepath.Join(root, "contrib/tools/ragel6/bin")
 	Throw(os.MkdirAll(ragelDir, 0o755))
-	Throw(os.WriteFile(filepath.Join(ragelDir, "ya.make"), []byte("PROGRAM()\nSRCS(main.cpp)\nEND()\n"), 0o644))
+	Throw(os.WriteFile(filepath.Join(ragelDir, "ya.make"), []byte("PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n"), 0o644))
 
 	// Target consumer with an .rl6 source.
 	consumerDir := filepath.Join(root, "consumer")
@@ -1003,7 +1008,7 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	// host ragel6 UID.
 	var (
 		r6Node *Node
-		ldUID  string
+		ldNode *Node
 	)
 
 	for _, n := range g.Graph {
@@ -1011,7 +1016,7 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		case "R6":
 			r6Node = n
 		case "LD":
-			ldUID = n.UID
+			ldNode = n
 		}
 	}
 
@@ -1019,13 +1024,36 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Fatal("no R6 node found")
 	}
 
-	tool, ok := r6Node.ForeignDeps["tool"]
-	if !ok {
-		t.Fatalf("R6 ForeignDeps[tool] missing; got %#v", r6Node.ForeignDeps)
+	if ldNode == nil {
+		t.Fatal("no host ragel6 LD node found")
 	}
 
-	if len(tool) != 1 || tool[0] != ldUID {
-		t.Errorf("R6 ForeignDeps[tool] = %v, want [%q]", tool, ldUID)
+	// PR-28 D04: ragel6 host LD edge lives in deps (not foreign_deps)
+	// to match the empirical reference shape.
+	if len(r6Node.Deps) != 1 || r6Node.Deps[0] != ldNode.UID {
+		t.Errorf("R6 Deps = %v, want [%q]", r6Node.Deps, ldNode.UID)
+	}
+
+	if len(r6Node.ForeignDeps) != 0 {
+		t.Errorf("R6 ForeignDeps = %v, want empty (PR-28 dropped foreign_deps[tool] placeholder)", r6Node.ForeignDeps)
+	}
+
+	// PR-28 D09: cmd_args[0] (the ragel6 invocation path) must match
+	// the host LD's outputs[0] exactly. This pins the internal
+	// consistency between R6 dispatch and our own host-PROGRAM
+	// emission — without it a future regression in either side could
+	// produce a graph that compiles but invokes the wrong binary path.
+	if len(r6Node.Cmds) == 0 || len(r6Node.Cmds[0].CmdArgs) == 0 {
+		t.Fatalf("R6 node has no Cmds[0].CmdArgs; got Cmds=%v", r6Node.Cmds)
+	}
+
+	if len(ldNode.Outputs) == 0 {
+		t.Fatalf("host LD node has no Outputs; got Outputs=%v", ldNode.Outputs)
+	}
+
+	if r6Node.Cmds[0].CmdArgs[0] != ldNode.Outputs[0] {
+		t.Errorf("R6 cmd_args[0] = %q, want host ragel6 LD outputs[0] = %q",
+			r6Node.Cmds[0].CmdArgs[0], ldNode.Outputs[0])
 	}
 }
 
@@ -1171,6 +1199,230 @@ func TestGen_ToolsArchiver_DoesNotCrash(t *testing.T) {
 	}
 }
 
+// TestGen_ToolsArchiver_DualPlatform_HostAndTargetCounts pins PR-28's
+// structural acceptance bar: target nodes ≥ 1696 (PR-27 baseline), host
+// nodes ≥ 1500 (D10 threshold; reference has 1797), single result root.
+// A regression in either lobe (target or host) is a structural failure
+// that comparator percentage drops cannot diagnose alone.
+func TestGen_ToolsArchiver_DualPlatform_HostAndTargetCounts(t *testing.T) {
+	if _, err := os.Stat(sourceRoot + "/tools/archiver/ya.make"); err != nil {
+		t.Skipf("tools/archiver not present in source tree: %v", err)
+	}
+
+	g := Gen(DefaultLinuxConfig, sourceRoot, "tools/archiver")
+
+	var hostNodes, targetNodes int
+
+	for _, n := range g.Graph {
+		if n.HostPlatform {
+			hostNodes++
+		} else {
+			targetNodes++
+		}
+	}
+
+	if targetNodes < 1696 {
+		t.Errorf("target nodes = %d, want ≥ 1696 (PR-27 baseline)", targetNodes)
+	}
+
+	if hostNodes < 1582 {
+		t.Errorf("host nodes = %d, want ≥ 1582 (current emission floor; ref = 1797)", hostNodes)
+	}
+
+	// PR-28 D09: result is target-only — single archiver LD.
+	if len(g.Result) != 1 {
+		t.Errorf("len(Result) = %d, want 1 (host LDs reachable via deps but not result roots)", len(g.Result))
+	}
+}
+
+// TestGen_BuildCowOn_NoHostWalk pins the demand-driven invariant:
+// build/cow/on has no .rl6 / .S sources, so Gen against it MUST emit
+// exactly 2 target nodes and zero host nodes. A regression here means
+// the host walk fired unconditionally, which would also break M1's
+// byte-exact 2/2 comparator pairing.
+func TestGen_BuildCowOn_NoHostWalk(t *testing.T) {
+	if _, err := os.Stat(sourceRoot + "/build/cow/on/ya.make"); err != nil {
+		t.Skipf("reference ya.make not present at %s/build/cow/on/ya.make", sourceRoot)
+	}
+
+	g := Gen(DefaultLinuxConfig, sourceRoot, "build/cow/on")
+
+	if len(g.Graph) != 2 {
+		t.Fatalf("len(Graph) = %d, want 2 (host walk must NOT fire for build/cow/on)", len(g.Graph))
+	}
+
+	for _, n := range g.Graph {
+		if n.HostPlatform {
+			t.Errorf("unexpected host node %s emitted for build/cow/on", n.UID)
+		}
+	}
+}
+
+// TestGen_AllocatorMacro_ResolvesToPeer pins D12: ALLOCATOR(MIM) must
+// append `library/cpp/malloc/mimalloc` to the module's PEERDIR list so
+// the walker descends into it. Synthetic fixture with a trivial peer
+// stub.
+func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
+	root := t.TempDir()
+
+	// PROGRAM with ALLOCATOR(MIM) and explicit minimal peers; the
+	// implicit DEFAULT_PEERDIR machinery is gated off by NO_PLATFORM
+	// so the synthetic graph stays narrow.
+	progDir := filepath.Join(root, "prog")
+	Throw(os.MkdirAll(progDir, 0o755))
+	Throw(os.WriteFile(filepath.Join(progDir, "ya.make"),
+		[]byte("PROGRAM()\nNO_PLATFORM()\nALLOCATOR(MIM)\nSRCS(main.cpp)\nEND()\n"), 0o644))
+
+	mimDir := filepath.Join(root, "library/cpp/malloc/mimalloc")
+	Throw(os.MkdirAll(mimDir, 0o755))
+	Throw(os.WriteFile(filepath.Join(mimDir, "ya.make"),
+		[]byte("LIBRARY()\nNO_PLATFORM()\nSRCS(mim.cpp)\nEND()\n"), 0o644))
+
+	g := Gen(DefaultLinuxConfig, root, "prog")
+
+	var sawMimDir bool
+
+	for _, n := range g.Graph {
+		if n.TargetProperties["module_dir"] == "library/cpp/malloc/mimalloc" {
+			sawMimDir = true
+
+			break
+		}
+	}
+
+	if !sawMimDir {
+		t.Errorf("expected ALLOCATOR(MIM) to add library/cpp/malloc/mimalloc as peer; got Graph with no such module_dir")
+	}
+}
+
+// TestGen_HostWalk_AsmlibYasmWired pins D05: a host `.S` source in a
+// known yasm-using module must trigger a yasm host walk and wire the
+// resulting LD ref into the AS node's `ForeignDepRefs["tool"]`. Other
+// host AS sources (e.g. `chkstk_aarch64.S` in cxxsupp/builtins) get
+// nil and emit no foreign_deps — that's the M2 `asmlibYasmModules`
+// gate.
+func TestGen_HostWalk_AsmlibYasmWired(t *testing.T) {
+	root := t.TempDir()
+
+	// Synthetic asmlib host fixture with one .S source.
+	asmlibDir := filepath.Join(root, "contrib/libs/asmlib")
+	Throw(os.MkdirAll(asmlibDir, 0o755))
+	Throw(os.WriteFile(filepath.Join(asmlibDir, "ya.make"),
+		[]byte("LIBRARY()\nNO_PLATFORM()\nSRCS(memcmp64.S)\nEND()\n"), 0o644))
+
+	// Synthetic host yasm PROGRAM.
+	yasmDir := filepath.Join(root, "contrib/tools/yasm")
+	Throw(os.MkdirAll(yasmDir, 0o755))
+	Throw(os.WriteFile(filepath.Join(yasmDir, "ya.make"),
+		[]byte("PROGRAM()\nNO_PLATFORM()\nSRCS(yasm.c)\nEND()\n"), 0o644))
+
+	// Drive asmlib as a host instance directly so the .S dispatch
+	// fires under PIC=true. (The full demand-driven path would route
+	// through ragel6/bin → musl/full → asmlib; this synthetic test
+	// shortcuts to the AS+yasm wiring.)
+	cfg := DefaultLinuxConfig
+	ctx := &genCtx{
+		cfg:        cfg,
+		sourceRoot: root,
+		emit:       NewBufferedEmitter(),
+		memo:       make(map[ModuleInstance]*moduleEmitResult),
+		walking:    make(map[ModuleInstance]bool),
+	}
+
+	hostAsmlib := ModuleInstance{
+		Path:     "contrib/libs/asmlib",
+		Language: LangCPP,
+		Target:   cfg.Host.ID,
+		Flags:    inferFlagsFromPath("contrib/libs/asmlib", true),
+	}
+
+	genModule(ctx, hostAsmlib)
+
+	g := Finalize(ctx.emit.(*BufferedEmitter))
+
+	var asNode, yasmLD *Node
+
+	for _, n := range g.Graph {
+		switch n.KV["p"] {
+		case "AS":
+			asNode = n
+		case "LD":
+			if n.HostPlatform {
+				yasmLD = n
+			}
+		}
+	}
+
+	if asNode == nil {
+		t.Fatal("no AS node emitted")
+	}
+
+	if yasmLD == nil {
+		t.Fatal("no host yasm LD emitted")
+	}
+
+	tool, ok := asNode.ForeignDeps["tool"]
+	if !ok {
+		t.Fatalf("AS ForeignDeps[tool] missing; got %#v", asNode.ForeignDeps)
+	}
+
+	if len(tool) != 1 || tool[0] != yasmLD.UID {
+		t.Errorf("AS ForeignDeps[tool] = %v, want [%q]", tool, yasmLD.UID)
+	}
+}
+
+// TestGen_HostWalk_NonAsmlibAS_NoYasmDep pins the gate: a host `.S`
+// source NOT in `asmlibYasmModules` (e.g. cxxsupp/builtins shim) must
+// emit an AS node with NO foreign_deps. Reference confirms 58 of 83
+// host AS nodes have no foreign_deps.
+func TestGen_HostWalk_NonAsmlibAS_NoYasmDep(t *testing.T) {
+	root := t.TempDir()
+
+	// Fake module NOT in asmlibYasmModules.
+	modDir := filepath.Join(root, "myasm")
+	Throw(os.MkdirAll(modDir, 0o755))
+	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"),
+		[]byte("LIBRARY()\nNO_PLATFORM()\nSRCS(thing.S)\nEND()\n"), 0o644))
+
+	cfg := DefaultLinuxConfig
+	ctx := &genCtx{
+		cfg:        cfg,
+		sourceRoot: root,
+		emit:       NewBufferedEmitter(),
+		memo:       make(map[ModuleInstance]*moduleEmitResult),
+		walking:    make(map[ModuleInstance]bool),
+	}
+
+	hostInstance := ModuleInstance{
+		Path:     "myasm",
+		Language: LangCPP,
+		Target:   cfg.Host.ID,
+		Flags:    inferFlagsFromPath("myasm", true),
+	}
+
+	genModule(ctx, hostInstance)
+
+	g := Finalize(ctx.emit.(*BufferedEmitter))
+
+	var asNode *Node
+
+	for _, n := range g.Graph {
+		if n.KV["p"] == "AS" {
+			asNode = n
+
+			break
+		}
+	}
+
+	if asNode == nil {
+		t.Fatal("no AS node emitted")
+	}
+
+	if len(asNode.ForeignDeps) != 0 {
+		t.Errorf("AS ForeignDeps = %v, want empty (myasm not in asmlibYasmModules)", asNode.ForeignDeps)
+	}
+}
+
 // TestGen_DefaultPeerdirs_BuildCowOnUnaffected pins the M1 invariant
 // against the PR-26 default-peerdir machinery: build/cow/on declares
 // NO_LIBC + NO_RUNTIME + NO_UTIL (effective NO_PLATFORM per
@@ -1199,7 +1451,7 @@ func TestGen_DefaultPeerdirs_BuildCowOnUnaffected(t *testing.T) {
 		Flags:    inferFlagsFromPath(targetDir, false),
 	}
 
-	got := defaultPeerdirsFor(bcOn)
+	got := defaultPeerdirsFor(nil, bcOn)
 
 	if len(got) != 0 {
 		t.Errorf("defaultPeerdirsFor(build/cow/on) = %v, want []", got)
@@ -1255,7 +1507,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"util",
 	}
 
-	gotDefaults := defaultPeerdirsFor(plain)
+	gotDefaults := defaultPeerdirsFor(nil, plain)
 
 	if !stringSlicesEqual(gotDefaults, wantDefaults) {
 		t.Errorf("defaultPeerdirsFor(plain CPP) = %v, want %v", gotDefaults, wantDefaults)
@@ -1349,6 +1601,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			mi: ModuleInstance{
 				Path:     "x",
 				Language: LangCPP,
+				Target:   PlatformDefaultLinuxAArch64,
 				Flags:    FlagSet{NoLibc: true},
 			},
 			want: []string{
@@ -1365,6 +1618,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			mi: ModuleInstance{
 				Path:     "x",
 				Language: LangCPP,
+				Target:   PlatformDefaultLinuxAArch64,
 				Flags:    FlagSet{NoRuntime: true},
 			},
 			want: []string{"contrib/libs/musl", "library/cpp/malloc/api", "util"},
@@ -1416,7 +1670,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		// runtime root); it gets the full default set.
 		{
 			name: "musl_extra_not_runtime_ancestor",
-			mi:   ModuleInstance{Path: "contrib/libs/musl_extra", Language: LangCPP, Flags: FlagSet{}},
+			mi:   ModuleInstance{Path: "contrib/libs/musl_extra", Language: LangCPP, Target: PlatformDefaultLinuxAArch64, Flags: FlagSet{}},
 			want: fullSet,
 		},
 		{
@@ -1459,7 +1713,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := defaultPeerdirsFor(c.mi)
+			got := defaultPeerdirsFor(nil, c.mi)
 
 			if !stringSlicesEqual(got, c.want) {
 				t.Errorf("defaultPeerdirsFor(%+v) = %v, want %v", c.mi, got, c.want)
@@ -1534,4 +1788,157 @@ END()
 	if muslCount != 1 {
 		t.Errorf("expected exactly 1 musl AR in lib1's deps, got %d", muslCount)
 	}
+}
+
+// TestGen_SrcDirRebasesSourceResolution pins PR-28-D02 / D11: when a
+// module declares SRCDIR(other/dir), per-source CC nodes (including
+// those from JOIN_SRCS) must emit module_dir = "other/dir" and inputs
+// rooted at "$(SOURCE_ROOT)/other/dir/<src>". Without SRCDIR the
+// instance's own path must be used unchanged.
+func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
+	t.Run("with_srcdir", func(t *testing.T) {
+		root := t.TempDir()
+
+		modDir := filepath.Join(root, "mymod")
+		Throw(os.MkdirAll(modDir, 0o755))
+
+		// SRCDIR(other/dir) rebases source resolution; NO_PLATFORM
+		// suppresses implicit default peers so the graph stays narrow.
+		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCDIR(other/dir)\nSRCS(foo.cpp)\nEND()\n")
+		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+
+		g := Gen(TargetCfg, root, "mymod")
+
+		// Expect 1 CC + 1 AR (NO_PLATFORM, no defaults).
+		if len(g.Graph) != 2 {
+			t.Fatalf("expected 2 nodes (1 CC + 1 AR), got %d", len(g.Graph))
+		}
+
+		var ccNode *Node
+
+		for _, n := range g.Graph {
+			if n.KV["p"] == "CC" {
+				ccNode = n
+			}
+		}
+
+		if ccNode == nil {
+			t.Fatal("no CC node emitted")
+		}
+
+		if ccNode.TargetProperties["module_dir"] != "other/dir" {
+			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "other/dir")
+		}
+
+		wantInput := "$(SOURCE_ROOT)/other/dir/foo.cpp"
+
+		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0] != wantInput {
+			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
+		}
+	})
+
+	t.Run("without_srcdir_baseline", func(t *testing.T) {
+		root := t.TempDir()
+
+		modDir := filepath.Join(root, "basemod")
+		Throw(os.MkdirAll(modDir, 0o755))
+
+		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(bar.cpp)\nEND()\n")
+		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+
+		g := Gen(TargetCfg, root, "basemod")
+
+		if len(g.Graph) != 2 {
+			t.Fatalf("expected 2 nodes (1 CC + 1 AR), got %d", len(g.Graph))
+		}
+
+		var ccNode *Node
+
+		for _, n := range g.Graph {
+			if n.KV["p"] == "CC" {
+				ccNode = n
+			}
+		}
+
+		if ccNode == nil {
+			t.Fatal("no CC node emitted")
+		}
+
+		// Without SRCDIR, module_dir must be instance.Path.
+		if ccNode.TargetProperties["module_dir"] != "basemod" {
+			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "basemod")
+		}
+
+		wantInput := "$(SOURCE_ROOT)/basemod/bar.cpp"
+
+		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0] != wantInput {
+			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
+		}
+	})
+
+	t.Run("join_srcs_with_srcdir", func(t *testing.T) {
+		root := t.TempDir()
+
+		modDir := filepath.Join(root, "jsmod")
+		Throw(os.MkdirAll(modDir, 0o755))
+
+		// SRCDIR + JOIN_SRCS: the JS node and its downstream CC must
+		// both carry module_dir = "other/dir" and JS inputs must be
+		// rooted at $(SOURCE_ROOT)/other/dir/<src>.
+		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCDIR(other/dir)\nJOIN_SRCS(all.cpp s1.cpp s2.cpp)\nEND()\n")
+		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+
+		g := Gen(TargetCfg, root, "jsmod")
+
+		// 1 JS + 1 CC (joined) + 1 AR.
+		if len(g.Graph) != 3 {
+			t.Fatalf("expected 3 nodes (1 JS + 1 CC + 1 AR), got %d", len(g.Graph))
+		}
+
+		var jsNode, ccNode *Node
+
+		for _, n := range g.Graph {
+			switch n.KV["p"] {
+			case "JS":
+				jsNode = n
+			case "CC":
+				ccNode = n
+			}
+		}
+
+		if jsNode == nil {
+			t.Fatal("no JS node emitted")
+		}
+
+		if ccNode == nil {
+			t.Fatal("no CC node emitted")
+		}
+
+		// JS module_dir must reflect the rebased path.
+		if jsNode.TargetProperties["module_dir"] != "other/dir" {
+			t.Errorf("JS module_dir = %q, want %q", jsNode.TargetProperties["module_dir"], "other/dir")
+		}
+
+		// CC module_dir must match.
+		if ccNode.TargetProperties["module_dir"] != "other/dir" {
+			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "other/dir")
+		}
+
+		// JS inputs[2] (first source, after the two scripts) must be
+		// rooted at $(SOURCE_ROOT)/other/dir/s1.cpp.
+		wantInput := "$(SOURCE_ROOT)/other/dir/s1.cpp"
+		foundInput := false
+
+		for _, in := range jsNode.Inputs {
+			if in == wantInput {
+				foundInput = true
+
+				break
+			}
+		}
+
+		if !foundInput {
+			t.Errorf("JS inputs = %v, want to contain %q", jsNode.Inputs, wantInput)
+		}
+	})
 }

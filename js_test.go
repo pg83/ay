@@ -45,13 +45,15 @@ func TestEmitJS_UtilCharsetAllCharset_ByteExact(t *testing.T) {
 		t.Skip(skipReason)
 	}
 
+	// PR-28-D11: sources are bare module-relative names; EmitJS now
+	// prepends instance.Path to form $(SOURCE_ROOT)/<path>/<src>.
 	sources := []string{
-		"util/charset/generated/unidata.cpp",
-		"util/charset/recode_result.cpp",
-		"util/charset/unicode_table.cpp",
-		"util/charset/unidata.cpp",
-		"util/charset/utf8.cpp",
-		"util/charset/wide.cpp",
+		"generated/unidata.cpp",
+		"recode_result.cpp",
+		"unicode_table.cpp",
+		"unidata.cpp",
+		"utf8.cpp",
+		"wide.cpp",
 	}
 
 	e := NewBufferedEmitter()

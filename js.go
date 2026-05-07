@@ -19,6 +19,13 @@ package main
 // Output: $(BUILD_ROOT)/<instance.Path>/<allName>. allName already
 // carries the .cpp suffix in all known JOIN_SRCS call sites.
 //
+// Sources are bare module-relative names (e.g. "recode_result.cpp" or
+// "generated/unidata.cpp"). PR-28-D11: EmitJS composes them against
+// instance.Path so cmd_args carries "<instance.Path>/<src>" and
+// inputs carries "$(SOURCE_ROOT)/<instance.Path>/<src>". When the
+// caller threads a SRCDIR-rebased instance, the resulting paths
+// reflect the rebased directory.
+//
 // Inputs: sources in DECLARATION ORDER (R13 — NOT sorted). The
 // inputs list is: gen_join_srcs.py, process_command_files.py, then
 // the sources expanded to their $(SOURCE_ROOT)/... form.
@@ -35,7 +42,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, emit Emit
 	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + allName
 
 	// cmd_args: python3, script, output, --ya-start-command-file,
-	// <relative source paths...>, --ya-end-command-file.
+	// <instance.Path>/<src>..., --ya-end-command-file.
 	cmdArgs := make([]string, 0, 4+len(sources))
 	cmdArgs = append(cmdArgs,
 		python3Path,
@@ -43,7 +50,11 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, emit Emit
 		outputPath,
 		"--ya-start-command-file",
 	)
-	cmdArgs = append(cmdArgs, sources...)
+
+	for _, s := range sources {
+		cmdArgs = append(cmdArgs, instance.Path+"/"+s)
+	}
+
 	cmdArgs = append(cmdArgs, "--ya-end-command-file")
 
 	env := map[string]string{
@@ -51,12 +62,12 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, emit Emit
 	}
 
 	// inputs: scripts first, then source files expanded to
-	// $(SOURCE_ROOT)/...
+	// $(SOURCE_ROOT)/<instance.Path>/<src>.
 	inputs := make([]string, 0, 2+len(sources))
 	inputs = append(inputs, joinSrcsPath, procCmdFiles)
 
 	for _, s := range sources {
-		inputs = append(inputs, "$(SOURCE_ROOT)/"+s)
+		inputs = append(inputs, "$(SOURCE_ROOT)/"+instance.Path+"/"+s)
 	}
 
 	node := &Node{
