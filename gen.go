@@ -112,6 +112,16 @@ type moduleEmitResult struct {
 // `cyclesTolerated` counts back-edges suppressed by the headerOnly
 // stub path (D02). Accessible to tests that need to assert a known
 // cycle was hit exactly once.
+//
+// Host-tool walks fire eagerly from inside `emitOneSource`: a `.rl6`
+// source recurses into ragel6/bin, an `.S`/`.s` source in a yasm-using
+// host module recurses into yasm. The recursion happens at the trigger
+// site so the resulting host LD's NodeRef and output path are
+// available to wire into the per-source emitter (R6's cmd_args[0],
+// AS's foreign_deps.tool). `genModule`'s memo prevents re-walking the
+// same host instance twice. No post-walk drainer is needed — every
+// host PROGRAM the target closure depends on is reached through one
+// of the two source-extension dispatch sites.
 type genCtx struct {
 	cfg             PlatformConfig
 	sourceRoot      string
@@ -119,6 +129,16 @@ type genCtx struct {
 	memo            map[ModuleInstance]*moduleEmitResult
 	walking         map[ModuleInstance]bool
 	cyclesTolerated int
+}
+
+// asmlibYasmModules lists module paths whose host `.S`/`.s` sources
+// invoke yasm via `foreign_deps.tool`. Per F2/F4 of the PR-28 plan, the
+// reference graph wires yasm into the 25 host-asmlib AS nodes; no other
+// host AS source reaches yasm (`cxxsupp/builtins/chkstk_aarch64.S` and
+// libcxx/libcxxabi shims use clang's built-in assembler with no
+// foreign_deps). Future host modules that adopt yasm get appended here.
+var asmlibYasmModules = map[string]bool{
+	"contrib/libs/asmlib": true,
 }
 
 // whitelistedMetadataMacros is the whitelist of UnknownStmt names
@@ -172,6 +192,20 @@ var whitelistedMetadataMacros = map[string]struct{}{
 // (`genModule`) takes the ModuleInstance directly so future host-
 // tool recursion (PR-25) can fork the walker into a host instance
 // without changing this entry point.
+//
+// PR-28 model: host PROGRAM walks fire eagerly from the source-dispatch
+// sites in `emitOneSource`. When `genModule`'s per-source loop hits
+// `.rl6` (R6 generator) or a yasm-using `.S`/`.s`, it constructs the
+// host ModuleInstance via `WithHost(cfg)` and calls `genModule`
+// recursively right there — no separate post-walk drainer. The host
+// walk may itself trigger further host walks (ragel6/bin → musl/full →
+// asmlib's host AS → yasm), all reached through the same eager-recursion
+// rule. `genCtx.memo` deduplicates so each host PROGRAM is walked at
+// most once.
+//
+// Host LDs are emitted into the same Graph as the target walk but are
+// NOT added to the result roots (per F3 of the PR-28 plan: reference
+// graph's `result` is target-only).
 func Gen(cfg PlatformConfig, sourceRoot string, targetDir string) *Graph {
 	ctx := &genCtx{
 		cfg:        cfg,
@@ -267,9 +301,11 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 		case *LDFlagsStmt:
 			d.ldFlags = append(d.ldFlags, v.Flags...)
 		case *SrcDirStmt:
-			// SRCDIR shifts source resolution base (e.g. SRCDIR(../shared) SRCS(foo.cpp) → ../shared/foo.cpp).
-			// PR-25 collects but does NOT thread this into emitOneSource — tools/archiver closure
-			// has no SRCDIR usages so the gap is invisible today. PR-26 wires it through.
+			// SRCDIR shifts source resolution base. PR-28-D02 threads d.srcDir
+			// into emitOneSource so per-source CC/AS/R6 nodes rebase to <srcDir>;
+			// JOIN_SRCS / EmitJS gap was closed by PR-28-D11. LD/AR remain at
+			// instance.Path (semantic difference: the binary/archive lives where
+			// declared, even if its sources are elsewhere).
 			d.srcDir = v.Dir
 		case *GlobalSrcsStmt:
 			d.globalSrcs = append(d.globalSrcs, v.Sources...)
@@ -292,9 +328,11 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 // applyUnknownStmt routes an UnknownStmt by name. The five flag-
 // flipping macros (NO_LIBC / NO_UTIL / NO_RUNTIME / NO_PLATFORM /
 // NO_COMPILER_WARNINGS) override the inferFlagsFromPath heuristic.
-// Anything else must be in the metadata whitelist; an unknown name
-// throws so a new ya.make macro surfaces immediately rather than
-// being silently dropped (D27 discipline extended to UnknownStmts).
+// `ALLOCATOR(NAME)` is resolved to an implicit PEERDIR addition per
+// `build/ymake.core.conf:961-1035` (PR-28 / D12). Anything else must
+// be in the metadata whitelist; an unknown name throws so a new
+// ya.make macro surfaces immediately rather than being silently
+// dropped (D27 discipline extended to UnknownStmts).
 func applyUnknownStmt(v *UnknownStmt, d *moduleData) {
 	switch v.Name {
 	case "NO_LIBC":
@@ -311,11 +349,72 @@ func applyUnknownStmt(v *UnknownStmt, d *moduleData) {
 		d.cxxFlags = append(d.cxxFlags, v.Args...)
 	case "CONLYFLAGS":
 		d.cOnlyFlags = append(d.cOnlyFlags, v.Args...)
+	case "ALLOCATOR":
+		applyAllocatorStmt(v, d)
 	default:
 		if _, ok := whitelistedMetadataMacros[v.Name]; !ok {
 			ThrowFmt("gen: PR-25 does not yet support macro %q (extend whitelistedMetadataMacros or add a typed Stmt)", v.Name)
 		}
 	}
+}
+
+// allocatorPeers maps `ALLOCATOR(<name>)` arguments to the implicit
+// PEERDIR additions per `build/ymake.core.conf:961-1035`. Each name
+// resolves to zero or more peer paths appended to the module's
+// PEERDIR list. PR-28 ships the M2-relevant subset; entries with
+// resolved == nil intentionally add no peer (FAKE /
+// allocator-already-handled-elsewhere).
+//
+// ALLOCATOR(SYSTEM) unconditionally adds library/cpp/malloc/system per
+// build/ymake.core.conf:1038-1040 (`when ($ALLOCATOR == "SYSTEM")`).
+// The MUSL gate at lines 954-958 applies to the select($ALLOCATOR)
+// block, NOT to this when-clause.
+var allocatorPeers = map[string][]string{
+	"MIM":                       {"library/cpp/malloc/mimalloc"},
+	"MIM_SDC":                   {"library/cpp/malloc/mimalloc_sdc"},
+	"HU":                        {"library/cpp/malloc/hu"},
+	"PROFILED_HU":               {"library/cpp/malloc/profiled_hu"},
+	"THREAD_PROFILED_HU":        {"library/cpp/malloc/thread_profiled_hu"},
+	"TCMALLOC_256K":             {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc"},
+	"TCMALLOC_SMALL_BUT_SLOW":   {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/small_but_slow"},
+	"TCMALLOC_NUMA_256K":        {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/numa_256k"},
+	"TCMALLOC_NUMA_LARGE_PAGES": {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/numa_large_pages"},
+	"TCMALLOC":                  {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/default"},
+	"TCMALLOC_TC":               {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/no_percpu_cache"},
+	"GOOGLE":                    {"library/cpp/malloc/galloc"},
+	"J":                         {"library/cpp/malloc/jemalloc"},
+	"LF":                        {"library/cpp/lfalloc"},
+	"LF_YT":                     {"library/cpp/lfalloc/yt"},
+	"LF_DBG":                    {"library/cpp/lfalloc/dbg"},
+	"B":                         {"library/cpp/balloc"},
+	"BM":                        {"library/cpp/balloc_market"},
+	"C":                         {"library/cpp/malloc/calloc"},
+	"LOCKLESS":                  {"library/cpp/malloc/lockless"},
+	"YT":                        {"library/cpp/ytalloc/impl"},
+	// FAKE / DEFAULT add no peer; SYSTEM unconditionally peers
+	// library/cpp/malloc/system per ymake.core.conf:1038-1040.
+	"FAKE":    nil,
+	"SYSTEM":  {"library/cpp/malloc/system"},
+	"DEFAULT": nil,
+}
+
+// applyAllocatorStmt resolves `ALLOCATOR(<name>)` to a PEERDIR
+// addition per `build/ymake.core.conf:961-1035`. The macro takes
+// exactly one argument; multi-arg or unknown allocator names throw
+// loudly per D27 discipline.
+func applyAllocatorStmt(v *UnknownStmt, d *moduleData) {
+	if len(v.Args) != 1 {
+		ThrowFmt("gen: ALLOCATOR expects exactly 1 argument, got %d (line %d)", len(v.Args), v.Line)
+	}
+
+	name := v.Args[0]
+
+	peers, ok := allocatorPeers[name]
+	if !ok {
+		ThrowFmt("gen: unknown allocator %q (line %d); extend allocatorPeers in gen.go", name, v.Line)
+	}
+
+	d.peerdirs = append(d.peerdirs, peers...)
 }
 
 // buildIfEnv constructs the per-instance bound-variable environment
@@ -464,7 +563,12 @@ func isRuntimeAncestor(path string) bool {
 //
 // Returns empty for non-CPP languages — proto / go / py / java will
 // get their own helpers in M5+.
-func defaultPeerdirsFor(instance ModuleInstance) []string {
+//
+// `ctx` is consulted only for the target-axis discriminator on `util`
+// (PR-28-D08); a nil ctx falls back to the M2-canonical
+// `DefaultLinuxConfig.Target.ID` so unit tests that exercise the
+// helper directly do not have to thread a real context through.
+func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
 	if instance.Language != LangCPP {
 		return nil
 	}
@@ -530,7 +634,18 @@ func defaultPeerdirsFor(instance ModuleInstance) []string {
 		}
 	}
 
-	if !instance.Flags.NoUtil && !noPlatform {
+	// util is a target-only implicit peer per the reference graph (zero
+	// host nodes under util/). Suppressing here keeps the host walk from
+	// pulling util in. The proper upstream rule lives in
+	// build/ymake.core.conf's _BUILTIN_PEERDIR (USE_CXX/NO_UTIL gating);
+	// the target-axis check approximates it for M2.
+	targetPlatformID := DefaultLinuxConfig.Target.ID
+
+	if ctx != nil {
+		targetPlatformID = ctx.cfg.Target.ID
+	}
+
+	if !instance.Flags.NoUtil && !noPlatform && instance.Target == targetPlatformID {
 		if instance.Path != "util" && !strings.HasPrefix(instance.Path, "util/") {
 			peers = append(peers, "util")
 		}
@@ -692,7 +807,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// not exist in those trees. A missing EXPLICIT peer is still a
 	// hard error — the test author declared it, so its absence is a
 	// fixture bug, not an "implicit ymake plumbing" no-op.
-	defaults := defaultPeerdirsFor(instance)
+	defaults := defaultPeerdirsFor(ctx, instance)
 
 	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
 	allPeers := make([]string, 0, len(defaults)+len(d.peerdirs))
@@ -762,7 +877,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ccOutputs := make([]string, 0, len(d.srcs)+len(d.joinSrcs))
 
 	for _, src := range d.srcs {
-		ref, outPath, ok := emitOneSource(ctx, instance, src, d.addIncl)
+		ref, outPath, ok := emitOneSource(ctx, instance, d.srcDir, src, d.addIncl)
 
 		if !ok {
 			continue
@@ -773,15 +888,26 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	for _, js := range d.joinSrcs {
-		_, joinOut := EmitJS(instance, js.OutputName, js.Sources, ctx.emit)
+		// PR-28-D11: rebase onto SRCDIR, matching emitOneSource's
+		// pattern. srcInstance carries the rebased Path so EmitJS
+		// emits module_dir = <srcDir> (not instance.Path) and
+		// resolves sources under $(SOURCE_ROOT)/<srcDir>/. The
+		// downstream EmitCC must also use srcInstance so its
+		// module_dir is consistent.
+		srcInstance := instance
 
-		// EmitJS returns a $(BUILD_ROOT)/<modulePath>/<name>
-		// absolute path; convert to module-relative for the
-		// downstream EmitCC. The relative path is just `name`
-		// when modulePath is the immediate parent.
-		jsRel := strings.TrimPrefix(joinOut, "$(BUILD_ROOT)/"+instance.Path+"/")
+		if d.srcDir != "" {
+			srcInstance.Path = d.srcDir
+		}
 
-		ref, outPath := EmitCC(instance, jsRel, ctx.emit)
+		_, joinOut := EmitJS(srcInstance, js.OutputName, js.Sources, ctx.emit)
+
+		// EmitJS returns a $(BUILD_ROOT)/<srcInstance.Path>/<name>
+		// absolute path; convert to srcInstance-relative for the
+		// downstream EmitCC.
+		jsRel := strings.TrimPrefix(joinOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
+
+		ref, outPath := EmitCC(srcInstance, jsRel, ctx.emit)
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
 	}
@@ -792,7 +918,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	globalOutputs := make([]string, 0, len(d.globalSrcs))
 
 	for _, src := range d.globalSrcs {
-		ref, outPath, ok := emitOneSource(ctx, instance, src, d.addIncl)
+		ref, outPath, ok := emitOneSource(ctx, instance, d.srcDir, src, d.addIncl)
 
 		if !ok {
 			continue
@@ -803,15 +929,29 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	if d.moduleStmt.Name == "PROGRAM" {
+		// PR-28-D01: PROGRAM(name) declares the linker output basename
+		// directly. Most ya.makes elide the argument (PROGRAM() →
+		// binary inherits the directory's last component) but
+		// `contrib/tools/ragel6/bin/ya.make` declares
+		// `PROGRAM(ragel6)` so the binary is `bin/ragel6`, not
+		// `bin/bin`. Pass through to EmitLD; the emitter's empty-fallback
+		// matches the elided-argument case.
+		var binaryName string
+
+		if len(d.moduleStmt.Args) > 0 {
+			binaryName = d.moduleStmt.Args[0]
+		}
+
 		ldRef := EmitLD(
 			instance,
+			binaryName,
 			ccRefs, ccOutputs,
 			peerArchiveRefs, peerArchivePaths,
 			nil, nil,
 			peerGlobalRefs, peerGlobalPaths,
 			ctx.emit,
 		)
-		ldPath := LDOutputPath(instance)
+		ldPath := LDOutputPath(instance, binaryName)
 
 		result := &moduleEmitResult{
 			ARRef:     ldRef,
@@ -855,7 +995,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 // peer's `genModule` runs (its memo entry then makes the peer
 // available to other consumers in the closure).
 func walkPeersForSideEffects(ctx *genCtx, instance ModuleInstance, d *moduleData) {
-	defaults := defaultPeerdirsFor(instance)
+	defaults := defaultPeerdirsFor(ctx, instance)
 
 	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
 
@@ -925,13 +1065,34 @@ func isHeaderSource(srcRel string) bool {
 // new source kind surfaces during integration rather than being
 // silently dropped.
 //
+// `srcDir` is the module's `SRCDIR(...)` setting (empty when none).
+// Per PR-28-D02, when non-empty it relocates the per-source emitter's
+// view of the module: SRCS resolve to `$(SOURCE_ROOT)/<srcDir>/<rel>`
+// and the emitted node's `module_dir` becomes `<srcDir>` instead of
+// `instance.Path`. The LD/AR/Global archives that wrap these sources
+// remain at `instance.Path` (the walker called from genModule keeps
+// instance unchanged for those). For ragel6/bin: `instance.Path =
+// contrib/tools/ragel6/bin`, `srcDir = contrib/tools/ragel6` →
+// per-source CC nodes show `module_dir = contrib/tools/ragel6` and
+// inputs `$(SOURCE_ROOT)/contrib/tools/ragel6/<src>`, while the
+// containing LD lands at `bin/ragel6`.
+//
 // `_addIncl` is reserved for PR-26's per-module include threading;
 // PR-25 collects ADDINCL into moduleData but does not yet wire it
 // into EmitCC's cmd_args (the existing rule emitters carry the
 // hardcoded include bundles).
-func emitOneSource(ctx *genCtx, instance ModuleInstance, srcRel string, _addIncl []string) (NodeRef, string, bool) {
+func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, _addIncl []string) (NodeRef, string, bool) {
 	if isHeaderSource(srcRel) {
 		return NodeRef{}, "", false
+	}
+
+	// PR-28-D02: rebase per-source emission onto SRCDIR. The
+	// rebased instance is value-copied so the caller's instance
+	// (used for the parent AR/LD) is untouched.
+	srcInstance := instance
+
+	if srcDir != "" {
+		srcInstance.Path = srcDir
 	}
 
 	switch {
@@ -939,42 +1100,76 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcRel string, _addIncl
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
 		strings.HasSuffix(srcRel, ".cxx"):
-		ref, outPath := EmitCC(instance, srcRel, ctx.emit)
+		ref, outPath := EmitCC(srcInstance, srcRel, ctx.emit)
 
 		return ref, outPath, true
 	case strings.HasSuffix(srcRel, ".S"), strings.HasSuffix(srcRel, ".s"):
-		// PR-25 wires AS without a yasm host dep; the asmlib
-		// closure (the only consumer of yasm) is not in PR-25's
-		// synthetic test set. PR-26 will plumb yasmLD when it
-		// extends the walker into asmlib.
-		ref, outPath := EmitAS(instance, srcRel, nil, nil, ctx.emit)
+		// PR-28: when a host (`Flags.PIC`) `.S`/`.s` source belongs
+		// to a module known to use yasm (`asmlibYasmModules`), recurse
+		// into the host yasm PROGRAM and wire its LDRef into the AS
+		// node's `ForeignDepRefs["tool"]` (matches reference: 25
+		// host-asmlib AS nodes have foreign_deps.tool=yasm). Other
+		// `.S` sources (target-side AS, host chkstk, host
+		// libcxx/libcxxabi shims) pass nil — they assemble via
+		// clang's built-in assembler with no foreign_deps.
+		//
+		// asmlib host walk is wired but not reached in the M2 archiver
+		// closure because we peer contrib/libs/musl, not
+		// contrib/libs/musl/full (the upstream PEERDIR rule
+		// MUSL=yes && !MUSL_LITE → musl/full lives at
+		// build/ymake.core.conf:1238-1245 and is not modelled here).
+		// Closing the musl/full closure path is deferred to a follow-up
+		// PR. The trigger code here remains as forward-scaffolding so
+		// that PR will not need to re-derive the wiring; the existing
+		// synthetic test pins it.
+		var yasmRef *NodeRef
+
+		if instance.Flags.PIC && asmlibYasmModules[instance.Path] {
+			const yasmPath = "contrib/tools/yasm"
+
+			yasmInstance := instance.WithHost(ctx.cfg)
+			yasmInstance.Path = yasmPath
+			yasmInstance.Flags = inferFlagsFromPath(yasmPath, true)
+
+			yasmResult := genModule(ctx, yasmInstance)
+			ldRef := yasmResult.LDRef
+			yasmRef = &ldRef
+		}
+
+		ref, outPath := EmitAS(srcInstance, srcRel, nil, yasmRef, ctx.emit)
 
 		return ref, outPath, true
 	case strings.HasSuffix(srcRel, ".rl6"):
-		// Host-ragel6 recursion (D31). Construct the host instance
-		// of `contrib/tools/ragel6`, walk it to completion, and
-		// thread the resulting LD ref through EmitR6. Then EmitCC
-		// over the generated `.cpp`.
+		// Host-ragel6 recursion (D31, eager per PR-28). The recursion
+		// happens here so the resulting LD's outputs[0] can be
+		// threaded into EmitR6's cmd_args[0] (PR-28-D01 — internal
+		// consistency between R6 invocation path and our own host LD).
 		//
-		// PR-27 tolerance: ragel6's parent ya.make uses
-		// `INCLUDE(${ARCADIA_ROOT}/...)` which our parser does not
-		// yet expand (the variable substitution layer is M5+ work).
-		// When the recursion fails, emit EmitR6 with a zero
-		// ragel6LD ref — the .rl6 → .cpp generation still emits a
-		// node with the right module_dir / output path; only the
-		// generator-tool dep is wrong, which the comparator sees as
-		// L3 divergence on that one ragel-using module rather than
-		// blowing up the whole walk. Documented for PR-28's
-		// host-tool plumbing fix.
-		var ragelLDRef NodeRef
+		// `contrib/tools/ragel6/bin` is the real host-PROGRAM
+		// directory; the parent `contrib/tools/ragel6/ya.make` uses
+		// INCLUDE(${ARCADIA_ROOT}/...) which our parser does not yet
+		// expand (M5+ variable substitution work).
+		const ragelBinPath = "contrib/tools/ragel6/bin"
+
+		// Fallback ragel6 path: used when the host walk fails its
+		// parse. The literal matches the reference graph's invocation
+		// path, so a zero-host-LD codepath at least produces a
+		// meaningful argv even though the host LD node is missing.
+		const ragelFallbackPath = "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"
+
+		var (
+			ragelLDRef     NodeRef
+			ragelBinaryStr = ragelFallbackPath
+		)
 
 		ragelInstance := instance.WithHost(ctx.cfg)
-		ragelInstance.Path = "contrib/tools/ragel6"
+		ragelInstance.Path = ragelBinPath
 		ragelInstance.Flags = inferFlagsFromPath(ragelInstance.Path, true)
 
 		if exc := Try(func() {
 			ragelResult := genModule(ctx, ragelInstance)
 			ragelLDRef = ragelResult.LDRef
+			ragelBinaryStr = ragelResult.LDPath
 		}); exc != nil {
 			// Only swallow *ParseError — the documented gap when
 			// ragel6's ya.make contains INCLUDE(${ARCADIA_ROOT}/...)
@@ -988,25 +1183,26 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcRel string, _addIncl
 				panic(exc)
 			}
 
-			// Leave ragelLDRef zero-valued; document the host-tool
-			// gap rather than re-throwing. ProcessR6's NodeRef
-			// argument tolerates a zero ref (the resulting node
-			// just won't dep-link to a host ragel6).
+			// Leave ragelLDRef zero-valued and ragelBinaryStr at the
+			// reference-shaped fallback; document the host-tool gap
+			// rather than re-throwing. The R6 node will not dep-link
+			// to a host ragel6, but its cmd_args[0] still names a
+			// plausible binary path.
 		}
 
-		_, r6Out := EmitR6(instance, srcRel, ragelLDRef, ctx.emit)
-		// EmitR6's output is `$(BUILD_ROOT)/<modulePath>/_/<srcRel>.cpp`.
+		_, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, ctx.emit)
+		// EmitR6's output is `$(BUILD_ROOT)/<srcInstance.Path>/_/<srcRel>.cpp`.
 		// EmitCC needs a module-relative source path; strip the
-		// `$(BUILD_ROOT)/<modulePath>/` prefix to recover it.
+		// `$(BUILD_ROOT)/<srcInstance.Path>/` prefix to recover it.
 		//
-		// R6 emits its .cpp output into $(BUILD_ROOT)/<modulePath>/_/<srcRel>.cpp.
-		// EmitCC currently composes inputPath as $(SOURCE_ROOT)/<modulePath>/<srcRel>,
+		// R6 emits its .cpp output into $(BUILD_ROOT)/<srcInstance.Path>/_/<srcRel>.cpp.
+		// EmitCC currently composes inputPath as $(SOURCE_ROOT)/<srcInstance.Path>/<srcRel>,
 		// which produces a wrong inputPath for this generated source. Mirror of the
 		// JS gap documented earlier in this function (search for EmitJS). PR-26 lands
 		// EmitCCFromBuildRoot variant that takes the BUILD_ROOT path AND threads the
 		// generator NodeRef into DepRefs.
-		ccSrcRel := strings.TrimPrefix(r6Out, "$(BUILD_ROOT)/"+instance.Path+"/")
-		ccRef, ccOut := EmitCC(instance, ccSrcRel, ctx.emit)
+		ccSrcRel := strings.TrimPrefix(r6Out, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
+		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ctx.emit)
 
 		return ccRef, ccOut, true
 	}

@@ -1103,3 +1103,104 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 **Location:** yamake.go:512-513 (readToken digit dispatch), yamake.go:638-657 (readNumberOrWord), yamake.go:189-193 (ExprInt comment)
 **Description:** `IF (X < -1)` lexes `-1` as `tokWord("-1")` because `-` is in `isWordByte`; `parseAtom` then throws "unexpected word "-1" in IF condition". Not exercised by current closure.
 **Fix:** Document explicitly in the ExprInt comment at yamake.go:189-193 that integer literals are unsigned and negative integers are unsupported. Defer the lexer extension until a real closure ya.make needs it.
+
+---
+
+## PR-28
+
+### [PR-28-D01] R6 cmd_args invokes a ragel6 binary at a path that does not match our own host LD output
+**Status:** resolved
+**Severity:** major
+**Location:** r6.go:35; gen.go:1171,1177-1179; ld.go:119-120
+**Description:** EmitR6 hardcodes `$(BUILD_ROOT)/contrib/tools/ragel6/ragel6` but our host LD output is `$(BUILD_ROOT)/contrib/tools/ragel6/bin/bin` (D03 path correction moved instance to /bin; EmitLD derives binary name from lastPathComponent, not PROGRAM(name)). A real builder consuming this graph would invoke a non-existent binary.
+**Root cause:** Two compounding gaps. (a) D03 placed the host instance at /bin to dodge parent's INCLUDE; (b) EmitLD/EmitR6 don't honor PROGRAM(<name>) — binary name is path-derived.
+**Suggested fix:** Thread `ModuleStmt.Args[0]` (program name) into EmitLD's binaryName composition, and have EmitR6 derive the ragel6 invocation path from the consumed host LD output (e.g. accept the path alongside the ref, or compose from `<host LD's outputs[0]>`). Add regression test: R6 cmd_args[0] == host ragel6 LD outputs[0].
+
+### [PR-28-D02] Host ragel6 closure emits module_dir=contrib/tools/ragel6/bin instead of contrib/tools/ragel6 (10 nodes wrong)
+**Status:** resolved
+**Severity:** major
+**Location:** gen.go:1171,1177-1179; gen.go:386-389 (collectStmts SRCDIR collection); gen.go emitOneSource (SRCDIR consumption gap)
+**Description:** All 10 host ragel6 nodes (1 LD + 9 CC) emit module_dir=contrib/tools/ragel6/bin; reference uses contrib/tools/ragel6 because /bin/ya.make declares SRCDIR(contrib/tools/ragel6) which relocates SRCS to parent. Our walker collects srcDir into moduleData but never consumes it in emitOneSource. Comparator pairs by (module_dir, output) so the 10 nodes pair-fail.
+**Root cause:** SRCDIR collected at gen.go:386-389 with explicit comment marking it a documented PR-26 deferral. PR-28 walks /bin (which uses SRCDIR) so the gap surfaces.
+**Fix:** emitOneSource now takes `srcDir string` parameter; constructs `srcInstance` with rebased Path when srcDir != "". Plain SRCS (CC, AS, R6) rebase to <sourceRoot>/<srcDir>. JOIN_SRCS branch was missed in initial fix; closed by D11. LD/AR remain at instance.Path (semantic difference: binary lives where declared even if sources are elsewhere).
+
+### [PR-28-D03] drainHostToolWalks is dead code; requiredHostTools machinery never fires
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go:243,261-287,289-312; trigger sites at gen.go:1145,1173
+**Description:** Reviewer commented out the drainHostToolWalks call at gen.go:243 and got a SHA-256 byte-identical 18,778,347-byte graph. Both trigger sites eagerly call genModule(...) synchronously to obtain the host LDRef they need to wire DepRefs/ForeignDepRefs. By the time the post-target-walk drain runs, memo already has every requested host instance and pendingHostTools returns empty. The "demand-driven" two-phase backbone is purely scaffolding.
+**Root cause:** Plan implied two-phase model (record demand, post-walk drain). Executor wired both phases AND eager recursion (because trigger sites need LDRef value back inline). Once eager wiring landed, drain became unreachable.
+**Fix:** Removed drainHostToolWalks, requiredHostTools, hostToolPrograms, pendingHostTools and related plumbing. Eager-recursion model documented at genCtx and Gen() doc comments.
+
+### [PR-28-D04] DISABLE_INSTRUCTION_SETS=false binding is empirically dead with misleading comment
+**Status:** resolved
+**Severity:** minor
+**Location:** macros.go:303
+**Description:** Reviewer removed binding entirely and got SHA-256 byte-identical archiver.json. util/charset is the only consumer; on target axis ARCH_X86_64=false short-circuits the AND; on host axis util is gated off via PR-28's util-target-only gate. Comment "M2 default = enabled" implies binding fires under M2; it does not.
+**Root cause:** Speculative addition during host-walk bring-up; gate landed later and made it unreachable but binding stayed.
+**Fix:** Removed binding entirely. Throw-on-miss philosophy preserved; new vars surface via the unhandled-IF-throw signal.
+
+### [PR-28-D05] ALLOCATOR(SYSTEM) silently drops unconditional library/cpp/malloc/system PEERDIR; comment incorrectly claims MUSL gating
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go:476-478, 448-451
+**Description:** Upstream `build/ymake.core.conf` lines 1038-1040: `when ($ALLOCATOR == "SYSTEM") { PEERDIR+=library/cpp/malloc/system }` — outside the select($ALLOCATOR) block, NOT MUSL-gated. Our table maps `"SYSTEM": nil` and the comment claims SYSTEM is "MUSL-gated, never fires under M2". Misreading. No M2 closure types ALLOCATOR(SYSTEM) so currently inert; non-M2 closure using SYSTEM would silently lose the peer.
+**Fix:** `"SYSTEM": []string{"library/cpp/malloc/system"}` with comment citing ymake.core.conf:1038-1040 and clarifying that the MUSL gate at lines 954-958 applies to the select($ALLOCATOR) block, NOT to the SYSTEM when-clause.
+
+### [PR-28-D06] yasm host-PROGRAM walk and asmlib host AS+yasm wiring are end-to-end dead in M2 closure
+**Status:** resolved (deferred — wiring kept as forward-scaffolding for follow-up PR; closure path documented inline)
+**Severity:** minor
+**Location:** gen.go:1142-1154 (.S/asmlib trigger); gen_test.go:1280-1349 (TestGen_HostWalk_AsmlibYasmWired)
+**Description:** Reference has 27 host asmlib nodes (25 AS) and 8 host yasm nodes; we emit 0 of each. ragel6/bin host walk doesn't transitively reach asmlib because we peer `contrib/libs/musl` not `contrib/libs/musl/full` (the only path that pulls asmlib via ARCH_X86_64-gated PEERDIR at musl/full/ya.make:17-23). The `.S` yasm-trigger code is exercised only by synthetic test, never by M2 closure.
+**Root cause:** Our `defaultPeerdirsFor` doesn't implement upstream's `_BUILTIN_PEERDIR` rule "MUSL=yes && !MUSL_LITE → PEERDIR+=contrib/libs/musl/full" (ymake.core.conf:1238-1245).
+**Fix:** Comment added at .S yasm-trigger site documenting the deferred musl/full closure path. Synthetic test + wiring remain as forward-scaffolding for the follow-up PR. PR-28 Completed entry calls out the deferral.
+
+### [PR-28-D07] TestGen_ToolsArchiver_DualPlatform_HostAndTargetCounts host floor 1500 too loose (current 1582)
+**Status:** resolved
+**Severity:** minor
+**Location:** gen_test.go:1190-1206
+**Description:** Test asserts hostNodes >= 1500 against current 1582 (reference 1797). Future regression dropping ~80 host nodes (e.g. accidental libcxx-host pruning) would still pass.
+**Fix:** Floor tightened to `>= 1582` (current emission baseline). Future PR closing the 215-node gap will raise floor + update Completed entry.
+
+### [PR-28-D08] util gate uses Flags.PIC as host/target-axis discriminator; correct discriminator is instance.Target
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go:719
+**Description:** Predicate `!instance.Flags.PIC` repurposes a flag-level signal as platform-axis check. Works under M2 because WithHost flips PIC=true and target modules don't currently need PIC=true; breaks if a target shared library legitimately needs PIC. Correct predicate is `instance.Target == ctx.cfg.Target.ID`.
+**Fix:** Predicate changed to `instance.Target == targetPlatformID` with nil-safe fallback to `DefaultLinuxConfig.Target.ID` for unit tests; defaultPeerdirsFor signature now takes `*genCtx`. Comment rewritten positively per brief.
+
+### [PR-28-D09] Synthetic R6 test does not pin cmd_args[0] ↔ host LD outputs[0] consistency
+**Status:** resolved
+**Severity:** nit
+**Location:** gen_test.go:944-1033 (TestGen_HostToolRecursion_R6)
+**Description:** Test only checks counts and deps↔ldUID linkage; does not verify R6 cmd_args[0] equals host LD outputs[0]. Adding the assertion would have caught D01 immediately.
+**Fix:** Assertion added inside TestGen_HostToolRecursion_R6 pinning `r6Node.Cmds[0].CmdArgs[0] == ldNode.Outputs[0]`.
+
+### [PR-28-D10] PR-28 plan doc allegedly missing from worktree
+**Status:** resolved (not a defect — plan doc exists in main at docs/drafts/20260507-1131-pr28-dual-platform.md but worktree was branched from main BEFORE the planning subagent wrote it)
+**Severity:** nit
+**Location:** docs/drafts/20260507-1131-pr28-dual-platform.md (in main checkout)
+**Description:** Reviewer flagged plan doc as missing. Cause: orchestrator dispatched the PR-28 executor in worktree isolation immediately after the planner wrote the doc, but worktree creation snapshots main HEAD (which at the time did not include the plan doc commit). The plan doc exists in main; reviewer searched the worktree only.
+**Fix:** No code change. Process note: future plan docs should be committed to main before spawning a worktree-isolated executor that needs them as context, OR the executor brief should inline the plan doc text rather than reference its path.
+
+### [PR-28-D11] D02's SRCDIR threading misses JOIN_SRCS / EmitJS / downstream EmitCC and the LD itself
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go:888-899 (JOIN_SRCS path), gen.go:932-941 (LD/LDOutputPath), js.go:28-89
+**Description:** D02's docstring claims "module_dir + inputs reflect SRCDIR-relocated source root" but JS-derived nodes were NOT rebased: 7 ragel6 JS nodes + 7 downstream JS-derived CC nodes still carried `module_dir = contrib/tools/ragel6/bin`, and JS inputs were bare `$(SOURCE_ROOT)/cdcodegen.cpp` (preexisting EmitJS bug compounded).
+**Root cause:** EmitJS called with unmodified `instance` and bypassed emitOneSource. EmitJS itself prepended `$(SOURCE_ROOT)/` to bare source names without resolving against any module path.
+**Fix:** JOIN_SRCS branch now constructs `srcInstance` (with srcDir applied) and passes it to both EmitJS and the downstream EmitCC. EmitJS path composition fixed: cmd_args use `<instance.Path>/<src>`, inputs use `$(SOURCE_ROOT)/<instance.Path>/<src>`. js_test.go updated to use bare module-relative names (the correct convention matching real ya.make parser output). Lift: L1 88.47% → 88.66%, L2 86.46% → 86.89%.
+
+### [PR-28-D12] D02 acceptance criterion "regression test pins SRCDIR-rewritten module_dir AND inputs" not satisfied
+**Status:** resolved
+**Severity:** minor
+**Location:** gen_test.go (no test added in round 2)
+**Description:** Brief D02 acceptance criterion #9 demanded a regression test pinning the SRCDIR-rewritten module_dir AND inputs. None was added in the initial fix. Coverage (`TestGen_ToolsArchiver_DualPlatform_HostAndTargetCounts`) only checked node counts at the `>= 1582` floor.
+**Fix:** TestGen_SrcDirRebasesSourceResolution added with three subtests: SRCDIR with SRCS, no-SRCDIR baseline, SRCDIR with JOIN_SRCS. Each pins both module_dir and inputs.
+
+### [PR-28-D13] Stale comment in collectStmts contradicts D02
+**Status:** resolved
+**Severity:** nit
+**Location:** gen.go:303-307 (SrcDirStmt case)
+**Description:** Comment said `"PR-25 collects but does NOT thread this into emitOneSource — tools/archiver closure has no SRCDIR usages so the gap is invisible today. PR-26 wires it through."` Outdated: emitOneSource now threads srcDir, and ragel6/bin uses SRCDIR within tools/archiver closure.
+**Fix:** Comment replaced with current-state description: SRCDIR shifts source resolution; PR-28-D02 threads srcDir into emitOneSource; PR-28-D11 closed JOIN_SRCS gap; LD/AR remain at instance.Path (intentional — binary lives where declared even if sources are elsewhere).
