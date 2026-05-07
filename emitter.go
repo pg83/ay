@@ -34,23 +34,64 @@ type NodeRef struct {
 	id int64
 }
 
-// Emitter is the interface rules use to publish nodes and mark results.
+// Emitter is the interface rules use to publish nodes and mark
+// results.
+//
+// `OnReady` lands in PR-23 as part of the streaming-emitter contract
+// (D37). It returns a channel that closes when the referenced node's
+// dependencies are all resolved. `BufferedEmitter`'s implementation
+// is a no-op — every channel returned closes immediately at
+// `Finalize` time, because in the buffered model "all deps resolved"
+// is equivalent to "Finalize ran". `StreamingEmitter` (M3) closes
+// per-node as the topo wave reaches it. Locking the signature now
+// means rule emitters that need to await readiness (PR-26+ parallel
+// executor) can be written against `Emitter`, not the concrete
+// type.
+//
+// BufferedEmitter returns one shared channel that closes at Finalize for any
+// input ref. StreamingEmitter (M3) MUST close a per-ref channel as each node's
+// deps resolve — the shared-channel shortcut is buffered-only.
 type Emitter interface {
 	Emit(n *Node) NodeRef
 	Result(NodeRef)
+	OnReady(NodeRef) <-chan struct{}
 }
 
-// BufferedEmitter accumulates nodes and result refs in memory; Finalize
-// turns the buffer into a Graph.
+// BufferedEmitter accumulates nodes and result refs in memory;
+// Finalize turns the buffer into a Graph.
 type BufferedEmitter struct {
 	nodes     []*Node
 	results   []int64
 	finalized bool
+
+	// readyCh is shared across all OnReady calls — the buffered
+	// model treats every node as "ready" only after Finalize, so
+	// one channel that closes at Finalize covers every caller.
+	readyCh chan struct{}
 }
 
 // NewBufferedEmitter constructs an empty BufferedEmitter.
 func NewBufferedEmitter() *BufferedEmitter {
-	return &BufferedEmitter{}
+	return &BufferedEmitter{
+		readyCh: make(chan struct{}),
+	}
+}
+
+// OnReady returns a channel that closes when the node's dependencies
+// are all resolved. For BufferedEmitter that is at Finalize time —
+// every node "becomes ready" simultaneously when the Merkle pass
+// completes. The shared channel is closed by Finalize. Callers that
+// `<-` before Finalize will block; that is correct semantics — a
+// streaming caller would block on a streaming emitter too, just for
+// a shorter duration.
+//
+// Per the brief, the ref is validated only loosely; an out-of-range
+// ref will trip Finalize's checkRef when Finalize runs, not here.
+// Returning a never-closing channel for a bogus ref would be a
+// silent deadlock; the brief asks for "no-op" so we accept any ref
+// and return the shared channel.
+func (e *BufferedEmitter) OnReady(_ NodeRef) <-chan struct{} {
+	return e.readyCh
 }
 
 // Emit appends n to the buffer and returns a NodeRef whose id is the
@@ -390,6 +431,15 @@ func Finalize(e *BufferedEmitter) *Graph {
 	}
 
 	e.finalized = true
+
+	// Signal every OnReady waiter (D37). The channel is shared
+	// across all callers; closing it once releases everyone. If
+	// the channel was never created (zero-value emitter), skip
+	// the close — older callers that bypass NewBufferedEmitter
+	// won't be affected.
+	if e.readyCh != nil {
+		close(e.readyCh)
+	}
 
 	return out
 }

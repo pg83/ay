@@ -494,6 +494,40 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 	}
 }
 
+// TestEmitter_OnReady_BufferedNoOp verifies that BufferedEmitter's
+// OnReady channel does not close until Finalize runs (D37). Pre-
+// Finalize the channel must be open (a non-blocking <- must NOT
+// receive); post-Finalize every OnReady channel must be closed.
+func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
+	e := NewBufferedEmitter()
+	r := e.Emit(&Node{
+		Cmds: []Cmd{{CmdArgs: []string{"X"}, Env: map[string]string{}}},
+		Env:  map[string]string{}, Inputs: []string{},
+		KV: map[string]string{"name": "X"}, Outputs: []string{},
+		Requirements: map[string]interface{}{},
+		Tags:         []string{}, TargetProperties: map[string]string{},
+	})
+	e.Result(r)
+
+	ch := e.OnReady(r)
+
+	select {
+	case <-ch:
+		t.Fatalf("OnReady channel closed pre-Finalize (BufferedEmitter contract)")
+	default:
+		// Expected: channel is still open.
+	}
+
+	Finalize(e)
+
+	select {
+	case <-ch:
+		// Expected: closed.
+	default:
+		t.Fatalf("OnReady channel not closed post-Finalize")
+	}
+}
+
 func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
 	e := NewBufferedEmitter()
 	e.Emit(&Node{KV: map[string]string{"p": "TEST"}})

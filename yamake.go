@@ -56,12 +56,131 @@ type UnknownStmt struct {
 	Line int
 }
 
-func (*ModuleStmt) stmtMarker()  {}
-func (*PeerdirStmt) stmtMarker() {}
-func (*SrcsStmt) stmtMarker()    {}
-func (*SetStmt) stmtMarker()     {}
-func (*EndStmt) stmtMarker()     {}
-func (*UnknownStmt) stmtMarker() {}
+// IfStmt represents `IF (cond) ... ELSE ... ENDIF` (and ELSEIF as
+// nested IfStmt in the Else branch). The body slices are the parsed
+// Stmts of each branch in source order; an IF without ELSE has nil/
+// empty Else. PR-13 only parses the construct; PR-20 wires the
+// evaluator (`macros.go:EvalCond`) into Gen so unreachable branches
+// are dropped before rule emission.
+type IfStmt struct {
+	Cond Expr
+	Then []Stmt
+	Else []Stmt
+	Line int
+}
+
+// IncludeStmt is the type for an `INCLUDE(path)` directive. NOTE:
+// `Parse`/`ParseFile` NEVER emit this in the resulting `Stmts` slice —
+// includes are inline-expanded at parse time so downstream walkers see
+// a flat list of top-level Stmts. The type stays defined for symmetry
+// with the rest of the M2 ADT and so future PRs (e.g. PR-20 reporting
+// "where did this Stmt come from") can re-introduce a marker without
+// breaking the public type set. See `expandInclude` in this file for
+// the resolution rule (path is relative to the directory of the
+// currently-parsed file).
+type IncludeStmt struct {
+	Path string
+	Line int
+}
+
+// JoinSrcsStmt represents `JOIN_SRCS(name srcs...)`. OutputName is the
+// first arg; Sources keeps the remaining args in declaration order
+// (NOT sorted — JOIN_SRCS preserves source order in the generated
+// translation unit, which the reference graph relies on for byte-exact
+// cmd_args).
+type JoinSrcsStmt struct {
+	OutputName string
+	Sources    []string
+	Line       int
+}
+
+// AddInclStmt represents `ADDINCL([GLOBAL] paths...)`. Modifier is
+// either "GLOBAL" or "" (no modifier).
+type AddInclStmt struct {
+	Modifier string
+	Paths    []string
+	Line     int
+}
+
+// CFlagsStmt represents `CFLAGS([GLOBAL] flags...)`. Same modifier
+// shape as AddInclStmt.
+type CFlagsStmt struct {
+	Modifier string
+	Flags    []string
+	Line     int
+}
+
+// LDFlagsStmt represents `LDFLAGS(flags...)`. No modifier — LDFLAGS in
+// the upstream macro vocabulary is always "global to the linked
+// module" and never carries a per-arg GLOBAL-ness toggle.
+type LDFlagsStmt struct {
+	Flags []string
+	Line  int
+}
+
+// SrcDirStmt represents `SRCDIR(dir)` — single-arg.
+type SrcDirStmt struct {
+	Dir  string
+	Line int
+}
+
+// GlobalSrcsStmt represents `GLOBAL_SRCS(srcs...)`.
+type GlobalSrcsStmt struct {
+	Sources []string
+	Line    int
+}
+
+func (*ModuleStmt) stmtMarker()     {}
+func (*PeerdirStmt) stmtMarker()    {}
+func (*SrcsStmt) stmtMarker()       {}
+func (*SetStmt) stmtMarker()        {}
+func (*EndStmt) stmtMarker()        {}
+func (*UnknownStmt) stmtMarker()    {}
+func (*IfStmt) stmtMarker()         {}
+func (*IncludeStmt) stmtMarker()    {}
+func (*JoinSrcsStmt) stmtMarker()   {}
+func (*AddInclStmt) stmtMarker()    {}
+func (*CFlagsStmt) stmtMarker()     {}
+func (*LDFlagsStmt) stmtMarker()    {}
+func (*SrcDirStmt) stmtMarker()     {}
+func (*GlobalSrcsStmt) stmtMarker() {}
+
+// Expr is the sealed-interface marker for IF-predicate AST nodes. The
+// evaluator lives in `macros.go:EvalCond`. Keeping the ADT small (four
+// constructors: ident, NOT, AND, OR) is intentional — the ya.make IF
+// language we observe in the archiver-closure subset of the reference
+// graph never reaches for richer constructs, and a smaller ADT means
+// a smaller surface for round-tripping bugs.
+type Expr interface {
+	exprMarker()
+}
+
+// ExprIdent is a leaf identifier — typically a bound-var name like
+// `OS_LINUX` or `CLANG`. The evaluator throws on unknown idents
+// (D27) rather than silently defaulting to false.
+type ExprIdent struct {
+	Name string
+}
+
+// ExprNot is logical negation: `NOT X`.
+type ExprNot struct {
+	Of Expr
+}
+
+// ExprAnd is short-circuiting conjunction: `A AND B`.
+type ExprAnd struct {
+	Left, Right Expr
+}
+
+// ExprOr is short-circuiting disjunction: `A OR B`.
+type ExprOr struct {
+	Left, Right Expr
+}
+
+func (*ExprIdent) exprMarker() {}
+func (*ExprNot) exprMarker()   {}
+func (*ExprAnd) exprMarker()   {}
+func (*ExprOr) exprMarker()    {}
 
 // ParseError describes a syntactic problem with a ya.make file.
 type ParseError struct {
@@ -474,32 +593,111 @@ func Parse(name string, src []byte) (mf *MakeFile, err error) {
 }
 
 func parseInternal(name string, src []byte) *MakeFile {
-	p := &parser{lex: newLexer(name, src), name: name}
-	mf := &MakeFile{Path: name}
+	return parseInternalWithStack(name, src, nil)
+}
 
+func parseInternalWithStack(name string, src []byte, stack []string) *MakeFile {
+	p := &parser{lex: newLexer(name, src), name: name, includeStack: stack}
+	mf := &MakeFile{Path: name}
+	mf.Stmts, _ = p.parseStmts(termTopLevel)
+
+	return mf
+}
+
+// stmtTerminator names the boundary that ends a Stmt sequence. The
+// caller of `parseStmts` passes one of these to say "I want to read
+// Stmts until you hit X". `termTopLevel` is the file-level terminator
+// (only `tokEOF` ends the sequence). The `termIfBody*` set is used by
+// `parseIf` to stop at `ELSE`, `ELSEIF`, or `ENDIF`.
+type stmtTerminator int
+
+const (
+	termTopLevel stmtTerminator = iota
+	termIfBody
+)
+
+// parseStmts collects Stmts until it sees the terminator (EOF for
+// termTopLevel, or one of ELSE/ELSEIF/ENDIF for termIfBody). For
+// termIfBody it returns the terminator macro's name token via
+// `endTok` so `parseIf` can decide whether the next thing is an Else
+// branch, an ElseIf chain, or the ENDIF closer. INCLUDE is
+// transparently expanded inline (the IncludeStmt itself is dropped
+// from the result).
+func (p *parser) parseStmts(term stmtTerminator) (stmts []Stmt, endTok token) {
 	for {
 		tok := p.lex.next()
 
 		if tok.kind == tokEOF {
-			break
+			if term != termTopLevel {
+				p.lex.throwParse(tok.line, tok.col, "unexpected end of file inside IF block (missing ENDIF)")
+			}
+
+			return stmts, tok
 		}
 
-		// A macro name is either a tokIdent (e.g. PROGRAM, PEERDIR — the
-		// uppercase macros our buildStmt routes specially) or a tokWord
-		// whose textual form is identifier-shaped (e.g. "lowercase_macro",
-		// "Mixed_Case"). The latter case lets per-spec "everything else"
-		// macros parse as UnknownStmt rather than erroring out. A non-
-		// ident-shaped word (e.g. a stray path "a/b" at top level) is
-		// still a parse error.
 		if tok.kind != tokIdent && !(tok.kind == tokWord && isIdentShapedName(tok.val)) {
 			p.lex.throwParse(tok.line, tok.col, "expected macro name, got %s", describeToken(tok))
 		}
 
-		stmt := p.parseMacro(tok)
-		mf.Stmts = append(mf.Stmts, stmt)
+		// Inside an IF body, the keywords ELSE/ELSEIF/ENDIF are not
+		// macros — they are block boundaries. Detect them BEFORE we
+		// consume the `(...)` so parseIf can parse ELSEIF's condition
+		// arguments itself.
+		if term == termIfBody && (tok.val == "ELSE" || tok.val == "ELSEIF" || tok.val == "ENDIF") {
+			return stmts, tok
+		}
+
+		stmts = p.parseMacroInto(stmts, tok)
+	}
+}
+
+// parseMacroInto consumes `(args...)` for the macro whose name token
+// is `nameTok` and appends the resulting Stmts to `into`. Most macros
+// produce exactly one Stmt; INCLUDE expands inline (zero-or-more
+// Stmts from the included file) and IF reads its own block bodies via
+// parseStmts(termIfBody) so the caller's loop sees the IF as one Stmt.
+func (p *parser) parseMacroInto(into []Stmt, nameTok token) []Stmt {
+	switch nameTok.val {
+	case "IF":
+		return append(into, p.parseIf(nameTok))
+	case "INCLUDE":
+		return p.expandInclude(into, nameTok)
 	}
 
-	return mf
+	args := p.parseMacroArgs(nameTok)
+	stmt := p.buildStmt(nameTok, args)
+
+	return append(into, stmt)
+}
+
+// parseMacroArgs reads `( args... )`. The leading `(` and the trailing
+// `)` are both consumed; the returned slice contains the bare-string
+// args (idents, words, strings) in source order.
+func (p *parser) parseMacroArgs(nameTok token) []string {
+	lp := p.lex.next()
+
+	if lp.kind != tokLParen {
+		p.lex.throwParse(lp.line, lp.col, "expected '(' after macro name %q, got %s", nameTok.val, describeToken(lp))
+	}
+
+	var args []string
+
+	for {
+		tok := p.lex.next()
+
+		switch tok.kind {
+		case tokRParen:
+			return args
+		case tokEOF:
+			p.lex.throwParse(nameTok.line, nameTok.col, "unterminated macro call %q (missing ')')", nameTok.val)
+		case tokIdent, tokWord, tokString:
+			args = append(args, tok.val)
+		case tokLParen:
+			p.lex.throwParse(tok.line, tok.col, "unexpected '(' inside macro call %q", nameTok.val)
+		default:
+			p.lex.throwParse(tok.line, tok.col, "unexpected %s inside macro call %q", describeToken(tok), nameTok.val)
+		}
+	}
 }
 
 // isIdentShapedName reports whether s could plausibly be a macro
@@ -533,41 +731,14 @@ func isIdentShapedName(s string) bool {
 }
 
 type parser struct {
-	lex  *lexer
-	name string
-}
-
-// parseMacro is called with the macro-name token already consumed. It
-// expects a '(' next, then args (any number, including zero), then ')'.
-func (p *parser) parseMacro(nameTok token) Stmt {
-	lp := p.lex.next()
-
-	if lp.kind != tokLParen {
-		p.lex.throwParse(lp.line, lp.col, "expected '(' after macro name %q, got %s", nameTok.val, describeToken(lp))
-	}
-
-	var args []string
-
-	for {
-		tok := p.lex.next()
-
-		switch tok.kind {
-		case tokRParen:
-			return p.buildStmt(nameTok, args)
-		case tokEOF:
-			p.lex.throwParse(nameTok.line, nameTok.col, "unterminated macro call %q (missing ')')", nameTok.val)
-		case tokIdent, tokWord, tokString:
-			args = append(args, tok.val)
-		case tokLParen:
-			p.lex.throwParse(tok.line, tok.col, "unexpected '(' inside macro call %q", nameTok.val)
-		default:
-			p.lex.throwParse(tok.line, tok.col, "unexpected %s inside macro call %q", describeToken(tok), nameTok.val)
-		}
-	}
+	lex          *lexer
+	name         string
+	includeStack []string // absolute paths of files being parsed, outermost first; used for cycle detection
 }
 
 // buildStmt routes recognized macro names to typed Stmt; everything else
-// becomes UnknownStmt.
+// becomes UnknownStmt. IF/INCLUDE are handled out-of-band by
+// parseMacroInto and never reach this function.
 func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 	switch nameTok.val {
 	case "PROGRAM", "LIBRARY":
@@ -584,9 +755,359 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		return &SetStmt{Name: args[0], Value: args[1], Line: nameTok.line}
 	case "END":
 		return &EndStmt{Line: nameTok.line}
+	case "JOIN_SRCS":
+		if len(args) == 0 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "JOIN_SRCS expects at least one argument (the output name)")
+		}
+
+		// Defensive copy: the caller's args slice is reused across
+		// branches; a sub-slice into it would alias.
+		sources := append([]string(nil), args[1:]...)
+
+		return &JoinSrcsStmt{OutputName: args[0], Sources: sources, Line: nameTok.line}
+	case "ADDINCL":
+		mod, paths := splitGlobalModifier(args)
+
+		return &AddInclStmt{Modifier: mod, Paths: paths, Line: nameTok.line}
+	case "CFLAGS":
+		mod, flags := splitGlobalModifier(args)
+
+		return &CFlagsStmt{Modifier: mod, Flags: flags, Line: nameTok.line}
+	case "LDFLAGS":
+		return &LDFlagsStmt{Flags: append([]string(nil), args...), Line: nameTok.line}
+	case "SRCDIR":
+		if len(args) != 1 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "SRCDIR expects exactly 1 argument, got %d", len(args))
+		}
+
+		return &SrcDirStmt{Dir: args[0], Line: nameTok.line}
+	case "GLOBAL_SRCS":
+		return &GlobalSrcsStmt{Sources: append([]string(nil), args...), Line: nameTok.line}
 	default:
 		return &UnknownStmt{Name: nameTok.val, Args: args, Line: nameTok.line}
 	}
+}
+
+// splitGlobalModifier extracts a leading "GLOBAL" pseudo-arg from an
+// arg list (used by ADDINCL and CFLAGS). Returns ("GLOBAL", rest) when
+// the first arg is exactly "GLOBAL"; otherwise ("", args) — the
+// uppercase match is deliberate, mirroring the upstream macro syntax
+// where a lowercase "global" is a regular path token, not a modifier.
+func splitGlobalModifier(args []string) (string, []string) {
+	if len(args) > 0 && args[0] == "GLOBAL" {
+		return "GLOBAL", append([]string(nil), args[1:]...)
+	}
+
+	return "", append([]string(nil), args...)
+}
+
+// parseIf is invoked with the `IF` name token already consumed. It
+// reads the condition args inside `(...)`, parses them into an Expr,
+// then collects the THEN body until ELSE/ELSEIF/ENDIF, recursing into
+// nested IfStmts for ELSEIF and reading the ELSE body until ENDIF.
+//
+// The semantics of ELSEIF are exactly "an IF inside the parent's
+// Else", so the nested IfStmt holds the elseif's condition and body;
+// chained ELSEIFs become right-leaning nested IfStmts, just like the
+// `else if` chain in C.
+func (p *parser) parseIf(ifTok token) *IfStmt {
+	condToks := p.readCondTokens(ifTok)
+
+	if len(condToks) == 0 {
+		p.lex.throwParse(ifTok.line, ifTok.col, "IF requires a condition expression")
+	}
+
+	cond := parseCondExpr(p, ifTok, condToks)
+
+	thenBody, endTok := p.parseStmts(termIfBody)
+	node := &IfStmt{Cond: cond, Then: thenBody, Line: ifTok.line}
+
+	switch endTok.val {
+	case "ENDIF":
+		p.consumeEmptyMacroArgs(endTok)
+
+		return node
+	case "ELSE":
+		p.consumeEmptyMacroArgs(endTok)
+
+		elseBody, endIf := p.parseStmts(termIfBody)
+
+		if endIf.val != "ENDIF" {
+			p.lex.throwParse(endIf.line, endIf.col, "expected ENDIF after ELSE block, got %s", endIf.val)
+		}
+
+		p.consumeEmptyMacroArgs(endIf)
+		node.Else = elseBody
+
+		return node
+	case "ELSEIF":
+		// ELSEIF (cond) ... = an IF nested in the parent's Else.
+		// Recurse via parseIf — that handler reads the nested
+		// condition args, the nested THEN body, and any further
+		// ELSE/ELSEIF/ENDIF chain.
+		nested := p.parseIf(endTok)
+		node.Else = []Stmt{nested}
+
+		return node
+	}
+
+	// Unreachable: parseStmts(termIfBody) only returns one of the
+	// three terminator names above. A defensive throw makes the
+	// invariant explicit.
+	p.lex.throwParse(endTok.line, endTok.col, "internal: unexpected IF terminator %q", endTok.val)
+
+	return nil
+}
+
+// readCondTokens reads the IF's `(...)` args, allowing arbitrary
+// inner-paren grouping (the cond grammar supports it for precedence
+// override). Returns the token sequence WITHOUT the outer `(`/`)`
+// pair; inner parens are preserved as tokLParen/tokRParen so
+// parseCondExpr can use them.
+func (p *parser) readCondTokens(ifTok token) []token {
+	lp := p.lex.next()
+
+	if lp.kind != tokLParen {
+		p.lex.throwParse(lp.line, lp.col, "expected '(' after IF, got %s", describeToken(lp))
+	}
+
+	var (
+		out   []token
+		depth = 1
+	)
+
+	for {
+		tok := p.lex.next()
+
+		switch tok.kind {
+		case tokEOF:
+			p.lex.throwParse(ifTok.line, ifTok.col, "unterminated IF condition (missing ')')")
+		case tokLParen:
+			depth++
+			out = append(out, tok)
+		case tokRParen:
+			depth--
+
+			if depth == 0 {
+				return out
+			}
+
+			out = append(out, tok)
+		case tokIdent, tokWord, tokString:
+			out = append(out, tok)
+		}
+	}
+}
+
+// consumeEmptyMacroArgs reads `()` after one of the IF block keywords
+// (ELSE/ELSEIF/ENDIF). ELSE/ENDIF accept only the empty arg list;
+// ELSEIF's condition is parsed by `parseIf` recursively. The caller
+// passes the keyword token in for line/col error reporting.
+func (p *parser) consumeEmptyMacroArgs(kwTok token) {
+	args := p.parseMacroArgs(kwTok)
+
+	if len(args) != 0 {
+		p.lex.throwParse(kwTok.line, kwTok.col, "%s does not take arguments, got %d", kwTok.val, len(args))
+	}
+}
+
+// condParser is the cursor state for the IF-cond recursive-descent
+// parser below. It walks the token slice produced by readCondTokens.
+type condParser struct {
+	toks   []token
+	pos    int
+	parent *parser // for throwParse line/col reporting on the lexer
+	ifTok  token   // the IF keyword's token, used as fallback location
+}
+
+// parseCondExpr parses the IF's condition tokens into an Expr ADT.
+// Precedence (lowest → highest): OR, AND, NOT. Parentheses override
+// precedence. AND/OR are left-associative; NOT is right-associative.
+// Throws *ParseError on syntactic problems.
+func parseCondExpr(parent *parser, ifTok token, toks []token) Expr {
+	cp := &condParser{toks: toks, parent: parent, ifTok: ifTok}
+	expr := cp.parseOr()
+
+	if cp.pos != len(cp.toks) {
+		t := cp.toks[cp.pos]
+		parent.lex.throwParse(t.line, t.col, "unexpected %s in IF condition", describeToken(t))
+	}
+
+	return expr
+}
+
+func (c *condParser) peek() (token, bool) {
+	if c.pos >= len(c.toks) {
+		return token{}, false
+	}
+
+	return c.toks[c.pos], true
+}
+
+func (c *condParser) consume() token {
+	t := c.toks[c.pos]
+	c.pos++
+
+	return t
+}
+
+func (c *condParser) parseOr() Expr {
+	left := c.parseAnd()
+
+	for {
+		t, ok := c.peek()
+
+		if !ok || !(t.kind == tokIdent && t.val == "OR") {
+			return left
+		}
+
+		c.consume()
+		right := c.parseAnd()
+		left = &ExprOr{Left: left, Right: right}
+	}
+}
+
+func (c *condParser) parseAnd() Expr {
+	left := c.parseNot()
+
+	for {
+		t, ok := c.peek()
+
+		if !ok || !(t.kind == tokIdent && t.val == "AND") {
+			return left
+		}
+
+		c.consume()
+		right := c.parseNot()
+		left = &ExprAnd{Left: left, Right: right}
+	}
+}
+
+func (c *condParser) parseNot() Expr {
+	t, ok := c.peek()
+
+	if ok && t.kind == tokIdent && t.val == "NOT" {
+		c.consume()
+
+		return &ExprNot{Of: c.parseNot()}
+	}
+
+	return c.parseAtom()
+}
+
+func (c *condParser) parseAtom() Expr {
+	t, ok := c.peek()
+
+	if !ok {
+		c.parent.lex.throwParse(c.ifTok.line, c.ifTok.col, "unexpected end of IF condition")
+	}
+
+	if t.kind == tokLParen {
+		c.consume()
+		expr := c.parseOr()
+		closer, hasCloser := c.peek()
+
+		if !hasCloser || closer.kind != tokRParen {
+			c.parent.lex.throwParse(t.line, t.col, "missing ')' in IF condition")
+		}
+
+		c.consume()
+
+		return expr
+	}
+
+	if t.kind == tokIdent || (t.kind == tokWord && isIdentShapedName(t.val)) {
+		// AND/OR/NOT as bare atoms are an error — they're operators.
+		// A user typing `IF (AND)` should get a clear diagnostic, not
+		// silently bind an identifier called AND.
+		if t.val == "AND" || t.val == "OR" || t.val == "NOT" {
+			c.parent.lex.throwParse(t.line, t.col, "operator %q used as identifier in IF condition", t.val)
+		}
+
+		c.consume()
+
+		return &ExprIdent{Name: t.val}
+	}
+
+	c.parent.lex.throwParse(t.line, t.col, "unexpected %s in IF condition", describeToken(t))
+
+	return nil // unreachable
+}
+
+// expandInclude parses `INCLUDE(path)` and inlines the included
+// file's top-level Stmts into `into`. The IncludeStmt type stays
+// defined for symmetry with the rest of the M2 ADT, but
+// Parse/ParseFile NEVER emit it — downstream walkers see a flat list.
+//
+// Path resolution: relative to `filepath.Dir(p.name)`. When the
+// caller used `Parse(name, src)` with a non-path label (e.g.
+// `"test.input"`), `filepath.Dir` returns `.`, so an INCLUDE in such
+// a stream resolves against the process CWD. The include test path
+// uses `t.TempDir()` so this surfaces as a real file lookup, which
+// is the documented contract.
+//
+// Cycle detection: expandInclude maintains p.includeStack, a slice of
+// absolute paths forming the current include chain from the outermost
+// file to the immediately-enclosing one. Before recursing, it checks
+// whether the target path already appears in the stack; if so, it
+// throws a *ParseError pinned at the INCLUDE site with message
+// "INCLUDE cycle: <chain> -> <target>". The stack is propagated to
+// the child parser so cycles spanning more than one hop are also
+// caught.
+func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
+	args := p.parseMacroArgs(nameTok)
+
+	if len(args) != 1 {
+		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE expects exactly 1 argument (the path), got %d", len(args))
+	}
+
+	rel := args[0]
+	dir := filepath.Dir(p.name)
+	full := rel
+
+	if !filepath.IsAbs(rel) {
+		full = filepath.Join(dir, rel)
+	}
+
+	// Normalise to an absolute path for reliable cycle detection
+	// across symlinks and "." components.
+	absTarget, absErr := filepath.Abs(full)
+	if absErr != nil {
+		absTarget = full
+	}
+
+	// Build the full chain: the current parser's own file plus its
+	// inherited stack. p.name is the absolute path of the file being
+	// parsed right now (set by parseInternalWithStack); it is the last
+	// element of the chain leading into this INCLUDE site.
+	chain := append(p.includeStack, p.name)
+
+	// Check for a cycle: does absTarget already appear anywhere in chain?
+	for _, visited := range chain {
+		if visited == absTarget {
+			// Format the cycle chain for the error message.
+			chainStr := ""
+			for i, v := range chain {
+				if i > 0 {
+					chainStr += " -> "
+				}
+				chainStr += v
+			}
+			chainStr += " -> " + absTarget
+			p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE cycle: %s", chainStr)
+		}
+	}
+
+	data, ioErr := os.ReadFile(absTarget)
+	if ioErr != nil {
+		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE %q: %v", rel, ioErr)
+	}
+
+	// Recurse with the updated chain propagated into the child parser so
+	// transitive cycles (a→b→a) are also caught.
+	included := parseInternalWithStack(absTarget, data, chain)
+
+	return append(into, included.Stmts...)
 }
 
 func describeToken(t token) string {

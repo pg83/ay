@@ -2,69 +2,74 @@ package main
 
 // flags.go — CC compile flag bundles.
 //
-// The CC node for `build/cow/on/lib.c` in the reference graph
-// (`/home/pg/monorepo/yatool_orig/g.json`) has a 101-element `cmd_args`
-// list. Rather than dump the whole 101-element slice into one giant
-// literal, the flags are partitioned into named bundles that EmitCC
-// `append`-chains together. The grouping is the natural one observed in
-// the reference output:
+// Three flavours of CC bundle are pinned byte-exact:
 //
-//   prologue (clang+target+output)        — 7 args  (positionally [0-6])
-//   ccIncludes                            — 4 args  ([7-10])
-//   debugPrefixMapFlags                   — 3 args  ([11-13])
-//   xclangDebugCompilationDir             — 4 args  ([14-17])
-//   commonCFlags (-pipe, -g, -fno-common, -ffunction-sections, ...)
-//                                          — 14 args ([18-31])
-//   warningFlags (-Werror/-Wall/-Wextra and the three "tip-of-tree"
-//                 -Wno- workarounds that always travel with them)
-//                                          — 6 args  ([32-37])
-//   commonDefines (-DARCADIA_*, -D_THREAD_SAFE, -D_GNU_SOURCE, ...)
-//                                          — 11 args ([38-48])
-//   noLibcUndebugBlock (-UNDEBUG plus the 21-flag aarch64 / cxx warning
-//                       suppression set that appears twice — once before
-//                       and once after -DCATBOOST_OPENSOURCE=yes)
-//                                          — 22 args ([49-70] and [72-93])
-//   catboostOpenSourceDefine               — 1 arg   ([71])
-//   builtinMacroDateTime (-Wno-builtin-macro-redefined plus the pinned
-//                         __DATE__/__TIME__ that make builds bit-identical
-//                         across days)     — 3 args  ([94-96])
-//   macroPrefixMapFlags                    — 3 args  ([97-99])
+//   - `build/cow/on` TARGET (M1 leaf, PR-08): 101-element cmd_args
+//     against `default-linux-aarch64`.
+//   - `build/cow/on` HOST (PR-23): 105-element cmd_args against
+//     `default-linux-x86_64` (PIC build, `lib.c.pic.o`).
+//   - `contrib/libs/musl/...` (M2 wave 2, PR-14): 111-element
+//     cmd_args. Chosen by EmitCC when the instance's path is
+//     `contrib/libs/musl[/...]`.
 //
-// Plus the input source path appended last (1 arg, [100]) — composed in
+// Rather than dump each bundle as one giant literal, the flags are
+// partitioned into named bundles that EmitCC `append`-chains
+// together. The grouping is the natural one observed in the
+// reference output:
+//
+//   prologue (clang+target+output)        — varies by flavor
+//   ccIncludes / muslCcIncludes           — 4 / 10 args
+//   debugPrefixMapFlags                   — 3 args
+//   xclangDebugCompilationDir             — 4 args
+//   commonCFlags / hostCFlags             — 14 / 11 args (host drops -g/-fno-stack-protector...)
+//   warningFlags / muslWarningFlags       — 6 / 1 arg
+//   commonDefines / hostDefines           — 11 / 13 args (host adds two cpu/feature)
+//   noLibcUndebugBlock                    — 22 args (target uses, host substitutes
+//                                                    its own ndebugPicBlock)
+//   ndebugPicBlock                        — 22 args (host counterpart of
+//                                                    noLibcUndebugBlock)
+//   catboostOpenSourceDefine              — 1 arg
+//   builtinMacroDateTime                  — 3 args
+//   macroPrefixMapFlags                   — 3 args
+//
+// Plus the input source path appended last (1 arg) — composed in
 // EmitCC, not here.
 //
-// Why the duplicated noLibcUndebugBlock? The reference graph repeats the
-// `-UNDEBUG` + `-mno-outline-atomics` + 20× `-Wno-*` bundle on either side
-// of `-DCATBOOST_OPENSOURCE=yes`. That is what ymake itself emits — the
-// duplication is part of the byte-exact target. Reproducing it via two
-// references to the same slice (instead of inlining the 22 strings twice)
-// keeps the source readable and the intent explicit: this is one bundle,
-// applied twice, by deliberate ymake design.
+// Why the duplicated `noLibcUndebugBlock`/`ndebugPicBlock`? The
+// reference graph repeats the suppression bundle on either side of
+// `-DCATBOOST_OPENSOURCE=yes` and (for host) inserts an
+// SSE/feature-flag bundle between them. That is what ymake itself
+// emits; reproducing the duplication via two references to the
+// same slice keeps the source readable and the intent explicit.
 //
-// $(BUILD_ROOT) / $(SOURCE_ROOT) / $(TOOL_ROOT) are LITERAL strings — the
-// build system substitutes them at execution time. They are not Go
-// template variables; do not interpolate them at emit time.
+// $(BUILD_ROOT) / $(SOURCE_ROOT) / $(TOOL_ROOT) are LITERAL strings —
+// the build system substitutes them at execution time. They are not
+// Go template variables; do not interpolate them at emit time.
 
 // ccCompilerPath is the absolute path to clang as it appears in the
-// reference graph. M5's toolchain refactor will lift this onto
-// PlatformConfig; for M1 it is hardcoded.
+// reference graph. Identical for target and host builds in the
+// reference graph; M5 will lift this onto PlatformConfig.
 const ccCompilerPath = "/ix/realm/boot/bin/clang"
 
 // targetTriple is the --target= argument for the M1 aarch64 platform.
 const targetTriple = "aarch64-linux-gnu"
 
+// hostTriple is the --target= argument for the host x86_64 platform.
+const hostTriple = "x86_64-linux-gnu"
+
 // archFlag is the -march= argument for the M1 aarch64 platform.
 const archFlag = "armv8-a"
 
-// binPath is the value of -B (assembler/linker driver search path) used
-// in the reference graph.
+// binPath is the value of -B (assembler/linker driver search path)
+// used in the reference graph (identical for target and host).
 const binPath = "/usr/bin"
 
-// ccIncludes are the -I include directories applied to every CC
-// compilation in the reference graph for the build/cow/on module.
+// ccIncludes are the -I include directories applied to every
+// non-musl CC compilation in the reference graph.
 //
-// $(BUILD_ROOT) and $(SOURCE_ROOT) are literal placeholders the build
-// system substitutes at execution time; they are not Go variables.
+// $(BUILD_ROOT) and $(SOURCE_ROOT) are literal placeholders the
+// build system substitutes at execution time; they are not Go
+// variables.
 var ccIncludes = []string{
 	"-I$(BUILD_ROOT)",
 	"-I$(SOURCE_ROOT)",
@@ -72,18 +77,18 @@ var ccIncludes = []string{
 	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers/_nf",
 }
 
-// debugPrefixMapFlags rewrite source paths in DWARF info so the debug
-// output is reproducible across build hosts (the on-disk source/build
-// roots vary between machines but `/-S`, `/-B`, `/-T` do not).
+// debugPrefixMapFlags rewrite source paths in DWARF info so the
+// debug output is reproducible across build hosts. Identical for
+// target and host.
 var debugPrefixMapFlags = []string{
 	"-fdebug-prefix-map=$(BUILD_ROOT)=/-B",
 	"-fdebug-prefix-map=$(SOURCE_ROOT)=/-S",
 	"-fdebug-prefix-map=$(TOOL_ROOT)=/-T",
 }
 
-// xclangDebugCompilationDir pins the DW_AT_comp_dir DWARF attribute to
-// `/tmp` so the same source compiled in different working directories
-// yields bit-identical .o files.
+// xclangDebugCompilationDir pins the DW_AT_comp_dir DWARF attribute
+// to /tmp so the same source compiled in different working
+// directories yields bit-identical .o files. Identical target/host.
 var xclangDebugCompilationDir = []string{
 	"-Xclang",
 	"-fdebug-compilation-dir",
@@ -91,9 +96,9 @@ var xclangDebugCompilationDir = []string{
 	"/tmp",
 }
 
-// commonCFlags are the architecture-agnostic compile flags applied to
-// every CC compilation: pipe, debug, codegen, exception model, color
-// diagnostics, stack protection.
+// commonCFlags are the architecture-agnostic compile flags applied
+// to every TARGET CC compilation: pipe, debug, codegen, exception
+// model, color diagnostics, stack protection.
 var commonCFlags = []string{
 	"-pipe",
 	"-g",
@@ -111,10 +116,37 @@ var commonCFlags = []string{
 	"-fstack-protector",
 }
 
+// hostCFlags is the host-build counterpart of commonCFlags. Differs
+// from the target bundle in five places (verified against
+// `build/cow/on/lib.c.pic.o` cmd_args[17..27]):
+//
+//   - `-pipe` retained
+//   - `-m64` REPLACES `-g`/`-fdebug-default-version=4`/`-ggnu-pubnames`
+//     (host build is release, no DWARF tuning)
+//   - `-O3` injected (host is release)
+//   - `-fsigned-char`/`-fstack-protector` dropped (no need on host)
+//   - everything else preserved
+//
+// Total 11 args.
+var hostCFlags = []string{
+	"-pipe",
+	"-m64",
+	"-O3",
+	"-fno-common",
+	"-ffunction-sections",
+	"-fdata-sections",
+	"-fsized-deallocation",
+	"-fexceptions",
+	"-fuse-init-array",
+	"-fcolor-diagnostics",
+	"-faligned-allocation",
+}
+
 // warningFlags is `-Werror/-Wall/-Wextra` plus the three baseline
 // `-Wno-*` suppressions that always accompany them in the reference
 // graph (without these clang refuses to compile parts of the tree
-// because of new diagnostics promoted in recent versions).
+// because of new diagnostics promoted in recent versions). Used for
+// target AND host.
 var warningFlags = []string{
 	"-Werror",
 	"-Wall",
@@ -124,9 +156,8 @@ var warningFlags = []string{
 	"-Wno-unknown-warning-option",
 }
 
-// commonDefines is the baseline `-D` set the reference graph applies to
-// every CC compilation: ARCADIA roots, _GNU_SOURCE / _LARGEFILE_SOURCE
-// glibc-feature gates, and the C99 stdint format-macro toggles.
+// commonDefines is the baseline `-D` set the reference graph applies
+// to every TARGET CC compilation. 11 args.
 var commonDefines = []string{
 	"-DARCADIA_ROOT=$(SOURCE_ROOT)",
 	"-DARCADIA_BUILD_ROOT=$(BUILD_ROOT)",
@@ -141,26 +172,47 @@ var commonDefines = []string{
 	"-D__LONG_LONG_SUPPORTED",
 }
 
-// noLibcUndebugBlock is the bundle that travels with the no-libc /
-// no-runtime / no-util module flavor used by `build/cow/on` (LIBRARY()
-// with NO_UTIL/NO_LIBC/NO_RUNTIME). It contains:
-//
-//   - `-UNDEBUG`: ensure assert() is live regardless of NDEBUG state.
-//   - `-mno-outline-atomics`: aarch64 codegen knob.
-//   - 20× `-Wno-*`: the long tail of warnings clang has added that the
-//     tree predates and must not break on.
-//
-// The reference graph emits this bundle TWICE — once before and once
-// after `-DCATBOOST_OPENSOURCE=yes` — by ymake design (each "module
-// macro" appends its own flag set, and several modules attach the same
-// suppression set). EmitCC composes it twice to match.
-//
-// TODO(future-PR): once a non-NO_LIBC leaf module exists, this bundle
-// becomes conditional. For M1 the only target is build/cow/on, which
-// always wants the no-libc set, so EmitCC applies it unconditionally.
-var noLibcUndebugBlock = []string{
-	"-UNDEBUG",
-	"-mno-outline-atomics",
+// hostDefines is the host counterpart of commonDefines. The
+// reference graph for `build/cow/on/lib.c.pic.o` adds
+// `-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE` (host-only
+// libunwind shim) AFTER `-D_GNU_SOURCE` and BEFORE
+// `-D__LONG_LONG_SUPPORTED`. Otherwise identical to commonDefines.
+// 12 args.
+var hostDefines = []string{
+	"-DARCADIA_ROOT=$(SOURCE_ROOT)",
+	"-DARCADIA_BUILD_ROOT=$(BUILD_ROOT)",
+	"-D_THREAD_SAFE",
+	"-D_PTHREADS",
+	"-D_REENTRANT",
+	"-D_LARGEFILE_SOURCE",
+	"-D__STDC_CONSTANT_MACROS",
+	"-D__STDC_FORMAT_MACROS",
+	"-D_FILE_OFFSET_BITS=64",
+	"-D_GNU_SOURCE",
+	"-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE",
+	"-D__LONG_LONG_SUPPORTED",
+}
+
+// hostSseFeatures is the SSE/CPU-feature bundle the reference graph
+// inserts between the two halves of the host PIC build's
+// `noLibcUndebugBlock`-equivalent. 7 args, observed at cmd_args
+// positions [71..77] of `build/cow/on/lib.c.pic.o`.
+var hostSseFeatures = []string{
+	"-msse2",
+	"-msse3",
+	"-mssse3",
+	"-msse4.1",
+	"-msse4.2",
+	"-mpopcnt",
+	"-mcx16",
+}
+
+// noLibcWarningSuppressions is the long tail of -Wno-* flags that
+// travels with the no-libc / no-runtime / no-util module flavour.
+// Shared between target's `noLibcUndebugBlock` and host's
+// `ndebugPicBlock` — both wrap the same warning suppressions in
+// different `-UNDEBUG`/`-DNDEBUG -fPIC` prologues.
+var noLibcWarningSuppressions = []string{
 	"-Wno-array-parameter",
 	"-Wno-deprecate-lax-vec-conv-all",
 	"-Wno-unqualified-std-cast-call",
@@ -183,15 +235,43 @@ var noLibcUndebugBlock = []string{
 	"-Wno-strict-primary-template-shadow",
 }
 
-// catboostOpenSourceDefine is the single sentinel flag that sits between
-// the two copies of noLibcUndebugBlock in the reference output.
+// noLibcUndebugBlock is the TARGET-build counterpart used by build/cow/on,
+// musl, and similar no-libc modules. Begins with `-UNDEBUG -mno-outline-atomics`,
+// then the 20 -Wno-* flags. 22 entries total. Emitted twice in the
+// reference cmd_args (once before, once after `-DCATBOOST_OPENSOURCE=yes`).
+var noLibcUndebugBlock = func() []string {
+	out := make([]string, 0, 2+len(noLibcWarningSuppressions))
+	out = append(out, "-UNDEBUG", "-mno-outline-atomics")
+	out = append(out, noLibcWarningSuppressions...)
+
+	return out
+}()
+
+// ndebugPicBlock is the HOST-build counterpart of noLibcUndebugBlock.
+// Replaces `-UNDEBUG -mno-outline-atomics` with `-DNDEBUG -fPIC` (host
+// is release + position-independent), keeping the same 20-flag
+// suppression tail. 22 entries total. Emitted twice in the host
+// reference cmd_args, with `hostSseFeatures` between the two copies
+// instead of just `catboostOpenSourceDefine`.
+var ndebugPicBlock = func() []string {
+	out := make([]string, 0, 2+len(noLibcWarningSuppressions))
+	out = append(out, "-DNDEBUG", "-fPIC")
+	out = append(out, noLibcWarningSuppressions...)
+
+	return out
+}()
+
+// catboostOpenSourceDefine is the single sentinel flag that sits
+// between the two copies of noLibcUndebugBlock (target) or, for host,
+// before the `hostSseFeatures` block.
 var catboostOpenSourceDefine = []string{
 	"-DCATBOOST_OPENSOURCE=yes",
 }
 
-// builtinMacroDateTime suppresses the "redefined" warning and pins the
-// preprocessor `__DATE__`/`__TIME__` macros to a fixed value so the
-// resulting .o is reproducible regardless of when it was compiled.
+// builtinMacroDateTime suppresses the "redefined" warning and pins
+// the preprocessor `__DATE__`/`__TIME__` macros to a fixed value so
+// the resulting .o is reproducible regardless of when it was
+// compiled. Identical target/host.
 var builtinMacroDateTime = []string{
 	"-Wno-builtin-macro-redefined",
 	`-D__DATE__="Jan 10 2019"`,
@@ -199,12 +279,67 @@ var builtinMacroDateTime = []string{
 }
 
 // macroPrefixMapFlags rewrite the `__FILE__` macro the same way
-// debugPrefixMapFlags rewrite DWARF source paths: so the preprocessor
-// expansion of `__FILE__` is identical across build hosts. Note the
-// trailing `/=` (collapsing the prefix to empty), which differs from
-// the `/-S`/`/-B`/`/-T` shape of debugPrefixMapFlags.
+// debugPrefixMapFlags rewrite DWARF source paths. Identical
+// target/host.
 var macroPrefixMapFlags = []string{
 	"-fmacro-prefix-map=$(BUILD_ROOT)/=",
 	"-fmacro-prefix-map=$(SOURCE_ROOT)/=",
 	"-fmacro-prefix-map=$(TOOL_ROOT)/=",
+}
+
+// muslCcIncludes is the include set for `contrib/libs/musl` CC
+// nodes. Differs from `ccIncludes` by inserting eight musl-specific
+// `-I` paths between `$(SOURCE_ROOT)` and the linux-headers pair.
+// Order matches the reference graph exactly — musl's own headers
+// must shadow the global linux-headers in resolution.
+var muslCcIncludes = []string{
+	"-I$(BUILD_ROOT)",
+	"-I$(SOURCE_ROOT)",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/aarch64",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/generic",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/src/include",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/src/internal",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/include",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/extra",
+	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers",
+	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers/_nf",
+}
+
+// muslWarningFlags is the single-flag warning bundle the reference
+// graph applies to musl CC nodes in place of the 6-arg
+// `-Werror`/`-Wall`/`-Wextra` + 3× `-Wno-*` set used elsewhere.
+// musl silences everything because it's a vendored upstream codebase
+// the tree refuses to patch into clang's diagnostic style.
+var muslWarningFlags = []string{
+	"-Wno-everything",
+}
+
+// muslExtraDefines is the 9-arg block the reference graph injects
+// between `commonDefines` and the no-libc bundle for musl CC nodes.
+// Each flag captures a musl-specific compile-time invariant:
+//
+//   - `-D_XOPEN_SOURCE=700` enables POSIX.1-2008 (XSI) feature gates.
+//   - `-U_GNU_SOURCE` undoes the global `-D_GNU_SOURCE` from
+//     `commonDefines`; musl ships its own GNU compatibility shim and
+//     refuses the glibc-style flag.
+//   - `-nostdinc` / `-ffreestanding` strip the host toolchain's
+//     `<stdlib.h>` family so musl's own headers (added via
+//     `muslCcIncludes`) win unambiguously.
+//   - `-fno-stack-protector` is required because musl's startup code
+//     runs before the stack canary is initialised.
+//   - `-D__libc_calloc=calloc` / `-D__libc_malloc=malloc` /
+//     `-D__libc_free=free` are macro renamings that route musl's
+//     internal allocator references to the public symbols.
+//   - `-D_musl_=1` is the project-wide sentinel that conditional
+//     code uses to detect a musl build.
+var muslExtraDefines = []string{
+	"-D_XOPEN_SOURCE=700",
+	"-U_GNU_SOURCE",
+	"-nostdinc",
+	"-ffreestanding",
+	"-fno-stack-protector",
+	"-D__libc_calloc=calloc",
+	"-D__libc_malloc=malloc",
+	"-D__libc_free=free",
+	"-D_musl_=1",
 }

@@ -80,7 +80,7 @@ func TestEmitAS_CxxsuppBuiltinsChkstk_ByteExact(t *testing.T) {
 	}
 
 	emit := NewBufferedEmitter()
-	_, outPath := EmitAS(TargetCfg, "contrib/libs/cxxsupp/builtins", "aarch64/chkstk.S", builtinsASIncludes, emit)
+	_, outPath := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", builtinsASIncludes, nil, emit)
 
 	if outPath != referenceASOutput {
 		t.Errorf("outPath = %q, want %q", outPath, referenceASOutput)
@@ -162,7 +162,7 @@ func TestEmitAS_CxxsuppBuiltinsChkstk_ByteExact(t *testing.T) {
 // component — unlike CC which uses the flat formula for flat sources.
 func TestEmitAS_OutputPath_AlwaysHasUnderscore(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitAS(TargetCfg, "some/module", "flat.S", []string{}, e)
+	_, outPath := EmitAS(targetInstance("some/module"), "flat.S", []string{}, nil, e)
 	want := "$(BUILD_ROOT)/some/module/_/flat.S.o"
 
 	if outPath != want {
@@ -173,7 +173,7 @@ func TestEmitAS_OutputPath_AlwaysHasUnderscore(t *testing.T) {
 // TestEmitAS_OutputPath_NestedSrc verifies the nested-source output path.
 func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitAS(TargetCfg, "contrib/libs/cxxsupp/builtins", "aarch64/chkstk.S", []string{}, e)
+	_, outPath := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", []string{}, nil, e)
 	want := "$(BUILD_ROOT)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
 
 	if outPath != want {
@@ -185,7 +185,7 @@ func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 // (p=AS, pc=light-green, no show_out) as observed in the reference graph.
 func TestEmitAS_KV(t *testing.T) {
 	e := NewBufferedEmitter()
-	EmitAS(TargetCfg, "some/module", "aarch64/foo.S", []string{}, e)
+	EmitAS(targetInstance("some/module"), "aarch64/foo.S", []string{}, nil, e)
 
 	if len(e.nodes) != 1 {
 		t.Fatalf("emitter buffered %d nodes, want 1", len(e.nodes))

@@ -78,7 +78,7 @@ func TestEmitCC_BuildCowOnLibC_ByteExact(t *testing.T) {
 	}
 
 	emit := NewBufferedEmitter()
-	_, outPath := EmitCC(TargetCfg, "build/cow/on", "lib.c", emit)
+	_, outPath := EmitCC(targetInstance("build/cow/on"), "lib.c", emit)
 
 	if outPath != "$(BUILD_ROOT)/build/cow/on/lib.c.o" {
 		t.Errorf("outPath = %q, want %q", outPath, "$(BUILD_ROOT)/build/cow/on/lib.c.o")
@@ -156,7 +156,7 @@ func TestEmitCC_BuildCowOnLibC_ByteExact(t *testing.T) {
 
 func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitCC(TargetCfg, "contrib/libs/cxxsupp/libcxx", "src/algorithm.cpp", e)
+	_, outPath := EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", e)
 	want := "$(BUILD_ROOT)/contrib/libs/cxxsupp/libcxx/_/src/algorithm.cpp.o"
 
 	if outPath != want {
@@ -166,10 +166,92 @@ func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 
 func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitCC(TargetCfg, "build/cow/on", "lib.c", e)
+	_, outPath := EmitCC(targetInstance("build/cow/on"), "lib.c", e)
 	want := "$(BUILD_ROOT)/build/cow/on/lib.c.o"
 
 	if outPath != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
+	}
+}
+
+// TestEmitCC_BuildCowOn_Host_ByteExact verifies the host (PIC) CC
+// node for build/cow/on/lib.c — 105-arg cmd_args, with
+// host_platform=true, tags=["tool"], output ".pic.o", and the
+// release/PIC flag bundle (-O3, -fPIC, etc.) per the reference.
+func TestEmitCC_BuildCowOn_Host_ByteExact(t *testing.T) {
+	const targetOut = "$(BUILD_ROOT)/build/cow/on/lib.c.pic.o"
+
+	raw, err := os.ReadFile(referenceGraphPath)
+
+	if err != nil {
+		t.Skipf("reference graph not available (%v); skipping host byte-exact test", err)
+	}
+
+	var g Graph
+	Throw(json.Unmarshal(raw, &g))
+
+	var ref *Node
+
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0] == targetOut {
+			ref = n
+
+			break
+		}
+	}
+
+	if ref == nil {
+		t.Fatalf("reference host CC node with output %q not found", targetOut)
+	}
+
+	emit := NewBufferedEmitter()
+	_, outPath := EmitCC(hostInstance("build/cow/on"), "lib.c", emit)
+
+	if outPath != targetOut {
+		t.Errorf("outPath = %q, want %q", outPath, targetOut)
+	}
+
+	if len(emit.nodes) != 1 {
+		t.Fatalf("emitter buffered %d nodes, want 1", len(emit.nodes))
+	}
+
+	got := emit.nodes[0]
+
+	if len(got.Cmds[0].CmdArgs) != 105 {
+		t.Fatalf("cmd_args length = %d, want 105", len(got.Cmds[0].CmdArgs))
+	}
+
+	wantArgs := ref.Cmds[0].CmdArgs
+
+	if len(wantArgs) != 105 {
+		t.Fatalf("reference cmd_args length = %d, want 105 (sanity check)", len(wantArgs))
+	}
+
+	for i := range wantArgs {
+		if got.Cmds[0].CmdArgs[i] != wantArgs[i] {
+			t.Errorf("cmd_args[%d]:\n  got:  %q\n  want: %q", i, got.Cmds[0].CmdArgs[i], wantArgs[i])
+		}
+	}
+
+	fieldEqual(t, "cmds[0].env", got.Cmds[0].Env, ref.Cmds[0].Env)
+	fieldEqual(t, "inputs", got.Inputs, ref.Inputs)
+	fieldEqual(t, "outputs", got.Outputs, ref.Outputs)
+	fieldEqual(t, "kv", got.KV, ref.KV)
+	fieldEqual(t, "tags", got.Tags, ref.Tags)
+	fieldEqual(t, "target_properties", got.TargetProperties, ref.TargetProperties)
+	fieldEqual(t, "platform", got.Platform, ref.Platform)
+	fieldEqual(t, "requirements", got.Requirements, ref.Requirements)
+	fieldEqual(t, "env (top-level)", got.Env, ref.Env)
+
+	if !got.HostPlatform {
+		t.Errorf("host_platform: got false, want true")
+	}
+
+	if !ref.HostPlatform {
+		t.Errorf("reference host_platform: got false, want true (sanity check)")
+	}
+
+	if got.ForeignDeps != nil {
+		t.Errorf("foreign_deps: got %#v, want nil", got.ForeignDeps)
 	}
 }

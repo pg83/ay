@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -499,6 +500,351 @@ func TestStringHasNoEscapeProcessing(t *testing.T) {
 	}
 	if len(s.Value) != 4 {
 		t.Errorf("len(SET.Value) = %d, want 4", len(s.Value))
+	}
+}
+
+// TestParseIfElseEndif (PR-13) pins the simple two-arm case:
+// `IF (FOO) ... ELSE ... ENDIF` produces a single *IfStmt with both
+// THEN and ELSE bodies populated.
+func TestParseIfElseEndif(t *testing.T) {
+	src := []byte(`IF (FOO)
+    SRCS(then.cpp)
+ELSE()
+    SRCS(else.cpp)
+ENDIF()
+`)
+
+	mf, err := Parse("test.input", src)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if len(mf.Stmts) != 1 {
+		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
+	}
+	ifStmt, ok := mf.Stmts[0].(*IfStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *IfStmt", mf.Stmts[0])
+	}
+
+	cond, ok := ifStmt.Cond.(*ExprIdent)
+	if !ok {
+		t.Fatalf("IfStmt.Cond = %T, want *ExprIdent", ifStmt.Cond)
+	}
+	if cond.Name != "FOO" {
+		t.Errorf("ExprIdent.Name = %q, want %q", cond.Name, "FOO")
+	}
+
+	if len(ifStmt.Then) != 1 {
+		t.Fatalf("len(Then) = %d, want 1", len(ifStmt.Then))
+	}
+	thenSrc, ok := ifStmt.Then[0].(*SrcsStmt)
+	if !ok {
+		t.Fatalf("Then[0] = %T, want *SrcsStmt", ifStmt.Then[0])
+	}
+	if !equalStrings(thenSrc.Sources, []string{"then.cpp"}) {
+		t.Errorf("Then SRCS = %v, want [then.cpp]", thenSrc.Sources)
+	}
+
+	if len(ifStmt.Else) != 1 {
+		t.Fatalf("len(Else) = %d, want 1", len(ifStmt.Else))
+	}
+	elseSrc, ok := ifStmt.Else[0].(*SrcsStmt)
+	if !ok {
+		t.Fatalf("Else[0] = %T, want *SrcsStmt", ifStmt.Else[0])
+	}
+	if !equalStrings(elseSrc.Sources, []string{"else.cpp"}) {
+		t.Errorf("Else SRCS = %v, want [else.cpp]", elseSrc.Sources)
+	}
+}
+
+// TestParseIfElseifEndif (PR-13) pins the chained-ELSEIF case:
+// `IF (A) ... ELSEIF (B) ... ELSE ... ENDIF` produces an outer IfStmt
+// whose Else body is a single nested IfStmt holding the ELSEIF cond
+// and ELSE body. Mirrors C's `else if` chain.
+func TestParseIfElseifEndif(t *testing.T) {
+	src := []byte(`IF (A)
+    SRCS(a.cpp)
+ELSEIF (B)
+    SRCS(b.cpp)
+ELSE()
+    SRCS(c.cpp)
+ENDIF()
+`)
+
+	mf, err := Parse("test.input", src)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if len(mf.Stmts) != 1 {
+		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
+	}
+	outer, ok := mf.Stmts[0].(*IfStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *IfStmt", mf.Stmts[0])
+	}
+	if id, ok := outer.Cond.(*ExprIdent); !ok || id.Name != "A" {
+		t.Fatalf("outer.Cond = %#v, want ExprIdent{A}", outer.Cond)
+	}
+
+	if len(outer.Else) != 1 {
+		t.Fatalf("len(outer.Else) = %d, want 1 (the nested ELSEIF)", len(outer.Else))
+	}
+	nested, ok := outer.Else[0].(*IfStmt)
+	if !ok {
+		t.Fatalf("outer.Else[0] = %T, want *IfStmt (the ELSEIF)", outer.Else[0])
+	}
+	if id, ok := nested.Cond.(*ExprIdent); !ok || id.Name != "B" {
+		t.Fatalf("nested.Cond = %#v, want ExprIdent{B}", nested.Cond)
+	}
+	if len(nested.Then) != 1 {
+		t.Fatalf("len(nested.Then) = %d, want 1", len(nested.Then))
+	}
+	if len(nested.Else) != 1 {
+		t.Fatalf("len(nested.Else) = %d, want 1", len(nested.Else))
+	}
+	finalSrc, ok := nested.Else[0].(*SrcsStmt)
+	if !ok {
+		t.Fatalf("nested.Else[0] = %T, want *SrcsStmt", nested.Else[0])
+	}
+	if !equalStrings(finalSrc.Sources, []string{"c.cpp"}) {
+		t.Errorf("final ELSE SRCS = %v, want [c.cpp]", finalSrc.Sources)
+	}
+}
+
+// TestParseInclude_RelativePath (PR-13) pins INCLUDE's inline-expand
+// behavior: a parent ya.make with `INCLUDE(sub.inc)` and a sibling
+// `sub.inc` containing `SRCS(x.cpp)` parses into a Stmts slice that
+// CONTAINS the SrcsStmt and does NOT contain an IncludeStmt
+// (Parse/ParseFile drop the marker).
+func TestParseInclude_RelativePath(t *testing.T) {
+	dir := t.TempDir()
+
+	parentPath := filepath.Join(dir, "ya.make")
+	subPath := filepath.Join(dir, "sub.inc")
+
+	if err := os.WriteFile(parentPath, []byte("LIBRARY()\nINCLUDE(sub.inc)\nEND()\n"), 0o644); err != nil {
+		t.Fatalf("write parent: %v", err)
+	}
+	if err := os.WriteFile(subPath, []byte("SRCS(x.cpp)\n"), 0o644); err != nil {
+		t.Fatalf("write sub: %v", err)
+	}
+
+	mf, err := ParseFile(parentPath)
+	if err != nil {
+		t.Fatalf("ParseFile failed: %v", err)
+	}
+
+	for _, s := range mf.Stmts {
+		if _, isInc := s.(*IncludeStmt); isInc {
+			t.Errorf("Stmts contains *IncludeStmt; expected it to be dropped after inline expansion")
+		}
+	}
+
+	var srcs *SrcsStmt
+	for _, s := range mf.Stmts {
+		if v, ok := s.(*SrcsStmt); ok {
+			srcs = v
+		}
+	}
+	if srcs == nil {
+		t.Fatalf("Stmts has no *SrcsStmt; got %#v", mf.Stmts)
+	}
+	if !equalStrings(srcs.Sources, []string{"x.cpp"}) {
+		t.Errorf("included SRCS = %v, want [x.cpp]", srcs.Sources)
+	}
+}
+
+// TestParseJoinSrcs pins `JOIN_SRCS(name srcs...)` parsing.
+func TestParseJoinSrcs(t *testing.T) {
+	mf, err := Parse("test.input", []byte("JOIN_SRCS(allfoo a.cpp b.cpp)\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if len(mf.Stmts) != 1 {
+		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
+	}
+	js, ok := mf.Stmts[0].(*JoinSrcsStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *JoinSrcsStmt", mf.Stmts[0])
+	}
+	if js.OutputName != "allfoo" {
+		t.Errorf("OutputName = %q, want %q", js.OutputName, "allfoo")
+	}
+	if !equalStrings(js.Sources, []string{"a.cpp", "b.cpp"}) {
+		t.Errorf("Sources = %v, want [a.cpp b.cpp]", js.Sources)
+	}
+}
+
+// TestParseJoinSrcs_RejectsEmpty pins that JOIN_SRCS with zero args
+// throws — at minimum the output name is required.
+func TestParseJoinSrcs_RejectsEmpty(t *testing.T) {
+	_, err := Parse("test.input", []byte("JOIN_SRCS()\n"))
+	if err == nil {
+		t.Fatal("Parse returned nil error, want *ParseError")
+	}
+	var pe *ParseError
+	if !errors.As(err, &pe) {
+		t.Fatalf("Parse returned %T, want *ParseError", err)
+	}
+	if !strings.Contains(pe.Message, "JOIN_SRCS") {
+		t.Errorf("ParseError.Message = %q, want it to mention JOIN_SRCS", pe.Message)
+	}
+}
+
+// TestParseAddIncl_Global pins ADDINCL with the GLOBAL modifier.
+func TestParseAddIncl_Global(t *testing.T) {
+	mf, err := Parse("test.input", []byte("ADDINCL(GLOBAL include1 include2)\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if len(mf.Stmts) != 1 {
+		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
+	}
+	a, ok := mf.Stmts[0].(*AddInclStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
+	}
+	if a.Modifier != "GLOBAL" {
+		t.Errorf("Modifier = %q, want %q", a.Modifier, "GLOBAL")
+	}
+	if !equalStrings(a.Paths, []string{"include1", "include2"}) {
+		t.Errorf("Paths = %v, want [include1 include2]", a.Paths)
+	}
+}
+
+// TestParseAddIncl_NoModifier pins ADDINCL without the GLOBAL prefix.
+func TestParseAddIncl_NoModifier(t *testing.T) {
+	mf, err := Parse("test.input", []byte("ADDINCL(include1)\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	a, ok := mf.Stmts[0].(*AddInclStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
+	}
+	if a.Modifier != "" {
+		t.Errorf("Modifier = %q, want empty", a.Modifier)
+	}
+	if !equalStrings(a.Paths, []string{"include1"}) {
+		t.Errorf("Paths = %v, want [include1]", a.Paths)
+	}
+}
+
+// TestParseCFlags_Global pins CFLAGS with the GLOBAL modifier.
+func TestParseCFlags_Global(t *testing.T) {
+	mf, err := Parse("test.input", []byte("CFLAGS(GLOBAL -O2 -Wall)\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	c, ok := mf.Stmts[0].(*CFlagsStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *CFlagsStmt", mf.Stmts[0])
+	}
+	if c.Modifier != "GLOBAL" {
+		t.Errorf("Modifier = %q, want %q", c.Modifier, "GLOBAL")
+	}
+	if !equalStrings(c.Flags, []string{"-O2", "-Wall"}) {
+		t.Errorf("Flags = %v, want [-O2 -Wall]", c.Flags)
+	}
+}
+
+// TestParseCFlags_NoModifier pins CFLAGS without the GLOBAL prefix.
+func TestParseCFlags_NoModifier(t *testing.T) {
+	mf, err := Parse("test.input", []byte("CFLAGS(-O2)\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	c, ok := mf.Stmts[0].(*CFlagsStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *CFlagsStmt", mf.Stmts[0])
+	}
+	if c.Modifier != "" {
+		t.Errorf("Modifier = %q, want empty", c.Modifier)
+	}
+	if !equalStrings(c.Flags, []string{"-O2"}) {
+		t.Errorf("Flags = %v, want [-O2]", c.Flags)
+	}
+}
+
+// TestParseLDFlags pins LDFLAGS — no modifier, just a flat flag list.
+func TestParseLDFlags(t *testing.T) {
+	mf, err := Parse("test.input", []byte("LDFLAGS(-lpthread -lm)\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	l, ok := mf.Stmts[0].(*LDFlagsStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *LDFlagsStmt", mf.Stmts[0])
+	}
+	if !equalStrings(l.Flags, []string{"-lpthread", "-lm"}) {
+		t.Errorf("Flags = %v, want [-lpthread -lm]", l.Flags)
+	}
+}
+
+// TestParseSrcDir pins SRCDIR(dir) — single-arg, exposes the path.
+func TestParseSrcDir(t *testing.T) {
+	mf, err := Parse("test.input", []byte("SRCDIR(./xx)\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	s, ok := mf.Stmts[0].(*SrcDirStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *SrcDirStmt", mf.Stmts[0])
+	}
+	if s.Dir != "./xx" {
+		t.Errorf("Dir = %q, want %q", s.Dir, "./xx")
+	}
+}
+
+// TestParseGlobalSrcs pins GLOBAL_SRCS — flat source list, no
+// modifier.
+func TestParseGlobalSrcs(t *testing.T) {
+	mf, err := Parse("test.input", []byte("GLOBAL_SRCS(a.cpp b.cpp c.cpp)\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	g, ok := mf.Stmts[0].(*GlobalSrcsStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *GlobalSrcsStmt", mf.Stmts[0])
+	}
+	if !equalStrings(g.Sources, []string{"a.cpp", "b.cpp", "c.cpp"}) {
+		t.Errorf("Sources = %v, want [a.cpp b.cpp c.cpp]", g.Sources)
+	}
+}
+
+// TestParseInclude_RejectsSelfCycle (PR-13-D01) pins that a self-referential
+// INCLUDE(a.inc) is caught as a cycle before the goroutine stack overflows.
+func TestParseInclude_RejectsSelfCycle(t *testing.T) {
+	tmp := t.TempDir()
+	Throw(os.WriteFile(filepath.Join(tmp, "a.inc"), []byte("INCLUDE(a.inc)\n"), 0644))
+
+	_, err := ParseFile(filepath.Join(tmp, "a.inc"))
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "INCLUDE cycle") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// TestParseInclude_RejectsTransitiveCycle (PR-13-D01) pins that a two-hop
+// cycle (a.inc → b.inc → a.inc) is also caught before the goroutine stack
+// overflows.
+func TestParseInclude_RejectsTransitiveCycle(t *testing.T) {
+	tmp := t.TempDir()
+	Throw(os.WriteFile(filepath.Join(tmp, "a.inc"), []byte("INCLUDE(b.inc)\n"), 0644))
+	Throw(os.WriteFile(filepath.Join(tmp, "b.inc"), []byte("INCLUDE(a.inc)\n"), 0644))
+
+	_, err := ParseFile(filepath.Join(tmp, "a.inc"))
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "INCLUDE cycle") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
