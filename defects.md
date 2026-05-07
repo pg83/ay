@@ -1054,3 +1054,52 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 **Location:** gen.go:437-442
 **Description:** Comment says build/cow/on demos this pattern via "ya.make never types NO_PLATFORM but reference has zero peer deps". But build/cow/on gets the triple from inferFlagsFromPath HEURISTIC (module.go:161-165), NOT from ya.make declarations. Conflates path-heuristic source with macro-derived source.
 **Suggested fix:** Reword to clarify the source is the path heuristic; macro-driven examples await a future closure module.
+
+---
+
+## PR-27
+
+### [PR-27-D01] tools/archiver coverage 1696 falls short of brief's ≥2500-node target
+**Status:** resolved (deferred to PR-28+; structural — dual-platform emission gap dominates)
+**Severity:** major
+**Location:** tasks.md:57 (PR-27 spec); gen.go:169-190 (Gen entry walks target only)
+**Description:** PR-27 stated goal: bring coverage 1541 → ~3500+. Achieved: 1696 (delta +155, 4.2% of gap). Of 3730 reference nodes: walker emits 1696 target (vs ref 1933 target → 87.7% target coverage), zero host (vs ref 1797 host → 0%). 15 reference module_dirs entirely missing: asmlib, asmglibc, jemalloc, mimalloc, tcmalloc/{malloc_extension,no_percpu_cache}, abseil-cpp, ragel6 host, yasm host, malloc/{mimalloc,tcmalloc}, musl/full, musl/include, musl_extra. Dual-platform gap dominates (~48% of total ref nodes).
+**Root cause:** Two distinct gaps. (a) Walker emits `instance.Target` only; no general dual-platform pass. (b) Allocator/asm libraries reached only via ALLOCATOR_IMPL/EXTRALIBS/RECURSE which PR-27 keeps as metadata-only.
+**Fix:** Deferred to PR-28+ as dedicated dual-platform-emission PR. PR-27 closes against partially-met spec target with explicit shortfall logged; the +155 delta from libcxx/util walks is the in-scope contribution. ALLOCATOR_IMPL routing left to a separate gap-closer.
+
+### [PR-27-D02] Cycle handler relaxed throw → silent stub-return without diagnostic
+**Status:** resolved
+**Severity:** major
+**Location:** gen.go:611-613
+**Description:** PR-26 raised on PEERDIR cycle; PR-27 silently returns `&moduleEmitResult{headerOnly: true}` with no log. Empirically tolerates exactly 1 cycle today (`util` re-entered via `zlib`'s default-peer set). Safe at L0–L3 (all 48 reference AR nodes have zero peer-archive inputs, verified). Risk: a future genuine cycle (not implicit-default-induced) gets silently skipped, producing wrong graph with no diagnostic.
+**Root cause:** `zlib`-style modules with `NO_RUNTIME()` only (not `NO_UTIL`) get `util` as implicit default; `util` reaches `zlib` via its own closure. Runtime-ancestor exclusion at gen.go:471 covers `util` but not `util`'s descendants peering `zlib`.
+**Fix:** Add stderr diagnostic in the cycle handler so a real cycle in production is visible. Counter on genCtx so test can assert "tolerated zero / N cycles". Keep the relaxation but make it observable.
+
+### [PR-27-D03] Try-wrapped ragel6 recursion silently swallows ALL exceptions, not just parse-gap exceptions
+**Status:** resolved
+**Severity:** minor
+**Location:** gen.go:958-967
+**Description:** `Try(func() { ragelResult := genModule(ctx, ragelInstance); ragelLDRef = ragelResult.LDRef })` catches every exception type, not just *ParseError from the documented INCLUDE-substitution gap. Regression in host-instance walking for any other reason silently produces zero ragelLDRef and L3 byte-exact divergence on every .rl6 module instead of failing loudly.
+**Root cause:** Coarse-grained Try catches the wrong shape.
+**Fix:** Narrow the Try to *ParseError only via `errors.As`; re-throw any other exception type to preserve loud-fail discipline.
+
+### [PR-27-D04] defaultPeerdirsFor per-path self-suppression checks are dead code given runtimeAncestorPaths early-exit
+**Status:** resolved
+**Severity:** nit
+**Location:** gen.go:484, 490, 496, 506, 510, 514, 520
+**Description:** Runtime-ancestor early-exit at gen.go:471 returns nil for any path in runtimeAncestorPaths, which already covers musl/cxxsupp/libunwind/malloc/api/util. Every per-path self-cycle guard below (e.g. `instance.Path != "contrib/libs/musl"`) is unreachable. Adds visual noise; risk of drift (line 510 has only `!=` not the prefix-match shape used at 484/506/520).
+**Fix:** Add a compile-time invariant comment at gen.go:471 documenting that every path enumerated below must appear in `runtimeAncestorPaths` and the per-path checks are redundant defense-in-depth, OR remove the per-path checks. Defense-in-depth is the safer choice — keep checks, add the invariant comment.
+
+### [PR-27-D05] DefaultIfEnv comment lists "SANITIZER" as a bool binding, but it is not present in the bools map
+**Status:** resolved
+**Severity:** nit
+**Location:** macros.go:257
+**Description:** Doc comment advertises `bool-typed FUZZING / EXPORT_CMAKE / NO_CXX_RTTI / NO_CXX_EXCEPTIONS / USE_ARCADIA_COMPILER_RUNTIME / SANITIZER / PROVIDE_*` but bools map at lines 261-303 contains no entry named `SANITIZER`. No closure ya.make currently uses `IF (SANITIZER)`, so functional impact is zero, but a future maintainer reading the comment would believe the binding exists.
+**Fix:** Remove `SANITIZER /` from the comment list at macros.go:257. Closure does not currently need the binding; add it on demand if a real `IF (SANITIZER)` shows up.
+
+### [PR-27-D06] Negative integer literals fail to lex as tokInt; degrade to tokWord and break int comparisons
+**Status:** resolved (deferred — closure does not currently use `IF (X < -N)`; documented as ExprInt invariant)
+**Severity:** nit
+**Location:** yamake.go:512-513 (readToken digit dispatch), yamake.go:638-657 (readNumberOrWord), yamake.go:189-193 (ExprInt comment)
+**Description:** `IF (X < -1)` lexes `-1` as `tokWord("-1")` because `-` is in `isWordByte`; `parseAtom` then throws "unexpected word "-1" in IF condition". Not exercised by current closure.
+**Fix:** Document explicitly in the ExprInt comment at yamake.go:189-193 that integer literals are unsigned and negative integers are unsupported. Defer the lexer extension until a real closure ya.make needs it.

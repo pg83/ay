@@ -283,10 +283,19 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 	}
 }
 
-// TestGen_PeerdirCycle_Throws verifies the cycle detector fires when
-// two modules peer each other. The walking-set check throws as soon
-// as the second module recurses back into the first.
-func TestGen_PeerdirCycle_Throws(t *testing.T) {
+// TestGen_PeerdirCycle_Tolerated verifies the cycle handler breaks
+// the loop without throwing, emits a diagnostic, and increments
+// ctx.cyclesTolerated. PR-27 changed the model from "cycle is a hard
+// error" to "cycle peer is treated as a header-only stub", because the
+// implicit DEFAULT_PEERDIR set in real ya.makes creates legitimate
+// mutual references between runtime-stack modules that the upstream
+// reference handles via exclusion lists we have not yet modelled.
+// The break-edge peer's archive ref is not propagated into the
+// consumer's AR/LD; the peer's own walk completes elsewhere on the
+// recursion stack.
+//
+// D02: the test drives genModule directly so it can inspect ctx.cyclesTolerated.
+func TestGen_PeerdirCycle_Tolerated(t *testing.T) {
 	root := t.TempDir()
 
 	aDir := filepath.Join(root, "a")
@@ -300,24 +309,55 @@ func TestGen_PeerdirCycle_Throws(t *testing.T) {
 		t.Fatalf("mkdir b: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(aDir, "ya.make"), []byte("LIBRARY()\nPEERDIR(b)\nSRCS(a.cpp)\nEND()\n"), 0o644); err != nil {
-		t.Fatalf("write a/ya.make: %v", err)
+	// Both modules declare effective NO_PLATFORM so the implicit
+	// default-peer set is empty — this keeps the test focused on
+	// the explicit cycle rather than introducing a transitive
+	// musl/builtins/etc. recursion.
+	Throw(os.WriteFile(filepath.Join(aDir, "ya.make"), []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(b)\nSRCS(a.cpp)\nEND()\n"), 0o644))
+	Throw(os.WriteFile(filepath.Join(bDir, "ya.make"), []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(a)\nSRCS(b.cpp)\nEND()\n"), 0o644))
+
+	// Drive genModule directly so we can inspect ctx.cyclesTolerated
+	// after the walk (D02). The a→b→a cycle triggers exactly one
+	// back-edge: when b walks its PEERDIR(a) and a is still on the
+	// walking stack.
+	ctx := &genCtx{
+		cfg:        TargetCfg,
+		sourceRoot: root,
+		emit:       NewBufferedEmitter(),
+		memo:       make(map[ModuleInstance]*moduleEmitResult),
+		walking:    make(map[ModuleInstance]bool),
 	}
 
-	if err := os.WriteFile(filepath.Join(bDir, "ya.make"), []byte("LIBRARY()\nPEERDIR(a)\nSRCS(b.cpp)\nEND()\n"), 0o644); err != nil {
-		t.Fatalf("write b/ya.make: %v", err)
+	seed := ModuleInstance{
+		Path:     "a",
+		Language: LangCPP,
+		Target:   TargetCfg.Target.ID,
+		Flags:    inferFlagsFromPath("a", false),
 	}
 
-	exc := Try(func() {
-		Gen(TargetCfg, root, "a")
+	var exc *Exception
+
+	exc = Try(func() {
+		genModule(ctx, seed)
 	})
 
-	if exc == nil {
-		t.Fatal("expected exception for PEERDIR cycle, got nil")
+	if exc != nil {
+		t.Fatalf("genModule on cyclic graph should not throw (cycle is tolerated); got: %v", exc)
 	}
 
-	if !strings.Contains(exc.Error(), "cycle detected") {
-		t.Errorf("error %q does not mention 'cycle detected'", exc.Error())
+	// Both modules emit a CC node and an AR node — the cycle is
+	// broken silently, the peer's own walk runs, and the archive
+	// ref for the back-edge is dropped.
+	g := Finalize(ctx.emit.(*BufferedEmitter))
+
+	if len(g.Graph) < 4 {
+		t.Errorf("expected at least 4 nodes (2 CC + 2 AR), got %d", len(g.Graph))
+	}
+
+	// D02: exactly one back-edge was tolerated (b's PEERDIR(a) fires
+	// while a is still on the walking stack).
+	if ctx.cyclesTolerated != 1 {
+		t.Errorf("cyclesTolerated = %d, want 1", ctx.cyclesTolerated)
 	}
 }
 
@@ -1185,6 +1225,10 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"contrib/libs/musl",
 		"contrib/libs/cxxsupp/builtins",
 		"library/cpp/malloc/api",
+		"contrib/libs/cxxsupp/libcxx",
+		"contrib/libs/cxxsupp/libcxxrt",
+		"contrib/libs/libunwind",
+		"util",
 	} {
 		dir := filepath.Join(root, path)
 
@@ -1193,7 +1237,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	}
 
 	// Helper assertion: defaultPeerdirsFor returns exactly the
-	// three paths for a fresh CPP LIBRARY with zero NO_* flags.
+	// seven paths for a fresh CPP LIBRARY with zero NO_* flags.
 	plain := ModuleInstance{
 		Path:     "consumer",
 		Language: LangCPP,
@@ -1205,6 +1249,10 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"contrib/libs/musl",
 		"contrib/libs/cxxsupp/builtins",
 		"library/cpp/malloc/api",
+		"contrib/libs/cxxsupp/libcxx",
+		"contrib/libs/cxxsupp/libcxxrt",
+		"contrib/libs/libunwind",
+		"util",
 	}
 
 	gotDefaults := defaultPeerdirsFor(plain)
@@ -1213,7 +1261,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		t.Errorf("defaultPeerdirsFor(plain CPP) = %v, want %v", gotDefaults, wantDefaults)
 	}
 
-	// End-to-end: walk a consumer LIBRARY and confirm the three
+	// End-to-end: walk a consumer LIBRARY and confirm the seven
 	// stubs were emitted.
 	consumerDir := filepath.Join(root, "consumer")
 
@@ -1235,6 +1283,10 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"contrib/libs/musl",
 		"contrib/libs/cxxsupp/builtins",
 		"library/cpp/malloc/api",
+		"contrib/libs/cxxsupp/libcxx",
+		"contrib/libs/cxxsupp/libcxxrt",
+		"contrib/libs/libunwind",
+		"util",
 	} {
 		if !emittedDirs[want] {
 			t.Errorf("graph missing module_dir %q; got %v", want, emittedDirs)
@@ -1243,15 +1295,32 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 }
 
 // TestGen_DefaultPeerdirs_HelperSuppression exercises the full
-// suppression matrix of `defaultPeerdirsFor`:
+// suppression matrix of `defaultPeerdirsFor`. PR-27 widened the
+// default set (libcxx/libcxxrt/libunwind/util added, gated by
+// NoRuntime / NoUtil) and introduced runtime-ancestor self-suppression
+// — modules whose path sits in `runtimeAncestorPaths` get zero
+// implicit peers regardless of their FlagSet, matching the empirical
+// reference-graph fact that every such module has no peer-archive
+// deps in its AR.
 //
 //   - effective NO_PLATFORM (NoLibc+NoRuntime+NoUtil)  → empty set
 //   - explicit NO_PLATFORM                            → empty set
 //   - NO_LIBC only                                    → drops musl
-//   - NO_RUNTIME only                                 → drops builtins
+//   - NO_RUNTIME only                                 → drops builtins+libcxx*
+//   - NO_UTIL only                                    → drops util
 //   - non-CPP language                                → empty set
-//   - self-instance for each default                  → drops self
+//   - self-instance for any runtime ancestor          → empty set
 func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
+	fullSet := []string{
+		"contrib/libs/musl",
+		"contrib/libs/cxxsupp/builtins",
+		"library/cpp/malloc/api",
+		"contrib/libs/cxxsupp/libcxx",
+		"contrib/libs/cxxsupp/libcxxrt",
+		"contrib/libs/libunwind",
+		"util",
+	}
+
 	cases := []struct {
 		name string
 		mi   ModuleInstance
@@ -1282,7 +1351,14 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Language: LangCPP,
 				Flags:    FlagSet{NoLibc: true},
 			},
-			want: []string{"contrib/libs/cxxsupp/builtins", "library/cpp/malloc/api"},
+			want: []string{
+				"contrib/libs/cxxsupp/builtins",
+				"library/cpp/malloc/api",
+				"contrib/libs/cxxsupp/libcxx",
+				"contrib/libs/cxxsupp/libcxxrt",
+				"contrib/libs/libunwind",
+				"util",
+			},
 		},
 		{
 			name: "no_runtime_only",
@@ -1291,7 +1367,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Language: LangCPP,
 				Flags:    FlagSet{NoRuntime: true},
 			},
-			want: []string{"contrib/libs/musl", "library/cpp/malloc/api"},
+			want: []string{"contrib/libs/musl", "library/cpp/malloc/api", "util"},
 		},
 		{
 			name: "non_cpp",
@@ -1302,51 +1378,82 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			},
 			want: nil,
 		},
+		// PR-27: `contrib/libs/musl` is a runtime ancestor — gets
+		// zero defaults regardless of FlagSet. Pre-PR-27 expected
+		// "drops self only" semantics; the new model is stricter.
 		{
-			name: "self_musl",
+			name: "self_musl_runtime_ancestor",
 			mi: ModuleInstance{
 				Path:     "contrib/libs/musl",
 				Language: LangCPP,
 				Flags:    FlagSet{},
 			},
-			want: []string{"contrib/libs/cxxsupp/builtins", "library/cpp/malloc/api"},
+			want: nil,
 		},
 		{
-			name: "self_musl_subdir",
+			name: "self_musl_subdir_runtime_ancestor",
 			mi: ModuleInstance{
 				Path:     "contrib/libs/musl/full",
 				Language: LangCPP,
 				Flags:    FlagSet{},
 			},
-			want: []string{"contrib/libs/cxxsupp/builtins", "library/cpp/malloc/api"},
+			want: nil,
 		},
 		{
 			name: "no_util_only",
 			mi:   ModuleInstance{Path: "x", Language: LangCPP, Flags: FlagSet{NoUtil: true}},
-			want: []string{"contrib/libs/musl", "contrib/libs/cxxsupp/builtins", "library/cpp/malloc/api"},
+			want: []string{
+				"contrib/libs/musl",
+				"contrib/libs/cxxsupp/builtins",
+				"library/cpp/malloc/api",
+				"contrib/libs/cxxsupp/libcxx",
+				"contrib/libs/cxxsupp/libcxxrt",
+				"contrib/libs/libunwind",
+			},
 		},
+		// musl_extra is NOT in the runtime-ancestor set (the upstream
+		// reference includes it as a 2-node leaf rather than a
+		// runtime root); it gets the full default set.
 		{
-			name: "musl_extra_not_self",
+			name: "musl_extra_not_runtime_ancestor",
 			mi:   ModuleInstance{Path: "contrib/libs/musl_extra", Language: LangCPP, Flags: FlagSet{}},
-			want: []string{"contrib/libs/musl", "contrib/libs/cxxsupp/builtins", "library/cpp/malloc/api"},
+			want: fullSet,
 		},
 		{
-			name: "self_builtins",
+			name: "self_builtins_runtime_ancestor",
 			mi: ModuleInstance{
 				Path:     "contrib/libs/cxxsupp/builtins",
 				Language: LangCPP,
 				Flags:    FlagSet{},
 			},
-			want: []string{"contrib/libs/musl", "library/cpp/malloc/api"},
+			want: nil,
 		},
 		{
-			name: "self_malloc_api",
+			name: "self_malloc_api_runtime_ancestor",
 			mi: ModuleInstance{
 				Path:     "library/cpp/malloc/api",
 				Language: LangCPP,
 				Flags:    FlagSet{},
 			},
-			want: []string{"contrib/libs/musl", "contrib/libs/cxxsupp/builtins"},
+			want: nil,
+		},
+		{
+			name: "self_libcxx_runtime_ancestor",
+			mi: ModuleInstance{
+				Path:     "contrib/libs/cxxsupp/libcxx",
+				Language: LangCPP,
+				Flags:    FlagSet{},
+			},
+			want: nil,
+		},
+		{
+			name: "self_util_runtime_ancestor",
+			mi: ModuleInstance{
+				Path:     "util",
+				Language: LangCPP,
+				Flags:    FlagSet{},
+			},
+			want: nil,
 		},
 	}
 

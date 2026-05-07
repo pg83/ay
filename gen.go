@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -84,10 +85,18 @@ import (
 //
 // `isPROGRAM` records the module-shape so the caller (`Gen`) knows
 // whether to mark `LDRef` or `ARRef` as the graph result.
+//
+// PR-27: `headerOnly` distinguishes header-only LIBRARY modules
+// (e.g. `library/cpp/sanitizer/include`) that have no compilable
+// sources and emit nothing. Such modules are walked (so their
+// transitive PEERDIRs are still discovered) but contribute no
+// AR/LD/Global node — callers that peer them must skip the
+// archive-dep wiring rather than trip on a zero-valued NodeRef.
 type moduleEmitResult struct {
 	ARRef      NodeRef
 	ARPath     string
 	isPROGRAM  bool
+	headerOnly bool
 	LDRef      NodeRef
 	LDPath     string
 	GlobalRef  *NodeRef // non-nil when the module has GLOBAL_SRCS (EmitARGlobal was called)
@@ -99,12 +108,17 @@ type moduleEmitResult struct {
 // deduplicates per-instance emission; `walking` is the
 // cycle-detection stack. PR-23 keys both maps on `ModuleInstance`
 // (D34); PR-12 keyed them on the bare path string.
+//
+// `cyclesTolerated` counts back-edges suppressed by the headerOnly
+// stub path (D02). Accessible to tests that need to assert a known
+// cycle was hit exactly once.
 type genCtx struct {
-	cfg        PlatformConfig
-	sourceRoot string
-	emit       Emitter
-	memo       map[ModuleInstance]*moduleEmitResult
-	walking    map[ModuleInstance]bool
+	cfg             PlatformConfig
+	sourceRoot      string
+	emit            Emitter
+	memo            map[ModuleInstance]*moduleEmitResult
+	walking         map[ModuleInstance]bool
+	cyclesTolerated int
 }
 
 // whitelistedMetadataMacros is the whitelist of UnknownStmt names
@@ -145,6 +159,10 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"USE_CXX":               {},
 	"DEFINE_VARIABLE":       {},
 	"PYTHON3":               {},
+	"BUILD_ONLY_IF":         {}, // PR-27: contrib/libs/cxxsupp/libcxxrt
+	"MESSAGE":               {}, // PR-27: contrib/libs/cxxsupp/libcxx (FATAL_ERROR in dead branch)
+	"SRC":                   {}, // PR-27: util/charset (per-source compile flag; treated as metadata until R3 lands)
+	"SRC_C_SSE41":           {}, // PR-27: util/charset (arch-specific compile-flag wrapper)
 }
 
 // Gen produces the build graph rooted at `targetDir`. PR-23 wraps
@@ -208,7 +226,7 @@ type moduleData struct {
 // The `pathFlags` argument is the path-based heuristic seed; macro
 // overlays mutate it in place on the returned moduleData so the
 // caller does not need to compose two separate bags.
-func collectModule(modulePath string, stmts []Stmt, env map[string]bool, pathFlags FlagSet) *moduleData {
+func collectModule(modulePath string, stmts []Stmt, env Environment, pathFlags FlagSet) *moduleData {
 	d := &moduleData{flags: pathFlags}
 
 	collectStmts(modulePath, stmts, env, d)
@@ -218,7 +236,7 @@ func collectModule(modulePath string, stmts []Stmt, env map[string]bool, pathFla
 
 // collectStmts is the shared walker collectModule and IfStmt-branch
 // expansion both use. It mutates `d` in place.
-func collectStmts(modulePath string, stmts []Stmt, env map[string]bool, d *moduleData) {
+func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleData) {
 	for _, s := range stmts {
 		switch v := s.(type) {
 		case *ModuleStmt:
@@ -304,22 +322,19 @@ func applyUnknownStmt(v *UnknownStmt, d *moduleData) {
 // for IF predicates. The base set is `DefaultIfEnv` (M2 default =
 // aarch64 / linux / clang / musl). For host instances (Flags.PIC),
 // flip ARCH_AARCH64↔ARCH_X86_64 so the same ya.make produces the
-// other architecture's branches. The result is a fresh map; the
-// caller is free to mutate it.
-func buildIfEnv(instance ModuleInstance) map[string]bool {
-	env := make(map[string]bool, len(DefaultIfEnv))
-	for k, v := range DefaultIfEnv {
-		env[k] = v
-	}
+// other architecture's branches. The result is a fresh Environment;
+// the caller is free to mutate it.
+func buildIfEnv(instance ModuleInstance) Environment {
+	env := DefaultIfEnv.Clone()
 
 	if instance.Target == PlatformDefaultLinuxX8664 {
-		env["ARCH_AARCH64"] = false
-		env["ARCH_X86_64"] = true
+		env.SetBool("ARCH_AARCH64", false)
+		env.SetBool("ARCH_X86_64", true)
 	}
 
 	if instance.Target == PlatformDefaultLinuxAArch64 {
-		env["ARCH_AARCH64"] = true
-		env["ARCH_X86_64"] = false
+		env.SetBool("ARCH_AARCH64", true)
+		env.SetBool("ARCH_X86_64", false)
 	}
 
 	return env
@@ -342,13 +357,71 @@ func derivePeerInstance(parent ModuleInstance, peerPath string) ModuleInstance {
 	}
 }
 
+// runtimeAncestorPaths is the set of module paths that are themselves
+// part of the platform/runtime stack and therefore receive NO implicit
+// default peers — matches the empirical reference-graph behaviour where
+// every one of these modules has zero peer-archive deps in its AR.
+//
+// Upstream ymake achieves this via a special-case in `_BUILTIN_PEERDIR`
+// (build/conf/) that we do not yet model from source; PR-27 hard-codes
+// the closure-membership set instead. The list is the union of:
+//
+//   - C runtime stack: musl, libc_compat, linuxvdso(/original).
+//   - C++ runtime stack: cxxsupp/{builtins, libcxx, libcxxrt,
+//     libcxxabi, libcxxabi-parts}, libunwind.
+//   - Allocator API: library/cpp/malloc/api.
+//   - Sanitizer headers shim: library/cpp/sanitizer/include.
+//   - The Yandex stdlib root: util.
+//
+// Membership of a path in this set causes `defaultPeerdirsFor` to
+// return an empty slice for that instance, regardless of FlagSet.
+// The set is intentionally narrow: a module not listed here that
+// happens to declare a NO_* flag still goes through the normal
+// per-flag suppression below. New entries land here only when the
+// reference graph confirms the module has zero peer-archive deps
+// AND the walker hits a cycle through it.
+var runtimeAncestorPaths = map[string]bool{
+	"contrib/libs/musl":                    true,
+	"contrib/libs/libc_compat":             true,
+	"contrib/libs/linuxvdso":               true,
+	"contrib/libs/linuxvdso/original":      true,
+	"contrib/libs/cxxsupp/builtins":        true,
+	"contrib/libs/cxxsupp/libcxx":          true,
+	"contrib/libs/cxxsupp/libcxxrt":        true,
+	"contrib/libs/cxxsupp/libcxxabi":       true,
+	"contrib/libs/cxxsupp/libcxxabi-parts": true,
+	"contrib/libs/libunwind":               true,
+	"library/cpp/malloc/api":               true,
+	"library/cpp/sanitizer/include":        true,
+	"util":                                 true,
+}
+
+// isRuntimeAncestor reports whether instance.Path is a runtime
+// ancestor (see runtimeAncestorPaths) or sits inside a runtime
+// ancestor's subtree (e.g. `contrib/libs/musl/full`, `util/charset`).
+func isRuntimeAncestor(path string) bool {
+	if runtimeAncestorPaths[path] {
+		return true
+	}
+
+	for prefix := range runtimeAncestorPaths {
+		if strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+
+	return false
+}
+
 // defaultPeerdirsFor returns the implicit DEFAULT_PEERDIRs ymake
 // adds automatically based on language + module flavor. PR-26 hard-
-// codes the upstream `_BUILTIN_PEERDIR` mechanism for CPP modules
+// coded the upstream `_BUILTIN_PEERDIR` mechanism for CPP modules
 // because reproducing it from `build/conf/` in a faithful evaluator
 // is M5+ work and the gap between the explicit-only walker (50 nodes
 // for tools/archiver) and the reference (3,730 nodes) is dominated
-// by these implicit peers (musl alone is 2,656 nodes).
+// by these implicit peers (musl alone is 2,656 nodes). PR-27
+// completes the set — libcxx / libcxxrt / libunwind / util — once
+// the parser learned `==` and `<` so those modules' ya.makes parse.
 //
 // Suppression model: ymake's `NO_PLATFORM` is the umbrella switch
 // that disables every implicit peer below; the more granular flags
@@ -368,42 +441,48 @@ func derivePeerInstance(parent ModuleInstance, peerPath string) ModuleInstance {
 //     effective NO_PLATFORM
 //   - library/cpp/malloc/api         — suppressed by effective
 //     NO_PLATFORM
+//   - contrib/libs/cxxsupp/libcxx    — suppressed by NO_RUNTIME or
+//     effective NO_PLATFORM (PR-27)
+//   - contrib/libs/cxxsupp/libcxxrt  — suppressed by NO_RUNTIME or
+//     effective NO_PLATFORM (PR-27)
+//   - contrib/libs/libunwind         — suppressed by NO_RUNTIME or
+//     effective NO_PLATFORM (PR-27)
+//   - util                           — suppressed by NO_UTIL or
+//     effective NO_PLATFORM (PR-27)
 //
-// The list is intentionally smaller than the upstream `_BUILTIN_PEERDIR`
-// emits. The full upstream set also includes:
-//
-//   - contrib/libs/cxxsupp/libcxx
-//   - contrib/libs/cxxsupp/libcxxrt
-//   - contrib/libs/libunwind
-//   - util
-//
-// Those four are deferred for two orthogonal reasons captured in the
-// PR-26 Completed entry:
-//
-//  1. libcxx / libcxxrt / libunwind contain `IF (X == "Y")` predicates
-//     that the PR-13 macros parser does not recognise (the predicate
-//     ADT is bool-only — ExprIdent / ExprNot / ExprAnd / ExprOr).
-//     Walking them throws at parse time. Adding equality is parser
-//     work, deferred to a later PR.
-//
-//  2. util peers `contrib/libs/libc_compat`, whose ya.make uses
-//     `IF (ANDROID_API < 28)` (a `<` operator). Same parser gap; same
-//     deferral.
-//
-// Without those four the closure is incomplete vs the reference, but
-// adding the three above takes tools/archiver from 50 → ~1,500+ nodes,
-// which clears the PR-26 ≥150 acceptance bar and is correct (just
-// short of the full upstream set) for the modules it does emit.
+// The libcxx/libcxxrt/libunwind suppression by NO_RUNTIME is the
+// upstream behaviour: those three are runtime-support libraries,
+// pulled in only when the consumer wants the C++ runtime
+// scaffolding. util is separately gated by NO_UTIL because util is
+// the Yandex stdlib analogue, conceptually distinct from the
+// language runtime.
 //
 // Cycle prevention: the helper guards against adding a module as its
 // own peer via the `instance.Path != "..."` checks (and a prefix
-// match for musl, which has sub-modules under `contrib/libs/musl/`).
+// match for musl, libcxx, util, which have sub-modules underneath).
 // The walker's own `walking` stack catches deeper cycles.
 //
 // Returns empty for non-CPP languages — proto / go / py / java will
 // get their own helpers in M5+.
 func defaultPeerdirsFor(instance ModuleInstance) []string {
 	if instance.Language != LangCPP {
+		return nil
+	}
+
+	// PR-27: runtime ancestor modules (libcxx, libcxxrt, libunwind,
+	// musl, malloc/api, util, ...) get zero implicit peers — matches
+	// upstream ymake's `_BUILTIN_PEERDIR` exclusion list and breaks
+	// the otherwise-unavoidable mutual cycle between malloc/api and
+	// libcxxrt (each had the other as a default).
+	//
+	// INVARIANT: every path enumerated in the per-platform branches below
+	// MUST appear in runtimeAncestorPaths so that the early-exit above
+	// catches the self-cycle case before we recurse. The per-path
+	// instance.Path != "..." guards on lines ~484-520 are redundant
+	// defense-in-depth — kept to make the suppression intent visible at
+	// the call site, not because they are reachable when runtimeAncestorPaths
+	// is complete.
+	if isRuntimeAncestor(instance.Path) {
 		return nil
 	}
 
@@ -430,6 +509,30 @@ func defaultPeerdirsFor(instance ModuleInstance) []string {
 	if !noPlatform {
 		if instance.Path != "library/cpp/malloc/api" {
 			peers = append(peers, "library/cpp/malloc/api")
+		}
+	}
+
+	// PR-27: complete the implicit-peer set. libcxx / libcxxrt /
+	// libunwind are gated by NO_RUNTIME (same as builtins); util
+	// is gated by NO_UTIL. Each is suppressed for the module's
+	// own subtree to break the obvious self-cycle.
+	if !instance.Flags.NoRuntime && !noPlatform {
+		if instance.Path != "contrib/libs/cxxsupp/libcxx" && !strings.HasPrefix(instance.Path, "contrib/libs/cxxsupp/libcxx/") {
+			peers = append(peers, "contrib/libs/cxxsupp/libcxx")
+		}
+
+		if instance.Path != "contrib/libs/cxxsupp/libcxxrt" {
+			peers = append(peers, "contrib/libs/cxxsupp/libcxxrt")
+		}
+
+		if instance.Path != "contrib/libs/libunwind" {
+			peers = append(peers, "contrib/libs/libunwind")
+		}
+	}
+
+	if !instance.Flags.NoUtil && !noPlatform {
+		if instance.Path != "util" && !strings.HasPrefix(instance.Path, "util/") {
+			peers = append(peers, "util")
 		}
 	}
 
@@ -506,8 +609,24 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		return existing
 	}
 
+	// PR-27: a back-edge during the walk is no longer a hard error —
+	// the implicit DEFAULT_PEERDIR set creates legitimate mutual
+	// references between runtime-stack modules (libcxx ↔ libcxxrt,
+	// libunwind ↔ libcxxrt via sanitizer/include's ancestor chain,
+	// etc.) that the upstream reference handles by exclusion lists
+	// we have not yet modelled. Returning a `headerOnly`-shaped
+	// stub for the back-edge peer is sufficient: the peer's own
+	// walk completes elsewhere on the stack, and the consumer
+	// correctly skips an empty archive-ref instead of pinning a
+	// zero-valued NodeRef into its AR/LD. The reference graph
+	// emits no peer-archive deps in AR anyway (every LIBRARY's AR
+	// has only its own .o files), so the loss-of-information here
+	// is below the comparator's L1 surface.
 	if ctx.walking[instance] {
-		ThrowFmt("gen: PEERDIR cycle detected involving %s", instance)
+		ctx.cyclesTolerated++
+		fmt.Fprintf(os.Stderr, "gen: PEERDIR cycle tolerated at %s\n", instance.Path)
+
+		return &moduleEmitResult{headerOnly: true}
 	}
 
 	ctx.walking[instance] = true
@@ -536,8 +655,28 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// so this rebinds locally without affecting the caller.
 	instance.Flags = d.flags
 
+	// PR-27: a header-only LIBRARY (e.g. library/cpp/sanitizer/include)
+	// has no compilable sources but still has a valid module
+	// declaration; the upstream reference does not emit any AR for
+	// these. Walk the peers so their transitive closure is
+	// discovered, then return a `headerOnly: true` result that
+	// callers handle by skipping the archive-dep wiring. PROGRAMs
+	// with zero compilable sources remain a hard error.
 	if !hasCompilableSource(d) {
-		ThrowFmt("gen: %s has no compilable sources (after IF/header filter)", instance.Path)
+		if d.moduleStmt.Name == "PROGRAM" {
+			ThrowFmt("gen: %s has no compilable sources (after IF/header filter)", instance.Path)
+		}
+
+		result := &moduleEmitResult{headerOnly: true}
+		ctx.memo[instance] = result
+
+		// Still walk the peers so their downstream emission happens
+		// — sanitizer/include peers nothing that emits, so this is
+		// effectively a no-op today, but the invariant matters when
+		// future header-only libs declare PEERDIR.
+		walkPeersForSideEffects(ctx, instance, d)
+
+		return result
 	}
 
 	// Recurse into peers. Implicit DEFAULT_PEERDIRs (PR-26) are
@@ -593,6 +732,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		if peerResult.isPROGRAM {
 			ThrowFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path, peerPath)
+		}
+
+		// PR-27: a header-only peer (e.g. library/cpp/sanitizer/include)
+		// emits no AR; skip the archive-dep wiring so the caller
+		// does not pin a zero-valued NodeRef. The peer's transitive
+		// closure was already walked by the recursive genModule call.
+		if peerResult.headerOnly {
+			continue
 		}
 
 		peerArchiveRefs = append(peerArchiveRefs, peerResult.ARRef)
@@ -701,6 +848,46 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	return result
 }
 
+// walkPeersForSideEffects recurses into the peers of a header-only
+// LIBRARY so their transitive closure is still discovered (PR-27).
+// The header-only module emits nothing itself, so the per-peer
+// archive refs are dropped on the floor; we only care that the
+// peer's `genModule` runs (its memo entry then makes the peer
+// available to other consumers in the closure).
+func walkPeersForSideEffects(ctx *genCtx, instance ModuleInstance, d *moduleData) {
+	defaults := defaultPeerdirsFor(instance)
+
+	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
+
+	for _, p := range defaults {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+
+		seen[p] = struct{}{}
+		peerPath := filepath.Clean(p)
+
+		if !peerYaMakeExists(ctx.sourceRoot, peerPath) {
+			continue
+		}
+
+		peerInstance := derivePeerInstance(instance, peerPath)
+		genModule(ctx, peerInstance)
+	}
+
+	for _, p := range d.peerdirs {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+
+		seen[p] = struct{}{}
+
+		peerPath := filepath.Clean(p)
+		peerInstance := derivePeerInstance(instance, peerPath)
+		genModule(ctx, peerInstance)
+	}
+}
+
 // hasCompilableSource reports whether the module has at least one
 // source the rule emitter would actually compile (excluding pure
 // headers in SRCS, which the upstream uses as IDE / dependency-
@@ -768,12 +955,46 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcRel string, _addIncl
 		// of `contrib/tools/ragel6`, walk it to completion, and
 		// thread the resulting LD ref through EmitR6. Then EmitCC
 		// over the generated `.cpp`.
+		//
+		// PR-27 tolerance: ragel6's parent ya.make uses
+		// `INCLUDE(${ARCADIA_ROOT}/...)` which our parser does not
+		// yet expand (the variable substitution layer is M5+ work).
+		// When the recursion fails, emit EmitR6 with a zero
+		// ragel6LD ref — the .rl6 → .cpp generation still emits a
+		// node with the right module_dir / output path; only the
+		// generator-tool dep is wrong, which the comparator sees as
+		// L3 divergence on that one ragel-using module rather than
+		// blowing up the whole walk. Documented for PR-28's
+		// host-tool plumbing fix.
+		var ragelLDRef NodeRef
+
 		ragelInstance := instance.WithHost(ctx.cfg)
 		ragelInstance.Path = "contrib/tools/ragel6"
 		ragelInstance.Flags = inferFlagsFromPath(ragelInstance.Path, true)
-		ragelResult := genModule(ctx, ragelInstance)
 
-		_, r6Out := EmitR6(instance, srcRel, ragelResult.LDRef, ctx.emit)
+		if exc := Try(func() {
+			ragelResult := genModule(ctx, ragelInstance)
+			ragelLDRef = ragelResult.LDRef
+		}); exc != nil {
+			// Only swallow *ParseError — the documented gap when
+			// ragel6's ya.make contains INCLUDE(${ARCADIA_ROOT}/...)
+			// that our parser cannot yet expand (M5+ variable
+			// substitution). Any other exception is unexpected and
+			// must propagate loudly rather than silently produce a
+			// zero ragel6LD ref.
+			var pe *ParseError
+
+			if !errors.As(exc.AsError(), &pe) {
+				panic(exc)
+			}
+
+			// Leave ragelLDRef zero-valued; document the host-tool
+			// gap rather than re-throwing. ProcessR6's NodeRef
+			// argument tolerates a zero ref (the resulting node
+			// just won't dep-link to a host ragel6).
+		}
+
+		_, r6Out := EmitR6(instance, srcRel, ragelLDRef, ctx.emit)
 		// EmitR6's output is `$(BUILD_ROOT)/<modulePath>/_/<srcRel>.cpp`.
 		// EmitCC needs a module-relative source path; strip the
 		// `$(BUILD_ROOT)/<modulePath>/` prefix to recover it.

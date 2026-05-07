@@ -146,11 +146,12 @@ func (*SrcDirStmt) stmtMarker()     {}
 func (*GlobalSrcsStmt) stmtMarker() {}
 
 // Expr is the sealed-interface marker for IF-predicate AST nodes. The
-// evaluator lives in `macros.go:EvalCond`. Keeping the ADT small (four
-// constructors: ident, NOT, AND, OR) is intentional — the ya.make IF
-// language we observe in the archiver-closure subset of the reference
-// graph never reaches for richer constructs, and a smaller ADT means
-// a smaller surface for round-tripping bugs.
+// evaluator lives in `macros.go:EvalCond`. PR-27 widened the ADT from
+// four bool-only constructors (ident/NOT/AND/OR) to eight by adding
+// the value-position leaves (string/int literals) plus the two
+// comparison operators (`==`, `<`) that the libcxx / libcxxrt /
+// libunwind / libc_compat ya.makes use. The grammar stays small —
+// only what the closure actually needs.
 type Expr interface {
 	exprMarker()
 }
@@ -177,10 +178,44 @@ type ExprOr struct {
 	Left, Right Expr
 }
 
-func (*ExprIdent) exprMarker() {}
-func (*ExprNot) exprMarker()   {}
-func (*ExprAnd) exprMarker()   {}
-func (*ExprOr) exprMarker()    {}
+// ExprString is a string literal — `"libcxxrt"` in
+// `IF (CXX_RT == "libcxxrt")`. Only legal as an operand of ExprEq;
+// using it as a top-level cond throws at evaluation time (a bare
+// string has no boolean meaning).
+type ExprString struct {
+	Value string
+}
+
+// ExprInt is an integer literal — `28` in `IF (ANDROID_API < 28)`.
+// Same value-position constraint as ExprString. Integer literals are
+// unsigned (digits only); negative integers are unsupported by the
+// current lexer — closures requiring `IF (X < -N)` would need a lexer
+// extension.
+type ExprInt struct {
+	Value int
+}
+
+// ExprEq is equality comparison: `Left == Right`. Both operands must
+// resolve (via env or literal) to the same dynamic type — `string ==
+// string` or `int == int`. Mixed types throw at evaluation time.
+type ExprEq struct {
+	Left, Right Expr
+}
+
+// ExprLt is numeric less-than: `Left < Right`. Both operands must
+// resolve to int; non-int operands throw.
+type ExprLt struct {
+	Left, Right Expr
+}
+
+func (*ExprIdent) exprMarker()  {}
+func (*ExprNot) exprMarker()    {}
+func (*ExprAnd) exprMarker()    {}
+func (*ExprOr) exprMarker()     {}
+func (*ExprString) exprMarker() {}
+func (*ExprInt) exprMarker()    {}
+func (*ExprEq) exprMarker()     {}
+func (*ExprLt) exprMarker()     {}
 
 // ParseError describes a syntactic problem with a ya.make file.
 type ParseError struct {
@@ -243,6 +278,10 @@ const (
 	tokWord   // bare path / identifier-like atom that's not a macro IDENT (e.g. "main.cpp", "library/cpp/archive")
 	tokLParen
 	tokRParen
+	tokInt   // unsigned integer literal (PR-27: IF (ANDROID_API < 28))
+	tokEq    // `==` operator (PR-27: IF (CXX_RT == "libcxxrt"))
+	tokLt    // `<` operator (PR-27: IF (ANDROID_API < 28))
+	tokNotEq // `!=` operator (PR-27: IF (OS_SDK != "ubuntu-20"))
 )
 
 type token struct {
@@ -449,6 +488,32 @@ func (l *lexer) readToken() token {
 		return token{kind: tokRParen, line: startLine, col: startCol}
 	case b == '"':
 		return l.readString(startLine, startCol)
+	case b == '<':
+		// `<` is the only single-character relational operator we
+		// model. `<=` and `>=` are not in the closure subset; if a
+		// future ya.make needs them, extend here and in parseCmp.
+		l.advance()
+
+		return token{kind: tokLt, line: startLine, col: startCol}
+	case b == '=' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '=':
+		// `==` only — bare `=` at a token boundary falls through to
+		// readWord (so flag-style values like "-D_X=1" still lex as a
+		// single word; bare `=` cannot start a token in any real
+		// ya.make we observe).
+		l.advance() // consume first '='
+		l.advance() // consume second '='
+
+		return token{kind: tokEq, line: startLine, col: startCol}
+	case b == '!' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '=':
+		// `!=` only — bare `!` at a token boundary falls through to
+		// readWord (e.g. CFLAGS values like "!suppressed"; not common
+		// in real ya.makes but kept lenient).
+		l.advance() // consume '!'
+		l.advance() // consume '='
+
+		return token{kind: tokNotEq, line: startLine, col: startCol}
+	case b >= '0' && b <= '9':
+		return l.readNumberOrWord(startLine, startCol)
 	case isIdentStart(b):
 		return l.readIdentOrWord(startLine, startCol)
 	case isWordByte(b):
@@ -563,6 +628,35 @@ func (l *lexer) readWord(startLine, startCol int) token {
 	}
 
 	return token{kind: tokWord, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
+}
+
+// readNumberOrWord reads a token that begins with a digit. A pure
+// digit run that ends at a non-word boundary becomes a tokInt
+// (`28` → tokInt(28)). Anything else — digits followed by another
+// word byte, or a non-digit punctuation continuation — degrades to
+// a tokWord so version literals like `2025-06-20` keep their existing
+// shape and the rest of the parser sees them as bare words. The
+// non-degraded path is the one PR-27 added support for; the
+// degraded path is the pre-PR-27 behaviour preserved verbatim.
+func (l *lexer) readNumberOrWord(startLine, startCol int) token {
+	start := l.pos
+
+	for l.pos < len(l.src) && l.src[l.pos] >= '0' && l.src[l.pos] <= '9' {
+		l.advance()
+	}
+
+	if l.pos < len(l.src) && isWordByte(l.src[l.pos]) {
+		// Continuation byte is a non-digit word byte — the whole run
+		// is a tokWord (e.g. version literal "2025-06-20" or a
+		// path component starting with a digit).
+		for l.pos < len(l.src) && isWordByte(l.src[l.pos]) {
+			l.advance()
+		}
+
+		return token{kind: tokWord, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
+	}
+
+	return token{kind: tokInt, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
 }
 
 // ----------------------------------------------------------------------
@@ -690,7 +784,7 @@ func (p *parser) parseMacroArgs(nameTok token) []string {
 			return args
 		case tokEOF:
 			p.lex.throwParse(nameTok.line, nameTok.col, "unterminated macro call %q (missing ')')", nameTok.val)
-		case tokIdent, tokWord, tokString:
+		case tokIdent, tokWord, tokString, tokInt:
 			args = append(args, tok.val)
 		case tokLParen:
 			p.lex.throwParse(tok.line, tok.col, "unexpected '(' inside macro call %q", nameTok.val)
@@ -893,7 +987,7 @@ func (p *parser) readCondTokens(ifTok token) []token {
 			}
 
 			out = append(out, tok)
-		case tokIdent, tokWord, tokString:
+		case tokIdent, tokWord, tokString, tokInt, tokEq, tokLt, tokNotEq:
 			out = append(out, tok)
 		}
 	}
@@ -921,9 +1015,15 @@ type condParser struct {
 }
 
 // parseCondExpr parses the IF's condition tokens into an Expr ADT.
-// Precedence (lowest → highest): OR, AND, NOT. Parentheses override
-// precedence. AND/OR are left-associative; NOT is right-associative.
-// Throws *ParseError on syntactic problems.
+// Precedence (lowest → highest): OR, AND, NOT, comparator (`==` /
+// `<`), atom. Comparators bind tighter than NOT so `NOT X == Y`
+// parses as `NOT (X == Y)`, which matches the libcxxrt usage
+// `IF (SANITIZER_TYPE == undefined OR FUZZING)` (the OR's RHS is
+// just FUZZING, the LHS is the whole comparison). Comparators are
+// non-associative: `A == B == C` is a syntax error, not a chain.
+// Parentheses override precedence. AND/OR are left-associative;
+// NOT is right-associative. Throws *ParseError on syntactic
+// problems.
 func parseCondExpr(parent *parser, ifTok token, toks []token) Expr {
 	cp := &condParser{toks: toks, parent: parent, ifTok: ifTok}
 	expr := cp.parseOr()
@@ -992,7 +1092,64 @@ func (c *condParser) parseNot() Expr {
 		return &ExprNot{Of: c.parseNot()}
 	}
 
-	return c.parseAtom()
+	return c.parseCmp()
+}
+
+// parseCmp recognises a single comparator `X op Y` between two atoms,
+// where op is `==` or `<`. Non-associative: a second comparator after
+// the first throws (so `A == B == C` is a clear syntax error rather
+// than silently associating left or right). When no comparator
+// follows the leading atom, parseCmp returns the atom as-is.
+func (c *condParser) parseCmp() Expr {
+	left := c.parseAtom()
+
+	t, ok := c.peek()
+
+	if !ok {
+		return left
+	}
+
+	switch t.kind {
+	case tokEq:
+		c.consume()
+		right := c.parseAtom()
+		c.rejectChainedCmp(t)
+
+		return &ExprEq{Left: left, Right: right}
+	case tokLt:
+		c.consume()
+		right := c.parseAtom()
+		c.rejectChainedCmp(t)
+
+		return &ExprLt{Left: left, Right: right}
+	case tokNotEq:
+		// `X != Y` desugars to `NOT (X == Y)` so the evaluator only
+		// needs the ExprEq path; the negation is structural and the
+		// short-circuit semantics are unaffected.
+		c.consume()
+		right := c.parseAtom()
+		c.rejectChainedCmp(t)
+
+		return &ExprNot{Of: &ExprEq{Left: left, Right: right}}
+	}
+
+	return left
+}
+
+// rejectChainedCmp throws when the token directly after a comparator's
+// RHS is itself another comparator — `A == B == C` and similar. Pinned
+// at the chain operator's location so the user sees exactly which
+// `==`/`<` was the second one.
+func (c *condParser) rejectChainedCmp(prev token) {
+	t, ok := c.peek()
+
+	if !ok {
+		return
+	}
+
+	if t.kind == tokEq || t.kind == tokLt || t.kind == tokNotEq {
+		c.parent.lex.throwParse(t.line, t.col, "chained comparison %s after %s is not supported", describeToken(t), describeToken(prev))
+	}
 }
 
 func (c *condParser) parseAtom() Expr {
@@ -1014,6 +1171,27 @@ func (c *condParser) parseAtom() Expr {
 		c.consume()
 
 		return expr
+	}
+
+	if t.kind == tokString {
+		c.consume()
+
+		return &ExprString{Value: t.val}
+	}
+
+	if t.kind == tokInt {
+		c.consume()
+
+		// Lexer guarantees t.val is non-empty and digits-only;
+		// strconv-style parsing inline would pull in a stdlib import
+		// for one call site. The hand-rolled parse keeps the
+		// parser's import set tight.
+		n := 0
+		for i := 0; i < len(t.val); i++ {
+			n = n*10 + int(t.val[i]-'0')
+		}
+
+		return &ExprInt{Value: n}
 	}
 
 	if t.kind == tokIdent || (t.kind == tokWord && isIdentShapedName(t.val)) {
@@ -1124,6 +1302,14 @@ func describeToken(t token) string {
 		return "'('"
 	case tokRParen:
 		return "')'"
+	case tokInt:
+		return fmt.Sprintf("integer %s", t.val)
+	case tokEq:
+		return "'=='"
+	case tokLt:
+		return "'<'"
+	case tokNotEq:
+		return "'!='"
 	default:
 		return fmt.Sprintf("token(kind=%d)", t.kind)
 	}

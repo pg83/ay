@@ -4,13 +4,114 @@ package main
 // the M2 macro routing pipeline uses to decide which branches a parsed
 // `*IfStmt` keeps. The Expr ADT is in `yamake.go` next to the parser
 // that builds it; the evaluator and the canonical env live here so
-// later PRs (PR-20 wiring, PR-22 archiver-platform sweep) extend just
-// `DefaultIfEnv` rather than touching the parser.
+// later PRs (PR-22 archiver-platform sweep) extend just `DefaultIfEnv`
+// rather than touching the parser.
 //
 // The contract per D27 is intentionally strict: an unknown identifier
 // in an IF expression throws. Silent default-to-false is the failure
 // mode that hides "we never bound this var" until the comparator
 // reports a missing-node, which is one round too late.
+//
+// PR-27 widened the value space from booleans to {bool, string, int}
+// so the parser ADT additions (ExprEq, ExprLt, ExprString, ExprInt)
+// have somewhere to look up their operands. The Environment carries
+// three typed maps; a name appears in at most one (otherwise the
+// Lookup fallthrough order is bool → string → int, but in practice
+// each binding is only ever in one). The bool-only path stays the
+// hot path — every existing IF predicate in the M1 closure is
+// boolean-valued and only the new comparator paths reach for typed
+// lookups.
+
+// Environment binds IF-condition identifiers to their typed values.
+// Three disjoint maps, one per supported value type. PR-27 introduced
+// this in place of the pre-PR-27 `map[string]bool` so comparators
+// (ExprEq, ExprLt) can resolve operands of differing types; the
+// boolean-only callers (ExprIdent in predicate position, ExprAnd,
+// ExprOr, ExprNot) still go through the typed `Bool` lookup which
+// throws on a non-bool binding.
+type Environment struct {
+	bools   map[string]bool
+	strings map[string]string
+	ints    map[string]int
+}
+
+// Lookup returns the typed value bound to name, or throws on miss.
+// The return type is `any` because the caller (evalAtom, ExprEq's
+// rhs/lhs resolution) only branches on the dynamic type. Callers that
+// need a specific type — EvalCond's ExprIdent path expects bool — go
+// through Bool to get a typed value plus a clean error message.
+func (e Environment) Lookup(name string) any {
+	if v, ok := e.bools[name]; ok {
+		return v
+	}
+
+	if v, ok := e.strings[name]; ok {
+		return v
+	}
+
+	if v, ok := e.ints[name]; ok {
+		return v
+	}
+
+	ThrowFmt("macros: unknown IF identifier %q (extend env in macros.go's DefaultIfEnv)", name)
+
+	return nil // unreachable; ThrowFmt panics
+}
+
+// Bool returns the boolean binding for name. Throws on miss OR on a
+// non-bool binding — the caller (predicate-position ExprIdent) expects
+// a bool and silently coercing a string/int would be a defect.
+func (e Environment) Bool(name string) bool {
+	if v, ok := e.bools[name]; ok {
+		return v
+	}
+
+	if _, ok := e.strings[name]; ok {
+		ThrowFmt("macros: identifier %q has string binding but is used in boolean position", name)
+	}
+
+	if _, ok := e.ints[name]; ok {
+		ThrowFmt("macros: identifier %q has int binding but is used in boolean position", name)
+	}
+
+	ThrowFmt("macros: unknown IF identifier %q (extend env in macros.go's DefaultIfEnv)", name)
+
+	return false // unreachable
+}
+
+// Clone returns a deep-enough copy of the env that callers can mutate
+// per-instance (e.g. flip ARCH_AARCH64 ↔ ARCH_X86_64 for host targets)
+// without trampling DefaultIfEnv. The maps are copied; their contents
+// are immutable scalars.
+func (e Environment) Clone() Environment {
+	out := Environment{
+		bools:   make(map[string]bool, len(e.bools)),
+		strings: make(map[string]string, len(e.strings)),
+		ints:    make(map[string]int, len(e.ints)),
+	}
+
+	for k, v := range e.bools {
+		out.bools[k] = v
+	}
+
+	for k, v := range e.strings {
+		out.strings[k] = v
+	}
+
+	for k, v := range e.ints {
+		out.ints[k] = v
+	}
+
+	return out
+}
+
+// SetBool overrides (or adds) a boolean binding. Helper for
+// per-instance env tweaks like ARCH_AARCH64 ↔ ARCH_X86_64; callers
+// must Clone first if they don't want their mutation to leak into
+// DefaultIfEnv.
+func (e Environment) SetBool(name string, v bool) {
+	e.bools[name] = v
+}
 
 // EvalCond evaluates an IF predicate against a fixed env. Throws
 // (D27) on:
@@ -19,23 +120,29 @@ package main
 //     extended with the new var rather than letting the call silently
 //     return false;
 //   - unhandled Expr type — defensive guard for future ADT widenings
-//     that forget to extend the switch.
-func EvalCond(e Expr, env map[string]bool) bool {
+//     that forget to extend the switch;
+//   - bare ExprString / ExprInt in predicate position — a string or
+//     int has no boolean meaning on its own, only as a comparator
+//     operand;
+//   - ExprEq / ExprLt with mismatched or non-numeric operand types.
+func EvalCond(e Expr, env Environment) bool {
 	switch x := e.(type) {
 	case *ExprIdent:
-		v, ok := env[x.Name]
-
-		if !ok {
-			ThrowFmt("macros: unknown IF identifier %q (extend env in macros.go's DefaultIfEnv)", x.Name)
-		}
-
-		return v
+		return env.Bool(x.Name)
 	case *ExprNot:
 		return !EvalCond(x.Of, env)
 	case *ExprAnd:
 		return EvalCond(x.Left, env) && EvalCond(x.Right, env)
 	case *ExprOr:
 		return EvalCond(x.Left, env) || EvalCond(x.Right, env)
+	case *ExprString:
+		ThrowFmt("macros: bare string %q cannot be evaluated as a boolean condition", x.Value)
+	case *ExprInt:
+		ThrowFmt("macros: bare integer %d cannot be evaluated as a boolean condition", x.Value)
+	case *ExprEq:
+		return evalEq(x, env)
+	case *ExprLt:
+		return evalLt(x, env)
 	}
 
 	ThrowFmt("macros: unhandled Expr type %T", e)
@@ -43,45 +150,178 @@ func EvalCond(e Expr, env map[string]bool) bool {
 	return false // unreachable; ThrowFmt panics
 }
 
+// evalAtom resolves a value-position Expr (operand of `==` or `<`) to
+// its dynamic value. ExprIdent goes through Lookup (any type); literal
+// nodes return their carried value. Anything else — a bool combinator
+// or another comparator nested directly as an operand — throws,
+// because the parser's grammar should never produce such a shape.
+func evalAtom(e Expr, env Environment) any {
+	switch x := e.(type) {
+	case *ExprIdent:
+		return env.Lookup(x.Name)
+	case *ExprString:
+		return x.Value
+	case *ExprInt:
+		return x.Value
+	}
+
+	ThrowFmt("macros: unexpected Expr type %T in comparator operand position", e)
+
+	return nil // unreachable
+}
+
+// evalEq compares two atoms for equality. Same-type comparison only;
+// mixed string/int throws so a parser-level type confusion surfaces
+// immediately rather than silently returning false.
+func evalEq(x *ExprEq, env Environment) bool {
+	l := evalAtom(x.Left, env)
+	r := evalAtom(x.Right, env)
+
+	switch lv := l.(type) {
+	case string:
+		rv, ok := r.(string)
+
+		if !ok {
+			ThrowFmt("macros: == operand type mismatch: left is string %q, right is %T", lv, r)
+		}
+
+		return lv == rv
+	case int:
+		rv, ok := r.(int)
+
+		if !ok {
+			ThrowFmt("macros: == operand type mismatch: left is int %d, right is %T", lv, r)
+		}
+
+		return lv == rv
+	case bool:
+		rv, ok := r.(bool)
+
+		if !ok {
+			ThrowFmt("macros: == operand type mismatch: left is bool %v, right is %T", lv, r)
+		}
+
+		return lv == rv
+	}
+
+	ThrowFmt("macros: == operand has unsupported dynamic type %T", l)
+
+	return false // unreachable
+}
+
+// evalLt enforces numeric `<`. Both sides must be int; anything else
+// throws.
+func evalLt(x *ExprLt, env Environment) bool {
+	l := evalAtom(x.Left, env)
+	r := evalAtom(x.Right, env)
+
+	li, lok := l.(int)
+	ri, rok := r.(int)
+
+	if !lok || !rok {
+		ThrowFmt("macros: < requires int operands, got left=%T right=%T", l, r)
+	}
+
+	return li < ri
+}
+
 // DefaultIfEnv is the bound-variable environment matching the
 // reference graph (M2 target = `default-linux-aarch64` + clang +
 // musl). Extending this set is the documented way to teach EvalCond
-// about a new identifier; PR-20 will trip the unknown-identifier
-// throw exactly when a real ya.make in the archiver closure
-// references something we have not bound, at which point the env
-// gets a new entry — not the evaluator a new fallback.
+// about a new identifier; PR-27's wider closure (libcxx / libcxxrt /
+// libunwind / util) added the typed entries below.
 //
-// PR-26 extension: when the walker reaches DEFAULT_PEERDIR closure
-// (musl / builtins / malloc/api) it encounters identifiers the
-// PR-25 set did not bind because no explicit-PEERDIR module in
-// `tools/archiver` referenced them. Each addition below is a
-// concrete observed gap; the value is `false` in every case (the
-// M2 target is musl / linux / aarch64 / clang, none of these
-// alternative-build markers apply).
-var DefaultIfEnv = map[string]bool{
-	"OS_LINUX":                          true,
-	"OS_WINDOWS":                        false,
-	"OS_DARWIN":                         false,
-	"OS_IOS":                            false,
-	"OS_ANDROID":                        false,
-	"OS_EMSCRIPTEN":                     false,
-	"ARCH_AARCH64":                      true,
-	"ARCH_X86_64":                       false,
-	"ARCH_I386":                         false,
-	"ARCH_ARM7":                         false,
-	"ARCH_ARM64":                        false,
-	"ARCH_ARM6":                         false, // PR-26: contrib/libs/cxxsupp/builtins
-	"CLANG":                             true,
-	"CLANG_CL":                          false,
-	"GCC":                               false,
-	"MSVC":                              false,
-	"MUSL":                              true,
-	"USE_EAT_MY_DATA":                   false, // PR-26: contrib/libs/musl
-	"WITH_MAPKIT":                       false, // PR-26: contrib/libs/cxxsupp/builtins (Yandex MapKit toggle)
-	"WITH_VALGRIND":                     false,
-	"TSTRING_IS_STD_STRING":             false,
-	"NO_CUSTOM_CHAR_PTR_STD_COMPARATOR": false,
-	"NEED_CHECK":                        false,
-	"TRUE":                              true,
-	"FALSE":                             false,
+// PR-27 extension: when the walker reaches the libcxx and libc_compat
+// branches of the closure it encounters comparator operands that the
+// previous bool-only env could not represent. The new typed bindings
+// are:
+//
+//   - CXX_RT="libcxxrt" — what the SET chain in libcxx/ya.make
+//     resolves to for M2 (linux + non-Android + non-ARM6/7). Walker
+//     does not yet evaluate SET, so the chosen value is wired
+//     directly into the env so `IF (CXX_RT == "libcxxrt")` takes
+//     the intended branch.
+//   - SANITIZER_TYPE="" — sanitizers are off in M2; bare-ident
+//     literals "undefined" / "memory" then compare against this empty
+//     value and yield false.
+//   - "undefined" / "memory" / "address" / "thread" / "leak" —
+//     bare-ident sanitizer-type literals appearing on the RHS of
+//     `IF (SANITIZER_TYPE == undefined)` style predicates. Each is
+//     bound to a string equal to its own name so the comparison
+//     evaluates as a string-literal compare against SANITIZER_TYPE.
+//   - ANDROID_API=0 — defensive; libc_compat's `<` branches sit
+//     inside `IF (OS_ANDROID)` (false on M2) so this binding is not
+//     reached today, but pinning it makes the value explicit if a
+//     future closure walks an OS_ANDROID-conditional module.
+//   - bool-typed FUZZING / EXPORT_CMAKE / NO_CXX_RTTI /
+//     NO_CXX_EXCEPTIONS / USE_ARCADIA_COMPILER_RUNTIME /
+//     PROVIDE_* — flag-style booleans the wider closure uses;
+//     all false in M2.
+var DefaultIfEnv = Environment{
+	bools: map[string]bool{
+		"OS_LINUX":                          true,
+		"OS_WINDOWS":                        false,
+		"OS_DARWIN":                         false,
+		"OS_IOS":                            false,
+		"OS_ANDROID":                        false,
+		"OS_EMSCRIPTEN":                     false,
+		"OS_FREEBSD":                        false, // PR-27: contrib/libs/cxxsupp/libcxx
+		"OS_CYGWIN":                         false, // PR-27: util
+		"SUN":                               false, // PR-27: util
+		"CYGWIN":                            false, // PR-27: util
+		"ARCH_AARCH64":                      true,
+		"ARCH_X86_64":                       false,
+		"ARCH_I386":                         false,
+		"ARCH_ARM7":                         false,
+		"ARCH_ARM64":                        false,
+		"ARCH_ARM6":                         false,
+		"ARCH_WASM32":                       false, // PR-27: contrib/libs/libunwind
+		"ARCH_WASM64":                       false, // PR-27: contrib/libs/libunwind
+		"CLANG":                             true,
+		"CLANG_CL":                          false,
+		"GCC":                               false,
+		"MSVC":                              false,
+		"MUSL":                              true,
+		"USE_EAT_MY_DATA":                   false,
+		"WITH_MAPKIT":                       false,
+		"WITH_VALGRIND":                     false,
+		"TSTRING_IS_STD_STRING":             false,
+		"NO_CUSTOM_CHAR_PTR_STD_COMPARATOR": false,
+		"NEED_CHECK":                        false,
+		"TRUE":                              true,
+		"FALSE":                             false,
+		"FUZZING":                           false, // PR-27: contrib/libs/cxxsupp/libcxxrt
+		"EXPORT_CMAKE":                      false, // PR-27: contrib/libs/cxxsupp/libcxxabi-parts
+		"NO_CXX_RTTI":                       false, // PR-27: contrib/libs/cxxsupp/libcxxrt
+		"NO_CXX_EXCEPTIONS":                 false, // PR-27: contrib/libs/cxxsupp/libcxxrt
+		"USE_ARCADIA_COMPILER_RUNTIME":      false, // PR-27: library/cpp/sanitizer/include
+		"PROVIDE_REALLOCARRAY":              false, // PR-27: contrib/libs/libc_compat (DEFAULT-set, M2 default = no)
+		"PROVIDE_GETRANDOM_GETENTROPY":      false, // PR-27: contrib/libs/libc_compat
+		"PROVIDE_QUEUE":                     false, // PR-27: contrib/libs/libc_compat
+		"PROVIDE_GETSERVBYNAME":             false, // PR-27: contrib/libs/libc_compat
+		"PROVIDE_MEMFD_CREATE":              false, // PR-27: contrib/libs/libc_compat
+	},
+	strings: map[string]string{
+		// CXX_RT: SET-derived runtime selector. M2 (linux + clang +
+		// non-Android + non-ARM6/7) lands on libcxxrt. The walker
+		// does not yet evaluate SET, so the chosen value is wired
+		// directly here.
+		"CXX_RT": "libcxxrt",
+		// SANITIZER_TYPE: empty in unsanitized M2; comparisons against
+		// the bare-ident sanitizer-type names below evaluate to false.
+		"SANITIZER_TYPE": "",
+		// Bare-ident sanitizer type literals — each maps to its own
+		// name so `SANITIZER_TYPE == undefined` compares against the
+		// literal "undefined" via string equality.
+		"undefined": "undefined",
+		"memory":    "memory",
+		"address":   "address",
+		"thread":    "thread",
+		"leak":      "leak",
+	},
+	ints: map[string]int{
+		// ANDROID_API: defensive default for libc_compat's `<`
+		// branches; not reached on M2 (OS_ANDROID=false above).
+		"ANDROID_API": 0,
+	},
 }
