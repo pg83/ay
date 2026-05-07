@@ -1204,3 +1204,43 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 **Location:** gen.go:303-307 (SrcDirStmt case)
 **Description:** Comment said `"PR-25 collects but does NOT thread this into emitOneSource — tools/archiver closure has no SRCDIR usages so the gap is invisible today. PR-26 wires it through."` Outdated: emitOneSource now threads srcDir, and ragel6/bin uses SRCDIR within tools/archiver closure.
 **Fix:** Comment replaced with current-state description: SRCDIR shifts source resolution; PR-28-D02 threads srcDir into emitOneSource; PR-28-D11 closed JOIN_SRCS gap; LD/AR remain at instance.Path (intentional — binary lives where declared even if sources are elsewhere).
+
+---
+
+## PR-29
+
+### [PR-29-D01] CXXFLAGS GLOBAL modifier leaks as literal cmd_arg
+**Status:** resolved
+**Severity:** major
+**Location:** gen.go:350-353 (applyUnknownStmt CXXFLAGS/CONLYFLAGS branches); gen.go:881-885 (collected via cxxFlags into ModuleCCInputs); cc.go:276 (appendCxxStdAndOwn)
+**Description:** applyUnknownStmt appends `v.Args...` directly into `d.cxxFlags`/`d.cOnlyFlags` without using `splitGlobalModifier`. When ya.make declares `CXXFLAGS(GLOBAL -nostdinc++)` (libcxx ya.make:68 IF (CLANG) branch, taken in M2), the parser produces UnknownStmt{Name: "CXXFLAGS", Args: ["GLOBAL", "-nostdinc++"]}. Walker stores both args verbatim; appendCxxStdAndOwn appends slice to cmd_args. Result: every libcxx CC node emits literal `GLOBAL` at cmd_args[95] (116 nodes verified). Compounding: `CXXFLAGS(GLOBAL X)` per ymake semantics propagates X to peers and does NOT apply to self — injecting `-nostdinc++` into libcxx's own cmd_args is also semantically wrong (D04 PR-30 territory). Contrast: ADDINCL/CFLAGS go through typed *AddInclStmt/*CFlagsStmt whose parsers strip the modifier; CXXFLAGS/CONLYFLAGS were left untyped.
+**Root cause:** PR-29-D02 plan correctly noted "GLOBAL CXXFLAGS — out of scope for D02" but implementation forgot to FILTER GLOBAL out. Pipeline silently includes GLOBAL-prefixed args because applyUnknownStmt has no awareness "GLOBAL" is a meta-token.
+**Fix:** applyUnknownStmt CXXFLAGS/CONLYFLAGS branches at gen.go:350-367 call splitGlobalModifier; when mod=="GLOBAL", break (drop both literal "GLOBAL" token AND the flags — peer-propagation routing deferred to PR-30 D04). Inline comments name PR-30 D04 as future site. Empirical: regenerated tools/archiver has zero "GLOBAL" tokens in any cmd_args (3321 nodes); libcxx CC nodes correctly drop both GLOBAL and -nostdinc++ from own cmd_args.
+
+### [PR-29-D02] D02 test coverage bypasses parser→walker→emit path
+**Status:** resolved
+**Severity:** minor
+**Location:** cc_test.go:508-553 (TestEmitCC_OwnCXXFlags_SlotsAfterSuppressionBlock), :559-575 (TestEmitCC_COnlyFlags_AppliesOnlyToCSources)
+**Description:** Both D02 pin tests construct ModuleCCInputs.CXXFlags/COnlyFlags directly with hand-written non-GLOBAL slices. They don't exercise the parser → applyUnknownStmt → moduleData.cxxFlags → ModuleCCInputs pipeline. The GLOBAL-leak defect (D01) is invisible to them — they pass cleanly with bug present.
+**Fix:** Covered by D01's regression test `TestGen_CXXFLAGS_GLOBAL_NotLeakedToOwnCmdArgs` (gen_test.go:1956-2084) — three subtests (CXXFLAGS GLOBAL drop, CONLYFLAGS GLOBAL drop, non-GLOBAL passthrough) exercising the full parser→walker→emit pipeline via real ya.make + Gen + cmd_args inspection.
+
+### [PR-29-D03] cc.go header comment claims Generator is "wired into DepRefs" but no caller sets it
+**Status:** resolved
+**Severity:** nit
+**Location:** cc.go:11, :57-71
+**Description:** Package doc-block said ModuleCCInputs "carries... a Generator NodeRef wired into DepRefs." Field comment said "Generator: NodeRef threaded into DepRefs when IsGenerated (D07)." Both implied live integration. No caller in gen.go sets `ccIn.Generator`; gate at cc.go:202 unreachable today.
+**Fix:** cc.go:11 doc-block updated to "reserved for PR-30; not wired today"; cc.go:62-63 field comment cites cc.go:196-201 as the L0-deferral rationale.
+
+### [PR-29-D04] composeMuslCC's appendCxxStdAndOwn produces double `-Wno-everything` for any future C++ musl source
+**Status:** resolved
+**Severity:** minor
+**Location:** cc.go:389 (composeMuslCC), cc.go:441 (composeMuslHostCC), cc.go:263-279 (appendCxxStdAndOwn)
+**Description:** Musl composers hard-coded `appendCxxStdAndOwn(cmdArgs, isCxx, true, ownExtras)`. When isCxx && noCompilerWarnings both hold, helper appended `muslWarningFlags...`. But musl composers ALREADY appended muslWarningFlags... earlier. Latent: M2 closure has no musl C++ source today; surfaces once musl/full lands.
+**Fix:** appendCxxStdAndOwn signature gained `injectCxxWarningBundle bool` (cc.go:270). composeTargetCC/composeHostCC pass true (preserves pre-D04 behavior); composeMuslCC/composeMuslHostCC pass false. Inline comment at musl call sites: "musl already added muslWarningFlags above; suppress duplicate injection in helper."
+
+### [PR-29-D05] noCompilerWarnings parameter unused in composeMuslCC/composeMuslHostCC, hidden via `_ = noCompilerWarnings`
+**Status:** resolved
+**Severity:** nit
+**Location:** cc.go:367 (composeMuslCC), cc.go:419 (composeMuslHostCC)
+**Description:** Both musl composers took `noCompilerWarnings bool` and immediately discarded via `_ = noCompilerWarnings`. Body always behaved as if noCompilerWarnings=true. Parameter was decorative.
+**Fix:** Parameter removed from composeMuslCC (cc.go:373) and composeMuslHostCC (cc.go:424). Dispatcher at cc.go:137-139 passes only the new short signature. No `_ = noCompilerWarnings` lines remain. Inline comment retained next to the muslWarningFlags append: "musl always uses muslWarningFlags by definition."
