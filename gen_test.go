@@ -58,11 +58,12 @@ func TestGen_BuildCowOn_TwoNodeSubgraph_L3MatchesReference(t *testing.T) {
 		if !strings.HasPrefix(n.Outputs[0], "$(BUILD_ROOT)/"+targetDir+"/") {
 			continue
 		}
-		// PR-10 emits one platform (TargetCfg.Name). The reference graph
-		// carries the same module on multiple platforms (4 nodes for
-		// build/cow/on: 2 platforms × {CC, AR}); restrict the comparison
-		// subgraph to TargetCfg.Name so the pairing is 2-vs-2 not 4-vs-2.
-		if n.Platform != TargetCfg.Name {
+		// PR-10 emits one platform (TargetCfg.Target.ID). The reference
+		// graph carries the same module on multiple platforms (4 nodes
+		// for build/cow/on: 2 platforms × {CC, AR}); restrict the
+		// comparison subgraph to TargetCfg.Target.ID so the pairing is
+		// 2-vs-2 not 4-vs-2.
+		if n.Platform != string(TargetCfg.Target.ID) {
 			continue
 		}
 
@@ -246,9 +247,15 @@ func TestGen_PeerdirCycle_Throws(t *testing.T) {
 }
 
 // TestGen_RejectsUnsupportedMacro verifies that any macro outside
-// PR-12's narrow whitelist throws with a concrete deferred-to-PR-13
-// message. `IF` is the canonical example: it is the macro PR-13
-// will introduce a real evaluator for.
+// PR-23's whitelist throws with a concrete deferred-to-PR-25
+// message. PR-13 introduced typed Stmts for IF / INCLUDE /
+// JOIN_SRCS / ADDINCL / CFLAGS / LDFLAGS / SRCDIR / GLOBAL_SRCS,
+// so `IF` is no longer the "unsupported macro" canary — gen.go now
+// hits its default `*Stmt` arm with an "unhandled Stmt type" message
+// for those. Any name NOT in `pr12SupportedUnknownMacros` AND NOT a
+// typed Stmt name still flows through `*UnknownStmt` and trips the
+// original whitelist check; `RUN_PYTHON3` is a stable example of
+// that path.
 func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 	root := t.TempDir()
 
@@ -258,7 +265,7 @@ func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 		t.Fatalf("mkdir mod: %v", err)
 	}
 
-	yamake := []byte("LIBRARY()\nIF(LINUX)\nSRCS(a.cpp)\nENDIF()\nSRCS(main.cpp)\nEND()\n")
+	yamake := []byte("LIBRARY()\nRUN_PYTHON3(foo bar)\nSRCS(main.cpp)\nEND()\n")
 
 	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644); err != nil {
 		t.Fatalf("write mod/ya.make: %v", err)
@@ -272,8 +279,8 @@ func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 		t.Fatal("expected exception for unsupported macro, got nil")
 	}
 
-	if !strings.Contains(exc.Error(), "PR-12 does not yet support macro") {
-		t.Errorf("error %q does not contain 'PR-12 does not yet support macro'", exc.Error())
+	if !strings.Contains(exc.Error(), "does not yet support macro") {
+		t.Errorf("error %q does not contain 'does not yet support macro'", exc.Error())
 	}
 }
 
@@ -317,6 +324,101 @@ END()
 
 	if !strings.Contains(exc.Error(), "no module declaration") {
 		t.Errorf("unexpected error: %v", exc)
+	}
+}
+
+// TestGen_DualInstantiation_BuildCowOn pins D31 — the same Path,
+// instantiated as TWO ModuleInstances (target + host), produces TWO
+// distinct memo entries and TWO distinct CC+AR pairs. PR-23 walker
+// (`Gen`) only emits the TARGET pair (host-tool recursion is wired
+// in PR-25 via the macro evaluator). PR-23's contract for this test
+// is therefore:
+//
+//  1. Gen with the target seed → 2 nodes (M1 acceptance preserved).
+//  2. A direct EmitCC + EmitAR call against a host instance against
+//     the SAME emitter buffer adds 2 more nodes byte-exact against
+//     the reference host pair.
+//
+// Together these prove that ModuleInstance addressing AND host
+// emission both work; PR-25 will fold the second half into the
+// walker.
+func TestGen_DualInstantiation_BuildCowOn(t *testing.T) {
+	const targetDir = "build/cow/on"
+
+	if _, err := os.Stat(sourceRoot + "/" + targetDir + "/ya.make"); err != nil {
+		t.Skipf("reference ya.make not present: %v", err)
+	}
+
+	if _, err := os.Stat(referenceGraphPath); err != nil {
+		t.Skipf("reference graph %s not present: %v", referenceGraphPath, err)
+	}
+
+	// Step 1: full Gen against target. Must emit exactly 2 nodes
+	// (1 CC + 1 AR) — same as M1 acceptance.
+	our := Gen(DefaultLinuxConfig, sourceRoot, targetDir)
+
+	if len(our.Graph) != 2 {
+		t.Errorf("Gen produced %d nodes, want 2 (1 CC + 1 AR target-only)", len(our.Graph))
+	}
+
+	for _, n := range our.Graph {
+		if n.Platform != string(PlatformDefaultLinuxAArch64) {
+			t.Errorf("node %s on platform %q; want target only", n.Outputs[0], n.Platform)
+		}
+
+		if n.HostPlatform {
+			t.Errorf("node %s has host_platform=true; want target only", n.Outputs[0])
+		}
+	}
+
+	// Step 2: build a fresh emitter and emit BOTH target and host
+	// pairs by hand. Verify 4 nodes total.
+	e := NewBufferedEmitter()
+
+	tInstance := targetInstance(targetDir)
+	tCCRef, tCCOut := EmitCC(tInstance, "lib.c", e)
+	EmitAR(tInstance, []NodeRef{tCCRef}, []string{tCCOut}, nil, e)
+
+	hInstance := hostInstance(targetDir)
+	hCCRef, hCCOut := EmitCC(hInstance, "lib.c", e)
+	EmitAR(hInstance, []NodeRef{hCCRef}, []string{hCCOut}, nil, e)
+
+	if len(e.nodes) != 4 {
+		t.Errorf("dual emission produced %d nodes, want 4", len(e.nodes))
+	}
+
+	// Verify host nodes (indices 2, 3) carry host_platform=true and
+	// tags=["tool"].
+	hostCC := e.nodes[2]
+	hostAR := e.nodes[3]
+
+	for i, n := range []*Node{hostCC, hostAR} {
+		if !n.HostPlatform {
+			t.Errorf("dual host node %d host_platform = false, want true", i)
+		}
+
+		if len(n.Tags) != 1 || n.Tags[0] != "tool" {
+			t.Errorf("dual host node %d tags = %v, want [tool]", i, n.Tags)
+		}
+
+		if n.Platform != string(PlatformDefaultLinuxX8664) {
+			t.Errorf("dual host node %d platform = %q, want %q", i, n.Platform, PlatformDefaultLinuxX8664)
+		}
+	}
+
+	// Verify target nodes (indices 0, 1) carry no host_platform
+	// and tags=[].
+	targetCC := e.nodes[0]
+	targetAR := e.nodes[1]
+
+	for i, n := range []*Node{targetCC, targetAR} {
+		if n.HostPlatform {
+			t.Errorf("dual target node %d host_platform = true, want false", i)
+		}
+
+		if len(n.Tags) != 0 {
+			t.Errorf("dual target node %d tags = %v, want []", i, n.Tags)
+		}
 	}
 }
 

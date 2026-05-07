@@ -666,7 +666,7 @@ Codify same shape for PR-10.
 ## PR-13
 
 ### [PR-13-D01] INCLUDE cycle causes unbounded recursion / stack overflow
-**Status:** under fix
+**Status:** resolved
 **Severity:** major
 **Location:** yamake.go:1044-1077 (expandInclude)
 **Description:** No visited-set tracking. Self-referential `INCLUDE(a.inc)` in `a.inc`, or any cycle, causes infinite recursion through ParseFile → Parse → parseInternal → parseStmts → parseMacroInto → expandInclude → ParseFile, exhausting goroutine stack. Reproduced: probe writing `a.inc` containing `INCLUDE(a.inc)` doesn't terminate within 4s.
@@ -712,7 +712,7 @@ Codify same shape for PR-10.
 ## PR-14
 
 ### [PR-14-D01] inferModuleFlavor prefix match misclassifies `contrib/libs/musl_extra` as musl flavor
-**Status:** under fix
+**Status:** resolved
 **Severity:** major
 **Location:** cc.go:64
 **Description:** Reference graph contains `contrib/libs/musl_extra` (110 args, no `-Wno-everything`, no `-D_musl_=1`, no `-nostdinc`). `strings.HasPrefix(targetDir, "contrib/libs/musl")` matches both `contrib/libs/musl` AND `contrib/libs/musl_extra`. PR-20 recursive walk will silently emit IsMusl bundle for musl_extra, producing byte-mismatch.
@@ -751,7 +751,7 @@ Codify same shape for PR-10.
 ## PR-15
 
 ### [PR-15-D01] cmd_args .o sort divergence: PR-15 sorts cmd_args[10:] but reference uses declaration order (16 of 48 AR nodes affected)
-**Status:** under fix
+**Status:** resolved
 **Severity:** major
 **Location:** ar.go:55-77 (sortObjsLockstep), :103-104 (cmd_args composition); ar_test.go:408-416 (TestEmitAR_TcmallocGlobal_ByteExact masks divergence)
 **Description:** sortObjsLockstep sorts both inputs AND cmd_args[10:]. Reference inputs ARE sorted (matches), but reference cmd_args[10:] is in DECLARATION order for 16 of 48 AR nodes (util, library/cpp/archive, contrib/libs/cxxsupp/*, contrib/libs/musl, tcmalloc/no_percpu_cache global). PR-22 byte-exact at L3 will silently fail for those modules. TestEmitAR_TcmallocGlobal_ByteExact compares cmd_args as sorted set — actively masks the divergence.
@@ -810,7 +810,7 @@ NO DEFECTS. Clean. Reviewer verified 94-arg byte-exact for chkstk.S, M1 regressi
 **Fix:** Orchestrator updated tasks.md D20 to clarify UID ownership. m2-plan.md sections §3 R2, §4 D20, §7 Q4 receive same correction.
 
 ### [PR-17-D02] R6 stub strategy diverges from D20/Q4 plan (incompatible with Finalize's pre-populated ForeignDeps rejection)
-**Status:** under fix
+**Status:** resolved
 **Severity:** minor
 **Location:** r6.go:53-67 (stub Node emission), :23 (unused ragel6HostUID const); emitter.go:115-122 (Finalize's no-pre-populated-ForeignDeps rule)
 **Description:** D20/Q4 spec "Preserves L0/L1/L2 fingerprint pairing" requires R6 node post-Finalize foreign_deps.tool to carry `XO1d8CLk3qDKv0XQTlDKmQ` byte-exact. Implementation works around Finalize's no-pre-populated-ForeignDeps rule by emitting a stub Node. Post-Finalize the R6 node has `foreign_deps.tool = ["<merkle-of-stub>"]` ≠ reference. PR-20 wiring will surface as unpaired R6 + extra phantom node.
@@ -835,3 +835,42 @@ NO DEFECTS. Clean. Reviewer verified 94-arg byte-exact for chkstk.S, M1 regressi
 ## PR-18
 
 NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests use defer recover with substring assertion; M1 regression preserved.
+
+---
+
+## PR-23 (PIVOT)
+
+### [PR-23-D01] EmitAS signature deviates from D33 with `(includes []string, yasmLD NodeRef, hasYasm bool)` triple instead of `yasmLD NodeRef`
+**Status:** resolved
+**Severity:** minor
+**Location:** as.go:48
+**Description:** D33 specs `EmitAS(instance, srcRel, yasmLD, emit) (NodeRef, string)`. PR-23 ships extra `includes []string` (inherited from PR-16) AND `hasYasm bool` (sentinel because `NodeRef{id:0}` is ambiguous with first-emitted ref). Bool sentinel is a real concern — propagates to PR-25.
+**Suggested fix:** Replace `yasmLD NodeRef, hasYasm bool` with `yasmLD *NodeRef` (nil = no yasm). Cleaner; readable at call sites. Update tests.
+
+### [PR-23-D02] Stale doc reference to undefined identifier `noYasmRef`
+**Status:** resolved
+**Severity:** nit
+**Location:** as.go:42
+**Description:** Doc comment references `noYasmRef` symbol that doesn't exist — earlier draft. Misleads readers.
+**Suggested fix:** Replace with `(NodeRef{}, false)` or after D01 fix, with `(nil)`.
+
+### [PR-23-D03] FlagSet.Extra type changed from `[]string` to `string` but module.go header comment still says `[]string`
+**Status:** resolved
+**Severity:** nit
+**Location:** module.go:25-29
+**Description:** Header comment claims `Extra []string`. Actual field at line 86 is `string` (sort-joined). Field-level comment correct; header stale.
+**Suggested fix:** Update header to "Its `Extra` field is a `\n`-joined sorted concatenation (string, not []string, because slice fields disqualify a struct from being a map key per D34)".
+
+### [PR-23-D04] `peerArchivePaths` collected but never read in genModule
+**Status:** resolved
+**Severity:** nit
+**Location:** gen.go:211, :222
+**Description:** `peerArchivePaths` allocated and appended but never consumed (EmitAR signature only takes `peerArchiveRefs`). Dead code.
+**Suggested fix:** Delete lines 211 and 222 outright. PR-24/PR-25 can re-add when LD wiring needs it.
+
+### [PR-23-D05] OnReady doc lacks per-ref-channel note for M3 StreamingEmitter implementer
+**Status:** resolved
+**Severity:** nit
+**Location:** emitter.go:50-54, :89-91
+**Description:** Doc says BufferedEmitter no-op but doesn't tell M3 author that StreamingEmitter MUST switch to per-NodeRef channels.
+**Suggested fix:** Add to interface comment: "BufferedEmitter returns one shared channel that closes at Finalize for any input ref. StreamingEmitter (M3) MUST close a per-ref channel as each node's deps resolve — the shared-channel shortcut is buffered-only."

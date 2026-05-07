@@ -1,27 +1,64 @@
 package main
 
-// toolchain.go — minimal platform descriptor used by rule emitters.
+// toolchain.go — platform descriptors for rule emission.
 //
-// M1 only ships a single target platform (default-linux-aarch64); no host
-// platform yet (M4 introduces host-side tool nodes). The struct is a
-// placeholder: it carries just the platform name, which rule emitters embed
-// into the emitted Node's `platform` field. M5 will fill out the real
-// toolchain descriptor (compiler binary path, sysroot, target triple,
-// arch flags, etc.) so that flag composition can stop hardcoding strings
-// from the reference graph.
+// PR-23 introduces the (Target, Host) pair so cross-platform recursion
+// (D31) has a single source of truth for how to flip from a target
+// instance to its host counterpart. The descriptor is still minimal —
+// rule emitters only consume `ID` today, and the canonical bundles
+// hardcode the rest of the toolchain (compiler path, sysroot,
+// warning flags) in flags.go.
+//
+// `TargetCfg` survives as a back-compat alias so existing tests that
+// use `EmitCC(TargetCfg, ...)` continue to compile until PR-25 sweeps
+// every call site to pass a `ModuleInstance`. PR-25 retires
+// `TargetCfg`; for PR-23 it is the M1-equivalent default.
 
-// PlatformConfig describes a target/host platform for rule emission.
-//
-// Currently only the platform name is captured; future PRs will add the
-// fields the flag composers actually parameterize on (compiler path, target
-// triple, march flag, debug-prefix-map roots, etc.). Until then, the
-// hardcoded bundles in flags.go cover the M1 leaf module.
-type PlatformConfig struct {
-	Name string // e.g. "default-linux-aarch64"
+// PlatformSpec captures the per-platform fields rule emitters
+// occasionally branch on. PR-23 only consumes `ID` (it surfaces as
+// `node.platform`); the remaining fields are forward-declared so M5's
+// toolchain refactor can wire compiler invocation through them
+// without rewriting this struct.
+type PlatformSpec struct {
+	ID     PlatformID
+	Triple string
+	March  string
+	SDK    string
+	PIC    bool
 }
 
-// TargetCfg is the target-platform config for M1. Hardcoded to match the
-// reference graph (`/home/pg/monorepo/yatool_orig/g.json`) for the
-// `build/cow/on` leaf module. M4 will introduce a separate HostCfg for
-// build-time tool nodes.
-var TargetCfg = PlatformConfig{Name: "default-linux-aarch64"}
+// PlatformConfig is the (Target, Host) pair the walker propagates
+// through `genCtx.cfg`. `Target` seeds the initial Gen call; `Host`
+// is what `(ModuleInstance).WithHost` flips to for host-tool
+// recursion (D31).
+type PlatformConfig struct {
+	Target PlatformSpec
+	Host   PlatformSpec
+}
+
+// DefaultLinuxConfig is the canonical M2 (target=aarch64, host=x86_64)
+// configuration. Mirrors the platform pair in
+// /home/pg/monorepo/yatool_orig/g.json: 1,930 target nodes on
+// `default-linux-aarch64`, ~1,800 host nodes on `default-linux-x86_64`,
+// 27 cross-platform foreign-dep edges between them.
+var DefaultLinuxConfig = PlatformConfig{
+	Target: PlatformSpec{
+		ID:     PlatformDefaultLinuxAArch64,
+		Triple: "aarch64-linux-gnu",
+		March:  "armv8-a",
+		PIC:    false,
+	},
+	Host: PlatformSpec{
+		ID:     PlatformDefaultLinuxX8664,
+		Triple: "x86_64-linux-gnu",
+		March:  "x86-64",
+		PIC:    true,
+	},
+}
+
+// TargetCfg is the back-compat alias kept so existing call sites
+// (`EmitCC(TargetCfg, ...)`, `Gen(TargetCfg, ...)`) compile. It is
+// equal to `DefaultLinuxConfig`; PR-25 will retire it once every
+// rule emitter takes a `ModuleInstance` instead of a
+// `PlatformConfig`.
+var TargetCfg = DefaultLinuxConfig
