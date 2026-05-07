@@ -58,6 +58,10 @@ func NewBufferedEmitter() *BufferedEmitter {
 // rule may keep mutating it until Finalize is called, but that is bad
 // practice and not relied upon.
 func (e *BufferedEmitter) Emit(n *Node) NodeRef {
+	if e.finalized {
+		panic("BufferedEmitter.Emit called after Finalize")
+	}
+
 	id := int64(len(e.nodes))
 	e.nodes = append(e.nodes, n)
 
@@ -68,6 +72,10 @@ func (e *BufferedEmitter) Emit(n *Node) NodeRef {
 // order of Result calls is preserved in the resulting Graph's `result`
 // list (after Finalize translates ids to UIDs).
 func (e *BufferedEmitter) Result(r NodeRef) {
+	if e.finalized {
+		panic("BufferedEmitter.Result called after Finalize")
+	}
+
 	e.results = append(e.results, r.id)
 }
 

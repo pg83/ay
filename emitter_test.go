@@ -494,6 +494,54 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 	}
 }
 
+func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
+	e := NewBufferedEmitter()
+	e.Emit(&Node{KV: map[string]string{"p": "TEST"}})
+	Finalize(e)
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic on post-finalize Emit")
+		}
+
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("recover returned %T, want string", r)
+		}
+
+		if !strings.Contains(msg, "after Finalize") {
+			t.Errorf("unexpected panic message: %q", msg)
+		}
+	}()
+
+	e.Emit(&Node{KV: map[string]string{"p": "TEST2"}})
+}
+
+func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
+	e := NewBufferedEmitter()
+	ref := e.Emit(&Node{KV: map[string]string{"p": "TEST"}})
+	Finalize(e)
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic on post-finalize Result")
+		}
+
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("recover returned %T, want string", r)
+		}
+
+		if !strings.Contains(msg, "after Finalize") {
+			t.Errorf("unexpected panic message: %q", msg)
+		}
+	}()
+
+	e.Result(ref)
+}
+
 func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 	// Merkle property: changing a leaf must change its parent's UID
 	// (because the parent's canonical bytes include the leaf's UID).
