@@ -8,6 +8,7 @@
 /tmp_*
 /out/
 /.tmp/
+/scratch/
 
 # OS
 .DS_Store

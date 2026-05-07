@@ -1773,20 +1773,18 @@ END()
 		t.Fatal("lib1 AR not found")
 	}
 
-	// Count distinct musl AR refs in DepRefs.
-	muslCount := 0
+	// PR-30 D05: peer-archive refs are NOT threaded into AR.DepRefs.
+	// The reference graph confirms every AR has zero AR-on-AR deps.
+	// The dedupe contract still applies upstream (defaultPeerdirsFor
+	// + explicit PEERDIR are deduped before walk), so the peer's
+	// genModule fires exactly once. We pin the new invariant: lib1's
+	// AR has zero AR-typed deps.
 	for _, ref := range lib1AR.Deps {
-		// Find the node by UID
 		for _, n := range g.Graph {
-			if n.UID == ref && n.KV["p"] == "AR" && n.TargetProperties["module_dir"] == "contrib/libs/musl" {
-				muslCount++
-				break
+			if n.UID == ref && n.KV["p"] == "AR" {
+				t.Errorf("lib1 AR has AR-typed dep %q (module_dir=%q); reference invariant: zero AR-on-AR deps", ref, n.TargetProperties["module_dir"])
 			}
 		}
-	}
-
-	if muslCount != 1 {
-		t.Errorf("expected exactly 1 musl AR in lib1's deps, got %d", muslCount)
 	}
 }
 
@@ -1797,19 +1795,22 @@ END()
 // instance's own path must be used unchanged.
 func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	t.Run("with_srcdir", func(t *testing.T) {
+		// PR-30 D06: LIBRARY with non-ancestor SRCDIR keeps module_dir
+		// at instance.Path; per-source SRCDIR routing applies (input
+		// at $(SOURCE_ROOT)/<srcdir>/<src>; output uses `__/<rel>`
+		// infix). The historical PR-28-D02 "always rebase" shape is
+		// retained ONLY for the PROGRAM-with-ancestor-SRCDIR pattern
+		// (ragel6/bin); see TestGen_SrcdirAncestor_RebasesModuleDir.
 		root := t.TempDir()
 
 		modDir := filepath.Join(root, "mymod")
 		Throw(os.MkdirAll(modDir, 0o755))
 
-		// SRCDIR(other/dir) rebases source resolution; NO_PLATFORM
-		// suppresses implicit default peers so the graph stays narrow.
 		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCDIR(other/dir)\nSRCS(foo.cpp)\nEND()\n")
 		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
 		g := Gen(TargetCfg, root, "mymod")
 
-		// Expect 1 CC + 1 AR (NO_PLATFORM, no defaults).
 		if len(g.Graph) != 2 {
 			t.Fatalf("expected 2 nodes (1 CC + 1 AR), got %d", len(g.Graph))
 		}
@@ -1826,14 +1827,25 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		if ccNode.TargetProperties["module_dir"] != "other/dir" {
-			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "other/dir")
+		// Sibling SRCDIR: module_dir stays at instance.Path.
+		if ccNode.TargetProperties["module_dir"] != "mymod" {
+			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "mymod")
 		}
 
+		// Input path resolves under SRCDIR (foo.cpp doesn't exist
+		// locally at mymod/, so the composer takes the SRCDIR route).
 		wantInput := "$(SOURCE_ROOT)/other/dir/foo.cpp"
 
 		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0] != wantInput {
 			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
+		}
+
+		// Output path uses `__/<rel>` infix; rel = relpath(other/dir/foo.cpp
+		// from mymod) = ../other/dir/foo.cpp → __/other/dir/foo.cpp.
+		wantOutput := "$(BUILD_ROOT)/mymod/__/other/dir/foo.cpp.o"
+
+		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0] != wantOutput {
+			t.Errorf("CC outputs = %v, want first = %q", ccNode.Outputs, wantOutput)
 		}
 	})
 
@@ -1876,21 +1888,22 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("join_srcs_with_srcdir", func(t *testing.T) {
+	t.Run("join_srcs_with_srcdir_library_non_ancestor", func(t *testing.T) {
+		// PR-30 D06: LIBRARY with non-ancestor SRCDIR + JOIN_SRCS keeps
+		// the JS module_dir at instance.Path. JS sources resolve at
+		// the LIBRARY's own dir per the upstream convention (the
+		// JOIN_SRCS-with-sibling-SRCDIR shape is unused in the M2
+		// closure; the test pins the LIBRARY-no-rebase invariant).
 		root := t.TempDir()
 
 		modDir := filepath.Join(root, "jsmod")
 		Throw(os.MkdirAll(modDir, 0o755))
 
-		// SRCDIR + JOIN_SRCS: the JS node and its downstream CC must
-		// both carry module_dir = "other/dir" and JS inputs must be
-		// rooted at $(SOURCE_ROOT)/other/dir/<src>.
 		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCDIR(other/dir)\nJOIN_SRCS(all.cpp s1.cpp s2.cpp)\nEND()\n")
 		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
 		g := Gen(TargetCfg, root, "jsmod")
 
-		// 1 JS + 1 CC (joined) + 1 AR.
 		if len(g.Graph) != 3 {
 			t.Fatalf("expected 3 nodes (1 JS + 1 CC + 1 AR), got %d", len(g.Graph))
 		}
@@ -1914,31 +1927,54 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		// JS module_dir must reflect the rebased path.
-		if jsNode.TargetProperties["module_dir"] != "other/dir" {
-			t.Errorf("JS module_dir = %q, want %q", jsNode.TargetProperties["module_dir"], "other/dir")
+		// LIBRARY non-ancestor: JS module_dir stays at instance.Path.
+		if jsNode.TargetProperties["module_dir"] != "jsmod" {
+			t.Errorf("JS module_dir = %q, want %q", jsNode.TargetProperties["module_dir"], "jsmod")
 		}
 
-		// CC module_dir must match.
-		if ccNode.TargetProperties["module_dir"] != "other/dir" {
-			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "other/dir")
+		if ccNode.TargetProperties["module_dir"] != "jsmod" {
+			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "jsmod")
 		}
+	})
 
-		// JS inputs[2] (first source, after the two scripts) must be
-		// rooted at $(SOURCE_ROOT)/other/dir/s1.cpp.
-		wantInput := "$(SOURCE_ROOT)/other/dir/s1.cpp"
-		foundInput := false
+	t.Run("ancestor_program_rebases_module_dir", func(t *testing.T) {
+		// PR-30 D06: PROGRAM with ancestor SRCDIR (ragel6/bin pattern)
+		// fully rebases — module_dir = SRCDIR, output at SRCDIR.
+		root := t.TempDir()
 
-		for _, in := range jsNode.Inputs {
-			if in == wantInput {
-				foundInput = true
+		modDir := filepath.Join(root, "tools/r6/bin")
+		Throw(os.MkdirAll(modDir, 0o755))
 
-				break
+		yamake := []byte("PROGRAM(myprog)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nALLOCATOR(FAKE)\nSRCDIR(tools/r6)\nSRCS(main.cpp)\nEND()\n")
+		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+
+		g := Gen(TargetCfg, root, "tools/r6/bin")
+
+		var ccNode *Node
+
+		for _, n := range g.Graph {
+			if n.KV["p"] == "CC" {
+				ccNode = n
 			}
 		}
 
-		if !foundInput {
-			t.Errorf("JS inputs = %v, want to contain %q", jsNode.Inputs, wantInput)
+		if ccNode == nil {
+			t.Fatal("no CC node emitted")
+		}
+
+		// Ancestor PROGRAM: module_dir == SRCDIR; output at <srcdir>/<src>.o.
+		if ccNode.TargetProperties["module_dir"] != "tools/r6" {
+			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "tools/r6")
+		}
+
+		wantInput := "$(SOURCE_ROOT)/tools/r6/main.cpp"
+		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0] != wantInput {
+			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
+		}
+
+		wantOutput := "$(BUILD_ROOT)/tools/r6/main.cpp.o"
+		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0] != wantOutput {
+			t.Errorf("CC outputs = %v, want first = %q", ccNode.Outputs, wantOutput)
 		}
 	})
 }
@@ -2081,4 +2117,444 @@ func TestGen_CXXFLAGS_GLOBAL_NotLeakedToOwnCmdArgs(t *testing.T) {
 			t.Errorf("CC cmd_args missing %q — non-GLOBAL CXXFLAGS must be applied to own node", "-DMINE")
 		}
 	})
+}
+
+// TestGen_GeneratorWiredIntoDepRefs_JS pins PR-30 D04: a JOIN_SRCS module's
+// downstream CC must carry the JS NodeRef as a DepRef (the reference shape:
+// every JS-derived CC has Deps=[js UID]).
+func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
+	root := t.TempDir()
+
+	modDir := filepath.Join(root, "jsmod")
+	Throw(os.MkdirAll(modDir, 0o755))
+	yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nJOIN_SRCS(all.cpp s1.cpp s2.cpp)\nEND()\n")
+	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+
+	g := Gen(TargetCfg, root, "jsmod")
+
+	var jsNode, ccNode *Node
+
+	for _, n := range g.Graph {
+		switch n.KV["p"] {
+		case "JS":
+			jsNode = n
+		case "CC":
+			ccNode = n
+		}
+	}
+
+	if jsNode == nil {
+		t.Fatal("no JS node emitted")
+	}
+
+	if ccNode == nil {
+		t.Fatal("no CC node emitted")
+	}
+
+	found := false
+
+	for _, dep := range ccNode.Deps {
+		if dep == jsNode.UID {
+			found = true
+
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("CC.Deps = %v, want to contain JS UID %q (PR-30 D04 Generator wiring)", ccNode.Deps, jsNode.UID)
+	}
+}
+
+// TestGen_GeneratorWiredIntoDepRefs_R6 pins PR-30 D04: a `.rl6` source
+// emits a downstream CC node whose DepRefs contains the R6 NodeRef.
+func TestGen_GeneratorWiredIntoDepRefs_R6(t *testing.T) {
+	root := t.TempDir()
+
+	// Module that uses .rl6.
+	modDir := filepath.Join(root, "r6mod")
+	Throw(os.MkdirAll(modDir, 0o755))
+	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(`LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(thing.rl6)
+END()
+`), 0o644))
+
+	// Stub host ragel6 PROGRAM so the host-tool recursion has
+	// something to resolve. Its parse may fail in the synthetic
+	// fixture (no SET evaluator) — emitOneSource swallows ParseError
+	// and leaves ragelLDRef zero-valued; the downstream CC still
+	// receives r6Ref from the local EmitR6 call (HasGenerator=true).
+	Throw(os.MkdirAll(filepath.Join(root, "contrib/tools/ragel6/bin"), 0o755))
+	Throw(os.WriteFile(filepath.Join(root, "contrib/tools/ragel6/bin", "ya.make"), []byte(`PROGRAM(ragel6)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+ALLOCATOR(FAKE)
+SRCS(main.cpp)
+END()
+`), 0o644))
+
+	g := Gen(TargetCfg, root, "r6mod")
+
+	var r6Node, ccNode *Node
+
+	for _, n := range g.Graph {
+		switch n.KV["p"] {
+		case "R6":
+			r6Node = n
+		case "CC":
+			// Pick the CC whose input lives under $(BUILD_ROOT)
+			// (the R6-derived CC; the host ragel6 PROGRAM also
+			// emits a CC for its main.cpp under $(SOURCE_ROOT)).
+			ip := ""
+			if len(n.Inputs) > 0 {
+				ip = n.Inputs[0]
+			}
+
+			if ccNode == nil && len(ip) > 0 && ip[:14] == "$(BUILD_ROOT)/" {
+				ccNode = n
+			}
+		}
+	}
+
+	if r6Node == nil {
+		t.Fatal("no R6 node emitted")
+	}
+
+	if ccNode == nil {
+		t.Fatal("no R6-derived CC node emitted")
+	}
+
+	found := false
+
+	for _, dep := range ccNode.Deps {
+		if dep == r6Node.UID {
+			found = true
+
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("R6-derived CC.Deps = %v, want to contain R6 UID %q (PR-30 D04 Generator wiring)", ccNode.Deps, r6Node.UID)
+	}
+}
+
+// TestEmitAR_NoPeerArchivesInDeps pins PR-30 D05: the LIBRARY AR call
+// site drops `peerArchiveRefs`. Reference confirms every AR has zero
+// AR-on-AR deps. Even when peers are declared and emit, lib1's AR
+// has zero AR-typed deps.
+func TestEmitAR_NoPeerArchivesInDeps(t *testing.T) {
+	tmp := t.TempDir()
+	Throw(os.MkdirAll(filepath.Join(tmp, "lib_consumer"), 0o755))
+	Throw(os.WriteFile(filepath.Join(tmp, "lib_consumer", "ya.make"), []byte(`LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(lib_peer)
+SRCS(c.cpp)
+END()
+`), 0o644))
+
+	Throw(os.MkdirAll(filepath.Join(tmp, "lib_peer"), 0o755))
+	Throw(os.WriteFile(filepath.Join(tmp, "lib_peer", "ya.make"), []byte(`LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(p.cpp)
+END()
+`), 0o644))
+
+	g := Gen(TargetCfg, tmp, "lib_consumer")
+
+	var consumerAR *Node
+
+	for _, n := range g.Graph {
+		if n.KV["p"] == "AR" && n.TargetProperties["module_dir"] == "lib_consumer" {
+			consumerAR = n
+
+			break
+		}
+	}
+
+	if consumerAR == nil {
+		t.Fatal("lib_consumer AR not found")
+	}
+
+	for _, dep := range consumerAR.Deps {
+		for _, n := range g.Graph {
+			if n.UID == dep && n.KV["p"] == "AR" {
+				t.Errorf("lib_consumer AR has AR-typed dep (peer module_dir=%q); reference invariant: zero AR-on-AR deps", n.TargetProperties["module_dir"])
+			}
+		}
+	}
+}
+
+// TestGen_PROGRAM_DefaultMuslFull_PeerEmitted pins PR-30 D02: a PROGRAM
+// in the M2 environment (MUSL=yes, !MUSL_LITE) implicitly peers
+// `contrib/libs/musl/full`. Synthetic fixture supplies the musl/full
+// ya.make so the implicit peer resolves.
+func TestGen_PROGRAM_DefaultMuslFull_PeerEmitted(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Synthetic PROGRAM with no ALLOCATOR macro.
+	Throw(os.MkdirAll(filepath.Join(tmp, "myprog"), 0o755))
+	Throw(os.WriteFile(filepath.Join(tmp, "myprog", "ya.make"), []byte(`PROGRAM(myprog)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+ALLOCATOR(FAKE)
+SRCS(main.cpp)
+END()
+`), 0o644))
+
+	// Synthetic musl/full ya.make.
+	Throw(os.MkdirAll(filepath.Join(tmp, "contrib/libs/musl/full"), 0o755))
+	Throw(os.WriteFile(filepath.Join(tmp, "contrib/libs/musl/full", "ya.make"), []byte(`LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PLATFORM()
+SRCS(stub.c)
+END()
+`), 0o644))
+
+	g := Gen(TargetCfg, tmp, "myprog")
+
+	found := false
+
+	for _, n := range g.Graph {
+		if n.KV["p"] == "AR" && n.TargetProperties["module_dir"] == "contrib/libs/musl/full" {
+			found = true
+
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("expected an AR node with module_dir=contrib/libs/musl/full (PR-30 D02 default PROGRAM peer); not found")
+	}
+}
+
+// TestGen_PROGRAM_DefaultAllocator_TcmallocTc pins PR-30 D03: a PROGRAM
+// without ALLOCATOR(...) defaults to TCMALLOC_TC, pulling
+// library/cpp/malloc/tcmalloc + contrib/libs/tcmalloc/no_percpu_cache.
+func TestGen_PROGRAM_DefaultAllocator_TcmallocTc(t *testing.T) {
+	tmp := t.TempDir()
+
+	Throw(os.MkdirAll(filepath.Join(tmp, "myprog"), 0o755))
+	// PROGRAM with no ALLOCATOR macro and no SRCDIR.
+	Throw(os.WriteFile(filepath.Join(tmp, "myprog", "ya.make"), []byte(`PROGRAM(myprog)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(main.cpp)
+END()
+`), 0o644))
+
+	// Synthetic stubs for the TCMALLOC_TC peers.
+	Throw(os.MkdirAll(filepath.Join(tmp, "library/cpp/malloc/tcmalloc"), 0o755))
+	Throw(os.WriteFile(filepath.Join(tmp, "library/cpp/malloc/tcmalloc", "ya.make"), []byte(`LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PLATFORM()
+SRCS(stub.cpp)
+END()
+`), 0o644))
+
+	Throw(os.MkdirAll(filepath.Join(tmp, "contrib/libs/tcmalloc/no_percpu_cache"), 0o755))
+	Throw(os.WriteFile(filepath.Join(tmp, "contrib/libs/tcmalloc/no_percpu_cache", "ya.make"), []byte(`LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PLATFORM()
+SRCS(stub.cpp)
+END()
+`), 0o644))
+
+	g := Gen(TargetCfg, tmp, "myprog")
+
+	hasTcmalloc := false
+	hasNoPercpu := false
+
+	for _, n := range g.Graph {
+		md := n.TargetProperties["module_dir"]
+
+		if n.KV["p"] != "AR" {
+			continue
+		}
+
+		switch md {
+		case "library/cpp/malloc/tcmalloc":
+			hasTcmalloc = true
+		case "contrib/libs/tcmalloc/no_percpu_cache":
+			hasNoPercpu = true
+		}
+	}
+
+	if !hasTcmalloc {
+		t.Errorf("expected AR with module_dir=library/cpp/malloc/tcmalloc; not found")
+	}
+
+	if !hasNoPercpu {
+		t.Errorf("expected AR with module_dir=contrib/libs/tcmalloc/no_percpu_cache; not found")
+	}
+}
+
+// TestGen_PROGRAM_ExplicitAllocator_NoTcmallocDefault pins PR-30 D03:
+// a PROGRAM that explicitly types ALLOCATOR(FAKE) does NOT receive
+// the TCMALLOC_TC default-allocator peers.
+func TestGen_PROGRAM_ExplicitAllocator_NoTcmallocDefault(t *testing.T) {
+	tmp := t.TempDir()
+
+	Throw(os.MkdirAll(filepath.Join(tmp, "myprog"), 0o755))
+	Throw(os.WriteFile(filepath.Join(tmp, "myprog", "ya.make"), []byte(`PROGRAM(myprog)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+ALLOCATOR(FAKE)
+SRCS(main.cpp)
+END()
+`), 0o644))
+
+	g := Gen(TargetCfg, tmp, "myprog")
+
+	for _, n := range g.Graph {
+		md := n.TargetProperties["module_dir"]
+
+		if md == "library/cpp/malloc/tcmalloc" || md == "contrib/libs/tcmalloc/no_percpu_cache" {
+			t.Errorf("PROGRAM with ALLOCATOR(FAKE) emitted unexpected node module_dir=%q (TCMALLOC_TC default must be suppressed)", md)
+		}
+	}
+}
+
+// TestGen_SrcdirSibling_KeepsModuleDir pins PR-30 D06: a LIBRARY whose
+// SRCDIR points at a sibling directory keeps its own module_dir on
+// per-source CC nodes; the source path uses `__/<rel>` infix.
+//
+// Synthetic fixture: instance=`mylib`, SRCDIR=`other`, source `src/foo.cpp`.
+// The composer takes the SRCDIR route because foo.cpp doesn't exist
+// at mylib/src/foo.cpp on disk.
+func TestGen_SrcdirSibling_KeepsModuleDir(t *testing.T) {
+	tmp := t.TempDir()
+
+	Throw(os.MkdirAll(filepath.Join(tmp, "mylib"), 0o755))
+	Throw(os.WriteFile(filepath.Join(tmp, "mylib", "ya.make"), []byte(`LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCDIR(other)
+SRCS(src/foo.cpp)
+END()
+`), 0o644))
+
+	g := Gen(TargetCfg, tmp, "mylib")
+
+	var ccNode *Node
+
+	for _, n := range g.Graph {
+		if n.KV["p"] == "CC" {
+			ccNode = n
+
+			break
+		}
+	}
+
+	if ccNode == nil {
+		t.Fatal("no CC node emitted")
+	}
+
+	if got := ccNode.TargetProperties["module_dir"]; got != "mylib" {
+		t.Errorf("CC module_dir = %q, want %q (sibling SRCDIR — module_dir stays at instance.Path)", got, "mylib")
+	}
+
+	wantInput := "$(SOURCE_ROOT)/other/src/foo.cpp"
+
+	if len(ccNode.Inputs) == 0 || ccNode.Inputs[0] != wantInput {
+		t.Errorf("CC input = %v, want first = %q", ccNode.Inputs, wantInput)
+	}
+
+	wantOutput := "$(BUILD_ROOT)/mylib/__/other/src/foo.cpp.o"
+
+	if len(ccNode.Outputs) == 0 || ccNode.Outputs[0] != wantOutput {
+		t.Errorf("CC output = %v, want first = %q", ccNode.Outputs, wantOutput)
+	}
+}
+
+// TestGen_SrcdirLocal_IgnoresSrcdir pins PR-30 D06: a LIBRARY with SRCDIR
+// where the source ALSO exists locally (in instance.Path) takes the
+// local-resolution path — SRCDIR is silently ignored. This is the
+// musl_extra / tcmalloc/no_percpu_cache `aligned_alloc.c` shape.
+func TestGen_SrcdirLocal_IgnoresSrcdir(t *testing.T) {
+	tmp := t.TempDir()
+
+	Throw(os.MkdirAll(filepath.Join(tmp, "mylib"), 0o755))
+	Throw(os.WriteFile(filepath.Join(tmp, "mylib", "ya.make"), []byte(`LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCDIR(other)
+SRCS(local.c)
+END()
+`), 0o644))
+
+	// Place the actual source file at instance.Path so the composer's
+	// stat check finds it locally.
+	Throw(os.WriteFile(filepath.Join(tmp, "mylib", "local.c"), []byte("int x;\n"), 0o644))
+
+	g := Gen(TargetCfg, tmp, "mylib")
+
+	var ccNode *Node
+
+	for _, n := range g.Graph {
+		if n.KV["p"] == "CC" {
+			ccNode = n
+
+			break
+		}
+	}
+
+	if ccNode == nil {
+		t.Fatal("no CC node emitted")
+	}
+
+	wantInput := "$(SOURCE_ROOT)/mylib/local.c"
+
+	if len(ccNode.Inputs) == 0 || ccNode.Inputs[0] != wantInput {
+		t.Errorf("CC input = %v, want first = %q (local-existing source must ignore SRCDIR)", ccNode.Inputs, wantInput)
+	}
+
+	wantOutput := "$(BUILD_ROOT)/mylib/local.c.o"
+
+	if len(ccNode.Outputs) == 0 || ccNode.Outputs[0] != wantOutput {
+		t.Errorf("CC output = %v, want first = %q", ccNode.Outputs, wantOutput)
+	}
+}
+
+// TestGen_ToolsArchiver_L0_AtLeast95 is the M2 acceptance closer: PR-30
+// must lift L0 ≥ 95% on the tools/archiver target against the reference
+// graph at /home/pg/monorepo/yatool_orig/g.json.
+func TestGen_ToolsArchiver_L0_AtLeast95(t *testing.T) {
+	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "g.json")); err != nil {
+		t.Skipf("reference graph not available at %s/g.json: %v", sourceRoot, err)
+	}
+
+	our := Gen(TargetCfg, sourceRoot, "tools/archiver")
+	ref := LoadReference(filepath.Join(sourceRoot, "g.json"))
+
+	l0, note := compareTopology(ref, our)
+
+	const acceptance = 0.95
+
+	if l0 < acceptance {
+		t.Errorf("L0 = %.4f (%s) < acceptance bar %.2f (PR-30 must clear M2 L0 gate)", l0, note, acceptance)
+	} else {
+		t.Logf("L0 = %.4f (%s) — clears acceptance bar %.2f", l0, note, acceptance)
+	}
 }

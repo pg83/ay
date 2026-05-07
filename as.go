@@ -16,6 +16,11 @@ package main
 // (sentinel for "no yasm dep, target build"). Callers that DO need
 // yasm wiring pass `&realYasmRef`.
 //
+// PR-30 D02: yasmLD when non-nil is wired BOTH into
+// ForeignDepRefs["tool"] (per the reference shape) AND into DepRefs
+// (L0 fingerprint reads only deps; foreign-deps-only shape diverged
+// for asmlib's 25 AS nodes).
+//
 // EmitAS produces a single Node matching the shape ymake itself
 // produces for assembling one .S source into an object file. The
 // reference node pinned for byte-exact tests is the chkstk.S node
@@ -37,9 +42,12 @@ var asWnoEverything = []string{"-Wno-everything"}
 // no access to the module's ya.make ADDINCL list.
 //
 // `yasmLD` is the NodeRef of the host yasm linker. The caller
-// passes a real ref for asmlib `.pic.o` nodes (they wire it via
-// `ForeignDepRefs["tool"]`); callers without a yasm dep pass `nil`
-// for yasmLD and EmitAS skips the foreign-dep wiring.
+// passes a real ref for asmlib `.pic.o` nodes; callers without a
+// yasm dep pass `nil` for yasmLD and EmitAS skips the wiring.
+// yasmLD when non-nil is wired BOTH into ForeignDepRefs["tool"] (per
+// the reference shape) AND into DepRefs (PR-30 D02 — L0 fingerprint
+// reads only deps; foreign-deps-only shape diverged for asmlib's 25
+// AS nodes).
 //
 // Returns (NodeRef, outputPath) so the caller can wire the AS node
 // as a dependency of the AR step and avoid re-deriving the output
@@ -124,6 +132,14 @@ func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *N
 		node.ForeignDepRefs = map[string][]NodeRef{
 			"tool": {*yasmLD},
 		}
+
+		// PR-30 D02: the reference asmlib host AS nodes also list yasm
+		// in `deps` (not just `foreign_deps.tool`). The L0 fingerprint
+		// reads only `deps`, so the foreign-deps wiring alone leaves
+		// the AS node fingerprint without a yasm child — diverging
+		// from the reference shape. Threading yasmLD into DepRefs
+		// brings the AS node's L0 fingerprint into alignment.
+		node.DepRefs = []NodeRef{*yasmLD}
 	}
 
 	return emit.Emit(node), outputPath

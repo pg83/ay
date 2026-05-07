@@ -300,6 +300,8 @@ var DefaultIfEnv = Environment{
 		"PROVIDE_QUEUE":                     false, // PR-27: contrib/libs/libc_compat
 		"PROVIDE_GETSERVBYNAME":             false, // PR-27: contrib/libs/libc_compat
 		"PROVIDE_MEMFD_CREATE":              false, // PR-27: contrib/libs/libc_compat
+		"MUSL_LITE":                         false, // PR-30 D01: M2 default = full musl, not lite. Read by D02's defaultProgramPeerdirsFor to pick contrib/libs/musl/full when MUSL=yes && !MUSL_LITE.
+		"OPENSOURCE_REPLACE_LINUX_HEADERS":  false, // PR-30: contrib/libs/linux-headers (used in IF(X AND EXPORT_CMAKE)).
 	},
 	strings: map[string]string{
 		// CXX_RT: SET-derived runtime selector. M2 (linux + clang +

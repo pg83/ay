@@ -185,6 +185,52 @@ func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 	}
 }
 
+// TestEmitAS_YasmLD_PopulatesDepRefs verifies that when yasmLD is non-nil,
+// EmitAS wires it into both DepRefs and ForeignDepRefs["tool"] (PR-30 D02).
+// The L0 fingerprint reads only deps; the foreign-deps-only shape diverged
+// for asmlib's 25 AS nodes in the reference graph.
+func TestEmitAS_YasmLD_PopulatesDepRefs(t *testing.T) {
+	e := NewBufferedEmitter()
+
+	// Emit a minimal stand-in node to obtain a valid NodeRef for yasmLD.
+	// The node's content is irrelevant — we only need its identity.
+	yasmLDRef := e.Emit(&Node{
+		Cmds:         []Cmd{{CmdArgs: []string{"yasm"}, Env: map[string]string{}}},
+		Env:          map[string]string{},
+		Inputs:       []string{},
+		Outputs:      []string{"$(BUILD_ROOT)/tools/yasm/yasm"},
+		KV:           map[string]string{"p": "LD", "pc": "light-cyan"},
+		Tags:         []string{"tool"},
+		Platform:     string(PlatformDefaultLinuxX8664),
+		Requirements: map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
+		TargetProperties: map[string]string{
+			"module_dir": "tools/yasm",
+		},
+	})
+
+	ref, _ := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", builtinsASIncludes, &yasmLDRef, e)
+
+	// The AS node is at index 1 (yasmLD is at index 0).
+	if len(e.nodes) != 2 {
+		t.Fatalf("emitter buffered %d nodes, want 2", len(e.nodes))
+	}
+
+	_ = ref
+	got := e.nodes[1]
+
+	// DepRefs must contain exactly the yasmLD ref.
+	if len(got.DepRefs) != 1 || got.DepRefs[0] != yasmLDRef {
+		t.Errorf("DepRefs = %v, want [%v]", got.DepRefs, yasmLDRef)
+	}
+
+	// ForeignDepRefs["tool"] must also contain the yasmLD ref.
+	toolRefs := got.ForeignDepRefs["tool"]
+
+	if len(toolRefs) != 1 || toolRefs[0] != yasmLDRef {
+		t.Errorf(`ForeignDepRefs["tool"] = %v, want [%v]`, toolRefs, yasmLDRef)
+	}
+}
+
 // TestEmitAS_KV verifies that AS nodes carry the correct kv fields
 // (p=AS, pc=light-green, no show_out) as observed in the reference graph.
 func TestEmitAS_KV(t *testing.T) {

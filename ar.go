@@ -78,6 +78,10 @@ func globalArchiveName(moduleDir string) string {
 // `instance` provides platform + path + Flags.PIC. host_platform is
 // set when Flags.PIC=true and "tool" is appended to tags
 // (consistent with the host CC convention).
+//
+// PR-30 D05: production caller now passes nil for peerArchiveRefs;
+// the reference graph confirms zero AR-on-AR deps. The parameter is
+// retained for tests that pin the historical shape.
 func emitARNode(
 	instance ModuleInstance,
 	archivePath string,
@@ -210,6 +214,10 @@ func emitARNode(
 // archives .o files; peer archives are link-time inputs for LD.
 //
 // Returns the NodeRef for the emitted AR node.
+//
+// PR-30 D05: production caller now passes nil for peerArchiveRefs;
+// the reference graph confirms zero AR-on-AR deps. The parameter is
+// retained for tests that pin the historical shape.
 func EmitAR(
 	instance ModuleInstance,
 	objRefs []NodeRef,
