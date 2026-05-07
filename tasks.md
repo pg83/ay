@@ -25,7 +25,7 @@ Detail in `./docs/drafts/20260507-0134-recreate-ymake-plan.md`. One line per PR 
 - [x] **PR-02** — `node.go`, `emitter.go`, `uid.go`: Node type, Emitter interface, BufferedEmitter, Merkle UID finalizer.
 - [x] **PR-03** — `gjson.go`: streaming reader for the reference g.json.
 - [x] **PR-04** — `compare.go` + `compare_topology.go`: comparator L0 (topology fingerprint).
-- [ ] **PR-05** — `compare_props.go`: comparator L1 (kv.p, module_*, outputs) + L2 (inputs, tags, requirements).
+- [x] **PR-05** — `compare_props.go`: comparator L1 (kv.p, module_*, outputs) + L2 (inputs, tags, requirements).
 - [ ] **PR-06** — `compare_cmd.go`: comparator L3 (cmd_args + env byte-exact).
 - [x] **PR-07** — `yamake.go`: minimal ya.make parser (LIBRARY/PROGRAM/PEERDIR/SRCS/SET/END).
 - [x] **PR-08** — `cc.go`, `flags.go`, `toolchain.go`: minimal CC rule with hardcoded flag bundles.
@@ -171,3 +171,14 @@ Detail in `./docs/drafts/20260507-0134-recreate-ymake-plan.md`. One line per PR 
   - **`cmdCompare` pattern** is now the second `cmdInspect`-shape subcommand; PR-10's `cmdGen` MUST adopt the same flag-handling pattern (D17 cross-cutting reaffirmed).
   - **D14 audit shape**: every `range` over a map in compare_topology.go either feeds a `sort.Strings`'d output OR is a presence-check / counter. No raw map iteration in the determinism-critical hash inputs.
   - **`Compare(nil, ...)` and `Compare(..., nil)`** throw with specific "want graph is nil" / "got graph is nil" messages (D04 fix). Catch at boundary.
+
+- **PR-05** (2026-05-07) — Comparator L1 (kv.p, target_properties, outputs) + L2 (inputs, tags, requirements). Files: `compare_props.go` + `compare_props_test.go`, modified `compare.go` (CompareReport extended with L1/L2/L1Note/L2Note + WantOnly/GotOnly fields; Compare runs L1+L2 when maxLevel>=1 and >=2 respectively; one shared pairing build) and `main.go` (cmdCompare prints L1/L2 lines per --level). Pairing strategy: `(outputs[0], platform)` — NOT outputs[0] alone, because real graph has 11 outputs[0] collisions between target/host platforms (verified: 22 nodes, all `default-linux-aarch64`/`default-linux-x86_64` pairs). Platform is pairing-discriminator only, NOT in L1/L2 compared-fields. `pairByOutput` throws on duplicate-key collisions defensively. Per-pair match: ALL specified fields must match (boolean conjunction). Real-graph self-match: **L0/L1/L2 = 100.00% / 100.00% / 100.00%** (3730 of 3730), byte-deterministic.
+  Two review rounds. Round 1 (6 defects, 0 major): D01 indexByUID docstring claimed throw on dupe but body silently overwrote (added throw); D02 --level flag usage stale (updated); D03 L1Note/L2Note phrasing misrepresented Y when graphs differ (note format reworked); D04 wantOnly/gotOnly returned but discarded (threaded into CompareReport); D05 false "alphabetically ordered inputs" comment (rewritten to honest "ymake-deterministic order" rationale; 7 of 3730 nodes have non-alphabetical inputs); D06 compareL1 docstring lied about note format (updated). **All 6 fixed**, D03/D04/D06 in one stroke. Round 2 (2 nits, deferred): D07 stale L1Note inline-comment example, D08 weakened test-substring assertion. Both deferred to next compare-edit cycle.
+  Surprises / constraints future PRs must respect:
+  - **Pairing key is `(outputs[0], platform)`** — pinned in `pairByOutput`. Future host/target merge work (M4) MUST preserve this; don't strip the platform component from the key.
+  - **Real graph has 11 outputs[0] collisions** (target/host duplicates of same `.o`). Any future code that uses `outputs[0]` as a unique identifier is wrong. Use platform-qualified key.
+  - **Note format pinned**: `"%d matched / %d pairs / %d unpaired-want / %d unpaired-got"` for L1/L2. PR-06's L3 should follow the same shape.
+  - **`WantOnly`/`GotOnly` available in CompareReport** — sorted UIDs of nodes with no pair. Future `--verbose` mode in cmdCompare can dump these for debugging diffs.
+  - **L1/L2 percentage denominator = `max(len(want.Graph), len(got.Graph))`** — unpaired nodes count against the percentage. The note format makes this explicit (matched < pairs ≤ max).
+  - **`pairByOutput` throws on duplicate (outputs[0], platform) keys** — defensive guard against future reference graphs that violate the uniqueness assumption. If it ever fires in production, the comparator needs a richer pairing key (e.g. add `kv.p` or use full-outputs hash).
+  - **Inputs are NOT alphabetical in g.json** for ~7 of 3730 nodes (mixed `$(BUILD_ROOT)` / `$(SOURCE_ROOT)` paths with `vcs_info.py` mid-list). PR-08+/PR-10 emitter MUST reproduce ymake's exact non-alphabetical order, not sort-and-emit. The yatool emitter's input ordering is a per-rule decision, not a global sort.
