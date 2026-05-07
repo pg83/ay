@@ -96,3 +96,162 @@ func TestEvalCond_DefaultEnvCoversArchiverClosureCanaries(t *testing.T) {
 		}
 	}
 }
+
+// TestEvalCond_StringEquality (PR-27) pins string-equality semantics:
+// the env binds CXX_RT="libcxxrt"; an `IF (CXX_RT == "libcxxrt")`
+// evaluates true, and `IF (CXX_RT == "other")` evaluates false.
+func TestEvalCond_StringEquality(t *testing.T) {
+	cases := []struct {
+		name string
+		expr string
+		want bool
+	}{
+		{"matching_value", `CXX_RT == "libcxxrt"`, true},
+		{"non_matching_value", `CXX_RT == "libcxxabi"`, false},
+		// `undefined` is bound as a string equal to its own name —
+		// the libcxxrt sanitizer-type pattern. SANITIZER_TYPE is "" in M2.
+		{"sanitizer_type_undefined_false", `SANITIZER_TYPE == undefined`, false},
+		{"sanitizer_type_memory_false", `SANITIZER_TYPE == memory`, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			expr := parseCondForTest(t, tc.expr)
+			got := EvalCond(expr, DefaultIfEnv)
+
+			if got != tc.want {
+				t.Errorf("EvalCond(%q) = %v, want %v", tc.expr, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestEvalCond_NumericLessThan (PR-27) pins int-comparison
+// semantics: env binds ANDROID_API=0; `IF (ANDROID_API < 28)` is
+// true, `IF (ANDROID_API < 0)` is false (strict less-than, not
+// less-or-equal).
+func TestEvalCond_NumericLessThan(t *testing.T) {
+	cases := []struct {
+		name string
+		expr string
+		want bool
+	}{
+		{"strictly_less", "ANDROID_API < 28", true},
+		{"equal_is_not_less", "ANDROID_API < 0", false},
+		{"literal_less_literal", "0 < 28", true},
+		{"literal_eq_literal_not_less", "5 < 5", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			expr := parseCondForTest(t, tc.expr)
+			got := EvalCond(expr, DefaultIfEnv)
+
+			if got != tc.want {
+				t.Errorf("EvalCond(%q) = %v, want %v", tc.expr, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestEvalCond_TypeMismatch (PR-27) pins the strict type-check on
+// comparator operands: a string compared to an int throws, as does
+// `<` applied to non-int operands. Silent coercion would mask
+// real ya.make errors; throwing surfaces them at evaluation time.
+func TestEvalCond_TypeMismatch(t *testing.T) {
+	cases := []struct {
+		name    string
+		expr    string
+		wantSub string
+	}{
+		{
+			name:    "string_lt_int_throws",
+			expr:    `CXX_RT < 5`,
+			wantSub: "< requires int operands",
+		},
+		{
+			name:    "int_eq_string_throws",
+			expr:    `ANDROID_API == "x"`,
+			wantSub: "operand type mismatch",
+		},
+		{
+			name:    "int_eq_bool_throws",
+			expr:    `ANDROID_API == CLANG`,
+			wantSub: "operand type mismatch",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			expr := parseCondForTest(t, tc.expr)
+			exc := Try(func() {
+				EvalCond(expr, DefaultIfEnv)
+			})
+
+			if exc == nil {
+				t.Fatalf("EvalCond(%q) returned nil exception, want throw", tc.expr)
+			}
+
+			if !strings.Contains(exc.Error(), tc.wantSub) {
+				t.Errorf("exception %q does not contain %q", exc.Error(), tc.wantSub)
+			}
+		})
+	}
+}
+
+// TestEvalCond_BareLiteralInPredicateThrows (PR-27) pins that a
+// string or int literal cannot stand alone as a boolean predicate —
+// `IF ("foo")` and `IF (42)` are degenerate forms that the
+// evaluator rejects.
+func TestEvalCond_BareLiteralInPredicateThrows(t *testing.T) {
+	cases := []string{`"foo"`, `42`}
+
+	for _, c := range cases {
+		t.Run(c, func(t *testing.T) {
+			expr := parseCondForTest(t, c)
+			exc := Try(func() {
+				EvalCond(expr, DefaultIfEnv)
+			})
+
+			if exc == nil {
+				t.Fatalf("EvalCond(%q) did not throw", c)
+			}
+
+			if !strings.Contains(exc.Error(), "cannot be evaluated as a boolean condition") {
+				t.Errorf("exception %q does not mention boolean-condition rejection", exc.Error())
+			}
+		})
+	}
+}
+
+// TestEnvironment_BoolMethodRejectsTypedBindings (PR-27) pins that
+// using a string- or int-typed binding in boolean position throws
+// (so a typo like `IF (CXX_RT)` instead of `IF (CXX_RT == "...")`
+// fails fast).
+func TestEnvironment_BoolMethodRejectsTypedBindings(t *testing.T) {
+	cases := []struct {
+		name    string
+		ident   string
+		wantSub string
+	}{
+		{"string_in_bool_position", "CXX_RT", "string binding"},
+		{"int_in_bool_position", "ANDROID_API", "int binding"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			expr := &ExprIdent{Name: tc.ident}
+			exc := Try(func() {
+				EvalCond(expr, DefaultIfEnv)
+			})
+
+			if exc == nil {
+				t.Fatalf("EvalCond(%s) did not throw", tc.ident)
+			}
+
+			if !strings.Contains(exc.Error(), tc.wantSub) {
+				t.Errorf("exception %q does not contain %q", exc.Error(), tc.wantSub)
+			}
+		})
+	}
+}

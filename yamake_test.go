@@ -848,6 +848,221 @@ func TestParseInclude_RejectsTransitiveCycle(t *testing.T) {
 	}
 }
 
+// TestParseIf_StringEquality (PR-27) pins the parser handling of
+// `IF (X == "Y")` — the libcxx pattern. The condition expression
+// is an *ExprEq with an *ExprIdent left and an *ExprString right;
+// both arms parse cleanly and the THEN body's SRCS is preserved.
+func TestParseIf_StringEquality(t *testing.T) {
+	src := []byte(`IF (CXX_RT == "libcxxrt")
+    SRCS(rt.c)
+ENDIF()
+`)
+
+	mf, err := Parse("test.input", src)
+
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if len(mf.Stmts) != 1 {
+		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
+	}
+
+	ifStmt, ok := mf.Stmts[0].(*IfStmt)
+
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *IfStmt", mf.Stmts[0])
+	}
+
+	eq, ok := ifStmt.Cond.(*ExprEq)
+
+	if !ok {
+		t.Fatalf("IfStmt.Cond = %T, want *ExprEq", ifStmt.Cond)
+	}
+
+	if id, ok := eq.Left.(*ExprIdent); !ok || id.Name != "CXX_RT" {
+		t.Errorf("ExprEq.Left = %#v, want ExprIdent{CXX_RT}", eq.Left)
+	}
+
+	if s, ok := eq.Right.(*ExprString); !ok || s.Value != "libcxxrt" {
+		t.Errorf("ExprEq.Right = %#v, want ExprString{libcxxrt}", eq.Right)
+	}
+}
+
+// TestParseIf_NumericLessThan (PR-27) pins the parser handling of
+// `IF (X < N)` — the libc_compat ANDROID_API pattern.
+func TestParseIf_NumericLessThan(t *testing.T) {
+	src := []byte(`IF (ANDROID_API < 28)
+    SRCS(android.c)
+ENDIF()
+`)
+
+	mf, err := Parse("test.input", src)
+
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if len(mf.Stmts) != 1 {
+		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
+	}
+
+	ifStmt, ok := mf.Stmts[0].(*IfStmt)
+
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *IfStmt", mf.Stmts[0])
+	}
+
+	lt, ok := ifStmt.Cond.(*ExprLt)
+
+	if !ok {
+		t.Fatalf("IfStmt.Cond = %T, want *ExprLt", ifStmt.Cond)
+	}
+
+	if id, ok := lt.Left.(*ExprIdent); !ok || id.Name != "ANDROID_API" {
+		t.Errorf("ExprLt.Left = %#v, want ExprIdent{ANDROID_API}", lt.Left)
+	}
+
+	if i, ok := lt.Right.(*ExprInt); !ok || i.Value != 28 {
+		t.Errorf("ExprLt.Right = %#v, want ExprInt{28}", lt.Right)
+	}
+}
+
+// TestParseIf_NotEqualDesugars (PR-27) pins the desugar of `X != Y`
+// to `NOT (X == Y)` at parse time — the libc_compat OS_SDK pattern.
+func TestParseIf_NotEqualDesugars(t *testing.T) {
+	src := []byte(`IF (OS_SDK != "ubuntu-20")
+    SRCS(other_sdk.c)
+ENDIF()
+`)
+
+	mf, err := Parse("test.input", src)
+
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ifStmt, ok := mf.Stmts[0].(*IfStmt)
+
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *IfStmt", mf.Stmts[0])
+	}
+
+	not, ok := ifStmt.Cond.(*ExprNot)
+
+	if !ok {
+		t.Fatalf("IfStmt.Cond = %T, want *ExprNot (X != Y desugar)", ifStmt.Cond)
+	}
+
+	eq, ok := not.Of.(*ExprEq)
+
+	if !ok {
+		t.Fatalf("ExprNot.Of = %T, want *ExprEq", not.Of)
+	}
+
+	if id, ok := eq.Left.(*ExprIdent); !ok || id.Name != "OS_SDK" {
+		t.Errorf("ExprEq.Left = %#v, want ExprIdent{OS_SDK}", eq.Left)
+	}
+
+	if s, ok := eq.Right.(*ExprString); !ok || s.Value != "ubuntu-20" {
+		t.Errorf("ExprEq.Right = %#v, want ExprString{ubuntu-20}", eq.Right)
+	}
+}
+
+// TestParseIf_ChainedComparisonRejected (PR-27) pins the
+// non-associativity of comparators: `A == B == C` must be a syntax
+// error, not silently associated. The error pinpoints the second
+// `==` so the user knows which one is the chain offender.
+func TestParseIf_ChainedComparisonRejected(t *testing.T) {
+	_, err := Parse("test.input", []byte("IF (A == B == C)\nENDIF()\n"))
+
+	if err == nil {
+		t.Fatal("expected error for chained comparison, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "chained comparison") {
+		t.Errorf("error %q does not mention 'chained comparison'", err.Error())
+	}
+}
+
+// TestParseIf_ComparisonInAndOr (PR-27) pins that comparisons bind
+// tighter than AND / OR — the libcxxrt pattern
+// `IF (SANITIZER_TYPE == undefined OR FUZZING)` must parse as
+// `(SANITIZER_TYPE == undefined) OR FUZZING`, not as `SANITIZER_TYPE
+// == (undefined OR FUZZING)`.
+func TestParseIf_ComparisonInAndOr(t *testing.T) {
+	src := []byte(`IF (SANITIZER_TYPE == undefined OR FUZZING)
+    SRCS(x.c)
+ENDIF()
+`)
+
+	mf, err := Parse("test.input", src)
+
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ifStmt := mf.Stmts[0].(*IfStmt)
+
+	or, ok := ifStmt.Cond.(*ExprOr)
+
+	if !ok {
+		t.Fatalf("Cond = %T, want *ExprOr (OR is outermost)", ifStmt.Cond)
+	}
+
+	if _, ok := or.Left.(*ExprEq); !ok {
+		t.Errorf("OR.Left = %T, want *ExprEq", or.Left)
+	}
+
+	if id, ok := or.Right.(*ExprIdent); !ok || id.Name != "FUZZING" {
+		t.Errorf("OR.Right = %#v, want ExprIdent{FUZZING}", or.Right)
+	}
+}
+
+// TestParseIf_VersionLiteralStillWord (PR-27) pins the lexer's
+// readNumberOrWord regression check: `VERSION(2025-06-20)` is a
+// macro arg that begins with a digit but contains non-digit word
+// bytes; it must still lex as a single tokWord, not be split into
+// tokInt + tokWord by the new digit-leading path.
+func TestParseIf_VersionLiteralStillWord(t *testing.T) {
+	mf, err := Parse("test.input", []byte("VERSION(2025-06-20)\n"))
+
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if len(mf.Stmts) != 1 {
+		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
+	}
+
+	u, ok := mf.Stmts[0].(*UnknownStmt)
+
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *UnknownStmt", mf.Stmts[0])
+	}
+
+	if !equalStrings(u.Args, []string{"2025-06-20"}) {
+		t.Errorf("VERSION args = %v, want [2025-06-20]", u.Args)
+	}
+}
+
+// TestParseIf_PureIntInMacroArg (PR-27) pins that a pure-digit
+// macro arg lexes as tokInt and is preserved verbatim when surfaced
+// as a string in UnknownStmt.Args (e.g. `IDE_FOLDER(42)`).
+func TestParseIf_PureIntInMacroArg(t *testing.T) {
+	mf, err := Parse("test.input", []byte("IDE_FOLDER(42)\n"))
+
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	u := mf.Stmts[0].(*UnknownStmt)
+
+	if !equalStrings(u.Args, []string{"42"}) {
+		t.Errorf("IDE_FOLDER args = %v, want [42]", u.Args)
+	}
+}
+
 // equalStrings is a tiny helper to keep test output readable.
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
