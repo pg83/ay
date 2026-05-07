@@ -1412,3 +1412,191 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 **Location:** .gitignore (does not list _artifacts/ or debug/)
 **Description:** PR-32 sessions produced 600MB+ of artifacts under `_artifacts/`. `git status` lists as untracked; future `git add -A` slip would commit ~600MB of binary JSON.
 **Fix:** `.gitignore` extended with `/_artifacts/` and `/debug/` entries.
+
+---
+
+## PR-33
+
+### [PR-33-A_clean] Reviewer A (correctness lens) returned NO DEFECTS
+**Status:** resolved (no action needed)
+**Severity:** —
+**Description:** Numbers reproduce; cycle invariant preserved; bucket helper edge cases verified (own/peer empty/non-empty/overlap); test inversions honest (TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs is correct rename matching D02 semantic). 10/10 sample-trace of newly-byte-exact pairs are genuinely byte-exact. M1 byte-exact preserved.
+
+### [PR-33-C01] util-module PEERDIR ordering: libcxx/libcxxrt -I emitted AFTER musl, not BEFORE (16 util .o nodes + 9 ragel6)
+**Status:** open
+**Severity:** major
+**Location:** gen.go (PEERDIR walk for util — exact site under investigation)
+**Description:** For util/_/digest/city.cpp.o aarch64 (and 15 other util .o + 9 ragel6 transitively): reference emits include order [linux-headers, libcxx/include, libcxxrt/include, musl/arch, musl/include, ...]; ours emits [linux-headers, musl/arch, musl/include, ..., libcxx/include LAST, libcxxrt/include]. Slot count + surrounding flags byte-exact except the 2-slot reorder. PR-33's util-libcxx peering work introduced libcxx/libcxxrt as peers but inserted them at the TAIL of the include list rather than between linux-headers and musl/arch.
+**Suggested fix:** Order util's libcxx/libcxxrt PEERDIRs BEFORE musl in include emission. Likely peer-list ordering issue in PEERDIR walk where library-class peers should precede toolchain-injected peers (musl is libc toolchain; libcxx is user library wrapping it).
+
+### [PR-33-C02] yasm libyasm missing `-D_musl_=1` macro (30 yasm libyasm + 11 yasm modules)
+**Status:** open
+**Severity:** major
+**Location:** yasm-specific CFLAGS injection (likely contrib/tools/yasm/libyasm/ya.make IF (MUSL) handling)
+**Description:** Reference yasm/_/libyasm/assocdat.c.pic.o x86_64 emits `-D_musl_=1` at slot 52 after YASM-specific defines. Ours skips this slot; everything from slot 52 onward shifts by one. 30 yasm libyasm + 6 yasm modules + 5 yasm objfmts/elf nodes (~41 total) regress at L3.
+**Suggested fix:** Inspect contrib/tools/yasm/libyasm/ya.make (or equivalent) for per-module CFLAGS or BUILDWITH_MUSL conditional setting `-D_musl_=1`, route through emitter. Independent of libcxxrt-doubled-flag pattern (PR-32-D01 89-instance overlap likely covers part of this).
+
+### [PR-33-C03] sysincl uchar.h over-fan-out — DOMINATES L2 ceiling (251 libcxx/abseil/libcxxabi-parts consumers; +2 spurious inputs each)
+**Status:** resolved (deferred — PR-34 sysincl per-record source-vs-includer routing)
+**Severity:** major
+**Location:** sysincl.go Lookup path; scanner.go:411-412 includerRel keying
+**Description:** stl-to-libcxx.yml uchar.h record has source_filter `^(?!(contrib/libs/musl|contrib/tools/yasm)).*|^contrib/libs/musl/tests` meant to reject musl callers. Our keying uses immediate-includer path; non-musl source reaching uchar.h via yasm-related includer chain triggers libcxx-uchar mapping. Closing alone would push L2 83.94% → ~90.7%.
+**Fix:** Deferred. PR-34's per-record source-class bucket gating addresses this.
+
+### [PR-33-C04] F1 (libcxxrt own non-GLOBAL CXXFLAGS doubled) under-counted at 8; actual ~29 (14 libcxxrt + 6 libcxxabi-parts + 9 ragel6)
+**Status:** resolved (count correction; underlying mechanism is real, fix needed)
+**Severity:** minor
+**Location:** cc.go own-CXXFLAGS emission — single emission where reference emits twice for libcxxrt-class own flags
+**Description:** Reference doubles `-nostdinc++` flanking catboost-redux for libcxxrt/libcxxabi-parts/ragel6 own non-GLOBAL CXXFLAGS. Ours emits once. Note: PR-33 D02 ALREADY does this correctly for own + peer GLOBAL CXXFLAGS (libcxx, abseil byte-exact); fails only for OWN NON-GLOBAL CXXFLAGS in libcxxrt-class modules.
+**Suggested fix:** Investigate why libcxx/abseil work (own GLOBAL + peer GLOBAL via bucket-twice) but libcxxrt own NON-GLOBAL doesn't. Likely a missing GLOBAL-flag-routing for OWN-module non-GLOBAL CXXFLAGS in those classes — or upstream uses a different mechanism (e.g. duplicate cmd_args via a SECOND emit pass we don't replicate).
+
+### [PR-33-C05] F5 mislabeled — tcmalloc duplicate `-I tcmalloc` is a successful PR-33 match, not a defect
+**Status:** resolved (no action — record-keeping correction only)
+**Severity:** nit
+**Description:** PR-32 emitted `-I tcmalloc` once; PR-33 emits twice (slots 9 + 19) matching reference exactly. 36 tcmalloc/no_percpu_cache nodes went L3-mismatch → L3-match in PR-33. `_BUILTIN_PEERDIR` self-walk hypothesis empirically confirmed.
+
+### [PR-33-B01] AddIncl GlobalPaths-first reorder breaks intra-stmt declaration order for stmts interleaving GLOBAL and non-GLOBAL paths
+**Status:** resolved (deferred — M5 hardening; libcxx empirically declares GLOBAL first; latent until a future module declares interleaved)
+**Severity:** minor
+**Location:** gen.go:377-379
+**Description:** `d.addIncl = append(d.addIncl, v.GlobalPaths...); d.addIncl = append(d.addIncl, v.OwnPaths...)` per stmt collapses GlobalPaths-then-OwnPaths regardless of declaration order. For `ADDINCL(src GLOBAL include)` (non-GLOBAL before GLOBAL) the collapse emits `[include, src]` REORDERED. libcxx happens to declare GLOBAL first so visible behavior is correct.
+**Fix:** Deferred. Future M5 hardening: extend AddInclStmt to carry single ordered `[]struct{Path, Global}` slice; reproduce both fields in true source order.
+
+### [PR-33-B02] Duplicate musl-self gate for own GLOBAL CFLAGS in genModule (~17 lines redundant)
+**Status:** resolved (deferred — M5 hardening)
+**Severity:** minor
+**Location:** gen.go:1252-1262 vs gen.go:1316-1333
+**Description:** genModule computes LibcMusl-gated own-GLOBAL CFLAGS triple TWICE. Lines 1252-1262 produce `ownCFlagsGlobal`/etc. (used for moduleEmitResult); lines 1316-1333 produce `*Self` variants with IDENTICAL gate (used for ModuleCCInputs.Own*Global). Drift risk if gate evolves.
+**Fix:** Deferred. Future cleanup: drop second computation, reuse first.
+
+### [PR-33-B03] Asymmetric data shape for ADDINCL vs CFLAGS GLOBAL handling in ModuleCCInputs
+**Status:** resolved (deferred — M5 hardening; structural rot signal but functional)
+**Severity:** minor
+**Location:** cc.go:79-166 (ModuleCCInputs); gen.go:377-379 vs gen.go:380-401
+**Description:** ADDINCL globals merged INTO d.addIncl (mixed bag, no OwnAddInclGlobal field); CFLAGS keep OwnCFlagsGlobal/PeerCFlagsGlobal split. Future readers must internalise asymmetry.
+**Fix:** Deferred. Pick one shape uniformly; document rationale or unify.
+
+### [PR-33-B04] composeTargetCC/composeHostCC now take 11 positional parameters; PR-29 struct-refactor regression
+**Status:** resolved (deferred — M5 hardening)
+**Severity:** minor
+**Location:** cc.go:660 (composeTargetCC), cc.go:726 (composeHostCC)
+**Description:** PR-29 reshaped EmitCC to ModuleCCInputs struct to avoid positional growth. Composers below have grown 6→8→11 params over PR-31/32/33. Same refactor pattern should apply.
+**Fix:** Deferred. Introduce `composerInputs` struct bundling per-source-language and per-module args.
+
+### [PR-33-B05] composeOwnAndPeerGlobalBucket capacity over-allocates by one branch
+**Status:** resolved (deferred — nit; functionally correct)
+**Severity:** nit
+**Location:** cc.go:603-606
+**Description:** Capacity counts BOTH C++ axis lengths AND C-only axis lengths, but only one is emitted per isCxx. Functionally correct (cap is hint).
+**Fix:** Deferred. Compute cap conditionally on isCxx.
+
+### [PR-33-B06] composePeerExtras called for C++ branch but result discarded
+**Status:** resolved (deferred — nit; trivially wasted CPU)
+**Severity:** nit
+**Location:** cc.go:248, cc.go:687-698
+**Description:** peerExtras computed unconditionally, only used in !isCxx branch.
+**Fix:** Deferred. Move call inside C-branch or document the discard.
+
+### [PR-33-B07] TestIsRuntimeAncestor_LiteralOnly omits 1 literal + includes a non-module artifact path
+**Status:** resolved (deferred — test coverage gap; does not affect production behavior)
+**Severity:** nit
+**Location:** gen_test.go:2687-2700, 2708-2715
+**Description:** Test enumerates 12 of 13 runtimeAncestorPaths entries (missing `contrib/libs/linuxvdso/original`); subtree slice includes `util/datetime/parser.rl6.cpp.o` (build artifact path, not module path).
+**Fix:** Deferred. Add missing literal; replace artifact with real subtree module.
+
+### [PR-33-B08] "bucket" terminology not anchored to file's existing vocabulary
+**Status:** resolved (deferred — nit; cosmetic)
+**Severity:** nit
+**Location:** cc.go:572-632 (composeOwnAndPeerGlobalBucket)
+**Description:** "bucket" coined locally; rest of cc.go uses "extras"/"block"/"set"/"slot". Future readers must map.
+**Fix:** Deferred. Rename to composeOwnAndPeerGlobals; or add one-line glossary in helper docstring.
+
+### [PR-33-A2_01] C01 hoist is reorder-only; runtime ancestors with no PEERDIRs (library/cpp/malloc/api) get NO libcxx/libcxxrt at all
+**Status:** open
+**Severity:** major
+**Location:** gen.go:1313-1343 (hoist gate); affects library/cpp/malloc/api
+**Description:** C01 doc claims "model libcxx/libcxxrt as direct GLOBAL peers for runtime ancestors". Implementation only REORDERS entries already in peerAddInclGlobal; never INJECTS when missing. For util this works because user-PEERDIRs (util/charset, zlib, etc.) pull libcxx/libcxxrt into the slice via Phase 2; for library/cpp/malloc/api (runtime ancestor with NO_UTIL + zero PEERDIRs), nothing puts libcxx/libcxxrt into the slice and the hoist has nothing to hoist. Reference malloc.cpp.o has libcxx/include + libcxxrt/include at slots 11-12; ours has musl/arch instead (libcxx/libcxxrt entirely absent). 2 L3 mismatches (.o + .pic.o) in M2; structural concern that the discriminator's premise is operationally false.
+**Suggested fix:** Either (a) augment defaultPeerdirsFor so runtime ancestors also receive libcxx/include + libcxxrt/include as implicit GLOBAL header-only contributions; or (b) change the hoist to INJECT-then-reorder. (a) more honest model; (b) smaller patch.
+
+### [PR-33-A2_02 / C2_01] AS-emitter hardcoded to aarch64 toolchain; 62 x86_64 AS nodes have wrong cmd_args
+**Status:** open
+**Severity:** major
+**Location:** as.go:74-79 (EmitAS prologue uses targetTriple + archFlag constants directly); flags.go:63-70 (constants are hardcoded `aarch64-linux-gnu` / `armv8-a`)
+**Description:** 62 AS nodes in our output have platform=`default-linux-x86_64` but ALL 62 have `--target=aarch64-linux-gnu` and `-march=armv8-a`. Reference: zero such mismatches (37 x86 AS nodes correctly use `--target=x86_64-linux-gnu`). Sample (musl `ceill.s.o`): 23-arg cmd_args delta (want 109, got 86). Plus EmitAS doesn't inject muslExtraDefines for musl-self assembly (43 nodes total). **Dominates remaining 117 L3 misses (56 of 117 are kind=AS); closing lifts L3 95.60% → ~97.10%.**
+**Suggested fix:** EmitAS must branch on `instance.Target` (or host-vs-target flag), choose hostTriple + no -march + muslCcIncludesX8664-style includes for host. Pattern in cc.go:253-262 (composeMuslHostCC). Plus musl-self branch injecting muslExtraDefines per `instance.Flags.LibcMusl`.
+
+### [PR-33-A2_03] C01 doc-comment overstates: "16 util siblings" — actually 5 util own-CC in M2 closure
+**Status:** resolved (deferred — nit doc accuracy)
+**Severity:** nit
+**Location:** gen.go:1326-1329
+**Description:** Comment says "util's own CC nodes (util/_/digest/city.cpp.o + 15 siblings)". Reference has only 5 util own-CC nodes; 4 match, 1 (datetime/parser.rl6.cpp.o) diverges for separate reason.
+**Fix:** Deferred. Replace "+ 15 siblings" with "+ 4 siblings" or drop count.
+
+### [PR-33-A2_04] C01 doc claim "rescues util from libcxx-at-tail to libcxx-at-front" empirically incorrect for util's matching CC nodes
+**Status:** resolved (deferred — minor doc accuracy)
+**Severity:** minor
+**Location:** gen.go:1318-1330
+**Description:** util's 4 matching own-CC nodes had libcxx/libcxxrt at FRONT in PR-33 round-1 baseline already (via util's user-PEERDIRs as Phase 2 contributors). C01 hoist is empirically a NO-OP for those. What it actually rescues is more subtle (libcxxabi/libunwind ordering when those slots are present).
+**Fix:** Deferred. Replace example with actual modules whose L3 fingerprint flipped due to hoist; or remove the named-example clause.
+
+### [PR-33-A2_05] tools/archiver/main.cpp.o has tcmalloc misordered ahead of zlib/double-conversion/libc_compat
+**Status:** resolved (deferred — pre-existing peer-walk ordering issue, separate PR)
+**Severity:** minor
+**Location:** gen.go (genModule peer-walk Phase 1+2)
+**Description:** Reference archiver/main.cpp.o slots [17-21] = `zlib/include, double-conversion, libc_compat/.../readpassphrase, tcmalloc, abseil-cpp`. Got = `tcmalloc, zlib/include, double-conversion, libc_compat, abseil-cpp`. tcmalloc misordered to slot 17 instead of 20. archiver is NOT runtime-ancestor (C01 doesn't fire) and IS PROGRAM (C02 only added -D_musl_=1). Pre-existing peer-walk Phase 1+2 ordering issue; 1 L3 mismatch in M2 closure.
+**Fix:** Deferred. Trace tcmalloc's entry path; reference puts it in user-PEERDIR-tail region.
+
+### [PR-33-A2_06 / C2_03] ragel6 host PIC duplicated linux-headers pair (slots 18-19) + mimalloc/ragel5 ordering
+**Status:** open
+**Severity:** minor
+**Location:** gen.go peer-walk dedup logic for ragel6/bin host walks
+**Description:** ragel6/all_cd.cpp.pic.o reference slots [11-18]: libcxx/include, libcxxrt/include, musl/{arch/x86_64,arch/generic,include,extra}, mimalloc/include, ragel5/aapl. Got: same through musl, then ragel5/aapl, then DUPLICATE linux-headers + linux-headers/_nf, then mimalloc/include. Two issues: (a) mimalloc-vs-ragel5/aapl ordering reversed; (b) linux-headers re-emitted at slots 18-19 (over-emit by us). Pushes -D_musl_=1 from slot 51 to 53 (offset +2). 9 ragel6 host-PIC CC nodes affected.
+**Suggested fix:** Locate duplicate-include emission site for host PIC ragel6 (likely peer-ADDINCL accumulator without dedup against bundle's already-emitted linux-headers). Standard fix: dedup `-I` flags against already-emitted set.
+
+### [PR-33-A2_07] Header-only walker lacks C01 hoist gate; assumption unenforced
+**Status:** resolved (deferred — minor; M2-empirical-safe)
+**Severity:** minor
+**Location:** gen.go:1774-1782
+**Description:** walkPeersForGlobalAddIncl note says "header-only LIBRARYs (musl/include, etc.) keep natural Phase 1+2 order — none of M2-closure header-only modules are runtime ancestors". True today; but unenforced empirical assumption. Future closure pulling header-only runtime ancestor through header-only walker silently fails discriminator.
+**Fix:** Deferred. Either guard panics on assumption violation, or apply hoist unconditionally in header-only walker too (symmetric).
+
+### [PR-33-A2_08] C02 effectiveNoPlatform gate not exercised by M2 closure
+**Status:** resolved (deferred — nit; empirically unverifiable in M2)
+**Severity:** nit
+**Location:** gen.go:1464
+**Description:** C02 gate `!effectiveNoPlatform(instance.Flags)` excludes PROGRAMs with NO_PLATFORM. No PROGRAM in M2 archiver closure has effectiveNoPlatform=true. Cannot falsify from M2 evidence.
+**Fix:** Deferred. Document as empirical boundary in C02 comment; verify against M3+ reference when it arrives.
+
+### [PR-33-C2_02] Round-2 lift accounting was estimates not measurements (real: C01=19 util, C02=79 yasm, ragel6=0; sum exactly 98)
+**Status:** resolved (correction noted; no code action)
+**Severity:** minor
+**Description:** Brief said "C01 lifted ~25 (util+ragel6); C02 lifted ~41 (yasm); discrepancy 32 unaccounted". Empirical: C01 lifted 19 util ONLY (ragel6 untouched); C02 lifted 79 yasm; sum exactly 98, no discrepancy. ZERO match→miss regressions.
+**Fix:** Documented in PR-33 Completed entry with correct numbers.
+
+### [PR-33-C2_04] PR-33-C04 round-1 hypothesis "libcxxrt own non-GLOBAL CXXFLAGS doubled" is empirically wrong — actual is missing `-nostdinc++` (1-arg shortfall)
+**Status:** resolved (correction; underlying L3 mismatch is real but characterization was inverted)
+**Severity:** minor
+**Location:** Earlier C04 ledger entry; affected: cc.go cxx-tail composition for libcxxrt
+**Description:** Round-1 hypothesis: "libcxxrt own non-GLOBAL CXXFLAGS doubled in reference". Empirical: libcxxrt CC nodes have want=110 args, got=109 — 1-arg SHORTFALL, not doubling. Missing flag is `-nostdinc++` at slot 102. 14 nodes (not 29).
+**Fix:** Correction noted. Underlying defect is "libcxxrt CC missing `-nostdinc++` in cxx-tail composition" — fix is to add `-nostdinc++` to libcxxrt's own-CXXFLAGS or dedicated freestanding-cxx tail block.
+
+### [PR-33-C2_05] util/system/compiler.cpp.o unpaired — reference emits it, our walker doesn't
+**Status:** resolved (deferred — pre-existing parser/walker gap, separate PR)
+**Severity:** minor
+**Location:** gen.go walker; tools/archiver/main.cpp → util PEERDIR closure
+**Description:** Among 47 unpaired-want nodes is `$(BUILD_ROOT)/util/system/compiler.cpp.o` (default-linux-aarch64). Pre-PR-33. Knock-on: util/libyutil.a L3-divergent (got 31 inputs, want 32; AR slot 10 holds next file alphabetically rather than compiler.cpp.o). 2 of 4 remaining util L3 misses collapse to same root.
+**Fix:** Deferred. Investigate why walker omits util/system/compiler.cpp from util module's source list.
+
+### [PR-33-C2_06] util target AS uses stripped warning bundle instead of preserving module-own warning CFLAGS
+**Status:** resolved (deferred — AS-emitter retrofit, separate PR)
+**Severity:** minor
+**Location:** as.go:86 (asWnoEverything substitution); gen.go ADDINCL/CFLAGS threading for AS-kind sources
+**Description:** util/_/system/context_aarch64.S.o want has 106 cmd_args including module-own warnings (-Werror, -Wall, -Wextra, -Wno-parentheses, etc.); got has 86 with `-Wno-everything` substitution. AS emitter doesn't thread module ADDINCL/CFLAGS the way CC does. 1-node defect in M2 but cascades for AS-kind misses generally.
+**Fix:** Deferred. AS-emitter retrofit to thread module-own warning CFLAGS — sized as own PR.
+
+### [PR-33-C2_07] util R6 path mismatch: ragel6/bin/ragel6 vs ragel6/ragel6
+**Status:** resolved (deferred — single-node R6 path resolution, separate PR)
+**Severity:** minor
+**Location:** r6.go ragel6 binary path resolution
+**Description:** Reference want: `$(BUILD_ROOT)/contrib/tools/ragel6/ragel6`. Got: `$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6`. Single-node defect; util/_/datetime/parser.rl6.cpp R6 node cmd[0][0] differs.
+**Fix:** Deferred. Drop `/bin/` segment from R6 binary path resolution.

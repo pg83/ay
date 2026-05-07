@@ -393,8 +393,21 @@ func (s *IncludeScanner) resolve(includerAbs string, d includeDirective, ctx *Sc
 	}
 
 	// Sysincl: add EVERY matching record's contribution on top of
-	// the search-path result. The includer-rel key (not the per-CC
-	// source) drives source_filter matching per ymake semantics.
+	// the search-path result. The source_filter key is the IMMEDIATE
+	// includer's relative path (not the compile-unit source path) —
+	// empirically required by the reference graph: glibcasm-mapping
+	// records (filter `^contrib/libs/glibcasm`) fire when a musl
+	// header transitively reaches a glibcasm-based includer in the
+	// closure, which would not happen with a compile-unit-keyed
+	// match. PR-33 D05 attempted ctx.SourceRel as the key but lost
+	// 125 musl CC nodes' glibcasm closure (regressed L2 from 83.94%
+	// to 79.60%). Both keys give wrong answers for some axis: the
+	// per-includer key over-fans-out for stl-to-libcxx on
+	// non-yasm/non-musl headers reached via a yasm chain
+	// (libc_compat/reallocarray/stdlib.h is the canonical case).
+	// Resolution lives in a sysincl follow-up that gates per-record
+	// by source-class (the upstream's actual mechanism — recorded as
+	// a PR-33 deferred follow-up defect).
 	includerRel := strings.TrimPrefix(includerAbs, s.sourceRoot+"/")
 	mappings, _ := s.sysincl.Lookup(includerRel, d.target)
 

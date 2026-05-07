@@ -1657,12 +1657,18 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			},
 			want: nil,
 		},
+		// PR-33 D01: `contrib/libs/musl/full` is no longer a runtime
+		// ancestor by literal entry (the subtree extension was dropped).
+		// The empty-default-set is preserved because `inferFlagsFromPath`
+		// seeds musl-subtree paths with NoLibc+NoUtil+NoRuntime, which
+		// `effectiveNoPlatform` collapses to NO_PLATFORM. Tests that
+		// construct the ModuleInstance directly must mirror this seed.
 		{
 			name: "self_musl_subdir_runtime_ancestor",
 			mi: ModuleInstance{
 				Path:     "contrib/libs/musl/full",
 				Language: LangCPP,
-				Flags:    FlagSet{LibcMusl: true},
+				Flags:    FlagSet{LibcMusl: true, NoLibc: true, NoUtil: true, NoRuntime: true},
 			},
 			want: nil,
 		},
@@ -2001,25 +2007,23 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	})
 }
 
-// TestGen_CXXFLAGS_GLOBAL_NotLeakedToOwnCmdArgs pins PR-29-D01: the
-// GLOBAL modifier on CXXFLAGS / CONLYFLAGS must NOT be forwarded to
-// the module's own cmd_args (neither the literal "GLOBAL" token nor
-// the flag that follows it). GLOBAL-prefixed flags propagate to peer
-// modules per ymake semantics; applying them to self would be
-// semantically wrong. PR-30 D04 will route them via cxxFlagsGlobal.
-//
-// This test exercises the full parser→applyUnknownStmt→moduleData
-// →ModuleCCInputs→EmitCC pipeline (D02: same shape, resolved by D01's
-// test per the brief).
-func TestGen_CXXFLAGS_GLOBAL_NotLeakedToOwnCmdArgs(t *testing.T) {
-	t.Run("CXXFLAGS_GLOBAL_not_in_cmd_args", func(t *testing.T) {
+// TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs pins the PR-33 D02
+// inversion of PR-29-D01: own GLOBAL CXXFLAGS / CONLYFLAGS DO appear
+// on the module's own cmd_args (via the (own ∪ peer) GLOBAL bucket
+// emitted twice flanking the catboost-redux). The literal `GLOBAL`
+// token must still NOT leak through (only the flag token following
+// it). Empirical anchor: libcxx algorithm.cpp.o cmd_args[101] +
+// [103] = `-nostdinc++` (own GLOBAL CXXFLAGS, emitted twice via the
+// bucket).
+func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
+	t.Run("CXXFLAGS_GLOBAL_emitted_twice_no_literal_GLOBAL", func(t *testing.T) {
 		root := t.TempDir()
 		modDir := filepath.Join(root, "testlib")
 		Throw(os.MkdirAll(modDir, 0o755))
 
-		// CXXFLAGS(GLOBAL -nostdinc++) — the GLOBAL modifier marks this
-		// for peer propagation; the own CC node must receive neither
-		// "GLOBAL" nor "-nostdinc++".
+		// CXXFLAGS(GLOBAL -nostdinc++) — PR-33 D02: own GLOBAL CXXFLAGS
+		// IS emitted on the module's own C++ CC node (twice, flanking
+		// the catboost-redux). The literal GLOBAL token must not leak.
 		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCXXFLAGS(GLOBAL -nostdinc++)\nSRCS(foo.cpp)\nEND()\n")
 		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
@@ -2043,25 +2047,38 @@ func TestGen_CXXFLAGS_GLOBAL_NotLeakedToOwnCmdArgs(t *testing.T) {
 			t.Fatal("CC node has no Cmds")
 		}
 
+		nostdinccCount := 0
+
 		for _, arg := range ccNode.Cmds[0].CmdArgs {
 			if arg == "GLOBAL" {
 				t.Errorf("CC cmd_args contains literal %q — GLOBAL modifier leaked into own node", arg)
 			}
 
 			if arg == "-nostdinc++" {
-				t.Errorf("CC cmd_args contains %q — GLOBAL-prefixed flag leaked into own node (should be dropped until PR-30)", arg)
+				nostdinccCount++
 			}
+		}
+
+		// PR-33 D02: own GLOBAL CXXFLAGS lands on own cmd_args twice
+		// (the bucket emitted on each side of the catboost-redux).
+		if nostdinccCount != 2 {
+			t.Errorf("expected 2 occurrences of -nostdinc++ in own cmd_args (bucket × 2), got %d", nostdinccCount)
 		}
 	})
 
-	t.Run("CONLYFLAGS_GLOBAL_not_in_cmd_args", func(t *testing.T) {
+	t.Run("CONLYFLAGS_GLOBAL_no_literal_GLOBAL_in_C", func(t *testing.T) {
 		root := t.TempDir()
 		modDir := filepath.Join(root, "testlib")
 		Throw(os.MkdirAll(modDir, 0o755))
 
-		// CONLYFLAGS(GLOBAL -Dfoo) — GLOBAL modifier on C-only flags;
-		// the own CC node (compiling a .c source) must receive neither
-		// "GLOBAL" nor "-Dfoo".
+		// CONLYFLAGS(GLOBAL -Dfoo) — for C sources the empirical
+		// reference shows no catboost-redux and no second peerExtras
+		// emission (build/cow/on lib.c.o has no -DCATBOOST_OPENSOURCE
+		// duplicate; tcmalloc aligned_alloc.c.o likewise). PR-33 D02
+		// keeps the C path on the existing single peerExtras slot;
+		// the literal GLOBAL token still must not leak. Own GLOBAL
+		// CONLYFLAGS for C is not exercised in the M2 closure; if a
+		// future closure surfaces such a case, revisit.
 		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCONLYFLAGS(GLOBAL -Dfoo)\nSRCS(bar.c)\nEND()\n")
 		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
@@ -2088,10 +2105,6 @@ func TestGen_CXXFLAGS_GLOBAL_NotLeakedToOwnCmdArgs(t *testing.T) {
 		for _, arg := range ccNode.Cmds[0].CmdArgs {
 			if arg == "GLOBAL" {
 				t.Errorf("CC cmd_args contains literal %q — GLOBAL modifier leaked into own node", arg)
-			}
-
-			if arg == "-Dfoo" {
-				t.Errorf("CC cmd_args contains %q — GLOBAL-prefixed flag leaked into own node (should be dropped until PR-30)", arg)
 			}
 		}
 	})
@@ -2659,5 +2672,51 @@ func TestGen_ToolsArchiver_L0_AtLeast95(t *testing.T) {
 		t.Errorf("L0 = %.4f (%s) < acceptance bar %.2f (PR-30 must clear M2 L0 gate)", l0, note, acceptance)
 	} else {
 		t.Logf("L0 = %.4f (%s) — clears acceptance bar %.2f", l0, note, acceptance)
+	}
+}
+
+// TestIsRuntimeAncestor_LiteralOnly pins PR-33 D01: `isRuntimeAncestor`
+// matches only literal entries in `runtimeAncestorPaths`. Subtree
+// members (`util/charset`, `contrib/libs/musl/full`,
+// `contrib/libs/cxxsupp/libcxxabi-parts`) are NOT runtime ancestors;
+// they go through the normal `defaultPeerdirsFor` flow and pick up
+// libcxx / libcxxrt / libunwind / util as auto-peers. The literal
+// entries themselves still self-suppress via the
+// `instance.Path != "..."` guards inside `defaultPeerdirsFor`.
+func TestIsRuntimeAncestor_LiteralOnly(t *testing.T) {
+	literals := []string{
+		"contrib/libs/musl",
+		"contrib/libs/libc_compat",
+		"contrib/libs/linuxvdso",
+		"contrib/libs/cxxsupp/builtins",
+		"contrib/libs/cxxsupp/libcxx",
+		"contrib/libs/cxxsupp/libcxxrt",
+		"contrib/libs/cxxsupp/libcxxabi",
+		"contrib/libs/cxxsupp/libcxxabi-parts",
+		"contrib/libs/libunwind",
+		"library/cpp/malloc/api",
+		"library/cpp/sanitizer/include",
+		"util",
+	}
+
+	for _, p := range literals {
+		if !isRuntimeAncestor(p) {
+			t.Errorf("isRuntimeAncestor(%q) = false, want true (literal entry)", p)
+		}
+	}
+
+	// Subtree members must NOT be classified as runtime ancestors.
+	subtree := []string{
+		"util/charset",
+		"util/datetime/parser.rl6.cpp.o",
+		"contrib/libs/musl/full",
+		"contrib/libs/cxxsupp/libcxxabi-parts/src",
+		"contrib/libs/libunwind/private",
+	}
+
+	for _, p := range subtree {
+		if isRuntimeAncestor(p) {
+			t.Errorf("isRuntimeAncestor(%q) = true, want false (subtree extension dropped in PR-33 D01)", p)
+		}
 	}
 }

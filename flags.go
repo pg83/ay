@@ -361,6 +361,34 @@ var muslWarningFlags = []string{
 	"-Wno-everything",
 }
 
+// cxxStandardWarnings is the clang C++ standard-warning-extension
+// bundle the reference graph emits unconditionally for every clang C++
+// compile that does NOT set NO_COMPILER_WARNINGS (PR-33 D04 — mirror
+// of `ymake_conf.py:1624-1636`). 10 args. Slotted in cmd_args
+// immediately AFTER `-std=c++20` (which itself is emitted by
+// `appendCxxStdAndOwn`) and BEFORE the module's own non-GLOBAL
+// CXXFLAGS / CONLYFLAGS. Empirically observed at
+// util/charset/all_charset.cpp.o cmd_args[102..111] and on every
+// non-NoCompilerWarnings C++ CC node in the reference graph.
+//
+// For modules with `NO_COMPILER_WARNINGS()` (libcxx, libcxxrt,
+// abseil-cpp, tcmalloc, ...) this bundle is replaced by the
+// single-arg `-Wno-everything` (already handled by the existing
+// `appendCxxStdAndOwn` muslWarningFlags branch when
+// `injectCxxWarningBundle && noCompilerWarnings`).
+var cxxStandardWarnings = []string{
+	"-Wimport-preprocessor-directive-pedantic",
+	"-Woverloaded-virtual",
+	"-Wno-ambiguous-reversed-operator",
+	"-Wno-defaulted-function-deleted",
+	"-Wno-deprecated-anon-enum-enum-conversion",
+	"-Wno-deprecated-enum-enum-conversion",
+	"-Wno-deprecated-enum-float-conversion",
+	"-Wno-deprecated-volatile",
+	"-Wno-pessimizing-move",
+	"-Wno-undefined-var-template",
+}
+
 // muslExtraDefines is the 9-arg block the reference graph injects
 // between `commonDefines` and the no-libc bundle for musl CC nodes.
 // Each flag captures a musl-specific compile-time invariant:
