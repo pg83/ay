@@ -116,6 +116,10 @@ func TestEmitAS_CxxsuppBuiltinsChkstk_ByteExact(t *testing.T) {
 		}
 	}
 
+	if got.Cmds[0].Cwd != ref.Cmds[0].Cwd {
+		t.Errorf("Cmds[0].Cwd = %q, want %q", got.Cmds[0].Cwd, ref.Cmds[0].Cwd)
+	}
+
 	fieldEqual(t, "cmds[0].env", got.Cmds[0].Env, ref.Cmds[0].Env)
 	fieldEqual(t, "inputs", got.Inputs, ref.Inputs)
 	fieldEqual(t, "outputs", got.Outputs, ref.Outputs)

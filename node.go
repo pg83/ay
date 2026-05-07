@@ -24,8 +24,16 @@ package main
 // never serialize.
 
 // Cmd is one command line in a node's `cmds` list.
+//
+// Field order is alphabetical to match the reference g.json key order
+// (cmd_args, cwd, env). `Cwd` is `omitempty` because the reference
+// graph omits it for most cmds — only LD cmd[2] (link_exe.py
+// invocation) and 58 of 83 AS nodes carry an explicit cwd. Emitting
+// `cwd:""` for the other ~3,000 cmds would diverge from the
+// reference byte-for-byte.
 type Cmd struct {
 	CmdArgs []string          `json:"cmd_args"`
+	Cwd     string            `json:"cwd,omitempty"`
 	Env     map[string]string `json:"env"`
 }
 

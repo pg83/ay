@@ -76,6 +76,10 @@ func l3Match(want, got *Node) bool {
 			return false
 		}
 
+		if want.Cmds[i].Cwd != got.Cmds[i].Cwd {
+			return false
+		}
+
 		if !stringMapEqual(want.Cmds[i].Env, got.Cmds[i].Env) {
 			return false
 		}
