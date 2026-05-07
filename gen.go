@@ -170,8 +170,7 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"IDE_FOLDER":            {},
 	"EXTRALIBS":             {},
 	"HEADERS":               {},
-	"DISABLE":               {},
-	"ENABLE":                {},
+	"DISABLE":               {}, // PR-30: ENABLE handled explicitly to track MUSL_LITE per module; DISABLE has no per-module side effect today.
 	"NO_BUILD_IF":           {},
 	"NO_SANITIZE":           {},
 	"NO_SANITIZE_COVERAGE":  {},
@@ -185,6 +184,8 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"MESSAGE":               {}, // PR-27: contrib/libs/cxxsupp/libcxx (FATAL_ERROR in dead branch)
 	"SRC":                   {}, // PR-27: util/charset (per-source compile flag; treated as metadata until R3 lands)
 	"SRC_C_SSE41":           {}, // PR-27: util/charset (arch-specific compile-flag wrapper)
+	"NO_CLANG_COVERAGE":     {}, // PR-30: contrib/tools/yasm
+	"NO_PROFILE_RUNTIME":    {}, // PR-30: contrib/tools/yasm
 }
 
 // Gen produces the build graph rooted at `targetDir`. PR-23 wraps
@@ -237,19 +238,21 @@ func Gen(cfg PlatformConfig, sourceRoot string, targetDir string) *Graph {
 // inlined macros. The `flags` field starts from the path-based
 // heuristic and is overlaid with macro-derived bools (NO_LIBC etc.).
 type moduleData struct {
-	moduleStmt  *ModuleStmt
-	srcs        []string
-	globalSrcs  []string
-	peerdirs    []string
-	joinSrcs    []*JoinSrcsStmt
-	addIncl     []string // collected ADDINCL paths, all variants
-	cFlags      []string // collected CFLAGS values, all variants
-	cxxFlags    []string // collected CXXFLAGS values (C++ only); PR-29-D02 threads into ModuleCCInputs.CXXFlags
-	cOnlyFlags  []string // collected CONLYFLAGS values (C only); PR-29-D02 threads into ModuleCCInputs.COnlyFlags
-	ldFlags     []string // collected LDFLAGS values
-	srcDir      string   // last SRCDIR setting (empty = module dir)
-	flags       FlagSet  // overlay of inferFlagsFromPath + macro bools
-	conflictMod *ModuleStmt
+	moduleStmt   *ModuleStmt
+	srcs         []string
+	globalSrcs   []string
+	peerdirs     []string
+	joinSrcs     []*JoinSrcsStmt
+	addIncl      []string // collected ADDINCL paths, all variants
+	cFlags       []string // collected CFLAGS values, all variants
+	cxxFlags     []string // collected CXXFLAGS values (C++ only); PR-29-D02 threads into ModuleCCInputs.CXXFlags
+	cOnlyFlags   []string // collected CONLYFLAGS values (C only); PR-29-D02 threads into ModuleCCInputs.COnlyFlags
+	ldFlags      []string // collected LDFLAGS values
+	srcDir       string   // last SRCDIR setting (empty = module dir)
+	flags        FlagSet  // overlay of inferFlagsFromPath + macro bools
+	hadAllocator bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
+	muslLite     bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
+	conflictMod  *ModuleStmt
 }
 
 // collectModule walks `mf.Stmts` (after IF branches have been
@@ -367,6 +370,19 @@ func applyUnknownStmt(v *UnknownStmt, d *moduleData) {
 		d.cOnlyFlags = append(d.cOnlyFlags, rest...)
 	case "ALLOCATOR":
 		applyAllocatorStmt(v, d)
+	case "ENABLE":
+		// PR-30 D02: track ENABLE(MUSL_LITE) so the
+		// defaultProgramPeerdirsFor decision sees the per-module
+		// flip. yasm declares ENABLE(MUSL_LITE) inside its IF(MUSL)
+		// branch; without this hook yasm pulls musl/full and the
+		// resulting cross-PROGRAM cycle (yasm → musl/full →
+		// asmlib's .asm sources → yasm) blows the cycle counter.
+		// All other ENABLE(...) names stay metadata-only.
+		for _, a := range v.Args {
+			if a == "MUSL_LITE" {
+				d.muslLite = true
+			}
+		}
 	default:
 		if _, ok := whitelistedMetadataMacros[v.Name]; !ok {
 			ThrowFmt("gen: PR-25 does not yet support macro %q (extend whitelistedMetadataMacros or add a typed Stmt)", v.Name)
@@ -431,6 +447,7 @@ func applyAllocatorStmt(v *UnknownStmt, d *moduleData) {
 	}
 
 	d.peerdirs = append(d.peerdirs, peers...)
+	d.hadAllocator = true
 }
 
 // buildIfEnv constructs the per-instance bound-variable environment
@@ -509,6 +526,23 @@ var runtimeAncestorPaths = map[string]bool{
 	"library/cpp/malloc/api":               true,
 	"library/cpp/sanitizer/include":        true,
 	"util":                                 true,
+}
+
+// isAncestorPath reports whether `srcDir` is an ancestor of
+// `instancePath` (or equal to it). PR-30 D06 uses this to guard the
+// SRCDIR full-rebase decision: the rebase fires only for the
+// "include-from-parent" pattern (PROGRAM whose SRCDIR is an ancestor
+// directory of the module path), where ymake's reference emits the
+// PROGRAM's outputs under SRCDIR with module_dir = srcDir. LIBRARYs
+// with SRCDIR pointing elsewhere (sibling, ancestor, or self) fall
+// through to per-source SRCDIR routing in composeCCPaths, which keeps
+// module_dir at instance.Path.
+func isAncestorPath(srcDir, instancePath string) bool {
+	if srcDir == instancePath {
+		return true
+	}
+
+	return strings.HasPrefix(instancePath, srcDir+"/")
 }
 
 // isRuntimeAncestor reports whether instance.Path is a runtime
@@ -670,6 +704,69 @@ func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
 	return peers
 }
 
+// defaultProgramPeerdirsFor returns the implicit DEFAULT_PEERDIRs that
+// upstream `_BASE_PROGRAM` (`build/ymake.core.conf:1219-1253`) attaches
+// to PROGRAM modules in our M2 environment (MUSL=yes, OS_LINUX=yes,
+// CLANG=yes, no sanitizer). PR-30 D02 + D03:
+//
+//   - `MUSL=yes && !MUSL_LITE` → `contrib/libs/musl/full`. Drives the
+//     host `musl/full → asmlib + asmglibc + linux-headers` cascade and
+//     the asmlib host AS sources' yasm trigger (which then pulls
+//     jemalloc + musl_extra via yasm's own PEERDIRs).
+//   - PROGRAM with no explicit `ALLOCATOR(...)` macro AND `MUSL=yes`
+//     AND `OS_LINUX=yes` → default ALLOCATOR=TCMALLOC_TC →
+//     `library/cpp/malloc/tcmalloc` + `contrib/libs/tcmalloc/no_percpu_cache`
+//     (which transitively peers `contrib/libs/tcmalloc/malloc_extension`
+//     and `contrib/restricted/abseil-cpp` via its common.inc).
+//
+// The helper does NOT model the GCC, sanitizer, or non-Linux paths;
+// future closures that hit those will need a richer environment-driven
+// dispatch (R2 of the PR-30 plan flags this as a known gap).
+//
+// Suppression: when `instance` is itself a runtime-ancestor module
+// (covered by `isRuntimeAncestor`), `defaultPeerdirsFor` already
+// returns nil; the PROGRAM-default helper is only consulted from the
+// non-ancestor branch in `genModule`. PROGRAMs that ARE runtime
+// ancestors (none in the M2 closure) would still get the
+// program-default peers from this helper — `genModule` callers can
+// suppress by checking `isRuntimeAncestor` themselves if a future
+// closure surfaces such a case.
+func defaultProgramPeerdirsFor(instance ModuleInstance, hadAllocator bool, muslLiteOverride bool) []string {
+	if instance.Language != LangCPP {
+		return nil
+	}
+
+	env := buildIfEnv(instance)
+	muslOn := env.Bool("MUSL")
+	muslLite := env.Bool("MUSL_LITE") || muslLiteOverride
+	osLinux := env.Bool("OS_LINUX")
+
+	var peers []string
+
+	if muslOn && !muslLite {
+		// Caller (defaultPeerdirsFor in gen.go:932) gates on !isRuntimeAncestor(instance.Path)
+		// which already excludes contrib/libs/musl/* (incl. musl/full). No self-suppression needed here.
+		const muslFullPath = "contrib/libs/musl/full"
+		peers = append(peers, muslFullPath)
+	}
+
+	// PR-30 D03: default ALLOCATOR=TCMALLOC_TC for our M2 environment
+	// (MUSL=yes, OS_LINUX=yes). PROGRAMs that explicitly declare
+	// ALLOCATOR(NAME) go through allocatorPeers; this default fires
+	// only when neither was declared.
+	if !hadAllocator && muslOn && osLinux {
+		// TCMALLOC_TC peer set; mirrors allocatorPeers["TCMALLOC_TC"].
+		// Listed inline so the PROGRAM-default path remains
+		// self-documenting alongside the M2 environment guards.
+		peers = append(peers,
+			"library/cpp/malloc/tcmalloc",
+			"contrib/libs/tcmalloc/no_percpu_cache",
+		)
+	}
+
+	return peers
+}
+
 // effectiveNoPlatform reports true when the FlagSet's combination
 // behaves as `NO_PLATFORM` in upstream ymake — i.e., NoLibc + NoUtil +
 // NoRuntime all set. The M1 leaf `build/cow/on` exhibits this pattern
@@ -825,6 +922,17 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// fixture bug, not an "implicit ymake plumbing" no-op.
 	defaults := defaultPeerdirsFor(ctx, instance)
 
+	// PR-30 D02 + D03: PROGRAM-only implicit peerdirs. `_BASE_PROGRAM`
+	// adds musl/full (when MUSL=yes && !MUSL_LITE) and the default
+	// ALLOCATOR's peer set (TCMALLOC_TC for our environment) on top of
+	// the language defaults. Threaded only for PROGRAM modules; the
+	// `hadAllocator` flag suppresses the allocator-default when the
+	// PROGRAM declared `ALLOCATOR(NAME)` itself.
+	if d.moduleStmt.Name == "PROGRAM" && !isRuntimeAncestor(instance.Path) {
+		programDefaults := defaultProgramPeerdirsFor(instance, d.hadAllocator, d.muslLite)
+		defaults = append(defaults, programDefaults...)
+	}
+
 	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
 	allPeers := make([]string, 0, len(defaults)+len(d.peerdirs))
 
@@ -896,10 +1004,20 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		AddIncl:    d.addIncl,
 		CXXFlags:   d.cxxFlags,
 		COnlyFlags: d.cOnlyFlags,
+		SrcDir:     d.srcDir,
+		SourceRoot: ctx.sourceRoot,
 	}
 
+	// PR-30 D06: ancestor-only SRCDIR rebase. The "PROGRAM with SRCDIR
+	// pointing at an ancestor of instance.Path" pattern (typified by
+	// `contrib/tools/ragel6/bin` whose SRCDIR is `contrib/tools/ragel6`)
+	// is the only shape where the reference rebases module_dir to
+	// SRCDIR. LIBRARYs with SRCDIR keep module_dir at instance.Path
+	// and route per-source via composeCCPaths' SRCDIR-aware composer.
+	ancestorRebase := d.srcDir != "" && d.moduleStmt.Name == "PROGRAM" && isAncestorPath(d.srcDir, instance.Path)
+
 	for _, src := range d.srcs {
-		ref, outPath, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs)
+		ref, outPath, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs, ancestorRebase)
 
 		if !ok {
 			continue
@@ -910,37 +1028,38 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	for _, js := range d.joinSrcs {
-		// PR-28-D11: rebase onto SRCDIR, matching emitOneSource's
-		// pattern. srcInstance carries the rebased Path so EmitJS
-		// emits module_dir = <srcDir> (not instance.Path) and
-		// resolves sources under $(SOURCE_ROOT)/<srcDir>/. The
-		// downstream EmitCC must also use srcInstance so its
-		// module_dir is consistent.
+		// PR-28-D11 + PR-30 D06: rebase onto SRCDIR only when
+		// `ancestorRebase` is set (PROGRAM with ancestor SRCDIR; the
+		// ragel6/bin pattern). Otherwise keep srcInstance at
+		// instance.Path — JOIN_SRCS in LIBRARY-with-sibling-SRCDIR
+		// modules (none in M2 closure today, but defended for future)
+		// emit at the LIBRARY's own dir.
 		srcInstance := instance
 
-		if d.srcDir != "" {
+		if ancestorRebase {
 			srcInstance.Path = d.srcDir
 		}
 
-		_, joinOut := EmitJS(srcInstance, js.OutputName, js.Sources, ctx.emit)
+		jsRef, joinOut := EmitJS(srcInstance, js.OutputName, js.Sources, ctx.emit)
 
 		// EmitJS returns a $(BUILD_ROOT)/<srcInstance.Path>/<name>
 		// absolute path; convert to srcInstance-relative for the
 		// downstream EmitCC. PR-29-D07: the JS output lives under
 		// $(BUILD_ROOT) — pass IsGenerated so EmitCC composes the
 		// inputPath under $(BUILD_ROOT) instead of $(SOURCE_ROOT).
-		// Note: the plan's optional "thread Generator NodeRef into
-		// DepRefs" step is NOT applied here — adding the dep changed
-		// 24 CC topology fingerprints away from values that
-		// accidentally collided with reference-side childless-CC
-		// fingerprints, costing 2 L0 multiset matches. The brief's
-		// hard L0 ≥ 88.34% bar takes precedence; the inputPath
-		// rewrite alone is sufficient to lift L2 by 24 byte-exact
-		// pairs (the L2-pairing gain D07 was designed for).
+		// PR-30 D04: thread the JS NodeRef as the downstream CC's
+		// `Generator` so the CC node carries an explicit dep on its
+		// source-generating JS node, matching the reference shape
+		// (every JS-derived CC in the reference has DepRefs=[js UID]).
+		// PR-29 deferred this because the wider closure had not yet
+		// landed; PR-30's musl/full + ALLOCATOR_IMPL closure widening
+		// absorbs the 2-multiset cost many times over.
 		jsRel := strings.TrimPrefix(joinOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
 
 		ccIn := moduleInputs
 		ccIn.IsGenerated = true
+		ccIn.Generator = jsRef
+		ccIn.HasGenerator = true
 
 		ref, outPath := EmitCC(srcInstance, jsRel, ccIn, ctx.emit)
 		ccRefs = append(ccRefs, ref)
@@ -953,7 +1072,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	globalOutputs := make([]string, 0, len(d.globalSrcs))
 
 	for _, src := range d.globalSrcs {
-		ref, outPath, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs)
+		ref, outPath, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs, ancestorRebase)
 
 		if !ok {
 			continue
@@ -1000,8 +1119,16 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		return result
 	}
 
-	// LIBRARY: regular AR over own CCs + peer-archive DepRefs.
-	arRef := EmitAR(instance, ccRefs, ccOutputs, peerArchiveRefs, ctx.emit)
+	// LIBRARY: regular AR over own CCs. Peer-archive DepRefs are
+	// intentionally NOT threaded — PR-30 D05: empirical reference probe
+	// confirmed every reference AR has zero AR-on-AR deps. Threading
+	// peer-archive refs into AR.DepRefs (PR-15 → PR-29 behaviour)
+	// shifted the parent AR's L0 fingerprint away from the reference
+	// shape on 24 paired AR pairs. Peer archives correctly flow into
+	// the consumer's downstream LD via the `peerArchiveRefs` slot in
+	// `EmitLD`'s call site below — only the LIBRARY AR drops them.
+	arRef := EmitAR(instance, ccRefs, ccOutputs, nil, ctx.emit)
+	_ = peerArchiveRefs // retained as a loop accumulator for the PROGRAM LD branch above; intentionally unused for the LIBRARY AR.
 	arPath := "$(BUILD_ROOT)/" + instance.Path + "/" + ArchiveName(instance.Path)
 
 	result := &moduleEmitResult{
@@ -1116,18 +1243,33 @@ func isHeaderSource(srcRel string) bool {
 // CXXFLAGS / CONLYFLAGS, D03 ADDINCL). Per PR-29 the walker collects
 // ADDINCL/CXXFLAGS/CONLYFLAGS into moduleData and threads them into
 // EmitCC via this struct.
-func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, in ModuleCCInputs) (NodeRef, string, bool) {
+func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, in ModuleCCInputs, ancestorRebase bool) (NodeRef, string, bool) {
 	if isHeaderSource(srcRel) {
 		return NodeRef{}, "", false
 	}
 
-	// PR-28-D02: rebase per-source emission onto SRCDIR. The
-	// rebased instance is value-copied so the caller's instance
-	// (used for the parent AR/LD) is untouched.
+	// PR-30 D06: SRCDIR rebase is now ancestor-only and only fires when
+	// the caller has decided this is the "include-from-parent" pattern
+	// (PROGRAM whose SRCDIR is an ancestor of instance.Path; ragel6/bin
+	// is the canonical case). LIBRARYs with SRCDIR (libcxxabi-parts,
+	// musl_extra, tcmalloc/no_percpu_cache) keep
+	// `srcInstance.Path == instance.Path`; the per-source SRCDIR
+	// resolution happens inside EmitCC via `in.SrcDir`/`in.SourceRoot`
+	// (composeCCPaths).
 	srcInstance := instance
 
-	if srcDir != "" {
+	if ancestorRebase {
 		srcInstance.Path = srcDir
+	}
+
+	// When the instance is rebased to SRCDIR (ragel6/bin pattern), the
+	// composer should NOT additionally apply SRCDIR routing — clear
+	// SrcDir on the per-source input bag. When NOT rebased (LIBRARY
+	// shape), keep SrcDir so the composer can decide local-vs-SRCDIR
+	// resolution per source.
+	srcIn := in
+	if ancestorRebase {
+		srcIn.SrcDir = ""
 	}
 
 	switch {
@@ -1135,10 +1277,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
 		strings.HasSuffix(srcRel, ".cxx"):
-		ref, outPath := EmitCC(srcInstance, srcRel, in, ctx.emit)
+		ref, outPath := EmitCC(srcInstance, srcRel, srcIn, ctx.emit)
 
 		return ref, outPath, true
-	case strings.HasSuffix(srcRel, ".S"), strings.HasSuffix(srcRel, ".s"):
+	case strings.HasSuffix(srcRel, ".S"),
+		strings.HasSuffix(srcRel, ".s"),
+		strings.HasSuffix(srcRel, ".asm"):
 		// PR-28: when a host (`Flags.PIC`) `.S`/`.s` source belongs
 		// to a module known to use yasm (`asmlibYasmModules`), recurse
 		// into the host yasm PROGRAM and wire its LDRef into the AS
@@ -1225,17 +1369,20 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			// plausible binary path.
 		}
 
-		_, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, ctx.emit)
+		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, ctx.emit)
 		// PR-29-D07: same shape as the JS branch above. Pass
 		// IsGenerated so the downstream CC composes inputPath under
 		// $(BUILD_ROOT)/<srcInstance.Path>/<rel> rather than the
-		// stale $(SOURCE_ROOT) shape. Generator NodeRef threading
-		// into DepRefs is intentionally omitted; see the JS branch
-		// for the rationale (L0 cost outweighs the topology gain).
+		// stale $(SOURCE_ROOT) shape. PR-30 D04: thread r6Ref as the
+		// downstream CC's `Generator` so the CC node carries an
+		// explicit dep on its R6 source-generator node, matching the
+		// reference shape.
 		ccSrcRel := strings.TrimPrefix(r6Out, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
 
-		ccIn := in
+		ccIn := srcIn
 		ccIn.IsGenerated = true
+		ccIn.Generator = r6Ref
+		ccIn.HasGenerator = true
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 

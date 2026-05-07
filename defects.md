@@ -1244,3 +1244,49 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 **Location:** cc.go:367 (composeMuslCC), cc.go:419 (composeMuslHostCC)
 **Description:** Both musl composers took `noCompilerWarnings bool` and immediately discarded via `_ = noCompilerWarnings`. Body always behaved as if noCompilerWarnings=true. Parameter was decorative.
 **Fix:** Parameter removed from composeMuslCC (cc.go:373) and composeMuslHostCC (cc.go:424). Dispatcher at cc.go:137-139 passes only the new short signature. No `_ = noCompilerWarnings` lines remain. Inline comment retained next to the muslWarningFlags append: "musl always uses muslWarningFlags by definition."
+
+---
+
+## PR-30
+
+### [PR-30-D01] ar.go peerArchiveRefs documentation contradicts new invariant
+**Status:** resolved
+**Severity:** nit
+**Location:** ar.go:67-72, ar.go:197-211
+**Description:** ar.go's emitARNode and EmitAR docstrings still claim "peerArchiveRefs are wired as DepRefs so the AR node's UID accounts for them". Per PR-30 D05, the production caller (gen.go:1131) now passes nil unconditionally and the reference invariant is "every AR has zero AR-on-AR deps". Docstring is technically still accurate at function-signature level (passing non-nil still wires DepRefs) but readers comparing the doc against the new reference invariant will be confused.
+**Suggested fix:** Append one sentence to both docstrings: "PR-30 D05: production caller passes nil; reference graph confirms zero AR-on-AR deps. Parameter retained for tests that pin the historical shape."
+
+### [PR-30-D02] as.go top-level docstring lists only ForeignDepRefs, omits new DepRefs wiring
+**Status:** resolved
+**Severity:** nit
+**Location:** as.go:7-10, as.go:39-42
+**Description:** as.go's top-level comment and `yasmLD` parameter doc both stated "wired into ForeignDepRefs[\"tool\"]" with no mention of PR-30 D02's addition that also threads yasmLD into DepRefs.
+**Fix:** Updated as.go:19-22 (file-level) and as.go:47-50 (yasmLD parameter doc) to note dual wiring (DepRefs + ForeignDepRefs["tool"]) and the L0 fingerprint rationale (asmlib 25 AS nodes).
+
+### [PR-30-D03] No direct test pin for as.go yasm DepRefs wiring
+**Status:** resolved
+**Severity:** minor
+**Location:** as_test.go (TestEmitAS_CxxsuppBuiltinsChkstk_ByteExact)
+**Description:** Single AS byte-exact test (chkstk) passed nil yasmLD; exercised no-yasm code path. New "yasmLD non-nil → DepRefs populated" behaviour verified only indirectly via L0 numbers.
+**Fix:** TestEmitAS_YasmLD_PopulatesDepRefs added at as_test.go:192-232. Exercises non-nil yasmLD via dummy emitted node; asserts both DepRefs[0]==yasmLD and ForeignDepRefs["tool"][0]==yasmLD.
+
+### [PR-30-D04] defaultProgramPeerdirsFor in-helper musl/full self-suppression is dead code
+**Status:** resolved
+**Severity:** nit
+**Location:** gen.go:746-752
+**Description:** Block `if instance.Path != muslFullPath && !strings.HasPrefix(instance.Path, muslFullPath+"/")` was unreachable: only caller gates on `!isRuntimeAncestor(instance.Path)`, which returns true for any path under `contrib/libs/musl/`.
+**Fix:** Inner guard removed at gen.go:746-751; replaced with unconditional `peers = append(peers, muslFullPath)` plus comment naming the caller's gate as the load-bearing exclusion mechanism.
+
+### [PR-30-D05] tasks.md edited by executor; orchestrator-owned per CLAUDE.md
+**Status:** resolved (orchestrator overwrites with own version at squash time)
+**Severity:** nit
+**Location:** tasks.md:51, tasks.md:374-394 (in worktree)
+**Description:** CLAUDE.md loop discipline reserves tasks.md flips and Completed entries for orchestrator (I3 + I5). PR-30 commit includes both: status flip [~] → [x] AND a 20-line rich Completed entry. Brief flagged for review. Content quality high but process boundary crossed.
+**Fix:** At squash time, orchestrator stages source-only files from worktree (excludes tasks.md); writes own Completed entry from main checkout per I5.
+
+### [PR-30-D06] gen.go:747 caller-name in comment misnames `genModule` as `defaultPeerdirsFor`
+**Status:** resolved (deferred — 1-token nit; orchestrator doesn't fix code per CLAUDE.md; logged for future cleanup PR)
+**Severity:** nit
+**Location:** gen.go:747
+**Description:** Comment added in D04 reads `Caller (defaultPeerdirsFor in gen.go:932) gates on !isRuntimeAncestor(...)`. Actual caller is `genModule` (defined at gen.go:835); line 932 is inside genModule's body, not inside defaultPeerdirsFor. Line number correct; function name not.
+**Fix:** Deferred. One-token edit (`defaultPeerdirsFor` → `genModule`); will pick up in next gen.go cleanup PR or M3 work.

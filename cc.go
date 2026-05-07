@@ -8,7 +8,9 @@ package main
 // same closure but stay constant for a single (instance, source)
 // pair: ADDINCL paths, own CXXFLAGS, own CONLYFLAGS, the
 // "is generated" bit (input lives under $(BUILD_ROOT) instead of
-// $(SOURCE_ROOT)), and a `Generator NodeRef` reserved for PR-30; not wired today.
+// $(SOURCE_ROOT)), and a `Generator NodeRef` (PR-30 D04: wired to the
+// upstream JS or R6 node so the CC's DepRefs carry the source-
+// generator dep, matching the reference shape).
 // Extending the struct does not require updating every call site —
 // that is the whole point of switching from a positional signature.
 //
@@ -45,6 +47,8 @@ package main
 //     dominant lever.
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -59,16 +63,42 @@ import (
 //   - CXXFlags: own CXXFLAGS (D02; C++ sources only)
 //   - COnlyFlags: own CONLYFLAGS (D02; C/.S sources only)
 //   - IsGenerated: source lives under $(BUILD_ROOT)/... (D07)
-//   - Generator: NodeRef forward-scaffolding for PR-30; no caller sets this
-//     in PR-29 — see cc.go:196-201 for L0-deferral rationale.
+//   - Generator: NodeRef of the upstream generator node (JS for
+//     JOIN_SRCS, R6 for ragel6) — PR-30 D04 wired this so EmitCC
+//     populates DepRefs with the generator dep.
+//   - SrcDir: PR-30 D06 — the module's SRCDIR setting; used to
+//     compose output infix `__/<rel>` and SRCDIR-based input path
+//     for sibling/non-local source files.
 //
-// D04 (peer-propagated GLOBAL ADDINCL/CXXFLAGS) is deferred to PR-30.
+// D04 (peer-propagated GLOBAL ADDINCL/CXXFLAGS) is deferred to PR-31.
 type ModuleCCInputs struct {
 	AddIncl     []string
 	CXXFlags    []string
 	COnlyFlags  []string
 	IsGenerated bool
 	Generator   NodeRef
+	// HasGenerator distinguishes "no generator" from "generator that
+	// happens to have a zero-valued NodeRef.id" (BufferedEmitter
+	// assigns ids starting at 0, so a nil-check on the bare struct is
+	// unreliable for the very first emitted node). Set this true
+	// alongside `Generator` whenever a JS or R6 ref is threaded.
+	HasGenerator bool
+	// SrcDir is the module's `SRCDIR(...)` setting (empty when none).
+	// PR-30 D06: when non-empty AND the source is non-local (resolves
+	// under SRCDIR rather than instance.Path), the composer uses
+	// `__/<rel>` as the output-path infix and `<srcdir>/<src>` as the
+	// input path. The walker passes the original module SrcDir
+	// uniformly; per-source local-vs-srcdir resolution happens inside
+	// the composer via filesystem stat of the candidate local path.
+	SrcDir string
+	// SourceRoot is the walker's source root (genCtx.sourceRoot). The
+	// composer needs it to stat candidate local source paths so flat
+	// sources that exist locally (e.g. tcmalloc/no_percpu_cache's
+	// aligned_alloc.c, musl_extra's all.c) keep their natural local
+	// resolution rather than the SRCDIR-rebased one. Empty SourceRoot
+	// disables the local-existence check entirely (used by synthetic
+	// tests that pin the SRCDIR-rebased shape directly).
+	SourceRoot string
 }
 
 // EmitCC emits a CC node for compiling `srcRel` (a path relative to
@@ -91,19 +121,7 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 		suffix = ".pic.o"
 	}
 
-	var outputPath string
-	if strings.Contains(srcRel, "/") {
-		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + suffix
-	} else {
-		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + suffix
-	}
-
-	rootPrefix := "$(SOURCE_ROOT)/"
-	if in.IsGenerated {
-		rootPrefix = "$(BUILD_ROOT)/"
-	}
-
-	inputPath := rootPrefix + instance.Path + "/" + srcRel
+	outputPath, inputPath := composeCCPaths(instance, srcRel, in, suffix)
 
 	isMusl := instance.Path == "contrib/libs/musl" || strings.HasPrefix(instance.Path, "contrib/libs/musl/")
 	isCxx := isCxxSource(srcRel)
@@ -194,17 +212,146 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 		node.Tags = []string{"tool"}
 	}
 
-	// PR-29-D07: when `Generator` is non-zero, thread it into DepRefs
-	// so the CC node carries an explicit dep on its source-generating
-	// JS/R6 node (the reference shape). The walker passes
-	// IsGenerated=true alone to flip ONLY inputPath without touching
-	// the topology — see gen.go's JS/R6 branches for why threading
-	// the Generator costs L0 multiset matches in the current closure.
-	if in.IsGenerated && in.Generator != (NodeRef{}) {
+	// PR-30 D04: when `HasGenerator` is set, thread `Generator` into
+	// DepRefs so the CC node carries an explicit dep on its source-
+	// generating JS/R6 node (matching the reference shape — every
+	// JS-derived and R6-derived CC in the reference has Deps=[gen UID]).
+	// The HasGenerator flag is required because BufferedEmitter assigns
+	// NodeRef ids starting at 0; a bare NodeRef{} comparison would
+	// false-negative on the very first emitted node.
+	if in.HasGenerator {
 		node.DepRefs = []NodeRef{in.Generator}
 	}
 
 	return emit.Emit(node), outputPath
+}
+
+// composeCCPaths derives the (outputPath, inputPath) pair per PR-30
+// D06's SRCDIR-aware semantics. The composer distinguishes three
+// shapes empirically observed in the reference graph:
+//
+//  1. No SRCDIR (the historical case): output is
+//     `$(BUILD_ROOT)/<instance.Path>/<rel>.o` (with `_/` infix when
+//     srcRel contains "/"); input is
+//     `$(SOURCE_ROOT)/<instance.Path>/<srcRel>` (or `$(BUILD_ROOT)/`
+//     when IsGenerated).
+//  2. SRCDIR set, source resolves locally (file exists at
+//     `<sourceRoot>/<instance.Path>/<srcRel>`): SRCDIR is silently
+//     ignored — same as case (1). Empirical examples: musl_extra's
+//     `all.c`, tcmalloc/no_percpu_cache's `aligned_alloc.c`.
+//  3. SRCDIR set, source does not resolve locally: input is
+//     `$(SOURCE_ROOT)/<srcdir>/<srcRel>`; output is
+//     `$(BUILD_ROOT)/<instance.Path>/__/<rel>.o` where `<rel>` is the
+//     relative path from instance.Path to (srcdir+srcRel), with `..`
+//     segments rendered as `__`. Empirical examples: libcxxabi-parts's
+//     `src/abort_message.cpp` (sibling SRCDIR), tcmalloc/no_percpu_cache's
+//     `tcmalloc/want_hpaa.cc` (ancestor SRCDIR + nested src path).
+//
+// Generated sources (IsGenerated=true) skip case (3) — generators emit
+// to `$(BUILD_ROOT)/<srcInstance.Path>/<rel>` where srcInstance is
+// already SRCDIR-aware (the JS/R6 emitter rebased it before invocation).
+func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, suffix string) (string, string) {
+	if in.IsGenerated {
+		// Generators (JS/R6) write under $(BUILD_ROOT)/<srcInstance.Path>/.
+		// SrcDir handling for those branches is upstream (in gen.go's
+		// JOIN_SRCS / .rl6 dispatch where srcInstance is constructed).
+
+		var outputPath string
+
+		if strings.Contains(srcRel, "/") {
+			outputPath = "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + suffix
+		} else {
+			outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + suffix
+		}
+
+		inputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel
+
+		return outputPath, inputPath
+	}
+
+	// PR-30 D06 SRCDIR routing.
+	useSrcDir := in.SrcDir != "" && in.SrcDir != instance.Path && !sourceExistsLocally(in.SourceRoot, instance.Path, srcRel)
+
+	if useSrcDir {
+		outputRel := composeSrcDirOutputRel(instance.Path, in.SrcDir, srcRel)
+		outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + outputRel + suffix
+		inputPath := "$(SOURCE_ROOT)/" + in.SrcDir + "/" + srcRel
+
+		return outputPath, inputPath
+	}
+
+	var outputPath string
+
+	if strings.Contains(srcRel, "/") {
+		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + suffix
+	} else {
+		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + suffix
+	}
+
+	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
+
+	return outputPath, inputPath
+}
+
+// sourceExistsLocally reports whether `<sourceRoot>/<modulePath>/<srcRel>`
+// is a regular file. PR-30 D06 uses this to decide whether a flat
+// source resolves at the LIBRARY's own dir (case 2 above) or under
+// SRCDIR (case 3). When sourceRoot is empty (the synthetic-test path),
+// the helper returns false so the caller falls into the SRCDIR branch
+// — synthetic tests that want the local-resolution shape pass an
+// empty SrcDir (or a SrcDir equal to instance.Path), not an empty
+// SourceRoot.
+func sourceExistsLocally(sourceRoot, modulePath, srcRel string) bool {
+	if sourceRoot == "" {
+		return false
+	}
+
+	candidate := filepath.Join(sourceRoot, modulePath, srcRel)
+	info, err := os.Stat(candidate)
+
+	if err != nil {
+		return false
+	}
+
+	return !info.IsDir()
+}
+
+// composeSrcDirOutputRel computes the output-path infix for case (3)
+// of composeCCPaths: relative path from `instancePath` to
+// `srcDir/srcRel`, with `..` segments replaced by `__`.
+//
+// Empirical reference matches:
+//   - libcxxabi-parts: instance=`contrib/libs/cxxsupp/libcxxabi-parts`,
+//     srcDir=`contrib/libs/cxxsupp/libcxxabi`, srcRel=`src/abort_message.cpp`
+//     → relpath = `../libcxxabi/src/abort_message.cpp`
+//     → infix = `__/libcxxabi/src/abort_message.cpp`
+//   - tcmalloc/no_percpu_cache: instance=`contrib/libs/tcmalloc/no_percpu_cache`,
+//     srcDir=`contrib/libs/tcmalloc`, srcRel=`tcmalloc/want_hpaa.cc`
+//     → relpath = `../tcmalloc/want_hpaa.cc`
+//     → infix = `__/tcmalloc/want_hpaa.cc`
+func composeSrcDirOutputRel(instancePath, srcDir, srcRel string) string {
+	target := filepath.Join(srcDir, srcRel)
+	rel, err := filepath.Rel(instancePath, target)
+
+	if err != nil {
+		// filepath.Rel only fails on absolute-vs-relative mismatch
+		// or on Windows volume mismatch; both are unreachable for our
+		// SOURCE_ROOT-relative inputs. Fall back to a defensive shape.
+		return "_/" + srcRel
+	}
+
+	// Replace each `..` segment with `__` to match ymake's path
+	// rendering (the same convention the reference graph uses for
+	// SRCDIR-redirected outputs).
+	parts := strings.Split(rel, string(filepath.Separator))
+
+	for i, p := range parts {
+		if p == ".." {
+			parts[i] = "__"
+		}
+	}
+
+	return strings.Join(parts, "/")
 }
 
 // isCxxSource returns true when `srcRel`'s extension marks it as a
