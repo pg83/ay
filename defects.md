@@ -660,3 +660,178 @@ Codify same shape for PR-10.
 **Location:** gen_test.go:373-430
 **Description:** D06 said "Assert AR nodes' module_dir order in g.Graph follows declaration order." Implemented test only checks both AR nodes exist + `len(g.Graph) == 6`. Test's NOTE comment acknowledges Finalize's UID-tie-break topo sort makes strict order fragile. `sort.Strings(peerdirs)` regression in genModule would still emit 6 nodes and pass.
 **Fix:** Mitigated. Count-check still catches "drops a peerdir entirely" or "fails to walk" regressions. Strict R14 pin requires either (a) exposing BufferedEmitter pre-Finalize via Gen returning a tuple, or (b) recording an emit-sequence field on Node — both architectural changes. Deferred to a future test-infra PR. Mirror of D05 deferral pattern.
+
+---
+
+## PR-13
+
+### [PR-13-D01] INCLUDE cycle causes unbounded recursion / stack overflow
+**Status:** under fix
+**Severity:** major
+**Location:** yamake.go:1044-1077 (expandInclude)
+**Description:** No visited-set tracking. Self-referential `INCLUDE(a.inc)` in `a.inc`, or any cycle, causes infinite recursion through ParseFile → Parse → parseInternal → parseStmts → parseMacroInto → expandInclude → ParseFile, exhausting goroutine stack. Reproduced: probe writing `a.inc` containing `INCLUDE(a.inc)` doesn't terminate within 4s.
+**Suggested fix:** Thread `includeStack map[string]bool` through parser. Compute absolute path of include target, check membership, throw `*ParseError` pinned at INCLUDE site with "INCLUDE cycle: a → b → a" diagnostic. Add `TestParseInclude_RejectsCycle` covering self-cycle and a→b→a.
+
+### [PR-13-D02] IncludeStmt type defined but never constructed (dead code)
+**Status:** resolved (deferred — type retained for symmetry; PR-20 may construct if needed)
+**Severity:** minor
+**Location:** yamake.go:73-85, :141
+**Description:** Type defined with stmtMarker but no production code constructs it. expandInclude returns `append(into, included.Stmts...)` without wrapping inclusion marker. Brief said "TYPE defined but DROPPED from result Stmts", which is what was implemented. Phantom type that next reviewer will re-investigate.
+**Fix:** Deferred. Type retained per brief; if PR-20 needs it for source-tracking, wire then. Otherwise drop in future cleanup PR.
+
+### [PR-13-D03] ADDINCL/CFLAGS/LDFLAGS/GLOBAL_SRCS accept zero arguments silently
+**Status:** resolved (deferred — permissive parsing is consistent with parser philosophy; PR-20 will validate at semantic level)
+**Severity:** minor
+**Location:** yamake.go:764-771
+**Description:** `ADDINCL()`, `CFLAGS()`, `LDFLAGS()`, `GLOBAL_SRCS()` parse cleanly into empty-slice typed Stmts. Asymmetric vs JOIN_SRCS/SRCDIR which throw on zero args.
+**Fix:** Deferred. Parser stays permissive; PR-20's gen.go integration will validate semantically (e.g. zero-arg ADDINCL is no-op).
+
+### [PR-13-D04] Lowercase identifier in IF cond accepted, defers to EvalCond runtime throw
+**Status:** resolved (deferred — design consistency; isIdentShapedName is shared classifier across two contexts with different conventions)
+**Severity:** nit
+**Location:** yamake.go:1015-1025
+**Description:** `IF (foo_lower)` parses successfully because `isIdentShapedName` accepts any letter/underscore start. Error surfaces at EvalCond runtime ("unknown IF identifier"). Convention is uppercase IF idents.
+**Fix:** Deferred. isIdentShapedName intentionally permissive. EvalCond's hard error is the correct place to surface.
+
+### [PR-13-D05] parseInternal discards parseStmts terminator with `_`
+**Status:** resolved (deferred — minor refactor; cosmetic)
+**Severity:** nit
+**Location:** yamake.go:599
+**Description:** `mf.Stmts, _ = p.parseStmts(termTopLevel)` discards endTok. STYLE.md "Explicit over implicit" calls out blank-discard for required values. parseStmts returns at EOF so endTok is unused at top level.
+**Fix:** Deferred. Optional refactor: split into parseTopLevelStmts (single return) and parseIfBodyStmts (tuple).
+
+### [PR-13-D06] Unbalanced extra `)` after IF cond produces misleading "expected macro name" error
+**Status:** resolved (deferred — UX-only; real ya.make sources don't trip)
+**Severity:** nit
+**Location:** yamake.go:870-895
+**Description:** `IF (FOO))\nENDIF()` — extra `)` becomes someone else's problem; surfaces as "expected macro name, got ')'".
+**Fix:** Deferred. UX-only.
+
+---
+
+## PR-14
+
+### [PR-14-D01] inferModuleFlavor prefix match misclassifies `contrib/libs/musl_extra` as musl flavor
+**Status:** under fix
+**Severity:** major
+**Location:** cc.go:64
+**Description:** Reference graph contains `contrib/libs/musl_extra` (110 args, no `-Wno-everything`, no `-D_musl_=1`, no `-nostdinc`). `strings.HasPrefix(targetDir, "contrib/libs/musl")` matches both `contrib/libs/musl` AND `contrib/libs/musl_extra`. PR-20 recursive walk will silently emit IsMusl bundle for musl_extra, producing byte-mismatch.
+**Suggested fix:** Tighten predicate: `if targetDir == "contrib/libs/musl" || strings.HasPrefix(targetDir, "contrib/libs/musl/")`. Add regression test `TestInferModuleFlavor_MuslExtraIsNotMusl`.
+
+### [PR-14-D02] doc comment "8 musl-specific -I paths" undercounts
+**Status:** resolved (deferred — cosmetic doc count)
+**Severity:** minor
+**Location:** cc.go:101, flags.go:221
+**Description:** Doc claims 8 musl-specific paths; actual is 6 musl-specific (10 total entries, 4 shared with ccIncludes).
+**Fix:** Deferred. Cosmetic doc fix in next cc.go edit.
+
+### [PR-14-D03] ModuleFlavor.IsCpp/NoPlatform/NoCompilerWarnings declared but not consulted
+**Status:** resolved (deferred to PR-20 — PR-14 placeholder envelope; PR-20 wires them)
+**Severity:** minor
+**Location:** cc.go:35-38, :131-186
+**Description:** Three of nine ModuleFlavor fields are dead-on-arrival. PR-20 is the consumer.
+**Fix:** Deferred to PR-20. Field stubs retained; PR-20 wires `NoCompilerWarnings`/`NoPlatform`/`IsCpp` into bundle composition.
+
+### [PR-14-D04] EmitCCFlavor silently produces non-byte-exact node for unknown moduleDirs
+**Status:** resolved (deferred — known limitation; PR-20 supplies real flavor)
+**Severity:** minor
+**Location:** cc.go:73, :131
+**Description:** `inferModuleFlavor("unknown/path")` returns `ModuleFlavor{}` (all-false). EmitCCFlavor emits 56-arg bundle matching no reference. Silent garbage.
+**Fix:** Deferred. PR-20's macro-driven flavor inference replaces inferModuleFlavor; until then, `Gen` only calls EmitCC for build/cow/on (M1) so the unknown-path path is unreachable in practice.
+
+### [PR-14-D05] Musl byte-exact test omits ref-side sanity checks present in M1 test
+**Status:** resolved (deferred — extract `assertReferenceCCInvariants` helper in next cc_test edit)
+**Severity:** nit
+**Location:** cc_test.go:193-258 vs :89-171
+**Description:** New musl test omits the three sanity-check blocks present in M1 test (host_platform/foreign_deps/deps).
+**Fix:** Deferred. Extract `assertReferenceCCInvariants` shared helper.
+
+---
+
+## PR-15
+
+### [PR-15-D01] cmd_args .o sort divergence: PR-15 sorts cmd_args[10:] but reference uses declaration order (16 of 48 AR nodes affected)
+**Status:** under fix
+**Severity:** major
+**Location:** ar.go:55-77 (sortObjsLockstep), :103-104 (cmd_args composition); ar_test.go:408-416 (TestEmitAR_TcmallocGlobal_ByteExact masks divergence)
+**Description:** sortObjsLockstep sorts both inputs AND cmd_args[10:]. Reference inputs ARE sorted (matches), but reference cmd_args[10:] is in DECLARATION order for 16 of 48 AR nodes (util, library/cpp/archive, contrib/libs/cxxsupp/*, contrib/libs/musl, tcmalloc/no_percpu_cache global). PR-22 byte-exact at L3 will silently fail for those modules. TestEmitAR_TcmallocGlobal_ByteExact compares cmd_args as sorted set — actively masks the divergence.
+**Suggested fix:** Sort `inputs` only. Pass cmd_args .o paths through in caller-supplied (declaration) order. gen.go feeds in source declaration order which matches reference. Update tests: split TestEmitAR_ObjPathsSorted into TestEmitAR_InputsSorted (asserts inputs sorted) + TestEmitAR_CmdArgsPreservesDeclarationOrder (asserts cmd_args[10:] = caller order). Update TestEmitAR_TcmallocGlobal_ByteExact to compare cmd_args[10:] against refObjPaths directly (not as sorted set).
+
+### [PR-15-D02] m2-plan.md R10 stale "24 reference AR outputs" — actual is 38
+**Status:** resolved (orchestrator note; fix in m2-plan.md)
+**Severity:** nit
+**Location:** docs/drafts/20260507-0549-m2-plan.md:27
+**Description:** Plan claims 24; actual python probe shows 38 unique non-global + 1 global = 39.
+**Fix:** Orchestrator updates m2-plan.md to "38 unique non-global + 1 global; see ar_test.go TestArchiveName_AllReferenceAR".
+
+### [PR-15-D03] globalArchiveName strips trailing ".a" without verifying suffix
+**Status:** resolved (deferred — defensive guard nice-to-have)
+**Severity:** nit
+**Location:** ar.go:47-51
+**Description:** Strips 2 chars assuming `.a` suffix. Today every ArchiveName branch returns `.a`. Future shared-lib rule could break silently.
+**Fix:** Deferred. Add `if !strings.HasSuffix(base, ".a") { ThrowFmt(...) }` in next ar.go edit.
+
+### [PR-15-D04] archivePathOf in gen.go duplicates EmitAR's internal archive-path construction
+**Status:** resolved (deferred — extract ArchivePath helper in next ar.go edit)
+**Severity:** nit
+**Location:** gen.go:108-110, ar.go:214, :246
+**Description:** Three sites construct identical `$(BUILD_ROOT)/<moduleDir>/<ArchiveName(...)>` prefix. Format-prefix change requires editing all three.
+**Fix:** Deferred. Extract `ArchivePath(moduleDir) string` helper in ar.go.
+
+### [PR-15-D05] EmitARGlobal exercised against only 1 reference (tcmalloc) — branches untested
+**Status:** resolved (deferred — purely additive coverage; mechanical test addition)
+**Severity:** nit
+**Location:** ar_test.go:282-431
+**Description:** Only one reference global archive exists. Other globalArchiveName branches (util, library/cpp/...) untested.
+**Fix:** Deferred. Add TestGlobalArchiveName_AllBranches table-driven test in next ar_test edit.
+
+### [PR-15-D06] Comment "fixed prefix of 9 elements" reads ambiguously vs 10-element literal
+**Status:** resolved (deferred — cosmetic comment rewording)
+**Severity:** nit
+**Location:** ar.go:103-118
+**Description:** Comment counts 9 + archive path; literal has 10 strings (9 fixed + archivePath embedded). Cognitive friction.
+**Fix:** Deferred. Reword to "10 elements before .o section (indices 0-9)".
+
+---
+
+## PR-16
+
+NO DEFECTS. Clean. Reviewer verified 94-arg byte-exact for chkstk.S, M1 regression preserved (2/2 at L1/L2/L3), STYLE compliant.
+
+---
+
+## PR-17
+
+### [PR-17-D01] tasks.md D20/Q4 + m2-plan.md misidentify which UID belongs to ragel6 vs dangling external
+**Status:** resolved (orchestrator-work; tasks.md D20 already corrected, m2-plan.md to be updated)
+**Severity:** major
+**Location:** tasks.md:75 D20, :90 Q4 (FIXED 2026-05-07); docs/drafts/20260507-0549-m2-plan.md:19, :37, :108 (still stale)
+**Description:** `OsvsEu9xnOqLNXi3INZ9CQ` is the YASM LD UID (used by 25 AS nodes' foreign_deps.tool); `XO1d8CLk3qDKv0XQTlDKmQ` is the host ragel6 LD UID (used by R6 node, dangling-external from M2's target-only view). Plan had labels swapped; tasks.md D20 corrected post-PR-17 escalation; m2-plan.md still has stale labels.
+**Fix:** Orchestrator updated tasks.md D20 to clarify UID ownership. m2-plan.md sections §3 R2, §4 D20, §7 Q4 receive same correction.
+
+### [PR-17-D02] R6 stub strategy diverges from D20/Q4 plan (incompatible with Finalize's pre-populated ForeignDeps rejection)
+**Status:** under fix
+**Severity:** minor
+**Location:** r6.go:53-67 (stub Node emission), :23 (unused ragel6HostUID const); emitter.go:115-122 (Finalize's no-pre-populated-ForeignDeps rule)
+**Description:** D20/Q4 spec "Preserves L0/L1/L2 fingerprint pairing" requires R6 node post-Finalize foreign_deps.tool to carry `XO1d8CLk3qDKv0XQTlDKmQ` byte-exact. Implementation works around Finalize's no-pre-populated-ForeignDeps rule by emitting a stub Node. Post-Finalize the R6 node has `foreign_deps.tool = ["<merkle-of-stub>"]` ≠ reference. PR-20 wiring will surface as unpaired R6 + extra phantom node.
+**Suggested fix:** Option 1 (chosen by orchestrator): RELAX Finalize's pre-populated-ForeignDeps rejection — allow rules to pre-populate `node.ForeignDeps` directly with literal UID strings (for stub-host scenarios). Keep the pre-populated `Deps` rejection (Deps must always go through DepRefs). Update emitter.go to drop the ForeignDeps-pre-populated check while keeping the Deps check. Rewrite EmitR6 to set `node.ForeignDeps = map[string][]string{"tool": {"XO1d8CLk3qDKv0XQTlDKmQ"}}` directly. Drop the stub Node emission. Update r6_test to assert reference UID byte-exact.
+
+### [PR-17-D03] R6 stub Node has hardcoded "default-linux-x86_64" magic literal with no source-of-truth comment
+**Status:** resolved (will-be-removed by D02 fix)
+**Severity:** nit
+**Location:** r6.go:59
+**Description:** Stub Node carries `Platform: "default-linux-x86_64"` literal. If stub survives in PR-19/PR-20 output, becomes maintenance puzzle.
+**Fix:** Resolved by D02 fix (stub Node emission removed entirely; ragel6HostUID const becomes the literal in foreign_deps).
+
+### [PR-17-D04] r6_test.go asserts cardinality only, not resolved-UID-equality
+**Status:** resolved (will-be-strengthened by D02 fix)
+**Severity:** nit
+**Location:** r6_test.go:144-164
+**Description:** Test confirms cardinality (1 entry in foreign_deps.tool) but doesn't assert the reference UID byte-exact. Will pass under D02 divergence.
+**Fix:** Resolved by D02 fix — test will assert `got.ForeignDeps["tool"][0] == "XO1d8CLk3qDKv0XQTlDKmQ"` directly.
+
+---
+
+## PR-18
+
+NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests use defer recover with substring assertion; M1 regression preserved.

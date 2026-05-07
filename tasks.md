@@ -40,16 +40,21 @@ Detail in `./docs/drafts/20260507-0134-recreate-ymake-plan.md`. One line per PR 
 Detail in `./docs/drafts/20260507-0549-m2-plan.md`. One line per PR here.
 
 - [x] **PR-12** — Generalize `Gen()` for recursive PEERDIR walk; accept PROGRAM; refactor EmitCC signature `(NodeRef) → (NodeRef, string)`. **Wave 1 — blocks all Wave 2.**
-- [ ] **PR-13** — Parser extension + macro evaluator (IF/INCLUDE/JOIN_SRCS/ADDINCL/CFLAGS/LDFLAGS/SRCDIR/GLOBAL_SRCS). [Wave 2, parallel]
-- [ ] **PR-14** — `flags.go` second bundle (musl-flavor) + module-flavor flag for CC; resolves PR-08-D03/D04. [Wave 2, parallel]
-- [ ] **PR-15** — `ar.go` real archive-naming + multi-source sort + GLOBAL_SRCS; resolves PR-09-D01/D02. [Wave 2, parallel]
-- [ ] **PR-16** — `as.go` (AS rule for `.S` files). [Wave 2, parallel]
-- [ ] **PR-17** — `cp.go` + `js.go` + `r6.go` (three small op-types). [Wave 2, parallel]
-- [ ] **PR-18** — `Emit`/`Result` panic-on-finalized guards; resolves PR-02-D09. [Wave 2, parallel]
-- [ ] **PR-21** — Sweep M1 deferred cosmetics (PR-09-D06, PR-08-D04, PR-05-D07/D08, PR-04-D06, PR-03-D03). [Wave 2 shadow, parallel]
-- [ ] **PR-19** — `ld.go` (4-cmd LD rule) + Gen wiring for PROGRAM-with-LD. [Wave 3, after Wave 2]
-- [ ] **PR-20** — `gen.go` recursive walk integration + module-flavor inference + macro evaluator wiring. [Wave 3, after PR-19]
-- [ ] **PR-22** — M2 acceptance: full archiver-subgraph compare + `--filter-platform` flag + perf check. [Wave 4]
+- [!] **PR-13** — Parser extension + macro evaluator. **SUPERSEDED by PR-23 (PR-PIVOT)**. Cherry-pick source for `yamake.go`/`macros.go` only (verbatim). Worktree retained.
+- [!] **PR-14** — `flags.go` musl bundle + ModuleFlavor. **SUPERSEDED by PR-23**. Cherry-pick `flags.go` musl bundles only; `ModuleFlavor`/`EmitCCFlavor`/`inferModuleFlavor` discarded (subsumed by `ModuleInstance.Flags` per D30/D33).
+- [!] **PR-15** — `ar.go` real archive-naming + multi-source sort + GLOBAL_SRCS. **SUPERSEDED by PR-23**. Cherry-pick `ar.go` body with `EmitAR(instance ModuleInstance, ...)` signature update.
+- [x] **PR-16** — `as.go` (AS rule for `.S` files). [Wave 2, parallel] **REWORKED in-place by PR-23** (signature → `EmitAS(instance, srcRel, yasmLD NodeRef, emit)` per D33; `ForeignDepRefs["tool"]` wiring per D31).
+- [!] **PR-17** — `cp.go` + `js.go` + `r6.go` (three small op-types). **SUPERSEDED by PR-23**. Cherry-pick `cp.go`/`js.go` (signature update); `r6.go` REWRITTEN with host-recursion (D31); `emitter.go` Finalize relax REVERTED.
+- [x] **PR-18** — `Emit`/`Result` panic-on-finalized guards. [Wave 2, parallel] **Survives unchanged** (orthogonal to D30 addressing).
+- [ ] **PR-21** — Sweep M1+M2 deferred cosmetics. Renumbered as **PR-27**. Runs after PR-26 acceptance.
+- [ ] **PR-19** — `ld.go` 4-cmd LD rule + Gen wiring. Renumbered as **PR-24**. After PR-23.
+- [ ] **PR-20** — `gen.go` walker + macro evaluator wiring + host-tool recursion hooks. Renumbered as **PR-25**. After PR-24. **Wave-3 keystone.**
+- [ ] **PR-22** — M2 acceptance: full archiver subgraph (3,730 nodes incl host). Renumbered as **PR-26**. **No `--filter-platform`** (D40). Acceptance: L0 ≥ 95%, L1 ≥ 80%, L2 ≥ 70%, L3 ≥ 50% on FULL graph.
+- [~] **PR-23 (PR-PIVOT)** — **Architectural pivot.** Introduces `ModuleInstance`/`FlagSet`/`Language`/`PlatformID`. Cherry-picks salvageable Wave-2 code. Reverts PR-17 emitter.go. Adds `Emitter.OnReady`. Acceptance: M1 4-node build/cow/on (target+host) byte-exact at L0/L1/L2/L3. **Plan: `./docs/drafts/20260507-0717-m2-architecture-revision.md`.**
+- [ ] **PR-24** — `ld.go` 4-cmd LD rule + Gen wiring for PROGRAM-with-LD. After PR-23.
+- [ ] **PR-25** — Walker integrates macro evaluator + per-instance flag derivation + host-tool recursion (ragel6/yasm). Wave-3 keystone.
+- [ ] **PR-26** — M2 acceptance: full `tools/archiver` 3,730-node graph with host instances. L0 ≥ 95%, L1 ≥ 80%, L2 ≥ 70%, L3 ≥ 50%. Wall < 10s.
+- [ ] **PR-27** — Sweep M1+M2 deferred cosmetics.
 
 ---
 
@@ -72,7 +77,7 @@ Detail in `./docs/drafts/20260507-0549-m2-plan.md`. One line per PR here.
 - [x] **D15** — `inputs`/`conf` in our generator output may be empty; comparator only reads `graph` + `result`. Revocable.
 - [x] **D16** — JSON serializer in PR-04 (and any future graph-writing code) MUST use `json.Encoder` with `SetEscapeHTML(false)` to produce output bytes that match `canonicalNodeBytes` from PR-02. Otherwise default `json.Marshal` HTML-escapes (`<` → `<` etc.), producing on-disk bytes the Merkle hash never saw, breaking comparator. Pinning test landed in PR-02 (`TestCanonicalNodeBytes_VsDefaultJSONMarshal`). Origin: PR-02-D08.
 - [x] **D19 — M2 recursive PEERDIR walk.** Depth-first, post-order, cycle-detected, memoized by targetDir. Visit order = declaration order inside `PEERDIR(...)` (preserve, not sort) — produces LD link-order R14. M2 single-threaded; M3 parallelizes.
-- [x] **D20 — M2 stub-host strategy.** Host-tool foreign_deps populated with hardcoded reference-graph UIDs from `host_stubs.go`: `OsvsEu9xnOqLNXi3INZ9CQ` (ragel6), `XO1d8CLk3qDKv0XQTlDKmQ` (dangling external). M4 replaces with real host pass.
+- [x] **D20 — M2 stub-host strategy.** Host-tool foreign_deps populated with hardcoded reference-graph UIDs from `host_stubs.go`. **Verified by PR-17 executor 2026-05-07** (planner mislabel corrected): the R6 node `util/_/datetime/parser.rl6.cpp` actually uses `foreign_deps.tool = ["XO1d8CLk3qDKv0XQTlDKmQ"]` (ragel6 LD UID — dangling external from PR-15's perspective; resolved internally to ragel6 host LD by reference graph). `OsvsEu9xnOqLNXi3INZ9CQ` is the yasm binary's UID (no current consumer in archiver closure). M4 replaces with real host pass.
 - [x] **D21 — Multi-source CC.** One `EmitCC` per source, declaration order (not sorted). PR-10-D03 refactor: `EmitCC` returns `(NodeRef, string)` — lands in PR-12.
 - [x] **D22 — LD rule shape.** ONE Node with FOUR Cmds (vcs_info → clang compile-vcs → link_exe.py → fs_tools.py link_or_copy_to_dir). Single `EmitLD(...)` in `ld.go`. Lands PR-19.
 - [x] **D23 — Accept PROGRAM in addition to LIBRARY.** PR-12 gates this; PR-19 emits real LD for PROGRAM.
@@ -82,6 +87,29 @@ Detail in `./docs/drafts/20260507-0549-m2-plan.md`. One line per PR here.
 - [x] **D27 — Macro evaluator.** Tiny ad-hoc evaluator. Supports `IF(IDENT)`, `AND`, `OR`, `NOT`, parens. Bound vars hardcoded in `macros.go`. Hard error on unknown identifier.
 - [x] **D28 — Parser AST extensions for M2** — `IfStmt`, `IncludeStmt`, `JoinSrcsStmt`, `AddInclStmt`, `CFlagsStmt`, `LDFlagsStmt`, `SrcDirStmt`, `GlobalSrcsStmt`. NO_*/LICENSE/etc stay as `UnknownStmt`.
 - [x] **D29 — Output path mangling for non-`.cpp` sources.** `.S` → `$(BUILD_ROOT)/<moduleDir>/_/<basename>.o`. `.rl6` → intermediate `$(BUILD_ROOT)/<moduleDir>/_/<src>.cpp`.
+
+### Architecture revision (2026-05-07) — D30–D40 supersede D8/D19/D20/D21/Q5
+
+User feedback: module = tuple `(path, language, target, flag-set)`, not path alone. Cross-platform via re-instantiation, not post-merge. Early execution requires real refs throughout. Plan: `./docs/drafts/20260507-0717-m2-architecture-revision.md`. Lands in PR-23 (PR-PIVOT).
+
+- [x] **D30** — `ModuleInstance{Path, Language, Target PlatformID, Flags FlagSet}` is the address. Comparable by value; memo key. Supersedes D8/D20/D21.
+- [x] **D31** — Cross-platform recursion replaces post-merge join. Walker recurses into `instance.WithHost(cfg)` for tool deps; gets real `NodeRef`. No stub UIDs. Supersedes D8.
+- [x] **D32** — One Emitter, one Graph, no merge step. Both target and host nodes accumulate in single `BufferedEmitter`. `PlatformConfig{Target, Host PlatformSpec}`. Supersedes D8.
+- [x] **D33** — Rule signatures take `instance ModuleInstance` (NOT `cfg + moduleDir`). Output paths use `instance.Flags.PIC` for `.o` ↔ `.pic.o`, `.a` ↔ `.pic.a`. Supersedes D21.
+- [x] **D34** — `genCtx.memo: map[ModuleInstance]*moduleEmitResult`. Same path different (target/host/lang/flags) memoize separately.
+- [x] **D35** — Language-polymorphic macros via dispatch table (per-language `LanguageEmitter`). PROTO/FBS/etc reserved; M5+ implementation. M2 ships only LangCPP.
+- [x] **D36** — Walker is post-order, recursion-driven, single emitter. PEERDIR declaration order preserved (R14). Cycle detection covers within-platform AND cross-platform. Supersedes D19.
+- [x] **D37** — `Emitter.OnReady(NodeRef) <-chan struct{}` lands in PR-23 (interface; BufferedEmitter no-op impl). M3 StreamingEmitter implements per-node. Enables early execution.
+- [x] **D38** — Comparator continues to receive static `*Graph` from Finalize. Streaming impl assembles same struct.
+- [x] **D39** — `Flags.PIC` is canonical host/target axis for M2. Drives output mangling, `-fPIC` inclusion, flag-bundle selection.
+- [x] **D40** — `--filter-platform` descoped (revises Q5). Direct recursion emits both platforms; comparator pairs by `(outputs[0], platform)` already.
+
+Q-resolutions for PR-23:
+- **Q6** — Type names locked: `ModuleInstance`, `Language`, `PlatformID`, `FlagSet`.
+- **Q7** — PR-PIVOT lands as ONE squash commit per CLAUDE.md "One PR = one commit".
+- **Q8** — M3 StreamingEmitter impl deferred; `OnReady` interface lands in PR-23.
+- **Q9** — Confirmed by probe: `foreign_deps.tool` semantics permit recursion model. Host yasm closure already part of full graph.
+- **Q10** — PR-23 acceptance: target byte-exact + host structural (4 nodes total). Full host byte-exact = M4.
 - [x] **D17** — All error handling goes through `throw.go` per `STYLE.md` "Error handling". Pass-through `if err != nil { return err }` is forbidden — use `Throw`/`Throw2`/`Throw3`/`ThrowFmt`. Functions return `error` only when (a) interface obligation (e.g. `flag.Value.Set`, `json.Unmarshaler`), (b) error is a domain signal the caller discriminates via `errors.As`/`errors.Is`, or (c) external boundary (CLI/RPC). Top-level `main` and each goroutine entry MUST wrap body in `Try(...).Catch(...)`. Retrofit of existing code lands in PR-11. Reviewers MUST flag any pass-through that doesn't fit the three exception categories.
 - [x] **D18** — Code follows `STYLE.md` "Formatting": blank lines around control blocks (`if`/`for`/`switch`/`select`/`go`/`defer`) except first/last in a `{}`; blank line before `return` except first stmt after `{`; consecutive one-liners that form one logical operation stay together (no blanks), separate ops get a blank between. Reviewers MUST run a quick visual check; nit-tier defects but accumulate into a noisy diff if missed. Retrofit of existing code lands in PR-11.
 - [x] **Q1** — M1 leaf module: **`build/cow/on`**. Single C source (`lib.c`), zero PEERDIR, ya.make = `LIBRARY()/NO_UTIL/NO_LIBC/NO_RUNTIME/SRCS(lib.c)/END()`. Reference subgraph in g.json: 1 CC node (`lib.c.o`, 101 cmd_args, `clang` not `clang++`) + 1 AR node (`libbuild-cow-on.a`, 11 cmd_args, standard `link_lib.py` invocation). No host-tool deps, no foreign_deps. Inspection report: see Q1 subagent return on 2026-05-07. PR-08 hardcodes the 101-arg CC bundle; PR-09 hardcodes the 11-arg AR pattern; PR-10 wires parser+rules to produce the 2-node subgraph.
