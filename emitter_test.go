@@ -51,6 +51,7 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 		DepRefs:          []NodeRef{b, c},
 	})
 	e.Result(a)
+
 	return e, a, b, c
 }
 
@@ -58,15 +59,29 @@ func nodeNameByKV(g *Graph, idx int) string {
 	return g.Graph[idx].KV["name"]
 }
 
+// finalizeExc is a small helper that runs Finalize inside Try and
+// returns (graph, exception). Used by tests that need to inspect a
+// finalize-time error message; tests that expect success can call
+// Finalize directly.
+//
+// Success-path tests should call Finalize(e) directly so an unexpected
+// panic surfaces as a test failure rather than being silently captured by Try.
+func finalizeExc(e *BufferedEmitter) (g *Graph, exc *Exception) {
+	exc = Try(func() {
+		g = Finalize(e)
+	})
+
+	return g, exc
+}
+
 func TestFinalize_TopoOrder_LeavesFirst(t *testing.T) {
 	e, _, _, _ := build3NodeDAG()
-	g, err := Finalize(e)
-	if err != nil {
-		t.Fatalf("Finalize: %v", err)
-	}
+	g := Finalize(e)
+
 	if len(g.Graph) != 3 {
 		t.Fatalf("expected 3 nodes, got %d", len(g.Graph))
 	}
+
 	want := []string{"C", "B", "A"}
 	for i, w := range want {
 		got := nodeNameByKV(g, i)
@@ -79,24 +94,12 @@ func TestFinalize_TopoOrder_LeavesFirst(t *testing.T) {
 
 func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 	e1, _, _, _ := build3NodeDAG()
-	g1, err := Finalize(e1)
-	if err != nil {
-		t.Fatalf("Finalize 1: %v", err)
-	}
-	raw1, err := json.Marshal(g1)
-	if err != nil {
-		t.Fatalf("marshal 1: %v", err)
-	}
+	g1 := Finalize(e1)
+	raw1 := Throw2(json.Marshal(g1))
 
 	e2, _, _, _ := build3NodeDAG()
-	g2, err := Finalize(e2)
-	if err != nil {
-		t.Fatalf("Finalize 2: %v", err)
-	}
-	raw2, err := json.Marshal(g2)
-	if err != nil {
-		t.Fatalf("marshal 2: %v", err)
-	}
+	g2 := Finalize(e2)
+	raw2 := Throw2(json.Marshal(g2))
 
 	if !bytes.Equal(raw1, raw2) {
 		t.Errorf("Finalize output not byte-stable across runs.\nrun1: %s\nrun2: %s", raw1, raw2)
@@ -107,9 +110,11 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 		if len(n.UID) != 22 {
 			t.Errorf("graph[%d].UID len = %d, want 22 (got %q)", i, len(n.UID), n.UID)
 		}
+
 		if n.SelfUID != n.UID {
 			t.Logf("PR-02 placeholder: SelfUID currently equals UID; future PR will compute distinct value. graph[%d].SelfUID=%q UID=%q", i, n.SelfUID, n.UID)
 		}
+
 		if n.StatsUID != "" {
 			t.Errorf("graph[%d].StatsUID = %q, want \"\" (PR-02 placeholder)", i, n.StatsUID)
 		}
@@ -119,6 +124,7 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 	if len(g1.Result) != 1 {
 		t.Fatalf("expected 1 result, got %d (%v)", len(g1.Result), g1.Result)
 	}
+
 	if g1.Result[0] != g1.Graph[2].UID {
 		t.Errorf("result[0] = %q, want graph[2].UID %q", g1.Result[0], g1.Graph[2].UID)
 	}
@@ -141,6 +147,7 @@ func TestFinalize_DepsAreSortedAlphabetically(t *testing.T) {
 	x := mkLeaf("X")
 	y := mkLeaf("Y")
 	z := mkLeaf("Z")
+
 	// Emit child refs in a deliberately unsorted-by-UID order. After
 	// Finalize the published Deps slice must be alphabetical.
 	a := e.Emit(&Node{
@@ -153,24 +160,26 @@ func TestFinalize_DepsAreSortedAlphabetically(t *testing.T) {
 		DepRefs:          []NodeRef{z, x, y},
 	})
 	e.Result(a)
-	g, err := Finalize(e)
-	if err != nil {
-		t.Fatalf("Finalize: %v", err)
-	}
+	g := Finalize(e)
+
 	// Find A in the graph.
 	var aNode *Node
 	for _, n := range g.Graph {
 		if n.KV["name"] == "A" {
 			aNode = n
+
 			break
 		}
 	}
+
 	if aNode == nil {
 		t.Fatalf("A not found in graph")
 	}
+
 	if len(aNode.Deps) != 3 {
 		t.Fatalf("A.Deps len = %d, want 3 (%v)", len(aNode.Deps), aNode.Deps)
 	}
+
 	if !sort.StringsAreSorted(aNode.Deps) {
 		t.Errorf("A.Deps not sorted: %v", aNode.Deps)
 	}
@@ -196,19 +205,19 @@ func TestFinalize_DedupesDuplicateDeps(t *testing.T) {
 		DepRefs:          []NodeRef{c, c, c}, // intentional duplicates
 	})
 	e.Result(a)
-	g, err := Finalize(e)
-	if err != nil {
-		t.Fatalf("Finalize: %v", err)
-	}
+	g := Finalize(e)
+
 	var aNode *Node
 	for _, n := range g.Graph {
 		if n.KV["name"] == "A" {
 			aNode = n
 		}
 	}
+
 	if aNode == nil {
 		t.Fatalf("A not found")
 	}
+
 	if len(aNode.Deps) != 1 {
 		t.Errorf("expected duplicates collapsed; A.Deps = %v", aNode.Deps)
 	}
@@ -239,8 +248,10 @@ func TestFinalize_CycleReturnsError(t *testing.T) {
 	aNode.DepRefs = []NodeRef{b}
 	bNode.DepRefs = []NodeRef{a}
 	e.Result(a)
-	if _, err := Finalize(e); err == nil {
-		t.Errorf("Finalize on cyclic graph returned no error")
+
+	_, exc := finalizeExc(e)
+	if exc == nil {
+		t.Errorf("Finalize on cyclic graph returned no exception")
 	}
 }
 
@@ -256,27 +267,25 @@ func TestFinalize_OutOfRangeRefReturnsError(t *testing.T) {
 		DepRefs:          []NodeRef{{id: 999}}, // bogus
 	})
 	e.Result(a)
-	if _, err := Finalize(e); err == nil {
-		t.Errorf("Finalize with bogus ref returned no error")
+
+	_, exc := finalizeExc(e)
+	if exc == nil {
+		t.Errorf("Finalize with bogus ref returned no exception")
 	}
 }
 
 func TestFinalize_GraphTopLevelKeyOrder(t *testing.T) {
 	// The Graph wrapper must serialise as { conf, graph, inputs, result }.
 	e, _, _, _ := build3NodeDAG()
-	g, err := Finalize(e)
-	if err != nil {
-		t.Fatalf("Finalize: %v", err)
-	}
-	raw, err := json.Marshal(g)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
+	g := Finalize(e)
+	raw := Throw2(json.Marshal(g))
 	keys := extractKeyOrder(t, raw)
 	want := []string{"conf", "graph", "inputs", "result"}
+
 	if len(keys) != len(want) {
 		t.Fatalf("graph keys = %v, want %v", keys, want)
 	}
+
 	for i, w := range want {
 		if keys[i] != w {
 			t.Errorf("graph key[%d] = %q, want %q", i, keys[i], w)
@@ -310,23 +319,24 @@ func TestFinalize_ForeignDepsResolvedAndSorted(t *testing.T) {
 		},
 	})
 	e.Result(a)
-	g, err := Finalize(e)
-	if err != nil {
-		t.Fatalf("Finalize: %v", err)
-	}
+	g := Finalize(e)
+
 	var aNode *Node
 	for _, n := range g.Graph {
 		if n.KV["name"] == "A" {
 			aNode = n
 		}
 	}
+
 	if aNode == nil {
 		t.Fatalf("A not found")
 	}
+
 	got := aNode.ForeignDeps["tool"]
 	if len(got) != 2 {
 		t.Errorf("ForeignDeps[tool] not deduped: %v", got)
 	}
+
 	if !sort.StringsAreSorted(got) {
 		t.Errorf("ForeignDeps[tool] not sorted: %v", got)
 	}
@@ -347,12 +357,14 @@ func TestFinalize_RejectsPreSetDeps(t *testing.T) {
 		TargetProperties: map[string]string{},
 		Deps:             []string{"FAKE"},
 	})
-	_, err := Finalize(e)
-	if err == nil {
-		t.Fatalf("Finalize accepted pre-populated Deps; want error")
+
+	_, exc := finalizeExc(e)
+	if exc == nil {
+		t.Fatalf("Finalize accepted pre-populated Deps; want exception")
 	}
-	if !strings.Contains(err.Error(), "pre-populated Deps") {
-		t.Errorf("error message %q does not mention pre-populated Deps", err.Error())
+
+	if !strings.Contains(exc.Error(), "pre-populated Deps") {
+		t.Errorf("error message %q does not mention pre-populated Deps", exc.Error())
 	}
 }
 
@@ -368,12 +380,14 @@ func TestFinalize_RejectsPreSetForeignDeps(t *testing.T) {
 		TargetProperties: map[string]string{},
 		ForeignDeps:      map[string][]string{"tool": {"FAKE"}},
 	})
-	_, err := Finalize(e)
-	if err == nil {
-		t.Fatalf("Finalize accepted pre-populated ForeignDeps; want error")
+
+	_, exc := finalizeExc(e)
+	if exc == nil {
+		t.Fatalf("Finalize accepted pre-populated ForeignDeps; want exception")
 	}
-	if !strings.Contains(err.Error(), "pre-populated ForeignDeps") {
-		t.Errorf("error message %q does not mention pre-populated ForeignDeps", err.Error())
+
+	if !strings.Contains(exc.Error(), "pre-populated ForeignDeps") {
+		t.Errorf("error message %q does not mention pre-populated ForeignDeps", exc.Error())
 	}
 }
 
@@ -396,10 +410,8 @@ func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
 	r2 := mk()
 	e.Result(r1)
 	e.Result(r2)
-	g, err := Finalize(e)
-	if err != nil {
-		t.Fatalf("Finalize: %v", err)
-	}
+	g := Finalize(e)
+
 	if len(g.Graph) != 1 {
 		t.Errorf("expected 1 deduped node in Graph, got %d (%+v)", len(g.Graph), g.Graph)
 	}
@@ -410,15 +422,15 @@ func TestFinalize_SecondCallErrors(t *testing.T) {
 	// callers don't silently get a stale graph after the *Refs slices
 	// have been cleared.
 	e, _, _, _ := build3NodeDAG()
-	if _, err := Finalize(e); err != nil {
-		t.Fatalf("first Finalize: %v", err)
+	Finalize(e)
+
+	_, exc := finalizeExc(e)
+	if exc == nil {
+		t.Fatalf("second Finalize returned nil exception; want already-finalized error")
 	}
-	_, err := Finalize(e)
-	if err == nil {
-		t.Fatalf("second Finalize returned nil error; want already-finalized error")
-	}
-	if !strings.Contains(err.Error(), "already finalized") {
-		t.Errorf("error message %q does not mention already-finalized state", err.Error())
+
+	if !strings.Contains(exc.Error(), "already finalized") {
+		t.Errorf("error message %q does not mention already-finalized state", exc.Error())
 	}
 }
 
@@ -438,26 +450,24 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 		ForeignDepRefs:   map[string][]NodeRef{"tool": {}}, // empty slice
 	})
 	e.Result(a)
-	g, err := Finalize(e)
-	if err != nil {
-		t.Fatalf("Finalize: %v", err)
-	}
+	g := Finalize(e)
+
 	var aNode *Node
 	for _, n := range g.Graph {
 		if n.KV["name"] == "A" {
 			aNode = n
 		}
 	}
+
 	if aNode == nil {
 		t.Fatalf("A not found")
 	}
+
 	if aNode.ForeignDeps != nil {
 		t.Errorf("expected ForeignDeps==nil (omitempty drops the field); got %v", aNode.ForeignDeps)
 	}
-	raw, err := json.Marshal(aNode)
-	if err != nil {
-		t.Fatalf("marshal A: %v", err)
-	}
+
+	raw := Throw2(json.Marshal(aNode))
 	if bytes.Contains(raw, []byte(`"foreign_deps"`)) {
 		t.Errorf("foreign_deps key leaked into JSON for empty-only ForeignDepRefs: %s", raw)
 	}
@@ -477,10 +487,8 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 	})
 	e.Result(a)
 	e.Result(a) // duplicate, must collapse
-	g, err := Finalize(e)
-	if err != nil {
-		t.Fatalf("Finalize: %v", err)
-	}
+	g := Finalize(e)
+
 	if len(g.Result) != 1 {
 		t.Errorf("expected 1 deduped result, got %d (%v)", len(g.Result), g.Result)
 	}
@@ -504,10 +512,7 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 		DepRefs: []NodeRef{c1},
 	})
 	e1.Result(a1)
-	g1, err := Finalize(e1)
-	if err != nil {
-		t.Fatalf("Finalize 1: %v", err)
-	}
+	g1 := Finalize(e1)
 
 	e2 := NewBufferedEmitter()
 	c2 := e2.Emit(&Node{
@@ -524,14 +529,12 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 		DepRefs: []NodeRef{c2},
 	})
 	e2.Result(a2)
-	g2, err := Finalize(e2)
-	if err != nil {
-		t.Fatalf("Finalize 2: %v", err)
-	}
+	g2 := Finalize(e2)
 
 	// Find A in each graph (it's the topo-last entry).
 	a1uid := g1.Graph[len(g1.Graph)-1].UID
 	a2uid := g2.Graph[len(g2.Graph)-1].UID
+
 	if a1uid == a2uid {
 		t.Errorf("Merkle property violated: parent UID stayed %q after leaf change", a1uid)
 	}

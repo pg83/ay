@@ -8,21 +8,47 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
+	exc := Try(func() {
+		dispatch(os.Args)
+	})
+
+	exc.Catch(func(e *Exception) {
+		fmt.Fprintln(os.Stderr, e.Error())
+		os.Exit(1)
+	})
+}
+
+// dispatch parses the command-line and routes to the per-subcommand
+// handler. It is the throw-style boundary between main()'s
+// Try(...).Catch(...) wrapper and the rest of the program: per
+// STYLE.md ("Catches belong at boundaries: main.go: the top-level
+// Try(...).Catch(...) prints the error and os.Exit(1)") any panic with
+// an *Exception bubbles up here and gets printed to stderr.
+//
+// Subcommands return an int exit code today (PR-11 stubs). PR-03+
+// will replace those bodies with real implementations that throw on
+// failure; the contract above keeps working unchanged.
+//
+// Note: os.Exit from a subcommand bypasses any defers placed by the outer Try;
+// only panics propagate. If success-path cleanup needs to fire from Try,
+// dispatch must return an exit code instead of calling os.Exit directly.
+func dispatch(argv []string) {
+	if len(argv) < 2 {
 		printUsage(os.Stderr)
 		os.Exit(2)
 	}
-	switch os.Args[1] {
+
+	switch argv[1] {
 	case "help", "-h", "--help":
-		os.Exit(cmdHelp(os.Args[2:]))
+		os.Exit(cmdHelp(argv[2:]))
 	case "gen":
-		os.Exit(cmdGen(os.Args[2:]))
+		os.Exit(cmdGen(argv[2:]))
 	case "compare":
-		os.Exit(cmdCompare(os.Args[2:]))
+		os.Exit(cmdCompare(argv[2:]))
 	case "inspect":
-		os.Exit(cmdInspect(os.Args[2:]))
+		os.Exit(cmdInspect(argv[2:]))
 	default:
-		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", argv[1])
 		printUsage(os.Stderr)
 		os.Exit(2)
 	}
@@ -44,23 +70,27 @@ Subcommands:
 
 func cmdHelp(_ []string) int {
 	printUsage(os.Stdout)
+
 	return 0
 }
 
 func cmdGen(_ []string) int {
 	_ = flag.NewFlagSet("gen", flag.ExitOnError)
 	fmt.Fprintln(os.Stderr, "gen: not implemented yet")
+
 	return 1
 }
 
 func cmdCompare(_ []string) int {
 	_ = flag.NewFlagSet("compare", flag.ExitOnError)
 	fmt.Fprintln(os.Stderr, "compare: not implemented yet")
+
 	return 1
 }
 
 func cmdInspect(_ []string) int {
 	_ = flag.NewFlagSet("inspect", flag.ExitOnError)
 	fmt.Fprintln(os.Stderr, "inspect: not implemented yet")
+
 	return 1
 }
