@@ -621,3 +621,65 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 		t.Errorf("Merkle property violated: parent UID stayed %q after leaf change", a1uid)
 	}
 }
+
+// TestFinalize_HeapTopo_Determinism pins the topo-sort tie-break: when
+// several nodes are simultaneously ready (indeg == 0), the next one
+// emitted is the one with the smallest buffer index. PR-34a swapped the
+// linear-scan-for-min in Finalize for a container/heap min-heap; the
+// equivalence to the prior implementation rests on this invariant.
+//
+// Graph layout (Emit order is the buffer index; "A->B" means A depends on B):
+//
+//	idx 0: L0  (leaf)
+//	idx 1: L1  (leaf)
+//	idx 2: L2  (leaf)
+//	idx 3: M3  -> L0
+//	idx 4: M4  -> L1
+//	idx 5: T   -> L2, M3, M4
+//
+// Expected pop sequence under "smallest index wins":
+//
+//	seed       = {0, 1, 2}             -> pop 0
+//	after  0   = {1, 2, 3}             -> pop 1
+//	after  1   = {2, 3, 4}             -> pop 2
+//	after  2   = {3, 4}                -> pop 3
+//	after  3   = {4} (T still has indeg 1) -> pop 4
+//	after  4   = {5}                   -> pop 5
+//
+// Buffer-index order: [0, 1, 2, 3, 4, 5]. Names map to [L0, L1, L2, M3, M4, T].
+func TestFinalize_HeapTopo_Determinism(t *testing.T) {
+	e := NewBufferedEmitter()
+	mk := func(name string, deps ...NodeRef) NodeRef {
+		return e.Emit(&Node{
+			Cmds:             []Cmd{{CmdArgs: []string{name}, Env: map[string]string{}}},
+			Env:              map[string]string{},
+			Inputs:           []string{},
+			KV:               map[string]string{"name": name},
+			Outputs:          []string{},
+			Requirements:     map[string]interface{}{},
+			Tags:             []string{},
+			TargetProperties: map[string]string{},
+			DepRefs:          deps,
+		})
+	}
+	l0 := mk("L0")
+	l1 := mk("L1")
+	l2 := mk("L2")
+	m3 := mk("M3", l0)
+	m4 := mk("M4", l1)
+	t6 := mk("T", l2, m3, m4)
+	e.Result(t6)
+	g := Finalize(e)
+
+	want := []string{"L0", "L1", "L2", "M3", "M4", "T"}
+	if len(g.Graph) != len(want) {
+		t.Fatalf("graph len = %d, want %d", len(g.Graph), len(want))
+	}
+
+	for i, w := range want {
+		got := g.Graph[i].KV["name"]
+		if got != w {
+			t.Errorf("topo[%d] = %q, want %q", i, got, w)
+		}
+	}
+}
