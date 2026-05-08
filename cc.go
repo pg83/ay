@@ -569,13 +569,33 @@ func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
 	return out
 }
 
+// baseUnitCxxNostdinc is `_BASE_UNIT.CXXFLAGS += -nostdinc++` from
+// `build/ymake.core.conf:807` — applied to every `_BASE_UNIT`-derived
+// module in the default closure (USE_STL_SYSTEM != "yes" && MSVC !=
+// "yes"). Empirically the injection lands ONLY at the post-catboost
+// bucket slot, never at the pre-catboost or own-extras slots, even for
+// modules whose own ya.make declares the same flag (libcxxrt:
+// reference shows `-nostdinc++` at the ownExtras slot via its own
+// `CXXFLAGS(-nostdinc++)` AND at the post-catboost bucket slot via
+// this _BASE_UNIT injection — two distinct positions, not deduped
+// across them).
+//
+// Musl flavours route through composeMuslCC / composeMuslHostCC and
+// skip the catboost-redux entirely, so the injection is naturally
+// excluded for musl. NoPlatform / NoRuntime / NoUtil do not gate the
+// _BASE_UNIT body — all `_BASE_UNIT`-derived modules inherit the rule
+// (libunwind has NO_RUNTIME and still receives the post-catboost
+// `-nostdinc++` per its reference CC node).
+const baseUnitCxxNostdinc = "-nostdinc++"
+
 // composeOwnAndPeerGlobalBucket assembles the (own GLOBAL ∪ peer
 // GLOBAL) CFLAGS / CXXFLAGS / CONLYFLAGS contribution per
 // source-language axis for the PR-33 D02 redux slot. C++ sources emit
-// this bucket TWICE flanking a `-DCATBOOST_OPENSOURCE=yes` token (the
-// catboost-redux); C sources emit no redux (and so the bucket is
-// only consulted via composePeerExtras for the existing single
-// peerExtras slot).
+// this bucket flanking a `-DCATBOOST_OPENSOURCE=yes` token (the
+// catboost-redux); the post-catboost half is augmented with
+// `baseUnitCxxNostdinc` per `composePostCatboostBucket` (PR-35f).
+// C sources emit no redux (and so the bucket is only consulted via
+// composePeerExtras for the existing single peerExtras slot).
 //
 // Order: own GLOBAL CFLAGS, peer GLOBAL CFLAGS, then own/peer GLOBAL
 // CXXFLAGS or CONLYFLAGS depending on source language. Deduplication
@@ -590,15 +610,9 @@ func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
 //     [-nostdinc++] (own GLOBAL = [], peer GLOBAL = [-nostdinc++]).
 //   - abseil casts.cc.o cmd_args[99] + [101]: bucket = [-nostdinc++]
 //     (own GLOBAL = [], peer GLOBAL = [-nostdinc++]).
-//
-// Known gap: libcxxrt's own non-GLOBAL `CXXFLAGS(-nostdinc++)` is
-// emitted twice in the reference (slots 96 + 98) but the bucket
-// model produces an empty bucket because libcxxrt has no own GLOBAL
-// and no peer GLOBAL. The 4 libcxxrt target + 4 host CC nodes stay
-// L3-divergent until upstream's "non-GLOBAL CXXFLAGS doubled on
-// runtime-stack modules" mechanism is identified (planner's open
-// question; PR-33 self-recover guidance: implement naive bucket and
-// document the gap).
+//   - libcxxrt auxhelper.cc.o cmd_args[101] + post[103]: pre-bucket =
+//     [] (no own/peer GLOBAL CXXFLAGS), post-bucket = [-nostdinc++]
+//     via the _BASE_UNIT injection — closes PR-33 known gap (PR-35f).
 func composeOwnAndPeerGlobalBucket(in ModuleCCInputs, isCxx bool) []string {
 	out := make([]string, 0,
 		len(in.OwnCFlagsGlobal)+len(in.PeerCFlagsGlobal)+
@@ -631,6 +645,35 @@ func composeOwnAndPeerGlobalBucket(in ModuleCCInputs, isCxx bool) []string {
 	return out
 }
 
+// composePostCatboostBucket returns the post-catboost half of the
+// bucket-twice slot. PR-35f closes PR-33-C2_04: the pre-catboost half
+// is `preBucket` (own GLOBAL ∪ peer GLOBAL) as before, but the
+// post-catboost half folds in the `_BASE_UNIT.CXXFLAGS += -nostdinc++`
+// injection on top — for non-musl C++ compiles in the default closure.
+//
+// Dedup is first-occurrence-wins, so libcxx (preBucket already carries
+// `-nostdinc++` via own GLOBAL) and abseil (via peer GLOBAL) keep the
+// same content on both halves and stay byte-exact. libcxxrt /
+// libcxxabi-parts / libunwind (preBucket empty) gain `-nostdinc++` on
+// the post half only — matching the reference exactly.
+//
+// Caller responsibility: invoke ONLY for non-musl C++ compiles. Musl
+// composers route through composeMuslCC / composeMuslHostCC which do
+// not consult the bucket at all; C sources do not emit a catboost-redux.
+func composePostCatboostBucket(preBucket []string) []string {
+	for _, x := range preBucket {
+		if x == baseUnitCxxNostdinc {
+			return preBucket
+		}
+	}
+
+	out := make([]string, 0, len(preBucket)+1)
+	out = append(out, preBucket...)
+	out = append(out, baseUnitCxxNostdinc)
+
+	return out
+}
+
 // composeTargetCC composes the cmd_args bundle for a TARGET-flavoured
 // no-libc CC compilation. Pinned byte-exact (101 args, no per-module
 // extras) against build/cow/on/lib.c.o in
@@ -658,7 +701,7 @@ func composeOwnAndPeerGlobalBucket(in ModuleCCInputs, isCxx bool) []string {
 //     `appendCxxStdAndOwn` for C++ sources without
 //     NoCompilerWarnings.
 func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket []string, isCxx, noCompilerWarnings bool) []string {
-	cmdArgs := make([]string, 0, 101+len(ownAddIncl)+len(peerAddIncl)+len(ownCFlags)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2*len(ownGlobalBucket)+3)
+	cmdArgs := make([]string, 0, 101+len(ownAddIncl)+len(peerAddIncl)+len(ownCFlags)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2*len(ownGlobalBucket)+4)
 	cmdArgs = append(cmdArgs,
 		pickCompiler(isCxx),
 		"--target="+targetTriple,
@@ -687,7 +730,7 @@ func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownC
 	if isCxx {
 		cmdArgs = append(cmdArgs, ownGlobalBucket...)
 		cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-		cmdArgs = append(cmdArgs, ownGlobalBucket...)
+		cmdArgs = append(cmdArgs, composePostCatboostBucket(ownGlobalBucket)...)
 	} else {
 		// C source: empirical reference shows no catboost-redux for
 		// C compiles (build/cow/on lib.c.o, tcmalloc aligned_alloc.c.o).
@@ -724,7 +767,7 @@ func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownC
 // sources emit the bucket twice flanking the catboost-redux; C
 // sources emit peerExtras once.
 func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket []string, isCxx, noCompilerWarnings bool) []string {
-	cmdArgs := make([]string, 0, 105+len(ownAddIncl)+len(peerAddIncl)+len(ownCFlags)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2*len(ownGlobalBucket)+3)
+	cmdArgs := make([]string, 0, 105+len(ownAddIncl)+len(peerAddIncl)+len(ownCFlags)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2*len(ownGlobalBucket)+4)
 	cmdArgs = append(cmdArgs,
 		pickCompiler(isCxx),
 		"--target="+hostTriple,
@@ -759,7 +802,7 @@ func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFl
 	if isCxx {
 		cmdArgs = append(cmdArgs, ownGlobalBucket...)
 		cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-		cmdArgs = append(cmdArgs, ownGlobalBucket...)
+		cmdArgs = append(cmdArgs, composePostCatboostBucket(ownGlobalBucket)...)
 	} else {
 		cmdArgs = append(cmdArgs, peerExtras...)
 	}
