@@ -163,6 +163,25 @@ type ModuleCCInputs struct {
 	// OwnCOnlyFlagsGlobal is the module's own GLOBAL CONLYFLAGS
 	// (PR-33 D02). C / .S sources only.
 	OwnCOnlyFlagsGlobal []string
+	// PerSourceCFlags is the per-source extra CFLAGS bundle attached
+	// to the current compile via the `SRC(filename extra_cflags...)`
+	// macro (PR-35o). The composer slots these flags BETWEEN
+	// `macroPrefixMapFlags` and the input path — matching the
+	// empirical reference for `util/charset/wide_sse41.cpp.o` where
+	// `-DSSE41_STUB` sits immediately before
+	// `$(SOURCE_ROOT)/util/charset/wide_sse41.cpp`. Empty for sources
+	// declared via plain `SRCS` / `SRC_C_NO_LTO` / `JOIN_SRCS` /
+	// `GLOBAL_SRCS`.
+	PerSourceCFlags []string
+	// FlatOutput selects a flat output-path layout for this source —
+	// no `_/` infix even when the source contains a `/` (PR-35o). Set
+	// for sources declared via the upstream `SRC(...)` and
+	// `SRC_C_NO_LTO(...)` macros. Mirrors the empirical reference
+	// distinction: `SRCS(digest/city.cpp)` →
+	// `util/_/digest/city.cpp.o`, while `SRC_C_NO_LTO(system/compiler.cpp)`
+	// → `util/system/compiler.cpp.o`. Default false preserves the
+	// historical SRCS behaviour for every other source type.
+	FlatOutput bool
 }
 
 // EmitCC emits a CC node for compiling `srcRel` (a path relative to
@@ -256,9 +275,9 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	case isMusl:
 		cmdArgs = composeMuslCC(outputPath, inputPath, nil, muslOwnExtras, isCxx)
 	case instance.Flags.PIC:
-		cmdArgs = composeHostCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, isCxx, instance.Flags.NoCompilerWarnings)
+		cmdArgs = composeHostCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, in.PerSourceCFlags, isCxx, instance.Flags.NoCompilerWarnings)
 	default:
-		cmdArgs = composeTargetCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, isCxx, instance.Flags.NoCompilerWarnings)
+		cmdArgs = composeTargetCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, in.PerSourceCFlags, isCxx, instance.Flags.NoCompilerWarnings)
 	}
 
 	// The reference graph carries the same env map at both the cmd
@@ -390,9 +409,16 @@ func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, s
 
 	var outputPath string
 
-	if strings.Contains(srcRel, "/") {
+	switch {
+	case in.FlatOutput:
+		// PR-35o: SRC / SRC_C_NO_LTO emit a flat output path even when
+		// `srcRel` contains a `/`. Empirical reference:
+		// `SRC_C_NO_LTO(system/compiler.cpp)` →
+		// `util/system/compiler.cpp.o` (no `_/` infix).
+		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + suffix
+	case strings.Contains(srcRel, "/"):
 		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + suffix
-	} else {
+	default:
 		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + suffix
 	}
 
@@ -700,8 +726,8 @@ func composePostCatboostBucket(preBucket []string) []string {
 //   - cxxStandardWarnings bundle (D04) is injected by
 //     `appendCxxStdAndOwn` for C++ sources without
 //     NoCompilerWarnings.
-func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket []string, isCxx, noCompilerWarnings bool) []string {
-	cmdArgs := make([]string, 0, 101+len(ownAddIncl)+len(peerAddIncl)+len(ownCFlags)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2*len(ownGlobalBucket)+4)
+func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, perSrcCFlags []string, isCxx, noCompilerWarnings bool) []string {
+	cmdArgs := make([]string, 0, 101+len(ownAddIncl)+len(peerAddIncl)+len(ownCFlags)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2*len(ownGlobalBucket)+len(perSrcCFlags)+4)
 	cmdArgs = append(cmdArgs,
 		pickCompiler(isCxx),
 		"--target="+targetTriple,
@@ -742,6 +768,11 @@ func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownC
 
 	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
 	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)
+	// PR-35o: per-source extra CFLAGS (from `SRC(filename
+	// extra_cflags...)`) slot BETWEEN macroPrefixMapFlags and the
+	// input path. Empirical reference: util/charset/wide_sse41.cpp.o
+	// cmd_args show `-DSSE41_STUB` immediately before the source path.
+	cmdArgs = append(cmdArgs, perSrcCFlags...)
 	cmdArgs = append(cmdArgs, inputPath)
 
 	return cmdArgs
@@ -766,8 +797,8 @@ func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownC
 // own-GLOBAL-bucket × 2 redux pattern as composeTargetCC. C++
 // sources emit the bucket twice flanking the catboost-redux; C
 // sources emit peerExtras once.
-func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket []string, isCxx, noCompilerWarnings bool) []string {
-	cmdArgs := make([]string, 0, 105+len(ownAddIncl)+len(peerAddIncl)+len(ownCFlags)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2*len(ownGlobalBucket)+4)
+func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, perSrcCFlags []string, isCxx, noCompilerWarnings bool) []string {
+	cmdArgs := make([]string, 0, 105+len(ownAddIncl)+len(peerAddIncl)+len(ownCFlags)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2*len(ownGlobalBucket)+len(perSrcCFlags)+4)
 	cmdArgs = append(cmdArgs,
 		pickCompiler(isCxx),
 		"--target="+hostTriple,
@@ -809,6 +840,8 @@ func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFl
 
 	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
 	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)
+	// PR-35o: per-source extra CFLAGS slot (mirror of composeTargetCC).
+	cmdArgs = append(cmdArgs, perSrcCFlags...)
 	cmdArgs = append(cmdArgs, inputPath)
 
 	return cmdArgs

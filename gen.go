@@ -264,7 +264,6 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"NO_BUILD_IF":           {},
 	"NO_SANITIZE":           {},
 	"NO_SANITIZE_COVERAGE":  {},
-	"SRC_C_NO_LTO":          {},
 	"DEFAULT":               {},
 	"PROVIDES":              {},
 	"USE_CXX":               {},
@@ -272,7 +271,6 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"PYTHON3":               {},
 	"BUILD_ONLY_IF":         {}, // PR-27: contrib/libs/cxxsupp/libcxxrt
 	"MESSAGE":               {}, // PR-27: contrib/libs/cxxsupp/libcxx (FATAL_ERROR in dead branch)
-	"SRC":                   {}, // PR-27: util/charset (per-source compile flag; treated as metadata until R3 lands)
 	"SRC_C_SSE41":           {}, // PR-27: util/charset (arch-specific compile-flag wrapper)
 	"NO_CLANG_COVERAGE":     {}, // PR-30: contrib/tools/yasm
 	"NO_PROFILE_RUNTIME":    {}, // PR-30: contrib/tools/yasm
@@ -367,7 +365,26 @@ type moduleData struct {
 	allocatorName    string   // PR-35g: name passed to ALLOCATOR(...); empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE).
 	muslLite         bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
 	ldPlugins        []string // PR-35k: filenames declared via LD_PLUGIN(name.py); the only M2 case is contrib/libs/musl/include's `LD_PLUGIN(musl.py)`. Each entry becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs.
-	conflictMod      *ModuleStmt
+	// PR-35o: per-source extra CFLAGS keyed by source filename.
+	// Populated by `SRC(filename extra_cflags...)` (e.g.
+	// `util/charset/ya.make:22-25` `SRC(wide_sse41.cpp -DSSE41_STUB)`).
+	// Threaded through emitOneSource into ModuleCCInputs.PerSourceCFlags
+	// so the composer can append the per-source flags right before the
+	// input path (matching the reference cmd_args slot for the SSE41_STUB
+	// flag on `util/charset/wide_sse41.cpp.o`).
+	perSrcCFlags map[string][]string
+	// PR-35o: set of source filenames declared via `SRC(...)` or
+	// `SRC_C_NO_LTO(...)`. Upstream `SRC`/`SRC_C_NO_LTO` macros emit a
+	// FLAT output path (no `_/` infix even when the source contains a
+	// `/`), unlike `SRCS(subdir/foo.cpp)` which emits
+	// `<modulePath>/_/subdir/foo.cpp.o`. Compare reference paths:
+	//   - SRCS member util/digest/city.cpp → util/_/digest/city.cpp.o
+	//   - SRC_C_NO_LTO util/system/compiler.cpp → util/system/compiler.cpp.o
+	// emitOneSource consults this set to set
+	// ModuleCCInputs.FlatOutput, which composeCCPaths uses to skip the
+	// `_/` infix.
+	flatSrcs    map[string]struct{}
+	conflictMod *ModuleStmt
 }
 
 // collectModule walks `mf.Stmts` (after IF branches have been
@@ -516,6 +533,57 @@ func applyUnknownStmt(v *UnknownStmt, d *moduleData) {
 				d.muslLite = true
 			}
 		}
+	case "SRC":
+		// PR-35o: SRC(filename [extra_cflags...]) is a SRCS variant
+		// that registers a single source AND attaches per-source extra
+		// CFLAGS to that source's compile. The first arg is the
+		// filename; remaining args are flag tokens (e.g. -DSSE41_STUB)
+		// appended to the compile cmd_args at the per-source slot
+		// (right before the input path), matching the reference for
+		// `util/charset/wide_sse41.cpp.o`. SRC() with no args throws.
+		// SRC's output path is FLAT (no `_/` infix) — see flatSrcs in
+		// moduleData.
+		if len(v.Args) == 0 {
+			ThrowFmt("gen: SRC() requires at least 1 argument (filename); got 0 at line %d", v.Line)
+		}
+
+		filename := v.Args[0]
+		d.srcs = append(d.srcs, filename)
+
+		if d.flatSrcs == nil {
+			d.flatSrcs = map[string]struct{}{}
+		}
+
+		d.flatSrcs[filename] = struct{}{}
+
+		if len(v.Args) > 1 {
+			if d.perSrcCFlags == nil {
+				d.perSrcCFlags = map[string][]string{}
+			}
+
+			extras := append([]string(nil), v.Args[1:]...)
+			d.perSrcCFlags[filename] = append(d.perSrcCFlags[filename], extras...)
+		}
+	case "SRC_C_NO_LTO":
+		// PR-35o: SRC_C_NO_LTO(filename) is a SRCS variant that
+		// disables LTO for the named source. The reference cmd_args
+		// for `util/system/compiler.cpp.o` show no LTO-specific
+		// flag delta (LTO is already off in M2's debug build), so
+		// this reduces to plain SRCS in the current closure.
+		// Output path is FLAT (no `_/` infix) — see flatSrcs in
+		// moduleData.
+		if len(v.Args) != 1 {
+			ThrowFmt("gen: SRC_C_NO_LTO expects exactly 1 argument (filename); got %d at line %d", len(v.Args), v.Line)
+		}
+
+		filename := v.Args[0]
+		d.srcs = append(d.srcs, filename)
+
+		if d.flatSrcs == nil {
+			d.flatSrcs = map[string]struct{}{}
+		}
+
+		d.flatSrcs[filename] = struct{}{}
 	case "LD_PLUGIN":
 		// PR-35k: LD_PLUGIN(name.py) declares a python plugin to be
 		// passed to the linker via `--start-plugins ... --end-plugins`
@@ -601,16 +669,24 @@ func applyAllocatorStmt(v *UnknownStmt, d *moduleData) {
 // flip ARCH_AARCH64↔ARCH_X86_64 so the same ya.make produces the
 // other architecture's branches. The result is a fresh Environment;
 // the caller is free to mutate it.
+//
+// PR-35o: ARCH_ARM64 is the upstream alias for ARCH_AARCH64 (Arcadia
+// sets both together). Flip it alongside ARCH_AARCH64 so any
+// `IF (ARCH_ARM64 ...)` predicate sees the same binding as
+// `ARCH_AARCH64` — required for `contrib/libs/cxxsupp/builtins`'s
+// bf16 SRCS block whose gate uses `ARCH_ARM64 OR ARCH_X86_64`.
 func buildIfEnv(instance ModuleInstance) Environment {
 	env := DefaultIfEnv.Clone()
 
 	if instance.Target == PlatformDefaultLinuxX8664 {
 		env.SetBool("ARCH_AARCH64", false)
+		env.SetBool("ARCH_ARM64", false)
 		env.SetBool("ARCH_X86_64", true)
 	}
 
 	if instance.Target == PlatformDefaultLinuxAArch64 {
 		env.SetBool("ARCH_AARCH64", true)
+		env.SetBool("ARCH_ARM64", true)
 		env.SetBool("ARCH_X86_64", false)
 	}
 
@@ -1900,7 +1976,24 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ancestorRebase := d.srcDir != "" && d.moduleStmt.Name == "PROGRAM" && isAncestorPath(d.srcDir, instance.Path)
 
 	for _, src := range d.srcs {
-		ref, outPath, ccIns, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs, ancestorRebase)
+		// PR-35o: overlay per-source extras recorded by `SRC(...)` /
+		// `SRC_C_NO_LTO(...)` onto the module-level inputs bag for THIS
+		// source only. The composer slots `srcInputs.PerSourceCFlags`
+		// between macroPrefixMapFlags and the input path; FlatOutput
+		// selects the flat output-path layout (no `_/` infix). Plain
+		// SRCS / GLOBAL_SRCS sources have no entries in either map so
+		// the overlay is a no-op (preserves byte-exact for every other
+		// CC).
+		srcInputs := moduleInputs
+		if extras, ok := d.perSrcCFlags[src]; ok {
+			srcInputs.PerSourceCFlags = extras
+		}
+
+		if _, ok := d.flatSrcs[src]; ok {
+			srcInputs.FlatOutput = true
+		}
+
+		ref, outPath, ccIns, ok := emitOneSource(ctx, instance, d.srcDir, src, srcInputs, ancestorRebase)
 
 		if !ok {
 			continue
