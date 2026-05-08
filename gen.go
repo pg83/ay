@@ -1065,6 +1065,19 @@ func peerYaMakeExists(sourceRoot, peerPath string) bool {
 //
 // 10. Memoise and return.
 func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
+	// PR-34b: capture the seed key BEFORE applyUnknownStmt-style overlay
+	// at line 1116 (`instance.Flags = d.flags`) rebinds instance.Flags
+	// to the macro-derived FlagSet. Callers pass the seed FlagSet from
+	// `derivePeerInstance`/`inferFlagsFromPath`, which lacks the
+	// post-parse NO_PLATFORM / NO_COMPILER_WARNINGS / NO_UTIL /
+	// NO_RUNTIME / NO_LIBC bits applied by `collectModule`. Memo writes
+	// run AFTER the overlay, so without an alias the seed-key lookup at
+	// the top of this function misses every consumer's call and we
+	// re-execute the body 7-138 times per module. The fix: write the
+	// result under both the originalInstance (seed) and the
+	// post-overlay instance keys at every memo-write site below.
+	originalInstance := instance
+
 	if existing, ok := ctx.memo[instance]; ok {
 		return existing
 	}
@@ -1155,6 +1168,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			CXXFlagsGlobal:   mergeDedup(ownCXXFlagsGlobalH, peerContribs.cxxFlags),
 			COnlyFlagsGlobal: mergeDedup(ownCOnlyFlagsGlobalH, peerContribs.cOnlyFlags),
 		}
+		ctx.memo[originalInstance] = result
 		ctx.memo[instance] = result
 
 		return result
@@ -1619,6 +1633,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			CXXFlagsGlobal:   effectiveCXXFlagsGlobal,
 			COnlyFlagsGlobal: effectiveCOnlyFlagsGlobal,
 		}
+		ctx.memo[originalInstance] = result
 		ctx.memo[instance] = result
 
 		return result
@@ -1655,6 +1670,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		result.GlobalPath = instance.Path + "/" + globalArchiveName(instance.Path)
 	}
 
+	ctx.memo[originalInstance] = result
 	ctx.memo[instance] = result
 
 	return result
