@@ -1892,6 +1892,30 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
+	// PR-35y R8: track which entries are "primary sources" of the
+	// regular SRCS / JOIN_SRCS / .rl6 dispatch — distinct from
+	// header closures. The reference graph treats the two splits
+	// asymmetrically across the regular `.a` and `.global.a`
+	// archives:
+	//
+	//   - regular AR (`.a`) inputs: regular primaries + global
+	//     primaries + everyone's header/closure;
+	//   - global AR (`.global.a`) inputs: global primaries +
+	//     everyone's header/closure (NO regular primaries).
+	//
+	// Empirical reference: contrib/libs/tcmalloc/no_percpu_cache —
+	// the regular `.a` archives `aligned_alloc.c` (regular SRCS) AND
+	// every `tcmalloc/*` global SRCS source (and all 1311 shared
+	// headers). The `.global.a` archives every `tcmalloc/*` source
+	// and the same 1311 shared headers, but NOT `aligned_alloc.c`.
+	//
+	// `regularPrimariesSet` is the membership filter the global AR
+	// uses to drop these from its own input list.
+	regularPrimariesSet := map[string]struct{}{}
+	addRegularPrimary := func(p string) {
+		regularPrimariesSet[p] = struct{}{}
+	}
+
 	// PR-32 D09: auto-injected peer-CFLAG -D_musl_ for every TARGET
 	// module that is not effectively NO_PLATFORM, when the CLI says
 	// MUSL=yes. Mirrors `_BASE_UNIT`'s
@@ -1993,7 +2017,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			srcInputs.FlatOutput = true
 		}
 
-		ref, outPath, ccIns, ok := emitOneSource(ctx, instance, d.srcDir, src, srcInputs, ancestorRebase)
+		ref, outPath, ccIns, primaryCount, ok := emitOneSource(ctx, instance, d.srcDir, src, srcInputs, ancestorRebase)
 
 		if !ok {
 			continue
@@ -2002,6 +2026,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
 		addMemberInputs(ccIns)
+		// PR-35y R8: track primary source paths so the .global.a
+		// aggregator can exclude them. emitOneSource returns the
+		// ccIns slice with the leading `primaryCount` entries being
+		// the member's primary source(s) — `.cpp/.c/.cc/.cxx`/`.S`
+		// dispatch yields 1 primary; `.rl6` dispatch yields 1 (the
+		// .rl6 source) or 2 (when the `.h` companion exists on disk).
+		for i := 0; i < primaryCount && i < len(ccIns); i++ {
+			addRegularPrimary(ccIns[i])
+		}
 	}
 
 	for _, js := range d.joinSrcs {
@@ -2064,12 +2097,23 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ref, outPath := EmitCC(srcInstance, jsRel, ccIn, ctx.emit)
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
-		// PR-35d: feed the AR/LD member-input aggregator the full
-		// JS-derived CC input multiset.
-		jsGenInput := "$(BUILD_ROOT)/" + srcInstance.Path + "/" + jsRel
-		ccMemberInputs := append(make([]string, 0, 1+len(ccIncludeInputs)), jsGenInput)
-		ccMemberInputs = append(ccMemberInputs, ccIncludeInputs...)
-		addMemberInputs(ccMemberInputs)
+		// PR-35y R7: the AR/LD `inputs` slot omits the BUILD_ROOT-
+		// staged generated cpp (JS output). Reference graph confirms:
+		// util's libyutil.a never lists `$(BUILD_ROOT)/util/all_*.cpp`
+		// even though those are the primary inputs of the downstream
+		// JS-derived CC nodes. The aggregator gets only the member's
+		// scripts + joined source files + their resolved include
+		// closure (`ccIncludeInputs`).
+		addMemberInputs(ccIncludeInputs)
+		// PR-35y R8: the joined source files (`js.Sources`) are
+		// "regular primaries" — only the regular AR archives them;
+		// the .global.a aggregator drops them. Scripts and the
+		// resolved header closure flow to BOTH archives. Empirical
+		// reference: util's libyutil.a (no .global.a) and util/charset's
+		// libutil-charset.a both archive the JS member sources.
+		for _, s := range js.Sources {
+			addRegularPrimary("$(SOURCE_ROOT)/" + srcInstance.Path + "/" + s)
+		}
 	}
 
 	// GLOBAL_SRCS get their own CC nodes and a separate AR pass
@@ -2083,7 +2127,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	globalMemberInputsSeen := map[string]struct{}{}
 
 	for _, src := range d.globalSrcs {
-		ref, outPath, ccIns, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs, ancestorRebase)
+		ref, outPath, ccIns, _, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs, ancestorRebase)
 
 		if !ok {
 			continue
@@ -2195,7 +2239,32 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// shape on 24 paired AR pairs. Peer archives correctly flow into
 	// the consumer's downstream LD via the `peerArchiveRefs` slot in
 	// `EmitLD`'s call site below — only the LIBRARY AR drops them.
-	arRef := EmitAR(instance, ccRefs, ccOutputs, nil, memberInputs, ctx.emit)
+	//
+	// PR-35y R8: the regular AR receives the union of regular and
+	// global members' inputs (everyone's primaries + everyone's
+	// header closures). The reference graph confirms the union shape
+	// on tcmalloc/no_percpu_cache: its `liblibs-tcmalloc-no_percpu_cache.a`
+	// archives `aligned_alloc.c` (regular SRCS), every `tcmalloc/*`
+	// global SRCS source, and the 1286 shared header closure. Without
+	// this union the regular AR was missing the GLOBAL_SRCS' resolved
+	// closures (1286 transitive header inputs in the M2 case).
+	combinedMemberInputs := memberInputs
+
+	if len(globalMemberInputs) > 0 {
+		combinedMemberInputs = make([]string, 0, len(memberInputs)+len(globalMemberInputs))
+		combinedMemberInputs = append(combinedMemberInputs, memberInputs...)
+
+		for _, p := range globalMemberInputs {
+			if _, dup := memberInputsSeen[p]; dup {
+				continue
+			}
+
+			memberInputsSeen[p] = struct{}{}
+			combinedMemberInputs = append(combinedMemberInputs, p)
+		}
+	}
+
+	arRef := EmitAR(instance, ccRefs, ccOutputs, nil, combinedMemberInputs, ctx.emit)
 	_ = peerArchiveRefs // retained as a loop accumulator for the PROGRAM LD branch above; intentionally unused for the LIBRARY AR.
 	arPath := "$(BUILD_ROOT)/" + instance.Path + "/" + ArchiveName(instance.Path)
 
@@ -2217,7 +2286,28 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	if len(globalRefs) > 0 {
-		globalRef := EmitARGlobal(instance, globalRefs, globalOutputs, globalMemberInputs, ctx.emit)
+		// PR-35y R8: the .global.a aggregator drops every regular
+		// primary source (regular SRCS / JOIN_SRCS member sources /
+		// .rl6 source-pairs) but keeps everyone's header closure
+		// and every global primary. Empirically: tcmalloc/
+		// no_percpu_cache's `.global.a` archives all `tcmalloc/*`
+		// sources and the 1311 shared header closure, but not
+		// `aligned_alloc.c` (the regular SRCS source).
+		globalAggregated := combinedMemberInputs
+
+		if len(regularPrimariesSet) > 0 {
+			globalAggregated = make([]string, 0, len(combinedMemberInputs))
+
+			for _, p := range combinedMemberInputs {
+				if _, isPrimary := regularPrimariesSet[p]; isPrimary {
+					continue
+				}
+
+				globalAggregated = append(globalAggregated, p)
+			}
+		}
+
+		globalRef := EmitARGlobal(instance, globalRefs, globalOutputs, globalAggregated, ctx.emit)
 		result.GlobalRef = &globalRef
 		result.GlobalPath = instance.Path + "/" + globalArchiveName(instance.Path)
 	}
@@ -2567,9 +2657,18 @@ func isHeaderSource(srcRel string) bool {
 // CXXFLAGS / CONLYFLAGS, D03 ADDINCL). Per PR-29 the walker collects
 // ADDINCL/CXXFLAGS/CONLYFLAGS into moduleData and threads them into
 // EmitCC via this struct.
-func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, in ModuleCCInputs, ancestorRebase bool) (NodeRef, string, []string, bool) {
+//
+// PR-35y: returns (ref, outputPath, ccInputs, primaryCount, ok).
+// `primaryCount` is the number of leading entries in `ccInputs` that
+// are "primary sources" of this member (as opposed to header/closure
+// entries) — the .global.a aggregator drops these primaries when the
+// member belongs to regular SRCS rather than GLOBAL_SRCS. The
+// .c/.cpp/.cc/.cxx/.S/.s/.asm dispatches yield primaryCount=1; the
+// .rl6 dispatch yields 1 (just the .rl6 source) or 2 (when the `.h`
+// companion exists on disk).
+func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, in ModuleCCInputs, ancestorRebase bool) (NodeRef, string, []string, int, bool) {
 	if isHeaderSource(srcRel) {
-		return NodeRef{}, "", nil, false
+		return NodeRef{}, "", nil, 0, false
 	}
 
 	// PR-30 D06: SRCDIR rebase is now ancestor-only and only fires when
@@ -2618,7 +2717,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		inputPath := emittedSourceInputPath(srcInstance, srcRel, srcIn, ctx.sourceRoot)
 		ccInputs := append([]string{inputPath}, srcIn.IncludeInputs...)
 
-		return ref, outPath, ccInputs, true
+		return ref, outPath, ccInputs, 1, true
 	case strings.HasSuffix(srcRel, ".S"),
 		strings.HasSuffix(srcRel, ".s"),
 		strings.HasSuffix(srcRel, ".asm"):
@@ -2667,10 +2766,26 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// (retiring the util-specific path-sniff stopgap PR-35i added).
 		ref, outPath := EmitAS(srcInstance, srcRel, asIn, yasmRef, ctx.emit)
 
+		// PR-35y R8: when the module declares SRCDIR and the .S
+		// source does not exist locally at instance.Path/<srcRel>,
+		// the AR memberInput resolves at `$(SOURCE_ROOT)/<srcDir>/<srcRel>`
+		// rather than the unrebased `<instance.Path>/<srcRel>`.
+		// Empirical reference: tcmalloc/no_percpu_cache (SRCDIR=
+		// `contrib/libs/tcmalloc`) — its `tcmalloc/internal/percpu_rseq_asm.S`
+		// resolves at `contrib/libs/tcmalloc/tcmalloc/internal/percpu_rseq_asm.S`,
+		// not `contrib/libs/tcmalloc/no_percpu_cache/tcmalloc/internal/percpu_rseq_asm.S`.
+		// Same rule as composeASPaths' SRCDIR routing for AS itself
+		// (PR-35r, as.go:316-336): keeping the gen.go aggregator's
+		// path in sync with as.go's resolution.
 		asInputPath := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
+
+		if srcDir != "" && srcDir != srcInstance.Path && !sourceExistsLocally(ctx.sourceRoot, srcInstance.Path, srcRel) {
+			asInputPath = "$(SOURCE_ROOT)/" + srcDir + "/" + srcRel
+		}
+
 		asInputs := append([]string{asInputPath}, asIn.IncludeInputs...)
 
-		return ref, outPath, asInputs, true
+		return ref, outPath, asInputs, 1, true
 	case strings.HasSuffix(srcRel, ".rl6"):
 		// Host-ragel6 recursion (D31, eager per PR-28). The recursion
 		// happens here so the resulting LD's outputs[0] can be
@@ -2741,15 +2856,36 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 
 		// R6-derived CC: primary input is the BUILD_ROOT-rooted .cpp
 		// generated by ragel6. No scanner pass (the .cpp doesn't exist
-		// on disk at scan time). Inputs are the .cpp path only.
-		genInputPath := "$(BUILD_ROOT)/" + srcInstance.Path + "/" + ccSrcRel
+		// on disk at scan time).
+		//
+		// PR-35y R7: the AR/LD member-inputs aggregator excludes the
+		// BUILD_ROOT-staged generated cpp (mirror of the JS rule) and
+		// instead carries the original `.rl6` source plus its
+		// companion `.h` header. Reference graph confirms: util's
+		// libyutil.a inputs include `parser.rl6` and `parser.h`,
+		// never the `parser.rl6.cpp` BUILD_ROOT shim. The companion
+		// `.h` header is added only when a sibling file with the
+		// same basename and `.h` suffix exists on disk — the
+		// convention holds for every observed `.rl6` source in the
+		// M2 closure (util/datetime/parser.rl6 → parser.h).
+		rl6Source := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
+		ccInputs := []string{rl6Source}
+		primaryCount := 1
 
-		return ccRef, ccOut, []string{genInputPath}, true
+		companionRel := strings.TrimSuffix(srcRel, ".rl6") + ".h"
+		companionAbs := filepath.Join(ctx.sourceRoot, srcInstance.Path, companionRel)
+
+		if info, err := os.Stat(companionAbs); err == nil && !info.IsDir() {
+			ccInputs = append(ccInputs, "$(SOURCE_ROOT)/"+srcInstance.Path+"/"+companionRel)
+			primaryCount = 2
+		}
+
+		return ccRef, ccOut, ccInputs, primaryCount, true
 	}
 
 	ThrowFmt("gen: %s: unsupported source extension in %q", instance.Path, srcRel)
 
-	return NodeRef{}, "", nil, false
+	return NodeRef{}, "", nil, 0, false
 }
 
 // emittedSourceInputPath mirrors composeCCPaths' inputPath logic so

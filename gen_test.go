@@ -3411,3 +3411,279 @@ func TestEvalCond_ARCH_ARM64_Aliased(t *testing.T) {
 		t.Errorf("EvalCond(ARCH_ARM64) on default (aarch64) env = false, want true (alias for ARCH_AARCH64)")
 	}
 }
+
+// TestGen_PR35y_R7_JoinSrcs_SuppressBuildRootShim pins PR-35y R7:
+// the AR's `inputs` slot does NOT include the BUILD_ROOT-staged
+// joined-cpp shim that the JS step produces. Reference graph
+// behaviour: util's `libyutil.a` lists `all_datetime.cpp.o` (the
+// compiled object) but NEVER `$(BUILD_ROOT)/util/all_datetime.cpp`
+// (the joined cpp source itself). Pre-PR-35y, our walker added this
+// path to the AR aggregator, leaving 16 OUR-only entries on util's
+// libyutil.a (15 JOIN_SRCS + 1 .rl6.cpp shim).
+func TestGen_PR35y_R7_JoinSrcs_SuppressBuildRootShim(t *testing.T) {
+	root := t.TempDir()
+	modDir := filepath.Join(root, "joinmod")
+	Throw(os.MkdirAll(modDir, 0o755))
+
+	yamake := []byte(`LIBRARY()
+JOIN_SRCS(all_my.cpp src1.cpp src2.cpp)
+END()
+`)
+	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+
+	g := Gen(TargetCfg, root, "joinmod")
+
+	var arNode *Node
+
+	for _, n := range g.Graph {
+		if n.KV["p"] == "AR" {
+			arNode = n
+
+			break
+		}
+	}
+
+	if arNode == nil {
+		t.Fatal("no AR node emitted")
+	}
+
+	const forbidden = "$(BUILD_ROOT)/joinmod/all_my.cpp"
+
+	for _, in := range arNode.Inputs {
+		if in == forbidden {
+			t.Errorf("AR.Inputs contains %q — JS-derived BUILD_ROOT shim must be filtered (PR-35y R7)", forbidden)
+		}
+	}
+
+	// The joined source files (`src1.cpp`, `src2.cpp`) MUST appear in
+	// the AR's inputs — they are the JS member sources, not the
+	// generated cpp shim, and the reference graph carries them.
+	wantSources := map[string]bool{
+		"$(SOURCE_ROOT)/joinmod/src1.cpp": false,
+		"$(SOURCE_ROOT)/joinmod/src2.cpp": false,
+	}
+	for _, in := range arNode.Inputs {
+		if _, want := wantSources[in]; want {
+			wantSources[in] = true
+		}
+	}
+
+	for src, found := range wantSources {
+		if !found {
+			t.Errorf("AR.Inputs missing %q — JS member source must appear (PR-35y R7)", src)
+		}
+	}
+}
+
+// TestGen_PR35y_R7_RagelRl6_OriginalSourcePair pins PR-35y R7 for
+// the .rl6 case: the AR's `inputs` slot includes the original
+// `.rl6` source AND its `.h` companion (when present), but NOT the
+// BUILD_ROOT-staged generated `.rl6.cpp` shim. Reference graph
+// behaviour for util: `libyutil.a` lists `parser.rl6` and
+// `parser.h` but never `$(BUILD_ROOT)/util/_/datetime/parser.rl6.cpp`.
+func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
+	root := t.TempDir()
+	consumerDir := filepath.Join(root, "consumer")
+	Throw(os.MkdirAll(consumerDir, 0o755))
+	Throw(os.WriteFile(filepath.Join(consumerDir, "ya.make"), []byte("LIBRARY()\nSRCS(parser.rl6)\nEND()\n"), 0o644))
+	// Place the companion .h on disk so the walker discovers it.
+	Throw(os.WriteFile(filepath.Join(consumerDir, "parser.rl6"), []byte("// fixture\n"), 0o644))
+	Throw(os.WriteFile(filepath.Join(consumerDir, "parser.h"), []byte("// fixture\n"), 0o644))
+
+	// Synthetic host ragel6 stub so the host walk parses cleanly.
+	ragelDir := filepath.Join(root, "contrib/tools/ragel6/bin")
+	Throw(os.MkdirAll(ragelDir, 0o755))
+	Throw(os.WriteFile(filepath.Join(ragelDir, "ya.make"), []byte("PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n"), 0o644))
+
+	g := Gen(DefaultLinuxConfig, root, "consumer")
+
+	var arNode *Node
+
+	for _, n := range g.Graph {
+		if n.KV["p"] == "AR" && n.TargetProperties["module_dir"] == "consumer" {
+			arNode = n
+
+			break
+		}
+	}
+
+	if arNode == nil {
+		t.Fatal("no consumer AR node emitted")
+	}
+
+	const forbidden = "$(BUILD_ROOT)/consumer/_/parser.rl6.cpp"
+
+	for _, in := range arNode.Inputs {
+		if in == forbidden {
+			t.Errorf("AR.Inputs contains %q — R6-derived BUILD_ROOT shim must be filtered (PR-35y R7)", forbidden)
+		}
+	}
+
+	wantSources := map[string]bool{
+		"$(SOURCE_ROOT)/consumer/parser.rl6": false,
+		"$(SOURCE_ROOT)/consumer/parser.h":   false,
+	}
+	for _, in := range arNode.Inputs {
+		if _, want := wantSources[in]; want {
+			wantSources[in] = true
+		}
+	}
+
+	for src, found := range wantSources {
+		if !found {
+			t.Errorf("AR.Inputs missing %q — .rl6 + .h source-pair must appear (PR-35y R7)", src)
+		}
+	}
+}
+
+// TestGen_PR35y_R8_RegularARIncludesGlobalMemberInputs pins PR-35y
+// R8: the regular `.a` archive's memberInputs union BOTH regular
+// SRCS and GLOBAL_SRCS member inputs. Reference graph empirically
+// confirms this on tcmalloc/no_percpu_cache: its `.a` has 1313
+// inputs covering BOTH `aligned_alloc.c` (regular SRCS) closure AND
+// every `tcmalloc/*` GLOBAL_SRCS source closure (1311 shared
+// headers + the regular primary). Pre-PR-35y the regular AR was
+// missing the GLOBAL closure entirely.
+//
+// Conversely, the .global.a aggregator drops regular primaries
+// (the regular SRCS source files themselves) but keeps everyone's
+// header closure, mirroring the reference asymmetry.
+func TestGen_PR35y_R8_RegularARIncludesGlobalMemberInputs(t *testing.T) {
+	root := t.TempDir()
+	modDir := filepath.Join(root, "globalmod")
+	Throw(os.MkdirAll(modDir, 0o755))
+
+	yamake := []byte(`LIBRARY()
+GLOBAL_SRCS(global.cpp)
+SRCS(regular.cpp)
+END()
+`)
+	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+
+	g := Gen(TargetCfg, root, "globalmod")
+
+	var (
+		regularAR *Node
+		globalAR  *Node
+	)
+
+	for _, n := range g.Graph {
+		if n.KV["p"] != "AR" {
+			continue
+		}
+
+		if n.TargetProperties["module_tag"] == "global" {
+			globalAR = n
+		} else {
+			regularAR = n
+		}
+	}
+
+	if regularAR == nil || globalAR == nil {
+		t.Fatalf("expected both regular and global AR (got regular=%v, global=%v)", regularAR != nil, globalAR != nil)
+	}
+
+	regularInputs := map[string]bool{}
+	for _, in := range regularAR.Inputs {
+		regularInputs[in] = true
+	}
+
+	globalInputs := map[string]bool{}
+	for _, in := range globalAR.Inputs {
+		globalInputs[in] = true
+	}
+
+	const (
+		regularSrc = "$(SOURCE_ROOT)/globalmod/regular.cpp"
+		globalSrc  = "$(SOURCE_ROOT)/globalmod/global.cpp"
+	)
+
+	if !regularInputs[regularSrc] {
+		t.Errorf("regular AR.Inputs missing %q (regular primary must appear)", regularSrc)
+	}
+
+	if !regularInputs[globalSrc] {
+		t.Errorf("regular AR.Inputs missing %q — PR-35y R8 requires the regular AR to union global member inputs", globalSrc)
+	}
+
+	if !globalInputs[globalSrc] {
+		t.Errorf(".global.a AR.Inputs missing %q (global primary must appear)", globalSrc)
+	}
+
+	if globalInputs[regularSrc] {
+		t.Errorf(".global.a AR.Inputs contains %q — regular primaries must be excluded from the .global.a (PR-35y R8)", regularSrc)
+	}
+}
+
+// TestGen_PR35y_R8_AsmSrcdirRebase pins PR-35y R8: when a LIBRARY
+// declares SRCDIR and a `.S` source resolves under that SRCDIR
+// (because no local file exists at instance.Path/<srcRel>), the AR
+// aggregator's view of the source path uses the SRCDIR-rebased
+// shape `$(SOURCE_ROOT)/<srcDir>/<srcRel>`, not the unrebased
+// `$(SOURCE_ROOT)/<instance.Path>/<srcRel>`. Empirical reference:
+// tcmalloc/no_percpu_cache (SRCDIR=`contrib/libs/tcmalloc`) — its
+// `tcmalloc/internal/percpu_rseq_asm.S` resolves at
+// `contrib/libs/tcmalloc/tcmalloc/internal/percpu_rseq_asm.S` in
+// the AR's inputs.
+func TestGen_PR35y_R8_AsmSrcdirRebase(t *testing.T) {
+	root := t.TempDir()
+
+	// Module at `mod/inner` declares SRCDIR pointing at `mod`. The
+	// `.S` source `sub/foo.S` does NOT exist at `mod/inner/sub/foo.S`,
+	// so the SRCDIR-rebased branch fires.
+	Throw(os.MkdirAll(filepath.Join(root, "mod/inner"), 0o755))
+	Throw(os.WriteFile(filepath.Join(root, "mod/inner", "ya.make"), []byte(`LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PLATFORM()
+SRCDIR(mod)
+SRCS(sub/foo.S)
+END()
+`), 0o644))
+	// Place the actual source under SRCDIR (mod/sub/foo.S), NOT under
+	// instance.Path (mod/inner/sub/foo.S). The composer's
+	// sourceExistsLocally probe must return false at the local path
+	// so the SRCDIR branch wins.
+	Throw(os.MkdirAll(filepath.Join(root, "mod/sub"), 0o755))
+	Throw(os.WriteFile(filepath.Join(root, "mod/sub", "foo.S"), []byte("// asm\n"), 0o644))
+
+	g := Gen(TargetCfg, root, "mod/inner")
+
+	var arNode *Node
+
+	for _, n := range g.Graph {
+		if n.KV["p"] == "AR" && n.TargetProperties["module_dir"] == "mod/inner" {
+			arNode = n
+
+			break
+		}
+	}
+
+	if arNode == nil {
+		t.Fatal("no AR node emitted for mod/inner")
+	}
+
+	const want = "$(SOURCE_ROOT)/mod/sub/foo.S"
+	const forbidden = "$(SOURCE_ROOT)/mod/inner/sub/foo.S"
+
+	for _, in := range arNode.Inputs {
+		if in == forbidden {
+			t.Errorf("AR.Inputs contains %q — SRCDIR rebase must redirect to %q (PR-35y R8)", forbidden, want)
+		}
+	}
+
+	found := false
+
+	for _, in := range arNode.Inputs {
+		if in == want {
+			found = true
+
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("AR.Inputs missing %q — PR-35y R8 SRCDIR rebase for `.S` source", want)
+	}
+}
