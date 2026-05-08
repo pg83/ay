@@ -49,6 +49,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // SysIncl is one record from a sysincl YAML file. Mappings are
@@ -146,15 +147,62 @@ type PerSourceView struct {
 	// includerKeyed lists every KeyBySource=false record. Their
 	// filters are tested per Lookup against the includer.
 	includerKeyed []*SysIncl
+	// includerFilterCache memoises the filter-match step in
+	// LookupIncluderKeyed: for a given includerPath, which records
+	// in `includerKeyed` accept it. The value is the cached subset
+	// of accepting records — header-INdependent. Reused across every
+	// (includerPath, *) Lookup against this view, collapsing the
+	// per-call linear filter walk (~25 records, RE2 / prefix matching)
+	// into one map probe + iteration over the pre-filtered subset.
+	//
+	// Pointer-typed so the cache survives the value-type copies Go
+	// performs when a `PerSourceView` is returned by value or passed
+	// as a method receiver — every copy points at the same map. In
+	// production, scanner.go's `anySrcView` is the single view that
+	// services all includer-keyed lookups (`viewCache` per-source
+	// views are only used for source-keyed reads), so one cache
+	// instance accumulates the entire workload's reuse.
+	//
+	// Plain map + sync.RWMutex (sync.Map proved slower in PR-35e's
+	// experiments for this access pattern — many small subsets,
+	// frequent reads).
+	includerFilterCache *includerFilterCache
+}
+
+// includerFilterCache memoises filter-match results across a SysInclSet's
+// includer-keyed records. Lives behind a pointer so multiple
+// PerSourceView instances built from the same SysInclSet share the
+// memoisation table. RWMutex permits concurrent reads from parallel
+// scanner workers (PR-32+ may parallelise per-source).
+type includerFilterCache struct {
+	mu sync.RWMutex
+	// active maps includerPath → subset of includerKeyed records
+	// whose filters accepted that path. nil-slice value distinguishes
+	// "cached, no records match" from "not cached".
+	active map[string][]*SysIncl
+}
+
+func newIncluderFilterCache() *includerFilterCache {
+	return &includerFilterCache{active: make(map[string][]*SysIncl, 64)}
 }
 
 // PreparePerSource returns a Lookup view with SOURCE-keyed filters
 // pre-resolved against the given source path. The view is safe to
 // reuse for every Lookup call within one WalkClosure.
+//
+// A fresh `includerFilterCache` is allocated per view. Each view's
+// cache fills independently as its includer-keyed lookups happen;
+// in production, scanner.go's `anySrcView` is the only view that
+// services includer-keyed reads, so one long-lived cache accumulates
+// reuse across the whole archiver closure. Per-source views obtained
+// from `viewCache[sourceRel]` carry their own caches but never see
+// includer-keyed traffic (scanner routes through anySrcView), so
+// those caches stay empty and harmless.
 func (s SysInclSet) PreparePerSource(sourcePath string) PerSourceView {
 	view := PerSourceView{
-		activeSourceKeyed: make([]*SysIncl, 0, len(s)),
-		includerKeyed:     make([]*SysIncl, 0, len(s)),
+		activeSourceKeyed:   make([]*SysIncl, 0, len(s)),
+		includerKeyed:       make([]*SysIncl, 0, len(s)),
+		includerFilterCache: newIncluderFilterCache(),
 	}
 
 	for i := range s {
@@ -267,18 +315,23 @@ func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool) {
 // same SysInclSet — though Go semantics mean each view has its own
 // slice header pointing at the same underlying records). Cache by
 // (includer, target) for cross-source reuse.
+//
+// The filter-match step (`rec.Filter.match(includerPath)` over every
+// includer-keyed record) is memoised by includerPath alone via
+// `includerFilterCache`: many distinct (includerPath, header) probes
+// share the same includerPath, so the linear filter walk runs once per
+// unique includerPath and the per-header path then only iterates the
+// already-accepting subset. PR-34j.
 func (v PerSourceView) LookupIncluderKeyed(includerPath, header string) ([]string, bool) {
+	active := v.activeIncluderRecords(includerPath)
+
 	var (
 		out   []string
 		found bool
 		seen  map[string]struct{}
 	)
 
-	for _, rec := range v.includerKeyed {
-		if rec.Filter != nil && !rec.Filter.match(includerPath) {
-			continue
-		}
-
+	for _, rec := range active {
 		paths, ok := rec.Mappings[header]
 
 		if !ok {
@@ -306,6 +359,65 @@ func (v PerSourceView) LookupIncluderKeyed(includerPath, header string) ([]strin
 	}
 
 	return out, found
+}
+
+// activeIncluderRecords returns the subset of `v.includerKeyed` whose
+// filters accept `includerPath`. Memoised on the view's
+// includerFilterCache; the cache is includer-keyed only (independent of
+// the per-Lookup `header` argument), so every header probe sharing the
+// same includer pays one map probe instead of a fresh ~25-record
+// filter walk.
+func (v PerSourceView) activeIncluderRecords(includerPath string) []*SysIncl {
+	if v.includerFilterCache == nil {
+		// Defensive: a hand-constructed PerSourceView without the
+		// cache field still works correctly, just without memo.
+		return v.computeActiveIncluderRecords(includerPath)
+	}
+
+	c := v.includerFilterCache
+
+	c.mu.RLock()
+	cached, ok := c.active[includerPath]
+	c.mu.RUnlock()
+
+	if ok {
+		return cached
+	}
+
+	active := v.computeActiveIncluderRecords(includerPath)
+
+	c.mu.Lock()
+	// Re-check after the upgrade: a concurrent reader may have populated
+	// the entry between our RUnlock and Lock. First-writer-wins keeps
+	// the slice identity stable for any reader that already saw it.
+	if existing, dup := c.active[includerPath]; dup {
+		c.mu.Unlock()
+
+		return existing
+	}
+
+	c.active[includerPath] = active
+	c.mu.Unlock()
+
+	return active
+}
+
+// computeActiveIncluderRecords walks v.includerKeyed once, returning
+// the records whose filters accept includerPath. Returns nil when none
+// match (distinct from an unset map entry — the cache stores the nil
+// slice so a "no match" probe also takes the fast path).
+func (v PerSourceView) computeActiveIncluderRecords(includerPath string) []*SysIncl {
+	var active []*SysIncl
+
+	for _, rec := range v.includerKeyed {
+		if rec.Filter != nil && !rec.Filter.match(includerPath) {
+			continue
+		}
+
+		active = append(active, rec)
+	}
+
+	return active
 }
 
 // linuxMuslSysInclOrder lists the platform-INDEPENDENT sysincl YAML
