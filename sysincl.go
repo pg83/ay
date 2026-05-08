@@ -538,8 +538,21 @@ type sourceFilter struct {
 	unsupported bool
 }
 
+// filterAlt holds one alt of a sourceFilter. An alt matches when:
+//   - the path does not start with any excludePrefix, AND
+//   - one of (literalPrefix, re) is satisfied. literalPrefix is a
+//     fast-path: when set, `strings.HasPrefix(path, literalPrefix)`
+//     is the positive criterion and `re` is left nil. When neither
+//     literalPrefix nor re is set the alt accepts every path that
+//     survived the excludes (matches `.*` / no positive constraint).
+//
+// Hot-path note: 129/169 source_filter patterns observed in
+// build/sysincl/*.yml are simple `^literal-prefix` regexes. Replacing
+// `re.MatchString` with `strings.HasPrefix` avoids the RE2 NFA
+// engine's per-call overhead in the common case.
 type filterAlt struct {
 	excludePrefixes []string
+	literalPrefix   string
 	re              *regexp.Regexp
 }
 
@@ -549,8 +562,8 @@ func (f *sourceFilter) match(sourcePath string) bool {
 		return false
 	}
 
-	for _, alt := range f.alts {
-		if alt.matches(sourcePath) {
+	for i := range f.alts {
+		if f.alts[i].matches(sourcePath) {
 			return true
 		}
 	}
@@ -563,6 +576,10 @@ func (a *filterAlt) matches(sourcePath string) bool {
 		if strings.HasPrefix(sourcePath, p) {
 			return false
 		}
+	}
+
+	if a.literalPrefix != "" {
+		return strings.HasPrefix(sourcePath, a.literalPrefix)
 	}
 
 	if a.re == nil {
@@ -622,26 +639,40 @@ func compileSourceFilter(name string, lineno int, pat string) *sourceFilter {
 						ThrowFmt("sysincl: %s:%d: unsupported negative lookahead position in %q (residual after ^(?!): %q)", name, lineno, altStr, residual)
 					}
 
-					re, err := regexp.Compile(residual)
+					// `.*` after the lookahead is a no-op positive
+					// constraint — the lookahead already gated the path
+					// and the rest accepts anything.
+					if residual == ".*" {
+						// alt.re stays nil; alt.literalPrefix stays "".
+						// The exclude prefixes are the only constraint.
+					} else if lit := extractLiteralAnchoredPrefix(residual); lit != "" {
+						alt.literalPrefix = lit
+					} else {
+						re, err := regexp.Compile(residual)
 
-					if err != nil {
-						ThrowFmt("sysincl: %s:%d: cannot compile alt residual %q: %v", name, lineno, residual, err)
+						if err != nil {
+							ThrowFmt("sysincl: %s:%d: cannot compile alt residual %q: %v", name, lineno, residual, err)
+						}
+
+						alt.re = re
 					}
-
-					alt.re = re
 				}
 			} else {
 				if strings.Contains(altStr, "(?!") {
 					ThrowFmt("sysincl: %s:%d: unsupported negative lookahead position in %q", name, lineno, altStr)
 				}
 
-				re, err := regexp.Compile(altStr)
+				if lit := extractLiteralAnchoredPrefix(altStr); lit != "" {
+					alt.literalPrefix = lit
+				} else {
+					re, err := regexp.Compile(altStr)
 
-				if err != nil {
-					ThrowFmt("sysincl: %s:%d: cannot compile alt %q: %v", name, lineno, altStr, err)
+					if err != nil {
+						ThrowFmt("sysincl: %s:%d: cannot compile alt %q: %v", name, lineno, altStr, err)
+					}
+
+					alt.re = re
 				}
-
-				alt.re = re
 			}
 
 			f.alts = append(f.alts, alt)
@@ -805,4 +836,37 @@ func containsRegexMeta(s string) bool {
 	}
 
 	return false
+}
+
+// extractLiteralAnchoredPrefix returns the literal prefix when `pat` is
+// exactly `^literalChars` (anchored start, followed by characters that
+// are not RE2 metacharacters), else returns "". This is the hot-path
+// optimisation for source_filter regexes: empirically 129/169 patterns
+// in build/sysincl/*.yml have this shape (e.g. `^contrib/libs/musl`,
+// `^contrib/libs/jemalloc/`), so replacing the RE2 engine call with a
+// `strings.HasPrefix` saves measurable Lookup-time overhead.
+//
+// Returns "" for:
+//   - patterns lacking a leading `^` anchor.
+//   - patterns whose body contains any RE2 metacharacter (the residual
+//     would then be a real regex, not a literal prefix).
+//   - the empty literal (`^` alone) — signalling "no fast path"; the
+//     caller falls through to compile a regex (which itself is then a
+//     trivial `.*`-equivalent, but correctness is upstream's job).
+func extractLiteralAnchoredPrefix(pat string) string {
+	if !strings.HasPrefix(pat, "^") {
+		return ""
+	}
+
+	body := pat[1:]
+
+	if body == "" {
+		return ""
+	}
+
+	if containsRegexMeta(body) {
+		return ""
+	}
+
+	return body
 }
