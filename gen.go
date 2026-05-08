@@ -2023,7 +2023,17 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// member, so its closure is the union of member closures).
 		joinClosure := joinSrcsIncludeClosure(ctx, srcInstance, js.Sources, moduleInputs)
 
-		jsRef, joinOut := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.emit)
+		// PR-35s: anchor the JS node to the outer-target platform
+		// (`ctx.cfg.Target.ID`) regardless of whether this module
+		// instance was reached through a host-PROGRAM walk. The
+		// reference graph emits every JS (JOIN_SRCS) node on
+		// `default-linux-aarch64` — including the 7 JOIN_SRCS in
+		// `contrib/tools/ragel6/bin` whose surrounding LD lives on
+		// the host axis. Only the JS Platform axis detaches; the
+		// downstream JS-derived CC node below continues to compile
+		// at `srcInstance.Target` (host x86_64 for ragel6/bin) so
+		// the .pic.o output stays on the correct compile axis.
+		jsRef, joinOut := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.cfg.Target.ID, ctx.emit)
 
 		// EmitJS returns a $(BUILD_ROOT)/<srcInstance.Path>/<name>
 		// absolute path; convert to srcInstance-relative for the
