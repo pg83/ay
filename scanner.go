@@ -46,6 +46,21 @@ import (
 // groups: directive (`include` or `include_next`) and target.
 var includeRe = regexp.MustCompile(`^\s*#\s*(include|include_next)\s*[<"]([^>"]+)[>"]`)
 
+// yasmIncludeRe matches NASM/yasm `%include` directives in `.asm`/
+// `.asi` source files. The directive token is case-insensitive
+// (`%include` and `%INCLUDE` both occur in the asmlib sources —
+// `cachesize64.asm`'s `%include "defs.asm"` uses lowercase, while
+// `mersenne64.asm`/`mother64.asm`/`sfmt64.asm` use uppercase
+// `%INCLUDE "randomah.asi"`). Both quoted and angle-bracket forms
+// are accepted; in practice only quoted form appears in the M2
+// closure. Single capture group: target.
+//
+// PR-35x: introduced for the asmlib AS scan path (PR-35t R4
+// closure). Without this regex the AS scanner missed
+// `defs.asm`/`instrset64.asm`/`randomah.asi` from 25 asmlib AS
+// nodes plus 1 AR aggregator (26 L2-divergent pairs).
+var yasmIncludeRe = regexp.MustCompile(`(?i)^\s*%\s*include\s*[<"]([^>"]+)[>"]`)
+
 // includeKind discriminates `<...>` (system) from `"..."` (quoted).
 // `#include_next` retains its directive form via `next` and is
 // otherwise treated as system for search-path resolution.
@@ -822,6 +837,13 @@ func (s *IncludeScanner) walkSubgraphTainted(absPath string, ctx *ScanContext, c
 // do not exist (the caller's resolver dropped them already, but DFS
 // may also reach a dangling path through a sysincl mapping that
 // names a file the tree does not have).
+//
+// PR-35x: dispatches on file extension. `.asm`/`.asi` files (yasm/
+// NASM assembly) use the `parseYasmIncludes` path which matches
+// `%include` directives; everything else uses the C/C++ `#include`
+// regex. The two syntaxes share `includeDirective` and the rest of
+// the resolver pipeline — yasm `%include "foo.asm"` resolves through
+// the same search-path / sysincl machinery as a quoted C include.
 func (s *IncludeScanner) parseIncludes(absPath string) []includeDirective {
 	// PR-34n: lock removed (single-goroutine).
 	if cached, ok := s.parsed[absPath]; ok {
@@ -836,6 +858,24 @@ func (s *IncludeScanner) parseIncludes(absPath string) []includeDirective {
 		return nil
 	}
 
+	var out []includeDirective
+
+	if isYasmLike(absPath) {
+		out = parseYasmIncludes(data)
+	} else {
+		out = parseCIncludes(data)
+	}
+
+	s.parsed[absPath] = out
+
+	return out
+}
+
+// parseCIncludes extracts C/C++ `#include` / `#include_next` directives
+// from `data`. Block-comment / line-comment / string-literal regions
+// are stripped first via `stripComments` so the regex never matches
+// `#include` text inside non-code spans (PR-35u motivator).
+func parseCIncludes(data []byte) []includeDirective {
 	// PR-35u: strip C-style block comments, line comments, and string-
 	// literal payloads before regex match. The regex would otherwise
 	// fire on `#include` text inside `/* ... */` blocks (the dominant
@@ -896,9 +936,84 @@ func (s *IncludeScanner) parseIncludes(absPath string) []includeDirective {
 		out = append(out, includeDirective{kind: kind, next: next, target: target})
 	})
 
-	s.parsed[absPath] = out
+	return out
+}
+
+// parseYasmIncludes extracts NASM/yasm `%include` directives from
+// `data`. The directive token is matched case-insensitively
+// (`%include` / `%INCLUDE` both occur in asmlib). yasm's `;` line
+// comments are not stripped — the `^\s*%include` anchor cannot fire
+// from inside a `;`-prefixed line, and yasm has no C-style block
+// comments. String literals ARE preserved verbatim because, as in
+// the C scanner, the directive's quoted form `%include "foo.asm"`
+// IS a string literal at the lexer level; stripping the payload
+// would erase every yasm include in the closure.
+//
+// The result uses the same `includeDirective` shape as C includes,
+// with `next: false` (no `%include_next` exists in NASM/yasm) and
+// kind discriminated by the bracket character (`<` → system, `"` →
+// quoted). Resolution flows through the same `resolve()` pipeline
+// — quoted form prefers the includer's directory then own/peer
+// ADDINCL, exactly the path that brings `defs.asm` /
+// `instrset64.asm` / `randomah.asi` into the asmlib AS closures.
+func parseYasmIncludes(data []byte) []includeDirective {
+	out := make([]includeDirective, 0, 4)
+
+	eachLine(data, func(line []byte) {
+		// Short-circuit lines without `%` before invoking the regex
+		// engine — most yasm source lines are instruction mnemonics
+		// or labels that never start with `%`.
+		if bytes.IndexByte(line, '%') < 0 {
+			return
+		}
+
+		m := yasmIncludeRe.FindSubmatchIndex(line)
+
+		if m == nil {
+			return
+		}
+
+		// Discriminate kind by the bracket character. yasm overwhelmingly
+		// uses the quoted form in practice (every observed asmlib
+		// `%include` is quoted); the angle-bracket branch is included
+		// for parity with the C scanner so a `%include <foo>` form, if
+		// it ever appears, resolves through search-path-only semantics.
+		kind := includeSystem
+
+		idx := indexOfAngleOrQuote(line)
+		if idx >= 0 && line[idx] == '"' {
+			kind = includeQuoted
+		}
+
+		// m[2:4] are the target capture's byte offsets (the regex has
+		// only one capture group; m[0:2] is the full match span).
+		target := string(line[m[2]:m[3]])
+
+		out = append(out, includeDirective{kind: kind, next: false, target: target})
+	})
 
 	return out
+}
+
+// isYasmLike returns true when `absPath` ends with `.asm` or `.asi`
+// — the NASM/yasm assembly source extensions. `.S`/`.s` files use
+// GAS / AT&T syntax with C preprocessor `#include` directives and
+// continue to use the C-include scanner path.
+func isYasmLike(absPath string) bool {
+	idx := strings.LastIndexByte(absPath, '.')
+
+	if idx < 0 {
+		return false
+	}
+
+	ext := absPath[idx:]
+
+	switch ext {
+	case ".asm", ".asi":
+		return true
+	}
+
+	return false
 }
 
 // resolve returns the absolute paths the include directive resolves
