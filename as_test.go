@@ -256,3 +256,172 @@ func TestEmitAS_KV(t *testing.T) {
 		t.Errorf("kv:\n  got:  %#v\n  want: %#v", got.KV, want)
 	}
 }
+
+// TestEmitAS_MuslHost_Ceill_ByteExact (PR-35a) pins the cmd_args bundle
+// for a host x86_64 musl-self assembly node against the reference graph
+// (`$(BUILD_ROOT)/contrib/libs/musl/_/src/math/x86_64/ceill.s.o`). Total
+// 109 args: x86_64 toolchain + hostCFlags / hostDefines / muslExtraDefines
+// + ndebugPicBlock × 2 with hostSseFeatures between + the tail
+// muslCcIncludesX8664 set. Verifies that:
+//
+//   - target triple is x86_64-linux-gnu (NOT aarch64-linux-gnu).
+//   - no `-march=` flag (host is generic x86_64).
+//   - `-D_musl_=1` is present (muslExtraDefines).
+//   - host_platform=true and tags=["tool"].
+func TestEmitAS_MuslHost_Ceill_ByteExact(t *testing.T) {
+	const targetOut = "$(BUILD_ROOT)/contrib/libs/musl/_/src/math/x86_64/ceill.s.o"
+
+	raw, err := os.ReadFile(referenceGraphPath)
+
+	if err != nil {
+		t.Skipf("reference graph not available (%v); skipping host musl AS byte-exact test", err)
+	}
+
+	var g Graph
+	Throw(json.Unmarshal(raw, &g))
+
+	var ref *Node
+
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0] == targetOut {
+			ref = n
+
+			break
+		}
+	}
+
+	if ref == nil {
+		t.Fatalf("reference host musl AS node with output %q not found", targetOut)
+	}
+
+	emit := NewBufferedEmitter()
+	_, outPath := EmitAS(muslHostInstance("contrib/libs/musl"), "src/math/x86_64/ceill.s", nil, nil, nil, emit)
+
+	if outPath != targetOut {
+		t.Errorf("outPath = %q, want %q", outPath, targetOut)
+	}
+
+	if len(emit.nodes) != 1 {
+		t.Fatalf("emitter buffered %d nodes, want 1", len(emit.nodes))
+	}
+
+	got := emit.nodes[0]
+	wantArgs := ref.Cmds[0].CmdArgs
+
+	if len(got.Cmds[0].CmdArgs) != len(wantArgs) {
+		t.Fatalf("cmd_args length = %d, want %d", len(got.Cmds[0].CmdArgs), len(wantArgs))
+	}
+
+	for i := range wantArgs {
+		if got.Cmds[0].CmdArgs[i] != wantArgs[i] {
+			t.Errorf("cmd_args[%d]:\n  got:  %q\n  want: %q", i, got.Cmds[0].CmdArgs[i], wantArgs[i])
+		}
+	}
+
+	if !got.HostPlatform {
+		t.Errorf("host_platform: got false, want true")
+	}
+
+	if len(got.Tags) != 1 || got.Tags[0] != "tool" {
+		t.Errorf("tags = %v, want [\"tool\"]", got.Tags)
+	}
+
+	if got.Platform != string(PlatformDefaultLinuxX8664) {
+		t.Errorf("platform = %q, want %q", got.Platform, PlatformDefaultLinuxX8664)
+	}
+
+	t.Logf("cmd_args length = %d (reference = %d)", len(got.Cmds[0].CmdArgs), len(wantArgs))
+}
+
+// TestEmitAS_HostNonMusl_X8664Chkstk_Prologue (PR-35a) pins the cmd_args
+// PROLOGUE for a host x86_64 non-musl AS node
+// (`$(BUILD_ROOT)/contrib/libs/cxxsupp/builtins/_/x86_64/chkstk.S.o`)
+// against the reference. The reference is 98 args; ours emits 90 (the
+// trailing 8-arg module-specific include set is not threaded — pre-existing
+// PR-33-C2_06 limitation deferred to a follow-up). The prologue and
+// suppression block (90 args, indices 0..89) are byte-exact: x86_64
+// toolchain + hostCFlags / hostDefines + ndebugPicBlock × 2 with
+// hostSseFeatures between, NO muslExtraDefines, NO -march, NO -D_musl_=1.
+func TestEmitAS_HostNonMusl_X8664Chkstk_Prologue(t *testing.T) {
+	const targetOut = "$(BUILD_ROOT)/contrib/libs/cxxsupp/builtins/_/x86_64/chkstk.S.o"
+
+	raw, err := os.ReadFile(referenceGraphPath)
+
+	if err != nil {
+		t.Skipf("reference graph not available (%v); skipping host non-musl AS prologue test", err)
+	}
+
+	var g Graph
+	Throw(json.Unmarshal(raw, &g))
+
+	var ref *Node
+
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0] == targetOut {
+			ref = n
+
+			break
+		}
+	}
+
+	if ref == nil {
+		t.Fatalf("reference host non-musl AS node with output %q not found", targetOut)
+	}
+
+	emit := NewBufferedEmitter()
+	_, outPath := EmitAS(hostInstance("contrib/libs/cxxsupp/builtins"), "x86_64/chkstk.S", nil, nil, nil, emit)
+
+	if outPath != targetOut {
+		t.Errorf("outPath = %q, want %q", outPath, targetOut)
+	}
+
+	if len(emit.nodes) != 1 {
+		t.Fatalf("emitter buffered %d nodes, want 1", len(emit.nodes))
+	}
+
+	got := emit.nodes[0]
+	gotArgs := got.Cmds[0].CmdArgs
+	wantArgs := ref.Cmds[0].CmdArgs
+
+	// Pin the prologue (everything up to and including the source-path
+	// argument) byte-exact. The trailing module-specific includes
+	// (-I$(BUILD_ROOT) + 7 musl/linux-headers paths) are PR-33-C2_06
+	// territory; out-of-scope for PR-35a.
+	const wantPrologueLen = 90
+
+	if len(gotArgs) != wantPrologueLen {
+		t.Fatalf("cmd_args length = %d, want %d (prologue only; module includes deferred to PR-33-C2_06)", len(gotArgs), wantPrologueLen)
+	}
+
+	for i := 0; i < wantPrologueLen; i++ {
+		if gotArgs[i] != wantArgs[i] {
+			t.Errorf("cmd_args[%d]:\n  got:  %q\n  want: %q", i, gotArgs[i], wantArgs[i])
+		}
+	}
+
+	// Toolchain identity assertions: x86_64-linux-gnu, no -march,
+	// no -D_musl_=1.
+	if gotArgs[1] != "--target=x86_64-linux-gnu" {
+		t.Errorf("cmd_args[1] = %q, want --target=x86_64-linux-gnu", gotArgs[1])
+	}
+
+	for _, a := range gotArgs {
+		if a == "-march=armv8-a" {
+			t.Errorf("non-musl host AS must not carry -march=armv8-a")
+		}
+
+		if a == "-D_musl_=1" {
+			t.Errorf("non-musl host AS must not carry -D_musl_=1")
+		}
+	}
+
+	if !got.HostPlatform {
+		t.Errorf("host_platform: got false, want true")
+	}
+
+	if len(got.Tags) != 1 || got.Tags[0] != "tool" {
+		t.Errorf("tags = %v, want [\"tool\"]", got.Tags)
+	}
+
+	t.Logf("prologue cmd_args byte-exact 0..%d (reference total = %d; %d-arg include tail deferred)", wantPrologueLen-1, len(wantArgs), len(wantArgs)-wantPrologueLen)
+}
