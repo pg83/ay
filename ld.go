@@ -27,13 +27,16 @@ package main
 // pins each of the 4 cmd_args slices entry-by-entry; if a flag bundle
 // drifts the test fails with the offending index.
 //
-// Inputs (R14 — non-alphabetical, follows ymake's emission order, NOT
-// sorted): pyplugin, then global archives, then own .cpp.o files
-// (e.g. main.cpp.o), then the script bundle (vcs_info.py,
+// Inputs: PR-35b closes PR-31-D09 — the BUILD_ROOT-rooted block
+// (peer .a archives + pyplugin + .global.a + own .cpp.o files) is
+// emitted as one alphabetically-sorted set, then the 7-script bundle
+// in REGISTRATION ORDER (NOT alphabetical: vcs_info.py,
 // svn_interface.c, link_exe.py, thinlto_cache.py,
 // process_command_files.py, process_whole_archive_option.py,
-// fs_tools.py). The ordering is verified against the reference
-// `tools/archiver/archiver` LD node's `inputs` array.
+// fs_tools.py), then the union of every member CC's inputs (source +
+// transitive headers) in DFS-discovery order. Verified against the
+// reference `tools/archiver/archiver` LD node's `inputs` array
+// (1052 entries).
 //
 // Per D33 the rule takes a `ModuleInstance`. PR-24 supports only
 // PROGRAM modules built with `Flags.PIC=false` (target build); host
@@ -164,11 +167,12 @@ func EmitLD(
 		{CmdArgs: cmd3, Env: envVcsOnly},
 	}
 
-	inputs := composeLDInputs(instance.Path, ccPaths, pluginPaths, globalPaths)
+	inputs := composeLDInputs(instance.Path, ccPaths, peerLibPaths, pluginPaths, globalPaths)
 
-	// PR-31 D11: append the per-CC member inputs (source + headers)
-	// after the script bundle, deduplicated against the existing set.
-	// Matches the sg.json LD shape: archives + .o (interleaved by
+	// PR-31 D11 + PR-35b: append the per-CC member inputs (source +
+	// headers) after the script bundle, deduplicated against the
+	// existing set. Matches the sg.json LD shape: BUILD_ROOT block
+	// (peers + plugins + globals + own .o, alphabetically sorted by
 	// composeLDInputs) + 7 scripts + UNION-of-CC-inputs.
 	inputSet := map[string]struct{}{}
 	for _, p := range inputs {
@@ -429,20 +433,25 @@ func composeLDCmdLinkOrCopy(modulePath string) []string {
 	}
 }
 
-// composeLDInputs composes the `inputs` array for an LD node. The
-// ordering is hand-pinned against the reference graph and is NOT
-// alphabetical:
+// composeLDInputs composes the `inputs` array for an LD node. PR-35b
+// closure of PR-31-D09: the BUILD_ROOT block now interleaves peer-
+// archive paths with plugins, global archives, and own .o files, all
+// sorted alphabetically as one block (matching the sg.json shape).
 //
-//  1. plugin paths (BUILD_ROOT, sorted alphabetically among
-//     themselves — only one in the M2 archiver case so the order is
-//     trivially correct).
-//  2. global archive paths (BUILD_ROOT, sorted alphabetically
-//     among themselves; one in the M2 archiver case).
-//  3. own .cpp.o files (BUILD_ROOT, in caller order).
-//  4. The 7-script bundle in REGISTRATION ORDER (NOT alphabetical):
+// Layout:
+//
+//  1. BUILD_ROOT block (alphabetically sorted as one set):
+//     - peer LIBRARY archive paths (BUILD_ROOT-relative, prefixed
+//     with $(BUILD_ROOT)/)
+//     - plugin paths (already $(BUILD_ROOT)-rooted by caller)
+//     - global archive paths (BUILD_ROOT-relative, prefixed)
+//     - own .cpp.o files (already $(BUILD_ROOT)-rooted by caller)
+//  2. The 7-script bundle in REGISTRATION ORDER (NOT alphabetical):
 //     vcs_info.py, svn_interface.c, link_exe.py, thinlto_cache.py,
 //     process_command_files.py, process_whole_archive_option.py,
 //     fs_tools.py.
+//  3. Caller appends member-CC inputs (source + headers) after this
+//     function returns.
 //
 // Note that `__vcs_version__.c.o` is NOT in inputs even though it is
 // consumed by cmd[2] — it is an intermediate produced by cmd[1]
@@ -450,39 +459,27 @@ func composeLDCmdLinkOrCopy(modulePath string) []string {
 // `__vcs_version__.c` is not in inputs — cmd[0] generates it
 // in-place.
 //
-// The plugin/global slices are sorted alphabetically (within their
-// respective sections) before composition so two callers that supply
-// the same set in different orders produce the same `inputs` array;
-// the ymake reference happens to provide them already-sorted, so a
-// sort-on-emit is a no-op for the byte-exact test but a defence
-// against a future caller's slip.
-func composeLDInputs(modulePath string, ccPaths, pluginPaths, globalPaths []string) []string {
-	out := make([]string, 0, len(pluginPaths)+len(globalPaths)+len(ccPaths)+7)
+// The reference verification (tools/archiver) shows 35 entries in the
+// BUILD_ROOT block: 32 peer .a + 1 plugin + 1 global .global.a + 1
+// own main.cpp.o, all interleaved in alphabetical order.
+func composeLDInputs(modulePath string, ccPaths, peerLibPaths, pluginPaths, globalPaths []string) []string {
+	buildRootBlock := make([]string, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(ccPaths))
 
-	// Plugins: $(BUILD_ROOT)-rooted, alphabetised within the section.
-	if len(pluginPaths) > 0 {
-		sortedPlugins := append([]string{}, pluginPaths...)
-		sort.Strings(sortedPlugins)
-		out = append(out, sortedPlugins...)
+	for _, p := range peerLibPaths {
+		buildRootBlock = append(buildRootBlock, "$(BUILD_ROOT)/"+p)
 	}
 
-	// Globals: BUILD_ROOT-relative in cmd_args; full $(BUILD_ROOT)/
-	// prefix for inputs. Alphabetised within the section.
-	if len(globalPaths) > 0 {
-		sortedGlobals := make([]string, 0, len(globalPaths))
-		for _, g := range globalPaths {
-			sortedGlobals = append(sortedGlobals, "$(BUILD_ROOT)/"+g)
-		}
-		sort.Strings(sortedGlobals)
-		out = append(out, sortedGlobals...)
+	buildRootBlock = append(buildRootBlock, pluginPaths...)
+
+	for _, g := range globalPaths {
+		buildRootBlock = append(buildRootBlock, "$(BUILD_ROOT)/"+g)
 	}
 
-	// Own .cpp.o files in caller order. The reference has only one
-	// (main.cpp.o) so the ordering question is moot for the byte-
-	// exact pin; multi-source PROGRAM emission lands in PR-25+.
-	out = append(out, ccPaths...)
+	buildRootBlock = append(buildRootBlock, ccPaths...)
+	sort.Strings(buildRootBlock)
 
-	// 7-script bundle in REGISTRATION ORDER (NOT alphabetical).
+	out := make([]string, 0, len(buildRootBlock)+len(ldScriptInputs))
+	out = append(out, buildRootBlock...)
 	out = append(out, ldScriptInputs...)
 
 	_ = modulePath // reserved for future use (path-dependent inputs).
