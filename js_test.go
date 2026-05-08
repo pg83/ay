@@ -56,8 +56,14 @@ func TestEmitJS_UtilCharsetAllCharset_ByteExact(t *testing.T) {
 		"wide.cpp",
 	}
 
+	// PR-35d: feed EmitJS the reference's actual per-source include
+	// closure (everything past index 7: the 8-entry scripts+sources
+	// prefix). This exercises the closure-threading path and pins
+	// the JS node to the reference's exact 941 inputs byte-for-byte.
+	closure := append([]string(nil), ref.Inputs[8:]...)
+
 	e := NewBufferedEmitter()
-	_, outPath := EmitJS(targetInstance("util/charset"), "all_charset.cpp", sources, e)
+	_, outPath := EmitJS(targetInstance("util/charset"), "all_charset.cpp", sources, closure, e)
 
 	if outPath != refJSOutput {
 		t.Errorf("outPath = %q, want %q", outPath, refJSOutput)
@@ -87,14 +93,13 @@ func TestEmitJS_UtilCharsetAllCharset_ByteExact(t *testing.T) {
 		t.Errorf("cmds[0].env mismatch:\n  got  %v\n  want %v", got.Cmds[0].Env, ref.Cmds[0].Env)
 	}
 
-	// Hard-pinned to current emitter output (documented prefix subset;
-	// PR-31-D08 in defects.md tracks the full-set expansion deferred
-	// to PR-32+). A drop below 8 will fail loudly; the prefix property
-	// is verified by the per-element loop below.
-	const wantInputCount = 8
-
-	if len(got.Inputs) != wantInputCount {
-		t.Errorf("inputs count = %d, want %d", len(got.Inputs), wantInputCount)
+	// PR-35d: with the reference's closure threaded in, EmitJS now
+	// produces byte-exact Inputs against the reference (941 entries).
+	// Closure of length 8 (the previous K=8 pin) corresponded to an
+	// empty closure under the old EmitJS signature; the new pin
+	// covers the full reference shape end-to-end.
+	if len(got.Inputs) != len(ref.Inputs) {
+		t.Errorf("inputs count = %d, want %d", len(got.Inputs), len(ref.Inputs))
 	}
 
 	for i, gotIn := range got.Inputs {

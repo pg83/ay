@@ -28,11 +28,15 @@ package main
 //
 // Inputs: sources in DECLARATION ORDER (R13 — NOT sorted). The
 // inputs list is: gen_join_srcs.py, process_command_files.py, then
-// the sources expanded to their $(SOURCE_ROOT)/... form.
+// the sources expanded to their $(SOURCE_ROOT)/... form, then the
+// caller-supplied `closure` (PR-35d) — the union of per-source
+// #include closures across the joined sources. L2 compares Inputs as
+// a multiset (PR-31 D14), so closure order matters only for the
+// byte-exact JS test pin in js_test.go.
 //
 // Returns the JS NodeRef and the output path so the caller (PR-25's
 // gen.go) can thread the output into a downstream EmitCC.
-func EmitJS(instance ModuleInstance, allName string, sources []string, emit Emitter) (NodeRef, string) {
+func EmitJS(instance ModuleInstance, allName string, sources, closure []string, emit Emitter) (NodeRef, string) {
 	const (
 		python3Path  = "/ix/realm/pg/bin/python3"
 		joinSrcsPath = "$(SOURCE_ROOT)/build/scripts/gen_join_srcs.py"
@@ -62,13 +66,16 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, emit Emit
 	}
 
 	// inputs: scripts first, then source files expanded to
-	// $(SOURCE_ROOT)/<instance.Path>/<src>.
-	inputs := make([]string, 0, 2+len(sources))
+	// $(SOURCE_ROOT)/<instance.Path>/<src>, then the caller-supplied
+	// per-source include closure (PR-35d).
+	inputs := make([]string, 0, 2+len(sources)+len(closure))
 	inputs = append(inputs, joinSrcsPath, procCmdFiles)
 
 	for _, s := range sources {
 		inputs = append(inputs, "$(SOURCE_ROOT)/"+instance.Path+"/"+s)
 	}
+
+	inputs = append(inputs, closure...)
 
 	node := &Node{
 		Cmds: []Cmd{

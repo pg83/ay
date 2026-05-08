@@ -1689,7 +1689,13 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			srcInstance.Path = d.srcDir
 		}
 
-		jsRef, joinOut := EmitJS(srcInstance, js.OutputName, js.Sources, ctx.emit)
+		// PR-35d: per-source include closure threaded into the JS
+		// node Inputs and the JS-derived CC's IncludeInputs (mirror
+		// of the reference: the joined .cpp textually #includes each
+		// member, so its closure is the union of member closures).
+		joinClosure := joinSrcsIncludeClosure(ctx, srcInstance, js.Sources, moduleInputs)
+
+		jsRef, joinOut := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.emit)
 
 		// EmitJS returns a $(BUILD_ROOT)/<srcInstance.Path>/<name>
 		// absolute path; convert to srcInstance-relative for the
@@ -1705,17 +1711,27 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// absorbs the 2-multiset cost many times over.
 		jsRel := strings.TrimPrefix(joinOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
 
+		// PR-35d: thread (scripts + sources + closure) as the
+		// JS-derived CC's IncludeInputs so its full Inputs read
+		// [joinedCpp, scripts..., sources..., closure...] — same shape
+		// as JS Inputs with the joined .cpp prepended.
+		ccIncludeInputs := jsCCIncludeInputs(srcInstance, js.Sources, joinClosure)
+
 		ccIn := moduleInputs
 		ccIn.IsGenerated = true
 		ccIn.Generator = jsRef
 		ccIn.HasGenerator = true
+		ccIn.IncludeInputs = ccIncludeInputs
 
 		ref, outPath := EmitCC(srcInstance, jsRel, ccIn, ctx.emit)
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
-		// JS-derived CC: input is the BUILD_ROOT-rooted joined .cpp.
+		// PR-35d: feed the AR/LD member-input aggregator the full
+		// JS-derived CC input multiset.
 		jsGenInput := "$(BUILD_ROOT)/" + srcInstance.Path + "/" + jsRel
-		addMemberInputs([]string{jsGenInput})
+		ccMemberInputs := append(make([]string, 0, 1+len(ccIncludeInputs)), jsGenInput)
+		ccMemberInputs = append(ccMemberInputs, ccIncludeInputs...)
+		addMemberInputs(ccMemberInputs)
 	}
 
 	// GLOBAL_SRCS get their own CC nodes and a separate AR pass
@@ -2245,6 +2261,98 @@ func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCI
 	}
 
 	return "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
+}
+
+// joinSrcsIncludeClosure unions per-source #include closures across
+// `sources` (PR-35d) using the consumer's own scan context. The
+// scanner's DFS runs over all members with a SHARED visited set —
+// mirroring the actual joined .cpp compile, where headers reached
+// once stay deduped — so total work is O(union closure) not O(sum
+// per-source closures). Returns nil when nothing resolves.
+func joinSrcsIncludeClosure(ctx *genCtx, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []string {
+	scanner := ctx.scannerTarget
+
+	if srcInstance.Flags.PIC {
+		scanner = ctx.scannerHost
+	}
+
+	if scanner == nil {
+		return nil
+	}
+
+	visited := make(map[string]struct{}, 1024)
+	order := make([]string, 0, 1024)
+	srcAbsSet := make(map[string]struct{}, len(sources))
+
+	for _, src := range sources {
+		srcRelOnDisk := srcInstance.Path + "/" + src
+
+		if in.SrcDir != "" && in.SrcDir != srcInstance.Path {
+			localCandidate := filepath.Join(ctx.sourceRoot, srcInstance.Path, src)
+			info, err := os.Stat(localCandidate)
+
+			if err != nil || info.IsDir() {
+				srcRelOnDisk = in.SrcDir + "/" + src
+			}
+		}
+
+		scanCtx := ScanContext{
+			SourceRel:       srcRelOnDisk,
+			OwnAddIncl:      in.AddIncl,
+			PeerAddInclSet:  in.PeerAddInclGlobal,
+			BaseSearchPaths: includeScannerBasePaths(srcInstance),
+		}
+		ctxHash := hashScanContext(&scanCtx)
+
+		srcAbs := scanner.sourceRoot + "/" + scanCtx.SourceRel
+		srcAbsSet[srcAbs] = struct{}{}
+		scanner.dfs(srcAbs, &scanCtx, ctxHash, visited, &order)
+	}
+
+	if len(order) == 0 {
+		return nil
+	}
+
+	prefix := scanner.sourceRoot + "/"
+	out := make([]string, 0, len(order))
+
+	for _, abs := range order {
+		// Skip the source files themselves — JOIN_SRCS members are
+		// emitted separately as $(SOURCE_ROOT)/<path>/<src>; the
+		// scanner closure carries only headers/extras.
+		if _, isSrc := srcAbsSet[abs]; isSrc {
+			continue
+		}
+
+		rel := strings.TrimPrefix(abs, prefix)
+		out = append(out, "$(SOURCE_ROOT)/"+rel)
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	return out
+}
+
+// jsCCIncludeInputs assembles `[scripts..., sources..., closure...]`
+// for the JS-derived CC's IncludeInputs slot (PR-35d).
+func jsCCIncludeInputs(srcInstance ModuleInstance, sources, closure []string) []string {
+	const (
+		joinSrcsPath = "$(SOURCE_ROOT)/build/scripts/gen_join_srcs.py"
+		procCmdFiles = "$(SOURCE_ROOT)/build/scripts/process_command_files.py"
+	)
+
+	out := make([]string, 0, 2+len(sources)+len(closure))
+	out = append(out, joinSrcsPath, procCmdFiles)
+
+	for _, s := range sources {
+		out = append(out, "$(SOURCE_ROOT)/"+srcInstance.Path+"/"+s)
+	}
+
+	out = append(out, closure...)
+
+	return out
 }
 
 // scanIncludesForSource resolves the source's actual on-disk path
