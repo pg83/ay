@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/json"
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
@@ -197,10 +197,12 @@ Flags:
 }
 
 // writeGraph encodes g as JSON to the given path (or stdout when path
-// is "-"). Uses json.Encoder with SetEscapeHTML(false) so the on-disk
-// bytes match what canonicalNodeBytes hashed during Finalize (D16
-// cross-cutting constraint — without it, '<', '>', '&' would render
-// as '<' etc. and break byte-exact comparisons).
+// is "-"). Delegates to writeGraphIndented (gjson_write.go), a hand-rolled
+// streaming serializer that matches json.Encoder with SetEscapeHTML(false)
+// + SetIndent("", "  ") byte-for-byte but emits in a single pass — avoiding
+// the compact-marshal + Indent two-pass cost that dominated profile time
+// (PR-34l). Output via a 1 MiB bufio.Writer to keep file syscalls to a
+// minimum.
 func writeGraph(out string, g *Graph) {
 	var w io.Writer
 
@@ -214,11 +216,9 @@ func writeGraph(out string, g *Graph) {
 		w = f
 	}
 
-	enc := json.NewEncoder(w)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-
-	Throw(enc.Encode(g))
+	bw := bufio.NewWriterSize(w, 1<<20)
+	writeGraphIndented(bw, g)
+	Throw(bw.Flush())
 }
 
 // cmdCompare loads two reference g.json files and prints the
