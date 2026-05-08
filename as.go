@@ -54,6 +54,19 @@ var asWnoEverything = []string{"-Wno-everything"}
 // (e.g. cxxsupp/builtins/chkstk.S → assembly.h). Empty for the
 // common case where the source has no transitive headers.
 //
+// PR-35a: cmd_args composition branches on two orthogonal flags:
+//
+//   - `instance.Flags.PIC` selects host (x86_64) vs target (aarch64)
+//     toolchain. Host emits `--target=x86_64-linux-gnu` with no
+//     `-march` and uses hostCFlags / hostDefines / ndebugPicBlock × 2
+//     with hostSseFeatures between (mirror of composeMuslHostCC's
+//     non-musl-aware layout). Target keeps the historical
+//     `--target=aarch64-linux-gnu -march=armv8-a` + commonCFlags /
+//     commonDefines / noLibcUndebugBlock × 2 shape.
+//   - `instance.Flags.LibcMusl` injects muslExtraDefines (incl.
+//     `-D_musl_=1`) between the defines block and the suppression
+//     block, matching composeMuslCC / composeMuslHostCC's slot.
+//
 // Returns (NodeRef, outputPath) so the caller can wire the AS node
 // as a dependency of the AR step and avoid re-deriving the output
 // path.
@@ -61,42 +74,22 @@ func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *N
 	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + ".o"
 	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
 
-	// Compose the cmd_args. The capacity hint is the fixed part
-	// (86) plus the module-specific includes length, to avoid
-	// reallocation.
-	fixed := 4 + len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
-		len(commonCFlags) + len(asWnoEverything) + len(commonDefines) +
-		len(noLibcUndebugBlock) + len(catboostOpenSourceDefine) +
-		len(noLibcUndebugBlock) + 4
-	cmdArgs := make([]string, 0, fixed+len(includes))
+	// PR-35a: musl-self assembly nodes get the full musl include set
+	// emitted at the cmd_args tail (matching the reference shape:
+	// host musl ceill.s uses muslCcIncludesX8664; target musl uses
+	// muslCcIncludes). The walker passes nil for `includes` to AS,
+	// so the default-derived set lands here. Callers that already
+	// supplied module-specific includes (e.g. the byte-exact test
+	// for cxxsupp/builtins) keep their explicit slice.
+	if includes == nil && instance.Flags.LibcMusl {
+		if instance.Flags.PIC {
+			includes = muslCcIncludesX8664
+		} else {
+			includes = muslCcIncludes
+		}
+	}
 
-	// Prologue: compiler, target triple, arch, assembler search path.
-	cmdArgs = append(cmdArgs,
-		ccCompilerPath,
-		"--target="+targetTriple,
-		"-march="+archFlag,
-		"-B"+binPath,
-	)
-	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
-	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
-	cmdArgs = append(cmdArgs, commonCFlags...)
-
-	// AS uses -Wno-everything instead of CC's
-	// -Werror/-Wall/-Wextra + companions.
-	cmdArgs = append(cmdArgs, asWnoEverything...)
-	cmdArgs = append(cmdArgs, commonDefines...)
-
-	// noLibcUndebugBlock appears twice (once before and once after
-	// catboostOpenSourceDefine), mirroring CC's composition exactly.
-	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
-	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
-
-	// Output and input: -c -o <out> <in>, trailing all flags.
-	cmdArgs = append(cmdArgs, "-c", "-o", outputPath, inputPath)
-
-	// Module-specific includes trail the source path.
-	cmdArgs = append(cmdArgs, includes...)
+	cmdArgs := composeASCmdArgs(instance, outputPath, inputPath, includes)
 
 	// The reference graph carries identical env maps at both the cmd
 	// level and the node top level. A single map is constructed and
@@ -110,6 +103,14 @@ func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *N
 	allInputs = append(allInputs, inputPath)
 	allInputs = append(allInputs, includeInputs...)
 
+	tags := []string{}
+	if instance.Flags.PIC {
+		// PR-35a: host-built AS nodes carry `host_platform=true` and
+		// `tags=["tool"]` per the reference shape (asmlib pic.o,
+		// cxxsupp/builtins/x86_64/chkstk.S.o, musl host pic.o).
+		tags = []string{"tool"}
+	}
+
 	node := &Node{
 		Cmds: []Cmd{
 			{
@@ -118,14 +119,15 @@ func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *N
 				Env:     env,
 			},
 		},
-		Env:     env,
-		Inputs:  allInputs,
-		Outputs: []string{outputPath},
+		Env:          env,
+		Inputs:       allInputs,
+		Outputs:      []string{outputPath},
+		HostPlatform: instance.Flags.PIC,
 		KV: map[string]string{
 			"p":  "AS",
 			"pc": "light-green",
 		},
-		Tags: []string{},
+		Tags: tags,
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
@@ -152,4 +154,106 @@ func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *N
 	}
 
 	return emit.Emit(node), outputPath
+}
+
+// composeASCmdArgs builds the cmd_args bundle for an AS node. Three
+// flavours, dispatched on `instance.Flags.PIC` (host vs target axis)
+// and `instance.Flags.LibcMusl` (musl-self extra-defines block):
+//
+// Target (PIC=false): aarch64 toolchain, commonCFlags + commonDefines +
+// (optional muslExtraDefines for LibcMusl) + noLibcUndebugBlock × 2 with
+// catboost between. Pinned 94-arg byte-exact against
+// `contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o`.
+//
+// Host non-musl (PIC=true, LibcMusl=false): x86_64 toolchain, hostCFlags
+// + hostDefines + ndebugPicBlock × 2 with catboost + hostSseFeatures
+// between. Pinned 98-arg byte-exact against
+// `contrib/libs/cxxsupp/builtins/_/x86_64/chkstk.S.o` (prologue 0..89).
+//
+// Host musl (PIC=true, LibcMusl=true): same as host non-musl plus
+// muslExtraDefines slotted between hostDefines and the first
+// ndebugPicBlock copy. Pinned 109-arg byte-exact against
+// `contrib/libs/musl/_/src/math/x86_64/ceill.s.o`.
+//
+// Mirrors composeMuslHostCC's slot ordering — the only AS-specific
+// substitution is `asWnoEverything` in place of `warningFlags` /
+// `muslWarningFlags` / `cxxStandardWarnings`. PR-33 C2_06 (per-module
+// CFLAGS threading) is out-of-scope for PR-35a.
+func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, includes []string) []string {
+	isHost := instance.Flags.PIC
+	isMusl := instance.Flags.LibcMusl
+
+	var cFlags, defines, suppressionBlock []string
+	var triple string
+	var withMarch bool
+
+	if isHost {
+		triple = hostTriple
+		cFlags = hostCFlags
+		defines = hostDefines
+		suppressionBlock = ndebugPicBlock
+	} else {
+		triple = targetTriple
+		withMarch = true
+		cFlags = commonCFlags
+		defines = commonDefines
+		suppressionBlock = noLibcUndebugBlock
+	}
+
+	prologueArgs := 3
+	if withMarch {
+		prologueArgs = 4
+	}
+
+	musl := []string(nil)
+	if isMusl {
+		musl = muslExtraDefines
+	}
+
+	betweenBlocks := len(catboostOpenSourceDefine)
+	if isHost {
+		betweenBlocks += len(hostSseFeatures)
+	}
+
+	fixed := prologueArgs + len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
+		len(cFlags) + len(asWnoEverything) + len(defines) + len(musl) +
+		len(suppressionBlock) + betweenBlocks + len(suppressionBlock) + 4
+	cmdArgs := make([]string, 0, fixed+len(includes))
+
+	// Prologue: compiler, target triple, optional -march, assembler search path.
+	cmdArgs = append(cmdArgs, ccCompilerPath, "--target="+triple)
+
+	if withMarch {
+		cmdArgs = append(cmdArgs, "-march="+archFlag)
+	}
+
+	cmdArgs = append(cmdArgs, "-B"+binPath)
+	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
+	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
+	cmdArgs = append(cmdArgs, cFlags...)
+
+	// AS uses -Wno-everything in place of CC's warningFlags / cxxStandardWarnings.
+	cmdArgs = append(cmdArgs, asWnoEverything...)
+	cmdArgs = append(cmdArgs, defines...)
+	cmdArgs = append(cmdArgs, musl...)
+
+	// Suppression block emitted twice flanking catboostOpenSourceDefine
+	// (target) or catboost + hostSseFeatures (host). Mirror of
+	// composeMuslCC / composeMuslHostCC.
+	cmdArgs = append(cmdArgs, suppressionBlock...)
+	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
+
+	if isHost {
+		cmdArgs = append(cmdArgs, hostSseFeatures...)
+	}
+
+	cmdArgs = append(cmdArgs, suppressionBlock...)
+
+	// Output and input: -c -o <out> <in>, trailing all flags.
+	cmdArgs = append(cmdArgs, "-c", "-o", outputPath, inputPath)
+
+	// Module-specific includes trail the source path.
+	cmdArgs = append(cmdArgs, includes...)
+
+	return cmdArgs
 }
