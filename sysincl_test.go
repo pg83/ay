@@ -26,8 +26,10 @@ func TestLoadSysInclSet_RealTree(t *testing.T) {
 	// `<string.h>` for a non-musl source. libc-to-musl.yml record 2
 	// contributes musl/include/string.h; stl-to-libcxx.yml record 1
 	// contributes libcxx/include/string.h. Both records' filters
-	// match base64/avx2/lib.c.
-	got, ok := set.Lookup("contrib/libs/base64/avx2/lib.c", "string.h")
+	// match base64/avx2/lib.c. PR-35e: Lookup takes (source, includer,
+	// header). The base64 source IS its own includer for a top-level
+	// `#include <string.h>`, so we pass the same path twice.
+	got, ok := set.Lookup("contrib/libs/base64/avx2/lib.c", "contrib/libs/base64/avx2/lib.c", "string.h")
 
 	if !ok {
 		t.Fatalf("expected string.h mapping for non-musl source, got none")
@@ -46,8 +48,10 @@ func TestLoadSysInclSet_RealTree(t *testing.T) {
 		t.Fatalf("string.h union missing %v; got %v", wantMembers, got)
 	}
 
-	// Empirical check: features.h fan-out for musl source.
-	got, ok = set.Lookup("contrib/libs/musl/src/string/strlen.c", "features.h")
+	// Empirical check: features.h fan-out for musl source. The musl
+	// source is its own immediate includer for a top-level
+	// `#include <features.h>`, so source and includer paths coincide.
+	got, ok = set.Lookup("contrib/libs/musl/src/string/strlen.c", "contrib/libs/musl/src/string/strlen.c", "features.h")
 
 	if !ok {
 		t.Fatalf("expected features.h mapping for musl source, got none")
@@ -176,6 +180,138 @@ func TestSourceFilter_NegativeLookahead(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestSysIncl_PerRecordKeying pins the PR-35e source-vs-includer
+// dispatch. Negative-lookahead filters (`(?!...)`) must key against
+// the SOURCE path; positive filters key against the IMMEDIATE
+// includer. Two scenarios exercise both branches:
+//
+//   - libcxx-source reaching uchar.h via a libcxx includer chain:
+//     stl-to-libcxx's `^(?!(contrib/libs/musl|contrib/tools/yasm)).*`
+//     filter is negative-lookahead and must key by source. Both
+//     records (stl-to-libcxx + libc-to-musl line 75) accept libcxx
+//     sources, so the libcxx-uchar + musl-uchar mappings DO fire here
+//     under per-record keying — the L2-ceiling fix that closes the
+//     uchar.h over-fan-out comes from skipping `#include_next`
+//     resolution entirely (TestScanner_IncludeNextSuppressed below)
+//     rather than from filter discrimination alone. This test only
+//     pins the keying mechanism's correctness, not the L2 outcome.
+//   - musl-source reaching `<stdc-predef.h>` via a glibcasm features.h
+//     includer: libc-to-musl line 258's filter
+//     `^(contrib/libs/glibcasm/glibc/include/features\.h)` is positive
+//     and must key by includer (the source is musl, not glibcasm; the
+//     filter matches the includer file path). Per-record keying lets
+//     this record continue to fire — the PR-33 D05 deferred regression
+//     it documented.
+func TestSysIncl_PerRecordKeying(t *testing.T) {
+	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
+		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
+	}
+
+	set := LoadSysInclSet(sourceRoot)
+
+	// Source-keyed branch: libcxx-source reaching uchar.h via a
+	// libcxx-internal includer (__mbstate_t.h).
+	got, ok := set.Lookup(
+		"contrib/libs/cxxsupp/libcxx/src/algorithm.cpp",
+		"contrib/libs/cxxsupp/libcxx/include/__mbstate_t.h",
+		"uchar.h",
+	)
+
+	if !ok {
+		t.Fatalf("expected uchar.h sysincl mapping for libcxx source; got none")
+	}
+
+	// Both libcxx and musl uchar.h are mapped because both records'
+	// source-keyed filters accept libcxx-source. The L2 fix comes from
+	// the scanner suppressing `#include_next` resolution (see
+	// TestScanner_IncludeNextSuppressed); this test pins the YAML-
+	// level dispatch only.
+	wantUchar := map[string]bool{
+		"contrib/libs/cxxsupp/libcxx/include/uchar.h": true,
+		"contrib/libs/musl/include/uchar.h":           true,
+	}
+
+	for _, p := range got {
+		delete(wantUchar, p)
+	}
+
+	if len(wantUchar) != 0 {
+		t.Errorf("uchar.h mapping for libcxx source: missing %v, got %v", wantUchar, got)
+	}
+
+	// Includer-keyed branch: musl-source reaching stdc-predef.h via
+	// glibcasm features.h. The libc-to-musl line 258 record has a
+	// positive filter on the includer path (the literal
+	// `glibcasm/glibc/include/features.h`); per-record keying picks
+	// includer for non-(?!) filters and the mapping fires.
+	got, ok = set.Lookup(
+		"contrib/libs/musl/src/multibyte/c16rtomb.c",
+		"contrib/libs/glibcasm/glibc/include/features.h",
+		"stdc-predef.h",
+	)
+
+	if !ok {
+		t.Fatalf("expected stdc-predef.h mapping for glibcasm includer; got none")
+	}
+
+	foundMusl := false
+
+	for _, p := range got {
+		if p == "contrib/libs/musl/include/stdc-predef.h" {
+			foundMusl = true
+
+			break
+		}
+	}
+
+	if !foundMusl {
+		t.Errorf("stdc-predef.h includer-keyed mapping: musl/include/stdc-predef.h missing; got %v", got)
+	}
+}
+
+// TestSysIncl_KeyBySourceCompiledFromFilter checks that the
+// PR-35e parser sets KeyBySource based on filter shape: negative
+// lookahead → true; everything else → false. Empirical: stl-to-libcxx
+// has `^(?!...)` and must come out source-keyed; misc.yml glibcasm
+// has `^contrib/libs/glibcasm` and must come out includer-keyed.
+func TestSysIncl_KeyBySourceCompiledFromFilter(t *testing.T) {
+	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
+		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
+	}
+
+	set := LoadSysInclSet(sourceRoot)
+
+	srcKeyed := 0
+	incKeyed := 0
+	noFilter := 0
+
+	for _, r := range set {
+		switch {
+		case r.Filter == nil:
+			noFilter++
+		case r.KeyBySource:
+			srcKeyed++
+		default:
+			incKeyed++
+		}
+	}
+
+	t.Logf("sysincl per-record keying: %d source-keyed, %d includer-keyed, %d no-filter", srcKeyed, incKeyed, noFilter)
+
+	// Sanity: each class has at least a handful of records.
+	if srcKeyed < 3 {
+		t.Errorf("expected ≥3 source-keyed records (negative-lookahead filters); got %d", srcKeyed)
+	}
+
+	if incKeyed < 50 {
+		t.Errorf("expected ≥50 includer-keyed records (positive prefix filters); got %d", incKeyed)
 	}
 }
 

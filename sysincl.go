@@ -56,9 +56,29 @@ import (
 // list (or list with empty-string element) marks a header as sysincl-
 // known but emitting no input — the resolution stops without
 // recursing.
+//
+// `KeyBySource` chooses which path Lookup tests against the record's
+// filter: the COMPILE-UNIT source (true) or the IMMEDIATE includer
+// (false). Empirically, the upstream ymake scanner discriminates per
+// record: filters with a negative lookahead (`(?!...)`) — meant to
+// reject SOURCES rooted in particular subtrees so libcxx/musl-style
+// replacement headers fire only for non-musl/non-yasm consumers — must
+// key by source. Filters without negative lookahead default to includer
+// keying so that records like `^contrib/libs/glibcasm` continue to fire
+// when a musl-source's includer chain reaches a glibcasm header (the
+// existing reference-graph requirement that PR-33 D05 documented).
+//
+// The discrimination heuristic was set empirically by inspecting the
+// reference graph (see PR-31-D08 / PR-33-C03). The alternative (always
+// includer-keyed) over-fans-out the stl-to-libcxx and libc-to-musl
+// uchar.h records onto 251 libcxx/abseil/libcxxabi-parts CC consumers
+// + 23 JS-derived CCs whose chain reaches `__mbstate_t.h`'s
+// `#include_next <uchar.h>` (a `#elif` branch ymake never takes when
+// `_LIBCPP_HAS_MUSL_LIBC` is set).
 type SysIncl struct {
-	Filter   *sourceFilter
-	Mappings map[string][]string
+	Filter      *sourceFilter
+	KeyBySource bool
+	Mappings    map[string][]string
 }
 
 // SysInclSet is the union of all sysincl records loaded from
@@ -66,7 +86,10 @@ type SysIncl struct {
 type SysInclSet []SysIncl
 
 // Lookup returns the union of resolved paths for `header` across
-// every record whose filter matches `sourcePath`. Empirically, ymake
+// every record whose filter matches the appropriate path key. Each
+// record's `KeyBySource` flag decides whether its filter is tested
+// against `sourcePath` (the compile-unit source) or `includerPath`
+// (the immediate includer of `header`). Empirically, ymake
 // stacks sysincl YAML files: each record contributes its own mapping
 // to a header, and the consumer sees ALL contributions as candidate
 // inputs. Examples:
@@ -88,15 +111,171 @@ type SysInclSet []SysIncl
 // (paths may be empty when every claimer is suppression-only), or
 // (nil, false) when no record claims the header at all (the caller's
 // resolver then falls through to other search-path candidates).
-func (s SysInclSet) Lookup(sourcePath, header string) ([]string, bool) {
+//
+// Callers that only carry one path (legacy single-path probes from
+// tests) may pass the same string for both arguments — every record
+// will then see that path as both source and includer, matching the
+// pre-PR-35e behaviour for those call sites.
+func (s SysInclSet) Lookup(sourcePath, includerPath, header string) ([]string, bool) {
+	view := s.PreparePerSource(sourcePath)
+
+	return view.Lookup(includerPath, header)
+}
+
+// PerSourceView is a sysincl set with the SOURCE-keyed filter pre-
+// resolved against a fixed source path. The expensive part of a
+// sysincl Lookup is the per-record filter match; SOURCE-keyed records
+// have a fixed result for the lifetime of one CC's WalkClosure (the
+// source is constant), so caching the accepting subset once per
+// WalkClosure turns the hot per-include Lookup into a cheap iteration
+// over a smaller slice.
+//
+// INCLUDER-keyed records still need a per-call filter match against
+// the immediate includer; we keep them as-is and gate per Lookup.
+//
+// `srcMappingsByTarget` memoises LookupSourceKeyed by target. Built
+// lazily on first per-target Lookup; reused across every includer
+// reaching the same target within this view's source. Eliminates the
+// `activeSourceKeyed` slice scan from the per-resolve hot path.
+type PerSourceView struct {
+	// activeSourceKeyed lists the records whose KeyBySource=true and
+	// whose filter accepted the source. These records' Mappings will
+	// fire on every Lookup against this view (the filter has already
+	// been satisfied).
+	activeSourceKeyed []*SysIncl
+	// includerKeyed lists every KeyBySource=false record. Their
+	// filters are tested per Lookup against the includer.
+	includerKeyed []*SysIncl
+}
+
+// PreparePerSource returns a Lookup view with SOURCE-keyed filters
+// pre-resolved against the given source path. The view is safe to
+// reuse for every Lookup call within one WalkClosure.
+func (s SysInclSet) PreparePerSource(sourcePath string) PerSourceView {
+	view := PerSourceView{
+		activeSourceKeyed: make([]*SysIncl, 0, len(s)),
+		includerKeyed:     make([]*SysIncl, 0, len(s)),
+	}
+
+	for i := range s {
+		rec := &s[i]
+
+		if rec.KeyBySource {
+			if rec.Filter == nil || rec.Filter.match(sourcePath) {
+				view.activeSourceKeyed = append(view.activeSourceKeyed, rec)
+			}
+
+			continue
+		}
+
+		view.includerKeyed = append(view.includerKeyed, rec)
+	}
+
+	return view
+}
+
+// Lookup returns the union of resolved paths for `header` across every
+// record applicable to the given includer. SOURCE-keyed records were
+// pre-filtered when the view was constructed; INCLUDER-keyed records
+// are filter-checked here.
+func (v PerSourceView) Lookup(includerPath, header string) ([]string, bool) {
+	srcOut, srcFound := v.LookupSourceKeyed(header)
+	incOut, incFound := v.LookupIncluderKeyed(includerPath, header)
+
+	if !srcFound && !incFound {
+		return nil, false
+	}
+
+	if len(srcOut) == 0 {
+		return incOut, true
+	}
+
+	if len(incOut) == 0 {
+		return srcOut, true
+	}
+
+	out := make([]string, 0, len(srcOut)+len(incOut))
+	seen := make(map[string]struct{}, len(srcOut)+len(incOut))
+
+	for _, p := range srcOut {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+
+	for _, p := range incOut {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+
+	return out, true
+}
+
+// LookupSourceKeyed returns the union of paths contributed by the
+// view's active source-keyed records. The result is source-dependent
+// but includer-INdependent (the source-keyed filters were already
+// satisfied at view construction). Callers that want to cache the
+// source-keyed half independently of the includer-keyed half use this
+// directly.
+func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool) {
 	var (
 		out   []string
 		found bool
-		seen  = map[string]struct{}{}
+		seen  map[string]struct{}
 	)
 
-	for _, rec := range s {
-		if rec.Filter != nil && !rec.Filter.match(sourcePath) {
+	for _, rec := range v.activeSourceKeyed {
+		paths, ok := rec.Mappings[header]
+
+		if !ok {
+			continue
+		}
+
+		found = true
+
+		for _, p := range paths {
+			if p == "" {
+				continue
+			}
+
+			if seen == nil {
+				seen = make(map[string]struct{}, 4)
+			}
+
+			if _, dup := seen[p]; dup {
+				continue
+			}
+
+			seen[p] = struct{}{}
+			out = append(out, p)
+		}
+	}
+
+	return out, found
+}
+
+// LookupIncluderKeyed returns the union of paths contributed by the
+// view's includer-keyed records. The result is source-INdependent (the
+// view shares includerKeyed across all source views derived from the
+// same SysInclSet — though Go semantics mean each view has its own
+// slice header pointing at the same underlying records). Cache by
+// (includer, target) for cross-source reuse.
+func (v PerSourceView) LookupIncluderKeyed(includerPath, header string) ([]string, bool) {
+	var (
+		out   []string
+		found bool
+		seen  map[string]struct{}
+	)
+
+	for _, rec := range v.includerKeyed {
+		if rec.Filter != nil && !rec.Filter.match(includerPath) {
 			continue
 		}
 
@@ -111,6 +290,10 @@ func (s SysInclSet) Lookup(sourcePath, header string) ([]string, bool) {
 		for _, p := range paths {
 			if p == "" {
 				continue
+			}
+
+			if seen == nil {
+				seen = make(map[string]struct{}, 4)
 			}
 
 			if _, dup := seen[p]; dup {
@@ -420,7 +603,20 @@ func handleRecordHeader(name string, lineno int, body string, rec *SysIncl, inIn
 
 	if strings.HasPrefix(body, "source_filter:") {
 		rest := strings.TrimSpace(body[len("source_filter:"):])
-		rec.Filter = compileSourceFilter(name, lineno, unquote(rest))
+		pat := unquote(rest)
+		rec.Filter = compileSourceFilter(name, lineno, pat)
+		// Negative-lookahead filters (`(?!...)`) are meant to reject
+		// SOURCES rooted in particular subtrees. Empirically these
+		// records key by the compile-unit source path — using the
+		// immediate includer instead causes the libcxx/musl-style
+		// replacement headers (uchar.h, ctype.h, etc.) to fire on
+		// every libcxx-source consumer reaching them via a libcxx
+		// internal-header chain (PR-31-D08 / PR-33-C03). Records
+		// without negative-lookahead default to includer keying so
+		// that filters like `^contrib/libs/glibcasm` continue to fire
+		// on glibcasm-rooted includer chains reached from musl
+		// sources (the empirical PR-33-D05 observation).
+		rec.KeyBySource = strings.Contains(pat, "(?!")
 
 		return
 	}
