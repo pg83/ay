@@ -1,8 +1,30 @@
 package main
 
 import (
+	"container/heap"
 	"sort"
 )
+
+// intHeap is a min-heap of ints used by Finalize's Kahn topo-sort. A
+// previous linear-scan-for-min + slice-shift implementation was O(N²)
+// in the size of the ready queue and dominated gen wall-clock time on
+// real targets (235K buffered nodes pre-dedup). A heap reduces the
+// per-extraction cost to O(log N) without changing the tie-break
+// (smallest buffer index wins), preserving byte-exact output.
+type intHeap []int
+
+func (h intHeap) Len() int            { return len(h) }
+func (h intHeap) Less(i, j int) bool  { return h[i] < h[j] }
+func (h intHeap) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
+func (h *intHeap) Push(x interface{}) { *h = append(*h, x.(int)) }
+func (h *intHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[:n-1]
+
+	return x
+}
 
 // emitter.go — the Emitter interface, NodeRef placeholder, BufferedEmitter
 // implementation, the Graph wrapper type, and the Finalize Merkle pass.
@@ -258,36 +280,29 @@ func Finalize(e *BufferedEmitter) *Graph {
 		}
 	}
 
-	// Seed the queue with every zero-in-degree node, in buffer-index
-	// order so the topo result is deterministic.
-	queue := make([]int, 0, n)
+	// Seed the heap with every zero-in-degree node. The heap pops the
+	// smallest buffer index next — same tie-break the previous
+	// linear-scan implementation produced — so the topo order is
+	// byte-exact-equivalent. Seeding ascending is irrelevant to the
+	// pop sequence (the heap re-orders) but cheap to write.
+	queue := make(intHeap, 0, n)
 	for i := 0; i < n; i++ {
 		if indeg[i] == 0 {
 			queue = append(queue, i)
 		}
 	}
+	heap.Init(&queue)
 
 	order := make([]int, 0, n)
-	for len(queue) > 0 {
-		// Pop the smallest index in the queue (stable tie-break). The
-		// queue is small enough in practice that a linear scan beats
-		// importing container/heap.
-		minPos := 0
-		for j := 1; j < len(queue); j++ {
-			if queue[j] < queue[minPos] {
-				minPos = j
-			}
-		}
-
-		i := queue[minPos]
-		queue = append(queue[:minPos], queue[minPos+1:]...)
+	for queue.Len() > 0 {
+		i := heap.Pop(&queue).(int)
 		order = append(order, i)
 
 		for _, c := range children[i] {
 			indeg[c]--
 
 			if indeg[c] == 0 {
-				queue = append(queue, c)
+				heap.Push(&queue, c)
 			}
 		}
 	}
