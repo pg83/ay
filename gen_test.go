@@ -3090,3 +3090,121 @@ func TestGen_ToolsArchiver_LDPluginSection(t *testing.T) {
 		t.Errorf("--end-plugins (idx %d) must precede --clang-ver (idx %d)", endIdx, clangVerIdx)
 	}
 }
+
+// TestGen_MuslPyplugin_HostCPDedup pins PR-35l's host CP dedup. The
+// reference graph emits exactly ONE CP node for `musl.py.pyplugin`
+// (on the target platform, UID `nPHkMSIqOHBrXsoclNuu6g` in
+// /home/pg/monorepo/yatool_orig/sg.json:105555) and reuses its UID
+// from both target consumer LDs (archiver) and host consumer LDs
+// (yasm, ragel6). PR-35k initially emitted a second CP node on the
+// host platform because `WithHost`-recursed walks of
+// `contrib/libs/musl/include` re-fired `emitOwnLDPlugins`, producing
+// a dup with `Platform=default-linux-x86_64` whose UID differed from
+// the target's. PR-35l added `genCtx.ldPluginCPCache` so the first
+// emit wins (target, since the seed walk runs target-first) and
+// every subsequent host visit reuses the cached NodeRef.
+//
+// Verification shape:
+//
+//   - exactly one CP node has output `musl.py.pyplugin`,
+//   - that CP carries `Platform = default-linux-aarch64` (target),
+//   - every LD whose `cmd[2]` references the pyplugin path also
+//     lists the SAME CP UID in its `Deps` slice, regardless of the
+//     LD's own platform.
+func TestGen_MuslPyplugin_HostCPDedup(t *testing.T) {
+	const targetDir = "tools/archiver"
+
+	if _, err := os.Stat(sourceRoot + "/" + targetDir + "/ya.make"); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	our := Gen(TargetCfg, sourceRoot, targetDir)
+
+	const pluginOutput = "$(BUILD_ROOT)/contrib/libs/musl/include/musl.py.pyplugin"
+
+	cpNodes := []*Node{}
+
+	for _, n := range our.Graph {
+		if n.KV["p"] != "CP" {
+			continue
+		}
+
+		if len(n.Outputs) == 0 || n.Outputs[0] != pluginOutput {
+			continue
+		}
+
+		cpNodes = append(cpNodes, n)
+	}
+
+	if len(cpNodes) != 1 {
+		gotPlats := make([]string, 0, len(cpNodes))
+
+		for _, n := range cpNodes {
+			gotPlats = append(gotPlats, n.Platform)
+		}
+
+		t.Fatalf("expected exactly 1 CP node for %s; got %d (platforms: %v) — host walk re-emitted the plugin instead of reusing the target's NodeRef", pluginOutput, len(cpNodes), gotPlats)
+	}
+
+	cpNode := cpNodes[0]
+
+	if cpNode.Platform != string(TargetCfg.Target.ID) {
+		t.Errorf("musl plugin CP platform = %q, want %q (the surviving CP must be the target one — first-emit-wins)", cpNode.Platform, TargetCfg.Target.ID)
+	}
+
+	cpUID := cpNode.UID
+
+	if cpUID == "" {
+		t.Fatalf("musl plugin CP node has empty UID")
+	}
+
+	// Walk every LD; if its cmd[2] references the pyplugin path then
+	// the CP UID must appear in its Deps. The reference graph's host
+	// LDs (ragel6/yasm) carry the same target-platform CP UID in deps
+	// as the target archiver LD.
+	ldsReferencing := 0
+
+	for _, n := range our.Graph {
+		if n.KV["p"] != "LD" || len(n.Cmds) < 3 {
+			continue
+		}
+
+		referencesPlugin := false
+
+		for _, a := range n.Cmds[2].CmdArgs {
+			if a == pluginOutput {
+				referencesPlugin = true
+
+				break
+			}
+		}
+
+		if !referencesPlugin {
+			continue
+		}
+
+		ldsReferencing++
+
+		hasDep := false
+
+		for _, dep := range n.Deps {
+			if dep == cpUID {
+				hasDep = true
+
+				break
+			}
+		}
+
+		if !hasDep {
+			t.Errorf("LD with output %q (platform=%q) lists pyplugin in cmd[2] but does not depend on CP UID %q — host CP dedup must wire host LDs to the target CP NodeRef", n.Outputs[0], n.Platform, cpUID)
+		}
+	}
+
+	if ldsReferencing == 0 {
+		t.Fatalf("no LD references the pyplugin path; expected at least the target archiver LD")
+	}
+}
