@@ -587,3 +587,85 @@ func contains(xs []string, target string) bool {
 
 	return false
 }
+
+// TestEmitCC_Libcxxrt_AuxhelperCc_ByteExact pins the libcxxrt
+// auxhelper.cc target CC node against the reference graph. PR-35f
+// closes PR-33-C2_04: libcxxrt has no own/peer GLOBAL CXXFLAGS, so
+// the pre-catboost bucket is empty and the post-catboost bucket
+// receives only the `_BASE_UNIT.CXXFLAGS += -nostdinc++` injection.
+// The expected cmd_args end is
+// `..., -nostdinc++ (ownExtras), catboost, -nostdinc++ (post-bucket
+// from baseUnit), -Wno-builtin-macro-redefined, ...`.
+func TestEmitCC_Libcxxrt_AuxhelperCc_ByteExact(t *testing.T) {
+	const targetOut = "$(BUILD_ROOT)/contrib/libs/cxxsupp/libcxxrt/auxhelper.cc.o"
+
+	raw, err := os.ReadFile(referenceGraphPath)
+
+	if err != nil {
+		t.Skipf("reference graph not available (%v); skipping libcxxrt byte-exact test", err)
+	}
+
+	var g Graph
+	Throw(json.Unmarshal(raw, &g))
+
+	var ref *Node
+
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0] == targetOut {
+			ref = n
+
+			break
+		}
+	}
+
+	if ref == nil {
+		t.Fatalf("reference libcxxrt CC node with output %q not found", targetOut)
+	}
+
+	emit := NewBufferedEmitter()
+	inst := targetInstance("contrib/libs/cxxsupp/libcxxrt")
+	inst.Flags.NoCompilerWarnings = true
+	in := ModuleCCInputs{
+		// libcxxrt's ya.make declares `CXXFLAGS(-nostdinc++)` (line 29
+		// of `contrib/libs/cxxsupp/libcxxrt/ya.make`); this is the own
+		// non-GLOBAL CXXFLAGS that lands at the ownExtras slot.
+		CXXFlags: []string{"-nostdinc++"},
+		// PeerAddInclGlobal is the set the walker computes for libcxxrt's
+		// peer closure (libunwind + sanitizer/include + transitive musl
+		// arch paths via runtime-stack hoisting). Reference ordering at
+		// cmd_args[11..14] is the canonical musl-arch triple plus extra.
+		PeerAddInclGlobal: []string{
+			"contrib/libs/musl/arch/aarch64",
+			"contrib/libs/musl/arch/generic",
+			"contrib/libs/musl/include",
+			"contrib/libs/musl/extra",
+		},
+		// AutoPeerCFlags is the consumer-side `-D_musl_` sentinel that
+		// `defaultPeerCFlags` injects when MUSL=yes and the module is
+		// not LibcMusl-self / not effectively NO_PLATFORM. Reference
+		// slot 79 carries it.
+		AutoPeerCFlags: []string{"-D_musl_"},
+		// The reference's resolved transitive header set; the test
+		// pins both cmd_args AND inputs against sg.json.
+		IncludeInputs: append([]string(nil), ref.Inputs[1:]...),
+	}
+	_, outPath := EmitCC(inst, "auxhelper.cc", in, emit)
+
+	if outPath != targetOut {
+		t.Errorf("outPath = %q, want %q", outPath, targetOut)
+	}
+
+	got := emit.nodes[0]
+
+	wantArgs := ref.Cmds[0].CmdArgs
+
+	if len(got.Cmds[0].CmdArgs) != len(wantArgs) {
+		t.Fatalf("cmd_args length = %d, want %d", len(got.Cmds[0].CmdArgs), len(wantArgs))
+	}
+
+	for i := range wantArgs {
+		if got.Cmds[0].CmdArgs[i] != wantArgs[i] {
+			t.Errorf("cmd_args[%d]:\n  got:  %q\n  want: %q", i, got.Cmds[0].CmdArgs[i], wantArgs[i])
+		}
+	}
+}
