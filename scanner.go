@@ -86,6 +86,16 @@ type includeDirective struct {
 type IncludeScanner struct {
 	sysincl    SysInclSet
 	sourceRoot string
+	// sourceRootSlash is the precomputed `sourceRoot + "/"` prefix.
+	// Hot paths build absolute paths by `sourceRootSlash + rel` (one
+	// 2-string concat = one alloc) instead of `sourceRoot + "/" + rel`
+	// (which Go's runtime resolves via concatstring3 — still one alloc,
+	// but the literal `"/"` segment forces the string-table to allocate
+	// the joined `sourceRoot+"/"` prefix on every call). Caching it
+	// once removes the per-call prefix alloc that PR-34k's profile
+	// flagged inside `addPath` and `resolve`'s `TrimPrefix(... ,
+	// s.sourceRoot+"/")` call sites.
+	sourceRootSlash string
 
 	mu           sync.Mutex
 	parsed       map[string][]includeDirective
@@ -117,6 +127,20 @@ type IncludeScanner struct {
 
 	visitedPool sync.Pool // *map[string]struct{}
 	orderPool   sync.Pool // *[]string
+	// seenPool reuses the per-resolveSearchPath dedup map across calls.
+	// Each resolve produces 1-6 candidate paths so the map fills to a
+	// handful of entries; the bucket allocation (~256 B) is what we
+	// were paying per call before pooling.
+	seenPool sync.Pool // *map[string]struct{}
+
+	// emittedRelCache memoises the per-output `$(SOURCE_ROOT)/<rel>`
+	// string built by WalkClosure for every header in the closure. The
+	// same header appears in many CC nodes' closures (libcxx's
+	// __config is included by 3000+ CCs), so interning the formatted
+	// path string once and reusing it saves the per-element string
+	// concat — 30 MB / run pre-PR-34k.
+	emittedRelMu    sync.Mutex
+	emittedRelCache map[string]string
 }
 
 type sysinclSourceKey struct {
@@ -141,14 +165,20 @@ type resolveKey struct {
 // source-root absolute path.
 func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
 	s := &IncludeScanner{
-		sysincl:              sysincl,
-		sourceRoot:           sourceRoot,
-		parsed:               make(map[string][]includeDirective),
-		exists:               make(map[string]bool, 4096),
-		resolveCache:         make(map[resolveKey][]string, 4096),
-		viewCache:            make(map[string]PerSourceView, 256),
-		sysinclSourceCache:   make(map[sysinclSourceKey][]string, 4096),
-		sysinclIncluderCache: make(map[sysinclIncluderKey][]string, 4096),
+		sysincl:         sysincl,
+		sourceRoot:      sourceRoot,
+		sourceRootSlash: sourceRoot + "/",
+		parsed:          make(map[string][]includeDirective, 8192),
+		exists:          make(map[string]bool, 16384),
+		resolveCache:    make(map[resolveKey][]string, 16384),
+		viewCache:       make(map[string]PerSourceView, 1024),
+		emittedRelCache: make(map[string]string, 16384),
+		// Pre-sized to the upper end of the observed working set for the
+		// tools/archiver target. Pre-sizing eliminates the rehash-and-
+		// grow chain that PR-34k's profile flagged as a dominant
+		// flat-alloc inside `sysinclSourceCache[key] = ...`.
+		sysinclSourceCache:   make(map[sysinclSourceKey][]string, 131072),
+		sysinclIncluderCache: make(map[sysinclIncluderKey][]string, 16384),
 	}
 	s.anySrcView = s.sysincl.PreparePerSource("")
 
@@ -166,6 +196,15 @@ func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
 		o := make([]string, 0, 64)
 
 		return &o
+	}
+
+	// Per-resolve dedup maps are tiny (1-6 entries typical); start
+	// with a small bucket and let it grow once for the rare large
+	// resolution.
+	s.seenPool.New = func() any {
+		m := make(map[string]struct{}, 8)
+
+		return &m
 	}
 
 	return s
@@ -205,7 +244,7 @@ type ScanContext struct {
 // retains backing capacity for the next call. Pool items are
 // pointer-typed (`*map`, `*[]string`) so `Pool.Put` does not box.
 func (s *IncludeScanner) WalkClosure(ctx ScanContext) []string {
-	srcAbs := s.sourceRoot + "/" + ctx.SourceRel
+	srcAbs := s.sourceRootSlash + ctx.SourceRel
 	ctxHash := hashScanContext(&ctx)
 
 	visitedP := s.visitedPool.Get().(*map[string]struct{})
@@ -216,7 +255,6 @@ func (s *IncludeScanner) WalkClosure(ctx ScanContext) []string {
 
 	s.dfs(srcAbs, &ctx, ctxHash, visited, &order)
 
-	prefix := s.sourceRoot + "/"
 	out := make([]string, 0, len(order))
 
 	for _, abs := range order {
@@ -225,8 +263,7 @@ func (s *IncludeScanner) WalkClosure(ctx ScanContext) []string {
 			continue
 		}
 
-		rel := strings.TrimPrefix(abs, prefix)
-		out = append(out, "$(SOURCE_ROOT)/"+rel)
+		out = append(out, s.emittedRel(abs))
 	}
 
 	// Reset and return scratch buffers to the pool. `clear()`
@@ -241,6 +278,32 @@ func (s *IncludeScanner) WalkClosure(ctx ScanContext) []string {
 
 	s.visitedPool.Put(visitedP)
 	s.orderPool.Put(orderP)
+
+	return out
+}
+
+// emittedRel converts an absolute path under sourceRoot into the
+// `$(SOURCE_ROOT)/<rel>` form used in graph-node Inputs, interning the
+// result so repeat calls (libcxx's __config.h is reached by 3000+ CC
+// closures) return the same string instance instead of re-allocating
+// the concat per caller. Cache writes go through a dedicated mutex so
+// the scanner's main `mu` (which holds the parse/resolve caches under
+// recursion) is not contended on the WalkClosure output path.
+func (s *IncludeScanner) emittedRel(abs string) string {
+	s.emittedRelMu.Lock()
+	cached, ok := s.emittedRelCache[abs]
+	s.emittedRelMu.Unlock()
+
+	if ok {
+		return cached
+	}
+
+	rel := strings.TrimPrefix(abs, s.sourceRootSlash)
+	out := "$(SOURCE_ROOT)/" + rel
+
+	s.emittedRelMu.Lock()
+	s.emittedRelCache[abs] = out
+	s.emittedRelMu.Unlock()
 
 	return out
 }
@@ -336,28 +399,40 @@ func (s *IncludeScanner) parseIncludes(absPath string) []includeDirective {
 
 	out := make([]includeDirective, 0, 8)
 
-	for _, line := range splitLinesNoAlloc(data) {
-		m := includeRe.FindSubmatch(line)
+	eachLine(data, func(line []byte) {
+		// `FindSubmatchIndex` returns a flat `[]int` of byte offsets
+		// (start1,end1, ..., startN,endN). The stdlib internally uses
+		// a 4-int dst-cap on the stack, so a tiny match returns
+		// without allocating; the [][]byte form of FindSubmatch wraps
+		// the same offsets in a freshly-allocated slice header per
+		// call (~2 MB flat across the M2 closure pre-PR-34k).
+		m := includeRe.FindSubmatchIndex(line)
 
 		if m == nil {
-			continue
+			return
 		}
 
 		// Determine kind by inspecting the line's bracket character
-		// after the keyword. `[<"]` capture is not exposed by
-		// FindSubmatch, so we re-find the bracket position.
+		// after the keyword.
 		kind := includeSystem
-		// Find the first `<` or `"` after the keyword in the line.
-		idx := indexOfAny(line, []byte{'<', '"'})
+		idx := indexOfAngleOrQuote(line)
 
 		if idx >= 0 && line[idx] == '"' {
 			kind = includeQuoted
 		}
 
-		next := string(m[1]) == "include_next"
+		// m[2:4] are start/end offsets of the directive keyword
+		// (`include` or `include_next`). Comparing on length avoids
+		// `string(line[m[2]:m[3]])` allocation per matched line.
+		next := (m[3] - m[2]) == len("include_next")
 
-		out = append(out, includeDirective{kind: kind, next: next, target: string(m[2])})
-	}
+		// m[4:6] are the target capture's byte offsets. The single
+		// remaining string allocation per match is converting the
+		// target bytes to a string for the cache value.
+		target := string(line[m[4]:m[5]])
+
+		out = append(out, includeDirective{kind: kind, next: next, target: target})
+	})
 
 	s.mu.Lock()
 	s.parsed[absPath] = out
@@ -436,7 +511,7 @@ func (s *IncludeScanner) resolve(includerAbs string, d includeDirective, ctx *Sc
 	// libc-to-musl line 75, libc-to-compat) to source-keyed so they
 	// no longer fire on libcxx-internal includer chains reaching
 	// uchar.h/wchar.h via `__has_include_next` shadow patterns.
-	includerRel := strings.TrimPrefix(includerAbs, s.sourceRoot+"/")
+	includerRel := strings.TrimPrefix(includerAbs, s.sourceRootSlash)
 	mappings := s.sysinclLookup(ctx.SourceRel, includerRel, d.target)
 
 	if len(mappings) == 0 {
@@ -619,11 +694,10 @@ func (s *IncludeScanner) absifyRels(rels []string) []string {
 		return nil
 	}
 
-	prefix := s.sourceRoot + "/"
 	out := make([]string, 0, len(rels))
 
 	for _, rel := range rels {
-		out = append(out, prefix+normalisePath(rel))
+		out = append(out, s.sourceRootSlash+normalisePath(rel))
 	}
 
 	return out
@@ -673,10 +747,14 @@ func (s *IncludeScanner) resolveSearchPath(includerAbs string, d includeDirectiv
 		return cached
 	}
 
-	var (
-		out  []string
-		seen = map[string]struct{}{}
-	)
+	var out []string
+
+	// Pool the per-resolve dedup map. PR-34k's profile showed
+	// `resolveSearchPath`'s map literal as a per-call ~256 B alloc
+	// fired ~40k times across the tools/archiver run. The map is
+	// cleared and returned to the pool before we exit.
+	seenP := s.seenPool.Get().(*map[string]struct{})
+	seen := *seenP
 
 	addPath := func(rel string) bool {
 		// Normalize `..`/`.` segments so paths like
@@ -689,7 +767,7 @@ func (s *IncludeScanner) resolveSearchPath(includerAbs string, d includeDirectiv
 			return false
 		}
 
-		abs := s.sourceRoot + "/" + rel
+		abs := s.sourceRootSlash + rel
 
 		if !s.fileExists(abs) {
 			return false
@@ -709,7 +787,7 @@ func (s *IncludeScanner) resolveSearchPath(includerAbs string, d includeDirectiv
 	searchPathFound := false
 
 	if d.kind == includeQuoted {
-		incRel := strings.TrimPrefix(includerAbs, s.sourceRoot+"/")
+		incRel := strings.TrimPrefix(includerAbs, s.sourceRootSlash)
 		incDir := pathDir(incRel)
 
 		var candidate string
@@ -764,6 +842,12 @@ func (s *IncludeScanner) resolveSearchPath(includerAbs string, d includeDirectiv
 			}
 		}
 	}
+
+	// Reset and release the dedup map to the pool. `clear()` (Go 1.21+)
+	// drops every key without releasing the bucket allocation, so the
+	// next caller starts with empty-but-prewarmed state.
+	clear(seen)
+	s.seenPool.Put(seenP)
 
 	s.mu.Lock()
 	s.resolveCache[key] = out
@@ -834,11 +918,15 @@ func (s *IncludeScanner) fileExists(absPath string) bool {
 	return val
 }
 
-// splitLinesNoAlloc walks `data` returning successive lines as
-// byte-slices into the same backing array — no per-line allocation.
-// Caller must not mutate the returned slices.
-func splitLinesNoAlloc(data []byte) [][]byte {
-	out := make([][]byte, 0, 64)
+// eachLine invokes `fn` for every newline-terminated record in `data`,
+// passing a sub-slice of `data` (no per-line slice allocation, no
+// `[][]byte` accumulator). The optional trailing `\r` is stripped to
+// match POSIX-vs-Windows line conventions. The callback must not retain
+// the slice past its invocation: the next iteration may reuse the same
+// backing memory for a different sub-slice. PR-34k replaced the prior
+// `splitLinesNoAlloc` (which allocated a per-file `make([][]byte, 0,
+// 64)` — ~74 MB across the tools/archiver run) with this iterator.
+func eachLine(data []byte, fn func(line []byte)) {
 	start := 0
 
 	for i := 0; i < len(data); i++ {
@@ -849,26 +937,27 @@ func splitLinesNoAlloc(data []byte) [][]byte {
 				line = line[:len(line)-1]
 			}
 
-			out = append(out, line)
+			fn(line)
 			start = i + 1
 		}
 	}
 
 	if start < len(data) {
-		out = append(out, data[start:])
+		fn(data[start:])
 	}
-
-	return out
 }
 
-// indexOfAny returns the index of the first occurrence of any byte
-// in `chars` within `b`, or -1 when none found.
-func indexOfAny(b []byte, chars []byte) int {
+// indexOfAngleOrQuote returns the index of the first `<` or `"` in `b`,
+// or -1 when neither is present. Specialised for include-directive
+// parsing — replaces the generic `indexOfAny` two-byte loop, which
+// allocated nothing but ran a length-2 inner loop per byte; the
+// specialised form is straight-line and inlines.
+func indexOfAngleOrQuote(b []byte) int {
 	for i := 0; i < len(b); i++ {
-		for _, c := range chars {
-			if b[i] == c {
-				return i
-			}
+		c := b[i]
+
+		if c == '<' || c == '"' {
+			return i
 		}
 	}
 
