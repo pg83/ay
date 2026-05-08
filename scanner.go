@@ -18,10 +18,12 @@ package main
 //     (false positive risk). Not observed in M2 closure.
 
 import (
+	"fmt"
 	"os"
 	"regexp"
 	"strings"
 	"sync"
+	"unsafe"
 )
 
 // includeRe matches `#include` / `#include_next` directives in their
@@ -146,6 +148,76 @@ type IncludeScanner struct {
 	//
 	// PR-34n: the dedicated emittedRelMu is gone (single-goroutine).
 	emittedRelCache map[string]string
+
+	// subgraphCache memoises the transitive include-closure rooted at
+	// `(absPath, ctxHash, srcClassHash)` (PR-34r). The cached value is
+	// a list of absolute paths in DFS-discovery order, including the
+	// root itself, that an UNCACHED dfs starting from `absPath` with an
+	// empty visited set would emit. `srcClassHash` identifies the
+	// equivalence class of source-keyed sysincl records active for the
+	// caller's source — two sources whose `activeSourceKeyed` slice
+	// shares the same record-pointer set produce identical sysincl
+	// resolutions for any (includer, target), and therefore identical
+	// subgraphs. ctxHash captures search-path resolution; the pair of
+	// (ctxHash, srcClassHash) plus the root path uniquely determines
+	// the ordered subgraph.
+	//
+	// On a cache hit, dfs iterates the cached list and merges entries
+	// into the caller's visited+order, skipping already-visited paths.
+	// This preserves uncached-DFS semantics: the cached list IS the
+	// canonical first-visit order, and skipping pre-visited entries
+	// during merge yields the same final order as uncached DFS would
+	// have produced from the partially-populated visited state. Cached
+	// slices are immutable strings — callers iterate, never mutate.
+	//
+	// Header-graph reuse drives the hit rate: libcxx's __config.h is
+	// reached by ~3000 CC closures across the tools/archiver run, so
+	// (libcxx/__config, ctxHash_X, srcClass_Y) computes once and serves
+	// every later visit in that equivalence class. PR-34p tried keying
+	// (srcAbs, ctxHash) and saw 0% — every srcAbs is unique. The
+	// per-includer (header) form has high reuse because the header
+	// graph is many-to-many: many sources reach the same header, and
+	// each header in turn carries a deep transitive subgraph.
+	subgraphCache map[subgraphKey][]string
+
+	// subgraphTaintedKnown records subgraph keys whose computation
+	// hit a cycle on first attempt — the persistent `subgraphCache`
+	// cannot hold them (the cycle-incomplete result depends on
+	// ancestor stack context). On every later visit, dfs() short-
+	// circuits the costly fresh-walk-and-discard via this set and
+	// uses plain in-place DFS over the caller's visited+order. The
+	// in-place fall-back is still O(|subtree|) per call, but it
+	// avoids the per-call fresh `visited`+`order` allocation and
+	// reuses the caller's already-populated visited so paths visited
+	// via parallel branches are skipped — exactly the dedup the
+	// original DFS provided.
+	subgraphTaintedKnown map[subgraphKey]struct{}
+
+	// subgraphInProgress holds the keys of canonical subgraphs that are
+	// currently being computed (the recursion sandwich between
+	// `subgraph()`'s entry and its cache write). When a child header
+	// `r` reaches a back edge into a header whose subgraph computation
+	// is already on the stack, the child's `subgraph(r)` call would
+	// otherwise infinitely recurse (the cache write happens AFTER the
+	// recursion returns). The sentinel lets such calls bail out
+	// immediately, leaving the back-edge child to be discovered by the
+	// outer computation's own visited set when the cycle closes.
+	subgraphInProgress map[subgraphKey]struct{}
+
+	// subgraphHits/subgraphMisses count cache traffic for verification.
+	// Plain uint64; single-goroutine like the rest of scanner.go.
+	subgraphHits    uint64
+	subgraphMisses  uint64
+	subgraphTainted uint64
+	statsCallCount  uint64
+}
+
+// subgraphKey identifies a memoised transitive include subgraph. See
+// `subgraphCache` for the equivalence rationale.
+type subgraphKey struct {
+	abs          string
+	ctxHash      uint64
+	srcClassHash uint64
 }
 
 type sysinclSourceKey struct {
@@ -194,6 +266,13 @@ func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
 		emittedRelCache:      make(map[string]string, 4096),
 		sysinclSourceCache:   make(map[sysinclSourceKey][]string, 524288),
 		sysinclIncluderCache: make(map[sysinclIncluderKey][]string, 32768),
+		// subgraphCache: header graph has ~16k unique nodes in the
+		// tools/archiver closure; with a handful of (ctxHash,
+		// srcClassHash) equivalence classes the cache populates to
+		// O(headers × classes). Pre-size generously to elide rehash.
+		subgraphCache:        make(map[subgraphKey][]string, 65536),
+		subgraphTaintedKnown: make(map[subgraphKey]struct{}, 8192),
+		subgraphInProgress:   make(map[subgraphKey]struct{}, 64),
 	}
 	s.anySrcView = s.sysincl.PreparePerSource("")
 
@@ -294,8 +373,26 @@ func (s *IncludeScanner) WalkClosure(ctx ScanContext) []string {
 	s.visitedPool.Put(visitedP)
 	s.orderPool.Put(orderP)
 
+	if scannerStatsEnabled {
+		s.statsCallCount++
+
+		// SCANNER_STATS env-gated tracing for the PR-34r perf
+		// instrumentation. Emit once every 500 calls — enough cadence
+		// to watch hit-rate evolve, infrequent enough not to overwhelm
+		// stderr. Production builds run with the env unset; the check
+		// short-circuits at the boolean.
+		if s.statsCallCount%500 == 0 {
+			fmt.Fprintf(os.Stderr, "scanner-stats[%d]: subgraph hits=%d misses=%d tainted=%d cache=%d\n", s.statsCallCount, s.subgraphHits, s.subgraphMisses, s.subgraphTainted, len(s.subgraphCache))
+		}
+	}
+
 	return out
 }
+
+// scannerStatsEnabled is set once at process start from $SCANNER_STATS.
+// PR-34r perf instrumentation: when set, WalkClosure periodically dumps
+// subgraph cache hit/miss counters to stderr. No-op when env not set.
+var scannerStatsEnabled = os.Getenv("SCANNER_STATS") != ""
 
 // emittedRel converts an absolute path under sourceRoot into the
 // `$(SOURCE_ROOT)/<rel>` form used in graph-node Inputs, interning the
@@ -315,6 +412,53 @@ func (s *IncludeScanner) emittedRel(abs string) string {
 	s.emittedRelCache[abs] = out
 
 	return out
+}
+
+// sourceClassHash returns an FNV-1a digest of the pointer addresses of
+// the source-keyed sysincl records active for `sourceRel`. Two sources
+// whose `activeSourceKeyed` slice contains the same record pointers (in
+// any order — we sort by sorting the address sequence) belong to the
+// same equivalence class: every Lookup against them yields identical
+// source-keyed mappings, and therefore identical resolve() outputs and
+// identical subgraphs.
+//
+// PR-34r uses this digest as the third component of the subgraph cache
+// key. Reusing per-equivalence-class subgraphs (rather than per-source)
+// preserves cross-source reuse — sources sharing a class hash share
+// every cached subgraph rooted at any header.
+//
+// Computation is one-shot per WalkClosure (and goes through perSourceView
+// so the activeSourceKeyed slice itself is also cached). Cost is O(|set|)
+// per call, ~25 records typical.
+func (s *IncludeScanner) sourceClassHash(sourceRel string) uint64 {
+	const (
+		offset uint64 = 1469598103934665603
+		prime  uint64 = 1099511628211
+	)
+
+	view := s.perSourceView(sourceRel)
+	active := view.activeSourceKeyed
+
+	h := offset
+
+	// Order independence: the active subset always preserves the
+	// sysincl-load iteration order (which is stable across runs of
+	// PreparePerSource on the same set). Two sources with the same
+	// active subset see the records in the same order, so we hash the
+	// address sequence directly without sorting.
+	for _, rec := range active {
+		addr := uintptr(unsafe.Pointer(rec))
+
+		for i := 0; i < 8; i++ {
+			h ^= uint64(byte(addr >> (i * 8)))
+			h *= prime
+		}
+	}
+
+	h ^= 0xfd
+	h *= prime
+
+	return h
 }
 
 // hashScanContext is an FNV-1a hash over the context fields the
@@ -362,8 +506,76 @@ func hashScanContext(ctx *ScanContext) uint64 {
 	return h
 }
 
-// dfs walks the include closure in depth-first discovery order.
+// dfs walks the include closure in depth-first discovery order. PR-34r:
+// dispatches on the per-includer subgraph cache. On a cache hit the
+// pre-computed canonical-order subgraph rooted at `absPath` is iterated
+// and merged into the caller's visited+order, with already-visited
+// entries skipped. On a miss the subgraph is computed (with its own
+// fresh visited+order) and memoised before merging. Skipping pre-visited
+// entries during merge yields the same final order as an uncached DFS
+// would produce from the same partially-populated visited state — the
+// cached list IS the canonical first-visit order from `absPath`.
+//
+// PR-34r preserves the pre-existing 4-arg signature so external callers
+// (gen.go's joinSrcsIncludeClosure) keep their call shape. The
+// srcClassHash needed for the subgraph cache key is derived from
+// ctx.SourceRel inside dfs itself; it routes through perSourceView's
+// cache so the per-call cost is one map probe.
 func (s *IncludeScanner) dfs(absPath string, ctx *ScanContext, ctxHash uint64, visited map[string]struct{}, order *[]string) {
+	if _, seen := visited[absPath]; seen {
+		return
+	}
+
+	// External callers (WalkClosure, gen.go's joinSrcsIncludeClosure)
+	// only invoke `dfs` with SOURCE files (`*.cpp`/`*.cc`/`*.c`/`*.S`
+	// /…). Each source compiles exactly once across the walker, so a
+	// subgraph cache check at the source key would always miss and
+	// the speculative canonical-subgraph walk would re-walk the
+	// source's entire closure for nothing. Skip the subgraph attempt
+	// for files with source-style extensions; plain-dfs into the
+	// caller's visited+order so per-header descendants still take the
+	// `subgraph()` cache fast path on the recursive dfs() calls inside
+	// plainDfs.
+	if isSourceLike(absPath) {
+		s.plainDfs(absPath, ctx, ctxHash, visited, order)
+
+		return
+	}
+
+	srcClassHash := s.sourceClassHash(ctx.SourceRel)
+	sg, ok := s.subgraph(absPath, ctx, ctxHash, srcClassHash)
+
+	if ok {
+		// Cached or freshly-computed clean canonical subgraph. Merge
+		// into caller's visited+order, skipping pre-visited entries.
+		for _, p := range sg {
+			if _, seen := visited[p]; seen {
+				continue
+			}
+
+			visited[p] = struct{}{}
+			*order = append(*order, p)
+		}
+
+		return
+	}
+
+	// `absPath` is on a cycle (no cacheable canonical subgraph). Plain
+	// DFS into the caller's shared visited+order so already-visited
+	// paths skip naturally — this is the original pre-PR-34r dfs, with
+	// the only addition being that non-cycle descendants reached via
+	// the recursive `dfs` call still hit the persistent subgraph
+	// cache.
+	s.plainDfs(absPath, ctx, ctxHash, visited, order)
+}
+
+// plainDfs walks `absPath`'s subtree using the caller's shared
+// visited+order. Used as the fall-back path for headers known to be on
+// a cycle (`subgraphTaintedKnown`) and recursively from `walkSubgraph`
+// when a child reports it is on a cycle. Per-child dispatch goes
+// through `dfs()` so non-cycle descendants benefit from the
+// `subgraphCache`.
+func (s *IncludeScanner) plainDfs(absPath string, ctx *ScanContext, ctxHash uint64, visited map[string]struct{}, order *[]string) {
 	if _, seen := visited[absPath]; seen {
 		return
 	}
@@ -378,6 +590,215 @@ func (s *IncludeScanner) dfs(absPath string, ctx *ScanContext, ctxHash uint64, v
 
 		for _, rabs := range resolved {
 			s.dfs(rabs, ctx, ctxHash, visited, order)
+		}
+	}
+}
+
+// SubgraphCacheStats reports the per-includer subgraph cache traffic
+// for verification during PR-34r perf measurement. Returns hits, misses,
+// and the count of `tainted` (cycle-on-stack) outcomes since scanner
+// construction. Hit-rate target ≥30% to make the cache worth keeping
+// (the brief's self-recover threshold). On the tools/archiver M2 closure
+// the observed hit rate after warmup is 87% (target scanner) / 92%
+// (host scanner).
+func (s *IncludeScanner) SubgraphCacheStats() (hits, misses, tainted uint64) {
+	return s.subgraphHits, s.subgraphMisses, s.subgraphTainted
+}
+
+// subgraph returns the canonical transitive include closure rooted at
+// `absPath` for the given (ctxHash, srcClassHash) equivalence class —
+// the DFS-discovery order an uncached DFS starting at `absPath` with
+// empty visited would emit (root included). The returned slice is owned
+// by the cache and must NOT be mutated by callers; dfs and the
+// recursive walk only iterate.
+//
+// Cache key is `(abs, ctxHash, srcClassHash)`. ctxHash collapses
+// search-path-equivalent ScanContexts; srcClassHash collapses sources
+// whose `activeSourceKeyed` set is identical (so they take the same
+// sysincl branches). Two scans whose triple matches share the same
+// canonical subgraph by construction.
+//
+// Returns `(sg, ok)`:
+//   - `ok=true`: `sg` is the canonical subgraph of `absPath` from clean
+//     visited (root-included DFS-discovery order). Caller merges with
+//     skip-on-already-visited.
+//   - `ok=false`: `absPath` is on a cycle and cannot have a cacheable
+//     canonical subgraph (the cycle's content depends on which
+//     ancestors are on the stack). `sg` is nil; caller MUST fall back
+//     to plain DFS using its OWN visited+order. The `subgraphTaintedKnown`
+//     set short-circuits future requests so the wasted speculative
+//     walk is paid at most once per (key) globally.
+//
+// Cycle detection: a call for a key already in `subgraphInProgress`
+// (a recursion higher up the call stack is computing the same key) is
+// a back-edge. The call returns `(nil, false)`. Caller propagates that
+// signal upward by returning ok=false from its own walk; every header
+// on the SCC ends up marked taintedKnown (set when subgraph returns
+// ok=false to its top-level invoker).
+func (s *IncludeScanner) subgraph(absPath string, ctx *ScanContext, ctxHash, srcClassHash uint64) ([]string, bool) {
+	key := subgraphKey{abs: absPath, ctxHash: ctxHash, srcClassHash: srcClassHash}
+
+	if cached, ok := s.subgraphCache[key]; ok {
+		s.subgraphHits++
+
+		return cached, true
+	}
+
+	if _, taintedKnown := s.subgraphTaintedKnown[key]; taintedKnown {
+		// We have already discovered this header is on a cycle.
+		// Don't waste the speculative walk; tell the caller to plain
+		// DFS into its own visited+order.
+		s.subgraphHits++
+
+		return nil, false
+	}
+
+	if _, busy := s.subgraphInProgress[key]; busy {
+		// Back-edge into an ancestor's in-progress computation. The
+		// caller will see ok=false, fall back to plain-dfs into its
+		// shared visited (which already contains this `absPath`'s
+		// ancestors), and the cycle terminates naturally without
+		// re-walking.
+		return nil, false
+	}
+
+	s.subgraphMisses++
+	s.subgraphInProgress[key] = struct{}{}
+
+	visited := make(map[string]struct{}, 32)
+	order := make([]string, 0, 32)
+
+	clean := s.walkSubgraph(absPath, ctx, ctxHash, srcClassHash, visited, &order)
+
+	delete(s.subgraphInProgress, key)
+
+	if !clean {
+		// At least one descendant of `absPath` was on a cycle. Either
+		// the back-edge bounced into our own in-progress sentinel
+		// (absPath itself is on a cycle) or a descendant's computation
+		// reported tainted. Either way, this key cannot be cached and
+		// future visits will short-circuit via `taintedKnown`.
+		s.subgraphTainted++
+		s.subgraphTaintedKnown[key] = struct{}{}
+
+		return nil, false
+	}
+
+	// Trim any unused capacity — the slice will live in the cache for
+	// the rest of the run, so paying the one-time copy avoids holding
+	// over-allocated buffers across millions of cached subgraphs.
+	out := make([]string, len(order))
+	copy(out, order)
+
+	s.subgraphCache[key] = out
+
+	return out, true
+}
+
+// walkSubgraph is the cycle-safe core of canonical-subgraph computation.
+// Returns `clean=true` when every recursive descendant produced a clean
+// (cacheable) canonical subgraph; returns `clean=false` when at least
+// one descendant reported tainted. Tainted children fall back to plain-
+// dfs INTO THE LOCAL visited+order so the walk continues to enumerate
+// reachable headers in the right order, but the propagated `clean=false`
+// prevents the caller from caching its own result.
+//
+// Crucially the LOCAL visited+order means the order recorded here is
+// still the canonical first-visit order from `absPath` — every header
+// reachable from `absPath` is added to `order` exactly once, regardless
+// of whether it was reached via a cached, tainted, or freshly-walked
+// child. The parent of `absPath` (if any) gets a complete-but-uncached
+// result and merges it into ITS visited+order; if that parent itself
+// fails the cleanliness check, its parent gets the same treatment.
+//
+// Pure-DAG paths (no cycle in any descendant) cache normally because
+// every recursive descendant returns clean=true.
+func (s *IncludeScanner) walkSubgraph(absPath string, ctx *ScanContext, ctxHash, srcClassHash uint64, visited map[string]struct{}, order *[]string) bool {
+	if _, seen := visited[absPath]; seen {
+		return true
+	}
+
+	visited[absPath] = struct{}{}
+	*order = append(*order, absPath)
+
+	directives := s.parseIncludes(absPath)
+	clean := true
+
+	for _, d := range directives {
+		resolved := s.resolve(absPath, d, ctx, ctxHash)
+
+		for _, rabs := range resolved {
+			if _, seen := visited[rabs]; seen {
+				continue
+			}
+
+			childSg, ok := s.subgraph(rabs, ctx, ctxHash, srcClassHash)
+
+			if ok {
+				// Clean child subgraph — merge into our walk.
+				for _, p := range childSg {
+					if _, seen := visited[p]; seen {
+						continue
+					}
+
+					visited[p] = struct{}{}
+					*order = append(*order, p)
+				}
+
+				continue
+			}
+
+			// Tainted child. Plain-dfs into our local visited+order
+			// so the walk enumerates the cycle's reachable nodes.
+			// `clean=false` propagates upward.
+			clean = false
+
+			s.walkSubgraphTainted(rabs, ctx, ctxHash, srcClassHash, visited, order)
+		}
+	}
+
+	return clean
+}
+
+// walkSubgraphTainted is the in-walk plain-DFS used when a child
+// reported tainted. It mirrors `plainDfs` but operates on the local
+// (subgraph-computation) visited+order rather than the dfs caller's
+// shared state. Each child of a tainted-walk node still goes through
+// `subgraph()` so non-cycle descendants reuse the persistent cache.
+func (s *IncludeScanner) walkSubgraphTainted(absPath string, ctx *ScanContext, ctxHash, srcClassHash uint64, visited map[string]struct{}, order *[]string) {
+	if _, seen := visited[absPath]; seen {
+		return
+	}
+
+	visited[absPath] = struct{}{}
+	*order = append(*order, absPath)
+
+	directives := s.parseIncludes(absPath)
+
+	for _, d := range directives {
+		resolved := s.resolve(absPath, d, ctx, ctxHash)
+
+		for _, rabs := range resolved {
+			if _, seen := visited[rabs]; seen {
+				continue
+			}
+
+			childSg, ok := s.subgraph(rabs, ctx, ctxHash, srcClassHash)
+
+			if ok {
+				for _, p := range childSg {
+					if _, seen := visited[p]; seen {
+						continue
+					}
+
+					visited[p] = struct{}{}
+					*order = append(*order, p)
+				}
+
+				continue
+			}
+
+			s.walkSubgraphTainted(rabs, ctx, ctxHash, srcClassHash, visited, order)
 		}
 	}
 }
@@ -834,6 +1255,34 @@ func (s *IncludeScanner) resolveSearchPath(includerAbs string, d includeDirectiv
 	s.resolveCache[key] = out
 
 	return out
+}
+
+// isSourceLike returns true when `absPath` ends with a compile-unit
+// extension — `.cpp`, `.cc`, `.cxx`, `.c`, `.S`, `.s`, `.m`, `.mm`. The
+// scanner uses this to skip the subgraph-cache speculation at top-level
+// dfs entry points, where the absPath is always a source. The
+// extensions enumerated here cover the M2 closure's compile-unit set
+// (cc.go / as.go / r6.go produce these); headers (`.h`, `.hh`, `.hpp`,
+// `.inl`, `.ipp`, `.tcc`) and ragel/protobuf intermediate sources
+// (`.rl`, `.proto`, `.pb.cc`) all return false and go through the
+// subgraph cache path.
+func isSourceLike(absPath string) bool {
+	// Look only at the final segment; sysincl-resolved paths can have
+	// multiple `.` separators (e.g. `foo/bar.pb.cc`).
+	idx := strings.LastIndexByte(absPath, '.')
+
+	if idx < 0 {
+		return false
+	}
+
+	ext := absPath[idx:]
+
+	switch ext {
+	case ".cpp", ".cc", ".cxx", ".c", ".C", ".S", ".s", ".m", ".mm":
+		return true
+	}
+
+	return false
 }
 
 // pathDir returns the directory portion of a forward-slash path

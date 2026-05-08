@@ -17,3 +17,4 @@
 # Artifacts / debug scripts
 /_artifacts/
 /debug/
+/.bench/
