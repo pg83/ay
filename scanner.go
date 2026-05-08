@@ -14,10 +14,24 @@ package main
 //     sysincl mapping.
 //   - Exact ymake scanner-order traversal. L2 compares inputs as a
 //     multiset; we DFS-discovery-emit and rely on multiset semantics.
-//   - `#include` lines inside multi-line C strings or block comments
-//     (false positive risk). Not observed in M2 closure.
+//
+// PR-35u: comment stripping. The original "block-comment false
+// positive risk; not observed in M2 closure" was wrong — 151 of 228
+// L2-divergent pairs in the tools/archiver M2 closure all stemmed
+// from one site:
+// `contrib/libs/cxxsupp/libcxx/include/__charconv/from_chars_integral.h:156-166`
+// holds a `/* ... #include <iostream> ... */` block-comment "code
+// used to generate the lookup table" that the regex picked up,
+// flooding every CC source whose closure transitively reaches
+// `<charconv>` with phantom `<iostream>` (and via the cascade,
+// `<format>`/`<chrono>`/`<print>`). `stripComments` walks the file
+// bytes once before regex matching, replacing block-comment, line-
+// comment, and string-literal payloads with spaces (newlines kept
+// so per-line `^\s*#` anchoring is preserved) so the regex never
+// sees include-shaped text inside non-code regions.
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"regexp"
@@ -822,9 +836,32 @@ func (s *IncludeScanner) parseIncludes(absPath string) []includeDirective {
 		return nil
 	}
 
+	// PR-35u: strip C-style block comments, line comments, and string-
+	// literal payloads before regex match. The regex would otherwise
+	// fire on `#include` text inside `/* ... */` blocks (the dominant
+	// L2-divergence root cause documented at PR-35t R1+R2) and on
+	// quoted occurrences inside diagnostic strings. `stripComments`
+	// rewrites in-place over a copy of `data`, replacing payload bytes
+	// with spaces and preserving newlines so per-line `^\s*#` anchoring
+	// is unchanged.
+	data = stripComments(data)
+
 	out := make([]includeDirective, 0, 8)
 
 	eachLine(data, func(line []byte) {
+		// PR-35u: short-circuit lines without `#` before invoking the
+		// regex engine. `stripComments` replaces block-comment text
+		// (often hundreds of consecutive spaces) with spaces; the
+		// `^\s*#` anchor of `includeRe` would otherwise greedily match
+		// the leading whitespace and only fail on the first non-space,
+		// non-`#` byte — multiplying the regex cost roughly 3× on the
+		// M2 closure (profile pre-skip showed `regexp.tryBacktrack`
+		// rising from 0.73s to 2.15s). The byte-scan to find `#` is
+		// vectorised by the runtime and runs at memory bandwidth.
+		if bytes.IndexByte(line, '#') < 0 {
+			return
+		}
+
 		// `FindSubmatchIndex` returns a flat `[]int` of byte offsets
 		// (start1,end1, ..., startN,endN). The stdlib internally uses
 		// a 4-int dst-cap on the stack, so a tiny match returns
@@ -1386,4 +1423,263 @@ func indexOfAngleOrQuote(b []byte) int {
 	}
 
 	return -1
+}
+
+// stripComments rewrites C/C++ source bytes so the include-directive
+// regex never matches text inside non-code regions. Block comments
+// (`/* ... */`) and line comments (`// ...`) are replaced with spaces;
+// newlines are always preserved so the line-iterator's per-line
+// `^\s*#` anchoring continues to address the same lines as the
+// original.
+//
+// String and char literals are NOT stripped. They are RECOGNISED as a
+// transparent state — bytes are walked over so a `/*` or `//` inside
+// a string body never enters comment state — but the bytes themselves
+// stay unchanged. This matters because the include directive's quoted
+// form `#include "header.h"` IS a string literal at lexer level, and
+// stripping its payload would erase every quoted include in the M2
+// closure (PR-35u early prototype lost ~2599 pairs by stripping
+// strings; the brief explicitly says "String/char literals should NOT
+// be stripped"). The price of leaving string bodies intact is a
+// theoretical false positive when a non-include diagnostic string
+// like `"use #include <foo.h>"` appears at column zero of a line —
+// not observed in the M2 closure.
+//
+// Raw string literals (`R"delim(...)delim"`) are skipped wholesale
+// (transparent) so an unescaped `/*` or `//` inside the raw body does
+// not enter comment state.
+//
+// Mutates `data` in place — the buffer comes from os.ReadFile and the
+// caller does not retain it past parseIncludes. A pre-scan returns
+// `data` unchanged when neither `/*` nor `//` is present (no comment
+// triggers) AND no string-literal trigger is present, so files without
+// comments skip the state-machine cost. Most production headers carry
+// at least one comment, so the fast path mostly fires for the rare
+// pure-preprocessor file.
+//
+// The state machine is intentionally simple: it does NOT understand
+// trigraphs, line-continuation backslashes that splice `//` into the
+// next line, alternative tokens (`%:include`), or preprocessor-aware
+// include forms. None of those appear in the M2 closure; a more
+// accurate implementation can replace this when the next ceiling
+// demands it.
+func stripComments(data []byte) []byte {
+	// Fast pre-scan: a buffer with neither `/` nor a quote/raw-string
+	// trigger has nothing to strip and no string state to track. This
+	// also covers the empty-file case.
+	hasTrigger := false
+
+	for i := 0; i < len(data); i++ {
+		c := data[i]
+
+		if c == '/' || c == '"' || c == '\'' {
+			hasTrigger = true
+
+			break
+		}
+	}
+
+	if !hasTrigger {
+		return data
+	}
+
+	n := len(data)
+	i := 0
+
+	for i < n {
+		c := data[i]
+
+		// Line comment: `//` runs to end of line. Newline is preserved.
+		if c == '/' && i+1 < n && data[i+1] == '/' {
+			data[i] = ' '
+			data[i+1] = ' '
+			i += 2
+
+			for i < n && data[i] != '\n' {
+				data[i] = ' '
+				i++
+			}
+
+			continue
+		}
+
+		// Block comment: `/* ... */`. Newlines inside are preserved so
+		// per-line addressing through the comment span keeps lining up.
+		if c == '/' && i+1 < n && data[i+1] == '*' {
+			data[i] = ' '
+			data[i+1] = ' '
+			i += 2
+
+			for i < n {
+				if i+1 < n && data[i] == '*' && data[i+1] == '/' {
+					data[i] = ' '
+					data[i+1] = ' '
+					i += 2
+
+					break
+				}
+
+				if data[i] != '\n' {
+					data[i] = ' '
+				}
+
+				i++
+			}
+
+			continue
+		}
+
+		// Raw string literal: `R"delim(...)delim"`. C++11 raw form lets
+		// the body contain unescaped `"`, `\`, `/*`, and `//`, so we
+		// MUST recognise it to keep the comment state from entering
+		// inside the body. Only recognise `R"` when the previous byte
+		// is not part of an identifier (otherwise it's the trailing
+		// letter of `myR` followed by a regular string).
+		if c == 'R' && i+1 < n && data[i+1] == '"' && !isIdentByte(prevByte(data, i)) {
+			// Read delimiter between `R"` and `(`.
+			delimStart := i + 2
+			j := delimStart
+
+			for j < n && data[j] != '(' && data[j] != '\n' && j-delimStart < 16 {
+				j++
+			}
+
+			if j >= n || data[j] != '(' {
+				// Malformed (or hit a newline before `(`) — treat the
+				// `R` as ordinary identifier and continue. Falling
+				// into the standard `"` branch on the next iteration
+				// preserves prior behaviour.
+				i++
+
+				continue
+			}
+
+			// Capture the delimiter independently — bytes within the
+			// raw-string region we walk are NOT mutated (strings are
+			// transparent), but capturing is still cheap and shields
+			// the close-token match from any future change to the
+			// transparency policy.
+			delim := make([]byte, j-delimStart)
+			copy(delim, data[delimStart:j])
+
+			i = j + 1
+
+			// Walk to `)delim"`. Bytes are not modified — we only
+			// advance past the body so subsequent code/comment scanning
+			// resumes after the closing quote.
+			for i < n {
+				if data[i] == ')' && i+1+len(delim)+1 <= n {
+					match := true
+
+					for k, b := range delim {
+						if data[i+1+k] != b {
+							match = false
+
+							break
+						}
+					}
+
+					if match && data[i+1+len(delim)] == '"' {
+						i += 1 + len(delim) + 1
+
+						break
+					}
+				}
+
+				i++
+			}
+
+			continue
+		}
+
+		// Double-quoted string literal: `"..."`. Standard C escapes —
+		// `\"` does not terminate; `\\` does not start an escape pair.
+		// Bytes are NOT modified; we only walk past the body so a `/*`
+		// or `//` inside cannot enter comment state.
+		if c == '"' {
+			i++
+
+			for i < n {
+				if data[i] == '\\' && i+1 < n && data[i+1] != '\n' {
+					i += 2
+
+					continue
+				}
+
+				if data[i] == '"' {
+					i++
+
+					break
+				}
+
+				if data[i] == '\n' {
+					// Unterminated string at EOL — non-raw strings do
+					// not span newlines absent a backslash-newline
+					// continuation. Bail out so the next line resets
+					// to code state; matches C compiler behaviour.
+					break
+				}
+
+				i++
+			}
+
+			continue
+		}
+
+		// Single-quoted char literal: `'...'`. Same escape rules.
+		// Bytes are NOT modified; we only walk past so `/*` inside
+		// cannot enter comment state.
+		if c == '\'' {
+			i++
+
+			for i < n {
+				if data[i] == '\\' && i+1 < n && data[i+1] != '\n' {
+					i += 2
+
+					continue
+				}
+
+				if data[i] == '\'' {
+					i++
+
+					break
+				}
+
+				if data[i] == '\n' {
+					break
+				}
+
+				i++
+			}
+
+			continue
+		}
+
+		i++
+	}
+
+	return data
+}
+
+// prevByte returns the byte immediately before index `i` in `data`, or
+// 0 when `i == 0`. Used by stripComments to discriminate token-starting
+// `R` (the C++11 raw-string-literal prefix) from a trailing identifier
+// letter.
+func prevByte(data []byte, i int) byte {
+	if i == 0 {
+		return 0
+	}
+
+	return data[i-1]
+}
+
+// isIdentByte reports whether `b` is part of a C/C++ identifier
+// (`[A-Za-z0-9_]`). stripComments uses it to recognise that an `R"`
+// preceded by an identifier byte is NOT the raw-string-literal prefix
+// but the trailing letter of a longer identifier.
+func isIdentByte(b byte) bool {
+	return (b >= 'a' && b <= 'z') ||
+		(b >= 'A' && b <= 'Z') ||
+		(b >= '0' && b <= '9') ||
+		b == '_'
 }
