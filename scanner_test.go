@@ -504,3 +504,303 @@ func TestScanner_SubgraphCacheReuse(t *testing.T) {
 			"(hits delta=%d)", missesAcrossThird, hits3-hitsBefore3)
 	}
 }
+
+// TestScanner_QuotedSysinclGated_LocalResolved pins the PR-35w
+// gate: a quoted include `#include "foo.h"` whose local search-path
+// resolution succeeded MUST NOT pick up the matching sysincl record's
+// alternate path. Quoted-form is a project-local include; the upstream
+// ymake scanner only consults sysincl alternates when the search-path
+// resolution fails. The text-blind union appended musl/libc/libcxxrt
+// alternates on top of legitimate local resolutions, producing 34
+// L2-divergent pairs in the M2 closure (R3 elf.h-style + R5
+// unwind.h-quoted-self subset).
+//
+// The synthetic tree mirrors the elf.h shape: yasm/elf.h exists and
+// is the legitimate target of `#include "elf.h"` from yasm/source.cpp;
+// sysincl maps `elf.h → musl/include/elf.h`. With the gate, the
+// scanner returns ONLY yasm/elf.h. Without the gate the closure would
+// also contain musl/include/elf.h — the exact L2-divergent
+// over-emission this PR closes.
+func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
+	dir := t.TempDir()
+
+	mkdirs := []string{"yasm", "musl/include"}
+
+	for _, p := range mkdirs {
+		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", p, err)
+		}
+	}
+
+	src := []byte(`#include "elf.h"
+`)
+
+	if err := os.WriteFile(filepath.Join(dir, "yasm/source.cpp"), src, 0o644); err != nil {
+		t.Fatalf("write source.cpp: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "yasm/elf.h"), []byte("// local elf.h\n"), 0o644); err != nil {
+		t.Fatalf("write yasm/elf.h: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "musl/include/elf.h"), []byte("// musl elf.h\n"), 0o644); err != nil {
+		t.Fatalf("write musl/include/elf.h: %v", err)
+	}
+
+	// Hand-build a sysincl set with one record: header `elf.h` maps to
+	// `musl/include/elf.h`. KeyBySource=false + nil filter so the
+	// record matches every (source, includer) pair.
+	sysincl := SysInclSet{
+		{
+			Filter:      nil,
+			KeyBySource: false,
+			Mappings: map[string][]string{
+				"elf.h": {"musl/include/elf.h"},
+			},
+		},
+	}
+
+	scanner := NewIncludeScanner(dir, sysincl)
+	closure := scanner.WalkClosure(ScanContext{
+		SourceRel: "yasm/source.cpp",
+	})
+
+	hasLocal := false
+	hasMusl := false
+
+	for _, p := range closure {
+		switch {
+		case strings.HasSuffix(p, "/yasm/elf.h"):
+			hasLocal = true
+		case strings.HasSuffix(p, "/musl/include/elf.h"):
+			hasMusl = true
+		}
+	}
+
+	if !hasLocal {
+		t.Errorf("closure missing local yasm/elf.h (search-path resolution broken): %v", closure)
+	}
+
+	if hasMusl {
+		t.Errorf("closure contains spurious musl/include/elf.h — PR-35w gate failed to suppress sysincl on locally-resolved quoted include: %v", closure)
+	}
+}
+
+// TestScanner_QuotedSysinclFiresOnLocalMiss is the converse pin: a
+// quoted include whose local search-path resolution FAILED must still
+// fall through to sysincl. The gate is "skip sysincl when local
+// resolved", not "skip sysincl entirely for quoted form" — the
+// upstream ymake scanner consults sysincl alternates when local lookup
+// fails, and we must preserve that behaviour or quoted-form headers
+// that only exist as sysincl entries (e.g. some musl-only forms)
+// would silently lose their inputs.
+func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
+	dir := t.TempDir()
+
+	mkdirs := []string{"src", "musl/include"}
+
+	for _, p := range mkdirs {
+		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", p, err)
+		}
+	}
+
+	// `#include "absent.h"` from src/source.cpp — no local file at
+	// src/absent.h. The sysincl record provides musl/include/absent.h
+	// as the alternate; the gate must let it through.
+	src := []byte(`#include "absent.h"
+`)
+
+	if err := os.WriteFile(filepath.Join(dir, "src/source.cpp"), src, 0o644); err != nil {
+		t.Fatalf("write source.cpp: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "musl/include/absent.h"), []byte("// musl absent.h\n"), 0o644); err != nil {
+		t.Fatalf("write musl/include/absent.h: %v", err)
+	}
+
+	sysincl := SysInclSet{
+		{
+			Filter:      nil,
+			KeyBySource: false,
+			Mappings: map[string][]string{
+				"absent.h": {"musl/include/absent.h"},
+			},
+		},
+	}
+
+	scanner := NewIncludeScanner(dir, sysincl)
+	closure := scanner.WalkClosure(ScanContext{
+		SourceRel: "src/source.cpp",
+	})
+
+	hasMusl := false
+
+	for _, p := range closure {
+		if strings.HasSuffix(p, "/musl/include/absent.h") {
+			hasMusl = true
+
+			break
+		}
+	}
+
+	if !hasMusl {
+		t.Errorf("closure missing musl/include/absent.h — gate over-suppresses sysincl when local resolution failed: %v", closure)
+	}
+}
+
+// TestScanner_AngleSysinclUnaffected pins the asymmetry: an
+// angle-bracket include `#include <unwind.h>` whose local search-path
+// resolution succeeded must STILL pick up matching sysincl alternates.
+// libcxx/libcxxrt/libunwind ship multi-target sysincl records for the
+// same logical header — the reference scan unions the local and
+// sysincl resolutions, and the PR-35w gate is gated on QUOTED form
+// only. Using the same physical layout as the quoted-resolved test
+// but flipping `< >` MUST yield BOTH paths.
+func TestScanner_AngleSysinclUnaffected(t *testing.T) {
+	dir := t.TempDir()
+
+	mkdirs := []string{"libcxxrt", "libunwind/include"}
+
+	for _, p := range mkdirs {
+		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", p, err)
+		}
+	}
+
+	// `#include <unwind.h>` from libcxxrt/source.cpp — angle bracket.
+	// Local resolution succeeds via OwnAddIncl=libcxxrt; sysincl maps
+	// `unwind.h` → libunwind/include/unwind.h. Both must appear.
+	src := []byte(`#include <unwind.h>
+`)
+
+	if err := os.WriteFile(filepath.Join(dir, "libcxxrt/source.cpp"), src, 0o644); err != nil {
+		t.Fatalf("write source.cpp: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "libcxxrt/unwind.h"), []byte("// libcxxrt unwind.h\n"), 0o644); err != nil {
+		t.Fatalf("write libcxxrt/unwind.h: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "libunwind/include/unwind.h"), []byte("// libunwind unwind.h\n"), 0o644); err != nil {
+		t.Fatalf("write libunwind/include/unwind.h: %v", err)
+	}
+
+	sysincl := SysInclSet{
+		{
+			Filter:      nil,
+			KeyBySource: false,
+			Mappings: map[string][]string{
+				"unwind.h": {"libunwind/include/unwind.h"},
+			},
+		},
+	}
+
+	scanner := NewIncludeScanner(dir, sysincl)
+	closure := scanner.WalkClosure(ScanContext{
+		SourceRel:  "libcxxrt/source.cpp",
+		OwnAddIncl: []string{"libcxxrt"},
+	})
+
+	hasLocal := false
+	hasLibunwind := false
+
+	for _, p := range closure {
+		switch {
+		case strings.HasSuffix(p, "/libcxxrt/unwind.h"):
+			hasLocal = true
+		case strings.HasSuffix(p, "/libunwind/include/unwind.h"):
+			hasLibunwind = true
+		}
+	}
+
+	if !hasLocal {
+		t.Errorf("closure missing local libcxxrt/unwind.h: %v", closure)
+	}
+
+	if !hasLibunwind {
+		t.Errorf("closure missing libunwind/include/unwind.h — PR-35w gate over-suppressed sysincl on angle-bracket include: %v", closure)
+	}
+}
+
+// TestScanner_LibcxxrtUnwindQuoted_ProductionParity is the
+// production-tree pin for the canonical R5 case the PR-35w gate
+// closes. The sequence:
+//   - `libcxxrt/exception.cc` does `#include "unwind.h"` (quoted).
+//   - Local resolution succeeds: same-dir lookup yields
+//     `libcxxrt/unwind.h` — the legitimate intended target.
+//   - `libcxxrt/unwind.h` itself does
+//     `#include <contrib/libs/libunwind/include/unwind.h>` (fully-
+//     qualified angle bracket), so the libunwind shadow comes in via
+//     the transitive scan rather than via sysincl.
+//   - Pre-PR-35w, sysincl additionally appended `libcxx/include/unwind.h`
+//     on top of the locally-resolved libcxxrt copy — a spurious
+//     over-emission the reference scan does not produce.
+//
+// Reference parity check: the closure of libcxxrt/exception.cc must
+// contain libcxxrt/unwind.h and libunwind/include/unwind.h, but
+// NOT libcxx/include/unwind.h.
+func TestScanner_LibcxxrtUnwindQuoted_ProductionParity(t *testing.T) {
+	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
+		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
+	}
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "contrib/libs/cxxsupp/libcxxrt/exception.cc")); err != nil {
+		t.Skipf("libcxxrt source not present: %v", err)
+	}
+
+	sysincl := LoadSysInclSet(sourceRoot)
+	scanner := NewIncludeScanner(sourceRoot, sysincl)
+
+	// ScanContext mirrors the libcxxrt CC consumer's emission shape:
+	// libcxxrt is its own ADDINCL root; cxx-tail picks up libunwind
+	// indirectly via libcxxrt/unwind.h's fully-qualified include.
+	ctx := ScanContext{
+		SourceRel: "contrib/libs/cxxsupp/libcxxrt/exception.cc",
+		OwnAddIncl: []string{
+			"contrib/libs/cxxsupp/libcxxrt",
+		},
+		BaseSearchPaths: []string{
+			"contrib/libs/musl/include",
+			"contrib/libs/musl/arch/aarch64",
+			"contrib/libs/musl/arch/generic",
+			"contrib/libs/linux-headers",
+			"",
+		},
+	}
+
+	closure := scanner.WalkClosure(ctx)
+
+	if len(closure) == 0 {
+		t.Fatalf("libcxxrt closure unexpectedly empty")
+	}
+
+	hasLibcxxrt := false
+	hasLibunwind := false
+	hasLibcxxSpurious := false
+
+	for _, p := range closure {
+		switch {
+		case strings.HasSuffix(p, "/libcxxrt/unwind.h"):
+			hasLibcxxrt = true
+		case strings.HasSuffix(p, "/libunwind/include/unwind.h"):
+			hasLibunwind = true
+		case strings.HasSuffix(p, "/libcxx/include/unwind.h"):
+			hasLibcxxSpurious = true
+		}
+	}
+
+	if !hasLibcxxrt {
+		t.Errorf("libcxxrt closure missing local libcxxrt/unwind.h (regression beyond PR-35w scope)")
+	}
+
+	if !hasLibunwind {
+		t.Errorf("libcxxrt closure missing libunwind/include/unwind.h (PR-35w over-suppressed transitive chain)")
+	}
+
+	if hasLibcxxSpurious {
+		t.Errorf("libcxxrt closure contains spurious libcxx/include/unwind.h — PR-35w gate failed to close R5 over-emission")
+	}
+}

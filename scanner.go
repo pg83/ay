@@ -913,13 +913,28 @@ func (s *IncludeScanner) parseIncludes(absPath string) []includeDirective {
 //     mirroring the compiler's `-I` precedence. Once the first
 //     existing file is found, no further search-path candidates
 //     are tried.
-//   - Sysincl candidates are UNION-ON-TOP: every record matching
-//     the includer's path adds its mapped paths to the result, on
-//     top of whatever the search path produced. This is because
-//     `<stddef.h>` from a non-musl C source legitimately resolves
-//     to BOTH libcxx/include/stddef.h (via stl-to-libcxx.yml) AND
+//   - Sysincl candidates are UNION-ON-TOP, but ONLY for ANGLE-BRACKET
+//     includes (`#include <X>`). Every record matching the includer's
+//     path adds its mapped paths to the result, on top of whatever the
+//     search path produced. This is because `<stddef.h>` from a
+//     non-musl C source legitimately resolves to BOTH
+//     libcxx/include/stddef.h (via stl-to-libcxx.yml) AND
 //     musl/include/stddef.h (via libc-to-musl.yml) — both records
 //     are active and both contribute to the input set.
+//   - For QUOTED includes (`#include "X"`), sysincl is GATED by
+//     search-path resolution: when the local search path resolved
+//     the directive to at least one existing file, sysincl is
+//     suppressed. Quoted-form includes target a project-local file
+//     (`#include "elf.h"` from yasm/ targets yasm/elf.h, not
+//     musl/include/elf.h). The upstream ymake scanner only consults
+//     sysincl alternates for quoted includes when local resolution
+//     fails — text-blindly unioning both pulls in spurious musl/libc
+//     mappings (PR-35t R3+R5: 30 elf.h-style + 4 unwind.h-quoted-self
+//     pairs across the M2 closure). Angle-bracket includes still
+//     union sysincl on top because libcxx/libcxxrt/libunwind multi-
+//     target headers (e.g. `<unwind.h>`, `<cxxabi.h>`) need both the
+//     local libcxx resolution AND the libcxxrt sysincl record to
+//     match the reference scan.
 func (s *IncludeScanner) resolve(includerAbs string, d includeDirective, ctx *ScanContext, ctxHash uint64) []string {
 	// `#include_next` directives resolve to nothing in the upstream
 	// reference scan: every observed live use is the libcxx
@@ -955,6 +970,24 @@ func (s *IncludeScanner) resolve(includerAbs string, d includeDirective, ctx *Sc
 	// within one source's closure, includer-keyed by (includer,
 	// target) reused across every source reaching that includer.
 	searchOut := s.resolveSearchPath(includerAbs, d, ctx, ctxHash)
+
+	// PR-35w sysincl multi-target gating: for QUOTED includes
+	// (`#include "foo.h"`), when the local search path resolved
+	// successfully, suppress the sysincl layer. Quoted-form
+	// directives target a project-local header — `#include "elf.h"`
+	// from a yasm-internal source means yasm/elf.h, never the
+	// libc-to-musl mapping `elf.h → contrib/libs/musl/include/elf.h`.
+	// The text-blind union appended musl/libc/libcxxrt headers on top
+	// of the legitimately-resolved local path, producing 34 L2-divergent
+	// pairs in the M2 closure (PR-35t R3 + R5 subset). Angle-bracket
+	// includes (`<unwind.h>`, `<cxxabi.h>`) keep the union — those
+	// genuinely need sysincl alternates because libcxx/libcxxrt/
+	// libunwind ship multi-target sysincl records for the same logical
+	// header. The gate is asymmetric by include kind, not by whether
+	// search-path resolved.
+	if d.kind == includeQuoted && len(searchOut) > 0 {
+		return searchOut
+	}
 
 	// Sysincl: add EVERY matching record's contribution on top of the
 	// search-path result. PR-35e: per-record source-vs-includer
