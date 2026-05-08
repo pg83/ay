@@ -1038,11 +1038,20 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Errorf("R6 ForeignDeps = %v, want empty (PR-28 dropped foreign_deps[tool] placeholder)", r6Node.ForeignDeps)
 	}
 
-	// PR-28 D09: cmd_args[0] (the ragel6 invocation path) must match
-	// the host LD's outputs[0] exactly. This pins the internal
-	// consistency between R6 dispatch and our own host-PROGRAM
-	// emission — without it a future regression in either side could
-	// produce a graph that compiles but invokes the wrong binary path.
+	// PR-28 D09: cmd_args[0] (the ragel6 invocation path) tracks the
+	// host LD's outputs[0] modulo PR-35j's `/bin/` canonicalisation.
+	// This pins the internal consistency between R6 dispatch and our
+	// own host-PROGRAM emission — without it a future regression in
+	// either side could produce a graph that compiles but invokes the
+	// wrong binary path. PR-35j (closure of PR-33-C2_07): when the
+	// host walker enters `contrib/tools/ragel6/bin` (because the
+	// parent ya.make's `INCLUDE` is not yet expanded), EmitR6
+	// canonicalises cmd_args[0] back to the reference-shaped parent
+	// path `$(BUILD_ROOT)/contrib/tools/ragel6/ragel6`. The host LD's
+	// outputs[0] keeps the walked `/bin/` path (the host LD itself is
+	// not an L*-pair lever for the util closure). The consistency
+	// invariant therefore compares the LD output through the same
+	// canonicaliser that EmitR6 applies.
 	if len(r6Node.Cmds) == 0 || len(r6Node.Cmds[0].CmdArgs) == 0 {
 		t.Fatalf("R6 node has no Cmds[0].CmdArgs; got Cmds=%v", r6Node.Cmds)
 	}
@@ -1051,9 +1060,11 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Fatalf("host LD node has no Outputs; got Outputs=%v", ldNode.Outputs)
 	}
 
-	if r6Node.Cmds[0].CmdArgs[0] != ldNode.Outputs[0] {
-		t.Errorf("R6 cmd_args[0] = %q, want host ragel6 LD outputs[0] = %q",
-			r6Node.Cmds[0].CmdArgs[0], ldNode.Outputs[0])
+	wantCmd0 := canonicalizeRagel6BinaryPath(ldNode.Outputs[0])
+
+	if r6Node.Cmds[0].CmdArgs[0] != wantCmd0 {
+		t.Errorf("R6 cmd_args[0] = %q, want canonicalised host ragel6 LD outputs[0] = %q (raw outputs[0] = %q)",
+			r6Node.Cmds[0].CmdArgs[0], wantCmd0, ldNode.Outputs[0])
 	}
 }
 
