@@ -234,14 +234,12 @@ func TestEmitLD_ToolsArchiver_ByteExact(t *testing.T) {
 		}
 	}
 
-	// Hard-pinned to current emitter output (documented prefix subset;
-	// PR-31-D09 in defects.md tracks the full-set expansion deferred
-	// to PR-32+). composeLDInputs emits plugin + global + own .o + 7
-	// scripts (10 entries); memberInputs adds 1010 entries from the
-	// reference; total = 1020. Peer-archive folding is deferred.
-	// A drop below 1020 will fail loudly; the prefix property is
-	// verified by the per-element loop in cmd_args above.
-	const wantInputCount = 1020
+	// Hard-pinned to the reference inputs count. PR-35b closed
+	// PR-31-D09: composeLDInputs now interleaves peer-archive paths
+	// with plugins, global archives, and own .o (35-entry alphabetical
+	// BUILD_ROOT block: 32 peers + 1 plugin + 1 global + 1 own.o) +
+	// 7 scripts + 1010 member-CC inputs = 1052 = reference exactly.
+	const wantInputCount = 1052
 
 	if len(got.Inputs) != wantInputCount {
 		t.Errorf("inputs count = %d, want %d", len(got.Inputs), wantInputCount)
