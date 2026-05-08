@@ -273,8 +273,17 @@ var DefaultIfEnv = Environment{
 		"ARCH_X86_64":                       false,
 		"ARCH_I386":                         false,
 		"ARCH_ARM7":                         false,
-		"ARCH_ARM64":                        false,
-		"ARCH_ARM6":                         false,
+		// PR-35o: ARCH_ARM64 is the upstream alias for ARCH_AARCH64
+		// (Arcadia sets both together for the aarch64 target). The
+		// `contrib/libs/cxxsupp/builtins/ya.make` bf16 SRCS block is
+		// guarded by `IF (ARCH_ARM64 OR ARCH_X86_64)`; without the
+		// alias the 5 bf16 .c.o nodes (extendbfsf2, truncdfbf2,
+		// truncsfbf2, trunctfbf2, truncxfbf2) are skipped on aarch64
+		// and miss from the L0 closure. `composeHostCC`'s ARCH flip
+		// (gen.go:buildIfEnv) flips ARCH_ARM64 alongside ARCH_AARCH64
+		// so host-PIC walks see the consistent x86_64 binding.
+		"ARCH_ARM64": true,
+		"ARCH_ARM6":  false,
 		"ARCH_WASM32":                       false, // PR-27: contrib/libs/libunwind
 		"ARCH_WASM64":                       false, // PR-27: contrib/libs/libunwind
 		"CLANG":                             true,

@@ -3208,3 +3208,206 @@ func TestGen_MuslPyplugin_HostCPDedup(t *testing.T) {
 		t.Fatalf("no LD references the pyplugin path; expected at least the target archiver LD")
 	}
 }
+
+// TestGen_SRC_AppendsExtraCFlags_PerSource verifies PR-35o's SRC
+// macro: `SRC(filename extra_cflags...)` registers the source AND
+// appends the extra flags to that source's compile cmd_args at the
+// per-source slot (right before the input path). Mirrors the
+// upstream `util/charset/ya.make` `SRC(wide_sse41.cpp -DSSE41_STUB)`
+// pattern that was the L0=99.71%→100% blocker before PR-35o.
+func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
+	root := t.TempDir()
+
+	modDir := filepath.Join(root, "mod")
+
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		t.Fatalf("mkdir mod: %v", err)
+	}
+
+	yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRC(foo.cpp -DSSE41_STUB)\nEND()\n")
+
+	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644); err != nil {
+		t.Fatalf("write mod/ya.make: %v", err)
+	}
+
+	g := Gen(TargetCfg, root, "mod")
+
+	var cc *Node
+
+	for _, n := range g.Graph {
+		if n.KV["p"] == "CC" {
+			cc = n
+
+			break
+		}
+	}
+
+	if cc == nil {
+		t.Fatal("no CC node emitted for SRC(foo.cpp ...)")
+	}
+
+	args := cc.Cmds[0].CmdArgs
+
+	if len(args) < 2 {
+		t.Fatalf("CC cmd_args too short: %d", len(args))
+	}
+	// The per-source CFLAGS slot the composer places between
+	// macroPrefixMapFlags and the input path: -DSSE41_STUB must
+	// appear immediately before the source path at the tail.
+	wantInput := "$(SOURCE_ROOT)/mod/foo.cpp"
+
+	if args[len(args)-1] != wantInput {
+		t.Errorf("last cmd_arg = %q, want %q", args[len(args)-1], wantInput)
+	}
+
+	if args[len(args)-2] != "-DSSE41_STUB" {
+		t.Errorf("second-to-last cmd_arg = %q, want %q (per-source CFLAGS slot)", args[len(args)-2], "-DSSE41_STUB")
+	}
+}
+
+// TestGen_SRC_C_NO_LTO_RegistersSource verifies PR-35o's SRC_C_NO_LTO
+// macro: `SRC_C_NO_LTO(filename)` registers the source as a regular
+// CC member with NO per-source CFLAGS and a FLAT output path (no `_/`
+// infix even when the filename contains a `/`). Mirrors the upstream
+// `util/ya.make:341` `SRC_C_NO_LTO(system/compiler.cpp)` pattern.
+func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
+	root := t.TempDir()
+
+	modDir := filepath.Join(root, "mod")
+	subDir := filepath.Join(modDir, "system")
+
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatalf("mkdir mod/system: %v", err)
+	}
+
+	yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRC_C_NO_LTO(system/compiler.cpp)\nEND()\n")
+
+	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644); err != nil {
+		t.Fatalf("write mod/ya.make: %v", err)
+	}
+
+	g := Gen(TargetCfg, root, "mod")
+
+	var cc *Node
+
+	for _, n := range g.Graph {
+		if n.KV["p"] == "CC" {
+			cc = n
+
+			break
+		}
+	}
+
+	if cc == nil {
+		t.Fatal("no CC node emitted for SRC_C_NO_LTO(system/compiler.cpp)")
+	}
+
+	if len(cc.Outputs) != 1 {
+		t.Fatalf("CC outputs = %#v, want exactly 1", cc.Outputs)
+	}
+	// FLAT output path: no `_/` infix.
+	wantOut := "$(BUILD_ROOT)/mod/system/compiler.cpp.o"
+
+	if cc.Outputs[0] != wantOut {
+		t.Errorf("CC output = %q, want %q (SRC_C_NO_LTO uses flat output, not `mod/_/system/compiler.cpp.o`)", cc.Outputs[0], wantOut)
+	}
+	// No per-source CFLAGS: last arg is the input path, second-to-last
+	// is the standard macro-prefix-map (NOT a per-source -D flag).
+	args := cc.Cmds[0].CmdArgs
+
+	if args[len(args)-1] != "$(SOURCE_ROOT)/mod/system/compiler.cpp" {
+		t.Errorf("last cmd_arg = %q, want input path", args[len(args)-1])
+	}
+
+	if args[len(args)-2] != "-fmacro-prefix-map=$(TOOL_ROOT)/=" {
+		t.Errorf("second-to-last cmd_arg = %q, want %q (no per-source CFLAG)", args[len(args)-2], "-fmacro-prefix-map=$(TOOL_ROOT)/=")
+	}
+}
+
+// TestGen_SRC_FlatOutputPath verifies PR-35o's SRC macro emits a flat
+// output path (no `_/` infix) even for a slashed source filename.
+// Mirrors SRC_C_NO_LTO's flat-path semantics — both come from the
+// upstream `_SRC` macro family, distinct from `SRCS(subdir/foo.cpp)`
+// which emits `<modulePath>/_/subdir/foo.cpp.o`.
+func TestGen_SRC_FlatOutputPath(t *testing.T) {
+	root := t.TempDir()
+
+	modDir := filepath.Join(root, "mod")
+
+	if err := os.MkdirAll(filepath.Join(modDir, "sub"), 0o755); err != nil {
+		t.Fatalf("mkdir mod/sub: %v", err)
+	}
+
+	yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRC(sub/x.cpp)\nEND()\n")
+
+	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644); err != nil {
+		t.Fatalf("write mod/ya.make: %v", err)
+	}
+
+	g := Gen(TargetCfg, root, "mod")
+
+	var cc *Node
+
+	for _, n := range g.Graph {
+		if n.KV["p"] == "CC" {
+			cc = n
+
+			break
+		}
+	}
+
+	if cc == nil {
+		t.Fatal("no CC node emitted for SRC(sub/x.cpp)")
+	}
+
+	wantOut := "$(BUILD_ROOT)/mod/sub/x.cpp.o"
+
+	if len(cc.Outputs) != 1 || cc.Outputs[0] != wantOut {
+		t.Errorf("CC output = %#v, want [%q] (SRC uses flat output, not `mod/_/sub/x.cpp.o`)", cc.Outputs, wantOut)
+	}
+}
+
+// TestGen_SRC_RejectsZeroArgs verifies PR-35o's SRC macro throws on
+// SRC() with no filename — defensive: a SRC with an empty arg list is
+// almost certainly a typo / parse error upstream and silently ignoring
+// it would mask the bug.
+func TestGen_SRC_RejectsZeroArgs(t *testing.T) {
+	root := t.TempDir()
+
+	modDir := filepath.Join(root, "mod")
+
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		t.Fatalf("mkdir mod: %v", err)
+	}
+
+	yamake := []byte("LIBRARY()\nSRC()\nEND()\n")
+
+	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644); err != nil {
+		t.Fatalf("write mod/ya.make: %v", err)
+	}
+
+	exc := Try(func() {
+		Gen(TargetCfg, root, "mod")
+	})
+
+	if exc == nil {
+		t.Fatal("expected exception for SRC() with no args, got nil")
+	}
+
+	if !strings.Contains(exc.Error(), "SRC()") {
+		t.Errorf("error %q does not mention SRC()", exc.Error())
+	}
+}
+
+// TestEvalCond_ARCH_ARM64_Aliased pins PR-35o's ARCH_ARM64↔ARCH_AARCH64
+// alias: the `contrib/libs/cxxsupp/builtins/ya.make` bf16 SRCS block is
+// guarded by `IF (ARCH_ARM64 OR ARCH_X86_64)` and Arcadia binds
+// ARCH_ARM64=true whenever ARCH_AARCH64=true. Without the alias 5
+// .c.o nodes would be silently dropped from the L0 closure on aarch64.
+func TestEvalCond_ARCH_ARM64_Aliased(t *testing.T) {
+	got := EvalCond(&ExprIdent{Name: "ARCH_ARM64"}, DefaultIfEnv)
+
+	if !got {
+		t.Errorf("EvalCond(ARCH_ARM64) on default (aarch64) env = false, want true (alias for ARCH_AARCH64)")
+	}
+}
