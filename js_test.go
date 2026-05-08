@@ -63,7 +63,14 @@ func TestEmitJS_UtilCharsetAllCharset_ByteExact(t *testing.T) {
 	closure := append([]string(nil), ref.Inputs[8:]...)
 
 	e := NewBufferedEmitter()
-	_, outPath := EmitJS(targetInstance("util/charset"), "all_charset.cpp", sources, closure, e)
+	// PR-35s: EmitJS now takes an explicit Platform parameter so the
+	// caller can anchor the JS node to the outer-target axis even when
+	// the surrounding instance has been flipped to the host axis.
+	// util/charset's JS lives on the target axis (no host walk
+	// involved), so the explicit platform here matches
+	// `targetInstance(...)`'s `Target` and the byte-exact assertions
+	// below are unchanged.
+	_, outPath := EmitJS(targetInstance("util/charset"), "all_charset.cpp", sources, closure, PlatformDefaultLinuxAArch64, e)
 
 	if outPath != refJSOutput {
 		t.Errorf("outPath = %q, want %q", outPath, refJSOutput)

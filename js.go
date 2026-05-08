@@ -34,9 +34,19 @@ package main
 // a multiset (PR-31 D14), so closure order matters only for the
 // byte-exact JS test pin in js_test.go.
 //
+// `platform` overrides the JS node's `Platform` field. PR-35s: in the
+// reference graph, JS (JOIN_SRCS) nodes are anchored to the outer-
+// target platform axis (`default-linux-aarch64`) even when the
+// surrounding module is reached through a host-PROGRAM walk
+// (`contrib/tools/ragel6/bin`). Threading platform explicitly keeps
+// the JS Platform decoupled from the host-walked instance's Target
+// (which flips to `default-linux-x86_64` via `WithHost`); the
+// downstream JS-derived CC node continues to use `instance.Target` so
+// only the JS axis is detached, not the per-source compile axis.
+//
 // Returns the JS NodeRef and the output path so the caller (PR-25's
 // gen.go) can thread the output into a downstream EmitCC.
-func EmitJS(instance ModuleInstance, allName string, sources, closure []string, emit Emitter) (NodeRef, string) {
+func EmitJS(instance ModuleInstance, allName string, sources, closure []string, platform PlatformID, emit Emitter) (NodeRef, string) {
 	const (
 		python3Path  = "/ix/realm/pg/bin/python3"
 		joinSrcsPath = "$(SOURCE_ROOT)/build/scripts/gen_join_srcs.py"
@@ -91,7 +101,7 @@ func EmitJS(instance ModuleInstance, allName string, sources, closure []string, 
 			"pc": "magenta",
 		},
 		Outputs:  []string{outputPath},
-		Platform: string(instance.Target),
+		Platform: string(platform),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
