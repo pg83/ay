@@ -66,6 +66,12 @@ type includeDirective struct {
 //     resolve() results across that overlap turns the scan from O(N
 //     CC × header-graph) into approximately O(unique ctx × header-
 //     graph). The ctx-hash is computed once per WalkClosure call.
+//   - visitedPool / orderPool: per-WalkClosure scratch buffers reused
+//     across calls (PR-34d). The profiler showed WalkClosure's fresh
+//     `visited` map and `order` slice as the largest single allocator
+//     (~1.94 GB flat across the tools/archiver run). Both are scratch
+//     state — once WalkClosure copies the result into the returned
+//     `[]string`, the buffers can be cleared and returned to the pool.
 //
 // All caches are protected by a mutex so the scanner is safe to
 // invoke from concurrent walkers (PR-31's walker is single-threaded
@@ -78,6 +84,9 @@ type IncludeScanner struct {
 	parsed       map[string][]includeDirective
 	exists       map[string]bool
 	resolveCache map[resolveKey][]string
+
+	visitedPool sync.Pool // *map[string]struct{}
+	orderPool   sync.Pool // *[]string
 }
 
 type resolveKey struct {
@@ -90,13 +99,31 @@ type resolveKey struct {
 // NewIncludeScanner constructs a scanner bound to a SysInclSet and a
 // source-root absolute path.
 func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
-	return &IncludeScanner{
+	s := &IncludeScanner{
 		sysincl:      sysincl,
 		sourceRoot:   sourceRoot,
 		parsed:       make(map[string][]includeDirective),
 		exists:       make(map[string]bool, 4096),
 		resolveCache: make(map[resolveKey][]string, 4096),
 	}
+
+	// Pool factories preallocate the same capacity that the
+	// non-pooled WalkClosure used (64 entries). Pooled items are
+	// returned as pointers to keep `Pool.Put` from boxing the
+	// value (a plain map or slice would box-allocate on Put).
+	s.visitedPool.New = func() any {
+		m := make(map[string]struct{}, 64)
+
+		return &m
+	}
+
+	s.orderPool.New = func() any {
+		o := make([]string, 0, 64)
+
+		return &o
+	}
+
+	return s
 }
 
 // ScanContext carries the per-CC-node resolution context: the
@@ -124,12 +151,23 @@ type ScanContext struct {
 // for the given source file (excluding the source itself), in DFS-
 // discovery order. The result list is suitable for use as
 // `node.Inputs[1:]`.
+//
+// The `visited` map and `order` slice are pulled from per-scanner
+// `sync.Pool`s (PR-34d). The result `out` slice is freshly allocated
+// each call — the caller stores it on the node and the scanner does
+// not retain it — so returning `order` to the pool cannot corrupt the
+// caller's data. `clear()` resets the map in place; `order[:0]`
+// retains backing capacity for the next call. Pool items are
+// pointer-typed (`*map`, `*[]string`) so `Pool.Put` does not box.
 func (s *IncludeScanner) WalkClosure(ctx ScanContext) []string {
 	srcAbs := s.sourceRoot + "/" + ctx.SourceRel
 	ctxHash := hashScanContext(&ctx)
 
-	visited := make(map[string]struct{}, 64)
-	order := make([]string, 0, 64)
+	visitedP := s.visitedPool.Get().(*map[string]struct{})
+	orderP := s.orderPool.Get().(*[]string)
+
+	visited := *visitedP
+	order := (*orderP)[:0]
 
 	s.dfs(srcAbs, &ctx, ctxHash, visited, &order)
 
@@ -145,6 +183,19 @@ func (s *IncludeScanner) WalkClosure(ctx ScanContext) []string {
 		rel := strings.TrimPrefix(abs, prefix)
 		out = append(out, "$(SOURCE_ROOT)/"+rel)
 	}
+
+	// Reset and return scratch buffers to the pool. `clear()`
+	// (Go 1.21+) drops every key without releasing the bucket
+	// allocation. `order` is reset by writing back the trimmed
+	// slice header so the next caller sees length 0 with the
+	// existing capacity. The contents of `order` are not zeroed
+	// (string headers retained), but they are unreachable through
+	// the empty slice and will be overwritten on the next dfs.
+	clear(visited)
+	*orderP = order[:0]
+
+	s.visitedPool.Put(visitedP)
+	s.orderPool.Put(orderP)
 
 	return out
 }
