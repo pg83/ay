@@ -41,7 +41,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	// the stub LD's outputs[0] above; PR-28-D01 makes this the
 	// caller's responsibility (the gen.go walker derives it from the
 	// host LD's own emission).
-	r6Ref, outPath := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6", e)
+	r6Ref, outPath := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6", nil, e)
 
 	wantOut := "$(BUILD_ROOT)/util/_/datetime/parser.rl6.cpp"
 	if outPath != wantOut {
@@ -136,7 +136,7 @@ func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
 
 	// Caller threads the (non-canonical) host LD output. EmitR6 must
 	// canonicalise to the reference shape.
-	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6", e)
+	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6", nil, e)
 
 	got := e.nodes[r6Ref.id]
 
@@ -193,6 +193,53 @@ func TestCanonicalizeRagel6BinaryPath_PassThrough(t *testing.T) {
 		got := canonicalizeRagel6BinaryPath(c.in)
 		if got != c.want {
 			t.Errorf("canonicalizeRagel6BinaryPath(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z pins the R6
+// inputs shape post-PR-35z. The reference R6 node carries
+// `[ragel6BinaryPath, .rl6 source, ...transitive header closure]`
+// — the binary the node invokes plus the source plus its scanned
+// `#include` closure (1009 inputs for util/datetime/parser.rl6 in
+// the M2 closure). This test exercises the structural shape on a
+// 2-element synthetic closure rather than reading util/datetime
+// off-disk; integration coverage of the real M2 case lives in the
+// gen → compare pipeline.
+func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
+	e := NewBufferedEmitter()
+
+	ragel6LD := e.Emit(&Node{
+		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
+		Env:     map[string]string{},
+		Inputs:  []string{},
+		KV:      map[string]string{"p": "LD"},
+		Outputs: []string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"},
+	})
+
+	closure := []string{
+		"$(SOURCE_ROOT)/util/datetime/parser.h",
+		"$(SOURCE_ROOT)/util/generic/ymath.h",
+	}
+
+	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6", closure, e)
+
+	got := e.nodes[r6Ref.id]
+
+	wantInputs := []string{
+		"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6",
+		"$(SOURCE_ROOT)/util/datetime/parser.rl6",
+		"$(SOURCE_ROOT)/util/datetime/parser.h",
+		"$(SOURCE_ROOT)/util/generic/ymath.h",
+	}
+
+	if len(got.Inputs) != len(wantInputs) {
+		t.Fatalf("R6 inputs len = %d, want %d (got=%v)", len(got.Inputs), len(wantInputs), got.Inputs)
+	}
+
+	for i, w := range wantInputs {
+		if got.Inputs[i] != w {
+			t.Errorf("R6 inputs[%d] = %q, want %q", i, got.Inputs[i], w)
 		}
 	}
 }

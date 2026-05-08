@@ -75,14 +75,24 @@ func canonicalizeRagel6BinaryPath(p string) string {
 // the `_/` infix matches the AS convention (D29) — generated sources
 // are nested-output regardless of srcRel depth.
 //
+// PR-35z: `closure` is the SOURCE_ROOT-relative transitive header
+// closure scanned from the `.rl6` source (same scanner pass as
+// regular `.cpp`/`.S` sources; the `.rl6` body embeds `#include`
+// directives that resolve through the same search-path / sysincl
+// rules). Reference R6 inputs read
+// `[ragel6BinaryPath, .rl6 source, ...closure]` — the binary the
+// node invokes plus the `.rl6` source plus its include closure
+// (1009 inputs for util/datetime/parser.rl6 in the M2 closure).
+//
 // Returns (NodeRef, outputPath) so the caller can wire the R6 node as
 // the input of a downstream EmitCC.
-func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath string, emit Emitter) (NodeRef, string) {
+func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath string, closure []string, emit Emitter) (NodeRef, string) {
 	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + ".cpp"
 	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
+	canonicalBinary := canonicalizeRagel6BinaryPath(ragel6BinaryPath)
 
 	cmdArgs := []string{
-		canonicalizeRagel6BinaryPath(ragel6BinaryPath),
+		canonicalBinary,
 		"-CT0",
 		"-L",
 		"-I$(SOURCE_ROOT)",
@@ -95,6 +105,15 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
 	}
 
+	// PR-35z: inputs = [ragel6 binary, .rl6 source, ...transitive
+	// header closure]. The binary entry mirrors the reference shape
+	// (every reference R6 node lists `$(BUILD_ROOT)/contrib/tools/
+	// ragel6/ragel6` as inputs[0]); the closure carries every header
+	// the .rl6 transitively `#include`s, in DFS-discovery order.
+	inputs := make([]string, 0, 2+len(closure))
+	inputs = append(inputs, canonicalBinary, inputPath)
+	inputs = append(inputs, closure...)
+
 	node := &Node{
 		Cmds: []Cmd{
 			{
@@ -103,7 +122,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 			},
 		},
 		Env:     env,
-		Inputs:  []string{inputPath},
+		Inputs:  inputs,
 		Outputs: []string{outputPath},
 		KV: map[string]string{
 			"p":  "R6",

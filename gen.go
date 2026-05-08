@@ -2837,7 +2837,18 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			// plausible binary path.
 		}
 
-		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, ctx.emit)
+		// PR-35z: scan the `.rl6` source's transitive #include closure
+		// (the `.rl6` body embeds `#include` directives that resolve
+		// through the same search-path / sysincl rules as `.cpp`/`.S`
+		// sources). Both the R6 generator node AND the downstream CC
+		// of the generated `.cpp` carry the same closure in their
+		// `inputs` slot — reference graph: util/datetime/parser.rl6
+		// produces a 1009-input R6 node and a 1009-input CC node,
+		// where positions 1.. of each are identical (the `.rl6`
+		// source plus its 1007-header transitive closure).
+		rl6Closure := scanIncludesForSource(ctx, srcInstance, srcRel, srcIn)
+
+		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, rl6Closure, ctx.emit)
 		// PR-29-D07: same shape as the JS branch above. Pass
 		// IsGenerated so the downstream CC composes inputPath under
 		// $(BUILD_ROOT)/<srcInstance.Path>/<rel> rather than the
@@ -2845,12 +2856,23 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// downstream CC's `Generator` so the CC node carries an
 		// explicit dep on its R6 source-generator node, matching the
 		// reference shape.
+		//
+		// PR-35z: thread `[<.rl6 source>, ...closure]` as the
+		// downstream CC's `IncludeInputs`. EmitCC composes
+		// `node.Inputs = [generated-cpp, IncludeInputs...]`, so this
+		// yields the reference shape
+		// `[generated-cpp, .rl6 source, ...closure]`.
 		ccSrcRel := strings.TrimPrefix(r6Out, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
+		rl6SourceAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
+		ccIncludeInputs := make([]string, 0, 1+len(rl6Closure))
+		ccIncludeInputs = append(ccIncludeInputs, rl6SourceAbs)
+		ccIncludeInputs = append(ccIncludeInputs, rl6Closure...)
 
 		ccIn := srcIn
 		ccIn.IsGenerated = true
 		ccIn.Generator = r6Ref
 		ccIn.HasGenerator = true
+		ccIn.IncludeInputs = ccIncludeInputs
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
