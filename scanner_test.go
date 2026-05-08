@@ -804,3 +804,250 @@ func TestScanner_LibcxxrtUnwindQuoted_ProductionParity(t *testing.T) {
 		t.Errorf("libcxxrt closure contains spurious libcxx/include/unwind.h — PR-35w gate failed to close R5 over-emission")
 	}
 }
+
+// TestParseYasmIncludes_LowercaseQuoted pins the basic NASM/yasm
+// `%include "foo"` form against the stand-alone parser. PR-35x's
+// asmlib motivator: `cachesize64.asm:1` is `%include "defs.asm"`.
+func TestParseYasmIncludes_LowercaseQuoted(t *testing.T) {
+	in := []byte(`%include "defs.asm"
+some_label:
+    mov rax, 0
+`)
+
+	dirs := parseYasmIncludes(in)
+
+	if len(dirs) != 1 {
+		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
+	}
+
+	if dirs[0].target != "defs.asm" {
+		t.Errorf("target = %q, want %q", dirs[0].target, "defs.asm")
+	}
+
+	if dirs[0].kind != includeQuoted {
+		t.Errorf("kind = %v, want includeQuoted", dirs[0].kind)
+	}
+
+	if dirs[0].next {
+		t.Errorf("next = true, want false (yasm has no %%include_next)")
+	}
+}
+
+// TestParseYasmIncludes_UppercaseDirective pins case-insensitive
+// directive matching: NASM/yasm directives are case-insensitive, and
+// asmlib's `mersenne64.asm:64` / `mother64.asm:32` / `sfmt64.asm:29`
+// all use uppercase `%INCLUDE "randomah.asi"`. Without case-insensitive
+// matching those three sources would still miss `randomah.asi`.
+func TestParseYasmIncludes_UppercaseDirective(t *testing.T) {
+	in := []byte(`%INCLUDE "randomah.asi"
+`)
+
+	dirs := parseYasmIncludes(in)
+
+	if len(dirs) != 1 {
+		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
+	}
+
+	if dirs[0].target != "randomah.asi" {
+		t.Errorf("target = %q, want %q", dirs[0].target, "randomah.asi")
+	}
+
+	if dirs[0].kind != includeQuoted {
+		t.Errorf("kind = %v, want includeQuoted", dirs[0].kind)
+	}
+}
+
+// TestParseYasmIncludes_LineCommentIgnored asserts that yasm `;`
+// line comments do not produce phantom includes. A `;` at column zero
+// followed by `%include "ghost.asm"` text must not match — the
+// `^\s*%include` anchor requires `%` as the first non-whitespace
+// token; `;` blocks the regex from firing.
+func TestParseYasmIncludes_LineCommentIgnored(t *testing.T) {
+	in := []byte(`; %include "ghost.asm"
+%include "real.asm"
+`)
+
+	dirs := parseYasmIncludes(in)
+
+	if len(dirs) != 1 {
+		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
+	}
+
+	if dirs[0].target != "real.asm" {
+		t.Errorf("target = %q, want %q", dirs[0].target, "real.asm")
+	}
+}
+
+// TestParseYasmIncludes_TrailingSemicolonComment pins that a real
+// directive followed by an inline `; ...` comment still parses. The
+// regex anchors on the directive head and stops at the closing `"`,
+// so trailing trivia is naturally ignored. Mirrors
+// `instrset64.asm:26`'s `%include "instrset64.asm"              ;
+// include code for InstructionSet function`.
+func TestParseYasmIncludes_TrailingSemicolonComment(t *testing.T) {
+	in := []byte(`%include "instrset64.asm"              ; include code for InstructionSet function
+`)
+
+	dirs := parseYasmIncludes(in)
+
+	if len(dirs) != 1 {
+		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
+	}
+
+	if dirs[0].target != "instrset64.asm" {
+		t.Errorf("target = %q, want %q", dirs[0].target, "instrset64.asm")
+	}
+}
+
+// TestParseYasmIncludes_NoMatchOnCInclude is the cross-syntax pin: a
+// C-style `#include` on a yasm line must NOT match the yasm parser.
+// `parseYasmIncludes` is dispatched only for `.asm`/`.asi`, so a
+// stray `#` that does not begin with `%` should produce no
+// directive.
+func TestParseYasmIncludes_NoMatchOnCInclude(t *testing.T) {
+	in := []byte(`#include "foo.h"
+`)
+
+	dirs := parseYasmIncludes(in)
+
+	if len(dirs) != 0 {
+		t.Errorf("got %d directives, want 0; %+v", len(dirs), dirs)
+	}
+}
+
+// TestParseYasmIncludes_AngleBracketForm verifies the angle-bracket
+// branch. Not observed in asmlib but supported for parity with the
+// C scanner — yasm accepts `%include <foo>` for system-style search.
+func TestParseYasmIncludes_AngleBracketForm(t *testing.T) {
+	in := []byte(`%include <sysmacros.asi>
+`)
+
+	dirs := parseYasmIncludes(in)
+
+	if len(dirs) != 1 {
+		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
+	}
+
+	if dirs[0].target != "sysmacros.asi" {
+		t.Errorf("target = %q, want %q", dirs[0].target, "sysmacros.asi")
+	}
+
+	if dirs[0].kind != includeSystem {
+		t.Errorf("kind = %v, want includeSystem", dirs[0].kind)
+	}
+}
+
+// TestParseIncludes_DispatchByExtension pins parseIncludes' dispatch
+// by file extension: a `.asm` file routes to the yasm parser; a `.h`
+// file routes to the C parser. The two parsers agree on the
+// `includeDirective` shape but only one fires per file. Without the
+// dispatch the asmlib AS scanner missed every `%include` (PR-35t R4
+// root cause).
+func TestParseIncludes_DispatchByExtension(t *testing.T) {
+	dir := t.TempDir()
+
+	asmPath := filepath.Join(dir, "src.asm")
+	hPath := filepath.Join(dir, "src.h")
+
+	if err := os.WriteFile(asmPath, []byte(`%include "defs.asm"
+#include "should-not-match.h"
+`), 0o644); err != nil {
+		t.Fatalf("write src.asm: %v", err)
+	}
+
+	if err := os.WriteFile(hPath, []byte(`#include "real.h"
+%include "should-not-match.asm"
+`), 0o644); err != nil {
+		t.Fatalf("write src.h: %v", err)
+	}
+
+	scanner := NewIncludeScanner(dir, SysInclSet{})
+
+	asmDirs := scanner.parseIncludes(asmPath)
+	hDirs := scanner.parseIncludes(hPath)
+
+	if len(asmDirs) != 1 || asmDirs[0].target != "defs.asm" {
+		t.Errorf("asm dispatch failed: got %+v, want one directive targeting defs.asm", asmDirs)
+	}
+
+	if len(hDirs) != 1 || hDirs[0].target != "real.h" {
+		t.Errorf("h dispatch failed: got %+v, want one directive targeting real.h", hDirs)
+	}
+}
+
+// TestParseIncludes_AsiDispatchesToYasm pins that `.asi` (yasm
+// include-only file) extension also routes to the yasm parser.
+// asmlib's `randomah.asi` is a `.asi` file; without `.asi` in the
+// dispatch list, transitive scans through it would silently miss any
+// nested `%include` it might hold.
+func TestParseIncludes_AsiDispatchesToYasm(t *testing.T) {
+	dir := t.TempDir()
+	asiPath := filepath.Join(dir, "src.asi")
+
+	if err := os.WriteFile(asiPath, []byte(`%include "nested.asi"
+`), 0o644); err != nil {
+		t.Fatalf("write src.asi: %v", err)
+	}
+
+	scanner := NewIncludeScanner(dir, SysInclSet{})
+	dirs := scanner.parseIncludes(asiPath)
+
+	if len(dirs) != 1 || dirs[0].target != "nested.asi" {
+		t.Errorf(".asi dispatch failed: got %+v, want one directive targeting nested.asi", dirs)
+	}
+}
+
+// TestScanner_AsmlibAsmInputsParity is the production-tree pin for
+// the PR-35x R4 closure. The ScanContext mirrors what
+// `gen.go::scanIncludesForSource` constructs for an asmlib host AS
+// node (PIC-mode, asmlibYasmModules trigger). The transitive closure
+// of `contrib/libs/asmlib/sfmt64.asm` must contain BOTH
+// `defs.asm` (via the file's leading `%include "defs.asm"`) and
+// `randomah.asi` (via the `%INCLUDE "randomah.asi"` later in the
+// file). Reference: `sg.json` 1013831-1013833.
+//
+// Skips when the production tree is not present.
+func TestScanner_AsmlibAsmInputsParity(t *testing.T) {
+	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "contrib/libs/asmlib/sfmt64.asm")); err != nil {
+		t.Skipf("asmlib source not present: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
+		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
+	}
+
+	sysincl := LoadSysInclSet(sourceRoot)
+	scanner := NewIncludeScanner(sourceRoot, sysincl)
+
+	ctx := ScanContext{
+		SourceRel: "contrib/libs/asmlib/sfmt64.asm",
+	}
+
+	closure := scanner.WalkClosure(ctx)
+
+	if len(closure) == 0 {
+		t.Fatalf("asmlib sfmt64.asm closure unexpectedly empty")
+	}
+
+	hasDefs := false
+	hasRandomah := false
+
+	for _, p := range closure {
+		switch {
+		case strings.HasSuffix(p, "/asmlib/defs.asm"):
+			hasDefs = true
+		case strings.HasSuffix(p, "/asmlib/randomah.asi"):
+			hasRandomah = true
+		}
+	}
+
+	if !hasDefs {
+		t.Errorf("asmlib sfmt64.asm closure missing defs.asm — PR-35x yasm-include scanner regression: %v", closure)
+	}
+
+	if !hasRandomah {
+		t.Errorf("asmlib sfmt64.asm closure missing randomah.asi — PR-35x case-insensitive yasm-include matching regression: %v", closure)
+	}
+}
