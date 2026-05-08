@@ -164,12 +164,28 @@ func TestEmitLD_ToolsArchiver_ByteExact(t *testing.T) {
 	// member CC inputs (source + headers). The script bundle
 	// signature is the trailing bundle's last entry `fs_tools.py`;
 	// everything after it is member inputs.
+	//
+	// PR-35v: svnversion.h is the last entry in the reference inputs
+	// (index 1051). EmitLD now injects it unconditionally as a static
+	// input after the member-CC union; the caller (gen.go) does NOT
+	// include it in memberInputs. Strip it from the reference-derived
+	// slice so the test exercises the static injection path rather
+	// than the dedup-passthrough path.
 	const fsToolsScript = "$(SOURCE_ROOT)/build/scripts/fs_tools.py"
 	var refMemberInputs []string
 
 	for i, p := range ref.Inputs {
 		if p == fsToolsScript {
-			refMemberInputs = ref.Inputs[i+1:]
+			raw := ref.Inputs[i+1:]
+			refMemberInputs = make([]string, 0, len(raw))
+
+			for _, mp := range raw {
+				if mp == ldSvnversionHInput {
+					continue
+				}
+
+				refMemberInputs = append(refMemberInputs, mp)
+			}
 
 			break
 		}
