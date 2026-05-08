@@ -2556,11 +2556,16 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// (e.g. cxxsupp/builtins/chkstk.S → assembly.h +
 		// int_endianness.h); the scanner populates the AS node's
 		// inputs and feeds the downstream AR's memberInputs aggregator.
-		asIncludeInputs := scanIncludesForSource(ctx, srcInstance, srcRel, srcIn)
-		ref, outPath := EmitAS(srcInstance, srcRel, nil, yasmRef, asIncludeInputs, ctx.emit)
+		asIn := srcIn
+		asIn.IncludeInputs = scanIncludesForSource(ctx, srcInstance, srcRel, srcIn)
+		// PR-35m: thread the full ModuleCCInputs into EmitAS so it
+		// can compose own/peer ADDINCL, own non-GLOBAL CFLAGS, and
+		// auto peer CFLAGS at the same slots CC consumes them
+		// (retiring the util-specific path-sniff stopgap PR-35i added).
+		ref, outPath := EmitAS(srcInstance, srcRel, asIn, yasmRef, ctx.emit)
 
 		asInputPath := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
-		asInputs := append([]string{asInputPath}, asIncludeInputs...)
+		asInputs := append([]string{asInputPath}, asIn.IncludeInputs...)
 
 		return ref, outPath, asInputs, true
 	case strings.HasSuffix(srcRel, ".rl6"):

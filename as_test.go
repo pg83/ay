@@ -24,24 +24,17 @@ import (
 // in the reference graph.
 const referenceASOutput = "$(BUILD_ROOT)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
 
-// builtinsASIncludes are the module-specific -I flags for the
-// contrib/libs/cxxsupp/builtins AS node as observed in the reference
-// graph. The first two (-I$(BUILD_ROOT) and -I$(SOURCE_ROOT)) appear in
-// every AS node; the remaining six are the musl arch/include paths that
-// the builtins module adds via ADDINCL.
-//
-// These are passed to EmitAS as the `includes` parameter. A future gen
-// driver that reads ADDINCL from ya.make will derive them dynamically;
-// for the byte-exact test they are pinned here.
-var builtinsASIncludes = []string{
-	"-I$(BUILD_ROOT)",
-	"-I$(SOURCE_ROOT)",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/aarch64",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/generic",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/include",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/extra",
-	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers",
-	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers/_nf",
+// builtinsASOwnAddIncl is the own-ADDINCL slice cxxsupp/builtins
+// declares in its ya.make (the four musl-arch paths added under
+// `IF (MUSL)`). PR-35m: the AS composer assembles the full include
+// tail from these (own AddIncl) plus `ccIncludesPrefix`/`ccIncludesSuffix`
+// (BUILD_ROOT/SOURCE_ROOT + linux-headers pair) so the previously
+// pre-baked flat list now derives structurally.
+var builtinsASOwnAddIncl = []string{
+	"contrib/libs/musl/arch/aarch64",
+	"contrib/libs/musl/arch/generic",
+	"contrib/libs/musl/include",
+	"contrib/libs/musl/extra",
 }
 
 // loadReferenceASNode reads the on-disk reference graph and returns the
@@ -94,7 +87,11 @@ func TestEmitAS_CxxsuppBuiltinsChkstk_ByteExact(t *testing.T) {
 	// so the synthetic test must inject it.
 	chkstkInstance := targetInstance("contrib/libs/cxxsupp/builtins")
 	chkstkInstance.Flags.NoCompilerWarnings = true
-	_, outPath := EmitAS(chkstkInstance, "aarch64/chkstk.S", builtinsASIncludes, nil, chkstkIncludeInputs, emit)
+	chkstkIn := ModuleCCInputs{
+		AddIncl:       builtinsASOwnAddIncl,
+		IncludeInputs: chkstkIncludeInputs,
+	}
+	_, outPath := EmitAS(chkstkInstance, "aarch64/chkstk.S", chkstkIn, nil, emit)
 
 	if outPath != referenceASOutput {
 		t.Errorf("outPath = %q, want %q", outPath, referenceASOutput)
@@ -180,7 +177,7 @@ func TestEmitAS_CxxsuppBuiltinsChkstk_ByteExact(t *testing.T) {
 // component — unlike CC which uses the flat formula for flat sources.
 func TestEmitAS_OutputPath_AlwaysHasUnderscore(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitAS(targetInstance("some/module"), "flat.S", []string{}, nil, nil, e)
+	_, outPath := EmitAS(targetInstance("some/module"), "flat.S", ModuleCCInputs{}, nil, e)
 	want := "$(BUILD_ROOT)/some/module/_/flat.S.o"
 
 	if outPath != want {
@@ -191,7 +188,7 @@ func TestEmitAS_OutputPath_AlwaysHasUnderscore(t *testing.T) {
 // TestEmitAS_OutputPath_NestedSrc verifies the nested-source output path.
 func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", []string{}, nil, nil, e)
+	_, outPath := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", ModuleCCInputs{}, nil, e)
 	want := "$(BUILD_ROOT)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
 
 	if outPath != want {
@@ -222,7 +219,8 @@ func TestEmitAS_YasmLD_PopulatesDepRefs(t *testing.T) {
 		},
 	})
 
-	ref, _ := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", builtinsASIncludes, &yasmLDRef, nil, e)
+	yasmTestIn := ModuleCCInputs{AddIncl: builtinsASOwnAddIncl}
+	ref, _ := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", yasmTestIn, &yasmLDRef, e)
 
 	// The AS node is at index 1 (yasmLD is at index 0).
 	if len(e.nodes) != 2 {
@@ -249,7 +247,7 @@ func TestEmitAS_YasmLD_PopulatesDepRefs(t *testing.T) {
 // (p=AS, pc=light-green, no show_out) as observed in the reference graph.
 func TestEmitAS_KV(t *testing.T) {
 	e := NewBufferedEmitter()
-	EmitAS(targetInstance("some/module"), "aarch64/foo.S", []string{}, nil, nil, e)
+	EmitAS(targetInstance("some/module"), "aarch64/foo.S", ModuleCCInputs{}, nil, e)
 
 	if len(e.nodes) != 1 {
 		t.Fatalf("emitter buffered %d nodes, want 1", len(e.nodes))
@@ -312,7 +310,7 @@ func TestEmitAS_MuslHost_Ceill_ByteExact(t *testing.T) {
 	// NoCompilerWarnings (only macro parsing does in the real walker).
 	ceillInstance := muslHostInstance("contrib/libs/musl")
 	ceillInstance.Flags.NoCompilerWarnings = true
-	_, outPath := EmitAS(ceillInstance, "src/math/x86_64/ceill.s", nil, nil, nil, emit)
+	_, outPath := EmitAS(ceillInstance, "src/math/x86_64/ceill.s", ModuleCCInputs{}, nil, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)
@@ -350,22 +348,19 @@ func TestEmitAS_MuslHost_Ceill_ByteExact(t *testing.T) {
 	t.Logf("cmd_args length = %d (reference = %d)", len(got.Cmds[0].CmdArgs), len(wantArgs))
 }
 
-// TestEmitAS_HostNonMusl_X8664Chkstk_Prologue (PR-35a) pins the cmd_args
-// PROLOGUE for a host x86_64 non-musl AS node
+// TestEmitAS_HostNonMusl_X8664Chkstk_ByteExact (PR-35a / PR-35m closure)
+// pins the full cmd_args bundle for a host x86_64 non-musl AS node
 // (`$(BUILD_ROOT)/contrib/libs/cxxsupp/builtins/_/x86_64/chkstk.S.o`)
-// against the reference. The reference is 98 args; ours emits 90 (the
-// trailing 8-arg module-specific include set is not threaded — pre-existing
-// PR-33-C2_06 limitation deferred to a follow-up). The prologue and
-// suppression block (90 args, indices 0..89) are byte-exact: x86_64
-// toolchain + hostCFlags / hostDefines + ndebugPicBlock × 2 with
-// hostSseFeatures between, NO muslExtraDefines, NO -march, NO -D_musl_=1.
-func TestEmitAS_HostNonMusl_X8664Chkstk_Prologue(t *testing.T) {
+// against the reference. PR-35m retired the prologue-only bound by
+// threading the include-tail (own AddIncl: musl-arch×4 x86_64 + linux-
+// headers via prefix/suffix) through ModuleCCInputs.
+func TestEmitAS_HostNonMusl_X8664Chkstk_ByteExact(t *testing.T) {
 	const targetOut = "$(BUILD_ROOT)/contrib/libs/cxxsupp/builtins/_/x86_64/chkstk.S.o"
 
 	raw, err := os.ReadFile(referenceGraphPath)
 
 	if err != nil {
-		t.Skipf("reference graph not available (%v); skipping host non-musl AS prologue test", err)
+		t.Skipf("reference graph not available (%v); skipping host non-musl AS byte-exact test", err)
 	}
 
 	var g Graph
@@ -390,9 +385,21 @@ func TestEmitAS_HostNonMusl_X8664Chkstk_Prologue(t *testing.T) {
 	// PR-35i: cxxsupp/builtins declares `NO_COMPILER_WARNINGS()`; set
 	// the flag on the test instance so EmitAS picks the
 	// `-Wno-everything` branch of `pickWarningFlags`.
+	// PR-35m: own AddIncl carries the host-arch musl include set as
+	// declared by the IF (ARCH_X86_64) branch of cxxsupp/builtins'
+	// ya.make — same shape as the aarch64 byte-exact test but with
+	// `arch/x86_64` substituted.
 	hostInst := hostInstance("contrib/libs/cxxsupp/builtins")
 	hostInst.Flags.NoCompilerWarnings = true
-	_, outPath := EmitAS(hostInst, "x86_64/chkstk.S", nil, nil, nil, emit)
+	hostIn := ModuleCCInputs{
+		AddIncl: []string{
+			"contrib/libs/musl/arch/x86_64",
+			"contrib/libs/musl/arch/generic",
+			"contrib/libs/musl/include",
+			"contrib/libs/musl/extra",
+		},
+	}
+	_, outPath := EmitAS(hostInst, "x86_64/chkstk.S", hostIn, nil, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)
@@ -406,17 +413,11 @@ func TestEmitAS_HostNonMusl_X8664Chkstk_Prologue(t *testing.T) {
 	gotArgs := got.Cmds[0].CmdArgs
 	wantArgs := ref.Cmds[0].CmdArgs
 
-	// Pin the prologue (everything up to and including the source-path
-	// argument) byte-exact. The trailing module-specific includes
-	// (-I$(BUILD_ROOT) + 7 musl/linux-headers paths) are PR-33-C2_06
-	// territory; out-of-scope for PR-35a.
-	const wantPrologueLen = 90
-
-	if len(gotArgs) != wantPrologueLen {
-		t.Fatalf("cmd_args length = %d, want %d (prologue only; module includes deferred to PR-33-C2_06)", len(gotArgs), wantPrologueLen)
+	if len(gotArgs) != len(wantArgs) {
+		t.Fatalf("cmd_args length = %d, want %d", len(gotArgs), len(wantArgs))
 	}
 
-	for i := 0; i < wantPrologueLen; i++ {
+	for i := range wantArgs {
 		if gotArgs[i] != wantArgs[i] {
 			t.Errorf("cmd_args[%d]:\n  got:  %q\n  want: %q", i, gotArgs[i], wantArgs[i])
 		}
@@ -446,13 +447,13 @@ func TestEmitAS_HostNonMusl_X8664Chkstk_Prologue(t *testing.T) {
 		t.Errorf("tags = %v, want [\"tool\"]", got.Tags)
 	}
 
-	t.Logf("prologue cmd_args byte-exact 0..%d (reference total = %d; %d-arg include tail deferred)", wantPrologueLen-1, len(wantArgs), len(wantArgs)-wantPrologueLen)
+	t.Logf("cmd_args length = %d (reference = %d)", len(gotArgs), len(wantArgs))
 }
 
-// TestEmitAS_UtilContext_ByteExact (PR-35i / PR-33-C2_06 closure) pins
-// the cmd_args bundle for util's only AS node
-// (`$(BUILD_ROOT)/util/_/system/context_aarch64.S.o`) against the
-// reference graph. Total 106 args. util declares no
+// TestEmitAS_UtilContext_ByteExact (PR-35i / PR-33-C2_06 closure;
+// PR-35m generic threading) pins the cmd_args bundle for util's only
+// AS node (`$(BUILD_ROOT)/util/_/system/context_aarch64.S.o`) against
+// the reference graph. Total 106 args. util declares no
 // `NO_COMPILER_WARNINGS()` macro, so the warning bundle is the full
 // `-Werror`/`-Wall`/`-Wextra` set (NOT `-Wno-everything`); util's own
 // non-GLOBAL `CFLAGS(-Wnarrowing)` (util/ya.make:243) sits between
@@ -468,6 +469,12 @@ func TestEmitAS_HostNonMusl_X8664Chkstk_Prologue(t *testing.T) {
 //   - own CFLAG `-Wnarrowing` is present at the post-commonDefines slot.
 //   - `-D_musl_` (NOT `-D_musl_=1`) is present at the post-catboost slot.
 //   - includes tail matches the 13-arg reference set.
+//
+// PR-35m: the per-module compile knobs are now passed via the same
+// `ModuleCCInputs` struct CC consumes (own AddIncl empty for util,
+// peer-GLOBAL = libcxx/libcxxrt + musl-arch-aarch64×4 + the user-
+// PEERDIR contributions, own CFlags = `-Wnarrowing`, AutoPeerCFlags =
+// `-D_musl_`). The util-specific path-sniff stopgap is retired.
 func TestEmitAS_UtilContext_ByteExact(t *testing.T) {
 	const targetOut = "$(BUILD_ROOT)/util/_/system/context_aarch64.S.o"
 
@@ -503,10 +510,28 @@ func TestEmitAS_UtilContext_ByteExact(t *testing.T) {
 	// to EmitAS for util.
 	utilInstance := targetInstance("util")
 
-	// gen.go's AS dispatch passes `nil` for `includes`. EmitAS
-	// substitutes `asUtilTailIncludes` when the path matches; pass
-	// `nil` here too so the production code path is covered.
-	_, outPath := EmitAS(utilInstance, "system/context_aarch64.S", nil, nil, nil, emit)
+	// PR-35m: thread util's compile knobs through ModuleCCInputs as
+	// the production walker does. `-Wnarrowing` (own non-GLOBAL CFLAG
+	// from util/ya.make:243's IF (GCC OR CLANG OR CLANG_CL) block);
+	// `-D_musl_` (auto peer CFLAG from defaultPeerCFlags); peer-GLOBAL
+	// AddIncl in declaration order (libcxx/libcxxrt + musl arch+include
+	// + user-PEERDIR zlib/double-conversion/libc_compat).
+	utilIn := ModuleCCInputs{
+		CFlags:         []string{"-Wnarrowing"},
+		AutoPeerCFlags: []string{"-D_musl_"},
+		PeerAddInclGlobal: []string{
+			"contrib/libs/cxxsupp/libcxx/include",
+			"contrib/libs/cxxsupp/libcxxrt/include",
+			"contrib/libs/musl/arch/aarch64",
+			"contrib/libs/musl/arch/generic",
+			"contrib/libs/musl/include",
+			"contrib/libs/musl/extra",
+			"contrib/libs/zlib/include",
+			"contrib/libs/double-conversion",
+			"contrib/libs/libc_compat/include/readpassphrase",
+		},
+	}
+	_, outPath := EmitAS(utilInstance, "system/context_aarch64.S", utilIn, nil, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)

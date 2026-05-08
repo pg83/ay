@@ -42,14 +42,37 @@ package main
 // Prior to PR-35i, AS unconditionally substituted `-Wno-everything`
 // regardless of the module's `NoCompilerWarnings` flag. The change is
 // equivalent to CC's `pickWarningFlags(noCompilerWarnings)` call.
+//
+// PR-35m (PR-35i stopgap retirement): the per-module compile knobs
+// AS needs — own ADDINCL, peer-GLOBAL ADDINCL, own non-GLOBAL CFLAGS,
+// auto peer CFLAGS — now thread via `ModuleCCInputs` (the same struct
+// CC consumes), supplied by gen.go's AS dispatch. The util-specific
+// path-sniff stopgap (`asUtilOwnCFlags` / `asUtilAutoPeerCFlags` /
+// `asUtilTailIncludes`) is retired. `composeASCmdArgs` derives:
+//   - includes tail = `ccIncludesPrefix + AddIncl + ccIncludesSuffix +
+//     PeerAddInclGlobal` (mirror of CC's includes layout, excluding the
+//     musl-self structural override). Empirical anchors:
+//       - util/_/system/context_aarch64.S.o cmd_args[93..105] (own
+//         AddIncl empty, peer-GLOBAL = libcxx/libcxxrt/musl-arch×4 +
+//         user-PEERDIR zlib/double-conversion/libc_compat).
+//       - libunwind/_/src/UnwindRegistersRestore.S.o cmd_args[98..106]
+//         (own AddIncl = libunwind/include, peer-GLOBAL = musl-arch×4).
+//       - cxxsupp/builtins/_/aarch64/chkstk.S.o cmd_args[86..93] (own
+//         AddIncl = musl-arch×4, peer-GLOBAL empty — NO_PLATFORM).
+//   - own CFLAGS slot between commonDefines and the first
+//     suppressionBlock copy (mirror of CC's `ownCFlags` slot at
+//     cc.go:723 / cc.go:788).
+//   - autoPeerCFlags slot between catboost and the second
+//     suppressionBlock copy (mirror of CC at cc.go:726 / cc.go:797).
 
 // EmitAS emits an AS node for assembling `srcRel` (a path relative
 // to `instance.Path`) into an object file.
 //
-// `includes` is the ordered list of -I flags specific to this
-// module. They are appended after the source path, matching the
-// reference layout. The caller supplies these because EmitAS has
-// no access to the module's ya.make ADDINCL list.
+// `in` carries the per-module compile knobs the walker collected for
+// CC/AS (own ADDINCL, peer-GLOBAL ADDINCL, own CFLAGS, auto peer
+// CFLAGS, transitive header closure). For synthetic tests that bypass
+// the walker, pass `ModuleCCInputs{}` for the historical "no per-
+// module flags" behaviour.
 //
 // `yasmLD` is the NodeRef of the host yasm linker. The caller
 // passes a real ref for asmlib `.pic.o` nodes; callers without a
@@ -58,11 +81,6 @@ package main
 // the reference shape) AND into DepRefs (PR-30 D02 — L0 fingerprint
 // reads only deps; foreign-deps-only shape diverged for asmlib's 25
 // AS nodes).
-//
-// `includeInputs` (PR-31 D11) is the resolved transitive header
-// closure for assembly sources that #include `.h`/`.inc` files
-// (e.g. cxxsupp/builtins/chkstk.S → assembly.h). Empty for the
-// common case where the source has no transitive headers.
 //
 // PR-35a: cmd_args composition branches on two orthogonal flags:
 //
@@ -80,26 +98,11 @@ package main
 // Returns (NodeRef, outputPath) so the caller can wire the AS node
 // as a dependency of the AR step and avoid re-deriving the output
 // path.
-func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *NodeRef, includeInputs []string, emit Emitter) (NodeRef, string) {
+func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, string) {
 	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + ".o"
 	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
 
-	// PR-35a: musl-self assembly nodes get the full musl include set
-	// emitted at the cmd_args tail (matching the reference shape:
-	// host musl ceill.s uses muslCcIncludesX8664; target musl uses
-	// muslCcIncludes). The walker passes nil for `includes` to AS,
-	// so the default-derived set lands here. Callers that already
-	// supplied module-specific includes (e.g. the byte-exact test
-	// for cxxsupp/builtins) keep their explicit slice.
-	if includes == nil && instance.Flags.LibcMusl {
-		if instance.Flags.PIC {
-			includes = muslCcIncludesX8664
-		} else {
-			includes = muslCcIncludes
-		}
-	}
-
-	cmdArgs := composeASCmdArgs(instance, outputPath, inputPath, includes)
+	cmdArgs := composeASCmdArgs(instance, outputPath, inputPath, in)
 
 	// The reference graph carries identical env maps at both the cmd
 	// level and the node top level. A single map is constructed and
@@ -109,9 +112,9 @@ func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *N
 		"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
 	}
 
-	allInputs := make([]string, 0, 1+len(includeInputs))
+	allInputs := make([]string, 0, 1+len(in.IncludeInputs))
 	allInputs = append(allInputs, inputPath)
-	allInputs = append(allInputs, includeInputs...)
+	allInputs = append(allInputs, in.IncludeInputs...)
 
 	tags := []string{}
 	if instance.Flags.PIC {
@@ -178,7 +181,7 @@ func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *N
 // Host non-musl (PIC=true, LibcMusl=false): x86_64 toolchain, hostCFlags
 // + hostDefines + ndebugPicBlock × 2 with catboost + hostSseFeatures
 // between. Pinned 98-arg byte-exact against
-// `contrib/libs/cxxsupp/builtins/_/x86_64/chkstk.S.o` (prologue 0..89).
+// `contrib/libs/cxxsupp/builtins/_/x86_64/chkstk.S.o`.
 //
 // Host musl (PIC=true, LibcMusl=true): same as host non-musl plus
 // muslExtraDefines slotted between hostDefines and the first
@@ -188,12 +191,12 @@ func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *N
 // Mirrors composeMuslHostCC's slot ordering. PR-35i lifts the warning
 // bundle to honour `instance.Flags.NoCompilerWarnings` (CC's
 // `pickWarningFlags` rule); modules without NO_COMPILER_WARNINGS keep
-// their `-Werror`/`-Wall`/`-Wextra` set. PR-35i also threads util's
-// own non-GLOBAL CFLAG (`-Wnarrowing`) and the `-D_musl_` consumer
-// sentinel via a path-sniff stopgap (see `asUtilOwnCFlags` /
-// `asUtilAutoPeerCFlags` / `asUtilTailIncludes`); generic walker
-// threading via gen.go is the long-term fix.
-func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, includes []string) []string {
+// their `-Werror`/`-Wall`/`-Wextra` set. PR-35m threads own non-GLOBAL
+// CFLAGS (`in.CFlags`), auto peer CFLAGS (`in.AutoPeerCFlags`), and
+// the includes tail (`ccIncludesPrefix + in.AddIncl + ccIncludesSuffix
+// + in.PeerAddInclGlobal`) generically via the same struct CC
+// consumes.
+func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in ModuleCCInputs) []string {
 	isHost := instance.Flags.PIC
 	isMusl := instance.Flags.LibcMusl
 
@@ -230,25 +233,20 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, inc
 	// `-Werror`/`-Wall`/`-Wextra` set.
 	warnBundle := pickWarningFlags(instance.Flags.NoCompilerWarnings)
 
-	// PR-35i: util's own non-GLOBAL CFLAG (`-Wnarrowing`, util/ya.make:243
-	// inside `IF (GCC OR CLANG OR CLANG_CL)`) and the `-D_musl_`
-	// consumer-side musl sentinel (defaultPeerCFlags in gen.go) are
-	// threaded here as a path-sniff stopgap. The CC pipeline gets these
-	// via ModuleCCInputs.{CFlags,AutoPeerCFlags}; the AS dispatch in
-	// gen.go currently passes neither, so as.go reproduces the data
-	// locally for the one util AS node (util/system/context_aarch64.S).
-	// A follow-up PR that extends gen.go's AS dispatch will retire the
-	// path-sniff. PR-33-C2_06 closure scope.
+	// PR-35m: own non-GLOBAL CFLAGS (`in.CFlags`) and auto peer CFLAGS
+	// (`in.AutoPeerCFlags`) thread through `ModuleCCInputs` from the
+	// walker (same struct CC consumes). Suppressed for musl-self per
+	// the musl-self-isolation invariant (Q6) — `muslExtraDefines`
+	// already carries the musl-self CFLAGS, and the peer-consumer
+	// `-D_musl_` does not apply to musl-self builds.
 	var ownCFlags, autoPeerCFlags []string
 
-	if instance.Path == "util" && !isHost && !isMusl {
-		ownCFlags = asUtilOwnCFlags
-		autoPeerCFlags = asUtilAutoPeerCFlags
-
-		if includes == nil {
-			includes = asUtilTailIncludes
-		}
+	if !isMusl {
+		ownCFlags = in.CFlags
+		autoPeerCFlags = in.AutoPeerCFlags
 	}
+
+	includes := composeASIncludes(in, isMusl, isHost)
 
 	betweenBlocks := len(catboostOpenSourceDefine) + len(autoPeerCFlags)
 	if isHost {
@@ -277,9 +275,9 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, inc
 	cmdArgs = append(cmdArgs, defines...)
 	cmdArgs = append(cmdArgs, musl...)
 
-	// PR-35i: own non-GLOBAL CFLAGS slot between commonDefines and the
+	// PR-35m: own non-GLOBAL CFLAGS slot between commonDefines and the
 	// first noLibcUndebugBlock (mirror of composeTargetCC's ownCFlags
-	// slot at cc.go:680).
+	// slot at cc.go:723).
 	cmdArgs = append(cmdArgs, ownCFlags...)
 
 	// Suppression block emitted twice flanking catboostOpenSourceDefine
@@ -288,8 +286,8 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, inc
 	cmdArgs = append(cmdArgs, suppressionBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
 
-	// PR-35i: AutoPeerCFlags slot between catboost and the second
-	// suppressionBlock copy (mirror of composeTargetCC at cc.go:683).
+	// PR-35m: AutoPeerCFlags slot between catboost and the second
+	// suppressionBlock copy (mirror of composeTargetCC at cc.go:726).
 	cmdArgs = append(cmdArgs, autoPeerCFlags...)
 
 	if isHost {
@@ -307,44 +305,44 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, inc
 	return cmdArgs
 }
 
-// asUtilOwnCFlags is util's own non-GLOBAL CFLAGS bundle as it appears
-// in the reference graph. Sourced from util/ya.make:242-244
-// (`IF (GCC OR CLANG OR CLANG_CL) { CFLAGS(-Wnarrowing) }`). Used by
-// `composeASCmdArgs` to reproduce the slot the CC pipeline gets via
-// `ModuleCCInputs.CFlags` (the AS dispatch in gen.go currently passes
-// no per-module CFlags, see PR-35i comment in `composeASCmdArgs`).
-var asUtilOwnCFlags = []string{"-Wnarrowing"}
+// composeASIncludes derives the include-tail slice that follows the
+// source path in cmd_args. Three flavours:
+//
+//   - musl-self target (LibcMusl=true, PIC=false): `muslCcIncludes`
+//     (the structurally-folded aarch64 musl include set).
+//   - musl-self host (LibcMusl=true, PIC=true): `muslCcIncludesX8664`
+//     (the same set with `arch/aarch64` swapped for `arch/x86_64`).
+//   - non-musl (the common case): `ccIncludesPrefix + AddIncl +
+//     ccIncludesSuffix + PeerAddInclGlobal`, mirror of the CC composer
+//     (cc.go:714-717 / cc.go:779-782). Own ADDINCL slots BETWEEN the
+//     baseline `BUILD_ROOT/SOURCE_ROOT` pair and the linux-headers
+//     pair; peer-GLOBAL ADDINCL slots AFTER the linux-headers pair.
+//     Empirical anchors: util context_aarch64.S.o cmd_args[93..105]
+//     (own empty, peer = libcxx/libcxxrt/musl/zlib/double-conversion/
+//     libc_compat); libunwind UnwindRegistersRestore.S.o
+//     cmd_args[98..106] (own = libunwind/include, peer = musl-arch×4);
+//     cxxsupp/builtins chkstk.S.o cmd_args[86..93] (own = musl-arch×4,
+//     peer empty — NO_PLATFORM).
+//
+// The musl-self override is structural (musl's own ya.make declares
+// the arch/include paths as own ADDINCL but the reference shape
+// interleaves them between `SOURCE_ROOT` and the linux-headers pair,
+// which is the canonical musl-self isolation pattern). The override
+// matches the CC behaviour (cc.go:218-228).
+func composeASIncludes(in ModuleCCInputs, isMusl, isHost bool) []string {
+	if isMusl {
+		if isHost {
+			return muslCcIncludesX8664
+		}
 
-// asUtilAutoPeerCFlags is the `-D_musl_` consumer-side musl sentinel
-// the walker auto-injects for any non-NO_PLATFORM, non-musl-self
-// module when CLI MUSL=yes (`defaultPeerCFlags` in gen.go). The CC
-// pipeline picks this up via `ModuleCCInputs.AutoPeerCFlags`; AS
-// reproduces it locally for util pending generic threading.
-var asUtilAutoPeerCFlags = []string{muslConsumerSentinel}
+		return muslCcIncludes
+	}
 
-// asUtilTailIncludes is the include set that trails the source path
-// in util's AS cmd_args. Mirrors the reference shape for
-// util/_/system/context_aarch64.S.o cmd_args[93..105]. Composed from
-// the same building blocks the CC walker assembles for util's CC
-// nodes: ccIncludes (BUILD_ROOT + SOURCE_ROOT + linux-headers pair) +
-// the runtime-stack peer-GLOBAL ADDINCLs (libcxx, libcxxrt, musl
-// arch/aarch64, musl arch/generic, musl include, musl extra) + util's
-// own user-PEERDIR contributions (zlib, double-conversion,
-// libc_compat/readpassphrase) in declaration order. Pinned literally
-// here as a path-sniff stopgap; generic threading via gen.go is the
-// long-term fix.
-var asUtilTailIncludes = []string{
-	"-I$(BUILD_ROOT)",
-	"-I$(SOURCE_ROOT)",
-	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers",
-	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers/_nf",
-	"-I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxx/include",
-	"-I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxxrt/include",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/aarch64",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/generic",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/include",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/extra",
-	"-I$(SOURCE_ROOT)/contrib/libs/zlib/include",
-	"-I$(SOURCE_ROOT)/contrib/libs/double-conversion",
-	"-I$(SOURCE_ROOT)/contrib/libs/libc_compat/include/readpassphrase",
+	out := make([]string, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(ccIncludesSuffix)+len(in.PeerAddInclGlobal))
+	out = append(out, ccIncludesPrefix...)
+	out = appendAddIncl(out, in.AddIncl)
+	out = append(out, ccIncludesSuffix...)
+	out = appendAddIncl(out, in.PeerAddInclGlobal)
+
+	return out
 }
