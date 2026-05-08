@@ -31,10 +31,8 @@ import (
 var includeRe = regexp.MustCompile(`^\s*#\s*(include|include_next)\s*[<"]([^>"]+)[>"]`)
 
 // includeKind discriminates `<...>` (system) from `"..."` (quoted).
-// `#include_next` is treated as system for resolution purposes (the
-// distinction matters only for which directory in the search path
-// the next match resumes from; since L2 is multiset-based and our
-// scanner does the union of all matches anyway, the kind suffices).
+// `#include_next` retains its directive form via `next` and is
+// otherwise treated as system for search-path resolution.
 type includeKind int
 
 const (
@@ -43,8 +41,17 @@ const (
 )
 
 // includeDirective is one parsed `#include` from a source file.
+// `next` distinguishes `#include_next` from a regular `#include`. For
+// sysincl resolution `#include_next` is suppressed: the directive
+// semantically asks the preprocessor to search past the current
+// header's directory, never to apply YAML-driven sysincl mappings —
+// the upstream ymake scanner does not synthesise sysincl entries for
+// `#include_next`, and following them through libcxx's
+// `__has_include_next` shadow-header pattern is the dominant L2-ceiling
+// over-fan-out (PR-31-D08, PR-33-C03).
 type includeDirective struct {
 	kind   includeKind
+	next   bool
 	target string
 }
 
@@ -84,9 +91,42 @@ type IncludeScanner struct {
 	parsed       map[string][]includeDirective
 	exists       map[string]bool
 	resolveCache map[resolveKey][]string
+	// anySrcView is a PerSourceView prepared with an empty source path.
+	// Its `includerKeyed` slice is the canonical includer-keyed record
+	// list (every view derives the same slice); the `activeSourceKeyed`
+	// half is empty (no source-keyed filter accepts ""). Used as a
+	// lock-free shortcut by sysinclIncluderLookup.
+	anySrcView PerSourceView
+	// viewCache caches per-source PerSourceViews so repeat WalkClosure
+	// calls (and the multi-source dfs in joinSrcsIncludeClosure) reuse
+	// the precomputed source-keyed filter results. Keyed by SourceRel.
+	viewCache map[string]PerSourceView
+	// sysinclSourceCache memoises the source-keyed half across
+	// (sourceRel, target). The result is includer-INdependent for
+	// source-keyed records (the source filter was satisfied when the
+	// view was constructed); two CCs sharing a sourceRel reach the
+	// same set of source-keyed paths for any (includer, target). Most
+	// CC sources visit a few hundred distinct targets; the cache hits
+	// on every repeat target within one source's closure.
+	sysinclSourceCache map[sysinclSourceKey][]string
+	// sysinclIncluderCache memoises the includer-keyed half across
+	// (includerRel, target). The result is source-INdependent
+	// (includer-keyed records' filters depend only on the includer);
+	// every CC reaching the same (includer, target) shares this entry.
+	sysinclIncluderCache map[sysinclIncluderKey][]string
 
 	visitedPool sync.Pool // *map[string]struct{}
 	orderPool   sync.Pool // *[]string
+}
+
+type sysinclSourceKey struct {
+	sourceRel string
+	target    string
+}
+
+type sysinclIncluderKey struct {
+	includerRel string
+	target      string
 }
 
 type resolveKey struct {
@@ -94,18 +134,23 @@ type resolveKey struct {
 	includer string
 	target   string
 	kind     includeKind
+	next     bool
 }
 
 // NewIncludeScanner constructs a scanner bound to a SysInclSet and a
 // source-root absolute path.
 func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
 	s := &IncludeScanner{
-		sysincl:      sysincl,
-		sourceRoot:   sourceRoot,
-		parsed:       make(map[string][]includeDirective),
-		exists:       make(map[string]bool, 4096),
-		resolveCache: make(map[resolveKey][]string, 4096),
+		sysincl:              sysincl,
+		sourceRoot:           sourceRoot,
+		parsed:               make(map[string][]includeDirective),
+		exists:               make(map[string]bool, 4096),
+		resolveCache:         make(map[resolveKey][]string, 4096),
+		viewCache:            make(map[string]PerSourceView, 256),
+		sysinclSourceCache:   make(map[sysinclSourceKey][]string, 4096),
+		sysinclIncluderCache: make(map[sysinclIncluderKey][]string, 4096),
 	}
+	s.anySrcView = s.sysincl.PreparePerSource("")
 
 	// Pool factories preallocate the same capacity that the
 	// non-pooled WalkClosure used (64 entries). Pooled items are
@@ -201,13 +246,16 @@ func (s *IncludeScanner) WalkClosure(ctx ScanContext) []string {
 }
 
 // hashScanContext is an FNV-1a hash over the context fields the
-// resolve cache keys on (OwnAddIncl + PeerAddInclSet + BaseSearchPaths).
-// SourceRel is intentionally NOT part of the hash because it does not
-// affect resolve() behaviour beyond the includer-rel sysincl key (which
-// IS part of the resolveKey itself). Two CCs in the same module with
-// different sources but the same ADDINCL/peer-GLOBAL/Base sets share
-// the same ctxHash and reuse cached resolves for shared transitive
-// includers.
+// search-path resolve cache keys on (OwnAddIncl + PeerAddInclSet +
+// BaseSearchPaths). SourceRel is intentionally NOT part of the hash:
+// search-path resolution is source-independent (only the includer's
+// directory plus the module's ADDINCL/peer/Base search path is
+// consulted), so two CCs with different sources but the same module
+// configuration can share search-path results. Sysincl resolution
+// IS source-dependent (PR-35e introduces per-record source-vs-includer
+// keying) and is bypass-cached: computed per call and merged into the
+// final result without using resolveCache. The split keeps the
+// cross-source cache hit rate that PR-34's pooling refactor delivered.
 func hashScanContext(ctx *ScanContext) uint64 {
 	const (
 		offset uint64 = 1469598103934665603
@@ -306,7 +354,9 @@ func (s *IncludeScanner) parseIncludes(absPath string) []includeDirective {
 			kind = includeQuoted
 		}
 
-		out = append(out, includeDirective{kind: kind, target: string(m[2])})
+		next := string(m[1]) == "include_next"
+
+		out = append(out, includeDirective{kind: kind, next: next, target: string(m[2])})
 	}
 
 	s.mu.Lock()
@@ -336,11 +386,283 @@ func (s *IncludeScanner) parseIncludes(absPath string) []includeDirective {
 //     musl/include/stddef.h (via libc-to-musl.yml) — both records
 //     are active and both contribute to the input set.
 func (s *IncludeScanner) resolve(includerAbs string, d includeDirective, ctx *ScanContext, ctxHash uint64) []string {
+	// `#include_next` directives resolve to nothing in the upstream
+	// reference scan: every observed live use is the libcxx
+	// "shadow-header" pattern where libcxx/X.h does
+	// `#include_next <X.h>` to chain through to the system's X.h
+	// (e.g. libcxx/wchar.h chaining to musl/include/wchar.h). The
+	// chained header is ALWAYS reachable via the parallel C++ wrapper
+	// (cwchar, cuchar, cstring, …) which does a regular
+	// `#include <X.h>` that resolves via sysincl to BOTH the libcxx
+	// and the musl shadow. Following `#include_next` adds no new
+	// inputs in those cases — and adds spurious inputs when the
+	// `#include_next` lives inside an `#elif` branch the live
+	// preprocessor never takes (PR-31-D08, PR-33-C03:
+	// __mbstate_t.h's `#elif __has_include_next(<uchar.h>)` is dead
+	// when `_LIBCPP_HAS_MUSL_LIBC` is set, but our text-blind scanner
+	// followed it through both the search path and sysincl, doubling
+	// in 422 libcxx + 23 JS-derived CC consumers).
+	//
+	// Returning early here is the surgical fix for that ceiling. We
+	// do not attempt to evaluate `#elif` chains (out of scope for
+	// PR-35e); the heuristic is conservative — real `#include_next`
+	// chains in our M2 closure all duplicate paths the parallel
+	// regular-include path already supplies.
+	if d.next {
+		return nil
+	}
+
+	// Two-level resolve. Search-path resolution is source-independent
+	// and goes through resolveCache (keyed by ctxHash + includer +
+	// target + kind) for cross-source reuse. Sysincl resolution is
+	// source-dependent (PR-35e per-record keying) and goes through
+	// per-half caches: source-keyed by (sourceRel, target) reused
+	// within one source's closure, includer-keyed by (includer,
+	// target) reused across every source reaching that includer.
+	searchOut := s.resolveSearchPath(includerAbs, d, ctx, ctxHash)
+
+	// Sysincl: add EVERY matching record's contribution on top of the
+	// search-path result. PR-35e: per-record source-vs-includer
+	// keying — each SysIncl record carries a `KeyBySource` flag
+	// (compiled from its `source_filter` shape: negative-lookahead
+	// `(?!...)` → key by source, otherwise key by includer). The
+	// SysInclSet.Lookup signature takes BOTH paths; per-record
+	// dispatch picks which to test against. PR-33 D05 attempted a
+	// blanket source-keyed lookup and lost the glibcasm closure for
+	// 125 musl CC nodes (filter `^contrib/libs/glibcasm` had to fire
+	// on glibcasm-rooted includer chains reached from musl sources);
+	// per-record dispatch keeps that includer-keyed branch intact
+	// while flipping the negative-lookahead records (stl-to-libcxx,
+	// libc-to-musl line 75, libc-to-compat) to source-keyed so they
+	// no longer fire on libcxx-internal includer chains reaching
+	// uchar.h/wchar.h via `__has_include_next` shadow patterns.
+	includerRel := strings.TrimPrefix(includerAbs, s.sourceRoot+"/")
+	mappings := s.sysinclLookup(ctx.SourceRel, includerRel, d.target)
+
+	if len(mappings) == 0 {
+		return searchOut
+	}
+
+	// Layer sysincl mappings on top of the search-path result.
+	// `mappings` already carry absolute paths (the per-half cache
+	// pre-converts via `absifyRels`); we still file-check each because
+	// some sysincl entries point at files the tree may lack. When no
+	// new entries stick we return searchOut directly to avoid the
+	// make/copy.
+	//
+	// Fast path: when searchOut is empty (the common case for system
+	// includes hitting only sysincl) we can use `mappings` directly,
+	// applying file-check + dedup in place to a fresh slice without
+	// copying searchOut. Linear-scan dedup beats the map alloc since
+	// mapping lists are 1-3 entries long.
+	if len(searchOut) == 0 {
+		var out []string
+
+	fastLoop:
+		for _, abs := range mappings {
+			for _, q := range out {
+				if q == abs {
+					continue fastLoop
+				}
+			}
+
+			if !s.fileExists(abs) {
+				continue
+			}
+
+			if out == nil {
+				out = make([]string, 0, len(mappings))
+			}
+
+			out = append(out, abs)
+		}
+
+		return out
+	}
+
+	var out []string
+
+mapLoop:
+	for _, abs := range mappings {
+		if out != nil {
+			for _, q := range out {
+				if q == abs {
+					continue mapLoop
+				}
+			}
+		} else {
+			for _, q := range searchOut {
+				if q == abs {
+					continue mapLoop
+				}
+			}
+		}
+
+		if !s.fileExists(abs) {
+			continue
+		}
+
+		if out == nil {
+			out = make([]string, len(searchOut), len(searchOut)+len(mappings))
+			copy(out, searchOut)
+		}
+
+		out = append(out, abs)
+	}
+
+	if out == nil {
+		return searchOut
+	}
+
+	return out
+}
+
+// sysinclLookup unions the source-keyed and includer-keyed halves of
+// the sysincl Lookup, each memoised independently. The split lets the
+// includer-keyed half be reused across every CC reaching the same
+// (includer, target) — the cross-source cache hit rate that PR-34d's
+// pooling refactor preserved — while the source-keyed half is reused
+// within a single source's closure for repeat targets.
+//
+// Returns either srcMappings (when incMappings is empty), incMappings
+// (when srcMappings is empty), or a freshly-allocated union slice. The
+// dedup uses a linear scan over `out` because typical sysincl mapping
+// lists are 1-3 entries long; a map allocation per call would dominate
+// the per-resolve cost.
+func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel, target string) []string {
+	srcMappings := s.sysinclSourceLookup(sourceRel, target)
+	incMappings := s.sysinclIncluderLookup(includerRel, target)
+
+	if len(srcMappings) == 0 {
+		return incMappings
+	}
+
+	if len(incMappings) == 0 {
+		return srcMappings
+	}
+
+	out := make([]string, 0, len(srcMappings)+len(incMappings))
+	out = append(out, srcMappings...)
+
+incLoop:
+	for _, p := range incMappings {
+		for _, q := range out {
+			if p == q {
+				continue incLoop
+			}
+		}
+
+		out = append(out, p)
+	}
+
+	return out
+}
+
+func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) []string {
+	key := sysinclSourceKey{sourceRel: sourceRel, target: target}
+
+	s.mu.Lock()
+	cached, ok := s.sysinclSourceCache[key]
+	s.mu.Unlock()
+
+	if ok {
+		return cached
+	}
+
+	view := s.perSourceView(sourceRel)
+	rels, _ := view.LookupSourceKeyed(target)
+
+	mappings := s.absifyRels(rels)
+
+	s.mu.Lock()
+	s.sysinclSourceCache[key] = mappings
+	s.mu.Unlock()
+
+	return mappings
+}
+
+func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) []string {
+	key := sysinclIncluderKey{includerRel: includerRel, target: target}
+
+	s.mu.Lock()
+	cached, ok := s.sysinclIncluderCache[key]
+	s.mu.Unlock()
+
+	if ok {
+		return cached
+	}
+
+	// PerSourceView's includerKeyed slice is identical regardless of
+	// which source it was prepared for (every view derives it from the
+	// same SysInclSet). Use the prepared anySrcView (initialised once
+	// at NewIncludeScanner) to access the includer-keyed records
+	// without going through perSourceView's per-call lock.
+	rels, _ := s.anySrcView.LookupIncluderKeyed(includerRel, target)
+
+	mappings := s.absifyRels(rels)
+
+	s.mu.Lock()
+	s.sysinclIncluderCache[key] = mappings
+	s.mu.Unlock()
+
+	return mappings
+}
+
+// absifyRels converts a list of SOURCE_ROOT-relative paths (as produced
+// by sysincl YAMLs) into absolute paths under the scanner's source
+// root, normalising `..`/`.` segments at the same time. Cached at the
+// per-half sysinclCache level so the per-resolve hot path can skip
+// the per-mapping `prefix + rel` string concatenation that dominated
+// the alloc profile pre-PR-35e perf tuning.
+func (s *IncludeScanner) absifyRels(rels []string) []string {
+	if len(rels) == 0 {
+		return nil
+	}
+
+	prefix := s.sourceRoot + "/"
+	out := make([]string, 0, len(rels))
+
+	for _, rel := range rels {
+		out = append(out, prefix+normalisePath(rel))
+	}
+
+	return out
+}
+
+// perSourceView returns a cached SysInclSet view with SOURCE-keyed
+// filters pre-resolved against `sourceRel`. Computed once per source
+// and reused for every per-include resolve in that source's closure;
+// cross-source reuse on top of that is safe — `viewCache` is keyed by
+// SourceRel — so two CCs with the same SourceRel (rare but possible
+// in dual-platform host/target emission) share the same view.
+func (s *IncludeScanner) perSourceView(sourceRel string) PerSourceView {
+	s.mu.Lock()
+	cached, ok := s.viewCache[sourceRel]
+	s.mu.Unlock()
+
+	if ok {
+		return cached
+	}
+
+	view := s.sysincl.PreparePerSource(sourceRel)
+
+	s.mu.Lock()
+	s.viewCache[sourceRel] = view
+	s.mu.Unlock()
+
+	return view
+}
+
+// resolveSearchPath returns the search-path-only resolved set for the
+// given directive. Cached by (ctxHash, includer, target, kind) — the
+// result is source-independent.
+func (s *IncludeScanner) resolveSearchPath(includerAbs string, d includeDirective, ctx *ScanContext, ctxHash uint64) []string {
 	key := resolveKey{
 		ctxHash:  ctxHash,
 		includer: includerAbs,
 		target:   d.target,
 		kind:     d.kind,
+		next:     d.next,
 	}
 
 	s.mu.Lock()
@@ -441,29 +763,6 @@ func (s *IncludeScanner) resolve(includerAbs string, d includeDirective, ctx *Sc
 				break
 			}
 		}
-	}
-
-	// Sysincl: add EVERY matching record's contribution on top of
-	// the search-path result. The source_filter key is the IMMEDIATE
-	// includer's relative path (not the compile-unit source path) —
-	// empirically required by the reference graph: glibcasm-mapping
-	// records (filter `^contrib/libs/glibcasm`) fire when a musl
-	// header transitively reaches a glibcasm-based includer in the
-	// closure, which would not happen with a compile-unit-keyed
-	// match. PR-33 D05 attempted ctx.SourceRel as the key but lost
-	// 125 musl CC nodes' glibcasm closure (regressed L2 from 83.94%
-	// to 79.60%). Both keys give wrong answers for some axis: the
-	// per-includer key over-fans-out for stl-to-libcxx on
-	// non-yasm/non-musl headers reached via a yasm chain
-	// (libc_compat/reallocarray/stdlib.h is the canonical case).
-	// Resolution lives in a sysincl follow-up that gates per-record
-	// by source-class (the upstream's actual mechanism — recorded as
-	// a PR-33 deferred follow-up defect).
-	includerRel := strings.TrimPrefix(includerAbs, s.sourceRoot+"/")
-	mappings, _ := s.sysincl.Lookup(includerRel, d.target)
-
-	for _, p := range mappings {
-		addPath(p)
 	}
 
 	s.mu.Lock()
