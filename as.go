@@ -137,8 +137,16 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 		return emitASYasm(instance, srcRel, in, yasmLD, emit)
 	}
 
-	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + ".o"
-	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
+	// PR-35r: output/input path composition mirrors composeCCPaths (cc.go).
+	// Three cases:
+	//   1. srcRel has no "/": flat output (no _/ infix), same-dir input.
+	//      Empirical: contrib/libs/asmglibc/memchr.S.o.
+	//   2. srcRel has "/" and no SRCDIR override: _/<srcRel>.o output,
+	//      same-dir input (e.g. cxxsupp/builtins/_/aarch64/chkstk.S.o).
+	//   3. SRCDIR set and source doesn't exist locally: __/<rel>.o output
+	//      (ancestor-dir segments rendered as __), SRCDIR input.
+	//      Empirical: tcmalloc/no_percpu_cache/__/tcmalloc/internal/percpu_rseq_asm.S.o.
+	outputPath, inputPath := composeASPaths(instance, srcRel, in)
 
 	cmdArgs := composeASCmdArgs(instance, outputPath, inputPath, in)
 
@@ -303,6 +311,41 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 	}
 
 	return emit.Emit(node), outputPath
+}
+
+// composeASPaths derives (outputPath, inputPath) for the clang AS path.
+// Mirrors composeCCPaths (cc.go:361-402) with three cases:
+//
+//  1. srcRel has no "/": flat output `$(BUILD_ROOT)/<path>/<srcRel>.o`;
+//     input `$(SOURCE_ROOT)/<path>/<srcRel>`. Empirical: asmglibc/memchr.S.
+//  2. srcRel has "/" and no SRCDIR override: `$(BUILD_ROOT)/<path>/_/<srcRel>.o`;
+//     input `$(SOURCE_ROOT)/<path>/<srcRel>`. Empirical: cxxsupp/builtins/_/aarch64/chkstk.S.
+//  3. SRCDIR set and source does not resolve locally: output uses
+//     composeSrcDirOutputRel infix (cc.go) → `__/` for ancestor SRCDIR;
+//     input `$(SOURCE_ROOT)/<srcDir>/<srcRel>`. Empirical: tcmalloc/no_percpu_cache →
+//     `__/tcmalloc/internal/percpu_rseq_asm.S.o`.
+func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (string, string) {
+	useSrcDir := in.SrcDir != "" && in.SrcDir != instance.Path && !sourceExistsLocally(in.SourceRoot, instance.Path, srcRel)
+
+	if useSrcDir {
+		outputRel := composeSrcDirOutputRel(instance.Path, in.SrcDir, srcRel)
+		outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + outputRel + ".o"
+		inputPath := "$(SOURCE_ROOT)/" + in.SrcDir + "/" + srcRel
+
+		return outputPath, inputPath
+	}
+
+	var outputPath string
+
+	if strings.Contains(srcRel, "/") {
+		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + ".o"
+	} else {
+		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + ".o"
+	}
+
+	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
+
+	return outputPath, inputPath
 }
 
 // composeASCmdArgs builds the cmd_args bundle for an AS node. Three

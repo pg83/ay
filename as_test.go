@@ -172,13 +172,13 @@ func TestEmitAS_CxxsuppBuiltinsChkstk_ByteExact(t *testing.T) {
 	t.Logf("cmd_args length = %d (reference = %d)", len(got.Cmds[0].CmdArgs), len(wantArgs))
 }
 
-// TestEmitAS_OutputPath_AlwaysHasUnderscore verifies that the _/ infix
-// is unconditional for AS nodes (D29), even for sources with no directory
-// component — unlike CC which uses the flat formula for flat sources.
-func TestEmitAS_OutputPath_AlwaysHasUnderscore(t *testing.T) {
+// TestEmitAS_OutputPath_FlatSrcRel verifies that a flat srcRel (no "/" component)
+// produces a flat output path with no _/ infix (PR-35r cluster 4 fix).
+// Empirical reference: contrib/libs/asmglibc/memchr.S.o (flat, no _/).
+func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 	e := NewBufferedEmitter()
 	_, outPath := EmitAS(targetInstance("some/module"), "flat.S", ModuleCCInputs{}, nil, e)
-	want := "$(BUILD_ROOT)/some/module/_/flat.S.o"
+	want := "$(BUILD_ROOT)/some/module/flat.S.o"
 
 	if outPath != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
@@ -194,6 +194,213 @@ func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 	if outPath != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
 	}
+}
+
+// TestEmitAS_OutputPath_SrcDir verifies the __/ infix for ancestor-SRCDIR cases
+// (PR-35r cluster 5). When in.SrcDir is set and the source does not resolve
+// locally, the output path uses composeSrcDirOutputRel (same as CC case 3).
+func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
+	e := NewBufferedEmitter()
+	// tcmalloc/no_percpu_cache: SRCDIR = contrib/libs/tcmalloc (ancestor).
+	// srcRel = tcmalloc/internal/percpu_rseq_asm.S
+	// Expected: __/tcmalloc/internal/percpu_rseq_asm.S.o
+	in := ModuleCCInputs{SrcDir: "contrib/libs/tcmalloc"}
+	_, outPath := EmitAS(
+		targetInstance("contrib/libs/tcmalloc/no_percpu_cache"),
+		"tcmalloc/internal/percpu_rseq_asm.S",
+		in,
+		nil,
+		e,
+	)
+	want := "$(BUILD_ROOT)/contrib/libs/tcmalloc/no_percpu_cache/__/tcmalloc/internal/percpu_rseq_asm.S.o"
+
+	if outPath != want {
+		t.Errorf("outPath = %q, want %q", outPath, want)
+	}
+}
+
+// TestEmitAS_AsmgLibc_Memchr_ByteExact (PR-35r cluster 4) pins the flat
+// output path for asmglibc/memchr.S.o against the reference graph.
+// asmglibc is a host-PIC (x86_64) clang AS module with a single-component
+// srcRel — the reference output is flat (no _/ infix).
+func TestEmitAS_AsmgLibc_Memchr_ByteExact(t *testing.T) {
+	const targetOut = "$(BUILD_ROOT)/contrib/libs/asmglibc/memchr.S.o"
+
+	raw, err := os.ReadFile(referenceGraphPath)
+
+	if err != nil {
+		t.Skipf("reference graph not available (%v); skipping asmglibc AS byte-exact test", err)
+	}
+
+	var g Graph
+	Throw(json.Unmarshal(raw, &g))
+
+	var ref *Node
+
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0] == targetOut {
+			ref = n
+
+			break
+		}
+	}
+
+	if ref == nil {
+		t.Fatalf("reference asmglibc AS node with output %q not found", targetOut)
+	}
+
+	emit := NewBufferedEmitter()
+
+	// asmglibc: host-PIC (x86_64), no SrcDir, no own AddIncl, no peer
+	// AddIncl, NoCompilerWarnings=false (full warning bundle in reference).
+	// srcRel = "memchr.S" (flat — PR-35r fix: no _/ infix in output).
+	// IncludeInputs from scanner: sysdep.h only.
+	asmglibcInst := hostInstance("contrib/libs/asmglibc")
+	asmglibcIn := ModuleCCInputs{
+		IncludeInputs: []string{
+			"$(SOURCE_ROOT)/contrib/libs/asmglibc/sysdep.h",
+		},
+	}
+	_, outPath := EmitAS(asmglibcInst, "memchr.S", asmglibcIn, nil, emit)
+
+	if outPath != targetOut {
+		t.Errorf("outPath = %q, want %q", outPath, targetOut)
+	}
+
+	if len(emit.nodes) != 1 {
+		t.Fatalf("emitter buffered %d nodes, want 1", len(emit.nodes))
+	}
+
+	got := emit.nodes[0]
+	wantArgs := ref.Cmds[0].CmdArgs
+
+	if len(got.Cmds[0].CmdArgs) != len(wantArgs) {
+		t.Fatalf("cmd_args length = %d, want %d", len(got.Cmds[0].CmdArgs), len(wantArgs))
+	}
+
+	for i := range wantArgs {
+		if got.Cmds[0].CmdArgs[i] != wantArgs[i] {
+			t.Errorf("cmd_args[%d]:\n  got:  %q\n  want: %q", i, got.Cmds[0].CmdArgs[i], wantArgs[i])
+		}
+	}
+
+	if !got.HostPlatform {
+		t.Errorf("host_platform: got false, want true")
+	}
+
+	fieldEqual(t, "inputs", got.Inputs, ref.Inputs)
+	fieldEqual(t, "outputs", got.Outputs, ref.Outputs)
+
+	t.Logf("cmd_args length = %d (reference = %d)", len(got.Cmds[0].CmdArgs), len(wantArgs))
+}
+
+// TestEmitAS_TcmallocNopercpu_PercpuRseqAsm_ByteExact (PR-35r cluster 5)
+// pins the full cmd_args bundle and output path for
+// tcmalloc/no_percpu_cache/__/tcmalloc/internal/percpu_rseq_asm.S.o.
+// This module uses SRCDIR(contrib/libs/tcmalloc) (ancestor), so the
+// output infix is __/ and the input comes from $(SOURCE_ROOT)/contrib/libs/tcmalloc/...
+func TestEmitAS_TcmallocNopercpu_PercpuRseqAsm_ByteExact(t *testing.T) {
+	const targetOut = "$(BUILD_ROOT)/contrib/libs/tcmalloc/no_percpu_cache/__/tcmalloc/internal/percpu_rseq_asm.S.o"
+
+	raw, err := os.ReadFile(referenceGraphPath)
+
+	if err != nil {
+		t.Skipf("reference graph not available (%v); skipping tcmalloc percpu_rseq AS byte-exact test", err)
+	}
+
+	var g Graph
+	Throw(json.Unmarshal(raw, &g))
+
+	var ref *Node
+
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0] == targetOut {
+			ref = n
+
+			break
+		}
+	}
+
+	if ref == nil {
+		t.Fatalf("reference tcmalloc AS node with output %q not found", targetOut)
+	}
+
+	emit := NewBufferedEmitter()
+
+	// tcmalloc/no_percpu_cache: target-side (PIC=false), SRCDIR=contrib/libs/tcmalloc,
+	// NO_COMPILER_WARNINGS=true, own AddIncl=contrib/libs/tcmalloc (ADDINCL GLOBAL),
+	// own CFLAGS from ya.make (-DTCMALLOC_INTERNAL_256K_PAGES, -DTCMALLOC_DEPRECATED_PERTHREAD
+	// only — -UNDEBUG and -mno-outline-atomics are the noLibcUndebugBlock prefix),
+	// AutoPeerCFlags=-D_musl_, PeerAddInclGlobal mirrors reference cmd_args[94..101].
+	tcmallocInst := targetInstance("contrib/libs/tcmalloc/no_percpu_cache")
+	tcmallocInst.Flags.NoCompilerWarnings = true
+	tcmallocIn := ModuleCCInputs{
+		SrcDir: "contrib/libs/tcmalloc",
+		// own AddIncl: ADDINCL GLOBAL from common.inc
+		AddIncl: []string{"contrib/libs/tcmalloc"},
+		// own CFLAGS from no_percpu_cache/ya.make CFLAGS() block only.
+		// -UNDEBUG/-mno-outline-atomics are part of noLibcUndebugBlock, not own CFlags.
+		CFlags: []string{
+			"-DTCMALLOC_INTERNAL_256K_PAGES",
+			"-DTCMALLOC_DEPRECATED_PERTHREAD",
+		},
+		AutoPeerCFlags: []string{"-D_musl_"},
+		PeerAddInclGlobal: []string{
+			"contrib/libs/cxxsupp/libcxx/include",
+			"contrib/libs/cxxsupp/libcxxrt/include",
+			"contrib/libs/musl/arch/aarch64",
+			"contrib/libs/musl/arch/generic",
+			"contrib/libs/musl/include",
+			"contrib/libs/musl/extra",
+			"contrib/restricted/abseil-cpp",
+			"contrib/libs/tcmalloc",
+		},
+		IncludeInputs: ref.Inputs[1:], // all but the primary source
+	}
+	_, outPath := EmitAS(tcmallocInst, "tcmalloc/internal/percpu_rseq_asm.S", tcmallocIn, nil, emit)
+
+	if outPath != targetOut {
+		t.Errorf("outPath = %q, want %q", outPath, targetOut)
+	}
+
+	if len(emit.nodes) != 1 {
+		t.Fatalf("emitter buffered %d nodes, want 1", len(emit.nodes))
+	}
+
+	got := emit.nodes[0]
+	wantArgs := ref.Cmds[0].CmdArgs
+
+	if len(got.Cmds[0].CmdArgs) != len(wantArgs) {
+		// Print mismatched args for diagnosis.
+		for i := 85; i < len(got.Cmds[0].CmdArgs) && i < len(wantArgs)+5; i++ {
+			got_a := "(missing)"
+			want_a := "(missing)"
+			if i < len(got.Cmds[0].CmdArgs) {
+				got_a = got.Cmds[0].CmdArgs[i]
+			}
+			if i < len(wantArgs) {
+				want_a = wantArgs[i]
+			}
+			t.Logf("cmd_args[%d]: got=%q want=%q", i, got_a, want_a)
+		}
+		t.Fatalf("cmd_args length = %d, want %d", len(got.Cmds[0].CmdArgs), len(wantArgs))
+	}
+
+	for i := range wantArgs {
+		if got.Cmds[0].CmdArgs[i] != wantArgs[i] {
+			t.Errorf("cmd_args[%d]:\n  got:  %q\n  want: %q", i, got.Cmds[0].CmdArgs[i], wantArgs[i])
+		}
+	}
+
+	fieldEqual(t, "inputs", got.Inputs, ref.Inputs)
+	fieldEqual(t, "outputs", got.Outputs, ref.Outputs)
+	fieldEqual(t, "target_properties", got.TargetProperties, ref.TargetProperties)
+
+	if got.HostPlatform {
+		t.Errorf("host_platform: got true, want false (target-side AS)")
+	}
+
+	t.Logf("cmd_args length = %d (reference = %d)", len(got.Cmds[0].CmdArgs), len(wantArgs))
 }
 
 // TestEmitAS_YasmLD_PopulatesDepRefs verifies that when yasmLD is non-nil,
@@ -740,7 +947,9 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoYasmBranch(t *testing.T) {
 	// PIC=false → target-side. Even though asmlibYasmModules matches
 	// instance.Path, the predicate is gated on PIC=true.
 	_, outPath := EmitAS(targetInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, e)
-	wantClangPath := "$(BUILD_ROOT)/contrib/libs/asmlib/_/memset64.asm.o"
+	// PR-35r: flat srcRel → flat output path (no _/ infix). memset64.asm
+	// has no "/" so the clang AS path emits a flat output.
+	wantClangPath := "$(BUILD_ROOT)/contrib/libs/asmlib/memset64.asm.o"
 
 	if outPath != wantClangPath {
 		t.Errorf("outPath = %q, want %q (clang AS path; yasm branch must not fire for target-side)", outPath, wantClangPath)
