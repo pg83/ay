@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 // as.go — emitter for AS assembly nodes.
 //
 // PR-23 retrofitted the signature: `EmitAS` now takes a
@@ -25,6 +27,36 @@ package main
 // produces for assembling one .S source into an object file. The
 // reference node pinned for byte-exact tests is the chkstk.S node
 // inside contrib/libs/cxxsupp/builtins.
+
+// PR-35q: when the module is an asmlib host-PIC consumer
+// (`asmlibYasmModules[instance.Path] && instance.Flags.PIC`), EmitAS
+// switches to the yasm toolchain shape rather than the clang AS shape.
+// The reference graph's 25 asmlib `.asm` AS nodes diverge from clang
+// AS in three ways:
+//
+//   - Output: flat `<modulePath>/<srcStem>.pic.o` (no `_/` infix; stem
+//     = srcRel with `.asm` suffix stripped). The clang AS path is
+//     `<modulePath>/_/<srcRel>.o` which neither matches the suffix nor
+//     omits the `_/` infix.
+//   - cmd_args: 18-arg yasm invocation
+//     (`$(BUILD_ROOT)/contrib/tools/yasm/yasm -f elf64 -D UNIX
+//     --replace=$(BUILD_ROOT)=/-B --replace=$(SOURCE_ROOT)=/-S
+//     --replace=$(TOOL_ROOT)=/-T -D _x86_64_ -D_YASM_ -I $(BUILD_ROOT)
+//     -I $(SOURCE_ROOT) -o <out> <in>`). No clang flags, no warning
+//     bundle, no defines, no includes from `ModuleCCInputs`.
+//   - Env: only `ARCADIA_ROOT_DISTBUILD` + `YASM_TEST_SUITE=1`
+//     (NO `DYLD_LIBRARY_PATH` — yasm has no host-clang library
+//     dependency).
+//
+// Inputs ordering: yasm binary FIRST, then source path, then transitive
+// includes. The reference shape places the yasm binary at index 0 of
+// the inputs slice (verified across cachesize64 / cpuid64 / memcpy64 /
+// memset64 / strlen64).
+//
+// Empirically pinned against `contrib/libs/asmlib/cachesize64.pic.o` in
+// `as_test.go::TestEmitAS_AsmlibYasm_ByteExact`. The asmlib host
+// closure (25 AS nodes) was identified by the PR-35p probe; this
+// branch closes 25 L1 pairs + 25 L3 nodes simultaneously.
 
 // PR-35i (PR-33-C2_06 closure): the warning-bundle slot in AS cmd_args
 // follows the same NO_COMPILER_WARNINGS discriminator as CC. Modules
@@ -99,6 +131,12 @@ package main
 // as a dependency of the AR step and avoid re-deriving the output
 // path.
 func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, string) {
+	// PR-35q: asmlib host-PIC AS nodes use yasm, not clang. Branch off
+	// before any clang-shape composition runs.
+	if instance.Flags.PIC && asmlibYasmModules[instance.Path] {
+		return emitASYasm(instance, srcRel, in, yasmLD, emit)
+	}
+
 	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + ".o"
 	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
 
@@ -163,6 +201,104 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 		// the AS node fingerprint without a yasm child — diverging
 		// from the reference shape. Threading yasmLD into DepRefs
 		// brings the AS node's L0 fingerprint into alignment.
+		node.DepRefs = []NodeRef{*yasmLD}
+	}
+
+	return emit.Emit(node), outputPath
+}
+
+// yasmBinaryPath is the canonical $(BUILD_ROOT)-relative path of the
+// host yasm binary, as observed across all 25 reference asmlib AS
+// nodes in the M2 closure (cmd_args[0]). Hardcoded here because the
+// only consumer is the asmlib host-PIC branch, which is itself gated
+// by `asmlibYasmModules`. If a future host module joins
+// `asmlibYasmModules`, the path remains the same — yasm's PROGRAM
+// directory is stable.
+const yasmBinaryPath = "$(BUILD_ROOT)/contrib/tools/yasm/yasm"
+
+// emitASYasm composes the yasm-shaped AS node for an asmlib host-PIC
+// `.asm` source. See the PR-35q docstring above EmitAS for the
+// rationale and the byte-exact reference shape. The function is the
+// asmlib-only counterpart to the clang AS path the rest of EmitAS
+// implements.
+func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, string) {
+	// Output stem strips `.asm` (the only extension this branch sees;
+	// asmlib's reference uses `.asm` exclusively per PR-30 D07).
+	stem := strings.TrimSuffix(srcRel, ".asm")
+	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + stem + ".pic.o"
+	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
+
+	cmdArgs := []string{
+		yasmBinaryPath,
+		"-f", "elf64",
+		"-D", "UNIX",
+		"--replace=$(BUILD_ROOT)=/-B",
+		"--replace=$(SOURCE_ROOT)=/-S",
+		"--replace=$(TOOL_ROOT)=/-T",
+		"-D", "_x86_64_",
+		"-D_YASM_",
+		"-I", "$(BUILD_ROOT)",
+		"-I", "$(SOURCE_ROOT)",
+		"-o", outputPath,
+		inputPath,
+	}
+
+	// Env shape: `ARCADIA_ROOT_DISTBUILD` + `YASM_TEST_SUITE`. NO
+	// `DYLD_LIBRARY_PATH` — yasm doesn't link against host clang's
+	// runtime, so the reference omits the slot. Single map aliased to
+	// both the cmd-level and node-level Env (mirror of EmitAS's
+	// clang-path treatment).
+	env := map[string]string{
+		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"YASM_TEST_SUITE":        "1",
+	}
+
+	// Inputs: yasm binary FIRST, then the source, then any transitive
+	// asm includes (e.g. `defs.asm` for the asmlib set). The reference
+	// shape places the yasm binary at index 0; the per-source includes
+	// the scanner discovers (PR-31 D11) follow.
+	allInputs := make([]string, 0, 2+len(in.IncludeInputs))
+	allInputs = append(allInputs, yasmBinaryPath)
+	allInputs = append(allInputs, inputPath)
+	allInputs = append(allInputs, in.IncludeInputs...)
+
+	node := &Node{
+		Cmds: []Cmd{
+			{
+				CmdArgs: cmdArgs,
+				// Cwd intentionally empty: the reference asmlib yasm AS
+				// nodes omit the `cwd` field (verified across all 25
+				// nodes in `/home/pg/monorepo/yatool_orig/sg.json`).
+				// The clang AS path sets `Cwd: $(BUILD_ROOT)` because
+				// 58/83 reference clang AS nodes carry it; the yasm AS
+				// nodes are part of the 25 that don't.
+				Env: env,
+			},
+		},
+		Env:          env,
+		Inputs:       allInputs,
+		Outputs:      []string{outputPath},
+		HostPlatform: true,
+		KV: map[string]string{
+			"p":  "AS",
+			"pc": "light-green",
+		},
+		Tags: []string{"tool"},
+		TargetProperties: map[string]string{
+			"module_dir": instance.Path,
+		},
+		Platform: string(instance.Target),
+		Requirements: map[string]interface{}{
+			"cpu":     float64(1),
+			"network": "restricted",
+			"ram":     float64(32),
+		},
+	}
+
+	if yasmLD != nil {
+		node.ForeignDepRefs = map[string][]NodeRef{
+			"tool": {*yasmLD},
+		}
 		node.DepRefs = []NodeRef{*yasmLD}
 	}
 

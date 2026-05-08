@@ -564,3 +564,197 @@ func TestEmitAS_UtilContext_ByteExact(t *testing.T) {
 
 	t.Logf("cmd_args length = %d (reference = %d)", len(got.Cmds[0].CmdArgs), len(wantArgs))
 }
+
+// TestEmitAS_AsmlibYasm_Cachesize_ByteExact (PR-35q) pins the yasm-
+// toolchain shape for asmlib's host-PIC `.asm` AS nodes against the
+// reference graph (`$(BUILD_ROOT)/contrib/libs/asmlib/cachesize64.pic.o`).
+//
+// Verifies the four shape divergences from the clang AS path:
+//
+//   - Output path is flat (`<modulePath>/<base>.pic.o`; no `_/` infix,
+//     `.asm` suffix stripped).
+//   - cmd_args is the 18-arg yasm invocation (NOT a 94/98/106/109-arg
+//     clang AS bundle).
+//   - Cwd is empty (the reference omits the `cwd` field for all 25
+//     asmlib yasm AS nodes; PR-35q must not set `Cwd: $(BUILD_ROOT)`).
+//   - Env is `ARCADIA_ROOT_DISTBUILD` + `YASM_TEST_SUITE` (no
+//     `DYLD_LIBRARY_PATH`).
+//
+// Inputs ordering (yasm binary at index 0) and downstream wiring
+// (DepRefs + ForeignDepRefs["tool"]) are pinned alongside.
+func TestEmitAS_AsmlibYasm_Cachesize_ByteExact(t *testing.T) {
+	const targetOut = "$(BUILD_ROOT)/contrib/libs/asmlib/cachesize64.pic.o"
+
+	raw, err := os.ReadFile(referenceGraphPath)
+
+	if err != nil {
+		t.Skipf("reference graph not available (%v); skipping asmlib yasm AS byte-exact test", err)
+	}
+
+	var g Graph
+	Throw(json.Unmarshal(raw, &g))
+
+	var ref *Node
+
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0] == targetOut {
+			ref = n
+
+			break
+		}
+	}
+
+	if ref == nil {
+		t.Fatalf("reference asmlib yasm AS node with output %q not found", targetOut)
+	}
+
+	emit := NewBufferedEmitter()
+
+	// Stand-in yasm LD ref. Identity is the only thing that matters —
+	// the AS node references it via foreign_deps.tool + deps.
+	yasmLDRef := emit.Emit(&Node{
+		Cmds:         []Cmd{{CmdArgs: []string{"yasm"}, Env: map[string]string{}}},
+		Env:          map[string]string{},
+		Inputs:       []string{},
+		Outputs:      []string{"$(BUILD_ROOT)/contrib/tools/yasm/yasm"},
+		KV:           map[string]string{"p": "LD", "pc": "light-cyan"},
+		Tags:         []string{"tool"},
+		Platform:     string(PlatformDefaultLinuxX8664),
+		Requirements: map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
+		TargetProperties: map[string]string{
+			"module_dir": "contrib/tools/yasm",
+		},
+	})
+
+	// asmlib host walk: PIC=true (host), instance.Path matches
+	// asmlibYasmModules. Includes scanned by gen.go include defs.asm —
+	// pre-load it here so the inputs slice the emitter produces is
+	// what the production walker would emit.
+	asmlibInstance := hostInstance("contrib/libs/asmlib")
+	asmlibIn := ModuleCCInputs{
+		IncludeInputs: []string{"$(SOURCE_ROOT)/contrib/libs/asmlib/defs.asm"},
+	}
+	_, outPath := EmitAS(asmlibInstance, "cachesize64.asm", asmlibIn, &yasmLDRef, emit)
+
+	if outPath != targetOut {
+		t.Errorf("outPath = %q, want %q", outPath, targetOut)
+	}
+
+	// AS node sits at index 1 (yasmLD is at index 0).
+	if len(emit.nodes) != 2 {
+		t.Fatalf("emitter buffered %d nodes, want 2", len(emit.nodes))
+	}
+
+	got := emit.nodes[1]
+	wantArgs := ref.Cmds[0].CmdArgs
+
+	if len(got.Cmds[0].CmdArgs) != len(wantArgs) {
+		t.Fatalf("cmd_args length = %d, want %d", len(got.Cmds[0].CmdArgs), len(wantArgs))
+	}
+
+	for i := range wantArgs {
+		if got.Cmds[0].CmdArgs[i] != wantArgs[i] {
+			t.Errorf("cmd_args[%d]:\n  got:  %q\n  want: %q", i, got.Cmds[0].CmdArgs[i], wantArgs[i])
+		}
+	}
+
+	// Cwd must be empty (reference omits the field).
+	if got.Cmds[0].Cwd != "" {
+		t.Errorf("Cmds[0].Cwd = %q, want empty", got.Cmds[0].Cwd)
+	}
+
+	if ref.Cmds[0].Cwd != "" {
+		t.Errorf("reference Cmds[0].Cwd = %q, want empty (sanity check)", ref.Cmds[0].Cwd)
+	}
+
+	// Env (per-cmd and top-level) must match exactly.
+	fieldEqual(t, "cmds[0].env", got.Cmds[0].Env, ref.Cmds[0].Env)
+	fieldEqual(t, "env (top-level)", got.Env, ref.Env)
+	fieldEqual(t, "outputs", got.Outputs, ref.Outputs)
+	fieldEqual(t, "tags", got.Tags, ref.Tags)
+	fieldEqual(t, "kv", got.KV, ref.KV)
+	fieldEqual(t, "target_properties", got.TargetProperties, ref.TargetProperties)
+	fieldEqual(t, "platform", got.Platform, ref.Platform)
+	fieldEqual(t, "requirements", got.Requirements, ref.Requirements)
+
+	// host_platform must be true.
+	if !got.HostPlatform {
+		t.Errorf("host_platform: got false, want true")
+	}
+
+	if !ref.HostPlatform {
+		t.Errorf("reference host_platform: got false, want true (sanity check)")
+	}
+
+	// Inputs: yasm binary at index 0, source at index 1, defs.asm at 2.
+	wantInputs := []string{
+		"$(BUILD_ROOT)/contrib/tools/yasm/yasm",
+		"$(SOURCE_ROOT)/contrib/libs/asmlib/cachesize64.asm",
+		"$(SOURCE_ROOT)/contrib/libs/asmlib/defs.asm",
+	}
+	fieldEqual(t, "inputs", got.Inputs, wantInputs)
+	fieldEqual(t, "inputs (vs reference)", got.Inputs, ref.Inputs)
+
+	// DepRefs + ForeignDepRefs["tool"] must contain the yasmLD ref
+	// (PR-30 D02).
+	if len(got.DepRefs) != 1 || got.DepRefs[0] != yasmLDRef {
+		t.Errorf("DepRefs = %v, want [%v]", got.DepRefs, yasmLDRef)
+	}
+
+	toolRefs := got.ForeignDepRefs["tool"]
+	if len(toolRefs) != 1 || toolRefs[0] != yasmLDRef {
+		t.Errorf(`ForeignDepRefs["tool"] = %v, want [%v]`, toolRefs, yasmLDRef)
+	}
+
+	t.Logf("cmd_args length = %d (reference = %d)", len(got.Cmds[0].CmdArgs), len(wantArgs))
+}
+
+// TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix (PR-35q) verifies
+// that asmlib host-PIC `.asm` AS nodes use the FLAT output path
+// (`<base>.pic.o`) without the `_/` infix that the clang AS path
+// applies unconditionally. This is the inverse of
+// TestEmitAS_OutputPath_AlwaysHasUnderscore — the asmlib yasm branch
+// is the documented exception to the clang-AS unconditional infix
+// rule.
+func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
+	e := NewBufferedEmitter()
+	_, outPath := EmitAS(hostInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, e)
+	want := "$(BUILD_ROOT)/contrib/libs/asmlib/memset64.pic.o"
+
+	if outPath != want {
+		t.Errorf("outPath = %q, want %q", outPath, want)
+	}
+}
+
+// TestEmitAS_AsmlibYasm_TargetSide_NoYasmBranch (PR-35q) verifies that
+// the yasm branch fires ONLY for host-PIC asmlib invocations. A
+// hypothetical target-side asmlib AS (PIC=false) must take the clang
+// AS path — the `_/<srcRel>.o` output, the clang cmd_args bundle, the
+// `Cwd: $(BUILD_ROOT)`. The asmlib reference graph contains no such
+// target-side node (asmlib is host-only by construction), but
+// defending the predicate against PIC=false is the cheapest way to
+// guarantee the branch never accidentally hijacks a future target AS
+// node living under a similarly-named module path.
+func TestEmitAS_AsmlibYasm_TargetSide_NoYasmBranch(t *testing.T) {
+	e := NewBufferedEmitter()
+	// PIC=false → target-side. Even though asmlibYasmModules matches
+	// instance.Path, the predicate is gated on PIC=true.
+	_, outPath := EmitAS(targetInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, e)
+	wantClangPath := "$(BUILD_ROOT)/contrib/libs/asmlib/_/memset64.asm.o"
+
+	if outPath != wantClangPath {
+		t.Errorf("outPath = %q, want %q (clang AS path; yasm branch must not fire for target-side)", outPath, wantClangPath)
+	}
+
+	if len(e.nodes) != 1 {
+		t.Fatalf("emitter buffered %d nodes, want 1", len(e.nodes))
+	}
+
+	got := e.nodes[0]
+
+	// Clang path sets Cwd; yasm path leaves it empty. A non-empty Cwd
+	// confirms the clang branch ran.
+	if got.Cmds[0].Cwd != "$(BUILD_ROOT)" {
+		t.Errorf("Cmds[0].Cwd = %q, want $(BUILD_ROOT) (clang AS path)", got.Cmds[0].Cwd)
+	}
+}
