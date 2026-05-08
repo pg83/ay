@@ -331,6 +331,7 @@ type moduleData struct {
 	srcDir           string   // last SRCDIR setting (empty = module dir)
 	flags            FlagSet  // overlay of inferFlagsFromPath + macro bools
 	hadAllocator     bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
+	allocatorName    string   // PR-35g: name passed to ALLOCATOR(...); empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE).
 	muslLite         bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
 	conflictMod      *ModuleStmt
 }
@@ -546,6 +547,7 @@ func applyAllocatorStmt(v *UnknownStmt, d *moduleData) {
 
 	d.peerdirs = append(d.peerdirs, peers...)
 	d.hadAllocator = true
+	d.allocatorName = name
 }
 
 // buildIfEnv constructs the per-instance bound-variable environment
@@ -728,6 +730,50 @@ var runtimeStackAddInclPaths = map[string]int{
 	"contrib/libs/cxxsupp/libcxxrt/include":  1,
 	"contrib/libs/cxxsupp/libcxxabi/include": 2,
 	"contrib/libs/libunwind/include":         3,
+}
+
+// bundledAddInclPaths is the set of ADDINCL paths the cc bundle's
+// `ccIncludesSuffix` (cc.go) injects directly into every non-musl CC
+// node's cmd_args (slots between own AddIncl and peer AddInclGlobal).
+// PR-35g: peer-propagated GLOBAL ADDINCL contributions whose path is
+// already covered by the bundle MUST be deduped out of
+// `peerAddInclGlobal` so they do not re-emit at a later slot.
+//
+// Empirical motivation: ragel6 host PIC walks musl/full → linux-headers
+// (whose `ADDINCL(GLOBAL contrib/libs/linux-headers ...)` propagates),
+// producing a duplicate emission at the tail of the peer-AddIncl block.
+// The reference graph drops it because the cc bundle already supplies
+// the same `-I$(SOURCE_ROOT)/contrib/libs/linux-headers{,/_nf}` flags.
+//
+// Musl flavours bypass this filter: their composer drops
+// PeerAddInclGlobal entirely (the `-nostdinc` + muslCcIncludes set
+// defines the entire include search path explicitly).
+var bundledAddInclPaths = map[string]bool{
+	"contrib/libs/linux-headers":     true,
+	"contrib/libs/linux-headers/_nf": true,
+}
+
+// suppressMallocAPIDefault drops `library/cpp/malloc/api` from a
+// default-peer slice when the module declared `ALLOCATOR(FAKE)`.
+// PR-35g: mirrors upstream `_BASE_UNIT`'s skip of the malloc/api
+// auto-peer when ALLOCATOR=FAKE — yasm is the only M2-closure case.
+// Returns the input unchanged when the gate is closed.
+func suppressMallocAPIDefault(defaults []string, allocatorName string) []string {
+	if allocatorName != "FAKE" {
+		return defaults
+	}
+
+	out := make([]string, 0, len(defaults))
+
+	for _, p := range defaults {
+		if p == "library/cpp/malloc/api" {
+			continue
+		}
+
+		out = append(out, p)
+	}
+
+	return out
 }
 
 // hoistRuntimeStackAddIncl returns `paths` with any entries from the
@@ -1261,26 +1307,70 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// fixture bug, not an "implicit ymake plumbing" no-op.
 	defaults := defaultPeerdirsFor(ctx, instance)
 
+	// PR-35g: ALLOCATOR(FAKE) suppresses the implicit malloc/api auto-
+	// peer (matches upstream `_BASE_UNIT`'s skip of malloc/api when
+	// ALLOCATOR=FAKE). yasm is the M2-closure case — no allocator peer
+	// AND no malloc/api means yasm's LD drops one peer-archive ref.
+	defaults = suppressMallocAPIDefault(defaults, d.allocatorName)
+
 	// PR-30 D02 + D03: PROGRAM-only implicit peerdirs. `_BASE_PROGRAM`
 	// adds musl/full (when MUSL=yes && !MUSL_LITE) and the default
 	// ALLOCATOR's peer set (TCMALLOC_TC for our environment) on top of
 	// the language defaults. Threaded only for PROGRAM modules; the
 	// `hadAllocator` flag suppresses the allocator-default when the
 	// PROGRAM declared `ALLOCATOR(NAME)` itself.
+	//
+	// PR-35g: split program-defaults from language-defaults so the peer-
+	// GLOBAL aggregation can apply different orderings to each group
+	// (language-defaults two-phase; program-defaults single-phase).
+	languageDefaultsCount := len(defaults)
+
 	if d.moduleStmt.Name == "PROGRAM" && !isRuntimeAncestor(instance.Path) {
-		programDefaults := defaultProgramPeerdirsFor(ctx, instance, d.hadAllocator, d.muslLite)
-		defaults = append(defaults, programDefaults...)
+		defaults = append(defaults, defaultProgramPeerdirsFor(ctx, instance, d.hadAllocator, d.muslLite)...)
 	}
 
 	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
 	allPeers := make([]string, 0, len(defaults)+len(d.peerdirs))
 
-	for _, p := range defaults {
+	// PR-35g: track per-peer category so the peer-GLOBAL aggregation
+	// below can apply the right ordering rule per group:
+	//   - language-defaults: two-phase (own first, then transitive) —
+	//     preserves libcxx/libcxxrt OWN ahead of the musl-arch
+	//     transitive chain (the PR-31 D05 archiver invariant).
+	//   - user-peers: single-phase AddInclGlobal in declaration order —
+	//     places an ALLOCATOR-derived peer's transitive GLOBAL ahead of
+	//     a later user PEERDIR's OWN GLOBAL (the ragel6 mimalloc/include
+	//     vs ragel5/aapl invariant).
+	//   - program-defaults: single-phase AddInclGlobal — places the
+	//     implicit TCMALLOC_TC peer-set's OWN GLOBAL after util's
+	//     transitive zlib/double-conversion/libc_compat (the archiver-
+	//     default allocator invariant).
+	//
+	// `allPeers` declaration order is preserved unchanged from PR-35c
+	// (defaults first, then user PEERDIRs) so peer-archive aggregation,
+	// LD inputs alphabetisation, and downstream LIBRARY closures keep
+	// their existing topology. The kind tag only steers AddInclGlobal
+	// aggregation in Phase 1/2.
+	const (
+		peerKindLangDefault    = 0
+		peerKindProgramDefault = 1
+		peerKindUserPeer       = 2
+	)
+
+	peerKinds := make([]int, 0, len(defaults)+len(d.peerdirs))
+
+	for i, p := range defaults {
 		if _, dup := seen[p]; dup {
 			continue
 		}
 		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
+
+		if i < languageDefaultsCount {
+			peerKinds = append(peerKinds, peerKindLangDefault)
+		} else {
+			peerKinds = append(peerKinds, peerKindProgramDefault)
+		}
 	}
 
 	for _, p := range d.peerdirs {
@@ -1289,6 +1379,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
+		peerKinds = append(peerKinds, peerKindUserPeer)
 	}
 
 	peerArchiveRefs := make([]NodeRef, 0, len(allPeers))
@@ -1363,6 +1454,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	type resolvedPeer struct {
 		path   string
 		result *moduleEmitResult
+		kind   int // PR-35g: peerKindLangDefault / peerKindProgramDefault / peerKindUserPeer
 	}
 
 	resolved := make([]resolvedPeer, 0, len(allPeers))
@@ -1370,9 +1462,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	for i, p := range allPeers {
 		peerPath := filepath.Clean(p)
 
-		isDefault := i < len(defaults)
+		kind := peerKinds[i]
 
-		if isDefault && !peerYaMakeExists(ctx.sourceRoot, peerPath) {
+		// PR-35g: language-defaults AND program-defaults both go through
+		// the missing-ya.make tolerance (the synthetic-test fixtures
+		// pattern). Only user-declared PEERDIRs are required to exist.
+		if kind != peerKindUserPeer && !peerYaMakeExists(ctx.sourceRoot, peerPath) {
 			continue
 		}
 
@@ -1383,7 +1478,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ThrowFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path, peerPath)
 		}
 
-		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult})
+		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult, kind: kind})
 
 		// PR-35c: fold peer's transitive archive closure into our
 		// own running closure BEFORE the peer's own archive (DFS
@@ -1409,19 +1504,77 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
-	// Phase 1: each peer's OWN GLOBAL declarations, in declaration
-	// order across peers.
+	// PR-35g: per-kind aggregation. Language-defaults use two-phase
+	// (own first, transitive second) so libcxx/libcxxrt OWN GLOBAL
+	// land before musl-arch transitive (archiver invariant). User-
+	// peers and program-defaults use single-phase AddInclGlobal in
+	// declaration order so an allocator-derived peer's transitive
+	// GLOBAL precedes a later peer's OWN GLOBAL (ragel6 mimalloc-vs-
+	// aapl invariant) and program-defaults' OWN GLOBAL trail
+	// language-defaults' transitive (archiver tcmalloc-after-zlib
+	// invariant).
+
+	// Phase 1: language-defaults' OWN GLOBAL declarations.
 	for _, rp := range resolved {
+		if rp.kind != peerKindLangDefault {
+			continue
+		}
+
 		addEach(addInclSeen, &peerAddInclGlobal, rp.result.OwnAddInclGlobal)
 	}
 
-	// Phase 2: each peer's TRANSITIVE peer-GLOBAL contributions
-	// (their own AddInclGlobal minus the bits already added above).
-	// Since AddInclGlobal includes own + transitive, the dedup table
-	// drops the duplicates from Phase 1 and keeps only the transitive
-	// portion in declaration order.
+	// Phase 2: language-defaults' TRANSITIVE peer-GLOBAL contributions
+	// (full AddInclGlobal; dedup drops the OWN duplicates from Phase 1).
 	for _, rp := range resolved {
+		if rp.kind != peerKindLangDefault {
+			continue
+		}
+
 		addEach(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
+	}
+
+	// Phase 3: user-peers' AddInclGlobal in declaration order (own +
+	// transitive merged per peer). A peer with no OWN GLOBAL but a
+	// non-empty transitive set (library/cpp/malloc/mimalloc → contrib/
+	// libs/mimalloc) lands its transitive contribution at THIS peer's
+	// slot, ahead of later peers' OWN.
+	for _, rp := range resolved {
+		if rp.kind != peerKindUserPeer {
+			continue
+		}
+
+		addEach(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
+	}
+
+	// Phase 4: program-defaults' AddInclGlobal in declaration order.
+	for _, rp := range resolved {
+		if rp.kind != peerKindProgramDefault {
+			continue
+		}
+
+		addEach(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
+	}
+
+	// PR-35g: drop bundled-include paths from the peer-propagated set.
+	// `ccIncludesSuffix` already injects `-I…linux-headers{,/_nf}` at
+	// the front of every non-musl CC node; a transitive peer's GLOBAL
+	// declaration of the same paths (e.g. linux-headers's own GLOBAL
+	// reaching consumers via musl/full → linux-headers) would emit a
+	// duplicate at the peer-AddIncl slot. Musl flavours drop the entire
+	// peer-AddInclGlobal slice in cc.go's composer, so this filter is a
+	// no-op for them.
+	if len(peerAddInclGlobal) > 0 {
+		filtered := peerAddInclGlobal[:0]
+
+		for _, p := range peerAddInclGlobal {
+			if bundledAddInclPaths[p] {
+				continue
+			}
+
+			filtered = append(filtered, p)
+		}
+
+		peerAddInclGlobal = filtered
 	}
 
 	// PR-33 C01: hoist runtime-stack include paths (libcxx/include,
@@ -1778,11 +1931,37 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			binaryName = d.moduleStmt.Args[0]
 		}
 
+		// PR-35g: ALLOCATOR(FAKE) at the PROGRAM level filters
+		// `library/cpp/malloc/api` out of the link closure even when a
+		// transitive peer (musl_extra, jemalloc, ...) introduced it via
+		// its own default-peer set. yasm is the M2-closure case: yasm
+		// itself drops malloc/api via `suppressMallocAPIDefault` above,
+		// but its user peers musl_extra and jemalloc each have malloc/
+		// api in their own default sets, re-introducing it via the
+		// archive closure. The link-closure filter applies the same
+		// suppression at the PROGRAM boundary.
+		ldPeerArchiveRefs := peerArchiveRefs
+		ldPeerArchivePaths := peerArchivePaths
+
+		if d.allocatorName == "FAKE" {
+			ldPeerArchiveRefs = make([]NodeRef, 0, len(peerArchiveRefs))
+			ldPeerArchivePaths = make([]string, 0, len(peerArchivePaths))
+
+			for i, p := range peerArchivePaths {
+				if strings.HasPrefix(p, "library/cpp/malloc/api/") {
+					continue
+				}
+
+				ldPeerArchiveRefs = append(ldPeerArchiveRefs, peerArchiveRefs[i])
+				ldPeerArchivePaths = append(ldPeerArchivePaths, p)
+			}
+		}
+
 		ldRef := EmitLD(
 			instance,
 			binaryName,
 			ccRefs, ccOutputs,
-			peerArchiveRefs, peerArchivePaths,
+			ldPeerArchiveRefs, ldPeerArchivePaths,
 			nil, nil,
 			peerGlobalRefs, peerGlobalPaths,
 			memberInputs,
@@ -1921,6 +2100,13 @@ type peerGlobalContribs struct {
 func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleData) peerGlobalContribs {
 	defaults := defaultPeerdirsFor(ctx, instance)
 
+	// PR-35g: mirror genModule's ALLOCATOR(FAKE) malloc/api suppression
+	// in the header-only walker so a header-only LIBRARY that sets
+	// ALLOCATOR(FAKE) (no current M2 case, but defended for future)
+	// drops the same default. Header-only LIBRARYs in M2 do not declare
+	// ALLOCATOR, so this is normally a no-op.
+	defaults = suppressMallocAPIDefault(defaults, d.allocatorName)
+
 	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
 	out := peerGlobalContribs{}
 	addInclSeen := map[string]struct{}{}
@@ -2000,6 +2186,25 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	// main walker (genModule) is keyed on `isRuntimeAncestor`; a
 	// header-only LIBRARY that ever needs the same treatment can flip
 	// this to mirror the main walker's gate.
+
+	// PR-35g: drop bundled-include paths (linux-headers, linux-headers/
+	// _nf) from the propagated set. The cc bundle's `ccIncludesSuffix`
+	// already provides them; consumers reaching this header-only
+	// LIBRARY's `AddInclGlobal` should not see them re-emitted at the
+	// peer-AddIncl slot.
+	if len(out.addIncl) > 0 {
+		filtered := out.addIncl[:0]
+
+		for _, p := range out.addIncl {
+			if bundledAddInclPaths[p] {
+				continue
+			}
+
+			filtered = append(filtered, p)
+		}
+
+		out.addIncl = filtered
+	}
 
 	return out
 }
