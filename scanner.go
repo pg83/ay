@@ -80,9 +80,14 @@ type includeDirective struct {
 //     state — once WalkClosure copies the result into the returned
 //     `[]string`, the buffers can be cleared and returned to the pool.
 //
-// All caches are protected by a mutex so the scanner is safe to
-// invoke from concurrent walkers (PR-31's walker is single-threaded
-// but PR-32+ may parallelise per-source).
+// PR-34n: removed sync.Mutex per re-profile — single-goroutine; M3
+// streaming may need to reintroduce. The scanner is invoked exclusively
+// from gen.go's serial walker; profiling at HEAD f5fef1c showed the
+// `sync.Mutex.Lock`+`Unlock` pair (no contention, just runtime overhead)
+// at 7.8% of CPU across 13 lock pairs on hot paths. Removing them
+// turns each cache op into a plain map read/write. If M3 introduces
+// per-source goroutines, the locks must be reintroduced — every Lock
+// site is replaced by a comment marker `// PR-34n: lock removed`.
 type IncludeScanner struct {
 	sysincl    SysInclSet
 	sourceRoot string
@@ -97,7 +102,6 @@ type IncludeScanner struct {
 	// s.sourceRoot+"/")` call sites.
 	sourceRootSlash string
 
-	mu           sync.Mutex
 	parsed       map[string][]includeDirective
 	exists       map[string]bool
 	resolveCache map[resolveKey][]string
@@ -139,7 +143,8 @@ type IncludeScanner struct {
 	// __config is included by 3000+ CCs), so interning the formatted
 	// path string once and reusing it saves the per-element string
 	// concat — 30 MB / run pre-PR-34k.
-	emittedRelMu    sync.Mutex
+	//
+	// PR-34n: the dedicated emittedRelMu is gone (single-goroutine).
 	emittedRelCache map[string]string
 }
 
@@ -164,21 +169,31 @@ type resolveKey struct {
 // NewIncludeScanner constructs a scanner bound to a SysInclSet and a
 // source-root absolute path.
 func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
+	// PR-34n: pre-sizes set to the upper bound of the observed working
+	// set for tools/archiver (target+host scanners combined; instrumented
+	// run reports below). Under-pre-sizing was the actual finding from
+	// the re-profile — sysinclSourceCache reaches ~328k entries on the
+	// target scanner (the 131072 prior pre-size triggered ~2 rehash
+	// chains; bucket re-grow + rehash-and-copy was the dominant flat
+	// alloc). Pre-sizing past the observed peak eliminates rehashing.
+	//
+	// Observed peak per-scanner:
+	//   parsed=4354 / 3559   exists=14195 / 14494
+	//   resolveCache=97921 / 48054   viewCache=2063 / 1767
+	//   sysinclSourceCache=328510 / 128091
+	//   sysinclIncluderCache=22520 / 16089
+	//   emittedRelCache=2137 / 1691
 	s := &IncludeScanner{
-		sysincl:         sysincl,
-		sourceRoot:      sourceRoot,
-		sourceRootSlash: sourceRoot + "/",
-		parsed:          make(map[string][]includeDirective, 8192),
-		exists:          make(map[string]bool, 16384),
-		resolveCache:    make(map[resolveKey][]string, 16384),
-		viewCache:       make(map[string]PerSourceView, 1024),
-		emittedRelCache: make(map[string]string, 16384),
-		// Pre-sized to the upper end of the observed working set for the
-		// tools/archiver target. Pre-sizing eliminates the rehash-and-
-		// grow chain that PR-34k's profile flagged as a dominant
-		// flat-alloc inside `sysinclSourceCache[key] = ...`.
-		sysinclSourceCache:   make(map[sysinclSourceKey][]string, 131072),
-		sysinclIncluderCache: make(map[sysinclIncluderKey][]string, 16384),
+		sysincl:              sysincl,
+		sourceRoot:           sourceRoot,
+		sourceRootSlash:      sourceRoot + "/",
+		parsed:               make(map[string][]includeDirective, 8192),
+		exists:               make(map[string]bool, 16384),
+		resolveCache:         make(map[resolveKey][]string, 131072),
+		viewCache:            make(map[string]PerSourceView, 4096),
+		emittedRelCache:      make(map[string]string, 4096),
+		sysinclSourceCache:   make(map[sysinclSourceKey][]string, 524288),
+		sysinclIncluderCache: make(map[sysinclIncluderKey][]string, 32768),
 	}
 	s.anySrcView = s.sysincl.PreparePerSource("")
 
@@ -286,24 +301,18 @@ func (s *IncludeScanner) WalkClosure(ctx ScanContext) []string {
 // `$(SOURCE_ROOT)/<rel>` form used in graph-node Inputs, interning the
 // result so repeat calls (libcxx's __config.h is reached by 3000+ CC
 // closures) return the same string instance instead of re-allocating
-// the concat per caller. Cache writes go through a dedicated mutex so
-// the scanner's main `mu` (which holds the parse/resolve caches under
-// recursion) is not contended on the WalkClosure output path.
+// the concat per caller.
+//
+// PR-34n: lock removed (single-goroutine).
 func (s *IncludeScanner) emittedRel(abs string) string {
-	s.emittedRelMu.Lock()
-	cached, ok := s.emittedRelCache[abs]
-	s.emittedRelMu.Unlock()
-
-	if ok {
+	if cached, ok := s.emittedRelCache[abs]; ok {
 		return cached
 	}
 
 	rel := strings.TrimPrefix(abs, s.sourceRootSlash)
 	out := "$(SOURCE_ROOT)/" + rel
 
-	s.emittedRelMu.Lock()
 	s.emittedRelCache[abs] = out
-	s.emittedRelMu.Unlock()
 
 	return out
 }
@@ -379,20 +388,15 @@ func (s *IncludeScanner) dfs(absPath string, ctx *ScanContext, ctxHash uint64, v
 // may also reach a dangling path through a sysincl mapping that
 // names a file the tree does not have).
 func (s *IncludeScanner) parseIncludes(absPath string) []includeDirective {
-	s.mu.Lock()
-	cached, ok := s.parsed[absPath]
-	s.mu.Unlock()
-
-	if ok {
+	// PR-34n: lock removed (single-goroutine).
+	if cached, ok := s.parsed[absPath]; ok {
 		return cached
 	}
 
 	data, err := os.ReadFile(absPath)
 
 	if err != nil {
-		s.mu.Lock()
 		s.parsed[absPath] = nil
-		s.mu.Unlock()
 
 		return nil
 	}
@@ -434,9 +438,7 @@ func (s *IncludeScanner) parseIncludes(absPath string) []includeDirective {
 		out = append(out, includeDirective{kind: kind, next: next, target: target})
 	})
 
-	s.mu.Lock()
 	s.parsed[absPath] = out
-	s.mu.Unlock()
 
 	return out
 }
@@ -636,11 +638,8 @@ incLoop:
 func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) []string {
 	key := sysinclSourceKey{sourceRel: sourceRel, target: target}
 
-	s.mu.Lock()
-	cached, ok := s.sysinclSourceCache[key]
-	s.mu.Unlock()
-
-	if ok {
+	// PR-34n: lock removed (single-goroutine).
+	if cached, ok := s.sysinclSourceCache[key]; ok {
 		return cached
 	}
 
@@ -648,10 +647,7 @@ func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) []string 
 	rels, _ := view.LookupSourceKeyed(target)
 
 	mappings := s.absifyRels(rels)
-
-	s.mu.Lock()
 	s.sysinclSourceCache[key] = mappings
-	s.mu.Unlock()
 
 	return mappings
 }
@@ -659,11 +655,8 @@ func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) []string 
 func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) []string {
 	key := sysinclIncluderKey{includerRel: includerRel, target: target}
 
-	s.mu.Lock()
-	cached, ok := s.sysinclIncluderCache[key]
-	s.mu.Unlock()
-
-	if ok {
+	// PR-34n: lock removed (single-goroutine).
+	if cached, ok := s.sysinclIncluderCache[key]; ok {
 		return cached
 	}
 
@@ -671,14 +664,11 @@ func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) []str
 	// which source it was prepared for (every view derives it from the
 	// same SysInclSet). Use the prepared anySrcView (initialised once
 	// at NewIncludeScanner) to access the includer-keyed records
-	// without going through perSourceView's per-call lock.
+	// without going through perSourceView.
 	rels, _ := s.anySrcView.LookupIncluderKeyed(includerRel, target)
 
 	mappings := s.absifyRels(rels)
-
-	s.mu.Lock()
 	s.sysinclIncluderCache[key] = mappings
-	s.mu.Unlock()
 
 	return mappings
 }
@@ -710,19 +700,13 @@ func (s *IncludeScanner) absifyRels(rels []string) []string {
 // SourceRel — so two CCs with the same SourceRel (rare but possible
 // in dual-platform host/target emission) share the same view.
 func (s *IncludeScanner) perSourceView(sourceRel string) PerSourceView {
-	s.mu.Lock()
-	cached, ok := s.viewCache[sourceRel]
-	s.mu.Unlock()
-
-	if ok {
+	// PR-34n: lock removed (single-goroutine).
+	if cached, ok := s.viewCache[sourceRel]; ok {
 		return cached
 	}
 
 	view := s.sysincl.PreparePerSource(sourceRel)
-
-	s.mu.Lock()
 	s.viewCache[sourceRel] = view
-	s.mu.Unlock()
 
 	return view
 }
@@ -739,11 +723,8 @@ func (s *IncludeScanner) resolveSearchPath(includerAbs string, d includeDirectiv
 		next:     d.next,
 	}
 
-	s.mu.Lock()
-	cached, ok := s.resolveCache[key]
-	s.mu.Unlock()
-
-	if ok {
+	// PR-34n: lock removed (single-goroutine).
+	if cached, ok := s.resolveCache[key]; ok {
 		return cached
 	}
 
@@ -849,9 +830,8 @@ func (s *IncludeScanner) resolveSearchPath(includerAbs string, d includeDirectiv
 	clear(seen)
 	s.seenPool.Put(seenP)
 
-	s.mu.Lock()
+	// PR-34n: lock removed (single-goroutine).
 	s.resolveCache[key] = out
-	s.mu.Unlock()
 
 	return out
 }
@@ -900,20 +880,15 @@ func normalisePath(p string) string {
 // fileExists is a thin cached wrapper around os.Stat. Returns true
 // for regular files only (directories return false).
 func (s *IncludeScanner) fileExists(absPath string) bool {
-	s.mu.Lock()
-	cached, ok := s.exists[absPath]
-	s.mu.Unlock()
-
-	if ok {
+	// PR-34n: lock removed (single-goroutine).
+	if cached, ok := s.exists[absPath]; ok {
 		return cached
 	}
 
 	info, err := os.Stat(absPath)
 	val := err == nil && !info.IsDir()
 
-	s.mu.Lock()
 	s.exists[absPath] = val
-	s.mu.Unlock()
 
 	return val
 }
