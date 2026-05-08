@@ -203,6 +203,24 @@ type genCtx struct {
 	// `when ($MUSL == "yes") { PEERDIR+=contrib/libs/musl/include }`).
 	// Read-only after Gen seeds it; never mutated mid-walk.
 	cliDefines map[string]string
+	// ldPluginCPCache deduplicates LD_PLUGIN CP NodeRefs across the
+	// target/host walk pair (PR-35l). PR-35k emitted a fresh CP node for
+	// every (instance.Path, plugin name) pair the walker visited, which
+	// produced two CP nodes for `contrib/libs/musl/include`'s `musl.py`
+	// — one on `default-linux-aarch64` (target walk) and one on
+	// `default-linux-x86_64` (host walk through ragel6/bin → musl/include).
+	// The reference graph emits the CP node ONCE on the target platform
+	// and reuses its UID from both target and host LDs (verified at
+	// /home/pg/monorepo/yatool_orig/sg.json:105515 — the same UID
+	// `nPHkMSIqOHBrXsoclNuu6g` appears in target archiver LD deps AND in
+	// the host ragel6 LD's deps). Keying by plugin output path
+	// (`$(BUILD_ROOT)/<modulePath>/<name>.pyplugin`) is sufficient: the
+	// path is independent of platform, and the plugin file is the same
+	// artifact regardless of which walk reached it. First-write wins —
+	// the target walk runs before any host walk recursion (host walks
+	// fire from inside `emitOneSource`, after the seed module's peer
+	// walk has run), so the cached entry carries the target platform.
+	ldPluginCPCache map[string]NodeRef
 }
 
 // asmlibYasmModules lists module paths whose host `.S`/`.s` sources
@@ -298,14 +316,15 @@ func GenWith(cfg PlatformConfig, sourceRoot string, targetDir string, cliDefines
 	}
 
 	ctx := &genCtx{
-		cfg:           cfg,
-		sourceRoot:    sourceRoot,
-		emit:          NewBufferedEmitter(),
-		memo:          make(map[ModuleInstance]*moduleEmitResult),
-		walking:       make(map[ModuleInstance]bool),
-		scannerTarget: NewIncludeScanner(sourceRoot, LoadSysInclSetFor(sourceRoot, "aarch64")),
-		scannerHost:   NewIncludeScanner(sourceRoot, LoadSysInclSetFor(sourceRoot, "x86_64")),
-		cliDefines:    cliDefines,
+		cfg:             cfg,
+		sourceRoot:      sourceRoot,
+		emit:            NewBufferedEmitter(),
+		memo:            make(map[ModuleInstance]*moduleEmitResult),
+		walking:         make(map[ModuleInstance]bool),
+		scannerTarget:   NewIncludeScanner(sourceRoot, LoadSysInclSetFor(sourceRoot, "aarch64")),
+		scannerHost:     NewIncludeScanner(sourceRoot, LoadSysInclSetFor(sourceRoot, "x86_64")),
+		cliDefines:      cliDefines,
+		ldPluginCPCache: make(map[string]NodeRef),
 	}
 
 	seed := ModuleInstance{
@@ -2143,6 +2162,16 @@ func mergeDedup(a, b []string) []string {
 // `$(BUILD_ROOT)/<modulePath>/<name>.pyplugin` (verified against the
 // reference CP node for `contrib/libs/musl/include`'s `musl.py`).
 // Returns parallel ref + path slices in declaration order. PR-35k.
+//
+// PR-35l: the CP NodeRef is cached on `genCtx.ldPluginCPCache`, keyed by
+// the plugin output path. The reference graph emits each CP node once
+// (on the target platform) and shares its UID across target and host
+// LD deps; without this dedup the host walk through `WithHost` re-fires
+// `emitOwnLDPlugins` on the same plugin and produces a duplicate CP
+// node on `default-linux-x86_64` (the host platform UID differs from
+// the target UID because `Platform` is part of the canonical hash).
+// First-emit wins — the seed walk runs target-first, so the cached
+// entry carries the target platform per the reference shape.
 func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string) ([]NodeRef, []string) {
 	if len(plugins) == 0 {
 		return nil, nil
@@ -2154,7 +2183,14 @@ func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string) ([
 	for _, name := range plugins {
 		src := "$(SOURCE_ROOT)/" + instance.Path + "/" + name
 		dst := "$(BUILD_ROOT)/" + instance.Path + "/" + name + ".pyplugin"
-		ref := EmitCP(instance, src, dst, ctx.emit)
+
+		ref, ok := ctx.ldPluginCPCache[dst]
+
+		if !ok {
+			ref = EmitCP(instance, src, dst, ctx.emit)
+			ctx.ldPluginCPCache[dst] = ref
+		}
+
 		refs = append(refs, ref)
 		paths = append(paths, dst)
 	}
