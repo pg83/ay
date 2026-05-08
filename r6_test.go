@@ -111,3 +111,88 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		t.Errorf("requirements.network = %v, want restricted", got.Requirements["network"])
 	}
 }
+
+// TestEmitR6_CanonicalizesBinPath_PR35j pins PR-35j: when the caller
+// passes a `/contrib/tools/ragel6/bin/ragel6` path (because our host
+// walker walks the `bin/` subdirectory rather than expanding the
+// upstream `INCLUDE(${ARCADIA_ROOT}/contrib/tools/ragel6/bin/ya.make)`
+// at the parent level), EmitR6 rewrites cmd_args[0] to the
+// reference-shaped parent path `/contrib/tools/ragel6/ragel6`.
+// Reference verification source:
+// /home/pg/monorepo/yatool_orig/sg.json — the util R6 node invokes
+// ragel6 at the parent path, NOT under bin/.
+func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
+	e := NewBufferedEmitter()
+
+	// Stub host LD whose outputs[0] mirrors what our own walker emits
+	// when it walks `contrib/tools/ragel6/bin` directly.
+	ragel6LD := e.Emit(&Node{
+		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
+		Env:     map[string]string{},
+		Inputs:  []string{},
+		KV:      map[string]string{"p": "LD"},
+		Outputs: []string{"$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6"},
+	})
+
+	// Caller threads the (non-canonical) host LD output. EmitR6 must
+	// canonicalise to the reference shape.
+	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6", e)
+
+	got := e.nodes[r6Ref.id]
+
+	wantCmd0 := "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"
+
+	if len(got.Cmds) == 0 || len(got.Cmds[0].CmdArgs) == 0 {
+		t.Fatalf("R6 node has no Cmds[0].CmdArgs; got Cmds=%v", got.Cmds)
+	}
+
+	if got.Cmds[0].CmdArgs[0] != wantCmd0 {
+		t.Errorf("R6 cmd_args[0] = %q, want %q (PR-35j: /bin/ stripped to match reference)",
+			got.Cmds[0].CmdArgs[0], wantCmd0)
+	}
+}
+
+// TestCanonicalizeRagel6BinaryPath_PassThrough pins that
+// canonicalizeRagel6BinaryPath leaves non-matching inputs unchanged:
+// the parse-gap fallback string supplied by gen.go (already canonical)
+// must not be double-rewritten, and arbitrary other strings must
+// pass through untouched.
+func TestCanonicalizeRagel6BinaryPath_PassThrough(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		// Already canonical — no rewrite.
+		{
+			in:   "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6",
+			want: "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6",
+		},
+		// Bin-subpath — rewrite to parent.
+		{
+			in:   "$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6",
+			want: "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6",
+		},
+		// Arbitrary unrelated path — unchanged.
+		{
+			in:   "$(BUILD_ROOT)/contrib/tools/yasm/yasm",
+			want: "$(BUILD_ROOT)/contrib/tools/yasm/yasm",
+		},
+		// Empty — unchanged.
+		{
+			in:   "",
+			want: "",
+		},
+		// Different basename under ragel6/bin/ (defensive — future-proof
+		// against a hypothetical second binary).
+		{
+			in:   "$(BUILD_ROOT)/contrib/tools/ragel6/bin/other",
+			want: "$(BUILD_ROOT)/contrib/tools/ragel6/other",
+		},
+	}
+
+	for _, c := range cases {
+		got := canonicalizeRagel6BinaryPath(c.in)
+		if got != c.want {
+			t.Errorf("canonicalizeRagel6BinaryPath(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
