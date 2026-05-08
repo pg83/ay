@@ -26,12 +26,22 @@ package main
 // reference node pinned for byte-exact tests is the chkstk.S node
 // inside contrib/libs/cxxsupp/builtins.
 
-// asWnoEverything is the single warning-suppression flag that AS
-// nodes carry in place of CC's warningFlags bundle. The assembler
-// pass does not need the strict warning-as-error discipline that
-// C/C++ compilation uses; silencing all warnings avoids churn from
-// clang version upgrades.
-var asWnoEverything = []string{"-Wno-everything"}
+// PR-35i (PR-33-C2_06 closure): the warning-bundle slot in AS cmd_args
+// follows the same NO_COMPILER_WARNINGS discriminator as CC. Modules
+// that declare `NO_COMPILER_WARNINGS()` (musl-self, libcxx, libcxxrt,
+// abseil-cpp, tcmalloc, cxxsupp/builtins, …) emit the single-arg
+// `muslWarningFlags` (`-Wno-everything`); regular modules (util,
+// libunwind, asmglibc) preserve the full `warningFlags` bundle
+// (`-Werror -Wall -Wextra -Wno-parentheses ...`). Empirical reference:
+//
+//   - cxxsupp/builtins/_/aarch64/chkstk.S.o cmd_args[25] = "-Wno-everything"
+//     (NO_COMPILER_WARNINGS=true).
+//   - util/_/system/context_aarch64.S.o cmd_args[25..30] = warningFlags
+//     (NO_COMPILER_WARNINGS=false; warning bundle preserved).
+//
+// Prior to PR-35i, AS unconditionally substituted `-Wno-everything`
+// regardless of the module's `NoCompilerWarnings` flag. The change is
+// equivalent to CC's `pickWarningFlags(noCompilerWarnings)` call.
 
 // EmitAS emits an AS node for assembling `srcRel` (a path relative
 // to `instance.Path`) into an object file.
@@ -175,10 +185,14 @@ func EmitAS(instance ModuleInstance, srcRel string, includes []string, yasmLD *N
 // ndebugPicBlock copy. Pinned 109-arg byte-exact against
 // `contrib/libs/musl/_/src/math/x86_64/ceill.s.o`.
 //
-// Mirrors composeMuslHostCC's slot ordering — the only AS-specific
-// substitution is `asWnoEverything` in place of `warningFlags` /
-// `muslWarningFlags` / `cxxStandardWarnings`. PR-33 C2_06 (per-module
-// CFLAGS threading) is out-of-scope for PR-35a.
+// Mirrors composeMuslHostCC's slot ordering. PR-35i lifts the warning
+// bundle to honour `instance.Flags.NoCompilerWarnings` (CC's
+// `pickWarningFlags` rule); modules without NO_COMPILER_WARNINGS keep
+// their `-Werror`/`-Wall`/`-Wextra` set. PR-35i also threads util's
+// own non-GLOBAL CFLAG (`-Wnarrowing`) and the `-D_musl_` consumer
+// sentinel via a path-sniff stopgap (see `asUtilOwnCFlags` /
+// `asUtilAutoPeerCFlags` / `asUtilTailIncludes`); generic walker
+// threading via gen.go is the long-term fix.
 func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, includes []string) []string {
 	isHost := instance.Flags.PIC
 	isMusl := instance.Flags.LibcMusl
@@ -210,13 +224,39 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, inc
 		musl = muslExtraDefines
 	}
 
-	betweenBlocks := len(catboostOpenSourceDefine)
+	// PR-35i: warning bundle follows the NoCompilerWarnings discriminator
+	// (mirror of CC's pickWarningFlags). musl-self / libcxx-style
+	// modules keep `-Wno-everything`; util / libunwind preserve the full
+	// `-Werror`/`-Wall`/`-Wextra` set.
+	warnBundle := pickWarningFlags(instance.Flags.NoCompilerWarnings)
+
+	// PR-35i: util's own non-GLOBAL CFLAG (`-Wnarrowing`, util/ya.make:243
+	// inside `IF (GCC OR CLANG OR CLANG_CL)`) and the `-D_musl_`
+	// consumer-side musl sentinel (defaultPeerCFlags in gen.go) are
+	// threaded here as a path-sniff stopgap. The CC pipeline gets these
+	// via ModuleCCInputs.{CFlags,AutoPeerCFlags}; the AS dispatch in
+	// gen.go currently passes neither, so as.go reproduces the data
+	// locally for the one util AS node (util/system/context_aarch64.S).
+	// A follow-up PR that extends gen.go's AS dispatch will retire the
+	// path-sniff. PR-33-C2_06 closure scope.
+	var ownCFlags, autoPeerCFlags []string
+
+	if instance.Path == "util" && !isHost && !isMusl {
+		ownCFlags = asUtilOwnCFlags
+		autoPeerCFlags = asUtilAutoPeerCFlags
+
+		if includes == nil {
+			includes = asUtilTailIncludes
+		}
+	}
+
+	betweenBlocks := len(catboostOpenSourceDefine) + len(autoPeerCFlags)
 	if isHost {
 		betweenBlocks += len(hostSseFeatures)
 	}
 
 	fixed := prologueArgs + len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
-		len(cFlags) + len(asWnoEverything) + len(defines) + len(musl) +
+		len(cFlags) + len(warnBundle) + len(defines) + len(musl) + len(ownCFlags) +
 		len(suppressionBlock) + betweenBlocks + len(suppressionBlock) + 4
 	cmdArgs := make([]string, 0, fixed+len(includes))
 
@@ -232,16 +272,25 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, inc
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
 	cmdArgs = append(cmdArgs, cFlags...)
 
-	// AS uses -Wno-everything in place of CC's warningFlags / cxxStandardWarnings.
-	cmdArgs = append(cmdArgs, asWnoEverything...)
+	// PR-35i: NO_COMPILER_WARNINGS-gated warning bundle (mirror of CC).
+	cmdArgs = append(cmdArgs, warnBundle...)
 	cmdArgs = append(cmdArgs, defines...)
 	cmdArgs = append(cmdArgs, musl...)
+
+	// PR-35i: own non-GLOBAL CFLAGS slot between commonDefines and the
+	// first noLibcUndebugBlock (mirror of composeTargetCC's ownCFlags
+	// slot at cc.go:680).
+	cmdArgs = append(cmdArgs, ownCFlags...)
 
 	// Suppression block emitted twice flanking catboostOpenSourceDefine
 	// (target) or catboost + hostSseFeatures (host). Mirror of
 	// composeMuslCC / composeMuslHostCC.
 	cmdArgs = append(cmdArgs, suppressionBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
+
+	// PR-35i: AutoPeerCFlags slot between catboost and the second
+	// suppressionBlock copy (mirror of composeTargetCC at cc.go:683).
+	cmdArgs = append(cmdArgs, autoPeerCFlags...)
 
 	if isHost {
 		cmdArgs = append(cmdArgs, hostSseFeatures...)
@@ -256,4 +305,46 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, inc
 	cmdArgs = append(cmdArgs, includes...)
 
 	return cmdArgs
+}
+
+// asUtilOwnCFlags is util's own non-GLOBAL CFLAGS bundle as it appears
+// in the reference graph. Sourced from util/ya.make:242-244
+// (`IF (GCC OR CLANG OR CLANG_CL) { CFLAGS(-Wnarrowing) }`). Used by
+// `composeASCmdArgs` to reproduce the slot the CC pipeline gets via
+// `ModuleCCInputs.CFlags` (the AS dispatch in gen.go currently passes
+// no per-module CFlags, see PR-35i comment in `composeASCmdArgs`).
+var asUtilOwnCFlags = []string{"-Wnarrowing"}
+
+// asUtilAutoPeerCFlags is the `-D_musl_` consumer-side musl sentinel
+// the walker auto-injects for any non-NO_PLATFORM, non-musl-self
+// module when CLI MUSL=yes (`defaultPeerCFlags` in gen.go). The CC
+// pipeline picks this up via `ModuleCCInputs.AutoPeerCFlags`; AS
+// reproduces it locally for util pending generic threading.
+var asUtilAutoPeerCFlags = []string{muslConsumerSentinel}
+
+// asUtilTailIncludes is the include set that trails the source path
+// in util's AS cmd_args. Mirrors the reference shape for
+// util/_/system/context_aarch64.S.o cmd_args[93..105]. Composed from
+// the same building blocks the CC walker assembles for util's CC
+// nodes: ccIncludes (BUILD_ROOT + SOURCE_ROOT + linux-headers pair) +
+// the runtime-stack peer-GLOBAL ADDINCLs (libcxx, libcxxrt, musl
+// arch/aarch64, musl arch/generic, musl include, musl extra) + util's
+// own user-PEERDIR contributions (zlib, double-conversion,
+// libc_compat/readpassphrase) in declaration order. Pinned literally
+// here as a path-sniff stopgap; generic threading via gen.go is the
+// long-term fix.
+var asUtilTailIncludes = []string{
+	"-I$(BUILD_ROOT)",
+	"-I$(SOURCE_ROOT)",
+	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers",
+	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers/_nf",
+	"-I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxx/include",
+	"-I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxxrt/include",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/aarch64",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/generic",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/include",
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/extra",
+	"-I$(SOURCE_ROOT)/contrib/libs/zlib/include",
+	"-I$(SOURCE_ROOT)/contrib/libs/double-conversion",
+	"-I$(SOURCE_ROOT)/contrib/libs/libc_compat/include/readpassphrase",
 }

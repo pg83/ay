@@ -85,7 +85,16 @@ func TestEmitAS_CxxsuppBuiltinsChkstk_ByteExact(t *testing.T) {
 		"$(SOURCE_ROOT)/contrib/libs/cxxsupp/builtins/assembly.h",
 		"$(SOURCE_ROOT)/contrib/libs/cxxsupp/builtins/int_endianness.h",
 	}
-	_, outPath := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", builtinsASIncludes, nil, chkstkIncludeInputs, emit)
+
+	// PR-35i: cxxsupp/builtins declares `NO_COMPILER_WARNINGS()`
+	// (contrib/libs/cxxsupp/builtins/ya.make:19); set the flag on
+	// the test instance so EmitAS picks the `-Wno-everything` branch
+	// of `pickWarningFlags`. inferFlagsFromPath does not derive
+	// NoCompilerWarnings (only macro parsing does in the real walker),
+	// so the synthetic test must inject it.
+	chkstkInstance := targetInstance("contrib/libs/cxxsupp/builtins")
+	chkstkInstance.Flags.NoCompilerWarnings = true
+	_, outPath := EmitAS(chkstkInstance, "aarch64/chkstk.S", builtinsASIncludes, nil, chkstkIncludeInputs, emit)
 
 	if outPath != referenceASOutput {
 		t.Errorf("outPath = %q, want %q", outPath, referenceASOutput)
@@ -295,7 +304,15 @@ func TestEmitAS_MuslHost_Ceill_ByteExact(t *testing.T) {
 	}
 
 	emit := NewBufferedEmitter()
-	_, outPath := EmitAS(muslHostInstance("contrib/libs/musl"), "src/math/x86_64/ceill.s", nil, nil, nil, emit)
+
+	// PR-35i: contrib/libs/musl declares `NO_COMPILER_WARNINGS()`
+	// (contrib/libs/musl/ya.make:25); set the flag on the test
+	// instance so EmitAS picks the `-Wno-everything` branch of
+	// `pickWarningFlags`. inferFlagsFromPath does not derive
+	// NoCompilerWarnings (only macro parsing does in the real walker).
+	ceillInstance := muslHostInstance("contrib/libs/musl")
+	ceillInstance.Flags.NoCompilerWarnings = true
+	_, outPath := EmitAS(ceillInstance, "src/math/x86_64/ceill.s", nil, nil, nil, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)
@@ -369,7 +386,13 @@ func TestEmitAS_HostNonMusl_X8664Chkstk_Prologue(t *testing.T) {
 	}
 
 	emit := NewBufferedEmitter()
-	_, outPath := EmitAS(hostInstance("contrib/libs/cxxsupp/builtins"), "x86_64/chkstk.S", nil, nil, nil, emit)
+
+	// PR-35i: cxxsupp/builtins declares `NO_COMPILER_WARNINGS()`; set
+	// the flag on the test instance so EmitAS picks the
+	// `-Wno-everything` branch of `pickWarningFlags`.
+	hostInst := hostInstance("contrib/libs/cxxsupp/builtins")
+	hostInst.Flags.NoCompilerWarnings = true
+	_, outPath := EmitAS(hostInst, "x86_64/chkstk.S", nil, nil, nil, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)
@@ -424,4 +447,95 @@ func TestEmitAS_HostNonMusl_X8664Chkstk_Prologue(t *testing.T) {
 	}
 
 	t.Logf("prologue cmd_args byte-exact 0..%d (reference total = %d; %d-arg include tail deferred)", wantPrologueLen-1, len(wantArgs), len(wantArgs)-wantPrologueLen)
+}
+
+// TestEmitAS_UtilContext_ByteExact (PR-35i / PR-33-C2_06 closure) pins
+// the cmd_args bundle for util's only AS node
+// (`$(BUILD_ROOT)/util/_/system/context_aarch64.S.o`) against the
+// reference graph. Total 106 args. util declares no
+// `NO_COMPILER_WARNINGS()` macro, so the warning bundle is the full
+// `-Werror`/`-Wall`/`-Wextra` set (NOT `-Wno-everything`); util's own
+// non-GLOBAL `CFLAGS(-Wnarrowing)` (util/ya.make:243) sits between
+// commonDefines and the first noLibcUndebugBlock copy; the consumer-
+// side `-D_musl_` sentinel sits between catboost and the second
+// noLibcUndebugBlock copy; the include tail (13 args) carries util's
+// linux-headers + runtime-stack + user-PEERDIR ADDINCL contributions.
+//
+// Verifies that:
+//
+//   - target triple is aarch64-linux-gnu with -march=armv8-a.
+//   - warning bundle is `warningFlags` (6 args, NOT `-Wno-everything`).
+//   - own CFLAG `-Wnarrowing` is present at the post-commonDefines slot.
+//   - `-D_musl_` (NOT `-D_musl_=1`) is present at the post-catboost slot.
+//   - includes tail matches the 13-arg reference set.
+func TestEmitAS_UtilContext_ByteExact(t *testing.T) {
+	const targetOut = "$(BUILD_ROOT)/util/_/system/context_aarch64.S.o"
+
+	raw, err := os.ReadFile(referenceGraphPath)
+
+	if err != nil {
+		t.Skipf("reference graph not available (%v); skipping util AS byte-exact test", err)
+	}
+
+	var g Graph
+	Throw(json.Unmarshal(raw, &g))
+
+	var ref *Node
+
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0] == targetOut {
+			ref = n
+
+			break
+		}
+	}
+
+	if ref == nil {
+		t.Fatalf("reference util AS node with output %q not found", targetOut)
+	}
+
+	emit := NewBufferedEmitter()
+
+	// util declares only NO_UTIL — no NO_COMPILER_WARNINGS, no
+	// LibcMusl. inferFlagsFromPath returns a zero-valued FlagSet for
+	// `util` (the path-prefix branches are for build/cow/on and
+	// contrib/libs/musl only), which is what the real walker presents
+	// to EmitAS for util.
+	utilInstance := targetInstance("util")
+
+	// gen.go's AS dispatch passes `nil` for `includes`. EmitAS
+	// substitutes `asUtilTailIncludes` when the path matches; pass
+	// `nil` here too so the production code path is covered.
+	_, outPath := EmitAS(utilInstance, "system/context_aarch64.S", nil, nil, nil, emit)
+
+	if outPath != targetOut {
+		t.Errorf("outPath = %q, want %q", outPath, targetOut)
+	}
+
+	if len(emit.nodes) != 1 {
+		t.Fatalf("emitter buffered %d nodes, want 1", len(emit.nodes))
+	}
+
+	got := emit.nodes[0]
+	wantArgs := ref.Cmds[0].CmdArgs
+
+	if len(got.Cmds[0].CmdArgs) != len(wantArgs) {
+		t.Fatalf("cmd_args length = %d, want %d", len(got.Cmds[0].CmdArgs), len(wantArgs))
+	}
+
+	for i := range wantArgs {
+		if got.Cmds[0].CmdArgs[i] != wantArgs[i] {
+			t.Errorf("cmd_args[%d]:\n  got:  %q\n  want: %q", i, got.Cmds[0].CmdArgs[i], wantArgs[i])
+		}
+	}
+
+	if got.HostPlatform {
+		t.Errorf("host_platform: got true, want false (util AS is target-side)")
+	}
+
+	if got.Platform != string(PlatformDefaultLinuxAArch64) {
+		t.Errorf("platform = %q, want %q", got.Platform, PlatformDefaultLinuxAArch64)
+	}
+
+	t.Logf("cmd_args length = %d (reference = %d)", len(got.Cmds[0].CmdArgs), len(wantArgs))
 }
