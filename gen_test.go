@@ -2916,3 +2916,177 @@ func TestGen_ToolsArchiver_LDPeerArchiveClosure(t *testing.T) {
 		}
 	}
 }
+
+// TestGen_MuslPyplugin_CPNodeEmitted pins PR-35k's LD_PLUGIN wiring:
+// `contrib/libs/musl/include` declares `LD_PLUGIN(musl.py)`; `Gen`
+// must emit a CP node that copies
+// `$(SOURCE_ROOT)/contrib/libs/musl/include/musl.py` to
+// `$(BUILD_ROOT)/contrib/libs/musl/include/musl.py.pyplugin`. The CP
+// node's shape is independently pinned by
+// `TestEmitCP_MuslPyplugin_ByteExact` against the reference; here we
+// only verify the walker triggers the emission.
+func TestGen_MuslPyplugin_CPNodeEmitted(t *testing.T) {
+	const targetDir = "tools/archiver"
+
+	if _, err := os.Stat(sourceRoot + "/" + targetDir + "/ya.make"); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	our := Gen(TargetCfg, sourceRoot, targetDir)
+
+	const wantOutput = "$(BUILD_ROOT)/contrib/libs/musl/include/musl.py.pyplugin"
+
+	var targetCP *Node
+
+	for _, n := range our.Graph {
+		if n.KV["p"] != "CP" {
+			continue
+		}
+
+		if len(n.Outputs) == 0 || n.Outputs[0] != wantOutput {
+			continue
+		}
+
+		if n.Platform != string(TargetCfg.Target.ID) {
+			continue
+		}
+
+		targetCP = n
+
+		break
+	}
+
+	if targetCP == nil {
+		t.Fatalf("Gen emitted no CP node with output %q on target platform %q", wantOutput, TargetCfg.Target.ID)
+	}
+
+	if got := targetCP.TargetProperties["module_dir"]; got != "contrib/libs/musl/include" {
+		t.Errorf("CP module_dir = %q, want %q", got, "contrib/libs/musl/include")
+	}
+
+	if len(targetCP.Cmds) != 1 {
+		t.Fatalf("CP has %d cmds, want 1", len(targetCP.Cmds))
+	}
+
+	args := targetCP.Cmds[0].CmdArgs
+
+	if len(args) != 5 {
+		t.Fatalf("CP cmd_args length = %d, want 5", len(args))
+	}
+
+	if args[2] != "copy" {
+		t.Errorf("CP cmd_args[2] = %q, want %q", args[2], "copy")
+	}
+
+	const wantSrc = "$(SOURCE_ROOT)/contrib/libs/musl/include/musl.py"
+	if args[3] != wantSrc {
+		t.Errorf("CP cmd_args[3] (src) = %q, want %q", args[3], wantSrc)
+	}
+
+	if args[4] != wantOutput {
+		t.Errorf("CP cmd_args[4] (dst) = %q, want %q", args[4], wantOutput)
+	}
+}
+
+// TestGen_ToolsArchiver_LDPluginSection pins PR-35k's archiver LD
+// `--start-plugins ... --end-plugins` block: the musl pyplugin path
+// must appear once between the two markers, sitting between
+// `link_exe.py` and the `--clang-ver` flag pair (per `composeLDCmdLinkExe`'s
+// shape). The plugin path must reference the BUILD_ROOT-anchored
+// pyplugin produced by the CP node above. Pinned for archiver (target
+// PROGRAM, the M2 byte-exact pin) — host LDs (yasm, ragel6) carry the
+// same shape but are not byte-exact pinned here.
+func TestGen_ToolsArchiver_LDPluginSection(t *testing.T) {
+	const targetDir = "tools/archiver"
+
+	if _, err := os.Stat(sourceRoot + "/" + targetDir + "/ya.make"); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	our := Gen(TargetCfg, sourceRoot, targetDir)
+
+	const ldOutput = "$(BUILD_ROOT)/tools/archiver/archiver"
+
+	var ourLD *Node
+
+	for _, n := range our.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0] == ldOutput {
+			ourLD = n
+
+			break
+		}
+	}
+
+	if ourLD == nil {
+		t.Fatalf("Gen produced no LD node with output %q", ldOutput)
+	}
+
+	if len(ourLD.Cmds) < 3 {
+		t.Fatalf("LD has %d cmds, expected >= 3", len(ourLD.Cmds))
+	}
+
+	cmd2 := ourLD.Cmds[2].CmdArgs
+
+	startIdx := -1
+	endIdx := -1
+
+	for i, a := range cmd2 {
+		if a == "--start-plugins" {
+			startIdx = i
+		} else if a == "--end-plugins" {
+			endIdx = i
+
+			break
+		}
+	}
+
+	if startIdx < 0 {
+		t.Fatalf("cmd[2] missing --start-plugins marker (PR-35k must wire the musl plugin into archiver's LD)")
+	}
+
+	if endIdx < 0 || endIdx <= startIdx {
+		t.Fatalf("cmd[2] missing --end-plugins marker after --start-plugins (start=%d end=%d)", startIdx, endIdx)
+	}
+
+	gotPlugins := cmd2[startIdx+1 : endIdx]
+
+	wantPlugins := []string{"$(BUILD_ROOT)/contrib/libs/musl/include/musl.py.pyplugin"}
+
+	if len(gotPlugins) != len(wantPlugins) {
+		t.Fatalf("plugin section: got %d entries, want %d (entries: %v)", len(gotPlugins), len(wantPlugins), gotPlugins)
+	}
+
+	for i, want := range wantPlugins {
+		if gotPlugins[i] != want {
+			t.Errorf("plugin[%d] = %q, want %q", i, gotPlugins[i], want)
+		}
+	}
+
+	// The plugin marker pair must precede `--clang-ver` (composeLDCmdLinkExe
+	// shape: prologue → plugins → --clang-ver/...).
+	clangVerIdx := -1
+
+	for i, a := range cmd2 {
+		if a == "--clang-ver" {
+			clangVerIdx = i
+
+			break
+		}
+	}
+
+	if clangVerIdx < 0 {
+		t.Fatalf("cmd[2] missing --clang-ver flag")
+	}
+
+	if endIdx >= clangVerIdx {
+		t.Errorf("--end-plugins (idx %d) must precede --clang-ver (idx %d)", endIdx, clangVerIdx)
+	}
+}

@@ -144,6 +144,21 @@ type moduleEmitResult struct {
 	// but contribute no archive of their own.
 	PeerArchiveClosureRefs  []NodeRef
 	PeerArchiveClosurePaths []string
+	// LDPluginRefs / LDPluginPaths is the transitive set of LD plugin
+	// CP nodes a consumer PROGRAM must wire into its
+	// `--start-plugins ... --end-plugins` block. PR-35k: the only
+	// M2-closure case is `contrib/libs/musl/include`'s
+	// `LD_PLUGIN(musl.py)`, which becomes
+	// `$(BUILD_ROOT)/contrib/libs/musl/include/musl.py.pyplugin` and
+	// reaches archiver / ragel6 / yasm via their PEERDIR walk through
+	// musl/include. Aggregation mirrors the peer-archive closure: a
+	// peer's own LD plugins UNION its PeerLDPluginPaths flow into the
+	// consumer's running set, deduped by path (first occurrence wins).
+	// Header-only LIBRARYs (musl/include itself) emit their own CP node
+	// AND propagate it through this slot. Non-PROGRAM consumers
+	// (LIBRARY ARs) carry the closure through but never consume it.
+	LDPluginRefs  []NodeRef
+	LDPluginPaths []string
 }
 
 // genCtx threads state through the recursive walk. `emit`
@@ -243,7 +258,6 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"SRC_C_SSE41":           {}, // PR-27: util/charset (arch-specific compile-flag wrapper)
 	"NO_CLANG_COVERAGE":     {}, // PR-30: contrib/tools/yasm
 	"NO_PROFILE_RUNTIME":    {}, // PR-30: contrib/tools/yasm
-	"LD_PLUGIN":             {}, // PR-32 D03: contrib/libs/musl/include — directs ymake to invoke musl.py during link, no per-module compile-time effect we model.
 	"WITHOUT_VERSION":       {}, // PR-32 D03: contrib/libs/musl/include neighbours; metadata-only.
 }
 
@@ -333,6 +347,7 @@ type moduleData struct {
 	hadAllocator     bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
 	allocatorName    string   // PR-35g: name passed to ALLOCATOR(...); empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE).
 	muslLite         bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
+	ldPlugins        []string // PR-35k: filenames declared via LD_PLUGIN(name.py); the only M2 case is contrib/libs/musl/include's `LD_PLUGIN(musl.py)`. Each entry becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs.
 	conflictMod      *ModuleStmt
 }
 
@@ -482,6 +497,17 @@ func applyUnknownStmt(v *UnknownStmt, d *moduleData) {
 				d.muslLite = true
 			}
 		}
+	case "LD_PLUGIN":
+		// PR-35k: LD_PLUGIN(name.py) declares a python plugin to be
+		// passed to the linker via `--start-plugins ... --end-plugins`
+		// in every consumer PROGRAM's LD cmd_args. The named file is
+		// copied (via a CP node) from `$(SOURCE_ROOT)/<modulePath>/name.py`
+		// to `$(BUILD_ROOT)/<modulePath>/name.py.pyplugin` at gen time.
+		// Multiple args (multiple plugins) are accepted; each is
+		// recorded verbatim and emitted as a separate CP node by the
+		// owning module's `genModule` call. Only `contrib/libs/musl/
+		// include` declares this in M2 (`LD_PLUGIN(musl.py)`).
+		d.ldPlugins = append(d.ldPlugins, v.Args...)
 	default:
 		if _, ok := whitelistedMetadataMacros[v.Name]; !ok {
 			ThrowFmt("gen: PR-25 does not yet support macro %q (extend whitelistedMetadataMacros or add a typed Stmt)", v.Name)
@@ -1276,6 +1302,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ownCOnlyFlagsGlobalH = nil
 		}
 
+		// PR-35k: emit own LD_PLUGIN CP nodes (e.g. musl.py →
+		// musl.py.pyplugin) BEFORE composing the result so the CP refs
+		// propagate alongside the peer-walked plugin closure. The CP
+		// node carries `module_dir = instance.Path` per the reference
+		// shape; the source/dest are anchored under instance.Path.
+		ownLDPluginRefs, ownLDPluginPaths := emitOwnLDPlugins(ctx, instance, d.ldPlugins)
+		ldPluginRefs, ldPluginPaths := mergeLDPlugins(ownLDPluginRefs, ownLDPluginPaths, peerContribs.ldPluginRefs, peerContribs.ldPluginPaths)
+
 		result := &moduleEmitResult{
 			headerOnly:              true,
 			AddInclGlobal:           mergeDedup(d.addInclGlobal, peerContribs.addIncl),
@@ -1285,6 +1319,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			COnlyFlagsGlobal:        mergeDedup(ownCOnlyFlagsGlobalH, peerContribs.cOnlyFlags),
 			PeerArchiveClosureRefs:  peerContribs.archiveRefs,
 			PeerArchiveClosurePaths: peerContribs.archivePaths,
+			LDPluginRefs:            ldPluginRefs,
+			LDPluginPaths:           ldPluginPaths,
 		}
 		ctx.memo[originalInstance] = result
 		ctx.memo[instance] = result
@@ -1406,6 +1442,25 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerArchivePaths = append(peerArchivePaths, path)
 	}
 
+	// PR-35k: dedup table for the transitive LD plugin closure.
+	// Each direct peer contributes its `LDPluginRefs/Paths` (which
+	// already include the peer's own plugins UNION every transitive
+	// peer's). First occurrence wins; the closure flows through this
+	// module's result so consumers further up the walk pick it up
+	// without re-walking.
+	peerLDPluginRefs := make([]NodeRef, 0, 1)
+	peerLDPluginPaths := make([]string, 0, 1)
+	peerLDPluginSeen := map[string]struct{}{}
+	peerLDPluginAddPath := func(ref NodeRef, path string) {
+		if _, dup := peerLDPluginSeen[path]; dup {
+			return
+		}
+
+		peerLDPluginSeen[path] = struct{}{}
+		peerLDPluginRefs = append(peerLDPluginRefs, ref)
+		peerLDPluginPaths = append(peerLDPluginPaths, path)
+	}
+
 	// PR-31 D05 + PR-32 D07: aggregate peer-GLOBAL contributions
 	// transitively across all four axes (ADDINCL / CFLAGS / CXXFLAGS /
 	// CONLYFLAGS). The aggregation uses a TWO-PHASE traversal so the
@@ -1487,6 +1542,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// PEERDIRs' archives) even though they emit no AR themselves.
 		for i, p := range peerResult.PeerArchiveClosurePaths {
 			peerArchiveAddPath(peerResult.PeerArchiveClosureRefs[i], p)
+		}
+
+		// PR-35k: fold peer's LD plugin closure (own ∪ transitive) into
+		// our own. Runs for BOTH header-only and non-header peers — the
+		// only M2 plugin (musl.py.pyplugin) is owned by the header-only
+		// `contrib/libs/musl/include` LIBRARY.
+		for i, p := range peerResult.LDPluginPaths {
+			peerLDPluginAddPath(peerResult.LDPluginRefs[i], p)
 		}
 
 		// PR-27: header-only peers contribute peer-GLOBAL flags but no
@@ -1917,6 +1980,16 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
+	// PR-35k: emit own LD_PLUGIN CP nodes (no current M2 case fires
+	// here — musl/include is header-only and handled above — but the
+	// emission is symmetric so a future LIBRARY/PROGRAM that declares
+	// LD_PLUGIN inline picks up the same wiring). Merge with the
+	// transitive peer plugin closure; the result feeds both EmitLD's
+	// `--start-plugins ... --end-plugins` block (PROGRAMs) and the
+	// LDPluginRefs/Paths slot on `moduleEmitResult` (every kind).
+	ownLDPluginRefs, ownLDPluginPaths := emitOwnLDPlugins(ctx, instance, d.ldPlugins)
+	mergedLDPluginRefs, mergedLDPluginPaths := mergeLDPlugins(ownLDPluginRefs, ownLDPluginPaths, peerLDPluginRefs, peerLDPluginPaths)
+
 	if d.moduleStmt.Name == "PROGRAM" {
 		// PR-28-D01: PROGRAM(name) declares the linker output basename
 		// directly. Most ya.makes elide the argument (PROGRAM() →
@@ -1962,7 +2035,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			binaryName,
 			ccRefs, ccOutputs,
 			ldPeerArchiveRefs, ldPeerArchivePaths,
-			nil, nil,
+			mergedLDPluginRefs, mergedLDPluginPaths,
 			peerGlobalRefs, peerGlobalPaths,
 			memberInputs,
 			cliMuslOn(ctx),
@@ -1983,6 +2056,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			COnlyFlagsGlobal:        effectiveCOnlyFlagsGlobal,
 			PeerArchiveClosureRefs:  append([]NodeRef(nil), peerArchiveRefs...),
 			PeerArchiveClosurePaths: append([]string(nil), peerArchivePaths...),
+			LDPluginRefs:            mergedLDPluginRefs,
+			LDPluginPaths:           mergedLDPluginPaths,
 		}
 		ctx.memo[originalInstance] = result
 		ctx.memo[instance] = result
@@ -2015,6 +2090,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		COnlyFlagsGlobal:        effectiveCOnlyFlagsGlobal,
 		PeerArchiveClosureRefs:  append([]NodeRef(nil), peerArchiveRefs...),
 		PeerArchiveClosurePaths: append([]string(nil), peerArchivePaths...),
+		LDPluginRefs:            mergedLDPluginRefs,
+		LDPluginPaths:           mergedLDPluginPaths,
 	}
 
 	if len(globalRefs) > 0 {
@@ -2060,6 +2137,67 @@ func mergeDedup(a, b []string) []string {
 	return out
 }
 
+// emitOwnLDPlugins emits one CP node per `LD_PLUGIN(name.py)` entry
+// declared in this module. The CP src is
+// `$(SOURCE_ROOT)/<modulePath>/<name>` and the dst is
+// `$(BUILD_ROOT)/<modulePath>/<name>.pyplugin` (verified against the
+// reference CP node for `contrib/libs/musl/include`'s `musl.py`).
+// Returns parallel ref + path slices in declaration order. PR-35k.
+func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string) ([]NodeRef, []string) {
+	if len(plugins) == 0 {
+		return nil, nil
+	}
+
+	refs := make([]NodeRef, 0, len(plugins))
+	paths := make([]string, 0, len(plugins))
+
+	for _, name := range plugins {
+		src := "$(SOURCE_ROOT)/" + instance.Path + "/" + name
+		dst := "$(BUILD_ROOT)/" + instance.Path + "/" + name + ".pyplugin"
+		ref := EmitCP(instance, src, dst, ctx.emit)
+		refs = append(refs, ref)
+		paths = append(paths, dst)
+	}
+
+	return refs, paths
+}
+
+// mergeLDPlugins concatenates `(ownRefs, ownPaths)` with
+// `(peerRefs, peerPaths)`, dropping any peer entry whose path appears
+// in own. Mirrors `mergeDedup` for the parallel-slice case used by
+// LD plugin propagation. PR-35k.
+func mergeLDPlugins(ownRefs []NodeRef, ownPaths []string, peerRefs []NodeRef, peerPaths []string) ([]NodeRef, []string) {
+	if len(ownPaths) == 0 && len(peerPaths) == 0 {
+		return nil, nil
+	}
+
+	seen := make(map[string]struct{}, len(ownPaths)+len(peerPaths))
+	outRefs := make([]NodeRef, 0, len(ownPaths)+len(peerPaths))
+	outPaths := make([]string, 0, len(ownPaths)+len(peerPaths))
+
+	for i, p := range ownPaths {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+
+		seen[p] = struct{}{}
+		outRefs = append(outRefs, ownRefs[i])
+		outPaths = append(outPaths, p)
+	}
+
+	for i, p := range peerPaths {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+
+		seen[p] = struct{}{}
+		outRefs = append(outRefs, peerRefs[i])
+		outPaths = append(outPaths, p)
+	}
+
+	return outRefs, outPaths
+}
+
 // peerGlobalContribs is the per-axis aggregation of a header-only
 // LIBRARY's peer-walk (PR-27 + PR-32 D07). All four axes share the
 // same declaration-order + dedup discipline as the main walker.
@@ -2087,6 +2225,11 @@ type peerGlobalContribs struct {
 	// no archive).
 	archiveRefs  []NodeRef
 	archivePaths []string
+	// PR-35k: LD plugin closure surfaced through the header-only walker.
+	// Mirrors the archive closure: dedup-by-path, declaration order,
+	// first occurrence wins.
+	ldPluginRefs  []NodeRef
+	ldPluginPaths []string
 }
 
 // walkPeersForGlobalAddIncl walks the peers of a header-only LIBRARY
@@ -2114,6 +2257,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	cxxFlagsSeen := map[string]struct{}{}
 	cOnlyFlagsSeen := map[string]struct{}{}
 	archiveSeen := map[string]struct{}{}
+	ldPluginSeen := map[string]struct{}{}
 
 	addEach := func(seenSet map[string]struct{}, dst *[]string, src []string) {
 		for _, x := range src {
@@ -2136,6 +2280,16 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		out.archivePaths = append(out.archivePaths, path)
 	}
 
+	addLDPlugin := func(ref NodeRef, path string) {
+		if _, dup := ldPluginSeen[path]; dup {
+			return
+		}
+
+		ldPluginSeen[path] = struct{}{}
+		out.ldPluginRefs = append(out.ldPluginRefs, ref)
+		out.ldPluginPaths = append(out.ldPluginPaths, path)
+	}
+
 	walk := func(peerPath string) {
 		peerInstance := derivePeerInstance(instance, peerPath)
 		peerResult := genModule(ctx, peerInstance)
@@ -2152,6 +2306,14 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 
 		if !peerResult.headerOnly {
 			addArchive(peerResult.ARRef, peerPath+"/"+ArchiveName(peerPath))
+		}
+
+		// PR-35k: fold peer's transitive LD plugin closure. Header-only
+		// peers (musl/include itself) populate this slot from their own
+		// LD_PLUGIN macro; non-header peers may carry it through if any
+		// of their transitive PEERDIRs declared one.
+		for i, p := range peerResult.LDPluginPaths {
+			addLDPlugin(peerResult.LDPluginRefs[i], p)
 		}
 	}
 
