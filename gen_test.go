@@ -2720,3 +2720,188 @@ func TestIsRuntimeAncestor_LiteralOnly(t *testing.T) {
 		}
 	}
 }
+
+// TestGen_MallocApi_HoistInjection_ByteExact pins the PR-35c A2_01 fix:
+// `library/cpp/malloc/api` is a runtime ancestor whose
+// `defaultPeerdirsFor` returns the empty default-peer set, so the C01
+// hoist (which is reorder-only) had nothing to hoist. PR-33-A2_01 left
+// malloc.cpp.o + malloc.cpp.pic.o L3-divergent — slots 11-12 should be
+// `-I libcxx/include` + `-I libcxxrt/include` per the reference, but
+// without an injection ours emitted musl/arch directly there.
+//
+// PR-35c injects libcxx/include + libcxxrt/include + `-nostdinc++`
+// directly into malloc/api's `peerAddInclGlobal` /
+// `peerCXXFlagsGlobal` (LOCAL only — not propagated to consumers).
+// This test pins the resulting CC node byte-exact.
+func TestGen_MallocApi_HoistInjection_ByteExact(t *testing.T) {
+	const targetDir = "library/cpp/malloc/api"
+
+	if _, err := os.Stat(sourceRoot + "/" + targetDir + "/ya.make"); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	if _, err := os.Stat(referenceGraphPath); err != nil {
+		t.Skipf("reference graph %s not present: %v", referenceGraphPath, err)
+	}
+
+	our := Gen(TargetCfg, sourceRoot, targetDir)
+
+	const ccOutput = "$(BUILD_ROOT)/library/cpp/malloc/api/malloc.cpp.o"
+
+	var ourCC *Node
+
+	for _, n := range our.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0] == ccOutput {
+			ourCC = n
+
+			break
+		}
+	}
+
+	if ourCC == nil {
+		t.Fatalf("Gen produced no CC node with output %q", ccOutput)
+	}
+
+	ref := LoadReference(referenceGraphPath)
+
+	var refCC *Node
+
+	for _, n := range ref.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0] == ccOutput && n.Platform == string(TargetCfg.Target.ID) {
+			refCC = n
+
+			break
+		}
+	}
+
+	if refCC == nil {
+		t.Fatalf("reference graph contains no CC node with output %q on platform %q", ccOutput, TargetCfg.Target.ID)
+	}
+
+	if len(ourCC.Cmds) != len(refCC.Cmds) {
+		t.Fatalf("malloc.cpp.o: cmds count = %d, want %d", len(ourCC.Cmds), len(refCC.Cmds))
+	}
+
+	for ci, refCmd := range refCC.Cmds {
+		ourArgs := ourCC.Cmds[ci].CmdArgs
+		refArgs := refCmd.CmdArgs
+
+		if len(ourArgs) != len(refArgs) {
+			t.Errorf("malloc.cpp.o cmd[%d].cmd_args: got %d args, want %d", ci, len(ourArgs), len(refArgs))
+
+			continue
+		}
+
+		for i := range refArgs {
+			if ourArgs[i] != refArgs[i] {
+				t.Errorf("malloc.cpp.o cmd[%d].cmd_args[%d]:\n  got:  %q\n  want: %q", ci, i, ourArgs[i], refArgs[i])
+
+				break
+			}
+		}
+	}
+
+	// Slot 11-12 anchors: the libcxx + libcxxrt header peers must
+	// land immediately after the linux-headers ccIncludesSuffix pair
+	// (slots 9-10 in the reference shape).
+	const wantSlot11 = "-I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxx/include"
+	const wantSlot12 = "-I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxxrt/include"
+
+	if len(ourCC.Cmds[0].CmdArgs) <= 12 {
+		t.Fatalf("cmd_args has %d entries, expected >= 13 to anchor slots 11-12", len(ourCC.Cmds[0].CmdArgs))
+	}
+
+	if got := ourCC.Cmds[0].CmdArgs[11]; got != wantSlot11 {
+		t.Errorf("cmd_args[11] = %q, want %q (PR-35c hoist injection anchor)", got, wantSlot11)
+	}
+
+	if got := ourCC.Cmds[0].CmdArgs[12]; got != wantSlot12 {
+		t.Errorf("cmd_args[12] = %q, want %q (PR-35c hoist injection anchor)", got, wantSlot12)
+	}
+}
+
+// TestGen_ToolsArchiver_LDPeerArchiveClosure pins the PR-35c LD walker
+// transitive peer-archive closure fix. Pre-PR-35c the walker collected
+// only direct peers' archives — 13 entries for `tools/archiver`'s LD,
+// versus the reference's 32. PR-35c folds each peer's
+// `PeerArchiveClosure*` into the running closure (DFS post-order,
+// dedup-by-path), so the LD's `--start-group ... --end-group` block
+// matches the reference 32 archives.
+//
+// The test pins the count + the SET (order may diverge from the
+// reference until upstream's exact `_BUILTIN_PEERDIR` walk-order
+// algorithm is modelled — pinning the set is sufficient to guard the
+// regression that motivated PR-35b's deferred 19-archive gap).
+func TestGen_ToolsArchiver_LDPeerArchiveClosure(t *testing.T) {
+	const targetDir = "tools/archiver"
+
+	if _, err := os.Stat(sourceRoot + "/" + targetDir + "/ya.make"); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	our := Gen(TargetCfg, sourceRoot, targetDir)
+
+	const ldOutput = "$(BUILD_ROOT)/tools/archiver/archiver"
+
+	var ourLD *Node
+
+	for _, n := range our.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0] == ldOutput {
+			ourLD = n
+
+			break
+		}
+	}
+
+	if ourLD == nil {
+		t.Fatalf("Gen produced no LD node with output %q", ldOutput)
+	}
+
+	if len(ourLD.Cmds) < 3 {
+		t.Fatalf("LD has %d cmds, expected >= 3", len(ourLD.Cmds))
+	}
+
+	cmd2 := ourLD.Cmds[2].CmdArgs
+
+	startIdx := -1
+	endIdx := -1
+
+	for i, a := range cmd2 {
+		if a == "-Wl,--start-group" {
+			startIdx = i
+		} else if a == "-Wl,--end-group" {
+			endIdx = i
+
+			break
+		}
+	}
+
+	if startIdx < 0 || endIdx < 0 || endIdx <= startIdx {
+		t.Fatalf("cmd[2] missing --start-group / --end-group framing (start=%d end=%d)", startIdx, endIdx)
+	}
+
+	gotPeers := cmd2[startIdx+1 : endIdx]
+
+	if len(gotPeers) != len(archiverPeerLibPaths) {
+		t.Errorf("peer-archive count = %d, want %d (PR-35c transitive closure)", len(gotPeers), len(archiverPeerLibPaths))
+	}
+
+	gotSet := make(map[string]struct{}, len(gotPeers))
+	for _, p := range gotPeers {
+		gotSet[p] = struct{}{}
+	}
+
+	for _, want := range archiverPeerLibPaths {
+		if _, ok := gotSet[want]; !ok {
+			t.Errorf("peer-archive set missing %q (PR-35c walker should expose it)", want)
+		}
+	}
+}
