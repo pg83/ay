@@ -188,6 +188,20 @@ func EmitLD(
 		inputs = append(inputs, p)
 	}
 
+	// PR-35v: svnversion.h is a c_template consumed by vcs_info.py
+	// when generating __vcs_version__.c. ymake registers it as a
+	// static input on every PROGRAM LD node, appended after the
+	// member-CC input union (verified at index 1051 of the reference
+	// tools/archiver LD node with 1052 total inputs, and at the last
+	// position of contrib/tools/yasm's LD node with 263 inputs).
+	// The CC include scanner does not see this file (it is not
+	// #included by any user source), so it must be injected here.
+	// Dedup guard is present for safety — in practice the CC closure
+	// never contains this path.
+	if _, dup := inputSet[ldSvnversionHInput]; !dup {
+		inputs = append(inputs, ldSvnversionHInput)
+	}
+
 	// DepRefs capture every node whose UID flows into the LD's
 	// content hash: own .cpp.o files, plugin inputs, global
 	// archives, and peer LIBRARY archives.
@@ -486,6 +500,12 @@ func composeLDInputs(modulePath string, ccPaths, peerLibPaths, pluginPaths, glob
 
 	return out
 }
+
+// ldSvnversionHInput is the c_template header consumed by vcs_info.py
+// when it generates __vcs_version__.c. ymake appends it as the last
+// entry of every PROGRAM LD node's inputs slice, after the member-CC
+// input union. PR-35v adds this static injection (R9 closure).
+const ldSvnversionHInput = "$(SOURCE_ROOT)/build/scripts/c_templates/svnversion.h"
 
 // ldStaticMuslTrailingFlags is the 12-flag trailer the reference
 // `tools/archiver/archiver` LD cmd[2] emits AFTER `-Wl,--end-group`.
