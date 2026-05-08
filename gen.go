@@ -129,6 +129,21 @@ type moduleEmitResult struct {
 	CFlagsGlobal     []string
 	CXXFlagsGlobal   []string
 	COnlyFlagsGlobal []string
+	// PeerArchiveClosureRefs / PeerArchiveClosurePaths is the transitive
+	// archive closure exposed by this module to its consumers — every
+	// peer's own AR plus every peer's PeerArchiveClosure*, deduplicated
+	// in DFS post-order (first occurrence wins). PR-35c closes the LD
+	// walker's deferred 19-archive gap (PR-31-D09 follow-on): without
+	// this slot, PROGRAM modules' EmitLD only saw their *direct* peer
+	// archives, so a 13-archive subset of the reference's 32 reached
+	// cmd[2]'s `--start-group ... --end-group` block. The closure flows
+	// through LIBRARY modules' moduleEmitResult so that any consumer
+	// (LIBRARY or PROGRAM) can union its peers' closures with the
+	// peers' own archives to produce the full link-time archive set.
+	// Header-only LIBRARYs (PR-27) propagate closures from their peers
+	// but contribute no archive of their own.
+	PeerArchiveClosureRefs  []NodeRef
+	PeerArchiveClosurePaths []string
 }
 
 // genCtx threads state through the recursive walk. `emit`
@@ -611,6 +626,50 @@ var runtimeAncestorPaths = map[string]bool{
 	"util":                                 true,
 }
 
+// runtimeAncestorCxxConsumers is the subset of runtimeAncestorPaths
+// whose C++ sources include libcxx headers (e.g. <atomic>, <cstddef>)
+// and therefore need libcxx as an implicit GLOBAL header peer to
+// supply `-I libcxx/include`, `-I libcxxrt/include` (libcxx's own
+// GLOBAL ADDINCLs propagate the libcxxrt include via libcxx's
+// `IF (CXX_RT == "libcxxrt")` branch — see
+// `contrib/libs/cxxsupp/libcxx/ya.make:78-85`), and `-nostdinc++`
+// (libcxx's GLOBAL CXXFLAG when CLANG=yes).
+//
+// PR-35c closes PR-33-A2_01: the C01 hoist was reorder-only — it
+// rearranged `peerAddInclGlobal` entries already present, but never
+// INJECTED the libcxx/libcxxrt slots when the runtime ancestor's
+// `defaultPeerdirsFor` returned the empty set (the
+// `library/cpp/malloc/api` case: NO_UTIL only, zero explicit
+// PEERDIRs). For these modules, libcxx must be wired as a default
+// peer so the existing two-phase peer-aggregation supplies the
+// missing slots, and C01's hoist can lift them into the canonical
+// order.
+//
+// The set is deliberately narrow:
+//   - The C-runtime stack (musl, libc_compat, linuxvdso(/original),
+//     builtins) compiles only C and would gain spurious -I libcxx
+//     entries that the reference does not emit.
+//   - The C++-runtime stack (libcxx, libcxxrt, libcxxabi, libcxxabi-
+//     parts, libunwind) carries its own ADDINCL/CXXFLAGS declarations
+//     in-tree and the reference emits a freestanding (`-nostdinc++`-
+//     only) shape on those CC nodes; adding libcxx as a peer would
+//     introduce flags they intentionally drop.
+//   - util already pulls libcxx/libcxxrt headers via its existing
+//     user-PEERDIRs (util/charset, zlib, double-conversion,
+//     libc_compat) through the Phase 2 transitive walk; adding libcxx
+//     here would duplicate work without fingerprint impact.
+//   - sanitizer/include is header-only; consumers see its peer-GLOBAL
+//     contributions via `walkPeersForGlobalAddIncl`, not through this
+//     direct-peer mechanism.
+//
+// The single M2-closure member is `library/cpp/malloc/api`. New
+// entries land here only when the reference graph confirms a runtime
+// ancestor's CC nodes carry libcxx/libcxxrt -I + `-nostdinc++` and
+// the existing peer-aggregation does not supply them.
+var runtimeAncestorCxxConsumers = map[string]bool{
+	"library/cpp/malloc/api": true,
+}
+
 // isAncestorPath reports whether `srcDir` is an ancestor of
 // `instancePath` (or equal to it). PR-30 D06 uses this to guard the
 // SRCDIR full-rebase decision: the rebase fires only for the
@@ -996,6 +1055,17 @@ func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocato
 		)
 	}
 
+	// PR-35c: USE_COW=yes M2 default — every PROGRAM gets `build/cow/on`
+	// as an implicit peer. Mirrors `_BASE_PROGRAM`'s
+	// `when ($USE_COW == "yes") { PEERDIR += build/cow/on }` at
+	// `build/ymake.core.conf:946-948`. The M1 build/cow/on leaf is the
+	// canonical NO_PLATFORM-via-effective-flags example
+	// (`inferFlagsFromPath` seeds NoLibc+NoUtil+NoRuntime from the
+	// path); upstream USE_COW gates on a default-yes variable so we
+	// add unconditionally for now. Closes the archiver LD's missing
+	// `build/cow/on/libbuild-cow-on.a` archive.
+	peers = append(peers, "build/cow/on")
+
 	return peers
 }
 
@@ -1161,12 +1231,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 
 		result := &moduleEmitResult{
-			headerOnly:       true,
-			AddInclGlobal:    mergeDedup(d.addInclGlobal, peerContribs.addIncl),
-			OwnAddInclGlobal: append([]string(nil), d.addInclGlobal...),
-			CFlagsGlobal:     mergeDedup(ownCFlagsGlobalH, peerContribs.cFlags),
-			CXXFlagsGlobal:   mergeDedup(ownCXXFlagsGlobalH, peerContribs.cxxFlags),
-			COnlyFlagsGlobal: mergeDedup(ownCOnlyFlagsGlobalH, peerContribs.cOnlyFlags),
+			headerOnly:              true,
+			AddInclGlobal:           mergeDedup(d.addInclGlobal, peerContribs.addIncl),
+			OwnAddInclGlobal:        append([]string(nil), d.addInclGlobal...),
+			CFlagsGlobal:            mergeDedup(ownCFlagsGlobalH, peerContribs.cFlags),
+			CXXFlagsGlobal:          mergeDedup(ownCXXFlagsGlobalH, peerContribs.cxxFlags),
+			COnlyFlagsGlobal:        mergeDedup(ownCOnlyFlagsGlobalH, peerContribs.cOnlyFlags),
+			PeerArchiveClosureRefs:  peerContribs.archiveRefs,
+			PeerArchiveClosurePaths: peerContribs.archivePaths,
 		}
 		ctx.memo[originalInstance] = result
 		ctx.memo[instance] = result
@@ -1223,6 +1295,25 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	peerArchivePaths := make([]string, 0, len(allPeers))
 	peerGlobalRefs := make([]NodeRef, 0, len(allPeers))
 	peerGlobalPaths := make([]string, 0, len(allPeers))
+
+	// PR-35c: dedup table for the transitive peer-archive closure.
+	// For each direct peer, we accumulate (peer's own AR ∪ peer's
+	// PeerArchiveClosure) — first occurrence wins (R14 declaration
+	// order). The closure is consumed only by the PROGRAM branch
+	// below (LIBRARYs drop peer-archive refs from their AR per
+	// PR-30 D05); LIBRARY consumers downstream walk our exposed
+	// `PeerArchiveClosureRefs/Paths` field on `moduleEmitResult`,
+	// which we fold into below per the same dedup discipline.
+	peerArchiveSeen := map[string]struct{}{}
+	peerArchiveAddPath := func(ref NodeRef, path string) {
+		if _, dup := peerArchiveSeen[path]; dup {
+			return
+		}
+
+		peerArchiveSeen[path] = struct{}{}
+		peerArchiveRefs = append(peerArchiveRefs, ref)
+		peerArchivePaths = append(peerArchivePaths, path)
+	}
 
 	// PR-31 D05 + PR-32 D07: aggregate peer-GLOBAL contributions
 	// transitively across all four axes (ADDINCL / CFLAGS / CXXFLAGS /
@@ -1294,14 +1385,23 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult})
 
+		// PR-35c: fold peer's transitive archive closure into our
+		// own running closure BEFORE the peer's own archive (DFS
+		// post-order: dependencies-of-peer come first, peer last).
+		// Header-only peers may still expose a closure (their
+		// PEERDIRs' archives) even though they emit no AR themselves.
+		for i, p := range peerResult.PeerArchiveClosurePaths {
+			peerArchiveAddPath(peerResult.PeerArchiveClosureRefs[i], p)
+		}
+
 		// PR-27: header-only peers contribute peer-GLOBAL flags but no
-		// archive-dep refs. Non-header peers contribute archive refs.
+		// archive-dep refs of their own. Non-header peers contribute
+		// archive refs.
 		if peerResult.headerOnly {
 			continue
 		}
 
-		peerArchiveRefs = append(peerArchiveRefs, peerResult.ARRef)
-		peerArchivePaths = append(peerArchivePaths, peerPath+"/"+ArchiveName(peerPath))
+		peerArchiveAddPath(peerResult.ARRef, peerPath+"/"+ArchiveName(peerPath))
 
 		if peerResult.GlobalRef != nil {
 			peerGlobalRefs = append(peerGlobalRefs, *peerResult.GlobalRef)
@@ -1397,6 +1497,60 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	effectiveCFlagsGlobal := mergeDedup(ownCFlagsGlobal, peerCFlagsGlobal)
 	effectiveCXXFlagsGlobal := mergeDedup(ownCXXFlagsGlobal, peerCXXFlagsGlobal)
 	effectiveCOnlyFlagsGlobal := mergeDedup(ownCOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
+
+	// PR-35c (closes PR-33-A2_01): inject libcxx's GLOBAL ADDINCL +
+	// GLOBAL CXXFLAGS into runtime-ancestor C++ consumers' OWN CC
+	// emission only — not into the `effective*` propagation slices
+	// already snapshotted above.
+	//
+	// Why local-only: making libcxx an implicit DEFAULT peer (via
+	// `defaultPeerdirsFor`) would also push libcxx/include +
+	// libcxxrt/include into this module's `effectiveAddInclGlobal`,
+	// which every downstream consumer's Phase 2 walk reads — producing
+	// spurious -I flags on unrelated CC nodes (zlib, mimalloc,
+	// libcxxabi-parts, etc.) for a 100+-node L3 regression.
+	//
+	// Mutating `peerAddInclGlobal` and `peerCXXFlagsGlobal` AFTER the
+	// `effective*` snapshot keeps the propagated view clean. The local
+	// view (consumed by `ModuleCCInputs` for THIS module's own CC
+	// compile) gains the slots; the C01 hoist below re-runs on the
+	// post-injection slice so the injected libcxx/include +
+	// libcxxrt/include land at the canonical front position
+	// immediately after the linux-headers ccIncludesSuffix.
+	if !effectiveNoPlatform(instance.Flags) && runtimeAncestorCxxConsumers[instance.Path] {
+		// libcxx's CLANG-branch GLOBAL CXXFLAG (`-nostdinc++`) — see
+		// `contrib/libs/cxxsupp/libcxx/ya.make:67-69`.
+		const nostdincPP = "-nostdinc++"
+		// libcxx's GLOBAL ADDINCL set on Linux with CXX_RT==libcxxrt
+		// — see `contrib/libs/cxxsupp/libcxx/ya.make:24-25, 78-85`.
+		injectAddIncl := []string{
+			"contrib/libs/cxxsupp/libcxx/include",
+			"contrib/libs/cxxsupp/libcxxrt/include",
+		}
+
+		for _, p := range injectAddIncl {
+			if _, dup := addInclSeen[p]; dup {
+				continue
+			}
+
+			addInclSeen[p] = struct{}{}
+			peerAddInclGlobal = append(peerAddInclGlobal, p)
+		}
+
+		if _, dup := cxxFlagsSeen[nostdincPP]; !dup {
+			cxxFlagsSeen[nostdincPP] = struct{}{}
+			peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, nostdincPP)
+		}
+
+		// Re-hoist so the injected libcxx/include + libcxxrt/include
+		// slot at the front of `peerAddInclGlobal` (the runtime-stack
+		// position observed in malloc/api's reference cmd_args[11..12]).
+		// The earlier C01 hoist call at line 1414 already ran, but on
+		// the un-injected slice; running it again here is idempotent
+		// for entries already at the front and a no-op when nothing
+		// was injected.
+		peerAddInclGlobal = hoistRuntimeStackAddIncl(peerAddInclGlobal)
+	}
 
 	// Per-source dispatch. JoinSrcs entries become JS+CC pairs
 	// folded in alongside regular SRCS. Header sources (`.h` /
@@ -1622,16 +1776,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ldPath := LDOutputPath(instance, binaryName)
 
 		result := &moduleEmitResult{
-			ARRef:            ldRef,
-			ARPath:           ldPath,
-			isPROGRAM:        true,
-			LDRef:            ldRef,
-			LDPath:           ldPath,
-			AddInclGlobal:    effectiveAddInclGlobal,
-			OwnAddInclGlobal: append([]string(nil), d.addInclGlobal...),
-			CFlagsGlobal:     effectiveCFlagsGlobal,
-			CXXFlagsGlobal:   effectiveCXXFlagsGlobal,
-			COnlyFlagsGlobal: effectiveCOnlyFlagsGlobal,
+			ARRef:                   ldRef,
+			ARPath:                  ldPath,
+			isPROGRAM:               true,
+			LDRef:                   ldRef,
+			LDPath:                  ldPath,
+			AddInclGlobal:           effectiveAddInclGlobal,
+			OwnAddInclGlobal:        append([]string(nil), d.addInclGlobal...),
+			CFlagsGlobal:            effectiveCFlagsGlobal,
+			CXXFlagsGlobal:          effectiveCXXFlagsGlobal,
+			COnlyFlagsGlobal:        effectiveCOnlyFlagsGlobal,
+			PeerArchiveClosureRefs:  append([]NodeRef(nil), peerArchiveRefs...),
+			PeerArchiveClosurePaths: append([]string(nil), peerArchivePaths...),
 		}
 		ctx.memo[originalInstance] = result
 		ctx.memo[instance] = result
@@ -1652,16 +1808,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	arPath := "$(BUILD_ROOT)/" + instance.Path + "/" + ArchiveName(instance.Path)
 
 	result := &moduleEmitResult{
-		ARRef:            arRef,
-		ARPath:           arPath,
-		isPROGRAM:        false,
-		LDRef:            arRef,
-		LDPath:           arPath,
-		AddInclGlobal:    effectiveAddInclGlobal,
-		OwnAddInclGlobal: append([]string(nil), d.addInclGlobal...),
-		CFlagsGlobal:     effectiveCFlagsGlobal,
-		CXXFlagsGlobal:   effectiveCXXFlagsGlobal,
-		COnlyFlagsGlobal: effectiveCOnlyFlagsGlobal,
+		ARRef:                   arRef,
+		ARPath:                  arPath,
+		isPROGRAM:               false,
+		LDRef:                   arRef,
+		LDPath:                  arPath,
+		AddInclGlobal:           effectiveAddInclGlobal,
+		OwnAddInclGlobal:        append([]string(nil), d.addInclGlobal...),
+		CFlagsGlobal:            effectiveCFlagsGlobal,
+		CXXFlagsGlobal:          effectiveCXXFlagsGlobal,
+		COnlyFlagsGlobal:        effectiveCOnlyFlagsGlobal,
+		PeerArchiveClosureRefs:  append([]NodeRef(nil), peerArchiveRefs...),
+		PeerArchiveClosurePaths: append([]string(nil), peerArchivePaths...),
 	}
 
 	if len(globalRefs) > 0 {
@@ -1723,6 +1881,17 @@ type peerGlobalContribs struct {
 	cFlags     []string
 	cxxFlags   []string
 	cOnlyFlags []string
+	// PR-35c: archive closure transitively reachable from this
+	// header-only LIBRARY's peers — folded into the same DFS post-
+	// order, dedup-by-path discipline the main walker uses. Header-
+	// only LIBRARYs do not emit an AR of their own, but they DO
+	// expose their transitive archive closure to downstream consumers
+	// (e.g. `contrib/libs/musl/include` is header-only and its `IF`
+	// branches PEERDIR `contrib/libs/musl` — the consumer needs musl
+	// in its archive set even though musl/include itself contributes
+	// no archive).
+	archiveRefs  []NodeRef
+	archivePaths []string
 }
 
 // walkPeersForGlobalAddIncl walks the peers of a header-only LIBRARY
@@ -1742,6 +1911,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	cFlagsSeen := map[string]struct{}{}
 	cxxFlagsSeen := map[string]struct{}{}
 	cOnlyFlagsSeen := map[string]struct{}{}
+	archiveSeen := map[string]struct{}{}
 
 	addEach := func(seenSet map[string]struct{}, dst *[]string, src []string) {
 		for _, x := range src {
@@ -1754,6 +1924,16 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		}
 	}
 
+	addArchive := func(ref NodeRef, path string) {
+		if _, dup := archiveSeen[path]; dup {
+			return
+		}
+
+		archiveSeen[path] = struct{}{}
+		out.archiveRefs = append(out.archiveRefs, ref)
+		out.archivePaths = append(out.archivePaths, path)
+	}
+
 	walk := func(peerPath string) {
 		peerInstance := derivePeerInstance(instance, peerPath)
 		peerResult := genModule(ctx, peerInstance)
@@ -1761,6 +1941,16 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		addEach(cFlagsSeen, &out.cFlags, peerResult.CFlagsGlobal)
 		addEach(cxxFlagsSeen, &out.cxxFlags, peerResult.CXXFlagsGlobal)
 		addEach(cOnlyFlagsSeen, &out.cOnlyFlags, peerResult.COnlyFlagsGlobal)
+
+		// PR-35c: fold peer's transitive archive closure plus peer's
+		// own AR (when not header-only) in DFS post-order.
+		for i, p := range peerResult.PeerArchiveClosurePaths {
+			addArchive(peerResult.PeerArchiveClosureRefs[i], p)
+		}
+
+		if !peerResult.headerOnly {
+			addArchive(peerResult.ARRef, peerPath+"/"+ArchiveName(peerPath))
+		}
 	}
 
 	for _, p := range defaults {
