@@ -315,6 +315,74 @@ func TestSysIncl_KeyBySourceCompiledFromFilter(t *testing.T) {
 	}
 }
 
+// TestSysIncl_IncluderFilterCache_HitProducesEqualResult verifies the
+// PR-34j memo: repeated LookupIncluderKeyed calls with the same
+// includerPath but different headers must return the same set of
+// matching records — and the cached fast path must not change the
+// observable result. Builds a view, calls the lookup once to warm the
+// cache, then again with a different header, and asserts the second
+// call's result matches an uncached recompute.
+func TestSysIncl_IncluderFilterCache_HitProducesEqualResult(t *testing.T) {
+	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
+		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
+	}
+
+	set := LoadSysInclSet(sourceRoot)
+	view := set.PreparePerSource("contrib/libs/musl/src/string/strlen.c")
+
+	// First call warms the cache for this includerPath.
+	got1, _ := view.LookupIncluderKeyed("contrib/libs/musl/src/string/strlen.c", "features.h")
+
+	// Second call with a different header — should reuse the cached
+	// active-records subset for the includer.
+	got2, _ := view.LookupIncluderKeyed("contrib/libs/musl/src/string/strlen.c", "string.h")
+
+	// Independent recompute via a fresh view (its cache starts empty,
+	// so the result here is the uncached path's output).
+	fresh := set.PreparePerSource("contrib/libs/musl/src/string/strlen.c")
+	want2, _ := fresh.LookupIncluderKeyed("contrib/libs/musl/src/string/strlen.c", "string.h")
+
+	if !stringSlicesEqualUnordered(got2, want2) {
+		t.Fatalf("cache hit returned different result from uncached recompute:\n got=%v\nwant=%v", got2, want2)
+	}
+
+	// And the first warmer call's result must also be reproducible.
+	freshFeatures, _ := fresh.LookupIncluderKeyed("contrib/libs/musl/src/string/strlen.c", "features.h")
+
+	if !stringSlicesEqualUnordered(got1, freshFeatures) {
+		t.Fatalf("first call result not reproducible across views:\n got=%v\nwant=%v", got1, freshFeatures)
+	}
+}
+
+// stringSlicesEqualUnordered compares two []string ignoring order. The
+// LookupIncluderKeyed result order is deterministic per call (driven
+// by includerKeyed iteration order) but the test treats it as a set —
+// any record-ordering refactor inside the cache layer should not break
+// this assertion.
+func stringSlicesEqualUnordered(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	seen := make(map[string]int, len(a))
+
+	for _, s := range a {
+		seen[s]++
+	}
+
+	for _, s := range b {
+		seen[s]--
+
+		if seen[s] < 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
 // TestLoadSysInclSet_Stats prints a one-line stat header used in
 // PR-31 acceptance reporting. Emitted via t.Logf so `go test -v`
 // shows it.
