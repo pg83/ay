@@ -142,3 +142,111 @@ func TestScanner_RegularIncludeStillResolvesViaSysincl(t *testing.T) {
 		t.Errorf("libcxx-source closure missing musl-string.h (cstring → <string.h> sysincl chain broken)")
 	}
 }
+
+// TestScanner_SubgraphCacheReuse pins the PR-34r per-includer subgraph
+// cache contract: running WalkClosure twice on the SAME source returns
+// byte-identical closures, and the second run hits the cache for every
+// header the first run computed (zero new misses for the second source).
+// Also exercised via two DIFFERENT sources whose ScanContext shares the
+// same OwnAddIncl/PeerAddInclSet/BaseSearchPaths AND the same source-
+// keyed sysincl equivalence class — those sources must share cached
+// subgraphs for every header reached via either.
+//
+// The cache is keyed by `(headerAbs, ctxHash, srcClassHash)`; two
+// libcxx-source compiles with identical ADDINCL configuration land in
+// the same equivalence class because their `activeSourceKeyed` records
+// (PerSourceView) match pointer-for-pointer.
+func TestScanner_SubgraphCacheReuse(t *testing.T) {
+	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
+		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
+	}
+
+	sysincl := LoadSysInclSet(sourceRoot)
+	scanner := NewIncludeScanner(sourceRoot, sysincl)
+
+	makeCtx := func(srcRel string) ScanContext {
+		return ScanContext{
+			SourceRel: srcRel,
+			OwnAddIncl: []string{
+				"contrib/libs/cxxsupp/libcxx/include",
+			},
+			BaseSearchPaths: []string{
+				"contrib/libs/musl/include",
+				"contrib/libs/musl/arch/aarch64",
+				"contrib/libs/musl/arch/generic",
+				"contrib/libs/linux-headers",
+				"",
+			},
+		}
+	}
+
+	closure1 := scanner.WalkClosure(makeCtx("contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"))
+
+	if len(closure1) == 0 {
+		t.Fatalf("first closure unexpectedly empty (source absent or scan misconfigured)")
+	}
+
+	hits1, misses1, _ := scanner.SubgraphCacheStats()
+
+	// Second walk on a DIFFERENT source in the same equivalence class.
+	// Many of the headers the first walk computed should be reused —
+	// hits should grow significantly while misses grow only by the
+	// new-source's own previously-unseen headers (typically a small
+	// number when the two sources share most of libcxx's transitive
+	// closure).
+	closure2 := scanner.WalkClosure(makeCtx("contrib/libs/cxxsupp/libcxx/src/string.cpp"))
+
+	if len(closure2) == 0 {
+		t.Fatalf("second closure unexpectedly empty")
+	}
+
+	hits2, misses2, _ := scanner.SubgraphCacheStats()
+
+	hitsDelta := hits2 - hits1
+	missesDelta := misses2 - misses1
+
+	if hitsDelta == 0 {
+		t.Errorf("second-walk hits delta is 0 — cache not reused across libcxx-source compiles "+
+			"(hits1=%d hits2=%d misses1=%d misses2=%d)",
+			hits1, hits2, misses1, misses2)
+	}
+
+	if hitsDelta < missesDelta {
+		t.Errorf("second-walk hits delta (%d) less than misses delta (%d) — "+
+			"cross-source cache reuse is below 50%% (PR-34r ≥30%% gate at risk)",
+			hitsDelta, missesDelta)
+	}
+
+	// Re-walk the FIRST source. Should produce the same closure, with
+	// effectively zero new misses — every header it touched is now
+	// cached. The walk's hit count grows; miss count stays roughly
+	// constant.
+	hitsBefore3, missesBefore3, _ := scanner.SubgraphCacheStats()
+	closure3 := scanner.WalkClosure(makeCtx("contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"))
+	hits3, misses3, _ := scanner.SubgraphCacheStats()
+
+	if len(closure3) != len(closure1) {
+		t.Errorf("re-walk closure length differs: first=%d third=%d", len(closure1), len(closure3))
+	}
+
+	for i, p := range closure3 {
+		if i >= len(closure1) {
+			break
+		}
+
+		if p != closure1[i] {
+			t.Errorf("re-walk diverges at index %d: first=%q third=%q", i, closure1[i], p)
+
+			break
+		}
+	}
+
+	missesAcrossThird := misses3 - missesBefore3
+
+	if missesAcrossThird > 5 {
+		t.Errorf("re-walk added %d new misses — cache is not durable across repeat WalkClosure on the same key "+
+			"(hits delta=%d)", missesAcrossThird, hits3-hitsBefore3)
+	}
+}
