@@ -333,23 +333,23 @@ func TestSysIncl_IncluderFilterCache_HitProducesEqualResult(t *testing.T) {
 	view := set.PreparePerSource("contrib/libs/musl/src/string/strlen.c")
 
 	// First call warms the cache for this includerPath.
-	got1, _ := view.LookupIncluderKeyed("contrib/libs/musl/src/string/strlen.c", "features.h")
+	got1, _, _ := view.LookupIncluderKeyed("contrib/libs/musl/src/string/strlen.c", "features.h")
 
 	// Second call with a different header — should reuse the cached
 	// active-records subset for the includer.
-	got2, _ := view.LookupIncluderKeyed("contrib/libs/musl/src/string/strlen.c", "string.h")
+	got2, _, _ := view.LookupIncluderKeyed("contrib/libs/musl/src/string/strlen.c", "string.h")
 
 	// Independent recompute via a fresh view (its cache starts empty,
 	// so the result here is the uncached path's output).
 	fresh := set.PreparePerSource("contrib/libs/musl/src/string/strlen.c")
-	want2, _ := fresh.LookupIncluderKeyed("contrib/libs/musl/src/string/strlen.c", "string.h")
+	want2, _, _ := fresh.LookupIncluderKeyed("contrib/libs/musl/src/string/strlen.c", "string.h")
 
 	if !stringSlicesEqualUnordered(got2, want2) {
 		t.Fatalf("cache hit returned different result from uncached recompute:\n got=%v\nwant=%v", got2, want2)
 	}
 
 	// And the first warmer call's result must also be reproducible.
-	freshFeatures, _ := fresh.LookupIncluderKeyed("contrib/libs/musl/src/string/strlen.c", "features.h")
+	freshFeatures, _, _ := fresh.LookupIncluderKeyed("contrib/libs/musl/src/string/strlen.c", "features.h")
 
 	if !stringSlicesEqualUnordered(got1, freshFeatures) {
 		t.Fatalf("first call result not reproducible across views:\n got=%v\nwant=%v", got1, freshFeatures)

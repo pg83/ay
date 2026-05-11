@@ -586,6 +586,198 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 	}
 }
 
+// TestScanner_QuotedMultiTargetSysincl_OwnAddIncl pins the PR-36 fix:
+// a quoted include `#include "cxxabi.h"` resolved via OwnAddIncl (not
+// the same directory as the includer) MUST pick up sysincl multi-target
+// alternates. This mirrors the libcxxabi-parts pattern:
+//   - Source: libcxxabi-parts/src/abort_message.cpp
+//   - `abort_message.h` does `#include "cxxabi.h"` (quoted)
+//   - OwnAddIncl=libcxxabi/include → finds libcxxabi/include/cxxabi.h
+//   - stl-to-libcxx.yml maps cxxabi.h to BOTH libcxxabi/include/cxxabi.h
+//     AND libcxxrt/include/cxxabi.h (multi-target, ≥ 2 paths)
+//   - Reference graph includes both — the PR-35w gate was too aggressive.
+//
+// The synthetic tree: `src/` holds the source and header; `libcxxabi/include/`
+// holds the "local" cxxabi.h (via OwnAddIncl); `libcxxrt/include/` holds the
+// sysincl alternate. The sysincl record is multi-target (2 non-empty paths).
+// With the PR-36 fix, both paths appear in the closure. Without it, only
+// `libcxxabi/include/cxxabi.h` would appear (gate short-circuits sysincl).
+func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
+	dir := t.TempDir()
+
+	mkdirs := []string{
+		"src",
+		"libcxxabi/include",
+		"libcxxrt/include",
+	}
+
+	for _, p := range mkdirs {
+		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", p, err)
+		}
+	}
+
+	// src/header.h does `#include "cxxabi.h"` (quoted). Same-dir
+	// `src/cxxabi.h` does NOT exist — forces OwnAddIncl resolution.
+	header := []byte(`#include "cxxabi.h"
+`)
+
+	src := []byte(`#include "header.h"
+`)
+
+	if err := os.WriteFile(filepath.Join(dir, "src/header.h"), header, 0o644); err != nil {
+		t.Fatalf("write header.h: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "src/source.cpp"), src, 0o644); err != nil {
+		t.Fatalf("write source.cpp: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "libcxxabi/include/cxxabi.h"), []byte("// libcxxabi cxxabi.h\n"), 0o644); err != nil {
+		t.Fatalf("write libcxxabi/include/cxxabi.h: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "libcxxrt/include/cxxabi.h"), []byte("// libcxxrt cxxabi.h\n"), 0o644); err != nil {
+		t.Fatalf("write libcxxrt/include/cxxabi.h: %v", err)
+	}
+
+	// Multi-target sysincl: cxxabi.h maps to BOTH libcxxabi and libcxxrt.
+	// HasMultiTarget must be set explicitly on hand-built records (YAML
+	// loading sets it automatically via parseSysInclYAML's flushRecord).
+	sysincl := SysInclSet{
+		{
+			Filter:         nil,
+			KeyBySource:    false,
+			HasMultiTarget: true,
+			Mappings: map[string][]string{
+				"cxxabi.h": {
+					"libcxxabi/include/cxxabi.h",
+					"libcxxrt/include/cxxabi.h",
+				},
+			},
+		},
+	}
+
+	scanner := NewIncludeScanner(dir, sysincl)
+	closure := scanner.WalkClosure(ScanContext{
+		SourceRel:  "src/source.cpp",
+		OwnAddIncl: []string{"libcxxabi/include"},
+	})
+
+	hasLibcxxabi := false
+	hasLibcxxrt := false
+
+	for _, p := range closure {
+		switch {
+		case strings.HasSuffix(p, "/libcxxabi/include/cxxabi.h"):
+			hasLibcxxabi = true
+		case strings.HasSuffix(p, "/libcxxrt/include/cxxabi.h"):
+			hasLibcxxrt = true
+		}
+	}
+
+	if !hasLibcxxabi {
+		t.Errorf("closure missing libcxxabi/include/cxxabi.h (OwnAddIncl resolution broken): %v", closure)
+	}
+
+	if !hasLibcxxrt {
+		t.Errorf("closure missing libcxxrt/include/cxxabi.h — PR-36 multi-target bypass failed "+
+			"for OwnAddIncl-resolved quoted include: %v", closure)
+	}
+}
+
+// TestScanner_QuotedSameDirStillGated pins that the PR-36 bypass does
+// NOT fire when the quoted include was resolved via the SAME DIRECTORY
+// as the includer. Same-dir resolution means the file is literally
+// adjacent — sysincl alternates are inappropriate regardless of the
+// record's target count. This guards the libcxxrt/dwarf_eh.h → unwind.h
+// regression that PR-35w originally closed: `libcxxrt/unwind.h` exists
+// in the same directory as `dwarf_eh.h`, so the PR-36 multi-target bypass
+// must NOT fire (even though the stl-to-libcxx.yml unwind.h record is
+// multi-target) and `libcxx/include/unwind.h` must NOT appear.
+func TestScanner_QuotedSameDirStillGated(t *testing.T) {
+	dir := t.TempDir()
+
+	mkdirs := []string{
+		"libcxxrt",
+		"libcxx/include",
+	}
+
+	for _, p := range mkdirs {
+		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", p, err)
+		}
+	}
+
+	// libcxxrt/dwarf_eh.h does `#include "unwind.h"` (quoted).
+	// libcxxrt/unwind.h EXISTS (same-dir) — same-dir resolution wins.
+	dwarf := []byte(`#include "unwind.h"
+`)
+	src := []byte(`#include "dwarf_eh.h"
+`)
+
+	if err := os.WriteFile(filepath.Join(dir, "libcxxrt/dwarf_eh.h"), dwarf, 0o644); err != nil {
+		t.Fatalf("write dwarf_eh.h: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "libcxxrt/source.cc"), src, 0o644); err != nil {
+		t.Fatalf("write source.cc: %v", err)
+	}
+
+	// libcxxrt/unwind.h exists in the SAME DIR as dwarf_eh.h.
+	if err := os.WriteFile(filepath.Join(dir, "libcxxrt/unwind.h"), []byte("// libcxxrt unwind.h\n"), 0o644); err != nil {
+		t.Fatalf("write libcxxrt/unwind.h: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "libcxx/include/unwind.h"), []byte("// libcxx unwind.h\n"), 0o644); err != nil {
+		t.Fatalf("write libcxx/include/unwind.h: %v", err)
+	}
+
+	// Multi-target sysincl: unwind.h maps to BOTH libcxx and libcxxrt.
+	// HasMultiTarget must be set explicitly on hand-built records (YAML
+	// loading sets it automatically via parseSysInclYAML's flushRecord).
+	sysincl := SysInclSet{
+		{
+			Filter:         nil,
+			KeyBySource:    false,
+			HasMultiTarget: true,
+			Mappings: map[string][]string{
+				"unwind.h": {
+					"libcxx/include/unwind.h",
+					"libcxxrt/unwind.h",
+				},
+			},
+		},
+	}
+
+	scanner := NewIncludeScanner(dir, sysincl)
+	closure := scanner.WalkClosure(ScanContext{
+		SourceRel:  "libcxxrt/source.cc",
+		OwnAddIncl: []string{"libcxxrt"},
+	})
+
+	hasLibcxxrt := false
+	hasLibcxxSpurious := false
+
+	for _, p := range closure {
+		switch {
+		case strings.HasSuffix(p, "/libcxxrt/unwind.h"):
+			hasLibcxxrt = true
+		case strings.HasSuffix(p, "/libcxx/include/unwind.h"):
+			hasLibcxxSpurious = true
+		}
+	}
+
+	if !hasLibcxxrt {
+		t.Errorf("closure missing local libcxxrt/unwind.h (same-dir resolution broken): %v", closure)
+	}
+
+	if hasLibcxxSpurious {
+		t.Errorf("closure contains spurious libcxx/include/unwind.h — PR-36 same-dir gate failed "+
+			"(must NOT bypass for same-dir resolved quoted includes): %v", closure)
+	}
+}
+
 // TestScanner_QuotedSysinclFiresOnLocalMiss is the converse pin: a
 // quoted include whose local search-path resolution FAILED must still
 // fall through to sysincl. The gate is "skip sysincl when local

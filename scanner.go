@@ -153,12 +153,12 @@ type IncludeScanner struct {
 	// same set of source-keyed paths for any (includer, target). Most
 	// CC sources visit a few hundred distinct targets; the cache hits
 	// on every repeat target within one source's closure.
-	sysinclSourceCache map[sysinclSourceKey][]string
+	sysinclSourceCache map[sysinclSourceKey]sysinclCacheEntry
 	// sysinclIncluderCache memoises the includer-keyed half across
 	// (includerRel, target). The result is source-INdependent
 	// (includer-keyed records' filters depend only on the includer);
 	// every CC reaching the same (includer, target) shares this entry.
-	sysinclIncluderCache map[sysinclIncluderKey][]string
+	sysinclIncluderCache map[sysinclIncluderKey]sysinclCacheEntry
 
 	visitedPool sync.Pool // *map[string]struct{}
 	orderPool   sync.Pool // *[]string
@@ -259,6 +259,16 @@ type sysinclIncluderKey struct {
 	target      string
 }
 
+// sysinclCacheEntry is the value stored in sysinclSourceCache and
+// sysinclIncluderCache. `paths` carries the resolved absolute paths;
+// `hasMultiTarget` is true when any contributing record maps the
+// queried header to ≥ 2 non-empty paths (used by resolveDirective's
+// PR-36 gate refinement).
+type sysinclCacheEntry struct {
+	paths          []string
+	hasMultiTarget bool
+}
+
 type resolveKey struct {
 	ctxHash  uint64
 	includer string
@@ -293,8 +303,8 @@ func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
 		resolveCache:         make(map[resolveKey][]string, 131072),
 		viewCache:            make(map[string]PerSourceView, 4096),
 		emittedRelCache:      make(map[string]string, 4096),
-		sysinclSourceCache:   make(map[sysinclSourceKey][]string, 524288),
-		sysinclIncluderCache: make(map[sysinclIncluderKey][]string, 32768),
+		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 524288),
+		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 32768),
 		// subgraphCache: header graph has ~16k unique nodes in the
 		// tools/archiver closure; with a handful of (ctxHash,
 		// srcClassHash) equivalence classes the cache populates to
@@ -1037,19 +1047,25 @@ func isYasmLike(absPath string) bool {
 //     musl/include/stddef.h (via libc-to-musl.yml) — both records
 //     are active and both contribute to the input set.
 //   - For QUOTED includes (`#include "X"`), sysincl is GATED by
-//     search-path resolution: when the local search path resolved
-//     the directive to at least one existing file, sysincl is
-//     suppressed. Quoted-form includes target a project-local file
+//     search-path resolution and by the resolution tier:
+//     (a) Same-directory resolution (`includerDir/X` exists): sysincl
+//     is ALWAYS suppressed. Quoted-form includes resolved in the same
+//     directory as the includer target a project-local file
 //     (`#include "elf.h"` from yasm/ targets yasm/elf.h, not
-//     musl/include/elf.h). The upstream ymake scanner only consults
-//     sysincl alternates for quoted includes when local resolution
-//     fails — text-blindly unioning both pulls in spurious musl/libc
-//     mappings (PR-35t R3+R5: 30 elf.h-style + 4 unwind.h-quoted-self
-//     pairs across the M2 closure). Angle-bracket includes still
-//     union sysincl on top because libcxx/libcxxrt/libunwind multi-
-//     target headers (e.g. `<unwind.h>`, `<cxxabi.h>`) need both the
-//     local libcxx resolution AND the libcxxrt sysincl record to
-//     match the reference scan.
+//     musl/include/elf.h). Gate introduced in PR-35w (PR-35t R3+R5:
+//     30 elf.h-style + 4 unwind.h-quoted-self pairs).
+//     (b) ADDINCL/peer/base-search resolution + single-target sysincl:
+//     sysincl is ALSO suppressed (same-as-before behaviour).
+//     (c) ADDINCL/peer/base-search resolution + multi-target sysincl
+//     (≥ 2 non-empty paths for the queried header in any contributing
+//     record): sysincl IS added on top (PR-36 fix). The multi-target
+//     case is `cxxabi.h` / `unwind.h` in stl-to-libcxx.yml: a
+//     `#include "cxxabi.h"` from libcxxabi-parts resolves locally to
+//     libcxxabi/include/cxxabi.h (via OwnAddIncl), but the reference
+//     also expects libcxxrt/include/cxxabi.h from sysincl. Gate (a)
+//     still correctly excludes libcxxrt/dwarf_eh.h `#include "unwind.h"`
+//     because unwind.h lives in the SAME dir as dwarf_eh.h.
+//     Angle-bracket includes still union sysincl on top unconditionally.
 func (s *IncludeScanner) resolve(includerAbs string, d includeDirective, ctx *ScanContext, ctxHash uint64) []string {
 	// `#include_next` directives resolve to nothing in the upstream
 	// reference scan: every observed live use is the libcxx
@@ -1086,24 +1102,6 @@ func (s *IncludeScanner) resolve(includerAbs string, d includeDirective, ctx *Sc
 	// target) reused across every source reaching that includer.
 	searchOut := s.resolveSearchPath(includerAbs, d, ctx, ctxHash)
 
-	// PR-35w sysincl multi-target gating: for QUOTED includes
-	// (`#include "foo.h"`), when the local search path resolved
-	// successfully, suppress the sysincl layer. Quoted-form
-	// directives target a project-local header — `#include "elf.h"`
-	// from a yasm-internal source means yasm/elf.h, never the
-	// libc-to-musl mapping `elf.h → contrib/libs/musl/include/elf.h`.
-	// The text-blind union appended musl/libc/libcxxrt headers on top
-	// of the legitimately-resolved local path, producing 34 L2-divergent
-	// pairs in the M2 closure (PR-35t R3 + R5 subset). Angle-bracket
-	// includes (`<unwind.h>`, `<cxxabi.h>`) keep the union — those
-	// genuinely need sysincl alternates because libcxx/libcxxrt/
-	// libunwind ship multi-target sysincl records for the same logical
-	// header. The gate is asymmetric by include kind, not by whether
-	// search-path resolved.
-	if d.kind == includeQuoted && len(searchOut) > 0 {
-		return searchOut
-	}
-
 	// Sysincl: add EVERY matching record's contribution on top of the
 	// search-path result. PR-35e: per-record source-vs-includer
 	// keying — each SysIncl record carries a `KeyBySource` flag
@@ -1120,7 +1118,40 @@ func (s *IncludeScanner) resolve(includerAbs string, d includeDirective, ctx *Sc
 	// no longer fire on libcxx-internal includer chains reaching
 	// uchar.h/wchar.h via `__has_include_next` shadow patterns.
 	includerRel := strings.TrimPrefix(includerAbs, s.sourceRootSlash)
-	mappings := s.sysinclLookup(ctx.SourceRel, includerRel, d.target)
+	mappings, hasMultiTarget := s.sysinclLookup(ctx.SourceRel, includerRel, d.target)
+
+	// PR-35w / PR-36 quoted-include gate. For QUOTED includes when the
+	// local search path found at least one file, sysincl is suppressed
+	// in two cases:
+	//   1. The file was found in the SAME DIRECTORY as the includer
+	//      (`#include "elf.h"` from yasm/ targets yasm/elf.h; the
+	//      libc-to-musl mapping must not fire regardless of target
+	//      count). Always gate — PR-35w fix preserved.
+	//   2. The sysincl result is single-target (no record maps this
+	//      header to ≥ 2 non-empty paths). Gate applies — PR-35w fix
+	//      preserved for the single-target over-emission cases.
+	// Exception (PR-36): if the file was found via a SEARCH-PATH TIER
+	// OTHER THAN same-dir (i.e. OwnAddIncl / PeerAddIncl / BaseSearch)
+	// AND the sysincl result is multi-target, the gate is bypassed.
+	// Example: `#include "cxxabi.h"` from libcxxabi-parts resolves
+	// locally to libcxxabi/include/cxxabi.h via OwnAddIncl, but the
+	// stl-to-libcxx.yml multi-target record also contributes
+	// libcxxrt/include/cxxabi.h — and the reference graph includes both.
+	if d.kind == includeQuoted && len(searchOut) > 0 {
+		incDir := pathDir(includerRel)
+
+		var sameDirAbs string
+
+		if incDir != "" {
+			sameDirAbs = s.sourceRootSlash + normalisePath(incDir+"/"+d.target)
+		} else {
+			sameDirAbs = s.sourceRootSlash + d.target
+		}
+
+		if !hasMultiTarget || searchOut[0] == sameDirAbs {
+			return searchOut
+		}
+	}
 
 	if len(mappings) == 0 {
 		return searchOut
@@ -1207,21 +1238,28 @@ mapLoop:
 // pooling refactor preserved — while the source-keyed half is reused
 // within a single source's closure for repeat targets.
 //
+// Returns the unioned path slice and a hasMultiTarget bool. hasMultiTarget
+// is true when any contributing record (from either the source-keyed or
+// includer-keyed half) maps `target` to ≥ 2 non-empty paths. Used by
+// resolveDirective (PR-36) to decide whether the PR-35w quoted-include
+// gate applies.
+//
 // Returns either srcMappings (when incMappings is empty), incMappings
 // (when srcMappings is empty), or a freshly-allocated union slice. The
 // dedup uses a linear scan over `out` because typical sysincl mapping
 // lists are 1-3 entries long; a map allocation per call would dominate
 // the per-resolve cost.
-func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel, target string) []string {
-	srcMappings := s.sysinclSourceLookup(sourceRel, target)
-	incMappings := s.sysinclIncluderLookup(includerRel, target)
+func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel, target string) ([]string, bool) {
+	srcMappings, srcMT := s.sysinclSourceLookup(sourceRel, target)
+	incMappings, incMT := s.sysinclIncluderLookup(includerRel, target)
+	hasMultiTarget := srcMT || incMT
 
 	if len(srcMappings) == 0 {
-		return incMappings
+		return incMappings, hasMultiTarget
 	}
 
 	if len(incMappings) == 0 {
-		return srcMappings
+		return srcMappings, hasMultiTarget
 	}
 
 	out := make([]string, 0, len(srcMappings)+len(incMappings))
@@ -1238,32 +1276,35 @@ incLoop:
 		out = append(out, p)
 	}
 
-	return out
+	return out, hasMultiTarget
 }
 
-func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) []string {
+func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]string, bool) {
 	key := sysinclSourceKey{sourceRel: sourceRel, target: target}
 
 	// PR-34n: lock removed (single-goroutine).
 	if cached, ok := s.sysinclSourceCache[key]; ok {
-		return cached
+		return cached.paths, cached.hasMultiTarget
 	}
 
 	view := s.perSourceView(sourceRel)
-	rels, _ := view.LookupSourceKeyed(target)
+	rels, _, hasMultiTarget := view.LookupSourceKeyed(target)
 
-	mappings := s.absifyRels(rels)
-	s.sysinclSourceCache[key] = mappings
+	entry := sysinclCacheEntry{
+		paths:          s.absifyRels(rels),
+		hasMultiTarget: hasMultiTarget,
+	}
+	s.sysinclSourceCache[key] = entry
 
-	return mappings
+	return entry.paths, entry.hasMultiTarget
 }
 
-func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) []string {
+func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) ([]string, bool) {
 	key := sysinclIncluderKey{includerRel: includerRel, target: target}
 
 	// PR-34n: lock removed (single-goroutine).
 	if cached, ok := s.sysinclIncluderCache[key]; ok {
-		return cached
+		return cached.paths, cached.hasMultiTarget
 	}
 
 	// PerSourceView's includerKeyed slice is identical regardless of
@@ -1271,12 +1312,15 @@ func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) []str
 	// same SysInclSet). Use the prepared anySrcView (initialised once
 	// at NewIncludeScanner) to access the includer-keyed records
 	// without going through perSourceView.
-	rels, _ := s.anySrcView.LookupIncluderKeyed(includerRel, target)
+	rels, _, hasMultiTarget := s.anySrcView.LookupIncluderKeyed(includerRel, target)
 
-	mappings := s.absifyRels(rels)
-	s.sysinclIncluderCache[key] = mappings
+	entry := sysinclCacheEntry{
+		paths:          s.absifyRels(rels),
+		hasMultiTarget: hasMultiTarget,
+	}
+	s.sysinclIncluderCache[key] = entry
 
-	return mappings
+	return entry.paths, entry.hasMultiTarget
 }
 
 // absifyRels converts a list of SOURCE_ROOT-relative paths (as produced

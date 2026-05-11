@@ -76,10 +76,20 @@ import (
 // + 23 JS-derived CCs whose chain reaches `__mbstate_t.h`'s
 // `#include_next <uchar.h>` (a `#elif` branch ymake never takes when
 // `_LIBCPP_HAS_MUSL_LIBC` is set).
+//
+// `HasMultiTarget` is true when at least one header in Mappings maps
+// to ≥ 2 distinct non-empty paths (a "fan-out" record). Set at load
+// time in parseSysInclYAML. Used by scanner.go::resolveDirective to
+// decide whether the PR-35w quoted-include gate must yield to
+// sysincl when the include was resolved via OwnAddIncl rather than the
+// same-directory search (PR-36 fix: `cxxabi.h` and `unwind.h` in
+// stl-to-libcxx.yml are multi-target and must contribute even for
+// quoted includes resolved by OwnAddIncl).
 type SysIncl struct {
-	Filter      *sourceFilter
-	KeyBySource bool
-	Mappings    map[string][]string
+	Filter         *sourceFilter
+	KeyBySource    bool
+	HasMultiTarget bool
+	Mappings       map[string][]string
 }
 
 // SysInclSet is the union of all sysincl records loaded from
@@ -227,8 +237,8 @@ func (s SysInclSet) PreparePerSource(sourcePath string) PerSourceView {
 // pre-filtered when the view was constructed; INCLUDER-keyed records
 // are filter-checked here.
 func (v PerSourceView) Lookup(includerPath, header string) ([]string, bool) {
-	srcOut, srcFound := v.LookupSourceKeyed(header)
-	incOut, incFound := v.LookupIncluderKeyed(includerPath, header)
+	srcOut, srcFound, _ := v.LookupSourceKeyed(header)
+	incOut, incFound, _ := v.LookupIncluderKeyed(includerPath, header)
 
 	if !srcFound && !incFound {
 		return nil, false
@@ -272,11 +282,17 @@ func (v PerSourceView) Lookup(includerPath, header string) ([]string, bool) {
 // satisfied at view construction). Callers that want to cache the
 // source-keyed half independently of the includer-keyed half use this
 // directly.
-func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool) {
+//
+// The third return value `hasMultiTarget` is true when any record
+// contributing to this lookup has HasMultiTarget=true AND maps
+// `header` to ≥ 2 non-empty paths. Used by scanner.go::resolveDirective
+// (PR-36) to decide whether the PR-35w quoted-include gate applies.
+func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool, bool) {
 	var (
-		out   []string
-		found bool
-		seen  map[string]struct{}
+		out            []string
+		found          bool
+		hasMultiTarget bool
+		seen           map[string]struct{}
 	)
 
 	for _, rec := range v.activeSourceKeyed {
@@ -287,6 +303,20 @@ func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool) {
 		}
 
 		found = true
+
+		if rec.HasMultiTarget {
+			count := 0
+
+			for _, p := range paths {
+				if p != "" {
+					count++
+				}
+			}
+
+			if count >= 2 {
+				hasMultiTarget = true
+			}
+		}
 
 		for _, p := range paths {
 			if p == "" {
@@ -306,7 +336,7 @@ func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool) {
 		}
 	}
 
-	return out, found
+	return out, found, hasMultiTarget
 }
 
 // LookupIncluderKeyed returns the union of paths contributed by the
@@ -322,13 +352,19 @@ func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool) {
 // share the same includerPath, so the linear filter walk runs once per
 // unique includerPath and the per-header path then only iterates the
 // already-accepting subset. PR-34j.
-func (v PerSourceView) LookupIncluderKeyed(includerPath, header string) ([]string, bool) {
+//
+// The third return value `hasMultiTarget` is true when any record
+// contributing to this lookup has HasMultiTarget=true AND maps
+// `header` to ≥ 2 non-empty paths. Used by scanner.go::resolveDirective
+// (PR-36) to decide whether the PR-35w quoted-include gate applies.
+func (v PerSourceView) LookupIncluderKeyed(includerPath, header string) ([]string, bool, bool) {
 	active := v.activeIncluderRecords(includerPath)
 
 	var (
-		out   []string
-		found bool
-		seen  map[string]struct{}
+		out            []string
+		found          bool
+		hasMultiTarget bool
+		seen           map[string]struct{}
 	)
 
 	for _, rec := range active {
@@ -339,6 +375,20 @@ func (v PerSourceView) LookupIncluderKeyed(includerPath, header string) ([]strin
 		}
 
 		found = true
+
+		if rec.HasMultiTarget {
+			count := 0
+
+			for _, p := range paths {
+				if p != "" {
+					count++
+				}
+			}
+
+			if count >= 2 {
+				hasMultiTarget = true
+			}
+		}
 
 		for _, p := range paths {
 			if p == "" {
@@ -358,7 +408,7 @@ func (v PerSourceView) LookupIncluderKeyed(includerPath, header string) ([]strin
 		}
 	}
 
-	return out, found
+	return out, found, hasMultiTarget
 }
 
 // activeIncluderRecords returns the subset of `v.includerKeyed` whose
@@ -589,6 +639,27 @@ func parseSysInclYAML(name, text string) []SysIncl {
 		flushPending()
 
 		if current != nil {
+			// Set HasMultiTarget: true when any header mapping in this
+			// record has ≥ 2 non-empty resolution targets (fan-out).
+			// Used by scanner.go::resolveDirective to bypass the PR-35w
+			// quoted-include gate when the include was resolved via
+			// OwnAddIncl rather than same-directory search.
+			for _, paths := range current.Mappings {
+				count := 0
+
+				for _, p := range paths {
+					if p != "" {
+						count++
+					}
+				}
+
+				if count >= 2 {
+					current.HasMultiTarget = true
+
+					break
+				}
+			}
+
 			out = append(out, *current)
 			current = nil
 			inIncludes = false
