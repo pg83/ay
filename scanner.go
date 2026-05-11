@@ -233,8 +233,24 @@ type IncludeScanner struct {
 	// construct scanners directly via NewIncludeScanner leave this nil and
 	// operate with on-disk-only resolution). Non-nil after GenWith wires a
 	// CodegenRegistry per the per-scanner architecture (F-7-A).
-	// F-7-C integrates this into fileExists / parseIncludes.
+	// F-7-C integrates this into resolveSearchPath via the codegenLocator.
 	codegen *CodegenRegistry
+
+	// fallbackLocators holds the F-7-C VFS-codegen tier (and any future
+	// non-FS resolution tier). Consulted from resolveSearchPath AFTER the
+	// regular on-disk search-path walk fails for every candidate. The
+	// FS tier is NOT in this list — it stays inline in resolveSearchPath
+	// through the existing fileExists path because each search-path tier
+	// (same-dir / own-ADDINCL / peer-ADDINCL / base) prepends a different
+	// prefix to the include target, and only the FS tier participates in
+	// that per-tier search. The codegen tier resolves on the target name
+	// alone (no per-tier prefix; the path lives under $(BUILD_ROOT)/) and
+	// runs once as a fallback when every FS-prefix candidate missed.
+	//
+	// PR-M3-F-7-C: instantiated as [codegenLocator{reg: codegen}] when
+	// `codegen` is non-nil; nil-codegen scanners (tests) get a nil slice
+	// and the F-7-C fallback is a no-op.
+	fallbackLocators []pathLocator
 }
 
 // resolveInnerKey is the per-scanCtx resolve cache key. `ctxHash` is NOT
@@ -556,8 +572,18 @@ func (s *IncludeScanner) emittedRel(abs string) string {
 		return cached
 	}
 
-	rel := strings.TrimPrefix(abs, s.sourceRootSlash)
-	out := "$(SOURCE_ROOT)/" + rel
+	// PR-M3-F-7-C: registry-resolved paths carry the literal $(BUILD_ROOT)/...
+	// prefix (generated files never exist under sourceRoot at gen time). Pass
+	// them through verbatim — TrimPrefix below would otherwise leave the
+	// $(BUILD_ROOT)/ prefix intact and the concat would double-prefix to
+	// $(SOURCE_ROOT)/$(BUILD_ROOT)/... .
+	var out string
+	if strings.HasPrefix(abs, "$(BUILD_ROOT)/") {
+		out = abs
+	} else {
+		rel := strings.TrimPrefix(abs, s.sourceRootSlash)
+		out = "$(SOURCE_ROOT)/" + rel
+	}
 
 	s.emittedRelCache[abs] = out
 
@@ -731,13 +757,65 @@ func (sc *scanCtx) plainDfs(absPath string, visited map[string]struct{}, order *
 	visited[absPath] = struct{}{}
 	*order = append(*order, absPath)
 
-	directives := sc.scanner.parseIncludes(absPath)
+	sc.forEachResolvedChild(absPath, func(rabs string) {
+		sc.dfs(rabs, visited, order)
+	})
+}
+
+// forEachResolvedChild invokes `fn` once per resolved-child path of
+// `absPath`, dispatching on path provenance:
+//
+//   - $(BUILD_ROOT)/<...> path AND present in the per-scanner
+//     CodegenRegistry: the children are the entry's EmitsIncludes,
+//     already absolute. No parseIncludes/resolve — the file does not
+//     exist on disk.
+//   - any other absPath: the children come from parseIncludes(absPath)
+//     piped through resolve() (the legacy on-disk path).
+//
+// Registry-resolved children are emitted in EmitsIncludes order, which is
+// produced sorted by the emitters in F-7-B (protoDirectImportIncludes,
+// cfIncludeDirectives, EN registration each sort their results). Caller
+// is responsible for visited-set deduplication.
+//
+// PR-M3-F-7-C.
+func (sc *scanCtx) forEachResolvedChild(absPath string, fn func(rabs string)) {
+	s := sc.scanner
+
+	if strings.HasPrefix(absPath, "$(BUILD_ROOT)/") {
+		if s.codegen != nil {
+			if info, ok := s.codegen.Lookup(absPath); ok {
+				for _, rabs := range info.EmitsIncludes {
+					// Translate $(SOURCE_ROOT)/<rel> entries to their
+					// on-disk absolute form so the recursive walk can
+					// parseIncludes / fileExists them. $(BUILD_ROOT)/
+					// entries stay as-is (they trip the registry branch
+					// on the next recursion).
+					if strings.HasPrefix(rabs, "$(SOURCE_ROOT)/") {
+						rabs = s.sourceRootSlash + rabs[len("$(SOURCE_ROOT)/"):]
+					}
+
+					fn(rabs)
+				}
+
+				return
+			}
+		}
+
+		// $(BUILD_ROOT) path not in the registry: nothing to walk. The
+		// path may be a registered output reached as a leaf (no
+		// EmitsIncludes, e.g. an R6 .rl6.cpp) or an unknown BUILD_ROOT
+		// path the caller produced through some other channel. Either
+		// way, no children — parseIncludes would fail os.ReadFile.
+		return
+	}
+
+	directives := s.parseIncludes(absPath)
 
 	for _, d := range directives {
 		resolved := sc.resolve(absPath, d)
 
 		for _, rabs := range resolved {
-			sc.dfs(rabs, visited, order)
+			fn(rabs)
 		}
 	}
 }
@@ -892,41 +970,36 @@ func (sc *scanCtx) walkSubgraph(absPath string, srcClassHash uint64, visited map
 	visited[absPath] = struct{}{}
 	*order = append(*order, absPath)
 
-	directives := sc.scanner.parseIncludes(absPath)
 	clean := true
 
-	for _, d := range directives {
-		resolved := sc.resolve(absPath, d)
+	sc.forEachResolvedChild(absPath, func(rabs string) {
+		if _, seen := visited[rabs]; seen {
+			return
+		}
 
-		for _, rabs := range resolved {
-			if _, seen := visited[rabs]; seen {
-				continue
-			}
+		childSg, ok := sc.subgraph(rabs, srcClassHash)
 
-			childSg, ok := sc.subgraph(rabs, srcClassHash)
-
-			if ok {
-				// Clean child subgraph — merge into our walk.
-				for _, p := range childSg {
-					if _, seen := visited[p]; seen {
-						continue
-					}
-
-					visited[p] = struct{}{}
-					*order = append(*order, p)
+		if ok {
+			// Clean child subgraph — merge into our walk.
+			for _, p := range childSg {
+				if _, seen := visited[p]; seen {
+					continue
 				}
 
-				continue
+				visited[p] = struct{}{}
+				*order = append(*order, p)
 			}
 
-			// Tainted child. Plain-dfs into our local visited+order
-			// so the walk enumerates the cycle's reachable nodes.
-			// `clean=false` propagates upward.
-			clean = false
-
-			sc.walkSubgraphTainted(rabs, srcClassHash, visited, order)
+			return
 		}
-	}
+
+		// Tainted child. Plain-dfs into our local visited+order
+		// so the walk enumerates the cycle's reachable nodes.
+		// `clean=false` propagates upward.
+		clean = false
+
+		sc.walkSubgraphTainted(rabs, srcClassHash, visited, order)
+	})
 
 	return clean
 }
@@ -944,34 +1017,28 @@ func (sc *scanCtx) walkSubgraphTainted(absPath string, srcClassHash uint64, visi
 	visited[absPath] = struct{}{}
 	*order = append(*order, absPath)
 
-	directives := sc.scanner.parseIncludes(absPath)
+	sc.forEachResolvedChild(absPath, func(rabs string) {
+		if _, seen := visited[rabs]; seen {
+			return
+		}
 
-	for _, d := range directives {
-		resolved := sc.resolve(absPath, d)
+		childSg, ok := sc.subgraph(rabs, srcClassHash)
 
-		for _, rabs := range resolved {
-			if _, seen := visited[rabs]; seen {
-				continue
-			}
-
-			childSg, ok := sc.subgraph(rabs, srcClassHash)
-
-			if ok {
-				for _, p := range childSg {
-					if _, seen := visited[p]; seen {
-						continue
-					}
-
-					visited[p] = struct{}{}
-					*order = append(*order, p)
+		if ok {
+			for _, p := range childSg {
+				if _, seen := visited[p]; seen {
+					continue
 				}
 
-				continue
+				visited[p] = struct{}{}
+				*order = append(*order, p)
 			}
 
-			sc.walkSubgraphTainted(rabs, srcClassHash, visited, order)
+			return
 		}
-	}
+
+		sc.walkSubgraphTainted(rabs, srcClassHash, visited, order)
+	})
 }
 
 // parseIncludes returns the parsed include directives for the file at
@@ -1607,8 +1674,42 @@ func (sc *scanCtx) resolveSearchPath(includerAbs string, d includeDirective) []s
 			}
 
 			if addPath(candidate) {
+				searchPathFound = true
+
 				break
 			}
+		}
+	}
+
+	// PR-M3-F-7-C: VFS fallback tier — consult fallbackLocators (the
+	// codegen registry today; extensible to future VFS tiers) ONLY when
+	// every on-disk search-path candidate missed. Generated files
+	// (.pb.h, _serialized.h, .ev.pb.h, …) do not exist on disk at gen
+	// time, so fileExists returns false for every on-disk candidate.
+	// The locator is queried with the canonical $(BUILD_ROOT)/<target>
+	// form — consumer #includes carry the full BUILD_ROOT-relative path
+	// (verified against the reference graph: every generated-header
+	// include in the M3 closure uses the full path under BUILD_ROOT,
+	// never a basename-only form).
+	//
+	// On-disk files always win over the VFS tier. This preserves M2
+	// byte-exactness: M2's closure contains no #include of any
+	// generated file (verified against sg.json: zero matches for
+	// "_serialized" / "pb.h" / "ev.pb").
+	if !searchPathFound && len(s.fallbackLocators) > 0 {
+		abs := "$(BUILD_ROOT)/" + d.target
+
+		for _, loc := range s.fallbackLocators {
+			if !loc.Exists(abs) {
+				continue
+			}
+
+			if _, dup := seen[abs]; !dup {
+				seen[abs] = struct{}{}
+				out = append(out, abs)
+			}
+
+			break
 		}
 	}
 
@@ -1693,8 +1794,81 @@ func normalisePath(p string) string {
 	return strings.Join(out, "/")
 }
 
+// pathLocator answers whether a path refers to a real file (on disk under
+// $(SOURCE_ROOT)) or a registered generated output (in the per-scanner
+// CodegenRegistry, under $(BUILD_ROOT)). The scanner consults locators in
+// priority order when resolving #include directives; for the F-7-C
+// integration the FS locator runs first and the VFS-codegen locator runs
+// as a fallback for $(BUILD_ROOT)/-rooted candidates that have no on-disk
+// counterpart at gen time.
+//
+// PR-M3-F-7-C.
+type pathLocator interface {
+	// Exists reports whether `abs` is reachable through this locator's
+	// backing store. `abs` is always one of:
+	//   - <sourceRoot>/<rel> — a real-filesystem path under the
+	//     scanner's source root.
+	//   - $(BUILD_ROOT)/<rel> — a VFS-rooted generated-output path.
+	// Locators may answer for one or the other (not both). The FS
+	// locator returns false for $(BUILD_ROOT)/ paths; the VFS-codegen
+	// locator returns false for <sourceRoot>/ paths.
+	Exists(abs string) bool
+}
+
+// fsLocator answers Exists for real-filesystem paths via the shared
+// parse-cache exists map (cached os.Stat). Returns false for non-FS
+// (e.g. $(BUILD_ROOT)/-prefixed) paths.
+//
+// PR-M3-F-7-C.
+type fsLocator struct {
+	pc *sharedParseCache
+}
+
+func (f fsLocator) Exists(abs string) bool {
+	if strings.HasPrefix(abs, "$(BUILD_ROOT)/") {
+		return false
+	}
+
+	if cached, ok := f.pc.exists[abs]; ok {
+		return cached
+	}
+
+	info, err := os.Stat(abs)
+	val := err == nil && !info.IsDir()
+
+	f.pc.exists[abs] = val
+
+	return val
+}
+
+// codegenLocator answers Exists for $(BUILD_ROOT)/-rooted paths via the
+// per-scanner CodegenRegistry. Returns false for FS paths and for any
+// $(BUILD_ROOT)/ path that has not been Register()ed. Lookup is O(1).
+//
+// PR-M3-F-7-C.
+type codegenLocator struct {
+	reg *CodegenRegistry
+}
+
+func (c codegenLocator) Exists(abs string) bool {
+	if c.reg == nil {
+		return false
+	}
+
+	if !strings.HasPrefix(abs, "$(BUILD_ROOT)/") {
+		return false
+	}
+
+	_, ok := c.reg.Lookup(abs)
+
+	return ok
+}
+
 // fileExists is a thin cached wrapper around os.Stat. Returns true
-// for regular files only (directories return false).
+// for regular files only (directories return false). Retained as the
+// per-scanner FS-tier predicate used by sysincl resolution and the
+// per-tier search-path walk; the F-7-C VFS-codegen fallback is handled
+// separately in resolveSearchPath.
 func (s *IncludeScanner) fileExists(absPath string) bool {
 	// PR-34n: lock removed (single-goroutine).
 	// PR-M3-perf-B: exists cache is shared between target and host scanners
