@@ -261,6 +261,38 @@ type RunAntlr4CppSplitStmt struct {
 	Line     int
 }
 
+// ResourcePair holds one (path, key) pair from a RESOURCE / RESOURCE_FILES
+// macro. The Path is the source-file path (module-relative) or "-" for a
+// kv-only entry; in the latter case Key carries the raw "name=value"
+// string fed to --kvs by the upstream packer.
+type ResourcePair struct {
+	Path string
+	Key  string
+}
+
+// ResourceStmt represents a `RESOURCE([DONT_PARSE] [DONT_COMPRESS]
+// path1 key1 path2 key2 ...)` invocation. Pairs preserves declaration
+// order; the DONT_PARSE / DONT_COMPRESS keywords (which the upstream
+// impl.cpp strips from the first two args) are dropped here and not
+// recorded — PR-A's hash + cmd_args derivation does not depend on
+// them.
+type ResourceStmt struct {
+	Pairs []ResourcePair
+	Line  int
+}
+
+// ResourceFilesStmt represents a `RESOURCE_FILES([DONT_COMPRESS]
+// [PREFIX p] [DEST d] [STRIP s] path1 path2 ...)` invocation. Args
+// is the raw token list; the upstream `build/plugins/res.py:onresource_files`
+// expansion into RESOURCE pairs (PREFIX/STRIP/DEST applied to each path,
+// `resfs/file/...` keys, `resfs/src/...=...` kvs) is performed in
+// `gen.go:collectStmts` so that downstream walkers see a uniform pair
+// list on `moduleData.resources`.
+type ResourceFilesStmt struct {
+	Args []string
+	Line int
+}
+
 func (*ModuleStmt) stmtMarker()                   {}
 func (*PeerdirStmt) stmtMarker()                  {}
 func (*SrcsStmt) stmtMarker()                     {}
@@ -284,6 +316,8 @@ func (*ConfigureFileStmt) stmtMarker()            {}
 func (*CreateBuildInfoStmt) stmtMarker()          {}
 func (*RunAntlr4CppStmt) stmtMarker()             {}
 func (*RunAntlr4CppSplitStmt) stmtMarker()        {}
+func (*ResourceStmt) stmtMarker()                 {}
+func (*ResourceFilesStmt) stmtMarker()            {}
 
 // Expr is the sealed-interface marker for IF-predicate AST nodes. The
 // evaluator lives in `macros.go:EvalCond`. PR-27 widened the ADT from
@@ -1130,6 +1164,21 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_PROGRAM expects at least 1 argument (tool path)")
 		}
 		return parseRunProgram(args, nameTok.line)
+	case "RESOURCE":
+		// RESOURCE([DONT_PARSE] [DONT_COMPRESS] path1 key1 ...)
+		// Mirrors upstream `devtools/ymake/plugins/resource_handler/impl.cpp:23-26`
+		// which strips the leading DONT_PARSE / DONT_COMPRESS tokens before
+		// pairing.  The remaining args are (path, key) pairs in declaration
+		// order; an odd-count arg list is an upstream error and we throw
+		// rather than silently truncate.
+		return parseResource(args, nameTok)
+	case "RESOURCE_FILES":
+		// RESOURCE_FILES([DONT_COMPRESS] [PREFIX p] [DEST d] [STRIP s]
+		//                path1 path2 ...)
+		// The plugin-side expansion into RESOURCE pairs (per `build/plugins/res.py`)
+		// happens at collect time in gen.go; here we just capture the raw
+		// arg list verbatim.
+		return &ResourceFilesStmt{Args: append([]string(nil), args...), Line: nameTok.line}
 	default:
 		return &UnknownStmt{Name: nameTok.val, Args: args, Line: nameTok.line}
 	}
@@ -1266,6 +1315,41 @@ func parseRunProgram(args []string, line int) *RunProgramStmt {
 		i++
 	}
 	return stmt
+}
+
+// parseResource parses RESOURCE(...) into a ResourceStmt by stripping
+// the leading DONT_PARSE / DONT_COMPRESS keywords (per upstream
+// `devtools/ymake/plugins/resource_handler/impl.cpp:23-26`) and
+// folding the remaining args into (path, key) pairs in declaration
+// order.  An odd-count residual list is a malformed RESOURCE call and
+// surfaces as a parse error.
+func parseResource(args []string, nameTok token) *ResourceStmt {
+	rest := args
+	// Strip up to two leading modifier tokens (DONT_PARSE, DONT_COMPRESS).
+	// Upstream caps the strip at two; we mirror that bound so a stray
+	// third keyword would round-trip as a (malformed) path token.
+	for i := 0; i < 2 && len(rest) > 0; i++ {
+		if rest[0] == "DONT_PARSE" || rest[0] == "DONT_COMPRESS" {
+			rest = rest[1:]
+
+			continue
+		}
+
+		break
+	}
+
+	if len(rest)%2 != 0 {
+		p := &parser{lex: &lexer{}}
+		_ = p
+		ThrowFmt("RESOURCE at line %d: argument count after DONT_PARSE/DONT_COMPRESS strip must be even (got %d)", nameTok.line, len(rest))
+	}
+
+	pairs := make([]ResourcePair, 0, len(rest)/2)
+	for i := 0; i < len(rest); i += 2 {
+		pairs = append(pairs, ResourcePair{Path: rest[i], Key: rest[i+1]})
+	}
+
+	return &ResourceStmt{Pairs: pairs, Line: nameTok.line}
 }
 
 // splitGlobalModifier extracts a leading "GLOBAL" pseudo-arg from an
