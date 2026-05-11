@@ -1030,27 +1030,17 @@ func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
 
 	var peers []string
 
-	if !instance.Flags.NoLibc && !noPlatform && cliMuslOn(ctx) {
-		// PR-32 D02: musl-self-suppression keys off Flags.LibcMusl
-		// (was a path-prefix test). The flag is set by the M2 shim
-		// in inferFlagsFromPath; consumer modules never have it set
-		// even if their path happens to match a musl-prefix string.
-		if !instance.Flags.LibcMusl {
-			peers = append(peers, "contrib/libs/musl")
-		}
-	}
+	// PR-42: contrib/libs/musl is reached transitively via contrib/libs/musl/full
+	// (program-default); upstream conf does NOT add it as a direct peer of arbitrary
+	// consumers (verified against build/ymake.core.conf:760-1255 and musl/full/ya.make).
 
-	if !instance.Flags.NoRuntime && !noPlatform {
-		if instance.Path != "contrib/libs/cxxsupp/builtins" {
-			peers = append(peers, "contrib/libs/cxxsupp/builtins")
-		}
-	}
+	// PR-42: contrib/libs/cxxsupp/builtins is reached transitively via
+	// contrib/libs/cxxsupp/libcxx → builtins (libcxx's ya.make PEERDIR);
+	// upstream conf does NOT add builtins as a direct peer of arbitrary consumers.
 
-	if !noPlatform {
-		if instance.Path != "library/cpp/malloc/api" {
-			peers = append(peers, "library/cpp/malloc/api")
-		}
-	}
+	// PR-42: library/cpp/malloc/api is reached transitively via
+	// library/cpp/malloc/tcmalloc → api (program-default allocator walk);
+	// upstream conf does NOT add malloc/api as a direct peer of arbitrary consumers.
 
 	// PR-27: complete the implicit-peer set. libcxx / libcxxrt /
 	// libunwind are gated by NO_RUNTIME (same as builtins); util
@@ -1201,12 +1191,14 @@ func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocato
 
 	var peers []string
 
-	if muslOn && !muslLite {
-		// Caller (defaultPeerdirsFor in gen.go:932) gates on !isRuntimeAncestor(instance.Path)
-		// which already excludes contrib/libs/musl/* (incl. musl/full). No self-suppression needed here.
-		const muslFullPath = "contrib/libs/musl/full"
-		peers = append(peers, muslFullPath)
-	}
+	// PR-35c: USE_COW=yes M2 default — every PROGRAM gets `build/cow/on`
+	// as an implicit peer. Mirrors `_BASE_PROGRAM`'s
+	// `when ($USE_COW == "yes") { PEERDIR += build/cow/on }` at
+	// `build/ymake.core.conf:946-948`. Declared BEFORE the allocator block
+	// (conf line 946 precedes the allocator select at line 959) so post-order
+	// DFS places build/cow/on before the tcmalloc subtree. PR-42: reordered
+	// to match upstream conf declaration sequence.
+	peers = append(peers, "build/cow/on")
 
 	// PR-30 D03: default ALLOCATOR=TCMALLOC_TC for our M2 environment
 	// (MUSL=yes, OS_LINUX=yes). PROGRAMs that explicitly declare
@@ -1222,16 +1214,24 @@ func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocato
 		)
 	}
 
-	// PR-35c: USE_COW=yes M2 default — every PROGRAM gets `build/cow/on`
-	// as an implicit peer. Mirrors `_BASE_PROGRAM`'s
-	// `when ($USE_COW == "yes") { PEERDIR += build/cow/on }` at
-	// `build/ymake.core.conf:946-948`. The M1 build/cow/on leaf is the
-	// canonical NO_PLATFORM-via-effective-flags example
-	// (`inferFlagsFromPath` seeds NoLibc+NoUtil+NoRuntime from the
-	// path); upstream USE_COW gates on a default-yes variable so we
-	// add unconditionally for now. Closes the archiver LD's missing
-	// `build/cow/on/libbuild-cow-on.a` archive.
-	peers = append(peers, "build/cow/on")
+	// PR-42: musl block declared AFTER the allocator block in upstream conf
+	// (build/ymake.core.conf:1238-1244, after allocator select at :959-1036).
+	// Post-order DFS places musl after the tcmalloc subtree, matching REF
+	// slots 47-48 (musl, musl/full) vs slots 41-46 (cow + tcmalloc cluster).
+	if muslOn && !muslLite {
+		// Caller (defaultPeerdirsFor in gen.go:932) gates on !isRuntimeAncestor(instance.Path)
+		// which already excludes contrib/libs/musl/* (incl. musl/full). No self-suppression needed here.
+		const muslFullPath = "contrib/libs/musl/full"
+		peers = append(peers, muslFullPath)
+	}
+
+	if muslOn && muslLite {
+		// PR-42: upstream conf build/ymake.core.conf:1239-1240 adds bare contrib/libs/musl
+		// (not musl/full) when MUSL_LITE=yes. Mirrors the MUSL_LITE branch of _BASE_PROGRAM.
+		// Modules like contrib/tools/yasm declare ENABLE(MUSL_LITE) to get musl without
+		// the full allocator+tcmalloc cascade.
+		peers = append(peers, "contrib/libs/musl")
+	}
 
 	return peers
 }

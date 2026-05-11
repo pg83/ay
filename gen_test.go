@@ -1508,13 +1508,11 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		Flags:    FlagSet{},
 	}
 
-	// PR-32 D03: with cliMuslOn(nil)=true the auto-PEERDIR appends
-	// `contrib/libs/musl/include` to every non-NO_PLATFORM CPP module's
-	// default set.
+	// PR-42: contrib/libs/musl, contrib/libs/cxxsupp/builtins, and
+	// library/cpp/malloc/api are no longer direct implicit peers; they are
+	// reached transitively (musl via musl/full, builtins via libcxx, malloc/api
+	// via malloc/tcmalloc). PR-32 D03: musl/include is still appended directly.
 	wantDefaults := []string{
-		"contrib/libs/musl",
-		"contrib/libs/cxxsupp/builtins",
-		"library/cpp/malloc/api",
 		"contrib/libs/cxxsupp/libcxx",
 		"contrib/libs/cxxsupp/libcxxrt",
 		"contrib/libs/libunwind",
@@ -1545,11 +1543,11 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		}
 	}
 
+	// PR-42: musl, builtins, malloc/api are no longer direct implicit peers of
+	// a plain LIBRARY; they arrive transitively through program-default parents
+	// (musl/full, libcxx, malloc/tcmalloc) which are not added for LIBRARYs.
 	for _, want := range []string{
 		"consumer",
-		"contrib/libs/musl",
-		"contrib/libs/cxxsupp/builtins",
-		"library/cpp/malloc/api",
 		"contrib/libs/cxxsupp/libcxx",
 		"contrib/libs/cxxsupp/libcxxrt",
 		"contrib/libs/libunwind",
@@ -1578,13 +1576,10 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 //   - non-CPP language                                → empty set
 //   - self-instance for any runtime ancestor          → empty set
 func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
-	// PR-32 D03: full set now ends with the auto-injected
-	// `contrib/libs/musl/include` (mirrors `_BASE_UNIT`'s
-	// `when ($MUSL == "yes") { PEERDIR+=contrib/libs/musl/include }`).
+	// PR-42: musl, builtins, malloc/api are no longer direct implicit peers
+	// (reached transitively via program-default parents). PR-32 D03: musl/include
+	// remains a direct peer (conf-declared via _BASE_UNIT PEERDIR at ymake.core.conf:781).
 	fullSet := []string{
-		"contrib/libs/musl",
-		"contrib/libs/cxxsupp/builtins",
-		"library/cpp/malloc/api",
 		"contrib/libs/cxxsupp/libcxx",
 		"contrib/libs/cxxsupp/libcxxrt",
 		"contrib/libs/libunwind",
@@ -1623,17 +1618,9 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Target:   PlatformDefaultLinuxAArch64,
 				Flags:    FlagSet{NoLibc: true},
 			},
-			// PR-32 D03: auto-PEERDIR musl/include still fires (NO_LIBC
-			// alone is not effective NO_PLATFORM).
-			want: []string{
-				"contrib/libs/cxxsupp/builtins",
-				"library/cpp/malloc/api",
-				"contrib/libs/cxxsupp/libcxx",
-				"contrib/libs/cxxsupp/libcxxrt",
-				"contrib/libs/libunwind",
-				"util",
-				"contrib/libs/musl/include",
-			},
+			// PR-42: musl was already removed from direct peers; NO_LIBC no
+			// longer changes the set. PR-32 D03: musl/include still fires.
+			want: fullSet,
 		},
 		{
 			name: "no_runtime_only",
@@ -1643,8 +1630,9 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Target:   PlatformDefaultLinuxAArch64,
 				Flags:    FlagSet{NoRuntime: true},
 			},
-			// PR-32 D03: auto-PEERDIR musl/include still fires.
-			want: []string{"contrib/libs/musl", "library/cpp/malloc/api", "util", "contrib/libs/musl/include"},
+			// PR-42: musl and malloc/api removed from direct peers. NO_RUNTIME drops
+			// libcxx/libcxxrt/libunwind. PR-32 D03: musl/include still fires.
+			want: []string{"util", "contrib/libs/musl/include"},
 		},
 		{
 			name: "non_cpp",
@@ -1686,12 +1674,9 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		{
 			name: "no_util_only",
 			mi:   ModuleInstance{Path: "x", Language: LangCPP, Flags: FlagSet{NoUtil: true}},
-			// PR-32 D03: auto-PEERDIR musl/include still fires (NO_UTIL
-			// alone is not effective NO_PLATFORM).
+			// PR-42: musl, builtins, malloc/api removed from direct peers.
+			// NO_UTIL drops util. PR-32 D03: musl/include still fires.
 			want: []string{
-				"contrib/libs/musl",
-				"contrib/libs/cxxsupp/builtins",
-				"library/cpp/malloc/api",
 				"contrib/libs/cxxsupp/libcxx",
 				"contrib/libs/cxxsupp/libcxxrt",
 				"contrib/libs/libunwind",
