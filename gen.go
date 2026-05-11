@@ -414,7 +414,10 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"PYTHON3_ADDINCL":                   {}, // Adds Python3 include paths (system python, handled by emitter).
 	"PYTHON2_ADDINCL":                   {}, // Adds Python2 include paths.
 	"NO_PYTHON_INCLUDES":                {}, // Suppresses default Python include injection.
-	"NO_CHECK_IMPORTS":                  {}, // Suppresses import-check step.
+	// NO_CHECK_IMPORTS: now typed UnknownStmt handled in applyUnknownStmt
+	// (PR-M3-resource-objcopy-B); collects args into d.noCheckImports
+	// and emits via emitNoCheckImportsObjcopy. Removed from whitelist
+	// so it doesn't fall through to the no-op path.
 	"NO_PYTHON_COVERAGE":                {}, // Suppresses Python coverage instrumentation.
 	"NO_IMPORT_TRACING":                 {}, // Suppresses import tracing.
 	"NO_LINT":                           {}, // Suppresses linting.
@@ -693,6 +696,20 @@ type moduleData struct {
 	// expanded inline at collect time so this slice is the canonical view
 	// for the emitter.
 	resources   []resourceEntry
+	// PR-M3-resource-objcopy-B: kv_only objcopy shapes (PY3-only).
+	// pyMain captures the `PY_MAIN(<arg>)` macro argument or the
+	// `MAIN <src.py>` modifier of `PY_SRCS(...)` — both produce a single
+	// `PY_MAIN=<dotted-mod>:<func>` kv per upstream pybuild.py:py_main
+	// (build/plugins/pybuild.py:759). Empty when no PY_MAIN-shape is
+	// present.
+	pyMain string
+	// noCheckImports captures the verbatim arg list of
+	// `NO_CHECK_IMPORTS(args...)` — used by emitNoCheckImportsObjcopy
+	// to build a single `py/no_check_imports/<pathid>=<space-joined>` kv.
+	// Args are kept in declaration order (the upstream value used in
+	// pathid() and the resfs value join the args by ' ' in that order;
+	// see build/plugins/ytest.py:811).
+	noCheckImports []string
 	conflictMod *ModuleStmt
 }
 
@@ -924,7 +941,7 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 
 			collectStmts(modulePath, taken, env, d)
 		case *UnknownStmt:
-			applyUnknownStmt(v, d)
+			applyUnknownStmt(modulePath, v, d)
 		default:
 			ThrowFmt("gen: %s: unhandled Stmt type %T (parser added a new Stmt subclass without updating gen.go)", modulePath, s)
 		}
@@ -939,7 +956,7 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 // be in the metadata whitelist; an unknown name throws so a new
 // ya.make macro surfaces immediately rather than being silently
 // dropped (D27 discipline extended to UnknownStmts).
-func applyUnknownStmt(v *UnknownStmt, d *moduleData) {
+func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 	switch v.Name {
 	case "NO_LIBC":
 		// build/ymake.core.conf: NO_LIBC() calls NO_RUNTIME() which calls NO_UTIL().
@@ -1056,15 +1073,64 @@ func applyUnknownStmt(v *UnknownStmt, d *moduleData) {
 		d.peerdirs = append(d.peerdirs, "contrib/tools/python3", "contrib/tools/python3/Lib")
 	case "PY_SRCS":
 		// PR-M3-A: collect PY_SRCS python source files into d.pySrcs.
-		// PY_SRCS accepts optional leading modifiers TOP_LEVEL and MAIN
-		// (MAIN designates the entry-point module; both affect the Python
-		// module name but not the generated file path in our emitter).
-		// Strip both modifiers and record the remaining filenames.
+		// PY_SRCS accepts optional leading/per-source modifiers TOP_LEVEL
+		// and MAIN. TOP_LEVEL sets namespace to "" for subsequent paths
+		// (default ns is `<modulePath-dotted>.`).  MAIN flags the next
+		// path as the program entry point; in py3 mode this causes
+		// pybuild.py:py_main(unit, mod + ":main") to emit a
+		// `PY_MAIN=<dotted-mod>:main` kv resource (pybuild.py:362-396).
+		// We capture pyMain at parse time; resource.go consumes it.
+		topLevel := false
+		mainNext := false
 		for _, a := range v.Args {
-			if a == "TOP_LEVEL" || a == "MAIN" {
+			switch a {
+			case "TOP_LEVEL":
+				topLevel = true
+				continue
+			case "MAIN":
+				mainNext = true
 				continue
 			}
 			d.pySrcs = append(d.pySrcs, a)
+			if mainNext {
+				// Compute the dotted module name per pybuild.py:289,385:
+				//   ns = upath.replace('/','.') + '.'   (default)
+				//   ns = ''                              (TOP_LEVEL)
+				//   mod_name = stripext(arg).replace('/','.')
+				//   mod = ns + mod_name
+				ns := strings.ReplaceAll(modulePath, "/", ".") + "."
+				if topLevel {
+					ns = ""
+				}
+				modName := strings.TrimSuffix(a, ".py")
+				modName = strings.ReplaceAll(modName, "/", ".")
+				d.pyMain = ns + modName + ":main"
+				mainNext = false
+			}
+		}
+	case "PY_MAIN":
+		// PR-M3-resource-objcopy-B: PY_MAIN(<arg>) macro per upstream
+		// pybuild.py:onpy_main (build/plugins/pybuild.py:762). Argument
+		// gets normalised: `/` → `.`, and a `:main` suffix is appended
+		// when the arg has no colon. Multiple PY_MAIN(...) on the same
+		// module would each emit a separate resource entry, but the M3
+		// closure contains only single-PY_MAIN modules — we keep one.
+		if len(v.Args) != 1 {
+			ThrowFmt("gen: PY_MAIN expects exactly 1 argument, got %d", len(v.Args))
+		}
+		arg := strings.ReplaceAll(v.Args[0], "/", ".")
+		if !strings.Contains(arg, ":") {
+			arg += ":main"
+		}
+		d.pyMain = arg
+	case "NO_CHECK_IMPORTS":
+		// PR-M3-resource-objcopy-B: NO_CHECK_IMPORTS(args...) per upstream
+		// ytest.py:on_register_no_check_imports (build/plugins/ytest.py:808).
+		// The args are joined by ' ' in declaration order; that string is
+		// the resfs value AND the input to _common.pathid() (md5 →
+		// lower-cased unpadded base32). Empty arg list = no-op (no kv).
+		if len(v.Args) > 0 {
+			d.noCheckImports = append(d.noCheckImports, v.Args...)
 		}
 	default:
 		if _, ok := whitelistedMetadataMacros[v.Name]; !ok {
