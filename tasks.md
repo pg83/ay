@@ -60,7 +60,8 @@ Detail in `./docs/drafts/20260507-0549-m2-plan.md`. One line per PR here.
 - [x] **PR-39** — `contrib/libs/musl/full` not-musl classification (PR-36-probe cluster F). **L3 99.81% → 99.87% (+2 pairs).** See Completed below.
 - [x] **PR-41** — R6 `.rl6.cpp` lang-CFLAG + AR SRC_C_NO_LTO/generated bucket sort (PR-36-probe clusters H + I). **L3 99.87% → 99.92% (+2 pairs).** See Completed below.
 - [x] **PR-40** — ragel6 LD output dir lift + JS arch-axis (PR-36-probe clusters C + D). **L1 99.97% → 100.00% (+1 unpaired pair closed); L2 99.79% → 100.00% (+8 pairs).** See Completed below.
-- [ ] **PR-38** — yasm host-LD axis (vcs-compile + link-exe) (PR-36-probe cluster G). `ld.go::composeLDCmdVcsCompile` and `composeLDCmdLinkExe` are hardcoded to the target toolchain (`targetTriple`, `archFlag`, `commonCFlags`, etc.); yasm host LD's internal compile/link sub-commands therefore emit aarch64 cmds on the x86_64 host axis. Fix: thread `instance.Flags.PIC` into the cmd-composers; gate triple/march/CFlags/Defines on host-vs-target. Acceptance: L3 +1 (yasm LD); L2 unchanged; M1 preserved; gen ≤ 5 s. **Serial-after PR-40 (shared `ld.go`).** Plan: `./docs/drafts/20260511-0000-pr36-closure-probe.md` §3 L3-C.
+- [x] **PR-38** — host PROGRAM LD toolchain-axis fix (PR-36-probe cluster G). **L3 99.95% → 99.97% (+2 pairs: yasm LD + ragel6 LD cmd[1]).** See Completed below.
+- [ ] **PR-43** — ragel6 LD ALLOCATOR(MIM) mimalloc-cluster link-order fix. ragel6 declares `ALLOCATOR(MIM)` which brings in `library/cpp/malloc/mimalloc → contrib/libs/mimalloc → library/cpp/malloc/api`. In REF, these 3 peers slot at positions 41-43 in cmd[2] link order; in OUR they slot at 45-47 (shifted 4 slots later behind 4 other peers). Per probe of remaining L3 divergence: the only remaining L3 mismatch after PR-38 (3729/3730). Acceptance: L3 +1 → **100.00%**; M1 preserved; gen ≤ 5 s. Likely fix area: `gen.go::defaultProgramPeerdirsFor` allocator branch + how `allocatorPeers["MIM"]` peers thread into program-defaults ordering relative to other PROGRAM-default peers.
 - [x] **PR-42** — archiver LD peer-library link-order fix (PR-36-probe cluster J). **L3 99.92% → 99.95% (+1 pair, archiver LD).** See Completed below.
 - [ ] **PR-19** — `ld.go` 4-cmd LD rule + Gen wiring. Renumbered as **PR-24**. After PR-23.
 - [ ] **PR-20** — `gen.go` walker + macro evaluator wiring + host-tool recursion hooks. Renumbered as **PR-25**. After PR-24. **Wave-3 keystone.**
@@ -136,6 +137,21 @@ Q-resolutions for PR-23:
 ---
 
 ## Completed
+
+- **PR-38** (2026-05-11) — host PROGRAM LD toolchain-axis fix (PR-36-probe cluster G). **Headline: L3 99.95% → 99.97% (+2 pairs, 3728 → 3729).** L0/L1/L2 preserved at 100%; M1 byte-exact preserved; gen wall ~0.91 s. Plan: `docs/drafts/20260511-0000-pr36-closure-probe.md` §3 L3-C.
+  Substantive work (ld.go + ld_test.go):
+  - `ld.go::EmitLD` gains a `moduleCFlags []string` parameter (caller: `gen.go::genModule` passes `ownCFlags`).
+  - `hostBuild := instance.Flags.PIC` flag dispatches between target and host toolchain bundles for cmd[1] (`__vcs_version__.c` compile) and cmd[2] (`link_exe.py`).
+  - New `composeLDCmdVcsCompileHost`: 94-arg bundle with `--target=x86_64-linux-gnu`, `hostCFlags`, `hostDefines`, `ndebugPicBlock`, `hostSseFeatures`, `.pic.o` suffix — matches reference byte-exactly.
+  - New `ldHostStaticTrailingFlags` constant for host cmd[2] link invocation (`-fPIC -fPIC -static -Wl,--no-dynamic-linker -nostdlib ...`).
+  - `ld_test.go` — 4 `EmitLD` test calls updated with `nil` for the new `moduleCFlags` parameter.
+  Verification: `go build` clean; `go test ./...` PASS (14.1s); `./yatool gen --target tools/archiver` ~0.91s; comparator reports L0=100.00% / L1=100.00% / L2=100.00% / **L3=99.97%** (3729/3730); yasm LD byte-exact; ragel6 LD cmd[1] byte-exact (cmd[2] link-order still divergent — queued for PR-43); M1 `build/cow/on` byte-exact preserved.
+  Cherry-pick required conflict resolution on `gen_test.go` (PR-38 worktree branched off pre-PR-42 master; the executor duplicated PR-42's gen.go/gen_test.go fixes which were already in master). Comment text in gen_test.go conflicted — orchestrator took HEAD's PR-42-labelled comments; the `wantDefaults`/`fullSet`/`want` test data was identical in both versions. Caller signature in gen.go:2259 required one-line update (`ownCFlags,` insertion) — orchestrator applied per the executor's verified diff. No review round yet (cherry-pick applied directly; retroactive review queued).
+  Surprises / constraints future PRs must respect:
+  - **`EmitLD` signature now includes `moduleCFlags []string` parameter** — all callers (gen.go production + 4 test calls) updated. Future test additions must pass at least `nil` for this parameter.
+  - **Host-LD axis dispatch is `instance.Flags.PIC`-driven**. Future host PROGRAMs (ragel6, yasm, any M3+ host tool) auto-route through `composeLDCmdVcsCompileHost` + `ldHostStaticTrailingFlags`. Target LDs unchanged.
+  - **`composeLDCmdVcsCompileHost` carries the host SSE feature bundle inline** (`-m64`, `-mssse3`, `-mpopcnt`, `-msse2`, `-msse3`, `-msse4.1`, `-msse4.2`, `-mcx16`). If the host axis ever becomes ARM, this needs revisiting.
+  - **ragel6 LD cmd[2] link-order divergence remains** (mimalloc cluster slots 41-43 in REF vs 45-47 in OUR). Tracked as PR-43 — last L3 mismatch in the M2 closure.
 
 - **PR-42** (2026-05-11) — archiver LD peer-library link-order fix (PR-36-probe cluster J). **Headline: L3 99.92% → 99.95% (+1 pair, archiver LD closed).** L0/L1/L2 preserved at 100%; M1 byte-exact preserved; gen wall ~0.93 s. Plans: `docs/drafts/20260511-0000-pr36-closure-probe.md` §3 L3-final-cluster + dedicated probe `docs/drafts/20260511-0001-pr42-link-order-probe.md`.
   Substantive work (gen.go + gen_test.go):

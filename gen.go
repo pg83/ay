@@ -2265,6 +2265,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			peerGlobalRefs, peerGlobalPaths,
 			memberInputs,
 			cliMuslOn(ctx),
+			ownCFlags,
 			ctx.emit,
 		)
 		ldPath := LDOutputPath(instance, binaryName)
