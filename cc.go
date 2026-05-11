@@ -271,7 +271,13 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 		autoPeerCFlags = in.AutoPeerCFlags
 		peerExtras = composePeerExtras(in, isCxx)
 		ownGlobalBucket = composeOwnAndPeerGlobalBucket(in, isCxx)
-		ownCFlags = in.CFlags
+		// PR-M3-F-6: ownCFlags slot now carries in.CFlags +
+		// OwnCFlagsGlobal + PeerCFlagsGlobal (all CFLAGS axes
+		// concatenated). Empirical: antlr4 SetTransition.cpp.o
+		// idx 52-54 (own GLOBAL) and python mysnprintf.c.pic.o
+		// idx 76-78 (peer GLOBAL from lzma/openssl/libffi) both
+		// land here, not in the bucket or peerExtras tail.
+		ownCFlags = composeOwnAndPeerCFlagsAtOwnSlot(in)
 	}
 
 	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
@@ -590,14 +596,21 @@ func appendCxxStdAndOwn(cmdArgs []string, isCxx bool, noCompilerWarnings bool, i
 	return cmdArgs
 }
 
-// composePeerExtras assembles the peer-propagated GLOBAL CFLAGS /
-// CXXFLAGS / CONLYFLAGS contribution per source-language axis (PR-32
-// D08). Source-language filtering follows ymake's CFLAGS-applies-to-
-// both rule:
+// composePeerExtras assembles the peer-propagated GLOBAL CXXFLAGS /
+// CONLYFLAGS contribution per source-language axis (PR-32 D08, revised
+// by PR-M3-F-6). Source-language filtering follows ymake's CFLAGS-axis
+// rule, but the CFlags axis itself has been relocated to the ownCFlags
+// slot (alongside `in.CFlags`) — see `composeOwnAndPeerCFlagsAtOwnSlot`.
 //
-//   - PeerCFlagsGlobal applies to both C and C++ sources.
 //   - PeerCXXFlagsGlobal applies only to C++ sources.
 //   - PeerCOnlyFlagsGlobal applies only to C / .S sources.
+//
+// PR-M3-F-6 rationale: empirical reference (python mysnprintf.c.pic.o
+// idx 76, antlr4 SetTransition.cpp.o idx 52, devtools/ymake/bin/main.cpp.o
+// idx 80) shows peer-propagated GLOBAL CFLAGS landing at the ownCFlags
+// slot (immediately after in.CFlags and before the noLibcUndebugBlock /
+// ndebugPicBlock), not at the cxx-extras tail. The peerExtras tail
+// continues to carry CXXFLAGS / CONLYFLAGS only.
 //
 // AutoPeerCFlags (e.g. -D_musl_) is NOT included here — it slots at
 // a different cmd_args position (between catboost and 2nd
@@ -606,14 +619,49 @@ func appendCxxStdAndOwn(cmdArgs []string, isCxx bool, noCompilerWarnings bool, i
 // (peer contributions in declaration order; no own contributions
 // here — those are appended via appendCxxStdAndOwn).
 func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
-	out := make([]string, 0, len(in.PeerCFlagsGlobal)+len(in.PeerCXXFlagsGlobal)+len(in.PeerCOnlyFlagsGlobal))
-	out = append(out, in.PeerCFlagsGlobal...)
-
 	if isCxx {
+		out := make([]string, 0, len(in.PeerCXXFlagsGlobal))
 		out = append(out, in.PeerCXXFlagsGlobal...)
-	} else {
-		out = append(out, in.PeerCOnlyFlagsGlobal...)
+
+		return out
 	}
+
+	out := make([]string, 0, len(in.PeerCOnlyFlagsGlobal))
+	out = append(out, in.PeerCOnlyFlagsGlobal...)
+
+	return out
+}
+
+// composeOwnAndPeerCFlagsAtOwnSlot assembles the combined CFLAGS bundle
+// that lands at the ownCFlags slot of composeTargetCC / composeHostCC
+// (between commonDefines and the first noLibcUndebugBlock / ndebugPicBlock
+// copy). PR-M3-F-6: this is where ALL CFLAGS go — own non-GLOBAL CFLAGS,
+// own GLOBAL CFLAGS, and peer-propagated GLOBAL CFLAGS — applying to
+// both C and C++ sources of the consumer.
+//
+// Order (concatenation; no dedup — the reference preserves duplicates,
+// e.g. openssl's `-DOPENSSL_BUILD=1` appears twice via top-level CFLAGS
+// and crypto/ya.make.inc): in.CFlags → in.OwnCFlagsGlobal →
+// in.PeerCFlagsGlobal. Empirical anchors:
+//
+//   - lzma tuklib_cpucores.c.o idx 58-60: own non-GLOBAL `-DHAVE_CONFIG_H`,
+//     `-DTUKLIB_SYMBOL_PREFIX=lzma_` (in.CFlags) precede own GLOBAL
+//     `-DLZMA_API_STATIC` (OwnCFlagsGlobal).
+//   - python mysnprintf.c.pic.o idx 73-78: in.CFlags `-DPLATFORM=...`
+//     etc. precede peer-GLOBAL `-DLZMA_API_STATIC`,
+//     `-DOPENSSL_RENAME_SYMBOLS=1`, `-DFFI_STATIC_BUILD`.
+//   - devtools/ymake/bin/main.cpp.o idx 79-90: in.CFlags `-D_musl_=1`
+//     (PROGRAM injection) precedes the peer chain (LZMA, OPENSSL, FFI,
+//     USE_PYTHON3, ASIO_STANDALONE, …, ANTLR4CPP_STATIC, …).
+//
+// musl flavours (composeMuslCC / composeMuslHostCC) do not consult this
+// helper — they fold CFLAGS into `muslExtraDefines` and zero out the
+// peer-propagation slots upstream in EmitCC.
+func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs) []string {
+	out := make([]string, 0, len(in.CFlags)+len(in.OwnCFlagsGlobal)+len(in.PeerCFlagsGlobal))
+	out = append(out, in.CFlags...)
+	out = append(out, in.OwnCFlagsGlobal...)
+	out = append(out, in.PeerCFlagsGlobal...)
 
 	return out
 }
@@ -638,21 +686,26 @@ func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
 const baseUnitCxxNostdinc = "-nostdinc++"
 
 // composeOwnAndPeerGlobalBucket assembles the (own GLOBAL ∪ peer
-// GLOBAL) CFLAGS / CXXFLAGS / CONLYFLAGS contribution per
-// source-language axis for the PR-33 D02 redux slot. C++ sources emit
-// this bucket flanking a `-DCATBOOST_OPENSOURCE=yes` token (the
-// catboost-redux); the post-catboost half is augmented with
-// `baseUnitCxxNostdinc` per `composePostCatboostBucket` (PR-35f).
-// C sources emit no redux (and so the bucket is only consulted via
-// composePeerExtras for the existing single peerExtras slot).
+// GLOBAL) CXXFLAGS / CONLYFLAGS contribution per source-language axis
+// for the PR-33 D02 redux slot. C++ sources emit this bucket flanking a
+// `-DCATBOOST_OPENSOURCE=yes` token (the catboost-redux); the
+// post-catboost half is augmented with `baseUnitCxxNostdinc` per
+// `composePostCatboostBucket` (PR-35f). C sources emit no redux.
 //
-// Order: own GLOBAL CFLAGS, peer GLOBAL CFLAGS, then own/peer GLOBAL
-// CXXFLAGS or CONLYFLAGS depending on source language. Deduplication
-// is first-occurrence-wins (R14): an own GLOBAL flag also present in
-// peer GLOBAL appears once, in the own slot.
+// PR-M3-F-6: the CFlags axis (own + peer GLOBAL CFLAGS) was relocated
+// out of this bucket and into the ownCFlags slot (see
+// `composeOwnAndPeerCFlagsAtOwnSlot`). Empirical reference (antlr4
+// SetTransition.cpp.o idx 103+105, libcxx algorithm.cpp.o idx 105+107)
+// shows the bucket carries ONLY `-nostdinc++` and similar CXX-only /
+// C-only-axis flags; antlr4's `-DANTLR4CPP_STATIC` (a CFLAGS GLOBAL)
+// appears at the ownCFlags slot (idx 52-54), never in the bucket.
+//
+// Order: own/peer GLOBAL CXXFLAGS or CONLYFLAGS depending on source
+// language. Deduplication is first-occurrence-wins (R14): an own GLOBAL
+// flag also present in peer GLOBAL appears once, in the own slot.
 //
 // Empirical anchors:
-//   - libcxx algorithm.cpp.o cmd_args[101] + [103]: bucket =
+//   - libcxx algorithm.cpp.o cmd_args[105] + [107]: bucket =
 //     [-nostdinc++] (own GLOBAL CXXFLAGS = [-nostdinc++], peer GLOBAL
 //     CXXFLAGS = [-nostdinc++ from libcxxabi-parts], deduped).
 //   - util/charset/all_charset.cpp.o cmd_args[112] + [114]: bucket =
@@ -664,8 +717,7 @@ const baseUnitCxxNostdinc = "-nostdinc++"
 //     via the _BASE_UNIT injection — closes PR-33 known gap (PR-35f).
 func composeOwnAndPeerGlobalBucket(in ModuleCCInputs, isCxx bool) []string {
 	out := make([]string, 0,
-		len(in.OwnCFlagsGlobal)+len(in.PeerCFlagsGlobal)+
-			len(in.OwnCXXFlagsGlobal)+len(in.PeerCXXFlagsGlobal)+
+		len(in.OwnCXXFlagsGlobal)+len(in.PeerCXXFlagsGlobal)+
 			len(in.OwnCOnlyFlagsGlobal)+len(in.PeerCOnlyFlagsGlobal))
 	seen := make(map[string]struct{}, cap(out))
 
@@ -679,9 +731,6 @@ func composeOwnAndPeerGlobalBucket(in ModuleCCInputs, isCxx bool) []string {
 			out = append(out, x)
 		}
 	}
-
-	addEach(in.OwnCFlagsGlobal)
-	addEach(in.PeerCFlagsGlobal)
 
 	if isCxx {
 		addEach(in.OwnCXXFlagsGlobal)

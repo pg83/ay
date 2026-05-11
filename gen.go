@@ -2579,8 +2579,20 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ownCFlags = ownCFlagsWithMusl
 	}
 
+	// PR-M3-F-6 (Cluster-CC-INCL-OVER): dedup d.addIncl in
+	// first-occurrence-wins order. The reference (openssl drbg_lib.c.o
+	// idx 9-14: exactly 6 unique entries) does not emit duplicate -I
+	// flags even when the same path appears in both the top-level
+	// ADDINCL block and an INCLUDE'd `crypto/ya.make.inc` ADDINCL block.
+	// Our parser appends without dedup at the AddInclStmt site, so
+	// openssl emits 8 entries (6 unique + 2 trailing dupes for
+	// `openssl/include` and `openssl`). Dedup at composer entry keeps
+	// the parser's append-only model intact while matching upstream's
+	// emit-time dedup behaviour.
+	dedupedAddIncl := mergeDedup(d.addIncl, nil)
+
 	moduleInputs := ModuleCCInputs{
-		AddIncl:              d.addIncl,
+		AddIncl:              dedupedAddIncl,
 		PeerAddInclGlobal:    peerAddInclGlobal,
 		CFlags:               ownCFlags,
 		CXXFlags:             d.cxxFlags,
@@ -3724,7 +3736,8 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 	// protobuf) resolve correctly. Mirrors the ModuleCCInputs built for
 	// CC nodes in the same module (PR-M3-F-3).
 	scanIn := ModuleCCInputs{
-		AddIncl:           d.addIncl,
+		// PR-M3-F-6: same dedup as the main CC composer site.
+		AddIncl:           mergeDedup(d.addIncl, nil),
 		PeerAddInclGlobal: peerAddInclGlobal,
 		SourceRoot:        ctx.sourceRoot,
 	}
