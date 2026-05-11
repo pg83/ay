@@ -6,15 +6,18 @@ package main
 // they are declared in the struct, and the reference output in
 // /home/pg/monorepo/yatool_orig/sg.json lists keys alphabetically
 // (cmds, deps, env, foreign_deps, host_platform, inputs, kv, outputs,
-// platform, requirements, self_uid, stats_uid, tags, target_properties, uid).
+// platform, requirements, sandboxing, self_uid, tags, target_properties, uid).
 // Keep the field ordering below in lockstep with that observation.
 //
-// `omitempty` is used only for fields g.json itself omits on most nodes:
+// `omitempty` is used only for fields sg.json itself omits on most nodes:
 // host_platform (present on ~half of nodes, always `true` when present) and
 // foreign_deps (present on ~26 of ~3730 nodes). Every other field is
 // always present in the on-disk JSON, even when empty, so they have no
 // `omitempty` tag — that ensures empty arrays and maps render as `[]`/`{}`
 // rather than vanishing.
+// stats_uid is tagged json:"-" (not serialized) per PR-L4-C/04: REF's
+// stats_uid is a 32-char hex whose derivation is outside our scope;
+// the normalizer also drops it, keeping both sides in sync.
 //
 // Rule authors do not assemble `Deps`/`ForeignDeps` directly — they call
 // the Emitter, which hands back NodeRef values; Finalize resolves those
@@ -54,8 +57,9 @@ type Node struct {
 	Outputs          []string               `json:"outputs"`
 	Platform         string                 `json:"platform"`
 	Requirements     map[string]interface{} `json:"requirements"`
+	Sandboxing       bool                   `json:"sandboxing"`
 	SelfUID          string                 `json:"self_uid"`
-	StatsUID         string                 `json:"stats_uid"`
+	StatsUID         string                 `json:"-"`
 	Tags             []string               `json:"tags"`
 	TargetProperties map[string]string      `json:"target_properties"`
 	UID              string                 `json:"uid"`

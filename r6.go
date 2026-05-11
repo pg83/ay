@@ -138,7 +138,11 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 			"network": "restricted",
 			"ram":     float64(32),
 		},
-		DepRefs: []NodeRef{ragel6LD},
+		// PR-L4-C/07: wire ragel6LD into both DepRefs (for the L0 topology
+		// fingerprint, which reads only deps) and ForeignDepRefs["tool"]
+		// (matching REF's foreign_deps shape for the R6 aarch64 node).
+		DepRefs:        []NodeRef{ragel6LD},
+		ForeignDepRefs: map[string][]NodeRef{"tool": {ragel6LD}},
 	}
 
 	return emit.Emit(node), outputPath

@@ -9,7 +9,8 @@ import (
 
 // gjson_write.go — hand-rolled streaming JSON serializer that produces
 // output byte-identical to json.Encoder with SetEscapeHTML(false) and
-// SetIndent("", "  ") for the Graph shape (D16 cross-cutting constraint).
+// SetIndent("", "    ") (4 spaces) for the Graph shape (D16 cross-cutting
+// constraint). PR-L4-C/02 changed indent from 2 to 4 spaces to match REF.
 //
 // Why this exists: the stock json.Encoder Encode-with-indent path runs in
 // two passes — encode-compact into a temp buffer, then json.Indent into
@@ -34,8 +35,8 @@ import (
 //   - Floats: strconv.AppendFloat(_, 'f', -1, 64) for the magnitudes
 //     this codebase actually emits (cpu/ram in Requirements are
 //     float64(1) and float64(32), which serialise as "1" and "32").
-//   - Trailing newline: yes, after the closing '}' of the top-level
-//     object — matching json.Encoder.Encode's behaviour.
+//   - Trailing newline: none — REF has no trailing newline; the final
+//     closing '}' is the last byte. PR-L4-C/03.
 //
 // The parallel test (gjson_write_test.go) compares the output of this
 // function against json.Encoder for a fixture covering every code path
@@ -53,11 +54,11 @@ func writeGraphIndented(w io.Writer, g *Graph) {
 	buf = append(buf, '{', '\n')
 
 	// "conf": {} — always empty per emitter.go's Finalize contract.
-	buf = append(buf, `  "conf": {},`...)
+	buf = append(buf, `    "conf": {},`...)
 	buf = append(buf, '\n')
 
 	// "graph": [ ...nodes... ]
-	buf = append(buf, `  "graph": `...)
+	buf = append(buf, `    "graph": `...)
 
 	if len(g.Graph) == 0 {
 		buf = append(buf, '[', ']', ',', '\n')
@@ -65,7 +66,7 @@ func writeGraphIndented(w io.Writer, g *Graph) {
 		buf = append(buf, '[', '\n')
 
 		for i, node := range g.Graph {
-			buf = appendNode(buf, node, "    ")
+			buf = appendNode(buf, node, "        ")
 
 			if i < len(g.Graph)-1 {
 				buf = append(buf, ',')
@@ -82,20 +83,21 @@ func writeGraphIndented(w io.Writer, g *Graph) {
 			}
 		}
 
-		buf = append(buf, `  ],`...)
+		buf = append(buf, `    ],`...)
 		buf = append(buf, '\n')
 	}
 
 	// "inputs": {} — always empty per emitter.go's Finalize contract.
-	buf = append(buf, `  "inputs": {},`...)
+	buf = append(buf, `    "inputs": {},`...)
 	buf = append(buf, '\n')
 
 	// "result": [ ...uids... ]
-	buf = append(buf, `  "result": `...)
-	buf = appendStringSlice(buf, g.Result, "  ")
+	buf = append(buf, `    "result": `...)
+	buf = appendStringSlice(buf, g.Result, "    ")
 	buf = append(buf, '\n')
 
-	buf = append(buf, '}', '\n')
+	// PR-L4-C/03: no trailing newline — REF's last byte is '}'.
+	buf = append(buf, '}')
 
 	Throw2(w.Write(buf))
 }
@@ -104,9 +106,10 @@ func writeGraphIndented(w io.Writer, g *Graph) {
 // (the indent of the object's opening '{'). Field order is alphabetical
 // per the Node struct's declaration order in node.go (cmds, deps, env,
 // foreign_deps, host_platform, inputs, kv, outputs, platform,
-// requirements, self_uid, stats_uid, tags, target_properties, uid).
+// requirements, sandboxing, self_uid, tags, target_properties, uid).
+// stats_uid is omitted (json:"-" in node.go, PR-L4-C/04).
 func appendNode(buf []byte, n *Node, pad string) []byte {
-	innerPad := pad + "  "
+	innerPad := pad + "    "
 	buf = append(buf, pad...)
 	buf = append(buf, '{', '\n')
 
@@ -173,17 +176,23 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 	buf = appendInterfaceMap(buf, n.Requirements, innerPad)
 	buf = append(buf, ',', '\n')
 
+	// sandboxing: bool — always true for every node in the M2 closure;
+	// PR-L4-C/01 emits it unconditionally to match REF.
+	buf = append(buf, innerPad...)
+	if n.Sandboxing {
+		buf = append(buf, `"sandboxing": true,`...)
+	} else {
+		buf = append(buf, `"sandboxing": false,`...)
+	}
+	buf = append(buf, '\n')
+
 	// self_uid: string
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"self_uid": `...)
 	buf = appendString(buf, n.SelfUID)
 	buf = append(buf, ',', '\n')
 
-	// stats_uid: string
-	buf = append(buf, innerPad...)
-	buf = append(buf, `"stats_uid": `...)
-	buf = appendString(buf, n.StatsUID)
-	buf = append(buf, ',', '\n')
+	// stats_uid is tagged json:"-" and omitted; see node.go.
 
 	// tags: []string
 	buf = append(buf, innerPad...)
@@ -210,15 +219,15 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 }
 
 // appendCmdSlice emits []Cmd. Inner pad is the indent of the array's
-// opening '[' (cmd_args' indent inside each Cmd is innerPad+"    ").
+// opening '[' (cmd_args' indent inside each Cmd is innerPad+"        ").
 func appendCmdSlice(buf []byte, cmds []Cmd, pad string) []byte {
 	if len(cmds) == 0 {
 		return append(buf, '[', ']')
 	}
 
 	buf = append(buf, '[', '\n')
-	itemPad := pad + "  "
-	innerPad := itemPad + "  "
+	itemPad := pad + "    "
+	innerPad := itemPad + "    "
 
 	for i, c := range cmds {
 		buf = append(buf, itemPad...)
@@ -267,7 +276,7 @@ func appendStringSlice(buf []byte, ss []string, pad string) []byte {
 	}
 
 	buf = append(buf, '[', '\n')
-	itemPad := pad + "  "
+	itemPad := pad + "    "
 
 	for i, s := range ss {
 		buf = append(buf, itemPad...)
@@ -300,7 +309,7 @@ func appendStringMap(buf []byte, m map[string]string, pad string) []byte {
 	sort.Strings(keys)
 
 	buf = append(buf, '{', '\n')
-	itemPad := pad + "  "
+	itemPad := pad + "    "
 
 	for i, k := range keys {
 		buf = append(buf, itemPad...)
@@ -335,7 +344,7 @@ func appendStringSliceMap(buf []byte, m map[string][]string, pad string) []byte 
 	sort.Strings(keys)
 
 	buf = append(buf, '{', '\n')
-	itemPad := pad + "  "
+	itemPad := pad + "    "
 
 	for i, k := range keys {
 		buf = append(buf, itemPad...)
@@ -373,7 +382,7 @@ func appendInterfaceMap(buf []byte, m map[string]interface{}, pad string) []byte
 	sort.Strings(keys)
 
 	buf = append(buf, '{', '\n')
-	itemPad := pad + "  "
+	itemPad := pad + "    "
 
 	for i, k := range keys {
 		buf = append(buf, itemPad...)

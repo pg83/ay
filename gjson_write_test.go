@@ -7,7 +7,8 @@ import (
 )
 
 // gjson_write_test.go — pin writeGraphIndented to json.Encoder's
-// SetEscapeHTML(false) + SetIndent("", "  ") byte-exact behaviour.
+// SetEscapeHTML(false) + SetIndent("", "    ") (4-space) byte-exact behaviour.
+// PR-L4-C/02 changed indent from 2 to 4 spaces; stdlib reference updated here.
 //
 // The fixture below covers every code path in gjson_write.go:
 //   - empty graph slice, non-empty graph slice with multiple nodes;
@@ -26,10 +27,17 @@ func encodeWithStdlib(g *Graph) []byte {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
+	enc.SetIndent("", "    ")
 	Throw(enc.Encode(g))
 
-	return buf.Bytes()
+	// The stdlib encoder always appends a trailing '\n'; strip it to match
+	// writeGraphIndented's no-trailing-newline contract (PR-L4-C/03).
+	b := buf.Bytes()
+	if len(b) > 0 && b[len(b)-1] == '\n' {
+		b = b[:len(b)-1]
+	}
+
+	return b
 }
 
 func encodeWithHandRolled(g *Graph) []byte {
@@ -73,8 +81,8 @@ func TestWriteGraphIndented_ByteExact(t *testing.T) {
 					"frac":    float64(1.5),
 					"flag":    true,
 				},
+				Sandboxing:       true,
 				SelfUID:          "selfUidXXXXXXXXXXXXXX1",
-				StatsUID:         "",
 				Tags:             []string{"tag1", "tag2"},
 				TargetProperties: map[string]string{"module_dir": "x/y", "module_lang": "cpp"},
 				UID:              "uidXXXXXXXXXXXXXXXXXX1",
@@ -88,8 +96,8 @@ func TestWriteGraphIndented_ByteExact(t *testing.T) {
 				Outputs:          []string{},
 				Platform:         "platform-with-control-and--and-\b-and-\f",
 				Requirements:     map[string]interface{}{},
+				Sandboxing:       true,
 				SelfUID:          "selfUidXXXXXXXXXXXXXX2",
-				StatsUID:         "",
 				Tags:             []string{},
 				TargetProperties: map[string]string{},
 				UID:              "uidXXXXXXXXXXXXXXXXXX2",

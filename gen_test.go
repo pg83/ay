@@ -1028,14 +1028,14 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Fatal("no host ragel6 LD node found")
 	}
 
-	// PR-28 D04: ragel6 host LD edge lives in deps (not foreign_deps)
-	// to match the empirical reference shape.
+	// PR-L4-C/07: ragel6 host LD edge lives in both deps (for topology)
+	// and foreign_deps.tool (matching REF's shape for the R6 aarch64 node).
 	if len(r6Node.Deps) != 1 || r6Node.Deps[0] != ldNode.UID {
 		t.Errorf("R6 Deps = %v, want [%q]", r6Node.Deps, ldNode.UID)
 	}
 
-	if len(r6Node.ForeignDeps) != 0 {
-		t.Errorf("R6 ForeignDeps = %v, want empty (PR-28 dropped foreign_deps[tool] placeholder)", r6Node.ForeignDeps)
+	if len(r6Node.ForeignDeps) != 1 || len(r6Node.ForeignDeps["tool"]) != 1 || r6Node.ForeignDeps["tool"][0] != ldNode.UID {
+		t.Errorf("R6 ForeignDeps = %v, want {tool: [%q]}", r6Node.ForeignDeps, ldNode.UID)
 	}
 
 	// PR-28 D09: cmd_args[0] (the ragel6 invocation path) tracks the
