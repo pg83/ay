@@ -637,6 +637,8 @@ type moduleData struct {
 	globalSrcs       []string
 	pySrcs           []string // PR-M3-A: python sources from PY_SRCS(...); each entry is a .py filename
 	pyBuildNoPYC     bool     // PR-M3-A: set by ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
+	pyBuildNoPY      bool     // PR-M3-resource-objcopy-C: set by ENABLE(PYBUILD_NO_PY); suppresses raw .py resfs embedding from PY_SRCS (only the yapyc3 form is embedded)
+	pyTopLevel       bool     // PR-M3-resource-objcopy-C: set by TOP_LEVEL prefix in PY_SRCS(...); the resfs key for each source omits the dotted module-path prefix
 	enumSrcs         []*GenerateEnumSerializationStmt // PR-M3-D: GENERATE_ENUM_SERIALIZATION(*) declarations
 	peerdirs         []string
 	joinSrcs         []*JoinSrcsStmt
@@ -997,6 +999,14 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			if a == "PYBUILD_NO_PYC" {
 				d.pyBuildNoPYC = true
 			}
+			// PR-M3-resource-objcopy-C: PYBUILD_NO_PY (without the 'C')
+			// is a separate flag — used by contrib/tools/python3/Lib —
+			// that suppresses the raw `.py` resfs embedding while still
+			// running yapyc3 compilation. Lib also has ENABLE(PYBUILD_NO_PY)
+			// declared at the top of its ya.make.
+			if a == "PYBUILD_NO_PY" {
+				d.pyBuildNoPY = true
+			}
 		}
 	case "SRC":
 		// PR-35o: SRC(filename [extra_cflags...]) is a SRCS variant
@@ -1086,6 +1096,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			switch a {
 			case "TOP_LEVEL":
 				topLevel = true
+				d.pyTopLevel = true
 				continue
 			case "MAIN":
 				mainNext = true
