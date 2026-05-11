@@ -112,6 +112,12 @@ func cmdGen(args []string) int {
 
 	fs.Var(&defines, "define", "ymake-style -D KEY=VALUE; repeatable; default: -DMUSL=yes")
 
+	// PR-M3-perf-E: scanCtx lifecycle policy. "interned" (default;
+	// winner of the bake-off) interns one scanCtx per (scanner, ctxHash)
+	// for the whole Gen call. "local" allocates a fresh scanCtx per
+	// genModule frame (no cross-module reuse).
+	scanCtxMode := fs.String("scan-ctx-mode", defaultScanCtxMode, "scanCtx lifecycle: \"local\" or \"interned\"")
+
 	err := fs.Parse(args)
 
 	if errors.Is(err, flag.ErrHelp) {
@@ -130,7 +136,7 @@ func cmdGen(args []string) int {
 		ThrowFmt("gen: --out is required (use '-' for stdout)")
 	}
 
-	g := GenWith(TargetCfg, *sourceRoot, *target, defines.toMap())
+	g := GenWithMode(TargetCfg, *sourceRoot, *target, defines.toMap(), *scanCtxMode)
 
 	writeGraph(*out, g)
 
