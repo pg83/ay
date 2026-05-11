@@ -3751,16 +3751,42 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			ctx.enOutputs[p] = enRef
 		}
 
-		// PR-M3-F-7-A: parallel-register EN outputs in the target scanner's
-		// CodegenRegistry. EN nodes always emit on the target axis (all 21 EN
-		// nodes in sg2.json are on default-linux-aarch64). EmitsIncludes is
-		// left nil here; F-7-B fills the per-emitter include sets.
+		// PR-M3-F-7-B: register EN outputs in the target scanner's CodegenRegistry
+		// with populated EmitsIncludes. EN nodes always emit on the target axis.
+		// Per enum_parser/main.cpp::WriteHeader:
+		//   _serialized.h  includes util/generic/serialized_enum.h + the input header.
+		//   _serialized.cpp includes the enum_serialization_runtime headers + util helpers.
 		if ctx.scannerTarget.codegen != nil {
+			headerSrc := "$(SOURCE_ROOT)/" + enInstance.Path + "/" + headerRel
 			for _, p := range enOutPaths {
+				var includes []string
+				if strings.HasSuffix(p, "_serialized.h") {
+					includes = []string{
+						headerSrc,
+						"$(SOURCE_ROOT)/util/generic/serialized_enum.h",
+					}
+					sort.Strings(includes)
+				} else {
+					// _serialized.cpp
+					includes = []string{
+						headerSrc,
+						"$(SOURCE_ROOT)/tools/enum_parser/enum_parser/stdlib_deps.h",
+						"$(SOURCE_ROOT)/tools/enum_parser/enum_serialization_runtime/enum_runtime.h",
+						"$(SOURCE_ROOT)/util/generic/map.h",
+						"$(SOURCE_ROOT)/util/generic/serialized_enum.h",
+						"$(SOURCE_ROOT)/util/generic/singleton.h",
+						"$(SOURCE_ROOT)/util/generic/string.h",
+						"$(SOURCE_ROOT)/util/generic/typetraits.h",
+						"$(SOURCE_ROOT)/util/generic/vector.h",
+						"$(SOURCE_ROOT)/util/stream/output.h",
+						"$(SOURCE_ROOT)/util/string/cast.h",
+					}
+					sort.Strings(includes)
+				}
 				ctx.scannerTarget.codegen.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EN",
 					OutputPath:    p,
-					EmitsIncludes: nil,
+					EmitsIncludes: includes,
 				})
 			}
 		}
@@ -3989,6 +4015,16 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		rl6Closure := scanIncludesForSource(ctx, srcInstance, srcRel, srcIn)
 
 		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, rl6Closure, ctx.emit)
+
+		// F-7-B: register the R6 output (.rl6.cpp — not a header, so EmitsIncludes is empty).
+		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:   "R6",
+				OutputPath:    r6Out,
+				EmitsIncludes: nil,
+			})
+		}
+
 		// PR-29-D07: same shape as the JS branch above. Pass
 		// IsGenerated so the downstream CC composes inputPath under
 		// $(BUILD_ROOT)/<srcInstance.Path>/<rel> rather than the
@@ -4104,6 +4140,17 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				cppStyleguideBinary, protocBinary, event2cppBinary,
 				"", ctx.sourceRoot, ctx.emit)
 
+			// F-7-B: register the .ev.pb.h output with EmitsIncludes from the .ev imports.
+			evRelPath := srcInstance.Path + "/" + srcRel
+			evH := "$(BUILD_ROOT)/" + evRelPath + ".pb.h"
+			if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
+				reg.Register(&GeneratedFileInfo{
+					ProducerKvP:   "EV",
+					OutputPath:    evH,
+					EmitsIncludes: protoDirectImportIncludes(ctx.sourceRoot, evRelPath),
+				})
+			}
+
 			// Emit downstream CC for the generated .ev.pb.cc.
 			evPbCCSuffix := srcRel + ".pb.cc"
 			ccIn := srcIn
@@ -4169,7 +4216,20 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 
 		r5Ref, r5TmpOut, r5CppOut := EmitR5(srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinStr, rlgenCdBinStr, ctx.emit)
 		_ = r5Ref
-		_ = r5TmpOut
+
+		// F-7-B: register R5 outputs (.tmp and .rl5.cpp — neither is a header; EmitsIncludes nil).
+		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:   "R5",
+				OutputPath:    r5TmpOut,
+				EmitsIncludes: nil,
+			})
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:   "R5",
+				OutputPath:    r5CppOut,
+				EmitsIncludes: nil,
+			})
+		}
 
 		// Downstream CC for the generated .rl5.cpp (generated source, no scan).
 		ccSrcRel := strings.TrimPrefix(r5CppOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
@@ -4202,6 +4262,18 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		srcIn.IncludeInputs = scanIncludesForSource(ctx, srcInstance, srcRel, srcIn)
 		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
 		_ = cfRef
+
+		// F-7-B: register the CF output with EmitsIncludes from the template's
+		// quoted #include directives. The output is a .cpp (not a header), so
+		// EmitsIncludes will typically be empty; populated for completeness.
+		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
+			diskPath := ctx.sourceRoot + "/" + srcInstance.Path + "/" + srcRel
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:   "CF",
+				OutputPath:    cfOut,
+				EmitsIncludes: cfIncludeDirectives(diskPath),
+			})
+		}
 
 		// Downstream CC for the generated .cpp / .c (generated source, no scan).
 		ccSrcRel := strings.TrimPrefix(cfOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
@@ -4580,4 +4652,98 @@ func reorderARMembers(refs []NodeRef, paths []string, isFlatNoLto []bool, numSrc
 	}
 
 	return outRefs, outPaths
+}
+
+// ─── F-7-B: codegen registry helpers ─────────────────────────────────────────
+
+// codegenRegForInstance returns the CodegenRegistry for the given instance.
+// Target-axis instances (aarch64) use the target scanner's registry; host-axis
+// instances (x86_64) use the host scanner's registry. Returns nil when no
+// registry is available (both scanners are nil-registry, e.g. in tests).
+func codegenRegForInstance(ctx *genCtx, instance ModuleInstance) *CodegenRegistry {
+	if targetIsX8664(instance) {
+		if ctx.scannerHost != nil {
+			return ctx.scannerHost.codegen
+		}
+		return nil
+	}
+	if ctx.scannerTarget != nil {
+		return ctx.scannerTarget.codegen
+	}
+	return nil
+}
+
+// protoDirectImportIncludes parses the direct `import "..."` statements from a
+// .proto or .ev source file and converts them to the generated header paths that
+// protoc emits under $(BUILD_ROOT):
+//
+//   - import "x/y/z.proto"  → "$(BUILD_ROOT)/x/y/z.pb.h"
+//   - import "x/y/z.ev"     → "$(BUILD_ROOT)/x/y/z.ev.pb.h"
+//
+// Only direct imports of the primary file are returned (no recursion). When the
+// file cannot be read (missing source on disk at scan time) the function returns
+// nil. Results are sorted lexicographically. Cited upstream pattern:
+// proto_processor.cpp:43-56::TProtoIncludeProcessor::PrepareIncludes.
+func protoDirectImportIncludes(sourceRoot, srcRel string) []string {
+	absPath := filepath.Join(sourceRoot, srcRel)
+	f, err := os.Open(absPath)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	var out []string
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if !strings.HasPrefix(line, "import ") {
+			continue
+		}
+		start := strings.IndexByte(line, '"')
+		end := strings.LastIndexByte(line, '"')
+		if start < 0 || end <= start {
+			continue
+		}
+		imp := line[start+1 : end]
+		if strings.HasSuffix(imp, ".ev") {
+			out = append(out, "$(BUILD_ROOT)/"+strings.TrimSuffix(imp, ".ev")+".ev.pb.h")
+		} else if strings.HasSuffix(imp, ".proto") {
+			out = append(out, "$(BUILD_ROOT)/"+strings.TrimSuffix(imp, ".proto")+".pb.h")
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// cfIncludeDirectives parses `#include "..."` directives from a configure_file
+// template (.cpp.in / .c.in). Only quoted includes are collected (angle-bracket
+// forms are system headers resolved by the compiler search path, not by the
+// registry). Returns $(SOURCE_ROOT)/... paths, sorted lexicographically.
+// Returns nil when the file cannot be read.
+func cfIncludeDirectives(diskPath string) []string {
+	data, err := os.ReadFile(diskPath)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, line := range strings.Split(string(data), "\n") {
+		t := strings.TrimSpace(line)
+		if !strings.HasPrefix(t, "#include ") {
+			continue
+		}
+		start := strings.IndexByte(t, '"')
+		if start < 0 {
+			continue
+		}
+		end := strings.IndexByte(t[start+1:], '"')
+		if end < 0 {
+			continue
+		}
+		inc := t[start+1 : start+1+end]
+		if inc != "" {
+			out = append(out, "$(SOURCE_ROOT)/"+inc)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
