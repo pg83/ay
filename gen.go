@@ -3897,6 +3897,105 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			}
 		}
 
+		// PR-M3-F-7-B: register EN outputs in the target scanner's CodegenRegistry
+		// with populated EmitsIncludes. EN nodes always emit on the target axis.
+		// Per enum_parser/main.cpp::WriteHeader:
+		//   _serialized.h  includes util/generic/serialized_enum.h + the input header.
+		//   _serialized.cpp includes the enum_serialization_runtime headers + util helpers.
+		//
+		// PR-AUDIT-6: registered BEFORE EmitEN so the EN node itself can walk its
+		// _serialized.cpp via the registry to augment its `inputs` closure (REF's
+		// EN node `inputs` includes the .cpp's transitive include set; this walk
+		// is what surfaces dispatch_methods.h / ordered_pairs.h / enum_runtime.h
+		// in the EN node's inputs).
+		serializedCPPPath := "$(BUILD_ROOT)/" + enInstance.Path + "/" + headerRel + "_serialized.cpp"
+		var serializedHPath string
+		if withHeader {
+			serializedHPath = "$(BUILD_ROOT)/" + enInstance.Path + "/" + headerRel + "_serialized.h"
+		}
+		if ctx.scannerTarget.codegen != nil {
+			headerSrc := "$(SOURCE_ROOT)/" + enInstance.Path + "/" + headerRel
+			cppIncludes := []string{
+				headerSrc,
+				"$(SOURCE_ROOT)/tools/enum_parser/enum_parser/stdlib_deps.h",
+				"$(SOURCE_ROOT)/tools/enum_parser/enum_serialization_runtime/dispatch_methods.h",
+				"$(SOURCE_ROOT)/tools/enum_parser/enum_serialization_runtime/enum_runtime.h",
+				"$(SOURCE_ROOT)/tools/enum_parser/enum_serialization_runtime/ordered_pairs.h",
+				"$(SOURCE_ROOT)/util/generic/map.h",
+				"$(SOURCE_ROOT)/util/generic/serialized_enum.h",
+				"$(SOURCE_ROOT)/util/generic/singleton.h",
+				"$(SOURCE_ROOT)/util/generic/string.h",
+				"$(SOURCE_ROOT)/util/generic/typetraits.h",
+				"$(SOURCE_ROOT)/util/generic/vector.h",
+				"$(SOURCE_ROOT)/util/stream/output.h",
+				"$(SOURCE_ROOT)/util/string/cast.h",
+			}
+			sort.Strings(cppIncludes)
+			ctx.scannerTarget.codegen.Register(&GeneratedFileInfo{
+				ProducerKvP:   "EN",
+				OutputPath:    serializedCPPPath,
+				EmitsIncludes: cppIncludes,
+			})
+			if withHeader {
+				hIncludes := []string{
+					headerSrc,
+					"$(SOURCE_ROOT)/util/generic/serialized_enum.h",
+				}
+				sort.Strings(hIncludes)
+				ctx.scannerTarget.codegen.Register(&GeneratedFileInfo{
+					ProducerKvP:   "EN",
+					OutputPath:    serializedHPath,
+					EmitsIncludes: hIncludes,
+				})
+			}
+		}
+
+		// PR-AUDIT-6: walk each cross-EN dep's _serialized.cpp to fold its
+		// transitive closure into THIS EN node's `inputs`. REF's EN node walks
+		// through cross-EN deps (e.g. dep_types depends on stats_enums via a
+		// `#include "stats_enums.h_serialized.h"` in some closure file; the
+		// cross-EN dep's `_serialized.cpp` carries the enum_runtime.h transitive
+		// closure that reaches dispatch_methods.h / ordered_pairs.h).
+		//
+		// EN nodes without cross-EN deps (e.g. stats_enums itself, a leaf EN)
+		// don't get this augmentation — matching REF's tight 2-input shape for
+		// leaf EN nodes.
+		//
+		// Excluding headerSrc (EmitEN appends it separately) and depENOutputs
+		// (likewise) prevents multiset duplicates. Also filter the source-header
+		// `closure` against depENOutputs — the closure may include a
+		// $(BUILD_ROOT)/_serialized.h entry that depENOutputs also names (the
+		// scanner resolves both through the codegen registry / cross-EN dep
+		// detection), and the duplicate fails L2 multiset equality.
+		enClosureExcl := map[string]struct{}{
+			"$(SOURCE_ROOT)/" + enInstance.Path + "/" + headerRel: {},
+		}
+		for _, p := range depENOutputs {
+			enClosureExcl[p] = struct{}{}
+		}
+		filteredClosure := make([]string, 0, len(closure))
+		for _, p := range closure {
+			if _, drop := enClosureExcl[p]; drop {
+				continue
+			}
+			filteredClosure = append(filteredClosure, p)
+		}
+		var crossCppClosure []string
+		for _, depOut := range depENOutputs {
+			if !strings.HasSuffix(depOut, "_serialized.cpp") {
+				continue
+			}
+			sub := walkClosureFromBuildRoot(ctx, enInstance, depOut, scanIn)
+			for _, p := range sub {
+				if _, drop := enClosureExcl[p]; drop {
+					continue
+				}
+				crossCppClosure = append(crossCppClosure, p)
+			}
+		}
+		enClosure := mergeDedup(filteredClosure, crossCppClosure)
+		sort.Strings(enClosure)
+
 		enRef, enOutPaths := EmitEN(
 			enInstance,
 			headerRel,
@@ -3905,53 +4004,13 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			enumParserBin,
 			depENRefs,
 			depENOutputs,
-			closure,
+			enClosure,
 			ctx.emit,
 		)
 
 		// Record outputs so later EN nodes can dep on them.
 		for _, p := range enOutPaths {
 			ctx.enOutputs[p] = enRef
-		}
-
-		// PR-M3-F-7-B: register EN outputs in the target scanner's CodegenRegistry
-		// with populated EmitsIncludes. EN nodes always emit on the target axis.
-		// Per enum_parser/main.cpp::WriteHeader:
-		//   _serialized.h  includes util/generic/serialized_enum.h + the input header.
-		//   _serialized.cpp includes the enum_serialization_runtime headers + util helpers.
-		if ctx.scannerTarget.codegen != nil {
-			headerSrc := "$(SOURCE_ROOT)/" + enInstance.Path + "/" + headerRel
-			for _, p := range enOutPaths {
-				var includes []string
-				if strings.HasSuffix(p, "_serialized.h") {
-					includes = []string{
-						headerSrc,
-						"$(SOURCE_ROOT)/util/generic/serialized_enum.h",
-					}
-					sort.Strings(includes)
-				} else {
-					// _serialized.cpp
-					includes = []string{
-						headerSrc,
-						"$(SOURCE_ROOT)/tools/enum_parser/enum_parser/stdlib_deps.h",
-						"$(SOURCE_ROOT)/tools/enum_parser/enum_serialization_runtime/enum_runtime.h",
-						"$(SOURCE_ROOT)/util/generic/map.h",
-						"$(SOURCE_ROOT)/util/generic/serialized_enum.h",
-						"$(SOURCE_ROOT)/util/generic/singleton.h",
-						"$(SOURCE_ROOT)/util/generic/string.h",
-						"$(SOURCE_ROOT)/util/generic/typetraits.h",
-						"$(SOURCE_ROOT)/util/generic/vector.h",
-						"$(SOURCE_ROOT)/util/stream/output.h",
-						"$(SOURCE_ROOT)/util/string/cast.h",
-					}
-					sort.Strings(includes)
-				}
-				ctx.scannerTarget.codegen.Register(&GeneratedFileInfo{
-					ProducerKvP:   "EN",
-					OutputPath:    p,
-					EmitsIncludes: includes,
-				})
-			}
 		}
 	}
 }
