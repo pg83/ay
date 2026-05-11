@@ -266,6 +266,19 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		EmitPB(instance, src, cppStyleguideLDRef, protocLDRef,
 			cppStyleguideBinary, protocBinary,
 			"cpp_proto", ctx.sourceRoot, ctx.emit)
+
+		// F-7-B: register the .pb.h output with its EmitsIncludes. The .pb.h
+		// includes the .pb.h of every proto imported by this source.
+		protoRelPath := instance.Path + "/" + src
+		protoBase := strings.TrimSuffix(protoRelPath, ".proto")
+		pbH := "$(BUILD_ROOT)/" + protoBase + ".pb.h"
+		if reg := codegenRegForInstance(ctx, instance); reg != nil {
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:   "PB",
+				OutputPath:    pbH,
+				EmitsIncludes: protoDirectImportIncludes(ctx.sourceRoot, protoRelPath),
+			})
+		}
 	}
 
 	// Emit EV nodes (PROTO_LIBRARY with .ev sources → module_tag:"cpp_proto").
@@ -289,6 +302,18 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			EmitEV(instance, src, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
 				"cpp_proto", ctx.sourceRoot, ctx.emit)
+
+			// F-7-B: register the .ev.pb.h output with EmitsIncludes derived from
+			// the .ev source's direct imports.
+			evRelPath := instance.Path + "/" + src
+			evH := "$(BUILD_ROOT)/" + evRelPath + ".pb.h"
+			if reg := codegenRegForInstance(ctx, instance); reg != nil {
+				reg.Register(&GeneratedFileInfo{
+					ProducerKvP:   "EV",
+					OutputPath:    evH,
+					EmitsIncludes: protoDirectImportIncludes(ctx.sourceRoot, evRelPath),
+				})
+			}
 		}
 	}
 }

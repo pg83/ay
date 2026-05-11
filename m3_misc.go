@@ -784,35 +784,87 @@ func EmitPR(
 // The CF emitter for .cpp.in/.c.in sources is already handled in
 // emitOneSource; this function handles only the explicit CONFIGURE_FILE()
 // macro form (not the implicit .in-source form).
+// antlr4RuntimeHeaderPath is the $(SOURCE_ROOT)-rooted path to the
+// antlr4 C++ umbrella header included by all ANTLR4-generated .h files.
+// F-7-B uses it as the static EmitsIncludes for JV .h outputs.
+const antlr4RuntimeHeaderPath = "$(SOURCE_ROOT)/contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h"
+
 func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData) {
+	outDir := "$(BUILD_ROOT)/" + instance.Path
+	reg := codegenRegForInstance(ctx, instance)
+
 	// JV: emit one node per ANTLR4 grammar declaration.
 	for _, g := range d.antlr4Grammars {
 		if g.IsSplit {
 			EmitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ctx.emit)
+			// F-7-B: register the .h outputs. ANTLR4-generated headers include
+			// antlr4-runtime.h (XPathLexer.h pattern in
+			// contrib/libs/antlr4_cpp_runtime/src/tree/xpath/XPathLexer.h).
+			if reg != nil {
+				lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
+				parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
+				for _, h := range []string{
+					outDir + "/" + lexerBase + ".h",
+					outDir + "/" + parserBase + ".h",
+					outDir + "/" + parserBase + "Visitor.h",
+					outDir + "/" + parserBase + "BaseVisitor.h",
+				} {
+					reg.Register(&GeneratedFileInfo{
+						ProducerKvP:   "JV",
+						OutputPath:    h,
+						EmitsIncludes: []string{antlr4RuntimeHeaderPath},
+					})
+				}
+			}
 		} else {
 			EmitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ctx.emit)
+			// F-7-B: register .h outputs.
+			if reg != nil {
+				base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
+				for _, h := range []string{
+					outDir + "/" + base + "Lexer.h",
+					outDir + "/" + base + "Parser.h",
+					outDir + "/" + base + "Visitor.h",
+					outDir + "/" + base + "BaseVisitor.h",
+				} {
+					reg.Register(&GeneratedFileInfo{
+						ProducerKvP:   "JV",
+						OutputPath:    h,
+						EmitsIncludes: []string{antlr4RuntimeHeaderPath},
+					})
+				}
+			}
 		}
 	}
 
 	// CF: emit one node per explicit CONFIGURE_FILE() declaration.
 	for _, cf := range d.configureFiles {
-		emitExplicitCF(ctx, instance, cf, d)
+		emitExplicitCF(ctx, instance, cf, d, reg)
 	}
 
 	// BI: emit one node when CREATE_BUILDINFO_FOR was declared.
 	if d.createBuildInfoFor != "" {
 		EmitBI(instance, d.createBuildInfoFor, biFlagsForInstance(), ctx.emit)
+		// F-7-B: register BI output. buildinfo_data.h is a generated header
+		// but its #include content is opaque (build-system metadata); EmitsIncludes nil.
+		if reg != nil {
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:   "BI",
+				OutputPath:    outDir + "/" + d.createBuildInfoFor,
+				EmitsIncludes: nil,
+			})
+		}
 	}
 
 	// PR: emit one node per RUN_PROGRAM declaration.
 	for _, rp := range d.runPrograms {
-		emitRunProgram(ctx, instance, rp, d)
+		emitRunProgram(ctx, instance, rp, d, reg)
 	}
 }
 
 // emitExplicitCF emits a CF node for an explicit CONFIGURE_FILE(src dst)
 // declaration (not triggered by a .cpp.in source in SRCS).
-func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *moduleData) {
+func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *moduleData, reg *CodegenRegistry) {
 	// Build a minimal ModuleCCInputs for CF emission — only DefaultVars
 	// and the scanner context matter; the compilation flags are not used.
 	in := ModuleCCInputs{
@@ -828,12 +880,22 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	}
 	in.IncludeInputs = scanIncludesForSource(ctx, instance, cf.Src, in)
 
-	EmitCF(instance, cf.Src, in, ctx.emit)
+	_, cfOut := EmitCF(instance, cf.Src, in, ctx.emit)
+
+	// F-7-B: register the explicit CF output with EmitsIncludes.
+	if reg != nil {
+		diskPath := ctx.sourceRoot + "/" + instance.Path + "/" + cf.Src
+		reg.Register(&GeneratedFileInfo{
+			ProducerKvP:   "CF",
+			OutputPath:    cfOut,
+			EmitsIncludes: cfIncludeDirectives(diskPath),
+		})
+	}
 }
 
 // emitRunProgram emits a PR node for a RUN_PROGRAM declaration.
 // It walks the tool PROGRAM as a host instance to get its LD ref/path.
-func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, d *moduleData) {
+func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, d *moduleData, reg *CodegenRegistry) {
 	// Walk the tool as a host program.
 	toolPath := filepath.Clean(stmt.ToolPath)
 	toolInstance := instance.WithHost(ctx.cfg)
@@ -859,4 +921,32 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// the in-files are listed explicitly in the RUN_PROGRAM macro.)
 
 	EmitPR(instance, stmt, toolBinPath, toolLDRef, inputClosure, ctx.emit)
+
+	// F-7-B: register PR outputs. PR outputs are generated files (possibly
+	// .h headers) but their include content is tool-specific and opaque at
+	// gen time. EmitsIncludes is nil — F-7-C will handle transitive lookup
+	// if needed.
+	if reg != nil {
+		for _, f := range stmt.OUTFiles {
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:   "PR",
+				OutputPath:    "$(BUILD_ROOT)/" + instance.Path + "/" + f,
+				EmitsIncludes: nil,
+			})
+		}
+		for _, f := range stmt.OUTNoAutoFiles {
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:   "PR",
+				OutputPath:    "$(BUILD_ROOT)/" + instance.Path + "/" + f,
+				EmitsIncludes: nil,
+			})
+		}
+		if stmt.StdoutFile != "" {
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:   "PR",
+				OutputPath:    "$(BUILD_ROOT)/" + instance.Path + "/" + stmt.StdoutFile,
+				EmitsIncludes: nil,
+			})
+		}
+	}
 }
