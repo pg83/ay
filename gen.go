@@ -534,6 +534,19 @@ func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, cliDef
 	// on scannerTarget/scannerHost below).
 	sharedPC := newSharedParseCache()
 
+	// PR-M3-F-7-A: one CodegenRegistry per scanner (per-scanner architecture
+	// per user arbitration 2026-05-11; see codegen_registry.go header).
+	// Target and host each maintain their own registry so platform-specific
+	// generated outputs (e.g. protobuf compiled for both axes) are
+	// independently tracked. F-7-C integrates these into scanner resolution.
+	targetReg := NewCodegenRegistry()
+	hostReg := NewCodegenRegistry()
+
+	targetScanner := newIncludeScannerWith(sourceRoot, LoadSysInclSetFor(sourceRoot, "aarch64"), sharedPC)
+	targetScanner.codegen = targetReg
+	hostScanner := newIncludeScannerWith(sourceRoot, LoadSysInclSetFor(sourceRoot, "x86_64"), sharedPC)
+	hostScanner.codegen = hostReg
+
 	ctx := &genCtx{
 		cfg:             cfg,
 		sourceRoot:      sourceRoot,
@@ -547,8 +560,8 @@ func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, cliDef
 		// caches (sysinclSource/IncluderCache, resolveCache, subgraphCache)
 		// remain per-scanner because sysincl YAML content is arch-specific
 		// (linux-musl-aarch64.yml vs linux-musl.yml differ for bits/*).
-		scannerTarget:   newIncludeScannerWith(sourceRoot, LoadSysInclSetFor(sourceRoot, "aarch64"), sharedPC),
-		scannerHost:     newIncludeScannerWith(sourceRoot, LoadSysInclSetFor(sourceRoot, "x86_64"), sharedPC),
+		scannerTarget:   targetScanner,
+		scannerHost:     hostScanner,
 		cliDefines:      cliDefines,
 		enOutputs:       make(map[string]NodeRef),
 		ldPluginCPCache: make(map[string]NodeRef),
@@ -3736,6 +3749,20 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// Record outputs so later EN nodes can dep on them.
 		for _, p := range enOutPaths {
 			ctx.enOutputs[p] = enRef
+		}
+
+		// PR-M3-F-7-A: parallel-register EN outputs in the target scanner's
+		// CodegenRegistry. EN nodes always emit on the target axis (all 21 EN
+		// nodes in sg2.json are on default-linux-aarch64). EmitsIncludes is
+		// left nil here; F-7-B fills the per-emitter include sets.
+		if ctx.scannerTarget.codegen != nil {
+			for _, p := range enOutPaths {
+				ctx.scannerTarget.codegen.Register(&GeneratedFileInfo{
+					ProducerKvP:   "EN",
+					OutputPath:    p,
+					EmitsIncludes: nil,
+				})
+			}
 		}
 	}
 }

@@ -227,6 +227,14 @@ type IncludeScanner struct {
 	subgraphMisses  uint64
 	subgraphTainted uint64
 	statsCallCount  uint64
+
+	// codegen is the per-scanner registry of codegen-emitted file metadata.
+	// Nil means the registry is not active (legacy behaviour; tests that
+	// construct scanners directly via NewIncludeScanner leave this nil and
+	// operate with on-disk-only resolution). Non-nil after GenWith wires a
+	// CodegenRegistry per the per-scanner architecture (F-7-A).
+	// F-7-C integrates this into fileExists / parseIncludes.
+	codegen *CodegenRegistry
 }
 
 // resolveInnerKey is the per-scanCtx resolve cache key. `ctxHash` is NOT
