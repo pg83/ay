@@ -1641,6 +1641,46 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 
 ## PR-39
 
+### [PR-41-D01] ccIsFlatNoLto semantic mismatch — tracks d.flatSrcs not SRC_C_NO_LTO specifically
+**Status:** resolved (deferred — M2-correct, latent for future modules with interleaved SRC() + SRCS())
+**Severity:** minor
+**Location:** gen.go:1872-1876 (declaration), gen.go:2034-2038 (population), gen.go:3179-3225 (reorderARMembers consumer)
+**Description:** Variable name `ccIsFlatNoLto`, doc comment on `reorderARMembers` ("SRC_C_NO_LTO sources (isFlatNoLto[i]==true) — hoisted to the front"), and the switch arm comment all assert this bool identifies `SRC_C_NO_LTO()` entries. In fact `d.flatSrcs` is also populated by plain `SRC()` macro (gen.go:553-557). M2 happens to byte-verify only because the lone `SRC()` in the closure (`util/charset/wide_sse41.cpp`) lands in a module whose flat bucket has exactly one element — hoisting is a no-op there. A future module declaring `SRC()` plus regular `SRCS()` such that REF interleaves them in declaration order will silently regress, exactly the failure mode the executor flagged for cxxsupp/builtins (just triggered by SRC() instead of the now-resolved path-pattern bucketer).
+**Root cause:** gen.go:553-557 adds plain `SRC()` filenames to `d.flatSrcs` because they share the flat-output layout; `flatSrcs` was then reused by PR-41 as a stand-in for SRC_C_NO_LTO-membership without re-checking.
+**Suggested fix:** Introduce a separate `d.noLtoSrcs map[string]struct{}` populated only in the `case "SRC_C_NO_LTO":` arm at gen.go:567-586. In the SRCS loop at gen.go:2034-2038, derive `isFlatNoLto := false; if _, ok := d.noLtoSrcs[src]; ok { isFlatNoLto = true }` independently of `FlatOutput` (which remains driven by `d.flatSrcs`). Update doc / switch-arm comments. Zero byte-exact change for M2; safety harness for M3+.
+
+### [PR-41-D02] No regression-pin test for reorderARMembers or R6 lang-CFLAG injection
+**Status:** resolved (deferred — M1 byte-exact pin and full archiver L3 comparator cover regression)
+**Severity:** minor
+**Location:** gen.go:2913 (Fix H), gen.go:3179-3249 (Fix I); absent from gen_test.go / ar_test.go / cc_test.go
+**Description:** Neither fix has a dedicated unit or table-driven test. `go test` passing is the absence of a test catching this — gen_test.go:2722 mentions `util/datetime/parser.rl6.cpp.o` only as a string in an ancestor-classification table. A future refactor in `reorderARMembers` or in the `.rl6` dispatch could silently regress and only be caught by full-archiver L3 re-run.
+**Suggested fix:** Add `TestReorderARMembers_BucketOrder` covering (i) empty input, (ii) JOIN_SRCS-only, (iii) interleaved regular flat+nested preserved, (iv) SRC_C_NO_LTO hoisted, (v) R6 sunk, (vi) all four buckets. Add `TestEmitOneSource_RL6_LangCFlag` asserting the rl6 dispatch appends `-Wno-implicit-fallthrough` exactly once.
+
+### [PR-41-D03] Cherry-picked commit body understates L3 measurement
+**Status:** resolved (note-only — actual measurement recorded in tasks.md Completed entry)
+**Severity:** nit
+**Location:** commit `272bdc8` body (cherry-picked verbatim from worktree)
+**Description:** Commit body says "Verification: L3 3717/3729 (99.65%) vs baseline 3715 (99.60%, +2)." Measured L3 on master with this commit applied is 3727/3729 (99.92%) — +12 against PR-39 baseline 3715. The executor measured against pre-PR-37 master (the worktree's branch base); intermediate PRs (PR-36/PR-37/PR-39) landed in parallel raising baseline before this PR merged. Future audits using `git log` as authoritative will under-credit PR-41.
+**Suggested fix:** Per CLAUDE.md "Prefer to create a new commit rather than amending" — no amend. The accurate measurement is captured in tasks.md PR-41 Completed entry; this defect entry pins the discrepancy for the audit trail.
+
+### [PR-41-D04] -Wno-implicit-fallthrough inlined at .rl6 dispatch; _LANG_CFLAGS_RL is shared across 5+ extensions
+**Status:** resolved (deferred — M3+ will surface .pyx/.py.py3/etc and trigger consolidation)
+**Severity:** minor
+**Location:** gen.go:2910-2913
+**Description:** Per `build/ymake.core.conf:3605-3610`, `_LANG_CFLAGS_RL=-Wno-implicit-fallthrough` is applied by ymake to source extensions `.rl5`, `.rl6`, `.pyx`, `.py.py3`, `.py.py2`, `.pyx.py3` — not just `.rl6`. The executor's inline comment acknowledges this ("Extend in M3+ for .pyx, .py.py3, .rl5 when their closures surface."), but inlining the literal flag at the `.rl6` dispatch site means any future M3 closure adding any of the other five extensions will need a parallel edit to a different dispatch branch instead of one shared lookup table.
+**Suggested fix:** Extract a package-level constant or helper: `var langCFlagsRL = []string{"-Wno-implicit-fallthrough"}`, applied wherever the EmitR6/EmitJS/EmitPyx/... chain feeds a downstream EmitCC of a `_LANG_CFLAGS_RL`-eligible extension. Live in `r6.go` (or a new `lang_cflags.go`) so the rl6 / pyx / py.py3 dispatches share one source of truth.
+
+### [PR-41-D05] reorderARMembers doc-comment overstates /_/_/ discriminator uniqueness
+**Status:** resolved (deferred — M2-correct; M3+ revisit when literal `_/` directories surface)
+**Severity:** nit
+**Location:** gen.go:3192-3193 ("Regular (non-R6) SRCS members never produce this pattern.")
+**Description:** Claim true for M2 (only one `/_/_/` path in `want.graph` — the rl6 case). Not structurally true in general: a hand-written source under a literal directory named `_` (e.g. `SRCS(_/foo.cpp)`) would produce `<inst>/_/_/foo.cpp.o` via the nested path layout (`cc.go:419-420` prefixes `_/` to any srcRel containing `/`). No such case in M2; the comment invites a future maintainer to trust the discriminator beyond its actual guarantee.
+**Suggested fix:** Soften comment, OR more robustly replace path-pattern with explicit `ccIsR6 []bool` parallel slice set inside the `.rl6` dispatch of emitOneSource. Bool approach mirrors `ccIsFlatNoLto` (also a per-source flag) and removes implicit-string-pattern coupling between `emitOneSource` and `reorderARMembers`.
+
+---
+
+## PR-36
+
 ### [PR-36-D01] sameDirAbs skips normalisePath on the empty-incDir branch
 **Status:** resolved (deferred — latent edge case unreachable from M2 closure)
 **Severity:** nit
