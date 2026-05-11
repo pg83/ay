@@ -2669,6 +2669,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// re-sorts by canonical UID).
 	emitEnumSrcs(ctx, instance, d, peerAddInclGlobal)
 
+	// PR-AUDIT-8: hoist JV/CF/BI/PR node emission before the per-source loop
+	// so the codegen registry is fully populated when any source's WalkClosure
+	// runs. Mirrors the earlier emitEnumSrcs hoist (F-7-C). No state written
+	// by the per-source loop is read by emitMiscNodes.
+	emitMiscNodes(ctx, instance, d)
+
 	// PR-M3-F-7-C: two-pass source emission. Codegen-producing sources
 	// (.ev/.proto/.rl6/.rl/.cpp.in/.c.in) emit nodes whose outputs
 	// (`.ev.pb.h`, `.rl6.cpp`, `*.cpp`, …) consumer CCs in this same
@@ -3016,9 +3022,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			emitPySrcs(ctx, instance, d)
 		}
 
-		// PR-M3-E: emit JV, CF, BI, PR nodes declared at module level.
-		emitMiscNodes(ctx, instance, d)
-
 		result := &moduleEmitResult{
 			ARRef:                   ldRef,
 			ARPath:                  ldPath,
@@ -3105,9 +3108,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	// PR-M3-D EN emission moved to pre-source-loop (PR-M3-F-7-C); the
 	// codegen registry must be populated before consumer CCs scan.
-
-	// PR-M3-E: emit JV, CF, BI, PR nodes declared at module level.
-	emitMiscNodes(ctx, instance, d)
+	// PR-AUDIT-8: emitMiscNodes likewise hoisted to pre-source-loop above.
 
 	result := &moduleEmitResult{
 		ARRef:                   arRef,
