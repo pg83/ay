@@ -1423,14 +1423,14 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 **Description:** Numbers reproduce; cycle invariant preserved; bucket helper edge cases verified (own/peer empty/non-empty/overlap); test inversions honest (TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs is correct rename matching D02 semantic). 10/10 sample-trace of newly-byte-exact pairs are genuinely byte-exact. M1 byte-exact preserved.
 
 ### [PR-33-C01] util-module PEERDIR ordering: libcxx/libcxxrt -I emitted AFTER musl, not BEFORE (16 util .o nodes + 9 ragel6)
-**Status:** open
+**Status:** resolved (closed by subsequent M2-closure work; hygiene 2026-05-11)
 **Severity:** major
 **Location:** gen.go (PEERDIR walk for util — exact site under investigation)
 **Description:** For util/_/digest/city.cpp.o aarch64 (and 15 other util .o + 9 ragel6 transitively): reference emits include order [linux-headers, libcxx/include, libcxxrt/include, musl/arch, musl/include, ...]; ours emits [linux-headers, musl/arch, musl/include, ..., libcxx/include LAST, libcxxrt/include]. Slot count + surrounding flags byte-exact except the 2-slot reorder. PR-33's util-libcxx peering work introduced libcxx/libcxxrt as peers but inserted them at the TAIL of the include list rather than between linux-headers and musl/arch.
 **Suggested fix:** Order util's libcxx/libcxxrt PEERDIRs BEFORE musl in include emission. Likely peer-list ordering issue in PEERDIR walk where library-class peers should precede toolchain-injected peers (musl is libc toolchain; libcxx is user library wrapping it).
 
 ### [PR-33-C02] yasm libyasm missing `-D_musl_=1` macro (30 yasm libyasm + 11 yasm modules)
-**Status:** open
+**Status:** resolved (closed by subsequent M2-closure work; hygiene 2026-05-11)
 **Severity:** major
 **Location:** yasm-specific CFLAGS injection (likely contrib/tools/yasm/libyasm/ya.make IF (MUSL) handling)
 **Description:** Reference yasm/_/libyasm/assocdat.c.pic.o x86_64 emits `-D_musl_=1` at slot 52 after YASM-specific defines. Ours skips this slot; everything from slot 52 onward shifts by one. 30 yasm libyasm + 6 yasm modules + 5 yasm objfmts/elf nodes (~41 total) regress at L3.
@@ -1512,14 +1512,14 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 **Fix:** Deferred. Rename to composeOwnAndPeerGlobals; or add one-line glossary in helper docstring.
 
 ### [PR-33-A2_01] C01 hoist is reorder-only; runtime ancestors with no PEERDIRs (library/cpp/malloc/api) get NO libcxx/libcxxrt at all
-**Status:** open
+**Status:** resolved (closed by subsequent M2-closure work; hygiene 2026-05-11)
 **Severity:** major
 **Location:** gen.go:1313-1343 (hoist gate); affects library/cpp/malloc/api
 **Description:** C01 doc claims "model libcxx/libcxxrt as direct GLOBAL peers for runtime ancestors". Implementation only REORDERS entries already in peerAddInclGlobal; never INJECTS when missing. For util this works because user-PEERDIRs (util/charset, zlib, etc.) pull libcxx/libcxxrt into the slice via Phase 2; for library/cpp/malloc/api (runtime ancestor with NO_UTIL + zero PEERDIRs), nothing puts libcxx/libcxxrt into the slice and the hoist has nothing to hoist. Reference malloc.cpp.o has libcxx/include + libcxxrt/include at slots 11-12; ours has musl/arch instead (libcxx/libcxxrt entirely absent). 2 L3 mismatches (.o + .pic.o) in M2; structural concern that the discriminator's premise is operationally false.
 **Suggested fix:** Either (a) augment defaultPeerdirsFor so runtime ancestors also receive libcxx/include + libcxxrt/include as implicit GLOBAL header-only contributions; or (b) change the hoist to INJECT-then-reorder. (a) more honest model; (b) smaller patch.
 
 ### [PR-33-A2_02 / C2_01] AS-emitter hardcoded to aarch64 toolchain; 62 x86_64 AS nodes have wrong cmd_args
-**Status:** open
+**Status:** resolved (closed by subsequent M2-closure work; hygiene 2026-05-11)
 **Severity:** major
 **Location:** as.go:74-79 (EmitAS prologue uses targetTriple + archFlag constants directly); flags.go:63-70 (constants are hardcoded `aarch64-linux-gnu` / `armv8-a`)
 **Description:** 62 AS nodes in our output have platform=`default-linux-x86_64` but ALL 62 have `--target=aarch64-linux-gnu` and `-march=armv8-a`. Reference: zero such mismatches (37 x86 AS nodes correctly use `--target=x86_64-linux-gnu`). Sample (musl `ceill.s.o`): 23-arg cmd_args delta (want 109, got 86). Plus EmitAS doesn't inject muslExtraDefines for musl-self assembly (43 nodes total). **Dominates remaining 117 L3 misses (56 of 117 are kind=AS); closing lifts L3 95.60% → ~97.10%.**
@@ -1547,7 +1547,7 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 **Fix:** Deferred. Trace tcmalloc's entry path; reference puts it in user-PEERDIR-tail region.
 
 ### [PR-33-A2_06 / C2_03] ragel6 host PIC duplicated linux-headers pair (slots 18-19) + mimalloc/ragel5 ordering
-**Status:** open
+**Status:** resolved (closed by subsequent M2-closure work; hygiene 2026-05-11)
 **Severity:** minor
 **Location:** gen.go peer-walk dedup logic for ragel6/bin host walks
 **Description:** ragel6/all_cd.cpp.pic.o reference slots [11-18]: libcxx/include, libcxxrt/include, musl/{arch/x86_64,arch/generic,include,extra}, mimalloc/include, ragel5/aapl. Got: same through musl, then ragel5/aapl, then DUPLICATE linux-headers + linux-headers/_nf, then mimalloc/include. Two issues: (a) mimalloc-vs-ragel5/aapl ordering reversed; (b) linux-headers re-emitted at slots 18-19 (over-emit by us). Pushes -D_musl_=1 from slot 51 to 53 (offset +2). 9 ragel6 host-PIC CC nodes affected.
