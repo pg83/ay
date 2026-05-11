@@ -956,7 +956,7 @@ func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, in Mod
 
 	ccIn := in
 	ccIn.IsGenerated = true
-	ccIn.IncludeInputs = walkClosureFromBuildRoot(ctx, instance, prOut, in)
+	ccIn.IncludeInputs = walkClosure(ctx, instance, prOut, in)
 
 	ref, outPath := EmitCC(instance, out, ccIn, ctx.emit)
 
@@ -989,7 +989,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	if !strings.Contains(srcPath, "/") {
 		srcPath = instance.Path + "/" + cf.Src
 	}
-	in.IncludeInputs = scanIncludesForSource(ctx, instance, cf.Src, in)
+	in.IncludeInputs = walkClosure(ctx, instance, resolveSourceVFS(ctx, instance, cf.Src, in.SrcDir), in)
 
 	_, cfOut := EmitCF(instance, cf.Src, in, ctx.emit)
 
