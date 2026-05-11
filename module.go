@@ -179,11 +179,22 @@ func inferFlagsFromPath(path string, isPIC bool) FlagSet {
 	// site reads `Flags.LibcMusl` instead. Documented removable in
 	// M5+ when ya.make-driven flag inference (parsing NO_PLATFORM +
 	// path-conditional SET(MUSL no) etc.) replaces this heuristic.
+	//
+	// PR-39: contrib/libs/musl/full is a normal LIBRARY (ya.make has
+	// SET(MUSL no)) that bridges the musl ABI to glibc — it must NOT
+	// receive the musl CC bundle. It still carries NO_LIBC/NO_UTIL/
+	// NO_RUNTIME (keeping effectiveNoPlatform=true to suppress default
+	// peer injection); only LibcMusl is withheld so the CC dispatch
+	// routes to composeTargetCC. TODO: remove when SET() parsing
+	// lands in M3+.
 	if path == "contrib/libs/musl" || strings.HasPrefix(path, "contrib/libs/musl/") {
 		fs.NoLibc = true
 		fs.NoUtil = true
 		fs.NoRuntime = true
-		fs.LibcMusl = true
+
+		if path != "contrib/libs/musl/full" {
+			fs.LibcMusl = true
+		}
 	}
 
 	return fs
