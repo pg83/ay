@@ -149,7 +149,8 @@ func EmitLD(
 	// TODO: remove this shim when a general RECURSE-driven BinaryDir
 	// lift lands in M3+.
 	binaryDir := ldBinaryDir(instance)
-	hostBuild := instance.Flags.PIC
+	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
+	hostBuild := targetIsX8664(instance)
 
 	outputPath := "$(BUILD_ROOT)/" + binaryDir + "/" + binaryName
 	vcsCPath := "$(BUILD_ROOT)/" + binaryDir + "/__vcs_version__.c"
@@ -262,7 +263,8 @@ func EmitLD(
 	// the convention CC/AR use for host nodes. PR-24's
 	// target-only LD never tripped this branch; PR-26 verifies the
 	// full host LD bundle byte-exact.
-	if instance.Flags.PIC {
+	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
+	if targetIsX8664(instance) {
 		n.HostPlatform = true
 		n.Tags = []string{"tool"}
 	}

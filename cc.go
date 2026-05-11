@@ -269,12 +269,13 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 		ownCFlags = in.CFlags
 	}
 
+	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
 	switch {
-	case isMusl && instance.Flags.PIC:
+	case isMusl && targetIsX8664(instance):
 		cmdArgs = composeMuslHostCC(outputPath, inputPath, nil, muslOwnExtras, isCxx)
 	case isMusl:
 		cmdArgs = composeMuslCC(outputPath, inputPath, nil, muslOwnExtras, isCxx)
-	case instance.Flags.PIC:
+	case targetIsX8664(instance):
 		cmdArgs = composeHostCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, in.PerSourceCFlags, isCxx, instance.Flags.NoCompilerWarnings)
 	default:
 		cmdArgs = composeTargetCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, in.PerSourceCFlags, isCxx, instance.Flags.NoCompilerWarnings)
@@ -330,7 +331,8 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 		},
 	}
 
-	if instance.Flags.PIC {
+	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
+	if targetIsX8664(instance) {
 		// Host build: reference nodes carry `host_platform=true`
 		// and `tags=["tool"]`. The "tool" tag distinguishes host
 		// nodes that are built specifically to be invoked at

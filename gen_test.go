@@ -3672,3 +3672,49 @@ END()
 		t.Errorf("AR.Inputs missing %q — PR-35y R8 SRCDIR rebase for `.S` source", want)
 	}
 }
+
+// TestD41_PICCoincidesWithHostTarget locks the M2/M3 invariant:
+// for every emitted node, if its Platform equals the configured host
+// platform then HostPlatform must be true, and if its Platform equals
+// the configured target platform then HostPlatform must be false.
+//
+// This is the graph-level proof that D41's dispatch-on-Target rule is
+// internally consistent: emitter sites that set HostPlatform read
+// instance.Target (via targetIsX8664) and instance.Target determines
+// node.Platform — so the two fields must agree.
+//
+// If this test ever fails, either a walker site failed to flip Target
+// when descending into a host dependency, or an emitter site still
+// reads Flags.PIC for HostPlatform assignment. Update D41 and fix the
+// offending site; do not remove the test.
+func TestD41_PICCoincidesWithHostTarget(t *testing.T) {
+	const targetDir = "tools/archiver"
+
+	if _, err := os.Stat(sourceRoot + "/" + targetDir + "/ya.make"); err != nil {
+		t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+	}
+
+	g := Gen(DefaultLinuxConfig, sourceRoot, targetDir)
+
+	hostID := string(DefaultLinuxConfig.Host.ID)
+	targetID := string(DefaultLinuxConfig.Target.ID)
+
+	for _, n := range g.Graph {
+		out := ""
+		if len(n.Outputs) > 0 {
+			out = n.Outputs[0]
+		}
+
+		switch n.Platform {
+		case hostID:
+			if !n.HostPlatform {
+				t.Errorf("node %q on host platform %q has HostPlatform=false (D41 invariant violated)", out, hostID)
+			}
+
+		case targetID:
+			if n.HostPlatform {
+				t.Errorf("node %q on target platform %q has HostPlatform=true (D41 invariant violated)", out, targetID)
+			}
+		}
+	}
+}

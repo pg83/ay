@@ -62,3 +62,10 @@ var DefaultLinuxConfig = PlatformConfig{
 // rule emitter takes a `ModuleInstance` instead of a
 // `PlatformConfig`.
 var TargetCfg = DefaultLinuxConfig
+
+// targetIsX8664 reports whether mi is built for the x86_64 platform.
+// In M2/M3 this coincides with the host axis; naming avoids the
+// host/target boolean framing per D41.
+func targetIsX8664(mi ModuleInstance) bool {
+	return mi.Target == PlatformDefaultLinuxX8664
+}
