@@ -102,6 +102,7 @@ func EmitLD(
 	globalPaths []string,
 	memberInputs []string,
 	muslOn bool,
+	moduleCFlags []string,
 	emit Emitter,
 ) NodeRef {
 	if len(ccRefs) != len(ccPaths) {
@@ -148,14 +149,24 @@ func EmitLD(
 	// TODO: remove this shim when a general RECURSE-driven BinaryDir
 	// lift lands in M3+.
 	binaryDir := ldBinaryDir(instance)
+	hostBuild := instance.Flags.PIC
 
 	outputPath := "$(BUILD_ROOT)/" + binaryDir + "/" + binaryName
 	vcsCPath := "$(BUILD_ROOT)/" + binaryDir + "/__vcs_version__.c"
-	vcsOPath := "$(BUILD_ROOT)/" + binaryDir + "/__vcs_version__.c.o"
+
+	// PR-38: host PROGRAM nodes use `.pic.o` for the vcs_version
+	// compile output to match the reference graph shape; target nodes
+	// use plain `.o`.
+	vcsOSuffix := ".o"
+	if hostBuild {
+		vcsOSuffix = ".pic.o"
+	}
+
+	vcsOPath := "$(BUILD_ROOT)/" + binaryDir + "/__vcs_version__.c" + vcsOSuffix
 
 	cmd0 := composeLDCmdVcsInfo(vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath, muslOn)
-	cmd2 := composeLDCmdLinkExe(outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths)
+	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath, muslOn, moduleCFlags, hostBuild)
+	cmd2 := composeLDCmdLinkExe(outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, hostBuild)
 	cmd3 := composeLDCmdLinkOrCopy(binaryDir)
 
 	// vcs_info.py and fs_tools.py only carry ARCADIA_ROOT_DISTBUILD;
@@ -322,31 +333,31 @@ func composeLDCmdVcsInfo(vcsCPath string) []string {
 }
 
 // composeLDCmdVcsCompile composes cmd[1]: clang compile of
-// `__vcs_version__.c` → `__vcs_version__.c.o`. 94 args.
+// `__vcs_version__.c` → `__vcs_version__.c.o` (target) or
+// `__vcs_version__.c.pic.o` (host). Target: 94 args.
 //
-// Differs from the regular target CC bundle in two structural ways:
+// Target build (hostBuild=false): uses the target toolchain triple,
+// -march=, commonCFlags, warningFlags, commonDefines. The
+// `moduleCFlags` parameter is unused on the target path.
 //
-//   - The include block is a single `-I$(SOURCE_ROOT)` instead of
-//     the 4-element `ccIncludes` set used by user-source CC.
-//   - The two `noLibcUndebugBlock` copies are flanked by `-D_musl_=1`
-//     and `-D_musl_` sentinels respectively, instead of being bare.
-//     Real ymake emits this for vcs_version compiles inside a musl
-//     PROGRAM closure to mark the .o as participating in the musl
-//     build (`_musl_=1` for the first half, the bare `_musl_` for the
-//     second half — verified entry-by-entry against
-//     `tools/archiver/__vcs_version__.c.o`).
+// Host build (hostBuild=true): uses hostTriple (no -march), hostCFlags,
+// muslWarningFlags (-Wno-everything), hostDefines, then moduleCFlags
+// (which carries the module's own CFLAGS plus -D_musl_=1 when muslOn),
+// then ndebugPicBlock × 2 with catboostOpenSourceDefine +
+// muslConsumerSentinel + hostSseFeatures between them. Pinned byte-exact
+// against the reference contrib/tools/ragel6/ragel6 LD cmd[1] (PR-38).
 //
 // PR-32 D10: the musl-specific D-flag pair (`-D_musl_=1` and
 // `-D_musl_`) is now driven by the CLI's `--define MUSL=...` value
 // instead of unconditional injection. The `muslOn` parameter
 // reflects `cliMuslOn(ctx)` from the walker; when MUSL=no the two
-// sentinels collapse to a bare double-`noLibcUndebugBlock`. The
-// flag-bundle data (the literal `-D_musl_=1` / `-D_musl_` strings)
-// stays here as the documented musl-internal vcs-compile shape.
-//
-// Output and input are passed in (output `__vcs_version__.c.o`, input
-// `__vcs_version__.c`).
-func composeLDCmdVcsCompile(vcsCPath, vcsOPath string, muslOn bool) []string {
+// sentinels collapse to a bare double-`noLibcUndebugBlock` (target)
+// or no muslConsumerSentinel between catboost and SSE (host).
+func composeLDCmdVcsCompile(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags []string, hostBuild bool) []string {
+	if hostBuild {
+		return composeLDCmdVcsCompileHost(vcsCPath, vcsOPath, muslOn, moduleCFlags)
+	}
+
 	cmdArgs := make([]string, 0, 94)
 	cmdArgs = append(cmdArgs,
 		ccCompilerPath,
@@ -381,6 +392,43 @@ func composeLDCmdVcsCompile(vcsCPath, vcsOPath string, muslOn bool) []string {
 	return cmdArgs
 }
 
+// composeLDCmdVcsCompileHost composes the HOST variant of cmd[1]: uses
+// the x86_64 toolchain, hostCFlags, muslWarningFlags, hostDefines, then
+// `moduleCFlags` (module-own CFLAGS + `-D_musl_=1` when muslOn), then
+// ndebugPicBlock twice with catboostOpenSourceDefine + muslConsumerSentinel
+// + hostSseFeatures between them. Matches the reference shape for
+// contrib/tools/ragel6 and contrib/tools/yasm host LD cmd[1].
+func composeLDCmdVcsCompileHost(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags []string) []string {
+	cmdArgs := make([]string, 0, 94+len(moduleCFlags))
+	cmdArgs = append(cmdArgs,
+		ccCompilerPath,
+		"--target="+hostTriple,
+		"-B"+binPath,
+		"-c",
+		"-o",
+		vcsOPath,
+		vcsCPath,
+	)
+	cmdArgs = append(cmdArgs, "-I$(SOURCE_ROOT)")
+	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
+	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
+	cmdArgs = append(cmdArgs, hostCFlags...)
+	cmdArgs = append(cmdArgs, muslWarningFlags...)
+	cmdArgs = append(cmdArgs, hostDefines...)
+	cmdArgs = append(cmdArgs, moduleCFlags...)
+	cmdArgs = append(cmdArgs, ndebugPicBlock...)
+	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
+
+	if muslOn {
+		cmdArgs = append(cmdArgs, muslConsumerSentinel)
+	}
+
+	cmdArgs = append(cmdArgs, hostSseFeatures...)
+	cmdArgs = append(cmdArgs, ndebugPicBlock...)
+
+	return cmdArgs
+}
+
 // ldVcsMuslSelfDefine is the `-D_musl_=1` flag the LD vcs_version
 // compile injects between commonDefines and the first
 // noLibcUndebugBlock copy when MUSL=yes (PR-32 D10). The =1 form
@@ -402,14 +450,19 @@ const ldVcsMuslSelfDefine = "-D_musl_=1"
 //	--ya-start-command-file / globals /           1 + len(globals) + 1 args  (block always present;
 //	--ya-end-command-file                                                     globals slice may be empty)
 //	-Wl,--no-whole-archive                        1 arg
-//	__vcs_version__.c.o + ccPaths                 1 + len(ccPaths) args
+//	__vcs_version__.c[.pic].o + ccPaths           1 + len(ccPaths) args
 //	-o / outputPath                               2 args
-//	--target / -march / -B/usr/bin                3 args
+//	--target / [-march] / -B/usr/bin              2-3 args (target has -march; host does not)
 //	-Wl,--start-group / peerLibs / -Wl,--end-group  1 + len(peerLibs) + 1 args
-//	trailing static-musl flags                    12 args
+//	trailing static flags                         12 args
 //
-// For tools/archiver: 2 + (3) + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 34 + 12 = 73 args. ✓
-func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths, peerLibPaths, pluginPaths, globalPaths []string) []string {
+// For tools/archiver (target): 2 + (3) + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 34 + 12 = 73 args. ✓
+// For ragel6 (host): 2 + (3) + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 10 + 2 + 2 + 12 + 12 = 58 args (varies by peer count).
+//
+// PR-38: `hostBuild` selects the host toolchain triple (x86_64, no
+// -march) and `ldHostStaticTrailingFlags` in place of the target's
+// `ldStaticMuslTrailingFlags` (which carries -lrt/-ldl absent on host).
+func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths, peerLibPaths, pluginPaths, globalPaths []string, hostBuild bool) []string {
 	// Capacity hint matches the reference graph's structure plus the
 	// caller-supplied slices.
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 12 + 1 + len(ccPaths) + len(peerLibPaths) + len(globalPaths)
@@ -448,16 +501,30 @@ func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths, peerLibPaths, plu
 		vcsOPath,
 	)
 	cmdArgs = append(cmdArgs, ccPaths...)
-	cmdArgs = append(cmdArgs,
-		"-o", outputPath,
-		"--target="+targetTriple,
-		"-march="+archFlag,
-		"-B"+binPath,
-		"-Wl,--start-group",
-	)
+	cmdArgs = append(cmdArgs, "-o", outputPath)
+
+	if hostBuild {
+		cmdArgs = append(cmdArgs,
+			"--target="+hostTriple,
+			"-B"+binPath,
+		)
+	} else {
+		cmdArgs = append(cmdArgs,
+			"--target="+targetTriple,
+			"-march="+archFlag,
+			"-B"+binPath,
+		)
+	}
+
+	cmdArgs = append(cmdArgs, "-Wl,--start-group")
 	cmdArgs = append(cmdArgs, peerLibPaths...)
 	cmdArgs = append(cmdArgs, "-Wl,--end-group")
-	cmdArgs = append(cmdArgs, ldStaticMuslTrailingFlags...)
+
+	if hostBuild {
+		cmdArgs = append(cmdArgs, ldHostStaticTrailingFlags...)
+	} else {
+		cmdArgs = append(cmdArgs, ldStaticMuslTrailingFlags...)
+	}
 
 	return cmdArgs
 }
@@ -552,6 +619,28 @@ var ldStaticMuslTrailingFlags = []string{
 	"-Wl,--no-dynamic-linker",
 	"-lrt",
 	"-ldl",
+	"-nostdlib",
+	"-fno-pie",
+	"-Wl,-no-pie",
+	"-nostdlib",
+	"-lm",
+	"-Wl,--gc-sections",
+}
+
+// ldHostStaticTrailingFlags is the 12-flag trailer the reference host
+// PROGRAM LD cmd[2] (ragel6, yasm) emits AFTER `-Wl,--end-group`.
+// Differs from `ldStaticMuslTrailingFlags` in two places: `-lrt` and
+// `-ldl` are absent (host binaries do not need the glibc-compat rt/dl
+// shims), replaced by two `-fPIC` flags that satisfy the static-PIC
+// link invariant. Verified entry-by-entry against
+// `contrib/tools/ragel6/ragel6` LD cmd[2] in the reference graph.
+var ldHostStaticTrailingFlags = []string{
+	"-rdynamic",
+	"-Wl,--no-as-needed",
+	"-fPIC",
+	"-fPIC",
+	"-static",
+	"-Wl,--no-dynamic-linker",
 	"-nostdlib",
 	"-fno-pie",
 	"-Wl,-no-pie",
