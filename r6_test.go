@@ -92,8 +92,9 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		t.Errorf("host_platform = true, want false")
 	}
 
-	// PR-28 D04: ragel6 host LD edge lives in DepRefs (not
-	// ForeignDepRefs["tool"]) to match the empirical reference shape.
+	// PR-L4-C/07: ragel6 host LD edge lives in both DepRefs (for the L0
+	// topology fingerprint) AND ForeignDepRefs["tool"] (matching REF's
+	// foreign_deps shape for the R6 aarch64 node).
 	if len(got.DepRefs) != 1 {
 		t.Fatalf("DepRefs len = %d, want 1", len(got.DepRefs))
 	}
@@ -102,8 +103,10 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		t.Errorf("DepRefs[0] = %v, want %v", got.DepRefs[0], ragel6LD)
 	}
 
-	if len(got.ForeignDepRefs) != 0 {
-		t.Errorf("ForeignDepRefs = %v, want empty (PR-28 D04 dropped placeholder)", got.ForeignDepRefs)
+	if len(got.ForeignDepRefs) != 1 {
+		t.Errorf("ForeignDepRefs len = %d, want 1 (PR-L4-C/07 restores foreign_deps[tool])", len(got.ForeignDepRefs))
+	} else if len(got.ForeignDepRefs["tool"]) != 1 || got.ForeignDepRefs["tool"][0] != ragel6LD {
+		t.Errorf("ForeignDepRefs[tool] = %v, want [%v]", got.ForeignDepRefs["tool"], ragel6LD)
 	}
 
 	// requirements must include cpu/network/ram (matching reference).

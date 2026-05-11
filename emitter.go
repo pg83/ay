@@ -325,21 +325,41 @@ func Finalize(e *BufferedEmitter) *Graph {
 	for _, i := range order {
 		node := e.nodes[i]
 
-		// Resolve Deps. Dedupe + sort per D14 so the canonicalisation
-		// is order-independent and the hash is stable across emit
-		// orderings that produce the same set of edges.
+		// Resolve Deps. For LD and AR nodes, preserve emit (insertion)
+		// order with deduplication — PR-L4-C/05: REF carries link order
+		// for these 30 nodes (3 LDs + 27 ARs); sorting would diverge.
+		// For all other node types, sort for a stable canonical hash (D14).
+		//
+		// The UID hash (canonicalNodeBytes below) always sees the SORTED
+		// form so the hash is order-independent; for LD/AR the Deps slice
+		// is restored to insertion order after hashing.
+		var insertionOrderDeps []string // non-nil only for LD/AR
 		if len(node.DepRefs) > 0 {
-			depSet := make(map[string]struct{}, len(node.DepRefs))
+			// Build deduped slice in insertion order (first occurrence wins).
+			seen := make(map[string]struct{}, len(node.DepRefs))
+			ordered := make([]string, 0, len(node.DepRefs))
+
 			for _, r := range node.DepRefs {
-				depSet[uids[r.id]] = struct{}{}
+				u := uids[r.id]
+				if _, ok := seen[u]; ok {
+					continue
+				}
+
+				seen[u] = struct{}{}
+				ordered = append(ordered, u)
 			}
 
-			deps := make([]string, 0, len(depSet))
-			for u := range depSet {
-				deps = append(deps, u)
+			if node.KV["p"] == "LD" || node.KV["p"] == "AR" {
+				// Remember insertion order; hash over sorted form.
+				insertionOrderDeps = ordered
+				sorted := make([]string, len(ordered))
+				copy(sorted, ordered)
+				sort.Strings(sorted)
+				node.Deps = sorted
+			} else {
+				sort.Strings(ordered)
+				node.Deps = ordered
 			}
-			sort.Strings(deps)
-			node.Deps = deps
 		} else if node.Deps == nil {
 			// Ensure the field serialises as [] not null.
 			node.Deps = []string{}
@@ -386,9 +406,15 @@ func Finalize(e *BufferedEmitter) *Graph {
 			// else: leave node.ForeignDeps nil so omitempty drops the field.
 		}
 
+		// PR-L4-C/01: sandboxing is always true for every node in the M2
+		// tools/archiver closure (verified uniformly across 3730 REF nodes).
+		// Set here once rather than in each rule emitter to avoid scatter.
+		node.Sandboxing = true
+
 		// Hash the (now child-resolved) node. The canonical form has
 		// UID/SelfUID/StatsUID zeroed, ensuring hash-of-content not
-		// hash-of-identity.
+		// hash-of-identity. For LD/AR, node.Deps is sorted at this point
+		// (set above) so the hash is order-independent.
 		canon := canonicalNodeBytes(node)
 		u := computeUID(canon)
 		node.UID = u
@@ -401,6 +427,12 @@ func Finalize(e *BufferedEmitter) *Graph {
 		node.StatsUID = "" // explicit; refined in a later PR.
 		uids[i] = u
 
+		// PR-L4-C/05: after hashing, restore LD/AR deps to insertion order
+		// so the serialized output preserves link/archive order (REF shape).
+		if insertionOrderDeps != nil {
+			node.Deps = insertionOrderDeps
+		}
+
 		// Drop the internal *Refs so they do not leak past Finalize. The
 		// emitter's `finalized` flag (set below) is the actual safety
 		// net against re-Finalize; clearing the refs is hygiene only.
@@ -408,28 +440,25 @@ func Finalize(e *BufferedEmitter) *Graph {
 		node.ForeignDepRefs = nil
 	}
 
-	// Build the output Graph. `Graph` is the topo-ordered list of
-	// nodes deduped by UID (two emits that hash to the same UID are
-	// the same node and must appear once); `Result` is the UIDs
-	// corresponding to the Result() refs in call order, also deduped
-	// (duplicate Result(ref) calls are idempotent).
+	// Build the output Graph. Result UIDs are computed first.
+	// Graph[] is ordered DFS preorder rooted at each Result UID,
+	// visiting children in their as-emitted Deps order (PR-L4-C/06).
+	// This matches REF's graph[] array order (verified empirically in
+	// the L4 roadmap §1.9). UIDs are deduplicated across all roots.
 	out := &Graph{
 		Conf:   map[string]interface{}{},
 		Inputs: map[string]interface{}{},
 		Graph:  make([]*Node, 0, n),
 		Result: make([]string, 0, len(e.results)),
 	}
-	seenNode := map[string]struct{}{}
 
-	for _, i := range order {
+	// Build a uid→node lookup for the DFS pass.
+	uidToNode := make(map[string]*Node, n)
+	for i, node := range e.nodes {
 		u := uids[i]
-
-		if _, ok := seenNode[u]; ok {
-			continue
+		if _, ok := uidToNode[u]; !ok {
+			uidToNode[u] = node
 		}
-
-		seenNode[u] = struct{}{}
-		out.Graph = append(out.Graph, e.nodes[i])
 	}
 
 	seenResult := map[string]struct{}{}
@@ -443,6 +472,45 @@ func Finalize(e *BufferedEmitter) *Graph {
 
 		seenResult[u] = struct{}{}
 		out.Result = append(out.Result, u)
+	}
+
+	// DFS preorder: visit each result root in result order, then recurse
+	// into its Deps in their emitted order. Each node appears exactly once.
+	seenNode := make(map[string]struct{}, n)
+
+	var dfsVisit func(uid string)
+	dfsVisit = func(uid string) {
+		if _, ok := seenNode[uid]; ok {
+			return
+		}
+
+		seenNode[uid] = struct{}{}
+		node := uidToNode[uid]
+
+		if node == nil {
+			return
+		}
+
+		out.Graph = append(out.Graph, node)
+
+		for _, depUID := range node.Deps {
+			dfsVisit(depUID)
+		}
+	}
+
+	for _, rootUID := range out.Result {
+		dfsVisit(rootUID)
+	}
+
+	// Any nodes not reachable from the result roots (disconnected subgraphs
+	// that may arise from dedup collisions) are appended in topo order to
+	// preserve completeness.
+	for _, i := range order {
+		u := uids[i]
+		if _, ok := seenNode[u]; !ok {
+			seenNode[u] = struct{}{}
+			out.Graph = append(out.Graph, e.nodes[i])
+		}
 	}
 
 	e.finalized = true

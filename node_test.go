@@ -17,8 +17,10 @@ import (
 //     empty arrays/maps render as []/{}.
 
 // expectedKeyOrder is the sequence of keys observed in the reference
-// g.json (alphabetical, including the two omitempty fields). Tests that
+// sg.json (alphabetical, including the two omitempty fields). Tests that
 // supply non-zero values for the omitempty fields expect this full order.
+// PR-L4-C/01: sandboxing added between requirements and self_uid.
+// PR-L4-C/04: stats_uid removed (json:"-").
 var expectedKeyOrder = []string{
 	"cmds",
 	"deps",
@@ -30,8 +32,8 @@ var expectedKeyOrder = []string{
 	"outputs",
 	"platform",
 	"requirements",
+	"sandboxing",
 	"self_uid",
-	"stats_uid",
 	"tags",
 	"target_properties",
 	"uid",
@@ -48,8 +50,8 @@ var expectedKeyOrderMinimal = []string{
 	"outputs",
 	"platform",
 	"requirements",
+	"sandboxing",
 	"self_uid",
-	"stats_uid",
 	"tags",
 	"target_properties",
 	"uid",

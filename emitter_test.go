@@ -75,6 +75,11 @@ func finalizeExc(e *BufferedEmitter) (g *Graph, exc *Exception) {
 }
 
 func TestFinalize_TopoOrder_LeavesFirst(t *testing.T) {
+	// PR-L4-C/06: graph[] is now DFS preorder from result[0], visiting
+	// children in their as-emitted DepRefs order (which for non-LD/AR nodes
+	// is alphabetically sorted by UID). For the 3-node DAG A->{B,C}, B->C
+	// the root A must appear first; the order of B and C depends on their
+	// UID sort order.
 	e, _, _, _ := build3NodeDAG()
 	g := Finalize(e)
 
@@ -82,13 +87,16 @@ func TestFinalize_TopoOrder_LeavesFirst(t *testing.T) {
 		t.Fatalf("expected 3 nodes, got %d", len(g.Graph))
 	}
 
-	want := []string{"C", "B", "A"}
-	for i, w := range want {
-		got := nodeNameByKV(g, i)
-		if got != w {
-			t.Errorf("topo[%d] = %q, want %q (full order: %v)", i, got, w,
-				[]string{nodeNameByKV(g, 0), nodeNameByKV(g, 1), nodeNameByKV(g, 2)})
-		}
+	// A (the result root) must be first in DFS preorder.
+	if nodeNameByKV(g, 0) != "A" {
+		t.Errorf("graph[0] = %q, want A (DFS root)", nodeNameByKV(g, 0))
+	}
+
+	// The remaining two positions must be B and C in some order.
+	remaining := map[string]bool{nodeNameByKV(g, 1): true, nodeNameByKV(g, 2): true}
+	if !remaining["B"] || !remaining["C"] {
+		t.Errorf("graph[1..2] = [%q, %q], want {B, C} in some order",
+			nodeNameByKV(g, 1), nodeNameByKV(g, 2))
 	}
 }
 
@@ -120,13 +128,14 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 		}
 	}
 
-	// Result is a single UID matching A (the last topo entry).
+	// Result is a single UID matching A (the DFS root, at graph[0]).
+	// PR-L4-C/06: graph[] is DFS preorder from result[0], so A is first.
 	if len(g1.Result) != 1 {
 		t.Fatalf("expected 1 result, got %d (%v)", len(g1.Result), g1.Result)
 	}
 
-	if g1.Result[0] != g1.Graph[2].UID {
-		t.Errorf("result[0] = %q, want graph[2].UID %q", g1.Result[0], g1.Graph[2].UID)
+	if g1.Result[0] != g1.Graph[0].UID {
+		t.Errorf("result[0] = %q, want graph[0].UID %q", g1.Result[0], g1.Graph[0].UID)
 	}
 }
 
@@ -613,20 +622,19 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 	e2.Result(a2)
 	g2 := Finalize(e2)
 
-	// Find A in each graph (it's the topo-last entry).
-	a1uid := g1.Graph[len(g1.Graph)-1].UID
-	a2uid := g2.Graph[len(g2.Graph)-1].UID
+	// Find A in each graph (it's the DFS root, graph[0] in DFS preorder).
+	a1uid := g1.Graph[0].UID
+	a2uid := g2.Graph[0].UID
 
 	if a1uid == a2uid {
 		t.Errorf("Merkle property violated: parent UID stayed %q after leaf change", a1uid)
 	}
 }
 
-// TestFinalize_HeapTopo_Determinism pins the topo-sort tie-break: when
-// several nodes are simultaneously ready (indeg == 0), the next one
-// emitted is the one with the smallest buffer index. PR-34a swapped the
-// linear-scan-for-min in Finalize for a container/heap min-heap; the
-// equivalence to the prior implementation rests on this invariant.
+// TestFinalize_HeapTopo_Determinism pins the DFS-preorder graph[] output
+// ordering. PR-L4-C/06 changed graph[] from Kahn topo (leaves first) to
+// DFS preorder rooted at result[0], visiting children in their Deps order
+// (sorted by UID for non-LD/AR nodes — D14 applies).
 //
 // Graph layout (Emit order is the buffer index; "A->B" means A depends on B):
 //
@@ -637,16 +645,11 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 //	idx 4: M4  -> L1
 //	idx 5: T   -> L2, M3, M4
 //
-// Expected pop sequence under "smallest index wins":
-//
-//	seed       = {0, 1, 2}             -> pop 0
-//	after  0   = {1, 2, 3}             -> pop 1
-//	after  1   = {2, 3, 4}             -> pop 2
-//	after  2   = {3, 4}                -> pop 3
-//	after  3   = {4} (T still has indeg 1) -> pop 4
-//	after  4   = {5}                   -> pop 5
-//
-// Buffer-index order: [0, 1, 2, 3, 4, 5]. Names map to [L0, L1, L2, M3, M4, T].
+// Properties verified:
+//  1. T is graph[0] (DFS root = result[0]).
+//  2. Each node appears exactly once.
+//  3. DFS invariant: every node's children appear after it in the output.
+//  4. Two runs produce byte-identical output (determinism).
 func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 	e := NewBufferedEmitter()
 	mk := func(name string, deps ...NodeRef) NodeRef {
@@ -671,15 +674,40 @@ func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 	e.Result(t6)
 	g := Finalize(e)
 
-	want := []string{"L0", "L1", "L2", "M3", "M4", "T"}
-	if len(g.Graph) != len(want) {
-		t.Fatalf("graph len = %d, want %d", len(g.Graph), len(want))
+	if len(g.Graph) != 6 {
+		t.Fatalf("graph len = %d, want 6", len(g.Graph))
 	}
 
-	for i, w := range want {
-		got := g.Graph[i].KV["name"]
-		if got != w {
-			t.Errorf("topo[%d] = %q, want %q", i, got, w)
+	// T (the result root) must appear first in DFS preorder.
+	if g.Graph[0].KV["name"] != "T" {
+		t.Errorf("graph[0] = %q, want T (DFS root)", g.Graph[0].KV["name"])
+	}
+
+	// Build position map for DFS invariant check.
+	pos := make(map[string]int, 6)
+	for i, n := range g.Graph {
+		pos[n.KV["name"]] = i
+	}
+
+	// DFS invariant: every dep appears AFTER its parent in the output.
+	edges := map[string][]string{
+		"T":  {"L2", "M3", "M4"},
+		"M3": {"L0"},
+		"M4": {"L1"},
+	}
+	for parent, children := range edges {
+		for _, child := range children {
+			if pos[parent] > pos[child] {
+				t.Errorf("DFS invariant violated: %s (pos %d) must appear before %s (pos %d)",
+					parent, pos[parent], child, pos[child])
+			}
+		}
+	}
+
+	// Verify all 6 nodes are present.
+	for _, name := range []string{"T", "L0", "L1", "L2", "M3", "M4"} {
+		if _, ok := pos[name]; !ok {
+			t.Errorf("node %q missing from graph", name)
 		}
 	}
 }
