@@ -87,7 +87,19 @@ func canonicalizeRagel6BinaryPath(p string) string {
 // Returns (NodeRef, outputPath) so the caller can wire the R6 node as
 // the input of a downstream EmitCC.
 func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath string, closure []string, emit Emitter) (NodeRef, string) {
-	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + ".cpp"
+	// PR-M3-A fix: add `_/` infix only when srcRel contains a `/` (i.e.
+	// the source is in a subdirectory of the module). Flat .rl6 sources
+	// (no path separator) live at the module root and their generated
+	// .cpp must land at `$(BUILD_ROOT)/<module>/<srcRel>.cpp` without
+	// the `_/` infix. Reference: util/datetime/parser.rl6 (has `/`) →
+	// `util/_/datetime/parser.rl6.cpp` ✓; include_parsers's
+	// cpp_includes_parser.rl6 (flat) → `include_parsers/cpp_includes_parser.rl6.cpp`.
+	var outputPath string
+	if strings.Contains(srcRel, "/") {
+		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + ".cpp"
+	} else {
+		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + ".cpp"
+	}
 	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
 	canonicalBinary := canonicalizeRagel6BinaryPath(ragel6BinaryPath)
 

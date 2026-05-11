@@ -58,16 +58,19 @@ func (e Environment) Lookup(name string) any {
 	return nil // unreachable; ThrowFmt panics
 }
 
-// Bool returns the boolean binding for name. Throws on miss OR on a
-// non-bool binding — the caller (predicate-position ExprIdent) expects
-// a bool and silently coercing a string/int would be a defect.
+// Bool returns the boolean binding for name. Bool-typed bindings are
+// returned directly. String-typed bindings are coerced: empty string →
+// false, non-empty string → true (upstream ymake semantics for bare-ident
+// use of a string variable, e.g. `IF (SANITIZER_TYPE OR ...)` where
+// SANITIZER_TYPE is "" when sanitizers are off). Int-typed bindings are
+// not expected in bool position; that remains a defect.
 func (e Environment) Bool(name string) bool {
 	if v, ok := e.bools[name]; ok {
 		return v
 	}
 
-	if _, ok := e.strings[name]; ok {
-		ThrowFmt("macros: identifier %q has string binding but is used in boolean position", name)
+	if v, ok := e.strings[name]; ok {
+		return v != ""
 	}
 
 	if _, ok := e.ints[name]; ok {
@@ -311,6 +314,74 @@ var DefaultIfEnv = Environment{
 		"PROVIDE_MEMFD_CREATE":              false, // PR-27: contrib/libs/libc_compat
 		"MUSL_LITE":                         false, // PR-30 D01: M2 default = full musl, not lite. Read by D02's defaultProgramPeerdirsFor to pick contrib/libs/musl/full when MUSL=yes && !MUSL_LITE.
 		"OPENSOURCE_REPLACE_LINUX_HEADERS":  false, // PR-30: contrib/libs/linux-headers (used in IF(X AND EXPORT_CMAKE)).
+		// M3 new identifiers.
+		// OPENSOURCE=true: this source tree is the open-source Arcadia export.
+		// The reference sg2.json was built from this tree, so IF(NOT OPENSOURCE)
+		// branches that PEERDIR internal-only modules (e.g. library/cpp/xml/document)
+		// must be taken false. OPENSOURCE=false would include modules missing from
+		// the tree and cause gen failures; the M2 target (tools/archiver) does not
+		// reach any OPENSOURCE-gated code so flipping this to true is M2-safe.
+		"OPENSOURCE":                    true, // M3: open-source Arcadia export (sg2.json reference).
+		"YA_OPENSOURCE":                 false, // M3: ya-tool open-source build flag.
+		"EXTERNAL_PY_FILES":             false, // M3: library/python/runtime_py3 external-py variant.
+		"USE_ARCADIA_PYTHON":            false, // M3: use Arcadia Python; false = use Arcadia Python3 bundle.
+		"USE_PYTHON3_PREV":              false, // M3: use previous Python3 toolchain.
+		"PREBUILT":                      false, // M3: use prebuilt tools (tools/py3cc, rescompiler, etc.).
+		"PY_PROTOS_FOR":                 false, // M3: PROTO_LIBRARY PY_PROTOS_FOR flag; false = no Python proto.
+		"YMAKE_DEBUG":                   false, // M3: devtools/ymake/diag ymake-debug mode.
+		"USE_VANILLA_PROTOC":            false, // M3: protobuf runtime selector.
+		"USE_PREBUILT_TOOLS":            false, // M3: tools/py3cc prebuilt path.
+		"PYTHON_SQLITE3":                false, // M3: tools/py3cc/slow sqlite3 variant.
+		"USE_SYSTEM_OPENSSL":            false, // M3: contrib/libs/openssl system variant.
+		"OPENSOURCE_REPLACE_OPENSSL":    false, // M3: contrib/libs/openssl export replacement.
+		"PYBUILD_NO_PYC":                false, // M3: Python build variant.
+		"USE_LIGHT_PY2CC":               false, // M3: Python 2 build variant.
+		"PYBIND_SRC":                    false, // M3: pybind source variant.
+		"PYTHON_FORBIDDEN_PROTOBUFS":    false, // M3: proto restrictions.
+		"SANITIZER_ADDRESS_USE_AFTER_SCOPE": false, // M3: sanitizer variant.
+		"ASAN":                          false, // M3: AddressSanitizer build.
+		"TSAN":                          false, // M3: ThreadSanitizer build.
+		"MSAN":                          false, // M3: MemorySanitizer build.
+		"UBSAN":                         false, // M3: UndefinedBehaviorSanitizer build.
+		"LSAN":                          false, // M3: LeakSanitizer build.
+		"HAVE_OPENSSL":                  false, // M3: OpenSSL availability.
+		"NO_OPENSSL":                    false, // M3: OpenSSL suppression flag.
+		"DARWIN_ARM64":                  false, // M3: macOS ARM64 arch flag; false on Linux.
+		"DARWIN_X86_64":                 false, // M3: macOS x86_64 arch flag; false on Linux.
+		"OS_HAIKU":                      false, // M3: Haiku OS; false on Linux.
+		"OS_NETBSD":                     false, // M3: NetBSD; false on Linux.
+		"OS_OPENBSD":                    false, // M3: OpenBSD; false on Linux.
+		"OS_VXWORKS":                    false, // M3: VxWorks RTOS; false on Linux.
+		"OS_ZOS":                        false, // M3: z/OS; false on Linux.
+		"CPU_ARM":                       false, // M3: generic ARM flag (not aarch64).
+		"CPU_X86":                       false, // M3: generic x86 flag (not x86_64).
+		"NO_CPU_CHECK":                  false, // M3: CPU capability check suppression.
+		"HAVE_POSIX_MEMALIGN":           false, // M3: POSIX memalign availability.
+		"HAVE_MREMAP":                   false, // M3: mremap syscall availability.
+		"NO_UTIL":                       false, // M3: util/generic suppression flag (also whitelist).
+		"TCLANG":                        false, // M3: ThinLTO clang variant.
+		"CLANG_VER":                     false, // M3: Clang version flag (bool use in some IFs).
+		// M3 additional platform/arch booleans — all false on standard linux-aarch64 build.
+		"ANDROID_ARMV7":                         false, // M3: Android ARMv7 target.
+		"ANDROID_I686":                           false, // M3: Android i686 target.
+		"ARCADIA_OPENSSL_DISABLE_ARMV7_TICK":     false, // M3: OpenSSL armv7 tick disable.
+		"ARCADIA_PCRE_ENABLE_JIT":                false, // M3: PCRE JIT enable flag.
+		"ARCH_I686":                              false, // M3: i686 32-bit x86 target.
+		"ARCH_PPC64LE":                           false, // M3: PowerPC 64-bit LE target.
+		"ARCH_TYPE_32":                           false, // M3: 32-bit architecture flag.
+		"DISABLE_INSTRUCTION_SETS":               false, // M3: instruction-set disablement flag.
+		"DONT_LINK_LEGACY_ZSTD06_BLOCKCODEC":     false, // M3: zstd 0.6 blockcodec linkage flag.
+		"IOS_ARMV7":                              false, // M3: iOS ARMv7 target.
+		"IOS_I386":                               false, // M3: iOS i386 simulator target.
+		"LINUX_ARMV7":                            false, // M3: Linux ARMv7 target.
+		"MAPSMOBI_BUILD_TARGET":                  false, // M3: MobileYandexMaps build target flag.
+		"OPENSOURCE_REPLACE_PROTOBUF":            false, // M3: protobuf export replacement flag.
+		"OS_IOSSIM":                              false, // M3: iOS simulator.
+		"OS_NONE":                                false, // M3: no OS (bare metal / embedded).
+		"OS_SDK":                                 false, // M3: OS SDK flag.
+		"USE_LTO":                                false, // M3: link-time optimization flag.
+		"USE_SYSTEM_PYTHON":                      false, // M3: use system Python (not Arcadia bundle).
+		"WINDOWS_I686":                           false, // M3: Windows i686 target.
 	},
 	strings: map[string]string{
 		// CXX_RT: SET-derived runtime selector. M2 (linux + clang +
@@ -318,6 +389,11 @@ var DefaultIfEnv = Environment{
 		// does not yet evaluate SET, so the chosen value is wired
 		// directly here.
 		"CXX_RT": "libcxxrt",
+		// OPENSOURCE_PROJECT: project selector used in some library
+		// ya.makes (e.g. library/cpp/svnversion: yt-cpp-sdk branch adds
+		// a PEERDIR that is absent in the standard Arcadia build). M3+
+		// closure sees this identifier; empty string = standard build.
+		"OPENSOURCE_PROJECT": "",
 		// SANITIZER_TYPE: empty in unsanitized M2; comparisons against
 		// the bare-ident sanitizer-type names below evaluate to false.
 		"SANITIZER_TYPE": "",

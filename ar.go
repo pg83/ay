@@ -49,6 +49,13 @@ func ArchiveName(moduleDir string) string {
 		return "lib" + strings.Join(append([]string{"cpp"}, parts[2:]...), "-") + ".a"
 	}
 
+	// devtools/ymake/X/Y/... (depth >= 4): drop "devtools", keep from "ymake".
+	// Reference: devtools/ymake/plugins/pybridge → libymake-plugins-pybridge.a;
+	// devtools/ymake/diag/common_display → libymake-diag-common_display.a.
+	if len(parts) >= 4 && parts[0] == "devtools" && parts[1] == "ymake" {
+		return "lib" + strings.Join(append([]string{"ymake"}, parts[2:]...), "-") + ".a"
+	}
+
 	// All other paths (depth <= 3 contrib/libs, depth <= 3 library/cpp,
 	// or any non-matching prefix): standard dash-joined formula.
 	return "lib" + strings.ReplaceAll(moduleDir, "/", "-") + ".a"

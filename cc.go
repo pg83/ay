@@ -478,16 +478,32 @@ func composeSrcDirOutputRel(instancePath, srcDir, srcRel string) string {
 
 	// Replace each `..` segment with `__` to match ymake's path
 	// rendering (the same convention the reference graph uses for
-	// SRCDIR-redirected outputs).
+	// SRCDIR-redirected outputs that go outside the module dir).
+	// When there are NO `..` segments, the target is under instancePath.
+	// ymake still uses a `_/` prefix for SRCDIR-based outputs that land
+	// under the module directory, mirroring the non-SRCDIR `_/` infix
+	// for sources with slashes (line 420 of composeCCPaths). Without the
+	// `_/`, openssl's `SRCDIR(crypto)` + `../asm/aarch64/...` sources
+	// would emit to `openssl/asm/...` instead of `openssl/_/asm/...`.
 	parts := strings.Split(rel, string(filepath.Separator))
 
+	hasParent := false
 	for i, p := range parts {
 		if p == ".." {
 			parts[i] = "__"
+			hasParent = true
 		}
 	}
 
-	return strings.Join(parts, "/")
+	joined := strings.Join(parts, "/")
+
+	// No parent traversal → target lands under instancePath: prepend `_/`
+	// to match ymake's convention for SRCDIR-redirected subdirectory outputs.
+	if !hasParent {
+		return "_/" + joined
+	}
+
+	return joined
 }
 
 // isCxxSource returns true when `srcRel`'s extension marks it as a
