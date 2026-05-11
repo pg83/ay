@@ -18,15 +18,18 @@ import (
 // host AR's `host_platform=true` and `tags=["tool"]`, not by an
 // archive-name suffix.
 
-// ArchiveName returns the on-disk archive base name for a module dir.
-//
-// Rule (from upstream devtools/ymake/module_confs.cpp:48-57,
-// SetDefaultRealprjnameImpl(mod, depth=2) as used by ThreeDirNames):
-// join the last min(3, depth) path components with "-", prefix "lib",
-// suffix ".a". Single special case: "util" → "libyutil.a".
-func ArchiveName(moduleDir string) string {
+// archiveNameWithPrefix returns the archive base name using the given
+// prefix instead of the default "lib". The prefix is used verbatim
+// (e.g. "lib", "libpy3", "libpy3c"). Single special case preserved:
+// "util" → "libyutil.a" (prefix substitution still applies, so a
+// py3 caller would get "libpy3yutil.a" — but "util" is never a
+// Python module in practice).
+func archiveNameWithPrefix(moduleDir, prefix string) string {
 	if moduleDir == "util" {
-		return "libyutil.a"
+		// The "y" infix is baked into the util special-case; preserve
+		// it relative to whatever prefix the caller supplies.
+		base := "libyutil.a"
+		return prefix + base[len("lib"):]
 	}
 
 	parts := strings.Split(moduleDir, "/")
@@ -34,7 +37,31 @@ func ArchiveName(moduleDir string) string {
 		parts = parts[len(parts)-3:]
 	}
 
-	return "lib" + strings.Join(parts, "-") + ".a"
+	return prefix + strings.Join(parts, "-") + ".a"
+}
+
+// ArchiveName returns the on-disk archive base name for a module dir.
+//
+// Rule (from upstream devtools/ymake/module_confs.cpp:48-57,
+// SetDefaultRealprjnameImpl(mod, depth=2) as used by ThreeDirNames):
+// join the last min(3, depth) path components with "-", prefix "lib",
+// suffix ".a". Single special case: "util" → "libyutil.a".
+func ArchiveName(moduleDir string) string {
+	return archiveNameWithPrefix(moduleDir, "lib")
+}
+
+// Py3ArchiveName returns the archive base name for a PY3_LIBRARY
+// module (prefix "libpy3"). Used by Python library types whose
+// reference graph uses the "libpy3<name>.a" naming convention.
+func Py3ArchiveName(moduleDir string) string {
+	return archiveNameWithPrefix(moduleDir, "libpy3")
+}
+
+// Py3cArchiveName returns the archive base name for a PY23_NATIVE_LIBRARY
+// module (prefix "libpy3c"). Used by native Python C-extension library
+// types whose reference graph uses the "libpy3c<name>.a" convention.
+func Py3cArchiveName(moduleDir string) string {
+	return archiveNameWithPrefix(moduleDir, "libpy3c")
 }
 
 // globalArchiveName returns the archive base name for a module's
@@ -43,6 +70,14 @@ func ArchiveName(moduleDir string) string {
 // ".global.a".
 func globalArchiveName(moduleDir string) string {
 	base := ArchiveName(moduleDir)
+
+	return base[:len(base)-2] + ".global.a"
+}
+
+// globalArchiveNameWithPrefix is like globalArchiveName but uses an
+// explicit prefix (e.g. "libpy3") instead of "lib".
+func globalArchiveNameWithPrefix(moduleDir, prefix string) string {
+	base := archiveNameWithPrefix(moduleDir, prefix)
 
 	return base[:len(base)-2] + ".global.a"
 }
@@ -271,6 +306,50 @@ func EmitARGlobal(
 	}
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + globalArchiveName(instance.Path)
+
+	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, emit)
+}
+
+// EmitARNamed emits an AR node using an explicitly supplied archive
+// base name (e.g. Py3ArchiveName or Py3cArchiveName) instead of the
+// default ArchiveName. Used by Python library module types that require
+// the "libpy3…" naming convention.
+//
+// archiveBaseName must be just the filename (e.g. "libpy3foo.a"), NOT a
+// full path — the function prepends "$(BUILD_ROOT)/<instance.Path>/".
+func EmitARNamed(
+	instance ModuleInstance,
+	archiveBaseName string,
+	objRefs []NodeRef,
+	objPaths []string,
+	peerArchiveRefs []NodeRef,
+	memberInputs []string,
+	emit Emitter,
+) NodeRef {
+	if len(objRefs) != len(objPaths) {
+		ThrowFmt("EmitARNamed: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
+	}
+
+	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
+
+	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, emit)
+}
+
+// EmitARGlobalNamed is like EmitARGlobal but uses an explicitly
+// supplied archive base name. Used by Python library module types.
+func EmitARGlobalNamed(
+	instance ModuleInstance,
+	archiveBaseName string,
+	objRefs []NodeRef,
+	objPaths []string,
+	memberInputs []string,
+	emit Emitter,
+) NodeRef {
+	if len(objRefs) != len(objPaths) {
+		ThrowFmt("EmitARGlobalNamed: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
+	}
+
+	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
 
 	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, emit)
 }
