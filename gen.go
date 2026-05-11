@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -1920,7 +1921,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		emitPySrcs(ctx, instance, d)
 
 		// PR-M3-D: emit EN nodes for GENERATE_ENUM_SERIALIZATION(*) declarations.
-		emitEnumSrcs(ctx, instance, d)
+		emitEnumSrcs(ctx, instance, d, peerContribs.addIncl)
 
 		// PR-M3-C: emit PB/EV nodes for PROTO_LIBRARY .proto/.ev sources.
 		// PROTO_LIBRARY modules never have compilable C/C++ sources and
@@ -2939,7 +2940,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	emitPySrcs(ctx, instance, d)
 
 	// PR-M3-D: emit EN nodes for GENERATE_ENUM_SERIALIZATION(*) declarations.
-	emitEnumSrcs(ctx, instance, d)
+	emitEnumSrcs(ctx, instance, d, peerAddInclGlobal)
 
 	// PR-M3-E: emit JV, CF, BI, PR nodes declared at module level.
 	emitMiscNodes(ctx, instance, d)
@@ -3581,7 +3582,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 // EN nodes are always emitted on the TARGET platform (instance.Target),
 // matching the reference graph (all 21 EN nodes in sg2.json are on
 // default-linux-aarch64 even though enum_parser is a host x86_64 tool).
-func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
+func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddInclGlobal []string) {
 	if len(d.enumSrcs) == 0 {
 		return
 	}
@@ -3618,12 +3619,14 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	// D41: use targetIsX8664 for axis checks.
 	enInstance.Flags.PIC = false
 
-	// Synthesize a minimal ModuleCCInputs for the include scanner so
-	// the header's search path reflects the module's own ADDINCL
-	// declarations (needed for headers that include module-local paths).
+	// Synthesize a ModuleCCInputs for the include scanner using the
+	// module's own ADDINCL declarations plus the peer-global ADDINCL
+	// set so that headers from transitive peer libraries (e.g. abseil,
+	// protobuf) resolve correctly. Mirrors the ModuleCCInputs built for
+	// CC nodes in the same module (PR-M3-F-3).
 	scanIn := ModuleCCInputs{
 		AddIncl:           d.addIncl,
-		PeerAddInclGlobal: nil, // cross-module include paths not wired here
+		PeerAddInclGlobal: peerAddInclGlobal,
 		SourceRoot:        ctx.sourceRoot,
 	}
 
@@ -3639,64 +3642,81 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 		// Cross-EN deps: when a previously emitted EN node produced a
 		// _serialized.h file (--header variant), and the current header's
-		// include closure includes that serialized .h (under $(BUILD_ROOT)),
-		// the current EN node must dep on that prior EN node.
+		// include closure contains a file that EXPLICITLY #includes that
+		// _serialized.h (under $(BUILD_ROOT)), the current EN node must
+		// dep on that prior EN node.
 		//
-		// The include scanner resolves $(SOURCE_ROOT)/ paths; serialized .h
-		// files live under $(BUILD_ROOT). These do not appear in the scanner
-		// closure. Cross-EN deps therefore require matching based on which
-		// EN outputs ($(BUILD_ROOT)/.../foo_serialized.h) would be included
-		// by the current header, using a $(SOURCE_ROOT) → $(BUILD_ROOT) path
-		// translation for any _serialized.h entries already recorded in
-		// ctx.enOutputs.
-		//
-		// Simplified approach: for each recorded enOutput, derive the
-		// corresponding SOURCE_ROOT header path (strip _serialized.{cpp,h}
-		// suffix and BUILD_ROOT prefix, re-add SOURCE_ROOT + .h) and check
-		// if that SOURCE_ROOT header appears in the closure. If so, the
-		// current EN node depends on the prior one.
+		// The include scanner cannot resolve $(BUILD_ROOT)/_serialized.h
+		// paths (generated files absent at scan time). The correct signal
+		// is a literal `#include <..._serialized.h>` in any source file
+		// that IS in the scanner closure. Scan each closure file on disk
+		// for _serialized.h include patterns and match them against known
+		// EN outputs.
 		var depENRefs []NodeRef
 		var depENOutputs []string
 
 		if len(ctx.enOutputs) > 0 {
-			closureSet := make(map[string]struct{}, len(closure))
-			for _, h := range closure {
-				closureSet[h] = struct{}{}
+			// Build a map from bare rel-path suffix → buildRootPath for
+			// all known _serialized.h EN outputs. Key is the path a
+			// source header would write in an #include angle-bracket
+			// form, e.g. "devtools/ymake/diag/stats_enums.h_serialized.h".
+			serializedHByRel := make(map[string]string, len(ctx.enOutputs))
+			for buildRootPath := range ctx.enOutputs {
+				if !strings.HasSuffix(buildRootPath, "_serialized.h") {
+					continue
+				}
+				rel := strings.TrimPrefix(buildRootPath, "$(BUILD_ROOT)/")
+				serializedHByRel[rel] = buildRootPath
 			}
 
 			depSeen := map[NodeRef]struct{}{}
 
-			for buildRootPath, ref := range ctx.enOutputs {
-				// Only serialized .h files can be #included by a header;
-				// serialized .cpp files cannot be. Skip .cpp outputs.
-				if !strings.HasSuffix(buildRootPath, "_serialized.h") {
-					continue
-				}
-
-				// Derive the source header path this serialized .h was
-				// generated from: strip $(BUILD_ROOT)/ prefix and
-				// _serialized.h suffix, then add $(SOURCE_ROOT)/ + .h.
-				srcHeaderRel := strings.TrimPrefix(buildRootPath, "$(BUILD_ROOT)/")
-				srcHeaderRel = strings.TrimSuffix(srcHeaderRel, "_serialized.h")
-				srcHeaderAbs := "$(SOURCE_ROOT)/" + srcHeaderRel
-
-				if _, inClosure := closureSet[srcHeaderAbs]; !inClosure {
-					continue
-				}
-
-				if _, dup := depSeen[ref]; dup {
-					continue
-				}
-
-				depSeen[ref] = struct{}{}
-				depENRefs = append(depENRefs, ref)
-				depENOutputs = append(depENOutputs, buildRootPath)
-
-				// Also include the corresponding _serialized.cpp path in
-				// depENOutputs if it exists.
-				cppPath := strings.TrimSuffix(buildRootPath, "_serialized.h") + "_serialized.cpp"
-				if cppRef, ok := ctx.enOutputs[cppPath]; ok && cppRef == ref {
-					depENOutputs = append(depENOutputs, cppPath)
+			if len(serializedHByRel) > 0 {
+				for _, srcAbsPath := range closure {
+					rel := strings.TrimPrefix(srcAbsPath, "$(SOURCE_ROOT)/")
+					diskPath := filepath.Join(ctx.sourceRoot, rel)
+					f, err := os.Open(diskPath)
+					if err != nil {
+						continue
+					}
+					sc := bufio.NewScanner(f)
+					for sc.Scan() {
+						line := strings.TrimSpace(sc.Text())
+						if !strings.Contains(line, "_serialized.h") {
+							continue
+						}
+						// Extract the include path from angle-bracket or quote include.
+						var includePath string
+						if i := strings.IndexByte(line, '<'); i >= 0 {
+							if j := strings.IndexByte(line[i+1:], '>'); j >= 0 {
+								includePath = line[i+1 : i+1+j]
+							}
+						} else if i := strings.IndexByte(line, '"'); i >= 0 {
+							if j := strings.IndexByte(line[i+1:], '"'); j >= 0 {
+								includePath = line[i+1 : i+1+j]
+							}
+						}
+						if includePath == "" {
+							continue
+						}
+						buildRootPath, ok := serializedHByRel[includePath]
+						if !ok {
+							continue
+						}
+						ref := ctx.enOutputs[buildRootPath]
+						if _, dup := depSeen[ref]; dup {
+							continue
+						}
+						depSeen[ref] = struct{}{}
+						depENRefs = append(depENRefs, ref)
+						depENOutputs = append(depENOutputs, buildRootPath)
+						// Also include the corresponding _serialized.cpp path.
+						cppPath := strings.TrimSuffix(buildRootPath, "_serialized.h") + "_serialized.cpp"
+						if cppRef, ok2 := ctx.enOutputs[cppPath]; ok2 && cppRef == ref {
+							depENOutputs = append(depENOutputs, cppPath)
+						}
+					}
+					f.Close()
 				}
 			}
 		}

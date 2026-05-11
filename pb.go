@@ -76,9 +76,11 @@ func EmitPB(
 ) NodeRef {
 	moduleDir := instance.Path
 	protoRelPath := moduleDir + "/" + srcRel
+	// Output paths strip the .proto suffix: foo.proto → foo.pb.h / foo.pb.cc.
+	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 
-	pbH := "$(BUILD_ROOT)/" + protoRelPath + ".pb.h"
-	pbCC := "$(BUILD_ROOT)/" + protoRelPath + ".pb.cc"
+	pbH := "$(BUILD_ROOT)/" + protoBase + ".pb.h"
+	pbCC := "$(BUILD_ROOT)/" + protoBase + ".pb.cc"
 	srcAbs := "$(SOURCE_ROOT)/" + protoRelPath
 
 	cmdArgs := []string{

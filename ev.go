@@ -192,6 +192,7 @@ func EmitEV(
 func resolveEvImports(sourceRoot, srcRel string) []string {
 	visited := map[string]struct{}{}
 	order := make([]string, 0, 8)
+	descriptorAdded := false
 
 	// Queue starting from the source's imports (not the source itself —
 	// it is already in inputs from the caller).
@@ -231,6 +232,16 @@ func resolveEvImports(sourceRoot, srcRel string) []string {
 			}
 
 			importedRel := line[start+1 : end]
+			// google/protobuf/descriptor.proto is resolved via the
+			// protobuf include path, not directly under sourceRoot.
+			// Detect and emit the canonical path once.
+			if importedRel == "google/protobuf/descriptor.proto" {
+				if !descriptorAdded {
+					order = append(order, pbDescriptorProto)
+					descriptorAdded = true
+				}
+				continue
+			}
 			imports = append(imports, importedRel)
 		}
 
