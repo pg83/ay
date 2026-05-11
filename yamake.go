@@ -1281,6 +1281,16 @@ func splitGlobalModifier(args []string) (string, []string) {
 	return "", append([]string(nil), args...)
 }
 
+// unescapeFlag converts backslash-quoted double-quotes in compiler
+// flag tokens to bare double-quotes. The ya.make source writes flag
+// values like -DFOO=\"bar\" (a single bare-word token with literal
+// backslash-quote pairs); the reference graph stores the unescaped
+// form -DFOO="bar". PR-M3-F-2 applies this at the flag-split boundary
+// so all downstream emitters see the unescaped string.
+func unescapeFlag(s string) string {
+	return strings.ReplaceAll(s, `\"`, `"`)
+}
+
 // splitFlagsByGlobal separates CFLAGS / CXXFLAGS / CONLYFLAGS args
 // into a global and own slice using per-path GLOBAL semantics
 // (PR-32 D04). A flag token immediately following the literal
@@ -1291,16 +1301,20 @@ func splitGlobalModifier(args []string) (string, []string) {
 // level distinction has no observable difference today; the
 // per-path shape future-proofs against later mixed-token call
 // sites.
+//
+// PR-M3-F-2: each flag token is passed through unescapeFlag so
+// backslash-quoted double-quotes (\"…\") are stored as bare
+// double-quotes ("…"), matching the reference cmd_args encoding.
 func splitFlagsByGlobal(args []string) (globalFlags, ownFlags []string) {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "GLOBAL" {
 			i++
 
 			if i < len(args) {
-				globalFlags = append(globalFlags, args[i])
+				globalFlags = append(globalFlags, unescapeFlag(args[i]))
 			}
 		} else {
-			ownFlags = append(ownFlags, args[i])
+			ownFlags = append(ownFlags, unescapeFlag(args[i]))
 		}
 	}
 
@@ -1326,10 +1340,28 @@ func splitFlagsByGlobal(args []string) (globalFlags, ownFlags []string) {
 // PR-31 D13: replaces the old statement-level splitGlobalModifier for
 // ADDINCL, which incorrectly treated all paths after a leading GLOBAL
 // as global, leaking module-own paths to consumers.
+//
+// PR-M3-F-2 (Q-M3-B): FOR <kind> qualifiers are dropped unconditionally.
+// ADDINCL(GLOBAL FOR proto path) and ADDINCL(FOR cython path) both
+// record only the bare path (global or own respectively); the FOR
+// qualifier selects a non-C/C++ language axis that is irrelevant for
+// CC/AS include paths.
 func splitAddInclPaths(args []string) (globalPaths, ownPaths []string) {
 	for i := 0; i < len(args); i++ {
+		if args[i] == "FOR" {
+			// FOR <kind> — drop both tokens; not a C/C++ include path.
+			i++ // skip kind
+			continue
+		}
+
 		if args[i] == "GLOBAL" {
 			i++
+
+			// GLOBAL FOR <kind> <path>: skip the FOR <kind> pair.
+			if i < len(args) && args[i] == "FOR" {
+				i++ // skip FOR
+				i++ // skip kind
+			}
 
 			if i < len(args) {
 				globalPaths = append(globalPaths, args[i])

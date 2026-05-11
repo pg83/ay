@@ -775,6 +775,68 @@ func TestParseAddIncl_Mixed(t *testing.T) {
 	}
 }
 
+// TestParseAddIncl_ForKindDropped (PR-M3-F-2) pins that a bare
+// `FOR <kind>` pair in ADDINCL is dropped entirely. The canonical
+// case is ADDINCL(FOR proto path) which must not emit -I.../FOR
+// or -I.../proto; only -I.../path is wanted.
+func TestParseAddIncl_ForKindDropped(t *testing.T) {
+	mf, err := Parse("test.input", []byte("ADDINCL(FOR proto contrib/libs/protobuf/src)\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	a, ok := mf.Stmts[0].(*AddInclStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
+	}
+	if len(a.GlobalPaths) != 0 {
+		t.Errorf("GlobalPaths = %v, want empty", a.GlobalPaths)
+	}
+	if !equalStrings(a.OwnPaths, []string{"contrib/libs/protobuf/src"}) {
+		t.Errorf("OwnPaths = %v, want [contrib/libs/protobuf/src]", a.OwnPaths)
+	}
+}
+
+// TestParseAddIncl_GlobalForKindDropped (PR-M3-F-2) pins that
+// GLOBAL FOR <kind> <path> correctly drops the FOR <kind> pair
+// and assigns <path> to GlobalPaths. Upstream pattern from
+// contrib/libs/protobuf/ya.make: ADDINCL(GLOBAL FOR proto path).
+func TestParseAddIncl_GlobalForKindDropped(t *testing.T) {
+	src := "ADDINCL(\n    GLOBAL contrib/libs/protobuf/src\n    GLOBAL FOR\n    proto\n    contrib/libs/protobuf/src\n)\n"
+	mf, err := Parse("test.input", []byte(src))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	a, ok := mf.Stmts[0].(*AddInclStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
+	}
+	// Both GLOBAL paths should be contrib/libs/protobuf/src (deduplicated later by gen.go).
+	if !equalStrings(a.GlobalPaths, []string{"contrib/libs/protobuf/src", "contrib/libs/protobuf/src"}) {
+		t.Errorf("GlobalPaths = %v, want [contrib/libs/protobuf/src contrib/libs/protobuf/src]", a.GlobalPaths)
+	}
+	if len(a.OwnPaths) != 0 {
+		t.Errorf("OwnPaths = %v, want empty", a.OwnPaths)
+	}
+}
+
+// TestParseCFlags_BackslashQuoteUnescaped (PR-M3-F-2) pins that
+// backslash-quoted double-quotes in CFLAGS tokens are unescaped
+// at the parse boundary. Source: -DFOO=\"bar\" → stored as -DFOO="bar".
+func TestParseCFlags_BackslashQuoteUnescaped(t *testing.T) {
+	mf, err := Parse("test.input", []byte("CFLAGS(-DENGINESDIR=\\\"/usr/local/lib/engines-1.1\\\")\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	c, ok := mf.Stmts[0].(*CFlagsStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *CFlagsStmt", mf.Stmts[0])
+	}
+	want := `-DENGINESDIR="/usr/local/lib/engines-1.1"`
+	if len(c.OwnFlags) != 1 || c.OwnFlags[0] != want {
+		t.Errorf("OwnFlags = %v, want [%s]", c.OwnFlags, want)
+	}
+}
+
 // TestParseCFlags_Global pins CFLAGS with the GLOBAL modifier.
 // PR-32 D04: per-path GLOBAL semantics — flag immediately following
 // the literal `GLOBAL` keyword goes to GlobalFlags; later flags
