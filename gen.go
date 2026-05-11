@@ -4161,12 +4161,19 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 
 		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, rl6Closure, ctx.emit)
 
-		// F-7-B: register the R6 output (.rl6.cpp — not a header, so EmitsIncludes is empty).
+		// F-7-B / PR-AUDIT-2 D02: register the R6 output (.rl6.cpp). Ragel emits
+		// the .rl6 source's `#include` directives verbatim into the generated
+		// .cpp, so the .cpp's effective direct-include set is the .rl6's. We
+		// register a single EmitsIncludes entry pointing at the .rl6 source;
+		// WalkClosure on the .rl6.cpp will recurse into the .rl6 via the
+		// FS-parsed locator and produce the same closure the downstream CC
+		// previously got from scanning the .rl6 manually.
+		rl6SourceAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "R6",
 				OutputPath:    r6Out,
-				EmitsIncludes: nil,
+				EmitsIncludes: []string{rl6SourceAbs},
 			})
 		}
 
@@ -4178,16 +4185,15 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// explicit dep on its R6 source-generator node, matching the
 		// reference shape.
 		//
-		// PR-35z: thread `[<.rl6 source>, ...closure]` as the
-		// downstream CC's `IncludeInputs`. EmitCC composes
-		// `node.Inputs = [generated-cpp, IncludeInputs...]`, so this
-		// yields the reference shape
-		// `[generated-cpp, .rl6 source, ...closure]`.
+		// PR-AUDIT-2 D02: dispatch through the unified VFS-path entry — the
+		// .rl6.cpp is registered in the codegen registry (see Register above)
+		// and the scanner walks transitively through both BUILD_ROOT and
+		// SOURCE_ROOT children uniformly. Previously this site assembled
+		// `[<.rl6 source>, ...rl6Closure]` by hand from a separate
+		// source-side scan; the architecturally-correct shape comes from
+		// WalkClosure rooted at the generated .cpp.
 		ccSrcRel := strings.TrimPrefix(r6Out, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
-		rl6SourceAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
-		ccIncludeInputs := make([]string, 0, 1+len(rl6Closure))
-		ccIncludeInputs = append(ccIncludeInputs, rl6SourceAbs)
-		ccIncludeInputs = append(ccIncludeInputs, rl6Closure...)
+		ccIncludeInputs := walkClosureFromBuildRoot(ctx, srcInstance, r6Out, srcIn)
 
 		ccIn := srcIn
 		ccIn.IsGenerated = true
@@ -4289,6 +4295,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			// plus the protobuf runtime headers (F-7-D).
 			evRelPath := srcInstance.Path + "/" + srcRel
 			evH := "$(BUILD_ROOT)/" + evRelPath + ".pb.h"
+			evPbCC := "$(BUILD_ROOT)/" + evRelPath + ".pb.cc"
 			if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
 				evEmitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders))
@@ -4299,15 +4306,30 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 					OutputPath:    evH,
 					EmitsIncludes: evEmitsIncludes,
 				})
+				// PR-AUDIT-2 D04: register the .ev.pb.cc output too. event2cpp
+				// emits a `#include "<base>.ev.pb.h"` plus the protobuf runtime
+				// headers; the .pb.h's own EmitsIncludes are already registered
+				// (just above), so a single entry pointing at the .pb.h would
+				// suffice — we mirror the .pb.h list for symmetry with PB (the
+				// .pb.cc emitted by protoc includes the same runtime headers).
+				reg.Register(&GeneratedFileInfo{
+					ProducerKvP:   "EV",
+					OutputPath:    evPbCC,
+					EmitsIncludes: append([]string{evH}, protobufRuntimeHeaders...),
+				})
 			}
 
 			// Emit downstream CC for the generated .ev.pb.cc.
+			// PR-AUDIT-2 D04: dispatch through the unified VFS-path entry —
+			// the .ev.pb.cc is registered above with the right EmitsIncludes;
+			// WalkClosure walks transitively into the .pb.h and out to the
+			// protobuf runtime headers via the FS locator.
 			evPbCCSuffix := srcRel + ".pb.cc"
 			ccIn := srcIn
 			ccIn.IsGenerated = true
 			ccIn.Generator = evRef
 			ccIn.HasGenerator = true
-			ccIn.IncludeInputs = nil // generated file; no disk-based include scan
+			ccIn.IncludeInputs = walkClosureFromBuildRoot(ctx, srcInstance, evPbCC, srcIn)
 
 			ref, outPath := EmitCC(srcInstance, evPbCCSuffix, ccIn, ctx.emit)
 
@@ -4367,7 +4389,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		r5Ref, r5TmpOut, r5CppOut := EmitR5(srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinStr, rlgenCdBinStr, ctx.emit)
 		_ = r5Ref
 
-		// F-7-B: register R5 outputs (.tmp and .rl5.cpp — neither is a header; EmitsIncludes nil).
+		// F-7-B / PR-AUDIT-2 D05: register R5 outputs. ragel5 emits the
+		// .rl source's #include directives verbatim into the generated
+		// .rl5.cpp; the .tmp intermediate has no consumer-visible includes.
+		rlSourceAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "R5",
@@ -4377,14 +4402,19 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "R5",
 				OutputPath:    r5CppOut,
-				EmitsIncludes: nil,
+				EmitsIncludes: []string{rlSourceAbs},
 			})
 		}
 
-		// Downstream CC for the generated .rl5.cpp (generated source, no scan).
+		// Downstream CC for the generated .rl5.cpp.
+		// PR-AUDIT-2 D05: dispatch through the unified VFS-path entry —
+		// the .rl5.cpp is registered above with the .rl source as its
+		// single direct include; WalkClosure recurses into the .rl via
+		// the FS locator and yields the full transitive closure.
 		ccSrcRel := strings.TrimPrefix(r5CppOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IsGenerated = true
+		ccIn.IncludeInputs = walkClosureFromBuildRoot(ctx, srcInstance, r5CppOut, srcIn)
 		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
@@ -4413,22 +4443,31 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
 		_ = cfRef
 
-		// F-7-B: register the CF output with EmitsIncludes from the template's
-		// quoted #include directives. The output is a .cpp (not a header), so
-		// EmitsIncludes will typically be empty; populated for completeness.
+		// F-7-B / PR-AUDIT-2 D08: register the CF output. configure_file.py
+		// performs `@VAR@` substitution but leaves `#include` directives
+		// intact, so the generated .cpp's direct includes are the .cpp.in's
+		// (modulo substitution). We register the .cpp.in source as the
+		// single EmitsIncludes child so WalkClosure recurses into it via
+		// the FS locator and yields the full transitive closure that the
+		// downstream CC needs.
+		inSourceAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
-			diskPath := ctx.sourceRoot + "/" + srcInstance.Path + "/" + srcRel
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "CF",
 				OutputPath:    cfOut,
-				EmitsIncludes: cfIncludeDirectives(diskPath),
+				EmitsIncludes: []string{inSourceAbs},
 			})
 		}
 
-		// Downstream CC for the generated .cpp / .c (generated source, no scan).
+		// Downstream CC for the generated .cpp / .c.
+		// PR-AUDIT-2 D08: dispatch through the unified VFS-path entry —
+		// the .cpp is registered above with the .cpp.in as its single
+		// direct include; WalkClosure recurses into the .cpp.in via the
+		// FS locator and yields the full transitive closure.
 		ccSrcRel := strings.TrimPrefix(cfOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IsGenerated = true
+		ccIn.IncludeInputs = walkClosureFromBuildRoot(ctx, srcInstance, cfOut, srcIn)
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
@@ -4667,6 +4706,46 @@ func scanIncludesForSource(ctx *genCtx, srcInstance ModuleInstance, srcRel strin
 	// changing semantics. See `docs/drafts/20260511-1850-parsed-
 	// includes-audit.md` §3.1.
 	return sc.WalkClosure(vfsSource(srcRelOnDisk))
+}
+
+// walkClosureFromBuildRoot resolves the include closure of a codegen-
+// generated source rooted at `$(BUILD_ROOT)/...`. PR-AUDIT-2: callers do
+// NOT branch on "is this on disk?" — they compose the BUILD_ROOT VFS path
+// of the generated file (whose producer has already Registered it in the
+// per-scanner CodegenRegistry with the correct EmitsIncludes) and the
+// scanner's locator (forEachResolvedChild) walks transitively through
+// both BUILD_ROOT (registry) and SOURCE_ROOT (FS-parsed) entries.
+//
+// Returned list is suitable for use as `ccIn.IncludeInputs` on the
+// downstream CC consumer of the generated source.
+func walkClosureFromBuildRoot(ctx *genCtx, srcInstance ModuleInstance, vfsBuildPath string, in ModuleCCInputs) []string {
+	scanner := ctx.scannerTarget
+
+	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
+	if targetIsX8664(srcInstance) {
+		scanner = ctx.scannerHost
+	}
+
+	if scanner == nil {
+		return nil
+	}
+
+	cfg := ScanContext{
+		// SourceRel is not meaningful for a BUILD_ROOT root (WalkClosure's
+		// docstring documents that the BUILD_ROOT branch in
+		// forEachResolvedChild never consults SourceRel). Carry the
+		// BUILD_ROOT-relative path so srcClassHash keys deterministically
+		// per generated file rather than reusing the previous call's
+		// stale source-rel from this scanCtx.
+		SourceRel:       strings.TrimPrefix(vfsBuildPath, vfsBuildPrefix),
+		OwnAddIncl:      in.AddIncl,
+		PeerAddInclSet:  in.PeerAddInclGlobal,
+		BaseSearchPaths: includeScannerBasePaths(srcInstance),
+	}
+
+	sc := ctx.getScanCtx(scanner, cfg)
+
+	return sc.WalkClosure(vfsBuildPath)
 }
 
 // includeScannerBasePaths returns the implicit include search path
