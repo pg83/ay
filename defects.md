@@ -1600,3 +1600,39 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 **Location:** r6.go ragel6 binary path resolution
 **Description:** Reference want: `$(BUILD_ROOT)/contrib/tools/ragel6/ragel6`. Got: `$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6`. Single-node defect; util/_/datetime/parser.rl6.cpp R6 node cmd[0][0] differs.
 **Fix:** Deferred. Drop `/bin/` segment from R6 binary path resolution.
+
+---
+
+## PR-37
+
+### [PR-37-D01] cc.go change is uncommitted in the executor's worktree
+**Status:** resolved (orchestrator committed at merge)
+**Severity:** minor
+**Location:** worktree `worktree-agent-a53ec33a36efdb34b` working tree (since GC'd)
+**Description:** At review time, `git status` reported `cc.go` as modified-not-staged on the executor's worktree branch. The branch HEAD was 5 commits behind master, so a direct cherry-pick of the branch would not have carried the PR-37 change.
+**Fix:** Orchestrator copied `cc.go` from the worktree's working tree onto the main checkout, re-ran the build/test/comparator on master, and committed PR-37 as a single commit including the ledger updates. The worktree branch is left for runtime GC.
+
+### [PR-37-D02] composeHostCC / composeMuslCC / composeMuslHostCC retain old C-source slot ordering
+**Status:** resolved (deferred to M3+ — no M2 module triggers it)
+**Severity:** nit
+**Location:** cc.go::composeHostCC (~L846), composeMuslCC (~L894), composeMuslHostCC (~L945)
+**Description:** The trailer-slot fix was applied only to `composeTargetCC`. The three sibling composers still emit `ownExtras` via `appendCxxStdAndOwn` at the pre-`builtinMacroDateTime` slot for C sources. M2 closure does not exercise these paths for C sources with own CONLYFLAGS (reviewer audited: 1634 host-axis C-source CCs scanned, zero with late `-std=c*`/`-march`, zero L3 mismatches). The defect is latent — any M3+ module with a HOST C-source carrying CONLYFLAGS, or a musl C-source carrying its own CONLYFLAGS, will reproduce the L3-A slot bug on its axis.
+**Root cause:** `composeTargetCC` patched in isolation; the four composers' trailer ordering is structurally identical but the fix wasn't propagated.
+**Fix:** Deferred. When an M3+ module surfaces the trigger, propagate the same `if isCxx { appendCxxStdAndOwn } else { cOnlyExtras = ownExtras }` split + post-`perSrcCFlags`/post-`macroPrefixMapFlags` append to the affected composer. (Note: `composeMuslCC`/`composeMuslHostCC` lack a `perSrcCFlags` slot today; trailer position there is just after `macroPrefixMapFlags`.)
+
+### [PR-37-D03] No regression-pin unit test for the new trailer-slot ordering
+**Status:** resolved (deferred — M1 byte-exact pin and full archiver L3 comparison cover regression)
+**Severity:** nit
+**Location:** cc_test.go (no new test)
+**Description:** Existing `TestEmitCC_COnlyFlags_AppliesOnlyToCSources` asserts only PRESENCE of CONLYFLAGS, not SLOT POSITION. The M1 byte-exact pin (`build/cow/on/lib.c.o`) does not exercise the new trailer because that module has zero CONLYFLAGS. A future refactor in `composeTargetCC` that shuffles the `cOnlyExtras` slot would not be caught by unit tests — only by re-running the full `tools/archiver` L3 comparator.
+**Fix:** Deferred. When a future PR next touches `composeTargetCC` slot ordering, add an assertion like `idx("-std=c11") > idx("-fmacro-prefix-map=$(TOOL_ROOT)/=")` and `idx("-std=c11") < idx("$(SOURCE_ROOT)/lib.c")` to pin the trailer slot semantically.
+
+### [PR-37-D04] Style and comment-quality nits in the patched block
+**Status:** resolved (deferred — cosmetic, low payoff)
+**Severity:** nit
+**Location:** cc.go L754-790 (the patched block)
+**Description:** Three minor issues:
+(a) Missing blank line before the new `if isCxx {` block (STYLE.md "blank line before `if`"; borderline because the new `var cOnlyExtras []string` is logically part of the same operation).
+(b) `appendCxxStdAndOwn(cmdArgs, true, noCompilerWarnings, true, ownExtras)` hardcodes the first `true` literal; using the variable `isCxx` (which is guaranteed `true` inside the guarded branch) would keep the C++ branch a textual no-op vs master, easier to audit. Hardcoding `true` is gratuitous.
+(c) The second new comment ("PR-37: C-source CONLYFLAGS trail after macroPrefixMapFlags...") substantially duplicates the L755-760 comment block; STYLE.md "minimal new comments" suggests trimming.
+**Fix:** Deferred (cosmetic). Apply when next editing `composeTargetCC`.
