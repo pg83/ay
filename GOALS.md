@@ -65,6 +65,13 @@ keys; trailing newlines; etc.).
   single-node `BI` shape in M3's sg2.json — value `false`, no
   generator analogue), and any future fields the upstream ymake
   emits that have no semantic meaning for our regenerated graph.
+- Drop the per-node `foreign_deps` key on both sides before re-UID.
+  Rationale: `foreign_deps` is a non-semantic toolchain-routing hint.
+  REF's `foreign_deps` contains dangling cross-subgraph UIDs (the upstream
+  host tool LD lives outside the `tools/archiver` closure in sg.json);
+  OUR `foreign_deps` contains real local UIDs for the same tools. The
+  structural divergence is legitimate and not a graph-correctness defect.
+  See `normalize.py::_strip_and_canonicalize` for the implementation.
 
 **NOT allowed**:
 
