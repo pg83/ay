@@ -4493,13 +4493,9 @@ func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCI
 // once stay deduped — so total work is O(union closure) not O(sum
 // per-source closures). Returns nil when nothing resolves.
 func joinSrcsIncludeClosure(ctx *genCtx, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []string {
-	scanner := ctx.scannerTarget
-
-	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
-	if targetIsX8664(srcInstance) {
-		scanner = ctx.scannerHost
-	}
-
+	// PR-AUDIT-4 (D08): per-instance scanner via the unified dispatch
+	// helper; no more inline target-vs-host branch.
+	scanner := ctx.scannerFor(srcInstance)
 	if scanner == nil {
 		return nil
 	}
@@ -4641,13 +4637,9 @@ func jsTargetPeerAddIncl(hostPeerAddIncl []string) []string {
 // for the linux-headers / musl-arch include paths the cc bundle
 // includes implicitly.
 func scanIncludesForSource(ctx *genCtx, srcInstance ModuleInstance, srcRel string, in ModuleCCInputs) []string {
-	scanner := ctx.scannerTarget
-
-	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
-	if targetIsX8664(srcInstance) {
-		scanner = ctx.scannerHost
-	}
-
+	// PR-AUDIT-4 (D14): per-instance scanner via the unified dispatch
+	// helper; no more inline target-vs-host branch.
+	scanner := ctx.scannerFor(srcInstance)
 	if scanner == nil {
 		return nil
 	}
@@ -4831,21 +4823,35 @@ func reorderARMembers(refs []NodeRef, paths []string, isFlatNoLto []bool, numSrc
 
 // ─── F-7-B: codegen registry helpers ─────────────────────────────────────────
 
-// codegenRegForInstance returns the CodegenRegistry for the given instance.
-// Target-axis instances (aarch64) use the target scanner's registry; host-axis
-// instances (x86_64) use the host scanner's registry. Returns nil when no
-// registry is available (both scanners are nil-registry, e.g. in tests).
-func codegenRegForInstance(ctx *genCtx, instance ModuleInstance) *CodegenRegistry {
+// scannerFor returns the IncludeScanner appropriate for `instance`'s
+// platform axis. Target-axis instances (aarch64) get the target scanner;
+// host-axis instances (x86_64) get the host scanner. Returns nil when the
+// matching scanner is not allocated (e.g. tests).
+//
+// PR-AUDIT-4 (D14, D08): this is the single dispatch point for the
+// target-vs-host scanner choice. Callers that want "the parsed-includes
+// pool for this instance" MUST go through this helper rather than
+// hand-coding the `targetIsX8664 ? scannerHost : scannerTarget` branch
+// inline. EN's `ctx.scannerTarget` accesses (gen.go:3917, 3944) stay
+// explicit because EN nodes always emit on the target axis regardless
+// of the surrounding walk's axis — that is a deliberate cross-axis
+// reach, not a per-instance dispatch.
+func (ctx *genCtx) scannerFor(instance ModuleInstance) *IncludeScanner {
 	if targetIsX8664(instance) {
-		if ctx.scannerHost != nil {
-			return ctx.scannerHost.codegen
-		}
+		return ctx.scannerHost
+	}
+	return ctx.scannerTarget
+}
+
+// codegenRegForInstance returns the CodegenRegistry attached to the
+// scanner picked by scannerFor. Returns nil when the scanner is nil
+// (PR-AUDIT-4: dispatch lives in scannerFor, not duplicated here).
+func codegenRegForInstance(ctx *genCtx, instance ModuleInstance) *CodegenRegistry {
+	sc := ctx.scannerFor(instance)
+	if sc == nil {
 		return nil
 	}
-	if ctx.scannerTarget != nil {
-		return ctx.scannerTarget.codegen
-	}
-	return nil
+	return sc.codegen
 }
 
 // protoDirectImportIncludes parses the direct `import "..."` statements from a
