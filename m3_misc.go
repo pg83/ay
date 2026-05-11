@@ -861,10 +861,116 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		}
 	}
 
-	// PR: emit one node per RUN_PROGRAM declaration.
+	// PR: PR-AUDIT-5 — RUN_PROGRAM emission moved ahead of AR so that
+	// PR outputs ending in a CC-compilable extension (.cpp/.cc/.cxx/.c)
+	// can be threaded into the module's AR member list as additional
+	// CC sources. The dedicated entry point is `emitRunProgramsForAR`
+	// (gen.go); this site is now a no-op for PR.
+	_ = d.runPrograms
+}
+
+// emitRunProgramsForAR emits PR nodes ahead of the module's AR step and,
+// for each PR output whose extension is a CC-compilable source kind,
+// emits a downstream CC consuming the registered BUILD_ROOT source.
+//
+// PR-AUDIT-5: implements the Python→Ragel→C++ chain's terminal case
+// (PR→CC). RUN_PROGRAM with `STDOUT foo.cpp` (or `OUT foo.cpp`) emits
+// the .cpp under $(BUILD_ROOT)/<instance.Path>/foo.cpp; the consuming
+// CC node compiles it into <foo>.cpp.o which the surrounding AR/LD
+// archives alongside the module's regular SRCS.
+//
+// Empirical reference (sg2.json): devtools/ymake/symbols's RUN_PROGRAM
+// emits dep_types.h_dumper.cpp via STDOUT, and the module's AR archives
+// dep_types.h_dumper.cpp.o as the trailing member after the declared
+// SRCS. Mirrors the upstream ymake behaviour: a RUN_PROGRAM whose
+// STDOUT/OUT names a compilable extension auto-promotes that output to
+// an implicit module source.
+//
+// Returns the per-CC `(refs, outputs, memberInputs)` triples for the
+// caller to fold into the AR-member accumulators. `memberInputs` is
+// already deduped against caller-side state via the returned per-CC
+// slice; the caller's `addMemberInputs` performs the union.
+func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []string, memberInputs [][]string) {
+	if len(d.runPrograms) == 0 {
+		return nil, nil, nil
+	}
+
+	reg := codegenRegForInstance(ctx, instance)
+
 	for _, rp := range d.runPrograms {
 		emitRunProgram(ctx, instance, rp, d, reg)
+
+		// PR-AUDIT-5: classify outputs by extension. CC-compilable
+		// outputs trigger a downstream CC; opaque outputs (.pyc and
+		// the like) carry through as registry-only entries.
+		outs := make([]string, 0, len(rp.OUTFiles)+len(rp.OUTNoAutoFiles)+1)
+		outs = append(outs, rp.OUTFiles...)
+		// PR-AUDIT-5: OUT_NOAUTO suppresses the auto-promote-to-source
+		// behaviour upstream, so we skip rp.OUTNoAutoFiles for the CC
+		// dispatch even when their extension is .cpp/.c/...
+		if rp.StdoutFile != "" {
+			outs = append(outs, rp.StdoutFile)
+		}
+
+		for _, out := range outs {
+			if !isCCSourceExt(out) {
+				continue
+			}
+
+			ccRef, ccOut, ccIns := emitPRDownstreamCC(ctx, instance, out, in)
+			ccRefs = append(ccRefs, ccRef)
+			ccOutputs = append(ccOutputs, ccOut)
+			memberInputs = append(memberInputs, ccIns)
+		}
 	}
+
+	return ccRefs, ccOutputs, memberInputs
+}
+
+// isCCSourceExt reports whether `path` names a CC-compilable source.
+// PR-AUDIT-5 dispatch helper: PR outputs with these extensions become
+// implicit module sources. The extension set mirrors emitOneSource's
+// .c/.cpp/.cc/.cxx branch; .S/.s/.asm are excluded — PR currently
+// produces no assembly outputs in any observed closure, and the AS
+// path has its own toolchain prerequisites (yasm walk) that don't
+// trivially compose from a PR-driven scaffold.
+func isCCSourceExt(p string) bool {
+	return strings.HasSuffix(p, ".cpp") ||
+		strings.HasSuffix(p, ".cc") ||
+		strings.HasSuffix(p, ".cxx") ||
+		strings.HasSuffix(p, ".c")
+}
+
+// emitPRDownstreamCC emits the CC node compiling a PR-generated source.
+// Mirrors the R6/EV/CF downstream-CC shape (gen.go:4196..4236, PR-AUDIT-2):
+// IsGenerated=true; IncludeInputs from WalkBuildRootClosure over the
+// registered output (the registry entry is populated by emitRunProgram
+// itself with EmitsIncludes=nil — opaque tool output — so the closure
+// is empty unless a future PR-AUDIT iteration populates it).
+//
+// The PR-emitted source lives at $(BUILD_ROOT)/<instance.Path>/<out>;
+// composeCCPaths' IsGenerated branch yields $(BUILD_ROOT)/<instance.
+// Path>/<out>.o for the output (flat layout when <out> has no `/`).
+func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, in ModuleCCInputs) (NodeRef, string, []string) {
+	prOut := "$(BUILD_ROOT)/" + instance.Path + "/" + out
+
+	ccIn := in
+	ccIn.IsGenerated = true
+	ccIn.IncludeInputs = walkClosureFromBuildRoot(ctx, instance, prOut, in)
+
+	ref, outPath := EmitCC(instance, out, ccIn, ctx.emit)
+
+	// CC inputs: the PR-emitted source itself + its include closure.
+	// Reference (sg2.json devtools/ymake/symbols/dep_types.h_dumper.cpp.o):
+	// inputs[0..2] = [stats_enums.h_serialized.cpp, stats_enums.h_serialized.h,
+	// dep_types.h_dumper.cpp, ...closure...]. The .h_serialized.* entries
+	// come from the registered EN outputs (already in the include
+	// closure for sources that #include them); the .cpp leads.
+	ccInputs := make([]string, 0, 1+len(ccIn.IncludeInputs))
+	ccInputs = append(ccInputs, prOut)
+	ccInputs = append(ccInputs, ccIn.IncludeInputs...)
+
+	return ref, outPath, ccInputs
 }
 
 // emitExplicitCF emits a CF node for an explicit CONFIGURE_FILE(src dst)
@@ -929,29 +1035,65 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	// F-7-B: register PR outputs. PR outputs are generated files (possibly
 	// .h headers) but their include content is tool-specific and opaque at
-	// gen time. EmitsIncludes is nil — F-7-C will handle transitive lookup
-	// if needed.
+	// gen time.
+	//
+	// PR-AUDIT-5: for CC-compilable outputs (.cpp/.cc/.cxx/.c) we know the
+	// generator-tool convention: the emitted source textually `#include`s
+	// its IN files (which are the headers the tool was asked to read).
+	// Populate EmitsIncludes with the SOURCE_ROOT-rooted IN paths so the
+	// downstream CC's WalkBuildRootClosure picks up the transitive header
+	// closure. The OUTPUT_INCLUDES directive declares additional textual
+	// `#include`s the generator produces; thread those in too. For non-
+	// compilable outputs (.h, .pyc, ...) EmitsIncludes stays nil — those
+	// either lead to opaque binary content or to header content the
+	// scanner cannot derive at gen time without invoking the tool.
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
 				OutputPath:    "$(BUILD_ROOT)/" + instance.Path + "/" + f,
-				EmitsIncludes: nil,
+				EmitsIncludes: prEmitsIncludes(instance, f, stmt),
 			})
 		}
 		for _, f := range stmt.OUTNoAutoFiles {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
 				OutputPath:    "$(BUILD_ROOT)/" + instance.Path + "/" + f,
-				EmitsIncludes: nil,
+				EmitsIncludes: prEmitsIncludes(instance, f, stmt),
 			})
 		}
 		if stmt.StdoutFile != "" {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
 				OutputPath:    "$(BUILD_ROOT)/" + instance.Path + "/" + stmt.StdoutFile,
-				EmitsIncludes: nil,
+				EmitsIncludes: prEmitsIncludes(instance, stmt.StdoutFile, stmt),
 			})
 		}
 	}
+}
+
+// prEmitsIncludes returns the EmitsIncludes set to register for a PR
+// output named `outFile`. For CC-compilable outputs the convention is
+// that the generated source textually `#include`s its IN files and any
+// OUTPUT_INCLUDES-declared headers; for everything else the content is
+// opaque and we return nil. PR-AUDIT-5.
+func prEmitsIncludes(instance ModuleInstance, outFile string, stmt *RunProgramStmt) []string {
+	if !isCCSourceExt(outFile) {
+		return nil
+	}
+
+	includes := make([]string, 0, len(stmt.INFiles)+len(stmt.OutputIncludes))
+
+	// IN files are module-relative; rebase to SOURCE_ROOT.
+	for _, f := range stmt.INFiles {
+		includes = append(includes, "$(SOURCE_ROOT)/"+instance.Path+"/"+f)
+	}
+
+	// OUTPUT_INCLUDES entries are repo-relative (e.g.
+	// `devtools/ymake/symbols/file_store.h`); rebase to SOURCE_ROOT.
+	for _, f := range stmt.OutputIncludes {
+		includes = append(includes, "$(SOURCE_ROOT)/"+f)
+	}
+
+	return includes
 }

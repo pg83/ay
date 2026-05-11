@@ -2764,6 +2764,23 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
+	// PR-AUDIT-5: emit PR (RUN_PROGRAM) nodes whose outputs include
+	// CC-compilable extensions (.cpp/.cc/.cxx/.c) ahead of the AR step,
+	// folding the downstream CCs into the module's regular SRCS bucket.
+	// Empirical reference: devtools/ymake/symbols's RUN_PROGRAM emits
+	// dep_types.h_dumper.cpp via STDOUT; the consuming CC node compiles
+	// it and the AR archives the resulting .o as the trailing SRCS
+	// member (after the declared SRCS list, before any JOIN_SRCS).
+	{
+		prCCRefs, prCCOutputs, prMemberInputsList := emitRunProgramsForAR(ctx, instance, d, moduleInputs)
+		for i, ref := range prCCRefs {
+			ccRefs = append(ccRefs, ref)
+			ccOutputs = append(ccOutputs, prCCOutputs[i])
+			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
+			addMemberInputs(prMemberInputsList[i])
+		}
+	}
+
 	// PR-41 Fix I: record the SRCS/JOIN_SRCS boundary so the AR
 	// cmd_args reorder below can apply the right bucket rules to
 	// each group independently. All entries up to this index are
