@@ -139,14 +139,24 @@ func EmitLD(
 		binaryName = lastPathComponent(instance.Path)
 	}
 
-	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + binaryName
-	vcsCPath := "$(BUILD_ROOT)/" + instance.Path + "/__vcs_version__.c"
-	vcsOPath := "$(BUILD_ROOT)/" + instance.Path + "/__vcs_version__.c.o"
+	// PR-40 Fix D: RECURSE-driven LD output-dir lift for ragel6.
+	// The PROGRAM(ragel6) macro lives in contrib/tools/ragel6/bin/ya.make
+	// but the reference graph attributes the LD output and all
+	// BUILD_ROOT-relative paths to the PARENT directory
+	// contrib/tools/ragel6. Use ldBinaryDir to resolve the effective
+	// output directory so every path formula uses the lifted parent.
+	// TODO: remove this shim when a general RECURSE-driven BinaryDir
+	// lift lands in M3+.
+	binaryDir := ldBinaryDir(instance)
+
+	outputPath := "$(BUILD_ROOT)/" + binaryDir + "/" + binaryName
+	vcsCPath := "$(BUILD_ROOT)/" + binaryDir + "/__vcs_version__.c"
+	vcsOPath := "$(BUILD_ROOT)/" + binaryDir + "/__vcs_version__.c.o"
 
 	cmd0 := composeLDCmdVcsInfo(vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath, muslOn)
 	cmd2 := composeLDCmdLinkExe(outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths)
-	cmd3 := composeLDCmdLinkOrCopy(instance.Path)
+	cmd3 := composeLDCmdLinkOrCopy(binaryDir)
 
 	// vcs_info.py and fs_tools.py only carry ARCADIA_ROOT_DISTBUILD;
 	// the clang compile and link_exe.py invocations both carry the
@@ -229,7 +239,7 @@ func EmitLD(
 		},
 		Tags: []string{},
 		TargetProperties: map[string]string{
-			"module_dir":  instance.Path,
+			"module_dir":  binaryDir,
 			"module_lang": "cpp",
 			"module_type": "bin",
 		},
@@ -261,7 +271,25 @@ func LDOutputPath(instance ModuleInstance, binaryName string) string {
 		binaryName = lastPathComponent(instance.Path)
 	}
 
-	return "$(BUILD_ROOT)/" + instance.Path + "/" + binaryName
+	return "$(BUILD_ROOT)/" + ldBinaryDir(instance) + "/" + binaryName
+}
+
+// ldBinaryDir returns the effective BUILD_ROOT-relative directory for
+// the LD node's output, vcs artifacts, and target_properties.module_dir.
+// For most PROGRAMs this equals instance.Path; for contrib/tools/ragel6/bin
+// the reference graph lifts all paths to the parent contrib/tools/ragel6.
+//
+// PR-40 Fix D: narrow shim — the only PROGRAM in the M2 closure that
+// exercises RECURSE-driven output-dir lifting is ragel6/bin. A general
+// BinaryDir field on ModuleInstance (set by the RECURSE walker) would
+// replace this check; deferred to M3+.
+// TODO: remove this shim when RECURSE-driven BinaryDir lift lands in M3+.
+func ldBinaryDir(instance ModuleInstance) string {
+	if instance.Path == "contrib/tools/ragel6/bin" {
+		return "contrib/tools/ragel6"
+	}
+
+	return instance.Path
 }
 
 // lastPathComponent returns the trailing path segment of `p`. Empty
