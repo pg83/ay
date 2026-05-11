@@ -4679,7 +4679,15 @@ func scanIncludesForSource(ctx *genCtx, srcInstance ModuleInstance, srcRel strin
 	// the per-genModule (local) or genCtx-wide (interned) cache.
 	sc := ctx.getScanCtx(scanner, cfg)
 
-	return sc.WalkSource(cfg.SourceRel)
+	// PR-AUDIT-1: dispatch through the unified VFS-path entry. The
+	// caller composes the VFS-rooted path once and the scanner's
+	// locator (forEachResolvedChild) decides FS-vs-codegen internally.
+	// Subsequent PR-AUDIT-2..5 retrofit the EV/R6/R5/CF/PR sites to
+	// pass `$(BUILD_ROOT)/...` paths through this same entry point;
+	// this PR just centralises the existing FS-rooted callers without
+	// changing semantics. See `docs/drafts/20260511-1850-parsed-
+	// includes-audit.md` §3.1.
+	return sc.WalkClosure(vfsSource(srcRelOnDisk))
 }
 
 // includeScannerBasePaths returns the implicit include search path

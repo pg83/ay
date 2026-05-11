@@ -538,18 +538,48 @@ func (s *IncludeScanner) WalkClosure(cfg ScanContext) []string {
 //
 // PR-M3-perf-E: the previous WalkClosure body lives here, less the
 // ctxHash recomputation.
+//
+// PR-AUDIT-1: thin shim over WalkClosure — the implementation lives there
+// so callers that already hold a VFS path (FS or BUILD_ROOT) can hit the
+// uniform entry point without converting back to a source-rel.
 func (sc *scanCtx) WalkSource(sourceRel string) []string {
+	return sc.WalkClosure(vfsSource(sourceRel))
+}
+
+// WalkClosure walks the include closure rooted at `vfsPath` using the
+// receiver's already-bound context. `vfsPath` MUST be VFS-rooted —
+// either `$(SOURCE_ROOT)/...` (FS-backed) or `$(BUILD_ROOT)/...`
+// (codegen-registry-backed). Internal dispatch goes through
+// forEachResolvedChild's locator branch: callers do NOT discriminate on
+// "is this on disk?" — that knowledge belongs in the locator, not the
+// caller (PR-AUDIT-1 / audit doc `docs/drafts/20260511-1850-parsed-
+// includes-audit.md` §1, §3.1).
+//
+// Returns the transitive header set excluding the root itself, in DFS-
+// discovery order. The result slice is freshly allocated each call.
+//
+// Sysincl resolution keys on `cfg.SourceRel`: for $(SOURCE_ROOT)/ roots
+// the SourceRel is derived from the VFS path so cross-source DFS within
+// one scanCtx keys sysincl correctly per source. For $(BUILD_ROOT)/
+// roots no sysincl resolution fires at the root (children come from the
+// pre-resolved EmitsIncludes); the cfg.SourceRel remains whatever the
+// previous call left it at, which is harmless because BUILD_ROOT
+// children are not parsed through resolve().
+func (sc *scanCtx) WalkClosure(vfsPath string) []string {
 	s := sc.scanner
-	// PR-M3-vfs-paths: srcAbs is a VFS-rooted path. The FS-translation
-	// happens inside parseIncludes / fileExists / fsLocator.Exists.
-	srcAbs := vfsSource(sourceRel)
+
 	// PR-M3-perf-E: cfg.SourceRel is the source-rel that perSourceView
 	// keys on for the src-class hash, but the scanCtx is shared across
 	// many sources within a module — overwrite the per-call source-rel
 	// field on the cfg so resolve()'s `s.sysinclSourceLookup(ctx.SourceRel,
 	// …)` path keys on the CURRENT source rather than the one captured
-	// at scanCtx construction.
-	sc.cfg.SourceRel = sourceRel
+	// at scanCtx construction. For $(BUILD_ROOT)/ roots there is no
+	// meaningful source-rel (the file is not on disk); leave cfg.SourceRel
+	// untouched in that case — the BUILD_ROOT branch in forEachResolvedChild
+	// never consults SourceRel anyway.
+	if isSourceVFS(vfsPath) {
+		sc.cfg.SourceRel = strings.TrimPrefix(vfsPath, vfsSourcePrefix)
+	}
 
 	visitedP := s.visitedPool.Get().(*map[string]struct{})
 	orderP := s.orderPool.Get().(*[]string)
@@ -557,13 +587,13 @@ func (sc *scanCtx) WalkSource(sourceRel string) []string {
 	visited := *visitedP
 	order := (*orderP)[:0]
 
-	sc.dfs(srcAbs, visited, &order)
+	sc.dfs(vfsPath, visited, &order)
 
 	out := make([]string, 0, len(order))
 
 	for _, abs := range order {
-		// Skip the source itself; only headers are emitted.
-		if abs == srcAbs {
+		// Skip the root itself; only headers are emitted.
+		if abs == vfsPath {
 			continue
 		}
 
