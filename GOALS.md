@@ -60,6 +60,11 @@ keys; trailing newlines; etc.).
   Rationale: the reference uses ymake's UID algorithm; reproducing it
   byte-exact is a separate effort and not load-bearing for graph
   correctness once L0..L3 have established semantic equivalence.
+- Drop any per-node fields that carry upstream-only state and do not
+  participate in graph semantics: `stats_uid`, `cache` (where present;
+  single-node `BI` shape in M3's sg2.json — value `false`, no
+  generator analogue), and any future fields the upstream ymake
+  emits that have no semantic meaning for our regenerated graph.
 
 **NOT allowed**:
 
@@ -78,10 +83,16 @@ keys; trailing newlines; etc.).
 - **Not** `g.json`. `sg.json` includes parsed `#include` paths in node
   `inputs`; that is the canonical shape.
 
-### Initial target subgraph
+### Initial target subgraphs
 
-- `tools/archiver` (full PEERDIR closure, both `default-linux-aarch64` target
-  and `default-linux-x86_64` host platforms; reference graph = 3730 nodes).
+- **M2**: `tools/archiver` (full PEERDIR closure, both `default-linux-aarch64`
+  target and `default-linux-x86_64` host platforms; reference graph = 3730
+  nodes; reference at `/home/pg/monorepo/yatool_orig/sg.json`).
+- **M3**: `devtools/ymake/bin` (the ymake binary itself — meta-bootstrap;
+  8750 nodes; reference at `/home/pg/monorepo/yatool_orig/sg2.json`).
+  Same `--musl --target-platform=default-linux-aarch64 --sandboxing` flag
+  set; produced by `srun2.sh`. Same L0..L4 = 100% bar; same gen ≤ 5 s
+  hard gate (no relaxation despite ×2.35 node growth).
 
 ### Regression-pin subgraph
 
