@@ -101,6 +101,13 @@ type moduleEmitResult struct {
 	ARPath     string
 	isPROGRAM  bool
 	headerOnly bool
+	// hasPlainAR is true when EmitAR(Named) was actually called for this
+	// module — i.e. the module has at least one regular (non-global) CC
+	// output. False for modules whose only compilable sources are
+	// GLOBAL_SRCS (blockcodecs codecs, getopt): these emit only a
+	// .global.a and the consumer's peerLibPaths should not include the
+	// plain .a path. PR-M3-residue-B.
+	hasPlainAR bool
 	LDRef      NodeRef
 	LDPath     string
 	GlobalRef  *NodeRef // non-nil when the module has GLOBAL_SRCS (EmitARGlobal was called)
@@ -2241,7 +2248,16 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			continue
 		}
 
-		peerArchiveAddPath(peerResult.ARRef, peerPath+"/"+ArchiveName(peerPath))
+		// PR-M3-residue-B: use peerResult.ARPath (which carries the
+		// py3-prefixed name for Python modules) instead of recomputing
+		// ArchiveName. Skip when hasPlainAR is false (module has only
+		// GLOBAL_SRCS — no regular archive was emitted).
+		if peerResult.hasPlainAR {
+			// ARPath has "$(BUILD_ROOT)/" prefix; cmd_args use a
+			// bare relative path. Strip the prefix for consistency.
+			arRelPath := strings.TrimPrefix(peerResult.ARPath, "$(BUILD_ROOT)/")
+			peerArchiveAddPath(peerResult.ARRef, arRelPath)
+		}
 
 		if peerResult.GlobalRef != nil {
 			peerGlobalRefs = append(peerGlobalRefs, *peerResult.GlobalRef)
@@ -2591,6 +2607,28 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// emit-time dedup behaviour.
 	dedupedAddIncl := mergeDedup(d.addIncl, nil)
 
+	// PR-M3-residue-B: Python native library modules (PY23_NATIVE_LIBRARY)
+	// emit ".py3.o" CC outputs (not plain ".o") per the reference graph.
+	isPy3NativeLib := d.moduleStmt.Name == "PY23_NATIVE_LIBRARY"
+
+	// arNameFn selects the archive naming function for this module:
+	//   - PY23_NATIVE_LIBRARY → "libpy3c" prefix (Py3cArchiveName)
+	//   - PY3_LIBRARY / PY2_LIBRARY / PY23_LIBRARY / PY2_PROGRAM / PY3_PROGRAM → "libpy3" prefix (Py3ArchiveName)
+	//   - everything else → standard "lib" prefix (ArchiveName)
+	var arNameFn func(string) string
+	var globalArNameFn func(string) string
+	switch d.moduleStmt.Name {
+	case "PY23_NATIVE_LIBRARY":
+		arNameFn = Py3cArchiveName
+		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefix(dir, "libpy3c") }
+	case "PY3_LIBRARY", "PY2_LIBRARY", "PY23_LIBRARY", "PY2_PROGRAM", "PY3_PROGRAM":
+		arNameFn = Py3ArchiveName
+		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefix(dir, "libpy3") }
+	default:
+		arNameFn = ArchiveName
+		globalArNameFn = globalArchiveName
+	}
+
 	moduleInputs := ModuleCCInputs{
 		AddIncl:              dedupedAddIncl,
 		PeerAddInclGlobal:    peerAddInclGlobal,
@@ -2608,6 +2646,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		SourceRoot:           ctx.sourceRoot,
 		DefaultVars:          d.defaultVars,
 		DefaultVarOrder:      d.defaultVarOrder,
+		Py3Suffix:            isPy3NativeLib,
 	}
 
 	// PR-30 D06: ancestor-only SRCDIR rebase. The "PROGRAM with SRCDIR
@@ -3023,9 +3062,24 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// order), then JOIN_SRCS, then R6-generated last.
 	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, ccIsFlatNoLto, numSrcsDerived)
 
-	arRef := EmitAR(instance, ccRefs, ccOutputs, nil, combinedMemberInputs, ctx.emit)
+	// PR-M3-residue-B fix 1: skip plain AR when there are no regular CC
+	// outputs (module has only GLOBAL_SRCS — blockcodecs codecs, getopt).
+	// The reference graph does not emit a regular (non-global) archive for
+	// such modules; only EmitARGlobal below produces the ".global.a" node.
+	//
+	// PR-M3-residue-B fix 2: Python library modules use py3-prefixed
+	// archive names (Py3cArchiveName for PY23_NATIVE_LIBRARY, Py3ArchiveName
+	// for PY3_LIBRARY etc.) so we route through EmitARNamed with the name
+	// selected by arNameFn.
+	var arRef NodeRef
+	arBaseName := arNameFn(instance.Path)
+
+	if len(ccRefs) > 0 {
+		arRef = EmitARNamed(instance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, ctx.emit)
+	}
+
 	_ = peerArchiveRefs // retained as a loop accumulator for the PROGRAM LD branch above; intentionally unused for the LIBRARY AR.
-	arPath := "$(BUILD_ROOT)/" + instance.Path + "/" + ArchiveName(instance.Path)
+	arPath := "$(BUILD_ROOT)/" + instance.Path + "/" + arBaseName
 
 	// PR-M3-A: emit yapyc3 PY nodes for PY_SRCS() declarations.
 	// Modules that have both SRCS and PY_SRCS (rare but valid) get CC/AR
@@ -3041,6 +3095,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	result := &moduleEmitResult{
 		ARRef:                   arRef,
 		ARPath:                  arPath,
+		hasPlainAR:              len(ccRefs) > 0,
 		isPROGRAM:               false,
 		LDRef:                   arRef,
 		LDPath:                  arPath,
@@ -3077,9 +3132,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 		}
 
-		globalRef := EmitARGlobal(instance, globalRefs, globalOutputs, globalAggregated, ctx.emit)
+		globalBaseName := globalArNameFn(instance.Path)
+		globalRef := EmitARGlobalNamed(instance, globalBaseName, globalRefs, globalOutputs, globalAggregated, ctx.emit)
 		result.GlobalRef = &globalRef
-		result.GlobalPath = instance.Path + "/" + globalArchiveName(instance.Path)
+		result.GlobalPath = instance.Path + "/" + globalBaseName
 	}
 
 	ctx.memo[originalInstance] = result
@@ -3303,8 +3359,11 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 			addArchive(peerResult.PeerArchiveClosureRefs[i], p)
 		}
 
-		if !peerResult.headerOnly {
-			addArchive(peerResult.ARRef, peerPath+"/"+ArchiveName(peerPath))
+		// PR-M3-residue-B: use peerResult.ARPath (py3-prefixed for
+		// Python modules) and skip when hasPlainAR is false.
+		if !peerResult.headerOnly && peerResult.hasPlainAR {
+			arRelPath := strings.TrimPrefix(peerResult.ARPath, "$(BUILD_ROOT)/")
+			addArchive(peerResult.ARRef, arRelPath)
 		}
 
 		// PR-35k: fold peer's transitive LD plugin closure. Header-only

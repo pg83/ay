@@ -187,6 +187,11 @@ type ModuleCCInputs struct {
 	// Keys are variable names; values are the DEFAULT-declared values.
 	DefaultVars     map[string]string
 	DefaultVarOrder []string
+	// Py3Suffix selects ".py3.o" as the output suffix instead of the
+	// default ".o". Set for PY23_NATIVE_LIBRARY modules whose reference
+	// graph emits <src>.py3.o instead of plain <src>.o. Does not affect
+	// PIC modules (".pic.o" suffix is still used when Flags.PIC is set).
+	Py3Suffix bool
 }
 
 // EmitCC emits a CC node for compiling `srcRel` (a path relative to
@@ -207,6 +212,8 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	suffix := ".o"
 	if instance.Flags.PIC {
 		suffix = ".pic.o"
+	} else if in.Py3Suffix {
+		suffix = ".py3.o"
 	}
 
 	outputPath, inputPath := composeCCPaths(instance, srcRel, in, suffix)
