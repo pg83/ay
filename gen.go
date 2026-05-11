@@ -653,12 +653,16 @@ func applyAllocatorStmt(v *UnknownStmt, d *moduleData) {
 
 	name := v.Args[0]
 
-	peers, ok := allocatorPeers[name]
-	if !ok {
+	if _, ok := allocatorPeers[name]; !ok {
 		ThrowFmt("gen: unknown allocator %q (line %d); extend allocatorPeers in gen.go", name, v.Line)
 	}
 
-	d.peerdirs = append(d.peerdirs, peers...)
+	// PR-43: allocator peers are inserted into the program-default slot
+	// (between build/cow/on and musl/full) by defaultProgramPeerdirsFor,
+	// NOT into d.peerdirs (user-peer slot). Appending to d.peerdirs caused
+	// the mimalloc cluster to land after musl/full's transitive closure
+	// (asmlib/asmglibc/musl) in the LD archive list, reversing the
+	// REF order for ragel6's ALLOCATOR(MIM) case.
 	d.hadAllocator = true
 	d.allocatorName = name
 }
@@ -1170,7 +1174,14 @@ const muslConsumerSentinel = "-D_musl_"
 // program-default peers from this helper — `genModule` callers can
 // suppress by checking `isRuntimeAncestor` themselves if a future
 // closure surfaces such a case.
-func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocator bool, muslLiteOverride bool) []string {
+//
+// PR-43: split into pre-user and post-user halves via the `includeMusl`
+// parameter.  When `includeMusl=false` the musl/full (or bare musl)
+// tail is omitted; when `includeMusl=true` only the musl tail is
+// returned.  `genModule` calls this twice so it can interleave the
+// allocator explicit peers (kept as peerKindUserPeer for GLOBAL phase
+// ordering) and the regular d.peerdirs between the two halves.
+func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocator bool, muslLiteOverride bool, includeMusl bool) []string {
 	if instance.Language != LangCPP {
 		return nil
 	}
@@ -1191,46 +1202,50 @@ func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocato
 
 	var peers []string
 
-	// PR-35c: USE_COW=yes M2 default — every PROGRAM gets `build/cow/on`
-	// as an implicit peer. Mirrors `_BASE_PROGRAM`'s
-	// `when ($USE_COW == "yes") { PEERDIR += build/cow/on }` at
-	// `build/ymake.core.conf:946-948`. Declared BEFORE the allocator block
-	// (conf line 946 precedes the allocator select at line 959) so post-order
-	// DFS places build/cow/on before the tcmalloc subtree. PR-42: reordered
-	// to match upstream conf declaration sequence.
-	peers = append(peers, "build/cow/on")
+	if !includeMusl {
+		// PR-35c: USE_COW=yes M2 default — every PROGRAM gets `build/cow/on`
+		// as an implicit peer. Mirrors `_BASE_PROGRAM`'s
+		// `when ($USE_COW == "yes") { PEERDIR += build/cow/on }` at
+		// `build/ymake.core.conf:946-948`. Declared BEFORE the allocator block
+		// (conf line 946 precedes the allocator select at line 959) so post-order
+		// DFS places build/cow/on before the tcmalloc subtree. PR-42: reordered
+		// to match upstream conf declaration sequence.
+		peers = append(peers, "build/cow/on")
 
-	// PR-30 D03: default ALLOCATOR=TCMALLOC_TC for our M2 environment
-	// (MUSL=yes, OS_LINUX=yes). PROGRAMs that explicitly declare
-	// ALLOCATOR(NAME) go through allocatorPeers; this default fires
-	// only when neither was declared.
-	if !hadAllocator && muslOn && osLinux {
-		// TCMALLOC_TC peer set; mirrors allocatorPeers["TCMALLOC_TC"].
-		// Listed inline so the PROGRAM-default path remains
-		// self-documenting alongside the M2 environment guards.
-		peers = append(peers,
-			"library/cpp/malloc/tcmalloc",
-			"contrib/libs/tcmalloc/no_percpu_cache",
-		)
-	}
+		// PR-30 D03: default ALLOCATOR=TCMALLOC_TC for our M2 environment
+		// (MUSL=yes, OS_LINUX=yes). PROGRAMs that explicitly declare
+		// ALLOCATOR(NAME) go through allocatorPeers; this default fires
+		// only when neither was declared.
+		if !hadAllocator && muslOn && osLinux {
+			// TCMALLOC_TC peer set; mirrors allocatorPeers["TCMALLOC_TC"].
+			// Listed inline so the PROGRAM-default path remains
+			// self-documenting alongside the M2 environment guards.
+			peers = append(peers,
+				"library/cpp/malloc/tcmalloc",
+				"contrib/libs/tcmalloc/no_percpu_cache",
+			)
+		}
+	} else {
+		// PR-42: musl block declared AFTER the allocator block in upstream conf
+		// (build/ymake.core.conf:1238-1244, after allocator select at :959-1036).
+		// Post-order DFS places musl after the tcmalloc subtree, matching REF
+		// slots 47-48 (musl, musl/full) vs slots 41-46 (cow + tcmalloc cluster).
+		// PR-43: musl is in the post-user half so that explicit ALLOCATOR peers
+		// (kept as peerKindUserPeer) land before musl/full in the archive walk.
+		if muslOn && !muslLite {
+			// Caller (defaultPeerdirsFor in gen.go:932) gates on !isRuntimeAncestor(instance.Path)
+			// which already excludes contrib/libs/musl/* (incl. musl/full). No self-suppression needed here.
+			const muslFullPath = "contrib/libs/musl/full"
+			peers = append(peers, muslFullPath)
+		}
 
-	// PR-42: musl block declared AFTER the allocator block in upstream conf
-	// (build/ymake.core.conf:1238-1244, after allocator select at :959-1036).
-	// Post-order DFS places musl after the tcmalloc subtree, matching REF
-	// slots 47-48 (musl, musl/full) vs slots 41-46 (cow + tcmalloc cluster).
-	if muslOn && !muslLite {
-		// Caller (defaultPeerdirsFor in gen.go:932) gates on !isRuntimeAncestor(instance.Path)
-		// which already excludes contrib/libs/musl/* (incl. musl/full). No self-suppression needed here.
-		const muslFullPath = "contrib/libs/musl/full"
-		peers = append(peers, muslFullPath)
-	}
-
-	if muslOn && muslLite {
-		// PR-42: upstream conf build/ymake.core.conf:1239-1240 adds bare contrib/libs/musl
-		// (not musl/full) when MUSL_LITE=yes. Mirrors the MUSL_LITE branch of _BASE_PROGRAM.
-		// Modules like contrib/tools/yasm declare ENABLE(MUSL_LITE) to get musl without
-		// the full allocator+tcmalloc cascade.
-		peers = append(peers, "contrib/libs/musl")
+		if muslOn && muslLite {
+			// PR-42: upstream conf build/ymake.core.conf:1239-1240 adds bare contrib/libs/musl
+			// (not musl/full) when MUSL_LITE=yes. Mirrors the MUSL_LITE branch of _BASE_PROGRAM.
+			// Modules like contrib/tools/yasm declare ENABLE(MUSL_LITE) to get musl without
+			// the full allocator+tcmalloc cascade.
+			peers = append(peers, "contrib/libs/musl")
+		}
 	}
 
 	return peers
@@ -1454,14 +1469,34 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// PR-35g: split program-defaults from language-defaults so the peer-
 	// GLOBAL aggregation can apply different orderings to each group
 	// (language-defaults two-phase; program-defaults single-phase).
+	//
+	// PR-43: program-defaults are further split into pre-user (cow/on +
+	// optional tcmalloc) and post-user (musl/full or musl) halves.
+	// Explicit ALLOCATOR peers and regular d.peerdirs are interleaved
+	// between the two halves so they appear before musl/full in the
+	// archive-accumulation walk (correct LD link order for the
+	// mimalloc cluster) while retaining peerKindUserPeer (correct
+	// AddInclGlobal Phase 3 ordering for the ragel6 CC include case).
 	languageDefaultsCount := len(defaults)
 
-	if d.moduleStmt.Name == "PROGRAM" && !isRuntimeAncestor(instance.Path) {
-		defaults = append(defaults, defaultProgramPeerdirsFor(ctx, instance, d.hadAllocator, d.muslLite)...)
+	isProgram := d.moduleStmt.Name == "PROGRAM" && !isRuntimeAncestor(instance.Path)
+
+	var preUserProgDefaults []string
+	var postUserProgDefaults []string
+	if isProgram {
+		preUserProgDefaults = defaultProgramPeerdirsFor(ctx, instance, d.hadAllocator, d.muslLite, false)
+		postUserProgDefaults = defaultProgramPeerdirsFor(ctx, instance, d.hadAllocator, d.muslLite, true)
+		defaults = append(defaults, preUserProgDefaults...)
 	}
 
-	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
-	allPeers := make([]string, 0, len(defaults)+len(d.peerdirs))
+	// allocatorExplicitPeers are the peers declared by ALLOCATOR(NAME)
+	// (nil for FAKE/DEFAULT/SYSTEM, or when no ALLOCATOR macro was used).
+	// They are treated as peerKindUserPeer so AddInclGlobal Phase 3
+	// places their transitive includes ahead of later user-PEERDIRs.
+	allocatorExplicitPeers := allocatorPeers[d.allocatorName]
+
+	seen := make(map[string]struct{}, len(defaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
+	allPeers := make([]string, 0, len(defaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
 
 	// PR-35g: track per-peer category so the peer-GLOBAL aggregation
 	// below can apply the right ordering rule per group:
@@ -1476,20 +1511,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	//     implicit TCMALLOC_TC peer-set's OWN GLOBAL after util's
 	//     transitive zlib/double-conversion/libc_compat (the archiver-
 	//     default allocator invariant).
-	//
-	// `allPeers` declaration order is preserved unchanged from PR-35c
-	// (defaults first, then user PEERDIRs) so peer-archive aggregation,
-	// LD inputs alphabetisation, and downstream LIBRARY closures keep
-	// their existing topology. The kind tag only steers AddInclGlobal
-	// aggregation in Phase 1/2.
 	const (
 		peerKindLangDefault    = 0
 		peerKindProgramDefault = 1
 		peerKindUserPeer       = 2
 	)
 
-	peerKinds := make([]int, 0, len(defaults)+len(d.peerdirs))
+	peerKinds := make([]int, 0, len(defaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
 
+	// 1. Language-defaults and pre-user program-defaults.
 	for i, p := range defaults {
 		if _, dup := seen[p]; dup {
 			continue
@@ -1504,6 +1534,36 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
+	// 2. Explicit allocator peers (peerKindUserPeer so Phase 3 handles
+	//    their AddInclGlobal, keeping mimalloc/include before ragel5/aapl).
+	//    Placed BEFORE the musl post-user block so the allocator cluster
+	//    (e.g. mimalloc → malloc/api + mimalloc AR) precedes musl/full's
+	//    transitive deps (asmlib/asmglibc/musl) in the archive walk.
+	//    Only the ALLOCATOR-derived peers are hoisted here; regular
+	//    d.peerdirs stay in step 4 so they remain AFTER musl/full.
+	for _, p := range allocatorExplicitPeers {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+		seen[p] = struct{}{}
+		allPeers = append(allPeers, p)
+		peerKinds = append(peerKinds, peerKindUserPeer)
+	}
+
+	// 3. Post-user program-defaults (musl/full or bare musl). Placed
+	//    after the allocator explicit peers but before regular user
+	//    PEERDIRs so musl/full's transitive closure lands before
+	//    user-peerdir libraries in the archive walk (PR-42 invariant).
+	for _, p := range postUserProgDefaults {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+		seen[p] = struct{}{}
+		allPeers = append(allPeers, p)
+		peerKinds = append(peerKinds, peerKindProgramDefault)
+	}
+
+	// 4. Regular user-declared PEERDIRs.
 	for _, p := range d.peerdirs {
 		if _, dup := seen[p]; dup {
 			continue
