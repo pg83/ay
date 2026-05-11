@@ -20,45 +20,21 @@ import (
 
 // ArchiveName returns the on-disk archive base name for a module dir.
 //
-// Convention (verified against 38 unique AR outputs in g.json):
-//
-//   - "util" → "libyutil.a" (special — `y` prefix)
-//   - "contrib/libs/X" (exactly depth 3) → "libcontrib-libs-X.a" (keep `contrib`)
-//   - "contrib/libs/X/Y/..." (depth ≥ 4) → "liblibs-X-Y-....a" (drop `contrib`)
-//   - "library/cpp/X" (exactly depth 3) → "liblibrary-cpp-X.a" (keep `library`)
-//   - "library/cpp/X/Y/..." (depth ≥ 4) → "libcpp-X-Y-....a" (drop `library`)
-//   - all other paths → "lib<dashed>.a" (dash-join all parts)
-//
-// Cross-reference: PR-09's naive "lib<dashed>.a" formula was correct
-// for build/cow/on (depth 3, not contrib/libs or library/cpp); this
-// function generalises.
+// Rule (from upstream devtools/ymake/module_confs.cpp:48-57,
+// SetDefaultRealprjnameImpl(mod, depth=2) as used by ThreeDirNames):
+// join the last min(3, depth) path components with "-", prefix "lib",
+// suffix ".a". Single special case: "util" → "libyutil.a".
 func ArchiveName(moduleDir string) string {
 	if moduleDir == "util" {
 		return "libyutil.a"
 	}
 
 	parts := strings.Split(moduleDir, "/")
-
-	// contrib/libs/X/Y/... (depth >= 4): drop "contrib", keep from "libs".
-	if len(parts) >= 4 && parts[0] == "contrib" && parts[1] == "libs" {
-		return "lib" + strings.Join(append([]string{"libs"}, parts[2:]...), "-") + ".a"
+	if len(parts) > 3 {
+		parts = parts[len(parts)-3:]
 	}
 
-	// library/cpp/X/Y/... (depth >= 4): drop "library", keep from "cpp".
-	if len(parts) >= 4 && parts[0] == "library" && parts[1] == "cpp" {
-		return "lib" + strings.Join(append([]string{"cpp"}, parts[2:]...), "-") + ".a"
-	}
-
-	// devtools/ymake/X/Y/... (depth >= 4): drop "devtools", keep from "ymake".
-	// Reference: devtools/ymake/plugins/pybridge → libymake-plugins-pybridge.a;
-	// devtools/ymake/diag/common_display → libymake-diag-common_display.a.
-	if len(parts) >= 4 && parts[0] == "devtools" && parts[1] == "ymake" {
-		return "lib" + strings.Join(append([]string{"ymake"}, parts[2:]...), "-") + ".a"
-	}
-
-	// All other paths (depth <= 3 contrib/libs, depth <= 3 library/cpp,
-	// or any non-matching prefix): standard dash-joined formula.
-	return "lib" + strings.ReplaceAll(moduleDir, "/", "-") + ".a"
+	return "lib" + strings.Join(parts, "-") + ".a"
 }
 
 // globalArchiveName returns the archive base name for a module's
