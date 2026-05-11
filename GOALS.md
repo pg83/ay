@@ -31,10 +31,46 @@ budget.
 | Metric | Definition | Current | Target |
 |---|---|---|---|
 | L0 | Per-node Merkle topology fingerprint multiset overlap with reference | 100.00% (3730 / 3730) | **100.00%** |
-| L1 | Per-pair `(outputs[0], platform)` pairing yields matched `kv.p` / `target_properties` / `outputs` | 99.97% (3729 / 3729 paired; 1 unpaired-want / 1 unpaired-got) | **100.00%** |
-| L2 | Paired-node `inputs` / `tags` / `requirements` multiset equality | 99.52% (3712 / 3729) | **100.00%** |
-| L3 | Paired-node `cmd_args` / `env` / `cwd` byte-exact equality | 99.60% (3715 / 3729) | **100.00%** |
-| `gen` wall time | `time ./yatool gen --target tools/archiver` warm-cache (3-run avg) | ~0.86 s | **≤ 5 s** (hard gate; deviations are emergency tickets) |
+| L1 | Per-pair `(outputs[0], platform)` pairing yields matched `kv.p` / `target_properties` / `outputs` | 100.00% (3730 / 3730) | **100.00%** |
+| L2 | Paired-node `inputs` / `tags` / `requirements` multiset equality | 100.00% (3730 / 3730) | **100.00%** |
+| L3 | Paired-node `cmd_args` / `env` / `cwd` byte-exact equality | 100.00% (3730 / 3730) | **100.00%** |
+| L4 | `sha256(our.json) == sha256(normalized-ref.json)` — byte-exact equality of the full on-disk graph file | not yet measured | **byte-exact equal** |
+| `gen` wall time | `time ./yatool gen --target tools/archiver` warm-cache (3-run avg) | ~0.92 s | **≤ 5 s** (hard gate; deviations are emergency tickets) |
+
+#### L4 — byte-exact on-disk equality
+
+L4 promotes L0..L3 from "semantically equivalent" to "literally the same
+bytes on disk". The intent is to surface remaining graph-construction
+defects that the semantic comparators tolerate (UID collisions that
+fingerprint-match but byte-differ; node-ordering in the `graph` array;
+field-emission shape per node; struct-field ordering; `null` vs omitted
+keys; trailing newlines; etc.).
+
+**Allowed normalizations of the reference** (one-time, codified):
+
+- Strip the top-level `conf` section before comparison. The `conf`
+  block carries build-config metadata that is not part of the graph
+  semantics; reproducing it byte-exact is out of scope.
+- Re-canonicalize the reference for trivial-syntactic equivalence
+  (key order within objects, whitespace, empty-section vs `null`
+  vs omitted, etc.). Document the exact normalization rules; the
+  normalized reference is checked in or reproducibly regenerated.
+- Re-compute UIDs using our generator's fingerprint algorithm,
+  cascading through `deps`, `result`, and `inputs` references.
+  Rationale: the reference uses ymake's UID algorithm; reproducing it
+  byte-exact is a separate effort and not load-bearing for graph
+  correctness once L0..L3 have established semantic equivalence.
+
+**NOT allowed**:
+
+- Stripping any semantic field from the reference (e.g., `sandboxing`,
+  `target_properties`, `requirements`).
+- Re-ordering the `graph` array of the reference. The order itself is
+  semantic; if our generator emits a different order, our generator
+  is wrong, not the reference.
+- Round-trip normalization of OUR output. Our output must be produced
+  byte-exact directly by the emitter. Only the reference is
+  normalized.
 
 ### Reference graph
 
@@ -103,12 +139,18 @@ The project is complete when **all of the following hold simultaneously** on
 main, against the canonical reference graph at `/home/pg/monorepo/yatool_orig/sg.json`:
 
 1. L0 = L1 = L2 = L3 = **100.00 %** for `tools/archiver`.
-2. `time ./yatool gen --target tools/archiver` ≤ 5 s warm-cache, 3-run avg.
-3. M1 (`build/cow/on`) byte-exact at all four levels — preserved.
-4. `go test ./... -count=1` passes; `go build`, `go vet`, `gofmt -l *.go` clean.
-5. `defects.md` has zero open entries (`resolved` or `resolved (deferred)` only).
-6. `grep -E '(HasPrefix|HasSuffix|Contains).*"contrib/libs/(musl|cxxsupp)"' *.go`
+2. **L4 byte-exact**: `sha256(./yatool gen --target tools/archiver --out -)`
+   equals `sha256(normalized-ref-for-tools-archiver.json)`, where the
+   normalized reference is produced by the documented one-time
+   normalization pass over `/home/pg/monorepo/yatool_orig/sg.json` (strip
+   `conf`; re-canonicalize syntactic-equivalent JSON; re-UID via our
+   fingerprint).
+3. `time ./yatool gen --target tools/archiver` ≤ 5 s warm-cache, 3-run avg.
+4. M1 (`build/cow/on`) byte-exact at all four levels — preserved.
+5. `go test ./... -count=1` passes; `go build`, `go vet`, `gofmt -l *.go` clean.
+6. `defects.md` has zero open entries (`resolved` or `resolved (deferred)` only).
+7. `grep -E '(HasPrefix|HasSuffix|Contains).*"contrib/libs/(musl|cxxsupp)"' *.go`
    returns no matches in production code (architectural goal: no path-prefix
    dispatch for upstream-config-driven concerns).
-7. Two consecutive `gen` runs produce sha256-identical JSON output
+8. Two consecutive `gen` runs produce sha256-identical JSON output
    (determinism).
