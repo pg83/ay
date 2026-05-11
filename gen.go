@@ -187,6 +187,9 @@ type genCtx struct {
 	memo            map[ModuleInstance]*moduleEmitResult
 	walking         map[ModuleInstance]bool
 	cyclesTolerated int
+	// traceStack is populated when YATOOL_TRACE=1: each entry is
+	// "<path>@<platform>" for the calling frame; printed on genModule entry.
+	traceStack []string
 	// scannerTarget is the include-resolver for TARGET (aarch64) CC
 	// nodes; scannerHost is the host (x86_64) variant. Each scanner
 	// has its own parsed-includes cache (the OS page cache amortises
@@ -580,6 +583,16 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 				if strings.Contains(p, "${") {
 					continue
 				}
+				// Skip PEERDIR modifier keywords that appear as bare tokens inside
+				// the argument list. Upstream ymake supports per-path modifiers
+				// like `PEERDIR(ADDINCL some/path)` where ADDINCL is a modifier
+				// that makes the peer's includes visible without a recursive build.
+				// Our parser records all tokens as paths; filter the known modifiers
+				// so they don't cause "ADDINCL/ya.make not found" walk failures.
+				// PR-M3-F-1: tools/event2cpp/bin/ya.make uses this pattern.
+				if p == "ADDINCL" || p == "GLOBAL" {
+					continue
+				}
 				d.peerdirs = append(d.peerdirs, p)
 			}
 		case *SetStmt:
@@ -707,13 +720,22 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 func applyUnknownStmt(v *UnknownStmt, d *moduleData) {
 	switch v.Name {
 	case "NO_LIBC":
+		// build/ymake.core.conf: NO_LIBC() calls NO_RUNTIME() which calls NO_UTIL().
 		d.flags.NoLibc = true
+		d.flags.NoRuntime = true
+		d.flags.NoUtil = true
 	case "NO_UTIL":
 		d.flags.NoUtil = true
 	case "NO_RUNTIME":
+		// build/ymake.core.conf: NO_RUNTIME() calls NO_UTIL().
 		d.flags.NoRuntime = true
+		d.flags.NoUtil = true
 	case "NO_PLATFORM":
+		// build/ymake.core.conf: NO_PLATFORM() calls NO_LIBC() → NO_RUNTIME() → NO_UTIL().
 		d.flags.NoPlatform = true
+		d.flags.NoLibc = true
+		d.flags.NoRuntime = true
+		d.flags.NoUtil = true
 	case "NO_COMPILER_WARNINGS":
 		d.flags.NoCompilerWarnings = true
 	case "ALLOCATOR":
@@ -812,12 +834,12 @@ func applyUnknownStmt(v *UnknownStmt, d *moduleData) {
 		d.peerdirs = append(d.peerdirs, "contrib/tools/python3", "contrib/tools/python3/Lib")
 	case "PY_SRCS":
 		// PR-M3-A: collect PY_SRCS python source files into d.pySrcs.
-		// PY_SRCS accepts an optional leading TOP_LEVEL modifier (which
-		// affects the Python module name but not the generated file path
-		// in our emitter — both paths use <modulePath>/<srcRel>). Strip
-		// TOP_LEVEL and record the remaining filenames.
+		// PY_SRCS accepts optional leading modifiers TOP_LEVEL and MAIN
+		// (MAIN designates the entry-point module; both affect the Python
+		// module name but not the generated file path in our emitter).
+		// Strip both modifiers and record the remaining filenames.
 		for _, a := range v.Args {
-			if a == "TOP_LEVEL" {
+			if a == "TOP_LEVEL" || a == "MAIN" {
 				continue
 			}
 			d.pySrcs = append(d.pySrcs, a)
@@ -901,11 +923,25 @@ func applyAllocatorStmt(v *UnknownStmt, d *moduleData) {
 // compiled as normal LIBRARY sources; their non-C sources (*.py, *.proto)
 // are skipped (header-only path). PR-M3-B..E introduce real emitters for
 // the PY/PB/PR node kinds.
-func isMultimoduleLibraryType(name string) bool {
+// isPyLibraryType returns true for Python library/program module names that
+// behave as LIBRARY-shaped modules (emit AR/CC for their C++ SRCS, header-only
+// when they have none). Unlike the multimodule types in isMultimoduleLibraryType,
+// these modules are NOT unconditionally header-only — hasCompilableSource gates
+// the path. They are separated so the gate check at the top of genModule can
+// admit them without routing every one of them to the header-only path.
+func isPyLibraryType(name string) bool {
 	switch name {
 	case "PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",
-		"PY3_PROGRAM_BIN", "PY2_PROGRAM", "PY3_PROGRAM",
-		"PROTO_LIBRARY",
+		"PY2_PROGRAM", "PY3_PROGRAM":
+		return true
+	}
+
+	return false
+}
+
+func isMultimoduleLibraryType(name string) bool {
+	switch name {
+	case "PROTO_LIBRARY",
 		"DLL", "SO_PROGRAM",
 		"PACKAGE", "UNION", "RESOURCES_LIBRARY":
 		return true
@@ -1313,18 +1349,14 @@ func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
 		}
 	}
 
-	// util is a target-only implicit peer per the reference graph (zero
-	// host nodes under util/). Suppressing here keeps the host walk from
-	// pulling util in. The proper upstream rule lives in
-	// build/ymake.core.conf's _BUILTIN_PEERDIR (USE_CXX/NO_UTIL gating);
-	// the target-axis check approximates it for M2.
-	targetPlatformID := DefaultLinuxConfig.Target.ID
-
-	if ctx != nil {
-		targetPlatformID = ctx.cfg.Target.ID
-	}
-
-	if !instance.Flags.NoUtil && !noPlatform && instance.Target == targetPlatformID {
+	// PR-M3-F-1: util is an implicit peer for ALL CPP modules (both target
+	// and host) unless suppressed by NO_UTIL / effective NO_PLATFORM.
+	// The reference graph (sg2.json) includes util on default-linux-x86_64
+	// for host PROGRAM modules (tools/archiver, tools/rescompiler, etc.).
+	// Prior code restricted util to target-platform only; this caused ~24
+	// missing x86_64 util nodes in M3. M2 is unaffected because its host
+	// tools (ragel6, yasm) both declare NO_UTIL / NO_PLATFORM.
+	if !instance.Flags.NoUtil && !noPlatform {
 		if instance.Path != "util" && !strings.HasPrefix(instance.Path, "util/") {
 			peers = append(peers, "util")
 		}
@@ -1583,6 +1615,19 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		return existing
 	}
 
+	// YATOOL_TRACE=1: print a trace line on every first-visit so the caller
+	// chain is visible in stderr. Format: indent·<path>@<platform> (caller: <parent>)
+	if os.Getenv("YATOOL_TRACE") == "1" {
+		indent := strings.Repeat("  ", len(ctx.traceStack))
+		caller := "(root)"
+		if len(ctx.traceStack) > 0 {
+			caller = ctx.traceStack[len(ctx.traceStack)-1]
+		}
+		fmt.Fprintf(os.Stderr, "%sgenModule %s@%s  (from %s)\n", indent, instance.Path, instance.Target, caller)
+		ctx.traceStack = append(ctx.traceStack, instance.Path+"@"+string(instance.Target))
+		defer func() { ctx.traceStack = ctx.traceStack[:len(ctx.traceStack)-1] }()
+	}
+
 	// PR-27: a back-edge during the walk is no longer a hard error —
 	// the implicit DEFAULT_PEERDIR set creates legitimate mutual
 	// references between runtime-stack modules (libcxx ↔ libcxxrt,
@@ -1620,7 +1665,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path)
 	}
 
-	if d.moduleStmt.Name != "LIBRARY" && d.moduleStmt.Name != "PROGRAM" && !isMultimoduleLibraryType(d.moduleStmt.Name) {
+	if d.moduleStmt.Name != "LIBRARY" && d.moduleStmt.Name != "PROGRAM" && d.moduleStmt.Name != "PY3_PROGRAM_BIN" && !isPyLibraryType(d.moduleStmt.Name) && !isMultimoduleLibraryType(d.moduleStmt.Name) {
 		ThrowFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path, d.moduleStmt.Name)
 	}
 
@@ -1628,6 +1673,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// emitters see the post-macro view. The instance is value-typed
 	// so this rebinds locally without affecting the caller.
 	instance.Flags = d.flags
+
+	// PR-M3-F-1: upstream ymake.core.conf has `when ($MUSL_LITE == "yes") { NO_UTIL() }`.
+	// Apply the same implication: MUSL_LITE=yes → NoUtil=true.
+	// This prevents yasm (which declares ENABLE(MUSL_LITE)) from getting
+	// util as a default peer, matching the M2 reference graph.
+	if d.muslLite {
+		instance.Flags.NoUtil = true
+	}
 
 	// PR-27: a header-only LIBRARY (e.g. library/cpp/sanitizer/include)
 	// has no compilable sources but still has a valid module
@@ -1641,7 +1694,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// take the header-only path regardless of whether their SRCS
 	// contain non-C++ sources like .ev — those are emitted by
 	// emitProtoSrcs below, not by emitOneSource.
-	if !hasCompilableSource(d) || isMultimoduleLibraryType(d.moduleStmt.Name) {
+	// PR-M3-F-1: PY3_PROGRAM_BIN has no C++ sources but IS a PROGRAM
+	// (Python program); exclude it from the header-only path so it
+	// goes through the full PROGRAM walk + EmitLD dispatch below.
+	// PR-M3-F-1: Python library types (PY3_LIBRARY etc.) may have
+	// compilable C++ sources (e.g. library/python/runtime_py3); when
+	// they do, they take the LIBRARY AR/CC path. When they have no
+	// compilable sources they still reach the header-only path via
+	// !hasCompilableSource (the `isPyLibraryType` check is NOT here).
+	if (!hasCompilableSource(d) && d.moduleStmt.Name != "PY3_PROGRAM_BIN") || isMultimoduleLibraryType(d.moduleStmt.Name) {
 		if d.moduleStmt.Name == "PROGRAM" && !hasSkippedSource(d) {
 			ThrowFmt("gen: %s has no compilable sources (after IF/header filter)", instance.Path)
 		}
@@ -1759,7 +1820,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// AddInclGlobal Phase 3 ordering for the ragel6 CC include case).
 	languageDefaultsCount := len(defaults)
 
-	isProgram := d.moduleStmt.Name == "PROGRAM" && !isRuntimeAncestor(instance.Path)
+	isProgram := (d.moduleStmt.Name == "PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN") && !isRuntimeAncestor(instance.Path)
 
 	var preUserProgDefaults []string
 	var postUserProgDefaults []string
@@ -2560,7 +2621,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ownLDPluginRefs, ownLDPluginPaths := emitOwnLDPlugins(ctx, instance, d.ldPlugins)
 	mergedLDPluginRefs, mergedLDPluginPaths := mergeLDPlugins(ownLDPluginRefs, ownLDPluginPaths, peerLDPluginRefs, peerLDPluginPaths)
 
-	if d.moduleStmt.Name == "PROGRAM" {
+	if d.moduleStmt.Name == "PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
 		// PR-28-D01: PROGRAM(name) declares the linker output basename
 		// directly. Most ya.makes elide the argument (PROGRAM() →
 		// binary inherits the directory's last component) but
@@ -2568,6 +2629,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// `PROGRAM(ragel6)` so the binary is `bin/ragel6`, not
 		// `bin/bin`. Pass through to EmitLD; the emitter's empty-fallback
 		// matches the elided-argument case.
+		// PR-M3-F-1: PY3_PROGRAM_BIN shares the same dispatch path;
+		// it has no own CC outputs (ccRefs/ccOutputs are empty) but its
+		// peer closure and LD node are emitted identically.
 		var binaryName string
 
 		if len(d.moduleStmt.Args) > 0 {
@@ -2600,8 +2664,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 		}
 
+		// PR-M3-F-1: PY3_PROGRAM_BIN emits module_lang="py3". Tag the
+		// instance at the EmitLD call site only so the Language field
+		// does not propagate into derivePeerInstance's peer walks (peers
+		// are C++ LIBRARY modules and must stay Language=LangCPP to
+		// share memo entries with the rest of the target/host closure).
+		ldInstance := instance
+		if d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+			ldInstance.Language = LangPy
+		}
+
 		ldRef := EmitLD(
-			instance,
+			ldInstance,
 			binaryName,
 			ccRefs, ccOutputs,
 			ldPeerArchiveRefs, ldPeerArchivePaths,
@@ -2613,6 +2687,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ctx.emit,
 		)
 		ldPath := LDOutputPath(instance, binaryName)
+
+		// PR-M3-F-1: PY3_PROGRAM_BIN modules carry PY_SRCS; emit yapyc3
+		// PY nodes here (the LIBRARY branch calls emitPySrcs after EmitAR,
+		// but the PROGRAM branch skips it — add it explicitly for Python
+		// program modules so their .yapyc3 nodes appear in the graph).
+		if d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+			emitPySrcs(ctx, instance, d)
+		}
 
 		// PR-M3-E: emit JV, CF, BI, PR nodes declared at module level.
 		emitMiscNodes(ctx, instance, d)
@@ -3174,13 +3256,13 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		// Leave zero ref; py3ccBinary stays at canonical fallback.
 	}
 
-	// Walk tools/py3cc/slow (the slow-py3cc binary). The slow directory's
-	// ya.make uses INCLUDE(bin/ya.make) which our parser does not expand,
-	// so the walk of tools/py3cc/slow yields a header-only result with an
-	// empty LDPath. Only update py3ccSlowBin when the walk actually
-	// produces a non-empty path; otherwise the canonical fallback
-	// $(BUILD_ROOT)/tools/py3cc/slow/py3cc (pre-initialised above) is the
-	// correct value to use in cmd_args[2].
+	// Walk tools/py3cc/slow (the slow-py3cc binary). tools/py3cc/slow/ya.make
+	// uses IF(NOT PREBUILT) INCLUDE(bin/ya.make) which our parser expands
+	// (PREBUILT=false). However tools/py3cc/slow/bin declares PY3_PROGRAM_BIN,
+	// which isMultimoduleLibraryType routes to the header-only path, so
+	// LDPath is empty. Only update py3ccSlowBin when the walk produces a
+	// non-empty path; otherwise the canonical fallback
+	// $(BUILD_ROOT)/tools/py3cc/slow/py3cc (pre-initialised above) is used.
 	py3ccSlowHostInst := instance.WithHost(ctx.cfg)
 	py3ccSlowHostInst.Path = py3ccSlowPath
 	py3ccSlowHostInst.Flags = inferFlagsFromPath(py3ccSlowPath, true)
@@ -3191,8 +3273,8 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		if result.LDPath != "" {
 			py3ccSlowBin = result.LDPath
 		}
-		// If LDPath is empty (header-only due to INCLUDE not being
-		// expanded), py3ccSlowBin retains its canonical fallback value.
+		// If LDPath is empty (PY3_PROGRAM_BIN → header-only stub),
+		// py3ccSlowBin retains its canonical fallback value.
 	}); exc != nil {
 		var pe *ParseError
 		if !errors.As(exc.AsError(), &pe) {
@@ -3200,6 +3282,36 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		}
 		// Leave zero ref; py3ccSlowBin stays at canonical fallback.
 	}
+
+	// PR-M3-F-1: walk tools/rescompiler/bin, tools/rescompressor/bin, and
+	// tools/archiver as host tools. These are referenced by PY (objcopy) and
+	// AR (pyc.inc) nodes in the M3 closure. ldBinaryDir lifts the output dirs.
+	// Walks are eager (at most once per ctx due to memoization); LD NodeRefs
+	// are not yet wired into the yapyc3 PY nodes emitted below (that wiring
+	// is deferred to a later PR when the full objcopy PY emitter lands).
+	const (
+		rescompilerBinPath  = "tools/rescompiler/bin"
+		rescompressorBinPath = "tools/rescompressor/bin"
+		archiverPath        = "tools/archiver"
+	)
+
+	walkHostTool := func(path string) {
+		hostInst := instance.WithHost(ctx.cfg)
+		hostInst.Path = path
+		hostInst.Flags = inferFlagsFromPath(path, true)
+		if exc := Try(func() {
+			genModule(ctx, hostInst)
+		}); exc != nil {
+			var pe *ParseError
+			if !errors.As(exc.AsError(), &pe) {
+				panic(exc)
+			}
+		}
+	}
+
+	walkHostTool(rescompilerBinPath)
+	walkHostTool(rescompressorBinPath)
+	walkHostTool(archiverPath)
 
 	// Emit one yapyc3 PY node per .py source.
 	for _, srcRel := range d.pySrcs {

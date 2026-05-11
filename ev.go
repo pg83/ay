@@ -48,7 +48,12 @@ import (
 
 const (
 	evEvent2cppBinaryPath = "$(BUILD_ROOT)/tools/event2cpp/event2cpp"
-	evEvent2cppModule     = "tools/event2cpp"
+	// evEvent2cppModule is the ya.make path walked to obtain the event2cpp host
+	// LD node. tools/event2cpp/ya.make uses INCLUDE() patterns that our parser
+	// does not expand; tools/event2cpp/bin/ya.make is the actual PROGRAM
+	// declaration. ldBinaryDir lifts the output dir from tools/event2cpp/bin to
+	// tools/event2cpp so the LD node's module_dir matches the reference.
+	evEvent2cppModule     = "tools/event2cpp/bin"
 	evEventlogIncludePath = "$(SOURCE_ROOT)/library/cpp/eventlog"
 )
 
