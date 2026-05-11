@@ -3843,31 +3843,19 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			depSeen := map[NodeRef]struct{}{}
 
 			if len(serializedHByRel) > 0 {
+				// PR-AUDIT-3 D07: consult the scanner's parsed-directive
+				// cache rather than re-opening every closure entry with
+				// os.Open / bufio.NewScanner. The scanner already parsed
+				// each header while building `closure`; IncludeDirectiveTargets
+				// returns the cached target strings (the bare-rel form a
+				// source header writes between `<...>` / `"..."`) with no
+				// FS re-read. The match against serializedHByRel is
+				// identical to the previous ad-hoc bracket extraction.
+				enScanner := ctx.scannerTarget
 				for _, srcAbsPath := range closure {
-					rel := strings.TrimPrefix(srcAbsPath, "$(SOURCE_ROOT)/")
-					diskPath := filepath.Join(ctx.sourceRoot, rel)
-					f, err := os.Open(diskPath)
-					if err != nil {
-						continue
-					}
-					sc := bufio.NewScanner(f)
-					for sc.Scan() {
-						line := strings.TrimSpace(sc.Text())
-						if !strings.Contains(line, "_serialized.h") {
-							continue
-						}
-						// Extract the include path from angle-bracket or quote include.
-						var includePath string
-						if i := strings.IndexByte(line, '<'); i >= 0 {
-							if j := strings.IndexByte(line[i+1:], '>'); j >= 0 {
-								includePath = line[i+1 : i+1+j]
-							}
-						} else if i := strings.IndexByte(line, '"'); i >= 0 {
-							if j := strings.IndexByte(line[i+1:], '"'); j >= 0 {
-								includePath = line[i+1 : i+1+j]
-							}
-						}
-						if includePath == "" {
+					targets := enScanner.IncludeDirectiveTargets(srcAbsPath)
+					for _, includePath := range targets {
+						if !strings.HasSuffix(includePath, "_serialized.h") {
 							continue
 						}
 						buildRootPath, ok := serializedHByRel[includePath]
@@ -3887,7 +3875,6 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 							depENOutputs = append(depENOutputs, cppPath)
 						}
 					}
-					f.Close()
 				}
 			}
 		}
@@ -4865,6 +4852,12 @@ func codegenRegForInstance(ctx *genCtx, instance ModuleInstance) *CodegenRegistr
 // file cannot be read (missing source on disk at scan time) the function returns
 // nil. Results are sorted lexicographically. Cited upstream pattern:
 // proto_processor.cpp:43-56::TProtoIncludeProcessor::PrepareIncludes.
+//
+// PR-AUDIT-3: legitimate disk read — extracts structured `import` directives
+// from a .proto/.ev source at registration time to populate its EmitsIncludes.
+// NOT for closure walks. The architectural cleanup to route through a unified
+// registry-resolved "structured-import extractor" lives in PR-AUDIT-3.D12 (still
+// open) — keeping the (B) classification per audit doc §2 D12, §4 PR-AUDIT-3.
 func protoDirectImportIncludes(sourceRoot, srcRel string) []string {
 	absPath := filepath.Join(sourceRoot, srcRel)
 	f, err := os.Open(absPath)
@@ -4901,6 +4894,12 @@ func protoDirectImportIncludes(sourceRoot, srcRel string) []string {
 // forms are system headers resolved by the compiler search path, not by the
 // registry). Returns $(SOURCE_ROOT)/... paths, sorted lexicographically.
 // Returns nil when the file cannot be read.
+//
+// PR-AUDIT-3: legitimate disk read — extracts structured `#include` directives
+// from a .cpp.in/.c.in template at registration time to populate the CF output's
+// EmitsIncludes. NOT for closure walks. The architectural cleanup to route
+// through a unified registry-resolved "structured-import extractor" lives in
+// PR-AUDIT-3.D12 / .D16 (still open); kept per audit doc §2 D12/D16.
 func cfIncludeDirectives(diskPath string) []string {
 	data, err := os.ReadFile(diskPath)
 	if err != nil {

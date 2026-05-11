@@ -189,6 +189,12 @@ func EmitEV(
 // follow the referenced paths relative to the source root. The eventlog
 // import `library/cpp/eventlog/proto/events_extension.proto` is the
 // primary transitive chain that surfaces descriptor.proto.
+//
+// PR-AUDIT-3: legitimate disk read — extracts structured `import` directives
+// from .ev/.proto sources at EV-node-emission time to build the EV node's
+// input list. NOT for closure walks. The architectural cleanup to route this
+// through a unified registry-resolved "structured-import extractor" lives in
+// PR-AUDIT-3.D12 (still open); kept per audit doc §2 D12.
 func resolveEvImports(sourceRoot, srcRel string) []string {
 	visited := map[string]struct{}{}
 	order := make([]string, 0, 8)

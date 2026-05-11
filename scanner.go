@@ -629,6 +629,46 @@ func (sc *scanCtx) WalkClosure(vfsPath string) []string {
 	return out
 }
 
+// IncludeDirectiveTargets returns the raw `#include` directive target
+// strings parsed from the file at `vfsPath`. The result is the list of
+// strings inside the angle brackets / quotes of each directive, in
+// source order, with no resolution applied. Memoized through the same
+// parse-cache that `WalkClosure` populates: callers that already walked
+// the closure pay zero re-parse cost.
+//
+// PR-AUDIT-3: callers obtaining the raw `#include` target list of a
+// previously-walked file must NOT re-open the file with `os.Open` /
+// `bufio.NewScanner` and re-implement the bracket extraction (see
+// audit doc §2 D07). They must go through this entry point, which
+// dispatches on path provenance the same way `WalkClosure` does:
+// $(SOURCE_ROOT)/-rooted paths hit the FS parser; $(BUILD_ROOT)/-rooted
+// paths return the registered EmitsIncludes list as-is (the children
+// are already resolved, so the "raw target" view is the EmitsIncludes
+// itself).
+func (s *IncludeScanner) IncludeDirectiveTargets(vfsPath string) []string {
+	if isBuildVFS(vfsPath) {
+		if s.codegen != nil {
+			if info, ok := s.codegen.Lookup(vfsPath); ok {
+				out := make([]string, len(info.EmitsIncludes))
+				copy(out, info.EmitsIncludes)
+				return out
+			}
+		}
+		return nil
+	}
+
+	directives := s.parseIncludes(vfsPath)
+	if len(directives) == 0 {
+		return nil
+	}
+
+	out := make([]string, len(directives))
+	for i, d := range directives {
+		out[i] = d.target
+	}
+	return out
+}
+
 // scannerStatsEnabled is set once at process start from $SCANNER_STATS.
 // PR-34r perf instrumentation: when set, WalkClosure periodically dumps
 // subgraph cache hit/miss counters to stderr. No-op when env not set.

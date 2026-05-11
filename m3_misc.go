@@ -449,6 +449,11 @@ var cfgVarRefRe = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
 func buildCFGVars(srcDiskPath string, defaultVars map[string]string, defaultVarOrder []string) []string {
 	// Scan the .in file for @VAR@ references.  Silently skip unreadable files
 	// (generated sources during a warm build may not exist on disk yet).
+	//
+	// PR-AUDIT-3: legitimate disk read — extracts structured @VAR@ references
+	// from a .cpp.in/.c.in template at CF-node-emission time to filter the
+	// DEFAULT-declared vars to only those the template actually references.
+	// NOT for closure walks. Kept per audit doc §2 D12 scope-note.
 	referenced := map[string]bool{}
 
 	if data, err := os.ReadFile(srcDiskPath); err == nil {

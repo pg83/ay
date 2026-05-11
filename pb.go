@@ -208,6 +208,12 @@ func EmitPB(
 // protoImportsDescriptor reports whether the .proto (or .ev) source file at
 // `<sourceRoot>/<srcRel>` contains an import of "google/protobuf/descriptor.proto".
 // Returns false when the file cannot be read (missing source → no descriptor dep).
+//
+// PR-AUDIT-3: legitimate disk read — extracts a single structured `import`
+// predicate from a .proto/.ev source at PB-node-emission time. NOT for closure
+// walks. The architectural cleanup to route this through a unified
+// registry-resolved "structured-import extractor" lives in PR-AUDIT-3.D12
+// (still open); kept per audit doc §2 D12.
 func protoImportsDescriptor(sourceRoot, srcRel string) bool {
 	absPath := filepath.Join(sourceRoot, srcRel)
 	f, err := os.Open(absPath)
