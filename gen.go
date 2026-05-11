@@ -1800,7 +1800,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	// PR-M3-perf-E: in "local" mode, push a fresh scanCtx cache map for
-	// this module emission. Every call to `scanIncludesForSource` /
+	// this module emission. Every call to `walkClosure` /
 	// `joinSrcsIncludeClosure` inside this genModule frame goes through
 	// `getScanCtx`, which addresses the top of the stack; on pop the
 	// scanCtxes allocated under this frame become unreachable. In
@@ -3827,7 +3827,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// target scanner. EN nodes always compile on the target axis;
 		// the include search path mirrors a target CC node's search
 		// path for this module.
-		closure := scanIncludesForSource(ctx, enInstance, headerRel, scanIn)
+		closure := walkClosure(ctx, enInstance, resolveSourceVFS(ctx, enInstance, headerRel, scanIn.SrcDir), scanIn)
 
 		// Cross-EN deps: when a previously emitted EN node produced a
 		// _serialized.h file (--header variant), and the current header's
@@ -4090,7 +4090,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// their primary input lives under $(BUILD_ROOT) and doesn't
 		// exist on disk at scan time. The walker passes the
 		// scanner-aware srcIn down to EmitCC.
-		srcIn.IncludeInputs = scanIncludesForSource(ctx, srcInstance, srcRel, srcIn)
+		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 
 		ref, outPath := EmitCC(srcInstance, srcRel, srcIn, ctx.emit)
 
@@ -4147,7 +4147,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// int_endianness.h); the scanner populates the AS node's
 		// inputs and feeds the downstream AR's memberInputs aggregator.
 		asIn := srcIn
-		asIn.IncludeInputs = scanIncludesForSource(ctx, srcInstance, srcRel, srcIn)
+		asIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 		// PR-35m: thread the full ModuleCCInputs into EmitAS so it
 		// can compose own/peer ADDINCL, own non-GLOBAL CFLAGS, and
 		// auto peer CFLAGS at the same slots CC consumes them
@@ -4234,7 +4234,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// produces a 1009-input R6 node and a 1009-input CC node,
 		// where positions 1.. of each are identical (the `.rl6`
 		// source plus its 1007-header transitive closure).
-		rl6Closure := scanIncludesForSource(ctx, srcInstance, srcRel, srcIn)
+		rl6Closure := walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 
 		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, rl6Closure, ctx.emit)
 
@@ -4270,7 +4270,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// source-side scan; the architecturally-correct shape comes from
 		// WalkClosure rooted at the generated .cpp.
 		ccSrcRel := strings.TrimPrefix(r6Out, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
-		ccIncludeInputs := walkClosureFromBuildRoot(ctx, srcInstance, r6Out, srcIn)
+		ccIncludeInputs := walkClosure(ctx, srcInstance, r6Out, srcIn)
 
 		ccIn := srcIn
 		ccIn.IsGenerated = true
@@ -4406,7 +4406,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			ccIn.IsGenerated = true
 			ccIn.Generator = evRef
 			ccIn.HasGenerator = true
-			ccIn.IncludeInputs = walkClosureFromBuildRoot(ctx, srcInstance, evPbCC, srcIn)
+			ccIn.IncludeInputs = walkClosure(ctx, srcInstance, evPbCC, srcIn)
 
 			ref, outPath := EmitCC(srcInstance, evPbCCSuffix, ccIn, ctx.emit)
 
@@ -4491,7 +4491,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccSrcRel := strings.TrimPrefix(r5CppOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IsGenerated = true
-		ccIn.IncludeInputs = walkClosureFromBuildRoot(ctx, srcInstance, r5CppOut, srcIn)
+		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, r5CppOut, srcIn)
 		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
@@ -4516,7 +4516,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// (same as a .cpp source) and fold into srcIn.IncludeInputs before
 		// calling EmitCF so the CF node's inputs[] matches the reference shape
 		// (e.g. sandbox.cpp.in → 795-entry closure; build_info.cpp.in → 5).
-		srcIn.IncludeInputs = scanIncludesForSource(ctx, srcInstance, srcRel, srcIn)
+		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
 		_ = cfRef
 
@@ -4544,7 +4544,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccSrcRel := strings.TrimPrefix(cfOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IsGenerated = true
-		ccIn.IncludeInputs = walkClosureFromBuildRoot(ctx, srcInstance, cfOut, srcIn)
+		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, cfOut, srcIn)
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
@@ -4727,88 +4727,56 @@ func jsTargetPeerAddIncl(hostPeerAddIncl []string) []string {
 	return out
 }
 
-// scanIncludesForSource resolves the source's actual on-disk path
-// (matching composeCCPaths' SRCDIR-aware semantics) and invokes the
-// include scanner. Returns the SOURCE_ROOT-relative include set the
-// scanner produces, or nil when the scanner is unavailable, the
-// source has no on-disk file, or the scanner produces an empty
-// closure.
-//
-// PR-31 D08 — the source-rel and ScanContext that drives the
-// scanner per CC node. The own-AddIncl + peer-GLOBAL-AddIncl
-// search path mirrors what cmd_args -I uses, plus a baseline set
-// for the linux-headers / musl-arch include paths the cc bundle
-// includes implicitly.
-func scanIncludesForSource(ctx *genCtx, srcInstance ModuleInstance, srcRel string, in ModuleCCInputs) []string {
-	// PR-AUDIT-4 (D14): per-instance scanner via the unified dispatch
-	// helper; no more inline target-vs-host branch.
-	scanner := ctx.scannerFor(srcInstance)
-	if scanner == nil {
-		return nil
-	}
-
-	// Mirror composeCCPaths' source-resolution logic so the scanner
-	// hashes the same on-disk file as the cc compiler will read.
+// resolveSourceVFS composes the `$(SOURCE_ROOT)/...` VFS path of a
+// SRCS-declared source, applying composeCCPaths' SRCDIR-aware
+// fallback: when the module declares SRCDIR and no local file exists
+// at instance.Path/<srcRel>, the source resolves under SRCDIR. This
+// is registration-time path resolution (matches AUDIT-3 bucket (B));
+// the os.Stat is legitimate at this layer because the answer feeds
+// path composition, not scanner-internal locator dispatch.
+func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDir string) string {
 	srcRelOnDisk := srcInstance.Path + "/" + srcRel
 
-	if in.SrcDir != "" && in.SrcDir != srcInstance.Path {
-		// SRCDIR override: the source resolves under SRCDIR when no
-		// local file at instance.Path/<srcRel> exists.
+	if srcDir != "" && srcDir != srcInstance.Path {
 		localCandidate := filepath.Join(ctx.sourceRoot, srcInstance.Path, srcRel)
 		info, err := os.Stat(localCandidate)
 
 		if err != nil || info.IsDir() {
-			srcRelOnDisk = in.SrcDir + "/" + srcRel
+			srcRelOnDisk = srcDir + "/" + srcRel
 		}
 	}
 
-	cfg := ScanContext{
-		SourceRel:       srcRelOnDisk,
-		OwnAddIncl:      in.AddIncl,
-		PeerAddInclSet:  in.PeerAddInclGlobal,
-		BaseSearchPaths: includeScannerBasePaths(srcInstance),
-	}
-
-	// PR-M3-perf-E: route through the scanCtx dispatcher rather than
-	// allocating a fresh ScanCtx per call. The dispatcher consults
-	// the per-genModule (local) or genCtx-wide (interned) cache.
-	sc := ctx.getScanCtx(scanner, cfg)
-
-	// PR-AUDIT-1: dispatch through the unified VFS-path entry. The
-	// caller composes the VFS-rooted path once and the scanner's
-	// locator (forEachResolvedChild) decides FS-vs-codegen internally.
-	// Subsequent PR-AUDIT-2..5 retrofit the EV/R6/R5/CF/PR sites to
-	// pass `$(BUILD_ROOT)/...` paths through this same entry point;
-	// this PR just centralises the existing FS-rooted callers without
-	// changing semantics. See `docs/drafts/20260511-1850-parsed-
-	// includes-audit.md` §3.1.
-	return sc.WalkClosure(vfsSource(srcRelOnDisk))
+	return vfsSource(srcRelOnDisk)
 }
 
-// walkClosureFromBuildRoot resolves the include closure of a codegen-
-// generated source rooted at `$(BUILD_ROOT)/...`. PR-AUDIT-2: callers do
-// NOT branch on "is this on disk?" — they compose the BUILD_ROOT VFS path
-// of the generated file (whose producer has already Registered it in the
-// per-scanner CodegenRegistry with the correct EmitsIncludes) and the
-// scanner's locator (forEachResolvedChild) walks transitively through
-// both BUILD_ROOT (registry) and SOURCE_ROOT (FS-parsed) entries.
+// walkClosure resolves the transitive include closure of a source
+// rooted at any VFS path — `$(SOURCE_ROOT)/...` for FS-resident
+// sources or `$(BUILD_ROOT)/...` for codegen outputs whose producer
+// has registered an EmitsIncludes entry in the per-scanner
+// CodegenRegistry. The scanner's locator (forEachResolvedChild)
+// dispatches FS-vs-codegen internally; callers do not branch on
+// is-on-disk. Returns the resolved include set or nil when the
+// scanner is unavailable.
 //
-// Returned list is suitable for use as `ccIn.IncludeInputs` on the
-// downstream CC consumer of the generated source.
-func walkClosureFromBuildRoot(ctx *genCtx, srcInstance ModuleInstance, vfsBuildPath string, in ModuleCCInputs) []string {
+// The ScanContext mirrors what cmd_args -I uses: own AddIncl + peer
+// GLOBAL AddIncl + the cc bundle's implicit baseline (linux-headers
+// and the active musl-arch include path).
+func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath string, in ModuleCCInputs) []string {
 	scanner := ctx.scannerFor(srcInstance)
 	if scanner == nil {
 		return nil
 	}
 
+	// SourceRel feeds srcClassHash (per-source subgraph-cache keying).
+	// WalkClosure overwrites it per-call for SOURCE_ROOT paths so
+	// scanCtx reuse across sources keys correctly; for BUILD_ROOT
+	// paths it stays as set here and is never consulted by the
+	// BUILD_ROOT child branch.
+	sourceRel := strings.TrimPrefix(vfsPath, vfsSourcePrefix)
+	sourceRel = strings.TrimPrefix(sourceRel, vfsBuildPrefix)
+
 	cfg := ScanContext{
-		// SourceRel is not meaningful for a BUILD_ROOT root (WalkClosure's
-		// docstring documents that the BUILD_ROOT branch in
-		// forEachResolvedChild never consults SourceRel). Carry the
-		// BUILD_ROOT-relative path so srcClassHash keys deterministically
-		// per generated file rather than reusing the previous call's
-		// stale source-rel from this scanCtx.
-		SourceRel:       strings.TrimPrefix(vfsBuildPath, vfsBuildPrefix),
+		SourceRel:       sourceRel,
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
 		BaseSearchPaths: includeScannerBasePaths(srcInstance),
@@ -4816,7 +4784,7 @@ func walkClosureFromBuildRoot(ctx *genCtx, srcInstance ModuleInstance, vfsBuildP
 
 	sc := ctx.getScanCtx(scanner, cfg)
 
-	return sc.WalkClosure(vfsBuildPath)
+	return sc.WalkClosure(vfsPath)
 }
 
 // includeScannerBasePaths returns the implicit include search path

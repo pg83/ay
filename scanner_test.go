@@ -293,7 +293,7 @@ func TestScanner_IncludeNextSuppressed(t *testing.T) {
 	scanner := NewIncludeScanner(sourceRoot, sysincl)
 
 	// libcxx-source case. The ScanContext mirrors what gen.go's
-	// `scanIncludesForSource` constructs for a libcxx CC consumer:
+	// `walkClosure` constructs for a libcxx CC consumer:
 	// libcxx/include is in OwnAddIncl (the libcxx module's own
 	// ADDINCL). musl/include is in BaseSearchPaths (the cc bundle's
 	// implicit -I set).
@@ -1196,7 +1196,7 @@ func TestParseIncludes_AsiDispatchesToYasm(t *testing.T) {
 
 // TestScanner_AsmlibAsmInputsParity is the production-tree pin for
 // the PR-35x R4 closure. The ScanContext mirrors what
-// `gen.go::scanIncludesForSource` constructs for an asmlib host AS
+// `gen.go::walkClosure` constructs for an asmlib host AS
 // node (PIC-mode, asmlibYasmModules trigger). The transitive closure
 // of `contrib/libs/asmlib/sfmt64.asm` must contain BOTH
 // `defs.asm` (via the file's leading `%include "defs.asm"`) and
