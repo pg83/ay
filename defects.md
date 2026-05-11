@@ -1641,6 +1641,31 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 
 ## PR-39
 
+### [PR-36-D01] sameDirAbs skips normalisePath on the empty-incDir branch
+**Status:** resolved (deferred — latent edge case unreachable from M2 closure)
+**Severity:** nit
+**Location:** `scanner.go:1141-1149` (the `sameDirAbs` construction inside the PR-36 gate)
+**Description:** When the includer lives at the source root (`incDir == ""`), the gate sets `sameDirAbs = s.sourceRootSlash + d.target` *without* calling `normalisePath`. By contrast, `resolveSearchPath`'s same-dir candidate (scanner.go:1420-1432) always routes through `addPath`, which calls `normalisePath(rel)` before constructing the absolute path. If a root-level source emits `#include "./foo.h"` or `#include "../bar.h"`, `resolveSearchPath` produces `<root>/foo.h` / `<root>/bar.h`, but the gate's `sameDirAbs` produces `<root>/./foo.h` / `<root>/../bar.h`. The equality test then yields `false`, the gate fails to fire, and a multi-target sysincl bypass triggers spuriously. The cluster fix doesn't hit this case (libcxxabi-parts / libunwind sources have non-empty `incDir`), so the M2 closure is unaffected.
+**Suggested fix:** Mirror `resolveSearchPath`'s normalisation in both branches: `candidate := d.target; if incDir != "" { candidate = incDir + "/" + d.target }; sameDirAbs := s.sourceRootSlash + normalisePath(candidate)`.
+
+### [PR-36-D02] hasMultiTarget across union of two single-target halves not detected
+**Status:** resolved (deferred to follow-up cleanup PR — structural fragility, not active in M2)
+**Severity:** minor
+**Location:** `scanner.go:1252-1279` (`sysinclLookup`) + `sysincl.go:290-339` / `sysincl.go:360-411` (per-half multi-target detection)
+**Description:** `hasMultiTarget` is computed *per-record* (record flag ∧ header has ≥ 2 paths in that record's Mappings). The two halves' results then OR together: `hasMultiTarget = srcMT || incMT`. This misses the case where (a) one source-keyed record contributes exactly one path for `target`, (b) one includer-keyed record also contributes exactly one *different* path for `target`, and (c) the union therefore has 2 paths but neither half reports `multiTarget=true`. The gate would suppress the sysincl layer even though, by the multi-target spirit of the PR-36 invariant, both alternates should contribute. M2 isn't exhibiting this case (L2=99.79% matches expected); the brief's L2-B example happens to be safe because the includer-keyed record is itself multi-target. Adding a new single-target source-keyed YAML record that pairs with an existing single-target includer-keyed record would silently mis-gate.
+**Suggested fix:** Compute `hasMultiTarget` from the size of the *unioned* result rather than from per-record flags. After the dedup loop, set `hasMultiTarget = len(out) >= 2` (and pass that through to the caller). Drop the per-record `HasMultiTarget` flag and the per-target re-check inside `LookupSourceKeyed`/`LookupIncluderKeyed`; `len(out) >= 2` after dedup is a strictly weaker invariant that captures the same intent without the cross-record blind spot.
+
+### [PR-36-D03] PR-36 invariant block-comment understates the path-vs-tier discriminator
+**Status:** resolved (deferred — comment cleanup, low payoff)
+**Severity:** nit
+**Location:** `scanner.go:1123-1139`
+**Description:** Comment says "if the file was found via a SEARCH-PATH TIER OTHER THAN same-dir (i.e. OwnAddIncl / PeerAddIncl / BaseSearch) AND the sysincl result is multi-target, the gate is bypassed." This is true for the *current implementation*, but the *operational* discriminator is `searchOut[0] == sameDirAbs`, which only inspects the resolved PATH — not which tier resolved it. If OwnAddIncl happens to point at the same directory as the includer (e.g. `OwnAddIncl=["src"]` for an includer also under `src/`), and the same-dir file doesn't exist but the OwnAddIncl path does, `searchOut[0]` equals `sameDirAbs` and the gate fires *even though the resolution came from a tier the comment lists as bypassable*. Functionally fine (path-shape equivalence is what matters); the comment will mislead the next maintainer.
+**Suggested fix:** Reword the comment to describe the actual discriminator: "If the resolved path equals `incDir/d.target`, regardless of which search tier produced it, the gate fires; otherwise (path differs from same-dir candidate) the multi-target case bypasses."
+
+---
+
+## PR-39
+
 ### [PR-39-D01] PR-32 D02 "SOLE remaining musl-path-prefix dispatch" comment is now stale
 **Status:** resolved (deferred — refresh comment when next editing the block)
 **Severity:** nit
