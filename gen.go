@@ -4736,13 +4736,7 @@ func scanIncludesForSource(ctx *genCtx, srcInstance ModuleInstance, srcRel strin
 // Returned list is suitable for use as `ccIn.IncludeInputs` on the
 // downstream CC consumer of the generated source.
 func walkClosureFromBuildRoot(ctx *genCtx, srcInstance ModuleInstance, vfsBuildPath string, in ModuleCCInputs) []string {
-	scanner := ctx.scannerTarget
-
-	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
-	if targetIsX8664(srcInstance) {
-		scanner = ctx.scannerHost
-	}
-
+	scanner := ctx.scannerFor(srcInstance)
 	if scanner == nil {
 		return nil
 	}
