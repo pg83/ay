@@ -89,6 +89,22 @@ Detail in `./docs/drafts/20260511-0900-L4-byte-exact-roadmap.md`. One line per P
 
 ---
 
+## Milestone 3 — PR breakdown
+
+Detail plan: `./docs/drafts/20260511-0930-m3-plan.md` (M3 closure: 7 PRs + 2 conditional perf). Plus the architectural prerequisite `./docs/drafts/20260511-1000-D41-target-platform-axis.md` (decouple PIC from host axis). One line per PR here; sub-tasks stay in the plan docs.
+
+- [~] **PR-D41-A** — Decouple `Flags.PIC` from the host-vs-target axis (Design Y, user-confirmed 2026-05-11). Add `(ModuleInstance).IsHostBuild(cfg PlatformConfig) bool` helper to `module.go`. Refactor 23 Category-B `Flags.PIC` axis-proxy reads across `ar.go, as.go, cc.go, ld.go, cp.go, r6.go, gen.go` to read `IsHostBuild(cfg)` instead. Thread `cfg PlatformConfig` through the emitter signatures (EmitCC/AR/AS/LD/CP/R6) that don't already have it. Keep the 3 Category-A reads (`cc.go:203, 333`, `ld.go:265`) — those emit literal `-fPIC` / `.pic.o`, NOT axis dispatch. Add invariant regression test: `Target == cfg.Host.ID ⇔ Flags.PIC == true` for every M2/M3 instance. Acceptance: M1 + M2 byte-exact preserved at L0..L4 = 100%; L4 sha256 unchanged; `go test ./...` includes new invariant test; gen wall ≤ 1 s.
+- [ ] **PR-M3-A** — Host walk extension for `devtools/ymake/bin`. Add the 13 new host PROGRAMs (protoc, py3cc, ragel5, etc.) via RECURSE-lift; introduce `MultimoduleStmt` AST node; add `LangPY` as first-class `Language` value. **Serial-after PR-D41-A** (uses `IsHostBuild(cfg)`). Acceptance: `./yatool gen --target devtools/ymake/bin` runs to completion with ≥ 8000 nodes; M2 + M1 preserved.
+- [ ] **PR-M3-B** — PY emitter (667 nodes; largest single new emitter). After PR-M3-A.
+- [ ] **PR-M3-C** — PB + EV emitters.
+- [ ] **PR-M3-D** — EN emitter.
+- [ ] **PR-M3-E** — PR/R5/JV/CF/BI emitters (small kinds bundled).
+- [ ] **PR-M3-F** — foreign_deps + flag bundles audit (M3 has 739 foreign_deps nodes vs M2's 1).
+- [ ] **PR-M3-G** — L4 closure on sg2 + regression-pin tests.
+- (conditional) **PR-M3-perf-A/B** — profiler-driven perf optimization if gen wall on M3 baseline > 1 s.
+
+---
+
 ## Cross-cutting architectural notes (locked)
 
 - [x] **D1** — Module path: `module yatool` in `go.mod`.
@@ -134,6 +150,7 @@ User feedback: module = tuple `(path, language, target, flag-set)`, not path alo
 - [x] **D38** — Comparator continues to receive static `*Graph` from Finalize. Streaming impl assembles same struct.
 - [x] **D39** — `Flags.PIC` is canonical host/target axis for M2. Drives output mangling, `-fPIC` inclusion, flag-bundle selection.
 - [x] **D40** — `--filter-platform` descoped (revises Q5). Direct recursion emits both platforms; comparator pairs by `(outputs[0], platform)` already.
+- [~] **D41** — `instance.Target == cfg.Host.ID` is the canonical host-vs-target axis; `Flags.PIC` is reserved for the compiler-flag meaning only. User arbitration 2026-05-11 (Design Y): "это часть M3, без неё нормально не сделать". Adds `(ModuleInstance).IsHostBuild(cfg PlatformConfig) bool` helper; all 23 Category-B `Flags.PIC` axis-proxy reads in `ar.go`/`as.go`/`cc.go`/`ld.go`/`cp.go`/`r6.go` get refactored. Category-A reads (3 sites: `cc.go:203,333`; `ld.go:265` — literal `-fPIC` flag / `.pic.o` suffix) STAY as `Flags.PIC`. Invariant `Target == cfg.Host.ID ⇔ Flags.PIC == true` is locked by a fail-loudly regression test for M2/M3; the test fires on any future divergence to force an explicit D41 update. Detail plan: `./docs/drafts/20260511-1000-D41-target-platform-axis.md`. Lands as PR-D41-A (mandatory, before PR-M3-A); PR-D41-B (defense test, optional) and PR-D41-C (PlatformSpec.PIC dead-field cleanup, M5+) deferred.
 
 Q-resolutions for PR-23:
 - **Q6** — Type names locked: `ModuleInstance`, `Language`, `PlatformID`, `FlagSet`.
