@@ -185,6 +185,82 @@ type GenerateEnumSerializationStmt struct {
 	Line    int
 }
 
+// DefaultVarStmt represents `DEFAULT(NAME value)`. Records a
+// configuration-variable default used by CONFIGURE_FILE's $CFG_VARS
+// expansion. The value is the second argument; quotes are stripped by
+// the parser so the stored value is the bare string (e.g.
+// `DEFAULT(KOSHER_SVN_VERSION "")` → Value="").
+type DefaultVarStmt struct {
+	VarName string
+	Value   string
+	Line    int
+}
+
+// RunProgramStmt represents `RUN_PROGRAM(tool args... [IN files...]
+// [OUT files...] [OUT_NOAUTO files...] [STDOUT file] [ENV key=val...]
+// [CWD dir] [OUTPUT_INCLUDES files...])`.
+// ToolPath is the module-relative path of the PROGRAM to invoke.
+// Args are the positional arguments passed after the tool path (before
+// the first keyword argument).  INFiles/OUTFiles/OUTNoAutoFiles are
+// the parsed IN/OUT/OUT_NOAUTO lists.  StdoutFile is the STDOUT
+// argument (if any); its output lands in outputs[0] for the generated
+// node.  Env maps ENV key=value pairs.
+type RunProgramStmt struct {
+	ToolPath       string
+	Args           []string
+	INFiles        []string
+	OUTFiles       []string
+	OUTNoAutoFiles []string
+	StdoutFile     string   // empty when STDOUT not specified
+	EnvPairs       []string // "KEY=VALUE" strings from ENV
+	CWD            string
+	OutputIncludes []string
+	Line           int
+}
+
+// ConfigureFileStmt represents `CONFIGURE_FILE(src dst)`. Src is a
+// SOURCE_ROOT-relative path to the .in template; Dst is the output
+// file relative to BUILD_ROOT (same base name without .in).
+// CONFIGURE_FILE is also the implicit handler for .cpp.in/.c.in
+// sources listed in SRCS — in that case the parser synthesises a
+// ConfigureFileStmt with Src=<srcRel> and Dst=<srcRel without .in>.
+type ConfigureFileStmt struct {
+	Src  string // SOURCE_ROOT-relative
+	Dst  string // BUILD_ROOT-relative (module-dir-relative)
+	Line int
+}
+
+// CreateBuildInfoStmt represents `CREATE_BUILDINFO_FOR(output_header)`.
+// OutputHeader is the name of the generated header (e.g.
+// "buildinfo_data.h").
+type CreateBuildInfoStmt struct {
+	OutputHeader string
+	Line         int
+}
+
+// RunAntlr4CppStmt represents `RUN_ANTLR4_CPP(grammar [options...])`.
+// Grammar is the single .g4 file.  Options is the remaining arg list
+// (may include -package NConfReader, etc.).  Visitor/NoListener are
+// parsed from VISITOR/NO_LISTENER keywords in Options.
+type RunAntlr4CppStmt struct {
+	Grammar  string   // e.g. "TConf.g4"
+	Options  []string // extra args (e.g. ["-package", "NConfReader"])
+	Visitor  bool
+	Listener bool
+	Line     int
+}
+
+// RunAntlr4CppSplitStmt represents `RUN_ANTLR4_CPP_SPLIT(lexer parser
+// [VISITOR] [LISTENER] [OUTPUT_INCLUDES ...])`. Lexer and Parser are
+// the two .g4 grammar files; the generated outputs cover both.
+type RunAntlr4CppSplitStmt struct {
+	Lexer    string // e.g. "CmdLexer.g4"
+	Parser   string // e.g. "CmdParser.g4"
+	Visitor  bool
+	Listener bool
+	Line     int
+}
+
 func (*ModuleStmt) stmtMarker()                   {}
 func (*PeerdirStmt) stmtMarker()                  {}
 func (*SrcsStmt) stmtMarker()                     {}
@@ -202,6 +278,12 @@ func (*LDFlagsStmt) stmtMarker()                  {}
 func (*SrcDirStmt) stmtMarker()                   {}
 func (*GlobalSrcsStmt) stmtMarker()               {}
 func (*GenerateEnumSerializationStmt) stmtMarker() {}
+func (*DefaultVarStmt) stmtMarker()               {}
+func (*RunProgramStmt) stmtMarker()               {}
+func (*ConfigureFileStmt) stmtMarker()            {}
+func (*CreateBuildInfoStmt) stmtMarker()          {}
+func (*RunAntlr4CppStmt) stmtMarker()             {}
+func (*RunAntlr4CppSplitStmt) stmtMarker()        {}
 
 // Expr is the sealed-interface marker for IF-predicate AST nodes. The
 // evaluator lives in `macros.go:EvalCond`. PR-27 widened the ADT from
@@ -999,9 +1081,191 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		}
 
 		return &GenerateEnumSerializationStmt{Header: args[0], Variant: "noutf", Line: nameTok.line}
+	case "DEFAULT":
+		// DEFAULT(NAME value) — configuration variable default.
+		// Accepts 1 or 2 args: name and optional value (empty string when
+		// the quoted value "" was stripped by the lexer).
+		varName := ""
+		value := ""
+		if len(args) >= 1 {
+			varName = args[0]
+		}
+		if len(args) >= 2 {
+			value = args[1]
+		}
+		return &DefaultVarStmt{VarName: varName, Value: value, Line: nameTok.line}
+	case "CONFIGURE_FILE":
+		// CONFIGURE_FILE(src dst) — src is SOURCE_ROOT-relative path to
+		// the .in template; dst is the output name (BUILD_ROOT-relative to
+		// the module dir, no .in suffix).
+		if len(args) != 2 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "CONFIGURE_FILE expects exactly 2 arguments (src dst), got %d", len(args))
+		}
+		return &ConfigureFileStmt{Src: args[0], Dst: args[1], Line: nameTok.line}
+	case "CREATE_BUILDINFO_FOR":
+		// CREATE_BUILDINFO_FOR(output_header) — emits a BI node.
+		if len(args) != 1 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "CREATE_BUILDINFO_FOR expects exactly 1 argument, got %d", len(args))
+		}
+		return &CreateBuildInfoStmt{OutputHeader: args[0], Line: nameTok.line}
+	case "RUN_ANTLR4_CPP":
+		// RUN_ANTLR4_CPP(grammar [-package pkg] [VISITOR] [NO_LISTENER] ...)
+		// The first arg is the .g4 grammar file; subsequent args are
+		// options (including VISITOR keyword and -package pairs).
+		if len(args) == 0 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_ANTLR4_CPP expects at least 1 argument (grammar)")
+		}
+		return parseRunAntlr4Cpp(args, nameTok.line)
+	case "RUN_ANTLR4_CPP_SPLIT":
+		// RUN_ANTLR4_CPP_SPLIT(lexer parser [VISITOR] [LISTENER] ...)
+		if len(args) < 2 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_ANTLR4_CPP_SPLIT expects at least 2 arguments (lexer parser)")
+		}
+		return parseRunAntlr4CppSplit(args, nameTok.line)
+	case "RUN_PROGRAM":
+		// RUN_PROGRAM(tool args... [IN files...]
+		//             [OUT files...] [OUT_NOAUTO files...] [STDOUT file] [ENV key=val...]
+		//             [CWD dir] [OUTPUT_INCLUDES files...])
+		if len(args) == 0 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_PROGRAM expects at least 1 argument (tool path)")
+		}
+		return parseRunProgram(args, nameTok.line)
 	default:
 		return &UnknownStmt{Name: nameTok.val, Args: args, Line: nameTok.line}
 	}
+}
+
+// parseRunAntlr4Cpp parses RUN_ANTLR4_CPP args into a RunAntlr4CppStmt.
+// The grammar is args[0]; subsequent args may include VISITOR, NO_LISTENER,
+// OUTPUT_INCLUDES (and the files following it), and other option tokens
+// (e.g. -package, NConfReader) that are passed to antlr4 cmd_args.
+func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
+	stmt := &RunAntlr4CppStmt{Grammar: args[0], Line: line, Listener: true}
+	i := 1
+	for i < len(args) {
+		switch args[i] {
+		case "VISITOR":
+			stmt.Visitor = true
+			i++
+		case "NO_LISTENER", "LISTENER":
+			// LISTENER is the positive form; NO_LISTENER suppresses it.
+			// RUN_ANTLR4_CPP default: -no-listener unless LISTENER given.
+			// The reference uses -visitor -no-listener, so track explicitly.
+			if args[i] == "NO_LISTENER" {
+				stmt.Listener = false
+			} else {
+				stmt.Listener = true
+			}
+			i++
+		case "OUTPUT_INCLUDES", "IN", "OUT", "OUT_NOAUTO", "INDUCED_DEPS", "TOOL":
+			// Skip keyword and its following arguments (until next keyword or end).
+			i++
+			for i < len(args) && !isRunAntlrKeyword(args[i]) {
+				i++
+			}
+		default:
+			stmt.Options = append(stmt.Options, args[i])
+			i++
+		}
+	}
+	return stmt
+}
+
+// parseRunAntlr4CppSplit parses RUN_ANTLR4_CPP_SPLIT args.
+// Args[0]=lexer .g4, args[1]=parser .g4; remaining: VISITOR/LISTENER keywords
+// and OUTPUT_INCLUDES section (ignored in our model).
+func parseRunAntlr4CppSplit(args []string, line int) *RunAntlr4CppSplitStmt {
+	stmt := &RunAntlr4CppSplitStmt{Lexer: args[0], Parser: args[1], Line: line}
+	for i := 2; i < len(args); i++ {
+		switch args[i] {
+		case "VISITOR":
+			stmt.Visitor = true
+		case "LISTENER":
+			stmt.Listener = true
+		case "NO_LISTENER":
+			// no-op: default is already no-listener
+		case "OUTPUT_INCLUDES", "IN", "OUT", "OUT_NOAUTO", "INDUCED_DEPS", "TOOL":
+			// skip keyword block
+			i++
+			for i < len(args) && !isRunAntlrKeyword(args[i]) {
+				i++
+			}
+			i-- // outer loop will i++
+		}
+	}
+	return stmt
+}
+
+// isRunAntlrKeyword reports whether s is a keyword that terminates a
+// positional-arg section in RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT.
+func isRunAntlrKeyword(s string) bool {
+	switch s {
+	case "VISITOR", "LISTENER", "NO_LISTENER", "OUTPUT_INCLUDES",
+		"IN", "OUT", "OUT_NOAUTO", "INDUCED_DEPS", "TOOL":
+		return true
+	}
+	return false
+}
+
+// runProgramKeywords is the set of keyword tokens in RUN_PROGRAM that
+// introduce a named argument list. When the parser encounters one of
+// these, subsequent tokens up to the next keyword (or end) belong to
+// that section rather than to the positional Args list.
+var runProgramKeywords = map[string]bool{
+	"IN":              true,
+	"IN_NOPARSE":      true,
+	"OUT":             true,
+	"OUT_NOAUTO":      true,
+	"STDOUT":          true,
+	"STDOUT_NOAUTO":   true,
+	"CWD":             true,
+	"ENV":             true,
+	"OUTPUT_INCLUDES": true,
+	"INDUCED_DEPS":    true,
+	"IN_DEPS":         true,
+	"TOOL":            true,
+}
+
+// parseRunProgram parses RUN_PROGRAM args into a RunProgramStmt.
+// args[0] is the tool path (module-relative); remaining args are a mix
+// of positional args and keyword-headed sections (IN, OUT, OUT_NOAUTO,
+// STDOUT, ENV, CWD, OUTPUT_INCLUDES, INDUCED_DEPS, TOOL).
+func parseRunProgram(args []string, line int) *RunProgramStmt {
+	stmt := &RunProgramStmt{ToolPath: args[0], Line: line}
+	i := 1
+	currentSection := "ARGS"
+	for i < len(args) {
+		tok := args[i]
+		if runProgramKeywords[tok] {
+			currentSection = tok
+			i++
+			continue
+		}
+		switch currentSection {
+		case "ARGS":
+			stmt.Args = append(stmt.Args, tok)
+		case "IN", "IN_NOPARSE", "IN_DEPS":
+			stmt.INFiles = append(stmt.INFiles, tok)
+		case "OUT":
+			stmt.OUTFiles = append(stmt.OUTFiles, tok)
+		case "OUT_NOAUTO":
+			stmt.OUTNoAutoFiles = append(stmt.OUTNoAutoFiles, tok)
+		case "STDOUT", "STDOUT_NOAUTO":
+			if stmt.StdoutFile == "" {
+				stmt.StdoutFile = tok
+			}
+		case "ENV":
+			stmt.EnvPairs = append(stmt.EnvPairs, tok)
+		case "CWD":
+			if stmt.CWD == "" {
+				stmt.CWD = tok
+			}
+		case "OUTPUT_INCLUDES", "INDUCED_DEPS", "TOOL":
+			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
+		}
+		i++
+	}
+	return stmt
 }
 
 // splitGlobalModifier extracts a leading "GLOBAL" pseudo-arg from an
