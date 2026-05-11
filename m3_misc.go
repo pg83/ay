@@ -1,7 +1,10 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -371,7 +374,10 @@ func EmitCF(
 	// names appear in @VAR@ references in the source; we use the
 	// declaration order from the ya.make.  Also inject BUILD_TYPE=DEBUG
 	// if not already present (a global build-system var).
-	cfgVars := buildCFGVars(srcAbs, in.DefaultVars, in.DefaultVarOrder)
+	// PR-M3-F-5: pass the real on-disk source path (SourceRoot/<path>/<srcRel>)
+	// so buildCFGVars can read the .in file to scan for @VAR@ references.
+	srcDiskPath := in.SourceRoot + "/" + instance.Path + "/" + srcRel
+	cfgVars := buildCFGVars(srcDiskPath, in.DefaultVars, in.DefaultVarOrder)
 
 	cmdArgs := []string{
 		python3Path,
@@ -417,37 +423,66 @@ func EmitCF(
 	return emit.Emit(node), outAbs
 }
 
+// cfgVarRefRe matches @VAR_NAME@ substitution markers in .in template files.
+var cfgVarRefRe = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
+
 // buildCFGVars constructs the $CFG_VARS expansion from the module's DEFAULT
-// declarations plus the global BUILD_TYPE=DEBUG.
+// declarations, filtered to only those variables actually referenced as
+// @VAR@ in the .in source file and emitted in alphabetical order.
 //
-// The reference cmd_args for build_info.cpp.in only contain "BUILD_TYPE=DEBUG"
-// (the one @BUILD_TYPE@ reference in the file). sandbox.cpp.in has
-// KOSHER_SVN_VERSION= and SANDBOX_TASK_ID=0 (from DEFAULT) in ya.make order.
+// srcDiskPath is the real on-disk path to the .in source (not the
+// $(SOURCE_ROOT)/... macro path) so the file can be read to scan for
+// @VAR@ references.
 //
-// We enumerate defaultVarOrder (declaration order) and emit KEY=VALUE for
-// each; then inject BUILD_TYPE=DEBUG if not already provided.  The result
-// matches the reference byte-exact because:
+// ymake's $CFG_VARS logic:
+//   - Only DEFAULT-declared vars that appear as @VAR@ in the .in source are
+//     emitted (vars not referenced are silently dropped).
+//   - Vars are emitted in alphabetical order (not declaration order).
+//   - If @BUILD_TYPE@ is referenced but not DEFAULT-declared, ymake injects
+//     the global BUILD_TYPE=DEBUG value.
+//
+// Empirical anchors (sg2.json reference):
+//   - build_info.cpp.in references only @BUILD_TYPE@ → ["BUILD_TYPE=DEBUG"].
 //   - sandbox.cpp.in references @KOSHER_SVN_VERSION@ and @SANDBOX_TASK_ID@
-//     which come from the DEFAULT declarations in declaration order.
-//   - build_info.cpp.in references @BUILD_TYPE@ which has no DEFAULT and
-//     comes from the global build config.
-func buildCFGVars(srcAbs string, defaultVars map[string]string, defaultVarOrder []string) []string {
+//     → ["KOSHER_SVN_VERSION=", "SANDBOX_TASK_ID=0"] (alpha order; no
+//     BUILD_TYPE injected since @BUILD_TYPE@ is absent in sandbox.cpp.in).
+func buildCFGVars(srcDiskPath string, defaultVars map[string]string, defaultVarOrder []string) []string {
+	// Scan the .in file for @VAR@ references.  Silently skip unreadable files
+	// (generated sources during a warm build may not exist on disk yet).
+	referenced := map[string]bool{}
+
+	if data, err := os.ReadFile(srcDiskPath); err == nil {
+		for _, m := range cfgVarRefRe.FindAllSubmatch(data, -1) {
+			referenced[string(m[1])] = true
+		}
+	}
+
+	// Collect DEFAULT-declared vars that are actually referenced.
 	var vars []string
-	seen := map[string]bool{}
+	declaredSet := map[string]bool{}
 
 	for _, name := range defaultVarOrder {
+		if !referenced[name] {
+			continue
+		}
+
 		val, ok := defaultVars[name]
 		if !ok {
 			continue
 		}
+
 		vars = append(vars, name+"="+val)
-		seen[name] = true
+		declaredSet[name] = true
 	}
 
-	// Inject BUILD_TYPE=DEBUG if not declared by the module.
-	if !seen["BUILD_TYPE"] {
+	// Inject global BUILD_TYPE=DEBUG when @BUILD_TYPE@ is referenced but
+	// not declared via DEFAULT.
+	if referenced["BUILD_TYPE"] && !declaredSet["BUILD_TYPE"] {
 		vars = append(vars, buildTypeDebug)
 	}
+
+	// ymake emits CFG_VARS in alphabetical order.
+	sort.Strings(vars)
 
 	return vars
 }

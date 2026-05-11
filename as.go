@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"path"
+	"strings"
+)
 
 // as.go — emitter for AS assembly nodes.
 //
@@ -131,10 +134,15 @@ import "strings"
 // as a dependency of the AR step and avoid re-deriving the output
 // path.
 func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, string) {
-	// PR-35q: asmlib host-PIC AS nodes use yasm, not clang. Branch off
-	// before any clang-shape composition runs.
+	// PR-35q: host-PIC AS nodes with a `.asm` extension use yasm, not clang.
+	// Branch off before any clang-shape composition runs.
 	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
-	if targetIsX8664(instance) && asmlibYasmModules[instance.Path] {
+	// PR-M3-F-5: extend to all `.asm` sources on x86_64, not just asmlib.
+	// The reference graph uses yasm for every `.asm` host source (asmlib's
+	// 25 nodes + util/system/context_x86.asm). Non-asmlib modules get the
+	// default Linux _YASM_PREDEFINED_FLAGS_VALUE=-g dwarf2; asmlib clears
+	// it via SET(_YASM_PREDEFINED_FLAGS_VALUE "").
+	if targetIsX8664(instance) && strings.HasSuffix(srcRel, ".asm") {
 		return emitASYasm(instance, srcRel, in, yasmLD, emit)
 	}
 
@@ -235,10 +243,29 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 	// Output stem strips `.asm` (the only extension this branch sees;
 	// asmlib's reference uses `.asm` exclusively per PR-30 D07).
 	stem := strings.TrimSuffix(srcRel, ".asm")
-	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + stem + ".pic.o"
+	// PR-M3-F-5: when srcRel contains "/" (e.g. "system/context_x86.asm"
+	// from the util module), use the "_/" infix to match the reference
+	// output shape (util/_/system/context_x86.pic.o). Flat srcRel
+	// (asmlib's "cachesize64.asm") keeps the existing flat shape.
+	var outputPath string
+	if strings.Contains(srcRel, "/") {
+		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/_/" + stem + ".pic.o"
+	} else {
+		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + stem + ".pic.o"
+	}
 	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
 
-	cmdArgs := []string{
+	// PR-M3-F-5: _YASM_PREDEFINED_FLAGS_VALUE is "-g dwarf2" for all Linux
+	// non-asmlib modules (the default in ymake.core.conf). asmlib clears it
+	// via SET(_YASM_PREDEFINED_FLAGS_VALUE "") in its ya.make; we track that
+	// via the asmlibYasmModules sentinel.
+	var predefinedFlags []string
+	if !asmlibYasmModules[instance.Path] {
+		predefinedFlags = []string{"-g", "dwarf2"}
+	}
+
+	cmdArgs := make([]string, 0, 20+len(predefinedFlags))
+	cmdArgs = append(cmdArgs,
 		yasmBinaryPath,
 		"-f", "elf64",
 		"-D", "UNIX",
@@ -247,11 +274,14 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 		"--replace=$(TOOL_ROOT)=/-T",
 		"-D", "_x86_64_",
 		"-D_YASM_",
+	)
+	cmdArgs = append(cmdArgs, predefinedFlags...)
+	cmdArgs = append(cmdArgs,
 		"-I", "$(BUILD_ROOT)",
 		"-I", "$(SOURCE_ROOT)",
 		"-o", outputPath,
 		inputPath,
-	}
+	)
 
 	// Env shape: `ARCADIA_ROOT_DISTBUILD` + `YASM_TEST_SUITE`. NO
 	// `DYLD_LIBRARY_PATH` — yasm doesn't link against host clang's
@@ -332,7 +362,11 @@ func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (
 	if useSrcDir {
 		outputRel := composeSrcDirOutputRel(instance.Path, in.SrcDir, srcRel)
 		outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + outputRel + ".o"
-		inputPath := "$(SOURCE_ROOT)/" + in.SrcDir + "/" + srcRel
+		// path.Clean resolves any ".." segments produced when srcRel is a
+		// relative path that ascends out of SrcDir (e.g. openssl's
+		// "crypto/../asm/aarch64/..." sources). The reference graph uses
+		// the canonical form without "..".
+		inputPath := "$(SOURCE_ROOT)/" + path.Clean(in.SrcDir+"/"+srcRel)
 
 		return outputPath, inputPath
 	}

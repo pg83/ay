@@ -3661,7 +3661,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		var yasmRef *NodeRef
 
 		// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
-		if targetIsX8664(instance) && asmlibYasmModules[instance.Path] {
+		// PR-M3-F-5: extend yasm walk to all `.asm` sources on x86_64, not
+		// just asmlibYasmModules. The reference graph uses yasm for every
+		// `.asm` host source (util/system/context_x86.asm + asmlib's 25 nodes).
+		if targetIsX8664(instance) && strings.HasSuffix(srcRel, ".asm") {
 			const yasmPath = "contrib/tools/yasm"
 
 			yasmInstance := instance.WithHost(ctx.cfg)
@@ -3975,6 +3978,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// hardcoded build configuration).
 		//
 		// The output path strips the .in suffix: sandbox.cpp.in → sandbox.cpp.
+		// PR-M3-F-5: scan the .in template for its transitive include closure
+		// (same as a .cpp source) and fold into srcIn.IncludeInputs before
+		// calling EmitCF so the CF node's inputs[] matches the reference shape
+		// (e.g. sandbox.cpp.in → 795-entry closure; build_info.cpp.in → 5).
+		srcIn.IncludeInputs = scanIncludesForSource(ctx, srcInstance, srcRel, srcIn)
 		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
 		_ = cfRef
 
