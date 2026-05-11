@@ -1572,7 +1572,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// discovered, then return a `headerOnly: true` result that
 	// callers handle by skipping the archive-dep wiring. PROGRAMs
 	// with zero compilable sources remain a hard error.
-	if !hasCompilableSource(d) {
+	//
+	// PR-M3-C: multimodule library types (PROTO_LIBRARY etc.) always
+	// take the header-only path regardless of whether their SRCS
+	// contain non-C++ sources like .ev — those are emitted by
+	// emitProtoSrcs below, not by emitOneSource.
+	if !hasCompilableSource(d) || isMultimoduleLibraryType(d.moduleStmt.Name) {
 		if d.moduleStmt.Name == "PROGRAM" && !hasSkippedSource(d) {
 			ThrowFmt("gen: %s has no compilable sources (after IF/header filter)", instance.Path)
 		}
@@ -1621,6 +1626,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		// PR-M3-D: emit EN nodes for GENERATE_ENUM_SERIALIZATION(*) declarations.
 		emitEnumSrcs(ctx, instance, d)
+
+		// PR-M3-C: emit PB/EV nodes for PROTO_LIBRARY .proto/.ev sources.
+		// PROTO_LIBRARY modules never have compilable C/C++ sources and
+		// always reach the header-only branch; their .proto/.ev sources
+		// require protoc-driven PB/EV node emission.
+		emitProtoSrcs(ctx, instance, d)
 
 		result := &moduleEmitResult{
 			headerOnly:              true,
@@ -2941,11 +2952,12 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 // hasCompilableSource reports whether the module has at least one
 // source the rule emitter would actually compile (excluding pure
 // headers in SRCS, which the upstream uses as IDE / dependency-
-// tracking metadata). Modules that contain only JOIN_SRCS / globals
-// also count.
+// tracking metadata, and known-deferred sources handled by dedicated
+// emitters — e.g. .proto/.ev handled by emitProtoSrcs). Modules that
+// contain only JOIN_SRCS / globals also count.
 func hasCompilableSource(d *moduleData) bool {
 	for _, s := range d.srcs {
-		if !isHeaderSource(s) {
+		if !isHeaderSource(s) && !isSkippedSource(s) {
 			return true
 		}
 	}
@@ -2955,7 +2967,7 @@ func hasCompilableSource(d *moduleData) bool {
 	}
 
 	for _, s := range d.globalSrcs {
-		if !isHeaderSource(s) {
+		if !isHeaderSource(s) && !isSkippedSource(s) {
 			return true
 		}
 	}
@@ -2970,12 +2982,11 @@ func isHeaderSource(srcRel string) bool {
 }
 
 // isSkippedSource reports whether `srcRel` is a known deferred source kind
-// that the PR-M3-A emitter does not yet handle. These sources are silently
-// skipped (like headers) rather than throwing "unsupported extension".
-// The corresponding emitters land in PR-M3-B..E:
+// that the emitter does not yet handle (or handles elsewhere). These sources
+// are silently skipped (like headers) rather than throwing "unsupported extension".
 //   - .rl     → R5 (ragel5 two-step; PR-M3-C)
-//   - .proto  → PB (protobuf compiler; PR-M3-B)
-//   - .ev     → EV (event compiler via event2cpp; PR-M3-D)
+//   - .proto  → PB (emitted by emitProtoSrcs in the PROTO_LIBRARY header-only branch)
+//   - .ev     → EV (emitted by emitOneSource for LIBRARY, emitProtoSrcs for PROTO_LIBRARY)
 //   - .py     → PY node via runtime library (PR-M3-E)
 //   - .cpp.in → CF template source; code-generator fills in values at build
 //               time (e.g. library/cpp/build_info); PR-M3-D.
@@ -2984,7 +2995,6 @@ func isHeaderSource(srcRel string) bool {
 func isSkippedSource(srcRel string) bool {
 	return strings.HasSuffix(srcRel, ".rl") ||
 		strings.HasSuffix(srcRel, ".proto") ||
-		strings.HasSuffix(srcRel, ".ev") ||
 		strings.HasSuffix(srcRel, ".py") ||
 		strings.HasSuffix(srcRel, ".cpp.in") ||
 		strings.HasSuffix(srcRel, ".c.in") ||
@@ -3633,6 +3643,77 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		}
 
 		return ccRef, ccOut, ccInputs, primaryCount, true
+
+	case strings.HasSuffix(srcRel, ".ev"):
+		// PR-M3-C: .ev sources in a LIBRARY module (e.g. devtools/ymake/diag/trace.ev).
+		// Emits one EV node (generating .ev.pb.cc + .ev.pb.h) then a downstream
+		// CC node compiling the generated .ev.pb.cc. The CC node's full include
+		// closure is not scanned (generated files don't exist on disk at gen time);
+		// the node structure is correct at L0/L1/L2 even without L3-exact inputs.
+		{
+			// Walk host tool programs.
+			cppStyleguideBinary := pbCppStyleguidePath
+			protocBinary := pbProtocBinaryPath
+			event2cppBinary := evEvent2cppBinaryPath
+
+			var cppStyleguideLDRef, protocLDRef, event2cppLDRef NodeRef
+
+			protocHostInst := instance.WithHost(ctx.cfg)
+			protocHostInst.Path = pbProtocModule
+			protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
+
+			if exc := Try(func() {
+				result := genModule(ctx, protocHostInst)
+				protocLDRef = result.LDRef
+				protocBinary = result.LDPath
+			}); exc != nil {
+				_ = exc
+			}
+
+			cppStyleguideHostInst := instance.WithHost(ctx.cfg)
+			cppStyleguideHostInst.Path = pbCppStyleguideModule
+			cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
+
+			if exc := Try(func() {
+				result := genModule(ctx, cppStyleguideHostInst)
+				cppStyleguideLDRef = result.LDRef
+				cppStyleguideBinary = result.LDPath
+			}); exc != nil {
+				_ = exc
+			}
+
+			event2cppHostInst := instance.WithHost(ctx.cfg)
+			event2cppHostInst.Path = evEvent2cppModule
+			event2cppHostInst.Flags = inferFlagsFromPath(evEvent2cppModule, true)
+
+			if exc := Try(func() {
+				result := genModule(ctx, event2cppHostInst)
+				event2cppLDRef = result.LDRef
+				event2cppBinary = result.LDPath
+			}); exc != nil {
+				_ = exc
+			}
+
+			// moduleTag is empty for LIBRARY modules (no "cpp_proto" tag).
+			evRef := EmitEV(srcInstance, srcRel,
+				cppStyleguideLDRef, protocLDRef, event2cppLDRef,
+				cppStyleguideBinary, protocBinary, event2cppBinary,
+				"", ctx.sourceRoot, ctx.emit)
+
+			// Emit downstream CC for the generated .ev.pb.cc.
+			evPbCCSuffix := srcRel + ".pb.cc"
+			ccIn := srcIn
+			ccIn.IsGenerated = true
+			ccIn.Generator = evRef
+			ccIn.HasGenerator = true
+			ccIn.IncludeInputs = nil // generated file; no disk-based include scan
+
+			ref, outPath := EmitCC(srcInstance, evPbCCSuffix, ccIn, ctx.emit)
+
+			// The primary input for the AR/LD memberInputs is the original .ev source.
+			evSrcAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
+			return ref, outPath, []string{evSrcAbs}, 1, true
+		}
 	}
 
 	// PR-M3-A: known-deferred source kinds are silently skipped rather
