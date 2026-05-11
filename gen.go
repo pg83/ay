@@ -1872,6 +1872,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// regular `.a`).
 	ccRefs := make([]NodeRef, 0, len(d.srcs)+len(d.joinSrcs))
 	ccOutputs := make([]string, 0, len(d.srcs)+len(d.joinSrcs))
+	// PR-41 Fix I: track which ccOutputs entries come from SRC_C_NO_LTO
+	// (i.e., d.flatSrcs) so reorderARMembers can hoist them to the front
+	// without disturbing the declaration order of regular SRCS members.
+	ccIsFlatNoLto := make([]bool, 0, len(d.srcs)+len(d.joinSrcs))
 	// PR-31 D11: accumulate the union of every CC member's inputs
 	// (primary source + IncludeInputs, deduped, in DFS-discovery
 	// order) so the downstream AR/LD step can fold these into its
@@ -2027,8 +2031,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			srcInputs.PerSourceCFlags = extras
 		}
 
+		isFlatNoLto := false
 		if _, ok := d.flatSrcs[src]; ok {
 			srcInputs.FlatOutput = true
+			isFlatNoLto = true
 		}
 
 		ref, outPath, ccIns, primaryCount, ok := emitOneSource(ctx, instance, d.srcDir, src, srcInputs, ancestorRebase)
@@ -2039,6 +2045,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
+		ccIsFlatNoLto = append(ccIsFlatNoLto, isFlatNoLto)
 		addMemberInputs(ccIns)
 		// PR-35y R8: track primary source paths so the .global.a
 		// aggregator can exclude them. emitOneSource returns the
@@ -2050,6 +2057,13 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			addRegularPrimary(ccIns[i])
 		}
 	}
+
+	// PR-41 Fix I: record the SRCS/JOIN_SRCS boundary so the AR
+	// cmd_args reorder below can apply the right bucket rules to
+	// each group independently. All entries up to this index are
+	// SRCS-derived (regular + .rl6); entries from here onward are
+	// JOIN_SRCS-derived.
+	numSrcsDerived := len(ccOutputs)
 
 	for _, js := range d.joinSrcs {
 		// PR-28-D11 + PR-30 D06: rebase onto SRCDIR only when
@@ -2111,6 +2125,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ref, outPath := EmitCC(srcInstance, jsRel, ccIn, ctx.emit)
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
+		ccIsFlatNoLto = append(ccIsFlatNoLto, false) // JOIN_SRCS are never SRC_C_NO_LTO
 		// PR-35y R7: the AR/LD `inputs` slot omits the BUILD_ROOT-
 		// staged generated cpp (JS output). Reference graph confirms:
 		// util's libyutil.a never lists `$(BUILD_ROOT)/util/all_*.cpp`
@@ -2277,6 +2292,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			combinedMemberInputs = append(combinedMemberInputs, p)
 		}
 	}
+
+	// PR-41 Fix I: reorder AR members into ymake's canonical bucket
+	// order: SRC_C_NO_LTO first, then regular SRCS (declaration
+	// order), then JOIN_SRCS, then R6-generated last.
+	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, ccIsFlatNoLto, numSrcsDerived)
 
 	arRef := EmitAR(instance, ccRefs, ccOutputs, nil, combinedMemberInputs, ctx.emit)
 	_ = peerArchiveRefs // retained as a loop accumulator for the PROGRAM LD branch above; intentionally unused for the LIBRARY AR.
@@ -2887,6 +2907,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccIn.Generator = r6Ref
 		ccIn.HasGenerator = true
 		ccIn.IncludeInputs = ccIncludeInputs
+		// PR-41 Fix H: ymake's _LANG_CFLAGS_RL=-Wno-implicit-fallthrough applies to CC
+		// compiles whose source is a .rl6-generated .cpp (build/ymake.core.conf).
+		// Extend in M3+ for .pyx, .py.py3, .rl5 when their closures surface.
+		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
@@ -3150,4 +3174,76 @@ func includeScannerBasePaths(instance ModuleInstance) []string {
 	out = append(out, base...)
 
 	return out
+}
+
+// reorderARMembers reorders (refs, paths) so the AR cmd_args match
+// ymake's canonical member ordering:
+//
+//  1. SRC_C_NO_LTO sources (isFlatNoLto[i]==true) — hoisted to the
+//     front in their original relative order.
+//  2. Regular SRCS (non-SRC_C_NO_LTO, non-R6) — kept in declaration
+//     order, interleaved flat and nested as declared.
+//  3. JOIN_SRCS (entries at [numSrcsDerived, len)) — in declaration order.
+//  4. R6-generated (paths containing "/_/_/") — moved to the end.
+//
+// The `/_/_/` discriminator identifies R6-generated members: EmitCC of
+// an R6-generated source emits to `$(BUILD_ROOT)/<path>/_/<srcRel>.cpp.o`,
+// where <srcRel> already contains a `/` (e.g. `_/datetime/`), producing
+// the `/_/_/` double-underscore infix. Regular (non-R6) SRCS members never
+// produce this pattern.
+//
+// isFlatNoLto is a parallel bool slice (same length as refs/paths before
+// JOIN_SRCS are appended) marking SRC_C_NO_LTO entries. The slice must
+// have len(isFlatNoLto) == len(refs) == len(paths) at call time. PR-41 Fix I.
+func reorderARMembers(refs []NodeRef, paths []string, isFlatNoLto []bool, numSrcsDerived int) ([]NodeRef, []string) {
+	if len(paths) == 0 {
+		return refs, paths
+	}
+
+	type member struct {
+		ref  NodeRef
+		path string
+	}
+
+	// Classify SRCS-derived entries [0, numSrcsDerived) into three buckets:
+	// SRC_C_NO_LTO, regular, or R6-generated.
+	var noLtoSrcs, regularSrcs, genSrcs []member
+
+	for i := 0; i < numSrcsDerived && i < len(paths); i++ {
+		m := member{refs[i], paths[i]}
+		switch {
+		case strings.Contains(m.path, "/_/_/"):
+			// R6-generated: double-underscore infix from EmitR6+EmitCC chain.
+			genSrcs = append(genSrcs, m)
+		case i < len(isFlatNoLto) && isFlatNoLto[i]:
+			// SRC_C_NO_LTO: flat output, hoist to front.
+			noLtoSrcs = append(noLtoSrcs, m)
+		default:
+			// Regular SRCS: nested or flat, keep in declaration order.
+			regularSrcs = append(regularSrcs, m)
+		}
+	}
+
+	// JOIN_SRCS entries stay as-is in declaration order (never SRC_C_NO_LTO, never R6).
+	joinSrcs := make([]member, 0, len(paths)-numSrcsDerived)
+	for i := numSrcsDerived; i < len(paths); i++ {
+		joinSrcs = append(joinSrcs, member{refs[i], paths[i]})
+	}
+
+	// Reassemble: SRC_C_NO_LTO → regular SRCS → JOIN_SRCS → R6-generated.
+	out := make([]member, 0, len(paths))
+	out = append(out, noLtoSrcs...)
+	out = append(out, regularSrcs...)
+	out = append(out, joinSrcs...)
+	out = append(out, genSrcs...)
+
+	outRefs := make([]NodeRef, len(out))
+	outPaths := make([]string, len(out))
+
+	for i, m := range out {
+		outRefs[i] = m.ref
+		outPaths[i] = m.path
+	}
+
+	return outRefs, outPaths
 }
