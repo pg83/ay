@@ -229,29 +229,51 @@ func TestEvalCond_BareLiteralInPredicateThrows(t *testing.T) {
 // (so a typo like `IF (CXX_RT)` instead of `IF (CXX_RT == "...")`
 // fails fast).
 func TestEnvironment_BoolMethodRejectsTypedBindings(t *testing.T) {
-	cases := []struct {
-		name    string
-		ident   string
-		wantSub string
-	}{
-		{"string_in_bool_position", "CXX_RT", "string binding"},
-		{"int_in_bool_position", "ANDROID_API", "int binding"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			expr := &ExprIdent{Name: tc.ident}
-			exc := Try(func() {
-				EvalCond(expr, DefaultIfEnv)
-			})
-
-			if exc == nil {
-				t.Fatalf("EvalCond(%s) did not throw", tc.ident)
-			}
-
-			if !strings.Contains(exc.Error(), tc.wantSub) {
-				t.Errorf("exception %q does not contain %q", exc.Error(), tc.wantSub)
+	// PR-M3-A: string bindings are now coerced to bool (empty→false,
+	// non-empty→true) to match upstream ymake semantics for bare-ident
+	// use of string variables (e.g. `IF (SANITIZER_TYPE OR ...)`). The
+	// "string_in_bool_position" sub-case formerly expected a throw; it
+	// is now replaced by a coercion check.  Int bindings still throw.
+	t.Run("string_in_bool_position_coerces_not_throws", func(t *testing.T) {
+		// CXX_RT == "libcxxrt" in DefaultIfEnv → non-empty → coerced true.
+		expr := &ExprIdent{Name: "CXX_RT"}
+		exc := Try(func() {
+			got := EvalCond(expr, DefaultIfEnv)
+			if !got {
+				t.Errorf("EvalCond(CXX_RT) = false; want true (non-empty string coerces to true)")
 			}
 		})
-	}
+		if exc != nil {
+			t.Fatalf("EvalCond(CXX_RT) threw unexpectedly: %v", exc)
+		}
+	})
+
+	t.Run("empty_string_in_bool_position_coerces_false", func(t *testing.T) {
+		// SANITIZER_TYPE == "" in DefaultIfEnv → empty → coerced false.
+		expr := &ExprIdent{Name: "SANITIZER_TYPE"}
+		exc := Try(func() {
+			got := EvalCond(expr, DefaultIfEnv)
+			if got {
+				t.Errorf("EvalCond(SANITIZER_TYPE) = true; want false (empty string coerces to false)")
+			}
+		})
+		if exc != nil {
+			t.Fatalf("EvalCond(SANITIZER_TYPE) threw unexpectedly: %v", exc)
+		}
+	})
+
+	t.Run("int_in_bool_position", func(t *testing.T) {
+		expr := &ExprIdent{Name: "ANDROID_API"}
+		exc := Try(func() {
+			EvalCond(expr, DefaultIfEnv)
+		})
+
+		if exc == nil {
+			t.Fatalf("EvalCond(ANDROID_API) did not throw")
+		}
+
+		if !strings.Contains(exc.Error(), "int binding") {
+			t.Errorf("exception %q does not contain %q", exc.Error(), "int binding")
+		}
+	})
 }

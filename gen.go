@@ -274,7 +274,86 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"SRC_C_SSE41":           {}, // PR-27: util/charset (arch-specific compile-flag wrapper)
 	"NO_CLANG_COVERAGE":     {}, // PR-30: contrib/tools/yasm
 	"NO_PROFILE_RUNTIME":    {}, // PR-30: contrib/tools/yasm
-	"WITHOUT_VERSION":       {}, // PR-32 D03: contrib/libs/musl/include neighbours; metadata-only.
+	"WITHOUT_VERSION": {}, // PR-32 D03: contrib/libs/musl/include neighbours; metadata-only.
+
+	// M3 metadata macros — no per-module side effect in PR-M3-A;
+	// real emitters land in PR-M3-B..E.
+	// USE_PYTHON3 is handled by the applyUnknownStmt case above (adds implicit
+	// PEERDIRs to contrib/tools/python3 and .../Lib); removed from whitelist
+	// so it doesn't fall through to the no-op path.
+	"USE_PYTHON2":                       {}, // Python 2 dependency marker.
+	"PYTHON3_ADDINCL":                   {}, // Adds Python3 include paths (system python, handled by emitter).
+	"PYTHON2_ADDINCL":                   {}, // Adds Python2 include paths.
+	"NO_PYTHON_INCLUDES":                {}, // Suppresses default Python include injection.
+	"NO_CHECK_IMPORTS":                  {}, // Suppresses import-check step.
+	"NO_PYTHON_COVERAGE":                {}, // Suppresses Python coverage instrumentation.
+	"NO_IMPORT_TRACING":                 {}, // Suppresses import tracing.
+	"NO_LINT":                           {}, // Suppresses linting.
+	"STYLE_PYTHON":                      {}, // Python style checker metadata.
+	"WINDOWS_LONG_PATH_MANIFEST":        {}, // Windows-only manifest; no-op on Linux.
+	// PYBUILD_NO_PYC: handled in applyUnknownStmt ENABLE case → d.pyBuildNoPYC; not a no-op whitelist entry.
+	"RESOURCE":                          {}, // Embeds binary resources; PR-M3-A defers PY node emission.
+	"RESOURCE_FILES":                    {}, // Variant of RESOURCE.
+	"PY_REGISTER":                       {}, // Python module registration; semantic in PR-M3-E.
+	"RUN_PROGRAM":                       {}, // Code-generator invocation; EN/PY nodes deferred to PR-M3-D.
+	"RUN_ANTLR4_CPP":                    {}, // ANTLR4 C++ parser generator; deferred to PR-M3-D.
+	"RUN_ANTLR4_CPP_SPLIT":              {}, // ANTLR4 split-mode variant; deferred to PR-M3-D.
+	"GENERATE_ENUM_SERIALIZATION":       {}, // EN node; deferred to PR-M3-C.
+	"GENERATE_ENUM_SERIALIZATION_WITH_HEADER": {}, // EN node variant; deferred to PR-M3-C.
+	"GENERATE_ENUM_SERIALIZATION_NOUTF": {}, // EN node variant.
+	"ARCHIVE":                           {}, // Embeds archive of files; deferred.
+	"CREATE_BUILDINFO_FOR":              {}, // Generates build-info C++ header; CF node deferred to PR-M3-D.
+	"INCLUDE_TAGS":                      {}, // Proto include-tag filter; semantic in PR-M3-B.
+	"INDUCED_DEPS":                      {}, // Adds header deps without PEERDIR; metadata for PR-M3-A.
+	"NO_PYTHON2":                        {}, // Marks PY2 unavailability; metadata.
+	"CHECK_DEPENDENT_DIRS":              {}, // Dependency restriction check; metadata.
+	"SUBSCRIBER":                        {}, // Ownership metadata.
+	"OWNER":                             {}, // Ownership metadata.
+	"LICENSE_RESTRICTION_EXCEPTIONS":    {}, // License metadata.
+	"LICENSE_RESTRICTION":               {}, // License metadata.
+	"RESTRICT_PATH":                     {}, // Path-restriction metadata.
+	"NO_OPTIMIZE":                       {}, // Suppresses optimization; metadata for PR-M3-A.
+	"TASKLET":                           {}, // Tasklet metadata; deferred.
+	"TASKLETSUPPORT":                    {}, // Tasklet support metadata; deferred.
+	"SET_APPEND":                        {}, // SET_APPEND macro; no evaluator yet.
+	"OPENSOURCE_PROJECT":                {}, // Metadata.
+	"SPLIT_FACTOR":                      {}, // Test metadata.
+	"FORK_TESTS":                        {}, // Test metadata.
+	"FORK_SUBTESTS":                     {}, // Test metadata.
+	"SIZE":                              {}, // Test size metadata.
+	"TAG":                               {}, // Test tag metadata.
+	"REQUIREMENTS":                      {}, // Test requirements metadata.
+	"TIMEOUT":                           {}, // Test timeout metadata.
+	"ENV":                               {}, // Test env metadata.
+	"DATA":                              {}, // Test data metadata.
+	"TEST_SRCS":                         {}, // Test source list.
+	"LINT":                              {}, // Lint metadata.
+	"NO_YMAKE_PYTHON":                   {}, // Suppresses ymake python binding; metadata.
+	"USE_LIGHT_PY2CC":                   {}, // Python build variant; metadata.
+
+	// Additional M3 metadata macros found by scanning the closure:
+	"SUPPRESSIONS":                    {}, // Sanitizer suppression file; metadata.
+	"OPENSOURCE_EXPORT_REPLACEMENT":   {}, // CMake/Conan export replacement; metadata.
+	"EXCLUDE_TAGS":                    {}, // Build-system tag exclusion; metadata.
+	"FILES":                           {}, // Proto library file listing; metadata for PR-M3-B.
+	"AR_PLUGIN":                       {}, // Archive plugin declaration; metadata.
+	"NO_JOIN_SRC":                     {}, // Suppresses JOIN_SRCS optimisation; metadata.
+	"MASMFLAGS":                       {}, // MASM compiler flags (Windows); no-op on Linux.
+	"SRC_C_AVX":                       {}, // AVX-specific SRC variant; deferred to PR-M3-D.
+	"SRC_C_SSE2":                      {}, // SSE2-specific SRC variant; deferred.
+	"SRC_C_SSE4":                      {}, // SSE4-specific SRC variant; deferred.
+	"SRC_C_SSSE3":                     {}, // SSSE3-specific SRC variant; deferred.
+	"SRC_C_XOP":                       {}, // XOP-specific SRC variant; deferred.
+	"NO_MYPY":                         {}, // Suppresses mypy type checking; metadata.
+	"NO_OPTIMIZE_PY_PROTOS":           {}, // Suppresses proto Python optimisation; metadata.
+	"PROTO_NAMESPACE":                 {}, // Proto namespace declaration; semantic in PR-M3-B.
+	"PY_NAMESPACE":                    {}, // Python namespace declaration; semantic in PR-M3-E.
+	"GRPC":                            {}, // gRPC service declaration; deferred.
+	"CPP_PROTO_PLUGIN":                {}, // protoc C++ plugin; deferred to PR-M3-B.
+	"CPP_PROTO_PLUGIN2":               {}, // protoc C++ plugin variant; deferred.
+	"CPP_EV_PLUGIN":                   {}, // event compiler plugin; deferred.
+	"JAVA_SRCS":                       {}, // Java sources; deferred.
+	"JAVA_CLASSPATH_IGNORE_CONFLICTZ": {}, // Java classpath; metadata.
 }
 
 // Gen produces the build graph rooted at `targetDir`. PR-23 wraps
@@ -348,6 +427,8 @@ type moduleData struct {
 	moduleStmt       *ModuleStmt
 	srcs             []string
 	globalSrcs       []string
+	pySrcs           []string // PR-M3-A: python sources from PY_SRCS(...); each entry is a .py filename
+	pyBuildNoPYC     bool     // PR-M3-A: set by ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
 	peerdirs         []string
 	joinSrcs         []*JoinSrcsStmt
 	addIncl          []string // collected non-GLOBAL ADDINCL paths
@@ -419,9 +500,41 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 
 			d.moduleStmt = v
 		case *SrcsStmt:
-			d.srcs = append(d.srcs, v.Sources...)
+			// M3: SRCS(GLOBAL foo.cpp) uses GLOBAL as a per-source
+			// modifier meaning the source's symbols are exported globally
+			// (equivalent to GLOBAL_SRCS). PR-41+ upstream introduced
+			// this inline variant. Strip GLOBAL tokens and route the
+			// following sources to d.globalSrcs (PR-M3-A: treat the
+			// same as regular srcs since EmitARGlobal handles global
+			// archives; the correct routing matches GLOBAL_SRCS).
+			globalNext := false
+
+			for _, src := range v.Sources {
+				if src == "GLOBAL" {
+					globalNext = true
+
+					continue
+				}
+
+				if globalNext {
+					d.globalSrcs = append(d.globalSrcs, src)
+					globalNext = false
+				} else {
+					d.srcs = append(d.srcs, src)
+				}
+			}
 		case *PeerdirStmt:
-			d.peerdirs = append(d.peerdirs, v.Paths...)
+			for _, p := range v.Paths {
+				// Skip unexpanded variable references (e.g. ${STUB_PEERDIRS}).
+				// These appear in some ya.make files as SET-driven optional peerdirs
+				// that resolve to empty in the standard open-source build. The walker
+				// has no SET evaluator, so variable-ref paths would cause a
+				// "no such file" failure; skipping them is the correct M3 behaviour.
+				if strings.Contains(p, "${") {
+					continue
+				}
+				d.peerdirs = append(d.peerdirs, p)
+			}
 		case *SetStmt:
 			// SET is parsed but PR-25 has no evaluator. The taken
 			// IF branches above already flattened any conditional
@@ -527,10 +640,16 @@ func applyUnknownStmt(v *UnknownStmt, d *moduleData) {
 		// branch; without this hook yasm pulls musl/full and the
 		// resulting cross-PROGRAM cycle (yasm → musl/full →
 		// asmlib's .asm sources → yasm) blows the cycle counter.
-		// All other ENABLE(...) names stay metadata-only.
+		// PR-M3-A: track ENABLE(PYBUILD_NO_PYC) so emitPySrcs
+		// suppresses yapyc3 node emission for modules like
+		// contrib/tools/python3/lib2/py that declare all Python
+		// sources but do not want .pyc/.yapyc3 files generated.
 		for _, a := range v.Args {
 			if a == "MUSL_LITE" {
 				d.muslLite = true
+			}
+			if a == "PYBUILD_NO_PYC" {
+				d.pyBuildNoPYC = true
 			}
 		}
 	case "SRC":
@@ -595,6 +714,29 @@ func applyUnknownStmt(v *UnknownStmt, d *moduleData) {
 		// owning module's `genModule` call. Only `contrib/libs/musl/
 		// include` declares this in M2 (`LD_PLUGIN(musl.py)`).
 		d.ldPlugins = append(d.ldPlugins, v.Args...)
+	case "USE_PYTHON3":
+		// M3: USE_PYTHON3() adds implicit PEERDIRs to the Python 3 runtime
+		// library (contrib/tools/python3) and stdlib (contrib/tools/python3/Lib).
+		// In the real Arcadia build system, USE_PYTHON3() is a conf macro that
+		// sets PEERDIR+=${PYTHON3_TOOL_PEERDIR} (= contrib/tools/python3) and
+		// PEERDIR+=${PYTHON3_TOOL_PEERDIR}/Lib (= contrib/tools/python3/Lib).
+		// The walker does not evaluate conf macros, so we hardcode the
+		// two peers here. Without this, devtools/ymake/plugins/pybridge
+		// (which calls USE_PYTHON3()) would not walk the Python3 closure
+		// and ~3200 nodes would be missing from the M3 graph.
+		d.peerdirs = append(d.peerdirs, "contrib/tools/python3", "contrib/tools/python3/Lib")
+	case "PY_SRCS":
+		// PR-M3-A: collect PY_SRCS python source files into d.pySrcs.
+		// PY_SRCS accepts an optional leading TOP_LEVEL modifier (which
+		// affects the Python module name but not the generated file path
+		// in our emitter — both paths use <modulePath>/<srcRel>). Strip
+		// TOP_LEVEL and record the remaining filenames.
+		for _, a := range v.Args {
+			if a == "TOP_LEVEL" {
+				continue
+			}
+			d.pySrcs = append(d.pySrcs, a)
+		}
 	default:
 		if _, ok := whitelistedMetadataMacros[v.Name]; !ok {
 			ThrowFmt("gen: PR-25 does not yet support macro %q (extend whitelistedMetadataMacros or add a typed Stmt)", v.Name)
@@ -665,6 +807,26 @@ func applyAllocatorStmt(v *UnknownStmt, d *moduleData) {
 	// REF order for ragel6's ALLOCATOR(MIM) case.
 	d.hadAllocator = true
 	d.allocatorName = name
+}
+
+// isMultimoduleLibraryType returns true for module-declaration names that
+// are NOT "LIBRARY" or "PROGRAM" but are treated as LIBRARY-shaped stubs
+// in PR-M3-A. These include Python-binding native libraries, Python
+// libraries, and proto libraries. Their C/C++ sources (when present) are
+// compiled as normal LIBRARY sources; their non-C sources (*.py, *.proto)
+// are skipped (header-only path). PR-M3-B..E introduce real emitters for
+// the PY/PB/PR node kinds.
+func isMultimoduleLibraryType(name string) bool {
+	switch name {
+	case "PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",
+		"PY3_PROGRAM_BIN", "PY2_PROGRAM", "PY3_PROGRAM",
+		"PROTO_LIBRARY",
+		"DLL", "SO_PROGRAM",
+		"PACKAGE", "UNION", "RESOURCES_LIBRARY":
+		return true
+	}
+
+	return false
 }
 
 // buildIfEnv constructs the per-instance bound-variable environment
@@ -1373,7 +1535,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path)
 	}
 
-	if d.moduleStmt.Name != "LIBRARY" && d.moduleStmt.Name != "PROGRAM" {
+	if d.moduleStmt.Name != "LIBRARY" && d.moduleStmt.Name != "PROGRAM" && !isMultimoduleLibraryType(d.moduleStmt.Name) {
 		ThrowFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path, d.moduleStmt.Name)
 	}
 
@@ -1390,9 +1552,17 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// callers handle by skipping the archive-dep wiring. PROGRAMs
 	// with zero compilable sources remain a hard error.
 	if !hasCompilableSource(d) {
-		if d.moduleStmt.Name == "PROGRAM" {
+		if d.moduleStmt.Name == "PROGRAM" && !hasSkippedSource(d) {
 			ThrowFmt("gen: %s has no compilable sources (after IF/header filter)", instance.Path)
 		}
+
+		// PROGRAMs whose only sources are known-deferred kinds (e.g.
+		// .rl ragel5 inputs whose R5 emitter lands in PR-M3-C) are
+		// treated as header-only stubs in PR-M3-A rather than a hard
+		// error. The PROGRAM LD node is intentionally not emitted here;
+		// PR-M3-C closes the gap when EmitR5 / EmitPB / EmitEN are
+		// implemented. Multimodule library types (PROTO_LIBRARY etc.)
+		// also reach this branch and are likewise header-only for now.
 
 		// Header-only LIBRARYs may declare ADDINCL(GLOBAL ...) /
 		// CFLAGS(GLOBAL ...) / CXXFLAGS(GLOBAL ...) / CONLYFLAGS(GLOBAL
@@ -1421,6 +1591,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// shape; the source/dest are anchored under instance.Path.
 		ownLDPluginRefs, ownLDPluginPaths := emitOwnLDPlugins(ctx, instance, d.ldPlugins)
 		ldPluginRefs, ldPluginPaths := mergeLDPlugins(ownLDPluginRefs, ownLDPluginPaths, peerContribs.ldPluginRefs, peerContribs.ldPluginPaths)
+
+		// PR-M3-A: emit yapyc3 PY nodes for PY_SRCS() declarations.
+		// PY3_LIBRARY / PY23_LIBRARY modules often have only PY_SRCS
+		// (no compilable C/C++ sources) so they reach the header-only
+		// branch; their Python sources still require PY node emission.
+		emitPySrcs(ctx, instance, d)
 
 		result := &moduleEmitResult{
 			headerOnly:              true,
@@ -2398,6 +2574,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	_ = peerArchiveRefs // retained as a loop accumulator for the PROGRAM LD branch above; intentionally unused for the LIBRARY AR.
 	arPath := "$(BUILD_ROOT)/" + instance.Path + "/" + ArchiveName(instance.Path)
 
+	// PR-M3-A: emit yapyc3 PY nodes for PY_SRCS() declarations.
+	// Modules that have both SRCS and PY_SRCS (rare but valid) get CC/AR
+	// nodes from the SRCS path above AND yapyc3 nodes from PY_SRCS here.
+	emitPySrcs(ctx, instance, d)
+
 	result := &moduleEmitResult{
 		ARRef:                   arRef,
 		ARPath:                  arPath,
@@ -2761,6 +2942,213 @@ func isHeaderSource(srcRel string) bool {
 	return strings.HasSuffix(srcRel, ".h") || strings.HasSuffix(srcRel, ".hpp")
 }
 
+// isSkippedSource reports whether `srcRel` is a known deferred source kind
+// that the PR-M3-A emitter does not yet handle. These sources are silently
+// skipped (like headers) rather than throwing "unsupported extension".
+// The corresponding emitters land in PR-M3-B..E:
+//   - .rl     → R5 (ragel5 two-step; PR-M3-C)
+//   - .proto  → PB (protobuf compiler; PR-M3-B)
+//   - .ev     → EV (event compiler via event2cpp; PR-M3-D)
+//   - .py     → PY node via runtime library (PR-M3-E)
+//   - .cpp.in → CF template source; code-generator fills in values at build
+//               time (e.g. library/cpp/build_info); PR-M3-D.
+//   - .c.in   → C template variant of the above.
+//   - .g4     → ANTLR4 grammar; processed by RUN_ANTLR4_CPP; PR-M3-D.
+func isSkippedSource(srcRel string) bool {
+	return strings.HasSuffix(srcRel, ".rl") ||
+		strings.HasSuffix(srcRel, ".proto") ||
+		strings.HasSuffix(srcRel, ".ev") ||
+		strings.HasSuffix(srcRel, ".py") ||
+		strings.HasSuffix(srcRel, ".cpp.in") ||
+		strings.HasSuffix(srcRel, ".c.in") ||
+		strings.HasSuffix(srcRel, ".g4")
+}
+
+// hasSkippedSource reports whether d contains at least one source that is
+// known-deferred (isSkippedSource). Used to distinguish PROGRAMs with
+// deferred-only sources (graceful stub) from PROGRAMs with truly empty
+// source sets (hard error).
+func hasSkippedSource(d *moduleData) bool {
+	for _, s := range d.srcs {
+		if isSkippedSource(s) {
+			return true
+		}
+	}
+
+	for _, s := range d.globalSrcs {
+		if isSkippedSource(s) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// emitPySrcs emits one PY yapyc3 node per `.py` entry in d.pySrcs.
+// This is the PR-M3-A implementation of the PY_SRCS emitter.
+//
+// Each node compiles `<instance.Path>/<srcRel>` to a `.yapyc3` file
+// using the host `tools/py3cc/bin` and `tools/py3cc/slow` binaries.
+// The two py3cc binaries are walked as host tools (x86_64); the
+// resulting LD NodeRefs are threaded into each yapyc3 node's DepRefs
+// so the graph captures the host-tool dependency.
+//
+// Output suffix rule (empirical, from sg2.json):
+//   - flat source (no `/` in srcRel): `$(BUILD_ROOT)/<path>.py.yapyc3`
+//   - subdir source (has `/` in srcRel): `$(BUILD_ROOT)/<path>.py.3kp2.yapyc3`
+//
+// cmd_args format (6 args):
+//   [py3cc_binary, --slow-py3cc, slow_py3cc_binary,
+//    <modulePath>/<srcRel>-, $(SOURCE_ROOT)/<modulePath>/<srcRel>,
+//    $(BUILD_ROOT)/<output>]
+//
+// inputs: [py3cc_binary, slow_py3cc_binary, $(SOURCE_ROOT)/<src>]
+//
+// The function tolerates a host walk failure for tools/py3cc: if the
+// binary walk throws a ParseError the py3cc LD refs remain zero (the
+// dep edges are absent) but yapyc3 nodes are still emitted with the
+// canonical binary paths in cmd_args (matching the reference shape).
+func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
+	if len(d.pySrcs) == 0 {
+		return
+	}
+
+	// ENABLE(PYBUILD_NO_PYC) suppresses yapyc3 generation. Modules like
+	// contrib/tools/python3/lib2/py declare all Python sources but set
+	// this flag to prevent .pyc/.yapyc3 files from being emitted —
+	// they embed the sources via RESOURCE/objcopy instead.
+	if d.pyBuildNoPYC {
+		return
+	}
+
+	// Walk tools/py3cc/bin and tools/py3cc/slow as HOST tools to get
+	// their LD NodeRefs. Both are PROGRAM modules on x86_64.
+	const (
+		py3ccBinPath  = "tools/py3cc/bin"
+		py3ccSlowPath = "tools/py3cc/slow"
+	)
+
+	// Canonical binary paths ($(BUILD_ROOT)-rooted) used in cmd_args
+	// and inputs when the host walk succeeds or as fallbacks when it fails.
+	const (
+		py3ccBinaryCanonical     = "$(BUILD_ROOT)/tools/py3cc/py3cc"
+		py3ccSlowBinaryCanonical = "$(BUILD_ROOT)/tools/py3cc/slow/py3cc"
+	)
+
+	var (
+		py3ccLDRef     NodeRef
+		py3ccSlowLDRef NodeRef
+		py3ccBinary    = py3ccBinaryCanonical
+		py3ccSlowBin   = py3ccSlowBinaryCanonical
+	)
+
+	// Walk tools/py3cc/bin (the main py3cc binary).
+	py3ccHostInst := instance.WithHost(ctx.cfg)
+	py3ccHostInst.Path = py3ccBinPath
+	py3ccHostInst.Flags = inferFlagsFromPath(py3ccBinPath, true)
+
+	if exc := Try(func() {
+		result := genModule(ctx, py3ccHostInst)
+		py3ccLDRef = result.LDRef
+		py3ccBinary = result.LDPath
+	}); exc != nil {
+		var pe *ParseError
+		if !errors.As(exc.AsError(), &pe) {
+			panic(exc)
+		}
+		// Leave zero ref; py3ccBinary stays at canonical fallback.
+	}
+
+	// Walk tools/py3cc/slow (the slow-py3cc binary). The slow directory's
+	// ya.make includes bin/ya.make so it compiles the same source; it is a
+	// separate PROGRAM node with a different output path.
+	py3ccSlowHostInst := instance.WithHost(ctx.cfg)
+	py3ccSlowHostInst.Path = py3ccSlowPath
+	py3ccSlowHostInst.Flags = inferFlagsFromPath(py3ccSlowPath, true)
+
+	if exc := Try(func() {
+		result := genModule(ctx, py3ccSlowHostInst)
+		py3ccSlowLDRef = result.LDRef
+		py3ccSlowBin = result.LDPath
+	}); exc != nil {
+		var pe *ParseError
+		if !errors.As(exc.AsError(), &pe) {
+			panic(exc)
+		}
+		// Leave zero ref; py3ccSlowBin stays at canonical fallback.
+	}
+
+	// Emit one yapyc3 PY node per .py source.
+	for _, srcRel := range d.pySrcs {
+		srcAbs := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
+
+		// The "module name" arg: <modulePath>/<srcRel>- (trailing dash).
+		moduleName := instance.Path + "/" + srcRel + "-"
+
+		// Output suffix: flat → .py.yapyc3; subdir → .py.3kp2.yapyc3.
+		var outputPath string
+		if strings.Contains(srcRel, "/") {
+			// The srcRel already ends in ".py"; insert ".3kp2" before ".yapyc3".
+			outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + ".3kp2.yapyc3"
+		} else {
+			outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + ".yapyc3"
+		}
+
+		cmdArgs := []string{
+			py3ccBinary,
+			"--slow-py3cc",
+			py3ccSlowBin,
+			moduleName,
+			srcAbs,
+			outputPath,
+		}
+
+		env := map[string]string{
+			"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+			"PYTHONHASHSEED":         "0",
+		}
+
+		node := &Node{
+			Cmds: []Cmd{
+				{
+					CmdArgs: cmdArgs,
+					Env:     env,
+				},
+			},
+			Env:     env,
+			Inputs:  []string{py3ccBinary, py3ccSlowBin, srcAbs},
+			Outputs: []string{outputPath},
+			KV: map[string]string{
+				"p":  "PY",
+				"pc": "yellow",
+			},
+			Tags: []string{},
+			TargetProperties: map[string]string{
+				"module_dir": instance.Path,
+			},
+			Platform: string(instance.Target),
+			Requirements: map[string]interface{}{
+				"cpu":     float64(1),
+				"network": "restricted",
+				"ram":     float64(32),
+			},
+		}
+
+		// Wire py3cc LD refs as deps so the graph captures host-tool
+		// dependency. Only add non-zero refs (zero ref means the host
+		// walk failed and we have no LD node to reference).
+		if py3ccLDRef != (NodeRef{}) {
+			node.DepRefs = append(node.DepRefs, py3ccLDRef)
+		}
+
+		if py3ccSlowLDRef != (NodeRef{}) {
+			node.DepRefs = append(node.DepRefs, py3ccSlowLDRef)
+		}
+
+		ctx.emit.Emit(node)
+	}
+}
+
 // emitOneSource dispatches a single source by extension. Returns
 // `(ref, outputPath, ccInputs, true)` when a node was emitted (the
 // 3rd return is the CC node's input list — primary source path
@@ -3038,6 +3426,15 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		}
 
 		return ccRef, ccOut, ccInputs, primaryCount, true
+	}
+
+	// PR-M3-A: known-deferred source kinds are silently skipped rather
+	// than throwing. Real emitters land in PR-M3-B (PB), PR-M3-C (R5),
+	// PR-M3-D (EN/EV/CF), PR-M3-E (PY). Until then, returning false
+	// means the source contributes nothing to the AR/LD node set; the
+	// module may become header-only if all its sources are deferred.
+	if isSkippedSource(srcRel) {
+		return NodeRef{}, "", nil, 0, false
 	}
 
 	ThrowFmt("gen: %s: unsupported source extension in %q", instance.Path, srcRel)

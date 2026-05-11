@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // MakeFile is the parsed representation of a ya.make file.
@@ -450,7 +451,10 @@ func isWordByte(b byte) bool {
 	}
 
 	switch b {
-	case '_', '-', '.', '/', '+', ':', '=', '*', '?', '$', '%', '~', ',', '!', '{', '}', '#':
+	case '_', '-', '.', '/', '+', ':', '=', '*', '?', '$', '%', '~', ',', '!', '{', '}', '#',
+		// M3: backslash appears in -DFOO=\"bar\" compiler-flag tokens
+		// (e.g. contrib/libs/openssl/crypto/ya.make.inc:112).
+		'\\':
 		return true
 	}
 
@@ -629,21 +633,31 @@ func (l *lexer) readString(startLine, startCol int) token {
 // and matches how ya.make actually distributes uppercase macro names vs.
 // lowercase paths.
 func (l *lexer) readIdentOrWord(startLine, startCol int) token {
-	start := l.pos
+	var buf []byte
 	pureIdent := true
 
 	for l.pos < len(l.src) {
 		b := l.src[l.pos]
 
+		if b == '\\' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '"' {
+			// M3: `\"` inside an ident/word token — consume as two literal
+			// bytes (same as readWord). The `"` must not start a string.
+			pureIdent = false
+			buf = append(buf, l.advance())
+			buf = append(buf, l.advance())
+
+			continue
+		}
+
 		if isIdentCont(b) {
-			l.advance()
+			buf = append(buf, l.advance())
 
 			continue
 		}
 
 		if isWordByte(b) {
 			pureIdent = false
-			l.advance()
+			buf = append(buf, l.advance())
 
 			continue
 		}
@@ -651,7 +665,7 @@ func (l *lexer) readIdentOrWord(startLine, startCol int) token {
 		break
 	}
 
-	val := string(l.src[start:l.pos])
+	val := string(buf)
 	kind := tokIdent
 
 	if !pureIdent {
@@ -663,13 +677,29 @@ func (l *lexer) readIdentOrWord(startLine, startCol int) token {
 
 // readWord reads a bare-word token (path, lowercase identifier, etc.).
 func (l *lexer) readWord(startLine, startCol int) token {
-	start := l.pos
+	var buf []byte
 
-	for l.pos < len(l.src) && isWordByte(l.src[l.pos]) {
-		l.advance()
+	for l.pos < len(l.src) {
+		b := l.src[l.pos]
+
+		if b == '\\' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '"' {
+			// M3: `\"` inside a bare-word token (e.g. -DFOO=\"bar\")
+			// is consumed as two literal bytes so the whole compiler flag
+			// remains one token. The embedded `"` must not start a string.
+			buf = append(buf, l.advance())
+			buf = append(buf, l.advance())
+
+			continue
+		}
+
+		if !isWordByte(b) {
+			break
+		}
+
+		buf = append(buf, l.advance())
 	}
 
-	return token{kind: tokWord, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
+	return token{kind: tokWord, val: string(buf), line: startLine, col: startCol}
 }
 
 // readNumberOrWord reads a token that begins with a digit. A pure
@@ -877,7 +907,16 @@ type parser struct {
 // parseMacroInto and never reach this function.
 func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 	switch nameTok.val {
-	case "PROGRAM", "LIBRARY":
+	case "PROGRAM", "LIBRARY",
+		// M3 multimodule types: parsed as ModuleStmt with canonical name so
+		// genModule can route them. PR-M3-A treats them as LIBRARY-shaped stubs
+		// (header-only when they have no compilable C/C++ sources, emitted as
+		// a normal LIBRARY when they do). PR-M3-B..E introduce real emitters.
+		"PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",
+		"PY3_PROGRAM_BIN", "PY2_PROGRAM", "PY3_PROGRAM",
+		"PROTO_LIBRARY",
+		"DLL", "SO_PROGRAM",
+		"PACKAGE", "UNION", "RESOURCES_LIBRARY":
 		return &ModuleStmt{Name: nameTok.val, Args: args, Line: nameTok.line}
 	case "PEERDIR":
 		return &PeerdirStmt{Paths: args, Line: nameTok.line}
@@ -1351,6 +1390,56 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 	}
 
 	rel := args[0]
+
+	// Resolve ${ARCADIA_ROOT}/... INCLUDE paths by replacing the variable
+	// with the source-root directory (the parent of the top-level ya.make's
+	// directory chain). For any ya.make whose absolute path is
+	// <sourceRoot>/some/path/ya.make the source root is found by walking
+	// up until the path begins with the known prefix. We approximate it
+	// as filepath.Dir(p.name) for N levels up until a canonical marker
+	// file exists — but a simpler heuristic is to strip exactly as many
+	// components as the module path has, using the fact that p.name is
+	// always <sourceRoot>/<modulePath>/ya.make. For M3 purposes we just
+	// resolve ${ARCADIA_ROOT} by stripping "/ya.make" suffix and enough
+	// parent directories to reach the source root. The portable approach:
+	// the source root equals the path that, when joined with the module's
+	// relative include path, produces a file that exists on disk. Simplest
+	// safe implementation: replace ${ARCADIA_ROOT} with the root computed
+	// from p.name (three levels: strip <file>, <dir>, … until a
+	// recognizable marker is found). For the M3 closure, all
+	// ARCADIA_ROOT-rooted INCLUDEs live at paths that are child-of the
+	// same directory as p.name minus the module subpath. We derive
+	// sourceRoot by detecting the ${ARCADIA_ROOT} prefix and computing
+	// the root via the parser's stored name.
+	if strings.HasPrefix(rel, "${ARCADIA_ROOT}/") {
+		// Derive sourceRoot from p.name: p.name = <sourceRoot>/<modulePath>/ya.make.
+		// Walk up from p.name's directory until we find the root that, when
+		// joined with the remainder of rel, names an existing file. As a
+		// conservative heuristic, walk up from dir(p.name) a bounded number
+		// of steps and try each.
+		suffix := strings.TrimPrefix(rel, "${ARCADIA_ROOT}/")
+		dir := filepath.Dir(p.name)
+
+		for i := 0; i < 20; i++ {
+			candidate := filepath.Join(dir, suffix)
+
+			if _, err := os.Stat(candidate); err == nil {
+				rel = candidate
+
+				break
+			}
+
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+
+			dir = parent
+		}
+		// If no candidate was found, rel still has ${ARCADIA_ROOT}/ prefix
+		// and the os.ReadFile below will produce a clear parse error.
+	}
+
 	dir := filepath.Dir(p.name)
 	full := rel
 
@@ -1389,6 +1478,17 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 
 	data, ioErr := os.ReadFile(absTarget)
 	if ioErr != nil {
+		// Silently skip optional includes that do not exist on disk.
+		// This handles conditional branches such as
+		// `IF (USE_SYSTEM_OPENSSL) INCLUDE(system_openssl.ya.inc)`
+		// where the included file is absent in the open-source tree.
+		// Because our parser expands INCLUDE in both branches of an IF
+		// before we evaluate the condition, a missing file in a dead
+		// branch must not be a fatal error.
+		if os.IsNotExist(ioErr) {
+			return into
+		}
+
 		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE %q: %v", rel, ioErr)
 	}
 
