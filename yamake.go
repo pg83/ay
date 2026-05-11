@@ -171,22 +171,37 @@ type GlobalSrcsStmt struct {
 	Line    int
 }
 
-func (*ModuleStmt) stmtMarker()     {}
-func (*PeerdirStmt) stmtMarker()    {}
-func (*SrcsStmt) stmtMarker()       {}
-func (*SetStmt) stmtMarker()        {}
-func (*EndStmt) stmtMarker()        {}
-func (*UnknownStmt) stmtMarker()    {}
-func (*IfStmt) stmtMarker()         {}
-func (*IncludeStmt) stmtMarker()    {}
-func (*JoinSrcsStmt) stmtMarker()   {}
-func (*AddInclStmt) stmtMarker()    {}
-func (*CFlagsStmt) stmtMarker()     {}
-func (*CXXFlagsStmt) stmtMarker()   {}
-func (*CONLYFlagsStmt) stmtMarker() {}
-func (*LDFlagsStmt) stmtMarker()    {}
-func (*SrcDirStmt) stmtMarker()     {}
-func (*GlobalSrcsStmt) stmtMarker() {}
+// GenerateEnumSerializationStmt represents a GENERATE_ENUM_SERIALIZATION(*) macro.
+// Variant captures which of the three macro forms was used:
+//   - "plain"       → GENERATE_ENUM_SERIALIZATION
+//   - "with_header" → GENERATE_ENUM_SERIALIZATION_WITH_HEADER
+//   - "noutf"       → GENERATE_ENUM_SERIALIZATION_NOUTF
+//
+// Header is the single argument: the header path relative to the
+// module directory (e.g. "stats_enums.h" or "config/config.h").
+type GenerateEnumSerializationStmt struct {
+	Header  string
+	Variant string // "plain" | "with_header" | "noutf"
+	Line    int
+}
+
+func (*ModuleStmt) stmtMarker()                   {}
+func (*PeerdirStmt) stmtMarker()                  {}
+func (*SrcsStmt) stmtMarker()                     {}
+func (*SetStmt) stmtMarker()                      {}
+func (*EndStmt) stmtMarker()                      {}
+func (*UnknownStmt) stmtMarker()                  {}
+func (*IfStmt) stmtMarker()                       {}
+func (*IncludeStmt) stmtMarker()                  {}
+func (*JoinSrcsStmt) stmtMarker()                 {}
+func (*AddInclStmt) stmtMarker()                  {}
+func (*CFlagsStmt) stmtMarker()                   {}
+func (*CXXFlagsStmt) stmtMarker()                 {}
+func (*CONLYFlagsStmt) stmtMarker()               {}
+func (*LDFlagsStmt) stmtMarker()                  {}
+func (*SrcDirStmt) stmtMarker()                   {}
+func (*GlobalSrcsStmt) stmtMarker()               {}
+func (*GenerateEnumSerializationStmt) stmtMarker() {}
 
 // Expr is the sealed-interface marker for IF-predicate AST nodes. The
 // evaluator lives in `macros.go:EvalCond`. PR-27 widened the ADT from
@@ -966,6 +981,24 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		return &SrcDirStmt{Dir: args[0], Line: nameTok.line}
 	case "GLOBAL_SRCS":
 		return &GlobalSrcsStmt{Sources: append([]string(nil), args...), Line: nameTok.line}
+	case "GENERATE_ENUM_SERIALIZATION":
+		if len(args) != 1 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
+		}
+
+		return &GenerateEnumSerializationStmt{Header: args[0], Variant: "plain", Line: nameTok.line}
+	case "GENERATE_ENUM_SERIALIZATION_WITH_HEADER":
+		if len(args) != 1 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION_WITH_HEADER expects exactly 1 argument (header path), got %d", len(args))
+		}
+
+		return &GenerateEnumSerializationStmt{Header: args[0], Variant: "with_header", Line: nameTok.line}
+	case "GENERATE_ENUM_SERIALIZATION_NOUTF":
+		if len(args) != 1 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION_NOUTF expects exactly 1 argument (header path), got %d", len(args))
+		}
+
+		return &GenerateEnumSerializationStmt{Header: args[0], Variant: "noutf", Line: nameTok.line}
 	default:
 		return &UnknownStmt{Name: nameTok.val, Args: args, Line: nameTok.line}
 	}
