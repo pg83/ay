@@ -252,7 +252,7 @@ func EmitLD(
 		Tags: []string{},
 		TargetProperties: map[string]string{
 			"module_dir":  binaryDir,
-			"module_lang": "cpp",
+			"module_lang": ldModuleLang(instance),
 			"module_type": "bin",
 		},
 		DepRefs: depRefs,
@@ -297,12 +297,38 @@ func LDOutputPath(instance ModuleInstance, binaryName string) string {
 // BinaryDir field on ModuleInstance (set by the RECURSE walker) would
 // replace this check; deferred to M3+.
 // TODO: remove this shim when RECURSE-driven BinaryDir lift lands in M3+.
+//
+// PR-M3-F-1: extend the table with M3-closure bin-subdir PROGRAMs that
+// declare SRCDIR(parent) so their binary lands in the parent dir, not
+// the /bin subdir that we walk.
 func ldBinaryDir(instance ModuleInstance) string {
-	if instance.Path == "contrib/tools/ragel6/bin" {
+	switch instance.Path {
+	case "contrib/tools/ragel6/bin":
 		return "contrib/tools/ragel6"
+	case "tools/py3cc/bin":
+		return "tools/py3cc"
+	case "tools/event2cpp/bin":
+		return "tools/event2cpp"
+	case "tools/rescompiler/bin":
+		return "tools/rescompiler"
+	case "tools/rescompressor/bin":
+		return "tools/rescompressor"
+	case "tools/py3cc/slow/bin":
+		return "tools/py3cc/slow"
 	}
 
 	return instance.Path
+}
+
+// ldModuleLang returns the value for the `module_lang` target_property
+// of an LD node. Python program modules (PY3_PROGRAM_BIN) emit `py3`;
+// all other PROGRAM modules emit `cpp`.
+func ldModuleLang(instance ModuleInstance) string {
+	if instance.Language == LangPy {
+		return "py3"
+	}
+
+	return "cpp"
 }
 
 // lastPathComponent returns the trailing path segment of `p`. Empty
