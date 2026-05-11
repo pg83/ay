@@ -316,6 +316,41 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	}
 }
 
+// TestArchiveName pins the ArchiveName rule for representative paths.
+// Rule: last min(3, depth) components joined with "-", prefixed "lib",
+// suffixed ".a". Sole exception: "util" → "libyutil.a".
+// Source: devtools/ymake/module_confs.cpp:48-57 (ThreeDirNames /
+// SetDefaultRealprjnameImpl with depth=2).
+func TestArchiveName(t *testing.T) {
+	cases := []struct {
+		moduleDir string
+		want      string
+	}{
+		// Special case: asymmetric "y" prefix hard-coded for util root.
+		{"util", "libyutil.a"},
+		// depth-2 path: all components used.
+		{"tools/archiver", "libtools-archiver.a"},
+		{"foo/bar", "libfoo-bar.a"},
+		// depth-1 path: sole component used.
+		{"foo", "libfoo.a"},
+		// depth-3 paths: all three components used.
+		{"build/cow/on", "libbuild-cow-on.a"},
+		{"util/charset", "libutil-charset.a"},
+		// depth-4+ paths: last 3 components (drop leading part).
+		{"contrib/libs/cxxsupp/libcxxrt", "liblibs-cxxsupp-libcxxrt.a"},
+		{"library/cpp/getopt/small", "libcpp-getopt-small.a"},
+		{"devtools/ymake/diag/common_display", "libymake-diag-common_display.a"},
+	}
+
+	for _, tc := range cases {
+		got := ArchiveName(tc.moduleDir)
+
+		if got != tc.want {
+			t.Errorf("ArchiveName(%q) = %q, want %q", tc.moduleDir, got, tc.want)
+		}
+	}
+}
+
 // TestArchiveName_AllReferenceAR asserts that ArchiveName produces
 // the correct archive base name for all 38 unique module_dirs found
 // in the reference g.json.
