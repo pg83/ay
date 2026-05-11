@@ -544,8 +544,10 @@ func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, cliDef
 
 	targetScanner := newIncludeScannerWith(sourceRoot, LoadSysInclSetFor(sourceRoot, "aarch64"), sharedPC)
 	targetScanner.codegen = targetReg
+	targetScanner.fallbackLocators = []pathLocator{codegenLocator{reg: targetReg}}
 	hostScanner := newIncludeScannerWith(sourceRoot, LoadSysInclSetFor(sourceRoot, "x86_64"), sharedPC)
 	hostScanner.codegen = hostReg
+	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
 
 	ctx := &genCtx{
 		cfg:             cfg,
@@ -2604,6 +2606,62 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// and route per-source via composeCCPaths' SRCDIR-aware composer.
 	ancestorRebase := d.srcDir != "" && d.moduleStmt.Name == "PROGRAM" && isAncestorPath(d.srcDir, instance.Path)
 
+	// PR-M3-F-7-C: emit EN nodes BEFORE the per-source CC loop so the
+	// codegen registry is populated when consumer sources scan their
+	// include closures. `stats.cpp`/`trace.cpp` in `devtools/ymake/diag`
+	// `#include <devtools/ymake/diag/stats_enums.h_serialized.h>` and the
+	// scanner now consults `IncludeScanner.codegen` (F-7-A) populated by
+	// `emitEnumSrcs` (F-7-B). If EN runs AFTER the source loop (the pre-
+	// F-7-C placement at the bottom of this branch), the registry is empty
+	// at scan time and the lookups miss. EN node emission order in the
+	// output graph does not affect L4 byte-exactness (the normalizer
+	// re-sorts by canonical UID).
+	emitEnumSrcs(ctx, instance, d, peerAddInclGlobal)
+
+	// PR-M3-F-7-C: two-pass source emission. Codegen-producing sources
+	// (.ev/.proto/.rl6/.rl/.cpp.in/.c.in) emit nodes whose outputs
+	// (`.ev.pb.h`, `.rl6.cpp`, `*.cpp`, …) consumer CCs in this same
+	// module may #include. If we processed sources in d.srcs declaration
+	// order, a consumer .cpp that precedes a codegen producer would scan
+	// its closure against an unpopulated registry — the resolveCache and
+	// subgraphCache would lock in a "not found" miss that survives even
+	// after the producer registers later. (Witnessed on devtools/ymake/
+	// diag: `display.cpp` is index 3, `trace.ev` is index 4; display.cpp's
+	// scan of trace.h → trace.ev.pb.h missed and poisoned the trace.h
+	// subgraph for every subsequent consumer.)
+	//
+	// Fix: emit codegen-producing sources FIRST (Pass A), then iterate
+	// d.srcs in declaration order (Pass B), using Pass A's cached results
+	// for codegen producers and calling emitOneSource fresh for the rest.
+	// AR member order is preserved (Pass B appends to ccRefs in d.srcs
+	// order), so the resulting AR.cmd_args remains byte-exact.
+	type srcResult struct {
+		ref          NodeRef
+		outPath      string
+		ccIns        []string
+		primaryCount int
+		ok           bool
+	}
+
+	preEmitted := make(map[string]srcResult, 4)
+
+	for _, src := range d.srcs {
+		if !isCodegenProducingSrc(src) {
+			continue
+		}
+
+		srcInputs := moduleInputs
+		if extras, ok := d.perSrcCFlags[src]; ok {
+			srcInputs.PerSourceCFlags = extras
+		}
+		if _, ok := d.flatSrcs[src]; ok {
+			srcInputs.FlatOutput = true
+		}
+
+		ref, outPath, ccIns, primaryCount, ok := emitOneSource(ctx, instance, d.srcDir, src, srcInputs, ancestorRebase)
+		preEmitted[src] = srcResult{ref: ref, outPath: outPath, ccIns: ccIns, primaryCount: primaryCount, ok: ok}
+	}
+
 	for _, src := range d.srcs {
 		// PR-35o: overlay per-source extras recorded by `SRC(...)` /
 		// `SRC_C_NO_LTO(...)` onto the module-level inputs bag for THIS
@@ -2624,7 +2682,17 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			isFlatNoLto = true
 		}
 
-		ref, outPath, ccIns, primaryCount, ok := emitOneSource(ctx, instance, d.srcDir, src, srcInputs, ancestorRebase)
+		var ref NodeRef
+		var outPath string
+		var ccIns []string
+		var primaryCount int
+		var ok bool
+
+		if pre, hadPre := preEmitted[src]; hadPre {
+			ref, outPath, ccIns, primaryCount, ok = pre.ref, pre.outPath, pre.ccIns, pre.primaryCount, pre.ok
+		} else {
+			ref, outPath, ccIns, primaryCount, ok = emitOneSource(ctx, instance, d.srcDir, src, srcInputs, ancestorRebase)
+		}
 
 		if !ok {
 			continue
@@ -2952,8 +3020,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// nodes from the SRCS path above AND yapyc3 nodes from PY_SRCS here.
 	emitPySrcs(ctx, instance, d)
 
-	// PR-M3-D: emit EN nodes for GENERATE_ENUM_SERIALIZATION(*) declarations.
-	emitEnumSrcs(ctx, instance, d, peerAddInclGlobal)
+	// PR-M3-D EN emission moved to pre-source-loop (PR-M3-F-7-C); the
+	// codegen registry must be populated before consumer CCs scan.
 
 	// PR-M3-E: emit JV, CF, BI, PR nodes declared at module level.
 	emitMiscNodes(ctx, instance, d)
@@ -3337,6 +3405,24 @@ func isSkippedSource(srcRel string) bool {
 		strings.HasSuffix(srcRel, ".ev") ||
 		strings.HasSuffix(srcRel, ".py") ||
 		strings.HasSuffix(srcRel, ".g4")
+}
+
+// isCodegenProducingSrc reports whether `srcRel` is a source extension whose
+// emitOneSource branch emits a codegen node (PB/EV/R6/R5/CF) whose outputs go
+// into the per-scanner CodegenRegistry (F-7-B). Consumer sources in the SAME
+// module may #include those outputs, so the two-pass loop in the
+// LIBRARY-with-sources branch runs these first to populate the registry
+// before any consumer CC scans its closure (F-7-C).
+//
+// `.proto` is not included here: the .proto path runs only via emitProtoSrcs
+// in the PROTO_LIBRARY header-only branch (those modules emit codegen ahead
+// of any consumer module's CC walk through the normal peer-walk ordering).
+func isCodegenProducingSrc(srcRel string) bool {
+	return strings.HasSuffix(srcRel, ".ev") ||
+		strings.HasSuffix(srcRel, ".rl6") ||
+		strings.HasSuffix(srcRel, ".rl") ||
+		strings.HasSuffix(srcRel, ".cpp.in") ||
+		strings.HasSuffix(srcRel, ".c.in")
 }
 
 // hasSkippedSource reports whether d contains at least one source that is
