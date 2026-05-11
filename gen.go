@@ -230,6 +230,118 @@ type genCtx struct {
 	// fire from inside `emitOneSource`, after the seed module's peer
 	// walk has run), so the cached entry carries the target platform.
 	ldPluginCPCache map[string]NodeRef
+
+	// PR-M3-perf-E: scanCtx (per-ctxHash resolve/subgraph cache holder)
+	// lifecycle policy. Two variants benchmarked:
+	//
+	//   - "local"    — one scanCtx per (genModule, scanner, ctxHash).
+	//                  Pushed at genModule entry, popped at exit. No
+	//                  cross-module reuse. localScanCtxStack is the
+	//                  per-genModule cache map stack.
+	//   - "interned" — one scanCtx per (scanner, ctxHash) for the whole
+	//                  Gen call. Lives in internedScanCtx. Cross-module
+	//                  reuse when ctxHash matches.
+	//
+	// The flag is plumbed from the CLI `--scan-ctx-mode` (main.go).
+	// Default = "interned" (winner of the bake-off; see commit message).
+	scanCtxMode        string
+	localScanCtxStack  []map[scanCtxCacheKey]*scanCtx
+	internedScanCtx    map[scanCtxCacheKey]*scanCtx
+	// PR-M3-perf-E debug counters (printed when YATOOL_SCANCTX_STATS=1).
+	// scanCtxAllocs counts every fresh scanCtx allocation across the Gen;
+	// scanCtxPeak is max bucket size observed at any get-and-store moment.
+	// The local-mode peak corresponds to the deepest in-flight genModule
+	// frame's bucket size; the interned-mode peak equals the total
+	// scanCtx count since the bucket never shrinks. The counters are
+	// dormant unless the env var is set.
+	scanCtxAllocs int
+	scanCtxPeak   int
+}
+
+// scanCtxCacheKey identifies a scanCtx by the (scanner pointer, ctxHash)
+// pair. Pointer identity disambiguates target vs host scanners; ctxHash
+// disambiguates module-config equivalence classes within one scanner.
+//
+// PR-M3-perf-E.
+type scanCtxCacheKey struct {
+	scanner *IncludeScanner
+	ctxHash uint64
+}
+
+// getScanCtx returns a `*scanCtx` for the (scanner, cfg) pair. Lookup
+// dispatches on `ctx.scanCtxMode`:
+//
+//   - "local": the per-genModule cache map (top of localScanCtxStack);
+//     a miss allocates a fresh scanCtx and stores it. When the genModule
+//     pops the stack, every scanCtx allocated under that frame becomes
+//     unreachable.
+//   - "interned": the genCtx-wide internedScanCtx map; the scanCtx
+//     persists across modules and accumulates resolveCache / subgraphCache
+//     entries that any later matching ctxHash benefits from.
+//
+// PR-M3-perf-E.
+func (ctx *genCtx) getScanCtx(scanner *IncludeScanner, cfg ScanContext) *scanCtx {
+	ctxHash := hashScanContext(&cfg)
+	key := scanCtxCacheKey{scanner: scanner, ctxHash: ctxHash}
+
+	var bucket map[scanCtxCacheKey]*scanCtx
+
+	if ctx.scanCtxMode == "interned" {
+		bucket = ctx.internedScanCtx
+	} else {
+		// "local" — top of stack. The stack is always non-empty between
+		// genModule entry and exit; an empty stack here is a programming
+		// error.
+		if len(ctx.localScanCtxStack) == 0 {
+			ThrowFmt("genCtx.getScanCtx: localScanCtxStack empty (scanCtx requested outside genModule frame)")
+		}
+
+		bucket = ctx.localScanCtxStack[len(ctx.localScanCtxStack)-1]
+	}
+
+	if existing, ok := bucket[key]; ok {
+		return existing
+	}
+
+	sc := scanner.NewScanCtx(cfg)
+	bucket[key] = sc
+
+	ctx.scanCtxAllocs++
+
+	if len(bucket) > ctx.scanCtxPeak {
+		ctx.scanCtxPeak = len(bucket)
+	}
+
+	return sc
+}
+
+// pushLocalScanCtx pushes a fresh empty scanCtx cache map onto the
+// per-genModule stack. Called at genModule entry; the matching pop runs
+// in a deferred cleanup. No-op in "interned" mode.
+//
+// PR-M3-perf-E.
+func (ctx *genCtx) pushLocalScanCtx() {
+	if ctx.scanCtxMode != "local" {
+		return
+	}
+
+	ctx.localScanCtxStack = append(ctx.localScanCtxStack, make(map[scanCtxCacheKey]*scanCtx, 4))
+}
+
+// popLocalScanCtx pops the top entry from the stack. No-op in "interned"
+// mode.
+//
+// PR-M3-perf-E.
+func (ctx *genCtx) popLocalScanCtx() {
+	if ctx.scanCtxMode != "local" {
+		return
+	}
+
+	if len(ctx.localScanCtxStack) == 0 {
+		ThrowFmt("genCtx.popLocalScanCtx: stack underflow")
+	}
+
+	ctx.localScanCtxStack = ctx.localScanCtxStack[:len(ctx.localScanCtxStack)-1]
 }
 
 // asmlibYasmModules lists module paths whose host `.S`/`.s` sources
@@ -396,6 +508,23 @@ func Gen(cfg PlatformConfig, sourceRoot string, targetDir string) *Graph {
 // non-nil empty map to opt out of all defaults (useful for test
 // fixtures that pin the no-defaults shape).
 func GenWith(cfg PlatformConfig, sourceRoot string, targetDir string, cliDefines map[string]string) *Graph {
+	return GenWithMode(cfg, sourceRoot, targetDir, cliDefines, defaultScanCtxMode)
+}
+
+// defaultScanCtxMode is the per-Gen scanCtx lifecycle policy used when
+// no explicit mode is passed (e.g. by tests, by the Gen wrapper). The
+// PR-M3-perf-E bake-off selected "interned" as the winner (~6% wall-time
+// reduction over "local"); the constant is the single source of truth
+// for the production default.
+const defaultScanCtxMode = "interned"
+
+// GenWithMode is GenWith plus the scanCtxMode dispatch knob (PR-M3-perf-E).
+// `mode` must be either "local" or "interned"; anything else throws.
+func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, cliDefines map[string]string, mode string) *Graph {
+	if mode != "local" && mode != "interned" {
+		ThrowFmt("gen: --scan-ctx-mode must be \"local\" or \"interned\", got %q", mode)
+	}
+
 	if cliDefines == nil {
 		cliDefines = map[string]string{"MUSL": "yes"}
 	}
@@ -422,7 +551,16 @@ func GenWith(cfg PlatformConfig, sourceRoot string, targetDir string, cliDefines
 		cliDefines:      cliDefines,
 		enOutputs:       make(map[string]NodeRef),
 		ldPluginCPCache: make(map[string]NodeRef),
+		scanCtxMode:     mode,
+		internedScanCtx: make(map[scanCtxCacheKey]*scanCtx, 64),
 	}
+
+	// PR-M3-perf-E: seed the local-mode stack with one root frame so the
+	// top-level genModule call (and any peer-walk recursion outside its
+	// own push/pop) has a non-empty stack to address. The frame is never
+	// popped; it serves as the catch-all in case getScanCtx is invoked
+	// from a call site we did not augment with push/pop.
+	ctx.localScanCtxStack = []map[scanCtxCacheKey]*scanCtx{make(map[scanCtxCacheKey]*scanCtx, 4)}
 
 	seed := ModuleInstance{
 		Path:     filepath.Clean(targetDir),
@@ -434,6 +572,29 @@ func GenWith(cfg PlatformConfig, sourceRoot string, targetDir string, cliDefines
 	root := genModule(ctx, seed)
 
 	ctx.emit.Result(root.LDRef)
+
+	if os.Getenv("YATOOL_SCANCTX_STATS") == "1" {
+		fmt.Fprintf(os.Stderr, "scanctx-stats: mode=%s allocs=%d peak-in-flight=%d interned-final=%d\n",
+			ctx.scanCtxMode, ctx.scanCtxAllocs, ctx.scanCtxPeak, len(ctx.internedScanCtx))
+
+		// Per-scanCtx populated cache sizes — only valid in interned mode
+		// (in local mode the buckets are emptied as frames pop).
+		if ctx.scanCtxMode == "interned" {
+			var totalResolve, totalSubgraph, maxResolve, maxSubgraph int
+			for _, sc := range ctx.internedScanCtx {
+				totalResolve += len(sc.resolveCache)
+				totalSubgraph += len(sc.subgraphCache)
+				if len(sc.resolveCache) > maxResolve {
+					maxResolve = len(sc.resolveCache)
+				}
+				if len(sc.subgraphCache) > maxSubgraph {
+					maxSubgraph = len(sc.subgraphCache)
+				}
+			}
+			fmt.Fprintf(os.Stderr, "scanctx-stats: resolveCache total=%d max-per-ctx=%d  subgraphCache total=%d max-per-ctx=%d\n",
+				totalResolve, maxResolve, totalSubgraph, maxSubgraph)
+		}
+	}
 
 	return Finalize(ctx.emit.(*BufferedEmitter))
 }
@@ -1614,6 +1775,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if existing, ok := ctx.memo[instance]; ok {
 		return existing
 	}
+
+	// PR-M3-perf-E: in "local" mode, push a fresh scanCtx cache map for
+	// this module emission. Every call to `scanIncludesForSource` /
+	// `joinSrcsIncludeClosure` inside this genModule frame goes through
+	// `getScanCtx`, which addresses the top of the stack; on pop the
+	// scanCtxes allocated under this frame become unreachable. In
+	// "interned" mode the pair is a no-op (the genCtx-wide map is used).
+	ctx.pushLocalScanCtx()
+	defer ctx.popLocalScanCtx()
 
 	// YATOOL_TRACE=1: print a trace line on every first-visit so the caller
 	// chain is visible in stderr. Format: indent·<path>@<platform> (caller: <parent>)
@@ -4068,17 +4238,32 @@ func joinSrcsIncludeClosure(ctx *genCtx, srcInstance ModuleInstance, sources []s
 			}
 		}
 
-		scanCtx := ScanContext{
+		cfg := ScanContext{
 			SourceRel:       srcRelOnDisk,
 			OwnAddIncl:      in.AddIncl,
 			PeerAddInclSet:  in.PeerAddInclGlobal,
 			BaseSearchPaths: includeScannerBasePaths(srcInstance),
 		}
-		ctxHash := hashScanContext(&scanCtx)
 
-		srcAbs := scanner.sourceRoot + "/" + scanCtx.SourceRel
+		// PR-M3-perf-E: scanCtx dispatch — local vs interned (see
+		// genCtx.getScanCtx). Within this join-srcs loop every source's
+		// cfg differs only in SourceRel; PR-M3-perf-E ignored that
+		// observation in favour of routing through getScanCtx anyway,
+		// which yields one scanCtx per unique (ctxHash) and lets
+		// resolveCache / subgraphCache entries from earlier sources serve
+		// later sources at the same ctxHash.
+		sc := ctx.getScanCtx(scanner, cfg)
+
+		// `WalkSource` rewrites `sc.cfg.SourceRel` to the current
+		// source-rel so sysinclSourceLookup keys on the right path. We
+		// must therefore use the dfs entry that ALSO sets it, OR set it
+		// inline before dfs. dfs reads sc.cfg.SourceRel for srcClassHash,
+		// so set it here before invoking dfs against the shared visited+order.
+		sc.cfg.SourceRel = srcRelOnDisk
+
+		srcAbs := scanner.sourceRoot + "/" + srcRelOnDisk
 		srcAbsSet[srcAbs] = struct{}{}
-		scanner.dfs(srcAbs, &scanCtx, ctxHash, visited, &order)
+		sc.dfs(srcAbs, visited, &order)
 	}
 
 	if len(order) == 0 {
@@ -4196,14 +4381,19 @@ func scanIncludesForSource(ctx *genCtx, srcInstance ModuleInstance, srcRel strin
 		}
 	}
 
-	scanCtx := ScanContext{
+	cfg := ScanContext{
 		SourceRel:       srcRelOnDisk,
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
 		BaseSearchPaths: includeScannerBasePaths(srcInstance),
 	}
 
-	return scanner.WalkClosure(scanCtx)
+	// PR-M3-perf-E: route through the scanCtx dispatcher rather than
+	// allocating a fresh ScanCtx per call. The dispatcher consults
+	// the per-genModule (local) or genCtx-wide (interned) cache.
+	sc := ctx.getScanCtx(scanner, cfg)
+
+	return sc.WalkSource(cfg.SourceRel)
 }
 
 // includeScannerBasePaths returns the implicit include search path

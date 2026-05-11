@@ -168,18 +168,7 @@ type IncludeScanner struct {
 
 	// pc holds the parse-level caches shared between target and host
 	// scanners (PR-M3-perf-B). Never nil.
-	pc           *sharedParseCache
-	// resolveCache: 2-level by ctxHash. The outer map is keyed by
-	// uint64 ctxHash (Go's fast64 map path); the inner is keyed by
-	// `resolveInnerKey`. Within one WalkClosure, all `resolve()` calls
-	// share `ctxHash`, so the inner map is fetched once via
-	// `resolveBucketFor` and consulted directly thereafter — the hot
-	// path skips the outer lookup, mirroring the
-	// `subgraphByClass`/`activeBucket` design.
-	resolveCache         map[uint64]map[resolveInnerKey][]string
-	activeResolveBucket  map[resolveInnerKey][]string
-	activeResolveCtxHash uint64
-	activeResolveSet     bool
+	pc *sharedParseCache
 	// anySrcView is a PerSourceView prepared with an empty source path.
 	// Its `includerKeyed` slice is the canonical includer-keyed record
 	// list (every view derives the same slice); the `activeSourceKeyed`
@@ -212,6 +201,14 @@ type IncludeScanner struct {
 	// were paying per call before pooling.
 	seenPool sync.Pool // *map[string]struct{}
 
+	// walkClosureCache interns scanCtx instances created via the
+	// top-level WalkClosure entry (the test-facing path). Per-ctxHash
+	// scanCtx reuse here matches the pre-PR-M3-perf-E semantics where
+	// repeat WalkClosure calls on the same ctxHash hit the same resolve
+	// / subgraph caches. Production callers (gen.go) intern through
+	// genCtx.getScanCtx instead; this map is independent.
+	walkClosureCache map[uint64]*scanCtx
+
 	// emittedRelCache memoises the per-output `$(SOURCE_ROOT)/<rel>`
 	// string built by WalkClosure for every header in the closure. The
 	// same header appears in many CC nodes' closures (libcxx's
@@ -222,78 +219,77 @@ type IncludeScanner struct {
 	// PR-34n: the dedicated emittedRelMu is gone (single-goroutine).
 	emittedRelCache map[string]string
 
-	// subgraphByClass replaces the prior `subgraphCache` /
-	// `subgraphTaintedKnown` / `subgraphInProgress` composite-keyed maps
-	// (PR-M3-perf-D). The 2-level layout partitions all three caches by
-	// `classKey = (ctxHash, srcClassHash)` so the per-header probe (the
-	// 1.67M-call hot path) becomes a string-keyed lookup on the inner
-	// `classBucket.cache` map — Go's optimised `mapaccess2_faststr`
-	// path — instead of a struct-keyed lookup with composite-key
-	// hashing.
-	//
-	// Each inner `classBucket.cache` maps an absolute header path to
-	// the canonical DFS-discovery order subgraph that an uncached DFS
-	// starting at that header with an empty visited set would emit
-	// (root included). `tainted` records headers whose subgraph hit a
-	// cycle on first attempt (cannot be cached because the result
-	// depends on ancestor stack); `inProgress` is the in-flight
-	// sentinel used to detect back-edges during recursion.
-	//
-	// On a cache hit, dfs iterates the cached list and merges entries
-	// into the caller's visited+order, skipping already-visited paths.
-	// This preserves uncached-DFS semantics: the cached list IS the
-	// canonical first-visit order, and skipping pre-visited entries
-	// during merge yields the same final order as uncached DFS would
-	// have produced from the partially-populated visited state. Cached
-	// slices are immutable strings — callers iterate, never mutate.
-	//
-	// Header-graph reuse drives the hit rate: libcxx's __config.h is
-	// reached by ~3000 CC closures across the tools/archiver run, so
-	// (libcxx/__config, classKey_X) computes once and serves every
-	// later visit in that equivalence class.
-	subgraphByClass map[classKey]*classBucket
-
-	// activeBucket caches the *classBucket for the current WalkClosure
-	// invocation (set in WalkClosure / joinSrcsIncludeClosure-style
-	// entry points) so the hot `subgraph()` path skips the outer
-	// `bucketFor` map lookup per recursive call. Single-goroutine; cleared
-	// implicitly when the next WalkClosure sets a different one.
-	activeBucket    *classBucket
-	activeBucketKey classKey
-
 	// subgraphHits/subgraphMisses count cache traffic for verification.
 	// Plain uint64; single-goroutine like the rest of scanner.go.
+	// PR-M3-perf-E: moved from per-scanCtx into the scanner so stats
+	// aggregate across every scanCtx the scanner produces.
 	subgraphHits    uint64
 	subgraphMisses  uint64
 	subgraphTainted uint64
 	statsCallCount  uint64
 }
 
-// classKey is the (ctxHash, srcClassHash) pair that partitions the
-// subgraph cache. PR-M3-perf-D: the 2-level cache replaces the prior
-// composite-keyed `map[subgraphKey][]string` with
-// `map[classKey]*classBucket` so the hot per-header lookup becomes a
-// string-keyed map access (Go's optimised `mapaccess2_faststr`) instead
-// of a struct-keyed access (`mapaccess2` with composite-key hashing).
-// The (ctxHash, srcClassHash) outer cardinality stays small (~104 for
-// the M3 closure) so the outer lookup is cheap; the inner string-keyed
-// map serves the 1.67M per-run probes the previous structure dominated
-// the CPU profile with (~30% of GenWith wall time pre-refactor).
-type classKey struct {
-	ctxHash      uint64
+// resolveInnerKey is the per-scanCtx resolve cache key. `ctxHash` is NOT
+// part of the key — the scanCtx itself is bound to a single ctxHash, so
+// every entry in a scanCtx.resolveCache is implicitly that-ctxHash-only.
+//
+// PR-M3-perf-E: replaces the scanner-wide `resolveKey{ctxHash, includer,
+// target, kind, next}` map. Hoisting ctxHash out of every lookup makes
+// each cache probe a 3-field-struct hash instead of a 5-field one and
+// (more importantly) keeps the scanCtx fully self-contained so its caches
+// can be discarded when the scanCtx is dropped.
+type resolveInnerKey struct {
+	includer string
+	target   string
+	kind     includeKind
+	next     bool
+}
+
+// subgraphInnerKey is the per-scanCtx subgraph cache key. `ctxHash` is
+// implicit in the scanCtx; only `(abs, srcClassHash)` remain. Note that
+// srcClassHash STAYS in the key because a single scanCtx can serve
+// many sources (different srcClass equivalence classes) — the
+// resolve/search-path resolution is source-independent but the sysincl
+// branches are source-dependent, so subgraphs differ across srcClasses
+// within a single ctxHash.
+//
+// PR-M3-perf-E: replaces the scanner-wide `subgraphKey{abs, ctxHash,
+// srcClassHash}` map.
+type subgraphInnerKey struct {
+	abs          string
 	srcClassHash uint64
 }
 
-// classBucket holds the per-class cache: the canonical subgraph map
-// (abs → first-visit DFS order), the tainted-known set, and the
-// in-progress sentinel set. The three maps were previously keyed by
-// `subgraphKey`; collapsing them into a per-class bucket eliminates the
-// composite-key hash on every probe and pulls all three lookups for a
-// given (abs, classKey) onto the same cache line.
-type classBucket struct {
-	cache      map[string][]string
-	tainted    map[string]struct{}
-	inProgress map[string]struct{}
+// scanCtx is the per-(ctxHash) runtime context for include resolution.
+// It groups every cache whose key contains ctxHash, materialising the
+// "ctxHash-stable region" that the scanner-wide caches expressed only
+// implicitly. The IncludeScanner stays as the per-architecture sysincl/
+// parse/exists/source-keyed-view holder; scanCtx is allocated per
+// caller-provided ScanContext and discarded when the caller is done
+// with that context.
+//
+// Two lifecycle policies coexist (see gen.go):
+//
+//   - "local" mode: each genModule pushes a fresh scanCtx cache map.
+//     scanCtx instances live for the module emission only.
+//   - "interned" mode: genCtx owns a single map keyed by
+//     (scanner, ctxHash); scanCtx instances live for the whole Gen call
+//     and are shared across modules whose ScanContext shape matches.
+//
+// All cache accesses go through `*scanCtx` (resolveCache / subgraphCache
+// / subgraphTaintedKnown / subgraphInProgress). The 5-field resolveKey
+// and 3-field subgraphKey of the previous architecture become 4-field
+// resolveInnerKey and 2-field subgraphInnerKey respectively, because
+// ctxHash is now implicit in `*scanCtx`'s identity.
+type scanCtx struct {
+	scanner *IncludeScanner
+	cfg     ScanContext
+	ctxHash uint64
+
+	resolveCache         map[resolveInnerKey][]string
+	subgraphCache        map[subgraphInnerKey][]string
+	subgraphTaintedKnown map[subgraphInnerKey]struct{}
+	subgraphInProgress   map[subgraphInnerKey]struct{}
 }
 
 type sysinclSourceKey struct {
@@ -314,18 +310,6 @@ type sysinclIncluderKey struct {
 type sysinclCacheEntry struct {
 	paths          []string
 	hasMultiTarget bool
-}
-
-// resolveInnerKey is the inner key for the 2-level resolveCache
-// (PR-M3-perf-D). The outer key is `ctxHash` (uint64, fast64 map path);
-// the inner key drops it to shave one uint64 from the per-probe hash.
-// `next` is omitted because `resolve()` returns early for `d.next` at
-// the top of the function — no `next=true` entry ever reaches the
-// cache.
-type resolveInnerKey struct {
-	includer string
-	target   string
-	kind     includeKind
 }
 
 // NewIncludeScanner constructs a scanner bound to a SysInclSet and a
@@ -366,17 +350,11 @@ func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedPars
 		sourceRoot:           sourceRoot,
 		sourceRootSlash:      sourceRoot + "/",
 		pc:                   pc,
-		// 2-level resolveCache; outer pre-sized to a generous cap
-		// (~110 distinct ctxHash values across the M3 closure).
-		resolveCache: make(map[uint64]map[resolveInnerKey][]string, 256),
 		viewCache:            make(map[string]PerSourceView, 4096),
 		emittedRelCache:      make(map[string]string, 4096),
 		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 524288),
 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 32768),
-		// PR-M3-perf-D: 2-level cache. Outer map cardinality ≈ 104
-		// distinct (ctxHash, srcClassHash) pairs on the M3 closure; the
-		// inner string-keyed maps absorb the per-header probes.
-		subgraphByClass: make(map[classKey]*classBucket, 128),
+		walkClosureCache:     make(map[uint64]*scanCtx, 8),
 	}
 	s.anySrcView = s.sysincl.PreparePerSource("")
 
@@ -429,21 +407,81 @@ type ScanContext struct {
 	BaseSearchPaths []string // baseline include set (linux-headers, musl arch when applicable)
 }
 
+// NewScanCtx allocates a fresh per-context resolution object bound to
+// this scanner and the given ScanContext. The returned `*scanCtx` owns
+// its own resolveCache and subgraphCache; lifetime is the caller's
+// responsibility (see gen.go's local vs interned dispatch).
+//
+// PR-M3-perf-E: ctxHash is computed once at construction and stored on
+// the object; every later cache probe uses the inner keys directly
+// without re-hashing the ScanContext.
+func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
+	// Per-scanCtx cache pre-sizes are smaller than the previous scanner-
+	// wide map because each scanCtx serves one (ctxHash) only. Observed
+	// scanner-wide totals split across ~few dozen distinct ctxHashes;
+	// 8192/4096 covers the largest single-context working set with one
+	// or two grows.
+	return &scanCtx{
+		scanner:              s,
+		cfg:                  cfg,
+		ctxHash:              hashScanContext(&cfg),
+		resolveCache:         make(map[resolveInnerKey][]string, 8192),
+		subgraphCache:        make(map[subgraphInnerKey][]string, 4096),
+		subgraphTaintedKnown: make(map[subgraphInnerKey]struct{}, 256),
+		subgraphInProgress:   make(map[subgraphInnerKey]struct{}, 64),
+	}
+}
+
 // WalkClosure returns the SOURCE_ROOT-prefixed transitive-header set
 // for the given source file (excluding the source itself), in DFS-
 // discovery order. The result list is suitable for use as
 // `node.Inputs[1:]`.
 //
+// PR-M3-perf-E: this entry point allocates a fresh `*scanCtx` per call
+// and delegates to it. Callers that already hold a `*scanCtx` (gen.go's
+// per-module dispatch) call `scanCtx.WalkSource` directly so multiple
+// sources within a module share the same caches.
+//
 // The `visited` map and `order` slice are pulled from per-scanner
 // `sync.Pool`s (PR-34d). The result `out` slice is freshly allocated
 // each call — the caller stores it on the node and the scanner does
 // not retain it — so returning `order` to the pool cannot corrupt the
-// caller's data. `clear()` resets the map in place; `order[:0]`
-// retains backing capacity for the next call. Pool items are
-// pointer-typed (`*map`, `*[]string`) so `Pool.Put` does not box.
-func (s *IncludeScanner) WalkClosure(ctx ScanContext) []string {
-	srcAbs := s.sourceRootSlash + ctx.SourceRel
-	ctxHash := hashScanContext(&ctx)
+// caller's data.
+func (s *IncludeScanner) WalkClosure(cfg ScanContext) []string {
+	// PR-M3-perf-E: intern per (scanner, ctxHash) so repeat WalkClosure
+	// calls on the same context reuse the resolve/subgraph caches the
+	// previous call populated. This preserves the
+	// TestScanner_SubgraphCacheReuse contract that pre-existed the
+	// refactor.
+	ctxHash := hashScanContext(&cfg)
+
+	sc, ok := s.walkClosureCache[ctxHash]
+
+	if !ok {
+		sc = s.NewScanCtx(cfg)
+		s.walkClosureCache[ctxHash] = sc
+	}
+
+	return sc.WalkSource(cfg.SourceRel)
+}
+
+// WalkSource walks the include closure starting from `sourceRel` using
+// the receiver's already-bound context. Used by the per-module dispatch
+// in gen.go: one `*scanCtx` is built once per (scanner, ctxHash) and
+// reused for every source within the module.
+//
+// PR-M3-perf-E: the previous WalkClosure body lives here, less the
+// ctxHash recomputation.
+func (sc *scanCtx) WalkSource(sourceRel string) []string {
+	s := sc.scanner
+	srcAbs := s.sourceRootSlash + sourceRel
+	// PR-M3-perf-E: cfg.SourceRel is the source-rel that perSourceView
+	// keys on for the src-class hash, but the scanCtx is shared across
+	// many sources within a module — overwrite the per-call source-rel
+	// field on the cfg so resolve()'s `s.sysinclSourceLookup(ctx.SourceRel,
+	// …)` path keys on the CURRENT source rather than the one captured
+	// at scanCtx construction.
+	sc.cfg.SourceRel = sourceRel
 
 	visitedP := s.visitedPool.Get().(*map[string]struct{})
 	orderP := s.orderPool.Get().(*[]string)
@@ -451,7 +489,7 @@ func (s *IncludeScanner) WalkClosure(ctx ScanContext) []string {
 	visited := *visitedP
 	order := (*orderP)[:0]
 
-	s.dfs(srcAbs, &ctx, ctxHash, visited, &order)
+	sc.dfs(srcAbs, visited, &order)
 
 	out := make([]string, 0, len(order))
 
@@ -486,11 +524,7 @@ func (s *IncludeScanner) WalkClosure(ctx ScanContext) []string {
 		// stderr. Production builds run with the env unset; the check
 		// short-circuits at the boolean.
 		if s.statsCallCount%500 == 0 {
-			cacheEntries := 0
-			for _, b := range s.subgraphByClass {
-				cacheEntries += len(b.cache)
-			}
-			fmt.Fprintf(os.Stderr, "scanner-stats[%d]: subgraph hits=%d misses=%d tainted=%d cache=%d classes=%d\n", s.statsCallCount, s.subgraphHits, s.subgraphMisses, s.subgraphTainted, cacheEntries, len(s.subgraphByClass))
+			fmt.Fprintf(os.Stderr, "scanner-stats[%d]: subgraph hits=%d misses=%d tainted=%d cache=%d\n", s.statsCallCount, s.subgraphHits, s.subgraphMisses, s.subgraphTainted, len(sc.subgraphCache))
 		}
 	}
 
@@ -624,17 +658,15 @@ func hashScanContext(ctx *ScanContext) uint64 {
 // would produce from the same partially-populated visited state — the
 // cached list IS the canonical first-visit order from `absPath`.
 //
-// PR-34r preserves the pre-existing 4-arg signature so external callers
-// (gen.go's joinSrcsIncludeClosure) keep their call shape. The
-// srcClassHash needed for the subgraph cache key is derived from
-// ctx.SourceRel inside dfs itself; it routes through perSourceView's
-// cache so the per-call cost is one map probe.
-func (s *IncludeScanner) dfs(absPath string, ctx *ScanContext, ctxHash uint64, visited map[string]struct{}, order *[]string) {
+// PR-M3-perf-E: receiver is `*scanCtx`. The previous (ctx, ctxHash)
+// parameters are now read off the receiver. srcClassHash is still
+// derived from sc.cfg.SourceRel inside dfs.
+func (sc *scanCtx) dfs(absPath string, visited map[string]struct{}, order *[]string) {
 	if _, seen := visited[absPath]; seen {
 		return
 	}
 
-	// External callers (WalkClosure, gen.go's joinSrcsIncludeClosure)
+	// External callers (WalkSource, gen.go's joinSrcsIncludeClosure)
 	// only invoke `dfs` with SOURCE files (`*.cpp`/`*.cc`/`*.c`/`*.S`
 	// /…). Each source compiles exactly once across the walker, so a
 	// subgraph cache check at the source key would always miss and
@@ -645,13 +677,13 @@ func (s *IncludeScanner) dfs(absPath string, ctx *ScanContext, ctxHash uint64, v
 	// `subgraph()` cache fast path on the recursive dfs() calls inside
 	// plainDfs.
 	if isSourceLike(absPath) {
-		s.plainDfs(absPath, ctx, ctxHash, visited, order)
+		sc.plainDfs(absPath, visited, order)
 
 		return
 	}
 
-	srcClassHash := s.sourceClassHash(ctx.SourceRel)
-	sg, ok := s.subgraph(absPath, ctx, ctxHash, srcClassHash)
+	srcClassHash := sc.scanner.sourceClassHash(sc.cfg.SourceRel)
+	sg, ok := sc.subgraph(absPath, srcClassHash)
 
 	if ok {
 		// Cached or freshly-computed clean canonical subgraph. Merge
@@ -674,7 +706,7 @@ func (s *IncludeScanner) dfs(absPath string, ctx *ScanContext, ctxHash uint64, v
 	// the only addition being that non-cycle descendants reached via
 	// the recursive `dfs` call still hit the persistent subgraph
 	// cache.
-	s.plainDfs(absPath, ctx, ctxHash, visited, order)
+	sc.plainDfs(absPath, visited, order)
 }
 
 // plainDfs walks `absPath`'s subtree using the caller's shared
@@ -683,7 +715,7 @@ func (s *IncludeScanner) dfs(absPath string, ctx *ScanContext, ctxHash uint64, v
 // when a child reports it is on a cycle. Per-child dispatch goes
 // through `dfs()` so non-cycle descendants benefit from the
 // `subgraphCache`.
-func (s *IncludeScanner) plainDfs(absPath string, ctx *ScanContext, ctxHash uint64, visited map[string]struct{}, order *[]string) {
+func (sc *scanCtx) plainDfs(absPath string, visited map[string]struct{}, order *[]string) {
 	if _, seen := visited[absPath]; seen {
 		return
 	}
@@ -691,13 +723,13 @@ func (s *IncludeScanner) plainDfs(absPath string, ctx *ScanContext, ctxHash uint
 	visited[absPath] = struct{}{}
 	*order = append(*order, absPath)
 
-	directives := s.parseIncludes(absPath)
+	directives := sc.scanner.parseIncludes(absPath)
 
 	for _, d := range directives {
-		resolved := s.resolve(absPath, d, ctx, ctxHash)
+		resolved := sc.resolve(absPath, d)
 
 		for _, rabs := range resolved {
-			s.dfs(rabs, ctx, ctxHash, visited, order)
+			sc.dfs(rabs, visited, order)
 		}
 	}
 }
@@ -743,21 +775,17 @@ func (s *IncludeScanner) SubgraphCacheStats() (hits, misses, tainted uint64) {
 // signal upward by returning ok=false from its own walk; every header
 // on the SCC ends up marked taintedKnown (set when subgraph returns
 // ok=false to its top-level invoker).
-func (s *IncludeScanner) subgraph(absPath string, ctx *ScanContext, ctxHash, srcClassHash uint64) ([]string, bool) {
-	// PR-M3-perf-D: 2-level lookup. Outer probe by (ctxHash,
-	// srcClassHash); inner probe by absPath string. The inner string-
-	// keyed access takes Go's `mapaccess2_faststr` path which the
-	// profile flagged as ~30% faster per probe than the prior
-	// composite-keyed `mapaccess2` access.
-	bucket := s.bucketFor(ctxHash, srcClassHash)
+func (sc *scanCtx) subgraph(absPath string, srcClassHash uint64) ([]string, bool) {
+	s := sc.scanner
+	key := subgraphInnerKey{abs: absPath, srcClassHash: srcClassHash}
 
-	if cached, ok := bucket.cache[absPath]; ok {
+	if cached, ok := sc.subgraphCache[key]; ok {
 		s.subgraphHits++
 
 		return cached, true
 	}
 
-	if _, taintedKnown := bucket.tainted[absPath]; taintedKnown {
+	if _, taintedKnown := sc.subgraphTaintedKnown[key]; taintedKnown {
 		// We have already discovered this header is on a cycle.
 		// Don't waste the speculative walk; tell the caller to plain
 		// DFS into its own visited+order.
@@ -766,7 +794,7 @@ func (s *IncludeScanner) subgraph(absPath string, ctx *ScanContext, ctxHash, src
 		return nil, false
 	}
 
-	if _, busy := bucket.inProgress[absPath]; busy {
+	if _, busy := sc.subgraphInProgress[key]; busy {
 		// Back-edge into an ancestor's in-progress computation. The
 		// caller will see ok=false, fall back to plain-dfs into its
 		// shared visited (which already contains this `absPath`'s
@@ -776,7 +804,7 @@ func (s *IncludeScanner) subgraph(absPath string, ctx *ScanContext, ctxHash, src
 	}
 
 	s.subgraphMisses++
-	bucket.inProgress[absPath] = struct{}{}
+	sc.subgraphInProgress[key] = struct{}{}
 
 	// Pull scratch buffers from the per-scanner pools (same pools that
 	// WalkClosure uses). Each subgraph computation needs its own isolated
@@ -791,9 +819,9 @@ func (s *IncludeScanner) subgraph(absPath string, ctx *ScanContext, ctxHash, src
 	visited := *visitedP
 	order := (*orderP)[:0]
 
-	clean := s.walkSubgraph(absPath, ctx, ctxHash, srcClassHash, visited, &order)
+	clean := sc.walkSubgraph(absPath, srcClassHash, visited, &order)
 
-	delete(bucket.inProgress, absPath)
+	delete(sc.subgraphInProgress, key)
 
 	if !clean {
 		// At least one descendant of `absPath` was on a cycle. Either
@@ -802,7 +830,7 @@ func (s *IncludeScanner) subgraph(absPath string, ctx *ScanContext, ctxHash, src
 		// reported tainted. Either way, this key cannot be cached and
 		// future visits will short-circuit via `taintedKnown`.
 		s.subgraphTainted++
-		bucket.tainted[absPath] = struct{}{}
+		sc.subgraphTaintedKnown[key] = struct{}{}
 
 		// Return scratch buffers to the pool before returning.
 		clear(visited)
@@ -825,65 +853,9 @@ func (s *IncludeScanner) subgraph(absPath string, ctx *ScanContext, ctxHash, src
 	s.visitedPool.Put(visitedP)
 	s.orderPool.Put(orderP)
 
-	bucket.cache[absPath] = out
+	sc.subgraphCache[key] = out
 
 	return out, true
-}
-
-// resolveBucketFor returns the per-ctxHash inner map of the 2-level
-// resolveCache (PR-M3-perf-D), creating it on first access. The active
-// bucket is cached on the scanner so all `resolveSearchPath` calls in
-// one WalkClosure share the outer lookup.
-func (s *IncludeScanner) resolveBucketFor(ctxHash uint64) map[resolveInnerKey][]string {
-	if s.activeResolveSet && s.activeResolveCtxHash == ctxHash {
-		return s.activeResolveBucket
-	}
-
-	b, ok := s.resolveCache[ctxHash]
-	if !ok {
-		b = make(map[resolveInnerKey][]string, 4096)
-		s.resolveCache[ctxHash] = b
-	}
-
-	s.activeResolveBucket = b
-	s.activeResolveCtxHash = ctxHash
-	s.activeResolveSet = true
-
-	return b
-}
-
-// bucketFor returns the per-class subgraph cache bucket, creating it on
-// first access. The inner maps are pre-sized to typical occupancy on
-// the M3 closure: ~16k canonical subgraphs per active class for the
-// dominant pair, far less for the long tail (most classes hold only a
-// handful of entries before the consumer count exhausts them).
-//
-// PR-M3-perf-D: the hot path consults `s.activeBucket` cached on the
-// scanner; this function is the slow path that fills the cache. Within
-// a single WalkClosure all `subgraph()` calls share the same classKey
-// (ctxHash and srcClassHash are passed unchanged through dfs / walkSubgraph
-// / walkSubgraphTainted), so one outer lookup per top-level walk suffices.
-func (s *IncludeScanner) bucketFor(ctxHash, srcClassHash uint64) *classBucket {
-	k := classKey{ctxHash: ctxHash, srcClassHash: srcClassHash}
-
-	if s.activeBucket != nil && s.activeBucketKey == k {
-		return s.activeBucket
-	}
-
-	b, ok := s.subgraphByClass[k]
-	if !ok {
-		b = &classBucket{
-			cache:      make(map[string][]string, 4096),
-			tainted:    make(map[string]struct{}, 256),
-			inProgress: make(map[string]struct{}, 16),
-		}
-		s.subgraphByClass[k] = b
-	}
-
-	s.activeBucket = b
-	s.activeBucketKey = k
-
-	return b
 }
 
 // walkSubgraph is the cycle-safe core of canonical-subgraph computation.
@@ -904,7 +876,7 @@ func (s *IncludeScanner) bucketFor(ctxHash, srcClassHash uint64) *classBucket {
 //
 // Pure-DAG paths (no cycle in any descendant) cache normally because
 // every recursive descendant returns clean=true.
-func (s *IncludeScanner) walkSubgraph(absPath string, ctx *ScanContext, ctxHash, srcClassHash uint64, visited map[string]struct{}, order *[]string) bool {
+func (sc *scanCtx) walkSubgraph(absPath string, srcClassHash uint64, visited map[string]struct{}, order *[]string) bool {
 	if _, seen := visited[absPath]; seen {
 		return true
 	}
@@ -912,18 +884,18 @@ func (s *IncludeScanner) walkSubgraph(absPath string, ctx *ScanContext, ctxHash,
 	visited[absPath] = struct{}{}
 	*order = append(*order, absPath)
 
-	directives := s.parseIncludes(absPath)
+	directives := sc.scanner.parseIncludes(absPath)
 	clean := true
 
 	for _, d := range directives {
-		resolved := s.resolve(absPath, d, ctx, ctxHash)
+		resolved := sc.resolve(absPath, d)
 
 		for _, rabs := range resolved {
 			if _, seen := visited[rabs]; seen {
 				continue
 			}
 
-			childSg, ok := s.subgraph(rabs, ctx, ctxHash, srcClassHash)
+			childSg, ok := sc.subgraph(rabs, srcClassHash)
 
 			if ok {
 				// Clean child subgraph — merge into our walk.
@@ -944,7 +916,7 @@ func (s *IncludeScanner) walkSubgraph(absPath string, ctx *ScanContext, ctxHash,
 			// `clean=false` propagates upward.
 			clean = false
 
-			s.walkSubgraphTainted(rabs, ctx, ctxHash, srcClassHash, visited, order)
+			sc.walkSubgraphTainted(rabs, srcClassHash, visited, order)
 		}
 	}
 
@@ -956,7 +928,7 @@ func (s *IncludeScanner) walkSubgraph(absPath string, ctx *ScanContext, ctxHash,
 // (subgraph-computation) visited+order rather than the dfs caller's
 // shared state. Each child of a tainted-walk node still goes through
 // `subgraph()` so non-cycle descendants reuse the persistent cache.
-func (s *IncludeScanner) walkSubgraphTainted(absPath string, ctx *ScanContext, ctxHash, srcClassHash uint64, visited map[string]struct{}, order *[]string) {
+func (sc *scanCtx) walkSubgraphTainted(absPath string, srcClassHash uint64, visited map[string]struct{}, order *[]string) {
 	if _, seen := visited[absPath]; seen {
 		return
 	}
@@ -964,17 +936,17 @@ func (s *IncludeScanner) walkSubgraphTainted(absPath string, ctx *ScanContext, c
 	visited[absPath] = struct{}{}
 	*order = append(*order, absPath)
 
-	directives := s.parseIncludes(absPath)
+	directives := sc.scanner.parseIncludes(absPath)
 
 	for _, d := range directives {
-		resolved := s.resolve(absPath, d, ctx, ctxHash)
+		resolved := sc.resolve(absPath, d)
 
 		for _, rabs := range resolved {
 			if _, seen := visited[rabs]; seen {
 				continue
 			}
 
-			childSg, ok := s.subgraph(rabs, ctx, ctxHash, srcClassHash)
+			childSg, ok := sc.subgraph(rabs, srcClassHash)
 
 			if ok {
 				for _, p := range childSg {
@@ -989,7 +961,7 @@ func (s *IncludeScanner) walkSubgraphTainted(absPath string, ctx *ScanContext, c
 				continue
 			}
 
-			s.walkSubgraphTainted(rabs, ctx, ctxHash, srcClassHash, visited, order)
+			sc.walkSubgraphTainted(rabs, srcClassHash, visited, order)
 		}
 	}
 }
@@ -1221,7 +1193,9 @@ func isYasmLike(absPath string) bool {
 //     still correctly excludes libcxxrt/dwarf_eh.h `#include "unwind.h"`
 //     because unwind.h lives in the SAME dir as dwarf_eh.h.
 //     Angle-bracket includes still union sysincl on top unconditionally.
-func (s *IncludeScanner) resolve(includerAbs string, d includeDirective, ctx *ScanContext, ctxHash uint64) []string {
+func (sc *scanCtx) resolve(includerAbs string, d includeDirective) []string {
+	s := sc.scanner
+	ctx := &sc.cfg
 	// `#include_next` directives resolve to nothing in the upstream
 	// reference scan: every observed live use is the libcxx
 	// "shadow-header" pattern where libcxx/X.h does
@@ -1255,7 +1229,7 @@ func (s *IncludeScanner) resolve(includerAbs string, d includeDirective, ctx *Sc
 	// per-half caches: source-keyed by (sourceRel, target) reused
 	// within one source's closure, includer-keyed by (includer,
 	// target) reused across every source reaching that includer.
-	searchOut := s.resolveSearchPath(includerAbs, d, ctx, ctxHash)
+	searchOut := sc.resolveSearchPath(includerAbs, d)
 
 	// Sysincl: add EVERY matching record's contribution on top of the
 	// search-path result. PR-35e: per-record source-vs-includer
@@ -1293,14 +1267,6 @@ func (s *IncludeScanner) resolve(includerAbs string, d includeDirective, ctx *Sc
 	// stl-to-libcxx.yml multi-target record also contributes
 	// libcxxrt/include/cxxabi.h — and the reference graph includes both.
 	if d.kind == includeQuoted && len(searchOut) > 0 {
-		// PR-M3-perf-D: short-circuit the single-target half first to
-		// avoid the same-dir abs-path construction (was ~390 MB allocated
-		// across the M3 walk pre-fix, plus ~120 MS in `normalisePath`).
-		// Same-dir comparison only matters when sysincl is multi-target.
-		if !hasMultiTarget {
-			return searchOut
-		}
-
 		incDir := pathDir(includerRel)
 
 		var sameDirAbs string
@@ -1311,7 +1277,7 @@ func (s *IncludeScanner) resolve(includerAbs string, d includeDirective, ctx *Sc
 			sameDirAbs = s.sourceRootSlash + d.target
 		}
 
-		if searchOut[0] == sameDirAbs {
+		if !hasMultiTarget || searchOut[0] == sameDirAbs {
 			return searchOut
 		}
 	}
@@ -1525,21 +1491,20 @@ func (s *IncludeScanner) perSourceView(sourceRel string) PerSourceView {
 }
 
 // resolveSearchPath returns the search-path-only resolved set for the
-// given directive. Cached by (ctxHash, includer, target, kind) — the
-// result is source-independent.
-//
-// PR-M3-perf-D: 2-level resolveCache. The active inner map is set once
-// per WalkClosure via `activateResolveBucket(ctxHash)` so the hot path
-// consults it directly without the outer `mapaccess2_fast64` probe.
-func (s *IncludeScanner) resolveSearchPath(includerAbs string, d includeDirective, ctx *ScanContext, ctxHash uint64) []string {
-	bucket := s.resolveBucketFor(ctxHash)
+// given directive. Cached on the scanCtx by (includer, target, kind,
+// next) — ctxHash is implicit in the scanCtx receiver.
+func (sc *scanCtx) resolveSearchPath(includerAbs string, d includeDirective) []string {
+	s := sc.scanner
+	ctx := &sc.cfg
 	key := resolveInnerKey{
 		includer: includerAbs,
 		target:   d.target,
 		kind:     d.kind,
+		next:     d.next,
 	}
 
-	if cached, ok := bucket[key]; ok {
+	// PR-34n: lock removed (single-goroutine).
+	if cached, ok := sc.resolveCache[key]; ok {
 		return cached
 	}
 
@@ -1645,7 +1610,8 @@ func (s *IncludeScanner) resolveSearchPath(includerAbs string, d includeDirectiv
 	clear(seen)
 	s.seenPool.Put(seenP)
 
-	bucket[key] = out
+	// PR-34n: lock removed (single-goroutine).
+	sc.resolveCache[key] = out
 
 	return out
 }
