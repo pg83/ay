@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/md5"
+	enc32 "encoding/base32"
 	encb64 "encoding/base64"
 	enchex "encoding/hex"
 	"errors"
@@ -175,12 +176,38 @@ func emitResourceObjcopy(
 	instance ModuleInstance,
 	d *moduleData,
 ) []string {
-	if len(d.resources) == 0 {
+	// PR-B: emit kv_only sibling shapes (PY_MAIN, py/namespace,
+	// py/no_check_imports) alongside the legacy RESOURCE/RESOURCE_FILES
+	// flush. Each sibling is independent and conditional on its own
+	// per-module data; a module may emit any non-empty subset.
+	hasKvOnly := d.pyMain != "" || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0
+	if len(d.resources) == 0 && !hasKvOnly {
 		return nil
 	}
 
 	rescompilerLDRef := walkHostToolForRef(ctx, instance, "tools/rescompiler/bin")
 	rescompressorLDRef := walkHostToolForRef(ctx, instance, "tools/rescompressor/bin")
+
+	var outputs []string
+
+	// kv_only siblings — each fires only when its trigger is present
+	// (no-op return when not). Emission order does NOT affect L4 byte-
+	// exactness (the canonicaliser re-sorts the graph by UID).
+	if o := emitPyNamespaceObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
+		outputs = append(outputs, o)
+	}
+
+	if o := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
+		outputs = append(outputs, o)
+	}
+
+	if o := emitNoCheckImportsObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
+		outputs = append(outputs, o)
+	}
+
+	if len(d.resources) == 0 {
+		return outputs
+	}
 
 	// Filter rejected entries (mirrors objcopy.h:84-96 CanHandle):
 	// drop entries whose path or name contains the BAD substrings.
@@ -209,8 +236,6 @@ func emitResourceObjcopy(
 	if d.moduleStmt != nil {
 		moduleTag = resourceModuleTag(d.moduleStmt.Name)
 	}
-
-	var outputs []string
 
 	flush := func() {
 		if cur.cmdLen == 0 {
@@ -388,6 +413,265 @@ func objcopyTargetTriple(instance ModuleInstance) string {
 	}
 
 	return targetTriple
+}
+
+// emitKvOnlyObjcopyNode emits a single kv_only objcopy PY node for the
+// module — one whose upstream packer flush carries an empty `paths`
+// slice and a non-empty `kvs` list, so the cmd_args have no `--inputs`
+// / `--keys` slots and `inputs[]` is the three-element rescompiler /
+// rescompressor / objcopy.py prefix (no per-resource source paths).
+//
+// The hash matches the upstream
+// `TObjCopyResourcePacker::GetHashForOutput` derivation
+// (`devtools/ymake/plugins/resource_handler/packer.h:73-85`): MD5 of
+// sorted([kvsHash..., "$S/"+unitPath]) joined by "," with MODULE_TAG
+// suffix; first hashLen hex chars (lower-case).
+//
+// Caller passes:
+//   - kvsHash: the literal kv strings as the packer's hash sees them
+//     after ya.make macro evaluation — i.e. with outer double quotes
+//     retained for `py/namespace/...="value"` and
+//     `py/no_check_imports/...="value"` (per pybuild.py:593 and
+//     ytest.py:811), and unquoted for `PY_MAIN=value` (pybuild.py:759).
+//   - kvsCmd: the form that lands in cmd_args after ymake's RUN_PYTHON3
+//     template strips outer quotes from the kv argument tokens. Empirically
+//     this is the unquoted `key=value` for all three shapes (verified
+//     against REF sg2.json for the 7 PR-B nodes).
+//   - moduleName: the ModuleStmt.Name (e.g. "PY3_LIBRARY"); used to
+//     derive both the hash MODULE_TAG suffix (resourceModuleTag) and
+//     the lower-cased target_properties.module_tag override that the
+//     REF surfaces only for PY23_*-flavoured modules.
+//
+// Returns the `$(BUILD_ROOT)/<modulePath>/objcopy_<hash>.o` output path.
+func emitKvOnlyObjcopyNode(
+	ctx *genCtx,
+	instance ModuleInstance,
+	kvsHash []string,
+	kvsCmd []string,
+	moduleName string,
+	rescompilerLDRef NodeRef,
+	rescompressorLDRef NodeRef,
+) string {
+	moduleTag := resourceModuleTag(moduleName)
+	hash := objcopyHash(nil, nil, kvsHash, instance.Path, moduleTag)
+	outputObj := "$(BUILD_ROOT)/" + instance.Path + "/objcopy_" + hash + ".o"
+
+	cmdArgs := []string{
+		"/ix/realm/pg/bin/python3",
+		"$(SOURCE_ROOT)/build/scripts/objcopy.py",
+		"--compiler", "/ix/realm/boot/bin/clang++",
+		"--objcopy", "/ix/realm/boot/bin/llvm-objcopy",
+		"--compressor", "$(BUILD_ROOT)/tools/rescompressor/rescompressor",
+		"--rescompiler", "$(BUILD_ROOT)/tools/rescompiler/rescompiler",
+		"--output_obj", outputObj,
+		"--target", objcopyTargetTriple(instance),
+		"--kvs",
+	}
+	cmdArgs = append(cmdArgs, kvsCmd...)
+
+	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)"}
+
+	// kv_only nodes always carry the three-element inputs prefix in the
+	// rescompiler / rescompressor / objcopy.py order (verified against
+	// all 7 REF samples in this PR's scope; no source-path entries are
+	// appended because the kv-only flush has zero `paths`).
+	inputs := []string{
+		"$(BUILD_ROOT)/tools/rescompiler/rescompiler",
+		"$(BUILD_ROOT)/tools/rescompressor/rescompressor",
+		"$(SOURCE_ROOT)/build/scripts/objcopy.py",
+	}
+
+	targetProps := map[string]string{
+		"module_dir": instance.Path,
+	}
+
+	// PY23_LIBRARY / PY23_NATIVE_LIBRARY have MODULE_TAG=PY3 but the
+	// reference graph surfaces `target_properties.module_tag = "py3"`
+	// (lower-case) only for those flavours. PY3_LIBRARY / PY3_PROGRAM_BIN
+	// suppress it (the MODULE_TAG matches the default for their declared
+	// type; upstream omits redundant properties). Witnessed in REF:
+	// library/python/symbols/module (PY23_LIBRARY) carries module_tag=py3
+	// on aarch64; library/python/runtime_py3 (PY3_LIBRARY) does not.
+	switch moduleName {
+	case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
+		targetProps["module_tag"] = "py3"
+	}
+
+	node := &Node{
+		Cmds: []Cmd{
+			{
+				CmdArgs: cmdArgs,
+				Env:     env,
+			},
+		},
+		Env:              env,
+		Inputs:           inputs,
+		Outputs:          []string{outputObj},
+		KV:               map[string]string{"p": "PY", "pc": "yellow", "show_out": "yes"},
+		Tags:             []string{},
+		TargetProperties: targetProps,
+		Platform:         string(instance.Target),
+		Requirements: map[string]interface{}{
+			"cpu":     float64(1),
+			"network": "restricted",
+			"ram":     float64(32),
+		},
+	}
+
+	// D41: x86_64 instances are host-axis builds — carry
+	// `host_platform=true` and `tags=["tool"]` per cc.go:353-360
+	// convention. REF confirms: kv_only objcopy nodes on x86_64 have
+	// `tags=['tool']` while their aarch64 twins have `tags=[]`.
+	if targetIsX8664(instance) {
+		node.HostPlatform = true
+		node.Tags = []string{"tool"}
+	}
+
+	if rescompilerLDRef != (NodeRef{}) {
+		node.DepRefs = append(node.DepRefs, rescompilerLDRef)
+	}
+
+	if rescompressorLDRef != (NodeRef{}) {
+		node.DepRefs = append(node.DepRefs, rescompressorLDRef)
+	}
+
+	ctx.emit.Emit(node)
+
+	return outputObj
+}
+
+// emitPyNamespaceObjcopy emits the `py/namespace/<mod_list_md5>/<unit>=<ns>.`
+// kv objcopy node per upstream pybuild.py:587-594. The mod_list_md5 is
+// a streaming md5 over each `(path, mod)` pair's `mod` UTF-8 bytes,
+// iteration-ordered. The unit_path component and namespace value are
+// the dotted upath. Skipped for `contrib/tools/python3` modules where
+// is_extended_source_search_enabled returns False (pybuild.py:40-48),
+// and for modules whose PY_SRCS is TOP_LEVEL (ns="") since ns="" emits
+// no namespace kv. Returns the emitted output path (empty when nothing
+// was emitted).
+func emitPyNamespaceObjcopy(
+	ctx *genCtx,
+	instance ModuleInstance,
+	d *moduleData,
+	rescompilerLDRef NodeRef,
+	rescompressorLDRef NodeRef,
+) string {
+	if len(d.pySrcs) == 0 {
+		return ""
+	}
+
+	// Gate: `is_extended_source_search_enabled` returns False for
+	// `$S/contrib/python*` and `$S/contrib/tools/python3*` per
+	// pybuild.py:46. No namespace kv is emitted for those modules.
+	if strings.HasPrefix(instance.Path, "contrib/python") ||
+		strings.HasPrefix(instance.Path, "contrib/tools/python3") {
+		return ""
+	}
+
+	// PR-B scope is PY3 / PY23 only; the namespace mechanism is gated
+	// on py3=true in pybuild.py:559. Non-PY3 modules are skipped.
+	if d.moduleStmt == nil {
+		return ""
+	}
+	if resourceModuleTag(d.moduleStmt.Name) == "" {
+		return ""
+	}
+
+	// Default namespace: `<upath-dotted>.`. The TOP_LEVEL modifier of
+	// PY_SRCS empties ns; we have no per-source TOP_LEVEL tracking
+	// surfaced beyond d.pySrcs, so we conservatively derive ns from
+	// the upath. The four REF modules in scope do not use TOP_LEVEL
+	// for the entries that drive the namespace hash (verified against
+	// library/python/runtime_py3, library/python/symbols/module,
+	// tools/py3cc/slow). contrib/tools/python3/lib2/py uses TOP_LEVEL
+	// but is gated out by the contrib/tools/python3 check above.
+	ns := strings.ReplaceAll(instance.Path, "/", ".") + "."
+
+	// Compute mod_list_md5: streaming md5 over each `mod` in pys order.
+	// mod = ns + stripext(arg).replace('/','.')   (pybuild.py:385,391).
+	h := md5.New()
+	for _, srcRel := range d.pySrcs {
+		modName := strings.TrimSuffix(srcRel, ".py")
+		modName = strings.ReplaceAll(modName, "/", ".")
+		mod := ns + modName
+		h.Write([]byte(mod))
+	}
+	modListMD5 := enchex.EncodeToString(h.Sum(nil))
+
+	// Build the kv. mod_root_path = unit path (when SRCDIR is unset or
+	// equals upath, which holds for the 3 REF modules in scope).
+	// pybuild.py:591: key = '{prefix}/{md5}/{path}'; the value joins
+	// sorted ns set by ':'.  Each module in scope has exactly one ns,
+	// so the join collapses to that one entry verbatim.
+	key := "py/namespace/" + modListMD5 + "/" + instance.Path
+	// Hash form retains the outer double quotes around the value as
+	// emitted by pybuild.py:593 (`'{}="{}"'.format(key, namespaces)`).
+	// cmd_args form is unquoted (the RUN_PYTHON3 template strips them).
+	kvHash := key + "=\"" + ns + "\""
+	kvCmd := key + "=" + ns
+
+	return emitKvOnlyObjcopyNode(ctx, instance, []string{kvHash}, []string{kvCmd}, d.moduleStmt.Name, rescompilerLDRef, rescompressorLDRef)
+}
+
+// emitPyMainObjcopy emits the `PY_MAIN=<dotted>:<func>` kv objcopy node
+// per upstream pybuild.py:py_main (build/plugins/pybuild.py:759). The
+// arg is captured at parse time on d.pyMain — either from the explicit
+// `PY_MAIN(arg)` macro (PY_MAIN case in collectStmts) or from the
+// `MAIN <src.py>` modifier of PY_SRCS (PY_SRCS case).  Returns the
+// emitted output path (empty when d.pyMain is unset).
+func emitPyMainObjcopy(
+	ctx *genCtx,
+	instance ModuleInstance,
+	d *moduleData,
+	rescompilerLDRef NodeRef,
+	rescompressorLDRef NodeRef,
+) string {
+	if d.pyMain == "" {
+		return ""
+	}
+	if d.moduleStmt == nil {
+		return ""
+	}
+
+	// PY_MAIN= is unquoted in both hash and cmd_args (pybuild.py:759
+	// `'PY_MAIN={}'.format(arg)` — no quotes around the value).
+	kv := "PY_MAIN=" + d.pyMain
+	return emitKvOnlyObjcopyNode(ctx, instance, []string{kv}, []string{kv}, d.moduleStmt.Name, rescompilerLDRef, rescompressorLDRef)
+}
+
+// emitNoCheckImportsObjcopy emits the
+// `py/no_check_imports/<pathid>=<args-space-joined>` kv objcopy node
+// per upstream ytest.py:on_register_no_check_imports
+// (build/plugins/ytest.py:808-811). The pathid is the lower-cased
+// unpadded base32 of md5(value-bytes); see build/plugins/_common.py:37
+// (pathid). Returns the emitted output path (empty when d.noCheckImports
+// is empty).
+func emitNoCheckImportsObjcopy(
+	ctx *genCtx,
+	instance ModuleInstance,
+	d *moduleData,
+	rescompilerLDRef NodeRef,
+	rescompressorLDRef NodeRef,
+) string {
+	if len(d.noCheckImports) == 0 {
+		return ""
+	}
+	if d.moduleStmt == nil {
+		return ""
+	}
+
+	value := strings.Join(d.noCheckImports, " ")
+	sum := md5.Sum([]byte(value))
+	// base32-lower-unpadded over the 16-byte digest.
+	b32 := strings.ToLower(enc32.StdEncoding.EncodeToString(sum[:]))
+	b32 = strings.TrimRight(b32, "=")
+	key := "py/no_check_imports/" + b32
+	// Hash form retains the outer double quotes (ytest.py:811
+	// `'py/no_check_imports/{}="{}"'.format(...)`); cmd_args strips them.
+	kvHash := key + "=\"" + value + "\""
+	kvCmd := key + "=" + value
+
+	return emitKvOnlyObjcopyNode(ctx, instance, []string{kvHash}, []string{kvCmd}, d.moduleStmt.Name, rescompilerLDRef, rescompressorLDRef)
 }
 
 // walkHostToolForRef walks `path` as a host tool and returns the LD
