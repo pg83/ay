@@ -55,7 +55,85 @@ const (
 	// tools/event2cpp so the LD node's module_dir matches the reference.
 	evEvent2cppModule     = "tools/event2cpp/bin"
 	evEventlogIncludePath = "$(SOURCE_ROOT)/library/cpp/eventlog"
+	evSourceBase          = "$(SOURCE_ROOT)/"
 )
+
+// eventRuntimeHeaders is the common subset of SOURCE_ROOT headers present in
+// every .ev.pb.cc CC node in the reference graph (68 entries, derived from
+// the intersection across all 2 .ev.pb.cc consumers in sg2.json).
+// These are registered as EmitsIncludes on the .ev.pb.h output so the scanner
+// closure propagates them into all CC nodes that consume .ev.pb.h.
+// Sorted lexicographically. VFS-rooted $(SOURCE_ROOT)/... paths.
+var eventRuntimeHeaders = []string{
+	evSourceBase + "library/cpp/eventlog/event_field_output.h",
+	evSourceBase + "library/cpp/eventlog/event_field_printer.h",
+	evSourceBase + "library/cpp/eventlog/events_extension.h",
+	evSourceBase + "util/charset/unicode_table.h",
+	evSourceBase + "util/charset/unidata.h",
+	evSourceBase + "util/digest/numeric.h",
+	evSourceBase + "util/generic/array_size.h",
+	evSourceBase + "util/generic/bitops.h",
+	evSourceBase + "util/generic/buffer.h",
+	evSourceBase + "util/generic/cast.h",
+	evSourceBase + "util/generic/deque.h",
+	evSourceBase + "util/generic/explicit_type.h",
+	evSourceBase + "util/generic/flags.h",
+	evSourceBase + "util/generic/fwd.h",
+	evSourceBase + "util/generic/hide_ptr.h",
+	evSourceBase + "util/generic/intrlist.h",
+	evSourceBase + "util/generic/iterator.h",
+	evSourceBase + "util/generic/map.h",
+	evSourceBase + "util/generic/mapfindptr.h",
+	evSourceBase + "util/generic/mem_copy.h",
+	evSourceBase + "util/generic/noncopyable.h",
+	evSourceBase + "util/generic/ptr.h",
+	evSourceBase + "util/generic/refcount.h",
+	evSourceBase + "util/generic/reserve.h",
+	evSourceBase + "util/generic/singleton.h",
+	evSourceBase + "util/generic/store_policy.h",
+	evSourceBase + "util/generic/strbase.h",
+	evSourceBase + "util/generic/strbuf.h",
+	evSourceBase + "util/generic/string.h",
+	evSourceBase + "util/generic/string_hash.h",
+	evSourceBase + "util/generic/typelist.h",
+	evSourceBase + "util/generic/typetraits.h",
+	evSourceBase + "util/generic/utility.h",
+	evSourceBase + "util/generic/va_args.h",
+	evSourceBase + "util/generic/yexception.h",
+	evSourceBase + "util/generic/ylimits.h",
+	evSourceBase + "util/memory/alloc.h",
+	evSourceBase + "util/memory/tempbuf.h",
+	evSourceBase + "util/str_stl.h",
+	evSourceBase + "util/stream/fwd.h",
+	evSourceBase + "util/stream/input.h",
+	evSourceBase + "util/stream/labeled.h",
+	evSourceBase + "util/stream/output.h",
+	evSourceBase + "util/stream/str.h",
+	evSourceBase + "util/stream/tempbuf.h",
+	evSourceBase + "util/stream/zerocopy.h",
+	evSourceBase + "util/stream/zerocopy_output.h",
+	evSourceBase + "util/string/hex.h",
+	evSourceBase + "util/string/subst.h",
+	evSourceBase + "util/system/align.h",
+	evSourceBase + "util/system/atexit.h",
+	evSourceBase + "util/system/backtrace.h",
+	evSourceBase + "util/system/compat.h",
+	evSourceBase + "util/system/compiler.h",
+	evSourceBase + "util/system/defaults.h",
+	evSourceBase + "util/system/error.h",
+	evSourceBase + "util/system/guard.h",
+	evSourceBase + "util/system/mutex.h",
+	evSourceBase + "util/system/platform.h",
+	evSourceBase + "util/system/src_location.h",
+	evSourceBase + "util/system/src_root.h",
+	evSourceBase + "util/system/thread.i",
+	evSourceBase + "util/system/type_name.h",
+	evSourceBase + "util/system/types.h",
+	evSourceBase + "util/system/unaligned_mem.h",
+	evSourceBase + "util/system/win_undef.h",
+	evSourceBase + "util/system/winint.h",
+	evSourceBase + "util/system/yassert.h",
+}
 
 // EmitEV emits an EV node for `srcRel` (a .ev file relative to `instance.Path`).
 func EmitEV(

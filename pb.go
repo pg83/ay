@@ -59,13 +59,12 @@ const (
 	pbRuntimeBase = "$(SOURCE_ROOT)/contrib/libs/protobuf/src/"
 )
 
-// protobufRuntimeHeaders is the constant set of runtime headers that every
-// protoc-generated .pb.h file #includes unconditionally. Sampled from
-// descriptor.pb.h, any.pb.h, timestamp.pb.h, api.pb.h, duration.pb.h —
-// all present on disk under contrib/libs/protobuf/src/. Sorted lexicographically.
-// The scanner walks each entry transitively (their own #includes are resolved
-// via the FS locator against SOURCE_ROOT), so the full protobuf include closure
-// emerges from scanner recursion, not from pre-computation here.
+// protobufRuntimeHeaders is the set of headers that every protoc-generated
+// .pb.h directly #includes (verified by reading any.pb.h, duration.pb.h,
+// timestamp.pb.h, etc.). These are registered as EmitsIncludes on the .pb.h
+// output so the scanner closure propagates them into all CC nodes that
+// include the .pb.h. Scanner recursion then finds their transitive includes.
+// Sorted lexicographically. VFS-rooted $(SOURCE_ROOT)/... paths.
 var protobufRuntimeHeaders = []string{
 	pbRuntimeBase + "google/protobuf/arena.h",
 	pbRuntimeBase + "google/protobuf/arenastring.h",
@@ -75,6 +74,8 @@ var protobufRuntimeHeaders = []string{
 	pbRuntimeBase + "google/protobuf/io/coded_stream.h",
 	pbRuntimeBase + "google/protobuf/message.h",
 	pbRuntimeBase + "google/protobuf/metadata_lite.h",
+	pbRuntimeBase + "google/protobuf/port_def.inc",
+	pbRuntimeBase + "google/protobuf/port_undef.inc",
 	pbRuntimeBase + "google/protobuf/repeated_field.h",
 	pbRuntimeBase + "google/protobuf/unknown_field_set.h",
 }
@@ -339,14 +340,16 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				"cpp_proto", ctx.sourceRoot, ctx.emit)
 
 			// F-7-B: register the .ev.pb.h output with EmitsIncludes derived from
-			// the .ev source's direct imports, plus the protobuf runtime headers (F-7-D).
+			// the .ev source's direct imports, plus the protobuf runtime headers (F-7-D)
+			// and the EV-specific runtime headers (util/* + eventlog).
 			evRelPath := instance.Path + "/" + src
 			evH := "$(BUILD_ROOT)/" + evRelPath + ".pb.h"
 			if reg := codegenRegForInstance(ctx, instance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
-				emitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders))
+				emitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
 				emitsIncludes = append(emitsIncludes, directImports...)
 				emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
+				emitsIncludes = append(emitsIncludes, eventRuntimeHeaders...)
 				reg.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EV",
 					OutputPath:    evH,
