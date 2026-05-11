@@ -421,8 +421,9 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"STYLE_PYTHON":                      {}, // Python style checker metadata.
 	"WINDOWS_LONG_PATH_MANIFEST":        {}, // Windows-only manifest; no-op on Linux.
 	// PYBUILD_NO_PYC: handled in applyUnknownStmt ENABLE case → d.pyBuildNoPYC; not a no-op whitelist entry.
-	"RESOURCE":                          {}, // Embeds binary resources; PR-M3-A defers PY node emission.
-	"RESOURCE_FILES":                    {}, // Variant of RESOURCE.
+	// RESOURCE / RESOURCE_FILES: now typed Stmts (PR-M3-resource-objcopy-A);
+	// removed from whitelist. Routed via parseResource / parseResourceFiles
+	// in yamake.go and consumed by resource.go::emitResourceObjcopy.
 	"PY_REGISTER":                       {}, // Python module registration; semantic in PR-M3-E.
 	// RUN_PROGRAM: now typed Stmt; removed from whitelist.
 	// RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT: now typed Stmts; removed from whitelist.
@@ -686,7 +687,23 @@ type moduleData struct {
 	// ModuleCCInputs.FlatOutput, which composeCCPaths uses to skip the
 	// `_/` infix.
 	flatSrcs    map[string]struct{}
+	// PR-M3-resource-objcopy-A: RESOURCE() / RESOURCE_FILES() pair lists.
+	// After collection, `resources` carries the (path, key, kv) triple list
+	// that the objcopy packer in resource.go consumes; RESOURCE_FILES are
+	// expanded inline at collect time so this slice is the canonical view
+	// for the emitter.
+	resources   []resourceEntry
 	conflictMod *ModuleStmt
+}
+
+// resourceEntry is one packer input as produced by upstream
+// `TObjCopyResourcePacker::HandleResource`. Path == "-" marks a kv-only
+// entry (--kvs); otherwise Path is the source path and Key is the
+// pre-base64 raw key (the packer applies Base64 encoding when building
+// the hash list / cmd_args).
+type resourceEntry struct {
+	Path string
+	Key  string
 }
 
 // antlr4GrammarInfo captures a single RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT
@@ -877,6 +894,27 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 		case *RunProgramStmt:
 			// PR-M3-E: RUN_PROGRAM → PR node.
 			d.runPrograms = append(d.runPrograms, v)
+		case *ResourceStmt:
+			// PR-M3-resource-objcopy-A: RESOURCE pairs feed the objcopy
+			// packer as-is. Pairs whose path is "-" are kv-only entries;
+			// non-"-" pairs are (source path, raw key) pairs.
+			for _, pair := range v.Pairs {
+				d.resources = append(d.resources, resourceEntry{Path: pair.Path, Key: pair.Key})
+			}
+		case *ResourceFilesStmt:
+			// PR-M3-resource-objcopy-A: expand RESOURCE_FILES into
+			// resource entries per `build/plugins/res.py:onresource_files`.
+			// For each path P (after DONT_COMPRESS / PREFIX / DEST / STRIP
+			// keywords are processed), append:
+			//   - kv-only entry: Path="-", Key=resfs/src/resfs/file/<key>=${rootrel;context=TEXT;input=TEXT:"<P>"}
+			//   - source entry:  Path=<P>, Key=resfs/file/<key>
+			// The ${rootrel;...} placeholder is preserved verbatim because
+			// the hash formula (resource.go:objcopyHash) requires the
+			// pre-expansion form (verified against REF
+			// `devtools/ymake/contrib/python-rapidjson` objcopy hash).
+			for _, e := range expandResourceFiles(v.Args) {
+				d.resources = append(d.resources, e)
+			}
 		case *IfStmt:
 			taken := v.Then
 
@@ -1941,6 +1979,13 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// (no compilable C/C++ sources) so they reach the header-only
 		// branch; their Python sources still require PY node emission.
 		emitPySrcs(ctx, instance, d)
+
+		// PR-M3-resource-objcopy-A: emit objcopy PY nodes for
+		// RESOURCE / RESOURCE_FILES declarations. Header-only LIBRARY
+		// modules (e.g. certs) host the only-resource shape; the
+		// returned `.o` paths flow into the module's .global.a archive
+		// in a follow-up PR (PR-B wires the AR aggregation).
+		_ = emitResourceObjcopy(ctx, instance, d)
 
 		// PR-M3-D: emit EN nodes for GENERATE_ENUM_SERIALIZATION(*) declarations.
 		emitEnumSrcs(ctx, instance, d, peerContribs.addIncl)
@@ -3020,6 +3065,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// program modules so their .yapyc3 nodes appear in the graph).
 		if d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
 			emitPySrcs(ctx, instance, d)
+			// PR-M3-resource-objcopy-A: PY3_PROGRAM_BIN may also carry
+			// RESOURCE / RESOURCE_FILES (the yapyc3 + objcopy clusters
+			// coexist on PY3 programs per upstream pybuild.py).
+			_ = emitResourceObjcopy(ctx, instance, d)
 		}
 
 		result := &moduleEmitResult{
@@ -3105,6 +3154,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// Modules that have both SRCS and PY_SRCS (rare but valid) get CC/AR
 	// nodes from the SRCS path above AND yapyc3 nodes from PY_SRCS here.
 	emitPySrcs(ctx, instance, d)
+
+	// PR-M3-resource-objcopy-A: emit objcopy PY nodes for
+	// RESOURCE / RESOURCE_FILES declarations. The returned `.o` paths
+	// flow into the module's .global.a archive in a follow-up PR
+	// (PR-B wires the AR aggregation).
+	_ = emitResourceObjcopy(ctx, instance, d)
 
 	// PR-M3-D EN emission moved to pre-source-loop (PR-M3-F-7-C); the
 	// codegen registry must be populated before consumer CCs scan.
