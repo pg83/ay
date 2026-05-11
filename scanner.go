@@ -704,8 +704,18 @@ func (s *IncludeScanner) subgraph(absPath string, ctx *ScanContext, ctxHash, src
 	s.subgraphMisses++
 	s.subgraphInProgress[key] = struct{}{}
 
-	visited := make(map[string]struct{}, 32)
-	order := make([]string, 0, 32)
+	// Pull scratch buffers from the per-scanner pools (same pools that
+	// WalkClosure uses). Each subgraph computation needs its own isolated
+	// visited+order — isolating the canonical-subgraph walk from the
+	// caller's accumulator is what makes the cache correct — but the
+	// buffers themselves are throwaway after the copy below. Pooling
+	// eliminates the per-call make(map) + make([]string) alloc pair,
+	// which profiling showed at ~102 MB + 31 MB per M3 run.
+	visitedP := s.visitedPool.Get().(*map[string]struct{})
+	orderP := s.orderPool.Get().(*[]string)
+
+	visited := *visitedP
+	order := (*orderP)[:0]
 
 	clean := s.walkSubgraph(absPath, ctx, ctxHash, srcClassHash, visited, &order)
 
@@ -720,6 +730,12 @@ func (s *IncludeScanner) subgraph(absPath string, ctx *ScanContext, ctxHash, src
 		s.subgraphTainted++
 		s.subgraphTaintedKnown[key] = struct{}{}
 
+		// Return scratch buffers to the pool before returning.
+		clear(visited)
+		*orderP = order[:0]
+		s.visitedPool.Put(visitedP)
+		s.orderPool.Put(orderP)
+
 		return nil, false
 	}
 
@@ -728,6 +744,12 @@ func (s *IncludeScanner) subgraph(absPath string, ctx *ScanContext, ctxHash, src
 	// over-allocated buffers across millions of cached subgraphs.
 	out := make([]string, len(order))
 	copy(out, order)
+
+	// Return scratch buffers to the pool.
+	clear(visited)
+	*orderP = order[:0]
+	s.visitedPool.Put(visitedP)
+	s.orderPool.Put(orderP)
 
 	s.subgraphCache[key] = out
 
