@@ -2082,7 +2082,36 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// node Inputs and the JS-derived CC's IncludeInputs (mirror
 		// of the reference: the joined .cpp textually #includes each
 		// member, so its closure is the union of member closures).
+		//
+		// PR-40 Fix C: JS nodes are anchored to the outer-target
+		// platform axis (PR-35s), so the JS closure must be resolved
+		// with the TARGET scanner and TARGET musl arch search paths,
+		// even when srcInstance is a host (PIC) instance. The
+		// downstream CC node still compiles on the host axis and needs
+		// the HOST closure. Compute them separately when
+		// srcInstance.Flags.PIC — for the target case they are
+		// identical so a single call suffices.
+		// TODO: remove the Flags.PIC guard when a general target-vs-host
+		// axis parameter is plumbed through genModule (M3+ scope).
 		joinClosure := joinSrcsIncludeClosure(ctx, srcInstance, js.Sources, moduleInputs)
+
+		ccClosure := joinClosure
+
+		if srcInstance.Flags.PIC {
+			// Compute a separate closure for the JS node using the
+			// TARGET scanner and TARGET musl arch search paths.
+			// jsInstance has PIC=false so joinSrcsIncludeClosure picks
+			// ctx.scannerTarget. jsModuleInputs rebases PeerAddInclGlobal
+			// to swap x86_64 arch paths for aarch64 ones so the search
+			// path reflects the target (aarch64) musl layout.
+			jsInstance := srcInstance
+			jsInstance.Flags.PIC = false
+
+			jsModuleInputs := moduleInputs
+			jsModuleInputs.PeerAddInclGlobal = jsTargetPeerAddIncl(moduleInputs.PeerAddInclGlobal)
+
+			joinClosure = joinSrcsIncludeClosure(ctx, jsInstance, js.Sources, jsModuleInputs)
+		}
 
 		// PR-35s: anchor the JS node to the outer-target platform
 		// (`ctx.cfg.Target.ID`) regardless of whether this module
@@ -2114,7 +2143,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// JS-derived CC's IncludeInputs so its full Inputs read
 		// [joinedCpp, scripts..., sources..., closure...] — same shape
 		// as JS Inputs with the joined .cpp prepended.
-		ccIncludeInputs := jsCCIncludeInputs(srcInstance, js.Sources, joinClosure)
+		// PR-40 Fix C: use ccClosure (host scanner when PIC) for the
+		// CC node, not joinClosure (target scanner).
+		ccIncludeInputs := jsCCIncludeInputs(srcInstance, js.Sources, ccClosure)
 
 		ccIn := moduleInputs
 		ccIn.IsGenerated = true
@@ -3058,6 +3089,36 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, sources, closure []string) []
 	}
 
 	out = append(out, closure...)
+
+	return out
+}
+
+// jsTargetPeerAddIncl rebases a host (x86_64) PeerAddInclGlobal slice to
+// the target (aarch64) musl arch layout for use in the JS-node closure
+// scan. JS nodes are anchored to the target platform axis (PR-35s), so
+// their include closure must reflect aarch64 musl search paths rather
+// than the host x86_64 ones that the surrounding HOST-build moduleInputs
+// carries.
+//
+// PR-40 Fix C: narrow shim — only the musl arch/x86_64 entry is
+// rewritten to arch/aarch64; all other entries pass through unchanged.
+// TODO: remove when a general target-addincl propagation mechanism lands
+// in M3+ (the same milestone as the BinaryDir lift for Fix D).
+func jsTargetPeerAddIncl(hostPeerAddIncl []string) []string {
+	const (
+		hostMuslArch   = "contrib/libs/musl/arch/x86_64"
+		targetMuslArch = "contrib/libs/musl/arch/aarch64"
+	)
+
+	out := make([]string, len(hostPeerAddIncl))
+
+	for i, p := range hostPeerAddIncl {
+		if p == hostMuslArch {
+			out[i] = targetMuslArch
+		} else {
+			out[i] = p
+		}
+	}
 
 	return out
 }
