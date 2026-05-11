@@ -205,6 +205,14 @@ func emitResourceObjcopy(
 		outputs = append(outputs, o)
 	}
 
+	// PR-M3-resource-objcopy-C: per-PY_SRCS resfs entry objcopy nodes.
+	// One node per packer-flush chunk; small modules fit in one chunk
+	// (single-entry exact match); large modules (Lib, lib2/py) split
+	// into multiple chunks via chunkPySrcEntries.
+	for _, o := range emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef) {
+		outputs = append(outputs, o)
+	}
+
 	if len(d.resources) == 0 {
 		return outputs
 	}
@@ -672,6 +680,271 @@ func emitNoCheckImportsObjcopy(
 	kvCmd := key + "=" + value
 
 	return emitKvOnlyObjcopyNode(ctx, instance, []string{kvHash}, []string{kvCmd}, d.moduleStmt.Name, rescompilerLDRef, rescompressorLDRef)
+}
+
+// pySrcEntry is one element of the per-PY_SRCS objcopy emission. A
+// single source produces between one and two entries depending on
+// PYBUILD_NO_PY / PYBUILD_NO_PYC mode:
+//   - default: emit both the raw .py entry AND the .yapyc3 entry
+//   - PYBUILD_NO_PY (Lib): emit only the .yapyc3 entry
+//   - PYBUILD_NO_PYC (lib2/py, runtime_py3, py3cc/slow): emit only the
+//     raw .py entry
+//
+// `srcRel` is the PY_SRCS argument (relative path within the source
+// unit). `actualUnit` is the SRCDIR-resolved unit (== d.srcDir when
+// SRCDIR is set, otherwise == instance.Path). `topLevel` mirrors the
+// PY_SRCS TOP_LEVEL prefix and strips the dotted-module-path prefix
+// from the resfs key.
+type pySrcEntry struct {
+	pathHash  string // srcRel.yapyc3 form for flat, srcRel.3kp2.yapyc3 form for subdir; used as `paths` for the hash
+	pathInput string // cmd_args --inputs slot: $(BUILD_ROOT)/<actualUnit>/<srcRel>{.suffix} (yapyc3) or $(SOURCE_ROOT)/<actualUnit>/<srcRel> (raw)
+	key       string // pre-base64 key: resfs/file/py/[<ns>/]<srcRel>[.yapyc3]
+	kvHash    string // pre-rootrel-expansion form (placeholder retained)
+	kvCmd     string // post-rootrel-expansion form (placeholder expanded to <actualUnit>/<value>)
+	inputDep  string // inputs[] graph slot: same as pathInput
+}
+
+// buildPySrcEntries derives the ordered (kv,path,key) triples that the
+// upstream packer would receive for one PY_SRCS macro. The order is
+// declaration order (matches REF). Each entry is independent of chunk
+// boundaries — the chunker decides which chunk it lands in.
+func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
+	if len(d.pySrcs) == 0 {
+		return nil
+	}
+
+	actualUnit := modulePath
+	if d.srcDir != "" {
+		actualUnit = d.srcDir
+	}
+
+	// keyPrefix is the dotted-module-path prefix prepended to each
+	// per-source resfs key. TOP_LEVEL strips the prefix, leaving the
+	// raw source path as the resfs key root.
+	keyPrefix := ""
+	if !d.pyTopLevel {
+		keyPrefix = modulePath + "/"
+	}
+
+	out := make([]pySrcEntry, 0, len(d.pySrcs)*2)
+	for _, srcRel := range d.pySrcs {
+		suffix := ".yapyc3"
+		if strings.Contains(srcRel, "/") {
+			suffix = ".3kp2.yapyc3"
+		}
+
+		// yapyc3 entry — always emitted unless PYBUILD_NO_PYC is set.
+		if !d.pyBuildNoPYC {
+			ypKey := "resfs/file/py/" + keyPrefix + srcRel + ".yapyc3"
+			ypPathHash := srcRel + suffix
+			ypPathInput := "$(BUILD_ROOT)/" + actualUnit + "/" + srcRel + suffix
+			// kv hash form retains the ${rootrel;...} placeholder with
+			// the inner-srcRel-with-suffix value. cmd_args form expands
+			// to <actualUnit>/<srcRel><suffix>.
+			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
+			ypKvCmd := "resfs/src/" + ypKey + "=" + actualUnit + "/" + srcRel + suffix
+			out = append(out, pySrcEntry{
+				pathHash:  ypPathHash,
+				pathInput: ypPathInput,
+				key:       ypKey,
+				kvHash:    ypKvHash,
+				kvCmd:     ypKvCmd,
+				inputDep:  ypPathInput,
+			})
+		}
+
+		// raw .py entry — emitted unless PYBUILD_NO_PY is set.
+		if !d.pyBuildNoPY {
+			pyKey := "resfs/file/py/" + keyPrefix + srcRel
+			pyPathHash := srcRel
+			pyPathInput := "$(SOURCE_ROOT)/" + actualUnit + "/" + srcRel
+			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
+			pyKvCmd := "resfs/src/" + pyKey + "=" + actualUnit + "/" + srcRel
+			out = append(out, pySrcEntry{
+				pathHash:  pyPathHash,
+				pathInput: pyPathInput,
+				key:       pyKey,
+				kvHash:    pyKvHash,
+				kvCmd:     pyKvCmd,
+				inputDep:  pyPathInput,
+			})
+		}
+	}
+
+	return out
+}
+
+// pySrcChunk holds the accumulator state for one objcopy node emitted
+// by chunkPySrcEntries — the kv-first pre-check chunker.
+type pySrcChunk struct {
+	paths     []string
+	keys      []string // base64-padded
+	kvsHash   []string
+	kvsCmd    []string
+	pathInps  []string
+}
+
+// chunkPySrcEntries partitions a declaration-ordered entry list into
+// upstream-packer-style chunks. Each chunk's combined cmd-arg length
+// stays at or under maxCmdLen. The packer's accumulator increments by
+// `rootCmdLen + len(arg)` per argument added; the entry-add pre-check
+// is on the kv-portion alone (the path/key portion goes in the same
+// chunk as the kv, even when it pushes cmdLen past maxCmdLen — this
+// matches the observed REF behaviour where path-only-overflow does not
+// split entries).
+//
+// Single-entry / small-bucket modules (runtime_py3, py3cc/slow,
+// symbols/module) always fit in one chunk; this path is exact. Large
+// buckets (contrib/tools/python3/Lib, contrib/tools/python3/lib2/py)
+// produce ~40 / ~74 chunks; the chunker approximates the upstream
+// split-on-mid-entry-flush behaviour, so a subset of the chunk hashes
+// will diverge from REF. Documented under PR-M3-resource-objcopy-C.
+func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	chunks := make([]pySrcChunk, 0)
+	cur := pySrcChunk{}
+	cmdLen := 0
+
+	flush := func() {
+		if cmdLen == 0 {
+			return
+		}
+		chunks = append(chunks, cur)
+		cur = pySrcChunk{}
+		cmdLen = 0
+	}
+
+	for _, e := range entries {
+		kvLen := rootCmdLen + len(e.kvCmd)
+		pathLen := rootCmdLen + len(e.pathInput) + len(e.key)
+
+		if cmdLen+kvLen > maxCmdLen {
+			flush()
+		}
+		cur.kvsHash = append(cur.kvsHash, e.kvHash)
+		cur.kvsCmd = append(cur.kvsCmd, e.kvCmd)
+		cmdLen += kvLen
+
+		cur.paths = append(cur.paths, e.pathHash)
+		cur.keys = append(cur.keys, encb64.StdEncoding.EncodeToString([]byte(e.key)))
+		cur.pathInps = append(cur.pathInps, e.pathInput)
+		cmdLen += pathLen
+	}
+	flush()
+
+	return chunks
+}
+
+// emitPySrcObjcopy emits one objcopy PY node per chunk of PY_SRCS-derived
+// resfs entries. Returns the emitted output paths in chunk order.
+// Skipped when the module has no PY_SRCS or when its PY_SRCS produces
+// no resfs entries (all-suppressed by PYBUILD_NO_PY + PYBUILD_NO_PYC,
+// an unobserved combination that would degenerate to a no-op).
+func emitPySrcObjcopy(
+	ctx *genCtx,
+	instance ModuleInstance,
+	d *moduleData,
+	rescompilerLDRef NodeRef,
+	rescompressorLDRef NodeRef,
+) []string {
+	if len(d.pySrcs) == 0 {
+		return nil
+	}
+	if d.moduleStmt == nil {
+		return nil
+	}
+
+	// PY3-flavoured modules only — non-PY3 PY_SRCS does not exist in
+	// the M3 closure (the gate mirrors emitPyNamespaceObjcopy:572-578).
+	if resourceModuleTag(d.moduleStmt.Name) == "" {
+		return nil
+	}
+
+	entries := buildPySrcEntries(d, instance.Path)
+	if len(entries) == 0 {
+		return nil
+	}
+
+	chunks := chunkPySrcEntries(entries)
+	moduleTag := resourceModuleTag(d.moduleStmt.Name)
+
+	outputs := make([]string, 0, len(chunks))
+	for _, ch := range chunks {
+		hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path, moduleTag)
+		outputObj := "$(BUILD_ROOT)/" + instance.Path + "/objcopy_" + hash + ".o"
+
+		cmdArgs := []string{
+			"/ix/realm/pg/bin/python3",
+			"$(SOURCE_ROOT)/build/scripts/objcopy.py",
+			"--compiler", "/ix/realm/boot/bin/clang++",
+			"--objcopy", "/ix/realm/boot/bin/llvm-objcopy",
+			"--compressor", "$(BUILD_ROOT)/tools/rescompressor/rescompressor",
+			"--rescompiler", "$(BUILD_ROOT)/tools/rescompiler/rescompiler",
+			"--output_obj", outputObj,
+			"--target", objcopyTargetTriple(instance),
+		}
+
+		cmdArgs = append(cmdArgs, "--inputs")
+		cmdArgs = append(cmdArgs, ch.pathInps...)
+		cmdArgs = append(cmdArgs, "--keys")
+		cmdArgs = append(cmdArgs, ch.keys...)
+		cmdArgs = append(cmdArgs, "--kvs")
+		cmdArgs = append(cmdArgs, ch.kvsCmd...)
+
+		// inputs[]: rescompiler + rescompressor + per-entry source files +
+		// objcopy.py. Order from REF (multi-entry rapidjson shape, PR-A):
+		// tooling first, source files, script last.
+		inputs := []string{
+			"$(BUILD_ROOT)/tools/rescompiler/rescompiler",
+			"$(BUILD_ROOT)/tools/rescompressor/rescompressor",
+		}
+		inputs = append(inputs, ch.pathInps...)
+		inputs = append(inputs, "$(SOURCE_ROOT)/build/scripts/objcopy.py")
+
+		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)"}
+
+		targetProps := map[string]string{"module_dir": instance.Path}
+		switch d.moduleStmt.Name {
+		case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
+			targetProps["module_tag"] = "py3"
+		}
+
+		node := &Node{
+			Cmds: []Cmd{{CmdArgs: cmdArgs, Env: env}},
+			Env:              env,
+			Inputs:           inputs,
+			Outputs:          []string{outputObj},
+			KV:               map[string]string{"p": "PY", "pc": "yellow", "show_out": "yes"},
+			Tags:             []string{},
+			TargetProperties: targetProps,
+			Platform:         string(instance.Target),
+			Requirements: map[string]interface{}{
+				"cpu":     float64(1),
+				"network": "restricted",
+				"ram":     float64(32),
+			},
+		}
+
+		if targetIsX8664(instance) {
+			node.HostPlatform = true
+			node.Tags = []string{"tool"}
+		}
+
+		if rescompilerLDRef != (NodeRef{}) {
+			node.DepRefs = append(node.DepRefs, rescompilerLDRef)
+		}
+		if rescompressorLDRef != (NodeRef{}) {
+			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
+		}
+
+		ctx.emit.Emit(node)
+		outputs = append(outputs, outputObj)
+	}
+
+	return outputs
 }
 
 // walkHostToolForRef walks `path` as a host tool and returns the LD

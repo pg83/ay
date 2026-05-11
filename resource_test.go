@@ -263,3 +263,110 @@ func TestNoCheckImportsPathidLib2Py(t *testing.T) {
 		t.Fatalf("no_check_imports pathid for lib2/py: got %q, want %q", got, want)
 	}
 }
+
+// TestPySrcObjcopyHashRuntimePy3RawEntryPoints verifies the objcopy hash
+// for the single-entry raw `.py` chunk of library/python/runtime_py3.
+// PYBUILD_NO_PYC is on, namespace is non-TOP_LEVEL (default upath
+// prefix). REF:
+//
+//	output: $(BUILD_ROOT)/library/python/runtime_py3/objcopy_84a3659770bdea15f8ae77837d.o
+//	key:    resfs/file/py/library/python/runtime_py3/entry_points.py
+//	kv:     resfs/src/<key>=${rootrel;context=TEXT;input=TEXT:"entry_points.py"}
+//	paths:  [entry_points.py]   (the raw PY_SRCS argument, not srcRel+suffix)
+//
+// The hash uses the placeholder kv form; cmd_args use the expanded form.
+func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
+	d := &moduleData{
+		pySrcs:       []string{"entry_points.py"},
+		pyBuildNoPYC: true,
+		pyBuildNoPY:  false,
+		pyTopLevel:   false,
+		moduleStmt:   &ModuleStmt{Name: "PY3_LIBRARY"},
+	}
+	entries := buildPySrcEntries(d, "library/python/runtime_py3")
+	if len(entries) != 1 {
+		t.Fatalf("entries: got %d, want 1", len(entries))
+	}
+	if entries[0].pathHash != "entry_points.py" {
+		t.Errorf("pathHash: got %q, want %q", entries[0].pathHash, "entry_points.py")
+	}
+	expectedKey := "resfs/file/py/library/python/runtime_py3/entry_points.py"
+	if entries[0].key != expectedKey {
+		t.Errorf("key: got %q, want %q", entries[0].key, expectedKey)
+	}
+	expectedKv := "resfs/src/" + expectedKey + "=${rootrel;context=TEXT;input=TEXT:\"entry_points.py\"}"
+	if entries[0].kvHash != expectedKv {
+		t.Errorf("kvHash: got %q, want %q", entries[0].kvHash, expectedKv)
+	}
+
+	chunks := chunkPySrcEntries(entries)
+	if len(chunks) != 1 {
+		t.Fatalf("chunks: got %d, want 1", len(chunks))
+	}
+	ch := chunks[0]
+	got := objcopyHash(ch.paths, ch.keys, ch.kvsHash, "library/python/runtime_py3", "PY3")
+	want := "84a3659770bdea15f8ae77837d"
+	if got != want {
+		t.Fatalf("runtime_py3 entry_points objcopy hash: got %q, want %q", got, want)
+	}
+}
+
+// TestPySrcObjcopyHashPy3ccSlowMain verifies the single-entry raw .py
+// chunk for tools/py3cc/slow (PY3_PROGRAM_BIN, PYBUILD_NO_PYC, MAIN main.py).
+// REF: objcopy_c3a5182796bc68c054c676bcc0.o
+func TestPySrcObjcopyHashPy3ccSlowMain(t *testing.T) {
+	d := &moduleData{
+		pySrcs:       []string{"main.py"},
+		pyBuildNoPYC: true,
+		pyBuildNoPY:  false,
+		pyTopLevel:   false,
+		moduleStmt:   &ModuleStmt{Name: "PY3_PROGRAM_BIN"},
+	}
+	entries := buildPySrcEntries(d, "tools/py3cc/slow")
+	chunks := chunkPySrcEntries(entries)
+	if len(chunks) != 1 {
+		t.Fatalf("chunks: got %d, want 1", len(chunks))
+	}
+	got := objcopyHash(chunks[0].paths, chunks[0].keys, chunks[0].kvsHash, "tools/py3cc/slow", "PY3")
+	want := "c3a5182796bc68c054c676bcc0"
+	if got != want {
+		t.Fatalf("py3cc/slow main.py objcopy hash: got %q, want %q", got, want)
+	}
+}
+
+// TestPySrcObjcopyHashSymbolsModuleDualEntry verifies the dual-entry
+// (raw .py + .yapyc3) chunk for library/python/symbols/module.
+// PY23_LIBRARY (MODULE_TAG=PY3), no PYBUILD_NO_*, NOT TOP_LEVEL.
+// REF: objcopy_c325f0009e9625395005936d90.o
+func TestPySrcObjcopyHashSymbolsModuleDualEntry(t *testing.T) {
+	d := &moduleData{
+		pySrcs:       []string{"__init__.py"},
+		pyBuildNoPYC: false,
+		pyBuildNoPY:  false,
+		pyTopLevel:   false,
+		moduleStmt:   &ModuleStmt{Name: "PY23_LIBRARY"},
+	}
+	entries := buildPySrcEntries(d, "library/python/symbols/module")
+	if len(entries) != 2 {
+		t.Fatalf("entries: got %d, want 2 (yapyc3 + raw)", len(entries))
+	}
+	chunks := chunkPySrcEntries(entries)
+	if len(chunks) != 1 {
+		t.Fatalf("chunks: got %d, want 1", len(chunks))
+	}
+	got := objcopyHash(chunks[0].paths, chunks[0].keys, chunks[0].kvsHash, "library/python/symbols/module", "PY3")
+	want := "c325f0009e9625395005936d90"
+	if got != want {
+		t.Fatalf("symbols/module __init__.py objcopy hash: got %q, want %q", got, want)
+	}
+}
+
+// TestChunkPySrcEntriesEmptyReturnsNil ensures the chunker degenerates
+// cleanly on empty input — no allocations, returns nil. PR-M3-resource-
+// objcopy-C guard for modules where PYBUILD_NO_PY + PYBUILD_NO_PYC are
+// both set (an unobserved combo that produces zero entries).
+func TestChunkPySrcEntriesEmptyReturnsNil(t *testing.T) {
+	if got := chunkPySrcEntries(nil); got != nil {
+		t.Fatalf("chunkPySrcEntries(nil): got %+v, want nil", got)
+	}
+}
