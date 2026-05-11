@@ -250,7 +250,10 @@ func TestScanner_BlockCommentIncludeIgnored(t *testing.T) {
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
 
-	dirs := scanner.parseIncludes(path)
+	// PR-M3-vfs-paths: parseIncludes takes a VFS path. The test file
+	// `<dir>/fake.h` becomes `$(SOURCE_ROOT)/fake.h` under the scanner's
+	// dir-as-sourceRoot.
+	dirs := scanner.parseIncludes("$(SOURCE_ROOT)/fake.h")
 
 	if len(dirs) != 1 {
 		t.Fatalf("got %d directives, want 1; directives=%+v", len(dirs), dirs)
@@ -1155,8 +1158,9 @@ func TestParseIncludes_DispatchByExtension(t *testing.T) {
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
 
-	asmDirs := scanner.parseIncludes(asmPath)
-	hDirs := scanner.parseIncludes(hPath)
+	// PR-M3-vfs-paths: parseIncludes takes a VFS path.
+	asmDirs := scanner.parseIncludes("$(SOURCE_ROOT)/src.asm")
+	hDirs := scanner.parseIncludes("$(SOURCE_ROOT)/src.h")
 
 	if len(asmDirs) != 1 || asmDirs[0].target != "defs.asm" {
 		t.Errorf("asm dispatch failed: got %+v, want one directive targeting defs.asm", asmDirs)
@@ -1182,7 +1186,8 @@ func TestParseIncludes_AsiDispatchesToYasm(t *testing.T) {
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	dirs := scanner.parseIncludes(asiPath)
+	// PR-M3-vfs-paths: parseIncludes takes a VFS path.
+	dirs := scanner.parseIncludes("$(SOURCE_ROOT)/src.asi")
 
 	if len(dirs) != 1 || dirs[0].target != "nested.asi" {
 		t.Errorf(".asi dispatch failed: got %+v, want one directive targeting nested.asi", dirs)

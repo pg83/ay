@@ -4466,7 +4466,10 @@ func joinSrcsIncludeClosure(ctx *genCtx, srcInstance ModuleInstance, sources []s
 		// so set it here before invoking dfs against the shared visited+order.
 		sc.cfg.SourceRel = srcRelOnDisk
 
-		srcAbs := scanner.sourceRoot + "/" + srcRelOnDisk
+		// PR-M3-vfs-paths: srcAbs is a VFS-rooted path. The scanner's
+		// internal walk operates on VFS form; the FS translation happens
+		// at the parseIncludes / fileExists boundary inside scanner.go.
+		srcAbs := "$(SOURCE_ROOT)/" + srcRelOnDisk
 		srcAbsSet[srcAbs] = struct{}{}
 		sc.dfs(srcAbs, visited, &order)
 	}
@@ -4475,7 +4478,6 @@ func joinSrcsIncludeClosure(ctx *genCtx, srcInstance ModuleInstance, sources []s
 		return nil
 	}
 
-	prefix := scanner.sourceRoot + "/"
 	out := make([]string, 0, len(order))
 
 	for _, abs := range order {
@@ -4486,8 +4488,10 @@ func joinSrcsIncludeClosure(ctx *genCtx, srcInstance ModuleInstance, sources []s
 			continue
 		}
 
-		rel := strings.TrimPrefix(abs, prefix)
-		out = append(out, "$(SOURCE_ROOT)/"+rel)
+		// PR-M3-vfs-paths: `abs` is already in $(SOURCE_ROOT)/-rooted
+		// form (the scanner walks VFS paths internally); no translation
+		// needed before stashing it as a node Input.
+		out = append(out, abs)
 	}
 
 	if len(out) == 0 {

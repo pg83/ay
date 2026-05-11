@@ -40,6 +40,56 @@ import (
 	"unsafe"
 )
 
+// PR-M3-vfs-paths: the include scanner's internal path discipline. Every
+// path that flows through resolve / dfs / subgraphCache / resolveCache /
+// parseIncludes / fileExists / emittedRel is a VFS-rooted string of one
+// of two shapes:
+//
+//   - `$(SOURCE_ROOT)/<rel>` — a real on-disk file under the scanner's
+//     sourceRoot. The fs locator and fileExists translate this prefix to
+//     `sourceRoot + "/" + rel` at the os.Stat / os.ReadFile site, never
+//     above it.
+//   - `$(BUILD_ROOT)/<rel>` — a generated output tracked by the per-scanner
+//     CodegenRegistry. The codegen locator answers Exists for these; their
+//     children come from GeneratedFileInfo.EmitsIncludes (already in VFS
+//     form), not from parseIncludes.
+//
+// User directive (verbatim, 2026-05-11):
+//
+//   "резолвер должен оперировать не абсолютными путями, а путями в vfs,
+//    то есть, начинающимися с $(SOURCE_ROOT)/... или $(BUILD_ROOT)/..."
+//
+// Before this refactor, FS-tier paths flowed through the scanner as
+// filesystem-absolute strings (`sourceRoot + "/" + rel`). The mixed
+// representation forced emittedRel to translate at every result-emission
+// site and forEachResolvedChild to translate codegen `$(SOURCE_ROOT)/`
+// children BACK into FS-absolute form before recursion. Uniform VFS form
+// eliminates the translation churn and makes the FS / codegen dispatch a
+// single prefix check at the locator boundary.
+//
+// vfsSourcePrefix / vfsBuildPrefix are the two valid VFS roots; helpers
+// vfsSource / vfsBuild build them and isSourceVFS / isBuildVFS test for
+// them. The scanner uses plain `string` for cache keys and parameters
+// (a named `type VFSPath string` was considered but ruled out: every
+// cache map would have required `map[VFSPath]…` and every conversion to
+// `string` for os.ReadFile / map lookup would have produced syntactic
+// noise without changing semantics). The discipline is enforced by
+// convention + helpers + per-function doc; the FS-translation sites are
+// localised to fileExists / fsLocator.Exists / parseIncludes.
+const (
+	vfsSourcePrefix = "$(SOURCE_ROOT)/"
+	vfsBuildPrefix  = "$(BUILD_ROOT)/"
+)
+
+// vfsSource builds the canonical VFS form of a SOURCE_ROOT-relative path.
+func vfsSource(rel string) string { return vfsSourcePrefix + rel }
+
+// isSourceVFS reports whether p is a $(SOURCE_ROOT)/-prefixed VFS path.
+func isSourceVFS(p string) bool { return strings.HasPrefix(p, vfsSourcePrefix) }
+
+// isBuildVFS reports whether p is a $(BUILD_ROOT)/-prefixed VFS path.
+func isBuildVFS(p string) bool { return strings.HasPrefix(p, vfsBuildPrefix) }
+
 // includeRe matches `#include` / `#include_next` directives in their
 // angle-bracket and quoted-string forms, tolerating arbitrary
 // whitespace between `#`, the keyword, and the bracket. Two capture
@@ -104,13 +154,18 @@ type includeDirective struct {
 // architecture-neutral: the same header text yields the same
 // directives regardless of which arch is being compiled.
 type sharedParseCache struct {
-	// parsed memoises include directives per absolute path. 8192
-	// pre-size covers the peak observed for tools/archiver
-	// (4354 target + 3559 host, mostly overlapping files).
+	// parsed memoises include directives per VFS-rooted path
+	// ($(SOURCE_ROOT)/<rel>). 8192 pre-size covers the peak observed
+	// for tools/archiver (4354 target + 3559 host, mostly overlapping
+	// files). PR-M3-vfs-paths: key shape changed from FS-absolute to
+	// VFS form when parseIncludes was refactored to take VFS input;
+	// the cached value set itself is unchanged.
 	parsed map[string][]includeDirective
-	// exists memoises os.Stat results per absolute path. 16384
+	// exists memoises os.Stat results per VFS-rooted path. 16384
 	// pre-size covers the peak (14195 target + 14494 host, mostly
-	// the same files on both walks).
+	// the same files on both walks). PR-M3-vfs-paths: keyed by
+	// $(SOURCE_ROOT)/<rel>; FS translation happens at the os.Stat
+	// site inside fileExists / fsLocator.Exists.
 	exists map[string]bool
 }
 
@@ -156,14 +211,12 @@ type IncludeScanner struct {
 	sysincl    SysInclSet
 	sourceRoot string
 	// sourceRootSlash is the precomputed `sourceRoot + "/"` prefix.
-	// Hot paths build absolute paths by `sourceRootSlash + rel` (one
-	// 2-string concat = one alloc) instead of `sourceRoot + "/" + rel`
-	// (which Go's runtime resolves via concatstring3 — still one alloc,
-	// but the literal `"/"` segment forces the string-table to allocate
-	// the joined `sourceRoot+"/"` prefix on every call). Caching it
-	// once removes the per-call prefix alloc that PR-34k's profile
-	// flagged inside `addPath` and `resolve`'s `TrimPrefix(... ,
-	// s.sourceRoot+"/")` call sites.
+	// PR-M3-vfs-paths: scanner internals operate on VFS-rooted paths
+	// (`$(SOURCE_ROOT)/<rel>`); the FS translation
+	// `$(SOURCE_ROOT)/<rel>` → `sourceRoot/<rel>` happens at the
+	// boundary sites — parseIncludes, fileExists, fsLocator.Exists —
+	// at the os.Stat / os.ReadFile call. sourceRootSlash is still
+	// precomputed to keep that one boundary concat alloc-free.
 	sourceRootSlash string
 
 	// pc holds the parse-level caches shared between target and host
@@ -208,16 +261,6 @@ type IncludeScanner struct {
 	// / subgraph caches. Production callers (gen.go) intern through
 	// genCtx.getScanCtx instead; this map is independent.
 	walkClosureCache map[uint64]*scanCtx
-
-	// emittedRelCache memoises the per-output `$(SOURCE_ROOT)/<rel>`
-	// string built by WalkClosure for every header in the closure. The
-	// same header appears in many CC nodes' closures (libcxx's
-	// __config is included by 3000+ CCs), so interning the formatted
-	// path string once and reusing it saves the per-element string
-	// concat — 30 MB / run pre-PR-34k.
-	//
-	// PR-34n: the dedicated emittedRelMu is gone (single-goroutine).
-	emittedRelCache map[string]string
 
 	// subgraphHits/subgraphMisses count cache traffic for verification.
 	// Plain uint64; single-goroutine like the rest of scanner.go.
@@ -375,7 +418,6 @@ func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedPars
 		sourceRootSlash:      sourceRoot + "/",
 		pc:                   pc,
 		viewCache:            make(map[string]PerSourceView, 4096),
-		emittedRelCache:      make(map[string]string, 4096),
 		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 524288),
 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 32768),
 		walkClosureCache:     make(map[uint64]*scanCtx, 8),
@@ -498,7 +540,9 @@ func (s *IncludeScanner) WalkClosure(cfg ScanContext) []string {
 // ctxHash recomputation.
 func (sc *scanCtx) WalkSource(sourceRel string) []string {
 	s := sc.scanner
-	srcAbs := s.sourceRootSlash + sourceRel
+	// PR-M3-vfs-paths: srcAbs is a VFS-rooted path. The FS-translation
+	// happens inside parseIncludes / fileExists / fsLocator.Exists.
+	srcAbs := vfsSource(sourceRel)
 	// PR-M3-perf-E: cfg.SourceRel is the source-rel that perSourceView
 	// keys on for the src-class hash, but the scanCtx is shared across
 	// many sources within a module — overwrite the per-call source-rel
@@ -560,34 +604,15 @@ func (sc *scanCtx) WalkSource(sourceRel string) []string {
 // subgraph cache hit/miss counters to stderr. No-op when env not set.
 var scannerStatsEnabled = os.Getenv("SCANNER_STATS") != ""
 
-// emittedRel converts an absolute path under sourceRoot into the
-// `$(SOURCE_ROOT)/<rel>` form used in graph-node Inputs, interning the
-// result so repeat calls (libcxx's __config.h is reached by 3000+ CC
-// closures) return the same string instance instead of re-allocating
-// the concat per caller.
-//
-// PR-34n: lock removed (single-goroutine).
+// emittedRel returns the VFS-rooted form that the scanner emits for a
+// header path. PR-M3-vfs-paths: internal paths are already VFS-rooted
+// ($(SOURCE_ROOT)/<rel> or $(BUILD_ROOT)/<rel>); emittedRel is now a
+// passthrough validator. The pre-refactor body translated FS-absolute
+// paths to $(SOURCE_ROOT)/<rel> and cached the result; with uniform
+// internal VFS form the conversion is the identity and the cache is
+// gone.
 func (s *IncludeScanner) emittedRel(abs string) string {
-	if cached, ok := s.emittedRelCache[abs]; ok {
-		return cached
-	}
-
-	// PR-M3-F-7-C: registry-resolved paths carry the literal $(BUILD_ROOT)/...
-	// prefix (generated files never exist under sourceRoot at gen time). Pass
-	// them through verbatim — TrimPrefix below would otherwise leave the
-	// $(BUILD_ROOT)/ prefix intact and the concat would double-prefix to
-	// $(SOURCE_ROOT)/$(BUILD_ROOT)/... .
-	var out string
-	if strings.HasPrefix(abs, "$(BUILD_ROOT)/") {
-		out = abs
-	} else {
-		rel := strings.TrimPrefix(abs, s.sourceRootSlash)
-		out = "$(SOURCE_ROOT)/" + rel
-	}
-
-	s.emittedRelCache[abs] = out
-
-	return out
+	return abs
 }
 
 // sourceClassHash returns an FNV-1a digest of the pointer addresses of
@@ -762,15 +787,21 @@ func (sc *scanCtx) plainDfs(absPath string, visited map[string]struct{}, order *
 	})
 }
 
-// forEachResolvedChild invokes `fn` once per resolved-child path of
-// `absPath`, dispatching on path provenance:
+// forEachResolvedChild invokes `fn` once per resolved-child VFS path of
+// `vfsPath`, dispatching on path provenance:
 //
 //   - $(BUILD_ROOT)/<...> path AND present in the per-scanner
-//     CodegenRegistry: the children are the entry's EmitsIncludes,
-//     already absolute. No parseIncludes/resolve — the file does not
-//     exist on disk.
-//   - any other absPath: the children come from parseIncludes(absPath)
-//     piped through resolve() (the legacy on-disk path).
+//     CodegenRegistry: the children are the entry's EmitsIncludes, in
+//     VFS form. No parseIncludes/resolve — the file does not exist on
+//     disk and its children are pre-resolved at registration time.
+//   - any $(SOURCE_ROOT)/<...> path: the children come from
+//     parseIncludes(vfsPath) piped through resolve() (the FS path).
+//
+// PR-M3-vfs-paths: both branches operate purely on VFS-rooted paths. The
+// previous FS-translation of EmitsIncludes' $(SOURCE_ROOT)/<rel> entries
+// is gone — the recursive walk receives the VFS form directly and the
+// parseIncludes / fileExists callees translate to FS only at the
+// os.ReadFile / os.Stat boundary.
 //
 // Registry-resolved children are emitted in EmitsIncludes order, which is
 // produced sorted by the emitters in F-7-B (protoDirectImportIncludes,
@@ -778,22 +809,13 @@ func (sc *scanCtx) plainDfs(absPath string, visited map[string]struct{}, order *
 // is responsible for visited-set deduplication.
 //
 // PR-M3-F-7-C.
-func (sc *scanCtx) forEachResolvedChild(absPath string, fn func(rabs string)) {
+func (sc *scanCtx) forEachResolvedChild(vfsPath string, fn func(rabs string)) {
 	s := sc.scanner
 
-	if strings.HasPrefix(absPath, "$(BUILD_ROOT)/") {
+	if isBuildVFS(vfsPath) {
 		if s.codegen != nil {
-			if info, ok := s.codegen.Lookup(absPath); ok {
+			if info, ok := s.codegen.Lookup(vfsPath); ok {
 				for _, rabs := range info.EmitsIncludes {
-					// Translate $(SOURCE_ROOT)/<rel> entries to their
-					// on-disk absolute form so the recursive walk can
-					// parseIncludes / fileExists them. $(BUILD_ROOT)/
-					// entries stay as-is (they trip the registry branch
-					// on the next recursion).
-					if strings.HasPrefix(rabs, "$(SOURCE_ROOT)/") {
-						rabs = s.sourceRootSlash + rabs[len("$(SOURCE_ROOT)/"):]
-					}
-
 					fn(rabs)
 				}
 
@@ -809,10 +831,10 @@ func (sc *scanCtx) forEachResolvedChild(absPath string, fn func(rabs string)) {
 		return
 	}
 
-	directives := s.parseIncludes(absPath)
+	directives := s.parseIncludes(vfsPath)
 
 	for _, d := range directives {
-		resolved := sc.resolve(absPath, d)
+		resolved := sc.resolve(vfsPath, d)
 
 		for _, rabs := range resolved {
 			fn(rabs)
@@ -1042,10 +1064,17 @@ func (sc *scanCtx) walkSubgraphTainted(absPath string, srcClassHash uint64, visi
 }
 
 // parseIncludes returns the parsed include directives for the file at
-// `absPath`. Memoized per absolute path. Returns nil for files that
-// do not exist (the caller's resolver dropped them already, but DFS
-// may also reach a dangling path through a sysincl mapping that
-// names a file the tree does not have).
+// `vfsPath`. PR-M3-vfs-paths: the parameter is a VFS-rooted path
+// (`$(SOURCE_ROOT)/<rel>`); the FS translation to `sourceRoot+"/"+rel`
+// happens inside this function at the os.ReadFile call. Memoized by
+// VFS path. Returns nil for files that do not exist (the caller's
+// resolver dropped them already, but DFS may also reach a dangling
+// path through a sysincl mapping that names a file the tree does not
+// have).
+//
+// Callers must NOT pass a $(BUILD_ROOT)/-prefixed path here — generated
+// outputs are read via the per-scanner CodegenRegistry, not parsed off
+// disk. forEachResolvedChild enforces this dispatch.
 //
 // PR-35x: dispatches on file extension. `.asm`/`.asi` files (yasm/
 // NASM assembly) use the `parseYasmIncludes` path which matches
@@ -1053,32 +1082,37 @@ func (sc *scanCtx) walkSubgraphTainted(absPath string, srcClassHash uint64, visi
 // regex. The two syntaxes share `includeDirective` and the rest of
 // the resolver pipeline — yasm `%include "foo.asm"` resolves through
 // the same search-path / sysincl machinery as a quoted C include.
-func (s *IncludeScanner) parseIncludes(absPath string) []includeDirective {
+func (s *IncludeScanner) parseIncludes(vfsPath string) []includeDirective {
 	// PR-34n: lock removed (single-goroutine).
 	// PR-M3-perf-B: parsed cache is shared between target and host scanners
 	// via s.pc; both walk the same source tree so parsed directives are
 	// identical regardless of which scanner first reads the file.
-	if cached, ok := s.pc.parsed[absPath]; ok {
+	if cached, ok := s.pc.parsed[vfsPath]; ok {
 		return cached
 	}
 
-	data, err := os.ReadFile(absPath)
+	// FS translation: $(SOURCE_ROOT)/<rel> → sourceRoot/<rel>. Any non-
+	// $(SOURCE_ROOT)/ path here is a bug (a $(BUILD_ROOT)/ should have
+	// been dispatched to the registry by forEachResolvedChild).
+	fsPath := s.sourceRootSlash + strings.TrimPrefix(vfsPath, vfsSourcePrefix)
+
+	data, err := os.ReadFile(fsPath)
 
 	if err != nil {
-		s.pc.parsed[absPath] = nil
+		s.pc.parsed[vfsPath] = nil
 
 		return nil
 	}
 
 	var out []includeDirective
 
-	if isYasmLike(absPath) {
+	if isYasmLike(vfsPath) {
 		out = parseYasmIncludes(data)
 	} else {
 		out = parseCIncludes(data)
 	}
 
-	s.pc.parsed[absPath] = out
+	s.pc.parsed[vfsPath] = out
 
 	return out
 }
@@ -1321,7 +1355,11 @@ func (sc *scanCtx) resolve(includerAbs string, d includeDirective) []string {
 	// libc-to-musl line 75, libc-to-compat) to source-keyed so they
 	// no longer fire on libcxx-internal includer chains reaching
 	// uchar.h/wchar.h via `__has_include_next` shadow patterns.
-	includerRel := strings.TrimPrefix(includerAbs, s.sourceRootSlash)
+	// PR-M3-vfs-paths: includerAbs is a $(SOURCE_ROOT)/-rooted VFS path
+	// (the BUILD_ROOT codegen branch dispatches in forEachResolvedChild
+	// before reaching resolve()). Strip the VFS prefix to recover the
+	// sysincl-keyed relative form.
+	includerRel := strings.TrimPrefix(includerAbs, vfsSourcePrefix)
 	mappings, hasMultiTarget := s.sysinclLookup(ctx.SourceRel, includerRel, d.target)
 
 	// PR-35w / PR-36 quoted-include gate. For QUOTED includes when the
@@ -1347,9 +1385,9 @@ func (sc *scanCtx) resolve(includerAbs string, d includeDirective) []string {
 		var sameDirAbs string
 
 		if incDir != "" {
-			sameDirAbs = s.sourceRootSlash + normalisePath(incDir+"/"+d.target)
+			sameDirAbs = vfsSource(normalisePath(incDir + "/" + d.target))
 		} else {
-			sameDirAbs = s.sourceRootSlash + d.target
+			sameDirAbs = vfsSource(d.target)
 		}
 
 		if !hasMultiTarget || searchOut[0] == sameDirAbs {
@@ -1528,11 +1566,15 @@ func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) ([]st
 }
 
 // absifyRels converts a list of SOURCE_ROOT-relative paths (as produced
-// by sysincl YAMLs) into absolute paths under the scanner's source
-// root, normalising `..`/`.` segments at the same time. Cached at the
+// by sysincl YAMLs) into VFS-rooted paths ($(SOURCE_ROOT)/<rel>),
+// normalising `..`/`.` segments at the same time. Cached at the
 // per-half sysinclCache level so the per-resolve hot path can skip
 // the per-mapping `prefix + rel` string concatenation that dominated
 // the alloc profile pre-PR-35e perf tuning.
+//
+// PR-M3-vfs-paths: the output prefix changed from sourceRootSlash to
+// vfsSourcePrefix. The downstream consumer (resolve / fileExists)
+// translates VFS → FS only at the os.Stat call site.
 func (s *IncludeScanner) absifyRels(rels []string) []string {
 	if len(rels) == 0 {
 		return nil
@@ -1541,7 +1583,7 @@ func (s *IncludeScanner) absifyRels(rels []string) []string {
 	out := make([]string, 0, len(rels))
 
 	for _, rel := range rels {
-		out = append(out, s.sourceRootSlash+normalisePath(rel))
+		out = append(out, vfsSource(normalisePath(rel)))
 	}
 
 	return out
@@ -1603,7 +1645,11 @@ func (sc *scanCtx) resolveSearchPath(includerAbs string, d includeDirective) []s
 			return false
 		}
 
-		abs := s.sourceRootSlash + rel
+		// PR-M3-vfs-paths: candidates exit the resolver in VFS form
+		// ($(SOURCE_ROOT)/<rel>). fileExists translates to FS for the
+		// os.Stat at the boundary; out / resolveCache / subgraphCache
+		// all hold VFS paths.
+		abs := vfsSource(rel)
 
 		if !s.fileExists(abs) {
 			return false
@@ -1623,7 +1669,10 @@ func (sc *scanCtx) resolveSearchPath(includerAbs string, d includeDirective) []s
 	searchPathFound := false
 
 	if d.kind == includeQuoted {
-		incRel := strings.TrimPrefix(includerAbs, s.sourceRootSlash)
+		// PR-M3-vfs-paths: includerAbs is $(SOURCE_ROOT)/-rooted here
+		// (the BUILD_ROOT branch in forEachResolvedChild never reaches
+		// resolveSearchPath).
+		incRel := strings.TrimPrefix(includerAbs, vfsSourcePrefix)
 		incDir := pathDir(incRel)
 
 		var candidate string
@@ -1697,7 +1746,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs string, d includeDirective) []s
 	// generated file (verified against sg.json: zero matches for
 	// "_serialized" / "pb.h" / "ev.pb").
 	if !searchPathFound && len(s.fallbackLocators) > 0 {
-		abs := "$(BUILD_ROOT)/" + d.target
+		abs := vfsBuildPrefix + d.target
 
 		for _, loc := range s.fallbackLocators {
 			if !loc.Exists(abs) {
@@ -1794,72 +1843,86 @@ func normalisePath(p string) string {
 	return strings.Join(out, "/")
 }
 
-// pathLocator answers whether a path refers to a real file (on disk under
-// $(SOURCE_ROOT)) or a registered generated output (in the per-scanner
-// CodegenRegistry, under $(BUILD_ROOT)). The scanner consults locators in
-// priority order when resolving #include directives; for the F-7-C
-// integration the FS locator runs first and the VFS-codegen locator runs
-// as a fallback for $(BUILD_ROOT)/-rooted candidates that have no on-disk
-// counterpart at gen time.
+// pathLocator answers whether a VFS-rooted path refers to a reachable
+// resource — a real file under the scanner's source root (fsLocator) or
+// a registered generated output (codegenLocator). The scanner consults
+// locators in priority order when resolving #include directives; for
+// the F-7-C integration the FS tier runs inline through fileExists and
+// the codegen locator runs as a fallback for $(BUILD_ROOT)/-rooted
+// candidates that have no on-disk counterpart at gen time.
+//
+// PR-M3-vfs-paths: the locator boundary is where VFS dispatches to its
+// backing store. The scanner above this interface speaks only VFS-
+// rooted strings; the locator implementations translate to FS / consult
+// the registry below it.
 //
 // PR-M3-F-7-C.
 type pathLocator interface {
-	// Exists reports whether `abs` is reachable through this locator's
-	// backing store. `abs` is always one of:
-	//   - <sourceRoot>/<rel> — a real-filesystem path under the
+	// Exists reports whether `vfsPath` is reachable through this
+	// locator's backing store. `vfsPath` is always one of:
+	//   - $(SOURCE_ROOT)/<rel> — a real-filesystem path under the
 	//     scanner's source root.
 	//   - $(BUILD_ROOT)/<rel> — a VFS-rooted generated-output path.
 	// Locators may answer for one or the other (not both). The FS
-	// locator returns false for $(BUILD_ROOT)/ paths; the VFS-codegen
-	// locator returns false for <sourceRoot>/ paths.
-	Exists(abs string) bool
+	// locator returns false for $(BUILD_ROOT)/ paths; the codegen
+	// locator returns false for $(SOURCE_ROOT)/ paths.
+	Exists(vfsPath string) bool
 }
 
-// fsLocator answers Exists for real-filesystem paths via the shared
-// parse-cache exists map (cached os.Stat). Returns false for non-FS
-// (e.g. $(BUILD_ROOT)/-prefixed) paths.
+// fsLocator answers Exists for $(SOURCE_ROOT)/-rooted VFS paths via the
+// shared parse-cache exists map (cached os.Stat). Returns false for
+// $(BUILD_ROOT)/-prefixed paths (the codegen locator handles those).
+//
+// PR-M3-vfs-paths: parameter is a VFS-rooted path; the FS translation
+// to sourceRoot+rel happens inside Exists at the os.Stat call site.
+// Cache key is VFS-form, shared with parseIncludes via sharedParseCache.
 //
 // PR-M3-F-7-C.
 type fsLocator struct {
-	pc *sharedParseCache
+	scanner *IncludeScanner
 }
 
-func (f fsLocator) Exists(abs string) bool {
-	if strings.HasPrefix(abs, "$(BUILD_ROOT)/") {
+func (f fsLocator) Exists(vfsPath string) bool {
+	if !isSourceVFS(vfsPath) {
 		return false
 	}
 
-	if cached, ok := f.pc.exists[abs]; ok {
+	pc := f.scanner.pc
+
+	if cached, ok := pc.exists[vfsPath]; ok {
 		return cached
 	}
 
-	info, err := os.Stat(abs)
+	fsPath := f.scanner.sourceRootSlash + strings.TrimPrefix(vfsPath, vfsSourcePrefix)
+
+	info, err := os.Stat(fsPath)
 	val := err == nil && !info.IsDir()
 
-	f.pc.exists[abs] = val
+	pc.exists[vfsPath] = val
 
 	return val
 }
 
-// codegenLocator answers Exists for $(BUILD_ROOT)/-rooted paths via the
-// per-scanner CodegenRegistry. Returns false for FS paths and for any
-// $(BUILD_ROOT)/ path that has not been Register()ed. Lookup is O(1).
+// codegenLocator answers Exists for $(BUILD_ROOT)/-rooted VFS paths via
+// the per-scanner CodegenRegistry. Returns false for $(SOURCE_ROOT)/
+// paths and for any $(BUILD_ROOT)/ path that has not been Register()ed.
+// Lookup is O(1).
 //
 // PR-M3-F-7-C.
 type codegenLocator struct {
 	reg *CodegenRegistry
 }
 
-func (c codegenLocator) Exists(abs string) bool {
+func (c codegenLocator) Exists(vfsPath string) bool {
 	if c.reg == nil {
 		return false
 	}
 
-	if !strings.HasPrefix(abs, "$(BUILD_ROOT)/") {
+	if !isBuildVFS(vfsPath) {
 		return false
 	}
 
-	_, ok := c.reg.Lookup(abs)
+	_, ok := c.reg.Lookup(vfsPath)
 
 	return ok
 }
@@ -1869,19 +1932,26 @@ func (c codegenLocator) Exists(abs string) bool {
 // per-scanner FS-tier predicate used by sysincl resolution and the
 // per-tier search-path walk; the F-7-C VFS-codegen fallback is handled
 // separately in resolveSearchPath.
-func (s *IncludeScanner) fileExists(absPath string) bool {
+//
+// PR-M3-vfs-paths: parameter is a $(SOURCE_ROOT)/-rooted VFS path; the
+// FS translation to sourceRoot+rel happens here at the os.Stat call
+// site, and the cache key is VFS-form. Callers must NOT pass a
+// $(BUILD_ROOT)/-prefixed path — the codegen registry tier owns those.
+func (s *IncludeScanner) fileExists(vfsPath string) bool {
 	// PR-34n: lock removed (single-goroutine).
 	// PR-M3-perf-B: exists cache is shared between target and host scanners
 	// via s.pc; file existence is the same regardless of which scanner
 	// queries it (both use the same sourceRoot).
-	if cached, ok := s.pc.exists[absPath]; ok {
+	if cached, ok := s.pc.exists[vfsPath]; ok {
 		return cached
 	}
 
-	info, err := os.Stat(absPath)
+	fsPath := s.sourceRootSlash + strings.TrimPrefix(vfsPath, vfsSourcePrefix)
+
+	info, err := os.Stat(fsPath)
 	val := err == nil && !info.IsDir()
 
-	s.pc.exists[absPath] = val
+	s.pc.exists[vfsPath] = val
 
 	return val
 }
