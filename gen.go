@@ -392,14 +392,25 @@ func GenWith(cfg PlatformConfig, sourceRoot string, targetDir string, cliDefines
 		cliDefines = map[string]string{"MUSL": "yes"}
 	}
 
+	// PR-M3-perf-B: one parse cache shared by both scanners (see comment
+	// on scannerTarget/scannerHost below).
+	sharedPC := newSharedParseCache()
+
 	ctx := &genCtx{
 		cfg:             cfg,
 		sourceRoot:      sourceRoot,
 		emit:            NewBufferedEmitter(),
 		memo:            make(map[ModuleInstance]*moduleEmitResult),
 		walking:         make(map[ModuleInstance]bool),
-		scannerTarget:   NewIncludeScanner(sourceRoot, LoadSysInclSetFor(sourceRoot, "aarch64")),
-		scannerHost:     NewIncludeScanner(sourceRoot, LoadSysInclSetFor(sourceRoot, "x86_64")),
+		// PR-M3-perf-B: target and host scanners share one parse-level cache
+		// (file-byte parsing + file existence). Both scanners operate over
+		// the same sourceRoot so parsed directives and stat results are
+		// identical regardless of which arch first reads a header. Resolution
+		// caches (sysinclSource/IncluderCache, resolveCache, subgraphCache)
+		// remain per-scanner because sysincl YAML content is arch-specific
+		// (linux-musl-aarch64.yml vs linux-musl.yml differ for bits/*).
+		scannerTarget:   newIncludeScannerWith(sourceRoot, LoadSysInclSetFor(sourceRoot, "aarch64"), sharedPC),
+		scannerHost:     newIncludeScannerWith(sourceRoot, LoadSysInclSetFor(sourceRoot, "x86_64"), sharedPC),
 		cliDefines:      cliDefines,
 		ldPluginCPCache: make(map[string]NodeRef),
 	}
