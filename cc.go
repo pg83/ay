@@ -751,7 +751,19 @@ func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownC
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
 	cmdArgs = append(cmdArgs, autoPeerCFlags...)
 	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
-	cmdArgs = appendCxxStdAndOwn(cmdArgs, isCxx, noCompilerWarnings, true, ownExtras)
+
+	// For C sources, CONLYFLAGS (ownExtras) must trail AFTER
+	// macroPrefixMapFlags — empirical reference: base64 neon32/neon64/
+	// plain32/plain64 CC nodes show CONLYFLAGS at cmd_args[107..108],
+	// after the three fmacro-prefix-map flags. Do NOT pass them to
+	// appendCxxStdAndOwn here; hold them for the trailer below.
+	// For C++ sources the slot order is correct as-is.
+	var cOnlyExtras []string
+	if isCxx {
+		cmdArgs = appendCxxStdAndOwn(cmdArgs, true, noCompilerWarnings, true, ownExtras)
+	} else {
+		cOnlyExtras = ownExtras
+	}
 
 	if isCxx {
 		cmdArgs = append(cmdArgs, ownGlobalBucket...)
@@ -773,6 +785,9 @@ func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownC
 	// input path. Empirical reference: util/charset/wide_sse41.cpp.o
 	// cmd_args show `-DSSE41_STUB` immediately before the source path.
 	cmdArgs = append(cmdArgs, perSrcCFlags...)
+	// PR-37: C-source CONLYFLAGS trail after macroPrefixMapFlags (and
+	// after perSrcCFlags). Empirical: base64 plain32/neon64 CC nodes.
+	cmdArgs = append(cmdArgs, cOnlyExtras...)
 	cmdArgs = append(cmdArgs, inputPath)
 
 	return cmdArgs
