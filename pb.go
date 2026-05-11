@@ -304,6 +304,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		protoRelPath := instance.Path + "/" + src
 		protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 		pbH := "$(BUILD_ROOT)/" + protoBase + ".pb.h"
+		pbCC := "$(BUILD_ROOT)/" + protoBase + ".pb.cc"
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
 			directImports := protoDirectImportIncludes(ctx.sourceRoot, protoRelPath)
 			emitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders))
@@ -313,6 +314,16 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				ProducerKvP:   "PB",
 				OutputPath:    pbH,
 				EmitsIncludes: emitsIncludes,
+			})
+			// PR-AUDIT-6 step 4: register the .pb.cc output too. protoc emits a
+			// `#include "<base>.pb.h"` plus the protobuf runtime headers; the
+			// .pb.h's own EmitsIncludes are already registered (just above), so a
+			// single entry pointing at the .pb.h would suffice — we mirror the
+			// .pb.h list for symmetry with the LIBRARY/EV path (gen.go:4338-4342).
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:   "PB",
+				OutputPath:    pbCC,
+				EmitsIncludes: append([]string{pbH}, protobufRuntimeHeaders...),
 			})
 		}
 	}
@@ -344,6 +355,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			// and the EV-specific runtime headers (util/* + eventlog).
 			evRelPath := instance.Path + "/" + src
 			evH := "$(BUILD_ROOT)/" + evRelPath + ".pb.h"
+			evPbCC := "$(BUILD_ROOT)/" + evRelPath + ".pb.cc"
 			if reg := codegenRegForInstance(ctx, instance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
 				emitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
@@ -354,6 +366,19 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 					ProducerKvP:   "EV",
 					OutputPath:    evH,
 					EmitsIncludes: emitsIncludes,
+				})
+				// PR-AUDIT-6 step 4: register the .ev.pb.cc output too. event2cpp
+				// emits a `#include "<base>.ev.pb.h"` plus the protobuf + event
+				// runtime headers; mirror the .pb.h list for symmetry with the
+				// LIBRARY/EV path (gen.go:4338-4342).
+				ccEmits := make([]string, 0, 1+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
+				ccEmits = append(ccEmits, evH)
+				ccEmits = append(ccEmits, protobufRuntimeHeaders...)
+				ccEmits = append(ccEmits, eventRuntimeHeaders...)
+				reg.Register(&GeneratedFileInfo{
+					ProducerKvP:   "EV",
+					OutputPath:    evPbCC,
+					EmitsIncludes: ccEmits,
 				})
 			}
 		}
