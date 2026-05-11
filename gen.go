@@ -710,7 +710,9 @@ func derivePeerInstance(parent ModuleInstance, peerPath string) ModuleInstance {
 		Path:     peerPath,
 		Language: parent.Language,
 		Target:   parent.Target,
-		Flags:    inferFlagsFromPath(peerPath, parent.Flags.PIC),
+		// D41: pass platform identity rather than PIC flag so inferFlagsFromPath
+		// seeds the peer's PIC from the parent's Target axis, not Flags.PIC directly.
+		Flags: inferFlagsFromPath(peerPath, targetIsX8664(parent)),
 	}
 }
 
@@ -2157,14 +2159,16 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		ccClosure := joinClosure
 
-		if srcInstance.Flags.PIC {
+		// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
+		if targetIsX8664(srcInstance) {
 			// Compute a separate closure for the JS node using the
 			// TARGET scanner and TARGET musl arch search paths.
-			// jsInstance has PIC=false so joinSrcsIncludeClosure picks
-			// ctx.scannerTarget. jsModuleInputs rebases PeerAddInclGlobal
+			// jsInstance uses the target platform so joinSrcsIncludeClosure
+			// picks ctx.scannerTarget. jsModuleInputs rebases PeerAddInclGlobal
 			// to swap x86_64 arch paths for aarch64 ones so the search
 			// path reflects the target (aarch64) musl layout.
 			jsInstance := srcInstance
+			jsInstance.Target = PlatformDefaultLinuxAArch64
 			jsInstance.Flags.PIC = false
 
 			jsModuleInputs := moduleInputs
@@ -2867,7 +2871,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// synthetic test pins it.
 		var yasmRef *NodeRef
 
-		if instance.Flags.PIC && asmlibYasmModules[instance.Path] {
+		// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
+		if targetIsX8664(instance) && asmlibYasmModules[instance.Path] {
 			const yasmPath = "contrib/tools/yasm"
 
 			yasmInstance := instance.WithHost(ctx.cfg)
@@ -3071,7 +3076,8 @@ func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCI
 func joinSrcsIncludeClosure(ctx *genCtx, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []string {
 	scanner := ctx.scannerTarget
 
-	if srcInstance.Flags.PIC {
+	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
+	if targetIsX8664(srcInstance) {
 		scanner = ctx.scannerHost
 	}
 
@@ -3199,7 +3205,8 @@ func jsTargetPeerAddIncl(hostPeerAddIncl []string) []string {
 func scanIncludesForSource(ctx *genCtx, srcInstance ModuleInstance, srcRel string, in ModuleCCInputs) []string {
 	scanner := ctx.scannerTarget
 
-	if srcInstance.Flags.PIC {
+	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
+	if targetIsX8664(srcInstance) {
 		scanner = ctx.scannerHost
 	}
 
@@ -3261,11 +3268,12 @@ func includeScannerBasePaths(instance ModuleInstance) []string {
 	if instance.Flags.LibcMusl {
 		// Mirror muslCcIncludes / muslCcIncludesX8664: arch + generic
 		// + src/include + src/internal + include + extra. Use the
-		// instance's PIC flag to pick aarch64 vs x86_64 (the same
+		// instance's Target to pick aarch64 vs x86_64 (D41: same
 		// switch composeMuslCC vs composeMuslHostCC uses).
 		var arch string
 
-		if instance.Flags.PIC {
+		// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
+		if targetIsX8664(instance) {
 			arch = "x86_64"
 		} else {
 			arch = "aarch64"

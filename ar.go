@@ -79,9 +79,10 @@ func globalArchiveName(moduleDir string) string {
 // appears in the .o set)`. memberInputs are the per-CC source paths
 // + IncludeInputs the walker accumulated.
 //
-// `instance` provides platform + path + Flags.PIC. host_platform is
-// set when Flags.PIC=true and "tool" is appended to tags
-// (consistent with the host CC convention).
+// `instance` provides platform + path. host_platform is set when
+// instance.Target == PlatformDefaultLinuxX8664 (D41: platform-
+// identity dispatch replaces Flags.PIC on the host/target axis) and
+// "tool" is appended to tags (consistent with the host CC convention).
 //
 // PR-30 D05: production caller now passes nil for peerArchiveRefs;
 // the reference graph confirms zero AR-on-AR deps. The parameter is
@@ -183,7 +184,7 @@ func emitARNode(
 	depRefs = append(depRefs, peerArchiveRefs...)
 
 	tags := []string{}
-	if instance.Flags.PIC {
+	if targetIsX8664(instance) {
 		tags = []string{"tool"}
 	}
 
@@ -213,7 +214,8 @@ func emitARNode(
 		DepRefs:          depRefs,
 	}
 
-	if instance.Flags.PIC {
+	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
+	if targetIsX8664(instance) {
 		n.HostPlatform = true
 	}
 

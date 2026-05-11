@@ -133,7 +133,8 @@ import "strings"
 func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, string) {
 	// PR-35q: asmlib host-PIC AS nodes use yasm, not clang. Branch off
 	// before any clang-shape composition runs.
-	if instance.Flags.PIC && asmlibYasmModules[instance.Path] {
+	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
+	if targetIsX8664(instance) && asmlibYasmModules[instance.Path] {
 		return emitASYasm(instance, srcRel, in, yasmLD, emit)
 	}
 
@@ -163,7 +164,8 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 	allInputs = append(allInputs, in.IncludeInputs...)
 
 	tags := []string{}
-	if instance.Flags.PIC {
+	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
+	if targetIsX8664(instance) {
 		// PR-35a: host-built AS nodes carry `host_platform=true` and
 		// `tags=["tool"]` per the reference shape (asmlib pic.o,
 		// cxxsupp/builtins/x86_64/chkstk.S.o, musl host pic.o).
@@ -181,7 +183,7 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 		Env:          env,
 		Inputs:       allInputs,
 		Outputs:      []string{outputPath},
-		HostPlatform: instance.Flags.PIC,
+		HostPlatform: targetIsX8664(instance),
 		KV: map[string]string{
 			"p":  "AS",
 			"pc": "light-green",
@@ -376,7 +378,8 @@ func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (
 // + in.PeerAddInclGlobal`) generically via the same struct CC
 // consumes.
 func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in ModuleCCInputs) []string {
-	isHost := instance.Flags.PIC
+	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
+	isHost := targetIsX8664(instance)
 	isMusl := instance.Flags.LibcMusl
 
 	var cFlags, defines, suppressionBlock []string

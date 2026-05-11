@@ -129,6 +129,9 @@ type ModuleInstance struct {
 // platform ID and `Flags.PIC=true`. The same Path/Language carry over;
 // the host instance shares the source tree, only the codegen flavour
 // changes.
+//
+// D41: co-setting Flags.PIC=true is policy (M2/M3 host PROGRAMs use
+// PIC), not derivation; emitter sites dispatch on Target, not PIC.
 func (mi ModuleInstance) WithHost(cfg PlatformConfig) ModuleInstance {
 	out := mi
 	out.Target = cfg.Host.ID
