@@ -1315,11 +1315,13 @@ func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
 func TestGen_HostWalk_AsmlibYasmWired(t *testing.T) {
 	root := t.TempDir()
 
-	// Synthetic asmlib host fixture with one .S source.
+	// Synthetic asmlib host fixture with one .asm source.
+	// PR-M3-F-5: yasm dispatch is now extension-based (.asm), not
+	// module-path-based, so the fixture must use .asm.
 	asmlibDir := filepath.Join(root, "contrib/libs/asmlib")
 	Throw(os.MkdirAll(asmlibDir, 0o755))
 	Throw(os.WriteFile(filepath.Join(asmlibDir, "ya.make"),
-		[]byte("LIBRARY()\nNO_PLATFORM()\nSRCS(memcmp64.S)\nEND()\n"), 0o644))
+		[]byte("LIBRARY()\nNO_PLATFORM()\nSRCS(memcmp64.asm)\nEND()\n"), 0o644))
 
 	// Synthetic host yasm PROGRAM.
 	yasmDir := filepath.Join(root, "contrib/tools/yasm")
