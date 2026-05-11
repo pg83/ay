@@ -3985,7 +3985,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			if !strings.HasSuffix(depOut, "_serialized.cpp") {
 				continue
 			}
-			sub := walkClosureFromBuildRoot(ctx, enInstance, depOut, scanIn)
+			sub := walkClosure(ctx, enInstance, depOut, scanIn)
 			for _, p := range sub {
 				if _, drop := enClosureExcl[p]; drop {
 					continue
