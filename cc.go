@@ -182,6 +182,11 @@ type ModuleCCInputs struct {
 	// → `util/system/compiler.cpp.o`. Default false preserves the
 	// historical SRCS behaviour for every other source type.
 	FlatOutput bool
+	// DefaultVars is the per-module DEFAULT(name value) map collected
+	// from the ya.make. Used by EmitCF to expand $CFG_VARS (PR-M3-E).
+	// Keys are variable names; values are the DEFAULT-declared values.
+	DefaultVars     map[string]string
+	DefaultVarOrder []string
 }
 
 // EmitCC emits a CC node for compiling `srcRel` (a path relative to

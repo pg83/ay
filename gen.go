@@ -301,14 +301,13 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"RESOURCE":                          {}, // Embeds binary resources; PR-M3-A defers PY node emission.
 	"RESOURCE_FILES":                    {}, // Variant of RESOURCE.
 	"PY_REGISTER":                       {}, // Python module registration; semantic in PR-M3-E.
-	"RUN_PROGRAM":                       {}, // Code-generator invocation; EN/PY nodes deferred to PR-M3-D.
-	"RUN_ANTLR4_CPP":                    {}, // ANTLR4 C++ parser generator; deferred to PR-M3-D.
-	"RUN_ANTLR4_CPP_SPLIT":              {}, // ANTLR4 split-mode variant; deferred to PR-M3-D.
+	// RUN_PROGRAM: now typed Stmt; removed from whitelist.
+	// RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT: now typed Stmts; removed from whitelist.
 	// GENERATE_ENUM_SERIALIZATION / _WITH_HEADER / _NOUTF removed from
 	// whitelist in PR-M3-D: they are now parsed as GenerateEnumSerializationStmt
 	// and dispatched to EmitEN via emitEnumSrcs.
 	"ARCHIVE":                           {}, // Embeds archive of files; deferred.
-	"CREATE_BUILDINFO_FOR":              {}, // Generates build-info C++ header; CF node deferred to PR-M3-D.
+	// CREATE_BUILDINFO_FOR: now typed Stmt; removed from whitelist.
 	"INCLUDE_TAGS":                      {}, // Proto include-tag filter; semantic in PR-M3-B.
 	"INDUCED_DEPS":                      {}, // Adds header deps without PEERDIR; metadata for PR-M3-A.
 	"NO_PYTHON2":                        {}, // Marks PY2 unavailability; metadata.
@@ -473,6 +472,22 @@ type moduleData struct {
 	// input path (matching the reference cmd_args slot for the SSE41_STUB
 	// flag on `util/charset/wide_sse41.cpp.o`).
 	perSrcCFlags map[string][]string
+	// PR-M3-E: DEFAULT(name value) declarations collected per-module.
+	// Used by ConfigureFileStmt processing to expand $CFG_VARS.
+	// Keys are variable names; values are the DEFAULT values (empty
+	// string for DEFAULT(name "")).
+	defaultVars map[string]string
+	// PR-M3-E: ordered list of DEFAULT var names (for deterministic
+	// $CFG_VARS expansion matching the reference cmd_args order).
+	defaultVarOrder []string
+	// PR-M3-E: CONFIGURE_FILE() / .cpp.in / .c.in sources → CF nodes.
+	configureFiles []*ConfigureFileStmt
+	// PR-M3-E: CREATE_BUILDINFO_FOR(output_header) → BI node.
+	createBuildInfoFor string
+	// PR-M3-E: RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT → JV nodes.
+	antlr4Grammars []antlr4GrammarInfo
+	// PR-M3-E: RUN_PROGRAM → PR nodes.
+	runPrograms []*RunProgramStmt
 	// PR-35o: set of source filenames declared via `SRC(...)` or
 	// `SRC_C_NO_LTO(...)`. Upstream `SRC`/`SRC_C_NO_LTO` macros emit a
 	// FLAT output path (no `_/` infix even when the source contains a
@@ -485,6 +500,19 @@ type moduleData struct {
 	// `_/` infix.
 	flatSrcs    map[string]struct{}
 	conflictMod *ModuleStmt
+}
+
+// antlr4GrammarInfo captures a single RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT
+// invocation for later JV node emission.  IsSplit distinguishes the two-grammar
+// form (lexer+parser) from the single-grammar form.
+type antlr4GrammarInfo struct {
+	IsSplit  bool
+	Lexer    string   // .g4 file (IsSplit=true)
+	Parser   string   // .g4 file (IsSplit=true)
+	Grammar  string   // .g4 file (IsSplit=false)
+	Options  []string // extra antlr4 cmd_args (e.g. ["-package", "NConfReader"])
+	Visitor  bool
+	Listener bool
 }
 
 // collectModule walks `mf.Stmts` (after IF branches have been
@@ -616,6 +644,42 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 			d.globalSrcs = append(d.globalSrcs, v.Sources...)
 		case *GenerateEnumSerializationStmt:
 			d.enumSrcs = append(d.enumSrcs, v)
+		case *DefaultVarStmt:
+			// PR-M3-E: track DEFAULT(name value) for $CFG_VARS expansion.
+			if d.defaultVars == nil {
+				d.defaultVars = map[string]string{}
+			}
+			if _, exists := d.defaultVars[v.VarName]; !exists {
+				d.defaultVars[v.VarName] = v.Value
+				d.defaultVarOrder = append(d.defaultVarOrder, v.VarName)
+			}
+		case *ConfigureFileStmt:
+			// PR-M3-E: explicit CONFIGURE_FILE(src dst) declaration.
+			d.configureFiles = append(d.configureFiles, v)
+		case *CreateBuildInfoStmt:
+			// PR-M3-E: CREATE_BUILDINFO_FOR(header) → BI node.
+			d.createBuildInfoFor = v.OutputHeader
+		case *RunAntlr4CppStmt:
+			// PR-M3-E: single-grammar ANTLR4 invocation → JV node.
+			d.antlr4Grammars = append(d.antlr4Grammars, antlr4GrammarInfo{
+				IsSplit:  false,
+				Grammar:  v.Grammar,
+				Options:  append([]string(nil), v.Options...),
+				Visitor:  v.Visitor,
+				Listener: v.Listener,
+			})
+		case *RunAntlr4CppSplitStmt:
+			// PR-M3-E: lexer+parser split ANTLR4 invocation → JV node.
+			d.antlr4Grammars = append(d.antlr4Grammars, antlr4GrammarInfo{
+				IsSplit:  true,
+				Lexer:    v.Lexer,
+				Parser:   v.Parser,
+				Visitor:  v.Visitor,
+				Listener: v.Listener,
+			})
+		case *RunProgramStmt:
+			// PR-M3-E: RUN_PROGRAM → PR node.
+			d.runPrograms = append(d.runPrograms, v)
 		case *IfStmt:
 			taken := v.Then
 
@@ -1633,6 +1697,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// require protoc-driven PB/EV node emission.
 		emitProtoSrcs(ctx, instance, d)
 
+		// PR-M3-E: emit JV, CF, BI, PR nodes declared at module level.
+		emitMiscNodes(ctx, instance, d)
+
 		result := &moduleEmitResult{
 			headerOnly:              true,
 			AddInclGlobal:           mergeDedup(d.addInclGlobal, peerContribs.addIncl),
@@ -2280,6 +2347,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		AutoPeerCFlags:       autoPeerCFlags,
 		SrcDir:               d.srcDir,
 		SourceRoot:           ctx.sourceRoot,
+		DefaultVars:          d.defaultVars,
+		DefaultVarOrder:      d.defaultVarOrder,
 	}
 
 	// PR-30 D06: ancestor-only SRCDIR rebase. The "PROGRAM with SRCDIR
@@ -2545,6 +2614,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		)
 		ldPath := LDOutputPath(instance, binaryName)
 
+		// PR-M3-E: emit JV, CF, BI, PR nodes declared at module level.
+		emitMiscNodes(ctx, instance, d)
+
 		result := &moduleEmitResult{
 			ARRef:                   ldRef,
 			ARPath:                  ldPath,
@@ -2616,6 +2688,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	// PR-M3-D: emit EN nodes for GENERATE_ENUM_SERIALIZATION(*) declarations.
 	emitEnumSrcs(ctx, instance, d)
+
+	// PR-M3-E: emit JV, CF, BI, PR nodes declared at module level.
+	emitMiscNodes(ctx, instance, d)
 
 	result := &moduleEmitResult{
 		ARRef:                   arRef,
@@ -2982,22 +3057,19 @@ func isHeaderSource(srcRel string) bool {
 }
 
 // isSkippedSource reports whether `srcRel` is a known deferred source kind
-// that the emitter does not yet handle (or handles elsewhere). These sources
-// are silently skipped (like headers) rather than throwing "unsupported extension".
-//   - .rl     → R5 (ragel5 two-step; PR-M3-C)
+// that the emitter does not yet handle. These sources are silently
+// skipped (like headers) rather than throwing "unsupported extension".
+// Note: .rl (ragel5) and .cpp.in/.c.in are now handled by emitOneSource
+// and are NOT counted as skipped — they cause hasCompilableSource to return true.
+// The corresponding emitters land in PR-M3-B..E:
 //   - .proto  → PB (emitted by emitProtoSrcs in the PROTO_LIBRARY header-only branch)
 //   - .ev     → EV (emitted by emitOneSource for LIBRARY, emitProtoSrcs for PROTO_LIBRARY)
 //   - .py     → PY node via runtime library (PR-M3-E)
-//   - .cpp.in → CF template source; code-generator fills in values at build
-//               time (e.g. library/cpp/build_info); PR-M3-D.
-//   - .c.in   → C template variant of the above.
 //   - .g4     → ANTLR4 grammar; processed by RUN_ANTLR4_CPP; PR-M3-D.
 func isSkippedSource(srcRel string) bool {
-	return strings.HasSuffix(srcRel, ".rl") ||
-		strings.HasSuffix(srcRel, ".proto") ||
+	return strings.HasSuffix(srcRel, ".proto") ||
+		strings.HasSuffix(srcRel, ".ev") ||
 		strings.HasSuffix(srcRel, ".py") ||
-		strings.HasSuffix(srcRel, ".cpp.in") ||
-		strings.HasSuffix(srcRel, ".c.in") ||
 		strings.HasSuffix(srcRel, ".g4")
 }
 
@@ -3714,13 +3786,103 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			evSrcAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
 			return ref, outPath, []string{evSrcAbs}, 1, true
 		}
+
+	case strings.HasSuffix(srcRel, ".rl"):
+		// PR-M3-E: ragel5 two-step code generation (.rl → .rl.tmp → .rl5.cpp).
+		// Mirrors the .rl6 branch: walk the two host ragel5 PROGRAMs eagerly,
+		// emit the R5 node, then emit a CC node for the generated .rl5.cpp.
+		const (
+			ragel5Path      = "contrib/tools/ragel5/ragel"
+			rlgenCdPath     = "contrib/tools/ragel5/rlgen-cd"
+			ragel5Fallback  = "$(BUILD_ROOT)/contrib/tools/ragel5/ragel/ragel5"
+			rlgenCdFallback = "$(BUILD_ROOT)/contrib/tools/ragel5/rlgen-cd/rlgen-cd"
+		)
+
+		var (
+			ragel5LDRef   NodeRef
+			rlgenCdLDRef  NodeRef
+			ragel5BinStr  = ragel5Fallback
+			rlgenCdBinStr = rlgenCdFallback
+		)
+
+		ragel5Instance := srcInstance.WithHost(ctx.cfg)
+		ragel5Instance.Path = ragel5Path
+		ragel5Instance.Flags = inferFlagsFromPath(ragel5Path, true)
+
+		if exc := Try(func() {
+			res := genModule(ctx, ragel5Instance)
+			ragel5LDRef = res.LDRef
+			ragel5BinStr = res.LDPath
+		}); exc != nil {
+			var pe *ParseError
+			if !errors.As(exc.AsError(), &pe) {
+				panic(exc)
+			}
+		}
+
+		rlgenCdInstance := srcInstance.WithHost(ctx.cfg)
+		rlgenCdInstance.Path = rlgenCdPath
+		rlgenCdInstance.Flags = inferFlagsFromPath(rlgenCdPath, true)
+
+		if exc := Try(func() {
+			res := genModule(ctx, rlgenCdInstance)
+			rlgenCdLDRef = res.LDRef
+			rlgenCdBinStr = res.LDPath
+		}); exc != nil {
+			var pe *ParseError
+			if !errors.As(exc.AsError(), &pe) {
+				panic(exc)
+			}
+		}
+
+		r5Ref, r5TmpOut, r5CppOut := EmitR5(srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinStr, rlgenCdBinStr, ctx.emit)
+		_ = r5Ref
+		_ = r5TmpOut
+
+		// Downstream CC for the generated .rl5.cpp (generated source, no scan).
+		ccSrcRel := strings.TrimPrefix(r5CppOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
+		ccIn := srcIn
+		ccIn.IsGenerated = true
+		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
+
+		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
+
+		// AR/LD member inputs: use the original .rl source (not generated .cpp).
+		rlSource := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
+		return ccRef, ccOut, []string{rlSource}, 1, true
+
+	case strings.HasSuffix(srcRel, ".cpp.in"),
+		strings.HasSuffix(srcRel, ".c.in"):
+		// PR-M3-E: CONFIGURE_FILE template source. Emit a CF node that runs
+		// configure_file.py to expand @VAR@ placeholders, then emit a CC
+		// node for the generated .cpp / .c file.
+		//
+		// The CF node's cmd_args include the DEFAULT-declared cfg vars; those
+		// are passed via the moduleData in srcIn.DefaultVars (set by genModule
+		// before calling emitOneSource). We also add BUILD_TYPE=DEBUG (the
+		// hardcoded build configuration).
+		//
+		// The output path strips the .in suffix: sandbox.cpp.in → sandbox.cpp.
+		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
+		_ = cfRef
+
+		// Downstream CC for the generated .cpp / .c (generated source, no scan).
+		ccSrcRel := strings.TrimPrefix(cfOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
+		ccIn := srcIn
+		ccIn.IsGenerated = true
+
+		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
+
+		// AR/LD member inputs: use the original .cpp.in / .c.in source.
+		inSource := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
+		return ccRef, ccOut, []string{inSource}, 1, true
 	}
 
 	// PR-M3-A: known-deferred source kinds are silently skipped rather
-	// than throwing. Real emitters land in PR-M3-B (PB), PR-M3-C (R5),
-	// PR-M3-D (EN/EV/CF), PR-M3-E (PY). Until then, returning false
-	// means the source contributes nothing to the AR/LD node set; the
-	// module may become header-only if all its sources are deferred.
+	// than throwing. Real emitters land in PR-M3-B (PB), PR-M3-D (EN/EV),
+	// and later PRs. Until then, returning false means the source
+	// contributes nothing to the AR/LD node set; the module may become
+	// header-only if all its sources are deferred.
 	if isSkippedSource(srcRel) {
 		return NodeRef{}, "", nil, 0, false
 	}
