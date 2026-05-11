@@ -3050,7 +3050,13 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	if exc := Try(func() {
 		result := genModule(ctx, py3ccHostInst)
 		py3ccLDRef = result.LDRef
-		py3ccBinary = result.LDPath
+		// canonicalizePy3ccBinaryPath rewrites
+		// $(BUILD_ROOT)/tools/py3cc/bin/py3cc →
+		// $(BUILD_ROOT)/tools/py3cc/py3cc to match the reference
+		// yapyc3 cmd_args[0] shape. tools/py3cc/bin/ya.make declares
+		// SRCDIR(tools/py3cc) so the upstream intent is a top-level
+		// binary; we walk /bin/ as a stopgap (same pattern as ragel6).
+		py3ccBinary = canonicalizePy3ccBinaryPath(result.LDPath)
 	}); exc != nil {
 		var pe *ParseError
 		if !errors.As(exc.AsError(), &pe) {
@@ -3060,8 +3066,12 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	}
 
 	// Walk tools/py3cc/slow (the slow-py3cc binary). The slow directory's
-	// ya.make includes bin/ya.make so it compiles the same source; it is a
-	// separate PROGRAM node with a different output path.
+	// ya.make uses INCLUDE(bin/ya.make) which our parser does not expand,
+	// so the walk of tools/py3cc/slow yields a header-only result with an
+	// empty LDPath. Only update py3ccSlowBin when the walk actually
+	// produces a non-empty path; otherwise the canonical fallback
+	// $(BUILD_ROOT)/tools/py3cc/slow/py3cc (pre-initialised above) is the
+	// correct value to use in cmd_args[2].
 	py3ccSlowHostInst := instance.WithHost(ctx.cfg)
 	py3ccSlowHostInst.Path = py3ccSlowPath
 	py3ccSlowHostInst.Flags = inferFlagsFromPath(py3ccSlowPath, true)
@@ -3069,7 +3079,11 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	if exc := Try(func() {
 		result := genModule(ctx, py3ccSlowHostInst)
 		py3ccSlowLDRef = result.LDRef
-		py3ccSlowBin = result.LDPath
+		if result.LDPath != "" {
+			py3ccSlowBin = result.LDPath
+		}
+		// If LDPath is empty (header-only due to INCLUDE not being
+		// expanded), py3ccSlowBin retains its canonical fallback value.
 	}); exc != nil {
 		var pe *ParseError
 		if !errors.As(exc.AsError(), &pe) {
@@ -3134,15 +3148,25 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			},
 		}
 
-		// Wire py3cc LD refs as deps so the graph captures host-tool
-		// dependency. Only add non-zero refs (zero ref means the host
-		// walk failed and we have no LD node to reference).
+		// Wire py3cc LD refs into both DepRefs (topology/deps) and
+		// ForeignDepRefs["tool"] (foreign_deps.tool) to match the
+		// reference yapyc3 node shape.  Only add non-zero refs (zero
+		// ref means the host walk failed and we have no LD node to
+		// reference).
+		var toolRefs []NodeRef
+
 		if py3ccLDRef != (NodeRef{}) {
 			node.DepRefs = append(node.DepRefs, py3ccLDRef)
+			toolRefs = append(toolRefs, py3ccLDRef)
 		}
 
 		if py3ccSlowLDRef != (NodeRef{}) {
 			node.DepRefs = append(node.DepRefs, py3ccSlowLDRef)
+			toolRefs = append(toolRefs, py3ccSlowLDRef)
+		}
+
+		if len(toolRefs) > 0 {
+			node.ForeignDepRefs = map[string][]NodeRef{"tool": toolRefs}
 		}
 
 		ctx.emit.Emit(node)
