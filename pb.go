@@ -51,9 +51,33 @@ const (
 	pbDescriptorProto   = "$(SOURCE_ROOT)/contrib/libs/protobuf/src/google/protobuf/descriptor.proto"
 
 	// Tool module paths for host-walk recursion.
-	pbProtocModule       = "contrib/tools/protoc"
+	pbProtocModule        = "contrib/tools/protoc"
 	pbCppStyleguideModule = "contrib/tools/protoc/plugins/cpp_styleguide"
+
+	// pbRuntimeBase is the $(SOURCE_ROOT)-rooted prefix for all protobuf
+	// runtime headers (under contrib/libs/protobuf/src/).
+	pbRuntimeBase = "$(SOURCE_ROOT)/contrib/libs/protobuf/src/"
 )
+
+// protobufRuntimeHeaders is the constant set of runtime headers that every
+// protoc-generated .pb.h file #includes unconditionally. Sampled from
+// descriptor.pb.h, any.pb.h, timestamp.pb.h, api.pb.h, duration.pb.h —
+// all present on disk under contrib/libs/protobuf/src/. Sorted lexicographically.
+// The scanner walks each entry transitively (their own #includes are resolved
+// via the FS locator against SOURCE_ROOT), so the full protobuf include closure
+// emerges from scanner recursion, not from pre-computation here.
+var protobufRuntimeHeaders = []string{
+	pbRuntimeBase + "google/protobuf/arena.h",
+	pbRuntimeBase + "google/protobuf/arenastring.h",
+	pbRuntimeBase + "google/protobuf/extension_set.h",
+	pbRuntimeBase + "google/protobuf/generated_message_reflection.h",
+	pbRuntimeBase + "google/protobuf/generated_message_util.h",
+	pbRuntimeBase + "google/protobuf/io/coded_stream.h",
+	pbRuntimeBase + "google/protobuf/message.h",
+	pbRuntimeBase + "google/protobuf/metadata_lite.h",
+	pbRuntimeBase + "google/protobuf/repeated_field.h",
+	pbRuntimeBase + "google/protobuf/unknown_field_set.h",
+}
 
 // EmitPB emits a PB node for `srcRel` (a .proto file relative to `instance.Path`).
 // `cppStyleguideLDRef` and `protocLDRef` are the host LD NodeRefs for the two
@@ -268,15 +292,20 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			"cpp_proto", ctx.sourceRoot, ctx.emit)
 
 		// F-7-B: register the .pb.h output with its EmitsIncludes. The .pb.h
-		// includes the .pb.h of every proto imported by this source.
+		// includes the .pb.h of every proto imported by this source, plus the
+		// constant protobuf runtime header set (F-7-D).
 		protoRelPath := instance.Path + "/" + src
 		protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 		pbH := "$(BUILD_ROOT)/" + protoBase + ".pb.h"
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
+			directImports := protoDirectImportIncludes(ctx.sourceRoot, protoRelPath)
+			emitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders))
+			emitsIncludes = append(emitsIncludes, directImports...)
+			emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PB",
 				OutputPath:    pbH,
-				EmitsIncludes: protoDirectImportIncludes(ctx.sourceRoot, protoRelPath),
+				EmitsIncludes: emitsIncludes,
 			})
 		}
 	}
@@ -304,14 +333,18 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				"cpp_proto", ctx.sourceRoot, ctx.emit)
 
 			// F-7-B: register the .ev.pb.h output with EmitsIncludes derived from
-			// the .ev source's direct imports.
+			// the .ev source's direct imports, plus the protobuf runtime headers (F-7-D).
 			evRelPath := instance.Path + "/" + src
 			evH := "$(BUILD_ROOT)/" + evRelPath + ".pb.h"
 			if reg := codegenRegForInstance(ctx, instance); reg != nil {
+				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
+				emitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders))
+				emitsIncludes = append(emitsIncludes, directImports...)
+				emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
 				reg.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EV",
 					OutputPath:    evH,
-					EmitsIncludes: protoDirectImportIncludes(ctx.sourceRoot, evRelPath),
+					EmitsIncludes: emitsIncludes,
 				})
 			}
 		}

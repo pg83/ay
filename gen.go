@@ -4226,14 +4226,19 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				cppStyleguideBinary, protocBinary, event2cppBinary,
 				"", ctx.sourceRoot, ctx.emit)
 
-			// F-7-B: register the .ev.pb.h output with EmitsIncludes from the .ev imports.
+			// F-7-B: register the .ev.pb.h output with EmitsIncludes from the .ev imports,
+			// plus the protobuf runtime headers (F-7-D).
 			evRelPath := srcInstance.Path + "/" + srcRel
 			evH := "$(BUILD_ROOT)/" + evRelPath + ".pb.h"
 			if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
+				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
+				evEmitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders))
+				evEmitsIncludes = append(evEmitsIncludes, directImports...)
+				evEmitsIncludes = append(evEmitsIncludes, protobufRuntimeHeaders...)
 				reg.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EV",
 					OutputPath:    evH,
-					EmitsIncludes: protoDirectImportIncludes(ctx.sourceRoot, evRelPath),
+					EmitsIncludes: evEmitsIncludes,
 				})
 			}
 
