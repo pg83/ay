@@ -51,6 +51,8 @@ func dispatch(argv []string) {
 		os.Exit(cmdCompare(argv[2:]))
 	case "inspect":
 		os.Exit(cmdInspect(argv[2:]))
+	case "normalize":
+		os.Exit(cmdNormalize(argv[2:]))
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", argv[1])
 		printUsage(os.Stderr)
