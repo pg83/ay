@@ -86,18 +86,51 @@ type includeDirective struct {
 	target string
 }
 
+// sharedParseCache holds the parse-level caches that are
+// architecture-independent: file-byte parsing (parsed) and file
+// existence (exists). Both depend only on the source tree, not on
+// which sysincl YAML records are loaded. When two scanners share the
+// same source root (e.g. target/host pair in GenWith) they can share
+// one sharedParseCache — headers parsed for the target walk are reused
+// by the host walk without re-reading or re-parsing.
+//
+// PR-M3-perf-B: created to implement scanner unification (Option U2).
+// Full unification (U1) is not correct because sysincl resolution IS
+// architecture-dependent: linux-musl-aarch64.yml and linux-musl.yml
+// map bits/alltypes.h and similar bits/* headers to different paths.
+// The resolve chain (resolveCache, subgraphCache, sysinclSource/
+// IncluderCache) therefore remains per-scanner. Only the parse tier —
+// reading file bytes and extracting #include directives — is
+// architecture-neutral: the same header text yields the same
+// directives regardless of which arch is being compiled.
+type sharedParseCache struct {
+	// parsed memoises include directives per absolute path. 8192
+	// pre-size covers the peak observed for tools/archiver
+	// (4354 target + 3559 host, mostly overlapping files).
+	parsed map[string][]includeDirective
+	// exists memoises os.Stat results per absolute path. 16384
+	// pre-size covers the peak (14195 target + 14494 host, mostly
+	// the same files on both walks).
+	exists map[string]bool
+}
+
+// newSharedParseCache allocates a sharedParseCache with pre-sized maps
+// matched to the observed peak for the tools/archiver closure.
+func newSharedParseCache() *sharedParseCache {
+	return &sharedParseCache{
+		parsed: make(map[string][]includeDirective, 8192),
+		exists: make(map[string]bool, 16384),
+	}
+}
+
 // IncludeScanner is the per-walker include-resolver state. It owns:
 //
 //   - sysincl: the loaded SysInclSet (one for the whole walker).
 //   - sourceRoot: absolute path used to stat candidate header files
 //     and read their text for transitive parsing.
-//   - parsed: per-file include-directive cache, keyed by absolute
-//     path. Memoized once per scanner — libcxx's __config (≈1180
-//     lines) is parsed once even though ~3000 CC nodes transitively
-//     include it.
-//   - exists: per-absolute-path file-existence cache. Stat'ing a
-//     candidate path is the per-resolution hot loop; we cache the
-//     boolean to avoid hammering the kernel for negative results.
+//   - pc: shared parse-level caches (parsed directives + file existence).
+//     May be shared between target and host scanners when both operate
+//     over the same source root (PR-M3-perf-B). See sharedParseCache.
 //   - resolveCache: per-(ctx, includer, target, kind) resolved-set
 //     cache. Modules contribute the same ctx to many CC nodes, and
 //     CC nodes share most of their includer transitive graph; caching
@@ -133,8 +166,9 @@ type IncludeScanner struct {
 	// s.sourceRoot+"/")` call sites.
 	sourceRootSlash string
 
-	parsed       map[string][]includeDirective
-	exists       map[string]bool
+	// pc holds the parse-level caches shared between target and host
+	// scanners (PR-M3-perf-B). Never nil.
+	pc           *sharedParseCache
 	resolveCache map[resolveKey][]string
 	// anySrcView is a PerSourceView prepared with an empty source path.
 	// Its `includerKeyed` slice is the canonical includer-keyed record
@@ -278,18 +312,34 @@ type resolveKey struct {
 }
 
 // NewIncludeScanner constructs a scanner bound to a SysInclSet and a
-// source-root absolute path.
+// source-root absolute path. Allocates a private sharedParseCache; use
+// newIncludeScannerWith to share a parse cache between scanners.
 func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
+	return newIncludeScannerWith(sourceRoot, sysincl, newSharedParseCache())
+}
+
+// newIncludeScannerWith is the internal constructor used when a
+// sharedParseCache is provided externally (e.g. the target/host pair in
+// GenWith). The caller is responsible for ensuring pc is non-nil and that
+// both scanners share the same sourceRoot (the cache is keyed by absolute
+// path, so a mismatched root would silently return stale results).
+//
+// PR-M3-perf-B: introduced to allow the target and host scanners to share
+// their parse-level caches. Full unification (U1) is not safe because
+// sysincl resolution is architecture-dependent (linux-musl-aarch64.yml vs
+// linux-musl.yml produce different mappings for bits/alltypes.h and similar
+// platform-specific headers). Only the parse tier — reading file bytes and
+// extracting #include directives — is architecture-neutral.
+func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedParseCache) *IncludeScanner {
 	// PR-34n: pre-sizes set to the upper bound of the observed working
-	// set for tools/archiver (target+host scanners combined; instrumented
-	// run reports below). Under-pre-sizing was the actual finding from
+	// set for tools/archiver. Under-pre-sizing was the actual finding from
 	// the re-profile — sysinclSourceCache reaches ~328k entries on the
 	// target scanner (the 131072 prior pre-size triggered ~2 rehash
 	// chains; bucket re-grow + rehash-and-copy was the dominant flat
 	// alloc). Pre-sizing past the observed peak eliminates rehashing.
 	//
 	// Observed peak per-scanner:
-	//   parsed=4354 / 3559   exists=14195 / 14494
+	//   parsed=4354 / 3559   exists=14195 / 14494   (now shared via pc)
 	//   resolveCache=97921 / 48054   viewCache=2063 / 1767
 	//   sysinclSourceCache=328510 / 128091
 	//   sysinclIncluderCache=22520 / 16089
@@ -298,8 +348,7 @@ func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
 		sysincl:              sysincl,
 		sourceRoot:           sourceRoot,
 		sourceRootSlash:      sourceRoot + "/",
-		parsed:               make(map[string][]includeDirective, 8192),
-		exists:               make(map[string]bool, 16384),
+		pc:                   pc,
 		resolveCache:         make(map[resolveKey][]string, 131072),
 		viewCache:            make(map[string]PerSourceView, 4096),
 		emittedRelCache:      make(map[string]string, 4096),
@@ -878,14 +927,17 @@ func (s *IncludeScanner) walkSubgraphTainted(absPath string, ctx *ScanContext, c
 // the same search-path / sysincl machinery as a quoted C include.
 func (s *IncludeScanner) parseIncludes(absPath string) []includeDirective {
 	// PR-34n: lock removed (single-goroutine).
-	if cached, ok := s.parsed[absPath]; ok {
+	// PR-M3-perf-B: parsed cache is shared between target and host scanners
+	// via s.pc; both walk the same source tree so parsed directives are
+	// identical regardless of which scanner first reads the file.
+	if cached, ok := s.pc.parsed[absPath]; ok {
 		return cached
 	}
 
 	data, err := os.ReadFile(absPath)
 
 	if err != nil {
-		s.parsed[absPath] = nil
+		s.pc.parsed[absPath] = nil
 
 		return nil
 	}
@@ -898,7 +950,7 @@ func (s *IncludeScanner) parseIncludes(absPath string) []includeDirective {
 		out = parseCIncludes(data)
 	}
 
-	s.parsed[absPath] = out
+	s.pc.parsed[absPath] = out
 
 	return out
 }
@@ -1581,14 +1633,17 @@ func normalisePath(p string) string {
 // for regular files only (directories return false).
 func (s *IncludeScanner) fileExists(absPath string) bool {
 	// PR-34n: lock removed (single-goroutine).
-	if cached, ok := s.exists[absPath]; ok {
+	// PR-M3-perf-B: exists cache is shared between target and host scanners
+	// via s.pc; file existence is the same regardless of which scanner
+	// queries it (both use the same sourceRoot).
+	if cached, ok := s.pc.exists[absPath]; ok {
 		return cached
 	}
 
 	info, err := os.Stat(absPath)
 	val := err == nil && !info.IsDir()
 
-	s.exists[absPath] = val
+	s.pc.exists[absPath] = val
 
 	return val
 }
