@@ -203,6 +203,12 @@ type genCtx struct {
 	// `when ($MUSL == "yes") { PEERDIR+=contrib/libs/musl/include }`).
 	// Read-only after Gen seeds it; never mutated mid-walk.
 	cliDefines map[string]string
+	// enOutputs maps each emitted EN node's output paths to its NodeRef.
+	// PR-M3-D: cross-EN header-inclusion deps are resolved by looking up
+	// previously emitted EN nodes whose outputs are included by the current
+	// header's transitive include closure. The map key is the
+	// $(BUILD_ROOT)-rooted output path; the value is the EN NodeRef.
+	enOutputs map[string]NodeRef
 	// ldPluginCPCache deduplicates LD_PLUGIN CP NodeRefs across the
 	// target/host walk pair (PR-35l). PR-35k emitted a fresh CP node for
 	// every (instance.Path, plugin name) pair the walker visited, which
@@ -298,9 +304,9 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"RUN_PROGRAM":                       {}, // Code-generator invocation; EN/PY nodes deferred to PR-M3-D.
 	"RUN_ANTLR4_CPP":                    {}, // ANTLR4 C++ parser generator; deferred to PR-M3-D.
 	"RUN_ANTLR4_CPP_SPLIT":              {}, // ANTLR4 split-mode variant; deferred to PR-M3-D.
-	"GENERATE_ENUM_SERIALIZATION":       {}, // EN node; deferred to PR-M3-C.
-	"GENERATE_ENUM_SERIALIZATION_WITH_HEADER": {}, // EN node variant; deferred to PR-M3-C.
-	"GENERATE_ENUM_SERIALIZATION_NOUTF": {}, // EN node variant.
+	// GENERATE_ENUM_SERIALIZATION / _WITH_HEADER / _NOUTF removed from
+	// whitelist in PR-M3-D: they are now parsed as GenerateEnumSerializationStmt
+	// and dispatched to EmitEN via emitEnumSrcs.
 	"ARCHIVE":                           {}, // Embeds archive of files; deferred.
 	"CREATE_BUILDINFO_FOR":              {}, // Generates build-info C++ header; CF node deferred to PR-M3-D.
 	"INCLUDE_TAGS":                      {}, // Proto include-tag filter; semantic in PR-M3-B.
@@ -412,6 +418,7 @@ func GenWith(cfg PlatformConfig, sourceRoot string, targetDir string, cliDefines
 		scannerTarget:   newIncludeScannerWith(sourceRoot, LoadSysInclSetFor(sourceRoot, "aarch64"), sharedPC),
 		scannerHost:     newIncludeScannerWith(sourceRoot, LoadSysInclSetFor(sourceRoot, "x86_64"), sharedPC),
 		cliDefines:      cliDefines,
+		enOutputs:       make(map[string]NodeRef),
 		ldPluginCPCache: make(map[string]NodeRef),
 	}
 
@@ -440,6 +447,7 @@ type moduleData struct {
 	globalSrcs       []string
 	pySrcs           []string // PR-M3-A: python sources from PY_SRCS(...); each entry is a .py filename
 	pyBuildNoPYC     bool     // PR-M3-A: set by ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
+	enumSrcs         []*GenerateEnumSerializationStmt // PR-M3-D: GENERATE_ENUM_SERIALIZATION(*) declarations
 	peerdirs         []string
 	joinSrcs         []*JoinSrcsStmt
 	addIncl          []string // collected non-GLOBAL ADDINCL paths
@@ -606,6 +614,8 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 			d.srcDir = v.Dir
 		case *GlobalSrcsStmt:
 			d.globalSrcs = append(d.globalSrcs, v.Sources...)
+		case *GenerateEnumSerializationStmt:
+			d.enumSrcs = append(d.enumSrcs, v)
 		case *IfStmt:
 			taken := v.Then
 
@@ -1609,6 +1619,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// branch; their Python sources still require PY node emission.
 		emitPySrcs(ctx, instance, d)
 
+		// PR-M3-D: emit EN nodes for GENERATE_ENUM_SERIALIZATION(*) declarations.
+		emitEnumSrcs(ctx, instance, d)
+
 		result := &moduleEmitResult{
 			headerOnly:              true,
 			AddInclGlobal:           mergeDedup(d.addInclGlobal, peerContribs.addIncl),
@@ -2590,6 +2603,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// nodes from the SRCS path above AND yapyc3 nodes from PY_SRCS here.
 	emitPySrcs(ctx, instance, d)
 
+	// PR-M3-D: emit EN nodes for GENERATE_ENUM_SERIALIZATION(*) declarations.
+	emitEnumSrcs(ctx, instance, d)
+
 	result := &moduleEmitResult{
 		ARRef:                   arRef,
 		ARPath:                  arPath,
@@ -3181,6 +3197,162 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		}
 
 		ctx.emit.Emit(node)
+	}
+}
+
+// emitEnumSrcs emits one EN node per GENERATE_ENUM_SERIALIZATION(*)
+// declaration in d.enumSrcs. PR-M3-D.
+//
+// Algorithm:
+//  1. Walk tools/enum_parser/enum_parser as a host tool to get its
+//     LD NodeRef. Falls back to the canonical binary path when the
+//     walk fails with a ParseError.
+//  2. For each GenerateEnumSerializationStmt, scan the header's
+//     transitive include closure (same scanner as CC nodes).
+//  3. Collect cross-EN deps: any previously emitted EN output path
+//     that appears in the header's include closure contributes its
+//     NodeRef and path to the dep lists.
+//  4. Call EmitEN, then record the output paths in ctx.enOutputs.
+//
+// EN nodes are always emitted on the TARGET platform (instance.Target),
+// matching the reference graph (all 21 EN nodes in sg2.json are on
+// default-linux-aarch64 even though enum_parser is a host x86_64 tool).
+func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
+	if len(d.enumSrcs) == 0 {
+		return
+	}
+
+	const enumParserPath = "tools/enum_parser/enum_parser"
+
+	var (
+		enumParserLD  NodeRef
+		enumParserBin = enumParserBinaryPath
+	)
+
+	// Walk enum_parser as a HOST tool (x86_64).
+	enumHostInst := instance.WithHost(ctx.cfg)
+	enumHostInst.Path = enumParserPath
+	enumHostInst.Flags = inferFlagsFromPath(enumParserPath, true)
+
+	if exc := Try(func() {
+		result := genModule(ctx, enumHostInst)
+		enumParserLD = result.LDRef
+		enumParserBin = result.LDPath
+	}); exc != nil {
+		var pe *ParseError
+		if !errors.As(exc.AsError(), &pe) {
+			panic(exc)
+		}
+		// ParseError: leave zero LD ref; enumParserBin stays at canonical fallback.
+	}
+
+	// EN nodes emit on the TARGET platform regardless of whether we're
+	// in a host walk (all 21 EN nodes in sg2.json are on
+	// default-linux-aarch64). Build a target-axis instance.
+	enInstance := instance
+	enInstance.Target = ctx.cfg.Target.ID
+	// D41: use targetIsX8664 for axis checks.
+	enInstance.Flags.PIC = false
+
+	// Synthesize a minimal ModuleCCInputs for the include scanner so
+	// the header's search path reflects the module's own ADDINCL
+	// declarations (needed for headers that include module-local paths).
+	scanIn := ModuleCCInputs{
+		AddIncl:           d.addIncl,
+		PeerAddInclGlobal: nil, // cross-module include paths not wired here
+		SourceRoot:        ctx.sourceRoot,
+	}
+
+	for _, stmt := range d.enumSrcs {
+		headerRel := stmt.Header
+		withHeader := stmt.Variant == "with_header"
+
+		// Scan the header's transitive include closure using the
+		// target scanner. EN nodes always compile on the target axis;
+		// the include search path mirrors a target CC node's search
+		// path for this module.
+		closure := scanIncludesForSource(ctx, enInstance, headerRel, scanIn)
+
+		// Cross-EN deps: when a previously emitted EN node produced a
+		// _serialized.h file (--header variant), and the current header's
+		// include closure includes that serialized .h (under $(BUILD_ROOT)),
+		// the current EN node must dep on that prior EN node.
+		//
+		// The include scanner resolves $(SOURCE_ROOT)/ paths; serialized .h
+		// files live under $(BUILD_ROOT). These do not appear in the scanner
+		// closure. Cross-EN deps therefore require matching based on which
+		// EN outputs ($(BUILD_ROOT)/.../foo_serialized.h) would be included
+		// by the current header, using a $(SOURCE_ROOT) → $(BUILD_ROOT) path
+		// translation for any _serialized.h entries already recorded in
+		// ctx.enOutputs.
+		//
+		// Simplified approach: for each recorded enOutput, derive the
+		// corresponding SOURCE_ROOT header path (strip _serialized.{cpp,h}
+		// suffix and BUILD_ROOT prefix, re-add SOURCE_ROOT + .h) and check
+		// if that SOURCE_ROOT header appears in the closure. If so, the
+		// current EN node depends on the prior one.
+		var depENRefs []NodeRef
+		var depENOutputs []string
+
+		if len(ctx.enOutputs) > 0 {
+			closureSet := make(map[string]struct{}, len(closure))
+			for _, h := range closure {
+				closureSet[h] = struct{}{}
+			}
+
+			depSeen := map[NodeRef]struct{}{}
+
+			for buildRootPath, ref := range ctx.enOutputs {
+				// Only serialized .h files can be #included by a header;
+				// serialized .cpp files cannot be. Skip .cpp outputs.
+				if !strings.HasSuffix(buildRootPath, "_serialized.h") {
+					continue
+				}
+
+				// Derive the source header path this serialized .h was
+				// generated from: strip $(BUILD_ROOT)/ prefix and
+				// _serialized.h suffix, then add $(SOURCE_ROOT)/ + .h.
+				srcHeaderRel := strings.TrimPrefix(buildRootPath, "$(BUILD_ROOT)/")
+				srcHeaderRel = strings.TrimSuffix(srcHeaderRel, "_serialized.h")
+				srcHeaderAbs := "$(SOURCE_ROOT)/" + srcHeaderRel
+
+				if _, inClosure := closureSet[srcHeaderAbs]; !inClosure {
+					continue
+				}
+
+				if _, dup := depSeen[ref]; dup {
+					continue
+				}
+
+				depSeen[ref] = struct{}{}
+				depENRefs = append(depENRefs, ref)
+				depENOutputs = append(depENOutputs, buildRootPath)
+
+				// Also include the corresponding _serialized.cpp path in
+				// depENOutputs if it exists.
+				cppPath := strings.TrimSuffix(buildRootPath, "_serialized.h") + "_serialized.cpp"
+				if cppRef, ok := ctx.enOutputs[cppPath]; ok && cppRef == ref {
+					depENOutputs = append(depENOutputs, cppPath)
+				}
+			}
+		}
+
+		enRef, enOutPaths := EmitEN(
+			enInstance,
+			headerRel,
+			withHeader,
+			enumParserLD,
+			enumParserBin,
+			depENRefs,
+			depENOutputs,
+			closure,
+			ctx.emit,
+		)
+
+		// Record outputs so later EN nodes can dep on them.
+		for _, p := range enOutPaths {
+			ctx.enOutputs[p] = enRef
+		}
 	}
 }
 
