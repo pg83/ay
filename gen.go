@@ -1974,6 +1974,20 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ownCFlags = ownCFlagsWithMusl
 	}
 
+	// PR-39: contrib/libs/musl/full is a non-musl LIBRARY inside the musl
+	// subtree (SET(MUSL no) in its ya.make). Its CC dispatch routes through
+	// composeTargetCC / composeHostCC (LibcMusl=false), but the upstream
+	// build context is still MUSL=yes, so the reference injects
+	// -D_musl_=1 into the ownCFlags slot — same position as the PROGRAM
+	// injection above, but keyed on the musl-subtree path. TODO: remove
+	// when SET() parsing lands in M3+ and drives this from the ya.make flag.
+	if instance.Path == "contrib/libs/musl/full" && cliMuslOn(ctx) {
+		ownCFlagsWithMusl := make([]string, 0, len(ownCFlags)+1)
+		ownCFlagsWithMusl = append(ownCFlagsWithMusl, ownCFlags...)
+		ownCFlagsWithMusl = append(ownCFlagsWithMusl, "-D_musl_=1")
+		ownCFlags = ownCFlagsWithMusl
+	}
+
 	moduleInputs := ModuleCCInputs{
 		AddIncl:              d.addIncl,
 		PeerAddInclGlobal:    peerAddInclGlobal,

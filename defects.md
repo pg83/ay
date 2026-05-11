@@ -1636,3 +1636,15 @@ NO DEFECTS. Clean. Panic guards correctly placed at top of Emit/Result; tests us
 (b) `appendCxxStdAndOwn(cmdArgs, true, noCompilerWarnings, true, ownExtras)` hardcodes the first `true` literal; using the variable `isCxx` (which is guaranteed `true` inside the guarded branch) would keep the C++ branch a textual no-op vs master, easier to audit. Hardcoding `true` is gratuitous.
 (c) The second new comment ("PR-37: C-source CONLYFLAGS trail after macroPrefixMapFlags...") substantially duplicates the L755-760 comment block; STYLE.md "minimal new comments" suggests trimming.
 **Fix:** Deferred (cosmetic). Apply when next editing `composeTargetCC`.
+
+---
+
+## PR-39
+
+### [PR-39-D01] PR-32 D02 "SOLE remaining musl-path-prefix dispatch" comment is now stale
+**Status:** resolved (deferred — refresh comment when next editing the block)
+**Severity:** nit
+**Location:** `module.go:176-181`
+**Description:** The comment block above the musl-path-prefix branch in `inferFlagsFromPath` asserts that this test is "the SOLE remaining musl-path-prefix dispatch in the codebase — every other call site reads `Flags.LibcMusl` instead." PR-39 introduces a second musl-path-equality dispatch at `gen.go:1984` (the `-D_musl_=1` re-injection for `contrib/libs/musl/full`). The "SOLE remaining" claim is therefore false and risks misleading future readers / subagents who use this comment as a roadmap of where the M5 removal touches.
+**Root cause:** PR-39 added a sibling dispatch at `gen.go:1984` and a new "PR-39:" comment block in `module.go` (below the PR-32 D02 comment), but did NOT update the surviving "SOLE remaining" phrase in the older PR-32 D02 block.
+**Fix:** Deferred per CLAUDE.md "Do not edit the code yourself, even for trivial fixes". When a future PR next touches this comment block, replace "is the SOLE remaining musl-path-prefix dispatch in the codebase" with a short list of remaining sites, e.g. "is one of two musl-path dispatches remaining (the other is the `-D_musl_=1` injection for `contrib/libs/musl/full` at `gen.go:1984`); both are M5+-removable together."
