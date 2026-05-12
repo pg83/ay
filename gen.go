@@ -4731,7 +4731,35 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 				crossCppClosure = append(crossCppClosure, p)
 			}
 		}
+		// PR-M3-G-3: walk OUR OWN _serialized.cpp output through the codegen
+		// registry to fold its transitive include closure (util/generic/*,
+		// libcxx/*, musl/* etc. reached via cppIncludes' EmitsIncludes) into
+		// THIS EN node's `inputs`. REF's EN node inputs equal the consuming
+		// CC node's inputs (both walk the same .h_serialized.cpp) for the
+		// plain GENERATE_ENUM_SERIALIZATION variant. The WITH_HEADER variant
+		// produces a `.h_serialized.h` that other ENs cross-consume; REF
+		// keeps those EN nodes' inputs tight (source-header closure only,
+		// no output-side augmentation), because the consumers absorb the
+		// full closure on their side. The two WITH_HEADER usages in the
+		// M3 closure (`diag/stats_enums.h`, `diag/trace_type_enums.h`) are
+		// both emitted with source-header-only inputs in sg2.json.
+		//
+		// The $(BUILD_ROOT)/<output> path lookup goes through the codegen
+		// registry (registered moments earlier) and follows EmitsIncludes;
+		// subsequent children resolve via parseIncludes on the real
+		// $(SOURCE_ROOT) headers.
+		var ownOutputClosure []string
+		if !withHeader && ctx.scannerTarget.codegen != nil {
+			sub := walkClosure(ctx, enInstance, serializedCPPPath, scanIn)
+			for _, p := range sub {
+				if _, drop := enClosureExcl[p]; drop {
+					continue
+				}
+				ownOutputClosure = append(ownOutputClosure, p)
+			}
+		}
 		enClosure := mergeDedup(filteredClosure, crossCppClosure)
+		enClosure = mergeDedup(enClosure, ownOutputClosure)
 		sort.Strings(enClosure)
 
 		enRef, enOutPaths := EmitEN(
