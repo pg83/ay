@@ -975,8 +975,17 @@ func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFl
 	// bundle on host. Empirical host probe via tools/archiver host
 	// CC nodes confirms the same shape (catboost → -D_musl_ →
 	// hostSseFeatures → 2nd ndebugPicBlock).
-	cmdArgs = append(cmdArgs, autoPeerCFlags...)
+	//
+	// PR-M3-cc-argv-slot-order: `-DUSE_PYTHON3` is also routed through
+	// autoPeerCFlags by `defaultPeerCFlags`, but the host reference
+	// places it AFTER `hostSseFeatures` (sitecustomize.cpp.pic.o ref:97
+	// = -DUSE_PYTHON3, right after -mcx16 at ref:96 and before the 2nd
+	// ndebugPicBlock at ref:98). Partition `autoPeerCFlags` here so
+	// pre-SSE keeps `-D_musl_` and post-SSE picks up `-DUSE_PYTHON3`.
+	preSse, postSse := partitionPython3FromAutoPeer(autoPeerCFlags)
+	cmdArgs = append(cmdArgs, preSse...)
 	cmdArgs = append(cmdArgs, hostSseFeatures...)
+	cmdArgs = append(cmdArgs, postSse...)
 	cmdArgs = append(cmdArgs, ndebugPicBlock...)
 	// PR-M3-cmd-arg-slot-ordering: mirror composeTargetCC's C-source
 	// trailer — CONLYFLAGS slot AFTER macroPrefixMapFlags + perSrcCFlags,
@@ -1094,6 +1103,35 @@ func composeMuslHostCC(outputPath, inputPath string, addIncl, ownExtras []string
 	cmdArgs = append(cmdArgs, inputPath)
 
 	return cmdArgs
+}
+
+// partitionPython3FromAutoPeer splits `autoPeerCFlags` into a pre-SSE
+// and post-SSE half for the HOST compose path (PR-M3-cc-argv-slot-order).
+// `-DUSE_PYTHON3` is routed through `autoPeerCFlags` (see
+// `defaultPeerCFlags`), but the host reference graph places it AFTER
+// the `hostSseFeatures` block — between `-mcx16` and the second
+// `ndebugPicBlock` copy. `-D_musl_` keeps its pre-SSE slot. Order is
+// stable for every non-USE_PYTHON3 flag, so the split is safe to apply
+// unconditionally.
+func partitionPython3FromAutoPeer(autoPeer []string) ([]string, []string) {
+	if len(autoPeer) == 0 {
+		return autoPeer, nil
+	}
+
+	preSse := make([]string, 0, len(autoPeer))
+	var postSse []string
+
+	for _, f := range autoPeer {
+		if f == "-DUSE_PYTHON3" {
+			postSse = append(postSse, f)
+
+			continue
+		}
+
+		preSse = append(preSse, f)
+	}
+
+	return preSse, postSse
 }
 
 // appendAddIncl prepends `-I$(SOURCE_ROOT)/` to each ADDINCL path and

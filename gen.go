@@ -938,47 +938,19 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 	d.addInclGlobal = append(d.addInclGlobal, "contrib/libs/python/Include")
 	d.addIncl = append(d.addIncl, "contrib/libs/python/Include")
 
-	// PR-M3-python3-addincl-buildroot-order: ARCHIVE(NAME ...) in
-	// `library/python/runtime_py3/ya.make` auto-injects an `addincl`
-	// modifier on the output (`${addincl;noauto;output:NAME}` per
-	// `build/ymake.core.conf:4143` macro ARCHIVE), which adds
-	// `$(BUILD_ROOT)/library/python/runtime_py3` to that module's own
-	// IncDirs at `EIncDirScope::Global` (per
-	// `macro_processor.cpp:1016-1019`). The injection is OWNER-SCOPED:
-	// only `library/python/runtime_py3` (the module that owns the
-	// ARCHIVE statement) has this path in its OWN AddIncl bucket;
-	// other USE_PYTHON3 callers (e.g. devtools/ymake) see it solely
-	// via peer-propagation from runtime_py3, NOT in their own slot.
-	//
-	// Place it in `d.addIncl` (non-GLOBAL own) so it lands in the
-	// `ownAddIncl` slot of composeTargetCC / composeHostCC (between
-	// ccIncludesPrefix and ccIncludesSuffix). Empirical: REF
-	// `library/python/runtime_py3/__res.cpp.pic.o` slots 8-9 carry
-	// `[python/Include, BUILD_ROOT/library/python/runtime_py3]` in
-	// that order, both in OWN AddIncl.
-	//
-	// For propagation to consumers, the path is spliced into
-	// `effectiveAddInclGlobal` AFTER `contrib/restricted/abseil-cpp`
-	// in `genModule` — see the post-merge splice block. This matches
-	// the empirical REF ordering on 145 consumer nodes (e.g.
-	// devtools/ymake LIBRARY preeval.cpp.o slots 21-23:
-	// `[python/Include, abseil-cpp, BUILD_ROOT/runtime_py3]`).
+	// ARCHIVE(NAME ...) in library/python/runtime_py3 auto-injects
+	// `${addincl;noauto;output:NAME}` per ymake.core.conf:4143. The
+	// path is owner-scoped (own slot for runtime_py3) AND peer-propagated
+	// to USE_PYTHON3 consumers. Owner gets it in d.addIncl (own).
+	// Consumers see it via genModule's post-merge splice (placed AFTER
+	// abseil-cpp).
 	if modulePath == "library/python/runtime_py3" {
 		d.addIncl = append(d.addIncl, "$(BUILD_ROOT)/library/python/runtime_py3")
 	}
 }
 
 // applyBuildInfoAddIncl mirrors the implicit `ADDINCL(<build_info_dir>)`
-// upstream CREATE_BUILDINFO_FOR macros emit (build/conf/buildinfo.conf):
-// the generated header (e.g. buildinfo_data.h) lives at
-// `$(BUILD_ROOT)/<module>/<header>` and CC consumers in the same module
-// reach it via `-I$(BUILD_ROOT)/<module>`. REF shape verified on the 3
-// `library/cpp/build_info/*.cpp.o` nodes.
-//
-// Scope: own AddIncl only (consumers' CCs in the build_info module).
-// Peer modules see the generated header via standard PEERDIR closure;
-// the BUILD_ROOT addincl path is owner-scoped (same shape as
-// runtime_py3's `$(BUILD_ROOT)/library/python/runtime_py3` injection).
+// upstream CREATE_BUILDINFO_FOR macros emit.
 func applyBuildInfoAddIncl(modulePath string, d *moduleData) {
 	if d.createBuildInfoFor == "" {
 		return
@@ -2492,7 +2464,13 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// would create a cycle (library/python/symbols/python → contrib/libs/
 	// python → library/python/symbols/python).
 	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path != "contrib/libs/python" {
-		d.peerdirs = append(d.peerdirs, "contrib/libs/python")
+		// PR-M3-cc-argv-slot-order: upstream `_BASE_PY3_LIBRARY` (and the
+		// PY2 / PY23 / PY*_PROGRAM siblings) emits PEERDIR(contrib/libs/python)
+		// FROM the module-decl macro body BEFORE the user-declared PEERDIRs
+		// run. Reference ymakeyaml.cpp.o ref:21 shows `python/Include`
+		// (contrib/libs/python OWN GLOBAL) ahead of `re2/include` (user-peer
+		// transitive); prepend preserves that visit order in the peer walk.
+		d.peerdirs = append([]string{"contrib/libs/python"}, d.peerdirs...)
 	}
 
 	// PR-M3-aarch64-enum-and-global-a: GENERATE_ENUM_SERIALIZATION* injects
@@ -3488,9 +3466,20 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		globalArNameFn = globalArchiveName
 	}
 
+	// PR-M3-cc-argv-slot-order: drop BUILD_ROOT-rooted addincl paths from
+	// the peer slot when the same path already sits in this module's own
+	// addincl slot. Generated-output paths (`$(BUILD_ROOT)/<mod>`) are
+	// produced by THIS module's ARCHIVE() / RUN_PROGRAM and arrive at peer
+	// consumers via the PEERDIR walk; the self-compile must not also
+	// emit them in the peer slot. SOURCE_ROOT paths (e.g. `python/Include`)
+	// are not filtered — the upstream reference deliberately emits the
+	// own + peer duplicate for those (sitecustomize.cpp.pic.o ref:8+26,
+	// ymakeyaml.cpp.o ref:9+21).
+	selfPeerAddInclGlobal := filterBuildRootSelfPaths(peerAddInclGlobal, dedupedAddIncl)
+
 	moduleInputs := ModuleCCInputs{
 		AddIncl:              dedupedAddIncl,
-		PeerAddInclGlobal:    peerAddInclGlobal,
+		PeerAddInclGlobal:    selfPeerAddInclGlobal,
 		CFlags:               ownCFlags,
 		CXXFlags:             d.cxxFlags,
 		COnlyFlags:           d.cOnlyFlags,
@@ -3535,7 +3524,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// member buckets below (alongside PR-AUDIT-5's PR-downstream CCs)
 	// so the consumer module's regular `.a` archives the EN-derived
 	// `.o`s after its declared SRCS.
-	enCCRefs, enCCOutputs, enCCMemberInputs := emitEnumSrcs(ctx, instance, d, peerAddInclGlobal, &moduleInputs)
+	enCCRefs, enCCOutputs, enCCMemberInputs := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
 
 	// PR-AUDIT-8: hoist JV/CF/BI/PR node emission before the per-source loop
 	// so the codegen registry is fully populated when any source's WalkClosure
@@ -4310,6 +4299,44 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 // peer-GLOBAL slices: own contributions first, then transitive peer
 // contributions. PR-32 D07 introduced the helper to keep the per-axis
 // composition uniform across ADDINCL / CFLAGS / CXXFLAGS / CONLYFLAGS.
+// filterBuildRootSelfPaths drops `$(BUILD_ROOT)/...` paths from `peer`
+// that also appear in `own`. Returns a fresh slice (input unchanged) so
+// the unfiltered `peerAddInclGlobal` continues to flow to peer-prop
+// channels (effective AddInclGlobal and any downstream consumer's
+// peer walk). Used at the SELF-compile cmd_args boundary only — see
+// PR-M3-cc-argv-slot-order. SOURCE_ROOT-rooted paths (e.g. `python/Include`)
+// are intentionally left alone: the upstream reference emits the
+// own + peer duplicate for those.
+func filterBuildRootSelfPaths(peer, own []string) []string {
+	if len(peer) == 0 {
+		return peer
+	}
+
+	ownSet := make(map[string]struct{}, len(own))
+
+	for _, p := range own {
+		if strings.HasPrefix(p, "$(BUILD_ROOT)/") {
+			ownSet[p] = struct{}{}
+		}
+	}
+
+	if len(ownSet) == 0 {
+		return peer
+	}
+
+	out := make([]string, 0, len(peer))
+
+	for _, p := range peer {
+		if _, dup := ownSet[p]; dup {
+			continue
+		}
+
+		out = append(out, p)
+	}
+
+	return out
+}
+
 func mergeDedup(a, b []string) []string {
 	out := make([]string, 0, len(a)+len(b))
 	seen := make(map[string]struct{}, len(a)+len(b))
