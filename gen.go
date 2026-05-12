@@ -788,6 +788,26 @@ func collectModule(modulePath string, stmts []Stmt, env Environment, pathFlags F
 
 	applyPython3AddIncl(modulePath, d)
 
+	// PR-M3-sparsehash-slot-order: per upstream build/conf/proto.conf:480-491,
+	// the _CPP_EVLOG_CMD (and _CPP_PROTO_EVLOG_CMD) macros fired for every
+	// `.ev` source append `.PEERDIR=library/cpp/eventlog contrib/libs/protobuf`
+	// to the owning module's PEERDIRs. Visit eventlog's transitive chain
+	// (blockcodecs → codecs/brotli, codecs/snappy, contrib/libs/re2) from
+	// every `.ev`-bearing module — places those peers ahead of sparsehash
+	// in the consumer's transitive ADDINCL aggregation.
+	hasEv := false
+	for _, src := range d.srcs {
+		if strings.HasSuffix(src, ".ev") {
+			hasEv = true
+
+			break
+		}
+	}
+
+	if hasEv {
+		d.peerdirs = append(d.peerdirs, "library/cpp/eventlog", "contrib/libs/protobuf")
+	}
+
 	return d
 }
 
