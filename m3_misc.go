@@ -682,34 +682,66 @@ func EmitPR(
 	}
 
 	// Expand positional args: substitute ${ARCADIA_ROOT} → $(SOURCE_ROOT),
-	// and expand bare filenames that appear in the IN list to SOURCE_ROOT paths.
+	// substitute ${MODDIR} → instance.Path, and expand bare filenames
+	// referenced by IN / OUT / OUT_NOAUTO / STDOUT to absolute paths.
 	inSet := make(map[string]bool, len(stmt.INFiles))
 	for _, f := range stmt.INFiles {
 		inSet[f] = true
+	}
+	outSet := make(map[string]bool, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
+	for _, f := range stmt.OUTFiles {
+		outSet[f] = true
+	}
+	for _, f := range stmt.OUTNoAutoFiles {
+		outSet[f] = true
+	}
+	if stmt.StdoutFile != "" {
+		outSet[stmt.StdoutFile] = true
 	}
 
 	cmdArgs := make([]string, 0, 1+len(stmt.Args))
 	cmdArgs = append(cmdArgs, toolBinPath)
 	for _, a := range stmt.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(SOURCE_ROOT)")
+		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path)
 		// If the arg is a plain filename (no path sep, no - prefix, no =),
 		// and appears in IN list, expand to SOURCE_ROOT abs.
 		if inSet[a] && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = "$(SOURCE_ROOT)/" + instance.Path + "/" + a
+		} else if outSet[a] && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
+			// Bare OUT / OUT_NOAUTO / STDOUT basenames are rewritten to
+			// $(BUILD_ROOT)/<modulePath>/<basename> so the consumer
+			// references the generated artifact's absolute path.
+			a = "$(BUILD_ROOT)/" + instance.Path + "/" + a
 		}
 		cmdArgs = append(cmdArgs, a)
 	}
 
-	// Build inputs list: tool binary + IN files + closure.
+	// Build inputs list: tool binary + IN files + closure. Dedup so an
+	// IN file that is also reached transitively via the closure (it
+	// appears in the registered EmitsIncludes set seeded from IN) is
+	// listed once, matching the reference multiset shape.
 	inAbsPaths := make([]string, 0, len(stmt.INFiles))
 	for _, f := range stmt.INFiles {
 		inAbsPaths = append(inAbsPaths, "$(SOURCE_ROOT)/"+instance.Path+"/"+f)
 	}
 
 	inputs := make([]string, 0, 1+len(inAbsPaths)+len(inputClosure))
-	inputs = append(inputs, toolBinPath)
-	inputs = append(inputs, inAbsPaths...)
-	inputs = append(inputs, inputClosure...)
+	seen := make(map[string]struct{}, 1+len(inAbsPaths)+len(inputClosure))
+	appendUnique := func(p string) {
+		if _, dup := seen[p]; dup {
+			return
+		}
+		seen[p] = struct{}{}
+		inputs = append(inputs, p)
+	}
+	appendUnique(toolBinPath)
+	for _, p := range inAbsPaths {
+		appendUnique(p)
+	}
+	for _, p := range inputClosure {
+		appendUnique(p)
+	}
 
 	// Build outputs list.
 	var outputs []string
@@ -1581,11 +1613,13 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	var toolBinPath string
 	var toolLDRef NodeRef
+	var toolInducedDeps []string
 
 	if exc := Try(func() {
 		res := genModule(ctx, toolInstance)
 		toolLDRef = res.LDRef
 		toolBinPath = res.LDPath
+		toolInducedDeps = res.InducedDeps
 	}); exc != nil {
 		// Swallow parse errors (tool may not fully parse); use fallback path.
 		toolBinPath = "$(BUILD_ROOT)/" + toolPath + "/" + filepath.Base(toolPath)
@@ -1606,26 +1640,34 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// compilable outputs (.h, .pyc, ...) EmitsIncludes stays nil — those
 	// either lead to opaque binary content or to header content the
 	// scanner cannot derive at gen time without invoking the tool.
+	//
+	// PR-M3-runprogram-closure: the tool's module-level INDUCED_DEPS(<ext>
+	// headers...) names headers the tool injects into every generated
+	// output of the listed extensions. Treat the listed headers as
+	// additional EmitsIncludes for the PR output so the scanner reaches
+	// the tool-injected header closure (e.g. struct2fieldcalc declares
+	// INDUCED_DEPS(h+cpp .../field_calc_int.h), the scanner then walks
+	// field_calc_int.h → field_calc.h → autoarray.h).
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
 				OutputPath:    "$(BUILD_ROOT)/" + instance.Path + "/" + f,
-				EmitsIncludes: prEmitsIncludes(instance, f, stmt),
+				EmitsIncludes: prEmitsIncludes(instance, f, stmt, toolInducedDeps),
 			})
 		}
 		for _, f := range stmt.OUTNoAutoFiles {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
 				OutputPath:    "$(BUILD_ROOT)/" + instance.Path + "/" + f,
-				EmitsIncludes: prEmitsIncludes(instance, f, stmt),
+				EmitsIncludes: prEmitsIncludes(instance, f, stmt, toolInducedDeps),
 			})
 		}
 		if stmt.StdoutFile != "" {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
 				OutputPath:    "$(BUILD_ROOT)/" + instance.Path + "/" + stmt.StdoutFile,
-				EmitsIncludes: prEmitsIncludes(instance, stmt.StdoutFile, stmt),
+				EmitsIncludes: prEmitsIncludes(instance, stmt.StdoutFile, stmt, toolInducedDeps),
 			})
 		}
 	}
@@ -1702,12 +1744,17 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 // that the generated source textually `#include`s its IN files and any
 // OUTPUT_INCLUDES-declared headers; for everything else the content is
 // opaque and we return nil. PR-AUDIT-5.
-func prEmitsIncludes(instance ModuleInstance, outFile string, stmt *RunProgramStmt) []string {
+//
+// PR-M3-runprogram-closure: toolInducedDeps carries the tool PROGRAM's
+// module-level INDUCED_DEPS(...) header list (repo-relative). Append
+// those to the seed-include set so the include scanner reaches the
+// transitive closure of headers the tool injects into its outputs.
+func prEmitsIncludes(instance ModuleInstance, outFile string, stmt *RunProgramStmt, toolInducedDeps []string) []string {
 	if !isCCSourceExt(outFile) {
 		return nil
 	}
 
-	includes := make([]string, 0, len(stmt.INFiles)+len(stmt.OutputIncludes))
+	includes := make([]string, 0, len(stmt.INFiles)+len(stmt.OutputIncludes)+len(toolInducedDeps))
 
 	// IN files are module-relative; rebase to SOURCE_ROOT.
 	for _, f := range stmt.INFiles {
@@ -1717,6 +1764,11 @@ func prEmitsIncludes(instance ModuleInstance, outFile string, stmt *RunProgramSt
 	// OUTPUT_INCLUDES entries are repo-relative (e.g.
 	// `devtools/ymake/symbols/file_store.h`); rebase to SOURCE_ROOT.
 	for _, f := range stmt.OutputIncludes {
+		includes = append(includes, "$(SOURCE_ROOT)/"+f)
+	}
+
+	// Tool-declared INDUCED_DEPS (repo-relative); rebase to SOURCE_ROOT.
+	for _, f := range toolInducedDeps {
 		includes = append(includes, "$(SOURCE_ROOT)/"+f)
 	}
 
