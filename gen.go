@@ -3006,7 +3006,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	// PR-M3-residue-B: Python native library modules (PY23_NATIVE_LIBRARY)
 	// emit ".py3.o" CC outputs (not plain ".o") per the reference graph.
-	isPy3NativeLib := d.moduleStmt.Name == "PY23_NATIVE_LIBRARY"
+	// PR-M3-py23-py3suffix-module-cpp: PY23_LIBRARY also emits ".py3.o"
+	// (e.g. library/python/symbols/module/module.cpp.py3.o); extend flag.
+	isPy3NativeLib := d.moduleStmt.Name == "PY23_NATIVE_LIBRARY" ||
+		d.moduleStmt.Name == "PY23_LIBRARY"
 
 	// arNameFn selects the archive naming function for this module:
 	//   - PY23_NATIVE_LIBRARY → "libpy3c" prefix (Py3cArchiveName)
