@@ -157,11 +157,16 @@ type moduleEmitResult struct {
 	// PY23_NATIVE_LIBRARY, PY2_PROGRAM, PY3_PROGRAM). PR-M3-protobuf-
 	// umbrella-trigger: applyUmbrellaAddIncl reads this flag to suppress
 	// umbrella ADDINCL propagation into Python-bound sub-libraries that
-	// happen to sit under a propagating ancestor's path prefix
-	// (devtools/ymake/contrib/python-rapidjson, devtools/ymake/libs/
-	// ymakeyaml). REF does not propagate the umbrella's brotli/snappy/re2
-	// set into PY*_LIBRARY consumers.
+	// happen to sit under a propagating ancestor's path prefix.
 	isPyLibrary bool
+	// PeerGlobalClosureRefs / PeerGlobalClosurePaths is the transitive set
+	// of `.global.a` archives reachable through this module's PEERDIR
+	// closure (DFS post-order, dedup by path). PR-M3-LD-peer-globalA:
+	// closes a 24-input gap on `devtools/ymake/bin/ymake` and 8 other LD
+	// nodes where REF wires transitively-reachable `.global.a` archives
+	// into the consumer PROGRAM's LD `inputs` slot.
+	PeerGlobalClosureRefs  []NodeRef
+	PeerGlobalClosurePaths []string
 	// LDPluginRefs / LDPluginPaths is the transitive set of LD plugin
 	// CP nodes a consumer PROGRAM must wire into its
 	// `--start-plugins ... --end-plugins` block. PR-35k: the only
@@ -2513,6 +2518,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// archive that archives them.
 		objcopyRefs, objcopyOutputs := emitResourceObjcopy(ctx, instance, d)
 
+		// PR-M3-LD-peer-globalA: capture the header-only `.global.a` ref
+		// so consumers see it via `moduleEmitResult.GlobalRef/GlobalPath`.
+		// Previously discarded — RESOURCE-only LIBRARY (`certs`) and
+		// PY3_LIBRARY PY_SRCS modules' `.global.a` archives were emitted
+		// to the graph but orphaned from every LD `inputs` slot.
+		var hOnlyGlobalRef *NodeRef
+		var hOnlyGlobalPath string
+
 		if len(objcopyRefs) > 0 {
 			// REF surfaces module_lang="py3" for PY*_LIBRARY archives
 			// (module_tag=global, or py3_global on PY23_LIBRARY) and
@@ -2538,7 +2551,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				globalBaseName = globalArchiveName(instance.Path)
 				tag = "global"
 			}
-			_ = EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRefs, objcopyOutputs, nil, ctx.emit)
+			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRefs, objcopyOutputs, nil, ctx.emit)
+			hOnlyGlobalRef = &gRef
+			hOnlyGlobalPath = instance.Path + "/" + globalBaseName
 		}
 
 		// PR-M3-D: emit EN nodes for GENERATE_ENUM_SERIALIZATION(*) declarations.
@@ -2557,15 +2572,40 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// types). peerContribs is threaded so the downstream CCs see the
 		// same peer-GLOBAL CFLAGS / ADDINCL slice the header-only walker
 		// aggregated.
-		emitProtoSrcs(ctx, instance, d, peerContribs)
+		// PR-M3-LD-peer-globalA: surface PROTO_LIBRARY's emitted .a so
+		// downstream LD walks see it (the AR previously lived in the
+		// graph but was orphaned from every LD `inputs` slot).
+		protoARRef, protoARPath, protoHasAR := emitProtoSrcs(ctx, instance, d, peerContribs)
 
 		// PR-M3-E: emit JV, CF, BI, PR nodes declared at module level.
 		// Header-only branch: no downstream CC/AR, so pass nil consumerInputs.
 		emitMiscNodes(ctx, instance, d, nil)
 
+		// PR-M3-LD-peer-globalA: PROTO_LIBRARY emits a regular `.a` archive
+		// via `emitProtoSrcs` above. Surface that AR through the result so
+		// downstream consumers' peer-archive closure picks it up. The
+		// module remains `headerOnly: true` (it compiles zero of its own
+		// C/C++ sources; the AR's members are protoc-generated CCs), but
+		// `hasPlainAR=true` lets the consumer's walker fold the AR into
+		// its `peerArchiveRefs` slot without re-introducing the AR-on-AR
+		// dependency that PR-30 D05 explicitly removed for LIBRARY ARs.
+		hOnlyARRef := NodeRef{}
+		hOnlyARPath := ""
+		hOnlyHasAR := false
+		if protoHasAR {
+			hOnlyARRef = protoARRef
+			hOnlyARPath = protoARPath
+			hOnlyHasAR = true
+		}
+
 		result := &moduleEmitResult{
 			headerOnly:              true,
 			isPyLibrary:             isPyLibraryType(d.moduleStmt.Name),
+			hasPlainAR:              hOnlyHasAR,
+			ARRef:                   hOnlyARRef,
+			ARPath:                  hOnlyARPath,
+			GlobalRef:               hOnlyGlobalRef,
+			GlobalPath:              hOnlyGlobalPath,
 			AddInclGlobal:           mergeDedup(d.addInclGlobal, peerContribs.addIncl),
 			OwnAddInclGlobal:        append([]string(nil), d.addInclGlobal...),
 			// PR-M3-peer-cflags-global-ordering: peer-transitive first,
@@ -2578,6 +2618,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			COnlyFlagsGlobal:        mergeDedup(peerContribs.cOnlyFlags, ownCOnlyFlagsGlobalH),
 			PeerArchiveClosureRefs:  peerContribs.archiveRefs,
 			PeerArchiveClosurePaths: peerContribs.archivePaths,
+			PeerGlobalClosureRefs:   peerContribs.globalRefs,
+			PeerGlobalClosurePaths:  peerContribs.globalPaths,
 			LDPluginRefs:            ldPluginRefs,
 			LDPluginPaths:           ldPluginPaths,
 		}
@@ -2727,6 +2769,23 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	peerGlobalRefs := make([]NodeRef, 0, len(allPeers))
 	peerGlobalPaths := make([]string, 0, len(allPeers))
 
+	// PR-M3-LD-peer-globalA: dedup table for the transitive `.global.a`
+	// closure. Each direct peer contributes its own `.global.a` (when
+	// GlobalRef != nil) AND every entry of its PeerGlobalClosure*. First
+	// occurrence wins; the closure flows up through this module's
+	// `moduleEmitResult.PeerGlobalClosure*` so PROGRAM LDs at any depth
+	// reach every transitively-reachable `.global.a` archive.
+	peerGlobalSeen := map[string]struct{}{}
+	peerGlobalAddPath := func(ref NodeRef, path string) {
+		if _, dup := peerGlobalSeen[path]; dup {
+			return
+		}
+
+		peerGlobalSeen[path] = struct{}{}
+		peerGlobalRefs = append(peerGlobalRefs, ref)
+		peerGlobalPaths = append(peerGlobalPaths, path)
+	}
+
 	// PR-35c: dedup table for the transitive peer-archive closure.
 	// For each direct peer, we accumulate (peer's own AR ∪ peer's
 	// PeerArchiveClosure) — first occurrence wins (R14 declaration
@@ -2848,6 +2907,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			peerArchiveAddPath(peerResult.PeerArchiveClosureRefs[i], p)
 		}
 
+		// PR-M3-LD-peer-globalA: fold peer's transitive `.global.a`
+		// closure BEFORE the peer's own `.global.a` (DFS post-order,
+		// same shape as the archive closure). Runs for header-only and
+		// non-header peers alike — a header-only LIBRARY contributes no
+		// `.global.a` of its own, but its peers may.
+		for i, p := range peerResult.PeerGlobalClosurePaths {
+			peerGlobalAddPath(peerResult.PeerGlobalClosureRefs[i], p)
+		}
+
 		// PR-35k: fold peer's LD plugin closure (own ∪ transitive) into
 		// our own. Runs for BOTH header-only and non-header peers — the
 		// only M2 plugin (musl.py.pyplugin) is owned by the header-only
@@ -2856,27 +2924,28 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			peerLDPluginAddPath(peerResult.LDPluginRefs[i], p)
 		}
 
-		// PR-27: header-only peers contribute peer-GLOBAL flags but no
-		// archive-dep refs of their own. Non-header peers contribute
-		// archive refs.
-		if peerResult.headerOnly {
-			continue
+		// PR-M3-LD-peer-globalA: header-only peers still expose their
+		// own `.global.a` when present (e.g. `certs` RESOURCE-only
+		// LIBRARY emits `libcerts.global.a` from objcopy outputs via
+		// PR-M3-aarch64-enum-and-global-a). Fold the peer's own
+		// `.global.a` regardless of headerOnly status.
+		if peerResult.GlobalRef != nil {
+			peerGlobalAddPath(*peerResult.GlobalRef, peerResult.GlobalPath)
 		}
 
 		// PR-M3-residue-B: use peerResult.ARPath (which carries the
 		// py3-prefixed name for Python modules) instead of recomputing
 		// ArchiveName. Skip when hasPlainAR is false (module has only
 		// GLOBAL_SRCS — no regular archive was emitted).
+		// PR-M3-LD-peer-globalA: PROTO_LIBRARY emits a regular `.a` from
+		// the header-only branch (its members are protoc-generated CCs);
+		// `hasPlainAR` is set on its `moduleEmitResult` so the AR flows
+		// through this branch regardless of `headerOnly`.
 		if peerResult.hasPlainAR {
 			// ARPath has "$(BUILD_ROOT)/" prefix; cmd_args use a
 			// bare relative path. Strip the prefix for consistency.
 			arRelPath := strings.TrimPrefix(peerResult.ARPath, "$(BUILD_ROOT)/")
 			peerArchiveAddPath(peerResult.ARRef, arRelPath)
-		}
-
-		if peerResult.GlobalRef != nil {
-			peerGlobalRefs = append(peerGlobalRefs, *peerResult.GlobalRef)
-			peerGlobalPaths = append(peerGlobalPaths, peerResult.GlobalPath)
 		}
 	}
 
@@ -3893,6 +3962,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			COnlyFlagsGlobal:        effectiveCOnlyFlagsGlobal,
 			PeerArchiveClosureRefs:  append([]NodeRef(nil), peerArchiveRefs...),
 			PeerArchiveClosurePaths: append([]string(nil), peerArchivePaths...),
+			PeerGlobalClosureRefs:   append([]NodeRef(nil), peerGlobalRefs...),
+			PeerGlobalClosurePaths:  append([]string(nil), peerGlobalPaths...),
 			LDPluginRefs:            mergedLDPluginRefs,
 			LDPluginPaths:           mergedLDPluginPaths,
 		}
@@ -4014,6 +4085,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		COnlyFlagsGlobal:        effectiveCOnlyFlagsGlobal,
 		PeerArchiveClosureRefs:  append([]NodeRef(nil), peerArchiveRefs...),
 		PeerArchiveClosurePaths: append([]string(nil), peerArchivePaths...),
+		PeerGlobalClosureRefs:   append([]NodeRef(nil), peerGlobalRefs...),
+		PeerGlobalClosurePaths:  append([]string(nil), peerGlobalPaths...),
 		LDPluginRefs:            mergedLDPluginRefs,
 		LDPluginPaths:           mergedLDPluginPaths,
 	}
@@ -4199,6 +4272,13 @@ type peerGlobalContribs struct {
 	// no archive).
 	archiveRefs  []NodeRef
 	archivePaths []string
+	// PR-M3-LD-peer-globalA: `.global.a` closure transitively reachable
+	// through this header-only LIBRARY's peers. Mirrors archiveRefs but
+	// for `.global.a` archives (every peer's own GlobalRef UNION every
+	// peer's PeerGlobalClosure*). Header-only LIBRARYs do not emit a
+	// `.global.a` of their own, but their peers may.
+	globalRefs  []NodeRef
+	globalPaths []string
 	// PR-35k: LD plugin closure surfaced through the header-only walker.
 	// Mirrors the archive closure: dedup-by-path, declaration order,
 	// first occurrence wins.
@@ -4231,6 +4311,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	cxxFlagsSeen := map[string]struct{}{}
 	cOnlyFlagsSeen := map[string]struct{}{}
 	archiveSeen := map[string]struct{}{}
+	globalSeen := map[string]struct{}{}
 	ldPluginSeen := map[string]struct{}{}
 
 	addEach := func(seenSet map[string]struct{}, dst *[]string, src []string) {
@@ -4252,6 +4333,16 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		archiveSeen[path] = struct{}{}
 		out.archiveRefs = append(out.archiveRefs, ref)
 		out.archivePaths = append(out.archivePaths, path)
+	}
+
+	addGlobal := func(ref NodeRef, path string) {
+		if _, dup := globalSeen[path]; dup {
+			return
+		}
+
+		globalSeen[path] = struct{}{}
+		out.globalRefs = append(out.globalRefs, ref)
+		out.globalPaths = append(out.globalPaths, path)
 	}
 
 	addLDPlugin := func(ref NodeRef, path string) {
@@ -4280,9 +4371,24 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 
 		// PR-M3-residue-B: use peerResult.ARPath (py3-prefixed for
 		// Python modules) and skip when hasPlainAR is false.
-		if !peerResult.headerOnly && peerResult.hasPlainAR {
+		// PR-M3-LD-peer-globalA: gate on `hasPlainAR` alone — PROTO_LIBRARY
+		// modules have `headerOnly=true` AND `hasPlainAR=true`; the legacy
+		// `!headerOnly` guard wrongly suppressed their AR.
+		if peerResult.hasPlainAR {
 			arRelPath := strings.TrimPrefix(peerResult.ARPath, "$(BUILD_ROOT)/")
 			addArchive(peerResult.ARRef, arRelPath)
+		}
+
+		// PR-M3-LD-peer-globalA: fold peer's transitive `.global.a`
+		// closure plus peer's own `.global.a` (when GlobalRef != nil).
+		// Header-only peers may still emit a `.global.a` (e.g. `certs`
+		// emits libcerts.global.a from RESOURCE-driven objcopy outputs).
+		for i, p := range peerResult.PeerGlobalClosurePaths {
+			addGlobal(peerResult.PeerGlobalClosureRefs[i], p)
+		}
+
+		if peerResult.GlobalRef != nil {
+			addGlobal(*peerResult.GlobalRef, peerResult.GlobalPath)
 		}
 
 		// PR-35k: fold peer's transitive LD plugin closure. Header-only

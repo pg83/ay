@@ -528,7 +528,12 @@ func protoImportsDescriptor(sourceRoot, srcRel string) bool {
 // `peerContribs` carries the transitive per-axis peer-GLOBAL union the
 // header-only walker computed (used to compose the per-CC ModuleCCInputs
 // so flags reach the consumer CCs of the protoc-generated sources).
-func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs) {
+//
+// PR-M3-LD-peer-globalA: returns (arRef, arPath, true) when a PROTO_LIBRARY
+// AR was emitted so the caller can surface it through `moduleEmitResult`'s
+// archive closure (the AR was previously orphaned — emitted as a graph
+// node but not reachable from any LD `inputs` via the peer walk).
+func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs) (NodeRef, string, bool) {
 	// Collect .proto and .ev sources from d.srcs.
 	var protoSrcs, evSrcs []string
 
@@ -542,7 +547,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	}
 
 	if len(protoSrcs) == 0 && len(evSrcs) == 0 {
-		return
+		return NodeRef{}, "", false
 	}
 
 	// Walk host protoc and cpp_styleguide tool programs.
@@ -727,7 +732,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	// path's own .ev branch in emitOneSource already handles its own
 	// downstream-CC + AR aggregation (gen.go:4315).
 	if d.moduleStmt.Name != "PROTO_LIBRARY" || len(codegenOutputs) == 0 {
-		return
+		return NodeRef{}, "", false
 	}
 
 	// Compose ModuleCCInputs for the downstream CCs. Mirror the LIBRARY
@@ -807,5 +812,6 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	// AR emission. Mirrors gen.go:3097 EmitARNamed with module_tag=cpp_proto.
 	arBaseName := ArchiveName(instance.Path)
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + arBaseName
-	emitARNode(instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, ctx.emit)
+	arRef := emitARNode(instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, ctx.emit)
+	return arRef, archivePath, true
 }
