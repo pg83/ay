@@ -416,7 +416,10 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"USE_PYTHON2":                       {}, // Python 2 dependency marker.
 	"PYTHON3_ADDINCL":                   {}, // Adds Python3 include paths (system python, handled by emitter).
 	"PYTHON2_ADDINCL":                   {}, // Adds Python2 include paths.
-	"NO_PYTHON_INCLUDES":                {}, // Suppresses default Python include injection.
+	// NO_PYTHON_INCLUDES: handled in applyUnknownStmt → d.noPythonIncl
+	// (PR-M3-aarch64-py-closure); gates the PY*_LIBRARY-implicit
+	// PEERDIR+=contrib/libs/python per build/conf/python.conf:741-743.
+	// Removed from whitelist so it doesn't fall through to the no-op path.
 	// NO_CHECK_IMPORTS: now typed UnknownStmt handled in applyUnknownStmt
 	// (PR-M3-resource-objcopy-B); collects args into d.noCheckImports
 	// and emits via emitNoCheckImportsObjcopy. Removed from whitelist
@@ -654,6 +657,7 @@ type moduleData struct {
 	hadAllocator     bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
 	allocatorName    string   // PR-35g: name passed to ALLOCATOR(...); empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE).
 	muslLite         bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
+	noPythonIncl     bool     // PR-M3-aarch64-py-closure: set by NO_PYTHON_INCLUDES(); suppresses the PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (mirror of `when ($NO_PYTHON_INCLS != "yes") { PEERDIR+=contrib/libs/python }` in build/conf/python.conf:741-743).
 	ldPlugins        []string // PR-35k: filenames declared via LD_PLUGIN(name.py); the only M2 case is contrib/libs/musl/include's `LD_PLUGIN(musl.py)`. Each entry becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs.
 	// PR-35o: per-source extra CFLAGS keyed by source filename.
 	// Populated by `SRC(filename extra_cflags...)` (e.g.
@@ -984,6 +988,15 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		d.flags.NoUtil = true
 	case "NO_COMPILER_WARNINGS":
 		d.flags.NoCompilerWarnings = true
+	case "NO_PYTHON_INCLUDES":
+		// PR-M3-aarch64-py-closure: NO_PYTHON_INCLUDES() sets NO_PYTHON_INCLS=yes
+		// per build/conf/python.conf:928-929 (macro definition). The PY*_LIBRARY
+		// implicit `when ($NO_PYTHON_INCLS != "yes") { PEERDIR+=contrib/libs/python }`
+		// at python.conf:741-743 is gated by this; we capture the flip here so
+		// the implicit-peer code in genModule skips contrib/libs/python for
+		// modules that declare NO_PYTHON_INCLUDES (e.g. library/python/runtime_py3,
+		// library/python/symbols/module).
+		d.noPythonIncl = true
 	case "ALLOCATOR":
 		applyAllocatorStmt(v, d)
 	case "ENABLE":
@@ -1272,6 +1285,24 @@ func applyAllocatorStmt(v *UnknownStmt, d *moduleData) {
 func isPyLibraryType(name string) bool {
 	switch name {
 	case "PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",
+		"PY2_PROGRAM", "PY3_PROGRAM":
+		return true
+	}
+
+	return false
+}
+
+// pyLibraryAutoPythonPeer returns true for Python module types whose
+// upstream definition in build/conf/python.conf auto-PEERDIRs
+// contrib/libs/python (gated by NO_PYTHON_INCLUDES). The set is a
+// strict subset of isPyLibraryType — PY23_NATIVE_LIBRARY is excluded
+// because its PY2/PY3 sub-modules inherit from plain LIBRARY (not
+// PY*_LIBRARY) and so do not pick up the implicit peer upstream.
+// PY2_PROGRAM/PY3_PROGRAM are kept in step with PY3_PROGRAM_BIN
+// because _BASE_PY3_PROGRAM (their base) carries the same implicit peer.
+func pyLibraryAutoPythonPeer(name string) bool {
+	switch name {
+	case "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY", "PY3_PROGRAM_BIN",
 		"PY2_PROGRAM", "PY3_PROGRAM":
 		return true
 	}
@@ -2044,6 +2075,29 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// util as a default peer, matching the M2 reference graph.
 	if d.muslLite {
 		instance.Flags.NoUtil = true
+	}
+
+	// PR-M3-aarch64-py-closure: PY{2,3,23}_LIBRARY and PY{3}_PROGRAM_BIN
+	// module declarations upstream `when ($NO_PYTHON_INCLS != "yes") {
+	// PEERDIR+=contrib/libs/python }` inside the module-decl body
+	// (build/conf/python.conf:697-699 PY2_LIBRARY, :741-743 PY3_LIBRARY,
+	// PY23_LIBRARY inherits via its PY2/PY3 submodules, :887-889 _BASE_PY3_PROGRAM
+	// for PY3_PROGRAM_BIN/PY3TEST_BIN). Without this implicit peer,
+	// devtools/ymake/contrib/python-rapidjson (PY3_LIBRARY) reaches
+	// contrib/libs/python via USE_PYTHON3 only on the host axis (transitively
+	// via tools/py3cc/slow); the aarch64 PY3_LIBRARY instances never walk
+	// into contrib/libs/python and thus miss the library/python/symbols/
+	// {module,libc,python,registry} closure that `contrib/libs/python`'s
+	// `IF (USE_ARCADIA_PYTHON)` block PEERDIRs in.
+	//
+	// PY23_NATIVE_LIBRARY is intentionally NOT in the set: its PY2/PY3
+	// submodules inherit from plain `LIBRARY` (python.conf:1238-1259),
+	// not from PY*_LIBRARY, so upstream does NOT auto-PEERDIR
+	// contrib/libs/python for them. Including PY23_NATIVE_LIBRARY here
+	// would create a cycle (library/python/symbols/python → contrib/libs/
+	// python → library/python/symbols/python).
+	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path != "contrib/libs/python" {
+		d.peerdirs = append(d.peerdirs, "contrib/libs/python")
 	}
 
 	// PR-27: a header-only LIBRARY (e.g. library/cpp/sanitizer/include)
