@@ -1076,6 +1076,17 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 				d.defaultVars[v.VarName] = v.Value
 				d.defaultVarOrder = append(d.defaultVarOrder, v.VarName)
 			}
+			// PR-M3-pcre-jit-default-eval: also bridge the binding into the
+			// per-module IF env so subsequent `IF (NAME)` / `IF (NAME == "v")`
+			// predicates evaluated in this collectStmts walk see the value.
+			// Mirrors upstream TEvalContext::SetStatement's NMacro::DEFAULT
+			// branch (devtools/ymake/lang/eval_context.cpp:335-339): only
+			// sets when the variable has no prior binding. Value typed as
+			// string so bare-ident `IF (NAME)` coerces via Environment.Bool
+			// (empty → false, non-empty → true) and `IF (NAME == "yes")`
+			// matches via string equality. The env is the per-module clone
+			// from buildIfEnv, so the mutation does not leak across modules.
+			env.SetDefaultString(v.VarName, v.Value)
 		case *ConfigureFileStmt:
 			// PR-M3-E: explicit CONFIGURE_FILE(src dst) declaration.
 			d.configureFiles = append(d.configureFiles, v)
