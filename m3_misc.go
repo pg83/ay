@@ -817,9 +817,24 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			// F-7-B: register the .h outputs. ANTLR4-generated headers include
 			// antlr4-runtime.h (XPathLexer.h pattern in
 			// contrib/libs/antlr4_cpp_runtime/src/tree/xpath/XPathLexer.h).
+			// PR-M3-final-codegen-registry-expansion: the JV-generated .h also
+			// carries the antlr4 toolchain witnesses (antlr.jar, stdout2stderr.py
+			// script, the .g4 sources) and the sibling .cpp output. Verified on
+			// devtools/ymake/lang/cmd_parser.cpp.o and confreader.cpp.o.
 			lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 			if reg != nil {
+				lexerG4 := "$(SOURCE_ROOT)/" + instance.Path + "/" + g.Lexer
+				parserG4 := "$(SOURCE_ROOT)/" + instance.Path + "/" + g.Parser
+				lexerCpp := outDir + "/" + lexerBase + ".cpp"
+				witnessIncludes := []string{
+					antlr4RuntimeHeaderPath,
+					lexerCpp,
+					stdout2stderrPath,
+					antlr4JarPath,
+					lexerG4,
+					parserG4,
+				}
 				for _, h := range []string{
 					outDir + "/" + lexerBase + ".h",
 					outDir + "/" + parserBase + ".h",
@@ -829,7 +844,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					reg.Register(&GeneratedFileInfo{
 						ProducerKvP:   "JV",
 						OutputPath:    h,
-						EmitsIncludes: []string{antlr4RuntimeHeaderPath},
+						EmitsIncludes: witnessIncludes,
 					})
 				}
 			}
@@ -855,8 +870,20 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		} else {
 			jvRef := EmitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ctx.emit)
 			// F-7-B: register .h outputs.
+			// PR-M3-final-codegen-registry-expansion: same witness set as
+			// the split path (antlr.jar + stdout2stderr.py + .g4 source +
+			// sibling Lexer.cpp).
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 			if reg != nil {
+				grammarG4 := "$(SOURCE_ROOT)/" + instance.Path + "/" + g.Grammar
+				lexerCpp := outDir + "/" + base + "Lexer.cpp"
+				witnessIncludes := []string{
+					antlr4RuntimeHeaderPath,
+					lexerCpp,
+					stdout2stderrPath,
+					antlr4JarPath,
+					grammarG4,
+				}
 				for _, h := range []string{
 					outDir + "/" + base + "Lexer.h",
 					outDir + "/" + base + "Parser.h",
@@ -866,7 +893,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					reg.Register(&GeneratedFileInfo{
 						ProducerKvP:   "JV",
 						OutputPath:    h,
-						EmitsIncludes: []string{antlr4RuntimeHeaderPath},
+						EmitsIncludes: witnessIncludes,
 					})
 				}
 			}
@@ -898,13 +925,21 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 	// BI: emit one node when CREATE_BUILDINFO_FOR was declared.
 	if d.createBuildInfoFor != "" {
 		EmitBI(instance, d.createBuildInfoFor, biFlagsForInstance(), ctx.emit)
-		// F-7-B: register BI output. buildinfo_data.h is a generated header
-		// but its #include content is opaque (build-system metadata); EmitsIncludes nil.
+		// F-7-B: register BI output. buildinfo_data.h is a generated header.
+		// PR-M3-final-codegen-registry-expansion: the BI-script trio
+		// (build_info_gen.py + xargs.py + yield_line.py) flows up into
+		// CC consumers of the generated header (witnessed on
+		// library/cpp/build_info/build_info_static.cpp.o in REF). Register
+		// them as EmitsIncludes so the scanner closure propagates them.
 		if reg != nil {
 			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:   "BI",
-				OutputPath:    outDir + "/" + d.createBuildInfoFor,
-				EmitsIncludes: nil,
+				ProducerKvP: "BI",
+				OutputPath:  outDir + "/" + d.createBuildInfoFor,
+				EmitsIncludes: []string{
+					buildInfoGenPyPath,
+					xargsPyPath,
+					yieldLinePyPath,
+				},
 			})
 		}
 	}
@@ -1010,7 +1045,11 @@ func emitJVDownstreamCPCC(
 		ccRef, ccOut := EmitCC(instance, g4CppRel, ccIn, ctx.emit)
 
 		// AR memberInputs: SOURCE_ROOT closure entries only (no BUILD_ROOT).
-		memberInputs := make([]string, 0, len(closure))
+		// PR-M3-final-codegen-registry-expansion: fs_tools.py and
+		// process_command_files.py are CP-step build-script helpers
+		// witnessed in REF on the enclosing AR rollup (libdevtools-ymake-lang.a).
+		memberInputs := make([]string, 0, len(closure)+2)
+		memberInputs = append(memberInputs, antlr4FsToolsPath, antlr4ProcCmdFiles)
 		for _, p := range closure {
 			if strings.HasPrefix(p, "$(BUILD_ROOT)/") {
 				continue

@@ -453,29 +453,26 @@ func EmitPB(
 }
 
 // pbDescriptorImporterExtras returns the witness inputs propagated through a
-// protoc-generated .pb.h whose source proto imports
-// "google/protobuf/descriptor.proto". The list is the union of:
+// protoc-generated .pb.h to its CC consumers. The list is the union of:
 //   - pbDescriptorImporterHeaders (7 protobuf reflection-cluster headers),
 //   - pbWrapperPath (cpp_proto_wrapper.py — the script that drives protoc),
-//   - pbDescriptorProto (the descriptor.proto source itself),
-//   - the proto source file (its $(SOURCE_ROOT)-rooted path).
+//   - the proto source file (its $(SOURCE_ROOT)-rooted path),
+//   - pbDescriptorProto (the descriptor.proto source itself; only when the
+//     proto imports descriptor.proto).
 //
-// Returns nil when the proto does not import descriptor.proto.
-//
-// Verified by intersecting CC-consumer inputs across all
-// descriptor.proto-importing .pb.h's in
-// /home/pg/monorepo/yatool_orig/sg2.json (see
-// docs/drafts/20260512-0200-residue-pre-100pct.md §2 lever #1).
+// Verified by intersecting CC-consumer inputs across all .pb.h's in
+// /home/pg/monorepo/yatool_orig/sg2.json: the 7 headers + wrapper + proto
+// source appear on 105/105 cpp.o consumers, regardless of descriptor
+// import (PR-M3-final-codegen-registry-expansion).
 func pbDescriptorImporterExtras(sourceRoot, protoRelPath string) []string {
-	if !protoImportsDescriptor(sourceRoot, protoRelPath) {
-		return nil
-	}
-
 	out := make([]string, 0, len(pbDescriptorImporterHeaders)+3)
 	out = append(out, pbWrapperPath)
-	out = append(out, pbDescriptorProto)
 	out = append(out, "$(SOURCE_ROOT)/"+protoRelPath)
 	out = append(out, pbDescriptorImporterHeaders...)
+
+	if protoImportsDescriptor(sourceRoot, protoRelPath) {
+		out = append(out, pbDescriptorProto)
+	}
 
 	return out
 }
@@ -795,6 +792,15 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		ccIn.Generator = co.genRef
 		ccIn.HasGenerator = true
 		ccIn.IncludeInputs = walkClosure(ctx, instance, co.pbCC, moduleInputs)
+		// PR-M3-final-codegen-registry-expansion: protoc emits
+		// `#include "google/protobuf/wire_format.h"` into the reflection
+		// scaffolding of every .ev.pb.cc; add it post-closure (registry-side
+		// addition leaks through .ev.pb.h → .ev.pb.cc witness link to
+		// over-emit onto non-protobuf CC nodes). Restricted to .ev sources
+		// (.pb.cc gets wire_format.h via pbCcDeepRuntimeHeaders already).
+		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
+			ccIn.IncludeInputs = append(ccIn.IncludeInputs, pbRuntimeBase+"google/protobuf/wire_format.h")
+		}
 
 		ccRef, ccOut := EmitCC(instance, co.srcRel, ccIn, ctx.emit)
 		ccRefs = append(ccRefs, ccRef)
