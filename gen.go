@@ -2193,7 +2193,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		emitProtoSrcs(ctx, instance, d, peerContribs)
 
 		// PR-M3-E: emit JV, CF, BI, PR nodes declared at module level.
-		emitMiscNodes(ctx, instance, d)
+		// Header-only branch: no downstream CC/AR, so pass nil consumerInputs.
+		emitMiscNodes(ctx, instance, d, nil)
 
 		result := &moduleEmitResult{
 			headerOnly:              true,
@@ -2921,7 +2922,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// so the codegen registry is fully populated when any source's WalkClosure
 	// runs. Mirrors the earlier emitEnumSrcs hoist (F-7-C). No state written
 	// by the per-source loop is read by emitMiscNodes.
-	emitMiscNodes(ctx, instance, d)
+	// PR-M3-antlr-g4-cpp: pass moduleInputs so JV downstream CP+CC are emitted.
+	jvCCRefs, jvCCOutputs, jvCCMemberInputs := emitMiscNodes(ctx, instance, d, &moduleInputs)
 
 	// PR-M3-F-7-C: two-pass source emission. Codegen-producing sources
 	// (.ev/.proto/.rl6/.rl/.cpp.in/.c.in) emit nodes whose outputs
@@ -3016,6 +3018,19 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		for i := 0; i < primaryCount && i < len(ccIns); i++ {
 			addRegularPrimary(ccIns[i])
 		}
+	}
+
+	// PR-M3-antlr-g4-cpp: fold JV-downstream CCs (CP-rename + compile for
+	// each ANTLR-generated .cpp) into the AR member bucket. The reference
+	// graph places them after the regular SRCS bucket and before the
+	// EN-downstream CCs (sg2.json devtools/ymake/lang AR: TConfLexer.g4.cpp.o,
+	// TConfParser.g4.cpp.o, CmdLexer.g4.cpp.o, CmdParser.g4.cpp.o at
+	// positions after value_storage.cpp.o and before h_serialized.cpp.o).
+	for i, ref := range jvCCRefs {
+		ccRefs = append(ccRefs, ref)
+		ccOutputs = append(ccOutputs, jvCCOutputs[i])
+		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
+		addMemberInputs(jvCCMemberInputs[i])
 	}
 
 	// PR-M3-codegen-cc-enqueue: fold the EN-downstream CCs (captured
