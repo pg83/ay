@@ -911,14 +911,18 @@ type archiveEntry struct {
 // antlr4GrammarInfo captures a single RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT
 // invocation for later JV node emission.  IsSplit distinguishes the two-grammar
 // form (lexer+parser) from the single-grammar form.
+// OutputIncludes carries repo-relative headers from the macro's OUTPUT_INCLUDES
+// keyword (PR-M3-jv-antlr-system-headers): they are registered as CP `.g4.cpp`
+// EmitsIncludes so the CC consumer walks their transitive closure.
 type antlr4GrammarInfo struct {
-	IsSplit  bool
-	Lexer    string   // .g4 file (IsSplit=true)
-	Parser   string   // .g4 file (IsSplit=true)
-	Grammar  string   // .g4 file (IsSplit=false)
-	Options  []string // extra antlr4 cmd_args (e.g. ["-package", "NConfReader"])
-	Visitor  bool
-	Listener bool
+	IsSplit        bool
+	Lexer          string   // .g4 file (IsSplit=true)
+	Parser         string   // .g4 file (IsSplit=true)
+	Grammar        string   // .g4 file (IsSplit=false)
+	Options        []string // extra antlr4 cmd_args (e.g. ["-package", "NConfReader"])
+	Visitor        bool
+	Listener       bool
+	OutputIncludes []string // repo-relative
 }
 
 // collectModule walks `mf.Stmts` (after IF branches have been
@@ -1243,20 +1247,22 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 		case *RunAntlr4CppStmt:
 			// PR-M3-E: single-grammar ANTLR4 invocation → JV node.
 			d.antlr4Grammars = append(d.antlr4Grammars, antlr4GrammarInfo{
-				IsSplit:  false,
-				Grammar:  v.Grammar,
-				Options:  append([]string(nil), v.Options...),
-				Visitor:  v.Visitor,
-				Listener: v.Listener,
+				IsSplit:        false,
+				Grammar:        v.Grammar,
+				Options:        append([]string(nil), v.Options...),
+				Visitor:        v.Visitor,
+				Listener:       v.Listener,
+				OutputIncludes: append([]string(nil), v.OutputIncludes...),
 			})
 		case *RunAntlr4CppSplitStmt:
 			// PR-M3-E: lexer+parser split ANTLR4 invocation → JV node.
 			d.antlr4Grammars = append(d.antlr4Grammars, antlr4GrammarInfo{
-				IsSplit:  true,
-				Lexer:    v.Lexer,
-				Parser:   v.Parser,
-				Visitor:  v.Visitor,
-				Listener: v.Listener,
+				IsSplit:        true,
+				Lexer:          v.Lexer,
+				Parser:         v.Parser,
+				Visitor:        v.Visitor,
+				Listener:       v.Listener,
+				OutputIncludes: append([]string(nil), v.OutputIncludes...),
 			})
 		case *RunProgramStmt:
 			// PR-M3-E: RUN_PROGRAM → PR node.

@@ -250,23 +250,29 @@ type CreateBuildInfoStmt struct {
 // Grammar is the single .g4 file.  Options is the remaining arg list
 // (may include -package NConfReader, etc.).  Visitor/NoListener are
 // parsed from VISITOR/NO_LISTENER keywords in Options.
+// OutputIncludes captures repo-relative headers from the OUTPUT_INCLUDES
+// keyword section — propagated into the CP `.g4.cpp` registry entry so
+// the CC consumer's include closure inherits their transitive set
+// (PR-M3-jv-antlr-system-headers, mirroring PB/EV F-7-D).
 type RunAntlr4CppStmt struct {
-	Grammar  string   // e.g. "TConf.g4"
-	Options  []string // extra args (e.g. ["-package", "NConfReader"])
-	Visitor  bool
-	Listener bool
-	Line     int
+	Grammar        string   // e.g. "TConf.g4"
+	Options        []string // extra args (e.g. ["-package", "NConfReader"])
+	Visitor        bool
+	Listener       bool
+	OutputIncludes []string // repo-relative (e.g. "util/generic/string.h")
+	Line           int
 }
 
 // RunAntlr4CppSplitStmt represents `RUN_ANTLR4_CPP_SPLIT(lexer parser
 // [VISITOR] [LISTENER] [OUTPUT_INCLUDES ...])`. Lexer and Parser are
 // the two .g4 grammar files; the generated outputs cover both.
 type RunAntlr4CppSplitStmt struct {
-	Lexer    string // e.g. "CmdLexer.g4"
-	Parser   string // e.g. "CmdParser.g4"
-	Visitor  bool
-	Listener bool
-	Line     int
+	Lexer          string // e.g. "CmdLexer.g4"
+	Parser         string // e.g. "CmdParser.g4"
+	Visitor        bool
+	Listener       bool
+	OutputIncludes []string // repo-relative (PR-M3-jv-antlr-system-headers)
+	Line           int
 }
 
 // ResourcePair holds one (path, key) pair from a RESOURCE / RESOURCE_FILES
@@ -1217,7 +1223,16 @@ func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
 				stmt.Listener = true
 			}
 			i++
-		case "OUTPUT_INCLUDES", "IN", "OUT", "OUT_NOAUTO", "INDUCED_DEPS", "TOOL":
+		case "OUTPUT_INCLUDES":
+			// PR-M3-jv-antlr-system-headers: capture the OUTPUT_INCLUDES
+			// section (repo-relative header paths). Threaded into the CP
+			// `.g4.cpp` registry entry so CC scan walks them transitively.
+			i++
+			for i < len(args) && !isRunAntlrKeyword(args[i]) {
+				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
+				i++
+			}
+		case "IN", "OUT", "OUT_NOAUTO", "INDUCED_DEPS", "TOOL":
 			// Skip keyword and its following arguments (until next keyword or end).
 			i++
 			for i < len(args) && !isRunAntlrKeyword(args[i]) {
@@ -1233,7 +1248,8 @@ func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
 
 // parseRunAntlr4CppSplit parses RUN_ANTLR4_CPP_SPLIT args.
 // Args[0]=lexer .g4, args[1]=parser .g4; remaining: VISITOR/LISTENER keywords
-// and OUTPUT_INCLUDES section (ignored in our model).
+// and OUTPUT_INCLUDES section. PR-M3-jv-antlr-system-headers: OUTPUT_INCLUDES
+// tokens are captured for CP registry use; other keyword sections are skipped.
 func parseRunAntlr4CppSplit(args []string, line int) *RunAntlr4CppSplitStmt {
 	stmt := &RunAntlr4CppSplitStmt{Lexer: args[0], Parser: args[1], Line: line}
 	for i := 2; i < len(args); i++ {
@@ -1244,7 +1260,15 @@ func parseRunAntlr4CppSplit(args []string, line int) *RunAntlr4CppSplitStmt {
 			stmt.Listener = true
 		case "NO_LISTENER":
 			// no-op: default is already no-listener
-		case "OUTPUT_INCLUDES", "IN", "OUT", "OUT_NOAUTO", "INDUCED_DEPS", "TOOL":
+		case "OUTPUT_INCLUDES":
+			// PR-M3-jv-antlr-system-headers: capture repo-relative headers.
+			i++
+			for i < len(args) && !isRunAntlrKeyword(args[i]) {
+				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
+				i++
+			}
+			i-- // outer loop will i++
+		case "IN", "OUT", "OUT_NOAUTO", "INDUCED_DEPS", "TOOL":
 			// skip keyword block
 			i++
 			for i < len(args) && !isRunAntlrKeyword(args[i]) {
