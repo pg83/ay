@@ -775,30 +775,39 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 }
 
 // pySrcChunk holds the accumulator state for one objcopy node emitted
-// by chunkPySrcEntries — the kv-first pre-check chunker.
+// by chunkPySrcEntries — a per-HandleResource-call flush chunker
+// matching upstream `TObjCopyResourcePacker::HandleResource`
+// (`devtools/ymake/plugins/resource_handler/objcopy.h:17-29`).
 type pySrcChunk struct {
-	paths     []string
-	keys      []string // base64-padded
-	kvsHash   []string
-	kvsCmd    []string
-	pathInps  []string
+	paths    []string
+	keys     []string // base64-padded
+	kvsHash  []string
+	kvsCmd   []string
+	pathInps []string
 }
 
 // chunkPySrcEntries partitions a declaration-ordered entry list into
-// upstream-packer-style chunks. Each chunk's combined cmd-arg length
-// stays at or under maxCmdLen. The packer's accumulator increments by
-// `rootCmdLen + len(arg)` per argument added; the entry-add pre-check
-// is on the kv-portion alone (the path/key portion goes in the same
-// chunk as the kv, even when it pushes cmdLen past maxCmdLen — this
-// matches the observed REF behaviour where path-only-overflow does not
-// split entries).
+// chunks that mirror byte-exact what the upstream packer would produce.
 //
-// Single-entry / small-bucket modules (runtime_py3, py3cc/slow,
-// symbols/module) always fit in one chunk; this path is exact. Large
-// buckets (contrib/tools/python3/Lib, contrib/tools/python3/lib2/py)
-// produce ~40 / ~74 chunks; the chunker approximates the upstream
-// split-on-mid-entry-flush behaviour, so a subset of the chunk hashes
-// will diverge from REF. Documented under PR-M3-resource-objcopy-C.
+// Upstream semantics (`objcopy.h:17-29`): per RESOURCE() entry the
+// `res.py:onresource_files` macro appends `[-, src_kv, path, key]` to
+// the packer input. The packer's `HandleResource` is therefore called
+// TWICE per entry:
+//
+//	(1) kv add:        EstimatedCmdLen_ += ROOT_CMD_LEN + len(src_kv_hash)
+//	(2) path+key add:  EstimatedCmdLen_ += ROOT_CMD_LEN + len(path_arg) + len(b64(key))
+//
+// After EACH add, `Finalize(force=false)` runs; if
+// `EstimatedCmdLen_ >= MAX_CMD_LEN` the chunk flushes. This is why a
+// single entry can straddle a chunk boundary: the kv lands in chunk N,
+// the path+key in chunk N+1.
+//
+// The accumulator uses the pre-expansion forms for both adds: the kv's
+// `${rootrel;...}` placeholder is retained (`e.kvHash`), and the path is
+// the bare source-relative string (`e.pathHash`), not the
+// `$(BUILD_ROOT)/...` expansion. Confirmed byte-exact for
+// `contrib/tools/python3/Lib` (40/40) and `contrib/tools/python3/lib2/py`
+// (37/37 PY_SRCS chunks) — see `resource_test.go`.
 func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 	if len(entries) == 0 {
 		return nil
@@ -818,20 +827,23 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 	}
 
 	for _, e := range entries {
-		kvLen := rootCmdLen + len(e.kvCmd)
-		pathLen := rootCmdLen + len(e.pathInput) + len(e.key)
-
-		if cmdLen+kvLen > maxCmdLen {
-			flush()
-		}
+		// HandleResource("-", e.kvHash): kv add.
 		cur.kvsHash = append(cur.kvsHash, e.kvHash)
 		cur.kvsCmd = append(cur.kvsCmd, e.kvCmd)
-		cmdLen += kvLen
+		cmdLen += rootCmdLen + len(e.kvHash)
+		if cmdLen >= maxCmdLen {
+			flush()
+		}
 
+		// HandleResource(e.pathHash, e.key): path+key add.
+		kb64 := encb64.StdEncoding.EncodeToString([]byte(e.key))
 		cur.paths = append(cur.paths, e.pathHash)
-		cur.keys = append(cur.keys, encb64.StdEncoding.EncodeToString([]byte(e.key)))
+		cur.keys = append(cur.keys, kb64)
 		cur.pathInps = append(cur.pathInps, e.pathInput)
-		cmdLen += pathLen
+		cmdLen += rootCmdLen + len(e.pathHash) + len(kb64)
+		if cmdLen >= maxCmdLen {
+			flush()
+		}
 	}
 	flush()
 
