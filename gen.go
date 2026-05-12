@@ -3943,33 +3943,74 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ldInstance.Language = LangPy
 		}
 
+		// PR-M3-py3-runtime-closure: PY3_PROGRAM_BIN must emit its yapyc3
+		// and objcopy nodes BEFORE EmitLD so the objcopy outputs can be
+		// folded into the LD's ccPaths slot (the reference graph wraps
+		// the program LD around the per-resource objcopy `.o` files in
+		// addition to the regular member CCs). Pre-PR the emission ran
+		// after EmitLD which meant the LD never saw the objcopy outputs.
+		ldCCRefs := ccRefs
+		ldCCOutputs := ccOutputs
+		ldMemberInputs := memberInputs
+
+		if d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+			emitPySrcs(ctx, instance, d)
+
+			objcopyRefs, objcopyOutputs, _ := emitResourceObjcopy(ctx, instance, d)
+
+			if len(objcopyRefs) > 0 {
+				ldCCRefs = append(append([]NodeRef(nil), ccRefs...), objcopyRefs...)
+				ldCCOutputs = append(append([]string(nil), ccOutputs...), objcopyOutputs...)
+			}
+
+			// Fold the objcopy script + PY_SRCS source paths + RESOURCE
+			// source paths into the LD member-input union so they appear
+			// in the LD node's inputs (mirror of the reference shape for
+			// tools/py3cc/slow/py3cc: build/scripts/objcopy.py +
+			// tools/py3cc/slow/main.py + each declared RESOURCE source).
+			if resourceModuleTag(d.moduleStmt.Name) != "" {
+				var resourcePaths []string
+				for _, e := range d.resources {
+					if e.Path == "-" {
+						continue
+					}
+
+					resourcePaths = append(resourcePaths, e.Path)
+				}
+
+				if extras := pySrcsARExtraInputs(instance.Path, d.srcDir, d.pySrcs, resourcePaths); len(extras) > 0 {
+					seen := make(map[string]struct{}, len(ldMemberInputs))
+					for _, p := range ldMemberInputs {
+						seen[p] = struct{}{}
+					}
+
+					ldMemberInputs = append([]string(nil), ldMemberInputs...)
+
+					for _, p := range extras {
+						if _, dup := seen[p]; dup {
+							continue
+						}
+
+						seen[p] = struct{}{}
+						ldMemberInputs = append(ldMemberInputs, p)
+					}
+				}
+			}
+		}
+
 		ldRef := EmitLD(
 			ldInstance,
 			binaryName,
-			ccRefs, ccOutputs,
+			ldCCRefs, ldCCOutputs,
 			ldPeerArchiveRefs, ldPeerArchivePaths,
 			mergedLDPluginRefs, mergedLDPluginPaths,
 			peerGlobalRefs, peerGlobalPaths,
-			memberInputs,
+			ldMemberInputs,
 			cliMuslOn(ctx),
 			ownCFlags,
 			ctx.emit,
 		)
 		ldPath := LDOutputPath(instance, binaryName)
-
-		// PR-M3-F-1: PY3_PROGRAM_BIN modules carry PY_SRCS; emit yapyc3
-		// PY nodes here (the LIBRARY branch calls emitPySrcs after EmitAR,
-		// but the PROGRAM branch skips it — add it explicitly for Python
-		// program modules so their .yapyc3 nodes appear in the graph).
-		if d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
-			emitPySrcs(ctx, instance, d)
-			// PR-M3-resource-objcopy-A: PY3_PROGRAM_BIN may also carry
-			// RESOURCE / RESOURCE_FILES (the yapyc3 + objcopy clusters
-			// coexist on PY3 programs per upstream pybuild.py).
-			// PROGRAMs don't emit a separate .global.a; the LD absorbs
-			// the objcopy outputs via the regular dependency graph.
-			_, _, _ = emitResourceObjcopy(ctx, instance, d)
-		}
 
 		result := &moduleEmitResult{
 			ARRef:                   ldRef,
@@ -4026,6 +4067,46 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 			memberInputsSeen[p] = struct{}{}
 			combinedMemberInputs = append(combinedMemberInputs, p)
+		}
+	}
+
+	// PR-M3-py3-runtime-closure: PY*_LIBRARY modules with PY_SRCS emit
+	// objcopy nodes (see emitPySrcObjcopy) whose inputs include
+	// build/scripts/objcopy.py plus every PY_SRCS source `.py` path.
+	// The reference graph union-aggregates those into the module's
+	// regular `.a` and `.global.a` inputs. Mirror this by injecting the
+	// same set into combinedMemberInputs before AR emission. Gate on the
+	// same resourceModuleTag check that emitPySrcObjcopy uses so non-
+	// PY3 modules (plain LIBRARY) stay unaffected.
+	if d.moduleStmt != nil && resourceModuleTag(d.moduleStmt.Name) != "" {
+		// Collect non-kv-only RESOURCE / RESOURCE_FILES source paths;
+		// kv-only entries (Path == "-") do not point at a real file and
+		// would inject an invalid input path.
+		var resourcePaths []string
+		for _, e := range d.resources {
+			if e.Path == "-" {
+				continue
+			}
+
+			resourcePaths = append(resourcePaths, e.Path)
+		}
+
+		if extras := pySrcsARExtraInputs(instance.Path, d.srcDir, d.pySrcs, resourcePaths); len(extras) > 0 {
+			// Ensure combinedMemberInputs is its own slice header so the
+			// append below cannot alias the caller's memberInputs backing
+			// array when the no-global branch above kept the alias.
+			if len(globalMemberInputs) == 0 {
+				combinedMemberInputs = append([]string(nil), memberInputs...)
+			}
+
+			for _, p := range extras {
+				if _, dup := memberInputsSeen[p]; dup {
+					continue
+				}
+
+				memberInputsSeen[p] = struct{}{}
+				combinedMemberInputs = append(combinedMemberInputs, p)
+			}
 		}
 	}
 
@@ -5341,10 +5422,13 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// dep refs onto the CC node whenever its IncludeInputs pulls in a
 		// $(BUILD_ROOT)-rooted EN output (e.g. `stats_enums.h_serialized.h`
 		// reaches consumers across devtools/ymake/** via diag/stats.h's
-		// peer chain). REF wires the producing EN node into the
-		// consumer's `deps`; without this the consumer's inputs are
-		// byte-exact but the deps comparator flags a missing edge.
+		// peer chain).
 		srcIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcIn.IncludeInputs)
+		// PR-M3-py3-runtime-closure: runtime_py3 __res.cpp / sitecustomize.cpp
+		// each carry the matching .pyc.inc + PY_SRCS python inputs in REF.
+		if extras := runtimePy3CCExtraInputs(srcInstance.Path, srcRel); len(extras) > 0 {
+			srcIn.IncludeInputs = append(srcIn.IncludeInputs, extras...)
+		}
 
 		ref, outPath := EmitCC(srcInstance, srcRel, srcIn, ctx.emit)
 
