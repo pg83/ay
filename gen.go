@@ -2692,33 +2692,25 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		addEach(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
 	}
 
-	// PR-M3-cmd-arg-slot-ordering: when a module has at least one
-	// user-peer with OWN GLOBAL ADDINCL, emit program-defaults' AddIncl-
-	// Global BEFORE user-peers'. Empirical:
-	//   - ragel5/rlgen-cd peers ragel5/{aapl,common,redfsm} which each
-	//     have OWN GLOBAL. REF places tcmalloc + abseil-cpp ahead of
-	//     ragel5/{aapl,common,redfsm}.
-	//   - protoc/bin peers contrib/libs/protoc which has OWN GLOBAL
-	//     (protoc/src). REF places tcmalloc + abseil-cpp ahead of
-	//     protoc/src + protobuf/src + abseil-cpp-tstring.
-	//   - rescompiler/rescompressor peers library/cpp/resource which
-	//     itself peers util chains; the user-peer's OWN-presence flips
-	//     the order.
-	//   - archiver peers library/cpp/{archive,digest/md5,getopt/small}
-	//     — NONE have OWN GLOBAL. REF places user-peers' transitive
-	//     (zlib, double-conversion, libc_compat) ahead of tcmalloc +
-	//     abseil-cpp.
-	//   - ragel6 has user-peers with OWN GLOBAL (ragel5/aapl), so
-	//     program-defaults emit first; cow/on contributes nothing so
-	//     the visible order stays [mimalloc/include, aapl].
-	anyUserPeerOwn := false
-	for _, rp := range resolved {
-		if rp.kind == peerKindUserPeer && len(rp.result.OwnAddInclGlobal) > 0 {
-			anyUserPeerOwn = true
-			break
-		}
-	}
-
+	// PR-M3-l3-peer-order: program-defaults emit BEFORE user-peers in
+	// peer-GLOBAL ADDINCL aggregation. The two slots interleave only when
+	// a user-peer brings GLOBAL contributions of its own (own or transitive)
+	// that overlap the program-default closure — in every empirically
+	// observed REF cluster (archiver, ragel5/rlgen-cd, protoc/bin,
+	// rescompiler/rescompressor, py3cc, library/python/runtime_py3/
+	// stage0pycc) the program-default tcmalloc + abseil-cpp pair appears
+	// AHEAD of any user-peer's OWN or transitive GLOBAL. The prior heuristic
+	// (gate on user-peer OWN GLOBAL only) missed:
+	//   - rescompiler/rescompressor: user-peer library/cpp/resource has no
+	//     OWN GLOBAL but transitively pulls contrib/restricted/abseil-cpp
+	//     via library/cpp/containers/absl_flat_hash; the heuristic chose
+	//     user-peers-first and placed abseil-cpp ahead of tcmalloc.
+	//   - py3cc / library/python/runtime_py3/stage0pycc: user-peer contrib/
+	//     tools/python3 transitively pulls lzma/openssl/libffi which then
+	//     landed ahead of program-defaults' tcmalloc + abseil-cpp.
+	// Archiver remains correct: its user-peers contribute only dedups of
+	// lang-default paths, so program-defaults-first produces the same
+	// trailing tcmalloc + abseil-cpp pair as user-peers-first.
 	emitUserPeers := func() {
 		for _, rp := range resolved {
 			if rp.kind != peerKindUserPeer {
@@ -2739,13 +2731,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
-	if anyUserPeerOwn {
-		emitProgramDefaults()
-		emitUserPeers()
-	} else {
-		emitUserPeers()
-		emitProgramDefaults()
-	}
+	emitProgramDefaults()
+	emitUserPeers()
 
 	// PR-35g: drop bundled-include paths from the peer-propagated set.
 	// `ccIncludesSuffix` already injects `-I…linux-headers{,/_nf}` at
