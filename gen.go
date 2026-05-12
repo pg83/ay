@@ -1767,7 +1767,7 @@ const muslConsumerSentinel = "-D_musl_"
 // returned.  `genModule` calls this twice so it can interleave the
 // allocator explicit peers (kept as peerKindUserPeer for GLOBAL phase
 // ordering) and the regular d.peerdirs between the two halves.
-func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocator bool, muslLiteOverride bool, includeMusl bool) []string {
+func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocator bool, allocatorName string, muslLiteOverride bool, includeMusl bool) []string {
 	if instance.Language != LangCPP {
 		return nil
 	}
@@ -1831,6 +1831,21 @@ func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocato
 			// Modules like contrib/tools/yasm declare ENABLE(MUSL_LITE) to get musl without
 			// the full allocator+tcmalloc cascade.
 			peers = append(peers, "contrib/libs/musl")
+		}
+
+		// PR-M3-cpuid-check-host-peerdir: upstream `_BASE_PROGRAM` at
+		// build/ymake.core.conf:1247-1254 declares `DEFAULT(CPU_CHECK yes)`
+		// gated off by `USE_SSE4 != yes || NOUTIL == yes || ALLOCATOR == FAKE`.
+		// USE_SSE4 defaults yes only when `ARCH_X86_64 || ARCH_I386` (conf
+		// :3057-3132); the `otherwise` branch at :3128-3132 forces
+		// `USE_SSE4=no` AND `CPU_CHECK=no`, so the predicate collapses to
+		// (ARCH_X86_64 && !NoUtil && ALLOCATOR != "FAKE") in our M2/M3
+		// environment (i386 not in closure). Declared after musl/full to
+		// mirror the upstream conf order (:1238-1244 musl, :1252-1254
+		// cpuid_check). Closes the L0 reshuffle (logger@aarch64 + every
+		// downstream EN/CC chain) cascading off host x86_64 PROGRAMs.
+		if env.Bool("ARCH_X86_64") && !instance.Flags.NoUtil && allocatorName != "FAKE" {
+			peers = append(peers, "library/cpp/cpuid_check")
 		}
 	}
 
@@ -2155,8 +2170,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	var preUserProgDefaults []string
 	var postUserProgDefaults []string
 	if isProgram {
-		preUserProgDefaults = defaultProgramPeerdirsFor(ctx, instance, d.hadAllocator, d.muslLite, false)
-		postUserProgDefaults = defaultProgramPeerdirsFor(ctx, instance, d.hadAllocator, d.muslLite, true)
+		preUserProgDefaults = defaultProgramPeerdirsFor(ctx, instance, d.hadAllocator, d.allocatorName, d.muslLite, false)
+		postUserProgDefaults = defaultProgramPeerdirsFor(ctx, instance, d.hadAllocator, d.allocatorName, d.muslLite, true)
 		defaults = append(defaults, preUserProgDefaults...)
 	}
 
