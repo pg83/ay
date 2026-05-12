@@ -2071,7 +2071,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		_ = emitResourceObjcopy(ctx, instance, d)
 
 		// PR-M3-D: emit EN nodes for GENERATE_ENUM_SERIALIZATION(*) declarations.
-		emitEnumSrcs(ctx, instance, d, peerContribs.addIncl)
+		// Header-only modules in the M3 closure never compile the EN
+		// `_serialized.cpp` output (every observed EN-emitting module
+		// has a regular AR archiving the output); pass nil consumerInputs
+		// to suppress downstream-CC emission here. PR-M3-codegen-cc-enqueue.
+		emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, nil)
 
 		// PR-M3-C: emit PB/EV nodes for PROTO_LIBRARY .proto/.ev sources.
 		// PROTO_LIBRARY modules never have compilable C/C++ sources and
@@ -2795,7 +2799,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// at scan time and the lookups miss. EN node emission order in the
 	// output graph does not affect L4 byte-exactness (the normalizer
 	// re-sorts by canonical UID).
-	emitEnumSrcs(ctx, instance, d, peerAddInclGlobal)
+	//
+	// PR-M3-codegen-cc-enqueue: pass moduleInputs so emitEnumSrcs also
+	// emits the downstream CC for each EN's `_serialized.cpp`. The
+	// returned `(refs, outputs, memberInputs)` are folded into the AR
+	// member buckets below (alongside PR-AUDIT-5's PR-downstream CCs)
+	// so the consumer module's regular `.a` archives the EN-derived
+	// `.o`s after its declared SRCS.
+	enCCRefs, enCCOutputs, enCCMemberInputs := emitEnumSrcs(ctx, instance, d, peerAddInclGlobal, &moduleInputs)
 
 	// PR-AUDIT-8: hoist JV/CF/BI/PR node emission before the per-source loop
 	// so the codegen registry is fully populated when any source's WalkClosure
@@ -2896,6 +2907,20 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		for i := 0; i < primaryCount && i < len(ccIns); i++ {
 			addRegularPrimary(ccIns[i])
 		}
+	}
+
+	// PR-M3-codegen-cc-enqueue: fold the EN-downstream CCs (captured
+	// above via emitEnumSrcs) into the regular AR member bucket. The
+	// reference graph places these `.h_serialized.cpp.o` entries after
+	// the module's declared SRCS `.cpp.o` and before any JOIN_SRCS /
+	// PR-derived members (sg2.json devtools/ymake's `libdevtools-ymake.a`
+	// cmd_args positions 134..142 — trailing the 124-entry regular SRCS
+	// bucket).
+	for i, ref := range enCCRefs {
+		ccRefs = append(ccRefs, ref)
+		ccOutputs = append(ccOutputs, enCCOutputs[i])
+		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
+		addMemberInputs(enCCMemberInputs[i])
 	}
 
 	// PR-AUDIT-5: emit PR (RUN_PROGRAM) nodes whose outputs include
@@ -3908,9 +3933,23 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 // EN nodes are always emitted on the TARGET platform (instance.Target),
 // matching the reference graph (all 21 EN nodes in sg2.json are on
 // default-linux-aarch64 even though enum_parser is a host x86_64 tool).
-func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddInclGlobal []string) {
+//
+// When `consumerInputs` is non-nil, additionally emit one downstream CC
+// per EN's `_serialized.cpp` output, returning per-CC `(refs, outputs,
+// memberInputs)` for the caller to fold into the surrounding AR member
+// accumulators. This is PR-M3-codegen-cc-enqueue: the EN-emitted
+// `_serialized.cpp` is an implicit module source whose compiled `.o`
+// archives alongside the declared SRCS (reference shape: every EN
+// consumer's regular `.a` archives the EN-downstream `.o` after its
+// regular `.cpp.o` members). `consumerInputs` must carry the consuming
+// module's full CC compile bag (CFlags / CXXFlags / ADDINCL / etc.) so
+// the downstream CC node matches the byte-shape of a hand-written SRCS
+// entry in the same module. When nil, only EN nodes are emitted (the
+// header-only branch path; no module compiles those `_serialized.cpp`
+// in current M3 closure).
+func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddInclGlobal []string, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []string, memberInputsList [][]string) {
 	if len(d.enumSrcs) == 0 {
-		return
+		return nil, nil, nil
 	}
 
 	const enumParserPath = "tools/enum_parser/enum_parser"
@@ -4150,7 +4189,36 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		for _, p := range enOutPaths {
 			ctx.enOutputs[p] = enRef
 		}
+
+		// PR-M3-codegen-cc-enqueue: emit the downstream CC compiling
+		// the EN-produced `_serialized.cpp` as an implicit module
+		// source. The CC inherits the consuming module's full compile
+		// bag (consumerInputs); composeCCPaths' IsGenerated branch
+		// roots the output under $(BUILD_ROOT)/<enInstance.Path>/
+		// <headerRel>_serialized.cpp{,.o} with `_/` infix when headerRel
+		// contains a `/`. depPrefix is the cross-EN dep set the
+		// reference graph places ahead of the consumer's own
+		// `_serialized.cpp` in the CC's inputs[] (sg2.json
+		// devtools/ymake/export_json_debug.h_serialized.cpp.o:
+		// inputs[0..1] = [stats_enums.h_serialized.cpp,
+		// stats_enums.h_serialized.h], inputs[2] = the consuming
+		// .h_serialized.cpp).
+		if consumerInputs != nil {
+			cppRel := headerRel + "_serialized.cpp"
+			// DepRefs: own EN + cross-EN dep refs. Reference shape
+			// (sg2.json export_json_debug.h_serialized.cpp.o):
+			// deps = [stats_enums-EN-uid, export_json_debug-EN-uid].
+			allDepRefs := make([]NodeRef, 0, 1+len(depENRefs))
+			allDepRefs = append(allDepRefs, enRef)
+			allDepRefs = append(allDepRefs, depENRefs...)
+			ccRef, ccOut, ccIns := emitCodegenDownstreamCC(ctx, enInstance, cppRel, depENOutputs, allDepRefs, *consumerInputs)
+			ccRefs = append(ccRefs, ccRef)
+			ccOutputs = append(ccOutputs, ccOut)
+			memberInputsList = append(memberInputsList, ccIns)
+		}
 	}
+
+	return ccRefs, ccOutputs, memberInputsList
 }
 
 // emitOneSource dispatches a single source by extension. Returns
