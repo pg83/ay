@@ -3503,6 +3503,26 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
+	// PR-M3-AR-header-closure: headers (.h/.hpp) listed in SRCS do not
+	// emit a CC node, but upstream ymake still walks their #include
+	// closure and propagates it up to the AR/LD via EDT_BuildFrom (the
+	// `addInput` call in mkcmd.cpp:212-228, reached for every
+	// EDT_BuildFrom file child whether or not it has a build command).
+	// Without this pass our AR loses the transitive set reached only
+	// through SRCS-listed headers (e.g. library/cpp/packedtypes:
+	// fixed_point.h / packed.h / zigzag.h drag in libcxx/locale,
+	// numeric, vector and zc_memory_input.h that no .cpp member
+	// transitively reaches).
+	for _, src := range d.srcs {
+		if !isHeaderSource(src) {
+			continue
+		}
+		headerPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + src
+		headerVFS := resolveSourceVFS(ctx, instance, src, moduleInputs.SrcDir)
+		headerClosure := walkClosure(ctx, instance, headerVFS, moduleInputs)
+		addMemberInputs(append([]string{headerPath}, headerClosure...))
+	}
+
 	// PR-M3-antlr-g4-cpp: fold JV-downstream CCs (CP-rename + compile for
 	// each ANTLR-generated .cpp) into the AR member bucket. The reference
 	// graph places them after the regular SRCS bucket and before the
@@ -5390,6 +5410,13 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			primaryCount = 2
 		}
 
+		// PR-M3-AR-header-closure: roll up the downstream CC's transitive
+		// header closure into memberInputs so the AR/LD aggregator carries
+		// the libcxx/musl/protobuf/etc. headers the generated .rl6.cpp
+		// includes. Upstream ymake propagates each member-CC's NodeInputs
+		// up via EDT_BuildFrom (json_visitor.cpp:788-789 NeedToPassInputs).
+		ccInputs = append(ccInputs, ccIncludeInputs...)
+
 		return ccRef, ccOut, ccInputs, primaryCount, true
 
 	case strings.HasSuffix(srcRel, ".ev"):
@@ -5579,8 +5606,16 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
 		// AR/LD member inputs: use the original .rl source (not generated .cpp).
+		// PR-M3-AR-header-closure: roll up the downstream CC's transitive
+		// header closure into memberInputs. Upstream ymake propagates each
+		// member-CC's NodeInputs up to the parent AR/LD via EDT_BuildFrom
+		// (json_visitor.cpp:788-789 NeedToPassInputs); the .rl-generated
+		// .cpp's #include closure is included even though the AR archives
+		// only the .o, because the inputs walk is set-union over all
+		// transitive file deps under the module boundary.
 		rlSource := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
-		return ccRef, ccOut, []string{rlSource}, 1, true
+		rlMemberInputs := append([]string{rlSource}, ccIn.IncludeInputs...)
+		return ccRef, ccOut, rlMemberInputs, 1, true
 
 	case strings.HasSuffix(srcRel, ".cpp.in"),
 		strings.HasSuffix(srcRel, ".c.in"):
@@ -5631,8 +5666,14 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
 		// AR/LD member inputs: use the original .cpp.in / .c.in source.
+		// PR-M3-AR-header-closure: roll up the downstream CC's transitive
+		// header closure (the closure of the generated .cpp scanned against
+		// the .cpp.in body via the codegen-registry EmitsIncludes edge) so
+		// the AR/LD aggregator carries the same set upstream ymake propagates
+		// via EDT_BuildFrom (json_visitor.cpp:788-789 NeedToPassInputs).
 		inSource := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
-		return ccRef, ccOut, []string{inSource}, 1, true
+		cfMemberInputs := append([]string{inSource}, ccIn.IncludeInputs...)
+		return ccRef, ccOut, cfMemberInputs, 1, true
 	}
 
 	// PR-M3-A: known-deferred source kinds are silently skipped rather
