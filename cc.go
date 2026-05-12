@@ -200,6 +200,13 @@ type ModuleCCInputs struct {
 	// graph emits <src>.py3.o instead of plain <src>.o. Does not affect
 	// PIC modules (".pic.o" suffix is still used when Flags.PIC is set).
 	Py3Suffix bool
+	// ModuleTag, when non-empty, is added to the emitted CC's
+	// target_properties as `module_tag=<ModuleTag>`. PROTO_LIBRARY CCs
+	// consuming protoc-generated .pb.cc / .ev.pb.cc sources carry
+	// `module_tag=cpp_proto`; regular LIBRARY CCs leave this empty so
+	// no module_tag key is emitted (the reference for a regular LIBRARY
+	// CC of a generated .ev.pb.cc lacks the key).
+	ModuleTag string
 }
 
 // EmitCC emits a CC node for compiling `srcRel` (a path relative to
@@ -339,9 +346,13 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 			"pc": "green",
 		},
 		Tags: []string{},
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
+		TargetProperties: func() map[string]string {
+			tp := map[string]string{"module_dir": instance.Path}
+			if in.ModuleTag != "" {
+				tp["module_tag"] = in.ModuleTag
+			}
+			return tp
+		}(),
 		Platform: string(instance.Target),
 		// Numeric values are stored as float64 to match what
 		// encoding/json produces when unmarshalling the reference
