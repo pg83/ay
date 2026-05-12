@@ -57,6 +57,14 @@ const (
 	// pbRuntimeBase is the $(SOURCE_ROOT)-rooted prefix for all protobuf
 	// runtime headers (under contrib/libs/protobuf/src/).
 	pbRuntimeBase = "$(SOURCE_ROOT)/contrib/libs/protobuf/src/"
+
+	// abslTstringBase is the $(SOURCE_ROOT)-rooted prefix for abseil-cpp-tstring
+	// headers. The protobuf runtime transitively reaches a large
+	// abseil-cpp-tstring closure via `port_def.inc → y_absl/strings/string_view.h
+	// → ...`; consumer PROTO_LIBRARYs do not peer abseil-cpp-tstring themselves
+	// (it is an internal protobuf-runtime dependency), so the scanner cannot
+	// resolve `y_absl/...` includes without pre-resolved EmitsIncludes.
+	abslTstringBase = "$(SOURCE_ROOT)/contrib/restricted/abseil-cpp-tstring/"
 )
 
 // protobufRuntimeHeaders is the set of headers that every protoc-generated
@@ -96,6 +104,226 @@ var pbDescriptorImporterHeaders = []string{
 	pbRuntimeBase + "google/protobuf/map_field_inl.h",
 	pbRuntimeBase + "google/protobuf/map_field_lite.h",
 	pbRuntimeBase + "google/protobuf/reflection_ops.h",
+}
+
+// pbCcDeepRuntimeHeaders is the deep protobuf+abseil transitive header set that
+// every protoc-generated .pb.cc transitively reaches via #include closure.
+// Verified by diffing the REF inputs of `library/cpp/eventlog/proto/internal.pb.cc.o`
+// (and four sibling .pb.cc.o nodes) against our emitted set.
+//
+// PR-M3-proto-abseil-pb-cc-closure: registered as EmitsIncludes on the .pb.cc
+// output ONLY — NOT on the .pb.h. The .pb.h is consumed by every CC node that
+// includes any .pb.h (broad), whereas the .pb.cc is consumed by exactly the
+// single CC compile node for that .pb.cc.o (narrow). Registering on .pb.h
+// over-emits these headers onto 100+ non-protobuf CC consumers (the prior
+// reverted commit 870d43d caused L2 -1.05pp via that path). Registering on
+// .pb.cc keeps the closure scoped to the .pb.cc.o consumer alone.
+//
+// The set spans two groups:
+//
+//  1. The deep protobuf transitive set reached via port_def.inc and the core
+//     message/runtime chain — descriptor.h, parse_context.h, map.h,
+//     wire_format*.h, stubs/*, etc. (42 entries).
+//  2. The full 145-entry abseil-cpp-tstring transitive closure reached via
+//     port_def.inc → y_absl/strings/string_view.h → ... The per-file libcxx
+//     #includes inside each y_absl header resolve through the consumer's own
+//     libcxx language-default peer (scanner DFS walks parseIncludes for
+//     SOURCE_ROOT paths, so libcxx <vector>/<string>/... discovery is
+//     automatic once the abseil headers are walkable).
+//
+// Sorted lexicographically. VFS-rooted $(SOURCE_ROOT)/... paths.
+var pbCcDeepRuntimeHeaders = []string{
+	// Group 1: deep protobuf transitive set.
+	pbRuntimeBase + "google/protobuf/any.h",
+	pbRuntimeBase + "google/protobuf/arena_align.h",
+	pbRuntimeBase + "google/protobuf/arena_allocation_policy.h",
+	pbRuntimeBase + "google/protobuf/arena_cleanup.h",
+	pbRuntimeBase + "google/protobuf/arena_config.h",
+	pbRuntimeBase + "google/protobuf/arenaz_sampler.h",
+	pbRuntimeBase + "google/protobuf/descriptor.h",
+	pbRuntimeBase + "google/protobuf/endian.h",
+	pbRuntimeBase + "google/protobuf/explicitly_constructed.h",
+	pbRuntimeBase + "google/protobuf/generated_enum_reflection.h",
+	pbRuntimeBase + "google/protobuf/generated_enum_util.h",
+	pbRuntimeBase + "google/protobuf/generated_message_bases.h",
+	pbRuntimeBase + "google/protobuf/generated_message_tctable_decl.h",
+	pbRuntimeBase + "google/protobuf/has_bits.h",
+	pbRuntimeBase + "google/protobuf/implicit_weak_message.h",
+	pbRuntimeBase + "google/protobuf/inlined_string_field.h",
+	pbRuntimeBase + "google/protobuf/io/zero_copy_stream.h",
+	pbRuntimeBase + "google/protobuf/io/zero_copy_stream_impl.h",
+	pbRuntimeBase + "google/protobuf/io/zero_copy_stream_impl_lite.h",
+	pbRuntimeBase + "google/protobuf/json_util.h",
+	pbRuntimeBase + "google/protobuf/map.h",
+	pbRuntimeBase + "google/protobuf/map_entry.h",
+	pbRuntimeBase + "google/protobuf/map_entry_lite.h",
+	pbRuntimeBase + "google/protobuf/map_field.h",
+	pbRuntimeBase + "google/protobuf/map_field_inl.h",
+	pbRuntimeBase + "google/protobuf/map_field_lite.h",
+	pbRuntimeBase + "google/protobuf/map_type_handler.h",
+	pbRuntimeBase + "google/protobuf/message_lite.h",
+	pbRuntimeBase + "google/protobuf/messagext.h",
+	pbRuntimeBase + "google/protobuf/parse_context.h",
+	pbRuntimeBase + "google/protobuf/port.h",
+	pbRuntimeBase + "google/protobuf/reflection_ops.h",
+	pbRuntimeBase + "google/protobuf/repeated_ptr_field.h",
+	pbRuntimeBase + "google/protobuf/serial_arena.h",
+	pbRuntimeBase + "google/protobuf/string_block.h",
+	pbRuntimeBase + "google/protobuf/stubs/callback.h",
+	pbRuntimeBase + "google/protobuf/stubs/common.h",
+	pbRuntimeBase + "google/protobuf/stubs/platform_macros.h",
+	pbRuntimeBase + "google/protobuf/stubs/port.h",
+	pbRuntimeBase + "google/protobuf/thread_safe_arena.h",
+	pbRuntimeBase + "google/protobuf/wire_format.h",
+	pbRuntimeBase + "google/protobuf/wire_format_lite.h",
+
+	// Group 2: abseil-cpp-tstring deep transitive closure reached from
+	// port_def.inc → string_view.h → ... (145 entries).
+	abslTstringBase + "y_absl/algorithm/algorithm.h",
+	abslTstringBase + "y_absl/algorithm/container.h",
+	abslTstringBase + "y_absl/base/attributes.h",
+	abslTstringBase + "y_absl/base/call_once.h",
+	abslTstringBase + "y_absl/base/casts.h",
+	abslTstringBase + "y_absl/base/config.h",
+	abslTstringBase + "y_absl/base/const_init.h",
+	abslTstringBase + "y_absl/base/dynamic_annotations.h",
+	abslTstringBase + "y_absl/base/internal/atomic_hook.h",
+	abslTstringBase + "y_absl/base/internal/dynamic_annotations.h",
+	abslTstringBase + "y_absl/base/internal/endian.h",
+	abslTstringBase + "y_absl/base/internal/errno_saver.h",
+	abslTstringBase + "y_absl/base/internal/identity.h",
+	abslTstringBase + "y_absl/base/internal/inline_variable.h",
+	abslTstringBase + "y_absl/base/internal/invoke.h",
+	abslTstringBase + "y_absl/base/internal/low_level_alloc.h",
+	abslTstringBase + "y_absl/base/internal/low_level_scheduling.h",
+	abslTstringBase + "y_absl/base/internal/nullability_impl.h",
+	abslTstringBase + "y_absl/base/internal/per_thread_tls.h",
+	abslTstringBase + "y_absl/base/internal/raw_logging.h",
+	abslTstringBase + "y_absl/base/internal/scheduling_mode.h",
+	abslTstringBase + "y_absl/base/internal/spinlock.h",
+	abslTstringBase + "y_absl/base/internal/spinlock_wait.h",
+	abslTstringBase + "y_absl/base/internal/thread_identity.h",
+	abslTstringBase + "y_absl/base/internal/throw_delegate.h",
+	abslTstringBase + "y_absl/base/internal/tsan_mutex_interface.h",
+	abslTstringBase + "y_absl/base/internal/unaligned_access.h",
+	abslTstringBase + "y_absl/base/log_severity.h",
+	abslTstringBase + "y_absl/base/macros.h",
+	abslTstringBase + "y_absl/base/nullability.h",
+	abslTstringBase + "y_absl/base/optimization.h",
+	abslTstringBase + "y_absl/base/options.h",
+	abslTstringBase + "y_absl/base/policy_checks.h",
+	abslTstringBase + "y_absl/base/port.h",
+	abslTstringBase + "y_absl/base/prefetch.h",
+	abslTstringBase + "y_absl/base/thread_annotations.h",
+	abslTstringBase + "y_absl/container/btree_map.h",
+	abslTstringBase + "y_absl/container/fixed_array.h",
+	abslTstringBase + "y_absl/container/flat_hash_map.h",
+	abslTstringBase + "y_absl/container/hash_container_defaults.h",
+	abslTstringBase + "y_absl/container/inlined_vector.h",
+	abslTstringBase + "y_absl/container/internal/btree.h",
+	abslTstringBase + "y_absl/container/internal/btree_container.h",
+	abslTstringBase + "y_absl/container/internal/common.h",
+	abslTstringBase + "y_absl/container/internal/common_policy_traits.h",
+	abslTstringBase + "y_absl/container/internal/compressed_tuple.h",
+	abslTstringBase + "y_absl/container/internal/container_memory.h",
+	abslTstringBase + "y_absl/container/internal/hash_function_defaults.h",
+	abslTstringBase + "y_absl/container/internal/hash_policy_traits.h",
+	abslTstringBase + "y_absl/container/internal/hashtable_debug_hooks.h",
+	abslTstringBase + "y_absl/container/internal/hashtablez_sampler.h",
+	abslTstringBase + "y_absl/container/internal/inlined_vector.h",
+	abslTstringBase + "y_absl/container/internal/layout.h",
+	abslTstringBase + "y_absl/container/internal/raw_hash_map.h",
+	abslTstringBase + "y_absl/container/internal/raw_hash_set.h",
+	abslTstringBase + "y_absl/crc/crc32c.h",
+	abslTstringBase + "y_absl/crc/internal/crc32_x86_arm_combined_simd.h",
+	abslTstringBase + "y_absl/crc/internal/crc32c_inline.h",
+	abslTstringBase + "y_absl/crc/internal/crc_cord_state.h",
+	abslTstringBase + "y_absl/debugging/internal/demangle.h",
+	abslTstringBase + "y_absl/functional/any_invocable.h",
+	abslTstringBase + "y_absl/functional/function_ref.h",
+	abslTstringBase + "y_absl/functional/internal/any_invocable.h",
+	abslTstringBase + "y_absl/functional/internal/function_ref.h",
+	abslTstringBase + "y_absl/hash/hash.h",
+	abslTstringBase + "y_absl/hash/internal/city.h",
+	abslTstringBase + "y_absl/hash/internal/hash.h",
+	abslTstringBase + "y_absl/hash/internal/low_level_hash.h",
+	abslTstringBase + "y_absl/log/absl_check.h",
+	abslTstringBase + "y_absl/log/absl_log.h",
+	abslTstringBase + "y_absl/log/absl_vlog_is_on.h",
+	abslTstringBase + "y_absl/log/internal/check_impl.h",
+	abslTstringBase + "y_absl/log/internal/check_op.h",
+	abslTstringBase + "y_absl/log/internal/conditions.h",
+	abslTstringBase + "y_absl/log/internal/config.h",
+	abslTstringBase + "y_absl/log/internal/log_impl.h",
+	abslTstringBase + "y_absl/log/internal/log_message.h",
+	abslTstringBase + "y_absl/log/internal/nullguard.h",
+	abslTstringBase + "y_absl/log/internal/nullstream.h",
+	abslTstringBase + "y_absl/log/internal/proto.h",
+	abslTstringBase + "y_absl/log/internal/strip.h",
+	abslTstringBase + "y_absl/log/internal/structured_proto.h",
+	abslTstringBase + "y_absl/log/internal/vlog_config.h",
+	abslTstringBase + "y_absl/log/internal/voidify.h",
+	abslTstringBase + "y_absl/log/log_entry.h",
+	abslTstringBase + "y_absl/log/log_sink.h",
+	abslTstringBase + "y_absl/memory/memory.h",
+	abslTstringBase + "y_absl/meta/type_traits.h",
+	abslTstringBase + "y_absl/numeric/bits.h",
+	abslTstringBase + "y_absl/numeric/int128.h",
+	abslTstringBase + "y_absl/numeric/int128_have_intrinsic.inc",
+	abslTstringBase + "y_absl/numeric/int128_no_intrinsic.inc",
+	abslTstringBase + "y_absl/numeric/internal/bits.h",
+	abslTstringBase + "y_absl/profiling/internal/sample_recorder.h",
+	abslTstringBase + "y_absl/strings/cord.h",
+	abslTstringBase + "y_absl/strings/cord_analysis.h",
+	abslTstringBase + "y_absl/strings/cord_buffer.h",
+	abslTstringBase + "y_absl/strings/has_absl_stringify.h",
+	abslTstringBase + "y_absl/strings/internal/cord_data_edge.h",
+	abslTstringBase + "y_absl/strings/internal/cord_internal.h",
+	abslTstringBase + "y_absl/strings/internal/cord_rep_btree.h",
+	abslTstringBase + "y_absl/strings/internal/cord_rep_btree_navigator.h",
+	abslTstringBase + "y_absl/strings/internal/cord_rep_btree_reader.h",
+	abslTstringBase + "y_absl/strings/internal/cord_rep_crc.h",
+	abslTstringBase + "y_absl/strings/internal/cord_rep_flat.h",
+	abslTstringBase + "y_absl/strings/internal/cordz_functions.h",
+	abslTstringBase + "y_absl/strings/internal/cordz_handle.h",
+	abslTstringBase + "y_absl/strings/internal/cordz_info.h",
+	abslTstringBase + "y_absl/strings/internal/cordz_statistics.h",
+	abslTstringBase + "y_absl/strings/internal/cordz_update_scope.h",
+	abslTstringBase + "y_absl/strings/internal/cordz_update_tracker.h",
+	abslTstringBase + "y_absl/strings/internal/resize_uninitialized.h",
+	abslTstringBase + "y_absl/strings/internal/str_format/arg.h",
+	abslTstringBase + "y_absl/strings/internal/str_format/bind.h",
+	abslTstringBase + "y_absl/strings/internal/str_format/checker.h",
+	abslTstringBase + "y_absl/strings/internal/str_format/constexpr_parser.h",
+	abslTstringBase + "y_absl/strings/internal/str_format/extension.h",
+	abslTstringBase + "y_absl/strings/internal/str_format/output.h",
+	abslTstringBase + "y_absl/strings/internal/str_format/parser.h",
+	abslTstringBase + "y_absl/strings/internal/string_constant.h",
+	abslTstringBase + "y_absl/strings/internal/stringify_sink.h",
+	abslTstringBase + "y_absl/strings/numbers.h",
+	abslTstringBase + "y_absl/strings/str_cat.h",
+	abslTstringBase + "y_absl/strings/str_format.h",
+	abslTstringBase + "y_absl/strings/string_view.h",
+	abslTstringBase + "y_absl/synchronization/internal/create_thread_identity.h",
+	abslTstringBase + "y_absl/synchronization/internal/kernel_timeout.h",
+	abslTstringBase + "y_absl/synchronization/internal/per_thread_sem.h",
+	abslTstringBase + "y_absl/synchronization/mutex.h",
+	abslTstringBase + "y_absl/time/civil_time.h",
+	abslTstringBase + "y_absl/time/clock.h",
+	abslTstringBase + "y_absl/time/internal/cctz/include/cctz/civil_time.h",
+	abslTstringBase + "y_absl/time/internal/cctz/include/cctz/civil_time_detail.h",
+	abslTstringBase + "y_absl/time/internal/cctz/include/cctz/time_zone.h",
+	abslTstringBase + "y_absl/time/time.h",
+	abslTstringBase + "y_absl/types/bad_optional_access.h",
+	abslTstringBase + "y_absl/types/bad_variant_access.h",
+	abslTstringBase + "y_absl/types/compare.h",
+	abslTstringBase + "y_absl/types/internal/optional.h",
+	abslTstringBase + "y_absl/types/internal/span.h",
+	abslTstringBase + "y_absl/types/internal/variant.h",
+	abslTstringBase + "y_absl/types/optional.h",
+	abslTstringBase + "y_absl/types/span.h",
+	abslTstringBase + "y_absl/types/variant.h",
+	abslTstringBase + "y_absl/utility/utility.h",
 }
 
 // EmitPB emits a PB node for `srcRel` (a .proto file relative to `instance.Path`).
@@ -392,10 +620,29 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			// .pb.h's own EmitsIncludes are already registered (just above), so a
 			// single entry pointing at the .pb.h would suffice — we mirror the
 			// .pb.h list for symmetry with the LIBRARY/EV path (gen.go:4338-4342).
+			//
+			// PR-M3-proto-abseil-pb-cc-closure: the .pb.cc.o consumer also reaches
+			// the deep protobuf+abseil-cpp-tstring transitive closure that
+			// port_def.inc opens (witnessed in REF for every PROTO_LIBRARY's
+			// .pb.cc.o; see pbCcDeepRuntimeHeaders for the 187-entry list).
+			// Plus REF includes the .proto source itself and the cpp_proto_wrapper.py
+			// script in every PROTO_LIBRARY consumer's .pb.cc.o inputs (verified
+			// against `library/cpp/eventlog/proto/internal.pb.cc.o`). Scope is
+			// narrow: these headers register on the .pb.cc output ONLY, NOT the
+			// .pb.h — the .pb.h is consumed by 100+ broad CC nodes which must NOT
+			// inherit the abseil closure (over-emission regression in reverted
+			// commit 870d43d cost L2 -1.05pp). The .pb.cc is consumed by exactly
+			// one CC compile node, so the closure is tightly scoped.
+			pbCCEmits := make([]string, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
+			pbCCEmits = append(pbCCEmits, pbH)
+			pbCCEmits = append(pbCCEmits, "$(SOURCE_ROOT)/"+protoRelPath)
+			pbCCEmits = append(pbCCEmits, pbWrapperPath)
+			pbCCEmits = append(pbCCEmits, protobufRuntimeHeaders...)
+			pbCCEmits = append(pbCCEmits, pbCcDeepRuntimeHeaders...)
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PB",
 				OutputPath:    pbCC,
-				EmitsIncludes: append([]string{pbH}, protobufRuntimeHeaders...),
+				EmitsIncludes: pbCCEmits,
 			})
 		}
 
