@@ -1056,7 +1056,22 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 	reg := codegenRegForInstance(ctx, instance)
 
 	for _, rp := range d.runPrograms {
-		emitRunProgram(ctx, instance, rp, d, reg, in)
+		prRef := emitRunProgram(ctx, instance, rp, d, reg, in)
+		// PR-M3-unpaired-got-closure: record (output filename → PR
+		// NodeRef) so ARCHIVE() in the same module can wire the AR's
+		// dep set to the producing PR.
+		if d.prOutputProducer == nil {
+			d.prOutputProducer = map[string]NodeRef{}
+		}
+		for _, f := range rp.OUTFiles {
+			d.prOutputProducer[f] = prRef
+		}
+		for _, f := range rp.OUTNoAutoFiles {
+			d.prOutputProducer[f] = prRef
+		}
+		if rp.StdoutFile != "" {
+			d.prOutputProducer[rp.StdoutFile] = prRef
+		}
 
 		// PR-AUDIT-5: classify outputs by extension. CC-compilable
 		// outputs trigger a downstream CC; opaque outputs (.pyc and
@@ -1083,6 +1098,293 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 	}
 
 	return ccRefs, ccOutputs, memberInputs
+}
+
+// ─── ARCHIVE (PR-M3-unpaired-got-closure) ───────────────────────────────────
+
+// archiverToolPath is the upstream host-tool that the ARCHIVE() macro
+// invokes per `build/ymake.core.conf:4142-4145` (`$ARCH_TOOL`). Pinned to
+// the M3 layout: tools/archiver builds a single binary named `archiver`.
+const archiverToolPath = "tools/archiver"
+
+// emitArchives emits one AR node per `ARCHIVE(NAME <out> [DONTCOMPRESS]
+// files...)` declaration in `d.archives`. The node invokes the host
+// archiver binary (resolved by walking tools/archiver as a host PROGRAM)
+// to pack the listed files into the named output.
+//
+// Reference cmd_args shape (sg2.json):
+//
+//	$(BUILD_ROOT)/tools/archiver/archiver -q -x [-p] <file1>: [<file2>:] -o <NAME-absolute>
+//
+// Each archived file is rendered with a trailing colon (`${suf=\:;input}`
+// in the upstream macro) and resolved to its BUILD_ROOT-absolute path when
+// it names a PR-produced artifact in the same module; otherwise it is
+// treated as a SOURCE_ROOT-relative path and rendered as
+// `$(SOURCE_ROOT)/<modulePath>/<file>`.
+//
+// Inputs: the PR-produced files (as BUILD_ROOT paths), the archiver tool
+// path, the producer PR's IN files (rebased to SOURCE_ROOT). Deps: the
+// producer PR's NodeRef + the archiver LD's NodeRef.
+func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
+	if len(d.archives) == 0 {
+		return
+	}
+
+	// Walk the archiver as a host program to resolve its binary path + LD
+	// ref. Mirrors emitRunProgram's tool-walk shape; archiver lives at
+	// tools/archiver and is hard-pinned by const archiverToolPath above.
+	toolInstance := instance.WithHost(ctx.cfg)
+	toolInstance.Path = archiverToolPath
+	toolInstance.Flags = inferFlagsFromPath(archiverToolPath, true)
+
+	var (
+		toolBinPath = "$(BUILD_ROOT)/" + archiverToolPath + "/archiver"
+		toolLDRef   NodeRef
+	)
+	if exc := Try(func() {
+		res := genModule(ctx, toolInstance)
+		toolLDRef = res.LDRef
+		if res.LDPath != "" {
+			toolBinPath = res.LDPath
+		}
+	}); exc != nil {
+		// Tool walk failure surfaces as a fallback path; matches
+		// emitRunProgram's pattern (the build will still record the
+		// node, but with the conventional binary path).
+	}
+
+	// Aggregate the SOURCE_ROOT-rooted IN files contributed by every PR
+	// in this module — REF includes the full set of upstream sources
+	// (e.g. `__res.py` + `sitecustomize.py`) in each ARCHIVE node's
+	// `inputs[]`, not just the IN list of the PR that produced the
+	// specifically-archived file. Sort + dedup once so every emitted
+	// AR node sees a stable view.
+	var prInSources []string
+	{
+		seen := map[string]struct{}{}
+		for _, rp := range d.runPrograms {
+			for _, f := range rp.INFiles {
+				p := "$(SOURCE_ROOT)/" + instance.Path + "/" + f
+				if _, dup := seen[p]; dup {
+					continue
+				}
+				seen[p] = struct{}{}
+				prInSources = append(prInSources, p)
+			}
+		}
+		sort.Strings(prInSources)
+	}
+
+	for _, a := range d.archives {
+		emitArchive(instance, a, d, toolBinPath, toolLDRef, prInSources, ctx.emit)
+	}
+}
+
+// emitArchive emits a single AR node for one ARCHIVE() declaration.
+// Helper for emitArchives; split out so the tool-walk + shared input
+// aggregation runs once per module rather than once per ARCHIVE.
+func emitArchive(
+	instance ModuleInstance,
+	a archiveEntry,
+	d *moduleData,
+	toolBinPath string,
+	toolLDRef NodeRef,
+	prInSources []string,
+	emit Emitter,
+) {
+	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + a.Name
+
+	// Build cmd_args. Each archived file is rendered with a trailing
+	// colon per upstream `${suf=\:;input:Files}`.
+	cmdArgs := make([]string, 0, 4+len(a.Files)+2)
+	cmdArgs = append(cmdArgs, toolBinPath, "-q", "-x")
+	if a.DontCompress {
+		cmdArgs = append(cmdArgs, "-p")
+	}
+
+	// Track the unique producer PRs so we can wire deps to all of them
+	// and add their BUILD_ROOT outputs to the AR's input set.
+	producerRefs := []NodeRef{}
+	producerSet := map[NodeRef]struct{}{}
+	pathPerFile := make([]string, 0, len(a.Files))
+
+	for _, f := range a.Files {
+		// When the file matches a PR output of this module, resolve to
+		// the producer's BUILD_ROOT-absolute path and record the PR
+		// NodeRef for dep wiring. Otherwise treat as SOURCE_ROOT-
+		// relative to the module dir.
+		abs := "$(BUILD_ROOT)/" + instance.Path + "/" + f
+		isPRProduced := false
+		if d.prOutputProducer != nil {
+			if ref, ok := d.prOutputProducer[f]; ok {
+				isPRProduced = true
+				if _, dup := producerSet[ref]; !dup {
+					producerSet[ref] = struct{}{}
+					producerRefs = append(producerRefs, ref)
+				}
+			}
+		}
+		if !isPRProduced {
+			abs = "$(SOURCE_ROOT)/" + instance.Path + "/" + f
+		}
+		pathPerFile = append(pathPerFile, abs)
+		cmdArgs = append(cmdArgs, abs+":")
+	}
+	cmdArgs = append(cmdArgs, "-o", archivePath)
+
+	// PR-M3-unpaired-got-closure: REF's AR inputs include every output
+	// of an upstream PR producer that is lexicographically ≤ the
+	// archive's explicitly-referenced file. Concretely, when ARCHIVE
+	// references `sitecustomize.pyc` and the producing RUN_PROGRAM also
+	// emits the lexically-earlier `__res.pyc`, REF lists __res.pyc in
+	// the AR's `inputs[]` alongside the archived file; the inverse
+	// (ARCHIVE on `__res.pyc`, sibling `sitecustomize.pyc`) does NOT
+	// include the lexically-later sibling. The lexicographic gate keeps
+	// the input ordering stable across multiple archives sharing a
+	// producer.
+	prSiblingOutputs := make([]string, 0)
+	{
+		// Largest archived file path (BUILD_ROOT-rooted) becomes the
+		// upper bound — siblings strictly greater than this are
+		// excluded.
+		maxArchived := ""
+		for _, p := range pathPerFile {
+			if p > maxArchived {
+				maxArchived = p
+			}
+		}
+		seen := map[string]struct{}{}
+		for _, p := range pathPerFile {
+			seen[p] = struct{}{}
+		}
+		for _, rp := range d.runPrograms {
+			rpProduces := false
+			for _, f := range rp.OUTFiles {
+				if _, ok := producerSet[d.prOutputProducer[f]]; ok {
+					rpProduces = true
+					break
+				}
+			}
+			if !rpProduces {
+				for _, f := range rp.OUTNoAutoFiles {
+					if _, ok := producerSet[d.prOutputProducer[f]]; ok {
+						rpProduces = true
+						break
+					}
+				}
+			}
+			if !rpProduces && rp.StdoutFile != "" {
+				if _, ok := producerSet[d.prOutputProducer[rp.StdoutFile]]; ok {
+					rpProduces = true
+				}
+			}
+			if !rpProduces {
+				continue
+			}
+			collect := func(rel string) {
+				p := "$(BUILD_ROOT)/" + instance.Path + "/" + rel
+				if p > maxArchived {
+					return
+				}
+				if _, dup := seen[p]; dup {
+					return
+				}
+				seen[p] = struct{}{}
+				prSiblingOutputs = append(prSiblingOutputs, p)
+			}
+			for _, f := range rp.OUTFiles {
+				collect(f)
+			}
+			for _, f := range rp.OUTNoAutoFiles {
+				collect(f)
+			}
+			if rp.StdoutFile != "" {
+				collect(rp.StdoutFile)
+			}
+		}
+	}
+
+	// inputs: each archived file's resolved path, then any sibling PR
+	// outputs from the same producer (preserving REF's "all PR outputs
+	// appear in every consumer's inputs" shape — sitecustomize.pyc.inc
+	// lists __res.pyc even though it only archives sitecustomize.pyc),
+	// then the tool binary, then the producer PR's source `IN` files
+	// (rebased to SOURCE_ROOT, pre-aggregated by caller). Dedup
+	// against the per-file slot.
+	inputs := make([]string, 0, len(pathPerFile)+len(prSiblingOutputs)+1+len(prInSources))
+	// Build a global lexical-order set of BUILD_ROOT entries:
+	// pathPerFile ∪ prSiblingOutputs, sorted, so REF's
+	// "alphabetical merge of producer outputs" shape lines up.
+	buildRootSet := map[string]struct{}{}
+	for _, p := range pathPerFile {
+		buildRootSet[p] = struct{}{}
+	}
+	for _, p := range prSiblingOutputs {
+		buildRootSet[p] = struct{}{}
+	}
+	buildRootSorted := make([]string, 0, len(buildRootSet))
+	for p := range buildRootSet {
+		buildRootSorted = append(buildRootSorted, p)
+	}
+	sort.Strings(buildRootSorted)
+	inputs = append(inputs, buildRootSorted...)
+	inputs = append(inputs, toolBinPath)
+	inSet := map[string]struct{}{}
+	for _, p := range inputs {
+		inSet[p] = struct{}{}
+	}
+	for _, p := range prInSources {
+		if _, dup := inSet[p]; dup {
+			continue
+		}
+		inSet[p] = struct{}{}
+		inputs = append(inputs, p)
+	}
+
+	depRefs := make([]NodeRef, 0, len(producerRefs)+1)
+	depRefs = append(depRefs, producerRefs...)
+	if toolLDRef != (NodeRef{}) {
+		depRefs = append(depRefs, toolLDRef)
+	}
+
+	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)"}
+
+	tags := []string{}
+	if targetIsX8664(instance) {
+		tags = []string{"tool"}
+	}
+
+	n := &Node{
+		Cmds: []Cmd{
+			{
+				CmdArgs: cmdArgs,
+				Env:     env,
+			},
+		},
+		Env:    env,
+		Inputs: inputs,
+		KV: map[string]string{
+			"p":  "AR",
+			"pc": "light-red",
+		},
+		Outputs:  []string{archivePath},
+		Platform: string(instance.Target),
+		Requirements: map[string]interface{}{
+			"cpu":     float64(1),
+			"network": "restricted",
+			"ram":     float64(32),
+		},
+		Tags: tags,
+		TargetProperties: map[string]string{
+			"module_dir": instance.Path,
+		},
+		DepRefs: depRefs,
+	}
+	if targetIsX8664(instance) {
+		n.HostPlatform = true
+	}
+
+	emit.Emit(n)
 }
 
 // isCCSourceExt reports whether `path` names a CC-compilable source.
@@ -1223,7 +1525,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 
 // emitRunProgram emits a PR node for a RUN_PROGRAM declaration.
 // It walks the tool PROGRAM as a host instance to get its LD ref/path.
-func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, d *moduleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) {
+func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, d *moduleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
 	// Walk the tool as a host program.
 	toolPath := filepath.Clean(stmt.ToolPath)
 	toolInstance := instance.WithHost(ctx.cfg)
@@ -1293,7 +1595,7 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// would walk to nothing — skip them.
 	inputClosure := prInputClosure(ctx, instance, stmt, moduleInputs)
 
-	EmitPR(instance, stmt, toolBinPath, toolLDRef, inputClosure, ctx.emit)
+	return EmitPR(instance, stmt, toolBinPath, toolLDRef, inputClosure, ctx.emit)
 }
 
 // prInputClosure returns the union of transitive include closures of every
