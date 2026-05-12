@@ -41,7 +41,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	// the stub LD's outputs[0] above; PR-28-D01 makes this the
 	// caller's responsibility (the gen.go walker derives it from the
 	// host LD's own emission).
-	r6Ref, outPath := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6", nil, e)
+	r6Ref, outPath := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6", nil, nil, e)
 
 	wantOut := "$(BUILD_ROOT)/util/_/datetime/parser.rl6.cpp"
 	if outPath != wantOut {
@@ -139,7 +139,7 @@ func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
 
 	// Caller threads the (non-canonical) host LD output. EmitR6 must
 	// canonicalise to the reference shape.
-	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6", nil, e)
+	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6", nil, nil, e)
 
 	got := e.nodes[r6Ref.id]
 
@@ -200,6 +200,89 @@ func TestCanonicalizeRagel6BinaryPath_PassThrough(t *testing.T) {
 	}
 }
 
+// TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags pins the
+// per-module `SET(RAGEL6_FLAGS <value>)` path. The override REPLACES
+// the platform-default `-CT0` / `-CG2` slot at cmd_args[1] — upstream
+// `_SRC("rl6", ...)` at build/ymake.core.conf:3284 interpolates
+// `$RAGEL6_FLAGS` before everything else and `SET` does not
+// concatenate. Empirical M3 witness: devtools/ymake/lang/makelists/
+// ya.make:6 sets `-lF1`, producing the cmd_args[1] observed in the
+// reference graph's `makefile_lang.rl6.cpp` node.
+func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
+	e := NewBufferedEmitter()
+
+	ragel6LD := e.Emit(&Node{
+		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
+		Env:     map[string]string{},
+		Inputs:  []string{},
+		KV:      map[string]string{"p": "LD"},
+		Outputs: []string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"},
+	})
+
+	r6Ref, _ := EmitR6(
+		targetInstance("devtools/ymake/lang/makelists"),
+		"makefile_lang.rl6",
+		ragel6LD,
+		"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6",
+		[]string{"-lF1"},
+		nil,
+		e,
+	)
+
+	got := e.nodes[r6Ref.id]
+
+	if got.Cmds[0].CmdArgs[1] != "-lF1" {
+		t.Errorf("cmd_args[1] = %q, want -lF1 (per-module SET(RAGEL6_FLAGS) override)", got.Cmds[0].CmdArgs[1])
+	}
+
+	// The default flag must NOT also appear — SET replaces, does not
+	// append (cmd_args length is the same as the default-flag case).
+	for i, a := range got.Cmds[0].CmdArgs {
+		if a == "-CT0" || a == "-CG2" {
+			t.Errorf("cmd_args[%d] = %q — default flag leaked through the SET override", i, a)
+		}
+	}
+
+	if len(got.Cmds[0].CmdArgs) != 7 {
+		t.Errorf("cmd_args length = %d, want 7 (SET(RAGEL6_FLAGS -lF1) is a 1-arg replacement, not an append)", len(got.Cmds[0].CmdArgs))
+	}
+}
+
+// TestEmitR6_X8664HostDefault_PR_M3_ragel_flags pins the
+// platform-default branch: a host (x86_64) build with no per-module
+// SET picks `-CG2` (release toolchain), not `-CT0`. Mirrors upstream
+// `build/ymake_conf.py:2271-2277` where `set_default_flags(optimized=
+// True)` appends `-CG2`. Empirical M3 witness: the only x86_64 R6
+// node in devtools/ymake/bin's closure — util/_/datetime/parser.rl6.cpp
+// — has cmd_args[1]=`-CG2` in the reference graph.
+func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
+	e := NewBufferedEmitter()
+
+	ragel6LD := e.Emit(&Node{
+		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
+		Env:     map[string]string{},
+		Inputs:  []string{},
+		KV:      map[string]string{"p": "LD"},
+		Outputs: []string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"},
+	})
+
+	r6Ref, _ := EmitR6(
+		hostInstance("util"),
+		"datetime/parser.rl6",
+		ragel6LD,
+		"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6",
+		nil,
+		nil,
+		e,
+	)
+
+	got := e.nodes[r6Ref.id]
+
+	if got.Cmds[0].CmdArgs[1] != "-CG2" {
+		t.Errorf("cmd_args[1] = %q, want -CG2 (x86_64 host = release = optimized)", got.Cmds[0].CmdArgs[1])
+	}
+}
+
 // TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z pins the R6
 // inputs shape post-PR-35z. The reference R6 node carries
 // `[ragel6BinaryPath, .rl6 source, ...transitive header closure]`
@@ -225,7 +308,7 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 		"$(SOURCE_ROOT)/util/generic/ymath.h",
 	}
 
-	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6", closure, e)
+	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6", nil, closure, e)
 
 	got := e.nodes[r6Ref.id]
 

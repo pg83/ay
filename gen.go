@@ -779,6 +779,15 @@ type moduleData struct {
 	// bucket with SRC()/SRC_C_NO_LTO entries (no `_/` infix), so
 	// reorderARMembers hoists them to the front of the archive.
 	simdSrcs []simdSrc
+	// PR-M3-ragel-flags-per-module: per-module RAGEL6_FLAGS override
+	// captured from `SET(RAGEL6_FLAGS <value>)` (upstream
+	// build/ymake.core.conf:3284 expands `$RAGEL6_FLAGS ${SRCFLAGS}`
+	// before the rest of the ragel6 cmd line). Empty means the
+	// platform-default fires inside EmitR6 — `-CG2` on x86_64 host
+	// (release, mirroring ymake_conf.py:2274) and `-CT0` on target
+	// aarch64 (debug). Empirical M3 case: devtools/ymake/lang/
+	// makelists/ya.make sets `-lF1`.
+	ragel6Flags []string
 	conflictMod *ModuleStmt
 	// PR-M3-runprogram-closure: module-level INDUCED_DEPS(<exts> headers...)
 	// declarations. Each entry is a SOURCE_ROOT-rooted header path the tool
@@ -1043,6 +1052,19 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 			// IF branches above already flattened any conditional
 			// SET; an unconditional SET that influences downstream
 			// IFs would need a real macro evaluator (PR-26+).
+			//
+			// PR-M3-ragel-flags-per-module: capture `SET(RAGEL6_FLAGS
+			// <value>)` so emitOneSource can thread the override into
+			// EmitR6. Upstream `_SRC("rl6", ...)` (build/ymake.core.conf:
+			// 3284) interpolates `$RAGEL6_FLAGS` before everything else,
+			// so a SET replaces the default and is not additive to other
+			// SETs in the same module (last-write-wins). Empirical M3
+			// witness: devtools/ymake/lang/makelists/ya.make:6 sets
+			// `-lF1`, producing the ragel6 cmd_args[1] observed in the
+			// reference graph's `makefile_lang.rl6.cpp` node.
+			if v.Name == "RAGEL6_FLAGS" {
+				d.ragel6Flags = []string{v.Value}
+			}
 		case *EndStmt:
 			// Structural sentinel; nothing to do.
 		case *JoinSrcsStmt:
@@ -3497,6 +3519,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		DefaultVarOrder:      d.defaultVarOrder,
 		Py3Suffix:            isPy3NativeLib,
 		ModuleTag:            perModuleCCTag,
+		Ragel6Flags:          d.ragel6Flags,
 	}
 
 	// PR-30 D06: ancestor-only SRCDIR rebase. The "PROGRAM with SRCDIR
@@ -5674,7 +5697,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// EmitsIncludes traversal and are unaffected.
 		rl6Closure = filterEnSerializedSiblings(rl6Closure)
 
-		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, rl6Closure, ctx.emit)
+		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
 
 		// F-7-B / PR-AUDIT-2 D02: register the R6 output (.rl6.cpp). Ragel emits
 		// the .rl6 source's `#include` directives verbatim into the generated

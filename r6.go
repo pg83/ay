@@ -35,6 +35,13 @@ import "strings"
 const (
 	ragel6BinSubpath   = "$(BUILD_ROOT)/contrib/tools/ragel6/bin/"
 	ragel6CanonicalDir = "$(BUILD_ROOT)/contrib/tools/ragel6/"
+	// ragel6DefaultFlagOptimized / ragel6DefaultFlagDebug mirror the
+	// `set_default_flags(optimized)` branch in upstream
+	// `build/ymake_conf.py:2271-2277`: the release toolchain emits
+	// `-CG2` (host build), the debug toolchain emits `-CT0` (target
+	// build).
+	ragel6DefaultFlagOptimized = "-CG2"
+	ragel6DefaultFlagDebug     = "-CT0"
 )
 
 // canonicalizeRagel6BinaryPath maps the host walker's
@@ -84,9 +91,24 @@ func canonicalizeRagel6BinaryPath(p string) string {
 // node invokes plus the `.rl6` source plus its include closure
 // (1009 inputs for util/datetime/parser.rl6 in the M2 closure).
 //
+// `ragel6Flags` carries the per-module `SET(RAGEL6_FLAGS <value>)`
+// override captured by collectStmts (PR-M3-ragel-flags-per-module).
+// When the slice is empty, the platform-default fires here: `-CG2` on
+// the x86_64 host (release toolchain, mirroring upstream
+// `build/ymake_conf.py:2271-2277` where
+// `set_default_flags(optimized=True)` appends `-CG2`) and `-CT0` on
+// the aarch64 target (debug). The override replaces the default; the
+// upstream `_SRC("rl6", ...)` macro at
+// `build/ymake.core.conf:3284` expands `$RAGEL6_FLAGS` before
+// everything else and `SET` does not concatenate. Empirical M3
+// witnesses: `devtools/ymake/lang/makelists/ya.make:6` →
+// `makefile_lang.rl6.cpp` cmd_args[1]=`-lF1`;
+// `util/_/datetime/parser.rl6.cpp` on x86_64 →
+// cmd_args[1]=`-CG2`.
+//
 // Returns (NodeRef, outputPath) so the caller can wire the R6 node as
 // the input of a downstream EmitCC.
-func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath string, closure []string, emit Emitter) (NodeRef, string) {
+func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath string, ragel6Flags []string, closure []string, emit Emitter) (NodeRef, string) {
 	// PR-M3-A fix: add `_/` infix only when srcRel contains a `/` (i.e.
 	// the source is in a subdirectory of the module). Flat .rl6 sources
 	// (no path separator) live at the module root and their generated
@@ -103,15 +125,28 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
 	canonicalBinary := canonicalizeRagel6BinaryPath(ragel6BinaryPath)
 
-	cmdArgs := []string{
-		canonicalBinary,
-		"-CT0",
+	// PR-M3-ragel-flags-per-module: pick the effective RAGEL6_FLAGS.
+	// Module SET wins; otherwise platform-default (release host →
+	// `-CG2`, debug target → `-CT0`).
+	effectiveFlags := ragel6Flags
+	if len(effectiveFlags) == 0 {
+		if targetIsX8664(instance) {
+			effectiveFlags = []string{ragel6DefaultFlagOptimized}
+		} else {
+			effectiveFlags = []string{ragel6DefaultFlagDebug}
+		}
+	}
+
+	cmdArgs := make([]string, 0, 5+len(effectiveFlags)+1)
+	cmdArgs = append(cmdArgs, canonicalBinary)
+	cmdArgs = append(cmdArgs, effectiveFlags...)
+	cmdArgs = append(cmdArgs,
 		"-L",
 		"-I$(SOURCE_ROOT)",
 		"-o",
 		outputPath,
 		inputPath,
-	}
+	)
 
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
