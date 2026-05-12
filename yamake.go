@@ -116,7 +116,15 @@ type JoinSrcsStmt struct {
 type AddInclStmt struct {
 	GlobalPaths []string
 	OwnPaths    []string
-	Line        int
+	// AllPaths preserves the original declaration order across the
+	// GLOBAL split. PR-M3-cmd-arg-slot-ordering: own cmd_args emission
+	// (gen.go AddInclStmt case) uses AllPaths so the -I slots match
+	// the reference graph's declaration-order layout (e.g. libffi
+	// ADDINCL(libffi  libffi/include  libffi/src  GLOBAL libffi/include)
+	// emits as [libffi, libffi/include, libffi/src] — not Global-first
+	// [libffi/include, libffi, libffi/src]).
+	AllPaths []string
+	Line     int
 }
 
 // CFlagsStmt represents `CFLAGS([GLOBAL] flags...)` with per-path
@@ -1072,9 +1080,9 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 
 		return &JoinSrcsStmt{OutputName: args[0], Sources: sources, Line: nameTok.line}
 	case "ADDINCL":
-		globalPaths, ownPaths := splitAddInclPaths(args)
+		globalPaths, ownPaths, allPaths := splitAddInclPaths(args)
 
-		return &AddInclStmt{GlobalPaths: globalPaths, OwnPaths: ownPaths, Line: nameTok.line}
+		return &AddInclStmt{GlobalPaths: globalPaths, OwnPaths: ownPaths, AllPaths: allPaths, Line: nameTok.line}
 	case "CFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
 
@@ -1430,7 +1438,7 @@ func splitFlagsByGlobal(args []string) (globalFlags, ownFlags []string) {
 // record only the bare path (global or own respectively); the FOR
 // qualifier selects a non-C/C++ language axis that is irrelevant for
 // CC/AS include paths.
-func splitAddInclPaths(args []string) (globalPaths, ownPaths []string) {
+func splitAddInclPaths(args []string) (globalPaths, ownPaths, allPaths []string) {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "FOR" {
 			// FOR <kind> — drop both tokens; not a C/C++ include path.
@@ -1449,13 +1457,15 @@ func splitAddInclPaths(args []string) (globalPaths, ownPaths []string) {
 
 			if i < len(args) {
 				globalPaths = append(globalPaths, args[i])
+				allPaths = append(allPaths, args[i])
 			}
 		} else {
 			ownPaths = append(ownPaths, args[i])
+			allPaths = append(allPaths, args[i])
 		}
 	}
 
-	return globalPaths, ownPaths
+	return globalPaths, ownPaths, allPaths
 }
 
 // parseIf is invoked with the `IF` name token already consumed. It
