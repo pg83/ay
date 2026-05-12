@@ -815,15 +815,6 @@ type pySrcChunk struct {
 	inps []string
 }
 
-// lastEq returns true when `s` equals the last element of `xs`. Used by
-// chunkPySrcEntries to dedupe consecutive identical input additions
-// emitted by the KV-then-path-key pair on the same entry within one
-// chunk; the cross-chunk straddle case is preserved because the two
-// adds land in different chunks (and thus different `inps` lists).
-func lastEq(xs []string, s string) bool {
-	return len(xs) > 0 && xs[len(xs)-1] == s
-}
-
 // chunkPySrcEntries partitions a declaration-ordered entry list into
 // chunks that mirror byte-exact what the upstream packer would produce.
 //
@@ -854,6 +845,13 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 	chunks := make([]pySrcChunk, 0)
 	cur := pySrcChunk{}
 	cmdLen := 0
+	// inpsSeen tracks which paths have already been added to `cur.inps`
+	// within the current chunk. Reset on flush. Mirrors the upstream ymake
+	// scanner's natural per-node `inputs[]` dedup (a single file appears
+	// once per node regardless of how many resfs entries reference it).
+	// A chunk-straddling entry still contributes to both the kv-add chunk
+	// and the path+key-add chunk because the map is reset between them.
+	inpsSeen := make(map[string]struct{})
 
 	flush := func() {
 		if cmdLen == 0 {
@@ -862,18 +860,25 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 		chunks = append(chunks, cur)
 		cur = pySrcChunk{}
 		cmdLen = 0
+		inpsSeen = make(map[string]struct{})
 	}
 
-	// addInps appends the entry's pathInput + extraSrcInput to the current
-	// chunk's `inps` list, deduping against the most recently appended
-	// values so a same-chunk KV+path-key pair contributes each path
-	// exactly once. Straddlers retain both adds (one per chunk).
+	// addInps records the entry's pathInput + extraSrcInput on the current
+	// chunk's `inps` list, deduped per-chunk by absolute path. Same-chunk
+	// KV-add and path+key-add of the same entry collapse to one contribution.
+	// Cross-entry duplicates (e.g. the yapyc3 entry's extraSrcInput .py and
+	// the raw .py entry's pathInput naming the same file) also collapse.
 	addInps := func(e pySrcEntry) {
-		if !lastEq(cur.inps, e.pathInput) {
+		if _, ok := inpsSeen[e.pathInput]; !ok {
 			cur.inps = append(cur.inps, e.pathInput)
+			inpsSeen[e.pathInput] = struct{}{}
 		}
-		if e.extraSrcInput != "" && !lastEq(cur.inps, e.extraSrcInput) {
+		if e.extraSrcInput == "" {
+			return
+		}
+		if _, ok := inpsSeen[e.extraSrcInput]; !ok {
 			cur.inps = append(cur.inps, e.extraSrcInput)
+			inpsSeen[e.extraSrcInput] = struct{}{}
 		}
 	}
 
