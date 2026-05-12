@@ -242,7 +242,24 @@ type genCtx struct {
 	// previously emitted EN nodes whose outputs are included by the current
 	// header's transitive include closure. The map key is the
 	// $(BUILD_ROOT)-rooted output path; the value is the EN NodeRef.
+	//
+	// EN nodes only ever emit on the target axis (see gen.go:4531-4535), so
+	// a flat path-keyed map collapses cleanly. PB/EV use codegenOutputKey
+	// because both axes can emit their own producer NodeRefs.
 	enOutputs map[string]NodeRef
+	// pbOutputs/evOutputs map (platform, $(BUILD_ROOT)-rooted output path)
+	// → emitted PB/EV NodeRef. Mirrors enOutputs but per-platform because
+	// PB/EV emit on BOTH target and host axes (the host emission carries
+	// tags=["tool"], the target one doesn't), and CC consumers must dep on
+	// the producer that shares their own platform (verified in sg2.json:
+	// x86_64 CCs dep on x86_64 PB; aarch64 CCs dep on aarch64 PB).
+	//
+	// PR-M3-L0-codegen-deps-EV-PB: consulted by resolveCodegenDepRefs() to
+	// thread the producer NodeRef into a consumer CC's ExtraDepRefs when
+	// the CC's IncludeInputs carries the BUILD_ROOT path of a generated
+	// .pb.h / .pb.cc / .ev.pb.h / .ev.pb.cc.
+	pbOutputs map[codegenOutputKey]NodeRef
+	evOutputs map[codegenOutputKey]NodeRef
 	// ldPluginCPCache deduplicates LD_PLUGIN CP NodeRefs across the
 	// target/host walk pair (PR-35l). PR-35k emitted a fresh CP node for
 	// every (instance.Path, plugin name) pair the walker visited, which
@@ -297,6 +314,74 @@ type genCtx struct {
 type scanCtxCacheKey struct {
 	scanner *IncludeScanner
 	ctxHash uint64
+}
+
+// codegenOutputKey identifies a codegen producer's output path on a specific
+// platform axis. PR-M3-L0-codegen-deps-EV-PB: PB/EV emit on both target
+// (aarch64) and host (x86_64) axes, and CC consumers must dep on the
+// producer matching their own platform — flat path-only keying would
+// collapse the two and produce wrong-axis deps.
+type codegenOutputKey struct {
+	platform PlatformID
+	path     string
+}
+
+// resolveCodegenDepRefs scans `includeInputs` for $(BUILD_ROOT)-rooted paths
+// that match a previously emitted EN/PB/EV output, and returns the producer
+// NodeRefs deduped in scan order. Each consumer CC node carries those NodeRefs
+// as ExtraDepRefs so the resulting CC `deps` list mirrors the reference graph
+// shape (sg2.json places explicit codegen-producer deps on every CC whose
+// inputs[] references a $(BUILD_ROOT)/<gen>.h or <gen>.cc).
+//
+// `consumer.Target` disambiguates per-platform PB/EV lookup. EN nodes always
+// emit on the target axis so ctx.enOutputs is consulted by path alone (both
+// host and target consumers reach the same target EN NodeRef).
+//
+// `exclude` lists NodeRefs to suppress from the result (typically the
+// downstream CC's `Generator` ref, which EmitCC already threads into DepRefs
+// as the leading entry — without filtering, a CC compiling its own producer's
+// .cc would carry the producer twice).
+func resolveCodegenDepRefs(ctx *genCtx, consumer ModuleInstance, includeInputs []string, exclude ...NodeRef) []NodeRef {
+	if len(includeInputs) == 0 {
+		return nil
+	}
+
+	seen := make(map[NodeRef]struct{}, 4+len(exclude))
+	for _, r := range exclude {
+		seen[r] = struct{}{}
+	}
+
+	var out []NodeRef
+
+	for _, p := range includeInputs {
+		if !strings.HasPrefix(p, "$(BUILD_ROOT)/") {
+			continue
+		}
+
+		var ref NodeRef
+		var ok bool
+
+		if r, found := ctx.enOutputs[p]; found {
+			ref, ok = r, true
+		} else if r, found := ctx.pbOutputs[codegenOutputKey{platform: consumer.Target, path: p}]; found {
+			ref, ok = r, true
+		} else if r, found := ctx.evOutputs[codegenOutputKey{platform: consumer.Target, path: p}]; found {
+			ref, ok = r, true
+		}
+
+		if !ok {
+			continue
+		}
+
+		if _, dup := seen[ref]; dup {
+			continue
+		}
+
+		seen[ref] = struct{}{}
+		out = append(out, ref)
+	}
+
+	return out
 }
 
 // getScanCtx returns a `*scanCtx` for the (scanner, cfg) pair. Lookup
@@ -605,6 +690,8 @@ func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, cliDef
 		scannerHost:     hostScanner,
 		cliDefines:      cliDefines,
 		enOutputs:       make(map[string]NodeRef),
+		pbOutputs:       make(map[codegenOutputKey]NodeRef),
+		evOutputs:       make(map[codegenOutputKey]NodeRef),
 		ldPluginCPCache: make(map[string]NodeRef),
 		scanCtxMode:     mode,
 		internedScanCtx: make(map[scanCtxCacheKey]*scanCtx, 64),
@@ -5397,13 +5484,25 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		enClosure = mergeDedup(enClosure, ownOutputClosure)
 		sort.Strings(enClosure)
 
+		// PR-M3-L0-codegen-deps-EV-PB: when this EN node's transitive closure
+		// pulls in a PB/EV producer's $(BUILD_ROOT) output (e.g. an EN whose
+		// header includes a header that #includes msg.ev.pb.h), the resulting
+		// EN node must dep on that PB/EV producer — matching sg2.json shape
+		// where `module_resolver.h_serialized.cpp` deps on the msg.ev/trace.ev
+		// EV nodes + events_extension PB. Filter out the cross-EN dep refs
+		// already in depENRefs so they aren't duplicated.
+		augmentedDepENRefs := depENRefs
+		if extra := resolveCodegenDepRefs(ctx, enInstance, enClosure, depENRefs...); len(extra) > 0 {
+			augmentedDepENRefs = append(append([]NodeRef(nil), depENRefs...), extra...)
+		}
+
 		enRef, enOutPaths := EmitEN(
 			enInstance,
 			headerRel,
 			withHeader,
 			enumParserLD,
 			enumParserBin,
-			depENRefs,
+			augmentedDepENRefs,
 			depENOutputs,
 			enClosure,
 			ctx.emit,
@@ -5522,12 +5621,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// scanner-aware srcIn down to EmitCC.
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 
-		// PR-M3-module-tag-and-stats-enums-dep: thread codegen producer
-		// dep refs onto the CC node whenever its IncludeInputs pulls in a
-		// $(BUILD_ROOT)-rooted EN output (e.g. `stats_enums.h_serialized.h`
-		// reaches consumers across devtools/ymake/** via diag/stats.h's
-		// peer chain).
-		srcIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcIn.IncludeInputs)
+		// Thread codegen producer dep refs into the CC node. PR-M3-L0-codegen-
+		// deps-EV-PB extended this to PB/EV (with platform keying) on top of
+		// the EN path established by PR-M3-module-tag-and-stats-enums-dep.
+		srcIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, srcIn.IncludeInputs)
 		// PR-M3-py3-runtime-closure: runtime_py3 __res.cpp / sitecustomize.cpp
 		// each carry the matching .pyc.inc + PY_SRCS python inputs in REF.
 		if extras := runtimePy3CCExtraInputs(srcInstance.Path, srcRel); len(extras) > 0 {
@@ -5738,16 +5835,14 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccIn.Generator = r6Ref
 		ccIn.HasGenerator = true
 		ccIn.IncludeInputs = ccIncludeInputs
-		// PR-M3-module-tag-and-stats-enums-dep: surface codegen-producer
-		// deps when the .rl6.cpp's transitive header set hits an EN
-		// output (devtools/ymake/include_parsers/*.rl6 reaches
-		// diag/stats_enums.h_serialized.h through the same diag.h
-		// peer-include chain as the regular CC sources in the module).
-		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, ccIncludeInputs)
 		// PR-41 Fix H: ymake's _LANG_CFLAGS_RL=-Wno-implicit-fallthrough applies to CC
 		// compiles whose source is a .rl6-generated .cpp (build/ymake.core.conf).
 		// Extend in M3+ for .pyx, .py.py3, .rl5 when their closures surface.
 		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
+		// PR-M3-L0-codegen-deps-EV-PB: thread EN/PB/EV producer refs reached
+		// through the .rl6.cpp's transitive include closure. Generator (r6Ref)
+		// is filtered out so EmitCC's leading-DepRefs slot isn't duplicated.
+		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r6Ref)
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
@@ -5847,6 +5942,15 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			evRelPath := srcInstance.Path + "/" + srcRel
 			evH := "$(BUILD_ROOT)/" + evRelPath + ".pb.h"
 			evPbCC := "$(BUILD_ROOT)/" + evRelPath + ".pb.cc"
+
+			// PR-M3-L0-codegen-deps-EV-PB: stash the EV NodeRef under both outputs
+			// on the emitting platform so consumer CCs in OTHER modules whose
+			// IncludeInputs include this .ev.pb.h / .ev.pb.cc dep on the producer.
+			evKey := codegenOutputKey{platform: srcInstance.Target}
+			evKey.path = evH
+			ctx.evOutputs[evKey] = evRef
+			evKey.path = evPbCC
+			ctx.evOutputs[evKey] = evRef
 			if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
 				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC)
@@ -5884,15 +5988,13 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			ccIn.HasGenerator = true
 			ccIn.IncludeInputs = walkClosure(ctx, srcInstance, evPbCC, srcIn)
 			// PR-M3-final-codegen-registry-expansion: protoc emits
-			// `#include "google/protobuf/wire_format.h"` directly into the
-			// generated .ev.pb.cc reflection scaffolding (witnessed in REF on
-			// every .ev.pb.cc.o). This is a CC-side post-closure addition
-			// (not via the registry) because the registry's EmitsIncludes
-			// propagates up through the .ev.pb.cc → .ev.pb.h witness link to
-			// every CC consumer of the .ev.pb.h, which over-emits the header
-			// onto ~30 non-protobuf CC nodes. Scope is narrow: only the
-			// .ev.pb.cc.o (this CC node) inherits wire_format.h.
+			// `#include "google/protobuf/wire_format.h"` directly. Add to inputs
+			// only on this CC node (not via registry — that would over-emit).
 			ccIn.IncludeInputs = append(ccIn.IncludeInputs, pbRuntimeBase+"google/protobuf/wire_format.h")
+			// PR-M3-L0-codegen-deps-EV-PB: thread cross-codegen producer refs
+			// (e.g. an .ev that imports another module's .proto pulls the
+			// peer's PB into the consumer CC's deps via its .pb.h in inputs[]).
+			ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, evRef)
 
 			ref, outPath := EmitCC(srcInstance, evPbCCSuffix, ccIn, ctx.emit)
 
@@ -5981,6 +6083,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccIn.IsGenerated = true
 		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, r5CppOut, srcIn)
 		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
+		// PR-M3-L0-codegen-deps-EV-PB: thread EN/PB/EV producer refs reached
+		// through the .rl5.cpp's transitive include closure.
+		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs)
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
@@ -6045,6 +6150,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccIn := srcIn
 		ccIn.IsGenerated = true
 		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, cfOut, srcIn)
+		// PR-M3-L0-codegen-deps-EV-PB: thread codegen producer refs reached
+		// through the CF-generated .cpp's transitive include closure.
+		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs)
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
@@ -6255,49 +6363,8 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 	return vfsSource(srcRelOnDisk)
 }
 
-// resolveCodegenDepRefs scans `includeInputs` for `$(BUILD_ROOT)/...`
-// paths whose producer is registered in `ctx.enOutputs` and returns the
-// deduped NodeRefs in scan-discovery order. Used by the per-source CC
-// emitter to thread codegen-producer dependencies onto consumer CC
-// nodes whose transitive header closure pulls in a generated
-// `_serialized.h` (or `.cpp`). REF's CC node carries an explicit `deps`
-// entry for each such producer; without this wiring the consumer CC
-// fails the deps comparator even though its inputs are byte-exact.
-//
-// Today only EN producers register a (path → NodeRef) map. PB / EV /
-// CF / etc. follow the same emission order (codegen before consumer
-// CC) but their output→ref mappings live in per-file local slices, not
-// genCtx; extending this helper to those families requires lifting
-// those maps onto genCtx first. The scoped EN-only resolution is the
-// 66-node yield identified by PR-M3 probe v4.
-func resolveCodegenDepRefs(ctx *genCtx, includeInputs []string) []NodeRef {
-	if len(ctx.enOutputs) == 0 || len(includeInputs) == 0 {
-		return nil
-	}
-
-	var refs []NodeRef
-	seen := make(map[NodeRef]struct{}, 2)
-
-	for _, p := range includeInputs {
-		if !strings.HasPrefix(p, "$(BUILD_ROOT)/") {
-			continue
-		}
-
-		ref, ok := ctx.enOutputs[p]
-		if !ok {
-			continue
-		}
-
-		if _, dup := seen[ref]; dup {
-			continue
-		}
-
-		seen[ref] = struct{}{}
-		refs = append(refs, ref)
-	}
-
-	return refs
-}
+// resolveCodegenDepRefs replaced by the EN/PB/EV-aware version at line 344
+// (PR-M3-L0-codegen-deps-EV-PB).
 
 // walkClosure resolves the transitive include closure of a source
 // rooted at any VFS path — `$(SOURCE_ROOT)/...` for FS-resident
