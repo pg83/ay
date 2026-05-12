@@ -1072,15 +1072,21 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		d.ldPlugins = append(d.ldPlugins, v.Args...)
 	case "USE_PYTHON3":
 		// M3: USE_PYTHON3() adds implicit PEERDIRs to the Python 3 runtime
-		// library (contrib/tools/python3) and stdlib (contrib/tools/python3/Lib).
-		// In the real Arcadia build system, USE_PYTHON3() is a conf macro that
-		// sets PEERDIR+=${PYTHON3_TOOL_PEERDIR} (= contrib/tools/python3) and
-		// PEERDIR+=${PYTHON3_TOOL_PEERDIR}/Lib (= contrib/tools/python3/Lib).
-		// The walker does not evaluate conf macros, so we hardcode the
-		// two peers here. Without this, devtools/ymake/plugins/pybridge
-		// (which calls USE_PYTHON3()) would not walk the Python3 closure
-		// and ~3200 nodes would be missing from the M3 graph.
-		d.peerdirs = append(d.peerdirs, "contrib/tools/python3", "contrib/tools/python3/Lib")
+		// per build/conf/python.conf:1063-1071 (upstream macro USE_PYTHON3):
+		//   PEERDIR(contrib/libs/python)
+		//   when ($USE_ARCADIA_PYTHON == "yes"): PEERDIR+=library/python/runtime_py3
+		// The walker does not evaluate conf macros, so we hardcode the peers
+		// here. We additionally emit contrib/tools/python3 + .../Lib (the tool
+		// peerdirs that the conf indirectly resolves via PYTHON3_TOOL_PEERDIR
+		// in PY3_BIN/PY3TEST modules — kept for back-compat with the M3 graph
+		// emission that relied on the prior hardcoded list). Without contrib/
+		// libs/python the symbols/{module,libc,python} closure was missing.
+		d.peerdirs = append(d.peerdirs,
+			"contrib/tools/python3",
+			"contrib/tools/python3/Lib",
+			"contrib/libs/python",
+			"library/python/runtime_py3",
+		)
 	case "PY_SRCS":
 		// PR-M3-A: collect PY_SRCS python source files into d.pySrcs.
 		// PY_SRCS accepts optional leading/per-source modifiers TOP_LEVEL
