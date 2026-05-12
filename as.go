@@ -379,7 +379,10 @@ func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (
 		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + ".o"
 	}
 
-	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
+	// PR-M3-final-path-clean: apply path.Clean to the non-SRCDIR arm's input
+	// as well, mirroring the useSrcDir arm above. Defensive against modules
+	// that list `SRCS(../foo.S)` without a corresponding SRCDIR override.
+	inputPath := "$(SOURCE_ROOT)/" + path.Clean(instance.Path+"/"+srcRel)
 
 	return outputPath, inputPath
 }
