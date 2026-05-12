@@ -894,7 +894,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					{outDir + "/" + lexerBase + ".cpp", outDir + "/" + lexerBase + ".h"},
 					{outDir + "/" + parserBase + ".cpp", outDir + "/" + parserBase + ".h"},
 				}
-				refs, outs, inputs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, *consumerInputs)
+				refs, outs, inputs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 				ccRefs = append(ccRefs, refs...)
 				ccOutputs = append(ccOutputs, outs...)
 				memberInputsList = append(memberInputsList, inputs...)
@@ -941,7 +941,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					{outDir + "/" + base + "Lexer.cpp", outDir + "/" + base + "Lexer.h"},
 					{outDir + "/" + base + "Parser.cpp", outDir + "/" + base + "Parser.h"},
 				}
-				refs, outs, inputs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, *consumerInputs)
+				refs, outs, inputs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 				ccRefs = append(ccRefs, refs...)
 				ccOutputs = append(ccOutputs, outs...)
 				memberInputsList = append(memberInputsList, inputs...)
@@ -1008,6 +1008,10 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 // cpccPairs holds (srcCppAbsPath, srcHAbsPath) for each grammar .cpp output.
 // jvPrimary is always the JV node's outputs[0] (the lexer .cpp).
 // jvInputs are the JV node's Inputs (grammar .g4 files + scripts + jar).
+// outputIncludes carries the repo-relative headers from the macro's
+// OUTPUT_INCLUDES keyword (PR-M3-jv-antlr-system-headers); they are
+// rebased to $(SOURCE_ROOT)/... and appended to the CP `.g4.cpp`
+// EmitsIncludes so the CC scan walks their transitive closure.
 func emitJVDownstreamCPCC(
 	ctx *genCtx,
 	instance ModuleInstance,
@@ -1015,6 +1019,7 @@ func emitJVDownstreamCPCC(
 	jvPrimary string,
 	jvInputs []string,
 	cpccPairs []struct{ cpp, h string },
+	outputIncludes []string,
 	in ModuleCCInputs,
 ) (ccRefs []NodeRef, ccOutputs []string, memberInputsList [][]string) {
 	reg := codegenRegForInstance(ctx, instance)
@@ -1030,11 +1035,21 @@ func emitJVDownstreamCPCC(
 
 		// Register the .g4.cpp in the codegen registry so walkClosure
 		// can resolve its transitive antlr4-runtime.h include chain.
+		// PR-M3-jv-antlr-system-headers: also seed the registry entry with
+		// the macro's OUTPUT_INCLUDES (rebased to $(SOURCE_ROOT)/...). The
+		// scanner walks each entry transitively via the FS locator, so the
+		// downstream system-header closure (e.g. util/generic/string.h →
+		// glibcasm / musl / cxxsupp) lands in the CP/CC inputs naturally.
 		if reg != nil {
+			emits := make([]string, 0, 1+len(outputIncludes))
+			emits = append(emits, antlr4RuntimeHeaderPath)
+			for _, h := range outputIncludes {
+				emits = append(emits, "$(SOURCE_ROOT)/"+h)
+			}
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "CP",
 				OutputPath:    g4CppPath,
-				EmitsIncludes: []string{antlr4RuntimeHeaderPath},
+				EmitsIncludes: emits,
 			})
 		}
 
