@@ -4154,6 +4154,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		case "PY23_NATIVE_LIBRARY":
 			globalTag = "py3_native_global"
 		}
+		// PR-M3-AR-member-order: the .global.a aggregator follows the
+		// same member-order discipline as the regular AR — hand-written /
+		// objcopy_* .o files precede codegen-derived .reg3.cpp.o etc.
+		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), len(globalRefs))
 		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, globalAggregated, ctx.emit)
 		result.GlobalRef = &globalRef
 		result.GlobalPath = instance.Path + "/" + globalBaseName
@@ -6211,16 +6215,18 @@ func includeScannerBasePaths(instance ModuleInstance) []string {
 //
 //  1. SRC_C_NO_LTO sources (isFlatNoLto[i]==true) — hoisted to the
 //     front in their original relative order.
-//  2. Regular SRCS (non-SRC_C_NO_LTO, non-R6) — kept in declaration
-//     order, interleaved flat and nested as declared.
+//  2. Regular SRCS hand-written .o (non-SRC_C_NO_LTO, non-R6, no codegen
+//     suffix) — kept in declaration order.
 //  3. JOIN_SRCS (entries at [numSrcsDerived, len)) — in declaration order.
-//  4. R6-generated (paths containing "/_/_/") — moved to the end.
-//
-// The `/_/_/` discriminator identifies R6-generated members: EmitCC of
-// an R6-generated source emits to `$(BUILD_ROOT)/<path>/_/<srcRel>.cpp.o`,
-// where <srcRel> already contains a `/` (e.g. `_/datetime/`), producing
-// the `/_/_/` double-underscore infix. Regular (non-R6) SRCS members never
-// produce this pattern.
+//  4. Codegen-derived .o files, partitioned by source-extension category
+//     and emitted in canonical order: .g4.cpp → .h_serialized.cpp →
+//     .ev.pb.cc → .rl6.cpp → .reg3.cpp. Within each category declaration
+//     relative order is preserved. PR-M3-AR-member-order: REF places
+//     hand-written .cpp.o before generated .o files in AR member listing.
+//  5. R6-generated paths bearing the legacy `/_/_/` infix go last (these
+//     are the util/_/_/datetime/parser.rl6.cpp.o family caught by the
+//     pre-existing path heuristic; the .rl6.cpp.o suffix category above
+//     handles the remaining R6 members whose path lacks the infix).
 //
 // isFlatNoLto is a parallel bool slice (same length as refs/paths before
 // JOIN_SRCS are appended) marking SRC_C_NO_LTO entries. The slice must
@@ -6235,37 +6241,53 @@ func reorderARMembers(refs []NodeRef, paths []string, isFlatNoLto []bool, numSrc
 		path string
 	}
 
-	// Classify SRCS-derived entries [0, numSrcsDerived) into three buckets:
-	// SRC_C_NO_LTO, regular, or R6-generated.
-	var noLtoSrcs, regularSrcs, genSrcs []member
+	// Classify SRCS-derived entries [0, numSrcsDerived) into buckets.
+	// noLto: SRC_C_NO_LTO front-hoist.
+	// regular: hand-written hand-named .o (no codegen suffix).
+	// g4/hser/ev/rl6/reg3: codegen-derived .o files, tail-grouped.
+	// legacyR6: pre-existing /_/_/ infix path (e.g. util/_/_/datetime/parser.rl6.cpp.o).
+	var noLtoSrcs, regularSrcs, g4Srcs, hSerSrcs, evPbSrcs, rl6Srcs, reg3Srcs, legacyR6 []member
 
 	for i := 0; i < numSrcsDerived && i < len(paths); i++ {
 		m := member{refs[i], paths[i]}
 		switch {
 		case strings.Contains(m.path, "/_/_/"):
-			// R6-generated: double-underscore infix from EmitR6+EmitCC chain.
-			genSrcs = append(genSrcs, m)
+			legacyR6 = append(legacyR6, m)
 		case i < len(isFlatNoLto) && isFlatNoLto[i]:
-			// SRC_C_NO_LTO: flat output, hoist to front.
 			noLtoSrcs = append(noLtoSrcs, m)
+		case strings.HasSuffix(m.path, ".reg3.cpp.o") || strings.Contains(m.path, ".reg3.cpp.py3.o"):
+			reg3Srcs = append(reg3Srcs, m)
+		case strings.HasSuffix(m.path, ".rl6.cpp.o"):
+			rl6Srcs = append(rl6Srcs, m)
+		case strings.HasSuffix(m.path, ".ev.pb.cc.o"):
+			evPbSrcs = append(evPbSrcs, m)
+		case strings.HasSuffix(m.path, ".h_serialized.cpp.o"):
+			hSerSrcs = append(hSerSrcs, m)
+		case strings.HasSuffix(m.path, ".g4.cpp.o"):
+			g4Srcs = append(g4Srcs, m)
 		default:
-			// Regular SRCS: nested or flat, keep in declaration order.
 			regularSrcs = append(regularSrcs, m)
 		}
 	}
 
-	// JOIN_SRCS entries stay as-is in declaration order (never SRC_C_NO_LTO, never R6).
+	// JOIN_SRCS entries stay as-is in declaration order (never SRC_C_NO_LTO, never codegen).
 	joinSrcs := make([]member, 0, len(paths)-numSrcsDerived)
 	for i := numSrcsDerived; i < len(paths); i++ {
 		joinSrcs = append(joinSrcs, member{refs[i], paths[i]})
 	}
 
-	// Reassemble: SRC_C_NO_LTO → regular SRCS → JOIN_SRCS → R6-generated.
+	// Reassemble: SRC_C_NO_LTO → regular SRCS → JOIN_SRCS → codegen
+	// (g4 → h_serialized → ev.pb → rl6 → reg3) → legacy /_/_/ R6.
 	out := make([]member, 0, len(paths))
 	out = append(out, noLtoSrcs...)
 	out = append(out, regularSrcs...)
 	out = append(out, joinSrcs...)
-	out = append(out, genSrcs...)
+	out = append(out, g4Srcs...)
+	out = append(out, hSerSrcs...)
+	out = append(out, evPbSrcs...)
+	out = append(out, rl6Srcs...)
+	out = append(out, reg3Srcs...)
+	out = append(out, legacyR6...)
 
 	outRefs := make([]NodeRef, len(out))
 	outPaths := make([]string, len(out))
