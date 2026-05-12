@@ -456,7 +456,8 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"NO_OPTIMIZE":                       {}, // Suppresses optimization; metadata for PR-M3-A.
 	"TASKLET":                           {}, // Tasklet metadata; deferred.
 	"TASKLETSUPPORT":                    {}, // Tasklet support metadata; deferred.
-	"SET_APPEND":                        {}, // SET_APPEND macro; no evaluator yet.
+	// SET_APPEND is handled by applyUnknownStmt for the SFLAGS axis;
+	// other SET_APPEND targets remain as no-ops (handled there).
 	"OPENSOURCE_PROJECT":                {}, // Metadata.
 	"SPLIT_FACTOR":                      {}, // Test metadata.
 	"FORK_TESTS":                        {}, // Test metadata.
@@ -667,6 +668,7 @@ type moduleData struct {
 	cxxFlagsGlobal   []string // PR-32 D05: collected CXXFLAGS(GLOBAL ...) values; peer-propagated to consumers' C++ sources
 	cOnlyFlags       []string // collected non-GLOBAL CONLYFLAGS values (C only); PR-29-D02 threads into ModuleCCInputs.COnlyFlags
 	cOnlyFlagsGlobal []string // PR-32 D06: collected CONLYFLAGS(GLOBAL ...) values; peer-propagated to consumers' C / .S sources
+	sFlags           []string // PR-M3-openssl-as-cflags: SET_APPEND(SFLAGS ...) values; appended to AS compiles only.
 	ldFlags          []string // collected LDFLAGS values
 	srcDir           string   // last SRCDIR setting (empty = module dir)
 	flags            FlagSet  // overlay of inferFlagsFromPath + macro bools
@@ -1326,6 +1328,17 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		// SRCS(GLOBAL $Func.reg3.cpp) inside macro _PY3_REGISTER at
 		// build/ymake.core.conf:4086-4089).
 		d.pyRegister = append(d.pyRegister, v.Args...)
+	case "SET_APPEND":
+		// PR-M3-openssl-as-cflags: SET_APPEND(<var> <values...>) is
+		// ymake's append-to-variable macro. Only SFLAGS is wired today
+		// (openssl/crypto/ya.make.inc:179-186's
+		// `IF (ARCH_X86_64 AND NOT MSVC) { SET_APPEND(SFLAGS -mavx512bw
+		// -mavx512ifma -mavx512vl) }`); SFLAGS is the assembler flag
+		// bundle threaded between CFLAGS and `-c -o` in AS cmd_args
+		// (ymake.core.conf:3217). Other targets currently no-op.
+		if len(v.Args) >= 2 && v.Args[0] == "SFLAGS" {
+			d.sFlags = append(d.sFlags, v.Args[1:]...)
+		}
 	default:
 		if _, ok := whitelistedMetadataMacros[v.Name]; !ok {
 			ThrowFmt("gen: PR-25 does not yet support macro %q (extend whitelistedMetadataMacros or add a typed Stmt)", v.Name)
@@ -3063,6 +3076,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		PeerCXXFlagsGlobal:   peerCXXFlagsGlobal,
 		PeerCOnlyFlagsGlobal: peerCOnlyFlagsGlobal,
 		AutoPeerCFlags:       autoPeerCFlags,
+		SFlags:               d.sFlags,
 		SrcDir:               d.srcDir,
 		SourceRoot:           ctx.sourceRoot,
 		DefaultVars:          d.defaultVars,

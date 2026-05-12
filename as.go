@@ -455,10 +455,19 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	// the musl-self-isolation invariant (Q6) — `muslExtraDefines`
 	// already carries the musl-self CFLAGS, and the peer-consumer
 	// `-D_musl_` does not apply to musl-self builds.
+	//
+	// PR-M3-openssl-as-cflags: ownCFlags now consults the same composer
+	// CC uses (`composeOwnAndPeerCFlagsAtOwnSlot`), so the AS node's
+	// ownCFlags slot carries `in.CFlags + in.PeerCFlagsGlobal +
+	// in.OwnCFlagsGlobal` — matching the openssl ya.make's
+	// `CFLAGS(GLOBAL -DOPENSSL_RENAME_SYMBOLS=1)` propagation that
+	// reaches both the module's own .s/.S compiles AND any peer
+	// AS consumer (e.g. contrib/tools/python3/Python/asm_trampoline.S
+	// receives the openssl rename flag via PEERDIR).
 	var ownCFlags, autoPeerCFlags []string
 
 	if !isMusl {
-		ownCFlags = in.CFlags
+		ownCFlags = composeOwnAndPeerCFlagsAtOwnSlot(in)
 		autoPeerCFlags = in.AutoPeerCFlags
 	}
 
@@ -471,7 +480,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 
 	fixed := prologueArgs + len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
 		len(cFlags) + len(warnBundle) + len(defines) + len(musl) + len(ownCFlags) +
-		len(suppressionBlock) + betweenBlocks + len(suppressionBlock) + 4
+		len(suppressionBlock) + betweenBlocks + len(suppressionBlock) + len(in.SFlags) + 4
 	cmdArgs := make([]string, 0, fixed+len(includes))
 
 	// Prologue: compiler, target triple, optional -march, assembler search path.
@@ -511,6 +520,15 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	}
 
 	cmdArgs = append(cmdArgs, suppressionBlock...)
+
+	// PR-M3-openssl-as-cflags: SFLAGS slot — assembler-only flag bundle
+	// from `SET_APPEND(SFLAGS ...)` in the module's ya.make. Sits
+	// between the 2nd suppressionBlock and the trailing `-c -o`, mirror
+	// of upstream ymake's `$CFLAGS $SFLAGS $SRCFLAGS -c -o ...` order
+	// (build/ymake.core.conf:3217). Empirical anchor: openssl
+	// aesni-mb-x86_64.s.o cmd_args[137..139] = -mavx512bw / -mavx512ifma
+	// / -mavx512vl right before -c.
+	cmdArgs = append(cmdArgs, in.SFlags...)
 
 	// Output and input: -c -o <out> <in>, trailing all flags.
 	cmdArgs = append(cmdArgs, "-c", "-o", outputPath, inputPath)
