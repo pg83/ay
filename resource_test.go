@@ -373,6 +373,88 @@ func TestChunkPySrcEntriesEmptyReturnsNil(t *testing.T) {
 	}
 }
 
+// TestChunkPySrcEntriesLibInputsAggregate asserts the per-chunk `inps`
+// list carries each yapyc3 entry's pathInput AND its corresponding .py
+// source file from $(SOURCE_ROOT), AND that the chunk-straddle entry
+// (synchronize.py.3kp2.yapyc3 in Lib's first chunk) lands in BOTH the
+// straddled chunks' inps lists. PR-M3-py-objcopy-aggregation reproduction:
+// REF objcopy_0299ac47a... has 13 yapyc3 + 13 .py in inputs[] while
+// cmd_args --inputs only carries the 12 non-straddler yapyc3s.
+func TestChunkPySrcEntriesLibInputsAggregate(t *testing.T) {
+	srcs := parsePySrcsTopLevel(t, "/home/pg/monorepo/yatool_orig/contrib/tools/python3/Lib/ya.make")
+	d := &moduleData{
+		pySrcs:       srcs,
+		pyBuildNoPY:  true,
+		pyBuildNoPYC: false,
+		pyTopLevel:   true,
+		moduleStmt:   &ModuleStmt{Name: "PY3_LIBRARY"},
+	}
+	entries := buildPySrcEntries(d, "contrib/tools/python3/Lib")
+	chunks := chunkPySrcEntries(entries)
+	// Locate the chunk whose hash matches REF objcopy_0299ac47a...
+	var found *pySrcChunk
+	for i := range chunks {
+		if objcopyHash(chunks[i].paths, chunks[i].keys, chunks[i].kvsHash, "contrib/tools/python3/Lib", "PY3") == "0299ac47a84f85e85182c986c0" {
+			found = &chunks[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("chunk with hash 0299ac47a... not found")
+	}
+
+	// Expected inputs[].yapyc3 (13 entries, sorted): popen_fork → synchronize.
+	expectedYapyc := []string{
+		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_fork.py.3kp2.yapyc3",
+		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_forkserver.py.3kp2.yapyc3",
+		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_posix.py.3kp2.yapyc3",
+		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_win32.py.3kp2.yapyc3",
+		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/process.py.3kp2.yapyc3",
+		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/queues.py.3kp2.yapyc3",
+		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/reduction.py.3kp2.yapyc3",
+		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/resource_sharer.py.3kp2.yapyc3",
+		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/resource_tracker.py.3kp2.yapyc3",
+		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/shared_memory.py.3kp2.yapyc3",
+		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/sharedctypes.py.3kp2.yapyc3",
+		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/spawn.py.3kp2.yapyc3",
+		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/synchronize.py.3kp2.yapyc3",
+	}
+	expectedPy := []string{
+		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_fork.py",
+		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_forkserver.py",
+		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_posix.py",
+		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_win32.py",
+		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/process.py",
+		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/queues.py",
+		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/reduction.py",
+		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/resource_sharer.py",
+		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/resource_tracker.py",
+		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/shared_memory.py",
+		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/sharedctypes.py",
+		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/spawn.py",
+		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/synchronize.py",
+	}
+
+	inSet := func(xs []string) map[string]struct{} {
+		m := make(map[string]struct{}, len(xs))
+		for _, x := range xs {
+			m[x] = struct{}{}
+		}
+		return m
+	}
+	have := inSet(found.inps)
+	for _, x := range expectedYapyc {
+		if _, ok := have[x]; !ok {
+			t.Errorf("chunk inps missing yapyc3 %s", x)
+		}
+	}
+	for _, x := range expectedPy {
+		if _, ok := have[x]; !ok {
+			t.Errorf("chunk inps missing .py source %s", x)
+		}
+	}
+}
+
 // parsePySrcsTopLevel pulls the `.py` source list out of a `PY_SRCS(TOP_LEVEL ...)`
 // block in an upstream ya.make. PR-M3-resource-objcopy-chunker-precision
 // uses this to feed the actual contrib/tools/python3 source lists into the

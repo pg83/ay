@@ -707,6 +707,18 @@ type pySrcEntry struct {
 	kvHash    string // pre-rootrel-expansion form (placeholder retained)
 	kvCmd     string // post-rootrel-expansion form (placeholder expanded to <actualUnit>/<value>)
 	inputDep  string // inputs[] graph slot: same as pathInput
+
+	// extraSrcInput is the additional `.py` source-tree input the upstream
+	// ymake scanner threads into the objcopy node's `inputs[]` whenever the
+	// entry's resfs target is a `.yapyc3` bytecode (which is itself built
+	// from the `.py` source by `on_py3_compile_bytecode`). For raw `.py`
+	// entries this is empty (pathInput already covers the .py path). For
+	// yapyc3 entries it is `$(SOURCE_ROOT)/<actualUnit>/<srcRel>`.
+	// Verified against REF Lib chunks: `inputs[].py` count consistently
+	// matches `inputs[].yapyc3` count one-to-one, even when the entry
+	// straddles a chunk boundary (synchronize.py.3kp2.yapyc3 / synchronize.py
+	// in both objcopy_0299ac47a... and objcopy_a5d68f981...).
+	extraSrcInput string
 }
 
 // buildPySrcEntries derives the ordered (kv,path,key) triples that the
@@ -749,12 +761,13 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
 			ypKvCmd := "resfs/src/" + ypKey + "=" + actualUnit + "/" + srcRel + suffix
 			out = append(out, pySrcEntry{
-				pathHash:  ypPathHash,
-				pathInput: ypPathInput,
-				key:       ypKey,
-				kvHash:    ypKvHash,
-				kvCmd:     ypKvCmd,
-				inputDep:  ypPathInput,
+				pathHash:      ypPathHash,
+				pathInput:     ypPathInput,
+				key:           ypKey,
+				kvHash:        ypKvHash,
+				kvCmd:         ypKvCmd,
+				inputDep:      ypPathInput,
+				extraSrcInput: "$(SOURCE_ROOT)/" + actualUnit + "/" + srcRel,
 			})
 		}
 
@@ -789,6 +802,26 @@ type pySrcChunk struct {
 	kvsHash  []string
 	kvsCmd   []string
 	pathInps []string
+
+	// inps holds the upstream-scanner-discovered `inputs[]` fragment for
+	// this chunk: every entry whose KV add OR path+key add lands in this
+	// chunk contributes its `pathInput` and (when non-empty) its
+	// `extraSrcInput`. The chunker emits in declaration order with
+	// per-chunk deduplication; the emitter merges with the tooling prefix
+	// (rescompiler/rescompressor/objcopy.py) before writing the node.
+	// Captures the chunk-straddle case where an entry's KV is in chunk N
+	// but its path+key is in chunk N+1 (the entry's paths land in BOTH
+	// chunks' inps lists — REF byte-exact, see resource_test.go).
+	inps []string
+}
+
+// lastEq returns true when `s` equals the last element of `xs`. Used by
+// chunkPySrcEntries to dedupe consecutive identical input additions
+// emitted by the KV-then-path-key pair on the same entry within one
+// chunk; the cross-chunk straddle case is preserved because the two
+// adds land in different chunks (and thus different `inps` lists).
+func lastEq(xs []string, s string) bool {
+	return len(xs) > 0 && xs[len(xs)-1] == s
 }
 
 // chunkPySrcEntries partitions a declaration-ordered entry list into
@@ -831,10 +864,24 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 		cmdLen = 0
 	}
 
+	// addInps appends the entry's pathInput + extraSrcInput to the current
+	// chunk's `inps` list, deduping against the most recently appended
+	// values so a same-chunk KV+path-key pair contributes each path
+	// exactly once. Straddlers retain both adds (one per chunk).
+	addInps := func(e pySrcEntry) {
+		if !lastEq(cur.inps, e.pathInput) {
+			cur.inps = append(cur.inps, e.pathInput)
+		}
+		if e.extraSrcInput != "" && !lastEq(cur.inps, e.extraSrcInput) {
+			cur.inps = append(cur.inps, e.extraSrcInput)
+		}
+	}
+
 	for _, e := range entries {
 		// HandleResource("-", e.kvHash): kv add.
 		cur.kvsHash = append(cur.kvsHash, e.kvHash)
 		cur.kvsCmd = append(cur.kvsCmd, e.kvCmd)
+		addInps(e)
 		cmdLen += rootCmdLen + len(e.kvHash)
 		if cmdLen >= maxCmdLen {
 			flush()
@@ -845,6 +892,7 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 		cur.paths = append(cur.paths, e.pathHash)
 		cur.keys = append(cur.keys, kb64)
 		cur.pathInps = append(cur.pathInps, e.pathInput)
+		addInps(e)
 		cmdLen += rootCmdLen + len(e.pathHash) + len(kb64)
 		if cmdLen >= maxCmdLen {
 			flush()
@@ -914,12 +962,16 @@ func emitPySrcObjcopy(
 
 		// inputs[]: rescompiler + rescompressor + per-entry source files +
 		// objcopy.py. Order from REF (multi-entry rapidjson shape, PR-A):
-		// tooling first, source files, script last.
+		// tooling first, source files, script last. PR-M3-py-objcopy-aggregation:
+		// uses `ch.inps` (KV-add AND path+key-add slots, deduped per chunk)
+		// instead of `ch.pathInps`; for yapyc3-only modules (Lib) this adds
+		// the underlying .py source as an extra input, and on chunk-straddles
+		// the spillover entry's yapyc3 + .py land in BOTH chunks' inputs[].
 		inputs := []string{
 			"$(BUILD_ROOT)/tools/rescompiler/rescompiler",
 			"$(BUILD_ROOT)/tools/rescompressor/rescompressor",
 		}
-		inputs = append(inputs, ch.pathInps...)
+		inputs = append(inputs, ch.inps...)
 		inputs = append(inputs, "$(SOURCE_ROOT)/build/scripts/objcopy.py")
 
 		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)"}
