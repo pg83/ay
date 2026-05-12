@@ -152,6 +152,16 @@ type moduleEmitResult struct {
 	// but contribute no archive of their own.
 	PeerArchiveClosureRefs  []NodeRef
 	PeerArchiveClosurePaths []string
+	// isPyLibrary is true when this module's declared type is a Python
+	// library/program variant (PY3_LIBRARY, PY23_LIBRARY, PY2_LIBRARY,
+	// PY23_NATIVE_LIBRARY, PY2_PROGRAM, PY3_PROGRAM). PR-M3-protobuf-
+	// umbrella-trigger: applyUmbrellaAddIncl reads this flag to suppress
+	// umbrella ADDINCL propagation into Python-bound sub-libraries that
+	// happen to sit under a propagating ancestor's path prefix
+	// (devtools/ymake/contrib/python-rapidjson, devtools/ymake/libs/
+	// ymakeyaml). REF does not propagate the umbrella's brotli/snappy/re2
+	// set into PY*_LIBRARY consumers.
+	isPyLibrary bool
 	// LDPluginRefs / LDPluginPaths is the transitive set of LD plugin
 	// CP nodes a consumer PROGRAM must wire into its
 	// `--start-plugins ... --end-plugins` block. PR-35k: the only
@@ -820,16 +830,33 @@ func collectModule(modulePath string, stmts []Stmt, env Environment, pathFlags F
 	// every `.ev`-bearing module — places those peers ahead of sparsehash
 	// in the consumer's transitive ADDINCL aggregation.
 	hasEv := false
+	hasProto := false
 	for _, src := range d.srcs {
-		if strings.HasSuffix(src, ".ev") {
+		switch {
+		case strings.HasSuffix(src, ".ev"):
 			hasEv = true
-
-			break
+		case strings.HasSuffix(src, ".proto"):
+			hasProto = true
 		}
 	}
 
 	if hasEv {
 		d.peerdirs = append(d.peerdirs, "library/cpp/eventlog", "contrib/libs/protobuf")
+	}
+
+	// PR-M3-protobuf-umbrella-trigger: per upstream build/conf/proto.conf:461-465,
+	// the `_CPP_PROTO_CMD(File)` macro fires once per `.proto` source and
+	// appends `.PEERDIR=contrib/libs/protobuf` to the owning module. The
+	// .ev branch above already covers `_CPP_EVLOG_CMD` / `_CPP_PROTO_EVLOG_CMD`
+	// for .ev sources; mirror it here so .proto-only PROTO_LIBRARYs (e.g.
+	// library/cpp/eventlog/proto, library/cpp/retry/protos,
+	// library/cpp/protobuf/{json,util}/proto) propagate protobuf/src +
+	// transitive abseil-cpp{,-tstring} -I to their downstream .pb.cc.o
+	// consumers. Guarded on PROTO_LIBRARY only — other module types may
+	// declare .proto sources for codegen without compiling them as
+	// protobuf-runtime consumers.
+	if hasProto && !hasEv && d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" {
+		d.peerdirs = append(d.peerdirs, "contrib/libs/protobuf")
 	}
 
 	return d
@@ -2538,6 +2565,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		result := &moduleEmitResult{
 			headerOnly:              true,
+			isPyLibrary:             isPyLibraryType(d.moduleStmt.Name),
 			AddInclGlobal:           mergeDedup(d.addInclGlobal, peerContribs.addIncl),
 			OwnAddInclGlobal:        append([]string(nil), d.addInclGlobal...),
 			// PR-M3-peer-cflags-global-ordering: peer-transitive first,
@@ -3835,6 +3863,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ARRef:                   ldRef,
 			ARPath:                  ldPath,
 			isPROGRAM:               true,
+			isPyLibrary:             isPyLibraryType(d.moduleStmt.Name),
 			LDRef:                   ldRef,
 			LDPath:                  ldPath,
 			AddInclGlobal:           effectiveAddInclGlobal,
@@ -3955,6 +3984,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ARPath:                  arPath,
 		hasPlainAR:              len(ccRefs) > 0,
 		isPROGRAM:               false,
+		isPyLibrary:             isPyLibraryType(d.moduleStmt.Name),
 		LDRef:                   arRef,
 		LDPath:                  arPath,
 		AddInclGlobal:           effectiveAddInclGlobal,
@@ -6252,14 +6282,27 @@ func applyUmbrellaAddIncl(ctx *genCtx) {
 	}
 
 	pathAddIncl := map[key][]string{}
+	// pyByPath records (path, platform) keys whose module declared a
+	// PY*_LIBRARY-family type. PR-M3-protobuf-umbrella-trigger: the
+	// umbrella propagator must skip CC nodes belonging to Python-bound
+	// modules (rapidjson, ymakeyaml under devtools/ymake). REF does not
+	// emit brotli/snappy/re2 for those even though their peer chain
+	// otherwise meets the hasNonLangDefault gate (Python/libffi/lzma
+	// includes are non-language-default contributions).
+	pyByPath := map[key]bool{}
 
 	for inst, res := range ctx.memo {
-		if res == nil || len(res.AddInclGlobal) == 0 {
+		if res == nil {
 			continue
 		}
 
 		k := key{path: inst.Path, platform: string(inst.Target)}
-		pathAddIncl[k] = res.AddInclGlobal
+		if len(res.AddInclGlobal) != 0 {
+			pathAddIncl[k] = res.AddInclGlobal
+		}
+		if res.isPyLibrary {
+			pyByPath[k] = true
+		}
 	}
 
 	// pathPrefixAncestors yields the strict path-prefix ancestors of
@@ -6287,6 +6330,16 @@ func applyUmbrellaAddIncl(ctx *genCtx) {
 
 		modulePath, ok := n.TargetProperties["module_dir"]
 		if !ok || modulePath == "" {
+			continue
+		}
+
+		// PR-M3-protobuf-umbrella-trigger: PY*_LIBRARY consumers do not
+		// receive umbrella ADDINCL propagation, even when their own
+		// peer chain has non-language-default contributions
+		// (python/Include, libffi/, lzma/, openssl/, abseil-cpp via
+		// runtime_py3). REF empirically excludes rapidjson + ymakeyaml
+		// under devtools/ymake from the brotli/snappy/re2 propagation.
+		if pyByPath[key{path: modulePath, platform: n.Platform}] {
 			continue
 		}
 
