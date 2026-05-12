@@ -4177,6 +4177,27 @@ func mergeDedup(a, b []string) []string {
 	return out
 }
 
+// filterEnSerializedSiblings drops entries whose VFS path ends with the
+// EN-generator output suffixes `_serialized.cpp` or `_serialized.h`.
+// Used at the R6 input boundary: REF's R6 closure walks transitively
+// through a `#include <..._serialized.h>` directive's descendants but
+// does not list the EN-generated `.cpp`/`.h` siblings themselves in the
+// R6 node's inputs. The filter preserves descendant order for the
+// retained entries.
+func filterEnSerializedSiblings(in []string) []string {
+	out := make([]string, 0, len(in))
+
+	for _, p := range in {
+		if strings.HasSuffix(p, "_serialized.cpp") || strings.HasSuffix(p, "_serialized.h") {
+			continue
+		}
+
+		out = append(out, p)
+	}
+
+	return out
+}
+
 // emitOwnLDPlugins emits one CP node per `LD_PLUGIN(name.py)` entry
 // declared in this module. The CP src is
 // `$(SOURCE_ROOT)/<modulePath>/<name>` and the dst is
@@ -5445,6 +5466,19 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// where positions 1.. of each are identical (the `.rl6`
 		// source plus its 1007-header transitive closure).
 		rl6Closure := walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
+
+		// PR-M3-final-r6-stats-enums-leak: REF's R6 closure resolves a
+		// transitive `#include <..._serialized.h>` directive (via stats.h
+		// or sibling) for its descendant headers (e.g. util/generic/
+		// serialized_enum.h) but does NOT add the generated EN
+		// `_serialized.{cpp,h}` siblings themselves to the R6 inputs.
+		// Our codegen registry resolves the directive to the registered
+		// $(BUILD_ROOT)/<...>_serialized.h output and follows EmitsIncludes,
+		// which pulls in both the .h itself and its sibling .cpp. Strip
+		// both at the R6 input boundary; the descendant util headers
+		// (which REF does carry) reach R6 inputs through the same
+		// EmitsIncludes traversal and are unaffected.
+		rl6Closure = filterEnSerializedSiblings(rl6Closure)
 
 		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, rl6Closure, ctx.emit)
 
