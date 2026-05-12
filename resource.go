@@ -34,6 +34,12 @@ const rootCmdLen = 200
 // the end (single-flush only); the chunker lands in PR-C.
 const maxCmdLen = 8000
 
+// objcopyScriptPath is the SOURCE_ROOT path to the upstream packer
+// script. Carried on every emitted objcopy node's `inputs` slot and
+// propagated into the enclosing module's `.global.a` member inputs
+// (PR-M3-globalA-narrow-closure).
+const objcopyScriptPath = "$(SOURCE_ROOT)/build/scripts/objcopy.py"
+
 // objcopyHash computes the upstream `GetHashForOutput` digest used
 // to form the `objcopy_<hex>.o` output filename. The list is the
 // concatenation of (paths, base64-padded keys, raw kvs, "$S/" + unitPath);
@@ -175,14 +181,14 @@ func emitResourceObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
 	d *moduleData,
-) ([]NodeRef, []string) {
+) ([]NodeRef, []string, []string) {
 	// PR-B: emit kv_only sibling shapes (PY_MAIN, py/namespace,
 	// py/no_check_imports) alongside the legacy RESOURCE/RESOURCE_FILES
 	// flush. Each sibling is independent and conditional on its own
 	// per-module data; a module may emit any non-empty subset.
 	hasKvOnly := d.pyMain != "" || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0
 	if len(d.resources) == 0 && !hasKvOnly {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	rescompilerLDRef := walkHostToolForRef(ctx, instance, "tools/rescompiler/bin")
@@ -190,6 +196,14 @@ func emitResourceObjcopy(
 
 	var refs []NodeRef
 	var outputs []string
+	// PR-M3-globalA-narrow-closure: collect the SOURCE_ROOT-rooted
+	// member inputs each emitted objcopy node would contribute to the
+	// enclosing module's .global.a archive. Every emitted node carries
+	// `objcopy.py` in its own `inputs[]`; path-based flushes additionally
+	// carry their source paths. The kv-only sub-emitters return only
+	// `objcopy.py`. Caller dedups + folds into globalMemberInputs.
+	var globalMemberInputs []string
+	addGlobal := func(p string) { globalMemberInputs = append(globalMemberInputs, p) }
 
 	// kv_only siblings — each fires only when its trigger is present
 	// (no-op return when not). Emission order does NOT affect L4 byte-
@@ -197,28 +211,32 @@ func emitResourceObjcopy(
 	if r, o := emitPyNamespaceObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
 		refs = append(refs, r)
 		outputs = append(outputs, o)
+		addGlobal(objcopyScriptPath)
 	}
 
 	if r, o := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
 		refs = append(refs, r)
 		outputs = append(outputs, o)
+		addGlobal(objcopyScriptPath)
 	}
 
 	if r, o := emitNoCheckImportsObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
 		refs = append(refs, r)
 		outputs = append(outputs, o)
+		addGlobal(objcopyScriptPath)
 	}
 
 	// PR-M3-resource-objcopy-C: per-PY_SRCS resfs entry objcopy nodes.
 	// One node per packer-flush chunk; small modules fit in one chunk
 	// (single-entry exact match); large modules (Lib, lib2/py) split
 	// into multiple chunks via chunkPySrcEntries.
-	srcRefs, srcOuts := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
+	srcRefs, srcOuts, srcGlobalInputs := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
 	refs = append(refs, srcRefs...)
 	outputs = append(outputs, srcOuts...)
+	globalMemberInputs = append(globalMemberInputs, srcGlobalInputs...)
 
 	if len(d.resources) == 0 {
-		return refs, outputs
+		return refs, outputs, globalMemberInputs
 	}
 
 	// Filter rejected entries (mirrors objcopy.h:84-96 CanHandle):
@@ -361,6 +379,14 @@ func emitResourceObjcopy(
 		refs = append(refs, r)
 		outputs = append(outputs, outputObj)
 
+		// PR-M3-globalA-narrow-closure: this node's SOURCE_ROOT inputs
+		// (per-entry source paths + objcopy.py) must propagate to the
+		// enclosing module's .global.a archive's `inputs` slot.
+		for _, p := range cur.paths {
+			addGlobal("$(SOURCE_ROOT)/" + instance.Path + "/" + p)
+		}
+		addGlobal(objcopyScriptPath)
+
 		cur = acc{}
 	}
 
@@ -385,7 +411,7 @@ func emitResourceObjcopy(
 
 	flush()
 
-	return refs, outputs
+	return refs, outputs, globalMemberInputs
 }
 
 // expandRootrel substitutes the upstream
@@ -919,23 +945,23 @@ func emitPySrcObjcopy(
 	d *moduleData,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) ([]NodeRef, []string) {
+) ([]NodeRef, []string, []string) {
 	if len(d.pySrcs) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if d.moduleStmt == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// PY3-flavoured modules only — non-PY3 PY_SRCS does not exist in
 	// the M3 closure (the gate mirrors emitPyNamespaceObjcopy:572-578).
 	if resourceModuleTag(d.moduleStmt.Name) == "" {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	entries := buildPySrcEntries(d, instance.Path)
 	if len(entries) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	chunks := chunkPySrcEntries(entries)
@@ -943,6 +969,12 @@ func emitPySrcObjcopy(
 
 	refs := make([]NodeRef, 0, len(chunks))
 	outputs := make([]string, 0, len(chunks))
+	// PR-M3-globalA-narrow-closure: per-chunk SOURCE_ROOT inputs (PY_SRCS
+	// raw .py paths + objcopy.py) feed the enclosing module's .global.a.
+	// BUILD_ROOT-rooted .yapyc3 path entries are excluded — they are
+	// non-.o codegen artefacts and the AR aggregator's filter
+	// (isBuildRootCodegenProduct) would drop them anyway.
+	var globalMemberInputs []string
 	for _, ch := range chunks {
 		hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path, moduleTag)
 		outputObj := "$(BUILD_ROOT)/" + instance.Path + "/objcopy_" + hash + ".o"
@@ -1018,9 +1050,18 @@ func emitPySrcObjcopy(
 		r := ctx.emit.Emit(node)
 		refs = append(refs, r)
 		outputs = append(outputs, outputObj)
+
+		// SOURCE_ROOT-rooted inputs propagate into .global.a; BUILD_ROOT
+		// .yapyc3 entries are filtered by the AR aggregator (PR-M3-l2).
+		for _, p := range ch.pathInps {
+			if strings.HasPrefix(p, "$(SOURCE_ROOT)/") {
+				globalMemberInputs = append(globalMemberInputs, p)
+			}
+		}
+		globalMemberInputs = append(globalMemberInputs, objcopyScriptPath)
 	}
 
-	return refs, outputs
+	return refs, outputs, globalMemberInputs
 }
 
 // walkHostToolForRef walks `path` as a host tool and returns the LD
