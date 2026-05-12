@@ -324,7 +324,18 @@ var DefaultIfEnv = Environment{
 		"OPENSOURCE":                    true, // M3: open-source Arcadia export (sg2.json reference).
 		"YA_OPENSOURCE":                 false, // M3: ya-tool open-source build flag.
 		"EXTERNAL_PY_FILES":             false, // M3: library/python/runtime_py3 external-py variant.
-		"USE_ARCADIA_PYTHON":            false, // M3: use Arcadia Python; false = use Arcadia Python3 bundle.
+		// USE_ARCADIA_PYTHON=true: the reference sg2.json was generated
+		// against a tree where ARCADIA_PYTHON is enabled. The flag gates
+		// the `library/python/symbols/{module,libc,python}` PEERDIR
+		// block in `contrib/libs/python/ya.make` (IF (USE_ARCADIA_PYTHON))
+		// plus the `contrib/tools/python3` PEERDIR + `Include` ADDINCL
+		// in `library/python/runtime_py3/stage0pycc/ya.make` and
+		// `tools/py3cc/bin/ya.make` (each takes the ELSE arm when the
+		// flag is true). Verified empirically: REF stage0pycc/main.cpp.pic.o
+		// carries `-I$(SOURCE_ROOT)/contrib/tools/python3/Include`, which
+		// only the ELSE arm contributes; REF aarch64 emits 14 symbols/*
+		// nodes that only the IF arm in contrib/libs/python contributes.
+		"USE_ARCADIA_PYTHON": true,
 		"USE_PYTHON3_PREV":              false, // M3: use previous Python3 toolchain.
 		"PREBUILT":                      false, // M3: use prebuilt tools (tools/py3cc, rescompiler, etc.).
 		"PY_PROTOS_FOR":                 false, // M3: PROTO_LIBRARY PY_PROTOS_FOR flag; false = no Python proto.
@@ -405,6 +416,16 @@ var DefaultIfEnv = Environment{
 		"address":   "address",
 		"thread":    "thread",
 		"leak":      "leak",
+		// PR-M3-aarch64-py-closure: MODULE_TAG = "PY3" for our M3 closure.
+		// `contrib/libs/python/ya.make:32` gates on `IF (MODULE_TAG == "PY2")`
+		// to choose the Python 2 vs Python 3 PEERDIR branch; with USE_PYTHON3
+		// (the only Python variant exercised by our M3 closure) the ELSE arm
+		// is the intended branch, which requires MODULE_TAG to compare
+		// non-equal to "PY2". "PY3" mirrors the value `module PY3_LIBRARY`
+		// sets via `SET(MODULE_LANG PY3)` and the per-Python-variant module
+		// declarations in build/conf/python.conf.
+		"MODULE_TAG":  "PY3",
+		"PY2":         "PY2", // bare-ident literal used in `IF (MODULE_TAG == "PY2")`.
 	},
 	ints: map[string]int{
 		// ANDROID_API: defensive default for libc_compat's `<`
