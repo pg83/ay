@@ -3189,6 +3189,26 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	isPy3NativeLib := d.moduleStmt.Name == "PY23_NATIVE_LIBRARY" ||
 		d.moduleStmt.Name == "PY23_LIBRARY"
 
+	// PR-M3-module-tag-and-stats-enums-dep: PY23_NATIVE_LIBRARY's PY3
+	// submodule calls PYTHON3_ADDINCL() → SET(MODULE_TAG PY3_NATIVE)
+	// (build/conf/python.conf:995); PY23_LIBRARY's PY3 submodule inherits
+	// PY3_LIBRARY → _ARCADIA_PYTHON3_ADDINCL() → SET(MODULE_TAG PY3)
+	// (python.conf:1005). The REF graph surfaces these as the lower-cased
+	// `target_properties.module_tag = "py3_native"` / `"py3"` on the
+	// per-source CC nodes and the regular (.a) AR archive. Plain PY3_LIBRARY
+	// (e.g. library/python/runtime_py3) carries no module_tag on its
+	// regular CC/AR — it inherits the default for its type and upstream
+	// omits redundant properties. The "global" / "py3_global" /
+	// "py3_native_global" suffixed tags on .global.a archives are set
+	// independently at the EmitARGlobalNamedTagged call site below.
+	var perModuleCCTag string
+	switch d.moduleStmt.Name {
+	case "PY23_NATIVE_LIBRARY":
+		perModuleCCTag = "py3_native"
+	case "PY23_LIBRARY":
+		perModuleCCTag = "py3"
+	}
+
 	// arNameFn selects the archive naming function for this module:
 	//   - PY23_NATIVE_LIBRARY → "libpy3c" prefix (Py3cArchiveName)
 	//   - PY3_LIBRARY / PY2_LIBRARY / PY23_LIBRARY / PY2_PROGRAM / PY3_PROGRAM → "libpy3" prefix (Py3ArchiveName)
@@ -3226,6 +3246,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		DefaultVars:          d.defaultVars,
 		DefaultVarOrder:      d.defaultVarOrder,
 		Py3Suffix:            isPy3NativeLib,
+		ModuleTag:            perModuleCCTag,
 	}
 
 	// PR-30 D06: ancestor-only SRCDIR rebase. The "PROGRAM with SRCDIR
@@ -3794,7 +3815,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	if len(ccRefs) > 0 {
-		arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, ctx.emit)
+		// PR-M3-module-tag-and-stats-enums-dep: the plain `.a` archive for
+		// PY23_LIBRARY / PY23_NATIVE_LIBRARY surfaces `module_tag=py3` /
+		// `module_tag=py3_native` in REF. Empty tag preserves the
+		// historical no-tag shape for every other module type.
+		if perModuleCCTag != "" {
+			arRef = EmitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, ctx.emit)
+		} else {
+			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, ctx.emit)
+		}
 	}
 
 	_ = peerArchiveRefs // retained as a loop accumulator for the PROGRAM LD branch above; intentionally unused for the LIBRARY AR.
@@ -4436,9 +4465,19 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				"pc": "yellow",
 			},
 			Tags: []string{},
-			TargetProperties: map[string]string{
-				"module_dir": instance.Path,
-			},
+			TargetProperties: func() map[string]string {
+				tp := map[string]string{"module_dir": instance.Path}
+				// PR-M3-module-tag-and-stats-enums-dep: PY23_LIBRARY's
+				// .yapyc3 nodes carry `module_tag=py3` in REF (matches
+				// MODULE_TAG=PY3 from _ARCADIA_PYTHON3_ADDINCL via the
+				// PY3 submodule). PY3_LIBRARY / PY2_LIBRARY etc keep no
+				// tag (the type is its own default and upstream omits
+				// redundant properties).
+				if d.moduleStmt.Name == "PY23_LIBRARY" {
+					tp["module_tag"] = "py3"
+				}
+				return tp
+			}(),
 			Platform: string(instance.Target),
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
@@ -4985,6 +5024,15 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// scanner-aware srcIn down to EmitCC.
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 
+		// PR-M3-module-tag-and-stats-enums-dep: thread codegen producer
+		// dep refs onto the CC node whenever its IncludeInputs pulls in a
+		// $(BUILD_ROOT)-rooted EN output (e.g. `stats_enums.h_serialized.h`
+		// reaches consumers across devtools/ymake/** via diag/stats.h's
+		// peer chain). REF wires the producing EN node into the
+		// consumer's `deps`; without this the consumer's inputs are
+		// byte-exact but the deps comparator flags a missing edge.
+		srcIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcIn.IncludeInputs)
+
 		ref, outPath := EmitCC(srcInstance, srcRel, srcIn, ctx.emit)
 
 		// AR/LD aggregate the per-CC inputs (primary source +
@@ -5170,6 +5218,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccIn.Generator = r6Ref
 		ccIn.HasGenerator = true
 		ccIn.IncludeInputs = ccIncludeInputs
+		// PR-M3-module-tag-and-stats-enums-dep: surface codegen-producer
+		// deps when the .rl6.cpp's transitive header set hits an EN
+		// output (devtools/ymake/include_parsers/*.rl6 reaches
+		// diag/stats_enums.h_serialized.h through the same diag.h
+		// peer-include chain as the regular CC sources in the module).
+		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, ccIncludeInputs)
 		// PR-41 Fix H: ymake's _LANG_CFLAGS_RL=-Wno-implicit-fallthrough applies to CC
 		// compiles whose source is a .rl6-generated .cpp (build/ymake.core.conf).
 		// Extend in M3+ for .pyx, .py.py3, .rl5 when their closures surface.
@@ -5642,6 +5696,50 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 	}
 
 	return vfsSource(srcRelOnDisk)
+}
+
+// resolveCodegenDepRefs scans `includeInputs` for `$(BUILD_ROOT)/...`
+// paths whose producer is registered in `ctx.enOutputs` and returns the
+// deduped NodeRefs in scan-discovery order. Used by the per-source CC
+// emitter to thread codegen-producer dependencies onto consumer CC
+// nodes whose transitive header closure pulls in a generated
+// `_serialized.h` (or `.cpp`). REF's CC node carries an explicit `deps`
+// entry for each such producer; without this wiring the consumer CC
+// fails the deps comparator even though its inputs are byte-exact.
+//
+// Today only EN producers register a (path → NodeRef) map. PB / EV /
+// CF / etc. follow the same emission order (codegen before consumer
+// CC) but their output→ref mappings live in per-file local slices, not
+// genCtx; extending this helper to those families requires lifting
+// those maps onto genCtx first. The scoped EN-only resolution is the
+// 66-node yield identified by PR-M3 probe v4.
+func resolveCodegenDepRefs(ctx *genCtx, includeInputs []string) []NodeRef {
+	if len(ctx.enOutputs) == 0 || len(includeInputs) == 0 {
+		return nil
+	}
+
+	var refs []NodeRef
+	seen := make(map[NodeRef]struct{}, 2)
+
+	for _, p := range includeInputs {
+		if !strings.HasPrefix(p, "$(BUILD_ROOT)/") {
+			continue
+		}
+
+		ref, ok := ctx.enOutputs[p]
+		if !ok {
+			continue
+		}
+
+		if _, dup := seen[ref]; dup {
+			continue
+		}
+
+		seen[ref] = struct{}{}
+		refs = append(refs, ref)
+	}
+
+	return refs
 }
 
 // walkClosure resolves the transitive include closure of a source

@@ -372,6 +372,30 @@ func EmitARNamed(
 	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, emit)
 }
 
+// EmitARNamedTagged is like EmitARNamed but stamps an explicit
+// `module_tag=<tag>` onto target_properties. PY23_LIBRARY's plain `.a`
+// carries `py3` and PY23_NATIVE_LIBRARY's plain `libpy3c*.a` carries
+// `py3_native` per the REF graph; the rest of the named archives stay
+// untagged (regular `.a` archives have no module_tag in REF).
+func EmitARNamedTagged(
+	instance ModuleInstance,
+	archiveBaseName string,
+	tag string,
+	objRefs []NodeRef,
+	objPaths []string,
+	peerArchiveRefs []NodeRef,
+	memberInputs []string,
+	emit Emitter,
+) NodeRef {
+	if len(objRefs) != len(objPaths) {
+		ThrowFmt("EmitARNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
+	}
+
+	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
+
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, memberInputs, emit)
+}
+
 // EmitARGlobalNamedTagged is like EmitARGlobalNamed but uses an
 // explicit module_tag (e.g. "py3_global", "py3_native_global"). The
 // canonical "global" tag remains the default; callers needing the
