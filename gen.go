@@ -400,7 +400,10 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"PYTHON3":               {},
 	"BUILD_ONLY_IF":         {}, // PR-27: contrib/libs/cxxsupp/libcxxrt
 	"MESSAGE":               {}, // PR-27: contrib/libs/cxxsupp/libcxx (FATAL_ERROR in dead branch)
-	"SRC_C_SSE41":           {}, // PR-27: util/charset (arch-specific compile-flag wrapper)
+	// SRC_C_SSE41 / SSE2 / SSSE3 / AVX / XOP / SSE3 / SSE4: PR-M3-simd-permutations
+	// handles these in applyUnknownStmt → d.simdSrcs (one CC node per
+	// variant). Removed from the metadata whitelist so they no longer
+	// no-op.
 	"NO_CLANG_COVERAGE":     {}, // PR-30: contrib/tools/yasm
 	"NO_PROFILE_RUNTIME":    {}, // PR-30: contrib/tools/yasm
 	"WITHOUT_VERSION": {}, // PR-32 D03: contrib/libs/musl/include neighbours; metadata-only.
@@ -471,11 +474,6 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"AR_PLUGIN":                       {}, // Archive plugin declaration; metadata.
 	"NO_JOIN_SRC":                     {}, // Suppresses JOIN_SRCS optimisation; metadata.
 	"MASMFLAGS":                       {}, // MASM compiler flags (Windows); no-op on Linux.
-	"SRC_C_AVX":                       {}, // AVX-specific SRC variant; deferred to PR-M3-D.
-	"SRC_C_SSE2":                      {}, // SSE2-specific SRC variant; deferred.
-	"SRC_C_SSE4":                      {}, // SSE4-specific SRC variant; deferred.
-	"SRC_C_SSSE3":                     {}, // SSSE3-specific SRC variant; deferred.
-	"SRC_C_XOP":                       {}, // XOP-specific SRC variant; deferred.
 	"NO_MYPY":                         {}, // Suppresses mypy type checking; metadata.
 	"NO_OPTIMIZE_PY_PROTOS":           {}, // Suppresses proto Python optimisation; metadata.
 	"PROTO_NAMESPACE":                 {}, // Proto namespace declaration; semantic in PR-M3-B.
@@ -697,7 +695,7 @@ type moduleData struct {
 	// that the objcopy packer in resource.go consumes; RESOURCE_FILES are
 	// expanded inline at collect time so this slice is the canonical view
 	// for the emitter.
-	resources   []resourceEntry
+	resources []resourceEntry
 	// PR-M3-resource-objcopy-B: kv_only objcopy shapes (PY3-only).
 	// pyMain captures the `PY_MAIN(<arg>)` macro argument or the
 	// `MAIN <src.py>` modifier of `PY_SRCS(...)` — both produce a single
@@ -712,6 +710,13 @@ type moduleData struct {
 	// pathid() and the resfs value join the args by ' ' in that order;
 	// see build/plugins/ytest.py:811).
 	noCheckImports []string
+	// PR-M3-simd-permutations: per-`SRC_C_<VARIANT>` entries in
+	// declaration order. Each entry produces one CC node alongside (and
+	// in addition to) any plain SRCS / SRC / SRC_C_NO_LTO listing of the
+	// same file. AR-member ordering: emitted entries share the FLAT
+	// bucket with SRC()/SRC_C_NO_LTO entries (no `_/` infix), so
+	// reorderARMembers hoists them to the front of the archive.
+	simdSrcs []simdSrc
 	conflictMod *ModuleStmt
 }
 
@@ -1059,6 +1064,36 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		}
 
 		d.flatSrcs[filename] = struct{}{}
+	case "SRC_C_AVX", "SRC_C_SSE2", "SRC_C_SSE3", "SRC_C_SSSE3",
+		"SRC_C_SSE4", "SRC_C_SSE41", "SRC_C_XOP":
+		// PR-M3-simd-permutations: SRC_C_<V>(filename [extra_flags...])
+		// emits one CC node compiling `filename` with the variant's
+		// `-m<flag>` bundle plus the extras, into a FLAT
+		// `<src>.<variant>.pic.o` output. The cmd_args layout reuses the
+		// existing PerSourceCFlags slot (between macroPrefixMapFlags and
+		// the input path). Per `build/ymake.core.conf:3848-3923`, each
+		// macro expands to `_SRC_CUSTOM_C_CPP(... $FILE .<v> $<V>_CFLAGS
+		// $FLAGS)` — the variant CFLAGS come first, then the macro's
+		// trailing arguments.
+		variant, ok := simdVariantFor(v.Name)
+		if !ok {
+			ThrowFmt("gen: unrecognised SIMD-permutation macro %q at line %d (simdVariants table out of sync)", v.Name, v.Line)
+		}
+		if len(v.Args) == 0 {
+			ThrowFmt("gen: %s() requires at least 1 argument (filename); got 0 at line %d", v.Name, v.Line)
+		}
+
+		filename := v.Args[0]
+		flags := make([]string, 0, len(variant.CFlags)+len(v.Args)-1)
+		flags = append(flags, variant.CFlags...)
+		flags = append(flags, v.Args[1:]...)
+
+		d.simdSrcs = append(d.simdSrcs, simdSrc{
+			Src:     filename,
+			Variant: variant.Suffix,
+			CFlags:  flags,
+			Line:    v.Line,
+		})
 	case "LD_PLUGIN":
 		// PR-35k: LD_PLUGIN(name.py) declares a python plugin to be
 		// passed to the linker via `--start-plugins ... --end-plugins`
@@ -2957,6 +2992,46 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ccOutputs = append(ccOutputs, prCCOutputs[i])
 			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 			addMemberInputs(prMemberInputsList[i])
+		}
+	}
+
+	// PR-M3-simd-permutations: emit one CC node per SRC_C_<V> entry.
+	// Each variant compile reuses the regular CC flavor pipeline (same
+	// AddIncl / peer/own CFLAGS / scanner closure as the module's plain
+	// SRCS) but carries the variant `-m<flag>` bundle + extras at the
+	// PerSourceCFlags slot and a `.<variant>` suffix in the output path
+	// (FlatOutput=true so the path is `<module>/<src>.<variant>.pic.o`,
+	// no `_/` infix even when `src` is nested). The entries inherit the
+	// SRC_C_NO_LTO flat-bucket disposition for AR ordering (R8):
+	// reorderARMembers hoists them ahead of plain SRCS in the archive,
+	// matching the reference shape (blake2: SRC()s first, then the 10
+	// SIMD variants, then `_/`-infix SRCS).
+	for _, e := range d.simdSrcs {
+		variantIn := moduleInputs
+		variantIn.FlatOutput = true
+		variantIn.Variant = e.Variant
+		// Compose PerSourceCFlags = (variant CFLAGS + macro extras) +
+		// any pre-existing PerSourceCFlags for this filename declared
+		// via SRC(filename extra...) — although the reference shows no
+		// case where SIMD and SRC stack on the same file, the merge is
+		// the principled join.
+		flags := append([]string(nil), e.CFlags...)
+		if extras, ok := d.perSrcCFlags[e.Src]; ok {
+			flags = append(flags, extras...)
+		}
+		variantIn.PerSourceCFlags = flags
+
+		ref, outPath, ccIns, primaryCount, ok := emitOneSource(ctx, instance, d.srcDir, e.Src, variantIn, ancestorRebase)
+		if !ok {
+			continue
+		}
+
+		ccRefs = append(ccRefs, ref)
+		ccOutputs = append(ccOutputs, outPath)
+		ccIsFlatNoLto = append(ccIsFlatNoLto, true)
+		addMemberInputs(ccIns)
+		for i := 0; i < primaryCount && i < len(ccIns); i++ {
+			addRegularPrimary(ccIns[i])
 		}
 	}
 

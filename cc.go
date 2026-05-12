@@ -207,6 +207,13 @@ type ModuleCCInputs struct {
 	// no module_tag key is emitted (the reference for a regular LIBRARY
 	// CC of a generated .ev.pb.cc lacks the key).
 	ModuleTag string
+	// Variant marks this compile as a SIMD permutation of `srcRel`
+	// emitted via one of the `SRC_C_AVX / SSE2 / SSE3 / SSSE3 / SSE4 /
+	// SSE41 / XOP` macros (PR-M3-simd-permutations). When non-empty the
+	// output path becomes `<srcRel>.<variant><suffix>` (flat, even for
+	// srcRel with subdirs) and PerSourceCFlags carries the `-m<flag>`
+	// bundle plus any extra `-DSUFFIX=…` from the macro arglist.
+	Variant string
 }
 
 // EmitCC emits a CC node for compiling `srcRel` (a path relative to
@@ -229,6 +236,13 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 		suffix = ".pic.o"
 	} else if in.Py3Suffix {
 		suffix = ".py3.o"
+	}
+
+	// PR-M3-simd-permutations: prefix the suffix with `.<variant>` so the
+	// output path becomes `<srcRel>.<variant><suffix>`. The reference
+	// emits e.g. `<src>.avx.pic.o`, `<src>.sse41.pic.o`, etc.
+	if in.Variant != "" {
+		suffix = "." + in.Variant + suffix
 	}
 
 	outputPath, inputPath := composeCCPaths(instance, srcRel, in, suffix)
