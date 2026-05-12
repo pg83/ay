@@ -166,7 +166,7 @@ func EmitLD(
 	vcsOPath := "$(BUILD_ROOT)/" + binaryDir + "/__vcs_version__.c" + vcsOSuffix
 
 	cmd0 := composeLDCmdVcsInfo(vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath, muslOn, moduleCFlags, hostBuild)
+	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath, muslOn, moduleCFlags, hostBuild, instance.Flags.NoCompilerWarnings)
 	cmd2 := composeLDCmdLinkExe(outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, hostBuild)
 	cmd3 := composeLDCmdLinkOrCopy(binaryDir)
 
@@ -369,7 +369,9 @@ func composeLDCmdVcsInfo(vcsCPath string) []string {
 // `moduleCFlags` parameter is unused on the target path.
 //
 // Host build (hostBuild=true): uses hostTriple (no -march), hostCFlags,
-// muslWarningFlags (-Wno-everything), hostDefines, then moduleCFlags
+// the warning bundle picked by `pickWarningFlags(noCompilerWarnings)`
+// (6-arg `-Werror`/`-Wall`/`-Wextra` + 3× `-Wno-*` for normal modules;
+// 1-arg `-Wno-everything` for NO_COMPILER_WARNINGS modules), hostDefines, then moduleCFlags
 // (which carries the module's own CFLAGS plus -D_musl_=1 when muslOn),
 // then ndebugPicBlock × 2 with catboostOpenSourceDefine +
 // muslConsumerSentinel + hostSseFeatures between them. Pinned byte-exact
@@ -381,9 +383,9 @@ func composeLDCmdVcsInfo(vcsCPath string) []string {
 // reflects `cliMuslOn(ctx)` from the walker; when MUSL=no the two
 // sentinels collapse to a bare double-`noLibcUndebugBlock` (target)
 // or no muslConsumerSentinel between catboost and SSE (host).
-func composeLDCmdVcsCompile(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags []string, hostBuild bool) []string {
+func composeLDCmdVcsCompile(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags []string, hostBuild bool, noCompilerWarnings bool) []string {
 	if hostBuild {
-		return composeLDCmdVcsCompileHost(vcsCPath, vcsOPath, muslOn, moduleCFlags)
+		return composeLDCmdVcsCompileHost(vcsCPath, vcsOPath, muslOn, moduleCFlags, noCompilerWarnings)
 	}
 
 	cmdArgs := make([]string, 0, 94)
@@ -421,12 +423,26 @@ func composeLDCmdVcsCompile(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags
 }
 
 // composeLDCmdVcsCompileHost composes the HOST variant of cmd[1]: uses
-// the x86_64 toolchain, hostCFlags, muslWarningFlags, hostDefines, then
-// `moduleCFlags` (module-own CFLAGS + `-D_musl_=1` when muslOn), then
-// ndebugPicBlock twice with catboostOpenSourceDefine + muslConsumerSentinel
-// + hostSseFeatures between them. Matches the reference shape for
-// contrib/tools/ragel6 and contrib/tools/yasm host LD cmd[1].
-func composeLDCmdVcsCompileHost(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags []string) []string {
+// the x86_64 toolchain, hostCFlags, the warning bundle, hostDefines,
+// then `moduleCFlags` (module-own CFLAGS + `-D_musl_=1` when muslOn),
+// then ndebugPicBlock twice with catboostOpenSourceDefine +
+// muslConsumerSentinel + hostSseFeatures between them. Matches the
+// reference shape for contrib/tools/ragel6 and contrib/tools/yasm host
+// LD cmd[1].
+//
+// Warning bundle selection follows the module's NO_COMPILER_WARNINGS
+// attribute (mirror of `pickWarningFlags`): modules that declare
+// NO_COMPILER_WARNINGS (contrib/tools/* vendored upstream tools — yasm,
+// ragel5, ragel6, protoc, cpp_styleguide) get the single-arg
+// `-Wno-everything` (muslWarningFlags); regular host PROGRAMs
+// (tools/archiver, tools/enum_parser, tools/event2cpp, tools/py3cc,
+// tools/rescompiler, tools/rescompressor, tools/struct2fieldcalc,
+// library/python/runtime_py3/stage0pycc) get the 6-arg standard
+// bundle (`-Werror -Wall -Wextra -Wno-parentheses
+// -Wno-implicit-const-int-float-conversion -Wno-unknown-warning-option`).
+// Canonical bundle composition: `ymake_conf.py:1550-1556` and
+// `gnu_compiler.conf:124-140`.
+func composeLDCmdVcsCompileHost(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags []string, noCompilerWarnings bool) []string {
 	cmdArgs := make([]string, 0, 94+len(moduleCFlags))
 	cmdArgs = append(cmdArgs,
 		ccCompilerPath,
@@ -441,7 +457,7 @@ func composeLDCmdVcsCompileHost(vcsCPath, vcsOPath string, muslOn bool, moduleCF
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
 	cmdArgs = append(cmdArgs, hostCFlags...)
-	cmdArgs = append(cmdArgs, muslWarningFlags...)
+	cmdArgs = append(cmdArgs, pickWarningFlags(noCompilerWarnings)...)
 	cmdArgs = append(cmdArgs, hostDefines...)
 	cmdArgs = append(cmdArgs, moduleCFlags...)
 	cmdArgs = append(cmdArgs, ndebugPicBlock...)
