@@ -1081,12 +1081,17 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 }
 
 // applyBuildInfoAddIncl mirrors the implicit `ADDINCL(<build_info_dir>)`
-// upstream CREATE_BUILDINFO_FOR macros emit.
+// upstream CREATE_BUILDINFO_FOR macros emit. PR-M3-final-surgical (fix 5):
+// the implicit ADDINCL is GLOBAL — the generated header must be visible to
+// PEER consumers too (witnessed by `main.cpp.o` / `print.cpp.o` carrying
+// `-I$(BUILD_ROOT)/library/cpp/build_info` via their peer chain).
 func applyBuildInfoAddIncl(modulePath string, d *moduleData) {
 	if d.createBuildInfoFor == "" {
 		return
 	}
-	d.addIncl = append(d.addIncl, "$(BUILD_ROOT)/"+modulePath)
+	biDir := "$(BUILD_ROOT)/" + modulePath
+	d.addIncl = append(d.addIncl, biDir)
+	d.addInclGlobal = append(d.addInclGlobal, biDir)
 }
 
 // pyModuleTypeUsesPython3 returns true for module types whose upstream
@@ -1148,6 +1153,13 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 				}
 			}
 		case *PeerdirStmt:
+			// PR-M3-final-surgical (fix 3): the ADDINCL modifier on the
+			// immediately-following peerdir path means "peer this AND add
+			// the same path to this module's own ADDINCL list". Drives
+			// `PEERDIR(ADDINCL contrib/libs/protobuf …)` in
+			// tools/event2cpp/bin/ya.make, which feeds a CC -I slot for
+			// the consumer's compile of proto_events.cpp.
+			addInclNext := false
 			for _, p := range v.Paths {
 				// Skip unexpanded variable references (e.g. ${STUB_PEERDIRS}).
 				// These appear in some ya.make files as SET-driven optional peerdirs
@@ -1157,15 +1169,16 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 				if strings.Contains(p, "${") {
 					continue
 				}
-				// Skip PEERDIR modifier keywords that appear as bare tokens inside
-				// the argument list. Upstream ymake supports per-path modifiers
-				// like `PEERDIR(ADDINCL some/path)` where ADDINCL is a modifier
-				// that makes the peer's includes visible without a recursive build.
-				// Our parser records all tokens as paths; filter the known modifiers
-				// so they don't cause "ADDINCL/ya.make not found" walk failures.
-				// PR-M3-F-1: tools/event2cpp/bin/ya.make uses this pattern.
-				if p == "ADDINCL" || p == "GLOBAL" {
+				if p == "ADDINCL" {
+					addInclNext = true
 					continue
+				}
+				if p == "GLOBAL" {
+					continue
+				}
+				if addInclNext {
+					d.addIncl = append(d.addIncl, p)
+					addInclNext = false
 				}
 				d.peerdirs = append(d.peerdirs, p)
 			}
@@ -1615,6 +1628,25 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		// SRCS(GLOBAL $Func.reg3.cpp) inside macro _PY3_REGISTER at
 		// build/ymake.core.conf:4086-4089).
 		d.pyRegister = append(d.pyRegister, v.Args...)
+		// PR-M3-final-surgical (fix 4): mirror pybuild.py:740-750 — for
+		// each dotted PY_REGISTER argument inject the two -D macro
+		// renames so every CC in the same module compiles with them.
+		for _, name := range v.Args {
+			dot := strings.LastIndexByte(name, '.')
+			if dot < 0 {
+				continue
+			}
+			shortname := name[dot+1:]
+			// mangle: "a.b.c" → "1a1b1c" (len(seg)+seg per segment).
+			var mangled strings.Builder
+			for _, seg := range strings.Split(name, ".") {
+				fmt.Fprintf(&mangled, "%d%s", len(seg), seg)
+			}
+			d.cFlags = append(d.cFlags,
+				"-DPyInit_"+shortname+"=PyInit_"+mangled.String(),
+				"-Dinit_module_"+shortname+"=init_module_"+mangled.String(),
+			)
+		}
 	case "SET_APPEND":
 		// PR-M3-openssl-as-cflags: SET_APPEND(<var> <values...>) is
 		// ymake's append-to-variable macro. Only SFLAGS is wired today
@@ -5242,6 +5274,21 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		ccIn.HasGenerator = true
 		ccIn.Py3Suffix = py3Suffix
 		ccIn.IncludeInputs = []string{genPy3RegScriptPath}
+		// PR-M3-final-surgical (fix 4): mirror upstream ordering — the
+		// PyInit_/init_module_ defines added by `onpy_register` AFTER
+		// `_PY3_REGISTER`'s `SRCS(GLOBAL …)` only attach to user-declared
+		// sources; the synthetic reg3.cpp keeps the pre-call CFLAGS
+		// snapshot. Strip the two define families from this CC's bundle.
+		if len(in.CFlags) > 0 {
+			filtered := make([]string, 0, len(in.CFlags))
+			for _, f := range in.CFlags {
+				if strings.HasPrefix(f, "-DPyInit_") || strings.HasPrefix(f, "-Dinit_module_") {
+					continue
+				}
+				filtered = append(filtered, f)
+			}
+			ccIn.CFlags = filtered
+		}
 
 		ccRef, ccOut := EmitCC(instance, regCpp, ccIn, ctx.emit)
 
@@ -6060,6 +6107,21 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			ccIn.Generator = evRef
 			ccIn.HasGenerator = true
 			ccIn.IncludeInputs = walkClosure(ctx, srcInstance, evPbCC, srcIn)
+			// PR-M3-final-surgical (fix 1): the .ev.pb.cc.o consumer must not
+			// carry its OWN .ev.pb.h in inputs[] (REF omits the self-include;
+			// cross-imported sibling .ev.pb.h entries remain). The walker
+			// reaches evH transitively because the .pb.cc is registered with
+			// evH as its first EmitsIncludes child — drop just that entry.
+			{
+				filtered := make([]string, 0, len(ccIn.IncludeInputs))
+				for _, in := range ccIn.IncludeInputs {
+					if in == evH {
+						continue
+					}
+					filtered = append(filtered, in)
+				}
+				ccIn.IncludeInputs = filtered
+			}
 			// PR-M3-final-codegen-registry-expansion: protoc emits
 			// `#include "google/protobuf/wire_format.h"` directly. Add to inputs
 			// only on this CC node (not via registry — that would over-emit).
