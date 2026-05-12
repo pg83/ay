@@ -4263,8 +4263,17 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 				EmitsIncludes: cppIncludes,
 			})
 			if withHeader {
+				// PR-M3-enum-parser-registry: include the sibling _serialized.cpp
+				// so CC consumers that #include the _serialized.h transitively pull
+				// the .cpp into their inputs and (via its EmitsIncludes) the
+				// enum_serialization_runtime header set (dispatch_methods.h /
+				// enum_runtime.h / ordered_pairs.h / stdlib_deps.h). REF bundles
+				// the EN producer's .h and .cpp outputs together in every
+				// downstream CC's inputs; mirroring that bundling through the
+				// registry is the smallest mechanism that reproduces it.
 				hIncludes := []string{
 					headerSrc,
+					serializedCPPPath,
 					"$(SOURCE_ROOT)/util/generic/serialized_enum.h",
 				}
 				sort.Strings(hIncludes)
