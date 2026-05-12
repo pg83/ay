@@ -776,6 +776,34 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 			suffix = ".3kp2.yapyc3"
 		}
 
+		// PR-M3-final-sort-inversions: when a PY_SRCS source emits both
+		// the raw `.py` entry AND the `.yapyc3` entry (the
+		// non-PYBUILD_NO_PY × non-PYBUILD_NO_PYC default), REF places the
+		// raw `.py` entry FIRST in the packer's input list — driving
+		// --inputs / --keys / --kvs ordering. Witness:
+		// library/python/symbols/module/__init__.py objcopy node
+		// (sg2.json) lists $(SOURCE_ROOT)/.../__init__.py before
+		// $(BUILD_ROOT)/.../__init__.py.yapyc3. The chunk-hash sorts
+		// internally so the objcopy_<hex>.o filename is invariant under
+		// this swap; only cmd_args (and inputs[]) ordering shifts.
+
+		// raw .py entry — emitted unless PYBUILD_NO_PY is set.
+		if !d.pyBuildNoPY {
+			pyKey := "resfs/file/py/" + keyPrefix + srcRel
+			pyPathHash := srcRel
+			pyPathInput := "$(SOURCE_ROOT)/" + actualUnit + "/" + srcRel
+			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
+			pyKvCmd := "resfs/src/" + pyKey + "=" + actualUnit + "/" + srcRel
+			out = append(out, pySrcEntry{
+				pathHash:  pyPathHash,
+				pathInput: pyPathInput,
+				key:       pyKey,
+				kvHash:    pyKvHash,
+				kvCmd:     pyKvCmd,
+				inputDep:  pyPathInput,
+			})
+		}
+
 		// yapyc3 entry — always emitted unless PYBUILD_NO_PYC is set.
 		if !d.pyBuildNoPYC {
 			ypKey := "resfs/file/py/" + keyPrefix + srcRel + ".yapyc3"
@@ -794,23 +822,6 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 				kvCmd:         ypKvCmd,
 				inputDep:      ypPathInput,
 				extraSrcInput: "$(SOURCE_ROOT)/" + actualUnit + "/" + srcRel,
-			})
-		}
-
-		// raw .py entry — emitted unless PYBUILD_NO_PY is set.
-		if !d.pyBuildNoPY {
-			pyKey := "resfs/file/py/" + keyPrefix + srcRel
-			pyPathHash := srcRel
-			pyPathInput := "$(SOURCE_ROOT)/" + actualUnit + "/" + srcRel
-			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
-			pyKvCmd := "resfs/src/" + pyKey + "=" + actualUnit + "/" + srcRel
-			out = append(out, pySrcEntry{
-				pathHash:  pyPathHash,
-				pathInput: pyPathInput,
-				key:       pyKey,
-				kvHash:    pyKvHash,
-				kvCmd:     pyKvCmd,
-				inputDep:  pyPathInput,
 			})
 		}
 	}

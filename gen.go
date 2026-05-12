@@ -3398,6 +3398,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// (i.e., d.flatSrcs) so reorderARMembers can hoist them to the front
 	// without disturbing the declaration order of regular SRCS members.
 	ccIsFlatNoLto := make([]bool, 0, len(d.srcs)+len(d.joinSrcs))
+	// PR-M3-final-sort-inversions: track CF-generated CCs (the .cpp output
+	// of a .cpp.in / .c.in CONFIGURE_FILE expansion). Their .o suffix is
+	// the same as a hand-written .cpp, so reorderARMembers cannot detect
+	// them from the path alone; REF places them after the hand-written
+	// regulars in declaration order. Witness: library/cpp/build_info
+	// (sandbox.cpp.in, build_info.cpp.in, build_info_static.cpp →
+	// REF: build_info_static.cpp.o, sandbox.cpp.o, build_info.cpp.o).
+	ccIsCFGenerated := make([]bool, 0, len(d.srcs)+len(d.joinSrcs))
 	// PR-31 D11: accumulate the union of every CC member's inputs
 	// (primary source + IncludeInputs, deduped, in DFS-discovery
 	// order) so the downstream AR/LD step can fold these into its
@@ -3726,6 +3734,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, isFlatNoLto)
+		ccIsCFGenerated = append(ccIsCFGenerated, strings.HasSuffix(src, ".cpp.in") || strings.HasSuffix(src, ".c.in"))
 		addMemberInputs(ccIns)
 		// PR-35y R8: track primary source paths so the .global.a
 		// aggregator can exclude them. emitOneSource returns the
@@ -3768,6 +3777,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, jvCCOutputs[i])
 		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
+		ccIsCFGenerated = append(ccIsCFGenerated, false)
 		addMemberInputs(jvCCMemberInputs[i])
 	}
 
@@ -3782,6 +3792,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, enCCOutputs[i])
 		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
+		ccIsCFGenerated = append(ccIsCFGenerated, false)
 		addMemberInputs(enCCMemberInputs[i])
 	}
 
@@ -3798,6 +3809,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ccRefs = append(ccRefs, ref)
 			ccOutputs = append(ccOutputs, prCCOutputs[i])
 			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
+			ccIsCFGenerated = append(ccIsCFGenerated, false)
 			addMemberInputs(prMemberInputsList[i])
 		}
 	}
@@ -3842,6 +3854,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, true)
+		ccIsCFGenerated = append(ccIsCFGenerated, false)
 		addMemberInputs(ccIns)
 		for i := 0; i < primaryCount && i < len(ccIns); i++ {
 			addRegularPrimary(ccIns[i])
@@ -3949,6 +3962,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, false) // JOIN_SRCS are never SRC_C_NO_LTO
+		ccIsCFGenerated = append(ccIsCFGenerated, false)
 		// PR-35y R7: the AR/LD `inputs` slot omits the BUILD_ROOT-
 		// staged generated cpp (JS output). Reference graph confirms:
 		// util's libyutil.a never lists `$(BUILD_ROOT)/util/all_*.cpp`
@@ -4257,7 +4271,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// PR-41 Fix I: reorder AR members into ymake's canonical bucket
 	// order: SRC_C_NO_LTO first, then regular SRCS (declaration
 	// order), then JOIN_SRCS, then R6-generated last.
-	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, ccIsFlatNoLto, numSrcsDerived)
+	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, ccIsFlatNoLto, ccIsCFGenerated, numSrcsDerived)
 
 	// PR-M3-residue-B fix 1: skip plain AR when there are no regular CC
 	// outputs (module has only GLOBAL_SRCS — blockcodecs codecs, getopt).
@@ -4391,7 +4405,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// PR-M3-AR-member-order: the .global.a aggregator follows the
 		// same member-order discipline as the regular AR — hand-written /
 		// objcopy_* .o files precede codegen-derived .reg3.cpp.o etc.
-		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), len(globalRefs))
+		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))
 		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, globalAggregated, ctx.emit)
 		result.GlobalRef = &globalRef
 		result.GlobalPath = instance.Path + "/" + globalBaseName
@@ -6492,7 +6506,14 @@ func includeScannerBasePaths(instance ModuleInstance) []string {
 // isFlatNoLto is a parallel bool slice (same length as refs/paths before
 // JOIN_SRCS are appended) marking SRC_C_NO_LTO entries. The slice must
 // have len(isFlatNoLto) == len(refs) == len(paths) at call time. PR-41 Fix I.
-func reorderARMembers(refs []NodeRef, paths []string, isFlatNoLto []bool, numSrcsDerived int) ([]NodeRef, []string) {
+//
+// isCFGenerated is a parallel bool slice marking entries whose CC was
+// driven by a CONFIGURE_FILE expansion (`.cpp.in` / `.c.in` source).
+// CF outputs share the plain `.cpp.o` / `.c.o` suffix with hand-written
+// SRCS so the path heuristic cannot distinguish them; this parallel
+// signal lets the reorder pass tail-bucket CF entries after the
+// hand-written regulars. PR-M3-final-sort-inversions.
+func reorderARMembers(refs []NodeRef, paths []string, isFlatNoLto []bool, isCFGenerated []bool, numSrcsDerived int) ([]NodeRef, []string) {
 	if len(paths) == 0 {
 		return refs, paths
 	}
@@ -6505,9 +6526,10 @@ func reorderARMembers(refs []NodeRef, paths []string, isFlatNoLto []bool, numSrc
 	// Classify SRCS-derived entries [0, numSrcsDerived) into buckets.
 	// noLto: SRC_C_NO_LTO front-hoist.
 	// regular: hand-written hand-named .o (no codegen suffix).
+	// cf: CONFIGURE_FILE-derived .cpp.o / .c.o (parallel signal — path-indistinguishable from regular).
 	// g4/hser/ev/rl6/reg3: codegen-derived .o files, tail-grouped.
 	// legacyR6: pre-existing /_/_/ infix path (e.g. util/_/_/datetime/parser.rl6.cpp.o).
-	var noLtoSrcs, regularSrcs, g4Srcs, hSerSrcs, evPbSrcs, rl6Srcs, reg3Srcs, legacyR6 []member
+	var noLtoSrcs, regularSrcs, cfSrcs, g4Srcs, hSerSrcs, evPbSrcs, rl6Srcs, reg3Srcs, legacyR6 []member
 
 	for i := 0; i < numSrcsDerived && i < len(paths); i++ {
 		m := member{refs[i], paths[i]}
@@ -6526,6 +6548,8 @@ func reorderARMembers(refs []NodeRef, paths []string, isFlatNoLto []bool, numSrc
 			hSerSrcs = append(hSerSrcs, m)
 		case strings.HasSuffix(m.path, ".g4.cpp.o"):
 			g4Srcs = append(g4Srcs, m)
+		case i < len(isCFGenerated) && isCFGenerated[i]:
+			cfSrcs = append(cfSrcs, m)
 		default:
 			regularSrcs = append(regularSrcs, m)
 		}
@@ -6537,11 +6561,12 @@ func reorderARMembers(refs []NodeRef, paths []string, isFlatNoLto []bool, numSrc
 		joinSrcs = append(joinSrcs, member{refs[i], paths[i]})
 	}
 
-	// Reassemble: SRC_C_NO_LTO → regular SRCS → JOIN_SRCS → codegen
+	// Reassemble: SRC_C_NO_LTO → regular SRCS → CF → JOIN_SRCS → codegen
 	// (g4 → h_serialized → ev.pb → rl6 → reg3) → legacy /_/_/ R6.
 	out := make([]member, 0, len(paths))
 	out = append(out, noLtoSrcs...)
 	out = append(out, regularSrcs...)
+	out = append(out, cfSrcs...)
 	out = append(out, joinSrcs...)
 	out = append(out, g4Srcs...)
 	out = append(out, hSerSrcs...)
