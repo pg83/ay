@@ -175,33 +175,37 @@ func emitResourceObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
 	d *moduleData,
-) []string {
+) ([]NodeRef, []string) {
 	// PR-B: emit kv_only sibling shapes (PY_MAIN, py/namespace,
 	// py/no_check_imports) alongside the legacy RESOURCE/RESOURCE_FILES
 	// flush. Each sibling is independent and conditional on its own
 	// per-module data; a module may emit any non-empty subset.
 	hasKvOnly := d.pyMain != "" || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0
 	if len(d.resources) == 0 && !hasKvOnly {
-		return nil
+		return nil, nil
 	}
 
 	rescompilerLDRef := walkHostToolForRef(ctx, instance, "tools/rescompiler/bin")
 	rescompressorLDRef := walkHostToolForRef(ctx, instance, "tools/rescompressor/bin")
 
+	var refs []NodeRef
 	var outputs []string
 
 	// kv_only siblings — each fires only when its trigger is present
 	// (no-op return when not). Emission order does NOT affect L4 byte-
 	// exactness (the canonicaliser re-sorts the graph by UID).
-	if o := emitPyNamespaceObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
+	if r, o := emitPyNamespaceObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
+		refs = append(refs, r)
 		outputs = append(outputs, o)
 	}
 
-	if o := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
+	if r, o := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
+		refs = append(refs, r)
 		outputs = append(outputs, o)
 	}
 
-	if o := emitNoCheckImportsObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
+	if r, o := emitNoCheckImportsObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
+		refs = append(refs, r)
 		outputs = append(outputs, o)
 	}
 
@@ -209,12 +213,12 @@ func emitResourceObjcopy(
 	// One node per packer-flush chunk; small modules fit in one chunk
 	// (single-entry exact match); large modules (Lib, lib2/py) split
 	// into multiple chunks via chunkPySrcEntries.
-	for _, o := range emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef) {
-		outputs = append(outputs, o)
-	}
+	srcRefs, srcOuts := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
+	refs = append(refs, srcRefs...)
+	outputs = append(outputs, srcOuts...)
 
 	if len(d.resources) == 0 {
-		return outputs
+		return refs, outputs
 	}
 
 	// Filter rejected entries (mirrors objcopy.h:84-96 CanHandle):
@@ -353,7 +357,8 @@ func emitResourceObjcopy(
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
 
-		ctx.emit.Emit(node)
+		r := ctx.emit.Emit(node)
+		refs = append(refs, r)
 		outputs = append(outputs, outputObj)
 
 		cur = acc{}
@@ -380,7 +385,7 @@ func emitResourceObjcopy(
 
 	flush()
 
-	return outputs
+	return refs, outputs
 }
 
 // expandRootrel substitutes the upstream
@@ -459,7 +464,7 @@ func emitKvOnlyObjcopyNode(
 	moduleName string,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) string {
+) (NodeRef, string) {
 	moduleTag := resourceModuleTag(moduleName)
 	hash := objcopyHash(nil, nil, kvsHash, instance.Path, moduleTag)
 	outputObj := "$(BUILD_ROOT)/" + instance.Path + "/objcopy_" + hash + ".o"
@@ -543,9 +548,9 @@ func emitKvOnlyObjcopyNode(
 		node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 	}
 
-	ctx.emit.Emit(node)
+	ref := ctx.emit.Emit(node)
 
-	return outputObj
+	return ref, outputObj
 }
 
 // emitPyNamespaceObjcopy emits the `py/namespace/<mod_list_md5>/<unit>=<ns>.`
@@ -563,9 +568,9 @@ func emitPyNamespaceObjcopy(
 	d *moduleData,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) string {
+) (NodeRef, string) {
 	if len(d.pySrcs) == 0 {
-		return ""
+		return NodeRef{}, ""
 	}
 
 	// Gate: `is_extended_source_search_enabled` returns False for
@@ -573,16 +578,16 @@ func emitPyNamespaceObjcopy(
 	// pybuild.py:46. No namespace kv is emitted for those modules.
 	if strings.HasPrefix(instance.Path, "contrib/python") ||
 		strings.HasPrefix(instance.Path, "contrib/tools/python3") {
-		return ""
+		return NodeRef{}, ""
 	}
 
 	// PR-B scope is PY3 / PY23 only; the namespace mechanism is gated
 	// on py3=true in pybuild.py:559. Non-PY3 modules are skipped.
 	if d.moduleStmt == nil {
-		return ""
+		return NodeRef{}, ""
 	}
 	if resourceModuleTag(d.moduleStmt.Name) == "" {
-		return ""
+		return NodeRef{}, ""
 	}
 
 	// Default namespace: `<upath-dotted>.`. The TOP_LEVEL modifier of
@@ -633,12 +638,12 @@ func emitPyMainObjcopy(
 	d *moduleData,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) string {
+) (NodeRef, string) {
 	if d.pyMain == "" {
-		return ""
+		return NodeRef{}, ""
 	}
 	if d.moduleStmt == nil {
-		return ""
+		return NodeRef{}, ""
 	}
 
 	// PY_MAIN= is unquoted in both hash and cmd_args (pybuild.py:759
@@ -660,12 +665,12 @@ func emitNoCheckImportsObjcopy(
 	d *moduleData,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) string {
+) (NodeRef, string) {
 	if len(d.noCheckImports) == 0 {
-		return ""
+		return NodeRef{}, ""
 	}
 	if d.moduleStmt == nil {
-		return ""
+		return NodeRef{}, ""
 	}
 
 	value := strings.Join(d.noCheckImports, " ")
@@ -861,28 +866,29 @@ func emitPySrcObjcopy(
 	d *moduleData,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) []string {
+) ([]NodeRef, []string) {
 	if len(d.pySrcs) == 0 {
-		return nil
+		return nil, nil
 	}
 	if d.moduleStmt == nil {
-		return nil
+		return nil, nil
 	}
 
 	// PY3-flavoured modules only — non-PY3 PY_SRCS does not exist in
 	// the M3 closure (the gate mirrors emitPyNamespaceObjcopy:572-578).
 	if resourceModuleTag(d.moduleStmt.Name) == "" {
-		return nil
+		return nil, nil
 	}
 
 	entries := buildPySrcEntries(d, instance.Path)
 	if len(entries) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	chunks := chunkPySrcEntries(entries)
 	moduleTag := resourceModuleTag(d.moduleStmt.Name)
 
+	refs := make([]NodeRef, 0, len(chunks))
 	outputs := make([]string, 0, len(chunks))
 	for _, ch := range chunks {
 		hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path, moduleTag)
@@ -952,11 +958,12 @@ func emitPySrcObjcopy(
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
 
-		ctx.emit.Emit(node)
+		r := ctx.emit.Emit(node)
+		refs = append(refs, r)
 		outputs = append(outputs, outputObj)
 	}
 
-	return outputs
+	return refs, outputs
 }
 
 // walkHostToolForRef walks `path` as a host tool and returns the LD
