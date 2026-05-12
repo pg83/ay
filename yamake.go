@@ -1197,7 +1197,10 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 // OUTPUT_INCLUDES (and the files following it), and other option tokens
 // (e.g. -package, NConfReader) that are passed to antlr4 cmd_args.
 func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
-	stmt := &RunAntlr4CppStmt{Grammar: args[0], Line: line, Listener: true}
+	// PR-M3-antlr-listener-default: default `-no-listener`, matching upstream
+	// `RUN_ANTLR4_CPP` (ymake.core.conf:5270 — `LISTENER?"GRAMMAR":"_ANTLR4_EMPTY"`
+	// with `_ANTLR4_LISTENER__ANTLR4_EMPTY=-no-listener` at line 5252).
+	stmt := &RunAntlr4CppStmt{Grammar: args[0], Line: line}
 	i := 1
 	for i < len(args) {
 		switch args[i] {

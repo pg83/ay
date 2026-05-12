@@ -1041,6 +1041,14 @@ func emitJVDownstreamCPCC(
 		ccIn.HasGenerator = true
 		ccIn.Generator = jvRef
 		ccIn.ExtraDepRefs = []NodeRef{cpRef}
+		// PR-M3-antlr-listener-default: ANTLR4-generated .g4.cpp files declare
+		// per-rule local variables the generator does not always reference;
+		// upstream attaches `-Wno-unused-variable` to silence the resulting
+		// `-Werror` diagnostic. The composer slots PerSourceCFlags between
+		// macroPrefixMapFlags and the input path — matching the reference
+		// position immediately before `<...>.g4.cpp` (sg2.json
+		// devtools/ymake/lang/TConfLexer.g4.cpp.o cmd_args index 144..145).
+		ccIn.PerSourceCFlags = []string{"-Wno-unused-variable"}
 
 		ccRef, ccOut := EmitCC(instance, g4CppRel, ccIn, ctx.emit)
 
