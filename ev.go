@@ -135,6 +135,54 @@ var eventRuntimeHeaders = []string{
 	evSourceBase + "util/system/yassert.h",
 }
 
+// evExtraProtobufHeaders is the .ev.pb.h-specific subset of protobuf headers
+// that show up only in CC consumers of event-generated headers (verified by
+// intersecting the inputs of every .ev.pb.h CC consumer in sg2.json). These
+// stem from event2cpp's generated reflection code and the protoc plugin
+// scaffolding used by event2cpp. Sorted lexicographically.
+var evExtraProtobufHeaders = []string{
+	pbRuntimeBase + "google/protobuf/io/printer.h",
+	pbRuntimeBase + "google/protobuf/io/zero_copy_sink.h",
+	pbRuntimeBase + "google/protobuf/stubs/hash.h",
+	pbRuntimeBase + "google/protobuf/stubs/stringpiece.h",
+	pbRuntimeBase + "google/protobuf/stubs/strutil.h",
+}
+
+// evAbseilCleanupHeaders is the abseil RAII-cleanup pair propagated through
+// every .ev.pb.h to its CC consumers (verified in sg2.json).
+var evAbseilCleanupHeaders = []string{
+	evSourceBase + "contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/cleanup.h",
+	evSourceBase + "contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h",
+}
+
+// evWitnessExtras returns the .ev.pb.h-specific witness inputs propagated
+// through every .ev.pb.h to its CC consumers. The set is:
+//   - cpp_proto_wrapper.py (the script that drives event2cpp+protoc),
+//   - descriptor.proto (every .ev imports it indirectly via events_extension),
+//   - the .ev source file itself,
+//   - the companion .ev.pb.cc generated next to .ev.pb.h,
+//   - the descriptor-importer protobuf header cluster
+//     (pbDescriptorImporterHeaders),
+//   - evExtraProtobufHeaders (event2cpp-specific protobuf cluster),
+//   - evAbseilCleanupHeaders (abseil cleanup pair).
+//
+// See docs/drafts/20260512-0200-residue-pre-100pct.md §2 lever #1.
+func evWitnessExtras(sourceRoot, evRelPath, evPbCC string) []string {
+	_ = sourceRoot // every .ev imports descriptor.proto transitively; no source-scan needed.
+
+	out := make([]string, 0,
+		3+len(pbDescriptorImporterHeaders)+len(evExtraProtobufHeaders)+len(evAbseilCleanupHeaders))
+	out = append(out, pbWrapperPath)
+	out = append(out, pbDescriptorProto)
+	out = append(out, "$(SOURCE_ROOT)/"+evRelPath)
+	out = append(out, evPbCC)
+	out = append(out, pbDescriptorImporterHeaders...)
+	out = append(out, evExtraProtobufHeaders...)
+	out = append(out, evAbseilCleanupHeaders...)
+
+	return out
+}
+
 // EmitEV emits an EV node for `srcRel` (a .ev file relative to `instance.Path`).
 func EmitEV(
 	instance ModuleInstance,
