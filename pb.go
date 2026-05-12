@@ -812,6 +812,20 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		ccIn.Generator = co.genRef
 		ccIn.HasGenerator = true
 		ccIn.IncludeInputs = walkClosure(ctx, instance, co.pbCC, moduleInputs)
+		// PR-M3-final-surgical (fix 1): the .ev.pb.cc.o consumer must not
+		// carry its OWN .ev.pb.h in inputs[] (REF omits the self-include).
+		// Drop just the sibling header co.pbCC -> co.pbCC[.cc -> .h].
+		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
+			selfH := strings.TrimSuffix(co.pbCC, ".cc") + ".h"
+			filtered := make([]string, 0, len(ccIn.IncludeInputs))
+			for _, in := range ccIn.IncludeInputs {
+				if in == selfH {
+					continue
+				}
+				filtered = append(filtered, in)
+			}
+			ccIn.IncludeInputs = filtered
+		}
 		// .ev.pb.cc gets wire_format.h post-closure (registry-side leaks through
 		// .ev.pb.h to over-emit; .pb.cc gets it via pbCcDeepRuntimeHeaders).
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {

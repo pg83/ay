@@ -1080,7 +1080,11 @@ func emitPySrcObjcopy(
 
 		// SOURCE_ROOT-rooted inputs propagate into .global.a; BUILD_ROOT
 		// .yapyc3 entries are filtered by the AR aggregator (PR-M3-l2).
-		for _, p := range ch.pathInps {
+		// PR-M3-final-surgical (fix 2): include extraSrcInput .py paths
+		// (captured in ch.inps but not in ch.pathInps for yapyc3-only
+		// modules like python3-Lib) so the global AR's inputs[] carries
+		// every .py source the chunk's resfs entries reference.
+		for _, p := range ch.inps {
 			if strings.HasPrefix(p, "$(SOURCE_ROOT)/") {
 				globalMemberInputs = append(globalMemberInputs, p)
 			}
