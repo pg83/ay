@@ -5039,9 +5039,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			evPbCC := "$(BUILD_ROOT)/" + evRelPath + ".pb.cc"
 			if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
-				evEmitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders))
+				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC)
+				evEmitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
 				evEmitsIncludes = append(evEmitsIncludes, directImports...)
 				evEmitsIncludes = append(evEmitsIncludes, protobufRuntimeHeaders...)
+				evEmitsIncludes = append(evEmitsIncludes, evExtras...)
 				reg.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EV",
 					OutputPath:    evH,

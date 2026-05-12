@@ -80,6 +80,24 @@ var protobufRuntimeHeaders = []string{
 	pbRuntimeBase + "google/protobuf/unknown_field_set.h",
 }
 
+// pbDescriptorImporterHeaders are the protobuf runtime headers that appear in
+// CC consumers of any .pb.h whose source proto imports
+// "google/protobuf/descriptor.proto". These pull in the
+// map/reflection_ops cluster that protoc emits in the reflection metadata for
+// extension-bearing protos (verified by intersecting the inputs of every
+// descriptor.proto-importing .pb.h's CC consumer in sg2.json — see
+// docs/drafts/20260512-0200-residue-pre-100pct.md §2 lever #1).
+// Sorted lexicographically.
+var pbDescriptorImporterHeaders = []string{
+	pbRuntimeBase + "google/protobuf/generated_message_bases.h",
+	pbRuntimeBase + "google/protobuf/map_entry.h",
+	pbRuntimeBase + "google/protobuf/map_entry_lite.h",
+	pbRuntimeBase + "google/protobuf/map_field.h",
+	pbRuntimeBase + "google/protobuf/map_field_inl.h",
+	pbRuntimeBase + "google/protobuf/map_field_lite.h",
+	pbRuntimeBase + "google/protobuf/reflection_ops.h",
+}
+
 // EmitPB emits a PB node for `srcRel` (a .proto file relative to `instance.Path`).
 // `cppStyleguideLDRef` and `protocLDRef` are the host LD NodeRefs for the two
 // tool programs (zeroed when the host walk failed). `cppStyleguideBinary` and
@@ -204,6 +222,34 @@ func EmitPB(
 	}
 
 	return emit.Emit(node)
+}
+
+// pbDescriptorImporterExtras returns the witness inputs propagated through a
+// protoc-generated .pb.h whose source proto imports
+// "google/protobuf/descriptor.proto". The list is the union of:
+//   - pbDescriptorImporterHeaders (7 protobuf reflection-cluster headers),
+//   - pbWrapperPath (cpp_proto_wrapper.py — the script that drives protoc),
+//   - pbDescriptorProto (the descriptor.proto source itself),
+//   - the proto source file (its $(SOURCE_ROOT)-rooted path).
+//
+// Returns nil when the proto does not import descriptor.proto.
+//
+// Verified by intersecting CC-consumer inputs across all
+// descriptor.proto-importing .pb.h's in
+// /home/pg/monorepo/yatool_orig/sg2.json (see
+// docs/drafts/20260512-0200-residue-pre-100pct.md §2 lever #1).
+func pbDescriptorImporterExtras(sourceRoot, protoRelPath string) []string {
+	if !protoImportsDescriptor(sourceRoot, protoRelPath) {
+		return nil
+	}
+
+	out := make([]string, 0, len(pbDescriptorImporterHeaders)+3)
+	out = append(out, pbWrapperPath)
+	out = append(out, pbDescriptorProto)
+	out = append(out, "$(SOURCE_ROOT)/"+protoRelPath)
+	out = append(out, pbDescriptorImporterHeaders...)
+
+	return out
 }
 
 // protoImportsDescriptor reports whether the .proto (or .ev) source file at
@@ -331,9 +377,11 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		pbCC := "$(BUILD_ROOT)/" + protoBase + ".pb.cc"
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
 			directImports := protoDirectImportIncludes(ctx.sourceRoot, protoRelPath)
-			emitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders))
+			extras := pbDescriptorImporterExtras(ctx.sourceRoot, protoRelPath)
+			emitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
 			emitsIncludes = append(emitsIncludes, directImports...)
 			emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
+			emitsIncludes = append(emitsIncludes, extras...)
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PB",
 				OutputPath:    pbH,
@@ -391,10 +439,12 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			evPbCC := "$(BUILD_ROOT)/" + evRelPath + ".pb.cc"
 			if reg := codegenRegForInstance(ctx, instance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
-				emitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
+				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC)
+				emitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders)+len(evExtras))
 				emitsIncludes = append(emitsIncludes, directImports...)
 				emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
 				emitsIncludes = append(emitsIncludes, eventRuntimeHeaders...)
+				emitsIncludes = append(emitsIncludes, evExtras...)
 				reg.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EV",
 					OutputPath:    evH,
