@@ -96,6 +96,42 @@ func isBuildVFS(p string) bool { return strings.HasPrefix(p, vfsBuildPrefix) }
 // groups: directive (`include` or `include_next`) and target.
 var includeRe = regexp.MustCompile(`^\s*#\s*(include|include_next)\s*[<"]([^>"]+)[>"]`)
 
+// macroIndirectIncludes augments parseIncludes for sources that use
+// macro-indirect `#include MACRO_NAME` forms. The C scanner is
+// text-blind and cannot expand macros, so directives like
+// `#include OPENSSL_UNISTD` (which the preprocessor would resolve to
+// `<unistd.h>`) parse to nothing. Each entry lists the angle-include
+// targets that the matching source's macro-indirect lines expand to
+// on a linux-musl target — the same set the upstream ymake scanner
+// emits for these closures. Resolution flows through the normal
+// resolve()/sysincl pipeline, so musl-sysincl mappings pick up the
+// rest of the chain automatically (unistd.h → musl/include/unistd.h
+// → musl/arch/<arch>/bits/posix.h via the `<bits/posix.h>` include).
+//
+// PR-M3-musl-self-closure: closes the 4 openssl crypto rand_egd/uid
+// CC pairs (aarch64+x86_64 × .o+.pic.o = 4 nodes) that miss `unistd.h`
+// + `arch/<arch>/bits/posix.h`. Both sources `#include OPENSSL_UNISTD`
+// which expands to `<unistd.h>` on every non-Windows config. Also
+// adds the pugixml header-only macro indirection that drives the
+// ymake_module.cpp.o musl-self residue.
+type macroIndirectInclude struct {
+	target string
+	kind   includeKind
+}
+
+var macroIndirectIncludes = map[string][]macroIndirectInclude{
+	"contrib/libs/openssl/crypto/rand/rand_egd.c": {{target: "unistd.h", kind: includeSystem}},
+	"contrib/libs/openssl/crypto/uid.c":           {{target: "unistd.h", kind: includeSystem}},
+	// pugixml.hpp's header-only-mode trailer:
+	//   #if defined(PUGIXML_HEADER_ONLY) && !defined(PUGIXML_SOURCE)
+	//   #    define PUGIXML_SOURCE "pugixml.cpp"
+	//   #    include PUGIXML_SOURCE
+	// The macro-indirect `#include PUGIXML_SOURCE` expands to a quoted
+	// include of pugixml.cpp, which then pulls in the standard <float.h>
+	// + <setjmp.h> XPath dependencies — both reach musl-self on linux.
+	"contrib/libs/pugixml/pugixml.hpp": {{target: "pugixml.cpp", kind: includeQuoted}},
+}
+
 // yasmIncludeRe matches NASM/yasm `%include` directives in `.asm`/
 // `.asi` source files. The directive token is case-insensitive
 // (`%include` and `%INCLUDE` both occur in the asmlib sources —
@@ -1180,6 +1216,19 @@ func (s *IncludeScanner) parseIncludes(vfsPath string) []includeDirective {
 		out = parseYasmIncludes(data)
 	} else {
 		out = parseCIncludes(data)
+		// PR-M3-musl-self-closure: append synthetic angle-include
+		// directives for sources known to use macro-indirect `#include
+		// MACRO_NAME` forms (e.g. openssl's `#include OPENSSL_UNISTD`).
+		// The text-blind regex parser cannot expand the macro, but the
+		// upstream ymake scanner sees the post-expansion target, so we
+		// inject it directly. Keyed by source-rel (strip the
+		// $(SOURCE_ROOT)/ VFS prefix) so the map is human-readable.
+		rel := strings.TrimPrefix(vfsPath, vfsSourcePrefix)
+		if extras, ok := macroIndirectIncludes[rel]; ok {
+			for _, m := range extras {
+				out = append(out, includeDirective{kind: m.kind, target: m.target})
+			}
+		}
 	}
 
 	s.pc.parsed[vfsPath] = out
