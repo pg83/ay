@@ -433,7 +433,10 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	// RESOURCE / RESOURCE_FILES: now typed Stmts (PR-M3-resource-objcopy-A);
 	// removed from whitelist. Routed via parseResource / parseResourceFiles
 	// in yamake.go and consumed by resource.go::emitResourceObjcopy.
-	"PY_REGISTER":                       {}, // Python module registration; semantic in PR-M3-E.
+	// PY_REGISTER: now typed UnknownStmt handled in applyUnknownStmt
+	// (PR-M3-reg3-cpp-py-register); each arg becomes one PY (gen_py3_reg.py)
+	// node generating `<arg>.reg3.cpp` plus a CC compiling it into the
+	// module's `.global.a`.
 	// RUN_PROGRAM: now typed Stmt; removed from whitelist.
 	// RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT: now typed Stmts; removed from whitelist.
 	// GENERATE_ENUM_SERIALIZATION / _WITH_HEADER / _NOUTF removed from
@@ -714,6 +717,11 @@ type moduleData struct {
 	// pathid() and the resfs value join the args by ' ' in that order;
 	// see build/plugins/ytest.py:811).
 	noCheckImports []string
+	// PR-M3-reg3-cpp-py-register: PY_REGISTER(args...) argument list. Each
+	// arg is the dotted module name; gen_py3_reg.py(<arg>, <output>) emits a
+	// `<arg>.reg3.cpp` source which is then SRCS(GLOBAL …) compiled.
+	// Mirror of upstream macro _PY3_REGISTER in build/ymake.core.conf:4086-4089.
+	pyRegister []string
 	// PR-M3-simd-permutations: per-`SRC_C_<VARIANT>` entries in
 	// declaration order. Each entry produces one CC node alongside (and
 	// in addition to) any plain SRCS / SRC / SRC_C_NO_LTO listing of the
@@ -1202,6 +1210,14 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		if len(v.Args) > 0 {
 			d.noCheckImports = append(d.noCheckImports, v.Args...)
 		}
+	case "PY_REGISTER":
+		// PR-M3-reg3-cpp-py-register: capture PY_REGISTER(args...) dotted
+		// module names. emitPyRegister later emits one PY (gen_py3_reg.py)
+		// node generating `<arg>.reg3.cpp` plus a CC compiling it; both
+		// flow into the module's `.global.a` (mirror of the upstream
+		// SRCS(GLOBAL $Func.reg3.cpp) inside macro _PY3_REGISTER at
+		// build/ymake.core.conf:4086-4089).
+		d.pyRegister = append(d.pyRegister, v.Args...)
 	default:
 		if _, ok := whitelistedMetadataMacros[v.Name]; !ok {
 			ThrowFmt("gen: PR-25 does not yet support macro %q (extend whitelistedMetadataMacros or add a typed Stmt)", v.Name)
@@ -3292,6 +3308,31 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
+	// PR-M3-reg3-cpp-py-register: emit PY+CC pairs for each PY_REGISTER(arg).
+	// Both flow into globalRefs/globalOutputs (the upstream macro
+	// _PY3_REGISTER appends `SRCS(GLOBAL $Func.reg3.cpp)` so the .o lands
+	// in the module's .global.a archive). PY3_LIBRARY (rapidjson, ymakeyaml)
+	// emits plain `.reg3.cpp.o`; PY23_LIBRARY and PY23_NATIVE_LIBRARY emit
+	// `.reg3.cpp.py3.o` (reference: library/python/symbols/module — a
+	// PY23_LIBRARY multimodule whose py3 submodule tags its CC outputs
+	// with module_tag=py3 and the .py3.o suffix).
+	regCCPy3Suffix := isPy3NativeLib || d.moduleStmt.Name == "PY23_LIBRARY"
+	regRefs, regOutputs, regMemberInputs := emitPyRegister(ctx, instance, d, moduleInputs, regCCPy3Suffix)
+
+	for i, ref := range regRefs {
+		globalRefs = append(globalRefs, ref)
+		globalOutputs = append(globalOutputs, regOutputs[i])
+	}
+
+	for _, p := range regMemberInputs {
+		if _, dup := globalMemberInputsSeen[p]; dup {
+			continue
+		}
+
+		globalMemberInputsSeen[p] = struct{}{}
+		globalMemberInputs = append(globalMemberInputs, p)
+	}
+
 	// PR-35k: emit own LD_PLUGIN CP nodes (no current M2 case fires
 	// here — musl/include is header-only and handled above — but the
 	// emission is symmetric so a future LIBRARY/PROGRAM that declares
@@ -4116,6 +4157,100 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 		ctx.emit.Emit(node)
 	}
+}
+
+// genPy3RegScriptPath is the source-relative path to the gen_py3_reg.py script
+// invoked by every PY_REGISTER's PY node (mirror of macro _PY3_REGISTER at
+// build/ymake.core.conf:4086-4089).
+const genPy3RegScriptPath = "$(SOURCE_ROOT)/build/scripts/gen_py3_reg.py"
+
+// emitPyRegister emits the PY+CC pair for each PY_REGISTER(arg) entry in
+// d.pyRegister. Each arg:
+//   - one PY node:  python3 gen_py3_reg.py <arg> $(BUILD_ROOT)/<modPath>/<arg>.reg3.cpp
+//   - one CC node:  compiles the generated `.reg3.cpp` into `.reg3.cpp.o` (or
+//     `.reg3.cpp.py3.o` when py3Suffix is set).
+//
+// Both nodes' refs flow into globalRefs/globalOutputs (the upstream
+// _PY3_REGISTER macro emits `SRCS(GLOBAL $Func.reg3.cpp)`, so the CC output
+// archives in the module's `.global.a`).
+//
+// Mirror of macro _PY3_REGISTER at build/ymake.core.conf:4086-4089.
+func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs, py3Suffix bool) (refs []NodeRef, outputs []string, memberInputs []string) {
+	if len(d.pyRegister) == 0 {
+		return nil, nil, nil
+	}
+
+	for _, arg := range d.pyRegister {
+		regCpp := arg + ".reg3.cpp"
+		regCppAbs := "$(BUILD_ROOT)/" + instance.Path + "/" + regCpp
+
+		env := map[string]string{
+			"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		}
+
+		pyCmdArgs := []string{
+			python3Path,
+			genPy3RegScriptPath,
+			arg,
+			regCppAbs,
+		}
+
+		pyNode := &Node{
+			Cmds: []Cmd{
+				{CmdArgs: pyCmdArgs, Env: env},
+			},
+			Env:     env,
+			Inputs:  []string{genPy3RegScriptPath},
+			Outputs: []string{regCppAbs},
+			KV: map[string]string{
+				"p":  "PY",
+				"pc": "yellow",
+			},
+			Tags: []string{},
+			TargetProperties: map[string]string{
+				"module_dir": instance.Path,
+			},
+			Platform: string(instance.Target),
+			Requirements: map[string]interface{}{
+				"cpu":     float64(1),
+				"network": "restricted",
+				"ram":     float64(32),
+			},
+			DepRefs: []NodeRef{},
+		}
+
+		if py3Suffix {
+			pyNode.TargetProperties["module_tag"] = "py3"
+		}
+
+		pyRef := ctx.emit.Emit(pyNode)
+
+		// CC node compiling the generated `.reg3.cpp`. IsGenerated=true so
+		// composeCCPaths reads the input from $(BUILD_ROOT)/<modPath>/<reg>.
+		// IncludeInputs is the gen_py3_reg.py script (the reference graph's
+		// reg3 CC node lists [<.reg3.cpp>, <gen_py3_reg.py>] as its only
+		// inputs — no transitive header closure is scanned because the
+		// generated source contains only registration stubs).
+		ccIn := in
+		ccIn.IsGenerated = true
+		ccIn.Generator = pyRef
+		ccIn.HasGenerator = true
+		ccIn.Py3Suffix = py3Suffix
+		ccIn.IncludeInputs = []string{genPy3RegScriptPath}
+
+		ccRef, ccOut := EmitCC(instance, regCpp, ccIn, ctx.emit)
+
+		refs = append(refs, ccRef)
+		outputs = append(outputs, ccOut)
+		// memberInputs feeds the .global.a aggregator. The CC's own input
+		// list is [<reg3.cpp>, gen_py3_reg.py]; gen_py3_reg.py contributes
+		// the archive-input added by the reference graph (the reg3.cpp
+		// itself is BUILD_ROOT-rooted and PR-35y R7 strips those from the
+		// AR aggregator).
+		memberInputs = append(memberInputs, genPy3RegScriptPath)
+	}
+
+	return refs, outputs, memberInputs
 }
 
 // emitEnumSrcs emits one EN node per GENERATE_ENUM_SERIALIZATION(*)
