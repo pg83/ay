@@ -183,6 +183,13 @@ type moduleEmitResult struct {
 	// (LIBRARY ARs) carry the closure through but never consume it.
 	LDPluginRefs  []NodeRef
 	LDPluginPaths []string
+	// InducedDeps is the module-level INDUCED_DEPS(<ext-filter> headers...)
+	// declaration list (paths repo-relative). PR-M3-runprogram-closure:
+	// emitRunProgram, when walking a tool PROGRAM via genModule, reads this
+	// to seed the PR output's EmitsIncludes so the include scanner reaches
+	// the tool-injected header closure (e.g. struct2fieldcalc's
+	// `library/cpp/fieldcalc/field_calc_int.h` chain into autoarray.h).
+	InducedDeps []string
 }
 
 // genCtx threads state through the recursive walk. `emit`
@@ -773,6 +780,13 @@ type moduleData struct {
 	// reorderARMembers hoists them to the front of the archive.
 	simdSrcs []simdSrc
 	conflictMod *ModuleStmt
+	// PR-M3-runprogram-closure: module-level INDUCED_DEPS(<exts> headers...)
+	// declarations. Each entry is a SOURCE_ROOT-rooted header path the tool
+	// (when this module is a PROGRAM invoked via RUN_PROGRAM) is declared to
+	// inject into its generated outputs. Consumed by emitRunProgram to seed
+	// the PR output's EmitsIncludes — the scanner then walks the headers'
+	// real `#include` graph to reach the full transitive closure.
+	inducedDeps []string
 }
 
 // resourceEntry is one packer input as produced by upstream
@@ -1493,6 +1507,21 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		// (ymake.core.conf:3217). Other targets currently no-op.
 		if len(v.Args) >= 2 && v.Args[0] == "SFLAGS" {
 			d.sFlags = append(d.sFlags, v.Args[1:]...)
+		}
+	case "INDUCED_DEPS":
+		// PR-M3-runprogram-closure: capture INDUCED_DEPS(<ext-filter> headers...)
+		// declared at module level. First arg is the extension filter
+		// (e.g. `h+cpp`, `h`) identifying which generated output kinds the
+		// listed headers apply to; remaining args are ${ARCADIA_ROOT}-
+		// rooted header paths. ymake/conf/index.yaml syntax: see
+		// `build/conf/_decl.conf` for the source-of-truth spec. We strip
+		// the leading `${ARCADIA_ROOT}/` prefix so the stored paths are
+		// repo-relative (SOURCE_ROOT-relative); the consumer rebases.
+		if len(v.Args) >= 2 {
+			for _, p := range v.Args[1:] {
+				p = strings.TrimPrefix(p, "${ARCADIA_ROOT}/")
+				d.inducedDeps = append(d.inducedDeps, p)
+			}
 		}
 	default:
 		if _, ok := whitelistedMetadataMacros[v.Name]; !ok {
@@ -2655,6 +2684,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			PeerGlobalClosurePaths:  peerContribs.globalPaths,
 			LDPluginRefs:            ldPluginRefs,
 			LDPluginPaths:           ldPluginPaths,
+			InducedDeps:             append([]string(nil), d.inducedDeps...),
 		}
 		ctx.memo[originalInstance] = result
 		ctx.memo[instance] = result
@@ -4044,6 +4074,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			PeerGlobalClosurePaths:  append([]string(nil), peerGlobalPaths...),
 			LDPluginRefs:            mergedLDPluginRefs,
 			LDPluginPaths:           mergedLDPluginPaths,
+			InducedDeps:             append([]string(nil), d.inducedDeps...),
 		}
 		ctx.memo[originalInstance] = result
 		ctx.memo[instance] = result
@@ -4228,6 +4259,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		PeerGlobalClosurePaths:  append([]string(nil), peerGlobalPaths...),
 		LDPluginRefs:            mergedLDPluginRefs,
 		LDPluginPaths:           mergedLDPluginPaths,
+		InducedDeps:             append([]string(nil), d.inducedDeps...),
 	}
 
 	if len(globalRefs) > 0 {
