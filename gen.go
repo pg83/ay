@@ -830,6 +830,14 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 	// the ownCFlags slot (position ~59), which mismatches the reference.
 	d.addInclGlobal = append(d.addInclGlobal, "contrib/libs/python/Include")
 	d.addIncl = append(d.addIncl, "contrib/libs/python/Include")
+
+	// PR-M3-py3-buildroot-addincl: ARCHIVE() in library/python/runtime_py3
+	// auto-injects `${addincl;noauto;output:NAME}` per ymake.core.conf, which
+	// resolves to `-I$(BUILD_ROOT)/library/python/runtime_py3` on every
+	// USE_PYTHON3 consumer (the runtime_py3 module's build-tree dir, where
+	// its `__res.pyc.inc` / `sitecustomize.pyc.inc` headers are generated).
+	// Peer-propagated only (consumers see it via PEERDIR), not own-slot.
+	d.addInclGlobal = append(d.addInclGlobal, "$(BUILD_ROOT)/library/python/runtime_py3")
 }
 
 // pyModuleTypeUsesPython3 returns true for module types whose upstream
