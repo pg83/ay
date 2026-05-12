@@ -225,6 +225,16 @@ type ModuleCCInputs struct {
 	// srcRel with subdirs) and PerSourceCFlags carries the `-m<flag>`
 	// bundle plus any extra `-DSUFFIX=…` from the macro arglist.
 	Variant string
+	// Ragel6Flags is the per-module `SET(RAGEL6_FLAGS <value>)` override
+	// threaded into EmitR6 (PR-M3-ragel-flags-per-module). When empty the
+	// platform-default fires inside EmitR6 (`-CG2` on x86_64 host /
+	// `-CT0` on aarch64 target — mirroring upstream
+	// build/ymake_conf.py:2271-2277 where `set_default_flags(optimized)`
+	// branches on the release toolchain flag). Empirical M3 witness:
+	// `devtools/ymake/lang/makelists/ya.make:6` sets `-lF1`, producing
+	// the ragel6 cmd_args[1] observed in the reference graph's
+	// `makefile_lang.rl6.cpp` node.
+	Ragel6Flags []string
 }
 
 // EmitCC emits a CC node for compiling `srcRel` (a path relative to
