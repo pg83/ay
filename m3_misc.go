@@ -1056,7 +1056,7 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 	reg := codegenRegForInstance(ctx, instance)
 
 	for _, rp := range d.runPrograms {
-		emitRunProgram(ctx, instance, rp, d, reg)
+		emitRunProgram(ctx, instance, rp, d, reg, in)
 
 		// PR-AUDIT-5: classify outputs by extension. CC-compilable
 		// outputs trigger a downstream CC; opaque outputs (.pyc and
@@ -1223,7 +1223,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 
 // emitRunProgram emits a PR node for a RUN_PROGRAM declaration.
 // It walks the tool PROGRAM as a host instance to get its LD ref/path.
-func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, d *moduleData, reg *CodegenRegistry) {
+func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, d *moduleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) {
 	// Walk the tool as a host program.
 	toolPath := filepath.Clean(stmt.ToolPath)
 	toolInstance := instance.WithHost(ctx.cfg)
@@ -1242,17 +1242,10 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		toolBinPath = "$(BUILD_ROOT)/" + toolPath + "/" + filepath.Base(toolPath)
 	}
 
-	// Collect header closure for IN files.
-	var inputClosure []string
-	// (No scanner pass for PR nodes in M3-E scope — inputs are tracked
-	// at the file level, not their transitive header closures, because
-	// the in-files are listed explicitly in the RUN_PROGRAM macro.)
-
-	EmitPR(instance, stmt, toolBinPath, toolLDRef, inputClosure, ctx.emit)
-
-	// F-7-B: register PR outputs. PR outputs are generated files (possibly
-	// .h headers) but their include content is tool-specific and opaque at
-	// gen time.
+	// F-7-B: register PR outputs FIRST so the closure walk below can resolve
+	// each output's $(BUILD_ROOT) path through the codegen registry. PR outputs
+	// are generated files (possibly .h headers) but their include content is
+	// tool-specific and opaque at gen time.
 	//
 	// PR-AUDIT-5: for CC-compilable outputs (.cpp/.cc/.cxx/.c) we know the
 	// generator-tool convention: the emitted source textually `#include`s
@@ -1287,6 +1280,72 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 			})
 		}
 	}
+
+	// PR-M3-G-3: fold the transitive include closure of each CC-compilable
+	// output into THIS PR node's `inputs`. REF's PR node `inputs` carry the
+	// full closure (e.g. devtools/ymake/symbols's `dep_types.h_dumper.cpp`
+	// PR node holds 1500 entries — every transitively-reachable header from
+	// the generator output via the registered EmitsIncludes set). The
+	// closure walk is driven by the registry: each output's EmitsIncludes
+	// is the SOURCE_ROOT-rooted IN/OUTPUT_INCLUDES headers; the scanner
+	// then follows real `#include` directives in those headers via
+	// parseIncludes. Non-CC outputs (.h/.pyc) have nil EmitsIncludes and
+	// would walk to nothing — skip them.
+	inputClosure := prInputClosure(ctx, instance, stmt, moduleInputs)
+
+	EmitPR(instance, stmt, toolBinPath, toolLDRef, inputClosure, ctx.emit)
+}
+
+// prInputClosure returns the union of transitive include closures of every
+// CC-compilable PR output (OUT / OUT_NOAUTO / STDOUT). For each such output
+// the scanner walks the registered EmitsIncludes (SOURCE_ROOT-rooted IN +
+// OUTPUT_INCLUDES headers) and follows real `#include` directives from
+// there. PR outputs whose extension is not CC-compilable (.h / .pyc / ...)
+// have nil EmitsIncludes and contribute nothing.
+//
+// PR-M3-G-3 helper.
+func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []string {
+	// Use the consuming module's full scan-input bag (AddIncl +
+	// PeerAddInclGlobal) so peer headers reachable from the PR-output's
+	// EmitsIncludes chain resolve correctly. Mirrors the EN-node scanner
+	// configuration in emitEnumSrcs (gen.go).
+	scanIn := ModuleCCInputs{
+		AddIncl:           moduleInputs.AddIncl,
+		PeerAddInclGlobal: moduleInputs.PeerAddInclGlobal,
+		SrcDir:            moduleInputs.SrcDir,
+		SourceRoot:        ctx.sourceRoot,
+	}
+
+	var out []string
+	walkOne := func(rel string) {
+		buildRootPath := "$(BUILD_ROOT)/" + instance.Path + "/" + rel
+		sub := walkClosure(ctx, instance, buildRootPath, scanIn)
+		out = append(out, sub...)
+	}
+
+	for _, f := range stmt.OUTFiles {
+		if !isCCSourceExt(f) {
+			continue
+		}
+		walkOne(f)
+	}
+	for _, f := range stmt.OUTNoAutoFiles {
+		if !isCCSourceExt(f) {
+			continue
+		}
+		walkOne(f)
+	}
+	if stmt.StdoutFile != "" && isCCSourceExt(stmt.StdoutFile) {
+		walkOne(stmt.StdoutFile)
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	out = mergeDedup(out, nil)
+	sort.Strings(out)
+	return out
 }
 
 // prEmitsIncludes returns the EmitsIncludes set to register for a PR
