@@ -5301,7 +5301,14 @@ func protoDirectImportIncludes(sourceRoot, srcRel string) []string {
 		if strings.HasSuffix(imp, ".ev") {
 			out = append(out, "$(BUILD_ROOT)/"+strings.TrimSuffix(imp, ".ev")+".ev.pb.h")
 		} else if strings.HasSuffix(imp, ".proto") {
-			out = append(out, "$(BUILD_ROOT)/"+strings.TrimSuffix(imp, ".proto")+".pb.h")
+			base := strings.TrimSuffix(imp, ".proto")
+			if imp == "google/protobuf/descriptor.proto" {
+				// descriptor.pb.h is pre-committed, not a codegen output.
+				// Upstream tree: contrib/libs/protobuf/src/google/protobuf/descriptor.pb.h
+				out = append(out, pbRuntimeBase+"google/protobuf/descriptor.pb.h")
+			} else {
+				out = append(out, "$(BUILD_ROOT)/"+base+".pb.h")
+			}
 		}
 	}
 	sort.Strings(out)
