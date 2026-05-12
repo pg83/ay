@@ -1256,18 +1256,25 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		d.ldPlugins = append(d.ldPlugins, v.Args...)
 	case "USE_PYTHON3":
 		// M3: USE_PYTHON3() adds implicit PEERDIRs to the Python 3 runtime
-		// per build/conf/python.conf:1063-1071 (upstream macro USE_PYTHON3):
+		// per build/conf/python.conf macro USE_PYTHON3 (python.conf:1064-1071):
 		//   PEERDIR(contrib/libs/python)
 		//   when ($USE_ARCADIA_PYTHON == "yes"): PEERDIR+=library/python/runtime_py3
 		// The walker does not evaluate conf macros, so we hardcode the peers
-		// here. We additionally emit contrib/tools/python3 + .../Lib (the tool
-		// peerdirs that the conf indirectly resolves via PYTHON3_TOOL_PEERDIR
-		// in PY3_BIN/PY3TEST modules — kept for back-compat with the M3 graph
-		// emission that relied on the prior hardcoded list). Without contrib/
-		// libs/python the symbols/{module,libc,python} closure was missing.
+		// here. PR-M3-use-python3-peer-split: contrib/tools/python3 and
+		// contrib/tools/python3/Lib are NOT in upstream's USE_PYTHON3 macro
+		// — they come from the PYTHON3_MODULE() macro (python.conf:644-647),
+		// which is invoked inside PY_ANY_MODULE-shaped modules and gated by
+		// USE_ARCADIA_PYTHON && (MSVC || IS_CROSS_TOOLS). Plain PROGRAM /
+		// LIBRARY callers of USE_PYTHON3() (e.g. devtools/ymake,
+		// devtools/ymake/bin) MUST NOT pick them up directly; they reach
+		// the python3 tool transitively via contrib/libs/python's own peer
+		// list (IF (USE_ARCADIA_PYTHON) ELSE branch: PEERDIR(contrib/tools/
+		// python3, contrib/tools/python3/Lib) in contrib/libs/python/ya.make).
+		// Adding them again at the USE_PYTHON3 site pulled their transitive
+		// addincl set (lzma/openssl/libffi) into the peer-AddInclGlobal slot
+		// BEFORE contrib/libs/python's own python/Include, mismatching the
+		// reference cmd_args[21] cluster on ~158 nodes.
 		d.peerdirs = append(d.peerdirs,
-			"contrib/tools/python3",
-			"contrib/tools/python3/Lib",
 			"contrib/libs/python",
 			"library/python/runtime_py3",
 		)
