@@ -1090,8 +1090,20 @@ func composeMuslHostCC(outputPath, inputPath string, addIncl, ownExtras []string
 // in ya.make declarations; the composer adds the literal prefix and
 // the `-I` flag at emit time. Order is preserved (R14 — declaration
 // order matters for `include_next` chains).
+//
+// PR-M3-py3-buildroot-addincl: paths that already start with `$(BUILD_ROOT)/`
+// (auto-injected by `${addincl;noauto;output:NAME}` in ymake.core.conf for
+// ARCHIVE() consumers — e.g. library/python/runtime_py3's build-tree dir)
+// pass through verbatim under a literal `-I` prefix; SOURCE_ROOT wrapping
+// would produce `-I$(SOURCE_ROOT)/$(BUILD_ROOT)/…` which mismatches REF.
 func appendAddIncl(cmdArgs []string, addIncl []string) []string {
 	for _, p := range addIncl {
+		if strings.HasPrefix(p, "$(BUILD_ROOT)/") {
+			cmdArgs = append(cmdArgs, "-I"+p)
+
+			continue
+		}
+
 		cmdArgs = append(cmdArgs, "-I$(SOURCE_ROOT)/"+p)
 	}
 
