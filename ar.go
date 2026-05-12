@@ -131,6 +131,7 @@ func emitARNode(
 	objPaths []string,
 	peerArchiveRefs []NodeRef,
 	memberInputs []string,
+	arPluginPath string,
 	emit Emitter,
 ) NodeRef {
 	scriptPath := "$(SOURCE_ROOT)/build/scripts/link_lib.py"
@@ -142,10 +143,16 @@ func emitARNode(
 		"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
 	}
 
-	// Build the cmd_args list: fixed prefix of 9 elements, then the
-	// archive output path, then all .o input paths in declaration
-	// (caller-supplied) order. The reference graph stores .o files
-	// in SRCS declaration order in cmd_args.
+	// Build the cmd_args list: fixed prefix, then the archive output
+	// path, then all .o input paths in declaration (caller-supplied)
+	// order. The reference graph stores .o files in SRCS declaration
+	// order in cmd_args.
+	//
+	// PR-M3-openssl-ar-plugin-and-as-clean: when arPluginPath is
+	// non-empty, the AR_PLUGIN macro fired on this module's ya.make and
+	// `--plugin <path>` is injected between the inner `-- ... --`
+	// separators of `_LD_ARCHIVER` (upstream ld.conf:366-368 +
+	// ld.conf:373).
 	cmdArgs := []string{
 		// TODO(portability): python3 path is captured from the
 		// reference build; future work must template this from
@@ -158,9 +165,11 @@ func emitARNode(
 		"$(BUILD_ROOT)",
 		"None",
 		"--",
-		"--",
-		archivePath,
 	}
+	if arPluginPath != "" {
+		cmdArgs = append(cmdArgs, "--plugin", arPluginPath)
+	}
+	cmdArgs = append(cmdArgs, "--", archivePath)
 
 	cmdArgs = append(cmdArgs, objPaths...)
 
@@ -171,9 +180,15 @@ func emitARNode(
 	sortedObjPaths := append([]string{}, objPaths...)
 	sort.Strings(sortedObjPaths)
 
-	inputs := make([]string, 0, len(sortedObjPaths)+1+len(memberInputs))
+	inputs := make([]string, 0, len(sortedObjPaths)+2+len(memberInputs))
 	inputs = append(inputs, sortedObjPaths...)
 	inputs = append(inputs, scriptPath)
+	// PR-M3-openssl-ar-plugin-and-as-clean: AR plugin path slots
+	// immediately after the script and before the memberInputs union
+	// (verified at sg2.json openssl AR inputs[696]).
+	if arPluginPath != "" {
+		inputs = append(inputs, arPluginPath)
+	}
 	// memberInputs may legitimately repeat across members (a header
 	// included from two .c files). Dedup against the union including
 	// the .o set so an unexpected collision (e.g. a .o path that
@@ -183,6 +198,9 @@ func emitARNode(
 		objSet[p] = struct{}{}
 	}
 	objSet[scriptPath] = struct{}{}
+	if arPluginPath != "" {
+		objSet[arPluginPath] = struct{}{}
+	}
 
 	for _, p := range memberInputs {
 		if _, dup := objSet[p]; dup {
@@ -316,7 +334,7 @@ func EmitAR(
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + ArchiveName(instance.Path)
 
-	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, emit)
+	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, "", emit)
 }
 
 // EmitARGlobal emits a second AR node for a module's GLOBAL_SRCS,
@@ -344,7 +362,7 @@ func EmitARGlobal(
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + globalArchiveName(instance.Path)
 
-	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, emit)
+	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, "", emit)
 }
 
 // EmitARNamed emits an AR node using an explicitly supplied archive
@@ -354,6 +372,10 @@ func EmitARGlobal(
 //
 // archiveBaseName must be just the filename (e.g. "libpy3foo.a"), NOT a
 // full path — the function prepends "$(BUILD_ROOT)/<instance.Path>/".
+//
+// arPluginPath is the AR_PLUGIN's resolved $(SOURCE_ROOT)-rooted path
+// (empty when no AR_PLUGIN macro fired on the owning module).
+// PR-M3-openssl-ar-plugin-and-as-clean.
 func EmitARNamed(
 	instance ModuleInstance,
 	archiveBaseName string,
@@ -361,6 +383,7 @@ func EmitARNamed(
 	objPaths []string,
 	peerArchiveRefs []NodeRef,
 	memberInputs []string,
+	arPluginPath string,
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
@@ -369,7 +392,7 @@ func EmitARNamed(
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
 
-	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, emit)
+	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, emit)
 }
 
 // EmitARNamedTagged is like EmitARNamed but stamps an explicit
@@ -385,6 +408,7 @@ func EmitARNamedTagged(
 	objPaths []string,
 	peerArchiveRefs []NodeRef,
 	memberInputs []string,
+	arPluginPath string,
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
@@ -393,7 +417,7 @@ func EmitARNamedTagged(
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
 
-	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, memberInputs, emit)
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, emit)
 }
 
 // EmitARGlobalNamedTagged is like EmitARGlobalNamed but uses an
@@ -416,7 +440,7 @@ func EmitARGlobalNamedTagged(
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
 
-	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, memberInputs, emit)
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, memberInputs, "", emit)
 }
 
 // EmitARGlobalNamed is like EmitARGlobal but uses an explicitly
@@ -435,5 +459,5 @@ func EmitARGlobalNamed(
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
 
-	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, emit)
+	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, "", emit)
 }

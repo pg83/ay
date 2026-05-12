@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -494,7 +495,6 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"OPENSOURCE_EXPORT_REPLACEMENT":   {}, // CMake/Conan export replacement; metadata.
 	"EXCLUDE_TAGS":                    {}, // Build-system tag exclusion; metadata.
 	"FILES":                           {}, // Proto library file listing; metadata for PR-M3-B.
-	"AR_PLUGIN":                       {}, // Archive plugin declaration; metadata.
 	"NO_JOIN_SRC":                     {}, // Suppresses JOIN_SRCS optimisation; metadata.
 	"MASMFLAGS":                       {}, // MASM compiler flags (Windows); no-op on Linux.
 	"NO_MYPY":                         {}, // Suppresses mypy type checking; metadata.
@@ -694,6 +694,7 @@ type moduleData struct {
 	noPythonIncl     bool     // PR-M3-aarch64-py-closure: set by NO_PYTHON_INCLUDES(); suppresses the PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (mirror of `when ($NO_PYTHON_INCLS != "yes") { PEERDIR+=contrib/libs/python }` in build/conf/python.conf:741-743).
 	usePython3      bool      // PR-M3-python-addincl-cflags: set by USE_PYTHON3() or a PY3-family module type (PY3_LIBRARY / PY3_PROGRAM / PY3_PROGRAM_BIN / PY23_LIBRARY / PY23_NATIVE_LIBRARY); normalised by applyPython3AddIncl. Triggers the `when ($USE_ARCADIA_PYTHON == "yes")` branch of `_PYTHON3_ADDINCL` (python.conf:1018-1023): -DUSE_PYTHON3 (via defaultPeerCFlags / AutoPeerCFlags slot) and contrib/libs/python/Include (own + GLOBAL ADDINCL).
 	ldPlugins        []string // PR-35k: filenames declared via LD_PLUGIN(name.py); the only M2 case is contrib/libs/musl/include's `LD_PLUGIN(musl.py)`. Each entry becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs.
+	arPlugin         string   // PR-M3-openssl-ar-plugin-and-as-clean: name from AR_PLUGIN(name); resolves to `$(SOURCE_ROOT)/<modulePath>/<name>.pyplugin` and is injected into the AR cmd_args (`--plugin <path>`) and inputs. Mirror of upstream macro `AR_PLUGIN` (ymake.core.conf:3396-3398) + `_LD_ARCHIVER_KV_PLUGIN` (ld.conf:366-368). Empty when no AR_PLUGIN macro present.
 	// PR-35o: per-source extra CFLAGS keyed by source filename.
 	// Populated by `SRC(filename extra_cflags...)` (e.g.
 	// `util/charset/ya.make:22-25` `SRC(wide_sse41.cpp -DSSE41_STUB)`).
@@ -1368,6 +1369,19 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		// owning module's `genModule` call. Only `contrib/libs/musl/
 		// include` declares this in M2 (`LD_PLUGIN(musl.py)`).
 		d.ldPlugins = append(d.ldPlugins, v.Args...)
+	case "AR_PLUGIN":
+		// PR-M3-openssl-ar-plugin-and-as-clean: AR_PLUGIN(name) registers
+		// a python plugin for the module's AR step. Upstream macro
+		// `AR_PLUGIN` (ymake.core.conf:3396-3398) does
+		// `SET(_AR_PLUGIN $name.pyplugin)`; ld.conf:366-368 then injects
+		// `--plugin ${input:_AR_PLUGIN}` between the inner `-- ... --`
+		// separators of `_LD_ARCHIVER` and adds the plugin path to
+		// `inputs`. Only `contrib/libs/openssl`'s `AR_PLUGIN(ar)` fires
+		// in the M3 closure.
+		if len(v.Args) != 1 {
+			ThrowFmt("gen: AR_PLUGIN expects exactly 1 argument, got %d", len(v.Args))
+		}
+		d.arPlugin = v.Args[0] + ".pyplugin"
 	case "USE_PYTHON3":
 		// M3: USE_PYTHON3() adds implicit PEERDIRs to the Python 3 runtime
 		// per build/conf/python.conf macro USE_PYTHON3 (python.conf:1064-1071):
@@ -4141,15 +4155,23 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		arInstance.Language = LangPy
 	}
 
+	// PR-M3-openssl-ar-plugin-and-as-clean: resolve AR_PLUGIN path
+	// (`$(SOURCE_ROOT)/<modulePath>/<name>.pyplugin`) when the macro
+	// fired on this module's ya.make.
+	arPluginPath := ""
+	if d.arPlugin != "" {
+		arPluginPath = "$(SOURCE_ROOT)/" + instance.Path + "/" + d.arPlugin
+	}
+
 	if len(ccRefs) > 0 {
-		// PR-M3-module-tag-and-stats-enums-dep: the plain `.a` archive for
-		// PY23_LIBRARY / PY23_NATIVE_LIBRARY surfaces `module_tag=py3` /
-		// `module_tag=py3_native` in REF. Empty tag preserves the
-		// historical no-tag shape for every other module type.
+		// PR-M3-module-tag-and-stats-enums-dep: PY23_LIBRARY / PY23_NATIVE_LIBRARY
+		// surface `module_tag=py3` / `module_tag=py3_native`.
+		// PR-M3-openssl-ar-plugin-and-as-clean: openssl AR_PLUGIN(ar) injects
+		// `--plugin <ar.pyplugin>` between the link_lib.py `--` separators.
 		if perModuleCCTag != "" {
-			arRef = EmitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, ctx.emit)
+			arRef = EmitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginPath, ctx.emit)
 		} else {
-			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, ctx.emit)
+			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginPath, ctx.emit)
 		}
 	}
 
@@ -5508,6 +5530,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		if srcDir != "" && srcDir != srcInstance.Path && !sourceExistsLocally(ctx.sourceRoot, srcInstance.Path, srcRel) {
 			asInputPath = "$(SOURCE_ROOT)/" + srcDir + "/" + srcRel
 		}
+
+		// PR-M3-openssl-ar-plugin-and-as-clean: collapse `..` segments so
+		// e.g. openssl's `crypto/../asm/...` resolves to `asm/...` in the
+		// AR aggregator's memberInputs. The AS node's own input path is
+		// composed independently inside as.go and is already cleaned.
+		asInputPath = path.Clean(asInputPath)
 
 		asInputs := append([]string{asInputPath}, asIn.IncludeInputs...)
 
