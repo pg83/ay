@@ -605,6 +605,18 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 		pbH := "$(BUILD_ROOT)/" + protoBase + ".pb.h"
 		pbCC := "$(BUILD_ROOT)/" + protoBase + ".pb.cc"
+
+		// PR-M3-L0-codegen-deps-EV-PB: stash the PB NodeRef under both output
+		// paths on the emitting platform so resolveCodegenDepRefs can thread
+		// it as a direct dep on any consumer CC whose IncludeInputs carry the
+		// .pb.h / .pb.cc BUILD_ROOT path. Keyed per-platform — PB emits on
+		// both target and host axes; x86_64 consumers must reach the x86_64
+		// PB, aarch64 consumers the aarch64 PB.
+		pbKey := codegenOutputKey{platform: instance.Target}
+		pbKey.path = pbH
+		ctx.pbOutputs[pbKey] = pbRef
+		pbKey.path = pbCC
+		ctx.pbOutputs[pbKey] = pbRef
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
 			directImports := protoDirectImportIncludes(ctx.sourceRoot, protoRelPath)
 			extras := pbDescriptorImporterExtras(ctx.sourceRoot, protoRelPath)
@@ -686,6 +698,14 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			evRelPath := instance.Path + "/" + src
 			evH := "$(BUILD_ROOT)/" + evRelPath + ".pb.h"
 			evPbCC := "$(BUILD_ROOT)/" + evRelPath + ".pb.cc"
+
+			// PR-M3-L0-codegen-deps-EV-PB: stash the EV NodeRef under both outputs
+			// on the emitting platform. See PB branch above for the keying rationale.
+			evKey := codegenOutputKey{platform: instance.Target}
+			evKey.path = evH
+			ctx.evOutputs[evKey] = evRef
+			evKey.path = evPbCC
+			ctx.evOutputs[evKey] = evRef
 			if reg := codegenRegForInstance(ctx, instance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
 				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC)
@@ -792,15 +812,13 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		ccIn.Generator = co.genRef
 		ccIn.HasGenerator = true
 		ccIn.IncludeInputs = walkClosure(ctx, instance, co.pbCC, moduleInputs)
-		// PR-M3-final-codegen-registry-expansion: protoc emits
-		// `#include "google/protobuf/wire_format.h"` into the reflection
-		// scaffolding of every .ev.pb.cc; add it post-closure (registry-side
-		// addition leaks through .ev.pb.h → .ev.pb.cc witness link to
-		// over-emit onto non-protobuf CC nodes). Restricted to .ev sources
-		// (.pb.cc gets wire_format.h via pbCcDeepRuntimeHeaders already).
+		// .ev.pb.cc gets wire_format.h post-closure (registry-side leaks through
+		// .ev.pb.h to over-emit; .pb.cc gets it via pbCcDeepRuntimeHeaders).
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
 			ccIn.IncludeInputs = append(ccIn.IncludeInputs, pbRuntimeBase+"google/protobuf/wire_format.h")
 		}
+		// PR-M3-L0-codegen-deps-EV-PB: cross-codegen deps via .pb.h imports.
+		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, co.genRef)
 
 		ccRef, ccOut := EmitCC(instance, co.srcRel, ccIn, ctx.emit)
 		ccRefs = append(ccRefs, ccRef)

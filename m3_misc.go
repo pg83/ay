@@ -1548,6 +1548,15 @@ func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string
 	ccIn.IncludeInputs = includeInputs
 	ccIn.ExtraDepRefs = depRefs
 
+	// PR-M3-L0-codegen-deps-EV-PB: append codegen-producer refs reached via
+	// the .cpp's transitive include closure (PB/EV peers an EN-downstream CC
+	// pulls in by including .pb.h / .ev.pb.h). Filter out anything already in
+	// depRefs (cross-EN dep set) so we don't duplicate.
+	extra := resolveCodegenDepRefs(ctx, instance, includeInputs, depRefs...)
+	if len(extra) > 0 {
+		ccIn.ExtraDepRefs = append(append([]NodeRef(nil), depRefs...), extra...)
+	}
+
 	ref, outPath := EmitCC(instance, cppRel, ccIn, ctx.emit)
 
 	// AR member-inputs: only the SOURCE_ROOT-rooted closure entries.
