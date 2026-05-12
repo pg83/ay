@@ -171,6 +171,17 @@ type ModuleCCInputs struct {
 	// OwnCOnlyFlagsGlobal is the module's own GLOBAL CONLYFLAGS
 	// (PR-33 D02). C / .S sources only.
 	OwnCOnlyFlagsGlobal []string
+	// SFlags is the module's own SFLAGS bundle as appended by
+	// `SET_APPEND(SFLAGS ...)` (PR-M3-openssl-as-cflags). Slotted by
+	// composeASCmdArgs immediately before the trailing `-c -o <out>
+	// <in>` block, mirroring upstream ymake's
+	// `$CFLAGS $SFLAGS $SRCFLAGS -c -o ...` order at
+	// `build/ymake.core.conf:3217`. Empty for every module that does
+	// not declare `SET_APPEND(SFLAGS ...)`; only openssl-internal
+	// modules carry a non-empty SFlags set in the M3 closure
+	// (`contrib/libs/openssl/crypto/ya.make.inc:179-186`'s AVX512
+	// bundle for x86_64).
+	SFlags []string
 	// PerSourceCFlags is the per-source extra CFLAGS bundle attached
 	// to the current compile via the `SRC(filename extra_cflags...)`
 	// macro (PR-35o). The composer slots these flags BETWEEN
