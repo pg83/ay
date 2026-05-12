@@ -243,7 +243,18 @@ func protoImportsDescriptor(sourceRoot, srcRel string) bool {
 // PB/EV emitters walk the host protoc + cpp_styleguide tool instances to
 // get their LDRefs; the same cached instances are shared across all
 // PROTO_LIBRARY modules via the genCtx memo.
-func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
+//
+// PR-M3-proto-library-ar: for true PROTO_LIBRARY modules (module name
+// `PROTO_LIBRARY`), after emitting PB/EV nodes, this function ALSO
+// emits the downstream CC for each generated .pb.cc / .ev.pb.cc and an
+// AR archiving them into `lib<dotted-path>.a` with module_tag=cpp_proto.
+// Mirrors the LIBRARY/EV branch in `gen.go::emitOneSource` (the .ev
+// case at line 4315) for the per-source downstream-CC dispatch; mirrors
+// the LIBRARY AR shape at line 3097 for the archive step.
+// `peerContribs` carries the transitive per-axis peer-GLOBAL union the
+// header-only walker computed (used to compose the per-CC ModuleCCInputs
+// so flags reach the consumer CCs of the protoc-generated sources).
+func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs) {
 	// Collect .proto and .ev sources from d.srcs.
 	var protoSrcs, evSrcs []string
 
@@ -292,9 +303,22 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		_ = exc
 	}
 
+	// PR-M3-proto-library-ar: collect per-codegen-source (genRef, .pb.cc path)
+	// pairs so the AR step can fold them into ccRefs/ccOutputs/memberInputs
+	// in declaration order. Mirrors the LIBRARY AR aggregation pattern
+	// (gen.go:2761 addMemberInputs(ccIns) inside the per-source loop).
+	type protoCodegenOutput struct {
+		genRef NodeRef // PB or EV node ref (used as Generator dep for the downstream CC)
+		pbCC   string  // generated .pb.cc / .ev.pb.cc absolute BUILD_ROOT path
+		srcRel string  // module-relative source-with-codegen-suffix (".pb.cc" appended)
+		primSrc string // primary source path ($(SOURCE_ROOT)/<module>/<src>) for AR memberInputs
+	}
+
+	var codegenOutputs []protoCodegenOutput
+
 	// Emit PB nodes.
 	for _, src := range protoSrcs {
-		EmitPB(instance, src, cppStyleguideLDRef, protocLDRef,
+		pbRef := EmitPB(instance, src, cppStyleguideLDRef, protocLDRef,
 			cppStyleguideBinary, protocBinary,
 			"cpp_proto", ctx.sourceRoot, ctx.emit)
 
@@ -326,6 +350,15 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				EmitsIncludes: append([]string{pbH}, protobufRuntimeHeaders...),
 			})
 		}
+
+		// PR-M3-proto-library-ar: stash the (PB ref, .pb.cc, src-with-suffix)
+		// for the downstream-CC + AR step below.
+		codegenOutputs = append(codegenOutputs, protoCodegenOutput{
+			genRef:  pbRef,
+			pbCC:    pbCC,
+			srcRel:  strings.TrimSuffix(src, ".proto") + ".pb.cc",
+			primSrc: "$(SOURCE_ROOT)/" + protoRelPath,
+		})
 	}
 
 	// Emit EV nodes (PROTO_LIBRARY with .ev sources → module_tag:"cpp_proto").
@@ -346,7 +379,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		}
 
 		for _, src := range evSrcs {
-			EmitEV(instance, src, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
+			evRef := EmitEV(instance, src, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
 				"cpp_proto", ctx.sourceRoot, ctx.emit)
 
@@ -381,6 +414,101 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 					EmitsIncludes: ccEmits,
 				})
 			}
+
+			codegenOutputs = append(codegenOutputs, protoCodegenOutput{
+				genRef:  evRef,
+				pbCC:    evPbCC,
+				srcRel:  src + ".pb.cc",
+				primSrc: "$(SOURCE_ROOT)/" + evRelPath,
+			})
 		}
 	}
+
+	// PR-M3-proto-library-ar: for true PROTO_LIBRARY modules, emit the
+	// downstream CC for each generated .pb.cc / .ev.pb.cc and the AR
+	// archiving them. Skip for non-PROTO_LIBRARY callers — the LIBRARY
+	// path's own .ev branch in emitOneSource already handles its own
+	// downstream-CC + AR aggregation (gen.go:4315).
+	if d.moduleStmt.Name != "PROTO_LIBRARY" || len(codegenOutputs) == 0 {
+		return
+	}
+
+	// Compose ModuleCCInputs for the downstream CCs. Mirror the LIBRARY
+	// path's moduleInputs construction (gen.go:2632) but pull the per-axis
+	// peer-GLOBAL slices from the header-only walker's peerContribs.
+	// LibcMusl-self modules zero their own GLOBAL CFLAGS (mirror of
+	// gen.go:1925-1929 in the header-only branch).
+	ownCFlagsGlobalSelf := d.cFlagsGlobal
+	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
+	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
+
+	if instance.Flags.LibcMusl {
+		ownCFlagsGlobalSelf = nil
+		ownCXXFlagsGlobalSelf = nil
+		ownCOnlyFlagsGlobalSelf = nil
+	}
+
+	dedupedAddIncl := mergeDedup(d.addIncl, nil)
+
+	moduleInputs := ModuleCCInputs{
+		AddIncl:              dedupedAddIncl,
+		PeerAddInclGlobal:    peerContribs.addIncl,
+		CFlags:               d.cFlags,
+		CXXFlags:             d.cxxFlags,
+		COnlyFlags:           d.cOnlyFlags,
+		OwnCFlagsGlobal:      ownCFlagsGlobalSelf,
+		OwnCXXFlagsGlobal:    ownCXXFlagsGlobalSelf,
+		OwnCOnlyFlagsGlobal:  ownCOnlyFlagsGlobalSelf,
+		PeerCFlagsGlobal:     peerContribs.cFlags,
+		PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
+		PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
+		AutoPeerCFlags:       defaultPeerCFlags(ctx, instance, d),
+		SrcDir:               d.srcDir,
+		SourceRoot:           ctx.sourceRoot,
+		DefaultVars:          d.defaultVars,
+		DefaultVarOrder:      d.defaultVarOrder,
+		ModuleTag:            "cpp_proto",
+	}
+
+	// Per-source downstream-CC emission. Mirrors gen.go:4399-4411 (EV
+	// LIBRARY branch) but for the PROTO_LIBRARY context.
+	ccRefs := make([]NodeRef, 0, len(codegenOutputs))
+	ccOutputs := make([]string, 0, len(codegenOutputs))
+	memberInputs := make([]string, 0, 64)
+	memberInputsSeen := make(map[string]struct{})
+
+	addMemberInputs := func(paths []string) {
+		for _, p := range paths {
+			if _, dup := memberInputsSeen[p]; dup {
+				continue
+			}
+			memberInputsSeen[p] = struct{}{}
+			memberInputs = append(memberInputs, p)
+		}
+	}
+
+	for _, co := range codegenOutputs {
+		ccIn := moduleInputs
+		ccIn.IsGenerated = true
+		ccIn.Generator = co.genRef
+		ccIn.HasGenerator = true
+		ccIn.IncludeInputs = walkClosure(ctx, instance, co.pbCC, moduleInputs)
+
+		ccRef, ccOut := EmitCC(instance, co.srcRel, ccIn, ctx.emit)
+		ccRefs = append(ccRefs, ccRef)
+		ccOutputs = append(ccOutputs, ccOut)
+
+		// AR memberInputs: primary source first, then the CC's include closure.
+		// Mirror of gen.go:4414-4415 (LIBRARY EV branch returning the .ev
+		// source as the primary member input) + gen.go:2761 addMemberInputs.
+		perCC := make([]string, 0, 1+len(ccIn.IncludeInputs))
+		perCC = append(perCC, co.primSrc)
+		perCC = append(perCC, ccIn.IncludeInputs...)
+		addMemberInputs(perCC)
+	}
+
+	// AR emission. Mirrors gen.go:3097 EmitARNamed with module_tag=cpp_proto.
+	arBaseName := ArchiveName(instance.Path)
+	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + arBaseName
+	emitARNode(instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, ctx.emit)
 }

@@ -2081,7 +2081,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// PROTO_LIBRARY modules never have compilable C/C++ sources and
 		// always reach the header-only branch; their .proto/.ev sources
 		// require protoc-driven PB/EV node emission.
-		emitProtoSrcs(ctx, instance, d)
+		// PR-M3-proto-library-ar: also emits downstream CC + AR scaffolding
+		// for true PROTO_LIBRARY modules (skipped for other multimodule
+		// types). peerContribs is threaded so the downstream CCs see the
+		// same peer-GLOBAL CFLAGS / ADDINCL slice the header-only walker
+		// aggregated.
+		emitProtoSrcs(ctx, instance, d, peerContribs)
 
 		// PR-M3-E: emit JV, CF, BI, PR nodes declared at module level.
 		emitMiscNodes(ctx, instance, d)
