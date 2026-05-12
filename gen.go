@@ -866,13 +866,34 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 	d.addInclGlobal = append(d.addInclGlobal, "contrib/libs/python/Include")
 	d.addIncl = append(d.addIncl, "contrib/libs/python/Include")
 
-	// PR-M3-py3-buildroot-addincl: ARCHIVE() in library/python/runtime_py3
-	// auto-injects `${addincl;noauto;output:NAME}` per ymake.core.conf, which
-	// resolves to `-I$(BUILD_ROOT)/library/python/runtime_py3` on every
-	// USE_PYTHON3 consumer (the runtime_py3 module's build-tree dir, where
-	// its `__res.pyc.inc` / `sitecustomize.pyc.inc` headers are generated).
-	// Peer-propagated only (consumers see it via PEERDIR), not own-slot.
-	d.addInclGlobal = append(d.addInclGlobal, "$(BUILD_ROOT)/library/python/runtime_py3")
+	// PR-M3-python3-addincl-buildroot-order: ARCHIVE(NAME ...) in
+	// `library/python/runtime_py3/ya.make` auto-injects an `addincl`
+	// modifier on the output (`${addincl;noauto;output:NAME}` per
+	// `build/ymake.core.conf:4143` macro ARCHIVE), which adds
+	// `$(BUILD_ROOT)/library/python/runtime_py3` to that module's own
+	// IncDirs at `EIncDirScope::Global` (per
+	// `macro_processor.cpp:1016-1019`). The injection is OWNER-SCOPED:
+	// only `library/python/runtime_py3` (the module that owns the
+	// ARCHIVE statement) has this path in its OWN AddIncl bucket;
+	// other USE_PYTHON3 callers (e.g. devtools/ymake) see it solely
+	// via peer-propagation from runtime_py3, NOT in their own slot.
+	//
+	// Place it in `d.addIncl` (non-GLOBAL own) so it lands in the
+	// `ownAddIncl` slot of composeTargetCC / composeHostCC (between
+	// ccIncludesPrefix and ccIncludesSuffix). Empirical: REF
+	// `library/python/runtime_py3/__res.cpp.pic.o` slots 8-9 carry
+	// `[python/Include, BUILD_ROOT/library/python/runtime_py3]` in
+	// that order, both in OWN AddIncl.
+	//
+	// For propagation to consumers, the path is spliced into
+	// `effectiveAddInclGlobal` AFTER `contrib/restricted/abseil-cpp`
+	// in `genModule` — see the post-merge splice block. This matches
+	// the empirical REF ordering on 145 consumer nodes (e.g.
+	// devtools/ymake LIBRARY preeval.cpp.o slots 21-23:
+	// `[python/Include, abseil-cpp, BUILD_ROOT/runtime_py3]`).
+	if modulePath == "library/python/runtime_py3" {
+		d.addIncl = append(d.addIncl, "$(BUILD_ROOT)/library/python/runtime_py3")
+	}
 }
 
 // pyModuleTypeUsesPython3 returns true for module types whose upstream
@@ -2876,6 +2897,51 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// Stored on the result so transitive consumers see the closure
 	// in one shot.
 	effectiveAddInclGlobal := mergeDedup(d.addInclGlobal, peerAddInclGlobal)
+
+	// PR-M3-python3-addincl-buildroot-order: `library/python/runtime_py3`
+	// propagates `$(BUILD_ROOT)/library/python/runtime_py3` to consumers
+	// via its `effectiveAddInclGlobal`, but at a position AFTER
+	// `contrib/restricted/abseil-cpp` (NOT at the head as a regular
+	// own-GLOBAL would land). Upstream `_PYTHON3_ADDINCL` runs at
+	// module-eval time (adds `python/Include`), then PEERDIR processing
+	// propagates abseil-cpp into runtime_py3's UserGlobalPropagated via
+	// `library/cpp/resource → absl_flat_hash`; the `ARCHIVE` macro fires
+	// later still and adds the BUILD_ROOT path via the `addincl`
+	// modifier — interleaved in such a way that the path lands AFTER
+	// abseil-cpp in propagation. Splice it explicitly to match the
+	// empirical REF ordering on 145 consumer nodes (e.g. devtools/ymake
+	// LIBRARY preeval.cpp.o slots 21-23 `[python/Include, abseil-cpp,
+	// BUILD_ROOT/runtime_py3]`).
+	//
+	// Fallback: when abseil-cpp is not in the merged set (no peer chain
+	// brings it), append at the tail — preserves the path so consumers
+	// can resolve runtime_py3's generated headers, while not interfering
+	// with non-abseil cases.
+	if instance.Path == "library/python/runtime_py3" {
+		const buildRootPath = "$(BUILD_ROOT)/library/python/runtime_py3"
+		const abseilPath = "contrib/restricted/abseil-cpp"
+		spliced := make([]string, 0, len(effectiveAddInclGlobal)+1)
+		inserted := false
+
+		for _, p := range effectiveAddInclGlobal {
+			if p == buildRootPath {
+				continue
+			}
+
+			spliced = append(spliced, p)
+
+			if !inserted && p == abseilPath {
+				spliced = append(spliced, buildRootPath)
+				inserted = true
+			}
+		}
+
+		if !inserted {
+			spliced = append(spliced, buildRootPath)
+		}
+
+		effectiveAddInclGlobal = spliced
+	}
 
 	// PR-32 D07: same shape for CFLAGS / CXXFLAGS / CONLYFLAGS.
 	// PR-32 D09 follow-on: musl-self modules' GLOBAL CFLAGS (which
