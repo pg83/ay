@@ -5802,6 +5802,10 @@ func protoDirectImportIncludes(sourceRoot, srcRel string) []string {
 				// descriptor.pb.h is pre-committed, not a codegen output.
 				// Upstream tree: contrib/libs/protobuf/src/google/protobuf/descriptor.pb.h
 				out = append(out, pbRuntimeBase+"google/protobuf/descriptor.pb.h")
+				// PR-M3-protobuf-runtime-deep-closure: the .proto source itself is
+				// also an input of the downstream .pb.cc.o (witnessed in REF for
+				// every PROTO_LIBRARY consumer whose .proto imports descriptor.proto).
+				out = append(out, pbRuntimeBase+"google/protobuf/descriptor.proto")
 			} else {
 				out = append(out, "$(BUILD_ROOT)/"+base+".pb.h")
 			}
