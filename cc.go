@@ -704,10 +704,16 @@ func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
 // helper — they fold CFLAGS into `muslExtraDefines` and zero out the
 // peer-propagation slots upstream in EmitCC.
 func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs) []string {
-	out := make([]string, 0, len(in.CFlags)+len(in.OwnCFlagsGlobal)+len(in.PeerCFlagsGlobal))
+	// PR-M3-cmd-arg-slot-ordering: empirical (asio.cpp.o, lang/*.cpp.o,
+	// idx ~53/71) shows peer-propagated GLOBAL CFLAGS slot AHEAD of own
+	// GLOBAL CFLAGS. Own non-GLOBAL `in.CFlags` keeps its leading slot
+	// (python mysnprintf.c.pic.o idx 73-78: `in.CFlags` first, then
+	// peer-GLOBAL). So the rule is: [own non-GLOBAL, peer-GLOBAL, own
+	// GLOBAL].
+	out := make([]string, 0, len(in.CFlags)+len(in.PeerCFlagsGlobal)+len(in.OwnCFlagsGlobal))
 	out = append(out, in.CFlags...)
-	out = append(out, in.OwnCFlagsGlobal...)
 	out = append(out, in.PeerCFlagsGlobal...)
+	out = append(out, in.OwnCFlagsGlobal...)
 
 	return out
 }
@@ -961,7 +967,17 @@ func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFl
 	cmdArgs = append(cmdArgs, autoPeerCFlags...)
 	cmdArgs = append(cmdArgs, hostSseFeatures...)
 	cmdArgs = append(cmdArgs, ndebugPicBlock...)
-	cmdArgs = appendCxxStdAndOwn(cmdArgs, isCxx, noCompilerWarnings, true, ownExtras)
+	// PR-M3-cmd-arg-slot-ordering: mirror composeTargetCC's C-source
+	// trailer — CONLYFLAGS slot AFTER macroPrefixMapFlags + perSrcCFlags,
+	// not via appendCxxStdAndOwn's unconditional tail-append. Empirical:
+	// base64 plain32/ssse3 host PIC nodes show -std=c11 (and -mssse3)
+	// immediately before the source path.
+	var cOnlyExtrasHost []string
+	if isCxx {
+		cmdArgs = appendCxxStdAndOwn(cmdArgs, true, noCompilerWarnings, true, ownExtras)
+	} else {
+		cOnlyExtrasHost = ownExtras
+	}
 
 	if isCxx {
 		cmdArgs = append(cmdArgs, ownGlobalBucket...)
@@ -975,6 +991,7 @@ func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFl
 	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)
 	// PR-35o: per-source extra CFLAGS slot (mirror of composeTargetCC).
 	cmdArgs = append(cmdArgs, perSrcCFlags...)
+	cmdArgs = append(cmdArgs, cOnlyExtrasHost...)
 	cmdArgs = append(cmdArgs, inputPath)
 
 	return cmdArgs

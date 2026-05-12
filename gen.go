@@ -844,9 +844,14 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 			// `libcxx/include` + `libcxx/src` + `libcxxrt/include` in
 			// stmt declaration order, where include and libcxxrt/include
 			// are GLOBAL and src is non-GLOBAL).
+			//
+			// PR-M3-cmd-arg-slot-ordering: append AllPaths (positional
+			// declaration order across the GLOBAL split) instead of
+			// "GLOBAL-then-OWN", which mis-orders modules whose ya.make
+			// interleaves bare and GLOBAL paths (libffi, base64, ragel5
+			// peer modules) — see AddInclStmt.AllPaths doc.
 			d.addInclGlobal = append(d.addInclGlobal, v.GlobalPaths...)
-			d.addIncl = append(d.addIncl, v.GlobalPaths...)
-			d.addIncl = append(d.addIncl, v.OwnPaths...)
+			d.addIncl = append(d.addIncl, v.AllPaths...)
 		case *CFlagsStmt:
 			// PR-32 D04: GLOBAL flags peer-propagate to consumers via
 			// PEERDIR (kept in `d.cFlagsGlobal`); non-GLOBAL flags apply
@@ -2536,26 +2541,59 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		addEach(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
 	}
 
-	// Phase 3: user-peers' AddInclGlobal in declaration order (own +
-	// transitive merged per peer). A peer with no OWN GLOBAL but a
-	// non-empty transitive set (library/cpp/malloc/mimalloc → contrib/
-	// libs/mimalloc) lands its transitive contribution at THIS peer's
-	// slot, ahead of later peers' OWN.
+	// PR-M3-cmd-arg-slot-ordering: when a module has at least one
+	// user-peer with OWN GLOBAL ADDINCL, emit program-defaults' AddIncl-
+	// Global BEFORE user-peers'. Empirical:
+	//   - ragel5/rlgen-cd peers ragel5/{aapl,common,redfsm} which each
+	//     have OWN GLOBAL. REF places tcmalloc + abseil-cpp ahead of
+	//     ragel5/{aapl,common,redfsm}.
+	//   - protoc/bin peers contrib/libs/protoc which has OWN GLOBAL
+	//     (protoc/src). REF places tcmalloc + abseil-cpp ahead of
+	//     protoc/src + protobuf/src + abseil-cpp-tstring.
+	//   - rescompiler/rescompressor peers library/cpp/resource which
+	//     itself peers util chains; the user-peer's OWN-presence flips
+	//     the order.
+	//   - archiver peers library/cpp/{archive,digest/md5,getopt/small}
+	//     — NONE have OWN GLOBAL. REF places user-peers' transitive
+	//     (zlib, double-conversion, libc_compat) ahead of tcmalloc +
+	//     abseil-cpp.
+	//   - ragel6 has user-peers with OWN GLOBAL (ragel5/aapl), so
+	//     program-defaults emit first; cow/on contributes nothing so
+	//     the visible order stays [mimalloc/include, aapl].
+	anyUserPeerOwn := false
 	for _, rp := range resolved {
-		if rp.kind != peerKindUserPeer {
-			continue
+		if rp.kind == peerKindUserPeer && len(rp.result.OwnAddInclGlobal) > 0 {
+			anyUserPeerOwn = true
+			break
 		}
-
-		addEach(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
 	}
 
-	// Phase 4: program-defaults' AddInclGlobal in declaration order.
-	for _, rp := range resolved {
-		if rp.kind != peerKindProgramDefault {
-			continue
-		}
+	emitUserPeers := func() {
+		for _, rp := range resolved {
+			if rp.kind != peerKindUserPeer {
+				continue
+			}
 
-		addEach(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
+			addEach(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
+		}
+	}
+
+	emitProgramDefaults := func() {
+		for _, rp := range resolved {
+			if rp.kind != peerKindProgramDefault {
+				continue
+			}
+
+			addEach(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
+		}
+	}
+
+	if anyUserPeerOwn {
+		emitProgramDefaults()
+		emitUserPeers()
+	} else {
+		emitUserPeers()
+		emitProgramDefaults()
 	}
 
 	// PR-35g: drop bundled-include paths from the peer-propagated set.
