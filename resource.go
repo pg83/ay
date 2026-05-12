@@ -1058,6 +1058,22 @@ func emitPySrcObjcopy(
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
 
+		// PR-M3-L0-cascade-close-v2: thread PY (yapyc3) producer refs into
+		// the objcopy CC's deps[]. The .yapyc3 paths live in `inps` as
+		// BUILD_ROOT-rooted inputs; resolveCodegenDepRefsExt's input-driven
+		// branch matches each against the codegen registry and returns the
+		// PY producer NodeRef. Per Plan B PR-2: closes 41 PY leaves.
+		exclude := []NodeRef{}
+		if rescompilerLDRef != (NodeRef{}) {
+			exclude = append(exclude, rescompilerLDRef)
+		}
+		if rescompressorLDRef != (NodeRef{}) {
+			exclude = append(exclude, rescompressorLDRef)
+		}
+		if extras := resolveCodegenDepRefsExt(ctx, instance, nil, ch.inps, exclude...); len(extras) > 0 {
+			node.DepRefs = append(node.DepRefs, extras...)
+		}
+
 		r := ctx.emit.Emit(node)
 		refs = append(refs, r)
 		outputs = append(outputs, outputObj)

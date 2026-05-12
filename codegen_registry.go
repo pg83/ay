@@ -42,11 +42,22 @@ package main
 import "sort"
 
 // GeneratedFileInfo describes one codegen-emitted file. Populated by each
-// codegen emitter (EN, PB, EV, R5, R6, CF, BI, JV, PR) during the emit walk.
-// F-7-B fills EmitsIncludes per emitter; F-7-A leaves it empty for all entries.
+// codegen emitter (EN, PB, EV, R5, R6, CF, BI, JV, PR, AR, PY) during the
+// emit walk. F-7-B fills EmitsIncludes per emitter; F-7-A leaves it empty
+// for all entries.
+//
+// PR-M3-L0-cascade-close-v2: ProducerRef captures the producer NodeRef so
+// resolveCodegenDepRefs can thread it into consumer CC `deps[]`. Some
+// emitters register the entry BEFORE the producer NodeRef is known (e.g.
+// CP/PR/EN register their output paths early so the scanner's existence
+// tier sees them, then the actual NodeRef is filled in via SetProducerRef
+// once Emit returns). HasProducerRef discriminates "registered, no ref
+// yet" from "registered, ref valid" — NodeRef{} (id=0) collides with the
+// first emitted node so the explicit flag is mandatory.
 type GeneratedFileInfo struct {
 	// ProducerKvP is the node-kind key ("EN", "PB", "EV", "R5", "R6", "CF",
-	// "BI", "JV", "PR"). Matches the KV["p"] value emitted by the producer node.
+	// "BI", "JV", "PR", "AR", "PY"). Matches the KV["p"] value emitted by
+	// the producer node.
 	ProducerKvP string
 
 	// OutputPath is the $(BUILD_ROOT)-rooted absolute path of this generated
@@ -63,6 +74,13 @@ type GeneratedFileInfo struct {
 	// Stored in discovery order; no deduplication required at this level (the
 	// scanner's DFS visited-set deduplicates at traversal time).
 	EmitsIncludes []string
+
+	// ProducerRef is the NodeRef of the emitted producer node. Valid only when
+	// HasProducerRef is true. resolveCodegenDepRefs uses this to thread the
+	// producer ref into consumer CC `deps[]` for both #include-driven (header
+	// closure) and input-driven (inputs[] $(BUILD_ROOT) paths) lookups.
+	ProducerRef    NodeRef
+	HasProducerRef bool
 }
 
 // CodegenRegistry is a per-scanner registry mapping every $(BUILD_ROOT)-prefixed
@@ -103,6 +121,29 @@ func (r *CodegenRegistry) Lookup(path string) (*GeneratedFileInfo, bool) {
 	info, ok := r.byOutput[path]
 
 	return info, ok
+}
+
+// SetProducerRef backfills the ProducerRef for an already-registered path.
+// Throws if path is not registered (callers must have invoked Register first).
+// Idempotent: re-setting with the same ref is a no-op; conflicting refs throw.
+//
+// PR-M3-L0-cascade-close-v2: most emitters call Register BEFORE Emit returns
+// the NodeRef (the registry entry is needed by the scanner's existence-tier
+// before the emit completes). This helper fills the NodeRef in after Emit so
+// resolveCodegenDepRefs can lift it into consumer CC `deps[]`.
+func (r *CodegenRegistry) SetProducerRef(path string, ref NodeRef) {
+	info, ok := r.byOutput[path]
+	if !ok {
+		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path)
+	}
+
+	if info.HasProducerRef && info.ProducerRef != ref {
+		ThrowFmt("CodegenRegistry: conflicting ProducerRef for %q (existing=%v, new=%v)",
+			path, info.ProducerRef, ref)
+	}
+
+	info.ProducerRef = ref
+	info.HasProducerRef = true
 }
 
 // All returns all registered entries sorted by OutputPath. Deterministic across

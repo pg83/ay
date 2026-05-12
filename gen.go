@@ -327,11 +327,12 @@ type codegenOutputKey struct {
 }
 
 // resolveCodegenDepRefs scans `includeInputs` for $(BUILD_ROOT)-rooted paths
-// that match a previously emitted EN/PB/EV output, and returns the producer
-// NodeRefs deduped in scan order. Each consumer CC node carries those NodeRefs
-// as ExtraDepRefs so the resulting CC `deps` list mirrors the reference graph
-// shape (sg2.json places explicit codegen-producer deps on every CC whose
-// inputs[] references a $(BUILD_ROOT)/<gen>.h or <gen>.cc).
+// that match a previously emitted EN/PB/EV/AR/CF/BI/JV/PR/R5/PY producer
+// output, and returns the producer NodeRefs deduped in scan order. Each
+// consumer CC node carries those NodeRefs as ExtraDepRefs so the resulting
+// CC `deps` list mirrors the reference graph shape (sg2.json places explicit
+// codegen-producer deps on every CC whose inputs[] references a $(BUILD_ROOT)/
+// <gen>.h or <gen>.cc).
 //
 // `consumer.Target` disambiguates per-platform PB/EV lookup. EN nodes always
 // emit on the target axis so ctx.enOutputs is consulted by path alone (both
@@ -341,8 +342,24 @@ type codegenOutputKey struct {
 // downstream CC's `Generator` ref, which EmitCC already threads into DepRefs
 // as the leading entry — without filtering, a CC compiling its own producer's
 // .cc would carry the producer twice).
+//
+// PR-M3-L0-cascade-close-v2: in addition to the three legacy enOutputs/
+// pbOutputs/evOutputs maps, the function consults the per-scanner
+// CodegenRegistry for any registered entry whose HasProducerRef is set.
+// This is the general producer-ref path that covers AR/CF/BI/JV/PR/R5/PY
+// emitters; the legacy maps remain as the EN/PB/EV path (their writes are
+// independent of the registry today and removing them is deferred to a
+// later PR).
 func resolveCodegenDepRefs(ctx *genCtx, consumer ModuleInstance, includeInputs []string, exclude ...NodeRef) []NodeRef {
-	if len(includeInputs) == 0 {
+	return resolveCodegenDepRefsExt(ctx, consumer, includeInputs, nil, exclude...)
+}
+
+// resolveCodegenDepRefsExt is the extended form that also scans `inputs` for
+// $(BUILD_ROOT) producer paths. Used by consumers whose producer ref is
+// input-driven (RESOURCE objcopy via .pyc.inc, .yapyc3 bytecode) rather than
+// #include-driven. The two slices are scanned in order; dedup is global.
+func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInputs, inputs []string, exclude ...NodeRef) []NodeRef {
+	if len(includeInputs) == 0 && len(inputs) == 0 {
 		return nil
 	}
 
@@ -353,9 +370,9 @@ func resolveCodegenDepRefs(ctx *genCtx, consumer ModuleInstance, includeInputs [
 
 	var out []NodeRef
 
-	for _, p := range includeInputs {
+	probe := func(p string) {
 		if !strings.HasPrefix(p, "$(BUILD_ROOT)/") {
-			continue
+			return
 		}
 
 		var ref NodeRef
@@ -367,18 +384,32 @@ func resolveCodegenDepRefs(ctx *genCtx, consumer ModuleInstance, includeInputs [
 			ref, ok = r, true
 		} else if r, found := ctx.evOutputs[codegenOutputKey{platform: consumer.Target, path: p}]; found {
 			ref, ok = r, true
+		} else {
+			reg := codegenRegForInstance(ctx, consumer)
+			if reg != nil {
+				if info, found := reg.Lookup(p); found && info.HasProducerRef {
+					ref, ok = info.ProducerRef, true
+				}
+			}
 		}
 
 		if !ok {
-			continue
+			return
 		}
 
 		if _, dup := seen[ref]; dup {
-			continue
+			return
 		}
 
 		seen[ref] = struct{}{}
 		out = append(out, ref)
+	}
+
+	for _, p := range includeInputs {
+		probe(p)
+	}
+	for _, p := range inputs {
+		probe(p)
 	}
 
 	return out
@@ -3657,6 +3688,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// PR-M3-antlr-g4-cpp: pass moduleInputs so JV downstream CP+CC are emitted.
 	jvCCRefs, jvCCOutputs, jvCCMemberInputs := emitMiscNodes(ctx, instance, d, &moduleInputs)
 
+	// PR-M3-L0-cascade-close-v2: hoist PR+AR node emission ahead of the SRCS
+	// loop so the codegen registry's AR/PR ProducerRef entries exist when a
+	// consumer CC (e.g. library/python/runtime_py3/__res.cpp) scans its
+	// inputs and reaches the .pyc.inc / PR-emitted output paths. Without
+	// this hoist the registry lookup misses, and runtime_py3's 4 AR-cluster
+	// CCs cascade 543/599 of the L0 mismatch surface (per Plan B). The
+	// returned PR-downstream-CC triples are folded into the AR-member bucket
+	// at the original site (below) so the existing AR.cmd_args order
+	// (which is byte-exact in M2) is preserved.
+	prCCRefs, prCCOutputs, prMemberInputsList := emitRunProgramsForAR(ctx, instance, d, moduleInputs)
+	emitArchives(ctx, instance, d)
+
 	// PR-M3-F-7-C: two-pass source emission. Codegen-producing sources
 	// (.ev/.proto/.rl6/.rl/.cpp.in/.c.in) emit nodes whose outputs
 	// (`.ev.pb.h`, `.rl6.cpp`, `*.cpp`, …) consumer CCs in this same
@@ -3802,29 +3845,20 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		addMemberInputs(enCCMemberInputs[i])
 	}
 
-	// PR-AUDIT-5: emit PR (RUN_PROGRAM) nodes whose outputs include
-	// CC-compilable extensions (.cpp/.cc/.cxx/.c) ahead of the AR step,
-	// folding the downstream CCs into the module's regular SRCS bucket.
-	// Empirical reference: devtools/ymake/symbols's RUN_PROGRAM emits
-	// dep_types.h_dumper.cpp via STDOUT; the consuming CC node compiles
-	// it and the AR archives the resulting .o as the trailing SRCS
-	// member (after the declared SRCS list, before any JOIN_SRCS).
-	{
-		prCCRefs, prCCOutputs, prMemberInputsList := emitRunProgramsForAR(ctx, instance, d, moduleInputs)
-		for i, ref := range prCCRefs {
-			ccRefs = append(ccRefs, ref)
-			ccOutputs = append(ccOutputs, prCCOutputs[i])
-			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
-			ccIsCFGenerated = append(ccIsCFGenerated, false)
-			addMemberInputs(prMemberInputsList[i])
-		}
+	// PR-M3-L0-cascade-close-v2: PR-downstream CC fold. emitRunProgramsForAR
+	// + emitArchives were hoisted ahead of the SRCS loop so the codegen
+	// registry's PR/AR ProducerRef entries are populated when consumer CCs
+	// (e.g. library/python/runtime_py3/__res.cpp) scan their inputs[]. The
+	// AR.cmd_args bucket ordering (PR-AUDIT-5: PR-downstream CCs sit AFTER
+	// regular SRCS, before JOIN_SRCS) is preserved by deferring the fold
+	// to this position.
+	for i, ref := range prCCRefs {
+		ccRefs = append(ccRefs, ref)
+		ccOutputs = append(ccOutputs, prCCOutputs[i])
+		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
+		ccIsCFGenerated = append(ccIsCFGenerated, false)
+		addMemberInputs(prMemberInputsList[i])
 	}
-
-	// PR-M3-unpaired-got-closure: emit AR nodes for ARCHIVE(NAME ...)
-	// declarations. ARCHIVE consumes the .pyc outputs of the preceding
-	// RUN_PROGRAM emit (above) — the call ordering is therefore
-	// significant and must follow emitRunProgramsForAR.
-	emitArchives(ctx, instance, d)
 
 	// PR-M3-simd-permutations: emit one CC node per SRC_C_<V> entry.
 	// Each variant compile reuses the regular CC flavor pipeline (same
@@ -5112,7 +5146,21 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			node.ForeignDepRefs = map[string][]NodeRef{"tool": toolRefs}
 		}
 
-		ctx.emit.Emit(node)
+		pyRef := ctx.emit.Emit(node)
+
+		// PR-M3-L0-cascade-close-v2: register the .yapyc3 output in the
+		// codegen registry so the downstream objcopy CC's input-driven
+		// resolveCodegenDepRefsExt lookup threads the PY producer into
+		// its deps[]. Per Plan B PR-2: 41 PY-leaf objcopy_*.o files lack
+		// the PY ref edge today — this closes them.
+		if reg := codegenRegForInstance(ctx, instance); reg != nil {
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:    "PY",
+				OutputPath:     outputPath,
+				ProducerRef:    pyRef,
+				HasProducerRef: true,
+			})
+		}
 	}
 }
 
@@ -5641,15 +5689,20 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// scanner-aware srcIn down to EmitCC.
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 
+		// PR-M3-py3-runtime-closure: runtime_py3 __res.cpp / sitecustomize.cpp
+		// each carry the matching .pyc.inc + PY_SRCS python inputs in REF.
+		// PR-M3-L0-cascade-close-v2: lift the extras BEFORE resolving codegen
+		// dep refs so the .pyc.inc producer (AR node) is reachable through the
+		// IncludeInputs probe. Order is preserved (extras appended to the tail
+		// of IncludeInputs) so EmitCC's inputs[] composition is unchanged.
+		extras := runtimePy3CCExtraInputs(srcInstance.Path, srcRel)
+		if len(extras) > 0 {
+			srcIn.IncludeInputs = append(srcIn.IncludeInputs, extras...)
+		}
 		// Thread codegen producer dep refs into the CC node. PR-M3-L0-codegen-
 		// deps-EV-PB extended this to PB/EV (with platform keying) on top of
 		// the EN path established by PR-M3-module-tag-and-stats-enums-dep.
 		srcIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, srcIn.IncludeInputs)
-		// PR-M3-py3-runtime-closure: runtime_py3 __res.cpp / sitecustomize.cpp
-		// each carry the matching .pyc.inc + PY_SRCS python inputs in REF.
-		if extras := runtimePy3CCExtraInputs(srcInstance.Path, srcRel); len(extras) > 0 {
-			srcIn.IncludeInputs = append(srcIn.IncludeInputs, extras...)
-		}
 
 		ref, outPath := EmitCC(srcInstance, srcRel, srcIn, ctx.emit)
 
@@ -6079,17 +6132,23 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// F-7-B / PR-AUDIT-2 D05: register R5 outputs. ragel5 emits the
 		// .rl source's #include directives verbatim into the generated
 		// .rl5.cpp; the .tmp intermediate has no consumer-visible includes.
+		// PR-M3-L0-cascade-close-v2: ProducerRef = r5Ref so the downstream
+		// CC consuming the .rl5.cpp threads R5 into its deps[].
 		rlSourceAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:   "R5",
-				OutputPath:    r5TmpOut,
-				EmitsIncludes: nil,
+				ProducerKvP:    "R5",
+				OutputPath:     r5TmpOut,
+				EmitsIncludes:  nil,
+				ProducerRef:    r5Ref,
+				HasProducerRef: true,
 			})
 			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:   "R5",
-				OutputPath:    r5CppOut,
-				EmitsIncludes: []string{rlSourceAbs},
+				ProducerKvP:    "R5",
+				OutputPath:     r5CppOut,
+				EmitsIncludes:  []string{rlSourceAbs},
+				ProducerRef:    r5Ref,
+				HasProducerRef: true,
 			})
 		}
 
@@ -6105,7 +6164,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
 		// PR-M3-L0-codegen-deps-EV-PB: thread EN/PB/EV producer refs reached
 		// through the .rl5.cpp's transitive include closure.
-		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs)
+		// PR-M3-L0-cascade-close-v2: prepend r5Ref. WalkClosure skips the
+		// root (r5CppOut) so the registry probe alone wouldn't surface R5;
+		// REF's R5-derived CC carries R5 as its leading dep.
+		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r5Ref)
+		ccIn.ExtraDepRefs = append([]NodeRef{r5Ref}, ccIn.ExtraDepRefs...)
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
@@ -6139,7 +6202,6 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// (e.g. sandbox.cpp.in → 795-entry closure; build_info.cpp.in → 5).
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
-		_ = cfRef
 
 		// F-7-B / PR-AUDIT-2 D08: register the CF output. configure_file.py
 		// performs `@VAR@` substitution but leaves `#include` directives
@@ -6152,12 +6214,16 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// codegen script driving the CF node; REF wires it as an input on
 		// every CC consumer of the generated .cpp (verified on
 		// build_info.cpp.o and sandbox.cpp.o).
+		// PR-M3-L0-cascade-close-v2: ProducerRef = cfRef so downstream CC's
+		// resolveCodegenDepRefs threads the CF producer into its deps[].
 		inSourceAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:   "CF",
-				OutputPath:    cfOut,
-				EmitsIncludes: []string{inSourceAbs, configureFilePyPath},
+				ProducerKvP:    "CF",
+				OutputPath:     cfOut,
+				EmitsIncludes:  []string{inSourceAbs, configureFilePyPath},
+				ProducerRef:    cfRef,
+				HasProducerRef: true,
 			})
 		}
 
@@ -6172,7 +6238,13 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, cfOut, srcIn)
 		// PR-M3-L0-codegen-deps-EV-PB: thread codegen producer refs reached
 		// through the CF-generated .cpp's transitive include closure.
-		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs)
+		// PR-M3-L0-cascade-close-v2: also add cfRef directly — the CC
+		// compiles cfOut, and WalkClosure skips the root (cfOut itself),
+		// so the registry probe wouldn't find it via IncludeInputs alone.
+		// REF's CF-derived CC carries the CF producer as a leading dep
+		// (sandbox.cpp.o → CF sandbox.cpp).
+		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, cfRef)
+		ccIn.ExtraDepRefs = append([]NodeRef{cfRef}, ccIn.ExtraDepRefs...)
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
