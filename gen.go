@@ -2516,7 +2516,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// resource shape; PR-M3-aarch64-enum-and-global-a completes the
 		// AR wiring: when there are objcopy outputs, emit a .global.a
 		// archive that archives them.
-		objcopyRefs, objcopyOutputs := emitResourceObjcopy(ctx, instance, d)
+		objcopyRefs, objcopyOutputs, objcopyGlobalInputs := emitResourceObjcopy(ctx, instance, d)
 
 		// PR-M3-LD-peer-globalA: capture the header-only `.global.a` ref
 		// so consumers see it via `moduleEmitResult.GlobalRef/GlobalPath`.
@@ -2551,7 +2551,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				globalBaseName = globalArchiveName(instance.Path)
 				tag = "global"
 			}
-			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRefs, objcopyOutputs, nil, ctx.emit)
+			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRefs, objcopyOutputs, objcopyGlobalInputs, ctx.emit)
 			hOnlyGlobalRef = &gRef
 			hOnlyGlobalPath = instance.Path + "/" + globalBaseName
 		}
@@ -3285,8 +3285,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// headers). The `.global.a` archives every `tcmalloc/*` source
 	// and the same 1311 shared headers, but NOT `aligned_alloc.c`.
 	//
-	// `regularPrimariesSet` is the membership filter the global AR
-	// uses to drop these from its own input list.
+	// `regularPrimariesSet` was the membership filter the global AR
+	// used to drop regular SRCS primaries from its inputs before
+	// PR-M3-globalA-narrow-closure. The narrowed `.global.a` now uses
+	// `globalMemberInputs` directly (the GLOBAL_SRCS-local closure)
+	// and never sees regular primaries; the set + closure are retained
+	// so call sites in the source-loop don't have to be untangled.
 	regularPrimariesSet := map[string]struct{}{}
 	addRegularPrimary := func(p string) {
 		regularPrimariesSet[p] = struct{}{}
@@ -3945,7 +3949,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			// coexist on PY3 programs per upstream pybuild.py).
 			// PROGRAMs don't emit a separate .global.a; the LD absorbs
 			// the objcopy outputs via the regular dependency graph.
-			_, _ = emitResourceObjcopy(ctx, instance, d)
+			_, _, _ = emitResourceObjcopy(ctx, instance, d)
 		}
 
 		result := &moduleEmitResult{
@@ -4062,9 +4066,22 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// flow into the module's .global.a archive (PR-M3-aarch64-enum-and-global-a
 	// completes the AR wiring by appending the refs/outputs into
 	// globalRefs/globalOutputs below).
-	objcopyRefs, objcopyOutputs := emitResourceObjcopy(ctx, instance, d)
+	// PR-M3-globalA-narrow-closure: the objcopy nodes' SOURCE_ROOT inputs
+	// (per-entry source paths + objcopy.py) are folded into the
+	// GLOBAL_SRCS-local closure that becomes the .global.a archive's
+	// `inputs` slot. Dedup against the existing accumulator.
+	objcopyRefs, objcopyOutputs, objcopyGlobalInputs := emitResourceObjcopy(ctx, instance, d)
 	globalRefs = append(globalRefs, objcopyRefs...)
 	globalOutputs = append(globalOutputs, objcopyOutputs...)
+
+	for _, p := range objcopyGlobalInputs {
+		if _, dup := globalMemberInputsSeen[p]; dup {
+			continue
+		}
+
+		globalMemberInputsSeen[p] = struct{}{}
+		globalMemberInputs = append(globalMemberInputs, p)
+	}
 
 	// PR-M3-D EN emission moved to pre-source-loop (PR-M3-F-7-C); the
 	// codegen registry must be populated before consumer CCs scan.
@@ -4092,26 +4109,19 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	if len(globalRefs) > 0 {
-		// PR-35y R8: the .global.a aggregator drops every regular
-		// primary source (regular SRCS / JOIN_SRCS member sources /
-		// .rl6 source-pairs) but keeps everyone's header closure
-		// and every global primary. Empirically: tcmalloc/
-		// no_percpu_cache's `.global.a` archives all `tcmalloc/*`
-		// sources and the 1311 shared header closure, but not
-		// `aligned_alloc.c` (the regular SRCS source).
-		globalAggregated := combinedMemberInputs
-
-		if len(regularPrimariesSet) > 0 {
-			globalAggregated = make([]string, 0, len(combinedMemberInputs))
-
-			for _, p := range combinedMemberInputs {
-				if _, isPrimary := regularPrimariesSet[p]; isPrimary {
-					continue
-				}
-
-				globalAggregated = append(globalAggregated, p)
-			}
-		}
+		// PR-M3-globalA-narrow-closure: the .global.a aggregator gets
+		// the GLOBAL_SRCS-local closure ONLY, not the regular AR's
+		// header closure. REF sg2.json constrains `.global.a` `inputs`
+		// to the GLOBAL_SRCS member-CC closures, PY_REGISTER reg3.cpp
+		// closures, and objcopy SOURCE_ROOT inputs (RESOURCE source
+		// paths + objcopy.py). The regular CC closure of SRCS members
+		// (Python.h, libcxx, glibcasm, musl, ...) does NOT propagate
+		// into `.global.a` — it propagates into the regular `.a`.
+		// Prior R8 union shape over-emitted ~5212 lines on 8 nodes
+		// across rapidjson / ymakeyaml / runtime_py3 / symbols-module /
+		// protobuf / ymake / tcmalloc/no_percpu_cache stayed exact (it
+		// has no regular SRCS so combined == global).
+		globalAggregated := globalMemberInputs
 
 		globalBaseName := globalArNameFn(instance.Path)
 		// PR-M3-aarch64-enum-and-global-a: pick module_tag per the same
