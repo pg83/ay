@@ -417,9 +417,9 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"PYTHON3_ADDINCL":                   {}, // Adds Python3 include paths (system python, handled by emitter).
 	"PYTHON2_ADDINCL":                   {}, // Adds Python2 include paths.
 	// NO_PYTHON_INCLUDES: handled in applyUnknownStmt → d.noPythonIncl
-	// (gates the PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python per
-	// build/conf/python.conf:741-743,797-799). Removed from whitelist so
-	// it doesn't fall through to the no-op path.
+	// (PR-M3-aarch64-py-closure); gates the PY*_LIBRARY-implicit
+	// PEERDIR+=contrib/libs/python per build/conf/python.conf:741-743.
+	// Removed from whitelist so it doesn't fall through to the no-op path.
 	// NO_CHECK_IMPORTS: now typed UnknownStmt handled in applyUnknownStmt
 	// (PR-M3-resource-objcopy-B); collects args into d.noCheckImports
 	// and emits via emitNoCheckImportsObjcopy. Removed from whitelist
@@ -722,15 +722,6 @@ type moduleData struct {
 	// reorderARMembers hoists them to the front of the archive.
 	simdSrcs []simdSrc
 	conflictMod *ModuleStmt
-	// PR-M3-python-include-expansion: tracks NO_PYTHON_INCLUDES() suppression
-	// of the implicit `PEERDIR+=contrib/libs/python` injected by PY3_*
-	// module types / USE_PYTHON3() per python.conf:741-743,797-799,1066.
-	noPythonIncls bool
-	// PR-M3-python-include-expansion: set by `USE_PYTHON3()` macro so the
-	// `collectModule` post-pass can apply USE_PYTHON3()'s implicit PEERDIR
-	// to `contrib/libs/python` and `library/python/runtime_py3` per
-	// python.conf:1063-1071 (`when ($USE_ARCADIA_PYTHON == "yes")` branch).
-	usePython3Explicit bool
 }
 
 // resourceEntry is one packer input as produced by upstream
@@ -771,78 +762,7 @@ func collectModule(modulePath string, stmts []Stmt, env Environment, pathFlags F
 
 	collectStmts(modulePath, stmts, env, d)
 
-	applyPython3ImplicitPeerdir(d)
-
 	return d
-}
-
-// applyPython3ImplicitPeerdir applies the implicit
-// `PEERDIR+=contrib/libs/python` injection that upstream ymake performs
-// for PY3_*  / PY23_*  / PY2_*  module types and for explicit
-// `USE_PYTHON3()` invocations. Per `build/conf/python.conf`:
-//
-//   - PY3_LIBRARY (line 738-775): `_ARCADIA_PYTHON3_ADDINCL()` +
-//     `when ($NO_PYTHON_INCLS != "yes") { PEERDIR+=contrib/libs/python }`.
-//   - PY23_LIBRARY (multimodule, line 1211-1220) resolves to PY3_LIBRARY in
-//     the M3 closure (PY3 sub-module is the relevant variant).
-//   - PY23_NATIVE_LIBRARY (line 1237-1259) PY3 sub-module calls
-//     `PYTHON3_ADDINCL()` and PEERDIRs `contrib/libs/python` via the
-//     `_LIBRARY` chain's gate.
-//   - PY2_LIBRARY / PY2_PROGRAM / PY3_PROGRAM: same gate.
-//   - `USE_PYTHON3()` macro (line 1063-1071):
-//     `PEERDIR(contrib/libs/python)` +
-//     `when ($USE_ARCADIA_PYTHON == "yes") { PEERDIR+=library/python/runtime_py3 }`.
-//
-// contrib/libs/python itself declares `NO_PYTHON_INCLUDES()` (its own
-// ya.make line 9) to suppress this gate and avoid a self-peer loop. The
-// `d.noPythonIncls` flag tracks that suppression.
-//
-// The contrib/libs/python peer is what carries the GLOBAL
-// `-DUSE_PYTHON3` CFLAG and `-I$(SOURCE_ROOT)/contrib/libs/python/Include`
-// ADDINCL to every consumer in the closure (see
-// `contrib/libs/python/ya.make:11-64` under `IF (USE_ARCADIA_PYTHON)`).
-// Without this implicit PEERDIR, ~143 nodes in the M3 closure miss
-// `-DUSE_PYTHON3` and `-I.../python/Include`.
-func applyPython3ImplicitPeerdir(d *moduleData) {
-	if d.moduleStmt == nil {
-		return
-	}
-
-	wantPython := d.usePython3Explicit
-
-	switch d.moduleStmt.Name {
-	case "PY3_LIBRARY", "PY3_PROGRAM", "PY23_LIBRARY", "PY23_NATIVE_LIBRARY",
-		"PY2_LIBRARY", "PY2_PROGRAM", "PY3_BIN_LIB":
-		wantPython = true
-	}
-
-	if !wantPython {
-		return
-	}
-
-	// `_PYTHON3_ADDINCL`'s `when ($USE_ARCADIA_PYTHON == "yes")` branch
-	// (python.conf:1018-1023) adds:
-	//   - `CFLAGS+=-DUSE_PYTHON3` (non-GLOBAL; lands in the module's own
-	//     d.cFlags so the composer emits it once at the ownCFlags slot).
-	//   - `ADDINCL+=GLOBAL $PY3_BASE_INCLUDE_DIR` (= contrib/libs/python/Include
-	//     per python.conf:96; GLOBAL so it peer-propagates AND appears at
-	//     this module's own ADDINCL slot).
-	// These effects are NOT gated by NO_PYTHON_INCLUDES (which only
-	// suppresses the implicit `PEERDIR+=contrib/libs/python` gate below);
-	// `_PYTHON3_ADDINCL` itself is invoked unconditionally by PY3_LIBRARY's
-	// module definition (python.conf:738-739) and USE_PYTHON3()
-	// (python.conf:1064). Empirical: library/python/runtime_py3 declares
-	// `NO_PYTHON_INCLUDES()` (its ya.make:21) yet its CC nodes still emit
-	// `-DUSE_PYTHON3` and `-I$(SOURCE_ROOT)/contrib/libs/python/Include`.
-	d.cFlags = append(d.cFlags, "-DUSE_PYTHON3")
-	d.addInclGlobal = append(d.addInclGlobal, "contrib/libs/python/Include")
-	d.addIncl = append(d.addIncl, "contrib/libs/python/Include")
-
-	if d.noPythonIncls {
-		return
-	}
-
-	d.peerdirs = append(d.peerdirs, "contrib/libs/python")
 }
 
 // collectStmts is the shared walker collectModule and IfStmt-branch
@@ -1208,21 +1128,18 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		// per build/conf/python.conf:1063-1071 (upstream macro USE_PYTHON3):
 		//   PEERDIR(contrib/libs/python)
 		//   when ($USE_ARCADIA_PYTHON == "yes"): PEERDIR+=library/python/runtime_py3
-		// We also emit contrib/tools/python3 + .../Lib (the tool peerdirs
-		// the conf indirectly resolves via PYTHON3_TOOL_PEERDIR).
-		// PR-M3-python-include-expansion: USE_PYTHON3() also invokes
-		// _ARCADIA_PYTHON3_ADDINCL → _PYTHON3_ADDINCL (python.conf:1063-1066)
-		// which under `when ($USE_ARCADIA_PYTHON == "yes")` adds
-		// `CFLAGS+=-DUSE_PYTHON3` and `ADDINCL+=GLOBAL $PY3_BASE_INCLUDE_DIR`
-		// (= contrib/libs/python/Include) per python.conf:1018-1023.
-		// `collectModule`'s post-pass applies that injection.
+		// The walker does not evaluate conf macros, so we hardcode the peers
+		// here. We additionally emit contrib/tools/python3 + .../Lib (the tool
+		// peerdirs that the conf indirectly resolves via PYTHON3_TOOL_PEERDIR
+		// in PY3_BIN/PY3TEST modules — kept for back-compat with the M3 graph
+		// emission that relied on the prior hardcoded list). Without contrib/
+		// libs/python the symbols/{module,libc,python} closure was missing.
 		d.peerdirs = append(d.peerdirs,
 			"contrib/tools/python3",
 			"contrib/tools/python3/Lib",
 			"contrib/libs/python",
 			"library/python/runtime_py3",
 		)
-		d.usePython3Explicit = true
 	case "PY_SRCS":
 		// PR-M3-A: collect PY_SRCS python source files into d.pySrcs.
 		// PY_SRCS accepts optional leading/per-source modifiers TOP_LEVEL
