@@ -2415,9 +2415,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			headerOnly:              true,
 			AddInclGlobal:           mergeDedup(d.addInclGlobal, peerContribs.addIncl),
 			OwnAddInclGlobal:        append([]string(nil), d.addInclGlobal...),
-			CFlagsGlobal:            mergeDedup(ownCFlagsGlobalH, peerContribs.cFlags),
-			CXXFlagsGlobal:          mergeDedup(ownCXXFlagsGlobalH, peerContribs.cxxFlags),
-			COnlyFlagsGlobal:        mergeDedup(ownCOnlyFlagsGlobalH, peerContribs.cOnlyFlags),
+			// PR-M3-peer-cflags-global-ordering: peer-transitive first,
+			// own last — mirrors the full-module branch at line 2888-2890
+			// per upstream `TGlobalVarsCollector` semantics. ADDINCL keeps
+			// the opposite (own first, peer second) per
+			// `TModuleIncDirs::Get()`.
+			CFlagsGlobal:            mergeDedup(peerContribs.cFlags, ownCFlagsGlobalH),
+			CXXFlagsGlobal:          mergeDedup(peerContribs.cxxFlags, ownCXXFlagsGlobalH),
+			COnlyFlagsGlobal:        mergeDedup(peerContribs.cOnlyFlags, ownCOnlyFlagsGlobalH),
 			PeerArchiveClosureRefs:  peerContribs.archiveRefs,
 			PeerArchiveClosurePaths: peerContribs.archivePaths,
 			LDPluginRefs:            ldPluginRefs,
@@ -2885,9 +2890,29 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ownCOnlyFlagsGlobal = nil
 	}
 
-	effectiveCFlagsGlobal := mergeDedup(ownCFlagsGlobal, peerCFlagsGlobal)
-	effectiveCXXFlagsGlobal := mergeDedup(ownCXXFlagsGlobal, peerCXXFlagsGlobal)
-	effectiveCOnlyFlagsGlobal := mergeDedup(ownCOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
+	// PR-M3-peer-cflags-global-ordering: peer-transitive CFLAGS GLOBAL
+	// precede this module's OWN CFLAGS GLOBAL in the effective propagated
+	// slice. Upstream rule (devtools/ymake/global_vars_collector.cpp):
+	// `TGlobalVarsCollector::Collect` (json_visitor.cpp:558) runs at
+	// DFS-Left for every direct peerdir edge, accumulating each peer's
+	// fully-built USER_CFLAGS into the consumer with `AppendUnique`
+	// (first-occurrence-wins); `Finish` runs at PrepareLeaving and only
+	// then pushes the module's OWN reserved-name CFLAGS contributions.
+	// Net effect on the per-module slice: peer-transitive CFLAGS land
+	// FIRST in DFS deepest-first order, own CFLAGS land LAST. ADDINCL
+	// follows the opposite rule via `TModuleIncDirs::Get()` returning
+	// `LocalUserGlobal` (own) before `UserGlobalPropagated` (peer), so
+	// `effectiveAddInclGlobal` keeps `(own, peer)` ordering above.
+	//
+	// Empirical anchor: devtools/ymake/_/commands/compilation.cpp.o
+	// (aarch64) cmd_args[68..70]: REF has [OPENSSL_RENAME_SYMBOLS=1,
+	// ASIO_STANDALONE, ASIO_SEPARATE_COMPILATION]. ASIO is a direct
+	// PEERDIR of devtools/ymake and PEERDIRs OpenSSL; upstream's per-peer
+	// AppendUnique places asio's OpenSSL transitive (peer-first) ahead of
+	// asio's own ASIO_* defines.
+	effectiveCFlagsGlobal := mergeDedup(peerCFlagsGlobal, ownCFlagsGlobal)
+	effectiveCXXFlagsGlobal := mergeDedup(peerCXXFlagsGlobal, ownCXXFlagsGlobal)
+	effectiveCOnlyFlagsGlobal := mergeDedup(peerCOnlyFlagsGlobal, ownCOnlyFlagsGlobal)
 
 	// PR-35c (closes PR-33-A2_01): inject libcxx's GLOBAL ADDINCL +
 	// GLOBAL CXXFLAGS into runtime-ancestor C++ consumers' OWN CC
