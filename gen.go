@@ -442,7 +442,8 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	// GENERATE_ENUM_SERIALIZATION / _WITH_HEADER / _NOUTF removed from
 	// whitelist in PR-M3-D: they are now parsed as GenerateEnumSerializationStmt
 	// and dispatched to EmitEN via emitEnumSrcs.
-	"ARCHIVE":                           {}, // Embeds archive of files; deferred.
+	// ARCHIVE: PR-M3-unpaired-got-closure — now parsed in applyUnknownStmt
+	// and consumed by emitArchives. Not a no-op whitelist entry.
 	// CREATE_BUILDINFO_FOR: now typed Stmt; removed from whitelist.
 	"INCLUDE_TAGS":                      {}, // Proto include-tag filter; semantic in PR-M3-B.
 	"INDUCED_DEPS":                      {}, // Adds header deps without PEERDIR; metadata for PR-M3-A.
@@ -702,6 +703,16 @@ type moduleData struct {
 	antlr4Grammars []antlr4GrammarInfo
 	// PR-M3-E: RUN_PROGRAM → PR nodes.
 	runPrograms []*RunProgramStmt
+	// PR-M3-unpaired-got-closure: ARCHIVE(NAME <out> [DONTCOMPRESS] files...)
+	// invocations collected in declaration order. Each entry produces one
+	// AR node invoking `$(BUILD_ROOT)/tools/archiver/archiver` to pack the
+	// listed files into NAME.
+	archives []archiveEntry
+	// PR-M3-unpaired-got-closure: map of PR-emitted output filename →
+	// producing PR NodeRef. Populated by emitRunProgramsForAR as each
+	// RUN_PROGRAM is emitted. Consumed by emitArchives to wire each AR
+	// node's dep set to the producing PR (matching the REF shape).
+	prOutputProducer map[string]NodeRef
 	// PR-35o: set of source filenames declared via `SRC(...)` or
 	// `SRC_C_NO_LTO(...)`. Upstream `SRC`/`SRC_C_NO_LTO` macros emit a
 	// FLAT output path (no `_/` infix even when the source contains a
@@ -756,6 +767,19 @@ type moduleData struct {
 type resourceEntry struct {
 	Path string
 	Key  string
+}
+
+// archiveEntry captures one `ARCHIVE(NAME <out> [DONTCOMPRESS] files...)`
+// invocation. Name is the module-relative output filename (e.g.
+// "__res.pyc.inc"); DontCompress is set when the DONTCOMPRESS keyword
+// appears; Files lists the inputs in declaration order (each is either a
+// module-relative source path or the basename of a build-tree artifact
+// produced by another macro in the same module — e.g. `__res.pyc`
+// produced by a RUN_PROGRAM emit).
+type archiveEntry struct {
+	Name         string
+	DontCompress bool
+	Files        []string
 }
 
 // antlr4GrammarInfo captures a single RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT
@@ -1156,6 +1180,13 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		d.noPythonIncl = true
 	case "ALLOCATOR":
 		applyAllocatorStmt(v, d)
+	case "ARCHIVE":
+		// PR-M3-unpaired-got-closure: parse `ARCHIVE(NAME <out>
+		// [DONTCOMPRESS] files...)` (upstream
+		// build/ymake.core.conf:4142-4145). The NAME keyword expects
+		// exactly one following argument; DONTCOMPRESS is a bare flag;
+		// remaining positional args are the input files.
+		applyArchiveStmt(v, d)
 	case "ENABLE":
 		// PR-30 D02: track ENABLE(MUSL_LITE) so the
 		// defaultProgramPeerdirsFor decision sees the per-module
@@ -1432,6 +1463,49 @@ var allocatorPeers = map[string][]string{
 	"FAKE":    nil,
 	"SYSTEM":  {"library/cpp/malloc/system"},
 	"DEFAULT": nil,
+}
+
+// applyArchiveStmt parses `ARCHIVE(NAME <out> [DONTCOMPRESS] files...)`
+// per upstream build/ymake.core.conf:4142-4145. NAME is a required
+// keyword followed by exactly one argument (the output filename);
+// DONTCOMPRESS is a bare flag that maps to the archiver's `-p` switch;
+// the remaining positional args are the inputs in declaration order.
+// Throws on a missing or malformed NAME — there is no sensible default
+// output name for this shape.
+func applyArchiveStmt(v *UnknownStmt, d *moduleData) {
+	var (
+		entry      archiveEntry
+		seenName   bool
+		inNameSlot bool
+	)
+	for _, a := range v.Args {
+		switch {
+		case inNameSlot:
+			entry.Name = a
+			inNameSlot = false
+			seenName = true
+		case a == "NAME":
+			inNameSlot = true
+		case a == "DONTCOMPRESS":
+			entry.DontCompress = true
+		default:
+			entry.Files = append(entry.Files, a)
+		}
+	}
+
+	if inNameSlot {
+		ThrowFmt("gen: ARCHIVE(NAME ...) missing value after NAME (line %d)", v.Line)
+	}
+
+	if !seenName || entry.Name == "" {
+		ThrowFmt("gen: ARCHIVE expects `NAME <output>` (line %d)", v.Line)
+	}
+
+	if len(entry.Files) == 0 {
+		ThrowFmt("gen: ARCHIVE(NAME %s) has no input files (line %d)", entry.Name, v.Line)
+	}
+
+	d.archives = append(d.archives, entry)
 }
 
 // applyAllocatorStmt resolves `ALLOCATOR(<name>)` to a PEERDIR
@@ -2279,6 +2353,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// util as a default peer, matching the M2 reference graph.
 	if d.muslLite {
 		instance.Flags.NoUtil = true
+	}
+
+	// PR-M3-unpaired-got-closure: _BASE_PY3_PROGRAM in build/conf/python.conf:877-883
+	// applies an implicit `ALLOCATOR($_MY_ALLOCATOR)` where the otherwise-branch
+	// (non-ARCH_PPC64LE) sets _MY_ALLOCATOR=J. Our linux-x86_64/aarch64 closure
+	// takes that branch, so PY3_PROGRAM_BIN modules without an explicit
+	// ALLOCATOR(...) inherit jemalloc rather than the plain-PROGRAM
+	// TCMALLOC_TC default. Surfaces library/cpp/malloc/jemalloc/{malloc-info.cpp.pic.o,
+	// libcpp-malloc-jemalloc.a} as paired nodes for tools/py3cc/slow/py3cc.
+	if !d.hadAllocator && d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+		d.hadAllocator = true
+		d.allocatorName = "J"
 	}
 
 	// PR-M3-aarch64-py-closure: PY{2,3,23}_LIBRARY and PY{3}_PROGRAM_BIN
@@ -3421,6 +3507,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			addMemberInputs(prMemberInputsList[i])
 		}
 	}
+
+	// PR-M3-unpaired-got-closure: emit AR nodes for ARCHIVE(NAME ...)
+	// declarations. ARCHIVE consumes the .pyc outputs of the preceding
+	// RUN_PROGRAM emit (above) — the call ordering is therefore
+	// significant and must follow emitRunProgramsForAR.
+	emitArchives(ctx, instance, d)
 
 	// PR-M3-simd-permutations: emit one CC node per SRC_C_<V> entry.
 	// Each variant compile reuses the regular CC flavor pipeline (same
