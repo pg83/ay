@@ -221,6 +221,10 @@ func emitARNode(
 		"module_type": "lib",
 	}
 
+	if instance.Language == LangPy {
+		targetProperties["module_lang"] = "py3"
+	}
+
 	if tag != "" {
 		targetProperties["module_tag"] = tag
 	}
@@ -366,6 +370,29 @@ func EmitARNamed(
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
 
 	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, emit)
+}
+
+// EmitARGlobalNamedTagged is like EmitARGlobalNamed but uses an
+// explicit module_tag (e.g. "py3_global", "py3_native_global"). The
+// canonical "global" tag remains the default; callers needing the
+// alternate shapes (PY23_LIBRARY → "py3_global"; PY23_NATIVE_LIBRARY
+// → "py3_native_global") supply the tag explicitly.
+func EmitARGlobalNamedTagged(
+	instance ModuleInstance,
+	archiveBaseName string,
+	tag string,
+	objRefs []NodeRef,
+	objPaths []string,
+	memberInputs []string,
+	emit Emitter,
+) NodeRef {
+	if len(objRefs) != len(objPaths) {
+		ThrowFmt("EmitARGlobalNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
+	}
+
+	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
+
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, memberInputs, emit)
 }
 
 // EmitARGlobalNamed is like EmitARGlobal but uses an explicitly

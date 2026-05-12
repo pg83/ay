@@ -2276,6 +2276,16 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		d.peerdirs = append(d.peerdirs, "contrib/libs/python")
 	}
 
+	// PR-M3-aarch64-enum-and-global-a: GENERATE_ENUM_SERIALIZATION* injects
+	// an implicit PEERDIR to tools/enum_parser/enum_serialization_runtime
+	// (upstream `_GENERATE_ENUM_SERIALIZATION_BASE` macro in
+	// build/ymake.core.conf). The runtime carries the dispatch_methods.cpp /
+	// enum_runtime.cpp / ordered_pairs.cpp sources that the generated
+	// _serialized.cpp links against. Skip the self-cycle.
+	if len(d.enumSrcs) > 0 && instance.Path != "tools/enum_parser/enum_serialization_runtime" {
+		d.peerdirs = append(d.peerdirs, "tools/enum_parser/enum_serialization_runtime")
+	}
+
 	// PR-27: a header-only LIBRARY (e.g. library/cpp/sanitizer/include)
 	// has no compilable sources but still has a valid module
 	// declaration; the upstream reference does not emit any AR for
@@ -2345,10 +2355,39 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		// PR-M3-resource-objcopy-A: emit objcopy PY nodes for
 		// RESOURCE / RESOURCE_FILES declarations. Header-only LIBRARY
-		// modules (e.g. certs) host the only-resource shape; the
-		// returned `.o` paths flow into the module's .global.a archive
-		// in a follow-up PR (PR-B wires the AR aggregation).
-		_ = emitResourceObjcopy(ctx, instance, d)
+		// modules (e.g. certs, PY3_LIBRARY-only-PY_SRCS) host the only-
+		// resource shape; PR-M3-aarch64-enum-and-global-a completes the
+		// AR wiring: when there are objcopy outputs, emit a .global.a
+		// archive that archives them.
+		objcopyRefs, objcopyOutputs := emitResourceObjcopy(ctx, instance, d)
+
+		if len(objcopyRefs) > 0 {
+			// REF surfaces module_lang="py3" for PY*_LIBRARY archives
+			// (module_tag=global, or py3_global on PY23_LIBRARY) and
+			// "cpp" for plain LIBRARY (module_tag=global) and for
+			// PY23_NATIVE_LIBRARY (module_tag=py3_native_global). Pivot
+			// Language locally for the AR emit; peer-walk Language stays
+			// LangCPP.
+			arInstance := instance
+			var globalBaseName, tag string
+			switch d.moduleStmt.Name {
+			case "PY23_NATIVE_LIBRARY":
+				globalBaseName = globalArchiveNameWithPrefix(instance.Path, "libpy3c")
+				tag = "py3_native_global"
+			case "PY23_LIBRARY":
+				arInstance.Language = LangPy
+				globalBaseName = globalArchiveNameWithPrefix(instance.Path, "libpy3")
+				tag = "py3_global"
+			case "PY3_LIBRARY", "PY2_LIBRARY", "PY2_PROGRAM", "PY3_PROGRAM":
+				arInstance.Language = LangPy
+				globalBaseName = globalArchiveNameWithPrefix(instance.Path, "libpy3")
+				tag = "global"
+			default:
+				globalBaseName = globalArchiveName(instance.Path)
+				tag = "global"
+			}
+			_ = EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRefs, objcopyOutputs, nil, ctx.emit)
+		}
 
 		// PR-M3-D: emit EN nodes for GENERATE_ENUM_SERIALIZATION(*) declarations.
 		// Header-only modules in the M3 closure never compile the EN
@@ -3565,7 +3604,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			// PR-M3-resource-objcopy-A: PY3_PROGRAM_BIN may also carry
 			// RESOURCE / RESOURCE_FILES (the yapyc3 + objcopy clusters
 			// coexist on PY3 programs per upstream pybuild.py).
-			_ = emitResourceObjcopy(ctx, instance, d)
+			// PROGRAMs don't emit a separate .global.a; the LD absorbs
+			// the objcopy outputs via the regular dependency graph.
+			_, _ = emitResourceObjcopy(ctx, instance, d)
 		}
 
 		result := &moduleEmitResult{
@@ -3640,8 +3681,22 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	var arRef NodeRef
 	arBaseName := arNameFn(instance.Path)
 
+	// PR-M3-aarch64-enum-and-global-a: PY3_LIBRARY / PY23_LIBRARY surface
+	// module_lang="py3" on both the regular and global archive in REF.
+	// PY23_NATIVE_LIBRARY retains module_lang="cpp" (its tag flips to
+	// py3_native / py3_native_global instead). We pivot the AR-emission
+	// instance's Language locally so the .a / .global.a nodes carry the
+	// right value; the surrounding walker's Language remains LangCPP
+	// (peer-walks must keep sharing memo entries with the rest of the
+	// cpp closure).
+	arInstance := instance
+	switch d.moduleStmt.Name {
+	case "PY3_LIBRARY", "PY2_LIBRARY", "PY23_LIBRARY", "PY2_PROGRAM", "PY3_PROGRAM":
+		arInstance.Language = LangPy
+	}
+
 	if len(ccRefs) > 0 {
-		arRef = EmitARNamed(instance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, ctx.emit)
+		arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, ctx.emit)
 	}
 
 	_ = peerArchiveRefs // retained as a loop accumulator for the PROGRAM LD branch above; intentionally unused for the LIBRARY AR.
@@ -3654,9 +3709,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	// PR-M3-resource-objcopy-A: emit objcopy PY nodes for
 	// RESOURCE / RESOURCE_FILES declarations. The returned `.o` paths
-	// flow into the module's .global.a archive in a follow-up PR
-	// (PR-B wires the AR aggregation).
-	_ = emitResourceObjcopy(ctx, instance, d)
+	// flow into the module's .global.a archive (PR-M3-aarch64-enum-and-global-a
+	// completes the AR wiring by appending the refs/outputs into
+	// globalRefs/globalOutputs below).
+	objcopyRefs, objcopyOutputs := emitResourceObjcopy(ctx, instance, d)
+	globalRefs = append(globalRefs, objcopyRefs...)
+	globalOutputs = append(globalOutputs, objcopyOutputs...)
 
 	// PR-M3-D EN emission moved to pre-source-loop (PR-M3-F-7-C); the
 	// codegen registry must be populated before consumer CCs scan.
@@ -3703,7 +3761,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 
 		globalBaseName := globalArNameFn(instance.Path)
-		globalRef := EmitARGlobalNamed(instance, globalBaseName, globalRefs, globalOutputs, globalAggregated, ctx.emit)
+		// PR-M3-aarch64-enum-and-global-a: pick module_tag per the same
+		// REF mapping as the header-only branch — PY23_LIBRARY surfaces
+		// py3_global; PY23_NATIVE_LIBRARY surfaces py3_native_global;
+		// the rest stay on "global".
+		globalTag := "global"
+		switch d.moduleStmt.Name {
+		case "PY23_LIBRARY":
+			globalTag = "py3_global"
+		case "PY23_NATIVE_LIBRARY":
+			globalTag = "py3_native_global"
+		}
+		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, globalAggregated, ctx.emit)
 		result.GlobalRef = &globalRef
 		result.GlobalPath = instance.Path + "/" + globalBaseName
 	}
