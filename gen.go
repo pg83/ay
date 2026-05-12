@@ -661,6 +661,7 @@ type moduleData struct {
 	allocatorName    string   // PR-35g: name passed to ALLOCATOR(...); empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE).
 	muslLite         bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
 	noPythonIncl     bool     // PR-M3-aarch64-py-closure: set by NO_PYTHON_INCLUDES(); suppresses the PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (mirror of `when ($NO_PYTHON_INCLS != "yes") { PEERDIR+=contrib/libs/python }` in build/conf/python.conf:741-743).
+	usePython3      bool      // PR-M3-python-addincl-cflags: set by USE_PYTHON3() or a PY3-family module type (PY3_LIBRARY / PY3_PROGRAM / PY3_PROGRAM_BIN / PY23_LIBRARY / PY23_NATIVE_LIBRARY); normalised by applyPython3AddIncl. Triggers the `when ($USE_ARCADIA_PYTHON == "yes")` branch of `_PYTHON3_ADDINCL` (python.conf:1018-1023): -DUSE_PYTHON3 (via defaultPeerCFlags / AutoPeerCFlags slot) and contrib/libs/python/Include (own + GLOBAL ADDINCL).
 	ldPlugins        []string // PR-35k: filenames declared via LD_PLUGIN(name.py); the only M2 case is contrib/libs/musl/include's `LD_PLUGIN(musl.py)`. Each entry becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs.
 	// PR-35o: per-source extra CFLAGS keyed by source filename.
 	// Populated by `SRC(filename extra_cflags...)` (e.g.
@@ -770,7 +771,86 @@ func collectModule(modulePath string, stmts []Stmt, env Environment, pathFlags F
 
 	collectStmts(modulePath, stmts, env, d)
 
+	applyPython3AddIncl(modulePath, d)
+
 	return d
+}
+
+// applyPython3AddIncl mirrors the `when ($USE_ARCADIA_PYTHON == "yes")`
+// branch of `_PYTHON3_ADDINCL` (build/conf/python.conf:1018-1023):
+// `CFLAGS+=-DUSE_PYTHON3` plus `ADDINCL+=GLOBAL $PY3_BASE_INCLUDE_DIR`
+// (= contrib/libs/python/Include per python.conf:96). Invoked by PY3-family
+// module types and by `USE_PYTHON3()` (python.conf:738-739, 862, 1064, 1250).
+//
+// Empirically the reference places `-DUSE_PYTHON3` at the AutoPeerCFlags
+// cmd_args slot — right after `-D_musl_`, before the second noLibcUndebug
+// block copy (e.g. library/python/runtime_py3/__res.cpp.o ref:93,
+// library/cpp/pybind/cast.cpp.py3.o ref:83) — even when the module declares
+// `NO_PYTHON_INCLUDES()` and therefore has no peer to `contrib/libs/python`
+// to propagate the flag from. We inject `-DUSE_PYTHON3` via
+// `defaultPeerCFlags` so it lands at that slot, and we set `d.usePython3`
+// here for `defaultPeerCFlags` to read. The `contrib/libs/python/Include`
+// path goes to BOTH `d.addInclGlobal` (peer-propagated) AND `d.addIncl`
+// (own ADDINCL slot), mirroring the `ADDINCL(GLOBAL X)` collector path
+// (gen.go:918-919).
+//
+// `contrib/libs/python` itself emits these via its own ya.make IF-block
+// (`ADDINCL(GLOBAL Include)` + `CFLAGS(GLOBAL -DUSE_PYTHON3)`), so skip it
+// to avoid double-emit and to mirror the same cycle-guard pattern used by
+// the PY*_LIBRARY auto-peerdir code at the genModule call site (line 2104).
+//
+// NO_PYTHON_INCLUDES() does NOT gate this injection: upstream gates only
+// the implicit `PEERDIR+=contrib/libs/python` (python.conf:741-743), not
+// the `_PYTHON3_ADDINCL` invocation itself. Empirical: library/python/
+// runtime_py3 declares NO_PYTHON_INCLUDES() yet its CC nodes carry
+// `-DUSE_PYTHON3` and `-I$(SOURCE_ROOT)/contrib/libs/python/Include`.
+func applyPython3AddIncl(modulePath string, d *moduleData) {
+	if d.moduleStmt == nil {
+		return
+	}
+
+	if !d.usePython3 && !pyModuleTypeUsesPython3(d.moduleStmt.Name) {
+		return
+	}
+
+	if modulePath == "contrib/libs/python" {
+		return
+	}
+
+	// Normalise: every code path downstream (e.g. `defaultPeerCFlags`'s
+	// AutoPeerCFlags slot injection) reads `d.usePython3` rather than
+	// re-checking the module-type set.
+	d.usePython3 = true
+
+	// `-DUSE_PYTHON3` is injected via `defaultPeerCFlags` so it lands at
+	// the AutoPeerCFlags cmd_args slot (between catboost-redux and the
+	// second noLibcUndebugBlock copy), matching the empirical reference
+	// position (e.g. runtime_py3/__res.cpp.o ref:93, pybind/cast.cpp.py3.o
+	// ref:83). Adding it to `d.cFlagsGlobal` instead would land it inside
+	// the ownCFlags slot (position ~59), which mismatches the reference.
+	d.addInclGlobal = append(d.addInclGlobal, "contrib/libs/python/Include")
+	d.addIncl = append(d.addIncl, "contrib/libs/python/Include")
+}
+
+// pyModuleTypeUsesPython3 returns true for module types whose upstream
+// definition in build/conf/python.conf invokes `_PYTHON3_ADDINCL` (directly
+// or via `_ARCADIA_PYTHON3_ADDINCL` / `PYTHON3_ADDINCL`):
+//   - PY3_LIBRARY (line 738-739)
+//   - PY3_PROGRAM_BIN / PY3_PROGRAM / _BASE_PY3_PROGRAM (line 862)
+//   - PY23_LIBRARY's PY3 sub-module (inherits via PY3_LIBRARY)
+//   - PY23_NATIVE_LIBRARY's PY3 sub-module (line 1250: PYTHON3_ADDINCL())
+//
+// PY2_LIBRARY / PY2_PROGRAM are intentionally excluded — they invoke
+// `_ARCADIA_PYTHON_ADDINCL` (no "3"; python.conf:695), which is the
+// Python2 variant and does not emit `-DUSE_PYTHON3`.
+func pyModuleTypeUsesPython3(name string) bool {
+	switch name {
+	case "PY3_LIBRARY", "PY3_PROGRAM", "PY3_PROGRAM_BIN",
+		"PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
+		return true
+	}
+
+	return false
 }
 
 // collectStmts is the shared walker collectModule and IfStmt-branch
@@ -1148,6 +1228,13 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			"contrib/libs/python",
 			"library/python/runtime_py3",
 		)
+		// PR-M3-python-addincl-cflags: USE_PYTHON3() also invokes
+		// `_ARCADIA_PYTHON3_ADDINCL` → `_PYTHON3_ADDINCL` (python.conf:1064)
+		// whose `when ($USE_ARCADIA_PYTHON == "yes")` branch adds
+		// `CFLAGS+=-DUSE_PYTHON3` and `ADDINCL+=GLOBAL contrib/libs/python/Include`.
+		// `collectModule`'s post-pass (`applyPython3AddIncl`) performs that
+		// injection; we just record the request here.
+		d.usePython3 = true
 	case "PY_SRCS":
 		// PR-M3-A: collect PY_SRCS python source files into d.pySrcs.
 		// PY_SRCS accepts optional leading/per-source modifiers TOP_LEVEL
@@ -1811,7 +1898,21 @@ func defaultPeerCFlags(ctx *genCtx, instance ModuleInstance, d *moduleData) []st
 		return nil
 	}
 
-	return []string{muslConsumerSentinel}
+	out := []string{muslConsumerSentinel}
+
+	// PR-M3-python-addincl-cflags: `_PYTHON3_ADDINCL`'s
+	// `CFLAGS+=-DUSE_PYTHON3` (python.conf:1019, gated on
+	// $USE_ARCADIA_PYTHON == "yes") lands here. The reference places it
+	// at the AutoPeerCFlags slot — right after `-D_musl_`, before the
+	// second `noLibcUndebugBlock` copy — e.g. library/python/runtime_py3
+	// /__res.cpp.o ref:93, library/cpp/pybind/cast.cpp.py3.o ref:83.
+	// `contrib/libs/python` itself is skipped via the modulePath guard
+	// in `applyPython3AddIncl`; the `usePython3` flag captures that decision.
+	if d.usePython3 && instance.Path != "contrib/libs/python" {
+		out = append(out, "-DUSE_PYTHON3")
+	}
+
+	return out
 }
 
 // muslConsumerSentinel is the `-D_musl_` flag that
