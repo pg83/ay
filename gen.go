@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -495,6 +494,7 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"OPENSOURCE_EXPORT_REPLACEMENT":   {}, // CMake/Conan export replacement; metadata.
 	"EXCLUDE_TAGS":                    {}, // Build-system tag exclusion; metadata.
 	"FILES":                           {}, // Proto library file listing; metadata for PR-M3-B.
+	"AR_PLUGIN":                       {}, // Archive plugin declaration; metadata.
 	"NO_JOIN_SRC":                     {}, // Suppresses JOIN_SRCS optimisation; metadata.
 	"MASMFLAGS":                       {}, // MASM compiler flags (Windows); no-op on Linux.
 	"NO_MYPY":                         {}, // Suppresses mypy type checking; metadata.
@@ -771,15 +771,6 @@ type moduleData struct {
 	// bucket with SRC()/SRC_C_NO_LTO entries (no `_/` infix), so
 	// reorderARMembers hoists them to the front of the archive.
 	simdSrcs []simdSrc
-	// PR-M3-final-path-clean: AR_PLUGIN(name) macro argument; sets
-	// `_AR_PLUGIN=<name>.pyplugin` per upstream
-	// build/ymake.core.conf:3396. The AR command template injects
-	// `--plugin $(SOURCE_ROOT)/<modulePath>/<name>.pyplugin` between
-	// the two `--` separators of link_lib.py's argv (see
-	// build/conf/linkers/ld.conf:367-373). Empty when no AR_PLUGIN
-	// macro is declared. Only known M3 user: contrib/libs/openssl
-	// (`AR_PLUGIN(ar)` → `ar.pyplugin`).
-	arPlugin string
 	conflictMod *ModuleStmt
 }
 
@@ -1235,16 +1226,10 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 	case "ARCHIVE":
 		// PR-M3-unpaired-got-closure: parse `ARCHIVE(NAME <out>
 		// [DONTCOMPRESS] files...)` (upstream
-		// build/ymake.core.conf:4142-4145).
+		// build/ymake.core.conf:4142-4145). The NAME keyword expects
+		// exactly one following argument; DONTCOMPRESS is a bare flag;
+		// remaining positional args are the input files.
 		applyArchiveStmt(v, d)
-	case "AR_PLUGIN":
-		// PR-M3-final-path-clean: capture `AR_PLUGIN(name)` argument.
-		// Upstream sets `_AR_PLUGIN=<name>.pyplugin`
-		// (build/ymake.core.conf:3396); the AR emitter threads the
-		// `<name>.pyplugin` filename into cmd_args and inputs.
-		if len(v.Args) == 1 {
-			d.arPlugin = v.Args[0] + ".pyplugin"
-		}
 	case "ENABLE":
 		// PR-30 D02: track ENABLE(MUSL_LITE) so the
 		// defaultProgramPeerdirsFor decision sees the per-module
@@ -4059,13 +4044,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if len(ccRefs) > 0 {
 		// PR-M3-module-tag-and-stats-enums-dep: the plain `.a` archive for
 		// PY23_LIBRARY / PY23_NATIVE_LIBRARY surfaces `module_tag=py3` /
-		// `module_tag=py3_native` in REF.
-		// PR-M3-final-path-clean: AR_PLUGIN(name) → `<name>.pyplugin` for
-		// openssl's `--plugin` between the link_lib.py `--` separators.
+		// `module_tag=py3_native` in REF. Empty tag preserves the
+		// historical no-tag shape for every other module type.
 		if perModuleCCTag != "" {
-			arRef = EmitARNamedTaggedWithPlugin(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, d.arPlugin, ctx.emit)
+			arRef = EmitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, ctx.emit)
 		} else {
-			arRef = EmitARNamedWithPlugin(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, d.arPlugin, ctx.emit)
+			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, ctx.emit)
 		}
 	}
 
@@ -5412,17 +5396,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// Same rule as composeASPaths' SRCDIR routing for AS itself
 		// (PR-35r, as.go:316-336): keeping the gen.go aggregator's
 		// path in sync with as.go's resolution.
-		//
-		// PR-M3-final-path-clean: apply path.Clean to canonicalise ".."
-		// segments produced when srcRel is a relative path that ascends
-		// out of SrcDir (e.g. openssl's "crypto/../asm/aarch64/...").
-		// The AS node itself emits the cleaned form (as.go::composeASPaths);
-		// the AR memberInput must agree or the AR's `inputs` slot retains
-		// the denormalised path that the AS node has already cleaned away.
-		asInputPath := "$(SOURCE_ROOT)/" + path.Clean(srcInstance.Path+"/"+srcRel)
+		asInputPath := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
 
 		if srcDir != "" && srcDir != srcInstance.Path && !sourceExistsLocally(ctx.sourceRoot, srcInstance.Path, srcRel) {
-			asInputPath = "$(SOURCE_ROOT)/" + path.Clean(srcDir+"/"+srcRel)
+			asInputPath = "$(SOURCE_ROOT)/" + srcDir + "/" + srcRel
 		}
 
 		asInputs := append([]string{asInputPath}, asIn.IncludeInputs...)
@@ -5688,13 +5665,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			ccIn.IsGenerated = true
 			ccIn.Generator = evRef
 			ccIn.HasGenerator = true
-			// PR-M3-final-path-clean: filter the co-generated sibling .pb.h
-			// from the .cc.o's IncludeInputs. event2cpp emits the .pb.cc
-			// and .pb.h together; the reference graph treats the sibling
-			// as a producer-only output, not a transitive input of the
-			// downstream CC (since both are co-generated by the same EV
-			// producer node).
-			ccIn.IncludeInputs = filterSiblingPbH(walkClosure(ctx, srcInstance, evPbCC, srcIn), evH)
+			ccIn.IncludeInputs = walkClosure(ctx, srcInstance, evPbCC, srcIn)
 
 			ref, outPath := EmitCC(srcInstance, evPbCCSuffix, ccIn, ctx.emit)
 
@@ -6131,29 +6102,6 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath string, in Mod
 	sc := ctx.getScanCtx(scanner, cfg)
 
 	return sc.WalkClosure(vfsPath)
-}
-
-// filterSiblingPbH removes the co-generated sibling `.pb.h` from a CC
-// node's IncludeInputs slice. protoc/event2cpp emits the `.pb.cc` and
-// `.pb.h` together as outputs of the same PB/EV producer node; the
-// reference graph treats the sibling .pb.h as a producer-only output,
-// not a transitive input of the downstream CC compiling the .pb.cc.
-// Without the filter, the scanner's walk of the .pb.cc through its
-// `EmitsIncludes` list (which starts with the sibling .pb.h) leaks the
-// .pb.h into the CC's `Inputs` slot, diverging from the reference.
-func filterSiblingPbH(includeInputs []string, siblingPbH string) []string {
-	if siblingPbH == "" {
-		return includeInputs
-	}
-
-	out := make([]string, 0, len(includeInputs))
-	for _, p := range includeInputs {
-		if p == siblingPbH {
-			continue
-		}
-		out = append(out, p)
-	}
-	return out
 }
 
 // includeScannerBasePaths returns the implicit include search path
