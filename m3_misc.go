@@ -794,20 +794,32 @@ func EmitPR(
 // F-7-B uses it as the static EmitsIncludes for JV .h outputs.
 const antlr4RuntimeHeaderPath = "$(SOURCE_ROOT)/contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h"
 
-func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData) {
+// antlr4FsToolsPath / antlr4ProcCmdFiles are the build-script helpers
+// threaded into JV-derived CP/CC node inputs (matching the reference
+// sg2.json shape where every g4.cpp CP/CC inputs these paths after the
+// JV primary output and before the grammar .g4 files).
+const antlr4FsToolsPath = "$(SOURCE_ROOT)/build/scripts/fs_tools.py"
+const antlr4ProcCmdFiles = "$(SOURCE_ROOT)/build/scripts/process_command_files.py"
+
+// emitMiscNodes emits all module-level JV, CF, BI, and PR nodes declared
+// in the module's ya.make. When consumerInputs is non-nil, also emits the
+// downstream CP + CC chain for each JV grammar .cpp output (the .g4.cpp
+// rename + compile), returning per-CC (refs, outputPaths, memberInputs)
+// for the caller to fold into the enclosing AR member accumulators.
+func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []string, memberInputsList [][]string) {
 	outDir := "$(BUILD_ROOT)/" + instance.Path
 	reg := codegenRegForInstance(ctx, instance)
 
 	// JV: emit one node per ANTLR4 grammar declaration.
 	for _, g := range d.antlr4Grammars {
 		if g.IsSplit {
-			EmitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ctx.emit)
+			jvRef := EmitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ctx.emit)
 			// F-7-B: register the .h outputs. ANTLR4-generated headers include
 			// antlr4-runtime.h (XPathLexer.h pattern in
 			// contrib/libs/antlr4_cpp_runtime/src/tree/xpath/XPathLexer.h).
+			lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
+			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 			if reg != nil {
-				lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
-				parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 				for _, h := range []string{
 					outDir + "/" + lexerBase + ".h",
 					outDir + "/" + parserBase + ".h",
@@ -821,11 +833,30 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 					})
 				}
 			}
+			// PR-M3-antlr-g4-cpp: emit CP+CC for each grammar .cpp output.
+			if consumerInputs != nil {
+				// JV inputs (grammar files + scripts + jar) are the JV node's Inputs.
+				jvInputs := []string{
+					"$(SOURCE_ROOT)/" + instance.Path + "/" + g.Lexer,
+					"$(SOURCE_ROOT)/" + instance.Path + "/" + g.Parser,
+					stdout2stderrPath,
+					antlr4JarPath,
+				}
+				jvPrimary := outDir + "/" + lexerBase + ".cpp"
+				cpccPairs := []struct{ cpp, h string }{
+					{outDir + "/" + lexerBase + ".cpp", outDir + "/" + lexerBase + ".h"},
+					{outDir + "/" + parserBase + ".cpp", outDir + "/" + parserBase + ".h"},
+				}
+				refs, outs, inputs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, *consumerInputs)
+				ccRefs = append(ccRefs, refs...)
+				ccOutputs = append(ccOutputs, outs...)
+				memberInputsList = append(memberInputsList, inputs...)
+			}
 		} else {
-			EmitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ctx.emit)
+			jvRef := EmitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ctx.emit)
 			// F-7-B: register .h outputs.
+			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 			if reg != nil {
-				base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 				for _, h := range []string{
 					outDir + "/" + base + "Lexer.h",
 					outDir + "/" + base + "Parser.h",
@@ -838,6 +869,23 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 						EmitsIncludes: []string{antlr4RuntimeHeaderPath},
 					})
 				}
+			}
+			// PR-M3-antlr-g4-cpp: emit CP+CC for each grammar .cpp output.
+			if consumerInputs != nil {
+				jvInputs := []string{
+					"$(SOURCE_ROOT)/" + instance.Path + "/" + g.Grammar,
+					stdout2stderrPath,
+					antlr4JarPath,
+				}
+				jvPrimary := outDir + "/" + base + "Lexer.cpp"
+				cpccPairs := []struct{ cpp, h string }{
+					{outDir + "/" + base + "Lexer.cpp", outDir + "/" + base + "Lexer.h"},
+					{outDir + "/" + base + "Parser.cpp", outDir + "/" + base + "Parser.h"},
+				}
+				refs, outs, inputs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, *consumerInputs)
+				ccRefs = append(ccRefs, refs...)
+				ccOutputs = append(ccOutputs, outs...)
+				memberInputsList = append(memberInputsList, inputs...)
 			}
 		}
 	}
@@ -867,6 +915,116 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	// CC sources. The dedicated entry point is `emitRunProgramsForAR`
 	// (gen.go); this site is now a no-op for PR.
 	_ = d.runPrograms
+	return
+}
+
+// emitJVDownstreamCPCC emits one CP + one CC node for each (cpp, h) pair
+// produced by a JV grammar invocation, and returns the per-CC triples
+// (refs, outputPaths, memberInputs) for the caller to fold into the
+// enclosing AR member accumulators.
+//
+// Pattern (reference sg2.json):
+//
+//	JV outputs CmdLexer.cpp → CP renames it to CmdLexer.g4.cpp
+//	                        → CC compiles CmdLexer.g4.cpp.o
+//
+// CP inputs (matching reference):
+//
+//	[jvPrimaryOutput, (srcCpp when != primary), fsToolsPath, procCmdFiles,
+//	 jvInputs..., antlr4-runtime closure...]
+//
+// CC inputs:
+//
+//	[jvPrimaryOutput, g4CppPath, srcHPath, fsToolsPath, procCmdFiles,
+//	 jvInputs..., antlr4-runtime closure...]
+//
+// cpccPairs holds (srcCppAbsPath, srcHAbsPath) for each grammar .cpp output.
+// jvPrimary is always the JV node's outputs[0] (the lexer .cpp).
+// jvInputs are the JV node's Inputs (grammar .g4 files + scripts + jar).
+func emitJVDownstreamCPCC(
+	ctx *genCtx,
+	instance ModuleInstance,
+	jvRef NodeRef,
+	jvPrimary string,
+	jvInputs []string,
+	cpccPairs []struct{ cpp, h string },
+	in ModuleCCInputs,
+) (ccRefs []NodeRef, ccOutputs []string, memberInputsList [][]string) {
+	reg := codegenRegForInstance(ctx, instance)
+
+	for _, pair := range cpccPairs {
+		srcCpp := pair.cpp
+		srcH := pair.h
+
+		// Derive the .g4.cpp name: replace .cpp suffix with .g4.cpp.
+		base := strings.TrimSuffix(filepath.Base(srcCpp), ".cpp")
+		g4CppPath := "$(BUILD_ROOT)/" + instance.Path + "/" + base + ".g4.cpp"
+		g4CppRel := base + ".g4.cpp"
+
+		// Register the .g4.cpp in the codegen registry so walkClosure
+		// can resolve its transitive antlr4-runtime.h include chain.
+		if reg != nil {
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:   "CP",
+				OutputPath:    g4CppPath,
+				EmitsIncludes: []string{antlr4RuntimeHeaderPath},
+			})
+		}
+
+		// Compute the include closure from the g4.cpp (through the registry).
+		ccIn := in
+		ccIn.IsGenerated = true
+		ccIn.HasGenerator = false
+		ccIn.ExtraDepRefs = nil
+		closure := walkClosure(ctx, instance, g4CppPath, ccIn)
+
+		// CP node inputs: [jvPrimary, (srcCpp if != primary), fsTools, procCmd, jvInputs..., closure...]
+		cpInputs := make([]string, 0, 2+len(jvInputs)+len(closure)+2)
+		cpInputs = append(cpInputs, jvPrimary)
+		if srcCpp != jvPrimary {
+			cpInputs = append(cpInputs, srcCpp)
+		}
+		cpInputs = append(cpInputs, antlr4FsToolsPath, antlr4ProcCmdFiles)
+		cpInputs = append(cpInputs, jvInputs...)
+		cpInputs = append(cpInputs, closure...)
+
+		// The closure minus the cp-specific prefix is the antlr4 content.
+		// Pass only the closure part to EmitJVCPG4 (it assembles the prefix itself).
+		cpRef := EmitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, closure, ctx.emit)
+
+		// CC node inputs: EmitCC with IsGenerated=true sets inputPath=g4CppPath.
+		// IncludeInputs = [jvPrimary, srcH, fsTools, procCmd, jvInputs..., closure...]
+		ccIncludeInputs := make([]string, 0, 3+len(jvInputs)+len(closure)+2)
+		ccIncludeInputs = append(ccIncludeInputs, jvPrimary)
+		ccIncludeInputs = append(ccIncludeInputs, srcH)
+		ccIncludeInputs = append(ccIncludeInputs, antlr4FsToolsPath, antlr4ProcCmdFiles)
+		ccIncludeInputs = append(ccIncludeInputs, jvInputs...)
+		ccIncludeInputs = append(ccIncludeInputs, closure...)
+
+		ccIn.IncludeInputs = ccIncludeInputs
+		// Deps: [jvRef, cpRef] — matching reference sg2.json shape.
+		ccIn.HasGenerator = true
+		ccIn.Generator = jvRef
+		ccIn.ExtraDepRefs = []NodeRef{cpRef}
+
+		ccRef, ccOut := EmitCC(instance, g4CppRel, ccIn, ctx.emit)
+
+		// AR memberInputs: SOURCE_ROOT closure entries only (no BUILD_ROOT).
+		memberInputs := make([]string, 0, len(closure))
+		for _, p := range closure {
+			if strings.HasPrefix(p, "$(BUILD_ROOT)/") {
+				continue
+			}
+			memberInputs = append(memberInputs, p)
+		}
+
+		ccRefs = append(ccRefs, ccRef)
+		ccOutputs = append(ccOutputs, ccOut)
+		memberInputsList = append(memberInputsList, memberInputs)
+		_ = cpInputs // assembled inside EmitJVCPG4; kept for clarity
+	}
+
+	return
 }
 
 // emitRunProgramsForAR emits PR nodes ahead of the module's AR step and,
