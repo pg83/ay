@@ -1248,3 +1248,49 @@ func TestScanner_AsmlibAsmInputsParity(t *testing.T) {
 		t.Errorf("asmlib sfmt64.asm closure missing randomah.asi — PR-35x case-insensitive yasm-include matching regression: %v", closure)
 	}
 }
+
+// TestParseIncludes_MacroIndirectAugmentation pins the
+// PR-M3-musl-self-closure behaviour: sources known to use macro-indirect
+// `#include MACRO_NAME` forms get synthetic includeDirectives appended
+// after the regex-extracted set. The text-blind regex parser cannot
+// expand the macro; the table-driven augmenter is the surgical fix.
+func TestParseIncludes_MacroIndirectAugmentation(t *testing.T) {
+	dir := t.TempDir()
+	rel := "contrib/libs/openssl/crypto/uid.c"
+	full := filepath.Join(dir, rel)
+
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	src := []byte(`#include <openssl/crypto.h>
+# include OPENSSL_UNISTD
+`)
+
+	if err := os.WriteFile(full, src, 0o644); err != nil {
+		t.Fatalf("write uid.c: %v", err)
+	}
+
+	scanner := NewIncludeScanner(dir, SysInclSet{})
+	dirs := scanner.parseIncludes("$(SOURCE_ROOT)/" + rel)
+
+	var hasCrypto, hasUnistd bool
+
+	for _, d := range dirs {
+		if d.target == "openssl/crypto.h" && d.kind == includeSystem {
+			hasCrypto = true
+		}
+
+		if d.target == "unistd.h" && d.kind == includeSystem {
+			hasUnistd = true
+		}
+	}
+
+	if !hasCrypto {
+		t.Errorf("regex-parsed openssl/crypto.h missing: %+v", dirs)
+	}
+
+	if !hasUnistd {
+		t.Errorf("macro-indirect unistd.h augmentation missing for openssl/crypto/uid.c: %+v", dirs)
+	}
+}
