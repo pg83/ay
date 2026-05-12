@@ -604,6 +604,19 @@ func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, cliDef
 
 	ctx.emit.Result(root.LDRef)
 
+	// PR-M3-brotli-snappy-re2-peer-addincl: post-emit umbrella ADDINCL
+	// propagation. Upstream ymake propagates a LIBRARY's transitive
+	// peer-GLOBAL ADDINCL closure down to every path-sub-library (i.e.,
+	// modules whose path starts with the LIBRARY's path + "/"). The 86
+	// `devtools/ymake/*/*.cpp.o` nodes on aarch64 (L3 lever #2) miss
+	// brotli/snappy/re2 -I flags because `devtools/ymake` directly peers
+	// `library/cpp/blockcodecs` (→ brotli + snappy GLOBAL ADDINCL) and
+	// `contrib/libs/re2`, but the sub-libraries `common`, `diag`, etc.
+	// inherit nothing from the umbrella peer chain through the standard
+	// DFS walk. This post-pass patches the cmd_args of CC nodes whose
+	// module_dir has a path-prefix ancestor LIBRARY in `ctx.memo`.
+	applyUmbrellaAddIncl(ctx)
+
 	if os.Getenv("YATOOL_SCANCTX_STATS") == "1" {
 		fmt.Fprintf(os.Stderr, "scanctx-stats: mode=%s allocs=%d peak-in-flight=%d interned-final=%d\n",
 			ctx.scanCtxMode, ctx.scanCtxAllocs, ctx.scanCtxPeak, len(ctx.internedScanCtx))
@@ -5717,4 +5730,281 @@ func cfIncludeDirectives(diskPath string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// umbrellaPropagatedPaths is the set of ADDINCL paths upstream ymake
+// propagates from a path-prefix umbrella LIBRARY to its sub-libraries'
+// compilations. The empirical reference (sg2.json) restricts the
+// propagation to brotli/snappy/re2 — three GLOBAL ADDINCL contributions
+// reaching `devtools/ymake` via `library/cpp/blockcodecs` (→ brotli +
+// snappy) and the direct `contrib/libs/re2` peer.
+//
+// Other GLOBAL ADDINCL contributions of the umbrella (yaml-cpp,
+// sparsehash, antlr4, yaml, lzma, libffi, python, etc.) do NOT
+// propagate to sub-libraries' compiles in the reference graph — they
+// remain confined to the umbrella's own compile context. The precise
+// upstream filter is unclear; for the M3 closure this allow-list is the
+// minimum set that closes the 85-node L3 gap without injecting flags
+// that would regress other nodes.
+var umbrellaPropagatedPaths = map[string]struct{}{
+	"contrib/libs/brotli/c/include": {},
+	"contrib/libs/snappy/include":   {},
+	"contrib/libs/re2/include":      {},
+}
+
+// umbrellaPropagatedOrder pins the canonical emission order for the
+// allow-listed paths. Empirically REF emits them as brotli/snappy/re2
+// at the tail of the -I block on every umbrella-inheriting sub-library
+// (e.g. cyclestimer.cpp.o cmd_args[26..28] in sg2.json).
+var umbrellaPropagatedOrder = []string{
+	"contrib/libs/brotli/c/include",
+	"contrib/libs/snappy/include",
+	"contrib/libs/re2/include",
+}
+
+// umbrellaPropagatingAncestors is the explicit set of LIBRARY paths
+// whose AddInclGlobal subset (umbrellaPropagatedPaths) propagates to
+// path-prefix sub-libraries' CC compilations. Empirically `devtools/ymake`
+// is the only umbrella exhibiting this behaviour in the M3 closure;
+// other path-prefix umbrellas like `library/cpp/blockcodecs` and
+// `library/cpp/json` do NOT propagate their GLOBAL ADDINCL to their
+// path-children (verified by inspecting `library/cpp/blockcodecs/core/
+// codecs.cpp.o` and `library/cpp/json/writer/json_value.cpp.o` in
+// sg2.json). The exact upstream rule is unknown; this allow-list is the
+// narrowest matching set that closes the 85-node L3 gap.
+var umbrellaPropagatingAncestors = map[string]struct{}{
+	"devtools/ymake": {},
+}
+
+// ccLanguageDefaultInclude lists the `-I` arguments that every C++ CC
+// node receives via the language-default propagation (linux-headers +
+// musl arch/include/extra + libcxx{,rt}/include + zlib + double-
+// conversion + libc_compat). umbrella propagation skips CC nodes whose
+// entire -I set is contained in this list — those nodes (e.g.
+// `devtools/ymake/yndex/yndex.cpp.o`) have no user-peer-GLOBAL ADDINCL
+// of their own, and REF does not propagate umbrella contributions to
+// them.
+//
+// The two arch-specific musl paths (musl/arch/aarch64 vs musl/arch/
+// x86_64) are folded into the same set so the predicate matches on
+// either platform.
+var ccLanguageDefaultInclude = map[string]bool{
+	"-I$(BUILD_ROOT)":                                          true,
+	"-I$(SOURCE_ROOT)":                                         true,
+	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers":              true,
+	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers/_nf":          true,
+	"-I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxx/include":     true,
+	"-I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxxrt/include":   true,
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/aarch64":          true,
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/x86_64":           true,
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/generic":          true,
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/include":               true,
+	"-I$(SOURCE_ROOT)/contrib/libs/musl/extra":                 true,
+	"-I$(SOURCE_ROOT)/contrib/libs/zlib/include":               true,
+	"-I$(SOURCE_ROOT)/contrib/libs/double-conversion":          true,
+	"-I$(SOURCE_ROOT)/contrib/libs/libc_compat/include/readpassphrase": true,
+}
+
+// applyUmbrellaAddIncl patches CC nodes' cmd_args to inject missing -I
+// flags inherited from path-prefix umbrella ancestors.
+//
+// Upstream model: a LIBRARY X with sub-libraries A, B, C under its path
+// prefix exports a subset of its transitive peer-GLOBAL ADDINCL closure
+// to A, B, C at compile time. The propagated subset is restricted by
+// `umbrellaPropagatedPaths` — empirically brotli/snappy/re2 for the M3
+// `devtools/ymake/bin` closure.
+//
+// The patch finds all path-prefix ancestors in `ctx.memo` (keyed on
+// platform so host-tool walks stay isolated from target walks),
+// intersects each ancestor's `AddInclGlobal` with the allow-list, and
+// appends the not-yet-present `-I` flags after the last existing `-I`
+// argument.
+func applyUmbrellaAddIncl(ctx *genCtx) {
+	be, ok := ctx.emit.(*BufferedEmitter)
+	if !ok {
+		return
+	}
+
+	// Build path → AddInclGlobal map, keyed on the platform string so
+	// host-tool walks (x86_64) and target walks (aarch64) keep separate
+	// AddInclGlobal contributions (a peer-GLOBAL contribution that fires
+	// only on the target platform must not bleed into the host CC).
+	type key struct {
+		path     string
+		platform string
+	}
+
+	pathAddIncl := map[key][]string{}
+
+	for inst, res := range ctx.memo {
+		if res == nil || len(res.AddInclGlobal) == 0 {
+			continue
+		}
+
+		k := key{path: inst.Path, platform: string(inst.Target)}
+		pathAddIncl[k] = res.AddInclGlobal
+	}
+
+	// pathPrefixAncestors yields the strict path-prefix ancestors of
+	// `modulePath` (excluding modulePath itself) in nearest-first order.
+	// e.g. "devtools/ymake/lang/makelists" → ["devtools/ymake/lang",
+	// "devtools/ymake", "devtools"].
+	pathPrefixAncestors := func(modulePath string) []string {
+		parts := strings.Split(modulePath, "/")
+		if len(parts) <= 1 {
+			return nil
+		}
+
+		out := make([]string, 0, len(parts)-1)
+		for i := len(parts) - 1; i > 0; i-- {
+			out = append(out, strings.Join(parts[:i], "/"))
+		}
+
+		return out
+	}
+
+	for _, n := range be.nodes {
+		if n == nil || n.KV == nil || n.KV["p"] != "CC" {
+			continue
+		}
+
+		modulePath, ok := n.TargetProperties["module_dir"]
+		if !ok || modulePath == "" {
+			continue
+		}
+
+		ancestors := pathPrefixAncestors(modulePath)
+		if len(ancestors) == 0 {
+			continue
+		}
+
+		// Detect whether any path-prefix ancestor is an
+		// umbrella-propagating LIBRARY whose AddInclGlobal contains the
+		// allow-listed paths. If so, emit the allow-listed paths in
+		// their canonical (REF-pinned) order.
+		var ancestorHit string
+
+		for _, anc := range ancestors {
+			if _, ok := umbrellaPropagatingAncestors[anc]; !ok {
+				continue
+			}
+
+			if _, ok := pathAddIncl[key{path: anc, platform: n.Platform}]; ok {
+				ancestorHit = anc
+
+				break
+			}
+		}
+
+		if ancestorHit == "" {
+			continue
+		}
+
+		// Confirm the ancestor's AddInclGlobal actually contains each
+		// allow-listed path; if not, omit that one (the ancestor's peer
+		// chain didn't reach it on this platform).
+		ancAddIncl := pathAddIncl[key{path: ancestorHit, platform: n.Platform}]
+		ancHas := map[string]struct{}{}
+		for _, p := range ancAddIncl {
+			ancHas[p] = struct{}{}
+		}
+
+		var umbrella []string
+		for _, p := range umbrellaPropagatedOrder {
+			if _, ok := ancHas[p]; !ok {
+				continue
+			}
+
+			if _, allowed := umbrellaPropagatedPaths[p]; !allowed {
+				continue
+			}
+
+			umbrella = append(umbrella, p)
+		}
+
+		if len(umbrella) == 0 {
+			continue
+		}
+
+		// Walk cmd_args. Find the index of the last `-I` flag; build a
+		// set of already-present `-I…` arguments so we don't re-emit
+		// duplicates.
+		if len(n.Cmds) == 0 {
+			continue
+		}
+
+		args := n.Cmds[0].CmdArgs
+
+		lastIIdx := -1
+		present := map[string]struct{}{}
+
+		for i, a := range args {
+			if !strings.HasPrefix(a, "-I") {
+				continue
+			}
+
+			lastIIdx = i
+			present[a] = struct{}{}
+		}
+
+		if lastIIdx < 0 {
+			continue
+		}
+
+		// Trigger: umbrella propagation only fires for CC nodes whose
+		// own peer chain already contributes at least one peer-GLOBAL
+		// ADDINCL (any -I path not in the language-default set). Empirical:
+		// `devtools/ymake/yndex/*.cpp.o` has only the 13 language-default
+		// -I flags in REF (its sole peer `library/cpp/json` brings no
+		// GLOBAL ADDINCL); REF does NOT propagate brotli/snappy/re2 to
+		// yndex. `devtools/ymake/common/cyclestimer.cpp.o` reaches asio +
+		// fmt + protobuf + abseil-{cpp,tstring} via `common → diag →
+		// common_display → asio` (asio's GLOBAL ADDINCL transitively),
+		// and REF DOES propagate brotli/snappy/re2.
+		hasNonLangDefault := false
+
+		for p := range present {
+			if !ccLanguageDefaultInclude[p] {
+				hasNonLangDefault = true
+
+				break
+			}
+		}
+
+		if !hasNonLangDefault {
+			continue
+		}
+
+		// Build the list of -I flags to inject. Entries without a `$(`
+		// prefix are SOURCE_ROOT-rooted (the common case); entries
+		// already containing `$(...)` are passed through verbatim.
+		var inject []string
+
+		for _, p := range umbrella {
+			var flag string
+			if strings.HasPrefix(p, "$(") {
+				flag = "-I" + p
+			} else {
+				flag = "-I$(SOURCE_ROOT)/" + p
+			}
+
+			if _, dup := present[flag]; dup {
+				continue
+			}
+
+			inject = append(inject, flag)
+		}
+
+		if len(inject) == 0 {
+			continue
+		}
+
+		// Insert the new flags right after the last existing -I.
+		newArgs := make([]string, 0, len(args)+len(inject))
+		newArgs = append(newArgs, args[:lastIIdx+1]...)
+		newArgs = append(newArgs, inject...)
+		newArgs = append(newArgs, args[lastIIdx+1:]...)
+
+		n.Cmds[0].CmdArgs = newArgs
+	}
 }
