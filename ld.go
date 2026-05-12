@@ -206,6 +206,17 @@ func EmitLD(
 			continue
 		}
 
+		// PR-M3-final-codegen-registry-expansion: drop BUILD_ROOT-rooted
+		// codegen products (generated `.pb.h`, `.pb.cc`, `_serialized.*`,
+		// ANTLR outputs, etc.) from LD inputs. Same shape as AR: BUILD_ROOT
+		// entries on an LD's `inputs` slot are .o objects and .a archives
+		// (plus the rare .pyplugin); generated source/header artifacts are
+		// wired solely through the constituent CC's own `inputs`. Verified
+		// in REF on tools/event2cpp/event2cpp.
+		if isBuildRootCodegenProduct(p) {
+			continue
+		}
+
 		inputSet[p] = struct{}{}
 		inputs = append(inputs, p)
 	}

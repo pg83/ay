@@ -826,6 +826,7 @@ func collectModule(modulePath string, stmts []Stmt, env Environment, pathFlags F
 	collectStmts(modulePath, stmts, env, d)
 
 	applyPython3AddIncl(modulePath, d)
+	applyBuildInfoAddIncl(modulePath, d)
 
 	// PR-M3-sparsehash-slot-order: per upstream build/conf/proto.conf:480-491,
 	// the _CPP_EVLOG_CMD (and _CPP_PROTO_EVLOG_CMD) macros fired for every
@@ -950,6 +951,24 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 	if modulePath == "library/python/runtime_py3" {
 		d.addIncl = append(d.addIncl, "$(BUILD_ROOT)/library/python/runtime_py3")
 	}
+}
+
+// applyBuildInfoAddIncl mirrors the implicit `ADDINCL(<build_info_dir>)`
+// upstream CREATE_BUILDINFO_FOR macros emit (build/conf/buildinfo.conf):
+// the generated header (e.g. buildinfo_data.h) lives at
+// `$(BUILD_ROOT)/<module>/<header>` and CC consumers in the same module
+// reach it via `-I$(BUILD_ROOT)/<module>`. REF shape verified on the 3
+// `library/cpp/build_info/*.cpp.o` nodes.
+//
+// Scope: own AddIncl only (consumers' CCs in the build_info module).
+// Peer modules see the generated header via standard PEERDIR closure;
+// the BUILD_ROOT addincl path is owner-scoped (same shape as
+// runtime_py3's `$(BUILD_ROOT)/library/python/runtime_py3` injection).
+func applyBuildInfoAddIncl(modulePath string, d *moduleData) {
+	if d.createBuildInfoFor == "" {
+		return
+	}
+	d.addIncl = append(d.addIncl, "$(BUILD_ROOT)/"+modulePath)
 }
 
 // pyModuleTypeUsesPython3 returns true for module types whose upstream
@@ -5666,12 +5685,24 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			ccIn.Generator = evRef
 			ccIn.HasGenerator = true
 			ccIn.IncludeInputs = walkClosure(ctx, srcInstance, evPbCC, srcIn)
+			// PR-M3-final-codegen-registry-expansion: protoc emits
+			// `#include "google/protobuf/wire_format.h"` directly into the
+			// generated .ev.pb.cc reflection scaffolding (witnessed in REF on
+			// every .ev.pb.cc.o). This is a CC-side post-closure addition
+			// (not via the registry) because the registry's EmitsIncludes
+			// propagates up through the .ev.pb.cc → .ev.pb.h witness link to
+			// every CC consumer of the .ev.pb.h, which over-emits the header
+			// onto ~30 non-protobuf CC nodes. Scope is narrow: only the
+			// .ev.pb.cc.o (this CC node) inherits wire_format.h.
+			ccIn.IncludeInputs = append(ccIn.IncludeInputs, pbRuntimeBase+"google/protobuf/wire_format.h")
 
 			ref, outPath := EmitCC(srcInstance, evPbCCSuffix, ccIn, ctx.emit)
 
 			// The primary input for the AR/LD memberInputs is the original .ev source.
+			// PR-M3-final-codegen-registry-expansion: wire_format.h also propagates
+			// up into the AR rollup (matched in REF on libdevtools-ymake-diag.a).
 			evSrcAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
-			return ref, outPath, []string{evSrcAbs}, 1, true
+			return ref, outPath, []string{evSrcAbs, pbRuntimeBase + "google/protobuf/wire_format.h"}, 1, true
 		}
 
 	case strings.HasSuffix(srcRel, ".rl"):
@@ -5794,12 +5825,16 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// single EmitsIncludes child so WalkClosure recurses into it via
 		// the FS locator and yields the full transitive closure that the
 		// downstream CC needs.
+		// PR-M3-final-codegen-registry-expansion: configure_file.py is the
+		// codegen script driving the CF node; REF wires it as an input on
+		// every CC consumer of the generated .cpp (verified on
+		// build_info.cpp.o and sandbox.cpp.o).
 		inSourceAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "CF",
 				OutputPath:    cfOut,
-				EmitsIncludes: []string{inSourceAbs},
+				EmitsIncludes: []string{inSourceAbs, configureFilePyPath},
 			})
 		}
 
