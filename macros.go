@@ -116,6 +116,40 @@ func (e Environment) SetBool(name string, v bool) {
 	e.bools[name] = v
 }
 
+// HasBinding reports whether name has any typed binding in this env.
+// Used by the DEFAULT(name value) statement to mirror upstream's
+// `if (vars.Get1(args[0]).empty())` no-op-on-pre-existing semantics
+// (see devtools/ymake/lang/eval_context.cpp:335-339).
+func (e Environment) HasBinding(name string) bool {
+	if _, ok := e.bools[name]; ok {
+		return true
+	}
+
+	if _, ok := e.strings[name]; ok {
+		return true
+	}
+
+	if _, ok := e.ints[name]; ok {
+		return true
+	}
+
+	return false
+}
+
+// SetDefaultString implements the DEFAULT(name value) statement: only
+// binds `name` when no prior binding exists, matching upstream
+// `TEvalContext::SetStatement`'s NMacro::DEFAULT branch. The value is
+// stored as a string; subsequent `IF (name)` predicates evaluate via
+// Bool (empty string → false, non-empty → true), and `IF (name == "v")`
+// predicates evaluate via evalEq's string path.
+func (e Environment) SetDefaultString(name, value string) {
+	if e.HasBinding(name) {
+		return
+	}
+
+	e.strings[name] = value
+}
+
 // EvalCond evaluates an IF predicate against a fixed env. Throws
 // (D27) on:
 //
@@ -376,7 +410,14 @@ var DefaultIfEnv = Environment{
 		"ANDROID_ARMV7":                         false, // M3: Android ARMv7 target.
 		"ANDROID_I686":                           false, // M3: Android i686 target.
 		"ARCADIA_OPENSSL_DISABLE_ARMV7_TICK":     false, // M3: OpenSSL armv7 tick disable.
-		"ARCADIA_PCRE_ENABLE_JIT":                false, // M3: PCRE JIT enable flag.
+		// ARCADIA_PCRE_ENABLE_JIT: intentionally NOT pre-bound. The
+		// contrib/libs/pcre/ya.make declares `DEFAULT(ARCADIA_PCRE_ENABLE_JIT yes)`
+		// then `IF (ARCADIA_PCRE_ENABLE_JIT)` to add `-DARCADIA_PCRE_ENABLE_JIT`
+		// to CFLAGS; the per-module DEFAULT→IF env-bridge in collectStmts
+		// (PR-M3-pcre-jit-default-eval) establishes the binding string="yes"
+		// at DEFAULT statement time so the subsequent IF observes the value.
+		// Pre-binding would force HasBinding to true and the DEFAULT's
+		// upstream-mirrored "skip if already set" semantics would no-op.
 		"ARCH_I686":                              false, // M3: i686 32-bit x86 target.
 		"ARCH_PPC64LE":                           false, // M3: PowerPC 64-bit LE target.
 		"ARCH_TYPE_32":                           false, // M3: 32-bit architecture flag.
