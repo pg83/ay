@@ -18,6 +18,24 @@ import (
 // host AR's `host_platform=true` and `tags=["tool"]`, not by an
 // archive-name suffix.
 
+// isBuildRootCodegenProduct reports whether a member-input path is a
+// BUILD_ROOT-rooted codegen artifact that must not appear in the AR
+// node's `inputs` slot. The reference graph (sg2.json) constrains AR
+// `inputs` to .o files for BUILD_ROOT-rooted entries; everything else
+// (generated `.cpp`, `.cc`, `.h`, `.pb.{cc,h}`, `_serialized.{cpp,h}`,
+// ANTLR lex/parse outputs, etc.) is wired through the constituent
+// CC's own `inputs` slot only.
+func isBuildRootCodegenProduct(p string) bool {
+	if !strings.HasPrefix(p, "$(BUILD_ROOT)/") {
+		return false
+	}
+	// .o is the only BUILD_ROOT extension legitimately carried by an
+	// AR aggregator's `inputs` slot (a member's compiled object).
+	// Strip optional .pic.o → .o by suffix check: HasSuffix(".o")
+	// catches both bare ".cpp.o" and PIC ".cpp.pic.o" plus ".S.o".
+	return !strings.HasSuffix(p, ".o")
+}
+
 // archiveNameWithPrefix returns the archive base name using the given
 // prefix instead of the default "lib". The prefix is used verbatim
 // (e.g. "lib", "libpy3", "libpy3c"). Single special case preserved:
@@ -168,6 +186,21 @@ func emitARNode(
 
 	for _, p := range memberInputs {
 		if _, dup := objSet[p]; dup {
+			continue
+		}
+
+		// PR-M3-l2-aggregator: drop BUILD_ROOT-rooted codegen products.
+		// Reference graph (sg2.json) constrains AR `inputs` to .o
+		// objects under $(BUILD_ROOT) — every non-.o codegen artifact
+		// (e.g. `*.ev.pb.{cc,h}`, `*_serialized.{cpp,h}`, `*.pb.h`,
+		// ANTLR `*.{h,cpp}` lex/parse outputs) is wired implicitly via
+		// the constituent CC's own `inputs` slot and must not leak into
+		// the AR aggregator's `inputs` slot. The .o entries already
+		// flow via `sortedObjPaths` above; BUILD_ROOT-rooted member
+		// inputs at this point are by definition non-.o (the closure
+		// walker yielded a generated header / source through a
+		// member's #include chain).
+		if isBuildRootCodegenProduct(p) {
 			continue
 		}
 
