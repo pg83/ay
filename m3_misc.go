@@ -952,23 +952,82 @@ func isCCSourceExt(p string) bool {
 // composeCCPaths' IsGenerated branch yields $(BUILD_ROOT)/<instance.
 // Path>/<out>.o for the output (flat layout when <out> has no `/`).
 func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, in ModuleCCInputs) (NodeRef, string, []string) {
-	prOut := "$(BUILD_ROOT)/" + instance.Path + "/" + out
+	return emitCodegenDownstreamCC(ctx, instance, out, nil, nil, in)
+}
+
+// emitCodegenDownstreamCC emits the downstream CC for a codegen producer's
+// `.cpp/.cc/.cxx/.c` output. PR-M3-codegen-cc-enqueue generalises
+// emitPRDownstreamCC to every codegen kind whose .cpp output lives under
+// $(BUILD_ROOT)/<instance.Path>/<cppRel> AND whose owning module compiles
+// that source as an implicit AR member (EN's `.h_serialized.cpp`, PR's
+// STDOUT/OUT .cpp, etc.). The shape mirrors the existing PR/R6/R5/EV
+// downstream-CC pattern:
+//
+//   - IsGenerated=true so composeCCPaths roots the input/output under
+//     $(BUILD_ROOT)/<instance.Path>/<cppRel>{,.o,.pic.o} (flat layout for
+//     a slash-free cppRel; `_/<cppRel>` infix when cppRel contains `/`).
+//   - IncludeInputs from walkClosure() rooted at the codegen .cpp's
+//     registered VFS path — the producer (EN/PR/EV/...) must have
+//     registered EmitsIncludes for the .cpp in the per-scanner codegen
+//     registry before this helper runs.
+//   - depPrefix prepends cross-codegen dependency entries that the
+//     reference graph places ahead of the primary source (EN consumers
+//     prepend cross-EN deps' `_serialized.cpp` + `_serialized.h` outputs;
+//     PR has no cross-deps and passes nil).
+func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string, depPrefix []string, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, string, []string) {
+	cppPath := "$(BUILD_ROOT)/" + instance.Path + "/" + cppRel
+
+	closure := walkClosure(ctx, instance, cppPath, in)
+
+	// PR-M3-codegen-cc-enqueue: prepend depPrefix into IncludeInputs so
+	// the resulting CC node's Inputs[] carries the cross-codegen dep
+	// paths the reference graph places ahead of the consumer's own
+	// generated .cpp (sg2.json export_json_debug.h_serialized.cpp.o
+	// inputs[0..1] = the cross-EN dep `.cpp` + `.h` outputs). Dedup
+	// against the scanner closure — the cross-EN `.h` is already in the
+	// closure via the codegen registry's `_serialized.h` EmitsIncludes
+	// chain; only the cross-EN `.cpp` reliably needs the explicit prepend.
+	includeInputs := make([]string, 0, len(depPrefix)+len(closure))
+	seen := make(map[string]struct{}, len(depPrefix)+len(closure))
+	for _, p := range depPrefix {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+		seen[p] = struct{}{}
+		includeInputs = append(includeInputs, p)
+	}
+	for _, p := range closure {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+		seen[p] = struct{}{}
+		includeInputs = append(includeInputs, p)
+	}
 
 	ccIn := in
 	ccIn.IsGenerated = true
-	ccIn.IncludeInputs = walkClosure(ctx, instance, prOut, in)
+	ccIn.IncludeInputs = includeInputs
+	ccIn.ExtraDepRefs = depRefs
 
-	ref, outPath := EmitCC(instance, out, ccIn, ctx.emit)
+	ref, outPath := EmitCC(instance, cppRel, ccIn, ctx.emit)
 
-	// CC inputs: the PR-emitted source itself + its include closure.
-	// Reference (sg2.json devtools/ymake/symbols/dep_types.h_dumper.cpp.o):
-	// inputs[0..2] = [stats_enums.h_serialized.cpp, stats_enums.h_serialized.h,
-	// dep_types.h_dumper.cpp, ...closure...]. The .h_serialized.* entries
-	// come from the registered EN outputs (already in the include
-	// closure for sources that #include them); the .cpp leads.
-	ccInputs := make([]string, 0, 1+len(ccIn.IncludeInputs))
-	ccInputs = append(ccInputs, prOut)
-	ccInputs = append(ccInputs, ccIn.IncludeInputs...)
+	// AR member-inputs: only the SOURCE_ROOT-rooted closure entries.
+	// PR-35y R7 / PR-M3-codegen-cc-enqueue: the AR aggregator excludes
+	// BUILD_ROOT-staged generated `.cpp` and the cross-codegen dep
+	// prefix from its `inputs[]` slot (the reference graph for
+	// devtools/ymake's `libdevtools-ymake.a` carries header `.h` entries
+	// from the EN-downstream CC's include closure but never the BUILD_
+	// ROOT-rooted `.h_serialized.cpp` / `.h_serialized.h` source
+	// outputs themselves — those are wired implicitly via the .o
+	// archive members). Filter BUILD_ROOT entries here so the AR
+	// inputs[] aggregate aligns with REF's multiset shape.
+	ccInputs := make([]string, 0, len(closure))
+	for _, p := range closure {
+		if strings.HasPrefix(p, "$(BUILD_ROOT)/") {
+			continue
+		}
+		ccInputs = append(ccInputs, p)
+	}
 
 	return ref, outPath, ccInputs
 }

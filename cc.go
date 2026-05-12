@@ -96,6 +96,14 @@ type ModuleCCInputs struct {
 	// unreliable for the very first emitted node). Set this true
 	// alongside `Generator` whenever a JS or R6 ref is threaded.
 	HasGenerator bool
+	// ExtraDepRefs threads additional NodeRefs into the CC node's
+	// DepRefs alongside `Generator` (when HasGenerator). PR-M3-codegen-
+	// cc-enqueue: the EN-downstream CC's `deps` carries the consumer's
+	// own EN ref (via Generator) AND the cross-EN dep refs (the EN
+	// nodes whose `_serialized.h` outputs participate in the consumer's
+	// header closure). The reference shape for a downstream CC of a
+	// codegen producer with cross-codegen deps is two deps, not one.
+	ExtraDepRefs []NodeRef
 	// SrcDir is the module's `SRCDIR(...)` setting (empty when none).
 	// PR-30 D06: when non-empty AND the source is non-local (resolves
 	// under SRCDIR rather than instance.Path), the composer uses
@@ -366,8 +374,14 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	// The HasGenerator flag is required because BufferedEmitter assigns
 	// NodeRef ids starting at 0; a bare NodeRef{} comparison would
 	// false-negative on the very first emitted node.
+	//
+	// PR-M3-codegen-cc-enqueue: ExtraDepRefs additionally threads cross-
+	// codegen deps (e.g. the cross-EN node refs for an EN-downstream CC)
+	// so the resulting Deps multiset matches the reference shape.
 	if in.HasGenerator {
-		node.DepRefs = []NodeRef{in.Generator}
+		node.DepRefs = append([]NodeRef{in.Generator}, in.ExtraDepRefs...)
+	} else if len(in.ExtraDepRefs) > 0 {
+		node.DepRefs = append([]NodeRef(nil), in.ExtraDepRefs...)
 	}
 
 	return emit.Emit(node), outputPath
