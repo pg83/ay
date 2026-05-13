@@ -132,15 +132,28 @@ type ModuleInstance struct {
 	Flags    FlagSet
 }
 
-// WithHost returns a copy of mi with `Platform` flipped to the host
-// Platform pointer and `Flags.PIC=true`. The same Path/Language carry
-// over; only the platform identity (and the PIC policy) changes.
-func (mi ModuleInstance) WithHost(host *Platform) ModuleInstance {
-	out := mi
-	out.Platform = host
-	out.Flags.PIC = true
-
-	return out
+// NewToolInstance builds a fresh ModuleInstance addressing a host-platform
+// tool at `path`. Flags are inferred from `path` (via inferFlagsFromPath)
+// so the tool's own ya.make properties — not the caller's — drive
+// dispatch. `lang` carries over from the caller because language is a
+// rule-engine selector, not a per-module fact (every tool routed today
+// is LangCPP).
+//
+// This replaces the older `instance.WithHost(host) + instance.Path = path`
+// pattern, which copied the surrounding module's Flags before swapping
+// in the tool path and so produced an instance whose Flags described
+// the WRONG ya.make. Latently inert for current M2/M3 closures (the
+// only paths inferFlagsFromPath special-cases are build/cow/on and
+// contrib/libs/musl/*; tools fall through to FlagSet{PIC: true}),
+// but a real correctness hazard the moment a tool ever sits under one
+// of those prefixes.
+func NewToolInstance(host *Platform, path string, lang Language) ModuleInstance {
+	return ModuleInstance{
+		Path:     path,
+		Language: lang,
+		Platform: host,
+		Flags:    inferFlagsFromPath(path, true),
+	}
 }
 
 // String returns a stable diagnostic representation in the form

@@ -5186,8 +5186,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	)
 
 	// Walk tools/py3cc/bin (the main py3cc binary).
-	py3ccHostInst := instance.WithHost(ctx.host)
-	py3ccHostInst.Path = py3ccBinPath
+	py3ccHostInst := NewToolInstance(ctx.host, py3ccBinPath, instance.Language)
 	py3ccHostInst.Flags = inferFlagsFromPath(py3ccBinPath, true)
 
 	if exc := Try(func() {
@@ -5215,8 +5214,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	// LDPath is empty. Only update py3ccSlowBin when the walk produces a
 	// non-empty path; otherwise the canonical fallback
 	// $(BUILD_ROOT)/tools/py3cc/slow/py3cc (pre-initialised above) is used.
-	py3ccSlowHostInst := instance.WithHost(ctx.host)
-	py3ccSlowHostInst.Path = py3ccSlowPath
+	py3ccSlowHostInst := NewToolInstance(ctx.host, py3ccSlowPath, instance.Language)
 	py3ccSlowHostInst.Flags = inferFlagsFromPath(py3ccSlowPath, true)
 
 	if exc := Try(func() {
@@ -5248,8 +5246,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	)
 
 	walkHostTool := func(path string) {
-		hostInst := instance.WithHost(ctx.host)
-		hostInst.Path = path
+		hostInst := NewToolInstance(ctx.host, path, instance.Language)
 		hostInst.Flags = inferFlagsFromPath(path, true)
 		if exc := Try(func() {
 			genModule(ctx, hostInst)
@@ -5523,8 +5520,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 	)
 
 	// Walk enum_parser as a HOST tool (x86_64).
-	enumHostInst := instance.WithHost(ctx.host)
-	enumHostInst.Path = enumParserPath
+	enumHostInst := NewToolInstance(ctx.host, enumParserPath, instance.Language)
 	enumHostInst.Flags = inferFlagsFromPath(enumParserPath, true)
 
 	if exc := Try(func() {
@@ -5957,8 +5953,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		if targetIsX8664(instance) && strings.HasSuffix(srcRel, ".asm") {
 			const yasmPath = "contrib/tools/yasm"
 
-			yasmInstance := instance.WithHost(ctx.host)
-			yasmInstance.Path = yasmPath
+			yasmInstance := NewToolInstance(ctx.host, yasmPath, instance.Language)
 			yasmInstance.Flags = inferFlagsFromPath(yasmPath, true)
 
 			yasmResult := genModule(ctx, yasmInstance)
@@ -6028,8 +6023,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			ragelBinaryStr = ragelFallbackPath
 		)
 
-		ragelInstance := instance.WithHost(ctx.host)
-		ragelInstance.Path = ragelBinPath
+		ragelInstance := NewToolInstance(ctx.host, ragelBinPath, instance.Language)
 		ragelInstance.Flags = inferFlagsFromPath(ragelInstance.Path, true)
 
 		if exc := Try(func() {
@@ -6181,8 +6175,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 
 			var cppStyleguideLDRef, protocLDRef, event2cppLDRef NodeRef
 
-			protocHostInst := instance.WithHost(ctx.host)
-			protocHostInst.Path = pbProtocModule
+			protocHostInst := NewToolInstance(ctx.host, pbProtocModule, instance.Language)
 			protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
 
 			if exc := Try(func() {
@@ -6193,8 +6186,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				_ = exc
 			}
 
-			cppStyleguideHostInst := instance.WithHost(ctx.host)
-			cppStyleguideHostInst.Path = pbCppStyleguideModule
+			cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule, instance.Language)
 			cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
 
 			if exc := Try(func() {
@@ -6205,8 +6197,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				_ = exc
 			}
 
-			event2cppHostInst := instance.WithHost(ctx.host)
-			event2cppHostInst.Path = evEvent2cppModule
+			event2cppHostInst := NewToolInstance(ctx.host, evEvent2cppModule, instance.Language)
 			event2cppHostInst.Flags = inferFlagsFromPath(evEvent2cppModule, true)
 
 			if exc := Try(func() {
@@ -6325,8 +6316,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			rlgenCdBinStr = rlgenCdFallback
 		)
 
-		ragel5Instance := srcInstance.WithHost(ctx.host)
-		ragel5Instance.Path = ragel5Path
+		ragel5Instance := NewToolInstance(ctx.host, ragel5Path, srcInstance.Language)
 		ragel5Instance.Flags = inferFlagsFromPath(ragel5Path, true)
 
 		if exc := Try(func() {
@@ -6340,8 +6330,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			}
 		}
 
-		rlgenCdInstance := srcInstance.WithHost(ctx.host)
-		rlgenCdInstance.Path = rlgenCdPath
+		rlgenCdInstance := NewToolInstance(ctx.host, rlgenCdPath, srcInstance.Language)
 		rlgenCdInstance.Flags = inferFlagsFromPath(rlgenCdPath, true)
 
 		if exc := Try(func() {

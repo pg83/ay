@@ -555,8 +555,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 
 	var cppStyleguideLDRef, protocLDRef NodeRef
 
-	protocHostInst := instance.WithHost(ctx.host)
-	protocHostInst.Path = pbProtocModule
+	protocHostInst := NewToolInstance(ctx.host, pbProtocModule, instance.Language)
 	protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
 
 	if exc := Try(func() {
@@ -568,8 +567,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		_ = exc
 	}
 
-	cppStyleguideHostInst := instance.WithHost(ctx.host)
-	cppStyleguideHostInst.Path = pbCppStyleguideModule
+	cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule, instance.Language)
 	cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
 
 	if exc := Try(func() {
@@ -678,8 +676,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		event2cppBinary := evEvent2cppBinaryPath
 		var event2cppLDRef NodeRef
 
-		event2cppHostInst := instance.WithHost(ctx.host)
-		event2cppHostInst.Path = evEvent2cppModule
+		event2cppHostInst := NewToolInstance(ctx.host, evEvent2cppModule, instance.Language)
 		event2cppHostInst.Flags = inferFlagsFromPath(evEvent2cppModule, true)
 
 		if exc := Try(func() {
