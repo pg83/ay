@@ -1123,7 +1123,7 @@ func emitJVDownstreamCPCC(
 
 		// The closure minus the cp-specific prefix is the antlr4 content.
 		// Pass only the closure part to EmitJVCPG4 (it assembles the prefix itself).
-		cpRef := EmitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, closure, ctx.emit)
+		cpRef := EmitJVCPG4(instance, ParseVFSOrSource(srcCpp), ParseVFSOrSource(g4CppPath), jvRef, ParseVFSOrSource(jvPrimary), jvInputs, closure, ctx.emit)
 
 		// CC node inputs: EmitCC with IsGenerated=true sets inputPath=g4CppPath.
 		// IncludeInputs = [jvPrimary, srcH, fsTools, procCmd, jvInputs..., closure...]

@@ -27,40 +27,38 @@ package main
 // The cmd_args copy srcAbsPath (the specific .cpp being renamed).
 func EmitJVCPG4(
 	instance ModuleInstance,
-	srcAbsPath string,
-	dstAbsPath string,
+	src VFS,
+	dst VFS,
 	jvRef NodeRef,
-	jvPrimaryOutput string,
+	jvPrimary VFS,
 	jvInputs []VFS,
 	closure []VFS,
 	emit Emitter,
 ) NodeRef {
-	const (
-		fsToolsPath  = "$(S)/build/scripts/fs_tools.py"
-		procCmdFiles = "$(S)/build/scripts/process_command_files.py"
-	)
+	fsTools := Source("build/scripts/fs_tools.py")
+	procCmdFiles := Source("build/scripts/process_command_files.py")
 
 	cmdArgs := []string{
 		python3Path,
-		fsToolsPath,
+		fsTools.String(),
 		"copy",
-		srcAbsPath,
-		dstAbsPath,
+		src.String(),
+		dst.String(),
 	}
 
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
-	// Inputs: jvPrimaryOutput first, then srcAbsPath only when it differs
-	// from jvPrimaryOutput (i.e. this is the parser output, not the lexer).
+	// Inputs: jvPrimary first, then src only when it differs from
+	// jvPrimary (i.e. this is the parser output, not the lexer).
 	inputCap := 2 + len(jvInputs) + len(closure) + 2
 	inputs := make([]VFS, 0, inputCap)
-	inputs = append(inputs, ParseVFSOrSource(jvPrimaryOutput))
-	if srcAbsPath != jvPrimaryOutput {
-		inputs = append(inputs, ParseVFSOrSource(srcAbsPath))
+	inputs = append(inputs, jvPrimary)
+	if src != jvPrimary {
+		inputs = append(inputs, src)
 	}
-	inputs = append(inputs, Source("build/scripts/fs_tools.py"), Source("build/scripts/process_command_files.py"))
+	inputs = append(inputs, fsTools, procCmdFiles)
 	inputs = append(inputs, jvInputs...)
 	inputs = append(inputs, closure...)
 
@@ -77,7 +75,7 @@ func EmitJVCPG4(
 			"p":  "CP",
 			"pc": "light-cyan",
 		},
-		Outputs:  []VFS{ParseVFSOrSource(dstAbsPath)},
+		Outputs:  []VFS{dst},
 		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
@@ -105,19 +103,17 @@ func EmitJVCPG4(
 //	copy
 //	<srcAbsPath>
 //	<dstAbsPath>
-func EmitCP(instance ModuleInstance, srcAbsPath, dstAbsPath string, emit Emitter) NodeRef {
-	const (
-		python3Path  = "/ix/realm/pg/bin/python3"
-		fsToolsPath  = "$(S)/build/scripts/fs_tools.py"
-		procCmdFiles = "$(S)/build/scripts/process_command_files.py"
-	)
+func EmitCP(instance ModuleInstance, src VFS, dst VFS, emit Emitter) NodeRef {
+	const python3Path = "/ix/realm/pg/bin/python3"
+	fsTools := Source("build/scripts/fs_tools.py")
+	procCmdFiles := Source("build/scripts/process_command_files.py")
 
 	cmdArgs := []string{
 		python3Path,
-		fsToolsPath,
+		fsTools.String(),
 		"copy",
-		srcAbsPath,
-		dstAbsPath,
+		src.String(),
+		dst.String(),
 	}
 
 	env := map[string]string{
@@ -125,9 +121,9 @@ func EmitCP(instance ModuleInstance, srcAbsPath, dstAbsPath string, emit Emitter
 	}
 
 	inputs := []VFS{
-		Source("build/scripts/fs_tools.py"),
-		Source("build/scripts/process_command_files.py"),
-		ParseVFSOrSource(srcAbsPath),
+		fsTools,
+		procCmdFiles,
+		src,
 	}
 
 	node := &Node{
@@ -143,7 +139,7 @@ func EmitCP(instance ModuleInstance, srcAbsPath, dstAbsPath string, emit Emitter
 			"p":  "CP",
 			"pc": "light-cyan",
 		},
-		Outputs:  []VFS{ParseVFSOrSource(dstAbsPath)},
+		Outputs:  []VFS{dst},
 		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),

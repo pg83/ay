@@ -4738,18 +4738,18 @@ func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string) ([
 	paths := make([]string, 0, len(plugins))
 
 	for _, name := range plugins {
-		src := "$(S)/" + instance.Path + "/" + name
-		dst := "$(B)/" + instance.Path + "/" + name + ".pyplugin"
+		src := Source(instance.Path + "/" + name)
+		dst := Build(instance.Path + "/" + name + ".pyplugin")
 
-		ref, ok := ctx.ldPluginCPCache[dst]
+		ref, ok := ctx.ldPluginCPCache[dst.String()]
 
 		if !ok {
 			ref = EmitCP(instance, src, dst, ctx.emit)
-			ctx.ldPluginCPCache[dst] = ref
+			ctx.ldPluginCPCache[dst.String()] = ref
 		}
 
 		refs = append(refs, ref)
-		paths = append(paths, dst)
+		paths = append(paths, dst.String())
 	}
 
 	return refs, paths
