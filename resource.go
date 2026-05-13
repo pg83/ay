@@ -185,7 +185,7 @@ func emitResourceObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
 	d *moduleData,
-) ([]NodeRef, []string, []VFS) {
+) ([]NodeRef, []VFS, []VFS) {
 	// PR-B: emit kv_only sibling shapes (PY_MAIN, py/namespace,
 	// py/no_check_imports) alongside the legacy RESOURCE/RESOURCE_FILES
 	// flush. Each sibling is independent and conditional on its own
@@ -199,7 +199,7 @@ func emitResourceObjcopy(
 	rescompressorLDRef := walkHostToolForRef(ctx, instance, "tools/rescompressor/bin")
 
 	var refs []NodeRef
-	var outputs []string
+	var outputs []VFS
 	// PR-M3-globalA-narrow-closure: collect the SOURCE_ROOT-rooted
 	// member inputs each emitted objcopy node would contribute to the
 	// enclosing module's .global.a archive. Every emitted node carries
@@ -215,21 +215,21 @@ func emitResourceObjcopy(
 	// invokes py_main first; namespace resource is emitted later at
 	// pybuild.py:587-594). Order affects the LD cmd[2] SRCS_GLOBAL slot
 	// emission sequence and therefore L3 cmd-equality.
-	if r, o := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
-		refs = append(refs, r)
-		outputs = append(outputs, o)
+	if res := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); res != nil {
+		refs = append(refs, res.Ref)
+		outputs = append(outputs, res.Out)
 		addGlobal(objcopyScriptVFS)
 	}
 
-	if r, o := emitPyNamespaceObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
-		refs = append(refs, r)
-		outputs = append(outputs, o)
+	if res := emitPyNamespaceObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); res != nil {
+		refs = append(refs, res.Ref)
+		outputs = append(outputs, res.Out)
 		addGlobal(objcopyScriptVFS)
 	}
 
-	if r, o := emitNoCheckImportsObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
-		refs = append(refs, r)
-		outputs = append(outputs, o)
+	if res := emitNoCheckImportsObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); res != nil {
+		refs = append(refs, res.Ref)
+		outputs = append(outputs, res.Out)
 		addGlobal(objcopyScriptVFS)
 	}
 
@@ -279,7 +279,7 @@ func emitResourceObjcopy(
 			return
 		}
 		hash := objcopyHash(cur.paths, cur.keys, cur.kvs, instance.Path, moduleTag)
-		outputObj := "$(BUILD_ROOT)/" + instance.Path + "/objcopy_" + hash + ".o"
+		outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
 		cmdArgs := []string{
 			"/ix/realm/pg/bin/python3",
@@ -288,7 +288,7 @@ func emitResourceObjcopy(
 			"--objcopy", "/ix/realm/boot/bin/llvm-objcopy",
 			"--compressor", "$(BUILD_ROOT)/tools/rescompressor/rescompressor",
 			"--rescompiler", "$(BUILD_ROOT)/tools/rescompiler/rescompiler",
-			"--output_obj", outputObj,
+			"--output_obj", outputObj.String(),
 			"--target", objcopyTargetTriple(instance.Platform),
 		}
 
@@ -365,7 +365,7 @@ func emitResourceObjcopy(
 			},
 			Env:     env,
 			Inputs:  inputs,
-			Outputs: []VFS{ParseVFSOrSource(outputObj)},
+			Outputs: []VFS{outputObj},
 			KV: map[string]string{
 				"p":        "PY",
 				"pc":       "yellow",
@@ -511,10 +511,10 @@ func emitKvOnlyObjcopyNode(
 	moduleName string,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) (NodeRef, string) {
+) *objcopyEmit {
 	moduleTag := resourceModuleTag(moduleName)
 	hash := objcopyHash(nil, nil, kvsHash, instance.Path, moduleTag)
-	outputObj := "$(BUILD_ROOT)/" + instance.Path + "/objcopy_" + hash + ".o"
+	outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
 	cmdArgs := []string{
 		"/ix/realm/pg/bin/python3",
@@ -523,7 +523,7 @@ func emitKvOnlyObjcopyNode(
 		"--objcopy", "/ix/realm/boot/bin/llvm-objcopy",
 		"--compressor", "$(BUILD_ROOT)/tools/rescompressor/rescompressor",
 		"--rescompiler", "$(BUILD_ROOT)/tools/rescompiler/rescompiler",
-		"--output_obj", outputObj,
+		"--output_obj", outputObj.String(),
 		"--target", objcopyTargetTriple(instance.Platform),
 		"--kvs",
 	}
@@ -575,7 +575,7 @@ func emitKvOnlyObjcopyNode(
 		},
 		Env:              env,
 		Inputs:           inputs,
-		Outputs:          []VFS{ParseVFSOrSource(outputObj)},
+		Outputs:          []VFS{outputObj},
 		KV:               map[string]string{"p": "PY", "pc": "yellow", "show_out": "yes"},
 		Tags:             kvTags,
 		TargetProperties: targetProps,
@@ -598,7 +598,15 @@ func emitKvOnlyObjcopyNode(
 
 	ref := ctx.emit.Emit(node)
 
-	return ref, outputObj
+	return &objcopyEmit{Ref: ref, Out: outputObj}
+}
+
+// objcopyEmit is the emit-product of a single kv-only objcopy sub-emitter
+// (PY_MAIN / namespace / no_check_imports). nil = trigger absent on this
+// module → nothing emitted; non-nil = (NodeRef, output path) pair.
+type objcopyEmit struct {
+	Ref NodeRef
+	Out VFS
 }
 
 // emitPyNamespaceObjcopy emits the `py/namespace/<mod_list_md5>/<unit>=<ns>.`
@@ -616,9 +624,9 @@ func emitPyNamespaceObjcopy(
 	d *moduleData,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) (NodeRef, string) {
+) *objcopyEmit {
 	if len(d.pySrcs) == 0 {
-		return NodeRef{}, ""
+		return nil
 	}
 
 	// Gate: `is_extended_source_search_enabled` returns False for
@@ -626,16 +634,16 @@ func emitPyNamespaceObjcopy(
 	// pybuild.py:46. No namespace kv is emitted for those modules.
 	if strings.HasPrefix(instance.Path, "contrib/python") ||
 		strings.HasPrefix(instance.Path, "contrib/tools/python3") {
-		return NodeRef{}, ""
+		return nil
 	}
 
 	// PR-B scope is PY3 / PY23 only; the namespace mechanism is gated
 	// on py3=true in pybuild.py:559. Non-PY3 modules are skipped.
 	if d.moduleStmt == nil {
-		return NodeRef{}, ""
+		return nil
 	}
 	if resourceModuleTag(d.moduleStmt.Name) == "" {
-		return NodeRef{}, ""
+		return nil
 	}
 
 	// Default namespace: `<upath-dotted>.`. The TOP_LEVEL modifier of
@@ -686,12 +694,12 @@ func emitPyMainObjcopy(
 	d *moduleData,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) (NodeRef, string) {
+) *objcopyEmit {
 	if d.pyMain == "" {
-		return NodeRef{}, ""
+		return nil
 	}
 	if d.moduleStmt == nil {
-		return NodeRef{}, ""
+		return nil
 	}
 
 	// PY_MAIN= is unquoted in both hash and cmd_args (pybuild.py:759
@@ -713,12 +721,12 @@ func emitNoCheckImportsObjcopy(
 	d *moduleData,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) (NodeRef, string) {
+) *objcopyEmit {
 	if len(d.noCheckImports) == 0 {
-		return NodeRef{}, ""
+		return nil
 	}
 	if d.moduleStmt == nil {
-		return NodeRef{}, ""
+		return nil
 	}
 
 	value := strings.Join(d.noCheckImports, " ")
@@ -978,7 +986,7 @@ func emitPySrcObjcopy(
 	d *moduleData,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) ([]NodeRef, []string, []VFS) {
+) ([]NodeRef, []VFS, []VFS) {
 	if len(d.pySrcs) == 0 {
 		return nil, nil, nil
 	}
@@ -1001,7 +1009,7 @@ func emitPySrcObjcopy(
 	moduleTag := resourceModuleTag(d.moduleStmt.Name)
 
 	refs := make([]NodeRef, 0, len(chunks))
-	outputs := make([]string, 0, len(chunks))
+	outputs := make([]VFS, 0, len(chunks))
 	// PR-M3-globalA-narrow-closure: per-chunk SOURCE_ROOT inputs (PY_SRCS
 	// raw .py paths + objcopy.py) feed the enclosing module's .global.a.
 	// BUILD_ROOT-rooted .yapyc3 path entries are excluded — they are
@@ -1010,7 +1018,7 @@ func emitPySrcObjcopy(
 	var globalMemberInputs []VFS
 	for _, ch := range chunks {
 		hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path, moduleTag)
-		outputObj := "$(BUILD_ROOT)/" + instance.Path + "/objcopy_" + hash + ".o"
+		outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
 		cmdArgs := []string{
 			"/ix/realm/pg/bin/python3",
@@ -1019,7 +1027,7 @@ func emitPySrcObjcopy(
 			"--objcopy", "/ix/realm/boot/bin/llvm-objcopy",
 			"--compressor", "$(BUILD_ROOT)/tools/rescompressor/rescompressor",
 			"--rescompiler", "$(BUILD_ROOT)/tools/rescompiler/rescompiler",
-			"--output_obj", outputObj,
+			"--output_obj", outputObj.String(),
 			"--target", objcopyTargetTriple(instance.Platform),
 		}
 
@@ -1066,7 +1074,7 @@ func emitPySrcObjcopy(
 			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
 			Env:              env,
 			Inputs:           inputs,
-			Outputs:          []VFS{Build(strings.TrimPrefix(outputObj, "$(BUILD_ROOT)/"))},
+			Outputs:          []VFS{outputObj},
 			KV:               map[string]string{"p": "PY", "pc": "yellow", "show_out": "yes"},
 			Tags:             pyTags,
 			TargetProperties: targetProps,

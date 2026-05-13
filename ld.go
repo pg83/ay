@@ -47,7 +47,6 @@ package main
 
 import (
 	"sort"
-	"strings"
 )
 
 // EmitLD emits the 4-cmd LD node for a PROGRAM module per D22.
@@ -94,7 +93,7 @@ func EmitLD(
 	instance ModuleInstance,
 	binaryName string,
 	ccRefs []NodeRef,
-	ccPaths []string,
+	ccPaths []VFS,
 	peerLDRefs []NodeRef,
 	peerLibPaths []string,
 	pluginRefs []NodeRef,
@@ -102,7 +101,7 @@ func EmitLD(
 	globalRefs []NodeRef,
 	globalPaths []string,
 	objcopyRefs []NodeRef,
-	objcopyPaths []string,
+	objcopyPaths []VFS,
 	memberInputs []VFS, //nolint:vfs-stay // cascade from gen.go member-inputs bucket
 	muslOn bool,
 	moduleCFlags []string,
@@ -564,7 +563,7 @@ const ldVcsMuslSelfDefine = "-D_musl_=1"
 // PR-M3-py3-program-bin-strip-all: `wantsStrip` controls insertion of
 // `-Wl,--strip-all` between the trailer's `-lm` and `-Wl,--gc-sections`.
 // Set true for PY3_PROGRAM_BIN (STRIP() in _BASE_PY3_PROGRAM, python.conf:884).
-func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths []string, hostBuild, wantsStrip bool) []string {
+func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths []string, objcopyPaths []VFS, hostBuild, wantsStrip bool) []string {
 	// Capacity hint matches the reference graph's structure plus the
 	// caller-supplied slices.
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 12 + 1 + len(ccPaths) + len(peerLibPaths) + len(globalPaths) + len(objcopyPaths)
@@ -607,11 +606,15 @@ func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths, peerLibPaths, plu
 	// `${rootrel;ext=.o:SRCS_GLOBAL}` which strips the $(BUILD_ROOT)/
 	// prefix. The `inputs` slot retains the prefix via composeLDInputs.
 	for _, p := range objcopyPaths {
-		cmdArgs = append(cmdArgs, strings.TrimPrefix(p, "$(BUILD_ROOT)/"))
+		// SRCS_GLOBAL bare-relative rendering: `${rootrel;ext=.o:SRCS_GLOBAL}`
+		// strips the $(BUILD_ROOT)/ prefix; VFS.Rel gives that form natively.
+		cmdArgs = append(cmdArgs, p.Rel)
 	}
 
 	cmdArgs = append(cmdArgs, vcsOPath)
-	cmdArgs = append(cmdArgs, ccPaths...)
+	for _, p := range ccPaths {
+		cmdArgs = append(cmdArgs, p.String())
+	}
 	cmdArgs = append(cmdArgs, "-o", outputPath)
 
 	if hostBuild {
@@ -731,17 +734,23 @@ func composeLDCmdLinkOrCopy(modulePath string) []string {
 // The reference verification (tools/archiver) shows 35 entries in the
 // BUILD_ROOT block: 32 peer .a + 1 plugin + 1 global .global.a + 1
 // own main.cpp.o, all interleaved in alphabetical order.
-func composeLDInputs(modulePath string, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths []string) []VFS {
-	buildRootBlock := make([]string, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(ccPaths)+len(objcopyPaths))
+func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []string, pluginPaths []string, globalPaths []string, objcopyPaths []VFS) []VFS {
+	// peerLibPaths / globalPaths arrive BUILD_ROOT-relative (caller convention);
+	// pluginPaths arrive as full $(BUILD_ROOT)/... strings. ccPaths and
+	// objcopyPaths are already VFS-typed. Lift all into the VFS-typed
+	// BUILD_ROOT block before alphabetising.
+	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(ccPaths)+len(objcopyPaths))
 
 	for _, p := range peerLibPaths {
-		buildRootBlock = append(buildRootBlock, "$(BUILD_ROOT)/"+p)
+		buildRootBlock = append(buildRootBlock, Build(p))
 	}
 
-	buildRootBlock = append(buildRootBlock, pluginPaths...)
+	for _, p := range pluginPaths {
+		buildRootBlock = append(buildRootBlock, ParseVFSOrSource(p))
+	}
 
 	for _, g := range globalPaths {
-		buildRootBlock = append(buildRootBlock, "$(BUILD_ROOT)/"+g)
+		buildRootBlock = append(buildRootBlock, Build(g))
 	}
 
 	buildRootBlock = append(buildRootBlock, ccPaths...)
@@ -749,12 +758,12 @@ func composeLDInputs(modulePath string, ccPaths, peerLibPaths, pluginPaths, glob
 	// $(BUILD_ROOT)/...-rooted; they belong in the BUILD_ROOT block of
 	// the LD's `inputs` slot just like own .cpp.o and peer .a entries.
 	buildRootBlock = append(buildRootBlock, objcopyPaths...)
-	sort.Strings(buildRootBlock)
+	sort.Slice(buildRootBlock, func(i, j int) bool {
+		return string(buildRootBlock[i].Rel) < string(buildRootBlock[j].Rel)
+	})
 
 	out := make([]VFS, 0, len(buildRootBlock)+len(ldScriptInputs))
-	for _, p := range buildRootBlock {
-		out = append(out, ParseVFSOrSource(p))
-	}
+	out = append(out, buildRootBlock...)
 	out = append(out, ldScriptInputs...)
 
 	_ = modulePath // reserved for future use (path-dependent inputs).

@@ -133,7 +133,7 @@ import (
 // Returns (NodeRef, outputPath) so the caller can wire the AS node
 // as a dependency of the AR step and avoid re-deriving the output
 // path.
-func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, string) {
+func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, VFS) {
 
 	// PR-35q: x86_64 AS nodes with a `.asm` extension use yasm, not clang.
 	// Branch off before any clang-shape composition runs. The yasm path is
@@ -216,7 +216,7 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 		node.DepRefs = []NodeRef{*yasmLD}
 	}
 
-	return emit.Emit(node), outputPath
+	return emit.Emit(node), outVFS
 }
 
 // yasmBinaryPath is the canonical $(BUILD_ROOT)-relative path of the
@@ -237,7 +237,7 @@ var yasmBinaryVFS = Build("contrib/tools/yasm/yasm")
 // rationale and the byte-exact reference shape. The function is the
 // asmlib-only counterpart to the clang AS path the rest of EmitAS
 // implements.
-func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, string) {
+func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, VFS) {
 	// Output stem strips `.asm` (the only extension this branch sees;
 	// asmlib's reference uses `.asm` exclusively per PR-30 D07).
 	stem := strings.TrimSuffix(srcRel, ".asm")
@@ -342,7 +342,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 		node.DepRefs = []NodeRef{*yasmLD}
 	}
 
-	return emit.Emit(node), outputPath
+	return emit.Emit(node), outVFS
 }
 
 // composeASPaths derives (outputPath, inputPath) for the clang AS path.

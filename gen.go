@@ -2883,7 +2883,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// PR-M3-LD-peer-globalA: surface PROTO_LIBRARY's emitted .a so
 		// downstream LD walks see it (the AR previously lived in the
 		// graph but was orphaned from every LD `inputs` slot).
-		protoARRef, protoARPath, protoHasAR := emitProtoSrcs(ctx, instance, d, peerContribs)
+		protoResult := emitProtoSrcs(ctx, instance, d, peerContribs)
 
 		// PR-M3-E: emit JV, CF, BI, PR nodes declared at module level.
 		// Header-only branch: no downstream CC/AR, so pass nil consumerInputs.
@@ -2900,9 +2900,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		hOnlyARRef := NodeRef{}
 		hOnlyARPath := ""
 		hOnlyHasAR := false
-		if protoHasAR {
-			hOnlyARRef = protoARRef
-			hOnlyARPath = protoARPath
+		if protoResult != nil {
+			hOnlyARRef = protoResult.ARRef
+			hOnlyARPath = protoResult.ARPath.String()
 			hOnlyHasAR = true
 		}
 
@@ -3621,7 +3621,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// processed as a separate AR step (so they don't pollute the
 	// regular `.a`).
 	ccRefs := make([]NodeRef, 0, len(d.srcs)+len(d.joinSrcs))
-	ccOutputs := make([]string, 0, len(d.srcs)+len(d.joinSrcs))
+	ccOutputs := make([]VFS, 0, len(d.srcs)+len(d.joinSrcs))
 	// PR-41 Fix I: track which ccOutputs entries come from SRC_C_NO_LTO
 	// (i.e., d.flatSrcs) so reorderARMembers can hoist them to the front
 	// without disturbing the declaration order of regular SRCS members.
@@ -3910,7 +3910,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// order), so the resulting AR.cmd_args remains byte-exact.
 	type srcResult struct {
 		ref          NodeRef
-		outPath      string
+		outPath      VFS
 		ccIns        []VFS
 		primaryCount int
 		ok           bool
@@ -3956,7 +3956,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 
 		var ref NodeRef
-		var outPath string
+		var outPath VFS
 		var ccIns []VFS
 		var primaryCount int
 		var ok bool
@@ -4212,7 +4212,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// GLOBAL_SRCS get their own CC nodes and a separate AR pass
 	// (see below). Filter headers here too.
 	globalRefs := make([]NodeRef, 0, len(d.globalSrcs))
-	globalOutputs := make([]string, 0, len(d.globalSrcs))
+	globalOutputs := make([]VFS, 0, len(d.globalSrcs))
 
 	// PR-31 D11: GLOBAL_SRCS contribute their own member-inputs slice
 	// to the .global.a archive (separate accumulator from regular AR).
@@ -4339,7 +4339,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ldCCOutputs := ccOutputs
 		ldMemberInputs := memberInputs
 		var ldObjcopyRefs []NodeRef
-		var ldObjcopyPaths []string
+		var ldObjcopyPaths []VFS
 
 		if d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
 			emitPySrcs(ctx, instance, d)
@@ -4546,9 +4546,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// PR-M3-openssl-ar-plugin-and-as-clean: resolve AR_PLUGIN path
 	// (`$(SOURCE_ROOT)/<modulePath>/<name>.pyplugin`) when the macro
 	// fired on this module's ya.make.
-	arPluginPath := ""
+	var arPluginVFS *VFS
 	if d.arPlugin != "" {
-		arPluginPath = "$(SOURCE_ROOT)/" + instance.Path + "/" + d.arPlugin
+		v := Source(instance.Path + "/" + d.arPlugin)
+		arPluginVFS = &v
 	}
 
 	if len(ccRefs) > 0 {
@@ -4557,9 +4558,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// PR-M3-openssl-ar-plugin-and-as-clean: openssl AR_PLUGIN(ar) injects
 		// `--plugin <ar.pyplugin>` between the link_lib.py `--` separators.
 		if perModuleCCTag != "" {
-			arRef = EmitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginPath, ctx.emit)
+			arRef = EmitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.emit)
 		} else {
-			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginPath, ctx.emit)
+			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.emit)
 		}
 	}
 
@@ -5410,7 +5411,7 @@ const genPy3RegScriptPath = "$(SOURCE_ROOT)/build/scripts/gen_py3_reg.py"
 // archives in the module's `.global.a`).
 //
 // Mirror of macro _PY3_REGISTER at build/ymake.core.conf:4086-4089.
-func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs, py3Suffix bool) (refs []NodeRef, outputs []string, memberInputs []VFS) {
+func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs, py3Suffix bool) (refs []NodeRef, outputs []VFS, memberInputs []VFS) {
 	if len(d.pyRegister) == 0 {
 		return nil, nil, nil
 	}
@@ -5534,7 +5535,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 // entry in the same module. When nil, only EN nodes are emitted (the
 // header-only branch path; no module compiles those `_serialized.cpp`
 // in current M3 closure).
-func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddInclGlobal []string, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []string, memberInputsList [][]VFS) {
+func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddInclGlobal []string, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS, memberInputsList [][]VFS) {
 	if len(d.enumSrcs) == 0 {
 		return nil, nil, nil
 	}
@@ -5882,9 +5883,9 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 // .c/.cpp/.cc/.cxx/.S/.s/.asm dispatches yield primaryCount=1; the
 // .rl6 dispatch yields 1 (just the .rl6 source) or 2 (when the `.h`
 // companion exists on disk).
-func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, in ModuleCCInputs, ancestorRebase bool) (NodeRef, string, []VFS, int, bool) {
+func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, in ModuleCCInputs, ancestorRebase bool) (NodeRef, VFS, []VFS, int, bool) {
 	if isHeaderSource(srcRel) {
-		return NodeRef{}, "", nil, 0, false
+		return NodeRef{}, VFS{}, nil, 0, false
 	}
 
 	// PR-30 D06: SRCDIR rebase is now ancestor-only and only fires when
@@ -6522,12 +6523,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 	// contributes nothing to the AR/LD node set; the module may become
 	// header-only if all its sources are deferred.
 	if isSkippedSource(srcRel) {
-		return NodeRef{}, "", nil, 0, false
+		return NodeRef{}, VFS{}, nil, 0, false
 	}
 
 	ThrowFmt("gen: %s: unsupported source extension in %q", instance.Path, srcRel)
 
-	return NodeRef{}, "", nil, 0, false
+	return NodeRef{}, VFS{}, nil, 0, false
 }
 
 // emittedSourceInputPath mirrors composeCCPaths' inputPath logic so
@@ -6845,14 +6846,14 @@ func includeScannerBasePaths(libcMusl bool, scanTarget PlatformID) []string {
 // SRCS so the path heuristic cannot distinguish them; this parallel
 // signal lets the reorder pass tail-bucket CF entries after the
 // hand-written regulars. PR-M3-final-sort-inversions.
-func reorderARMembers(refs []NodeRef, paths []string, isFlatNoLto []bool, isCFGenerated []bool, numSrcsDerived int) ([]NodeRef, []string) {
+func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGenerated []bool, numSrcsDerived int) ([]NodeRef, []VFS) {
 	if len(paths) == 0 {
 		return refs, paths
 	}
 
 	type member struct {
 		ref  NodeRef
-		path string
+		path VFS
 	}
 
 	// Classify SRCS-derived entries [0, numSrcsDerived) into buckets.
@@ -6865,20 +6866,21 @@ func reorderARMembers(refs []NodeRef, paths []string, isFlatNoLto []bool, isCFGe
 
 	for i := 0; i < numSrcsDerived && i < len(paths); i++ {
 		m := member{refs[i], paths[i]}
+		rel := m.path.Rel
 		switch {
-		case strings.Contains(m.path, "/_/_/"):
+		case strings.Contains(rel, "/_/_/"):
 			legacyR6 = append(legacyR6, m)
 		case i < len(isFlatNoLto) && isFlatNoLto[i]:
 			noLtoSrcs = append(noLtoSrcs, m)
-		case strings.HasSuffix(m.path, ".reg3.cpp.o") || strings.Contains(m.path, ".reg3.cpp.py3.o"):
+		case strings.HasSuffix(rel, ".reg3.cpp.o") || strings.Contains(rel, ".reg3.cpp.py3.o"):
 			reg3Srcs = append(reg3Srcs, m)
-		case strings.HasSuffix(m.path, ".rl6.cpp.o"):
+		case strings.HasSuffix(rel, ".rl6.cpp.o"):
 			rl6Srcs = append(rl6Srcs, m)
-		case strings.HasSuffix(m.path, ".ev.pb.cc.o"):
+		case strings.HasSuffix(rel, ".ev.pb.cc.o"):
 			evPbSrcs = append(evPbSrcs, m)
-		case strings.HasSuffix(m.path, ".h_serialized.cpp.o"):
+		case strings.HasSuffix(rel, ".h_serialized.cpp.o"):
 			hSerSrcs = append(hSerSrcs, m)
-		case strings.HasSuffix(m.path, ".g4.cpp.o"):
+		case strings.HasSuffix(rel, ".g4.cpp.o"):
 			g4Srcs = append(g4Srcs, m)
 		case i < len(isCFGenerated) && isCFGenerated[i]:
 			cfSrcs = append(cfSrcs, m)
@@ -6908,7 +6910,7 @@ func reorderARMembers(refs []NodeRef, paths []string, isFlatNoLto []bool, isCFGe
 	out = append(out, legacyR6...)
 
 	outRefs := make([]NodeRef, len(out))
-	outPaths := make([]string, len(out))
+	outPaths := make([]VFS, len(out))
 
 	for i, m := range out {
 		outRefs[i] = m.ref

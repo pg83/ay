@@ -251,7 +251,7 @@ type ModuleCCInputs struct {
 // NoCompilerWarnings selector adding/removing args inline);
 // reviewer-tracked tests pin each variant against the reference
 // graph.
-func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emitter) (NodeRef, string) {
+func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emitter) (NodeRef, VFS) {
 
 	suffix := ".o"
 	if instance.Flags.PIC {
@@ -433,7 +433,7 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 		node.DepRefs = append([]NodeRef(nil), in.ExtraDepRefs...)
 	}
 
-	return emit.Emit(node), outputPath
+	return emit.Emit(node), outVFS
 }
 
 // composeCCPaths derives the (outputPath, inputPath) pair per PR-30
