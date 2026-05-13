@@ -163,7 +163,9 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 	// aliased to both; EmitAS is single-shot so the alias is safe.
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
+		// TODO: hostP.MultiarchLibPath() — currently hardcoded; requires
+// threading hostP through Emit signatures.
+"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
 	}
 
 	allInputs := make([]VFS, 0, 1+len(in.IncludeInputs))
