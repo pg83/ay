@@ -29,6 +29,7 @@ import (
 //
 // Returns (R5 NodeRef, tmpPath, cppPath).
 func EmitR5(
+	hostP, targetP *Platform,
 	instance ModuleInstance,
 	srcRel string,
 	ragel5LD NodeRef,
@@ -37,6 +38,7 @@ func EmitR5(
 	rlgenCdBinPath string,
 	emit Emitter,
 ) (NodeRef, string, string) {
+	_ = hostP // PR-M3-platform-pair-step5: surfaced for signature symmetry.
 	srcPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
 	tmpPath := "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + ".tmp"
 	// Output: strip .rl suffix, append .rl5.cpp.
@@ -87,12 +89,17 @@ func EmitR5(
 			"p":  "R5",
 			"pc": "yellow",
 		},
+		// R5-specific: tags=["tool"] unconditionally (every R5 invocation
+		// is a host-toolchain ragel5 call, regardless of the calling
+		// module's axis — both x86_64 and aarch64 R5 variants carry the
+		// tool tag in REF). This is intrinsic to R5; not derived from
+		// targetP.Tags.
 		Tags: []string{"tool"},
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform:     string(instance.Target),
-		HostPlatform: targetIsX8664(instance),
+		Platform:     string(targetP.Target),
+		HostPlatform: targetP.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -677,6 +684,7 @@ func biFlagsForInstance(instance ModuleInstance) []string {
 //
 // The node's platform matches the containing module's platform.
 func EmitPR(
+	hostP, targetP *Platform,
 	instance ModuleInstance,
 	stmt *RunProgramStmt,
 	toolBinPath string,
@@ -685,6 +693,7 @@ func EmitPR(
 	extraDepRefs []NodeRef,
 	emit Emitter,
 ) NodeRef {
+	_ = hostP // PR-M3-platform-pair-step5: surfaced for signature symmetry.
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
 	}
@@ -801,10 +810,12 @@ func EmitPR(
 		cmd.Cwd = stmt.CWD
 	}
 
-	// PR node tags: "tool" when emitted in a host (x86_64) context.
+	// PR-M3-platform-pair-step5: tags + host_platform are baseline data
+	// from `targetP`. Empty `targetP.Tags` keeps the slice non-nil so
+	// the JSON serialises as `[]`, not `null`.
 	tags := []string{}
-	if targetIsX8664(instance) {
-		tags = []string{"tool"}
+	if len(targetP.Tags) > 0 {
+		tags = append(tags, targetP.Tags...)
 	}
 
 	node := &Node{
@@ -818,11 +829,11 @@ func EmitPR(
 			"show_out": "yes",
 		},
 		Tags:         tags,
-		HostPlatform: targetIsX8664(instance),
+		HostPlatform: targetP.IsHost,
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform: string(instance.Target),
+		Platform: string(targetP.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -1303,7 +1314,7 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 	reg := codegenRegForInstance(ctx, instance)
 	for _, a := range d.archives {
-		emitArchive(instance, a, d, toolBinPath, toolLDRef, prInSources, ctx.emit, reg)
+		emitArchive(ctx.host, ctx.platformFor(instance), instance, a, d, toolBinPath, toolLDRef, prInSources, ctx.emit, reg)
 	}
 }
 
@@ -1311,6 +1322,7 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 // Helper for emitArchives; split out so the tool-walk + shared input
 // aggregation runs once per module rather than once per ARCHIVE.
 func emitArchive(
+	hostP, targetP *Platform,
 	instance ModuleInstance,
 	a archiveEntry,
 	d *moduleData,
@@ -1320,6 +1332,7 @@ func emitArchive(
 	emit Emitter,
 	reg *CodegenRegistry,
 ) {
+	_ = hostP // PR-M3-platform-pair-step5: surfaced for signature symmetry.
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + a.Name
 
 	// Build cmd_args. Each archived file is rendered with a trailing
@@ -1477,9 +1490,12 @@ func emitArchive(
 
 	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)"}
 
+	// PR-M3-platform-pair-step5: tags + host_platform + platform from
+	// the Platform pair passed by caller. Empty `targetP.Tags` keeps
+	// the slice non-nil so JSON serialises as `[]`, not `null`.
 	tags := []string{}
-	if targetIsX8664(instance) {
-		tags = []string{"tool"}
+	if len(targetP.Tags) > 0 {
+		tags = append(tags, targetP.Tags...)
 	}
 
 	n := &Node{
@@ -1495,8 +1511,9 @@ func emitArchive(
 			"p":  "AR",
 			"pc": "light-red",
 		},
-		Outputs:  []string{archivePath},
-		Platform: string(instance.Target),
+		Outputs:      []string{archivePath},
+		Platform:     string(targetP.Target),
+		HostPlatform: targetP.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -1507,9 +1524,6 @@ func emitArchive(
 			"module_dir": instance.Path,
 		},
 		DepRefs: depRefs,
-	}
-	if targetIsX8664(instance) {
-		n.HostPlatform = true
 	}
 
 	arRef := emit.Emit(n)
@@ -1771,7 +1785,7 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// stats_enums.h_serialized.cpp via dep_types.h → stats_enums.h closure).
 	prExtraDepRefs := resolveCodegenDepRefs(ctx, instance, inputClosure, toolLDRef)
 
-	prRef := EmitPR(instance, stmt, toolBinPath, toolLDRef, inputClosure, prExtraDepRefs, ctx.emit)
+	prRef := EmitPR(ctx.host, ctx.platformFor(instance), instance, stmt, toolBinPath, toolLDRef, inputClosure, prExtraDepRefs, ctx.emit)
 
 	// PR-M3-L0-cascade-close-v2: backfill the PR ProducerRef so the
 	// downstream CC's resolveCodegenDepRefs threads PR into its deps[].
