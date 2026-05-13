@@ -108,7 +108,8 @@ func canonicalizeRagel6BinaryPath(p string) string {
 //
 // Returns (NodeRef, outputPath) so the caller can wire the R6 node as
 // the input of a downstream EmitCC.
-func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath string, ragel6Flags []string, closure []string, emit Emitter) (NodeRef, string) {
+func EmitR6(hostP, targetP *Platform, instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath string, ragel6Flags []string, closure []string, emit Emitter) (NodeRef, string) {
+	_ = hostP // PR-M3-platform-pair-step4: surfaced for signature symmetry.
 	// PR-M3-A fix: add `_/` infix only when srcRel contains a `/` (i.e.
 	// the source is in a subdirectory of the module). Flat .rl6 sources
 	// (no path separator) live at the module root and their generated
@@ -126,13 +127,17 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	canonicalBinary := canonicalizeRagel6BinaryPath(ragel6BinaryPath)
 
 	// PR-M3-ragel-flags-per-module: pick the effective RAGEL6_FLAGS.
-	// Module SET wins; otherwise platform-default (release host →
-	// `-CG2`, debug target → `-CT0`).
+	// Module SET wins; otherwise platform-default (x86_64 → `-CG2`
+	// optimized, aarch64 → `-CT0` debug). PR-M3-platform-pair-step4
+	// dispatches on `targetP.Target` instead of the implicit
+	// "is host" check — these are platform-specific compile flags,
+	// not host/target-axis flags.
 	effectiveFlags := ragel6Flags
 	if len(effectiveFlags) == 0 {
-		if targetIsX8664(instance) {
+		switch targetP.Target {
+		case PlatformDefaultLinuxX8664:
 			effectiveFlags = []string{ragel6DefaultFlagOptimized}
-		} else {
+		default:
 			effectiveFlags = []string{ragel6DefaultFlagDebug}
 		}
 	}
@@ -161,17 +166,14 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	inputs = append(inputs, canonicalBinary, inputPath)
 	inputs = append(inputs, closure...)
 
-	// PR-M3-rl6-host-platform-and-cctype: host-built R6 nodes carry
-	// `host_platform=true` and `tags=["tool"]` per the reference shape
-	// (x86_64 R6 nodes invoke the host ragel6 binary at build-time —
-	// classified as a tool node). Target-side R6 (aarch64) keeps the
-	// existing empty-tags / no-host-platform shape.
+	// PR-M3-platform-pair-step4: tags + host_platform are baseline data
+	// from `targetP`. Empty `targetP.Tags` keeps the slice non-nil so
+	// the JSON serialises as `[]`, not `null`.
 	tags := []string{}
-	hostPlatform := false
-	if targetIsX8664(instance) {
-		tags = []string{"tool"}
-		hostPlatform = true
+	if len(targetP.Tags) > 0 {
+		tags = append(tags, targetP.Tags...)
 	}
+	hostPlatform := targetP.IsHost
 
 	node := &Node{
 		Cmds: []Cmd{
@@ -192,7 +194,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform: string(instance.Target),
+		Platform: string(targetP.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
