@@ -172,6 +172,7 @@ type executor struct {
 	bldRoot   string
 	sema      chan struct{}
 	keepGoing bool
+	autoFire  bool // true → onNode immediately spawns the future's runner
 
 	mu      sync.Mutex
 	byUID   map[string]*nodeFuture
@@ -188,6 +189,8 @@ type nodeFuture struct {
 }
 
 func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool) *executor {
+	autoFire := true
+
 	if threads < 0 {
 		threads = runtime.NumCPU()
 	}
@@ -195,8 +198,10 @@ func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool) *executor
 	if threads == 0 {
 		// Build-only mode: caller will not invoke run(), but the
 		// semaphore must still have capacity in case future code
-		// paths spin up. Keep the channel non-blocking with one slot.
+		// paths spin up. Keep the channel non-blocking with one slot,
+		// and disable auto-fire so we just collect nodes.
 		threads = 1
+		autoFire = false
 	}
 
 	return &executor{
@@ -204,16 +209,46 @@ func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool) *executor
 		bldRoot:   bldRoot,
 		sema:      make(chan struct{}, threads),
 		keepGoing: keepGoing,
+		autoFire:  autoFire,
 		byUID:     make(map[string]*nodeFuture, 8192),
 		events:    make(chan func(), 4096),
 		stats:     map[string][]time.Duration{},
 	}
 }
 
+// onNode registers a freshly-finalized Node with the executor. In
+// auto-fire mode (the default for any --jobs > 0 run), the node's
+// future-runner spawns immediately so leaf nodes start compiling while
+// Gen is still emitting parents up the topological order. The
+// goroutine blocks inside visit→execute on its deps; deps are
+// guaranteed to be registered first (FinalizeStream yields dep-first
+// topo) so the dep.once handle the future-runner consults is always
+// already in byUID when its parent goroutine reaches it.
 func (ex *executor) onNode(n *Node) {
+	f := &nodeFuture{node: n}
+
 	ex.mu.Lock()
-	ex.byUID[n.UID] = &nodeFuture{node: n}
+	ex.byUID[n.UID] = f
 	ex.mu.Unlock()
+
+	if ex.autoFire {
+		go ex.fire(f)
+	}
+}
+
+// fire is the auto-spawned future-runner. It is a thin wrapper around
+// ex.visit so a node's once.Do is triggered as soon as registration
+// completes — without the caller (ex.run) needing to enumerate roots.
+func (ex *executor) fire(f *nodeFuture) {
+	Try(func() {
+		ex.visit(f.node.UID)
+	}).Catch(func(e *Exception) {
+		// Errors are recorded on the future via the same path
+		// ex.visit uses; nothing else to do here. The root waiter
+		// in ex.run re-throws when it sees f.err != nil and
+		// keepGoing is off.
+		_ = e
+	})
 }
 
 func (ex *executor) eventLoop() {
