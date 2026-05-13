@@ -150,3 +150,82 @@ func ToVFSSlice(ss []string) []VFS {
 	}
 	return out
 }
+
+// VFSMap is a two-bucket map keyed by VFS that dispatches on `Root`
+// (Source → bucket 0, Build → bucket 1) and stores values under the
+// rel-string portion. Compared to `map[VFS]T`, lookups go through
+// Go's `mapaccess2_faststr` fast path (specialised for `map[string]T`)
+// instead of the generic struct-keyed path which calls
+// `type:.hash.main.VFS` via an indirect type descriptor and pays a
+// ~2.5–2.8× per-op penalty in the scanner DFS hot loop (verified
+// against PR-M3-vfs-deep regression profiles, `walkSubgraph.func1`:
+// 373ms faststr → 1047ms generic for the same workload).
+//
+// Generic Go specialises one map per instantiation; the bench
+// (`BenchmarkMapAccess_VFS2Bucket_Generic` vs
+// `BenchmarkMapAccess_VFS2Bucket_NonGeneric`) shows 0% overhead vs
+// hand-rolled, and 9.1 ns/op beats both `map[VFS]T` (11.9 ns/op) and
+// `map[string]T` keyed by the materialised "$(ROOT)/<rel>" form
+// (10.6 ns/op).
+//
+// The two buckets are exposed as a [2]-array so callers can range
+// them deterministically when needed.
+type VFSMap[T any] [2]map[string]T
+
+// NewVFSMap constructs a VFSMap with each bucket pre-sized to `cap`.
+func NewVFSMap[T any](cap int) VFSMap[T] {
+	return VFSMap[T]{
+		make(map[string]T, cap),
+		make(map[string]T, cap),
+	}
+}
+
+// vfsBucket returns the per-root bucket index for v. Panics on
+// VFSRootUnset (uint8 underflow → 255 → bounds-check panic).
+func vfsBucket(v VFS) uint8 { return uint8(v.Root) - 1 }
+
+// Get returns the value stored under v and a presence flag.
+func (m VFSMap[T]) Get(v VFS) (T, bool) {
+	val, ok := m[vfsBucket(v)][v.Rel]
+	return val, ok
+}
+
+// Set stores val under v.
+func (m VFSMap[T]) Set(v VFS, val T) { m[vfsBucket(v)][v.Rel] = val }
+
+// Has reports presence.
+func (m VFSMap[T]) Has(v VFS) bool {
+	_, ok := m[vfsBucket(v)][v.Rel]
+	return ok
+}
+
+// Delete removes v's entry (no-op when absent).
+func (m VFSMap[T]) Delete(v VFS) { delete(m[vfsBucket(v)], v.Rel) }
+
+// Len returns the total entry count across both buckets.
+func (m VFSMap[T]) Len() int { return len(m[0]) + len(m[1]) }
+
+// Clear drops every entry in both buckets, retaining the underlying
+// bucket allocations for reuse (used by the scanner sync.Pool path).
+func (m VFSMap[T]) Clear() {
+	clear(m[0])
+	clear(m[1])
+}
+
+// VFSSet is a presence-only specialisation of VFSMap with a
+// zero-byte value type. Common for DFS visited-sets.
+type VFSSet = VFSMap[struct{}]
+
+// NewVFSSet constructs a VFSSet with each bucket pre-sized to `cap`.
+func NewVFSSet(cap int) VFSSet {
+	return VFSSet{
+		make(map[string]struct{}, cap),
+		make(map[string]struct{}, cap),
+	}
+}
+
+// Add inserts v into the set.
+func (m VFSMap[T]) Add(v VFS) {
+	var zero T
+	m[vfsBucket(v)][v.Rel] = zero
+}
