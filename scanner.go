@@ -1502,17 +1502,26 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) []VFS {
 	// stl-to-libcxx.yml multi-target record also contributes
 	// libcxxrt/include/cxxabi.h — and the reference graph includes both.
 	if d.kind == includeQuoted && len(searchOut) > 0 {
-		incDir := pathDir(includerRel)
+		// hasMultiTarget=false → bypass unconditionally. Most calls land
+		// here (the single-target case dominates sysincl); compute
+		// sameDirRel lazily so the `incDir + "/" + d.target` concat
+		// doesn't fire 2.4M times across an M3 gen for no reason.
+		bypass := !hasMultiTarget
+		if !bypass && searchOut[0].IsSource() {
+			incDir := pathDir(includerRel)
 
-		var sameDirRel string
+			var sameDirRel string
 
-		if incDir != "" {
-			sameDirRel = normalisePath(incDir + "/" + d.target)
-		} else {
-			sameDirRel = d.target
+			if incDir != "" {
+				sameDirRel = normalisePath(incDir + "/" + d.target)
+			} else {
+				sameDirRel = d.target
+			}
+
+			bypass = searchOut[0].Rel == sameDirRel
 		}
 
-		if !hasMultiTarget || (searchOut[0].IsSource() && searchOut[0].Rel == sameDirRel) {
+		if bypass {
 			return searchOut
 		}
 	}
