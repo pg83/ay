@@ -6061,7 +6061,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "R6",
-				OutputPath:    ParseVFSOrSource(r6Out),
+				OutputPath:    r6Out,
 				EmitsIncludes: []VFS{rl6SourceVFS},
 			})
 		}
@@ -6081,8 +6081,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// `[<.rl6 source>, ...rl6Closure]` by hand from a separate
 		// source-side scan; the architecturally-correct shape comes from
 		// WalkClosure rooted at the generated .cpp.
-		ccSrcRel := strings.TrimPrefix(r6Out, "$(B)/"+srcInstance.Path+"/")
-		ccIncludeInputs := walkClosure(ctx, srcInstance, ParseVFSOrSource(r6Out), srcIn)
+		ccSrcRel := strings.TrimPrefix(r6Out.Rel, srcInstance.Path+"/")
+		ccIncludeInputs := walkClosure(ctx, srcInstance, r6Out, srcIn)
 
 		ccIn := srcIn
 		ccIn.IsGenerated = true
@@ -6334,14 +6334,14 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:    "R5",
-				OutputPath:     ParseVFSOrSource(r5TmpOut),
+				OutputPath:     r5TmpOut,
 				EmitsIncludes:  nil,
 				ProducerRef:    r5Ref,
 				HasProducerRef: true,
 			})
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:    "R5",
-				OutputPath:     ParseVFSOrSource(r5CppOut),
+				OutputPath:     r5CppOut,
 				EmitsIncludes:  []VFS{rlSourceVFS},
 				ProducerRef:    r5Ref,
 				HasProducerRef: true,
@@ -6353,10 +6353,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// the .rl5.cpp is registered above with the .rl source as its
 		// single direct include; WalkClosure recurses into the .rl via
 		// the FS locator and yields the full transitive closure.
-		ccSrcRel := strings.TrimPrefix(r5CppOut, "$(B)/"+srcInstance.Path+"/")
+		ccSrcRel := strings.TrimPrefix(r5CppOut.Rel, srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IsGenerated = true
-		ccClosure := walkClosure(ctx, srcInstance, ParseVFSOrSource(r5CppOut), srcIn)
+		ccClosure := walkClosure(ctx, srcInstance, r5CppOut, srcIn)
 		// PR-M3-multi-output-producer-siblings: ragel5 emits two outputs
 		// (.rl.tmp intermediate + .rl5.cpp). Upstream ymake lists BOTH
 		// sibling outputs in the downstream CC's inputs[] — the consumer
@@ -6368,7 +6368,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// NOT propagate up into AR/LD memberInputs (sg2.json shows only
 		// the .rl source rolls up; the .tmp is an intermediate that does
 		// not cross module boundaries).
-		ccIn.IncludeInputs = append([]VFS{ParseVFSOrSource(r5TmpOut)}, ccClosure...)
+		ccIn.IncludeInputs = append([]VFS{r5TmpOut}, ccClosure...)
 		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
 		// PR-M3-L0-codegen-deps-EV-PB: thread EN/PB/EV producer refs reached
 		// through the .rl5.cpp's transitive include closure.
@@ -6429,7 +6429,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:    "CF",
-				OutputPath:     ParseVFSOrSource(cfOut),
+				OutputPath:     cfOut,
 				EmitsIncludes:  []VFS{inSourceVFS, ParseVFSOrSource(configureFilePyPath)},
 				ProducerRef:    cfRef,
 				HasProducerRef: true,
@@ -6441,10 +6441,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// the .cpp is registered above with the .cpp.in as its single
 		// direct include; WalkClosure recurses into the .cpp.in via the
 		// FS locator and yields the full transitive closure.
-		ccSrcRel := strings.TrimPrefix(cfOut, "$(B)/"+srcInstance.Path+"/")
+		ccSrcRel := strings.TrimPrefix(cfOut.Rel, srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IsGenerated = true
-		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, ParseVFSOrSource(cfOut), srcIn)
+		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, cfOut, srcIn)
 		// PR-M3-L0-codegen-deps-EV-PB: thread codegen producer refs reached
 		// through the CF-generated .cpp's transitive include closure.
 		// PR-M3-L0-cascade-close-v2: also add cfRef directly — the CC

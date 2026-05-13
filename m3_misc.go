@@ -36,11 +36,11 @@ func EmitR5(
 	ragel5BinPath string,
 	rlgenCdBinPath string,
 	emit Emitter,
-) (NodeRef, string, string) {
-	srcPath := "$(S)/" + instance.Path + "/" + srcRel
-	tmpPath := "$(B)/" + instance.Path + "/" + srcRel + ".tmp"
+) (NodeRef, VFS, VFS) {
+	srcVFS := Source(instance.Path + "/" + srcRel)
+	tmpVFS := Build(instance.Path + "/" + srcRel + ".tmp")
 	// Output: strip .rl suffix, append .rl5.cpp.
-	cppPath := "$(B)/" + instance.Path + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp"
+	cppVFS := Build(instance.Path + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp")
 
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
@@ -50,8 +50,8 @@ func EmitR5(
 		CmdArgs: []string{
 			ragel5BinPath,
 			"-o",
-			tmpPath,
-			srcPath,
+			tmpVFS.String(),
+			srcVFS.String(),
 		},
 		Env: env,
 	}
@@ -60,14 +60,14 @@ func EmitR5(
 			rlgenCdBinPath,
 			"-G2",
 			"-o",
-			cppPath,
-			tmpPath,
+			cppVFS.String(),
+			tmpVFS.String(),
 		},
 		Env: env,
 	}
 
 	// inputs = [ragel5 binary, rlgen-cd binary, source .rl]
-	inputs := []VFS{ParseVFSOrSource(ragel5BinPath), ParseVFSOrSource(rlgenCdBinPath), ParseVFSOrSource(srcPath)}
+	inputs := []VFS{ParseVFSOrSource(ragel5BinPath), ParseVFSOrSource(rlgenCdBinPath), srcVFS}
 
 	// deps / foreign_deps.tool = both host tool LD refs (in order).
 	depRefs := make([]NodeRef, 0, 2)
@@ -82,7 +82,7 @@ func EmitR5(
 		Cmds:    []Cmd{cmd0, cmd1},
 		Env:     env,
 		Inputs:  inputs,
-		Outputs: []VFS{ParseVFSOrSource(tmpPath), ParseVFSOrSource(cppPath)},
+		Outputs: []VFS{tmpVFS, cppVFS},
 		KV: map[string]string{
 			"p":  "R5",
 			"pc": "yellow",
@@ -107,7 +107,7 @@ func EmitR5(
 		ForeignDepRefs: map[string][]NodeRef{"tool": depRefs},
 	}
 
-	return emit.Emit(node), tmpPath, cppPath
+	return emit.Emit(node), tmpVFS, cppVFS
 }
 
 // ─── JV ──────────────────────────────────────────────────────────────────────
@@ -156,8 +156,9 @@ func EmitJV(
 	listener bool,
 	emit Emitter,
 ) NodeRef {
-	grammarAbs := "$(S)/" + instance.Path + "/" + grammar
-	outDir := "$(B)/" + instance.Path
+	grammarVFS := Source(instance.Path + "/" + grammar)
+	outDirVFS := Build(instance.Path)
+	outDir := outDirVFS.String()
 
 	cmdArgs := []string{
 		python3Path,
@@ -165,7 +166,7 @@ func EmitJV(
 		jdkResourcePath,
 		"-jar",
 		antlr4JarPath,
-		grammarAbs,
+		grammarVFS.String(),
 		"-Dlanguage=Cpp",
 		"-o",
 		outDir,
@@ -185,20 +186,21 @@ func EmitJV(
 	}
 
 	inputs := []VFS{
-		ParseVFSOrSource(grammarAbs),
+		grammarVFS,
 		ParseVFSOrSource(stdout2stderrPath),
-		ParseVFSOrSource(antlr4JarPath),
+		antlr4JarVFS,
 	}
 
 	// Outputs: derive from grammar base name (strip .g4).
 	base := strings.TrimSuffix(filepath.Base(grammar), ".g4")
+	outPrefix := instance.Path + "/" + base
 	outputs := []VFS{
-		ParseVFSOrSource(outDir + "/" + base + "Lexer.cpp"),
-		ParseVFSOrSource(outDir + "/" + base + "Lexer.h"),
-		ParseVFSOrSource(outDir + "/" + base + "Parser.cpp"),
-		ParseVFSOrSource(outDir + "/" + base + "Parser.h"),
-		ParseVFSOrSource(outDir + "/" + base + "Visitor.h"),
-		ParseVFSOrSource(outDir + "/" + base + "BaseVisitor.h"),
+		Build(outPrefix + "Lexer.cpp"),
+		Build(outPrefix + "Lexer.h"),
+		Build(outPrefix + "Parser.cpp"),
+		Build(outPrefix + "Parser.h"),
+		Build(outPrefix + "Visitor.h"),
+		Build(outPrefix + "BaseVisitor.h"),
 	}
 
 	node := &Node{
@@ -254,9 +256,10 @@ func EmitJVSplit(
 	listener bool,
 	emit Emitter,
 ) NodeRef {
-	lexerAbs := "$(S)/" + instance.Path + "/" + lexer
-	parserAbs := "$(S)/" + instance.Path + "/" + parser
-	outDir := "$(B)/" + instance.Path
+	lexerVFS := Source(instance.Path + "/" + lexer)
+	parserVFS := Source(instance.Path + "/" + parser)
+	outDirVFS := Build(instance.Path)
+	outDir := outDirVFS.String()
 
 	cmdArgs := []string{
 		python3Path,
@@ -264,8 +267,8 @@ func EmitJVSplit(
 		jdkResourcePath,
 		"-jar",
 		antlr4JarPath,
-		lexerAbs,
-		parserAbs,
+		lexerVFS.String(),
+		parserVFS.String(),
 		"-Dlanguage=Cpp",
 		"-o",
 		outDir,
@@ -284,23 +287,24 @@ func EmitJVSplit(
 	}
 
 	inputs := []VFS{
-		ParseVFSOrSource(lexerAbs),
-		ParseVFSOrSource(parserAbs),
+		lexerVFS,
+		parserVFS,
 		ParseVFSOrSource(stdout2stderrPath),
-		ParseVFSOrSource(antlr4JarPath),
+		antlr4JarVFS,
 	}
 
 	// Outputs: lexer base name + parser base name outputs.
 	lexerBase := strings.TrimSuffix(filepath.Base(lexer), ".g4")
 	parserBase := strings.TrimSuffix(filepath.Base(parser), ".g4")
 	visitorBase := parserBase
+	outPrefix := instance.Path + "/"
 	outputs := []VFS{
-		ParseVFSOrSource(outDir + "/" + lexerBase + ".cpp"),
-		ParseVFSOrSource(outDir + "/" + lexerBase + ".h"),
-		ParseVFSOrSource(outDir + "/" + parserBase + ".cpp"),
-		ParseVFSOrSource(outDir + "/" + parserBase + ".h"),
-		ParseVFSOrSource(outDir + "/" + visitorBase + "Visitor.h"),
-		ParseVFSOrSource(outDir + "/" + visitorBase + "BaseVisitor.h"),
+		Build(outPrefix + lexerBase + ".cpp"),
+		Build(outPrefix + lexerBase + ".h"),
+		Build(outPrefix + parserBase + ".cpp"),
+		Build(outPrefix + parserBase + ".h"),
+		Build(outPrefix + visitorBase + "Visitor.h"),
+		Build(outPrefix + visitorBase + "BaseVisitor.h"),
 	}
 
 	node := &Node{
@@ -369,11 +373,10 @@ func EmitCF(
 	srcRel string,
 	in ModuleCCInputs,
 	emit Emitter,
-) (NodeRef, string) {
-	srcAbs := "$(S)/" + instance.Path + "/" + srcRel
+) (NodeRef, VFS) {
+	srcVFS := Source(instance.Path + "/" + srcRel)
 	// Strip .in suffix to get output path.
-	outRel := strings.TrimSuffix(srcRel, ".in")
-	outAbs := "$(B)/" + instance.Path + "/" + outRel
+	outVFS := Build(instance.Path + "/" + strings.TrimSuffix(srcRel, ".in"))
 
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
@@ -391,15 +394,15 @@ func EmitCF(
 	cmdArgs := []string{
 		python3Path,
 		configureFilePyPath,
-		srcAbs,
-		outAbs,
+		srcVFS.String(),
+		outVFS.String(),
 	}
 	cmdArgs = append(cmdArgs, cfgVars...)
 
 	// Inputs: script + source + header closure scanned from the .in file.
 	// The include scanner handles the .cpp.in just like a .cpp file.
 	inputs := make([]VFS, 0, 2+len(in.IncludeInputs))
-	inputs = append(inputs, ParseVFSOrSource(configureFilePyPath), ParseVFSOrSource(srcAbs))
+	inputs = append(inputs, ParseVFSOrSource(configureFilePyPath), srcVFS)
 	inputs = append(inputs, in.IncludeInputs...)
 
 	node := &Node{
@@ -415,7 +418,7 @@ func EmitCF(
 			"p":  "CF",
 			"pc": "yellow",
 		},
-		Outputs: []VFS{ParseVFSOrSource(outAbs)},
+		Outputs: []VFS{outVFS},
 		Tags:    []string{},
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
@@ -430,7 +433,7 @@ func EmitCF(
 		DepRefs: []NodeRef{},
 	}
 
-	return emit.Emit(node), outAbs
+	return emit.Emit(node), outVFS
 }
 
 // cfgVarRefRe matches @VAR_NAME@ substitution markers in .in template files.
@@ -879,7 +882,7 @@ var antlr4ProcCmdVFS = Source("build/scripts/process_command_files.py")
 // rename + compile), returning per-CC (refs, outputPaths, memberInputs)
 // for the caller to fold into the enclosing AR member accumulators.
 func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS, memberInputsList [][]VFS) {
-	outDir := "$(B)/" + instance.Path
+	outPrefix := instance.Path + "/"
 	reg := codegenRegForInstance(ctx, instance)
 
 	// JV: emit one node per ANTLR4 grammar declaration.
@@ -900,24 +903,24 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			if reg != nil {
 				lexerG4 := Source(instance.Path + "/" + g.Lexer)
 				parserG4 := Source(instance.Path + "/" + g.Parser)
-				lexerCpp := ParseVFSOrSource(outDir + "/" + lexerBase + ".cpp")
+				lexerCpp := Build(outPrefix + lexerBase + ".cpp")
 				witnessIncludes := []VFS{
 					ParseVFSOrSource(antlr4RuntimeHeaderPath),
 					lexerCpp,
 					ParseVFSOrSource(stdout2stderrPath),
-					ParseVFSOrSource(antlr4JarPath),
+					antlr4JarVFS,
 					lexerG4,
 					parserG4,
 				}
-				for _, h := range []string{
-					outDir + "/" + lexerBase + ".h",
-					outDir + "/" + parserBase + ".h",
-					outDir + "/" + parserBase + "Visitor.h",
-					outDir + "/" + parserBase + "BaseVisitor.h",
+				for _, suffix := range []string{
+					lexerBase + ".h",
+					parserBase + ".h",
+					parserBase + "Visitor.h",
+					parserBase + "BaseVisitor.h",
 				} {
 					reg.Register(&GeneratedFileInfo{
 						ProducerKvP:    "JV",
-						OutputPath:     ParseVFSOrSource(h),
+						OutputPath:     Build(outPrefix + suffix),
 						EmitsIncludes:  witnessIncludes,
 						ProducerRef:    jvRef,
 						HasProducerRef: true,
@@ -931,12 +934,12 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					Source(instance.Path + "/" + g.Lexer),
 					Source(instance.Path + "/" + g.Parser),
 					ParseVFSOrSource(stdout2stderrPath),
-					ParseVFSOrSource(antlr4JarPath),
+					antlr4JarVFS,
 				}
-				jvPrimary := outDir + "/" + lexerBase + ".cpp"
-				cpccPairs := []struct{ cpp, h string }{
-					{outDir + "/" + lexerBase + ".cpp", outDir + "/" + lexerBase + ".h"},
-					{outDir + "/" + parserBase + ".cpp", outDir + "/" + parserBase + ".h"},
+				jvPrimary := Build(outPrefix + lexerBase + ".cpp")
+				cpccPairs := []struct{ cpp, h VFS }{
+					{Build(outPrefix + lexerBase + ".cpp"), Build(outPrefix + lexerBase + ".h")},
+					{Build(outPrefix + parserBase + ".cpp"), Build(outPrefix + parserBase + ".h")},
 				}
 				refs, outs, inputs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 				ccRefs = append(ccRefs, refs...)
@@ -953,23 +956,23 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 			if reg != nil {
 				grammarG4 := Source(instance.Path + "/" + g.Grammar)
-				lexerCpp := ParseVFSOrSource(outDir + "/" + base + "Lexer.cpp")
+				lexerCpp := Build(outPrefix + base + "Lexer.cpp")
 				witnessIncludes := []VFS{
 					ParseVFSOrSource(antlr4RuntimeHeaderPath),
 					lexerCpp,
 					ParseVFSOrSource(stdout2stderrPath),
-					ParseVFSOrSource(antlr4JarPath),
+					antlr4JarVFS,
 					grammarG4,
 				}
-				for _, h := range []string{
-					outDir + "/" + base + "Lexer.h",
-					outDir + "/" + base + "Parser.h",
-					outDir + "/" + base + "Visitor.h",
-					outDir + "/" + base + "BaseVisitor.h",
+				for _, suffix := range []string{
+					base + "Lexer.h",
+					base + "Parser.h",
+					base + "Visitor.h",
+					base + "BaseVisitor.h",
 				} {
 					reg.Register(&GeneratedFileInfo{
 						ProducerKvP:    "JV",
-						OutputPath:     ParseVFSOrSource(h),
+						OutputPath:     Build(outPrefix + suffix),
 						EmitsIncludes:  witnessIncludes,
 						ProducerRef:    jvRef,
 						HasProducerRef: true,
@@ -981,12 +984,12 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 				jvInputs := []VFS{
 					Source(instance.Path + "/" + g.Grammar),
 					ParseVFSOrSource(stdout2stderrPath),
-					ParseVFSOrSource(antlr4JarPath),
+					antlr4JarVFS,
 				}
-				jvPrimary := outDir + "/" + base + "Lexer.cpp"
-				cpccPairs := []struct{ cpp, h string }{
-					{outDir + "/" + base + "Lexer.cpp", outDir + "/" + base + "Lexer.h"},
-					{outDir + "/" + base + "Parser.cpp", outDir + "/" + base + "Parser.h"},
+				jvPrimary := Build(outPrefix + base + "Lexer.cpp")
+				cpccPairs := []struct{ cpp, h VFS }{
+					{Build(outPrefix + base + "Lexer.cpp"), Build(outPrefix + base + "Lexer.h")},
+					{Build(outPrefix + base + "Parser.cpp"), Build(outPrefix + base + "Parser.h")},
 				}
 				refs, outs, inputs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 				ccRefs = append(ccRefs, refs...)
@@ -1015,7 +1018,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		if reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP: "BI",
-				OutputPath:  ParseVFSOrSource(outDir + "/" + d.createBuildInfoFor),
+				OutputPath:  Build(outPrefix + d.createBuildInfoFor),
 				EmitsIncludes: []VFS{
 					ParseVFSOrSource(buildInfoGenPyPath),
 					ParseVFSOrSource(xargsPyPath),
@@ -1067,9 +1070,9 @@ func emitJVDownstreamCPCC(
 	ctx *genCtx,
 	instance ModuleInstance,
 	jvRef NodeRef,
-	jvPrimary string,
+	jvPrimary VFS,
 	jvInputs []VFS,
-	cpccPairs []struct{ cpp, h string },
+	cpccPairs []struct{ cpp, h VFS },
 	outputIncludes []string,
 	in ModuleCCInputs,
 ) (ccRefs []NodeRef, ccOutputs []VFS, memberInputsList [][]VFS) {
@@ -1080,8 +1083,8 @@ func emitJVDownstreamCPCC(
 		srcH := pair.h
 
 		// Derive the .g4.cpp name: replace .cpp suffix with .g4.cpp.
-		base := strings.TrimSuffix(filepath.Base(srcCpp), ".cpp")
-		g4CppPath := "$(B)/" + instance.Path + "/" + base + ".g4.cpp"
+		base := strings.TrimSuffix(filepath.Base(srcCpp.Rel), ".cpp")
+		g4CppPath := Build(instance.Path + "/" + base + ".g4.cpp")
 		g4CppRel := base + ".g4.cpp"
 
 		// Register the .g4.cpp in the codegen registry so walkClosure
@@ -1099,7 +1102,7 @@ func emitJVDownstreamCPCC(
 			}
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "CP",
-				OutputPath:    ParseVFSOrSource(g4CppPath),
+				OutputPath:    g4CppPath,
 				EmitsIncludes: emits,
 			})
 		}
@@ -1109,13 +1112,13 @@ func emitJVDownstreamCPCC(
 		ccIn.IsGenerated = true
 		ccIn.HasGenerator = false
 		ccIn.ExtraDepRefs = nil
-		closure := walkClosure(ctx, instance, ParseVFSOrSource(g4CppPath), ccIn)
+		closure := walkClosure(ctx, instance, g4CppPath, ccIn)
 
 		// CP node inputs: [jvPrimary, (srcCpp if != primary), fsTools, procCmd, jvInputs..., closure...]
 		cpInputs := make([]VFS, 0, 2+len(jvInputs)+len(closure)+2)
-		cpInputs = append(cpInputs, ParseVFSOrSource(jvPrimary))
+		cpInputs = append(cpInputs, jvPrimary)
 		if srcCpp != jvPrimary {
-			cpInputs = append(cpInputs, ParseVFSOrSource(srcCpp))
+			cpInputs = append(cpInputs, srcCpp)
 		}
 		cpInputs = append(cpInputs, antlr4FsToolsVFS, antlr4ProcCmdVFS)
 		cpInputs = append(cpInputs, jvInputs...)
@@ -1123,13 +1126,13 @@ func emitJVDownstreamCPCC(
 
 		// The closure minus the cp-specific prefix is the antlr4 content.
 		// Pass only the closure part to EmitJVCPG4 (it assembles the prefix itself).
-		cpRef := EmitJVCPG4(instance, ParseVFSOrSource(srcCpp), ParseVFSOrSource(g4CppPath), jvRef, ParseVFSOrSource(jvPrimary), jvInputs, closure, ctx.emit)
+		cpRef := EmitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, closure, ctx.emit)
 
 		// CC node inputs: EmitCC with IsGenerated=true sets inputPath=g4CppPath.
 		// IncludeInputs = [jvPrimary, srcH, fsTools, procCmd, jvInputs..., closure...]
 		ccIncludeInputs := make([]VFS, 0, 3+len(jvInputs)+len(closure)+2)
-		ccIncludeInputs = append(ccIncludeInputs, ParseVFSOrSource(jvPrimary))
-		ccIncludeInputs = append(ccIncludeInputs, ParseVFSOrSource(srcH))
+		ccIncludeInputs = append(ccIncludeInputs, jvPrimary)
+		ccIncludeInputs = append(ccIncludeInputs, srcH)
 		ccIncludeInputs = append(ccIncludeInputs, antlr4FsToolsVFS, antlr4ProcCmdVFS)
 		ccIncludeInputs = append(ccIncludeInputs, jvInputs...)
 		ccIncludeInputs = append(ccIncludeInputs, closure...)
@@ -1694,7 +1697,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		diskPath := ctx.sourceRoot + "/" + instance.Path + "/" + cf.Src
 		reg.Register(&GeneratedFileInfo{
 			ProducerKvP:   "CF",
-			OutputPath:    ParseVFSOrSource(cfOut),
+			OutputPath:    cfOut,
 			EmitsIncludes: cfIncludeDirectives(diskPath),
 		})
 	}
