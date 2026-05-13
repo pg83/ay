@@ -2858,7 +2858,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				globalBaseName = globalArchiveName(instance.Path)
 				tag = "global"
 			}
-			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRefs, objcopyOutputs, objcopyGlobalInputs, ctx.emit)
+			gRef := EmitARGlobalNamedTagged(ctx.host, ctx.platformFor(arInstance), arInstance, globalBaseName, tag, objcopyRefs, objcopyOutputs, objcopyGlobalInputs, ctx.emit)
 			hOnlyGlobalRef = &gRef
 			hOnlyGlobalPath = instance.Path + "/" + globalBaseName
 		}
@@ -4560,9 +4560,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// PR-M3-openssl-ar-plugin-and-as-clean: openssl AR_PLUGIN(ar) injects
 		// `--plugin <ar.pyplugin>` between the link_lib.py `--` separators.
 		if perModuleCCTag != "" {
-			arRef = EmitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginPath, ctx.emit)
+			arRef = EmitARNamedTagged(ctx.host, ctx.platformFor(arInstance), arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginPath, ctx.emit)
 		} else {
-			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginPath, ctx.emit)
+			arRef = EmitARNamed(ctx.host, ctx.platformFor(arInstance), arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginPath, ctx.emit)
 		}
 	}
 
@@ -4655,7 +4655,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// same member-order discipline as the regular AR — hand-written /
 		// objcopy_* .o files precede codegen-derived .reg3.cpp.o etc.
 		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))
-		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, globalAggregated, ctx.emit)
+		globalRef := EmitARGlobalNamedTagged(ctx.host, ctx.platformFor(arInstance), arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, globalAggregated, ctx.emit)
 		result.GlobalRef = &globalRef
 		result.GlobalPath = instance.Path + "/" + globalBaseName
 	}

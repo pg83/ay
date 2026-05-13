@@ -326,6 +326,8 @@ func TestGen_PeerdirCycle_Tolerated(t *testing.T) {
 		emit:       NewBufferedEmitter(),
 		memo:       make(map[ModuleInstance]*moduleEmitResult),
 		walking:    make(map[ModuleInstance]bool),
+		host:       testHostP,
+		target:     testTargetP,
 	}
 
 	seed := ModuleInstance{
@@ -519,11 +521,11 @@ func TestGen_DualInstantiation_BuildCowOn(t *testing.T) {
 
 	tInstance := targetInstance(targetDir)
 	tCCRef, tCCOut := EmitCC(tInstance, "lib.c", ModuleCCInputs{}, e)
-	EmitAR(tInstance, []NodeRef{tCCRef}, []string{tCCOut}, nil, nil, e)
+	EmitAR(testHostP, testTargetP, tInstance, []NodeRef{tCCRef}, []string{tCCOut}, nil, nil, e)
 
 	hInstance := hostInstance(targetDir)
 	hCCRef, hCCOut := EmitCC(hInstance, "lib.c", ModuleCCInputs{}, e)
-	EmitAR(hInstance, []NodeRef{hCCRef}, []string{hCCOut}, nil, nil, e)
+	EmitAR(testHostP, testHostP, hInstance, []NodeRef{hCCRef}, []string{hCCOut}, nil, nil, e)
 
 	if len(e.nodes) != 4 {
 		t.Errorf("dual emission produced %d nodes, want 4", len(e.nodes))
@@ -1340,6 +1342,8 @@ func TestGen_HostWalk_AsmlibYasmWired(t *testing.T) {
 		emit:       NewBufferedEmitter(),
 		memo:       make(map[ModuleInstance]*moduleEmitResult),
 		walking:    make(map[ModuleInstance]bool),
+		host:       testHostP,
+		target:     testTargetP,
 	}
 
 	hostAsmlib := ModuleInstance{
@@ -1404,6 +1408,8 @@ func TestGen_HostWalk_NonAsmlibAS_NoYasmDep(t *testing.T) {
 		emit:       NewBufferedEmitter(),
 		memo:       make(map[ModuleInstance]*moduleEmitResult),
 		walking:    make(map[ModuleInstance]bool),
+		host:       testHostP,
+		target:     testTargetP,
 	}
 
 	hostInstance := ModuleInstance{

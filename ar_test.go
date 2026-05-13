@@ -30,6 +30,22 @@ func hostInstance(path string) ModuleInstance {
 	}
 }
 
+// PR-M3-platform-pair-step3: canonical (host, target) Platform values
+// for tests. Constructed once via defaultLinuxPlatforms(nil) so every
+// test exercises the exact pair the production CLI builds.
+var (
+	testHostP, testTargetP = defaultLinuxPlatforms(nil)
+)
+
+// testPlatformFor mirrors ctx.platformFor for tests: returns the matching
+// `*Platform` for an instance constructed via targetInstance/hostInstance.
+func testPlatformFor(i ModuleInstance) *Platform {
+	if i.Target == PlatformDefaultLinuxX8664 {
+		return testHostP
+	}
+	return testTargetP
+}
+
 // TestEmitAR_BuildCowOn_Target_ByteExact verifies that EmitAR
 // produces a node that is field-for-field identical to the
 // reference TARGET AR node in /home/pg/monorepo/yatool_orig/sg.json
@@ -88,6 +104,7 @@ func TestEmitAR_BuildCowOn_Target_ByteExact(t *testing.T) {
 	})
 
 	arRef := EmitAR(
+		testHostP, testTargetP,
 		targetInstance("build/cow/on"),
 		[]NodeRef{leafRef},
 		[]string{"$(BUILD_ROOT)/build/cow/on/lib.c.o"},
@@ -236,6 +253,7 @@ func TestEmitAR_BuildCowOn_Host_ByteExact(t *testing.T) {
 	})
 
 	arRef := EmitAR(
+		testHostP, testHostP,
 		hostInstance("build/cow/on"),
 		[]NodeRef{leafRef},
 		[]string{"$(BUILD_ROOT)/build/cow/on/lib.c.pic.o"},
@@ -304,7 +322,7 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	objPaths := []string{"$(BUILD_ROOT)/o1.o", "$(BUILD_ROOT)/o2.o"}
 
 	exc := Try(func() {
-		EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, e)
+		EmitAR(testHostP, testTargetP, targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, e)
 	})
 
 	if exc == nil {
@@ -485,7 +503,7 @@ func TestEmitAR_TcmallocGlobal_ByteExact(t *testing.T) {
 		}
 	}
 
-	arRef := EmitARGlobal(targetInstance(moduleDir), objRefs, objPaths, refMemberInputs, e)
+	arRef := EmitARGlobal(testHostP, testTargetP, targetInstance(moduleDir), objRefs, objPaths, refMemberInputs, e)
 	got := e.nodes[arRef.id]
 
 	if !reflect.DeepEqual(got.Outputs, ref.Outputs) {
@@ -572,7 +590,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 	peer2 := makeLeaf("$(BUILD_ROOT)/other/peer/libother-peer.a")
 	peerArchiveRefs := []NodeRef{peer1, peer2}
 
-	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, nil, e)
+	arRef := EmitAR(testHostP, testTargetP, targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, nil, e)
 	got := e.nodes[arRef.id]
 
 	cmdArgs := got.Cmds[0].CmdArgs
@@ -624,7 +642,7 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 	peer2 := makeLeaf("$(BUILD_ROOT)/other/peer/libother-peer.a")
 	peerArchiveRefs := []NodeRef{peer1, peer2}
 
-	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, nil, e)
+	arRef := EmitAR(testHostP, testTargetP, targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, nil, e)
 	got := e.nodes[arRef.id]
 
 	wantDepRefs := len(objRefs) + len(peerArchiveRefs)
@@ -660,7 +678,7 @@ func TestEmitAR_InputsSorted(t *testing.T) {
 	objPaths := []string{z, m, a}
 	objRefs := []NodeRef{makeLeaf(z), makeLeaf(m), makeLeaf(a)}
 
-	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, e)
+	arRef := EmitAR(testHostP, testTargetP, targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, e)
 	got := e.nodes[arRef.id]
 
 	inputs := got.Inputs
@@ -707,7 +725,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 	objPaths := []string{z, m, a}
 	objRefs := []NodeRef{makeLeaf(z), makeLeaf(m), makeLeaf(a)}
 
-	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, e)
+	arRef := EmitAR(testHostP, testTargetP, targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, e)
 	got := e.nodes[arRef.id]
 
 	cmdArgs := got.Cmds[0].CmdArgs
