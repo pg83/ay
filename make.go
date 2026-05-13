@@ -109,36 +109,38 @@ func cmdMake(args []string) int {
 		defines["GG_HOST_PLATFORM"] = mf.hostPlat
 	}
 
+	// `-j 0` is the no-exec mode: Gen runs but no subprocesses fire.
+	// Inside this branch:
+	//   - `-G` dumps the resulting graph as stable JSON via the
+	//     buffered emitter (byte-exact match for `yatool gen --out -`).
+	//   - without `-G`, Gen streams to a discard sink — a smoke test
+	//     for the streaming pipeline itself.
+	if mf.threads == 0 {
+		if mf.dumpGraph {
+			for _, target := range mf.targets {
+				g := GenWithMode(TargetCfg, mf.srcRoot, target, defines, defaultScanCtxMode)
+				writeGraph("-", g)
+			}
+		} else {
+			genStream(mf.srcRoot, mf.targets, defines, func(*Node) {})
+		}
+
+		return 0
+	}
+
 	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing)
 
 	go ex.eventLoop()
 
-	streamed := 0
+	defer ex.close()
 
-	wrap := func(n *Node) {
-		streamed++
-		ex.onNode(n)
+	results := genStream(mf.srcRoot, mf.targets, defines, ex.onNode)
+
+	ex.run(results)
+
+	for _, uid := range results {
+		ex.installRoot(uid, mf.installRoot)
 	}
-
-	results := genStream(mf.srcRoot, mf.targets, defines, wrap)
-
-	if mf.dumpGraph {
-		fmt.Fprintf(os.Stderr, "graph: streamed %d node(s); %d root(s)\n", streamed, len(results))
-	}
-
-	// --jobs 0 (or any non-positive) is the build-only mode: stream
-	// through Gen + Finalize so the user can verify the graph shape,
-	// but skip subprocess execution. Useful for smoke-testing the
-	// pipeline without a real toolchain set up.
-	if mf.threads > 0 {
-		ex.run(results)
-
-		for _, uid := range results {
-			ex.installRoot(uid, mf.installRoot)
-		}
-	}
-
-	ex.close()
 
 	return 0
 }
@@ -160,10 +162,10 @@ func genStream(srcRoot string, targets []string, defines map[string]string, onNo
 }
 
 func genStreamOne(srcRoot, target string, defines map[string]string, onNode func(*Node)) []string {
-	emitter := NewBufferedEmitter()
-	runGenInto(srcRoot, target, defines, emitter, defaultScanCtxMode)
+	emitter := NewStreamingEmitter(onNode, mightNeedAddInclPatch)
+	_, prepare := runGenInto(srcRoot, target, defines, emitter, defaultScanCtxMode)
 
-	return FinalizeStream(emitter, onNode)
+	return emitter.Finish(prepare)
 }
 
 // executor — schedules and runs Node executions.
@@ -172,7 +174,6 @@ type executor struct {
 	bldRoot   string
 	sema      chan struct{}
 	keepGoing bool
-	autoFire  bool // true → onNode immediately spawns the future's runner
 
 	mu      sync.Mutex
 	byUID   map[string]*nodeFuture
@@ -189,41 +190,23 @@ type nodeFuture struct {
 }
 
 func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool) *executor {
-	autoFire := true
-
-	if threads < 0 {
-		threads = runtime.NumCPU()
-	}
-
-	if threads == 0 {
-		// Build-only mode: caller will not invoke run(), but the
-		// semaphore must still have capacity in case future code
-		// paths spin up. Keep the channel non-blocking with one slot,
-		// and disable auto-fire so we just collect nodes.
-		threads = 1
-		autoFire = false
-	}
-
 	return &executor{
 		srcRoot:   srcRoot,
 		bldRoot:   bldRoot,
 		sema:      make(chan struct{}, threads),
 		keepGoing: keepGoing,
-		autoFire:  autoFire,
 		byUID:     make(map[string]*nodeFuture, 8192),
 		events:    make(chan func(), 4096),
 		stats:     map[string][]time.Duration{},
 	}
 }
 
-// onNode registers a freshly-finalized Node with the executor. In
-// auto-fire mode (the default for any --jobs > 0 run), the node's
-// future-runner spawns immediately so leaf nodes start compiling while
-// Gen is still emitting parents up the topological order. The
-// goroutine blocks inside visit→execute on its deps; deps are
-// guaranteed to be registered first (FinalizeStream yields dep-first
-// topo) so the dep.once handle the future-runner consults is always
-// already in byUID when its parent goroutine reaches it.
+// onNode registers a freshly-finalized Node with the executor and
+// spawns its future-runner so leaf nodes start compiling while Gen is
+// still emitting parents up the topological order. The goroutine
+// blocks inside visit→execute on its deps; deps are guaranteed to be
+// registered first (the streaming emitter yields dep-first) so each
+// dep.once handle the future-runner consults is already in byUID.
 func (ex *executor) onNode(n *Node) {
 	f := &nodeFuture{node: n}
 
@@ -231,9 +214,7 @@ func (ex *executor) onNode(n *Node) {
 	ex.byUID[n.UID] = f
 	ex.mu.Unlock()
 
-	if ex.autoFire {
-		go ex.fire(f)
-	}
+	go ex.fire(f)
 }
 
 // fire is the auto-spawned future-runner. It is a thin wrapper around

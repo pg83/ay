@@ -156,9 +156,10 @@ type moduleEmitResult struct {
 	// isPyLibrary is true when this module's declared type is a Python
 	// library/program variant (PY3_LIBRARY, PY23_LIBRARY, PY2_LIBRARY,
 	// PY23_NATIVE_LIBRARY, PY2_PROGRAM, PY3_PROGRAM). PR-M3-protobuf-
-	// umbrella-trigger: applyUmbrellaAddIncl reads this flag to suppress
-	// umbrella ADDINCL propagation into Python-bound sub-libraries that
-	// happen to sit under a propagating ancestor's path prefix.
+	// umbrella-trigger: the umbrella branch of newPostEmitPrepare reads
+	// this flag to suppress umbrella ADDINCL propagation into Python-
+	// bound sub-libraries that sit under a propagating ancestor's path
+	// prefix.
 	isPyLibrary bool
 	// PeerGlobalClosureRefs / PeerGlobalClosurePaths is the transitive set
 	// of `.global.a` archives reachable through this module's PEERDIR
@@ -193,15 +194,17 @@ type moduleEmitResult struct {
 	// Peerdirs is the post-collect effective peer list for this module
 	// (user-declared PEERDIRs after the auto-injection of contrib/libs/python
 	// for PY*_LIBRARY families, etc.). PR-M3-symbols-module-abseil-addincl:
-	// applyBackPeerAddIncl reads this to compute the back-peer registry
-	// — when a module P PEERDIRs a module M, M is a back-peer-child of P
-	// and inherits P's AddInclGlobal closure (filtered to non-language-default).
+	// the back-peer branch of newPostEmitPrepare reads this to compute
+	// the back-peer registry — when a module P PEERDIRs a module M, M is
+	// a back-peer-child of P and inherits P's AddInclGlobal closure
+	// (filtered to non-language-default).
 	// SOURCE_ROOT-relative paths.
 	Peerdirs []string
 	// ModuleStmtName records the module declaration name (PY23_LIBRARY,
 	// LIBRARY, PROGRAM, ...). PR-M3-symbols-module-abseil-addincl:
-	// applyBackPeerAddIncl gates the back-peer propagation on the parent
-	// declaring a PY*_LIBRARY family that auto-PEERDIRs contrib/libs/python.
+	// the back-peer branch of newPostEmitPrepare gates the back-peer
+	// propagation on the parent declaring a PY*_LIBRARY family that
+	// auto-PEERDIRs contrib/libs/python.
 	ModuleStmtName string
 }
 
@@ -702,12 +705,14 @@ func GenWith(cfg PlatformConfig, sourceRoot string, targetDir string, cliDefines
 const defaultScanCtxMode = "interned"
 
 // runGenInto runs the Gen walk against the supplied emitter without
-// calling Finalize on it. Used by streaming consumers
-// (`yatool make`) that want to drive FinalizeStream themselves.
-//
-// Returns the root NodeRef so the caller can record it as a result
-// after FinalizeStream resolves UIDs.
-func runGenInto(srcRoot, targetDir string, cliDefines map[string]string, emitter *BufferedEmitter, mode string) NodeRef {
+// calling Finalize on it. Returns the root NodeRef and a per-node
+// `prepare` mutator: the caller must thread the mutator through their
+// finalize step (Finalize / FinalizeStreamWith) so the umbrella +
+// back-peer cmd_args mutations happen inline, per-node, before each
+// node's UID is computed. There is no longer a separate
+// applyUmbrellaAddIncl / applyBackPeerAddIncl batch pass that has to
+// walk every node twice before the first compile can fire.
+func runGenInto(srcRoot, targetDir string, cliDefines map[string]string, emitter Emitter, mode string) (NodeRef, func(*Node)) {
 	if mode != "local" && mode != "interned" {
 		ThrowFmt("gen: --scan-ctx-mode must be \"local\" or \"interned\", got %q", mode)
 	}
@@ -762,144 +767,20 @@ func runGenInto(srcRoot, targetDir string, cliDefines map[string]string, emitter
 
 	ctx.emit.Result(root.LDRef)
 
-	applyUmbrellaAddIncl(ctx)
-	applyBackPeerAddIncl(ctx)
-
-	return root.LDRef
+	return root.LDRef, newPostEmitPrepare(ctx)
 }
 
 // GenWithMode is GenWith plus the scanCtxMode dispatch knob (PR-M3-perf-E).
 // `mode` must be either "local" or "interned"; anything else throws.
+// Wraps runGenInto: the per-node umbrella + back-peer prepare hook
+// runGenInto returns is threaded through FinalizeWith so the mutations
+// apply per-node inline, not as two separate full-graph post-passes.
 func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, cliDefines map[string]string, mode string) *Graph {
-	if mode != "local" && mode != "interned" {
-		ThrowFmt("gen: --scan-ctx-mode must be \"local\" or \"interned\", got %q", mode)
-	}
+	emitter := NewBufferedEmitter()
+	_, prepare := runGenInto(sourceRoot, targetDir, cliDefines, emitter, mode)
+	_ = cfg // PlatformConfig is reserved for the M5 host-cross-compile dispatch.
 
-	if cliDefines == nil {
-		cliDefines = map[string]string{"MUSL": "yes"}
-	}
-
-	// PR-M3-perf-B: one parse cache shared by both scanners (see comment
-	// on scannerTarget/scannerHost below).
-	sharedPC := newSharedParseCache()
-
-	// PR-M3-F-7-A: one CodegenRegistry per scanner (per-scanner architecture
-	// per user arbitration 2026-05-11; see codegen_registry.go header).
-	// Target and host each maintain their own registry so platform-specific
-	// generated outputs (e.g. protobuf compiled for both axes) are
-	// independently tracked. F-7-C integrates these into scanner resolution.
-	targetReg := NewCodegenRegistry()
-	hostReg := NewCodegenRegistry()
-
-	targetScanner := newIncludeScannerWith(sourceRoot, LoadSysInclSetFor(sourceRoot, "aarch64"), sharedPC)
-	targetScanner.codegen = targetReg
-	targetScanner.fallbackLocators = []pathLocator{codegenLocator{reg: targetReg}}
-	hostScanner := newIncludeScannerWith(sourceRoot, LoadSysInclSetFor(sourceRoot, "x86_64"), sharedPC)
-	hostScanner.codegen = hostReg
-	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
-
-	// PR-M3-platform-pair: construct the (host, target) Platform pair
-	// from the CLI args. ALL emitters read these through `ctx.host` /
-	// `ctx.target` (or via explicit (hostP, targetP) parameters added
-	// in follow-on PRs); the old `targetIsX8664(instance)` helper is
-	// scheduled for removal once every emitter has been migrated.
-	hostP, targetP := defaultLinuxPlatforms(cliDefines)
-
-	ctx := &genCtx{
-		cfg:             cfg,
-		sourceRoot:      sourceRoot,
-		emit:            NewBufferedEmitter(),
-		memo:            make(map[ModuleInstance]*moduleEmitResult),
-		walking:         make(map[ModuleInstance]bool),
-		host:            hostP,
-		target:          targetP,
-		// PR-M3-perf-B: target and host scanners share one parse-level cache
-		// (file-byte parsing + file existence). Both scanners operate over
-		// the same sourceRoot so parsed directives and stat results are
-		// identical regardless of which arch first reads a header. Resolution
-		// caches (sysinclSource/IncluderCache, resolveCache, subgraphCache)
-		// remain per-scanner because sysincl YAML content is arch-specific
-		// (linux-musl-aarch64.yml vs linux-musl.yml differ for bits/*).
-		scannerTarget:   targetScanner,
-		scannerHost:     hostScanner,
-		cliDefines:      cliDefines,
-		enOutputs:       make(map[VFS]NodeRef),
-		pbOutputs:       make(map[codegenOutputKey]NodeRef),
-		evOutputs:       make(map[codegenOutputKey]NodeRef),
-		ldPluginCPCache: make(map[string]NodeRef),
-		scanCtxMode:     mode,
-		internedScanCtx: make(map[scanCtxCacheKey]*scanCtx, 64),
-	}
-
-	// PR-M3-perf-E: seed the local-mode stack with one root frame so the
-	// top-level genModule call (and any peer-walk recursion outside its
-	// own push/pop) has a non-empty stack to address. The frame is never
-	// popped; it serves as the catch-all in case getScanCtx is invoked
-	// from a call site we did not augment with push/pop.
-	ctx.localScanCtxStack = []map[scanCtxCacheKey]*scanCtx{make(map[scanCtxCacheKey]*scanCtx, 4)}
-
-	seed := ModuleInstance{
-		Path:     filepath.Clean(targetDir),
-		Language: LangCPP,
-		Platform: targetP,
-		Flags:    inferFlagsFromPath(filepath.Clean(targetDir), false),
-	}
-
-	root := genModule(ctx, seed)
-
-	ctx.emit.Result(root.LDRef)
-
-	// PR-M3-brotli-snappy-re2-peer-addincl: post-emit umbrella ADDINCL
-	// propagation. Upstream ymake propagates a LIBRARY's transitive
-	// peer-GLOBAL ADDINCL closure down to every path-sub-library (i.e.,
-	// modules whose path starts with the LIBRARY's path + "/"). The 86
-	// `devtools/ymake/*/*.cpp.o` nodes on aarch64 (L3 lever #2) miss
-	// brotli/snappy/re2 -I flags because `devtools/ymake` directly peers
-	// `library/cpp/blockcodecs` (→ brotli + snappy GLOBAL ADDINCL) and
-	// `contrib/libs/re2`, but the sub-libraries `common`, `diag`, etc.
-	// inherit nothing from the umbrella peer chain through the standard
-	// DFS walk. This post-pass patches the cmd_args of CC nodes whose
-	// module_dir has a path-prefix ancestor LIBRARY in `ctx.memo`.
-	applyUmbrellaAddIncl(ctx)
-
-	// PR-M3-symbols-module-abseil-addincl: post-emit back-peer ADDINCL
-	// propagation. A module M PEERDIR'd FROM a PY*_LIBRARY-family parent P
-	// (via P's auto-PEERDIR injection of contrib/libs/python — itself a
-	// PY23_LIBRARY) participates in P's peer-SCC for GLOBAL ADDINCL
-	// propagation in upstream ymake. Our DFS walker is forward-only and
-	// misses the back-edge, so M's PY3 sub-walk CC nodes lose the
-	// transitively-reachable GLOBAL ADDINCL paths that P's peer chain brings
-	// (e.g. `library/python/symbols/module/{module,syms.reg3}.cpp.py3.o`
-	// miss `-I$(S)/contrib/restricted/abseil-cpp` reached via
-	// `contrib/libs/python → runtime_py3 → cpp/resource → containers/
-	// absl_flat_hash → restricted/abseil-cpp`). This post-pass patches the
-	// affected CC nodes' cmd_args.
-	applyBackPeerAddIncl(ctx)
-
-	if os.Getenv("YATOOL_SCANCTX_STATS") == "1" {
-		fmt.Fprintf(os.Stderr, "scanctx-stats: mode=%s allocs=%d peak-in-flight=%d interned-final=%d\n",
-			ctx.scanCtxMode, ctx.scanCtxAllocs, ctx.scanCtxPeak, len(ctx.internedScanCtx))
-
-		// Per-scanCtx populated cache sizes — only valid in interned mode
-		// (in local mode the buckets are emptied as frames pop).
-		if ctx.scanCtxMode == "interned" {
-			var totalResolve, totalSubgraph, maxResolve, maxSubgraph int
-			for _, sc := range ctx.internedScanCtx {
-				totalResolve += len(sc.resolveCache)
-				totalSubgraph += len(sc.subgraphCache)
-				if len(sc.resolveCache) > maxResolve {
-					maxResolve = len(sc.resolveCache)
-				}
-				if len(sc.subgraphCache) > maxSubgraph {
-					maxSubgraph = len(sc.subgraphCache)
-				}
-			}
-			fmt.Fprintf(os.Stderr, "scanctx-stats: resolveCache total=%d max-per-ctx=%d  subgraphCache total=%d max-per-ctx=%d\n",
-				totalResolve, maxResolve, totalSubgraph, maxSubgraph)
-		}
-	}
-
-	return Finalize(ctx.emit.(*BufferedEmitter))
+	return FinalizeWith(emitter, prepare)
 }
 
 // moduleData is the per-module accumulator populated by
@@ -7201,26 +7082,85 @@ var ccLanguageDefaultInclude = map[string]bool{
 	"-I$(S)/contrib/libs/libc_compat/include/readpassphrase": true,
 }
 
-// applyUmbrellaAddIncl patches CC nodes' cmd_args to inject missing -I
-// flags inherited from path-prefix umbrella ancestors.
+// newPostEmitPrepare returns a per-node mutator that combines the
+// umbrella and back-peer ADDINCL patches into one inline operation.
+// Replaces the two separate full-graph batch passes that the
+// pre-refactor pipeline ran between Gen and Finalize. With the mutator
+// threaded through FinalizeWith / FinalizeStreamWith, each node
+// finalises in one shot — mutate cmd_args → resolve Deps → compute UID
+// → yield — so the executor sees its first leaf node within milliseconds
+// of FinalizeStream starting, not after two extra N-walks complete.
 //
-// Upstream model: a LIBRARY X with sub-libraries A, B, C under its path
+// Umbrella patch: a LIBRARY X with sub-libraries A, B, C under its path
 // prefix exports a subset of its transitive peer-GLOBAL ADDINCL closure
 // to A, B, C at compile time. The propagated subset is restricted by
 // `umbrellaPropagatedPaths` — empirically brotli/snappy/re2 for the M3
-// `devtools/ymake/bin` closure.
+// `devtools/ymake/bin` closure. Path-prefix ancestors are looked up in
+// `ctx.memo` keyed on (path, platform) so host-tool walks stay isolated
+// from target walks; each ancestor's `AddInclGlobal` is intersected
+// with the allow-list and the not-yet-present `-I` flags are appended
+// after the last existing `-I` argument.
 //
-// The patch finds all path-prefix ancestors in `ctx.memo` (keyed on
-// platform so host-tool walks stay isolated from target walks),
-// intersects each ancestor's `AddInclGlobal` with the allow-list, and
-// appends the not-yet-present `-I` flags after the last existing `-I`
-// argument.
-func applyUmbrellaAddIncl(ctx *genCtx) {
-	be, ok := ctx.emit.(*BufferedEmitter)
-	if !ok {
-		return
+// Back-peer patch: a PY*_LIBRARY-family child M whose parent P also
+// participates in the auto-PEERDIR cycle through `contrib/libs/python`
+// inherits P's allow-listed paths (currently
+// `contrib/restricted/abseil-cpp` only). Forward-only DFS walkers miss
+// this back-edge; the per-node hook reconstructs the back-peer
+// relationships from `ctx.memo` and injects the allow-listed paths
+// into the affected CC nodes' cmd_args.
+
+// mightNeedAddInclPatch is the hold predicate used by StreamingEmitter
+// (yatool make) to identify CC nodes whose cmd_args may be mutated by
+// the post-emit umbrella / back-peer patch. Such nodes cannot finalize
+// inline at Emit time — the patch's input state (ctx.memo path-prefix
+// ancestors, back-peer cycle parents) is incomplete until Gen
+// finishes — so they must be deferred to the post-pass.
+//
+// Both checks are deliberately statically derivable from the Node
+// alone (modulePath only):
+//
+//   - Umbrella branch fires only when a path-prefix ancestor sits in
+//     `umbrellaPropagatingAncestors` (currently a one-element set:
+//     `devtools/ymake`). Held: every CC whose modulePath starts with
+//     `devtools/ymake/`.
+//   - Back-peer branch fires only when both the CC's module and its
+//     PEER parent are PY*_LIBRARY-family. The actual gate
+//     (backPeerCycleParticipant on ModuleStmtName) needs ctx.memo,
+//     which we don't have inline; the path heuristic
+//     `library/python/symbols/module` is the narrowest cover that
+//     reproduces every M3-closure back-peer target without dragging
+//     in unrelated CC nodes. Extend if other auto-PEERDIR cycles
+//     surface in future closures.
+//
+// Over-holding is sound (the held node still gets finalized
+// correctly in Finish); under-holding silently breaks the patch by
+// firing onNode with stale cmd_args. When in doubt, hold.
+func mightNeedAddInclPatch(n *Node) bool {
+	if n == nil || n.KV == nil || n.KV["p"] != "CC" {
+		return false
 	}
 
+	modulePath := n.TargetProperties["module_dir"]
+	if modulePath == "" {
+		return false
+	}
+
+	for anc := range umbrellaPropagatingAncestors {
+		if modulePath == anc || strings.HasPrefix(modulePath, anc+"/") {
+			return true
+		}
+	}
+
+	if modulePath == "library/python/symbols/module" ||
+		strings.HasPrefix(modulePath, "library/python/symbols/module/") {
+		return true
+	}
+
+	return false
+}
+
+func newPostEmitPrepare(ctx *genCtx) func(*Node) {
+	// ─── Umbrella state ──────────────────────────────────────────
 	// Build path → AddInclGlobal map, keyed on the platform string so
 	// host-tool walks (x86_64) and target walks (aarch64) keep separate
 	// AddInclGlobal contributions (a peer-GLOBAL contribution that fires
@@ -7272,85 +7212,82 @@ func applyUmbrellaAddIncl(ctx *genCtx) {
 		return out
 	}
 
-	for _, n := range be.nodes {
-		if n == nil || n.KV == nil || n.KV["p"] != "CC" {
+	// ─── Back-peer state ────────────────────────────────────────
+	// Per (modulePath, platform): the list of parent paths P (with
+	// their AddInclGlobal slices) that declared this module in their
+	// effective Peerdirs AND participate in the back-peer cycle.
+	type backPeer struct {
+		parentPath    string
+		addInclGlobal []string
+	}
+
+	type backPeerEntry struct {
+		peerdirs       []string
+		addInclGlobal  []string
+		moduleStmtName string
+	}
+
+	resultsByKey := map[key]backPeerEntry{}
+
+	for inst, res := range ctx.memo {
+		if res == nil {
 			continue
+		}
+
+		resultsByKey[key{path: inst.Path, platform: string(inst.Platform.Target)}] = backPeerEntry{
+			peerdirs:       res.Peerdirs,
+			addInclGlobal:  res.AddInclGlobal,
+			moduleStmtName: res.ModuleStmtName,
+		}
+	}
+
+	backPeersByKey := map[key][]backPeer{}
+
+	for k, entry := range resultsByKey {
+		if !backPeerCycleParticipant(entry.moduleStmtName) {
+			continue
+		}
+
+		for _, peer := range entry.peerdirs {
+			peerKey := key{path: filepath.Clean(peer), platform: k.platform}
+
+			peerEntry, ok := resultsByKey[peerKey]
+			if !ok {
+				continue
+			}
+
+			if !backPeerCycleParticipant(peerEntry.moduleStmtName) {
+				continue
+			}
+
+			backPeersByKey[peerKey] = append(backPeersByKey[peerKey], backPeer{
+				parentPath:    k.path,
+				addInclGlobal: entry.addInclGlobal,
+			})
+		}
+	}
+
+	// ─── Per-node mutator ───────────────────────────────────────
+	// Combines umbrella + back-peer injection. Both passes share the
+	// same `-I` scan over the node's cmd_args and the same insert-
+	// after-last-existing-`-I` strategy, so we do that work once per
+	// node and apply both injections in a single rewrite.
+	return func(n *Node) {
+		if n == nil || n.KV == nil || n.KV["p"] != "CC" {
+			return
 		}
 
 		modulePath, ok := n.TargetProperties["module_dir"]
 		if !ok || modulePath == "" {
-			continue
+			return
 		}
 
-		// PR-M3-protobuf-umbrella-trigger: PY*_LIBRARY consumers do not
-		// receive umbrella ADDINCL propagation, even when their own
-		// peer chain has non-language-default contributions
-		// (python/Include, libffi/, lzma/, openssl/, abseil-cpp via
-		// runtime_py3). REF empirically excludes rapidjson + ymakeyaml
-		// under devtools/ymake from the brotli/snappy/re2 propagation.
-		if pyByPath[key{path: modulePath, platform: n.Platform}] {
-			continue
-		}
-
-		ancestors := pathPrefixAncestors(modulePath)
-		if len(ancestors) == 0 {
-			continue
-		}
-
-		// Detect whether any path-prefix ancestor is an
-		// umbrella-propagating LIBRARY whose AddInclGlobal contains the
-		// allow-listed paths. If so, emit the allow-listed paths in
-		// their canonical (REF-pinned) order.
-		var ancestorHit string
-
-		for _, anc := range ancestors {
-			if _, ok := umbrellaPropagatingAncestors[anc]; !ok {
-				continue
-			}
-
-			if _, ok := pathAddIncl[key{path: anc, platform: n.Platform}]; ok {
-				ancestorHit = anc
-
-				break
-			}
-		}
-
-		if ancestorHit == "" {
-			continue
-		}
-
-		// Confirm the ancestor's AddInclGlobal actually contains each
-		// allow-listed path; if not, omit that one (the ancestor's peer
-		// chain didn't reach it on this platform).
-		ancAddIncl := pathAddIncl[key{path: ancestorHit, platform: n.Platform}]
-		ancHas := map[string]struct{}{}
-		for _, p := range ancAddIncl {
-			ancHas[p] = struct{}{}
-		}
-
-		var umbrella []string
-		for _, p := range umbrellaPropagatedOrder {
-			if _, ok := ancHas[p]; !ok {
-				continue
-			}
-
-			if _, allowed := umbrellaPropagatedPaths[p]; !allowed {
-				continue
-			}
-
-			umbrella = append(umbrella, p)
-		}
-
-		if len(umbrella) == 0 {
-			continue
-		}
-
-		// Walk cmd_args. Find the index of the last `-I` flag; build a
-		// set of already-present `-I…` arguments so we don't re-emit
-		// duplicates.
 		if len(n.Cmds) == 0 {
-			continue
+			return
 		}
+
+		nodeKey := key{path: modulePath, platform: n.Platform}
+		isPY := pyByPath[nodeKey]
 
 		args := n.Cmds[0].CmdArgs
 
@@ -7367,58 +7304,107 @@ func applyUmbrellaAddIncl(ctx *genCtx) {
 		}
 
 		if lastIIdx < 0 {
-			continue
+			return
 		}
 
-		// Trigger: umbrella propagation only fires for CC nodes whose
-		// own peer chain already contributes at least one peer-GLOBAL
-		// ADDINCL (any -I path not in the language-default set). Empirical:
-		// `devtools/ymake/yndex/*.cpp.o` has only the 13 language-default
-		// -I flags in REF (its sole peer `library/cpp/json` brings no
-		// GLOBAL ADDINCL); REF does NOT propagate brotli/snappy/re2 to
-		// yndex. `devtools/ymake/common/cyclestimer.cpp.o` reaches asio +
-		// fmt + protobuf + abseil-{cpp,tstring} via `common → diag →
-		// common_display → asio` (asio's GLOBAL ADDINCL transitively),
-		// and REF DOES propagate brotli/snappy/re2.
-		hasNonLangDefault := false
-
-		for p := range present {
-			if !ccLanguageDefaultInclude[p] {
-				hasNonLangDefault = true
-
-				break
-			}
-		}
-
-		if !hasNonLangDefault {
-			continue
-		}
-
-		// Build the list of -I flags to inject. Entries without a `$(`
-		// prefix are SOURCE_ROOT-rooted (the common case); entries
-		// already containing `$(...)` are passed through verbatim.
 		var inject []string
+		injectSeen := map[string]struct{}{}
 
-		for _, p := range umbrella {
-			var flag string
-			if strings.HasPrefix(p, "$(") {
-				flag = "-I" + p
-			} else {
-				flag = "-I$(S)/" + p
-			}
-
+		appendIfNew := func(flag string) {
 			if _, dup := present[flag]; dup {
-				continue
+				return
 			}
 
+			if _, dup := injectSeen[flag]; dup {
+				return
+			}
+
+			injectSeen[flag] = struct{}{}
 			inject = append(inject, flag)
 		}
 
-		if len(inject) == 0 {
-			continue
+		// Umbrella: PY*_LIBRARY consumers (rapidjson, ymakeyaml under
+		// devtools/ymake) are excluded — REF does not propagate
+		// brotli/snappy/re2 to them.
+		if !isPY {
+			ancestors := pathPrefixAncestors(modulePath)
+
+			var ancestorHit string
+
+			for _, anc := range ancestors {
+				if _, ok := umbrellaPropagatingAncestors[anc]; !ok {
+					continue
+				}
+
+				if _, ok := pathAddIncl[key{path: anc, platform: n.Platform}]; ok {
+					ancestorHit = anc
+
+					break
+				}
+			}
+
+			if ancestorHit != "" {
+				ancAddIncl := pathAddIncl[key{path: ancestorHit, platform: n.Platform}]
+				ancHas := map[string]struct{}{}
+
+				for _, p := range ancAddIncl {
+					ancHas[p] = struct{}{}
+				}
+
+				// Trigger: umbrella fires only when the CC's own peer
+				// chain already contributes at least one peer-GLOBAL
+				// ADDINCL (any -I not in the language-default set).
+				hasNonLangDefault := false
+
+				for p := range present {
+					if !ccLanguageDefaultInclude[p] {
+						hasNonLangDefault = true
+
+						break
+					}
+				}
+
+				if hasNonLangDefault {
+					for _, p := range umbrellaPropagatedOrder {
+						if _, ok := ancHas[p]; !ok {
+							continue
+						}
+
+						if _, allowed := umbrellaPropagatedPaths[p]; !allowed {
+							continue
+						}
+
+						var flag string
+						if strings.HasPrefix(p, "$(") {
+							flag = "-I" + p
+						} else {
+							flag = "-I$(S)/" + p
+						}
+
+						appendIfNew(flag)
+					}
+				}
+			}
 		}
 
-		// Insert the new flags right after the last existing -I.
+		// Back-peer: PY*_LIBRARY-family child M whose parent P also
+		// participates in the cycle inherits P's allow-listed paths.
+		if parents := backPeersByKey[nodeKey]; len(parents) > 0 {
+			for _, parent := range parents {
+				for _, p := range parent.addInclGlobal {
+					if _, allowed := backPeerPropagatedPaths[p]; !allowed {
+						continue
+					}
+
+					appendIfNew("-I$(S)/" + p)
+				}
+			}
+		}
+
+		if len(inject) == 0 {
+			return
+		}
+
 		newArgs := make([]string, 0, len(args)+len(inject))
 		newArgs = append(newArgs, args[:lastIIdx+1]...)
 		newArgs = append(newArgs, inject...)
@@ -7447,187 +7433,6 @@ func applyUmbrellaAddIncl(ctx *genCtx) {
 // L3 gap without injecting flags that would regress paired nodes.
 var backPeerPropagatedPaths = map[string]struct{}{
 	"contrib/restricted/abseil-cpp": {},
-}
-
-// applyBackPeerAddIncl patches CC nodes' cmd_args to inject missing -I
-// flags inherited via a back-peer edge from a PY*_LIBRARY-family parent.
-//
-// Upstream model: a PY*_LIBRARY-family declaration (PY3_LIBRARY,
-// PY23_LIBRARY) auto-PEERDIRs `contrib/libs/python` (build/conf/python.conf
-// :697-743). `contrib/libs/python` (itself PY23_LIBRARY, NO_PYTHON_INCLUDES)
-// in turn PEERDIRs `library/python/symbols/{module,libc,python,registry}`
-// and `library/python/runtime_py3`. The forward edge from `contrib/libs/
-// python` into `library/python/symbols/module` plus the (auto-injected)
-// back-peer from `library/python/symbols/module` (PY23_LIBRARY) into
-// `contrib/libs/python` closes an SCC; ymake treats the SCC as one unit
-// for GLOBAL ADDINCL propagation, so symbols/module's PY3 sub-walk inherits
-// the abseil-cpp GLOBAL ADDINCL reached through runtime_py3.
-//
-// Forward-only DFS walkers (ours) miss this back-edge. This post-pass
-// reconstructs the back-peer relationships from ctx.memo and injects the
-// allow-listed paths into the affected CC nodes' cmd_args.
-//
-// Gating:
-//  1. Parent P's ModuleStmtName must be a PY*_LIBRARY family that
-//     participates in the auto-PEERDIR cycle (currently PY23_LIBRARY —
-//     extend if other auto-PEERDIR families show similar SCC residue).
-//  2. Child M's ModuleStmtName must likewise be PY*_LIBRARY (the back-peer
-//     cycle only closes between two cycle-participants).
-//  3. The CC node's platform must match the platform on which P emitted
-//     (host-tool walks stay isolated from target walks).
-//  4. The path must be in backPeerPropagatedPaths.
-//  5. The path must not already be present in the CC's cmd_args (dedup).
-func applyBackPeerAddIncl(ctx *genCtx) {
-	be, ok := ctx.emit.(*BufferedEmitter)
-	if !ok {
-		return
-	}
-
-	type key struct {
-		path     string
-		platform string
-	}
-
-	// resultsByKey caches each module's (Peerdirs, AddInclGlobal, ModuleStmtName)
-	// keyed on (path, platform). One entry per emitted module instance.
-	type backPeerEntry struct {
-		peerdirs       []string
-		addInclGlobal  []string
-		moduleStmtName string
-	}
-
-	resultsByKey := map[key]backPeerEntry{}
-
-	for inst, res := range ctx.memo {
-		if res == nil {
-			continue
-		}
-
-		resultsByKey[key{path: inst.Path, platform: string(inst.Platform.Target)}] = backPeerEntry{
-			peerdirs:       res.Peerdirs,
-			addInclGlobal:  res.AddInclGlobal,
-			moduleStmtName: res.ModuleStmtName,
-		}
-	}
-
-	// Build the back-peer registry: for each (target path, platform) M,
-	// the list of parent paths P (with their AddInclGlobal slices) that
-	// declared M in their effective Peerdirs.
-	type backPeer struct {
-		parentPath    string
-		addInclGlobal []string
-	}
-
-	backPeersByKey := map[key][]backPeer{}
-
-	for k, entry := range resultsByKey {
-		// Gate (1): parent must be a PY*_LIBRARY family.
-		if !backPeerCycleParticipant(entry.moduleStmtName) {
-			continue
-		}
-
-		for _, peer := range entry.peerdirs {
-			peerKey := key{path: filepath.Clean(peer), platform: k.platform}
-
-			peerEntry, ok := resultsByKey[peerKey]
-			if !ok {
-				continue
-			}
-
-			// Gate (2): child M must also be a PY*_LIBRARY family —
-			// otherwise the back-peer cycle does not close (plain LIBRARY
-			// children of contrib/libs/python like symbols/libc and
-			// symbols/registry don't reach abseil-cpp in REF).
-			if !backPeerCycleParticipant(peerEntry.moduleStmtName) {
-				continue
-			}
-
-			backPeersByKey[peerKey] = append(backPeersByKey[peerKey], backPeer{
-				parentPath:    k.path,
-				addInclGlobal: entry.addInclGlobal,
-			})
-		}
-	}
-
-	if len(backPeersByKey) == 0 {
-		return
-	}
-
-	for _, n := range be.nodes {
-		if n == nil || n.KV == nil || n.KV["p"] != "CC" {
-			continue
-		}
-
-		modulePath, ok := n.TargetProperties["module_dir"]
-		if !ok || modulePath == "" {
-			continue
-		}
-
-		parents, ok := backPeersByKey[key{path: modulePath, platform: n.Platform}]
-		if !ok || len(parents) == 0 {
-			continue
-		}
-
-		if len(n.Cmds) == 0 {
-			continue
-		}
-
-		args := n.Cmds[0].CmdArgs
-
-		lastIIdx := -1
-		present := map[string]struct{}{}
-
-		for i, a := range args {
-			if !strings.HasPrefix(a, "-I") {
-				continue
-			}
-
-			lastIIdx = i
-			present[a] = struct{}{}
-		}
-
-		if lastIIdx < 0 {
-			continue
-		}
-
-		// Collect allow-listed paths from every back-peering parent.
-		// Order: parent declaration order, then path declaration order
-		// within each parent. Duplicates dropped at injection time.
-		var inject []string
-		injectSeen := map[string]struct{}{}
-
-		for _, parent := range parents {
-			for _, p := range parent.addInclGlobal {
-				if _, allowed := backPeerPropagatedPaths[p]; !allowed {
-					continue
-				}
-
-				flag := "-I$(S)/" + p
-
-				if _, dup := present[flag]; dup {
-					continue
-				}
-
-				if _, dup := injectSeen[flag]; dup {
-					continue
-				}
-
-				injectSeen[flag] = struct{}{}
-				inject = append(inject, flag)
-			}
-		}
-
-		if len(inject) == 0 {
-			continue
-		}
-
-		newArgs := make([]string, 0, len(args)+len(inject))
-		newArgs = append(newArgs, args[:lastIIdx+1]...)
-		newArgs = append(newArgs, inject...)
-		newArgs = append(newArgs, args[lastIIdx+1:]...)
-
-		n.Cmds[0].CmdArgs = newArgs
-	}
 }
 
 // backPeerCycleParticipant returns true when the module declaration type

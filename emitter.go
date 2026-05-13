@@ -185,7 +185,17 @@ type Graph struct {
 // Cannot run concurrently with Finalize on the same emitter; both
 // set e.finalized.
 func FinalizeStream(e *BufferedEmitter, yield func(*Node)) []string {
-	uids := finalizeNodes(e, yield)
+	return FinalizeStreamWith(e, nil, yield)
+}
+
+// FinalizeStreamWith is FinalizeStream plus an optional `prepare`
+// hook invoked on each node BEFORE its UID is computed. Used by the
+// `yatool make` pipeline to fold the umbrella + back-peer cmd_args
+// mutations into the per-node loop so leaf nodes can fire into the
+// executor as soon as Gen finishes — no separate full-graph walks
+// stand between Gen and the first compile.
+func FinalizeStreamWith(e *BufferedEmitter, prepare, yield func(*Node)) []string {
+	uids := finalizeNodes(e, prepare, yield)
 
 	results := make([]string, 0, len(e.results))
 	seen := map[string]struct{}{}
@@ -214,7 +224,7 @@ func FinalizeStream(e *BufferedEmitter, yield func(*Node)) []string {
 // Sets e.finalized when it returns successfully. Throws on
 // re-finalize, on pre-populated Deps/ForeignDeps, on out-of-range
 // NodeRefs, or on dependency cycles.
-func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
+func finalizeNodes(e *BufferedEmitter, prepare, yield func(*Node)) []string {
 	if e.finalized {
 		ThrowFmt("finalize: emitter already finalized")
 	}
@@ -369,118 +379,16 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
 	for _, i := range order {
 		node := e.nodes[i]
 
-		// Resolve Deps. For LD and AR nodes, preserve emit (insertion)
-		// order with deduplication — PR-L4-C/05: REF carries link order
-		// for these 30 nodes (3 LDs + 27 ARs); sorting would diverge.
-		// For all other node types, sort for a stable canonical hash (D14).
-		//
-		// The UID hash (canonicalNodeBytes below) always sees the SORTED
-		// form so the hash is order-independent; for LD/AR the Deps slice
-		// is restored to insertion order after hashing.
-		var insertionOrderDeps []string // non-nil only for LD/AR
-		if len(node.DepRefs) > 0 {
-			// Build deduped slice in insertion order (first occurrence wins).
-			seen := make(map[string]struct{}, len(node.DepRefs))
-			ordered := make([]string, 0, len(node.DepRefs))
-
-			for _, r := range node.DepRefs {
-				u := uids[r.id]
-				if _, ok := seen[u]; ok {
-					continue
-				}
-
-				seen[u] = struct{}{}
-				ordered = append(ordered, u)
-			}
-
-			if node.KV["p"] == "LD" || node.KV["p"] == "AR" {
-				// Remember insertion order; hash over sorted form.
-				insertionOrderDeps = ordered
-				sorted := make([]string, len(ordered))
-				copy(sorted, ordered)
-				sort.Strings(sorted)
-				node.Deps = sorted
-			} else {
-				sort.Strings(ordered)
-				node.Deps = ordered
-			}
-		} else if node.Deps == nil {
-			// Ensure the field serialises as [] not null.
-			node.Deps = []string{}
+		if prepare != nil {
+			// Run prepare BEFORE resolveAndUID — prepare mutates
+			// cmd_args; we want the mutation to participate in the UID
+			// hash. (The legacy behaviour: prepare ran AFTER Deps/
+			// ForeignDeps resolve but BEFORE nodeUID; resolveAndUID
+			// does both, so we sequence prepare first.)
+			prepare(node)
 		}
 
-		// Resolve ForeignDeps. Same dedupe+sort treatment per key. We
-		// only emit the foreign_deps map at all if the rule author
-		// actually populated ForeignDepRefs with at least one non-empty
-		// key — that preserves the `omitempty` behaviour for nodes that
-		// have no foreign deps and avoids serialising
-		// `foreign_deps:{key:[]}` for empty-value keys.
-		if len(node.ForeignDepRefs) > 0 {
-			fkeys := make([]string, 0, len(node.ForeignDepRefs))
-			for k := range node.ForeignDepRefs {
-				fkeys = append(fkeys, k)
-			}
-			sort.Strings(fkeys)
-
-			resolved := make(map[string][]string, len(fkeys))
-			for _, k := range fkeys {
-				set := make(map[string]struct{})
-				for _, r := range node.ForeignDepRefs[k] {
-					set[uids[r.id]] = struct{}{}
-				}
-
-				if len(set) == 0 {
-					// Skip keys whose deduped+resolved slice is empty —
-					// they would otherwise serialize as `key:[]`, which
-					// is not what the reference output produces.
-					continue
-				}
-
-				vals := make([]string, 0, len(set))
-				for u := range set {
-					vals = append(vals, u)
-				}
-				sort.Strings(vals)
-				resolved[k] = vals
-			}
-
-			if len(resolved) > 0 {
-				node.ForeignDeps = resolved
-			}
-			// else: leave node.ForeignDeps nil so omitempty drops the field.
-		}
-
-		// PR-L4-C/01: sandboxing is always true for every node in the M2
-		// tools/archiver closure (verified uniformly across 3730 REF nodes).
-		// Set here once rather than in each rule emitter to avoid scatter.
-		node.Sandboxing = true
-
-		// Hash the (now child-resolved) node. UID/SelfUID/StatsUID are
-		// excluded from the stream, ensuring hash-of-content not
-		// hash-of-identity. For LD/AR, node.Deps is sorted at this point
-		// (set above) so the hash is order-independent.
-		u := nodeUID(node)
-		node.UID = u
-		// TODO(future-PR): SelfUID is currently set to the same value as UID
-		// as a PR-02 placeholder. A future PR must compute a distinct value
-		// (per ymake semantics, derived from this node's content only,
-		// excluding child UIDs). Tests pin the placeholder behaviour with a
-		// t.Logf rather than t.Errorf so this can be tightened later.
-		node.SelfUID = u
-		node.StatsUID = "" // explicit; refined in a later PR.
-		uids[i] = u
-
-		// PR-L4-C/05: after hashing, restore LD/AR deps to insertion order
-		// so the serialized output preserves link/archive order (REF shape).
-		if insertionOrderDeps != nil {
-			node.Deps = insertionOrderDeps
-		}
-
-		// Drop the internal *Refs so they do not leak past Finalize. The
-		// emitter's `finalized` flag (set below) is the actual safety
-		// net against re-Finalize; clearing the refs is hygiene only.
-		node.DepRefs = nil
-		node.ForeignDepRefs = nil
+		uids[i] = resolveAndUID(node, uids)
 
 		if yield != nil {
 			yield(node)
@@ -496,8 +404,257 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
 	return uids
 }
 
+// resolveAndUID is the per-node finalize step: resolves DepRefs and
+// ForeignDepRefs into Deps and ForeignDeps using the already-known UIDs
+// from preceding (dep-first) nodes, sets Sandboxing, hashes the node to
+// compute UID/SelfUID, restores LD/AR insertion order, and clears the
+// internal *Refs slots. Shared between BufferedEmitter's topo-sort
+// finalize and StreamingEmitter's inline-on-emit finalize.
+//
+// The `uids` slice must be indexed by NodeRef.id; entries for any
+// DepRef referenced from this node must already be populated.
+//
+// LD/AR nodes preserve emit (insertion) order in their Deps slice (PR-
+// L4-C/05). The hash always sees the SORTED form so it's order-
+// independent; insertion order is restored after the hash.
+func resolveAndUID(node *Node, uids []string) string {
+	var insertionOrderDeps []string
+
+	if len(node.DepRefs) > 0 {
+		seen := make(map[string]struct{}, len(node.DepRefs))
+		ordered := make([]string, 0, len(node.DepRefs))
+
+		for _, r := range node.DepRefs {
+			u := uids[r.id]
+			if _, ok := seen[u]; ok {
+				continue
+			}
+
+			seen[u] = struct{}{}
+			ordered = append(ordered, u)
+		}
+
+		if node.KV["p"] == "LD" || node.KV["p"] == "AR" {
+			insertionOrderDeps = ordered
+			sorted := make([]string, len(ordered))
+			copy(sorted, ordered)
+			sort.Strings(sorted)
+			node.Deps = sorted
+		} else {
+			sort.Strings(ordered)
+			node.Deps = ordered
+		}
+	} else if node.Deps == nil {
+		node.Deps = []string{}
+	}
+
+	if len(node.ForeignDepRefs) > 0 {
+		fkeys := make([]string, 0, len(node.ForeignDepRefs))
+		for k := range node.ForeignDepRefs {
+			fkeys = append(fkeys, k)
+		}
+		sort.Strings(fkeys)
+
+		resolved := make(map[string][]string, len(fkeys))
+		for _, k := range fkeys {
+			set := make(map[string]struct{})
+			for _, r := range node.ForeignDepRefs[k] {
+				set[uids[r.id]] = struct{}{}
+			}
+
+			if len(set) == 0 {
+				continue
+			}
+
+			vals := make([]string, 0, len(set))
+			for u := range set {
+				vals = append(vals, u)
+			}
+			sort.Strings(vals)
+			resolved[k] = vals
+		}
+
+		if len(resolved) > 0 {
+			node.ForeignDeps = resolved
+		}
+	}
+
+	// PR-L4-C/01: sandboxing is always true for every node in the M2
+	// closure.
+	node.Sandboxing = true
+
+	u := nodeUID(node)
+	node.UID = u
+	// SelfUID is a PR-02 placeholder; pinned by t.Logf rather than t.Errorf.
+	node.SelfUID = u
+	node.StatsUID = ""
+
+	if insertionOrderDeps != nil {
+		node.Deps = insertionOrderDeps
+	}
+
+	node.DepRefs = nil
+	node.ForeignDepRefs = nil
+
+	return u
+}
+
+// StreamingEmitter is an Emitter that finalizes each node inline at
+// Emit time when possible: resolves DepRefs from already-emitted nodes'
+// UIDs, computes the node's UID, and fires `onNode(n)` synchronously
+// from Emit. Used by `yatool make` so leaf compiles can start
+// immediately as Gen produces them, instead of waiting for all of Gen
+// to buffer first.
+//
+// Some CC nodes are eligible for the post-emit umbrella / back-peer
+// cmd_args patch (newPostEmitPrepare); those need ctx.memo to be fully
+// populated, so we cannot finalize them inline. Such nodes are
+// identified by the `hold` predicate passed at construction and parked
+// in a pending pool. Any node whose DepRefs include a still-pending
+// node is also held (cascade through the "all deps must have UIDs"
+// invariant). Finish() drains the pending pool with `prepare` applied,
+// in the order the nodes were emitted (which is already a valid
+// dep-first topo order under the post-order DFS invariant Gen
+// satisfies).
+type StreamingEmitter struct {
+	nodes       []*Node
+	uids        []string
+	pendingIdx  []int64
+	pendingSet  map[int64]bool
+	results     []int64
+	onNode      func(*Node)
+	hold        func(*Node) bool
+	finalized   bool
+	readyCh     chan struct{}
+}
+
+// NewStreamingEmitter constructs a StreamingEmitter with the given
+// onNode callback (invoked synchronously from Emit, or from Finish for
+// held-back nodes) and `hold` predicate (returns true when the node
+// must be deferred to the post-emit prepare pass).
+func NewStreamingEmitter(onNode func(*Node), hold func(*Node) bool) *StreamingEmitter {
+	return &StreamingEmitter{
+		pendingSet: map[int64]bool{},
+		onNode:     onNode,
+		hold:       hold,
+		readyCh:    make(chan struct{}),
+	}
+}
+
+func (e *StreamingEmitter) Emit(n *Node) NodeRef {
+	if e.finalized {
+		panic("StreamingEmitter.Emit called after Finish")
+	}
+
+	id := int64(len(e.nodes))
+	e.nodes = append(e.nodes, n)
+	e.uids = append(e.uids, "")
+
+	if e.shouldHold(n) {
+		e.pendingSet[id] = true
+		e.pendingIdx = append(e.pendingIdx, id)
+		return NodeRef{id: id}
+	}
+
+	e.uids[id] = resolveAndUID(n, e.uids)
+	if e.onNode != nil {
+		e.onNode(n)
+	}
+
+	return NodeRef{id: id}
+}
+
+// shouldHold returns true when the node cannot be finalized inline:
+// either the explicit `hold` predicate matched, or one of its DepRefs/
+// ForeignDepRefs points at a still-pending node. The DepRef check
+// cascades hold through the graph: anything depending on a held node
+// must also be held.
+func (e *StreamingEmitter) shouldHold(n *Node) bool {
+	if e.hold != nil && e.hold(n) {
+		return true
+	}
+
+	for _, r := range n.DepRefs {
+		if e.uids[r.id] == "" {
+			return true
+		}
+	}
+
+	for _, refs := range n.ForeignDepRefs {
+		for _, r := range refs {
+			if e.uids[r.id] == "" {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func (e *StreamingEmitter) Result(r NodeRef) {
+	if e.finalized {
+		panic("StreamingEmitter.Result called after Finish")
+	}
+
+	e.results = append(e.results, r.id)
+}
+
+func (e *StreamingEmitter) OnReady(_ NodeRef) <-chan struct{} {
+	return e.readyCh
+}
+
+// Finish drains the pending pool: applies `prepare` to each held node
+// (if non-nil), runs resolveAndUID, and fires onNode. Returns the
+// deduped slice of result UIDs in declaration order. Must be called
+// exactly once after Gen completes; further Emit/Result calls panic.
+func (e *StreamingEmitter) Finish(prepare func(*Node)) []string {
+	if e.finalized {
+		panic("StreamingEmitter.Finish called twice")
+	}
+
+	for _, id := range e.pendingIdx {
+		n := e.nodes[id]
+
+		if prepare != nil {
+			prepare(n)
+		}
+
+		e.uids[id] = resolveAndUID(n, e.uids)
+		if e.onNode != nil {
+			e.onNode(n)
+		}
+	}
+
+	e.finalized = true
+	close(e.readyCh)
+
+	results := make([]string, 0, len(e.results))
+	seen := map[string]struct{}{}
+
+	for _, rid := range e.results {
+		u := e.uids[rid]
+		if _, ok := seen[u]; ok {
+			continue
+		}
+
+		seen[u] = struct{}{}
+		results = append(results, u)
+	}
+
+	return results
+}
+
 func Finalize(e *BufferedEmitter) *Graph {
-	uids := finalizeNodes(e, nil)
+	return FinalizeWith(e, nil)
+}
+
+// FinalizeWith is Finalize plus an optional `prepare` hook invoked on
+// each node BEFORE its UID is computed. Mirrors the prepare slot of
+// FinalizeStreamWith for callers that still want a fully-materialised
+// *Graph (e.g. `yatool gen`'s JSON dumper) but need the same per-node
+// pre-UID mutations the streaming pipeline applies.
+func FinalizeWith(e *BufferedEmitter, prepare func(*Node)) *Graph {
+	uids := finalizeNodes(e, prepare, nil)
 	n := len(e.nodes)
 
 	// Build the output Graph. Result UIDs are computed first.
