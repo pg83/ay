@@ -92,6 +92,13 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		t.Errorf("host_platform = true, want false")
 	}
 
+	// PR-M3-rl6-host-platform-and-cctype: target-side (aarch64) R6 nodes
+	// keep tags empty — the "tool" tag is reserved for host-side
+	// (x86_64) codegen invocations.
+	if len(got.Tags) != 0 {
+		t.Errorf("tags = %v, want [] (aarch64 R6 is target-side)", got.Tags)
+	}
+
 	// PR-L4-C/07: ragel6 host LD edge lives in both DepRefs (for the L0
 	// topology fingerprint) AND ForeignDepRefs["tool"] (matching REF's
 	// foreign_deps shape for the R6 aarch64 node).
@@ -280,6 +287,17 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 
 	if got.Cmds[0].CmdArgs[1] != "-CG2" {
 		t.Errorf("cmd_args[1] = %q, want -CG2 (x86_64 host = release = optimized)", got.Cmds[0].CmdArgs[1])
+	}
+
+	// PR-M3-rl6-host-platform-and-cctype: x86_64 R6 nodes carry
+	// `host_platform=true` and `tags=["tool"]` matching the reference
+	// graph's classification of host-side codegen invocations.
+	if !got.HostPlatform {
+		t.Errorf("host_platform = false, want true (x86_64 R6 is host-side)")
+	}
+
+	if len(got.Tags) != 1 || got.Tags[0] != "tool" {
+		t.Errorf("tags = %v, want [tool]", got.Tags)
 	}
 }
 
