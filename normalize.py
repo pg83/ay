@@ -52,13 +52,16 @@ def _find_root(graph: list[dict], target: str) -> dict:
     """Return the LD (or AR fallback) root node for *target*.
 
     Search rules:
-    1. LD node: kv['p'] == 'LD' AND outputs[0] ends with '/<binaryName>'
-       where binaryName is the last component of target.
+    1. LD node: kv['p'] == 'LD' AND outputs[0] is anchored under the
+       target's build directory, i.e. starts with '$(BUILD_ROOT)/<target>/'.
+       This accepts both `tools/archiver` (binary == 'archiver', LD out
+       endswith '/archiver') and `devtools/ymake/bin` (binary == 'ymake',
+       LD out endswith '/ymake' — the binary name differs from the last
+       target-path component).
     2. AR node: kv['p'] == 'AR' AND outputs[0] contains '/<target>/'.
        Multiple AR candidates → prefer host_platform==false (target platform).
     """
-    binary_name = target.rsplit("/", 1)[-1]
-    ld_suffix = "/" + binary_name
+    ld_prefix = "$(BUILD_ROOT)/" + target + "/"
     ar_infix = "/" + target + "/"
 
     ld_candidates: list[dict] = []
@@ -70,7 +73,7 @@ def _find_root(graph: list[dict], target: str) -> dict:
         if not outputs:
             continue
         out0 = outputs[0]
-        if kv_p == "LD" and out0.endswith(ld_suffix):
+        if kv_p == "LD" and out0.startswith(ld_prefix):
             ld_candidates.append(node)
         elif kv_p == "AR" and ar_infix in out0:
             ar_candidates.append(node)
