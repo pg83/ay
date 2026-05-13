@@ -158,10 +158,10 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 		buf = append(buf, '\n')
 	}
 
-	// inputs: []string
+	// inputs: []VFS
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"inputs": `...)
-	buf = appendStringSlice(buf, n.Inputs, innerPad)
+	buf = appendVFSSlice(buf, n.Inputs, innerPad)
 	buf = append(buf, ',', '\n')
 
 	// kv: map[string]string
@@ -170,10 +170,10 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 	buf = appendStringMap(buf, n.KV, innerPad)
 	buf = append(buf, ',', '\n')
 
-	// outputs: []string
+	// outputs: []VFS
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"outputs": `...)
-	buf = appendStringSlice(buf, n.Outputs, innerPad)
+	buf = appendVFSSlice(buf, n.Outputs, innerPad)
 	buf = append(buf, ',', '\n')
 
 	// platform: string
@@ -320,6 +320,57 @@ func appendStringSlice(buf []byte, ss []string, pad string) []byte {
 	return buf
 }
 
+// appendVFSSlice emits []VFS in the same shape as appendStringSlice —
+// each VFS materialises to its canonical "$(SOURCE_ROOT)/<rel>" or
+// "$(BUILD_ROOT)/<rel>" string at JSON-emit time. The prefix is
+// emitted inline (two bytes: `"$`, then the rest) to avoid the
+// `v.String()` concat allocation that VFS.String would do.
+func appendVFSSlice(buf []byte, vs []VFS, pad string) []byte {
+	if len(vs) == 0 {
+		return append(buf, '[', ']')
+	}
+
+	buf = append(buf, '[', '\n')
+	itemPad := pad + "    "
+
+	for i, v := range vs {
+		buf = append(buf, itemPad...)
+		buf = appendVFS(buf, v)
+
+		if i < len(vs)-1 {
+			buf = append(buf, ',')
+		}
+
+		buf = append(buf, '\n')
+	}
+
+	buf = append(buf, pad...)
+	buf = append(buf, ']')
+
+	return buf
+}
+
+// appendVFS emits a single VFS in JSON-string form. Materialises the
+// "$(SOURCE_ROOT)/<rel>" / "$(BUILD_ROOT)/<rel>" prefix inline so we
+// pay one buffer-append per part, not one string concat per VFS.
+func appendVFS(buf []byte, v VFS) []byte {
+	switch v.Root {
+	case VFSRootSource:
+		buf = append(buf, '"')
+		buf = appendStringEscapedBody(buf, vfsSourcePrefix)
+		buf = appendStringEscapedBody(buf, v.Rel)
+		buf = append(buf, '"')
+		return buf
+	case VFSRootBuild:
+		buf = append(buf, '"')
+		buf = appendStringEscapedBody(buf, vfsBuildPrefix)
+		buf = appendStringEscapedBody(buf, v.Rel)
+		buf = append(buf, '"')
+		return buf
+	}
+	panic("appendVFS: zero-valued VFS")
+}
+
 // appendStringMap emits map[string]string with keys sorted (json default).
 // Empty map is `{}` on the same line.
 func appendStringMap(buf []byte, m map[string]string, pad string) []byte {
@@ -460,7 +511,18 @@ const hex = "0123456789abcdef"
 //   - Invalid UTF-8: replaced with �.
 func appendString(buf []byte, s string) []byte {
 	buf = append(buf, '"')
+	buf = appendStringEscapedBody(buf, s)
+	buf = append(buf, '"')
+	return buf
+}
 
+// appendStringEscapedBody emits the JSON-escaped BODY of a string,
+// without the surrounding `"` quotes. Extracted from appendString so
+// callers that emit a concatenation (appendVFS materialising
+// "$(SOURCE_ROOT)/" + rel) can avoid a heap concat at the call site:
+// they append the prefix body then the rel body inside one shared
+// pair of quotes.
+func appendStringEscapedBody(buf []byte, s string) []byte {
 	start := 0
 	for i := 0; i < len(s); {
 		// Fast ASCII path (no escape needed).
@@ -533,8 +595,6 @@ func appendString(buf []byte, s string) []byte {
 	if start < len(s) {
 		buf = append(buf, s[start:]...)
 	}
-
-	buf = append(buf, '"')
 
 	return buf
 }

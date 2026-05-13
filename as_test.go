@@ -107,8 +107,8 @@ func TestEmitAS_YasmLD_PopulatesDepRefs(t *testing.T) {
 	yasmLDRef := e.Emit(&Node{
 		Cmds:         []Cmd{{CmdArgs: []string{"yasm"}, Env: map[string]string{}}},
 		Env:          map[string]string{},
-		Inputs:       []string{},
-		Outputs:      []string{"$(BUILD_ROOT)/tools/yasm/yasm"},
+		Inputs:       ToVFSSlice([]string{}),
+		Outputs:      ToVFSSlice([]string{"$(BUILD_ROOT)/tools/yasm/yasm"}),
 		KV:           map[string]string{"p": "LD", "pc": "light-cyan"},
 		Tags:         []string{"tool"},
 		Platform:     string(PlatformDefaultLinuxX8664),

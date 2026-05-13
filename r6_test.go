@@ -25,9 +25,9 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	ragel6LD := e.Emit(&Node{
 		Cmds:             []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:              map[string]string{},
-		Inputs:           []string{},
+		Inputs:           ToVFSSlice([]string{}),
 		KV:               map[string]string{"p": "LD"},
-		Outputs:          []string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"},
+		Outputs:          ToVFSSlice([]string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"}),
 		Platform:         "default-linux-x86_64",
 		HostPlatform:     true,
 		Requirements:     map[string]interface{}{},
@@ -139,9 +139,9 @@ func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
 	ragel6LD := e.Emit(&Node{
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:     map[string]string{},
-		Inputs:  []string{},
+		Inputs:  ToVFSSlice([]string{}),
 		KV:      map[string]string{"p": "LD"},
-		Outputs: []string{"$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6"},
+		Outputs: ToVFSSlice([]string{"$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6"}),
 	})
 
 	// Caller threads the (non-canonical) host LD output. EmitR6 must
@@ -221,9 +221,9 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 	ragel6LD := e.Emit(&Node{
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:     map[string]string{},
-		Inputs:  []string{},
+		Inputs:  ToVFSSlice([]string{}),
 		KV:      map[string]string{"p": "LD"},
-		Outputs: []string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"},
+		Outputs: ToVFSSlice([]string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"}),
 	})
 
 	r6Ref, _ := EmitR6(
@@ -268,9 +268,9 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	ragel6LD := e.Emit(&Node{
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:     map[string]string{},
-		Inputs:  []string{},
+		Inputs:  ToVFSSlice([]string{}),
 		KV:      map[string]string{"p": "LD"},
-		Outputs: []string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"},
+		Outputs: ToVFSSlice([]string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"}),
 	})
 
 	r6Ref, _ := EmitR6(
@@ -316,9 +316,9 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	ragel6LD := e.Emit(&Node{
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:     map[string]string{},
-		Inputs:  []string{},
+		Inputs:  ToVFSSlice([]string{}),
 		KV:      map[string]string{"p": "LD"},
-		Outputs: []string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"},
+		Outputs: ToVFSSlice([]string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"}),
 	})
 
 	closure := []string{
@@ -342,8 +342,8 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	}
 
 	for i, w := range wantInputs {
-		if got.Inputs[i] != w {
-			t.Errorf("R6 inputs[%d] = %q, want %q", i, got.Inputs[i], w)
+		if got.Inputs[i].String() != w {
+			t.Errorf("R6 inputs[%d] = %q, want %q", i, got.Inputs[i].String(), w)
 		}
 	}
 }

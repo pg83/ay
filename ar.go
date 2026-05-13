@@ -270,13 +270,13 @@ func emitARNode(
 			},
 		},
 		Env:    topEnv,
-		Inputs: inputs,
+		Inputs: ToVFSSlice(inputs),
 		KV: map[string]string{
 			"p":        "AR",
 			"pc":       "light-red",
 			"show_out": "yes",
 		},
-		Outputs:      []string{archivePath},
+		Outputs:      ToVFSSlice([]string{archivePath}),
 		Platform:     string(instance.Platform.Target),
 		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{

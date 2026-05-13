@@ -264,8 +264,8 @@ func EmitLD(
 	n := &Node{
 		Cmds:    cmds,
 		Env:     envFull,
-		Inputs:  inputs,
-		Outputs: []string{outputPath},
+		Inputs:  ToVFSSlice(inputs),
+		Outputs: ToVFSSlice([]string{outputPath}),
 		KV: map[string]string{
 			"p":        "LD",
 			"pc":       "light-blue",

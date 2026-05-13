@@ -432,8 +432,8 @@ func EmitPB(
 			},
 		},
 		Env:     env,
-		Inputs:  inputs,
-		Outputs: []string{pbH, pbCC},
+		Inputs:  ToVFSSlice(inputs),
+		Outputs: ToVFSSlice([]string{pbH, pbCC}),
 		KV: map[string]string{
 			"p":  "PB",
 			"pc": "yellow",

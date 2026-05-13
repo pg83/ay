@@ -284,8 +284,8 @@ func EmitEV(
 			},
 		},
 		Env:     env,
-		Inputs:  inputs,
-		Outputs: []string{evCC, evH},
+		Inputs:  ToVFSSlice(inputs),
+		Outputs: ToVFSSlice([]string{evCC, evH}),
 		KV: map[string]string{
 			"p":  "EV",
 			"pc": "yellow",

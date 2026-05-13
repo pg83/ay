@@ -379,8 +379,8 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 			},
 		},
 		Env:     env,
-		Inputs:  allInputs,
-		Outputs: []string{outputPath},
+		Inputs:  ToVFSSlice(allInputs),
+		Outputs: ToVFSSlice([]string{outputPath}),
 		KV: map[string]string{
 			"p":  "CC",
 			"pc": "green",

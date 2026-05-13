@@ -59,9 +59,9 @@ func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 		Cmds:             []Cmd{},
 		Deps:             []string{},
 		Env:              map[string]string{},
-		Inputs:           []string{},
+		Inputs:           ToVFSSlice([]string{}),
 		KV:               map[string]string{},
-		Outputs:          []string{},
+		Outputs:          ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -98,8 +98,8 @@ func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
 	// canonicalNodeBytes' escape settings.
 	n := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"sh", "-c", "echo <a> & echo b"}, Env: map[string]string{}}},
-		Deps: []string{}, Env: map[string]string{}, Inputs: []string{},
-		KV: map[string]string{"p": "CC", "html": "a<b>c"}, Outputs: []string{},
+		Deps: []string{}, Env: map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		KV: map[string]string{"p": "CC", "html": "a<b>c"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: map[string]interface{}{}, Tags: []string{},
 		TargetProperties: map[string]string{},
 	}
@@ -138,8 +138,8 @@ func TestCanonicalNodeBytes_DoesNotEscapeHTML(t *testing.T) {
 	// behaviour with a node whose command contains all three.
 	n := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"sh", "-c", "echo <a> & echo b"}, Env: map[string]string{}}},
-		Deps: []string{}, Env: map[string]string{}, Inputs: []string{},
-		KV: map[string]string{}, Outputs: []string{},
+		Deps: []string{}, Env: map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		KV: map[string]string{}, Outputs: ToVFSSlice([]string{}),
 		Requirements: map[string]interface{}{}, Tags: []string{},
 		TargetProperties: map[string]string{},
 	}

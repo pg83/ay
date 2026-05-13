@@ -174,7 +174,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 
 	// Output path: $(BUILD_ROOT)/some/prog/prog.
 	wantOut := "$(BUILD_ROOT)/some/prog/prog"
-	if len(got.Outputs) != 1 || got.Outputs[0] != wantOut {
+	if len(got.Outputs) != 1 || got.Outputs[0].String() != wantOut {
 		t.Errorf("outputs = %#v, want [%q]", got.Outputs, wantOut)
 	}
 

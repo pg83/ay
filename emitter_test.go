@@ -18,9 +18,9 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 	c := e.Emit(&Node{
 		Cmds:             []Cmd{{CmdArgs: []string{"build", "C"}, Env: map[string]string{}}},
 		Env:              map[string]string{},
-		Inputs:           []string{"c.in"},
+		Inputs:           ToVFSSlice([]string{"c.in"}),
 		KV:               map[string]string{"name": "C"},
-		Outputs:          []string{"c.out"},
+		Outputs:          ToVFSSlice([]string{"c.out"}),
 		Platform:         "linux",
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
@@ -29,9 +29,9 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 	b := e.Emit(&Node{
 		Cmds:             []Cmd{{CmdArgs: []string{"build", "B"}, Env: map[string]string{}}},
 		Env:              map[string]string{},
-		Inputs:           []string{"b.in"},
+		Inputs:           ToVFSSlice([]string{"b.in"}),
 		KV:               map[string]string{"name": "B"},
-		Outputs:          []string{"b.out"},
+		Outputs:          ToVFSSlice([]string{"b.out"}),
 		Platform:         "linux",
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
@@ -41,9 +41,9 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 	a := e.Emit(&Node{
 		Cmds:             []Cmd{{CmdArgs: []string{"build", "A"}, Env: map[string]string{}}},
 		Env:              map[string]string{},
-		Inputs:           []string{"a.in"},
+		Inputs:           ToVFSSlice([]string{"a.in"}),
 		KV:               map[string]string{"name": "A"},
-		Outputs:          []string{"a.out"},
+		Outputs:          ToVFSSlice([]string{"a.out"}),
 		Platform:         "linux",
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
@@ -147,8 +147,8 @@ func TestFinalize_DepsAreSortedAlphabetically(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds:   []Cmd{{CmdArgs: []string{name}, Env: map[string]string{}}},
 			Env:    map[string]string{},
-			Inputs: []string{}, KV: map[string]string{"name": name},
-			Outputs:      []string{},
+			Inputs: ToVFSSlice([]string{}), KV: map[string]string{"name": name},
+			Outputs:      ToVFSSlice([]string{}),
 			Requirements: map[string]interface{}{}, Tags: []string{},
 			TargetProperties: map[string]string{},
 		})
@@ -161,8 +161,8 @@ func TestFinalize_DepsAreSortedAlphabetically(t *testing.T) {
 	// Finalize the published Deps slice must be alphabetical.
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: []string{},
-		KV: map[string]string{"name": "A"}, Outputs: []string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -198,16 +198,16 @@ func TestFinalize_DedupesDuplicateDeps(t *testing.T) {
 	e := NewBufferedEmitter()
 	c := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"C"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: []string{},
-		KV: map[string]string{"name": "C"}, Outputs: []string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		KV: map[string]string{"name": "C"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
 	})
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: []string{},
-		KV: map[string]string{"name": "A"}, Outputs: []string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -238,16 +238,16 @@ func TestFinalize_CycleReturnsError(t *testing.T) {
 	e := NewBufferedEmitter()
 	aNode := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: []string{},
-		KV: map[string]string{"name": "A"}, Outputs: []string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
 	}
 	bNode := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"B"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: []string{},
-		KV: map[string]string{"name": "B"}, Outputs: []string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		KV: map[string]string{"name": "B"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -268,8 +268,8 @@ func TestFinalize_OutOfRangeRefReturnsError(t *testing.T) {
 	e := NewBufferedEmitter()
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: []string{},
-		KV: map[string]string{"name": "A"}, Outputs: []string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -307,8 +307,8 @@ func TestFinalize_ForeignDepsResolvedAndSorted(t *testing.T) {
 	mk := func(name string) NodeRef {
 		return e.Emit(&Node{
 			Cmds: []Cmd{{CmdArgs: []string{name}, Env: map[string]string{}}},
-			Env:  map[string]string{}, Inputs: []string{},
-			KV: map[string]string{"name": name}, Outputs: []string{},
+			Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
+			KV: map[string]string{"name": name}, Outputs: ToVFSSlice([]string{}),
 			Requirements:     map[string]interface{}{},
 			Tags:             []string{},
 			TargetProperties: map[string]string{},
@@ -318,8 +318,8 @@ func TestFinalize_ForeignDepsResolvedAndSorted(t *testing.T) {
 	t2 := mk("T2")
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: []string{},
-		KV: map[string]string{"name": "A"}, Outputs: []string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -359,8 +359,8 @@ func TestFinalize_RejectsPreSetDeps(t *testing.T) {
 	e := NewBufferedEmitter()
 	e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: []string{},
-		KV: map[string]string{"name": "A"}, Outputs: []string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -382,8 +382,8 @@ func TestFinalize_RejectsPreSetForeignDeps(t *testing.T) {
 	e := NewBufferedEmitter()
 	e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: []string{},
-		KV: map[string]string{"name": "A"}, Outputs: []string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -408,8 +408,8 @@ func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
 	mk := func() NodeRef {
 		return e.Emit(&Node{
 			Cmds: []Cmd{{CmdArgs: []string{"identical"}, Env: map[string]string{}}},
-			Env:  map[string]string{}, Inputs: []string{},
-			KV: map[string]string{"name": "L"}, Outputs: []string{},
+			Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
+			KV: map[string]string{"name": "L"}, Outputs: ToVFSSlice([]string{}),
 			Requirements:     map[string]interface{}{},
 			Tags:             []string{},
 			TargetProperties: map[string]string{},
@@ -451,8 +451,8 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 	e := NewBufferedEmitter()
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: []string{},
-		KV: map[string]string{"name": "A"}, Outputs: []string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -488,8 +488,8 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 	e := NewBufferedEmitter()
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: []string{},
-		KV: map[string]string{"name": "A"}, Outputs: []string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -511,8 +511,8 @@ func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 	e := NewBufferedEmitter()
 	r := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"X"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: []string{},
-		KV: map[string]string{"name": "X"}, Outputs: []string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		KV: map[string]string{"name": "X"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: map[string]interface{}{},
 		Tags:         []string{}, TargetProperties: map[string]string{},
 	})
@@ -591,14 +591,14 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 	e1 := NewBufferedEmitter()
 	c1 := e1.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"C", "v1"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: []string{}, KV: map[string]string{},
-		Outputs: []string{}, Requirements: map[string]interface{}{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]string{},
+		Outputs: ToVFSSlice([]string{}), Requirements: map[string]interface{}{},
 		Tags: []string{}, TargetProperties: map[string]string{},
 	})
 	a1 := e1.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: []string{}, KV: map[string]string{},
-		Outputs: []string{}, Requirements: map[string]interface{}{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]string{},
+		Outputs: ToVFSSlice([]string{}), Requirements: map[string]interface{}{},
 		Tags: []string{}, TargetProperties: map[string]string{},
 		DepRefs: []NodeRef{c1},
 	})
@@ -608,14 +608,14 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 	e2 := NewBufferedEmitter()
 	c2 := e2.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"C", "v2"}, Env: map[string]string{}}}, // changed
-		Env:  map[string]string{}, Inputs: []string{}, KV: map[string]string{},
-		Outputs: []string{}, Requirements: map[string]interface{}{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]string{},
+		Outputs: ToVFSSlice([]string{}), Requirements: map[string]interface{}{},
 		Tags: []string{}, TargetProperties: map[string]string{},
 	})
 	a2 := e2.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}}, // unchanged
-		Env:  map[string]string{}, Inputs: []string{}, KV: map[string]string{},
-		Outputs: []string{}, Requirements: map[string]interface{}{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]string{},
+		Outputs: ToVFSSlice([]string{}), Requirements: map[string]interface{}{},
 		Tags: []string{}, TargetProperties: map[string]string{},
 		DepRefs: []NodeRef{c2},
 	})
@@ -656,9 +656,9 @@ func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds:             []Cmd{{CmdArgs: []string{name}, Env: map[string]string{}}},
 			Env:              map[string]string{},
-			Inputs:           []string{},
+			Inputs:           ToVFSSlice([]string{}),
 			KV:               map[string]string{"name": name},
-			Outputs:          []string{},
+			Outputs:          ToVFSSlice([]string{}),
 			Requirements:     map[string]interface{}{},
 			Tags:             []string{},
 			TargetProperties: map[string]string{},
