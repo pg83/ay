@@ -164,7 +164,7 @@ func EmitLD(
 	// per-platform-identity question explicit (rather than the
 	// "am I a host build?" framing of the prior `hostBuild`). The
 	// downstream composers still see the same boolean.
-	targetX8664 := instance.Platform.Target == PlatformDefaultLinuxX8664
+	targetX8664 := instance.Platform.ISA == ISAX8664
 	hostBuild := targetX8664
 
 	binPrefix := binaryDir + "/"

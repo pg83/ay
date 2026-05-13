@@ -344,7 +344,7 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	// instance.Platform.Target (which toolchain to use) and instance.Flags.LibcMusl
 	// (per-MODULE musl subtree membership — NOT instance.Platform.LibcMusl, which
 	// is the platform-wide libc selector).
-	targetX8664 := instance.Platform.Target == PlatformDefaultLinuxX8664
+	targetX8664 := instance.Platform.ISA == ISAX8664
 	switch {
 	case isMusl && targetX8664:
 		cmdArgs = composeMuslHostCC(instance.Platform, outputPath, inputPath, nil, muslOwnExtras, isCxx)

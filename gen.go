@@ -3462,7 +3462,7 @@ func (ctx *genCtx) scannerFor(instance ModuleInstance) *IncludeScanner {
 // (e.g. JOIN_SRCS forcing target-arch search paths during a host walk)
 // call this overload directly with the override platform.
 func (ctx *genCtx) scannerForPlatform(p *Platform) *IncludeScanner {
-	if p.Target == PlatformDefaultLinuxX8664 {
+	if p.ISA == ISAX8664 {
 		return ctx.scannerHost
 	}
 	return ctx.scannerTarget
