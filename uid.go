@@ -1,361 +1,209 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/binary"
+	"hash"
+	"io"
+	"math"
 	"sort"
-	"strconv"
 	"sync"
 )
 
 // uid.go — content-derived UID hashing.
 //
-// D7: UID = base64url(sha1(canonical-node-bytes))[:22]. The 22-character
-// length is verified against the on-disk reference (every uid/self_uid in
-// /home/pg/monorepo/yatool_orig/sg.json is exactly 22 characters of
-// base64url alphabet). stats_uid is a different beast (32-char MD5 hex)
-// and is left empty by PR-02 per the plan; later PRs will fill it.
+// UID = base64url(sha1(canonical-node-bytes))[:22]. The 22-character
+// length is verified against the on-disk reference (every uid/self_uid
+// in /home/pg/monorepo/yatool_orig/sg.json is exactly 22 characters
+// of base64url alphabet).
 //
-// Canonicalization for hashing: emit the Node fields in alphabetical
-// order, compact form (no whitespace), HTML escaping disabled, with
-// UID/SelfUID/StatsUID excluded so the hash is over content, not
-// over identity. Maps emit keys sorted; slice ordering is the
-// caller's responsibility — Finalize sorts Deps and per-key
-// ForeignDeps slices before calling here.
+// The "canonical node bytes" are an internal binary format — NOT JSON,
+// NOT human-readable. The only contract is that the resulting sha1
+// hash is stable per (semantic) node content. Production path:
+// `nodeUID(n)` streams the fields directly into a `sha1.Hash` with
+// zero intermediate buffers; only the 22-byte base64 string is
+// allocated per node.
 //
-// PR-M3-vfs-purge-canonjson: replaces the reflection-based
-// `encoding/json` path. The pre-refactor implementation ran
-// `json.NewEncoder(&buf).Encode(&clone)` per node, which dominated
-// the alloc profile (~9.6M allocations across one M3 gen, ~53% of
-// the run's total, ~10% of CPU on encoding/json + VFS.MarshalJSON).
-// The custom writer below reuses the `appendString` /
-// `appendStringEscapedBody` / `appendVFS` primitives from
-// gjson_write.go and pools its buffer; VFS values are emitted via
-// their inline-prefix form (no `v.String()` concat).
+// Field encoding is purely positional: every Node field is written in
+// the same fixed order (alphabetical, matching node.go's declaration)
+// so no field-name tags are needed. Variable-length items (strings,
+// slices, maps) are length-prefixed with a 4-byte little-endian count
+// so adjacent items cannot bleed into each other regardless of
+// content. UID, SelfUID, and StatsUID are excluded so the hash
+// depends only on content, not identity.
 
 const uidLength = 22
 
-// computeUID returns the 22-character base64url SHA-1 of the input bytes.
-// This is the entire UID derivation: stable, content-only, no salt.
+// computeUID returns the 22-character base64url SHA-1 of the input
+// bytes. Generic helper retained for tests that hand in their own
+// canonical bytes; the production emitter uses nodeUID directly.
 func computeUID(canonicalBytes []byte) string {
 	sum := sha1.Sum(canonicalBytes)
 
 	return base64.RawURLEncoding.EncodeToString(sum[:])[:uidLength]
 }
 
-// canonBufPool reuses buffer backing arrays across canonicalNodeBytes
-// calls. One bytes-slice per goroutine is taken on entry and returned
-// after the canonical form is hashed; the per-node allocation cost
-// becomes amortised across the whole emitter run.
-var canonBufPool = sync.Pool{
-	New: func() any {
-		b := make([]byte, 0, 4096)
-
-		return &b
-	},
-}
-
 // canonicalNodeBytes produces the byte sequence we hash to derive a
-// node's UID. The output excludes UID/SelfUID/StatsUID so the hash
-// depends only on content; HTML escaping is disabled so '<', '>',
-// '&' survive verbatim (they appear in command lines and would
-// otherwise be turned into &lt; etc., causing two callers that
-// produce semantically identical input to disagree on the hash if
-// one of them happens to use a non-default encoder elsewhere).
-//
-// The caller owns the returned slice; the underlying buffer is a
-// pool-borrowed scratch space that has already been copied out of.
+// node's UID. Used by tests; production callers should use nodeUID
+// which skips the buffer round-trip.
 func canonicalNodeBytes(n *Node) []byte {
-	bufP := canonBufPool.Get().(*[]byte)
-	scratch := (*bufP)[:0]
-	scratch = appendNodeCanonical(scratch, n)
-	out := append([]byte(nil), scratch...)
-	*bufP = scratch[:0]
-	canonBufPool.Put(bufP)
+	var buf bytes.Buffer
+	writeNode(&buf, n)
 
-	return out
+	return buf.Bytes()
 }
 
-// appendNodeCanonical emits the compact alphabetical canonical form
-// of a Node (no indentation, no whitespace between tokens) used for
-// content-hashing. Field order matches gjson_write.appendNode (which
-// is alphabetical, per the Node struct's declaration). UID, SelfUID,
-// and StatsUID are excluded so two semantically-equal nodes hash to
-// the same UID regardless of identity-field state.
-func appendNodeCanonical(buf []byte, n *Node) []byte {
-	buf = append(buf, '{')
+// nodeUID derives a Node's content-UID by streaming its fields
+// directly into a pooled sha1.Hash. No buffer alloc per node.
+func nodeUID(n *Node) string {
+	hp := sha1Pool.Get().(hash.Hash)
+	hp.Reset()
+	writeNode(hp, n)
 
-	// cache: *bool, omitempty.
-	if n.Cache != nil {
-		buf = append(buf, `"cache":`...)
-		if *n.Cache {
-			buf = append(buf, 't', 'r', 'u', 'e')
-		} else {
-			buf = append(buf, 'f', 'a', 'l', 's', 'e')
-		}
-		buf = append(buf, ',')
+	var sumBuf [sha1.Size]byte
+	sum := hp.Sum(sumBuf[:0])
+
+	sha1Pool.Put(hp)
+
+	return base64.RawURLEncoding.EncodeToString(sum)[:uidLength]
+}
+
+var sha1Pool = sync.Pool{New: func() any { return sha1.New() }}
+
+// writeNode streams the canonical form of n into w. Both sha1.Hash
+// (production) and *bytes.Buffer (tests) satisfy io.Writer; w.Write
+// errors are not possible for either backend.
+//
+// Field order matches `node.go` (alphabetical: cache, cmds, deps, env,
+// foreign_deps, host_platform, inputs, kv, outputs, platform,
+// requirements, sandboxing, tags, target_properties). self_uid, uid,
+// and stats_uid are excluded by design.
+//
+// `omitempty` fields stream their "absent" form (Cache=nil → 0x00,
+// HostPlatform=false → 0x00, ForeignDeps=nil → count 0). The shape is
+// always present so position remains unambiguous.
+func writeNode(w io.Writer, n *Node) {
+	// cache: *bool. 0=nil, 1=false, 2=true.
+	switch {
+	case n.Cache == nil:
+		writeByte(w, 0)
+	case *n.Cache:
+		writeByte(w, 2)
+	default:
+		writeByte(w, 1)
 	}
 
-	// cmds: []Cmd
-	buf = append(buf, `"cmds":`...)
-	buf = appendCmdSliceCanonical(buf, n.Cmds)
-	buf = append(buf, ',')
+	writeCmdSlice(w, n.Cmds)
+	writeStringSlice(w, n.Deps)
+	writeStringMap(w, n.Env)
+	writeStringSliceMap(w, n.ForeignDeps)
+	writeBool(w, n.HostPlatform)
+	writeVFSSlice(w, n.Inputs)
+	writeStringMap(w, n.KV)
+	writeVFSSlice(w, n.Outputs)
+	writeBytes(w, n.Platform)
+	writeInterfaceMap(w, n.Requirements)
+	writeBool(w, n.Sandboxing)
+	writeStringSlice(w, n.Tags)
+	writeStringMap(w, n.TargetProperties)
+}
 
-	// deps: []string
-	buf = append(buf, `"deps":`...)
-	buf = appendStringSliceCanonical(buf, n.Deps)
-	buf = append(buf, ',')
+// writeBytes writes a 4-byte LE length prefix followed by the raw
+// bytes of s. The length prefix is what makes adjacent variable-
+// length items unambiguously decodable — two distinct concatenations
+// of strings can only collide if their length prefixes already match.
+func writeBytes(w io.Writer, s string) {
+	var lenBuf [4]byte
+	binary.LittleEndian.PutUint32(lenBuf[:], uint32(len(s)))
+	_, _ = w.Write(lenBuf[:])
+	_, _ = w.Write([]byte(s))
+}
 
-	// env: map[string]string
-	buf = append(buf, `"env":`...)
-	buf = appendStringMapCanonical(buf, n.Env)
-	buf = append(buf, ',')
+func writeCount(w io.Writer, n int) {
+	var lenBuf [4]byte
+	binary.LittleEndian.PutUint32(lenBuf[:], uint32(n))
+	_, _ = w.Write(lenBuf[:])
+}
 
-	// foreign_deps: map[string][]string, omitempty
-	if len(n.ForeignDeps) > 0 {
-		buf = append(buf, `"foreign_deps":`...)
-		buf = appendStringSliceMapCanonical(buf, n.ForeignDeps)
-		buf = append(buf, ',')
-	}
+func writeByte(w io.Writer, b byte) {
+	_, _ = w.Write([]byte{b})
+}
 
-	// host_platform: bool, omitempty (only emitted when true)
-	if n.HostPlatform {
-		buf = append(buf, `"host_platform":true,`...)
-	}
-
-	// inputs: []VFS
-	buf = append(buf, `"inputs":`...)
-	buf = appendVFSSliceCanonical(buf, n.Inputs)
-	buf = append(buf, ',')
-
-	// kv: map[string]string
-	buf = append(buf, `"kv":`...)
-	buf = appendStringMapCanonical(buf, n.KV)
-	buf = append(buf, ',')
-
-	// outputs: []VFS
-	buf = append(buf, `"outputs":`...)
-	buf = appendVFSSliceCanonical(buf, n.Outputs)
-	buf = append(buf, ',')
-
-	// platform: string
-	buf = append(buf, `"platform":`...)
-	buf = appendString(buf, n.Platform)
-	buf = append(buf, ',')
-
-	// requirements: map[string]interface{}
-	buf = append(buf, `"requirements":`...)
-	buf = appendInterfaceMapCanonical(buf, n.Requirements)
-	buf = append(buf, ',')
-
-	// sandboxing: bool — always present in REF.
-	if n.Sandboxing {
-		buf = append(buf, `"sandboxing":true,`...)
+func writeBool(w io.Writer, b bool) {
+	if b {
+		writeByte(w, 1)
 	} else {
-		buf = append(buf, `"sandboxing":false,`...)
+		writeByte(w, 0)
 	}
-
-	// self_uid omitted — identity field, would make the hash depend on
-	// itself transitively. uid likewise.
-
-	// tags: []string
-	buf = append(buf, `"tags":`...)
-	buf = appendStringSliceCanonical(buf, n.Tags)
-	buf = append(buf, ',')
-
-	// target_properties: map[string]string
-	buf = append(buf, `"target_properties":`...)
-	buf = appendStringMapCanonical(buf, n.TargetProperties)
-
-	buf = append(buf, '}')
-
-	return buf
 }
 
-// appendCmdSliceCanonical emits []Cmd in compact alphabetical form.
-func appendCmdSliceCanonical(buf []byte, cmds []Cmd) []byte {
-	if len(cmds) == 0 {
-		return append(buf, '[', ']')
+func writeStringSlice(w io.Writer, ss []string) {
+	writeCount(w, len(ss))
+	for _, s := range ss {
+		writeBytes(w, s)
 	}
-
-	buf = append(buf, '[')
-
-	for i, c := range cmds {
-		buf = append(buf, '{')
-
-		// cmd_args
-		buf = append(buf, `"cmd_args":`...)
-		buf = appendStringSliceCanonical(buf, c.CmdArgs)
-		buf = append(buf, ',')
-
-		// cwd (omitempty)
-		if c.Cwd != "" {
-			buf = append(buf, `"cwd":`...)
-			buf = appendString(buf, c.Cwd)
-			buf = append(buf, ',')
-		}
-
-		// env
-		buf = append(buf, `"env":`...)
-		buf = appendStringMapCanonical(buf, c.Env)
-
-		// stdout (omitempty)
-		if c.Stdout != "" {
-			buf = append(buf, ',', '"', 's', 't', 'd', 'o', 'u', 't', '"', ':')
-			buf = appendString(buf, c.Stdout)
-		}
-
-		buf = append(buf, '}')
-
-		if i < len(cmds)-1 {
-			buf = append(buf, ',')
-		}
-	}
-
-	buf = append(buf, ']')
-
-	return buf
 }
 
-// appendStringSliceCanonical emits []string in compact form.
-func appendStringSliceCanonical(buf []byte, ss []string) []byte {
-	if len(ss) == 0 {
-		return append(buf, '[', ']')
+func writeVFSSlice(w io.Writer, vs []VFS) {
+	writeCount(w, len(vs))
+	for _, v := range vs {
+		writeByte(w, byte(v.Root))
+		writeBytes(w, v.Rel)
 	}
-
-	buf = append(buf, '[')
-
-	for i, s := range ss {
-		buf = appendString(buf, s)
-
-		if i < len(ss)-1 {
-			buf = append(buf, ',')
-		}
-	}
-
-	buf = append(buf, ']')
-
-	return buf
 }
 
-// appendVFSSliceCanonical emits []VFS in compact form, using the
-// inline-prefix form (no v.String() concat) per appendVFS.
-func appendVFSSliceCanonical(buf []byte, vs []VFS) []byte {
-	if len(vs) == 0 {
-		return append(buf, '[', ']')
+func writeStringMap(w io.Writer, m map[string]string) {
+	writeCount(w, len(m))
+	for _, k := range canonKeysOf(m) {
+		writeBytes(w, k)
+		writeBytes(w, m[k])
 	}
-
-	buf = append(buf, '[')
-
-	for i, v := range vs {
-		buf = appendVFS(buf, v)
-
-		if i < len(vs)-1 {
-			buf = append(buf, ',')
-		}
-	}
-
-	buf = append(buf, ']')
-
-	return buf
 }
 
-// appendStringMapCanonical emits map[string]string with keys sorted,
-// compact form.
-func appendStringMapCanonical(buf []byte, m map[string]string) []byte {
-	if len(m) == 0 {
-		return append(buf, '{', '}')
+func writeStringSliceMap(w io.Writer, m map[string][]string) {
+	writeCount(w, len(m))
+	for _, k := range canonKeysOf(m) {
+		writeBytes(w, k)
+		writeStringSlice(w, m[k])
 	}
-
-	keys := canonKeysOf(m)
-
-	buf = append(buf, '{')
-
-	for i, k := range keys {
-		buf = appendString(buf, k)
-		buf = append(buf, ':')
-		buf = appendString(buf, m[k])
-
-		if i < len(keys)-1 {
-			buf = append(buf, ',')
-		}
-	}
-
-	buf = append(buf, '}')
-
-	return buf
 }
 
-// appendStringSliceMapCanonical emits map[string][]string with keys
-// sorted, compact form.
-func appendStringSliceMapCanonical(buf []byte, m map[string][]string) []byte {
-	if len(m) == 0 {
-		return append(buf, '{', '}')
-	}
-
-	keys := canonKeysOf(m)
-
-	buf = append(buf, '{')
-
-	for i, k := range keys {
-		buf = appendString(buf, k)
-		buf = append(buf, ':')
-		buf = appendStringSliceCanonical(buf, m[k])
-
-		if i < len(keys)-1 {
-			buf = append(buf, ',')
-		}
-	}
-
-	buf = append(buf, '}')
-
-	return buf
-}
-
-// appendInterfaceMapCanonical emits map[string]interface{} for the
-// Requirements field. Same value-type contract as
-// gjson_write.appendInterfaceMap.
-func appendInterfaceMapCanonical(buf []byte, m map[string]interface{}) []byte {
-	if len(m) == 0 {
-		return append(buf, '{', '}')
-	}
-
-	keys := canonKeysOf(m)
-
-	buf = append(buf, '{')
-
-	for i, k := range keys {
-		buf = appendString(buf, k)
-		buf = append(buf, ':')
-
+func writeInterfaceMap(w io.Writer, m map[string]interface{}) {
+	writeCount(w, len(m))
+	for _, k := range canonKeysOf(m) {
+		writeBytes(w, k)
 		switch v := m[k].(type) {
 		case string:
-			buf = appendString(buf, v)
+			writeByte(w, 's')
+			writeBytes(w, v)
 		case float64:
-			buf = strconv.AppendFloat(buf, v, 'f', -1, 64)
+			writeByte(w, 'f')
+			var fBuf [8]byte
+			binary.LittleEndian.PutUint64(fBuf[:], math.Float64bits(v))
+			_, _ = w.Write(fBuf[:])
 		case bool:
-			if v {
-				buf = append(buf, 't', 'r', 'u', 'e')
-			} else {
-				buf = append(buf, 'f', 'a', 'l', 's', 'e')
-			}
+			writeByte(w, 'b')
+			writeBool(w, v)
 		default:
-			ThrowFmt("appendInterfaceMapCanonical: unsupported value type %T for key %q", v, k)
-		}
-
-		if i < len(keys)-1 {
-			buf = append(buf, ',')
+			ThrowFmt("writeInterfaceMap: unsupported value type %T for key %q", v, k)
 		}
 	}
-
-	buf = append(buf, '}')
-
-	return buf
 }
 
-// canonKeysOf extracts and sorts a map's keys. Generic-typed because
-// the three map shapes we emit (map[string]string, map[string][]string,
-// map[string]interface{}) share the keys-only contract.
+func writeCmdSlice(w io.Writer, cmds []Cmd) {
+	writeCount(w, len(cmds))
+	for _, c := range cmds {
+		writeStringSlice(w, c.CmdArgs)
+		writeBytes(w, c.Cwd)
+		writeStringMap(w, c.Env)
+		writeBytes(w, c.Stdout)
+	}
+}
+
+// canonKeysOf extracts and sorts a map's keys. Shared by every
+// map-encoding helper.
 func canonKeysOf[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
