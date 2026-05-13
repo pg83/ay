@@ -411,12 +411,11 @@ func Finalize(e *BufferedEmitter) *Graph {
 		// Set here once rather than in each rule emitter to avoid scatter.
 		node.Sandboxing = true
 
-		// Hash the (now child-resolved) node. The canonical form has
-		// UID/SelfUID/StatsUID zeroed, ensuring hash-of-content not
+		// Hash the (now child-resolved) node. UID/SelfUID/StatsUID are
+		// excluded from the stream, ensuring hash-of-content not
 		// hash-of-identity. For LD/AR, node.Deps is sorted at this point
 		// (set above) so the hash is order-independent.
-		canon := canonicalNodeBytes(node)
-		u := computeUID(canon)
+		u := nodeUID(node)
 		node.UID = u
 		// TODO(future-PR): SelfUID is currently set to the same value as UID
 		// as a PR-02 placeholder. A future PR must compute a distinct value
