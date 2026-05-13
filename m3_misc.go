@@ -1349,7 +1349,8 @@ func emitArchive(
 	emit Emitter,
 	reg *CodegenRegistry,
 ) {
-	archivePath := "$(B)/" + instance.Path + "/" + a.Name
+	archiveVFS := Build(instance.Path + "/" + a.Name)
+	archivePath := archiveVFS.String()
 
 	// Build cmd_args. Each archived file is rendered with a trailing
 	// colon per upstream `${suf=\:;input:Files}`.
@@ -1527,7 +1528,7 @@ func emitArchive(
 			"p":  "AR",
 			"pc": "light-red",
 		},
-		Outputs:      []VFS{ParseVFSOrSource(archivePath)},
+		Outputs:      []VFS{archiveVFS},
 		Platform:     string(instance.Platform.Target),
 		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
@@ -1554,7 +1555,7 @@ func emitArchive(
 	if reg != nil {
 		reg.Register(&GeneratedFileInfo{
 			ProducerKvP:    "AR",
-			OutputPath:     ParseVFSOrSource(archivePath),
+			OutputPath:     archiveVFS,
 			ProducerRef:    arRef,
 			HasProducerRef: true,
 		})

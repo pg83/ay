@@ -38,11 +38,15 @@ const maxCmdLen = 8000
 // script. Carried on every emitted objcopy node's `inputs` slot and
 // propagated into the enclosing module's `.global.a` member inputs
 // (PR-M3-globalA-narrow-closure).
-const objcopyScriptPath = "$(S)/build/scripts/objcopy.py"
+var (
+	objcopyScriptVFS  = Source("build/scripts/objcopy.py")
+	objcopyScriptPath = objcopyScriptVFS.String()
 
-// objcopyScriptVFS is the VFS-typed form of objcopyScriptPath, used by
-// internal flow that keeps inputs/outputs in VFS shape.
-var objcopyScriptVFS = Source("build/scripts/objcopy.py")
+	rescompressorBinVFS  = Build("tools/rescompressor/rescompressor")
+	rescompilerBinVFS    = Build("tools/rescompiler/rescompiler")
+	rescompressorBinPath = rescompressorBinVFS.String()
+	rescompilerBinPath   = rescompilerBinVFS.String()
+)
 
 // objcopyHash computes the upstream `GetHashForOutput` digest used
 // to form the `objcopy_<hex>.o` output filename. The list is the
@@ -283,11 +287,11 @@ func emitResourceObjcopy(
 
 		cmdArgs := []string{
 			"/ix/realm/pg/bin/python3",
-			"$(S)/build/scripts/objcopy.py",
+			objcopyScriptPath,
 			"--compiler", "/ix/realm/boot/bin/clang++",
 			"--objcopy", "/ix/realm/boot/bin/llvm-objcopy",
-			"--compressor", "$(B)/tools/rescompressor/rescompressor",
-			"--rescompiler", "$(B)/tools/rescompiler/rescompiler",
+			"--compressor", rescompressorBinPath,
+			"--rescompiler", rescompilerBinPath,
 			"--output_obj", outputObj.String(),
 			"--target", objcopyTargetTriple(instance.Platform),
 		}
@@ -299,7 +303,7 @@ func emitResourceObjcopy(
 		if len(cur.paths) > 0 {
 			cmdArgs = append(cmdArgs, "--inputs")
 			for _, p := range cur.paths {
-				cmdArgs = append(cmdArgs, "$(S)/"+instance.Path+"/"+p)
+				cmdArgs = append(cmdArgs, Source(instance.Path+"/"+p).String())
 			}
 			cmdArgs = append(cmdArgs, "--keys")
 			cmdArgs = append(cmdArgs, cur.keys...)
@@ -518,11 +522,11 @@ func emitKvOnlyObjcopyNode(
 
 	cmdArgs := []string{
 		"/ix/realm/pg/bin/python3",
-		"$(S)/build/scripts/objcopy.py",
+		objcopyScriptPath,
 		"--compiler", "/ix/realm/boot/bin/clang++",
 		"--objcopy", "/ix/realm/boot/bin/llvm-objcopy",
-		"--compressor", "$(B)/tools/rescompressor/rescompressor",
-		"--rescompiler", "$(B)/tools/rescompiler/rescompiler",
+		"--compressor", rescompressorBinPath,
+		"--rescompiler", rescompilerBinPath,
 		"--output_obj", outputObj.String(),
 		"--target", objcopyTargetTriple(instance.Platform),
 		"--kvs",
@@ -820,12 +824,11 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 		// raw .py entry — emitted unless PYBUILD_NO_PY is set.
 		if !d.pyBuildNoPY {
 			pyKey := "resfs/file/py/" + keyPrefix + srcRel
-			pyPathHash := srcRel
-			pyPathInput := "$(S)/" + actualUnit + "/" + srcRel
+			pyPathInput := Source(actualUnit + "/" + srcRel).String()
 			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
 			pyKvCmd := "resfs/src/" + pyKey + "=" + actualUnit + "/" + srcRel
 			out = append(out, pySrcEntry{
-				pathHash:  pyPathHash,
+				pathHash:  srcRel,
 				pathInput: pyPathInput,
 				key:       pyKey,
 				kvHash:    pyKvHash,
@@ -837,21 +840,20 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 		// yapyc3 entry — always emitted unless PYBUILD_NO_PYC is set.
 		if !d.pyBuildNoPYC {
 			ypKey := "resfs/file/py/" + keyPrefix + srcRel + ".yapyc3"
-			ypPathHash := srcRel + suffix
-			ypPathInput := "$(B)/" + actualUnit + "/" + srcRel + suffix
+			ypPathInput := Build(actualUnit + "/" + srcRel + suffix).String()
 			// kv hash form retains the ${rootrel;...} placeholder with
 			// the inner-srcRel-with-suffix value. cmd_args form expands
 			// to <actualUnit>/<srcRel><suffix>.
 			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
 			ypKvCmd := "resfs/src/" + ypKey + "=" + actualUnit + "/" + srcRel + suffix
 			out = append(out, pySrcEntry{
-				pathHash:      ypPathHash,
+				pathHash:      srcRel + suffix,
 				pathInput:     ypPathInput,
 				key:           ypKey,
 				kvHash:        ypKvHash,
 				kvCmd:         ypKvCmd,
 				inputDep:      ypPathInput,
-				extraSrcInput: "$(S)/" + actualUnit + "/" + srcRel,
+				extraSrcInput: Source(actualUnit + "/" + srcRel).String(),
 			})
 		}
 	}
