@@ -61,10 +61,11 @@ func compareL3(want, got *Graph, pairs map[string]string, wantOnly, gotOnly []st
 }
 
 // l3Match returns true iff want and got agree on every L3 field:
-// per-cmd CmdArgs (ordered slice equality), per-cmd Env (map
-// equality), and the top-level node Env (map equality). Order matters
-// for both the Cmds slice itself and the CmdArgs within each Cmd —
-// a reordering would change toolchain semantics in the real graph,
+// per-cmd CmdArgs (ordered slice equality), per-cmd Cwd, per-cmd
+// Stdout (PR-redirect target — empty when no STDOUT redirect), per-cmd
+// Env (map equality), and the top-level node Env (map equality). Order
+// matters for both the Cmds slice itself and the CmdArgs within each
+// Cmd — a reordering would change toolchain semantics in the real graph,
 // so a "permutation = match" relaxation would be wrong.
 func l3Match(want, got *Node) bool {
 	if len(want.Cmds) != len(got.Cmds) {
@@ -77,6 +78,10 @@ func l3Match(want, got *Node) bool {
 		}
 
 		if want.Cmds[i].Cwd != got.Cmds[i].Cwd {
+			return false
+		}
+
+		if want.Cmds[i].Stdout != got.Cmds[i].Stdout {
 			return false
 		}
 
