@@ -198,6 +198,7 @@ func TestEmitLD_ToolsArchiver_ByteExact(t *testing.T) {
 		peerLDRefs, archiverPeerLibPaths,
 		pluginRefs, archiverPluginPaths,
 		globalRefs, archiverGlobalPaths,
+		nil, nil, // PR-M3-py3cc-objcopy-shape: archiver has no SRCS_GLOBAL objcopy
 		refMemberInputs,
 		true,  // PR-32 D10: archiver pin runs MUSL=yes (M2 default)
 		nil,   // PR-38: moduleCFlags — nil for target PROGRAM (archiver has no own CFLAGS)
@@ -339,6 +340,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		nil, nil,
 		nil, nil,
 		nil, nil,
+		nil, nil, // PR-M3-py3cc-objcopy-shape: objcopy slot
 		nil,
 		true,  // PR-32 D10: synthetic test pin runs MUSL=yes
 		nil,   // PR-38: moduleCFlags nil for synthetic target test
@@ -430,6 +432,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		nil, nil,
 		nil, nil,
 		nil, nil,
+		nil, nil, // PR-M3-py3cc-objcopy-shape: objcopy slot
 		nil,
 		true,  // PR-32 D10: host pin runs MUSL=yes (M2 default)
 		nil,   // PR-38: moduleCFlags nil for synthetic host test
@@ -474,7 +477,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 			instance := targetInstance("test/prog")
 
 			exc := Try(func() {
-				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, nil, true, nil, nil, false, e)
+				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, nil, nil, nil, true, nil, nil, false, e)
 			})
 
 			if exc == nil {

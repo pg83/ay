@@ -206,15 +206,18 @@ func emitResourceObjcopy(
 	addGlobal := func(p string) { globalMemberInputs = append(globalMemberInputs, p) }
 
 	// kv_only siblings — each fires only when its trigger is present
-	// (no-op return when not). Emission order does NOT affect L4 byte-
-	// exactness (the canonicaliser re-sorts the graph by UID).
-	if r, o := emitPyNamespaceObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
+	// (no-op return when not). PR-M3-py3cc-objcopy-shape: PY_MAIN fires
+	// BEFORE the py/namespace resource (upstream pybuild.py:395-398
+	// invokes py_main first; namespace resource is emitted later at
+	// pybuild.py:587-594). Order affects the LD cmd[2] SRCS_GLOBAL slot
+	// emission sequence and therefore L3 cmd-equality.
+	if r, o := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
 		refs = append(refs, r)
 		outputs = append(outputs, o)
 		addGlobal(objcopyScriptPath)
 	}
 
-	if r, o := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
+	if r, o := emitPyNamespaceObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
 		refs = append(refs, r)
 		outputs = append(outputs, o)
 		addGlobal(objcopyScriptPath)

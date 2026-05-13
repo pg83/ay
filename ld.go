@@ -47,6 +47,7 @@ package main
 
 import (
 	"sort"
+	"strings"
 )
 
 // EmitLD emits the 4-cmd LD node for a PROGRAM module per D22.
@@ -100,6 +101,8 @@ func EmitLD(
 	pluginPaths []string,
 	globalRefs []NodeRef,
 	globalPaths []string,
+	objcopyRefs []NodeRef,
+	objcopyPaths []string,
 	memberInputs []string,
 	muslOn bool,
 	moduleCFlags []string,
@@ -121,6 +124,10 @@ func EmitLD(
 
 	if len(globalRefs) != len(globalPaths) {
 		ThrowFmt("EmitLD: globalRefs/globalPaths length mismatch (%d vs %d)", len(globalRefs), len(globalPaths))
+	}
+
+	if len(objcopyRefs) != len(objcopyPaths) {
+		ThrowFmt("EmitLD: objcopyRefs/objcopyPaths length mismatch (%d vs %d)", len(objcopyRefs), len(objcopyPaths))
 	}
 
 	// PR-25 lifts PR-24's host-PIC guard so the cross-platform
@@ -169,7 +176,7 @@ func EmitLD(
 
 	cmd0 := composeLDCmdVcsInfo(vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
-	cmd2 := composeLDCmdLinkExe(outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, hostBuild)
+	cmd2 := composeLDCmdLinkExe(outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths, hostBuild)
 	cmd3 := composeLDCmdLinkOrCopy(binaryDir)
 
 	// vcs_info.py and fs_tools.py only carry ARCADIA_ROOT_DISTBUILD;
@@ -191,7 +198,7 @@ func EmitLD(
 		{CmdArgs: cmd3, Env: envVcsOnly},
 	}
 
-	inputs := composeLDInputs(instance.Path, ccPaths, peerLibPaths, pluginPaths, globalPaths)
+	inputs := composeLDInputs(instance.Path, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths)
 
 	// PR-31 D11 + PR-35b: append the per-CC member inputs (source +
 	// headers) after the script bundle, deduplicated against the
@@ -240,11 +247,12 @@ func EmitLD(
 	// DepRefs capture every node whose UID flows into the LD's
 	// content hash: own .cpp.o files, plugin inputs, global
 	// archives, and peer LIBRARY archives.
-	depRefs := make([]NodeRef, 0, len(ccRefs)+len(pluginRefs)+len(globalRefs)+len(peerLDRefs))
+	depRefs := make([]NodeRef, 0, len(ccRefs)+len(pluginRefs)+len(globalRefs)+len(peerLDRefs)+len(objcopyRefs))
 	depRefs = append(depRefs, ccRefs...)
 	depRefs = append(depRefs, pluginRefs...)
 	depRefs = append(depRefs, globalRefs...)
 	depRefs = append(depRefs, peerLDRefs...)
+	depRefs = append(depRefs, objcopyRefs...)
 
 	n := &Node{
 		Cmds:    cmds,
@@ -555,10 +563,10 @@ const ldVcsMuslSelfDefine = "-D_musl_=1"
 // PR-38: `hostBuild` selects the host toolchain triple (x86_64, no
 // -march) and `ldHostStaticTrailingFlags` in place of the target's
 // `ldStaticMuslTrailingFlags` (which carries -lrt/-ldl absent on host).
-func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths, peerLibPaths, pluginPaths, globalPaths []string, hostBuild bool) []string {
+func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths []string, hostBuild bool) []string {
 	// Capacity hint matches the reference graph's structure plus the
 	// caller-supplied slices.
-	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 12 + 1 + len(ccPaths) + len(peerLibPaths) + len(globalPaths)
+	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 12 + 1 + len(ccPaths) + len(peerLibPaths) + len(globalPaths) + len(objcopyPaths)
 
 	if len(pluginPaths) > 0 {
 		argCap += 2 + len(pluginPaths)
@@ -591,8 +599,17 @@ func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths, peerLibPaths, plu
 	cmdArgs = append(cmdArgs,
 		"--ya-end-command-file",
 		"-Wl,--no-whole-archive",
-		vcsOPath,
 	)
+	// PR-M3-py3cc-objcopy-shape: SRCS_GLOBAL .o slot goes BEFORE
+	// $VCS_C_OBJ (upstream ld.conf:229-230 / 266-267 / 294-295). Paths
+	// emit bare (BUILD_ROOT-relative) — upstream uses
+	// `${rootrel;ext=.o:SRCS_GLOBAL}` which strips the $(BUILD_ROOT)/
+	// prefix. The `inputs` slot retains the prefix via composeLDInputs.
+	for _, p := range objcopyPaths {
+		cmdArgs = append(cmdArgs, strings.TrimPrefix(p, "$(BUILD_ROOT)/"))
+	}
+
+	cmdArgs = append(cmdArgs, vcsOPath)
 	cmdArgs = append(cmdArgs, ccPaths...)
 	cmdArgs = append(cmdArgs, "-o", outputPath)
 
@@ -681,8 +698,8 @@ func composeLDCmdLinkOrCopy(modulePath string) []string {
 // The reference verification (tools/archiver) shows 35 entries in the
 // BUILD_ROOT block: 32 peer .a + 1 plugin + 1 global .global.a + 1
 // own main.cpp.o, all interleaved in alphabetical order.
-func composeLDInputs(modulePath string, ccPaths, peerLibPaths, pluginPaths, globalPaths []string) []string {
-	buildRootBlock := make([]string, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(ccPaths))
+func composeLDInputs(modulePath string, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths []string) []string {
+	buildRootBlock := make([]string, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(ccPaths)+len(objcopyPaths))
 
 	for _, p := range peerLibPaths {
 		buildRootBlock = append(buildRootBlock, "$(BUILD_ROOT)/"+p)
@@ -695,6 +712,10 @@ func composeLDInputs(modulePath string, ccPaths, peerLibPaths, pluginPaths, glob
 	}
 
 	buildRootBlock = append(buildRootBlock, ccPaths...)
+	// PR-M3-py3cc-objcopy-shape: objcopy `.o` paths arrive as
+	// $(BUILD_ROOT)/...-rooted; they belong in the BUILD_ROOT block of
+	// the LD's `inputs` slot just like own .cpp.o and peer .a entries.
+	buildRootBlock = append(buildRootBlock, objcopyPaths...)
 	sort.Strings(buildRootBlock)
 
 	out := make([]string, 0, len(buildRootBlock)+len(ldScriptInputs))
