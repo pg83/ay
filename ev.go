@@ -55,7 +55,6 @@ const (
 	// tools/event2cpp so the LD node's module_dir matches the reference.
 	evEvent2cppModule     = "tools/event2cpp/bin"
 	evEventlogIncludePath = "$(S)/library/cpp/eventlog"
-	evSourceBase          = "$(S)/"
 )
 
 // eventRuntimeHeaders is the common subset of SOURCE_ROOT headers present in
@@ -63,76 +62,76 @@ const (
 // the intersection across all 2 .ev.pb.cc consumers in sg2.json).
 // These are registered as EmitsIncludes on the .ev.pb.h output so the scanner
 // closure propagates them into all CC nodes that consume .ev.pb.h.
-// Sorted lexicographically. VFS-rooted $(S)/... paths.
-var eventRuntimeHeaders = []string{
-	evSourceBase + "library/cpp/eventlog/event_field_output.h",
-	evSourceBase + "library/cpp/eventlog/event_field_printer.h",
-	evSourceBase + "library/cpp/eventlog/events_extension.h",
-	evSourceBase + "util/charset/unicode_table.h",
-	evSourceBase + "util/charset/unidata.h",
-	evSourceBase + "util/digest/numeric.h",
-	evSourceBase + "util/generic/array_size.h",
-	evSourceBase + "util/generic/bitops.h",
-	evSourceBase + "util/generic/buffer.h",
-	evSourceBase + "util/generic/cast.h",
-	evSourceBase + "util/generic/deque.h",
-	evSourceBase + "util/generic/explicit_type.h",
-	evSourceBase + "util/generic/flags.h",
-	evSourceBase + "util/generic/fwd.h",
-	evSourceBase + "util/generic/hide_ptr.h",
-	evSourceBase + "util/generic/intrlist.h",
-	evSourceBase + "util/generic/iterator.h",
-	evSourceBase + "util/generic/map.h",
-	evSourceBase + "util/generic/mapfindptr.h",
-	evSourceBase + "util/generic/mem_copy.h",
-	evSourceBase + "util/generic/noncopyable.h",
-	evSourceBase + "util/generic/ptr.h",
-	evSourceBase + "util/generic/refcount.h",
-	evSourceBase + "util/generic/reserve.h",
-	evSourceBase + "util/generic/singleton.h",
-	evSourceBase + "util/generic/store_policy.h",
-	evSourceBase + "util/generic/strbase.h",
-	evSourceBase + "util/generic/strbuf.h",
-	evSourceBase + "util/generic/string.h",
-	evSourceBase + "util/generic/string_hash.h",
-	evSourceBase + "util/generic/typelist.h",
-	evSourceBase + "util/generic/typetraits.h",
-	evSourceBase + "util/generic/utility.h",
-	evSourceBase + "util/generic/va_args.h",
-	evSourceBase + "util/generic/yexception.h",
-	evSourceBase + "util/generic/ylimits.h",
-	evSourceBase + "util/memory/alloc.h",
-	evSourceBase + "util/memory/tempbuf.h",
-	evSourceBase + "util/str_stl.h",
-	evSourceBase + "util/stream/fwd.h",
-	evSourceBase + "util/stream/input.h",
-	evSourceBase + "util/stream/labeled.h",
-	evSourceBase + "util/stream/output.h",
-	evSourceBase + "util/stream/str.h",
-	evSourceBase + "util/stream/tempbuf.h",
-	evSourceBase + "util/stream/zerocopy.h",
-	evSourceBase + "util/stream/zerocopy_output.h",
-	evSourceBase + "util/string/hex.h",
-	evSourceBase + "util/string/subst.h",
-	evSourceBase + "util/system/align.h",
-	evSourceBase + "util/system/atexit.h",
-	evSourceBase + "util/system/backtrace.h",
-	evSourceBase + "util/system/compat.h",
-	evSourceBase + "util/system/compiler.h",
-	evSourceBase + "util/system/defaults.h",
-	evSourceBase + "util/system/error.h",
-	evSourceBase + "util/system/guard.h",
-	evSourceBase + "util/system/mutex.h",
-	evSourceBase + "util/system/platform.h",
-	evSourceBase + "util/system/src_location.h",
-	evSourceBase + "util/system/src_root.h",
-	evSourceBase + "util/system/thread.i",
-	evSourceBase + "util/system/type_name.h",
-	evSourceBase + "util/system/types.h",
-	evSourceBase + "util/system/unaligned_mem.h",
-	evSourceBase + "util/system/win_undef.h",
-	evSourceBase + "util/system/winint.h",
-	evSourceBase + "util/system/yassert.h",
+// Sorted lexicographically.
+var eventRuntimeHeaders = []VFS{
+	Source("library/cpp/eventlog/event_field_output.h"),
+	Source("library/cpp/eventlog/event_field_printer.h"),
+	Source("library/cpp/eventlog/events_extension.h"),
+	Source("util/charset/unicode_table.h"),
+	Source("util/charset/unidata.h"),
+	Source("util/digest/numeric.h"),
+	Source("util/generic/array_size.h"),
+	Source("util/generic/bitops.h"),
+	Source("util/generic/buffer.h"),
+	Source("util/generic/cast.h"),
+	Source("util/generic/deque.h"),
+	Source("util/generic/explicit_type.h"),
+	Source("util/generic/flags.h"),
+	Source("util/generic/fwd.h"),
+	Source("util/generic/hide_ptr.h"),
+	Source("util/generic/intrlist.h"),
+	Source("util/generic/iterator.h"),
+	Source("util/generic/map.h"),
+	Source("util/generic/mapfindptr.h"),
+	Source("util/generic/mem_copy.h"),
+	Source("util/generic/noncopyable.h"),
+	Source("util/generic/ptr.h"),
+	Source("util/generic/refcount.h"),
+	Source("util/generic/reserve.h"),
+	Source("util/generic/singleton.h"),
+	Source("util/generic/store_policy.h"),
+	Source("util/generic/strbase.h"),
+	Source("util/generic/strbuf.h"),
+	Source("util/generic/string.h"),
+	Source("util/generic/string_hash.h"),
+	Source("util/generic/typelist.h"),
+	Source("util/generic/typetraits.h"),
+	Source("util/generic/utility.h"),
+	Source("util/generic/va_args.h"),
+	Source("util/generic/yexception.h"),
+	Source("util/generic/ylimits.h"),
+	Source("util/memory/alloc.h"),
+	Source("util/memory/tempbuf.h"),
+	Source("util/str_stl.h"),
+	Source("util/stream/fwd.h"),
+	Source("util/stream/input.h"),
+	Source("util/stream/labeled.h"),
+	Source("util/stream/output.h"),
+	Source("util/stream/str.h"),
+	Source("util/stream/tempbuf.h"),
+	Source("util/stream/zerocopy.h"),
+	Source("util/stream/zerocopy_output.h"),
+	Source("util/string/hex.h"),
+	Source("util/string/subst.h"),
+	Source("util/system/align.h"),
+	Source("util/system/atexit.h"),
+	Source("util/system/backtrace.h"),
+	Source("util/system/compat.h"),
+	Source("util/system/compiler.h"),
+	Source("util/system/defaults.h"),
+	Source("util/system/error.h"),
+	Source("util/system/guard.h"),
+	Source("util/system/mutex.h"),
+	Source("util/system/platform.h"),
+	Source("util/system/src_location.h"),
+	Source("util/system/src_root.h"),
+	Source("util/system/thread.i"),
+	Source("util/system/type_name.h"),
+	Source("util/system/types.h"),
+	Source("util/system/unaligned_mem.h"),
+	Source("util/system/win_undef.h"),
+	Source("util/system/winint.h"),
+	Source("util/system/yassert.h"),
 }
 
 // evExtraProtobufHeaders is the .ev.pb.h-specific subset of protobuf headers
@@ -140,19 +139,19 @@ var eventRuntimeHeaders = []string{
 // intersecting the inputs of every .ev.pb.h CC consumer in sg2.json). These
 // stem from event2cpp's generated reflection code and the protoc plugin
 // scaffolding used by event2cpp. Sorted lexicographically.
-var evExtraProtobufHeaders = []string{
-	pbRuntimeBase + "google/protobuf/io/printer.h",
-	pbRuntimeBase + "google/protobuf/io/zero_copy_sink.h",
-	pbRuntimeBase + "google/protobuf/stubs/hash.h",
-	pbRuntimeBase + "google/protobuf/stubs/stringpiece.h",
-	pbRuntimeBase + "google/protobuf/stubs/strutil.h",
+var evExtraProtobufHeaders = []VFS{
+	Source(pbRuntimeBase + "google/protobuf/io/printer.h"),
+	Source(pbRuntimeBase + "google/protobuf/io/zero_copy_sink.h"),
+	Source(pbRuntimeBase + "google/protobuf/stubs/hash.h"),
+	Source(pbRuntimeBase + "google/protobuf/stubs/stringpiece.h"),
+	Source(pbRuntimeBase + "google/protobuf/stubs/strutil.h"),
 }
 
 // evAbseilCleanupHeaders is the abseil RAII-cleanup pair propagated through
 // every .ev.pb.h to its CC consumers (verified in sg2.json).
-var evAbseilCleanupHeaders = []string{
-	evSourceBase + "contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/cleanup.h",
-	evSourceBase + "contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h",
+var evAbseilCleanupHeaders = []VFS{
+	Source("contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/cleanup.h"),
+	Source("contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
 }
 
 // evWitnessExtras returns the .ev.pb.h-specific witness inputs propagated
@@ -167,14 +166,14 @@ var evAbseilCleanupHeaders = []string{
 //   - evAbseilCleanupHeaders (abseil cleanup pair).
 //
 // See docs/drafts/20260512-0200-residue-pre-100pct.md §2 lever #1.
-func evWitnessExtras(sourceRoot, evRelPath, evPbCC string) []string {
+func evWitnessExtras(sourceRoot, evRelPath string, evPbCC VFS) []VFS {
 	_ = sourceRoot // every .ev imports descriptor.proto transitively; no source-scan needed.
 
-	out := make([]string, 0,
+	out := make([]VFS, 0,
 		3+len(pbDescriptorImporterHeaders)+len(evExtraProtobufHeaders)+len(evAbseilCleanupHeaders))
-	out = append(out, pbWrapperPath)
-	out = append(out, pbDescriptorProto)
-	out = append(out, "$(S)/"+evRelPath)
+	out = append(out, ParseVFSOrSource(pbWrapperPath))
+	out = append(out, ParseVFSOrSource(pbDescriptorProto))
+	out = append(out, Source(evRelPath))
 	out = append(out, evPbCC)
 	out = append(out, pbDescriptorImporterHeaders...)
 	out = append(out, evExtraProtobufHeaders...)

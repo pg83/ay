@@ -1695,7 +1695,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		reg.Register(&GeneratedFileInfo{
 			ProducerKvP:   "CF",
 			OutputPath:    ParseVFSOrSource(cfOut),
-			EmitsIncludes: VFSesFromStrings(cfIncludeDirectives(diskPath)),
+			EmitsIncludes: cfIncludeDirectives(diskPath),
 		})
 	}
 }
@@ -1750,21 +1750,21 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
 				OutputPath:    Build(instance.Path + "/" + f),
-				EmitsIncludes: VFSesFromStrings(prEmitsIncludes(instance, f, stmt, toolInducedDeps)),
+				EmitsIncludes: prEmitsIncludes(instance, f, stmt, toolInducedDeps),
 			})
 		}
 		for _, f := range stmt.OUTNoAutoFiles {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
 				OutputPath:    Build(instance.Path + "/" + f),
-				EmitsIncludes: VFSesFromStrings(prEmitsIncludes(instance, f, stmt, toolInducedDeps)),
+				EmitsIncludes: prEmitsIncludes(instance, f, stmt, toolInducedDeps),
 			})
 		}
 		if stmt.StdoutFile != "" {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
 				OutputPath:    Build(instance.Path + "/" + stmt.StdoutFile),
-				EmitsIncludes: VFSesFromStrings(prEmitsIncludes(instance, stmt.StdoutFile, stmt, toolInducedDeps)),
+				EmitsIncludes: prEmitsIncludes(instance, stmt.StdoutFile, stmt, toolInducedDeps),
 			})
 		}
 	}
@@ -1872,27 +1872,26 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 // module-level INDUCED_DEPS(...) header list (repo-relative). Append
 // those to the seed-include set so the include scanner reaches the
 // transitive closure of headers the tool injects into its outputs.
-func prEmitsIncludes(instance ModuleInstance, outFile string, stmt *RunProgramStmt, toolInducedDeps []string) []string {
+func prEmitsIncludes(instance ModuleInstance, outFile string, stmt *RunProgramStmt, toolInducedDeps []string) []VFS {
 	if !isCCSourceExt(outFile) {
 		return nil
 	}
 
-	includes := make([]string, 0, len(stmt.INFiles)+len(stmt.OutputIncludes)+len(toolInducedDeps))
+	includes := make([]VFS, 0, len(stmt.INFiles)+len(stmt.OutputIncludes)+len(toolInducedDeps))
 
 	// IN files are module-relative; rebase to SOURCE_ROOT.
 	for _, f := range stmt.INFiles {
-		includes = append(includes, "$(S)/"+instance.Path+"/"+f)
+		includes = append(includes, Source(instance.Path+"/"+f))
 	}
 
-	// OUTPUT_INCLUDES entries are repo-relative (e.g.
-	// `devtools/ymake/symbols/file_store.h`); rebase to SOURCE_ROOT.
+	// OUTPUT_INCLUDES entries are repo-relative.
 	for _, f := range stmt.OutputIncludes {
-		includes = append(includes, "$(S)/"+f)
+		includes = append(includes, Source(f))
 	}
 
-	// Tool-declared INDUCED_DEPS (repo-relative); rebase to SOURCE_ROOT.
+	// Tool-declared INDUCED_DEPS (repo-relative).
 	for _, f := range toolInducedDeps {
-		includes = append(includes, "$(S)/"+f)
+		includes = append(includes, Source(f))
 	}
 
 	return includes

@@ -54,17 +54,19 @@ const (
 	pbProtocModule        = "contrib/tools/protoc"
 	pbCppStyleguideModule = "contrib/tools/protoc/plugins/cpp_styleguide"
 
-	// pbRuntimeBase is the $(S)-rooted prefix for all protobuf
-	// runtime headers (under contrib/libs/protobuf/src/).
-	pbRuntimeBase = "$(S)/contrib/libs/protobuf/src/"
+	// pbRuntimeBase is the SOURCE_ROOT-relative prefix for all protobuf
+	// runtime headers (under contrib/libs/protobuf/src/). Combined with
+	// Source() at use-site to produce the VFS.
+	pbRuntimeBase = "contrib/libs/protobuf/src/"
 
-	// abslTstringBase is the $(S)-rooted prefix for abseil-cpp-tstring
-	// headers. The protobuf runtime transitively reaches a large
-	// abseil-cpp-tstring closure via `port_def.inc → y_absl/strings/string_view.h
-	// → ...`; consumer PROTO_LIBRARYs do not peer abseil-cpp-tstring themselves
-	// (it is an internal protobuf-runtime dependency), so the scanner cannot
-	// resolve `y_absl/...` includes without pre-resolved EmitsIncludes.
-	abslTstringBase = "$(S)/contrib/restricted/abseil-cpp-tstring/"
+	// abslTstringBase is the SOURCE_ROOT-relative prefix for
+	// abseil-cpp-tstring headers. The protobuf runtime transitively
+	// reaches a large abseil-cpp-tstring closure via `port_def.inc →
+	// y_absl/strings/string_view.h → ...`; consumer PROTO_LIBRARYs do
+	// not peer abseil-cpp-tstring themselves (it is an internal
+	// protobuf-runtime dependency), so the scanner cannot resolve
+	// `y_absl/...` includes without pre-resolved EmitsIncludes.
+	abslTstringBase = "contrib/restricted/abseil-cpp-tstring/"
 )
 
 // protobufRuntimeHeaders is the set of headers that every protoc-generated
@@ -72,20 +74,20 @@ const (
 // timestamp.pb.h, etc.). These are registered as EmitsIncludes on the .pb.h
 // output so the scanner closure propagates them into all CC nodes that
 // include the .pb.h. Scanner recursion then finds their transitive includes.
-// Sorted lexicographically. VFS-rooted $(S)/... paths.
-var protobufRuntimeHeaders = []string{
-	pbRuntimeBase + "google/protobuf/arena.h",
-	pbRuntimeBase + "google/protobuf/arenastring.h",
-	pbRuntimeBase + "google/protobuf/extension_set.h",
-	pbRuntimeBase + "google/protobuf/generated_message_reflection.h",
-	pbRuntimeBase + "google/protobuf/generated_message_util.h",
-	pbRuntimeBase + "google/protobuf/io/coded_stream.h",
-	pbRuntimeBase + "google/protobuf/message.h",
-	pbRuntimeBase + "google/protobuf/metadata_lite.h",
-	pbRuntimeBase + "google/protobuf/port_def.inc",
-	pbRuntimeBase + "google/protobuf/port_undef.inc",
-	pbRuntimeBase + "google/protobuf/repeated_field.h",
-	pbRuntimeBase + "google/protobuf/unknown_field_set.h",
+// Sorted lexicographically.
+var protobufRuntimeHeaders = []VFS{
+	Source(pbRuntimeBase + "google/protobuf/arena.h"),
+	Source(pbRuntimeBase + "google/protobuf/arenastring.h"),
+	Source(pbRuntimeBase + "google/protobuf/extension_set.h"),
+	Source(pbRuntimeBase + "google/protobuf/generated_message_reflection.h"),
+	Source(pbRuntimeBase + "google/protobuf/generated_message_util.h"),
+	Source(pbRuntimeBase + "google/protobuf/io/coded_stream.h"),
+	Source(pbRuntimeBase + "google/protobuf/message.h"),
+	Source(pbRuntimeBase + "google/protobuf/metadata_lite.h"),
+	Source(pbRuntimeBase + "google/protobuf/port_def.inc"),
+	Source(pbRuntimeBase + "google/protobuf/port_undef.inc"),
+	Source(pbRuntimeBase + "google/protobuf/repeated_field.h"),
+	Source(pbRuntimeBase + "google/protobuf/unknown_field_set.h"),
 }
 
 // pbDescriptorImporterHeaders are the protobuf runtime headers that appear in
@@ -96,14 +98,14 @@ var protobufRuntimeHeaders = []string{
 // descriptor.proto-importing .pb.h's CC consumer in sg2.json — see
 // docs/drafts/20260512-0200-residue-pre-100pct.md §2 lever #1).
 // Sorted lexicographically.
-var pbDescriptorImporterHeaders = []string{
-	pbRuntimeBase + "google/protobuf/generated_message_bases.h",
-	pbRuntimeBase + "google/protobuf/map_entry.h",
-	pbRuntimeBase + "google/protobuf/map_entry_lite.h",
-	pbRuntimeBase + "google/protobuf/map_field.h",
-	pbRuntimeBase + "google/protobuf/map_field_inl.h",
-	pbRuntimeBase + "google/protobuf/map_field_lite.h",
-	pbRuntimeBase + "google/protobuf/reflection_ops.h",
+var pbDescriptorImporterHeaders = []VFS{
+	Source(pbRuntimeBase + "google/protobuf/generated_message_bases.h"),
+	Source(pbRuntimeBase + "google/protobuf/map_entry.h"),
+	Source(pbRuntimeBase + "google/protobuf/map_entry_lite.h"),
+	Source(pbRuntimeBase + "google/protobuf/map_field.h"),
+	Source(pbRuntimeBase + "google/protobuf/map_field_inl.h"),
+	Source(pbRuntimeBase + "google/protobuf/map_field_lite.h"),
+	Source(pbRuntimeBase + "google/protobuf/reflection_ops.h"),
 }
 
 // pbCcDeepRuntimeHeaders is the deep protobuf+abseil transitive header set that
@@ -131,199 +133,199 @@ var pbDescriptorImporterHeaders = []string{
 //     SOURCE_ROOT paths, so libcxx <vector>/<string>/... discovery is
 //     automatic once the abseil headers are walkable).
 //
-// Sorted lexicographically. VFS-rooted $(S)/... paths.
-var pbCcDeepRuntimeHeaders = []string{
+// Sorted lexicographically.
+var pbCcDeepRuntimeHeaders = []VFS{
 	// Group 1: deep protobuf transitive set.
-	pbRuntimeBase + "google/protobuf/any.h",
-	pbRuntimeBase + "google/protobuf/arena_align.h",
-	pbRuntimeBase + "google/protobuf/arena_allocation_policy.h",
-	pbRuntimeBase + "google/protobuf/arena_cleanup.h",
-	pbRuntimeBase + "google/protobuf/arena_config.h",
-	pbRuntimeBase + "google/protobuf/arenaz_sampler.h",
-	pbRuntimeBase + "google/protobuf/descriptor.h",
-	pbRuntimeBase + "google/protobuf/endian.h",
-	pbRuntimeBase + "google/protobuf/explicitly_constructed.h",
-	pbRuntimeBase + "google/protobuf/generated_enum_reflection.h",
-	pbRuntimeBase + "google/protobuf/generated_enum_util.h",
-	pbRuntimeBase + "google/protobuf/generated_message_bases.h",
-	pbRuntimeBase + "google/protobuf/generated_message_tctable_decl.h",
-	pbRuntimeBase + "google/protobuf/has_bits.h",
-	pbRuntimeBase + "google/protobuf/implicit_weak_message.h",
-	pbRuntimeBase + "google/protobuf/inlined_string_field.h",
-	pbRuntimeBase + "google/protobuf/io/zero_copy_stream.h",
-	pbRuntimeBase + "google/protobuf/io/zero_copy_stream_impl.h",
-	pbRuntimeBase + "google/protobuf/io/zero_copy_stream_impl_lite.h",
-	pbRuntimeBase + "google/protobuf/json_util.h",
-	pbRuntimeBase + "google/protobuf/map.h",
-	pbRuntimeBase + "google/protobuf/map_entry.h",
-	pbRuntimeBase + "google/protobuf/map_entry_lite.h",
-	pbRuntimeBase + "google/protobuf/map_field.h",
-	pbRuntimeBase + "google/protobuf/map_field_inl.h",
-	pbRuntimeBase + "google/protobuf/map_field_lite.h",
-	pbRuntimeBase + "google/protobuf/map_type_handler.h",
-	pbRuntimeBase + "google/protobuf/message_lite.h",
-	pbRuntimeBase + "google/protobuf/messagext.h",
-	pbRuntimeBase + "google/protobuf/parse_context.h",
-	pbRuntimeBase + "google/protobuf/port.h",
-	pbRuntimeBase + "google/protobuf/reflection_ops.h",
-	pbRuntimeBase + "google/protobuf/repeated_ptr_field.h",
-	pbRuntimeBase + "google/protobuf/serial_arena.h",
-	pbRuntimeBase + "google/protobuf/string_block.h",
-	pbRuntimeBase + "google/protobuf/stubs/callback.h",
-	pbRuntimeBase + "google/protobuf/stubs/common.h",
-	pbRuntimeBase + "google/protobuf/stubs/platform_macros.h",
-	pbRuntimeBase + "google/protobuf/stubs/port.h",
-	pbRuntimeBase + "google/protobuf/thread_safe_arena.h",
-	pbRuntimeBase + "google/protobuf/wire_format.h",
-	pbRuntimeBase + "google/protobuf/wire_format_lite.h",
+	Source(pbRuntimeBase + "google/protobuf/any.h"),
+	Source(pbRuntimeBase + "google/protobuf/arena_align.h"),
+	Source(pbRuntimeBase + "google/protobuf/arena_allocation_policy.h"),
+	Source(pbRuntimeBase + "google/protobuf/arena_cleanup.h"),
+	Source(pbRuntimeBase + "google/protobuf/arena_config.h"),
+	Source(pbRuntimeBase + "google/protobuf/arenaz_sampler.h"),
+	Source(pbRuntimeBase + "google/protobuf/descriptor.h"),
+	Source(pbRuntimeBase + "google/protobuf/endian.h"),
+	Source(pbRuntimeBase + "google/protobuf/explicitly_constructed.h"),
+	Source(pbRuntimeBase + "google/protobuf/generated_enum_reflection.h"),
+	Source(pbRuntimeBase + "google/protobuf/generated_enum_util.h"),
+	Source(pbRuntimeBase + "google/protobuf/generated_message_bases.h"),
+	Source(pbRuntimeBase + "google/protobuf/generated_message_tctable_decl.h"),
+	Source(pbRuntimeBase + "google/protobuf/has_bits.h"),
+	Source(pbRuntimeBase + "google/protobuf/implicit_weak_message.h"),
+	Source(pbRuntimeBase + "google/protobuf/inlined_string_field.h"),
+	Source(pbRuntimeBase + "google/protobuf/io/zero_copy_stream.h"),
+	Source(pbRuntimeBase + "google/protobuf/io/zero_copy_stream_impl.h"),
+	Source(pbRuntimeBase + "google/protobuf/io/zero_copy_stream_impl_lite.h"),
+	Source(pbRuntimeBase + "google/protobuf/json_util.h"),
+	Source(pbRuntimeBase + "google/protobuf/map.h"),
+	Source(pbRuntimeBase + "google/protobuf/map_entry.h"),
+	Source(pbRuntimeBase + "google/protobuf/map_entry_lite.h"),
+	Source(pbRuntimeBase + "google/protobuf/map_field.h"),
+	Source(pbRuntimeBase + "google/protobuf/map_field_inl.h"),
+	Source(pbRuntimeBase + "google/protobuf/map_field_lite.h"),
+	Source(pbRuntimeBase + "google/protobuf/map_type_handler.h"),
+	Source(pbRuntimeBase + "google/protobuf/message_lite.h"),
+	Source(pbRuntimeBase + "google/protobuf/messagext.h"),
+	Source(pbRuntimeBase + "google/protobuf/parse_context.h"),
+	Source(pbRuntimeBase + "google/protobuf/port.h"),
+	Source(pbRuntimeBase + "google/protobuf/reflection_ops.h"),
+	Source(pbRuntimeBase + "google/protobuf/repeated_ptr_field.h"),
+	Source(pbRuntimeBase + "google/protobuf/serial_arena.h"),
+	Source(pbRuntimeBase + "google/protobuf/string_block.h"),
+	Source(pbRuntimeBase + "google/protobuf/stubs/callback.h"),
+	Source(pbRuntimeBase + "google/protobuf/stubs/common.h"),
+	Source(pbRuntimeBase + "google/protobuf/stubs/platform_macros.h"),
+	Source(pbRuntimeBase + "google/protobuf/stubs/port.h"),
+	Source(pbRuntimeBase + "google/protobuf/thread_safe_arena.h"),
+	Source(pbRuntimeBase + "google/protobuf/wire_format.h"),
+	Source(pbRuntimeBase + "google/protobuf/wire_format_lite.h"),
 
 	// Group 2: abseil-cpp-tstring deep transitive closure reached from
 	// port_def.inc → string_view.h → ... (145 entries).
-	abslTstringBase + "y_absl/algorithm/algorithm.h",
-	abslTstringBase + "y_absl/algorithm/container.h",
-	abslTstringBase + "y_absl/base/attributes.h",
-	abslTstringBase + "y_absl/base/call_once.h",
-	abslTstringBase + "y_absl/base/casts.h",
-	abslTstringBase + "y_absl/base/config.h",
-	abslTstringBase + "y_absl/base/const_init.h",
-	abslTstringBase + "y_absl/base/dynamic_annotations.h",
-	abslTstringBase + "y_absl/base/internal/atomic_hook.h",
-	abslTstringBase + "y_absl/base/internal/dynamic_annotations.h",
-	abslTstringBase + "y_absl/base/internal/endian.h",
-	abslTstringBase + "y_absl/base/internal/errno_saver.h",
-	abslTstringBase + "y_absl/base/internal/identity.h",
-	abslTstringBase + "y_absl/base/internal/inline_variable.h",
-	abslTstringBase + "y_absl/base/internal/invoke.h",
-	abslTstringBase + "y_absl/base/internal/low_level_alloc.h",
-	abslTstringBase + "y_absl/base/internal/low_level_scheduling.h",
-	abslTstringBase + "y_absl/base/internal/nullability_impl.h",
-	abslTstringBase + "y_absl/base/internal/per_thread_tls.h",
-	abslTstringBase + "y_absl/base/internal/raw_logging.h",
-	abslTstringBase + "y_absl/base/internal/scheduling_mode.h",
-	abslTstringBase + "y_absl/base/internal/spinlock.h",
-	abslTstringBase + "y_absl/base/internal/spinlock_wait.h",
-	abslTstringBase + "y_absl/base/internal/thread_identity.h",
-	abslTstringBase + "y_absl/base/internal/throw_delegate.h",
-	abslTstringBase + "y_absl/base/internal/tsan_mutex_interface.h",
-	abslTstringBase + "y_absl/base/internal/unaligned_access.h",
-	abslTstringBase + "y_absl/base/log_severity.h",
-	abslTstringBase + "y_absl/base/macros.h",
-	abslTstringBase + "y_absl/base/nullability.h",
-	abslTstringBase + "y_absl/base/optimization.h",
-	abslTstringBase + "y_absl/base/options.h",
-	abslTstringBase + "y_absl/base/policy_checks.h",
-	abslTstringBase + "y_absl/base/port.h",
-	abslTstringBase + "y_absl/base/prefetch.h",
-	abslTstringBase + "y_absl/base/thread_annotations.h",
-	abslTstringBase + "y_absl/container/btree_map.h",
-	abslTstringBase + "y_absl/container/fixed_array.h",
-	abslTstringBase + "y_absl/container/flat_hash_map.h",
-	abslTstringBase + "y_absl/container/hash_container_defaults.h",
-	abslTstringBase + "y_absl/container/inlined_vector.h",
-	abslTstringBase + "y_absl/container/internal/btree.h",
-	abslTstringBase + "y_absl/container/internal/btree_container.h",
-	abslTstringBase + "y_absl/container/internal/common.h",
-	abslTstringBase + "y_absl/container/internal/common_policy_traits.h",
-	abslTstringBase + "y_absl/container/internal/compressed_tuple.h",
-	abslTstringBase + "y_absl/container/internal/container_memory.h",
-	abslTstringBase + "y_absl/container/internal/hash_function_defaults.h",
-	abslTstringBase + "y_absl/container/internal/hash_policy_traits.h",
-	abslTstringBase + "y_absl/container/internal/hashtable_debug_hooks.h",
-	abslTstringBase + "y_absl/container/internal/hashtablez_sampler.h",
-	abslTstringBase + "y_absl/container/internal/inlined_vector.h",
-	abslTstringBase + "y_absl/container/internal/layout.h",
-	abslTstringBase + "y_absl/container/internal/raw_hash_map.h",
-	abslTstringBase + "y_absl/container/internal/raw_hash_set.h",
-	abslTstringBase + "y_absl/crc/crc32c.h",
-	abslTstringBase + "y_absl/crc/internal/crc32_x86_arm_combined_simd.h",
-	abslTstringBase + "y_absl/crc/internal/crc32c_inline.h",
-	abslTstringBase + "y_absl/crc/internal/crc_cord_state.h",
-	abslTstringBase + "y_absl/debugging/internal/demangle.h",
-	abslTstringBase + "y_absl/functional/any_invocable.h",
-	abslTstringBase + "y_absl/functional/function_ref.h",
-	abslTstringBase + "y_absl/functional/internal/any_invocable.h",
-	abslTstringBase + "y_absl/functional/internal/function_ref.h",
-	abslTstringBase + "y_absl/hash/hash.h",
-	abslTstringBase + "y_absl/hash/internal/city.h",
-	abslTstringBase + "y_absl/hash/internal/hash.h",
-	abslTstringBase + "y_absl/hash/internal/low_level_hash.h",
-	abslTstringBase + "y_absl/log/absl_check.h",
-	abslTstringBase + "y_absl/log/absl_log.h",
-	abslTstringBase + "y_absl/log/absl_vlog_is_on.h",
-	abslTstringBase + "y_absl/log/internal/check_impl.h",
-	abslTstringBase + "y_absl/log/internal/check_op.h",
-	abslTstringBase + "y_absl/log/internal/conditions.h",
-	abslTstringBase + "y_absl/log/internal/config.h",
-	abslTstringBase + "y_absl/log/internal/log_impl.h",
-	abslTstringBase + "y_absl/log/internal/log_message.h",
-	abslTstringBase + "y_absl/log/internal/nullguard.h",
-	abslTstringBase + "y_absl/log/internal/nullstream.h",
-	abslTstringBase + "y_absl/log/internal/proto.h",
-	abslTstringBase + "y_absl/log/internal/strip.h",
-	abslTstringBase + "y_absl/log/internal/structured_proto.h",
-	abslTstringBase + "y_absl/log/internal/vlog_config.h",
-	abslTstringBase + "y_absl/log/internal/voidify.h",
-	abslTstringBase + "y_absl/log/log_entry.h",
-	abslTstringBase + "y_absl/log/log_sink.h",
-	abslTstringBase + "y_absl/memory/memory.h",
-	abslTstringBase + "y_absl/meta/type_traits.h",
-	abslTstringBase + "y_absl/numeric/bits.h",
-	abslTstringBase + "y_absl/numeric/int128.h",
-	abslTstringBase + "y_absl/numeric/int128_have_intrinsic.inc",
-	abslTstringBase + "y_absl/numeric/int128_no_intrinsic.inc",
-	abslTstringBase + "y_absl/numeric/internal/bits.h",
-	abslTstringBase + "y_absl/profiling/internal/sample_recorder.h",
-	abslTstringBase + "y_absl/strings/cord.h",
-	abslTstringBase + "y_absl/strings/cord_analysis.h",
-	abslTstringBase + "y_absl/strings/cord_buffer.h",
-	abslTstringBase + "y_absl/strings/has_absl_stringify.h",
-	abslTstringBase + "y_absl/strings/internal/cord_data_edge.h",
-	abslTstringBase + "y_absl/strings/internal/cord_internal.h",
-	abslTstringBase + "y_absl/strings/internal/cord_rep_btree.h",
-	abslTstringBase + "y_absl/strings/internal/cord_rep_btree_navigator.h",
-	abslTstringBase + "y_absl/strings/internal/cord_rep_btree_reader.h",
-	abslTstringBase + "y_absl/strings/internal/cord_rep_crc.h",
-	abslTstringBase + "y_absl/strings/internal/cord_rep_flat.h",
-	abslTstringBase + "y_absl/strings/internal/cordz_functions.h",
-	abslTstringBase + "y_absl/strings/internal/cordz_handle.h",
-	abslTstringBase + "y_absl/strings/internal/cordz_info.h",
-	abslTstringBase + "y_absl/strings/internal/cordz_statistics.h",
-	abslTstringBase + "y_absl/strings/internal/cordz_update_scope.h",
-	abslTstringBase + "y_absl/strings/internal/cordz_update_tracker.h",
-	abslTstringBase + "y_absl/strings/internal/resize_uninitialized.h",
-	abslTstringBase + "y_absl/strings/internal/str_format/arg.h",
-	abslTstringBase + "y_absl/strings/internal/str_format/bind.h",
-	abslTstringBase + "y_absl/strings/internal/str_format/checker.h",
-	abslTstringBase + "y_absl/strings/internal/str_format/constexpr_parser.h",
-	abslTstringBase + "y_absl/strings/internal/str_format/extension.h",
-	abslTstringBase + "y_absl/strings/internal/str_format/output.h",
-	abslTstringBase + "y_absl/strings/internal/str_format/parser.h",
-	abslTstringBase + "y_absl/strings/internal/string_constant.h",
-	abslTstringBase + "y_absl/strings/internal/stringify_sink.h",
-	abslTstringBase + "y_absl/strings/numbers.h",
-	abslTstringBase + "y_absl/strings/str_cat.h",
-	abslTstringBase + "y_absl/strings/str_format.h",
-	abslTstringBase + "y_absl/strings/string_view.h",
-	abslTstringBase + "y_absl/synchronization/internal/create_thread_identity.h",
-	abslTstringBase + "y_absl/synchronization/internal/kernel_timeout.h",
-	abslTstringBase + "y_absl/synchronization/internal/per_thread_sem.h",
-	abslTstringBase + "y_absl/synchronization/mutex.h",
-	abslTstringBase + "y_absl/time/civil_time.h",
-	abslTstringBase + "y_absl/time/clock.h",
-	abslTstringBase + "y_absl/time/internal/cctz/include/cctz/civil_time.h",
-	abslTstringBase + "y_absl/time/internal/cctz/include/cctz/civil_time_detail.h",
-	abslTstringBase + "y_absl/time/internal/cctz/include/cctz/time_zone.h",
-	abslTstringBase + "y_absl/time/time.h",
-	abslTstringBase + "y_absl/types/bad_optional_access.h",
-	abslTstringBase + "y_absl/types/bad_variant_access.h",
-	abslTstringBase + "y_absl/types/compare.h",
-	abslTstringBase + "y_absl/types/internal/optional.h",
-	abslTstringBase + "y_absl/types/internal/span.h",
-	abslTstringBase + "y_absl/types/internal/variant.h",
-	abslTstringBase + "y_absl/types/optional.h",
-	abslTstringBase + "y_absl/types/span.h",
-	abslTstringBase + "y_absl/types/variant.h",
-	abslTstringBase + "y_absl/utility/utility.h",
+	Source(abslTstringBase + "y_absl/algorithm/algorithm.h"),
+	Source(abslTstringBase + "y_absl/algorithm/container.h"),
+	Source(abslTstringBase + "y_absl/base/attributes.h"),
+	Source(abslTstringBase + "y_absl/base/call_once.h"),
+	Source(abslTstringBase + "y_absl/base/casts.h"),
+	Source(abslTstringBase + "y_absl/base/config.h"),
+	Source(abslTstringBase + "y_absl/base/const_init.h"),
+	Source(abslTstringBase + "y_absl/base/dynamic_annotations.h"),
+	Source(abslTstringBase + "y_absl/base/internal/atomic_hook.h"),
+	Source(abslTstringBase + "y_absl/base/internal/dynamic_annotations.h"),
+	Source(abslTstringBase + "y_absl/base/internal/endian.h"),
+	Source(abslTstringBase + "y_absl/base/internal/errno_saver.h"),
+	Source(abslTstringBase + "y_absl/base/internal/identity.h"),
+	Source(abslTstringBase + "y_absl/base/internal/inline_variable.h"),
+	Source(abslTstringBase + "y_absl/base/internal/invoke.h"),
+	Source(abslTstringBase + "y_absl/base/internal/low_level_alloc.h"),
+	Source(abslTstringBase + "y_absl/base/internal/low_level_scheduling.h"),
+	Source(abslTstringBase + "y_absl/base/internal/nullability_impl.h"),
+	Source(abslTstringBase + "y_absl/base/internal/per_thread_tls.h"),
+	Source(abslTstringBase + "y_absl/base/internal/raw_logging.h"),
+	Source(abslTstringBase + "y_absl/base/internal/scheduling_mode.h"),
+	Source(abslTstringBase + "y_absl/base/internal/spinlock.h"),
+	Source(abslTstringBase + "y_absl/base/internal/spinlock_wait.h"),
+	Source(abslTstringBase + "y_absl/base/internal/thread_identity.h"),
+	Source(abslTstringBase + "y_absl/base/internal/throw_delegate.h"),
+	Source(abslTstringBase + "y_absl/base/internal/tsan_mutex_interface.h"),
+	Source(abslTstringBase + "y_absl/base/internal/unaligned_access.h"),
+	Source(abslTstringBase + "y_absl/base/log_severity.h"),
+	Source(abslTstringBase + "y_absl/base/macros.h"),
+	Source(abslTstringBase + "y_absl/base/nullability.h"),
+	Source(abslTstringBase + "y_absl/base/optimization.h"),
+	Source(abslTstringBase + "y_absl/base/options.h"),
+	Source(abslTstringBase + "y_absl/base/policy_checks.h"),
+	Source(abslTstringBase + "y_absl/base/port.h"),
+	Source(abslTstringBase + "y_absl/base/prefetch.h"),
+	Source(abslTstringBase + "y_absl/base/thread_annotations.h"),
+	Source(abslTstringBase + "y_absl/container/btree_map.h"),
+	Source(abslTstringBase + "y_absl/container/fixed_array.h"),
+	Source(abslTstringBase + "y_absl/container/flat_hash_map.h"),
+	Source(abslTstringBase + "y_absl/container/hash_container_defaults.h"),
+	Source(abslTstringBase + "y_absl/container/inlined_vector.h"),
+	Source(abslTstringBase + "y_absl/container/internal/btree.h"),
+	Source(abslTstringBase + "y_absl/container/internal/btree_container.h"),
+	Source(abslTstringBase + "y_absl/container/internal/common.h"),
+	Source(abslTstringBase + "y_absl/container/internal/common_policy_traits.h"),
+	Source(abslTstringBase + "y_absl/container/internal/compressed_tuple.h"),
+	Source(abslTstringBase + "y_absl/container/internal/container_memory.h"),
+	Source(abslTstringBase + "y_absl/container/internal/hash_function_defaults.h"),
+	Source(abslTstringBase + "y_absl/container/internal/hash_policy_traits.h"),
+	Source(abslTstringBase + "y_absl/container/internal/hashtable_debug_hooks.h"),
+	Source(abslTstringBase + "y_absl/container/internal/hashtablez_sampler.h"),
+	Source(abslTstringBase + "y_absl/container/internal/inlined_vector.h"),
+	Source(abslTstringBase + "y_absl/container/internal/layout.h"),
+	Source(abslTstringBase + "y_absl/container/internal/raw_hash_map.h"),
+	Source(abslTstringBase + "y_absl/container/internal/raw_hash_set.h"),
+	Source(abslTstringBase + "y_absl/crc/crc32c.h"),
+	Source(abslTstringBase + "y_absl/crc/internal/crc32_x86_arm_combined_simd.h"),
+	Source(abslTstringBase + "y_absl/crc/internal/crc32c_inline.h"),
+	Source(abslTstringBase + "y_absl/crc/internal/crc_cord_state.h"),
+	Source(abslTstringBase + "y_absl/debugging/internal/demangle.h"),
+	Source(abslTstringBase + "y_absl/functional/any_invocable.h"),
+	Source(abslTstringBase + "y_absl/functional/function_ref.h"),
+	Source(abslTstringBase + "y_absl/functional/internal/any_invocable.h"),
+	Source(abslTstringBase + "y_absl/functional/internal/function_ref.h"),
+	Source(abslTstringBase + "y_absl/hash/hash.h"),
+	Source(abslTstringBase + "y_absl/hash/internal/city.h"),
+	Source(abslTstringBase + "y_absl/hash/internal/hash.h"),
+	Source(abslTstringBase + "y_absl/hash/internal/low_level_hash.h"),
+	Source(abslTstringBase + "y_absl/log/absl_check.h"),
+	Source(abslTstringBase + "y_absl/log/absl_log.h"),
+	Source(abslTstringBase + "y_absl/log/absl_vlog_is_on.h"),
+	Source(abslTstringBase + "y_absl/log/internal/check_impl.h"),
+	Source(abslTstringBase + "y_absl/log/internal/check_op.h"),
+	Source(abslTstringBase + "y_absl/log/internal/conditions.h"),
+	Source(abslTstringBase + "y_absl/log/internal/config.h"),
+	Source(abslTstringBase + "y_absl/log/internal/log_impl.h"),
+	Source(abslTstringBase + "y_absl/log/internal/log_message.h"),
+	Source(abslTstringBase + "y_absl/log/internal/nullguard.h"),
+	Source(abslTstringBase + "y_absl/log/internal/nullstream.h"),
+	Source(abslTstringBase + "y_absl/log/internal/proto.h"),
+	Source(abslTstringBase + "y_absl/log/internal/strip.h"),
+	Source(abslTstringBase + "y_absl/log/internal/structured_proto.h"),
+	Source(abslTstringBase + "y_absl/log/internal/vlog_config.h"),
+	Source(abslTstringBase + "y_absl/log/internal/voidify.h"),
+	Source(abslTstringBase + "y_absl/log/log_entry.h"),
+	Source(abslTstringBase + "y_absl/log/log_sink.h"),
+	Source(abslTstringBase + "y_absl/memory/memory.h"),
+	Source(abslTstringBase + "y_absl/meta/type_traits.h"),
+	Source(abslTstringBase + "y_absl/numeric/bits.h"),
+	Source(abslTstringBase + "y_absl/numeric/int128.h"),
+	Source(abslTstringBase + "y_absl/numeric/int128_have_intrinsic.inc"),
+	Source(abslTstringBase + "y_absl/numeric/int128_no_intrinsic.inc"),
+	Source(abslTstringBase + "y_absl/numeric/internal/bits.h"),
+	Source(abslTstringBase + "y_absl/profiling/internal/sample_recorder.h"),
+	Source(abslTstringBase + "y_absl/strings/cord.h"),
+	Source(abslTstringBase + "y_absl/strings/cord_analysis.h"),
+	Source(abslTstringBase + "y_absl/strings/cord_buffer.h"),
+	Source(abslTstringBase + "y_absl/strings/has_absl_stringify.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/cord_data_edge.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/cord_internal.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/cord_rep_btree.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/cord_rep_btree_navigator.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/cord_rep_btree_reader.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/cord_rep_crc.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/cord_rep_flat.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/cordz_functions.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/cordz_handle.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/cordz_info.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/cordz_statistics.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/cordz_update_scope.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/cordz_update_tracker.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/resize_uninitialized.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/str_format/arg.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/str_format/bind.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/str_format/checker.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/str_format/constexpr_parser.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/str_format/extension.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/str_format/output.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/str_format/parser.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/string_constant.h"),
+	Source(abslTstringBase + "y_absl/strings/internal/stringify_sink.h"),
+	Source(abslTstringBase + "y_absl/strings/numbers.h"),
+	Source(abslTstringBase + "y_absl/strings/str_cat.h"),
+	Source(abslTstringBase + "y_absl/strings/str_format.h"),
+	Source(abslTstringBase + "y_absl/strings/string_view.h"),
+	Source(abslTstringBase + "y_absl/synchronization/internal/create_thread_identity.h"),
+	Source(abslTstringBase + "y_absl/synchronization/internal/kernel_timeout.h"),
+	Source(abslTstringBase + "y_absl/synchronization/internal/per_thread_sem.h"),
+	Source(abslTstringBase + "y_absl/synchronization/mutex.h"),
+	Source(abslTstringBase + "y_absl/time/civil_time.h"),
+	Source(abslTstringBase + "y_absl/time/clock.h"),
+	Source(abslTstringBase + "y_absl/time/internal/cctz/include/cctz/civil_time.h"),
+	Source(abslTstringBase + "y_absl/time/internal/cctz/include/cctz/civil_time_detail.h"),
+	Source(abslTstringBase + "y_absl/time/internal/cctz/include/cctz/time_zone.h"),
+	Source(abslTstringBase + "y_absl/time/time.h"),
+	Source(abslTstringBase + "y_absl/types/bad_optional_access.h"),
+	Source(abslTstringBase + "y_absl/types/bad_variant_access.h"),
+	Source(abslTstringBase + "y_absl/types/compare.h"),
+	Source(abslTstringBase + "y_absl/types/internal/optional.h"),
+	Source(abslTstringBase + "y_absl/types/internal/span.h"),
+	Source(abslTstringBase + "y_absl/types/internal/variant.h"),
+	Source(abslTstringBase + "y_absl/types/optional.h"),
+	Source(abslTstringBase + "y_absl/types/span.h"),
+	Source(abslTstringBase + "y_absl/types/variant.h"),
+	Source(abslTstringBase + "y_absl/utility/utility.h"),
 }
 
 // EmitPB emits a PB node for `srcRel` (a .proto file relative to `instance.Path`).
@@ -466,14 +468,14 @@ func EmitPB(
 // /home/pg/monorepo/yatool_orig/sg2.json: the 7 headers + wrapper + proto
 // source appear on 105/105 cpp.o consumers, regardless of descriptor
 // import (PR-M3-final-codegen-registry-expansion).
-func pbDescriptorImporterExtras(sourceRoot, protoRelPath string) []string {
-	out := make([]string, 0, len(pbDescriptorImporterHeaders)+3)
-	out = append(out, pbWrapperPath)
-	out = append(out, "$(S)/"+protoRelPath)
+func pbDescriptorImporterExtras(sourceRoot, protoRelPath string) []VFS {
+	out := make([]VFS, 0, len(pbDescriptorImporterHeaders)+3)
+	out = append(out, ParseVFSOrSource(pbWrapperPath))
+	out = append(out, Source(protoRelPath))
 	out = append(out, pbDescriptorImporterHeaders...)
 
 	if protoImportsDescriptor(sourceRoot, protoRelPath) {
-		out = append(out, pbDescriptorProto)
+		out = append(out, ParseVFSOrSource(pbDescriptorProto))
 	}
 
 	return out
@@ -630,9 +632,9 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			directImports := protoDirectImportIncludes(ctx.sourceRoot, protoRelPath)
 			extras := pbDescriptorImporterExtras(ctx.sourceRoot, protoRelPath)
 			emitsIncludes := make([]VFS, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
-			emitsIncludes = append(emitsIncludes, VFSesFromStrings(directImports)...)
-			emitsIncludes = append(emitsIncludes, VFSesFromStrings(protobufRuntimeHeaders)...)
-			emitsIncludes = append(emitsIncludes, VFSesFromStrings(extras)...)
+			emitsIncludes = append(emitsIncludes, directImports...)
+			emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
+			emitsIncludes = append(emitsIncludes, extras...)
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PB",
 				OutputPath:    pbH,
@@ -660,8 +662,8 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			pbCCEmits = append(pbCCEmits, pbH)
 			pbCCEmits = append(pbCCEmits, Source(protoRelPath))
 			pbCCEmits = append(pbCCEmits, ParseVFSOrSource(pbWrapperPath))
-			pbCCEmits = append(pbCCEmits, VFSesFromStrings(protobufRuntimeHeaders)...)
-			pbCCEmits = append(pbCCEmits, VFSesFromStrings(pbCcDeepRuntimeHeaders)...)
+			pbCCEmits = append(pbCCEmits, protobufRuntimeHeaders...)
+			pbCCEmits = append(pbCCEmits, pbCcDeepRuntimeHeaders...)
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PB",
 				OutputPath:    pbCC,
@@ -717,12 +719,12 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			ctx.evOutputs[evKey] = evRef
 			if reg := codegenRegForInstance(ctx, instance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
-				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC.String())
+				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC)
 				emitsIncludes := make([]VFS, 0, len(directImports)+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders)+len(evExtras))
-				emitsIncludes = append(emitsIncludes, VFSesFromStrings(directImports)...)
-				emitsIncludes = append(emitsIncludes, VFSesFromStrings(protobufRuntimeHeaders)...)
-				emitsIncludes = append(emitsIncludes, VFSesFromStrings(eventRuntimeHeaders)...)
-				emitsIncludes = append(emitsIncludes, VFSesFromStrings(evExtras)...)
+				emitsIncludes = append(emitsIncludes, directImports...)
+				emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
+				emitsIncludes = append(emitsIncludes, eventRuntimeHeaders...)
+				emitsIncludes = append(emitsIncludes, evExtras...)
 				reg.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EV",
 					OutputPath:    evH,
@@ -734,8 +736,8 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 				// LIBRARY/EV path (gen.go:4338-4342).
 				ccEmits := make([]VFS, 0, 1+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
 				ccEmits = append(ccEmits, evH)
-				ccEmits = append(ccEmits, VFSesFromStrings(protobufRuntimeHeaders)...)
-				ccEmits = append(ccEmits, VFSesFromStrings(eventRuntimeHeaders)...)
+				ccEmits = append(ccEmits, protobufRuntimeHeaders...)
+				ccEmits = append(ccEmits, eventRuntimeHeaders...)
 				reg.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EV",
 					OutputPath:    evPbCC,
