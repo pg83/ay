@@ -296,41 +296,28 @@ var macroPrefixMapFlags = []string{
 	"-fmacro-prefix-map=$(TOOL_ROOT)/=",
 }
 
-// muslCcIncludes is the include set for `contrib/libs/musl` CC
-// nodes (TARGET, aarch64). Differs from `ccIncludes` by inserting
-// eight musl-specific `-I` paths between `$(S)` and the
-// linux-headers pair. Order matches the reference graph exactly —
-// musl's own headers must shadow the global linux-headers in
-// resolution.
-var muslCcIncludes = []string{
-	"-I$(B)",
-	"-I$(S)",
-	"-I$(S)/contrib/libs/musl/arch/aarch64",
-	"-I$(S)/contrib/libs/musl/arch/generic",
-	"-I$(S)/contrib/libs/musl/src/include",
-	"-I$(S)/contrib/libs/musl/src/internal",
-	"-I$(S)/contrib/libs/musl/include",
-	"-I$(S)/contrib/libs/musl/extra",
-	"-I$(S)/contrib/libs/linux-headers",
-	"-I$(S)/contrib/libs/linux-headers/_nf",
-}
-
-// muslCcIncludesX8664 is the host-musl (x86_64) include set used by
-// `composeMuslHostCC` (PR-29-D01). Replaces `arch/aarch64` with
-// `arch/x86_64` — the only delta from `muslCcIncludes`. Verified
+// muslCcIncludesFor returns the include set for `contrib/libs/musl`
+// CC nodes on the given ISA. Differs from `ccIncludes` by inserting
+// eight musl-specific `-I` paths between `$(S)` and the linux-headers
+// pair. Order matches the reference graph exactly — musl's own
+// headers must shadow the global linux-headers in resolution.
+//
+// The ISA enters in exactly one slot (`musl/arch/<isa>`). Verified
 // against `$(B)/contrib/libs/musl/_/src/string/strlen.c.pic.o`
-// cmd_args[6..15] in the reference graph.
-var muslCcIncludesX8664 = []string{
-	"-I$(B)",
-	"-I$(S)",
-	"-I$(S)/contrib/libs/musl/arch/x86_64",
-	"-I$(S)/contrib/libs/musl/arch/generic",
-	"-I$(S)/contrib/libs/musl/src/include",
-	"-I$(S)/contrib/libs/musl/src/internal",
-	"-I$(S)/contrib/libs/musl/include",
-	"-I$(S)/contrib/libs/musl/extra",
-	"-I$(S)/contrib/libs/linux-headers",
-	"-I$(S)/contrib/libs/linux-headers/_nf",
+// (x86_64) and the aarch64 target nodes in the reference graph.
+func muslCcIncludesFor(isa ISA) []string {
+	return []string{
+		"-I$(B)",
+		"-I$(S)",
+		"-I$(S)/contrib/libs/musl/arch/" + string(isa),
+		"-I$(S)/contrib/libs/musl/arch/generic",
+		"-I$(S)/contrib/libs/musl/src/include",
+		"-I$(S)/contrib/libs/musl/src/internal",
+		"-I$(S)/contrib/libs/musl/include",
+		"-I$(S)/contrib/libs/musl/extra",
+		"-I$(S)/contrib/libs/linux-headers",
+		"-I$(S)/contrib/libs/linux-headers/_nf",
+	}
 }
 
 // muslWarningFlags is the single-flag warning bundle the reference

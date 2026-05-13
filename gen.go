@@ -2283,7 +2283,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			// walk's instance is kept verbatim — only the override
 			// `scanPlatform` argument flips.
 			jsModuleInputs := moduleInputs
-			jsModuleInputs.PeerAddInclGlobal = jsTargetPeerAddIncl(moduleInputs.PeerAddInclGlobal)
+			jsModuleInputs.PeerAddInclGlobal = jsTargetPeerAddIncl(moduleInputs.PeerAddInclGlobal, srcInstance.Platform.ISA, ctx.target.ISA)
 
 			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, srcInstance, js.Sources, jsModuleInputs)
 		}

@@ -816,28 +816,26 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []V
 	return out
 }
 
-// jsTargetPeerAddIncl rebases a host (x86_64) PeerAddInclGlobal slice to
-// the target (aarch64) musl arch layout for use in the JS-node closure
-// scan. JS nodes are anchored to the target platform axis (PR-35s), so
-// their include closure must reflect aarch64 musl search paths rather
-// than the host x86_64 ones that the surrounding HOST-build moduleInputs
-// carries.
+// jsTargetPeerAddIncl rebases a host-axis PeerAddInclGlobal slice to
+// the target-axis musl arch layout for use in the JS-node closure
+// scan. JS nodes are anchored to the target platform axis (PR-35s),
+// so their include closure must reflect the target's musl-arch
+// search paths rather than the host arch the surrounding HOST-build
+// moduleInputs carries.
 //
-// PR-40 Fix C: narrow shim — only the musl arch/x86_64 entry is
-// rewritten to arch/aarch64; all other entries pass through unchanged.
-// TODO: remove when a general target-addincl propagation mechanism lands
-// in M3+ (the same milestone as the BinaryDir lift for Fix D).
-func jsTargetPeerAddIncl(hostPeerAddIncl []string) []string {
-	const (
-		hostMuslArch   = "contrib/libs/musl/arch/x86_64"
-		targetMuslArch = "contrib/libs/musl/arch/aarch64"
-	)
+// PR-40 Fix C: narrow shim — only the musl-arch entry is rewritten
+// from `from.ISA` to `to.ISA`; all other entries pass through.
+// TODO: remove when a general target-addincl propagation mechanism
+// lands in M3+ (the same milestone as the BinaryDir lift for Fix D).
+func jsTargetPeerAddIncl(hostPeerAddIncl []string, from, to ISA) []string {
+	fromMuslArch := "contrib/libs/musl/arch/" + string(from)
+	toMuslArch := "contrib/libs/musl/arch/" + string(to)
 
 	out := make([]string, len(hostPeerAddIncl))
 
 	for i, p := range hostPeerAddIncl {
-		if p == hostMuslArch {
-			out[i] = targetMuslArch
+		if p == fromMuslArch {
+			out[i] = toMuslArch
 		} else {
 			out[i] = p
 		}
