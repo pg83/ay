@@ -371,10 +371,10 @@ func composeLDCmdVcsInfo(vcsCPath string) []string {
 		// TODO(portability): python3 path is captured from the
 		// reference build host.
 		"/ix/realm/pg/bin/python3",
-		"$(S)/build/scripts/vcs_info.py",
+		ldVcsInfoPath,
 		"$(VCS)/vcs.json",
 		vcsCPath,
-		"$(S)/build/scripts/c_templates/svn_interface.c",
+		ldSvnInterfacePath,
 	}
 }
 
@@ -577,7 +577,7 @@ func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths []VFS, peerLibPath
 
 	cmdArgs = append(cmdArgs,
 		"/ix/realm/pg/bin/python3",
-		"$(S)/build/scripts/link_exe.py",
+		ldLinkExePath,
 	)
 
 	if len(pluginPaths) > 0 {
@@ -699,7 +699,7 @@ func peersIncludeLibcCompat(peerLibPaths []string) bool {
 func composeLDCmdLinkOrCopy(modulePath string) []string {
 	return []string{
 		"/ix/realm/pg/bin/python3",
-		"$(S)/build/scripts/fs_tools.py",
+		ldFsToolsPath,
 		"link_or_copy_to_dir",
 		"--no-check",
 		Build(modulePath).String(),
@@ -870,8 +870,21 @@ var ldScriptInputs = []VFS{
 	Source("build/scripts/fs_tools.py"),
 }
 
-// ldSvnversionHVFS is the c_template header consumed by vcs_info.py
-// when it generates __vcs_version__.c. ymake appends it as the last
-// entry of every PROGRAM LD node's inputs slice, after the member-CC
-// input union. PR-35v adds this static injection (R9 closure).
-var ldSvnversionHVFS = Source("build/scripts/c_templates/svnversion.h")
+// LD-script VFS constants. ld.go composes cmd_args from the cached
+// .String() form (the `…Path` shim next to each VFS) and stitches the
+// same VFS into the inputs slot (or relies on the staticLDScriptBundle
+// slice below). ldSvnversionHVFS is consumed only as an input;
+// ldVcsInfo / ldSvnInterface / ldLinkExe / ldFsTools flow into both
+// cmd_args and the script bundle.
+var (
+	ldVcsInfoVFS      = Source("build/scripts/vcs_info.py")
+	ldSvnInterfaceVFS = Source("build/scripts/c_templates/svn_interface.c")
+	ldLinkExeVFS      = Source("build/scripts/link_exe.py")
+	ldFsToolsVFS      = Source("build/scripts/fs_tools.py")
+	ldSvnversionHVFS  = Source("build/scripts/c_templates/svnversion.h")
+
+	ldVcsInfoPath      = ldVcsInfoVFS.String()
+	ldSvnInterfacePath = ldSvnInterfaceVFS.String()
+	ldLinkExePath      = ldLinkExeVFS.String()
+	ldFsToolsPath      = ldFsToolsVFS.String()
+)

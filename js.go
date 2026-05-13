@@ -47,21 +47,19 @@ package main
 // Returns the JS NodeRef and the output path so the caller (PR-25's
 // gen.go) can thread the output into a downstream EmitCC.
 func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, platform PlatformID, emit Emitter) (NodeRef, string) {
-	const (
-		python3Path  = "/ix/realm/pg/bin/python3"
-		joinSrcsPath = "$(S)/build/scripts/gen_join_srcs.py"
-		procCmdFiles = "$(S)/build/scripts/process_command_files.py"
-	)
+	const python3Path = "/ix/realm/pg/bin/python3"
+	joinSrcs := Source("build/scripts/gen_join_srcs.py")
+	procCmdFiles := Source("build/scripts/process_command_files.py")
 
-	outputPath := "$(B)/" + instance.Path + "/" + allName
+	outVFS := Build(instance.Path + "/" + allName)
 
 	// cmd_args: python3, script, output, --ya-start-command-file,
 	// <instance.Path>/<src>..., --ya-end-command-file.
 	cmdArgs := make([]string, 0, 4+len(sources))
 	cmdArgs = append(cmdArgs,
 		python3Path,
-		joinSrcsPath,
-		outputPath,
+		joinSrcs.String(),
+		outVFS.String(),
 		"--ya-start-command-file",
 	)
 
@@ -79,8 +77,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 	// $(S)/<instance.Path>/<src>, then the caller-supplied
 	// per-source include closure (PR-35d).
 	inputs := make([]VFS, 0, 2+len(sources)+len(closure))
-	inputs = append(inputs, Source("build/scripts/gen_join_srcs.py"))
-	inputs = append(inputs, Source("build/scripts/process_command_files.py"))
+	inputs = append(inputs, joinSrcs, procCmdFiles)
 
 	for _, s := range sources {
 		inputs = append(inputs, Source(instance.Path+"/"+s))
@@ -101,7 +98,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 			"p":  "JS",
 			"pc": "magenta",
 		},
-		Outputs:  []VFS{Build(instance.Path + "/" + allName)},
+		Outputs:  []VFS{outVFS},
 		Platform: string(platform),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
@@ -114,5 +111,5 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		},
 	}
 
-	return emit.Emit(node), outputPath
+	return emit.Emit(node), outVFS.String()
 }

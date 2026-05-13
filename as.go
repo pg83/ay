@@ -226,11 +226,12 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 // by `asmlibYasmModules`. If a future host module joins
 // `asmlibYasmModules`, the path remains the same — yasm's PROGRAM
 // directory is stable.
-const yasmBinaryPath = "$(B)/contrib/tools/yasm/yasm"
-
-// yasmBinaryVFS is the typed counterpart of yasmBinaryPath, used at
-// node-input construction sites that consume []VFS.
-var yasmBinaryVFS = Build("contrib/tools/yasm/yasm")
+// yasmBinaryVFS is the typed yasm binary path; yasmBinaryPath is its
+// canonical string form derived from the same VFS.
+var (
+	yasmBinaryVFS  = Build("contrib/tools/yasm/yasm")
+	yasmBinaryPath = yasmBinaryVFS.String()
+)
 
 // emitASYasm composes the yasm-shaped AS node for an asmlib host-PIC
 // `.asm` source. See the PR-35q docstring above EmitAS for the
