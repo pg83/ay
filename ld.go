@@ -167,8 +167,9 @@ func EmitLD(
 	targetX8664 := instance.Platform.Target == PlatformDefaultLinuxX8664
 	hostBuild := targetX8664
 
-	outputPath := "$(B)/" + binaryDir + "/" + binaryName
-	vcsCPath := "$(B)/" + binaryDir + "/__vcs_version__.c"
+	binPrefix := binaryDir + "/"
+	outputVFS := Build(binPrefix + binaryName)
+	vcsCVFS := Build(binPrefix + "__vcs_version__.c")
 
 	// PR-38: host PROGRAM nodes use `.pic.o` for the vcs_version
 	// compile output to match the reference graph shape; target nodes
@@ -178,11 +179,11 @@ func EmitLD(
 		vcsOSuffix = ".pic.o"
 	}
 
-	vcsOPath := "$(B)/" + binaryDir + "/__vcs_version__.c" + vcsOSuffix
+	vcsOVFS := Build(binPrefix + "__vcs_version__.c" + vcsOSuffix)
 
-	cmd0 := composeLDCmdVcsInfo(vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
-	cmd2 := composeLDCmdLinkExe(outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths, hostBuild, wantsStrip)
+	cmd0 := composeLDCmdVcsInfo(vcsCVFS.String())
+	cmd1 := composeLDCmdVcsCompile(vcsCVFS.String(), vcsOVFS.String(), muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
+	cmd2 := composeLDCmdLinkExe(outputVFS.String(), vcsOVFS.String(), ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths, hostBuild, wantsStrip)
 	cmd3 := composeLDCmdLinkOrCopy(binaryDir)
 
 	// vcs_info.py and fs_tools.py only carry ARCADIA_ROOT_DISTBUILD;
@@ -264,7 +265,7 @@ func EmitLD(
 		Cmds:    cmds,
 		Env:     envFull,
 		Inputs:  inputs,
-		Outputs: []VFS{ParseVFSOrSource(outputPath)},
+		Outputs: []VFS{outputVFS},
 		KV: map[string]string{
 			"p":        "LD",
 			"pc":       "light-blue",
@@ -301,7 +302,7 @@ func LDOutputPath(instance ModuleInstance, binaryName string) string {
 		binaryName = lastPathComponent(instance.Path)
 	}
 
-	return "$(B)/" + ldBinaryDir(instance) + "/" + binaryName
+	return Build(ldBinaryDir(instance) + "/" + binaryName).String()
 }
 
 // ldBinaryDir returns the effective BUILD_ROOT-relative directory for
@@ -701,7 +702,7 @@ func composeLDCmdLinkOrCopy(modulePath string) []string {
 		"$(S)/build/scripts/fs_tools.py",
 		"link_or_copy_to_dir",
 		"--no-check",
-		"$(B)/" + modulePath,
+		Build(modulePath).String(),
 	}
 }
 
@@ -770,12 +771,6 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []string, pl
 
 	return out
 }
-
-// ldSvnversionHInput is the c_template header consumed by vcs_info.py
-// when it generates __vcs_version__.c. ymake appends it as the last
-// entry of every PROGRAM LD node's inputs slice, after the member-CC
-// input union. PR-35v adds this static injection (R9 closure).
-const ldSvnversionHInput = "$(S)/build/scripts/c_templates/svnversion.h"
 
 // ldStaticMuslTrailingFlags is the 12-flag trailer the reference
 // `tools/archiver/archiver` LD cmd[2] emits AFTER `-Wl,--end-group`.
@@ -875,5 +870,8 @@ var ldScriptInputs = []VFS{
 	Source("build/scripts/fs_tools.py"),
 }
 
-// ldSvnversionHVFS is the VFS form of ldSvnversionHInput.
+// ldSvnversionHVFS is the c_template header consumed by vcs_info.py
+// when it generates __vcs_version__.c. ymake appends it as the last
+// entry of every PROGRAM LD node's inputs slice, after the member-CC
+// input union. PR-35v adds this static injection (R9 closure).
 var ldSvnversionHVFS = Source("build/scripts/c_templates/svnversion.h")
