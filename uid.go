@@ -1,14 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
-	"io"
 	"math"
 	"sort"
-	"unsafe"
 )
 
 // uid.go — content-derived UID hashing.
@@ -20,10 +17,17 @@ import (
 //
 // The "canonical node bytes" are an internal binary format — NOT JSON,
 // NOT human-readable. The only contract is that the resulting sha1
-// hash is stable per (semantic) node content. Production path:
-// `nodeUID(n)` streams the fields directly into a `sha1.Hash` with
-// zero intermediate buffers; only the 22-byte base64 string is
-// allocated per node.
+// hash is stable per (semantic) node content.
+//
+// The canonical form is accumulated into a `canonBuf` (concrete type,
+// not an interface). Concrete-typed `(*canonBuf).writeXxx` methods
+// inline as direct `append(c.buf, ...)` calls — escape analysis keeps
+// any per-call scratch arrays on the stack, and the only heap
+// allocation per nodeUID call is the `canonBuf.buf` slice itself
+// (grown as needed). Going through `hash.Hash` / `io.Writer` interface
+// receivers would force each tiny write through dynamic dispatch and
+// box the slice header onto the heap — that was the 25% alloc cost
+// flagged in the post-canon-bytes-binary profile.
 //
 // Field encoding is purely positional: every Node field is written in
 // the same fixed order (alphabetical, matching node.go's declaration)
@@ -45,32 +49,121 @@ func computeUID(canonicalBytes []byte) string {
 }
 
 // canonicalNodeBytes produces the byte sequence we hash to derive a
-// node's UID. Used by tests; production callers should use nodeUID
-// which skips the buffer round-trip.
+// node's UID. Used by tests; production callers should use nodeUID.
 func canonicalNodeBytes(n *Node) []byte {
-	var buf bytes.Buffer
-	writeNode(&buf, n)
+	var c canonBuf
+	c.writeNode(n)
 
-	return buf.Bytes()
+	return c.buf
 }
 
-// nodeUID derives a Node's content-UID by streaming its fields
-// directly into a fresh sha1.Hash. The digest is an ~88-byte heap
-// allocation — across an M3 emit run (~6000 nodes ≈ 0.5 MB total) it
-// is GC-invisible and cheaper than the equivalent sync.Pool dance.
+// nodeUID derives a Node's content-UID by accumulating the canonical
+// form into a `canonBuf` and feeding the whole buffer to sha1 in one
+// shot. Concrete-typed receiver avoids the per-write interface boxing
+// that `hash.Hash`-streaming carried.
 func nodeUID(n *Node) string {
-	h := sha1.New()
-	writeNode(h, n)
+	var c canonBuf
+	c.writeNode(n)
 
-	var sumBuf [sha1.Size]byte
-	sum := h.Sum(sumBuf[:0])
+	sum := sha1.Sum(c.buf)
 
-	return base64.RawURLEncoding.EncodeToString(sum)[:uidLength]
+	return base64.RawURLEncoding.EncodeToString(sum[:])[:uidLength]
 }
 
-// writeNode streams the canonical form of n into w. Both sha1.Hash
-// (production) and *bytes.Buffer (tests) satisfy io.Writer; w.Write
-// errors are not possible for either backend.
+// canonBuf is a writable byte accumulator with concrete-typed
+// methods. All writeXxx methods compile to direct append calls — no
+// interface dispatch, no per-call scratch escaping.
+type canonBuf struct {
+	buf []byte
+}
+
+func (c *canonBuf) writeByte(b byte) {
+	c.buf = append(c.buf, b)
+}
+
+func (c *canonBuf) writeUint32(n uint32) {
+	var lenBuf [4]byte
+	binary.LittleEndian.PutUint32(lenBuf[:], n)
+	c.buf = append(c.buf, lenBuf[:]...)
+}
+
+func (c *canonBuf) writeBool(b bool) {
+	if b {
+		c.buf = append(c.buf, 1)
+	} else {
+		c.buf = append(c.buf, 0)
+	}
+}
+
+func (c *canonBuf) writeBytes(s string) {
+	c.writeUint32(uint32(len(s)))
+	c.buf = append(c.buf, s...)
+}
+
+func (c *canonBuf) writeStringSlice(ss []string) {
+	c.writeUint32(uint32(len(ss)))
+	for _, s := range ss {
+		c.writeBytes(s)
+	}
+}
+
+func (c *canonBuf) writeVFSSlice(vs []VFS) {
+	c.writeUint32(uint32(len(vs)))
+	for _, v := range vs {
+		c.writeByte(byte(v.Root))
+		c.writeBytes(v.Rel)
+	}
+}
+
+func (c *canonBuf) writeStringMap(m map[string]string) {
+	c.writeUint32(uint32(len(m)))
+	for _, k := range canonKeysOf(m) {
+		c.writeBytes(k)
+		c.writeBytes(m[k])
+	}
+}
+
+func (c *canonBuf) writeStringSliceMap(m map[string][]string) {
+	c.writeUint32(uint32(len(m)))
+	for _, k := range canonKeysOf(m) {
+		c.writeBytes(k)
+		c.writeStringSlice(m[k])
+	}
+}
+
+func (c *canonBuf) writeInterfaceMap(m map[string]interface{}) {
+	c.writeUint32(uint32(len(m)))
+	for _, k := range canonKeysOf(m) {
+		c.writeBytes(k)
+		switch v := m[k].(type) {
+		case string:
+			c.writeByte('s')
+			c.writeBytes(v)
+		case float64:
+			c.writeByte('f')
+			var fBuf [8]byte
+			binary.LittleEndian.PutUint64(fBuf[:], math.Float64bits(v))
+			c.buf = append(c.buf, fBuf[:]...)
+		case bool:
+			c.writeByte('b')
+			c.writeBool(v)
+		default:
+			ThrowFmt("canonBuf.writeInterfaceMap: unsupported value type %T for key %q", v, k)
+		}
+	}
+}
+
+func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
+	c.writeUint32(uint32(len(cmds)))
+	for _, cm := range cmds {
+		c.writeStringSlice(cm.CmdArgs)
+		c.writeBytes(cm.Cwd)
+		c.writeStringMap(cm.Env)
+		c.writeBytes(cm.Stdout)
+	}
+}
+
+// writeNode emits the canonical form of n into c.
 //
 // Field order matches `node.go` (alphabetical: cache, cmds, deps, env,
 // foreign_deps, host_platform, inputs, kv, outputs, platform,
@@ -78,135 +171,31 @@ func nodeUID(n *Node) string {
 // and stats_uid are excluded by design.
 //
 // `omitempty` fields stream their "absent" form (Cache=nil → 0x00,
-// HostPlatform=false → 0x00, ForeignDeps=nil → count 0). The shape is
-// always present so position remains unambiguous.
-func writeNode(w io.Writer, n *Node) {
-	// cache: *bool. 0=nil, 1=false, 2=true.
+// HostPlatform=false → 0x00, ForeignDeps=nil → count 0). Position is
+// always present-shape so encoding remains unambiguous.
+func (c *canonBuf) writeNode(n *Node) {
 	switch {
 	case n.Cache == nil:
-		writeByte(w, 0)
+		c.writeByte(0)
 	case *n.Cache:
-		writeByte(w, 2)
+		c.writeByte(2)
 	default:
-		writeByte(w, 1)
+		c.writeByte(1)
 	}
 
-	writeCmdSlice(w, n.Cmds)
-	writeStringSlice(w, n.Deps)
-	writeStringMap(w, n.Env)
-	writeStringSliceMap(w, n.ForeignDeps)
-	writeBool(w, n.HostPlatform)
-	writeVFSSlice(w, n.Inputs)
-	writeStringMap(w, n.KV)
-	writeVFSSlice(w, n.Outputs)
-	writeBytes(w, n.Platform)
-	writeInterfaceMap(w, n.Requirements)
-	writeBool(w, n.Sandboxing)
-	writeStringSlice(w, n.Tags)
-	writeStringMap(w, n.TargetProperties)
-}
-
-// writeBytes writes a 4-byte LE length prefix followed by the raw
-// bytes of s. The length prefix is what makes adjacent variable-
-// length items unambiguously decodable — two distinct concatenations
-// of strings can only collide if their length prefixes already match.
-//
-// The string body is aliased through unsafe.StringData to skip the
-// `[]byte(s)` copy. Safe because both production targets (sha1.digest
-// and *bytes.Buffer) consume the slice synchronously via copy and do
-// not retain a reference past the Write call.
-func writeBytes(w io.Writer, s string) {
-	var lenBuf [4]byte
-	binary.LittleEndian.PutUint32(lenBuf[:], uint32(len(s)))
-	_, _ = w.Write(lenBuf[:])
-	if len(s) > 0 {
-		_, _ = w.Write(unsafe.Slice(unsafe.StringData(s), len(s)))
-	}
-}
-
-func writeCount(w io.Writer, n int) {
-	var lenBuf [4]byte
-	binary.LittleEndian.PutUint32(lenBuf[:], uint32(n))
-	_, _ = w.Write(lenBuf[:])
-}
-
-// writeByte writes a single byte. The slice header references a
-// stack-local array; escape analysis keeps it on the stack as long as
-// Write doesn't retain it (verified for sha1.digest and bytes.Buffer).
-func writeByte(w io.Writer, b byte) {
-	buf := [1]byte{b}
-	_, _ = w.Write(buf[:])
-}
-
-func writeBool(w io.Writer, b bool) {
-	if b {
-		writeByte(w, 1)
-	} else {
-		writeByte(w, 0)
-	}
-}
-
-func writeStringSlice(w io.Writer, ss []string) {
-	writeCount(w, len(ss))
-	for _, s := range ss {
-		writeBytes(w, s)
-	}
-}
-
-func writeVFSSlice(w io.Writer, vs []VFS) {
-	writeCount(w, len(vs))
-	for _, v := range vs {
-		writeByte(w, byte(v.Root))
-		writeBytes(w, v.Rel)
-	}
-}
-
-func writeStringMap(w io.Writer, m map[string]string) {
-	writeCount(w, len(m))
-	for _, k := range canonKeysOf(m) {
-		writeBytes(w, k)
-		writeBytes(w, m[k])
-	}
-}
-
-func writeStringSliceMap(w io.Writer, m map[string][]string) {
-	writeCount(w, len(m))
-	for _, k := range canonKeysOf(m) {
-		writeBytes(w, k)
-		writeStringSlice(w, m[k])
-	}
-}
-
-func writeInterfaceMap(w io.Writer, m map[string]interface{}) {
-	writeCount(w, len(m))
-	for _, k := range canonKeysOf(m) {
-		writeBytes(w, k)
-		switch v := m[k].(type) {
-		case string:
-			writeByte(w, 's')
-			writeBytes(w, v)
-		case float64:
-			writeByte(w, 'f')
-			var fBuf [8]byte
-			binary.LittleEndian.PutUint64(fBuf[:], math.Float64bits(v))
-			_, _ = w.Write(fBuf[:])
-		case bool:
-			writeByte(w, 'b')
-			writeBool(w, v)
-		default:
-			ThrowFmt("writeInterfaceMap: unsupported value type %T for key %q", v, k)
-		}
-	}
-}
-
-func writeCmdSlice(w io.Writer, cmds []Cmd) {
-	writeCount(w, len(cmds))
-	for _, c := range cmds {
-		writeStringSlice(w, c.CmdArgs)
-		writeBytes(w, c.Cwd)
-		writeStringMap(w, c.Env)
-		writeBytes(w, c.Stdout)
-	}
+	c.writeCmdSlice(n.Cmds)
+	c.writeStringSlice(n.Deps)
+	c.writeStringMap(n.Env)
+	c.writeStringSliceMap(n.ForeignDeps)
+	c.writeBool(n.HostPlatform)
+	c.writeVFSSlice(n.Inputs)
+	c.writeStringMap(n.KV)
+	c.writeVFSSlice(n.Outputs)
+	c.writeBytes(n.Platform)
+	c.writeInterfaceMap(n.Requirements)
+	c.writeBool(n.Sandboxing)
+	c.writeStringSlice(n.Tags)
+	c.writeStringMap(n.TargetProperties)
 }
 
 // canonKeysOf extracts and sorts a map's keys. Shared by every
