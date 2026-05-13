@@ -223,7 +223,6 @@ type moduleEmitResult struct {
 // host PROGRAM the target closure depends on is reached through one
 // of the two source-extension dispatch sites.
 type genCtx struct {
-	cfg             PlatformConfig
 	sourceRoot      string
 	emit            Emitter
 	memo            map[ModuleInstance]*moduleEmitResult
@@ -682,7 +681,6 @@ func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emi
 	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
 
 	ctx := &genCtx{
-		cfg:             TargetCfg,
 		sourceRoot:      srcRoot,
 		emit:            emitter,
 		memo:            make(map[ModuleInstance]*moduleEmitResult),
@@ -725,10 +723,9 @@ func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emi
 // construct both Platforms from CLI flags + mining before invoking
 // this entry; the walker reads every flag, tool path, and tag off
 // the Platform pointers.
-func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, hostP, targetP *Platform, mode string) *Graph {
+func GenWithMode(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string) *Graph {
 	emitter := NewBufferedEmitter()
 	_, prepare := runGenInto(sourceRoot, targetDir, hostP, targetP, emitter, mode)
-	_ = cfg // PlatformConfig is reserved for the M5 host-cross-compile dispatch.
 
 	return FinalizeWith(emitter, prepare)
 }
@@ -2277,7 +2274,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		ccClosure := joinClosure
 
-		if targetIsX8664(srcInstance) {
+		if srcInstance.Platform.ISA == ISAX8664 {
 			// When this module is reached through a host (x86_64) walk
 			// the JS node nevertheless emits on the target axis (see the
 			// EmitJS call below — Platform is anchored to the outer-target
@@ -2301,7 +2298,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// downstream JS-derived CC node below continues to compile
 		// at `srcInstance.Platform.Target` (host x86_64 for ragel6/bin) so
 		// the .pic.o output stays on the correct compile axis.
-		jsRef, joinOutVFS := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.cfg.Target.ID, ctx.emit)
+		jsRef, joinOutVFS := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.target.Target, ctx.emit)
 
 		// EmitJS returns a $(B)/<srcInstance.Path>/<name>
 		// absolute path; convert to srcInstance-relative for the
