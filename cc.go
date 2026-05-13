@@ -350,10 +350,26 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 		cmdArgs = composeMuslHostCC(outputPath, inputPath, nil, muslOwnExtras, isCxx)
 	case isMusl:
 		cmdArgs = composeMuslCC(outputPath, inputPath, nil, muslOwnExtras, isCxx)
-	case targetX8664:
-		cmdArgs = composeHostCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, in.PerSourceCFlags, isCxx, instance.Flags.NoCompilerWarnings)
 	default:
-		cmdArgs = composeTargetCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, in.PerSourceCFlags, isCxx, instance.Flags.NoCompilerWarnings)
+		args := ccComposeArgs{
+			OutputPath:         outputPath,
+			InputPath:          inputPath,
+			OwnAddIncl:         in.AddIncl,
+			PeerAddIncl:        in.PeerAddInclGlobal,
+			OwnCFlags:          ownCFlags,
+			OwnExtras:          ownExtras,
+			AutoPeerCFlags:     autoPeerCFlags,
+			PeerExtras:         peerExtras,
+			OwnGlobalBucket:    ownGlobalBucket,
+			PerSrcCFlags:       in.PerSourceCFlags,
+			IsCxx:              isCxx,
+			NoCompilerWarnings: instance.Flags.NoCompilerWarnings,
+		}
+		if targetX8664 {
+			cmdArgs = composeHostCC(args)
+		} else {
+			cmdArgs = composeTargetCC(args)
+		}
 	}
 
 	// The reference graph carries the same env map at both the cmd
@@ -866,30 +882,50 @@ func composePostCatboostBucket(preBucket []string) []string {
 //   - cxxStandardWarnings bundle (D04) is injected by
 //     `appendCxxStdAndOwn` for C++ sources without
 //     NoCompilerWarnings.
-func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, perSrcCFlags []string, isCxx, noCompilerWarnings bool) []string {
-	cmdArgs := make([]string, 0, 101+len(ownAddIncl)+len(peerAddIncl)+len(ownCFlags)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2*len(ownGlobalBucket)+len(perSrcCFlags)+4)
+// ccComposeArgs packs the parameter bundle for the cmd_args-composing
+// helpers composeTargetCC / composeHostCC. Was twelve positional
+// parameters; one mismatched alias was the kind of bug that wouldn't
+// surface from the type system (every parameter is `[]string` or
+// `string`).
+type ccComposeArgs struct {
+	OutputPath         string
+	InputPath          string
+	OwnAddIncl         []string
+	PeerAddIncl        []string
+	OwnCFlags          []string
+	OwnExtras          []string
+	AutoPeerCFlags     []string
+	PeerExtras         []string
+	OwnGlobalBucket    []string
+	PerSrcCFlags       []string
+	IsCxx              bool
+	NoCompilerWarnings bool
+}
+
+func composeTargetCC(a ccComposeArgs) []string {
+	cmdArgs := make([]string, 0, 101+len(a.OwnAddIncl)+len(a.PeerAddIncl)+len(a.OwnCFlags)+len(a.OwnExtras)+len(a.AutoPeerCFlags)+len(a.PeerExtras)+2*len(a.OwnGlobalBucket)+len(a.PerSrcCFlags)+4)
 	cmdArgs = append(cmdArgs,
-		pickCompiler(isCxx),
+		pickCompiler(a.IsCxx),
 		"--target="+targetTriple,
 		"-march="+archFlag,
 		"-B"+binPath,
 		"-c",
 		"-o",
-		outputPath,
+		a.OutputPath,
 	)
 	cmdArgs = append(cmdArgs, ccIncludesPrefix...)
-	cmdArgs = appendAddIncl(cmdArgs, ownAddIncl)
+	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl)
 	cmdArgs = append(cmdArgs, ccIncludesSuffix...)
-	cmdArgs = appendAddIncl(cmdArgs, peerAddIncl)
+	cmdArgs = appendAddIncl(cmdArgs, a.PeerAddIncl)
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
 	cmdArgs = append(cmdArgs, commonCFlags...)
-	cmdArgs = append(cmdArgs, pickWarningFlags(noCompilerWarnings)...)
+	cmdArgs = append(cmdArgs, pickWarningFlags(a.NoCompilerWarnings)...)
 	cmdArgs = append(cmdArgs, commonDefines...)
-	cmdArgs = append(cmdArgs, ownCFlags...)
+	cmdArgs = append(cmdArgs, a.OwnCFlags...)
 	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-	cmdArgs = append(cmdArgs, autoPeerCFlags...)
+	cmdArgs = append(cmdArgs, a.AutoPeerCFlags...)
 	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
 
 	// For C sources, CONLYFLAGS (ownExtras) must trail AFTER
@@ -899,23 +935,23 @@ func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownC
 	// appendCxxStdAndOwn here; hold them for the trailer below.
 	// For C++ sources the slot order is correct as-is.
 	var cOnlyExtras []string
-	if isCxx {
-		cmdArgs = appendCxxStdAndOwn(cmdArgs, true, noCompilerWarnings, true, ownExtras)
+	if a.IsCxx {
+		cmdArgs = appendCxxStdAndOwn(cmdArgs, true, a.NoCompilerWarnings, true, a.OwnExtras)
 	} else {
-		cOnlyExtras = ownExtras
+		cOnlyExtras = a.OwnExtras
 	}
 
-	if isCxx {
-		cmdArgs = append(cmdArgs, ownGlobalBucket...)
+	if a.IsCxx {
+		cmdArgs = append(cmdArgs, a.OwnGlobalBucket...)
 		cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-		cmdArgs = append(cmdArgs, composePostCatboostBucket(ownGlobalBucket)...)
+		cmdArgs = append(cmdArgs, composePostCatboostBucket(a.OwnGlobalBucket)...)
 	} else {
 		// C source: empirical reference shows no catboost-redux for
 		// C compiles (build/cow/on lib.c.o, tcmalloc aligned_alloc.c.o).
 		// peerExtras is sufficient (own GLOBAL CFLAGS / CONLYFLAGS for
 		// C are unused in the M2 closure; if a future closure
 		// surfaces such a case, revisit).
-		cmdArgs = append(cmdArgs, peerExtras...)
+		cmdArgs = append(cmdArgs, a.PeerExtras...)
 	}
 
 	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
@@ -924,11 +960,11 @@ func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownC
 	// extra_cflags...)`) slot BETWEEN macroPrefixMapFlags and the
 	// input path. Empirical reference: util/charset/wide_sse41.cpp.o
 	// cmd_args show `-DSSE41_STUB` immediately before the source path.
-	cmdArgs = append(cmdArgs, perSrcCFlags...)
+	cmdArgs = append(cmdArgs, a.PerSrcCFlags...)
 	// PR-37: C-source CONLYFLAGS trail after macroPrefixMapFlags (and
 	// after perSrcCFlags). Empirical: base64 plain32/neon64 CC nodes.
 	cmdArgs = append(cmdArgs, cOnlyExtras...)
-	cmdArgs = append(cmdArgs, inputPath)
+	cmdArgs = append(cmdArgs, a.InputPath)
 
 	return cmdArgs
 }
@@ -952,26 +988,26 @@ func composeTargetCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownC
 // own-GLOBAL-bucket × 2 redux pattern as composeTargetCC. C++
 // sources emit the bucket twice flanking the catboost-redux; C
 // sources emit peerExtras once.
-func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, perSrcCFlags []string, isCxx, noCompilerWarnings bool) []string {
-	cmdArgs := make([]string, 0, 105+len(ownAddIncl)+len(peerAddIncl)+len(ownCFlags)+len(ownExtras)+len(autoPeerCFlags)+len(peerExtras)+2*len(ownGlobalBucket)+len(perSrcCFlags)+4)
+func composeHostCC(a ccComposeArgs) []string {
+	cmdArgs := make([]string, 0, 105+len(a.OwnAddIncl)+len(a.PeerAddIncl)+len(a.OwnCFlags)+len(a.OwnExtras)+len(a.AutoPeerCFlags)+len(a.PeerExtras)+2*len(a.OwnGlobalBucket)+len(a.PerSrcCFlags)+4)
 	cmdArgs = append(cmdArgs,
-		pickCompiler(isCxx),
+		pickCompiler(a.IsCxx),
 		"--target="+hostTriple,
 		"-B"+binPath,
 		"-c",
 		"-o",
-		outputPath,
+		a.OutputPath,
 	)
 	cmdArgs = append(cmdArgs, ccIncludesPrefix...)
-	cmdArgs = appendAddIncl(cmdArgs, ownAddIncl)
+	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl)
 	cmdArgs = append(cmdArgs, ccIncludesSuffix...)
-	cmdArgs = appendAddIncl(cmdArgs, peerAddIncl)
+	cmdArgs = appendAddIncl(cmdArgs, a.PeerAddIncl)
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
 	cmdArgs = append(cmdArgs, hostCFlags...)
-	cmdArgs = append(cmdArgs, pickWarningFlags(noCompilerWarnings)...)
+	cmdArgs = append(cmdArgs, pickWarningFlags(a.NoCompilerWarnings)...)
 	cmdArgs = append(cmdArgs, hostDefines...)
-	cmdArgs = append(cmdArgs, ownCFlags...)
+	cmdArgs = append(cmdArgs, a.OwnCFlags...)
 	cmdArgs = append(cmdArgs, ndebugPicBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
 	// PR-32 D09: autoPeerCFlags (-D_musl_) slots BETWEEN catboost
@@ -987,7 +1023,7 @@ func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFl
 	// = -DUSE_PYTHON3, right after -mcx16 at ref:96 and before the 2nd
 	// ndebugPicBlock at ref:98). Partition `autoPeerCFlags` here so
 	// pre-SSE keeps `-D_musl_` and post-SSE picks up `-DUSE_PYTHON3`.
-	preSse, postSse := partitionPython3FromAutoPeer(autoPeerCFlags)
+	preSse, postSse := partitionPython3FromAutoPeer(a.AutoPeerCFlags)
 	cmdArgs = append(cmdArgs, preSse...)
 	cmdArgs = append(cmdArgs, hostSseFeatures...)
 	cmdArgs = append(cmdArgs, postSse...)
@@ -998,26 +1034,26 @@ func composeHostCC(outputPath, inputPath string, ownAddIncl, peerAddIncl, ownCFl
 	// base64 plain32/ssse3 host PIC nodes show -std=c11 (and -mssse3)
 	// immediately before the source path.
 	var cOnlyExtrasHost []string
-	if isCxx {
-		cmdArgs = appendCxxStdAndOwn(cmdArgs, true, noCompilerWarnings, true, ownExtras)
+	if a.IsCxx {
+		cmdArgs = appendCxxStdAndOwn(cmdArgs, true, a.NoCompilerWarnings, true, a.OwnExtras)
 	} else {
-		cOnlyExtrasHost = ownExtras
+		cOnlyExtrasHost = a.OwnExtras
 	}
 
-	if isCxx {
-		cmdArgs = append(cmdArgs, ownGlobalBucket...)
+	if a.IsCxx {
+		cmdArgs = append(cmdArgs, a.OwnGlobalBucket...)
 		cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-		cmdArgs = append(cmdArgs, composePostCatboostBucket(ownGlobalBucket)...)
+		cmdArgs = append(cmdArgs, composePostCatboostBucket(a.OwnGlobalBucket)...)
 	} else {
-		cmdArgs = append(cmdArgs, peerExtras...)
+		cmdArgs = append(cmdArgs, a.PeerExtras...)
 	}
 
 	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
 	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)
 	// PR-35o: per-source extra CFLAGS slot (mirror of composeTargetCC).
-	cmdArgs = append(cmdArgs, perSrcCFlags...)
+	cmdArgs = append(cmdArgs, a.PerSrcCFlags...)
 	cmdArgs = append(cmdArgs, cOnlyExtrasHost...)
-	cmdArgs = append(cmdArgs, inputPath)
+	cmdArgs = append(cmdArgs, a.InputPath)
 
 	return cmdArgs
 }
