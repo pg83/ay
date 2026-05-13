@@ -103,6 +103,8 @@ func EmitLD(
 	memberInputs []string,
 	muslOn bool,
 	moduleCFlags []string,
+	peerCFlagsGlobal []string,
+	usePython3 bool,
 	emit Emitter,
 ) NodeRef {
 	if len(ccRefs) != len(ccPaths) {
@@ -166,7 +168,7 @@ func EmitLD(
 	vcsOPath := "$(BUILD_ROOT)/" + binaryDir + "/__vcs_version__.c" + vcsOSuffix
 
 	cmd0 := composeLDCmdVcsInfo(vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath, muslOn, moduleCFlags, hostBuild, instance.Flags.NoCompilerWarnings)
+	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
 	cmd2 := composeLDCmdLinkExe(outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, hostBuild)
 	cmd3 := composeLDCmdLinkOrCopy(binaryDir)
 
@@ -394,12 +396,12 @@ func composeLDCmdVcsInfo(vcsCPath string) []string {
 // reflects `cliMuslOn(ctx)` from the walker; when MUSL=no the two
 // sentinels collapse to a bare double-`noLibcUndebugBlock` (target)
 // or no muslConsumerSentinel between catboost and SSE (host).
-func composeLDCmdVcsCompile(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags []string, hostBuild bool, noCompilerWarnings bool) []string {
+func composeLDCmdVcsCompile(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags, peerCFlagsGlobal []string, usePython3 bool, hostBuild bool, noCompilerWarnings bool) []string {
 	if hostBuild {
-		return composeLDCmdVcsCompileHost(vcsCPath, vcsOPath, muslOn, moduleCFlags, noCompilerWarnings)
+		return composeLDCmdVcsCompileHost(vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, noCompilerWarnings)
 	}
 
-	cmdArgs := make([]string, 0, 94)
+	cmdArgs := make([]string, 0, 94+len(peerCFlagsGlobal))
 	cmdArgs = append(cmdArgs,
 		ccCompilerPath,
 		"--target="+targetTriple,
@@ -421,11 +423,30 @@ func composeLDCmdVcsCompile(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags
 		cmdArgs = append(cmdArgs, ldVcsMuslSelfDefine)
 	}
 
+	// PR-M3-final-LD-trailer-and-cflags Cluster B: PEERDIR-derived GLOBAL
+	// CFLAGS land here between the musl-self sentinel and the first
+	// `noLibcUndebugBlock`. Empirical anchor (devtools/ymake/bin/ymake
+	// cmd[1] ref:48..58): -DLZMA_API_STATIC, -DOPENSSL_RENAME_SYMBOLS=1,
+	// -DFFI_STATIC_BUILD, -DUSE_PYTHON3, -DASIO_STANDALONE,
+	// -DASIO_SEPARATE_COMPILATION, -DFMT_EXPORT, -DPCRE_STATIC,
+	// -DANTLR4CPP_STATIC, -DANTLR4_USE_THREAD_LOCAL_CACHE,
+	// -DANTLR4CPP_USING_ABSEIL precede -UNDEBUG / -mno-outline-atomics.
+	cmdArgs = append(cmdArgs, peerCFlagsGlobal...)
+
 	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
 
 	if muslOn {
 		cmdArgs = append(cmdArgs, muslConsumerSentinel)
+	}
+
+	// PR-M3-final-LD-trailer-and-cflags Cluster B: USE_PYTHON3
+	// (defaultPeerCFlags slot for target LD vcs compile) lands between
+	// muslConsumerSentinel and the second noLibcUndebugBlock copy.
+	// Anchor: devtools/ymake/bin/ymake cmd[1] ref:83 (`-DUSE_PYTHON3`
+	// after `-D_musl_`, before second `-UNDEBUG`).
+	if usePython3 {
+		cmdArgs = append(cmdArgs, "-DUSE_PYTHON3")
 	}
 
 	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
@@ -453,8 +474,8 @@ func composeLDCmdVcsCompile(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags
 // -Wno-implicit-const-int-float-conversion -Wno-unknown-warning-option`).
 // Canonical bundle composition: `ymake_conf.py:1550-1556` and
 // `gnu_compiler.conf:124-140`.
-func composeLDCmdVcsCompileHost(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags []string, noCompilerWarnings bool) []string {
-	cmdArgs := make([]string, 0, 94+len(moduleCFlags))
+func composeLDCmdVcsCompileHost(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags, peerCFlagsGlobal []string, usePython3 bool, noCompilerWarnings bool) []string {
+	cmdArgs := make([]string, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal))
 	cmdArgs = append(cmdArgs,
 		ccCompilerPath,
 		"--target="+hostTriple,
@@ -471,6 +492,13 @@ func composeLDCmdVcsCompileHost(vcsCPath, vcsOPath string, muslOn bool, moduleCF
 	cmdArgs = append(cmdArgs, pickWarningFlags(noCompilerWarnings)...)
 	cmdArgs = append(cmdArgs, hostDefines...)
 	cmdArgs = append(cmdArgs, moduleCFlags...)
+	// PR-M3-final-LD-trailer-and-cflags Cluster B: PEERDIR-derived GLOBAL
+	// CFLAGS land here between moduleCFlags (terminating with -D_musl_=1
+	// when MUSL=yes) and the first ndebugPicBlock. Empirical anchor
+	// (tools/py3cc/py3cc cmd[1] ref:45..47): -DLZMA_API_STATIC,
+	// -DOPENSSL_RENAME_SYMBOLS=1, -DFFI_STATIC_BUILD precede -DNDEBUG /
+	// -fPIC.
+	cmdArgs = append(cmdArgs, peerCFlagsGlobal...)
 	cmdArgs = append(cmdArgs, ndebugPicBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
 
@@ -479,6 +507,16 @@ func composeLDCmdVcsCompileHost(vcsCPath, vcsOPath string, muslOn bool, moduleCF
 	}
 
 	cmdArgs = append(cmdArgs, hostSseFeatures...)
+
+	// PR-M3-final-LD-trailer-and-cflags Cluster B: USE_PYTHON3
+	// (defaultPeerCFlags slot for host LD vcs compile) lands between
+	// hostSseFeatures and the second ndebugPicBlock copy. Anchor:
+	// tools/py3cc/slow/py3cc cmd[1] ref:78 (`-DUSE_PYTHON3` after the
+	// `-mcx16` SSE tail, before the second `-DNDEBUG`).
+	if usePython3 {
+		cmdArgs = append(cmdArgs, "-DUSE_PYTHON3")
+	}
+
 	cmdArgs = append(cmdArgs, ndebugPicBlock...)
 
 	return cmdArgs
@@ -576,12 +614,29 @@ func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths, peerLibPaths, plu
 	cmdArgs = append(cmdArgs, "-Wl,--end-group")
 
 	if hostBuild {
-		cmdArgs = append(cmdArgs, ldHostStaticTrailingFlags...)
+		if peersIncludeLibcCompat(peerLibPaths) {
+			cmdArgs = append(cmdArgs, ldHostStaticRTTrailingFlags...)
+		} else {
+			cmdArgs = append(cmdArgs, ldHostStaticTrailingFlags...)
+		}
 	} else {
 		cmdArgs = append(cmdArgs, ldStaticMuslTrailingFlags...)
 	}
 
 	return cmdArgs
+}
+
+// peersIncludeLibcCompat reports whether the host LD's peer-archive
+// slot includes `contrib/libs/libc_compat`. Used to select the
+// `-lrt`/`-ldl`-augmented trailer.
+func peersIncludeLibcCompat(peerLibPaths []string) bool {
+	for _, p := range peerLibPaths {
+		if p == libcCompatPeerPath {
+			return true
+		}
+	}
+
+	return false
 }
 
 // composeLDCmdLinkOrCopy composes cmd[3]: invokes fs_tools.py
@@ -703,6 +758,41 @@ var ldHostStaticTrailingFlags = []string{
 	"-lm",
 	"-Wl,--gc-sections",
 }
+
+// ldHostStaticRTTrailingFlags is the 14-flag trailer the reference host
+// PROGRAM LD cmd[2] emits AFTER `-Wl,--end-group` for host binaries
+// that link against `contrib/libs/libc_compat` (and typically
+// `contrib/libs/linuxvdso`). Differs from `ldHostStaticTrailingFlags`
+// by the inserted `-lrt`/`-ldl` pair between `--no-dynamic-linker` and
+// the first `-nostdlib`. Verified entry-by-entry against
+// `tools/archiver/archiver` LD cmd[2] in the reference graph (PR-M3-
+// final-LD-trailer-and-cflags Cluster A).
+var ldHostStaticRTTrailingFlags = []string{
+	"-rdynamic",
+	"-Wl,--no-as-needed",
+	"-fPIC",
+	"-fPIC",
+	"-static",
+	"-Wl,--no-dynamic-linker",
+	"-lrt",
+	"-ldl",
+	"-nostdlib",
+	"-fno-pie",
+	"-Wl,-no-pie",
+	"-nostdlib",
+	"-lm",
+	"-Wl,--gc-sections",
+}
+
+// libcCompatPeerPath is the peer-library path whose presence triggers
+// the `-lrt`/`-ldl` host LD trailer. Empirically (PR-M3-final-LD-
+// trailer-and-cflags Cluster A): host PROGRAMs that PEERDIR
+// `contrib/libs/libc_compat` (archiver, protoc, py3cc, stage0pycc, ...)
+// pull in glibc-compat shims that require `-lrt`/`-ldl`; host PROGRAMs
+// that do not (ragel6, yasm) omit them. The peer path appears in
+// `peerLibPaths` for host LD nodes as
+// `contrib/libs/libc_compat/libcontrib-libs-libc_compat.a`.
+const libcCompatPeerPath = "contrib/libs/libc_compat/libcontrib-libs-libc_compat.a"
 
 // ldScriptInputs is the 7-script bundle that appears at the tail of
 // every LD node's `inputs` array, in the exact NON-ALPHABETICAL order
