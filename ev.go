@@ -47,14 +47,20 @@ import (
 // tags: always [] (EV nodes only appear on aarch64 in the reference).
 
 const (
-	evEvent2cppBinaryPath = "$(B)/tools/event2cpp/event2cpp"
 	// evEvent2cppModule is the ya.make path walked to obtain the event2cpp host
 	// LD node. tools/event2cpp/ya.make uses INCLUDE() patterns that our parser
 	// does not expand; tools/event2cpp/bin/ya.make is the actual PROGRAM
 	// declaration. ldBinaryDir lifts the output dir from tools/event2cpp/bin to
 	// tools/event2cpp so the LD node's module_dir matches the reference.
-	evEvent2cppModule     = "tools/event2cpp/bin"
-	evEventlogIncludePath = "$(S)/library/cpp/eventlog"
+	evEvent2cppModule = "tools/event2cpp/bin"
+)
+
+var (
+	evEvent2cppBinaryVFS  = Build("tools/event2cpp/event2cpp")
+	evEvent2cppBinaryPath = evEvent2cppBinaryVFS.String()
+
+	evEventlogIncludeVFS  = Source("library/cpp/eventlog")
+	evEventlogIncludePath = evEventlogIncludeVFS.String()
 )
 
 // eventRuntimeHeaders is the common subset of SOURCE_ROOT headers present in
@@ -171,8 +177,8 @@ func evWitnessExtras(sourceRoot, evRelPath string, evPbCC VFS) []VFS {
 
 	out := make([]VFS, 0,
 		3+len(pbDescriptorImporterHeaders)+len(evExtraProtobufHeaders)+len(evAbseilCleanupHeaders))
-	out = append(out, ParseVFSOrSource(pbWrapperPath))
-	out = append(out, ParseVFSOrSource(pbDescriptorProto))
+	out = append(out, pbWrapperVFS)
+	out = append(out, pbDescriptorVFS)
 	out = append(out, Source(evRelPath))
 	out = append(out, evPbCC)
 	out = append(out, pbDescriptorImporterHeaders...)
@@ -200,16 +206,16 @@ func EmitEV(
 	evRelPath := moduleDir + "/" + srcRel
 
 	// EV outputs: .ev.pb.cc first, then .ev.pb.h (reference order).
-	evCC := "$(B)/" + evRelPath + ".pb.cc"
-	evH := "$(B)/" + evRelPath + ".pb.h"
-	srcAbs := "$(S)/" + evRelPath
+	evCC := Build(evRelPath + ".pb.cc")
+	evH := Build(evRelPath + ".pb.h")
+	srcVFS := Source(evRelPath)
 
 	cmdArgs := []string{
 		pbPython3Path,
 		pbWrapperPath,
 		"--outputs",
-		evCC,
-		evH,
+		evCC.String(),
+		evH.String(),
 		"--",
 		protocBinary,
 		"-I=./",
@@ -237,8 +243,8 @@ func EmitEV(
 		ParseVFSOrSource(cppStyleguideBinary),
 		ParseVFSOrSource(protocBinary),
 		ParseVFSOrSource(event2cppBinary),
-		ParseVFSOrSource(pbWrapperPath),
-		ParseVFSOrSource(srcAbs),
+		pbWrapperVFS,
+		srcVFS,
 	}
 
 	// Resolve transitive imports from the .ev source file and append them.
@@ -285,7 +291,7 @@ func EmitEV(
 		},
 		Env:     env,
 		Inputs:  inputs,
-		Outputs: []VFS{ParseVFSOrSource(evCC), ParseVFSOrSource(evH)},
+		Outputs: []VFS{evCC, evH},
 		KV: map[string]string{
 			"p":  "EV",
 			"pc": "yellow",
@@ -381,7 +387,7 @@ func resolveEvImports(sourceRoot, srcRel string) []string {
 		f.Close()
 
 		// Emit this file's absolute $(S)/... entry.
-		order = append(order, "$(S)/"+rel)
+		order = append(order, Source(rel).String())
 
 		// Recurse into imports.
 		for _, imp := range imports {
