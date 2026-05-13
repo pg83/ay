@@ -898,14 +898,14 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 			if reg != nil {
-				lexerG4 := "$(S)/" + instance.Path + "/" + g.Lexer
-				parserG4 := "$(S)/" + instance.Path + "/" + g.Parser
-				lexerCpp := outDir + "/" + lexerBase + ".cpp"
-				witnessIncludes := []string{
-					antlr4RuntimeHeaderPath,
+				lexerG4 := Source(instance.Path + "/" + g.Lexer)
+				parserG4 := Source(instance.Path + "/" + g.Parser)
+				lexerCpp := ParseVFSOrSource(outDir + "/" + lexerBase + ".cpp")
+				witnessIncludes := []VFS{
+					ParseVFSOrSource(antlr4RuntimeHeaderPath),
 					lexerCpp,
-					stdout2stderrPath,
-					antlr4JarPath,
+					ParseVFSOrSource(stdout2stderrPath),
+					ParseVFSOrSource(antlr4JarPath),
 					lexerG4,
 					parserG4,
 				}
@@ -917,7 +917,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 				} {
 					reg.Register(&GeneratedFileInfo{
 						ProducerKvP:    "JV",
-						OutputPath:     h,
+						OutputPath:     ParseVFSOrSource(h),
 						EmitsIncludes:  witnessIncludes,
 						ProducerRef:    jvRef,
 						HasProducerRef: true,
@@ -952,13 +952,13 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			// PR-M3-L0-cascade-close-v2: ProducerRef = jvRef.
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 			if reg != nil {
-				grammarG4 := "$(S)/" + instance.Path + "/" + g.Grammar
-				lexerCpp := outDir + "/" + base + "Lexer.cpp"
-				witnessIncludes := []string{
-					antlr4RuntimeHeaderPath,
+				grammarG4 := Source(instance.Path + "/" + g.Grammar)
+				lexerCpp := ParseVFSOrSource(outDir + "/" + base + "Lexer.cpp")
+				witnessIncludes := []VFS{
+					ParseVFSOrSource(antlr4RuntimeHeaderPath),
 					lexerCpp,
-					stdout2stderrPath,
-					antlr4JarPath,
+					ParseVFSOrSource(stdout2stderrPath),
+					ParseVFSOrSource(antlr4JarPath),
 					grammarG4,
 				}
 				for _, h := range []string{
@@ -969,7 +969,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 				} {
 					reg.Register(&GeneratedFileInfo{
 						ProducerKvP:    "JV",
-						OutputPath:     h,
+						OutputPath:     ParseVFSOrSource(h),
 						EmitsIncludes:  witnessIncludes,
 						ProducerRef:    jvRef,
 						HasProducerRef: true,
@@ -1015,11 +1015,11 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		if reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP: "BI",
-				OutputPath:  outDir + "/" + d.createBuildInfoFor,
-				EmitsIncludes: []string{
-					buildInfoGenPyPath,
-					xargsPyPath,
-					yieldLinePyPath,
+				OutputPath:  ParseVFSOrSource(outDir + "/" + d.createBuildInfoFor),
+				EmitsIncludes: []VFS{
+					ParseVFSOrSource(buildInfoGenPyPath),
+					ParseVFSOrSource(xargsPyPath),
+					ParseVFSOrSource(yieldLinePyPath),
 				},
 				ProducerRef:    biRef,
 				HasProducerRef: true,
@@ -1092,14 +1092,14 @@ func emitJVDownstreamCPCC(
 		// downstream system-header closure (e.g. util/generic/string.h →
 		// glibcasm / musl / cxxsupp) lands in the CP/CC inputs naturally.
 		if reg != nil {
-			emits := make([]string, 0, 1+len(outputIncludes))
-			emits = append(emits, antlr4RuntimeHeaderPath)
+			emits := make([]VFS, 0, 1+len(outputIncludes))
+			emits = append(emits, ParseVFSOrSource(antlr4RuntimeHeaderPath))
 			for _, h := range outputIncludes {
-				emits = append(emits, "$(S)/"+h)
+				emits = append(emits, Source(h))
 			}
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "CP",
-				OutputPath:    g4CppPath,
+				OutputPath:    ParseVFSOrSource(g4CppPath),
 				EmitsIncludes: emits,
 			})
 		}
@@ -1543,7 +1543,7 @@ func emitArchive(
 	if reg != nil {
 		reg.Register(&GeneratedFileInfo{
 			ProducerKvP:    "AR",
-			OutputPath:     archivePath,
+			OutputPath:     ParseVFSOrSource(archivePath),
 			ProducerRef:    arRef,
 			HasProducerRef: true,
 		})
@@ -1694,8 +1694,8 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		diskPath := ctx.sourceRoot + "/" + instance.Path + "/" + cf.Src
 		reg.Register(&GeneratedFileInfo{
 			ProducerKvP:   "CF",
-			OutputPath:    cfOut,
-			EmitsIncludes: cfIncludeDirectives(diskPath),
+			OutputPath:    ParseVFSOrSource(cfOut),
+			EmitsIncludes: VFSesFromStrings(cfIncludeDirectives(diskPath)),
 		})
 	}
 }
@@ -1749,22 +1749,22 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		for _, f := range stmt.OUTFiles {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
-				OutputPath:    "$(B)/" + instance.Path + "/" + f,
-				EmitsIncludes: prEmitsIncludes(instance, f, stmt, toolInducedDeps),
+				OutputPath:    Build(instance.Path + "/" + f),
+				EmitsIncludes: VFSesFromStrings(prEmitsIncludes(instance, f, stmt, toolInducedDeps)),
 			})
 		}
 		for _, f := range stmt.OUTNoAutoFiles {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
-				OutputPath:    "$(B)/" + instance.Path + "/" + f,
-				EmitsIncludes: prEmitsIncludes(instance, f, stmt, toolInducedDeps),
+				OutputPath:    Build(instance.Path + "/" + f),
+				EmitsIncludes: VFSesFromStrings(prEmitsIncludes(instance, f, stmt, toolInducedDeps)),
 			})
 		}
 		if stmt.StdoutFile != "" {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
-				OutputPath:    "$(B)/" + instance.Path + "/" + stmt.StdoutFile,
-				EmitsIncludes: prEmitsIncludes(instance, stmt.StdoutFile, stmt, toolInducedDeps),
+				OutputPath:    Build(instance.Path + "/" + stmt.StdoutFile),
+				EmitsIncludes: VFSesFromStrings(prEmitsIncludes(instance, stmt.StdoutFile, stmt, toolInducedDeps)),
 			})
 		}
 	}
@@ -1797,13 +1797,13 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// (NodeRef not yet known); SetProducerRef fills it in atomically.
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			reg.SetProducerRef("$(B)/"+instance.Path+"/"+f, prRef)
+			reg.SetProducerRef(Build(instance.Path+"/"+f), prRef)
 		}
 		for _, f := range stmt.OUTNoAutoFiles {
-			reg.SetProducerRef("$(B)/"+instance.Path+"/"+f, prRef)
+			reg.SetProducerRef(Build(instance.Path+"/"+f), prRef)
 		}
 		if stmt.StdoutFile != "" {
-			reg.SetProducerRef("$(B)/"+instance.Path+"/"+stmt.StdoutFile, prRef)
+			reg.SetProducerRef(Build(instance.Path+"/"+stmt.StdoutFile), prRef)
 		}
 	}
 

@@ -685,9 +685,11 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 func (s *IncludeScanner) IncludeDirectiveTargets(vfsPath VFS) []string {
 	if vfsPath.IsBuild() {
 		if s.codegen != nil {
-			if info, ok := s.codegen.Lookup(vfsPath.String()); ok {
+			if info, ok := s.codegen.Lookup(vfsPath); ok {
 				out := make([]string, len(info.EmitsIncludes))
-				copy(out, info.EmitsIncludes)
+				for i, v := range info.EmitsIncludes {
+					out[i] = v.String()
+				}
 				return out
 			}
 		}
@@ -921,12 +923,9 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 
 	if vfsPath.IsBuild() {
 		if s.codegen != nil {
-			if info, ok := s.codegen.Lookup(vfsPath.String()); ok {
-				// EmitsIncludes is still a []string of VFS-form
-				// strings (the codegen registry's external API).
-				// Parse each into VFS at the boundary.
+			if info, ok := s.codegen.Lookup(vfsPath); ok {
 				for _, rabs := range info.EmitsIncludes {
-					fn(ParseVFSOrSource(rabs))
+					fn(rabs)
 				}
 
 				return
@@ -2054,7 +2053,12 @@ func (c codegenLocator) Exists(vfsPath string) bool {
 		return false
 	}
 
-	_, ok := c.reg.Lookup(vfsPath)
+	v, ok := ParseVFS(vfsPath)
+	if !ok {
+		return false
+	}
+
+	_, ok = c.reg.Lookup(v)
 
 	return ok
 }

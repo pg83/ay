@@ -612,8 +612,8 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		// constant protobuf runtime header set (F-7-D).
 		protoRelPath := instance.Path + "/" + src
 		protoBase := strings.TrimSuffix(protoRelPath, ".proto")
-		pbH := "$(B)/" + protoBase + ".pb.h"
-		pbCC := "$(B)/" + protoBase + ".pb.cc"
+		pbH := Build(protoBase + ".pb.h")
+		pbCC := Build(protoBase + ".pb.cc")
 
 		// PR-M3-L0-codegen-deps-EV-PB: stash the PB NodeRef under both output
 		// paths on the emitting platform so resolveCodegenDepRefs can thread
@@ -622,17 +622,17 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		// both target and host axes; x86_64 consumers must reach the x86_64
 		// PB, aarch64 consumers the aarch64 PB.
 		pbKey := codegenOutputKey{platform: instance.Platform.Target}
-		pbKey.path = ParseVFSOrSource(pbH)
+		pbKey.path = pbH
 		ctx.pbOutputs[pbKey] = pbRef
-		pbKey.path = ParseVFSOrSource(pbCC)
+		pbKey.path = pbCC
 		ctx.pbOutputs[pbKey] = pbRef
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
 			directImports := protoDirectImportIncludes(ctx.sourceRoot, protoRelPath)
 			extras := pbDescriptorImporterExtras(ctx.sourceRoot, protoRelPath)
-			emitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
-			emitsIncludes = append(emitsIncludes, directImports...)
-			emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
-			emitsIncludes = append(emitsIncludes, extras...)
+			emitsIncludes := make([]VFS, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
+			emitsIncludes = append(emitsIncludes, VFSesFromStrings(directImports)...)
+			emitsIncludes = append(emitsIncludes, VFSesFromStrings(protobufRuntimeHeaders)...)
+			emitsIncludes = append(emitsIncludes, VFSesFromStrings(extras)...)
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PB",
 				OutputPath:    pbH,
@@ -656,12 +656,12 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			// inherit the abseil closure (over-emission regression in reverted
 			// commit 870d43d cost L2 -1.05pp). The .pb.cc is consumed by exactly
 			// one CC compile node, so the closure is tightly scoped.
-			pbCCEmits := make([]string, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
+			pbCCEmits := make([]VFS, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
 			pbCCEmits = append(pbCCEmits, pbH)
-			pbCCEmits = append(pbCCEmits, "$(S)/"+protoRelPath)
-			pbCCEmits = append(pbCCEmits, pbWrapperPath)
-			pbCCEmits = append(pbCCEmits, protobufRuntimeHeaders...)
-			pbCCEmits = append(pbCCEmits, pbCcDeepRuntimeHeaders...)
+			pbCCEmits = append(pbCCEmits, Source(protoRelPath))
+			pbCCEmits = append(pbCCEmits, ParseVFSOrSource(pbWrapperPath))
+			pbCCEmits = append(pbCCEmits, VFSesFromStrings(protobufRuntimeHeaders)...)
+			pbCCEmits = append(pbCCEmits, VFSesFromStrings(pbCcDeepRuntimeHeaders)...)
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PB",
 				OutputPath:    pbCC,
@@ -673,7 +673,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		// for the downstream-CC + AR step below.
 		codegenOutputs = append(codegenOutputs, protoCodegenOutput{
 			genRef:  pbRef,
-			pbCC:    pbCC,
+			pbCC:    pbCC.String(),
 			srcRel:  strings.TrimSuffix(src, ".proto") + ".pb.cc",
 			primSrc: "$(S)/" + protoRelPath,
 		})
@@ -705,24 +705,24 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			// the .ev source's direct imports, plus the protobuf runtime headers (F-7-D)
 			// and the EV-specific runtime headers (util/* + eventlog).
 			evRelPath := instance.Path + "/" + src
-			evH := "$(B)/" + evRelPath + ".pb.h"
-			evPbCC := "$(B)/" + evRelPath + ".pb.cc"
+			evH := Build(evRelPath + ".pb.h")
+			evPbCC := Build(evRelPath + ".pb.cc")
 
 			// PR-M3-L0-codegen-deps-EV-PB: stash the EV NodeRef under both outputs
 			// on the emitting platform. See PB branch above for the keying rationale.
 			evKey := codegenOutputKey{platform: instance.Platform.Target}
-			evKey.path = ParseVFSOrSource(evH)
+			evKey.path = evH
 			ctx.evOutputs[evKey] = evRef
-			evKey.path = ParseVFSOrSource(evPbCC)
+			evKey.path = evPbCC
 			ctx.evOutputs[evKey] = evRef
 			if reg := codegenRegForInstance(ctx, instance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
-				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC)
-				emitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders)+len(evExtras))
-				emitsIncludes = append(emitsIncludes, directImports...)
-				emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
-				emitsIncludes = append(emitsIncludes, eventRuntimeHeaders...)
-				emitsIncludes = append(emitsIncludes, evExtras...)
+				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC.String())
+				emitsIncludes := make([]VFS, 0, len(directImports)+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders)+len(evExtras))
+				emitsIncludes = append(emitsIncludes, VFSesFromStrings(directImports)...)
+				emitsIncludes = append(emitsIncludes, VFSesFromStrings(protobufRuntimeHeaders)...)
+				emitsIncludes = append(emitsIncludes, VFSesFromStrings(eventRuntimeHeaders)...)
+				emitsIncludes = append(emitsIncludes, VFSesFromStrings(evExtras)...)
 				reg.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EV",
 					OutputPath:    evH,
@@ -732,10 +732,10 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 				// emits a `#include "<base>.ev.pb.h"` plus the protobuf + event
 				// runtime headers; mirror the .pb.h list for symmetry with the
 				// LIBRARY/EV path (gen.go:4338-4342).
-				ccEmits := make([]string, 0, 1+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
+				ccEmits := make([]VFS, 0, 1+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
 				ccEmits = append(ccEmits, evH)
-				ccEmits = append(ccEmits, protobufRuntimeHeaders...)
-				ccEmits = append(ccEmits, eventRuntimeHeaders...)
+				ccEmits = append(ccEmits, VFSesFromStrings(protobufRuntimeHeaders)...)
+				ccEmits = append(ccEmits, VFSesFromStrings(eventRuntimeHeaders)...)
 				reg.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EV",
 					OutputPath:    evPbCC,
@@ -745,7 +745,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 
 			codegenOutputs = append(codegenOutputs, protoCodegenOutput{
 				genRef:  evRef,
-				pbCC:    evPbCC,
+				pbCC:    evPbCC.String(),
 				srcRel:  src + ".pb.cc",
 				primSrc: "$(S)/" + evRelPath,
 			})

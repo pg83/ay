@@ -1,6 +1,9 @@
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"sort"
+)
 
 // vfs.go — typed VFS path.
 //
@@ -131,6 +134,25 @@ func vfsStringsSlice(vs []VFS) []string {
 		out[i] = v.String()
 	}
 	return out
+}
+
+// SortVFS sorts in-place to match the canonical String() form's
+// lexicographic order without materialising the strings: `$(B)/<rel>`
+// sorts before `$(S)/<rel>` (B < S), and within the same Root the
+// trailing Rel orders lexicographically.
+func SortVFS(vs []VFS) {
+	sort.Slice(vs, func(i, j int) bool {
+		return lessVFS(vs[i], vs[j])
+	})
+}
+
+// lessVFS is the SortVFS comparator. Matches `a.String() < b.String()`
+// byte-for-byte but skips the two String() allocations.
+func lessVFS(a, b VFS) bool {
+	if a.Root != b.Root {
+		return a.Root == VFSRootBuild
+	}
+	return a.Rel < b.Rel
 }
 
 // ToVFSSlice converts a []string (each already in VFS form or a bare

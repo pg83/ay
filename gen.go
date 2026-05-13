@@ -417,7 +417,7 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 		} else {
 			reg := codegenRegForInstance(ctx, consumer)
 			if reg != nil {
-				if info, found := reg.Lookup(v.String()); found && info.HasProducerRef {
+				if info, found := reg.Lookup(v); found && info.HasProducerRef {
 					ref, ok = info.ProducerRef, true
 				}
 			}
@@ -5224,18 +5224,18 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 	// Emit one yapyc3 PY node per .py source.
 	for _, srcRel := range d.pySrcs {
-		srcAbs := "$(S)/" + instance.Path + "/" + srcRel
+		srcAbs := Source(instance.Path + "/" + srcRel)
 
 		// The "module name" arg: <modulePath>/<srcRel>- (trailing dash).
 		moduleName := instance.Path + "/" + srcRel + "-"
 
 		// Output suffix: flat → .py.yapyc3; subdir → .py.3kp2.yapyc3.
-		var outputPath string
+		var outputPath VFS
 		if strings.Contains(srcRel, "/") {
 			// The srcRel already ends in ".py"; insert ".3kp2" before ".yapyc3".
-			outputPath = "$(B)/" + instance.Path + "/" + srcRel + ".3kp2.yapyc3"
+			outputPath = Build(instance.Path + "/" + srcRel + ".3kp2.yapyc3")
 		} else {
-			outputPath = "$(B)/" + instance.Path + "/" + srcRel + ".yapyc3"
+			outputPath = Build(instance.Path + "/" + srcRel + ".yapyc3")
 		}
 
 		cmdArgs := []string{
@@ -5243,8 +5243,8 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			"--slow-py3cc",
 			py3ccSlowBin,
 			moduleName,
-			srcAbs,
-			outputPath,
+			srcAbs.String(),
+			outputPath.String(),
 		}
 
 		env := map[string]string{
@@ -5260,8 +5260,8 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				},
 			},
 			Env:     env,
-			Inputs:  []VFS{ParseVFSOrSource(py3ccBinary), ParseVFSOrSource(py3ccSlowBin), ParseVFSOrSource(srcAbs)},
-			Outputs: []VFS{ParseVFSOrSource(outputPath)},
+			Inputs:  []VFS{ParseVFSOrSource(py3ccBinary), ParseVFSOrSource(py3ccSlowBin), srcAbs},
+			Outputs: []VFS{outputPath},
 			KV: map[string]string{
 				"p":  "PY",
 				"pc": "yellow",
@@ -5595,29 +5595,29 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// EN node `inputs` includes the .cpp's transitive include set; this walk
 		// is what surfaces dispatch_methods.h / ordered_pairs.h / enum_runtime.h
 		// in the EN node's inputs).
-		serializedCPPPath := "$(B)/" + instance.Path + "/" + headerRel + "_serialized.cpp"
-		var serializedHPath string
+		serializedCPPPath := Build(instance.Path + "/" + headerRel + "_serialized.cpp")
+		var serializedHPath VFS
 		if withHeader {
-			serializedHPath = "$(B)/" + instance.Path + "/" + headerRel + "_serialized.h"
+			serializedHPath = Build(instance.Path + "/" + headerRel + "_serialized.h")
 		}
 		if ctx.scannerTarget.codegen != nil {
-			headerSrc := "$(S)/" + instance.Path + "/" + headerRel
-			cppIncludes := []string{
+			headerSrc := Source(instance.Path + "/" + headerRel)
+			cppIncludes := []VFS{
 				headerSrc,
-				"$(S)/tools/enum_parser/enum_parser/stdlib_deps.h",
-				"$(S)/tools/enum_parser/enum_serialization_runtime/dispatch_methods.h",
-				"$(S)/tools/enum_parser/enum_serialization_runtime/enum_runtime.h",
-				"$(S)/tools/enum_parser/enum_serialization_runtime/ordered_pairs.h",
-				"$(S)/util/generic/map.h",
-				"$(S)/util/generic/serialized_enum.h",
-				"$(S)/util/generic/singleton.h",
-				"$(S)/util/generic/string.h",
-				"$(S)/util/generic/typetraits.h",
-				"$(S)/util/generic/vector.h",
-				"$(S)/util/stream/output.h",
-				"$(S)/util/string/cast.h",
+				Source("tools/enum_parser/enum_parser/stdlib_deps.h"),
+				Source("tools/enum_parser/enum_serialization_runtime/dispatch_methods.h"),
+				Source("tools/enum_parser/enum_serialization_runtime/enum_runtime.h"),
+				Source("tools/enum_parser/enum_serialization_runtime/ordered_pairs.h"),
+				Source("util/generic/map.h"),
+				Source("util/generic/serialized_enum.h"),
+				Source("util/generic/singleton.h"),
+				Source("util/generic/string.h"),
+				Source("util/generic/typetraits.h"),
+				Source("util/generic/vector.h"),
+				Source("util/stream/output.h"),
+				Source("util/string/cast.h"),
 			}
-			sort.Strings(cppIncludes)
+			SortVFS(cppIncludes)
 			ctx.scannerTarget.codegen.Register(&GeneratedFileInfo{
 				ProducerKvP:   "EN",
 				OutputPath:    serializedCPPPath,
@@ -5632,12 +5632,12 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 				// the EN producer's .h and .cpp outputs together in every
 				// downstream CC's inputs; mirroring that bundling through the
 				// registry is the smallest mechanism that reproduces it.
-				hIncludes := []string{
+				hIncludes := []VFS{
 					headerSrc,
 					serializedCPPPath,
-					"$(S)/util/generic/serialized_enum.h",
+					Source("util/generic/serialized_enum.h"),
 				}
-				sort.Strings(hIncludes)
+				SortVFS(hIncludes)
 				ctx.scannerTarget.codegen.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EN",
 					OutputPath:    serializedHPath,
@@ -5708,7 +5708,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// $(S) headers.
 		var ownOutputClosure []VFS
 		if !withHeader && ctx.scannerTarget.codegen != nil {
-			sub := walkClosure(ctx, instance, ParseVFSOrSource(serializedCPPPath), scanIn)
+			sub := walkClosure(ctx, instance, serializedCPPPath, scanIn)
 			for _, p := range sub {
 				if _, drop := enClosureExcl[p]; drop {
 					continue
@@ -6057,12 +6057,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// WalkClosure on the .rl6.cpp will recurse into the .rl6 via the
 		// FS-parsed locator and produce the same closure the downstream CC
 		// previously got from scanning the .rl6 manually.
-		rl6SourceAbs := "$(S)/" + srcInstance.Path + "/" + srcRel
+		rl6SourceVFS := Source(srcInstance.Path + "/" + srcRel)
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "R6",
-				OutputPath:    r6Out,
-				EmitsIncludes: []string{rl6SourceAbs},
+				OutputPath:    ParseVFSOrSource(r6Out),
+				EmitsIncludes: []VFS{rl6SourceVFS},
 			})
 		}
 
@@ -6114,7 +6114,6 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// same basename and `.h` suffix exists on disk — the
 		// convention holds for every observed `.rl6` source in the
 		// M2 closure (util/datetime/parser.rl6 → parser.h).
-		rl6SourceVFS := Source(srcInstance.Path + "/" + srcRel)
 		ccInputs := []VFS{rl6SourceVFS}
 		primaryCount := 1
 
@@ -6192,24 +6191,24 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			// F-7-B: register the .ev.pb.h output with EmitsIncludes from the .ev imports,
 			// plus the protobuf runtime headers (F-7-D).
 			evRelPath := srcInstance.Path + "/" + srcRel
-			evH := "$(B)/" + evRelPath + ".pb.h"
-			evPbCC := "$(B)/" + evRelPath + ".pb.cc"
+			evH := Build(evRelPath + ".pb.h")
+			evPbCC := Build(evRelPath + ".pb.cc")
 
 			// PR-M3-L0-codegen-deps-EV-PB: stash the EV NodeRef under both outputs
 			// on the emitting platform so consumer CCs in OTHER modules whose
 			// IncludeInputs include this .ev.pb.h / .ev.pb.cc dep on the producer.
 			evKey := codegenOutputKey{platform: srcInstance.Platform.Target}
-			evKey.path = ParseVFSOrSource(evH)
+			evKey.path = evH
 			ctx.evOutputs[evKey] = evRef
-			evKey.path = ParseVFSOrSource(evPbCC)
+			evKey.path = evPbCC
 			ctx.evOutputs[evKey] = evRef
 			if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
-				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC)
-				evEmitsIncludes := make([]string, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
-				evEmitsIncludes = append(evEmitsIncludes, directImports...)
-				evEmitsIncludes = append(evEmitsIncludes, protobufRuntimeHeaders...)
-				evEmitsIncludes = append(evEmitsIncludes, evExtras...)
+				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC.String())
+				evEmitsIncludes := make([]VFS, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
+				evEmitsIncludes = append(evEmitsIncludes, VFSesFromStrings(directImports)...)
+				evEmitsIncludes = append(evEmitsIncludes, VFSesFromStrings(protobufRuntimeHeaders)...)
+				evEmitsIncludes = append(evEmitsIncludes, VFSesFromStrings(evExtras)...)
 				reg.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EV",
 					OutputPath:    evH,
@@ -6224,7 +6223,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				reg.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EV",
 					OutputPath:    evPbCC,
-					EmitsIncludes: append([]string{evH}, protobufRuntimeHeaders...),
+					EmitsIncludes: append([]VFS{evH}, VFSesFromStrings(protobufRuntimeHeaders)...),
 				})
 			}
 
@@ -6238,17 +6237,16 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			ccIn.IsGenerated = true
 			ccIn.Generator = evRef
 			ccIn.HasGenerator = true
-			ccIn.IncludeInputs = walkClosure(ctx, srcInstance, ParseVFSOrSource(evPbCC), srcIn)
+			ccIn.IncludeInputs = walkClosure(ctx, srcInstance, evPbCC, srcIn)
 			// PR-M3-final-surgical (fix 1): the .ev.pb.cc.o consumer must not
 			// carry its OWN .ev.pb.h in inputs[] (REF omits the self-include;
 			// cross-imported sibling .ev.pb.h entries remain). The walker
 			// reaches evH transitively because the .pb.cc is registered with
 			// evH as its first EmitsIncludes child — drop just that entry.
-			evHVFS := ParseVFSOrSource(evH)
 			{
 				filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 				for _, in := range ccIn.IncludeInputs {
-					if in == evHVFS {
+					if in == evH {
 						continue
 					}
 					filtered = append(filtered, in)
@@ -6332,19 +6330,19 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// .rl5.cpp; the .tmp intermediate has no consumer-visible includes.
 		// PR-M3-L0-cascade-close-v2: ProducerRef = r5Ref so the downstream
 		// CC consuming the .rl5.cpp threads R5 into its deps[].
-		rlSourceAbs := "$(S)/" + srcInstance.Path + "/" + srcRel
+		rlSourceVFS := Source(srcInstance.Path + "/" + srcRel)
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:    "R5",
-				OutputPath:     r5TmpOut,
+				OutputPath:     ParseVFSOrSource(r5TmpOut),
 				EmitsIncludes:  nil,
 				ProducerRef:    r5Ref,
 				HasProducerRef: true,
 			})
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:    "R5",
-				OutputPath:     r5CppOut,
-				EmitsIncludes:  []string{rlSourceAbs},
+				OutputPath:     ParseVFSOrSource(r5CppOut),
+				EmitsIncludes:  []VFS{rlSourceVFS},
 				ProducerRef:    r5Ref,
 				HasProducerRef: true,
 			})
@@ -6427,12 +6425,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// build_info.cpp.o and sandbox.cpp.o).
 		// PR-M3-L0-cascade-close-v2: ProducerRef = cfRef so downstream CC's
 		// resolveCodegenDepRefs threads the CF producer into its deps[].
-		inSourceAbs := "$(S)/" + srcInstance.Path + "/" + srcRel
+		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:    "CF",
-				OutputPath:     cfOut,
-				EmitsIncludes:  []string{inSourceAbs, configureFilePyPath},
+				OutputPath:     ParseVFSOrSource(cfOut),
+				EmitsIncludes:  []VFS{inSourceVFS, ParseVFSOrSource(configureFilePyPath)},
 				ProducerRef:    cfRef,
 				HasProducerRef: true,
 			})

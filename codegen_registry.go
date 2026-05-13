@@ -60,20 +60,16 @@ type GeneratedFileInfo struct {
 	// the producer node.
 	ProducerKvP string
 
-	// OutputPath is the $(B)-rooted absolute path of this generated
-	// file (e.g. "$(B)/devtools/ymake/diag/stats_enums.h_serialized.cpp").
-	OutputPath string
+	// OutputPath is the $(B)-rooted path of this generated file (e.g.
+	// VFS{Build, "devtools/ymake/diag/stats_enums.h_serialized.cpp"}).
+	OutputPath VFS
 
-	// EmitsIncludes lists the #include targets that the generated file contains.
-	// Populated by F-7-B per emitter kind; left nil/empty by F-7-A. Each entry
-	// is either:
-	//   - a $(B)/... path (another generated file → transitive lookup)
-	//   - a $(S)/... path (real on-disk file)
-	//   - a system-include name handled by the sysincl resolver
-	//
-	// Stored in discovery order; no deduplication required at this level (the
-	// scanner's DFS visited-set deduplicates at traversal time).
-	EmitsIncludes []string
+	// EmitsIncludes lists the #include targets that the generated file
+	// contains. Each entry is either a $(B)/... path (another generated
+	// file → transitive lookup) or a $(S)/... path (real on-disk file).
+	// Stored in discovery order; no deduplication required at this level
+	// (the scanner's DFS visited-set deduplicates at traversal time).
+	EmitsIncludes []VFS
 
 	// ProducerRef is the NodeRef of the emitted producer node. Valid only when
 	// HasProducerRef is true. resolveCodegenDepRefs uses this to thread the
@@ -88,7 +84,7 @@ type GeneratedFileInfo struct {
 // the emit walk (codegen emitters fire before CC emitters per PEERDIR-DFS order).
 // The scanner consults it as a third existence tier in F-7-C.
 type CodegenRegistry struct {
-	byOutput map[string]*GeneratedFileInfo
+	byOutput VFSMap[*GeneratedFileInfo]
 }
 
 // NewCodegenRegistry allocates an empty CodegenRegistry. Pre-sized for the
@@ -96,31 +92,29 @@ type CodegenRegistry struct {
 // devtools/ymake/bin closure).
 func NewCodegenRegistry() *CodegenRegistry {
 	return &CodegenRegistry{
-		byOutput: make(map[string]*GeneratedFileInfo, 256),
+		byOutput: NewVFSMap[*GeneratedFileInfo](256),
 	}
 }
 
 // Register records info under info.OutputPath.
 //
-// Precondition: info.OutputPath is non-empty and starts with "$(B)/".
+// Precondition: info.OutputPath is non-empty and Build-rooted.
 // Throws if the same OutputPath is registered a second time — this mirrors
 // upstream's DupSrc diagnostic (macro_processor.cpp:957) and enforces the
 // build-system invariant that no two nodes produce the same output file.
 func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
-	if _, dup := r.byOutput[info.OutputPath]; dup {
+	if existing, dup := r.byOutput.Get(info.OutputPath); dup {
 		ThrowFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
-			info.OutputPath, r.byOutput[info.OutputPath].ProducerKvP, info.ProducerKvP)
+			info.OutputPath.String(), existing.ProducerKvP, info.ProducerKvP)
 	}
 
-	r.byOutput[info.OutputPath] = info
+	r.byOutput.Set(info.OutputPath, info)
 }
 
 // Lookup returns the GeneratedFileInfo for path, or (nil, false) if path is
 // not registered. O(1) map lookup.
-func (r *CodegenRegistry) Lookup(path string) (*GeneratedFileInfo, bool) {
-	info, ok := r.byOutput[path]
-
-	return info, ok
+func (r *CodegenRegistry) Lookup(path VFS) (*GeneratedFileInfo, bool) {
+	return r.byOutput.Get(path)
 }
 
 // SetProducerRef backfills the ProducerRef for an already-registered path.
@@ -131,15 +125,15 @@ func (r *CodegenRegistry) Lookup(path string) (*GeneratedFileInfo, bool) {
 // the NodeRef (the registry entry is needed by the scanner's existence-tier
 // before the emit completes). This helper fills the NodeRef in after Emit so
 // resolveCodegenDepRefs can lift it into consumer CC `deps[]`.
-func (r *CodegenRegistry) SetProducerRef(path string, ref NodeRef) {
-	info, ok := r.byOutput[path]
+func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
+	info, ok := r.byOutput.Get(path)
 	if !ok {
-		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path)
+		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.String())
 	}
 
 	if info.HasProducerRef && info.ProducerRef != ref {
 		ThrowFmt("CodegenRegistry: conflicting ProducerRef for %q (existing=%v, new=%v)",
-			path, info.ProducerRef, ref)
+			path.String(), info.ProducerRef, ref)
 	}
 
 	info.ProducerRef = ref
@@ -151,14 +145,16 @@ func (r *CodegenRegistry) SetProducerRef(path string, ref NodeRef) {
 // Allocates a new slice on each call; callers that need a stable snapshot
 // should retain the result.
 func (r *CodegenRegistry) All() []*GeneratedFileInfo {
-	out := make([]*GeneratedFileInfo, 0, len(r.byOutput))
+	out := make([]*GeneratedFileInfo, 0, r.byOutput.Len())
 
-	for _, info := range r.byOutput {
-		out = append(out, info)
+	for _, bucket := range r.byOutput {
+		for _, info := range bucket {
+			out = append(out, info)
+		}
 	}
 
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].OutputPath < out[j].OutputPath
+		return lessVFS(out[i].OutputPath, out[j].OutputPath)
 	})
 
 	return out
@@ -166,5 +162,5 @@ func (r *CodegenRegistry) All() []*GeneratedFileInfo {
 
 // Len returns the number of registered entries.
 func (r *CodegenRegistry) Len() int {
-	return len(r.byOutput)
+	return r.byOutput.Len()
 }
