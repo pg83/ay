@@ -1125,13 +1125,12 @@ func isMultimoduleLibraryType(name string) bool {
 func buildIfEnv(instance ModuleInstance) Environment {
 	env := DefaultIfEnv.Clone()
 
-	if instance.Platform.Target == PlatformDefaultLinuxX8664 {
+	switch instance.Platform.ISA {
+	case ISAX8664:
 		env.SetBool("ARCH_AARCH64", false)
 		env.SetBool("ARCH_ARM64", false)
 		env.SetBool("ARCH_X86_64", true)
-	}
-
-	if instance.Platform.Target == PlatformDefaultLinuxAArch64 {
+	case ISAAArch64:
 		env.SetBool("ARCH_AARCH64", true)
 		env.SetBool("ARCH_ARM64", true)
 		env.SetBool("ARCH_X86_64", false)
@@ -1156,6 +1155,6 @@ func derivePeerInstance(parent ModuleInstance, peerPath string) ModuleInstance {
 		// Pass platform identity rather than the bare PIC flag so
 		// inferFlagsFromPath seeds the peer's PIC from the parent's
 		// platform identity, not Flags.PIC directly.
-		Flags: inferFlagsFromPath(peerPath, parent.Platform.Target == PlatformDefaultLinuxX8664),
+		Flags: inferFlagsFromPath(peerPath, parent.Platform.ISA == ISAX8664),
 	}
 }

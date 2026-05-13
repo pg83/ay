@@ -133,8 +133,8 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	// not host/target-axis flags.
 	effectiveFlags := ragel6Flags
 	if len(effectiveFlags) == 0 {
-		switch instance.Platform.Target {
-		case PlatformDefaultLinuxX8664:
+		switch instance.Platform.ISA {
+		case ISAX8664:
 			effectiveFlags = []string{ragel6DefaultFlagOptimized}
 		default:
 			effectiveFlags = []string{ragel6DefaultFlagDebug}

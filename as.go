@@ -139,7 +139,7 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 	// Branch off before any clang-shape composition runs. The yasm path is
 	// x86_64-ISA-specific (yasm is an x86 assembler); not a host/target axis
 	// decision.
-	if instance.Platform.Target == PlatformDefaultLinuxX8664 && strings.HasSuffix(srcRel, ".asm") {
+	if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
 		return emitASYasm(instance, srcRel, in, yasmLD, emit)
 	}
 
@@ -414,7 +414,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	// (musl flavour). The local is named `targetX8664` instead of
 	// `isHost` because the dispatch is about platform identity, not
 	// host/target axis role.
-	targetX8664 := instance.Platform.Target == PlatformDefaultLinuxX8664
+	targetX8664 := instance.Platform.ISA == ISAX8664
 	// `instance.Flags.LibcMusl` is the PER-MODULE flag ("this module is
 	// part of the musl subtree"). It is NOT `instance.Platform.Flags["MUSL"]`,
 	// which is the CLI-level "build everything in musl mode" toggle —

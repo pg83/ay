@@ -653,14 +653,14 @@ func biFlagsForInstance(targetP *Platform) []string {
 	flags = append(flags, warningFlags...)
 	flags = append(flags, commonDefines...)
 	flags = append(flags, "-UNDEBUG")
-	if targetP.Target == PlatformDefaultLinuxAArch64 {
+	if targetP.ISA == ISAAArch64 {
 		flags = append(flags, "-mno-outline-atomics")
 	}
 	flags = append(flags, noLibcWarningSuppressions...)
 	flags = append(flags, catboostOpenSourceDefine...)
 	flags = append(flags, "-D_musl_")
 	flags = append(flags, "-UNDEBUG")
-	if targetP.Target == PlatformDefaultLinuxAArch64 {
+	if targetP.ISA == ISAAArch64 {
 		flags = append(flags, "-mno-outline-atomics")
 	}
 	flags = append(flags, noLibcWarningSuppressions...)

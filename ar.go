@@ -123,9 +123,9 @@ func globalArchiveNameWithPrefix(moduleDir, prefix string) string {
 // + IncludeInputs the walker accumulated.
 //
 // `instance` provides platform + path. host_platform is set when
-// instance.Platform.Target == PlatformDefaultLinuxX8664 (D41: platform-
-// identity dispatch replaces Flags.PIC on the host/target axis) and
-// "tool" is appended to tags (consistent with the host CC convention).
+// `instance.Platform.IsHost` (D41: platform-identity dispatch replaces
+// Flags.PIC on the host/target axis) and "tool" is appended to tags
+// (consistent with the host CC convention).
 //
 // PR-30 D05: production caller now passes nil for peerArchiveRefs;
 // the reference graph confirms zero AR-on-AR deps. The parameter is
