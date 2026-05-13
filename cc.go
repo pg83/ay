@@ -345,13 +345,15 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	// (per-MODULE musl subtree membership — NOT instance.Platform.LibcMusl, which
 	// is the platform-wide libc selector).
 	targetX8664 := instance.Platform.Target == PlatformDefaultLinuxX8664
+	tools := instance.Platform.Tools
 	switch {
 	case isMusl && targetX8664:
-		cmdArgs = composeMuslHostCC(outputPath, inputPath, nil, muslOwnExtras, isCxx)
+		cmdArgs = composeMuslHostCC(tools, outputPath, inputPath, nil, muslOwnExtras, isCxx)
 	case isMusl:
-		cmdArgs = composeMuslCC(outputPath, inputPath, nil, muslOwnExtras, isCxx)
+		cmdArgs = composeMuslCC(tools, outputPath, inputPath, nil, muslOwnExtras, isCxx)
 	default:
 		args := ccComposeArgs{
+			Tools:              tools,
 			OutputPath:         outputPath,
 			InputPath:          inputPath,
 			OwnAddIncl:         in.AddIncl,
@@ -607,12 +609,12 @@ func isCxxSource(srcRel string) bool {
 
 // pickCompiler dispatches between clang and clang++ per source
 // language. PR-29-D05.
-func pickCompiler(isCxx bool) string {
+func pickCompiler(tools Toolchain, isCxx bool) string {
 	if isCxx {
-		return cxxCompilerPath
+		return tools.CXX
 	}
 
-	return ccCompilerPath
+	return tools.CC
 }
 
 // pickWarningFlags substitutes `-Wno-everything` (the muslWarningFlags
@@ -888,6 +890,7 @@ func composePostCatboostBucket(preBucket []string) []string {
 // surface from the type system (every parameter is `[]string` or
 // `string`).
 type ccComposeArgs struct {
+	Tools              Toolchain
 	OutputPath         string
 	InputPath          string
 	OwnAddIncl         []string
@@ -905,7 +908,7 @@ type ccComposeArgs struct {
 func composeTargetCC(a ccComposeArgs) []string {
 	cmdArgs := make([]string, 0, 101+len(a.OwnAddIncl)+len(a.PeerAddIncl)+len(a.OwnCFlags)+len(a.OwnExtras)+len(a.AutoPeerCFlags)+len(a.PeerExtras)+2*len(a.OwnGlobalBucket)+len(a.PerSrcCFlags)+4)
 	cmdArgs = append(cmdArgs,
-		pickCompiler(a.IsCxx),
+		pickCompiler(a.Tools, a.IsCxx),
 		"--target="+targetTriple,
 		"-march="+archFlag,
 		"-B"+binPath,
@@ -991,7 +994,7 @@ func composeTargetCC(a ccComposeArgs) []string {
 func composeHostCC(a ccComposeArgs) []string {
 	cmdArgs := make([]string, 0, 105+len(a.OwnAddIncl)+len(a.PeerAddIncl)+len(a.OwnCFlags)+len(a.OwnExtras)+len(a.AutoPeerCFlags)+len(a.PeerExtras)+2*len(a.OwnGlobalBucket)+len(a.PerSrcCFlags)+4)
 	cmdArgs = append(cmdArgs,
-		pickCompiler(a.IsCxx),
+		pickCompiler(a.Tools, a.IsCxx),
 		"--target="+hostTriple,
 		"-B"+binPath,
 		"-c",
@@ -1065,10 +1068,10 @@ func composeHostCC(a ccComposeArgs) []string {
 //   - `muslWarningFlags` (1 arg) replaces `warningFlags` (6 args)
 //   - `muslExtraDefines` (9 args) inserted after `commonDefines`,
 //     before the noLibc block
-func composeMuslCC(outputPath, inputPath string, addIncl, ownExtras []string, isCxx bool) []string {
+func composeMuslCC(tools Toolchain, outputPath, inputPath string, addIncl, ownExtras []string, isCxx bool) []string {
 	cmdArgs := make([]string, 0, 111+len(addIncl)+len(ownExtras)+2)
 	cmdArgs = append(cmdArgs,
-		pickCompiler(isCxx),
+		pickCompiler(tools, isCxx),
 		"--target="+targetTriple,
 		"-march="+archFlag,
 		"-B"+binPath,
@@ -1116,10 +1119,10 @@ func composeMuslCC(outputPath, inputPath string, addIncl, ownExtras []string, is
 // Net: 111 + 4 = 115 args (one fewer prologue arg from no -march,
 // one extra hostDefines arg, seven hostSseFeatures, three fewer
 // hostCFlags = -3 + 1 + 7 - 1 + 0 = +4).
-func composeMuslHostCC(outputPath, inputPath string, addIncl, ownExtras []string, isCxx bool) []string {
+func composeMuslHostCC(tools Toolchain, outputPath, inputPath string, addIncl, ownExtras []string, isCxx bool) []string {
 	cmdArgs := make([]string, 0, 115+len(addIncl)+len(ownExtras)+2)
 	cmdArgs = append(cmdArgs,
-		pickCompiler(isCxx),
+		pickCompiler(tools, isCxx),
 		"--target="+hostTriple,
 		"-B"+binPath,
 		"-c",

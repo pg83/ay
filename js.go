@@ -47,7 +47,6 @@ package main
 // Returns the JS NodeRef and the output path so the caller (PR-25's
 // gen.go) can thread the output into a downstream EmitCC.
 func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, platform PlatformID, emit Emitter) (NodeRef, VFS) {
-	const python3Path = "/ix/realm/pg/bin/python3"
 	joinSrcs := Source("build/scripts/gen_join_srcs.py")
 	procCmdFiles := Source("build/scripts/process_command_files.py")
 
@@ -57,7 +56,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 	// <instance.Path>/<src>..., --ya-end-command-file.
 	cmdArgs := make([]string, 0, 4+len(sources))
 	cmdArgs = append(cmdArgs,
-		python3Path,
+		instance.Platform.Tools.Python3,
 		joinSrcs.String(),
 		outVFS.String(),
 		"--ya-start-command-file",

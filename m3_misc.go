@@ -136,8 +136,6 @@ var antlr4JarPath = antlr4JarVFS.String()
 var stdout2stderrVFS = Source("build/scripts/stdout2stderr.py")
 var stdout2stderrPath = stdout2stderrVFS.String()
 
-// python3Path is the system python3 binary, consistent with cp.go.
-const python3Path = "/ix/realm/pg/bin/python3"
 
 // EmitJV emits a JV node for a single RUN_ANTLR4_CPP grammar invocation.
 // The grammar .g4 file is relative to the module dir.
@@ -171,7 +169,7 @@ func EmitJV(
 	outDir := outDirVFS.String()
 
 	cmdArgs := []string{
-		python3Path,
+		instance.Platform.Tools.Python3,
 		stdout2stderrPath,
 		jdkResourcePath,
 		"-jar",
@@ -272,7 +270,7 @@ func EmitJVSplit(
 	outDir := outDirVFS.String()
 
 	cmdArgs := []string{
-		python3Path,
+		instance.Platform.Tools.Python3,
 		stdout2stderrPath,
 		jdkResourcePath,
 		"-jar",
@@ -403,7 +401,7 @@ func EmitCF(
 	cfgVars := buildCFGVars(srcDiskPath, in.DefaultVars, in.DefaultVarOrder)
 
 	cmdArgs := []string{
-		python3Path,
+		instance.Platform.Tools.Python3,
 		configureFilePyPath,
 		srcVFS.String(),
 		outVFS.String(),
@@ -567,17 +565,17 @@ func EmitBI(
 
 	// cmd[0]: yield the CXX compiler path into __args.
 	cmd0Args := []string{
-		python3Path,
+		instance.Platform.Tools.Python3,
 		yieldLinePyPath,
 		"--",
 		argsFile,
-		cxxCompilerPath,
+		instance.Platform.Tools.CXX,
 	}
 
 	// cmd[1]: yield CXX compile flags into __args.
 	cmd1Args := make([]string, 0, 4+len(cxxFlags))
 	cmd1Args = append(cmd1Args,
-		python3Path,
+		instance.Platform.Tools.Python3,
 		yieldLinePyPath,
 		"--",
 		argsFile,
@@ -586,11 +584,11 @@ func EmitBI(
 
 	// cmd[2]: xargs.py feeds __args into build_info_gen.py.
 	cmd2Args := []string{
-		python3Path,
+		instance.Platform.Tools.Python3,
 		xargsPyPath,
 		"--",
 		argsFile,
-		python3Path,
+		instance.Platform.Tools.Python3,
 		buildInfoGenPyPath,
 		outVFS.String(),
 	}

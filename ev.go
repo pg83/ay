@@ -211,7 +211,7 @@ func EmitEV(
 	srcVFS := Source(evRelPath)
 
 	cmdArgs := []string{
-		pbPython3Path,
+		instance.Platform.Tools.Python3,
 		pbWrapperPath,
 		"--outputs",
 		evCC.String(),

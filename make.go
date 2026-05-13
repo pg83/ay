@@ -75,39 +75,48 @@ func cmdMake(args []string) int {
 		ThrowFmt("make: no targets supplied and current working directory is outside the source root")
 	}
 
-	tools := mineTools()
-	defines := commonFlags(tools)
+	// Mined toolchain feeds both Platform halves (build-host invokes
+	// these binaries regardless of which axis the cmd_args belong to).
+	tools := commonFlags(mineTools())
 
+	// Host platform: `--host-platform` selects axes (mined when empty),
+	// `--host-platform-flag KEY=VALUE` (mf.hflags) lands on host Flags,
+	// PIC=yes, baseline tag "tool".
+	hOS, hISA := resolvePlatform(mf.hostPlat)
+	hostFlags := make(map[string]string, len(tools)+len(mf.hflags)+1)
+	for k, v := range tools {
+		hostFlags[k] = v
+	}
+	for k, v := range mf.hflags {
+		hostFlags[k] = v
+	}
+	hostFlags["PIC"] = "yes"
+	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, true)
+
+	// Target platform: `--target-platform` selects axes (defaults to
+	// host when empty), `-D KEY=VALUE` (mf.tflags) lands on target Flags,
+	// `--musl` toggles MUSL, `--xbuild` / `-r` / `-d` selects build type,
+	// PIC=no.
+	targetSpec := mf.targetPlat
+	if targetSpec == "" {
+		targetSpec = string(MakePlatformID(hOS, hISA))
+	}
+	tOS, tISA := resolvePlatform(targetSpec)
+	targetFlags := make(map[string]string, len(tools)+len(mf.tflags)+3)
+	for k, v := range tools {
+		targetFlags[k] = v
+	}
 	for k, v := range mf.tflags {
-		defines[k] = v
+		targetFlags[k] = v
 	}
-
 	if mf.musl {
-		defines["MUSL"] = "yes"
+		targetFlags["MUSL"] = "yes"
 	}
-
 	if mf.buildType != "" {
-		defines["GG_BUILD_TYPE"] = mf.buildType
+		targetFlags["GG_BUILD_TYPE"] = mf.buildType
 	}
-
-	// Platform-id defaults to the running host's native triple so a
-	// bare `yatool make` builds for the current arch. Cross-compile
-	// users override via --target-platform / --host-platform.
-	if mf.targetPlat != "" {
-		defines["GG_TARGET_PLATFORM"] = mf.targetPlat
-	}
-	if _, ok := defines["GG_TARGET_PLATFORM"]; !ok {
-		defines["GG_TARGET_PLATFORM"] = hostPlatformID()
-	}
-
-	// Host-axis defines aren't consumed in MVP (the emitter side still
-	// hard-codes the host walker's flag set), but we mirror gg/ya.go's
-	// surface so the CLI is forward-compatible. --host-platform sets
-	// GG_HOST_PLATFORM; --host-platform-flag KEY=VALUE adds to hflags.
-	_ = mf.hflags
-	if mf.hostPlat != "" {
-		defines["GG_HOST_PLATFORM"] = mf.hostPlat
-	}
+	targetFlags["PIC"] = "no"
+	targetP := NewPlatform(tOS, tISA, targetFlags, nil, false)
 
 	// `-j 0` is the no-exec mode: Gen runs but no subprocesses fire.
 	// Inside this branch:
@@ -118,11 +127,11 @@ func cmdMake(args []string) int {
 	if mf.threads == 0 {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
-				g := GenWithMode(TargetCfg, mf.srcRoot, target, defines, defaultScanCtxMode)
+				g := GenWithMode(TargetCfg, mf.srcRoot, target, hostP, targetP, defaultScanCtxMode)
 				writeGraph("-", g)
 			}
 		} else {
-			genStream(mf.srcRoot, mf.targets, defines, func(*Node) {})
+			genStream(mf.srcRoot, mf.targets, hostP, targetP, func(*Node) {})
 		}
 
 		return 0
@@ -134,7 +143,7 @@ func cmdMake(args []string) int {
 
 	defer ex.close()
 
-	results := genStream(mf.srcRoot, mf.targets, defines, ex.onNode)
+	results := genStream(mf.srcRoot, mf.targets, hostP, targetP, ex.onNode)
 
 	ex.run(results)
 
@@ -150,20 +159,20 @@ func cmdMake(args []string) int {
 // every target. Targets are emitted serially today; the executor
 // inside makes the cost of one target's emission overlap with the
 // previous target's execution.
-func genStream(srcRoot string, targets []string, defines map[string]string, onNode func(*Node)) []string {
+func genStream(srcRoot string, targets []string, hostP, targetP *Platform, onNode func(*Node)) []string {
 	all := []string{}
 
 	for _, t := range targets {
-		ec := genStreamOne(srcRoot, t, defines, onNode)
+		ec := genStreamOne(srcRoot, t, hostP, targetP, onNode)
 		all = append(all, ec...)
 	}
 
 	return all
 }
 
-func genStreamOne(srcRoot, target string, defines map[string]string, onNode func(*Node)) []string {
+func genStreamOne(srcRoot, target string, hostP, targetP *Platform, onNode func(*Node)) []string {
 	emitter := NewStreamingEmitter(onNode, mightNeedAddInclPatch)
-	_, prepare := runGenInto(srcRoot, target, defines, emitter, defaultScanCtxMode)
+	_, prepare := runGenInto(srcRoot, target, hostP, targetP, emitter, defaultScanCtxMode)
 
 	return emitter.Finish(prepare)
 }

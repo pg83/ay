@@ -154,8 +154,9 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	}
 
 	// cmd[1]: clang. With -c -o.
-	if got.Cmds[1].CmdArgs[0] != ccCompilerPath {
-		t.Errorf("cmd[1][0] = %q, want %q", got.Cmds[1].CmdArgs[0], ccCompilerPath)
+	wantCC := testTargetP.Tools.CC
+	if got.Cmds[1].CmdArgs[0] != wantCC {
+		t.Errorf("cmd[1][0] = %q, want %q", got.Cmds[1].CmdArgs[0], wantCC)
 	}
 
 	// cmd[2]: link_exe.py.

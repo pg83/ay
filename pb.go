@@ -44,8 +44,6 @@ import (
 // target_properties: module_dir (always) + module_tag:"cpp_proto" (always).
 
 const (
-	pbPython3Path = "/ix/realm/pg/bin/python3"
-
 	// Tool module paths for host-walk recursion.
 	pbProtocModule        = "contrib/tools/protoc"
 	pbCppStyleguideModule = "contrib/tools/protoc/plugins/cpp_styleguide"
@@ -368,7 +366,7 @@ func EmitPB(
 	srcVFS := Source(protoRelPath)
 
 	cmdArgs := []string{
-		pbPython3Path,
+		instance.Platform.Tools.Python3,
 		pbWrapperPath,
 		"--outputs",
 		pbH.String(),

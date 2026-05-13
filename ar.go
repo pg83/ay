@@ -161,10 +161,7 @@ func emitARNode(
 	// separators of `_LD_ARCHIVER` (upstream ld.conf:366-368 +
 	// ld.conf:373).
 	cmdArgs := []string{
-		// TODO(portability): python3 path is captured from the
-		// reference build; future work must template this from
-		// PlatformConfig or detect it from $PATH.
-		"/ix/realm/pg/bin/python3",
+		instance.Platform.Tools.Python3,
 		scriptVFS.String(),
 		"ar",
 		"GNU_AR",

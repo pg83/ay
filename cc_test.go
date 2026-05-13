@@ -163,8 +163,9 @@ func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
-	if args[0] != cxxCompilerPath {
-		t.Errorf("compiler = %q, want %q", args[0], cxxCompilerPath)
+	wantCxx := testTargetP.Tools.CXX
+	if args[0] != wantCxx {
+		t.Errorf("compiler = %q, want %q", args[0], wantCxx)
 	}
 
 	// `-std=c++20` slots after the second suppression block. The exact
@@ -193,8 +194,9 @@ func TestEmitCC_CSource_UsesClang(t *testing.T) {
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
-	if args[0] != ccCompilerPath {
-		t.Errorf("compiler = %q, want %q", args[0], ccCompilerPath)
+	wantCC := testTargetP.Tools.CC
+	if args[0] != wantCC {
+		t.Errorf("compiler = %q, want %q", args[0], wantCC)
 	}
 
 	for _, a := range args {

@@ -59,7 +59,7 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 		t.Fatalf("write thelib/ya.make: %v", err)
 	}
 
-	g := Gen(TargetCfg, root, "mainprog")
+	g := testGen(root, "mainprog")
 
 	if len(g.Graph) != 4 {
 		t.Fatalf("Gen produced %d nodes, want 4 (2 CC + 1 AR + 1 LD)", len(g.Graph))
@@ -155,7 +155,7 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 		t.Fatalf("write lone/ya.make: %v", err)
 	}
 
-	g := Gen(TargetCfg, root, "lone")
+	g := testGen(root, "lone")
 
 	if len(g.Graph) != 2 {
 		t.Fatalf("Gen produced %d nodes, want 2 (1 CC + 1 LD)", len(g.Graph))
@@ -305,7 +305,7 @@ func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 	}
 
 	exc := Try(func() {
-		Gen(TargetCfg, root, "mod")
+		testGen(root, "mod")
 	})
 
 	if exc == nil {
@@ -328,7 +328,7 @@ END()
 `), 0644))
 
 	exc := Try(func() {
-		Gen(TargetCfg, tmp, "bad")
+		testGen(tmp, "bad")
 	})
 
 	if exc == nil {
@@ -348,7 +348,7 @@ END()
 `), 0644))
 
 	exc := Try(func() {
-		Gen(TargetCfg, tmp, "noop")
+		testGen(tmp, "noop")
 	})
 
 	if exc == nil {
@@ -375,7 +375,7 @@ END()
 `), 0644))
 
 	exc := Try(func() {
-		Gen(DefaultLinuxConfig, tmp, "caller")
+		testGen(tmp, "caller")
 	})
 
 	if exc == nil {
@@ -460,7 +460,7 @@ SRCS(alib.c)
 END()
 `), 0644))
 
-	g := Gen(TargetCfg, tmp, "mainprog")
+	g := testGen(tmp, "mainprog")
 
 	// Find the AR nodes for zlib and alib by output path. Assert zlib AR appears
 	// BEFORE alib AR in g.Graph (post-Finalize topo order respects emit order +
@@ -519,7 +519,7 @@ END()
 `)
 	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
-	g := Gen(TargetCfg, root, "ifmod")
+	g := testGen(root, "ifmod")
 
 	if len(g.Graph) != 2 {
 		t.Fatalf("expected 2 nodes (1 CC + 1 AR), got %d", len(g.Graph))
@@ -599,7 +599,7 @@ END()
 	// 2-node subgraph (1 CC + 1 AR). The CC's cmd_args composer is
 	// PR-26's job to keep aligned with the flag bag; PR-25 only
 	// verifies the bag itself is populated.
-	g := Gen(TargetCfg, root, "nolibcmod")
+	g := testGen(root, "nolibcmod")
 
 	if len(g.Graph) != 2 {
 		t.Errorf("Gen produced %d nodes, want 2 (1 CC + 1 AR)", len(g.Graph))
@@ -623,7 +623,7 @@ END()
 `)
 	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
-	g := Gen(TargetCfg, root, "joinmod")
+	g := testGen(root, "joinmod")
 
 	counts := make(map[string]int)
 	for _, n := range g.Graph {
@@ -717,7 +717,7 @@ END()
 `)
 	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
-	g := Gen(TargetCfg, root, "globalmod")
+	g := testGen(root, "globalmod")
 
 	counts := make(map[string]int)
 	for _, n := range g.Graph {
@@ -782,7 +782,7 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	Throw(os.MkdirAll(consumerDir, 0o755))
 	Throw(os.WriteFile(filepath.Join(consumerDir, "ya.make"), []byte("LIBRARY()\nSRCS(parser.rl6)\nEND()\n"), 0o644))
 
-	g := Gen(DefaultLinuxConfig, root, "consumer")
+	g := testGen(root, "consumer")
 
 	counts := make(map[string]int)
 	platforms := make(map[string]int)
@@ -912,7 +912,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 		"PROGRAM()\nSRCS(main.cpp)\nPEERDIR(peerlib)\nEND()\n",
 	), 0o644))
 
-	g := Gen(TargetCfg, root, "consumer")
+	g := testGen(root, "consumer")
 
 	// Locate the LD node.
 	var ldNode *Node
@@ -1018,7 +1018,7 @@ func TestGen_ToolsArchiver_DoesNotCrash(t *testing.T) {
 	var g *Graph
 
 	exc := Try(func() {
-		g = Gen(DefaultLinuxConfig, sourceRoot, "tools/archiver")
+		g = testGen(sourceRoot, "tools/archiver")
 	})
 
 	if exc != nil {
@@ -1044,7 +1044,7 @@ func TestGen_ToolsArchiver_DualPlatform_HostAndTargetCounts(t *testing.T) {
 		t.Skipf("tools/archiver not present in source tree: %v", err)
 	}
 
-	g := Gen(DefaultLinuxConfig, sourceRoot, "tools/archiver")
+	g := testGen(sourceRoot, "tools/archiver")
 
 	var hostNodes, targetNodes int
 
@@ -1080,7 +1080,7 @@ func TestGen_BuildCowOn_NoHostWalk(t *testing.T) {
 		t.Skipf("reference ya.make not present at %s/build/cow/on/ya.make", sourceRoot)
 	}
 
-	g := Gen(DefaultLinuxConfig, sourceRoot, "build/cow/on")
+	g := testGen(sourceRoot, "build/cow/on")
 
 	if len(g.Graph) != 2 {
 		t.Fatalf("len(Graph) = %d, want 2 (host walk must NOT fire for build/cow/on)", len(g.Graph))
@@ -1113,7 +1113,7 @@ func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
 	Throw(os.WriteFile(filepath.Join(mimDir, "ya.make"),
 		[]byte("LIBRARY()\nNO_PLATFORM()\nSRCS(mim.cpp)\nEND()\n"), 0o644))
 
-	g := Gen(DefaultLinuxConfig, root, "prog")
+	g := testGen(root, "prog")
 
 	var sawMimDir bool
 
@@ -1277,7 +1277,7 @@ func TestGen_DefaultPeerdirs_BuildCowOnUnaffected(t *testing.T) {
 		t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
 	}
 
-	g := Gen(TargetCfg, sourceRoot, targetDir)
+	g := testGen(sourceRoot, targetDir)
 
 	if len(g.Graph) != 2 {
 		t.Errorf("Gen produced %d nodes, want 2 (defaults must be suppressed)", len(g.Graph))
@@ -1363,7 +1363,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	Throw(os.MkdirAll(consumerDir, 0o755))
 	Throw(os.WriteFile(filepath.Join(consumerDir, "ya.make"), []byte("LIBRARY()\nSRCS(main.cpp)\nEND()\n"), 0o644))
 
-	g := Gen(TargetCfg, root, "consumer")
+	g := testGen(root, "consumer")
 
 	emittedDirs := make(map[string]bool)
 
@@ -1612,7 +1612,7 @@ SRCS(stub.c)
 END()
 `), 0644))
 
-	g := Gen(DefaultLinuxConfig, tmp, "lib1")
+	g := testGen(tmp, "lib1")
 
 	// Find lib1's AR; check its DepRefs.
 	var lib1AR *Node
@@ -1663,7 +1663,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCDIR(other/dir)\nSRCS(foo.cpp)\nEND()\n")
 		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
-		g := Gen(TargetCfg, root, "mymod")
+		g := testGen(root, "mymod")
 
 		if len(g.Graph) != 2 {
 			t.Fatalf("expected 2 nodes (1 CC + 1 AR), got %d", len(g.Graph))
@@ -1712,7 +1712,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(bar.cpp)\nEND()\n")
 		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
-		g := Gen(TargetCfg, root, "basemod")
+		g := testGen(root, "basemod")
 
 		if len(g.Graph) != 2 {
 			t.Fatalf("expected 2 nodes (1 CC + 1 AR), got %d", len(g.Graph))
@@ -1756,7 +1756,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCDIR(other/dir)\nJOIN_SRCS(all.cpp s1.cpp s2.cpp)\nEND()\n")
 		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
-		g := Gen(TargetCfg, root, "jsmod")
+		g := testGen(root, "jsmod")
 
 		if len(g.Graph) != 3 {
 			t.Fatalf("expected 3 nodes (1 JS + 1 CC + 1 AR), got %d", len(g.Graph))
@@ -1802,7 +1802,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		yamake := []byte("PROGRAM(myprog)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nALLOCATOR(FAKE)\nSRCDIR(tools/r6)\nSRCS(main.cpp)\nEND()\n")
 		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
-		g := Gen(TargetCfg, root, "tools/r6/bin")
+		g := testGen(root, "tools/r6/bin")
 
 		var ccNode *Node
 
@@ -1853,7 +1853,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCXXFLAGS(GLOBAL -nostdinc++)\nSRCS(foo.cpp)\nEND()\n")
 		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
-		g := Gen(TargetCfg, root, "testlib")
+		g := testGen(root, "testlib")
 
 		var ccNode *Node
 
@@ -1908,7 +1908,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCONLYFLAGS(GLOBAL -Dfoo)\nSRCS(bar.c)\nEND()\n")
 		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
-		g := Gen(TargetCfg, root, "testlib")
+		g := testGen(root, "testlib")
 
 		var ccNode *Node
 
@@ -1944,7 +1944,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCXXFLAGS(-DMINE)\nSRCS(foo.cpp)\nEND()\n")
 		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
-		g := Gen(TargetCfg, root, "testlib")
+		g := testGen(root, "testlib")
 
 		var ccNode *Node
 
@@ -1991,7 +1991,7 @@ func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
 	yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nJOIN_SRCS(all.cpp s1.cpp s2.cpp)\nEND()\n")
 	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
-	g := Gen(TargetCfg, root, "jsmod")
+	g := testGen(root, "jsmod")
 
 	var jsNode, ccNode *Node
 
@@ -2058,7 +2058,7 @@ SRCS(main.cpp)
 END()
 `), 0o644))
 
-	g := Gen(TargetCfg, root, "r6mod")
+	g := testGen(root, "r6mod")
 
 	var r6Node, ccNode *Node
 
@@ -2129,7 +2129,7 @@ SRCS(p.cpp)
 END()
 `), 0o644))
 
-	g := Gen(TargetCfg, tmp, "lib_consumer")
+	g := testGen(tmp, "lib_consumer")
 
 	var consumerAR *Node
 
@@ -2183,7 +2183,7 @@ SRCS(stub.c)
 END()
 `), 0o644))
 
-	g := Gen(TargetCfg, tmp, "myprog")
+	g := testGen(tmp, "myprog")
 
 	found := false
 
@@ -2237,7 +2237,7 @@ SRCS(stub.cpp)
 END()
 `), 0o644))
 
-	g := Gen(TargetCfg, tmp, "myprog")
+	g := testGen(tmp, "myprog")
 
 	hasTcmalloc := false
 	hasNoPercpu := false
@@ -2282,7 +2282,7 @@ SRCS(main.cpp)
 END()
 `), 0o644))
 
-	g := Gen(TargetCfg, tmp, "myprog")
+	g := testGen(tmp, "myprog")
 
 	for _, n := range g.Graph {
 		md := n.TargetProperties["module_dir"]
@@ -2313,7 +2313,7 @@ SRCS(src/foo.cpp)
 END()
 `), 0o644))
 
-	g := Gen(TargetCfg, tmp, "mylib")
+	g := testGen(tmp, "mylib")
 
 	var ccNode *Node
 
@@ -2367,7 +2367,7 @@ END()
 	// stat check finds it locally.
 	Throw(os.WriteFile(filepath.Join(tmp, "mylib", "local.c"), []byte("int x;\n"), 0o644))
 
-	g := Gen(TargetCfg, tmp, "mylib")
+	g := testGen(tmp, "mylib")
 
 	var ccNode *Node
 
@@ -2420,7 +2420,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 		"LIBRARY()\nPEERDIR(lib)\nSRCS(main.cpp)\nEND()\n",
 	), 0o644))
 
-	g := Gen(TargetCfg, root, "consumer")
+	g := testGen(root, "consumer")
 
 	// Find the CC node for main.cpp (the consumer's own source).
 	var consumerCC *Node
@@ -2561,7 +2561,7 @@ func TestGen_ToolsArchiver_LDPeerArchiveClosure(t *testing.T) {
 		t.Fatalf("stat ya.make: %v", err)
 	}
 
-	our := Gen(TargetCfg, sourceRoot, targetDir)
+	our := testGen(sourceRoot, targetDir)
 
 	const ldOutput = "$(B)/tools/archiver/archiver"
 
@@ -2639,7 +2639,7 @@ func TestGen_MuslPyplugin_CPNodeEmitted(t *testing.T) {
 		t.Fatalf("stat ya.make: %v", err)
 	}
 
-	our := Gen(TargetCfg, sourceRoot, targetDir)
+	our := testGen(sourceRoot, targetDir)
 
 	const wantOutput = "$(B)/contrib/libs/musl/include/musl.py.pyplugin"
 
@@ -2714,7 +2714,7 @@ func TestGen_ToolsArchiver_LDPluginSection(t *testing.T) {
 		t.Fatalf("stat ya.make: %v", err)
 	}
 
-	our := Gen(TargetCfg, sourceRoot, targetDir)
+	our := testGen(sourceRoot, targetDir)
 
 	const ldOutput = "$(B)/tools/archiver/archiver"
 
@@ -2825,7 +2825,7 @@ func TestGen_MuslPyplugin_HostCPDedup(t *testing.T) {
 		t.Fatalf("stat ya.make: %v", err)
 	}
 
-	our := Gen(TargetCfg, sourceRoot, targetDir)
+	our := testGen(sourceRoot, targetDir)
 
 	const pluginOutput = "$(B)/contrib/libs/musl/include/musl.py.pyplugin"
 
@@ -2933,7 +2933,7 @@ func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 		t.Fatalf("write mod/ya.make: %v", err)
 	}
 
-	g := Gen(TargetCfg, root, "mod")
+	g := testGen(root, "mod")
 
 	var cc *Node
 
@@ -2989,7 +2989,7 @@ func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 		t.Fatalf("write mod/ya.make: %v", err)
 	}
 
-	g := Gen(TargetCfg, root, "mod")
+	g := testGen(root, "mod")
 
 	var cc *Node
 
@@ -3047,7 +3047,7 @@ func TestGen_SRC_FlatOutputPath(t *testing.T) {
 		t.Fatalf("write mod/ya.make: %v", err)
 	}
 
-	g := Gen(TargetCfg, root, "mod")
+	g := testGen(root, "mod")
 
 	var cc *Node
 
@@ -3090,7 +3090,7 @@ func TestGen_SRC_RejectsZeroArgs(t *testing.T) {
 	}
 
 	exc := Try(func() {
-		Gen(TargetCfg, root, "mod")
+		testGen(root, "mod")
 	})
 
 	if exc == nil {
@@ -3134,7 +3134,7 @@ END()
 `)
 	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
-	g := Gen(TargetCfg, root, "joinmod")
+	g := testGen(root, "joinmod")
 
 	var arNode *Node
 
@@ -3198,7 +3198,7 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	Throw(os.MkdirAll(ragelDir, 0o755))
 	Throw(os.WriteFile(filepath.Join(ragelDir, "ya.make"), []byte("PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n"), 0o644))
 
-	g := Gen(DefaultLinuxConfig, root, "consumer")
+	g := testGen(root, "consumer")
 
 	var arNode *Node
 
@@ -3263,7 +3263,7 @@ END()
 `)
 	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
-	g := Gen(TargetCfg, root, "globalmod")
+	g := testGen(root, "globalmod")
 
 	var (
 		regularAR *Node
@@ -3351,7 +3351,7 @@ END()
 	Throw(os.MkdirAll(filepath.Join(root, "mod/sub"), 0o755))
 	Throw(os.WriteFile(filepath.Join(root, "mod/sub", "foo.S"), []byte("// asm\n"), 0o644))
 
-	g := Gen(TargetCfg, root, "mod/inner")
+	g := testGen(root, "mod/inner")
 
 	var arNode *Node
 
@@ -3412,7 +3412,7 @@ func TestD41_PICCoincidesWithHostTarget(t *testing.T) {
 		t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
 	}
 
-	g := Gen(DefaultLinuxConfig, sourceRoot, targetDir)
+	g := testGen(sourceRoot, targetDir)
 
 	hostID := string(DefaultLinuxConfig.Host.ID)
 	targetID := string(DefaultLinuxConfig.Target.ID)

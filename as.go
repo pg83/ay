@@ -489,7 +489,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	cmdArgs := make([]string, 0, fixed+len(includes))
 
 	// Prologue: compiler, target triple, optional -march, assembler search path.
-	cmdArgs = append(cmdArgs, ccCompilerPath, "--target="+triple)
+	cmdArgs = append(cmdArgs, instance.Platform.Tools.CC, "--target="+triple)
 
 	if withMarch {
 		cmdArgs = append(cmdArgs, "-march="+archFlag)

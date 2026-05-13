@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 // platform.go — the `(host, target)` Platform pair the generator threads
 // from CLI entry through every emitter.
 //
@@ -27,10 +29,22 @@ package main
 // rewrite the map first and re-derive shadows; the struct is treated
 // as immutable post-construction.
 type Platform struct {
-	Target PlatformID        // arch identity surfaced as `node.platform`
+	OS     OS                // OS axis (linux / darwin / windows)
+	ISA    ISA               // ISA axis (x86_64 / aarch64 / arm64)
+	Target PlatformID        // = MakePlatformID(OS, ISA); surfaces as `node.platform`
 	Flags  map[string]string // canonical per-platform toggles ("PIC"="yes", "MUSL"="yes", …)
 	Tags   []string          // baseline tags every node on this platform carries (e.g. `["tool"]` on host)
 	IsHost bool              // is this the host machine's platform? Set by CLI; surfaces as `node.host_platform`.
+
+	// Tools is the absolute-path toolchain bound to this Platform.
+	// Each emitter that materialises a tool invocation (python3 driver,
+	// clang(++) compile, llvm-objcopy strip-debug, …) reads the path
+	// off this struct rather than hard-coding it. Populated by
+	// NewPlatform from Flags entries written by mine.go::commonFlags;
+	// missing entries fall back to the reference-snapshot paths so
+	// tests that construct platforms with nil/empty flags continue to
+	// emit byte-exact cmd_args.
+	Tools Toolchain
 
 	// Shadow accessors — derived from Flags at construction time. Kept as
 	// fields rather than methods to avoid the map lookup in tight loops
@@ -49,15 +63,47 @@ type Platform struct {
 	LibcMusl bool
 }
 
-// NewPlatform constructs a `*Platform` from an explicit (target,
-// flags, tags, isHost) tuple and pre-fills the boolean shadows from
-// the flags map. The caller owns `flags` and `tags`; NewPlatform takes
-// references, so the caller must not mutate them after construction.
+// Toolchain captures the absolute paths the rule emitters need to
+// embed in cmd_args. Populated from a Flags map keyed on ymake's
+// `<TOOL>_TOOL` / `BUILD_PYTHON_BIN` convention (see mine.go::commonFlags).
+// Empty fields are legal at construction time — emitters that consume
+// a tool fail loudly if it was not mined, rather than silently embedding
+// a stale snapshot path.
+type Toolchain struct {
+	Python3 string // BUILD_PYTHON_BIN
+	CC      string // CLANG_TOOL       — C compile driver
+	CXX     string // CLANG_pl_pl_TOOL — C++ compile driver
+	Objcopy string // OBJCOPY_TOOL     — debug-section strip / resource embed
+	AR      string // AR_TOOL          — archiver
+	Strip   string // STRIP_TOOL
+	LLD     string // LLD_TOOL         — linker
+}
+
+// toolchainFromFlags reads tool paths out of a Flags map. Missing
+// entries land as empty strings; the consumer that actually needs the
+// tool is responsible for the error path.
+func toolchainFromFlags(flags map[string]string) Toolchain {
+	return Toolchain{
+		Python3: flags["BUILD_PYTHON_BIN"],
+		CC:      flags["CLANG_TOOL"],
+		CXX:     flags["CLANG_pl_pl_TOOL"],
+		Objcopy: flags["OBJCOPY_TOOL"],
+		AR:      flags["AR_TOOL"],
+		Strip:   flags["STRIP_TOOL"],
+		LLD:     flags["LLD_TOOL"],
+	}
+}
+
+// NewPlatform constructs a `*Platform` from an explicit
+// (os, isa, flags, tags, isHost) tuple and pre-fills the boolean
+// shadows from the flags map. The caller owns `flags` and `tags`;
+// NewPlatform takes references, so the caller must not mutate them
+// after construction.
 //
 // Flag value convention: `"yes"` is truthy; any other value (including
 // empty, missing, `"no"`) is falsy. Matches the ymake `--define` /
 // `cliDefines` convention.
-func NewPlatform(target PlatformID, flags map[string]string, tags []string, isHost bool) *Platform {
+func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, isHost bool) *Platform {
 	if flags == nil {
 		flags = map[string]string{}
 	}
@@ -66,10 +112,13 @@ func NewPlatform(target PlatformID, flags map[string]string, tags []string, isHo
 	}
 
 	return &Platform{
-		Target:   target,
+		OS:       os,
+		ISA:      isa,
+		Target:   MakePlatformID(os, isa),
 		Flags:    flags,
 		Tags:     tags,
 		IsHost:   isHost,
+		Tools:    toolchainFromFlags(flags),
 		PIC:      flags["PIC"] == "yes",
 		LibcMusl: flags["MUSL"] == "yes",
 	}
@@ -97,39 +146,17 @@ func (c *genCtx) platformFor(instance ModuleInstance) *Platform {
 	return nil
 }
 
-// defaultLinuxPlatforms returns the canonical M2/M3 (host, target) pair
-// the existing CLI implicitly used pre-refactor: host = x86_64 PIC + the
-// `"tool"` tag baseline (so every node emitted under a host sub-graph
-// inherits it via `instance.Platform.Tags`); target = aarch64 non-PIC, no
-// baseline tags. The MUSL flag is propagated to BOTH platforms from
-// `cliDefines["MUSL"]` because musl-vs-glibc applies to BOTH axes (the
-// host walk through ragel6/bin still hits the musl-flavoured cc.go
-// composer for asmlib/musl-deep peers).
-func defaultLinuxPlatforms(cliDefines map[string]string) (host, target *Platform) {
-	muslOn := cliDefines["MUSL"] == "yes"
-	muslVal := "no"
-	if muslOn {
-		muslVal = "yes"
+// ParsePlatformID splits a "default-<os>-<isa>" string into its OS
+// and ISA components. Throws on a malformed input; returns the
+// recognised typed pair on success.
+func ParsePlatformID(s string) (OS, ISA) {
+	if !strings.HasPrefix(s, "default-") {
+		ThrowFmt("ParsePlatformID: %q does not start with \"default-\"", s)
 	}
-
-	host = NewPlatform(
-		PlatformDefaultLinuxX8664,
-		map[string]string{
-			"PIC":  "yes",
-			"MUSL": muslVal,
-		},
-		[]string{"tool"},
-		true,
-	)
-	target = NewPlatform(
-		PlatformDefaultLinuxAArch64,
-		map[string]string{
-			"PIC":  "no",
-			"MUSL": muslVal,
-		},
-		nil,
-		false,
-	)
-
-	return host, target
+	rest := s[len("default-"):]
+	dash := strings.IndexByte(rest, '-')
+	if dash < 0 {
+		ThrowFmt("ParsePlatformID: %q lacks the <os>-<isa> separator", s)
+	}
+	return OS(rest[:dash]), ISA(rest[dash+1:])
 }

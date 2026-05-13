@@ -128,12 +128,32 @@ func cmdGen(args []string) int {
 	targetPlatform := fs.String("target-platform", "", "target platform id (e.g. default-linux-aarch64); empty preserves M3-reference behaviour")
 	hostPlatform := fs.String("host-platform", "", "host platform id (e.g. default-linux-x86_64); empty preserves M3-reference behaviour")
 
+	// Host-axis flag overrides. `--host-platform-flag KEY=VALUE`
+	// lands on the host Platform's Flags (mirrors `make`'s semantics);
+	// repeatable; bare KEY (without "=") is rejected.
+	var hostPlatformFlags stringMapValue
+
+	fs.Var(&hostPlatformFlags, "host-platform-flag", "host-axis KEY=VALUE flag; repeatable")
+
 	// PR-M3-perf-profile: write a Go pprof CPU profile to PATH for
 	// the duration of the Gen call. Empty (default) disables
 	// profiling. Inspect with `go tool pprof <PATH>`.
 	cpuProfile := fs.String("cpuprofile", "", "write CPU profile to PATH (Go pprof format); empty disables")
 	memProfile := fs.String("memprofile", "", "write heap profile to PATH after Gen completes; empty disables")
 	profileRate := fs.Int("profile-rate", 1000, "CPU profile sampling rate in Hz (default 1000); only effective when -cpuprofile is set")
+
+	// Toolchain overrides. When set, the explicit path wins over the
+	// mineTools() result for the corresponding entry. Useful for
+	// reproducing a saved reference graph whose cmd_args embed a
+	// specific absolute path (e.g. /ix/realm/boot/bin/clang++) that
+	// the current $PATH does not resolve to verbatim.
+	pythonBin := fs.String("python-bin", "", "override the mined BUILD_PYTHON_BIN; empty = use $PATH discovery")
+	cCompiler := fs.String("c-compiler", "", "override the mined CLANG_TOOL (C compile driver); empty = use $PATH discovery")
+	cxxCompiler := fs.String("cxx-compiler", "", "override the mined CLANG_pl_pl_TOOL (C++ compile driver); empty = use $PATH discovery")
+	objcopy := fs.String("objcopy", "", "override the mined OBJCOPY_TOOL (llvm-objcopy); empty = use $PATH discovery")
+	ar := fs.String("ar", "", "override the mined AR_TOOL (llvm-ar); empty = use $PATH discovery")
+	strip := fs.String("strip", "", "override the mined STRIP_TOOL (llvm-strip); empty = use $PATH discovery")
+	lld := fs.String("lld", "", "override the mined LLD_TOOL (linker); empty = use $PATH discovery")
 
 	err := fs.Parse(args)
 
@@ -162,25 +182,64 @@ func cmdGen(args []string) int {
 		}()
 	}
 
-	// PR-M3-make: mine the toolchain via $PATH and project into the
-	// ymake flag namespace; user --define values overlay on top. The
-	// mined map gives cliDefines a stable foothold against the running
-	// host's tool layout instead of a snapshot-pinned reference.
-	mined := commonFlags(mineTools())
-	cli := mergeFlags(mined, defines.toMap())
-	if _, ok := cli["MUSL"]; !ok {
-		cli["MUSL"] = "yes"
+	// Toolchain mining + per-tool CLI overrides. Tools are
+	// build-host facilities and land on both Platform halves; the
+	// per-tool --override flags win over the $PATH-mined value.
+	tools := commonFlags(mineTools())
+	for _, o := range []struct {
+		key, val string
+	}{
+		{"BUILD_PYTHON_BIN", *pythonBin},
+		{"BUILD_PYTHON3_BIN", *pythonBin},
+		{"CLANG_TOOL", *cCompiler},
+		{"CLANG_pl_pl_TOOL", *cxxCompiler},
+		{"OBJCOPY_TOOL", *objcopy},
+		{"AR_TOOL", *ar},
+		{"STRIP_TOOL", *strip},
+		{"LLD_TOOL", *lld},
+	} {
+		if o.val != "" {
+			tools[o.key] = o.val
+		}
 	}
 
-	if *targetPlatform != "" {
-		cli["GG_TARGET_PLATFORM"] = *targetPlatform
+	// Host platform: mined OS/ISA when --host-platform is empty;
+	// mined toolchain + PIC=yes; baseline tag "tool" so every host
+	// node carries it.
+	hOS, hISA := resolvePlatform(*hostPlatform)
+	hostFlags := make(map[string]string, len(tools)+len(hostPlatformFlags.toMap())+1)
+	for k, v := range tools {
+		hostFlags[k] = v
 	}
-	if *hostPlatform != "" {
-		cli["GG_HOST_PLATFORM"] = *hostPlatform
+	for k, v := range hostPlatformFlags.toMap() {
+		hostFlags[k] = v
 	}
+	hostFlags["PIC"] = "yes"
+	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, true)
+
+	// Target platform: defaults to host axes when --target-platform
+	// is empty; --define KEY=VALUE entries land on TARGET's flags
+	// only (-D semantics); PIC=no.
+	targetSpec := *targetPlatform
+	if targetSpec == "" {
+		targetSpec = string(MakePlatformID(hOS, hISA))
+	}
+	tOS, tISA := resolvePlatform(targetSpec)
+	targetFlags := make(map[string]string, len(tools)+len(defines.toMap())+2)
+	for k, v := range tools {
+		targetFlags[k] = v
+	}
+	for k, v := range defines.toMap() {
+		targetFlags[k] = v
+	}
+	if _, ok := targetFlags["MUSL"]; !ok {
+		targetFlags["MUSL"] = "yes"
+	}
+	targetFlags["PIC"] = "no"
+	targetP := NewPlatform(tOS, tISA, targetFlags, nil, false)
 
 	genStart := time.Now()
-	g := GenWithMode(TargetCfg, *sourceRoot, *target, cli, *scanCtxMode)
+	g := GenWithMode(TargetCfg, *sourceRoot, *target, hostP, targetP, *scanCtxMode)
 	genDur := time.Since(genStart)
 
 	if *memProfile != "" {
@@ -270,6 +329,13 @@ Flags:
     --source-root <path>   Absolute source-tree root. Defaults to /home/pg/monorepo/yatool_orig.
     --define KEY=VALUE     Repeatable. Mirrors ymake's -D flag. Default when omitted: MUSL=yes.
     --time                 Print wall-time breakdown (gen + serialise) to stderr.
+    --python-bin <path>    Override mined BUILD_PYTHON_BIN (Python interpreter).
+    --c-compiler <path>    Override mined CLANG_TOOL (C compile driver).
+    --cxx-compiler <path>  Override mined CLANG_pl_pl_TOOL (C++ compile driver).
+    --objcopy <path>       Override mined OBJCOPY_TOOL (llvm-objcopy).
+    --ar <path>            Override mined AR_TOOL (llvm-ar).
+    --strip <path>         Override mined STRIP_TOOL (llvm-strip).
+    --lld <path>           Override mined LLD_TOOL (linker).
     --cpuprofile <path>    Write CPU profile (pprof) over the run. Empty disables.
     --memprofile <path>    Write heap profile after Gen. Empty disables.
 `)

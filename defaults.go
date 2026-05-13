@@ -411,7 +411,7 @@ func cliMuslOn(ctx *genCtx) bool {
 		return true
 	}
 
-	return ctx.cliDefines["MUSL"] == "yes"
+	return ctx.target.Flags["MUSL"] == "yes"
 }
 
 // defaultPeerCFlags returns the auto-injected peer-CFLAG set the
@@ -505,7 +505,7 @@ func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocato
 	muslOn := env.Bool("MUSL")
 
 	if ctx != nil {
-		muslOn = ctx.cliDefines["MUSL"] == "yes"
+		muslOn = ctx.target.Flags["MUSL"] == "yes"
 	}
 
 	muslLite := env.Bool("MUSL_LITE") || muslLiteOverride

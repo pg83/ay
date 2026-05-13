@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -88,26 +87,46 @@ func commonFlags(tools map[string]string) map[string]string {
 	return res
 }
 
-// hostPlatformID returns the canonical `default-<os>-<arch>` triple
-// for the running process. Used as the default for both
-// `--target-platform` and `--host-platform` when neither flag is set.
-func hostPlatformID() string {
-	return fmt.Sprintf("default-%s-%s", runtime.GOOS, hostArch())
+// hostOS / hostISA / hostPlatformID surface the running process's
+// typed axes for the CLI fallback (when `--host-platform` is unset).
+// hostOS reads Go's runtime.GOOS verbatim; hostISA normalises Go's
+// runtime.GOARCH into the conventional ymake triple component
+// (amd64 → x86_64; arm64 → aarch64 on Linux, arm64 elsewhere).
+func hostOS() OS {
+	return OS(runtime.GOOS)
 }
 
-func hostArch() string {
+func hostISA() ISA {
 	switch runtime.GOARCH {
 	case "amd64":
-		return "x86_64"
+		return ISAX8664
 	case "arm64":
 		if runtime.GOOS == "darwin" || runtime.GOOS == "ios" {
-			return "arm64"
+			return ISAArm64
 		}
-
-		return "aarch64"
+		return ISAAArch64
 	default:
-		return runtime.GOARCH
+		return ISA(runtime.GOARCH)
 	}
+}
+
+// hostPlatformID returns the canonical `default-<os>-<isa>` triple
+// for the running process. Used by `yatool make` to seed
+// `GG_TARGET_PLATFORM` when the CLI flag is not supplied.
+func hostPlatformID() string {
+	return string(MakePlatformID(hostOS(), hostISA()))
+}
+
+// resolvePlatform parses the canonical `default-<os>-<isa>` form;
+// when the string is empty, mines OS/ISA from the running process
+// (hostOS / hostISA). The CLI caller threads the target's empty-
+// string fallback through this same function by passing the
+// already-resolved host's PlatformID string instead of "".
+func resolvePlatform(s string) (OS, ISA) {
+	if s == "" {
+		return hostOS(), hostISA()
+	}
+	return ParsePlatformID(s)
 }
 
 // mergeFlags returns a fresh map containing every entry from `base`
