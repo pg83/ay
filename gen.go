@@ -317,6 +317,20 @@ type genCtx struct {
 	// dormant unless the env var is set.
 	scanCtxAllocs int
 	scanCtxPeak   int
+
+	// PR-M3-platform-pair: the canonical (host, target) Platform pair
+	// constructed once in GenWithMode from the CLI args. Threaded through
+	// every emitter so renderers read `targetP.Target` / `targetP.Flags` /
+	// `targetP.Tags` / `targetP.IsHost` instead of inferring "am I a host
+	// build?" from `targetIsX8664(instance)`. See platform.go header.
+	//
+	// Tool sub-graph emission flips the second slot to host: the recursive
+	// emit call passes `(host, host)` so the rendered nodes carry
+	// `node.platform = host.Target`, `node.host_platform = true`,
+	// `node.tags = host.Tags` (`["tool"]`) without any branch in the
+	// renderer.
+	host   *Platform
+	target *Platform
 }
 
 // scanCtxCacheKey identifies a scanCtx by the (scanner pointer, ctxHash)
@@ -717,12 +731,21 @@ func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, cliDef
 	hostScanner.codegen = hostReg
 	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
 
+	// PR-M3-platform-pair: construct the (host, target) Platform pair
+	// from the CLI args. ALL emitters read these through `ctx.host` /
+	// `ctx.target` (or via explicit (hostP, targetP) parameters added
+	// in follow-on PRs); the old `targetIsX8664(instance)` helper is
+	// scheduled for removal once every emitter has been migrated.
+	hostP, targetP := defaultLinuxPlatforms(cliDefines)
+
 	ctx := &genCtx{
 		cfg:             cfg,
 		sourceRoot:      sourceRoot,
 		emit:            NewBufferedEmitter(),
 		memo:            make(map[ModuleInstance]*moduleEmitResult),
 		walking:         make(map[ModuleInstance]bool),
+		host:            hostP,
+		target:          targetP,
 		// PR-M3-perf-B: target and host scanners share one parse-level cache
 		// (file-byte parsing + file existence). Both scanners operate over
 		// the same sourceRoot so parsed directives and stat results are
