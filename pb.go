@@ -335,6 +335,7 @@ var pbCcDeepRuntimeHeaders = []string{
 //
 // Returns the emitted NodeRef.
 func EmitPB(
+	hostP, targetP *Platform,
 	instance ModuleInstance,
 	srcRel string,
 	cppStyleguideLDRef NodeRef,
@@ -345,6 +346,7 @@ func EmitPB(
 	sourceRoot string,
 	emit Emitter,
 ) NodeRef {
+	_ = hostP // PR-M3-platform-pair-step2: surfaced for symmetry; the renderer only consumes targetP today.
 	moduleDir := instance.Path
 	protoRelPath := moduleDir + "/" + srcRel
 	// Output paths strip the .proto suffix: foo.proto → foo.pb.h / foo.pb.cc.
@@ -392,11 +394,10 @@ func EmitPB(
 		inputs = append(inputs, pbDescriptorProto)
 	}
 
-	// tags: ["tool"] on host (x86_64), [] on target.
-	tags := []string{}
-	if targetIsX8664(instance) {
-		tags = []string{"tool"}
-	}
+	// PR-M3-platform-pair-step2: tags are baseline data carried by the
+	// platform the caller selected (`["tool"]` on host, `[]` on target).
+	// The renderer does NOT branch on "is this a host build?".
+	tags := append([]string(nil), targetP.Tags...)
 
 	targetProps := map[string]string{
 		"module_dir": moduleDir,
@@ -439,8 +440,8 @@ func EmitPB(
 		},
 		Tags:             tags,
 		TargetProperties: targetProps,
-		Platform:         string(instance.Target),
-		HostPlatform:     targetIsX8664(instance),
+		Platform:         string(targetP.Target),
+		HostPlatform:     targetP.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -595,7 +596,8 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 
 	// Emit PB nodes.
 	for _, src := range protoSrcs {
-		pbRef := EmitPB(instance, src, cppStyleguideLDRef, protocLDRef,
+		pbRef := EmitPB(ctx.host, ctx.platformFor(instance),
+			instance, src, cppStyleguideLDRef, protocLDRef,
 			cppStyleguideBinary, protocBinary,
 			"cpp_proto", ctx.sourceRoot, ctx.emit)
 

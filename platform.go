@@ -66,6 +66,28 @@ func NewPlatform(target PlatformID, flags map[string]string, tags []string, isHo
 	}
 }
 
+// platformFor returns the `*Platform` matching `instance.Target` from
+// the (host, target) pair on `c`. Helper for the migration period: as
+// each emitter is refactored to take `(hostP, targetP)` explicitly, its
+// caller resolves the right `*Platform` via this method. Throws if
+// `instance.Target` is neither host nor target; in M2/M3 this is
+// unreachable (ModuleInstance.Target is always one of the two CLI-
+// constructed platforms).
+func (c *genCtx) platformFor(instance ModuleInstance) *Platform {
+	switch instance.Target {
+	case c.host.Target:
+		return c.host
+	case c.target.Target:
+		return c.target
+	}
+
+	ThrowFmt(
+		"genCtx.platformFor: instance.Target=%q does not match host=%q or target=%q",
+		instance.Target, c.host.Target, c.target.Target,
+	)
+	return nil
+}
+
 // defaultLinuxPlatforms returns the canonical M2/M3 (host, target) pair
 // the existing CLI implicitly used pre-refactor: host = x86_64 PIC + the
 // `"tool"` tag baseline (so every node emitted under a host sub-graph
