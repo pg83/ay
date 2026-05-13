@@ -1024,11 +1024,11 @@ func emitPySrcObjcopy(
 
 		cmdArgs := []string{
 			"/ix/realm/pg/bin/python3",
-			"$(S)/build/scripts/objcopy.py",
+			objcopyScriptPath,
 			"--compiler", "/ix/realm/boot/bin/clang++",
 			"--objcopy", "/ix/realm/boot/bin/llvm-objcopy",
-			"--compressor", "$(B)/tools/rescompressor/rescompressor",
-			"--rescompiler", "$(B)/tools/rescompiler/rescompiler",
+			"--compressor", rescompressorBinPath,
+			"--rescompiler", rescompilerBinPath,
 			"--output_obj", outputObj.String(),
 			"--target", objcopyTargetTriple(instance.Platform),
 		}
