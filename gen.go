@@ -4497,7 +4497,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	_ = peerArchiveRefs // retained as a loop accumulator for the PROGRAM LD branch above; intentionally unused for the LIBRARY AR.
-	arPath := "$(B)/" + instance.Path + "/" + arBaseName
+	arPath := Build(instance.Path + "/" + arBaseName).String()
 
 	// PR-M3-A: emit yapyc3 PY nodes for PY_SRCS() declarations.
 	// Modules that have both SRCS and PY_SRCS (rare but valid) get CC/AR
@@ -5133,9 +5133,9 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 	// Canonical binary paths ($(B)-rooted) used in cmd_args
 	// and inputs when the host walk succeeds or as fallbacks when it fails.
-	const (
-		py3ccBinaryCanonical     = "$(B)/tools/py3cc/py3cc"
-		py3ccSlowBinaryCanonical = "$(B)/tools/py3cc/slow/py3cc"
+	var (
+		py3ccBinaryCanonical     = Build("tools/py3cc/py3cc").String()
+		py3ccSlowBinaryCanonical = Build("tools/py3cc/slow/py3cc").String()
 	)
 
 	var (
@@ -5351,7 +5351,8 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 
 	for _, arg := range d.pyRegister {
 		regCpp := arg + ".reg3.cpp"
-		regCppAbs := "$(B)/" + instance.Path + "/" + regCpp
+		regCppVFS := Build(instance.Path + "/" + regCpp)
+		regCppAbs := regCppVFS.String()
 
 		env := map[string]string{
 			"ARCADIA_ROOT_DISTBUILD": "$(S)",
@@ -5370,7 +5371,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			},
 			Env:     env,
 			Inputs:  []VFS{genPy3RegScriptVFS},
-			Outputs: []VFS{Build(instance.Path + "/" + regCpp)},
+			Outputs: []VFS{regCppVFS},
 			KV: map[string]string{
 				"p":  "PY",
 				"pc": "yellow",
@@ -5991,7 +5992,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// parse. The literal matches the reference graph's invocation
 		// path, so a zero-host-LD codepath at least produces a
 		// meaningful argv even though the host LD node is missing.
-		const ragelFallbackPath = "$(B)/contrib/tools/ragel6/ragel6"
+		var ragelFallbackPath = Build("contrib/tools/ragel6/ragel6").String()
 
 		var (
 			ragelLDRef     NodeRef
@@ -6282,10 +6283,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// Mirrors the .rl6 branch: walk the two host ragel5 PROGRAMs eagerly,
 		// emit the R5 node, then emit a CC node for the generated .rl5.cpp.
 		const (
-			ragel5Path      = "contrib/tools/ragel5/ragel"
-			rlgenCdPath     = "contrib/tools/ragel5/rlgen-cd"
-			ragel5Fallback  = "$(B)/contrib/tools/ragel5/ragel/ragel5"
-			rlgenCdFallback = "$(B)/contrib/tools/ragel5/rlgen-cd/rlgen-cd"
+			ragel5Path  = "contrib/tools/ragel5/ragel"
+			rlgenCdPath = "contrib/tools/ragel5/rlgen-cd"
+		)
+		var (
+			ragel5Fallback  = Build("contrib/tools/ragel5/ragel/ragel5").String()
+			rlgenCdFallback = Build("contrib/tools/ragel5/rlgen-cd/rlgen-cd").String()
 		)
 
 		var (
