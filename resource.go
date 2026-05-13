@@ -38,7 +38,7 @@ const maxCmdLen = 8000
 // script. Carried on every emitted objcopy node's `inputs` slot and
 // propagated into the enclosing module's `.global.a` member inputs
 // (PR-M3-globalA-narrow-closure).
-const objcopyScriptPath = "$(SOURCE_ROOT)/build/scripts/objcopy.py"
+const objcopyScriptPath = "$(S)/build/scripts/objcopy.py"
 
 // objcopyScriptVFS is the VFS-typed form of objcopyScriptPath, used by
 // internal flow that keeps inputs/outputs in VFS shape.
@@ -169,7 +169,7 @@ func resourceModuleTag(modName string) string {
 // emitResourceObjcopy emits one objcopy PY node per flush of the
 // upstream `TObjCopyResourcePacker`. PR-A flushes once per module
 // (the chunker lands in PR-C); returned slice is the
-// `$(BUILD_ROOT)/...objcopy_*.o` output paths in flush order, intended
+// `$(B)/...objcopy_*.o` output paths in flush order, intended
 // to be appended to the module's `.global.a` `srcs[]` by the caller.
 // When the module has no parsed RESOURCE / RESOURCE_FILES entries the
 // function emits nothing and returns nil.
@@ -283,23 +283,23 @@ func emitResourceObjcopy(
 
 		cmdArgs := []string{
 			"/ix/realm/pg/bin/python3",
-			"$(SOURCE_ROOT)/build/scripts/objcopy.py",
+			"$(S)/build/scripts/objcopy.py",
 			"--compiler", "/ix/realm/boot/bin/clang++",
 			"--objcopy", "/ix/realm/boot/bin/llvm-objcopy",
-			"--compressor", "$(BUILD_ROOT)/tools/rescompressor/rescompressor",
-			"--rescompiler", "$(BUILD_ROOT)/tools/rescompiler/rescompiler",
+			"--compressor", "$(B)/tools/rescompressor/rescompressor",
+			"--rescompiler", "$(B)/tools/rescompiler/rescompiler",
 			"--output_obj", outputObj.String(),
 			"--target", objcopyTargetTriple(instance.Platform),
 		}
 
 		// Source inputs slot: --inputs <p1> <p2> ... --keys <k1> <k2> ...
 		// `paths` carry the module-relative path as declared by the macro;
-		// cmd_args injects the $(SOURCE_ROOT)/<modulePath>/<path> form.
+		// cmd_args injects the $(S)/<modulePath>/<path> form.
 		// REF samples confirm both certs and rapidjson use this shape.
 		if len(cur.paths) > 0 {
 			cmdArgs = append(cmdArgs, "--inputs")
 			for _, p := range cur.paths {
-				cmdArgs = append(cmdArgs, "$(SOURCE_ROOT)/"+instance.Path+"/"+p)
+				cmdArgs = append(cmdArgs, "$(S)/"+instance.Path+"/"+p)
 			}
 			cmdArgs = append(cmdArgs, "--keys")
 			cmdArgs = append(cmdArgs, cur.keys...)
@@ -318,7 +318,7 @@ func emitResourceObjcopy(
 			}
 		}
 
-		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)"}
+		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 
 		// inputs[] mirrors REF: rescompiler + rescompressor binaries,
 		// then per-entry source paths in declaration order, with the
@@ -502,7 +502,7 @@ func objcopyTargetTriple(p *Platform) string {
 //     the lower-cased target_properties.module_tag override that the
 //     REF surfaces only for PY23_*-flavoured modules.
 //
-// Returns the `$(BUILD_ROOT)/<modulePath>/objcopy_<hash>.o` output path.
+// Returns the `$(B)/<modulePath>/objcopy_<hash>.o` output path.
 func emitKvOnlyObjcopyNode(
 	ctx *genCtx,
 	instance ModuleInstance,
@@ -518,18 +518,18 @@ func emitKvOnlyObjcopyNode(
 
 	cmdArgs := []string{
 		"/ix/realm/pg/bin/python3",
-		"$(SOURCE_ROOT)/build/scripts/objcopy.py",
+		"$(S)/build/scripts/objcopy.py",
 		"--compiler", "/ix/realm/boot/bin/clang++",
 		"--objcopy", "/ix/realm/boot/bin/llvm-objcopy",
-		"--compressor", "$(BUILD_ROOT)/tools/rescompressor/rescompressor",
-		"--rescompiler", "$(BUILD_ROOT)/tools/rescompiler/rescompiler",
+		"--compressor", "$(B)/tools/rescompressor/rescompressor",
+		"--rescompiler", "$(B)/tools/rescompiler/rescompiler",
 		"--output_obj", outputObj.String(),
 		"--target", objcopyTargetTriple(instance.Platform),
 		"--kvs",
 	}
 	cmdArgs = append(cmdArgs, kvsCmd...)
 
-	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)"}
+	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 
 	// kv_only nodes always carry the three-element inputs prefix in the
 	// rescompiler / rescompressor / objcopy.py order (verified against
@@ -758,7 +758,7 @@ func emitNoCheckImportsObjcopy(
 // from the resfs key.
 type pySrcEntry struct {
 	pathHash  string // srcRel.yapyc3 form for flat, srcRel.3kp2.yapyc3 form for subdir; used as `paths` for the hash
-	pathInput string // cmd_args --inputs slot: $(BUILD_ROOT)/<actualUnit>/<srcRel>{.suffix} (yapyc3) or $(SOURCE_ROOT)/<actualUnit>/<srcRel> (raw)
+	pathInput string // cmd_args --inputs slot: $(B)/<actualUnit>/<srcRel>{.suffix} (yapyc3) or $(S)/<actualUnit>/<srcRel> (raw)
 	key       string // pre-base64 key: resfs/file/py/[<ns>/]<srcRel>[.yapyc3]
 	kvHash    string // pre-rootrel-expansion form (placeholder retained)
 	kvCmd     string // post-rootrel-expansion form (placeholder expanded to <actualUnit>/<value>)
@@ -769,7 +769,7 @@ type pySrcEntry struct {
 	// entry's resfs target is a `.yapyc3` bytecode (which is itself built
 	// from the `.py` source by `on_py3_compile_bytecode`). For raw `.py`
 	// entries this is empty (pathInput already covers the .py path). For
-	// yapyc3 entries it is `$(SOURCE_ROOT)/<actualUnit>/<srcRel>`.
+	// yapyc3 entries it is `$(S)/<actualUnit>/<srcRel>`.
 	// Verified against REF Lib chunks: `inputs[].py` count consistently
 	// matches `inputs[].yapyc3` count one-to-one, even when the entry
 	// straddles a chunk boundary (synchronize.py.3kp2.yapyc3 / synchronize.py
@@ -812,8 +812,8 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 		// raw `.py` entry FIRST in the packer's input list — driving
 		// --inputs / --keys / --kvs ordering. Witness:
 		// library/python/symbols/module/__init__.py objcopy node
-		// (sg2.json) lists $(SOURCE_ROOT)/.../__init__.py before
-		// $(BUILD_ROOT)/.../__init__.py.yapyc3. The chunk-hash sorts
+		// (sg2.json) lists $(S)/.../__init__.py before
+		// $(B)/.../__init__.py.yapyc3. The chunk-hash sorts
 		// internally so the objcopy_<hex>.o filename is invariant under
 		// this swap; only cmd_args (and inputs[]) ordering shifts.
 
@@ -821,7 +821,7 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 		if !d.pyBuildNoPY {
 			pyKey := "resfs/file/py/" + keyPrefix + srcRel
 			pyPathHash := srcRel
-			pyPathInput := "$(SOURCE_ROOT)/" + actualUnit + "/" + srcRel
+			pyPathInput := "$(S)/" + actualUnit + "/" + srcRel
 			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
 			pyKvCmd := "resfs/src/" + pyKey + "=" + actualUnit + "/" + srcRel
 			out = append(out, pySrcEntry{
@@ -838,7 +838,7 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 		if !d.pyBuildNoPYC {
 			ypKey := "resfs/file/py/" + keyPrefix + srcRel + ".yapyc3"
 			ypPathHash := srcRel + suffix
-			ypPathInput := "$(BUILD_ROOT)/" + actualUnit + "/" + srcRel + suffix
+			ypPathInput := "$(B)/" + actualUnit + "/" + srcRel + suffix
 			// kv hash form retains the ${rootrel;...} placeholder with
 			// the inner-srcRel-with-suffix value. cmd_args form expands
 			// to <actualUnit>/<srcRel><suffix>.
@@ -851,7 +851,7 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 				kvHash:        ypKvHash,
 				kvCmd:         ypKvCmd,
 				inputDep:      ypPathInput,
-				extraSrcInput: "$(SOURCE_ROOT)/" + actualUnit + "/" + srcRel,
+				extraSrcInput: "$(S)/" + actualUnit + "/" + srcRel,
 			})
 		}
 	}
@@ -901,7 +901,7 @@ type pySrcChunk struct {
 // The accumulator uses the pre-expansion forms for both adds: the kv's
 // `${rootrel;...}` placeholder is retained (`e.kvHash`), and the path is
 // the bare source-relative string (`e.pathHash`), not the
-// `$(BUILD_ROOT)/...` expansion. Confirmed byte-exact for
+// `$(B)/...` expansion. Confirmed byte-exact for
 // `contrib/tools/python3/Lib` (40/40) and `contrib/tools/python3/lib2/py`
 // (37/37 PY_SRCS chunks) — see `resource_test.go`.
 func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
@@ -1022,11 +1022,11 @@ func emitPySrcObjcopy(
 
 		cmdArgs := []string{
 			"/ix/realm/pg/bin/python3",
-			"$(SOURCE_ROOT)/build/scripts/objcopy.py",
+			"$(S)/build/scripts/objcopy.py",
 			"--compiler", "/ix/realm/boot/bin/clang++",
 			"--objcopy", "/ix/realm/boot/bin/llvm-objcopy",
-			"--compressor", "$(BUILD_ROOT)/tools/rescompressor/rescompressor",
-			"--rescompiler", "$(BUILD_ROOT)/tools/rescompiler/rescompiler",
+			"--compressor", "$(B)/tools/rescompressor/rescompressor",
+			"--rescompiler", "$(B)/tools/rescompiler/rescompiler",
 			"--output_obj", outputObj.String(),
 			"--target", objcopyTargetTriple(instance.Platform),
 		}
@@ -1054,7 +1054,7 @@ func emitPySrcObjcopy(
 		}
 		inputs = append(inputs, objcopyScriptVFS)
 
-		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)"}
+		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 
 		targetProps := map[string]string{"module_dir": instance.Path}
 		switch d.moduleStmt.Name {
@@ -1125,7 +1125,7 @@ func emitPySrcObjcopy(
 		// modules like python3-Lib) so the global AR's inputs[] carries
 		// every .py source the chunk's resfs entries reference.
 		for _, p := range ch.inps {
-			if strings.HasPrefix(p, "$(SOURCE_ROOT)/") {
+			if strings.HasPrefix(p, "$(S)/") {
 				globalMemberInputs = append(globalMemberInputs, ParseVFSOrSource(p))
 			}
 		}

@@ -366,7 +366,7 @@ var DefaultIfEnv = Environment{
 		// in `library/python/runtime_py3/stage0pycc/ya.make` and
 		// `tools/py3cc/bin/ya.make` (each takes the ELSE arm when the
 		// flag is true). Verified empirically: REF stage0pycc/main.cpp.pic.o
-		// carries `-I$(SOURCE_ROOT)/contrib/tools/python3/Include`, which
+		// carries `-I$(S)/contrib/tools/python3/Include`, which
 		// only the ELSE arm contributes; REF aarch64 emits 14 symbols/*
 		// nodes that only the IF arm in contrib/libs/python contributes.
 		"USE_ARCADIA_PYTHON": true,

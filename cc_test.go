@@ -27,7 +27,7 @@ import (
 //      Cmd struct returning a single boolean.
 
 // referenceGraphPath declared in gjson_test.go; both files compile in `package main`.
-const referenceCCOutput = "$(BUILD_ROOT)/build/cow/on/lib.c.o"
+const referenceCCOutput = "$(B)/build/cow/on/lib.c.o"
 
 // loadReferenceCCNode reads the on-disk reference graph and returns the
 // CC node whose first output is referenceCCOutput. Returns nil and a
@@ -47,7 +47,7 @@ func fieldEqual(t *testing.T, name string, got, want interface{}) {
 func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 	e := NewBufferedEmitter()
 	_, outPath := EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", ModuleCCInputs{}, e)
-	want := "$(BUILD_ROOT)/contrib/libs/cxxsupp/libcxx/_/src/algorithm.cpp.o"
+	want := "$(B)/contrib/libs/cxxsupp/libcxx/_/src/algorithm.cpp.o"
 
 	if outPath.String() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
@@ -57,7 +57,7 @@ func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
 	e := NewBufferedEmitter()
 	_, outPath := EmitCC(targetInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, e)
-	want := "$(BUILD_ROOT)/build/cow/on/lib.c.o"
+	want := "$(B)/build/cow/on/lib.c.o"
 
 	if outPath.String() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
@@ -82,17 +82,17 @@ func muslHostInstance(path string) ModuleInstance {
 
 // TestEmitCC_MuslHost_StrlenC_ByteExact pins composeMuslHostCC's
 // 115-arg cmd_args bundle against the reference graph node
-// `$(BUILD_ROOT)/contrib/libs/musl/_/src/string/strlen.c.pic.o`
+// `$(B)/contrib/libs/musl/_/src/string/strlen.c.pic.o`
 // (platform `default-linux-x86_64`). PR-29-D01 dominant lever.
 // TestEmitCC_GeneratedSource_BuildRootInput pins the IsGenerated
 // branch of EmitCC: when true, inputPath is composed under
-// $(BUILD_ROOT) instead of $(SOURCE_ROOT). PR-29-D07.
+// $(B) instead of $(S). PR-29-D07.
 func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 	emit := NewBufferedEmitter()
 	in := ModuleCCInputs{IsGenerated: true}
 	_, outPath := EmitCC(targetInstance("util"), "_/datetime/parser.rl6.cpp", in, emit)
 
-	wantOut := "$(BUILD_ROOT)/util/_/_/datetime/parser.rl6.cpp.o"
+	wantOut := "$(B)/util/_/_/datetime/parser.rl6.cpp.o"
 
 	if outPath.String() != wantOut {
 		t.Errorf("outPath = %q, want %q", outPath, wantOut)
@@ -104,7 +104,7 @@ func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 
 	got := emit.nodes[0]
 
-	wantInput := "$(BUILD_ROOT)/util/_/datetime/parser.rl6.cpp"
+	wantInput := "$(B)/util/_/datetime/parser.rl6.cpp"
 
 	if len(got.Inputs) != 1 || got.Inputs[0].String() != wantInput {
 		t.Errorf("inputs = %v, want [%q]", got.Inputs, wantInput)
@@ -119,8 +119,8 @@ func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 }
 
 // TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix verifies PR-29-D03:
-// per-module ADDINCL paths sit between the baseline `-I$(BUILD_ROOT)
-// -I$(SOURCE_ROOT)` pair and the trailing `-I$(SOURCE_ROOT)/contrib/libs/linux-headers{,/_nf}`
+// per-module ADDINCL paths sit between the baseline `-I$(B)
+// -I$(S)` pair and the trailing `-I$(S)/contrib/libs/linux-headers{,/_nf}`
 // pair. Slot order matches the builtins fp_mode.c.o reference shape.
 func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 	emit := NewBufferedEmitter()
@@ -137,14 +137,14 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
 	wantSlot := []string{
-		"-I$(BUILD_ROOT)",
-		"-I$(SOURCE_ROOT)",
-		"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/aarch64",
-		"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/generic",
-		"-I$(SOURCE_ROOT)/contrib/libs/musl/include",
-		"-I$(SOURCE_ROOT)/contrib/libs/musl/extra",
-		"-I$(SOURCE_ROOT)/contrib/libs/linux-headers",
-		"-I$(SOURCE_ROOT)/contrib/libs/linux-headers/_nf",
+		"-I$(B)",
+		"-I$(S)",
+		"-I$(S)/contrib/libs/musl/arch/aarch64",
+		"-I$(S)/contrib/libs/musl/arch/generic",
+		"-I$(S)/contrib/libs/musl/include",
+		"-I$(S)/contrib/libs/musl/extra",
+		"-I$(S)/contrib/libs/linux-headers",
+		"-I$(S)/contrib/libs/linux-headers/_nf",
 	}
 
 	for i, want := range wantSlot {

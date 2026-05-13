@@ -321,8 +321,8 @@ func appendStringSlice(buf []byte, ss []string, pad string) []byte {
 }
 
 // appendVFSSlice emits []VFS in the same shape as appendStringSlice —
-// each VFS materialises to its canonical "$(SOURCE_ROOT)/<rel>" or
-// "$(BUILD_ROOT)/<rel>" string at JSON-emit time. The prefix is
+// each VFS materialises to its canonical "$(S)/<rel>" or
+// "$(B)/<rel>" string at JSON-emit time. The prefix is
 // emitted inline (two bytes: `"$`, then the rest) to avoid the
 // `v.String()` concat allocation that VFS.String would do.
 func appendVFSSlice(buf []byte, vs []VFS, pad string) []byte {
@@ -351,7 +351,7 @@ func appendVFSSlice(buf []byte, vs []VFS, pad string) []byte {
 }
 
 // appendVFS emits a single VFS in JSON-string form. Materialises the
-// "$(SOURCE_ROOT)/<rel>" / "$(BUILD_ROOT)/<rel>" prefix inline so we
+// "$(S)/<rel>" / "$(B)/<rel>" prefix inline so we
 // pay one buffer-append per part, not one string concat per VFS.
 func appendVFS(buf []byte, v VFS) []byte {
 	switch v.Root {
@@ -519,7 +519,7 @@ func appendString(buf []byte, s string) []byte {
 // appendStringEscapedBody emits the JSON-escaped BODY of a string,
 // without the surrounding `"` quotes. Extracted from appendString so
 // callers that emit a concatenation (appendVFS materialising
-// "$(SOURCE_ROOT)/" + rel) can avoid a heap concat at the call site:
+// "$(S)/" + rel) can avoid a heap concat at the call site:
 // they append the prefix body then the rel body inside one shared
 // pair of quotes.
 func appendStringEscapedBody(buf []byte, s string) []byte {

@@ -173,7 +173,7 @@ type moduleEmitResult struct {
 	// `--start-plugins ... --end-plugins` block. PR-35k: the only
 	// M2-closure case is `contrib/libs/musl/include`'s
 	// `LD_PLUGIN(musl.py)`, which becomes
-	// `$(BUILD_ROOT)/contrib/libs/musl/include/musl.py.pyplugin` and
+	// `$(B)/contrib/libs/musl/include/musl.py.pyplugin` and
 	// reaches archiver / ragel6 / yasm via their PEERDIR walk through
 	// musl/include. Aggregation mirrors the peer-archive closure: a
 	// peer's own LD plugins UNION its PeerLDPluginPaths flow into the
@@ -254,13 +254,13 @@ type genCtx struct {
 	// PR-M3-D: cross-EN header-inclusion deps are resolved by looking up
 	// previously emitted EN nodes whose outputs are included by the current
 	// header's transitive include closure. The map key is the
-	// $(BUILD_ROOT)-rooted output path; the value is the EN NodeRef.
+	// $(B)-rooted output path; the value is the EN NodeRef.
 	//
 	// EN nodes only ever emit on the target axis (see gen.go:4531-4535), so
 	// a flat path-keyed map collapses cleanly. PB/EV use codegenOutputKey
 	// because both axes can emit their own producer NodeRefs.
 	enOutputs map[VFS]NodeRef
-	// pbOutputs/evOutputs map (platform, $(BUILD_ROOT)-rooted output path)
+	// pbOutputs/evOutputs map (platform, $(B)-rooted output path)
 	// → emitted PB/EV NodeRef. Mirrors enOutputs but per-platform because
 	// PB/EV emit on BOTH target and host axes (the host emission carries
 	// tags=["tool"], the target one doesn't), and CC consumers must dep on
@@ -284,7 +284,7 @@ type genCtx struct {
 	// /home/pg/monorepo/yatool_orig/sg.json:105515 — the same UID
 	// `nPHkMSIqOHBrXsoclNuu6g` appears in target archiver LD deps AND in
 	// the host ragel6 LD's deps). Keying by plugin output path
-	// (`$(BUILD_ROOT)/<modulePath>/<name>.pyplugin`) is sufficient: the
+	// (`$(B)/<modulePath>/<name>.pyplugin`) is sufficient: the
 	// path is independent of platform, and the plugin file is the same
 	// artifact regardless of which walk reached it. First-write wins —
 	// the target walk runs before any host walk recursion (host walks
@@ -353,12 +353,12 @@ type codegenOutputKey struct {
 	path     VFS
 }
 
-// resolveCodegenDepRefs scans `includeInputs` for $(BUILD_ROOT)-rooted paths
+// resolveCodegenDepRefs scans `includeInputs` for $(B)-rooted paths
 // that match a previously emitted EN/PB/EV/AR/CF/BI/JV/PR/R5/PY producer
 // output, and returns the producer NodeRefs deduped in scan order. Each
 // consumer CC node carries those NodeRefs as ExtraDepRefs so the resulting
 // CC `deps` list mirrors the reference graph shape (sg2.json places explicit
-// codegen-producer deps on every CC whose inputs[] references a $(BUILD_ROOT)/
+// codegen-producer deps on every CC whose inputs[] references a $(B)/
 // <gen>.h or <gen>.cc).
 //
 // `consumer.Platform.Target` disambiguates per-platform PB/EV lookup. EN nodes always
@@ -382,7 +382,7 @@ func resolveCodegenDepRefs(ctx *genCtx, consumer ModuleInstance, includeInputs [
 }
 
 // resolveCodegenDepRefsExt is the extended form that also scans `inputs` for
-// $(BUILD_ROOT) producer paths. Used by consumers whose producer ref is
+// $(B) producer paths. Used by consumers whose producer ref is
 // input-driven (RESOURCE objcopy via .pyc.inc, .yapyc3 bytecode) rather than
 // #include-driven. The two slices are scanned in order; dedup is global.
 func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInputs, inputs []VFS, exclude ...NodeRef) []NodeRef {
@@ -803,7 +803,7 @@ func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, cliDef
 	// misses the back-edge, so M's PY3 sub-walk CC nodes lose the
 	// transitively-reachable GLOBAL ADDINCL paths that P's peer chain brings
 	// (e.g. `library/python/symbols/module/{module,syms.reg3}.cpp.py3.o`
-	// miss `-I$(SOURCE_ROOT)/contrib/restricted/abseil-cpp` reached via
+	// miss `-I$(S)/contrib/restricted/abseil-cpp` reached via
 	// `contrib/libs/python → runtime_py3 → cpp/resource → containers/
 	// absl_flat_hash → restricted/abseil-cpp`). This post-pass patches the
 	// affected CC nodes' cmd_args.
@@ -869,7 +869,7 @@ type moduleData struct {
 	noPythonIncl     bool     // PR-M3-aarch64-py-closure: set by NO_PYTHON_INCLUDES(); suppresses the PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (mirror of `when ($NO_PYTHON_INCLS != "yes") { PEERDIR+=contrib/libs/python }` in build/conf/python.conf:741-743).
 	usePython3      bool      // PR-M3-python-addincl-cflags: set by USE_PYTHON3() or a PY3-family module type (PY3_LIBRARY / PY3_PROGRAM / PY3_PROGRAM_BIN / PY23_LIBRARY / PY23_NATIVE_LIBRARY); normalised by applyPython3AddIncl. Triggers the `when ($USE_ARCADIA_PYTHON == "yes")` branch of `_PYTHON3_ADDINCL` (python.conf:1018-1023): -DUSE_PYTHON3 (via defaultPeerCFlags / AutoPeerCFlags slot) and contrib/libs/python/Include (own + GLOBAL ADDINCL).
 	ldPlugins        []string // PR-35k: filenames declared via LD_PLUGIN(name.py); the only M2 case is contrib/libs/musl/include's `LD_PLUGIN(musl.py)`. Each entry becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs.
-	arPlugin         string   // PR-M3-openssl-ar-plugin-and-as-clean: name from AR_PLUGIN(name); resolves to `$(SOURCE_ROOT)/<modulePath>/<name>.pyplugin` and is injected into the AR cmd_args (`--plugin <path>`) and inputs. Mirror of upstream macro `AR_PLUGIN` (ymake.core.conf:3396-3398) + `_LD_ARCHIVER_KV_PLUGIN` (ld.conf:366-368). Empty when no AR_PLUGIN macro present.
+	arPlugin         string   // PR-M3-openssl-ar-plugin-and-as-clean: name from AR_PLUGIN(name); resolves to `$(S)/<modulePath>/<name>.pyplugin` and is injected into the AR cmd_args (`--plugin <path>`) and inputs. Mirror of upstream macro `AR_PLUGIN` (ymake.core.conf:3396-3398) + `_LD_ARCHIVER_KV_PLUGIN` (ld.conf:366-368). Empty when no AR_PLUGIN macro present.
 	// PR-35o: per-source extra CFLAGS keyed by source filename.
 	// Populated by `SRC(filename extra_cflags...)` (e.g.
 	// `util/charset/ya.make:22-25` `SRC(wide_sse41.cpp -DSSE41_STUB)`).
@@ -896,7 +896,7 @@ type moduleData struct {
 	runPrograms []*RunProgramStmt
 	// PR-M3-unpaired-got-closure: ARCHIVE(NAME <out> [DONTCOMPRESS] files...)
 	// invocations collected in declaration order. Each entry produces one
-	// AR node invoking `$(BUILD_ROOT)/tools/archiver/archiver` to pack the
+	// AR node invoking `$(B)/tools/archiver/archiver` to pack the
 	// listed files into NAME.
 	archives []archiveEntry
 	// PR-M3-unpaired-got-closure: map of PR-emitted output filename →
@@ -1115,7 +1115,7 @@ func collectModule(modulePath string, stmts []Stmt, env Environment, pathFlags F
 // the implicit `PEERDIR+=contrib/libs/python` (python.conf:741-743), not
 // the `_PYTHON3_ADDINCL` invocation itself. Empirical: library/python/
 // runtime_py3 declares NO_PYTHON_INCLUDES() yet its CC nodes carry
-// `-DUSE_PYTHON3` and `-I$(SOURCE_ROOT)/contrib/libs/python/Include`.
+// `-DUSE_PYTHON3` and `-I$(S)/contrib/libs/python/Include`.
 func applyPython3AddIncl(modulePath string, d *moduleData) {
 	if d.moduleStmt == nil {
 		return
@@ -1150,7 +1150,7 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 	// Consumers see it via genModule's post-merge splice (placed AFTER
 	// abseil-cpp).
 	if modulePath == "library/python/runtime_py3" {
-		d.addIncl = append(d.addIncl, "$(BUILD_ROOT)/library/python/runtime_py3")
+		d.addIncl = append(d.addIncl, "$(B)/library/python/runtime_py3")
 	}
 }
 
@@ -1158,12 +1158,12 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 // upstream CREATE_BUILDINFO_FOR macros emit. PR-M3-final-surgical (fix 5):
 // the implicit ADDINCL is GLOBAL — the generated header must be visible to
 // PEER consumers too (witnessed by `main.cpp.o` / `print.cpp.o` carrying
-// `-I$(BUILD_ROOT)/library/cpp/build_info` via their peer chain).
+// `-I$(B)/library/cpp/build_info` via their peer chain).
 func applyBuildInfoAddIncl(modulePath string, d *moduleData) {
 	if d.createBuildInfoFor == "" {
 		return
 	}
-	biDir := "$(BUILD_ROOT)/" + modulePath
+	biDir := "$(B)/" + modulePath
 	d.addIncl = append(d.addIncl, biDir)
 	d.addInclGlobal = append(d.addInclGlobal, biDir)
 }
@@ -1581,8 +1581,8 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		// PR-35k: LD_PLUGIN(name.py) declares a python plugin to be
 		// passed to the linker via `--start-plugins ... --end-plugins`
 		// in every consumer PROGRAM's LD cmd_args. The named file is
-		// copied (via a CP node) from `$(SOURCE_ROOT)/<modulePath>/name.py`
-		// to `$(BUILD_ROOT)/<modulePath>/name.py.pyplugin` at gen time.
+		// copied (via a CP node) from `$(S)/<modulePath>/name.py`
+		// to `$(B)/<modulePath>/name.py.pyplugin` at gen time.
 		// Multiple args (multiple plugins) are accepted; each is
 		// recorded verbatim and emitted as a separate CP node by the
 		// owning module's `genModule` call. Only `contrib/libs/musl/
@@ -2113,7 +2113,7 @@ func isRuntimeAncestor(path string) bool {
 // appear as peer-GLOBAL contributions, regardless of which Phase
 // (own-first vs transitive-second) actually picked them up.
 // Paths are SOURCE_ROOT-relative — `appendAddIncl` (cc.go:867) adds
-// the literal `-I$(SOURCE_ROOT)/` prefix at emit time. Match the same
+// the literal `-I$(S)/` prefix at emit time. Match the same
 // representation here.
 var runtimeStackAddInclPaths = map[string]int{
 	"contrib/libs/cxxsupp/libcxx/include":    0,
@@ -2133,7 +2133,7 @@ var runtimeStackAddInclPaths = map[string]int{
 // (whose `ADDINCL(GLOBAL contrib/libs/linux-headers ...)` propagates),
 // producing a duplicate emission at the tail of the peer-AddIncl block.
 // The reference graph drops it because the cc bundle already supplies
-// the same `-I$(SOURCE_ROOT)/contrib/libs/linux-headers{,/_nf}` flags.
+// the same `-I$(S)/contrib/libs/linux-headers{,/_nf}` flags.
 //
 // Musl flavours bypass this filter: their composer drops
 // PeerAddInclGlobal entirely (the `-nostdinc` + muslCcIncludes set
@@ -3320,9 +3320,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// `hasPlainAR` is set on its `moduleEmitResult` so the AR flows
 		// through this branch regardless of `headerOnly`.
 		if peerResult.hasPlainAR {
-			// ARPath has "$(BUILD_ROOT)/" prefix; cmd_args use a
+			// ARPath has "$(B)/" prefix; cmd_args use a
 			// bare relative path. Strip the prefix for consistency.
-			arRelPath := strings.TrimPrefix(peerResult.ARPath, "$(BUILD_ROOT)/")
+			arRelPath := strings.TrimPrefix(peerResult.ARPath, "$(B)/")
 			peerArchiveAddPath(peerResult.ARRef, arRelPath)
 		}
 	}
@@ -3471,7 +3471,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	effectiveAddInclGlobal := mergeDedup(d.addInclGlobal, peerAddInclGlobal)
 
 	// PR-M3-python3-addincl-buildroot-order: `library/python/runtime_py3`
-	// propagates `$(BUILD_ROOT)/library/python/runtime_py3` to consumers
+	// propagates `$(B)/library/python/runtime_py3` to consumers
 	// via its `effectiveAddInclGlobal`, but at a position AFTER
 	// `contrib/restricted/abseil-cpp` (NOT at the head as a regular
 	// own-GLOBAL would land). Upstream `_PYTHON3_ADDINCL` runs at
@@ -3490,7 +3490,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// can resolve runtime_py3's generated headers, while not interfering
 	// with non-abseil cases.
 	if instance.Path == "library/python/runtime_py3" {
-		const buildRootPath = "$(BUILD_ROOT)/library/python/runtime_py3"
+		const buildRootPath = "$(B)/library/python/runtime_py3"
 		const abseilPath = "contrib/restricted/abseil-cpp"
 		spliced := make([]string, 0, len(effectiveAddInclGlobal)+1)
 		inserted := false
@@ -3813,7 +3813,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	// PR-M3-cc-argv-slot-order: drop BUILD_ROOT-rooted addincl paths from
 	// the peer slot when the same path already sits in this module's own
-	// addincl slot. Generated-output paths (`$(BUILD_ROOT)/<mod>`) are
+	// addincl slot. Generated-output paths (`$(B)/<mod>`) are
 	// produced by THIS module's ARCHIVE() / RUN_PROGRAM and arrive at peer
 	// consumers via the PEERDIR walk; the self-compile must not also
 	// emit them in the peer slot. SOURCE_ROOT paths (e.g. `python/Include`)
@@ -4141,11 +4141,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// the .pic.o output stays on the correct compile axis.
 		jsRef, joinOut := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.cfg.Target.ID, ctx.emit)
 
-		// EmitJS returns a $(BUILD_ROOT)/<srcInstance.Path>/<name>
+		// EmitJS returns a $(B)/<srcInstance.Path>/<name>
 		// absolute path; convert to srcInstance-relative for the
 		// downstream EmitCC. PR-29-D07: the JS output lives under
-		// $(BUILD_ROOT) — pass IsGenerated so EmitCC composes the
-		// inputPath under $(BUILD_ROOT) instead of $(SOURCE_ROOT).
+		// $(B) — pass IsGenerated so EmitCC composes the
+		// inputPath under $(B) instead of $(S).
 		// PR-30 D04: thread the JS NodeRef as the downstream CC's
 		// `Generator` so the CC node carries an explicit dep on its
 		// source-generating JS node, matching the reference shape
@@ -4153,7 +4153,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// PR-29 deferred this because the wider closure had not yet
 		// landed; PR-30's musl/full + ALLOCATOR_IMPL closure widening
 		// absorbs the 2-multiset cost many times over.
-		jsRel := strings.TrimPrefix(joinOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
+		jsRel := strings.TrimPrefix(joinOut, "$(B)/"+srcInstance.Path+"/")
 
 		// PR-35d: thread (scripts + sources + closure) as the
 		// JS-derived CC's IncludeInputs so its full Inputs read
@@ -4176,7 +4176,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccIsCFGenerated = append(ccIsCFGenerated, false)
 		// PR-35y R7: the AR/LD `inputs` slot omits the BUILD_ROOT-
 		// staged generated cpp (JS output). Reference graph confirms:
-		// util's libyutil.a never lists `$(BUILD_ROOT)/util/all_*.cpp`
+		// util's libyutil.a never lists `$(B)/util/all_*.cpp`
 		// even though those are the primary inputs of the downstream
 		// JS-derived CC nodes. The aggregator gets only the member's
 		// scripts + joined source files + their resolved include
@@ -4528,7 +4528,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	// PR-M3-openssl-ar-plugin-and-as-clean: resolve AR_PLUGIN path
-	// (`$(SOURCE_ROOT)/<modulePath>/<name>.pyplugin`) when the macro
+	// (`$(S)/<modulePath>/<name>.pyplugin`) when the macro
 	// fired on this module's ya.make.
 	var arPluginVFS *VFS
 	if d.arPlugin != "" {
@@ -4549,7 +4549,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	_ = peerArchiveRefs // retained as a loop accumulator for the PROGRAM LD branch above; intentionally unused for the LIBRARY AR.
-	arPath := "$(BUILD_ROOT)/" + instance.Path + "/" + arBaseName
+	arPath := "$(B)/" + instance.Path + "/" + arBaseName
 
 	// PR-M3-A: emit yapyc3 PY nodes for PY_SRCS() declarations.
 	// Modules that have both SRCS and PY_SRCS (rare but valid) get CC/AR
@@ -4654,7 +4654,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 // peer-GLOBAL slices: own contributions first, then transitive peer
 // contributions. PR-32 D07 introduced the helper to keep the per-axis
 // composition uniform across ADDINCL / CFLAGS / CXXFLAGS / CONLYFLAGS.
-// filterBuildRootSelfPaths drops `$(BUILD_ROOT)/...` paths from `peer`
+// filterBuildRootSelfPaths drops `$(B)/...` paths from `peer`
 // that also appear in `own`. Returns a fresh slice (input unchanged) so
 // the unfiltered `peerAddInclGlobal` continues to flow to peer-prop
 // channels (effective AddInclGlobal and any downstream consumer's
@@ -4670,7 +4670,7 @@ func filterBuildRootSelfPaths(peer, own []string) []string {
 	ownSet := make(map[string]struct{}, len(own))
 
 	for _, p := range own {
-		if strings.HasPrefix(p, "$(BUILD_ROOT)/") {
+		if strings.HasPrefix(p, "$(B)/") {
 			ownSet[p] = struct{}{}
 		}
 	}
@@ -4767,8 +4767,8 @@ func filterEnSerializedSiblings(in []VFS) []VFS {
 
 // emitOwnLDPlugins emits one CP node per `LD_PLUGIN(name.py)` entry
 // declared in this module. The CP src is
-// `$(SOURCE_ROOT)/<modulePath>/<name>` and the dst is
-// `$(BUILD_ROOT)/<modulePath>/<name>.pyplugin` (verified against the
+// `$(S)/<modulePath>/<name>` and the dst is
+// `$(B)/<modulePath>/<name>.pyplugin` (verified against the
 // reference CP node for `contrib/libs/musl/include`'s `musl.py`).
 // Returns parallel ref + path slices in declaration order. PR-35k.
 //
@@ -4790,8 +4790,8 @@ func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string) ([
 	paths := make([]string, 0, len(plugins))
 
 	for _, name := range plugins {
-		src := "$(SOURCE_ROOT)/" + instance.Path + "/" + name
-		dst := "$(BUILD_ROOT)/" + instance.Path + "/" + name + ".pyplugin"
+		src := "$(S)/" + instance.Path + "/" + name
+		dst := "$(B)/" + instance.Path + "/" + name + ".pyplugin"
 
 		ref, ok := ctx.ldPluginCPCache[dst]
 
@@ -4973,7 +4973,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		// modules have `headerOnly=true` AND `hasPlainAR=true`; the legacy
 		// `!headerOnly` guard wrongly suppressed their AR.
 		if peerResult.hasPlainAR {
-			arRelPath := strings.TrimPrefix(peerResult.ARPath, "$(BUILD_ROOT)/")
+			arRelPath := strings.TrimPrefix(peerResult.ARPath, "$(B)/")
 			addArchive(peerResult.ARRef, arRelPath)
 		}
 
@@ -5149,15 +5149,15 @@ func hasSkippedSource(d *moduleData) bool {
 // so the graph captures the host-tool dependency.
 //
 // Output suffix rule (empirical, from sg2.json):
-//   - flat source (no `/` in srcRel): `$(BUILD_ROOT)/<path>.py.yapyc3`
-//   - subdir source (has `/` in srcRel): `$(BUILD_ROOT)/<path>.py.3kp2.yapyc3`
+//   - flat source (no `/` in srcRel): `$(B)/<path>.py.yapyc3`
+//   - subdir source (has `/` in srcRel): `$(B)/<path>.py.3kp2.yapyc3`
 //
 // cmd_args format (6 args):
 //   [py3cc_binary, --slow-py3cc, slow_py3cc_binary,
-//    <modulePath>/<srcRel>-, $(SOURCE_ROOT)/<modulePath>/<srcRel>,
-//    $(BUILD_ROOT)/<output>]
+//    <modulePath>/<srcRel>-, $(S)/<modulePath>/<srcRel>,
+//    $(B)/<output>]
 //
-// inputs: [py3cc_binary, slow_py3cc_binary, $(SOURCE_ROOT)/<src>]
+// inputs: [py3cc_binary, slow_py3cc_binary, $(S)/<src>]
 //
 // The function tolerates a host walk failure for tools/py3cc: if the
 // binary walk throws a ParseError the py3cc LD refs remain zero (the
@@ -5183,11 +5183,11 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		py3ccSlowPath = "tools/py3cc/slow"
 	)
 
-	// Canonical binary paths ($(BUILD_ROOT)-rooted) used in cmd_args
+	// Canonical binary paths ($(B)-rooted) used in cmd_args
 	// and inputs when the host walk succeeds or as fallbacks when it fails.
 	const (
-		py3ccBinaryCanonical     = "$(BUILD_ROOT)/tools/py3cc/py3cc"
-		py3ccSlowBinaryCanonical = "$(BUILD_ROOT)/tools/py3cc/slow/py3cc"
+		py3ccBinaryCanonical     = "$(B)/tools/py3cc/py3cc"
+		py3ccSlowBinaryCanonical = "$(B)/tools/py3cc/slow/py3cc"
 	)
 
 	var (
@@ -5205,8 +5205,8 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		result := genModule(ctx, py3ccHostInst)
 		py3ccLDRef = result.LDRef
 		// canonicalizePy3ccBinaryPath rewrites
-		// $(BUILD_ROOT)/tools/py3cc/bin/py3cc →
-		// $(BUILD_ROOT)/tools/py3cc/py3cc to match the reference
+		// $(B)/tools/py3cc/bin/py3cc →
+		// $(B)/tools/py3cc/py3cc to match the reference
 		// yapyc3 cmd_args[0] shape. tools/py3cc/bin/ya.make declares
 		// SRCDIR(tools/py3cc) so the upstream intent is a top-level
 		// binary; we walk /bin/ as a stopgap (same pattern as ragel6).
@@ -5225,7 +5225,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	// which isMultimoduleLibraryType routes to the header-only path, so
 	// LDPath is empty. Only update py3ccSlowBin when the walk produces a
 	// non-empty path; otherwise the canonical fallback
-	// $(BUILD_ROOT)/tools/py3cc/slow/py3cc (pre-initialised above) is used.
+	// $(B)/tools/py3cc/slow/py3cc (pre-initialised above) is used.
 	py3ccSlowHostInst := NewToolInstance(ctx.host, py3ccSlowPath, instance.Language)
 	py3ccSlowHostInst.Flags = inferFlagsFromPath(py3ccSlowPath, true)
 
@@ -5276,7 +5276,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 	// Emit one yapyc3 PY node per .py source.
 	for _, srcRel := range d.pySrcs {
-		srcAbs := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
+		srcAbs := "$(S)/" + instance.Path + "/" + srcRel
 
 		// The "module name" arg: <modulePath>/<srcRel>- (trailing dash).
 		moduleName := instance.Path + "/" + srcRel + "-"
@@ -5285,9 +5285,9 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		var outputPath string
 		if strings.Contains(srcRel, "/") {
 			// The srcRel already ends in ".py"; insert ".3kp2" before ".yapyc3".
-			outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + ".3kp2.yapyc3"
+			outputPath = "$(B)/" + instance.Path + "/" + srcRel + ".3kp2.yapyc3"
 		} else {
-			outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + ".yapyc3"
+			outputPath = "$(B)/" + instance.Path + "/" + srcRel + ".yapyc3"
 		}
 
 		cmdArgs := []string{
@@ -5300,7 +5300,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		}
 
 		env := map[string]string{
-			"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+			"ARCADIA_ROOT_DISTBUILD": "$(S)",
 			"PYTHONHASHSEED":         "0",
 		}
 
@@ -5382,11 +5382,11 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 // genPy3RegScriptPath is the source-relative path to the gen_py3_reg.py script
 // invoked by every PY_REGISTER's PY node (mirror of macro _PY3_REGISTER at
 // build/ymake.core.conf:4086-4089).
-const genPy3RegScriptPath = "$(SOURCE_ROOT)/build/scripts/gen_py3_reg.py"
+const genPy3RegScriptPath = "$(S)/build/scripts/gen_py3_reg.py"
 
 // emitPyRegister emits the PY+CC pair for each PY_REGISTER(arg) entry in
 // d.pyRegister. Each arg:
-//   - one PY node:  python3 gen_py3_reg.py <arg> $(BUILD_ROOT)/<modPath>/<arg>.reg3.cpp
+//   - one PY node:  python3 gen_py3_reg.py <arg> $(B)/<modPath>/<arg>.reg3.cpp
 //   - one CC node:  compiles the generated `.reg3.cpp` into `.reg3.cpp.o` (or
 //     `.reg3.cpp.py3.o` when py3Suffix is set).
 //
@@ -5402,10 +5402,10 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 
 	for _, arg := range d.pyRegister {
 		regCpp := arg + ".reg3.cpp"
-		regCppAbs := "$(BUILD_ROOT)/" + instance.Path + "/" + regCpp
+		regCppAbs := "$(B)/" + instance.Path + "/" + regCpp
 
 		env := map[string]string{
-			"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+			"ARCADIA_ROOT_DISTBUILD": "$(S)",
 		}
 
 		pyCmdArgs := []string{
@@ -5446,7 +5446,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		pyRef := ctx.emit.Emit(pyNode)
 
 		// CC node compiling the generated `.reg3.cpp`. IsGenerated=true so
-		// composeCCPaths reads the input from $(BUILD_ROOT)/<modPath>/<reg>.
+		// composeCCPaths reads the input from $(B)/<modPath>/<reg>.
 		// IncludeInputs is the gen_py3_reg.py script (the reference graph's
 		// reg3 CC node lists [<.reg3.cpp>, <gen_py3_reg.py>] as its only
 		// inputs — no transitive header closure is scanned because the
@@ -5572,10 +5572,10 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// Cross-EN deps: when a previously emitted EN node produced a
 		// _serialized.h file (--header variant), and the current header's
 		// include closure contains a file that EXPLICITLY #includes that
-		// _serialized.h (under $(BUILD_ROOT)), the current EN node must
+		// _serialized.h (under $(B)), the current EN node must
 		// dep on that prior EN node.
 		//
-		// The include scanner cannot resolve $(BUILD_ROOT)/_serialized.h
+		// The include scanner cannot resolve $(B)/_serialized.h
 		// paths (generated files absent at scan time). The correct signal
 		// is a literal `#include <..._serialized.h>` in any source file
 		// that IS in the scanner closure. Scan each closure file on disk
@@ -5647,27 +5647,27 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// EN node `inputs` includes the .cpp's transitive include set; this walk
 		// is what surfaces dispatch_methods.h / ordered_pairs.h / enum_runtime.h
 		// in the EN node's inputs).
-		serializedCPPPath := "$(BUILD_ROOT)/" + instance.Path + "/" + headerRel + "_serialized.cpp"
+		serializedCPPPath := "$(B)/" + instance.Path + "/" + headerRel + "_serialized.cpp"
 		var serializedHPath string
 		if withHeader {
-			serializedHPath = "$(BUILD_ROOT)/" + instance.Path + "/" + headerRel + "_serialized.h"
+			serializedHPath = "$(B)/" + instance.Path + "/" + headerRel + "_serialized.h"
 		}
 		if ctx.scannerTarget.codegen != nil {
-			headerSrc := "$(SOURCE_ROOT)/" + instance.Path + "/" + headerRel
+			headerSrc := "$(S)/" + instance.Path + "/" + headerRel
 			cppIncludes := []string{
 				headerSrc,
-				"$(SOURCE_ROOT)/tools/enum_parser/enum_parser/stdlib_deps.h",
-				"$(SOURCE_ROOT)/tools/enum_parser/enum_serialization_runtime/dispatch_methods.h",
-				"$(SOURCE_ROOT)/tools/enum_parser/enum_serialization_runtime/enum_runtime.h",
-				"$(SOURCE_ROOT)/tools/enum_parser/enum_serialization_runtime/ordered_pairs.h",
-				"$(SOURCE_ROOT)/util/generic/map.h",
-				"$(SOURCE_ROOT)/util/generic/serialized_enum.h",
-				"$(SOURCE_ROOT)/util/generic/singleton.h",
-				"$(SOURCE_ROOT)/util/generic/string.h",
-				"$(SOURCE_ROOT)/util/generic/typetraits.h",
-				"$(SOURCE_ROOT)/util/generic/vector.h",
-				"$(SOURCE_ROOT)/util/stream/output.h",
-				"$(SOURCE_ROOT)/util/string/cast.h",
+				"$(S)/tools/enum_parser/enum_parser/stdlib_deps.h",
+				"$(S)/tools/enum_parser/enum_serialization_runtime/dispatch_methods.h",
+				"$(S)/tools/enum_parser/enum_serialization_runtime/enum_runtime.h",
+				"$(S)/tools/enum_parser/enum_serialization_runtime/ordered_pairs.h",
+				"$(S)/util/generic/map.h",
+				"$(S)/util/generic/serialized_enum.h",
+				"$(S)/util/generic/singleton.h",
+				"$(S)/util/generic/string.h",
+				"$(S)/util/generic/typetraits.h",
+				"$(S)/util/generic/vector.h",
+				"$(S)/util/stream/output.h",
+				"$(S)/util/string/cast.h",
 			}
 			sort.Strings(cppIncludes)
 			ctx.scannerTarget.codegen.Register(&GeneratedFileInfo{
@@ -5687,7 +5687,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 				hIncludes := []string{
 					headerSrc,
 					serializedCPPPath,
-					"$(SOURCE_ROOT)/util/generic/serialized_enum.h",
+					"$(S)/util/generic/serialized_enum.h",
 				}
 				sort.Strings(hIncludes)
 				ctx.scannerTarget.codegen.Register(&GeneratedFileInfo{
@@ -5712,7 +5712,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// Excluding headerSrc (EmitEN appends it separately) and depENOutputs
 		// (likewise) prevents multiset duplicates. Also filter the source-header
 		// `closure` against depENOutputs — the closure may include a
-		// $(BUILD_ROOT)/_serialized.h entry that depENOutputs also names (the
+		// $(B)/_serialized.h entry that depENOutputs also names (the
 		// scanner resolves both through the codegen registry / cross-EN dep
 		// detection), and the duplicate fails L2 multiset equality.
 		enClosureExcl := map[VFS]struct{}{
@@ -5754,10 +5754,10 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// M3 closure (`diag/stats_enums.h`, `diag/trace_type_enums.h`) are
 		// both emitted with source-header-only inputs in sg2.json.
 		//
-		// The $(BUILD_ROOT)/<output> path lookup goes through the codegen
+		// The $(B)/<output> path lookup goes through the codegen
 		// registry (registered moments earlier) and follows EmitsIncludes;
 		// subsequent children resolve via parseIncludes on the real
-		// $(SOURCE_ROOT) headers.
+		// $(S) headers.
 		var ownOutputClosure []VFS
 		if !withHeader && ctx.scannerTarget.codegen != nil {
 			sub := walkClosure(ctx, instance, ParseVFSOrSource(serializedCPPPath), scanIn)
@@ -5773,7 +5773,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		sort.Slice(enClosure, func(i, j int) bool { return enClosure[i].String() < enClosure[j].String() })
 
 		// PR-M3-L0-codegen-deps-EV-PB: when this EN node's transitive closure
-		// pulls in a PB/EV producer's $(BUILD_ROOT) output (e.g. an EN whose
+		// pulls in a PB/EV producer's $(B) output (e.g. an EN whose
 		// header includes a header that #includes msg.ev.pb.h), the resulting
 		// EN node must dep on that PB/EV producer — matching sg2.json shape
 		// where `module_resolver.h_serialized.cpp` deps on the msg.ev/trace.ev
@@ -5805,7 +5805,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// the EN-produced `_serialized.cpp` as an implicit module
 		// source. The CC inherits the consuming module's full compile
 		// bag (consumerInputs); composeCCPaths' IsGenerated branch
-		// roots the output under $(BUILD_ROOT)/<instance.Path>/
+		// roots the output under $(B)/<instance.Path>/
 		// <headerRel>_serialized.cpp{,.o} with `_/` infix when headerRel
 		// contains a `/`. depPrefix is the cross-EN dep set the
 		// reference graph places ahead of the consumer's own
@@ -5844,14 +5844,14 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 //
 // `srcDir` is the module's `SRCDIR(...)` setting (empty when none).
 // Per PR-28-D02, when non-empty it relocates the per-source emitter's
-// view of the module: SRCS resolve to `$(SOURCE_ROOT)/<srcDir>/<rel>`
+// view of the module: SRCS resolve to `$(S)/<srcDir>/<rel>`
 // and the emitted node's `module_dir` becomes `<srcDir>` instead of
 // `instance.Path`. The LD/AR/Global archives that wrap these sources
 // remain at `instance.Path` (the walker called from genModule keeps
 // instance unchanged for those). For ragel6/bin: `instance.Path =
 // contrib/tools/ragel6/bin`, `srcDir = contrib/tools/ragel6` →
 // per-source CC nodes show `module_dir = contrib/tools/ragel6` and
-// inputs `$(SOURCE_ROOT)/contrib/tools/ragel6/<src>`, while the
+// inputs `$(S)/contrib/tools/ragel6/<src>`, while the
 // containing LD lands at `bin/ragel6`.
 //
 // `in` carries the module's per-source-language compile knobs (D02
@@ -5919,7 +5919,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// PR-31 D08: resolve the transitive include closure for
 		// non-generated sources. Generated sources (handled in the
 		// JS / R6 branches below — NOT this site) skip the scanner:
-		// their primary input lives under $(BUILD_ROOT) and doesn't
+		// their primary input lives under $(B) and doesn't
 		// exist on disk at scan time. The walker passes the
 		// scanner-aware srcIn down to EmitCC.
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
@@ -6002,7 +6002,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 
 		// PR-35y R8: when the module declares SRCDIR and the .S
 		// source does not exist locally at instance.Path/<srcRel>,
-		// the AR memberInput resolves at `$(SOURCE_ROOT)/<srcDir>/<srcRel>`
+		// the AR memberInput resolves at `$(S)/<srcDir>/<srcRel>`
 		// rather than the unrebased `<instance.Path>/<srcRel>`.
 		// Empirical reference: tcmalloc/no_percpu_cache (SRCDIR=
 		// `contrib/libs/tcmalloc`) — its `tcmalloc/internal/percpu_rseq_asm.S`
@@ -6042,7 +6042,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// parse. The literal matches the reference graph's invocation
 		// path, so a zero-host-LD codepath at least produces a
 		// meaningful argv even though the host LD node is missing.
-		const ragelFallbackPath = "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"
+		const ragelFallbackPath = "$(B)/contrib/tools/ragel6/ragel6"
 
 		var (
 			ragelLDRef     NodeRef
@@ -6093,7 +6093,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// serialized_enum.h) but does NOT add the generated EN
 		// `_serialized.{cpp,h}` siblings themselves to the R6 inputs.
 		// Our codegen registry resolves the directive to the registered
-		// $(BUILD_ROOT)/<...>_serialized.h output and follows EmitsIncludes,
+		// $(B)/<...>_serialized.h output and follows EmitsIncludes,
 		// which pulls in both the .h itself and its sibling .cpp. Strip
 		// both at the R6 input boundary; the descendant util headers
 		// (which REF does carry) reach R6 inputs through the same
@@ -6109,7 +6109,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// WalkClosure on the .rl6.cpp will recurse into the .rl6 via the
 		// FS-parsed locator and produce the same closure the downstream CC
 		// previously got from scanning the .rl6 manually.
-		rl6SourceAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
+		rl6SourceAbs := "$(S)/" + srcInstance.Path + "/" + srcRel
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "R6",
@@ -6120,8 +6120,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 
 		// PR-29-D07: same shape as the JS branch above. Pass
 		// IsGenerated so the downstream CC composes inputPath under
-		// $(BUILD_ROOT)/<srcInstance.Path>/<rel> rather than the
-		// stale $(SOURCE_ROOT) shape. PR-30 D04: thread r6Ref as the
+		// $(B)/<srcInstance.Path>/<rel> rather than the
+		// stale $(S) shape. PR-30 D04: thread r6Ref as the
 		// downstream CC's `Generator` so the CC node carries an
 		// explicit dep on its R6 source-generator node, matching the
 		// reference shape.
@@ -6133,7 +6133,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// `[<.rl6 source>, ...rl6Closure]` by hand from a separate
 		// source-side scan; the architecturally-correct shape comes from
 		// WalkClosure rooted at the generated .cpp.
-		ccSrcRel := strings.TrimPrefix(r6Out, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
+		ccSrcRel := strings.TrimPrefix(r6Out, "$(B)/"+srcInstance.Path+"/")
 		ccIncludeInputs := walkClosure(ctx, srcInstance, ParseVFSOrSource(r6Out), srcIn)
 
 		ccIn := srcIn
@@ -6244,8 +6244,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			// F-7-B: register the .ev.pb.h output with EmitsIncludes from the .ev imports,
 			// plus the protobuf runtime headers (F-7-D).
 			evRelPath := srcInstance.Path + "/" + srcRel
-			evH := "$(BUILD_ROOT)/" + evRelPath + ".pb.h"
-			evPbCC := "$(BUILD_ROOT)/" + evRelPath + ".pb.cc"
+			evH := "$(B)/" + evRelPath + ".pb.h"
+			evPbCC := "$(B)/" + evRelPath + ".pb.cc"
 
 			// PR-M3-L0-codegen-deps-EV-PB: stash the EV NodeRef under both outputs
 			// on the emitting platform so consumer CCs in OTHER modules whose
@@ -6307,7 +6307,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				}
 				ccIn.IncludeInputs = filtered
 			}
-			wireFormatVFS := Source(strings.TrimPrefix(pbRuntimeBase, "$(SOURCE_ROOT)/") + "google/protobuf/wire_format.h")
+			wireFormatVFS := Source(strings.TrimPrefix(pbRuntimeBase, "$(S)/") + "google/protobuf/wire_format.h")
 			// PR-M3-final-codegen-registry-expansion: protoc emits
 			// `#include "google/protobuf/wire_format.h"` directly. Add to inputs
 			// only on this CC node (not via registry — that would over-emit).
@@ -6337,8 +6337,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		const (
 			ragel5Path      = "contrib/tools/ragel5/ragel"
 			rlgenCdPath     = "contrib/tools/ragel5/rlgen-cd"
-			ragel5Fallback  = "$(BUILD_ROOT)/contrib/tools/ragel5/ragel/ragel5"
-			rlgenCdFallback = "$(BUILD_ROOT)/contrib/tools/ragel5/rlgen-cd/rlgen-cd"
+			ragel5Fallback  = "$(B)/contrib/tools/ragel5/ragel/ragel5"
+			rlgenCdFallback = "$(B)/contrib/tools/ragel5/rlgen-cd/rlgen-cd"
 		)
 
 		var (
@@ -6384,7 +6384,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// .rl5.cpp; the .tmp intermediate has no consumer-visible includes.
 		// PR-M3-L0-cascade-close-v2: ProducerRef = r5Ref so the downstream
 		// CC consuming the .rl5.cpp threads R5 into its deps[].
-		rlSourceAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
+		rlSourceAbs := "$(S)/" + srcInstance.Path + "/" + srcRel
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:    "R5",
@@ -6407,7 +6407,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// the .rl5.cpp is registered above with the .rl source as its
 		// single direct include; WalkClosure recurses into the .rl via
 		// the FS locator and yields the full transitive closure.
-		ccSrcRel := strings.TrimPrefix(r5CppOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
+		ccSrcRel := strings.TrimPrefix(r5CppOut, "$(B)/"+srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IsGenerated = true
 		ccClosure := walkClosure(ctx, srcInstance, ParseVFSOrSource(r5CppOut), srcIn)
@@ -6479,7 +6479,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// build_info.cpp.o and sandbox.cpp.o).
 		// PR-M3-L0-cascade-close-v2: ProducerRef = cfRef so downstream CC's
 		// resolveCodegenDepRefs threads the CF producer into its deps[].
-		inSourceAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
+		inSourceAbs := "$(S)/" + srcInstance.Path + "/" + srcRel
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:    "CF",
@@ -6495,7 +6495,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// the .cpp is registered above with the .cpp.in as its single
 		// direct include; WalkClosure recurses into the .cpp.in via the
 		// FS locator and yields the full transitive closure.
-		ccSrcRel := strings.TrimPrefix(cfOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
+		ccSrcRel := strings.TrimPrefix(cfOut, "$(B)/"+srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IsGenerated = true
 		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, ParseVFSOrSource(cfOut), srcIn)
@@ -6538,7 +6538,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 // emittedSourceInputPath mirrors composeCCPaths' inputPath logic so
 // the walker can compose the AR/LD inputs aggregator without having
 // to round-trip through EmitCC's emitted node. Returns the
-// `$(SOURCE_ROOT)/...` (or `$(BUILD_ROOT)/...` for IsGenerated)
+// `$(S)/...` (or `$(B)/...` for IsGenerated)
 // path the CC node will use as its primary input.
 func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCInputs, sourceRoot string) VFS {
 	if in.IsGenerated {
@@ -6692,7 +6692,7 @@ func jsTargetPeerAddIncl(hostPeerAddIncl []string) []string {
 	return out
 }
 
-// resolveSourceVFS composes the `$(SOURCE_ROOT)/...` VFS path of a
+// resolveSourceVFS composes the `$(S)/...` VFS path of a
 // SRCS-declared source, applying composeCCPaths' SRCDIR-aware
 // fallback: when the module declares SRCDIR and no local file exists
 // at instance.Path/<srcRel>, the source resolves under SRCDIR. This
@@ -6718,8 +6718,8 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 // (PR-M3-L0-codegen-deps-EV-PB).
 
 // walkClosure resolves the transitive include closure of a source
-// rooted at any VFS path — `$(SOURCE_ROOT)/...` for FS-resident
-// sources or `$(BUILD_ROOT)/...` for codegen outputs whose producer
+// rooted at any VFS path — `$(S)/...` for FS-resident
+// sources or `$(B)/...` for codegen outputs whose producer
 // has registered an EmitsIncludes entry in the per-scanner
 // CodegenRegistry. The scanner's locator (forEachResolvedChild)
 // dispatches FS-vs-codegen internally; callers do not branch on
@@ -6762,8 +6762,8 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 // Non-musl flavours: an empty-string entry is prepended first,
 // representing the SOURCE_ROOT itself. The resolver treats an empty
 // prefix as "resolve directly against SOURCE_ROOT" — so `<util/foo.h>`
-// tries $(SOURCE_ROOT)/util/foo.h before the linux-headers subtree.
-// This mirrors the `-I$(SOURCE_ROOT)` flag the compiler receives via
+// tries $(S)/util/foo.h before the linux-headers subtree.
+// This mirrors the `-I$(S)` flag the compiler receives via
 // cmd_args for every non-musl CC node.
 //
 // Musl flavours (composeMuslCC / composeMuslHostCC paths) MUST NOT get
@@ -6814,7 +6814,7 @@ func includeScannerBasePaths(libcMusl bool, scanTarget PlatformID) []string {
 
 	// Non-musl: prepend the empty-prefix entry (SOURCE_ROOT itself) so
 	// repo-rooted system-form includes like `<util/folder/path.h>`
-	// resolve against $(SOURCE_ROOT)/util/folder/path.h.
+	// resolve against $(S)/util/folder/path.h.
 	out := make([]string, 0, 1+len(base))
 	out = append(out, "")
 	out = append(out, base...)
@@ -6969,10 +6969,10 @@ func codegenRegForInstance(ctx *genCtx, instance ModuleInstance) *CodegenRegistr
 
 // protoDirectImportIncludes parses the direct `import "..."` statements from a
 // .proto or .ev source file and converts them to the generated header paths that
-// protoc emits under $(BUILD_ROOT):
+// protoc emits under $(B):
 //
-//   - import "x/y/z.proto"  → "$(BUILD_ROOT)/x/y/z.pb.h"
-//   - import "x/y/z.ev"     → "$(BUILD_ROOT)/x/y/z.ev.pb.h"
+//   - import "x/y/z.proto"  → "$(B)/x/y/z.pb.h"
+//   - import "x/y/z.ev"     → "$(B)/x/y/z.ev.pb.h"
 //
 // Only direct imports of the primary file are returned (no recursion). When the
 // file cannot be read (missing source on disk at scan time) the function returns
@@ -7006,7 +7006,7 @@ func protoDirectImportIncludes(sourceRoot, srcRel string) []string {
 		}
 		imp := line[start+1 : end]
 		if strings.HasSuffix(imp, ".ev") {
-			out = append(out, "$(BUILD_ROOT)/"+strings.TrimSuffix(imp, ".ev")+".ev.pb.h")
+			out = append(out, "$(B)/"+strings.TrimSuffix(imp, ".ev")+".ev.pb.h")
 		} else if strings.HasSuffix(imp, ".proto") {
 			base := strings.TrimSuffix(imp, ".proto")
 			if imp == "google/protobuf/descriptor.proto" {
@@ -7014,7 +7014,7 @@ func protoDirectImportIncludes(sourceRoot, srcRel string) []string {
 				// Upstream tree: contrib/libs/protobuf/src/google/protobuf/descriptor.pb.h
 				out = append(out, pbRuntimeBase+"google/protobuf/descriptor.pb.h")
 			} else {
-				out = append(out, "$(BUILD_ROOT)/"+base+".pb.h")
+				out = append(out, "$(B)/"+base+".pb.h")
 			}
 		}
 	}
@@ -7025,7 +7025,7 @@ func protoDirectImportIncludes(sourceRoot, srcRel string) []string {
 // cfIncludeDirectives parses `#include "..."` directives from a configure_file
 // template (.cpp.in / .c.in). Only quoted includes are collected (angle-bracket
 // forms are system headers resolved by the compiler search path, not by the
-// registry). Returns $(SOURCE_ROOT)/... paths, sorted lexicographically.
+// registry). Returns $(S)/... paths, sorted lexicographically.
 // Returns nil when the file cannot be read.
 //
 // PR-AUDIT-3: legitimate disk read — extracts structured `#include` directives
@@ -7054,7 +7054,7 @@ func cfIncludeDirectives(diskPath string) []string {
 		}
 		inc := t[start+1 : start+1+end]
 		if inc != "" {
-			out = append(out, "$(SOURCE_ROOT)/"+inc)
+			out = append(out, "$(S)/"+inc)
 		}
 	}
 	sort.Strings(out)
@@ -7118,20 +7118,20 @@ var umbrellaPropagatingAncestors = map[string]struct{}{
 // x86_64) are folded into the same set so the predicate matches on
 // either platform.
 var ccLanguageDefaultInclude = map[string]bool{
-	"-I$(BUILD_ROOT)":                                          true,
-	"-I$(SOURCE_ROOT)":                                         true,
-	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers":              true,
-	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers/_nf":          true,
-	"-I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxx/include":     true,
-	"-I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxxrt/include":   true,
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/aarch64":          true,
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/x86_64":           true,
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/generic":          true,
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/include":               true,
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/extra":                 true,
-	"-I$(SOURCE_ROOT)/contrib/libs/zlib/include":               true,
-	"-I$(SOURCE_ROOT)/contrib/libs/double-conversion":          true,
-	"-I$(SOURCE_ROOT)/contrib/libs/libc_compat/include/readpassphrase": true,
+	"-I$(B)":                                          true,
+	"-I$(S)":                                         true,
+	"-I$(S)/contrib/libs/linux-headers":              true,
+	"-I$(S)/contrib/libs/linux-headers/_nf":          true,
+	"-I$(S)/contrib/libs/cxxsupp/libcxx/include":     true,
+	"-I$(S)/contrib/libs/cxxsupp/libcxxrt/include":   true,
+	"-I$(S)/contrib/libs/musl/arch/aarch64":          true,
+	"-I$(S)/contrib/libs/musl/arch/x86_64":           true,
+	"-I$(S)/contrib/libs/musl/arch/generic":          true,
+	"-I$(S)/contrib/libs/musl/include":               true,
+	"-I$(S)/contrib/libs/musl/extra":                 true,
+	"-I$(S)/contrib/libs/zlib/include":               true,
+	"-I$(S)/contrib/libs/double-conversion":          true,
+	"-I$(S)/contrib/libs/libc_compat/include/readpassphrase": true,
 }
 
 // applyUmbrellaAddIncl patches CC nodes' cmd_args to inject missing -I
@@ -7337,7 +7337,7 @@ func applyUmbrellaAddIncl(ctx *genCtx) {
 			if strings.HasPrefix(p, "$(") {
 				flag = "-I" + p
 			} else {
-				flag = "-I$(SOURCE_ROOT)/" + p
+				flag = "-I$(S)/" + p
 			}
 
 			if _, dup := present[flag]; dup {
@@ -7535,7 +7535,7 @@ func applyBackPeerAddIncl(ctx *genCtx) {
 					continue
 				}
 
-				flag := "-I$(SOURCE_ROOT)/" + p
+				flag := "-I$(S)/" + p
 
 				if _, dup := present[flag]; dup {
 					continue

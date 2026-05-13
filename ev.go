@@ -17,23 +17,23 @@ import (
 // Reference cmd_args (21 args):
 //
 //	/ix/realm/pg/bin/python3
-//	$(SOURCE_ROOT)/build/scripts/cpp_proto_wrapper.py
+//	$(S)/build/scripts/cpp_proto_wrapper.py
 //	--outputs <.ev.pb.cc> <.ev.pb.h>
 //	--
-//	$(BUILD_ROOT)/contrib/tools/protoc/protoc
-//	-I=./ -I=$(SOURCE_ROOT)/ -I=$(BUILD_ROOT) -I=$(SOURCE_ROOT)
-//	-I=$(SOURCE_ROOT)/contrib/libs/protobuf/src
-//	-I=$(BUILD_ROOT) -I=$(SOURCE_ROOT)/contrib/libs/protobuf/src
-//	--cpp_out=:$(BUILD_ROOT)/
-//	--cpp_styleguide_out=:$(BUILD_ROOT)/
+//	$(B)/contrib/tools/protoc/protoc
+//	-I=./ -I=$(S)/ -I=$(B) -I=$(S)
+//	-I=$(S)/contrib/libs/protobuf/src
+//	-I=$(B) -I=$(S)/contrib/libs/protobuf/src
+//	--cpp_out=:$(B)/
+//	--cpp_styleguide_out=:$(B)/
 //	--plugin=protoc-gen-cpp_styleguide=<cpp_styleguide_binary>
 //	<module_dir/ev_file>
 //	--plugin=protoc-gen-event2cpp=<event2cpp_binary>
-//	--event2cpp_out=$(BUILD_ROOT)
-//	-I=$(SOURCE_ROOT)/library/cpp/eventlog
+//	--event2cpp_out=$(B)
+//	-I=$(S)/library/cpp/eventlog
 //
 // inputs = [cpp_styleguide, protoc, event2cpp, cpp_proto_wrapper.py,
-//           $(SOURCE_ROOT)/<module_dir>/<src>,
+//           $(S)/<module_dir>/<src>,
 //           ... transitive .ev imports ...,
 //           ... transitive .proto imports ...,
 //           optionally descriptor.proto]
@@ -47,15 +47,15 @@ import (
 // tags: always [] (EV nodes only appear on aarch64 in the reference).
 
 const (
-	evEvent2cppBinaryPath = "$(BUILD_ROOT)/tools/event2cpp/event2cpp"
+	evEvent2cppBinaryPath = "$(B)/tools/event2cpp/event2cpp"
 	// evEvent2cppModule is the ya.make path walked to obtain the event2cpp host
 	// LD node. tools/event2cpp/ya.make uses INCLUDE() patterns that our parser
 	// does not expand; tools/event2cpp/bin/ya.make is the actual PROGRAM
 	// declaration. ldBinaryDir lifts the output dir from tools/event2cpp/bin to
 	// tools/event2cpp so the LD node's module_dir matches the reference.
 	evEvent2cppModule     = "tools/event2cpp/bin"
-	evEventlogIncludePath = "$(SOURCE_ROOT)/library/cpp/eventlog"
-	evSourceBase          = "$(SOURCE_ROOT)/"
+	evEventlogIncludePath = "$(S)/library/cpp/eventlog"
+	evSourceBase          = "$(S)/"
 )
 
 // eventRuntimeHeaders is the common subset of SOURCE_ROOT headers present in
@@ -63,7 +63,7 @@ const (
 // the intersection across all 2 .ev.pb.cc consumers in sg2.json).
 // These are registered as EmitsIncludes on the .ev.pb.h output so the scanner
 // closure propagates them into all CC nodes that consume .ev.pb.h.
-// Sorted lexicographically. VFS-rooted $(SOURCE_ROOT)/... paths.
+// Sorted lexicographically. VFS-rooted $(S)/... paths.
 var eventRuntimeHeaders = []string{
 	evSourceBase + "library/cpp/eventlog/event_field_output.h",
 	evSourceBase + "library/cpp/eventlog/event_field_printer.h",
@@ -174,7 +174,7 @@ func evWitnessExtras(sourceRoot, evRelPath, evPbCC string) []string {
 		3+len(pbDescriptorImporterHeaders)+len(evExtraProtobufHeaders)+len(evAbseilCleanupHeaders))
 	out = append(out, pbWrapperPath)
 	out = append(out, pbDescriptorProto)
-	out = append(out, "$(SOURCE_ROOT)/"+evRelPath)
+	out = append(out, "$(S)/"+evRelPath)
 	out = append(out, evPbCC)
 	out = append(out, pbDescriptorImporterHeaders...)
 	out = append(out, evExtraProtobufHeaders...)
@@ -201,9 +201,9 @@ func EmitEV(
 	evRelPath := moduleDir + "/" + srcRel
 
 	// EV outputs: .ev.pb.cc first, then .ev.pb.h (reference order).
-	evCC := "$(BUILD_ROOT)/" + evRelPath + ".pb.cc"
-	evH := "$(BUILD_ROOT)/" + evRelPath + ".pb.h"
-	srcAbs := "$(SOURCE_ROOT)/" + evRelPath
+	evCC := "$(B)/" + evRelPath + ".pb.cc"
+	evH := "$(B)/" + evRelPath + ".pb.h"
+	srcAbs := "$(S)/" + evRelPath
 
 	cmdArgs := []string{
 		pbPython3Path,
@@ -214,23 +214,23 @@ func EmitEV(
 		"--",
 		protocBinary,
 		"-I=./",
-		"-I=$(SOURCE_ROOT)/",
-		"-I=$(BUILD_ROOT)",
-		"-I=$(SOURCE_ROOT)",
-		"-I=$(SOURCE_ROOT)/contrib/libs/protobuf/src",
-		"-I=$(BUILD_ROOT)",
-		"-I=$(SOURCE_ROOT)/contrib/libs/protobuf/src",
-		"--cpp_out=:$(BUILD_ROOT)/",
-		"--cpp_styleguide_out=:$(BUILD_ROOT)/",
+		"-I=$(S)/",
+		"-I=$(B)",
+		"-I=$(S)",
+		"-I=$(S)/contrib/libs/protobuf/src",
+		"-I=$(B)",
+		"-I=$(S)/contrib/libs/protobuf/src",
+		"--cpp_out=:$(B)/",
+		"--cpp_styleguide_out=:$(B)/",
 		"--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary,
 		evRelPath,
 		"--plugin=protoc-gen-event2cpp=" + event2cppBinary,
-		"--event2cpp_out=$(BUILD_ROOT)",
+		"--event2cpp_out=$(B)",
 		"-I=" + evEventlogIncludePath,
 	}
 
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
 	// Build inputs: tool binaries + wrapper + source + transitive imports.
@@ -280,7 +280,7 @@ func EmitEV(
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
-				Cwd:     "$(SOURCE_ROOT)",
+				Cwd:     "$(S)",
 				Env:     env,
 			},
 		},
@@ -309,7 +309,7 @@ func EmitEV(
 
 // resolveEvImports resolves the transitive import set for a .ev (or .proto)
 // file rooted at `<sourceRoot>/<srcRel>`. Returns a deduplicated, ordered
-// slice of `$(SOURCE_ROOT)/...` paths for every imported file that can be
+// slice of `$(S)/...` paths for every imported file that can be
 // found on disk, plus descriptor.proto when any import chain transitively
 // reaches it.
 //
@@ -381,8 +381,8 @@ func resolveEvImports(sourceRoot, srcRel string) []string {
 
 		f.Close()
 
-		// Emit this file's absolute $(SOURCE_ROOT)/... entry.
-		order = append(order, "$(SOURCE_ROOT)/"+rel)
+		// Emit this file's absolute $(S)/... entry.
+		order = append(order, "$(S)/"+rel)
 
 		// Recurse into imports.
 		for _, imp := range imports {

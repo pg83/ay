@@ -17,21 +17,21 @@ import (
 // Reference shape (18 cmd_args, verified against sg2.json):
 //
 //	/ix/realm/pg/bin/python3
-//	$(SOURCE_ROOT)/build/scripts/cpp_proto_wrapper.py
+//	$(S)/build/scripts/cpp_proto_wrapper.py
 //	--outputs <.pb.h> <.pb.cc>
 //	--
-//	$(BUILD_ROOT)/contrib/tools/protoc/protoc
-//	-I=./ -I=$(SOURCE_ROOT)/ -I=$(BUILD_ROOT) -I=$(SOURCE_ROOT)
-//	-I=$(SOURCE_ROOT)/contrib/libs/protobuf/src
-//	-I=$(BUILD_ROOT) -I=$(SOURCE_ROOT)/contrib/libs/protobuf/src
-//	--cpp_out=:$(BUILD_ROOT)/
-//	--cpp_styleguide_out=:$(BUILD_ROOT)/
+//	$(B)/contrib/tools/protoc/protoc
+//	-I=./ -I=$(S)/ -I=$(B) -I=$(S)
+//	-I=$(S)/contrib/libs/protobuf/src
+//	-I=$(B) -I=$(S)/contrib/libs/protobuf/src
+//	--cpp_out=:$(B)/
+//	--cpp_styleguide_out=:$(B)/
 //	--plugin=protoc-gen-cpp_styleguide=<cpp_styleguide_binary>
 //	<module_dir/proto_file>
 //
 // inputs = [cpp_styleguide_binary, protoc_binary, cpp_proto_wrapper.py,
-//           $(SOURCE_ROOT)/<module_dir>/<src>,
-//           optionally $(SOURCE_ROOT)/contrib/libs/protobuf/src/google/protobuf/descriptor.proto]
+//           $(S)/<module_dir>/<src>,
+//           optionally $(S)/contrib/libs/protobuf/src/google/protobuf/descriptor.proto]
 //
 // descriptor.proto is included in inputs when the .proto source imports
 // "google/protobuf/descriptor.proto" (detected by scanning the source
@@ -45,26 +45,26 @@ import (
 
 const (
 	pbPython3Path       = "/ix/realm/pg/bin/python3"
-	pbWrapperPath       = "$(SOURCE_ROOT)/build/scripts/cpp_proto_wrapper.py"
-	pbProtocBinaryPath  = "$(BUILD_ROOT)/contrib/tools/protoc/protoc"
-	pbCppStyleguidePath = "$(BUILD_ROOT)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"
-	pbDescriptorProto   = "$(SOURCE_ROOT)/contrib/libs/protobuf/src/google/protobuf/descriptor.proto"
+	pbWrapperPath       = "$(S)/build/scripts/cpp_proto_wrapper.py"
+	pbProtocBinaryPath  = "$(B)/contrib/tools/protoc/protoc"
+	pbCppStyleguidePath = "$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"
+	pbDescriptorProto   = "$(S)/contrib/libs/protobuf/src/google/protobuf/descriptor.proto"
 
 	// Tool module paths for host-walk recursion.
 	pbProtocModule        = "contrib/tools/protoc"
 	pbCppStyleguideModule = "contrib/tools/protoc/plugins/cpp_styleguide"
 
-	// pbRuntimeBase is the $(SOURCE_ROOT)-rooted prefix for all protobuf
+	// pbRuntimeBase is the $(S)-rooted prefix for all protobuf
 	// runtime headers (under contrib/libs/protobuf/src/).
-	pbRuntimeBase = "$(SOURCE_ROOT)/contrib/libs/protobuf/src/"
+	pbRuntimeBase = "$(S)/contrib/libs/protobuf/src/"
 
-	// abslTstringBase is the $(SOURCE_ROOT)-rooted prefix for abseil-cpp-tstring
+	// abslTstringBase is the $(S)-rooted prefix for abseil-cpp-tstring
 	// headers. The protobuf runtime transitively reaches a large
 	// abseil-cpp-tstring closure via `port_def.inc → y_absl/strings/string_view.h
 	// → ...`; consumer PROTO_LIBRARYs do not peer abseil-cpp-tstring themselves
 	// (it is an internal protobuf-runtime dependency), so the scanner cannot
 	// resolve `y_absl/...` includes without pre-resolved EmitsIncludes.
-	abslTstringBase = "$(SOURCE_ROOT)/contrib/restricted/abseil-cpp-tstring/"
+	abslTstringBase = "$(S)/contrib/restricted/abseil-cpp-tstring/"
 )
 
 // protobufRuntimeHeaders is the set of headers that every protoc-generated
@@ -72,7 +72,7 @@ const (
 // timestamp.pb.h, etc.). These are registered as EmitsIncludes on the .pb.h
 // output so the scanner closure propagates them into all CC nodes that
 // include the .pb.h. Scanner recursion then finds their transitive includes.
-// Sorted lexicographically. VFS-rooted $(SOURCE_ROOT)/... paths.
+// Sorted lexicographically. VFS-rooted $(S)/... paths.
 var protobufRuntimeHeaders = []string{
 	pbRuntimeBase + "google/protobuf/arena.h",
 	pbRuntimeBase + "google/protobuf/arenastring.h",
@@ -131,7 +131,7 @@ var pbDescriptorImporterHeaders = []string{
 //     SOURCE_ROOT paths, so libcxx <vector>/<string>/... discovery is
 //     automatic once the abseil headers are walkable).
 //
-// Sorted lexicographically. VFS-rooted $(SOURCE_ROOT)/... paths.
+// Sorted lexicographically. VFS-rooted $(S)/... paths.
 var pbCcDeepRuntimeHeaders = []string{
 	// Group 1: deep protobuf transitive set.
 	pbRuntimeBase + "google/protobuf/any.h",
@@ -329,7 +329,7 @@ var pbCcDeepRuntimeHeaders = []string{
 // EmitPB emits a PB node for `srcRel` (a .proto file relative to `instance.Path`).
 // `cppStyleguideLDRef` and `protocLDRef` are the host LD NodeRefs for the two
 // tool programs (zeroed when the host walk failed). `cppStyleguideBinary` and
-// `protocBinary` are the $(BUILD_ROOT)-rooted paths for the tool binaries.
+// `protocBinary` are the $(B)-rooted paths for the tool binaries.
 // `moduleTag` is "cpp_proto" for PROTO_LIBRARY modules (may be empty for future use).
 // `sourceRoot` is the absolute path to the source tree root (for descriptor-import scanning).
 //
@@ -350,9 +350,9 @@ func EmitPB(
 	// Output paths strip the .proto suffix: foo.proto → foo.pb.h / foo.pb.cc.
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 
-	pbH := "$(BUILD_ROOT)/" + protoBase + ".pb.h"
-	pbCC := "$(BUILD_ROOT)/" + protoBase + ".pb.cc"
-	srcAbs := "$(SOURCE_ROOT)/" + protoRelPath
+	pbH := "$(B)/" + protoBase + ".pb.h"
+	pbCC := "$(B)/" + protoBase + ".pb.cc"
+	srcAbs := "$(S)/" + protoRelPath
 
 	cmdArgs := []string{
 		pbPython3Path,
@@ -363,20 +363,20 @@ func EmitPB(
 		"--",
 		protocBinary,
 		"-I=./",
-		"-I=$(SOURCE_ROOT)/",
-		"-I=$(BUILD_ROOT)",
-		"-I=$(SOURCE_ROOT)",
-		"-I=$(SOURCE_ROOT)/contrib/libs/protobuf/src",
-		"-I=$(BUILD_ROOT)",
-		"-I=$(SOURCE_ROOT)/contrib/libs/protobuf/src",
-		"--cpp_out=:$(BUILD_ROOT)/",
-		"--cpp_styleguide_out=:$(BUILD_ROOT)/",
+		"-I=$(S)/",
+		"-I=$(B)",
+		"-I=$(S)",
+		"-I=$(S)/contrib/libs/protobuf/src",
+		"-I=$(B)",
+		"-I=$(S)/contrib/libs/protobuf/src",
+		"--cpp_out=:$(B)/",
+		"--cpp_styleguide_out=:$(B)/",
 		"--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary,
 		protoRelPath,
 	}
 
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
 	// inputs: [cpp_styleguide, protoc, wrapper, source, optionally descriptor.proto]
@@ -427,7 +427,7 @@ func EmitPB(
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
-				Cwd:     "$(SOURCE_ROOT)",
+				Cwd:     "$(S)",
 				Env:     env,
 			},
 		},
@@ -458,7 +458,7 @@ func EmitPB(
 // protoc-generated .pb.h to its CC consumers. The list is the union of:
 //   - pbDescriptorImporterHeaders (7 protobuf reflection-cluster headers),
 //   - pbWrapperPath (cpp_proto_wrapper.py — the script that drives protoc),
-//   - the proto source file (its $(SOURCE_ROOT)-rooted path),
+//   - the proto source file (its $(S)-rooted path),
 //   - pbDescriptorProto (the descriptor.proto source itself; only when the
 //     proto imports descriptor.proto).
 //
@@ -469,7 +469,7 @@ func EmitPB(
 func pbDescriptorImporterExtras(sourceRoot, protoRelPath string) []string {
 	out := make([]string, 0, len(pbDescriptorImporterHeaders)+3)
 	out = append(out, pbWrapperPath)
-	out = append(out, "$(SOURCE_ROOT)/"+protoRelPath)
+	out = append(out, "$(S)/"+protoRelPath)
 	out = append(out, pbDescriptorImporterHeaders...)
 
 	if protoImportsDescriptor(sourceRoot, protoRelPath) {
@@ -595,7 +595,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		genRef NodeRef // PB or EV node ref (used as Generator dep for the downstream CC)
 		pbCC   string  // generated .pb.cc / .ev.pb.cc absolute BUILD_ROOT path
 		srcRel string  // module-relative source-with-codegen-suffix (".pb.cc" appended)
-		primSrc string // primary source path ($(SOURCE_ROOT)/<module>/<src>) for AR memberInputs
+		primSrc string // primary source path ($(S)/<module>/<src>) for AR memberInputs
 	}
 
 	var codegenOutputs []protoCodegenOutput
@@ -612,8 +612,8 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		// constant protobuf runtime header set (F-7-D).
 		protoRelPath := instance.Path + "/" + src
 		protoBase := strings.TrimSuffix(protoRelPath, ".proto")
-		pbH := "$(BUILD_ROOT)/" + protoBase + ".pb.h"
-		pbCC := "$(BUILD_ROOT)/" + protoBase + ".pb.cc"
+		pbH := "$(B)/" + protoBase + ".pb.h"
+		pbCC := "$(B)/" + protoBase + ".pb.cc"
 
 		// PR-M3-L0-codegen-deps-EV-PB: stash the PB NodeRef under both output
 		// paths on the emitting platform so resolveCodegenDepRefs can thread
@@ -658,7 +658,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			// one CC compile node, so the closure is tightly scoped.
 			pbCCEmits := make([]string, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
 			pbCCEmits = append(pbCCEmits, pbH)
-			pbCCEmits = append(pbCCEmits, "$(SOURCE_ROOT)/"+protoRelPath)
+			pbCCEmits = append(pbCCEmits, "$(S)/"+protoRelPath)
 			pbCCEmits = append(pbCCEmits, pbWrapperPath)
 			pbCCEmits = append(pbCCEmits, protobufRuntimeHeaders...)
 			pbCCEmits = append(pbCCEmits, pbCcDeepRuntimeHeaders...)
@@ -675,7 +675,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			genRef:  pbRef,
 			pbCC:    pbCC,
 			srcRel:  strings.TrimSuffix(src, ".proto") + ".pb.cc",
-			primSrc: "$(SOURCE_ROOT)/" + protoRelPath,
+			primSrc: "$(S)/" + protoRelPath,
 		})
 	}
 
@@ -705,8 +705,8 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			// the .ev source's direct imports, plus the protobuf runtime headers (F-7-D)
 			// and the EV-specific runtime headers (util/* + eventlog).
 			evRelPath := instance.Path + "/" + src
-			evH := "$(BUILD_ROOT)/" + evRelPath + ".pb.h"
-			evPbCC := "$(BUILD_ROOT)/" + evRelPath + ".pb.cc"
+			evH := "$(B)/" + evRelPath + ".pb.h"
+			evPbCC := "$(B)/" + evRelPath + ".pb.cc"
 
 			// PR-M3-L0-codegen-deps-EV-PB: stash the EV NodeRef under both outputs
 			// on the emitting platform. See PB branch above for the keying rationale.
@@ -747,7 +747,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 				genRef:  evRef,
 				pbCC:    evPbCC,
 				srcRel:  src + ".pb.cc",
-				primSrc: "$(SOURCE_ROOT)/" + evRelPath,
+				primSrc: "$(S)/" + evRelPath,
 			})
 		}
 	}
@@ -815,7 +815,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		}
 	}
 
-	wireFormatVFS := Source(strings.TrimPrefix(pbRuntimeBase, "$(SOURCE_ROOT)/") + "google/protobuf/wire_format.h")
+	wireFormatVFS := Source(strings.TrimPrefix(pbRuntimeBase, "$(S)/") + "google/protobuf/wire_format.h")
 	for _, co := range codegenOutputs {
 		ccIn := moduleInputs
 		ccIn.IsGenerated = true

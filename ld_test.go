@@ -24,7 +24,7 @@ import (
 
 // referenceLDOutput is the output path used to locate the reference
 // LD node for `tools/archiver`.
-const referenceLDOutput = "$(BUILD_ROOT)/tools/archiver/archiver"
+const referenceLDOutput = "$(B)/tools/archiver/archiver"
 
 // archiverPeerLibPaths are the 32 peer LIBRARY archive paths in the
 // exact PEERDIR walk order observed in the reference graph's cmd[2].
@@ -70,13 +70,13 @@ var archiverPeerLibPaths = []string{
 // archiverPluginPaths is the single plugin (musl pyplugin) referenced
 // by the archiver LD's `--start-plugins ... --end-plugins` block.
 var archiverPluginPaths = []string{
-	"$(BUILD_ROOT)/contrib/libs/musl/include/musl.py.pyplugin",
+	"$(B)/contrib/libs/musl/include/musl.py.pyplugin",
 }
 
 // archiverGlobalPaths is the single global archive (tcmalloc no-percpu
 // global) referenced by the archiver LD's `-Wl,--whole-archive`
-// section. BUILD_ROOT-relative (no $(BUILD_ROOT)/ prefix — link_exe.py
-// resolves these against `cwd: $(BUILD_ROOT)`).
+// section. BUILD_ROOT-relative (no $(B)/ prefix — link_exe.py
+// resolves these against `cwd: $(B)`).
 var archiverGlobalPaths = []string{
 	"contrib/libs/tcmalloc/no_percpu_cache/liblibs-tcmalloc-no_percpu_cache.global.a",
 }
@@ -121,7 +121,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	mainRef := emit.Emit(&Node{
 		KV: map[string]string{"p": "STUB"},
 	})
-	mainPath := "$(BUILD_ROOT)/some/prog/main.cpp.o"
+	mainPath := "$(B)/some/prog/main.cpp.o"
 
 	instance := targetInstance("some/prog")
 
@@ -149,7 +149,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	}
 
 	// cmd[0]: vcs_info.py
-	if got.Cmds[0].CmdArgs[1] != "$(SOURCE_ROOT)/build/scripts/vcs_info.py" {
+	if got.Cmds[0].CmdArgs[1] != "$(S)/build/scripts/vcs_info.py" {
 		t.Errorf("cmd[0] does not invoke vcs_info.py: %q", got.Cmds[0].CmdArgs[1])
 	}
 
@@ -159,21 +159,21 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	}
 
 	// cmd[2]: link_exe.py.
-	if got.Cmds[2].CmdArgs[1] != "$(SOURCE_ROOT)/build/scripts/link_exe.py" {
+	if got.Cmds[2].CmdArgs[1] != "$(S)/build/scripts/link_exe.py" {
 		t.Errorf("cmd[2] does not invoke link_exe.py: %q", got.Cmds[2].CmdArgs[1])
 	}
 
-	if got.Cmds[2].Cwd != "$(BUILD_ROOT)" {
-		t.Errorf("cmd[2].cwd = %q, want $(BUILD_ROOT)", got.Cmds[2].Cwd)
+	if got.Cmds[2].Cwd != "$(B)" {
+		t.Errorf("cmd[2].cwd = %q, want $(B)", got.Cmds[2].Cwd)
 	}
 
 	// cmd[3]: fs_tools.py
-	if got.Cmds[3].CmdArgs[1] != "$(SOURCE_ROOT)/build/scripts/fs_tools.py" {
+	if got.Cmds[3].CmdArgs[1] != "$(S)/build/scripts/fs_tools.py" {
 		t.Errorf("cmd[3] does not invoke fs_tools.py: %q", got.Cmds[3].CmdArgs[1])
 	}
 
-	// Output path: $(BUILD_ROOT)/some/prog/prog.
-	wantOut := "$(BUILD_ROOT)/some/prog/prog"
+	// Output path: $(B)/some/prog/prog.
+	wantOut := "$(B)/some/prog/prog"
 	if len(got.Outputs) != 1 || got.Outputs[0].String() != wantOut {
 		t.Errorf("outputs = %#v, want [%q]", got.Outputs, wantOut)
 	}

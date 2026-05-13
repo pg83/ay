@@ -42,10 +42,10 @@ import (
 //     `<modulePath>/_/<srcRel>.o` which neither matches the suffix nor
 //     omits the `_/` infix.
 //   - cmd_args: 18-arg yasm invocation
-//     (`$(BUILD_ROOT)/contrib/tools/yasm/yasm -f elf64 -D UNIX
-//     --replace=$(BUILD_ROOT)=/-B --replace=$(SOURCE_ROOT)=/-S
-//     --replace=$(TOOL_ROOT)=/-T -D _x86_64_ -D_YASM_ -I $(BUILD_ROOT)
-//     -I $(SOURCE_ROOT) -o <out> <in>`). No clang flags, no warning
+//     (`$(B)/contrib/tools/yasm/yasm -f elf64 -D UNIX
+//     --replace=$(B)=/-B --replace=$(S)=/-S
+//     --replace=$(TOOL_ROOT)=/-T -D _x86_64_ -D_YASM_ -I $(B)
+//     -I $(S) -o <out> <in>`). No clang flags, no warning
 //     bundle, no defines, no includes from `ModuleCCInputs`.
 //   - Env: only `ARCADIA_ROOT_DISTBUILD` + `YASM_TEST_SUITE=1`
 //     (NO `DYLD_LIBRARY_PATH` — yasm has no host-clang library
@@ -162,7 +162,7 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 	// level and the node top level. A single map is constructed and
 	// aliased to both; EmitAS is single-shot so the alias is safe.
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 		"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
 	}
 
@@ -178,7 +178,7 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
-				Cwd:     "$(BUILD_ROOT)",
+				Cwd:     "$(B)",
 				Env:     env,
 			},
 		},
@@ -219,14 +219,14 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 	return emit.Emit(node), outVFS
 }
 
-// yasmBinaryPath is the canonical $(BUILD_ROOT)-relative path of the
+// yasmBinaryPath is the canonical $(B)-relative path of the
 // host yasm binary, as observed across all 25 reference asmlib AS
 // nodes in the M2 closure (cmd_args[0]). Hardcoded here because the
 // only consumer is the asmlib host-PIC branch, which is itself gated
 // by `asmlibYasmModules`. If a future host module joins
 // `asmlibYasmModules`, the path remains the same — yasm's PROGRAM
 // directory is stable.
-const yasmBinaryPath = "$(BUILD_ROOT)/contrib/tools/yasm/yasm"
+const yasmBinaryPath = "$(B)/contrib/tools/yasm/yasm"
 
 // yasmBinaryVFS is the typed counterpart of yasmBinaryPath, used at
 // node-input construction sites that consume []VFS.
@@ -269,16 +269,16 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 		yasmBinaryPath,
 		"-f", "elf64",
 		"-D", "UNIX",
-		"--replace=$(BUILD_ROOT)=/-B",
-		"--replace=$(SOURCE_ROOT)=/-S",
+		"--replace=$(B)=/-B",
+		"--replace=$(S)=/-S",
 		"--replace=$(TOOL_ROOT)=/-T",
 		"-D", "_x86_64_",
 		"-D_YASM_",
 	)
 	cmdArgs = append(cmdArgs, predefinedFlags...)
 	cmdArgs = append(cmdArgs,
-		"-I", "$(BUILD_ROOT)",
-		"-I", "$(SOURCE_ROOT)",
+		"-I", "$(B)",
+		"-I", "$(S)",
 		"-o", outputPath,
 		inputPath,
 	)
@@ -289,7 +289,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 	// both the cmd-level and node-level Env (mirror of EmitAS's
 	// clang-path treatment).
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 		"YASM_TEST_SUITE":        "1",
 	}
 
@@ -309,7 +309,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 				// Cwd intentionally empty: the reference asmlib yasm AS
 				// nodes omit the `cwd` field (verified across all 25
 				// nodes in `/home/pg/monorepo/yatool_orig/sg.json`).
-				// The clang AS path sets `Cwd: $(BUILD_ROOT)` because
+				// The clang AS path sets `Cwd: $(B)` because
 				// 58/83 reference clang AS nodes carry it; the yasm AS
 				// nodes are part of the 25 that don't.
 				Env: env,
@@ -348,13 +348,13 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 // composeASPaths derives (outputPath, inputPath) for the clang AS path.
 // Mirrors composeCCPaths (cc.go:361-402) with three cases:
 //
-//  1. srcRel has no "/": flat output `$(BUILD_ROOT)/<path>/<srcRel>.o`;
-//     input `$(SOURCE_ROOT)/<path>/<srcRel>`. Empirical: asmglibc/memchr.S.
-//  2. srcRel has "/" and no SRCDIR override: `$(BUILD_ROOT)/<path>/_/<srcRel>.o`;
-//     input `$(SOURCE_ROOT)/<path>/<srcRel>`. Empirical: cxxsupp/builtins/_/aarch64/chkstk.S.
+//  1. srcRel has no "/": flat output `$(B)/<path>/<srcRel>.o`;
+//     input `$(S)/<path>/<srcRel>`. Empirical: asmglibc/memchr.S.
+//  2. srcRel has "/" and no SRCDIR override: `$(B)/<path>/_/<srcRel>.o`;
+//     input `$(S)/<path>/<srcRel>`. Empirical: cxxsupp/builtins/_/aarch64/chkstk.S.
 //  3. SRCDIR set and source does not resolve locally: output uses
 //     composeSrcDirOutputRel infix (cc.go) → `__/` for ancestor SRCDIR;
-//     input `$(SOURCE_ROOT)/<srcDir>/<srcRel>`. Empirical: tcmalloc/no_percpu_cache →
+//     input `$(S)/<srcDir>/<srcRel>`. Empirical: tcmalloc/no_percpu_cache →
 //     `__/tcmalloc/internal/percpu_rseq_asm.S.o`.
 func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (out, input VFS) {
 	useSrcDir := in.SrcDir != "" && in.SrcDir != instance.Path && !sourceExistsLocally(in.SourceRoot, instance.Path, srcRel)

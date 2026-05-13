@@ -11,8 +11,8 @@ import "strings"
 //     invoking the host `tools/py3cc` binary. Driven by PY_SRCS()
 //     declarations in PY3_LIBRARY / PY23_LIBRARY modules.
 //     cmd_args: [py3cc_binary, --slow-py3cc, slow_py3cc_binary,
-//                <modulePath>/<srcRel>-, $(SOURCE_ROOT)/<path>/<src>,
-//                $(BUILD_ROOT)/<output>]
+//                <modulePath>/<srcRel>-, $(S)/<path>/<src>,
+//                $(B)/<output>]
 //     Output suffix: flat src (no `/`) → `.py.yapyc3`;
 //                    subdir src (has `/`) → `.py.3kp2.yapyc3`.
 //
@@ -23,21 +23,21 @@ import "strings"
 // Binary path canonicalization:
 //   tools/py3cc/bin/ya.make declares PROGRAM(py3cc) with SRCDIR(tools/py3cc).
 //   Walking tools/py3cc/bin produces an LD node at
-//   $(BUILD_ROOT)/tools/py3cc/bin/py3cc, but the reference graph's yapyc3
+//   $(B)/tools/py3cc/bin/py3cc, but the reference graph's yapyc3
 //   nodes invoke py3cc at the canonical parent path
-//   $(BUILD_ROOT)/tools/py3cc/py3cc.  canonicalizePy3ccBinaryPath rewrites
+//   $(B)/tools/py3cc/py3cc.  canonicalizePy3ccBinaryPath rewrites
 //   the /bin/ subpath back to the canonical location so cmd_args[0] matches
 //   the reference byte-exact.  Same pattern as canonicalizeRagel6BinaryPath
 //   in r6.go.
 
 const (
-	py3ccBinSubpath   = "$(BUILD_ROOT)/tools/py3cc/bin/"
-	py3ccCanonicalDir = "$(BUILD_ROOT)/tools/py3cc/"
+	py3ccBinSubpath   = "$(B)/tools/py3cc/bin/"
+	py3ccCanonicalDir = "$(B)/tools/py3cc/"
 )
 
 // canonicalizePy3ccBinaryPath maps the host walker's
-// $(BUILD_ROOT)/tools/py3cc/bin/<basename> output back to the reference-
-// shaped $(BUILD_ROOT)/tools/py3cc/<basename>.  All other inputs pass
+// $(B)/tools/py3cc/bin/<basename> output back to the reference-
+// shaped $(B)/tools/py3cc/<basename>.  All other inputs pass
 // through unchanged so the canonical-fallback codepath (which already
 // supplies the correct literal) is not double-rewritten.
 func canonicalizePy3ccBinaryPath(p string) string {
@@ -52,7 +52,7 @@ func canonicalizePy3ccBinaryPath(p string) string {
 // whose ya.make declares ARCHIVE(NAME __res.pyc.inc DONTCOMPRESS __res.pyc)
 // and ARCHIVE(NAME sitecustomize.pyc.inc DONTCOMPRESS sitecustomize.pyc).
 // The two C++ sources __res.cpp and sitecustomize.cpp #include the
-// generated .pyc.inc headers from $(BUILD_ROOT)/<modulePath>/; upstream
+// generated .pyc.inc headers from $(B)/<modulePath>/; upstream
 // also records the PY_SRCS-fed .py files as side inputs on each compile
 // (the RUN_PROGRAM that pickles them feeds both sources to stage0pycc).
 const runtimePy3ModulePath = "library/python/runtime_py3"
@@ -68,7 +68,7 @@ const runtimePy3ModulePath = "library/python/runtime_py3"
 //     pickles __res.py and sitecustomize.py into __res.pyc /
 //     sitecustomize.pyc
 //   - ARCHIVE(NAME __res.pyc.inc DONTCOMPRESS __res.pyc) embeds the
-//     pickle as a C array header `__res.pyc.inc` under $(BUILD_ROOT)/
+//     pickle as a C array header `__res.pyc.inc` under $(B)/
 //     library/python/runtime_py3/
 //   - SRCS(__res.cpp sitecustomize.cpp GLOBAL runtime_reg_py3.cpp)
 //     compile the C++ wrappers that #include the .pyc.inc headers
@@ -87,7 +87,7 @@ const runtimePy3ModulePath = "library/python/runtime_py3"
 // in the AR's input multiset because the AR pulls the union of its
 // member compiles' inputs.
 //
-// modulePath is the module's canonical $(BUILD_ROOT)-relative path.
+// modulePath is the module's canonical $(B)-relative path.
 // srcDir is the SRCDIR(...) setting (empty when none). pySrcs is the
 // declaration-ordered list of PY_SRCS entries from the ya.make.
 // resourcePaths is the list of RESOURCE/RESOURCE_FILES source path

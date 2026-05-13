@@ -7,7 +7,7 @@ import "encoding/json"
 // A `VFS` value addresses a file in one of two virtual roots — SOURCE_ROOT
 // (the source tree) or BUILD_ROOT (the build-output tree) — by its
 // root-relative path. The previous codebase carried these as plain
-// `"$(SOURCE_ROOT)/<rel>"` / `"$(BUILD_ROOT)/<rel>"` strings, which forced
+// `"$(S)/<rel>"` / `"$(B)/<rel>"` strings, which forced
 // a string concat at every construction site (4.7M allocations per M3
 // run, profiled as the #1 alloc hotspot) and lost type information at
 // the boundary between scanner / emitter / serializer.
@@ -48,8 +48,8 @@ func (v VFS) IsSource() bool { return v.Root == VFSRootSource }
 // IsBuild reports whether v is anchored under BUILD_ROOT.
 func (v VFS) IsBuild() bool { return v.Root == VFSRootBuild }
 
-// String materialises the canonical "$(SOURCE_ROOT)/<rel>" or
-// "$(BUILD_ROOT)/<rel>" form. Used at the serializer boundary; the
+// String materialises the canonical "$(S)/<rel>" or
+// "$(B)/<rel>" form. Used at the serializer boundary; the
 // scanner os.Stat path bypasses it and concatenates `sourceRoot + rel`
 // directly to avoid two materialisations.
 //
@@ -65,7 +65,7 @@ func (v VFS) String() string {
 	panic("VFS.String: zero-valued VFS (missing Root)")
 }
 
-// ParseVFS recognises s as a "$(SOURCE_ROOT)/..." or "$(BUILD_ROOT)/..."
+// ParseVFS recognises s as a "$(S)/..." or "$(B)/..."
 // string and returns the corresponding VFS. Returns (zero, false) when
 // s lacks both recognised prefixes — callers handling such tokens
 // (e.g. compound CmdArg substrings) keep them as strings.
@@ -99,7 +99,7 @@ func (v VFS) MarshalJSON() ([]byte, error) {
 }
 
 // ParseVFSOrSource parses s as a VFS path if it carries a recognised
-// "$(SOURCE_ROOT)/" or "$(BUILD_ROOT)/" prefix; otherwise it returns
+// "$(S)/" or "$(B)/" prefix; otherwise it returns
 // Source(s) verbatim. Used by `ToVFSSlice` for the migration period —
 // synthetic emitter tests use bare relative strings (e.g. "c.in") that
 // don't carry a prefix; treating those as SOURCE_ROOT-rooted keeps the

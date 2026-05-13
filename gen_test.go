@@ -33,7 +33,7 @@ const sourceRoot = "/home/pg/monorepo/yatool_orig"
 // peering thelib) and `thelib` (LIBRARY) — each with a single
 // source. The expected closure is 4 nodes: thelib's CC + AR, then
 // mainprog's CC + LD. The root result is mainprog's LD (the binary
-// `$(BUILD_ROOT)/mainprog/mainprog`).
+// `$(B)/mainprog/mainprog`).
 func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	root := t.TempDir()
 
@@ -82,10 +82,10 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	}
 
 	const (
-		libCCOut    = "$(BUILD_ROOT)/thelib/lib.cpp.o"
-		libARout    = "$(BUILD_ROOT)/thelib/libthelib.a"
-		mainCCOut   = "$(BUILD_ROOT)/mainprog/main.cpp.o"
-		mainBinPath = "$(BUILD_ROOT)/mainprog/mainprog"
+		libCCOut    = "$(B)/thelib/lib.cpp.o"
+		libARout    = "$(B)/thelib/libthelib.a"
+		mainCCOut   = "$(B)/mainprog/main.cpp.o"
+		mainBinPath = "$(B)/mainprog/mainprog"
 	)
 
 	for _, key := range []string{libCCOut, libARout, mainCCOut, mainBinPath} {
@@ -189,7 +189,7 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 		t.Errorf("LD Cmds = %d, want 4", len(ld.Cmds))
 	}
 
-	wantOut := "$(BUILD_ROOT)/lone/lone"
+	wantOut := "$(B)/lone/lone"
 	if len(ld.Outputs) != 1 || ld.Outputs[0].String() != wantOut {
 		t.Errorf("LD outputs = %#v, want [%q]", ld.Outputs, wantOut)
 	}
@@ -610,7 +610,7 @@ END()
 // (1 JS) + (1 CC for joined) + (1 CC for sibling) + (1 AR) = 4
 // nodes. The JS NodeRef must thread into the joined-CC's input
 // path; the sibling CC compiles regularly. The joined CC's source
-// path is `$(BUILD_ROOT)/<modulePath>/<allName>` per EmitJS.
+// path is `$(B)/<modulePath>/<allName>` per EmitJS.
 func TestGen_JoinSrcs_EmitsJSAndCC(t *testing.T) {
 	root := t.TempDir()
 	modDir := filepath.Join(root, "joinmod")
@@ -685,7 +685,7 @@ END()
 	}
 
 	// Sanity: the JS node's output path is the joined .cpp under
-	// $(BUILD_ROOT)/<modulePath>/<allName>.
+	// $(B)/<modulePath>/<allName>.
 	var jsOut string
 
 	for _, n := range g.Graph {
@@ -694,7 +694,7 @@ END()
 		}
 	}
 
-	wantJSOut := "$(BUILD_ROOT)/joinmod/all_my.cpp"
+	wantJSOut := "$(B)/joinmod/all_my.cpp"
 	if jsOut != wantJSOut {
 		t.Errorf("JS output = %q, want %q", jsOut, wantJSOut)
 	}
@@ -871,7 +871,7 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	// host walker enters `contrib/tools/ragel6/bin` (because the
 	// parent ya.make's `INCLUDE` is not yet expanded), EmitR6
 	// canonicalises cmd_args[0] back to the reference-shaped parent
-	// path `$(BUILD_ROOT)/contrib/tools/ragel6/ragel6`. The host LD's
+	// path `$(B)/contrib/tools/ragel6/ragel6`. The host LD's
 	// outputs[0] keeps the walked `/bin/` path (the host LD itself is
 	// not an L*-pair lever for the util closure). The consistency
 	// invariant therefore compares the LD output through the same
@@ -946,10 +946,10 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 		t.Errorf("LD Deps = %d, want >= 3 (own CC + peer AR + peer global AR)", len(ldNode.Deps))
 	}
 
-	// D08 regression guard: inputs must contain $(BUILD_ROOT)/peerlib/libpeerlib.global.a
-	// (single prefix, no double). composeLDInputs prepends $(BUILD_ROOT)/ itself, so
-	// GlobalPath must be BUILD_ROOT-relative (no $(BUILD_ROOT)/ prefix).
-	expectedInput := "$(BUILD_ROOT)/peerlib/libpeerlib.global.a"
+	// D08 regression guard: inputs must contain $(B)/peerlib/libpeerlib.global.a
+	// (single prefix, no double). composeLDInputs prepends $(B)/ itself, so
+	// GlobalPath must be BUILD_ROOT-relative (no $(B)/ prefix).
+	expectedInput := "$(B)/peerlib/libpeerlib.global.a"
 	foundInInputs := false
 
 	for _, in := range ldNode.Inputs {
@@ -965,15 +965,15 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 
 	// Guard against double-prefixed entries (the original D08 defect).
 	for _, in := range ldNode.Inputs {
-		if strings.Contains(in.String(), "$(BUILD_ROOT)/$(BUILD_ROOT)") {
+		if strings.Contains(in.String(), "$(B)/$(B)") {
 			t.Errorf("double-prefixed input found: %q", in.String())
 		}
 	}
 
 	// D08 regression guard: cmd_args of link_exe.py (cmds[2]) must contain
-	// peerlib/libpeerlib.global.a without any $(BUILD_ROOT)/ prefix, because
+	// peerlib/libpeerlib.global.a without any $(B)/ prefix, because
 	// composeLDCmdLinkExe appends globalPaths verbatim into cmd_args and link_exe.py
-	// resolves them relative to $(BUILD_ROOT) (the cmd's Cwd).
+	// resolves them relative to $(B) (the cmd's Cwd).
 	if len(ldNode.Cmds) < 3 {
 		t.Fatalf("LD node has %d cmds, want >= 3", len(ldNode.Cmds))
 	}
@@ -1645,13 +1645,13 @@ END()
 // TestGen_SrcDirRebasesSourceResolution pins PR-28-D02 / D11: when a
 // module declares SRCDIR(other/dir), per-source CC nodes (including
 // those from JOIN_SRCS) must emit module_dir = "other/dir" and inputs
-// rooted at "$(SOURCE_ROOT)/other/dir/<src>". Without SRCDIR the
+// rooted at "$(S)/other/dir/<src>". Without SRCDIR the
 // instance's own path must be used unchanged.
 func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	t.Run("with_srcdir", func(t *testing.T) {
 		// PR-30 D06: LIBRARY with non-ancestor SRCDIR keeps module_dir
 		// at instance.Path; per-source SRCDIR routing applies (input
-		// at $(SOURCE_ROOT)/<srcdir>/<src>; output uses `__/<rel>`
+		// at $(S)/<srcdir>/<src>; output uses `__/<rel>`
 		// infix). The historical PR-28-D02 "always rebase" shape is
 		// retained ONLY for the PROGRAM-with-ancestor-SRCDIR pattern
 		// (ragel6/bin); see TestGen_SrcdirAncestor_RebasesModuleDir.
@@ -1688,7 +1688,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		// Input path resolves under SRCDIR (foo.cpp doesn't exist
 		// locally at mymod/, so the composer takes the SRCDIR route).
-		wantInput := "$(SOURCE_ROOT)/other/dir/foo.cpp"
+		wantInput := "$(S)/other/dir/foo.cpp"
 
 		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
 			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
@@ -1696,7 +1696,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		// Output path uses `__/<rel>` infix; rel = relpath(other/dir/foo.cpp
 		// from mymod) = ../other/dir/foo.cpp → __/other/dir/foo.cpp.
-		wantOutput := "$(BUILD_ROOT)/mymod/__/other/dir/foo.cpp.o"
+		wantOutput := "$(B)/mymod/__/other/dir/foo.cpp.o"
 
 		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].String() != wantOutput {
 			t.Errorf("CC outputs = %v, want first = %q", ccNode.Outputs, wantOutput)
@@ -1735,7 +1735,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "basemod")
 		}
 
-		wantInput := "$(SOURCE_ROOT)/basemod/bar.cpp"
+		wantInput := "$(S)/basemod/bar.cpp"
 
 		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
 			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
@@ -1821,12 +1821,12 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "tools/r6")
 		}
 
-		wantInput := "$(SOURCE_ROOT)/tools/r6/main.cpp"
+		wantInput := "$(S)/tools/r6/main.cpp"
 		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
 			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
 		}
 
-		wantOutput := "$(BUILD_ROOT)/tools/r6/main.cpp.o"
+		wantOutput := "$(B)/tools/r6/main.cpp.o"
 		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].String() != wantOutput {
 			t.Errorf("CC outputs = %v, want first = %q", ccNode.Outputs, wantOutput)
 		}
@@ -2067,15 +2067,15 @@ END()
 		case "R6":
 			r6Node = n
 		case "CC":
-			// Pick the CC whose input lives under $(BUILD_ROOT)
+			// Pick the CC whose input lives under $(B)
 			// (the R6-derived CC; the host ragel6 PROGRAM also
-			// emits a CC for its main.cpp under $(SOURCE_ROOT)).
+			// emits a CC for its main.cpp under $(S)).
 			ip := ""
 			if len(n.Inputs) > 0 {
 				ip = n.Inputs[0].String()
 			}
 
-			if ccNode == nil && len(ip) > 0 && ip[:14] == "$(BUILD_ROOT)/" {
+			if ccNode == nil && strings.HasPrefix(ip, "$(B)/") {
 				ccNode = n
 			}
 		}
@@ -2333,13 +2333,13 @@ END()
 		t.Errorf("CC module_dir = %q, want %q (sibling SRCDIR — module_dir stays at instance.Path)", got, "mylib")
 	}
 
-	wantInput := "$(SOURCE_ROOT)/other/src/foo.cpp"
+	wantInput := "$(S)/other/src/foo.cpp"
 
 	if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
 		t.Errorf("CC input = %v, want first = %q", ccNode.Inputs, wantInput)
 	}
 
-	wantOutput := "$(BUILD_ROOT)/mylib/__/other/src/foo.cpp.o"
+	wantOutput := "$(B)/mylib/__/other/src/foo.cpp.o"
 
 	if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].String() != wantOutput {
 		t.Errorf("CC output = %v, want first = %q", ccNode.Outputs, wantOutput)
@@ -2383,13 +2383,13 @@ END()
 		t.Fatal("no CC node emitted")
 	}
 
-	wantInput := "$(SOURCE_ROOT)/mylib/local.c"
+	wantInput := "$(S)/mylib/local.c"
 
 	if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
 		t.Errorf("CC input = %v, want first = %q (local-existing source must ignore SRCDIR)", ccNode.Inputs, wantInput)
 	}
 
-	wantOutput := "$(BUILD_ROOT)/mylib/local.c.o"
+	wantOutput := "$(B)/mylib/local.c.o"
 
 	if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].String() != wantOutput {
 		t.Errorf("CC output = %v, want first = %q", ccNode.Outputs, wantOutput)
@@ -2452,7 +2452,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	}
 
 	// GLOBAL path must propagate.
-	wantGlobal := "-I$(SOURCE_ROOT)/lib/include"
+	wantGlobal := "-I$(S)/lib/include"
 	foundGlobal := false
 
 	for _, f := range iFlags {
@@ -2467,7 +2467,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	}
 
 	// Module-own path must NOT propagate.
-	wantAbsent := "-I$(SOURCE_ROOT)/lib/src"
+	wantAbsent := "-I$(S)/lib/src"
 
 	for _, f := range iFlags {
 		if f == wantAbsent {
@@ -2563,7 +2563,7 @@ func TestGen_ToolsArchiver_LDPeerArchiveClosure(t *testing.T) {
 
 	our := Gen(TargetCfg, sourceRoot, targetDir)
 
-	const ldOutput = "$(BUILD_ROOT)/tools/archiver/archiver"
+	const ldOutput = "$(B)/tools/archiver/archiver"
 
 	var ourLD *Node
 
@@ -2623,8 +2623,8 @@ func TestGen_ToolsArchiver_LDPeerArchiveClosure(t *testing.T) {
 // TestGen_MuslPyplugin_CPNodeEmitted pins PR-35k's LD_PLUGIN wiring:
 // `contrib/libs/musl/include` declares `LD_PLUGIN(musl.py)`; `Gen`
 // must emit a CP node that copies
-// `$(SOURCE_ROOT)/contrib/libs/musl/include/musl.py` to
-// `$(BUILD_ROOT)/contrib/libs/musl/include/musl.py.pyplugin`. The CP
+// `$(S)/contrib/libs/musl/include/musl.py` to
+// `$(B)/contrib/libs/musl/include/musl.py.pyplugin`. The CP
 // node's shape is independently pinned by
 // `TestEmitCP_MuslPyplugin_ByteExact` against the reference; here we
 // only verify the walker triggers the emission.
@@ -2641,7 +2641,7 @@ func TestGen_MuslPyplugin_CPNodeEmitted(t *testing.T) {
 
 	our := Gen(TargetCfg, sourceRoot, targetDir)
 
-	const wantOutput = "$(BUILD_ROOT)/contrib/libs/musl/include/musl.py.pyplugin"
+	const wantOutput = "$(B)/contrib/libs/musl/include/musl.py.pyplugin"
 
 	var targetCP *Node
 
@@ -2685,7 +2685,7 @@ func TestGen_MuslPyplugin_CPNodeEmitted(t *testing.T) {
 		t.Errorf("CP cmd_args[2] = %q, want %q", args[2], "copy")
 	}
 
-	const wantSrc = "$(SOURCE_ROOT)/contrib/libs/musl/include/musl.py"
+	const wantSrc = "$(S)/contrib/libs/musl/include/musl.py"
 	if args[3] != wantSrc {
 		t.Errorf("CP cmd_args[3] (src) = %q, want %q", args[3], wantSrc)
 	}
@@ -2716,7 +2716,7 @@ func TestGen_ToolsArchiver_LDPluginSection(t *testing.T) {
 
 	our := Gen(TargetCfg, sourceRoot, targetDir)
 
-	const ldOutput = "$(BUILD_ROOT)/tools/archiver/archiver"
+	const ldOutput = "$(B)/tools/archiver/archiver"
 
 	var ourLD *Node
 
@@ -2761,7 +2761,7 @@ func TestGen_ToolsArchiver_LDPluginSection(t *testing.T) {
 
 	gotPlugins := cmd2[startIdx+1 : endIdx]
 
-	wantPlugins := []string{"$(BUILD_ROOT)/contrib/libs/musl/include/musl.py.pyplugin"}
+	wantPlugins := []string{"$(B)/contrib/libs/musl/include/musl.py.pyplugin"}
 
 	if len(gotPlugins) != len(wantPlugins) {
 		t.Fatalf("plugin section: got %d entries, want %d (entries: %v)", len(gotPlugins), len(wantPlugins), gotPlugins)
@@ -2827,7 +2827,7 @@ func TestGen_MuslPyplugin_HostCPDedup(t *testing.T) {
 
 	our := Gen(TargetCfg, sourceRoot, targetDir)
 
-	const pluginOutput = "$(BUILD_ROOT)/contrib/libs/musl/include/musl.py.pyplugin"
+	const pluginOutput = "$(B)/contrib/libs/musl/include/musl.py.pyplugin"
 
 	cpNodes := []*Node{}
 
@@ -2957,7 +2957,7 @@ func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 	// The per-source CFLAGS slot the composer places between
 	// macroPrefixMapFlags and the input path: -DSSE41_STUB must
 	// appear immediately before the source path at the tail.
-	wantInput := "$(SOURCE_ROOT)/mod/foo.cpp"
+	wantInput := "$(S)/mod/foo.cpp"
 
 	if args[len(args)-1] != wantInput {
 		t.Errorf("last cmd_arg = %q, want %q", args[len(args)-1], wantInput)
@@ -3009,7 +3009,7 @@ func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 		t.Fatalf("CC outputs = %#v, want exactly 1", cc.Outputs)
 	}
 	// FLAT output path: no `_/` infix.
-	wantOut := "$(BUILD_ROOT)/mod/system/compiler.cpp.o"
+	wantOut := "$(B)/mod/system/compiler.cpp.o"
 
 	if cc.Outputs[0].String() != wantOut {
 		t.Errorf("CC output = %q, want %q (SRC_C_NO_LTO uses flat output, not `mod/_/system/compiler.cpp.o`)", cc.Outputs[0].String(), wantOut)
@@ -3018,7 +3018,7 @@ func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 	// is the standard macro-prefix-map (NOT a per-source -D flag).
 	args := cc.Cmds[0].CmdArgs
 
-	if args[len(args)-1] != "$(SOURCE_ROOT)/mod/system/compiler.cpp" {
+	if args[len(args)-1] != "$(S)/mod/system/compiler.cpp" {
 		t.Errorf("last cmd_arg = %q, want input path", args[len(args)-1])
 	}
 
@@ -3063,7 +3063,7 @@ func TestGen_SRC_FlatOutputPath(t *testing.T) {
 		t.Fatal("no CC node emitted for SRC(sub/x.cpp)")
 	}
 
-	wantOut := "$(BUILD_ROOT)/mod/sub/x.cpp.o"
+	wantOut := "$(B)/mod/sub/x.cpp.o"
 
 	if len(cc.Outputs) != 1 || cc.Outputs[0].String() != wantOut {
 		t.Errorf("CC output = %#v, want [%q] (SRC uses flat output, not `mod/_/sub/x.cpp.o`)", cc.Outputs, wantOut)
@@ -3119,7 +3119,7 @@ func TestEvalCond_ARCH_ARM64_Aliased(t *testing.T) {
 // the AR's `inputs` slot does NOT include the BUILD_ROOT-staged
 // joined-cpp shim that the JS step produces. Reference graph
 // behaviour: util's `libyutil.a` lists `all_datetime.cpp.o` (the
-// compiled object) but NEVER `$(BUILD_ROOT)/util/all_datetime.cpp`
+// compiled object) but NEVER `$(B)/util/all_datetime.cpp`
 // (the joined cpp source itself). Pre-PR-35y, our walker added this
 // path to the AR aggregator, leaving 16 OUR-only entries on util's
 // libyutil.a (15 JOIN_SRCS + 1 .rl6.cpp shim).
@@ -3150,7 +3150,7 @@ END()
 		t.Fatal("no AR node emitted")
 	}
 
-	const forbidden = "$(BUILD_ROOT)/joinmod/all_my.cpp"
+	const forbidden = "$(B)/joinmod/all_my.cpp"
 
 	for _, in := range arNode.Inputs {
 		if in.String() == forbidden {
@@ -3162,8 +3162,8 @@ END()
 	// the AR's inputs — they are the JS member sources, not the
 	// generated cpp shim, and the reference graph carries them.
 	wantSources := map[string]bool{
-		"$(SOURCE_ROOT)/joinmod/src1.cpp": false,
-		"$(SOURCE_ROOT)/joinmod/src2.cpp": false,
+		"$(S)/joinmod/src1.cpp": false,
+		"$(S)/joinmod/src2.cpp": false,
 	}
 	for _, in := range arNode.Inputs {
 		if _, want := wantSources[in.String()]; want {
@@ -3183,7 +3183,7 @@ END()
 // `.rl6` source AND its `.h` companion (when present), but NOT the
 // BUILD_ROOT-staged generated `.rl6.cpp` shim. Reference graph
 // behaviour for util: `libyutil.a` lists `parser.rl6` and
-// `parser.h` but never `$(BUILD_ROOT)/util/_/datetime/parser.rl6.cpp`.
+// `parser.h` but never `$(B)/util/_/datetime/parser.rl6.cpp`.
 func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	root := t.TempDir()
 	consumerDir := filepath.Join(root, "consumer")
@@ -3214,7 +3214,7 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 		t.Fatal("no consumer AR node emitted")
 	}
 
-	const forbidden = "$(BUILD_ROOT)/consumer/_/parser.rl6.cpp"
+	const forbidden = "$(B)/consumer/_/parser.rl6.cpp"
 
 	for _, in := range arNode.Inputs {
 		if in.String() == forbidden {
@@ -3223,8 +3223,8 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	}
 
 	wantSources := map[string]bool{
-		"$(SOURCE_ROOT)/consumer/parser.rl6": false,
-		"$(SOURCE_ROOT)/consumer/parser.h":   false,
+		"$(S)/consumer/parser.rl6": false,
+		"$(S)/consumer/parser.h":   false,
 	}
 	for _, in := range arNode.Inputs {
 		if _, want := wantSources[in.String()]; want {
@@ -3297,8 +3297,8 @@ END()
 	}
 
 	const (
-		regularSrc = "$(SOURCE_ROOT)/globalmod/regular.cpp"
-		globalSrc  = "$(SOURCE_ROOT)/globalmod/global.cpp"
+		regularSrc = "$(S)/globalmod/regular.cpp"
+		globalSrc  = "$(S)/globalmod/global.cpp"
 	)
 
 	if !regularInputs[regularSrc] {
@@ -3322,8 +3322,8 @@ END()
 // declares SRCDIR and a `.S` source resolves under that SRCDIR
 // (because no local file exists at instance.Path/<srcRel>), the AR
 // aggregator's view of the source path uses the SRCDIR-rebased
-// shape `$(SOURCE_ROOT)/<srcDir>/<srcRel>`, not the unrebased
-// `$(SOURCE_ROOT)/<instance.Path>/<srcRel>`. Empirical reference:
+// shape `$(S)/<srcDir>/<srcRel>`, not the unrebased
+// `$(S)/<instance.Path>/<srcRel>`. Empirical reference:
 // tcmalloc/no_percpu_cache (SRCDIR=`contrib/libs/tcmalloc`) — its
 // `tcmalloc/internal/percpu_rseq_asm.S` resolves at
 // `contrib/libs/tcmalloc/tcmalloc/internal/percpu_rseq_asm.S` in
@@ -3367,8 +3367,8 @@ END()
 		t.Fatal("no AR node emitted for mod/inner")
 	}
 
-	const want = "$(SOURCE_ROOT)/mod/sub/foo.S"
-	const forbidden = "$(SOURCE_ROOT)/mod/inner/sub/foo.S"
+	const want = "$(S)/mod/sub/foo.S"
+	const forbidden = "$(S)/mod/inner/sub/foo.S"
 
 	for _, in := range arNode.Inputs {
 		if in.String() == forbidden {

@@ -9,7 +9,7 @@ import (
 // reference graph for contrib/libs/cxxsupp/builtins/aarch64/chkstk.S.
 //
 // The reference node is located by its output path
-// ("$(BUILD_ROOT)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o")
+// ("$(B)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o")
 // in /home/pg/monorepo/yatool_orig/sg.json. If the file is absent the
 // test is skipped (per STYLE.md filter pattern), not failed.
 //
@@ -20,7 +20,7 @@ import (
 
 // referenceASOutput is the output path used to locate the target AS node
 // in the reference graph.
-const referenceASOutput = "$(BUILD_ROOT)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
+const referenceASOutput = "$(B)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
 
 // builtinsASOwnAddIncl is the own-ADDINCL slice cxxsupp/builtins
 // declares in its ya.make (the four musl-arch paths added under
@@ -45,7 +45,7 @@ var builtinsASOwnAddIncl = []string{
 func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 	e := NewBufferedEmitter()
 	_, outPath := EmitAS(targetInstance("some/module"), "flat.S", ModuleCCInputs{}, nil, e)
-	want := "$(BUILD_ROOT)/some/module/flat.S.o"
+	want := "$(B)/some/module/flat.S.o"
 
 	if outPath.String() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
@@ -56,7 +56,7 @@ func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 	e := NewBufferedEmitter()
 	_, outPath := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", ModuleCCInputs{}, nil, e)
-	want := "$(BUILD_ROOT)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
+	want := "$(B)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
 
 	if outPath.String() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
@@ -79,7 +79,7 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 		nil,
 		e,
 	)
-	want := "$(BUILD_ROOT)/contrib/libs/tcmalloc/no_percpu_cache/__/tcmalloc/internal/percpu_rseq_asm.S.o"
+	want := "$(B)/contrib/libs/tcmalloc/no_percpu_cache/__/tcmalloc/internal/percpu_rseq_asm.S.o"
 
 	if outPath.String() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
@@ -94,7 +94,7 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 // pins the full cmd_args bundle and output path for
 // tcmalloc/no_percpu_cache/__/tcmalloc/internal/percpu_rseq_asm.S.o.
 // This module uses SRCDIR(contrib/libs/tcmalloc) (ancestor), so the
-// output infix is __/ and the input comes from $(SOURCE_ROOT)/contrib/libs/tcmalloc/...
+// output infix is __/ and the input comes from $(S)/contrib/libs/tcmalloc/...
 // TestEmitAS_YasmLD_PopulatesDepRefs verifies that when yasmLD is non-nil,
 // EmitAS wires it into both DepRefs and ForeignDepRefs["tool"] (PR-30 D02).
 // The L0 fingerprint reads only deps; the foreign-deps-only shape diverged
@@ -108,7 +108,7 @@ func TestEmitAS_YasmLD_PopulatesDepRefs(t *testing.T) {
 		Cmds:         []Cmd{{CmdArgs: []string{"yasm"}, Env: map[string]string{}}},
 		Env:          map[string]string{},
 		Inputs:       ToVFSSlice([]string{}),
-		Outputs:      ToVFSSlice([]string{"$(BUILD_ROOT)/tools/yasm/yasm"}),
+		Outputs:      ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
 		KV:           map[string]string{"p": "LD", "pc": "light-cyan"},
 		Tags:         []string{"tool"},
 		Platform:     string(PlatformDefaultLinuxX8664),
@@ -165,7 +165,7 @@ func TestEmitAS_KV(t *testing.T) {
 
 // TestEmitAS_MuslHost_Ceill_ByteExact (PR-35a) pins the cmd_args bundle
 // for a host x86_64 musl-self assembly node against the reference graph
-// (`$(BUILD_ROOT)/contrib/libs/musl/_/src/math/x86_64/ceill.s.o`). Total
+// (`$(B)/contrib/libs/musl/_/src/math/x86_64/ceill.s.o`). Total
 // 109 args: x86_64 toolchain + hostCFlags / hostDefines / muslExtraDefines
 // + ndebugPicBlock × 2 with hostSseFeatures between + the tail
 // muslCcIncludesX8664 set. Verifies that:
@@ -176,13 +176,13 @@ func TestEmitAS_KV(t *testing.T) {
 //   - host_platform=true and tags=["tool"].
 // TestEmitAS_HostNonMusl_X8664Chkstk_ByteExact (PR-35a / PR-35m closure)
 // pins the full cmd_args bundle for a host x86_64 non-musl AS node
-// (`$(BUILD_ROOT)/contrib/libs/cxxsupp/builtins/_/x86_64/chkstk.S.o`)
+// (`$(B)/contrib/libs/cxxsupp/builtins/_/x86_64/chkstk.S.o`)
 // against the reference. PR-35m retired the prologue-only bound by
 // threading the include-tail (own AddIncl: musl-arch×4 x86_64 + linux-
 // headers via prefix/suffix) through ModuleCCInputs.
 // TestEmitAS_UtilContext_ByteExact (PR-35i / PR-33-C2_06 closure;
 // PR-35m generic threading) pins the cmd_args bundle for util's only
-// AS node (`$(BUILD_ROOT)/util/_/system/context_aarch64.S.o`) against
+// AS node (`$(B)/util/_/system/context_aarch64.S.o`) against
 // the reference graph. Total 106 args. util declares no
 // `NO_COMPILER_WARNINGS()` macro, so the warning bundle is the full
 // `-Werror`/`-Wall`/`-Wextra` set (NOT `-Wno-everything`); util's own
@@ -207,7 +207,7 @@ func TestEmitAS_KV(t *testing.T) {
 // `-D_musl_`). The util-specific path-sniff stopgap is retired.
 // TestEmitAS_AsmlibYasm_Cachesize_ByteExact (PR-35q) pins the yasm-
 // toolchain shape for asmlib's host-PIC `.asm` AS nodes against the
-// reference graph (`$(BUILD_ROOT)/contrib/libs/asmlib/cachesize64.pic.o`).
+// reference graph (`$(B)/contrib/libs/asmlib/cachesize64.pic.o`).
 //
 // Verifies the four shape divergences from the clang AS path:
 //
@@ -216,7 +216,7 @@ func TestEmitAS_KV(t *testing.T) {
 //   - cmd_args is the 18-arg yasm invocation (NOT a 94/98/106/109-arg
 //     clang AS bundle).
 //   - Cwd is empty (the reference omits the `cwd` field for all 25
-//     asmlib yasm AS nodes; PR-35q must not set `Cwd: $(BUILD_ROOT)`).
+//     asmlib yasm AS nodes; PR-35q must not set `Cwd: $(B)`).
 //   - Env is `ARCADIA_ROOT_DISTBUILD` + `YASM_TEST_SUITE` (no
 //     `DYLD_LIBRARY_PATH`).
 //
@@ -232,7 +232,7 @@ func TestEmitAS_KV(t *testing.T) {
 func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
 	e := NewBufferedEmitter()
 	_, outPath := EmitAS(hostInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, e)
-	want := "$(BUILD_ROOT)/contrib/libs/asmlib/memset64.pic.o"
+	want := "$(B)/contrib/libs/asmlib/memset64.pic.o"
 
 	if outPath.String() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
@@ -243,7 +243,7 @@ func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
 // the yasm branch fires ONLY for host-PIC asmlib invocations. A
 // hypothetical target-side asmlib AS (PIC=false) must take the clang
 // AS path — the `_/<srcRel>.o` output, the clang cmd_args bundle, the
-// `Cwd: $(BUILD_ROOT)`. The asmlib reference graph contains no such
+// `Cwd: $(B)`. The asmlib reference graph contains no such
 // target-side node (asmlib is host-only by construction), but
 // defending the predicate against PIC=false is the cheapest way to
 // guarantee the branch never accidentally hijacks a future target AS
@@ -255,7 +255,7 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoYasmBranch(t *testing.T) {
 	_, outPath := EmitAS(targetInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, e)
 	// PR-35r: flat srcRel → flat output path (no _/ infix). memset64.asm
 	// has no "/" so the clang AS path emits a flat output.
-	wantClangPath := "$(BUILD_ROOT)/contrib/libs/asmlib/memset64.asm.o"
+	wantClangPath := "$(B)/contrib/libs/asmlib/memset64.asm.o"
 
 	if outPath.String() != wantClangPath {
 		t.Errorf("outPath = %q, want %q (clang AS path; yasm branch must not fire for target-side)", outPath, wantClangPath)
@@ -269,7 +269,7 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoYasmBranch(t *testing.T) {
 
 	// Clang path sets Cwd; yasm path leaves it empty. A non-empty Cwd
 	// confirms the clang branch ran.
-	if got.Cmds[0].Cwd != "$(BUILD_ROOT)" {
-		t.Errorf("Cmds[0].Cwd = %q, want $(BUILD_ROOT) (clang AS path)", got.Cmds[0].Cwd)
+	if got.Cmds[0].Cwd != "$(B)" {
+		t.Errorf("Cmds[0].Cwd = %q, want $(B) (clang AS path)", got.Cmds[0].Cwd)
 	}
 }
