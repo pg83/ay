@@ -5989,7 +5989,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// can compose own/peer ADDINCL, own non-GLOBAL CFLAGS, and
 		// auto peer CFLAGS at the same slots CC consumes them
 		// (retiring the util-specific path-sniff stopgap PR-35i added).
-		ref, outPath := EmitAS(srcInstance, srcRel, asIn, yasmRef, ctx.emit)
+		ref, outPath := EmitAS(ctx.host, ctx.platformFor(srcInstance), srcInstance, srcRel, asIn, yasmRef, ctx.emit)
 
 		// PR-35y R8: when the module declares SRCDIR and the .S
 		// source does not exist locally at instance.Path/<srcRel>,

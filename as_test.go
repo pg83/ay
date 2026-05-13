@@ -91,7 +91,7 @@ func TestEmitAS_CxxsuppBuiltinsChkstk_ByteExact(t *testing.T) {
 		AddIncl:       builtinsASOwnAddIncl,
 		IncludeInputs: chkstkIncludeInputs,
 	}
-	_, outPath := EmitAS(chkstkInstance, "aarch64/chkstk.S", chkstkIn, nil, emit)
+	_, outPath := EmitAS(testHostP, testTargetP, chkstkInstance, "aarch64/chkstk.S", chkstkIn, nil, emit)
 
 	if outPath != referenceASOutput {
 		t.Errorf("outPath = %q, want %q", outPath, referenceASOutput)
@@ -177,7 +177,7 @@ func TestEmitAS_CxxsuppBuiltinsChkstk_ByteExact(t *testing.T) {
 // Empirical reference: contrib/libs/asmglibc/memchr.S.o (flat, no _/).
 func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitAS(targetInstance("some/module"), "flat.S", ModuleCCInputs{}, nil, e)
+	_, outPath := EmitAS(testHostP, testTargetP, targetInstance("some/module"), "flat.S", ModuleCCInputs{}, nil, e)
 	want := "$(BUILD_ROOT)/some/module/flat.S.o"
 
 	if outPath != want {
@@ -188,7 +188,7 @@ func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 // TestEmitAS_OutputPath_NestedSrc verifies the nested-source output path.
 func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", ModuleCCInputs{}, nil, e)
+	_, outPath := EmitAS(testHostP, testTargetP, targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", ModuleCCInputs{}, nil, e)
 	want := "$(BUILD_ROOT)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
 
 	if outPath != want {
@@ -206,6 +206,7 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 	// Expected: __/tcmalloc/internal/percpu_rseq_asm.S.o
 	in := ModuleCCInputs{SrcDir: "contrib/libs/tcmalloc"}
 	_, outPath := EmitAS(
+		testHostP, testTargetP,
 		targetInstance("contrib/libs/tcmalloc/no_percpu_cache"),
 		"tcmalloc/internal/percpu_rseq_asm.S",
 		in,
@@ -261,7 +262,7 @@ func TestEmitAS_AsmgLibc_Memchr_ByteExact(t *testing.T) {
 			"$(SOURCE_ROOT)/contrib/libs/asmglibc/sysdep.h",
 		},
 	}
-	_, outPath := EmitAS(asmglibcInst, "memchr.S", asmglibcIn, nil, emit)
+	_, outPath := EmitAS(testHostP, testHostP, asmglibcInst, "memchr.S", asmglibcIn, nil, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)
@@ -357,7 +358,7 @@ func TestEmitAS_TcmallocNopercpu_PercpuRseqAsm_ByteExact(t *testing.T) {
 		},
 		IncludeInputs: ref.Inputs[1:], // all but the primary source
 	}
-	_, outPath := EmitAS(tcmallocInst, "tcmalloc/internal/percpu_rseq_asm.S", tcmallocIn, nil, emit)
+	_, outPath := EmitAS(testHostP, testTargetP, tcmallocInst, "tcmalloc/internal/percpu_rseq_asm.S", tcmallocIn, nil, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)
@@ -427,7 +428,7 @@ func TestEmitAS_YasmLD_PopulatesDepRefs(t *testing.T) {
 	})
 
 	yasmTestIn := ModuleCCInputs{AddIncl: builtinsASOwnAddIncl}
-	ref, _ := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", yasmTestIn, &yasmLDRef, e)
+	ref, _ := EmitAS(testHostP, testTargetP, targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", yasmTestIn, &yasmLDRef, e)
 
 	// The AS node is at index 1 (yasmLD is at index 0).
 	if len(e.nodes) != 2 {
@@ -454,7 +455,7 @@ func TestEmitAS_YasmLD_PopulatesDepRefs(t *testing.T) {
 // (p=AS, pc=light-green, no show_out) as observed in the reference graph.
 func TestEmitAS_KV(t *testing.T) {
 	e := NewBufferedEmitter()
-	EmitAS(targetInstance("some/module"), "aarch64/foo.S", ModuleCCInputs{}, nil, e)
+	EmitAS(testHostP, testTargetP, targetInstance("some/module"), "aarch64/foo.S", ModuleCCInputs{}, nil, e)
 
 	if len(e.nodes) != 1 {
 		t.Fatalf("emitter buffered %d nodes, want 1", len(e.nodes))
@@ -517,7 +518,7 @@ func TestEmitAS_MuslHost_Ceill_ByteExact(t *testing.T) {
 	// NoCompilerWarnings (only macro parsing does in the real walker).
 	ceillInstance := muslHostInstance("contrib/libs/musl")
 	ceillInstance.Flags.NoCompilerWarnings = true
-	_, outPath := EmitAS(ceillInstance, "src/math/x86_64/ceill.s", ModuleCCInputs{}, nil, emit)
+	_, outPath := EmitAS(testHostP, testHostP, ceillInstance, "src/math/x86_64/ceill.s", ModuleCCInputs{}, nil, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)
@@ -606,7 +607,7 @@ func TestEmitAS_HostNonMusl_X8664Chkstk_ByteExact(t *testing.T) {
 			"contrib/libs/musl/extra",
 		},
 	}
-	_, outPath := EmitAS(hostInst, "x86_64/chkstk.S", hostIn, nil, emit)
+	_, outPath := EmitAS(testHostP, testHostP, hostInst, "x86_64/chkstk.S", hostIn, nil, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)
@@ -738,7 +739,7 @@ func TestEmitAS_UtilContext_ByteExact(t *testing.T) {
 			"contrib/libs/libc_compat/include/readpassphrase",
 		},
 	}
-	_, outPath := EmitAS(utilInstance, "system/context_aarch64.S", utilIn, nil, emit)
+	_, outPath := EmitAS(testHostP, testTargetP, utilInstance, "system/context_aarch64.S", utilIn, nil, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)
@@ -841,7 +842,7 @@ func TestEmitAS_AsmlibYasm_Cachesize_ByteExact(t *testing.T) {
 	asmlibIn := ModuleCCInputs{
 		IncludeInputs: []string{"$(SOURCE_ROOT)/contrib/libs/asmlib/defs.asm"},
 	}
-	_, outPath := EmitAS(asmlibInstance, "cachesize64.asm", asmlibIn, &yasmLDRef, emit)
+	_, outPath := EmitAS(testHostP, testHostP, asmlibInstance, "cachesize64.asm", asmlibIn, &yasmLDRef, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)
@@ -925,7 +926,7 @@ func TestEmitAS_AsmlibYasm_Cachesize_ByteExact(t *testing.T) {
 // rule.
 func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitAS(hostInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, e)
+	_, outPath := EmitAS(testHostP, testHostP, hostInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, e)
 	want := "$(BUILD_ROOT)/contrib/libs/asmlib/memset64.pic.o"
 
 	if outPath != want {
@@ -946,7 +947,7 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoYasmBranch(t *testing.T) {
 	e := NewBufferedEmitter()
 	// PIC=false → target-side. Even though asmlibYasmModules matches
 	// instance.Path, the predicate is gated on PIC=true.
-	_, outPath := EmitAS(targetInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, e)
+	_, outPath := EmitAS(testHostP, testTargetP, targetInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, e)
 	// PR-35r: flat srcRel → flat output path (no _/ infix). memset64.asm
 	// has no "/" so the clang AS path emits a flat output.
 	wantClangPath := "$(BUILD_ROOT)/contrib/libs/asmlib/memset64.asm.o"
