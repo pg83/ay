@@ -251,7 +251,9 @@ type ModuleCCInputs struct {
 // NoCompilerWarnings selector adding/removing args inline);
 // reviewer-tracked tests pin each variant against the reference
 // graph.
-func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emitter) (NodeRef, string) {
+func EmitCC(hostP, targetP *Platform, instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emitter) (NodeRef, string) {
+	_ = hostP // PR-M3-platform-pair-step10: surfaced for signature symmetry.
+
 	suffix := ".o"
 	if instance.Flags.PIC {
 		suffix = ".pic.o"
@@ -337,13 +339,17 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 		ownCFlags = composeOwnAndPeerCFlagsAtOwnSlot(in)
 	}
 
-	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
+	// PR-M3-platform-pair-step10: compose-flavor dispatch is on
+	// targetP.Target (which toolchain to use) and instance.Flags.LibcMusl
+	// (per-MODULE musl subtree membership — NOT targetP.LibcMusl, which
+	// is the platform-wide libc selector).
+	targetX8664 := targetP.Target == PlatformDefaultLinuxX8664
 	switch {
-	case isMusl && targetIsX8664(instance):
+	case isMusl && targetX8664:
 		cmdArgs = composeMuslHostCC(outputPath, inputPath, nil, muslOwnExtras, isCxx)
 	case isMusl:
 		cmdArgs = composeMuslCC(outputPath, inputPath, nil, muslOwnExtras, isCxx)
-	case targetIsX8664(instance):
+	case targetX8664:
 		cmdArgs = composeHostCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, in.PerSourceCFlags, isCxx, instance.Flags.NoCompilerWarnings)
 	default:
 		cmdArgs = composeTargetCC(outputPath, inputPath, in.AddIncl, in.PeerAddInclGlobal, ownCFlags, ownExtras, autoPeerCFlags, peerExtras, ownGlobalBucket, in.PerSourceCFlags, isCxx, instance.Flags.NoCompilerWarnings)
@@ -380,7 +386,16 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 			"p":  "CC",
 			"pc": "green",
 		},
-		Tags: []string{},
+		// PR-M3-platform-pair-step10: tags from targetP. Empty
+		// `targetP.Tags` keeps the slice non-nil so JSON serialises
+		// as `[]`, not `null`.
+		Tags: func() []string {
+			out := []string{}
+			if len(targetP.Tags) > 0 {
+				out = append(out, targetP.Tags...)
+			}
+			return out
+		}(),
 		TargetProperties: func() map[string]string {
 			tp := map[string]string{"module_dir": instance.Path}
 			if in.ModuleTag != "" {
@@ -388,7 +403,8 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 			}
 			return tp
 		}(),
-		Platform: string(instance.Target),
+		Platform:     string(targetP.Target),
+		HostPlatform: targetP.IsHost,
 		// Numeric values are stored as float64 to match what
 		// encoding/json produces when unmarshalling the reference
 		// graph into `map[string]interface{}` (Go's default JSON-
@@ -403,15 +419,10 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 		},
 	}
 
-	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
-	if targetIsX8664(instance) {
-		// Host build: reference nodes carry `host_platform=true`
-		// and `tags=["tool"]`. The "tool" tag distinguishes host
-		// nodes that are built specifically to be invoked at
-		// build-time (per the reference graph's classification).
-		node.HostPlatform = true
-		node.Tags = []string{"tool"}
-	}
+	// PR-M3-platform-pair-step10: HostPlatform + Tags are already
+	// plumbed from targetP via the Node literal above; nothing left
+	// to do here. The legacy `if targetIsX8664(instance) { … }` block
+	// is retired.
 
 	// PR-30 D04: when `HasGenerator` is set, thread `Generator` into
 	// DepRefs so the CC node carries an explicit dep on its source-

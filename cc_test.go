@@ -78,7 +78,7 @@ func TestEmitCC_BuildCowOnLibC_ByteExact(t *testing.T) {
 	}
 
 	emit := NewBufferedEmitter()
-	_, outPath := EmitCC(targetInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, emit)
+	_, outPath := EmitCC(testHostP, testTargetP, targetInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, emit)
 
 	if outPath != "$(BUILD_ROOT)/build/cow/on/lib.c.o" {
 		t.Errorf("outPath = %q, want %q", outPath, "$(BUILD_ROOT)/build/cow/on/lib.c.o")
@@ -156,7 +156,7 @@ func TestEmitCC_BuildCowOnLibC_ByteExact(t *testing.T) {
 
 func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", ModuleCCInputs{}, e)
+	_, outPath := EmitCC(testHostP, testTargetP, targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", ModuleCCInputs{}, e)
 	want := "$(BUILD_ROOT)/contrib/libs/cxxsupp/libcxx/_/src/algorithm.cpp.o"
 
 	if outPath != want {
@@ -166,7 +166,7 @@ func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 
 func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitCC(targetInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, e)
+	_, outPath := EmitCC(testHostP, testTargetP, targetInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, e)
 	want := "$(BUILD_ROOT)/build/cow/on/lib.c.o"
 
 	if outPath != want {
@@ -205,7 +205,7 @@ func TestEmitCC_BuildCowOn_Host_ByteExact(t *testing.T) {
 	}
 
 	emit := NewBufferedEmitter()
-	_, outPath := EmitCC(hostInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, emit)
+	_, outPath := EmitCC(testHostP, testHostP, hostInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)
@@ -303,7 +303,7 @@ func TestEmitCC_MuslHost_StrlenC_ByteExact(t *testing.T) {
 	// IncludeInputs so this synthetic byte-exact test pins both the
 	// cmd_args (115) AND the input-set against sg.json.
 	muslIncludeInputs := append([]string(nil), ref.Inputs[1:]...)
-	_, outPath := EmitCC(muslHostInstance("contrib/libs/musl"), "src/string/strlen.c", ModuleCCInputs{IncludeInputs: muslIncludeInputs}, emit)
+	_, outPath := EmitCC(testHostP, testHostP, muslHostInstance("contrib/libs/musl"), "src/string/strlen.c", ModuleCCInputs{IncludeInputs: muslIncludeInputs}, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)
@@ -356,7 +356,7 @@ func TestEmitCC_MuslHost_StrlenC_ByteExact(t *testing.T) {
 func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 	emit := NewBufferedEmitter()
 	in := ModuleCCInputs{IsGenerated: true}
-	_, outPath := EmitCC(targetInstance("util"), "_/datetime/parser.rl6.cpp", in, emit)
+	_, outPath := EmitCC(testHostP, testTargetP, targetInstance("util"), "_/datetime/parser.rl6.cpp", in, emit)
 
 	wantOut := "$(BUILD_ROOT)/util/_/_/datetime/parser.rl6.cpp.o"
 
@@ -398,7 +398,7 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 			"contrib/libs/musl/extra",
 		},
 	}
-	EmitCC(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/fp_mode.c", in, emit)
+	EmitCC(testHostP, testTargetP, targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/fp_mode.c", in, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -425,7 +425,7 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 // second suppression block.
 func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 	emit := NewBufferedEmitter()
-	EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", ModuleCCInputs{}, emit)
+	EmitCC(testHostP, testTargetP, targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", ModuleCCInputs{}, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -455,7 +455,7 @@ func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 // dispatches to clang (NOT clang++) and does NOT carry `-std=c++20`.
 func TestEmitCC_CSource_UsesClang(t *testing.T) {
 	emit := NewBufferedEmitter()
-	EmitCC(targetInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, emit)
+	EmitCC(testHostP, testTargetP, targetInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -481,7 +481,7 @@ func TestEmitCC_NoCompilerWarnings_SelectsMuslWarningFlags(t *testing.T) {
 	emit := NewBufferedEmitter()
 	inst := targetInstance("contrib/libs/cxxsupp/libcxxrt")
 	inst.Flags.NoCompilerWarnings = true
-	EmitCC(inst, "exception.cc", ModuleCCInputs{}, emit)
+	EmitCC(testHostP, testTargetP, inst, "exception.cc", ModuleCCInputs{}, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -516,7 +516,7 @@ func TestEmitCC_OwnCXXFlags_SlotsAfterSuppressionBlock(t *testing.T) {
 	}
 	inst := targetInstance("contrib/libs/cxxsupp/libcxx")
 	inst.Flags.NoCompilerWarnings = true
-	EmitCC(inst, "src/algorithm.cpp", in, emit)
+	EmitCC(testHostP, testTargetP, inst, "src/algorithm.cpp", in, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -564,14 +564,14 @@ func TestEmitCC_COnlyFlags_AppliesOnlyToCSources(t *testing.T) {
 	in := ModuleCCInputs{COnlyFlags: []string{"-Wno-narrowing"}}
 
 	emitC := NewBufferedEmitter()
-	EmitCC(targetInstance("build/cow/on"), "lib.c", in, emitC)
+	EmitCC(testHostP, testTargetP, targetInstance("build/cow/on"), "lib.c", in, emitC)
 
 	if !contains(emitC.nodes[0].Cmds[0].CmdArgs, "-Wno-narrowing") {
 		t.Errorf(".c source missing CONLYFLAG -Wno-narrowing; got %v", emitC.nodes[0].Cmds[0].CmdArgs)
 	}
 
 	emitCpp := NewBufferedEmitter()
-	EmitCC(targetInstance("build/cow/on"), "lib.cpp", in, emitCpp)
+	EmitCC(testHostP, testTargetP, targetInstance("build/cow/on"), "lib.cpp", in, emitCpp)
 
 	if contains(emitCpp.nodes[0].Cmds[0].CmdArgs, "-Wno-narrowing") {
 		t.Errorf(".cpp source got CONLYFLAG -Wno-narrowing (should be CXXFlags-only); got %v", emitCpp.nodes[0].Cmds[0].CmdArgs)
@@ -649,7 +649,7 @@ func TestEmitCC_Libcxxrt_AuxhelperCc_ByteExact(t *testing.T) {
 		// pins both cmd_args AND inputs against sg.json.
 		IncludeInputs: append([]string(nil), ref.Inputs[1:]...),
 	}
-	_, outPath := EmitCC(inst, "auxhelper.cc", in, emit)
+	_, outPath := EmitCC(testHostP, testTargetP, inst, "auxhelper.cc", in, emit)
 
 	if outPath != targetOut {
 		t.Errorf("outPath = %q, want %q", outPath, targetOut)

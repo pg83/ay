@@ -520,11 +520,11 @@ func TestGen_DualInstantiation_BuildCowOn(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	tInstance := targetInstance(targetDir)
-	tCCRef, tCCOut := EmitCC(tInstance, "lib.c", ModuleCCInputs{}, e)
+	tCCRef, tCCOut := EmitCC(testHostP, testTargetP, tInstance, "lib.c", ModuleCCInputs{}, e)
 	EmitAR(testHostP, testTargetP, tInstance, []NodeRef{tCCRef}, []string{tCCOut}, nil, nil, e)
 
 	hInstance := hostInstance(targetDir)
-	hCCRef, hCCOut := EmitCC(hInstance, "lib.c", ModuleCCInputs{}, e)
+	hCCRef, hCCOut := EmitCC(testHostP, testHostP, hInstance, "lib.c", ModuleCCInputs{}, e)
 	EmitAR(testHostP, testHostP, hInstance, []NodeRef{hCCRef}, []string{hCCOut}, nil, nil, e)
 
 	if len(e.nodes) != 4 {

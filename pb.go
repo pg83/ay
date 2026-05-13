@@ -843,7 +843,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		// PR-M3-L0-codegen-deps-EV-PB: cross-codegen deps via .pb.h imports.
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, co.genRef)
 
-		ccRef, ccOut := EmitCC(instance, co.srcRel, ccIn, ctx.emit)
+		ccRef, ccOut := EmitCC(ctx.host, ctx.platformFor(instance), instance, co.srcRel, ccIn, ctx.emit)
 		ccRefs = append(ccRefs, ccRef)
 		ccOutputs = append(ccOutputs, ccOut)
 
