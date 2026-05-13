@@ -855,7 +855,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		// PR-M3-L0-codegen-deps-EV-PB: cross-codegen deps via .pb.h imports.
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, co.genRef)
 
-		ccRef, ccOut := EmitCC(instance, co.srcRel, ccIn, ctx.emit)
+		ccRef, ccOut := EmitCC(instance, co.srcRel, ccIn, ctx.host, ctx.emit)
 		ccRefs = append(ccRefs, ccRef)
 		ccOutputs = append(ccOutputs, ccOut)
 
@@ -871,6 +871,6 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	// AR emission. Mirrors gen.go:3097 EmitARNamed with module_tag=cpp_proto.
 	arBaseName := ArchiveName(instance.Path)
 	archivePath := Build(instance.Path + "/" + arBaseName)
-	arRef := emitARNode(instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, nil, ctx.emit)
+	arRef := emitARNode(instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, nil, ctx.host, ctx.emit)
 	return &protoSrcsResult{ARRef: arRef, ARPath: archivePath}
 }

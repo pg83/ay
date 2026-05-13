@@ -108,6 +108,7 @@ func EmitLD(
 	peerCFlagsGlobal []string,
 	usePython3 bool,
 	wantsStrip bool,
+	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
 
@@ -196,9 +197,7 @@ func EmitLD(
 	}
 	envFull := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		// TODO: hostP.MultiarchLibPath() — currently hardcoded; requires
-		// threading hostP through Emit signatures.
-		"DYLD_LIBRARY_PATH": "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
+		"DYLD_LIBRARY_PATH":      hostP.MultiarchLibPath(),
 	}
 
 	cmds := []Cmd{

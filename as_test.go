@@ -44,7 +44,7 @@ var builtinsASOwnAddIncl = []string{
 // Empirical reference: contrib/libs/asmglibc/memchr.S.o (flat, no _/).
 func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitAS(targetInstance("some/module"), "flat.S", ModuleCCInputs{}, nil, e)
+	_, outPath := EmitAS(targetInstance("some/module"), "flat.S", ModuleCCInputs{}, nil, testHostP, e)
 	want := "$(B)/some/module/flat.S.o"
 
 	if outPath.String() != want {
@@ -55,7 +55,7 @@ func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 // TestEmitAS_OutputPath_NestedSrc verifies the nested-source output path.
 func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", ModuleCCInputs{}, nil, e)
+	_, outPath := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", ModuleCCInputs{}, nil, testHostP, e)
 	want := "$(B)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
 
 	if outPath.String() != want {
@@ -77,6 +77,7 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 		"tcmalloc/internal/percpu_rseq_asm.S",
 		in,
 		nil,
+		testHostP,
 		e,
 	)
 	want := "$(B)/contrib/libs/tcmalloc/no_percpu_cache/__/tcmalloc/internal/percpu_rseq_asm.S.o"
@@ -119,7 +120,7 @@ func TestEmitAS_YasmLD_PopulatesDepRefs(t *testing.T) {
 	})
 
 	yasmTestIn := ModuleCCInputs{AddIncl: builtinsASOwnAddIncl}
-	ref, _ := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", yasmTestIn, &yasmLDRef, e)
+	ref, _ := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", yasmTestIn, &yasmLDRef, testHostP, e)
 
 	// The AS node is at index 1 (yasmLD is at index 0).
 	if len(e.nodes) != 2 {
@@ -146,7 +147,7 @@ func TestEmitAS_YasmLD_PopulatesDepRefs(t *testing.T) {
 // (p=AS, pc=light-green, no show_out) as observed in the reference graph.
 func TestEmitAS_KV(t *testing.T) {
 	e := NewBufferedEmitter()
-	EmitAS(targetInstance("some/module"), "aarch64/foo.S", ModuleCCInputs{}, nil, e)
+	EmitAS(targetInstance("some/module"), "aarch64/foo.S", ModuleCCInputs{}, nil, testHostP, e)
 
 	if len(e.nodes) != 1 {
 		t.Fatalf("emitter buffered %d nodes, want 1", len(e.nodes))
@@ -231,7 +232,7 @@ func TestEmitAS_KV(t *testing.T) {
 // rule.
 func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitAS(hostInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, e)
+	_, outPath := EmitAS(hostInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, testHostP, e)
 	want := "$(B)/contrib/libs/asmlib/memset64.pic.o"
 
 	if outPath.String() != want {
@@ -252,7 +253,7 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoYasmBranch(t *testing.T) {
 	e := NewBufferedEmitter()
 	// PIC=false → target-side. Even though asmlibYasmModules matches
 	// instance.Path, the predicate is gated on PIC=true.
-	_, outPath := EmitAS(targetInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, e)
+	_, outPath := EmitAS(targetInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, testHostP, e)
 	// PR-35r: flat srcRel → flat output path (no _/ infix). memset64.asm
 	// has no "/" so the clang AS path emits a flat output.
 	wantClangPath := "$(B)/contrib/libs/asmlib/memset64.asm.o"

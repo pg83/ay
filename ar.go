@@ -139,6 +139,7 @@ func emitARNode(
 	peerArchiveRefs []NodeRef,
 	memberInputs []VFS,
 	arPluginPath *VFS,
+	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
 	scriptVFS := Source("build/scripts/link_lib.py")
@@ -147,9 +148,7 @@ func emitARNode(
 	// downstream mutation of one map can't leak into the other.
 	cmdEnv := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		// TODO: hostP.MultiarchLibPath() — currently hardcoded; requires
-// threading hostP through Emit signatures.
-"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
+		"DYLD_LIBRARY_PATH":      hostP.MultiarchLibPath(),
 	}
 
 	// Build the cmd_args list: fixed prefix, then the archive output
@@ -236,9 +235,7 @@ func emitARNode(
 	// downstream mutation of one map can't leak into the other.
 	topEnv := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		// TODO: hostP.MultiarchLibPath() — currently hardcoded; requires
-// threading hostP through Emit signatures.
-"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
+		"DYLD_LIBRARY_PATH":      hostP.MultiarchLibPath(),
 	}
 
 	targetProperties := map[string]string{
@@ -331,6 +328,7 @@ func EmitAR(
 	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
 	memberInputs []VFS,
+	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
@@ -339,7 +337,7 @@ func EmitAR(
 
 	archivePath := Build(instance.Path + "/" + ArchiveName(instance.Path))
 
-	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, nil, emit)
+	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, nil, hostP, emit)
 }
 
 // EmitARNamed emits an AR node using an explicitly supplied archive
@@ -361,6 +359,7 @@ func EmitARNamed(
 	peerArchiveRefs []NodeRef,
 	memberInputs []VFS,
 	arPluginPath *VFS,
+	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
@@ -369,7 +368,7 @@ func EmitARNamed(
 
 	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
-	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, emit)
+	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, hostP, emit)
 }
 
 // EmitARNamedTagged is like EmitARNamed but stamps an explicit
@@ -386,6 +385,7 @@ func EmitARNamedTagged(
 	peerArchiveRefs []NodeRef,
 	memberInputs []VFS,
 	arPluginPath *VFS,
+	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
@@ -394,7 +394,7 @@ func EmitARNamedTagged(
 
 	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
-	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, emit)
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, hostP, emit)
 }
 
 // EmitARGlobalNamedTagged is like EmitARGlobalNamed but uses an
@@ -409,6 +409,7 @@ func EmitARGlobalNamedTagged(
 	objRefs []NodeRef,
 	objPaths []VFS,
 	memberInputs []VFS,
+	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
@@ -417,6 +418,6 @@ func EmitARGlobalNamedTagged(
 
 	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
-	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, memberInputs, nil, emit)
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, memberInputs, nil, hostP, emit)
 }
 

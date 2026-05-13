@@ -1163,7 +1163,7 @@ func emitJVDownstreamCPCC(
 		// devtools/ymake/lang/TConfLexer.g4.cpp.o cmd_args index 144..145).
 		ccIn.PerSourceCFlags = []string{"-Wno-unused-variable"}
 
-		ccRef, ccOut := EmitCC(instance, g4CppRel, ccIn, ctx.emit)
+		ccRef, ccOut := EmitCC(instance, g4CppRel, ccIn, ctx.host, ctx.emit)
 
 		// AR memberInputs: SOURCE_ROOT closure entries only (no BUILD_ROOT).
 		// PR-M3-final-codegen-registry-expansion: fs_tools.py and
@@ -1669,7 +1669,7 @@ func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string
 		ccIn.ExtraDepRefs = append(append([]NodeRef(nil), depRefs...), extra...)
 	}
 
-	ref, outPath := EmitCC(instance, cppRel, ccIn, ctx.emit)
+	ref, outPath := EmitCC(instance, cppRel, ccIn, ctx.host, ctx.emit)
 
 	// AR member-inputs: only the SOURCE_ROOT-rooted closure entries.
 	// PR-35y R7 / PR-M3-codegen-cc-enqueue: the AR aggregator excludes
