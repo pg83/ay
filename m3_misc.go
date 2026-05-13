@@ -149,6 +149,7 @@ const python3Path = "/ix/realm/pg/bin/python3"
 // Inputs: [grammar.g4, stdout2stderr.py, antlr4.jar]
 // cwd: $(BUILD_ROOT)/<modulePath>
 func EmitJV(
+	hostP, targetP *Platform,
 	instance ModuleInstance,
 	grammar string,
 	options []string,
@@ -156,6 +157,7 @@ func EmitJV(
 	listener bool,
 	emit Emitter,
 ) NodeRef {
+	_ = hostP // PR-M3-platform-pair-step6: surfaced for signature symmetry.
 	grammarAbs := "$(SOURCE_ROOT)/" + instance.Path + "/" + grammar
 	outDir := "$(BUILD_ROOT)/" + instance.Path
 
@@ -221,7 +223,8 @@ func EmitJV(
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform: string(instance.Target),
+		Platform:     string(targetP.Target),
+		HostPlatform: targetP.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -246,6 +249,7 @@ func EmitJV(
 //
 //	CmdParserVisitor.h, CmdParserBaseVisitor.h
 func EmitJVSplit(
+	hostP, targetP *Platform,
 	instance ModuleInstance,
 	lexer string,
 	parser string,
@@ -253,6 +257,7 @@ func EmitJVSplit(
 	listener bool,
 	emit Emitter,
 ) NodeRef {
+	_ = hostP // PR-M3-platform-pair-step6: surfaced for signature symmetry.
 	lexerAbs := "$(SOURCE_ROOT)/" + instance.Path + "/" + lexer
 	parserAbs := "$(SOURCE_ROOT)/" + instance.Path + "/" + parser
 	outDir := "$(BUILD_ROOT)/" + instance.Path
@@ -322,7 +327,8 @@ func EmitJVSplit(
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform: string(instance.Target),
+		Platform:     string(targetP.Target),
+		HostPlatform: targetP.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -363,11 +369,13 @@ const buildTypeDebug = "BUILD_TYPE=DEBUG"
 //
 // Returns (CF NodeRef, outputPath).
 func EmitCF(
+	hostP, targetP *Platform,
 	instance ModuleInstance,
 	srcRel string,
 	in ModuleCCInputs,
 	emit Emitter,
 ) (NodeRef, string) {
+	_ = hostP // PR-M3-platform-pair-step6: surfaced for signature symmetry.
 	srcAbs := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
 	// Strip .in suffix to get output path.
 	outRel := strings.TrimSuffix(srcRel, ".in")
@@ -418,7 +426,8 @@ func EmitCF(
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform: string(instance.Target),
+		Platform:     string(targetP.Target),
+		HostPlatform: targetP.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -531,11 +540,13 @@ const buildInfoGenPyPath = "$(SOURCE_ROOT)/build/scripts/build_info_gen.py"
 // inputs: [yield_line.py, xargs.py, build_info_gen.py]
 // outputs: [$(BUILD_ROOT)/<modulePath>/<outputHeader>]
 func EmitBI(
+	hostP, targetP *Platform,
 	instance ModuleInstance,
 	outputHeader string,
 	cxxFlags []string,
 	emit Emitter,
 ) NodeRef {
+	_ = hostP // PR-M3-platform-pair-step6: surfaced for signature symmetry.
 	argsFile := "$(BUILD_ROOT)/" + instance.Path + "/__args"
 	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + outputHeader
 
@@ -600,7 +611,8 @@ func EmitBI(
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform: string(instance.Target),
+		Platform:     string(targetP.Target),
+		HostPlatform: targetP.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -621,7 +633,10 @@ func EmitBI(
 // noLibcUndebugBlock prefix carries `-mno-outline-atomics` between
 // `-UNDEBUG` and the warning suppressions tail (matches REF
 // library/cpp/build_info/buildinfo_data.h on default-linux-aarch64).
-func biFlagsForInstance(instance ModuleInstance) []string {
+//
+// PR-M3-platform-pair-step6: dispatches on `targetP.Target` (aarch64-
+// specific codegen flag, not host/target axis).
+func biFlagsForInstance(targetP *Platform) []string {
 	flags := make([]string, 0, 100)
 	flags = append(flags, debugPrefixMapFlags...)
 	flags = append(flags, xclangDebugCompilationDir...)
@@ -629,14 +644,14 @@ func biFlagsForInstance(instance ModuleInstance) []string {
 	flags = append(flags, warningFlags...)
 	flags = append(flags, commonDefines...)
 	flags = append(flags, "-UNDEBUG")
-	if !targetIsX8664(instance) {
+	if targetP.Target == PlatformDefaultLinuxAArch64 {
 		flags = append(flags, "-mno-outline-atomics")
 	}
 	flags = append(flags, noLibcWarningSuppressions...)
 	flags = append(flags, catboostOpenSourceDefine...)
 	flags = append(flags, "-D_musl_")
 	flags = append(flags, "-UNDEBUG")
-	if !targetIsX8664(instance) {
+	if targetP.Target == PlatformDefaultLinuxAArch64 {
 		flags = append(flags, "-mno-outline-atomics")
 	}
 	flags = append(flags, noLibcWarningSuppressions...)
@@ -877,7 +892,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 	// JV: emit one node per ANTLR4 grammar declaration.
 	for _, g := range d.antlr4Grammars {
 		if g.IsSplit {
-			jvRef := EmitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ctx.emit)
+			jvRef := EmitJVSplit(ctx.host, ctx.platformFor(instance), instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ctx.emit)
 			// F-7-B: register the .h outputs. ANTLR4-generated headers include
 			// antlr4-runtime.h (XPathLexer.h pattern in
 			// contrib/libs/antlr4_cpp_runtime/src/tree/xpath/XPathLexer.h).
@@ -936,7 +951,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 				memberInputsList = append(memberInputsList, inputs...)
 			}
 		} else {
-			jvRef := EmitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ctx.emit)
+			jvRef := EmitJV(ctx.host, ctx.platformFor(instance), instance, g.Grammar, g.Options, g.Visitor, g.Listener, ctx.emit)
 			// F-7-B: register .h outputs.
 			// PR-M3-final-codegen-registry-expansion: same witness set as
 			// the split path (antlr.jar + stdout2stderr.py + .g4 source +
@@ -995,7 +1010,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 
 	// BI: emit one node when CREATE_BUILDINFO_FOR was declared.
 	if d.createBuildInfoFor != "" {
-		biRef := EmitBI(instance, d.createBuildInfoFor, biFlagsForInstance(instance), ctx.emit)
+		biRef := EmitBI(ctx.host, ctx.platformFor(instance), instance, d.createBuildInfoFor, biFlagsForInstance(ctx.platformFor(instance)), ctx.emit)
 		// F-7-B: register BI output. buildinfo_data.h is a generated header.
 		// PR-M3-final-codegen-registry-expansion: the BI-script trio
 		// (build_info_gen.py + xargs.py + yield_line.py) flows up into
@@ -1682,7 +1697,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	}
 	in.IncludeInputs = walkClosure(ctx, instance, resolveSourceVFS(ctx, instance, cf.Src, in.SrcDir), in)
 
-	_, cfOut := EmitCF(instance, cf.Src, in, ctx.emit)
+	_, cfOut := EmitCF(ctx.host, ctx.platformFor(instance), instance, cf.Src, in, ctx.emit)
 
 	// F-7-B: register the explicit CF output with EmitsIncludes.
 	if reg != nil {
