@@ -1838,6 +1838,21 @@ func isPyLibraryType(name string) bool {
 	return false
 }
 
+// isPROGRAMForMuslDef reports whether the module type behaves as a
+// terminal PROGRAM for the purposes of the `-D_musl_=1` ownCFlags
+// injection. PROGRAM plus PY3_PROGRAM_BIN both link a final binary via
+// EmitLD and observe the same musl-self CFLAG in the reference graph
+// (tools/py3cc/slow/py3cc cmd[1] ref:44 — `-D_musl_=1` precedes the
+// peer-GLOBAL CFLAGS block; PR-M3-final-LD-trailer-and-cflags).
+func isPROGRAMForMuslDef(name string) bool {
+	switch name {
+	case "PROGRAM", "PY3_PROGRAM_BIN":
+		return true
+	}
+
+	return false
+}
+
 // pyLibraryAutoPythonPeer returns true for Python module types whose
 // upstream definition in build/conf/python.conf auto-PEERDIRs
 // contrib/libs/python (gated by NO_PYTHON_INCLUDES). The set is a
@@ -3600,7 +3615,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// guard explicitly for clarity) and for effectively-NO_PLATFORM
 	// modules (mirror of the consumer-sentinel gate in
 	// `defaultPeerCFlags`).
-	if d.moduleStmt.Name == "PROGRAM" && cliMuslOn(ctx) && !instance.Flags.LibcMusl && !effectiveNoPlatform(instance.Flags) {
+	if isPROGRAMForMuslDef(d.moduleStmt.Name) && cliMuslOn(ctx) && !instance.Flags.LibcMusl && !effectiveNoPlatform(instance.Flags) {
 		// Copy before append: `ownCFlags = d.cFlags` aliases the
 		// underlying array, and a future caller iterating d.cFlags
 		// directly must not see the injected flag.
@@ -4266,6 +4281,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ldMemberInputs,
 			cliMuslOn(ctx),
 			ownCFlags,
+			peerCFlagsGlobal,
+			d.usePython3,
 			ctx.emit,
 		)
 		ldPath := LDOutputPath(instance, binaryName)

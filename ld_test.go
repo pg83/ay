@@ -199,8 +199,10 @@ func TestEmitLD_ToolsArchiver_ByteExact(t *testing.T) {
 		pluginRefs, archiverPluginPaths,
 		globalRefs, archiverGlobalPaths,
 		refMemberInputs,
-		true, // PR-32 D10: archiver pin runs MUSL=yes (M2 default)
-		nil,  // PR-38: moduleCFlags — nil for target PROGRAM (archiver has no own CFLAGS)
+		true,  // PR-32 D10: archiver pin runs MUSL=yes (M2 default)
+		nil,   // PR-38: moduleCFlags — nil for target PROGRAM (archiver has no own CFLAGS)
+		nil,   // PR-M3-final-LD-trailer-and-cflags: peerCFlagsGlobal — nil for archiver (no peer GLOBAL CFLAGS)
+		false, // PR-M3-final-LD-trailer-and-cflags: usePython3 — false for archiver
 		emit,
 	)
 
@@ -338,8 +340,10 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		nil, nil,
 		nil, nil,
 		nil,
-		true, // PR-32 D10: synthetic test pin runs MUSL=yes
-		nil,  // PR-38: moduleCFlags nil for synthetic target test
+		true,  // PR-32 D10: synthetic test pin runs MUSL=yes
+		nil,   // PR-38: moduleCFlags nil for synthetic target test
+		nil,   // PR-M3-final-LD-trailer-and-cflags: peerCFlagsGlobal nil
+		false, // PR-M3-final-LD-trailer-and-cflags: usePython3 false
 		emit,
 	)
 
@@ -427,8 +431,10 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		nil, nil,
 		nil, nil,
 		nil,
-		true, // PR-32 D10: host pin runs MUSL=yes (M2 default)
-		nil,  // PR-38: moduleCFlags nil for synthetic host test
+		true,  // PR-32 D10: host pin runs MUSL=yes (M2 default)
+		nil,   // PR-38: moduleCFlags nil for synthetic host test
+		nil,   // PR-M3-final-LD-trailer-and-cflags: peerCFlagsGlobal nil
+		false, // PR-M3-final-LD-trailer-and-cflags: usePython3 false
 		emit,
 	)
 
@@ -468,7 +474,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 			instance := targetInstance("test/prog")
 
 			exc := Try(func() {
-				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, nil, true, nil, e)
+				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, nil, true, nil, nil, false, e)
 			})
 
 			if exc == nil {
