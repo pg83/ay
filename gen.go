@@ -6430,7 +6430,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:    "CF",
 				OutputPath:     cfOut,
-				EmitsIncludes:  []VFS{inSourceVFS, ParseVFSOrSource(configureFilePyPath)},
+				EmitsIncludes:  []VFS{inSourceVFS, configureFilePyVFS},
 				ProducerRef:    cfRef,
 				HasProducerRef: true,
 			})
