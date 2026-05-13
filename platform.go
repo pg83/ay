@@ -150,6 +150,15 @@ func marchFor(isa ISA) string {
 	}
 }
 
+// MultiarchLibPath returns the `$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/<triple>`
+// path the reference graph embeds in DYLD_LIBRARY_PATH on every CC /
+// AR / LD / AS node. The path is the BUILD HOST's multiarch dir — the
+// machine running the build — so emitters call this on the host
+// Platform regardless of which axis the node belongs to.
+func (p *Platform) MultiarchLibPath() string {
+	return "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/" + p.Triple
+}
+
 // ParsePlatformID splits a "default-<os>-<isa>" string into its OS
 // and ISA components. Throws on a malformed input; returns the
 // recognised typed pair on success.

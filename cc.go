@@ -380,7 +380,9 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	// that mutate emitted nodes post-emit MUST clone before mutating.
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
+		// TODO: hostP.MultiarchLibPath() — currently hardcoded; requires
+// threading hostP through Emit signatures.
+"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
 	}
 
 	// PR-31 D09: prepend the resolved transitive header set to

@@ -147,7 +147,9 @@ func emitARNode(
 	// downstream mutation of one map can't leak into the other.
 	cmdEnv := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
+		// TODO: hostP.MultiarchLibPath() — currently hardcoded; requires
+// threading hostP through Emit signatures.
+"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
 	}
 
 	// Build the cmd_args list: fixed prefix, then the archive output
@@ -234,7 +236,9 @@ func emitARNode(
 	// downstream mutation of one map can't leak into the other.
 	topEnv := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
+		// TODO: hostP.MultiarchLibPath() — currently hardcoded; requires
+// threading hostP through Emit signatures.
+"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
 	}
 
 	targetProperties := map[string]string{
