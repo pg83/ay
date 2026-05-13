@@ -190,6 +190,19 @@ type moduleEmitResult struct {
 	// the tool-injected header closure (e.g. struct2fieldcalc's
 	// `library/cpp/fieldcalc/field_calc_int.h` chain into autoarray.h).
 	InducedDeps []string
+	// Peerdirs is the post-collect effective peer list for this module
+	// (user-declared PEERDIRs after the auto-injection of contrib/libs/python
+	// for PY*_LIBRARY families, etc.). PR-M3-symbols-module-abseil-addincl:
+	// applyBackPeerAddIncl reads this to compute the back-peer registry
+	// — when a module P PEERDIRs a module M, M is a back-peer-child of P
+	// and inherits P's AddInclGlobal closure (filtered to non-language-default).
+	// SOURCE_ROOT-relative paths.
+	Peerdirs []string
+	// ModuleStmtName records the module declaration name (PY23_LIBRARY,
+	// LIBRARY, PROGRAM, ...). PR-M3-symbols-module-abseil-addincl:
+	// applyBackPeerAddIncl gates the back-peer propagation on the parent
+	// declaring a PY*_LIBRARY family that auto-PEERDIRs contrib/libs/python.
+	ModuleStmtName string
 }
 
 // genCtx threads state through the recursive walk. `emit`
@@ -758,6 +771,20 @@ func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, cliDef
 	// DFS walk. This post-pass patches the cmd_args of CC nodes whose
 	// module_dir has a path-prefix ancestor LIBRARY in `ctx.memo`.
 	applyUmbrellaAddIncl(ctx)
+
+	// PR-M3-symbols-module-abseil-addincl: post-emit back-peer ADDINCL
+	// propagation. A module M PEERDIR'd FROM a PY*_LIBRARY-family parent P
+	// (via P's auto-PEERDIR injection of contrib/libs/python — itself a
+	// PY23_LIBRARY) participates in P's peer-SCC for GLOBAL ADDINCL
+	// propagation in upstream ymake. Our DFS walker is forward-only and
+	// misses the back-edge, so M's PY3 sub-walk CC nodes lose the
+	// transitively-reachable GLOBAL ADDINCL paths that P's peer chain brings
+	// (e.g. `library/python/symbols/module/{module,syms.reg3}.cpp.py3.o`
+	// miss `-I$(SOURCE_ROOT)/contrib/restricted/abseil-cpp` reached via
+	// `contrib/libs/python → runtime_py3 → cpp/resource → containers/
+	// absl_flat_hash → restricted/abseil-cpp`). This post-pass patches the
+	// affected CC nodes' cmd_args.
+	applyBackPeerAddIncl(ctx)
 
 	if os.Getenv("YATOOL_SCANCTX_STATS") == "1" {
 		fmt.Fprintf(os.Stderr, "scanctx-stats: mode=%s allocs=%d peak-in-flight=%d interned-final=%d\n",
@@ -2841,6 +2868,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			LDPluginRefs:            ldPluginRefs,
 			LDPluginPaths:           ldPluginPaths,
 			InducedDeps:             append([]string(nil), d.inducedDeps...),
+			Peerdirs:                append([]string(nil), d.peerdirs...),
+			ModuleStmtName:          d.moduleStmt.Name,
 		}
 		ctx.memo[originalInstance] = result
 		ctx.memo[instance] = result
@@ -4260,6 +4289,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			LDPluginRefs:            mergedLDPluginRefs,
 			LDPluginPaths:           mergedLDPluginPaths,
 			InducedDeps:             append([]string(nil), d.inducedDeps...),
+			Peerdirs:                append([]string(nil), d.peerdirs...),
+			ModuleStmtName:          d.moduleStmt.Name,
 		}
 		ctx.memo[originalInstance] = result
 		ctx.memo[instance] = result
@@ -4445,6 +4476,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		LDPluginRefs:            mergedLDPluginRefs,
 		LDPluginPaths:           mergedLDPluginPaths,
 		InducedDeps:             append([]string(nil), d.inducedDeps...),
+		Peerdirs:                append([]string(nil), d.peerdirs...),
+		ModuleStmtName:          d.moduleStmt.Name,
 	}
 
 	if len(globalRefs) > 0 {
@@ -7165,4 +7198,222 @@ func applyUmbrellaAddIncl(ctx *genCtx) {
 
 		n.Cmds[0].CmdArgs = newArgs
 	}
+}
+
+// backPeerPropagatedPaths is the allow-list of GLOBAL ADDINCL paths that
+// propagate through a back-peer edge (parent P PEERDIRs child M) into M's
+// CC compilations. Restricted to the minimal set empirically observed in
+// REF for the M3 closure:
+//   - `contrib/restricted/abseil-cpp` reaches `library/python/symbols/
+//     module`'s PY3 sub-walk via the chain `contrib/libs/python →
+//     library/python/runtime_py3 → library/cpp/resource → library/cpp/
+//     containers/absl_flat_hash → contrib/restricted/abseil-cpp`.
+//
+// Other GLOBAL ADDINCL contributions reachable through `contrib/libs/
+// python`'s peer chain (lzma, openssl, libffi, brought in via `contrib/
+// tools/python3`) do NOT propagate to its back-peered children in the
+// reference graph — confirmed by inspecting `library/python/symbols/{libc,
+// python,registry}` which gain no non-language-default `-I` flags despite
+// also being peered FROM `contrib/libs/python`. The exact upstream filter
+// is unclear; this allow-list is the narrowest set that closes the 2-node
+// L3 gap without injecting flags that would regress paired nodes.
+var backPeerPropagatedPaths = map[string]struct{}{
+	"contrib/restricted/abseil-cpp": {},
+}
+
+// applyBackPeerAddIncl patches CC nodes' cmd_args to inject missing -I
+// flags inherited via a back-peer edge from a PY*_LIBRARY-family parent.
+//
+// Upstream model: a PY*_LIBRARY-family declaration (PY3_LIBRARY,
+// PY23_LIBRARY) auto-PEERDIRs `contrib/libs/python` (build/conf/python.conf
+// :697-743). `contrib/libs/python` (itself PY23_LIBRARY, NO_PYTHON_INCLUDES)
+// in turn PEERDIRs `library/python/symbols/{module,libc,python,registry}`
+// and `library/python/runtime_py3`. The forward edge from `contrib/libs/
+// python` into `library/python/symbols/module` plus the (auto-injected)
+// back-peer from `library/python/symbols/module` (PY23_LIBRARY) into
+// `contrib/libs/python` closes an SCC; ymake treats the SCC as one unit
+// for GLOBAL ADDINCL propagation, so symbols/module's PY3 sub-walk inherits
+// the abseil-cpp GLOBAL ADDINCL reached through runtime_py3.
+//
+// Forward-only DFS walkers (ours) miss this back-edge. This post-pass
+// reconstructs the back-peer relationships from ctx.memo and injects the
+// allow-listed paths into the affected CC nodes' cmd_args.
+//
+// Gating:
+//  1. Parent P's ModuleStmtName must be a PY*_LIBRARY family that
+//     participates in the auto-PEERDIR cycle (currently PY23_LIBRARY —
+//     extend if other auto-PEERDIR families show similar SCC residue).
+//  2. Child M's ModuleStmtName must likewise be PY*_LIBRARY (the back-peer
+//     cycle only closes between two cycle-participants).
+//  3. The CC node's platform must match the platform on which P emitted
+//     (host-tool walks stay isolated from target walks).
+//  4. The path must be in backPeerPropagatedPaths.
+//  5. The path must not already be present in the CC's cmd_args (dedup).
+func applyBackPeerAddIncl(ctx *genCtx) {
+	be, ok := ctx.emit.(*BufferedEmitter)
+	if !ok {
+		return
+	}
+
+	type key struct {
+		path     string
+		platform string
+	}
+
+	// resultsByKey caches each module's (Peerdirs, AddInclGlobal, ModuleStmtName)
+	// keyed on (path, platform). One entry per emitted module instance.
+	type backPeerEntry struct {
+		peerdirs       []string
+		addInclGlobal  []string
+		moduleStmtName string
+	}
+
+	resultsByKey := map[key]backPeerEntry{}
+
+	for inst, res := range ctx.memo {
+		if res == nil {
+			continue
+		}
+
+		resultsByKey[key{path: inst.Path, platform: string(inst.Target)}] = backPeerEntry{
+			peerdirs:       res.Peerdirs,
+			addInclGlobal:  res.AddInclGlobal,
+			moduleStmtName: res.ModuleStmtName,
+		}
+	}
+
+	// Build the back-peer registry: for each (target path, platform) M,
+	// the list of parent paths P (with their AddInclGlobal slices) that
+	// declared M in their effective Peerdirs.
+	type backPeer struct {
+		parentPath    string
+		addInclGlobal []string
+	}
+
+	backPeersByKey := map[key][]backPeer{}
+
+	for k, entry := range resultsByKey {
+		// Gate (1): parent must be a PY*_LIBRARY family.
+		if !backPeerCycleParticipant(entry.moduleStmtName) {
+			continue
+		}
+
+		for _, peer := range entry.peerdirs {
+			peerKey := key{path: filepath.Clean(peer), platform: k.platform}
+
+			peerEntry, ok := resultsByKey[peerKey]
+			if !ok {
+				continue
+			}
+
+			// Gate (2): child M must also be a PY*_LIBRARY family —
+			// otherwise the back-peer cycle does not close (plain LIBRARY
+			// children of contrib/libs/python like symbols/libc and
+			// symbols/registry don't reach abseil-cpp in REF).
+			if !backPeerCycleParticipant(peerEntry.moduleStmtName) {
+				continue
+			}
+
+			backPeersByKey[peerKey] = append(backPeersByKey[peerKey], backPeer{
+				parentPath:    k.path,
+				addInclGlobal: entry.addInclGlobal,
+			})
+		}
+	}
+
+	if len(backPeersByKey) == 0 {
+		return
+	}
+
+	for _, n := range be.nodes {
+		if n == nil || n.KV == nil || n.KV["p"] != "CC" {
+			continue
+		}
+
+		modulePath, ok := n.TargetProperties["module_dir"]
+		if !ok || modulePath == "" {
+			continue
+		}
+
+		parents, ok := backPeersByKey[key{path: modulePath, platform: n.Platform}]
+		if !ok || len(parents) == 0 {
+			continue
+		}
+
+		if len(n.Cmds) == 0 {
+			continue
+		}
+
+		args := n.Cmds[0].CmdArgs
+
+		lastIIdx := -1
+		present := map[string]struct{}{}
+
+		for i, a := range args {
+			if !strings.HasPrefix(a, "-I") {
+				continue
+			}
+
+			lastIIdx = i
+			present[a] = struct{}{}
+		}
+
+		if lastIIdx < 0 {
+			continue
+		}
+
+		// Collect allow-listed paths from every back-peering parent.
+		// Order: parent declaration order, then path declaration order
+		// within each parent. Duplicates dropped at injection time.
+		var inject []string
+		injectSeen := map[string]struct{}{}
+
+		for _, parent := range parents {
+			for _, p := range parent.addInclGlobal {
+				if _, allowed := backPeerPropagatedPaths[p]; !allowed {
+					continue
+				}
+
+				flag := "-I$(SOURCE_ROOT)/" + p
+
+				if _, dup := present[flag]; dup {
+					continue
+				}
+
+				if _, dup := injectSeen[flag]; dup {
+					continue
+				}
+
+				injectSeen[flag] = struct{}{}
+				inject = append(inject, flag)
+			}
+		}
+
+		if len(inject) == 0 {
+			continue
+		}
+
+		newArgs := make([]string, 0, len(args)+len(inject))
+		newArgs = append(newArgs, args[:lastIIdx+1]...)
+		newArgs = append(newArgs, inject...)
+		newArgs = append(newArgs, args[lastIIdx+1:]...)
+
+		n.Cmds[0].CmdArgs = newArgs
+	}
+}
+
+// backPeerCycleParticipant returns true when the module declaration type
+// auto-PEERDIRs `contrib/libs/python` (build/conf/python.conf:697-743) and
+// therefore participates in the contrib/libs/python peer-SCC for GLOBAL
+// ADDINCL propagation. Mirrors `pyLibraryAutoPythonPeer` (used by the
+// forward auto-injection at gen.go:2575); kept separate so the back-peer
+// post-pass can be extended (e.g. to other auto-PEERDIR cycles) without
+// perturbing the forward gate.
+func backPeerCycleParticipant(name string) bool {
+	switch name {
+	case "PY3_LIBRARY", "PY2_LIBRARY", "PY23_LIBRARY":
+		return true
+	}
+
+	return false
 }
