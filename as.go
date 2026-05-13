@@ -133,17 +133,15 @@ import (
 // Returns (NodeRef, outputPath) so the caller can wire the AS node
 // as a dependency of the AR step and avoid re-deriving the output
 // path.
-func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, string) {
-	// PR-35q: host-PIC AS nodes with a `.asm` extension use yasm, not clang.
-	// Branch off before any clang-shape composition runs.
-	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
-	// PR-M3-F-5: extend to all `.asm` sources on x86_64, not just asmlib.
-	// The reference graph uses yasm for every `.asm` host source (asmlib's
-	// 25 nodes + util/system/context_x86.asm). Non-asmlib modules get the
-	// default Linux _YASM_PREDEFINED_FLAGS_VALUE=-g dwarf2; asmlib clears
-	// it via SET(_YASM_PREDEFINED_FLAGS_VALUE "").
-	if targetIsX8664(instance) && strings.HasSuffix(srcRel, ".asm") {
-		return emitASYasm(instance, srcRel, in, yasmLD, emit)
+func EmitAS(hostP, targetP *Platform, instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, string) {
+	_ = hostP // PR-M3-platform-pair-step9: surfaced for signature symmetry.
+
+	// PR-35q: x86_64 AS nodes with a `.asm` extension use yasm, not clang.
+	// Branch off before any clang-shape composition runs. The yasm path is
+	// x86_64-ISA-specific (yasm is an x86 assembler); not a host/target axis
+	// decision.
+	if targetP.Target == PlatformDefaultLinuxX8664 && strings.HasSuffix(srcRel, ".asm") {
+		return emitASYasm(hostP, targetP, instance, srcRel, in, yasmLD, emit)
 	}
 
 	// PR-35r: output/input path composition mirrors composeCCPaths (cc.go).
@@ -157,7 +155,7 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 	//      Empirical: tcmalloc/no_percpu_cache/__/tcmalloc/internal/percpu_rseq_asm.S.o.
 	outputPath, inputPath := composeASPaths(instance, srcRel, in)
 
-	cmdArgs := composeASCmdArgs(instance, outputPath, inputPath, in)
+	cmdArgs := composeASCmdArgs(targetP, instance, outputPath, inputPath, in)
 
 	// The reference graph carries identical env maps at both the cmd
 	// level and the node top level. A single map is constructed and
@@ -171,13 +169,11 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 	allInputs = append(allInputs, inputPath)
 	allInputs = append(allInputs, in.IncludeInputs...)
 
+	// PR-M3-platform-pair-step9: tags + host_platform from targetP;
+	// empty Tags initialised as []string{} for non-nil JSON output.
 	tags := []string{}
-	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
-	if targetIsX8664(instance) {
-		// PR-35a: host-built AS nodes carry `host_platform=true` and
-		// `tags=["tool"]` per the reference shape (asmlib pic.o,
-		// cxxsupp/builtins/x86_64/chkstk.S.o, musl host pic.o).
-		tags = []string{"tool"}
+	if len(targetP.Tags) > 0 {
+		tags = append(tags, targetP.Tags...)
 	}
 
 	node := &Node{
@@ -191,7 +187,7 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 		Env:          env,
 		Inputs:       allInputs,
 		Outputs:      []string{outputPath},
-		HostPlatform: targetIsX8664(instance),
+		HostPlatform: targetP.IsHost,
 		KV: map[string]string{
 			"p":  "AS",
 			"pc": "light-green",
@@ -200,7 +196,7 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform: string(instance.Target),
+		Platform: string(targetP.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -239,7 +235,8 @@ const yasmBinaryPath = "$(BUILD_ROOT)/contrib/tools/yasm/yasm"
 // rationale and the byte-exact reference shape. The function is the
 // asmlib-only counterpart to the clang AS path the rest of EmitAS
 // implements.
-func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, string) {
+func emitASYasm(hostP, targetP *Platform, instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, string) {
+	_ = hostP // PR-M3-platform-pair-step9: surfaced for signature symmetry.
 	// Output stem strips `.asm` (the only extension this branch sees;
 	// asmlib's reference uses `.asm` exclusively per PR-30 D07).
 	stem := strings.TrimSuffix(srcRel, ".asm")
@@ -318,16 +315,25 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 		Env:          env,
 		Inputs:       allInputs,
 		Outputs:      []string{outputPath},
-		HostPlatform: true,
+		HostPlatform: targetP.IsHost,
 		KV: map[string]string{
 			"p":  "AS",
 			"pc": "light-green",
 		},
-		Tags: []string{"tool"},
+		// PR-M3-platform-pair-step9: tags from targetP. emitASYasm only
+		// fires for x86_64 (the yasm path is x86-ISA-specific) so
+		// targetP.Tags is the host platform's `["tool"]` baseline.
+		Tags: func() []string {
+			out := []string{}
+			if len(targetP.Tags) > 0 {
+				out = append(out, targetP.Tags...)
+			}
+			return out
+		}(),
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform: string(instance.Target),
+		Platform: string(targetP.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -411,16 +417,24 @@ func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (
 // the includes tail (`ccIncludesPrefix + in.AddIncl + ccIncludesSuffix
 // + in.PeerAddInclGlobal`) generically via the same struct CC
 // consumes.
-func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in ModuleCCInputs) []string {
-	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
-	isHost := targetIsX8664(instance)
+func composeASCmdArgs(targetP *Platform, instance ModuleInstance, outputPath, inputPath string, in ModuleCCInputs) []string {
+	// PR-M3-platform-pair-step9: compose-flavor dispatch is on
+	// targetP.Target (which toolchain to use) and targetP.LibcMusl
+	// (musl flavour). The local is named `targetX8664` instead of
+	// `isHost` because the dispatch is about platform identity, not
+	// host/target axis role.
+	targetX8664 := targetP.Target == PlatformDefaultLinuxX8664
+	// `instance.Flags.LibcMusl` is the PER-MODULE flag ("this module is
+	// part of the musl subtree"). It is NOT `targetP.Flags["MUSL"]`,
+	// which is the CLI-level "build everything in musl mode" toggle —
+	// orthogonal concepts.
 	isMusl := instance.Flags.LibcMusl
 
 	var cFlags, defines, suppressionBlock []string
 	var triple string
 	var withMarch bool
 
-	if isHost {
+	if targetX8664 {
 		triple = hostTriple
 		cFlags = hostCFlags
 		defines = hostDefines
@@ -471,10 +485,10 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 		autoPeerCFlags = in.AutoPeerCFlags
 	}
 
-	includes := composeASIncludes(in, isMusl, isHost)
+	includes := composeASIncludes(in, isMusl, targetX8664)
 
 	betweenBlocks := len(catboostOpenSourceDefine) + len(autoPeerCFlags)
-	if isHost {
+	if targetX8664 {
 		betweenBlocks += len(hostSseFeatures)
 	}
 
@@ -515,7 +529,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	// suppressionBlock copy (mirror of composeTargetCC at cc.go:726).
 	cmdArgs = append(cmdArgs, autoPeerCFlags...)
 
-	if isHost {
+	if targetX8664 {
 		cmdArgs = append(cmdArgs, hostSseFeatures...)
 	}
 
@@ -563,9 +577,9 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 // interleaves them between `SOURCE_ROOT` and the linux-headers pair,
 // which is the canonical musl-self isolation pattern). The override
 // matches the CC behaviour (cc.go:218-228).
-func composeASIncludes(in ModuleCCInputs, isMusl, isHost bool) []string {
+func composeASIncludes(in ModuleCCInputs, isMusl, targetX8664 bool) []string {
 	if isMusl {
-		if isHost {
+		if targetX8664 {
 			return muslCcIncludesX8664
 		}
 

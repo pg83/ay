@@ -34,8 +34,17 @@ type Platform struct {
 
 	// Shadow accessors — derived from Flags at construction time. Kept as
 	// fields rather than methods to avoid the map lookup in tight loops
-	// (every CC compose dispatch checks PIC; every musl-aware emit checks
-	// LibcMusl). Treat as read-only post-construction.
+	// (every CC compose dispatch checks PIC; every libc-aware emit may
+	// check LibcMusl). Treat as read-only post-construction.
+	//
+	// `LibcMusl` is the Platform-level libc selector: host and target
+	// halves of the build can independently be musl or glibc, and a
+	// Platform represents one of them. It is distinct from the
+	// per-MODULE marker `ModuleInstance.Flags.LibcMusl`, which says
+	// "this module is part of the contrib/libs/musl subtree". Emitters
+	// must pick the one that matches the semantic they actually need
+	// (per-platform toolchain selection vs per-module subtree membership)
+	// — conflating them broke 64 nodes on M3 during this refactor.
 	PIC      bool
 	LibcMusl bool
 }
