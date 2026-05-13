@@ -49,6 +49,8 @@ func dispatch(argv []string) {
 		os.Exit(cmdHelp(argv[2:]))
 	case "gen":
 		os.Exit(cmdGen(argv[2:]))
+	case "make":
+		os.Exit(cmdMake(argv[2:]))
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", argv[1])
 		printUsage(os.Stderr)
@@ -64,6 +66,7 @@ Usage:
 
 Subcommands:
     gen        Generate a build graph for a target.
+    make       Generate and execute the build graph for a target.
     help       Show this message.
 
 Quality / comparison checks live in normalize.py — run that against the
@@ -118,6 +121,13 @@ func cmdGen(args []string) int {
 	// genModule frame (no cross-module reuse).
 	scanCtxMode := fs.String("scan-ctx-mode", defaultScanCtxMode, "scanCtx lifecycle: \"local\" or \"interned\"")
 
+	// PR-M3-make: --target-platform / --host-platform let cross-compile
+	// callers override the platform-id defaults. Empty (default) → use
+	// the canonical (host=x86_64, target=aarch64) pair the reference
+	// graph was built with.
+	targetPlatform := fs.String("target-platform", "", "target platform id (e.g. default-linux-aarch64); empty preserves M3-reference behaviour")
+	hostPlatform := fs.String("host-platform", "", "host platform id (e.g. default-linux-x86_64); empty preserves M3-reference behaviour")
+
 	// PR-M3-perf-profile: write a Go pprof CPU profile to PATH for
 	// the duration of the Gen call. Empty (default) disables
 	// profiling. Inspect with `go tool pprof <PATH>`.
@@ -152,8 +162,25 @@ func cmdGen(args []string) int {
 		}()
 	}
 
+	// PR-M3-make: mine the toolchain via $PATH and project into the
+	// ymake flag namespace; user --define values overlay on top. The
+	// mined map gives cliDefines a stable foothold against the running
+	// host's tool layout instead of a snapshot-pinned reference.
+	mined := commonFlags(mineTools())
+	cli := mergeFlags(mined, defines.toMap())
+	if _, ok := cli["MUSL"]; !ok {
+		cli["MUSL"] = "yes"
+	}
+
+	if *targetPlatform != "" {
+		cli["GG_TARGET_PLATFORM"] = *targetPlatform
+	}
+	if *hostPlatform != "" {
+		cli["GG_HOST_PLATFORM"] = *hostPlatform
+	}
+
 	genStart := time.Now()
-	g := GenWithMode(TargetCfg, *sourceRoot, *target, defines.toMap(), *scanCtxMode)
+	g := GenWithMode(TargetCfg, *sourceRoot, *target, cli, *scanCtxMode)
 	genDur := time.Since(genStart)
 
 	if *memProfile != "" {

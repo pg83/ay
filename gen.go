@@ -701,6 +701,73 @@ func GenWith(cfg PlatformConfig, sourceRoot string, targetDir string, cliDefines
 // for the production default.
 const defaultScanCtxMode = "interned"
 
+// runGenInto runs the Gen walk against the supplied emitter without
+// calling Finalize on it. Used by streaming consumers
+// (`yatool make`) that want to drive FinalizeStream themselves.
+//
+// Returns the root NodeRef so the caller can record it as a result
+// after FinalizeStream resolves UIDs.
+func runGenInto(srcRoot, targetDir string, cliDefines map[string]string, emitter *BufferedEmitter, mode string) NodeRef {
+	if mode != "local" && mode != "interned" {
+		ThrowFmt("gen: --scan-ctx-mode must be \"local\" or \"interned\", got %q", mode)
+	}
+
+	if cliDefines == nil {
+		cliDefines = map[string]string{"MUSL": "yes"}
+	}
+
+	sharedPC := newSharedParseCache()
+
+	targetReg := NewCodegenRegistry()
+	hostReg := NewCodegenRegistry()
+
+	targetScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, "aarch64"), sharedPC)
+	targetScanner.codegen = targetReg
+	targetScanner.fallbackLocators = []pathLocator{codegenLocator{reg: targetReg}}
+	hostScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, "x86_64"), sharedPC)
+	hostScanner.codegen = hostReg
+	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
+
+	hostP, targetP := defaultLinuxPlatforms(cliDefines)
+
+	ctx := &genCtx{
+		cfg:             TargetCfg,
+		sourceRoot:      srcRoot,
+		emit:            emitter,
+		memo:            make(map[ModuleInstance]*moduleEmitResult),
+		walking:         make(map[ModuleInstance]bool),
+		host:            hostP,
+		target:          targetP,
+		scannerTarget:   targetScanner,
+		scannerHost:     hostScanner,
+		cliDefines:      cliDefines,
+		enOutputs:       make(map[VFS]NodeRef),
+		pbOutputs:       make(map[codegenOutputKey]NodeRef),
+		evOutputs:       make(map[codegenOutputKey]NodeRef),
+		ldPluginCPCache: make(map[string]NodeRef),
+		scanCtxMode:     mode,
+		internedScanCtx: make(map[scanCtxCacheKey]*scanCtx, 64),
+	}
+
+	ctx.localScanCtxStack = []map[scanCtxCacheKey]*scanCtx{make(map[scanCtxCacheKey]*scanCtx, 4)}
+
+	seed := ModuleInstance{
+		Path:     filepath.Clean(targetDir),
+		Language: LangCPP,
+		Platform: targetP,
+		Flags:    inferFlagsFromPath(filepath.Clean(targetDir), false),
+	}
+
+	root := genModule(ctx, seed)
+
+	ctx.emit.Result(root.LDRef)
+
+	applyUmbrellaAddIncl(ctx)
+	applyBackPeerAddIncl(ctx)
+
+	return root.LDRef
+}
+
 // GenWithMode is GenWith plus the scanCtxMode dispatch knob (PR-M3-perf-E).
 // `mode` must be either "local" or "interned"; anything else throws.
 func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, cliDefines map[string]string, mode string) *Graph {

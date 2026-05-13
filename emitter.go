@@ -170,7 +170,51 @@ type Graph struct {
 // internal errors are discriminated by callers, so per STYLE.md we
 // raise via ThrowFmt rather than returning an error. Callers that need
 // to recover wrap the call in Try.
-func Finalize(e *BufferedEmitter) *Graph {
+// FinalizeStream is the streaming sibling of Finalize: it yields each
+// node by reference once its UID has been computed, in dep-first
+// topological order, and returns the resolved root UIDs (one per
+// e.results entry, in declaration order, deduped). Used by `yatool
+// make` to start executing leaf nodes as soon as they are ready,
+// without materialising the full `[]*Node` first.
+//
+// The yielded node's identity-fields (UID/SelfUID) and resolved
+// Deps/ForeignDeps are populated; the internal *Refs are cleared.
+// Callers retain ownership of each yielded *Node — it lives in the
+// emitter's nodes slice and is not copied.
+//
+// Cannot run concurrently with Finalize on the same emitter; both
+// set e.finalized.
+func FinalizeStream(e *BufferedEmitter, yield func(*Node)) []string {
+	uids := finalizeNodes(e, yield)
+
+	results := make([]string, 0, len(e.results))
+	seen := map[string]struct{}{}
+
+	for _, rid := range e.results {
+		u := uids[rid]
+		if _, ok := seen[u]; ok {
+			continue
+		}
+
+		seen[u] = struct{}{}
+		results = append(results, u)
+	}
+
+	return results
+}
+
+// finalizeNodes is the shared implementation behind Finalize and
+// FinalizeStream. It validates the buffered emitter state, topo-sorts
+// the nodes, resolves each node's Deps/ForeignDeps from its DepRefs/
+// ForeignDepRefs, computes the per-node UID, and yields the finalized
+// node via the optional `yield` callback in dep-first order. Returns
+// `uids[i]` indexed by buffer position so callers can resolve
+// e.results and build the *Graph output.
+//
+// Sets e.finalized when it returns successfully. Throws on
+// re-finalize, on pre-populated Deps/ForeignDeps, on out-of-range
+// NodeRefs, or on dependency cycles.
+func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
 	if e.finalized {
 		ThrowFmt("finalize: emitter already finalized")
 	}
@@ -437,7 +481,24 @@ func Finalize(e *BufferedEmitter) *Graph {
 		// net against re-Finalize; clearing the refs is hygiene only.
 		node.DepRefs = nil
 		node.ForeignDepRefs = nil
+
+		if yield != nil {
+			yield(node)
+		}
 	}
+
+	e.finalized = true
+
+	if e.readyCh != nil {
+		close(e.readyCh)
+	}
+
+	return uids
+}
+
+func Finalize(e *BufferedEmitter) *Graph {
+	uids := finalizeNodes(e, nil)
+	n := len(e.nodes)
 
 	// Build the output Graph. Result UIDs are computed first.
 	// Graph[] is ordered DFS preorder rooted at each Result UID,
@@ -502,25 +563,15 @@ func Finalize(e *BufferedEmitter) *Graph {
 	}
 
 	// Any nodes not reachable from the result roots (disconnected subgraphs
-	// that may arise from dedup collisions) are appended in topo order to
-	// preserve completeness.
-	for _, i := range order {
+	// that may arise from dedup collisions) are appended in buffer
+	// (= emit) order to preserve completeness; buffer order is itself a
+	// topological order because emit must precede each parent's emit.
+	for i, node := range e.nodes {
 		u := uids[i]
 		if _, ok := seenNode[u]; !ok {
 			seenNode[u] = struct{}{}
-			out.Graph = append(out.Graph, e.nodes[i])
+			out.Graph = append(out.Graph, node)
 		}
-	}
-
-	e.finalized = true
-
-	// Signal every OnReady waiter (D37). The channel is shared
-	// across all callers; closing it once releases everyone. If
-	// the channel was never created (zero-value emitter), skip
-	// the close — older callers that bypass NewBufferedEmitter
-	// won't be affected.
-	if e.readyCh != nil {
-		close(e.readyCh)
 	}
 
 	return out
