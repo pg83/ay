@@ -111,6 +111,7 @@ func EmitLD(
 	wantsStrip bool,
 	emit Emitter,
 ) NodeRef {
+
 	if len(ccRefs) != len(ccPaths) {
 		ThrowFmt("EmitLD: ccRefs/ccPaths length mismatch (%d vs %d)", len(ccRefs), len(ccPaths))
 	}
@@ -159,8 +160,13 @@ func EmitLD(
 	// TODO: remove this shim when a general RECURSE-driven BinaryDir
 	// lift lands in M3+.
 	binaryDir := ldBinaryDir(instance)
-	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
-	hostBuild := targetIsX8664(instance)
+	// PR-M3-platform-pair-step11: compose-flavor dispatch on
+	// instance.Platform.Target. The local is named `targetX8664` to make the
+	// per-platform-identity question explicit (rather than the
+	// "am I a host build?" framing of the prior `hostBuild`). The
+	// downstream composers still see the same boolean.
+	targetX8664 := instance.Platform.Target == PlatformDefaultLinuxX8664
+	hostBuild := targetX8664
 
 	outputPath := "$(BUILD_ROOT)/" + binaryDir + "/" + binaryName
 	vcsCPath := "$(BUILD_ROOT)/" + binaryDir + "/__vcs_version__.c"
@@ -265,30 +271,20 @@ func EmitLD(
 			"pc":       "light-blue",
 			"show_out": "yes",
 		},
-		Platform: string(instance.Target),
+		Platform:     string(instance.Platform.Target),
+		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
 			"ram":     float64(32),
 		},
-		Tags: []string{},
+		Tags: instance.Platform.Tags,
 		TargetProperties: map[string]string{
 			"module_dir":  binaryDir,
 			"module_lang": ldModuleLang(instance),
 			"module_type": "bin",
 		},
 		DepRefs: depRefs,
-	}
-
-	// PR-25: host PROGRAM modules (cross-platform recursion D31)
-	// must carry `host_platform=true` and `tags=["tool"]` to match
-	// the convention CC/AR use for host nodes. PR-24's
-	// target-only LD never tripped this branch; PR-26 verifies the
-	// full host LD bundle byte-exact.
-	// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
-	if targetIsX8664(instance) {
-		n.HostPlatform = true
-		n.Tags = []string{"tool"}
 	}
 
 	return emit.Emit(n)

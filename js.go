@@ -41,7 +41,7 @@ package main
 // (`contrib/tools/ragel6/bin`). Threading platform explicitly keeps
 // the JS Platform decoupled from the host-walked instance's Target
 // (which flips to `default-linux-x86_64` via `WithHost`); the
-// downstream JS-derived CC node continues to use `instance.Target` so
+// downstream JS-derived CC node continues to use `instance.Platform.Target` so
 // only the JS axis is detached, not the per-source compile axis.
 //
 // Returns the JS NodeRef and the output path so the caller (PR-25's

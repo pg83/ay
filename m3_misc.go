@@ -29,7 +29,6 @@ import (
 //
 // Returns (R5 NodeRef, tmpPath, cppPath).
 func EmitR5(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	srcRel string,
 	ragel5LD NodeRef,
@@ -38,7 +37,6 @@ func EmitR5(
 	rlgenCdBinPath string,
 	emit Emitter,
 ) (NodeRef, string, string) {
-	_ = hostP // PR-M3-platform-pair-step5: surfaced for signature symmetry.
 	srcPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
 	tmpPath := "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + ".tmp"
 	// Output: strip .rl suffix, append .rl5.cpp.
@@ -93,13 +91,13 @@ func EmitR5(
 		// is a host-toolchain ragel5 call, regardless of the calling
 		// module's axis — both x86_64 and aarch64 R5 variants carry the
 		// tool tag in REF). This is intrinsic to R5; not derived from
-		// targetP.Tags.
+		// instance.Platform.Tags.
 		Tags: []string{"tool"},
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform:     string(targetP.Target),
-		HostPlatform: targetP.IsHost,
+		Platform:     string(instance.Platform.Target),
+		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -149,7 +147,6 @@ const python3Path = "/ix/realm/pg/bin/python3"
 // Inputs: [grammar.g4, stdout2stderr.py, antlr4.jar]
 // cwd: $(BUILD_ROOT)/<modulePath>
 func EmitJV(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	grammar string,
 	options []string,
@@ -157,7 +154,6 @@ func EmitJV(
 	listener bool,
 	emit Emitter,
 ) NodeRef {
-	_ = hostP // PR-M3-platform-pair-step6: surfaced for signature symmetry.
 	grammarAbs := "$(SOURCE_ROOT)/" + instance.Path + "/" + grammar
 	outDir := "$(BUILD_ROOT)/" + instance.Path
 
@@ -223,8 +219,8 @@ func EmitJV(
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform:     string(targetP.Target),
-		HostPlatform: targetP.IsHost,
+		Platform:     string(instance.Platform.Target),
+		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -249,7 +245,6 @@ func EmitJV(
 //
 //	CmdParserVisitor.h, CmdParserBaseVisitor.h
 func EmitJVSplit(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	lexer string,
 	parser string,
@@ -257,7 +252,6 @@ func EmitJVSplit(
 	listener bool,
 	emit Emitter,
 ) NodeRef {
-	_ = hostP // PR-M3-platform-pair-step6: surfaced for signature symmetry.
 	lexerAbs := "$(SOURCE_ROOT)/" + instance.Path + "/" + lexer
 	parserAbs := "$(SOURCE_ROOT)/" + instance.Path + "/" + parser
 	outDir := "$(BUILD_ROOT)/" + instance.Path
@@ -327,8 +321,8 @@ func EmitJVSplit(
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform:     string(targetP.Target),
-		HostPlatform: targetP.IsHost,
+		Platform:     string(instance.Platform.Target),
+		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -369,13 +363,11 @@ const buildTypeDebug = "BUILD_TYPE=DEBUG"
 //
 // Returns (CF NodeRef, outputPath).
 func EmitCF(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	srcRel string,
 	in ModuleCCInputs,
 	emit Emitter,
 ) (NodeRef, string) {
-	_ = hostP // PR-M3-platform-pair-step6: surfaced for signature symmetry.
 	srcAbs := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
 	// Strip .in suffix to get output path.
 	outRel := strings.TrimSuffix(srcRel, ".in")
@@ -426,8 +418,8 @@ func EmitCF(
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform:     string(targetP.Target),
-		HostPlatform: targetP.IsHost,
+		Platform:     string(instance.Platform.Target),
+		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -540,13 +532,11 @@ const buildInfoGenPyPath = "$(SOURCE_ROOT)/build/scripts/build_info_gen.py"
 // inputs: [yield_line.py, xargs.py, build_info_gen.py]
 // outputs: [$(BUILD_ROOT)/<modulePath>/<outputHeader>]
 func EmitBI(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	outputHeader string,
 	cxxFlags []string,
 	emit Emitter,
 ) NodeRef {
-	_ = hostP // PR-M3-platform-pair-step6: surfaced for signature symmetry.
 	argsFile := "$(BUILD_ROOT)/" + instance.Path + "/__args"
 	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + outputHeader
 
@@ -611,8 +601,8 @@ func EmitBI(
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform:     string(targetP.Target),
-		HostPlatform: targetP.IsHost,
+		Platform:     string(instance.Platform.Target),
+		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -634,7 +624,7 @@ func EmitBI(
 // `-UNDEBUG` and the warning suppressions tail (matches REF
 // library/cpp/build_info/buildinfo_data.h on default-linux-aarch64).
 //
-// PR-M3-platform-pair-step6: dispatches on `targetP.Target` (aarch64-
+// PR-M3-platform-pair-step6: dispatches on `instance.Platform.Target` (aarch64-
 // specific codegen flag, not host/target axis).
 func biFlagsForInstance(targetP *Platform) []string {
 	flags := make([]string, 0, 100)
@@ -699,7 +689,6 @@ func biFlagsForInstance(targetP *Platform) []string {
 //
 // The node's platform matches the containing module's platform.
 func EmitPR(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	stmt *RunProgramStmt,
 	toolBinPath string,
@@ -708,7 +697,6 @@ func EmitPR(
 	extraDepRefs []NodeRef,
 	emit Emitter,
 ) NodeRef {
-	_ = hostP // PR-M3-platform-pair-step5: surfaced for signature symmetry.
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
 	}
@@ -826,12 +814,9 @@ func EmitPR(
 	}
 
 	// PR-M3-platform-pair-step5: tags + host_platform are baseline data
-	// from `targetP`. Empty `targetP.Tags` keeps the slice non-nil so
+	// from `targetP`. Empty `instance.Platform.Tags` keeps the slice non-nil so
 	// the JSON serialises as `[]`, not `null`.
-	tags := []string{}
-	if len(targetP.Tags) > 0 {
-		tags = append(tags, targetP.Tags...)
-	}
+	tags := instance.Platform.Tags
 
 	node := &Node{
 		Cmds:    []Cmd{cmd},
@@ -844,11 +829,11 @@ func EmitPR(
 			"show_out": "yes",
 		},
 		Tags:         tags,
-		HostPlatform: targetP.IsHost,
+		HostPlatform: instance.Platform.IsHost,
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform: string(targetP.Target),
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -892,7 +877,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 	// JV: emit one node per ANTLR4 grammar declaration.
 	for _, g := range d.antlr4Grammars {
 		if g.IsSplit {
-			jvRef := EmitJVSplit(ctx.host, ctx.platformFor(instance), instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ctx.emit)
+			jvRef := EmitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ctx.emit)
 			// F-7-B: register the .h outputs. ANTLR4-generated headers include
 			// antlr4-runtime.h (XPathLexer.h pattern in
 			// contrib/libs/antlr4_cpp_runtime/src/tree/xpath/XPathLexer.h).
@@ -951,7 +936,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 				memberInputsList = append(memberInputsList, inputs...)
 			}
 		} else {
-			jvRef := EmitJV(ctx.host, ctx.platformFor(instance), instance, g.Grammar, g.Options, g.Visitor, g.Listener, ctx.emit)
+			jvRef := EmitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ctx.emit)
 			// F-7-B: register .h outputs.
 			// PR-M3-final-codegen-registry-expansion: same witness set as
 			// the split path (antlr.jar + stdout2stderr.py + .g4 source +
@@ -1010,7 +995,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 
 	// BI: emit one node when CREATE_BUILDINFO_FOR was declared.
 	if d.createBuildInfoFor != "" {
-		biRef := EmitBI(ctx.host, ctx.platformFor(instance), instance, d.createBuildInfoFor, biFlagsForInstance(ctx.platformFor(instance)), ctx.emit)
+		biRef := EmitBI(instance, d.createBuildInfoFor, biFlagsForInstance(ctx.platformFor(instance)), ctx.emit)
 		// F-7-B: register BI output. buildinfo_data.h is a generated header.
 		// PR-M3-final-codegen-registry-expansion: the BI-script trio
 		// (build_info_gen.py + xargs.py + yield_line.py) flows up into
@@ -1155,7 +1140,7 @@ func emitJVDownstreamCPCC(
 		// devtools/ymake/lang/TConfLexer.g4.cpp.o cmd_args index 144..145).
 		ccIn.PerSourceCFlags = []string{"-Wno-unused-variable"}
 
-		ccRef, ccOut := EmitCC(ctx.host, ctx.platformFor(instance), instance, g4CppRel, ccIn, ctx.emit)
+		ccRef, ccOut := EmitCC(instance, g4CppRel, ccIn, ctx.emit)
 
 		// AR memberInputs: SOURCE_ROOT closure entries only (no BUILD_ROOT).
 		// PR-M3-final-codegen-registry-expansion: fs_tools.py and
@@ -1285,7 +1270,7 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	// Walk the archiver as a host program to resolve its binary path + LD
 	// ref. Mirrors emitRunProgram's tool-walk shape; archiver lives at
 	// tools/archiver and is hard-pinned by const archiverToolPath above.
-	toolInstance := instance.WithHost(ctx.cfg)
+	toolInstance := instance.WithHost(ctx.host)
 	toolInstance.Path = archiverToolPath
 	toolInstance.Flags = inferFlagsFromPath(archiverToolPath, true)
 
@@ -1329,7 +1314,7 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 	reg := codegenRegForInstance(ctx, instance)
 	for _, a := range d.archives {
-		emitArchive(ctx.host, ctx.platformFor(instance), instance, a, d, toolBinPath, toolLDRef, prInSources, ctx.emit, reg)
+		emitArchive(instance, a, d, toolBinPath, toolLDRef, prInSources, ctx.emit, reg)
 	}
 }
 
@@ -1337,7 +1322,6 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 // Helper for emitArchives; split out so the tool-walk + shared input
 // aggregation runs once per module rather than once per ARCHIVE.
 func emitArchive(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	a archiveEntry,
 	d *moduleData,
@@ -1347,7 +1331,6 @@ func emitArchive(
 	emit Emitter,
 	reg *CodegenRegistry,
 ) {
-	_ = hostP // PR-M3-platform-pair-step5: surfaced for signature symmetry.
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + a.Name
 
 	// Build cmd_args. Each archived file is rendered with a trailing
@@ -1506,12 +1489,9 @@ func emitArchive(
 	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)"}
 
 	// PR-M3-platform-pair-step5: tags + host_platform + platform from
-	// the Platform pair passed by caller. Empty `targetP.Tags` keeps
+	// the Platform pair passed by caller. Empty `instance.Platform.Tags` keeps
 	// the slice non-nil so JSON serialises as `[]`, not `null`.
-	tags := []string{}
-	if len(targetP.Tags) > 0 {
-		tags = append(tags, targetP.Tags...)
-	}
+	tags := instance.Platform.Tags
 
 	n := &Node{
 		Cmds: []Cmd{
@@ -1527,8 +1507,8 @@ func emitArchive(
 			"pc": "light-red",
 		},
 		Outputs:      []string{archivePath},
-		Platform:     string(targetP.Target),
-		HostPlatform: targetP.IsHost,
+		Platform:     string(instance.Platform.Target),
+		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -1656,7 +1636,7 @@ func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string
 		ccIn.ExtraDepRefs = append(append([]NodeRef(nil), depRefs...), extra...)
 	}
 
-	ref, outPath := EmitCC(ctx.host, ctx.platformFor(instance), instance, cppRel, ccIn, ctx.emit)
+	ref, outPath := EmitCC(instance, cppRel, ccIn, ctx.emit)
 
 	// AR member-inputs: only the SOURCE_ROOT-rooted closure entries.
 	// PR-35y R7 / PR-M3-codegen-cc-enqueue: the AR aggregator excludes
@@ -1697,7 +1677,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	}
 	in.IncludeInputs = walkClosure(ctx, instance, resolveSourceVFS(ctx, instance, cf.Src, in.SrcDir), in)
 
-	_, cfOut := EmitCF(ctx.host, ctx.platformFor(instance), instance, cf.Src, in, ctx.emit)
+	_, cfOut := EmitCF(instance, cf.Src, in, ctx.emit)
 
 	// F-7-B: register the explicit CF output with EmitsIncludes.
 	if reg != nil {
@@ -1715,7 +1695,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, d *moduleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
 	// Walk the tool as a host program.
 	toolPath := filepath.Clean(stmt.ToolPath)
-	toolInstance := instance.WithHost(ctx.cfg)
+	toolInstance := instance.WithHost(ctx.host)
 	toolInstance.Path = toolPath
 	toolInstance.Flags = inferFlagsFromPath(toolPath, true)
 
@@ -1800,7 +1780,7 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// stats_enums.h_serialized.cpp via dep_types.h → stats_enums.h closure).
 	prExtraDepRefs := resolveCodegenDepRefs(ctx, instance, inputClosure, toolLDRef)
 
-	prRef := EmitPR(ctx.host, ctx.platformFor(instance), instance, stmt, toolBinPath, toolLDRef, inputClosure, prExtraDepRefs, ctx.emit)
+	prRef := EmitPR(instance, stmt, toolBinPath, toolLDRef, inputClosure, prExtraDepRefs, ctx.emit)
 
 	// PR-M3-L0-cascade-close-v2: backfill the PR ProducerRef so the
 	// downstream CC's resolveCodegenDepRefs threads PR into its deps[].

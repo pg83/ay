@@ -118,23 +118,26 @@ func NewFlagSet(extra ...string) FlagSet {
 // ModuleInstance is the comparable-by-value identity of one rule-
 // emission target (D30). Walker memoisation, cycle detection, and
 // host-tool recursion all key on this struct.
+//
+// PR-M3-platform-pair-step12: `Platform *Platform` replaces the old
+// `Target PlatformID`. The pointer is one of the two singletons the
+// CLI constructs (host or target) — pointer equality is well-defined
+// and ModuleInstance remains a valid map key. Emitters read the
+// rendering data through `instance.Platform.{Target,IsHost,Tags,Flags}`
+// and no longer take a separate `targetP` argument.
 type ModuleInstance struct {
 	Path     string
 	Language Language
-	Target   PlatformID
+	Platform *Platform
 	Flags    FlagSet
 }
 
-// WithHost returns a copy of mi with `Target` flipped to cfg.Host's
-// platform ID and `Flags.PIC=true`. The same Path/Language carry over;
-// the host instance shares the source tree, only the codegen flavour
-// changes.
-//
-// D41: co-setting Flags.PIC=true is policy (M2/M3 host PROGRAMs use
-// PIC), not derivation; emitter sites dispatch on Target, not PIC.
-func (mi ModuleInstance) WithHost(cfg PlatformConfig) ModuleInstance {
+// WithHost returns a copy of mi with `Platform` flipped to the host
+// Platform pointer and `Flags.PIC=true`. The same Path/Language carry
+// over; only the platform identity (and the PIC policy) changes.
+func (mi ModuleInstance) WithHost(host *Platform) ModuleInstance {
 	out := mi
-	out.Target = cfg.Host.ID
+	out.Platform = host
 	out.Flags.PIC = true
 
 	return out
@@ -149,7 +152,7 @@ func (mi ModuleInstance) String() string {
 	b.WriteString(":")
 	b.WriteString(string(mi.Language))
 	b.WriteString("@")
-	b.WriteString(string(mi.Target))
+	b.WriteString(string(mi.Platform.Target))
 
 	return b.String()
 }

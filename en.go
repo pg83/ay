@@ -52,7 +52,6 @@ const enumParserBinaryPath = "$(BUILD_ROOT)/tools/enum_parser/enum_parser/enum_p
 //
 // Returns the emitted NodeRef and the list of output paths (1 or 2).
 func EmitEN(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	headerRel string,
 	withHeader bool,
@@ -63,7 +62,6 @@ func EmitEN(
 	headerIncludeClosure []string,
 	emit Emitter,
 ) (NodeRef, []string) {
-	_ = hostP // PR-M3-platform-pair-step8: surfaced for signature symmetry.
 	// Resolve the module-dir for this header. The header path may include
 	// a subdirectory component (e.g. "config/config.h" in devtools/ymake).
 	// The output path mirrors: $(BUILD_ROOT)/<instance.Path>/<headerRel>_serialized.cpp.
@@ -128,24 +126,15 @@ func EmitEN(
 			"pc": "yellow",
 		},
 		Outputs:      outputs,
-		Platform:     string(targetP.Target),
-		HostPlatform: targetP.IsHost,
+		Platform:     string(instance.Platform.Target),
+		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
 			"ram":     float64(32),
 		},
 		Sandboxing: true,
-		// PR-M3-platform-pair-step8: tags from targetP (empty for target
-		// EN nodes per REF; the slice must be non-nil so JSON serialises
-		// as `[]` rather than `null`).
-		Tags: func() []string {
-			out := []string{}
-			if len(targetP.Tags) > 0 {
-				out = append(out, targetP.Tags...)
-			}
-			return out
-		}(),
+		Tags: instance.Platform.Tags,
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},

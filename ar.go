@@ -116,7 +116,7 @@ func globalArchiveNameWithPrefix(moduleDir, prefix string) string {
 // + IncludeInputs the walker accumulated.
 //
 // `instance` provides platform + path. host_platform is set when
-// instance.Target == PlatformDefaultLinuxX8664 (D41: platform-
+// instance.Platform.Target == PlatformDefaultLinuxX8664 (D41: platform-
 // identity dispatch replaces Flags.PIC on the host/target axis) and
 // "tool" is appended to tags (consistent with the host CC convention).
 //
@@ -124,7 +124,6 @@ func globalArchiveNameWithPrefix(moduleDir, prefix string) string {
 // the reference graph confirms zero AR-on-AR deps. The parameter is
 // retained for tests that pin the historical shape.
 func emitARNode(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	archivePath string,
 	tag string,
@@ -135,7 +134,6 @@ func emitARNode(
 	arPluginPath string,
 	emit Emitter,
 ) NodeRef {
-	_ = hostP // PR-M3-platform-pair-step3: surfaced for signature symmetry; AR renders only from targetP.
 	scriptPath := "$(SOURCE_ROOT)/build/scripts/link_lib.py"
 
 	// Built as separate literals (not a shared variable) so
@@ -260,12 +258,9 @@ func emitARNode(
 
 	// PR-M3-platform-pair-step3: tags are baseline data from targetP
 	// (`["tool"]` on host, `[]` on target). Renderer does NOT branch on
-	// "is this a host build?". Empty `targetP.Tags` produces an empty
+	// "is this a host build?". Empty `instance.Platform.Tags` produces an empty
 	// (non-nil) slice so the JSON serialisation stays `[]` (not `null`).
-	tags := []string{}
-	if len(targetP.Tags) > 0 {
-		tags = append(tags, targetP.Tags...)
-	}
+	tags := instance.Platform.Tags
 
 	n := &Node{
 		Cmds: []Cmd{
@@ -282,8 +277,8 @@ func emitARNode(
 			"show_out": "yes",
 		},
 		Outputs:      []string{archivePath},
-		Platform:     string(targetP.Target),
-		HostPlatform: targetP.IsHost,
+		Platform:     string(instance.Platform.Target),
+		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -323,7 +318,6 @@ func emitARNode(
 // the reference graph confirms zero AR-on-AR deps. The parameter is
 // retained for tests that pin the historical shape.
 func EmitAR(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	objRefs []NodeRef,
 	objPaths []string,
@@ -337,7 +331,7 @@ func EmitAR(
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + ArchiveName(instance.Path)
 
-	return emitARNode(hostP, targetP, instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, "", emit)
+	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, "", emit)
 }
 
 // EmitARGlobal emits a second AR node for a module's GLOBAL_SRCS,
@@ -353,7 +347,6 @@ func EmitAR(
 //
 // Returns the NodeRef for the emitted global AR node.
 func EmitARGlobal(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	objRefs []NodeRef,
 	objPaths []string,
@@ -366,7 +359,7 @@ func EmitARGlobal(
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + globalArchiveName(instance.Path)
 
-	return emitARNode(hostP, targetP, instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, "", emit)
+	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, "", emit)
 }
 
 // EmitARNamed emits an AR node using an explicitly supplied archive
@@ -381,7 +374,6 @@ func EmitARGlobal(
 // (empty when no AR_PLUGIN macro fired on the owning module).
 // PR-M3-openssl-ar-plugin-and-as-clean.
 func EmitARNamed(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	archiveBaseName string,
 	objRefs []NodeRef,
@@ -397,7 +389,7 @@ func EmitARNamed(
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
 
-	return emitARNode(hostP, targetP, instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, emit)
+	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, emit)
 }
 
 // EmitARNamedTagged is like EmitARNamed but stamps an explicit
@@ -406,7 +398,6 @@ func EmitARNamed(
 // `py3_native` per the REF graph; the rest of the named archives stay
 // untagged (regular `.a` archives have no module_tag in REF).
 func EmitARNamedTagged(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	archiveBaseName string,
 	tag string,
@@ -423,7 +414,7 @@ func EmitARNamedTagged(
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
 
-	return emitARNode(hostP, targetP, instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, emit)
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, emit)
 }
 
 // EmitARGlobalNamedTagged is like EmitARGlobalNamed but uses an
@@ -432,7 +423,6 @@ func EmitARNamedTagged(
 // alternate shapes (PY23_LIBRARY → "py3_global"; PY23_NATIVE_LIBRARY
 // → "py3_native_global") supply the tag explicitly.
 func EmitARGlobalNamedTagged(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	archiveBaseName string,
 	tag string,
@@ -447,13 +437,12 @@ func EmitARGlobalNamedTagged(
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
 
-	return emitARNode(hostP, targetP, instance, archivePath, tag, objRefs, objPaths, nil, memberInputs, "", emit)
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, memberInputs, "", emit)
 }
 
 // EmitARGlobalNamed is like EmitARGlobal but uses an explicitly
 // supplied archive base name. Used by Python library module types.
 func EmitARGlobalNamed(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	archiveBaseName string,
 	objRefs []NodeRef,
@@ -467,5 +456,5 @@ func EmitARGlobalNamed(
 
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
 
-	return emitARNode(hostP, targetP, instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, "", emit)
+	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, "", emit)
 }

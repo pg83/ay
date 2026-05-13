@@ -13,14 +13,14 @@ func TestModuleInstance_Equality_Hashing(t *testing.T) {
 	a := ModuleInstance{
 		Path:     "build/cow/on",
 		Language: LangCPP,
-		Target:   PlatformDefaultLinuxAArch64,
+		Platform: testTargetP,
 		Flags:    inferFlagsFromPath("build/cow/on", false),
 	}
 
 	b := ModuleInstance{
 		Path:     "build/cow/on",
 		Language: LangCPP,
-		Target:   PlatformDefaultLinuxAArch64,
+		Platform: testTargetP,
 		Flags:    inferFlagsFromPath("build/cow/on", false),
 	}
 
@@ -38,7 +38,7 @@ func TestModuleInstance_Equality_Hashing(t *testing.T) {
 
 	// A different platform → a different instance → a different
 	// map slot.
-	host := a.WithHost(DefaultLinuxConfig)
+	host := a.WithHost(testHostP)
 	if host == a {
 		t.Errorf("WithHost did not produce a distinct instance: %v == %v", host, a)
 	}
@@ -54,7 +54,7 @@ func TestModuleInstance_WithHost_FlipsTargetAndPIC(t *testing.T) {
 	mi := ModuleInstance{
 		Path:     "build/cow/on",
 		Language: LangCPP,
-		Target:   DefaultLinuxConfig.Target.ID,
+		Platform: testTargetP,
 		Flags:    inferFlagsFromPath("build/cow/on", false),
 	}
 
@@ -62,7 +62,7 @@ func TestModuleInstance_WithHost_FlipsTargetAndPIC(t *testing.T) {
 		t.Fatalf("seed instance has PIC=true; want false")
 	}
 
-	host := mi.WithHost(DefaultLinuxConfig)
+	host := mi.WithHost(testHostP)
 
 	if host.Path != mi.Path {
 		t.Errorf("host.Path = %q, want %q", host.Path, mi.Path)
@@ -72,8 +72,8 @@ func TestModuleInstance_WithHost_FlipsTargetAndPIC(t *testing.T) {
 		t.Errorf("host.Language = %q, want %q", host.Language, mi.Language)
 	}
 
-	if host.Target != DefaultLinuxConfig.Host.ID {
-		t.Errorf("host.Target = %q, want %q", host.Target, DefaultLinuxConfig.Host.ID)
+	if host.Platform != testHostP {
+		t.Errorf("host.Platform != testHostP")
 	}
 
 	if !host.Flags.PIC {
@@ -85,8 +85,8 @@ func TestModuleInstance_WithHost_FlipsTargetAndPIC(t *testing.T) {
 		t.Errorf("WithHost mutated the receiver; mi.Flags.PIC = true")
 	}
 
-	if mi.Target != DefaultLinuxConfig.Target.ID {
-		t.Errorf("WithHost mutated the receiver; mi.Target = %q", mi.Target)
+	if mi.Platform != testTargetP {
+		t.Errorf("WithHost mutated the receiver; mi.Platform != testTargetP")
 	}
 }
 
@@ -96,7 +96,7 @@ func TestModuleInstance_String_Diagnostic(t *testing.T) {
 	mi := ModuleInstance{
 		Path:     "build/cow/on",
 		Language: LangCPP,
-		Target:   PlatformDefaultLinuxAArch64,
+		Platform: testTargetP,
 	}
 
 	got := mi.String()

@@ -335,7 +335,6 @@ var pbCcDeepRuntimeHeaders = []string{
 //
 // Returns the emitted NodeRef.
 func EmitPB(
-	hostP, targetP *Platform,
 	instance ModuleInstance,
 	srcRel string,
 	cppStyleguideLDRef NodeRef,
@@ -346,7 +345,6 @@ func EmitPB(
 	sourceRoot string,
 	emit Emitter,
 ) NodeRef {
-	_ = hostP // PR-M3-platform-pair-step2: surfaced for symmetry; the renderer only consumes targetP today.
 	moduleDir := instance.Path
 	protoRelPath := moduleDir + "/" + srcRel
 	// Output paths strip the .proto suffix: foo.proto → foo.pb.h / foo.pb.cc.
@@ -397,12 +395,9 @@ func EmitPB(
 	// PR-M3-platform-pair-step2: tags are baseline data carried by the
 	// platform the caller selected (`["tool"]` on host, `[]` on target).
 	// The renderer does NOT branch on "is this a host build?". Empty
-	// `targetP.Tags` produces an empty (non-nil) slice so the JSON stays
+	// `instance.Platform.Tags` produces an empty (non-nil) slice so the JSON stays
 	// `[]` rather than `null`.
-	tags := []string{}
-	if len(targetP.Tags) > 0 {
-		tags = append(tags, targetP.Tags...)
-	}
+	tags := instance.Platform.Tags
 
 	targetProps := map[string]string{
 		"module_dir": moduleDir,
@@ -445,8 +440,8 @@ func EmitPB(
 		},
 		Tags:             tags,
 		TargetProperties: targetProps,
-		Platform:         string(targetP.Target),
-		HostPlatform:     targetP.IsHost,
+		Platform:         string(instance.Platform.Target),
+		HostPlatform:     instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -560,7 +555,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 
 	var cppStyleguideLDRef, protocLDRef NodeRef
 
-	protocHostInst := instance.WithHost(ctx.cfg)
+	protocHostInst := instance.WithHost(ctx.host)
 	protocHostInst.Path = pbProtocModule
 	protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
 
@@ -573,7 +568,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		_ = exc
 	}
 
-	cppStyleguideHostInst := instance.WithHost(ctx.cfg)
+	cppStyleguideHostInst := instance.WithHost(ctx.host)
 	cppStyleguideHostInst.Path = pbCppStyleguideModule
 	cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
 
@@ -601,7 +596,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 
 	// Emit PB nodes.
 	for _, src := range protoSrcs {
-		pbRef := EmitPB(ctx.host, ctx.platformFor(instance),
+		pbRef := EmitPB(
 			instance, src, cppStyleguideLDRef, protocLDRef,
 			cppStyleguideBinary, protocBinary,
 			"cpp_proto", ctx.sourceRoot, ctx.emit)
@@ -620,7 +615,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		// .pb.h / .pb.cc BUILD_ROOT path. Keyed per-platform — PB emits on
 		// both target and host axes; x86_64 consumers must reach the x86_64
 		// PB, aarch64 consumers the aarch64 PB.
-		pbKey := codegenOutputKey{platform: instance.Target}
+		pbKey := codegenOutputKey{platform: instance.Platform.Target}
 		pbKey.path = pbH
 		ctx.pbOutputs[pbKey] = pbRef
 		pbKey.path = pbCC
@@ -683,7 +678,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		event2cppBinary := evEvent2cppBinaryPath
 		var event2cppLDRef NodeRef
 
-		event2cppHostInst := instance.WithHost(ctx.cfg)
+		event2cppHostInst := instance.WithHost(ctx.host)
 		event2cppHostInst.Path = evEvent2cppModule
 		event2cppHostInst.Flags = inferFlagsFromPath(evEvent2cppModule, true)
 
@@ -696,7 +691,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		}
 
 		for _, src := range evSrcs {
-			evRef := EmitEV(ctx.host, ctx.platformFor(instance),
+			evRef := EmitEV(
 				instance, src, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
 				"cpp_proto", ctx.sourceRoot, ctx.emit)
@@ -710,7 +705,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 
 			// PR-M3-L0-codegen-deps-EV-PB: stash the EV NodeRef under both outputs
 			// on the emitting platform. See PB branch above for the keying rationale.
-			evKey := codegenOutputKey{platform: instance.Target}
+			evKey := codegenOutputKey{platform: instance.Platform.Target}
 			evKey.path = evH
 			ctx.evOutputs[evKey] = evRef
 			evKey.path = evPbCC
@@ -843,7 +838,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		// PR-M3-L0-codegen-deps-EV-PB: cross-codegen deps via .pb.h imports.
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, co.genRef)
 
-		ccRef, ccOut := EmitCC(ctx.host, ctx.platformFor(instance), instance, co.srcRel, ccIn, ctx.emit)
+		ccRef, ccOut := EmitCC(instance, co.srcRel, ccIn, ctx.emit)
 		ccRefs = append(ccRefs, ccRef)
 		ccOutputs = append(ccOutputs, ccOut)
 
@@ -859,6 +854,6 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	// AR emission. Mirrors gen.go:3097 EmitARNamed with module_tag=cpp_proto.
 	arBaseName := ArchiveName(instance.Path)
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + arBaseName
-	arRef := emitARNode(ctx.host, ctx.platformFor(instance), instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, "", ctx.emit)
+	arRef := emitARNode(instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, "", ctx.emit)
 	return arRef, archivePath, true
 }
