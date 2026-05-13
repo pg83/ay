@@ -750,7 +750,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 			SourceRel:       srcRelOnDisk,
 			OwnAddIncl:      in.AddIncl,
 			PeerAddInclSet:  in.PeerAddInclGlobal,
-			BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.LibcMusl, scanPlatform.Target),
+			BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.LibcMusl, scanPlatform),
 		}
 
 		// PR-M3-perf-E: scanCtx dispatch — local vs interned (see
@@ -898,7 +898,7 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 		SourceRel:       vfsPath.Rel,
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
-		BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.LibcMusl, srcInstance.Platform.Target),
+		BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.LibcMusl, srcInstance.Platform),
 	}
 
 	sc := ctx.getScanCtx(scanner, cfg)
@@ -927,12 +927,12 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 // repo root, silently expanding the musl CC input sets incorrectly.
 // includeScannerBasePaths returns the base search-path list for the
 // include scanner. `libcMusl` is the per-MODULE flag (this module is
-// part of contrib/libs/musl/*); `scanTarget` is the platform identity
-// the search paths resolve against (typically `instance.Platform.Target`,
-// but JOIN_SRCS during a host walk passes `ctx.target.Target` to
-// force aarch64 musl-arch paths without mutating the surrounding
+// part of contrib/libs/musl/*); `scanPlatform` is the platform the
+// search paths resolve against (typically `instance.Platform`, but
+// JOIN_SRCS during a host walk passes `ctx.target` to force the
+// target-arch musl-arch paths without mutating the surrounding
 // instance).
-func includeScannerBasePaths(libcMusl bool, scanTarget PlatformID) []string {
+func includeScannerBasePaths(libcMusl bool, scanPlatform *Platform) []string {
 	base := []string{
 		"contrib/libs/linux-headers",
 		"contrib/libs/linux-headers/_nf",
@@ -941,16 +941,8 @@ func includeScannerBasePaths(libcMusl bool, scanTarget PlatformID) []string {
 	if libcMusl {
 		// Mirror muslCcIncludes / muslCcIncludesX8664: arch + generic
 		// + src/include + src/internal + include + extra.
-		var arch string
-
-		if scanTarget == PlatformDefaultLinuxX8664 {
-			arch = "x86_64"
-		} else {
-			arch = "aarch64"
-		}
-
 		muslPaths := []string{
-			"contrib/libs/musl/arch/" + arch,
+			"contrib/libs/musl/arch/" + string(scanPlatform.ISA),
 			"contrib/libs/musl/arch/generic",
 			"contrib/libs/musl/src/include",
 			"contrib/libs/musl/src/internal",
