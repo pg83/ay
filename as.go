@@ -181,8 +181,8 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 			},
 		},
 		Env:          env,
-		Inputs:       allInputs,
-		Outputs:      []string{outputPath},
+		Inputs:       ToVFSSlice(allInputs),
+		Outputs:      ToVFSSlice([]string{outputPath}),
 		HostPlatform: instance.Platform.IsHost,
 		KV: map[string]string{
 			"p":  "AS",
@@ -308,8 +308,8 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 			},
 		},
 		Env:          env,
-		Inputs:       allInputs,
-		Outputs:      []string{outputPath},
+		Inputs:       ToVFSSlice(allInputs),
+		Outputs:      ToVFSSlice([]string{outputPath}),
 		HostPlatform: instance.Platform.IsHost,
 		KV: map[string]string{
 			"p":  "AS",

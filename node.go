@@ -63,9 +63,9 @@ type Node struct {
 	Env              map[string]string      `json:"env"`
 	ForeignDeps      map[string][]string    `json:"foreign_deps,omitempty"`
 	HostPlatform     bool                   `json:"host_platform,omitempty"`
-	Inputs           []string               `json:"inputs"`
+	Inputs           []VFS                  `json:"inputs"`
 	KV               map[string]string      `json:"kv"`
-	Outputs          []string               `json:"outputs"`
+	Outputs          []VFS                  `json:"outputs"`
 	Platform         string                 `json:"platform"`
 	Requirements     map[string]interface{} `json:"requirements"`
 	Sandboxing       bool                   `json:"sandboxing"`

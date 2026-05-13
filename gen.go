@@ -5300,8 +5300,8 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				},
 			},
 			Env:     env,
-			Inputs:  []string{py3ccBinary, py3ccSlowBin, srcAbs},
-			Outputs: []string{outputPath},
+			Inputs:  ToVFSSlice([]string{py3ccBinary, py3ccSlowBin, srcAbs}),
+			Outputs: ToVFSSlice([]string{outputPath}),
 			KV: map[string]string{
 				"p":  "PY",
 				"pc": "yellow",
@@ -5408,8 +5408,8 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 				{CmdArgs: pyCmdArgs, Env: env},
 			},
 			Env:     env,
-			Inputs:  []string{genPy3RegScriptPath},
-			Outputs: []string{regCppAbs},
+			Inputs:  ToVFSSlice([]string{genPy3RegScriptPath}),
+			Outputs: ToVFSSlice([]string{regCppAbs}),
 			KV: map[string]string{
 				"p":  "PY",
 				"pc": "yellow",

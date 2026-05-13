@@ -179,8 +179,8 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 			},
 		},
 		Env:          env,
-		Inputs:       inputs,
-		Outputs:      []string{outputPath},
+		Inputs:       ToVFSSlice(inputs),
+		Outputs:      ToVFSSlice([]string{outputPath}),
 		HostPlatform: hostPlatform,
 		KV: map[string]string{
 			"p":  "R6",

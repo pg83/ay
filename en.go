@@ -120,12 +120,12 @@ func EmitEN(
 			},
 		},
 		Env:    env,
-		Inputs: inputs,
+		Inputs: ToVFSSlice(inputs),
 		KV: map[string]string{
 			"p":  "EN",
 			"pc": "yellow",
 		},
-		Outputs:      outputs,
+		Outputs:      ToVFSSlice(outputs),
 		Platform:     string(instance.Platform.Target),
 		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{

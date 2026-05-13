@@ -106,7 +106,7 @@ func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 
 	wantInput := "$(BUILD_ROOT)/util/_/datetime/parser.rl6.cpp"
 
-	if len(got.Inputs) != 1 || got.Inputs[0] != wantInput {
+	if len(got.Inputs) != 1 || got.Inputs[0].String() != wantInput {
 		t.Errorf("inputs = %v, want [%q]", got.Inputs, wantInput)
 	}
 

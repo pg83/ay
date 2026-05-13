@@ -39,6 +39,17 @@ func testPlatformFor(i ModuleInstance) *Platform {
 	return i.Platform
 }
 
+// vfsStrings materialises a []VFS as a []string of canonical VFS forms
+// — convenience for test assertions that compare against literal
+// "$(SOURCE_ROOT)/..." / "$(BUILD_ROOT)/..." strings.
+func vfsStrings(vs []VFS) []string {
+	out := make([]string, len(vs))
+	for i, v := range vs {
+		out[i] = v.String()
+	}
+	return out
+}
+
 // TestEmitAR_BuildCowOn_Target_ByteExact verifies that EmitAR
 // produces a node that is field-for-field identical to the
 // reference TARGET AR node in /home/pg/monorepo/yatool_orig/sg.json
@@ -55,9 +66,9 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	objRefs := []NodeRef{e.Emit(&Node{
 		Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
 		Env:              map[string]string{},
-		Inputs:           []string{},
+		Inputs:           ToVFSSlice([]string{}),
 		KV:               map[string]string{},
-		Outputs:          []string{"$(BUILD_ROOT)/build/cow/on/lib.c.o"},
+		Outputs:          ToVFSSlice([]string{"$(BUILD_ROOT)/build/cow/on/lib.c.o"}),
 		Platform:         "default-linux-aarch64",
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
@@ -182,9 +193,9 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
 			Env:              map[string]string{},
-			Inputs:           []string{},
+			Inputs:           ToVFSSlice([]string{}),
 			KV:               map[string]string{},
-			Outputs:          []string{out},
+			Outputs:          ToVFSSlice([]string{out}),
 			Platform:         "default-linux-aarch64",
 			Requirements:     map[string]interface{}{},
 			Tags:             []string{},
@@ -234,9 +245,9 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
 			Env:              map[string]string{},
-			Inputs:           []string{},
+			Inputs:           ToVFSSlice([]string{}),
 			KV:               map[string]string{},
-			Outputs:          []string{out},
+			Outputs:          ToVFSSlice([]string{out}),
 			Platform:         "default-linux-aarch64",
 			Requirements:     map[string]interface{}{},
 			Tags:             []string{},
@@ -273,9 +284,9 @@ func TestEmitAR_InputsSorted(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
 			Env:              map[string]string{},
-			Inputs:           []string{},
+			Inputs:           ToVFSSlice([]string{}),
 			KV:               map[string]string{},
-			Outputs:          []string{out},
+			Outputs:          ToVFSSlice([]string{out}),
 			Platform:         "default-linux-aarch64",
 			Requirements:     map[string]interface{}{},
 			Tags:             []string{},
@@ -297,7 +308,7 @@ func TestEmitAR_InputsSorted(t *testing.T) {
 		t.Fatalf("inputs len = %d, want 4", len(inputs))
 	}
 
-	inputObjs := inputs[:3]
+	inputObjs := vfsStrings(inputs[:3])
 
 	if !sort.StringsAreSorted(inputObjs) {
 		t.Errorf("inputs .o paths not sorted: %v", inputObjs)
@@ -320,9 +331,9 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
 			Env:              map[string]string{},
-			Inputs:           []string{},
+			Inputs:           ToVFSSlice([]string{}),
 			KV:               map[string]string{},
-			Outputs:          []string{out},
+			Outputs:          ToVFSSlice([]string{out}),
 			Platform:         "default-linux-aarch64",
 			Requirements:     map[string]interface{}{},
 			Tags:             []string{},

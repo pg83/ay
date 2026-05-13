@@ -72,12 +72,12 @@ func EmitJVCPG4(
 			},
 		},
 		Env:    env,
-		Inputs: inputs,
+		Inputs: ToVFSSlice(inputs),
 		KV: map[string]string{
 			"p":  "CP",
 			"pc": "light-cyan",
 		},
-		Outputs:  []string{dstAbsPath},
+		Outputs:  ToVFSSlice([]string{dstAbsPath}),
 		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
@@ -138,12 +138,12 @@ func EmitCP(instance ModuleInstance, srcAbsPath, dstAbsPath string, emit Emitter
 			},
 		},
 		Env:    env,
-		Inputs: inputs,
+		Inputs: ToVFSSlice(inputs),
 		KV: map[string]string{
 			"p":  "CP",
 			"pc": "light-cyan",
 		},
-		Outputs:  []string{dstAbsPath},
+		Outputs:  ToVFSSlice([]string{dstAbsPath}),
 		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),

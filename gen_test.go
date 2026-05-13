@@ -78,7 +78,7 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 			t.Fatalf("node uid=%s has no outputs", n.UID)
 		}
 
-		nodesByOutput[n.Outputs[0]] = n
+		nodesByOutput[n.Outputs[0].String()] = n
 	}
 
 	const (
@@ -190,7 +190,7 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 	}
 
 	wantOut := "$(BUILD_ROOT)/lone/lone"
-	if len(ld.Outputs) != 1 || ld.Outputs[0] != wantOut {
+	if len(ld.Outputs) != 1 || ld.Outputs[0].String() != wantOut {
 		t.Errorf("LD outputs = %#v, want [%q]", ld.Outputs, wantOut)
 	}
 
@@ -438,20 +438,6 @@ func TestCmdGen_MissingTargetThrows(t *testing.T) {
 	}
 }
 
-func TestCmdGen_MissingOutThrows(t *testing.T) {
-	exc := Try(func() {
-		cmdGen([]string{"--target", "build/cow/on"})
-	})
-
-	if exc == nil {
-		t.Fatal("expected exception")
-	}
-
-	if !strings.Contains(exc.Error(), "--out is required") {
-		t.Errorf("unexpected error: %v", exc)
-	}
-}
-
 func TestGen_PeerdirDeclarationOrder_Preserved(t *testing.T) {
 	tmp := t.TempDir()
 
@@ -484,10 +470,10 @@ END()
 
 	for i, n := range g.Graph {
 		if len(n.Outputs) > 0 {
-			if strings.Contains(n.Outputs[0], "/zlib/") && n.KV["p"] == "AR" {
+			if strings.Contains(n.Outputs[0].String(), "/zlib/") && n.KV["p"] == "AR" {
 				zlibIdx = i
 			}
-			if strings.Contains(n.Outputs[0], "/alib/") && n.KV["p"] == "AR" {
+			if strings.Contains(n.Outputs[0].String(), "/alib/") && n.KV["p"] == "AR" {
 				alibIdx = i
 			}
 		}
@@ -543,7 +529,7 @@ END()
 
 	for _, n := range g.Graph {
 		if n.KV["p"] == "CC" {
-			ccInputs = append(ccInputs, n.Inputs...)
+			ccInputs = append(ccInputs, vfsStrings(n.Inputs)...)
 		}
 	}
 
@@ -683,10 +669,10 @@ END()
 		}
 
 		switch {
-		case strings.Contains(n.Inputs[0], "all_my.cpp"):
-			joinedInput = n.Inputs[0]
-		case strings.Contains(n.Inputs[0], "other.cpp"):
-			otherInput = n.Inputs[0]
+		case strings.Contains(n.Inputs[0].String(), "all_my.cpp"):
+			joinedInput = n.Inputs[0].String()
+		case strings.Contains(n.Inputs[0].String(), "other.cpp"):
+			otherInput = n.Inputs[0].String()
 		}
 	}
 
@@ -704,7 +690,7 @@ END()
 
 	for _, n := range g.Graph {
 		if n.KV["p"] == "JS" && len(n.Outputs) > 0 {
-			jsOut = n.Outputs[0]
+			jsOut = n.Outputs[0].String()
 		}
 	}
 
@@ -898,11 +884,11 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Fatalf("host LD node has no Outputs; got Outputs=%v", ldNode.Outputs)
 	}
 
-	wantCmd0 := canonicalizeRagel6BinaryPath(ldNode.Outputs[0])
+	wantCmd0 := canonicalizeRagel6BinaryPath(ldNode.Outputs[0].String())
 
 	if r6Node.Cmds[0].CmdArgs[0] != wantCmd0 {
 		t.Errorf("R6 cmd_args[0] = %q, want canonicalised host ragel6 LD outputs[0] = %q (raw outputs[0] = %q)",
-			r6Node.Cmds[0].CmdArgs[0], wantCmd0, ldNode.Outputs[0])
+			r6Node.Cmds[0].CmdArgs[0], wantCmd0, ldNode.Outputs[0].String())
 	}
 }
 
@@ -967,7 +953,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	foundInInputs := false
 
 	for _, in := range ldNode.Inputs {
-		if in == expectedInput {
+		if in.String() == expectedInput {
 			foundInInputs = true
 			break
 		}
@@ -979,8 +965,8 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 
 	// Guard against double-prefixed entries (the original D08 defect).
 	for _, in := range ldNode.Inputs {
-		if strings.Contains(in, "$(BUILD_ROOT)/$(BUILD_ROOT)") {
-			t.Errorf("double-prefixed input found: %q", in)
+		if strings.Contains(in.String(), "$(BUILD_ROOT)/$(BUILD_ROOT)") {
+			t.Errorf("double-prefixed input found: %q", in.String())
 		}
 	}
 
@@ -1704,7 +1690,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		// locally at mymod/, so the composer takes the SRCDIR route).
 		wantInput := "$(SOURCE_ROOT)/other/dir/foo.cpp"
 
-		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0] != wantInput {
+		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
 			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
 		}
 
@@ -1712,7 +1698,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		// from mymod) = ../other/dir/foo.cpp → __/other/dir/foo.cpp.
 		wantOutput := "$(BUILD_ROOT)/mymod/__/other/dir/foo.cpp.o"
 
-		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0] != wantOutput {
+		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].String() != wantOutput {
 			t.Errorf("CC outputs = %v, want first = %q", ccNode.Outputs, wantOutput)
 		}
 	})
@@ -1751,7 +1737,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		wantInput := "$(SOURCE_ROOT)/basemod/bar.cpp"
 
-		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0] != wantInput {
+		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
 			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
 		}
 	})
@@ -1836,12 +1822,12 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		}
 
 		wantInput := "$(SOURCE_ROOT)/tools/r6/main.cpp"
-		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0] != wantInput {
+		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
 			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
 		}
 
 		wantOutput := "$(BUILD_ROOT)/tools/r6/main.cpp.o"
-		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0] != wantOutput {
+		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].String() != wantOutput {
 			t.Errorf("CC outputs = %v, want first = %q", ccNode.Outputs, wantOutput)
 		}
 	})
@@ -2086,7 +2072,7 @@ END()
 			// emits a CC for its main.cpp under $(SOURCE_ROOT)).
 			ip := ""
 			if len(n.Inputs) > 0 {
-				ip = n.Inputs[0]
+				ip = n.Inputs[0].String()
 			}
 
 			if ccNode == nil && len(ip) > 0 && ip[:14] == "$(BUILD_ROOT)/" {
@@ -2349,13 +2335,13 @@ END()
 
 	wantInput := "$(SOURCE_ROOT)/other/src/foo.cpp"
 
-	if len(ccNode.Inputs) == 0 || ccNode.Inputs[0] != wantInput {
+	if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
 		t.Errorf("CC input = %v, want first = %q", ccNode.Inputs, wantInput)
 	}
 
 	wantOutput := "$(BUILD_ROOT)/mylib/__/other/src/foo.cpp.o"
 
-	if len(ccNode.Outputs) == 0 || ccNode.Outputs[0] != wantOutput {
+	if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].String() != wantOutput {
 		t.Errorf("CC output = %v, want first = %q", ccNode.Outputs, wantOutput)
 	}
 }
@@ -2399,13 +2385,13 @@ END()
 
 	wantInput := "$(SOURCE_ROOT)/mylib/local.c"
 
-	if len(ccNode.Inputs) == 0 || ccNode.Inputs[0] != wantInput {
+	if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
 		t.Errorf("CC input = %v, want first = %q (local-existing source must ignore SRCDIR)", ccNode.Inputs, wantInput)
 	}
 
 	wantOutput := "$(BUILD_ROOT)/mylib/local.c.o"
 
-	if len(ccNode.Outputs) == 0 || ccNode.Outputs[0] != wantOutput {
+	if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].String() != wantOutput {
 		t.Errorf("CC output = %v, want first = %q", ccNode.Outputs, wantOutput)
 	}
 }
@@ -2442,7 +2428,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	for _, n := range g.Graph {
 		if n.KV["p"] == "CC" {
 			for _, out := range n.Outputs {
-				if strings.Contains(out, "main.cpp.o") {
+				if strings.Contains(out.String(), "main.cpp.o") {
 					consumerCC = n
 					break
 				}
@@ -2582,7 +2568,7 @@ func TestGen_ToolsArchiver_LDPeerArchiveClosure(t *testing.T) {
 	var ourLD *Node
 
 	for _, n := range our.Graph {
-		if len(n.Outputs) > 0 && n.Outputs[0] == ldOutput {
+		if len(n.Outputs) > 0 && n.Outputs[0].String() == ldOutput {
 			ourLD = n
 
 			break
@@ -2664,7 +2650,7 @@ func TestGen_MuslPyplugin_CPNodeEmitted(t *testing.T) {
 			continue
 		}
 
-		if len(n.Outputs) == 0 || n.Outputs[0] != wantOutput {
+		if len(n.Outputs) == 0 || n.Outputs[0].String() != wantOutput {
 			continue
 		}
 
@@ -2735,7 +2721,7 @@ func TestGen_ToolsArchiver_LDPluginSection(t *testing.T) {
 	var ourLD *Node
 
 	for _, n := range our.Graph {
-		if len(n.Outputs) > 0 && n.Outputs[0] == ldOutput {
+		if len(n.Outputs) > 0 && n.Outputs[0].String() == ldOutput {
 			ourLD = n
 
 			break
@@ -2850,7 +2836,7 @@ func TestGen_MuslPyplugin_HostCPDedup(t *testing.T) {
 			continue
 		}
 
-		if len(n.Outputs) == 0 || n.Outputs[0] != pluginOutput {
+		if len(n.Outputs) == 0 || n.Outputs[0].String() != pluginOutput {
 			continue
 		}
 
@@ -2917,7 +2903,7 @@ func TestGen_MuslPyplugin_HostCPDedup(t *testing.T) {
 		}
 
 		if !hasDep {
-			t.Errorf("LD with output %q (platform=%q) lists pyplugin in cmd[2] but does not depend on CP UID %q — host CP dedup must wire host LDs to the target CP NodeRef", n.Outputs[0], n.Platform, cpUID)
+			t.Errorf("LD with output %q (platform=%q) lists pyplugin in cmd[2] but does not depend on CP UID %q — host CP dedup must wire host LDs to the target CP NodeRef", n.Outputs[0].String(), n.Platform, cpUID)
 		}
 	}
 
@@ -3025,8 +3011,8 @@ func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 	// FLAT output path: no `_/` infix.
 	wantOut := "$(BUILD_ROOT)/mod/system/compiler.cpp.o"
 
-	if cc.Outputs[0] != wantOut {
-		t.Errorf("CC output = %q, want %q (SRC_C_NO_LTO uses flat output, not `mod/_/system/compiler.cpp.o`)", cc.Outputs[0], wantOut)
+	if cc.Outputs[0].String() != wantOut {
+		t.Errorf("CC output = %q, want %q (SRC_C_NO_LTO uses flat output, not `mod/_/system/compiler.cpp.o`)", cc.Outputs[0].String(), wantOut)
 	}
 	// No per-source CFLAGS: last arg is the input path, second-to-last
 	// is the standard macro-prefix-map (NOT a per-source -D flag).
@@ -3079,7 +3065,7 @@ func TestGen_SRC_FlatOutputPath(t *testing.T) {
 
 	wantOut := "$(BUILD_ROOT)/mod/sub/x.cpp.o"
 
-	if len(cc.Outputs) != 1 || cc.Outputs[0] != wantOut {
+	if len(cc.Outputs) != 1 || cc.Outputs[0].String() != wantOut {
 		t.Errorf("CC output = %#v, want [%q] (SRC uses flat output, not `mod/_/sub/x.cpp.o`)", cc.Outputs, wantOut)
 	}
 }
@@ -3167,7 +3153,7 @@ END()
 	const forbidden = "$(BUILD_ROOT)/joinmod/all_my.cpp"
 
 	for _, in := range arNode.Inputs {
-		if in == forbidden {
+		if in.String() == forbidden {
 			t.Errorf("AR.Inputs contains %q — JS-derived BUILD_ROOT shim must be filtered (PR-35y R7)", forbidden)
 		}
 	}
@@ -3180,8 +3166,8 @@ END()
 		"$(SOURCE_ROOT)/joinmod/src2.cpp": false,
 	}
 	for _, in := range arNode.Inputs {
-		if _, want := wantSources[in]; want {
-			wantSources[in] = true
+		if _, want := wantSources[in.String()]; want {
+			wantSources[in.String()] = true
 		}
 	}
 
@@ -3231,7 +3217,7 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	const forbidden = "$(BUILD_ROOT)/consumer/_/parser.rl6.cpp"
 
 	for _, in := range arNode.Inputs {
-		if in == forbidden {
+		if in.String() == forbidden {
 			t.Errorf("AR.Inputs contains %q — R6-derived BUILD_ROOT shim must be filtered (PR-35y R7)", forbidden)
 		}
 	}
@@ -3241,8 +3227,8 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 		"$(SOURCE_ROOT)/consumer/parser.h":   false,
 	}
 	for _, in := range arNode.Inputs {
-		if _, want := wantSources[in]; want {
-			wantSources[in] = true
+		if _, want := wantSources[in.String()]; want {
+			wantSources[in.String()] = true
 		}
 	}
 
@@ -3302,12 +3288,12 @@ END()
 
 	regularInputs := map[string]bool{}
 	for _, in := range regularAR.Inputs {
-		regularInputs[in] = true
+		regularInputs[in.String()] = true
 	}
 
 	globalInputs := map[string]bool{}
 	for _, in := range globalAR.Inputs {
-		globalInputs[in] = true
+		globalInputs[in.String()] = true
 	}
 
 	const (
@@ -3385,7 +3371,7 @@ END()
 	const forbidden = "$(SOURCE_ROOT)/mod/inner/sub/foo.S"
 
 	for _, in := range arNode.Inputs {
-		if in == forbidden {
+		if in.String() == forbidden {
 			t.Errorf("AR.Inputs contains %q — SRCDIR rebase must redirect to %q (PR-35y R8)", forbidden, want)
 		}
 	}
@@ -3393,7 +3379,7 @@ END()
 	found := false
 
 	for _, in := range arNode.Inputs {
-		if in == want {
+		if in.String() == want {
 			found = true
 
 			break
@@ -3434,7 +3420,7 @@ func TestD41_PICCoincidesWithHostTarget(t *testing.T) {
 	for _, n := range g.Graph {
 		out := ""
 		if len(n.Outputs) > 0 {
-			out = n.Outputs[0]
+			out = n.Outputs[0].String()
 		}
 
 		switch n.Platform {

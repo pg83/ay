@@ -81,8 +81,8 @@ func EmitR5(
 	node := &Node{
 		Cmds:    []Cmd{cmd0, cmd1},
 		Env:     env,
-		Inputs:  inputs,
-		Outputs: []string{tmpPath, cppPath},
+		Inputs:  ToVFSSlice(inputs),
+		Outputs: ToVFSSlice([]string{tmpPath, cppPath}),
 		KV: map[string]string{
 			"p":  "R5",
 			"pc": "yellow",
@@ -208,13 +208,13 @@ func EmitJV(
 			},
 		},
 		Env:    env,
-		Inputs: inputs,
+		Inputs: ToVFSSlice(inputs),
 		KV: map[string]string{
 			"p":        "JV",
 			"pc":       "light-blue",
 			"show_out": "yes",
 		},
-		Outputs: outputs,
+		Outputs: ToVFSSlice(outputs),
 		Tags:    []string{},
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
@@ -310,13 +310,13 @@ func EmitJVSplit(
 			},
 		},
 		Env:    env,
-		Inputs: inputs,
+		Inputs: ToVFSSlice(inputs),
 		KV: map[string]string{
 			"p":        "JV",
 			"pc":       "light-blue",
 			"show_out": "yes",
 		},
-		Outputs: outputs,
+		Outputs: ToVFSSlice(outputs),
 		Tags:    []string{},
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
@@ -408,12 +408,12 @@ func EmitCF(
 			},
 		},
 		Env:    env,
-		Inputs: inputs,
+		Inputs: ToVFSSlice(inputs),
 		KV: map[string]string{
 			"p":  "CF",
 			"pc": "yellow",
 		},
-		Outputs: []string{outAbs},
+		Outputs: ToVFSSlice([]string{outAbs}),
 		Tags:    []string{},
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
@@ -589,14 +589,14 @@ func EmitBI(
 			{CmdArgs: cmd2Args, Env: env},
 		},
 		Env:    env,
-		Inputs: inputs,
+		Inputs: ToVFSSlice(inputs),
 		KV: map[string]string{
 			"disable_cache": "yes",
 			"p":             "BI",
 			"pc":            "yellow",
 			"show_out":      "yes",
 		},
-		Outputs: []string{outputPath},
+		Outputs: ToVFSSlice([]string{outputPath}),
 		Tags:    []string{},
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
@@ -821,8 +821,8 @@ func EmitPR(
 	node := &Node{
 		Cmds:    []Cmd{cmd},
 		Env:     env,
-		Inputs:  inputs,
-		Outputs: outputs,
+		Inputs:  ToVFSSlice(inputs),
+		Outputs: ToVFSSlice(outputs),
 		KV: map[string]string{
 			"p":        "PR",
 			"pc":       "yellow",
@@ -1500,12 +1500,12 @@ func emitArchive(
 			},
 		},
 		Env:    env,
-		Inputs: inputs,
+		Inputs: ToVFSSlice(inputs),
 		KV: map[string]string{
 			"p":  "AR",
 			"pc": "light-red",
 		},
-		Outputs:      []string{archivePath},
+		Outputs:      ToVFSSlice([]string{archivePath}),
 		Platform:     string(instance.Platform.Target),
 		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
