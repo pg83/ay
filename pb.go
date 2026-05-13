@@ -396,8 +396,13 @@ func EmitPB(
 
 	// PR-M3-platform-pair-step2: tags are baseline data carried by the
 	// platform the caller selected (`["tool"]` on host, `[]` on target).
-	// The renderer does NOT branch on "is this a host build?".
-	tags := append([]string(nil), targetP.Tags...)
+	// The renderer does NOT branch on "is this a host build?". Empty
+	// `targetP.Tags` produces an empty (non-nil) slice so the JSON stays
+	// `[]` rather than `null`.
+	tags := []string{}
+	if len(targetP.Tags) > 0 {
+		tags = append(tags, targetP.Tags...)
+	}
 
 	targetProps := map[string]string{
 		"module_dir": moduleDir,
@@ -853,6 +858,6 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	// AR emission. Mirrors gen.go:3097 EmitARNamed with module_tag=cpp_proto.
 	arBaseName := ArchiveName(instance.Path)
 	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + arBaseName
-	arRef := emitARNode(instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, "", ctx.emit)
+	arRef := emitARNode(ctx.host, ctx.platformFor(instance), instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, "", ctx.emit)
 	return arRef, archivePath, true
 }
