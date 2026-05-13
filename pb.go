@@ -380,16 +380,16 @@ func EmitPB(
 	}
 
 	// inputs: [cpp_styleguide, protoc, wrapper, source, optionally descriptor.proto]
-	inputs := []string{
-		cppStyleguideBinary,
-		protocBinary,
-		pbWrapperPath,
-		srcAbs,
+	inputs := []VFS{
+		ParseVFSOrSource(cppStyleguideBinary),
+		ParseVFSOrSource(protocBinary),
+		ParseVFSOrSource(pbWrapperPath),
+		ParseVFSOrSource(srcAbs),
 	}
 
 	// If the source file imports "google/protobuf/descriptor.proto", add descriptor.proto.
 	if protoImportsDescriptor(sourceRoot, moduleDir+"/"+srcRel) {
-		inputs = append(inputs, pbDescriptorProto)
+		inputs = append(inputs, ParseVFSOrSource(pbDescriptorProto))
 	}
 
 	// PR-M3-platform-pair-step2: tags are baseline data carried by the
@@ -432,8 +432,8 @@ func EmitPB(
 			},
 		},
 		Env:     env,
-		Inputs:  ToVFSSlice(inputs),
-		Outputs: ToVFSSlice([]string{pbH, pbCC}),
+		Inputs:  inputs,
+		Outputs: []VFS{ParseVFSOrSource(pbH), ParseVFSOrSource(pbCC)},
 		KV: map[string]string{
 			"p":  "PB",
 			"pc": "yellow",
@@ -614,9 +614,9 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		// both target and host axes; x86_64 consumers must reach the x86_64
 		// PB, aarch64 consumers the aarch64 PB.
 		pbKey := codegenOutputKey{platform: instance.Platform.Target}
-		pbKey.path = pbH
+		pbKey.path = ParseVFSOrSource(pbH)
 		ctx.pbOutputs[pbKey] = pbRef
-		pbKey.path = pbCC
+		pbKey.path = ParseVFSOrSource(pbCC)
 		ctx.pbOutputs[pbKey] = pbRef
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
 			directImports := protoDirectImportIncludes(ctx.sourceRoot, protoRelPath)
@@ -703,9 +703,9 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			// PR-M3-L0-codegen-deps-EV-PB: stash the EV NodeRef under both outputs
 			// on the emitting platform. See PB branch above for the keying rationale.
 			evKey := codegenOutputKey{platform: instance.Platform.Target}
-			evKey.path = evH
+			evKey.path = ParseVFSOrSource(evH)
 			ctx.evOutputs[evKey] = evRef
-			evKey.path = evPbCC
+			evKey.path = ParseVFSOrSource(evPbCC)
 			ctx.evOutputs[evKey] = evRef
 			if reg := codegenRegForInstance(ctx, instance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
@@ -794,10 +794,10 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	// LIBRARY branch) but for the PROTO_LIBRARY context.
 	ccRefs := make([]NodeRef, 0, len(codegenOutputs))
 	ccOutputs := make([]string, 0, len(codegenOutputs))
-	memberInputs := make([]string, 0, 64)
-	memberInputsSeen := make(map[string]struct{})
+	memberInputs := make([]VFS, 0, 64)
+	memberInputsSeen := make(map[VFS]struct{})
 
-	addMemberInputs := func(paths []string) {
+	addMemberInputs := func(paths []VFS) {
 		for _, p := range paths {
 			if _, dup := memberInputsSeen[p]; dup {
 				continue
@@ -807,18 +807,19 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		}
 	}
 
+	wireFormatVFS := Source(strings.TrimPrefix(pbRuntimeBase, "$(SOURCE_ROOT)/") + "google/protobuf/wire_format.h")
 	for _, co := range codegenOutputs {
 		ccIn := moduleInputs
 		ccIn.IsGenerated = true
 		ccIn.Generator = co.genRef
 		ccIn.HasGenerator = true
-		ccIn.IncludeInputs = walkClosure(ctx, instance, co.pbCC, moduleInputs)
+		ccIn.IncludeInputs = walkClosure(ctx, instance, ParseVFSOrSource(co.pbCC), moduleInputs)
 		// PR-M3-final-surgical (fix 1): the .ev.pb.cc.o consumer must not
 		// carry its OWN .ev.pb.h in inputs[] (REF omits the self-include).
 		// Drop just the sibling header co.pbCC -> co.pbCC[.cc -> .h].
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
-			selfH := strings.TrimSuffix(co.pbCC, ".cc") + ".h"
-			filtered := make([]string, 0, len(ccIn.IncludeInputs))
+			selfH := ParseVFSOrSource(strings.TrimSuffix(co.pbCC, ".cc") + ".h")
+			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 			for _, in := range ccIn.IncludeInputs {
 				if in == selfH {
 					continue
@@ -830,7 +831,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		// .ev.pb.cc gets wire_format.h post-closure (registry-side leaks through
 		// .ev.pb.h to over-emit; .pb.cc gets it via pbCcDeepRuntimeHeaders).
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
-			ccIn.IncludeInputs = append(ccIn.IncludeInputs, pbRuntimeBase+"google/protobuf/wire_format.h")
+			ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
 		}
 		// PR-M3-L0-codegen-deps-EV-PB: cross-codegen deps via .pb.h imports.
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, co.genRef)
@@ -842,8 +843,8 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		// AR memberInputs: primary source first, then the CC's include closure.
 		// Mirror of gen.go:4414-4415 (LIBRARY EV branch returning the .ev
 		// source as the primary member input) + gen.go:2761 addMemberInputs.
-		perCC := make([]string, 0, 1+len(ccIn.IncludeInputs))
-		perCC = append(perCC, co.primSrc)
+		perCC := make([]VFS, 0, 1+len(ccIn.IncludeInputs))
+		perCC = append(perCC, ParseVFSOrSource(co.primSrc))
 		perCC = append(perCC, ccIn.IncludeInputs...)
 		addMemberInputs(perCC)
 	}

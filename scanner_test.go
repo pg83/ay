@@ -253,7 +253,7 @@ func TestScanner_BlockCommentIncludeIgnored(t *testing.T) {
 	// PR-M3-vfs-paths: parseIncludes takes a VFS path. The test file
 	// `<dir>/fake.h` becomes `$(SOURCE_ROOT)/fake.h` under the scanner's
 	// dir-as-sourceRoot.
-	dirs := scanner.parseIncludes("$(SOURCE_ROOT)/fake.h")
+	dirs := scanner.parseIncludes(Source("fake.h"))
 
 	if len(dirs) != 1 {
 		t.Fatalf("got %d directives, want 1; directives=%+v", len(dirs), dirs)
@@ -318,11 +318,11 @@ func TestScanner_IncludeNextSuppressed(t *testing.T) {
 	}
 
 	for _, p := range closure {
-		if strings.HasSuffix(p, "/libcxx/include/uchar.h") {
+		if strings.HasSuffix(p.String(), "/libcxx/include/uchar.h") {
 			t.Errorf("libcxx-source closure contains spurious libcxx-uchar: %s (PR-35e regression)", p)
 		}
 
-		if strings.HasSuffix(p, "/musl/include/uchar.h") {
+		if strings.HasSuffix(p.String(), "/musl/include/uchar.h") {
 			t.Errorf("libcxx-source closure contains spurious musl-uchar: %s (PR-35e regression)", p)
 		}
 	}
@@ -333,7 +333,7 @@ func TestScanner_IncludeNextSuppressed(t *testing.T) {
 	foundMbstate := false
 
 	for _, p := range closure {
-		if strings.HasSuffix(p, "/libcxx/include/__mbstate_t.h") {
+		if strings.HasSuffix(p.String(), "/libcxx/include/__mbstate_t.h") {
 			foundMbstate = true
 
 			break
@@ -384,9 +384,9 @@ func TestScanner_RegularIncludeStillResolvesViaSysincl(t *testing.T) {
 
 	for _, p := range closure {
 		switch {
-		case strings.HasSuffix(p, "/libcxx/include/string.h"):
+		case strings.HasSuffix(p.String(), "/libcxx/include/string.h"):
 			hasLibcxxString = true
-		case strings.HasSuffix(p, "/musl/include/string.h"):
+		case strings.HasSuffix(p.String(), "/musl/include/string.h"):
 			hasMuslString = true
 		}
 	}
@@ -573,9 +573,9 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 
 	for _, p := range closure {
 		switch {
-		case strings.HasSuffix(p, "/yasm/elf.h"):
+		case strings.HasSuffix(p.String(), "/yasm/elf.h"):
 			hasLocal = true
-		case strings.HasSuffix(p, "/musl/include/elf.h"):
+		case strings.HasSuffix(p.String(), "/musl/include/elf.h"):
 			hasMusl = true
 		}
 	}
@@ -672,9 +672,9 @@ func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 
 	for _, p := range closure {
 		switch {
-		case strings.HasSuffix(p, "/libcxxabi/include/cxxabi.h"):
+		case strings.HasSuffix(p.String(), "/libcxxabi/include/cxxabi.h"):
 			hasLibcxxabi = true
-		case strings.HasSuffix(p, "/libcxxrt/include/cxxabi.h"):
+		case strings.HasSuffix(p.String(), "/libcxxrt/include/cxxabi.h"):
 			hasLibcxxrt = true
 		}
 	}
@@ -764,9 +764,9 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 
 	for _, p := range closure {
 		switch {
-		case strings.HasSuffix(p, "/libcxxrt/unwind.h"):
+		case strings.HasSuffix(p.String(), "/libcxxrt/unwind.h"):
 			hasLibcxxrt = true
-		case strings.HasSuffix(p, "/libcxx/include/unwind.h"):
+		case strings.HasSuffix(p.String(), "/libcxx/include/unwind.h"):
 			hasLibcxxSpurious = true
 		}
 	}
@@ -832,7 +832,7 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 	hasMusl := false
 
 	for _, p := range closure {
-		if strings.HasSuffix(p, "/musl/include/absent.h") {
+		if strings.HasSuffix(p.String(), "/musl/include/absent.h") {
 			hasMusl = true
 
 			break
@@ -902,9 +902,9 @@ func TestScanner_AngleSysinclUnaffected(t *testing.T) {
 
 	for _, p := range closure {
 		switch {
-		case strings.HasSuffix(p, "/libcxxrt/unwind.h"):
+		case strings.HasSuffix(p.String(), "/libcxxrt/unwind.h"):
 			hasLocal = true
-		case strings.HasSuffix(p, "/libunwind/include/unwind.h"):
+		case strings.HasSuffix(p.String(), "/libunwind/include/unwind.h"):
 			hasLibunwind = true
 		}
 	}
@@ -978,11 +978,11 @@ func TestScanner_LibcxxrtUnwindQuoted_ProductionParity(t *testing.T) {
 
 	for _, p := range closure {
 		switch {
-		case strings.HasSuffix(p, "/libcxxrt/unwind.h"):
+		case strings.HasSuffix(p.String(), "/libcxxrt/unwind.h"):
 			hasLibcxxrt = true
-		case strings.HasSuffix(p, "/libunwind/include/unwind.h"):
+		case strings.HasSuffix(p.String(), "/libunwind/include/unwind.h"):
 			hasLibunwind = true
-		case strings.HasSuffix(p, "/libcxx/include/unwind.h"):
+		case strings.HasSuffix(p.String(), "/libcxx/include/unwind.h"):
 			hasLibcxxSpurious = true
 		}
 	}
@@ -1159,8 +1159,8 @@ func TestParseIncludes_DispatchByExtension(t *testing.T) {
 	scanner := NewIncludeScanner(dir, SysInclSet{})
 
 	// PR-M3-vfs-paths: parseIncludes takes a VFS path.
-	asmDirs := scanner.parseIncludes("$(SOURCE_ROOT)/src.asm")
-	hDirs := scanner.parseIncludes("$(SOURCE_ROOT)/src.h")
+	asmDirs := scanner.parseIncludes(Source("src.asm"))
+	hDirs := scanner.parseIncludes(Source("src.h"))
 
 	if len(asmDirs) != 1 || asmDirs[0].target != "defs.asm" {
 		t.Errorf("asm dispatch failed: got %+v, want one directive targeting defs.asm", asmDirs)
@@ -1187,7 +1187,7 @@ func TestParseIncludes_AsiDispatchesToYasm(t *testing.T) {
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
 	// PR-M3-vfs-paths: parseIncludes takes a VFS path.
-	dirs := scanner.parseIncludes("$(SOURCE_ROOT)/src.asi")
+	dirs := scanner.parseIncludes(Source("src.asi"))
 
 	if len(dirs) != 1 || dirs[0].target != "nested.asi" {
 		t.Errorf(".asi dispatch failed: got %+v, want one directive targeting nested.asi", dirs)
@@ -1233,9 +1233,9 @@ func TestScanner_AsmlibAsmInputsParity(t *testing.T) {
 
 	for _, p := range closure {
 		switch {
-		case strings.HasSuffix(p, "/asmlib/defs.asm"):
+		case strings.HasSuffix(p.String(), "/asmlib/defs.asm"):
 			hasDefs = true
-		case strings.HasSuffix(p, "/asmlib/randomah.asi"):
+		case strings.HasSuffix(p.String(), "/asmlib/randomah.asi"):
 			hasRandomah = true
 		}
 	}
@@ -1272,7 +1272,7 @@ func TestParseIncludes_MacroIndirectAugmentation(t *testing.T) {
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	dirs := scanner.parseIncludes("$(SOURCE_ROOT)/" + rel)
+	dirs := scanner.parseIncludes(Source(rel))
 
 	var hasCrypto, hasUnistd bool
 

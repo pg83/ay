@@ -67,7 +67,7 @@ func EmitR5(
 	}
 
 	// inputs = [ragel5 binary, rlgen-cd binary, source .rl]
-	inputs := []string{ragel5BinPath, rlgenCdBinPath, srcPath}
+	inputs := []VFS{ParseVFSOrSource(ragel5BinPath), ParseVFSOrSource(rlgenCdBinPath), ParseVFSOrSource(srcPath)}
 
 	// deps / foreign_deps.tool = both host tool LD refs (in order).
 	depRefs := make([]NodeRef, 0, 2)
@@ -81,8 +81,8 @@ func EmitR5(
 	node := &Node{
 		Cmds:    []Cmd{cmd0, cmd1},
 		Env:     env,
-		Inputs:  ToVFSSlice(inputs),
-		Outputs: ToVFSSlice([]string{tmpPath, cppPath}),
+		Inputs:  inputs,
+		Outputs: []VFS{ParseVFSOrSource(tmpPath), ParseVFSOrSource(cppPath)},
 		KV: map[string]string{
 			"p":  "R5",
 			"pc": "yellow",
@@ -182,21 +182,21 @@ func EmitJV(
 		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
 	}
 
-	inputs := []string{
-		grammarAbs,
-		stdout2stderrPath,
-		antlr4JarPath,
+	inputs := []VFS{
+		ParseVFSOrSource(grammarAbs),
+		ParseVFSOrSource(stdout2stderrPath),
+		ParseVFSOrSource(antlr4JarPath),
 	}
 
 	// Outputs: derive from grammar base name (strip .g4).
 	base := strings.TrimSuffix(filepath.Base(grammar), ".g4")
-	outputs := []string{
-		outDir + "/" + base + "Lexer.cpp",
-		outDir + "/" + base + "Lexer.h",
-		outDir + "/" + base + "Parser.cpp",
-		outDir + "/" + base + "Parser.h",
-		outDir + "/" + base + "Visitor.h",
-		outDir + "/" + base + "BaseVisitor.h",
+	outputs := []VFS{
+		ParseVFSOrSource(outDir + "/" + base + "Lexer.cpp"),
+		ParseVFSOrSource(outDir + "/" + base + "Lexer.h"),
+		ParseVFSOrSource(outDir + "/" + base + "Parser.cpp"),
+		ParseVFSOrSource(outDir + "/" + base + "Parser.h"),
+		ParseVFSOrSource(outDir + "/" + base + "Visitor.h"),
+		ParseVFSOrSource(outDir + "/" + base + "BaseVisitor.h"),
 	}
 
 	node := &Node{
@@ -208,13 +208,13 @@ func EmitJV(
 			},
 		},
 		Env:    env,
-		Inputs: ToVFSSlice(inputs),
+		Inputs: inputs,
 		KV: map[string]string{
 			"p":        "JV",
 			"pc":       "light-blue",
 			"show_out": "yes",
 		},
-		Outputs: ToVFSSlice(outputs),
+		Outputs: outputs,
 		Tags:    []string{},
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
@@ -281,24 +281,24 @@ func EmitJVSplit(
 		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
 	}
 
-	inputs := []string{
-		lexerAbs,
-		parserAbs,
-		stdout2stderrPath,
-		antlr4JarPath,
+	inputs := []VFS{
+		ParseVFSOrSource(lexerAbs),
+		ParseVFSOrSource(parserAbs),
+		ParseVFSOrSource(stdout2stderrPath),
+		ParseVFSOrSource(antlr4JarPath),
 	}
 
 	// Outputs: lexer base name + parser base name outputs.
 	lexerBase := strings.TrimSuffix(filepath.Base(lexer), ".g4")
 	parserBase := strings.TrimSuffix(filepath.Base(parser), ".g4")
 	visitorBase := parserBase
-	outputs := []string{
-		outDir + "/" + lexerBase + ".cpp",
-		outDir + "/" + lexerBase + ".h",
-		outDir + "/" + parserBase + ".cpp",
-		outDir + "/" + parserBase + ".h",
-		outDir + "/" + visitorBase + "Visitor.h",
-		outDir + "/" + visitorBase + "BaseVisitor.h",
+	outputs := []VFS{
+		ParseVFSOrSource(outDir + "/" + lexerBase + ".cpp"),
+		ParseVFSOrSource(outDir + "/" + lexerBase + ".h"),
+		ParseVFSOrSource(outDir + "/" + parserBase + ".cpp"),
+		ParseVFSOrSource(outDir + "/" + parserBase + ".h"),
+		ParseVFSOrSource(outDir + "/" + visitorBase + "Visitor.h"),
+		ParseVFSOrSource(outDir + "/" + visitorBase + "BaseVisitor.h"),
 	}
 
 	node := &Node{
@@ -310,13 +310,13 @@ func EmitJVSplit(
 			},
 		},
 		Env:    env,
-		Inputs: ToVFSSlice(inputs),
+		Inputs: inputs,
 		KV: map[string]string{
 			"p":        "JV",
 			"pc":       "light-blue",
 			"show_out": "yes",
 		},
-		Outputs: ToVFSSlice(outputs),
+		Outputs: outputs,
 		Tags:    []string{},
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
@@ -396,8 +396,8 @@ func EmitCF(
 
 	// Inputs: script + source + header closure scanned from the .in file.
 	// The include scanner handles the .cpp.in just like a .cpp file.
-	inputs := make([]string, 0, 2+len(in.IncludeInputs))
-	inputs = append(inputs, configureFilePyPath, srcAbs)
+	inputs := make([]VFS, 0, 2+len(in.IncludeInputs))
+	inputs = append(inputs, ParseVFSOrSource(configureFilePyPath), ParseVFSOrSource(srcAbs))
 	inputs = append(inputs, in.IncludeInputs...)
 
 	node := &Node{
@@ -408,12 +408,12 @@ func EmitCF(
 			},
 		},
 		Env:    env,
-		Inputs: ToVFSSlice(inputs),
+		Inputs: inputs,
 		KV: map[string]string{
 			"p":  "CF",
 			"pc": "yellow",
 		},
-		Outputs: ToVFSSlice([]string{outAbs}),
+		Outputs: []VFS{ParseVFSOrSource(outAbs)},
 		Tags:    []string{},
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
@@ -574,10 +574,10 @@ func EmitBI(
 		outputPath,
 	}
 
-	inputs := []string{
-		yieldLinePyPath,
-		xargsPyPath,
-		buildInfoGenPyPath,
+	inputs := []VFS{
+		ParseVFSOrSource(yieldLinePyPath),
+		ParseVFSOrSource(xargsPyPath),
+		ParseVFSOrSource(buildInfoGenPyPath),
 	}
 
 	cacheFalse := false
@@ -589,14 +589,14 @@ func EmitBI(
 			{CmdArgs: cmd2Args, Env: env},
 		},
 		Env:    env,
-		Inputs: ToVFSSlice(inputs),
+		Inputs: inputs,
 		KV: map[string]string{
 			"disable_cache": "yes",
 			"p":             "BI",
 			"pc":            "yellow",
 			"show_out":      "yes",
 		},
-		Outputs: ToVFSSlice([]string{outputPath}),
+		Outputs: []VFS{ParseVFSOrSource(outputPath)},
 		Tags:    []string{},
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
@@ -693,7 +693,7 @@ func EmitPR(
 	stmt *RunProgramStmt,
 	toolBinPath string,
 	toolLDRef NodeRef,
-	inputClosure []string,
+	inputClosure []VFS,
 	extraDepRefs []NodeRef,
 	emit Emitter,
 ) NodeRef {
@@ -749,21 +749,21 @@ func EmitPR(
 	// IN file that is also reached transitively via the closure (it
 	// appears in the registered EmitsIncludes set seeded from IN) is
 	// listed once, matching the reference multiset shape.
-	inAbsPaths := make([]string, 0, len(stmt.INFiles))
+	inAbsPaths := make([]VFS, 0, len(stmt.INFiles))
 	for _, f := range stmt.INFiles {
-		inAbsPaths = append(inAbsPaths, "$(SOURCE_ROOT)/"+instance.Path+"/"+f)
+		inAbsPaths = append(inAbsPaths, Source(instance.Path+"/"+f))
 	}
 
-	inputs := make([]string, 0, 1+len(inAbsPaths)+len(inputClosure))
-	seen := make(map[string]struct{}, 1+len(inAbsPaths)+len(inputClosure))
-	appendUnique := func(p string) {
+	inputs := make([]VFS, 0, 1+len(inAbsPaths)+len(inputClosure))
+	seen := make(map[VFS]struct{}, 1+len(inAbsPaths)+len(inputClosure))
+	appendUnique := func(p VFS) {
 		if _, dup := seen[p]; dup {
 			return
 		}
 		seen[p] = struct{}{}
 		inputs = append(inputs, p)
 	}
-	appendUnique(toolBinPath)
+	appendUnique(ParseVFSOrSource(toolBinPath))
 	for _, p := range inAbsPaths {
 		appendUnique(p)
 	}
@@ -772,17 +772,17 @@ func EmitPR(
 	}
 
 	// Build outputs list.
-	var outputs []string
+	var outputs []VFS
 	var stdoutPath string
 	if stmt.StdoutFile != "" {
 		stdoutPath = "$(BUILD_ROOT)/" + instance.Path + "/" + stmt.StdoutFile
-		outputs = append(outputs, stdoutPath)
+		outputs = append(outputs, Build(instance.Path+"/"+stmt.StdoutFile))
 	}
 	for _, f := range stmt.OUTFiles {
-		outputs = append(outputs, "$(BUILD_ROOT)/"+instance.Path+"/"+f)
+		outputs = append(outputs, Build(instance.Path+"/"+f))
 	}
 	for _, f := range stmt.OUTNoAutoFiles {
-		outputs = append(outputs, "$(BUILD_ROOT)/"+instance.Path+"/"+f)
+		outputs = append(outputs, Build(instance.Path+"/"+f))
 	}
 
 	// Build deps: tool LD ref + any input dep refs.
@@ -821,8 +821,8 @@ func EmitPR(
 	node := &Node{
 		Cmds:    []Cmd{cmd},
 		Env:     env,
-		Inputs:  ToVFSSlice(inputs),
-		Outputs: ToVFSSlice(outputs),
+		Inputs:  inputs,
+		Outputs: outputs,
 		KV: map[string]string{
 			"p":        "PR",
 			"pc":       "yellow",
@@ -865,12 +865,18 @@ const antlr4RuntimeHeaderPath = "$(SOURCE_ROOT)/contrib/libs/antlr4_cpp_runtime/
 const antlr4FsToolsPath = "$(SOURCE_ROOT)/build/scripts/fs_tools.py"
 const antlr4ProcCmdFiles = "$(SOURCE_ROOT)/build/scripts/process_command_files.py"
 
+// VFS-typed variants of antlr4FsToolsPath / antlr4ProcCmdFiles used by the
+// VFS-internal flow (PR-M3-vfs-typed-paths). cmd_args still consume the
+// string forms above.
+var antlr4FsToolsVFS = Source("build/scripts/fs_tools.py")
+var antlr4ProcCmdVFS = Source("build/scripts/process_command_files.py")
+
 // emitMiscNodes emits all module-level JV, CF, BI, and PR nodes declared
 // in the module's ya.make. When consumerInputs is non-nil, also emits the
 // downstream CP + CC chain for each JV grammar .cpp output (the .g4.cpp
 // rename + compile), returning per-CC (refs, outputPaths, memberInputs)
 // for the caller to fold into the enclosing AR member accumulators.
-func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []string, memberInputsList [][]string) {
+func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []string, memberInputsList [][]VFS) {
 	outDir := "$(BUILD_ROOT)/" + instance.Path
 	reg := codegenRegForInstance(ctx, instance)
 
@@ -919,11 +925,11 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			// PR-M3-antlr-g4-cpp: emit CP+CC for each grammar .cpp output.
 			if consumerInputs != nil {
 				// JV inputs (grammar files + scripts + jar) are the JV node's Inputs.
-				jvInputs := []string{
-					"$(SOURCE_ROOT)/" + instance.Path + "/" + g.Lexer,
-					"$(SOURCE_ROOT)/" + instance.Path + "/" + g.Parser,
-					stdout2stderrPath,
-					antlr4JarPath,
+				jvInputs := []VFS{
+					Source(instance.Path + "/" + g.Lexer),
+					Source(instance.Path + "/" + g.Parser),
+					ParseVFSOrSource(stdout2stderrPath),
+					ParseVFSOrSource(antlr4JarPath),
 				}
 				jvPrimary := outDir + "/" + lexerBase + ".cpp"
 				cpccPairs := []struct{ cpp, h string }{
@@ -970,10 +976,10 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			}
 			// PR-M3-antlr-g4-cpp: emit CP+CC for each grammar .cpp output.
 			if consumerInputs != nil {
-				jvInputs := []string{
-					"$(SOURCE_ROOT)/" + instance.Path + "/" + g.Grammar,
-					stdout2stderrPath,
-					antlr4JarPath,
+				jvInputs := []VFS{
+					Source(instance.Path + "/" + g.Grammar),
+					ParseVFSOrSource(stdout2stderrPath),
+					ParseVFSOrSource(antlr4JarPath),
 				}
 				jvPrimary := outDir + "/" + base + "Lexer.cpp"
 				cpccPairs := []struct{ cpp, h string }{
@@ -1060,11 +1066,11 @@ func emitJVDownstreamCPCC(
 	instance ModuleInstance,
 	jvRef NodeRef,
 	jvPrimary string,
-	jvInputs []string,
+	jvInputs []VFS,
 	cpccPairs []struct{ cpp, h string },
 	outputIncludes []string,
 	in ModuleCCInputs,
-) (ccRefs []NodeRef, ccOutputs []string, memberInputsList [][]string) {
+) (ccRefs []NodeRef, ccOutputs []string, memberInputsList [][]VFS) {
 	reg := codegenRegForInstance(ctx, instance)
 
 	for _, pair := range cpccPairs {
@@ -1101,15 +1107,15 @@ func emitJVDownstreamCPCC(
 		ccIn.IsGenerated = true
 		ccIn.HasGenerator = false
 		ccIn.ExtraDepRefs = nil
-		closure := walkClosure(ctx, instance, g4CppPath, ccIn)
+		closure := walkClosure(ctx, instance, ParseVFSOrSource(g4CppPath), ccIn)
 
 		// CP node inputs: [jvPrimary, (srcCpp if != primary), fsTools, procCmd, jvInputs..., closure...]
-		cpInputs := make([]string, 0, 2+len(jvInputs)+len(closure)+2)
-		cpInputs = append(cpInputs, jvPrimary)
+		cpInputs := make([]VFS, 0, 2+len(jvInputs)+len(closure)+2)
+		cpInputs = append(cpInputs, ParseVFSOrSource(jvPrimary))
 		if srcCpp != jvPrimary {
-			cpInputs = append(cpInputs, srcCpp)
+			cpInputs = append(cpInputs, ParseVFSOrSource(srcCpp))
 		}
-		cpInputs = append(cpInputs, antlr4FsToolsPath, antlr4ProcCmdFiles)
+		cpInputs = append(cpInputs, antlr4FsToolsVFS, antlr4ProcCmdVFS)
 		cpInputs = append(cpInputs, jvInputs...)
 		cpInputs = append(cpInputs, closure...)
 
@@ -1119,10 +1125,10 @@ func emitJVDownstreamCPCC(
 
 		// CC node inputs: EmitCC with IsGenerated=true sets inputPath=g4CppPath.
 		// IncludeInputs = [jvPrimary, srcH, fsTools, procCmd, jvInputs..., closure...]
-		ccIncludeInputs := make([]string, 0, 3+len(jvInputs)+len(closure)+2)
-		ccIncludeInputs = append(ccIncludeInputs, jvPrimary)
-		ccIncludeInputs = append(ccIncludeInputs, srcH)
-		ccIncludeInputs = append(ccIncludeInputs, antlr4FsToolsPath, antlr4ProcCmdFiles)
+		ccIncludeInputs := make([]VFS, 0, 3+len(jvInputs)+len(closure)+2)
+		ccIncludeInputs = append(ccIncludeInputs, ParseVFSOrSource(jvPrimary))
+		ccIncludeInputs = append(ccIncludeInputs, ParseVFSOrSource(srcH))
+		ccIncludeInputs = append(ccIncludeInputs, antlr4FsToolsVFS, antlr4ProcCmdVFS)
 		ccIncludeInputs = append(ccIncludeInputs, jvInputs...)
 		ccIncludeInputs = append(ccIncludeInputs, closure...)
 
@@ -1146,10 +1152,10 @@ func emitJVDownstreamCPCC(
 		// PR-M3-final-codegen-registry-expansion: fs_tools.py and
 		// process_command_files.py are CP-step build-script helpers
 		// witnessed in REF on the enclosing AR rollup (libdevtools-ymake-lang.a).
-		memberInputs := make([]string, 0, len(closure)+2)
-		memberInputs = append(memberInputs, antlr4FsToolsPath, antlr4ProcCmdFiles)
+		memberInputs := make([]VFS, 0, len(closure)+2)
+		memberInputs = append(memberInputs, antlr4FsToolsVFS, antlr4ProcCmdVFS)
 		for _, p := range closure {
-			if strings.HasPrefix(p, "$(BUILD_ROOT)/") {
+			if p.IsBuild() {
 				continue
 			}
 			memberInputs = append(memberInputs, p)
@@ -1185,7 +1191,7 @@ func emitJVDownstreamCPCC(
 // caller to fold into the AR-member accumulators. `memberInputs` is
 // already deduped against caller-side state via the returned per-CC
 // slice; the caller's `addMemberInputs` performs the union.
-func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []string, memberInputs [][]string) {
+func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []string, memberInputs [][]VFS) {
 	if len(d.runPrograms) == 0 {
 		return nil, nil, nil
 	}
@@ -1449,7 +1455,7 @@ func emitArchive(
 	// then the tool binary, then the producer PR's source `IN` files
 	// (rebased to SOURCE_ROOT, pre-aggregated by caller). Dedup
 	// against the per-file slot.
-	inputs := make([]string, 0, len(pathPerFile)+len(prSiblingOutputs)+1+len(prInSources))
+	inputs := make([]VFS, 0, len(pathPerFile)+len(prSiblingOutputs)+1+len(prInSources))
 	// Build a global lexical-order set of BUILD_ROOT entries:
 	// pathPerFile ∪ prSiblingOutputs, sorted, so REF's
 	// "alphabetical merge of producer outputs" shape lines up.
@@ -1465,18 +1471,21 @@ func emitArchive(
 		buildRootSorted = append(buildRootSorted, p)
 	}
 	sort.Strings(buildRootSorted)
-	inputs = append(inputs, buildRootSorted...)
-	inputs = append(inputs, toolBinPath)
-	inSet := map[string]struct{}{}
+	for _, p := range buildRootSorted {
+		inputs = append(inputs, ParseVFSOrSource(p))
+	}
+	inputs = append(inputs, ParseVFSOrSource(toolBinPath))
+	inSet := map[VFS]struct{}{}
 	for _, p := range inputs {
 		inSet[p] = struct{}{}
 	}
 	for _, p := range prInSources {
-		if _, dup := inSet[p]; dup {
+		v := ParseVFSOrSource(p)
+		if _, dup := inSet[v]; dup {
 			continue
 		}
-		inSet[p] = struct{}{}
-		inputs = append(inputs, p)
+		inSet[v] = struct{}{}
+		inputs = append(inputs, v)
 	}
 
 	depRefs := make([]NodeRef, 0, len(producerRefs)+1)
@@ -1500,12 +1509,12 @@ func emitArchive(
 			},
 		},
 		Env:    env,
-		Inputs: ToVFSSlice(inputs),
+		Inputs: inputs,
 		KV: map[string]string{
 			"p":  "AR",
 			"pc": "light-red",
 		},
-		Outputs:      ToVFSSlice([]string{archivePath}),
+		Outputs:      []VFS{ParseVFSOrSource(archivePath)},
 		Platform:     string(instance.Platform.Target),
 		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
@@ -1563,7 +1572,7 @@ func isCCSourceExt(p string) bool {
 // The PR-emitted source lives at $(BUILD_ROOT)/<instance.Path>/<out>;
 // composeCCPaths' IsGenerated branch yields $(BUILD_ROOT)/<instance.
 // Path>/<out>.o for the output (flat layout when <out> has no `/`).
-func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef NodeRef, in ModuleCCInputs) (NodeRef, string, []string) {
+func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef NodeRef, in ModuleCCInputs) (NodeRef, string, []VFS) {
 	// PR-M3-L0-cascade-close-v2: thread prRef as the downstream CC's
 	// leading dep. The CC compiles the PR-emitted .cpp, but walkClosure
 	// skips the root path so a registry probe over the closure alone
@@ -1591,8 +1600,8 @@ func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef 
 //     reference graph places ahead of the primary source (EN consumers
 //     prepend cross-EN deps' `_serialized.cpp` + `_serialized.h` outputs;
 //     PR has no cross-deps and passes nil).
-func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string, depPrefix []string, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, string, []string) {
-	cppPath := "$(BUILD_ROOT)/" + instance.Path + "/" + cppRel
+func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string, depPrefix []VFS, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, string, []VFS) {
+	cppPath := Build(instance.Path + "/" + cppRel)
 
 	closure := walkClosure(ctx, instance, cppPath, in)
 
@@ -1604,8 +1613,8 @@ func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string
 	// against the scanner closure — the cross-EN `.h` is already in the
 	// closure via the codegen registry's `_serialized.h` EmitsIncludes
 	// chain; only the cross-EN `.cpp` reliably needs the explicit prepend.
-	includeInputs := make([]string, 0, len(depPrefix)+len(closure))
-	seen := make(map[string]struct{}, len(depPrefix)+len(closure))
+	includeInputs := make([]VFS, 0, len(depPrefix)+len(closure))
+	seen := make(map[VFS]struct{}, len(depPrefix)+len(closure))
 	for _, p := range depPrefix {
 		if _, dup := seen[p]; dup {
 			continue
@@ -1647,9 +1656,9 @@ func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string
 	// outputs themselves — those are wired implicitly via the .o
 	// archive members). Filter BUILD_ROOT entries here so the AR
 	// inputs[] aggregate aligns with REF's multiset shape.
-	ccInputs := make([]string, 0, len(closure))
+	ccInputs := make([]VFS, 0, len(closure))
 	for _, p := range closure {
-		if strings.HasPrefix(p, "$(BUILD_ROOT)/") {
+		if p.IsBuild() {
 			continue
 		}
 		ccInputs = append(ccInputs, p)
@@ -1807,7 +1816,7 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 // have nil EmitsIncludes and contribute nothing.
 //
 // PR-M3-G-3 helper.
-func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []string {
+func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []VFS {
 	// Use the consuming module's full scan-input bag (AddIncl +
 	// PeerAddInclGlobal) so peer headers reachable from the PR-output's
 	// EmitsIncludes chain resolve correctly. Mirrors the EN-node scanner
@@ -1819,9 +1828,9 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		SourceRoot:        ctx.sourceRoot,
 	}
 
-	var out []string
+	var out []VFS
 	walkOne := func(rel string) {
-		buildRootPath := "$(BUILD_ROOT)/" + instance.Path + "/" + rel
+		buildRootPath := Build(instance.Path + "/" + rel)
 		sub := walkClosure(ctx, instance, buildRootPath, scanIn)
 		out = append(out, sub...)
 	}
@@ -1846,8 +1855,8 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		return nil
 	}
 
-	out = mergeDedup(out, nil)
-	sort.Strings(out)
+	out = mergeDedupVFS(out, nil)
+	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
 	return out
 }
 

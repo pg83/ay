@@ -152,7 +152,9 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 	//   3. SRCDIR set and source doesn't exist locally: __/<rel>.o output
 	//      (ancestor-dir segments rendered as __), SRCDIR input.
 	//      Empirical: tcmalloc/no_percpu_cache/__/tcmalloc/internal/percpu_rseq_asm.S.o.
-	outputPath, inputPath := composeASPaths(instance, srcRel, in)
+	outVFS, inVFS := composeASPaths(instance, srcRel, in)
+	outputPath := outVFS.String()
+	inputPath := inVFS.String()
 
 	cmdArgs := composeASCmdArgs(instance, outputPath, inputPath, in)
 
@@ -164,8 +166,8 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 		"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
 	}
 
-	allInputs := make([]string, 0, 1+len(in.IncludeInputs))
-	allInputs = append(allInputs, inputPath)
+	allInputs := make([]VFS, 0, 1+len(in.IncludeInputs))
+	allInputs = append(allInputs, inVFS)
 	allInputs = append(allInputs, in.IncludeInputs...)
 
 	// PR-M3-platform-pair-step9: tags + host_platform from targetP;
@@ -181,8 +183,8 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 			},
 		},
 		Env:          env,
-		Inputs:       ToVFSSlice(allInputs),
-		Outputs:      ToVFSSlice([]string{outputPath}),
+		Inputs:       allInputs,
+		Outputs:      []VFS{outVFS},
 		HostPlatform: instance.Platform.IsHost,
 		KV: map[string]string{
 			"p":  "AS",
@@ -226,6 +228,10 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 // directory is stable.
 const yasmBinaryPath = "$(BUILD_ROOT)/contrib/tools/yasm/yasm"
 
+// yasmBinaryVFS is the typed counterpart of yasmBinaryPath, used at
+// node-input construction sites that consume []VFS.
+var yasmBinaryVFS = Build("contrib/tools/yasm/yasm")
+
 // emitASYasm composes the yasm-shaped AS node for an asmlib host-PIC
 // `.asm` source. See the PR-35q docstring above EmitAS for the
 // rationale and the byte-exact reference shape. The function is the
@@ -239,13 +245,15 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 	// from the util module), use the "_/" infix to match the reference
 	// output shape (util/_/system/context_x86.pic.o). Flat srcRel
 	// (asmlib's "cachesize64.asm") keeps the existing flat shape.
-	var outputPath string
+	var outVFS VFS
 	if strings.Contains(srcRel, "/") {
-		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/_/" + stem + ".pic.o"
+		outVFS = Build(instance.Path + "/_/" + stem + ".pic.o")
 	} else {
-		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + stem + ".pic.o"
+		outVFS = Build(instance.Path + "/" + stem + ".pic.o")
 	}
-	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
+	inVFS := Source(instance.Path + "/" + srcRel)
+	outputPath := outVFS.String()
+	inputPath := inVFS.String()
 
 	// PR-M3-F-5: _YASM_PREDEFINED_FLAGS_VALUE is "-g dwarf2" for all Linux
 	// non-asmlib modules (the default in ymake.core.conf). asmlib clears it
@@ -289,9 +297,9 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 	// asm includes (e.g. `defs.asm` for the asmlib set). The reference
 	// shape places the yasm binary at index 0; the per-source includes
 	// the scanner discovers (PR-31 D11) follow.
-	allInputs := make([]string, 0, 2+len(in.IncludeInputs))
-	allInputs = append(allInputs, yasmBinaryPath)
-	allInputs = append(allInputs, inputPath)
+	allInputs := make([]VFS, 0, 2+len(in.IncludeInputs))
+	allInputs = append(allInputs, yasmBinaryVFS)
+	allInputs = append(allInputs, inVFS)
 	allInputs = append(allInputs, in.IncludeInputs...)
 
 	node := &Node{
@@ -308,8 +316,8 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 			},
 		},
 		Env:          env,
-		Inputs:       ToVFSSlice(allInputs),
-		Outputs:      ToVFSSlice([]string{outputPath}),
+		Inputs:       allInputs,
+		Outputs:      []VFS{outVFS},
 		HostPlatform: instance.Platform.IsHost,
 		KV: map[string]string{
 			"p":  "AS",
@@ -348,32 +356,28 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 //     composeSrcDirOutputRel infix (cc.go) → `__/` for ancestor SRCDIR;
 //     input `$(SOURCE_ROOT)/<srcDir>/<srcRel>`. Empirical: tcmalloc/no_percpu_cache →
 //     `__/tcmalloc/internal/percpu_rseq_asm.S.o`.
-func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (string, string) {
+func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (out, input VFS) {
 	useSrcDir := in.SrcDir != "" && in.SrcDir != instance.Path && !sourceExistsLocally(in.SourceRoot, instance.Path, srcRel)
 
 	if useSrcDir {
 		outputRel := composeSrcDirOutputRel(instance.Path, in.SrcDir, srcRel)
-		outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + outputRel + ".o"
 		// path.Clean resolves any ".." segments produced when srcRel is a
 		// relative path that ascends out of SrcDir (e.g. openssl's
 		// "crypto/../asm/aarch64/..." sources). The reference graph uses
 		// the canonical form without "..".
-		inputPath := "$(SOURCE_ROOT)/" + path.Clean(in.SrcDir+"/"+srcRel)
-
-		return outputPath, inputPath
+		return Build(instance.Path + "/" + outputRel + ".o"),
+			Source(path.Clean(in.SrcDir + "/" + srcRel))
 	}
 
-	var outputPath string
+	var outRel string
 
 	if strings.Contains(srcRel, "/") {
-		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + ".o"
+		outRel = instance.Path + "/_/" + srcRel + ".o"
 	} else {
-		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + ".o"
+		outRel = instance.Path + "/" + srcRel + ".o"
 	}
 
-	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
-
-	return outputPath, inputPath
+	return Build(outRel), Source(instance.Path + "/" + srcRel)
 }
 
 // composeASCmdArgs builds the cmd_args bundle for an AS node. Three

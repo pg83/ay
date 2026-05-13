@@ -234,17 +234,18 @@ func EmitEV(
 	}
 
 	// Build inputs: tool binaries + wrapper + source + transitive imports.
-	inputs := []string{
-		cppStyleguideBinary,
-		protocBinary,
-		event2cppBinary,
-		pbWrapperPath,
-		srcAbs,
+	inputs := []VFS{
+		ParseVFSOrSource(cppStyleguideBinary),
+		ParseVFSOrSource(protocBinary),
+		ParseVFSOrSource(event2cppBinary),
+		ParseVFSOrSource(pbWrapperPath),
+		ParseVFSOrSource(srcAbs),
 	}
 
 	// Resolve transitive imports from the .ev source file and append them.
-	importedInputs := resolveEvImports(sourceRoot, moduleDir+"/"+srcRel)
-	inputs = append(inputs, importedInputs...)
+	for _, p := range resolveEvImports(sourceRoot, moduleDir+"/"+srcRel) {
+		inputs = append(inputs, ParseVFSOrSource(p))
+	}
 
 	targetProps := map[string]string{
 		"module_dir": moduleDir,
@@ -284,8 +285,8 @@ func EmitEV(
 			},
 		},
 		Env:     env,
-		Inputs:  ToVFSSlice(inputs),
-		Outputs: ToVFSSlice([]string{evCC, evH}),
+		Inputs:  inputs,
+		Outputs: []VFS{ParseVFSOrSource(evCC), ParseVFSOrSource(evH)},
 		KV: map[string]string{
 			"p":  "EV",
 			"pc": "yellow",

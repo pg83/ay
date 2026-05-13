@@ -321,9 +321,9 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 		Outputs: ToVFSSlice([]string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"}),
 	})
 
-	closure := []string{
-		"$(SOURCE_ROOT)/util/datetime/parser.h",
-		"$(SOURCE_ROOT)/util/generic/ymath.h",
+	closure := []VFS{
+		Source("util/datetime/parser.h"),
+		Source("util/generic/ymath.h"),
 	}
 
 	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6", nil, closure, e)

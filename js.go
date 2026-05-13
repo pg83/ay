@@ -46,7 +46,7 @@ package main
 //
 // Returns the JS NodeRef and the output path so the caller (PR-25's
 // gen.go) can thread the output into a downstream EmitCC.
-func EmitJS(instance ModuleInstance, allName string, sources, closure []string, platform PlatformID, emit Emitter) (NodeRef, string) {
+func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, platform PlatformID, emit Emitter) (NodeRef, string) {
 	const (
 		python3Path  = "/ix/realm/pg/bin/python3"
 		joinSrcsPath = "$(SOURCE_ROOT)/build/scripts/gen_join_srcs.py"
@@ -78,11 +78,12 @@ func EmitJS(instance ModuleInstance, allName string, sources, closure []string, 
 	// inputs: scripts first, then source files expanded to
 	// $(SOURCE_ROOT)/<instance.Path>/<src>, then the caller-supplied
 	// per-source include closure (PR-35d).
-	inputs := make([]string, 0, 2+len(sources)+len(closure))
-	inputs = append(inputs, joinSrcsPath, procCmdFiles)
+	inputs := make([]VFS, 0, 2+len(sources)+len(closure))
+	inputs = append(inputs, Source("build/scripts/gen_join_srcs.py"))
+	inputs = append(inputs, Source("build/scripts/process_command_files.py"))
 
 	for _, s := range sources {
-		inputs = append(inputs, "$(SOURCE_ROOT)/"+instance.Path+"/"+s)
+		inputs = append(inputs, Source(instance.Path+"/"+s))
 	}
 
 	inputs = append(inputs, closure...)
@@ -95,12 +96,12 @@ func EmitJS(instance ModuleInstance, allName string, sources, closure []string, 
 			},
 		},
 		Env:    env,
-		Inputs: ToVFSSlice(inputs),
+		Inputs: inputs,
 		KV: map[string]string{
 			"p":  "JS",
 			"pc": "magenta",
 		},
-		Outputs:  ToVFSSlice([]string{outputPath}),
+		Outputs:  []VFS{Build(instance.Path + "/" + allName)},
 		Platform: string(platform),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),

@@ -93,7 +93,7 @@ const runtimePy3ModulePath = "library/python/runtime_py3"
 // resourcePaths is the list of RESOURCE/RESOURCE_FILES source path
 // entries (non-kv-only). Returns nil when neither input contributes
 // any extras.
-func pySrcsARExtraInputs(modulePath, srcDir string, pySrcs, resourcePaths []string) []string {
+func pySrcsARExtraInputs(modulePath, srcDir string, pySrcs, resourcePaths []string) []VFS {
 	if len(pySrcs) == 0 && len(resourcePaths) == 0 {
 		return nil
 	}
@@ -103,37 +103,37 @@ func pySrcsARExtraInputs(modulePath, srcDir string, pySrcs, resourcePaths []stri
 		actualUnit = srcDir
 	}
 
-	out := make([]string, 0, 1+len(pySrcs)+len(resourcePaths))
-	out = append(out, "$(SOURCE_ROOT)/build/scripts/objcopy.py")
+	out := make([]VFS, 0, 1+len(pySrcs)+len(resourcePaths))
+	out = append(out, Source("build/scripts/objcopy.py"))
 
 	for _, srcRel := range pySrcs {
-		out = append(out, "$(SOURCE_ROOT)/"+actualUnit+"/"+srcRel)
+		out = append(out, Source(actualUnit+"/"+srcRel))
 	}
 
 	for _, srcRel := range resourcePaths {
-		out = append(out, "$(SOURCE_ROOT)/"+modulePath+"/"+srcRel)
+		out = append(out, Source(modulePath+"/"+srcRel))
 	}
 
 	return out
 }
 
-func runtimePy3CCExtraInputs(modulePath, srcRel string) []string {
+func runtimePy3CCExtraInputs(modulePath, srcRel string) []VFS {
 	if modulePath != runtimePy3ModulePath {
 		return nil
 	}
 
 	switch srcRel {
 	case "__res.cpp":
-		return []string{
-			"$(BUILD_ROOT)/library/python/runtime_py3/__res.pyc.inc",
-			"$(SOURCE_ROOT)/library/python/runtime_py3/__res.py",
-			"$(SOURCE_ROOT)/library/python/runtime_py3/sitecustomize.py",
+		return []VFS{
+			Build("library/python/runtime_py3/__res.pyc.inc"),
+			Source("library/python/runtime_py3/__res.py"),
+			Source("library/python/runtime_py3/sitecustomize.py"),
 		}
 	case "sitecustomize.cpp":
-		return []string{
-			"$(BUILD_ROOT)/library/python/runtime_py3/sitecustomize.pyc.inc",
-			"$(SOURCE_ROOT)/library/python/runtime_py3/__res.py",
-			"$(SOURCE_ROOT)/library/python/runtime_py3/sitecustomize.py",
+		return []VFS{
+			Build("library/python/runtime_py3/sitecustomize.pyc.inc"),
+			Source("library/python/runtime_py3/__res.py"),
+			Source("library/python/runtime_py3/sitecustomize.py"),
 		}
 	}
 

@@ -40,6 +40,10 @@ const maxCmdLen = 8000
 // (PR-M3-globalA-narrow-closure).
 const objcopyScriptPath = "$(SOURCE_ROOT)/build/scripts/objcopy.py"
 
+// objcopyScriptVFS is the VFS-typed form of objcopyScriptPath, used by
+// internal flow that keeps inputs/outputs in VFS shape.
+var objcopyScriptVFS = Source("build/scripts/objcopy.py")
+
 // objcopyHash computes the upstream `GetHashForOutput` digest used
 // to form the `objcopy_<hex>.o` output filename. The list is the
 // concatenation of (paths, base64-padded keys, raw kvs, "$S/" + unitPath);
@@ -181,7 +185,7 @@ func emitResourceObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
 	d *moduleData,
-) ([]NodeRef, []string, []string) {
+) ([]NodeRef, []string, []VFS) {
 	// PR-B: emit kv_only sibling shapes (PY_MAIN, py/namespace,
 	// py/no_check_imports) alongside the legacy RESOURCE/RESOURCE_FILES
 	// flush. Each sibling is independent and conditional on its own
@@ -202,8 +206,8 @@ func emitResourceObjcopy(
 	// `objcopy.py` in its own `inputs[]`; path-based flushes additionally
 	// carry their source paths. The kv-only sub-emitters return only
 	// `objcopy.py`. Caller dedups + folds into globalMemberInputs.
-	var globalMemberInputs []string
-	addGlobal := func(p string) { globalMemberInputs = append(globalMemberInputs, p) }
+	var globalMemberInputs []VFS
+	addGlobal := func(p VFS) { globalMemberInputs = append(globalMemberInputs, p) }
 
 	// kv_only siblings — each fires only when its trigger is present
 	// (no-op return when not). PR-M3-py3cc-objcopy-shape: PY_MAIN fires
@@ -214,19 +218,19 @@ func emitResourceObjcopy(
 	if r, o := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
 		refs = append(refs, r)
 		outputs = append(outputs, o)
-		addGlobal(objcopyScriptPath)
+		addGlobal(objcopyScriptVFS)
 	}
 
 	if r, o := emitPyNamespaceObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
 		refs = append(refs, r)
 		outputs = append(outputs, o)
-		addGlobal(objcopyScriptPath)
+		addGlobal(objcopyScriptVFS)
 	}
 
 	if r, o := emitNoCheckImportsObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); o != "" {
 		refs = append(refs, r)
 		outputs = append(outputs, o)
-		addGlobal(objcopyScriptPath)
+		addGlobal(objcopyScriptVFS)
 	}
 
 	// PR-M3-resource-objcopy-C: per-PY_SRCS resfs entry objcopy nodes.
@@ -327,20 +331,20 @@ func emitResourceObjcopy(
 		// certs case the script lands first; for the multi-entry
 		// rapidjson case the script lands after the inputs. The
 		// distinguishing condition is the number of source-path entries.
-		inputs := []string{
-			"$(BUILD_ROOT)/tools/rescompiler/rescompiler",
-			"$(BUILD_ROOT)/tools/rescompressor/rescompressor",
+		inputs := []VFS{
+			Build("tools/rescompiler/rescompiler"),
+			Build("tools/rescompressor/rescompressor"),
 		}
 		if len(cur.paths) <= 1 {
-			inputs = append(inputs, "$(SOURCE_ROOT)/build/scripts/objcopy.py")
+			inputs = append(inputs, objcopyScriptVFS)
 			for _, p := range cur.paths {
-				inputs = append(inputs, "$(SOURCE_ROOT)/"+instance.Path+"/"+p)
+				inputs = append(inputs, Source(instance.Path+"/"+p))
 			}
 		} else {
 			for _, p := range cur.paths {
-				inputs = append(inputs, "$(SOURCE_ROOT)/"+instance.Path+"/"+p)
+				inputs = append(inputs, Source(instance.Path+"/"+p))
 			}
-			inputs = append(inputs, "$(SOURCE_ROOT)/build/scripts/objcopy.py")
+			inputs = append(inputs, objcopyScriptVFS)
 		}
 
 		// PR-M3-platform-pair-step7: tags + host_platform + platform
@@ -360,8 +364,8 @@ func emitResourceObjcopy(
 				},
 			},
 			Env:     env,
-			Inputs:  ToVFSSlice(inputs),
-			Outputs: ToVFSSlice([]string{outputObj}),
+			Inputs:  inputs,
+			Outputs: []VFS{ParseVFSOrSource(outputObj)},
 			KV: map[string]string{
 				"p":        "PY",
 				"pc":       "yellow",
@@ -396,9 +400,9 @@ func emitResourceObjcopy(
 		// (per-entry source paths + objcopy.py) must propagate to the
 		// enclosing module's .global.a archive's `inputs` slot.
 		for _, p := range cur.paths {
-			addGlobal("$(SOURCE_ROOT)/" + instance.Path + "/" + p)
+			addGlobal(Source(instance.Path + "/" + p))
 		}
-		addGlobal(objcopyScriptPath)
+		addGlobal(objcopyScriptVFS)
 
 		cur = acc{}
 	}
@@ -531,10 +535,10 @@ func emitKvOnlyObjcopyNode(
 	// rescompiler / rescompressor / objcopy.py order (verified against
 	// all 7 REF samples in this PR's scope; no source-path entries are
 	// appended because the kv-only flush has zero `paths`).
-	inputs := []string{
-		"$(BUILD_ROOT)/tools/rescompiler/rescompiler",
-		"$(BUILD_ROOT)/tools/rescompressor/rescompressor",
-		"$(SOURCE_ROOT)/build/scripts/objcopy.py",
+	inputs := []VFS{
+		Build("tools/rescompiler/rescompiler"),
+		Build("tools/rescompressor/rescompressor"),
+		objcopyScriptVFS,
 	}
 
 	targetProps := map[string]string{
@@ -570,8 +574,8 @@ func emitKvOnlyObjcopyNode(
 			},
 		},
 		Env:              env,
-		Inputs:           ToVFSSlice(inputs),
-		Outputs:          ToVFSSlice([]string{outputObj}),
+		Inputs:           inputs,
+		Outputs:          []VFS{ParseVFSOrSource(outputObj)},
 		KV:               map[string]string{"p": "PY", "pc": "yellow", "show_out": "yes"},
 		Tags:             kvTags,
 		TargetProperties: targetProps,
@@ -974,7 +978,7 @@ func emitPySrcObjcopy(
 	d *moduleData,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) ([]NodeRef, []string, []string) {
+) ([]NodeRef, []string, []VFS) {
 	if len(d.pySrcs) == 0 {
 		return nil, nil, nil
 	}
@@ -1003,7 +1007,7 @@ func emitPySrcObjcopy(
 	// BUILD_ROOT-rooted .yapyc3 path entries are excluded — they are
 	// non-.o codegen artefacts and the AR aggregator's filter
 	// (isBuildRootCodegenProduct) would drop them anyway.
-	var globalMemberInputs []string
+	var globalMemberInputs []VFS
 	for _, ch := range chunks {
 		hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path, moduleTag)
 		outputObj := "$(BUILD_ROOT)/" + instance.Path + "/objcopy_" + hash + ".o"
@@ -1033,12 +1037,14 @@ func emitPySrcObjcopy(
 		// instead of `ch.pathInps`; for yapyc3-only modules (Lib) this adds
 		// the underlying .py source as an extra input, and on chunk-straddles
 		// the spillover entry's yapyc3 + .py land in BOTH chunks' inputs[].
-		inputs := []string{
-			"$(BUILD_ROOT)/tools/rescompiler/rescompiler",
-			"$(BUILD_ROOT)/tools/rescompressor/rescompressor",
+		inputs := []VFS{
+			Build("tools/rescompiler/rescompiler"),
+			Build("tools/rescompressor/rescompressor"),
 		}
-		inputs = append(inputs, ch.inps...)
-		inputs = append(inputs, "$(SOURCE_ROOT)/build/scripts/objcopy.py")
+		for _, p := range ch.inps {
+			inputs = append(inputs, ParseVFSOrSource(p))
+		}
+		inputs = append(inputs, objcopyScriptVFS)
 
 		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)"}
 
@@ -1059,8 +1065,8 @@ func emitPySrcObjcopy(
 		node := &Node{
 			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
 			Env:              env,
-			Inputs:           ToVFSSlice(inputs),
-			Outputs:          ToVFSSlice([]string{outputObj}),
+			Inputs:           inputs,
+			Outputs:          []VFS{Build(strings.TrimPrefix(outputObj, "$(BUILD_ROOT)/"))},
 			KV:               map[string]string{"p": "PY", "pc": "yellow", "show_out": "yes"},
 			Tags:             pyTags,
 			TargetProperties: targetProps,
@@ -1092,7 +1098,11 @@ func emitPySrcObjcopy(
 		if rescompressorLDRef != (NodeRef{}) {
 			exclude = append(exclude, rescompressorLDRef)
 		}
-		if extras := resolveCodegenDepRefsExt(ctx, instance, nil, ch.inps, exclude...); len(extras) > 0 {
+		chInpsVFS := make([]VFS, 0, len(ch.inps))
+		for _, p := range ch.inps {
+			chInpsVFS = append(chInpsVFS, ParseVFSOrSource(p))
+		}
+		if extras := resolveCodegenDepRefsExt(ctx, instance, nil, chInpsVFS, exclude...); len(extras) > 0 {
 			node.DepRefs = append(node.DepRefs, extras...)
 		}
 
@@ -1108,10 +1118,10 @@ func emitPySrcObjcopy(
 		// every .py source the chunk's resfs entries reference.
 		for _, p := range ch.inps {
 			if strings.HasPrefix(p, "$(SOURCE_ROOT)/") {
-				globalMemberInputs = append(globalMemberInputs, p)
+				globalMemberInputs = append(globalMemberInputs, ParseVFSOrSource(p))
 			}
 		}
-		globalMemberInputs = append(globalMemberInputs, objcopyScriptPath)
+		globalMemberInputs = append(globalMemberInputs, objcopyScriptVFS)
 	}
 
 	return refs, outputs, globalMemberInputs
