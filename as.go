@@ -410,11 +410,11 @@ func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (
 // consumes.
 func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in ModuleCCInputs) []string {
 	// PR-M3-platform-pair-step9: compose-flavor dispatch is on
-	// instance.Platform.Target (which toolchain to use) and instance.Platform.LibcMusl
-	// (musl flavour). The local is named `targetX8664` instead of
-	// `isHost` because the dispatch is about platform identity, not
-	// host/target axis role.
-	targetX8664 := instance.Platform.ISA == ISAX8664
+	// instance.Platform.IsHost (which bundle flavour to compose).
+	// host: release/PIC with hostCFlags/hostDefines/ndebugPicBlock + SSE
+	// fanout; target: debug/noPIC with commonCFlags/commonDefines/
+	// noLibcUndebugBlock.
+	isHost := instance.Platform.IsHost
 	// `instance.Flags.LibcMusl` is the PER-MODULE flag ("this module is
 	// part of the musl subtree"). It is NOT `instance.Platform.Flags["MUSL"]`,
 	// which is the CLI-level "build everything in musl mode" toggle —
@@ -423,7 +423,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 
 	var cFlags, defines, suppressionBlock []string
 
-	if targetX8664 {
+	if isHost {
 		cFlags = hostCFlags
 		defines = hostDefines
 		suppressionBlock = ndebugPicBlock
@@ -476,7 +476,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	includes := composeASIncludes(in, isMusl, instance.Platform.ISA)
 
 	betweenBlocks := len(catboostOpenSourceDefine) + len(autoPeerCFlags)
-	if targetX8664 {
+	if isHost {
 		betweenBlocks += len(hostSseFeatures)
 	}
 
@@ -517,7 +517,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	// suppressionBlock copy (mirror of composeTargetCC at cc.go:726).
 	cmdArgs = append(cmdArgs, autoPeerCFlags...)
 
-	if targetX8664 {
+	if isHost {
 		cmdArgs = append(cmdArgs, hostSseFeatures...)
 	}
 

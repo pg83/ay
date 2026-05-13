@@ -340,13 +340,14 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 		ownCFlags = composeOwnAndPeerCFlagsAtOwnSlot(in)
 	}
 
-	// PR-M3-platform-pair-step10: compose-flavor dispatch is on
-	// instance.Platform.Target (which toolchain to use) and instance.Flags.LibcMusl
-	// (per-MODULE musl subtree membership — NOT instance.Platform.LibcMusl, which
-	// is the platform-wide libc selector).
-	targetX8664 := instance.Platform.ISA == ISAX8664
+	// Compose-flavour dispatch is on instance.Platform.IsHost (host
+	// bundle = release/PIC, target = debug/noPIC) and
+	// instance.Flags.LibcMusl (per-MODULE musl subtree membership —
+	// NOT instance.Platform.LibcMusl, which is the platform-wide libc
+	// selector).
+	isHost := instance.Platform.IsHost
 	switch {
-	case isMusl && targetX8664:
+	case isMusl && isHost:
 		cmdArgs = composeMuslHostCC(instance.Platform, outputPath, inputPath, nil, muslOwnExtras, isCxx)
 	case isMusl:
 		cmdArgs = composeMuslCC(instance.Platform, outputPath, inputPath, nil, muslOwnExtras, isCxx)
@@ -366,7 +367,7 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 			IsCxx:              isCxx,
 			NoCompilerWarnings: instance.Flags.NoCompilerWarnings,
 		}
-		if targetX8664 {
+		if isHost {
 			cmdArgs = composeHostCC(args)
 		} else {
 			cmdArgs = composeTargetCC(args)
