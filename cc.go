@@ -251,8 +251,7 @@ type ModuleCCInputs struct {
 // NoCompilerWarnings selector adding/removing args inline);
 // reviewer-tracked tests pin each variant against the reference
 // graph.
-func EmitCC(hostP, targetP *Platform, instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emitter) (NodeRef, string) {
-	_ = hostP // PR-M3-platform-pair-step10: surfaced for signature symmetry.
+func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emitter) (NodeRef, string) {
 
 	suffix := ".o"
 	if instance.Flags.PIC {
@@ -340,10 +339,10 @@ func EmitCC(hostP, targetP *Platform, instance ModuleInstance, srcRel string, in
 	}
 
 	// PR-M3-platform-pair-step10: compose-flavor dispatch is on
-	// targetP.Target (which toolchain to use) and instance.Flags.LibcMusl
-	// (per-MODULE musl subtree membership — NOT targetP.LibcMusl, which
+	// instance.Platform.Target (which toolchain to use) and instance.Flags.LibcMusl
+	// (per-MODULE musl subtree membership — NOT instance.Platform.LibcMusl, which
 	// is the platform-wide libc selector).
-	targetX8664 := targetP.Target == PlatformDefaultLinuxX8664
+	targetX8664 := instance.Platform.Target == PlatformDefaultLinuxX8664
 	switch {
 	case isMusl && targetX8664:
 		cmdArgs = composeMuslHostCC(outputPath, inputPath, nil, muslOwnExtras, isCxx)
@@ -386,16 +385,7 @@ func EmitCC(hostP, targetP *Platform, instance ModuleInstance, srcRel string, in
 			"p":  "CC",
 			"pc": "green",
 		},
-		// PR-M3-platform-pair-step10: tags from targetP. Empty
-		// `targetP.Tags` keeps the slice non-nil so JSON serialises
-		// as `[]`, not `null`.
-		Tags: func() []string {
-			out := []string{}
-			if len(targetP.Tags) > 0 {
-				out = append(out, targetP.Tags...)
-			}
-			return out
-		}(),
+		Tags: instance.Platform.Tags,
 		TargetProperties: func() map[string]string {
 			tp := map[string]string{"module_dir": instance.Path}
 			if in.ModuleTag != "" {
@@ -403,8 +393,8 @@ func EmitCC(hostP, targetP *Platform, instance ModuleInstance, srcRel string, in
 			}
 			return tp
 		}(),
-		Platform:     string(targetP.Target),
-		HostPlatform: targetP.IsHost,
+		Platform:     string(instance.Platform.Target),
+		HostPlatform: instance.Platform.IsHost,
 		// Numeric values are stored as float64 to match what
 		// encoding/json produces when unmarshalling the reference
 		// graph into `map[string]interface{}` (Go's default JSON-

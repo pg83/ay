@@ -285,7 +285,7 @@ func emitResourceObjcopy(
 			"--compressor", "$(BUILD_ROOT)/tools/rescompressor/rescompressor",
 			"--rescompiler", "$(BUILD_ROOT)/tools/rescompiler/rescompiler",
 			"--output_obj", outputObj,
-			"--target", objcopyTargetTriple(ctx.platformFor(instance)),
+			"--target", objcopyTargetTriple(instance.Platform),
 		}
 
 		// Source inputs slot: --inputs <p1> <p2> ... --keys <k1> <k2> ...
@@ -345,12 +345,11 @@ func emitResourceObjcopy(
 
 		// PR-M3-platform-pair-step7: tags + host_platform + platform
 		// plumbed from the Platform pair on ctx; renderer does NOT branch
-		// on "is host?". Empty `targetP.Tags` keeps the slice non-nil so
+		// on "is host?". Empty `instance.Platform.Tags` keeps the slice non-nil so
 		// JSON serialises as `[]`, not `null`.
-		targetP := ctx.platformFor(instance)
 		objcopyTags := []string{}
-		if len(targetP.Tags) > 0 {
-			objcopyTags = append(objcopyTags, targetP.Tags...)
+		if len(instance.Platform.Tags) > 0 {
+			objcopyTags = append(objcopyTags, instance.Platform.Tags...)
 		}
 
 		node := &Node{
@@ -372,8 +371,8 @@ func emitResourceObjcopy(
 			TargetProperties: map[string]string{
 				"module_dir": instance.Path,
 			},
-			Platform:     string(targetP.Target),
-			HostPlatform: targetP.IsHost,
+			Platform:     string(instance.Platform.Target),
+			HostPlatform: instance.Platform.IsHost,
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",
@@ -461,10 +460,10 @@ func expandRootrel(kv string, unitPath string) string {
 // `--target=<triple>` substring; the M2/M3 closure only carries two
 // concrete triples (aarch64-linux-gnu / x86_64-linux-gnu).
 //
-// PR-M3-platform-pair-step7: dispatch on `targetP.Target` — these are
-// per-platform LLVM target triples, not a host/target axis decision.
-func objcopyTargetTriple(targetP *Platform) string {
-	switch targetP.Target {
+// PR-M3-platform-pair-step12: dispatches on the Platform's Target —
+// per-platform LLVM target triple, not a host/target axis decision.
+func objcopyTargetTriple(p *Platform) string {
+	switch p.Target {
 	case PlatformDefaultLinuxX8664:
 		return hostTriple
 	default:
@@ -521,7 +520,7 @@ func emitKvOnlyObjcopyNode(
 		"--compressor", "$(BUILD_ROOT)/tools/rescompressor/rescompressor",
 		"--rescompiler", "$(BUILD_ROOT)/tools/rescompiler/rescompiler",
 		"--output_obj", outputObj,
-		"--target", objcopyTargetTriple(ctx.platformFor(instance)),
+		"--target", objcopyTargetTriple(instance.Platform),
 		"--kvs",
 	}
 	cmdArgs = append(cmdArgs, kvsCmd...)
@@ -555,13 +554,12 @@ func emitKvOnlyObjcopyNode(
 	}
 
 	// PR-M3-platform-pair-step7: tags + host_platform + platform from
-	// targetP. Empty `targetP.Tags` keeps the slice non-nil so JSON
+	// targetP. Empty `instance.Platform.Tags` keeps the slice non-nil so JSON
 	// serialises as `[]`, not `null`. REF confirms: kv_only objcopy
 	// nodes on x86_64 have `tags=['tool']`, aarch64 twins have `[]`.
-	targetP := ctx.platformFor(instance)
 	kvTags := []string{}
-	if len(targetP.Tags) > 0 {
-		kvTags = append(kvTags, targetP.Tags...)
+	if len(instance.Platform.Tags) > 0 {
+		kvTags = append(kvTags, instance.Platform.Tags...)
 	}
 
 	node := &Node{
@@ -577,8 +575,8 @@ func emitKvOnlyObjcopyNode(
 		KV:               map[string]string{"p": "PY", "pc": "yellow", "show_out": "yes"},
 		Tags:             kvTags,
 		TargetProperties: targetProps,
-		Platform:         string(targetP.Target),
-		HostPlatform:     targetP.IsHost,
+		Platform:         string(instance.Platform.Target),
+		HostPlatform:     instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -1018,7 +1016,7 @@ func emitPySrcObjcopy(
 			"--compressor", "$(BUILD_ROOT)/tools/rescompressor/rescompressor",
 			"--rescompiler", "$(BUILD_ROOT)/tools/rescompiler/rescompiler",
 			"--output_obj", outputObj,
-			"--target", objcopyTargetTriple(ctx.platformFor(instance)),
+			"--target", objcopyTargetTriple(instance.Platform),
 		}
 
 		cmdArgs = append(cmdArgs, "--inputs")
@@ -1051,12 +1049,11 @@ func emitPySrcObjcopy(
 		}
 
 		// PR-M3-platform-pair-step7: tags + host_platform + platform from
-		// targetP. Empty `targetP.Tags` keeps the slice non-nil so JSON
+		// targetP. Empty `instance.Platform.Tags` keeps the slice non-nil so JSON
 		// serialises as `[]`, not `null`.
-		targetP := ctx.platformFor(instance)
 		pyTags := []string{}
-		if len(targetP.Tags) > 0 {
-			pyTags = append(pyTags, targetP.Tags...)
+		if len(instance.Platform.Tags) > 0 {
+			pyTags = append(pyTags, instance.Platform.Tags...)
 		}
 
 		node := &Node{
@@ -1067,8 +1064,8 @@ func emitPySrcObjcopy(
 			KV:               map[string]string{"p": "PY", "pc": "yellow", "show_out": "yes"},
 			Tags:             pyTags,
 			TargetProperties: targetProps,
-			Platform:         string(targetP.Target),
-			HostPlatform:     targetP.IsHost,
+			Platform:         string(instance.Platform.Target),
+			HostPlatform:     instance.Platform.IsHost,
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",
@@ -1127,7 +1124,7 @@ func emitPySrcObjcopy(
 // to-back calls from emitPySrcs and emitResourceObjcopy do not
 // duplicate node emission.
 func walkHostToolForRef(ctx *genCtx, instance ModuleInstance, path string) NodeRef {
-	hostInst := instance.WithHost(ctx.cfg)
+	hostInst := instance.WithHost(ctx.host)
 	hostInst.Path = path
 	hostInst.Flags = inferFlagsFromPath(path, true)
 

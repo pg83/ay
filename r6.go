@@ -108,8 +108,7 @@ func canonicalizeRagel6BinaryPath(p string) string {
 //
 // Returns (NodeRef, outputPath) so the caller can wire the R6 node as
 // the input of a downstream EmitCC.
-func EmitR6(hostP, targetP *Platform, instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath string, ragel6Flags []string, closure []string, emit Emitter) (NodeRef, string) {
-	_ = hostP // PR-M3-platform-pair-step4: surfaced for signature symmetry.
+func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath string, ragel6Flags []string, closure []string, emit Emitter) (NodeRef, string) {
 	// PR-M3-A fix: add `_/` infix only when srcRel contains a `/` (i.e.
 	// the source is in a subdirectory of the module). Flat .rl6 sources
 	// (no path separator) live at the module root and their generated
@@ -129,12 +128,12 @@ func EmitR6(hostP, targetP *Platform, instance ModuleInstance, srcRel string, ra
 	// PR-M3-ragel-flags-per-module: pick the effective RAGEL6_FLAGS.
 	// Module SET wins; otherwise platform-default (x86_64 → `-CG2`
 	// optimized, aarch64 → `-CT0` debug). PR-M3-platform-pair-step4
-	// dispatches on `targetP.Target` instead of the implicit
+	// dispatches on `instance.Platform.Target` instead of the implicit
 	// "is host" check — these are platform-specific compile flags,
 	// not host/target-axis flags.
 	effectiveFlags := ragel6Flags
 	if len(effectiveFlags) == 0 {
-		switch targetP.Target {
+		switch instance.Platform.Target {
 		case PlatformDefaultLinuxX8664:
 			effectiveFlags = []string{ragel6DefaultFlagOptimized}
 		default:
@@ -167,13 +166,10 @@ func EmitR6(hostP, targetP *Platform, instance ModuleInstance, srcRel string, ra
 	inputs = append(inputs, closure...)
 
 	// PR-M3-platform-pair-step4: tags + host_platform are baseline data
-	// from `targetP`. Empty `targetP.Tags` keeps the slice non-nil so
+	// from `targetP`. Empty `instance.Platform.Tags` keeps the slice non-nil so
 	// the JSON serialises as `[]`, not `null`.
-	tags := []string{}
-	if len(targetP.Tags) > 0 {
-		tags = append(tags, targetP.Tags...)
-	}
-	hostPlatform := targetP.IsHost
+	tags := instance.Platform.Tags
+	hostPlatform := instance.Platform.IsHost
 
 	node := &Node{
 		Cmds: []Cmd{
@@ -194,7 +190,7 @@ func EmitR6(hostP, targetP *Platform, instance ModuleInstance, srcRel string, ra
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform: string(targetP.Target),
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",

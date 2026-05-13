@@ -13,9 +13,9 @@ package main
 //     the second slot becomes host, so the recursive emission renders
 //     for the host's arch.
 //   - Renderers (emit*.go) **never** ask "am I a host build?". They read
-//     `targetP.Target` (which toolchain to use), `targetP.Flags`
-//     (per-platform toggles like PIC), `targetP.Tags` (e.g. `["tool"]`),
-//     and `targetP.IsHost` (the boolean that lands in `node.host_platform`).
+//     `instance.Platform.Target` (which toolchain to use), `instance.Platform.Flags`
+//     (per-platform toggles like PIC), `instance.Platform.Tags` (e.g. `["tool"]`),
+//     and `instance.Platform.IsHost` (the boolean that lands in `node.host_platform`).
 //   - The renderer-side knowledge that something is "host" is restricted
 //     to one place: `IsHost` is set when the top-level CLI constructs the
 //     host Platform; every recursion just plumbs the pointer.
@@ -75,15 +75,15 @@ func NewPlatform(target PlatformID, flags map[string]string, tags []string, isHo
 	}
 }
 
-// platformFor returns the `*Platform` matching `instance.Target` from
+// platformFor returns the `*Platform` matching `instance.Platform.Target` from
 // the (host, target) pair on `c`. Helper for the migration period: as
 // each emitter is refactored to take `(hostP, targetP)` explicitly, its
 // caller resolves the right `*Platform` via this method. Throws if
-// `instance.Target` is neither host nor target; in M2/M3 this is
+// `instance.Platform.Target` is neither host nor target; in M2/M3 this is
 // unreachable (ModuleInstance.Target is always one of the two CLI-
 // constructed platforms).
 func (c *genCtx) platformFor(instance ModuleInstance) *Platform {
-	switch instance.Target {
+	switch instance.Platform.Target {
 	case c.host.Target:
 		return c.host
 	case c.target.Target:
@@ -91,8 +91,8 @@ func (c *genCtx) platformFor(instance ModuleInstance) *Platform {
 	}
 
 	ThrowFmt(
-		"genCtx.platformFor: instance.Target=%q does not match host=%q or target=%q",
-		instance.Target, c.host.Target, c.target.Target,
+		"genCtx.platformFor: instance.Platform.Target=%q does not match host=%q or target=%q",
+		instance.Platform.Target, c.host.Target, c.target.Target,
 	)
 	return nil
 }
@@ -100,7 +100,7 @@ func (c *genCtx) platformFor(instance ModuleInstance) *Platform {
 // defaultLinuxPlatforms returns the canonical M2/M3 (host, target) pair
 // the existing CLI implicitly used pre-refactor: host = x86_64 PIC + the
 // `"tool"` tag baseline (so every node emitted under a host sub-graph
-// inherits it via `targetP.Tags`); target = aarch64 non-PIC, no
+// inherits it via `instance.Platform.Tags`); target = aarch64 non-PIC, no
 // baseline tags. The MUSL flag is propagated to BOTH platforms from
 // `cliDefines["MUSL"]` because musl-vs-glibc applies to BOTH axes (the
 // host walk through ragel6/bin still hits the musl-flavoured cc.go

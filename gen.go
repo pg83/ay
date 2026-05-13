@@ -60,7 +60,7 @@ import (
 // Cross-platform recursion (D31):
 //
 // When a `.rl6` source is processed, the walker constructs the host
-// ragel6 instance (`instance.WithHost(ctx.cfg)` with Path overridden
+// ragel6 instance (`instance.WithHost(ctx.host)` with Path overridden
 // to `contrib/tools/ragel6`) and recurses through `genModule`. The
 // resulting host LD NodeRef threads into EmitR6's `ragel6LD`
 // parameter. Same shape applies for yasm when an `.S` source needs
@@ -320,8 +320,8 @@ type genCtx struct {
 
 	// PR-M3-platform-pair: the canonical (host, target) Platform pair
 	// constructed once in GenWithMode from the CLI args. Threaded through
-	// every emitter so renderers read `targetP.Target` / `targetP.Flags` /
-	// `targetP.Tags` / `targetP.IsHost` instead of inferring "am I a host
+	// every emitter so renderers read `instance.Platform.Target` / `instance.Platform.Flags` /
+	// `instance.Platform.Tags` / `instance.Platform.IsHost` instead of inferring "am I a host
 	// build?" from `targetIsX8664(instance)`. See platform.go header.
 	//
 	// Tool sub-graph emission flips the second slot to host: the recursive
@@ -361,7 +361,7 @@ type codegenOutputKey struct {
 // codegen-producer deps on every CC whose inputs[] references a $(BUILD_ROOT)/
 // <gen>.h or <gen>.cc).
 //
-// `consumer.Target` disambiguates per-platform PB/EV lookup. EN nodes always
+// `consumer.Platform.Target` disambiguates per-platform PB/EV lookup. EN nodes always
 // emit on the target axis so ctx.enOutputs is consulted by path alone (both
 // host and target consumers reach the same target EN NodeRef).
 //
@@ -407,9 +407,9 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 
 		if r, found := ctx.enOutputs[p]; found {
 			ref, ok = r, true
-		} else if r, found := ctx.pbOutputs[codegenOutputKey{platform: consumer.Target, path: p}]; found {
+		} else if r, found := ctx.pbOutputs[codegenOutputKey{platform: consumer.Platform.Target, path: p}]; found {
 			ref, ok = r, true
-		} else if r, found := ctx.evOutputs[codegenOutputKey{platform: consumer.Target, path: p}]; found {
+		} else if r, found := ctx.evOutputs[codegenOutputKey{platform: consumer.Platform.Target, path: p}]; found {
 			ref, ok = r, true
 		} else {
 			reg := codegenRegForInstance(ctx, consumer)
@@ -774,7 +774,7 @@ func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, cliDef
 	seed := ModuleInstance{
 		Path:     filepath.Clean(targetDir),
 		Language: LangCPP,
-		Target:   cfg.Target.ID,
+		Platform: targetP,
 		Flags:    inferFlagsFromPath(filepath.Clean(targetDir), false),
 	}
 
@@ -1944,13 +1944,13 @@ func isMultimoduleLibraryType(name string) bool {
 func buildIfEnv(instance ModuleInstance) Environment {
 	env := DefaultIfEnv.Clone()
 
-	if instance.Target == PlatformDefaultLinuxX8664 {
+	if instance.Platform.Target == PlatformDefaultLinuxX8664 {
 		env.SetBool("ARCH_AARCH64", false)
 		env.SetBool("ARCH_ARM64", false)
 		env.SetBool("ARCH_X86_64", true)
 	}
 
-	if instance.Target == PlatformDefaultLinuxAArch64 {
+	if instance.Platform.Target == PlatformDefaultLinuxAArch64 {
 		env.SetBool("ARCH_AARCH64", true)
 		env.SetBool("ARCH_ARM64", true)
 		env.SetBool("ARCH_X86_64", false)
@@ -1971,10 +1971,11 @@ func derivePeerInstance(parent ModuleInstance, peerPath string) ModuleInstance {
 	return ModuleInstance{
 		Path:     peerPath,
 		Language: parent.Language,
-		Target:   parent.Target,
-		// D41: pass platform identity rather than PIC flag so inferFlagsFromPath
-		// seeds the peer's PIC from the parent's Target axis, not Flags.PIC directly.
-		Flags: inferFlagsFromPath(peerPath, targetIsX8664(parent)),
+		Platform: parent.Platform,
+		// Pass platform identity rather than the bare PIC flag so
+		// inferFlagsFromPath seeds the peer's PIC from the parent's
+		// platform identity, not Flags.PIC directly.
+		Flags: inferFlagsFromPath(peerPath, parent.Platform.Target == PlatformDefaultLinuxX8664),
 	}
 }
 
@@ -2640,8 +2641,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if len(ctx.traceStack) > 0 {
 			caller = ctx.traceStack[len(ctx.traceStack)-1]
 		}
-		fmt.Fprintf(os.Stderr, "%sgenModule %s@%s  (from %s)\n", indent, instance.Path, instance.Target, caller)
-		ctx.traceStack = append(ctx.traceStack, instance.Path+"@"+string(instance.Target))
+		fmt.Fprintf(os.Stderr, "%sgenModule %s@%s  (from %s)\n", indent, instance.Path, instance.Platform.Target, caller)
+		ctx.traceStack = append(ctx.traceStack, instance.Path+"@"+string(instance.Platform.Target))
 		defer func() { ctx.traceStack = ctx.traceStack[:len(ctx.traceStack)-1] }()
 	}
 
@@ -2858,7 +2859,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				globalBaseName = globalArchiveName(instance.Path)
 				tag = "global"
 			}
-			gRef := EmitARGlobalNamedTagged(ctx.host, ctx.platformFor(arInstance), arInstance, globalBaseName, tag, objcopyRefs, objcopyOutputs, objcopyGlobalInputs, ctx.emit)
+			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRefs, objcopyOutputs, objcopyGlobalInputs, ctx.emit)
 			hOnlyGlobalRef = &gRef
 			hOnlyGlobalPath = instance.Path + "/" + globalBaseName
 		}
@@ -4139,7 +4140,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			// to swap x86_64 arch paths for aarch64 ones so the search
 			// path reflects the target (aarch64) musl layout.
 			jsInstance := srcInstance
-			jsInstance.Target = PlatformDefaultLinuxAArch64
+			jsInstance.Platform = ctx.target
 			jsInstance.Flags.PIC = false
 
 			jsModuleInputs := moduleInputs
@@ -4156,7 +4157,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// `contrib/tools/ragel6/bin` whose surrounding LD lives on
 		// the host axis. Only the JS Platform axis detaches; the
 		// downstream JS-derived CC node below continues to compile
-		// at `srcInstance.Target` (host x86_64 for ragel6/bin) so
+		// at `srcInstance.Platform.Target` (host x86_64 for ragel6/bin) so
 		// the .pic.o output stays on the correct compile axis.
 		jsRef, joinOut := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.cfg.Target.ID, ctx.emit)
 
@@ -4188,7 +4189,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccIn.HasGenerator = true
 		ccIn.IncludeInputs = ccIncludeInputs
 
-		ref, outPath := EmitCC(ctx.host, ctx.platformFor(srcInstance), srcInstance, jsRel, ccIn, ctx.emit)
+		ref, outPath := EmitCC(srcInstance, jsRel, ccIn, ctx.emit)
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, false) // JOIN_SRCS are never SRC_C_NO_LTO
@@ -4560,9 +4561,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// PR-M3-openssl-ar-plugin-and-as-clean: openssl AR_PLUGIN(ar) injects
 		// `--plugin <ar.pyplugin>` between the link_lib.py `--` separators.
 		if perModuleCCTag != "" {
-			arRef = EmitARNamedTagged(ctx.host, ctx.platformFor(arInstance), arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginPath, ctx.emit)
+			arRef = EmitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginPath, ctx.emit)
 		} else {
-			arRef = EmitARNamed(ctx.host, ctx.platformFor(arInstance), arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginPath, ctx.emit)
+			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginPath, ctx.emit)
 		}
 	}
 
@@ -4655,7 +4656,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// same member-order discipline as the regular AR — hand-written /
 		// objcopy_* .o files precede codegen-derived .reg3.cpp.o etc.
 		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))
-		globalRef := EmitARGlobalNamedTagged(ctx.host, ctx.platformFor(arInstance), arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, globalAggregated, ctx.emit)
+		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, globalAggregated, ctx.emit)
 		result.GlobalRef = &globalRef
 		result.GlobalPath = instance.Path + "/" + globalBaseName
 	}
@@ -5189,7 +5190,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	)
 
 	// Walk tools/py3cc/bin (the main py3cc binary).
-	py3ccHostInst := instance.WithHost(ctx.cfg)
+	py3ccHostInst := instance.WithHost(ctx.host)
 	py3ccHostInst.Path = py3ccBinPath
 	py3ccHostInst.Flags = inferFlagsFromPath(py3ccBinPath, true)
 
@@ -5218,7 +5219,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	// LDPath is empty. Only update py3ccSlowBin when the walk produces a
 	// non-empty path; otherwise the canonical fallback
 	// $(BUILD_ROOT)/tools/py3cc/slow/py3cc (pre-initialised above) is used.
-	py3ccSlowHostInst := instance.WithHost(ctx.cfg)
+	py3ccSlowHostInst := instance.WithHost(ctx.host)
 	py3ccSlowHostInst.Path = py3ccSlowPath
 	py3ccSlowHostInst.Flags = inferFlagsFromPath(py3ccSlowPath, true)
 
@@ -5251,7 +5252,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	)
 
 	walkHostTool := func(path string) {
-		hostInst := instance.WithHost(ctx.cfg)
+		hostInst := instance.WithHost(ctx.host)
 		hostInst.Path = path
 		hostInst.Flags = inferFlagsFromPath(path, true)
 		if exc := Try(func() {
@@ -5326,7 +5327,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				}
 				return tp
 			}(),
-			Platform: string(instance.Target),
+			Platform: string(instance.Platform.Target),
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",
@@ -5424,7 +5425,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			TargetProperties: map[string]string{
 				"module_dir": instance.Path,
 			},
-			Platform: string(instance.Target),
+			Platform: string(instance.Platform.Target),
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",
@@ -5467,7 +5468,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			ccIn.CFlags = filtered
 		}
 
-		ccRef, ccOut := EmitCC(ctx.host, ctx.platformFor(instance), instance, regCpp, ccIn, ctx.emit)
+		ccRef, ccOut := EmitCC(instance, regCpp, ccIn, ctx.emit)
 
 		refs = append(refs, ccRef)
 		outputs = append(outputs, ccOut)
@@ -5496,7 +5497,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 //     NodeRef and path to the dep lists.
 //  4. Call EmitEN, then record the output paths in ctx.enOutputs.
 //
-// EN nodes are always emitted on the TARGET platform (instance.Target),
+// EN nodes are always emitted on the TARGET platform (instance.Platform.Target),
 // matching the reference graph (all 21 EN nodes in sg2.json are on
 // default-linux-aarch64 even though enum_parser is a host x86_64 tool).
 //
@@ -5526,7 +5527,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 	)
 
 	// Walk enum_parser as a HOST tool (x86_64).
-	enumHostInst := instance.WithHost(ctx.cfg)
+	enumHostInst := instance.WithHost(ctx.host)
 	enumHostInst.Path = enumParserPath
 	enumHostInst.Flags = inferFlagsFromPath(enumParserPath, true)
 
@@ -5546,8 +5547,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 	// in a host walk (all 21 EN nodes in sg2.json are on
 	// default-linux-aarch64). Build a target-axis instance.
 	enInstance := instance
-	enInstance.Target = ctx.cfg.Target.ID
-	// D41: use targetIsX8664 for axis checks.
+	enInstance.Platform = ctx.target
 	enInstance.Flags.PIC = false
 
 	// Synthesize a ModuleCCInputs for the include scanner using the
@@ -5789,7 +5789,6 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		}
 
 		enRef, enOutPaths := EmitEN(
-			ctx.host, ctx.platformFor(enInstance),
 			enInstance,
 			headerRel,
 			withHeader,
@@ -5929,7 +5928,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// the EN path established by PR-M3-module-tag-and-stats-enums-dep.
 		srcIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, srcIn.IncludeInputs)
 
-		ref, outPath := EmitCC(ctx.host, ctx.platformFor(srcInstance), srcInstance, srcRel, srcIn, ctx.emit)
+		ref, outPath := EmitCC(srcInstance, srcRel, srcIn, ctx.emit)
 
 		// AR/LD aggregate the per-CC inputs (primary source +
 		// resolved headers) into their own inputs slice per the
@@ -5969,7 +5968,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		if targetIsX8664(instance) && strings.HasSuffix(srcRel, ".asm") {
 			const yasmPath = "contrib/tools/yasm"
 
-			yasmInstance := instance.WithHost(ctx.cfg)
+			yasmInstance := instance.WithHost(ctx.host)
 			yasmInstance.Path = yasmPath
 			yasmInstance.Flags = inferFlagsFromPath(yasmPath, true)
 
@@ -5989,7 +5988,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// can compose own/peer ADDINCL, own non-GLOBAL CFLAGS, and
 		// auto peer CFLAGS at the same slots CC consumes them
 		// (retiring the util-specific path-sniff stopgap PR-35i added).
-		ref, outPath := EmitAS(ctx.host, ctx.platformFor(srcInstance), srcInstance, srcRel, asIn, yasmRef, ctx.emit)
+		ref, outPath := EmitAS(srcInstance, srcRel, asIn, yasmRef, ctx.emit)
 
 		// PR-35y R8: when the module declares SRCDIR and the .S
 		// source does not exist locally at instance.Path/<srcRel>,
@@ -6040,7 +6039,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			ragelBinaryStr = ragelFallbackPath
 		)
 
-		ragelInstance := instance.WithHost(ctx.cfg)
+		ragelInstance := instance.WithHost(ctx.host)
 		ragelInstance.Path = ragelBinPath
 		ragelInstance.Flags = inferFlagsFromPath(ragelInstance.Path, true)
 
@@ -6092,7 +6091,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// EmitsIncludes traversal and are unaffected.
 		rl6Closure = filterEnSerializedSiblings(rl6Closure)
 
-		r6Ref, r6Out := EmitR6(ctx.host, ctx.platformFor(srcInstance), srcInstance, srcRel, ragelLDRef, ragelBinaryStr, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
+		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
 
 		// F-7-B / PR-AUDIT-2 D02: register the R6 output (.rl6.cpp). Ragel emits
 		// the .rl6 source's `#include` directives verbatim into the generated
@@ -6142,7 +6141,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// is filtered out so EmitCC's leading-DepRefs slot isn't duplicated.
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r6Ref)
 
-		ccRef, ccOut := EmitCC(ctx.host, ctx.platformFor(srcInstance), srcInstance, ccSrcRel, ccIn, ctx.emit)
+		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
 		// R6-derived CC: primary input is the BUILD_ROOT-rooted .cpp
 		// generated by ragel6. No scanner pass (the .cpp doesn't exist
@@ -6193,7 +6192,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 
 			var cppStyleguideLDRef, protocLDRef, event2cppLDRef NodeRef
 
-			protocHostInst := instance.WithHost(ctx.cfg)
+			protocHostInst := instance.WithHost(ctx.host)
 			protocHostInst.Path = pbProtocModule
 			protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
 
@@ -6205,7 +6204,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				_ = exc
 			}
 
-			cppStyleguideHostInst := instance.WithHost(ctx.cfg)
+			cppStyleguideHostInst := instance.WithHost(ctx.host)
 			cppStyleguideHostInst.Path = pbCppStyleguideModule
 			cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
 
@@ -6217,7 +6216,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				_ = exc
 			}
 
-			event2cppHostInst := instance.WithHost(ctx.cfg)
+			event2cppHostInst := instance.WithHost(ctx.host)
 			event2cppHostInst.Path = evEvent2cppModule
 			event2cppHostInst.Flags = inferFlagsFromPath(evEvent2cppModule, true)
 
@@ -6230,7 +6229,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			}
 
 			// moduleTag is empty for LIBRARY modules (no "cpp_proto" tag).
-			evRef := EmitEV(ctx.host, ctx.platformFor(srcInstance),
+			evRef := EmitEV(
 				srcInstance, srcRel,
 				cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
@@ -6245,7 +6244,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			// PR-M3-L0-codegen-deps-EV-PB: stash the EV NodeRef under both outputs
 			// on the emitting platform so consumer CCs in OTHER modules whose
 			// IncludeInputs include this .ev.pb.h / .ev.pb.cc dep on the producer.
-			evKey := codegenOutputKey{platform: srcInstance.Target}
+			evKey := codegenOutputKey{platform: srcInstance.Platform.Target}
 			evKey.path = evH
 			ctx.evOutputs[evKey] = evRef
 			evKey.path = evPbCC
@@ -6310,7 +6309,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			// peer's PB into the consumer CC's deps via its .pb.h in inputs[]).
 			ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, evRef)
 
-			ref, outPath := EmitCC(ctx.host, ctx.platformFor(srcInstance), srcInstance, evPbCCSuffix, ccIn, ctx.emit)
+			ref, outPath := EmitCC(srcInstance, evPbCCSuffix, ccIn, ctx.emit)
 
 			// The primary input for the AR/LD memberInputs is the original .ev source.
 			// PR-M3-final-codegen-registry-expansion: wire_format.h also propagates
@@ -6337,7 +6336,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			rlgenCdBinStr = rlgenCdFallback
 		)
 
-		ragel5Instance := srcInstance.WithHost(ctx.cfg)
+		ragel5Instance := srcInstance.WithHost(ctx.host)
 		ragel5Instance.Path = ragel5Path
 		ragel5Instance.Flags = inferFlagsFromPath(ragel5Path, true)
 
@@ -6352,7 +6351,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			}
 		}
 
-		rlgenCdInstance := srcInstance.WithHost(ctx.cfg)
+		rlgenCdInstance := srcInstance.WithHost(ctx.host)
 		rlgenCdInstance.Path = rlgenCdPath
 		rlgenCdInstance.Flags = inferFlagsFromPath(rlgenCdPath, true)
 
@@ -6367,7 +6366,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			}
 		}
 
-		r5Ref, r5TmpOut, r5CppOut := EmitR5(ctx.host, ctx.platformFor(srcInstance), srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinStr, rlgenCdBinStr, ctx.emit)
+		r5Ref, r5TmpOut, r5CppOut := EmitR5(srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinStr, rlgenCdBinStr, ctx.emit)
 		_ = r5Ref
 
 		// F-7-B / PR-AUDIT-2 D05: register R5 outputs. ragel5 emits the
@@ -6423,7 +6422,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r5Ref)
 		ccIn.ExtraDepRefs = append([]NodeRef{r5Ref}, ccIn.ExtraDepRefs...)
 
-		ccRef, ccOut := EmitCC(ctx.host, ctx.platformFor(srcInstance), srcInstance, ccSrcRel, ccIn, ctx.emit)
+		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
 		// AR/LD member inputs: use the original .rl source (not generated .cpp).
 		// PR-M3-AR-header-closure: roll up the downstream CC's transitive
@@ -6456,7 +6455,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// calling EmitCF so the CF node's inputs[] matches the reference shape
 		// (e.g. sandbox.cpp.in → 795-entry closure; build_info.cpp.in → 5).
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
-		cfRef, cfOut := EmitCF(ctx.host, ctx.platformFor(srcInstance), srcInstance, srcRel, srcIn, ctx.emit)
+		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
 
 		// F-7-B / PR-AUDIT-2 D08: register the CF output. configure_file.py
 		// performs `@VAR@` substitution but leaves `#include` directives
@@ -6501,7 +6500,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, cfRef)
 		ccIn.ExtraDepRefs = append([]NodeRef{cfRef}, ccIn.ExtraDepRefs...)
 
-		ccRef, ccOut := EmitCC(ctx.host, ctx.platformFor(srcInstance), srcInstance, ccSrcRel, ccIn, ctx.emit)
+		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.emit)
 
 		// AR/LD member inputs: use the original .cpp.in / .c.in source.
 		// PR-M3-AR-header-closure: roll up the downstream CC's transitive
@@ -7163,7 +7162,7 @@ func applyUmbrellaAddIncl(ctx *genCtx) {
 			continue
 		}
 
-		k := key{path: inst.Path, platform: string(inst.Target)}
+		k := key{path: inst.Path, platform: string(inst.Platform.Target)}
 		if len(res.AddInclGlobal) != 0 {
 			pathAddIncl[k] = res.AddInclGlobal
 		}
@@ -7421,7 +7420,7 @@ func applyBackPeerAddIncl(ctx *genCtx) {
 			continue
 		}
 
-		resultsByKey[key{path: inst.Path, platform: string(inst.Target)}] = backPeerEntry{
+		resultsByKey[key{path: inst.Path, platform: string(inst.Platform.Target)}] = backPeerEntry{
 			peerdirs:       res.Peerdirs,
 			addInclGlobal:  res.AddInclGlobal,
 			moduleStmtName: res.ModuleStmtName,

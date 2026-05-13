@@ -67,5 +67,5 @@ var TargetCfg = DefaultLinuxConfig
 // In M2/M3 this coincides with the host axis; naming avoids the
 // host/target boolean framing per D41.
 func targetIsX8664(mi ModuleInstance) bool {
-	return mi.Target == PlatformDefaultLinuxX8664
+	return mi.Platform.Target == PlatformDefaultLinuxX8664
 }

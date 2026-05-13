@@ -333,7 +333,7 @@ func TestGen_PeerdirCycle_Tolerated(t *testing.T) {
 	seed := ModuleInstance{
 		Path:     "a",
 		Language: LangCPP,
-		Target:   TargetCfg.Target.ID,
+		Platform: testTargetP,
 		Flags:    inferFlagsFromPath("a", false),
 	}
 
@@ -520,12 +520,12 @@ func TestGen_DualInstantiation_BuildCowOn(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	tInstance := targetInstance(targetDir)
-	tCCRef, tCCOut := EmitCC(testHostP, testTargetP, tInstance, "lib.c", ModuleCCInputs{}, e)
-	EmitAR(testHostP, testTargetP, tInstance, []NodeRef{tCCRef}, []string{tCCOut}, nil, nil, e)
+	tCCRef, tCCOut := EmitCC(tInstance, "lib.c", ModuleCCInputs{}, e)
+	EmitAR(tInstance, []NodeRef{tCCRef}, []string{tCCOut}, nil, nil, e)
 
 	hInstance := hostInstance(targetDir)
-	hCCRef, hCCOut := EmitCC(testHostP, testHostP, hInstance, "lib.c", ModuleCCInputs{}, e)
-	EmitAR(testHostP, testHostP, hInstance, []NodeRef{hCCRef}, []string{hCCOut}, nil, nil, e)
+	hCCRef, hCCOut := EmitCC(hInstance, "lib.c", ModuleCCInputs{}, e)
+	EmitAR(hInstance, []NodeRef{hCCRef}, []string{hCCOut}, nil, nil, e)
 
 	if len(e.nodes) != 4 {
 		t.Errorf("dual emission produced %d nodes, want 4", len(e.nodes))
@@ -759,7 +759,7 @@ END()
 		t.Fatalf("path flags pre-set; test premise broken: %+v", pathFlags)
 	}
 
-	d := collectModule("nolibcmod", mf.Stmts, buildIfEnv(ModuleInstance{Target: PlatformDefaultLinuxAArch64}), pathFlags)
+	d := collectModule("nolibcmod", mf.Stmts, buildIfEnv(ModuleInstance{Platform: testTargetP}), pathFlags)
 
 	if !d.flags.NoLibc {
 		t.Errorf("flags.NoLibc = false, want true (macro overlay should have flipped it)")
@@ -1349,7 +1349,7 @@ func TestGen_HostWalk_AsmlibYasmWired(t *testing.T) {
 	hostAsmlib := ModuleInstance{
 		Path:     "contrib/libs/asmlib",
 		Language: LangCPP,
-		Target:   cfg.Host.ID,
+		Platform: testHostP,
 		Flags:    inferFlagsFromPath("contrib/libs/asmlib", true),
 	}
 
@@ -1415,7 +1415,7 @@ func TestGen_HostWalk_NonAsmlibAS_NoYasmDep(t *testing.T) {
 	hostInstance := ModuleInstance{
 		Path:     "myasm",
 		Language: LangCPP,
-		Target:   cfg.Host.ID,
+		Platform: testHostP,
 		Flags:    inferFlagsFromPath("myasm", true),
 	}
 
@@ -1466,7 +1466,7 @@ func TestGen_DefaultPeerdirs_BuildCowOnUnaffected(t *testing.T) {
 	bcOn := ModuleInstance{
 		Path:     targetDir,
 		Language: LangCPP,
-		Target:   PlatformDefaultLinuxAArch64,
+		Platform: testTargetP,
 		Flags:    inferFlagsFromPath(targetDir, false),
 	}
 
@@ -1512,7 +1512,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	plain := ModuleInstance{
 		Path:     "consumer",
 		Language: LangCPP,
-		Target:   PlatformDefaultLinuxAArch64,
+		Platform: testTargetP,
 		Flags:    FlagSet{},
 	}
 
@@ -1623,7 +1623,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			mi: ModuleInstance{
 				Path:     "x",
 				Language: LangCPP,
-				Target:   PlatformDefaultLinuxAArch64,
+				Platform: testTargetP,
 				Flags:    FlagSet{NoLibc: true},
 			},
 			// PR-42: musl was already removed from direct peers; NO_LIBC no
@@ -1635,7 +1635,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			mi: ModuleInstance{
 				Path:     "x",
 				Language: LangCPP,
-				Target:   PlatformDefaultLinuxAArch64,
+				Platform: testTargetP,
 				Flags:    FlagSet{NoRuntime: true},
 			},
 			// PR-42: musl and malloc/api removed from direct peers. NO_RUNTIME drops
@@ -1696,7 +1696,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		// runtime root); it gets the full default set.
 		{
 			name: "musl_extra_not_runtime_ancestor",
-			mi:   ModuleInstance{Path: "contrib/libs/musl_extra", Language: LangCPP, Target: PlatformDefaultLinuxAArch64, Flags: FlagSet{}},
+			mi:   ModuleInstance{Path: "contrib/libs/musl_extra", Language: LangCPP, Platform: testTargetP, Flags: FlagSet{}},
 			want: fullSet,
 		},
 		// PR-32 D03: non-LibcMusl runtime ancestors (builtins,
@@ -3688,7 +3688,7 @@ END()
 //
 // This is the graph-level proof that D41's dispatch-on-Target rule is
 // internally consistent: emitter sites that set HostPlatform read
-// instance.Target (via targetIsX8664) and instance.Target determines
+// instance.Platform.Target (via targetIsX8664) and instance.Platform.Target determines
 // node.Platform — so the two fields must agree.
 //
 // If this test ever fails, either a walker site failed to flip Target

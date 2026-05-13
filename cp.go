@@ -78,7 +78,7 @@ func EmitJVCPG4(
 			"pc": "light-cyan",
 		},
 		Outputs:  []string{dstAbsPath},
-		Platform: string(instance.Target),
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -144,7 +144,7 @@ func EmitCP(instance ModuleInstance, srcAbsPath, dstAbsPath string, emit Emitter
 			"pc": "light-cyan",
 		},
 		Outputs:  []string{dstAbsPath},
-		Platform: string(instance.Target),
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
