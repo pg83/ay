@@ -189,8 +189,8 @@ func EmitLD(
 
 	tools := instance.Platform.Tools
 	cmd0 := composeLDCmdVcsInfo(tools, vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(tools, vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
-	cmd2 := composeLDCmdLinkExe(tools, outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths, hostBuild, wantsStrip)
+	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
+	cmd2 := composeLDCmdLinkExe(instance.Platform, outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths, hostBuild, wantsStrip)
 	cmd3 := composeLDCmdLinkOrCopy(tools, binaryDir)
 
 	// vcs_info.py and fs_tools.py only carry ARCADIA_ROOT_DISTBUILD;
@@ -406,16 +406,16 @@ func composeLDCmdVcsInfo(tools Toolchain, vcsCPath string) []string {
 // reflects `cliMuslOn(ctx)` from the walker; when MUSL=no the two
 // sentinels collapse to a bare double-`noLibcUndebugBlock` (target)
 // or no muslConsumerSentinel between catboost and SSE (host).
-func composeLDCmdVcsCompile(tools Toolchain, vcsCPath, vcsOPath string, muslOn bool, moduleCFlags, peerCFlagsGlobal []string, usePython3 bool, hostBuild bool, noCompilerWarnings bool) []string {
+func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, muslOn bool, moduleCFlags, peerCFlagsGlobal []string, usePython3 bool, hostBuild bool, noCompilerWarnings bool) []string {
 	if hostBuild {
-		return composeLDCmdVcsCompileHost(tools, vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, noCompilerWarnings)
+		return composeLDCmdVcsCompileHost(p, vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, noCompilerWarnings)
 	}
 
 	cmdArgs := make([]string, 0, 94+len(peerCFlagsGlobal))
 	cmdArgs = append(cmdArgs,
-		tools.CC,
-		"--target="+targetTriple,
-		"-march="+archFlag,
+		p.Tools.CC,
+		"--target="+p.Triple,
+		"-march="+p.March,
 		"-B"+binPath,
 		"-c",
 		"-o",
@@ -484,11 +484,11 @@ func composeLDCmdVcsCompile(tools Toolchain, vcsCPath, vcsOPath string, muslOn b
 // -Wno-implicit-const-int-float-conversion -Wno-unknown-warning-option`).
 // Canonical bundle composition: `ymake_conf.py:1550-1556` and
 // `gnu_compiler.conf:124-140`.
-func composeLDCmdVcsCompileHost(tools Toolchain, vcsCPath, vcsOPath string, muslOn bool, moduleCFlags, peerCFlagsGlobal []string, usePython3 bool, noCompilerWarnings bool) []string {
+func composeLDCmdVcsCompileHost(p *Platform, vcsCPath, vcsOPath string, muslOn bool, moduleCFlags, peerCFlagsGlobal []string, usePython3 bool, noCompilerWarnings bool) []string {
 	cmdArgs := make([]string, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal))
 	cmdArgs = append(cmdArgs,
-		tools.CC,
-		"--target="+hostTriple,
+		p.Tools.CC,
+		"--target="+p.Triple,
 		"-B"+binPath,
 		"-c",
 		"-o",
@@ -569,7 +569,7 @@ const ldVcsMuslSelfDefine = "-D_musl_=1"
 // PR-M3-py3-program-bin-strip-all: `wantsStrip` controls insertion of
 // `-Wl,--strip-all` between the trailer's `-lm` and `-Wl,--gc-sections`.
 // Set true for PY3_PROGRAM_BIN (STRIP() in _BASE_PY3_PROGRAM, python.conf:884).
-func composeLDCmdLinkExe(tools Toolchain, outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths []string, objcopyPaths []VFS, hostBuild, wantsStrip bool) []string {
+func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths []string, objcopyPaths []VFS, hostBuild, wantsStrip bool) []string {
 	// Capacity hint matches the reference graph's structure plus the
 	// caller-supplied slices.
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 12 + 1 + len(ccPaths) + len(peerLibPaths) + len(globalPaths) + len(objcopyPaths)
@@ -581,7 +581,7 @@ func composeLDCmdLinkExe(tools Toolchain, outputPath, vcsOPath string, ccPaths [
 	cmdArgs := make([]string, 0, argCap)
 
 	cmdArgs = append(cmdArgs,
-		tools.Python3,
+		p.Tools.Python3,
 		ldLinkExePath,
 	)
 
@@ -596,8 +596,8 @@ func composeLDCmdLinkExe(tools Toolchain, outputPath, vcsOPath string, ccPaths [
 		"--source-root", "$(S)",
 		"--build-root", "$(B)",
 		"--arch=LINUX",
-		"--objcopy-exe", tools.Objcopy,
-		tools.CXX,
+		"--objcopy-exe", p.Tools.Objcopy,
+		p.Tools.CXX,
 		"-Wl,--whole-archive",
 		"--ya-start-command-file",
 	)
@@ -611,27 +611,27 @@ func composeLDCmdLinkExe(tools Toolchain, outputPath, vcsOPath string, ccPaths [
 	// emit bare (BUILD_ROOT-relative) — upstream uses
 	// `${rootrel;ext=.o:SRCS_GLOBAL}` which strips the $(B)/
 	// prefix. The `inputs` slot retains the prefix via composeLDInputs.
-	for _, p := range objcopyPaths {
+	for _, op := range objcopyPaths {
 		// SRCS_GLOBAL bare-relative rendering: `${rootrel;ext=.o:SRCS_GLOBAL}`
 		// strips the $(B)/ prefix; VFS.Rel gives that form natively.
-		cmdArgs = append(cmdArgs, p.Rel)
+		cmdArgs = append(cmdArgs, op.Rel)
 	}
 
 	cmdArgs = append(cmdArgs, vcsOPath)
-	for _, p := range ccPaths {
-		cmdArgs = append(cmdArgs, p.String())
+	for _, cp := range ccPaths {
+		cmdArgs = append(cmdArgs, cp.String())
 	}
 	cmdArgs = append(cmdArgs, "-o", outputPath)
 
 	if hostBuild {
 		cmdArgs = append(cmdArgs,
-			"--target="+hostTriple,
+			"--target="+p.Triple,
 			"-B"+binPath,
 		)
 	} else {
 		cmdArgs = append(cmdArgs,
-			"--target="+targetTriple,
-			"-march="+archFlag,
+			"--target="+p.Triple,
+			"-march="+p.March,
 			"-B"+binPath,
 		)
 	}

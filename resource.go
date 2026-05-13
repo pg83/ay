@@ -293,7 +293,7 @@ func emitResourceObjcopy(
 			"--compressor", rescompressorBinPath,
 			"--rescompiler", rescompilerBinPath,
 			"--output_obj", outputObj.String(),
-			"--target", objcopyTargetTriple(instance.Platform),
+			"--target", instance.Platform.Triple,
 		}
 
 		// Source inputs slot: --inputs <p1> <p2> ... --keys <k1> <k2> ...
@@ -462,23 +462,6 @@ func expandRootrel(kv string, unitPath string) string {
 	return kv[:idx] + expanded + tail[end+len("\"}"):]
 }
 
-// objcopyTargetTriple maps a ModuleInstance.Target value to the
-// `--target <triple>` arg understood by build/scripts/objcopy.py.
-// Mirrors `objcopy.h:108-124` which parses `C_FLAGS_PLATFORM` for the
-// `--target=<triple>` substring; the M2/M3 closure only carries two
-// concrete triples (aarch64-linux-gnu / x86_64-linux-gnu).
-//
-// PR-M3-platform-pair-step12: dispatches on the Platform's Target —
-// per-platform LLVM target triple, not a host/target axis decision.
-func objcopyTargetTriple(p *Platform) string {
-	switch p.Target {
-	case PlatformDefaultLinuxX8664:
-		return hostTriple
-	default:
-		return targetTriple
-	}
-}
-
 // emitKvOnlyObjcopyNode emits a single kv_only objcopy PY node for the
 // module — one whose upstream packer flush carries an empty `paths`
 // slice and a non-empty `kvs` list, so the cmd_args have no `--inputs`
@@ -528,7 +511,7 @@ func emitKvOnlyObjcopyNode(
 		"--compressor", rescompressorBinPath,
 		"--rescompiler", rescompilerBinPath,
 		"--output_obj", outputObj.String(),
-		"--target", objcopyTargetTriple(instance.Platform),
+		"--target", instance.Platform.Triple,
 		"--kvs",
 	}
 	cmdArgs = append(cmdArgs, kvsCmd...)
@@ -1030,7 +1013,7 @@ func emitPySrcObjcopy(
 			"--compressor", rescompressorBinPath,
 			"--rescompiler", rescompilerBinPath,
 			"--output_obj", outputObj.String(),
-			"--target", objcopyTargetTriple(instance.Platform),
+			"--target", instance.Platform.Triple,
 		}
 
 		cmdArgs = append(cmdArgs, "--inputs")

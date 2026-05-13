@@ -345,15 +345,14 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	// (per-MODULE musl subtree membership — NOT instance.Platform.LibcMusl, which
 	// is the platform-wide libc selector).
 	targetX8664 := instance.Platform.Target == PlatformDefaultLinuxX8664
-	tools := instance.Platform.Tools
 	switch {
 	case isMusl && targetX8664:
-		cmdArgs = composeMuslHostCC(tools, outputPath, inputPath, nil, muslOwnExtras, isCxx)
+		cmdArgs = composeMuslHostCC(instance.Platform, outputPath, inputPath, nil, muslOwnExtras, isCxx)
 	case isMusl:
-		cmdArgs = composeMuslCC(tools, outputPath, inputPath, nil, muslOwnExtras, isCxx)
+		cmdArgs = composeMuslCC(instance.Platform, outputPath, inputPath, nil, muslOwnExtras, isCxx)
 	default:
 		args := ccComposeArgs{
-			Tools:              tools,
+			Platform:           instance.Platform,
 			OutputPath:         outputPath,
 			InputPath:          inputPath,
 			OwnAddIncl:         in.AddIncl,
@@ -890,7 +889,7 @@ func composePostCatboostBucket(preBucket []string) []string {
 // surface from the type system (every parameter is `[]string` or
 // `string`).
 type ccComposeArgs struct {
-	Tools              Toolchain
+	Platform           *Platform
 	OutputPath         string
 	InputPath          string
 	OwnAddIncl         []string
@@ -908,9 +907,9 @@ type ccComposeArgs struct {
 func composeTargetCC(a ccComposeArgs) []string {
 	cmdArgs := make([]string, 0, 101+len(a.OwnAddIncl)+len(a.PeerAddIncl)+len(a.OwnCFlags)+len(a.OwnExtras)+len(a.AutoPeerCFlags)+len(a.PeerExtras)+2*len(a.OwnGlobalBucket)+len(a.PerSrcCFlags)+4)
 	cmdArgs = append(cmdArgs,
-		pickCompiler(a.Tools, a.IsCxx),
-		"--target="+targetTriple,
-		"-march="+archFlag,
+		pickCompiler(a.Platform.Tools, a.IsCxx),
+		"--target="+a.Platform.Triple,
+		"-march="+a.Platform.March,
 		"-B"+binPath,
 		"-c",
 		"-o",
@@ -994,8 +993,8 @@ func composeTargetCC(a ccComposeArgs) []string {
 func composeHostCC(a ccComposeArgs) []string {
 	cmdArgs := make([]string, 0, 105+len(a.OwnAddIncl)+len(a.PeerAddIncl)+len(a.OwnCFlags)+len(a.OwnExtras)+len(a.AutoPeerCFlags)+len(a.PeerExtras)+2*len(a.OwnGlobalBucket)+len(a.PerSrcCFlags)+4)
 	cmdArgs = append(cmdArgs,
-		pickCompiler(a.Tools, a.IsCxx),
-		"--target="+hostTriple,
+		pickCompiler(a.Platform.Tools, a.IsCxx),
+		"--target="+a.Platform.Triple,
 		"-B"+binPath,
 		"-c",
 		"-o",
@@ -1068,12 +1067,12 @@ func composeHostCC(a ccComposeArgs) []string {
 //   - `muslWarningFlags` (1 arg) replaces `warningFlags` (6 args)
 //   - `muslExtraDefines` (9 args) inserted after `commonDefines`,
 //     before the noLibc block
-func composeMuslCC(tools Toolchain, outputPath, inputPath string, addIncl, ownExtras []string, isCxx bool) []string {
+func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl, ownExtras []string, isCxx bool) []string {
 	cmdArgs := make([]string, 0, 111+len(addIncl)+len(ownExtras)+2)
 	cmdArgs = append(cmdArgs,
-		pickCompiler(tools, isCxx),
-		"--target="+targetTriple,
-		"-march="+archFlag,
+		pickCompiler(p.Tools, isCxx),
+		"--target="+p.Triple,
+		"-march="+p.March,
 		"-B"+binPath,
 		"-c",
 		"-o",
@@ -1119,11 +1118,11 @@ func composeMuslCC(tools Toolchain, outputPath, inputPath string, addIncl, ownEx
 // Net: 111 + 4 = 115 args (one fewer prologue arg from no -march,
 // one extra hostDefines arg, seven hostSseFeatures, three fewer
 // hostCFlags = -3 + 1 + 7 - 1 + 0 = +4).
-func composeMuslHostCC(tools Toolchain, outputPath, inputPath string, addIncl, ownExtras []string, isCxx bool) []string {
+func composeMuslHostCC(p *Platform, outputPath, inputPath string, addIncl, ownExtras []string, isCxx bool) []string {
 	cmdArgs := make([]string, 0, 115+len(addIncl)+len(ownExtras)+2)
 	cmdArgs = append(cmdArgs,
-		pickCompiler(tools, isCxx),
-		"--target="+hostTriple,
+		pickCompiler(p.Tools, isCxx),
+		"--target="+p.Triple,
 		"-B"+binPath,
 		"-c",
 		"-o",
