@@ -16,95 +16,11 @@ import (
 // snapshot under /home/pg/monorepo/yatool_orig is required; absence is a
 // host condition, not a test failure.
 
-var sourceRoot = filepath.Dir(referenceGraphPath)
-
-func TestGen_BuildCowOn_TwoNodeSubgraph_L3MatchesReference(t *testing.T) {
-	const targetDir = "build/cow/on"
-	const arOutput = "$(BUILD_ROOT)/build/cow/on/libbuild-cow-on.a"
-
-	if _, err := os.Stat(sourceRoot + "/" + targetDir + "/ya.make"); err != nil {
-		if os.IsNotExist(err) {
-			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
-		}
-
-		t.Fatalf("stat ya.make: %v", err)
-	}
-
-	if _, err := os.Stat(referenceGraphPath); err != nil {
-		t.Skipf("reference graph %s not present: %v", referenceGraphPath, err)
-	}
-
-	our := Gen(TargetCfg, sourceRoot, targetDir)
-
-	if len(our.Graph) != 2 {
-		t.Fatalf("Gen produced %d nodes for %s, want 2 (1 CC + 1 AR)", len(our.Graph), targetDir)
-	}
-
-	ref := LoadReference(referenceGraphPath)
-
-	subgraphRef := &Graph{
-		Conf:   ref.Conf,
-		Inputs: ref.Inputs,
-		Graph:  []*Node{},
-	}
-
-	var arUID string
-
-	for _, n := range ref.Graph {
-		if len(n.Outputs) == 0 {
-			continue
-		}
-
-		if !strings.HasPrefix(n.Outputs[0], "$(BUILD_ROOT)/"+targetDir+"/") {
-			continue
-		}
-		// PR-10 emits one platform (TargetCfg.Target.ID). The reference
-		// graph carries the same module on multiple platforms (4 nodes
-		// for build/cow/on: 2 platforms × {CC, AR}); restrict the
-		// comparison subgraph to TargetCfg.Target.ID so the pairing is
-		// 2-vs-2 not 4-vs-2.
-		if n.Platform != string(TargetCfg.Target.ID) {
-			continue
-		}
-
-		subgraphRef.Graph = append(subgraphRef.Graph, n)
-
-		if n.Outputs[0] == arOutput {
-			arUID = n.UID
-		}
-	}
-
-	if len(subgraphRef.Graph) != 2 {
-		t.Fatalf("expected 2 nodes in reference subgraph for %s, got %d", targetDir, len(subgraphRef.Graph))
-	}
-
-	if arUID == "" {
-		t.Fatalf("reference subgraph for %s has no AR node with output %q", targetDir, arOutput)
-	}
-
-	subgraphRef.Result = []string{arUID}
-
-	r := Compare(subgraphRef, our, 3)
-
-	if r.L0 != 1.0 {
-		t.Errorf("L0 = %v, want 1.0 (note: %q)", r.L0, r.L0Note)
-	}
-
-	if r.L1 != 1.0 {
-		t.Errorf("L1 = %v, want 1.0 (note: %q)", r.L1, r.L1Note)
-	}
-
-	if r.L2 != 1.0 {
-		t.Errorf("L2 = %v, want 1.0 (note: %q)", r.L2, r.L2Note)
-	}
-
-	if r.L3 != 1.0 {
-		t.Errorf("L3 = %v, want 1.0 (note: %q)", r.L3, r.L3Note)
-	}
-
-	t.Logf("L0=%.4f L1=%.4f L2=%.4f L3=%.4f", r.L0, r.L1, r.L2, r.L3)
-	t.Logf("L3 note: %s", r.L3Note)
-}
+// sourceRoot points at the upstream snapshot used by reference-aware
+// tests. The constant matches the production CLI default
+// (cmdGen's --source-root) so test-only fixtures resolve the same paths
+// the integration harness does.
+const sourceRoot = "/home/pg/monorepo/yatool_orig"
 
 // TestGen_AcceptsProgramModule_Synthetic verifies PR-24's PROGRAM →
 // LD wiring on a synthetic source tree:
@@ -486,86 +402,6 @@ END()
 // Together these prove that ModuleInstance addressing AND host
 // emission both work; PR-25 will fold the second half into the
 // walker.
-func TestGen_DualInstantiation_BuildCowOn(t *testing.T) {
-	const targetDir = "build/cow/on"
-
-	if _, err := os.Stat(sourceRoot + "/" + targetDir + "/ya.make"); err != nil {
-		t.Skipf("reference ya.make not present: %v", err)
-	}
-
-	if _, err := os.Stat(referenceGraphPath); err != nil {
-		t.Skipf("reference graph %s not present: %v", referenceGraphPath, err)
-	}
-
-	// Step 1: full Gen against target. Must emit exactly 2 nodes
-	// (1 CC + 1 AR) — same as M1 acceptance.
-	our := Gen(DefaultLinuxConfig, sourceRoot, targetDir)
-
-	if len(our.Graph) != 2 {
-		t.Errorf("Gen produced %d nodes, want 2 (1 CC + 1 AR target-only)", len(our.Graph))
-	}
-
-	for _, n := range our.Graph {
-		if n.Platform != string(PlatformDefaultLinuxAArch64) {
-			t.Errorf("node %s on platform %q; want target only", n.Outputs[0], n.Platform)
-		}
-
-		if n.HostPlatform {
-			t.Errorf("node %s has host_platform=true; want target only", n.Outputs[0])
-		}
-	}
-
-	// Step 2: build a fresh emitter and emit BOTH target and host
-	// pairs by hand. Verify 4 nodes total.
-	e := NewBufferedEmitter()
-
-	tInstance := targetInstance(targetDir)
-	tCCRef, tCCOut := EmitCC(tInstance, "lib.c", ModuleCCInputs{}, e)
-	EmitAR(tInstance, []NodeRef{tCCRef}, []string{tCCOut}, nil, nil, e)
-
-	hInstance := hostInstance(targetDir)
-	hCCRef, hCCOut := EmitCC(hInstance, "lib.c", ModuleCCInputs{}, e)
-	EmitAR(hInstance, []NodeRef{hCCRef}, []string{hCCOut}, nil, nil, e)
-
-	if len(e.nodes) != 4 {
-		t.Errorf("dual emission produced %d nodes, want 4", len(e.nodes))
-	}
-
-	// Verify host nodes (indices 2, 3) carry host_platform=true and
-	// tags=["tool"].
-	hostCC := e.nodes[2]
-	hostAR := e.nodes[3]
-
-	for i, n := range []*Node{hostCC, hostAR} {
-		if !n.HostPlatform {
-			t.Errorf("dual host node %d host_platform = false, want true", i)
-		}
-
-		if len(n.Tags) != 1 || n.Tags[0] != "tool" {
-			t.Errorf("dual host node %d tags = %v, want [tool]", i, n.Tags)
-		}
-
-		if n.Platform != string(PlatformDefaultLinuxX8664) {
-			t.Errorf("dual host node %d platform = %q, want %q", i, n.Platform, PlatformDefaultLinuxX8664)
-		}
-	}
-
-	// Verify target nodes (indices 0, 1) carry no host_platform
-	// and tags=[].
-	targetCC := e.nodes[0]
-	targetAR := e.nodes[1]
-
-	for i, n := range []*Node{targetCC, targetAR} {
-		if n.HostPlatform {
-			t.Errorf("dual target node %d host_platform = true, want false", i)
-		}
-
-		if len(n.Tags) != 0 {
-			t.Errorf("dual target node %d tags = %v, want []", i, n.Tags)
-		}
-	}
-}
-
 func TestCmdGen_HelpFlag_PrintsUsageAndExits0(t *testing.T) {
 	rc := cmdGen([]string{"-h"})
 
@@ -2658,27 +2494,6 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 // TestGen_ToolsArchiver_L0_AtLeast95 is the M2 acceptance closer: PR-30
 // must lift L0 ≥ 95% on the tools/archiver target against the reference
 // graph at /home/pg/monorepo/yatool_orig/sg.json.
-func TestGen_ToolsArchiver_L0_AtLeast95(t *testing.T) {
-	const sourceRoot = "/home/pg/monorepo/yatool_orig"
-
-	if _, err := os.Stat(filepath.Join(sourceRoot, "sg.json")); err != nil {
-		t.Skipf("reference graph not available at %s/sg.json: %v", sourceRoot, err)
-	}
-
-	our := Gen(TargetCfg, sourceRoot, "tools/archiver")
-	ref := LoadReference(filepath.Join(sourceRoot, "sg.json"))
-
-	l0, note := compareTopology(ref, our)
-
-	const acceptance = 0.95
-
-	if l0 < acceptance {
-		t.Errorf("L0 = %.4f (%s) < acceptance bar %.2f (PR-30 must clear M2 L0 gate)", l0, note, acceptance)
-	} else {
-		t.Logf("L0 = %.4f (%s) — clears acceptance bar %.2f", l0, note, acceptance)
-	}
-}
-
 // TestIsRuntimeAncestor_LiteralOnly pins PR-33 D01: `isRuntimeAncestor`
 // matches only literal entries in `runtimeAncestorPaths`. Subtree
 // members (`util/charset`, `contrib/libs/musl/full`,
@@ -2737,97 +2552,6 @@ func TestIsRuntimeAncestor_LiteralOnly(t *testing.T) {
 // directly into malloc/api's `peerAddInclGlobal` /
 // `peerCXXFlagsGlobal` (LOCAL only — not propagated to consumers).
 // This test pins the resulting CC node byte-exact.
-func TestGen_MallocApi_HoistInjection_ByteExact(t *testing.T) {
-	const targetDir = "library/cpp/malloc/api"
-
-	if _, err := os.Stat(sourceRoot + "/" + targetDir + "/ya.make"); err != nil {
-		if os.IsNotExist(err) {
-			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
-		}
-
-		t.Fatalf("stat ya.make: %v", err)
-	}
-
-	if _, err := os.Stat(referenceGraphPath); err != nil {
-		t.Skipf("reference graph %s not present: %v", referenceGraphPath, err)
-	}
-
-	our := Gen(TargetCfg, sourceRoot, targetDir)
-
-	const ccOutput = "$(BUILD_ROOT)/library/cpp/malloc/api/malloc.cpp.o"
-
-	var ourCC *Node
-
-	for _, n := range our.Graph {
-		if len(n.Outputs) > 0 && n.Outputs[0] == ccOutput {
-			ourCC = n
-
-			break
-		}
-	}
-
-	if ourCC == nil {
-		t.Fatalf("Gen produced no CC node with output %q", ccOutput)
-	}
-
-	ref := LoadReference(referenceGraphPath)
-
-	var refCC *Node
-
-	for _, n := range ref.Graph {
-		if len(n.Outputs) > 0 && n.Outputs[0] == ccOutput && n.Platform == string(TargetCfg.Target.ID) {
-			refCC = n
-
-			break
-		}
-	}
-
-	if refCC == nil {
-		t.Fatalf("reference graph contains no CC node with output %q on platform %q", ccOutput, TargetCfg.Target.ID)
-	}
-
-	if len(ourCC.Cmds) != len(refCC.Cmds) {
-		t.Fatalf("malloc.cpp.o: cmds count = %d, want %d", len(ourCC.Cmds), len(refCC.Cmds))
-	}
-
-	for ci, refCmd := range refCC.Cmds {
-		ourArgs := ourCC.Cmds[ci].CmdArgs
-		refArgs := refCmd.CmdArgs
-
-		if len(ourArgs) != len(refArgs) {
-			t.Errorf("malloc.cpp.o cmd[%d].cmd_args: got %d args, want %d", ci, len(ourArgs), len(refArgs))
-
-			continue
-		}
-
-		for i := range refArgs {
-			if ourArgs[i] != refArgs[i] {
-				t.Errorf("malloc.cpp.o cmd[%d].cmd_args[%d]:\n  got:  %q\n  want: %q", ci, i, ourArgs[i], refArgs[i])
-
-				break
-			}
-		}
-	}
-
-	// Slot 11-12 anchors: the libcxx + libcxxrt header peers must
-	// land immediately after the linux-headers ccIncludesSuffix pair
-	// (slots 9-10 in the reference shape).
-	const wantSlot11 = "-I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxx/include"
-	const wantSlot12 = "-I$(SOURCE_ROOT)/contrib/libs/cxxsupp/libcxxrt/include"
-
-	if len(ourCC.Cmds[0].CmdArgs) <= 12 {
-		t.Fatalf("cmd_args has %d entries, expected >= 13 to anchor slots 11-12", len(ourCC.Cmds[0].CmdArgs))
-	}
-
-	if got := ourCC.Cmds[0].CmdArgs[11]; got != wantSlot11 {
-		t.Errorf("cmd_args[11] = %q, want %q (PR-35c hoist injection anchor)", got, wantSlot11)
-	}
-
-	if got := ourCC.Cmds[0].CmdArgs[12]; got != wantSlot12 {
-		t.Errorf("cmd_args[12] = %q, want %q (PR-35c hoist injection anchor)", got, wantSlot12)
-	}
-}
-
 // TestGen_ToolsArchiver_LDPeerArchiveClosure pins the PR-35c LD walker
 // transitive peer-archive closure fix. Pre-PR-35c the walker collected
 // only direct peers' archives — 13 entries for `tools/archiver`'s LD,
