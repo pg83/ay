@@ -5,11 +5,9 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
-	"hash"
 	"io"
 	"math"
 	"sort"
-	"sync"
 )
 
 // uid.go — content-derived UID hashing.
@@ -56,21 +54,18 @@ func canonicalNodeBytes(n *Node) []byte {
 }
 
 // nodeUID derives a Node's content-UID by streaming its fields
-// directly into a pooled sha1.Hash. No buffer alloc per node.
+// directly into a fresh sha1.Hash. The digest is an ~88-byte heap
+// allocation — across an M3 emit run (~6000 nodes ≈ 0.5 MB total) it
+// is GC-invisible and cheaper than the equivalent sync.Pool dance.
 func nodeUID(n *Node) string {
-	hp := sha1Pool.Get().(hash.Hash)
-	hp.Reset()
-	writeNode(hp, n)
+	h := sha1.New()
+	writeNode(h, n)
 
 	var sumBuf [sha1.Size]byte
-	sum := hp.Sum(sumBuf[:0])
-
-	sha1Pool.Put(hp)
+	sum := h.Sum(sumBuf[:0])
 
 	return base64.RawURLEncoding.EncodeToString(sum)[:uidLength]
 }
-
-var sha1Pool = sync.Pool{New: func() any { return sha1.New() }}
 
 // writeNode streams the canonical form of n into w. Both sha1.Hash
 // (production) and *bytes.Buffer (tests) satisfy io.Writer; w.Write
