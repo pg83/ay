@@ -1764,16 +1764,17 @@ func (sc *scanCtx) resolveSearchPath(includerAbs string, d includeDirective) []s
 			return false
 		}
 
-		// PR-M3-vfs-paths: candidates exit the resolver in VFS form
-		// ($(SOURCE_ROOT)/<rel>). fileExists translates to FS for the
-		// os.Stat at the boundary; out / resolveCache / subgraphCache
-		// all hold VFS paths.
-		abs := vfsSource(rel)
-
-		if !s.fileExists(abs) {
+		// PR-M3-perf-vfs-no-alloc: probe existence by rel BEFORE
+		// materialising the VFS string. Most candidates fail (search
+		// path is many entries; the file lives at one of them), so
+		// allocating "$(SOURCE_ROOT)/<rel>" before knowing the answer
+		// burned ~4.7M strings/run pre-optimisation. Now the VFS
+		// string is only constructed on success.
+		if !s.fileExistsByRel(rel) {
 			return false
 		}
 
+		abs := vfsSource(rel)
 		seen[rel] = struct{}{}
 		out = append(out, abs)
 
@@ -2006,20 +2007,10 @@ func (f fsLocator) Exists(vfsPath string) bool {
 		return false
 	}
 
-	pc := f.scanner.pc
-
-	if cached, ok := pc.exists[vfsPath]; ok {
-		return cached
-	}
-
-	fsPath := f.scanner.sourceRootSlash + strings.TrimPrefix(vfsPath, vfsSourcePrefix)
-
-	info, err := os.Stat(fsPath)
-	val := err == nil && !info.IsDir()
-
-	pc.exists[vfsPath] = val
-
-	return val
+	// PR-M3-perf-vfs-no-alloc: unified cache key with
+	// IncludeScanner.fileExists is the rel-form tail; trim the prefix
+	// here to share entries with the hot resolveSearchPath path.
+	return f.scanner.fileExistsByRel(strings.TrimPrefix(vfsPath, vfsSourcePrefix))
 }
 
 // codegenLocator answers Exists for $(BUILD_ROOT)/-rooted VFS paths via
@@ -2054,23 +2045,39 @@ func (c codegenLocator) Exists(vfsPath string) bool {
 //
 // PR-M3-vfs-paths: parameter is a $(SOURCE_ROOT)/-rooted VFS path; the
 // FS translation to sourceRoot+rel happens here at the os.Stat call
-// site, and the cache key is VFS-form. Callers must NOT pass a
-// $(BUILD_ROOT)/-prefixed path — the codegen registry tier owns those.
+// site, and the cache key is the SOURCE_ROOT-relative tail (rel-form).
+// Callers must NOT pass a $(BUILD_ROOT)/-prefixed path — the codegen
+// registry tier owns those.
+//
+// PR-M3-perf-vfs-no-alloc: the cache is keyed by `rel` (the
+// SOURCE_ROOT-relative tail), NOT by the full VFS string. This unifies
+// the storage with `fileExistsByRel` so callers that already have
+// `rel` in hand (the hot resolveSearchPath loop, ~4.7M calls) avoid
+// allocating a fresh VFS string per probe. Callers that have VFS
+// form continue to call this entry point — the trim is the only
+// runtime cost they pay.
 func (s *IncludeScanner) fileExists(vfsPath string) bool {
+	return s.fileExistsByRel(strings.TrimPrefix(vfsPath, vfsSourcePrefix))
+}
+
+// fileExistsByRel is the inner, rel-keyed existence check. The hot
+// loop in resolveSearchPath uses this directly to skip the
+// `$(SOURCE_ROOT)/` concat (the resolveSearchPath profile showed
+// that concat allocating 4.7M strings — 37% of the run's allocation
+// count — purely as a cache-lookup key).
+func (s *IncludeScanner) fileExistsByRel(rel string) bool {
 	// PR-34n: lock removed (single-goroutine).
 	// PR-M3-perf-B: exists cache is shared between target and host scanners
 	// via s.pc; file existence is the same regardless of which scanner
 	// queries it (both use the same sourceRoot).
-	if cached, ok := s.pc.exists[vfsPath]; ok {
+	if cached, ok := s.pc.exists[rel]; ok {
 		return cached
 	}
 
-	fsPath := s.sourceRootSlash + strings.TrimPrefix(vfsPath, vfsSourcePrefix)
-
-	info, err := os.Stat(fsPath)
+	info, err := os.Stat(s.sourceRootSlash + rel)
 	val := err == nil && !info.IsDir()
 
-	s.pc.exists[vfsPath] = val
+	s.pc.exists[rel] = val
 
 	return val
 }
