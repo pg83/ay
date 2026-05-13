@@ -248,9 +248,7 @@ func EmitEV(
 	}
 
 	// Resolve transitive imports from the .ev source file and append them.
-	for _, p := range resolveEvImports(sourceRoot, moduleDir+"/"+srcRel) {
-		inputs = append(inputs, ParseVFSOrSource(p))
-	}
+	inputs = append(inputs, resolveEvImports(sourceRoot, moduleDir+"/"+srcRel)...)
 
 	targetProps := map[string]string{
 		"module_dir": moduleDir,
@@ -328,9 +326,9 @@ func EmitEV(
 // input list. NOT for closure walks. The architectural cleanup to route this
 // through a unified registry-resolved "structured-import extractor" lives in
 // PR-AUDIT-3.D12 (still open); kept per audit doc §2 D12.
-func resolveEvImports(sourceRoot, srcRel string) []string {
+func resolveEvImports(sourceRoot, srcRel string) []VFS {
 	visited := map[string]struct{}{}
-	order := make([]string, 0, 8)
+	order := make([]VFS, 0, 8)
 	descriptorAdded := false
 
 	// Queue starting from the source's imports (not the source itself —
@@ -376,7 +374,7 @@ func resolveEvImports(sourceRoot, srcRel string) []string {
 			// Detect and emit the canonical path once.
 			if importedRel == "google/protobuf/descriptor.proto" {
 				if !descriptorAdded {
-					order = append(order, pbDescriptorProto)
+					order = append(order, pbDescriptorVFS)
 					descriptorAdded = true
 				}
 				continue
@@ -387,7 +385,7 @@ func resolveEvImports(sourceRoot, srcRel string) []string {
 		f.Close()
 
 		// Emit this file's absolute $(S)/... entry.
-		order = append(order, Source(rel).String())
+		order = append(order, Source(rel))
 
 		// Recurse into imports.
 		for _, imp := range imports {
