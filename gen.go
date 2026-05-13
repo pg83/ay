@@ -5789,6 +5789,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		}
 
 		enRef, enOutPaths := EmitEN(
+			ctx.host, ctx.platformFor(enInstance),
 			enInstance,
 			headerRel,
 			withHeader,
@@ -6229,7 +6230,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			}
 
 			// moduleTag is empty for LIBRARY modules (no "cpp_proto" tag).
-			evRef := EmitEV(srcInstance, srcRel,
+			evRef := EmitEV(ctx.host, ctx.platformFor(srcInstance),
+				srcInstance, srcRel,
 				cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
 				"", ctx.sourceRoot, ctx.emit)
