@@ -42,6 +42,12 @@ func EmitR5(
 	// Output: strip .rl suffix, append .rl5.cpp.
 	cppVFS := Build(instance.Path + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp")
 
+	// Pre-materialise the three .String() forms — tmpVFS is referenced
+	// in both cmd_args lines, so .String() it once instead of twice.
+	tmpPath := tmpVFS.String()
+	cppPath := cppVFS.String()
+	srcPath := srcVFS.String()
+
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
@@ -50,8 +56,8 @@ func EmitR5(
 		CmdArgs: []string{
 			ragel5BinPath,
 			"-o",
-			tmpVFS.String(),
-			srcVFS.String(),
+			tmpPath,
+			srcPath,
 		},
 		Env: env,
 	}
@@ -60,8 +66,8 @@ func EmitR5(
 			rlgenCdBinPath,
 			"-G2",
 			"-o",
-			cppVFS.String(),
-			tmpVFS.String(),
+			cppPath,
+			tmpPath,
 		},
 		Env: env,
 	}
@@ -1365,6 +1371,7 @@ func emitArchive(
 	producerRefs := []NodeRef{}
 	producerSet := map[NodeRef]struct{}{}
 	pathPerFile := make([]VFS, 0, len(a.Files))
+	pathStrPerFile := make([]string, 0, len(a.Files))
 
 	for _, f := range a.Files {
 		// When the file matches a PR output of this module, resolve to
@@ -1389,9 +1396,11 @@ func emitArchive(
 		} else {
 			absVFS = Source(rel)
 		}
+		absStr := absVFS.String()
 
 		pathPerFile = append(pathPerFile, absVFS)
-		cmdArgs = append(cmdArgs, absVFS.String()+":")
+		pathStrPerFile = append(pathStrPerFile, absStr)
+		cmdArgs = append(cmdArgs, absStr+":")
 	}
 	cmdArgs = append(cmdArgs, "-o", archivePath)
 
@@ -1409,10 +1418,10 @@ func emitArchive(
 	{
 		// Largest archived file path (string form) becomes the upper
 		// bound — siblings whose .String() form is strictly greater
-		// are excluded.
+		// are excluded. pathStrPerFile reuses the .String() materialised
+		// while building cmd_args, so we don't re-allocate here.
 		maxArchived := ""
-		for _, p := range pathPerFile {
-			s := p.String()
+		for _, s := range pathStrPerFile {
 			if s > maxArchived {
 				maxArchived = s
 			}
