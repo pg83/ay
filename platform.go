@@ -61,6 +61,18 @@ type Platform struct {
 	// — conflating them broke 64 nodes on M3 during this refactor.
 	PIC      bool
 	LibcMusl bool
+
+	// Triple is the clang `--target=<triple>` argument
+	// (e.g. "aarch64-linux-gnu"). Derived from `<isa>-<os>-gnu` at
+	// construction.
+	//
+	// March is the `-march=<arch>` argument; empty when the ISA does
+	// not need one (x86_64 captures the architecture via `-m64` /
+	// `-msseN` instead). The two are emitted side-by-side in CC / AS /
+	// LD compose prologues; when March == "" the `-march=` arg is
+	// omitted entirely (matches the reference graph's host shape).
+	Triple string
+	March  string
 }
 
 // Toolchain captures the absolute paths the rule emitters need to
@@ -121,6 +133,20 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, isHost 
 		Tools:    toolchainFromFlags(flags),
 		PIC:      flags["PIC"] == "yes",
 		LibcMusl: flags["MUSL"] == "yes",
+		Triple:   string(isa) + "-" + string(os) + "-gnu",
+		March:    marchFor(isa),
+	}
+}
+
+// marchFor returns the `-march=<arg>` value for an ISA. Empty when the
+// ISA's architectural baseline is communicated by other flags
+// (x86_64 → `-m64` / `-msseN` bundles, not `-march=`).
+func marchFor(isa ISA) string {
+	switch isa {
+	case ISAAArch64:
+		return "armv8-a"
+	default:
+		return ""
 	}
 }
 

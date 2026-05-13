@@ -422,21 +422,18 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	isMusl := instance.Flags.LibcMusl
 
 	var cFlags, defines, suppressionBlock []string
-	var triple string
-	var withMarch bool
 
 	if targetX8664 {
-		triple = hostTriple
 		cFlags = hostCFlags
 		defines = hostDefines
 		suppressionBlock = ndebugPicBlock
 	} else {
-		triple = targetTriple
-		withMarch = true
 		cFlags = commonCFlags
 		defines = commonDefines
 		suppressionBlock = noLibcUndebugBlock
 	}
+
+	withMarch := instance.Platform.March != ""
 
 	prologueArgs := 3
 	if withMarch {
@@ -489,10 +486,10 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	cmdArgs := make([]string, 0, fixed+len(includes))
 
 	// Prologue: compiler, target triple, optional -march, assembler search path.
-	cmdArgs = append(cmdArgs, instance.Platform.Tools.CC, "--target="+triple)
+	cmdArgs = append(cmdArgs, instance.Platform.Tools.CC, "--target="+instance.Platform.Triple)
 
 	if withMarch {
-		cmdArgs = append(cmdArgs, "-march="+archFlag)
+		cmdArgs = append(cmdArgs, "-march="+instance.Platform.March)
 	}
 
 	cmdArgs = append(cmdArgs, "-B"+binPath)

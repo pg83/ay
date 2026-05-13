@@ -50,15 +50,6 @@ package main
 // graph applies to every C++ compilation (PR-29-D05).
 const cxxStandardFlag = "-std=c++20"
 
-// targetTriple is the --target= argument for the M1 aarch64 platform.
-const targetTriple = "aarch64-linux-gnu"
-
-// hostTriple is the --target= argument for the host x86_64 platform.
-const hostTriple = "x86_64-linux-gnu"
-
-// archFlag is the -march= argument for the M1 aarch64 platform.
-const archFlag = "armv8-a"
-
 // binPath is the value of -B (assembler/linker driver search path)
 // used in the reference graph (identical for target and host).
 const binPath = "/usr/bin"
