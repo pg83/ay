@@ -126,7 +126,7 @@ type ModuleCCInputs struct {
 	// order. Empty for synthetic test paths that bypass the walker
 	// or for IsGenerated CCs where the scanner is intentionally
 	// skipped (generated CCs use a separate input shape).
-	IncludeInputs []string
+	IncludeInputs []VFS
 	// PeerCFlagsGlobal is the transitive union of every PEERDIR's
 	// GLOBAL CFLAGS contribution (PR-32 D08). Applies to BOTH C and
 	// C++ sources of the consumer, slotted in cmd_args AFTER own
@@ -267,7 +267,9 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 		suffix = "." + in.Variant + suffix
 	}
 
-	outputPath, inputPath := composeCCPaths(instance, srcRel, in, suffix)
+	outVFS, inVFS := composeCCPaths(instance, srcRel, in, suffix)
+	outputPath := outVFS.String()
+	inputPath := inVFS.String()
 
 	// PR-32 D02: dispatch via Flags.LibcMusl, not the path-prefix
 	// test. The flag is seeded by `inferFlagsFromPath` for the M2
@@ -367,8 +369,8 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	// node.Inputs after the primary source path. The order is
 	// primary source first, then include-inputs in DFS-discovery
 	// order (the scanner does no sorting; L2 compares as multiset).
-	allInputs := make([]string, 0, 1+len(in.IncludeInputs))
-	allInputs = append(allInputs, inputPath)
+	allInputs := make([]VFS, 0, 1+len(in.IncludeInputs))
+	allInputs = append(allInputs, inVFS)
 	allInputs = append(allInputs, in.IncludeInputs...)
 
 	node := &Node{
@@ -379,8 +381,8 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 			},
 		},
 		Env:     env,
-		Inputs:  ToVFSSlice(allInputs),
-		Outputs: ToVFSSlice([]string{outputPath}),
+		Inputs:  allInputs,
+		Outputs: []VFS{outVFS},
 		KV: map[string]string{
 			"p":  "CC",
 			"pc": "green",
@@ -458,23 +460,20 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 // Generated sources (IsGenerated=true) skip case (3) — generators emit
 // to `$(BUILD_ROOT)/<srcInstance.Path>/<rel>` where srcInstance is
 // already SRCDIR-aware (the JS/R6 emitter rebased it before invocation).
-func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, suffix string) (string, string) {
+func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, suffix string) (out, input VFS) {
 	if in.IsGenerated {
 		// Generators (JS/R6) write under $(BUILD_ROOT)/<srcInstance.Path>/.
 		// SrcDir handling for those branches is upstream (in gen.go's
 		// JOIN_SRCS / .rl6 dispatch where srcInstance is constructed).
-
-		var outputPath string
+		var outRel string
 
 		if strings.Contains(srcRel, "/") {
-			outputPath = "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + suffix
+			outRel = instance.Path + "/_/" + srcRel + suffix
 		} else {
-			outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + suffix
+			outRel = instance.Path + "/" + srcRel + suffix
 		}
 
-		inputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel
-
-		return outputPath, inputPath
+		return Build(outRel), Build(instance.Path + "/" + srcRel)
 	}
 
 	// PR-30 D06 SRCDIR routing.
@@ -482,13 +481,10 @@ func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, s
 
 	if useSrcDir {
 		outputRel := composeSrcDirOutputRel(instance.Path, in.SrcDir, srcRel)
-		outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + outputRel + suffix
-		inputPath := "$(SOURCE_ROOT)/" + in.SrcDir + "/" + srcRel
-
-		return outputPath, inputPath
+		return Build(instance.Path + "/" + outputRel + suffix), Source(in.SrcDir + "/" + srcRel)
 	}
 
-	var outputPath string
+	var outRel string
 
 	switch {
 	case in.FlatOutput:
@@ -496,16 +492,14 @@ func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, s
 		// `srcRel` contains a `/`. Empirical reference:
 		// `SRC_C_NO_LTO(system/compiler.cpp)` →
 		// `util/system/compiler.cpp.o` (no `_/` infix).
-		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + suffix
+		outRel = instance.Path + "/" + srcRel + suffix
 	case strings.Contains(srcRel, "/"):
-		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + suffix
+		outRel = instance.Path + "/_/" + srcRel + suffix
 	default:
-		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + suffix
+		outRel = instance.Path + "/" + srcRel + suffix
 	}
 
-	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
-
-	return outputPath, inputPath
+	return Build(outRel), Source(instance.Path + "/" + srcRel)
 }
 
 // sourceExistsLocally reports whether `<sourceRoot>/<modulePath>/<srcRel>`

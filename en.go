@@ -58,32 +58,32 @@ func EmitEN(
 	enumParserLD NodeRef,
 	enumParserBin string,
 	depENRefs []NodeRef,
-	depENOutputs []string,
-	headerIncludeClosure []string,
+	depENOutputs []VFS,
+	headerIncludeClosure []VFS,
 	emit Emitter,
-) (NodeRef, []string) {
+) (NodeRef, []VFS) {
 	// Resolve the module-dir for this header. The header path may include
 	// a subdirectory component (e.g. "config/config.h" in devtools/ymake).
 	// The output path mirrors: $(BUILD_ROOT)/<instance.Path>/<headerRel>_serialized.cpp.
-	headerSrc := "$(SOURCE_ROOT)/" + instance.Path + "/" + headerRel
+	headerSrcVFS := Source(instance.Path + "/" + headerRel)
 	includePath := instance.Path + "/" + headerRel
-	serializedCPP := "$(BUILD_ROOT)/" + instance.Path + "/" + headerRel + "_serialized.cpp"
+	serializedCPPVFS := Build(instance.Path + "/" + headerRel + "_serialized.cpp")
 
 	cmdArgs := []string{
 		enumParserBin,
-		headerSrc,
+		headerSrcVFS.String(),
 		"--include-path",
 		includePath,
 		"--output",
-		serializedCPP,
+		serializedCPPVFS.String(),
 	}
 
-	outputs := []string{serializedCPP}
+	outputs := []VFS{serializedCPPVFS}
 
 	if withHeader {
-		serializedH := "$(BUILD_ROOT)/" + instance.Path + "/" + headerRel + "_serialized.h"
-		cmdArgs = append(cmdArgs, "--header", serializedH)
-		outputs = append(outputs, serializedH)
+		serializedHVFS := Build(instance.Path + "/" + headerRel + "_serialized.h")
+		cmdArgs = append(cmdArgs, "--header", serializedHVFS.String())
+		outputs = append(outputs, serializedHVFS)
 	}
 
 	env := map[string]string{
@@ -92,10 +92,10 @@ func EmitEN(
 
 	// inputs: dep-EN outputs (leading), then enum_parser binary,
 	// then the source header, then its transitive include closure.
-	inputs := make([]string, 0, len(depENOutputs)+2+len(headerIncludeClosure))
+	inputs := make([]VFS, 0, len(depENOutputs)+2+len(headerIncludeClosure))
 	inputs = append(inputs, depENOutputs...)
-	inputs = append(inputs, enumParserBin)
-	inputs = append(inputs, headerSrc)
+	inputs = append(inputs, ParseVFSOrSource(enumParserBin))
+	inputs = append(inputs, headerSrcVFS)
 	inputs = append(inputs, headerIncludeClosure...)
 
 	depRefs := make([]NodeRef, 0, len(depENRefs)+1)
@@ -120,12 +120,12 @@ func EmitEN(
 			},
 		},
 		Env:    env,
-		Inputs: ToVFSSlice(inputs),
+		Inputs: inputs,
 		KV: map[string]string{
 			"p":  "EN",
 			"pc": "yellow",
 		},
-		Outputs:      ToVFSSlice(outputs),
+		Outputs:      outputs,
 		Platform:     string(instance.Platform.Target),
 		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{

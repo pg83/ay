@@ -31,8 +31,8 @@ func EmitJVCPG4(
 	dstAbsPath string,
 	jvRef NodeRef,
 	jvPrimaryOutput string,
-	jvInputs []string,
-	closure []string,
+	jvInputs []VFS,
+	closure []VFS,
 	emit Emitter,
 ) NodeRef {
 	const (
@@ -55,12 +55,12 @@ func EmitJVCPG4(
 	// Inputs: jvPrimaryOutput first, then srcAbsPath only when it differs
 	// from jvPrimaryOutput (i.e. this is the parser output, not the lexer).
 	inputCap := 2 + len(jvInputs) + len(closure) + 2
-	inputs := make([]string, 0, inputCap)
-	inputs = append(inputs, jvPrimaryOutput)
+	inputs := make([]VFS, 0, inputCap)
+	inputs = append(inputs, ParseVFSOrSource(jvPrimaryOutput))
 	if srcAbsPath != jvPrimaryOutput {
-		inputs = append(inputs, srcAbsPath)
+		inputs = append(inputs, ParseVFSOrSource(srcAbsPath))
 	}
-	inputs = append(inputs, fsToolsPath, procCmdFiles)
+	inputs = append(inputs, Source("build/scripts/fs_tools.py"), Source("build/scripts/process_command_files.py"))
 	inputs = append(inputs, jvInputs...)
 	inputs = append(inputs, closure...)
 
@@ -72,12 +72,12 @@ func EmitJVCPG4(
 			},
 		},
 		Env:    env,
-		Inputs: ToVFSSlice(inputs),
+		Inputs: inputs,
 		KV: map[string]string{
 			"p":  "CP",
 			"pc": "light-cyan",
 		},
-		Outputs:  ToVFSSlice([]string{dstAbsPath}),
+		Outputs:  []VFS{ParseVFSOrSource(dstAbsPath)},
 		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
@@ -124,10 +124,10 @@ func EmitCP(instance ModuleInstance, srcAbsPath, dstAbsPath string, emit Emitter
 		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
 	}
 
-	inputs := []string{
-		fsToolsPath,
-		procCmdFiles,
-		srcAbsPath,
+	inputs := []VFS{
+		Source("build/scripts/fs_tools.py"),
+		Source("build/scripts/process_command_files.py"),
+		ParseVFSOrSource(srcAbsPath),
 	}
 
 	node := &Node{
@@ -138,12 +138,12 @@ func EmitCP(instance ModuleInstance, srcAbsPath, dstAbsPath string, emit Emitter
 			},
 		},
 		Env:    env,
-		Inputs: ToVFSSlice(inputs),
+		Inputs: inputs,
 		KV: map[string]string{
 			"p":  "CP",
 			"pc": "light-cyan",
 		},
-		Outputs:  ToVFSSlice([]string{dstAbsPath}),
+		Outputs:  []VFS{ParseVFSOrSource(dstAbsPath)},
 		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),

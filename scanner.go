@@ -196,7 +196,7 @@ type sharedParseCache struct {
 	// files). PR-M3-vfs-paths: key shape changed from FS-absolute to
 	// VFS form when parseIncludes was refactored to take VFS input;
 	// the cached value set itself is unchanged.
-	parsed map[string][]includeDirective
+	parsed map[VFS][]includeDirective
 	// exists memoises os.Stat results per VFS-rooted path. 16384
 	// pre-size covers the peak (14195 target + 14494 host, mostly
 	// the same files on both walks). PR-M3-vfs-paths: keyed by
@@ -209,7 +209,7 @@ type sharedParseCache struct {
 // matched to the observed peak for the tools/archiver closure.
 func newSharedParseCache() *sharedParseCache {
 	return &sharedParseCache{
-		parsed: make(map[string][]includeDirective, 8192),
+		parsed: make(map[VFS][]includeDirective, 8192),
 		exists: make(map[string]bool, 16384),
 	}
 }
@@ -282,12 +282,17 @@ type IncludeScanner struct {
 	// every CC reaching the same (includer, target) shares this entry.
 	sysinclIncluderCache map[sysinclIncluderKey]sysinclCacheEntry
 
-	visitedPool sync.Pool // *map[string]struct{}
-	orderPool   sync.Pool // *[]string
+	visitedPool sync.Pool // *map[VFS]struct{}
+	orderPool   sync.Pool // *[]VFS
 	// seenPool reuses the per-resolveSearchPath dedup map across calls.
 	// Each resolve produces 1-6 candidate paths so the map fills to a
 	// handful of entries; the bucket allocation (~256 B) is what we
 	// were paying per call before pooling.
+	//
+	// PR-M3-vfs-internal: keys are rel-form strings (the search-path
+	// dedup operates on the post-normalise rel and never crosses VFS
+	// roots), so a string-keyed map is correct and slightly cheaper
+	// than VFS-keyed.
 	seenPool sync.Pool // *map[string]struct{}
 
 	// walkClosureCache interns scanCtx instances created via the
@@ -342,7 +347,7 @@ type IncludeScanner struct {
 // (more importantly) keeps the scanCtx fully self-contained so its caches
 // can be discarded when the scanCtx is dropped.
 type resolveInnerKey struct {
-	includer string
+	includer VFS
 	target   string
 	kind     includeKind
 	next     bool
@@ -359,7 +364,7 @@ type resolveInnerKey struct {
 // PR-M3-perf-E: replaces the scanner-wide `subgraphKey{abs, ctxHash,
 // srcClassHash}` map.
 type subgraphInnerKey struct {
-	abs          string
+	abs          VFS
 	srcClassHash uint64
 }
 
@@ -389,8 +394,8 @@ type scanCtx struct {
 	cfg     ScanContext
 	ctxHash uint64
 
-	resolveCache         map[resolveInnerKey][]string
-	subgraphCache        map[subgraphInnerKey][]string
+	resolveCache         map[resolveInnerKey][]VFS
+	subgraphCache        map[subgraphInnerKey][]VFS
 	subgraphTaintedKnown map[subgraphInnerKey]struct{}
 	subgraphInProgress   map[subgraphInnerKey]struct{}
 }
@@ -411,7 +416,7 @@ type sysinclIncluderKey struct {
 // queried header to ≥ 2 non-empty paths (used by resolveDirective's
 // PR-36 gate refinement).
 type sysinclCacheEntry struct {
-	paths          []string
+	paths          []VFS
 	hasMultiTarget bool
 }
 
@@ -465,13 +470,13 @@ func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedPars
 	// returned as pointers to keep `Pool.Put` from boxing the
 	// value (a plain map or slice would box-allocate on Put).
 	s.visitedPool.New = func() any {
-		m := make(map[string]struct{}, 64)
+		m := make(map[VFS]struct{}, 64)
 
 		return &m
 	}
 
 	s.orderPool.New = func() any {
-		o := make([]string, 0, 64)
+		o := make([]VFS, 0, 64)
 
 		return &o
 	}
@@ -527,8 +532,8 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 		scanner:              s,
 		cfg:                  cfg,
 		ctxHash:              hashScanContext(&cfg),
-		resolveCache:         make(map[resolveInnerKey][]string, 8192),
-		subgraphCache:        make(map[subgraphInnerKey][]string, 4096),
+		resolveCache:         make(map[resolveInnerKey][]VFS, 8192),
+		subgraphCache:        make(map[subgraphInnerKey][]VFS, 4096),
 		subgraphTaintedKnown: make(map[subgraphInnerKey]struct{}, 256),
 		subgraphInProgress:   make(map[subgraphInnerKey]struct{}, 64),
 	}
@@ -549,7 +554,7 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 // each call — the caller stores it on the node and the scanner does
 // not retain it — so returning `order` to the pool cannot corrupt the
 // caller's data.
-func (s *IncludeScanner) WalkClosure(cfg ScanContext) []string {
+func (s *IncludeScanner) WalkClosure(cfg ScanContext) []VFS {
 	// PR-M3-perf-E: intern per (scanner, ctxHash) so repeat WalkClosure
 	// calls on the same context reuse the resolve/subgraph caches the
 	// previous call populated. This preserves the
@@ -578,8 +583,8 @@ func (s *IncludeScanner) WalkClosure(cfg ScanContext) []string {
 // PR-AUDIT-1: thin shim over WalkClosure — the implementation lives there
 // so callers that already hold a VFS path (FS or BUILD_ROOT) can hit the
 // uniform entry point without converting back to a source-rel.
-func (sc *scanCtx) WalkSource(sourceRel string) []string {
-	return sc.WalkClosure(vfsSource(sourceRel))
+func (sc *scanCtx) WalkSource(sourceRel string) []VFS {
+	return sc.WalkClosure(Source(sourceRel))
 }
 
 // WalkClosure walks the include closure rooted at `vfsPath` using the
@@ -601,7 +606,7 @@ func (sc *scanCtx) WalkSource(sourceRel string) []string {
 // pre-resolved EmitsIncludes); the cfg.SourceRel remains whatever the
 // previous call left it at, which is harmless because BUILD_ROOT
 // children are not parsed through resolve().
-func (sc *scanCtx) WalkClosure(vfsPath string) []string {
+func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 	s := sc.scanner
 
 	// PR-M3-perf-E: cfg.SourceRel is the source-rel that perSourceView
@@ -613,19 +618,19 @@ func (sc *scanCtx) WalkClosure(vfsPath string) []string {
 	// meaningful source-rel (the file is not on disk); leave cfg.SourceRel
 	// untouched in that case — the BUILD_ROOT branch in forEachResolvedChild
 	// never consults SourceRel anyway.
-	if isSourceVFS(vfsPath) {
-		sc.cfg.SourceRel = strings.TrimPrefix(vfsPath, vfsSourcePrefix)
+	if vfsPath.IsSource() {
+		sc.cfg.SourceRel = vfsPath.Rel
 	}
 
-	visitedP := s.visitedPool.Get().(*map[string]struct{})
-	orderP := s.orderPool.Get().(*[]string)
+	visitedP := s.visitedPool.Get().(*map[VFS]struct{})
+	orderP := s.orderPool.Get().(*[]VFS)
 
 	visited := *visitedP
 	order := (*orderP)[:0]
 
 	sc.dfs(vfsPath, visited, &order)
 
-	out := make([]string, 0, len(order))
+	out := make([]VFS, 0, len(order))
 
 	for _, abs := range order {
 		// Skip the root itself; only headers are emitted.
@@ -633,7 +638,7 @@ func (sc *scanCtx) WalkClosure(vfsPath string) []string {
 			continue
 		}
 
-		out = append(out, s.emittedRel(abs))
+		out = append(out, abs)
 	}
 
 	// Reset and return scratch buffers to the pool. `clear()`
@@ -681,10 +686,10 @@ func (sc *scanCtx) WalkClosure(vfsPath string) []string {
 // paths return the registered EmitsIncludes list as-is (the children
 // are already resolved, so the "raw target" view is the EmitsIncludes
 // itself).
-func (s *IncludeScanner) IncludeDirectiveTargets(vfsPath string) []string {
-	if isBuildVFS(vfsPath) {
+func (s *IncludeScanner) IncludeDirectiveTargets(vfsPath VFS) []string {
+	if vfsPath.IsBuild() {
 		if s.codegen != nil {
-			if info, ok := s.codegen.Lookup(vfsPath); ok {
+			if info, ok := s.codegen.Lookup(vfsPath.String()); ok {
 				out := make([]string, len(info.EmitsIncludes))
 				copy(out, info.EmitsIncludes)
 				return out
@@ -826,7 +831,7 @@ func hashScanContext(ctx *ScanContext) uint64 {
 // PR-M3-perf-E: receiver is `*scanCtx`. The previous (ctx, ctxHash)
 // parameters are now read off the receiver. srcClassHash is still
 // derived from sc.cfg.SourceRel inside dfs.
-func (sc *scanCtx) dfs(absPath string, visited map[string]struct{}, order *[]string) {
+func (sc *scanCtx) dfs(absPath VFS, visited map[VFS]struct{}, order *[]VFS) {
 	if _, seen := visited[absPath]; seen {
 		return
 	}
@@ -880,7 +885,7 @@ func (sc *scanCtx) dfs(absPath string, visited map[string]struct{}, order *[]str
 // when a child reports it is on a cycle. Per-child dispatch goes
 // through `dfs()` so non-cycle descendants benefit from the
 // `subgraphCache`.
-func (sc *scanCtx) plainDfs(absPath string, visited map[string]struct{}, order *[]string) {
+func (sc *scanCtx) plainDfs(absPath VFS, visited map[VFS]struct{}, order *[]VFS) {
 	if _, seen := visited[absPath]; seen {
 		return
 	}
@@ -888,7 +893,7 @@ func (sc *scanCtx) plainDfs(absPath string, visited map[string]struct{}, order *
 	visited[absPath] = struct{}{}
 	*order = append(*order, absPath)
 
-	sc.forEachResolvedChild(absPath, func(rabs string) {
+	sc.forEachResolvedChild(absPath, func(rabs VFS) {
 		sc.dfs(rabs, visited, order)
 	})
 }
@@ -915,14 +920,17 @@ func (sc *scanCtx) plainDfs(absPath string, visited map[string]struct{}, order *
 // is responsible for visited-set deduplication.
 //
 // PR-M3-F-7-C.
-func (sc *scanCtx) forEachResolvedChild(vfsPath string, fn func(rabs string)) {
+func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
 
-	if isBuildVFS(vfsPath) {
+	if vfsPath.IsBuild() {
 		if s.codegen != nil {
-			if info, ok := s.codegen.Lookup(vfsPath); ok {
+			if info, ok := s.codegen.Lookup(vfsPath.String()); ok {
+				// EmitsIncludes is still a []string of VFS-form
+				// strings (the codegen registry's external API).
+				// Parse each into VFS at the boundary.
 				for _, rabs := range info.EmitsIncludes {
-					fn(rabs)
+					fn(ParseVFSOrSource(rabs))
 				}
 
 				return
@@ -989,7 +997,7 @@ func (s *IncludeScanner) SubgraphCacheStats() (hits, misses, tainted uint64) {
 // signal upward by returning ok=false from its own walk; every header
 // on the SCC ends up marked taintedKnown (set when subgraph returns
 // ok=false to its top-level invoker).
-func (sc *scanCtx) subgraph(absPath string, srcClassHash uint64) ([]string, bool) {
+func (sc *scanCtx) subgraph(absPath VFS, srcClassHash uint64) ([]VFS, bool) {
 	s := sc.scanner
 	key := subgraphInnerKey{abs: absPath, srcClassHash: srcClassHash}
 
@@ -1027,8 +1035,8 @@ func (sc *scanCtx) subgraph(absPath string, srcClassHash uint64) ([]string, bool
 	// buffers themselves are throwaway after the copy below. Pooling
 	// eliminates the per-call make(map) + make([]string) alloc pair,
 	// which profiling showed at ~102 MB + 31 MB per M3 run.
-	visitedP := s.visitedPool.Get().(*map[string]struct{})
-	orderP := s.orderPool.Get().(*[]string)
+	visitedP := s.visitedPool.Get().(*map[VFS]struct{})
+	orderP := s.orderPool.Get().(*[]VFS)
 
 	visited := *visitedP
 	order := (*orderP)[:0]
@@ -1058,7 +1066,7 @@ func (sc *scanCtx) subgraph(absPath string, srcClassHash uint64) ([]string, bool
 	// Trim any unused capacity — the slice will live in the cache for
 	// the rest of the run, so paying the one-time copy avoids holding
 	// over-allocated buffers across millions of cached subgraphs.
-	out := make([]string, len(order))
+	out := make([]VFS, len(order))
 	copy(out, order)
 
 	// Return scratch buffers to the pool.
@@ -1090,7 +1098,7 @@ func (sc *scanCtx) subgraph(absPath string, srcClassHash uint64) ([]string, bool
 //
 // Pure-DAG paths (no cycle in any descendant) cache normally because
 // every recursive descendant returns clean=true.
-func (sc *scanCtx) walkSubgraph(absPath string, srcClassHash uint64, visited map[string]struct{}, order *[]string) bool {
+func (sc *scanCtx) walkSubgraph(absPath VFS, srcClassHash uint64, visited map[VFS]struct{}, order *[]VFS) bool {
 	if _, seen := visited[absPath]; seen {
 		return true
 	}
@@ -1100,7 +1108,7 @@ func (sc *scanCtx) walkSubgraph(absPath string, srcClassHash uint64, visited map
 
 	clean := true
 
-	sc.forEachResolvedChild(absPath, func(rabs string) {
+	sc.forEachResolvedChild(absPath, func(rabs VFS) {
 		if _, seen := visited[rabs]; seen {
 			return
 		}
@@ -1137,7 +1145,7 @@ func (sc *scanCtx) walkSubgraph(absPath string, srcClassHash uint64, visited map
 // (subgraph-computation) visited+order rather than the dfs caller's
 // shared state. Each child of a tainted-walk node still goes through
 // `subgraph()` so non-cycle descendants reuse the persistent cache.
-func (sc *scanCtx) walkSubgraphTainted(absPath string, srcClassHash uint64, visited map[string]struct{}, order *[]string) {
+func (sc *scanCtx) walkSubgraphTainted(absPath VFS, srcClassHash uint64, visited map[VFS]struct{}, order *[]VFS) {
 	if _, seen := visited[absPath]; seen {
 		return
 	}
@@ -1145,7 +1153,7 @@ func (sc *scanCtx) walkSubgraphTainted(absPath string, srcClassHash uint64, visi
 	visited[absPath] = struct{}{}
 	*order = append(*order, absPath)
 
-	sc.forEachResolvedChild(absPath, func(rabs string) {
+	sc.forEachResolvedChild(absPath, func(rabs VFS) {
 		if _, seen := visited[rabs]; seen {
 			return
 		}
@@ -1188,7 +1196,7 @@ func (sc *scanCtx) walkSubgraphTainted(absPath string, srcClassHash uint64, visi
 // regex. The two syntaxes share `includeDirective` and the rest of
 // the resolver pipeline — yasm `%include "foo.asm"` resolves through
 // the same search-path / sysincl machinery as a quoted C include.
-func (s *IncludeScanner) parseIncludes(vfsPath string) []includeDirective {
+func (s *IncludeScanner) parseIncludes(vfsPath VFS) []includeDirective {
 	// PR-34n: lock removed (single-goroutine).
 	// PR-M3-perf-B: parsed cache is shared between target and host scanners
 	// via s.pc; both walk the same source tree so parsed directives are
@@ -1197,10 +1205,9 @@ func (s *IncludeScanner) parseIncludes(vfsPath string) []includeDirective {
 		return cached
 	}
 
-	// FS translation: $(SOURCE_ROOT)/<rel> → sourceRoot/<rel>. Any non-
-	// $(SOURCE_ROOT)/ path here is a bug (a $(BUILD_ROOT)/ should have
+	// Any non-SOURCE path here is a bug (a $(BUILD_ROOT)/ should have
 	// been dispatched to the registry by forEachResolvedChild).
-	fsPath := s.sourceRootSlash + strings.TrimPrefix(vfsPath, vfsSourcePrefix)
+	fsPath := s.sourceRootSlash + vfsPath.Rel
 
 	data, err := os.ReadFile(fsPath)
 
@@ -1223,8 +1230,7 @@ func (s *IncludeScanner) parseIncludes(vfsPath string) []includeDirective {
 		// upstream ymake scanner sees the post-expansion target, so we
 		// inject it directly. Keyed by source-rel (strip the
 		// $(SOURCE_ROOT)/ VFS prefix) so the map is human-readable.
-		rel := strings.TrimPrefix(vfsPath, vfsSourcePrefix)
-		if extras, ok := macroIndirectIncludes[rel]; ok {
+		if extras, ok := macroIndirectIncludes[vfsPath.Rel]; ok {
 			for _, m := range extras {
 				out = append(out, includeDirective{kind: m.kind, target: m.target})
 			}
@@ -1364,14 +1370,15 @@ func parseYasmIncludes(data []byte) []includeDirective {
 // — the NASM/yasm assembly source extensions. `.S`/`.s` files use
 // GAS / AT&T syntax with C preprocessor `#include` directives and
 // continue to use the C-include scanner path.
-func isYasmLike(absPath string) bool {
-	idx := strings.LastIndexByte(absPath, '.')
+func isYasmLike(absPath VFS) bool {
+	rel := absPath.Rel
+	idx := strings.LastIndexByte(rel, '.')
 
 	if idx < 0 {
 		return false
 	}
 
-	ext := absPath[idx:]
+	ext := rel[idx:]
 
 	switch ext {
 	case ".asm", ".asi":
@@ -1421,7 +1428,7 @@ func isYasmLike(absPath string) bool {
 //     still correctly excludes libcxxrt/dwarf_eh.h `#include "unwind.h"`
 //     because unwind.h lives in the SAME dir as dwarf_eh.h.
 //     Angle-bracket includes still union sysincl on top unconditionally.
-func (sc *scanCtx) resolve(includerAbs string, d includeDirective) []string {
+func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) []VFS {
 	s := sc.scanner
 	ctx := &sc.cfg
 	// `#include_next` directives resolve to nothing in the upstream
@@ -1478,7 +1485,7 @@ func (sc *scanCtx) resolve(includerAbs string, d includeDirective) []string {
 	// (the BUILD_ROOT codegen branch dispatches in forEachResolvedChild
 	// before reaching resolve()). Strip the VFS prefix to recover the
 	// sysincl-keyed relative form.
-	includerRel := strings.TrimPrefix(includerAbs, vfsSourcePrefix)
+	includerRel := includerAbs.Rel
 	mappings, hasMultiTarget := s.sysinclLookup(ctx.SourceRel, includerRel, d.target)
 
 	// PR-35w / PR-36 quoted-include gate. For QUOTED includes when the
@@ -1501,15 +1508,15 @@ func (sc *scanCtx) resolve(includerAbs string, d includeDirective) []string {
 	if d.kind == includeQuoted && len(searchOut) > 0 {
 		incDir := pathDir(includerRel)
 
-		var sameDirAbs string
+		var sameDirRel string
 
 		if incDir != "" {
-			sameDirAbs = vfsSource(normalisePath(incDir + "/" + d.target))
+			sameDirRel = normalisePath(incDir + "/" + d.target)
 		} else {
-			sameDirAbs = vfsSource(d.target)
+			sameDirRel = d.target
 		}
 
-		if !hasMultiTarget || searchOut[0] == sameDirAbs {
+		if !hasMultiTarget || (searchOut[0].IsSource() && searchOut[0].Rel == sameDirRel) {
 			return searchOut
 		}
 	}
@@ -1531,7 +1538,7 @@ func (sc *scanCtx) resolve(includerAbs string, d includeDirective) []string {
 	// copying searchOut. Linear-scan dedup beats the map alloc since
 	// mapping lists are 1-3 entries long.
 	if len(searchOut) == 0 {
-		var out []string
+		var out []VFS
 
 	fastLoop:
 		for _, abs := range mappings {
@@ -1541,12 +1548,12 @@ func (sc *scanCtx) resolve(includerAbs string, d includeDirective) []string {
 				}
 			}
 
-			if !s.fileExists(abs) {
+			if !s.fileExistsByRel(abs.Rel) {
 				continue
 			}
 
 			if out == nil {
-				out = make([]string, 0, len(mappings))
+				out = make([]VFS, 0, len(mappings))
 			}
 
 			out = append(out, abs)
@@ -1555,7 +1562,7 @@ func (sc *scanCtx) resolve(includerAbs string, d includeDirective) []string {
 		return out
 	}
 
-	var out []string
+	var out []VFS
 
 mapLoop:
 	for _, abs := range mappings {
@@ -1573,12 +1580,12 @@ mapLoop:
 			}
 		}
 
-		if !s.fileExists(abs) {
+		if !s.fileExistsByRel(abs.Rel) {
 			continue
 		}
 
 		if out == nil {
-			out = make([]string, len(searchOut), len(searchOut)+len(mappings))
+			out = make([]VFS, len(searchOut), len(searchOut)+len(mappings))
 			copy(out, searchOut)
 		}
 
@@ -1610,7 +1617,7 @@ mapLoop:
 // dedup uses a linear scan over `out` because typical sysincl mapping
 // lists are 1-3 entries long; a map allocation per call would dominate
 // the per-resolve cost.
-func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel, target string) ([]string, bool) {
+func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel, target string) ([]VFS, bool) {
 	srcMappings, srcMT := s.sysinclSourceLookup(sourceRel, target)
 	incMappings, incMT := s.sysinclIncluderLookup(includerRel, target)
 	hasMultiTarget := srcMT || incMT
@@ -1623,7 +1630,7 @@ func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel, target string) ([
 		return srcMappings, hasMultiTarget
 	}
 
-	out := make([]string, 0, len(srcMappings)+len(incMappings))
+	out := make([]VFS, 0, len(srcMappings)+len(incMappings))
 	out = append(out, srcMappings...)
 
 incLoop:
@@ -1640,7 +1647,7 @@ incLoop:
 	return out, hasMultiTarget
 }
 
-func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]string, bool) {
+func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, bool) {
 	key := sysinclSourceKey{sourceRel: sourceRel, target: target}
 
 	// PR-34n: lock removed (single-goroutine).
@@ -1660,7 +1667,7 @@ func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]string
 	return entry.paths, entry.hasMultiTarget
 }
 
-func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) ([]string, bool) {
+func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) ([]VFS, bool) {
 	key := sysinclIncluderKey{includerRel: includerRel, target: target}
 
 	// PR-34n: lock removed (single-goroutine).
@@ -1694,15 +1701,15 @@ func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) ([]st
 // PR-M3-vfs-paths: the output prefix changed from sourceRootSlash to
 // vfsSourcePrefix. The downstream consumer (resolve / fileExists)
 // translates VFS → FS only at the os.Stat call site.
-func (s *IncludeScanner) absifyRels(rels []string) []string {
+func (s *IncludeScanner) absifyRels(rels []string) []VFS {
 	if len(rels) == 0 {
 		return nil
 	}
 
-	out := make([]string, 0, len(rels))
+	out := make([]VFS, 0, len(rels))
 
 	for _, rel := range rels {
-		out = append(out, vfsSource(normalisePath(rel)))
+		out = append(out, Source(normalisePath(rel)))
 	}
 
 	return out
@@ -1729,7 +1736,7 @@ func (s *IncludeScanner) perSourceView(sourceRel string) PerSourceView {
 // resolveSearchPath returns the search-path-only resolved set for the
 // given directive. Cached on the scanCtx by (includer, target, kind,
 // next) — ctxHash is implicit in the scanCtx receiver.
-func (sc *scanCtx) resolveSearchPath(includerAbs string, d includeDirective) []string {
+func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS {
 	s := sc.scanner
 	ctx := &sc.cfg
 	key := resolveInnerKey{
@@ -1744,12 +1751,15 @@ func (sc *scanCtx) resolveSearchPath(includerAbs string, d includeDirective) []s
 		return cached
 	}
 
-	var out []string
+	var out []VFS
 
 	// Pool the per-resolve dedup map. PR-34k's profile showed
 	// `resolveSearchPath`'s map literal as a per-call ~256 B alloc
 	// fired ~40k times across the tools/archiver run. The map is
-	// cleared and returned to the pool before we exit.
+	// cleared and returned to the pool before we exit. Keys are the
+	// SOURCE_ROOT-relative tail (no prefix) — every candidate here is
+	// SOURCE-rooted and the rel-string is what fileExistsByRel keys on
+	// too, so reusing it avoids an extra VFS construction.
 	seenP := s.seenPool.Get().(*map[string]struct{})
 	seen := *seenP
 
@@ -1764,19 +1774,17 @@ func (sc *scanCtx) resolveSearchPath(includerAbs string, d includeDirective) []s
 			return false
 		}
 
-		// PR-M3-perf-vfs-no-alloc: probe existence by rel BEFORE
-		// materialising the VFS string. Most candidates fail (search
-		// path is many entries; the file lives at one of them), so
-		// allocating "$(SOURCE_ROOT)/<rel>" before knowing the answer
-		// burned ~4.7M strings/run pre-optimisation. Now the VFS
-		// string is only constructed on success.
 		if !s.fileExistsByRel(rel) {
 			return false
 		}
 
-		abs := vfsSource(rel)
 		seen[rel] = struct{}{}
-		out = append(out, abs)
+		// PR-M3-vfs-internal: append as a typed VFS value rather than
+		// constructing the "$(SOURCE_ROOT)/<rel>" string. The downstream
+		// resolveCache / dfs / output slice all carry VFS now, so the
+		// prefix is never materialised inside the scanner; only the
+		// JSON serializer emits it.
+		out = append(out, Source(rel))
 
 		return true
 	}
@@ -1789,11 +1797,9 @@ func (sc *scanCtx) resolveSearchPath(includerAbs string, d includeDirective) []s
 	searchPathFound := false
 
 	if d.kind == includeQuoted {
-		// PR-M3-vfs-paths: includerAbs is $(SOURCE_ROOT)/-rooted here
-		// (the BUILD_ROOT branch in forEachResolvedChild never reaches
-		// resolveSearchPath).
-		incRel := strings.TrimPrefix(includerAbs, vfsSourcePrefix)
-		incDir := pathDir(incRel)
+		// includerAbs is SOURCE-rooted here (the BUILD_ROOT branch in
+		// forEachResolvedChild never reaches resolveSearchPath).
+		incDir := pathDir(includerAbs.Rel)
 
 		var candidate string
 
@@ -1866,15 +1872,22 @@ func (sc *scanCtx) resolveSearchPath(includerAbs string, d includeDirective) []s
 	// generated file (verified against sg.json: zero matches for
 	// "_serialized" / "pb.h" / "ev.pb").
 	if !searchPathFound && len(s.fallbackLocators) > 0 {
-		abs := vfsBuildPrefix + d.target
+		// BUILD-rooted candidate. The Exists locator is the codegen
+		// registry; its API still takes the string form.
+		abs := Build(d.target)
+		absStr := abs.String()
 
 		for _, loc := range s.fallbackLocators {
-			if !loc.Exists(abs) {
+			if !loc.Exists(absStr) {
 				continue
 			}
 
-			if _, dup := seen[abs]; !dup {
-				seen[abs] = struct{}{}
+			// Use a distinct dedup key for BUILD-rooted entries (the
+			// rel-keyed `seen` would collide with a SOURCE rel of the
+			// same name). Prefix with "B:" so it's unique.
+			dedupKey := "B:" + d.target
+			if _, dup := seen[dedupKey]; !dup {
+				seen[dedupKey] = struct{}{}
 				out = append(out, abs)
 			}
 
@@ -1903,16 +1916,20 @@ func (sc *scanCtx) resolveSearchPath(includerAbs string, d includeDirective) []s
 // `.inl`, `.ipp`, `.tcc`) and ragel/protobuf intermediate sources
 // (`.rl`, `.proto`, `.pb.cc`) all return false and go through the
 // subgraph cache path.
-func isSourceLike(absPath string) bool {
+func isSourceLike(absPath VFS) bool {
 	// Look only at the final segment; sysincl-resolved paths can have
-	// multiple `.` separators (e.g. `foo/bar.pb.cc`).
-	idx := strings.LastIndexByte(absPath, '.')
+	// multiple `.` separators (e.g. `foo/bar.pb.cc`). VFS.Rel never
+	// contains the `$(SOURCE_ROOT)/` / `$(BUILD_ROOT)/` prefix, so
+	// scanning the rel directly is equivalent to scanning the full
+	// VFS-form string.
+	rel := absPath.Rel
+	idx := strings.LastIndexByte(rel, '.')
 
 	if idx < 0 {
 		return false
 	}
 
-	ext := absPath[idx:]
+	ext := rel[idx:]
 
 	switch ext {
 	case ".cpp", ".cc", ".cxx", ".c", ".C", ".S", ".s", ".m", ".mm":

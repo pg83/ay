@@ -103,7 +103,7 @@ func EmitLD(
 	globalPaths []string,
 	objcopyRefs []NodeRef,
 	objcopyPaths []string,
-	memberInputs []string,
+	memberInputs []VFS, //nolint:vfs-stay // cascade from gen.go member-inputs bucket
 	muslOn bool,
 	moduleCFlags []string,
 	peerCFlagsGlobal []string,
@@ -212,13 +212,13 @@ func EmitLD(
 	// existing set. Matches the sg.json LD shape: BUILD_ROOT block
 	// (peers + plugins + globals + own .o, alphabetically sorted by
 	// composeLDInputs) + 7 scripts + UNION-of-CC-inputs.
-	inputSet := map[string]struct{}{}
+	inputSet := map[VFS]struct{}{}
 	for _, p := range inputs {
 		inputSet[p] = struct{}{}
 	}
 
-	for _, p := range memberInputs {
-		if _, dup := inputSet[p]; dup {
+	for _, pV := range memberInputs {
+		if _, dup := inputSet[pV]; dup {
 			continue
 		}
 
@@ -229,12 +229,12 @@ func EmitLD(
 		// (plus the rare .pyplugin); generated source/header artifacts are
 		// wired solely through the constituent CC's own `inputs`. Verified
 		// in REF on tools/event2cpp/event2cpp.
-		if isBuildRootCodegenProduct(p) {
+		if pV.IsBuild() && isBuildRootCodegenProductRel(pV.Rel) {
 			continue
 		}
 
-		inputSet[p] = struct{}{}
-		inputs = append(inputs, p)
+		inputSet[pV] = struct{}{}
+		inputs = append(inputs, pV)
 	}
 
 	// PR-35v: svnversion.h is a c_template consumed by vcs_info.py
@@ -247,8 +247,8 @@ func EmitLD(
 	// #included by any user source), so it must be injected here.
 	// Dedup guard is present for safety — in practice the CC closure
 	// never contains this path.
-	if _, dup := inputSet[ldSvnversionHInput]; !dup {
-		inputs = append(inputs, ldSvnversionHInput)
+	if _, dup := inputSet[ldSvnversionHVFS]; !dup {
+		inputs = append(inputs, ldSvnversionHVFS)
 	}
 
 	// DepRefs capture every node whose UID flows into the LD's
@@ -264,8 +264,8 @@ func EmitLD(
 	n := &Node{
 		Cmds:    cmds,
 		Env:     envFull,
-		Inputs:  ToVFSSlice(inputs),
-		Outputs: ToVFSSlice([]string{outputPath}),
+		Inputs:  inputs,
+		Outputs: []VFS{ParseVFSOrSource(outputPath)},
 		KV: map[string]string{
 			"p":        "LD",
 			"pc":       "light-blue",
@@ -731,7 +731,7 @@ func composeLDCmdLinkOrCopy(modulePath string) []string {
 // The reference verification (tools/archiver) shows 35 entries in the
 // BUILD_ROOT block: 32 peer .a + 1 plugin + 1 global .global.a + 1
 // own main.cpp.o, all interleaved in alphabetical order.
-func composeLDInputs(modulePath string, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths []string) []string {
+func composeLDInputs(modulePath string, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths []string) []VFS {
 	buildRootBlock := make([]string, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(ccPaths)+len(objcopyPaths))
 
 	for _, p := range peerLibPaths {
@@ -751,8 +751,10 @@ func composeLDInputs(modulePath string, ccPaths, peerLibPaths, pluginPaths, glob
 	buildRootBlock = append(buildRootBlock, objcopyPaths...)
 	sort.Strings(buildRootBlock)
 
-	out := make([]string, 0, len(buildRootBlock)+len(ldScriptInputs))
-	out = append(out, buildRootBlock...)
+	out := make([]VFS, 0, len(buildRootBlock)+len(ldScriptInputs))
+	for _, p := range buildRootBlock {
+		out = append(out, ParseVFSOrSource(p))
+	}
 	out = append(out, ldScriptInputs...)
 
 	_ = modulePath // reserved for future use (path-dependent inputs).
@@ -854,12 +856,15 @@ const libcCompatPeerPath = "contrib/libs/libc_compat/libcontrib-libs-libc_compat
 // registration sequence for the link-script tool family; preserving
 // it is required for byte-exact `inputs` matching (per PR-05's
 // "inputs are NOT alphabetical for ~7 of 3730 nodes" finding).
-var ldScriptInputs = []string{
-	"$(SOURCE_ROOT)/build/scripts/vcs_info.py",
-	"$(SOURCE_ROOT)/build/scripts/c_templates/svn_interface.c",
-	"$(SOURCE_ROOT)/build/scripts/link_exe.py",
-	"$(SOURCE_ROOT)/build/scripts/thinlto_cache.py",
-	"$(SOURCE_ROOT)/build/scripts/process_command_files.py",
-	"$(SOURCE_ROOT)/build/scripts/process_whole_archive_option.py",
-	"$(SOURCE_ROOT)/build/scripts/fs_tools.py",
+var ldScriptInputs = []VFS{
+	Source("build/scripts/vcs_info.py"),
+	Source("build/scripts/c_templates/svn_interface.c"),
+	Source("build/scripts/link_exe.py"),
+	Source("build/scripts/thinlto_cache.py"),
+	Source("build/scripts/process_command_files.py"),
+	Source("build/scripts/process_whole_archive_option.py"),
+	Source("build/scripts/fs_tools.py"),
 }
+
+// ldSvnversionHVFS is the VFS form of ldSvnversionHInput.
+var ldSvnversionHVFS = Source("build/scripts/c_templates/svnversion.h")

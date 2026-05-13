@@ -259,7 +259,7 @@ type genCtx struct {
 	// EN nodes only ever emit on the target axis (see gen.go:4531-4535), so
 	// a flat path-keyed map collapses cleanly. PB/EV use codegenOutputKey
 	// because both axes can emit their own producer NodeRefs.
-	enOutputs map[string]NodeRef
+	enOutputs map[VFS]NodeRef
 	// pbOutputs/evOutputs map (platform, $(BUILD_ROOT)-rooted output path)
 	// → emitted PB/EV NodeRef. Mirrors enOutputs but per-platform because
 	// PB/EV emit on BOTH target and host axes (the host emission carries
@@ -350,7 +350,7 @@ type scanCtxCacheKey struct {
 // collapse the two and produce wrong-axis deps.
 type codegenOutputKey struct {
 	platform PlatformID
-	path     string
+	path     VFS
 }
 
 // resolveCodegenDepRefs scans `includeInputs` for $(BUILD_ROOT)-rooted paths
@@ -377,7 +377,7 @@ type codegenOutputKey struct {
 // emitters; the legacy maps remain as the EN/PB/EV path (their writes are
 // independent of the registry today and removing them is deferred to a
 // later PR).
-func resolveCodegenDepRefs(ctx *genCtx, consumer ModuleInstance, includeInputs []string, exclude ...NodeRef) []NodeRef {
+func resolveCodegenDepRefs(ctx *genCtx, consumer ModuleInstance, includeInputs []VFS, exclude ...NodeRef) []NodeRef {
 	return resolveCodegenDepRefsExt(ctx, consumer, includeInputs, nil, exclude...)
 }
 
@@ -385,7 +385,7 @@ func resolveCodegenDepRefs(ctx *genCtx, consumer ModuleInstance, includeInputs [
 // $(BUILD_ROOT) producer paths. Used by consumers whose producer ref is
 // input-driven (RESOURCE objcopy via .pyc.inc, .yapyc3 bytecode) rather than
 // #include-driven. The two slices are scanned in order; dedup is global.
-func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInputs, inputs []string, exclude ...NodeRef) []NodeRef {
+func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInputs, inputs []VFS, exclude ...NodeRef) []NodeRef {
 	if len(includeInputs) == 0 && len(inputs) == 0 {
 		return nil
 	}
@@ -397,24 +397,24 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 
 	var out []NodeRef
 
-	probe := func(p string) {
-		if !strings.HasPrefix(p, "$(BUILD_ROOT)/") {
+	probe := func(v VFS) {
+		if !v.IsBuild() {
 			return
 		}
 
 		var ref NodeRef
 		var ok bool
 
-		if r, found := ctx.enOutputs[p]; found {
+		if r, found := ctx.enOutputs[v]; found {
 			ref, ok = r, true
-		} else if r, found := ctx.pbOutputs[codegenOutputKey{platform: consumer.Platform.Target, path: p}]; found {
+		} else if r, found := ctx.pbOutputs[codegenOutputKey{platform: consumer.Platform.Target, path: v}]; found {
 			ref, ok = r, true
-		} else if r, found := ctx.evOutputs[codegenOutputKey{platform: consumer.Platform.Target, path: p}]; found {
+		} else if r, found := ctx.evOutputs[codegenOutputKey{platform: consumer.Platform.Target, path: v}]; found {
 			ref, ok = r, true
 		} else {
 			reg := codegenRegForInstance(ctx, consumer)
 			if reg != nil {
-				if info, found := reg.Lookup(p); found && info.HasProducerRef {
+				if info, found := reg.Lookup(v.String()); found && info.HasProducerRef {
 					ref, ok = info.ProducerRef, true
 				}
 			}
@@ -756,7 +756,7 @@ func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, cliDef
 		scannerTarget:   targetScanner,
 		scannerHost:     hostScanner,
 		cliDefines:      cliDefines,
-		enOutputs:       make(map[string]NodeRef),
+		enOutputs:       make(map[VFS]NodeRef),
 		pbOutputs:       make(map[codegenOutputKey]NodeRef),
 		evOutputs:       make(map[codegenOutputKey]NodeRef),
 		ldPluginCPCache: make(map[string]NodeRef),
@@ -3640,10 +3640,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// own `inputs` slice per the sg.json shape (AR includes the
 	// source files of its archived .o files, plus their resolved
 	// header closures).
-	memberInputs := make([]string, 0, 64)
-	memberInputsSeen := map[string]struct{}{}
+	memberInputs := make([]VFS, 0, 64)
+	memberInputsSeen := map[VFS]struct{}{}
 
-	addMemberInputs := func(paths []string) {
+	addMemberInputs := func(paths []VFS) {
 		for _, p := range paths {
 			if _, dup := memberInputsSeen[p]; dup {
 				continue
@@ -3677,8 +3677,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// `globalMemberInputs` directly (the GLOBAL_SRCS-local closure)
 	// and never sees regular primaries; the set + closure are retained
 	// so call sites in the source-loop don't have to be untangled.
-	regularPrimariesSet := map[string]struct{}{}
-	addRegularPrimary := func(p string) {
+	regularPrimariesSet := map[VFS]struct{}{}
+	addRegularPrimary := func(p VFS) {
 		regularPrimariesSet[p] = struct{}{}
 	}
 
@@ -3911,7 +3911,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	type srcResult struct {
 		ref          NodeRef
 		outPath      string
-		ccIns        []string
+		ccIns        []VFS
 		primaryCount int
 		ok           bool
 	}
@@ -3957,7 +3957,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		var ref NodeRef
 		var outPath string
-		var ccIns []string
+		var ccIns []VFS
 		var primaryCount int
 		var ok bool
 
@@ -4001,10 +4001,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if !isHeaderSource(src) {
 			continue
 		}
-		headerPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + src
 		headerVFS := resolveSourceVFS(ctx, instance, src, moduleInputs.SrcDir)
 		headerClosure := walkClosure(ctx, instance, headerVFS, moduleInputs)
-		addMemberInputs(append([]string{headerPath}, headerClosure...))
+		all := append([]VFS{Source(instance.Path + "/" + src)}, headerClosure...)
+		addMemberInputs(all)
 	}
 
 	// PR-M3-antlr-g4-cpp: fold JV-downstream CCs (CP-rename + compile for
@@ -4205,7 +4205,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// reference: util's libyutil.a (no .global.a) and util/charset's
 		// libutil-charset.a both archive the JS member sources.
 		for _, s := range js.Sources {
-			addRegularPrimary("$(SOURCE_ROOT)/" + srcInstance.Path + "/" + s)
+			addRegularPrimary(Source(srcInstance.Path + "/" + s))
 		}
 	}
 
@@ -4216,8 +4216,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	// PR-31 D11: GLOBAL_SRCS contribute their own member-inputs slice
 	// to the .global.a archive (separate accumulator from regular AR).
-	globalMemberInputs := make([]string, 0, 16)
-	globalMemberInputsSeen := map[string]struct{}{}
+	globalMemberInputs := make([]VFS, 0, 16)
+	globalMemberInputsSeen := map[VFS]struct{}{}
 
 	for _, src := range d.globalSrcs {
 		ref, outPath, ccIns, _, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs, ancestorRebase)
@@ -4367,12 +4367,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				}
 
 				if extras := pySrcsARExtraInputs(instance.Path, d.srcDir, d.pySrcs, resourcePaths); len(extras) > 0 {
-					seen := make(map[string]struct{}, len(ldMemberInputs))
+					seen := make(map[VFS]struct{}, len(ldMemberInputs))
 					for _, p := range ldMemberInputs {
 						seen[p] = struct{}{}
 					}
 
-					ldMemberInputs = append([]string(nil), ldMemberInputs...)
+					ldMemberInputs = append([]VFS(nil), ldMemberInputs...)
 
 					for _, p := range extras {
 						if _, dup := seen[p]; dup {
@@ -4459,7 +4459,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	combinedMemberInputs := memberInputs
 
 	if len(globalMemberInputs) > 0 {
-		combinedMemberInputs = make([]string, 0, len(memberInputs)+len(globalMemberInputs))
+		combinedMemberInputs = make([]VFS, 0, len(memberInputs)+len(globalMemberInputs))
 		combinedMemberInputs = append(combinedMemberInputs, memberInputs...)
 
 		for _, p := range globalMemberInputs {
@@ -4498,7 +4498,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			// append below cannot alias the caller's memberInputs backing
 			// array when the no-global branch above kept the alias.
 			if len(globalMemberInputs) == 0 {
-				combinedMemberInputs = append([]string(nil), memberInputs...)
+				combinedMemberInputs = append([]VFS(nil), memberInputs...)
 			}
 
 			for _, p := range extras {
@@ -4707,6 +4707,33 @@ func filterBuildRootSelfPaths(peer, own []string) []string {
 	return out
 }
 
+// mergeDedupVFS is mergeDedup for []VFS — keeps order of first
+// occurrence and drops later duplicates.
+func mergeDedupVFS(a, b []VFS) []VFS {
+	out := make([]VFS, 0, len(a)+len(b))
+	seen := make(map[VFS]struct{}, len(a)+len(b))
+
+	for _, x := range a {
+		if _, dup := seen[x]; dup {
+			continue
+		}
+
+		seen[x] = struct{}{}
+		out = append(out, x)
+	}
+
+	for _, x := range b {
+		if _, dup := seen[x]; dup {
+			continue
+		}
+
+		seen[x] = struct{}{}
+		out = append(out, x)
+	}
+
+	return out
+}
+
 func mergeDedup(a, b []string) []string {
 	out := make([]string, 0, len(a)+len(b))
 	seen := make(map[string]struct{}, len(a)+len(b))
@@ -4739,11 +4766,11 @@ func mergeDedup(a, b []string) []string {
 // does not list the EN-generated `.cpp`/`.h` siblings themselves in the
 // R6 node's inputs. The filter preserves descendant order for the
 // retained entries.
-func filterEnSerializedSiblings(in []string) []string {
-	out := make([]string, 0, len(in))
+func filterEnSerializedSiblings(in []VFS) []VFS {
+	out := make([]VFS, 0, len(in))
 
 	for _, p := range in {
-		if strings.HasSuffix(p, "_serialized.cpp") || strings.HasSuffix(p, "_serialized.h") {
+		if strings.HasSuffix(p.Rel, "_serialized.cpp") || strings.HasSuffix(p.Rel, "_serialized.h") {
 			continue
 		}
 
@@ -5300,8 +5327,8 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				},
 			},
 			Env:     env,
-			Inputs:  ToVFSSlice([]string{py3ccBinary, py3ccSlowBin, srcAbs}),
-			Outputs: ToVFSSlice([]string{outputPath}),
+			Inputs:  []VFS{ParseVFSOrSource(py3ccBinary), ParseVFSOrSource(py3ccSlowBin), ParseVFSOrSource(srcAbs)},
+			Outputs: []VFS{ParseVFSOrSource(outputPath)},
 			KV: map[string]string{
 				"p":  "PY",
 				"pc": "yellow",
@@ -5383,7 +5410,7 @@ const genPy3RegScriptPath = "$(SOURCE_ROOT)/build/scripts/gen_py3_reg.py"
 // archives in the module's `.global.a`).
 //
 // Mirror of macro _PY3_REGISTER at build/ymake.core.conf:4086-4089.
-func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs, py3Suffix bool) (refs []NodeRef, outputs []string, memberInputs []string) {
+func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs, py3Suffix bool) (refs []NodeRef, outputs []string, memberInputs []VFS) {
 	if len(d.pyRegister) == 0 {
 		return nil, nil, nil
 	}
@@ -5408,8 +5435,8 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 				{CmdArgs: pyCmdArgs, Env: env},
 			},
 			Env:     env,
-			Inputs:  ToVFSSlice([]string{genPy3RegScriptPath}),
-			Outputs: ToVFSSlice([]string{regCppAbs}),
+			Inputs:  []VFS{ParseVFSOrSource(genPy3RegScriptPath)},
+			Outputs: []VFS{Build(instance.Path + "/" + regCpp)},
 			KV: map[string]string{
 				"p":  "PY",
 				"pc": "yellow",
@@ -5444,7 +5471,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		ccIn.Generator = pyRef
 		ccIn.HasGenerator = true
 		ccIn.Py3Suffix = py3Suffix
-		ccIn.IncludeInputs = []string{genPy3RegScriptPath}
+		ccIn.IncludeInputs = []VFS{ParseVFSOrSource(genPy3RegScriptPath)}
 		// PR-M3-final-surgical (fix 4): mirror upstream ordering — the
 		// PyInit_/init_module_ defines added by `onpy_register` AFTER
 		// `_PY3_REGISTER`'s `SRCS(GLOBAL …)` only attach to user-declared
@@ -5470,7 +5497,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		// the archive-input added by the reference graph (the reg3.cpp
 		// itself is BUILD_ROOT-rooted and PR-35y R7 strips those from the
 		// AR aggregator).
-		memberInputs = append(memberInputs, genPy3RegScriptPath)
+		memberInputs = append(memberInputs, ParseVFSOrSource(genPy3RegScriptPath))
 	}
 
 	return refs, outputs, memberInputs
@@ -5507,7 +5534,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 // entry in the same module. When nil, only EN nodes are emitted (the
 // header-only branch path; no module compiles those `_serialized.cpp`
 // in current M3 closure).
-func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddInclGlobal []string, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []string, memberInputsList [][]string) {
+func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddInclGlobal []string, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []string, memberInputsList [][]VFS) {
 	if len(d.enumSrcs) == 0 {
 		return nil, nil, nil
 	}
@@ -5570,20 +5597,19 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// for _serialized.h include patterns and match them against known
 		// EN outputs.
 		var depENRefs []NodeRef
-		var depENOutputs []string
+		var depENOutputs []VFS
 
 		if len(ctx.enOutputs) > 0 {
 			// Build a map from bare rel-path suffix → buildRootPath for
 			// all known _serialized.h EN outputs. Key is the path a
 			// source header would write in an #include angle-bracket
 			// form, e.g. "devtools/ymake/diag/stats_enums.h_serialized.h".
-			serializedHByRel := make(map[string]string, len(ctx.enOutputs))
+			serializedHByRel := make(map[string]VFS, len(ctx.enOutputs))
 			for buildRootPath := range ctx.enOutputs {
-				if !strings.HasSuffix(buildRootPath, "_serialized.h") {
+				if !buildRootPath.IsBuild() || !strings.HasSuffix(buildRootPath.Rel, "_serialized.h") {
 					continue
 				}
-				rel := strings.TrimPrefix(buildRootPath, "$(BUILD_ROOT)/")
-				serializedHByRel[rel] = buildRootPath
+				serializedHByRel[buildRootPath.Rel] = buildRootPath
 			}
 
 			depSeen := map[NodeRef]struct{}{}
@@ -5616,7 +5642,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 						depENRefs = append(depENRefs, ref)
 						depENOutputs = append(depENOutputs, buildRootPath)
 						// Also include the corresponding _serialized.cpp path.
-						cppPath := strings.TrimSuffix(buildRootPath, "_serialized.h") + "_serialized.cpp"
+						cppPath := Build(strings.TrimSuffix(buildRootPath.Rel, "_serialized.h") + "_serialized.cpp")
 						if cppRef, ok2 := ctx.enOutputs[cppPath]; ok2 && cppRef == ref {
 							depENOutputs = append(depENOutputs, cppPath)
 						}
@@ -5704,22 +5730,22 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// $(BUILD_ROOT)/_serialized.h entry that depENOutputs also names (the
 		// scanner resolves both through the codegen registry / cross-EN dep
 		// detection), and the duplicate fails L2 multiset equality.
-		enClosureExcl := map[string]struct{}{
-			"$(SOURCE_ROOT)/" + instance.Path + "/" + headerRel: {},
+		enClosureExcl := map[VFS]struct{}{
+			Source(instance.Path + "/" + headerRel): {},
 		}
 		for _, p := range depENOutputs {
 			enClosureExcl[p] = struct{}{}
 		}
-		filteredClosure := make([]string, 0, len(closure))
+		filteredClosure := make([]VFS, 0, len(closure))
 		for _, p := range closure {
 			if _, drop := enClosureExcl[p]; drop {
 				continue
 			}
 			filteredClosure = append(filteredClosure, p)
 		}
-		var crossCppClosure []string
+		var crossCppClosure []VFS
 		for _, depOut := range depENOutputs {
-			if !strings.HasSuffix(depOut, "_serialized.cpp") {
+			if !strings.HasSuffix(depOut.Rel, "_serialized.cpp") {
 				continue
 			}
 			sub := walkClosure(ctx, instance, depOut, scanIn)
@@ -5747,9 +5773,9 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// registry (registered moments earlier) and follows EmitsIncludes;
 		// subsequent children resolve via parseIncludes on the real
 		// $(SOURCE_ROOT) headers.
-		var ownOutputClosure []string
+		var ownOutputClosure []VFS
 		if !withHeader && ctx.scannerTarget.codegen != nil {
-			sub := walkClosure(ctx, instance, serializedCPPPath, scanIn)
+			sub := walkClosure(ctx, instance, ParseVFSOrSource(serializedCPPPath), scanIn)
 			for _, p := range sub {
 				if _, drop := enClosureExcl[p]; drop {
 					continue
@@ -5757,9 +5783,9 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 				ownOutputClosure = append(ownOutputClosure, p)
 			}
 		}
-		enClosure := mergeDedup(filteredClosure, crossCppClosure)
-		enClosure = mergeDedup(enClosure, ownOutputClosure)
-		sort.Strings(enClosure)
+		enClosure := mergeDedupVFS(filteredClosure, crossCppClosure)
+		enClosure = mergeDedupVFS(enClosure, ownOutputClosure)
+		sort.Slice(enClosure, func(i, j int) bool { return enClosure[i].String() < enClosure[j].String() })
 
 		// PR-M3-L0-codegen-deps-EV-PB: when this EN node's transitive closure
 		// pulls in a PB/EV producer's $(BUILD_ROOT) output (e.g. an EN whose
@@ -5856,7 +5882,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 // .c/.cpp/.cc/.cxx/.S/.s/.asm dispatches yield primaryCount=1; the
 // .rl6 dispatch yields 1 (just the .rl6 source) or 2 (when the `.h`
 // companion exists on disk).
-func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, in ModuleCCInputs, ancestorRebase bool) (NodeRef, string, []string, int, bool) {
+func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, in ModuleCCInputs, ancestorRebase bool) (NodeRef, string, []VFS, int, bool) {
 	if isHeaderSource(srcRel) {
 		return NodeRef{}, "", nil, 0, false
 	}
@@ -5920,7 +5946,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// sg.json shape (PR-31 D11). Compose the input list here
 		// (matching what EmitCC itself does internally).
 		inputPath := emittedSourceInputPath(srcInstance, srcRel, srcIn, ctx.sourceRoot)
-		ccInputs := append([]string{inputPath}, srcIn.IncludeInputs...)
+		ccInputs := append([]VFS{inputPath}, srcIn.IncludeInputs...)
 
 		return ref, outPath, ccInputs, 1, true
 	case strings.HasSuffix(srcRel, ".S"),
@@ -5985,19 +6011,19 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// Same rule as composeASPaths' SRCDIR routing for AS itself
 		// (PR-35r, as.go:316-336): keeping the gen.go aggregator's
 		// path in sync with as.go's resolution.
-		asInputPath := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
+		asInputRel := srcInstance.Path + "/" + srcRel
 
 		if srcDir != "" && srcDir != srcInstance.Path && !sourceExistsLocally(ctx.sourceRoot, srcInstance.Path, srcRel) {
-			asInputPath = "$(SOURCE_ROOT)/" + srcDir + "/" + srcRel
+			asInputRel = srcDir + "/" + srcRel
 		}
 
 		// PR-M3-openssl-ar-plugin-and-as-clean: collapse `..` segments so
 		// e.g. openssl's `crypto/../asm/...` resolves to `asm/...` in the
 		// AR aggregator's memberInputs. The AS node's own input path is
 		// composed independently inside as.go and is already cleaned.
-		asInputPath = path.Clean(asInputPath)
+		asInputRel = path.Clean(asInputRel)
 
-		asInputs := append([]string{asInputPath}, asIn.IncludeInputs...)
+		asInputs := append([]VFS{Source(asInputRel)}, asIn.IncludeInputs...)
 
 		return ref, outPath, asInputs, 1, true
 	case strings.HasSuffix(srcRel, ".rl6"):
@@ -6108,7 +6134,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// source-side scan; the architecturally-correct shape comes from
 		// WalkClosure rooted at the generated .cpp.
 		ccSrcRel := strings.TrimPrefix(r6Out, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
-		ccIncludeInputs := walkClosure(ctx, srcInstance, r6Out, srcIn)
+		ccIncludeInputs := walkClosure(ctx, srcInstance, ParseVFSOrSource(r6Out), srcIn)
 
 		ccIn := srcIn
 		ccIn.IsGenerated = true
@@ -6140,15 +6166,15 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// same basename and `.h` suffix exists on disk — the
 		// convention holds for every observed `.rl6` source in the
 		// M2 closure (util/datetime/parser.rl6 → parser.h).
-		rl6Source := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
-		ccInputs := []string{rl6Source}
+		rl6SourceVFS := Source(srcInstance.Path + "/" + srcRel)
+		ccInputs := []VFS{rl6SourceVFS}
 		primaryCount := 1
 
 		companionRel := strings.TrimSuffix(srcRel, ".rl6") + ".h"
 		companionAbs := filepath.Join(ctx.sourceRoot, srcInstance.Path, companionRel)
 
 		if info, err := os.Stat(companionAbs); err == nil && !info.IsDir() {
-			ccInputs = append(ccInputs, "$(SOURCE_ROOT)/"+srcInstance.Path+"/"+companionRel)
+			ccInputs = append(ccInputs, Source(srcInstance.Path+"/"+companionRel))
 			primaryCount = 2
 		}
 
@@ -6225,9 +6251,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			// on the emitting platform so consumer CCs in OTHER modules whose
 			// IncludeInputs include this .ev.pb.h / .ev.pb.cc dep on the producer.
 			evKey := codegenOutputKey{platform: srcInstance.Platform.Target}
-			evKey.path = evH
+			evKey.path = ParseVFSOrSource(evH)
 			ctx.evOutputs[evKey] = evRef
-			evKey.path = evPbCC
+			evKey.path = ParseVFSOrSource(evPbCC)
 			ctx.evOutputs[evKey] = evRef
 			if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
@@ -6264,26 +6290,28 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			ccIn.IsGenerated = true
 			ccIn.Generator = evRef
 			ccIn.HasGenerator = true
-			ccIn.IncludeInputs = walkClosure(ctx, srcInstance, evPbCC, srcIn)
+			ccIn.IncludeInputs = walkClosure(ctx, srcInstance, ParseVFSOrSource(evPbCC), srcIn)
 			// PR-M3-final-surgical (fix 1): the .ev.pb.cc.o consumer must not
 			// carry its OWN .ev.pb.h in inputs[] (REF omits the self-include;
 			// cross-imported sibling .ev.pb.h entries remain). The walker
 			// reaches evH transitively because the .pb.cc is registered with
 			// evH as its first EmitsIncludes child — drop just that entry.
+			evHVFS := ParseVFSOrSource(evH)
 			{
-				filtered := make([]string, 0, len(ccIn.IncludeInputs))
+				filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 				for _, in := range ccIn.IncludeInputs {
-					if in == evH {
+					if in == evHVFS {
 						continue
 					}
 					filtered = append(filtered, in)
 				}
 				ccIn.IncludeInputs = filtered
 			}
+			wireFormatVFS := Source(strings.TrimPrefix(pbRuntimeBase, "$(SOURCE_ROOT)/") + "google/protobuf/wire_format.h")
 			// PR-M3-final-codegen-registry-expansion: protoc emits
 			// `#include "google/protobuf/wire_format.h"` directly. Add to inputs
 			// only on this CC node (not via registry — that would over-emit).
-			ccIn.IncludeInputs = append(ccIn.IncludeInputs, pbRuntimeBase+"google/protobuf/wire_format.h")
+			ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
 			// PR-M3-L0-codegen-deps-EV-PB: thread cross-codegen producer refs
 			// (e.g. an .ev that imports another module's .proto pulls the
 			// peer's PB into the consumer CC's deps via its .pb.h in inputs[]).
@@ -6294,8 +6322,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			// The primary input for the AR/LD memberInputs is the original .ev source.
 			// PR-M3-final-codegen-registry-expansion: wire_format.h also propagates
 			// up into the AR rollup (matched in REF on libdevtools-ymake-diag.a).
-			evSrcAbs := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
-			return ref, outPath, []string{evSrcAbs, pbRuntimeBase + "google/protobuf/wire_format.h"}, 1, true
+			return ref, outPath, []VFS{Source(srcInstance.Path + "/" + srcRel), wireFormatVFS}, 1, true
 		}
 
 	case strings.HasSuffix(srcRel, ".rl"):
@@ -6378,7 +6405,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccSrcRel := strings.TrimPrefix(r5CppOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IsGenerated = true
-		ccClosure := walkClosure(ctx, srcInstance, r5CppOut, srcIn)
+		ccClosure := walkClosure(ctx, srcInstance, ParseVFSOrSource(r5CppOut), srcIn)
 		// PR-M3-multi-output-producer-siblings: ragel5 emits two outputs
 		// (.rl.tmp intermediate + .rl5.cpp). Upstream ymake lists BOTH
 		// sibling outputs in the downstream CC's inputs[] — the consumer
@@ -6390,7 +6417,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// NOT propagate up into AR/LD memberInputs (sg2.json shows only
 		// the .rl source rolls up; the .tmp is an intermediate that does
 		// not cross module boundaries).
-		ccIn.IncludeInputs = append([]string{r5TmpOut}, ccClosure...)
+		ccIn.IncludeInputs = append([]VFS{ParseVFSOrSource(r5TmpOut)}, ccClosure...)
 		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
 		// PR-M3-L0-codegen-deps-EV-PB: thread EN/PB/EV producer refs reached
 		// through the .rl5.cpp's transitive include closure.
@@ -6412,8 +6439,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// transitive file deps under the module boundary. Uses ccClosure
 		// (NOT ccIn.IncludeInputs) so the .rl.tmp sibling stays scoped to
 		// the CC consumer and does not bleed into the AR/LD rollup.
-		rlSource := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
-		rlMemberInputs := append([]string{rlSource}, ccClosure...)
+		rlMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, ccClosure...)
 		return ccRef, ccOut, rlMemberInputs, 1, true
 
 	case strings.HasSuffix(srcRel, ".cpp.in"),
@@ -6467,7 +6493,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccSrcRel := strings.TrimPrefix(cfOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IsGenerated = true
-		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, cfOut, srcIn)
+		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, ParseVFSOrSource(cfOut), srcIn)
 		// PR-M3-L0-codegen-deps-EV-PB: thread codegen producer refs reached
 		// through the CF-generated .cpp's transitive include closure.
 		// PR-M3-L0-cascade-close-v2: also add cfRef directly — the CC
@@ -6486,8 +6512,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// the .cpp.in body via the codegen-registry EmitsIncludes edge) so
 		// the AR/LD aggregator carries the same set upstream ymake propagates
 		// via EDT_BuildFrom (json_visitor.cpp:788-789 NeedToPassInputs).
-		inSource := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
-		cfMemberInputs := append([]string{inSource}, ccIn.IncludeInputs...)
+		cfMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, ccIn.IncludeInputs...)
 		return ccRef, ccOut, cfMemberInputs, 1, true
 	}
 
@@ -6510,9 +6535,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 // to round-trip through EmitCC's emitted node. Returns the
 // `$(SOURCE_ROOT)/...` (or `$(BUILD_ROOT)/...` for IsGenerated)
 // path the CC node will use as its primary input.
-func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCInputs, sourceRoot string) string {
+func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCInputs, sourceRoot string) VFS {
 	if in.IsGenerated {
-		return "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel
+		return Build(instance.Path + "/" + srcRel)
 	}
 
 	if in.SrcDir != "" && in.SrcDir != instance.Path {
@@ -6520,11 +6545,11 @@ func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCI
 		info, err := os.Stat(localCandidate)
 
 		if err != nil || info.IsDir() {
-			return "$(SOURCE_ROOT)/" + in.SrcDir + "/" + srcRel
+			return Source(in.SrcDir + "/" + srcRel)
 		}
 	}
 
-	return "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
+	return Source(instance.Path + "/" + srcRel)
 }
 
 // joinSrcsIncludeClosure unions per-source #include closures across
@@ -6540,15 +6565,15 @@ func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCI
 // the target-arch musl layout even when the surrounding walk is host-axis.
 // The instance itself is read for module-level facts (Path, Flags.LibcMusl)
 // — its Platform identity is NOT mutated.
-func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []string {
+func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerForPlatform(scanPlatform)
 	if scanner == nil {
 		return nil
 	}
 
-	visited := make(map[string]struct{}, 1024)
-	order := make([]string, 0, 1024)
-	srcAbsSet := make(map[string]struct{}, len(sources))
+	visited := make(map[VFS]struct{}, 1024)
+	order := make([]VFS, 0, 1024)
+	srcAbsSet := make(map[VFS]struct{}, len(sources))
 
 	for _, src := range sources {
 		srcRelOnDisk := srcInstance.Path + "/" + src
@@ -6585,10 +6610,9 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 		// so set it here before invoking dfs against the shared visited+order.
 		sc.cfg.SourceRel = srcRelOnDisk
 
-		// PR-M3-vfs-paths: srcAbs is a VFS-rooted path. The scanner's
-		// internal walk operates on VFS form; the FS translation happens
-		// at the parseIncludes / fileExists boundary inside scanner.go.
-		srcAbs := "$(SOURCE_ROOT)/" + srcRelOnDisk
+		// Scanner walks operate on VFS values; the FS translation
+		// happens at parseIncludes / fileExists.
+		srcAbs := Source(srcRelOnDisk)
 		srcAbsSet[srcAbs] = struct{}{}
 		sc.dfs(srcAbs, visited, &order)
 	}
@@ -6597,19 +6621,16 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 		return nil
 	}
 
-	out := make([]string, 0, len(order))
+	out := make([]VFS, 0, len(order))
 
 	for _, abs := range order {
 		// Skip the source files themselves — JOIN_SRCS members are
-		// emitted separately as $(SOURCE_ROOT)/<path>/<src>; the
-		// scanner closure carries only headers/extras.
+		// emitted separately as Source(<path>/<src>); the scanner
+		// closure carries only headers/extras.
 		if _, isSrc := srcAbsSet[abs]; isSrc {
 			continue
 		}
 
-		// PR-M3-vfs-paths: `abs` is already in $(SOURCE_ROOT)/-rooted
-		// form (the scanner walks VFS paths internally); no translation
-		// needed before stashing it as a node Input.
 		out = append(out, abs)
 	}
 
@@ -6622,17 +6643,13 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 
 // jsCCIncludeInputs assembles `[scripts..., sources..., closure...]`
 // for the JS-derived CC's IncludeInputs slot (PR-35d).
-func jsCCIncludeInputs(srcInstance ModuleInstance, sources, closure []string) []string {
-	const (
-		joinSrcsPath = "$(SOURCE_ROOT)/build/scripts/gen_join_srcs.py"
-		procCmdFiles = "$(SOURCE_ROOT)/build/scripts/process_command_files.py"
-	)
-
-	out := make([]string, 0, 2+len(sources)+len(closure))
-	out = append(out, joinSrcsPath, procCmdFiles)
+func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []VFS) []VFS {
+	out := make([]VFS, 0, 2+len(sources)+len(closure))
+	out = append(out, Source("build/scripts/gen_join_srcs.py"))
+	out = append(out, Source("build/scripts/process_command_files.py"))
 
 	for _, s := range sources {
-		out = append(out, "$(SOURCE_ROOT)/"+srcInstance.Path+"/"+s)
+		out = append(out, Source(srcInstance.Path+"/"+s))
 	}
 
 	out = append(out, closure...)
@@ -6677,7 +6694,7 @@ func jsTargetPeerAddIncl(hostPeerAddIncl []string) []string {
 // is registration-time path resolution (matches AUDIT-3 bucket (B));
 // the os.Stat is legitimate at this layer because the answer feeds
 // path composition, not scanner-internal locator dispatch.
-func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDir string) string {
+func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDir string) VFS {
 	srcRelOnDisk := srcInstance.Path + "/" + srcRel
 
 	if srcDir != "" && srcDir != srcInstance.Path {
@@ -6689,7 +6706,7 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 		}
 	}
 
-	return vfsSource(srcRelOnDisk)
+	return Source(srcRelOnDisk)
 }
 
 // resolveCodegenDepRefs replaced by the EN/PB/EV-aware version at line 344
@@ -6707,7 +6724,7 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 // The ScanContext mirrors what cmd_args -I uses: own AddIncl + peer
 // GLOBAL AddIncl + the cc bundle's implicit baseline (linux-headers
 // and the active musl-arch include path).
-func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath string, in ModuleCCInputs) []string {
+func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerFor(srcInstance)
 	if scanner == nil {
 		return nil
@@ -6718,11 +6735,8 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath string, in Mod
 	// scanCtx reuse across sources keys correctly; for BUILD_ROOT
 	// paths it stays as set here and is never consulted by the
 	// BUILD_ROOT child branch.
-	sourceRel := strings.TrimPrefix(vfsPath, vfsSourcePrefix)
-	sourceRel = strings.TrimPrefix(sourceRel, vfsBuildPrefix)
-
 	cfg := ScanContext{
-		SourceRel:       sourceRel,
+		SourceRel:       vfsPath.Rel,
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
 		BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.LibcMusl, srcInstance.Platform.Target),

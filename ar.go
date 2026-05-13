@@ -36,6 +36,13 @@ func isBuildRootCodegenProduct(p string) bool {
 	return !strings.HasSuffix(p, ".o")
 }
 
+// isBuildRootCodegenProductRel is the VFS-internal form of
+// isBuildRootCodegenProduct. The caller has already verified the path is
+// BUILD_ROOT-anchored (VFS.IsBuild()); this checks only the suffix rule.
+func isBuildRootCodegenProductRel(rel string) bool {
+	return !strings.HasSuffix(rel, ".o")
+}
+
 // archiveNameWithPrefix returns the archive base name using the given
 // prefix instead of the default "lib". The prefix is used verbatim
 // (e.g. "lib", "libpy3", "libpy3c"). Single special case preserved:
@@ -130,7 +137,7 @@ func emitARNode(
 	objRefs []NodeRef,
 	objPaths []string,
 	peerArchiveRefs []NodeRef,
-	memberInputs []string,
+	memberInputs []VFS,
 	arPluginPath string,
 	emit Emitter,
 ) NodeRef {
@@ -180,30 +187,28 @@ func emitARNode(
 	sortedObjPaths := append([]string{}, objPaths...)
 	sort.Strings(sortedObjPaths)
 
-	inputs := make([]string, 0, len(sortedObjPaths)+2+len(memberInputs))
-	inputs = append(inputs, sortedObjPaths...)
-	inputs = append(inputs, scriptPath)
+	inputs := make([]VFS, 0, len(sortedObjPaths)+2+len(memberInputs))
+	for _, p := range sortedObjPaths {
+		inputs = append(inputs, ParseVFSOrSource(p))
+	}
+	inputs = append(inputs, ParseVFSOrSource(scriptPath))
 	// PR-M3-openssl-ar-plugin-and-as-clean: AR plugin path slots
 	// immediately after the script and before the memberInputs union
 	// (verified at sg2.json openssl AR inputs[696]).
 	if arPluginPath != "" {
-		inputs = append(inputs, arPluginPath)
+		inputs = append(inputs, ParseVFSOrSource(arPluginPath))
 	}
 	// memberInputs may legitimately repeat across members (a header
 	// included from two .c files). Dedup against the union including
 	// the .o set so an unexpected collision (e.g. a .o path that
 	// also somehow appears as a member input) doesn't double up.
-	objSet := map[string]struct{}{}
-	for _, p := range sortedObjPaths {
-		objSet[p] = struct{}{}
-	}
-	objSet[scriptPath] = struct{}{}
-	if arPluginPath != "" {
-		objSet[arPluginPath] = struct{}{}
+	objSet := map[VFS]struct{}{}
+	for _, v := range inputs {
+		objSet[v] = struct{}{}
 	}
 
-	for _, p := range memberInputs {
-		if _, dup := objSet[p]; dup {
+	for _, pV := range memberInputs {
+		if _, dup := objSet[pV]; dup {
 			continue
 		}
 
@@ -218,12 +223,12 @@ func emitARNode(
 		// inputs at this point are by definition non-.o (the closure
 		// walker yielded a generated header / source through a
 		// member's #include chain).
-		if isBuildRootCodegenProduct(p) {
+		if pV.IsBuild() && isBuildRootCodegenProductRel(pV.Rel) {
 			continue
 		}
 
-		objSet[p] = struct{}{}
-		inputs = append(inputs, p)
+		objSet[pV] = struct{}{}
+		inputs = append(inputs, pV)
 	}
 
 	// Built as separate literals (not a shared variable) so
@@ -270,13 +275,13 @@ func emitARNode(
 			},
 		},
 		Env:    topEnv,
-		Inputs: ToVFSSlice(inputs),
+		Inputs: inputs,
 		KV: map[string]string{
 			"p":        "AR",
 			"pc":       "light-red",
 			"show_out": "yes",
 		},
-		Outputs:      ToVFSSlice([]string{archivePath}),
+		Outputs:      []VFS{Build(strings.TrimPrefix(archivePath, "$(BUILD_ROOT)/"))},
 		Platform:     string(instance.Platform.Target),
 		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
@@ -322,7 +327,7 @@ func EmitAR(
 	objRefs []NodeRef,
 	objPaths []string,
 	peerArchiveRefs []NodeRef,
-	memberInputs []string,
+	memberInputs []VFS,
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
@@ -350,7 +355,7 @@ func EmitARGlobal(
 	instance ModuleInstance,
 	objRefs []NodeRef,
 	objPaths []string,
-	memberInputs []string,
+	memberInputs []VFS,
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
@@ -379,7 +384,7 @@ func EmitARNamed(
 	objRefs []NodeRef,
 	objPaths []string,
 	peerArchiveRefs []NodeRef,
-	memberInputs []string,
+	memberInputs []VFS,
 	arPluginPath string,
 	emit Emitter,
 ) NodeRef {
@@ -404,7 +409,7 @@ func EmitARNamedTagged(
 	objRefs []NodeRef,
 	objPaths []string,
 	peerArchiveRefs []NodeRef,
-	memberInputs []string,
+	memberInputs []VFS,
 	arPluginPath string,
 	emit Emitter,
 ) NodeRef {
@@ -428,7 +433,7 @@ func EmitARGlobalNamedTagged(
 	tag string,
 	objRefs []NodeRef,
 	objPaths []string,
-	memberInputs []string,
+	memberInputs []VFS,
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
@@ -447,7 +452,7 @@ func EmitARGlobalNamed(
 	archiveBaseName string,
 	objRefs []NodeRef,
 	objPaths []string,
-	memberInputs []string,
+	memberInputs []VFS,
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
