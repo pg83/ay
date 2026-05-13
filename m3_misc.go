@@ -24,8 +24,8 @@ import (
 //   cmd[0]: ragel5 -o <tmpPath> <srcPath>
 //   cmd[1]: rlgen-cd -G2 -o <cppPath> <tmpPath>
 //
-// tmpPath  = $(BUILD_ROOT)/<modulePath>/<srcRel>.tmp
-// cppPath  = $(BUILD_ROOT)/<modulePath>/<srcRel without .rl>.rl5.cpp
+// tmpPath  = $(B)/<modulePath>/<srcRel>.tmp
+// cppPath  = $(B)/<modulePath>/<srcRel without .rl>.rl5.cpp
 //
 // Returns (R5 NodeRef, tmpPath, cppPath).
 func EmitR5(
@@ -37,13 +37,13 @@ func EmitR5(
 	rlgenCdBinPath string,
 	emit Emitter,
 ) (NodeRef, string, string) {
-	srcPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
-	tmpPath := "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + ".tmp"
+	srcPath := "$(S)/" + instance.Path + "/" + srcRel
+	tmpPath := "$(B)/" + instance.Path + "/" + srcRel + ".tmp"
 	// Output: strip .rl suffix, append .rl5.cpp.
-	cppPath := "$(BUILD_ROOT)/" + instance.Path + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp"
+	cppPath := "$(B)/" + instance.Path + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp"
 
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
 	cmd0 := Cmd{
@@ -118,13 +118,13 @@ func EmitR5(
 const jdkResourcePath = "$(JDK17-564746473)/bin/java"
 
 // antlr4JarPath is the source-relative path to the ANTLR4 jar.
-const antlr4JarPath = "$(SOURCE_ROOT)/contrib/java/antlr/antlr4/antlr.jar"
+const antlr4JarPath = "$(S)/contrib/java/antlr/antlr4/antlr.jar"
 
 var antlr4JarVFS = Source("contrib/java/antlr/antlr4/antlr.jar")
 
 // stdout2stderrPath is the wrapper script that redirects antlr4's stdout to
 // stderr (required so the build system captures diagnostic output correctly).
-const stdout2stderrPath = "$(SOURCE_ROOT)/build/scripts/stdout2stderr.py"
+const stdout2stderrPath = "$(S)/build/scripts/stdout2stderr.py"
 
 // python3Path is the system python3 binary, consistent with cp.go.
 const python3Path = "/ix/realm/pg/bin/python3"
@@ -138,7 +138,7 @@ const python3Path = "/ix/realm/pg/bin/python3"
 // Reference cmd_args shape (single-grammar form):
 //
 //	[python3, stdout2stderr.py, jdk/bin/java, -jar, antlr4.jar,
-//	 <grammar.g4>, -Dlanguage=Cpp, -o, $(BUILD_ROOT)/<modulePath>,
+//	 <grammar.g4>, -Dlanguage=Cpp, -o, $(B)/<modulePath>,
 //	 <visitor?-visitor:-no-visitor>, <listener?-listener:-no-listener>,
 //	 ...options]
 //
@@ -147,7 +147,7 @@ const python3Path = "/ix/realm/pg/bin/python3"
 //	<grammar>Parser.h, <grammar>Visitor.h, <grammar>BaseVisitor.h
 //
 // Inputs: [grammar.g4, stdout2stderr.py, antlr4.jar]
-// cwd: $(BUILD_ROOT)/<modulePath>
+// cwd: $(B)/<modulePath>
 func EmitJV(
 	instance ModuleInstance,
 	grammar string,
@@ -156,8 +156,8 @@ func EmitJV(
 	listener bool,
 	emit Emitter,
 ) NodeRef {
-	grammarAbs := "$(SOURCE_ROOT)/" + instance.Path + "/" + grammar
-	outDir := "$(BUILD_ROOT)/" + instance.Path
+	grammarAbs := "$(S)/" + instance.Path + "/" + grammar
+	outDir := "$(B)/" + instance.Path
 
 	cmdArgs := []string{
 		python3Path,
@@ -181,7 +181,7 @@ func EmitJV(
 	cmdArgs = append(cmdArgs, options...)
 
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
 	inputs := []VFS{
@@ -241,7 +241,7 @@ func EmitJV(
 //
 //	[python3, stdout2stderr.py, jdk/bin/java, -jar, antlr4.jar,
 //	 lexerGrammar.g4, parserGrammar.g4, -Dlanguage=Cpp,
-//	 -o, $(BUILD_ROOT)/<modulePath>, -visitor, -no-listener]
+//	 -o, $(B)/<modulePath>, -visitor, -no-listener]
 //
 // Outputs: CmdLexer.cpp, CmdLexer.h, CmdParser.cpp, CmdParser.h,
 //
@@ -254,9 +254,9 @@ func EmitJVSplit(
 	listener bool,
 	emit Emitter,
 ) NodeRef {
-	lexerAbs := "$(SOURCE_ROOT)/" + instance.Path + "/" + lexer
-	parserAbs := "$(SOURCE_ROOT)/" + instance.Path + "/" + parser
-	outDir := "$(BUILD_ROOT)/" + instance.Path
+	lexerAbs := "$(S)/" + instance.Path + "/" + lexer
+	parserAbs := "$(S)/" + instance.Path + "/" + parser
+	outDir := "$(B)/" + instance.Path
 
 	cmdArgs := []string{
 		python3Path,
@@ -280,7 +280,7 @@ func EmitJVSplit(
 	}
 
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
 	inputs := []VFS{
@@ -340,7 +340,7 @@ func EmitJVSplit(
 
 // configureFilePyPath is the source-relative path to the configure_file.py
 // script used in all CF nodes.
-const configureFilePyPath = "$(SOURCE_ROOT)/build/scripts/configure_file.py"
+const configureFilePyPath = "$(S)/build/scripts/configure_file.py"
 
 // buildTypeDebug is the BUILD_TYPE configuration variable injected by the
 // build system. Hardcoded to DEBUG for the M3 debug build.
@@ -352,8 +352,8 @@ const buildTypeDebug = "BUILD_TYPE=DEBUG"
 // cmd_args shape:
 //
 //	[python3, configure_file.py,
-//	 $(SOURCE_ROOT)/<modulePath>/<srcRel>,
-//	 $(BUILD_ROOT)/<modulePath>/<srcRel without .in>,
+//	 $(S)/<modulePath>/<srcRel>,
+//	 $(B)/<modulePath>/<srcRel without .in>,
 //	 <cfgVars...>]
 //
 // cfgVars are derived from DEFAULT(name value) declarations in the
@@ -361,7 +361,7 @@ const buildTypeDebug = "BUILD_TYPE=DEBUG"
 // BUILD_TYPE=DEBUG injected for any module that references @BUILD_TYPE@.
 //
 // Inputs: [configure_file.py, source .cpp.in, ...header closure of the .in]
-// Outputs: [$(BUILD_ROOT)/<modulePath>/<srcRel without .in>]
+// Outputs: [$(B)/<modulePath>/<srcRel without .in>]
 //
 // Returns (CF NodeRef, outputPath).
 func EmitCF(
@@ -370,13 +370,13 @@ func EmitCF(
 	in ModuleCCInputs,
 	emit Emitter,
 ) (NodeRef, string) {
-	srcAbs := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
+	srcAbs := "$(S)/" + instance.Path + "/" + srcRel
 	// Strip .in suffix to get output path.
 	outRel := strings.TrimSuffix(srcRel, ".in")
-	outAbs := "$(BUILD_ROOT)/" + instance.Path + "/" + outRel
+	outAbs := "$(B)/" + instance.Path + "/" + outRel
 
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
 	// Build cfg vars list.  Only include DEFAULT-declared vars whose
@@ -441,7 +441,7 @@ var cfgVarRefRe = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
 // @VAR@ in the .in source file and emitted in alphabetical order.
 //
 // srcDiskPath is the real on-disk path to the .in source (not the
-// $(SOURCE_ROOT)/... macro path) so the file can be read to scan for
+// $(S)/... macro path) so the file can be read to scan for
 // @VAR@ references.
 //
 // ymake's $CFG_VARS logic:
@@ -505,14 +505,14 @@ func buildCFGVars(srcDiskPath string, defaultVars map[string]string, defaultVarO
 // ─── BI ──────────────────────────────────────────────────────────────────────
 
 // yieldLinePyPath is the source-relative path to the yield_line.py script.
-const yieldLinePyPath = "$(SOURCE_ROOT)/build/scripts/yield_line.py"
+const yieldLinePyPath = "$(S)/build/scripts/yield_line.py"
 
 // xargsPyPath is the source-relative path to the xargs.py script.
-const xargsPyPath = "$(SOURCE_ROOT)/build/scripts/xargs.py"
+const xargsPyPath = "$(S)/build/scripts/xargs.py"
 
 // buildInfoGenPyPath is the source-relative path to the build_info_gen.py
 // script invoked by xargs.py in the BI node.
-const buildInfoGenPyPath = "$(SOURCE_ROOT)/build/scripts/build_info_gen.py"
+const buildInfoGenPyPath = "$(S)/build/scripts/build_info_gen.py"
 
 // EmitBI emits a BI node for CREATE_BUILDINFO_FOR(outputHeader).
 //
@@ -532,18 +532,18 @@ const buildInfoGenPyPath = "$(SOURCE_ROOT)/build/scripts/build_info_gen.py"
 // unaffected, while the L3 comparator (which preserves the field)
 // now matches REF on the BI node.
 // inputs: [yield_line.py, xargs.py, build_info_gen.py]
-// outputs: [$(BUILD_ROOT)/<modulePath>/<outputHeader>]
+// outputs: [$(B)/<modulePath>/<outputHeader>]
 func EmitBI(
 	instance ModuleInstance,
 	outputHeader string,
 	cxxFlags []string,
 	emit Emitter,
 ) NodeRef {
-	argsFile := "$(BUILD_ROOT)/" + instance.Path + "/__args"
-	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + outputHeader
+	argsFile := "$(B)/" + instance.Path + "/__args"
+	outputPath := "$(B)/" + instance.Path + "/" + outputHeader
 
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
 	// cmd[0]: yield the CXX compiler path into __args.
@@ -678,11 +678,11 @@ func biFlagsForInstance(targetP *Platform) []string {
 //
 // cmd_args shape:
 //
-//	[toolBinPath, <args with ${ARCADIA_ROOT}→$(SOURCE_ROOT) substitution>]
+//	[toolBinPath, <args with ${ARCADIA_ROOT}→$(S) substitution>]
 //
-// IN files in args are expanded to $(SOURCE_ROOT)/<modulePath>/<file>.
-// OUT / OUT_NOAUTO files are expanded to $(BUILD_ROOT)/<modulePath>/<file>.
-// STDOUT redirects cmd's stdout to $(BUILD_ROOT)/<modulePath>/<file>.
+// IN files in args are expanded to $(S)/<modulePath>/<file>.
+// OUT / OUT_NOAUTO files are expanded to $(B)/<modulePath>/<file>.
+// STDOUT redirects cmd's stdout to $(B)/<modulePath>/<file>.
 //
 // inputs: [toolBinPath, ...IN file abs paths, ...input header closure]
 // outputs: [stdout path] or [OUT/OUT_NOAUTO abs paths]
@@ -700,7 +700,7 @@ func EmitPR(
 	emit Emitter,
 ) NodeRef {
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 	for _, kv := range stmt.EnvPairs {
 		parts := strings.SplitN(kv, "=", 2)
@@ -711,7 +711,7 @@ func EmitPR(
 		}
 	}
 
-	// Expand positional args: substitute ${ARCADIA_ROOT} → $(SOURCE_ROOT),
+	// Expand positional args: substitute ${ARCADIA_ROOT} → $(S),
 	// substitute ${MODDIR} → instance.Path, and expand bare filenames
 	// referenced by IN / OUT / OUT_NOAUTO / STDOUT to absolute paths.
 	inSet := make(map[string]bool, len(stmt.INFiles))
@@ -732,17 +732,17 @@ func EmitPR(
 	cmdArgs := make([]string, 0, 1+len(stmt.Args))
 	cmdArgs = append(cmdArgs, toolBinPath)
 	for _, a := range stmt.Args {
-		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(SOURCE_ROOT)")
+		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path)
 		// If the arg is a plain filename (no path sep, no - prefix, no =),
 		// and appears in IN list, expand to SOURCE_ROOT abs.
 		if inSet[a] && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = "$(SOURCE_ROOT)/" + instance.Path + "/" + a
+			a = "$(S)/" + instance.Path + "/" + a
 		} else if outSet[a] && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			// Bare OUT / OUT_NOAUTO / STDOUT basenames are rewritten to
-			// $(BUILD_ROOT)/<modulePath>/<basename> so the consumer
+			// $(B)/<modulePath>/<basename> so the consumer
 			// references the generated artifact's absolute path.
-			a = "$(BUILD_ROOT)/" + instance.Path + "/" + a
+			a = "$(B)/" + instance.Path + "/" + a
 		}
 		cmdArgs = append(cmdArgs, a)
 	}
@@ -777,7 +777,7 @@ func EmitPR(
 	var outputs []VFS
 	var stdoutPath string
 	if stmt.StdoutFile != "" {
-		stdoutPath = "$(BUILD_ROOT)/" + instance.Path + "/" + stmt.StdoutFile
+		stdoutPath = "$(B)/" + instance.Path + "/" + stmt.StdoutFile
 		outputs = append(outputs, Build(instance.Path+"/"+stmt.StdoutFile))
 	}
 	for _, f := range stmt.OUTFiles {
@@ -855,17 +855,17 @@ func EmitPR(
 // The CF emitter for .cpp.in/.c.in sources is already handled in
 // emitOneSource; this function handles only the explicit CONFIGURE_FILE()
 // macro form (not the implicit .in-source form).
-// antlr4RuntimeHeaderPath is the $(SOURCE_ROOT)-rooted path to the
+// antlr4RuntimeHeaderPath is the $(S)-rooted path to the
 // antlr4 C++ umbrella header included by all ANTLR4-generated .h files.
 // F-7-B uses it as the static EmitsIncludes for JV .h outputs.
-const antlr4RuntimeHeaderPath = "$(SOURCE_ROOT)/contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h"
+const antlr4RuntimeHeaderPath = "$(S)/contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h"
 
 // antlr4FsToolsPath / antlr4ProcCmdFiles are the build-script helpers
 // threaded into JV-derived CP/CC node inputs (matching the reference
 // sg2.json shape where every g4.cpp CP/CC inputs these paths after the
 // JV primary output and before the grammar .g4 files).
-const antlr4FsToolsPath = "$(SOURCE_ROOT)/build/scripts/fs_tools.py"
-const antlr4ProcCmdFiles = "$(SOURCE_ROOT)/build/scripts/process_command_files.py"
+const antlr4FsToolsPath = "$(S)/build/scripts/fs_tools.py"
+const antlr4ProcCmdFiles = "$(S)/build/scripts/process_command_files.py"
 
 // VFS-typed variants of antlr4FsToolsPath / antlr4ProcCmdFiles used by the
 // VFS-internal flow (PR-M3-vfs-typed-paths). cmd_args still consume the
@@ -879,7 +879,7 @@ var antlr4ProcCmdVFS = Source("build/scripts/process_command_files.py")
 // rename + compile), returning per-CC (refs, outputPaths, memberInputs)
 // for the caller to fold into the enclosing AR member accumulators.
 func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS, memberInputsList [][]VFS) {
-	outDir := "$(BUILD_ROOT)/" + instance.Path
+	outDir := "$(B)/" + instance.Path
 	reg := codegenRegForInstance(ctx, instance)
 
 	// JV: emit one node per ANTLR4 grammar declaration.
@@ -898,8 +898,8 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 			if reg != nil {
-				lexerG4 := "$(SOURCE_ROOT)/" + instance.Path + "/" + g.Lexer
-				parserG4 := "$(SOURCE_ROOT)/" + instance.Path + "/" + g.Parser
+				lexerG4 := "$(S)/" + instance.Path + "/" + g.Lexer
+				parserG4 := "$(S)/" + instance.Path + "/" + g.Parser
 				lexerCpp := outDir + "/" + lexerBase + ".cpp"
 				witnessIncludes := []string{
 					antlr4RuntimeHeaderPath,
@@ -952,7 +952,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			// PR-M3-L0-cascade-close-v2: ProducerRef = jvRef.
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 			if reg != nil {
-				grammarG4 := "$(SOURCE_ROOT)/" + instance.Path + "/" + g.Grammar
+				grammarG4 := "$(S)/" + instance.Path + "/" + g.Grammar
 				lexerCpp := outDir + "/" + base + "Lexer.cpp"
 				witnessIncludes := []string{
 					antlr4RuntimeHeaderPath,
@@ -1061,7 +1061,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 // jvInputs are the JV node's Inputs (grammar .g4 files + scripts + jar).
 // outputIncludes carries the repo-relative headers from the macro's
 // OUTPUT_INCLUDES keyword (PR-M3-jv-antlr-system-headers); they are
-// rebased to $(SOURCE_ROOT)/... and appended to the CP `.g4.cpp`
+// rebased to $(S)/... and appended to the CP `.g4.cpp`
 // EmitsIncludes so the CC scan walks their transitive closure.
 func emitJVDownstreamCPCC(
 	ctx *genCtx,
@@ -1081,13 +1081,13 @@ func emitJVDownstreamCPCC(
 
 		// Derive the .g4.cpp name: replace .cpp suffix with .g4.cpp.
 		base := strings.TrimSuffix(filepath.Base(srcCpp), ".cpp")
-		g4CppPath := "$(BUILD_ROOT)/" + instance.Path + "/" + base + ".g4.cpp"
+		g4CppPath := "$(B)/" + instance.Path + "/" + base + ".g4.cpp"
 		g4CppRel := base + ".g4.cpp"
 
 		// Register the .g4.cpp in the codegen registry so walkClosure
 		// can resolve its transitive antlr4-runtime.h include chain.
 		// PR-M3-jv-antlr-system-headers: also seed the registry entry with
-		// the macro's OUTPUT_INCLUDES (rebased to $(SOURCE_ROOT)/...). The
+		// the macro's OUTPUT_INCLUDES (rebased to $(S)/...). The
 		// scanner walks each entry transitively via the FS locator, so the
 		// downstream system-header closure (e.g. util/generic/string.h →
 		// glibcasm / musl / cxxsupp) lands in the CP/CC inputs naturally.
@@ -1095,7 +1095,7 @@ func emitJVDownstreamCPCC(
 			emits := make([]string, 0, 1+len(outputIncludes))
 			emits = append(emits, antlr4RuntimeHeaderPath)
 			for _, h := range outputIncludes {
-				emits = append(emits, "$(SOURCE_ROOT)/"+h)
+				emits = append(emits, "$(S)/"+h)
 			}
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "CP",
@@ -1178,7 +1178,7 @@ func emitJVDownstreamCPCC(
 //
 // PR-AUDIT-5: implements the Python→Ragel→C++ chain's terminal case
 // (PR→CC). RUN_PROGRAM with `STDOUT foo.cpp` (or `OUT foo.cpp`) emits
-// the .cpp under $(BUILD_ROOT)/<instance.Path>/foo.cpp; the consuming
+// the .cpp under $(B)/<instance.Path>/foo.cpp; the consuming
 // CC node compiles it into <foo>.cpp.o which the surrounding AR/LD
 // archives alongside the module's regular SRCS.
 //
@@ -1259,13 +1259,13 @@ const archiverToolPath = "tools/archiver"
 //
 // Reference cmd_args shape (sg2.json):
 //
-//	$(BUILD_ROOT)/tools/archiver/archiver -q -x [-p] <file1>: [<file2>:] -o <NAME-absolute>
+//	$(B)/tools/archiver/archiver -q -x [-p] <file1>: [<file2>:] -o <NAME-absolute>
 //
 // Each archived file is rendered with a trailing colon (`${suf=\:;input}`
 // in the upstream macro) and resolved to its BUILD_ROOT-absolute path when
 // it names a PR-produced artifact in the same module; otherwise it is
 // treated as a SOURCE_ROOT-relative path and rendered as
-// `$(SOURCE_ROOT)/<modulePath>/<file>`.
+// `$(S)/<modulePath>/<file>`.
 //
 // Inputs: the PR-produced files (as BUILD_ROOT paths), the archiver tool
 // path, the producer PR's IN files (rebased to SOURCE_ROOT). Deps: the
@@ -1282,7 +1282,7 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	toolInstance.Flags = inferFlagsFromPath(archiverToolPath, true)
 
 	var (
-		toolBinPath = "$(BUILD_ROOT)/" + archiverToolPath + "/archiver"
+		toolBinPath = "$(B)/" + archiverToolPath + "/archiver"
 		toolLDRef   NodeRef
 	)
 	if exc := Try(func() {
@@ -1308,7 +1308,7 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		seen := map[string]struct{}{}
 		for _, rp := range d.runPrograms {
 			for _, f := range rp.INFiles {
-				p := "$(SOURCE_ROOT)/" + instance.Path + "/" + f
+				p := "$(S)/" + instance.Path + "/" + f
 				if _, dup := seen[p]; dup {
 					continue
 				}
@@ -1338,7 +1338,7 @@ func emitArchive(
 	emit Emitter,
 	reg *CodegenRegistry,
 ) {
-	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + a.Name
+	archivePath := "$(B)/" + instance.Path + "/" + a.Name
 
 	// Build cmd_args. Each archived file is rendered with a trailing
 	// colon per upstream `${suf=\:;input:Files}`.
@@ -1359,7 +1359,7 @@ func emitArchive(
 		// the producer's BUILD_ROOT-absolute path and record the PR
 		// NodeRef for dep wiring. Otherwise treat as SOURCE_ROOT-
 		// relative to the module dir.
-		abs := "$(BUILD_ROOT)/" + instance.Path + "/" + f
+		abs := "$(B)/" + instance.Path + "/" + f
 		isPRProduced := false
 		if d.prOutputProducer != nil {
 			if ref, ok := d.prOutputProducer[f]; ok {
@@ -1371,7 +1371,7 @@ func emitArchive(
 			}
 		}
 		if !isPRProduced {
-			abs = "$(SOURCE_ROOT)/" + instance.Path + "/" + f
+			abs = "$(S)/" + instance.Path + "/" + f
 		}
 		pathPerFile = append(pathPerFile, abs)
 		cmdArgs = append(cmdArgs, abs+":")
@@ -1428,7 +1428,7 @@ func emitArchive(
 				continue
 			}
 			collect := func(rel string) {
-				p := "$(BUILD_ROOT)/" + instance.Path + "/" + rel
+				p := "$(B)/" + instance.Path + "/" + rel
 				if p > maxArchived {
 					return
 				}
@@ -1496,7 +1496,7 @@ func emitArchive(
 		depRefs = append(depRefs, toolLDRef)
 	}
 
-	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)"}
+	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 
 	// PR-M3-platform-pair-step5: tags + host_platform + platform from
 	// the Platform pair passed by caller. Empty `instance.Platform.Tags` keeps
@@ -1571,8 +1571,8 @@ func isCCSourceExt(p string) bool {
 // itself with EmitsIncludes=nil — opaque tool output — so the closure
 // is empty unless a future PR-AUDIT iteration populates it).
 //
-// The PR-emitted source lives at $(BUILD_ROOT)/<instance.Path>/<out>;
-// composeCCPaths' IsGenerated branch yields $(BUILD_ROOT)/<instance.
+// The PR-emitted source lives at $(B)/<instance.Path>/<out>;
+// composeCCPaths' IsGenerated branch yields $(B)/<instance.
 // Path>/<out>.o for the output (flat layout when <out> has no `/`).
 func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef NodeRef, in ModuleCCInputs) (NodeRef, VFS, []VFS) {
 	// PR-M3-L0-cascade-close-v2: thread prRef as the downstream CC's
@@ -1586,13 +1586,13 @@ func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef 
 // emitCodegenDownstreamCC emits the downstream CC for a codegen producer's
 // `.cpp/.cc/.cxx/.c` output. PR-M3-codegen-cc-enqueue generalises
 // emitPRDownstreamCC to every codegen kind whose .cpp output lives under
-// $(BUILD_ROOT)/<instance.Path>/<cppRel> AND whose owning module compiles
+// $(B)/<instance.Path>/<cppRel> AND whose owning module compiles
 // that source as an implicit AR member (EN's `.h_serialized.cpp`, PR's
 // STDOUT/OUT .cpp, etc.). The shape mirrors the existing PR/R6/R5/EV
 // downstream-CC pattern:
 //
 //   - IsGenerated=true so composeCCPaths roots the input/output under
-//     $(BUILD_ROOT)/<instance.Path>/<cppRel>{,.o,.pic.o} (flat layout for
+//     $(B)/<instance.Path>/<cppRel>{,.o,.pic.o} (flat layout for
 //     a slash-free cppRel; `_/<cppRel>` infix when cppRel contains `/`).
 //   - IncludeInputs from walkClosure() rooted at the codegen .cpp's
 //     registered VFS path — the producer (EN/PR/EV/...) must have
@@ -1719,11 +1719,11 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		toolInducedDeps = res.InducedDeps
 	}); exc != nil {
 		// Swallow parse errors (tool may not fully parse); use fallback path.
-		toolBinPath = "$(BUILD_ROOT)/" + toolPath + "/" + filepath.Base(toolPath)
+		toolBinPath = "$(B)/" + toolPath + "/" + filepath.Base(toolPath)
 	}
 
 	// F-7-B: register PR outputs FIRST so the closure walk below can resolve
-	// each output's $(BUILD_ROOT) path through the codegen registry. PR outputs
+	// each output's $(B) path through the codegen registry. PR outputs
 	// are generated files (possibly .h headers) but their include content is
 	// tool-specific and opaque at gen time.
 	//
@@ -1749,21 +1749,21 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		for _, f := range stmt.OUTFiles {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
-				OutputPath:    "$(BUILD_ROOT)/" + instance.Path + "/" + f,
+				OutputPath:    "$(B)/" + instance.Path + "/" + f,
 				EmitsIncludes: prEmitsIncludes(instance, f, stmt, toolInducedDeps),
 			})
 		}
 		for _, f := range stmt.OUTNoAutoFiles {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
-				OutputPath:    "$(BUILD_ROOT)/" + instance.Path + "/" + f,
+				OutputPath:    "$(B)/" + instance.Path + "/" + f,
 				EmitsIncludes: prEmitsIncludes(instance, f, stmt, toolInducedDeps),
 			})
 		}
 		if stmt.StdoutFile != "" {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
-				OutputPath:    "$(BUILD_ROOT)/" + instance.Path + "/" + stmt.StdoutFile,
+				OutputPath:    "$(B)/" + instance.Path + "/" + stmt.StdoutFile,
 				EmitsIncludes: prEmitsIncludes(instance, stmt.StdoutFile, stmt, toolInducedDeps),
 			})
 		}
@@ -1797,13 +1797,13 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// (NodeRef not yet known); SetProducerRef fills it in atomically.
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			reg.SetProducerRef("$(BUILD_ROOT)/"+instance.Path+"/"+f, prRef)
+			reg.SetProducerRef("$(B)/"+instance.Path+"/"+f, prRef)
 		}
 		for _, f := range stmt.OUTNoAutoFiles {
-			reg.SetProducerRef("$(BUILD_ROOT)/"+instance.Path+"/"+f, prRef)
+			reg.SetProducerRef("$(B)/"+instance.Path+"/"+f, prRef)
 		}
 		if stmt.StdoutFile != "" {
-			reg.SetProducerRef("$(BUILD_ROOT)/"+instance.Path+"/"+stmt.StdoutFile, prRef)
+			reg.SetProducerRef("$(B)/"+instance.Path+"/"+stmt.StdoutFile, prRef)
 		}
 	}
 
@@ -1881,18 +1881,18 @@ func prEmitsIncludes(instance ModuleInstance, outFile string, stmt *RunProgramSt
 
 	// IN files are module-relative; rebase to SOURCE_ROOT.
 	for _, f := range stmt.INFiles {
-		includes = append(includes, "$(SOURCE_ROOT)/"+instance.Path+"/"+f)
+		includes = append(includes, "$(S)/"+instance.Path+"/"+f)
 	}
 
 	// OUTPUT_INCLUDES entries are repo-relative (e.g.
 	// `devtools/ymake/symbols/file_store.h`); rebase to SOURCE_ROOT.
 	for _, f := range stmt.OutputIncludes {
-		includes = append(includes, "$(SOURCE_ROOT)/"+f)
+		includes = append(includes, "$(S)/"+f)
 	}
 
 	// Tool-declared INDUCED_DEPS (repo-relative); rebase to SOURCE_ROOT.
 	for _, f := range toolInducedDeps {
-		includes = append(includes, "$(SOURCE_ROOT)/"+f)
+		includes = append(includes, "$(S)/"+f)
 	}
 
 	return includes

@@ -26,7 +26,7 @@ import (
 // ANTLR lex/parse outputs, etc.) is wired through the constituent
 // CC's own `inputs` slot only.
 func isBuildRootCodegenProduct(p string) bool {
-	if !strings.HasPrefix(p, "$(BUILD_ROOT)/") {
+	if !strings.HasPrefix(p, "$(B)/") {
 		return false
 	}
 	// .o is the only BUILD_ROOT extension legitimately carried by an
@@ -108,7 +108,7 @@ func globalArchiveNameWithPrefix(moduleDir, prefix string) string {
 }
 
 // emitARNode is the shared implementation used by EmitAR and
-// EmitARGlobal. archivePath is the full $(BUILD_ROOT)-rooted output
+// EmitARGlobal. archivePath is the full $(B)-rooted output
 // path; tag is either "" or "global" and, when non-empty, is added
 // to target_properties. peerArchiveRefs are added to DepRefs only —
 // NOT to cmd_args or inputs — because ar(1) archives .o files; peer
@@ -146,7 +146,7 @@ func emitARNode(
 	// Built as separate literals (not a shared variable) so
 	// downstream mutation of one map can't leak into the other.
 	cmdEnv := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 		"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
 	}
 
@@ -169,7 +169,7 @@ func emitARNode(
 		"ar",
 		"GNU_AR",
 		"None",
-		"$(BUILD_ROOT)",
+		"$(B)",
 		"None",
 		"--",
 	}
@@ -216,7 +216,7 @@ func emitARNode(
 
 		// PR-M3-l2-aggregator: drop BUILD_ROOT-rooted codegen products.
 		// Reference graph (sg2.json) constrains AR `inputs` to .o
-		// objects under $(BUILD_ROOT) — every non-.o codegen artifact
+		// objects under $(B) — every non-.o codegen artifact
 		// (e.g. `*.ev.pb.{cc,h}`, `*_serialized.{cpp,h}`, `*.pb.h`,
 		// ANTLR `*.{h,cpp}` lex/parse outputs) is wired implicitly via
 		// the constituent CC's own `inputs` slot and must not leak into
@@ -236,7 +236,7 @@ func emitARNode(
 	// Built as separate literals (not a shared variable) so
 	// downstream mutation of one map can't leak into the other.
 	topEnv := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 		"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
 	}
 
@@ -301,7 +301,7 @@ func emitARNode(
 
 // EmitAR emits an AR node that archives the .o files (passed via
 // objRefs/objPaths) into
-// $(BUILD_ROOT)/<instance.Path>/<ArchiveName(instance.Path)> for the
+// $(B)/<instance.Path>/<ArchiveName(instance.Path)> for the
 // given module context.
 //
 // objRefs and objPaths must have the same length; they carry only
@@ -375,9 +375,9 @@ func EmitARGlobal(
 // the "libpy3…" naming convention.
 //
 // archiveBaseName must be just the filename (e.g. "libpy3foo.a"), NOT a
-// full path — the function prepends "$(BUILD_ROOT)/<instance.Path>/".
+// full path — the function prepends "$(B)/<instance.Path>/".
 //
-// arPluginPath is the AR_PLUGIN's resolved $(SOURCE_ROOT)-rooted path
+// arPluginPath is the AR_PLUGIN's resolved $(S)-rooted path
 // (empty when no AR_PLUGIN macro fired on the owning module).
 // PR-M3-openssl-ar-plugin-and-as-clean.
 func EmitARNamed(

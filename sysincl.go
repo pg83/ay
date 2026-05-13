@@ -483,7 +483,7 @@ func (v PerSourceView) computeActiveIncluderRecords(includerPath string) []*SysI
 // linux-headers.yml is intentionally absent: ymake loads it only
 // when OS_LINUX != "yes" (build/conf/sysincl.conf:69). Linux headers
 // reach the closure via the per-module/per-bundle ADDINCL paths
-// (-I$(SOURCE_ROOT)/contrib/libs/linux-headers etc.) and through
+// (-I$(S)/contrib/libs/linux-headers etc.) and through
 // the include scanner's transitive walk, not through sysincl
 // resolution.
 //

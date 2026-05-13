@@ -16,18 +16,18 @@ package main
 // tracked via genCtx.enOutputs and wired at emit time.
 //
 // cmd_args shape:
-//   [enumParserBinary, $(SOURCE_ROOT)/<path>/<header>.h,
+//   [enumParserBinary, $(S)/<path>/<header>.h,
 //    --include-path, <path>/<header>.h,
-//    --output, $(BUILD_ROOT)/<path>/<header>.h_serialized.cpp
-//    [--header, $(BUILD_ROOT)/<path>/<header>.h_serialized.h]]
+//    --output, $(B)/<path>/<header>.h_serialized.cpp
+//    [--header, $(B)/<path>/<header>.h_serialized.h]]
 //
 // inputs shape:
 //   [dep-EN-outputs..., enumParserBinary,
-//    $(SOURCE_ROOT)/<path>/<header>.h, ...headerIncludeClosure]
+//    $(S)/<path>/<header>.h, ...headerIncludeClosure]
 
 // enumParserBinaryPath is the canonical invocation path for the
 // enum_parser host binary. Used in cmd_args[0] and inputs.
-const enumParserBinaryPath = "$(BUILD_ROOT)/tools/enum_parser/enum_parser/enum_parser"
+const enumParserBinaryPath = "$(B)/tools/enum_parser/enum_parser/enum_parser"
 
 // EmitEN emits one EN node for a GENERATE_ENUM_SERIALIZATION(*)
 // invocation.
@@ -39,7 +39,7 @@ const enumParserBinaryPath = "$(BUILD_ROOT)/tools/enum_parser/enum_parser/enum_p
 //     _WITH_HEADER (adds --header + produces .h output).
 //   - enumParserLD: NodeRef of the tools/enum_parser/enum_parser
 //     host LD node; may be zero when the host walk failed.
-//   - enumParserBin: $(BUILD_ROOT)-rooted path to the binary
+//   - enumParserBin: $(B)-rooted path to the binary
 //     (falls back to enumParserBinaryPath when walk succeeded but
 //     the path is the same canonical form).
 //   - depENRefs: NodeRefs of EN nodes whose outputs are inputs to
@@ -64,7 +64,7 @@ func EmitEN(
 ) (NodeRef, []VFS) {
 	// Resolve the module-dir for this header. The header path may include
 	// a subdirectory component (e.g. "config/config.h" in devtools/ymake).
-	// The output path mirrors: $(BUILD_ROOT)/<instance.Path>/<headerRel>_serialized.cpp.
+	// The output path mirrors: $(B)/<instance.Path>/<headerRel>_serialized.cpp.
 	headerSrcVFS := Source(instance.Path + "/" + headerRel)
 	includePath := instance.Path + "/" + headerRel
 	serializedCPPVFS := Build(instance.Path + "/" + headerRel + "_serialized.cpp")
@@ -87,7 +87,7 @@ func EmitEN(
 	}
 
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
 	// inputs: dep-EN outputs (leading), then enum_parser binary,

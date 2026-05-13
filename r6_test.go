@@ -27,7 +27,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               map[string]string{"p": "LD"},
-		Outputs:          ToVFSSlice([]string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"}),
+		Outputs:          ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 		Platform:         "default-linux-x86_64",
 		HostPlatform:     true,
 		Requirements:     map[string]interface{}{},
@@ -41,9 +41,9 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	// the stub LD's outputs[0] above; PR-28-D01 makes this the
 	// caller's responsibility (the gen.go walker derives it from the
 	// host LD's own emission).
-	r6Ref, outPath := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6", nil, nil, e)
+	r6Ref, outPath := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(B)/contrib/tools/ragel6/ragel6", nil, nil, e)
 
-	wantOut := "$(BUILD_ROOT)/util/_/datetime/parser.rl6.cpp"
+	wantOut := "$(B)/util/_/datetime/parser.rl6.cpp"
 	if outPath != wantOut {
 		t.Errorf("outPath = %q, want %q", outPath, wantOut)
 	}
@@ -56,13 +56,13 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	}
 
 	wantCmd := []string{
-		"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6",
+		"$(B)/contrib/tools/ragel6/ragel6",
 		"-CT0",
 		"-L",
-		"-I$(SOURCE_ROOT)",
+		"-I$(S)",
 		"-o",
 		wantOut,
-		"$(SOURCE_ROOT)/util/datetime/parser.rl6",
+		"$(S)/util/datetime/parser.rl6",
 	}
 
 	for i, w := range wantCmd {
@@ -141,16 +141,16 @@ func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
 		Env:     map[string]string{},
 		Inputs:  ToVFSSlice([]string{}),
 		KV:      map[string]string{"p": "LD"},
-		Outputs: ToVFSSlice([]string{"$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6"}),
+		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/bin/ragel6"}),
 	})
 
 	// Caller threads the (non-canonical) host LD output. EmitR6 must
 	// canonicalise to the reference shape.
-	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6", nil, nil, e)
+	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(B)/contrib/tools/ragel6/bin/ragel6", nil, nil, e)
 
 	got := e.nodes[r6Ref.id]
 
-	wantCmd0 := "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"
+	wantCmd0 := "$(B)/contrib/tools/ragel6/ragel6"
 
 	if len(got.Cmds) == 0 || len(got.Cmds[0].CmdArgs) == 0 {
 		t.Fatalf("R6 node has no Cmds[0].CmdArgs; got Cmds=%v", got.Cmds)
@@ -173,18 +173,18 @@ func TestCanonicalizeRagel6BinaryPath_PassThrough(t *testing.T) {
 	}{
 		// Already canonical — no rewrite.
 		{
-			in:   "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6",
-			want: "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6",
+			in:   "$(B)/contrib/tools/ragel6/ragel6",
+			want: "$(B)/contrib/tools/ragel6/ragel6",
 		},
 		// Bin-subpath — rewrite to parent.
 		{
-			in:   "$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6",
-			want: "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6",
+			in:   "$(B)/contrib/tools/ragel6/bin/ragel6",
+			want: "$(B)/contrib/tools/ragel6/ragel6",
 		},
 		// Arbitrary unrelated path — unchanged.
 		{
-			in:   "$(BUILD_ROOT)/contrib/tools/yasm/yasm",
-			want: "$(BUILD_ROOT)/contrib/tools/yasm/yasm",
+			in:   "$(B)/contrib/tools/yasm/yasm",
+			want: "$(B)/contrib/tools/yasm/yasm",
 		},
 		// Empty — unchanged.
 		{
@@ -194,8 +194,8 @@ func TestCanonicalizeRagel6BinaryPath_PassThrough(t *testing.T) {
 		// Different basename under ragel6/bin/ (defensive — future-proof
 		// against a hypothetical second binary).
 		{
-			in:   "$(BUILD_ROOT)/contrib/tools/ragel6/bin/other",
-			want: "$(BUILD_ROOT)/contrib/tools/ragel6/other",
+			in:   "$(B)/contrib/tools/ragel6/bin/other",
+			want: "$(B)/contrib/tools/ragel6/other",
 		},
 	}
 
@@ -223,14 +223,14 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 		Env:     map[string]string{},
 		Inputs:  ToVFSSlice([]string{}),
 		KV:      map[string]string{"p": "LD"},
-		Outputs: ToVFSSlice([]string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"}),
+		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
 	r6Ref, _ := EmitR6(
 		targetInstance("devtools/ymake/lang/makelists"),
 		"makefile_lang.rl6",
 		ragel6LD,
-		"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6",
+		"$(B)/contrib/tools/ragel6/ragel6",
 		[]string{"-lF1"},
 		nil,
 		e,
@@ -270,14 +270,14 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 		Env:     map[string]string{},
 		Inputs:  ToVFSSlice([]string{}),
 		KV:      map[string]string{"p": "LD"},
-		Outputs: ToVFSSlice([]string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"}),
+		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
 	r6Ref, _ := EmitR6(
 		hostInstance("util"),
 		"datetime/parser.rl6",
 		ragel6LD,
-		"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6",
+		"$(B)/contrib/tools/ragel6/ragel6",
 		nil,
 		nil,
 		e,
@@ -318,7 +318,7 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 		Env:     map[string]string{},
 		Inputs:  ToVFSSlice([]string{}),
 		KV:      map[string]string{"p": "LD"},
-		Outputs: ToVFSSlice([]string{"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6"}),
+		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
 	closure := []VFS{
@@ -326,15 +326,15 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 		Source("util/generic/ymath.h"),
 	}
 
-	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(BUILD_ROOT)/contrib/tools/ragel6/ragel6", nil, closure, e)
+	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(B)/contrib/tools/ragel6/ragel6", nil, closure, e)
 
 	got := e.nodes[r6Ref.id]
 
 	wantInputs := []string{
-		"$(BUILD_ROOT)/contrib/tools/ragel6/ragel6",
-		"$(SOURCE_ROOT)/util/datetime/parser.rl6",
-		"$(SOURCE_ROOT)/util/datetime/parser.h",
-		"$(SOURCE_ROOT)/util/generic/ymath.h",
+		"$(B)/contrib/tools/ragel6/ragel6",
+		"$(S)/util/datetime/parser.rl6",
+		"$(S)/util/datetime/parser.h",
+		"$(S)/util/generic/ymath.h",
 	}
 
 	if len(got.Inputs) != len(wantInputs) {

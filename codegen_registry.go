@@ -16,7 +16,7 @@ package main
 // User arbitration confirmed 2026-05-11: one CodegenRegistry per
 // IncludeScanner (target and host each get their own instance), NOT a single
 // shared map on genCtx. Rationale: target and host walks can both produce
-// `$(BUILD_ROOT)/<path>` outputs with the same filename but potentially
+// `$(B)/<path>` outputs with the same filename but potentially
 // different content (e.g. protobuf compiled for both axes); per-scanner keeps
 // platform separation clean and mirrors the existing per-scanner cache
 // architecture (resolveCache, sysincl, etc.).
@@ -27,7 +27,7 @@ package main
 // # Uniqueness invariant
 //
 // Upstream ymake enforces that no two nodes produce a file with the same
-// `$(BUILD_ROOT)` output path within a build (DupSrc diagnostic at
+// `$(B)` output path within a build (DupSrc diagnostic at
 // macro_processor.cpp:957). Register() asserts this invariant: a second write
 // for the same key throws. If it ever fires, the build configuration is
 // malformed and that is a separate defect to triage — fail-fast is the right
@@ -60,15 +60,15 @@ type GeneratedFileInfo struct {
 	// the producer node.
 	ProducerKvP string
 
-	// OutputPath is the $(BUILD_ROOT)-rooted absolute path of this generated
-	// file (e.g. "$(BUILD_ROOT)/devtools/ymake/diag/stats_enums.h_serialized.cpp").
+	// OutputPath is the $(B)-rooted absolute path of this generated
+	// file (e.g. "$(B)/devtools/ymake/diag/stats_enums.h_serialized.cpp").
 	OutputPath string
 
 	// EmitsIncludes lists the #include targets that the generated file contains.
 	// Populated by F-7-B per emitter kind; left nil/empty by F-7-A. Each entry
 	// is either:
-	//   - a $(BUILD_ROOT)/... path (another generated file → transitive lookup)
-	//   - a $(SOURCE_ROOT)/... path (real on-disk file)
+	//   - a $(B)/... path (another generated file → transitive lookup)
+	//   - a $(S)/... path (real on-disk file)
 	//   - a system-include name handled by the sysincl resolver
 	//
 	// Stored in discovery order; no deduplication required at this level (the
@@ -78,12 +78,12 @@ type GeneratedFileInfo struct {
 	// ProducerRef is the NodeRef of the emitted producer node. Valid only when
 	// HasProducerRef is true. resolveCodegenDepRefs uses this to thread the
 	// producer ref into consumer CC `deps[]` for both #include-driven (header
-	// closure) and input-driven (inputs[] $(BUILD_ROOT) paths) lookups.
+	// closure) and input-driven (inputs[] $(B) paths) lookups.
 	ProducerRef    NodeRef
 	HasProducerRef bool
 }
 
-// CodegenRegistry is a per-scanner registry mapping every $(BUILD_ROOT)-prefixed
+// CodegenRegistry is a per-scanner registry mapping every $(B)-prefixed
 // generated file path to its producer metadata. Populated incrementally during
 // the emit walk (codegen emitters fire before CC emitters per PEERDIR-DFS order).
 // The scanner consults it as a third existence tier in F-7-C.
@@ -102,7 +102,7 @@ func NewCodegenRegistry() *CodegenRegistry {
 
 // Register records info under info.OutputPath.
 //
-// Precondition: info.OutputPath is non-empty and starts with "$(BUILD_ROOT)/".
+// Precondition: info.OutputPath is non-empty and starts with "$(B)/".
 // Throws if the same OutputPath is registered a second time — this mirrors
 // upstream's DupSrc diagnostic (macro_processor.cpp:957) and enforces the
 // build-system invariant that no two nodes produce the same output file.

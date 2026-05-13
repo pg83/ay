@@ -58,7 +58,7 @@ func TestWriteGraphIndented_ByteExact(t *testing.T) {
 				Cmds: []Cmd{
 					{
 						CmdArgs: []string{"a", "b<c>&d", "tab\there", "quote\"x", "back\\slash", "newline\nhere", "u2028   done"},
-						Cwd:     "$(BUILD_ROOT)",
+						Cwd:     "$(B)",
 						Env:     map[string]string{"FOO": "bar", "BAZ": "qux"},
 					},
 					{

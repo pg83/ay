@@ -14,16 +14,16 @@ import "strings"
 // itself, so we cannot reproduce it byte-exact and we omit
 // `foreign_deps` entirely instead.
 //
-// Reference R6 node: `$(BUILD_ROOT)/util/_/datetime/parser.rl6.cpp`.
+// Reference R6 node: `$(B)/util/_/datetime/parser.rl6.cpp`.
 // 7 cmd_args, kv={p:R6, pc:yellow}, tags=[],
 // requirements={cpu:1,network:restricted,ram:32},
 // deps=[<ragel6 host LD UID>].
 
 // canonicalRagel6BinaryPath is the reference-shaped invocation path
 // for the host ragel6 binary. Reference R6 nodes invoke ragel6 at
-// `$(BUILD_ROOT)/contrib/tools/ragel6/ragel6` even though our walker
+// `$(B)/contrib/tools/ragel6/ragel6` even though our walker
 // builds the binary one level deeper — at
-// `$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6` — because the
+// `$(B)/contrib/tools/ragel6/bin/ragel6` — because the
 // upstream `contrib/tools/ragel6/ya.make` declares
 // `INCLUDE(${ARCADIA_ROOT}/contrib/tools/ragel6/bin/ya.make)` which
 // our parser does not yet expand. The semantic intent of that INCLUDE
@@ -33,8 +33,8 @@ import "strings"
 // node's cmd_args[0] matches the reference graph byte-exact (PR-35j,
 // closure of PR-33-C2_07).
 const (
-	ragel6BinSubpath   = "$(BUILD_ROOT)/contrib/tools/ragel6/bin/"
-	ragel6CanonicalDir = "$(BUILD_ROOT)/contrib/tools/ragel6/"
+	ragel6BinSubpath   = "$(B)/contrib/tools/ragel6/bin/"
+	ragel6CanonicalDir = "$(B)/contrib/tools/ragel6/"
 	// ragel6DefaultFlagOptimized / ragel6DefaultFlagDebug mirror the
 	// `set_default_flags(optimized)` branch in upstream
 	// `build/ymake_conf.py:2271-2277`: the release toolchain emits
@@ -45,8 +45,8 @@ const (
 )
 
 // canonicalizeRagel6BinaryPath maps the host walker's
-// `$(BUILD_ROOT)/contrib/tools/ragel6/bin/<basename>` output back to
-// the reference-shaped `$(BUILD_ROOT)/contrib/tools/ragel6/<basename>`.
+// `$(B)/contrib/tools/ragel6/bin/<basename>` output back to
+// the reference-shaped `$(B)/contrib/tools/ragel6/<basename>`.
 // All other inputs pass through unchanged so the `(parse-gap →
 // fallback string)` codepath in gen.go (which already supplies the
 // canonical literal) and synthetic-test inputs that hand us a
@@ -63,13 +63,13 @@ func canonicalizeRagel6BinaryPath(p string) string {
 // `<instance.Path>/<srcRel>` using the host ragel6 binary referenced
 // by `ragel6LD` and located at `ragel6BinaryPath`.
 //
-// `ragel6BinaryPath` is the absolute `$(BUILD_ROOT)/...` path of the
+// `ragel6BinaryPath` is the absolute `$(B)/...` path of the
 // ragel6 binary as emitted by our own host LD walker. PR-35j applies
 // `canonicalizeRagel6BinaryPath` to it: the upstream `ya.make`
 // `INCLUDE`s `bin/ya.make` so the reference graph's R6 cmd_args[0]
-// uses the parent path `$(BUILD_ROOT)/contrib/tools/ragel6/ragel6`
+// uses the parent path `$(B)/contrib/tools/ragel6/ragel6`
 // while our walker (which doesn't expand INCLUDE yet) emits the
-// host LD at `$(BUILD_ROOT)/contrib/tools/ragel6/bin/ragel6`. The
+// host LD at `$(B)/contrib/tools/ragel6/bin/ragel6`. The
 // rewrite restores byte-exact reference parity for the R6 node
 // itself; the host LD node is unaffected (it remains at the walked
 // `/bin/` path and continues not to pair with the reference's host
@@ -78,7 +78,7 @@ func canonicalizeRagel6BinaryPath(p string) string {
 // caller passes the canonical literal fallback string and the
 // rewrite is a no-op.
 //
-// Output path: `$(BUILD_ROOT)/<instance.Path>/_/<srcRel>.cpp`. Note
+// Output path: `$(B)/<instance.Path>/_/<srcRel>.cpp`. Note
 // the `_/` infix matches the AS convention (D29) — generated sources
 // are nested-output regardless of srcRel depth.
 //
@@ -112,17 +112,17 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	// PR-M3-A fix: add `_/` infix only when srcRel contains a `/` (i.e.
 	// the source is in a subdirectory of the module). Flat .rl6 sources
 	// (no path separator) live at the module root and their generated
-	// .cpp must land at `$(BUILD_ROOT)/<module>/<srcRel>.cpp` without
+	// .cpp must land at `$(B)/<module>/<srcRel>.cpp` without
 	// the `_/` infix. Reference: util/datetime/parser.rl6 (has `/`) →
 	// `util/_/datetime/parser.rl6.cpp` ✓; include_parsers's
 	// cpp_includes_parser.rl6 (flat) → `include_parsers/cpp_includes_parser.rl6.cpp`.
 	var outputPath string
 	if strings.Contains(srcRel, "/") {
-		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/_/" + srcRel + ".cpp"
+		outputPath = "$(B)/" + instance.Path + "/_/" + srcRel + ".cpp"
 	} else {
-		outputPath = "$(BUILD_ROOT)/" + instance.Path + "/" + srcRel + ".cpp"
+		outputPath = "$(B)/" + instance.Path + "/" + srcRel + ".cpp"
 	}
-	inputPath := "$(SOURCE_ROOT)/" + instance.Path + "/" + srcRel
+	inputPath := "$(S)/" + instance.Path + "/" + srcRel
 	canonicalBinary := canonicalizeRagel6BinaryPath(ragel6BinaryPath)
 
 	// PR-M3-ragel-flags-per-module: pick the effective RAGEL6_FLAGS.
@@ -146,19 +146,19 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	cmdArgs = append(cmdArgs, effectiveFlags...)
 	cmdArgs = append(cmdArgs,
 		"-L",
-		"-I$(SOURCE_ROOT)",
+		"-I$(S)",
 		"-o",
 		outputPath,
 		inputPath,
 	)
 
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
 	// PR-35z: inputs = [ragel6 binary, .rl6 source, ...transitive
 	// header closure]. The binary entry mirrors the reference shape
-	// (every reference R6 node lists `$(BUILD_ROOT)/contrib/tools/
+	// (every reference R6 node lists `$(B)/contrib/tools/
 	// ragel6/ragel6` as inputs[0]); the closure carries every header
 	// the .rl6 transitively `#include`s, in DFS-discovery order.
 	inputs := make([]VFS, 0, 2+len(closure))

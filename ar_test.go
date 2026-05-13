@@ -41,7 +41,7 @@ func testPlatformFor(i ModuleInstance) *Platform {
 
 // vfsStrings materialises a []VFS as a []string of canonical VFS forms
 // — convenience for test assertions that compare against literal
-// "$(SOURCE_ROOT)/..." / "$(BUILD_ROOT)/..." strings.
+// "$(S)/..." / "$(B)/..." strings.
 func vfsStrings(vs []VFS) []string {
 	out := make([]string, len(vs))
 	for i, v := range vs {
@@ -68,7 +68,7 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               map[string]string{},
-		Outputs:          ToVFSSlice([]string{"$(BUILD_ROOT)/build/cow/on/lib.c.o"}),
+		Outputs:          ToVFSSlice([]string{"$(B)/build/cow/on/lib.c.o"}),
 		Platform:         "default-linux-aarch64",
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
@@ -223,8 +223,8 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 	}
 
 	peerPaths := []string{
-		"$(BUILD_ROOT)/some/peer/libsome-peer.a",
-		"$(BUILD_ROOT)/other/peer/libother-peer.a",
+		"$(B)/some/peer/libsome-peer.a",
+		"$(B)/other/peer/libother-peer.a",
 	}
 
 	for _, pp := range peerPaths {

@@ -42,7 +42,7 @@ package main
 // emits; reproducing the duplication via two references to the
 // same slice keeps the source readable and the intent explicit.
 //
-// $(BUILD_ROOT) / $(SOURCE_ROOT) / $(TOOL_ROOT) are LITERAL strings —
+// $(B) / $(S) / $(TOOL_ROOT) are LITERAL strings —
 // the build system substitutes them at execution time. They are not
 // Go template variables; do not interpolate them at emit time.
 
@@ -79,17 +79,17 @@ const binPath = "/usr/bin"
 // linux-headers pair. Verified against the builtins fp_mode.c.o
 // reference (cmd_args[7..14]: prefix → 4 own ADDINCL → suffix).
 //
-// $(BUILD_ROOT) and $(SOURCE_ROOT) are literal placeholders the
+// $(B) and $(S) are literal placeholders the
 // build system substitutes at execution time; they are not Go
 // variables.
 var ccIncludesPrefix = []string{
-	"-I$(BUILD_ROOT)",
-	"-I$(SOURCE_ROOT)",
+	"-I$(B)",
+	"-I$(S)",
 }
 
 var ccIncludesSuffix = []string{
-	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers",
-	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers/_nf",
+	"-I$(S)/contrib/libs/linux-headers",
+	"-I$(S)/contrib/libs/linux-headers/_nf",
 }
 
 // ccIncludes is the original 4-arg flat composition retained for the
@@ -109,8 +109,8 @@ var ccIncludes = func() []string {
 // debug output is reproducible across build hosts. Identical for
 // target and host.
 var debugPrefixMapFlags = []string{
-	"-fdebug-prefix-map=$(BUILD_ROOT)=/-B",
-	"-fdebug-prefix-map=$(SOURCE_ROOT)=/-S",
+	"-fdebug-prefix-map=$(B)=/-B",
+	"-fdebug-prefix-map=$(S)=/-S",
 	"-fdebug-prefix-map=$(TOOL_ROOT)=/-T",
 }
 
@@ -187,8 +187,8 @@ var warningFlags = []string{
 // commonDefines is the baseline `-D` set the reference graph applies
 // to every TARGET CC compilation. 11 args.
 var commonDefines = []string{
-	"-DARCADIA_ROOT=$(SOURCE_ROOT)",
-	"-DARCADIA_BUILD_ROOT=$(BUILD_ROOT)",
+	"-DARCADIA_ROOT=$(S)",
+	"-DARCADIA_BUILD_ROOT=$(B)",
 	"-D_THREAD_SAFE",
 	"-D_PTHREADS",
 	"-D_REENTRANT",
@@ -207,8 +207,8 @@ var commonDefines = []string{
 // `-D__LONG_LONG_SUPPORTED`. Otherwise identical to commonDefines.
 // 12 args.
 var hostDefines = []string{
-	"-DARCADIA_ROOT=$(SOURCE_ROOT)",
-	"-DARCADIA_BUILD_ROOT=$(BUILD_ROOT)",
+	"-DARCADIA_ROOT=$(S)",
+	"-DARCADIA_BUILD_ROOT=$(B)",
 	"-D_THREAD_SAFE",
 	"-D_PTHREADS",
 	"-D_REENTRANT",
@@ -310,46 +310,46 @@ var builtinMacroDateTime = []string{
 // debugPrefixMapFlags rewrite DWARF source paths. Identical
 // target/host.
 var macroPrefixMapFlags = []string{
-	"-fmacro-prefix-map=$(BUILD_ROOT)/=",
-	"-fmacro-prefix-map=$(SOURCE_ROOT)/=",
+	"-fmacro-prefix-map=$(B)/=",
+	"-fmacro-prefix-map=$(S)/=",
 	"-fmacro-prefix-map=$(TOOL_ROOT)/=",
 }
 
 // muslCcIncludes is the include set for `contrib/libs/musl` CC
 // nodes (TARGET, aarch64). Differs from `ccIncludes` by inserting
-// eight musl-specific `-I` paths between `$(SOURCE_ROOT)` and the
+// eight musl-specific `-I` paths between `$(S)` and the
 // linux-headers pair. Order matches the reference graph exactly —
 // musl's own headers must shadow the global linux-headers in
 // resolution.
 var muslCcIncludes = []string{
-	"-I$(BUILD_ROOT)",
-	"-I$(SOURCE_ROOT)",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/aarch64",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/generic",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/src/include",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/src/internal",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/include",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/extra",
-	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers",
-	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers/_nf",
+	"-I$(B)",
+	"-I$(S)",
+	"-I$(S)/contrib/libs/musl/arch/aarch64",
+	"-I$(S)/contrib/libs/musl/arch/generic",
+	"-I$(S)/contrib/libs/musl/src/include",
+	"-I$(S)/contrib/libs/musl/src/internal",
+	"-I$(S)/contrib/libs/musl/include",
+	"-I$(S)/contrib/libs/musl/extra",
+	"-I$(S)/contrib/libs/linux-headers",
+	"-I$(S)/contrib/libs/linux-headers/_nf",
 }
 
 // muslCcIncludesX8664 is the host-musl (x86_64) include set used by
 // `composeMuslHostCC` (PR-29-D01). Replaces `arch/aarch64` with
 // `arch/x86_64` — the only delta from `muslCcIncludes`. Verified
-// against `$(BUILD_ROOT)/contrib/libs/musl/_/src/string/strlen.c.pic.o`
+// against `$(B)/contrib/libs/musl/_/src/string/strlen.c.pic.o`
 // cmd_args[6..15] in the reference graph.
 var muslCcIncludesX8664 = []string{
-	"-I$(BUILD_ROOT)",
-	"-I$(SOURCE_ROOT)",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/x86_64",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/arch/generic",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/src/include",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/src/internal",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/include",
-	"-I$(SOURCE_ROOT)/contrib/libs/musl/extra",
-	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers",
-	"-I$(SOURCE_ROOT)/contrib/libs/linux-headers/_nf",
+	"-I$(B)",
+	"-I$(S)",
+	"-I$(S)/contrib/libs/musl/arch/x86_64",
+	"-I$(S)/contrib/libs/musl/arch/generic",
+	"-I$(S)/contrib/libs/musl/src/include",
+	"-I$(S)/contrib/libs/musl/src/internal",
+	"-I$(S)/contrib/libs/musl/include",
+	"-I$(S)/contrib/libs/musl/extra",
+	"-I$(S)/contrib/libs/linux-headers",
+	"-I$(S)/contrib/libs/linux-headers/_nf",
 }
 
 // muslWarningFlags is the single-flag warning bundle the reference

@@ -16,19 +16,19 @@ package main
 
 // EmitJS emits a JS node for JOIN_SRCS(allName srcs...).
 //
-// Output: $(BUILD_ROOT)/<instance.Path>/<allName>. allName already
+// Output: $(B)/<instance.Path>/<allName>. allName already
 // carries the .cpp suffix in all known JOIN_SRCS call sites.
 //
 // Sources are bare module-relative names (e.g. "recode_result.cpp" or
 // "generated/unidata.cpp"). PR-28-D11: EmitJS composes them against
 // instance.Path so cmd_args carries "<instance.Path>/<src>" and
-// inputs carries "$(SOURCE_ROOT)/<instance.Path>/<src>". When the
+// inputs carries "$(S)/<instance.Path>/<src>". When the
 // caller threads a SRCDIR-rebased instance, the resulting paths
 // reflect the rebased directory.
 //
 // Inputs: sources in DECLARATION ORDER (R13 — NOT sorted). The
 // inputs list is: gen_join_srcs.py, process_command_files.py, then
-// the sources expanded to their $(SOURCE_ROOT)/... form, then the
+// the sources expanded to their $(S)/... form, then the
 // caller-supplied `closure` (PR-35d) — the union of per-source
 // #include closures across the joined sources. L2 compares Inputs as
 // a multiset (PR-31 D14), so closure order matters only for the
@@ -49,11 +49,11 @@ package main
 func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, platform PlatformID, emit Emitter) (NodeRef, string) {
 	const (
 		python3Path  = "/ix/realm/pg/bin/python3"
-		joinSrcsPath = "$(SOURCE_ROOT)/build/scripts/gen_join_srcs.py"
-		procCmdFiles = "$(SOURCE_ROOT)/build/scripts/process_command_files.py"
+		joinSrcsPath = "$(S)/build/scripts/gen_join_srcs.py"
+		procCmdFiles = "$(S)/build/scripts/process_command_files.py"
 	)
 
-	outputPath := "$(BUILD_ROOT)/" + instance.Path + "/" + allName
+	outputPath := "$(B)/" + instance.Path + "/" + allName
 
 	// cmd_args: python3, script, output, --ya-start-command-file,
 	// <instance.Path>/<src>..., --ya-end-command-file.
@@ -72,11 +72,11 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 	cmdArgs = append(cmdArgs, "--ya-end-command-file")
 
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
 	// inputs: scripts first, then source files expanded to
-	// $(SOURCE_ROOT)/<instance.Path>/<src>, then the caller-supplied
+	// $(S)/<instance.Path>/<src>, then the caller-supplied
 	// per-source include closure (PR-35d).
 	inputs := make([]VFS, 0, 2+len(sources)+len(closure))
 	inputs = append(inputs, Source("build/scripts/gen_join_srcs.py"))

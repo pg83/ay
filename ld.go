@@ -9,12 +9,12 @@ package main
 //           the upstream VCS state. 5 args.
 //   cmd[1]: clang compile of `__vcs_version__.c` →
 //           `__vcs_version__.c.o`. 94 args. Same toolchain shape as a
-//           CC node but with a single `-I$(SOURCE_ROOT)` (no full
+//           CC node but with a single `-I$(S)` (no full
 //           ccIncludes set) and `-D_musl_=1` / `-D_musl_` sentinels
 //           wrapping the two `noLibcUndebugBlock` copies instead of
 //           CC's bare `noLibcUndebugBlock × 2`.
 //   cmd[2]: link_exe.py — the actual link invocation. 73 args. Carries
-//           a `cwd: $(BUILD_ROOT)` because the emitted command-file
+//           a `cwd: $(B)` because the emitted command-file
 //           paths are BUILD_ROOT-relative and link_exe.py resolves them
 //           by chdiring there before invoking the linker.
 //   cmd[3]: fs_tools.py link_or_copy_to_dir — copies (or hardlinks) the
@@ -56,7 +56,7 @@ import (
 //   - `instance`: the PROGRAM module's ModuleInstance. `instance.Path`
 //     names the module's directory. For target builds
 //     (`Flags.PIC=false`) the binary is emitted to
-//     `$(BUILD_ROOT)/<path>/<binaryName>`; PR-24 does not handle host
+//     `$(B)/<path>/<binaryName>`; PR-24 does not handle host
 //     LD specially.
 //   - `binaryName`: the linker output's basename. Per PR-28-D01, this
 //     comes from the parsed `PROGRAM(name)` macro's argument
@@ -73,12 +73,12 @@ import (
 //   - `peerLDRefs` / `peerLibPaths`: peer LIBRARY archive paths in
 //     PEERDIR walk order (R14 — non-alphabetical). Each `peerLibPath`
 //     is BUILD_ROOT-relative (e.g. "build/cow/on/libbuild-cow-on.a"),
-//     NOT prefixed with `$(BUILD_ROOT)/` — link_exe.py interprets the
+//     NOT prefixed with `$(B)/` — link_exe.py interprets the
 //     argv strings relative to its `cwd`. The `peerLDRefs` are wired
 //     as DepRefs so the Merkle hash captures the link-time inputs.
 //   - `pluginRefs` / `pluginPaths`: plugin script paths for the
 //     `--start-plugins ... --end-plugins` block (e.g. the musl
-//     pyplugin). `pluginPaths` are full `$(BUILD_ROOT)/...` paths
+//     pyplugin). `pluginPaths` are full `$(B)/...` paths
 //     because they appear verbatim in cmd[2] and in `inputs`. Pass nil
 //     when the module has no plugins.
 //   - `globalRefs` / `globalPaths`: peer `.global.a` archives that
@@ -87,7 +87,7 @@ import (
 //     as peerLibPaths). Pass nil when none.
 //
 // Returns the LD NodeRef. The output path is
-// `$(BUILD_ROOT)/<instance.Path>/<binaryName>`; the caller can
+// `$(B)/<instance.Path>/<binaryName>`; the caller can
 // re-derive it via `LDOutputPath(instance, binaryName)` if needed.
 func EmitLD(
 	instance ModuleInstance,
@@ -167,8 +167,8 @@ func EmitLD(
 	targetX8664 := instance.Platform.Target == PlatformDefaultLinuxX8664
 	hostBuild := targetX8664
 
-	outputPath := "$(BUILD_ROOT)/" + binaryDir + "/" + binaryName
-	vcsCPath := "$(BUILD_ROOT)/" + binaryDir + "/__vcs_version__.c"
+	outputPath := "$(B)/" + binaryDir + "/" + binaryName
+	vcsCPath := "$(B)/" + binaryDir + "/__vcs_version__.c"
 
 	// PR-38: host PROGRAM nodes use `.pic.o` for the vcs_version
 	// compile output to match the reference graph shape; target nodes
@@ -178,7 +178,7 @@ func EmitLD(
 		vcsOSuffix = ".pic.o"
 	}
 
-	vcsOPath := "$(BUILD_ROOT)/" + binaryDir + "/__vcs_version__.c" + vcsOSuffix
+	vcsOPath := "$(B)/" + binaryDir + "/__vcs_version__.c" + vcsOSuffix
 
 	cmd0 := composeLDCmdVcsInfo(vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
@@ -190,17 +190,17 @@ func EmitLD(
 	// full target-CC env (matches the reference cmd-level env on
 	// each cmd).
 	envVcsOnly := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 	envFull := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 		"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
 	}
 
 	cmds := []Cmd{
 		{CmdArgs: cmd0, Env: envVcsOnly},
 		{CmdArgs: cmd1, Env: envFull},
-		{CmdArgs: cmd2, Cwd: "$(BUILD_ROOT)", Env: envFull},
+		{CmdArgs: cmd2, Cwd: "$(B)", Env: envFull},
 		{CmdArgs: cmd3, Env: envVcsOnly},
 	}
 
@@ -301,7 +301,7 @@ func LDOutputPath(instance ModuleInstance, binaryName string) string {
 		binaryName = lastPathComponent(instance.Path)
 	}
 
-	return "$(BUILD_ROOT)/" + ldBinaryDir(instance) + "/" + binaryName
+	return "$(B)/" + ldBinaryDir(instance) + "/" + binaryName
 }
 
 // ldBinaryDir returns the effective BUILD_ROOT-relative directory for
@@ -370,10 +370,10 @@ func composeLDCmdVcsInfo(vcsCPath string) []string {
 		// TODO(portability): python3 path is captured from the
 		// reference build host.
 		"/ix/realm/pg/bin/python3",
-		"$(SOURCE_ROOT)/build/scripts/vcs_info.py",
+		"$(S)/build/scripts/vcs_info.py",
 		"$(VCS)/vcs.json",
 		vcsCPath,
-		"$(SOURCE_ROOT)/build/scripts/c_templates/svn_interface.c",
+		"$(S)/build/scripts/c_templates/svn_interface.c",
 	}
 }
 
@@ -416,7 +416,7 @@ func composeLDCmdVcsCompile(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags
 		vcsOPath,
 		vcsCPath,
 	)
-	cmdArgs = append(cmdArgs, "-I$(SOURCE_ROOT)")
+	cmdArgs = append(cmdArgs, "-I$(S)")
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
 	cmdArgs = append(cmdArgs, commonCFlags...)
@@ -489,7 +489,7 @@ func composeLDCmdVcsCompileHost(vcsCPath, vcsOPath string, muslOn bool, moduleCF
 		vcsOPath,
 		vcsCPath,
 	)
-	cmdArgs = append(cmdArgs, "-I$(SOURCE_ROOT)")
+	cmdArgs = append(cmdArgs, "-I$(S)")
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
 	cmdArgs = append(cmdArgs, hostCFlags...)
@@ -576,7 +576,7 @@ func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths []VFS, peerLibPath
 
 	cmdArgs = append(cmdArgs,
 		"/ix/realm/pg/bin/python3",
-		"$(SOURCE_ROOT)/build/scripts/link_exe.py",
+		"$(S)/build/scripts/link_exe.py",
 	)
 
 	if len(pluginPaths) > 0 {
@@ -587,8 +587,8 @@ func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths []VFS, peerLibPath
 
 	cmdArgs = append(cmdArgs,
 		"--clang-ver", "21",
-		"--source-root", "$(SOURCE_ROOT)",
-		"--build-root", "$(BUILD_ROOT)",
+		"--source-root", "$(S)",
+		"--build-root", "$(B)",
 		"--arch=LINUX",
 		"--objcopy-exe", "/ix/realm/boot/bin/llvm-objcopy",
 		"/ix/realm/boot/bin/clang++",
@@ -603,11 +603,11 @@ func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths []VFS, peerLibPath
 	// PR-M3-py3cc-objcopy-shape: SRCS_GLOBAL .o slot goes BEFORE
 	// $VCS_C_OBJ (upstream ld.conf:229-230 / 266-267 / 294-295). Paths
 	// emit bare (BUILD_ROOT-relative) — upstream uses
-	// `${rootrel;ext=.o:SRCS_GLOBAL}` which strips the $(BUILD_ROOT)/
+	// `${rootrel;ext=.o:SRCS_GLOBAL}` which strips the $(B)/
 	// prefix. The `inputs` slot retains the prefix via composeLDInputs.
 	for _, p := range objcopyPaths {
 		// SRCS_GLOBAL bare-relative rendering: `${rootrel;ext=.o:SRCS_GLOBAL}`
-		// strips the $(BUILD_ROOT)/ prefix; VFS.Rel gives that form natively.
+		// strips the $(B)/ prefix; VFS.Rel gives that form natively.
 		cmdArgs = append(cmdArgs, p.Rel)
 	}
 
@@ -698,10 +698,10 @@ func peersIncludeLibcCompat(peerLibPaths []string) bool {
 func composeLDCmdLinkOrCopy(modulePath string) []string {
 	return []string{
 		"/ix/realm/pg/bin/python3",
-		"$(SOURCE_ROOT)/build/scripts/fs_tools.py",
+		"$(S)/build/scripts/fs_tools.py",
 		"link_or_copy_to_dir",
 		"--no-check",
-		"$(BUILD_ROOT)/" + modulePath,
+		"$(B)/" + modulePath,
 	}
 }
 
@@ -714,10 +714,10 @@ func composeLDCmdLinkOrCopy(modulePath string) []string {
 //
 //  1. BUILD_ROOT block (alphabetically sorted as one set):
 //     - peer LIBRARY archive paths (BUILD_ROOT-relative, prefixed
-//     with $(BUILD_ROOT)/)
-//     - plugin paths (already $(BUILD_ROOT)-rooted by caller)
+//     with $(B)/)
+//     - plugin paths (already $(B)-rooted by caller)
 //     - global archive paths (BUILD_ROOT-relative, prefixed)
-//     - own .cpp.o files (already $(BUILD_ROOT)-rooted by caller)
+//     - own .cpp.o files (already $(B)-rooted by caller)
 //  2. The 7-script bundle in REGISTRATION ORDER (NOT alphabetical):
 //     vcs_info.py, svn_interface.c, link_exe.py, thinlto_cache.py,
 //     process_command_files.py, process_whole_archive_option.py,
@@ -736,7 +736,7 @@ func composeLDCmdLinkOrCopy(modulePath string) []string {
 // own main.cpp.o, all interleaved in alphabetical order.
 func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []string, pluginPaths []string, globalPaths []string, objcopyPaths []VFS) []VFS {
 	// peerLibPaths / globalPaths arrive BUILD_ROOT-relative (caller convention);
-	// pluginPaths arrive as full $(BUILD_ROOT)/... strings. ccPaths and
+	// pluginPaths arrive as full $(B)/... strings. ccPaths and
 	// objcopyPaths are already VFS-typed. Lift all into the VFS-typed
 	// BUILD_ROOT block before alphabetising.
 	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(ccPaths)+len(objcopyPaths))
@@ -755,7 +755,7 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []string, pl
 
 	buildRootBlock = append(buildRootBlock, ccPaths...)
 	// PR-M3-py3cc-objcopy-shape: objcopy `.o` paths arrive as
-	// $(BUILD_ROOT)/...-rooted; they belong in the BUILD_ROOT block of
+	// $(B)/...-rooted; they belong in the BUILD_ROOT block of
 	// the LD's `inputs` slot just like own .cpp.o and peer .a entries.
 	buildRootBlock = append(buildRootBlock, objcopyPaths...)
 	sort.Slice(buildRootBlock, func(i, j int) bool {
@@ -775,7 +775,7 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []string, pl
 // when it generates __vcs_version__.c. ymake appends it as the last
 // entry of every PROGRAM LD node's inputs slice, after the member-CC
 // input union. PR-35v adds this static injection (R9 closure).
-const ldSvnversionHInput = "$(SOURCE_ROOT)/build/scripts/c_templates/svnversion.h"
+const ldSvnversionHInput = "$(S)/build/scripts/c_templates/svnversion.h"
 
 // ldStaticMuslTrailingFlags is the 12-flag trailer the reference
 // `tools/archiver/archiver` LD cmd[2] emits AFTER `-Wl,--end-group`.

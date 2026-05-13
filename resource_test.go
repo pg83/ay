@@ -171,7 +171,7 @@ func TestPyNamespaceModListMD5Py3ccSlow(t *testing.T) {
 // TestPyNamespaceObjcopyHashRuntimePy3 verifies the kv_only objcopy
 // hash for library/python/runtime_py3 against REF:
 //
-//	output: $(BUILD_ROOT)/library/python/runtime_py3/objcopy_3b0561f75631281b973aa8b64e.o
+//	output: $(B)/library/python/runtime_py3/objcopy_3b0561f75631281b973aa8b64e.o
 //	kv (hash, quoted):    py/namespace/<md5>/<path>="<ns>"
 //	kv (cmd_args, unquoted): py/namespace/<md5>/<path>=<ns>
 //
@@ -191,7 +191,7 @@ func TestPyNamespaceObjcopyHashRuntimePy3(t *testing.T) {
 // TestNoCheckImportsObjcopyHashLib2Py verifies the kv_only objcopy
 // hash for contrib/tools/python3/lib2/py against REF:
 //
-//	output: $(BUILD_ROOT)/contrib/tools/python3/lib2/py/objcopy_cd47bcaec327e5eb9db4641ec8.o
+//	output: $(B)/contrib/tools/python3/lib2/py/objcopy_cd47bcaec327e5eb9db4641ec8.o
 //	kv (hash):    py/no_check_imports/<pathid>="<value>"
 //
 // PY3_LIBRARY (with ENABLE(PYBUILD_NO_PYC)) → MODULE_TAG = "PY3".
@@ -209,7 +209,7 @@ func TestNoCheckImportsObjcopyHashLib2Py(t *testing.T) {
 // TestPyMainObjcopyHashPy3ccSlow verifies the kv_only objcopy hash for
 // tools/py3cc/slow's PY_MAIN= kv against REF:
 //
-//	output: $(BUILD_ROOT)/tools/py3cc/slow/objcopy_4b1c18d0dc6973976969ad23be.o
+//	output: $(B)/tools/py3cc/slow/objcopy_4b1c18d0dc6973976969ad23be.o
 //	kv:     PY_MAIN=tools.py3cc.slow.main:main
 //
 // PY3_PROGRAM_BIN → MODULE_TAG = "PY3".
@@ -271,7 +271,7 @@ func TestNoCheckImportsPathidLib2Py(t *testing.T) {
 // PYBUILD_NO_PYC is on, namespace is non-TOP_LEVEL (default upath
 // prefix). REF:
 //
-//	output: $(BUILD_ROOT)/library/python/runtime_py3/objcopy_84a3659770bdea15f8ae77837d.o
+//	output: $(B)/library/python/runtime_py3/objcopy_84a3659770bdea15f8ae77837d.o
 //	key:    resfs/file/py/library/python/runtime_py3/entry_points.py
 //	kv:     resfs/src/<key>=${rootrel;context=TEXT;input=TEXT:"entry_points.py"}
 //	paths:  [entry_points.py]   (the raw PY_SRCS argument, not srcRel+suffix)
@@ -375,7 +375,7 @@ func TestChunkPySrcEntriesEmptyReturnsNil(t *testing.T) {
 
 // TestChunkPySrcEntriesLibInputsAggregate asserts the per-chunk `inps`
 // list carries each yapyc3 entry's pathInput AND its corresponding .py
-// source file from $(SOURCE_ROOT), AND that the chunk-straddle entry
+// source file from $(S), AND that the chunk-straddle entry
 // (synchronize.py.3kp2.yapyc3 in Lib's first chunk) lands in BOTH the
 // straddled chunks' inps lists. PR-M3-py-objcopy-aggregation reproduction:
 // REF objcopy_0299ac47a... has 13 yapyc3 + 13 .py in inputs[] while
@@ -405,34 +405,34 @@ func TestChunkPySrcEntriesLibInputsAggregate(t *testing.T) {
 
 	// Expected inputs[].yapyc3 (13 entries, sorted): popen_fork → synchronize.
 	expectedYapyc := []string{
-		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_fork.py.3kp2.yapyc3",
-		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_forkserver.py.3kp2.yapyc3",
-		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_posix.py.3kp2.yapyc3",
-		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_win32.py.3kp2.yapyc3",
-		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/process.py.3kp2.yapyc3",
-		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/queues.py.3kp2.yapyc3",
-		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/reduction.py.3kp2.yapyc3",
-		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/resource_sharer.py.3kp2.yapyc3",
-		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/resource_tracker.py.3kp2.yapyc3",
-		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/shared_memory.py.3kp2.yapyc3",
-		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/sharedctypes.py.3kp2.yapyc3",
-		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/spawn.py.3kp2.yapyc3",
-		"$(BUILD_ROOT)/contrib/tools/python3/Lib/multiprocessing/synchronize.py.3kp2.yapyc3",
+		"$(B)/contrib/tools/python3/Lib/multiprocessing/popen_fork.py.3kp2.yapyc3",
+		"$(B)/contrib/tools/python3/Lib/multiprocessing/popen_forkserver.py.3kp2.yapyc3",
+		"$(B)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_posix.py.3kp2.yapyc3",
+		"$(B)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_win32.py.3kp2.yapyc3",
+		"$(B)/contrib/tools/python3/Lib/multiprocessing/process.py.3kp2.yapyc3",
+		"$(B)/contrib/tools/python3/Lib/multiprocessing/queues.py.3kp2.yapyc3",
+		"$(B)/contrib/tools/python3/Lib/multiprocessing/reduction.py.3kp2.yapyc3",
+		"$(B)/contrib/tools/python3/Lib/multiprocessing/resource_sharer.py.3kp2.yapyc3",
+		"$(B)/contrib/tools/python3/Lib/multiprocessing/resource_tracker.py.3kp2.yapyc3",
+		"$(B)/contrib/tools/python3/Lib/multiprocessing/shared_memory.py.3kp2.yapyc3",
+		"$(B)/contrib/tools/python3/Lib/multiprocessing/sharedctypes.py.3kp2.yapyc3",
+		"$(B)/contrib/tools/python3/Lib/multiprocessing/spawn.py.3kp2.yapyc3",
+		"$(B)/contrib/tools/python3/Lib/multiprocessing/synchronize.py.3kp2.yapyc3",
 	}
 	expectedPy := []string{
-		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_fork.py",
-		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_forkserver.py",
-		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_posix.py",
-		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_win32.py",
-		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/process.py",
-		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/queues.py",
-		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/reduction.py",
-		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/resource_sharer.py",
-		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/resource_tracker.py",
-		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/shared_memory.py",
-		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/sharedctypes.py",
-		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/spawn.py",
-		"$(SOURCE_ROOT)/contrib/tools/python3/Lib/multiprocessing/synchronize.py",
+		"$(S)/contrib/tools/python3/Lib/multiprocessing/popen_fork.py",
+		"$(S)/contrib/tools/python3/Lib/multiprocessing/popen_forkserver.py",
+		"$(S)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_posix.py",
+		"$(S)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_win32.py",
+		"$(S)/contrib/tools/python3/Lib/multiprocessing/process.py",
+		"$(S)/contrib/tools/python3/Lib/multiprocessing/queues.py",
+		"$(S)/contrib/tools/python3/Lib/multiprocessing/reduction.py",
+		"$(S)/contrib/tools/python3/Lib/multiprocessing/resource_sharer.py",
+		"$(S)/contrib/tools/python3/Lib/multiprocessing/resource_tracker.py",
+		"$(S)/contrib/tools/python3/Lib/multiprocessing/shared_memory.py",
+		"$(S)/contrib/tools/python3/Lib/multiprocessing/sharedctypes.py",
+		"$(S)/contrib/tools/python3/Lib/multiprocessing/spawn.py",
+		"$(S)/contrib/tools/python3/Lib/multiprocessing/synchronize.py",
 	}
 
 	inSet := func(xs []string) map[string]struct{} {

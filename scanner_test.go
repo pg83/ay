@@ -251,7 +251,7 @@ func TestScanner_BlockCommentIncludeIgnored(t *testing.T) {
 	scanner := NewIncludeScanner(dir, SysInclSet{})
 
 	// PR-M3-vfs-paths: parseIncludes takes a VFS path. The test file
-	// `<dir>/fake.h` becomes `$(SOURCE_ROOT)/fake.h` under the scanner's
+	// `<dir>/fake.h` becomes `$(S)/fake.h` under the scanner's
 	// dir-as-sourceRoot.
 	dirs := scanner.parseIncludes(Source("fake.h"))
 

@@ -36,10 +36,20 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 def _load(path: str) -> dict[str, Any]:
-    """Parse a JSON file and return the top-level object."""
+    """Parse a JSON file and return the top-level object.
+
+    The yatool emitter writes paths as `$(S)/<rel>` / `$(B)/<rel>` to
+    keep node strings short; the reference graph uses the legacy
+    `$(SOURCE_ROOT)/<rel>` / `$(BUILD_ROOT)/<rel>`. Compress the
+    long forms to the short ones at file-load time (textual,
+    pre-parse) so downstream comparison is uniform without
+    sprinkling translation through the normaliser body.
+    """
     try:
-        with open(path, encoding="utf-8") as fh:
-            return json.load(fh)
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        raw = raw.replace(b"$(BUILD_ROOT)", b"$(B)").replace(b"$(SOURCE_ROOT)", b"$(S)")
+        return json.loads(raw)
     except (OSError, json.JSONDecodeError) as exc:
         _die(f"cannot load {path}: {exc}")
 
@@ -61,7 +71,7 @@ def _find_root(graph: list[dict], target: str) -> dict:
     2. AR node: kv['p'] == 'AR' AND outputs[0] contains '/<target>/'.
        Multiple AR candidates → prefer host_platform==false (target platform).
     """
-    ld_prefix = "$(BUILD_ROOT)/" + target + "/"
+    ld_prefix = "$(B)/" + target + "/"
     ar_infix = "/" + target + "/"
 
     ld_candidates: list[dict] = []

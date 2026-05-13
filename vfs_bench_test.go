@@ -7,7 +7,7 @@ import (
 
 // vfs_bench_test.go — microbenchmarks for the VFS-keyed map perf
 // regression hypothesis. Compares:
-//   - map[string]struct{} access via the "$(SOURCE_ROOT)/<rel>" key
+//   - map[string]struct{} access via the "$(S)/<rel>" key
 //     (PREV scanner shape).
 //   - map[VFS]struct{} access where VFS = struct{Root uint8; Rel string}
 //     (HEAD scanner shape).
@@ -30,11 +30,11 @@ func BenchmarkMapAccess_StringKey(b *testing.B) {
 	keys := bvKeys()
 	m := make(map[string]struct{}, bvN)
 	for _, k := range keys {
-		m["$(SOURCE_ROOT)/"+k] = struct{}{}
+		m["$(S)/"+k] = struct{}{}
 	}
 	probes := make([]string, bvN)
 	for i, k := range keys {
-		probes[i] = "$(SOURCE_ROOT)/" + k
+		probes[i] = "$(S)/" + k
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -88,11 +88,11 @@ func BenchmarkMapAccess_StringKey_ConstructedAtProbe(b *testing.B) {
 	keys := bvKeys()
 	m := make(map[string]struct{}, bvN)
 	for _, k := range keys {
-		m["$(SOURCE_ROOT)/"+k] = struct{}{}
+		m["$(S)/"+k] = struct{}{}
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, ok := m["$(SOURCE_ROOT)/"+keys[i%bvN]]
+		_, ok := m["$(S)/"+keys[i%bvN]]
 		if !ok {
 			b.Fatalf("miss on i=%d", i)
 		}

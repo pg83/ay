@@ -7,8 +7,8 @@ package main
 // The struct carries per-module knobs that vary across modules in the
 // same closure but stay constant for a single (instance, source)
 // pair: ADDINCL paths, own CXXFLAGS, own CONLYFLAGS, the
-// "is generated" bit (input lives under $(BUILD_ROOT) instead of
-// $(SOURCE_ROOT)), and a `Generator NodeRef` (PR-30 D04: wired to the
+// "is generated" bit (input lives under $(B) instead of
+// $(S)), and a `Generator NodeRef` (PR-30 D04: wired to the
 // upstream JS or R6 node so the CC's DepRefs carry the source-
 // generator dep, matching the reference shape).
 // Extending the struct does not require updating every call site —
@@ -31,8 +31,8 @@ package main
 //
 // Output path convention is unchanged from PR-12:
 //
-//   - Flat source: `$(BUILD_ROOT)/<path>/<srcRel><.o|.pic.o>`
-//   - Nested source (contains "/"): `$(BUILD_ROOT)/<path>/_/<srcRel><.o|.pic.o>`
+//   - Flat source: `$(B)/<path>/<srcRel><.o|.pic.o>`
+//   - Nested source (contains "/"): `$(B)/<path>/_/<srcRel><.o|.pic.o>`
 //
 // Suffix is `.o` for target builds, `.pic.o` for host (Flags.PIC=true).
 //
@@ -67,7 +67,7 @@ import (
 //   - AddIncl: own ADDINCL paths (D03)
 //   - CXXFlags: own CXXFLAGS (D02; C++ sources only)
 //   - COnlyFlags: own CONLYFLAGS (D02; C/.S sources only)
-//   - IsGenerated: source lives under $(BUILD_ROOT)/... (D07)
+//   - IsGenerated: source lives under $(B)/... (D07)
 //   - Generator: NodeRef of the upstream generator node (JS for
 //     JOIN_SRCS, R6 for ragel6) — PR-30 D04 wired this so EmitCC
 //     populates DepRefs with the generator dep.
@@ -188,7 +188,7 @@ type ModuleCCInputs struct {
 	// `macroPrefixMapFlags` and the input path — matching the
 	// empirical reference for `util/charset/wide_sse41.cpp.o` where
 	// `-DSSE41_STUB` sits immediately before
-	// `$(SOURCE_ROOT)/util/charset/wide_sse41.cpp`. Empty for sources
+	// `$(S)/util/charset/wide_sse41.cpp`. Empty for sources
 	// declared via plain `SRCS` / `SRC_C_NO_LTO` / `JOIN_SRCS` /
 	// `GLOBAL_SRCS`.
 	PerSourceCFlags []string
@@ -361,7 +361,7 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	// EmitCC is single-shot so the alias is safe today. Future PRs
 	// that mutate emitted nodes post-emit MUST clone before mutating.
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 		"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
 	}
 
@@ -441,28 +441,28 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 // shapes empirically observed in the reference graph:
 //
 //  1. No SRCDIR (the historical case): output is
-//     `$(BUILD_ROOT)/<instance.Path>/<rel>.o` (with `_/` infix when
+//     `$(B)/<instance.Path>/<rel>.o` (with `_/` infix when
 //     srcRel contains "/"); input is
-//     `$(SOURCE_ROOT)/<instance.Path>/<srcRel>` (or `$(BUILD_ROOT)/`
+//     `$(S)/<instance.Path>/<srcRel>` (or `$(B)/`
 //     when IsGenerated).
 //  2. SRCDIR set, source resolves locally (file exists at
 //     `<sourceRoot>/<instance.Path>/<srcRel>`): SRCDIR is silently
 //     ignored — same as case (1). Empirical examples: musl_extra's
 //     `all.c`, tcmalloc/no_percpu_cache's `aligned_alloc.c`.
 //  3. SRCDIR set, source does not resolve locally: input is
-//     `$(SOURCE_ROOT)/<srcdir>/<srcRel>`; output is
-//     `$(BUILD_ROOT)/<instance.Path>/__/<rel>.o` where `<rel>` is the
+//     `$(S)/<srcdir>/<srcRel>`; output is
+//     `$(B)/<instance.Path>/__/<rel>.o` where `<rel>` is the
 //     relative path from instance.Path to (srcdir+srcRel), with `..`
 //     segments rendered as `__`. Empirical examples: libcxxabi-parts's
 //     `src/abort_message.cpp` (sibling SRCDIR), tcmalloc/no_percpu_cache's
 //     `tcmalloc/want_hpaa.cc` (ancestor SRCDIR + nested src path).
 //
 // Generated sources (IsGenerated=true) skip case (3) — generators emit
-// to `$(BUILD_ROOT)/<srcInstance.Path>/<rel>` where srcInstance is
+// to `$(B)/<srcInstance.Path>/<rel>` where srcInstance is
 // already SRCDIR-aware (the JS/R6 emitter rebased it before invocation).
 func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, suffix string) (out, input VFS) {
 	if in.IsGenerated {
-		// Generators (JS/R6) write under $(BUILD_ROOT)/<srcInstance.Path>/.
+		// Generators (JS/R6) write under $(B)/<srcInstance.Path>/.
 		// SrcDir handling for those branches is upstream (in gen.go's
 		// JOIN_SRCS / .rl6 dispatch where srcInstance is constructed).
 		var outRel string
@@ -1062,7 +1062,7 @@ func composeMuslCC(outputPath, inputPath string, addIncl, ownExtras []string, is
 // composeMuslHostCC composes the cmd_args bundle for a HOST musl
 // (`contrib/libs/musl/...` PIC) CC compilation — PR-29-D01 dominant
 // L3 lever. 115 args with no per-module extras. Pinned byte-exact
-// against `$(BUILD_ROOT)/contrib/libs/musl/_/src/string/strlen.c.pic.o`
+// against `$(B)/contrib/libs/musl/_/src/string/strlen.c.pic.o`
 // (platform `default-linux-x86_64`) in the reference graph.
 //
 // Differs from composeMuslCC in:
@@ -1139,37 +1139,37 @@ func partitionPython3FromAutoPeer(autoPeer []string) ([]string, []string) {
 	return preSse, postSse
 }
 
-// appendAddIncl prepends `-I$(SOURCE_ROOT)/` to each ADDINCL path and
+// appendAddIncl prepends `-I$(S)/` to each ADDINCL path and
 // appends them to `cmdArgs` (PR-29-D03). Paths are SOURCE_ROOT-relative
 // in ya.make declarations; the composer adds the literal prefix and
 // the `-I` flag at emit time. Order is preserved (R14 — declaration
 // order matters for `include_next` chains).
 //
-// PR-M3-py3-buildroot-addincl: paths that already start with `$(BUILD_ROOT)/`
+// PR-M3-py3-buildroot-addincl: paths that already start with `$(B)/`
 // (auto-injected by `${addincl;noauto;output:NAME}` in ymake.core.conf for
 // ARCHIVE() consumers — e.g. library/python/runtime_py3's build-tree dir)
 // pass through verbatim under a literal `-I` prefix; SOURCE_ROOT wrapping
-// would produce `-I$(SOURCE_ROOT)/$(BUILD_ROOT)/…` which mismatches REF.
+// would produce `-I$(S)/$(B)/…` which mismatches REF.
 func appendAddIncl(cmdArgs []string, addIncl []string) []string {
 	for _, p := range addIncl {
-		if strings.HasPrefix(p, "$(BUILD_ROOT)/") {
+		if strings.HasPrefix(p, "$(B)/") {
 			cmdArgs = append(cmdArgs, "-I"+p)
 
 			continue
 		}
 
-		cmdArgs = append(cmdArgs, "-I$(SOURCE_ROOT)/"+p)
+		cmdArgs = append(cmdArgs, "-I$(S)/"+p)
 	}
 
 	return cmdArgs
 }
 
 // appendMuslIncludes splices per-module ADDINCL paths into the musl
-// include set. Slot is BETWEEN the prefix `-I$(BUILD_ROOT)
-// -I$(SOURCE_ROOT)` (entries [0..1] of muslCcIncludes*) and the body
+// include set. Slot is BETWEEN the prefix `-I$(B)
+// -I$(S)` (entries [0..1] of muslCcIncludes*) and the body
 // of musl arch/include/extra paths plus linux-headers suffix
 // (entries [2..]). This matches what builtins fp_mode.c.o shows
-// (cmd_args[7..14]: `-I$(BUILD_ROOT) -I$(SOURCE_ROOT) -I<musl/arch/X>
+// (cmd_args[7..14]: `-I$(B) -I$(S) -I<musl/arch/X>
 // -I<musl/arch/generic> -I<musl/include> -I<musl/extra>
 // -I<linux-headers> -I<linux-headers/_nf>`) — but note that builtins
 // is NOT a musl module, so its composition routes through composeTargetCC

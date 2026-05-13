@@ -36,8 +36,8 @@ func EmitJVCPG4(
 	emit Emitter,
 ) NodeRef {
 	const (
-		fsToolsPath  = "$(SOURCE_ROOT)/build/scripts/fs_tools.py"
-		procCmdFiles = "$(SOURCE_ROOT)/build/scripts/process_command_files.py"
+		fsToolsPath  = "$(S)/build/scripts/fs_tools.py"
+		procCmdFiles = "$(S)/build/scripts/process_command_files.py"
 	)
 
 	cmdArgs := []string{
@@ -49,7 +49,7 @@ func EmitJVCPG4(
 	}
 
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
 	// Inputs: jvPrimaryOutput first, then srcAbsPath only when it differs
@@ -101,15 +101,15 @@ func EmitJVCPG4(
 // cmd_args shape (5 args, verified against reference):
 //
 //	/ix/realm/pg/bin/python3
-//	$(SOURCE_ROOT)/build/scripts/fs_tools.py
+//	$(S)/build/scripts/fs_tools.py
 //	copy
 //	<srcAbsPath>
 //	<dstAbsPath>
 func EmitCP(instance ModuleInstance, srcAbsPath, dstAbsPath string, emit Emitter) NodeRef {
 	const (
 		python3Path  = "/ix/realm/pg/bin/python3"
-		fsToolsPath  = "$(SOURCE_ROOT)/build/scripts/fs_tools.py"
-		procCmdFiles = "$(SOURCE_ROOT)/build/scripts/process_command_files.py"
+		fsToolsPath  = "$(S)/build/scripts/fs_tools.py"
+		procCmdFiles = "$(S)/build/scripts/process_command_files.py"
 	)
 
 	cmdArgs := []string{
@@ -121,7 +121,7 @@ func EmitCP(instance ModuleInstance, srcAbsPath, dstAbsPath string, emit Emitter
 	}
 
 	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(SOURCE_ROOT)",
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
 	inputs := []VFS{
