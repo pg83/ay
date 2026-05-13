@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
+	"runtime/pprof"
 	"sort"
 	"strings"
 )
@@ -118,6 +120,13 @@ func cmdGen(args []string) int {
 	// genModule frame (no cross-module reuse).
 	scanCtxMode := fs.String("scan-ctx-mode", defaultScanCtxMode, "scanCtx lifecycle: \"local\" or \"interned\"")
 
+	// PR-M3-perf-profile: write a Go pprof CPU profile to PATH for
+	// the duration of the Gen call. Empty (default) disables
+	// profiling. Inspect with `go tool pprof <PATH>`.
+	cpuProfile := fs.String("cpuprofile", "", "write CPU profile to PATH (Go pprof format); empty disables")
+	memProfile := fs.String("memprofile", "", "write heap profile to PATH after Gen completes; empty disables")
+	profileRate := fs.Int("profile-rate", 1000, "CPU profile sampling rate in Hz (default 1000); only effective when -cpuprofile is set")
+
 	err := fs.Parse(args)
 
 	if errors.Is(err, flag.ErrHelp) {
@@ -136,7 +145,29 @@ func cmdGen(args []string) int {
 		ThrowFmt("gen: --out is required (use '-' for stdout)")
 	}
 
+	if *cpuProfile != "" {
+		f, ferr := os.Create(*cpuProfile)
+		Throw(ferr)
+
+		runtime.SetCPUProfileRate(*profileRate)
+		Throw(pprof.StartCPUProfile(f))
+
+		defer func() {
+			pprof.StopCPUProfile()
+			Throw(f.Close())
+		}()
+	}
+
 	g := GenWithMode(TargetCfg, *sourceRoot, *target, defines.toMap(), *scanCtxMode)
+
+	if *memProfile != "" {
+		f, ferr := os.Create(*memProfile)
+		Throw(ferr)
+
+		runtime.GC()
+		Throw(pprof.WriteHeapProfile(f))
+		Throw(f.Close())
+	}
 
 	writeGraph(*out, g)
 
