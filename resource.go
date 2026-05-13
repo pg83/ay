@@ -1124,8 +1124,7 @@ func emitPySrcObjcopy(
 // to-back calls from emitPySrcs and emitResourceObjcopy do not
 // duplicate node emission.
 func walkHostToolForRef(ctx *genCtx, instance ModuleInstance, path string) NodeRef {
-	hostInst := instance.WithHost(ctx.host)
-	hostInst.Path = path
+	hostInst := NewToolInstance(ctx.host, path, instance.Language)
 	hostInst.Flags = inferFlagsFromPath(path, true)
 
 	var ref NodeRef

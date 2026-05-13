@@ -36,11 +36,18 @@ func TestModuleInstance_Equality_Hashing(t *testing.T) {
 		t.Errorf("memo[b] = %q, want %q (map-key dispatch broken)", got, "hit")
 	}
 
-	// A different platform → a different instance → a different
-	// map slot.
-	host := a.WithHost(testHostP)
+	// A distinct ModuleInstance keyed on the host platform must miss
+	// in the map even when its path/language match `a`. Construct one
+	// inline to mimic what the production tool-spawn sites do via
+	// NewToolInstance.
+	host := ModuleInstance{
+		Path:     a.Path,
+		Language: a.Language,
+		Platform: testHostP,
+		Flags:    inferFlagsFromPath(a.Path, true),
+	}
 	if host == a {
-		t.Errorf("WithHost did not produce a distinct instance: %v == %v", host, a)
+		t.Errorf("host-axis copy compared equal to target-axis original: %v == %v", host, a)
 	}
 
 	if _, ok := memo[host]; ok {
@@ -48,45 +55,32 @@ func TestModuleInstance_Equality_Hashing(t *testing.T) {
 	}
 }
 
-// TestModuleInstance_WithHost_FlipsTargetAndPIC verifies the
-// host-flip discipline: same Path/Language, host platform, PIC=true.
-func TestModuleInstance_WithHost_FlipsTargetAndPIC(t *testing.T) {
-	mi := ModuleInstance{
-		Path:     "build/cow/on",
-		Language: LangCPP,
-		Platform: testTargetP,
-		Flags:    inferFlagsFromPath("build/cow/on", false),
+// TestNewToolInstance verifies that NewToolInstance builds an
+// instance from scratch — fresh Flags inferred from the tool's own
+// path, not copied from a surrounding module.
+func TestNewToolInstance(t *testing.T) {
+	tool := NewToolInstance(testHostP, "contrib/tools/ragel6", LangCPP)
+
+	if tool.Path != "contrib/tools/ragel6" {
+		t.Errorf("Path = %q, want contrib/tools/ragel6", tool.Path)
 	}
 
-	if mi.Flags.PIC {
-		t.Fatalf("seed instance has PIC=true; want false")
+	if tool.Language != LangCPP {
+		t.Errorf("Language = %q, want LangCPP", tool.Language)
 	}
 
-	host := mi.WithHost(testHostP)
-
-	if host.Path != mi.Path {
-		t.Errorf("host.Path = %q, want %q", host.Path, mi.Path)
+	if tool.Platform != testHostP {
+		t.Errorf("Platform != testHostP")
 	}
 
-	if host.Language != mi.Language {
-		t.Errorf("host.Language = %q, want %q", host.Language, mi.Language)
+	if !tool.Flags.PIC {
+		t.Errorf("Flags.PIC = false, want true (host axis)")
 	}
 
-	if host.Platform != testHostP {
-		t.Errorf("host.Platform != testHostP")
-	}
-
-	if !host.Flags.PIC {
-		t.Errorf("host.Flags.PIC = false, want true")
-	}
-
-	// The original instance must be untouched (value semantics).
-	if mi.Flags.PIC {
-		t.Errorf("WithHost mutated the receiver; mi.Flags.PIC = true")
-	}
-
-	if mi.Platform != testTargetP {
-		t.Errorf("WithHost mutated the receiver; mi.Platform != testTargetP")
+	// Tool path is not in inferFlagsFromPath's special-case set, so
+	// no extra flags should be set.
+	if tool.Flags.NoLibc || tool.Flags.LibcMusl {
+		t.Errorf("tool Flags carry unrelated module flags: %+v", tool.Flags)
 	}
 }
 
