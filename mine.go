@@ -79,7 +79,11 @@ func commonFlags(tools map[string]string) map[string]string {
 	}
 
 	for k, v := range tools {
-		key := strings.ToUpper(strings.ReplaceAll(k, "+", "_pl"))
+		// ymake's convention is mixed-case for the `+` transliteration
+		// (`clang++` → `CLANG_pl_pl_TOOL`, NOT `CLANG_PL_PL_TOOL`); the
+		// `_pl` is a marker token, not a token to upper-case. Uppercase
+		// the alpha component first, then transliterate `+`.
+		key := strings.ReplaceAll(strings.ToUpper(k), "+", "_pl")
 		res[key+"_TOOL"] = v
 		res[key+"_TOOL_VENDOR"] = v
 	}
