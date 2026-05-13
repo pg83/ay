@@ -1364,14 +1364,13 @@ func emitArchive(
 	// and add their BUILD_ROOT outputs to the AR's input set.
 	producerRefs := []NodeRef{}
 	producerSet := map[NodeRef]struct{}{}
-	pathPerFile := make([]string, 0, len(a.Files))
+	pathPerFile := make([]VFS, 0, len(a.Files))
 
 	for _, f := range a.Files {
 		// When the file matches a PR output of this module, resolve to
-		// the producer's BUILD_ROOT-absolute path and record the PR
+		// the producer's BUILD_ROOT-rooted path and record the PR
 		// NodeRef for dep wiring. Otherwise treat as SOURCE_ROOT-
 		// relative to the module dir.
-		abs := "$(B)/" + instance.Path + "/" + f
 		isPRProduced := false
 		if d.prOutputProducer != nil {
 			if ref, ok := d.prOutputProducer[f]; ok {
@@ -1382,11 +1381,17 @@ func emitArchive(
 				}
 			}
 		}
-		if !isPRProduced {
-			abs = "$(S)/" + instance.Path + "/" + f
+
+		rel := instance.Path + "/" + f
+		var absVFS VFS
+		if isPRProduced {
+			absVFS = Build(rel)
+		} else {
+			absVFS = Source(rel)
 		}
-		pathPerFile = append(pathPerFile, abs)
-		cmdArgs = append(cmdArgs, abs+":")
+
+		pathPerFile = append(pathPerFile, absVFS)
+		cmdArgs = append(cmdArgs, absVFS.String()+":")
 	}
 	cmdArgs = append(cmdArgs, "-o", archivePath)
 
@@ -1400,18 +1405,19 @@ func emitArchive(
 	// include the lexically-later sibling. The lexicographic gate keeps
 	// the input ordering stable across multiple archives sharing a
 	// producer.
-	prSiblingOutputs := make([]string, 0)
+	prSiblingOutputs := make([]VFS, 0)
 	{
-		// Largest archived file path (BUILD_ROOT-rooted) becomes the
-		// upper bound — siblings strictly greater than this are
-		// excluded.
+		// Largest archived file path (string form) becomes the upper
+		// bound — siblings whose .String() form is strictly greater
+		// are excluded.
 		maxArchived := ""
 		for _, p := range pathPerFile {
-			if p > maxArchived {
-				maxArchived = p
+			s := p.String()
+			if s > maxArchived {
+				maxArchived = s
 			}
 		}
-		seen := map[string]struct{}{}
+		seen := map[VFS]struct{}{}
 		for _, p := range pathPerFile {
 			seen[p] = struct{}{}
 		}
@@ -1440,15 +1446,15 @@ func emitArchive(
 				continue
 			}
 			collect := func(rel string) {
-				p := "$(B)/" + instance.Path + "/" + rel
-				if p > maxArchived {
+				v := Build(instance.Path + "/" + rel)
+				if v.String() > maxArchived {
 					return
 				}
-				if _, dup := seen[p]; dup {
+				if _, dup := seen[v]; dup {
 					return
 				}
-				seen[p] = struct{}{}
-				prSiblingOutputs = append(prSiblingOutputs, p)
+				seen[v] = struct{}{}
+				prSiblingOutputs = append(prSiblingOutputs, v)
 			}
 			for _, f := range rp.OUTFiles {
 				collect(f)
@@ -1471,23 +1477,21 @@ func emitArchive(
 	// against the per-file slot.
 	inputs := make([]VFS, 0, len(pathPerFile)+len(prSiblingOutputs)+1+len(prInSources))
 	// Build a global lexical-order set of BUILD_ROOT entries:
-	// pathPerFile ∪ prSiblingOutputs, sorted, so REF's
-	// "alphabetical merge of producer outputs" shape lines up.
-	buildRootSet := map[string]struct{}{}
+	// pathPerFile ∪ prSiblingOutputs, sorted by canonical String form,
+	// so REF's "alphabetical merge of producer outputs" shape lines up.
+	buildRootSet := map[VFS]struct{}{}
 	for _, p := range pathPerFile {
 		buildRootSet[p] = struct{}{}
 	}
 	for _, p := range prSiblingOutputs {
 		buildRootSet[p] = struct{}{}
 	}
-	buildRootSorted := make([]string, 0, len(buildRootSet))
+	buildRootSorted := make([]VFS, 0, len(buildRootSet))
 	for p := range buildRootSet {
 		buildRootSorted = append(buildRootSorted, p)
 	}
-	sort.Strings(buildRootSorted)
-	for _, p := range buildRootSorted {
-		inputs = append(inputs, ParseVFSOrSource(p))
-	}
+	SortVFS(buildRootSorted)
+	inputs = append(inputs, buildRootSorted...)
 	inputs = append(inputs, ParseVFSOrSource(toolBinPath))
 	inSet := map[VFS]struct{}{}
 	for _, p := range inputs {
