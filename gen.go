@@ -2346,7 +2346,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// downstream JS-derived CC node below continues to compile
 		// at `srcInstance.Platform.Target` (host x86_64 for ragel6/bin) so
 		// the .pic.o output stays on the correct compile axis.
-		jsRef, joinOut := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.cfg.Target.ID, ctx.emit)
+		jsRef, joinOutVFS := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.cfg.Target.ID, ctx.emit)
 
 		// EmitJS returns a $(B)/<srcInstance.Path>/<name>
 		// absolute path; convert to srcInstance-relative for the
@@ -2360,7 +2360,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// PR-29 deferred this because the wider closure had not yet
 		// landed; PR-30's musl/full + ALLOCATOR_IMPL closure widening
 		// absorbs the 2-multiset cost many times over.
-		jsRel := strings.TrimPrefix(joinOut, "$(B)/"+srcInstance.Path+"/")
+		jsRel := strings.TrimPrefix(joinOutVFS.Rel, srcInstance.Path+"/")
 
 		// PR-35d: thread (scripts + sources + closure) as the
 		// JS-derived CC's IncludeInputs so its full Inputs read

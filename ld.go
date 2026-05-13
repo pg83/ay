@@ -181,9 +181,15 @@ func EmitLD(
 
 	vcsOVFS := Build(binPrefix + "__vcs_version__.c" + vcsOSuffix)
 
-	cmd0 := composeLDCmdVcsInfo(vcsCVFS.String())
-	cmd1 := composeLDCmdVcsCompile(vcsCVFS.String(), vcsOVFS.String(), muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
-	cmd2 := composeLDCmdLinkExe(outputVFS.String(), vcsOVFS.String(), ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths, hostBuild, wantsStrip)
+	// Pre-materialise the three .String() forms — vcsCVFS / vcsOVFS
+	// flow into multiple cmd composers; .String() them once each.
+	vcsCPath := vcsCVFS.String()
+	vcsOPath := vcsOVFS.String()
+	outputPath := outputVFS.String()
+
+	cmd0 := composeLDCmdVcsInfo(vcsCPath)
+	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
+	cmd2 := composeLDCmdLinkExe(outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths, hostBuild, wantsStrip)
 	cmd3 := composeLDCmdLinkOrCopy(binaryDir)
 
 	// vcs_info.py and fs_tools.py only carry ARCADIA_ROOT_DISTBUILD;
