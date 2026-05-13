@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"unsafe"
 )
 
 // uid.go — content-derived UID hashing.
@@ -109,11 +110,18 @@ func writeNode(w io.Writer, n *Node) {
 // bytes of s. The length prefix is what makes adjacent variable-
 // length items unambiguously decodable — two distinct concatenations
 // of strings can only collide if their length prefixes already match.
+//
+// The string body is aliased through unsafe.StringData to skip the
+// `[]byte(s)` copy. Safe because both production targets (sha1.digest
+// and *bytes.Buffer) consume the slice synchronously via copy and do
+// not retain a reference past the Write call.
 func writeBytes(w io.Writer, s string) {
 	var lenBuf [4]byte
 	binary.LittleEndian.PutUint32(lenBuf[:], uint32(len(s)))
 	_, _ = w.Write(lenBuf[:])
-	_, _ = w.Write([]byte(s))
+	if len(s) > 0 {
+		_, _ = w.Write(unsafe.Slice(unsafe.StringData(s), len(s)))
+	}
 }
 
 func writeCount(w io.Writer, n int) {
@@ -122,8 +130,12 @@ func writeCount(w io.Writer, n int) {
 	_, _ = w.Write(lenBuf[:])
 }
 
+// writeByte writes a single byte. The slice header references a
+// stack-local array; escape analysis keeps it on the stack as long as
+// Write doesn't retain it (verified for sha1.digest and bytes.Buffer).
 func writeByte(w io.Writer, b byte) {
-	_, _ = w.Write([]byte{b})
+	buf := [1]byte{b}
+	_, _ = w.Write(buf[:])
 }
 
 func writeBool(w io.Writer, b bool) {
