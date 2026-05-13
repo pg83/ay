@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -98,7 +99,8 @@ func cmdGen(args []string) int {
 	fs.SetOutput(io.Discard)
 
 	target := fs.String("target", "", "module-relative path to the ya.make directory (e.g. build/cow/on)")
-	out := fs.String("out", "", "path to write the generated JSON (use '-' for stdout)")
+	out := fs.String("out", "", "path to write the generated JSON (use '-' for stdout; empty skips serialisation, useful for build-only timing)")
+	timeReport := fs.Bool("time", false, "print wall-time breakdown (gen + serialise) to stderr")
 	sourceRoot := fs.String("source-root", "/home/pg/monorepo/yatool_orig", "absolute path to the source tree (defaults to the upstream snapshot)")
 
 	// PR-32 D01: --define KEY=VALUE is the user-facing CLI flag that
@@ -137,10 +139,6 @@ func cmdGen(args []string) int {
 		ThrowFmt("gen: --target is required")
 	}
 
-	if *out == "" {
-		ThrowFmt("gen: --out is required (use '-' for stdout)")
-	}
-
 	if *cpuProfile != "" {
 		f, ferr := os.Create(*cpuProfile)
 		Throw(ferr)
@@ -154,7 +152,9 @@ func cmdGen(args []string) int {
 		}()
 	}
 
+	genStart := time.Now()
 	g := GenWithMode(TargetCfg, *sourceRoot, *target, defines.toMap(), *scanCtxMode)
+	genDur := time.Since(genStart)
 
 	if *memProfile != "" {
 		f, ferr := os.Create(*memProfile)
@@ -165,7 +165,21 @@ func cmdGen(args []string) int {
 		Throw(f.Close())
 	}
 
-	writeGraph(*out, g)
+	var writeDur time.Duration
+
+	if *out != "" {
+		writeStart := time.Now()
+		writeGraph(*out, g)
+		writeDur = time.Since(writeStart)
+	}
+
+	if *timeReport {
+		if *out != "" {
+			fmt.Fprintf(os.Stderr, "time: gen=%s serialise=%s total=%s\n", genDur.Round(time.Millisecond), writeDur.Round(time.Millisecond), (genDur + writeDur).Round(time.Millisecond))
+		} else {
+			fmt.Fprintf(os.Stderr, "time: gen=%s (no --out, serialisation skipped)\n", genDur.Round(time.Millisecond))
+		}
+	}
 
 	return 0
 }
@@ -218,14 +232,19 @@ func (s *stringMapValue) toMap() map[string]string {
 }
 
 func printGenUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage: yatool gen --target <module-dir> --out <path|-> [--source-root <path>] [--define KEY=VALUE]...
-Parse <source-root>/<module-dir>/ya.make and write the resulting build graph as JSON.
+	fmt.Fprint(w, `Usage: yatool gen --target <module-dir> [--out <path|->] [--source-root <path>] [--define KEY=VALUE]...
+Parse <source-root>/<module-dir>/ya.make and build the in-memory graph;
+serialise to JSON when --out is given.
 
 Flags:
     --target <path>        Module-relative ya.make directory (e.g. build/cow/on). Required.
-    --out <path|->         Output JSON path; "-" writes to stdout. Required.
+    --out <path|->         Output JSON path; "-" writes to stdout. Empty (default)
+                           skips serialisation — useful with --time for build-only timing.
     --source-root <path>   Absolute source-tree root. Defaults to /home/pg/monorepo/yatool_orig.
     --define KEY=VALUE     Repeatable. Mirrors ymake's -D flag. Default when omitted: MUSL=yes.
+    --time                 Print wall-time breakdown (gen + serialise) to stderr.
+    --cpuprofile <path>    Write CPU profile (pprof) over the run. Empty disables.
+    --memprofile <path>    Write heap profile after Gen. Empty disables.
 `)
 }
 
