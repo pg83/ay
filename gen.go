@@ -3140,6 +3140,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	resolved := make([]resolvedPeer, 0, len(allPeers))
 
+	// PASS A: resolve peers and aggregate LD plugin closure in source
+	// (declaration) order. Archive / .global.a aggregation is deferred to
+	// PASS B so it can use a different iteration order without disturbing
+	// the AddInclGlobal aggregation (which iterates `resolved` directly
+	// in this order downstream).
 	for i, p := range allPeers {
 		peerPath := filepath.Clean(p)
 
@@ -3161,6 +3166,62 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult, kind: kind})
 
+		// PR-35k: fold peer's LD plugin closure (own ∪ transitive) into
+		// our own. Runs for BOTH header-only and non-header peers — the
+		// only M2 plugin (musl.py.pyplugin) is owned by the header-only
+		// `contrib/libs/musl/include` LIBRARY.
+		for i, p := range peerResult.LDPluginPaths {
+			peerLDPluginAddPath(peerResult.LDPluginRefs[i], p)
+		}
+	}
+
+	// PASS B: archive + .global.a aggregation. Iterates `resolved` in an
+	// archive-specific order so PROGRAM-class consumers (ymake/bin,
+	// py3cc/slow/bin) can defer USE_PYTHON3's implicit peers (contrib/
+	// libs/python, library/python/runtime_py3) to AFTER user-declared
+	// PEERDIRs. The AddInclGlobal aggregation below continues to iterate
+	// `resolved` in source order so CC nodes see the existing -I... slot
+	// ordering (source-order is empirically correct for the include path
+	// slots; deferral there regressed 142 nodes).
+	//
+	// PR-M3-peer-archive-multimodule-partition: USE_PYTHON3() implicit
+	// peers (contrib/libs/python + library/python/runtime_py3) are
+	// reordered to the TAIL of the archive aggregation for PROGRAM-class
+	// modules. Upstream's `macro USE_PYTHON3() { PEERDIR(contrib/libs/
+	// python); when (...) { PEERDIR+=runtime_py3 } }` (python.conf:1063-
+	// 1071) effectively appends both peers to the tail of the module's
+	// peer list (the `when` block is explicitly deferred; the plain
+	// `PEERDIR(...)` inside a macro body behaves the same way upstream).
+	// For PY*_PROGRAM consumers (py3cc/slow/bin) REF places runtime_py3
+	// AFTER user-PEERDIR runtime_py3/main, matching this deferral and
+	// closing the cmd[2] slot 65-66 inversion.
+	// Scoped to PROGRAM/PY*_PROGRAM only — LIBRARY-class consumers depend
+	// on the existing peer order for their PeerArchiveClosurePaths
+	// propagation (LIBRARY-scope deferral regressed 100+ L3 nodes).
+	archiveOrder := resolved
+	if d.usePython3 && d.moduleStmt != nil {
+		switch d.moduleStmt.Name {
+		case "PROGRAM", "PY3_PROGRAM_BIN", "PY2_PROGRAM", "PY3_PROGRAM":
+			head := make([]resolvedPeer, 0, len(resolved))
+			tail := make([]resolvedPeer, 0, 2)
+
+			for _, rp := range resolved {
+				if rp.path == "contrib/libs/python" || rp.path == "library/python/runtime_py3" {
+					tail = append(tail, rp)
+
+					continue
+				}
+
+				head = append(head, rp)
+			}
+
+			archiveOrder = append(head, tail...)
+		}
+	}
+
+	for _, rp := range archiveOrder {
+		peerResult := rp.result
+
 		// PR-35c: fold peer's transitive archive closure into our
 		// own running closure BEFORE the peer's own archive (DFS
 		// post-order: dependencies-of-peer come first, peer last).
@@ -3177,14 +3238,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// `.global.a` of its own, but its peers may.
 		for i, p := range peerResult.PeerGlobalClosurePaths {
 			peerGlobalAddPath(peerResult.PeerGlobalClosureRefs[i], p)
-		}
-
-		// PR-35k: fold peer's LD plugin closure (own ∪ transitive) into
-		// our own. Runs for BOTH header-only and non-header peers — the
-		// only M2 plugin (musl.py.pyplugin) is owned by the header-only
-		// `contrib/libs/musl/include` LIBRARY.
-		for i, p := range peerResult.LDPluginPaths {
-			peerLDPluginAddPath(peerResult.LDPluginRefs[i], p)
 		}
 
 		// PR-M3-LD-peer-globalA: header-only peers still expose their
