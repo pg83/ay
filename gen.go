@@ -6204,11 +6204,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			ctx.evOutputs[evKey] = evRef
 			if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
-				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC.String())
+				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC)
 				evEmitsIncludes := make([]VFS, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
-				evEmitsIncludes = append(evEmitsIncludes, VFSesFromStrings(directImports)...)
-				evEmitsIncludes = append(evEmitsIncludes, VFSesFromStrings(protobufRuntimeHeaders)...)
-				evEmitsIncludes = append(evEmitsIncludes, VFSesFromStrings(evExtras)...)
+				evEmitsIncludes = append(evEmitsIncludes, directImports...)
+				evEmitsIncludes = append(evEmitsIncludes, protobufRuntimeHeaders...)
+				evEmitsIncludes = append(evEmitsIncludes, evExtras...)
 				reg.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EV",
 					OutputPath:    evH,
@@ -6223,7 +6223,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				reg.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EV",
 					OutputPath:    evPbCC,
-					EmitsIncludes: append([]VFS{evH}, VFSesFromStrings(protobufRuntimeHeaders)...),
+					EmitsIncludes: append([]VFS{evH}, protobufRuntimeHeaders...),
 				})
 			}
 
@@ -6253,7 +6253,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				}
 				ccIn.IncludeInputs = filtered
 			}
-			wireFormatVFS := Source(strings.TrimPrefix(pbRuntimeBase, "$(S)/") + "google/protobuf/wire_format.h")
+			wireFormatVFS := Source(pbRuntimeBase + "google/protobuf/wire_format.h")
 			// PR-M3-final-codegen-registry-expansion: protoc emits
 			// `#include "google/protobuf/wire_format.h"` directly. Add to inputs
 			// only on this CC node (not via registry — that would over-emit).
@@ -6930,7 +6930,7 @@ func codegenRegForInstance(ctx *genCtx, instance ModuleInstance) *CodegenRegistr
 // NOT for closure walks. The architectural cleanup to route through a unified
 // registry-resolved "structured-import extractor" lives in PR-AUDIT-3.D12 (still
 // open) — keeping the (B) classification per audit doc §2 D12, §4 PR-AUDIT-3.
-func protoDirectImportIncludes(sourceRoot, srcRel string) []string {
+func protoDirectImportIncludes(sourceRoot, srcRel string) []VFS {
 	absPath := filepath.Join(sourceRoot, srcRel)
 	f, err := os.Open(absPath)
 	if err != nil {
@@ -6938,7 +6938,7 @@ func protoDirectImportIncludes(sourceRoot, srcRel string) []string {
 	}
 	defer f.Close()
 
-	var out []string
+	var out []VFS
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -6952,26 +6952,26 @@ func protoDirectImportIncludes(sourceRoot, srcRel string) []string {
 		}
 		imp := line[start+1 : end]
 		if strings.HasSuffix(imp, ".ev") {
-			out = append(out, "$(B)/"+strings.TrimSuffix(imp, ".ev")+".ev.pb.h")
+			out = append(out, Build(strings.TrimSuffix(imp, ".ev")+".ev.pb.h"))
 		} else if strings.HasSuffix(imp, ".proto") {
 			base := strings.TrimSuffix(imp, ".proto")
 			if imp == "google/protobuf/descriptor.proto" {
 				// descriptor.pb.h is pre-committed, not a codegen output.
 				// Upstream tree: contrib/libs/protobuf/src/google/protobuf/descriptor.pb.h
-				out = append(out, pbRuntimeBase+"google/protobuf/descriptor.pb.h")
+				out = append(out, Source(pbRuntimeBase+"google/protobuf/descriptor.pb.h"))
 			} else {
-				out = append(out, "$(B)/"+base+".pb.h")
+				out = append(out, Build(base+".pb.h"))
 			}
 		}
 	}
-	sort.Strings(out)
+	SortVFS(out)
 	return out
 }
 
 // cfIncludeDirectives parses `#include "..."` directives from a configure_file
 // template (.cpp.in / .c.in). Only quoted includes are collected (angle-bracket
 // forms are system headers resolved by the compiler search path, not by the
-// registry). Returns $(S)/... paths, sorted lexicographically.
+// registry). Returns Source-rooted VFSes, sorted lexicographically.
 // Returns nil when the file cannot be read.
 //
 // PR-AUDIT-3: legitimate disk read — extracts structured `#include` directives
@@ -6979,12 +6979,12 @@ func protoDirectImportIncludes(sourceRoot, srcRel string) []string {
 // EmitsIncludes. NOT for closure walks. The architectural cleanup to route
 // through a unified registry-resolved "structured-import extractor" lives in
 // PR-AUDIT-3.D12 / .D16 (still open); kept per audit doc §2 D12/D16.
-func cfIncludeDirectives(diskPath string) []string {
+func cfIncludeDirectives(diskPath string) []VFS {
 	data, err := os.ReadFile(diskPath)
 	if err != nil {
 		return nil
 	}
-	var out []string
+	var out []VFS
 	for _, line := range strings.Split(string(data), "\n") {
 		t := strings.TrimSpace(line)
 		if !strings.HasPrefix(t, "#include ") {
@@ -7000,10 +7000,10 @@ func cfIncludeDirectives(diskPath string) []string {
 		}
 		inc := t[start+1 : start+1+end]
 		if inc != "" {
-			out = append(out, "$(S)/"+inc)
+			out = append(out, Source(inc))
 		}
 	}
-	sort.Strings(out)
+	SortVFS(out)
 	return out
 }
 
