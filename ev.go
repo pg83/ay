@@ -185,6 +185,7 @@ func evWitnessExtras(sourceRoot, evRelPath, evPbCC string) []string {
 
 // EmitEV emits an EV node for `srcRel` (a .ev file relative to `instance.Path`).
 func EmitEV(
+	hostP, targetP *Platform,
 	instance ModuleInstance,
 	srcRel string,
 	cppStyleguideLDRef NodeRef,
@@ -197,6 +198,7 @@ func EmitEV(
 	sourceRoot string,
 	emit Emitter,
 ) NodeRef {
+	_ = hostP // PR-M3-platform-pair-step8: surfaced for signature symmetry.
 	moduleDir := instance.Path
 	evRelPath := moduleDir + "/" + srcRel
 
@@ -290,9 +292,19 @@ func EmitEV(
 			"p":  "EV",
 			"pc": "yellow",
 		},
-		Tags:             []string{},
+		// PR-M3-platform-pair-step8: tags + host_platform + platform
+		// from targetP; empty Tags initialised as []string{} for
+		// non-nil JSON output.
+		Tags: func() []string {
+			out := []string{}
+			if len(targetP.Tags) > 0 {
+				out = append(out, targetP.Tags...)
+			}
+			return out
+		}(),
 		TargetProperties: targetProps,
-		Platform:         string(instance.Target),
+		Platform:         string(targetP.Target),
+		HostPlatform:     targetP.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",

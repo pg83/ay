@@ -696,7 +696,8 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		}
 
 		for _, src := range evSrcs {
-			evRef := EmitEV(instance, src, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
+			evRef := EmitEV(ctx.host, ctx.platformFor(instance),
+				instance, src, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
 				"cpp_proto", ctx.sourceRoot, ctx.emit)
 
