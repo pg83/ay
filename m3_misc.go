@@ -1018,7 +1018,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 
 	// BI: emit one node when CREATE_BUILDINFO_FOR was declared.
 	if d.createBuildInfoFor != "" {
-		biRef := EmitBI(instance, d.createBuildInfoFor, biFlagsForInstance(ctx.platformFor(instance)), ctx.emit)
+		biRef := EmitBI(instance, d.createBuildInfoFor, biFlagsForInstance(instance.Platform), ctx.emit)
 		// F-7-B: register BI output. buildinfo_data.h is a generated header.
 		// PR-M3-final-codegen-registry-expansion: the BI-script trio
 		// (build_info_gen.py + xargs.py + yield_line.py) flows up into
