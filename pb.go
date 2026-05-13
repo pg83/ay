@@ -605,10 +605,10 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	// in declaration order. Mirrors the LIBRARY AR aggregation pattern
 	// (gen.go:2761 addMemberInputs(ccIns) inside the per-source loop).
 	type protoCodegenOutput struct {
-		genRef NodeRef // PB or EV node ref (used as Generator dep for the downstream CC)
-		pbCC   string  // generated .pb.cc / .ev.pb.cc absolute BUILD_ROOT path
-		srcRel string  // module-relative source-with-codegen-suffix (".pb.cc" appended)
-		primSrc string // primary source path ($(S)/<module>/<src>) for AR memberInputs
+		genRef  NodeRef // PB or EV node ref (used as Generator dep for the downstream CC)
+		pbCC    VFS     // generated .pb.cc / .ev.pb.cc BUILD_ROOT path
+		srcRel  string  // module-relative source-with-codegen-suffix (".pb.cc" appended)
+		primSrc VFS     // primary source path ($(S)/<module>/<src>) for AR memberInputs
 	}
 
 	var codegenOutputs []protoCodegenOutput
@@ -672,7 +672,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			pbCCEmits := make([]VFS, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
 			pbCCEmits = append(pbCCEmits, pbH)
 			pbCCEmits = append(pbCCEmits, Source(protoRelPath))
-			pbCCEmits = append(pbCCEmits, ParseVFSOrSource(pbWrapperPath))
+			pbCCEmits = append(pbCCEmits, pbWrapperVFS)
 			pbCCEmits = append(pbCCEmits, protobufRuntimeHeaders...)
 			pbCCEmits = append(pbCCEmits, pbCcDeepRuntimeHeaders...)
 			reg.Register(&GeneratedFileInfo{
@@ -686,9 +686,9 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		// for the downstream-CC + AR step below.
 		codegenOutputs = append(codegenOutputs, protoCodegenOutput{
 			genRef:  pbRef,
-			pbCC:    pbCC.String(),
+			pbCC:    pbCC,
 			srcRel:  strings.TrimSuffix(src, ".proto") + ".pb.cc",
-			primSrc: "$(S)/" + protoRelPath,
+			primSrc: Source(protoRelPath),
 		})
 	}
 
@@ -758,9 +758,9 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 
 			codegenOutputs = append(codegenOutputs, protoCodegenOutput{
 				genRef:  evRef,
-				pbCC:    evPbCC.String(),
+				pbCC:    evPbCC,
 				srcRel:  src + ".pb.cc",
-				primSrc: "$(S)/" + evRelPath,
+				primSrc: Source(evRelPath),
 			})
 		}
 	}
@@ -828,18 +828,18 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		}
 	}
 
-	wireFormatVFS := Source(strings.TrimPrefix(pbRuntimeBase, "$(S)/") + "google/protobuf/wire_format.h")
+	wireFormatVFS := Source(pbRuntimeBase + "google/protobuf/wire_format.h")
 	for _, co := range codegenOutputs {
 		ccIn := moduleInputs
 		ccIn.IsGenerated = true
 		ccIn.Generator = co.genRef
 		ccIn.HasGenerator = true
-		ccIn.IncludeInputs = walkClosure(ctx, instance, ParseVFSOrSource(co.pbCC), moduleInputs)
+		ccIn.IncludeInputs = walkClosure(ctx, instance, co.pbCC, moduleInputs)
 		// PR-M3-final-surgical (fix 1): the .ev.pb.cc.o consumer must not
 		// carry its OWN .ev.pb.h in inputs[] (REF omits the self-include).
 		// Drop just the sibling header co.pbCC -> co.pbCC[.cc -> .h].
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
-			selfH := ParseVFSOrSource(strings.TrimSuffix(co.pbCC, ".cc") + ".h")
+			selfH := Build(strings.TrimSuffix(co.pbCC.Rel, ".cc") + ".h")
 			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 			for _, in := range ccIn.IncludeInputs {
 				if in == selfH {
@@ -865,7 +865,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		// Mirror of gen.go:4414-4415 (LIBRARY EV branch returning the .ev
 		// source as the primary member input) + gen.go:2761 addMemberInputs.
 		perCC := make([]VFS, 0, 1+len(ccIn.IncludeInputs))
-		perCC = append(perCC, ParseVFSOrSource(co.primSrc))
+		perCC = append(perCC, co.primSrc)
 		perCC = append(perCC, ccIn.IncludeInputs...)
 		addMemberInputs(perCC)
 	}
