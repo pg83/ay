@@ -239,7 +239,7 @@ func cmdGen(args []string) int {
 	targetP := NewPlatform(tOS, tISA, targetFlags, nil, false)
 
 	genStart := time.Now()
-	g := GenWithMode(TargetCfg, *sourceRoot, *target, hostP, targetP, *scanCtxMode)
+	g := GenWithMode(*sourceRoot, *target, hostP, targetP, *scanCtxMode)
 	genDur := time.Since(genStart)
 
 	if *memProfile != "" {

@@ -127,7 +127,7 @@ func cmdMake(args []string) int {
 	if mf.threads == 0 {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
-				g := GenWithMode(TargetCfg, mf.srcRoot, target, hostP, targetP, defaultScanCtxMode)
+				g := GenWithMode(mf.srcRoot, target, hostP, targetP, defaultScanCtxMode)
 				writeGraph("-", g)
 			}
 		} else {

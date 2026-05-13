@@ -130,7 +130,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// PR-M3-F-5: extend yasm walk to all `.asm` sources on x86_64, not
 		// just asmlibYasmModules. The reference graph uses yasm for every
 		// `.asm` host source (util/system/context_x86.asm + asmlib's 25 nodes).
-		if targetIsX8664(instance) && strings.HasSuffix(srcRel, ".asm") {
+		if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
 			const yasmPath = "contrib/tools/yasm"
 
 			yasmInstance := NewToolInstance(ctx.host, yasmPath, instance.Language)

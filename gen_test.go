@@ -237,7 +237,6 @@ func TestGen_PeerdirCycle_Tolerated(t *testing.T) {
 	// back-edge: when b walks its PEERDIR(a) and a is still on the
 	// walking stack.
 	ctx := &genCtx{
-		cfg:        TargetCfg,
 		sourceRoot: root,
 		emit:       NewBufferedEmitter(),
 		memo:       make(map[ModuleInstance]*moduleEmitResult),
@@ -1157,9 +1156,7 @@ func TestGen_HostWalk_AsmlibYasmWired(t *testing.T) {
 	// fires under PIC=true. (The full demand-driven path would route
 	// through ragel6/bin → musl/full → asmlib; this synthetic test
 	// shortcuts to the AS+yasm wiring.)
-	cfg := DefaultLinuxConfig
 	ctx := &genCtx{
-		cfg:        cfg,
 		sourceRoot: root,
 		emit:       NewBufferedEmitter(),
 		memo:       make(map[ModuleInstance]*moduleEmitResult),
@@ -1223,9 +1220,7 @@ func TestGen_HostWalk_NonAsmlibAS_NoYasmDep(t *testing.T) {
 	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"),
 		[]byte("LIBRARY()\nNO_PLATFORM()\nSRCS(thing.S)\nEND()\n"), 0o644))
 
-	cfg := DefaultLinuxConfig
 	ctx := &genCtx{
-		cfg:        cfg,
 		sourceRoot: root,
 		emit:       NewBufferedEmitter(),
 		memo:       make(map[ModuleInstance]*moduleEmitResult),
@@ -2654,7 +2649,7 @@ func TestGen_MuslPyplugin_CPNodeEmitted(t *testing.T) {
 			continue
 		}
 
-		if n.Platform != string(TargetCfg.Target.ID) {
+		if n.Platform != string(testTargetP.Target) {
 			continue
 		}
 
@@ -2664,7 +2659,7 @@ func TestGen_MuslPyplugin_CPNodeEmitted(t *testing.T) {
 	}
 
 	if targetCP == nil {
-		t.Fatalf("Gen emitted no CP node with output %q on target platform %q", wantOutput, TargetCfg.Target.ID)
+		t.Fatalf("Gen emitted no CP node with output %q on target platform %q", wantOutput, testTargetP.Target)
 	}
 
 	if got := targetCP.TargetProperties["module_dir"]; got != "contrib/libs/musl/include" {
@@ -2855,8 +2850,8 @@ func TestGen_MuslPyplugin_HostCPDedup(t *testing.T) {
 
 	cpNode := cpNodes[0]
 
-	if cpNode.Platform != string(TargetCfg.Target.ID) {
-		t.Errorf("musl plugin CP platform = %q, want %q (the surviving CP must be the target one — first-emit-wins)", cpNode.Platform, TargetCfg.Target.ID)
+	if cpNode.Platform != string(testTargetP.Target) {
+		t.Errorf("musl plugin CP platform = %q, want %q (the surviving CP must be the target one — first-emit-wins)", cpNode.Platform, testTargetP.Target)
 	}
 
 	cpUID := cpNode.UID
@@ -3414,8 +3409,8 @@ func TestD41_PICCoincidesWithHostTarget(t *testing.T) {
 
 	g := testGen(sourceRoot, targetDir)
 
-	hostID := string(DefaultLinuxConfig.Host.ID)
-	targetID := string(DefaultLinuxConfig.Target.ID)
+	hostID := string(testHostP.Target)
+	targetID := string(testTargetP.Target)
 
 	for _, n := range g.Graph {
 		out := ""

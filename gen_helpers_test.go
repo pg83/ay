@@ -17,5 +17,5 @@ func testGen(sourceRoot, targetDir string) *Graph {
 	targetFlags["PIC"] = "no"
 	targetFlags["MUSL"] = "yes"
 	target := NewPlatform(OSLinux, ISAAArch64, targetFlags, nil, false)
-	return GenWithMode(TargetCfg, sourceRoot, targetDir, host, target, defaultScanCtxMode)
+	return GenWithMode(sourceRoot, targetDir, host, target, defaultScanCtxMode)
 }
