@@ -104,14 +104,26 @@ func writeGraphIndented(w io.Writer, g *Graph) {
 
 // appendNode emits a single Node as a JSON object indented under `pad`
 // (the indent of the object's opening '{'). Field order is alphabetical
-// per the Node struct's declaration order in node.go (cmds, deps, env,
-// foreign_deps, host_platform, inputs, kv, outputs, platform,
+// per the Node struct's declaration order in node.go (cache, cmds, deps,
+// env, foreign_deps, host_platform, inputs, kv, outputs, platform,
 // requirements, sandboxing, self_uid, tags, target_properties, uid).
-// stats_uid is omitted (json:"-" in node.go, PR-L4-C/04).
+// stats_uid is omitted (json:"-" in node.go, PR-L4-C/04). cache is
+// emitted only when n.Cache is non-nil (omitempty equivalent).
 func appendNode(buf []byte, n *Node, pad string) []byte {
 	innerPad := pad + "    "
 	buf = append(buf, pad...)
 	buf = append(buf, '{', '\n')
+
+	// cache: *bool, omitempty — emit only when explicitly set.
+	if n.Cache != nil {
+		buf = append(buf, innerPad...)
+		if *n.Cache {
+			buf = append(buf, `"cache": true,`...)
+		} else {
+			buf = append(buf, `"cache": false,`...)
+		}
+		buf = append(buf, '\n')
+	}
 
 	// cmds: []Cmd
 	buf = append(buf, innerPad...)
@@ -251,6 +263,19 @@ func appendCmdSlice(buf []byte, cmds []Cmd, pad string) []byte {
 		buf = append(buf, innerPad...)
 		buf = append(buf, `"env": `...)
 		buf = appendStringMap(buf, c.Env, innerPad)
+
+		// stdout: string, omitempty — emitted after env to keep the
+		// alphabetical JSON key order REF uses (cmd_args, cwd, env,
+		// stdout). The only known REF cmd carrying an explicit stdout
+		// is the PR node for devtools/ymake/symbols
+		// dep_types.h_dumper.cpp (STDOUT redirect of struct2fieldcalc).
+		if c.Stdout != "" {
+			buf = append(buf, ',', '\n')
+			buf = append(buf, innerPad...)
+			buf = append(buf, `"stdout": `...)
+			buf = appendString(buf, c.Stdout)
+		}
+
 		buf = append(buf, '\n')
 
 		buf = append(buf, itemPad...)

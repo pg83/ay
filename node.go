@@ -49,7 +49,15 @@ type Cmd struct {
 // Public (JSON-tagged) fields are what the serializer writes. Internal
 // fields (DepRefs, ForeignDepRefs) carry rule-author input that Finalize
 // will resolve into the public Deps/ForeignDeps slices.
+//
+// Cache is a tri-state pointer: nil means the JSON `cache` key is
+// omitted (the common case across ~3,728 of ~3,730 reference nodes);
+// non-nil emits `cache: true` or `cache: false`. The only known
+// reference node carrying an explicit `cache: false` is BI
+// buildinfo_data.h (the build-info header generator is
+// non-deterministic and must not be cached).
 type Node struct {
+	Cache            *bool                  `json:"cache,omitempty"`
 	Cmds             []Cmd                  `json:"cmds"`
 	Deps             []string               `json:"deps"`
 	Env              map[string]string      `json:"env"`

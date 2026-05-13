@@ -516,7 +516,11 @@ const buildInfoGenPyPath = "$(SOURCE_ROOT)/build/scripts/build_info_gen.py"
 // compiler-invocation-specific args: -c, -o, input path).
 //
 // kv: {p: BI, pc: yellow, show_out: yes, disable_cache: yes}
-// cache: false is NOT emitted (normalize.py drops it per D41/GOALS.md).
+// cache: false is set as a top-level node field to match REF; the
+// normalizer drops it during M1/M2 canonicalization (per
+// normalize.py step 3) so the byte-exact M1/M2 hashes are
+// unaffected, while the L3 comparator (which preserves the field)
+// now matches REF on the BI node.
 // inputs: [yield_line.py, xargs.py, build_info_gen.py]
 // outputs: [$(BUILD_ROOT)/<modulePath>/<outputHeader>]
 func EmitBI(
@@ -568,7 +572,9 @@ func EmitBI(
 		buildInfoGenPyPath,
 	}
 
+	cacheFalse := false
 	node := &Node{
+		Cache: &cacheFalse,
 		Cmds: []Cmd{
 			{CmdArgs: cmd0Args, Env: env},
 			{CmdArgs: cmd1Args, Env: env},
@@ -604,8 +610,11 @@ func EmitBI(
 // bundle as a target CXX compile for a musl module (the build_info library
 // peers library/cpp/string_utils/base64 which chains into musl).
 // The flags match the noLibcUndebugBlock sequence (two copies flanking
-// catboostOpenSourceDefine) plus the CXX-specific tail.
-func biFlagsForInstance() []string {
+// catboostOpenSourceDefine) plus the CXX-specific tail. On aarch64 the
+// noLibcUndebugBlock prefix carries `-mno-outline-atomics` between
+// `-UNDEBUG` and the warning suppressions tail (matches REF
+// library/cpp/build_info/buildinfo_data.h on default-linux-aarch64).
+func biFlagsForInstance(instance ModuleInstance) []string {
 	flags := make([]string, 0, 100)
 	flags = append(flags, debugPrefixMapFlags...)
 	flags = append(flags, xclangDebugCompilationDir...)
@@ -613,10 +622,16 @@ func biFlagsForInstance() []string {
 	flags = append(flags, warningFlags...)
 	flags = append(flags, commonDefines...)
 	flags = append(flags, "-UNDEBUG")
+	if !targetIsX8664(instance) {
+		flags = append(flags, "-mno-outline-atomics")
+	}
 	flags = append(flags, noLibcWarningSuppressions...)
 	flags = append(flags, catboostOpenSourceDefine...)
 	flags = append(flags, "-D_musl_")
 	flags = append(flags, "-UNDEBUG")
+	if !targetIsX8664(instance) {
+		flags = append(flags, "-mno-outline-atomics")
+	}
 	flags = append(flags, noLibcWarningSuppressions...)
 	flags = append(flags, cxxStandardFlag)
 	// CXX warning extensions (from appendCxxStdAndOwn).
@@ -969,7 +984,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 
 	// BI: emit one node when CREATE_BUILDINFO_FOR was declared.
 	if d.createBuildInfoFor != "" {
-		biRef := EmitBI(instance, d.createBuildInfoFor, biFlagsForInstance(), ctx.emit)
+		biRef := EmitBI(instance, d.createBuildInfoFor, biFlagsForInstance(instance), ctx.emit)
 		// F-7-B: register BI output. buildinfo_data.h is a generated header.
 		// PR-M3-final-codegen-registry-expansion: the BI-script trio
 		// (build_info_gen.py + xargs.py + yield_line.py) flows up into
