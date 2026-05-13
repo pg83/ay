@@ -124,28 +124,6 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, isHost 
 	}
 }
 
-// platformFor returns the `*Platform` matching `instance.Platform.Target` from
-// the (host, target) pair on `c`. Helper for the migration period: as
-// each emitter is refactored to take `(hostP, targetP)` explicitly, its
-// caller resolves the right `*Platform` via this method. Throws if
-// `instance.Platform.Target` is neither host nor target; in M2/M3 this is
-// unreachable (ModuleInstance.Target is always one of the two CLI-
-// constructed platforms).
-func (c *genCtx) platformFor(instance ModuleInstance) *Platform {
-	switch instance.Platform.Target {
-	case c.host.Target:
-		return c.host
-	case c.target.Target:
-		return c.target
-	}
-
-	ThrowFmt(
-		"genCtx.platformFor: instance.Platform.Target=%q does not match host=%q or target=%q",
-		instance.Platform.Target, c.host.Target, c.target.Target,
-	)
-	return nil
-}
-
 // ParsePlatformID splits a "default-<os>-<isa>" string into its OS
 // and ISA components. Throws on a malformed input; returns the
 // recognised typed pair on success.
