@@ -5734,7 +5734,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 		enRef, enOutPaths := EmitEN(
 			instance,
-			headerRel,
+			Source(instance.Path+"/"+headerRel),
 			withHeader,
 			enumParserLD,
 			enumParserBin,

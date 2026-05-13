@@ -32,9 +32,11 @@ const enumParserBinaryPath = "$(B)/tools/enum_parser/enum_parser/enum_parser"
 // EmitEN emits one EN node for a GENERATE_ENUM_SERIALIZATION(*)
 // invocation.
 //
-//   - instance: the module that declared the macro.
-//   - headerRel: the header path relative to instance.Path
-//     (e.g. "stats_enums.h" or "config/config.h").
+//   - instance: the module that declared the macro (provides
+//     Platform and module_dir).
+//   - headerSrc: the source-rooted header VFS. Its Rel
+//     (= instance.Path + "/" + macro-arg) drives the serialized
+//     output paths and the --include-path cmd arg.
 //   - withHeader: true when the macro variant is
 //     _WITH_HEADER (adds --header + produces .h output).
 //   - enumParserLD: NodeRef of the tools/enum_parser/enum_parser
@@ -48,12 +50,12 @@ const enumParserBinaryPath = "$(B)/tools/enum_parser/enum_parser/enum_parser"
 //     the same order as depENRefs. These become the leading entries
 //     in this node's inputs slice.
 //   - headerIncludeClosure: SOURCE_ROOT-absolute paths of headers
-//     transitively included by headerRel (from the include scanner).
+//     transitively included by headerSrc (from the include scanner).
 //
 // Returns the emitted NodeRef and the list of output paths (1 or 2).
 func EmitEN(
 	instance ModuleInstance,
-	headerRel string,
+	headerSrc VFS,
 	withHeader bool,
 	enumParserLD NodeRef,
 	enumParserBin string,
@@ -62,18 +64,15 @@ func EmitEN(
 	headerIncludeClosure []VFS,
 	emit Emitter,
 ) (NodeRef, []VFS) {
-	// Resolve the module-dir for this header. The header path may include
-	// a subdirectory component (e.g. "config/config.h" in devtools/ymake).
-	// The output path mirrors: $(B)/<instance.Path>/<headerRel>_serialized.cpp.
-	headerSrcVFS := Source(instance.Path + "/" + headerRel)
-	includePath := instance.Path + "/" + headerRel
-	serializedCPPVFS := Build(instance.Path + "/" + headerRel + "_serialized.cpp")
+	// The output path mirrors:
+	//   $(B)/<headerSrc.Rel>_serialized.cpp[ .h with _WITH_HEADER]
+	serializedCPPVFS := Build(headerSrc.Rel + "_serialized.cpp")
 
 	cmdArgs := []string{
 		enumParserBin,
-		headerSrcVFS.String(),
+		headerSrc.String(),
 		"--include-path",
-		includePath,
+		headerSrc.Rel,
 		"--output",
 		serializedCPPVFS.String(),
 	}
@@ -81,7 +80,7 @@ func EmitEN(
 	outputs := []VFS{serializedCPPVFS}
 
 	if withHeader {
-		serializedHVFS := Build(instance.Path + "/" + headerRel + "_serialized.h")
+		serializedHVFS := Build(headerSrc.Rel + "_serialized.h")
 		cmdArgs = append(cmdArgs, "--header", serializedHVFS.String())
 		outputs = append(outputs, serializedHVFS)
 	}
@@ -95,7 +94,7 @@ func EmitEN(
 	inputs := make([]VFS, 0, len(depENOutputs)+2+len(headerIncludeClosure))
 	inputs = append(inputs, depENOutputs...)
 	inputs = append(inputs, ParseVFSOrSource(enumParserBin))
-	inputs = append(inputs, headerSrcVFS)
+	inputs = append(inputs, headerSrc)
 	inputs = append(inputs, headerIncludeClosure...)
 
 	depRefs := make([]NodeRef, 0, len(depENRefs)+1)
