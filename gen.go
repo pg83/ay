@@ -6222,7 +6222,19 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccSrcRel := strings.TrimPrefix(r5CppOut, "$(BUILD_ROOT)/"+srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IsGenerated = true
-		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, r5CppOut, srcIn)
+		ccClosure := walkClosure(ctx, srcInstance, r5CppOut, srcIn)
+		// PR-M3-multi-output-producer-siblings: ragel5 emits two outputs
+		// (.rl.tmp intermediate + .rl5.cpp). Upstream ymake lists BOTH
+		// sibling outputs in the downstream CC's inputs[] — the consumer
+		// depends on the producer node, so every produced file is a
+		// dependency edge. walkClosure scans only the .rl5.cpp (and its
+		// transitive includes), so the .rl.tmp must be injected
+		// explicitly. Prepended to keep the multi-output sibling adjacent
+		// to the primary .rl5.cpp input in DFS order. The .rl.tmp does
+		// NOT propagate up into AR/LD memberInputs (sg2.json shows only
+		// the .rl source rolls up; the .tmp is an intermediate that does
+		// not cross module boundaries).
+		ccIn.IncludeInputs = append([]string{r5TmpOut}, ccClosure...)
 		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
 		// PR-M3-L0-codegen-deps-EV-PB: thread EN/PB/EV producer refs reached
 		// through the .rl5.cpp's transitive include closure.
@@ -6241,9 +6253,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// (json_visitor.cpp:788-789 NeedToPassInputs); the .rl-generated
 		// .cpp's #include closure is included even though the AR archives
 		// only the .o, because the inputs walk is set-union over all
-		// transitive file deps under the module boundary.
+		// transitive file deps under the module boundary. Uses ccClosure
+		// (NOT ccIn.IncludeInputs) so the .rl.tmp sibling stays scoped to
+		// the CC consumer and does not bleed into the AR/LD rollup.
 		rlSource := "$(SOURCE_ROOT)/" + srcInstance.Path + "/" + srcRel
-		rlMemberInputs := append([]string{rlSource}, ccIn.IncludeInputs...)
+		rlMemberInputs := append([]string{rlSource}, ccClosure...)
 		return ccRef, ccOut, rlMemberInputs, 1, true
 
 	case strings.HasSuffix(srcRel, ".cpp.in"),
