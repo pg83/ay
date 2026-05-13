@@ -44,11 +44,7 @@ import (
 // target_properties: module_dir (always) + module_tag:"cpp_proto" (always).
 
 const (
-	pbPython3Path       = "/ix/realm/pg/bin/python3"
-	pbWrapperPath       = "$(S)/build/scripts/cpp_proto_wrapper.py"
-	pbProtocBinaryPath  = "$(B)/contrib/tools/protoc/protoc"
-	pbCppStyleguidePath = "$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"
-	pbDescriptorProto   = "$(S)/contrib/libs/protobuf/src/google/protobuf/descriptor.proto"
+	pbPython3Path = "/ix/realm/pg/bin/python3"
 
 	// Tool module paths for host-walk recursion.
 	pbProtocModule        = "contrib/tools/protoc"
@@ -67,6 +63,21 @@ const (
 	// protobuf-runtime dependency), so the scanner cannot resolve
 	// `y_absl/...` includes without pre-resolved EmitsIncludes.
 	abslTstringBase = "contrib/restricted/abseil-cpp-tstring/"
+)
+
+// pb tool/asset VFS constants. The `…Path` legacy strings are
+// derived once via .String() and used wherever a cmd_arg expects a
+// raw string.
+var (
+	pbWrapperVFS       = Source("build/scripts/cpp_proto_wrapper.py")
+	pbProtocBinaryVFS  = Build("contrib/tools/protoc/protoc")
+	pbCppStyleguideVFS = Build("contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide")
+	pbDescriptorVFS    = Source("contrib/libs/protobuf/src/google/protobuf/descriptor.proto")
+
+	pbWrapperPath       = pbWrapperVFS.String()
+	pbProtocBinaryPath  = pbProtocBinaryVFS.String()
+	pbCppStyleguidePath = pbCppStyleguideVFS.String()
+	pbDescriptorProto   = pbDescriptorVFS.String()
 )
 
 // protobufRuntimeHeaders is the set of headers that every protoc-generated
@@ -352,16 +363,16 @@ func EmitPB(
 	// Output paths strip the .proto suffix: foo.proto → foo.pb.h / foo.pb.cc.
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 
-	pbH := "$(B)/" + protoBase + ".pb.h"
-	pbCC := "$(B)/" + protoBase + ".pb.cc"
-	srcAbs := "$(S)/" + protoRelPath
+	pbH := Build(protoBase + ".pb.h")
+	pbCC := Build(protoBase + ".pb.cc")
+	srcVFS := Source(protoRelPath)
 
 	cmdArgs := []string{
 		pbPython3Path,
 		pbWrapperPath,
 		"--outputs",
-		pbH,
-		pbCC,
+		pbH.String(),
+		pbCC.String(),
 		"--",
 		protocBinary,
 		"-I=./",
@@ -385,13 +396,13 @@ func EmitPB(
 	inputs := []VFS{
 		ParseVFSOrSource(cppStyleguideBinary),
 		ParseVFSOrSource(protocBinary),
-		ParseVFSOrSource(pbWrapperPath),
-		ParseVFSOrSource(srcAbs),
+		pbWrapperVFS,
+		srcVFS,
 	}
 
 	// If the source file imports "google/protobuf/descriptor.proto", add descriptor.proto.
 	if protoImportsDescriptor(sourceRoot, moduleDir+"/"+srcRel) {
-		inputs = append(inputs, ParseVFSOrSource(pbDescriptorProto))
+		inputs = append(inputs, pbDescriptorVFS)
 	}
 
 	// PR-M3-platform-pair-step2: tags are baseline data carried by the
@@ -435,7 +446,7 @@ func EmitPB(
 		},
 		Env:     env,
 		Inputs:  inputs,
-		Outputs: []VFS{ParseVFSOrSource(pbH), ParseVFSOrSource(pbCC)},
+		Outputs: []VFS{pbH, pbCC},
 		KV: map[string]string{
 			"p":  "PB",
 			"pc": "yellow",
@@ -470,12 +481,12 @@ func EmitPB(
 // import (PR-M3-final-codegen-registry-expansion).
 func pbDescriptorImporterExtras(sourceRoot, protoRelPath string) []VFS {
 	out := make([]VFS, 0, len(pbDescriptorImporterHeaders)+3)
-	out = append(out, ParseVFSOrSource(pbWrapperPath))
+	out = append(out, pbWrapperVFS)
 	out = append(out, Source(protoRelPath))
 	out = append(out, pbDescriptorImporterHeaders...)
 
 	if protoImportsDescriptor(sourceRoot, protoRelPath) {
-		out = append(out, ParseVFSOrSource(pbDescriptorProto))
+		out = append(out, pbDescriptorVFS)
 	}
 
 	return out
