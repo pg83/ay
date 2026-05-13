@@ -6454,7 +6454,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// calling EmitCF so the CF node's inputs[] matches the reference shape
 		// (e.g. sandbox.cpp.in → 795-entry closure; build_info.cpp.in → 5).
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
-		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
+		cfRef, cfOut := EmitCF(ctx.host, ctx.platformFor(srcInstance), srcInstance, srcRel, srcIn, ctx.emit)
 
 		// F-7-B / PR-AUDIT-2 D08: register the CF output. configure_file.py
 		// performs `@VAR@` substitution but leaves `#include` directives
