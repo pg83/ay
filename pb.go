@@ -439,7 +439,8 @@ func EmitPB(
 		},
 		Tags:             tags,
 		TargetProperties: targetProps,
-		Platform: string(instance.Target),
+		Platform:         string(instance.Target),
+		HostPlatform:     targetIsX8664(instance),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
