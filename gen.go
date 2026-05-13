@@ -4127,26 +4127,22 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// identical so a single call suffices.
 		// TODO: remove the Flags.PIC guard when a general target-vs-host
 		// axis parameter is plumbed through genModule (M3+ scope).
-		joinClosure := joinSrcsIncludeClosure(ctx, srcInstance, js.Sources, moduleInputs)
+		joinClosure := joinSrcsIncludeClosure(ctx, srcInstance.Platform, srcInstance, js.Sources, moduleInputs)
 
 		ccClosure := joinClosure
 
-		// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
 		if targetIsX8664(srcInstance) {
-			// Compute a separate closure for the JS node using the
-			// TARGET scanner and TARGET musl arch search paths.
-			// jsInstance uses the target platform so joinSrcsIncludeClosure
-			// picks ctx.scannerTarget. jsModuleInputs rebases PeerAddInclGlobal
-			// to swap x86_64 arch paths for aarch64 ones so the search
-			// path reflects the target (aarch64) musl layout.
-			jsInstance := srcInstance
-			jsInstance.Platform = ctx.target
-			jsInstance.Flags.PIC = false
-
+			// When this module is reached through a host (x86_64) walk
+			// the JS node nevertheless emits on the target axis (see the
+			// EmitJS call below — Platform is anchored to the outer-target
+			// ID). Recompute the include closure with the target scanner +
+			// target-arch musl search paths rebased; the surrounding host
+			// walk's instance is kept verbatim — only the override
+			// `scanPlatform` argument flips.
 			jsModuleInputs := moduleInputs
 			jsModuleInputs.PeerAddInclGlobal = jsTargetPeerAddIncl(moduleInputs.PeerAddInclGlobal)
 
-			joinClosure = joinSrcsIncludeClosure(ctx, jsInstance, js.Sources, jsModuleInputs)
+			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, srcInstance, js.Sources, jsModuleInputs)
 		}
 
 		// PR-35s: anchor the JS node to the outer-target platform
@@ -5543,13 +5539,6 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// ParseError: leave zero LD ref; enumParserBin stays at canonical fallback.
 	}
 
-	// EN nodes emit on the TARGET platform regardless of whether we're
-	// in a host walk (all 21 EN nodes in sg2.json are on
-	// default-linux-aarch64). Build a target-axis instance.
-	enInstance := instance
-	enInstance.Platform = ctx.target
-	enInstance.Flags.PIC = false
-
 	// Synthesize a ModuleCCInputs for the include scanner using the
 	// module's own ADDINCL declarations plus the peer-global ADDINCL
 	// set so that headers from transitive peer libraries (e.g. abseil,
@@ -5570,7 +5559,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// target scanner. EN nodes always compile on the target axis;
 		// the include search path mirrors a target CC node's search
 		// path for this module.
-		closure := walkClosure(ctx, enInstance, resolveSourceVFS(ctx, enInstance, headerRel, scanIn.SrcDir), scanIn)
+		closure := walkClosure(ctx, instance, resolveSourceVFS(ctx, instance, headerRel, scanIn.SrcDir), scanIn)
 
 		// Cross-EN deps: when a previously emitted EN node produced a
 		// _serialized.h file (--header variant), and the current header's
@@ -5651,13 +5640,13 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// EN node `inputs` includes the .cpp's transitive include set; this walk
 		// is what surfaces dispatch_methods.h / ordered_pairs.h / enum_runtime.h
 		// in the EN node's inputs).
-		serializedCPPPath := "$(BUILD_ROOT)/" + enInstance.Path + "/" + headerRel + "_serialized.cpp"
+		serializedCPPPath := "$(BUILD_ROOT)/" + instance.Path + "/" + headerRel + "_serialized.cpp"
 		var serializedHPath string
 		if withHeader {
-			serializedHPath = "$(BUILD_ROOT)/" + enInstance.Path + "/" + headerRel + "_serialized.h"
+			serializedHPath = "$(BUILD_ROOT)/" + instance.Path + "/" + headerRel + "_serialized.h"
 		}
 		if ctx.scannerTarget.codegen != nil {
-			headerSrc := "$(SOURCE_ROOT)/" + enInstance.Path + "/" + headerRel
+			headerSrc := "$(SOURCE_ROOT)/" + instance.Path + "/" + headerRel
 			cppIncludes := []string{
 				headerSrc,
 				"$(SOURCE_ROOT)/tools/enum_parser/enum_parser/stdlib_deps.h",
@@ -5720,7 +5709,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// scanner resolves both through the codegen registry / cross-EN dep
 		// detection), and the duplicate fails L2 multiset equality.
 		enClosureExcl := map[string]struct{}{
-			"$(SOURCE_ROOT)/" + enInstance.Path + "/" + headerRel: {},
+			"$(SOURCE_ROOT)/" + instance.Path + "/" + headerRel: {},
 		}
 		for _, p := range depENOutputs {
 			enClosureExcl[p] = struct{}{}
@@ -5737,7 +5726,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			if !strings.HasSuffix(depOut, "_serialized.cpp") {
 				continue
 			}
-			sub := walkClosure(ctx, enInstance, depOut, scanIn)
+			sub := walkClosure(ctx, instance, depOut, scanIn)
 			for _, p := range sub {
 				if _, drop := enClosureExcl[p]; drop {
 					continue
@@ -5764,7 +5753,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// $(SOURCE_ROOT) headers.
 		var ownOutputClosure []string
 		if !withHeader && ctx.scannerTarget.codegen != nil {
-			sub := walkClosure(ctx, enInstance, serializedCPPPath, scanIn)
+			sub := walkClosure(ctx, instance, serializedCPPPath, scanIn)
 			for _, p := range sub {
 				if _, drop := enClosureExcl[p]; drop {
 					continue
@@ -5784,12 +5773,12 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// EV nodes + events_extension PB. Filter out the cross-EN dep refs
 		// already in depENRefs so they aren't duplicated.
 		augmentedDepENRefs := depENRefs
-		if extra := resolveCodegenDepRefs(ctx, enInstance, enClosure, depENRefs...); len(extra) > 0 {
+		if extra := resolveCodegenDepRefs(ctx, instance, enClosure, depENRefs...); len(extra) > 0 {
 			augmentedDepENRefs = append(append([]NodeRef(nil), depENRefs...), extra...)
 		}
 
 		enRef, enOutPaths := EmitEN(
-			enInstance,
+			instance,
 			headerRel,
 			withHeader,
 			enumParserLD,
@@ -5809,7 +5798,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// the EN-produced `_serialized.cpp` as an implicit module
 		// source. The CC inherits the consuming module's full compile
 		// bag (consumerInputs); composeCCPaths' IsGenerated branch
-		// roots the output under $(BUILD_ROOT)/<enInstance.Path>/
+		// roots the output under $(BUILD_ROOT)/<instance.Path>/
 		// <headerRel>_serialized.cpp{,.o} with `_/` infix when headerRel
 		// contains a `/`. depPrefix is the cross-EN dep set the
 		// reference graph places ahead of the consumer's own
@@ -5826,7 +5815,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			allDepRefs := make([]NodeRef, 0, 1+len(depENRefs))
 			allDepRefs = append(allDepRefs, enRef)
 			allDepRefs = append(allDepRefs, depENRefs...)
-			ccRef, ccOut, ccIns := emitCodegenDownstreamCC(ctx, enInstance, cppRel, depENOutputs, allDepRefs, *consumerInputs)
+			ccRef, ccOut, ccIns := emitCodegenDownstreamCC(ctx, instance, cppRel, depENOutputs, allDepRefs, *consumerInputs)
 			ccRefs = append(ccRefs, ccRef)
 			ccOutputs = append(ccOutputs, ccOut)
 			memberInputsList = append(memberInputsList, ccIns)
@@ -6555,10 +6544,15 @@ func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCI
 // mirroring the actual joined .cpp compile, where headers reached
 // once stay deduped — so total work is O(union closure) not O(sum
 // per-source closures). Returns nil when nothing resolves.
-func joinSrcsIncludeClosure(ctx *genCtx, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []string {
-	// PR-AUDIT-4 (D08): per-instance scanner via the unified dispatch
-	// helper; no more inline target-vs-host branch.
-	scanner := ctx.scannerFor(srcInstance)
+// joinSrcsIncludeClosure walks the include graph for a JOIN_SRCS member
+// set. `scanPlatform` chooses which scanner + arch search-paths to use:
+// callers pass `srcInstance.Platform` for the normal case; the JS-target
+// override (PR-35s) passes `ctx.target` so the closure resolves against
+// the target-arch musl layout even when the surrounding walk is host-axis.
+// The instance itself is read for module-level facts (Path, Flags.LibcMusl)
+// — its Platform identity is NOT mutated.
+func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []string {
+	scanner := ctx.scannerForPlatform(scanPlatform)
 	if scanner == nil {
 		return nil
 	}
@@ -6583,7 +6577,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, srcInstance ModuleInstance, sources []s
 			SourceRel:       srcRelOnDisk,
 			OwnAddIncl:      in.AddIncl,
 			PeerAddInclSet:  in.PeerAddInclGlobal,
-			BaseSearchPaths: includeScannerBasePaths(srcInstance),
+			BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.LibcMusl, scanPlatform.Target),
 		}
 
 		// PR-M3-perf-E: scanCtx dispatch — local vs interned (see
@@ -6742,7 +6736,7 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath string, in Mod
 		SourceRel:       sourceRel,
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
-		BaseSearchPaths: includeScannerBasePaths(srcInstance),
+		BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.LibcMusl, srcInstance.Platform.Target),
 	}
 
 	sc := ctx.getScanCtx(scanner, cfg)
@@ -6769,22 +6763,25 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath string, in Mod
 // include search path via muslCcIncludes. Adding SOURCE_ROOT there
 // would cause false resolution of system-form includes against the
 // repo root, silently expanding the musl CC input sets incorrectly.
-func includeScannerBasePaths(instance ModuleInstance) []string {
+// includeScannerBasePaths returns the base search-path list for the
+// include scanner. `libcMusl` is the per-MODULE flag (this module is
+// part of contrib/libs/musl/*); `scanTarget` is the platform identity
+// the search paths resolve against (typically `instance.Platform.Target`,
+// but JOIN_SRCS during a host walk passes `ctx.target.Target` to
+// force aarch64 musl-arch paths without mutating the surrounding
+// instance).
+func includeScannerBasePaths(libcMusl bool, scanTarget PlatformID) []string {
 	base := []string{
 		"contrib/libs/linux-headers",
 		"contrib/libs/linux-headers/_nf",
 	}
 
-	// PR-32 D02: dispatch via Flags.LibcMusl, not path-prefix.
-	if instance.Flags.LibcMusl {
+	if libcMusl {
 		// Mirror muslCcIncludes / muslCcIncludesX8664: arch + generic
-		// + src/include + src/internal + include + extra. Use the
-		// instance's Target to pick aarch64 vs x86_64 (D41: same
-		// switch composeMuslCC vs composeMuslHostCC uses).
+		// + src/include + src/internal + include + extra.
 		var arch string
 
-		// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
-		if targetIsX8664(instance) {
+		if scanTarget == PlatformDefaultLinuxX8664 {
 			arch = "x86_64"
 		} else {
 			arch = "aarch64"
@@ -6934,7 +6931,17 @@ func reorderARMembers(refs []NodeRef, paths []string, isFlatNoLto []bool, isCFGe
 // of the surrounding walk's axis — that is a deliberate cross-axis
 // reach, not a per-instance dispatch.
 func (ctx *genCtx) scannerFor(instance ModuleInstance) *IncludeScanner {
-	if targetIsX8664(instance) {
+	return ctx.scannerForPlatform(instance.Platform)
+}
+
+// scannerForPlatform returns the scanner pinned to `p`. PR-AUDIT-4: the
+// per-platform dispatch lives here; `scannerFor` is a thin wrapper around
+// it that derives the platform from a ModuleInstance. Callers that need
+// to resolve includes against a DIFFERENT platform than their instance
+// (e.g. JOIN_SRCS forcing target-arch search paths during a host walk)
+// call this overload directly with the override platform.
+func (ctx *genCtx) scannerForPlatform(p *Platform) *IncludeScanner {
+	if p.Target == PlatformDefaultLinuxX8664 {
 		return ctx.scannerHost
 	}
 	return ctx.scannerTarget
