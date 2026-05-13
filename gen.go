@@ -3908,15 +3908,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// for codegen producers and calling emitOneSource fresh for the rest.
 	// AR member order is preserved (Pass B appends to ccRefs in d.srcs
 	// order), so the resulting AR.cmd_args remains byte-exact.
-	type srcResult struct {
-		ref          NodeRef
-		outPath      VFS
-		ccIns        []VFS
-		primaryCount int
-		ok           bool
-	}
-
-	preEmitted := make(map[string]srcResult, 4)
+	preEmitted := make(map[string]*sourceEmit, 4)
 
 	for _, src := range d.srcs {
 		if !isCodegenProducingSrc(src) {
@@ -3931,8 +3923,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			srcInputs.FlatOutput = true
 		}
 
-		ref, outPath, ccIns, primaryCount, ok := emitOneSource(ctx, instance, d.srcDir, src, srcInputs, ancestorRebase)
-		preEmitted[src] = srcResult{ref: ref, outPath: outPath, ccIns: ccIns, primaryCount: primaryCount, ok: ok}
+		preEmitted[src] = emitOneSource(ctx, instance, d.srcDir, src, srcInputs, ancestorRebase)
 	}
 
 	for _, src := range d.srcs {
@@ -3955,35 +3946,28 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			isFlatNoLto = true
 		}
 
-		var ref NodeRef
-		var outPath VFS
-		var ccIns []VFS
-		var primaryCount int
-		var ok bool
-
-		if pre, hadPre := preEmitted[src]; hadPre {
-			ref, outPath, ccIns, primaryCount, ok = pre.ref, pre.outPath, pre.ccIns, pre.primaryCount, pre.ok
-		} else {
-			ref, outPath, ccIns, primaryCount, ok = emitOneSource(ctx, instance, d.srcDir, src, srcInputs, ancestorRebase)
+		emit, hadPre := preEmitted[src]
+		if !hadPre {
+			emit = emitOneSource(ctx, instance, d.srcDir, src, srcInputs, ancestorRebase)
 		}
 
-		if !ok {
+		if emit == nil {
 			continue
 		}
 
-		ccRefs = append(ccRefs, ref)
-		ccOutputs = append(ccOutputs, outPath)
+		ccRefs = append(ccRefs, emit.Ref)
+		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, isFlatNoLto)
 		ccIsCFGenerated = append(ccIsCFGenerated, strings.HasSuffix(src, ".cpp.in") || strings.HasSuffix(src, ".c.in"))
-		addMemberInputs(ccIns)
+		addMemberInputs(emit.CcIns)
 		// PR-35y R8: track primary source paths so the .global.a
 		// aggregator can exclude them. emitOneSource returns the
-		// ccIns slice with the leading `primaryCount` entries being
+		// ccIns slice with the leading `PrimaryCount` entries being
 		// the member's primary source(s) — `.cpp/.c/.cc/.cxx`/`.S`
 		// dispatch yields 1 primary; `.rl6` dispatch yields 1 (the
 		// .rl6 source) or 2 (when the `.h` companion exists on disk).
-		for i := 0; i < primaryCount && i < len(ccIns); i++ {
-			addRegularPrimary(ccIns[i])
+		for i := 0; i < emit.PrimaryCount && i < len(emit.CcIns); i++ {
+			addRegularPrimary(emit.CcIns[i])
 		}
 	}
 
@@ -4077,18 +4061,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 		variantIn.PerSourceCFlags = flags
 
-		ref, outPath, ccIns, primaryCount, ok := emitOneSource(ctx, instance, d.srcDir, e.Src, variantIn, ancestorRebase)
-		if !ok {
+		emit := emitOneSource(ctx, instance, d.srcDir, e.Src, variantIn, ancestorRebase)
+		if emit == nil {
 			continue
 		}
 
-		ccRefs = append(ccRefs, ref)
-		ccOutputs = append(ccOutputs, outPath)
+		ccRefs = append(ccRefs, emit.Ref)
+		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, true)
 		ccIsCFGenerated = append(ccIsCFGenerated, false)
-		addMemberInputs(ccIns)
-		for i := 0; i < primaryCount && i < len(ccIns); i++ {
-			addRegularPrimary(ccIns[i])
+		addMemberInputs(emit.CcIns)
+		for i := 0; i < emit.PrimaryCount && i < len(emit.CcIns); i++ {
+			addRegularPrimary(emit.CcIns[i])
 		}
 	}
 
@@ -4220,16 +4204,16 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	globalMemberInputsSeen := map[VFS]struct{}{}
 
 	for _, src := range d.globalSrcs {
-		ref, outPath, ccIns, _, ok := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs, ancestorRebase)
+		emit := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs, ancestorRebase)
 
-		if !ok {
+		if emit == nil {
 			continue
 		}
 
-		globalRefs = append(globalRefs, ref)
-		globalOutputs = append(globalOutputs, outPath)
+		globalRefs = append(globalRefs, emit.Ref)
+		globalOutputs = append(globalOutputs, emit.OutPath)
 
-		for _, p := range ccIns {
+		for _, p := range emit.CcIns {
 			if _, dup := globalMemberInputsSeen[p]; dup {
 				continue
 			}
@@ -5883,9 +5867,24 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 // .c/.cpp/.cc/.cxx/.S/.s/.asm dispatches yield primaryCount=1; the
 // .rl6 dispatch yields 1 (just the .rl6 source) or 2 (when the `.h`
 // companion exists on disk).
-func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, in ModuleCCInputs, ancestorRebase bool) (NodeRef, VFS, []VFS, int, bool) {
+// sourceEmit is the emit-product of emitOneSource: a single CC/AS/R5/R6/CF/etc.
+// node compiled from one declared source. nil = the source was silently
+// skipped (a `.h` header that emitOneSource does not produce a node for, or
+// an unhandled extension dispatched to the deferred-kind sink).
+//
+// PrimaryCount is the leading-CcIns count that names the member's primary
+// source(s) — `.c/.cpp/.cc/.cxx/.S/.s/.asm` yield 1; `.rl6` yields 1 or 2
+// (.rl6 source ± companion .h header).
+type sourceEmit struct {
+	Ref          NodeRef
+	OutPath      VFS
+	CcIns        []VFS
+	PrimaryCount int
+}
+
+func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, in ModuleCCInputs, ancestorRebase bool) *sourceEmit {
 	if isHeaderSource(srcRel) {
-		return NodeRef{}, VFS{}, nil, 0, false
+		return nil
 	}
 
 	// PR-30 D06: SRCDIR rebase is now ancestor-only and only fires when
@@ -5949,7 +5948,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		inputPath := emittedSourceInputPath(srcInstance, srcRel, srcIn, ctx.sourceRoot)
 		ccInputs := append([]VFS{inputPath}, srcIn.IncludeInputs...)
 
-		return ref, outPath, ccInputs, 1, true
+		return &sourceEmit{Ref: ref, OutPath: outPath, CcIns: ccInputs, PrimaryCount: 1}
 	case strings.HasSuffix(srcRel, ".S"),
 		strings.HasSuffix(srcRel, ".s"),
 		strings.HasSuffix(srcRel, ".asm"):
@@ -6026,7 +6025,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 
 		asInputs := append([]VFS{Source(asInputRel)}, asIn.IncludeInputs...)
 
-		return ref, outPath, asInputs, 1, true
+		return &sourceEmit{Ref: ref, OutPath: outPath, CcIns: asInputs, PrimaryCount: 1}
 	case strings.HasSuffix(srcRel, ".rl6"):
 		// Host-ragel6 recursion (D31, eager per PR-28). The recursion
 		// happens here so the resulting LD's outputs[0] can be
@@ -6186,7 +6185,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// up via EDT_BuildFrom (json_visitor.cpp:788-789 NeedToPassInputs).
 		ccInputs = append(ccInputs, ccIncludeInputs...)
 
-		return ccRef, ccOut, ccInputs, primaryCount, true
+		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: ccInputs, PrimaryCount: primaryCount}
 
 	case strings.HasSuffix(srcRel, ".ev"):
 		// PR-M3-C: .ev sources in a LIBRARY module (e.g. devtools/ymake/diag/trace.ev).
@@ -6323,7 +6322,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			// The primary input for the AR/LD memberInputs is the original .ev source.
 			// PR-M3-final-codegen-registry-expansion: wire_format.h also propagates
 			// up into the AR rollup (matched in REF on libdevtools-ymake-diag.a).
-			return ref, outPath, []VFS{Source(srcInstance.Path + "/" + srcRel), wireFormatVFS}, 1, true
+			return &sourceEmit{
+				Ref:          ref,
+				OutPath:      outPath,
+				CcIns:        []VFS{Source(srcInstance.Path + "/" + srcRel), wireFormatVFS},
+				PrimaryCount: 1,
+			}
 		}
 
 	case strings.HasSuffix(srcRel, ".rl"):
@@ -6441,7 +6445,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// (NOT ccIn.IncludeInputs) so the .rl.tmp sibling stays scoped to
 		// the CC consumer and does not bleed into the AR/LD rollup.
 		rlMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, ccClosure...)
-		return ccRef, ccOut, rlMemberInputs, 1, true
+		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: rlMemberInputs, PrimaryCount: 1}
 
 	case strings.HasSuffix(srcRel, ".cpp.in"),
 		strings.HasSuffix(srcRel, ".c.in"):
@@ -6514,7 +6518,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// the AR/LD aggregator carries the same set upstream ymake propagates
 		// via EDT_BuildFrom (json_visitor.cpp:788-789 NeedToPassInputs).
 		cfMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, ccIn.IncludeInputs...)
-		return ccRef, ccOut, cfMemberInputs, 1, true
+		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: cfMemberInputs, PrimaryCount: 1}
 	}
 
 	// PR-M3-A: known-deferred source kinds are silently skipped rather
@@ -6523,12 +6527,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 	// contributes nothing to the AR/LD node set; the module may become
 	// header-only if all its sources are deferred.
 	if isSkippedSource(srcRel) {
-		return NodeRef{}, VFS{}, nil, 0, false
+		return nil
 	}
 
 	ThrowFmt("gen: %s: unsupported source extension in %q", instance.Path, srcRel)
 
-	return NodeRef{}, VFS{}, nil, 0, false
+	return nil
 }
 
 // emittedSourceInputPath mirrors composeCCPaths' inputPath logic so
