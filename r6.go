@@ -108,7 +108,7 @@ func canonicalizeRagel6BinaryPath(p string) string {
 //
 // Returns (NodeRef, outputPath) so the caller can wire the R6 node as
 // the input of a downstream EmitCC.
-func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath string, ragel6Flags []string, closure []VFS, emit Emitter) (NodeRef, string) {
+func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath string, ragel6Flags []string, closure []VFS, emit Emitter) (NodeRef, VFS) {
 	// PR-M3-A fix: add `_/` infix only when srcRel contains a `/` (i.e.
 	// the source is in a subdirectory of the module). Flat .rl6 sources
 	// (no path separator) live at the module root and their generated
@@ -116,13 +116,13 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	// the `_/` infix. Reference: util/datetime/parser.rl6 (has `/`) →
 	// `util/_/datetime/parser.rl6.cpp` ✓; include_parsers's
 	// cpp_includes_parser.rl6 (flat) → `include_parsers/cpp_includes_parser.rl6.cpp`.
-	var outputPath string
+	var outVFS VFS
 	if strings.Contains(srcRel, "/") {
-		outputPath = "$(B)/" + instance.Path + "/_/" + srcRel + ".cpp"
+		outVFS = Build(instance.Path + "/_/" + srcRel + ".cpp")
 	} else {
-		outputPath = "$(B)/" + instance.Path + "/" + srcRel + ".cpp"
+		outVFS = Build(instance.Path + "/" + srcRel + ".cpp")
 	}
-	inputPath := "$(S)/" + instance.Path + "/" + srcRel
+	inVFS := Source(instance.Path + "/" + srcRel)
 	canonicalBinary := canonicalizeRagel6BinaryPath(ragel6BinaryPath)
 
 	// PR-M3-ragel-flags-per-module: pick the effective RAGEL6_FLAGS.
@@ -148,8 +148,8 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		"-L",
 		"-I$(S)",
 		"-o",
-		outputPath,
-		inputPath,
+		outVFS.String(),
+		inVFS.String(),
 	)
 
 	env := map[string]string{
@@ -162,7 +162,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	// ragel6/ragel6` as inputs[0]); the closure carries every header
 	// the .rl6 transitively `#include`s, in DFS-discovery order.
 	inputs := make([]VFS, 0, 2+len(closure))
-	inputs = append(inputs, ParseVFSOrSource(canonicalBinary), ParseVFSOrSource(inputPath))
+	inputs = append(inputs, ParseVFSOrSource(canonicalBinary), inVFS)
 	inputs = append(inputs, closure...)
 
 	// PR-M3-platform-pair-step4: tags + host_platform are baseline data
@@ -180,7 +180,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		},
 		Env:          env,
 		Inputs:       inputs,
-		Outputs:      []VFS{ParseVFSOrSource(outputPath)},
+		Outputs:      []VFS{outVFS},
 		HostPlatform: hostPlatform,
 		KV: map[string]string{
 			"p":  "R6",
@@ -203,5 +203,5 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		ForeignDepRefs: map[string][]NodeRef{"tool": {ragel6LD}},
 	}
 
-	return emit.Emit(node), outputPath
+	return emit.Emit(node), outVFS
 }

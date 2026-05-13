@@ -44,8 +44,8 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	r6Ref, outPath := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, "$(B)/contrib/tools/ragel6/ragel6", nil, nil, e)
 
 	wantOut := "$(B)/util/_/datetime/parser.rl6.cpp"
-	if outPath != wantOut {
-		t.Errorf("outPath = %q, want %q", outPath, wantOut)
+	if outPath.String() != wantOut {
+		t.Errorf("outPath = %q, want %q", outPath.String(), wantOut)
 	}
 
 	got := e.nodes[r6Ref.id]
