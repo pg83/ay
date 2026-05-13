@@ -4218,13 +4218,17 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		// PR-M3-py3-runtime-closure: PY3_PROGRAM_BIN must emit its yapyc3
 		// and objcopy nodes BEFORE EmitLD so the objcopy outputs can be
-		// folded into the LD's ccPaths slot (the reference graph wraps
-		// the program LD around the per-resource objcopy `.o` files in
-		// addition to the regular member CCs). Pre-PR the emission ran
-		// after EmitLD which meant the LD never saw the objcopy outputs.
+		// folded into the LD's SRCS_GLOBAL slot (the reference graph wraps
+		// the program LD around the per-resource objcopy `.o` files).
+		// PR-M3-py3cc-objcopy-shape: objcopy paths now flow through a
+		// dedicated EmitLD slot — they go BEFORE $VCS_C_OBJ in cmd[2] and
+		// emit BUILD_ROOT-relative (bare) per ld.conf:229-230 +
+		// ${rootrel;ext=.o:SRCS_GLOBAL}.
 		ldCCRefs := ccRefs
 		ldCCOutputs := ccOutputs
 		ldMemberInputs := memberInputs
+		var ldObjcopyRefs []NodeRef
+		var ldObjcopyPaths []string
 
 		if d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
 			emitPySrcs(ctx, instance, d)
@@ -4232,8 +4236,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			objcopyRefs, objcopyOutputs, _ := emitResourceObjcopy(ctx, instance, d)
 
 			if len(objcopyRefs) > 0 {
-				ldCCRefs = append(append([]NodeRef(nil), ccRefs...), objcopyRefs...)
-				ldCCOutputs = append(append([]string(nil), ccOutputs...), objcopyOutputs...)
+				ldObjcopyRefs = objcopyRefs
+				ldObjcopyPaths = objcopyOutputs
 			}
 
 			// Fold the objcopy script + PY_SRCS source paths + RESOURCE
@@ -4278,6 +4282,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ldPeerArchiveRefs, ldPeerArchivePaths,
 			mergedLDPluginRefs, mergedLDPluginPaths,
 			peerGlobalRefs, peerGlobalPaths,
+			ldObjcopyRefs, ldObjcopyPaths,
 			ldMemberInputs,
 			cliMuslOn(ctx),
 			ownCFlags,
