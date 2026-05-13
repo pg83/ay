@@ -120,6 +120,8 @@ const jdkResourcePath = "$(JDK17-564746473)/bin/java"
 // antlr4JarPath is the source-relative path to the ANTLR4 jar.
 const antlr4JarPath = "$(SOURCE_ROOT)/contrib/java/antlr/antlr4/antlr.jar"
 
+var antlr4JarVFS = Source("contrib/java/antlr/antlr4/antlr.jar")
+
 // stdout2stderrPath is the wrapper script that redirects antlr4's stdout to
 // stderr (required so the build system captures diagnostic output correctly).
 const stdout2stderrPath = "$(SOURCE_ROOT)/build/scripts/stdout2stderr.py"
@@ -876,7 +878,7 @@ var antlr4ProcCmdVFS = Source("build/scripts/process_command_files.py")
 // downstream CP + CC chain for each JV grammar .cpp output (the .g4.cpp
 // rename + compile), returning per-CC (refs, outputPaths, memberInputs)
 // for the caller to fold into the enclosing AR member accumulators.
-func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []string, memberInputsList [][]VFS) {
+func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS, memberInputsList [][]VFS) {
 	outDir := "$(BUILD_ROOT)/" + instance.Path
 	reg := codegenRegForInstance(ctx, instance)
 
@@ -1070,7 +1072,7 @@ func emitJVDownstreamCPCC(
 	cpccPairs []struct{ cpp, h string },
 	outputIncludes []string,
 	in ModuleCCInputs,
-) (ccRefs []NodeRef, ccOutputs []string, memberInputsList [][]VFS) {
+) (ccRefs []NodeRef, ccOutputs []VFS, memberInputsList [][]VFS) {
 	reg := codegenRegForInstance(ctx, instance)
 
 	for _, pair := range cpccPairs {
@@ -1191,7 +1193,7 @@ func emitJVDownstreamCPCC(
 // caller to fold into the AR-member accumulators. `memberInputs` is
 // already deduped against caller-side state via the returned per-CC
 // slice; the caller's `addMemberInputs` performs the union.
-func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []string, memberInputs [][]VFS) {
+func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS, memberInputs [][]VFS) {
 	if len(d.runPrograms) == 0 {
 		return nil, nil, nil
 	}
@@ -1572,7 +1574,7 @@ func isCCSourceExt(p string) bool {
 // The PR-emitted source lives at $(BUILD_ROOT)/<instance.Path>/<out>;
 // composeCCPaths' IsGenerated branch yields $(BUILD_ROOT)/<instance.
 // Path>/<out>.o for the output (flat layout when <out> has no `/`).
-func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef NodeRef, in ModuleCCInputs) (NodeRef, string, []VFS) {
+func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef NodeRef, in ModuleCCInputs) (NodeRef, VFS, []VFS) {
 	// PR-M3-L0-cascade-close-v2: thread prRef as the downstream CC's
 	// leading dep. The CC compiles the PR-emitted .cpp, but walkClosure
 	// skips the root path so a registry probe over the closure alone
@@ -1600,7 +1602,7 @@ func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef 
 //     reference graph places ahead of the primary source (EN consumers
 //     prepend cross-EN deps' `_serialized.cpp` + `_serialized.h` outputs;
 //     PR has no cross-deps and passes nil).
-func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string, depPrefix []VFS, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, string, []VFS) {
+func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string, depPrefix []VFS, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS, []VFS) {
 	cppPath := Build(instance.Path + "/" + cppRel)
 
 	closure := walkClosure(ctx, instance, cppPath, in)

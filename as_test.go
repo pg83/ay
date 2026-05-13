@@ -47,7 +47,7 @@ func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 	_, outPath := EmitAS(targetInstance("some/module"), "flat.S", ModuleCCInputs{}, nil, e)
 	want := "$(BUILD_ROOT)/some/module/flat.S.o"
 
-	if outPath != want {
+	if outPath.String() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
 	}
 }
@@ -58,7 +58,7 @@ func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 	_, outPath := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", ModuleCCInputs{}, nil, e)
 	want := "$(BUILD_ROOT)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
 
-	if outPath != want {
+	if outPath.String() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
 	}
 }
@@ -81,7 +81,7 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 	)
 	want := "$(BUILD_ROOT)/contrib/libs/tcmalloc/no_percpu_cache/__/tcmalloc/internal/percpu_rseq_asm.S.o"
 
-	if outPath != want {
+	if outPath.String() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
 	}
 }
@@ -234,7 +234,7 @@ func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
 	_, outPath := EmitAS(hostInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, e)
 	want := "$(BUILD_ROOT)/contrib/libs/asmlib/memset64.pic.o"
 
-	if outPath != want {
+	if outPath.String() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
 	}
 }
@@ -257,7 +257,7 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoYasmBranch(t *testing.T) {
 	// has no "/" so the clang AS path emits a flat output.
 	wantClangPath := "$(BUILD_ROOT)/contrib/libs/asmlib/memset64.asm.o"
 
-	if outPath != wantClangPath {
+	if outPath.String() != wantClangPath {
 		t.Errorf("outPath = %q, want %q (clang AS path; yasm branch must not fire for target-side)", outPath, wantClangPath)
 	}
 

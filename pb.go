@@ -532,7 +532,15 @@ func protoImportsDescriptor(sourceRoot, srcRel string) bool {
 // AR was emitted so the caller can surface it through `moduleEmitResult`'s
 // archive closure (the AR was previously orphaned — emitted as a graph
 // node but not reachable from any LD `inputs` via the peer walk).
-func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs) (NodeRef, string, bool) {
+// protoSrcsResult is the emit-product of emitProtoSrcs: a single AR node
+// archiving every per-source CC output. nil = nothing emitted (module has
+// no .proto / .ev sources).
+type protoSrcsResult struct {
+	ARRef  NodeRef
+	ARPath VFS
+}
+
+func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs) *protoSrcsResult {
 	// Collect .proto and .ev sources from d.srcs.
 	var protoSrcs, evSrcs []string
 
@@ -546,7 +554,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	}
 
 	if len(protoSrcs) == 0 && len(evSrcs) == 0 {
-		return NodeRef{}, "", false
+		return nil
 	}
 
 	// Walk host protoc and cpp_styleguide tool programs.
@@ -750,7 +758,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	// path's own .ev branch in emitOneSource already handles its own
 	// downstream-CC + AR aggregation (gen.go:4315).
 	if d.moduleStmt.Name != "PROTO_LIBRARY" || len(codegenOutputs) == 0 {
-		return NodeRef{}, "", false
+		return nil
 	}
 
 	// Compose ModuleCCInputs for the downstream CCs. Mirror the LIBRARY
@@ -793,7 +801,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	// Per-source downstream-CC emission. Mirrors gen.go:4399-4411 (EV
 	// LIBRARY branch) but for the PROTO_LIBRARY context.
 	ccRefs := make([]NodeRef, 0, len(codegenOutputs))
-	ccOutputs := make([]string, 0, len(codegenOutputs))
+	ccOutputs := make([]VFS, 0, len(codegenOutputs))
 	memberInputs := make([]VFS, 0, 64)
 	memberInputsSeen := make(map[VFS]struct{})
 
@@ -851,7 +859,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 
 	// AR emission. Mirrors gen.go:3097 EmitARNamed with module_tag=cpp_proto.
 	arBaseName := ArchiveName(instance.Path)
-	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + arBaseName
-	arRef := emitARNode(instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, "", ctx.emit)
-	return arRef, archivePath, true
+	archivePath := Build(instance.Path + "/" + arBaseName)
+	arRef := emitARNode(instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, nil, ctx.emit)
+	return &protoSrcsResult{ARRef: arRef, ARPath: archivePath}
 }

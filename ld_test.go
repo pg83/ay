@@ -128,7 +128,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	ldRef := EmitLD(
 		instance,
 		"", // empty falls back to lastPathComponent → "prog"
-		[]NodeRef{mainRef}, []string{mainPath},
+		[]NodeRef{mainRef}, []VFS{ParseVFSOrSource(mainPath)},
 		nil, nil,
 		nil, nil,
 		nil, nil,
@@ -221,7 +221,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 	ref := EmitLD(
 		hostInstance("some/prog"),
 		"", // empty falls back to lastPathComponent → "prog"
-		[]NodeRef{stub}, []string{"$(BUILD_ROOT)/some/prog/main.cpp.o"},
+		[]NodeRef{stub}, []VFS{Build("some/prog/main.cpp.o")},
 		nil, nil,
 		nil, nil,
 		nil, nil,
@@ -254,10 +254,11 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 // four ref/path slice pairs (cc, peerLD, plugin, global).
 func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 	tests := []struct {
-		name                                         string
-		ccRefs, peerRefs, pluginRefs, globalRefs     []NodeRef
-		ccPaths, peerPaths, pluginPaths, globalPaths []string
-		wantSubstr                                   string
+		name                                     string
+		ccRefs, peerRefs, pluginRefs, globalRefs []NodeRef
+		ccPaths                                  []VFS
+		peerPaths, pluginPaths, globalPaths      []string
+		wantSubstr                               string
 	}{
 		{"ccRefs vs ccPaths", []NodeRef{{}}, nil, nil, nil, nil, nil, nil, nil, "ccRefs"},
 		{"peerLDRefs vs peerLibPaths", nil, []NodeRef{{}}, nil, nil, nil, nil, nil, nil, "peerLD"},

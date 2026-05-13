@@ -132,16 +132,16 @@ func globalArchiveNameWithPrefix(moduleDir, prefix string) string {
 // retained for tests that pin the historical shape.
 func emitARNode(
 	instance ModuleInstance,
-	archivePath string,
+	archivePath VFS,
 	tag string,
 	objRefs []NodeRef,
-	objPaths []string,
+	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
 	memberInputs []VFS,
-	arPluginPath string,
+	arPluginPath *VFS,
 	emit Emitter,
 ) NodeRef {
-	scriptPath := "$(SOURCE_ROOT)/build/scripts/link_lib.py"
+	scriptVFS := Source("build/scripts/link_lib.py")
 
 	// Built as separate literals (not a shared variable) so
 	// downstream mutation of one map can't leak into the other.
@@ -156,7 +156,7 @@ func emitARNode(
 	// order in cmd_args.
 	//
 	// PR-M3-openssl-ar-plugin-and-as-clean: when arPluginPath is
-	// non-empty, the AR_PLUGIN macro fired on this module's ya.make and
+	// non-nil, the AR_PLUGIN macro fired on this module's ya.make and
 	// `--plugin <path>` is injected between the inner `-- ... --`
 	// separators of `_LD_ARCHIVER` (upstream ld.conf:366-368 +
 	// ld.conf:373).
@@ -165,7 +165,7 @@ func emitARNode(
 		// reference build; future work must template this from
 		// PlatformConfig or detect it from $PATH.
 		"/ix/realm/pg/bin/python3",
-		scriptPath,
+		scriptVFS.String(),
 		"ar",
 		"GNU_AR",
 		"None",
@@ -173,30 +173,32 @@ func emitARNode(
 		"None",
 		"--",
 	}
-	if arPluginPath != "" {
-		cmdArgs = append(cmdArgs, "--plugin", arPluginPath)
+	if arPluginPath != nil {
+		cmdArgs = append(cmdArgs, "--plugin", arPluginPath.String())
 	}
-	cmdArgs = append(cmdArgs, "--", archivePath)
+	cmdArgs = append(cmdArgs, "--", archivePath.String())
 
-	cmdArgs = append(cmdArgs, objPaths...)
+	for _, p := range objPaths {
+		cmdArgs = append(cmdArgs, p.String())
+	}
 
 	// inputs: .o paths sorted alphabetically, then the script path,
 	// then memberInputs (PR-31 D11; sg.json union of every member
 	// CC's source + headers). Sort the .o copy so objPaths used for
 	// cmd_args above is not mutated.
-	sortedObjPaths := append([]string{}, objPaths...)
-	sort.Strings(sortedObjPaths)
+	sortedObjPaths := append([]VFS(nil), objPaths...)
+	sort.Slice(sortedObjPaths, func(i, j int) bool {
+		return string(sortedObjPaths[i].Rel) < string(sortedObjPaths[j].Rel)
+	})
 
 	inputs := make([]VFS, 0, len(sortedObjPaths)+2+len(memberInputs))
-	for _, p := range sortedObjPaths {
-		inputs = append(inputs, ParseVFSOrSource(p))
-	}
-	inputs = append(inputs, ParseVFSOrSource(scriptPath))
+	inputs = append(inputs, sortedObjPaths...)
+	inputs = append(inputs, scriptVFS)
 	// PR-M3-openssl-ar-plugin-and-as-clean: AR plugin path slots
 	// immediately after the script and before the memberInputs union
 	// (verified at sg2.json openssl AR inputs[696]).
-	if arPluginPath != "" {
-		inputs = append(inputs, ParseVFSOrSource(arPluginPath))
+	if arPluginPath != nil {
+		inputs = append(inputs, *arPluginPath)
 	}
 	// memberInputs may legitimately repeat across members (a header
 	// included from two .c files). Dedup against the union including
@@ -281,7 +283,7 @@ func emitARNode(
 			"pc":       "light-red",
 			"show_out": "yes",
 		},
-		Outputs:      []VFS{Build(strings.TrimPrefix(archivePath, "$(BUILD_ROOT)/"))},
+		Outputs:      []VFS{archivePath},
 		Platform:     string(instance.Platform.Target),
 		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
@@ -325,7 +327,7 @@ func emitARNode(
 func EmitAR(
 	instance ModuleInstance,
 	objRefs []NodeRef,
-	objPaths []string,
+	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
 	memberInputs []VFS,
 	emit Emitter,
@@ -334,9 +336,9 @@ func EmitAR(
 		ThrowFmt("EmitAR: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + ArchiveName(instance.Path)
+	archivePath := Build(instance.Path + "/" + ArchiveName(instance.Path))
 
-	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, "", emit)
+	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, nil, emit)
 }
 
 // EmitARGlobal emits a second AR node for a module's GLOBAL_SRCS,
@@ -354,7 +356,7 @@ func EmitAR(
 func EmitARGlobal(
 	instance ModuleInstance,
 	objRefs []NodeRef,
-	objPaths []string,
+	objPaths []VFS,
 	memberInputs []VFS,
 	emit Emitter,
 ) NodeRef {
@@ -362,9 +364,9 @@ func EmitARGlobal(
 		ThrowFmt("EmitARGlobal: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + globalArchiveName(instance.Path)
+	archivePath := Build(instance.Path + "/" + globalArchiveName(instance.Path))
 
-	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, "", emit)
+	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, nil, emit)
 }
 
 // EmitARNamed emits an AR node using an explicitly supplied archive
@@ -382,17 +384,17 @@ func EmitARNamed(
 	instance ModuleInstance,
 	archiveBaseName string,
 	objRefs []NodeRef,
-	objPaths []string,
+	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
 	memberInputs []VFS,
-	arPluginPath string,
+	arPluginPath *VFS,
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
 		ThrowFmt("EmitARNamed: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
+	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
 	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, emit)
 }
@@ -407,17 +409,17 @@ func EmitARNamedTagged(
 	archiveBaseName string,
 	tag string,
 	objRefs []NodeRef,
-	objPaths []string,
+	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
 	memberInputs []VFS,
-	arPluginPath string,
+	arPluginPath *VFS,
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
 		ThrowFmt("EmitARNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
+	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
 	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, emit)
 }
@@ -432,7 +434,7 @@ func EmitARGlobalNamedTagged(
 	archiveBaseName string,
 	tag string,
 	objRefs []NodeRef,
-	objPaths []string,
+	objPaths []VFS,
 	memberInputs []VFS,
 	emit Emitter,
 ) NodeRef {
@@ -440,9 +442,9 @@ func EmitARGlobalNamedTagged(
 		ThrowFmt("EmitARGlobalNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
+	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
-	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, memberInputs, "", emit)
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, memberInputs, nil, emit)
 }
 
 // EmitARGlobalNamed is like EmitARGlobal but uses an explicitly
@@ -451,7 +453,7 @@ func EmitARGlobalNamed(
 	instance ModuleInstance,
 	archiveBaseName string,
 	objRefs []NodeRef,
-	objPaths []string,
+	objPaths []VFS,
 	memberInputs []VFS,
 	emit Emitter,
 ) NodeRef {
@@ -459,7 +461,7 @@ func EmitARGlobalNamed(
 		ThrowFmt("EmitARGlobalNamed: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := "$(BUILD_ROOT)/" + instance.Path + "/" + archiveBaseName
+	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
-	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, "", emit)
+	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, nil, emit)
 }

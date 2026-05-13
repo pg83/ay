@@ -74,7 +74,7 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
 	})}
-	objPaths := []string{"$(BUILD_ROOT)/o1.o", "$(BUILD_ROOT)/o2.o"}
+	objPaths := []VFS{Build("o1.o"), Build("o2.o")}
 
 	exc := Try(func() {
 		EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, e)
@@ -189,13 +189,13 @@ func TestArchiveName_AllReferenceAR(t *testing.T) {
 func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 	e := NewBufferedEmitter()
 
-	makeLeaf := func(out string) NodeRef {
+	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
 			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
 			Env:              map[string]string{},
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               map[string]string{},
-			Outputs:          ToVFSSlice([]string{out}),
+			Outputs:          []VFS{out},
 			Platform:         "default-linux-aarch64",
 			Requirements:     map[string]interface{}{},
 			Tags:             []string{},
@@ -203,13 +203,13 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 		})
 	}
 
-	o1 := "$(BUILD_ROOT)/build/cow/on/a.c.o"
-	o2 := "$(BUILD_ROOT)/build/cow/on/b.c.o"
+	o1 := Build("build/cow/on/a.c.o")
+	o2 := Build("build/cow/on/b.c.o")
 	objRefs := []NodeRef{makeLeaf(o1), makeLeaf(o2)}
-	objPaths := []string{o1, o2}
+	objPaths := []VFS{o1, o2}
 
-	peer1 := makeLeaf("$(BUILD_ROOT)/some/peer/libsome-peer.a")
-	peer2 := makeLeaf("$(BUILD_ROOT)/other/peer/libother-peer.a")
+	peer1 := makeLeaf(Build("some/peer/libsome-peer.a"))
+	peer2 := makeLeaf(Build("other/peer/libother-peer.a"))
 	peerArchiveRefs := []NodeRef{peer1, peer2}
 
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, nil, e)
@@ -241,13 +241,13 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 	e := NewBufferedEmitter()
 
-	makeLeaf := func(out string) NodeRef {
+	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
 			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
 			Env:              map[string]string{},
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               map[string]string{},
-			Outputs:          ToVFSSlice([]string{out}),
+			Outputs:          []VFS{out},
 			Platform:         "default-linux-aarch64",
 			Requirements:     map[string]interface{}{},
 			Tags:             []string{},
@@ -255,13 +255,13 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 		})
 	}
 
-	o1 := "$(BUILD_ROOT)/build/cow/on/a.c.o"
-	o2 := "$(BUILD_ROOT)/build/cow/on/b.c.o"
+	o1 := Build("build/cow/on/a.c.o")
+	o2 := Build("build/cow/on/b.c.o")
 	objRefs := []NodeRef{makeLeaf(o1), makeLeaf(o2)}
-	objPaths := []string{o1, o2}
+	objPaths := []VFS{o1, o2}
 
-	peer1 := makeLeaf("$(BUILD_ROOT)/some/peer/libsome-peer.a")
-	peer2 := makeLeaf("$(BUILD_ROOT)/other/peer/libother-peer.a")
+	peer1 := makeLeaf(Build("some/peer/libsome-peer.a"))
+	peer2 := makeLeaf(Build("other/peer/libother-peer.a"))
 	peerArchiveRefs := []NodeRef{peer1, peer2}
 
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, nil, e)
@@ -280,13 +280,13 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 func TestEmitAR_InputsSorted(t *testing.T) {
 	e := NewBufferedEmitter()
 
-	makeLeaf := func(out string) NodeRef {
+	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
 			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
 			Env:              map[string]string{},
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               map[string]string{},
-			Outputs:          ToVFSSlice([]string{out}),
+			Outputs:          []VFS{out},
 			Platform:         "default-linux-aarch64",
 			Requirements:     map[string]interface{}{},
 			Tags:             []string{},
@@ -294,10 +294,10 @@ func TestEmitAR_InputsSorted(t *testing.T) {
 		})
 	}
 
-	z := "$(BUILD_ROOT)/build/cow/on/z.c.o"
-	m := "$(BUILD_ROOT)/build/cow/on/m.c.o"
-	a := "$(BUILD_ROOT)/build/cow/on/a.c.o"
-	objPaths := []string{z, m, a}
+	z := Build("build/cow/on/z.c.o")
+	m := Build("build/cow/on/m.c.o")
+	a := Build("build/cow/on/a.c.o")
+	objPaths := []VFS{z, m, a}
 	objRefs := []NodeRef{makeLeaf(z), makeLeaf(m), makeLeaf(a)}
 
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, e)
@@ -314,7 +314,7 @@ func TestEmitAR_InputsSorted(t *testing.T) {
 		t.Errorf("inputs .o paths not sorted: %v", inputObjs)
 	}
 
-	wantInputObjs := []string{a, m, z}
+	wantInputObjs := []string{a.String(), m.String(), z.String()}
 
 	if !reflect.DeepEqual(inputObjs, wantInputObjs) {
 		t.Errorf("inputs .o mismatch:\n  want %v\n  got  %v", wantInputObjs, inputObjs)
@@ -327,13 +327,13 @@ func TestEmitAR_InputsSorted(t *testing.T) {
 func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 	e := NewBufferedEmitter()
 
-	makeLeaf := func(out string) NodeRef {
+	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
 			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
 			Env:              map[string]string{},
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               map[string]string{},
-			Outputs:          ToVFSSlice([]string{out}),
+			Outputs:          []VFS{out},
 			Platform:         "default-linux-aarch64",
 			Requirements:     map[string]interface{}{},
 			Tags:             []string{},
@@ -341,10 +341,10 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 		})
 	}
 
-	z := "$(BUILD_ROOT)/build/cow/on/z.c.o"
-	m := "$(BUILD_ROOT)/build/cow/on/m.c.o"
-	a := "$(BUILD_ROOT)/build/cow/on/a.c.o"
-	objPaths := []string{z, m, a}
+	z := Build("build/cow/on/z.c.o")
+	m := Build("build/cow/on/m.c.o")
+	a := Build("build/cow/on/a.c.o")
+	objPaths := []VFS{z, m, a}
 	objRefs := []NodeRef{makeLeaf(z), makeLeaf(m), makeLeaf(a)}
 
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, e)
@@ -356,7 +356,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 	}
 
 	trailing := cmdArgs[10:]
-	wantTrailing := []string{z, m, a}
+	wantTrailing := []string{z.String(), m.String(), a.String()}
 
 	if !reflect.DeepEqual(trailing, wantTrailing) {
 		t.Errorf("cmd_args .o order mismatch:\n  want %v\n  got  %v", wantTrailing, trailing)

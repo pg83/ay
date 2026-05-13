@@ -49,7 +49,7 @@ func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 	_, outPath := EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", ModuleCCInputs{}, e)
 	want := "$(BUILD_ROOT)/contrib/libs/cxxsupp/libcxx/_/src/algorithm.cpp.o"
 
-	if outPath != want {
+	if outPath.String() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
 	}
 }
@@ -59,7 +59,7 @@ func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
 	_, outPath := EmitCC(targetInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, e)
 	want := "$(BUILD_ROOT)/build/cow/on/lib.c.o"
 
-	if outPath != want {
+	if outPath.String() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
 	}
 }
@@ -94,7 +94,7 @@ func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 
 	wantOut := "$(BUILD_ROOT)/util/_/_/datetime/parser.rl6.cpp.o"
 
-	if outPath != wantOut {
+	if outPath.String() != wantOut {
 		t.Errorf("outPath = %q, want %q", outPath, wantOut)
 	}
 
