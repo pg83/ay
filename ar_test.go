@@ -99,7 +99,7 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	objPaths := []VFS{Build("o1.o"), Build("o2.o")}
 
 	exc := Try(func() {
-		EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, e)
+		EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, testHostP, e)
 	})
 
 	if exc == nil {
@@ -234,7 +234,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 	peer2 := makeLeaf(Build("other/peer/libother-peer.a"))
 	peerArchiveRefs := []NodeRef{peer1, peer2}
 
-	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, nil, e)
+	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, nil, testHostP, e)
 	got := e.nodes[arRef.id]
 
 	cmdArgs := got.Cmds[0].CmdArgs
@@ -286,7 +286,7 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 	peer2 := makeLeaf(Build("other/peer/libother-peer.a"))
 	peerArchiveRefs := []NodeRef{peer1, peer2}
 
-	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, nil, e)
+	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, nil, testHostP, e)
 	got := e.nodes[arRef.id]
 
 	wantDepRefs := len(objRefs) + len(peerArchiveRefs)
@@ -322,7 +322,7 @@ func TestEmitAR_InputsSorted(t *testing.T) {
 	objPaths := []VFS{z, m, a}
 	objRefs := []NodeRef{makeLeaf(z), makeLeaf(m), makeLeaf(a)}
 
-	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, e)
+	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, testHostP, e)
 	got := e.nodes[arRef.id]
 
 	inputs := got.Inputs
@@ -369,7 +369,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 	objPaths := []VFS{z, m, a}
 	objRefs := []NodeRef{makeLeaf(z), makeLeaf(m), makeLeaf(a)}
 
-	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, e)
+	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, nil, testHostP, e)
 	got := e.nodes[arRef.id]
 
 	cmdArgs := got.Cmds[0].CmdArgs

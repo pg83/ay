@@ -133,7 +133,7 @@ import (
 // Returns (NodeRef, outputPath) so the caller can wire the AS node
 // as a dependency of the AR step and avoid re-deriving the output
 // path.
-func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, VFS) {
+func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, hostP *Platform, emit Emitter) (NodeRef, VFS) {
 
 	// PR-35q: x86_64 AS nodes with a `.asm` extension use yasm, not clang.
 	// Branch off before any clang-shape composition runs. The yasm path is
@@ -163,9 +163,7 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 	// aliased to both; EmitAS is single-shot so the alias is safe.
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		// TODO: hostP.MultiarchLibPath() — currently hardcoded; requires
-// threading hostP through Emit signatures.
-"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
+		"DYLD_LIBRARY_PATH":      hostP.MultiarchLibPath(),
 	}
 
 	allInputs := make([]VFS, 0, 1+len(in.IncludeInputs))

@@ -1018,7 +1018,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				globalBaseName = globalArchiveName(instance.Path)
 				tag = "global"
 			}
-			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRefs, objcopyOutputs, objcopyGlobalInputs, ctx.emit)
+			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRefs, objcopyOutputs, objcopyGlobalInputs, ctx.host, ctx.emit)
 			hOnlyGlobalRef = &gRef
 			hOnlyGlobalPath = instance.Path + "/" + globalBaseName
 		}
@@ -2328,7 +2328,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccIn.HasGenerator = true
 		ccIn.IncludeInputs = ccIncludeInputs
 
-		ref, outPath := EmitCC(srcInstance, jsRel, ccIn, ctx.emit)
+		ref, outPath := EmitCC(srcInstance, jsRel, ccIn, ctx.host, ctx.emit)
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, false) // JOIN_SRCS are never SRC_C_NO_LTO
@@ -2550,6 +2550,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			peerCFlagsGlobal,
 			d.usePython3,
 			wantsStrip,
+			ctx.host,
 			ctx.emit,
 		)
 		ldPath := LDOutputPath(instance, binaryName)
@@ -2701,9 +2702,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// PR-M3-openssl-ar-plugin-and-as-clean: openssl AR_PLUGIN(ar) injects
 		// `--plugin <ar.pyplugin>` between the link_lib.py `--` separators.
 		if perModuleCCTag != "" {
-			arRef = EmitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.emit)
+			arRef = EmitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.host, ctx.emit)
 		} else {
-			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.emit)
+			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.host, ctx.emit)
 		}
 	}
 
@@ -2796,7 +2797,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// same member-order discipline as the regular AR — hand-written /
 		// objcopy_* .o files precede codegen-derived .reg3.cpp.o etc.
 		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))
-		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, globalAggregated, ctx.emit)
+		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, globalAggregated, ctx.host, ctx.emit)
 		result.GlobalRef = &globalRef
 		result.GlobalPath = instance.Path + "/" + globalBaseName
 	}

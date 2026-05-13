@@ -46,7 +46,7 @@ func fieldEqual(t *testing.T, name string, got, want interface{}) {
 
 func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", ModuleCCInputs{}, e)
+	_, outPath := EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", ModuleCCInputs{}, testHostP, e)
 	want := "$(B)/contrib/libs/cxxsupp/libcxx/_/src/algorithm.cpp.o"
 
 	if outPath.String() != want {
@@ -56,7 +56,7 @@ func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 
 func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitCC(targetInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, e)
+	_, outPath := EmitCC(targetInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, testHostP, e)
 	want := "$(B)/build/cow/on/lib.c.o"
 
 	if outPath.String() != want {
@@ -90,7 +90,7 @@ func muslHostInstance(path string) ModuleInstance {
 func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 	emit := NewBufferedEmitter()
 	in := ModuleCCInputs{IsGenerated: true}
-	_, outPath := EmitCC(targetInstance("util"), "_/datetime/parser.rl6.cpp", in, emit)
+	_, outPath := EmitCC(targetInstance("util"), "_/datetime/parser.rl6.cpp", in, testHostP, emit)
 
 	wantOut := "$(B)/util/_/_/datetime/parser.rl6.cpp.o"
 
@@ -132,7 +132,7 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 			"contrib/libs/musl/extra",
 		},
 	}
-	EmitCC(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/fp_mode.c", in, emit)
+	EmitCC(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/fp_mode.c", in, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -159,7 +159,7 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 // second suppression block.
 func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 	emit := NewBufferedEmitter()
-	EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", ModuleCCInputs{}, emit)
+	EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", ModuleCCInputs{}, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -190,7 +190,7 @@ func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 // dispatches to clang (NOT clang++) and does NOT carry `-std=c++20`.
 func TestEmitCC_CSource_UsesClang(t *testing.T) {
 	emit := NewBufferedEmitter()
-	EmitCC(targetInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, emit)
+	EmitCC(targetInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -217,7 +217,7 @@ func TestEmitCC_NoCompilerWarnings_SelectsMuslWarningFlags(t *testing.T) {
 	emit := NewBufferedEmitter()
 	inst := targetInstance("contrib/libs/cxxsupp/libcxxrt")
 	inst.Flags.NoCompilerWarnings = true
-	EmitCC(inst, "exception.cc", ModuleCCInputs{}, emit)
+	EmitCC(inst, "exception.cc", ModuleCCInputs{}, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -252,7 +252,7 @@ func TestEmitCC_OwnCXXFlags_SlotsAfterSuppressionBlock(t *testing.T) {
 	}
 	inst := targetInstance("contrib/libs/cxxsupp/libcxx")
 	inst.Flags.NoCompilerWarnings = true
-	EmitCC(inst, "src/algorithm.cpp", in, emit)
+	EmitCC(inst, "src/algorithm.cpp", in, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -300,14 +300,14 @@ func TestEmitCC_COnlyFlags_AppliesOnlyToCSources(t *testing.T) {
 	in := ModuleCCInputs{COnlyFlags: []string{"-Wno-narrowing"}}
 
 	emitC := NewBufferedEmitter()
-	EmitCC(targetInstance("build/cow/on"), "lib.c", in, emitC)
+	EmitCC(targetInstance("build/cow/on"), "lib.c", in, testHostP, emitC)
 
 	if !contains(emitC.nodes[0].Cmds[0].CmdArgs, "-Wno-narrowing") {
 		t.Errorf(".c source missing CONLYFLAG -Wno-narrowing; got %v", emitC.nodes[0].Cmds[0].CmdArgs)
 	}
 
 	emitCpp := NewBufferedEmitter()
-	EmitCC(targetInstance("build/cow/on"), "lib.cpp", in, emitCpp)
+	EmitCC(targetInstance("build/cow/on"), "lib.cpp", in, testHostP, emitCpp)
 
 	if contains(emitCpp.nodes[0].Cmds[0].CmdArgs, "-Wno-narrowing") {
 		t.Errorf(".cpp source got CONLYFLAG -Wno-narrowing (should be CXXFlags-only); got %v", emitCpp.nodes[0].Cmds[0].CmdArgs)

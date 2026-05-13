@@ -251,7 +251,7 @@ type ModuleCCInputs struct {
 // NoCompilerWarnings selector adding/removing args inline);
 // reviewer-tracked tests pin each variant against the reference
 // graph.
-func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emitter) (NodeRef, VFS) {
+func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS) {
 
 	suffix := ".o"
 	if instance.Flags.PIC {
@@ -380,9 +380,7 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, emit Emit
 	// that mutate emitted nodes post-emit MUST clone before mutating.
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		// TODO: hostP.MultiarchLibPath() — currently hardcoded; requires
-// threading hostP through Emit signatures.
-"DYLD_LIBRARY_PATH":      "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu",
+		"DYLD_LIBRARY_PATH":      hostP.MultiarchLibPath(),
 	}
 
 	// PR-31 D09: prepend the resolved transitive header set to
