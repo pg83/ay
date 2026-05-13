@@ -1038,6 +1038,30 @@ func collectModule(modulePath string, stmts []Stmt, env Environment, pathFlags F
 		d.peerdirs = append(d.peerdirs, "contrib/libs/protobuf")
 	}
 
+	// PR-M3-py-srcs-resource-peerdir: upstream pybuild plugin processes
+	// PY_SRCS / PY_REGISTER by emitting `RESOURCE(...)` calls (one per
+	// .py source and per PY_REGISTER argument) — each `RESOURCE()` macro
+	// invocation expands to `PEERDIR(library/cpp/resource)`
+	// (build/ymake.core.conf:522-524). Mirror that side effect here.
+	// Verified against `/home/pg/monorepo/yatool_orig/g` line 27293
+	// where `library/python/symbols/module` (PY23_LIBRARY with only
+	// PY_REGISTER + PY_SRCS, no explicit PEERDIRs in ya.make) carries
+	// `$S/library/cpp/resource` as its first user-direct peer.
+	if len(d.pySrcs) > 0 || len(d.pyRegister) > 0 {
+		if modulePath != "library/cpp/resource" {
+			already := false
+			for _, p := range d.peerdirs {
+				if p == "library/cpp/resource" {
+					already = true
+					break
+				}
+			}
+			if !already {
+				d.peerdirs = append(d.peerdirs, "library/cpp/resource")
+			}
+		}
+	}
+
 	return d
 }
 
@@ -2168,73 +2192,6 @@ func hoistRuntimeStackAddIncl(paths []string) []string {
 	return out
 }
 
-// resourceClosureMembers is the canonical set of relative archive paths
-// belonging to `library/cpp/resource`'s peer-archive sub-closure
-// (including resource's own .a and codec/zstd's .global.a). Used by
-// `hoistResourceClosure` to reorder contrib/libs/python's exposed
-// closure so the resource sub-tree precedes the symbols/* direct peers
-// (PR-M3-python-closure-order). The .global.a member is folded into the
-// same set so a single helper covers both PeerGlobalClosurePaths and
-// PeerArchiveClosurePaths.
-//
-// Empirical: sg2.json ymake/bin LD cmd[2] places
-//   - .global.a: `library/cpp/blockcodecs/codecs/zstd/libblockcodecs-codecs-zstd.global.a`
-//     at slot 18 (immediately after the tcmalloc program-default).
-//   - .a:        `library/cpp/containers/absl_flat_hash`, `library/cpp/blockcodecs/core`,
-//                `contrib/libs/xxhash`, `contrib/libs/zstd`, `library/cpp/resource`
-//     at slots 70-74 (immediately before symbols/module).
-//
-// In OUR pre-hoist output the resource sub-closure lands AFTER symbols/*
-// (declaration-order DFS in module_restorer.cpp puts symbols/{module,libc,
-// python} ahead of runtime_py3 in contrib/libs/python's peer iteration).
-// The hoist below restores the empirical reference ordering.
-var resourceClosureMembers = map[string]struct{}{
-	"library/cpp/containers/absl_flat_hash/libcpp-containers-absl_flat_hash.a":      {},
-	"library/cpp/blockcodecs/core/libcpp-blockcodecs-core.a":                        {},
-	"contrib/libs/xxhash/libcontrib-libs-xxhash.a":                                  {},
-	"contrib/libs/zstd/libcontrib-libs-zstd.a":                                      {},
-	"library/cpp/resource/liblibrary-cpp-resource.a":                                {},
-	"library/cpp/blockcodecs/codecs/zstd/libblockcodecs-codecs-zstd.global.a":       {},
-}
-
-// hoistResourceClosure reorders `paths` (and the parallel `refs` slice)
-// so any entries that belong to `library/cpp/resource`'s sub-closure
-// land at the FRONT in their original relative order. See
-// `resourceClosureMembers` for the canonical member set and motivation.
-func hoistResourceClosure(paths []string, refs []NodeRef) ([]string, []NodeRef) {
-	if len(paths) == 0 {
-		return paths, refs
-	}
-
-	hoistedPaths := make([]string, 0, len(paths))
-	hoistedRefs := make([]NodeRef, 0, len(paths))
-	restPaths := make([]string, 0, len(paths))
-	restRefs := make([]NodeRef, 0, len(paths))
-
-	for i, p := range paths {
-		if _, ok := resourceClosureMembers[p]; ok {
-			hoistedPaths = append(hoistedPaths, p)
-			hoistedRefs = append(hoistedRefs, refs[i])
-		} else {
-			restPaths = append(restPaths, p)
-			restRefs = append(restRefs, refs[i])
-		}
-	}
-
-	if len(hoistedPaths) == 0 {
-		return paths, refs
-	}
-
-	outPaths := make([]string, 0, len(paths))
-	outRefs := make([]NodeRef, 0, len(paths))
-	outPaths = append(outPaths, hoistedPaths...)
-	outPaths = append(outPaths, restPaths...)
-	outRefs = append(outRefs, hoistedRefs...)
-	outRefs = append(outRefs, restRefs...)
-
-	return outPaths, outRefs
-}
-
 // defaultPeerdirsFor returns the implicit DEFAULT_PEERDIRs ymake
 // adds automatically based on language + module flavor. PR-26 hard-
 // coded the upstream `_BUILTIN_PEERDIR` mechanism for CPP modules
@@ -2925,19 +2882,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			hOnlyHasAR = true
 		}
 
-		// PR-M3-python-closure-order: for contrib/libs/python LIBRARY,
-		// hoist the `library/cpp/resource` sub-closure to the front of
-		// the exposed PeerArchive / PeerGlobal closures. See
-		// `hoistResourceClosure` for details and motivation.
 		peerArchivePathsH := peerContribs.archivePaths
 		peerArchiveRefsH := peerContribs.archiveRefs
 		peerGlobalPathsH := peerContribs.globalPaths
 		peerGlobalRefsH := peerContribs.globalRefs
-
-		if instance.Path == "contrib/libs/python" {
-			peerArchivePathsH, peerArchiveRefsH = hoistResourceClosure(peerContribs.archivePaths, peerContribs.archiveRefs)
-			peerGlobalPathsH, peerGlobalRefsH = hoistResourceClosure(peerContribs.globalPaths, peerContribs.globalRefs)
-		}
 
 		result := &moduleEmitResult{
 			headerOnly:              true,
