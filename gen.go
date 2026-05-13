@@ -6571,7 +6571,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 		return nil
 	}
 
-	visited := make(map[VFS]struct{}, 1024)
+	visited := NewVFSSet(1024)
 	order := make([]VFS, 0, 1024)
 	srcAbsSet := make(map[VFS]struct{}, len(sources))
 

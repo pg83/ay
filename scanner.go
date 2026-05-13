@@ -196,7 +196,7 @@ type sharedParseCache struct {
 	// files). PR-M3-vfs-paths: key shape changed from FS-absolute to
 	// VFS form when parseIncludes was refactored to take VFS input;
 	// the cached value set itself is unchanged.
-	parsed map[VFS][]includeDirective
+	parsed VFSMap[[]includeDirective]
 	// exists memoises os.Stat results per VFS-rooted path. 16384
 	// pre-size covers the peak (14195 target + 14494 host, mostly
 	// the same files on both walks). PR-M3-vfs-paths: keyed by
@@ -209,7 +209,7 @@ type sharedParseCache struct {
 // matched to the observed peak for the tools/archiver closure.
 func newSharedParseCache() *sharedParseCache {
 	return &sharedParseCache{
-		parsed: make(map[VFS][]includeDirective, 8192),
+		parsed: NewVFSMap[[]includeDirective](8192),
 		exists: make(map[string]bool, 16384),
 	}
 }
@@ -282,7 +282,7 @@ type IncludeScanner struct {
 	// every CC reaching the same (includer, target) shares this entry.
 	sysinclIncluderCache map[sysinclIncluderKey]sysinclCacheEntry
 
-	visitedPool sync.Pool // *map[VFS]struct{}
+	visitedPool sync.Pool // *VFSSet
 	orderPool   sync.Pool // *[]VFS
 	// seenPool reuses the per-resolveSearchPath dedup map across calls.
 	// Each resolve produces 1-6 candidate paths so the map fills to a
@@ -470,7 +470,7 @@ func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedPars
 	// returned as pointers to keep `Pool.Put` from boxing the
 	// value (a plain map or slice would box-allocate on Put).
 	s.visitedPool.New = func() any {
-		m := make(map[VFS]struct{}, 64)
+		m := NewVFSSet(64)
 
 		return &m
 	}
@@ -622,7 +622,7 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 		sc.cfg.SourceRel = vfsPath.Rel
 	}
 
-	visitedP := s.visitedPool.Get().(*map[VFS]struct{})
+	visitedP := s.visitedPool.Get().(*VFSSet)
 	orderP := s.orderPool.Get().(*[]VFS)
 
 	visited := *visitedP
@@ -641,14 +641,10 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 		out = append(out, abs)
 	}
 
-	// Reset and return scratch buffers to the pool. `clear()`
-	// (Go 1.21+) drops every key without releasing the bucket
-	// allocation. `order` is reset by writing back the trimmed
-	// slice header so the next caller sees length 0 with the
-	// existing capacity. The contents of `order` are not zeroed
-	// (string headers retained), but they are unreachable through
-	// the empty slice and will be overwritten on the next dfs.
-	clear(visited)
+	// Reset and return scratch buffers to the pool. VFSSet.Clear
+	// drops every entry in both buckets while retaining the
+	// underlying bucket allocations for reuse.
+	visited.Clear()
 	*orderP = order[:0]
 
 	s.visitedPool.Put(visitedP)
@@ -831,8 +827,8 @@ func hashScanContext(ctx *ScanContext) uint64 {
 // PR-M3-perf-E: receiver is `*scanCtx`. The previous (ctx, ctxHash)
 // parameters are now read off the receiver. srcClassHash is still
 // derived from sc.cfg.SourceRel inside dfs.
-func (sc *scanCtx) dfs(absPath VFS, visited map[VFS]struct{}, order *[]VFS) {
-	if _, seen := visited[absPath]; seen {
+func (sc *scanCtx) dfs(absPath VFS, visited VFSSet, order *[]VFS) {
+	if visited.Has(absPath) {
 		return
 	}
 
@@ -859,11 +855,11 @@ func (sc *scanCtx) dfs(absPath VFS, visited map[VFS]struct{}, order *[]VFS) {
 		// Cached or freshly-computed clean canonical subgraph. Merge
 		// into caller's visited+order, skipping pre-visited entries.
 		for _, p := range sg {
-			if _, seen := visited[p]; seen {
+			if visited.Has(p) {
 				continue
 			}
 
-			visited[p] = struct{}{}
+			visited.Add(p)
 			*order = append(*order, p)
 		}
 
@@ -885,12 +881,12 @@ func (sc *scanCtx) dfs(absPath VFS, visited map[VFS]struct{}, order *[]VFS) {
 // when a child reports it is on a cycle. Per-child dispatch goes
 // through `dfs()` so non-cycle descendants benefit from the
 // `subgraphCache`.
-func (sc *scanCtx) plainDfs(absPath VFS, visited map[VFS]struct{}, order *[]VFS) {
-	if _, seen := visited[absPath]; seen {
+func (sc *scanCtx) plainDfs(absPath VFS, visited VFSSet, order *[]VFS) {
+	if visited.Has(absPath) {
 		return
 	}
 
-	visited[absPath] = struct{}{}
+	visited.Add(absPath)
 	*order = append(*order, absPath)
 
 	sc.forEachResolvedChild(absPath, func(rabs VFS) {
@@ -1035,7 +1031,7 @@ func (sc *scanCtx) subgraph(absPath VFS, srcClassHash uint64) ([]VFS, bool) {
 	// buffers themselves are throwaway after the copy below. Pooling
 	// eliminates the per-call make(map) + make([]string) alloc pair,
 	// which profiling showed at ~102 MB + 31 MB per M3 run.
-	visitedP := s.visitedPool.Get().(*map[VFS]struct{})
+	visitedP := s.visitedPool.Get().(*VFSSet)
 	orderP := s.orderPool.Get().(*[]VFS)
 
 	visited := *visitedP
@@ -1055,7 +1051,7 @@ func (sc *scanCtx) subgraph(absPath VFS, srcClassHash uint64) ([]VFS, bool) {
 		sc.subgraphTaintedKnown[key] = struct{}{}
 
 		// Return scratch buffers to the pool before returning.
-		clear(visited)
+		visited.Clear()
 		*orderP = order[:0]
 		s.visitedPool.Put(visitedP)
 		s.orderPool.Put(orderP)
@@ -1070,7 +1066,7 @@ func (sc *scanCtx) subgraph(absPath VFS, srcClassHash uint64) ([]VFS, bool) {
 	copy(out, order)
 
 	// Return scratch buffers to the pool.
-	clear(visited)
+	visited.Clear()
 	*orderP = order[:0]
 	s.visitedPool.Put(visitedP)
 	s.orderPool.Put(orderP)
@@ -1098,18 +1094,18 @@ func (sc *scanCtx) subgraph(absPath VFS, srcClassHash uint64) ([]VFS, bool) {
 //
 // Pure-DAG paths (no cycle in any descendant) cache normally because
 // every recursive descendant returns clean=true.
-func (sc *scanCtx) walkSubgraph(absPath VFS, srcClassHash uint64, visited map[VFS]struct{}, order *[]VFS) bool {
-	if _, seen := visited[absPath]; seen {
+func (sc *scanCtx) walkSubgraph(absPath VFS, srcClassHash uint64, visited VFSSet, order *[]VFS) bool {
+	if visited.Has(absPath) {
 		return true
 	}
 
-	visited[absPath] = struct{}{}
+	visited.Add(absPath)
 	*order = append(*order, absPath)
 
 	clean := true
 
 	sc.forEachResolvedChild(absPath, func(rabs VFS) {
-		if _, seen := visited[rabs]; seen {
+		if visited.Has(rabs) {
 			return
 		}
 
@@ -1118,11 +1114,11 @@ func (sc *scanCtx) walkSubgraph(absPath VFS, srcClassHash uint64, visited map[VF
 		if ok {
 			// Clean child subgraph — merge into our walk.
 			for _, p := range childSg {
-				if _, seen := visited[p]; seen {
+				if visited.Has(p) {
 					continue
 				}
 
-				visited[p] = struct{}{}
+				visited.Add(p)
 				*order = append(*order, p)
 			}
 
@@ -1145,16 +1141,16 @@ func (sc *scanCtx) walkSubgraph(absPath VFS, srcClassHash uint64, visited map[VF
 // (subgraph-computation) visited+order rather than the dfs caller's
 // shared state. Each child of a tainted-walk node still goes through
 // `subgraph()` so non-cycle descendants reuse the persistent cache.
-func (sc *scanCtx) walkSubgraphTainted(absPath VFS, srcClassHash uint64, visited map[VFS]struct{}, order *[]VFS) {
-	if _, seen := visited[absPath]; seen {
+func (sc *scanCtx) walkSubgraphTainted(absPath VFS, srcClassHash uint64, visited VFSSet, order *[]VFS) {
+	if visited.Has(absPath) {
 		return
 	}
 
-	visited[absPath] = struct{}{}
+	visited.Add(absPath)
 	*order = append(*order, absPath)
 
 	sc.forEachResolvedChild(absPath, func(rabs VFS) {
-		if _, seen := visited[rabs]; seen {
+		if visited.Has(rabs) {
 			return
 		}
 
@@ -1162,11 +1158,11 @@ func (sc *scanCtx) walkSubgraphTainted(absPath VFS, srcClassHash uint64, visited
 
 		if ok {
 			for _, p := range childSg {
-				if _, seen := visited[p]; seen {
+				if visited.Has(p) {
 					continue
 				}
 
-				visited[p] = struct{}{}
+				visited.Add(p)
 				*order = append(*order, p)
 			}
 
@@ -1201,7 +1197,7 @@ func (s *IncludeScanner) parseIncludes(vfsPath VFS) []includeDirective {
 	// PR-M3-perf-B: parsed cache is shared between target and host scanners
 	// via s.pc; both walk the same source tree so parsed directives are
 	// identical regardless of which scanner first reads the file.
-	if cached, ok := s.pc.parsed[vfsPath]; ok {
+	if cached, ok := s.pc.parsed.Get(vfsPath); ok {
 		return cached
 	}
 
@@ -1212,7 +1208,7 @@ func (s *IncludeScanner) parseIncludes(vfsPath VFS) []includeDirective {
 	data, err := os.ReadFile(fsPath)
 
 	if err != nil {
-		s.pc.parsed[vfsPath] = nil
+		s.pc.parsed.Set(vfsPath, nil)
 
 		return nil
 	}
@@ -1237,7 +1233,7 @@ func (s *IncludeScanner) parseIncludes(vfsPath VFS) []includeDirective {
 		}
 	}
 
-	s.pc.parsed[vfsPath] = out
+	s.pc.parsed.Set(vfsPath, out)
 
 	return out
 }
