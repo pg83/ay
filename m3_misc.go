@@ -117,14 +117,18 @@ func EmitR5(
 // is pinned byte-exact for the M3 closure.
 const jdkResourcePath = "$(JDK17-564746473)/bin/java"
 
-// antlr4JarPath is the source-relative path to the ANTLR4 jar.
-const antlr4JarPath = "$(S)/contrib/java/antlr/antlr4/antlr.jar"
-
+// antlr4JarVFS is the source-relative VFS path to the ANTLR4 jar.
 var antlr4JarVFS = Source("contrib/java/antlr/antlr4/antlr.jar")
 
-// stdout2stderrPath is the wrapper script that redirects antlr4's stdout to
-// stderr (required so the build system captures diagnostic output correctly).
-const stdout2stderrPath = "$(S)/build/scripts/stdout2stderr.py"
+// antlr4JarPath is the legacy string form (used in cmd_args). Equal
+// to antlr4JarVFS.String().
+var antlr4JarPath = antlr4JarVFS.String()
+
+// stdout2stderr is the wrapper script that redirects antlr4's stdout
+// to stderr (required so the build system captures diagnostic output
+// correctly).
+var stdout2stderrVFS = Source("build/scripts/stdout2stderr.py")
+var stdout2stderrPath = stdout2stderrVFS.String()
 
 // python3Path is the system python3 binary, consistent with cp.go.
 const python3Path = "/ix/realm/pg/bin/python3"
@@ -187,7 +191,7 @@ func EmitJV(
 
 	inputs := []VFS{
 		grammarVFS,
-		ParseVFSOrSource(stdout2stderrPath),
+		stdout2stderrVFS,
 		antlr4JarVFS,
 	}
 
@@ -289,7 +293,7 @@ func EmitJVSplit(
 	inputs := []VFS{
 		lexerVFS,
 		parserVFS,
-		ParseVFSOrSource(stdout2stderrPath),
+		stdout2stderrVFS,
 		antlr4JarVFS,
 	}
 
@@ -342,9 +346,10 @@ func EmitJVSplit(
 
 // ─── CF ──────────────────────────────────────────────────────────────────────
 
-// configureFilePyPath is the source-relative path to the configure_file.py
+// configureFilePy is the source-relative path to the configure_file.py
 // script used in all CF nodes.
-const configureFilePyPath = "$(S)/build/scripts/configure_file.py"
+var configureFilePyVFS = Source("build/scripts/configure_file.py")
+var configureFilePyPath = configureFilePyVFS.String()
 
 // buildTypeDebug is the BUILD_TYPE configuration variable injected by the
 // build system. Hardcoded to DEBUG for the M3 debug build.
@@ -402,7 +407,7 @@ func EmitCF(
 	// Inputs: script + source + header closure scanned from the .in file.
 	// The include scanner handles the .cpp.in just like a .cpp file.
 	inputs := make([]VFS, 0, 2+len(in.IncludeInputs))
-	inputs = append(inputs, ParseVFSOrSource(configureFilePyPath), srcVFS)
+	inputs = append(inputs, configureFilePyVFS, srcVFS)
 	inputs = append(inputs, in.IncludeInputs...)
 
 	node := &Node{
@@ -508,14 +513,17 @@ func buildCFGVars(srcDiskPath string, defaultVars map[string]string, defaultVarO
 // ─── BI ──────────────────────────────────────────────────────────────────────
 
 // yieldLinePyPath is the source-relative path to the yield_line.py script.
-const yieldLinePyPath = "$(S)/build/scripts/yield_line.py"
+var yieldLinePyVFS = Source("build/scripts/yield_line.py")
+var yieldLinePyPath = yieldLinePyVFS.String()
 
 // xargsPyPath is the source-relative path to the xargs.py script.
-const xargsPyPath = "$(S)/build/scripts/xargs.py"
+var xargsPyVFS = Source("build/scripts/xargs.py")
+var xargsPyPath = xargsPyVFS.String()
 
 // buildInfoGenPyPath is the source-relative path to the build_info_gen.py
 // script invoked by xargs.py in the BI node.
-const buildInfoGenPyPath = "$(S)/build/scripts/build_info_gen.py"
+var buildInfoGenPyVFS = Source("build/scripts/build_info_gen.py")
+var buildInfoGenPyPath = buildInfoGenPyVFS.String()
 
 // EmitBI emits a BI node for CREATE_BUILDINFO_FOR(outputHeader).
 //
@@ -542,8 +550,10 @@ func EmitBI(
 	cxxFlags []string,
 	emit Emitter,
 ) NodeRef {
-	argsFile := "$(B)/" + instance.Path + "/__args"
-	outputPath := "$(B)/" + instance.Path + "/" + outputHeader
+	outPrefix := instance.Path + "/"
+	argsFileVFS := Build(outPrefix + "__args")
+	outVFS := Build(outPrefix + outputHeader)
+	argsFile := argsFileVFS.String()
 
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
@@ -576,13 +586,13 @@ func EmitBI(
 		argsFile,
 		python3Path,
 		buildInfoGenPyPath,
-		outputPath,
+		outVFS.String(),
 	}
 
 	inputs := []VFS{
-		ParseVFSOrSource(yieldLinePyPath),
-		ParseVFSOrSource(xargsPyPath),
-		ParseVFSOrSource(buildInfoGenPyPath),
+		yieldLinePyVFS,
+		xargsPyVFS,
+		buildInfoGenPyVFS,
 	}
 
 	cacheFalse := false
@@ -601,7 +611,7 @@ func EmitBI(
 			"pc":            "yellow",
 			"show_out":      "yes",
 		},
-		Outputs: []VFS{ParseVFSOrSource(outputPath)},
+		Outputs: []VFS{outVFS},
 		Tags:    []string{},
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
@@ -740,12 +750,12 @@ func EmitPR(
 		// If the arg is a plain filename (no path sep, no - prefix, no =),
 		// and appears in IN list, expand to SOURCE_ROOT abs.
 		if inSet[a] && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = "$(S)/" + instance.Path + "/" + a
+			a = Source(instance.Path + "/" + a).String()
 		} else if outSet[a] && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			// Bare OUT / OUT_NOAUTO / STDOUT basenames are rewritten to
 			// $(B)/<modulePath>/<basename> so the consumer
 			// references the generated artifact's absolute path.
-			a = "$(B)/" + instance.Path + "/" + a
+			a = Build(instance.Path + "/" + a).String()
 		}
 		cmdArgs = append(cmdArgs, a)
 	}
@@ -780,8 +790,9 @@ func EmitPR(
 	var outputs []VFS
 	var stdoutPath string
 	if stmt.StdoutFile != "" {
-		stdoutPath = "$(B)/" + instance.Path + "/" + stmt.StdoutFile
-		outputs = append(outputs, Build(instance.Path+"/"+stmt.StdoutFile))
+		stdoutVFS := Build(instance.Path + "/" + stmt.StdoutFile)
+		stdoutPath = stdoutVFS.String()
+		outputs = append(outputs, stdoutVFS)
 	}
 	for _, f := range stmt.OUTFiles {
 		outputs = append(outputs, Build(instance.Path+"/"+f))
@@ -861,20 +872,17 @@ func EmitPR(
 // antlr4RuntimeHeaderPath is the $(S)-rooted path to the
 // antlr4 C++ umbrella header included by all ANTLR4-generated .h files.
 // F-7-B uses it as the static EmitsIncludes for JV .h outputs.
-const antlr4RuntimeHeaderPath = "$(S)/contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h"
+var antlr4RuntimeHeaderVFS = Source("contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h")
+var antlr4RuntimeHeaderPath = antlr4RuntimeHeaderVFS.String()
 
-// antlr4FsToolsPath / antlr4ProcCmdFiles are the build-script helpers
+// antlr4FsToolsVFS / antlr4ProcCmdVFS are the build-script helpers
 // threaded into JV-derived CP/CC node inputs (matching the reference
 // sg2.json shape where every g4.cpp CP/CC inputs these paths after the
 // JV primary output and before the grammar .g4 files).
-const antlr4FsToolsPath = "$(S)/build/scripts/fs_tools.py"
-const antlr4ProcCmdFiles = "$(S)/build/scripts/process_command_files.py"
-
-// VFS-typed variants of antlr4FsToolsPath / antlr4ProcCmdFiles used by the
-// VFS-internal flow (PR-M3-vfs-typed-paths). cmd_args still consume the
-// string forms above.
 var antlr4FsToolsVFS = Source("build/scripts/fs_tools.py")
 var antlr4ProcCmdVFS = Source("build/scripts/process_command_files.py")
+var antlr4FsToolsPath = antlr4FsToolsVFS.String()
+var antlr4ProcCmdFiles = antlr4ProcCmdVFS.String()
 
 // emitMiscNodes emits all module-level JV, CF, BI, and PR nodes declared
 // in the module's ya.make. When consumerInputs is non-nil, also emits the
@@ -905,9 +913,9 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 				parserG4 := Source(instance.Path + "/" + g.Parser)
 				lexerCpp := Build(outPrefix + lexerBase + ".cpp")
 				witnessIncludes := []VFS{
-					ParseVFSOrSource(antlr4RuntimeHeaderPath),
+					antlr4RuntimeHeaderVFS,
 					lexerCpp,
-					ParseVFSOrSource(stdout2stderrPath),
+					stdout2stderrVFS,
 					antlr4JarVFS,
 					lexerG4,
 					parserG4,
@@ -933,7 +941,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 				jvInputs := []VFS{
 					Source(instance.Path + "/" + g.Lexer),
 					Source(instance.Path + "/" + g.Parser),
-					ParseVFSOrSource(stdout2stderrPath),
+					stdout2stderrVFS,
 					antlr4JarVFS,
 				}
 				jvPrimary := Build(outPrefix + lexerBase + ".cpp")
@@ -958,9 +966,9 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 				grammarG4 := Source(instance.Path + "/" + g.Grammar)
 				lexerCpp := Build(outPrefix + base + "Lexer.cpp")
 				witnessIncludes := []VFS{
-					ParseVFSOrSource(antlr4RuntimeHeaderPath),
+					antlr4RuntimeHeaderVFS,
 					lexerCpp,
-					ParseVFSOrSource(stdout2stderrPath),
+					stdout2stderrVFS,
 					antlr4JarVFS,
 					grammarG4,
 				}
@@ -983,7 +991,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			if consumerInputs != nil {
 				jvInputs := []VFS{
 					Source(instance.Path + "/" + g.Grammar),
-					ParseVFSOrSource(stdout2stderrPath),
+					stdout2stderrVFS,
 					antlr4JarVFS,
 				}
 				jvPrimary := Build(outPrefix + base + "Lexer.cpp")
@@ -1020,9 +1028,9 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 				ProducerKvP: "BI",
 				OutputPath:  Build(outPrefix + d.createBuildInfoFor),
 				EmitsIncludes: []VFS{
-					ParseVFSOrSource(buildInfoGenPyPath),
-					ParseVFSOrSource(xargsPyPath),
-					ParseVFSOrSource(yieldLinePyPath),
+					buildInfoGenPyVFS,
+					xargsPyVFS,
+					yieldLinePyVFS,
 				},
 				ProducerRef:    biRef,
 				HasProducerRef: true,
@@ -1096,7 +1104,7 @@ func emitJVDownstreamCPCC(
 		// glibcasm / musl / cxxsupp) lands in the CP/CC inputs naturally.
 		if reg != nil {
 			emits := make([]VFS, 0, 1+len(outputIncludes))
-			emits = append(emits, ParseVFSOrSource(antlr4RuntimeHeaderPath))
+			emits = append(emits, antlr4RuntimeHeaderVFS)
 			for _, h := range outputIncludes {
 				emits = append(emits, Source(h))
 			}
