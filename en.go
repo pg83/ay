@@ -25,9 +25,12 @@ package main
 //   [dep-EN-outputs..., enumParserBinary,
 //    $(S)/<path>/<header>.h, ...headerIncludeClosure]
 
-// enumParserBinaryPath is the canonical invocation path for the
+// enumParserBinary is the canonical invocation path for the
 // enum_parser host binary. Used in cmd_args[0] and inputs.
-const enumParserBinaryPath = "$(B)/tools/enum_parser/enum_parser/enum_parser"
+var (
+	enumParserBinaryVFS  = Build("tools/enum_parser/enum_parser/enum_parser")
+	enumParserBinaryPath = enumParserBinaryVFS.String()
+)
 
 // EmitEN emits one EN node for a GENERATE_ENUM_SERIALIZATION(*)
 // invocation.
