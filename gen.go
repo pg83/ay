@@ -6091,7 +6091,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// EmitsIncludes traversal and are unaffected.
 		rl6Closure = filterEnSerializedSiblings(rl6Closure)
 
-		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
+		r6Ref, r6Out := EmitR6(ctx.host, ctx.platformFor(srcInstance), srcInstance, srcRel, ragelLDRef, ragelBinaryStr, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
 
 		// F-7-B / PR-AUDIT-2 D02: register the R6 output (.rl6.cpp). Ragel emits
 		// the .rl6 source's `#include` directives verbatim into the generated
