@@ -11,7 +11,10 @@ package main
 // downstream CC for each is composed via EmitCC with IsGenerated=true.
 
 import (
+	"bufio"
 	"errors"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -686,3 +689,108 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 	return ccRefs, ccOutputs, memberInputsList
 }
+// codegenRegForInstance returns the CodegenRegistry attached to the
+// scanner picked by scannerFor. Returns nil when the scanner is nil
+// (PR-AUDIT-4: dispatch lives in scannerFor, not duplicated here).
+func codegenRegForInstance(ctx *genCtx, instance ModuleInstance) *CodegenRegistry {
+	sc := ctx.scannerFor(instance)
+	if sc == nil {
+		return nil
+	}
+	return sc.codegen
+}
+
+// protoDirectImportIncludes parses the direct `import "..."` statements from a
+// .proto or .ev source file and converts them to the generated header paths that
+// protoc emits under $(B):
+//
+//   - import "x/y/z.proto"  → "$(B)/x/y/z.pb.h"
+//   - import "x/y/z.ev"     → "$(B)/x/y/z.ev.pb.h"
+//
+// Only direct imports of the primary file are returned (no recursion). When the
+// file cannot be read (missing source on disk at scan time) the function returns
+// nil. Results are sorted lexicographically. Cited upstream pattern:
+// proto_processor.cpp:43-56::TProtoIncludeProcessor::PrepareIncludes.
+//
+// PR-AUDIT-3: legitimate disk read — extracts structured `import` directives
+// from a .proto/.ev source at registration time to populate its EmitsIncludes.
+// NOT for closure walks. The architectural cleanup to route through a unified
+// registry-resolved "structured-import extractor" lives in PR-AUDIT-3.D12 (still
+// open) — keeping the (B) classification per audit doc §2 D12, §4 PR-AUDIT-3.
+func protoDirectImportIncludes(sourceRoot, srcRel string) []VFS {
+	absPath := filepath.Join(sourceRoot, srcRel)
+	f, err := os.Open(absPath)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	var out []VFS
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if !strings.HasPrefix(line, "import ") {
+			continue
+		}
+		start := strings.IndexByte(line, '"')
+		end := strings.LastIndexByte(line, '"')
+		if start < 0 || end <= start {
+			continue
+		}
+		imp := line[start+1 : end]
+		if strings.HasSuffix(imp, ".ev") {
+			out = append(out, Build(strings.TrimSuffix(imp, ".ev")+".ev.pb.h"))
+		} else if strings.HasSuffix(imp, ".proto") {
+			base := strings.TrimSuffix(imp, ".proto")
+			if imp == "google/protobuf/descriptor.proto" {
+				// descriptor.pb.h is pre-committed, not a codegen output.
+				// Upstream tree: contrib/libs/protobuf/src/google/protobuf/descriptor.pb.h
+				out = append(out, Source(pbRuntimeBase+"google/protobuf/descriptor.pb.h"))
+			} else {
+				out = append(out, Build(base+".pb.h"))
+			}
+		}
+	}
+	SortVFS(out)
+	return out
+}
+
+// cfIncludeDirectives parses `#include "..."` directives from a configure_file
+// template (.cpp.in / .c.in). Only quoted includes are collected (angle-bracket
+// forms are system headers resolved by the compiler search path, not by the
+// registry). Returns Source-rooted VFSes, sorted lexicographically.
+// Returns nil when the file cannot be read.
+//
+// PR-AUDIT-3: legitimate disk read — extracts structured `#include` directives
+// from a .cpp.in/.c.in template at registration time to populate the CF output's
+// EmitsIncludes. NOT for closure walks. The architectural cleanup to route
+// through a unified registry-resolved "structured-import extractor" lives in
+// PR-AUDIT-3.D12 / .D16 (still open); kept per audit doc §2 D12/D16.
+func cfIncludeDirectives(diskPath string) []VFS {
+	data, err := os.ReadFile(diskPath)
+	if err != nil {
+		return nil
+	}
+	var out []VFS
+	for _, line := range strings.Split(string(data), "\n") {
+		t := strings.TrimSpace(line)
+		if !strings.HasPrefix(t, "#include ") {
+			continue
+		}
+		start := strings.IndexByte(t, '"')
+		if start < 0 {
+			continue
+		}
+		end := strings.IndexByte(t[start+1:], '"')
+		if end < 0 {
+			continue
+		}
+		inc := t[start+1 : start+1+end]
+		if inc != "" {
+			out = append(out, Source(inc))
+		}
+	}
+	SortVFS(out)
+	return out
+}
+
