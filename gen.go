@@ -5327,10 +5327,11 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	}
 }
 
-// genPy3RegScriptPath is the source-relative path to the gen_py3_reg.py script
-// invoked by every PY_REGISTER's PY node (mirror of macro _PY3_REGISTER at
-// build/ymake.core.conf:4086-4089).
-const genPy3RegScriptPath = "$(S)/build/scripts/gen_py3_reg.py"
+// genPy3RegScriptVFS is the source-relative VFS path to the
+// gen_py3_reg.py script invoked by every PY_REGISTER's PY node
+// (mirror of macro _PY3_REGISTER at build/ymake.core.conf:4086-4089).
+var genPy3RegScriptVFS = Source("build/scripts/gen_py3_reg.py")
+var genPy3RegScriptPath = genPy3RegScriptVFS.String()
 
 // emitPyRegister emits the PY+CC pair for each PY_REGISTER(arg) entry in
 // d.pyRegister. Each arg:
@@ -5368,7 +5369,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 				{CmdArgs: pyCmdArgs, Env: env},
 			},
 			Env:     env,
-			Inputs:  []VFS{ParseVFSOrSource(genPy3RegScriptPath)},
+			Inputs:  []VFS{genPy3RegScriptVFS},
 			Outputs: []VFS{Build(instance.Path + "/" + regCpp)},
 			KV: map[string]string{
 				"p":  "PY",
@@ -5404,7 +5405,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		ccIn.Generator = pyRef
 		ccIn.HasGenerator = true
 		ccIn.Py3Suffix = py3Suffix
-		ccIn.IncludeInputs = []VFS{ParseVFSOrSource(genPy3RegScriptPath)}
+		ccIn.IncludeInputs = []VFS{genPy3RegScriptVFS}
 		// PR-M3-final-surgical (fix 4): mirror upstream ordering — the
 		// PyInit_/init_module_ defines added by `onpy_register` AFTER
 		// `_PY3_REGISTER`'s `SRCS(GLOBAL …)` only attach to user-declared
@@ -5430,7 +5431,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		// the archive-input added by the reference graph (the reg3.cpp
 		// itself is BUILD_ROOT-rooted and PR-35y R7 strips those from the
 		// AR aggregator).
-		memberInputs = append(memberInputs, ParseVFSOrSource(genPy3RegScriptPath))
+		memberInputs = append(memberInputs, genPy3RegScriptVFS)
 	}
 
 	return refs, outputs, memberInputs
