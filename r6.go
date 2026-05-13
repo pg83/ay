@@ -161,6 +161,18 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	inputs = append(inputs, canonicalBinary, inputPath)
 	inputs = append(inputs, closure...)
 
+	// PR-M3-rl6-host-platform-and-cctype: host-built R6 nodes carry
+	// `host_platform=true` and `tags=["tool"]` per the reference shape
+	// (x86_64 R6 nodes invoke the host ragel6 binary at build-time —
+	// classified as a tool node). Target-side R6 (aarch64) keeps the
+	// existing empty-tags / no-host-platform shape.
+	tags := []string{}
+	hostPlatform := false
+	if targetIsX8664(instance) {
+		tags = []string{"tool"}
+		hostPlatform = true
+	}
+
 	node := &Node{
 		Cmds: []Cmd{
 			{
@@ -168,14 +180,15 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 				Env:     env,
 			},
 		},
-		Env:     env,
-		Inputs:  inputs,
-		Outputs: []string{outputPath},
+		Env:          env,
+		Inputs:       inputs,
+		Outputs:      []string{outputPath},
+		HostPlatform: hostPlatform,
 		KV: map[string]string{
 			"p":  "R6",
 			"pc": "yellow",
 		},
-		Tags: []string{},
+		Tags: tags,
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
