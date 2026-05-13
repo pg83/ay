@@ -6365,7 +6365,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			}
 		}
 
-		r5Ref, r5TmpOut, r5CppOut := EmitR5(srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinStr, rlgenCdBinStr, ctx.emit)
+		r5Ref, r5TmpOut, r5CppOut := EmitR5(ctx.host, ctx.platformFor(srcInstance), srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinStr, rlgenCdBinStr, ctx.emit)
 		_ = r5Ref
 
 		// F-7-B / PR-AUDIT-2 D05: register R5 outputs. ragel5 emits the
