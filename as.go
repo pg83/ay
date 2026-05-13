@@ -273,7 +273,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 		"--replace=$(B)=/-B",
 		"--replace=$(S)=/-S",
 		"--replace=$(TOOL_ROOT)=/-T",
-		"-D", "_x86_64_",
+		"-D", "_" + string(instance.Platform.ISA) + "_",
 		"-D_YASM_",
 	)
 	cmdArgs = append(cmdArgs, predefinedFlags...)
