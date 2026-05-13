@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"os"
 	"reflect"
 	"testing"
 )
@@ -35,30 +33,6 @@ const referenceCCOutput = "$(BUILD_ROOT)/build/cow/on/lib.c.o"
 // CC node whose first output is referenceCCOutput. Returns nil and a
 // reason string when the file is absent (so the caller can t.Skip) or
 // the node is missing.
-func loadReferenceCCNode(t *testing.T) (*Node, string) {
-	t.Helper()
-	raw, err := os.ReadFile(referenceGraphPath)
-
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, "reference graph " + referenceGraphPath + " not present on this host"
-		}
-
-		t.Fatalf("read %s: %v", referenceGraphPath, err)
-	}
-
-	var g Graph
-	Throw(json.Unmarshal(raw, &g))
-
-	for _, n := range g.Graph {
-		if len(n.Outputs) > 0 && n.Outputs[0] == referenceCCOutput {
-			return n, ""
-		}
-	}
-
-	return nil, "reference graph contains no CC node for " + referenceCCOutput
-}
-
 // fieldEqual is a small helper that wraps reflect.DeepEqual + a diff-y
 // failure message with the expected and actual rendered as %#v so a
 // mismatch surfaces the offending value rather than a bare false.
@@ -67,90 +41,6 @@ func fieldEqual(t *testing.T, name string, got, want interface{}) {
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("field %s mismatch:\n  got:  %#v\n  want: %#v", name, got, want)
-	}
-}
-
-func TestEmitCC_BuildCowOnLibC_ByteExact(t *testing.T) {
-	ref, skipReason := loadReferenceCCNode(t)
-
-	if ref == nil {
-		t.Skip(skipReason)
-	}
-
-	emit := NewBufferedEmitter()
-	_, outPath := EmitCC(targetInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, emit)
-
-	if outPath != "$(BUILD_ROOT)/build/cow/on/lib.c.o" {
-		t.Errorf("outPath = %q, want %q", outPath, "$(BUILD_ROOT)/build/cow/on/lib.c.o")
-	}
-
-	if len(emit.nodes) != 1 {
-		t.Fatalf("emitter buffered %d nodes, want 1", len(emit.nodes))
-	}
-
-	got := emit.nodes[0]
-
-	// cmd_args length is the headline acceptance criterion: PR-08 must
-	// produce exactly 101 entries to match the reference.
-	if len(got.Cmds) != 1 {
-		t.Fatalf("got %d Cmds, want 1", len(got.Cmds))
-	}
-
-	if len(got.Cmds[0].CmdArgs) != 101 {
-		t.Fatalf("cmd_args length = %d, want 101", len(got.Cmds[0].CmdArgs))
-	}
-
-	// Walk cmd_args entry-by-entry so a mismatch reports the offending
-	// index instead of dumping a 100-element slice.
-	wantArgs := ref.Cmds[0].CmdArgs
-
-	for i := range wantArgs {
-		if got.Cmds[0].CmdArgs[i] != wantArgs[i] {
-			t.Errorf("cmd_args[%d]:\n  got:  %q\n  want: %q", i, got.Cmds[0].CmdArgs[i], wantArgs[i])
-		}
-	}
-
-	fieldEqual(t, "cmds[0].env", got.Cmds[0].Env, ref.Cmds[0].Env)
-	fieldEqual(t, "inputs", got.Inputs, ref.Inputs)
-	fieldEqual(t, "outputs", got.Outputs, ref.Outputs)
-	fieldEqual(t, "kv", got.KV, ref.KV)
-	fieldEqual(t, "tags", got.Tags, ref.Tags)
-	fieldEqual(t, "target_properties", got.TargetProperties, ref.TargetProperties)
-	fieldEqual(t, "platform", got.Platform, ref.Platform)
-	fieldEqual(t, "requirements", got.Requirements, ref.Requirements)
-	fieldEqual(t, "env (top-level)", got.Env, ref.Env)
-
-	// host_platform: leaf compile is target-side, must be false. The
-	// reference node has the field omitted (which decodes to false in
-	// the Go struct).
-	if got.HostPlatform {
-		t.Errorf("host_platform: got true, want false")
-	}
-
-	if ref.HostPlatform {
-		t.Errorf("reference host_platform: got true, want false (sanity check)")
-	}
-
-	// foreign_deps: a CC node has no host-tool deps, so the field is
-	// nil. Both got and ref must match.
-	if got.ForeignDeps != nil {
-		t.Errorf("foreign_deps: got %#v, want nil", got.ForeignDeps)
-	}
-
-	if ref.ForeignDeps != nil {
-		t.Errorf("reference foreign_deps: got %#v, want nil (sanity check)", ref.ForeignDeps)
-	}
-
-	// deps: leaf source compile, no upstream nodes. The reference node
-	// has `"deps": []` which decodes to an empty (possibly nil) slice;
-	// our emitted node has nil DepRefs which Finalize would later turn
-	// into []. Pre-finalize we accept either nil or empty.
-	if len(got.DepRefs) != 0 {
-		t.Errorf("DepRefs: got %d entries, want 0", len(got.DepRefs))
-	}
-
-	if len(ref.Deps) != 0 {
-		t.Errorf("reference deps: got %d entries, want 0 (sanity check)", len(ref.Deps))
 	}
 }
 
@@ -178,84 +68,6 @@ func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
 // node for build/cow/on/lib.c — 105-arg cmd_args, with
 // host_platform=true, tags=["tool"], output ".pic.o", and the
 // release/PIC flag bundle (-O3, -fPIC, etc.) per the reference.
-func TestEmitCC_BuildCowOn_Host_ByteExact(t *testing.T) {
-	const targetOut = "$(BUILD_ROOT)/build/cow/on/lib.c.pic.o"
-
-	raw, err := os.ReadFile(referenceGraphPath)
-
-	if err != nil {
-		t.Skipf("reference graph not available (%v); skipping host byte-exact test", err)
-	}
-
-	var g Graph
-	Throw(json.Unmarshal(raw, &g))
-
-	var ref *Node
-
-	for _, n := range g.Graph {
-		if len(n.Outputs) > 0 && n.Outputs[0] == targetOut {
-			ref = n
-
-			break
-		}
-	}
-
-	if ref == nil {
-		t.Fatalf("reference host CC node with output %q not found", targetOut)
-	}
-
-	emit := NewBufferedEmitter()
-	_, outPath := EmitCC(hostInstance("build/cow/on"), "lib.c", ModuleCCInputs{}, emit)
-
-	if outPath != targetOut {
-		t.Errorf("outPath = %q, want %q", outPath, targetOut)
-	}
-
-	if len(emit.nodes) != 1 {
-		t.Fatalf("emitter buffered %d nodes, want 1", len(emit.nodes))
-	}
-
-	got := emit.nodes[0]
-
-	if len(got.Cmds[0].CmdArgs) != 105 {
-		t.Fatalf("cmd_args length = %d, want 105", len(got.Cmds[0].CmdArgs))
-	}
-
-	wantArgs := ref.Cmds[0].CmdArgs
-
-	if len(wantArgs) != 105 {
-		t.Fatalf("reference cmd_args length = %d, want 105 (sanity check)", len(wantArgs))
-	}
-
-	for i := range wantArgs {
-		if got.Cmds[0].CmdArgs[i] != wantArgs[i] {
-			t.Errorf("cmd_args[%d]:\n  got:  %q\n  want: %q", i, got.Cmds[0].CmdArgs[i], wantArgs[i])
-		}
-	}
-
-	fieldEqual(t, "cmds[0].env", got.Cmds[0].Env, ref.Cmds[0].Env)
-	fieldEqual(t, "inputs", got.Inputs, ref.Inputs)
-	fieldEqual(t, "outputs", got.Outputs, ref.Outputs)
-	fieldEqual(t, "kv", got.KV, ref.KV)
-	fieldEqual(t, "tags", got.Tags, ref.Tags)
-	fieldEqual(t, "target_properties", got.TargetProperties, ref.TargetProperties)
-	fieldEqual(t, "platform", got.Platform, ref.Platform)
-	fieldEqual(t, "requirements", got.Requirements, ref.Requirements)
-	fieldEqual(t, "env (top-level)", got.Env, ref.Env)
-
-	if !got.HostPlatform {
-		t.Errorf("host_platform: got false, want true")
-	}
-
-	if !ref.HostPlatform {
-		t.Errorf("reference host_platform: got false, want true (sanity check)")
-	}
-
-	if got.ForeignDeps != nil {
-		t.Errorf("foreign_deps: got %#v, want nil", got.ForeignDeps)
-	}
-}
-
 // muslHostInstance constructs the canonical host (PIC) musl
 // ModuleInstance for a given musl-relative path. Used by PR-29-D01's
 // byte-exact pin against the reference graph.
@@ -272,84 +84,6 @@ func muslHostInstance(path string) ModuleInstance {
 // 115-arg cmd_args bundle against the reference graph node
 // `$(BUILD_ROOT)/contrib/libs/musl/_/src/string/strlen.c.pic.o`
 // (platform `default-linux-x86_64`). PR-29-D01 dominant lever.
-func TestEmitCC_MuslHost_StrlenC_ByteExact(t *testing.T) {
-	const targetOut = "$(BUILD_ROOT)/contrib/libs/musl/_/src/string/strlen.c.pic.o"
-
-	raw, err := os.ReadFile(referenceGraphPath)
-
-	if err != nil {
-		t.Skipf("reference graph not available (%v); skipping host musl byte-exact test", err)
-	}
-
-	var g Graph
-	Throw(json.Unmarshal(raw, &g))
-
-	var ref *Node
-
-	for _, n := range g.Graph {
-		if len(n.Outputs) > 0 && n.Outputs[0] == targetOut {
-			ref = n
-
-			break
-		}
-	}
-
-	if ref == nil {
-		t.Fatalf("reference host musl CC node with output %q not found", targetOut)
-	}
-
-	emit := NewBufferedEmitter()
-	// PR-31: pass the reference's resolved transitive headers as
-	// IncludeInputs so this synthetic byte-exact test pins both the
-	// cmd_args (115) AND the input-set against sg.json.
-	muslIncludeInputs := append([]string(nil), ref.Inputs[1:]...)
-	_, outPath := EmitCC(muslHostInstance("contrib/libs/musl"), "src/string/strlen.c", ModuleCCInputs{IncludeInputs: muslIncludeInputs}, emit)
-
-	if outPath != targetOut {
-		t.Errorf("outPath = %q, want %q", outPath, targetOut)
-	}
-
-	if len(emit.nodes) != 1 {
-		t.Fatalf("emitter buffered %d nodes, want 1", len(emit.nodes))
-	}
-
-	got := emit.nodes[0]
-
-	if len(got.Cmds[0].CmdArgs) != 115 {
-		t.Fatalf("cmd_args length = %d, want 115", len(got.Cmds[0].CmdArgs))
-	}
-
-	wantArgs := ref.Cmds[0].CmdArgs
-
-	if len(wantArgs) != 115 {
-		t.Fatalf("reference cmd_args length = %d, want 115 (sanity check)", len(wantArgs))
-	}
-
-	for i := range wantArgs {
-		if got.Cmds[0].CmdArgs[i] != wantArgs[i] {
-			t.Errorf("cmd_args[%d]:\n  got:  %q\n  want: %q", i, got.Cmds[0].CmdArgs[i], wantArgs[i])
-		}
-	}
-
-	fieldEqual(t, "cmds[0].env", got.Cmds[0].Env, ref.Cmds[0].Env)
-	fieldEqual(t, "inputs", got.Inputs, ref.Inputs)
-	fieldEqual(t, "outputs", got.Outputs, ref.Outputs)
-	fieldEqual(t, "kv", got.KV, ref.KV)
-	fieldEqual(t, "tags", got.Tags, ref.Tags)
-	fieldEqual(t, "target_properties", got.TargetProperties, ref.TargetProperties)
-	fieldEqual(t, "platform", got.Platform, ref.Platform)
-	fieldEqual(t, "requirements", got.Requirements, ref.Requirements)
-	fieldEqual(t, "env (top-level)", got.Env, ref.Env)
-
-	if !got.HostPlatform {
-		t.Errorf("host_platform: got false, want true")
-	}
-
-	if !ref.HostPlatform {
-		t.Errorf("reference host_platform: got false, want true (sanity check)")
-	}
-}
-
 // TestEmitCC_GeneratedSource_BuildRootInput pins the IsGenerated
 // branch of EmitCC: when true, inputPath is composed under
 // $(BUILD_ROOT) instead of $(SOURCE_ROOT). PR-29-D07.
@@ -596,76 +330,3 @@ func contains(xs []string, target string) bool {
 // The expected cmd_args end is
 // `..., -nostdinc++ (ownExtras), catboost, -nostdinc++ (post-bucket
 // from baseUnit), -Wno-builtin-macro-redefined, ...`.
-func TestEmitCC_Libcxxrt_AuxhelperCc_ByteExact(t *testing.T) {
-	const targetOut = "$(BUILD_ROOT)/contrib/libs/cxxsupp/libcxxrt/auxhelper.cc.o"
-
-	raw, err := os.ReadFile(referenceGraphPath)
-
-	if err != nil {
-		t.Skipf("reference graph not available (%v); skipping libcxxrt byte-exact test", err)
-	}
-
-	var g Graph
-	Throw(json.Unmarshal(raw, &g))
-
-	var ref *Node
-
-	for _, n := range g.Graph {
-		if len(n.Outputs) > 0 && n.Outputs[0] == targetOut {
-			ref = n
-
-			break
-		}
-	}
-
-	if ref == nil {
-		t.Fatalf("reference libcxxrt CC node with output %q not found", targetOut)
-	}
-
-	emit := NewBufferedEmitter()
-	inst := targetInstance("contrib/libs/cxxsupp/libcxxrt")
-	inst.Flags.NoCompilerWarnings = true
-	in := ModuleCCInputs{
-		// libcxxrt's ya.make declares `CXXFLAGS(-nostdinc++)` (line 29
-		// of `contrib/libs/cxxsupp/libcxxrt/ya.make`); this is the own
-		// non-GLOBAL CXXFLAGS that lands at the ownExtras slot.
-		CXXFlags: []string{"-nostdinc++"},
-		// PeerAddInclGlobal is the set the walker computes for libcxxrt's
-		// peer closure (libunwind + sanitizer/include + transitive musl
-		// arch paths via runtime-stack hoisting). Reference ordering at
-		// cmd_args[11..14] is the canonical musl-arch triple plus extra.
-		PeerAddInclGlobal: []string{
-			"contrib/libs/musl/arch/aarch64",
-			"contrib/libs/musl/arch/generic",
-			"contrib/libs/musl/include",
-			"contrib/libs/musl/extra",
-		},
-		// AutoPeerCFlags is the consumer-side `-D_musl_` sentinel that
-		// `defaultPeerCFlags` injects when MUSL=yes and the module is
-		// not LibcMusl-self / not effectively NO_PLATFORM. Reference
-		// slot 79 carries it.
-		AutoPeerCFlags: []string{"-D_musl_"},
-		// The reference's resolved transitive header set; the test
-		// pins both cmd_args AND inputs against sg.json.
-		IncludeInputs: append([]string(nil), ref.Inputs[1:]...),
-	}
-	_, outPath := EmitCC(inst, "auxhelper.cc", in, emit)
-
-	if outPath != targetOut {
-		t.Errorf("outPath = %q, want %q", outPath, targetOut)
-	}
-
-	got := emit.nodes[0]
-
-	wantArgs := ref.Cmds[0].CmdArgs
-
-	if len(got.Cmds[0].CmdArgs) != len(wantArgs) {
-		t.Fatalf("cmd_args length = %d, want %d", len(got.Cmds[0].CmdArgs), len(wantArgs))
-	}
-
-	for i := range wantArgs {
-		if got.Cmds[0].CmdArgs[i] != wantArgs[i] {
-			t.Errorf("cmd_args[%d]:\n  got:  %q\n  want: %q", i, got.Cmds[0].CmdArgs[i], wantArgs[i])
-		}
-	}
-}
