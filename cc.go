@@ -1078,7 +1078,7 @@ func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl, ownExtras
 		"-o",
 		outputPath,
 	)
-	cmdArgs = appendMuslIncludes(cmdArgs, muslCcIncludes, addIncl)
+	cmdArgs = appendMuslIncludes(cmdArgs, muslCcIncludesFor(p.ISA), addIncl)
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
 	cmdArgs = append(cmdArgs, commonCFlags...)
@@ -1128,7 +1128,7 @@ func composeMuslHostCC(p *Platform, outputPath, inputPath string, addIncl, ownEx
 		"-o",
 		outputPath,
 	)
-	cmdArgs = appendMuslIncludes(cmdArgs, muslCcIncludesX8664, addIncl)
+	cmdArgs = appendMuslIncludes(cmdArgs, muslCcIncludesFor(p.ISA), addIncl)
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
 	cmdArgs = append(cmdArgs, hostCFlags...)

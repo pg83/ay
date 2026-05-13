@@ -473,7 +473,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 		autoPeerCFlags = in.AutoPeerCFlags
 	}
 
-	includes := composeASIncludes(in, isMusl, targetX8664)
+	includes := composeASIncludes(in, isMusl, instance.Platform.ISA)
 
 	betweenBlocks := len(catboostOpenSourceDefine) + len(autoPeerCFlags)
 	if targetX8664 {
@@ -565,13 +565,9 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 // interleaves them between `SOURCE_ROOT` and the linux-headers pair,
 // which is the canonical musl-self isolation pattern). The override
 // matches the CC behaviour (cc.go:218-228).
-func composeASIncludes(in ModuleCCInputs, isMusl, targetX8664 bool) []string {
+func composeASIncludes(in ModuleCCInputs, isMusl bool, isa ISA) []string {
 	if isMusl {
-		if targetX8664 {
-			return muslCcIncludesX8664
-		}
-
-		return muslCcIncludes
+		return muslCcIncludesFor(isa)
 	}
 
 	out := make([]string, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(ccIncludesSuffix)+len(in.PeerAddInclGlobal))
