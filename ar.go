@@ -341,34 +341,6 @@ func EmitAR(
 	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, nil, emit)
 }
 
-// EmitARGlobal emits a second AR node for a module's GLOBAL_SRCS,
-// producing a .global.a archive with module_tag="global" in
-// target_properties.
-//
-// Global archives do not carry peer-archive DepRefs (GLOBAL_SRCS
-// are propagated differently from PEERDIR linkage).
-//
-// objRefs and objPaths carry only the GLOBAL_SRCS .o files in
-// declaration order. cmd_args preserves that order; inputs sorts
-// them alphabetically.
-//
-// Returns the NodeRef for the emitted global AR node.
-func EmitARGlobal(
-	instance ModuleInstance,
-	objRefs []NodeRef,
-	objPaths []VFS,
-	memberInputs []VFS,
-	emit Emitter,
-) NodeRef {
-	if len(objRefs) != len(objPaths) {
-		ThrowFmt("EmitARGlobal: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
-	}
-
-	archivePath := Build(instance.Path + "/" + globalArchiveName(instance.Path))
-
-	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, nil, emit)
-}
-
 // EmitARNamed emits an AR node using an explicitly supplied archive
 // base name (e.g. Py3ArchiveName or Py3cArchiveName) instead of the
 // default ArchiveName. Used by Python library module types that require
@@ -447,21 +419,3 @@ func EmitARGlobalNamedTagged(
 	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, memberInputs, nil, emit)
 }
 
-// EmitARGlobalNamed is like EmitARGlobal but uses an explicitly
-// supplied archive base name. Used by Python library module types.
-func EmitARGlobalNamed(
-	instance ModuleInstance,
-	archiveBaseName string,
-	objRefs []NodeRef,
-	objPaths []VFS,
-	memberInputs []VFS,
-	emit Emitter,
-) NodeRef {
-	if len(objRefs) != len(objPaths) {
-		ThrowFmt("EmitARGlobalNamed: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
-	}
-
-	archivePath := Build(instance.Path + "/" + archiveBaseName)
-
-	return emitARNode(instance, archivePath, "global", objRefs, objPaths, nil, memberInputs, nil, emit)
-}
