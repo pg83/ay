@@ -3,18 +3,19 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/jon-codes/getopt"
 )
 
 // make.go — `yatool make` subcommand.
@@ -516,95 +517,88 @@ func casPath(bldRoot, src string) string {
 
 // --------------------------- CLI parsing ---------------------------
 
-// parseMakeFlags pre-processes args to translate the original gg/ya.go
-// short letters (-G, -r, -d, -k, -T, -D, -j, -B, -o, -I) into the
-// matching long flag names so stdlib flag can parse them. Long flags
-// already use double-dash; short forms become their long aliases.
-//
-// Recognised short flags (mirroring gg/ya.go handleMake):
-//   -G  → --dump-graph
-//   -r  → --release
-//   -d  → --debug
-//   -k  → --keep-going
-//   -T  → --ninja          (per-node newline output)
-//   -D  → --define         (takes value)
-//   -j  → --jobs           (takes value)
-//   -B  → --build-dir      (takes value)
-//   -o  → --output         (takes value)
-//   -I  → --install        (takes value)
+// parseMakeFlags parses argv via the same getopt grammar as the
+// gg/ya.go original — short letters (-G/-r/-d/-k/-T) + value-bearing
+// short letters (-D/-j/-B/-o/-I) + long names. Bare `-h`/`--help`
+// prints usage and exits 0 (the gg/ya.go original didn't have one).
 func parseMakeFlags(args []string) *makeFlags {
-	args = expandShortFlags(args)
+	// getopt's NewState convention: args[0] is the program name and is
+	// skipped by the iterator. dispatch() hands us argv[2:] (the user
+	// args only), so prepend a sentinel so the iterator sees every
+	// flag the user typed.
+	state := getopt.NewState(append([]string{"yatool-make"}, args...))
 
-	fs := flag.NewFlagSet("make", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-
-	srcRoot := fs.String("source-root", "/home/pg/monorepo/yatool_orig", "source-tree root")
-	bldRoot := fs.String("build-dir", "", "build directory (defaults to <source-root>/obj)")
-	outRoot := fs.String("output", "", "output staging dir (defaults to <build-dir>/res)")
-	install := fs.String("install", "", "install final outputs into this directory after build (defaults to source-root)")
-	threads := fs.Int("jobs", runtime.NumCPU(), "parallel execution slots; 0 disables exec (build-only)")
-	keepGoing := fs.Bool("keep-going", false, "continue past per-node failures")
-	dumpGraph := fs.Bool("dump-graph", false, "log a graph summary to stderr after Gen")
-	stats := fs.Bool("stats", false, "print per-kind execution stats after the build")
-	ninja := fs.Bool("ninja", false, "ninja-style output: one line per finished node (default: in-place \\r repaint)")
-	musl := fs.Bool("musl", false, "add MUSL=yes")
-	release := fs.Bool("release", false, "set GG_BUILD_TYPE=release (default)")
-	debug := fs.Bool("debug", false, "set GG_BUILD_TYPE=debug")
-	xbuild := fs.String("xbuild", "", "set GG_BUILD_TYPE to a custom value (overrides --release/--debug)")
-	targetPlat := fs.String("target-platform", "", "target platform id (e.g. default-linux-aarch64); empty → host")
-	hostPlat := fs.String("host-platform", "", "host platform id (e.g. default-linux-x86_64); empty → host")
-
-	var tDefs stringMapValue
-	var hDefs stringMapValue
-
-	fs.Var(&tDefs, "define", "ymake-style -D KEY=VALUE for the target axis (repeatable)")
-	fs.Var(&hDefs, "host-platform-flag", "KEY=VALUE for the host axis (repeatable)")
-
-	err := fs.Parse(args)
-
-	if errors.Is(err, flag.ErrHelp) {
-		printMakeUsage(os.Stdout)
-		os.Exit(0)
-	}
-
-	Throw(err)
-
-	buildType := "release"
-	if *debug {
-		buildType = "debug"
-	}
-	if *release {
-		buildType = "release"
-	}
-	if *xbuild != "" {
-		buildType = *xbuild
+	config := getopt.Config{
+		Opts:     getopt.OptStr("GrdkThD:j:B:o:I:"),
+		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:"),
+		Mode:     getopt.ModeInOrder,
+		Func:     getopt.FuncGetOptLong,
 	}
 
 	mf := &makeFlags{
-		srcRoot:     *srcRoot,
-		bldRoot:     *bldRoot,
-		outRoot:     *outRoot,
-		installRoot: *install,
-		threads:     *threads,
-		keepGoing:   *keepGoing,
-		dumpGraph:   *dumpGraph,
-		stats:       *stats,
-		ninja:       *ninja,
-		musl:        *musl,
-		buildType:   buildType,
-		targetPlat:  *targetPlat,
-		hostPlat:    *hostPlat,
-		tflags:      tDefs.toMap(),
-		hflags:      hDefs.toMap(),
-		targets:     fs.Args(),
+		buildType: "release",
+		threads:   runtime.NumCPU(),
+		tflags:    map[string]string{},
+		hflags:    map[string]string{},
 	}
 
-	if mf.tflags == nil {
-		mf.tflags = map[string]string{}
+	for opt, err := range state.All(config) {
+		if err == getopt.ErrDone {
+			break
+		}
+
+		Throw(err)
+
+		switch {
+		case opt.Char == 'h' || opt.Name == "help":
+			printMakeUsage(os.Stdout)
+			os.Exit(0)
+		case opt.Char == 'k' || opt.Name == "keep-going":
+			mf.keepGoing = true
+		case opt.Char == 'G' || opt.Name == "dump-graph":
+			mf.dumpGraph = true
+		case opt.Name == "stats":
+			mf.stats = true
+		case opt.Name == "musl":
+			mf.musl = true
+		case opt.Char == 'T':
+			mf.ninja = true
+		case opt.Char == 'o' || opt.Name == "output":
+			mf.outRoot = opt.OptArg
+		case opt.Char == 'I' || opt.Name == "install":
+			mf.installRoot = opt.OptArg
+		case opt.Char == 'B' || opt.Name == "build-dir":
+			mf.bldRoot = opt.OptArg
+		case opt.Name == "source-root":
+			mf.srcRoot = opt.OptArg
+		case opt.Char == 'D':
+			parseKV(mf.tflags, opt.OptArg)
+		case opt.Char == 'j':
+			n, perr := strconv.Atoi(opt.OptArg)
+			Throw(perr)
+			mf.threads = n
+		case opt.Char == 'r' || opt.Name == "release":
+			mf.buildType = "release"
+		case opt.Char == 'd' || opt.Name == "debug":
+			mf.buildType = "debug"
+		case opt.Name == "xbuild":
+			mf.buildType = opt.OptArg
+		case opt.Name == "target-platform":
+			mf.targetPlat = opt.OptArg
+		case opt.Name == "host-platform":
+			mf.hostPlat = opt.OptArg
+		case opt.Name == "host-platform-flag":
+			parseKV(mf.hflags, opt.OptArg)
+		case opt.Char == 1:
+			// Positional argument (target).
+			mf.targets = append(mf.targets, opt.OptArg)
+		default:
+			ThrowFmt("make: unhandled flag %v", opt)
+		}
 	}
 
-	if mf.hflags == nil {
-		mf.hflags = map[string]string{}
+	if mf.srcRoot == "" {
+		mf.srcRoot = "/home/pg/monorepo/yatool_orig"
 	}
 
 	if mf.bldRoot == "" {
@@ -630,79 +624,18 @@ func parseMakeFlags(args []string) *makeFlags {
 	return mf
 }
 
-// shortFlagMap maps each single-letter gg/ya.go flag to its long name.
-// Value-bearing entries (suffixed with `=`) require the next argv
-// element to be picked up too. Mirrors getopt's "Gk" cluster handling
-// only on a single-letter prefix; tightly clustered short forms like
-// `-Gk` are NOT supported (the original required separate `-G -k`).
-var shortFlagMap = map[byte]string{
-	'G': "-dump-graph",
-	'r': "-release",
-	'd': "-debug",
-	'k': "-keep-going",
-	'T': "-ninja",
-	'D': "-define=", // takes value
-	'j': "-jobs=",
-	'B': "-build-dir=",
-	'o': "-output=",
-	'I': "-install=",
-}
+// parseKV splits `KEY=VALUE` on the first `=` and stores into `into`.
+// A bare `KEY` (no `=`) is treated as `KEY=yes`, matching gg/ya.go's
+// `Flags.parseInto` semantics.
+func parseKV(into map[string]string, kv string) {
+	idx := strings.IndexByte(kv, '=')
 
-// expandShortFlags walks `args` and rewrites single-dash short forms
-// (`-G`, `-D KEY=VAL`, `-D KEY=VAL` glued as `-DKEY=VAL`) into the
-// long-form names the stdlib flag package accepts. Unrecognised flags
-// pass through unchanged so flag.Parse can surface its own error.
-func expandShortFlags(args []string) []string {
-	out := make([]string, 0, len(args))
-
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-
-		// Stop translating after `--`; positional args follow.
-		if a == "--" {
-			out = append(out, args[i:]...)
-			break
-		}
-
-		if len(a) < 2 || a[0] != '-' || a[1] == '-' {
-			out = append(out, a)
-			continue
-		}
-
-		// `-abc...` — single-dash short form. Only the first letter is
-		// considered here; gg/ya.go didn't cluster short flags either.
-		mapping, ok := shortFlagMap[a[1]]
-		if !ok {
-			out = append(out, a)
-			continue
-		}
-
-		takesValue := strings.HasSuffix(mapping, "=")
-
-		if takesValue {
-			longName := strings.TrimSuffix(mapping, "=") // e.g. "-define"
-
-			if len(a) > 2 {
-				// `-DKEY=VAL` glued form.
-				out = append(out, "-"+longName+"="+a[2:])
-			} else {
-				// `-D KEY=VAL` two-arg form.
-				if i+1 >= len(args) {
-					ThrowFmt("make: %s requires a value", a)
-				}
-
-				out = append(out, "-"+longName+"="+args[i+1])
-				i++
-			}
-
-			continue
-		}
-
-		// Bool-style short flag: just emit the long alias.
-		out = append(out, "-"+mapping[1:])
+	if idx < 0 {
+		into[kv] = "yes"
+		return
 	}
 
-	return out
+	into[kv[:idx]] = kv[idx+1:]
 }
 
 func printMakeUsage(w io.Writer) {
