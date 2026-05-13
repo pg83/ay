@@ -286,10 +286,10 @@ func emitResourceObjcopy(
 		outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
 		cmdArgs := []string{
-			"/ix/realm/pg/bin/python3",
+			instance.Platform.Tools.Python3,
 			objcopyScriptPath,
-			"--compiler", "/ix/realm/boot/bin/clang++",
-			"--objcopy", "/ix/realm/boot/bin/llvm-objcopy",
+			"--compiler", instance.Platform.Tools.CXX,
+			"--objcopy", instance.Platform.Tools.Objcopy,
 			"--compressor", rescompressorBinPath,
 			"--rescompiler", rescompilerBinPath,
 			"--output_obj", outputObj.String(),
@@ -521,10 +521,10 @@ func emitKvOnlyObjcopyNode(
 	outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
 	cmdArgs := []string{
-		"/ix/realm/pg/bin/python3",
+		instance.Platform.Tools.Python3,
 		objcopyScriptPath,
-		"--compiler", "/ix/realm/boot/bin/clang++",
-		"--objcopy", "/ix/realm/boot/bin/llvm-objcopy",
+		"--compiler", instance.Platform.Tools.CXX,
+		"--objcopy", instance.Platform.Tools.Objcopy,
 		"--compressor", rescompressorBinPath,
 		"--rescompiler", rescompilerBinPath,
 		"--output_obj", outputObj.String(),
@@ -1023,10 +1023,10 @@ func emitPySrcObjcopy(
 		outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
 		cmdArgs := []string{
-			"/ix/realm/pg/bin/python3",
+			instance.Platform.Tools.Python3,
 			objcopyScriptPath,
-			"--compiler", "/ix/realm/boot/bin/clang++",
-			"--objcopy", "/ix/realm/boot/bin/llvm-objcopy",
+			"--compiler", instance.Platform.Tools.CXX,
+			"--objcopy", instance.Platform.Tools.Objcopy,
 			"--compressor", rescompressorBinPath,
 			"--rescompiler", rescompilerBinPath,
 			"--output_obj", outputObj.String(),

@@ -7,13 +7,35 @@ import (
 	"testing"
 )
 
-// helper to construct the canonical target instance for a path.
-// PR-M3-platform-pair-step12: canonical (host, target) Platform values
-// for tests. Constructed once via defaultLinuxPlatforms(nil) so every
-// test exercises the exact pair the production CLI builds.
+// Canonical (host, target) Platform values for tests. The toolchain
+// is pinned to arbitrary placeholder paths so byte-exact cmd_args
+// pins in this package stay stable across hosts whose actual $PATH
+// discovery would resolve a different absolute path. Production
+// cmdGen / cmdMake mines $PATH instead.
+var testToolchainFlags = map[string]string{
+	"BUILD_PYTHON_BIN":  "/bin/python3",
+	"BUILD_PYTHON3_BIN": "/bin/python3",
+	"CLANG_TOOL":        "/bin/clang",
+	"CLANG_pl_pl_TOOL":  "/bin/clang++",
+	"OBJCOPY_TOOL":      "/bin/llvm-objcopy",
+	"AR_TOOL":           "/bin/llvm-ar",
+	"STRIP_TOOL":        "/bin/llvm-strip",
+	"LLD_TOOL":          "/bin/lld",
+}
+
 var (
-	testHostP, testTargetP = defaultLinuxPlatforms(nil)
+	testHostP   = newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)
+	testTargetP = newTestPlatform(OSLinux, ISAAArch64, "no", nil, false)
 )
+
+func newTestPlatform(os OS, isa ISA, pic string, tags []string, isHost bool) *Platform {
+	flags := make(map[string]string, len(testToolchainFlags)+1)
+	for k, v := range testToolchainFlags {
+		flags[k] = v
+	}
+	flags["PIC"] = pic
+	return NewPlatform(os, isa, flags, tags, isHost)
+}
 
 func targetInstance(path string) ModuleInstance {
 	return ModuleInstance{

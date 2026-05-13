@@ -267,7 +267,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		}
 
 		pyCmdArgs := []string{
-			python3Path,
+			instance.Platform.Tools.Python3,
 			genPy3RegScriptPath,
 			arg,
 			regCppAbs,

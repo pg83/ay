@@ -240,14 +240,6 @@ type genCtx struct {
 	// bits/alltypes.h resolves arch-specifically).
 	scannerTarget *IncludeScanner
 	scannerHost   *IncludeScanner
-	// cliDefines mirrors the user-facing `--define KEY=VALUE` (PR-32
-	// D01). Read by the auto-PEERDIR machinery in defaultPeerdirsFor /
-	// defaultProgramPeerdirsFor and the auto-CFLAG injection in
-	// defaultPeerCFlags. The single load-bearing key today is `MUSL`
-	// (= "yes" mirrors `build/ymake.core.conf:781`'s
-	// `when ($MUSL == "yes") { PEERDIR+=contrib/libs/musl/include }`).
-	// Read-only after Gen seeds it; never mutated mid-walk.
-	cliDefines map[string]string
 	// enOutputs maps each emitted EN node's output paths to its NodeRef.
 	// PR-M3-D: cross-EN header-inclusion deps are resolved by looking up
 	// previously emitted EN nodes whose outputs are included by the current
@@ -657,41 +649,6 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"JAVA_CLASSPATH_IGNORE_CONFLICTZ": {}, // Java classpath; metadata.
 }
 
-// Gen produces the build graph rooted at `targetDir`. PR-23 wraps
-// the call into the new ModuleInstance addressing model: the seed
-// instance is constructed from `cfg.Target`, language=cpp,
-// flags=inferFlagsFromPath(targetDir, false). The walker
-// (`genModule`) takes the ModuleInstance directly so future host-
-// tool recursion (PR-25) can fork the walker into a host instance
-// without changing this entry point.
-//
-// PR-28 model: host PROGRAM walks fire eagerly from the source-dispatch
-// sites in `emitOneSource`. When `genModule`'s per-source loop hits
-// `.rl6` (R6 generator) or a yasm-using `.S`/`.s`, it constructs the
-// host ModuleInstance via `WithHost(cfg)` and calls `genModule`
-// recursively right there — no separate post-walk drainer. The host
-// walk may itself trigger further host walks (ragel6/bin → musl/full →
-// asmlib's host AS → yasm), all reached through the same eager-recursion
-// rule. `genCtx.memo` deduplicates so each host PROGRAM is walked at
-// most once.
-//
-// Host LDs are emitted into the same Graph as the target walk but are
-// NOT added to the result roots (per F3 of the PR-28 plan: reference
-// graph's `result` is target-only).
-func Gen(cfg PlatformConfig, sourceRoot string, targetDir string) *Graph {
-	return GenWith(cfg, sourceRoot, targetDir, nil)
-}
-
-// GenWith is the PR-32 D01 entry point that threads `cliDefines`
-// through to `genCtx`. A nil `cliDefines` defaults to
-// `{"MUSL": "yes"}` so back-compat callers (`Gen(cfg, root, target)`
-// → `GenWith(cfg, root, target, nil)`) preserve M2 behaviour. Pass a
-// non-nil empty map to opt out of all defaults (useful for test
-// fixtures that pin the no-defaults shape).
-func GenWith(cfg PlatformConfig, sourceRoot string, targetDir string, cliDefines map[string]string) *Graph {
-	return GenWithMode(cfg, sourceRoot, targetDir, cliDefines, defaultScanCtxMode)
-}
-
 // defaultScanCtxMode is the per-Gen scanCtx lifecycle policy used when
 // no explicit mode is passed (e.g. by tests, by the Gen wrapper). The
 // PR-M3-perf-E bake-off selected "interned" as the winner (~6% wall-time
@@ -707,13 +664,9 @@ const defaultScanCtxMode = "interned"
 // node's UID is computed. There is no longer a separate
 // applyUmbrellaAddIncl / applyBackPeerAddIncl batch pass that has to
 // walk every node twice before the first compile can fire.
-func runGenInto(srcRoot, targetDir string, cliDefines map[string]string, emitter Emitter, mode string) (NodeRef, func(*Node)) {
+func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string) (NodeRef, func(*Node)) {
 	if mode != "local" && mode != "interned" {
 		ThrowFmt("gen: --scan-ctx-mode must be \"local\" or \"interned\", got %q", mode)
-	}
-
-	if cliDefines == nil {
-		cliDefines = map[string]string{"MUSL": "yes"}
 	}
 
 	sharedPC := newSharedParseCache()
@@ -721,14 +674,12 @@ func runGenInto(srcRoot, targetDir string, cliDefines map[string]string, emitter
 	targetReg := NewCodegenRegistry()
 	hostReg := NewCodegenRegistry()
 
-	targetScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, "aarch64"), sharedPC)
+	targetScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, string(targetP.ISA)), sharedPC)
 	targetScanner.codegen = targetReg
 	targetScanner.fallbackLocators = []pathLocator{codegenLocator{reg: targetReg}}
-	hostScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, "x86_64"), sharedPC)
+	hostScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, string(hostP.ISA)), sharedPC)
 	hostScanner.codegen = hostReg
 	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
-
-	hostP, targetP := defaultLinuxPlatforms(cliDefines)
 
 	ctx := &genCtx{
 		cfg:             TargetCfg,
@@ -740,7 +691,6 @@ func runGenInto(srcRoot, targetDir string, cliDefines map[string]string, emitter
 		target:          targetP,
 		scannerTarget:   targetScanner,
 		scannerHost:     hostScanner,
-		cliDefines:      cliDefines,
 		enOutputs:       make(map[VFS]NodeRef),
 		pbOutputs:       make(map[codegenOutputKey]NodeRef),
 		evOutputs:       make(map[codegenOutputKey]NodeRef),
@@ -770,9 +720,14 @@ func runGenInto(srcRoot, targetDir string, cliDefines map[string]string, emitter
 // Wraps runGenInto: the per-node umbrella + back-peer prepare hook
 // runGenInto returns is threaded through FinalizeWith so the mutations
 // apply per-node inline, not as two separate full-graph post-passes.
-func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, cliDefines map[string]string, mode string) *Graph {
+// GenWithMode runs Gen against an explicit (host, target) Platform
+// pair. The callers (`yatool gen`, `yatool make -G`, test helpers)
+// construct both Platforms from CLI flags + mining before invoking
+// this entry; the walker reads every flag, tool path, and tag off
+// the Platform pointers.
+func GenWithMode(cfg PlatformConfig, sourceRoot string, targetDir string, hostP, targetP *Platform, mode string) *Graph {
 	emitter := NewBufferedEmitter()
-	_, prepare := runGenInto(sourceRoot, targetDir, cliDefines, emitter, mode)
+	_, prepare := runGenInto(sourceRoot, targetDir, hostP, targetP, emitter, mode)
 	_ = cfg // PlatformConfig is reserved for the M5 host-cross-compile dispatch.
 
 	return FinalizeWith(emitter, prepare)

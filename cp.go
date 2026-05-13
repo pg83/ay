@@ -39,7 +39,7 @@ func EmitJVCPG4(
 	procCmdFiles := Source("build/scripts/process_command_files.py")
 
 	cmdArgs := []string{
-		python3Path,
+		instance.Platform.Tools.Python3,
 		fsTools.String(),
 		"copy",
 		src.String(),
@@ -104,12 +104,11 @@ func EmitJVCPG4(
 //	<srcAbsPath>
 //	<dstAbsPath>
 func EmitCP(instance ModuleInstance, src VFS, dst VFS, emit Emitter) NodeRef {
-	const python3Path = "/ix/realm/pg/bin/python3"
 	fsTools := Source("build/scripts/fs_tools.py")
 	procCmdFiles := Source("build/scripts/process_command_files.py")
 
 	cmdArgs := []string{
-		python3Path,
+		instance.Platform.Tools.Python3,
 		fsTools.String(),
 		"copy",
 		src.String(),

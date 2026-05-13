@@ -47,14 +47,44 @@ const (
 	LangJava  Language = "java"  // reserved
 )
 
-// PlatformID is the on-disk `node.platform` string verbatim. The two
-// canonical M2 values match the reference graph's
-// `default-linux-aarch64` (target) and `default-linux-x86_64` (host).
-type PlatformID string
+// OS names the operating system axis of a Platform. Surfaced into
+// the on-disk `node.platform` string via MakePlatformID.
+type OS string
 
 const (
-	PlatformDefaultLinuxAArch64 PlatformID = "default-linux-aarch64"
-	PlatformDefaultLinuxX8664   PlatformID = "default-linux-x86_64"
+	OSLinux   OS = "linux"
+	OSDarwin  OS = "darwin"
+	OSWindows OS = "windows"
+)
+
+// ISA names the instruction-set architecture axis of a Platform.
+// Independent of OS — `default-linux-x86_64`, `default-darwin-x86_64`
+// and `default-windows-x86_64` all share ISAX8664. Keeping them as
+// separate enums avoids the combinatorial explosion of a single
+// `<OS>-<ISA>` enum and lets emitters branch on the axis they
+// actually care about.
+type ISA string
+
+const (
+	ISAX8664   ISA = "x86_64"
+	ISAAArch64 ISA = "aarch64"
+	ISAArm64   ISA = "arm64"
+)
+
+// PlatformID is the on-disk `node.platform` string verbatim, composed
+// from an OS + ISA pair via MakePlatformID. The two canonical M2
+// values match the reference graph's `default-linux-aarch64` (target)
+// and `default-linux-x86_64` (host).
+type PlatformID string
+
+// MakePlatformID composes the canonical `default-<os>-<isa>` form.
+func MakePlatformID(os OS, isa ISA) PlatformID {
+	return PlatformID("default-" + string(os) + "-" + string(isa))
+}
+
+var (
+	PlatformDefaultLinuxAArch64 = MakePlatformID(OSLinux, ISAAArch64)
+	PlatformDefaultLinuxX8664   = MakePlatformID(OSLinux, ISAX8664)
 )
 
 // FlagSet is the per-instance flag bag. Booleans capture the M2 macro

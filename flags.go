@@ -46,16 +46,6 @@ package main
 // the build system substitutes them at execution time. They are not
 // Go template variables; do not interpolate them at emit time.
 
-// ccCompilerPath is the absolute path to clang as it appears in the
-// reference graph. Identical for target and host builds in the
-// reference graph; M5 will lift this onto PlatformConfig.
-const ccCompilerPath = "/ix/realm/boot/bin/clang"
-
-// cxxCompilerPath is the absolute path to clang++ as it appears in
-// the reference graph for C++ source compilations (PR-29-D05). EmitCC
-// dispatches to this for `.cpp`/`.cc`/`.cxx` sources.
-const cxxCompilerPath = "/ix/realm/boot/bin/clang++"
-
 // cxxStandardFlag is the C++ language-standard switch the reference
 // graph applies to every C++ compilation (PR-29-D05).
 const cxxStandardFlag = "-std=c++20"

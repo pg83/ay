@@ -187,10 +187,11 @@ func EmitLD(
 	vcsOPath := vcsOVFS.String()
 	outputPath := outputVFS.String()
 
-	cmd0 := composeLDCmdVcsInfo(vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
-	cmd2 := composeLDCmdLinkExe(outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths, hostBuild, wantsStrip)
-	cmd3 := composeLDCmdLinkOrCopy(binaryDir)
+	tools := instance.Platform.Tools
+	cmd0 := composeLDCmdVcsInfo(tools, vcsCPath)
+	cmd1 := composeLDCmdVcsCompile(tools, vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
+	cmd2 := composeLDCmdLinkExe(tools, outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths, hostBuild, wantsStrip)
+	cmd3 := composeLDCmdLinkOrCopy(tools, binaryDir)
 
 	// vcs_info.py and fs_tools.py only carry ARCADIA_ROOT_DISTBUILD;
 	// the clang compile and link_exe.py invocations both carry the
@@ -372,11 +373,9 @@ func lastPathComponent(p string) string {
 // `build/scripts/vcs_info.py` to materialise `__vcs_version__.c` from
 // the upstream VCS state (`vcs.json`) and the C-template stub
 // `svn_interface.c`. 5 args, fixed.
-func composeLDCmdVcsInfo(vcsCPath string) []string {
+func composeLDCmdVcsInfo(tools Toolchain, vcsCPath string) []string {
 	return []string{
-		// TODO(portability): python3 path is captured from the
-		// reference build host.
-		"/ix/realm/pg/bin/python3",
+		tools.Python3,
 		ldVcsInfoPath,
 		"$(VCS)/vcs.json",
 		vcsCPath,
@@ -407,14 +406,14 @@ func composeLDCmdVcsInfo(vcsCPath string) []string {
 // reflects `cliMuslOn(ctx)` from the walker; when MUSL=no the two
 // sentinels collapse to a bare double-`noLibcUndebugBlock` (target)
 // or no muslConsumerSentinel between catboost and SSE (host).
-func composeLDCmdVcsCompile(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags, peerCFlagsGlobal []string, usePython3 bool, hostBuild bool, noCompilerWarnings bool) []string {
+func composeLDCmdVcsCompile(tools Toolchain, vcsCPath, vcsOPath string, muslOn bool, moduleCFlags, peerCFlagsGlobal []string, usePython3 bool, hostBuild bool, noCompilerWarnings bool) []string {
 	if hostBuild {
-		return composeLDCmdVcsCompileHost(vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, noCompilerWarnings)
+		return composeLDCmdVcsCompileHost(tools, vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, noCompilerWarnings)
 	}
 
 	cmdArgs := make([]string, 0, 94+len(peerCFlagsGlobal))
 	cmdArgs = append(cmdArgs,
-		ccCompilerPath,
+		tools.CC,
 		"--target="+targetTriple,
 		"-march="+archFlag,
 		"-B"+binPath,
@@ -485,10 +484,10 @@ func composeLDCmdVcsCompile(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags
 // -Wno-implicit-const-int-float-conversion -Wno-unknown-warning-option`).
 // Canonical bundle composition: `ymake_conf.py:1550-1556` and
 // `gnu_compiler.conf:124-140`.
-func composeLDCmdVcsCompileHost(vcsCPath, vcsOPath string, muslOn bool, moduleCFlags, peerCFlagsGlobal []string, usePython3 bool, noCompilerWarnings bool) []string {
+func composeLDCmdVcsCompileHost(tools Toolchain, vcsCPath, vcsOPath string, muslOn bool, moduleCFlags, peerCFlagsGlobal []string, usePython3 bool, noCompilerWarnings bool) []string {
 	cmdArgs := make([]string, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal))
 	cmdArgs = append(cmdArgs,
-		ccCompilerPath,
+		tools.CC,
 		"--target="+hostTriple,
 		"-B"+binPath,
 		"-c",
@@ -570,7 +569,7 @@ const ldVcsMuslSelfDefine = "-D_musl_=1"
 // PR-M3-py3-program-bin-strip-all: `wantsStrip` controls insertion of
 // `-Wl,--strip-all` between the trailer's `-lm` and `-Wl,--gc-sections`.
 // Set true for PY3_PROGRAM_BIN (STRIP() in _BASE_PY3_PROGRAM, python.conf:884).
-func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths []string, objcopyPaths []VFS, hostBuild, wantsStrip bool) []string {
+func composeLDCmdLinkExe(tools Toolchain, outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths []string, objcopyPaths []VFS, hostBuild, wantsStrip bool) []string {
 	// Capacity hint matches the reference graph's structure plus the
 	// caller-supplied slices.
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 12 + 1 + len(ccPaths) + len(peerLibPaths) + len(globalPaths) + len(objcopyPaths)
@@ -582,7 +581,7 @@ func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths []VFS, peerLibPath
 	cmdArgs := make([]string, 0, argCap)
 
 	cmdArgs = append(cmdArgs,
-		"/ix/realm/pg/bin/python3",
+		tools.Python3,
 		ldLinkExePath,
 	)
 
@@ -597,8 +596,8 @@ func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths []VFS, peerLibPath
 		"--source-root", "$(S)",
 		"--build-root", "$(B)",
 		"--arch=LINUX",
-		"--objcopy-exe", "/ix/realm/boot/bin/llvm-objcopy",
-		"/ix/realm/boot/bin/clang++",
+		"--objcopy-exe", tools.Objcopy,
+		tools.CXX,
 		"-Wl,--whole-archive",
 		"--ya-start-command-file",
 	)
@@ -702,9 +701,9 @@ func peersIncludeLibcCompat(peerLibPaths []string) bool {
 // composeLDCmdLinkOrCopy composes cmd[3]: invokes fs_tools.py
 // `link_or_copy_to_dir` to drop the linked binary into its containing
 // directory. 5 args, fixed.
-func composeLDCmdLinkOrCopy(modulePath string) []string {
+func composeLDCmdLinkOrCopy(tools Toolchain, modulePath string) []string {
 	return []string{
-		"/ix/realm/pg/bin/python3",
+		tools.Python3,
 		ldFsToolsPath,
 		"link_or_copy_to_dir",
 		"--no-check",
