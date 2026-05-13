@@ -108,6 +108,7 @@ func EmitLD(
 	moduleCFlags []string,
 	peerCFlagsGlobal []string,
 	usePython3 bool,
+	wantsStrip bool,
 	emit Emitter,
 ) NodeRef {
 	if len(ccRefs) != len(ccPaths) {
@@ -176,7 +177,7 @@ func EmitLD(
 
 	cmd0 := composeLDCmdVcsInfo(vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
-	cmd2 := composeLDCmdLinkExe(outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths, hostBuild)
+	cmd2 := composeLDCmdLinkExe(outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths, hostBuild, wantsStrip)
 	cmd3 := composeLDCmdLinkOrCopy(binaryDir)
 
 	// vcs_info.py and fs_tools.py only carry ARCADIA_ROOT_DISTBUILD;
@@ -563,7 +564,11 @@ const ldVcsMuslSelfDefine = "-D_musl_=1"
 // PR-38: `hostBuild` selects the host toolchain triple (x86_64, no
 // -march) and `ldHostStaticTrailingFlags` in place of the target's
 // `ldStaticMuslTrailingFlags` (which carries -lrt/-ldl absent on host).
-func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths []string, hostBuild bool) []string {
+//
+// PR-M3-py3-program-bin-strip-all: `wantsStrip` controls insertion of
+// `-Wl,--strip-all` between the trailer's `-lm` and `-Wl,--gc-sections`.
+// Set true for PY3_PROGRAM_BIN (STRIP() in _BASE_PY3_PROGRAM, python.conf:884).
+func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths []string, hostBuild, wantsStrip bool) []string {
 	// Capacity hint matches the reference graph's structure plus the
 	// caller-supplied slices.
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 12 + 1 + len(ccPaths) + len(peerLibPaths) + len(globalPaths) + len(objcopyPaths)
@@ -630,18 +635,50 @@ func composeLDCmdLinkExe(outputPath, vcsOPath string, ccPaths, peerLibPaths, plu
 	cmdArgs = append(cmdArgs, peerLibPaths...)
 	cmdArgs = append(cmdArgs, "-Wl,--end-group")
 
+	var trailer []string
 	if hostBuild {
 		if peersIncludeLibcCompat(peerLibPaths) {
-			cmdArgs = append(cmdArgs, ldHostStaticRTTrailingFlags...)
+			trailer = ldHostStaticRTTrailingFlags
 		} else {
-			cmdArgs = append(cmdArgs, ldHostStaticTrailingFlags...)
+			trailer = ldHostStaticTrailingFlags
 		}
 	} else {
-		cmdArgs = append(cmdArgs, ldStaticMuslTrailingFlags...)
+		trailer = ldStaticMuslTrailingFlags
+	}
+
+	// PR-M3-py3-program-bin-strip-all: when STRIP() was called on the
+	// module (PY3_PROGRAM_BIN per `_BASE_PY3_PROGRAM` in upstream
+	// python.conf), splice `-Wl,--strip-all` between the trailer's
+	// `-lm` and its terminating `-Wl,--gc-sections`. The trailer
+	// constants are pinned to end with `-Wl,--gc-sections`; we
+	// preserve that postfix and insert before it.
+	if wantsStrip {
+		n := len(trailer)
+		if n == 0 || trailer[n-1] != ldGcSectionsFlag {
+			ThrowFmt("composeLDCmdLinkExe: trailer must end with %q for strip insertion", ldGcSectionsFlag)
+		}
+
+		cmdArgs = append(cmdArgs, trailer[:n-1]...)
+		cmdArgs = append(cmdArgs, ldStripAllFlag)
+		cmdArgs = append(cmdArgs, trailer[n-1])
+	} else {
+		cmdArgs = append(cmdArgs, trailer...)
 	}
 
 	return cmdArgs
 }
+
+// ldStripAllFlag is the linker flag injected when STRIP() is in effect
+// for the module (PY3_PROGRAM_BIN — see `_BASE_PY3_PROGRAM` in
+// `build/conf/python.conf:884`). Resolved upstream as
+// `LD_STRIP_FLAG=-Wl,--strip-all` in `build/conf/linkers/ld.conf:22`
+// for Linux/Android targets.
+const ldStripAllFlag = "-Wl,--strip-all"
+
+// ldGcSectionsFlag is the trailer-terminating linker flag every LD
+// trailer ends with. The strip-all splice in composeLDCmdLinkExe
+// asserts this postfix to keep the insertion order pinned.
+const ldGcSectionsFlag = "-Wl,--gc-sections"
 
 // peersIncludeLibcCompat reports whether the host LD's peer-archive
 // slot includes `contrib/libs/libc_compat`. Used to select the

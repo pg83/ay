@@ -204,6 +204,7 @@ func TestEmitLD_ToolsArchiver_ByteExact(t *testing.T) {
 		nil,   // PR-38: moduleCFlags — nil for target PROGRAM (archiver has no own CFLAGS)
 		nil,   // PR-M3-final-LD-trailer-and-cflags: peerCFlagsGlobal — nil for archiver (no peer GLOBAL CFLAGS)
 		false, // PR-M3-final-LD-trailer-and-cflags: usePython3 — false for archiver
+		false, // PR-M3-py3-program-bin-strip-all: archiver is cpp PROGRAM, no STRIP()
 		emit,
 	)
 
@@ -346,6 +347,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		nil,   // PR-38: moduleCFlags nil for synthetic target test
 		nil,   // PR-M3-final-LD-trailer-and-cflags: peerCFlagsGlobal nil
 		false, // PR-M3-final-LD-trailer-and-cflags: usePython3 false
+		false, // PR-M3-py3-program-bin-strip-all: synthetic test is cpp PROGRAM
 		emit,
 	)
 
@@ -438,6 +440,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		nil,   // PR-38: moduleCFlags nil for synthetic host test
 		nil,   // PR-M3-final-LD-trailer-and-cflags: peerCFlagsGlobal nil
 		false, // PR-M3-final-LD-trailer-and-cflags: usePython3 false
+		false, // PR-M3-py3-program-bin-strip-all: synthetic host test, no STRIP()
 		emit,
 	)
 
@@ -477,7 +480,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 			instance := targetInstance("test/prog")
 
 			exc := Try(func() {
-				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, nil, nil, nil, true, nil, nil, false, e)
+				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, nil, nil, nil, true, nil, nil, false, false, e)
 			})
 
 			if exc == nil {

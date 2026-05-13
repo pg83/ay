@@ -4275,6 +4275,13 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 		}
 
+		// PR-M3-py3-program-bin-strip-all: PY3_PROGRAM_BIN's upstream
+		// `_BASE_PY3_PROGRAM` macro (build/conf/python.conf:884) calls
+		// STRIP(), which sets STRIP_FLAG=$LD_STRIP_FLAG=-Wl,--strip-all
+		// on Linux. PY3_PROGRAM (cpp module_lang) does not exercise the
+		// strip path in the M3 closure.
+		wantsStrip := d.moduleStmt.Name == "PY3_PROGRAM_BIN"
+
 		ldRef := EmitLD(
 			ldInstance,
 			binaryName,
@@ -4288,6 +4295,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ownCFlags,
 			peerCFlagsGlobal,
 			d.usePython3,
+			wantsStrip,
 			ctx.emit,
 		)
 		ldPath := LDOutputPath(instance, binaryName)
