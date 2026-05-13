@@ -159,13 +159,7 @@ func EmitLD(
 	// TODO: remove this shim when a general RECURSE-driven BinaryDir
 	// lift lands in M3+.
 	binaryDir := ldBinaryDir(instance)
-	// PR-M3-platform-pair-step11: compose-flavor dispatch on
-	// instance.Platform.Target. The local is named `targetX8664` to make the
-	// per-platform-identity question explicit (rather than the
-	// "am I a host build?" framing of the prior `hostBuild`). The
-	// downstream composers still see the same boolean.
-	targetX8664 := instance.Platform.ISA == ISAX8664
-	hostBuild := targetX8664
+	hostBuild := instance.Platform.IsHost
 
 	binPrefix := binaryDir + "/"
 	outputVFS := Build(binPrefix + binaryName)
