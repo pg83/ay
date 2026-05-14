@@ -313,7 +313,7 @@ func TestScanner_IncludeNextSuppressed(t *testing.T) {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
 	}
 
-	sysincl := LoadSysInclSet(sourceRoot, func(Warn) {})
+	sysincl := LoadSysInclSetFor(sourceRoot, "aarch64", func(Warn) {})
 	scanner := NewIncludeScanner(sourceRoot, sysincl)
 
 	// libcxx-source case. The ScanContext mirrors what gen.go's
@@ -384,7 +384,7 @@ func TestScanner_RegularIncludeStillResolvesViaSysincl(t *testing.T) {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
 	}
 
-	sysincl := LoadSysInclSet(sourceRoot, func(Warn) {})
+	sysincl := LoadSysInclSetFor(sourceRoot, "aarch64", func(Warn) {})
 	scanner := NewIncludeScanner(sourceRoot, sysincl)
 
 	libcxxCtx := ScanContext{
@@ -444,7 +444,7 @@ func TestScanner_SubgraphCacheReuse(t *testing.T) {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
 	}
 
-	sysincl := LoadSysInclSet(sourceRoot, func(Warn) {})
+	sysincl := LoadSysInclSetFor(sourceRoot, "aarch64", func(Warn) {})
 	scanner := NewIncludeScanner(sourceRoot, sysincl)
 
 	makeCtx := func(srcRel string) ScanContext {
@@ -970,7 +970,7 @@ func TestScanner_LibcxxrtUnwindQuoted_ProductionParity(t *testing.T) {
 		t.Skipf("libcxxrt source not present: %v", err)
 	}
 
-	sysincl := LoadSysInclSet(sourceRoot, func(Warn) {})
+	sysincl := LoadSysInclSetFor(sourceRoot, "aarch64", func(Warn) {})
 	scanner := NewIncludeScanner(sourceRoot, sysincl)
 
 	// ScanContext mirrors the libcxxrt CC consumer's emission shape:
@@ -1239,7 +1239,7 @@ func TestScanner_AsmlibAsmInputsParity(t *testing.T) {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
 	}
 
-	sysincl := LoadSysInclSet(sourceRoot, func(Warn) {})
+	sysincl := LoadSysInclSetFor(sourceRoot, "aarch64", func(Warn) {})
 	scanner := NewIncludeScanner(sourceRoot, sysincl)
 
 	ctx := ScanContext{

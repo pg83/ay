@@ -262,11 +262,15 @@ func evalLt(x *ExprLt, env Environment) bool {
 	return li < ri
 }
 
-// DefaultIfEnv is the bound-variable environment matching the
-// reference graph (M2 target = `default-linux-aarch64` + clang +
-// musl). Extending this set is the documented way to teach EvalCond
-// about a new identifier; PR-27's wider closure (libcxx / libcxxrt /
-// libunwind / util) added the typed entries below.
+// DefaultIfEnv is the bound-variable environment for `IF` predicates
+// — the per-build base bindings that are independent of the
+// instance's specific Platform.ISA. Every ARCH_* boolean defaults to
+// false; `buildIfEnv` flips the matching ISA's bits to true per
+// instance. Other environment shape (OS_LINUX=true, CLANG=true,
+// MUSL=true, …) reflects the reference closure's build configuration
+// (OS_LINUX + clang + musl). Extending this set is the documented way
+// to teach EvalCond about a new identifier; PR-27's wider closure
+// (libcxx / libcxxrt / libunwind / util) added the typed entries below.
 //
 // PR-27 extension: when the walker reaches the libcxx and libc_compat
 // branches of the closure it encounters comparator operands that the
@@ -306,21 +310,17 @@ var DefaultIfEnv = Environment{
 		"OS_CYGWIN":                         false, // PR-27: util
 		"SUN":                               false, // PR-27: util
 		"CYGWIN":                            false, // PR-27: util
-		"ARCH_AARCH64":                      true,
-		"ARCH_X86_64":                       false,
-		"ARCH_I386":                         false,
-		"ARCH_ARM7":                         false,
-		// PR-35o: ARCH_ARM64 is the upstream alias for ARCH_AARCH64
-		// (Arcadia sets both together for the aarch64 target). The
-		// `contrib/libs/cxxsupp/builtins/ya.make` bf16 SRCS block is
-		// guarded by `IF (ARCH_ARM64 OR ARCH_X86_64)`; without the
-		// alias the 5 bf16 .c.o nodes (extendbfsf2, truncdfbf2,
-		// truncsfbf2, trunctfbf2, truncxfbf2) are skipped on aarch64
-		// and miss from the L0 closure. `composeHostCC`'s ARCH flip
-		// (gen.go:buildIfEnv) flips ARCH_ARM64 alongside ARCH_AARCH64
-		// so host-PIC walks see the consistent x86_64 binding.
-		"ARCH_ARM64": true,
-		"ARCH_ARM6":  false,
+		// ARCH_ARM64 is the upstream alias for ARCH_AARCH64 — Arcadia
+		// sets both together; buildIfEnv (modules.go) flips them in
+		// lockstep per instance.Platform.ISA so any
+		// `IF (ARCH_ARM64 OR ARCH_X86_64)` predicate sees a
+		// consistent binding.
+		"ARCH_AARCH64": false,
+		"ARCH_X86_64":  false,
+		"ARCH_I386":    false,
+		"ARCH_ARM7":    false,
+		"ARCH_ARM64":   false,
+		"ARCH_ARM6":    false,
 		"ARCH_WASM32":                       false, // PR-27: contrib/libs/libunwind
 		"ARCH_WASM64":                       false, // PR-27: contrib/libs/libunwind
 		"CLANG":                             true,
