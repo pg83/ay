@@ -543,6 +543,13 @@ var linuxMuslSysInclOrder = []string{
 	"nvidia-cccl.yml",
 	"stl-to-libcxx.yml",
 	"libc-musl-libcxx.yml",
+	// python.conf:244-245 — gated by $OPENSOURCE (always true for the
+	// M3 closure). Bare-key suppression for every
+	// `<contrib/tools/python/src/Include/*>` shim in
+	// `contrib/libs/python/Include/*.h`'s `#else` (USE_PYTHON3=no)
+	// branches.
+	"python-2-disable.yml",
+	"python-2-disable-numpy.yml",
 }
 
 // LoadSysInclSet parses the sysincl YAML files in

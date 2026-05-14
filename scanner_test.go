@@ -152,15 +152,39 @@ no escape needed: " or \ — /* not a real block comment */ done
 		t.Errorf("post-raw-string #include lost: %q", s)
 	}
 
-	// The `/* not a real block comment */` lives inside the raw string
-	// body and must survive — the raw-string transparency layer keeps
-	// the comment state from engaging.
-	if !strings.Contains(s, "/* not a real block comment */") {
-		t.Errorf("raw-string body modified or comment state entered: %q", s)
+	// Raw-string body is blanked (non-newline bytes → spaces) so a
+	// fake `#include` at the start of an inner line — common in
+	// protoc-style `p->Emit(R"(#include "$path$")")` codegen
+	// templates — never reaches parseCIncludes. The "not a real
+	// block comment" body bytes must therefore NOT survive.
+	if strings.Contains(s, "not a real block comment") {
+		t.Errorf("raw-string body bytes survived; expected blanked: %q", s)
 	}
 
 	if got, want := bytes.Count(out, []byte{'\n'}), bytes.Count(in, []byte{'\n'}); got != want {
 		t.Errorf("newline count mismatch: got %d, want %d", got, want)
+	}
+}
+
+// TestStripComments_RawStringFakeIncludeBlanked pins the protoc-template
+// motivator: a `#include "X"` at the start of a line INSIDE a raw
+// string body must be blanked so parseCIncludes doesn't pick it up.
+func TestStripComments_RawStringFakeIncludeBlanked(t *testing.T) {
+	in := []byte(`p->Emit(R"(
+#include "$path$"
+)");
+#include <real.h>
+`)
+
+	out := stripComments(append([]byte(nil), in...))
+	s := string(out)
+
+	if !strings.Contains(s, "#include <real.h>") {
+		t.Errorf("post-raw-string #include lost: %q", s)
+	}
+
+	if strings.Contains(s, `#include "$path$"`) {
+		t.Errorf("raw-string fake #include survived blanking: %q", s)
 	}
 }
 
