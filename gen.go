@@ -656,8 +656,11 @@ var whitelistedMetadataMacros = map[string]struct{}{
 const defaultScanCtxMode = "interned"
 
 // runGenInto runs the Gen walk against the supplied emitter without
-// calling Finalize on it. Returns the root NodeRef.
-func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string) NodeRef {
+// calling Finalize on it. Returns the root NodeRef. `onWarn` receives
+// one line per diagnostic surfaced during loading (sysincl
+// source_filter records the runtime cannot model, …); callers route
+// it to stderr under `--verbose` and to a no-op otherwise.
+func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string, onWarn func(string)) NodeRef {
 	if mode != "local" && mode != "interned" {
 		ThrowFmt("gen: --scan-ctx-mode must be \"local\" or \"interned\", got %q", mode)
 	}
@@ -667,10 +670,10 @@ func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emi
 	targetReg := NewCodegenRegistry()
 	hostReg := NewCodegenRegistry()
 
-	targetScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, string(targetP.ISA)), sharedPC)
+	targetScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, string(targetP.ISA), onWarn), sharedPC)
 	targetScanner.codegen = targetReg
 	targetScanner.fallbackLocators = []pathLocator{codegenLocator{reg: targetReg}}
-	hostScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, string(hostP.ISA)), sharedPC)
+	hostScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, string(hostP.ISA), onWarn), sharedPC)
 	hostScanner.codegen = hostReg
 	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
 
@@ -712,10 +715,10 @@ func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emi
 // The callers (`yatool gen`, `yatool make -G`, test helpers) construct
 // both Platforms from CLI flags + mining before invoking this entry;
 // the walker reads every flag, tool path, and tag off the Platform
-// pointers.
-func GenWithMode(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string) *Graph {
+// pointers. `onWarn` receives one line per diagnostic.
+func GenWithMode(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(string)) *Graph {
 	emitter := NewBufferedEmitter()
-	runGenInto(sourceRoot, targetDir, hostP, targetP, emitter, mode)
+	runGenInto(sourceRoot, targetDir, hostP, targetP, emitter, mode, onWarn)
 
 	return Finalize(emitter)
 }

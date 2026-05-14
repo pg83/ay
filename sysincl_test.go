@@ -16,7 +16,7 @@ func TestLoadSysInclSet_RealTree(t *testing.T) {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
 	}
 
-	set := LoadSysInclSet(sourceRoot)
+	set := LoadSysInclSet(sourceRoot, func(string) {})
 
 	if len(set) == 0 {
 		t.Fatalf("expected non-zero records loaded")
@@ -87,7 +87,7 @@ func TestParseSysInclYAML_Synthetic(t *testing.T) {
 - includes:
   - any.h: contrib/libs/any/any.h
 `
-	recs := parseSysInclYAML("test.yml", yaml)
+	recs := parseSysInclYAML("test.yml", yaml, func(string) {})
 
 	if len(recs) != 2 {
 		t.Fatalf("expected 2 records, got %d", len(recs))
@@ -171,7 +171,7 @@ func TestSourceFilter_NegativeLookahead(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.pat, func(t *testing.T) {
-			f := compileSourceFilter("synthetic.yml", 1, c.pat)
+			f := compileSourceFilter("synthetic.yml", 1, c.pat, func(string) {})
 
 			for path, want := range c.match {
 				got := f.match(path)
@@ -212,7 +212,7 @@ func TestSysIncl_PerRecordKeying(t *testing.T) {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
 	}
 
-	set := LoadSysInclSet(sourceRoot)
+	set := LoadSysInclSet(sourceRoot, func(string) {})
 
 	// Source-keyed branch: libcxx-source reaching uchar.h via a
 	// libcxx-internal includer (__mbstate_t.h).
@@ -286,7 +286,7 @@ func TestSysIncl_KeyBySourceCompiledFromFilter(t *testing.T) {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
 	}
 
-	set := LoadSysInclSet(sourceRoot)
+	set := LoadSysInclSet(sourceRoot, func(string) {})
 
 	srcKeyed := 0
 	incKeyed := 0
@@ -329,7 +329,7 @@ func TestSysIncl_IncluderFilterCache_HitProducesEqualResult(t *testing.T) {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
 	}
 
-	set := LoadSysInclSet(sourceRoot)
+	set := LoadSysInclSet(sourceRoot, func(string) {})
 	view := set.PreparePerSource("contrib/libs/musl/src/string/strlen.c")
 
 	// First call warms the cache for this includerPath.
@@ -393,7 +393,7 @@ func TestLoadSysInclSet_Stats(t *testing.T) {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
 	}
 
-	set := LoadSysInclSet(sourceRoot)
+	set := LoadSysInclSet(sourceRoot, func(string) {})
 
 	mapCount := 0
 	suppress := 0
