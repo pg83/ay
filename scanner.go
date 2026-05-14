@@ -424,6 +424,12 @@ type sysinclIncluderKey struct {
 type sysinclCacheEntry struct {
 	paths          []VFS
 	hasMultiTarget bool
+	// claimed is true when at least one record's filter matched and
+	// its Mappings contained the queried header — even if the entry
+	// was bare-key suppression (no paths). Lets resolve() distinguish
+	// "sysincl knows this header but suppresses it" (no warning) from
+	// "sysincl doesn't know this header" (warn under --verbose).
+	claimed bool
 }
 
 // NewIncludeScanner constructs a scanner bound to a SysInclSet and a
@@ -1435,13 +1441,15 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	ctx := &sc.cfg
 
 	// Unresolved-include diagnostic: surface every directive that found
-	// no hit in source dir, build dir, search path, or sysincl through
-	// the scanner's onWarn callback. Caller-supplied: no-op under the
-	// default-quiet CLI, stderr printer under `--verbose`. Skipped when
+	// no hit in source dir, build dir, search path, AND was not claimed
+	// by any sysincl record (bare-key suppression in sysincl is an
+	// intentional empty result, not a resolver gap). Skipped when
 	// d.next is set (intentional empty per the upstream-reference
-	// shadow-header treatment above).
+	// shadow-header treatment above). Caller-supplied onWarn: no-op
+	// under the default-quiet CLI, stderr printer under `--verbose`.
+	var sysinclClaimed bool
 	defer func() {
-		if len(out) > 0 || d.next {
+		if len(out) > 0 || d.next || sysinclClaimed {
 			return
 		}
 		open, close := `<`, `>`
@@ -1511,7 +1519,9 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	// before reaching resolve()). Strip the VFS prefix to recover the
 	// sysincl-keyed relative form.
 	includerRel := includerAbs.Rel
-	mappings, hasMultiTarget := s.sysinclLookup(ctx.SourceRel, includerRel, d.target)
+	var mappings []VFS
+	var hasMultiTarget bool
+	mappings, hasMultiTarget, sysinclClaimed = s.sysinclLookup(ctx.SourceRel, includerRel, d.target)
 
 	// PR-35w / PR-36 quoted-include gate. For QUOTED includes when the
 	// local search path found at least one file, sysincl is suppressed
@@ -1647,17 +1657,18 @@ mapLoop:
 // dedup uses a linear scan over `out` because typical sysincl mapping
 // lists are 1-3 entries long; a map allocation per call would dominate
 // the per-resolve cost.
-func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel, target string) ([]VFS, bool) {
-	srcMappings, srcMT := s.sysinclSourceLookup(sourceRel, target)
-	incMappings, incMT := s.sysinclIncluderLookup(includerRel, target)
-	hasMultiTarget := srcMT || incMT
+func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel, target string) (paths []VFS, hasMultiTarget, claimed bool) {
+	srcMappings, srcMT, srcClaimed := s.sysinclSourceLookup(sourceRel, target)
+	incMappings, incMT, incClaimed := s.sysinclIncluderLookup(includerRel, target)
+	hasMultiTarget = srcMT || incMT
+	claimed = srcClaimed || incClaimed
 
 	if len(srcMappings) == 0 {
-		return incMappings, hasMultiTarget
+		return incMappings, hasMultiTarget, claimed
 	}
 
 	if len(incMappings) == 0 {
-		return srcMappings, hasMultiTarget
+		return srcMappings, hasMultiTarget, claimed
 	}
 
 	out := make([]VFS, 0, len(srcMappings)+len(incMappings))
@@ -1674,35 +1685,36 @@ incLoop:
 		out = append(out, p)
 	}
 
-	return out, hasMultiTarget
+	return out, hasMultiTarget, claimed
 }
 
-func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, bool) {
+func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, bool, bool) {
 	key := sysinclSourceKey{sourceRel: sourceRel, target: target}
 
 	// PR-34n: lock removed (single-goroutine).
 	if cached, ok := s.sysinclSourceCache[key]; ok {
-		return cached.paths, cached.hasMultiTarget
+		return cached.paths, cached.hasMultiTarget, cached.claimed
 	}
 
 	view := s.perSourceView(sourceRel)
-	rels, _, hasMultiTarget := view.LookupSourceKeyed(target)
+	rels, claimed, hasMultiTarget := view.LookupSourceKeyed(target)
 
 	entry := sysinclCacheEntry{
 		paths:          s.absifyRels(rels),
 		hasMultiTarget: hasMultiTarget,
+		claimed:        claimed,
 	}
 	s.sysinclSourceCache[key] = entry
 
-	return entry.paths, entry.hasMultiTarget
+	return entry.paths, entry.hasMultiTarget, entry.claimed
 }
 
-func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) ([]VFS, bool) {
+func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) ([]VFS, bool, bool) {
 	key := sysinclIncluderKey{includerRel: includerRel, target: target}
 
 	// PR-34n: lock removed (single-goroutine).
 	if cached, ok := s.sysinclIncluderCache[key]; ok {
-		return cached.paths, cached.hasMultiTarget
+		return cached.paths, cached.hasMultiTarget, cached.claimed
 	}
 
 	// PerSourceView's includerKeyed slice is identical regardless of
@@ -1710,15 +1722,16 @@ func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) ([]VF
 	// same SysInclSet). Use the prepared anySrcView (initialised once
 	// at NewIncludeScanner) to access the includer-keyed records
 	// without going through perSourceView.
-	rels, _, hasMultiTarget := s.anySrcView.LookupIncluderKeyed(includerRel, target)
+	rels, claimed, hasMultiTarget := s.anySrcView.LookupIncluderKeyed(includerRel, target)
 
 	entry := sysinclCacheEntry{
 		paths:          s.absifyRels(rels),
 		hasMultiTarget: hasMultiTarget,
+		claimed:        claimed,
 	}
 	s.sysinclIncluderCache[key] = entry
 
-	return entry.paths, entry.hasMultiTarget
+	return entry.paths, entry.hasMultiTarget, entry.claimed
 }
 
 // absifyRels converts a list of SOURCE_ROOT-relative paths (as produced

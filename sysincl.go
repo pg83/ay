@@ -89,12 +89,36 @@ type SysIncl struct {
 	Filter         *sourceFilter
 	KeyBySource    bool
 	HasMultiTarget bool
-	Mappings       map[string][]string
+	// CaseInsensitive marks records loaded with `case_sensitive: false`
+	// (windows.yml). Keys are stored lower-cased at parse time, and
+	// Lookup lower-cases the query header before probing this record's
+	// Mappings. Other records (CaseInsensitive=false) probe verbatim.
+	CaseInsensitive bool
+	Mappings        map[string][]string
 }
 
 // SysInclSet is the union of all sysincl records loaded from
 // build/sysincl/*.yml.
 type SysInclSet []SysIncl
+
+// recordKey returns the case-folded form of `k` for a record's
+// Mappings map. Records loaded with `case_sensitive: false` store
+// lower-cased keys; all others store verbatim.
+func recordKey(rec *SysIncl, k string) string {
+	if rec.CaseInsensitive {
+		return strings.ToLower(k)
+	}
+	return k
+}
+
+// recordQuery is recordKey's read-side twin: folds the query header
+// to match the record's storage convention.
+func recordQuery(rec *SysIncl, header string) string {
+	if rec.CaseInsensitive {
+		return strings.ToLower(header)
+	}
+	return header
+}
 
 // Lookup returns the union of resolved paths for `header` across
 // every record whose filter matches the appropriate path key. Each
@@ -296,7 +320,7 @@ func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool, bool) {
 	)
 
 	for _, rec := range v.activeSourceKeyed {
-		paths, ok := rec.Mappings[header]
+		paths, ok := rec.Mappings[recordQuery(rec, header)]
 
 		if !ok {
 			continue
@@ -368,7 +392,7 @@ func (v PerSourceView) LookupIncluderKeyed(includerPath, header string) ([]strin
 	)
 
 	for _, rec := range active {
-		paths, ok := rec.Mappings[header]
+		paths, ok := rec.Mappings[recordQuery(rec, header)]
 
 		if !ok {
 			continue
@@ -625,10 +649,11 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 		// `- key:` with no explicit list and no values — suppression.
 		// Empirically: linux-headers.yml's `- asm-generic/auxvec.h`
 		// (bare key) goes through this path with pendingPaths==nil.
+		key := recordKey(current, pendingKey)
 		if pendingPaths == nil {
-			current.Mappings[pendingKey] = nil
+			current.Mappings[key] = nil
 		} else {
-			current.Mappings[pendingKey] = pendingPaths
+			current.Mappings[key] = pendingPaths
 		}
 
 		pendingKey = ""
@@ -744,7 +769,7 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 		if !hasMapping {
 			// Bare key — sysincl-known, no mapping. Stored as nil
 			// to signal "consume but emit nothing".
-			current.Mappings[key] = nil
+			current.Mappings[recordKey(current, key)] = nil
 
 			continue
 		}
@@ -762,9 +787,9 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 		v := unquote(val)
 
 		if v == "" {
-			current.Mappings[key] = []string{""}
+			current.Mappings[recordKey(current, key)] = []string{""}
 		} else {
-			current.Mappings[key] = []string{v}
+			current.Mappings[recordKey(current, key)] = []string{v}
 		}
 	}
 
@@ -812,11 +837,23 @@ func handleRecordHeader(name string, lineno int, body string, rec *SysIncl, inIn
 		return
 	}
 
-	// Unknown record-header keys (e.g. `case_sensitive: false` from
-	// windows.yml) are not in our supported subset. Mark the record's
-	// filter unsupported so its mappings never fire — dropping the
-	// record outright is preferable to throwing because windows.yml
-	// and similar exotic files are not in the M2 Linux closure.
+	// `case_sensitive: <bool>` (windows.yml) sets case-folding for the
+	// record's header-key lookups. Win32 headers are conventionally
+	// referenced in mixed case (`#include <Windows.h>`,
+	// `<WinSock2.h>`); the YAML stores them lower-case and asks the
+	// scanner to fold the query. When `false`, parseSysInclYAML
+	// lower-cases each key as it lands in rec.Mappings, and Lookup
+	// lower-cases the query header before probing this record.
+	if strings.HasPrefix(body, "case_sensitive:") {
+		val := strings.TrimSpace(body[len("case_sensitive:"):])
+		if val == "false" {
+			rec.CaseInsensitive = true
+		}
+		return
+	}
+
+	// Unknown record-header keys are dropped — the record's filter is
+	// marked unsupported so its mappings never fire.
 	onWarn(Warn{
 		Kind:    WarnSysIncl,
 		Message: fmt.Sprintf("%s:%d: source_filter %q unsupported (unrecognised record header) — record disabled", name, lineno, body),
