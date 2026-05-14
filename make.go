@@ -125,9 +125,9 @@ func cmdMake(args []string) int {
 	//     buffered emitter (byte-exact match for `yatool gen --out -`).
 	//   - without `-G`, Gen streams to a discard sink — a smoke test
 	//     for the streaming pipeline itself.
-	onWarn := func(string) {}
+	onWarn := func(Warn) {}
 	if mf.verbose {
-		onWarn = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
+		onWarn = printWarn
 	}
 
 	if mf.threads == 0 {
@@ -165,7 +165,7 @@ func cmdMake(args []string) int {
 // every target. Targets are emitted serially today; the executor
 // inside makes the cost of one target's emission overlap with the
 // previous target's execution.
-func genStream(srcRoot string, targets []string, hostP, targetP *Platform, onNode func(*Node), onWarn func(string)) []string {
+func genStream(srcRoot string, targets []string, hostP, targetP *Platform, onNode func(*Node), onWarn func(Warn)) []string {
 	all := []string{}
 
 	for _, t := range targets {
@@ -176,7 +176,7 @@ func genStream(srcRoot string, targets []string, hostP, targetP *Platform, onNod
 	return all
 }
 
-func genStreamOne(srcRoot, target string, hostP, targetP *Platform, onNode func(*Node), onWarn func(string)) []string {
+func genStreamOne(srcRoot, target string, hostP, targetP *Platform, onNode func(*Node), onWarn func(Warn)) []string {
 	emitter := NewStreamingEmitter(onNode)
 	runGenInto(srcRoot, target, hostP, targetP, emitter, defaultScanCtxMode, onWarn)
 
