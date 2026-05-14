@@ -173,7 +173,9 @@ func cmdGen(args []string) int {
 
 	onWarn := func(Warn) {}
 	if *verbose {
-		onWarn = printWarn
+		onWarn = func(w Warn) {
+			fmt.Fprintf(os.Stderr, "\x1b[33m%s: %s\x1b[0m\n", w.Kind, w.Message)
+		}
 	}
 
 	if *cpuProfile != "" {
