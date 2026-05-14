@@ -303,6 +303,12 @@ type IncludeScanner struct {
 	// genCtx.getScanCtx instead; this map is independent.
 	walkClosureCache map[uint64]*scanCtx
 
+	// onWarn surfaces resolve-time diagnostics — primarily include
+	// directives that found no match in source tree, build tree, OR
+	// sysincl mappings. Caller-supplied; no-op in the default-quiet
+	// CLI, stderr printer under `--verbose`.
+	onWarn func(string)
+
 	// subgraphHits/subgraphMisses count cache traffic for verification.
 	// Plain uint64; single-goroutine like the rest of scanner.go.
 	// PR-M3-perf-E: moved from per-scanCtx into the scanner so stats
@@ -424,7 +430,7 @@ type sysinclCacheEntry struct {
 // source-root absolute path. Allocates a private sharedParseCache; use
 // newIncludeScannerWith to share a parse cache between scanners.
 func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
-	return newIncludeScannerWith(sourceRoot, sysincl, newSharedParseCache())
+	return newIncludeScannerWith(sourceRoot, sysincl, newSharedParseCache(), func(string) {})
 }
 
 // newIncludeScannerWith is the internal constructor used when a
@@ -439,7 +445,7 @@ func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
 // linux-musl.yml produce different mappings for bits/alltypes.h and similar
 // platform-specific headers). Only the parse tier — reading file bytes and
 // extracting #include directives — is architecture-neutral.
-func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedParseCache) *IncludeScanner {
+func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedParseCache, onWarn func(string)) *IncludeScanner {
 	// PR-34n: pre-sizes set to the upper bound of the observed working
 	// set for tools/archiver. Under-pre-sizing was the actual finding from
 	// the re-profile — sysinclSourceCache reaches ~328k entries on the
@@ -462,6 +468,7 @@ func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedPars
 		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 524288),
 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 32768),
 		walkClosureCache:     make(map[uint64]*scanCtx, 8),
+		onWarn:               onWarn,
 	}
 	s.anySrcView = s.sysincl.PreparePerSource("")
 
@@ -1423,9 +1430,27 @@ func isYasmLike(absPath VFS) bool {
 //     still correctly excludes libcxxrt/dwarf_eh.h `#include "unwind.h"`
 //     because unwind.h lives in the SAME dir as dwarf_eh.h.
 //     Angle-bracket includes still union sysincl on top unconditionally.
-func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) []VFS {
+func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	s := sc.scanner
 	ctx := &sc.cfg
+
+	// Unresolved-include diagnostic: surface every directive that found
+	// no hit in source dir, build dir, search path, or sysincl through
+	// the scanner's onWarn callback. Caller-supplied: no-op under the
+	// default-quiet CLI, stderr printer under `--verbose`. Skipped when
+	// d.next is set (intentional empty per the upstream-reference
+	// shadow-header treatment above).
+	defer func() {
+		if len(out) > 0 || d.next {
+			return
+		}
+		open, close := `<`, `>`
+		if d.kind == includeQuoted {
+			open, close = `"`, `"`
+		}
+		s.onWarn(fmt.Sprintf("scanner: %s: unresolved include %s%s%s — not found in source, build, search path, or sysincl",
+			includerAbs.String(), open, d.target, close))
+	}()
 	// `#include_next` directives resolve to nothing in the upstream
 	// reference scan: every observed live use is the libcxx
 	// "shadow-header" pattern where libcxx/X.h does
@@ -1447,7 +1472,9 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) []VFS {
 	// do not attempt to evaluate `#elif` chains (out of scope for
 	// PR-35e); the heuristic is conservative — real `#include_next`
 	// chains in our M2 closure all duplicate paths the parallel
-	// regular-include path already supplies.
+	// regular-include path already supplies. `#include_next` is NOT
+	// surfaced to onWarn — its empty result is the intended behaviour,
+	// not a resolver bug.
 	if d.next {
 		return nil
 	}
@@ -1542,8 +1569,6 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) []VFS {
 	// copying searchOut. Linear-scan dedup beats the map alloc since
 	// mapping lists are 1-3 entries long.
 	if len(searchOut) == 0 {
-		var out []VFS
-
 	fastLoop:
 		for _, abs := range mappings {
 			for _, q := range out {
@@ -1565,8 +1590,6 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) []VFS {
 
 		return out
 	}
-
-	var out []VFS
 
 mapLoop:
 	for _, abs := range mappings {
