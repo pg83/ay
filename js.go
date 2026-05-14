@@ -2,50 +2,24 @@ package main
 
 // js.go — emitter for JS (JOIN_SRCS) nodes.
 //
-// EmitJS produces a single Node matching the shape ymake itself
-// produces for a JOIN_SRCS macro invocation. The output is a single
-// .cpp file (named allName, which already includes the .cpp suffix
-// in all observed JOIN_SRCS calls) that #includes all listed
-// sources.
-//
-// R13: sources are provided in DECLARATION ORDER — do NOT sort
-// them. The reference graph confirms non-alphabetical orderings for
-// several JS nodes; sorting would produce byte-mismatch at L3.
-//
-// PR-23 retrofitted the signature to take a `ModuleInstance`.
+// One Node per JOIN_SRCS invocation; output is a single .cpp (named allName,
+// which already carries the .cpp suffix) that #includes all listed sources.
+// R13: sources stay in DECLARATION ORDER — never sort.
 
 // EmitJS emits a JS node for JOIN_SRCS(allName srcs...).
+// Output: $(B)/<instance.Path>/<allName>. Sources are bare module-relative
+// names composed against instance.Path for both cmd_args and inputs (so a
+// SRCDIR-rebased instance flows through transparently).
 //
-// Output: $(B)/<instance.Path>/<allName>. allName already
-// carries the .cpp suffix in all known JOIN_SRCS call sites.
+// Inputs order: gen_join_srcs.py, process_command_files.py, sources in
+// DECLARATION ORDER (R13), then caller-supplied `closure` (union of
+// per-source include closures). L2 compares Inputs as a multiset; closure
+// order matters only for the byte-exact JS test pin in js_test.go.
 //
-// Sources are bare module-relative names (e.g. "recode_result.cpp" or
-// "generated/unidata.cpp"). PR-28-D11: EmitJS composes them against
-// instance.Path so cmd_args carries "<instance.Path>/<src>" and
-// inputs carries "$(S)/<instance.Path>/<src>". When the
-// caller threads a SRCDIR-rebased instance, the resulting paths
-// reflect the rebased directory.
-//
-// Inputs: sources in DECLARATION ORDER (R13 — NOT sorted). The
-// inputs list is: gen_join_srcs.py, process_command_files.py, then
-// the sources expanded to their $(S)/... form, then the
-// caller-supplied `closure` (PR-35d) — the union of per-source
-// #include closures across the joined sources. L2 compares Inputs as
-// a multiset (PR-31 D14), so closure order matters only for the
-// byte-exact JS test pin in js_test.go.
-//
-// `platform` overrides the JS node's `Platform` field. PR-35s: in the
-// reference graph, JS (JOIN_SRCS) nodes are anchored to the outer-
-// target platform axis (`default-linux-aarch64`) even when the
-// surrounding module is reached through a host-PROGRAM walk
-// (`contrib/tools/ragel6/bin`). Threading platform explicitly keeps
-// the JS Platform decoupled from the host-walked instance's Target
-// (which flips to `default-linux-x86_64` via `WithHost`); the
-// downstream JS-derived CC node continues to use `instance.Platform.Target` so
+// `platform` overrides Node.Platform: JS nodes anchor to the outer-target
+// axis even when the surrounding module is reached via a host-PROGRAM walk,
+// while the downstream JS-derived CC still uses instance.Platform.Target —
 // only the JS axis is detached, not the per-source compile axis.
-//
-// Returns the JS NodeRef and the output path so the caller (PR-25's
-// gen.go) can thread the output into a downstream EmitCC.
 func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, platform PlatformID, emit Emitter) (NodeRef, VFS) {
 	joinSrcs := Source("build/scripts/gen_join_srcs.py")
 	procCmdFiles := Source("build/scripts/process_command_files.py")

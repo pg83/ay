@@ -2,49 +2,20 @@ package main
 
 // flags.go — CC compile flag bundles.
 //
-// Three flavours of CC bundle are pinned byte-exact:
+// Bundles emit byte-exact against the reference graph in the natural order
+// observed there:
+//   prologue → ccIncludes / muslCcIncludes → debugPrefixMapFlags →
+//   xclangDebugCompilationDir → commonCFlags / hostCFlags →
+//   warningFlags / muslWarningFlags → commonDefines / hostDefines →
+//   noLibcUndebugBlock / ndebugPicBlock → catboostOpenSourceDefine →
+//   builtinMacroDateTime → macroPrefixMapFlags → input source path.
 //
-//   - `build/cow/on` TARGET (M1 leaf, PR-08): 101-element cmd_args
-//     against `default-linux-aarch64`.
-//   - `build/cow/on` HOST (PR-23): 105-element cmd_args against
-//     `default-linux-x86_64` (PIC build, `lib.c.pic.o`).
-//   - `contrib/libs/musl/...` (M2 wave 2, PR-14): 111-element
-//     cmd_args. Chosen by EmitCC when the instance's path is
-//     `contrib/libs/musl[/...]`.
+// The reference repeats the suppression bundle on either side of
+// `-DCATBOOST_OPENSOURCE=yes` (host inserts `hostSseFeatures` between the
+// two copies); reusing one slice keeps the duplication explicit.
 //
-// Rather than dump each bundle as one giant literal, the flags are
-// partitioned into named bundles that EmitCC `append`-chains
-// together. The grouping is the natural one observed in the
-// reference output:
-//
-//   prologue (clang+target+output)        — varies by flavor
-//   ccIncludes / muslCcIncludes           — 4 / 10 args
-//   debugPrefixMapFlags                   — 3 args
-//   xclangDebugCompilationDir             — 4 args
-//   commonCFlags / hostCFlags             — 14 / 11 args (host drops -g/-fno-stack-protector...)
-//   warningFlags / muslWarningFlags       — 6 / 1 arg
-//   commonDefines / hostDefines           — 11 / 13 args (host adds two cpu/feature)
-//   noLibcUndebugBlock                    — 22 args (target uses, host substitutes
-//                                                    its own ndebugPicBlock)
-//   ndebugPicBlock                        — 22 args (host counterpart of
-//                                                    noLibcUndebugBlock)
-//   catboostOpenSourceDefine              — 1 arg
-//   builtinMacroDateTime                  — 3 args
-//   macroPrefixMapFlags                   — 3 args
-//
-// Plus the input source path appended last (1 arg) — composed in
-// EmitCC, not here.
-//
-// Why the duplicated `noLibcUndebugBlock`/`ndebugPicBlock`? The
-// reference graph repeats the suppression bundle on either side of
-// `-DCATBOOST_OPENSOURCE=yes` and (for host) inserts an
-// SSE/feature-flag bundle between them. That is what ymake itself
-// emits; reproducing the duplication via two references to the
-// same slice keeps the source readable and the intent explicit.
-//
-// $(B) / $(S) / $(TOOL_ROOT) are LITERAL strings —
-// the build system substitutes them at execution time. They are not
-// Go template variables; do not interpolate them at emit time.
+// $(B) / $(S) / $(TOOL_ROOT) are LITERAL strings the build system
+// substitutes at execution time — not Go template variables.
 
 // cxxStandardFlag is the C++ language-standard switch the reference
 // graph applies to every C++ compilation (PR-29-D05).
@@ -54,15 +25,10 @@ const cxxStandardFlag = "-std=c++20"
 // used in the reference graph (identical for target and host).
 const binPath = "/usr/bin"
 
-// ccIncludesPrefix and ccIncludesSuffix are the two halves of the
-// non-musl include set. Per PR-29-D03, per-module ADDINCL paths slot
-// BETWEEN the baseline pair (BUILD_ROOT + SOURCE_ROOT) and the
-// linux-headers pair. Verified against the builtins fp_mode.c.o
-// reference (cmd_args[7..14]: prefix → 4 own ADDINCL → suffix).
-//
-// $(B) and $(S) are literal placeholders the
-// build system substitutes at execution time; they are not Go
-// variables.
+// ccIncludesPrefix and ccIncludesSuffix are the two halves of the non-musl
+// include set. Per-module ADDINCL paths slot BETWEEN the baseline pair
+// ($(B)+$(S)) and the linux-headers pair. Verified against fp_mode.c.o
+// cmd_args[7..14]: prefix → own ADDINCL → suffix.
 var ccIncludesPrefix = []string{
 	"-I$(B)",
 	"-I$(S)",
@@ -125,18 +91,10 @@ var commonCFlags = []string{
 	"-fstack-protector",
 }
 
-// hostCFlags is the host-build counterpart of commonCFlags. Differs
-// from the target bundle in five places (verified against
-// `build/cow/on/lib.c.pic.o` cmd_args[17..27]):
-//
-//   - `-pipe` retained
-//   - `-m64` REPLACES `-g`/`-fdebug-default-version=4`/`-ggnu-pubnames`
-//     (host build is release, no DWARF tuning)
-//   - `-O3` injected (host is release)
-//   - `-fsigned-char`/`-fstack-protector` dropped (no need on host)
-//   - everything else preserved
-//
-// Total 11 args.
+// hostCFlags is the host-build counterpart of commonCFlags (release: -m64
+// replaces -g/-fdebug-default-version/-ggnu-pubnames, +-O3, drops
+// -fsigned-char/-fstack-protector). Verified against
+// build/cow/on/lib.c.pic.o cmd_args[17..27]; 11 args.
 var hostCFlags = []string{
 	"-pipe",
 	"-m64",
@@ -151,11 +109,9 @@ var hostCFlags = []string{
 	"-faligned-allocation",
 }
 
-// warningFlags is `-Werror/-Wall/-Wextra` plus the three baseline
-// `-Wno-*` suppressions that always accompany them in the reference
-// graph (without these clang refuses to compile parts of the tree
-// because of new diagnostics promoted in recent versions). Used for
-// target AND host.
+// warningFlags is `-Werror/-Wall/-Wextra` plus the three baseline `-Wno-*`
+// suppressions accompanying them in the reference (without these clang
+// refuses to compile parts of the tree). Target AND host.
 var warningFlags = []string{
 	"-Werror",
 	"-Wall",
@@ -181,12 +137,9 @@ var commonDefines = []string{
 	"-D__LONG_LONG_SUPPORTED",
 }
 
-// hostDefines is the host counterpart of commonDefines. The
-// reference graph for `build/cow/on/lib.c.pic.o` adds
-// `-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE` (host-only
-// libunwind shim) AFTER `-D_GNU_SOURCE` and BEFORE
-// `-D__LONG_LONG_SUPPORTED`. Otherwise identical to commonDefines.
-// 12 args.
+// hostDefines is the host counterpart of commonDefines: adds
+// `-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE` (host-only libunwind shim)
+// between -D_GNU_SOURCE and -D__LONG_LONG_SUPPORTED. 12 args.
 var hostDefines = []string{
 	"-DARCADIA_ROOT=$(S)",
 	"-DARCADIA_BUILD_ROOT=$(B)",
@@ -202,10 +155,9 @@ var hostDefines = []string{
 	"-D__LONG_LONG_SUPPORTED",
 }
 
-// hostSseFeatures is the SSE/CPU-feature bundle the reference graph
-// inserts between the two halves of the host PIC build's
-// `noLibcUndebugBlock`-equivalent. 7 args, observed at cmd_args
-// positions [71..77] of `build/cow/on/lib.c.pic.o`.
+// hostSseFeatures is the SSE/CPU-feature bundle inserted between the two
+// halves of the host PIC build's ndebug block. 7 args; observed at
+// cmd_args[71..77] of build/cow/on/lib.c.pic.o.
 var hostSseFeatures = []string{
 	"-msse2",
 	"-msse3",
@@ -216,11 +168,10 @@ var hostSseFeatures = []string{
 	"-mcx16",
 }
 
-// noLibcWarningSuppressions is the long tail of -Wno-* flags that
-// travels with the no-libc / no-runtime / no-util module flavour.
-// Shared between target's `noLibcUndebugBlock` and host's
-// `ndebugPicBlock` — both wrap the same warning suppressions in
-// different `-UNDEBUG`/`-DNDEBUG -fPIC` prologues.
+// noLibcWarningSuppressions is the -Wno-* tail accompanying the no-libc/
+// no-runtime/no-util module flavour. Shared between target's
+// noLibcUndebugBlock and host's ndebugPicBlock — both wrap the same
+// suppressions in different prologues (-UNDEBUG vs -DNDEBUG -fPIC).
 var noLibcWarningSuppressions = []string{
 	"-Wno-array-parameter",
 	"-Wno-deprecate-lax-vec-conv-all",
@@ -296,15 +247,10 @@ var macroPrefixMapFlags = []string{
 	"-fmacro-prefix-map=$(TOOL_ROOT)/=",
 }
 
-// muslCcIncludesFor returns the include set for `contrib/libs/musl`
-// CC nodes on the given ISA. Differs from `ccIncludes` by inserting
-// eight musl-specific `-I` paths between `$(S)` and the linux-headers
-// pair. Order matches the reference graph exactly — musl's own
-// headers must shadow the global linux-headers in resolution.
-//
-// The ISA enters in exactly one slot (`musl/arch/<isa>`). Verified
-// against `$(B)/contrib/libs/musl/_/src/string/strlen.c.pic.o`
-// (x86_64) and the aarch64 target nodes in the reference graph.
+// muslCcIncludesFor returns the include set for contrib/libs/musl CC nodes
+// on the given ISA. Inserts eight musl-specific -I paths between $(S) and
+// the linux-headers pair so musl's headers shadow the global linux-headers.
+// ISA enters in exactly one slot (musl/arch/<isa>).
 func muslCcIncludesFor(isa ISA) []string {
 	return []string{
 		"-I$(B)",
@@ -329,21 +275,12 @@ var muslWarningFlags = []string{
 	"-Wno-everything",
 }
 
-// cxxStandardWarnings is the clang C++ standard-warning-extension
-// bundle the reference graph emits unconditionally for every clang C++
-// compile that does NOT set NO_COMPILER_WARNINGS (PR-33 D04 — mirror
-// of `ymake_conf.py:1624-1636`). 10 args. Slotted in cmd_args
-// immediately AFTER `-std=c++20` (which itself is emitted by
-// `appendCxxStdAndOwn`) and BEFORE the module's own non-GLOBAL
-// CXXFLAGS / CONLYFLAGS. Empirically observed at
-// util/charset/all_charset.cpp.o cmd_args[102..111] and on every
-// non-NoCompilerWarnings C++ CC node in the reference graph.
-//
-// For modules with `NO_COMPILER_WARNINGS()` (libcxx, libcxxrt,
-// abseil-cpp, tcmalloc, ...) this bundle is replaced by the
-// single-arg `-Wno-everything` (already handled by the existing
-// `appendCxxStdAndOwn` muslWarningFlags branch when
-// `injectCxxWarningBundle && noCompilerWarnings`).
+// cxxStandardWarnings mirrors upstream ymake_conf.py:1624-1636 — clang C++
+// standard-warning-extension bundle (10 args) emitted unconditionally for
+// every C++ compile that does NOT set NO_COMPILER_WARNINGS. Slotted
+// immediately AFTER -std=c++20 and BEFORE the module's own non-GLOBAL
+// CXX/CONLYFLAGS. NO_COMPILER_WARNINGS modules (libcxx, libcxxrt,
+// abseil-cpp, tcmalloc, …) substitute `-Wno-everything`.
 var cxxStandardWarnings = []string{
 	"-Wimport-preprocessor-directive-pedantic",
 	"-Woverloaded-virtual",
@@ -357,24 +294,15 @@ var cxxStandardWarnings = []string{
 	"-Wno-undefined-var-template",
 }
 
-// muslExtraDefines is the 9-arg block the reference graph injects
-// between `commonDefines` and the no-libc bundle for musl CC nodes.
-// Each flag captures a musl-specific compile-time invariant:
-//
-//   - `-D_XOPEN_SOURCE=700` enables POSIX.1-2008 (XSI) feature gates.
-//   - `-U_GNU_SOURCE` undoes the global `-D_GNU_SOURCE` from
-//     `commonDefines`; musl ships its own GNU compatibility shim and
-//     refuses the glibc-style flag.
-//   - `-nostdinc` / `-ffreestanding` strip the host toolchain's
-//     `<stdlib.h>` family so musl's own headers (added via
-//     `muslCcIncludes`) win unambiguously.
-//   - `-fno-stack-protector` is required because musl's startup code
-//     runs before the stack canary is initialised.
-//   - `-D__libc_calloc=calloc` / `-D__libc_malloc=malloc` /
-//     `-D__libc_free=free` are macro renamings that route musl's
-//     internal allocator references to the public symbols.
-//   - `-D_musl_=1` is the project-wide sentinel that conditional
-//     code uses to detect a musl build.
+// muslExtraDefines is the 9-arg block injected between commonDefines and
+// the no-libc bundle for musl CC nodes:
+//   -D_XOPEN_SOURCE=700: POSIX.1-2008 XSI feature gates.
+//   -U_GNU_SOURCE: undo commonDefines' -D_GNU_SOURCE; musl rejects glibc-style.
+//   -nostdinc / -ffreestanding: strip host toolchain's <stdlib.h> family.
+//   -fno-stack-protector: musl startup runs before stack canary init.
+//   -D__libc_calloc=calloc / __libc_malloc / __libc_free: route musl's
+//   internal allocator references to public symbols.
+//   -D_musl_=1: project-wide musl-build sentinel.
 var muslExtraDefines = []string{
 	"-D_XOPEN_SOURCE=700",
 	"-U_GNU_SOURCE",

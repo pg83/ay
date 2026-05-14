@@ -2,40 +2,24 @@ package main
 
 // node.go — on-disk-aligned types mirroring the JSON shape produced by ymake.
 //
-// Field declaration order matters: encoding/json emits fields in the order
-// they are declared in the struct, and the reference output in
-// /home/pg/monorepo/yatool_orig/sg.json lists keys alphabetically
-// (cmds, deps, env, foreign_deps, host_platform, inputs, kv, outputs,
-// platform, requirements, sandboxing, self_uid, tags, target_properties, uid).
-// Keep the field ordering below in lockstep with that observation.
+// Field declaration order matters: encoding/json emits in declaration order,
+// and the reference /home/pg/monorepo/yatool_orig/sg.json lists keys
+// alphabetically. Keep field ordering in lockstep.
 //
-// `omitempty` is used only for fields sg.json itself omits on most nodes:
-// host_platform (present on ~half of nodes, always `true` when present) and
-// foreign_deps (present on ~26 of ~3730 nodes). Every other field is
-// always present in the on-disk JSON, even when empty, so they have no
-// `omitempty` tag — that ensures empty arrays and maps render as `[]`/`{}`
-// rather than vanishing.
-// stats_uid is tagged json:"-" (not serialized) per PR-L4-C/04: REF's
-// stats_uid is a 32-char hex whose derivation is outside our scope;
-// the normalizer also drops it, keeping both sides in sync.
+// `omitempty` is used only on fields sg.json itself omits on most nodes —
+// host_platform (~half of nodes, always true when present) and foreign_deps
+// (~26 of ~3730). Everything else is always-present so empty maps/arrays
+// render as `[]`/`{}` rather than vanish. stats_uid is json:"-": REF's
+// 32-char hex derivation is out of scope and the normalizer also drops it.
 //
-// Rule authors do not assemble `Deps`/`ForeignDeps` directly — they call
-// the Emitter, which hands back NodeRef values; Finalize resolves those
-// refs to UID strings during the Merkle pass and populates the public
-// `Deps`/`ForeignDeps` fields. The internal `DepRefs`/`ForeignDepRefs`
-// fields carry the unresolved refs and are tagged `json:"-"` so they
-// never serialize.
+// Rule authors assemble Deps/ForeignDeps indirectly via NodeRef; Finalize
+// resolves refs to UID strings during the Merkle pass. The internal
+// DepRefs/ForeignDepRefs fields carry the unresolved refs (json:"-").
 
-// Cmd is one command line in a node's `cmds` list.
-//
-// Field order is alphabetical to match the reference g.json key order
-// (cmd_args, cwd, env, stdout). `Cwd` and `Stdout` are `omitempty`
-// because the reference graph omits them for most cmds — only LD
-// cmd[2] (link_exe.py invocation) and 58 of 83 AS nodes carry an
-// explicit cwd. `stdout` appears on exactly one PR node
-// (devtools/ymake/symbols dep_types.h_dumper.cpp). Emitting empty
-// values for the other ~3,000 cmds would diverge from the reference
-// byte-for-byte.
+// Cmd is one command line in a node's `cmds` list. Field order is
+// alphabetical (cmd_args, cwd, env, stdout). Cwd/Stdout are omitempty: only
+// LD cmd[2] (link_exe.py) and 58 of 83 AS nodes carry cwd; stdout appears
+// on exactly one PR node. Emitting empty values would diverge byte-for-byte.
 type Cmd struct {
 	CmdArgs []string          `json:"cmd_args"`
 	Cwd     string            `json:"cwd,omitempty"`
@@ -43,19 +27,13 @@ type Cmd struct {
 	Stdout  string            `json:"stdout,omitempty"`
 }
 
-// Node is the on-disk representation of a build-graph node. Field order
-// is alphabetical to match the reference g.json output.
+// Node is the on-disk representation of a build-graph node (alphabetical
+// field order matches reference g.json). DepRefs/ForeignDepRefs carry
+// rule-author input that Finalize resolves into public Deps/ForeignDeps.
 //
-// Public (JSON-tagged) fields are what the serializer writes. Internal
-// fields (DepRefs, ForeignDepRefs) carry rule-author input that Finalize
-// will resolve into the public Deps/ForeignDeps slices.
-//
-// Cache is a tri-state pointer: nil means the JSON `cache` key is
-// omitted (the common case across ~3,728 of ~3,730 reference nodes);
-// non-nil emits `cache: true` or `cache: false`. The only known
-// reference node carrying an explicit `cache: false` is BI
-// buildinfo_data.h (the build-info header generator is
-// non-deterministic and must not be cached).
+// Cache is tri-state: nil omits the key (the common case); non-nil emits
+// `cache: true`/`cache: false`. The only reference node with explicit
+// `cache: false` is BI buildinfo_data.h (non-deterministic).
 type Node struct {
 	Cache            *bool                  `json:"cache,omitempty"`
 	Cmds             []Cmd                  `json:"cmds"`

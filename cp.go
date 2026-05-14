@@ -2,29 +2,15 @@ package main
 
 // cp.go — emitter for CP (file-copy) nodes.
 //
-// EmitCP produces a single Node matching the shape ymake itself
-// produces for a CP macro invocation. The only CP node in the M2
-// reference graph is contrib/libs/musl/include/musl.py →
-// musl.py.pyplugin. The function is structurally correct for any
-// src/dst pair; only the musl case is regression-tested byte-exact
-// against the reference graph.
-//
-// PR-23 retrofitted the signature to take a `ModuleInstance`
-// instead of a (platform, moduleDir) pair.
+// EmitCP produces a Node matching the shape ymake produces for a CP macro
+// invocation. Structurally correct for any src/dst; the byte-exact
+// regression pin covers the contrib/libs/musl/include musl.py → .pyplugin
+// case.
 
-// EmitJVCPG4 emits a CP node that renames an ANTLR-generated .cpp file
-// to its .g4.cpp form (e.g. CmdLexer.cpp → CmdLexer.g4.cpp).
-//
-// Differs from EmitCP: carries DepRefs = [jvRef] and an extended inputs
-// list that prepends the JV primary output and JV inputs (grammar .g4
-// files, stdout2stderr.py, antlr4.jar) before the include closure.
-//
-// Inputs layout (matching the reference sg2.json shape):
-//
-//	[jvPrimaryOutput, (srcAbsPath when != jvPrimaryOutput), fsToolsPath,
-//	 procCmdFiles, jvInputs..., closure...]
-//
-// The cmd_args copy srcAbsPath (the specific .cpp being renamed).
+// EmitJVCPG4 emits a CP node that renames an ANTLR-generated .cpp to its
+// .g4.cpp form (e.g. CmdLexer.cpp → CmdLexer.g4.cpp). Carries DepRefs=[jvRef]
+// and inputs [jvPrimary, (src if != jvPrimary), fsTools, procCmdFiles,
+// jvInputs..., closure...]; cmd_args copy srcAbsPath.
 func EmitJVCPG4(
 	instance ModuleInstance,
 	src VFS,
@@ -92,17 +78,9 @@ func EmitJVCPG4(
 	return emit.Emit(node)
 }
 
-// EmitCP emits a CP node copying srcAbsPath to dstAbsPath.
-// Used today only by contrib/libs/musl/include/ya.make for the
-// musl.py.pyplugin file.
-//
-// cmd_args shape (5 args, verified against reference):
-//
-//	/ix/realm/pg/bin/python3
-//	$(S)/build/scripts/fs_tools.py
-//	copy
-//	<srcAbsPath>
-//	<dstAbsPath>
+// EmitCP emits a CP node copying srcAbsPath to dstAbsPath. Today exercised
+// only by contrib/libs/musl/include/ya.make (musl.py.pyplugin).
+// cmd_args: [python3, $(S)/build/scripts/fs_tools.py, copy, src, dst].
 func EmitCP(instance ModuleInstance, src VFS, dst VFS, emit Emitter) NodeRef {
 	fsTools := Source("build/scripts/fs_tools.py")
 	procCmdFiles := Source("build/scripts/process_command_files.py")

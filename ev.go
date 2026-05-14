@@ -9,49 +9,20 @@ import (
 
 // ev.go — emitter for EV (event-log .ev → .ev.pb.cc/.ev.pb.h) nodes.
 //
-// EmitEV emits one EV node per .ev source. The shape is structurally
-// identical to PB but appends three extra cmd_args for the event2cpp
-// protoc plugin, and uses .ev.pb.cc / .ev.pb.h output suffixes (in that
-// order — cc first, per the reference graph).
-//
-// Reference cmd_args (21 args):
-//
-//	/ix/realm/pg/bin/python3
-//	$(S)/build/scripts/cpp_proto_wrapper.py
-//	--outputs <.ev.pb.cc> <.ev.pb.h>
-//	--
-//	$(B)/contrib/tools/protoc/protoc
-//	-I=./ -I=$(S)/ -I=$(B) -I=$(S)
-//	-I=$(S)/contrib/libs/protobuf/src
-//	-I=$(B) -I=$(S)/contrib/libs/protobuf/src
-//	--cpp_out=:$(B)/
-//	--cpp_styleguide_out=:$(B)/
-//	--plugin=protoc-gen-cpp_styleguide=<cpp_styleguide_binary>
-//	<module_dir/ev_file>
-//	--plugin=protoc-gen-event2cpp=<event2cpp_binary>
-//	--event2cpp_out=$(B)
-//	-I=$(S)/library/cpp/eventlog
+// Structurally identical to PB but appends three extra cmd_args for the
+// event2cpp protoc plugin, and uses .ev.pb.cc/.ev.pb.h outputs (cc first).
 //
 // inputs = [cpp_styleguide, protoc, event2cpp, cpp_proto_wrapper.py,
-//           $(S)/<module_dir>/<src>,
-//           ... transitive .ev imports ...,
-//           ... transitive .proto imports ...,
-//           optionally descriptor.proto]
-//
-// The transitive import set is resolved by scanning the .ev source for
-// `import "..."` lines, then recursively resolving those imports.
-// events_extension.proto (the standard eventlog import) and its
-// transitive descriptor.proto are included when reachable.
-//
-// foreign_deps / deps carry [cpp_styleguide, protoc, event2cpp] (3 refs).
-// tags: always [] (EV nodes only appear on aarch64 in the reference).
+//   $(S)/<module_dir>/<src>, ...transitive imports..., descriptor.proto?]
+// Transitive imports come from scanning `import "..."` lines (then
+// recursing). events_extension.proto + descriptor.proto are reached
+// transitively. deps and foreign_deps["tool"] carry all three host LD refs.
 
 const (
-	// evEvent2cppModule is the ya.make path walked to obtain the event2cpp host
-	// LD node. tools/event2cpp/ya.make uses INCLUDE() patterns that our parser
-	// does not expand; tools/event2cpp/bin/ya.make is the actual PROGRAM
-	// declaration. ldBinaryDir lifts the output dir from tools/event2cpp/bin to
-	// tools/event2cpp so the LD node's module_dir matches the reference.
+	// evEvent2cppModule is the ya.make path walked for the event2cpp host
+	// LD. tools/event2cpp/ya.make uses INCLUDE() which we don't expand;
+	// tools/event2cpp/bin/ya.make holds the PROGRAM declaration.
+	// ldBinaryDir lifts the output dir back to tools/event2cpp.
 	evEvent2cppModule = "tools/event2cpp/bin"
 )
 
@@ -63,12 +34,10 @@ var (
 	evEventlogIncludePath = evEventlogIncludeVFS.String()
 )
 
-// eventRuntimeHeaders is the common subset of SOURCE_ROOT headers present in
-// every .ev.pb.cc CC node in the reference graph (68 entries, derived from
-// the intersection across all 2 .ev.pb.cc consumers in sg2.json).
-// These are registered as EmitsIncludes on the .ev.pb.h output so the scanner
-// closure propagates them into all CC nodes that consume .ev.pb.h.
-// Sorted lexicographically.
+// eventRuntimeHeaders is the SOURCE_ROOT header subset present in every
+// .ev.pb.cc CC node (intersection across reference consumers). Registered
+// as EmitsIncludes on the .ev.pb.h output so the scanner closure
+// propagates them into all .ev.pb.h consumers. Sorted lexicographically.
 var eventRuntimeHeaders = []VFS{
 	Source("library/cpp/eventlog/event_field_output.h"),
 	Source("library/cpp/eventlog/event_field_printer.h"),
@@ -140,11 +109,9 @@ var eventRuntimeHeaders = []VFS{
 	Source("util/system/yassert.h"),
 }
 
-// evExtraProtobufHeaders is the .ev.pb.h-specific subset of protobuf headers
-// that show up only in CC consumers of event-generated headers (verified by
-// intersecting the inputs of every .ev.pb.h CC consumer in sg2.json). These
-// stem from event2cpp's generated reflection code and the protoc plugin
-// scaffolding used by event2cpp. Sorted lexicographically.
+// evExtraProtobufHeaders is the .ev.pb.h-specific protobuf header subset
+// appearing only in CC consumers of event-generated headers (from
+// event2cpp's reflection codegen + plugin scaffolding). Sorted lex.
 var evExtraProtobufHeaders = []VFS{
 	Source(pbRuntimeBase + "google/protobuf/io/printer.h"),
 	Source(pbRuntimeBase + "google/protobuf/io/zero_copy_sink.h"),
@@ -161,17 +128,10 @@ var evAbseilCleanupHeaders = []VFS{
 }
 
 // evWitnessExtras returns the .ev.pb.h-specific witness inputs propagated
-// through every .ev.pb.h to its CC consumers. The set is:
-//   - cpp_proto_wrapper.py (the script that drives event2cpp+protoc),
-//   - descriptor.proto (every .ev imports it indirectly via events_extension),
-//   - the .ev source file itself,
-//   - the companion .ev.pb.cc generated next to .ev.pb.h,
-//   - the descriptor-importer protobuf header cluster
-//     (pbDescriptorImporterHeaders),
-//   - evExtraProtobufHeaders (event2cpp-specific protobuf cluster),
-//   - evAbseilCleanupHeaders (abseil cleanup pair).
-//
-// See docs/drafts/20260512-0200-residue-pre-100pct.md §2 lever #1.
+// through every .ev.pb.h to its CC consumers: cpp_proto_wrapper.py,
+// descriptor.proto, the .ev source, the companion .ev.pb.cc,
+// pbDescriptorImporterHeaders, evExtraProtobufHeaders, and
+// evAbseilCleanupHeaders.
 func evWitnessExtras(sourceRoot, evRelPath string, evPbCC VFS) []VFS {
 	_ = sourceRoot // every .ev imports descriptor.proto transitively; no source-scan needed.
 
@@ -310,22 +270,13 @@ func EmitEV(
 	return emit.Emit(node)
 }
 
-// resolveEvImports resolves the transitive import set for a .ev (or .proto)
-// file rooted at `<sourceRoot>/<srcRel>`. Returns a deduplicated, ordered
-// slice of `$(S)/...` paths for every imported file that can be
-// found on disk, plus descriptor.proto when any import chain transitively
-// reaches it.
-//
-// The scan is shallow: we read each file for `import "..."` lines and
-// follow the referenced paths relative to the source root. The eventlog
-// import `library/cpp/eventlog/proto/events_extension.proto` is the
-// primary transitive chain that surfaces descriptor.proto.
-//
-// PR-AUDIT-3: legitimate disk read — extracts structured `import` directives
-// from .ev/.proto sources at EV-node-emission time to build the EV node's
-// input list. NOT for closure walks. The architectural cleanup to route this
-// through a unified registry-resolved "structured-import extractor" lives in
-// PR-AUDIT-3.D12 (still open); kept per audit doc §2 D12.
+// resolveEvImports returns the deduplicated transitive import set for a
+// .ev/.proto file at `<sourceRoot>/<srcRel>`: every imported file found on
+// disk plus descriptor.proto when any chain transitively reaches it. Reads
+// each file for `import "..."` lines and follows them relative to
+// sourceRoot. events_extension.proto is the primary descriptor.proto
+// chain. Legitimate disk read scoped to EV-node-emission input listing,
+// not closure walks.
 func resolveEvImports(sourceRoot, srcRel string) []VFS {
 	visited := map[string]struct{}{}
 	order := make([]VFS, 0, 8)

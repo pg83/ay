@@ -25,19 +25,13 @@ func main() {
 }
 
 // dispatch parses the command-line and routes to the per-subcommand
-// handler. It is the throw-style boundary between main()'s
-// Try(...).Catch(...) wrapper and the rest of the program: per
-// STYLE.md ("Catches belong at boundaries: main.go: the top-level
-// Try(...).Catch(...) prints the error and os.Exit(1)") any panic with
-// an *Exception bubbles up here and gets printed to stderr.
+// handler. It is the throw-style boundary between main()'s Try/Catch
+// wrapper and the rest of the program: any panic with an *Exception
+// bubbles up here and prints to stderr.
 //
-// Subcommands return an int exit code today (PR-11 stubs). PR-03+
-// will replace those bodies with real implementations that throw on
-// failure; the contract above keeps working unchanged.
-//
-// Note: os.Exit from a subcommand bypasses any defers placed by the outer Try;
-// only panics propagate. If success-path cleanup needs to fire from Try,
-// dispatch must return an exit code instead of calling os.Exit directly.
+// Note: os.Exit from a subcommand bypasses outer-Try defers (only panics
+// propagate). If success-path cleanup needs to fire, dispatch must return
+// an exit code instead of calling os.Exit directly.
 func dispatch(argv []string) {
 	if len(argv) < 2 {
 		printUsage(os.Stderr)
@@ -81,22 +75,14 @@ func cmdHelp(_ []string) int {
 }
 
 // cmdGen parses a ya.make and writes the resulting build graph as JSON.
-// Per the PR-03 pattern (D17), we use ContinueOnError + SetOutput(io.Discard)
-// so all diagnostics are owned by this function and the outer Catch.
-// flag.ErrHelp is discriminated explicitly so that -h / --help exits 0
-// with usage on stdout (PR-03-D01).
+// Uses ContinueOnError + SetOutput(io.Discard) so all diagnostics are owned
+// here and by the outer Catch; flag.ErrHelp is discriminated explicitly so
+// -h/--help exits 0 with usage on stdout.
 //
-// Retires the PR-01-D05 ceremony: `flag.NewFlagSet` is now load-bearing
-// (real flag registration), no `_ =` discard.
-//
-// --target is the module-relative ya.make directory (e.g. build/cow/on).
-// --out is the output JSON path; "-" writes to stdout.
-// --source-root defaults to the upstream snapshot used by PR-03's
-// LoadReference test; override for a different checkout.
-//
-// Exit code: 0 on success. Argument errors and IO/parse failures throw,
-// propagating to main()'s top-level Catch which prints to stderr and
-// exits 1.
+// --target: module-relative ya.make dir. --out: JSON path ("-" = stdout).
+// --source-root: defaults to the upstream snapshot used by reference tests.
+// Exit 0 on success; argument/IO/parse failures throw to main()'s Catch
+// which prints to stderr and exits 1.
 func cmdGen(args []string) int {
 	fs := flag.NewFlagSet("gen", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -106,25 +92,21 @@ func cmdGen(args []string) int {
 	timeReport := fs.Bool("time", false, "print wall-time breakdown (gen + serialise) to stderr")
 	sourceRoot := fs.String("source-root", "/home/pg/monorepo/yatool_orig", "absolute path to the source tree (defaults to the upstream snapshot)")
 
-	// PR-32 D01: --define KEY=VALUE is the user-facing CLI flag that
-	// drives flag-conditional auto-PEERDIRs and peer-CFLAGs (e.g.
-	// `--define MUSL=yes` mirrors `build/ymake.core.conf:781`'s
+	// --define KEY=VALUE drives flag-conditional auto-PEERDIRs and
+	// peer-CFLAGs (mirrors ymake `-D`; e.g. `--define MUSL=yes` ↔
 	// `when ($MUSL == "yes") { PEERDIR+=contrib/libs/musl/include }`).
-	// Repeatable; bare KEY (without "=") is rejected.
+	// Repeatable; bare KEY rejected.
 	var defines stringMapValue
 
 	fs.Var(&defines, "define", "ymake-style -D KEY=VALUE; repeatable; default: -DMUSL=yes")
 
-	// PR-M3-perf-E: scanCtx lifecycle policy. "interned" (default;
-	// winner of the bake-off) interns one scanCtx per (scanner, ctxHash)
-	// for the whole Gen call. "local" allocates a fresh scanCtx per
-	// genModule frame (no cross-module reuse).
+	// scanCtx lifecycle policy. "interned" (default): one scanCtx per
+	// (scanner, ctxHash) for the whole Gen call. "local": fresh scanCtx
+	// per genModule frame (no cross-module reuse).
 	scanCtxMode := fs.String("scan-ctx-mode", defaultScanCtxMode, "scanCtx lifecycle: \"local\" or \"interned\"")
 
-	// PR-M3-make: --target-platform / --host-platform let cross-compile
-	// callers override the platform-id defaults. Empty (default) → use
-	// the canonical (host=x86_64, target=aarch64) pair the reference
-	// graph was built with.
+	// --target-platform / --host-platform let cross-compile callers
+	// override defaults; empty preserves reference-canonical behaviour.
 	targetPlatform := fs.String("target-platform", "", "target platform id (e.g. default-linux-aarch64); empty preserves M3-reference behaviour")
 	hostPlatform := fs.String("host-platform", "", "host platform id (e.g. default-linux-x86_64); empty preserves M3-reference behaviour")
 
@@ -142,11 +124,9 @@ func cmdGen(args []string) int {
 	memProfile := fs.String("memprofile", "", "write heap profile to PATH after Gen completes; empty disables")
 	profileRate := fs.Int("profile-rate", 1000, "CPU profile sampling rate in Hz (default 1000); only effective when -cpuprofile is set")
 
-	// Toolchain overrides. When set, the explicit path wins over the
-	// mineTools() result for the corresponding entry. Useful for
-	// reproducing a saved reference graph whose cmd_args embed a
-	// specific absolute path (e.g. /ix/realm/boot/bin/clang++) that
-	// the current $PATH does not resolve to verbatim.
+	// Toolchain overrides win over mineTools() — useful for reproducing
+	// a reference graph whose cmd_args embed specific absolute paths
+	// that the current $PATH does not resolve verbatim.
 	pythonBin := fs.String("python-bin", "", "override the mined BUILD_PYTHON_BIN; empty = use $PATH discovery")
 	cCompiler := fs.String("c-compiler", "", "override the mined CLANG_TOOL (C compile driver); empty = use $PATH discovery")
 	cxxCompiler := fs.String("cxx-compiler", "", "override the mined CLANG_pl_pl_TOOL (C++ compile driver); empty = use $PATH discovery")
@@ -351,13 +331,11 @@ Flags:
 `)
 }
 
-// writeGraph encodes g as JSON to the given path (or stdout when path
-// is "-"). Delegates to writeGraphIndented (gjson_write.go), a hand-rolled
-// streaming serializer that matches json.Encoder with SetEscapeHTML(false)
-// + SetIndent("", "  ") byte-for-byte but emits in a single pass — avoiding
-// the compact-marshal + Indent two-pass cost that dominated profile time
-// (PR-34l). Output via a 1 MiB bufio.Writer to keep file syscalls to a
-// minimum.
+// writeGraph encodes g as JSON to path (or stdout when path == "-").
+// Delegates to writeGraphIndented (gjson_write.go), a hand-rolled streaming
+// serializer that matches json.Encoder with SetEscapeHTML(false) +
+// SetIndent("", "  ") byte-for-byte in a single pass. Output is buffered
+// through a 1 MiB bufio.Writer.
 func writeGraph(out string, g *Graph) {
 	var w io.Writer
 

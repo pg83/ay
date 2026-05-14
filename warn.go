@@ -17,16 +17,12 @@ type WarnKind int
 
 const (
 	// WarnSysIncl is a sysincl loader diagnostic: a `source_filter`
-	// record the runtime cannot model (unsupported header, negative
-	// lookahead at the wrong position, regex-compile failure). The
-	// record is dropped; the scan continues without its mappings.
+	// record the runtime cannot model. Record is dropped; scan continues.
 	WarnSysIncl WarnKind = iota
 
-	// WarnMissingInclude is an include-resolver diagnostic: an
-	// `#include` directive that found no hit in the source dir,
-	// build dir, search path, OR sysincl mappings. The build still
-	// proceeds — the upstream reference graph tolerates these too —
-	// but the directive contributes no input edge.
+	// WarnMissingInclude is an include-resolver diagnostic: an `#include`
+	// with no hit in source/build dirs, search path, or sysincl mappings.
+	// Build proceeds (upstream tolerates these) but no input edge emitted.
 	WarnMissingInclude
 )
 

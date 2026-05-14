@@ -2,37 +2,16 @@ package main
 
 // simd.go — SRC_C_<VARIANT> macro handling for SIMD permutations.
 //
-// Upstream (`build/ymake.core.conf:3848-3923`) defines the family:
+// Upstream `build/ymake.core.conf:3848-3923` defines SRC_C_SSE2/SSE3/SSSE3/
+// SSE4/SSE41/AVX/XOP. Each emits one CC node per (source, variant) pair with
+// FLAT output `<module>/<src>.<variant>.pic.o` (no `_/` infix) and cmd_args
+// carrying the variant `-m<flag>` bundle plus extras (typically
+// `-DSUFFIX=_<variant>`) at the per-source slot.
 //
-//     SRC_C_SSE2(file, flags...)   → compile `file` with $SSE2_CFLAGS  + `.sse2`  suffix
-//     SRC_C_SSE3(file, flags...)   → ...                $SSE3_CFLAGS   + `.sse3`
-//     SRC_C_SSSE3(file, flags...)  → ...                $SSSE3_CFLAGS  + `.ssse3`
-//     SRC_C_SSE4(file, flags...)   → ...                $SSE4_CFLAGS   + `.sse4`
-//     SRC_C_SSE41(file, flags...)  → ...                $SSE41_CFLAGS  + `.sse41`
-//     SRC_C_AVX(file, flags...)    → ...                $AVX_CFLAGS    + `.avx`
-//     SRC_C_XOP(file, flags...)    → ...                $XOP_CFLAGS    + `.xop`
-//
-// Each macro emits one CC node per (source, variant) pair. The output path
-// is FLAT (`<module>/<src>.<variant>.pic.o`, no `_/` infix even when the
-// source contains a `/`) and the cmd_args carry the variant `-m<flag>`
-// bundle plus any extra tokens (typically `-DSUFFIX=_<variant>`) at the
-// per-source slot — between `macroPrefixMapFlags` and the input path.
-//
-// The variant flag values follow the linux-clang branch of
-// `build/ymake.core.conf:3060-3082`:
-//
-//     SSE2_CFLAGS   = -msse2
-//     SSE3_CFLAGS   = -msse3
-//     SSSE3_CFLAGS  = -mssse3
-//     SSE41_CFLAGS  = -msse4.1
-//     AVX_CFLAGS    = -mavx -mpclmul
-//     XOP_CFLAGS    = -mxop
-//
-// SSE4_CFLAGS expands to "$SSE41_CFLAGS $SSE42_CFLAGS $POPCNT_CFLAGS
-// $CX16_FLAGS" — none of M3's reference modules use SRC_C_SSE4 with a
-// per-source override, so the table below carries the empirical 4-flag
-// expansion observed in the host SSE feature bundle (kept for parity with
-// the macro definition but unreferenced by the M3 closure).
+// Variant flag values follow the linux-clang branch of
+// `build/ymake.core.conf:3060-3082`. SSE4_CFLAGS expands to
+// $SSE41+$SSE42+$POPCNT+$CX16 — carried for parity but not exercised by
+// the reference closure.
 
 // simdVariant carries the per-variant emit knobs derived from
 // `_SRC_CUSTOM_C_CPP(... $FILE .<variant> $<VARIANT>_CFLAGS $FLAGS)`:

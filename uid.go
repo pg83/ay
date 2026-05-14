@@ -10,32 +10,19 @@ import (
 
 // uid.go — content-derived UID hashing.
 //
-// UID = base64url(sha1(canonical-node-bytes))[:22]. The 22-character
-// length is verified against the on-disk reference (every uid/self_uid
-// in /home/pg/monorepo/yatool_orig/sg.json is exactly 22 characters
-// of base64url alphabet).
+// UID = base64url(sha1(canonical-node-bytes))[:22] (length verified against
+// /home/pg/monorepo/yatool_orig/sg.json). Canonical bytes are an internal
+// binary format — not JSON; the only contract is hash stability per
+// semantic node content.
 //
-// The "canonical node bytes" are an internal binary format — NOT JSON,
-// NOT human-readable. The only contract is that the resulting sha1
-// hash is stable per (semantic) node content.
+// Accumulated via concrete-typed canonBuf whose writeXxx methods inline as
+// direct appends — avoids the per-write interface dispatch / slice-header
+// boxing that profiling flagged at 25% of allocs when streaming through
+// hash.Hash.
 //
-// The canonical form is accumulated into a `canonBuf` (concrete type,
-// not an interface). Concrete-typed `(*canonBuf).writeXxx` methods
-// inline as direct `append(c.buf, ...)` calls — escape analysis keeps
-// any per-call scratch arrays on the stack, and the only heap
-// allocation per nodeUID call is the `canonBuf.buf` slice itself
-// (grown as needed). Going through `hash.Hash` / `io.Writer` interface
-// receivers would force each tiny write through dynamic dispatch and
-// box the slice header onto the heap — that was the 25% alloc cost
-// flagged in the post-canon-bytes-binary profile.
-//
-// Field encoding is purely positional: every Node field is written in
-// the same fixed order (alphabetical, matching node.go's declaration)
-// so no field-name tags are needed. Variable-length items (strings,
-// slices, maps) are length-prefixed with a 4-byte little-endian count
-// so adjacent items cannot bleed into each other regardless of
-// content. UID, SelfUID, and StatsUID are excluded so the hash
-// depends only on content, not identity.
+// Field encoding is positional in alphabetical order (matching node.go);
+// variable-length items are 4-byte little-endian length-prefixed. UID,
+// SelfUID, StatsUID are excluded so the hash depends only on content.
 
 const uidLength = 22
 
@@ -163,16 +150,12 @@ func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
 	}
 }
 
-// writeNode emits the canonical form of n into c.
-//
-// Field order matches `node.go` (alphabetical: cache, cmds, deps, env,
-// foreign_deps, host_platform, inputs, kv, outputs, platform,
-// requirements, sandboxing, tags, target_properties). self_uid, uid,
-// and stats_uid are excluded by design.
-//
-// `omitempty` fields stream their "absent" form (Cache=nil → 0x00,
-// HostPlatform=false → 0x00, ForeignDeps=nil → count 0). Position is
-// always present-shape so encoding remains unambiguous.
+// writeNode emits the canonical form of n into c. Field order matches
+// node.go (alphabetical: cache, cmds, deps, env, foreign_deps,
+// host_platform, inputs, kv, outputs, platform, requirements, sandboxing,
+// tags, target_properties); self_uid/uid/stats_uid are excluded. `omitempty`
+// fields stream their "absent" form (Cache=nil → 0x00, HostPlatform=false →
+// 0x00, ForeignDeps=nil → count 0); position is always present.
 func (c *canonBuf) writeNode(n *Node) {
 	switch {
 	case n.Cache == nil:
