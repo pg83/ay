@@ -2,58 +2,32 @@ package main
 
 // codegen_registry.go — per-scanner registry of codegen-emitted file metadata.
 //
-// # Motivation
+// The C/C++ include scanner resolves `#include` by walking the source tree;
+// generated files (.pb.h, *_serialized.h, .rl6 outputs, configure_file, …)
+// do not yet exist at gen time. CodegenRegistry provides a flat
+// buildRootPath → producerInfo map that the scanner consults as a third
+// existence tier.
 //
-// The C/C++ include scanner resolves `#include` directives by walking the
-// source tree. Generated files (`.pb.h`, `*_serialized.h`, `.rl6`-derived
-// outputs, configure_file outputs, etc.) do not exist on disk at `gen` time,
-// so the scanner cannot find them. The CodegenRegistry closes this gap by
-// providing a flat `buildRootPath → producerInfo` map that the scanner can
-// consult as a third existence tier.
+// One registry per IncludeScanner (target and host each get their own) so
+// same-filename outputs across axes do not collide; mirrors the per-scanner
+// resolveCache/sysincl architecture.
 //
-// # Architecture (per-scanner, not genCtx-level)
-//
-// User arbitration confirmed 2026-05-11: one CodegenRegistry per
-// IncludeScanner (target and host each get their own instance), NOT a single
-// shared map on genCtx. Rationale: target and host walks can both produce
-// `$(B)/<path>` outputs with the same filename but potentially
-// different content (e.g. protobuf compiled for both axes); per-scanner keeps
-// platform separation clean and mirrors the existing per-scanner cache
-// architecture (resolveCache, sysincl, etc.).
-//
-// See docs/drafts/20260511-1700-codegen-include-registry.md §4.5 and §8
-// (PR-M3-F-7-A) for full rationale.
-//
-// # Uniqueness invariant
-//
-// Upstream ymake enforces that no two nodes produce a file with the same
-// `$(B)` output path within a build (DupSrc diagnostic at
-// macro_processor.cpp:957). Register() asserts this invariant: a second write
-// for the same key throws. If it ever fires, the build configuration is
-// malformed and that is a separate defect to triage — fail-fast is the right
-// response here.
-//
-// # Determinism
-//
-// All() returns entries sorted by OutputPath. The internal map is keyed by
-// output path, but iteration order is only exposed via the sorted accessor, so
-// no map-iteration order leaks into the output.
+// Uniqueness invariant mirrors upstream's DupSrc (macro_processor.cpp:957):
+// duplicate Register for the same OutputPath throws. All() returns entries
+// sorted by OutputPath so no map-iteration order leaks into output.
 
 import "sort"
 
-// GeneratedFileInfo describes one codegen-emitted file. Populated by each
-// codegen emitter (EN, PB, EV, R5, R6, CF, BI, JV, PR, AR, PY) during the
-// emit walk. F-7-B fills EmitsIncludes per emitter; F-7-A leaves it empty
-// for all entries.
+// GeneratedFileInfo describes one codegen-emitted file. Populated during the
+// emit walk by each codegen emitter (EN, PB, EV, R5, R6, CF, BI, JV, PR, AR,
+// PY). EmitsIncludes is filled per emitter where available.
 //
-// PR-M3-L0-cascade-close-v2: ProducerRef captures the producer NodeRef so
-// resolveCodegenDepRefs can thread it into consumer CC `deps[]`. Some
-// emitters register the entry BEFORE the producer NodeRef is known (e.g.
-// CP/PR/EN register their output paths early so the scanner's existence
-// tier sees them, then the actual NodeRef is filled in via SetProducerRef
-// once Emit returns). HasProducerRef discriminates "registered, no ref
-// yet" from "registered, ref valid" — NodeRef{} (id=0) collides with the
-// first emitted node so the explicit flag is mandatory.
+// Some emitters Register BEFORE the producer NodeRef is known (CP/PR/EN
+// publish output paths early for the scanner's existence tier, then
+// SetProducerRef backfills the NodeRef post-Emit). HasProducerRef
+// discriminates "registered, no ref yet" from "registered, ref valid" —
+// NodeRef{} (id=0) collides with the first emitted node so the flag is
+// mandatory.
 type GeneratedFileInfo struct {
 	// ProducerKvP is the node-kind key ("EN", "PB", "EV", "R5", "R6", "CF",
 	// "BI", "JV", "PR", "AR", "PY"). Matches the KV["p"] value emitted by
@@ -79,10 +53,10 @@ type GeneratedFileInfo struct {
 	HasProducerRef bool
 }
 
-// CodegenRegistry is a per-scanner registry mapping every $(B)-prefixed
-// generated file path to its producer metadata. Populated incrementally during
-// the emit walk (codegen emitters fire before CC emitters per PEERDIR-DFS order).
-// The scanner consults it as a third existence tier in F-7-C.
+// CodegenRegistry maps every $(B)-prefixed generated file path to its
+// producer metadata. Populated incrementally during the emit walk (codegen
+// emitters fire before CC emitters per PEERDIR-DFS order). The scanner
+// consults it as a third existence tier.
 type CodegenRegistry struct {
 	byOutput VFSMap[*GeneratedFileInfo]
 }
@@ -118,13 +92,10 @@ func (r *CodegenRegistry) Lookup(path VFS) (*GeneratedFileInfo, bool) {
 }
 
 // SetProducerRef backfills the ProducerRef for an already-registered path.
-// Throws if path is not registered (callers must have invoked Register first).
-// Idempotent: re-setting with the same ref is a no-op; conflicting refs throw.
-//
-// PR-M3-L0-cascade-close-v2: most emitters call Register BEFORE Emit returns
-// the NodeRef (the registry entry is needed by the scanner's existence-tier
-// before the emit completes). This helper fills the NodeRef in after Emit so
-// resolveCodegenDepRefs can lift it into consumer CC `deps[]`.
+// Throws if path is not registered. Idempotent on identical refs; conflicting
+// refs throw. Most emitters Register before Emit returns so the scanner's
+// existence-tier sees the output; this helper fills the NodeRef in after Emit
+// so resolveCodegenDepRefs can lift it into consumer CC `deps[]`.
 func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
 	info, ok := r.byOutput.Get(path)
 	if !ok {

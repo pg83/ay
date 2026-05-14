@@ -9,16 +9,11 @@ import (
 
 // mine.go — toolchain discovery and flag mining.
 //
-// Ported from the gg/ya.go MVP path: `findTools` resolves a fixed set
-// of programs via $PATH (clang, clang++, ar, objcopy, strip, python3,
-// lld) and `commonFlags` projects those into the ymake-style flag
-// namespace (BUILD_PYTHON_BIN, CLANG_TOOL, CLANG_pl_pl_TOOL, etc.)
-// expected by downstream consumers in cmd_args composition.
-//
-// Both subcommands (`gen` and `make`) consult these to populate
-// cliDefines so the resulting graph is dynamically pinned to the
-// current host's toolchain layout rather than hard-coded paths from a
-// reference snapshot.
+// mineTools resolves a fixed set of programs via $PATH (clang, clang++, ar,
+// objcopy, strip, python3, lld); commonFlags projects those into the
+// ymake-style flag namespace (BUILD_PYTHON_BIN, CLANG_TOOL,
+// CLANG_pl_pl_TOOL, etc.). Both `gen` and `make` consult these to populate
+// cliDefines so the graph is pinned to the host's actual toolchain layout.
 
 // mineTools resolves each tool's absolute path via exec.LookPath.
 // Missing tools throw with a clear message; per MVP scope we require

@@ -1,45 +1,30 @@
 package main
 
 // macros.go — IF-predicate evaluator and the bound-variable environment
-// the M2 macro routing pipeline uses to decide which branches a parsed
-// `*IfStmt` keeps. The Expr ADT is in `yamake.go` next to the parser
-// that builds it; the evaluator and the canonical env live here so
-// later PRs (PR-22 archiver-platform sweep) extend just `DefaultIfEnv`
-// rather than touching the parser.
+// for parsed `*IfStmt` branches. Expr ADT lives next to the parser in
+// yamake.go; this file owns the evaluator and DefaultIfEnv.
 //
-// The contract per D27 is intentionally strict: an unknown identifier
-// in an IF expression throws. Silent default-to-false is the failure
-// mode that hides "we never bound this var" until the comparator
-// reports a missing-node, which is one round too late.
+// Contract: an unknown identifier throws. Silent default-to-false hides
+// "we never bound this var" until the comparator reports a missing node.
 //
-// PR-27 widened the value space from booleans to {bool, string, int}
-// so the parser ADT additions (ExprEq, ExprLt, ExprString, ExprInt)
-// have somewhere to look up their operands. The Environment carries
-// three typed maps; a name appears in at most one (otherwise the
-// Lookup fallthrough order is bool → string → int, but in practice
-// each binding is only ever in one). The bool-only path stays the
-// hot path — every existing IF predicate in the M1 closure is
-// boolean-valued and only the new comparator paths reach for typed
-// lookups.
+// Value space is {bool, string, int}; Environment carries three typed
+// maps with Lookup fallthrough bool → string → int (in practice each
+// binding lives in exactly one map). Bool-only paths stay the hot path.
 
 // Environment binds IF-condition identifiers to their typed values.
-// Three disjoint maps, one per supported value type. PR-27 introduced
-// this in place of the pre-PR-27 `map[string]bool` so comparators
-// (ExprEq, ExprLt) can resolve operands of differing types; the
-// boolean-only callers (ExprIdent in predicate position, ExprAnd,
-// ExprOr, ExprNot) still go through the typed `Bool` lookup which
-// throws on a non-bool binding.
+// Three disjoint maps so comparators (ExprEq, ExprLt) resolve operands of
+// differing types. Boolean-only callers (ExprIdent in predicate position,
+// ExprAnd/Or/Not) go through Bool, which throws on a non-bool binding.
 type Environment struct {
 	bools   map[string]bool
 	strings map[string]string
 	ints    map[string]int
 }
 
-// Lookup returns the typed value bound to name, or throws on miss.
-// The return type is `any` because the caller (evalAtom, ExprEq's
-// rhs/lhs resolution) only branches on the dynamic type. Callers that
-// need a specific type — EvalCond's ExprIdent path expects bool — go
-// through Bool to get a typed value plus a clean error message.
+// Lookup returns the typed value bound to name (or throws). Return type
+// is `any` because callers (evalAtom, ExprEq operand resolution) branch
+// on dynamic type. EvalCond's ExprIdent path goes through Bool for a
+// typed value and a clean error.
 func (e Environment) Lookup(name string) any {
 	if v, ok := e.bools[name]; ok {
 		return v
@@ -58,12 +43,10 @@ func (e Environment) Lookup(name string) any {
 	return nil // unreachable; ThrowFmt panics
 }
 
-// Bool returns the boolean binding for name. Bool-typed bindings are
-// returned directly. String-typed bindings are coerced: empty string →
-// false, non-empty string → true (upstream ymake semantics for bare-ident
-// use of a string variable, e.g. `IF (SANITIZER_TYPE OR ...)` where
-// SANITIZER_TYPE is "" when sanitizers are off). Int-typed bindings are
-// not expected in bool position; that remains a defect.
+// Bool returns the boolean binding for name. Bool bindings return directly;
+// strings coerce (empty → false, non-empty → true) per upstream semantics
+// for bare-ident use of a string variable. Int bindings in bool position
+// throw (defect).
 func (e Environment) Bool(name string) bool {
 	if v, ok := e.bools[name]; ok {
 		return v
@@ -82,10 +65,9 @@ func (e Environment) Bool(name string) bool {
 	return false // unreachable
 }
 
-// Clone returns a deep-enough copy of the env that callers can mutate
-// per-instance (e.g. flip ARCH_AARCH64 ↔ ARCH_X86_64 for host targets)
-// without trampling DefaultIfEnv. The maps are copied; their contents
-// are immutable scalars.
+// Clone returns a deep copy so callers can mutate per-instance (e.g. flip
+// ARCH_AARCH64 ↔ ARCH_X86_64 for host targets) without trampling
+// DefaultIfEnv. Maps are copied; contents are immutable scalars.
 func (e Environment) Clone() Environment {
 	out := Environment{
 		bools:   make(map[string]bool, len(e.bools)),
@@ -108,10 +90,8 @@ func (e Environment) Clone() Environment {
 	return out
 }
 
-// SetBool overrides (or adds) a boolean binding. Helper for
-// per-instance env tweaks like ARCH_AARCH64 ↔ ARCH_X86_64; callers
-// must Clone first if they don't want their mutation to leak into
-// DefaultIfEnv.
+// SetBool overrides (or adds) a boolean binding. Per-instance env tweaks
+// must Clone first to avoid leaking into DefaultIfEnv.
 func (e Environment) SetBool(name string, v bool) {
 	e.bools[name] = v
 }
@@ -136,12 +116,10 @@ func (e Environment) HasBinding(name string) bool {
 	return false
 }
 
-// SetDefaultString implements the DEFAULT(name value) statement: only
-// binds `name` when no prior binding exists, matching upstream
-// `TEvalContext::SetStatement`'s NMacro::DEFAULT branch. The value is
-// stored as a string; subsequent `IF (name)` predicates evaluate via
-// Bool (empty string → false, non-empty → true), and `IF (name == "v")`
-// predicates evaluate via evalEq's string path.
+// SetDefaultString implements DEFAULT(name value): binds only when no
+// prior binding exists, matching upstream
+// TEvalContext::SetStatement/NMacro::DEFAULT. Value is string; later
+// `IF (name)` coerces via Bool, `IF (name == "v")` via evalEq.
 func (e Environment) SetDefaultString(name, value string) {
 	if e.HasBinding(name) {
 		return
@@ -150,18 +128,9 @@ func (e Environment) SetDefaultString(name, value string) {
 	e.strings[name] = value
 }
 
-// EvalCond evaluates an IF predicate against a fixed env. Throws
-// (D27) on:
-//
-//   - unknown identifier — the canonical env (DefaultIfEnv) must be
-//     extended with the new var rather than letting the call silently
-//     return false;
-//   - unhandled Expr type — defensive guard for future ADT widenings
-//     that forget to extend the switch;
-//   - bare ExprString / ExprInt in predicate position — a string or
-//     int has no boolean meaning on its own, only as a comparator
-//     operand;
-//   - ExprEq / ExprLt with mismatched or non-numeric operand types.
+// EvalCond evaluates an IF predicate against a fixed env. Throws on:
+// unknown identifier; unhandled Expr type; bare ExprString/ExprInt in
+// predicate position; ExprEq/ExprLt with mismatched or non-numeric operands.
 func EvalCond(e Expr, env Environment) bool {
 	switch x := e.(type) {
 	case *ExprIdent:
@@ -187,11 +156,10 @@ func EvalCond(e Expr, env Environment) bool {
 	return false // unreachable; ThrowFmt panics
 }
 
-// evalAtom resolves a value-position Expr (operand of `==` or `<`) to
-// its dynamic value. ExprIdent goes through Lookup (any type); literal
-// nodes return their carried value. Anything else — a bool combinator
-// or another comparator nested directly as an operand — throws,
-// because the parser's grammar should never produce such a shape.
+// evalAtom resolves a value-position Expr (operand of `==` or `<`) to its
+// dynamic value. ExprIdent → Lookup; literal nodes return carried values.
+// Anything else (bool combinator / nested comparator) throws — the parser
+// grammar should not produce such a shape.
 func evalAtom(e Expr, env Environment) any {
 	switch x := e.(type) {
 	case *ExprIdent:
@@ -207,9 +175,8 @@ func evalAtom(e Expr, env Environment) any {
 	return nil // unreachable
 }
 
-// evalEq compares two atoms for equality. Same-type comparison only;
-// mixed string/int throws so a parser-level type confusion surfaces
-// immediately rather than silently returning false.
+// evalEq compares two atoms for equality. Same-type only; mixed types
+// throw so a parser-level type confusion surfaces immediately.
 func evalEq(x *ExprEq, env Environment) bool {
 	l := evalAtom(x.Left, env)
 	r := evalAtom(x.Right, env)
@@ -262,42 +229,19 @@ func evalLt(x *ExprLt, env Environment) bool {
 	return li < ri
 }
 
-// DefaultIfEnv is the bound-variable environment for `IF` predicates
-// — the per-build base bindings that are independent of the
-// instance's specific Platform.ISA. Every ARCH_* boolean defaults to
-// false; `buildIfEnv` flips the matching ISA's bits to true per
-// instance. Other environment shape (OS_LINUX=true, CLANG=true,
-// MUSL=true, …) reflects the reference closure's build configuration
-// (OS_LINUX + clang + musl). Extending this set is the documented way
-// to teach EvalCond about a new identifier; PR-27's wider closure
-// (libcxx / libcxxrt / libunwind / util) added the typed entries below.
+// DefaultIfEnv is the bound-variable environment for `IF` predicates —
+// per-build bindings independent of instance.Platform.ISA. Every ARCH_*
+// defaults to false; buildIfEnv (modules.go) flips the matching ISA's
+// bits per instance. Other shape (OS_LINUX, CLANG, MUSL, …) reflects the
+// reference closure's build configuration (linux + clang + musl).
+// Extending this set is the documented way to teach EvalCond about a new
+// identifier.
 //
-// PR-27 extension: when the walker reaches the libcxx and libc_compat
-// branches of the closure it encounters comparator operands that the
-// previous bool-only env could not represent. The new typed bindings
-// are:
-//
-//   - CXX_RT="libcxxrt" — what the SET chain in libcxx/ya.make
-//     resolves to for M2 (linux + non-Android + non-ARM6/7). Walker
-//     does not yet evaluate SET, so the chosen value is wired
-//     directly into the env so `IF (CXX_RT == "libcxxrt")` takes
-//     the intended branch.
-//   - SANITIZER_TYPE="" — sanitizers are off in M2; bare-ident
-//     literals "undefined" / "memory" then compare against this empty
-//     value and yield false.
-//   - "undefined" / "memory" / "address" / "thread" / "leak" —
-//     bare-ident sanitizer-type literals appearing on the RHS of
-//     `IF (SANITIZER_TYPE == undefined)` style predicates. Each is
-//     bound to a string equal to its own name so the comparison
-//     evaluates as a string-literal compare against SANITIZER_TYPE.
-//   - ANDROID_API=0 — defensive; libc_compat's `<` branches sit
-//     inside `IF (OS_ANDROID)` (false on M2) so this binding is not
-//     reached today, but pinning it makes the value explicit if a
-//     future closure walks an OS_ANDROID-conditional module.
-//   - bool-typed FUZZING / EXPORT_CMAKE / NO_CXX_RTTI /
-//     NO_CXX_EXCEPTIONS / USE_ARCADIA_COMPILER_RUNTIME /
-//     PROVIDE_* — flag-style booleans the wider closure uses;
-//     all false in M2.
+// Typed bindings include CXX_RT="libcxxrt" (SET-resolved selector for
+// linux + non-Android + non-ARM6/7, wired directly because SET is not
+// evaluated), SANITIZER_TYPE="" (sanitizers off), bare-ident sanitizer
+// literals each = own name, and ANDROID_API=0 (defensive for libc_compat
+// `<` branches gated by OS_ANDROID=false).
 var DefaultIfEnv = Environment{
 	bools: map[string]bool{
 		"OS_LINUX":                          true,
@@ -310,11 +254,8 @@ var DefaultIfEnv = Environment{
 		"OS_CYGWIN":                         false, // PR-27: util
 		"SUN":                               false, // PR-27: util
 		"CYGWIN":                            false, // PR-27: util
-		// ARCH_ARM64 is the upstream alias for ARCH_AARCH64 — Arcadia
-		// sets both together; buildIfEnv (modules.go) flips them in
-		// lockstep per instance.Platform.ISA so any
-		// `IF (ARCH_ARM64 OR ARCH_X86_64)` predicate sees a
-		// consistent binding.
+		// ARCH_ARM64 is the upstream alias for ARCH_AARCH64; buildIfEnv
+		// flips them in lockstep so IF predicates see consistent bindings.
 		"ARCH_AARCH64": false,
 		"ARCH_X86_64":  false,
 		"ARCH_I386":    false,
@@ -348,27 +289,19 @@ var DefaultIfEnv = Environment{
 		"PROVIDE_MEMFD_CREATE":              false, // PR-27: contrib/libs/libc_compat
 		"MUSL_LITE":                         false, // PR-30 D01: M2 default = full musl, not lite. Read by D02's defaultProgramPeerdirsFor to pick contrib/libs/musl/full when MUSL=yes && !MUSL_LITE.
 		"OPENSOURCE_REPLACE_LINUX_HEADERS":  false, // PR-30: contrib/libs/linux-headers (used in IF(X AND EXPORT_CMAKE)).
-		// M3 new identifiers.
-		// OPENSOURCE=true: this source tree is the open-source Arcadia export.
-		// The reference sg2.json was built from this tree, so IF(NOT OPENSOURCE)
-		// branches that PEERDIR internal-only modules (e.g. library/cpp/xml/document)
-		// must be taken false. OPENSOURCE=false would include modules missing from
-		// the tree and cause gen failures; the M2 target (tools/archiver) does not
-		// reach any OPENSOURCE-gated code so flipping this to true is M2-safe.
+		// OPENSOURCE=true: this source tree is the open-source Arcadia
+		// export. Reference sg2.json was built from it, so IF(NOT
+		// OPENSOURCE) branches that PEERDIR internal-only modules (e.g.
+		// library/cpp/xml/document) must take the false arm.
 		"OPENSOURCE":                    true, // M3: open-source Arcadia export (sg2.json reference).
 		"YA_OPENSOURCE":                 false, // M3: ya-tool open-source build flag.
 		"EXTERNAL_PY_FILES":             false, // M3: library/python/runtime_py3 external-py variant.
-		// USE_ARCADIA_PYTHON=true: the reference sg2.json was generated
-		// against a tree where ARCADIA_PYTHON is enabled. The flag gates
-		// the `library/python/symbols/{module,libc,python}` PEERDIR
-		// block in `contrib/libs/python/ya.make` (IF (USE_ARCADIA_PYTHON))
-		// plus the `contrib/tools/python3` PEERDIR + `Include` ADDINCL
-		// in `library/python/runtime_py3/stage0pycc/ya.make` and
-		// `tools/py3cc/bin/ya.make` (each takes the ELSE arm when the
-		// flag is true). Verified empirically: REF stage0pycc/main.cpp.pic.o
-		// carries `-I$(S)/contrib/tools/python3/Include`, which
-		// only the ELSE arm contributes; REF aarch64 emits 14 symbols/*
-		// nodes that only the IF arm in contrib/libs/python contributes.
+		// USE_ARCADIA_PYTHON=true: reference sg2.json was generated with
+		// ARCADIA_PYTHON enabled. Gates library/python/symbols/* PEERDIRs
+		// in contrib/libs/python/ya.make and the contrib/tools/python3
+		// PEERDIR + Include ADDINCL in stage0pycc / tools/py3cc/bin
+		// (each takes ELSE when true). Verified via REF stage0pycc
+		// `-I$(S)/contrib/tools/python3/Include` and 14 symbols/* nodes.
 		"USE_ARCADIA_PYTHON": true,
 		"USE_PYTHON3_PREV":              false, // M3: use previous Python3 toolchain.
 		"PREBUILT":                      false, // M3: use prebuilt tools (tools/py3cc, rescompiler, etc.).
@@ -410,14 +343,12 @@ var DefaultIfEnv = Environment{
 		"ANDROID_ARMV7":                         false, // M3: Android ARMv7 target.
 		"ANDROID_I686":                           false, // M3: Android i686 target.
 		"ARCADIA_OPENSSL_DISABLE_ARMV7_TICK":     false, // M3: OpenSSL armv7 tick disable.
-		// ARCADIA_PCRE_ENABLE_JIT: intentionally NOT pre-bound. The
-		// contrib/libs/pcre/ya.make declares `DEFAULT(ARCADIA_PCRE_ENABLE_JIT yes)`
-		// then `IF (ARCADIA_PCRE_ENABLE_JIT)` to add `-DARCADIA_PCRE_ENABLE_JIT`
-		// to CFLAGS; the per-module DEFAULT→IF env-bridge in collectStmts
-		// (PR-M3-pcre-jit-default-eval) establishes the binding string="yes"
-		// at DEFAULT statement time so the subsequent IF observes the value.
-		// Pre-binding would force HasBinding to true and the DEFAULT's
-		// upstream-mirrored "skip if already set" semantics would no-op.
+		// ARCADIA_PCRE_ENABLE_JIT: intentionally NOT pre-bound.
+		// contrib/libs/pcre/ya.make does DEFAULT(ARCADIA_PCRE_ENABLE_JIT yes)
+		// then IF(ARCADIA_PCRE_ENABLE_JIT) for -DARCADIA_PCRE_ENABLE_JIT;
+		// the DEFAULT→IF env-bridge in collectStmts establishes the
+		// binding at DEFAULT time so the IF observes it. Pre-binding
+		// would force HasBinding=true and DEFAULT's "skip if set" no-ops.
 		"ARCH_I686":                              false, // M3: i686 32-bit x86 target.
 		"ARCH_PPC64LE":                           false, // M3: PowerPC 64-bit LE target.
 		"ARCH_TYPE_32":                           false, // M3: 32-bit architecture flag.
@@ -436,10 +367,9 @@ var DefaultIfEnv = Environment{
 		"WINDOWS_I686":                           false, // M3: Windows i686 target.
 	},
 	strings: map[string]string{
-		// CXX_RT: SET-derived runtime selector. M2 (linux + clang +
-		// non-Android + non-ARM6/7) lands on libcxxrt. The walker
-		// does not yet evaluate SET, so the chosen value is wired
-		// directly here.
+		// CXX_RT: SET-derived runtime selector. linux + clang + non-Android
+		// + non-ARM6/7 → libcxxrt. Wired directly because SET is not yet
+		// evaluated.
 		"CXX_RT": "libcxxrt",
 		// OPENSOURCE_PROJECT: project selector used in some library
 		// ya.makes (e.g. library/cpp/svnversion: yt-cpp-sdk branch adds
@@ -457,14 +387,10 @@ var DefaultIfEnv = Environment{
 		"address":   "address",
 		"thread":    "thread",
 		"leak":      "leak",
-		// PR-M3-aarch64-py-closure: MODULE_TAG = "PY3" for our M3 closure.
-		// `contrib/libs/python/ya.make:32` gates on `IF (MODULE_TAG == "PY2")`
-		// to choose the Python 2 vs Python 3 PEERDIR branch; with USE_PYTHON3
-		// (the only Python variant exercised by our M3 closure) the ELSE arm
-		// is the intended branch, which requires MODULE_TAG to compare
-		// non-equal to "PY2". "PY3" mirrors the value `module PY3_LIBRARY`
-		// sets via `SET(MODULE_LANG PY3)` and the per-Python-variant module
-		// declarations in build/conf/python.conf.
+		// MODULE_TAG = "PY3" for our closure. contrib/libs/python/ya.make:32
+		// gates on IF(MODULE_TAG == "PY2"); USE_PYTHON3 takes the ELSE arm,
+		// which requires MODULE_TAG != "PY2". Mirrors `module PY3_LIBRARY`'s
+		// SET(MODULE_LANG PY3) in build/conf/python.conf.
 		"MODULE_TAG":  "PY3",
 		"PY2":         "PY2", // bare-ident literal used in `IF (MODULE_TAG == "PY2")`.
 	},

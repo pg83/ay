@@ -1,42 +1,26 @@
 package main
 
-// module.go — module-instance addressing (D30..D40).
+// module.go — module-instance addressing.
 //
-// Per D30, a module's identity is the tuple (Path, Language, Target,
-// Flags). Two distinct platforms (target aarch64 vs host x86_64) of
-// the same `build/cow/on` directory are two different
-// `ModuleInstance`s — they emit two different node sets, addressed by
-// distinct memo keys, both flowing through one Emitter into one
-// Graph.
+// A module's identity is the tuple (Path, Language, Platform, Flags). Two
+// platforms of the same directory are two different ModuleInstances —
+// distinct memo keys, separate node sets, one Graph.
 //
-// PR-23 only ships the address structure. The macro-driven flag
-// inference (PR-25) and per-instance ADDINCL/CFLAGS digesting (M5)
-// extend `Flags.Extra` rather than mutating this file.
-//
-// Why these specific types:
-//
-//   - `Language` is a string newtype now so the parser tag (cpp / proto
-//     / go / py / java) flows through everything as a single token,
-//     matched by the comparator's `module_lang`. M2 only emits cpp; the
-//     rest are reserved per D30 §3.
-//   - `PlatformID` is a string newtype identical to the on-disk
-//     `node.platform` field. Comparing `node.Platform == string(id)`
-//     stays a one-line operation.
-//   - `FlagSet` is a small typed bag, comparable by value. Its
-//     `Extra` field is a `\n`-joined sorted concatenation (string, not
-//     []string, because slice fields disqualify a struct from being a
-//     map key per D34). `NewFlagSet` is the only sanctioned builder;
-//     direct literals are legal but skipping the sort is a defect.
+// Language is a string newtype so the parser tag (cpp/proto/go/py/java)
+// flows through as one token. PlatformID is a string newtype identical to
+// on-disk node.platform. FlagSet is a comparable-by-value typed bag whose
+// Extra field is a `\n`-joined sorted concatenation (string, not []string,
+// because slice fields disqualify a struct from being a map key);
+// NewFlagSet enforces the sort discipline.
 
 import (
 	"sort"
 	"strings"
 )
 
-// Language is the parser-level tag identifying which rule emitter a
-// module's ya.make routes through. M2 only exercises LangCPP; the
-// other constants are reserved so the addressing scheme is forward-
-// compatible with M5+ language polymorphism (D35).
+// Language is the parser-level tag picking which rule emitter a module
+// routes through. Only LangCPP is exercised today; the other constants
+// reserve forward-compatibility for language polymorphism.
 type Language string
 
 const (
@@ -57,12 +41,8 @@ const (
 	OSWindows OS = "windows"
 )
 
-// ISA names the instruction-set architecture axis of a Platform.
-// Independent of OS — `default-linux-x86_64`, `default-darwin-x86_64`
-// and `default-windows-x86_64` all share ISAX8664. Keeping them as
-// separate enums avoids the combinatorial explosion of a single
-// `<OS>-<ISA>` enum and lets emitters branch on the axis they
-// actually care about.
+// ISA names the instruction-set axis, independent of OS. Separate from OS
+// avoids the combinatorial explosion of a single `<OS>-<ISA>` enum.
 type ISA string
 
 const (
@@ -71,10 +51,9 @@ const (
 	ISAArm64   ISA = "arm64"
 )
 
-// PlatformID is the on-disk `node.platform` string verbatim, composed
-// from an OS + ISA pair via MakePlatformID. The two canonical M2
-// values match the reference graph's `default-linux-aarch64` (target)
-// and `default-linux-x86_64` (host).
+// PlatformID is the on-disk `node.platform` string, composed via
+// MakePlatformID from an OS + ISA pair. Reference values include
+// `default-linux-aarch64` and `default-linux-x86_64`.
 type PlatformID string
 
 // MakePlatformID composes the canonical `default-<os>-<isa>` form.
@@ -87,16 +66,12 @@ var (
 	PlatformDefaultLinuxX8664   = MakePlatformID(OSLinux, ISAX8664)
 )
 
-// FlagSet is the per-instance flag bag. Booleans capture the M2 macro
+// FlagSet is the per-instance flag bag. Booleans capture the macro
 // vocabulary (NO_LIBC / NO_UTIL / NO_RUNTIME / NO_PLATFORM /
 // NO_COMPILER_WARNINGS) plus the host/target axis (PIC = host build).
-// `IsCpp` is the per-source language tag the macro evaluator (PR-25)
-// will set; PR-23 only constructs C-language instances.
-//
-// `Extra` is reserved for ADDINCL/CFLAGS digests in M5. PR-23 leaves
-// it nil/empty; `NewFlagSet` enforces the sort discipline so future
-// equality checks (memo lookup) are stable regardless of declaration
-// order.
+// IsCpp is the per-source language tag; Extra reserves space for
+// ADDINCL/CFLAGS digests. NewFlagSet enforces sort discipline so
+// equality checks stay stable regardless of declaration order.
 type FlagSet struct {
 	NoLibc             bool
 	NoUtil             bool
@@ -105,35 +80,22 @@ type FlagSet struct {
 	NoCompilerWarnings bool
 	IsCpp              bool
 	PIC                bool
-	// LibcMusl marks an instance as a member of the musl-libc subtree
-	// (PR-32 D02). It is the dispatch key for the musl flavours of
-	// EmitCC's composer pick (replaces the old path-prefix test
-	// `instance.Path == "contrib/libs/musl" || HasPrefix(...musl/)`).
-	// Today seeded heuristically by `inferFlagsFromPath` for any path
-	// at or under `contrib/libs/musl`; M5+ will replace the heuristic
-	// with macro-driven inference (parsing NO_PLATFORM + SET(MUSL no)
-	// in the ya.make).
+	// LibcMusl marks an instance as a member of the musl-libc subtree;
+	// dispatch key for the musl flavours of EmitCC. Seeded heuristically
+	// by inferFlagsFromPath today; macro-driven inference (NO_PLATFORM +
+	// SET(MUSL no)) will eventually replace the path heuristic.
 	LibcMusl bool
-	// Extra carries opaque per-instance digests that two
-	// ModuleInstances with otherwise-equal fields use to
-	// disambiguate. Stored as a `\n`-joined sorted token
-	// concatenation rather than a `[]string` because Go does not
-	// allow slice-typed fields in a struct used as a map key.
-	// Populate via NewFlagSet to ensure the sort discipline; PR-23
-	// leaves it empty for every instance, M5's ADDINCL/CFLAGS
-	// digest will start writing real tokens.
+	// Extra carries opaque per-instance digests as a `\n`-joined sorted
+	// token concatenation (slice fields would disqualify the struct from
+	// being a map key). Populate via NewFlagSet to keep the sort stable.
 	Extra string
 }
 
-// NewFlagSet returns a FlagSet whose `Extra` field is the
-// `\n`-joined sorted concatenation of the caller's varargs. The
-// caller assigns the boolean fields on the returned struct directly.
-//
-// Why a joined string instead of `[]string`: slice fields
-// disqualify a struct from being a map key, and ModuleInstance MUST
-// be a map key (D34 — `genCtx.memo: map[ModuleInstance]...`). The
-// `\n` separator is safe because flag tokens never contain
-// newlines.
+// NewFlagSet returns a FlagSet whose Extra is the `\n`-joined sorted
+// concatenation of the varargs. The caller assigns boolean fields directly.
+// Joined string (not []string) because slice fields would disqualify
+// ModuleInstance from being a map key; `\n` is safe because flag tokens
+// never contain newlines.
 func NewFlagSet(extra ...string) FlagSet {
 	if len(extra) == 0 {
 		return FlagSet{}
@@ -145,16 +107,11 @@ func NewFlagSet(extra ...string) FlagSet {
 	return FlagSet{Extra: strings.Join(e, "\n")}
 }
 
-// ModuleInstance is the comparable-by-value identity of one rule-
-// emission target (D30). Walker memoisation, cycle detection, and
-// host-tool recursion all key on this struct.
-//
-// PR-M3-platform-pair-step12: `Platform *Platform` replaces the old
-// `Target PlatformID`. The pointer is one of the two singletons the
-// CLI constructs (host or target) — pointer equality is well-defined
-// and ModuleInstance remains a valid map key. Emitters read the
-// rendering data through `instance.Platform.{Target,IsHost,Tags,Flags}`
-// and no longer take a separate `targetP` argument.
+// ModuleInstance is the comparable-by-value identity of one rule-emission
+// target. Walker memoisation, cycle detection, and host-tool recursion all
+// key on this struct. Platform is one of the two CLI-constructed singletons
+// (host or target) — pointer equality is well-defined and ModuleInstance
+// remains a valid map key.
 type ModuleInstance struct {
 	Path     string
 	Language Language
@@ -162,21 +119,12 @@ type ModuleInstance struct {
 	Flags    FlagSet
 }
 
-// NewToolInstance builds a fresh ModuleInstance addressing a host-platform
-// tool at `path`. Flags are inferred from `path` (via inferFlagsFromPath)
-// so the tool's own ya.make properties — not the caller's — drive
-// dispatch. `lang` carries over from the caller because language is a
-// rule-engine selector, not a per-module fact (every tool routed today
-// is LangCPP).
-//
-// This replaces the older `instance.WithHost(host) + instance.Path = path`
-// pattern, which copied the surrounding module's Flags before swapping
-// in the tool path and so produced an instance whose Flags described
-// the WRONG ya.make. Latently inert for current M2/M3 closures (the
-// only paths inferFlagsFromPath special-cases are build/cow/on and
-// contrib/libs/musl/*; tools fall through to FlagSet{PIC: true}),
-// but a real correctness hazard the moment a tool ever sits under one
-// of those prefixes.
+// NewToolInstance builds a ModuleInstance for a host-platform tool at
+// `path`. Flags are inferred from path (via inferFlagsFromPath) so the
+// tool's own ya.make properties — not the caller's — drive dispatch.
+// `lang` carries over because language is a rule-engine selector, not a
+// per-module fact. The older "swap path on a copied instance" pattern
+// produced instances whose Flags described the wrong ya.make.
 func NewToolInstance(host *Platform, path string, lang Language) ModuleInstance {
 	return ModuleInstance{
 		Path:     path,
@@ -200,19 +148,10 @@ func (mi ModuleInstance) String() string {
 	return b.String()
 }
 
-// inferFlagsFromPath is the M2 stopgap that derives a FlagSet from a
-// module path alone, without parsing the module's ya.make. PR-25
-// replaces this with macro-driven inference (NO_LIBC / NO_UTIL / etc.
-// from the parsed UnknownStmt set). For PR-23 the heuristic is
-// sufficient because the only modules walked end-to-end are the
-// build/cow/on leaf (M1 acceptance) and the synthetic test fixtures
-// (which never hit the heuristic — Gen calls inferFlagsFromPath only
-// on the seed instance, and tests construct their own ModuleInstance
-// directly).
-//
-// The `isPIC` parameter threads the host/target axis from the caller
-// (Gen seeds target = false; future host-tool recursion will seed
-// host = true).
+// inferFlagsFromPath is the path-only stopgap that derives a FlagSet
+// without parsing the module's ya.make. Replacement: macro-driven
+// inference from the parsed UnknownStmt set. isPIC threads the
+// host/target axis from the caller (target = false; host = true).
 func inferFlagsFromPath(path string, isPIC bool) FlagSet {
 	fs := FlagSet{PIC: isPIC}
 
@@ -222,20 +161,17 @@ func inferFlagsFromPath(path string, isPIC bool) FlagSet {
 		fs.NoRuntime = true
 	}
 
-	// PR-32 D02: musl-prefix path heuristic doubles as the M2-stopgap
-	// seed for `Flags.LibcMusl`. The path test is the SOLE remaining
-	// musl-path-prefix dispatch in the codebase — every other call
-	// site reads `Flags.LibcMusl` instead. Documented removable in
-	// M5+ when ya.make-driven flag inference (parsing NO_PLATFORM +
-	// path-conditional SET(MUSL no) etc.) replaces this heuristic.
+	// Musl-prefix path heuristic seeds Flags.LibcMusl. This is the SOLE
+	// remaining musl-path-prefix dispatch in the codebase — every other
+	// call site reads Flags.LibcMusl instead. Removable once ya.make-
+	// driven flag inference (NO_PLATFORM + path-conditional SET(MUSL no))
+	// lands.
 	//
-	// PR-39: contrib/libs/musl/full is a normal LIBRARY (ya.make has
-	// SET(MUSL no)) that bridges the musl ABI to glibc — it must NOT
-	// receive the musl CC bundle. It still carries NO_LIBC/NO_UTIL/
-	// NO_RUNTIME (keeping effectiveNoPlatform=true to suppress default
-	// peer injection); only LibcMusl is withheld so the CC dispatch
-	// routes to composeTargetCC. TODO: remove when SET() parsing
-	// lands in M3+.
+	// contrib/libs/musl/full is a LIBRARY (ya.make has SET(MUSL no)) that
+	// bridges the musl ABI to glibc — it must NOT receive the musl CC
+	// bundle. It still carries NO_LIBC/NO_UTIL/NO_RUNTIME (keeping
+	// effectiveNoPlatform=true to suppress default peer injection); only
+	// LibcMusl is withheld so the CC dispatch routes to composeTargetCC.
 	if path == "contrib/libs/musl" || strings.HasPrefix(path, "contrib/libs/musl/") {
 		fs.NoLibc = true
 		fs.NoUtil = true

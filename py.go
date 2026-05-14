@@ -4,31 +4,17 @@ import "strings"
 
 // py.go — emitter helpers for PY (Python) source-compilation nodes.
 //
-// Two PY sub-shapes exist in the reference graph (sg2.json):
+// yapyc3 shape: .py.yapyc3 / .py.3kp2.yapyc3 bytecode via tools/py3cc, driven
+// by PY_SRCS() in PY3_LIBRARY / PY23_LIBRARY. cmd_args:
+//   [py3cc, --slow-py3cc, slow_py3cc, <modulePath>/<srcRel>-,
+//    $(S)/<path>/<src>, $(B)/<output>]
+// Output suffix: flat src → .py.yapyc3; subdir src → .py.3kp2.yapyc3.
+// The show_out/objcopy RESOURCE shape is handled elsewhere.
 //
-//  1. yapyc3 shape (536 nodes, no show_out flag):
-//     Produces `.py.yapyc3` or `.py.3kp2.yapyc3` bytecode files by
-//     invoking the host `tools/py3cc` binary. Driven by PY_SRCS()
-//     declarations in PY3_LIBRARY / PY23_LIBRARY modules.
-//     cmd_args: [py3cc_binary, --slow-py3cc, slow_py3cc_binary,
-//                <modulePath>/<srcRel>-, $(S)/<path>/<src>,
-//                $(B)/<output>]
-//     Output suffix: flat src (no `/`) → `.py.yapyc3`;
-//                    subdir src (has `/`) → `.py.3kp2.yapyc3`.
-//
-//  2. show_out / objcopy shape (127 nodes, show_out=yes):
-//     RESOURCE-based Python embedding; emitted by build/scripts/objcopy.py.
-//     Deferred to a later PR — not handled here.
-//
-// Binary path canonicalization:
-//   tools/py3cc/bin/ya.make declares PROGRAM(py3cc) with SRCDIR(tools/py3cc).
-//   Walking tools/py3cc/bin produces an LD node at
-//   $(B)/tools/py3cc/bin/py3cc, but the reference graph's yapyc3
-//   nodes invoke py3cc at the canonical parent path
-//   $(B)/tools/py3cc/py3cc.  canonicalizePy3ccBinaryPath rewrites
-//   the /bin/ subpath back to the canonical location so cmd_args[0] matches
-//   the reference byte-exact.  Same pattern as canonicalizeRagel6BinaryPath
-//   in r6.go.
+// Binary canonicalization: tools/py3cc/bin LD lands at
+// $(B)/tools/py3cc/bin/py3cc, but reference yapyc3 nodes invoke
+// $(B)/tools/py3cc/py3cc — canonicalizePy3ccBinaryPath rewrites the /bin/
+// segment. Same pattern as canonicalizeRagel6BinaryPath in r6.go.
 
 const (
 	py3ccBinSubpath   = "$(B)/tools/py3cc/bin/"
@@ -57,42 +43,23 @@ func canonicalizePy3ccBinaryPath(p string) string {
 // (the RUN_PROGRAM that pickles them feeds both sources to stage0pycc).
 const runtimePy3ModulePath = "library/python/runtime_py3"
 
-// runtimePy3CCExtraInputs returns the additional CC-input set the
-// reference graph attaches to CC nodes that compile __res.cpp /
-// sitecustomize.cpp in the runtime_py3 module. Returns nil for any
-// other (module, source) pair so the helper is scoped tightly.
+// runtimePy3CCExtraInputs returns extra CC inputs for __res.cpp /
+// sitecustomize.cpp in library/python/runtime_py3. The runtime_py3 pipeline
+// pickles __res.py/sitecustomize.py into .pyc and ARCHIVE-embeds them as
+// .pyc.inc headers under $(B)/library/python/runtime_py3/; each C++ wrapper
+// CC then carries the .pyc.inc and both .py sources as scanner-resolved
+// inputs, even though only the .pyc.inc is textually #included. Mirroring
+// this keeps the libpy3library-python-runtime_py3.{a,global.a} AR closure
+// byte-shape-correct.
 //
-// The runtime_py3 ya.make pipeline is:
-//   - PY_SRCS(entry_points.py) → yapyc3 output
-//   - RUN_PROGRAM(stage0pycc … IN __res.py sitecustomize.py …)
-//     pickles __res.py and sitecustomize.py into __res.pyc /
-//     sitecustomize.pyc
-//   - ARCHIVE(NAME __res.pyc.inc DONTCOMPRESS __res.pyc) embeds the
-//     pickle as a C array header `__res.pyc.inc` under $(B)/
-//     library/python/runtime_py3/
-//   - SRCS(__res.cpp sitecustomize.cpp GLOBAL runtime_reg_py3.cpp)
-//     compile the C++ wrappers that #include the .pyc.inc headers
+// pySrcsARExtraInputs returns the extra AR-input set for PY*_LIBRARY
+// modules whose ya.make declares PY_SRCS and/or RESOURCE_FILES. Each entry
+// flows through build/scripts/objcopy.py; the script and source paths land
+// in the AR multiset because AR unions member-compile inputs.
 //
-// As a result, each CC node carries the .pyc.inc header (BUILD_ROOT
-// path) and the two PY_SRCS-input python source paths as scanner-
-// resolved inputs even though only the .pyc.inc is in the textual
-// include chain. Mirroring this here keeps the AR closure
-// (libpy3library-python-runtime_py3.{a,global.a}) byte-shape-correct
-// against the reference graph.
-// pySrcsARExtraInputs returns the additional AR-input set the reference
-// graph attaches to the regular .a / .global.a of every PY*_LIBRARY
-// whose ya.make declares PY_SRCS and/or RESOURCE_FILES. Each PY_SRCS or
-// RESOURCE_FILES entry flows into the module's objcopy emitter via
-// build/scripts/objcopy.py; both the script and the source paths land
-// in the AR's input multiset because the AR pulls the union of its
-// member compiles' inputs.
-//
-// modulePath is the module's canonical $(B)-relative path.
-// srcDir is the SRCDIR(...) setting (empty when none). pySrcs is the
-// declaration-ordered list of PY_SRCS entries from the ya.make.
-// resourcePaths is the list of RESOURCE/RESOURCE_FILES source path
-// entries (non-kv-only). Returns nil when neither input contributes
-// any extras.
+// modulePath: canonical $(B)-relative path. srcDir: SRCDIR() (empty when
+// none). pySrcs / resourcePaths: declaration-ordered macro args. Returns
+// nil when nothing contributes.
 func pySrcsARExtraInputs(modulePath, srcDir string, pySrcs, resourcePaths []string) []VFS {
 	if len(pySrcs) == 0 && len(resourcePaths) == 0 {
 		return nil

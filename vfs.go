@@ -7,18 +7,13 @@ import (
 
 // vfs.go — typed VFS path.
 //
-// A `VFS` value addresses a file in one of two virtual roots — SOURCE_ROOT
-// (the source tree) or BUILD_ROOT (the build-output tree) — by its
-// root-relative path. The previous codebase carried these as plain
-// `"$(S)/<rel>"` / `"$(B)/<rel>"` strings, which forced
-// a string concat at every construction site (4.7M allocations per M3
-// run, profiled as the #1 alloc hotspot) and lost type information at
-// the boundary between scanner / emitter / serializer.
-//
-// VFS is a comparable struct, so it works as a map key and as a struct
-// field. Materialisation to the on-disk JSON string happens only at
-// the serializer boundary (`gjson_write.go`) and at the os.Stat
-// boundary inside the scanner.
+// A VFS value addresses a file in one of two virtual roots (SOURCE_ROOT /
+// BUILD_ROOT) by its root-relative path. Replaces the prior plain
+// "$(S)/<rel>" / "$(B)/<rel>" string carry, which cost 4.7M allocations per
+// run (#1 alloc hotspot) and lost type info at scanner/emitter/serializer
+// boundaries. The struct is comparable (map key / struct field);
+// materialisation happens only at the serializer boundary (gjson_write.go)
+// and the os.Stat boundary in the scanner.
 
 // VFSRoot identifies which root a `VFS` is anchored under.
 type VFSRoot uint8
@@ -173,25 +168,13 @@ func ToVFSSlice(ss []string) []VFS {
 	return out
 }
 
-// VFSMap is a two-bucket map keyed by VFS that dispatches on `Root`
-// (Source → bucket 0, Build → bucket 1) and stores values under the
-// rel-string portion. Compared to `map[VFS]T`, lookups go through
-// Go's `mapaccess2_faststr` fast path (specialised for `map[string]T`)
-// instead of the generic struct-keyed path which calls
-// `type:.hash.main.VFS` via an indirect type descriptor and pays a
-// ~2.5–2.8× per-op penalty in the scanner DFS hot loop (verified
-// against PR-M3-vfs-deep regression profiles, `walkSubgraph.func1`:
-// 373ms faststr → 1047ms generic for the same workload).
-//
-// Generic Go specialises one map per instantiation; the bench
-// (`BenchmarkMapAccess_VFS2Bucket_Generic` vs
-// `BenchmarkMapAccess_VFS2Bucket_NonGeneric`) shows 0% overhead vs
-// hand-rolled, and 9.1 ns/op beats both `map[VFS]T` (11.9 ns/op) and
-// `map[string]T` keyed by the materialised "$(ROOT)/<rel>" form
-// (10.6 ns/op).
-//
-// The two buckets are exposed as a [2]-array so callers can range
-// them deterministically when needed.
+// VFSMap is a two-bucket map keyed by VFS (Source → 0, Build → 1) that
+// stores values under the rel-string. Routes lookups through Go's
+// mapaccess2_faststr (specialised for map[string]T) instead of the generic
+// struct-keyed path — 2.5–2.8× faster in scanner DFS hot loops (profiled
+// 373ms faststr vs 1047ms generic on the same workload; bench at 9.1 ns/op
+// beats map[VFS]T at 11.9 and map[string]T-on-materialised at 10.6). The
+// two buckets are exposed as a [2]-array so callers can range deterministically.
 type VFSMap[T any] [2]map[string]T
 
 // NewVFSMap constructs a VFSMap with each bucket pre-sized to `cap`.

@@ -20,31 +20,20 @@ import (
 
 // make.go — `yatool make` subcommand.
 //
-// Pipelined Gen → Exec: as the in-memory emitter finalises each Node
-// (UID + Deps resolved, dep-first order), we hand it to an executor
-// that schedules a goroutine per node. Each node's goroutine waits on
-// its dep-futures, then runs the node's cmds. Leaf nodes start
-// executing as soon as they arrive — well before Gen produces the
-// roots. The full materialised `[]*Node` is never assembled.
+// Pipelined Gen → Exec: as the emitter finalises each Node (UID + Deps
+// resolved, dep-first order), it goes to an executor that schedules a
+// goroutine per node. Each node's goroutine waits on its dep-futures,
+// then runs the node's cmds. Leaf nodes start executing as soon as they
+// arrive — the full materialised []*Node is never assembled.
 //
-// Architecture ported from the early `gg/ya.go` (handleMake + Executor
-// + Cache + Future), refitted to:
-//   - operate on typed `*Node` (no JSON round-trip);
-//   - consume nodes streaming via FinalizeStream rather than from a
-//     fully-built `[]Node` slice;
-//   - drop the genConfFor / genGraphFor subprocess path (we generate
-//     in-process) and the merge(target, host) pass (we emit a single
-//     graph).
-//
-// Cache layout matches the gg layout so the on-disk artefacts stay
-// usable side-by-side with old builds:
-//   <BldRoot>/cas/<sha256> — content-addressed stored output blobs
+// Cache layout matches the legacy gg layout so on-disk artefacts stay
+// usable side-by-side:
+//   <BldRoot>/cas/<sha256> — content-addressed output blobs
 //   <BldRoot>/uid/<uid>    — per-node meta JSON: {output → cas path}
 
-// makeFlags captures every CLI option `yatool make` accepts. The flag
-// set mirrors the gg/ya.go handleMake getopt grammar — the original
-// short letters survive as a Go-flag-style long name (the stdlib flag
-// package doesn't grok single-dash multi-char clusters).
+// makeFlags captures every CLI option `yatool make` accepts. Mirrors the
+// legacy handleMake getopt grammar; the original short letters survive
+// as Go-flag long names (stdlib flag rejects single-dash multi-char).
 type makeFlags struct {
 	srcRoot     string
 	bldRoot     string
@@ -65,10 +54,9 @@ type makeFlags struct {
 	verbose     bool
 }
 
-// cmdMake parses CLI args, runs Gen (target axis only — host walks
-// recurse implicitly during Gen), and pipes the resulting node stream
-// into the executor. Exit code 0 on success; throws on any subcommand
-// failure so main()'s top-level Catch prints + exits non-zero.
+// cmdMake parses CLI args, runs Gen (host walks recurse implicitly), and
+// pipes the resulting node stream into the executor. Exit 0 on success;
+// throws on any subcommand failure so main's Catch prints + exits non-zero.
 func cmdMake(args []string) int {
 	mf := parseMakeFlags(args)
 
@@ -119,18 +107,14 @@ func cmdMake(args []string) int {
 	targetFlags["PIC"] = "no"
 	targetP := NewPlatform(tOS, tISA, targetFlags, nil, false)
 
-	// `-j 0` is the no-exec mode: Gen runs but no subprocesses fire.
-	// Inside this branch:
-	//   - `-G` dumps the resulting graph as stable JSON via the
-	//     buffered emitter (byte-exact match for `yatool gen --out -`).
-	//   - without `-G`, Gen streams to a discard sink — a smoke test
-	//     for the streaming pipeline itself.
+	// `-j 0` is no-exec mode (Gen runs, no subprocesses):
+	//   - with `-G`: dump the graph as stable JSON (byte-exact match
+	//     for `yatool gen --out -`).
+	//   - without `-G`: Gen streams to a discard sink (smoke test).
 	onWarn := func(w Warn) {
 		// Unresolved includes are a build-stopping error by default —
-		// they signal a real resolver gap and should not silently
-		// produce a graph with missing input edges. `--keep-going`
-		// downgrades them to a warning (still surfaced under
-		// `--verbose`).
+		// they signal a real resolver gap. `--keep-going` downgrades
+		// them to a warning (surfaced under `--verbose`).
 		if w.Kind == WarnMissingInclude && !mf.keepGoing {
 			ThrowFmt("%s: %s", w.Kind, w.Message)
 		}
@@ -169,11 +153,10 @@ func cmdMake(args []string) int {
 	return 0
 }
 
-// genStream runs our in-process Gen for each target and streams the
-// finalized nodes to onNode. Returns the union of root UIDs across
-// every target. Targets are emitted serially today; the executor
-// inside makes the cost of one target's emission overlap with the
-// previous target's execution.
+// genStream runs in-process Gen for each target and streams finalized
+// nodes to onNode. Returns the union of root UIDs. Targets run serially;
+// the executor overlaps one target's emission with the previous one's
+// execution.
 func genStream(srcRoot string, targets []string, hostP, targetP *Platform, onNode func(*Node), onWarn func(Warn)) []string {
 	all := []string{}
 
@@ -225,12 +208,11 @@ func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool) *executor
 	}
 }
 
-// onNode registers a freshly-finalized Node with the executor and
-// spawns its future-runner so leaf nodes start compiling while Gen is
-// still emitting parents up the topological order. The goroutine
-// blocks inside visit→execute on its deps; deps are guaranteed to be
-// registered first (the streaming emitter yields dep-first) so each
-// dep.once handle the future-runner consults is already in byUID.
+// onNode registers a freshly-finalized Node and spawns its future-runner
+// so leaves start compiling while Gen is still emitting parents. The
+// goroutine blocks inside visit→execute on its deps; the streaming
+// emitter yields dep-first, so every dep is registered in byUID before
+// the parent looks it up.
 func (ex *executor) onNode(n *Node) {
 	f := &nodeFuture{node: n}
 

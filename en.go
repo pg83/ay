@@ -2,28 +2,14 @@ package main
 
 // en.go — emitter for EN (enum serialization) nodes.
 //
-// EN nodes are emitted for GENERATE_ENUM_SERIALIZATION,
-// GENERATE_ENUM_SERIALIZATION_WITH_HEADER, and
-// GENERATE_ENUM_SERIALIZATION_NOUTF macro invocations. Each
-// declaration produces one EN node that runs enum_parser over
-// the named header, producing a _serialized.cpp and (with
-// _WITH_HEADER) a _serialized.h.
+// One EN node per GENERATE_ENUM_SERIALIZATION[_WITH_HEADER|_NOUTF] macro
+// invocation; runs enum_parser over the named header, producing
+// _serialized.cpp and (with _WITH_HEADER) _serialized.h.
 //
-// PR-M3-D scope: emit EN nodes with the correct cmd_args shape,
-// sandboxing, foreign_deps.tool, and deps on the enum_parser
-// host LD. Cross-EN header-inclusion deps (where one EN's
-// serialized .h is listed in another EN's inputs/deps) are
-// tracked via genCtx.enOutputs and wired at emit time.
-//
-// cmd_args shape:
-//   [enumParserBinary, $(S)/<path>/<header>.h,
-//    --include-path, <path>/<header>.h,
-//    --output, $(B)/<path>/<header>.h_serialized.cpp
-//    [--header, $(B)/<path>/<header>.h_serialized.h]]
-//
-// inputs shape:
-//   [dep-EN-outputs..., enumParserBinary,
-//    $(S)/<path>/<header>.h, ...headerIncludeClosure]
+// cmd_args: [enumParserBin, $(S)/<hdr>, --include-path, <hdr>,
+//            --output, $(B)/<hdr>_serialized.cpp,
+//            [--header, $(B)/<hdr>_serialized.h]]
+// inputs: [dep-EN-outputs..., enumParserBin, $(S)/<hdr>, ...includeClosure]
 
 // enumParserBinary is the canonical invocation path for the
 // enum_parser host binary. Used in cmd_args[0] and inputs.
@@ -32,30 +18,12 @@ var (
 	enumParserBinaryPath = enumParserBinaryVFS.String()
 )
 
-// EmitEN emits one EN node for a GENERATE_ENUM_SERIALIZATION(*)
-// invocation.
-//
-//   - instance: the module that declared the macro (provides
-//     Platform and module_dir).
-//   - headerSrc: the source-rooted header VFS. Its Rel
-//     (= instance.Path + "/" + macro-arg) drives the serialized
-//     output paths and the --include-path cmd arg.
-//   - withHeader: true when the macro variant is
-//     _WITH_HEADER (adds --header + produces .h output).
-//   - enumParserLD: NodeRef of the tools/enum_parser/enum_parser
-//     host LD node; may be zero when the host walk failed.
-//   - enumParserBin: $(B)-rooted path to the binary
-//     (falls back to enumParserBinaryPath when walk succeeded but
-//     the path is the same canonical form).
-//   - depENRefs: NodeRefs of EN nodes whose outputs are inputs to
-//     this EN node (cross-EN serialized header deps). May be empty.
-//   - depENOutputs: the output paths of those dep EN nodes, in
-//     the same order as depENRefs. These become the leading entries
-//     in this node's inputs slice.
-//   - headerIncludeClosure: SOURCE_ROOT-absolute paths of headers
-//     transitively included by headerSrc (from the include scanner).
-//
-// Returns the emitted NodeRef and the list of output paths (1 or 2).
+// EmitEN emits one EN node for a GENERATE_ENUM_SERIALIZATION(*) invocation.
+// headerSrc.Rel drives serialized output paths and --include-path.
+// withHeader adds --header + .h output. enumParserLD may be zero when the
+// host walk failed. depENRefs/depENOutputs wire cross-EN serialized-header
+// deps; headerIncludeClosure is the include-scanner result for headerSrc.
+// Returns NodeRef and output paths (1 or 2).
 func EmitEN(
 	instance ModuleInstance,
 	headerSrc VFS,

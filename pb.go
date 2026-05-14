@@ -9,39 +9,13 @@ import (
 
 // pb.go — emitter for PB (Protocol Buffers compile) nodes.
 //
-// EmitPB emits one PB node per .proto source in a PROTO_LIBRARY.
-// Each node invokes cpp_proto_wrapper.py (a Python wrapper) which
-// calls protoc with the cpp_styleguide plugin. The wrapper and both
-// tool binaries come from contrib/tools/protoc (host programs).
+// One PB node per .proto in a PROTO_LIBRARY. Invokes cpp_proto_wrapper.py
+// driving protoc + cpp_styleguide plugin (both from contrib/tools/protoc).
 //
-// Reference shape (18 cmd_args, verified against sg2.json):
-//
-//	/ix/realm/pg/bin/python3
-//	$(S)/build/scripts/cpp_proto_wrapper.py
-//	--outputs <.pb.h> <.pb.cc>
-//	--
-//	$(B)/contrib/tools/protoc/protoc
-//	-I=./ -I=$(S)/ -I=$(B) -I=$(S)
-//	-I=$(S)/contrib/libs/protobuf/src
-//	-I=$(B) -I=$(S)/contrib/libs/protobuf/src
-//	--cpp_out=:$(B)/
-//	--cpp_styleguide_out=:$(B)/
-//	--plugin=protoc-gen-cpp_styleguide=<cpp_styleguide_binary>
-//	<module_dir/proto_file>
-//
-// inputs = [cpp_styleguide_binary, protoc_binary, cpp_proto_wrapper.py,
-//           $(S)/<module_dir>/<src>,
-//           optionally $(S)/contrib/libs/protobuf/src/google/protobuf/descriptor.proto]
-//
-// descriptor.proto is included in inputs when the .proto source imports
-// "google/protobuf/descriptor.proto" (detected by scanning the source
-// file for that import string).
-//
-// foreign_deps / deps both carry [cpp_styleguide_LD_ref, protoc_LD_ref]
-// (two tool refs; the order matches the reference graph's uid list).
-//
-// tags: ["tool"] when platform == x86_64 (host build), [] otherwise.
-// target_properties: module_dir (always) + module_tag:"cpp_proto" (always).
+// inputs = [cpp_styleguide, protoc, cpp_proto_wrapper.py, $(S)/<src>,
+//           descriptor.proto?] — descriptor.proto when the source imports it.
+// deps and foreign_deps["tool"] both carry [cpp_styleguide_LD, protoc_LD].
+// target_properties: module_dir + module_tag:"cpp_proto".
 
 const (
 	// Tool module paths for host-walk recursion.
@@ -53,13 +27,11 @@ const (
 	// Source() at use-site to produce the VFS.
 	pbRuntimeBase = "contrib/libs/protobuf/src/"
 
-	// abslTstringBase is the SOURCE_ROOT-relative prefix for
-	// abseil-cpp-tstring headers. The protobuf runtime transitively
-	// reaches a large abseil-cpp-tstring closure via `port_def.inc →
-	// y_absl/strings/string_view.h → ...`; consumer PROTO_LIBRARYs do
-	// not peer abseil-cpp-tstring themselves (it is an internal
-	// protobuf-runtime dependency), so the scanner cannot resolve
-	// `y_absl/...` includes without pre-resolved EmitsIncludes.
+	// abslTstringBase is the SOURCE_ROOT prefix for abseil-cpp-tstring
+	// headers, reached transitively from the protobuf runtime via
+	// `port_def.inc → y_absl/strings/string_view.h → …`. Consumer
+	// PROTO_LIBRARYs do not peer abseil themselves; the scanner cannot
+	// resolve y_absl/... without pre-resolved EmitsIncludes.
 	abslTstringBase = "contrib/restricted/abseil-cpp-tstring/"
 )
 
@@ -78,12 +50,10 @@ var (
 	pbDescriptorProto   = pbDescriptorVFS.String()
 )
 
-// protobufRuntimeHeaders is the set of headers that every protoc-generated
-// .pb.h directly #includes (verified by reading any.pb.h, duration.pb.h,
-// timestamp.pb.h, etc.). These are registered as EmitsIncludes on the .pb.h
-// output so the scanner closure propagates them into all CC nodes that
-// include the .pb.h. Scanner recursion then finds their transitive includes.
-// Sorted lexicographically.
+// protobufRuntimeHeaders is the set every protoc-generated .pb.h directly
+// #includes. Registered as EmitsIncludes on the .pb.h so the scanner
+// closure propagates them into every CC that includes the .pb.h; scanner
+// recursion finds their transitive includes. Sorted lex.
 var protobufRuntimeHeaders = []VFS{
 	Source(pbRuntimeBase + "google/protobuf/arena.h"),
 	Source(pbRuntimeBase + "google/protobuf/arenastring.h"),
@@ -99,14 +69,11 @@ var protobufRuntimeHeaders = []VFS{
 	Source(pbRuntimeBase + "google/protobuf/unknown_field_set.h"),
 }
 
-// pbDescriptorImporterHeaders are the protobuf runtime headers that appear in
-// CC consumers of any .pb.h whose source proto imports
-// "google/protobuf/descriptor.proto". These pull in the
-// map/reflection_ops cluster that protoc emits in the reflection metadata for
-// extension-bearing protos (verified by intersecting the inputs of every
-// descriptor.proto-importing .pb.h's CC consumer in sg2.json — see
-// docs/drafts/20260512-0200-residue-pre-100pct.md §2 lever #1).
-// Sorted lexicographically.
+// pbDescriptorImporterHeaders are the protobuf runtime headers in CC
+// consumers of any .pb.h whose source proto imports
+// "google/protobuf/descriptor.proto". Pull in the map/reflection_ops
+// cluster protoc emits in reflection metadata for extension-bearing
+// protos. Sorted lex.
 var pbDescriptorImporterHeaders = []VFS{
 	Source(pbRuntimeBase + "google/protobuf/generated_message_bases.h"),
 	Source(pbRuntimeBase + "google/protobuf/map_entry.h"),
@@ -117,32 +84,18 @@ var pbDescriptorImporterHeaders = []VFS{
 	Source(pbRuntimeBase + "google/protobuf/reflection_ops.h"),
 }
 
-// pbCcDeepRuntimeHeaders is the deep protobuf+abseil transitive header set that
-// every protoc-generated .pb.cc transitively reaches via #include closure.
-// Verified by diffing the REF inputs of `library/cpp/eventlog/proto/internal.pb.cc.o`
-// (and four sibling .pb.cc.o nodes) against our emitted set.
+// pbCcDeepRuntimeHeaders is the deep protobuf+abseil transitive set every
+// protoc-generated .pb.cc reaches. Registered as EmitsIncludes on the
+// .pb.cc output ONLY — NOT on the .pb.h: .pb.h is consumed by ~100
+// non-protobuf CC nodes that must not inherit the abseil closure;
+// .pb.cc has exactly one CC consumer per file, so the closure is
+// tightly scoped.
 //
-// PR-M3-proto-abseil-pb-cc-closure: registered as EmitsIncludes on the .pb.cc
-// output ONLY — NOT on the .pb.h. The .pb.h is consumed by every CC node that
-// includes any .pb.h (broad), whereas the .pb.cc is consumed by exactly the
-// single CC compile node for that .pb.cc.o (narrow). Registering on .pb.h
-// over-emits these headers onto 100+ non-protobuf CC consumers (the prior
-// reverted commit 870d43d caused L2 -1.05pp via that path). Registering on
-// .pb.cc keeps the closure scoped to the .pb.cc.o consumer alone.
-//
-// The set spans two groups:
-//
-//  1. The deep protobuf transitive set reached via port_def.inc and the core
-//     message/runtime chain — descriptor.h, parse_context.h, map.h,
-//     wire_format*.h, stubs/*, etc. (42 entries).
-//  2. The full 145-entry abseil-cpp-tstring transitive closure reached via
-//     port_def.inc → y_absl/strings/string_view.h → ... The per-file libcxx
-//     #includes inside each y_absl header resolve through the consumer's own
-//     libcxx language-default peer (scanner DFS walks parseIncludes for
-//     SOURCE_ROOT paths, so libcxx <vector>/<string>/... discovery is
-//     automatic once the abseil headers are walkable).
-//
-// Sorted lexicographically.
+// Group 1: deep protobuf set via port_def.inc + message/runtime chain
+// (descriptor.h, parse_context.h, map.h, wire_format*.h, stubs/*, …).
+// Group 2: abseil-cpp-tstring transitive closure via port_def.inc →
+// y_absl/strings/string_view.h → … . libcxx <vector>/<string>/… inside
+// y_absl resolve through the consumer's own libcxx peer. Sorted lex.
 var pbCcDeepRuntimeHeaders = []VFS{
 	// Group 1: deep protobuf transitive set.
 	Source(pbRuntimeBase + "google/protobuf/any.h"),
@@ -403,11 +356,8 @@ func EmitPB(
 		inputs = append(inputs, pbDescriptorVFS)
 	}
 
-	// PR-M3-platform-pair-step2: tags are baseline data carried by the
-	// platform the caller selected (`["tool"]` on host, `[]` on target).
-	// The renderer does NOT branch on "is this a host build?". Empty
-	// `instance.Platform.Tags` produces an empty (non-nil) slice so the JSON stays
-	// `[]` rather than `null`.
+	// tags come from instance.Platform (["tool"] on host, [] on target);
+	// non-nil empty slice keeps JSON `[]`, not `null`.
 	tags := instance.Platform.Tags
 
 	targetProps := map[string]string{
@@ -465,18 +415,11 @@ func EmitPB(
 	return emit.Emit(node)
 }
 
-// pbDescriptorImporterExtras returns the witness inputs propagated through a
-// protoc-generated .pb.h to its CC consumers. The list is the union of:
-//   - pbDescriptorImporterHeaders (7 protobuf reflection-cluster headers),
-//   - pbWrapperPath (cpp_proto_wrapper.py — the script that drives protoc),
-//   - the proto source file (its $(S)-rooted path),
-//   - pbDescriptorProto (the descriptor.proto source itself; only when the
-//     proto imports descriptor.proto).
-//
-// Verified by intersecting CC-consumer inputs across all .pb.h's in
-// /home/pg/monorepo/yatool_orig/sg2.json: the 7 headers + wrapper + proto
-// source appear on 105/105 cpp.o consumers, regardless of descriptor
-// import (PR-M3-final-codegen-registry-expansion).
+// pbDescriptorImporterExtras returns the witness inputs propagated through
+// a protoc-generated .pb.h to its CC consumers: pbDescriptorImporterHeaders
+// (7 reflection-cluster headers), cpp_proto_wrapper.py, the proto source,
+// and descriptor.proto when imported. Verified by intersecting CC-consumer
+// inputs across all .pb.h's in /home/pg/monorepo/yatool_orig/sg2.json.
 func pbDescriptorImporterExtras(sourceRoot, protoRelPath string) []VFS {
 	out := make([]VFS, 0, len(pbDescriptorImporterHeaders)+3)
 	out = append(out, pbWrapperVFS)
@@ -490,15 +433,10 @@ func pbDescriptorImporterExtras(sourceRoot, protoRelPath string) []VFS {
 	return out
 }
 
-// protoImportsDescriptor reports whether the .proto (or .ev) source file at
-// `<sourceRoot>/<srcRel>` contains an import of "google/protobuf/descriptor.proto".
-// Returns false when the file cannot be read (missing source → no descriptor dep).
-//
-// PR-AUDIT-3: legitimate disk read — extracts a single structured `import`
-// predicate from a .proto/.ev source at PB-node-emission time. NOT for closure
-// walks. The architectural cleanup to route this through a unified
-// registry-resolved "structured-import extractor" lives in PR-AUDIT-3.D12
-// (still open); kept per audit doc §2 D12.
+// protoImportsDescriptor reports whether `<sourceRoot>/<srcRel>` imports
+// "google/protobuf/descriptor.proto". Returns false when unreadable (no
+// descriptor dep). Legitimate disk read scoped to PB-node-emission, not
+// closure walks.
 func protoImportsDescriptor(sourceRoot, srcRel string) bool {
 	absPath := filepath.Join(sourceRoot, srcRel)
 	f, err := os.Open(absPath)
@@ -521,31 +459,19 @@ func protoImportsDescriptor(sourceRoot, srcRel string) bool {
 	return false
 }
 
-// emitProtoSrcs emits PB/EV nodes for .proto and .ev entries in d.srcs
-// when the module is a PROTO_LIBRARY. Called from the header-only
-// branch of genModule after peer-walking, before returning the result.
-// PB/EV emitters walk the host protoc + cpp_styleguide tool instances to
-// get their LDRefs; the same cached instances are shared across all
-// PROTO_LIBRARY modules via the genCtx memo.
+// emitProtoSrcs emits PB/EV nodes for .proto/.ev entries in d.srcs when
+// the module is a PROTO_LIBRARY. Walks host protoc + cpp_styleguide once
+// (cached in genCtx memo).
 //
-// PR-M3-proto-library-ar: for true PROTO_LIBRARY modules (module name
-// `PROTO_LIBRARY`), after emitting PB/EV nodes, this function ALSO
-// emits the downstream CC for each generated .pb.cc / .ev.pb.cc and an
-// AR archiving them into `lib<dotted-path>.a` with module_tag=cpp_proto.
-// Mirrors the LIBRARY/EV branch in `gen.go::emitOneSource` (the .ev
-// case at line 4315) for the per-source downstream-CC dispatch; mirrors
-// the LIBRARY AR shape at line 3097 for the archive step.
-// `peerContribs` carries the transitive per-axis peer-GLOBAL union the
-// header-only walker computed (used to compose the per-CC ModuleCCInputs
-// so flags reach the consumer CCs of the protoc-generated sources).
+// For module name == PROTO_LIBRARY, also emits the downstream CC per
+// generated .pb.cc/.ev.pb.cc and an AR archiving them into
+// `lib<dotted-path>.a` with module_tag=cpp_proto. peerContribs carries
+// the transitive per-axis peer-GLOBAL union the header-only walker
+// computed so flags reach consumer CCs.
 //
-// PR-M3-LD-peer-globalA: returns (arRef, arPath, true) when a PROTO_LIBRARY
-// AR was emitted so the caller can surface it through `moduleEmitResult`'s
-// archive closure (the AR was previously orphaned — emitted as a graph
-// node but not reachable from any LD `inputs` via the peer walk).
-// protoSrcsResult is the emit-product of emitProtoSrcs: a single AR node
-// archiving every per-source CC output. nil = nothing emitted (module has
-// no .proto / .ev sources).
+// Returns (ARRef, ARPath) when a PROTO_LIBRARY AR was emitted so the
+// caller can surface it through moduleEmitResult's archive closure;
+// nil when no .proto/.ev sources.
 type protoSrcsResult struct {
 	ARRef  NodeRef
 	ARPath VFS
@@ -598,10 +524,9 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		_ = exc
 	}
 
-	// PR-M3-proto-library-ar: collect per-codegen-source (genRef, .pb.cc path)
-	// pairs so the AR step can fold them into ccRefs/ccOutputs/memberInputs
-	// in declaration order. Mirrors the LIBRARY AR aggregation pattern
-	// (gen.go:2761 addMemberInputs(ccIns) inside the per-source loop).
+	// Collect per-codegen-source (genRef, .pb.cc path) pairs so the AR
+	// step can fold them into ccRefs/ccOutputs/memberInputs in
+	// declaration order.
 	type protoCodegenOutput struct {
 		genRef  NodeRef // PB or EV node ref (used as Generator dep for the downstream CC)
 		pbCC    VFS     // generated .pb.cc / .ev.pb.cc BUILD_ROOT path
@@ -618,20 +543,18 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			cppStyleguideBinary, protocBinary,
 			"cpp_proto", ctx.sourceRoot, ctx.emit)
 
-		// F-7-B: register the .pb.h output with its EmitsIncludes. The .pb.h
-		// includes the .pb.h of every proto imported by this source, plus the
-		// constant protobuf runtime header set (F-7-D).
+		// Register the .pb.h with EmitsIncludes: .pb.h's of every imported
+		// proto plus the constant protobuf runtime header set.
 		protoRelPath := instance.Path + "/" + src
 		protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 		pbH := Build(protoBase + ".pb.h")
 		pbCC := Build(protoBase + ".pb.cc")
 
-		// PR-M3-L0-codegen-deps-EV-PB: stash the PB NodeRef under both output
-		// paths on the emitting platform so resolveCodegenDepRefs can thread
-		// it as a direct dep on any consumer CC whose IncludeInputs carry the
-		// .pb.h / .pb.cc BUILD_ROOT path. Keyed per-platform — PB emits on
-		// both target and host axes; x86_64 consumers must reach the x86_64
-		// PB, aarch64 consumers the aarch64 PB.
+		// Stash the PB NodeRef under both output paths on the emitting
+		// platform so resolveCodegenDepRefs can thread it as a direct dep
+		// on consumer CCs whose IncludeInputs carry the .pb.h/.pb.cc path.
+		// Keyed per-platform: x86_64 consumers reach the x86_64 PB,
+		// aarch64 consumers reach the aarch64 PB.
 		pbKey := codegenOutputKey{platform: instance.Platform.Target}
 		pbKey.path = pbH
 		ctx.pbOutputs[pbKey] = pbRef
@@ -649,24 +572,13 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 				OutputPath:    pbH,
 				EmitsIncludes: emitsIncludes,
 			})
-			// PR-AUDIT-6 step 4: register the .pb.cc output too. protoc emits a
-			// `#include "<base>.pb.h"` plus the protobuf runtime headers; the
-			// .pb.h's own EmitsIncludes are already registered (just above), so a
-			// single entry pointing at the .pb.h would suffice — we mirror the
-			// .pb.h list for symmetry with the LIBRARY/EV path (gen.go:4338-4342).
-			//
-			// PR-M3-proto-abseil-pb-cc-closure: the .pb.cc.o consumer also reaches
-			// the deep protobuf+abseil-cpp-tstring transitive closure that
-			// port_def.inc opens (witnessed in REF for every PROTO_LIBRARY's
-			// .pb.cc.o; see pbCcDeepRuntimeHeaders for the 187-entry list).
-			// Plus REF includes the .proto source itself and the cpp_proto_wrapper.py
-			// script in every PROTO_LIBRARY consumer's .pb.cc.o inputs (verified
-			// against `library/cpp/eventlog/proto/internal.pb.cc.o`). Scope is
-			// narrow: these headers register on the .pb.cc output ONLY, NOT the
-			// .pb.h — the .pb.h is consumed by 100+ broad CC nodes which must NOT
-			// inherit the abseil closure (over-emission regression in reverted
-			// commit 870d43d cost L2 -1.05pp). The .pb.cc is consumed by exactly
-			// one CC compile node, so the closure is tightly scoped.
+			// Register the .pb.cc output: protoc emits `#include
+			// "<base>.pb.h"` plus the protobuf runtime headers; the .pb.cc.o
+			// consumer also reaches the deep protobuf+abseil-cpp-tstring
+			// transitive closure (pbCcDeepRuntimeHeaders), plus the .proto
+			// source itself and cpp_proto_wrapper.py. Scope is narrow: ONLY
+			// on the .pb.cc, never the .pb.h — broad .pb.h consumers must
+			// NOT inherit the abseil closure.
 			pbCCEmits := make([]VFS, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
 			pbCCEmits = append(pbCCEmits, pbH)
 			pbCCEmits = append(pbCCEmits, Source(protoRelPath))
@@ -680,8 +592,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			})
 		}
 
-		// PR-M3-proto-library-ar: stash the (PB ref, .pb.cc, src-with-suffix)
-		// for the downstream-CC + AR step below.
+		// Stash the (PB ref, .pb.cc, src-with-suffix) for downstream-CC + AR.
 		codegenOutputs = append(codegenOutputs, protoCodegenOutput{
 			genRef:  pbRef,
 			pbCC:    pbCC,
@@ -712,15 +623,15 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 				cppStyleguideBinary, protocBinary, event2cppBinary,
 				"cpp_proto", ctx.sourceRoot, ctx.emit)
 
-			// F-7-B: register the .ev.pb.h output with EmitsIncludes derived from
-			// the .ev source's direct imports, plus the protobuf runtime headers (F-7-D)
-			// and the EV-specific runtime headers (util/* + eventlog).
+			// Register .ev.pb.h with EmitsIncludes: .ev source's direct
+			// imports + protobuf runtime headers + EV-specific runtime
+			// headers (util/* + eventlog).
 			evRelPath := instance.Path + "/" + src
 			evH := Build(evRelPath + ".pb.h")
 			evPbCC := Build(evRelPath + ".pb.cc")
 
-			// PR-M3-L0-codegen-deps-EV-PB: stash the EV NodeRef under both outputs
-			// on the emitting platform. See PB branch above for the keying rationale.
+			// Stash the EV NodeRef under both outputs on the emitting
+			// platform. See PB branch above for keying rationale.
 			evKey := codegenOutputKey{platform: instance.Platform.Target}
 			evKey.path = evH
 			ctx.evOutputs[evKey] = evRef
@@ -739,10 +650,8 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 					OutputPath:    evH,
 					EmitsIncludes: emitsIncludes,
 				})
-				// PR-AUDIT-6 step 4: register the .ev.pb.cc output too. event2cpp
-				// emits a `#include "<base>.ev.pb.h"` plus the protobuf + event
-				// runtime headers; mirror the .pb.h list for symmetry with the
-				// LIBRARY/EV path (gen.go:4338-4342).
+				// Register .ev.pb.cc: event2cpp emits `#include
+				// "<base>.ev.pb.h"` plus protobuf + event runtime headers.
 				ccEmits := make([]VFS, 0, 1+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
 				ccEmits = append(ccEmits, evH)
 				ccEmits = append(ccEmits, protobufRuntimeHeaders...)
@@ -763,20 +672,16 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		}
 	}
 
-	// PR-M3-proto-library-ar: for true PROTO_LIBRARY modules, emit the
-	// downstream CC for each generated .pb.cc / .ev.pb.cc and the AR
-	// archiving them. Skip for non-PROTO_LIBRARY callers — the LIBRARY
-	// path's own .ev branch in emitOneSource already handles its own
-	// downstream-CC + AR aggregation (gen.go:4315).
+	// For true PROTO_LIBRARY modules, emit the downstream CC per generated
+	// .pb.cc/.ev.pb.cc and the AR archiving them. LIBRARY callers handle
+	// their own downstream-CC + AR aggregation in emitOneSource.
 	if d.moduleStmt.Name != "PROTO_LIBRARY" || len(codegenOutputs) == 0 {
 		return nil
 	}
 
-	// Compose ModuleCCInputs for the downstream CCs. Mirror the LIBRARY
-	// path's moduleInputs construction (gen.go:2632) but pull the per-axis
-	// peer-GLOBAL slices from the header-only walker's peerContribs.
-	// LibcMusl-self modules zero their own GLOBAL CFLAGS (mirror of
-	// gen.go:1925-1929 in the header-only branch).
+	// Compose ModuleCCInputs for the downstream CCs. Per-axis peer-GLOBAL
+	// slices come from the header-only walker's peerContribs.
+	// LibcMusl-self modules zero their own GLOBAL CFLAGS.
 	ownCFlagsGlobalSelf := d.cFlagsGlobal
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
@@ -809,8 +714,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		ModuleTag:            "cpp_proto",
 	}
 
-	// Per-source downstream-CC emission. Mirrors gen.go:4399-4411 (EV
-	// LIBRARY branch) but for the PROTO_LIBRARY context.
+	// Per-source downstream-CC emission for the PROTO_LIBRARY context.
 	ccRefs := make([]NodeRef, 0, len(codegenOutputs))
 	ccOutputs := make([]VFS, 0, len(codegenOutputs))
 	memberInputs := make([]VFS, 0, 64)
@@ -833,9 +737,8 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		ccIn.Generator = co.genRef
 		ccIn.HasGenerator = true
 		ccIn.IncludeInputs = walkClosure(ctx, instance, co.pbCC, moduleInputs)
-		// PR-M3-final-surgical (fix 1): the .ev.pb.cc.o consumer must not
-		// carry its OWN .ev.pb.h in inputs[] (REF omits the self-include).
-		// Drop just the sibling header co.pbCC -> co.pbCC[.cc -> .h].
+		// .ev.pb.cc.o consumer must not carry its own .ev.pb.h in inputs[]
+		// (REF omits the self-include). Drop just the sibling header.
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
 			selfH := Build(strings.TrimSuffix(co.pbCC.Rel, ".cc") + ".h")
 			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
@@ -852,23 +755,22 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
 			ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
 		}
-		// PR-M3-L0-codegen-deps-EV-PB: cross-codegen deps via .pb.h imports.
+		// Cross-codegen deps via .pb.h imports.
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, co.genRef)
 
 		ccRef, ccOut := EmitCC(instance, co.srcRel, ccIn, ctx.host, ctx.emit)
 		ccRefs = append(ccRefs, ccRef)
 		ccOutputs = append(ccOutputs, ccOut)
 
-		// AR memberInputs: primary source first, then the CC's include closure.
-		// Mirror of gen.go:4414-4415 (LIBRARY EV branch returning the .ev
-		// source as the primary member input) + gen.go:2761 addMemberInputs.
+		// AR memberInputs: primary source first, then the CC's include
+		// closure.
 		perCC := make([]VFS, 0, 1+len(ccIn.IncludeInputs))
 		perCC = append(perCC, co.primSrc)
 		perCC = append(perCC, ccIn.IncludeInputs...)
 		addMemberInputs(perCC)
 	}
 
-	// AR emission. Mirrors gen.go:3097 EmitARNamed with module_tag=cpp_proto.
+	// AR emission with module_tag=cpp_proto.
 	arBaseName := ArchiveName(instance.Path)
 	archivePath := Build(instance.Path + "/" + arBaseName)
 	arRef := emitARNode(instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, nil, ctx.host, ctx.emit)

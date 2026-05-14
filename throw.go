@@ -66,11 +66,9 @@ func ThrowFmt(format string, args ...any) {
 	Fmt(format, args...).throw()
 }
 
-// HTTPError is a typed exception payload that carries an HTTP status
-// code alongside the message. Handlers use ThrowHTTP to raise 4xx
-// client errors (invalid args, not-found, conflict); an outer Catch
-// uses errors.As to distinguish them from unexpected panics (which
-// default to 500).
+// HTTPError carries an HTTP status alongside the message. ThrowHTTP raises
+// 4xx client errors; outer Catch uses errors.As to distinguish them from
+// unexpected panics (default 500).
 type HTTPError struct {
 	Status int
 	Msg    string

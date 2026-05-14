@@ -7,48 +7,34 @@ import (
 	"unicode/utf8"
 )
 
-// gjson_write.go — hand-rolled streaming JSON serializer that produces
-// output byte-identical to json.Encoder with SetEscapeHTML(false) and
-// SetIndent("", "    ") (4 spaces) for the Graph shape (D16 cross-cutting
-// constraint). PR-L4-C/02 changed indent from 2 to 4 spaces to match REF.
+// gjson_write.go — hand-rolled streaming JSON serializer, byte-identical
+// to json.Encoder with SetEscapeHTML(false) + SetIndent("", "    ") for
+// the Graph shape.
 //
-// Why this exists: the stock json.Encoder Encode-with-indent path runs in
-// two passes — encode-compact into a temp buffer, then json.Indent into
-// the destination. For the 63 MiB tools/archiver graph, that double-pass
-// dominated wall-clock (~300 ms of a ~1.5 s warm run, ~20 %). The
-// hand-rolled version below walks the Graph once, writing indentation
-// inline as it goes, and reuses a small per-Node working buffer to avoid
-// per-field allocations. It is intentionally specialised to the Graph /
-// Node / Cmd shape rather than reflection-driven; that is what makes it
-// fast.
+// Stock json.Encoder's indent path is two-pass (encode-compact, then
+// json.Indent); on the 63 MiB tools/archiver graph that doubled wall
+// time (~300 ms of ~1.5 s, ~20%). This walks Graph once, writing
+// indentation inline, reusing a per-Node buffer to avoid per-field
+// allocations. Specialised to Graph/Node/Cmd, not reflection-driven.
 //
-// Byte-exactness is the ironclad invariant. Every formatting decision
-// below mirrors encoding/json's behaviour for the shapes we actually
-// emit:
-//   - Map keys are emitted in alphabetical order (json default).
-//   - omitempty fields (host_platform, foreign_deps on Node; cwd on Cmd)
-//     are dropped when zero.
-//   - Empty slices and maps emit as `[]` / `{}` on the same line.
+// Byte-exactness invariants:
+//   - Map keys alphabetical (json default).
+//   - omitempty fields (host_platform, foreign_deps on Node; cwd on
+//     Cmd) dropped when zero.
+//   - Empty slices/maps render as `[]`/`{}` inline.
 //   - Strings: same escape table as encoding/json with EscapeHTML=false
-//     (control chars, quote, backslash, U+2028/U+2029; '<', '>', '&'
-//     pass through unchanged).
-//   - Floats: strconv.AppendFloat(_, 'f', -1, 64) for the magnitudes
-//     this codebase actually emits (cpu/ram in Requirements are
-//     float64(1) and float64(32), which serialise as "1" and "32").
-//   - Trailing newline: none — REF has no trailing newline; the final
-//     closing '}' is the last byte. PR-L4-C/03.
+//     (control chars, quote, backslash, U+2028/U+2029; '<>&' pass through).
+//   - Floats: strconv.AppendFloat(_, 'f', -1, 64).
+//   - No trailing newline — final byte is '}'.
 //
-// The parallel test (gjson_write_test.go) compares the output of this
-// function against json.Encoder for a fixture covering every code path
-// listed above; if it passes, the runtime output is byte-identical.
+// gjson_write_test.go parallels every code path against json.Encoder.
 
 // writeGraphIndented streams g as indented JSON to w. Errors from w
-// propagate via Throw so the cmdGen / writeGraph contract (panic up to
-// main()'s Catch) is preserved.
+// propagate via Throw (the cmdGen / writeGraph contract panics up to
+// main's Catch).
 func writeGraphIndented(w io.Writer, g *Graph) {
-	// Single reusable encode buffer. 1 MiB initial capacity is roomy
-	// for the largest individual node we have observed (~30 KiB) plus
-	// the structural skeleton; the buffer grows by doubling if needed.
+	// Single reusable encode buffer. 1 MiB initial caps the largest
+	// observed node (~30 KiB) plus skeleton; grows by doubling.
 	buf := make([]byte, 0, 1<<20)
 
 	buf = append(buf, '{', '\n')
@@ -75,8 +61,8 @@ func writeGraphIndented(w io.Writer, g *Graph) {
 			buf = append(buf, '\n')
 
 			// Flush periodically so we don't hold the whole 63 MiB output
-			// in RAM. 256 KiB is well above any single node's encoded
-			// size and keeps the bufio.Writer's chunks well-aligned.
+			// in RAM. 256 KiB stays above any single node's encoded size
+			// and aligns well with the bufio.Writer's chunks.
 			if len(buf) >= 256<<10 {
 				Throw2(w.Write(buf))
 				buf = buf[:0]
@@ -102,13 +88,10 @@ func writeGraphIndented(w io.Writer, g *Graph) {
 	Throw2(w.Write(buf))
 }
 
-// appendNode emits a single Node as a JSON object indented under `pad`
-// (the indent of the object's opening '{'). Field order is alphabetical
-// per the Node struct's declaration order in node.go (cache, cmds, deps,
-// env, foreign_deps, host_platform, inputs, kv, outputs, platform,
-// requirements, sandboxing, self_uid, tags, target_properties, uid).
-// stats_uid is omitted (json:"-" in node.go, PR-L4-C/04). cache is
-// emitted only when n.Cache is non-nil (omitempty equivalent).
+// appendNode emits a single Node as a JSON object indented under `pad`.
+// Field order is alphabetical (declaration order in node.go); stats_uid
+// is omitted (json:"-"). cache is emitted only when n.Cache != nil
+// (omitempty equivalent).
 func appendNode(buf []byte, n *Node, pad string) []byte {
 	innerPad := pad + "    "
 	buf = append(buf, pad...)
@@ -264,11 +247,10 @@ func appendCmdSlice(buf []byte, cmds []Cmd, pad string) []byte {
 		buf = append(buf, `"env": `...)
 		buf = appendStringMap(buf, c.Env, innerPad)
 
-		// stdout: string, omitempty — emitted after env to keep the
-		// alphabetical JSON key order REF uses (cmd_args, cwd, env,
-		// stdout). The only known REF cmd carrying an explicit stdout
-		// is the PR node for devtools/ymake/symbols
-		// dep_types.h_dumper.cpp (STDOUT redirect of struct2fieldcalc).
+		// stdout: omitempty, emitted after env to keep alphabetical
+		// key order (cmd_args, cwd, env, stdout). Only REF cmd carrying
+		// stdout is the PR node devtools/ymake/symbols
+		// dep_types.h_dumper.cpp.
 		if c.Stdout != "" {
 			buf = append(buf, ',', '\n')
 			buf = append(buf, innerPad...)
@@ -321,10 +303,8 @@ func appendStringSlice(buf []byte, ss []string, pad string) []byte {
 }
 
 // appendVFSSlice emits []VFS in the same shape as appendStringSlice —
-// each VFS materialises to its canonical "$(S)/<rel>" or
-// "$(B)/<rel>" string at JSON-emit time. The prefix is
-// emitted inline (two bytes: `"$`, then the rest) to avoid the
-// `v.String()` concat allocation that VFS.String would do.
+// each VFS materialises to its canonical "$(S)/<rel>" or "$(B)/<rel>"
+// inline at emit time, avoiding the v.String() concat allocation.
 func appendVFSSlice(buf []byte, vs []VFS, pad string) []byte {
 	if len(vs) == 0 {
 		return append(buf, '[', ']')
@@ -441,11 +421,10 @@ func appendStringSliceMap(buf []byte, m map[string][]string, pad string) []byte 
 	return buf
 }
 
-// appendInterfaceMap emits map[string]interface{} for the Requirements
-// field. The codebase only ever stores float64 or string values there
-// (see ar.go / cc.go / ld.go / as.go / js.go). Any other type Throws so
-// future contributors notice the gap rather than hitting a silent
-// byte-mismatch with the reference output.
+// appendInterfaceMap emits map[string]interface{} for Requirements. The
+// codebase stores only float64/string/bool here; any other dynamic type
+// throws so a future gap surfaces immediately rather than as a silent
+// byte-mismatch.
 func appendInterfaceMap(buf []byte, m map[string]interface{}, pad string) []byte {
 	if len(m) == 0 {
 		return append(buf, '{', '}')
@@ -497,9 +476,8 @@ func appendInterfaceMap(buf []byte, m map[string]interface{}, pad string) []byte
 const hex = "0123456789abcdef"
 
 // appendString emits s as a JSON-escaped string with EscapeHTML=false,
-// matching encoding/json's behaviour byte-for-byte for inputs we
-// actually encounter. The escape table below is the EscapeHTML=false
-// branch of encoding/json/encode.go's encodeState.string method:
+// matching encoding/json. The escape table is the EscapeHTML=false branch
+// of encoding/json/encode.go encodeState.string:
 //
 //   - 0x00..0x1f : \uXXXX, with shortcuts \b \t \n \f \r for 0x08..0x0d
 //     (skipping 0x0b which has no shortcut).
@@ -517,11 +495,9 @@ func appendString(buf []byte, s string) []byte {
 }
 
 // appendStringEscapedBody emits the JSON-escaped BODY of a string,
-// without the surrounding `"` quotes. Extracted from appendString so
-// callers that emit a concatenation (appendVFS materialising
-// "$(S)/" + rel) can avoid a heap concat at the call site:
-// they append the prefix body then the rel body inside one shared
-// pair of quotes.
+// without surrounding quotes. Extracted so concatenation callers (e.g.
+// appendVFS materialising "$(S)/" + rel) avoid heap concat: append
+// prefix body + rel body inside one shared pair of quotes.
 func appendStringEscapedBody(buf []byte, s string) []byte {
 	start := 0
 	for i := 0; i < len(s); {
@@ -599,11 +575,9 @@ func appendStringEscapedBody(buf []byte, s string) []byte {
 	return buf
 }
 
-// htmlSafeNoEscape[b] reports whether ASCII byte b can be emitted
-// verbatim in a JSON string when EscapeHTML is false. False means the
-// byte needs escaping (control char, '"', '\\') OR the byte is part of
-// a multi-byte UTF-8 sequence (>=0x80, but we never index into this
-// table for those).
+// htmlSafeNoEscape[b] reports whether ASCII byte b can pass through
+// verbatim with EscapeHTML=false. False means escaping needed (control
+// char, '"', '\\'). We never index this table for b >= 0x80.
 var htmlSafeNoEscape = func() [128]bool {
 	var t [128]bool
 

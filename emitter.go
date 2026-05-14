@@ -5,12 +5,10 @@ import (
 	"sort"
 )
 
-// intHeap is a min-heap of ints used by Finalize's Kahn topo-sort. A
-// previous linear-scan-for-min + slice-shift implementation was O(N²)
-// in the size of the ready queue and dominated gen wall-clock time on
-// real targets (235K buffered nodes pre-dedup). A heap reduces the
-// per-extraction cost to O(log N) without changing the tie-break
-// (smallest buffer index wins), preserving byte-exact output.
+// intHeap is a min-heap of ints used by Finalize's Kahn topo-sort.
+// Previous linear-scan-for-min + slice-shift was O(N²) on real targets
+// (235K nodes pre-dedup); heap is O(log N) per extraction, same
+// tie-break (smallest buffer index wins), byte-exact preserved.
 type intHeap []int
 
 func (h intHeap) Len() int            { return len(h) }
@@ -26,28 +24,19 @@ func (h *intHeap) Pop() interface{} {
 	return x
 }
 
-// emitter.go — the Emitter interface, NodeRef placeholder, BufferedEmitter
-// implementation, the Graph wrapper type, and the Finalize Merkle pass.
+// emitter.go — Emitter interface, NodeRef placeholder, BufferedEmitter,
+// Graph wrapper, and the Finalize Merkle pass.
 //
-// Design (D6/D7):
+// Rules call Emit(*Node) → NodeRef (opaque buffer index; the UID isn't
+// known until every transitive dep has been hashed). Deps are wired by
+// storing NodeRefs in DepRefs/ForeignDepRefs. Result(NodeRef) marks a
+// final output; Graph.Result holds those UIDs in call order.
 //
-//   - Rule authors call Emitter.Emit(*Node) and get back a NodeRef. The
-//     ref is opaque — it carries an integer index into the emitter's
-//     internal buffer, not the node's UID, because the UID isn't known
-//     until every transitive dependency has been hashed.
-//   - Rules wire dependencies by storing NodeRefs in a node's DepRefs /
-//     ForeignDepRefs. The emitter never asks for `[]string` UIDs from a
-//     rule.
-//   - Result(NodeRef) marks a node as a final output; the resulting
-//     Graph's `result` array contains those nodes' UIDs in the order
-//     Result was called.
-//   - Finalize topologically sorts the buffered nodes, then walks them
-//     in dependency-first order computing each node's UID from a
-//     canonicalised serialisation that already has its children's UIDs
-//     filled in (a Merkle hash). Cycles are an error. Per D14 the
-//     resolved Deps slice and each ForeignDeps[key] slice are sorted
-//     alphabetically before the canonicalisation step so the hash is
-//     order-independent.
+// Finalize topo-sorts buffered nodes, then walks dependency-first
+// computing each UID from a canonicalised serialisation whose children's
+// UIDs are already filled in (Merkle). Cycles throw. Resolved Deps and
+// each ForeignDeps[key] are sorted alphabetically before canonicalisation
+// so the hash is order-independent.
 
 // NodeRef is the indirection that lets rules express "this node depends
 // on that node" without knowing yet what the dependee's UID will be.
@@ -56,23 +45,12 @@ type NodeRef struct {
 	id int64
 }
 
-// Emitter is the interface rules use to publish nodes and mark
-// results.
-//
-// `OnReady` lands in PR-23 as part of the streaming-emitter contract
-// (D37). It returns a channel that closes when the referenced node's
-// dependencies are all resolved. `BufferedEmitter`'s implementation
-// is a no-op — every channel returned closes immediately at
-// `Finalize` time, because in the buffered model "all deps resolved"
-// is equivalent to "Finalize ran". `StreamingEmitter` (M3) closes
-// per-node as the topo wave reaches it. Locking the signature now
-// means rule emitters that need to await readiness (PR-26+ parallel
-// executor) can be written against `Emitter`, not the concrete
-// type.
-//
-// BufferedEmitter returns one shared channel that closes at Finalize for any
-// input ref. StreamingEmitter (M3) MUST close a per-ref channel as each node's
-// deps resolve — the shared-channel shortcut is buffered-only.
+// Emitter is the interface rules use to publish nodes and mark results.
+// OnReady returns a channel that closes when the referenced node's deps
+// are resolved. BufferedEmitter returns one shared channel that closes at
+// Finalize for any input ref. StreamingEmitter MUST close a per-ref
+// channel as each node's deps resolve — the shared-channel shortcut is
+// buffered-only.
 type Emitter interface {
 	Emit(n *Node) NodeRef
 	Result(NodeRef)
@@ -99,19 +77,11 @@ func NewBufferedEmitter() *BufferedEmitter {
 	}
 }
 
-// OnReady returns a channel that closes when the node's dependencies
-// are all resolved. For BufferedEmitter that is at Finalize time —
-// every node "becomes ready" simultaneously when the Merkle pass
-// completes. The shared channel is closed by Finalize. Callers that
-// `<-` before Finalize will block; that is correct semantics — a
-// streaming caller would block on a streaming emitter too, just for
-// a shorter duration.
-//
-// Per the brief, the ref is validated only loosely; an out-of-range
-// ref will trip Finalize's checkRef when Finalize runs, not here.
-// Returning a never-closing channel for a bogus ref would be a
-// silent deadlock; the brief asks for "no-op" so we accept any ref
-// and return the shared channel.
+// OnReady returns a channel that closes when the node's deps are
+// resolved. For BufferedEmitter every node becomes ready simultaneously
+// at Finalize (single shared channel). Callers that `<-` before Finalize
+// block; an out-of-range ref still returns the shared channel — Finalize's
+// checkRef catches it, avoiding a silent deadlock on a bogus ref.
 func (e *BufferedEmitter) OnReady(_ NodeRef) <-chan struct{} {
 	return e.readyCh
 }
@@ -143,11 +113,8 @@ func (e *BufferedEmitter) Result(r NodeRef) {
 }
 
 // Graph is the top-level on-disk shape: { conf, graph, inputs, result }.
-//
-// Field order matches the reference g.json (also alphabetical), so that
-// encoding/json emits keys in the same order as the upstream tool. For
-// PR-02, Conf and Inputs are empty maps per D15 (later PRs may populate
-// them).
+// Field order matches the reference g.json (alphabetical) so encoding/json
+// emits keys in the same order. Conf and Inputs are empty maps.
 type Graph struct {
 	Conf   map[string]interface{} `json:"conf"`
 	Graph  []*Node                `json:"graph"`
@@ -155,30 +122,17 @@ type Graph struct {
 	Result []string               `json:"result"`
 }
 
-// Finalize converts a BufferedEmitter into a *Graph: topologically sorts
-// the buffered nodes, walks them dependency-first computing each node's
-// UID (Merkle-style; SelfUID gets the same algorithm; StatsUID is left
-// empty for now), populates each node's serialised Deps/ForeignDeps
-// slices from the resolved children's UIDs (sorted, per D14), clears the
-// internal *Refs fields so they don't accidentally outlive Finalize, and
-// returns a Graph whose `Result` array is the result-ref ids translated
-// into UIDs in call order.
+// Finalize converts a BufferedEmitter into *Graph: topo-sort, walk dep-
+// first computing UID Merkle-style, populate Deps/ForeignDeps from
+// resolved children's UIDs (sorted), clear internal *Refs, and return a
+// Graph whose Result is the result-ref ids translated to UIDs in call
+// order. Cycles or out-of-range NodeRefs throw via ThrowFmt.
 //
-// Errors: a cycle in DepRefs/ForeignDepRefs throws an exception
-// mentioning one of the offending node ids; a NodeRef pointing outside
-// the buffer (id < 0 or id >= len(nodes)) also throws. None of these
-// internal errors are discriminated by callers, so per STYLE.md we
-// raise via ThrowFmt rather than returning an error. Callers that need
-// to recover wrap the call in Try.
-// FinalizeStream is the streaming sibling of Finalize: it yields each
-// node by reference once its UID has been computed, in dep-first
-// topological order, and returns the resolved root UIDs (one per
-// e.results entry, in declaration order, deduped). The yielded node's
-// identity-fields (UID/SelfUID) and resolved Deps/ForeignDeps are
-// populated; the internal *Refs are cleared. Callers retain ownership
-// of each yielded *Node — it lives in the emitter's nodes slice and
-// is not copied. Cannot run concurrently with Finalize on the same
-// emitter; both set e.finalized.
+// FinalizeStream is the streaming sibling: yields each finalized node
+// (UID/SelfUID + resolved Deps/ForeignDeps populated, internal *Refs
+// cleared) in dep-first topological order, then returns deduped root
+// UIDs. Yielded *Node lives in the emitter's slice; not copied. Cannot
+// run concurrently with Finalize on the same emitter.
 func FinalizeStream(e *BufferedEmitter, yield func(*Node)) []string {
 	uids := finalizeNodes(e, yield)
 
@@ -199,16 +153,12 @@ func FinalizeStream(e *BufferedEmitter, yield func(*Node)) []string {
 }
 
 // finalizeNodes is the shared implementation behind Finalize and
-// FinalizeStream. It validates the buffered emitter state, topo-sorts
-// the nodes, resolves each node's Deps/ForeignDeps from its DepRefs/
-// ForeignDepRefs, computes the per-node UID, and yields the finalized
-// node via the optional `yield` callback in dep-first order. Returns
-// `uids[i]` indexed by buffer position so callers can resolve
-// e.results and build the *Graph output.
-//
-// Sets e.finalized when it returns successfully. Throws on
-// re-finalize, on pre-populated Deps/ForeignDeps, on out-of-range
-// NodeRefs, or on dependency cycles.
+// FinalizeStream: validate buffer state, topo-sort, resolve Deps/
+// ForeignDeps from DepRefs/ForeignDepRefs, compute per-node UID, yield
+// via the optional callback in dep-first order. Returns uids[i] indexed
+// by buffer position. Sets e.finalized on success; throws on
+// re-finalize, pre-populated Deps/ForeignDeps, out-of-range NodeRefs,
+// or cycles.
 func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
 	if e.finalized {
 		ThrowFmt("finalize: emitter already finalized")
@@ -216,11 +166,10 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
 
 	n := len(e.nodes)
 
-	// Reject pre-populated Deps/ForeignDeps. Rules express dependencies via
-	// DepRefs/ForeignDepRefs; allowing the public slices to be set up-front
-	// would silently corrupt the Merkle hash because Finalize would either
-	// overwrite them (for nodes with refs) or leave them to participate in
-	// canonicalisation without ref-resolution (for nodes without refs).
+	// Reject pre-populated Deps/ForeignDeps. Rules MUST use DepRefs/
+	// ForeignDepRefs; pre-set public slices silently corrupt the Merkle
+	// hash (overwritten when refs exist; participate without resolution
+	// otherwise).
 	for id, node := range e.nodes {
 		if len(node.Deps) > 0 {
 			ThrowFmt("finalize: node %d has pre-populated Deps; rules must use DepRefs only", id)
@@ -265,13 +214,10 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
 		}
 	}
 
-	// Topological sort (Kahn's algorithm) by combined DepRefs +
-	// ForeignDepRefs edges. Edge: child -> parent (i.e. an edge from a
-	// dependee to its dependant). Scheduling by ascending in-degree
-	// emits leaves first, which is what we need to compute UIDs Merkle-
-	// style. Within equal in-degree we fall back to the buffer index
-	// order — that keeps the topo order deterministic for any given
-	// emit sequence.
+	// Kahn topological sort by combined DepRefs + ForeignDepRefs edges
+	// (child → parent). Ascending-in-degree scheduling emits leaves
+	// first, which is what Merkle-style UID computation needs. Equal
+	// in-degree breaks on buffer index for determinism.
 	indeg := make([]int, n)
 	// children[i] = nodes that depend on node i (i.e. nodes whose
 	// DepRefs/ForeignDepRefs include i). When i is finalised, each
@@ -319,11 +265,9 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
 		}
 	}
 
-	// Seed the heap with every zero-in-degree node. The heap pops the
-	// smallest buffer index next — same tie-break the previous
-	// linear-scan implementation produced — so the topo order is
-	// byte-exact-equivalent. Seeding ascending is irrelevant to the
-	// pop sequence (the heap re-orders) but cheap to write.
+	// Seed heap with every zero-in-degree node. Min-heap pop yields the
+	// smallest buffer index — same tie-break as the prior linear scan, so
+	// topo order is byte-exact-equivalent.
 	queue := make(intHeap, 0, n)
 	for i := 0; i < n; i++ {
 		if indeg[i] == 0 {
@@ -380,18 +324,14 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
 }
 
 // resolveAndUID is the per-node finalize step: resolves DepRefs and
-// ForeignDepRefs into Deps and ForeignDeps using the already-known UIDs
-// from preceding (dep-first) nodes, sets Sandboxing, hashes the node to
+// ForeignDepRefs into Deps and ForeignDeps using already-known UIDs from
+// preceding (dep-first) nodes, sets Sandboxing=true, hashes the node to
 // compute UID/SelfUID, restores LD/AR insertion order, and clears the
-// internal *Refs slots. Shared between BufferedEmitter's topo-sort
-// finalize and StreamingEmitter's inline-on-emit finalize.
+// internal *Refs slots. Shared between buffered and streaming finalizes.
 //
-// The `uids` slice must be indexed by NodeRef.id; entries for any
-// DepRef referenced from this node must already be populated.
-//
-// LD/AR nodes preserve emit (insertion) order in their Deps slice (PR-
-// L4-C/05). The hash always sees the SORTED form so it's order-
-// independent; insertion order is restored after the hash.
+// LD/AR nodes preserve emit (insertion) order in their final Deps slice;
+// the hash always sees the SORTED form for order-independence, then
+// insertion order is restored.
 func resolveAndUID(node *Node, uids []string) string {
 	var insertionOrderDeps []string
 
@@ -454,8 +394,7 @@ func resolveAndUID(node *Node, uids []string) string {
 		}
 	}
 
-	// PR-L4-C/01: sandboxing is always true for every node in the M2
-	// closure.
+	// Sandboxing is always true in the reference closure.
 	node.Sandboxing = true
 
 	u := nodeUID(node)
@@ -474,18 +413,11 @@ func resolveAndUID(node *Node, uids []string) string {
 	return u
 }
 
-// StreamingEmitter is an Emitter that finalizes each node inline at
-// Emit time: resolves DepRefs from already-emitted nodes' UIDs,
-// computes the node's UID, and fires `onNode(n)` synchronously from
-// Emit. Used by `yatool make` so leaf compiles can start immediately
-// as Gen produces them, instead of waiting for all of Gen to buffer
-// first.
-//
-// Gen emits in dep-first post-order DFS, so every dep's UID is known
-// by the time a parent reaches Emit. If a node's DepRef references a
-// not-yet-resolved peer (out-of-order emission), it is parked in a
-// pending pool and drained in Finish(); this is a safety net, not the
-// hot path.
+// StreamingEmitter finalizes each node inline at Emit time: resolves
+// DepRefs from already-emitted nodes' UIDs, computes UID, fires
+// onNode(n) synchronously. Used by `yatool make` so leaf compiles can
+// start immediately. Gen emits in dep-first post-order DFS, so deps land
+// before parents; out-of-order emits are parked and drained in Finish().
 type StreamingEmitter struct {
 	nodes      []*Node
 	uids       []string
@@ -528,9 +460,9 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 	return NodeRef{id: id}
 }
 
-// hasUnresolvedDeps reports whether any DepRef / ForeignDepRef points
-// at a not-yet-finalised peer. Should be false on the hot path —
-// Gen emits in DFS post-order, so deps land before their parents.
+// hasUnresolvedDeps reports whether any DepRef/ForeignDepRef points at
+// a not-yet-finalised peer. Should be false on the hot path: DFS
+// post-order emit lands deps before parents.
 func (e *StreamingEmitter) hasUnresolvedDeps(n *Node) bool {
 	for _, r := range n.DepRefs {
 		if e.uids[r.id] == "" {
@@ -562,10 +494,9 @@ func (e *StreamingEmitter) OnReady(_ NodeRef) <-chan struct{} {
 }
 
 // Finish drains the pending pool (out-of-order emits parked by
-// `hasUnresolvedDeps`), runs resolveAndUID, fires onNode, and returns
-// the deduped slice of result UIDs in declaration order. Must be
-// called exactly once after Gen completes; further Emit/Result calls
-// panic.
+// hasUnresolvedDeps), runs resolveAndUID, fires onNode, and returns the
+// deduped result UIDs in declaration order. Call once after Gen; further
+// Emit/Result panics.
 func (e *StreamingEmitter) Finish() []string {
 	if e.finalized {
 		panic("StreamingEmitter.Finish called twice")
@@ -602,11 +533,9 @@ func Finalize(e *BufferedEmitter) *Graph {
 	uids := finalizeNodes(e, nil)
 	n := len(e.nodes)
 
-	// Build the output Graph. Result UIDs are computed first.
-	// Graph[] is ordered DFS preorder rooted at each Result UID,
-	// visiting children in their as-emitted Deps order (PR-L4-C/06).
-	// This matches REF's graph[] array order (verified empirically in
-	// the L4 roadmap §1.9). UIDs are deduplicated across all roots.
+	// Build output Graph. Graph[] is DFS preorder rooted at each Result
+	// UID, visiting children in their as-emitted Deps order — matches
+	// REF's graph[] array order. UIDs are deduplicated across all roots.
 	out := &Graph{
 		Conf:   map[string]interface{}{},
 		Inputs: map[string]interface{}{},
@@ -664,10 +593,9 @@ func Finalize(e *BufferedEmitter) *Graph {
 		dfsVisit(rootUID)
 	}
 
-	// Any nodes not reachable from the result roots (disconnected subgraphs
-	// that may arise from dedup collisions) are appended in buffer
-	// (= emit) order to preserve completeness; buffer order is itself a
-	// topological order because emit must precede each parent's emit.
+	// Disconnected subgraphs (from dedup collisions) are appended in
+	// buffer (= emit) order — itself a topological order because emit
+	// precedes each parent's emit.
 	for i, node := range e.nodes {
 		u := uids[i]
 		if _, ok := seenNode[u]; !ok {
