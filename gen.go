@@ -670,10 +670,10 @@ func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emi
 	targetReg := NewCodegenRegistry()
 	hostReg := NewCodegenRegistry()
 
-	targetScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, string(targetP.ISA), onWarn), sharedPC)
+	targetScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, string(targetP.ISA), onWarn), sharedPC, onWarn)
 	targetScanner.codegen = targetReg
 	targetScanner.fallbackLocators = []pathLocator{codegenLocator{reg: targetReg}}
-	hostScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, string(hostP.ISA), onWarn), sharedPC)
+	hostScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, string(hostP.ISA), onWarn), sharedPC, onWarn)
 	hostScanner.codegen = hostReg
 	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
 
