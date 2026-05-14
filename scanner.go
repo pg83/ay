@@ -1229,6 +1229,16 @@ func (s *IncludeScanner) parseIncludes(vfsPath VFS) []includeDirective {
 
 	if isYasmLike(vfsPath) {
 		out = parseYasmIncludes(data)
+	} else if isAntlrGrammar(vfsPath) {
+		// .g4 ANTLR grammars carry C++ snippets that contain
+		// `#include "<generated>.h"` references resolved BY THE
+		// GENERATED .cpp/.h pair, not by direct compilation of the
+		// .g4 itself. The grammar is registered as an EmitsIncludes
+		// witness on the generated headers (m3_misc.go JV codegen),
+		// so it joins the closure as an input-dep edge — but its
+		// `#include` lines are not real C directives and should not
+		// be extracted.
+		out = nil
 	} else {
 		out = parseCIncludes(data)
 		// PR-M3-musl-self-closure: append synthetic angle-include
@@ -1378,6 +1388,14 @@ func parseYasmIncludes(data []byte) []includeDirective {
 // — the NASM/yasm assembly source extensions. `.S`/`.s` files use
 // GAS / AT&T syntax with C preprocessor `#include` directives and
 // continue to use the C-include scanner path.
+// isAntlrGrammar returns true when `absPath` ends with `.g4` — an
+// ANTLR4 grammar source. The grammar contains C++ snippet sections
+// with `#include` directives that are emitted into the generated
+// .cpp/.h, not compiled in place.
+func isAntlrGrammar(absPath VFS) bool {
+	return strings.HasSuffix(string(absPath.Rel), ".g4")
+}
+
 func isYasmLike(absPath VFS) bool {
 	rel := absPath.Rel
 	idx := strings.LastIndexByte(rel, '.')
@@ -2332,9 +2350,15 @@ func stripComments(data []byte) []byte {
 
 			i = j + 1
 
-			// Walk to `)delim"`. Bytes are not modified — we only
-			// advance past the body so subsequent code/comment scanning
-			// resumes after the closing quote.
+			// Walk to `)delim"`, blanking the body. Raw strings can span
+			// many lines and contain `#include "X"` patterns (protoc's
+			// `p->Emit(R"(#include "$path$")")` codegen templates are
+			// the canonical case). The parseCIncludes regex anchors on
+			// `^\s*#include`, so a fake `#include` at the start of an
+			// inner line inside the raw body would otherwise be picked
+			// up as a real directive. Replace every non-newline byte
+			// with a space; newlines stay so per-line addressing past
+			// the raw region keeps lining up with source.
 			for i < n {
 				if data[i] == ')' && i+1+len(delim)+1 <= n {
 					match := true
@@ -2348,12 +2372,19 @@ func stripComments(data []byte) []byte {
 					}
 
 					if match && data[i+1+len(delim)] == '"' {
+						for k := 0; k <= len(delim); k++ {
+							data[i+k] = ' '
+						}
+						data[i+1+len(delim)] = ' '
 						i += 1 + len(delim) + 1
 
 						break
 					}
 				}
 
+				if data[i] != '\n' {
+					data[i] = ' '
+				}
 				i++
 			}
 
