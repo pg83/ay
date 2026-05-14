@@ -171,10 +171,10 @@ func genStream(srcRoot string, targets []string, hostP, targetP *Platform, onNod
 }
 
 func genStreamOne(srcRoot, target string, hostP, targetP *Platform, onNode func(*Node)) []string {
-	emitter := NewStreamingEmitter(onNode, mightNeedAddInclPatch)
-	_, prepare := runGenInto(srcRoot, target, hostP, targetP, emitter, defaultScanCtxMode)
+	emitter := NewStreamingEmitter(onNode)
+	runGenInto(srcRoot, target, hostP, targetP, emitter, defaultScanCtxMode)
 
-	return emitter.Finish(prepare)
+	return emitter.Finish()
 }
 
 // executor — schedules and runs Node executions.

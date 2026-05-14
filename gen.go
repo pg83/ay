@@ -656,14 +656,8 @@ var whitelistedMetadataMacros = map[string]struct{}{
 const defaultScanCtxMode = "interned"
 
 // runGenInto runs the Gen walk against the supplied emitter without
-// calling Finalize on it. Returns the root NodeRef and a per-node
-// `prepare` mutator: the caller must thread the mutator through their
-// finalize step (Finalize / FinalizeStreamWith) so the umbrella +
-// back-peer cmd_args mutations happen inline, per-node, before each
-// node's UID is computed. There is no longer a separate
-// applyUmbrellaAddIncl / applyBackPeerAddIncl batch pass that has to
-// walk every node twice before the first compile can fire.
-func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string) (NodeRef, func(*Node)) {
+// calling Finalize on it. Returns the root NodeRef.
+func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string) NodeRef {
 	if mode != "local" && mode != "interned" {
 		ThrowFmt("gen: --scan-ctx-mode must be \"local\" or \"interned\", got %q", mode)
 	}
@@ -710,24 +704,20 @@ func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emi
 
 	ctx.emit.Result(root.LDRef)
 
-	return root.LDRef, newPostEmitPrepare(ctx)
+	return root.LDRef
 }
 
-// GenWithMode is GenWith plus the scanCtxMode dispatch knob (PR-M3-perf-E).
-// `mode` must be either "local" or "interned"; anything else throws.
-// Wraps runGenInto: the per-node umbrella + back-peer prepare hook
-// runGenInto returns is threaded through FinalizeWith so the mutations
-// apply per-node inline, not as two separate full-graph post-passes.
 // GenWithMode runs Gen against an explicit (host, target) Platform
-// pair. The callers (`yatool gen`, `yatool make -G`, test helpers)
-// construct both Platforms from CLI flags + mining before invoking
-// this entry; the walker reads every flag, tool path, and tag off
-// the Platform pointers.
+// pair with the chosen scanCtxMode (`local` or `interned`; PR-M3-perf-E).
+// The callers (`yatool gen`, `yatool make -G`, test helpers) construct
+// both Platforms from CLI flags + mining before invoking this entry;
+// the walker reads every flag, tool path, and tag off the Platform
+// pointers.
 func GenWithMode(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string) *Graph {
 	emitter := NewBufferedEmitter()
-	_, prepare := runGenInto(sourceRoot, targetDir, hostP, targetP, emitter, mode)
+	runGenInto(sourceRoot, targetDir, hostP, targetP, emitter, mode)
 
-	return FinalizeWith(emitter, prepare)
+	return Finalize(emitter)
 }
 
 // moduleData is the per-module accumulator populated by
