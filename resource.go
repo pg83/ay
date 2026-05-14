@@ -12,12 +12,8 @@ import (
 
 // resource.go — emitter for objcopy PY nodes produced by upstream
 // `devtools/ymake/plugins/resource_handler/objcopy.h:TObjCopyResourcePacker`.
-// PR-M3-resource-objcopy-A introduces the parser + emitter + hash
-// scaffolding for the cluster of 127 missing PY (kv.p="PY") nodes in
-// the M3 reference closure (sg2.json). PR-A's emission scope is
-// narrow: simple `RESOURCE(path key)` and single-flush
-// `RESOURCE_FILES(...)`; the cmd-length chunking branch
-// (`MAX_CMD_LEN = 8000`) and PY_SRCS-fanout shapes land in PR-B / PR-C.
+// Handles `RESOURCE(path key)`, `RESOURCE_FILES(...)`, PY_SRCS chunking,
+// and kv-only sibling shapes (PY_MAIN / namespace / no_check_imports).
 
 // hashLen is the prefix length applied to the MD5 hex digest when
 // computing the objcopy node's output basename (matches upstream
@@ -30,14 +26,12 @@ const rootCmdLen = 200
 
 // maxCmdLen is the flush threshold the upstream packer applies to
 // `EstimatedCmdLen_`; once exceeded the accumulator emits a node and
-// resets (`objcopy.h:34, packer.h:98`). PR-A always flushes once at
-// the end (single-flush only); the chunker lands in PR-C.
+// resets (`objcopy.h:34, packer.h:98`).
 const maxCmdLen = 8000
 
 // objcopyScriptPath is the SOURCE_ROOT path to the upstream packer
-// script. Carried on every emitted objcopy node's `inputs` slot and
-// propagated into the enclosing module's `.global.a` member inputs
-// (PR-M3-globalA-narrow-closure).
+// script. Carried on every emitted objcopy node's `inputs` and
+// propagated into the enclosing module's `.global.a` member inputs.
 var (
 	objcopyScriptVFS  = Source("build/scripts/objcopy.py")
 	objcopyScriptPath = objcopyScriptVFS.String()
@@ -70,29 +64,13 @@ func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath, modul
 }
 
 // expandResourceFiles applies the upstream
-// `build/plugins/res.py:onresource_files` expansion to the raw arg
-// list of a RESOURCE_FILES(...) invocation, producing the same
-// `(path, key)` packer-input pair list that a hand-written RESOURCE
-// macro would. The keyword grammar is:
-//
-//	DONT_COMPRESS                 (flag, dropped — handled by impl.cpp)
-//	PREFIX <prefix>               (per-path key prefix)
-//	DEST <dest>                   (overrides prefix for the next path)
-//	STRIP <prefix_to_strip>       (strips a path prefix before keying)
-//	<path>                        (source path; emits one kv entry +
-//	                               one path/key entry)
-//
-// For each plain path P:
-//   - kv-only entry: Path="-",
-//     Key="resfs/src/<computed-key>=${rootrel;context=TEXT;input=TEXT:\"<P>\"}".
-//   - source entry: Path=<P>, Key="resfs/file/<computed-key>".
-//
-// computed-key = (dest) | (prefix + (strip(P) or P)). DEST takes
-// precedence on a per-path basis (and resets prefix); subsequent
-// paths without DEST revert to PREFIX-based keying. The
-// `${rootrel;context=TEXT;input=TEXT:"<P>"}` placeholder is preserved
-// verbatim because the hash formula consumes the pre-expansion form
-// (verified against REF python-rapidjson objcopy hash).
+// `build/plugins/res.py:onresource_files` expansion. Keyword grammar:
+//   DONT_COMPRESS (dropped), PREFIX <p>, DEST <d>, STRIP <p>, <path>.
+// For each plain path P emits a kv-only entry (Path="-") plus a source
+// entry (Path=P, Key="resfs/file/<computed-key>"). computed-key =
+// (dest) | (prefix + (strip(P) or P)); DEST is per-path and resets
+// prefix. The `${rootrel;...}` placeholder is preserved verbatim
+// because objcopyHash consumes the pre-expansion form.
 func expandResourceFiles(args []string) []resourceEntry {
 	prefix := ""
 	prefixToStrip := ""
@@ -152,15 +130,10 @@ func expandResourceFiles(args []string) []resourceEntry {
 	return out
 }
 
-// resourceModuleTag returns the upstream MODULE_TAG seen by the packer
-// for the given module statement. Plain `LIBRARY` / `PROGRAM` and
-// most module flavors set MODULE_TAG to the empty string; PY3_LIBRARY
-// / PY3_PROGRAM_BIN set it to "PY3" (`build/conf/python.conf:1126
-// DEFAULT(MODULE_TAG PY3)`). GEN_LIBRARY sets "RESOURCE_LIB"
-// (`build/ymake.core.conf:598`); DLLs set "DLL"
-// (`build/ymake.core.conf:2197, 2379`). The set here is the conservative
-// PR-A subset (only `PY3` because PR-A's two scoped REF nodes belong
-// to plain LIBRARY (certs) and PY3_LIBRARY (rapidjson)).
+// resourceModuleTag returns the upstream MODULE_TAG seen by the packer.
+// Plain LIBRARY/PROGRAM → ""; PY3_LIBRARY/PY3_PROGRAM_BIN/PY23_* → "PY3"
+// (`build/conf/python.conf:1126`). GEN_LIBRARY ("RESOURCE_LIB", core
+// conf:598) and DLL ("DLL", core conf:2197,2379) are not yet handled.
 func resourceModuleTag(modName string) string {
 	switch modName {
 	case "PY3_LIBRARY", "PY3_PROGRAM_BIN", "PY3_PROGRAM", "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
@@ -171,16 +144,10 @@ func resourceModuleTag(modName string) string {
 }
 
 // emitResourceObjcopy emits one objcopy PY node per flush of the
-// upstream `TObjCopyResourcePacker`. PR-A flushes once per module
-// (the chunker lands in PR-C); returned slice is the
-// `$(B)/...objcopy_*.o` output paths in flush order, intended
-// to be appended to the module's `.global.a` `srcs[]` by the caller.
-// When the module has no parsed RESOURCE / RESOURCE_FILES entries the
-// function emits nothing and returns nil.
+// upstream `TObjCopyResourcePacker`. Returned slice is the
+// `$(B)/...objcopy_*.o` output paths in flush order, intended to be
+// appended to the module's `.global.a` `srcs[]` by the caller.
 //
-// The cmd_args shape mirrors REF (verified against
-// `certs/objcopy_c27c99b2d9d5eade92fd72d0aa.o` and
-// `devtools/ymake/contrib/python-rapidjson/objcopy_55c44b1fdbfda511798cd895e2.o`).
 // Walks `tools/rescompiler/bin` and `tools/rescompressor/bin` to
 // recover their LD NodeRefs and threads them as deps; both walks are
 // memoized in ctx.memo so the parallel call site in emitPySrcs does
@@ -190,10 +157,9 @@ func emitResourceObjcopy(
 	instance ModuleInstance,
 	d *moduleData,
 ) ([]NodeRef, []VFS, []VFS) {
-	// PR-B: emit kv_only sibling shapes (PY_MAIN, py/namespace,
-	// py/no_check_imports) alongside the legacy RESOURCE/RESOURCE_FILES
-	// flush. Each sibling is independent and conditional on its own
-	// per-module data; a module may emit any non-empty subset.
+	// Emit kv_only sibling shapes (PY_MAIN, py/namespace,
+	// py/no_check_imports) alongside RESOURCE/RESOURCE_FILES. Each
+	// sibling is independent and conditional on its own per-module data.
 	hasKvOnly := d.pyMain != "" || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0
 	if len(d.resources) == 0 && !hasKvOnly {
 		return nil, nil, nil
@@ -204,21 +170,17 @@ func emitResourceObjcopy(
 
 	var refs []NodeRef
 	var outputs []VFS
-	// PR-M3-globalA-narrow-closure: collect the SOURCE_ROOT-rooted
-	// member inputs each emitted objcopy node would contribute to the
-	// enclosing module's .global.a archive. Every emitted node carries
-	// `objcopy.py` in its own `inputs[]`; path-based flushes additionally
-	// carry their source paths. The kv-only sub-emitters return only
-	// `objcopy.py`. Caller dedups + folds into globalMemberInputs.
+	// Collect the SOURCE_ROOT-rooted member inputs each emitted objcopy
+	// node would contribute to the enclosing module's .global.a archive.
+	// Every node carries `objcopy.py`; path-based flushes also carry
+	// their source paths. Caller dedups + folds into globalMemberInputs.
 	var globalMemberInputs []VFS
 	addGlobal := func(p VFS) { globalMemberInputs = append(globalMemberInputs, p) }
 
-	// kv_only siblings — each fires only when its trigger is present
-	// (no-op return when not). PR-M3-py3cc-objcopy-shape: PY_MAIN fires
-	// BEFORE the py/namespace resource (upstream pybuild.py:395-398
-	// invokes py_main first; namespace resource is emitted later at
-	// pybuild.py:587-594). Order affects the LD cmd[2] SRCS_GLOBAL slot
-	// emission sequence and therefore L3 cmd-equality.
+	// kv_only siblings — each fires only when its trigger is present.
+	// PY_MAIN fires BEFORE py/namespace (upstream pybuild.py:395-398
+	// invokes py_main first; namespace is emitted at pybuild.py:587-594).
+	// Order affects the LD cmd[2] SRCS_GLOBAL emission sequence.
 	if res := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); res != nil {
 		refs = append(refs, res.Ref)
 		outputs = append(outputs, res.Out)
@@ -237,10 +199,8 @@ func emitResourceObjcopy(
 		addGlobal(objcopyScriptVFS)
 	}
 
-	// PR-M3-resource-objcopy-C: per-PY_SRCS resfs entry objcopy nodes.
-	// One node per packer-flush chunk; small modules fit in one chunk
-	// (single-entry exact match); large modules (Lib, lib2/py) split
-	// into multiple chunks via chunkPySrcEntries.
+	// Per-PY_SRCS resfs entry objcopy nodes. One node per packer-flush
+	// chunk; large modules (Lib, lib2/py) split via chunkPySrcEntries.
 	srcRefs, srcOuts, srcGlobalInputs := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
 	refs = append(refs, srcRefs...)
 	outputs = append(outputs, srcOuts...)
@@ -252,8 +212,6 @@ func emitResourceObjcopy(
 
 	// Filter rejected entries (mirrors objcopy.h:84-96 CanHandle):
 	// drop entries whose path or name contains the BAD substrings.
-	// PR-A's scoped entries never trip this; the guard mirrors upstream
-	// for forward correctness.
 	bad := []string{"${ARCADIA_BUILD_ROOT}", "${ARCADIA_SOURCE_ROOT}", "conftest.py"}
 	contains := func(s string) bool {
 		for _, b := range bad {
@@ -296,10 +254,9 @@ func emitResourceObjcopy(
 			"--target", instance.Platform.Triple,
 		}
 
-		// Source inputs slot: --inputs <p1> <p2> ... --keys <k1> <k2> ...
-		// `paths` carry the module-relative path as declared by the macro;
-		// cmd_args injects the $(S)/<modulePath>/<path> form.
-		// REF samples confirm both certs and rapidjson use this shape.
+		// Source inputs slot: --inputs <p1> ... --keys <k1> ...
+		// `paths` carry the module-relative path; cmd_args injects the
+		// $(S)/<modulePath>/<path> form.
 		if len(cur.paths) > 0 {
 			cmdArgs = append(cmdArgs, "--inputs")
 			for _, p := range cur.paths {
@@ -309,12 +266,9 @@ func emitResourceObjcopy(
 			cmdArgs = append(cmdArgs, cur.keys...)
 		}
 
-		// kvs cmd_args use the POST-`${rootrel;...}`-expansion form: the
-		// placeholder resolves to the module-relative path (i.e. the
-		// rootrel of the source — `<unitPath>/<P>`). Hash sees the
-		// pre-expansion form (cur.kvs); cmd_args sees the expanded form
-		// (verified against REF rapidjson sample at
-		// `cmds[0].cmd_args[25..]`).
+		// kvs cmd_args use the POST-`${rootrel;...}`-expansion form
+		// (`<unitPath>/<P>`). Hash sees the pre-expansion form
+		// (cur.kvs); cmd_args sees the expanded form.
 		if len(cur.kvs) > 0 {
 			cmdArgs = append(cmdArgs, "--kvs")
 			for _, kv := range cur.kvs {
@@ -324,17 +278,11 @@ func emitResourceObjcopy(
 
 		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 
-		// inputs[] mirrors REF: rescompiler + rescompressor binaries,
-		// then per-entry source paths in declaration order, with the
-		// objcopy.py script appended last (REF certs places objcopy.py
-		// before the resource paths; REF rapidjson places it after.
-		// The differentiator is which slot the upstream packer adds
-		// the script — `objcopy.h:50 --output_obj` references
-		// `${output:__OUT}`, while the script path comes from the
-		// surrounding `RUN_PYTHON3` macro template. For the single-entry
-		// certs case the script lands first; for the multi-entry
-		// rapidjson case the script lands after the inputs. The
-		// distinguishing condition is the number of source-path entries.
+		// inputs[]: rescompiler + rescompressor binaries, then per-entry
+		// source paths in declaration order, with objcopy.py script
+		// position toggled by source-count: ≤1 source → script before
+		// the source; >1 → script after. The script path comes from the
+		// surrounding `RUN_PYTHON3` macro template.
 		inputs := []VFS{
 			Build("tools/rescompiler/rescompiler"),
 			Build("tools/rescompressor/rescompressor"),
@@ -351,10 +299,8 @@ func emitResourceObjcopy(
 			inputs = append(inputs, objcopyScriptVFS)
 		}
 
-		// PR-M3-platform-pair-step7: tags + host_platform + platform
-		// plumbed from the Platform pair on ctx; renderer does NOT branch
-		// on "is host?". Empty `instance.Platform.Tags` keeps the slice non-nil so
-		// JSON serialises as `[]`, not `null`.
+		// tags + host_platform + platform plumbed from the Platform pair
+		// on ctx. Empty Tags stays non-nil so JSON serialises as `[]`.
 		objcopyTags := []string{}
 		if len(instance.Platform.Tags) > 0 {
 			objcopyTags = append(objcopyTags, instance.Platform.Tags...)
@@ -400,9 +346,8 @@ func emitResourceObjcopy(
 		refs = append(refs, r)
 		outputs = append(outputs, outputObj)
 
-		// PR-M3-globalA-narrow-closure: this node's SOURCE_ROOT inputs
-		// (per-entry source paths + objcopy.py) must propagate to the
-		// enclosing module's .global.a archive's `inputs` slot.
+		// SOURCE_ROOT inputs (per-entry source paths + objcopy.py) must
+		// propagate to the enclosing module's .global.a `inputs` slot.
 		for _, p := range cur.paths {
 			addGlobal(Source(instance.Path + "/" + p))
 		}
@@ -424,9 +369,8 @@ func emitResourceObjcopy(
 			}
 		}
 
-		// PR-A: single-flush only (no chunking). The chunker (PR-C)
-		// would emit when cmdLen exceeds maxCmdLen mid-stream; PR-A
-		// defers the flush to the end-of-stream `flush()` below.
+		// Single-flush only here (end-of-stream `flush()` below).
+		// Chunking is handled by chunkPySrcEntries for PY_SRCS.
 		_ = maxCmdLen
 	}
 
@@ -436,13 +380,10 @@ func emitResourceObjcopy(
 }
 
 // expandRootrel substitutes the upstream
-// `${rootrel;context=TEXT;input=TEXT:"<P>"}` placeholder produced by
-// `build/plugins/res.py:onresource_files` with its expanded form —
-// the module-relative path `<unitPath>/<P>`. The placeholder is
-// preserved by `expandResourceFiles` and consumed by `objcopyHash`
-// pre-expansion; cmd_args consume it post-expansion (the REF
-// rapidjson sample stores the expanded form in its
-// `cmds[0].cmd_args` `--kvs` slot).
+// `${rootrel;context=TEXT;input=TEXT:"<P>"}` placeholder with its
+// expanded form `<unitPath>/<P>`. The placeholder is preserved by
+// `expandResourceFiles` and consumed by `objcopyHash` pre-expansion;
+// cmd_args consume the expanded form.
 func expandRootrel(kv string, unitPath string) string {
 	const marker = "${rootrel;context=TEXT;input=TEXT:\""
 	idx := strings.Index(kv, marker)
@@ -462,34 +403,26 @@ func expandRootrel(kv string, unitPath string) string {
 	return kv[:idx] + expanded + tail[end+len("\"}"):]
 }
 
-// emitKvOnlyObjcopyNode emits a single kv_only objcopy PY node for the
-// module — one whose upstream packer flush carries an empty `paths`
-// slice and a non-empty `kvs` list, so the cmd_args have no `--inputs`
-// / `--keys` slots and `inputs[]` is the three-element rescompiler /
-// rescompressor / objcopy.py prefix (no per-resource source paths).
+// emitKvOnlyObjcopyNode emits one kv_only objcopy PY node — the packer
+// flush carries empty `paths` and a non-empty `kvs` list, so cmd_args
+// have no `--inputs`/`--keys` slots and `inputs[]` is the three-element
+// rescompiler / rescompressor / objcopy.py prefix.
 //
-// The hash matches the upstream
-// `TObjCopyResourcePacker::GetHashForOutput` derivation
-// (`devtools/ymake/plugins/resource_handler/packer.h:73-85`): MD5 of
-// sorted([kvsHash..., "$S/"+unitPath]) joined by "," with MODULE_TAG
-// suffix; first hashLen hex chars (lower-case).
+// Hash matches upstream `TObjCopyResourcePacker::GetHashForOutput`
+// (`packer.h:73-85`): MD5 of sorted([kvsHash..., "$S/"+unitPath])
+// joined by "," with MODULE_TAG suffix; first hashLen hex chars.
 //
 // Caller passes:
 //   - kvsHash: the literal kv strings as the packer's hash sees them
-//     after ya.make macro evaluation — i.e. with outer double quotes
-//     retained for `py/namespace/...="value"` and
-//     `py/no_check_imports/...="value"` (per pybuild.py:593 and
-//     ytest.py:811), and unquoted for `PY_MAIN=value` (pybuild.py:759).
-//   - kvsCmd: the form that lands in cmd_args after ymake's RUN_PYTHON3
-//     template strips outer quotes from the kv argument tokens. Empirically
-//     this is the unquoted `key=value` for all three shapes (verified
-//     against REF sg2.json for the 7 PR-B nodes).
-//   - moduleName: the ModuleStmt.Name (e.g. "PY3_LIBRARY"); used to
-//     derive both the hash MODULE_TAG suffix (resourceModuleTag) and
-//     the lower-cased target_properties.module_tag override that the
-//     REF surfaces only for PY23_*-flavoured modules.
-//
-// Returns the `$(B)/<modulePath>/objcopy_<hash>.o` output path.
+//     after ya.make macro evaluation — outer double quotes retained
+//     for `py/namespace/...="value"` (pybuild.py:593) and
+//     `py/no_check_imports/...="value"` (ytest.py:811); unquoted for
+//     `PY_MAIN=value` (pybuild.py:759).
+//   - kvsCmd: the form that lands in cmd_args after RUN_PYTHON3 strips
+//     outer quotes. Empirically the unquoted `key=value` for all three.
+//   - moduleName: the ModuleStmt.Name; drives MODULE_TAG suffix via
+//     resourceModuleTag and the lower-cased target_properties.module_tag
+//     that REF surfaces only for PY23_*-flavoured modules.
 func emitKvOnlyObjcopyNode(
 	ctx *genCtx,
 	instance ModuleInstance,
@@ -519,9 +452,8 @@ func emitKvOnlyObjcopyNode(
 	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 
 	// kv_only nodes always carry the three-element inputs prefix in the
-	// rescompiler / rescompressor / objcopy.py order (verified against
-	// all 7 REF samples in this PR's scope; no source-path entries are
-	// appended because the kv-only flush has zero `paths`).
+	// rescompiler / rescompressor / objcopy.py order; no source-path
+	// entries appended (the kv-only flush has zero `paths`).
 	inputs := []VFS{
 		Build("tools/rescompiler/rescompiler"),
 		Build("tools/rescompressor/rescompressor"),
@@ -532,22 +464,17 @@ func emitKvOnlyObjcopyNode(
 		"module_dir": instance.Path,
 	}
 
-	// PY23_LIBRARY / PY23_NATIVE_LIBRARY have MODULE_TAG=PY3 but the
-	// reference graph surfaces `target_properties.module_tag = "py3"`
-	// (lower-case) only for those flavours. PY3_LIBRARY / PY3_PROGRAM_BIN
-	// suppress it (the MODULE_TAG matches the default for their declared
-	// type; upstream omits redundant properties). Witnessed in REF:
-	// library/python/symbols/module (PY23_LIBRARY) carries module_tag=py3
-	// on aarch64; library/python/runtime_py3 (PY3_LIBRARY) does not.
+	// PY23_LIBRARY / PY23_NATIVE_LIBRARY have MODULE_TAG=PY3 but REF
+	// surfaces `target_properties.module_tag="py3"` (lower-case) only
+	// for those flavours; PY3_LIBRARY / PY3_PROGRAM_BIN suppress it
+	// (upstream omits redundant properties matching the default).
 	switch moduleName {
 	case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
 		targetProps["module_tag"] = "py3"
 	}
 
-	// PR-M3-platform-pair-step7: tags + host_platform + platform from
-	// targetP. Empty `instance.Platform.Tags` keeps the slice non-nil so JSON
-	// serialises as `[]`, not `null`. REF confirms: kv_only objcopy
-	// nodes on x86_64 have `tags=['tool']`, aarch64 twins have `[]`.
+	// Empty Tags stays non-nil so JSON serialises as `[]`. REF: kv_only
+	// objcopy nodes on x86_64 have `tags=['tool']`, aarch64 twins `[]`.
 	kvTags := []string{}
 	if len(instance.Platform.Tags) > 0 {
 		kvTags = append(kvTags, instance.Platform.Tags...)
@@ -597,14 +524,10 @@ type objcopyEmit struct {
 }
 
 // emitPyNamespaceObjcopy emits the `py/namespace/<mod_list_md5>/<unit>=<ns>.`
-// kv objcopy node per upstream pybuild.py:587-594. The mod_list_md5 is
-// a streaming md5 over each `(path, mod)` pair's `mod` UTF-8 bytes,
-// iteration-ordered. The unit_path component and namespace value are
-// the dotted upath. Skipped for `contrib/tools/python3` modules where
-// is_extended_source_search_enabled returns False (pybuild.py:40-48),
-// and for modules whose PY_SRCS is TOP_LEVEL (ns="") since ns="" emits
-// no namespace kv. Returns the emitted output path (empty when nothing
-// was emitted).
+// kv objcopy node per pybuild.py:587-594. The mod_list_md5 is a
+// streaming md5 over each `(path, mod)` pair's `mod` UTF-8 bytes,
+// iteration-ordered. Skipped for `contrib/tools/python3*` modules
+// (pybuild.py:40-48) and for modules whose PY_SRCS is TOP_LEVEL.
 func emitPyNamespaceObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
@@ -624,8 +547,7 @@ func emitPyNamespaceObjcopy(
 		return nil
 	}
 
-	// PR-B scope is PY3 / PY23 only; the namespace mechanism is gated
-	// on py3=true in pybuild.py:559. Non-PY3 modules are skipped.
+	// PY3 / PY23 only; gated on py3=true in pybuild.py:559.
 	if d.moduleStmt == nil {
 		return nil
 	}
@@ -633,14 +555,9 @@ func emitPyNamespaceObjcopy(
 		return nil
 	}
 
-	// Default namespace: `<upath-dotted>.`. The TOP_LEVEL modifier of
-	// PY_SRCS empties ns; we have no per-source TOP_LEVEL tracking
-	// surfaced beyond d.pySrcs, so we conservatively derive ns from
-	// the upath. The four REF modules in scope do not use TOP_LEVEL
-	// for the entries that drive the namespace hash (verified against
-	// library/python/runtime_py3, library/python/symbols/module,
-	// tools/py3cc/slow). contrib/tools/python3/lib2/py uses TOP_LEVEL
-	// but is gated out by the contrib/tools/python3 check above.
+	// Default namespace: `<upath-dotted>.`. TOP_LEVEL empties ns; we
+	// conservatively derive ns from upath (REF modules in scope do not
+	// use TOP_LEVEL for entries that drive the namespace hash).
 	ns := strings.ReplaceAll(instance.Path, "/", ".") + "."
 
 	// Compute mod_list_md5: streaming md5 over each `mod` in pys order.
@@ -654,15 +571,12 @@ func emitPyNamespaceObjcopy(
 	}
 	modListMD5 := enchex.EncodeToString(h.Sum(nil))
 
-	// Build the kv. mod_root_path = unit path (when SRCDIR is unset or
-	// equals upath, which holds for the 3 REF modules in scope).
-	// pybuild.py:591: key = '{prefix}/{md5}/{path}'; the value joins
-	// sorted ns set by ':'.  Each module in scope has exactly one ns,
-	// so the join collapses to that one entry verbatim.
+	// Build the kv. pybuild.py:591: key = '{prefix}/{md5}/{path}';
+	// value joins sorted ns set by ':' (each module in scope has one
+	// ns so the join collapses to that entry).
 	key := "py/namespace/" + modListMD5 + "/" + instance.Path
-	// Hash form retains the outer double quotes around the value as
-	// emitted by pybuild.py:593 (`'{}="{}"'.format(key, namespaces)`).
-	// cmd_args form is unquoted (the RUN_PYTHON3 template strips them).
+	// Hash form retains the outer double quotes (pybuild.py:593
+	// `'{}="{}"'.format(key, namespaces)`); cmd_args strips them.
 	kvHash := key + "=\"" + ns + "\""
 	kvCmd := key + "=" + ns
 
@@ -670,11 +584,9 @@ func emitPyNamespaceObjcopy(
 }
 
 // emitPyMainObjcopy emits the `PY_MAIN=<dotted>:<func>` kv objcopy node
-// per upstream pybuild.py:py_main (build/plugins/pybuild.py:759). The
-// arg is captured at parse time on d.pyMain — either from the explicit
-// `PY_MAIN(arg)` macro (PY_MAIN case in collectStmts) or from the
-// `MAIN <src.py>` modifier of PY_SRCS (PY_SRCS case).  Returns the
-// emitted output path (empty when d.pyMain is unset).
+// per pybuild.py:759. The arg is captured at parse time on d.pyMain
+// from either explicit `PY_MAIN(arg)` or the `MAIN <src.py>` modifier
+// of PY_SRCS.
 func emitPyMainObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
@@ -697,11 +609,8 @@ func emitPyMainObjcopy(
 
 // emitNoCheckImportsObjcopy emits the
 // `py/no_check_imports/<pathid>=<args-space-joined>` kv objcopy node
-// per upstream ytest.py:on_register_no_check_imports
-// (build/plugins/ytest.py:808-811). The pathid is the lower-cased
-// unpadded base32 of md5(value-bytes); see build/plugins/_common.py:37
-// (pathid). Returns the emitted output path (empty when d.noCheckImports
-// is empty).
+// per ytest.py:808-811. pathid is the lower-cased unpadded base32 of
+// md5(value-bytes); see build/plugins/_common.py:37.
 func emitNoCheckImportsObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
@@ -722,45 +631,32 @@ func emitNoCheckImportsObjcopy(
 	b32 := strings.ToLower(enc32.StdEncoding.EncodeToString(sum[:]))
 	b32 = strings.TrimRight(b32, "=")
 	key := "py/no_check_imports/" + b32
-	// Hash form retains the outer double quotes (ytest.py:811
-	// `'py/no_check_imports/{}="{}"'.format(...)`); cmd_args strips them.
+	// Hash form retains outer double quotes (ytest.py:811); cmd_args strips them.
 	kvHash := key + "=\"" + value + "\""
 	kvCmd := key + "=" + value
 
 	return emitKvOnlyObjcopyNode(ctx, instance, []string{kvHash}, []string{kvCmd}, d.moduleStmt.Name, rescompilerLDRef, rescompressorLDRef)
 }
 
-// pySrcEntry is one element of the per-PY_SRCS objcopy emission. A
-// single source produces between one and two entries depending on
-// PYBUILD_NO_PY / PYBUILD_NO_PYC mode:
-//   - default: emit both the raw .py entry AND the .yapyc3 entry
-//   - PYBUILD_NO_PY (Lib): emit only the .yapyc3 entry
-//   - PYBUILD_NO_PYC (lib2/py, runtime_py3, py3cc/slow): emit only the
-//     raw .py entry
-//
-// `srcRel` is the PY_SRCS argument (relative path within the source
-// unit). `actualUnit` is the SRCDIR-resolved unit (== d.srcDir when
-// SRCDIR is set, otherwise == instance.Path). `topLevel` mirrors the
-// PY_SRCS TOP_LEVEL prefix and strips the dotted-module-path prefix
-// from the resfs key.
+// pySrcEntry is one element of the per-PY_SRCS objcopy emission. Per
+// source: 1-2 entries by PYBUILD_NO_PY / PYBUILD_NO_PYC mode:
+//   - default: raw .py entry + .yapyc3 entry
+//   - PYBUILD_NO_PY: only .yapyc3
+//   - PYBUILD_NO_PYC: only raw .py
 type pySrcEntry struct {
-	pathHash  string // srcRel.yapyc3 form for flat, srcRel.3kp2.yapyc3 form for subdir; used as `paths` for the hash
+	pathHash  string // srcRel.yapyc3 (flat) or srcRel.3kp2.yapyc3 (subdir); used as `paths` for the hash
 	pathInput string // cmd_args --inputs slot: $(B)/<actualUnit>/<srcRel>{.suffix} (yapyc3) or $(S)/<actualUnit>/<srcRel> (raw)
 	key       string // pre-base64 key: resfs/file/py/[<ns>/]<srcRel>[.yapyc3]
 	kvHash    string // pre-rootrel-expansion form (placeholder retained)
-	kvCmd     string // post-rootrel-expansion form (placeholder expanded to <actualUnit>/<value>)
+	kvCmd     string // post-rootrel-expansion form
 	inputDep  string // inputs[] graph slot: same as pathInput
 
-	// extraSrcInput is the additional `.py` source-tree input the upstream
-	// ymake scanner threads into the objcopy node's `inputs[]` whenever the
-	// entry's resfs target is a `.yapyc3` bytecode (which is itself built
-	// from the `.py` source by `on_py3_compile_bytecode`). For raw `.py`
-	// entries this is empty (pathInput already covers the .py path). For
-	// yapyc3 entries it is `$(S)/<actualUnit>/<srcRel>`.
-	// Verified against REF Lib chunks: `inputs[].py` count consistently
-	// matches `inputs[].yapyc3` count one-to-one, even when the entry
-	// straddles a chunk boundary (synchronize.py.3kp2.yapyc3 / synchronize.py
-	// in both objcopy_0299ac47a... and objcopy_a5d68f981...).
+	// extraSrcInput is the additional `.py` source-tree input the scanner
+	// threads into objcopy `inputs[]` whenever the entry's resfs target
+	// is a `.yapyc3` bytecode (built from the `.py` by
+	// on_py3_compile_bytecode). Empty for raw .py entries; for yapyc3
+	// entries `$(S)/<actualUnit>/<srcRel>`. REF Lib chunks: .py count
+	// matches .yapyc3 count one-to-one even across chunk straddles.
 	extraSrcInput string
 }
 
@@ -793,16 +689,11 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 			suffix = ".3kp2.yapyc3"
 		}
 
-		// PR-M3-final-sort-inversions: when a PY_SRCS source emits both
-		// the raw `.py` entry AND the `.yapyc3` entry (the
-		// non-PYBUILD_NO_PY × non-PYBUILD_NO_PYC default), REF places the
-		// raw `.py` entry FIRST in the packer's input list — driving
-		// --inputs / --keys / --kvs ordering. Witness:
-		// library/python/symbols/module/__init__.py objcopy node
-		// (sg2.json) lists $(S)/.../__init__.py before
-		// $(B)/.../__init__.py.yapyc3. The chunk-hash sorts
-		// internally so the objcopy_<hex>.o filename is invariant under
-		// this swap; only cmd_args (and inputs[]) ordering shifts.
+		// When both raw .py and .yapyc3 entries fire (default), REF
+		// places the raw .py FIRST in the packer's input list, driving
+		// --inputs / --keys / --kvs ordering. The chunk-hash sorts
+		// internally so objcopy_<hex>.o is invariant under this swap;
+		// only cmd_args (and inputs[]) ordering shifts.
 
 		// raw .py entry — emitted unless PYBUILD_NO_PY is set.
 		if !d.pyBuildNoPY {
@@ -824,9 +715,8 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 		if !d.pyBuildNoPYC {
 			ypKey := "resfs/file/py/" + keyPrefix + srcRel + ".yapyc3"
 			ypPathInput := Build(actualUnit + "/" + srcRel + suffix).String()
-			// kv hash form retains the ${rootrel;...} placeholder with
-			// the inner-srcRel-with-suffix value. cmd_args form expands
-			// to <actualUnit>/<srcRel><suffix>.
+			// kv hash retains the ${rootrel;...} placeholder; cmd_args
+			// form expands to <actualUnit>/<srcRel><suffix>.
 			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
 			ypKvCmd := "resfs/src/" + ypKey + "=" + actualUnit + "/" + srcRel + suffix
 			out = append(out, pySrcEntry{
@@ -845,9 +735,8 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 }
 
 // pySrcChunk holds the accumulator state for one objcopy node emitted
-// by chunkPySrcEntries — a per-HandleResource-call flush chunker
-// matching upstream `TObjCopyResourcePacker::HandleResource`
-// (`devtools/ymake/plugins/resource_handler/objcopy.h:17-29`).
+// by chunkPySrcEntries — per-HandleResource-call flush chunker matching
+// upstream `TObjCopyResourcePacker::HandleResource` (`objcopy.h:17-29`).
 type pySrcChunk struct {
 	paths    []string
 	keys     []string // base64-padded
@@ -855,40 +744,29 @@ type pySrcChunk struct {
 	kvsCmd   []string
 	pathInps []string
 
-	// inps holds the upstream-scanner-discovered `inputs[]` fragment for
-	// this chunk: every entry whose KV add OR path+key add lands in this
-	// chunk contributes its `pathInput` and (when non-empty) its
-	// `extraSrcInput`. The chunker emits in declaration order with
-	// per-chunk deduplication; the emitter merges with the tooling prefix
-	// (rescompiler/rescompressor/objcopy.py) before writing the node.
-	// Captures the chunk-straddle case where an entry's KV is in chunk N
-	// but its path+key is in chunk N+1 (the entry's paths land in BOTH
-	// chunks' inps lists — REF byte-exact, see resource_test.go).
+	// inps holds the scanner-discovered `inputs[]` fragment for this
+	// chunk: every entry whose KV add OR path+key add lands here
+	// contributes its `pathInput` and (when non-empty) `extraSrcInput`,
+	// in declaration order with per-chunk dedup. Captures chunk-straddle
+	// where an entry's KV is in chunk N but its path+key is in N+1
+	// (REF byte-exact, see resource_test.go).
 	inps []string
 }
 
 // chunkPySrcEntries partitions a declaration-ordered entry list into
-// chunks that mirror byte-exact what the upstream packer would produce.
+// chunks byte-exact with the upstream packer.
 //
 // Upstream semantics (`objcopy.h:17-29`): per RESOURCE() entry the
-// `res.py:onresource_files` macro appends `[-, src_kv, path, key]` to
-// the packer input. The packer's `HandleResource` is therefore called
-// TWICE per entry:
+// `res.py:onresource_files` macro appends `[-, src_kv, path, key]` so
+// `HandleResource` is called TWICE per entry:
+//   (1) kv add:       EstimatedCmdLen_ += ROOT_CMD_LEN + len(src_kv_hash)
+//   (2) path+key add: EstimatedCmdLen_ += ROOT_CMD_LEN + len(path_arg) + len(b64(key))
+// After each add, `Finalize(force=false)` flushes when
+// EstimatedCmdLen_ >= MAX_CMD_LEN — a single entry can straddle a
+// chunk boundary (kv in N, path+key in N+1).
 //
-//	(1) kv add:        EstimatedCmdLen_ += ROOT_CMD_LEN + len(src_kv_hash)
-//	(2) path+key add:  EstimatedCmdLen_ += ROOT_CMD_LEN + len(path_arg) + len(b64(key))
-//
-// After EACH add, `Finalize(force=false)` runs; if
-// `EstimatedCmdLen_ >= MAX_CMD_LEN` the chunk flushes. This is why a
-// single entry can straddle a chunk boundary: the kv lands in chunk N,
-// the path+key in chunk N+1.
-//
-// The accumulator uses the pre-expansion forms for both adds: the kv's
-// `${rootrel;...}` placeholder is retained (`e.kvHash`), and the path is
-// the bare source-relative string (`e.pathHash`), not the
-// `$(B)/...` expansion. Confirmed byte-exact for
-// `contrib/tools/python3/Lib` (40/40) and `contrib/tools/python3/lib2/py`
-// (37/37 PY_SRCS chunks) — see `resource_test.go`.
+// Accumulator uses pre-expansion forms: kv keeps `${rootrel;...}`
+// (e.kvHash); path is the bare source-relative string (e.pathHash).
 func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 	if len(entries) == 0 {
 		return nil
@@ -897,12 +775,10 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 	chunks := make([]pySrcChunk, 0)
 	cur := pySrcChunk{}
 	cmdLen := 0
-	// inpsSeen tracks which paths have already been added to `cur.inps`
-	// within the current chunk. Reset on flush. Mirrors the upstream ymake
-	// scanner's natural per-node `inputs[]` dedup (a single file appears
-	// once per node regardless of how many resfs entries reference it).
-	// A chunk-straddling entry still contributes to both the kv-add chunk
-	// and the path+key-add chunk because the map is reset between them.
+	// inpsSeen tracks paths already in `cur.inps` for the current chunk
+	// (reset on flush). A chunk-straddling entry still contributes to
+	// both kv-add chunk and path+key-add chunk because the map resets
+	// between them.
 	inpsSeen := make(map[string]struct{})
 
 	flush := func() {
@@ -915,11 +791,9 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 		inpsSeen = make(map[string]struct{})
 	}
 
-	// addInps records the entry's pathInput + extraSrcInput on the current
-	// chunk's `inps` list, deduped per-chunk by absolute path. Same-chunk
-	// KV-add and path+key-add of the same entry collapse to one contribution.
-	// Cross-entry duplicates (e.g. the yapyc3 entry's extraSrcInput .py and
-	// the raw .py entry's pathInput naming the same file) also collapse.
+	// addInps records pathInput + extraSrcInput on `cur.inps`, deduped
+	// per-chunk by absolute path. Collapses same-chunk KV/path+key adds
+	// and cross-entry duplicates (yapyc3.extraSrcInput vs raw .py).
 	addInps := func(e pySrcEntry) {
 		if _, ok := inpsSeen[e.pathInput]; !ok {
 			cur.inps = append(cur.inps, e.pathInput)
@@ -961,10 +835,8 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 }
 
 // emitPySrcObjcopy emits one objcopy PY node per chunk of PY_SRCS-derived
-// resfs entries. Returns the emitted output paths in chunk order.
-// Skipped when the module has no PY_SRCS or when its PY_SRCS produces
-// no resfs entries (all-suppressed by PYBUILD_NO_PY + PYBUILD_NO_PYC,
-// an unobserved combination that would degenerate to a no-op).
+// resfs entries. Skipped when no PY_SRCS or when all entries are
+// suppressed by PYBUILD_NO_PY + PYBUILD_NO_PYC.
 func emitPySrcObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
@@ -979,8 +851,7 @@ func emitPySrcObjcopy(
 		return nil, nil, nil
 	}
 
-	// PY3-flavoured modules only — non-PY3 PY_SRCS does not exist in
-	// the M3 closure (the gate mirrors emitPyNamespaceObjcopy:572-578).
+	// PY3-flavoured modules only — gate mirrors emitPyNamespaceObjcopy.
 	if resourceModuleTag(d.moduleStmt.Name) == "" {
 		return nil, nil, nil
 	}
@@ -995,11 +866,10 @@ func emitPySrcObjcopy(
 
 	refs := make([]NodeRef, 0, len(chunks))
 	outputs := make([]VFS, 0, len(chunks))
-	// PR-M3-globalA-narrow-closure: per-chunk SOURCE_ROOT inputs (PY_SRCS
-	// raw .py paths + objcopy.py) feed the enclosing module's .global.a.
-	// BUILD_ROOT-rooted .yapyc3 path entries are excluded — they are
-	// non-.o codegen artefacts and the AR aggregator's filter
-	// (isBuildRootCodegenProduct) would drop them anyway.
+	// Per-chunk SOURCE_ROOT inputs (PY_SRCS raw .py paths + objcopy.py)
+	// feed the enclosing module's .global.a. BUILD_ROOT-rooted .yapyc3
+	// entries are excluded — codegen artefacts that the AR aggregator's
+	// isBuildRootCodegenProduct filter would drop anyway.
 	var globalMemberInputs []VFS
 	for _, ch := range chunks {
 		hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path, moduleTag)
@@ -1023,13 +893,11 @@ func emitPySrcObjcopy(
 		cmdArgs = append(cmdArgs, "--kvs")
 		cmdArgs = append(cmdArgs, ch.kvsCmd...)
 
-		// inputs[]: rescompiler + rescompressor + per-entry source files +
-		// objcopy.py. Order from REF (multi-entry rapidjson shape, PR-A):
-		// tooling first, source files, script last. PR-M3-py-objcopy-aggregation:
-		// uses `ch.inps` (KV-add AND path+key-add slots, deduped per chunk)
-		// instead of `ch.pathInps`; for yapyc3-only modules (Lib) this adds
-		// the underlying .py source as an extra input, and on chunk-straddles
-		// the spillover entry's yapyc3 + .py land in BOTH chunks' inputs[].
+		// inputs[]: rescompiler + rescompressor + per-entry source files
+		// + objcopy.py (script last). Uses `ch.inps` (KV and path+key
+		// slots, deduped per chunk); for yapyc3-only modules this adds
+		// the underlying .py; on chunk straddles the spillover entry's
+		// yapyc3 + .py land in BOTH chunks' inputs[].
 		inputs := []VFS{
 			Build("tools/rescompiler/rescompiler"),
 			Build("tools/rescompressor/rescompressor"),
@@ -1047,9 +915,7 @@ func emitPySrcObjcopy(
 			targetProps["module_tag"] = "py3"
 		}
 
-		// PR-M3-platform-pair-step7: tags + host_platform + platform from
-		// targetP. Empty `instance.Platform.Tags` keeps the slice non-nil so JSON
-		// serialises as `[]`, not `null`.
+		// Empty Tags stays non-nil so JSON serialises as `[]`.
 		pyTags := []string{}
 		if len(instance.Platform.Tags) > 0 {
 			pyTags = append(pyTags, instance.Platform.Tags...)
@@ -1079,11 +945,10 @@ func emitPySrcObjcopy(
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
 
-		// PR-M3-L0-cascade-close-v2: thread PY (yapyc3) producer refs into
-		// the objcopy CC's deps[]. The .yapyc3 paths live in `inps` as
-		// BUILD_ROOT-rooted inputs; resolveCodegenDepRefsExt's input-driven
-		// branch matches each against the codegen registry and returns the
-		// PY producer NodeRef. Per Plan B PR-2: closes 41 PY leaves.
+		// Thread PY (yapyc3) producer refs into the objcopy node's deps[].
+		// The .yapyc3 paths live in `inps` as BUILD_ROOT-rooted inputs;
+		// resolveCodegenDepRefsExt's input-driven branch matches each
+		// against the codegen registry and returns the PY producer ref.
 		exclude := []NodeRef{}
 		if rescompilerLDRef != (NodeRef{}) {
 			exclude = append(exclude, rescompilerLDRef)
@@ -1104,11 +969,10 @@ func emitPySrcObjcopy(
 		outputs = append(outputs, outputObj)
 
 		// SOURCE_ROOT-rooted inputs propagate into .global.a; BUILD_ROOT
-		// .yapyc3 entries are filtered by the AR aggregator (PR-M3-l2).
-		// PR-M3-final-surgical (fix 2): include extraSrcInput .py paths
-		// (captured in ch.inps but not in ch.pathInps for yapyc3-only
-		// modules like python3-Lib) so the global AR's inputs[] carries
-		// every .py source the chunk's resfs entries reference.
+		// .yapyc3 entries are filtered by the AR aggregator. Include
+		// extraSrcInput .py paths (in ch.inps but not ch.pathInps for
+		// yapyc3-only modules like python3-Lib) so the global AR's
+		// inputs[] carries every .py source the chunk references.
 		for _, p := range ch.inps {
 			if strings.HasPrefix(p, "$(S)/") {
 				globalMemberInputs = append(globalMemberInputs, ParseVFSOrSource(p))
@@ -1121,11 +985,9 @@ func emitPySrcObjcopy(
 }
 
 // walkHostToolForRef walks `path` as a host tool and returns the LD
-// NodeRef from the memoized emit result. ParseError-class failures
-// surface a zero ref (consistent with the existing host-tool walks in
-// emitPySrcs); other panics propagate. Memoized in ctx.memo so back-
-// to-back calls from emitPySrcs and emitResourceObjcopy do not
-// duplicate node emission.
+// NodeRef. ParseError-class failures surface a zero ref; other panics
+// propagate. Memoized in ctx.memo so back-to-back calls from emitPySrcs
+// and emitResourceObjcopy do not duplicate node emission.
 func walkHostToolForRef(ctx *genCtx, instance ModuleInstance, path string) NodeRef {
 	hostInst := NewToolInstance(ctx.host, path, instance.Language)
 	hostInst.Flags = inferFlagsFromPath(path, true)

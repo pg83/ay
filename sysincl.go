@@ -1,46 +1,29 @@
 package main
 
-// sysincl.go — loader for build/sysincl/*.yml. Maps a `#include <H>`
-// (or quoted-form fallback) to zero or more SOURCE_ROOT-relative file
-// paths the upstream ymake scanner would emit as additional inputs.
+// sysincl.go — loader for build/sysincl/*.yml. Maps `#include <H>`
+// (or quoted-form fallback) to zero or more SOURCE_ROOT-relative paths
+// the upstream ymake scanner emits as additional inputs.
 //
-// Why we parse YAML at runtime (documented exception to the project's
-// "hand-translate build/conf" rule): the upstream tree contains 53
-// sysincl YAML files totalling ~11K lines of pure data — translating
-// each to Go would be prohibitive and would drift on every upstream
-// resync. The PR-31 scanner needs faithful sysincl behaviour to
-// resolve `<features.h>`, `<cstring>`, `<linux/...>`, etc.; that
-// behaviour IS the data in these YAMLs.
-//
-// We do NOT pull a YAML library — a hand-rolled parser that handles
-// the subset actually used (string-only `key: value`, `key:` followed
-// by `- value` list under `includes:`, optional `source_filter:`
-// regex, `# comment` lines) is ~150 LOC. The parser THROWS on
-// constructs it does not recognise so an upstream evolution surfaces
-// loudly rather than silently misparses (R1 of the plan doc).
+// Runtime YAML parse: documented exception to the "hand-translate
+// build/conf" rule — 53 files / ~11K lines of pure data would drift
+// on every upstream resync. No YAML lib; a hand-rolled parser (~150
+// LOC) handles the subset actually used and THROWS on unrecognised
+// constructs so upstream evolution surfaces loudly.
 //
 // Subset supported:
 //   - leading `# comment` lines (skipped)
 //   - top-level list of records, each begun by `- source_filter: ...`
-//     OR `- includes:` (the source_filter line is optional; when
-//     absent, the record's filter matches every source path)
-//   - inside a record: `source_filter: "<regex>"` (string, optionally
-//     quoted) and `includes:` (a list)
-//   - inside includes: each entry is `- key: value` (single mapping
-//     to one path), `- key: ""` (suppression — header is sysincl-known
-//     but emits nothing), `- key:` followed by `- path` lines (fan-out
-//     to N paths), or `- bareKey` (no mapping — header is sysincl-
-//     known but emits nothing). Macro forms like `MACRO(arg)` parse
-//     but never fire because our scanner only triggers on bracketed
-//     `#include`s; the data is retained for forward-compat.
+//     OR `- includes:` (source_filter optional; absent → match all)
+//   - inside a record: `source_filter: "<regex>"` and `includes:` list
+//   - inside includes: `- key: value` (single mapping), `- key: ""`
+//     (explicit suppression), `- key:` followed by `- path` (fan-out),
+//     or `- bareKey` (suppression). MACRO(arg) parses but never fires.
 //
-// Negative-lookahead regexes (`(?!FOO)`) are common in the upstream
-// (e.g. `^(?!contrib/libs/musl).*` to match "every source EXCEPT musl
-// itself"). Go's RE2 stdlib does not support them. We translate the
-// recognised patterns into a custom matcher: a sourcePath matches when
-// (a) it satisfies all positive prefixes, AND (b) it matches none of
-// the negative-lookahead exclusions. Anything that does not fit those
-// shapes throws at load time.
+// Negative-lookahead regexes (`(?!FOO)`) common upstream are not
+// supported by Go's RE2. We translate recognised patterns into a
+// custom matcher: a sourcePath matches when it satisfies positive
+// prefixes AND matches none of the negative-lookahead exclusions.
+// Anything outside that shape throws at load time.
 
 import (
 	"fmt"
@@ -54,37 +37,28 @@ import (
 
 // SysIncl is one record from a sysincl YAML file. Mappings are
 // header-string → list of SOURCE_ROOT-relative resolved paths. Empty
-// list (or list with empty-string element) marks a header as sysincl-
-// known but emitting no input — the resolution stops without
-// recursing.
+// list (or empty-string element) marks a header as sysincl-known but
+// emitting no input — resolution stops without recursing.
 //
 // `KeyBySource` chooses which path Lookup tests against the record's
-// filter: the COMPILE-UNIT source (true) or the IMMEDIATE includer
-// (false). Empirically, the upstream ymake scanner discriminates per
-// record: filters with a negative lookahead (`(?!...)`) — meant to
-// reject SOURCES rooted in particular subtrees so libcxx/musl-style
-// replacement headers fire only for non-musl/non-yasm consumers — must
-// key by source. Filters without negative lookahead default to includer
-// keying so that records like `^contrib/libs/glibcasm` continue to fire
-// when a musl-source's includer chain reaches a glibcasm header (the
-// existing reference-graph requirement that PR-33 D05 documented).
+// filter: COMPILE-UNIT source (true) or IMMEDIATE includer (false).
+// Empirical discrimination: filters with negative lookahead (`(?!...)`)
+// — meant to reject SOURCES rooted in particular subtrees so
+// libcxx/musl-style replacement headers fire only for non-musl/non-yasm
+// consumers — key by source. Filters without negative lookahead key by
+// includer so records like `^contrib/libs/glibcasm` fire when a
+// musl-source's includer chain reaches a glibcasm header.
 //
-// The discrimination heuristic was set empirically by inspecting the
-// reference graph (see PR-31-D08 / PR-33-C03). The alternative (always
-// includer-keyed) over-fans-out the stl-to-libcxx and libc-to-musl
-// uchar.h records onto 251 libcxx/abseil/libcxxabi-parts CC consumers
-// + 23 JS-derived CCs whose chain reaches `__mbstate_t.h`'s
+// The alternative (always includer-keyed) over-fans-out stl-to-libcxx
+// and libc-to-musl uchar.h onto 251 libcxx/abseil/libcxxabi-parts CC
+// consumers + 23 JS-derived CCs whose chain reaches `__mbstate_t.h`'s
 // `#include_next <uchar.h>` (a `#elif` branch ymake never takes when
 // `_LIBCPP_HAS_MUSL_LIBC` is set).
 //
-// `HasMultiTarget` is true when at least one header in Mappings maps
-// to ≥ 2 distinct non-empty paths (a "fan-out" record). Set at load
-// time in parseSysInclYAML. Used by scanner.go::resolveDirective to
-// decide whether the PR-35w quoted-include gate must yield to
-// sysincl when the include was resolved via OwnAddIncl rather than the
-// same-directory search (PR-36 fix: `cxxabi.h` and `unwind.h` in
-// stl-to-libcxx.yml are multi-target and must contribute even for
-// quoted includes resolved by OwnAddIncl).
+// `HasMultiTarget` is true when ≥1 header in Mappings maps to ≥2
+// distinct non-empty paths (fan-out). Used by scanner.go's
+// resolveDirective to decide whether the quoted-include gate yields to
+// sysincl when resolved via OwnAddIncl (cxxabi.h, unwind.h).
 type SysIncl struct {
 	Filter         *sourceFilter
 	KeyBySource    bool
@@ -120,94 +94,62 @@ func recordQuery(rec *SysIncl, header string) string {
 	return header
 }
 
-// Lookup returns the union of resolved paths for `header` across
-// every record whose filter matches the appropriate path key. Each
-// record's `KeyBySource` flag decides whether its filter is tested
-// against `sourcePath` (the compile-unit source) or `includerPath`
-// (the immediate includer of `header`). Empirically, ymake
-// stacks sysincl YAML files: each record contributes its own mapping
-// to a header, and the consumer sees ALL contributions as candidate
-// inputs. Examples:
+// Lookup returns the union of resolved paths for `header` across every
+// record whose filter matches the appropriate path key. Each record's
+// `KeyBySource` decides whether its filter is tested against
+// `sourcePath` (compile-unit source) or `includerPath` (immediate
+// includer of `header`). ymake stacks YAML files: each record
+// contributes its mapping; consumers see ALL contributions. Examples:
 //
-//   - `<stddef.h>` from a non-musl C source resolves to BOTH
-//     libcxx/include/stddef.h (via stl-to-libcxx.yml) AND
-//     musl/include/stddef.h (via libc-to-musl.yml). Verified via
-//     base64/avx2/lib.c.o reference inputs (slots [3] and [14]).
-//   - `<features.h>` from musl source resolves to the
-//     musl/include + musl/src/include fan-out (libc-to-musl.yml's
-//     first record's 2-element list), with no further records adding
-//     paths.
+//   - `<stddef.h>` from a non-musl C source → BOTH
+//     libcxx/include/stddef.h (stl-to-libcxx.yml) AND
+//     musl/include/stddef.h (libc-to-musl.yml).
+//   - `<features.h>` from musl source → musl/include + musl/src/include
+//     fan-out (libc-to-musl.yml first record's 2-element list).
 //
-// Bare-key entries (no mapping value) and explicit `key: ""` are
-// suppression markers — they make the record a no-op for that header
-// without short-circuiting other records that might still claim it.
+// Bare-key entries and explicit `key: ""` are suppression markers —
+// they no-op the record for that header without short-circuiting
+// other records that might still claim it.
 //
-// Returns (paths, true) when at least one record claimed the header
-// (paths may be empty when every claimer is suppression-only), or
-// (nil, false) when no record claims the header at all (the caller's
-// resolver then falls through to other search-path candidates).
+// Returns (paths, true) when ≥1 record claims (paths may be empty for
+// suppression-only claims), or (nil, false) when no record claims.
 //
-// Callers that only carry one path (legacy single-path probes from
-// tests) may pass the same string for both arguments — every record
-// will then see that path as both source and includer, matching the
-// pre-PR-35e behaviour for those call sites.
+// Callers with only one path may pass the same string for both
+// arguments — every record then sees it as both source and includer.
 func (s SysInclSet) Lookup(sourcePath, includerPath, header string) ([]string, bool) {
 	view := s.PreparePerSource(sourcePath)
 
 	return view.Lookup(includerPath, header)
 }
 
-// PerSourceView is a sysincl set with the SOURCE-keyed filter pre-
-// resolved against a fixed source path. The expensive part of a
-// sysincl Lookup is the per-record filter match; SOURCE-keyed records
-// have a fixed result for the lifetime of one CC's WalkClosure (the
-// source is constant), so caching the accepting subset once per
-// WalkClosure turns the hot per-include Lookup into a cheap iteration
-// over a smaller slice.
-//
-// INCLUDER-keyed records still need a per-call filter match against
-// the immediate includer; we keep them as-is and gate per Lookup.
-//
-// `srcMappingsByTarget` memoises LookupSourceKeyed by target. Built
-// lazily on first per-target Lookup; reused across every includer
-// reaching the same target within this view's source. Eliminates the
-// `activeSourceKeyed` slice scan from the per-resolve hot path.
+// PerSourceView is a sysincl set with SOURCE-keyed filters pre-resolved
+// against a fixed source path. SOURCE-keyed records have a fixed
+// accept-set for the lifetime of one CC's WalkClosure, so caching it
+// once turns per-include Lookups into iteration over a smaller slice.
+// INCLUDER-keyed records still need per-call filter match against the
+// includer.
 type PerSourceView struct {
-	// activeSourceKeyed lists the records whose KeyBySource=true and
-	// whose filter accepted the source. These records' Mappings will
-	// fire on every Lookup against this view (the filter has already
-	// been satisfied).
+	// activeSourceKeyed: records with KeyBySource=true whose filter
+	// accepted the source — fire on every Lookup against this view.
 	activeSourceKeyed []*SysIncl
-	// includerKeyed lists every KeyBySource=false record. Their
-	// filters are tested per Lookup against the includer.
+	// includerKeyed: every KeyBySource=false record; filters tested
+	// per Lookup against the includer.
 	includerKeyed []*SysIncl
-	// includerFilterCache memoises the filter-match step in
-	// LookupIncluderKeyed: for a given includerPath, which records
-	// in `includerKeyed` accept it. The value is the cached subset
-	// of accepting records — header-INdependent. Reused across every
-	// (includerPath, *) Lookup against this view, collapsing the
-	// per-call linear filter walk (~25 records, RE2 / prefix matching)
-	// into one map probe + iteration over the pre-filtered subset.
-	//
-	// Pointer-typed so the cache survives the value-type copies Go
-	// performs when a `PerSourceView` is returned by value or passed
-	// as a method receiver — every copy points at the same map. In
-	// production, scanner.go's `anySrcView` is the single view that
-	// services all includer-keyed lookups (`viewCache` per-source
-	// views are only used for source-keyed reads), so one cache
-	// instance accumulates the entire workload's reuse.
-	//
-	// Plain map + sync.RWMutex (sync.Map proved slower in PR-35e's
-	// experiments for this access pattern — many small subsets,
-	// frequent reads).
+	// includerFilterCache memoises the filter-match step for a given
+	// includerPath: which records in `includerKeyed` accept it.
+	// Header-INdependent; reused across every (includerPath, *) Lookup.
+	// Pointer-typed so value-type PerSourceView copies share one map.
+	// In production scanner.go's `anySrcView` is the single view that
+	// services all includer-keyed lookups, so one cache instance
+	// accumulates the workload's reuse. sync.Map was slower in
+	// experiments — many small subsets, frequent reads.
 	includerFilterCache *includerFilterCache
 }
 
 // includerFilterCache memoises filter-match results across a SysInclSet's
-// includer-keyed records. Lives behind a pointer so multiple
-// PerSourceView instances built from the same SysInclSet share the
-// memoisation table. RWMutex permits concurrent reads from parallel
-// scanner workers (PR-32+ may parallelise per-source).
+// includer-keyed records. Pointer-typed so multiple PerSourceView
+// instances built from the same SysInclSet share the table. RWMutex
+// permits concurrent reads from parallel scanner workers.
 type includerFilterCache struct {
 	mu sync.RWMutex
 	// active maps includerPath → subset of includerKeyed records
@@ -221,17 +163,13 @@ func newIncluderFilterCache() *includerFilterCache {
 }
 
 // PreparePerSource returns a Lookup view with SOURCE-keyed filters
-// pre-resolved against the given source path. The view is safe to
-// reuse for every Lookup call within one WalkClosure.
+// pre-resolved against the given source path. Safe to reuse for every
+// Lookup call within one WalkClosure.
 //
-// A fresh `includerFilterCache` is allocated per view. Each view's
-// cache fills independently as its includer-keyed lookups happen;
-// in production, scanner.go's `anySrcView` is the only view that
-// services includer-keyed reads, so one long-lived cache accumulates
-// reuse across the whole archiver closure. Per-source views obtained
-// from `viewCache[sourceRel]` carry their own caches but never see
-// includer-keyed traffic (scanner routes through anySrcView), so
-// those caches stay empty and harmless.
+// A fresh includerFilterCache is allocated per view. In production,
+// scanner.go's `anySrcView` is the only view servicing includer-keyed
+// reads; per-source views from `viewCache[sourceRel]` only see
+// source-keyed reads, so their caches stay empty and harmless.
 func (s SysInclSet) PreparePerSource(sourcePath string) PerSourceView {
 	view := PerSourceView{
 		activeSourceKeyed:   make([]*SysIncl, 0, len(s)),
@@ -301,16 +239,12 @@ func (v PerSourceView) Lookup(includerPath, header string) ([]string, bool) {
 }
 
 // LookupSourceKeyed returns the union of paths contributed by the
-// view's active source-keyed records. The result is source-dependent
-// but includer-INdependent (the source-keyed filters were already
-// satisfied at view construction). Callers that want to cache the
-// source-keyed half independently of the includer-keyed half use this
-// directly.
+// view's active source-keyed records. Source-dependent but
+// includer-INdependent (filters already satisfied at view construction).
 //
-// The third return value `hasMultiTarget` is true when any record
-// contributing to this lookup has HasMultiTarget=true AND maps
-// `header` to ≥ 2 non-empty paths. Used by scanner.go::resolveDirective
-// (PR-36) to decide whether the PR-35w quoted-include gate applies.
+// `hasMultiTarget` is true when any contributing record has
+// HasMultiTarget=true AND maps `header` to ≥2 non-empty paths. Used
+// by scanner.go's resolveDirective to gate the quoted-include path.
 func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool, bool) {
 	var (
 		out            []string
@@ -364,23 +298,15 @@ func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool, bool) {
 }
 
 // LookupIncluderKeyed returns the union of paths contributed by the
-// view's includer-keyed records. The result is source-INdependent (the
-// view shares includerKeyed across all source views derived from the
-// same SysInclSet — though Go semantics mean each view has its own
-// slice header pointing at the same underlying records). Cache by
-// (includer, target) for cross-source reuse.
+// view's includer-keyed records (source-INdependent).
 //
-// The filter-match step (`rec.Filter.match(includerPath)` over every
-// includer-keyed record) is memoised by includerPath alone via
-// `includerFilterCache`: many distinct (includerPath, header) probes
-// share the same includerPath, so the linear filter walk runs once per
-// unique includerPath and the per-header path then only iterates the
-// already-accepting subset. PR-34j.
+// Filter-match (`rec.Filter.match(includerPath)`) is memoised via
+// includerFilterCache: many (includerPath, header) probes share the
+// same includerPath, so the linear filter walk runs once per unique
+// includerPath; per-header probes iterate the accepting subset.
 //
-// The third return value `hasMultiTarget` is true when any record
-// contributing to this lookup has HasMultiTarget=true AND maps
-// `header` to ≥ 2 non-empty paths. Used by scanner.go::resolveDirective
-// (PR-36) to decide whether the PR-35w quoted-include gate applies.
+// `hasMultiTarget` is true when any contributing record has
+// HasMultiTarget=true AND maps `header` to ≥2 non-empty paths.
 func (v PerSourceView) LookupIncluderKeyed(includerPath, header string) ([]string, bool, bool) {
 	active := v.activeIncluderRecords(includerPath)
 
@@ -436,11 +362,9 @@ func (v PerSourceView) LookupIncluderKeyed(includerPath, header string) ([]strin
 }
 
 // activeIncluderRecords returns the subset of `v.includerKeyed` whose
-// filters accept `includerPath`. Memoised on the view's
-// includerFilterCache; the cache is includer-keyed only (independent of
-// the per-Lookup `header` argument), so every header probe sharing the
-// same includer pays one map probe instead of a fresh ~25-record
-// filter walk.
+// filters accept `includerPath`. Memoised on includerFilterCache;
+// header-INdependent — every header probe sharing the same includer
+// pays one map probe instead of a fresh ~25-record filter walk.
 func (v PerSourceView) activeIncluderRecords(includerPath string) []*SysIncl {
 	if v.includerFilterCache == nil {
 		// Defensive: a hand-constructed PerSourceView without the
@@ -495,27 +419,22 @@ func (v PerSourceView) computeActiveIncluderRecords(includerPath string) []*SysI
 }
 
 // linuxMuslSysInclOrder lists the platform-INDEPENDENT sysincl YAML
-// files loaded for the M2 build configuration (Linux, MUSL,
+// files loaded for the build configuration (Linux, MUSL,
 // USE_STL_SYSTEM=no, NORUNTIME=no, USE_ARCADIA_COMPILER_RUNTIME=yes,
-// OPENSOURCE=yes). Order is taken from build/conf/sysincl.conf and
-// the conditional block in build/ymake.core.conf:340-351.
+// OPENSOURCE=yes). Order from build/conf/sysincl.conf and
+// build/ymake.core.conf:340-351.
 //
-// Union-of-matches semantics: each record contributes its mapping
-// to the resolved set; bare-key entries are sysincl-known but emit
-// nothing.
+// Union-of-matches semantics: each record contributes its mapping;
+// bare-key entries are sysincl-known but emit nothing.
 //
-// linux-headers.yml is intentionally absent: ymake loads it only
-// when OS_LINUX != "yes" (build/conf/sysincl.conf:69). Linux headers
-// reach the closure via the per-module/per-bundle ADDINCL paths
-// (-I$(S)/contrib/libs/linux-headers etc.) and through
-// the include scanner's transitive walk, not through sysincl
-// resolution.
+// linux-headers.yml is absent: ymake loads it only when OS_LINUX !=
+// "yes" (sysincl.conf:69). Linux headers reach the closure via
+// per-bundle ADDINCL (-I$(S)/contrib/libs/linux-headers) and the
+// include scanner's transitive walk.
 //
-// Platform-dependent files (`linux-musl-<isa>.yml`) are routed
-// through `LoadSysInclSetFor`'s `arch` argument because `bits/*`
-// mappings differ per ISA. The walker keeps a separate scanner per
-// ISA so each axis resolves against its own architecture-specific
-// records.
+// Platform-dependent files (`linux-musl-<isa>.yml`) are routed through
+// `LoadSysInclSetFor`'s `arch` argument because `bits/*` mappings
+// differ per ISA. The walker keeps a separate scanner per ISA.
 var linuxMuslSysInclOrder = []string{
 	"macro.yml",
 	"libc-to-compat.yml",
@@ -541,24 +460,21 @@ var linuxMuslSysInclOrder = []string{
 	"nvidia-cccl.yml",
 	"stl-to-libcxx.yml",
 	"libc-musl-libcxx.yml",
-	// python.conf:244-245 — gated by $OPENSOURCE (always true for the
-	// M3 closure). Bare-key suppression for every
-	// `<contrib/tools/python/src/Include/*>` shim in
-	// `contrib/libs/python/Include/*.h`'s `#else` (USE_PYTHON3=no)
-	// branches.
+	// python.conf:244-245 — gated by $OPENSOURCE. Bare-key suppression
+	// for `<contrib/tools/python/src/Include/*>` shims in
+	// `contrib/libs/python/Include/*.h`'s `#else` (USE_PYTHON3=no) branches.
 	"python-2-disable.yml",
 	"python-2-disable-numpy.yml",
 }
 
 // LoadSysInclSetFor loads the sysincl YAMLs with the given ISA's
-// `linux-musl-<arch>.yml` injected after `libc-to-musl.yml`
-// (mirroring `build/conf/sysincl.conf:53-58`'s when-block). `arch`
-// must be "aarch64" or "x86_64"; other values throw.
+// `linux-musl-<arch>.yml` injected after `libc-to-musl.yml` (mirrors
+// `build/conf/sysincl.conf:53-58`). `arch` must be "aarch64" or
+// "x86_64"; other values throw.
 //
-// When the sysincl directory does not exist (synthetic test trees
-// that supply only the modules the test cares about), the loader
+// When the sysincl directory does not exist (synthetic test trees),
 // returns an empty set rather than throwing — the include scanner
-// then falls back to its own AddIncl + peer-GLOBAL search path.
+// falls back to its AddIncl + peer-GLOBAL search path.
 func LoadSysInclSetFor(sourceRoot, arch string, onWarn func(Warn)) SysInclSet {
 	dir := filepath.Join(sourceRoot, "build", "sysincl")
 
@@ -610,10 +526,9 @@ func LoadSysInclSetFor(sourceRoot, arch string, onWarn func(Warn)) SysInclSet {
 // supplemental yamls compiles cleanly.
 var _ = sort.Strings
 
-// parseSysInclYAML parses one sysincl YAML file's text into a slice of
-// records. The filename is carried for error messages only. Throws
-// with a precise location ("name.yml:LINE: <reason>") on any
-// construct outside the documented subset.
+// parseSysInclYAML parses one sysincl YAML file. Throws with a precise
+// location ("name.yml:LINE: <reason>") on any construct outside the
+// documented subset.
 func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 	lines := strings.Split(text, "\n")
 
@@ -640,9 +555,9 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 			ThrowFmt("sysincl: %s: pending key %q with no active record", name, pendingKey)
 		}
 
-		// `- key:` with no explicit list and no values — suppression.
-		// Empirically: linux-headers.yml's `- asm-generic/auxvec.h`
-		// (bare key) goes through this path with pendingPaths==nil.
+		// `- key:` with no list and no values — suppression. E.g.
+		// linux-headers.yml's `- asm-generic/auxvec.h` (bare key)
+		// with pendingPaths==nil.
 		key := recordKey(current, pendingKey)
 		if pendingPaths == nil {
 			current.Mappings[key] = nil
@@ -658,11 +573,10 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 		flushPending()
 
 		if current != nil {
-			// Set HasMultiTarget: true when any header mapping in this
-			// record has ≥ 2 non-empty resolution targets (fan-out).
-			// Used by scanner.go::resolveDirective to bypass the PR-35w
-			// quoted-include gate when the include was resolved via
-			// OwnAddIncl rather than same-directory search.
+			// HasMultiTarget: true when any header mapping has ≥2
+			// non-empty resolution targets (fan-out). Used by
+			// scanner.go's resolveDirective to bypass the quoted-include
+			// gate when the include was resolved via OwnAddIncl.
 			for _, paths := range current.Mappings {
 				count := 0
 
@@ -725,12 +639,9 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 			continue
 		}
 
-		// Inside `includes:`. Expected forms:
-		//   `- key`              bare (suppression)
-		//   `- key: value`       single mapping
-		//   `- key: ""`          explicit suppression
-		//   `- key:`             start of fan-out list
-		//   `- path`             continuation of fan-out (when pendingKey set)
+		// Inside `includes:`. Forms: `- key` (suppression),
+		// `- key: value` (single), `- key: ""` (suppression),
+		// `- key:` (fan-out opener), `- path` (fan-out continuation).
 		if !strings.HasPrefix(body, "- ") && body != "-" {
 			ThrowFmt("sysincl: %s:%d: expected list entry, got %q", name, lineno, body)
 		}
@@ -743,12 +654,8 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 			entry = strings.TrimSpace(body[2:])
 		}
 
-		// Continuation of fan-out: this `- ...` lives at deeper indent
-		// than the mapping that opened it. Empirical YAML uses 4-space
-		// indent for the entry and 6-space for list items inside it,
-		// or 2/4-space depending on file. We disambiguate by whether
-		// `pendingKey` is set AND the entry contains no `:` outside a
-		// quoted string.
+		// Fan-out continuation: deeper-indent `- ...`. Disambiguated by
+		// pendingKey set AND entry has no `:` outside quoted strings.
 		if pendingKey != "" && !strings.Contains(entry, ":") {
 			pendingPaths = append(pendingPaths, unquote(entry))
 
@@ -807,17 +714,12 @@ func handleRecordHeader(name string, lineno int, body string, rec *SysIncl, inIn
 		rest := strings.TrimSpace(body[len("source_filter:"):])
 		pat := unquote(rest)
 		rec.Filter = compileSourceFilter(name, lineno, pat, onWarn)
-		// Negative-lookahead filters (`(?!...)`) are meant to reject
-		// SOURCES rooted in particular subtrees. Empirically these
-		// records key by the compile-unit source path — using the
-		// immediate includer instead causes the libcxx/musl-style
-		// replacement headers (uchar.h, ctype.h, etc.) to fire on
-		// every libcxx-source consumer reaching them via a libcxx
-		// internal-header chain (PR-31-D08 / PR-33-C03). Records
-		// without negative-lookahead default to includer keying so
-		// that filters like `^contrib/libs/glibcasm` continue to fire
-		// on glibcasm-rooted includer chains reached from musl
-		// sources (the empirical PR-33-D05 observation).
+		// Negative-lookahead filters key by source: using the includer
+		// instead causes libcxx/musl replacement headers (uchar.h,
+		// ctype.h, ...) to fire on every libcxx-source consumer
+		// reaching them via libcxx internal chains. Records without
+		// negative-lookahead key by includer so `^contrib/libs/glibcasm`
+		// fires on glibcasm-rooted chains from musl sources.
 		rec.KeyBySource = strings.Contains(pat, "(?!")
 
 		return
@@ -831,13 +733,11 @@ func handleRecordHeader(name string, lineno int, body string, rec *SysIncl, inIn
 		return
 	}
 
-	// `case_sensitive: <bool>` (windows.yml) sets case-folding for the
-	// record's header-key lookups. Win32 headers are conventionally
-	// referenced in mixed case (`#include <Windows.h>`,
-	// `<WinSock2.h>`); the YAML stores them lower-case and asks the
-	// scanner to fold the query. When `false`, parseSysInclYAML
-	// lower-cases each key as it lands in rec.Mappings, and Lookup
-	// lower-cases the query header before probing this record.
+	// `case_sensitive: <bool>` (windows.yml): Win32 headers are
+	// referenced in mixed case (`<Windows.h>`, `<WinSock2.h>`); the
+	// YAML stores them lower-case and asks the scanner to fold the
+	// query. When `false`, keys are stored lower-cased and Lookup
+	// lower-cases the query header before probing.
 	if strings.HasPrefix(body, "case_sensitive:") {
 		val := strings.TrimSpace(body[len("case_sensitive:"):])
 		if val == "false" {
@@ -934,35 +834,23 @@ func unquote(s string) string {
 	return s
 }
 
-// sourceFilter is a compiled source_filter clause. Each alternative
-// (split on top-level `|`) becomes its own filterAlt. The filter
-// matches a path when ANY alt matches. Within an alt:
-//
-//   - excludePrefixes: `(?!P)` translations (the path must NOT start
-//     with any of these for the alt to match).
-//   - re: the residual positive RE2 regex (compiled by stdlib); nil
-//     when the alt is purely `^(?!...)` with no remainder, in which
-//     case the alt matches any path that survives the excludes.
-//
-// When `unsupported` is set on the whole filter, no alt fires —
-// the record's mappings are dead for our purposes.
+// sourceFilter is a compiled source_filter. Top-level `|` splits into
+// alts; the filter matches when ANY alt matches. Within an alt:
+//   - excludePrefixes: `(?!P)` translations (path must NOT start with).
+//   - re: residual positive RE2 regex; nil for pure `^(?!...)` (the
+//     alt matches any path surviving the excludes).
+// `unsupported` kills the filter (no alt fires).
 type sourceFilter struct {
 	alts        []filterAlt
 	unsupported bool
 }
 
-// filterAlt holds one alt of a sourceFilter. An alt matches when:
-//   - the path does not start with any excludePrefix, AND
-//   - one of (literalPrefix, re) is satisfied. literalPrefix is a
-//     fast-path: when set, `strings.HasPrefix(path, literalPrefix)`
-//     is the positive criterion and `re` is left nil. When neither
-//     literalPrefix nor re is set the alt accepts every path that
-//     survived the excludes (matches `.*` / no positive constraint).
+// filterAlt holds one alt of a sourceFilter. Matches when path has no
+// excludePrefix AND one of (literalPrefix, re) is satisfied. Empty
+// literalPrefix+re accepts every path surviving the excludes.
 //
-// Hot-path note: 129/169 source_filter patterns observed in
-// build/sysincl/*.yml are simple `^literal-prefix` regexes. Replacing
-// `re.MatchString` with `strings.HasPrefix` avoids the RE2 NFA
-// engine's per-call overhead in the common case.
+// Fast-path: 129/169 source_filter patterns in build/sysincl/*.yml are
+// simple `^literal-prefix`; `strings.HasPrefix` avoids RE2 overhead.
 type filterAlt struct {
 	excludePrefixes []string
 	literalPrefix   string
@@ -1002,33 +890,21 @@ func (a *filterAlt) matches(sourcePath string) bool {
 	return a.re.MatchString(sourcePath)
 }
 
-// compileSourceFilter parses a single source_filter regex. Recognises
-// the upstream pattern vocabulary (with or without negative lookahead);
-// throws on anything outside that subset so future upstream patterns
+// compileSourceFilter parses a single source_filter regex. Throws on
+// anything outside the recognised subset so future upstream patterns
 // surface immediately rather than silently misparse.
 //
 // Recognised shapes (after stripping outer quotes):
+//   - `^P` or plain RE2 — compiled directly.
+//   - `^(?!P)` or `^(?!(P1|P2|...))` — exclude-prefix list; remainder
+//     dropped (filter accepts everything not in the exclude list).
+//   - `^(?!P)X|^Y` — alternation between exclude-clause and positive.
+//     Each alt is translated independently; the first alt's excludes
+//     apply only to it.
 //
-//   - `^P` or other plain RE2 — compiled directly.
-//   - `^(?!P)` or `^(?!(P1|P2|...))` — translated to an exclude-prefix
-//     list; remaining anchors are dropped (the filter trivially
-//     accepts the rest after the lookahead consumed nothing).
-//   - `^(?!P)X|^Y` — alternation between an exclude-clause and a
-//     positive clause. We transform to "match positive Y OR (no
-//     exclude AND remainder)". Implementation: split on top-level `|`,
-//     translate each alt independently, then OR-combine via a
-//     synthesised matcher (each excludePrefix list applies only to
-//     its alt; we approximate with the safe lower bound — the FIRST
-//     alt's excludePrefixes plus the union of positive RE2 patterns
-//     compiled into a single OR'd regex).
-//
-// The OR-combine path is sound because every observed upstream
-// alternation has the shape `^(?!X)|^X/something_else` (e.g.
-// `^(?!contrib/libs/musl)|^contrib/libs/musl/tests` — "everything
-// except musl, EXCEPT also musl/tests"). The "lower bound" matches
-// musl/tests via the second alt (regex) and excludes plain musl/foo
-// via the first alt's exclude prefix. Verified against every
-// alternation pattern in build/sysincl/*.yml.
+// Every observed upstream alternation has the shape
+// `^(?!X)|^X/something_else` ("everything except musl, EXCEPT also
+// musl/tests") — verified across all alternations in build/sysincl.
 func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn)) *sourceFilter {
 	if pat == "" {
 		return nil
@@ -1144,10 +1020,9 @@ func splitTopLevelOr(pat string) []string {
 }
 
 // extractNegativeLookahead recognises `^(?!P)` and `^(?!(P1|P2|...))`
-// at the start of a regex, returning the excluded prefixes and any
-// residual pattern after the lookahead. Returns isExclude=false for
-// patterns that do not begin with `^(?!`. Throws on `^(?!` shapes
-// outside the documented subset.
+// at the start of a regex. Returns excluded prefixes + residual after
+// the lookahead, or isExclude=false for patterns not starting with
+// `^(?!`. Throws on `^(?!` shapes outside the documented subset.
 func extractNegativeLookahead(pat string) ([]string, string, bool) {
 	const prefix = "^(?!"
 
@@ -1193,15 +1068,9 @@ func extractNegativeLookahead(pat string) ([]string, string, bool) {
 	return excludes, residual, true
 }
 
-// parseLookaheadAlts splits the body of a (?!...) group into prefix
-// alternatives. Recognised:
-//
-//   - `P` — single literal prefix.
-//   - `(P1|P2|...)` — parenthesised alternation; emits each Pi.
-//   - `P1|P2|...` — bare alternation.
-//
-// Each Pi must be a literal string (no regex metacharacters). Throws
-// on patterns outside this subset.
+// parseLookaheadAlts splits a (?!...) body into prefix alternatives.
+// Recognised: `P`, `(P1|P2|...)`, `P1|P2|...`. Each Pi must be literal
+// (no regex metacharacters); throws on patterns outside this subset.
 func parseLookaheadAlts(body string) []string {
 	body = strings.TrimSpace(body)
 
@@ -1248,21 +1117,11 @@ func containsRegexMeta(s string) bool {
 	return false
 }
 
-// extractLiteralAnchoredPrefix returns the literal prefix when `pat` is
-// exactly `^literalChars` (anchored start, followed by characters that
-// are not RE2 metacharacters), else returns "". This is the hot-path
-// optimisation for source_filter regexes: empirically 129/169 patterns
-// in build/sysincl/*.yml have this shape (e.g. `^contrib/libs/musl`,
-// `^contrib/libs/jemalloc/`), so replacing the RE2 engine call with a
-// `strings.HasPrefix` saves measurable Lookup-time overhead.
-//
-// Returns "" for:
-//   - patterns lacking a leading `^` anchor.
-//   - patterns whose body contains any RE2 metacharacter (the residual
-//     would then be a real regex, not a literal prefix).
-//   - the empty literal (`^` alone) — signalling "no fast path"; the
-//     caller falls through to compile a regex (which itself is then a
-//     trivial `.*`-equivalent, but correctness is upstream's job).
+// extractLiteralAnchoredPrefix returns the literal prefix when `pat`
+// is exactly `^literalChars` (no RE2 metacharacters after `^`), else
+// "". 129/169 source_filter patterns have this shape; HasPrefix saves
+// the RE2 NFA cost. Returns "" when no leading `^`, when body has
+// metacharacters, or when body is empty.
 func extractLiteralAnchoredPrefix(pat string) string {
 	if !strings.HasPrefix(pat, "^") {
 		return ""
