@@ -2,16 +2,12 @@ package main
 
 // sources.go — per-source dispatch and include-closure helpers.
 //
-// emitOneSource is the per-source dispatch by extension that the
-// genModule walker calls for each SRCS / GLOBAL_SRCS / JOIN_SRCS entry.
-// It routes to EmitCC / EmitAS / EmitR5 / EmitR6 / EmitCF and returns
-// the (NodeRef, output VFS, member inputs, primary count) tuple the
-// caller folds into its AR / .global.a / LD aggregates.
-//
-// The closure helpers (walkClosure, joinSrcsIncludeClosure,
-// jsCCIncludeInputs, jsTargetPeerAddIncl, resolveSourceVFS,
-// includeScannerBasePaths) compose the per-source IncludeInputs used
-// by the downstream CC compile.
+// emitOneSource dispatches by extension for each SRCS / GLOBAL_SRCS /
+// JOIN_SRCS entry, routing to EmitCC / EmitAS / EmitR5 / EmitR6 /
+// EmitCF and returning the (NodeRef, output VFS, member inputs,
+// primary count) tuple. Closure helpers (walkClosure / joinSrcs /
+// jsCC / jsTargetPeerAddIncl / resolveSourceVFS /
+// includeScannerBasePaths) compose per-source IncludeInputs.
 
 import (
 	"errors"
@@ -21,14 +17,12 @@ import (
 	"strings"
 )
 
-// sourceEmit is the emit-product of emitOneSource: a single CC/AS/R5/R6/CF/etc.
-// node compiled from one declared source. nil = the source was silently
-// skipped (a `.h` header that emitOneSource does not produce a node for, or
-// an unhandled extension dispatched to the deferred-kind sink).
-//
-// PrimaryCount is the leading-CcIns count that names the member's primary
-// source(s) — `.c/.cpp/.cc/.cxx/.S/.s/.asm` yield 1; `.rl6` yields 1 or 2
-// (.rl6 source ± companion .h header).
+// sourceEmit is the emit-product of emitOneSource: a single
+// CC/AS/R5/R6/CF/etc. node from one declared source. nil = silently
+// skipped (e.g. `.h` headers, deferred-kind sources). PrimaryCount is
+// the leading-CcIns count naming the member's primary source(s) —
+// `.c/.cpp/.cc/.cxx/.S/.s/.asm` yield 1; `.rl6` yields 1 or 2 (source
+// ± companion `.h`).
 type sourceEmit struct {
 	Ref          NodeRef
 	OutPath      VFS
@@ -41,25 +35,21 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		return nil
 	}
 
-	// PR-30 D06: SRCDIR rebase is now ancestor-only and only fires when
-	// the caller has decided this is the "include-from-parent" pattern
+	// SRCDIR rebase fires only for the "include-from-parent" pattern
 	// (PROGRAM whose SRCDIR is an ancestor of instance.Path; ragel6/bin
-	// is the canonical case). LIBRARYs with SRCDIR (libcxxabi-parts,
-	// musl_extra, tcmalloc/no_percpu_cache) keep
-	// `srcInstance.Path == instance.Path`; the per-source SRCDIR
-	// resolution happens inside EmitCC via `in.SrcDir`/`in.SourceRoot`
-	// (composeCCPaths).
+	// is canonical). LIBRARYs with SRCDIR (libcxxabi-parts, musl_extra,
+	// tcmalloc/no_percpu_cache) keep srcInstance.Path == instance.Path
+	// and resolve per-source inside EmitCC via composeCCPaths.
 	srcInstance := instance
 
 	if ancestorRebase {
 		srcInstance.Path = srcDir
 	}
 
-	// When the instance is rebased to SRCDIR (ragel6/bin pattern), the
-	// composer should NOT additionally apply SRCDIR routing — clear
-	// SrcDir on the per-source input bag. When NOT rebased (LIBRARY
-	// shape), keep SrcDir so the composer can decide local-vs-SRCDIR
-	// resolution per source.
+	// When instance is rebased (ragel6/bin), clear SrcDir so the
+	// composer doesn't double-apply SRCDIR routing. When not rebased
+	// (LIBRARY shape), keep SrcDir for per-source local-vs-SRCDIR
+	// resolution.
 	srcIn := in
 	if ancestorRebase {
 		srcIn.SrcDir = ""
@@ -70,20 +60,16 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
 		strings.HasSuffix(srcRel, ".cxx"):
-		// PR-31 D08: resolve the transitive include closure for
-		// non-generated sources. Generated sources (handled in the
-		// JS / R6 branches below — NOT this site) skip the scanner:
-		// their primary input lives under $(B) and doesn't
-		// exist on disk at scan time. The walker passes the
-		// scanner-aware srcIn down to EmitCC.
+		// Resolve transitive include closure for non-generated
+		// sources. Generated sources (JS/R6 branches below) skip the
+		// scanner — their primary input lives under $(B) and isn't on
+		// disk at scan time.
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 
-		// PR-M3-py3-runtime-closure: runtime_py3 __res.cpp / sitecustomize.cpp
-		// each carry the matching .pyc.inc + PY_SRCS python inputs in REF.
-		// PR-M3-L0-cascade-close-v2: lift the extras BEFORE resolving codegen
-		// dep refs so the .pyc.inc producer (AR node) is reachable through the
-		// IncludeInputs probe. Order is preserved (extras appended to the tail
-		// of IncludeInputs) so EmitCC's inputs[] composition is unchanged.
+		// runtime_py3 __res.cpp / sitecustomize.cpp carry matching
+		// .pyc.inc + PY_SRCS python inputs in REF. Lift extras BEFORE
+		// resolving codegen dep refs so the .pyc.inc producer (AR
+		// node) is reachable via IncludeInputs probe.
 		extras := runtimePy3CCExtraInputs(srcInstance.Path, srcRel)
 		if len(extras) > 0 {
 			srcIn.IncludeInputs = append(srcIn.IncludeInputs, extras...)
@@ -96,9 +82,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ref, outPath := EmitCC(srcInstance, srcRel, srcIn, ctx.host, ctx.emit)
 
 		// AR/LD aggregate the per-CC inputs (primary source +
-		// resolved headers) into their own inputs slice per the
-		// sg.json shape (PR-31 D11). Compose the input list here
-		// (matching what EmitCC itself does internally).
+		// resolved headers) into their own inputs slice per sg.json
+		// shape. Compose the input list here, matching what EmitCC
+		// does internally.
 		inputPath := emittedSourceInputPath(srcInstance, srcRel, srcIn, ctx.sourceRoot)
 		ccInputs := append([]VFS{inputPath}, srcIn.IncludeInputs...)
 
@@ -106,30 +92,15 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 	case strings.HasSuffix(srcRel, ".S"),
 		strings.HasSuffix(srcRel, ".s"),
 		strings.HasSuffix(srcRel, ".asm"):
-		// PR-28: when a host (`Flags.PIC`) `.S`/`.s` source belongs
-		// to a module known to use yasm (`asmlibYasmModules`), recurse
-		// into the host yasm PROGRAM and wire its LDRef into the AS
-		// node's `ForeignDepRefs["tool"]` (matches reference: 25
-		// host-asmlib AS nodes have foreign_deps.tool=yasm). Other
-		// `.S` sources (target-side AS, host chkstk, host
-		// libcxx/libcxxabi shims) pass nil — they assemble via
-		// clang's built-in assembler with no foreign_deps.
-		//
-		// asmlib host walk is wired but not reached in the M2 archiver
-		// closure because we peer contrib/libs/musl, not
-		// contrib/libs/musl/full (the upstream PEERDIR rule
-		// MUSL=yes && !MUSL_LITE → musl/full lives at
-		// build/ymake.core.conf:1238-1245 and is not modelled here).
-		// Closing the musl/full closure path is deferred to a follow-up
-		// PR. The trigger code here remains as forward-scaffolding so
-		// that PR will not need to re-derive the wiring; the existing
-		// synthetic test pins it.
+		// For x86_64 `.asm` sources the AS node carries yasm as
+		// `ForeignDepRefs["tool"]` (reference uses yasm for every
+		// `.asm` host source: util/system/context_x86.asm +
+		// asmlib's 25 nodes). Other `.S` sources (target-side AS,
+		// host chkstk, libcxx/libcxxabi shims) pass nil — they
+		// assemble via clang's built-in assembler.
 		var yasmRef *NodeRef
 
-		// D41: dispatch on Target, not Flags.PIC; x86_64 IS the host axis in M2/M3.
-		// PR-M3-F-5: extend yasm walk to all `.asm` sources on x86_64, not
-		// just asmlibYasmModules. The reference graph uses yasm for every
-		// `.asm` host source (util/system/context_x86.asm + asmlib's 25 nodes).
+		// Dispatch on ISA, not Flags.PIC; x86_64 IS the host axis.
 		if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
 			const yasmPath = "contrib/tools/yasm"
 
@@ -141,61 +112,49 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			yasmRef = &ldRef
 		}
 
-		// PR-31 D11: scan transitive headers for AS sources too. A
-		// small subset of `.S` sources include `.h`/`.inc` headers
-		// (e.g. cxxsupp/builtins/chkstk.S → assembly.h +
-		// int_endianness.h); the scanner populates the AS node's
-		// inputs and feeds the downstream AR's memberInputs aggregator.
+		// Scan transitive headers for AS sources — a subset of `.S`
+		// includes `.h`/`.inc` (e.g. cxxsupp/builtins/chkstk.S →
+		// assembly.h + int_endianness.h). Populates the AS node's
+		// inputs and feeds the downstream AR's memberInputs.
 		asIn := srcIn
 		asIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
-		// PR-35m: thread the full ModuleCCInputs into EmitAS so it
-		// can compose own/peer ADDINCL, own non-GLOBAL CFLAGS, and
-		// auto peer CFLAGS at the same slots CC consumes them
-		// (retiring the util-specific path-sniff stopgap PR-35i added).
+		// Thread full ModuleCCInputs into EmitAS so it composes
+		// own/peer ADDINCL, own CFLAGS, and auto peer CFLAGS at the
+		// same slots CC consumes them.
 		ref, outPath := EmitAS(srcInstance, srcRel, asIn, yasmRef, ctx.host, ctx.emit)
 
-		// PR-35y R8: when the module declares SRCDIR and the .S
-		// source does not exist locally at instance.Path/<srcRel>,
-		// the AR memberInput resolves at `$(S)/<srcDir>/<srcRel>`
-		// rather than the unrebased `<instance.Path>/<srcRel>`.
-		// Empirical reference: tcmalloc/no_percpu_cache (SRCDIR=
-		// `contrib/libs/tcmalloc`) — its `tcmalloc/internal/percpu_rseq_asm.S`
-		// resolves at `contrib/libs/tcmalloc/tcmalloc/internal/percpu_rseq_asm.S`,
-		// not `contrib/libs/tcmalloc/no_percpu_cache/tcmalloc/internal/percpu_rseq_asm.S`.
-		// Same rule as composeASPaths' SRCDIR routing for AS itself
-		// (PR-35r, as.go:316-336): keeping the gen.go aggregator's
-		// path in sync with as.go's resolution.
+		// SRCDIR routing for `.S` AR memberInput: when SRCDIR is set
+		// and the source doesn't exist locally, resolve under SRCDIR
+		// (same rule as composeASPaths' SRCDIR routing — as.go:316-336).
+		// Empirical: tcmalloc/no_percpu_cache's
+		// `tcmalloc/internal/percpu_rseq_asm.S` resolves at
+		// `contrib/libs/tcmalloc/tcmalloc/internal/percpu_rseq_asm.S`.
 		asInputRel := srcInstance.Path + "/" + srcRel
 
 		if srcDir != "" && srcDir != srcInstance.Path && !sourceExistsLocally(ctx.sourceRoot, srcInstance.Path, srcRel) {
 			asInputRel = srcDir + "/" + srcRel
 		}
 
-		// PR-M3-openssl-ar-plugin-and-as-clean: collapse `..` segments so
-		// e.g. openssl's `crypto/../asm/...` resolves to `asm/...` in the
-		// AR aggregator's memberInputs. The AS node's own input path is
-		// composed independently inside as.go and is already cleaned.
+		// Collapse `..` segments so openssl's `crypto/../asm/...`
+		// resolves to `asm/...` in AR memberInputs. AS node's own
+		// input path is cleaned inside as.go.
 		asInputRel = path.Clean(asInputRel)
 
 		asInputs := append([]VFS{Source(asInputRel)}, asIn.IncludeInputs...)
 
 		return &sourceEmit{Ref: ref, OutPath: outPath, CcIns: asInputs, PrimaryCount: 1}
 	case strings.HasSuffix(srcRel, ".rl6"):
-		// Host-ragel6 recursion (D31, eager per PR-28). The recursion
-		// happens here so the resulting LD's outputs[0] can be
-		// threaded into EmitR6's cmd_args[0] (PR-28-D01 — internal
-		// consistency between R6 invocation path and our own host LD).
-		//
+		// Host-ragel6 recursion: the resulting LD's outputs[0] is
+		// threaded into EmitR6's cmd_args[0] for internal consistency
+		// between the R6 invocation path and our own host LD.
 		// `contrib/tools/ragel6/bin` is the real host-PROGRAM
-		// directory; the parent `contrib/tools/ragel6/ya.make` uses
-		// INCLUDE(${ARCADIA_ROOT}/...) which our parser does not yet
-		// expand (M5+ variable substitution work).
+		// directory; the parent ya.make uses INCLUDE(${ARCADIA_ROOT}/
+		// ...) which our parser does not yet expand.
 		const ragelBinPath = "contrib/tools/ragel6/bin"
 
-		// Fallback ragel6 path: used when the host walk fails its
-		// parse. The literal matches the reference graph's invocation
-		// path, so a zero-host-LD codepath at least produces a
-		// meaningful argv even though the host LD node is missing.
+		// Fallback ragel6 path for when the host walk fails its
+		// parse. Literal matches the reference's invocation path so
+		// the zero-host-LD codepath produces a meaningful argv.
 		var ragelFallbackPath = Build("contrib/tools/ragel6/ragel6").String()
 
 		var (
@@ -211,58 +170,43 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			ragelLDRef = ragelResult.LDRef
 			ragelBinaryStr = ragelResult.LDPath
 		}); exc != nil {
-			// Only swallow *ParseError — the documented gap when
-			// ragel6's ya.make contains INCLUDE(${ARCADIA_ROOT}/...)
-			// that our parser cannot yet expand (M5+ variable
-			// substitution). Any other exception is unexpected and
-			// must propagate loudly rather than silently produce a
-			// zero ragel6LD ref.
+			// Only swallow *ParseError — the documented gap for
+			// INCLUDE(${ARCADIA_ROOT}/...) the parser can't expand.
+			// Other exceptions propagate.
 			var pe *ParseError
 
 			if !errors.As(exc.AsError(), &pe) {
 				panic(exc)
 			}
 
-			// Leave ragelLDRef zero-valued and ragelBinaryStr at the
-			// reference-shaped fallback; document the host-tool gap
-			// rather than re-throwing. The R6 node will not dep-link
-			// to a host ragel6, but its cmd_args[0] still names a
-			// plausible binary path.
+			// Leave ragelLDRef zero-valued and ragelBinaryStr at
+			// the fallback; R6 won't dep-link to a host ragel6 but
+			// cmd_args[0] still names a plausible binary path.
 		}
 
-		// PR-35z: scan the `.rl6` source's transitive #include closure
-		// (the `.rl6` body embeds `#include` directives that resolve
-		// through the same search-path / sysincl rules as `.cpp`/`.S`
-		// sources). Both the R6 generator node AND the downstream CC
-		// of the generated `.cpp` carry the same closure in their
-		// `inputs` slot — reference graph: util/datetime/parser.rl6
-		// produces a 1009-input R6 node and a 1009-input CC node,
-		// where positions 1.. of each are identical (the `.rl6`
-		// source plus its 1007-header transitive closure).
+		// Scan `.rl6` transitive #include closure (the `.rl6` body
+		// embeds `#include` directives resolving through the same
+		// search-path / sysincl rules as `.cpp`/`.S`). The R6 node and
+		// the downstream CC of the generated `.cpp` carry the same
+		// closure (reference: util/datetime/parser.rl6 → 1009 inputs
+		// each, identical at positions 1..).
 		rl6Closure := walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 
-		// PR-M3-final-r6-stats-enums-leak: REF's R6 closure resolves a
-		// transitive `#include <..._serialized.h>` directive (via stats.h
-		// or sibling) for its descendant headers (e.g. util/generic/
+		// REF's R6 closure resolves `#include <..._serialized.h>` via
+		// stats.h for descendant headers (util/generic/
 		// serialized_enum.h) but does NOT add the generated EN
-		// `_serialized.{cpp,h}` siblings themselves to the R6 inputs.
-		// Our codegen registry resolves the directive to the registered
-		// $(B)/<...>_serialized.h output and follows EmitsIncludes,
-		// which pulls in both the .h itself and its sibling .cpp. Strip
-		// both at the R6 input boundary; the descendant util headers
-		// (which REF does carry) reach R6 inputs through the same
-		// EmitsIncludes traversal and are unaffected.
+		// `_serialized.{cpp,h}` siblings to R6 inputs. Strip both at
+		// the R6 input boundary; descendant util headers reach R6 via
+		// the same EmitsIncludes traversal regardless.
 		rl6Closure = filterEnSerializedSiblings(rl6Closure)
 
 		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryStr, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
 
-		// F-7-B / PR-AUDIT-2 D02: register the R6 output (.rl6.cpp). Ragel emits
-		// the .rl6 source's `#include` directives verbatim into the generated
-		// .cpp, so the .cpp's effective direct-include set is the .rl6's. We
-		// register a single EmitsIncludes entry pointing at the .rl6 source;
-		// WalkClosure on the .rl6.cpp will recurse into the .rl6 via the
-		// FS-parsed locator and produce the same closure the downstream CC
-		// previously got from scanning the .rl6 manually.
+		// Register the R6 output (.rl6.cpp). Ragel emits the .rl6's
+		// `#include` directives verbatim into the generated .cpp, so
+		// the .cpp's direct-include set is the .rl6's. Register the
+		// .rl6 source as the single EmitsIncludes child; WalkClosure
+		// on the .rl6.cpp recurses into the .rl6 via the FS locator.
 		rl6SourceVFS := Source(srcInstance.Path + "/" + srcRel)
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
@@ -272,21 +216,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			})
 		}
 
-		// PR-29-D07: same shape as the JS branch above. Pass
-		// IsGenerated so the downstream CC composes inputPath under
-		// $(B)/<srcInstance.Path>/<rel> rather than the
-		// stale $(S) shape. PR-30 D04: thread r6Ref as the
-		// downstream CC's `Generator` so the CC node carries an
-		// explicit dep on its R6 source-generator node, matching the
-		// reference shape.
-		//
-		// PR-AUDIT-2 D02: dispatch through the unified VFS-path entry — the
-		// .rl6.cpp is registered in the codegen registry (see Register above)
-		// and the scanner walks transitively through both BUILD_ROOT and
-		// SOURCE_ROOT children uniformly. Previously this site assembled
-		// `[<.rl6 source>, ...rl6Closure]` by hand from a separate
-		// source-side scan; the architecturally-correct shape comes from
-		// WalkClosure rooted at the generated .cpp.
+		// Pass IsGenerated so the downstream CC composes inputPath
+		// under $(B)/<srcInstance.Path>/<rel>; thread r6Ref as
+		// Generator so the CC node carries an explicit dep on its R6
+		// source-generator. Dispatch through the unified VFS-path
+		// entry — the scanner walks both BUILD_ROOT and SOURCE_ROOT
+		// children uniformly via the registered EmitsIncludes edge.
 		ccSrcRel := strings.TrimPrefix(r6Out.Rel, srcInstance.Path+"/")
 		ccIncludeInputs := walkClosure(ctx, srcInstance, r6Out, srcIn)
 
@@ -295,31 +230,23 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		ccIn.Generator = r6Ref
 		ccIn.HasGenerator = true
 		ccIn.IncludeInputs = ccIncludeInputs
-		// PR-41 Fix H: ymake's _LANG_CFLAGS_RL=-Wno-implicit-fallthrough applies to CC
-		// compiles whose source is a .rl6-generated .cpp (build/ymake.core.conf).
-		// Extend in M3+ for .pyx, .py.py3, .rl5 when their closures surface.
+		// ymake's _LANG_CFLAGS_RL=-Wno-implicit-fallthrough applies
+		// to CC compiles whose source is a .rl6-generated .cpp
+		// (build/ymake.core.conf).
 		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
-		// PR-M3-L0-codegen-deps-EV-PB: thread EN/PB/EV producer refs reached
-		// through the .rl6.cpp's transitive include closure. Generator (r6Ref)
-		// is filtered out so EmitCC's leading-DepRefs slot isn't duplicated.
+		// Thread EN/PB/EV producer refs reached via the .rl6.cpp's
+		// transitive include closure. Generator (r6Ref) is filtered
+		// out so EmitCC's leading-DepRefs slot isn't duplicated.
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r6Ref)
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.host, ctx.emit)
 
-		// R6-derived CC: primary input is the BUILD_ROOT-rooted .cpp
-		// generated by ragel6. No scanner pass (the .cpp doesn't exist
-		// on disk at scan time).
-		//
-		// PR-35y R7: the AR/LD member-inputs aggregator excludes the
-		// BUILD_ROOT-staged generated cpp (mirror of the JS rule) and
-		// instead carries the original `.rl6` source plus its
-		// companion `.h` header. Reference graph confirms: util's
-		// libyutil.a inputs include `parser.rl6` and `parser.h`,
-		// never the `parser.rl6.cpp` BUILD_ROOT shim. The companion
-		// `.h` header is added only when a sibling file with the
-		// same basename and `.h` suffix exists on disk — the
-		// convention holds for every observed `.rl6` source in the
-		// M2 closure (util/datetime/parser.rl6 → parser.h).
+		// AR/LD member-inputs aggregator excludes the BUILD_ROOT-
+		// staged generated cpp (mirror of JS rule); carries the
+		// original `.rl6` plus its companion `.h` header. Reference:
+		// util's libyutil.a inputs include `parser.rl6` and
+		// `parser.h`, never `parser.rl6.cpp`. Companion `.h` added
+		// only when a same-basename `.h` sibling exists on disk.
 		ccInputs := []VFS{rl6SourceVFS}
 		primaryCount := 1
 
@@ -331,21 +258,19 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			primaryCount = 2
 		}
 
-		// PR-M3-AR-header-closure: roll up the downstream CC's transitive
-		// header closure into memberInputs so the AR/LD aggregator carries
-		// the libcxx/musl/protobuf/etc. headers the generated .rl6.cpp
-		// includes. Upstream ymake propagates each member-CC's NodeInputs
-		// up via EDT_BuildFrom (json_visitor.cpp:788-789 NeedToPassInputs).
+		// Roll up the downstream CC's transitive header closure into
+		// memberInputs so the AR/LD aggregator carries the libcxx /
+		// musl / protobuf headers the generated .rl6.cpp includes.
+		// Upstream ymake does this via EDT_BuildFrom
+		// (json_visitor.cpp:788-789 NeedToPassInputs).
 		ccInputs = append(ccInputs, ccIncludeInputs...)
 
 		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: ccInputs, PrimaryCount: primaryCount}
 
 	case strings.HasSuffix(srcRel, ".ev"):
-		// PR-M3-C: .ev sources in a LIBRARY module (e.g. devtools/ymake/diag/trace.ev).
-		// Emits one EV node (generating .ev.pb.cc + .ev.pb.h) then a downstream
-		// CC node compiling the generated .ev.pb.cc. The CC node's full include
-		// closure is not scanned (generated files don't exist on disk at gen time);
-		// the node structure is correct at L0/L1/L2 even without L3-exact inputs.
+		// `.ev` sources in a LIBRARY module (e.g. devtools/ymake/diag/
+		// trace.ev). Emits one EV node (generating .ev.pb.cc +
+		// .ev.pb.h) then a downstream CC node compiling .ev.pb.cc.
 		{
 			// Walk host tool programs.
 			cppStyleguideBinary := pbCppStyleguidePath
@@ -394,15 +319,16 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				cppStyleguideBinary, protocBinary, event2cppBinary,
 				"", ctx.sourceRoot, ctx.emit)
 
-			// F-7-B: register the .ev.pb.h output with EmitsIncludes from the .ev imports,
-			// plus the protobuf runtime headers (F-7-D).
+			// Register .ev.pb.h with EmitsIncludes from .ev imports
+			// plus protobuf runtime headers.
 			evRelPath := srcInstance.Path + "/" + srcRel
 			evH := Build(evRelPath + ".pb.h")
 			evPbCC := Build(evRelPath + ".pb.cc")
 
-			// PR-M3-L0-codegen-deps-EV-PB: stash the EV NodeRef under both outputs
-			// on the emitting platform so consumer CCs in OTHER modules whose
-			// IncludeInputs include this .ev.pb.h / .ev.pb.cc dep on the producer.
+			// Stash the EV NodeRef under both outputs on the emitting
+			// platform so consumer CCs in other modules whose
+			// IncludeInputs include this .ev.pb.h / .ev.pb.cc dep on
+			// the producer.
 			evKey := codegenOutputKey{platform: srcInstance.Platform.Target}
 			evKey.path = evH
 			ctx.evOutputs[evKey] = evRef
@@ -420,12 +346,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 					OutputPath:    evH,
 					EmitsIncludes: evEmitsIncludes,
 				})
-				// PR-AUDIT-2 D04: register the .ev.pb.cc output too. event2cpp
-				// emits a `#include "<base>.ev.pb.h"` plus the protobuf runtime
-				// headers; the .pb.h's own EmitsIncludes are already registered
-				// (just above), so a single entry pointing at the .pb.h would
-				// suffice — we mirror the .pb.h list for symmetry with PB (the
-				// .pb.cc emitted by protoc includes the same runtime headers).
+				// Register the .ev.pb.cc output. event2cpp emits a
+				// `#include "<base>.ev.pb.h"` plus protobuf runtime
+				// headers. Mirror the .pb.h list for symmetry with PB.
 				reg.Register(&GeneratedFileInfo{
 					ProducerKvP:   "EV",
 					OutputPath:    evPbCC,
@@ -433,22 +356,21 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				})
 			}
 
-			// Emit downstream CC for the generated .ev.pb.cc.
-			// PR-AUDIT-2 D04: dispatch through the unified VFS-path entry —
-			// the .ev.pb.cc is registered above with the right EmitsIncludes;
-			// WalkClosure walks transitively into the .pb.h and out to the
-			// protobuf runtime headers via the FS locator.
+			// Emit downstream CC for the generated .ev.pb.cc via the
+			// unified VFS-path entry — the .ev.pb.cc is registered
+			// above with the right EmitsIncludes; WalkClosure walks
+			// into .pb.h and the protobuf runtime headers.
 			evPbCCSuffix := srcRel + ".pb.cc"
 			ccIn := srcIn
 			ccIn.IsGenerated = true
 			ccIn.Generator = evRef
 			ccIn.HasGenerator = true
 			ccIn.IncludeInputs = walkClosure(ctx, srcInstance, evPbCC, srcIn)
-			// PR-M3-final-surgical (fix 1): the .ev.pb.cc.o consumer must not
-			// carry its OWN .ev.pb.h in inputs[] (REF omits the self-include;
-			// cross-imported sibling .ev.pb.h entries remain). The walker
-			// reaches evH transitively because the .pb.cc is registered with
-			// evH as its first EmitsIncludes child — drop just that entry.
+			// .ev.pb.cc.o consumer must not carry its OWN .ev.pb.h in
+			// inputs[] (REF omits the self-include; cross-imported
+			// sibling .ev.pb.h entries remain). The walker reaches
+			// evH transitively because the .pb.cc is registered with
+			// evH as its first EmitsIncludes child — drop just that.
 			{
 				filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 				for _, in := range ccIn.IncludeInputs {
@@ -460,20 +382,20 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				ccIn.IncludeInputs = filtered
 			}
 			wireFormatVFS := Source(pbRuntimeBase + "google/protobuf/wire_format.h")
-			// PR-M3-final-codegen-registry-expansion: protoc emits
-			// `#include "google/protobuf/wire_format.h"` directly. Add to inputs
-			// only on this CC node (not via registry — that would over-emit).
+			// protoc emits `#include "google/protobuf/wire_format.h"`
+			// directly. Add to inputs only on this CC node (not via
+			// registry — that would over-emit).
 			ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
-			// PR-M3-L0-codegen-deps-EV-PB: thread cross-codegen producer refs
-			// (e.g. an .ev that imports another module's .proto pulls the
-			// peer's PB into the consumer CC's deps via its .pb.h in inputs[]).
+			// Thread cross-codegen producer refs (e.g. an .ev that
+			// imports another module's .proto pulls the peer's PB
+			// into the consumer CC's deps via its .pb.h in inputs[]).
 			ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, evRef)
 
 			ref, outPath := EmitCC(srcInstance, evPbCCSuffix, ccIn, ctx.host, ctx.emit)
 
-			// The primary input for the AR/LD memberInputs is the original .ev source.
-			// PR-M3-final-codegen-registry-expansion: wire_format.h also propagates
-			// up into the AR rollup (matched in REF on libdevtools-ymake-diag.a).
+			// Primary input for AR/LD memberInputs is the original
+			// .ev source; wire_format.h also propagates into the AR
+			// rollup (matched in REF on libdevtools-ymake-diag.a).
 			return &sourceEmit{
 				Ref:          ref,
 				OutPath:      outPath,
@@ -483,9 +405,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		}
 
 	case strings.HasSuffix(srcRel, ".rl"):
-		// PR-M3-E: ragel5 two-step code generation (.rl → .rl.tmp → .rl5.cpp).
-		// Mirrors the .rl6 branch: walk the two host ragel5 PROGRAMs eagerly,
-		// emit the R5 node, then emit a CC node for the generated .rl5.cpp.
+		// ragel5 two-step code generation (.rl → .rl.tmp → .rl5.cpp).
+		// Mirrors the .rl6 branch: walk the two host ragel5 PROGRAMs,
+		// emit R5, then emit a CC for the generated .rl5.cpp.
 		const (
 			ragel5Path  = "contrib/tools/ragel5/ragel"
 			rlgenCdPath = "contrib/tools/ragel5/rlgen-cd"
@@ -533,11 +455,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		r5Ref, r5TmpOut, r5CppOut := EmitR5(srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinStr, rlgenCdBinStr, ctx.emit)
 		_ = r5Ref
 
-		// F-7-B / PR-AUDIT-2 D05: register R5 outputs. ragel5 emits the
-		// .rl source's #include directives verbatim into the generated
-		// .rl5.cpp; the .tmp intermediate has no consumer-visible includes.
-		// PR-M3-L0-cascade-close-v2: ProducerRef = r5Ref so the downstream
-		// CC consuming the .rl5.cpp threads R5 into its deps[].
+		// Register R5 outputs. ragel5 emits the .rl source's #include
+		// directives verbatim into .rl5.cpp; the .tmp intermediate has
+		// no consumer-visible includes. ProducerRef = r5Ref so the
+		// downstream CC threads R5 into its deps[].
 		rlSourceVFS := Source(srcInstance.Path + "/" + srcRel)
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
@@ -556,83 +477,62 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			})
 		}
 
-		// Downstream CC for the generated .rl5.cpp.
-		// PR-AUDIT-2 D05: dispatch through the unified VFS-path entry —
-		// the .rl5.cpp is registered above with the .rl source as its
-		// single direct include; WalkClosure recurses into the .rl via
-		// the FS locator and yields the full transitive closure.
+		// Downstream CC for the generated .rl5.cpp via the unified
+		// VFS-path entry — the .rl5.cpp is registered above with the
+		// .rl source as its single direct include; WalkClosure
+		// recurses into the .rl via the FS locator.
 		ccSrcRel := strings.TrimPrefix(r5CppOut.Rel, srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IsGenerated = true
 		ccClosure := walkClosure(ctx, srcInstance, r5CppOut, srcIn)
-		// PR-M3-multi-output-producer-siblings: ragel5 emits two outputs
-		// (.rl.tmp intermediate + .rl5.cpp). Upstream ymake lists BOTH
-		// sibling outputs in the downstream CC's inputs[] — the consumer
-		// depends on the producer node, so every produced file is a
-		// dependency edge. walkClosure scans only the .rl5.cpp (and its
-		// transitive includes), so the .rl.tmp must be injected
-		// explicitly. Prepended to keep the multi-output sibling adjacent
-		// to the primary .rl5.cpp input in DFS order. The .rl.tmp does
-		// NOT propagate up into AR/LD memberInputs (sg2.json shows only
-		// the .rl source rolls up; the .tmp is an intermediate that does
-		// not cross module boundaries).
+		// ragel5 emits two outputs (.rl.tmp + .rl5.cpp); upstream
+		// ymake lists BOTH in the downstream CC's inputs[]. walkClosure
+		// scans only the .rl5.cpp, so inject .rl.tmp explicitly
+		// (prepended to keep it adjacent to the primary in DFS order).
+		// The .rl.tmp does NOT propagate into AR/LD memberInputs
+		// (sg2.json shows only the .rl source rolls up).
 		ccIn.IncludeInputs = append([]VFS{r5TmpOut}, ccClosure...)
 		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
-		// PR-M3-L0-codegen-deps-EV-PB: thread EN/PB/EV producer refs reached
-		// through the .rl5.cpp's transitive include closure.
-		// PR-M3-L0-cascade-close-v2: prepend r5Ref. WalkClosure skips the
-		// root (r5CppOut) so the registry probe alone wouldn't surface R5;
-		// REF's R5-derived CC carries R5 as its leading dep.
+		// Thread codegen producer refs via the .rl5.cpp's transitive
+		// include closure. Prepend r5Ref because WalkClosure skips
+		// the root (r5CppOut) so the registry probe alone wouldn't
+		// surface R5; REF's R5-derived CC carries R5 as leading dep.
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r5Ref)
 		ccIn.ExtraDepRefs = append([]NodeRef{r5Ref}, ccIn.ExtraDepRefs...)
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.host, ctx.emit)
 
-		// AR/LD member inputs: use the original .rl source (not generated .cpp).
-		// PR-M3-AR-header-closure: roll up the downstream CC's transitive
-		// header closure into memberInputs. Upstream ymake propagates each
-		// member-CC's NodeInputs up to the parent AR/LD via EDT_BuildFrom
-		// (json_visitor.cpp:788-789 NeedToPassInputs); the .rl-generated
-		// .cpp's #include closure is included even though the AR archives
-		// only the .o, because the inputs walk is set-union over all
-		// transitive file deps under the module boundary. Uses ccClosure
-		// (NOT ccIn.IncludeInputs) so the .rl.tmp sibling stays scoped to
-		// the CC consumer and does not bleed into the AR/LD rollup.
+		// AR/LD member inputs: original .rl source plus the downstream
+		// CC's transitive header closure (upstream ymake propagates
+		// via EDT_BuildFrom — json_visitor.cpp:788-789 NeedToPassInputs).
+		// Uses ccClosure (NOT ccIn.IncludeInputs) so the .rl.tmp
+		// sibling stays scoped to the CC consumer.
 		rlMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, ccClosure...)
 		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: rlMemberInputs, PrimaryCount: 1}
 
 	case strings.HasSuffix(srcRel, ".cpp.in"),
 		strings.HasSuffix(srcRel, ".c.in"):
-		// PR-M3-E: CONFIGURE_FILE template source. Emit a CF node that runs
-		// configure_file.py to expand @VAR@ placeholders, then emit a CC
-		// node for the generated .cpp / .c file.
-		//
-		// The CF node's cmd_args include the DEFAULT-declared cfg vars; those
-		// are passed via the moduleData in srcIn.DefaultVars (set by genModule
-		// before calling emitOneSource). We also add BUILD_TYPE=DEBUG (the
-		// hardcoded build configuration).
-		//
-		// The output path strips the .in suffix: sandbox.cpp.in → sandbox.cpp.
-		// PR-M3-F-5: scan the .in template for its transitive include closure
-		// (same as a .cpp source) and fold into srcIn.IncludeInputs before
-		// calling EmitCF so the CF node's inputs[] matches the reference shape
-		// (e.g. sandbox.cpp.in → 795-entry closure; build_info.cpp.in → 5).
+		// CONFIGURE_FILE template. Emit a CF node running
+		// configure_file.py to expand @VAR@ placeholders, then a CC
+		// for the generated .cpp / .c. cfg vars come via
+		// srcIn.DefaultVars (set by genModule); BUILD_TYPE=DEBUG is
+		// hardcoded. Output strips .in suffix
+		// (sandbox.cpp.in → sandbox.cpp). Scan the .in template's
+		// transitive include closure and fold into IncludeInputs
+		// before EmitCF (sandbox.cpp.in → 795-entry closure;
+		// build_info.cpp.in → 5).
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
 
-		// F-7-B / PR-AUDIT-2 D08: register the CF output. configure_file.py
-		// performs `@VAR@` substitution but leaves `#include` directives
-		// intact, so the generated .cpp's direct includes are the .cpp.in's
-		// (modulo substitution). We register the .cpp.in source as the
-		// single EmitsIncludes child so WalkClosure recurses into it via
-		// the FS locator and yields the full transitive closure that the
-		// downstream CC needs.
-		// PR-M3-final-codegen-registry-expansion: configure_file.py is the
-		// codegen script driving the CF node; REF wires it as an input on
-		// every CC consumer of the generated .cpp (verified on
-		// build_info.cpp.o and sandbox.cpp.o).
-		// PR-M3-L0-cascade-close-v2: ProducerRef = cfRef so downstream CC's
-		// resolveCodegenDepRefs threads the CF producer into its deps[].
+		// Register CF output. configure_file.py performs `@VAR@`
+		// substitution but leaves `#include` directives intact, so
+		// the generated .cpp's direct includes are the .cpp.in's.
+		// Register the .cpp.in as the single EmitsIncludes child so
+		// WalkClosure recurses via the FS locator. configure_file.py
+		// is wired as an input on every CC consumer of the generated
+		// .cpp (verified on build_info.cpp.o and sandbox.cpp.o).
+		// ProducerRef = cfRef so downstream resolveCodegenDepRefs
+		// threads the CF producer into deps[].
 		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			reg.Register(&GeneratedFileInfo{
@@ -644,42 +544,35 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			})
 		}
 
-		// Downstream CC for the generated .cpp / .c.
-		// PR-AUDIT-2 D08: dispatch through the unified VFS-path entry —
-		// the .cpp is registered above with the .cpp.in as its single
-		// direct include; WalkClosure recurses into the .cpp.in via the
-		// FS locator and yields the full transitive closure.
+		// Downstream CC for the generated .cpp / .c via the unified
+		// VFS-path entry — the .cpp is registered with the .cpp.in as
+		// its direct include; WalkClosure recurses via the FS locator.
 		ccSrcRel := strings.TrimPrefix(cfOut.Rel, srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IsGenerated = true
 		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, cfOut, srcIn)
-		// PR-M3-L0-codegen-deps-EV-PB: thread codegen producer refs reached
-		// through the CF-generated .cpp's transitive include closure.
-		// PR-M3-L0-cascade-close-v2: also add cfRef directly — the CC
-		// compiles cfOut, and WalkClosure skips the root (cfOut itself),
-		// so the registry probe wouldn't find it via IncludeInputs alone.
-		// REF's CF-derived CC carries the CF producer as a leading dep
-		// (sandbox.cpp.o → CF sandbox.cpp).
+		// Thread codegen producer refs via the CF-generated .cpp's
+		// transitive include closure. Prepend cfRef because
+		// WalkClosure skips the root (cfOut) so registry probe alone
+		// wouldn't find it; REF's CF-derived CC carries the CF
+		// producer as leading dep (sandbox.cpp.o → CF sandbox.cpp).
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, cfRef)
 		ccIn.ExtraDepRefs = append([]NodeRef{cfRef}, ccIn.ExtraDepRefs...)
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.host, ctx.emit)
 
-		// AR/LD member inputs: use the original .cpp.in / .c.in source.
-		// PR-M3-AR-header-closure: roll up the downstream CC's transitive
-		// header closure (the closure of the generated .cpp scanned against
-		// the .cpp.in body via the codegen-registry EmitsIncludes edge) so
-		// the AR/LD aggregator carries the same set upstream ymake propagates
-		// via EDT_BuildFrom (json_visitor.cpp:788-789 NeedToPassInputs).
+		// AR/LD member inputs: original .cpp.in / .c.in source plus
+		// the downstream CC's transitive header closure (matching
+		// upstream ymake's EDT_BuildFrom propagation —
+		// json_visitor.cpp:788-789 NeedToPassInputs).
 		cfMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, ccIn.IncludeInputs...)
 		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: cfMemberInputs, PrimaryCount: 1}
 	}
 
-	// PR-M3-A: known-deferred source kinds are silently skipped rather
-	// than throwing. Real emitters land in PR-M3-B (PB), PR-M3-D (EN/EV),
-	// and later PRs. Until then, returning false means the source
-	// contributes nothing to the AR/LD node set; the module may become
-	// header-only if all its sources are deferred.
+	// Known-deferred source kinds are silently skipped rather than
+	// throwing. Returning nil means the source contributes nothing to
+	// the AR/LD node set; the module may become header-only if all
+	// its sources are deferred.
 	if isSkippedSource(srcRel) {
 		return nil
 	}
@@ -690,10 +583,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 }
 
 // emittedSourceInputPath mirrors composeCCPaths' inputPath logic so
-// the walker can compose the AR/LD inputs aggregator without having
-// to round-trip through EmitCC's emitted node. Returns the
-// `$(S)/...` (or `$(B)/...` for IsGenerated)
-// path the CC node will use as its primary input.
+// the walker composes the AR/LD inputs aggregator without round-
+// tripping through the emitted node. Returns `$(S)/...` (or
+// `$(B)/...` for IsGenerated).
 func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCInputs, sourceRoot string) VFS {
 	if in.IsGenerated {
 		return Build(instance.Path + "/" + srcRel)
@@ -711,19 +603,16 @@ func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCI
 	return Source(instance.Path + "/" + srcRel)
 }
 
-// joinSrcsIncludeClosure unions per-source #include closures across
-// `sources` (PR-35d) using the consumer's own scan context. The
-// scanner's DFS runs over all members with a SHARED visited set —
-// mirroring the actual joined .cpp compile, where headers reached
-// once stay deduped — so total work is O(union closure) not O(sum
-// per-source closures). Returns nil when nothing resolves.
-// joinSrcsIncludeClosure walks the include graph for a JOIN_SRCS member
-// set. `scanPlatform` chooses which scanner + arch search-paths to use:
-// callers pass `srcInstance.Platform` for the normal case; the JS-target
-// override (PR-35s) passes `ctx.target` so the closure resolves against
-// the target-arch musl layout even when the surrounding walk is host-axis.
-// The instance itself is read for module-level facts (Path, Flags.LibcMusl)
-// — its Platform identity is NOT mutated.
+// joinSrcsIncludeClosure walks the include graph for a JOIN_SRCS
+// member set. DFS runs over all members with a SHARED visited set
+// (mirroring the joined compile — headers reached once stay deduped),
+// so total work is O(union closure) not O(sum per-source).
+//
+// `scanPlatform` chooses scanner + arch search-paths: callers pass
+// `srcInstance.Platform` normally; the JS-target override passes
+// `ctx.target` so the closure resolves against target-arch musl even
+// when the surrounding walk is host-axis. instance.Platform is read
+// for module-level facts (Path, Flags.LibcMusl), NOT mutated.
 func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerForPlatform(scanPlatform)
 	if scanner == nil {
@@ -753,20 +642,16 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 			BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.LibcMusl, scanPlatform),
 		}
 
-		// PR-M3-perf-E: scanCtx dispatch — local vs interned (see
-		// genCtx.getScanCtx). Within this join-srcs loop every source's
-		// cfg differs only in SourceRel; PR-M3-perf-E ignored that
-		// observation in favour of routing through getScanCtx anyway,
-		// which yields one scanCtx per unique (ctxHash) and lets
-		// resolveCache / subgraphCache entries from earlier sources serve
-		// later sources at the same ctxHash.
+		// scanCtx dispatch via genCtx.getScanCtx — one scanCtx per
+		// unique ctxHash. Within this loop every source's cfg differs
+		// only in SourceRel; routing through getScanCtx lets
+		// resolveCache / subgraphCache entries from earlier sources
+		// serve later sources at the same ctxHash.
 		sc := ctx.getScanCtx(scanner, cfg)
 
-		// `WalkSource` rewrites `sc.cfg.SourceRel` to the current
-		// source-rel so sysinclSourceLookup keys on the right path. We
-		// must therefore use the dfs entry that ALSO sets it, OR set it
-		// inline before dfs. dfs reads sc.cfg.SourceRel for srcClassHash,
-		// so set it here before invoking dfs against the shared visited+order.
+		// dfs reads sc.cfg.SourceRel for srcClassHash; set it here
+		// before invoking against the shared visited+order so
+		// sysinclSourceLookup keys on the right path.
 		sc.cfg.SourceRel = srcRelOnDisk
 
 		// Scanner walks operate on VFS values; the FS translation
@@ -817,16 +702,12 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []V
 }
 
 // jsTargetPeerAddIncl rebases a host-axis PeerAddInclGlobal slice to
-// the target-axis musl arch layout for use in the JS-node closure
-// scan. JS nodes are anchored to the target platform axis (PR-35s),
-// so their include closure must reflect the target's musl-arch
-// search paths rather than the host arch the surrounding HOST-build
-// moduleInputs carries.
+// the target-axis musl-arch layout for the JS-node closure scan. JS
+// nodes are anchored to the target platform axis, so their include
+// closure reflects the target's musl-arch paths.
 //
-// PR-40 Fix C: narrow shim — only the musl-arch entry is rewritten
-// from `from.ISA` to `to.ISA`; all other entries pass through.
-// TODO: remove when a general target-addincl propagation mechanism
-// lands in M3+ (the same milestone as the BinaryDir lift for Fix D).
+// Narrow shim — only the musl-arch entry is rewritten; other entries
+// pass through. TODO: replace with general target-addincl propagation.
 func jsTargetPeerAddIncl(hostPeerAddIncl []string, from, to ISA) []string {
 	fromMuslArch := "contrib/libs/musl/arch/" + string(from)
 	toMuslArch := "contrib/libs/musl/arch/" + string(to)
@@ -844,13 +725,11 @@ func jsTargetPeerAddIncl(hostPeerAddIncl []string, from, to ISA) []string {
 	return out
 }
 
-// resolveSourceVFS composes the `$(S)/...` VFS path of a
-// SRCS-declared source, applying composeCCPaths' SRCDIR-aware
-// fallback: when the module declares SRCDIR and no local file exists
-// at instance.Path/<srcRel>, the source resolves under SRCDIR. This
-// is registration-time path resolution (matches AUDIT-3 bucket (B));
-// the os.Stat is legitimate at this layer because the answer feeds
-// path composition, not scanner-internal locator dispatch.
+// resolveSourceVFS composes the `$(S)/...` VFS path of a SRCS-declared
+// source with composeCCPaths' SRCDIR-aware fallback: when SRCDIR is set
+// and no local file exists at instance.Path/<srcRel>, resolve under
+// SRCDIR. Registration-time resolution; os.Stat is legitimate here
+// because it feeds path composition, not scanner-internal dispatch.
 func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDir string) VFS {
 	srcRelOnDisk := srcInstance.Path + "/" + srcRel
 
@@ -870,28 +749,20 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 // (PR-M3-L0-codegen-deps-EV-PB).
 
 // walkClosure resolves the transitive include closure of a source
-// rooted at any VFS path — `$(S)/...` for FS-resident
-// sources or `$(B)/...` for codegen outputs whose producer
-// has registered an EmitsIncludes entry in the per-scanner
-// CodegenRegistry. The scanner's locator (forEachResolvedChild)
-// dispatches FS-vs-codegen internally; callers do not branch on
-// is-on-disk. Returns the resolved include set or nil when the
-// scanner is unavailable.
-//
-// The ScanContext mirrors what cmd_args -I uses: own AddIncl + peer
-// GLOBAL AddIncl + the cc bundle's implicit baseline (linux-headers
-// and the active musl-arch include path).
+// rooted at any VFS path — `$(S)/...` for FS-resident sources or
+// `$(B)/...` for codegen outputs registered in the CodegenRegistry.
+// Scanner's locator dispatches FS-vs-codegen internally. ScanContext
+// mirrors cmd_args -I: own AddIncl + peer GLOBAL AddIncl + cc-bundle
+// implicit baseline (linux-headers + active musl-arch).
 func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerFor(srcInstance)
 	if scanner == nil {
 		return nil
 	}
 
-	// SourceRel feeds srcClassHash (per-source subgraph-cache keying).
-	// WalkClosure overwrites it per-call for SOURCE_ROOT paths so
-	// scanCtx reuse across sources keys correctly; for BUILD_ROOT
-	// paths it stays as set here and is never consulted by the
-	// BUILD_ROOT child branch.
+	// SourceRel feeds srcClassHash (per-source subgraph-cache key).
+	// WalkClosure overwrites it per-call for SOURCE_ROOT paths;
+	// BUILD_ROOT paths leave it as set and never consult it.
 	cfg := ScanContext{
 		SourceRel:       vfsPath.Rel,
 		OwnAddIncl:      in.AddIncl,
@@ -905,31 +776,23 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 }
 
 // includeScannerBasePaths returns the implicit include search path
-// that the cc bundle adds via cmd_args (SOURCE_ROOT + linux-headers +
-// musl arch when applicable). The scanner uses these as fallback
-// resolution candidates so headers like `<util/folder/path.h>` (repo-
-// rooted system-form includes) and `<linux/types.h>` (linux-headers)
-// resolve in the same way the compiler would.
+// the cc bundle adds via cmd_args (SOURCE_ROOT + linux-headers +
+// musl-arch when applicable). Used as fallback resolution candidates
+// so `<util/folder/path.h>` and `<linux/types.h>` resolve compiler-
+// identically.
 //
-// Non-musl flavours: an empty-string entry is prepended first,
-// representing the SOURCE_ROOT itself. The resolver treats an empty
-// prefix as "resolve directly against SOURCE_ROOT" — so `<util/foo.h>`
-// tries $(S)/util/foo.h before the linux-headers subtree.
-// This mirrors the `-I$(S)` flag the compiler receives via
-// cmd_args for every non-musl CC node.
+// Non-musl flavours prepend an empty-string entry representing
+// SOURCE_ROOT itself (mirrors `-I$(S)`); `<util/foo.h>` tries
+// $(S)/util/foo.h before linux-headers.
 //
-// Musl flavours (composeMuslCC / composeMuslHostCC paths) MUST NOT get
-// the empty prefix — they use `-nostdinc` and have a fully explicit
-// include search path via muslCcIncludes. Adding SOURCE_ROOT there
+// Musl flavours MUST NOT get the empty prefix — `-nostdinc` plus a
+// fully explicit muslCcIncludes search path. Adding SOURCE_ROOT
 // would cause false resolution of system-form includes against the
-// repo root, silently expanding the musl CC input sets incorrectly.
-// includeScannerBasePaths returns the base search-path list for the
-// include scanner. `libcMusl` is the per-MODULE flag (this module is
-// part of contrib/libs/musl/*); `scanPlatform` is the platform the
-// search paths resolve against (typically `instance.Platform`, but
-// JOIN_SRCS during a host walk passes `ctx.target` to force the
-// target-arch musl-arch paths without mutating the surrounding
-// instance).
+// repo root, silently expanding musl CC input sets.
+//
+// `libcMusl` is the per-MODULE flag; `scanPlatform` is the platform
+// to resolve against (typically instance.Platform, but JOIN_SRCS
+// during a host walk passes ctx.target to force target-arch paths).
 func includeScannerBasePaths(libcMusl bool, scanPlatform *Platform) []string {
 	base := []string{
 		"contrib/libs/linux-headers",

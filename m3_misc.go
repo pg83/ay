@@ -8,25 +8,19 @@ import (
 	"strings"
 )
 
-// m3_misc.go — emitters for the five small-kind nodes introduced in PR-M3-E:
-//   R5  — ragel5 two-step code generation (.rl → .rl.tmp → .rl5.cpp)
-//   JV  — ANTLR4 grammar Java invocation (RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT)
-//   CF  — CONFIGURE_FILE template expansion (.cpp.in/.c.in → .cpp/.c)
-//   BI  — CREATE_BUILDINFO_FOR build-info header generation
+// m3_misc.go — emitters for the small-kind nodes:
+//   R5  — ragel5 two-step (.rl → .rl.tmp → .rl5.cpp)
+//   JV  — ANTLR4 grammar Java invocation
+//   CF  — CONFIGURE_FILE (.cpp.in/.c.in → .cpp/.c)
+//   BI  — CREATE_BUILDINFO_FOR
 //   PR  — RUN_PROGRAM code-generator invocation
-//
-// Reference nodes come from /home/pg/monorepo/yatool_orig/sg2.json.
+// Reference: /home/pg/monorepo/yatool_orig/sg2.json.
 
 // ─── R5 ──────────────────────────────────────────────────────────────────────
 
-// EmitR5 emits an R5 node for a ragel5 two-step code generation.
-// The node has two cmds:
-//   cmd[0]: ragel5 -o <tmpPath> <srcPath>
-//   cmd[1]: rlgen-cd -G2 -o <cppPath> <tmpPath>
-//
-// tmpPath  = $(B)/<modulePath>/<srcRel>.tmp
-// cppPath  = $(B)/<modulePath>/<srcRel without .rl>.rl5.cpp
-//
+// EmitR5 emits an R5 node (two cmds: ragel5 → .tmp; rlgen-cd → .rl5.cpp).
+// tmpPath = $(B)/<modulePath>/<srcRel>.tmp
+// cppPath = $(B)/<modulePath>/<srcRel without .rl>.rl5.cpp
 // Returns (R5 NodeRef, tmpPath, cppPath).
 func EmitR5(
 	instance ModuleInstance,
@@ -93,11 +87,9 @@ func EmitR5(
 			"p":  "R5",
 			"pc": "yellow",
 		},
-		// R5-specific: tags=["tool"] unconditionally (every R5 invocation
-		// is a host-toolchain ragel5 call, regardless of the calling
-		// module's axis — both x86_64 and aarch64 R5 variants carry the
-		// tool tag in REF). This is intrinsic to R5; not derived from
-		// instance.Platform.Tags.
+		// R5-specific: tags=["tool"] unconditionally — every R5 is a
+		// host-toolchain ragel5 call regardless of caller axis. Not
+		// derived from instance.Platform.Tags.
 		Tags: []string{"tool"},
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
@@ -137,25 +129,14 @@ var stdout2stderrVFS = Source("build/scripts/stdout2stderr.py")
 var stdout2stderrPath = stdout2stderrVFS.String()
 
 
-// EmitJV emits a JV node for a single RUN_ANTLR4_CPP grammar invocation.
-// The grammar .g4 file is relative to the module dir.
-// Options are extra cmd_args tokens (e.g. ["-package", "NConfReader"]).
-// When visitor=true, adds -visitor; when listener=false (default for split),
-// adds -no-listener.
+// EmitJV emits a JV node for a single RUN_ANTLR4_CPP grammar (.g4
+// relative to module dir). Options are extra cmd_args tokens.
+// visitor=true → -visitor; listener=false (default split) → -no-listener.
 //
-// Reference cmd_args shape (single-grammar form):
-//
-//	[python3, stdout2stderr.py, jdk/bin/java, -jar, antlr4.jar,
-//	 <grammar.g4>, -Dlanguage=Cpp, -o, $(B)/<modulePath>,
-//	 <visitor?-visitor:-no-visitor>, <listener?-listener:-no-listener>,
-//	 ...options]
-//
-// Outputs: <grammar>Lexer.cpp, <grammar>Lexer.h, <grammar>Parser.cpp,
-//
-//	<grammar>Parser.h, <grammar>Visitor.h, <grammar>BaseVisitor.h
-//
-// Inputs: [grammar.g4, stdout2stderr.py, antlr4.jar]
-// cwd: $(B)/<modulePath>
+// cmd_args: [python3, stdout2stderr.py, jdk/bin/java, -jar, antlr4.jar,
+// <grammar>, -Dlanguage=Cpp, -o, $(B)/<modulePath>, ...options].
+// outputs: <grammar>{Lexer,Parser,Visitor,BaseVisitor}.{cpp,h}.
+// inputs: [grammar.g4, stdout2stderr.py, antlr4.jar]; cwd: $(B)/<modulePath>.
 func EmitJV(
 	instance ModuleInstance,
 	grammar string,
@@ -244,18 +225,12 @@ func EmitJV(
 	return emit.Emit(node)
 }
 
-// EmitJVSplit emits a JV node for a RUN_ANTLR4_CPP_SPLIT invocation that
-// takes a lexer grammar and a parser grammar as separate files.
+// EmitJVSplit emits a JV node for RUN_ANTLR4_CPP_SPLIT (separate lexer
+// + parser .g4 files).
 //
-// Reference cmd_args shape (split form):
-//
-//	[python3, stdout2stderr.py, jdk/bin/java, -jar, antlr4.jar,
-//	 lexerGrammar.g4, parserGrammar.g4, -Dlanguage=Cpp,
-//	 -o, $(B)/<modulePath>, -visitor, -no-listener]
-//
-// Outputs: CmdLexer.cpp, CmdLexer.h, CmdParser.cpp, CmdParser.h,
-//
-//	CmdParserVisitor.h, CmdParserBaseVisitor.h
+// cmd_args: [python3, stdout2stderr.py, jdk/bin/java, -jar, antlr4.jar,
+// <lexer>, <parser>, -Dlanguage=Cpp, -o, $(B)/<modulePath>, ...flags].
+// Outputs: {Lexer,Parser}.{cpp,h} + ParserVisitor.h, ParserBaseVisitor.h.
 func EmitJVSplit(
 	instance ModuleInstance,
 	lexer string,
@@ -360,21 +335,13 @@ var configureFilePyPath = configureFilePyVFS.String()
 const buildTypeDebug = "BUILD_TYPE=DEBUG"
 
 // EmitCF emits a CF node expanding a .cpp.in / .c.in template via
-// configure_file.py.  The output strips the .in suffix.
+// configure_file.py. Output strips the .in suffix.
 //
-// cmd_args shape:
-//
-//	[python3, configure_file.py,
-//	 $(S)/<modulePath>/<srcRel>,
-//	 $(B)/<modulePath>/<srcRel without .in>,
-//	 <cfgVars...>]
-//
-// cfgVars are derived from DEFAULT(name value) declarations in the
-// module's ya.make (passed via in.DefaultVars / in.DefaultVarOrder), plus
-// BUILD_TYPE=DEBUG injected for any module that references @BUILD_TYPE@.
-//
-// Inputs: [configure_file.py, source .cpp.in, ...header closure of the .in]
-// Outputs: [$(B)/<modulePath>/<srcRel without .in>]
+// cmd_args: [python3, configure_file.py, $(S)/<modulePath>/<srcRel>,
+// $(B)/<modulePath>/<srcRel without .in>, <cfgVars...>].
+// cfgVars derive from DEFAULT(name value) declarations filtered to
+// vars actually @VAR@-referenced in the .in; BUILD_TYPE=DEBUG is
+// injected when referenced but not DEFAULT-declared.
 //
 // Returns (CF NodeRef, outputPath).
 func EmitCF(
@@ -391,12 +358,8 @@ func EmitCF(
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
-	// Build cfg vars list.  Only include DEFAULT-declared vars whose
-	// names appear in @VAR@ references in the source; we use the
-	// declaration order from the ya.make.  Also inject BUILD_TYPE=DEBUG
-	// if not already present (a global build-system var).
-	// PR-M3-F-5: pass the real on-disk source path (SourceRoot/<path>/<srcRel>)
-	// so buildCFGVars can read the .in file to scan for @VAR@ references.
+	// Pass the real on-disk source path (SourceRoot/<path>/<srcRel>)
+	// so buildCFGVars can read the .in file to scan for @VAR@ refs.
 	srcDiskPath := in.SourceRoot + "/" + instance.Path + "/" + srcRel
 	cfgVars := buildCFGVars(srcDiskPath, in.DefaultVars, in.DefaultVarOrder)
 
@@ -448,34 +411,23 @@ func EmitCF(
 // cfgVarRefRe matches @VAR_NAME@ substitution markers in .in template files.
 var cfgVarRefRe = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
 
-// buildCFGVars constructs the $CFG_VARS expansion from the module's DEFAULT
-// declarations, filtered to only those variables actually referenced as
-// @VAR@ in the .in source file and emitted in alphabetical order.
+// buildCFGVars constructs $CFG_VARS from the module's DEFAULT
+// declarations, filtered to vars actually @VAR@-referenced in the .in
+// source, sorted alphabetically (ymake's order).
 //
-// srcDiskPath is the real on-disk path to the .in source (not the
-// $(S)/... macro path) so the file can be read to scan for
-// @VAR@ references.
+// srcDiskPath is the on-disk path to the .in (not the $(S)/... macro
+// path) so the file is readable to scan for @VAR@.
 //
-// ymake's $CFG_VARS logic:
-//   - Only DEFAULT-declared vars that appear as @VAR@ in the .in source are
-//     emitted (vars not referenced are silently dropped).
-//   - Vars are emitted in alphabetical order (not declaration order).
-//   - If @BUILD_TYPE@ is referenced but not DEFAULT-declared, ymake injects
-//     the global BUILD_TYPE=DEBUG value.
+// If @BUILD_TYPE@ is referenced but not DEFAULT-declared, ymake injects
+// BUILD_TYPE=DEBUG.
 //
-// Empirical anchors (sg2.json reference):
-//   - build_info.cpp.in references only @BUILD_TYPE@ → ["BUILD_TYPE=DEBUG"].
-//   - sandbox.cpp.in references @KOSHER_SVN_VERSION@ and @SANDBOX_TASK_ID@
-//     → ["KOSHER_SVN_VERSION=", "SANDBOX_TASK_ID=0"] (alpha order; no
-//     BUILD_TYPE injected since @BUILD_TYPE@ is absent in sandbox.cpp.in).
+// Empirical: build_info.cpp.in → ["BUILD_TYPE=DEBUG"]; sandbox.cpp.in
+// → ["KOSHER_SVN_VERSION=", "SANDBOX_TASK_ID=0"].
 func buildCFGVars(srcDiskPath string, defaultVars map[string]string, defaultVarOrder []string) []string {
-	// Scan the .in file for @VAR@ references.  Silently skip unreadable files
-	// (generated sources during a warm build may not exist on disk yet).
-	//
-	// PR-AUDIT-3: legitimate disk read — extracts structured @VAR@ references
-	// from a .cpp.in/.c.in template at CF-node-emission time to filter the
-	// DEFAULT-declared vars to only those the template actually references.
-	// NOT for closure walks. Kept per audit doc §2 D12 scope-note.
+	// Scan the .in file for @VAR@ references. Unreadable → skip
+	// (generated sources may not exist on disk yet). This disk read
+	// is legitimate: extracts structured @VAR@ refs at CF-emission
+	// time, not for closure walks.
 	referenced := map[string]bool{}
 
 	if data, err := os.ReadFile(srcDiskPath); err == nil {
@@ -530,24 +482,18 @@ var buildInfoGenPyVFS = Source("build/scripts/build_info_gen.py")
 var buildInfoGenPyPath = buildInfoGenPyVFS.String()
 
 // EmitBI emits a BI node for CREATE_BUILDINFO_FOR(outputHeader).
-//
-// The BI node has three cmds:
+// Three cmds:
 //   cmd[0]: yield_line.py -- <module>/__args <cxx_compiler>
 //   cmd[1]: yield_line.py -- <module>/__args <cxx_flags...>
-//   cmd[2]: xargs.py -- <module>/__args python3 build_info_gen.py <outputHeader>
+//   cmd[2]: xargs.py -- <module>/__args python3 build_info_gen.py <out>
 //
-// The compiler and flags come from the target platform CXX bundle
-// (same flags as a target CC compile for this module, minus the
-// compiler-invocation-specific args: -c, -o, input path).
+// Flags come from the target CXX bundle (same as a target CC for this
+// module, minus -c, -o, input path).
 //
-// kv: {p: BI, pc: yellow, show_out: yes, disable_cache: yes}
-// cache: false is set as a top-level node field to match REF; the
-// normalizer drops it during M1/M2 canonicalization (per
-// normalize.py step 3) so the byte-exact M1/M2 hashes are
-// unaffected, while the L3 comparator (which preserves the field)
-// now matches REF on the BI node.
-// inputs: [yield_line.py, xargs.py, build_info_gen.py]
-// outputs: [$(B)/<modulePath>/<outputHeader>]
+// cache:false at top level matches REF; normalize.py drops it during
+// M1/M2 canonicalization so byte-exact hashes are unaffected.
+// inputs: [yield_line.py, xargs.py, build_info_gen.py];
+// outputs: [$(B)/<modulePath>/<outputHeader>].
 func EmitBI(
 	instance ModuleInstance,
 	outputHeader string,
@@ -633,18 +579,13 @@ func EmitBI(
 	return emit.Emit(node)
 }
 
-// biFlagsForInstance composes the CXX flag bundle for a BI node.  The
-// reference BI node (library/cpp/build_info, aarch64) uses the same flag
-// bundle as a target CXX compile for a musl module (the build_info library
-// peers library/cpp/string_utils/base64 which chains into musl).
-// The flags match the noLibcUndebugBlock sequence (two copies flanking
-// catboostOpenSourceDefine) plus the CXX-specific tail. On aarch64 the
-// noLibcUndebugBlock prefix carries `-mno-outline-atomics` between
-// `-UNDEBUG` and the warning suppressions tail (matches REF
-// library/cpp/build_info/buildinfo_data.h on default-linux-aarch64).
-//
-// PR-M3-platform-pair-step6: dispatches on `instance.Platform.Target` (aarch64-
-// specific codegen flag, not host/target axis).
+// biFlagsForInstance composes the CXX flag bundle for a BI node.
+// Matches a target CXX compile for a musl module (build_info peers
+// base64 which chains into musl): noLibcUndebugBlock × 2 flanking
+// catboostOpenSourceDefine plus the CXX tail. On aarch64,
+// `-mno-outline-atomics` sits between `-UNDEBUG` and the warning
+// suppressions in each noLibcUndebugBlock half. Reference:
+// library/cpp/build_info/buildinfo_data.h on default-linux-aarch64.
 func biFlagsForInstance(targetP *Platform) []string {
 	flags := make([]string, 0, 100)
 	flags = append(flags, debugPrefixMapFlags...)
@@ -686,27 +627,16 @@ func biFlagsForInstance(targetP *Platform) []string {
 
 // ─── PR ──────────────────────────────────────────────────────────────────────
 
-// EmitPR emits a PR node for a RUN_PROGRAM macro invocation.
+// EmitPR emits a PR node for a RUN_PROGRAM invocation.
 //
-// toolBinPath is the BUILD_ROOT-absolute path to the tool binary (derived
-// from walking the tool PROGRAM and taking its LDPath).
-// toolLDRef is the NodeRef of the tool's LD node.
-// stmt holds the parsed RUN_PROGRAM statement.
+// toolBinPath: BUILD_ROOT-absolute path to the tool binary (from
+// walking the tool PROGRAM's LDPath). toolLDRef: the tool's LD node.
 //
-// cmd_args shape:
-//
-//	[toolBinPath, <args with ${ARCADIA_ROOT}→$(S) substitution>]
-//
-// IN files in args are expanded to $(S)/<modulePath>/<file>.
-// OUT / OUT_NOAUTO files are expanded to $(B)/<modulePath>/<file>.
-// STDOUT redirects cmd's stdout to $(B)/<modulePath>/<file>.
-//
-// inputs: [toolBinPath, ...IN file abs paths, ...input header closure]
-// outputs: [stdout path] or [OUT/OUT_NOAUTO abs paths]
-// deps: [toolLDRef, ...inputDepRefs]
-// foreign_deps.tool: [toolLDRef]
-//
-// The node's platform matches the containing module's platform.
+// cmd_args: [toolBinPath, <args with ${ARCADIA_ROOT}→$(S)>]. Bare
+// filenames matching IN/OUT/OUT_NOAUTO/STDOUT are expanded to
+// $(S)/.../ or $(B)/.../ respectively. inputs: tool + IN abs paths +
+// closure. outputs: STDOUT or OUT/OUT_NOAUTO abs paths.
+// deps/foreign_deps.tool carry toolLDRef.
 func EmitPR(
 	instance ModuleInstance,
 	stmt *RunProgramStmt,
@@ -728,9 +658,8 @@ func EmitPR(
 		}
 	}
 
-	// Expand positional args: substitute ${ARCADIA_ROOT} → $(S),
-	// substitute ${MODDIR} → instance.Path, and expand bare filenames
-	// referenced by IN / OUT / OUT_NOAUTO / STDOUT to absolute paths.
+	// Expand positional args: ${ARCADIA_ROOT}→$(S), ${MODDIR}→
+	// instance.Path; bare IN/OUT/OUT_NOAUTO/STDOUT filenames → abs.
 	inSet := make(map[string]bool, len(stmt.INFiles))
 	for _, f := range stmt.INFiles {
 		inSet[f] = true
@@ -764,10 +693,8 @@ func EmitPR(
 		cmdArgs = append(cmdArgs, a)
 	}
 
-	// Build inputs list: tool binary + IN files + closure. Dedup so an
-	// IN file that is also reached transitively via the closure (it
-	// appears in the registered EmitsIncludes set seeded from IN) is
-	// listed once, matching the reference multiset shape.
+	// Inputs: tool + IN files + closure, deduped (IN files also
+	// reached transitively via closure appear once, matching REF).
 	inAbsPaths := make([]VFS, 0, len(stmt.INFiles))
 	for _, f := range stmt.INFiles {
 		inAbsPaths = append(inAbsPaths, Source(instance.Path+"/"+f))
@@ -810,10 +737,9 @@ func EmitPR(
 	if toolLDRef != (NodeRef{}) {
 		depRefs = append(depRefs, toolLDRef)
 	}
-	// PR-M3-L0-cascade-close-v2: thread codegen-producer refs reached through
-	// the PR's inputClosure (e.g. cross-module EN whose _serialized.h is in
-	// the closure of an IN header consumed by the PR tool). REF places these
-	// in the PR node's deps[] alongside toolLDRef.
+	// Thread codegen-producer refs reached via the PR's inputClosure
+	// (e.g. cross-module EN whose _serialized.h is in an IN header's
+	// closure). REF places these in deps[] alongside toolLDRef.
 	depRefs = append(depRefs, extraDepRefs...)
 
 	// foreignDepRefs.tool = [toolLDRef].
@@ -833,9 +759,8 @@ func EmitPR(
 		cmd.Cwd = stmt.CWD
 	}
 
-	// PR-M3-platform-pair-step5: tags + host_platform are baseline data
-	// from `targetP`. Empty `instance.Platform.Tags` keeps the slice non-nil so
-	// the JSON serialises as `[]`, not `null`.
+	// Empty instance.Platform.Tags must stay non-nil so JSON
+	// serialises as `[]`, not `null`.
 	tags := instance.Platform.Tags
 
 	node := &Node{
@@ -868,31 +793,28 @@ func EmitPR(
 
 // ─── emitMiscNodes ────────────────────────────────────────────────────────────
 
-// emitMiscNodes emits all module-level JV, CF, BI, and PR nodes declared
-// in the module's ya.make.  Called from genModule after emitPySrcs.
-// The CF emitter for .cpp.in/.c.in sources is already handled in
-// emitOneSource; this function handles only the explicit CONFIGURE_FILE()
-// macro form (not the implicit .in-source form).
-// antlr4RuntimeHeaderPath is the $(S)-rooted path to the
-// antlr4 C++ umbrella header included by all ANTLR4-generated .h files.
-// F-7-B uses it as the static EmitsIncludes for JV .h outputs.
+// emitMiscNodes (defined below) emits all module-level JV, CF, BI, PR
+// nodes. The implicit-CF path for .cpp.in/.c.in sources is in
+// emitOneSource.
+//
+// antlr4RuntimeHeaderVFS is the $(S)-rooted antlr4 C++ umbrella
+// header included by all ANTLR4-generated .h files; used as static
+// EmitsIncludes for JV .h outputs.
 var antlr4RuntimeHeaderVFS = Source("contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h")
 var antlr4RuntimeHeaderPath = antlr4RuntimeHeaderVFS.String()
 
-// antlr4FsToolsVFS / antlr4ProcCmdVFS are the build-script helpers
-// threaded into JV-derived CP/CC node inputs (matching the reference
-// sg2.json shape where every g4.cpp CP/CC inputs these paths after the
-// JV primary output and before the grammar .g4 files).
+// antlr4FsToolsVFS / antlr4ProcCmdVFS are build-script helpers
+// threaded into JV-derived CP/CC inputs, slotted after the JV primary
+// output and before the grammar .g4 files.
 var antlr4FsToolsVFS = Source("build/scripts/fs_tools.py")
 var antlr4ProcCmdVFS = Source("build/scripts/process_command_files.py")
 var antlr4FsToolsPath = antlr4FsToolsVFS.String()
 var antlr4ProcCmdFiles = antlr4ProcCmdVFS.String()
 
-// emitMiscNodes emits all module-level JV, CF, BI, and PR nodes declared
-// in the module's ya.make. When consumerInputs is non-nil, also emits the
-// downstream CP + CC chain for each JV grammar .cpp output (the .g4.cpp
-// rename + compile), returning per-CC (refs, outputPaths, memberInputs)
-// for the caller to fold into the enclosing AR member accumulators.
+// emitMiscNodes emits all module-level JV, CF, BI, PR nodes. With
+// non-nil consumerInputs, also emits the downstream CP+CC chain for
+// each JV grammar .cpp output, returning per-CC (refs, outputs,
+// memberInputs) for the caller's AR-member accumulators.
 func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS, memberInputsList [][]VFS) {
 	outPrefix := instance.Path + "/"
 	reg := codegenRegForInstance(ctx, instance)
@@ -901,15 +823,12 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 	for _, g := range d.antlr4Grammars {
 		if g.IsSplit {
 			jvRef := EmitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ctx.emit)
-			// F-7-B: register the .h outputs. ANTLR4-generated headers include
-			// antlr4-runtime.h (XPathLexer.h pattern in
-			// contrib/libs/antlr4_cpp_runtime/src/tree/xpath/XPathLexer.h).
-			// PR-M3-final-codegen-registry-expansion: the JV-generated .h also
-			// carries the antlr4 toolchain witnesses (antlr.jar, stdout2stderr.py
-			// script, the .g4 sources) and the sibling .cpp output. Verified on
-			// devtools/ymake/lang/cmd_parser.cpp.o and confreader.cpp.o.
-			// PR-M3-L0-cascade-close-v2: ProducerRef = jvRef so the consumer CC
-			// reaching a JV-generated .h transitively threads JV into its deps[].
+			// Register .h outputs. ANTLR4-generated headers include
+			// antlr4-runtime.h; JV-generated .h also carries the
+			// antlr4 toolchain witnesses (antlr.jar, stdout2stderr.py,
+			// .g4 sources) and the sibling .cpp output.
+			// ProducerRef = jvRef so consumer CC reaching a JV-generated
+			// .h transitively threads JV into deps[].
 			lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 			if reg != nil {
@@ -960,11 +879,8 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			}
 		} else {
 			jvRef := EmitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ctx.emit)
-			// F-7-B: register .h outputs.
-			// PR-M3-final-codegen-registry-expansion: same witness set as
-			// the split path (antlr.jar + stdout2stderr.py + .g4 source +
-			// sibling Lexer.cpp).
-			// PR-M3-L0-cascade-close-v2: ProducerRef = jvRef.
+			// Register .h outputs (same witness set as split path).
+			// ProducerRef = jvRef.
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 			if reg != nil {
 				grammarG4 := Source(instance.Path + "/" + g.Grammar)
@@ -1019,14 +935,10 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 	// BI: emit one node when CREATE_BUILDINFO_FOR was declared.
 	if d.createBuildInfoFor != "" {
 		biRef := EmitBI(instance, d.createBuildInfoFor, biFlagsForInstance(instance.Platform), ctx.emit)
-		// F-7-B: register BI output. buildinfo_data.h is a generated header.
-		// PR-M3-final-codegen-registry-expansion: the BI-script trio
+		// Register BI output (buildinfo_data.h). The BI-script trio
 		// (build_info_gen.py + xargs.py + yield_line.py) flows up into
-		// CC consumers of the generated header (witnessed on
-		// library/cpp/build_info/build_info_static.cpp.o in REF). Register
-		// them as EmitsIncludes so the scanner closure propagates them.
-		// PR-M3-L0-cascade-close-v2: ProducerRef = biRef so the CC
-		// consumer of buildinfo_data.h carries the BI producer in deps[].
+		// CC consumers via EmitsIncludes. ProducerRef = biRef so the
+		// consumer CC carries BI in deps[].
 		if reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP: "BI",
@@ -1042,42 +954,27 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		}
 	}
 
-	// PR: PR-AUDIT-5 — RUN_PROGRAM emission moved ahead of AR so that
-	// PR outputs ending in a CC-compilable extension (.cpp/.cc/.cxx/.c)
-	// can be threaded into the module's AR member list as additional
-	// CC sources. The dedicated entry point is `emitRunProgramsForAR`
-	// (gen.go); this site is now a no-op for PR.
+	// RUN_PROGRAM emission lives in emitRunProgramsForAR (gen.go) —
+	// ahead of AR so PR outputs with CC-compilable extensions can be
+	// threaded into the module's AR member list. No-op here.
 	_ = d.runPrograms
 	return
 }
 
-// emitJVDownstreamCPCC emits one CP + one CC node for each (cpp, h) pair
-// produced by a JV grammar invocation, and returns the per-CC triples
-// (refs, outputPaths, memberInputs) for the caller to fold into the
-// enclosing AR member accumulators.
+// emitJVDownstreamCPCC emits one CP + one CC for each (cpp, h) pair
+// from a JV grammar invocation. Returns per-CC (refs, outputPaths,
+// memberInputs).
 //
-// Pattern (reference sg2.json):
+// Pattern: JV outputs CmdLexer.cpp → CP renames to CmdLexer.g4.cpp
+// → CC compiles CmdLexer.g4.cpp.o.
 //
-//	JV outputs CmdLexer.cpp → CP renames it to CmdLexer.g4.cpp
-//	                        → CC compiles CmdLexer.g4.cpp.o
+// CP inputs: [jvPrimary, (srcCpp if != primary), fsTools, procCmd,
+// jvInputs..., antlr4-runtime closure...].
+// CC inputs add srcH between jvPrimary and fsTools.
 //
-// CP inputs (matching reference):
-//
-//	[jvPrimaryOutput, (srcCpp when != primary), fsToolsPath, procCmdFiles,
-//	 jvInputs..., antlr4-runtime closure...]
-//
-// CC inputs:
-//
-//	[jvPrimaryOutput, g4CppPath, srcHPath, fsToolsPath, procCmdFiles,
-//	 jvInputs..., antlr4-runtime closure...]
-//
-// cpccPairs holds (srcCppAbsPath, srcHAbsPath) for each grammar .cpp output.
-// jvPrimary is always the JV node's outputs[0] (the lexer .cpp).
-// jvInputs are the JV node's Inputs (grammar .g4 files + scripts + jar).
-// outputIncludes carries the repo-relative headers from the macro's
-// OUTPUT_INCLUDES keyword (PR-M3-jv-antlr-system-headers); they are
-// rebased to $(S)/... and appended to the CP `.g4.cpp`
-// EmitsIncludes so the CC scan walks their transitive closure.
+// outputIncludes carries repo-relative headers from the macro's
+// OUTPUT_INCLUDES; rebased to $(S)/... and added to the CP .g4.cpp
+// EmitsIncludes so CC scan walks the transitive closure.
 func emitJVDownstreamCPCC(
 	ctx *genCtx,
 	instance ModuleInstance,
@@ -1099,13 +996,9 @@ func emitJVDownstreamCPCC(
 		g4CppPath := Build(instance.Path + "/" + base + ".g4.cpp")
 		g4CppRel := base + ".g4.cpp"
 
-		// Register the .g4.cpp in the codegen registry so walkClosure
-		// can resolve its transitive antlr4-runtime.h include chain.
-		// PR-M3-jv-antlr-system-headers: also seed the registry entry with
-		// the macro's OUTPUT_INCLUDES (rebased to $(S)/...). The
-		// scanner walks each entry transitively via the FS locator, so the
-		// downstream system-header closure (e.g. util/generic/string.h →
-		// glibcasm / musl / cxxsupp) lands in the CP/CC inputs naturally.
+		// Register .g4.cpp so walkClosure resolves its transitive
+		// antlr4-runtime.h chain and the macro's OUTPUT_INCLUDES
+		// (rebased to $(S)/...). Scanner walks each entry transitively.
 		if reg != nil {
 			emits := make([]VFS, 0, 1+len(outputIncludes))
 			emits = append(emits, antlr4RuntimeHeaderVFS)
@@ -1154,21 +1047,17 @@ func emitJVDownstreamCPCC(
 		ccIn.HasGenerator = true
 		ccIn.Generator = jvRef
 		ccIn.ExtraDepRefs = []NodeRef{cpRef}
-		// PR-M3-antlr-listener-default: ANTLR4-generated .g4.cpp files declare
-		// per-rule local variables the generator does not always reference;
-		// upstream attaches `-Wno-unused-variable` to silence the resulting
-		// `-Werror` diagnostic. The composer slots PerSourceCFlags between
-		// macroPrefixMapFlags and the input path — matching the reference
-		// position immediately before `<...>.g4.cpp` (sg2.json
-		// devtools/ymake/lang/TConfLexer.g4.cpp.o cmd_args index 144..145).
+		// ANTLR4-generated .g4.cpp files have per-rule unused locals;
+		// `-Wno-unused-variable` silences the `-Werror` diagnostic.
+		// Slotted by the composer between macroPrefixMapFlags and the
+		// input path (sg2.json TConfLexer.g4.cpp.o cmd_args[144..145]).
 		ccIn.PerSourceCFlags = []string{"-Wno-unused-variable"}
 
 		ccRef, ccOut := EmitCC(instance, g4CppRel, ccIn, ctx.host, ctx.emit)
 
-		// AR memberInputs: SOURCE_ROOT closure entries only (no BUILD_ROOT).
-		// PR-M3-final-codegen-registry-expansion: fs_tools.py and
-		// process_command_files.py are CP-step build-script helpers
-		// witnessed in REF on the enclosing AR rollup (libdevtools-ymake-lang.a).
+		// AR memberInputs: SOURCE_ROOT closure entries only. fs_tools.py
+		// and process_command_files.py are CP-step helpers witnessed
+		// in REF on the AR rollup (libdevtools-ymake-lang.a).
 		memberInputs := make([]VFS, 0, len(closure)+2)
 		memberInputs = append(memberInputs, antlr4FsToolsVFS, antlr4ProcCmdVFS)
 		for _, p := range closure {
@@ -1191,23 +1080,17 @@ func emitJVDownstreamCPCC(
 // for each PR output whose extension is a CC-compilable source kind,
 // emits a downstream CC consuming the registered BUILD_ROOT source.
 //
-// PR-AUDIT-5: implements the Python→Ragel→C++ chain's terminal case
-// (PR→CC). RUN_PROGRAM with `STDOUT foo.cpp` (or `OUT foo.cpp`) emits
-// the .cpp under $(B)/<instance.Path>/foo.cpp; the consuming
-// CC node compiles it into <foo>.cpp.o which the surrounding AR/LD
-// archives alongside the module's regular SRCS.
+// Implements the PR→CC terminal case. A RUN_PROGRAM with
+// `STDOUT/OUT foo.cpp` emits the .cpp under $(B)/<instance.Path>/foo.cpp
+// and the consuming CC compiles it into foo.cpp.o which the AR/LD
+// archives alongside the module's regular SRCS. Mirrors upstream
+// ymake's auto-promote of compilable-extension RUN_PROGRAM outputs.
 //
-// Empirical reference (sg2.json): devtools/ymake/symbols's RUN_PROGRAM
-// emits dep_types.h_dumper.cpp via STDOUT, and the module's AR archives
-// dep_types.h_dumper.cpp.o as the trailing member after the declared
-// SRCS. Mirrors the upstream ymake behaviour: a RUN_PROGRAM whose
-// STDOUT/OUT names a compilable extension auto-promotes that output to
-// an implicit module source.
+// Empirical: devtools/ymake/symbols emits dep_types.h_dumper.cpp via
+// STDOUT, then archives dep_types.h_dumper.cpp.o.
 //
-// Returns the per-CC `(refs, outputs, memberInputs)` triples for the
-// caller to fold into the AR-member accumulators. `memberInputs` is
-// already deduped against caller-side state via the returned per-CC
-// slice; the caller's `addMemberInputs` performs the union.
+// Returns per-CC (refs, outputs, memberInputs) for the caller's
+// AR-member accumulators.
 func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS, memberInputs [][]VFS) {
 	if len(d.runPrograms) == 0 {
 		return nil, nil, nil
@@ -1217,9 +1100,8 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 
 	for _, rp := range d.runPrograms {
 		prRef := emitRunProgram(ctx, instance, rp, d, reg, in)
-		// PR-M3-unpaired-got-closure: record (output filename → PR
-		// NodeRef) so ARCHIVE() in the same module can wire the AR's
-		// dep set to the producing PR.
+		// Record (output filename → PR NodeRef) so ARCHIVE() in the
+		// same module can wire the AR's dep set to the producing PR.
 		if d.prOutputProducer == nil {
 			d.prOutputProducer = map[string]NodeRef{}
 		}
@@ -1233,14 +1115,14 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 			d.prOutputProducer[rp.StdoutFile] = prRef
 		}
 
-		// PR-AUDIT-5: classify outputs by extension. CC-compilable
-		// outputs trigger a downstream CC; opaque outputs (.pyc and
-		// the like) carry through as registry-only entries.
+		// Classify outputs by extension. CC-compilable outputs
+		// trigger a downstream CC; opaque outputs (.pyc etc.) stay
+		// as registry-only entries.
 		outs := make([]string, 0, len(rp.OUTFiles)+len(rp.OUTNoAutoFiles)+1)
 		outs = append(outs, rp.OUTFiles...)
-		// PR-AUDIT-5: OUT_NOAUTO suppresses the auto-promote-to-source
-		// behaviour upstream, so we skip rp.OUTNoAutoFiles for the CC
-		// dispatch even when their extension is .cpp/.c/...
+		// OUT_NOAUTO suppresses auto-promote-to-source upstream, so
+		// rp.OUTNoAutoFiles is skipped for CC dispatch even when its
+		// extension is .cpp/.c/...
 		if rp.StdoutFile != "" {
 			outs = append(outs, rp.StdoutFile)
 		}
@@ -1268,23 +1150,15 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 const archiverToolPath = "tools/archiver"
 
 // emitArchives emits one AR node per `ARCHIVE(NAME <out> [DONTCOMPRESS]
-// files...)` declaration in `d.archives`. The node invokes the host
-// archiver binary (resolved by walking tools/archiver as a host PROGRAM)
-// to pack the listed files into the named output.
+// files...)` declaration. Invokes the host archiver binary (resolved
+// by walking tools/archiver as a host PROGRAM).
 //
-// Reference cmd_args shape (sg2.json):
+// cmd_args: `archiver -q -x [-p] <file1>: [<file2>:] -o <out>`. Each
+// file gets a trailing colon (upstream `${suf=\:;input}`); PR-produced
+// files resolve to BUILD_ROOT, others to $(S)/<modulePath>/<file>.
 //
-//	$(B)/tools/archiver/archiver -q -x [-p] <file1>: [<file2>:] -o <NAME-absolute>
-//
-// Each archived file is rendered with a trailing colon (`${suf=\:;input}`
-// in the upstream macro) and resolved to its BUILD_ROOT-absolute path when
-// it names a PR-produced artifact in the same module; otherwise it is
-// treated as a SOURCE_ROOT-relative path and rendered as
-// `$(S)/<modulePath>/<file>`.
-//
-// Inputs: the PR-produced files (as BUILD_ROOT paths), the archiver tool
-// path, the producer PR's IN files (rebased to SOURCE_ROOT). Deps: the
-// producer PR's NodeRef + the archiver LD's NodeRef.
+// Inputs: PR outputs ($(B)) + archiver tool + producer-PR IN files
+// ($(S)). Deps: producer-PR NodeRef + archiver LDRef.
 func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	if len(d.archives) == 0 {
 		return
@@ -1312,12 +1186,10 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		// node, but with the conventional binary path).
 	}
 
-	// Aggregate the SOURCE_ROOT-rooted IN files contributed by every PR
-	// in this module — REF includes the full set of upstream sources
-	// (e.g. `__res.py` + `sitecustomize.py`) in each ARCHIVE node's
-	// `inputs[]`, not just the IN list of the PR that produced the
-	// specifically-archived file. Sort + dedup once so every emitted
-	// AR node sees a stable view.
+	// Aggregate SOURCE_ROOT-rooted IN files contributed by every PR
+	// in this module — REF includes the full upstream set in each
+	// ARCHIVE's inputs[], not just the producing PR's IN list. Sort +
+	// dedup once.
 	var prInSources []string
 	{
 		seen := map[string]struct{}{}
@@ -1402,16 +1274,12 @@ func emitArchive(
 	}
 	cmdArgs = append(cmdArgs, "-o", archivePath)
 
-	// PR-M3-unpaired-got-closure: REF's AR inputs include every output
-	// of an upstream PR producer that is lexicographically ≤ the
-	// archive's explicitly-referenced file. Concretely, when ARCHIVE
-	// references `sitecustomize.pyc` and the producing RUN_PROGRAM also
-	// emits the lexically-earlier `__res.pyc`, REF lists __res.pyc in
-	// the AR's `inputs[]` alongside the archived file; the inverse
-	// (ARCHIVE on `__res.pyc`, sibling `sitecustomize.pyc`) does NOT
-	// include the lexically-later sibling. The lexicographic gate keeps
-	// the input ordering stable across multiple archives sharing a
-	// producer.
+	// REF's AR inputs include every upstream-PR output that is
+	// lexicographically ≤ the archive's explicitly-referenced file.
+	// ARCHIVE on `sitecustomize.pyc` lists sibling `__res.pyc`; the
+	// inverse (ARCHIVE on `__res.pyc`) does NOT include the later
+	// sibling. The lex gate keeps input ordering stable across
+	// multiple archives sharing a producer.
 	prSiblingOutputs := make([]VFS, 0)
 	{
 		// Largest archived file path (string form) becomes the upper
@@ -1556,13 +1424,12 @@ func emitArchive(
 
 	arRef := emit.Emit(n)
 
-	// PR-M3-L0-cascade-close-v2: register the AR's output (the .pyc.inc
-	// header for runtime_py3) in the codegen registry with the producer
-	// NodeRef. Consumer CCs in the same module (e.g. __res.cpp) carry the
-	// .pyc.inc path in their inputs[] via runtimePy3CCExtraInputs;
-	// resolveCodegenDepRefs lifts the matching ProducerRef into the CC's
-	// deps[]. EmitsIncludes is left nil — the .pyc.inc content is a
-	// generator-tool output (RESOURCE-packed C array), not C-readable.
+	// Register the AR's output (.pyc.inc header for runtime_py3) in
+	// the codegen registry. Consumer CCs (e.g. __res.cpp) carry the
+	// .pyc.inc path via runtimePy3CCExtraInputs;
+	// resolveCodegenDepRefs lifts ProducerRef into deps[].
+	// EmitsIncludes is nil — .pyc.inc is a RESOURCE-packed C array,
+	// not C-readable.
 	if reg != nil {
 		reg.Register(&GeneratedFileInfo{
 			ProducerKvP:    "AR",
@@ -1573,13 +1440,11 @@ func emitArchive(
 	}
 }
 
-// isCCSourceExt reports whether `path` names a CC-compilable source.
-// PR-AUDIT-5 dispatch helper: PR outputs with these extensions become
-// implicit module sources. The extension set mirrors emitOneSource's
-// .c/.cpp/.cc/.cxx branch; .S/.s/.asm are excluded — PR currently
-// produces no assembly outputs in any observed closure, and the AS
-// path has its own toolchain prerequisites (yasm walk) that don't
-// trivially compose from a PR-driven scaffold.
+// isCCSourceExt reports whether path names a CC-compilable source.
+// PR outputs with these extensions become implicit module sources
+// (.c/.cpp/.cc/.cxx). .S/.s/.asm are excluded — PR currently produces
+// no assembly outputs and the AS path has its own toolchain
+// prerequisites (yasm walk).
 func isCCSourceExt(p string) bool {
 	return strings.HasSuffix(p, ".cpp") ||
 		strings.HasSuffix(p, ".cc") ||
@@ -1587,57 +1452,44 @@ func isCCSourceExt(p string) bool {
 		strings.HasSuffix(p, ".c")
 }
 
-// emitPRDownstreamCC emits the CC node compiling a PR-generated source.
-// Mirrors the R6/EV/CF downstream-CC shape (gen.go:4196..4236, PR-AUDIT-2):
+// emitPRDownstreamCC emits the CC compiling a PR-generated source.
 // IsGenerated=true; IncludeInputs from WalkBuildRootClosure over the
-// registered output (the registry entry is populated by emitRunProgram
-// itself with EmitsIncludes=nil — opaque tool output — so the closure
-// is empty unless a future PR-AUDIT iteration populates it).
+// registered output (populated by emitRunProgram with EmitsIncludes=
+// nil — opaque tool output, empty closure today).
 //
-// The PR-emitted source lives at $(B)/<instance.Path>/<out>;
-// composeCCPaths' IsGenerated branch yields $(B)/<instance.
-// Path>/<out>.o for the output (flat layout when <out> has no `/`).
+// PR-emitted source: $(B)/<instance.Path>/<out>; composeCCPaths
+// yields $(B)/<instance.Path>/<out>.o (flat for slash-free <out>).
 func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef NodeRef, in ModuleCCInputs) (NodeRef, VFS, []VFS) {
-	// PR-M3-L0-cascade-close-v2: thread prRef as the downstream CC's
-	// leading dep. The CC compiles the PR-emitted .cpp, but walkClosure
-	// skips the root path so a registry probe over the closure alone
-	// can't surface the PR producer. REF places PR as the CC's leading
-	// dep (dep_types.h_dumper.cpp.o → PR dep_types.h_dumper.cpp).
+	// Thread prRef as the downstream CC's leading dep. walkClosure
+	// skips the root so a registry probe alone can't surface PR; REF
+	// places PR as CC's leading dep (dep_types.h_dumper.cpp.o → PR).
 	return emitCodegenDownstreamCC(ctx, instance, out, nil, []NodeRef{prRef}, in)
 }
 
-// emitCodegenDownstreamCC emits the downstream CC for a codegen producer's
-// `.cpp/.cc/.cxx/.c` output. PR-M3-codegen-cc-enqueue generalises
-// emitPRDownstreamCC to every codegen kind whose .cpp output lives under
-// $(B)/<instance.Path>/<cppRel> AND whose owning module compiles
-// that source as an implicit AR member (EN's `.h_serialized.cpp`, PR's
-// STDOUT/OUT .cpp, etc.). The shape mirrors the existing PR/R6/R5/EV
-// downstream-CC pattern:
+// emitCodegenDownstreamCC emits the downstream CC for a codegen
+// producer's `.cpp/.cc/.cxx/.c` output (EN's `.h_serialized.cpp`,
+// PR's STDOUT/OUT .cpp, etc.). The producer's .cpp lives at
+// $(B)/<instance.Path>/<cppRel> and the owning module compiles it as
+// an implicit AR member.
 //
-//   - IsGenerated=true so composeCCPaths roots the input/output under
-//     $(B)/<instance.Path>/<cppRel>{,.o,.pic.o} (flat layout for
-//     a slash-free cppRel; `_/<cppRel>` infix when cppRel contains `/`).
-//   - IncludeInputs from walkClosure() rooted at the codegen .cpp's
-//     registered VFS path — the producer (EN/PR/EV/...) must have
-//     registered EmitsIncludes for the .cpp in the per-scanner codegen
-//     registry before this helper runs.
-//   - depPrefix prepends cross-codegen dependency entries that the
-//     reference graph places ahead of the primary source (EN consumers
-//     prepend cross-EN deps' `_serialized.cpp` + `_serialized.h` outputs;
-//     PR has no cross-deps and passes nil).
+//   - IsGenerated=true → composeCCPaths roots input/output under $(B).
+//   - IncludeInputs from walkClosure() over the registered .cpp;
+//     producer MUST register EmitsIncludes in the codegen registry
+//     first.
+//   - depPrefix prepends cross-codegen dep entries the reference
+//     places ahead of the primary source (EN consumers prepend cross-EN
+//     `_serialized.cpp` + `_serialized.h`; PR has no cross-deps).
 func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string, depPrefix []VFS, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS, []VFS) {
 	cppPath := Build(instance.Path + "/" + cppRel)
 
 	closure := walkClosure(ctx, instance, cppPath, in)
 
-	// PR-M3-codegen-cc-enqueue: prepend depPrefix into IncludeInputs so
-	// the resulting CC node's Inputs[] carries the cross-codegen dep
-	// paths the reference graph places ahead of the consumer's own
-	// generated .cpp (sg2.json export_json_debug.h_serialized.cpp.o
-	// inputs[0..1] = the cross-EN dep `.cpp` + `.h` outputs). Dedup
-	// against the scanner closure — the cross-EN `.h` is already in the
-	// closure via the codegen registry's `_serialized.h` EmitsIncludes
-	// chain; only the cross-EN `.cpp` reliably needs the explicit prepend.
+	// Prepend depPrefix into IncludeInputs so CC's Inputs[] carries
+	// the cross-codegen dep paths ahead of the consumer's own .cpp
+	// (sg2.json export_json_debug.h_serialized.cpp.o inputs[0..1] =
+	// the cross-EN dep .cpp + .h). Dedup against the scanner closure
+	// — cross-EN .h already arrives via the registry's `_serialized.h`
+	// EmitsIncludes; only the .cpp reliably needs the explicit prepend.
 	includeInputs := make([]VFS, 0, len(depPrefix)+len(closure))
 	seen := make(map[VFS]struct{}, len(depPrefix)+len(closure))
 	for _, p := range depPrefix {
@@ -1660,10 +1512,9 @@ func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string
 	ccIn.IncludeInputs = includeInputs
 	ccIn.ExtraDepRefs = depRefs
 
-	// PR-M3-L0-codegen-deps-EV-PB: append codegen-producer refs reached via
-	// the .cpp's transitive include closure (PB/EV peers an EN-downstream CC
-	// pulls in by including .pb.h / .ev.pb.h). Filter out anything already in
-	// depRefs (cross-EN dep set) so we don't duplicate.
+	// Append codegen-producer refs reached via the .cpp's transitive
+	// include closure (PB/EV peers pulled in by .pb.h / .ev.pb.h).
+	// Filter out anything already in depRefs to avoid duplication.
 	extra := resolveCodegenDepRefs(ctx, instance, includeInputs, depRefs...)
 	if len(extra) > 0 {
 		ccIn.ExtraDepRefs = append(append([]NodeRef(nil), depRefs...), extra...)
@@ -1671,16 +1522,11 @@ func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string
 
 	ref, outPath := EmitCC(instance, cppRel, ccIn, ctx.host, ctx.emit)
 
-	// AR member-inputs: only the SOURCE_ROOT-rooted closure entries.
-	// PR-35y R7 / PR-M3-codegen-cc-enqueue: the AR aggregator excludes
-	// BUILD_ROOT-staged generated `.cpp` and the cross-codegen dep
-	// prefix from its `inputs[]` slot (the reference graph for
-	// devtools/ymake's `libdevtools-ymake.a` carries header `.h` entries
-	// from the EN-downstream CC's include closure but never the BUILD_
-	// ROOT-rooted `.h_serialized.cpp` / `.h_serialized.h` source
+	// AR member-inputs: SOURCE_ROOT-rooted closure entries only.
+	// REF (libdevtools-ymake.a) carries the EN-downstream CC's include-
+	// closure .h entries but never the BUILD_ROOT `_serialized.{cpp,h}`
 	// outputs themselves — those are wired implicitly via the .o
-	// archive members). Filter BUILD_ROOT entries here so the AR
-	// inputs[] aggregate aligns with REF's multiset shape.
+	// archive members.
 	ccInputs := make([]VFS, 0, len(closure))
 	for _, p := range closure {
 		if p.IsBuild() {
@@ -1745,28 +1591,19 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		toolBinPath = "$(B)/" + toolPath + "/" + filepath.Base(toolPath)
 	}
 
-	// F-7-B: register PR outputs FIRST so the closure walk below can resolve
-	// each output's $(B) path through the codegen registry. PR outputs
-	// are generated files (possibly .h headers) but their include content is
-	// tool-specific and opaque at gen time.
+	// Register PR outputs FIRST so the closure walk below resolves
+	// each output's $(B) path through the codegen registry.
 	//
-	// PR-AUDIT-5: for CC-compilable outputs (.cpp/.cc/.cxx/.c) we know the
-	// generator-tool convention: the emitted source textually `#include`s
-	// its IN files (which are the headers the tool was asked to read).
-	// Populate EmitsIncludes with the SOURCE_ROOT-rooted IN paths so the
-	// downstream CC's WalkBuildRootClosure picks up the transitive header
-	// closure. The OUTPUT_INCLUDES directive declares additional textual
-	// `#include`s the generator produces; thread those in too. For non-
-	// compilable outputs (.h, .pyc, ...) EmitsIncludes stays nil — those
-	// either lead to opaque binary content or to header content the
-	// scanner cannot derive at gen time without invoking the tool.
+	// For CC-compilable outputs (.cpp/.cc/.cxx/.c): populate
+	// EmitsIncludes with SOURCE_ROOT-rooted IN + OUTPUT_INCLUDES so
+	// the downstream CC's closure picks up the transitive header set.
+	// Non-compilable outputs (.h, .pyc) leave EmitsIncludes nil —
+	// content is opaque without invoking the tool.
 	//
-	// PR-M3-runprogram-closure: the tool's module-level INDUCED_DEPS(<ext>
-	// headers...) names headers the tool injects into every generated
-	// output of the listed extensions. Treat the listed headers as
-	// additional EmitsIncludes for the PR output so the scanner reaches
-	// the tool-injected header closure (e.g. struct2fieldcalc declares
-	// INDUCED_DEPS(h+cpp .../field_calc_int.h), the scanner then walks
+	// The tool's INDUCED_DEPS(<ext> headers...) names headers the
+	// tool injects into every output of the listed extensions; treat
+	// as additional EmitsIncludes (e.g. struct2fieldcalc declares
+	// INDUCED_DEPS(h+cpp field_calc_int.h) → scanner walks
 	// field_calc_int.h → field_calc.h → autoarray.h).
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
@@ -1792,32 +1629,27 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		}
 	}
 
-	// PR-M3-G-3: fold the transitive include closure of each CC-compilable
-	// output into THIS PR node's `inputs`. REF's PR node `inputs` carry the
-	// full closure (e.g. devtools/ymake/symbols's `dep_types.h_dumper.cpp`
-	// PR node holds 1500 entries — every transitively-reachable header from
-	// the generator output via the registered EmitsIncludes set). The
-	// closure walk is driven by the registry: each output's EmitsIncludes
-	// is the SOURCE_ROOT-rooted IN/OUTPUT_INCLUDES headers; the scanner
-	// then follows real `#include` directives in those headers via
-	// parseIncludes. Non-CC outputs (.h/.pyc) have nil EmitsIncludes and
-	// would walk to nothing — skip them.
+	// Fold the transitive include closure of each CC-compilable
+	// output into THIS PR node's inputs[] — REF's PR carries the full
+	// closure (dep_types.h_dumper.cpp PR holds 1500 entries). Driven
+	// by the registry: each output's EmitsIncludes is the SOURCE_ROOT
+	// IN/OUTPUT_INCLUDES set; scanner follows real `#include`s from
+	// there. Non-CC outputs contribute nothing.
 	inputClosure := prInputClosure(ctx, instance, stmt, moduleInputs)
 
-	// PR-M3-L0-cascade-close-v2: resolve codegen-producer refs reached
-	// through the PR's inputClosure. The PR node's deps[] must include any
-	// cross-module EN/PB/EV/... producer whose generated header appears in
-	// the PR's transitive input set (e.g. devtools/ymake/symbols's
-	// dep_types.h_dumper.cpp PR depends on devtools/ymake/diag's EN
-	// stats_enums.h_serialized.cpp via dep_types.h → stats_enums.h closure).
+	// Resolve codegen-producer refs reached via the PR's inputClosure.
+	// PR's deps[] must include any cross-module EN/PB/EV producer
+	// whose generated header appears in the PR's transitive input
+	// set (dep_types.h_dumper.cpp PR depends on diag's EN
+	// stats_enums.h_serialized.cpp via dep_types.h → stats_enums.h).
 	prExtraDepRefs := resolveCodegenDepRefs(ctx, instance, inputClosure, toolLDRef)
 
 	prRef := EmitPR(instance, stmt, toolBinPath, toolLDRef, inputClosure, prExtraDepRefs, ctx.emit)
 
-	// PR-M3-L0-cascade-close-v2: backfill the PR ProducerRef so the
-	// downstream CC's resolveCodegenDepRefs threads PR into its deps[].
-	// The registry entries were created above with HasProducerRef=false
-	// (NodeRef not yet known); SetProducerRef fills it in atomically.
+	// Backfill PR ProducerRef so the downstream CC's
+	// resolveCodegenDepRefs threads PR into deps[]. Registry entries
+	// above were created with HasProducerRef=false (ref not yet
+	// known); SetProducerRef fills it atomically.
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
 			reg.SetProducerRef(Build(instance.Path+"/"+f), prRef)
@@ -1833,19 +1665,15 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	return prRef
 }
 
-// prInputClosure returns the union of transitive include closures of every
-// CC-compilable PR output (OUT / OUT_NOAUTO / STDOUT). For each such output
-// the scanner walks the registered EmitsIncludes (SOURCE_ROOT-rooted IN +
-// OUTPUT_INCLUDES headers) and follows real `#include` directives from
-// there. PR outputs whose extension is not CC-compilable (.h / .pyc / ...)
+// prInputClosure returns the union of transitive include closures
+// over every CC-compilable PR output (OUT / OUT_NOAUTO / STDOUT).
+// Scanner walks registered EmitsIncludes (SOURCE_ROOT IN +
+// OUTPUT_INCLUDES) and follows `#include`s from there. Non-CC outputs
 // have nil EmitsIncludes and contribute nothing.
-//
-// PR-M3-G-3 helper.
 func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []VFS {
-	// Use the consuming module's full scan-input bag (AddIncl +
-	// PeerAddInclGlobal) so peer headers reachable from the PR-output's
-	// EmitsIncludes chain resolve correctly. Mirrors the EN-node scanner
-	// configuration in emitEnumSrcs (gen.go).
+	// Use the consuming module's full scan-input bag so peer headers
+	// reachable from the PR output's EmitsIncludes chain resolve.
+	// Mirrors emitEnumSrcs (gen.go).
 	scanIn := ModuleCCInputs{
 		AddIncl:           moduleInputs.AddIncl,
 		PeerAddInclGlobal: moduleInputs.PeerAddInclGlobal,

@@ -57,12 +57,10 @@ type UnknownStmt struct {
 	Line int
 }
 
-// IfStmt represents `IF (cond) ... ELSE ... ENDIF` (and ELSEIF as
-// nested IfStmt in the Else branch). The body slices are the parsed
-// Stmts of each branch in source order; an IF without ELSE has nil/
-// empty Else. PR-13 only parses the construct; PR-20 wires the
-// evaluator (`macros.go:EvalCond`) into Gen so unreachable branches
-// are dropped before rule emission.
+// IfStmt represents `IF (cond) ... ELSE ... ENDIF` (ELSEIF nests as
+// IfStmt in the Else branch). Body slices are parsed Stmts in source
+// order; IF without ELSE has nil Else. The evaluator
+// (`macros.go:EvalCond`) drops unreachable branches in Gen.
 type IfStmt struct {
 	Cond Expr
 	Then []Stmt
@@ -70,15 +68,12 @@ type IfStmt struct {
 	Line int
 }
 
-// IncludeStmt is the type for an `INCLUDE(path)` directive. NOTE:
-// `Parse`/`ParseFile` NEVER emit this in the resulting `Stmts` slice —
-// includes are inline-expanded at parse time so downstream walkers see
-// a flat list of top-level Stmts. The type stays defined for symmetry
-// with the rest of the M2 ADT and so future PRs (e.g. PR-20 reporting
-// "where did this Stmt come from") can re-introduce a marker without
-// breaking the public type set. See `expandInclude` in this file for
-// the resolution rule (path is relative to the directory of the
-// currently-parsed file).
+// IncludeStmt is the type for `INCLUDE(path)`. NOTE: Parse / ParseFile
+// NEVER emit this in the resulting Stmts slice — includes are inline-
+// expanded at parse time so downstream walkers see a flat top-level
+// Stmts list. The type stays defined for symmetry and so future PRs
+// can re-introduce a marker. See `expandInclude` for the resolution
+// rule (path relative to the currently-parsed file's directory).
 type IncludeStmt struct {
 	Path string
 	Line int
@@ -87,63 +82,47 @@ type IncludeStmt struct {
 // JoinSrcsStmt represents `JOIN_SRCS(name srcs...)`. OutputName is the
 // first arg; Sources keeps the remaining args in declaration order
 // (NOT sorted — JOIN_SRCS preserves source order in the generated
-// translation unit, which the reference graph relies on for byte-exact
-// cmd_args).
+// translation unit; reference cmd_args are byte-exact-sensitive).
 type JoinSrcsStmt struct {
 	OutputName string
 	Sources    []string
 	Line       int
 }
 
-// AddInclStmt represents `ADDINCL(paths...)` where individual paths
-// may be prefixed with GLOBAL. GlobalPaths holds paths that were
-// immediately preceded by the GLOBAL keyword and will be propagated
-// to consumers via PEERDIR. OwnPaths holds the remaining paths that
-// are local to the declaring module only.
-//
-// In ymake syntax, GLOBAL is a per-path modifier, not a
-// statement-level modifier. For example:
+// AddInclStmt represents `ADDINCL(paths...)` with per-path GLOBAL
+// modifier. GLOBAL paths propagate to consumers via PEERDIR; OwnPaths
+// apply only to the declaring module.
 //
 //	ADDINCL(
 //	    GLOBAL contrib/libs/cxxsupp/libcxx/include  # → GlobalPaths
 //	    contrib/libs/cxxsupp/libcxx/src             # → OwnPaths
 //	)
-//
-// PR-31 D13: previously this struct carried a statement-level
-// Modifier and a flat Paths list; the per-path split was missing,
-// causing the bare (non-GLOBAL) path to leak into the GLOBAL set
-// and propagate spuriously to consumers.
 type AddInclStmt struct {
 	GlobalPaths []string
 	OwnPaths    []string
-	// AllPaths preserves the original declaration order across the
-	// GLOBAL split. PR-M3-cmd-arg-slot-ordering: own cmd_args emission
-	// (gen.go AddInclStmt case) uses AllPaths so the -I slots match
-	// the reference graph's declaration-order layout (e.g. libffi
-	// ADDINCL(libffi  libffi/include  libffi/src  GLOBAL libffi/include)
-	// emits as [libffi, libffi/include, libffi/src] — not Global-first
-	// [libffi/include, libffi, libffi/src]).
+	// AllPaths preserves declaration order across the GLOBAL split.
+	// own cmd_args emission uses AllPaths so -I slots match the
+	// reference's declaration-order layout (e.g. libffi
+	// ADDINCL(libffi libffi/include libffi/src GLOBAL libffi/include)
+	// emits as [libffi, libffi/include, libffi/src], not Global-first).
 	AllPaths []string
 	Line     int
 }
 
-// CFlagsStmt represents `CFLAGS([GLOBAL] flags...)` with per-path
-// GLOBAL semantics (PR-32 D04, mirror of AddInclStmt's PR-31 D13
-// shape). A flag token immediately following the literal `GLOBAL`
-// keyword goes to GlobalFlags; all other flag tokens go to OwnFlags.
-// `CFLAGS(GLOBAL -DBAR)` puts -DBAR in GlobalFlags; `CFLAGS(-DBAZ)`
-// puts -DBAZ in OwnFlags. GlobalFlags propagates to consumers via
-// PEERDIR; OwnFlags applies only to the declaring module.
+// CFlagsStmt represents `CFLAGS([GLOBAL] flags...)` with per-flag
+// GLOBAL modifier. A flag immediately after `GLOBAL` goes to
+// GlobalFlags; others go to OwnFlags. GlobalFlags propagates to
+// consumers via PEERDIR; OwnFlags applies only to the declaring
+// module.
 type CFlagsStmt struct {
 	GlobalFlags []string
 	OwnFlags    []string
 	Line        int
 }
 
-// CXXFlagsStmt represents `CXXFLAGS([GLOBAL] flags...)`. Identical
-// per-path GLOBAL semantics to CFlagsStmt; the distinction is the
-// language axis: CXXFLAGS apply only to C++ sources (.cpp/.cc/.cxx),
-// while CFLAGS apply to both C and C++ sources. PR-32 D05.
+// CXXFlagsStmt represents `CXXFLAGS([GLOBAL] flags...)`. Same
+// per-flag GLOBAL semantics as CFlagsStmt; applies only to C++
+// sources (.cpp/.cc/.cxx) — CFLAGS applies to both C and C++.
 type CXXFlagsStmt struct {
 	GlobalFlags []string
 	OwnFlags    []string
@@ -204,15 +183,11 @@ type DefaultVarStmt struct {
 	Line    int
 }
 
-// RunProgramStmt represents `RUN_PROGRAM(tool args... [IN files...]
-// [OUT files...] [OUT_NOAUTO files...] [STDOUT file] [ENV key=val...]
-// [CWD dir] [OUTPUT_INCLUDES files...])`.
-// ToolPath is the module-relative path of the PROGRAM to invoke.
-// Args are the positional arguments passed after the tool path (before
-// the first keyword argument).  INFiles/OUTFiles/OUTNoAutoFiles are
-// the parsed IN/OUT/OUT_NOAUTO lists.  StdoutFile is the STDOUT
-// argument (if any); its output lands in outputs[0] for the generated
-// node.  Env maps ENV key=value pairs.
+// RunProgramStmt represents `RUN_PROGRAM(tool args... [IN ...]
+// [OUT ...] [OUT_NOAUTO ...] [STDOUT file] [ENV k=v...] [CWD dir]
+// [OUTPUT_INCLUDES ...])`. ToolPath is the PROGRAM's module-relative
+// path; Args are positional args before the first keyword. STDOUT (if
+// any) goes to outputs[0] of the generated node.
 type RunProgramStmt struct {
 	ToolPath       string
 	Args           []string
@@ -226,12 +201,11 @@ type RunProgramStmt struct {
 	Line           int
 }
 
-// ConfigureFileStmt represents `CONFIGURE_FILE(src dst)`. Src is a
-// SOURCE_ROOT-relative path to the .in template; Dst is the output
-// file relative to BUILD_ROOT (same base name without .in).
-// CONFIGURE_FILE is also the implicit handler for .cpp.in/.c.in
-// sources listed in SRCS — in that case the parser synthesises a
-// ConfigureFileStmt with Src=<srcRel> and Dst=<srcRel without .in>.
+// ConfigureFileStmt represents `CONFIGURE_FILE(src dst)`. Src is
+// SOURCE_ROOT-relative path to the .in template; Dst is BUILD_ROOT-
+// relative output. CONFIGURE_FILE is also the implicit handler for
+// .cpp.in/.c.in in SRCS — the parser synthesises a ConfigureFileStmt
+// with Src=<srcRel>, Dst=<srcRel without .in>.
 type ConfigureFileStmt struct {
 	Src  string // SOURCE_ROOT-relative
 	Dst  string // BUILD_ROOT-relative (module-dir-relative)
@@ -284,24 +258,19 @@ type ResourcePair struct {
 	Key  string
 }
 
-// ResourceStmt represents a `RESOURCE([DONT_PARSE] [DONT_COMPRESS]
-// path1 key1 path2 key2 ...)` invocation. Pairs preserves declaration
-// order; the DONT_PARSE / DONT_COMPRESS keywords (which the upstream
-// impl.cpp strips from the first two args) are dropped here and not
-// recorded — PR-A's hash + cmd_args derivation does not depend on
-// them.
+// ResourceStmt represents `RESOURCE([DONT_PARSE] [DONT_COMPRESS]
+// path1 key1 ...)`. Pairs preserves declaration order; DONT_PARSE /
+// DONT_COMPRESS are dropped (hash + cmd_args do not depend on them).
 type ResourceStmt struct {
 	Pairs []ResourcePair
 	Line  int
 }
 
-// ResourceFilesStmt represents a `RESOURCE_FILES([DONT_COMPRESS]
-// [PREFIX p] [DEST d] [STRIP s] path1 path2 ...)` invocation. Args
-// is the raw token list; the upstream `build/plugins/res.py:onresource_files`
-// expansion into RESOURCE pairs (PREFIX/STRIP/DEST applied to each path,
-// `resfs/file/...` keys, `resfs/src/...=...` kvs) is performed in
-// `gen.go:collectStmts` so that downstream walkers see a uniform pair
-// list on `moduleData.resources`.
+// ResourceFilesStmt represents `RESOURCE_FILES([DONT_COMPRESS]
+// [PREFIX p] [DEST d] [STRIP s] path1 ...)`. Args is the raw token
+// list; expansion into RESOURCE pairs (mirroring upstream
+// `build/plugins/res.py:onresource_files`) happens in
+// gen.go:collectStmts so downstream walkers see a uniform pair list.
 type ResourceFilesStmt struct {
 	Args []string
 	Line int
@@ -333,13 +302,9 @@ func (*RunAntlr4CppSplitStmt) stmtMarker()        {}
 func (*ResourceStmt) stmtMarker()                 {}
 func (*ResourceFilesStmt) stmtMarker()            {}
 
-// Expr is the sealed-interface marker for IF-predicate AST nodes. The
-// evaluator lives in `macros.go:EvalCond`. PR-27 widened the ADT from
-// four bool-only constructors (ident/NOT/AND/OR) to eight by adding
-// the value-position leaves (string/int literals) plus the two
-// comparison operators (`==`, `<`) that the libcxx / libcxxrt /
-// libunwind / libc_compat ya.makes use. The grammar stays small —
-// only what the closure actually needs.
+// Expr is the sealed-interface marker for IF-predicate AST nodes.
+// Evaluator: macros.go:EvalCond. Constructors: ident, NOT, AND, OR,
+// string/int literals, and the `==`, `!=`, `<` comparison operators.
 type Expr interface {
 	exprMarker()
 }
@@ -375,10 +340,8 @@ type ExprString struct {
 }
 
 // ExprInt is an integer literal — `28` in `IF (ANDROID_API < 28)`.
-// Same value-position constraint as ExprString. Integer literals are
-// unsigned (digits only); negative integers are unsupported by the
-// current lexer — closures requiring `IF (X < -N)` would need a lexer
-// extension.
+// Unsigned (digits only); negative integers unsupported by the
+// current lexer.
 type ExprInt struct {
 	Value int
 }
@@ -421,16 +384,10 @@ func (e *ParseError) Error() string {
 	return fmt.Sprintf("%d:%d: %s", e.Line, e.Col, e.Message)
 }
 
-// ParseFile reads path and parses it as a ya.make file. Returns a typed
-// *ParseError when the file is syntactically invalid (callers can
-// errors.As on it for line/col reporting). I/O errors from os.ReadFile
-// are surfaced as plain errors (the underlying *fs.PathError from the
-// stdlib).
-//
-// ParseFile is a Try boundary: internally it uses Throw2 for the
-// os.ReadFile call (no caller discriminates on its error shape beyond
-// "did it fail"), then delegates to Parse which is itself a boundary
-// for the typed *ParseError contract.
+// ParseFile reads path and parses it as a ya.make. Returns a typed
+// *ParseError for syntax errors (errors.As-able for line/col); I/O
+// errors surface as plain *fs.PathError. Try boundary: Throw2 on
+// ReadFile, then delegates to Parse.
 func ParseFile(path string) (mf *MakeFile, err error) {
 	exc := Try(func() {
 		data := Throw2(os.ReadFile(path))
@@ -485,11 +442,9 @@ type lexer struct {
 	pos  int
 	line int
 	col  int
-	// prevByte is the most recently consumed source byte, used by skipTrivia
-	// to decide whether a '#' is at a trivia boundary (and thus starts a
-	// comment) or is mid-word (and is a literal byte). Initialized to 0 to
-	// represent "start of file"; treated identically to whitespace for the
-	// boundary check.
+	// prevByte: most recently consumed source byte. skipTrivia uses
+	// it to decide whether a '#' starts a comment (boundary) or is a
+	// word byte. 0 = start of file, treated like whitespace.
 	prevByte byte
 }
 
@@ -563,28 +518,17 @@ func isIdentCont(b byte) bool {
 	return (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
 }
 
-// isWordByte tells whether b can appear inside a bare-word arg (path,
-// filename, lowercase identifier, version literal, etc.). The set is
-// deliberately conservative: alphanumerics plus the punctuation that
-// shows up in real ya.make atoms — paths, filenames, version literals,
-// flag-style tokens. A character outside this set at the start of a word
-// is a lex error (see readToken's default arm), which is exactly what the
-// brief asks for ("token that's neither IDENT, paren, string, nor
-// whitespace at top level").
+// isWordByte tells whether b can appear inside a bare-word arg. The
+// set is deliberately conservative: alphanumerics plus punctuation
+// appearing in real ya.make atoms (paths, filenames, version
+// literals, flag tokens).
 //
-// Notes on inclusions:
-//   - '{' and '}' are kept to support ${VAR} interpolation syntax that
-//     appears in real ya.make values; downstream emitters expect to see
-//     them as part of the bare word.
-//   - '#' is a word byte ONLY when it appears mid-word; skipTrivia (and
-//     the comment-boundary check there) handles the "is this a comment?"
-//     decision before readWord ever sees a leading '#'. A leading '#' at
-//     a trivia boundary is consumed by skipTrivia before the lexer
-//     classifies a token.
+// Inclusions worth noting: '{', '}' for ${VAR} interpolation; '#' is
+// allowed mid-word because skipTrivia's comment-boundary check
+// handles leading '#' before classification.
 //
-// Notes on exclusions (from the over-permissive earlier set):
-//   - Quote-like and shell-metacharacter bytes (' ` ; | & ^ < > [ ]) are
-//     dropped because they would silently swallow real syntax errors.
+// Quote-like and shell-metacharacter bytes (' ` ; | & ^ < > [ ]) are
+// excluded — they would silently swallow real syntax errors.
 func isWordByte(b byte) bool {
 	switch {
 	case b >= 'a' && b <= 'z':
@@ -606,15 +550,11 @@ func isWordByte(b byte) bool {
 	return false
 }
 
-// skipTrivia advances past whitespace and comments. Comments run from '#'
-// to end-of-line (the newline itself is whitespace and is also consumed).
-//
-// A '#' starts a comment only when it appears at a trivia boundary — that
-// is, when the byte immediately preceding it is whitespace, the start of
-// file, or '('. Anywhere else, '#' is a regular word byte (so e.g. the
-// path "a/b#x" remains one word). This avoids the bug where a mid-word
-// '#' would silently swallow the rest of the macro call up to EOL,
-// including the closing ')'.
+// skipTrivia advances past whitespace and comments. A '#' starts a
+// comment only at a trivia boundary (after whitespace, SOF, or '(');
+// anywhere else '#' is a word byte — so paths like "a/b#x" remain one
+// word. Without this discrimination a mid-word '#' would silently
+// swallow the rest of the macro call up to EOL.
 func (l *lexer) skipTrivia() {
 	for l.pos < len(l.src) {
 		b := l.src[l.pos]
@@ -722,19 +662,11 @@ func (l *lexer) readToken() token {
 	}
 }
 
-// readString reads a double-quoted string. The opening quote is at l.pos.
-// The returned token's val is the inner text (no surrounding quotes).
-//
-// String body is raw — no escape processing. \X is two literal bytes.
-// \" is therefore NOT an escape; the bare " closes the string. (This
-// behavior is pinned by TestStringHasNoEscapeProcessing in the test
-// suite — do not "improve" it without updating the test.)
-//
-// A literal newline (LF or CR) inside a string is rejected as
-// "unterminated string", pinned at the opening quote's line/col. ya.make
-// strings are intentionally single-line; the user-meaningful failure
-// when a newline appears mid-string is "you forgot the closing quote",
-// not "strings can't span lines."
+// readString reads a double-quoted string (val excludes the quotes).
+// Body is RAW — no escape processing. \X is two literal bytes; \" is
+// NOT an escape (pinned by TestStringHasNoEscapeProcessing). A literal
+// newline inside a string is rejected as "unterminated string" at the
+// opening-quote's line/col — ya.make strings are single-line.
 func (l *lexer) readString(startLine, startCol int) token {
 	l.advance() // consume opening "
 
@@ -770,13 +702,10 @@ func (l *lexer) readString(startLine, startCol int) token {
 	}
 }
 
-// readIdentOrWord reads a token whose first byte is an identifier-start
-// character. If the entire run is identifier-class bytes, it is a tokIdent.
-// If it contains anything else (e.g. a dot or slash because the source had
-// "Main.cpp" — though our identifiers are upper-case so this is unlikely),
-// the whole run is reclassified as a tokWord. This keeps the lexer simple
-// and matches how ya.make actually distributes uppercase macro names vs.
-// lowercase paths.
+// readIdentOrWord reads a token whose first byte is identifier-start.
+// Pure identifier-class bytes → tokIdent; any non-ident byte in the
+// run reclassifies the whole token as tokWord. Matches ya.make's
+// uppercase-macros vs lowercase-paths distribution.
 func (l *lexer) readIdentOrWord(startLine, startCol int) token {
 	var buf []byte
 	pureIdent := true
@@ -847,14 +776,9 @@ func (l *lexer) readWord(startLine, startCol int) token {
 	return token{kind: tokWord, val: string(buf), line: startLine, col: startCol}
 }
 
-// readNumberOrWord reads a token that begins with a digit. A pure
-// digit run that ends at a non-word boundary becomes a tokInt
-// (`28` → tokInt(28)). Anything else — digits followed by another
-// word byte, or a non-digit punctuation continuation — degrades to
-// a tokWord so version literals like `2025-06-20` keep their existing
-// shape and the rest of the parser sees them as bare words. The
-// non-degraded path is the one PR-27 added support for; the
-// degraded path is the pre-PR-27 behaviour preserved verbatim.
+// readNumberOrWord reads a token starting with a digit. Pure digit
+// run ending at a non-word boundary → tokInt; digits followed by
+// another word byte → tokWord (e.g. version literal "2025-06-20").
 func (l *lexer) readNumberOrWord(startLine, startCol int) token {
 	start := l.pos
 
@@ -880,13 +804,10 @@ func (l *lexer) readNumberOrWord(startLine, startCol int) token {
 // Parser
 // ----------------------------------------------------------------------
 
-// Parse parses src as a ya.make file. name is used in error messages.
-// Returns a typed *ParseError on syntactic problems (callers can
-// errors.As on it). Internally the lexer/parser raise via throw; Parse
-// wraps the entry point in Try and converts the recovered exception
-// back into the typed error so the public contract stays
-// (T, error)-shaped — domain signal that drives a branch (CLI error
-// formatting, future macro evaluator) lives at this boundary.
+// Parse parses src as a ya.make file. Returns a typed *ParseError on
+// syntactic problems (errors.As-able). Lexer/parser raise via throw;
+// Parse wraps the entry point in Try and converts back to typed
+// error so the public contract stays (T, error)-shaped.
 func Parse(name string, src []byte) (mf *MakeFile, err error) {
 	exc := Try(func() {
 		mf = parseInternal(name, src)
@@ -915,11 +836,9 @@ func parseInternalWithStack(name string, src []byte, stack []string) *MakeFile {
 	return mf
 }
 
-// stmtTerminator names the boundary that ends a Stmt sequence. The
-// caller of `parseStmts` passes one of these to say "I want to read
-// Stmts until you hit X". `termTopLevel` is the file-level terminator
-// (only `tokEOF` ends the sequence). The `termIfBody*` set is used by
-// `parseIf` to stop at `ELSE`, `ELSEIF`, or `ENDIF`.
+// stmtTerminator names the boundary ending a Stmt sequence.
+// termTopLevel ends only at tokEOF; termIfBody (used by parseIf)
+// stops at ELSE, ELSEIF, or ENDIF.
 type stmtTerminator int
 
 const (
@@ -927,13 +846,10 @@ const (
 	termIfBody
 )
 
-// parseStmts collects Stmts until it sees the terminator (EOF for
-// termTopLevel, or one of ELSE/ELSEIF/ENDIF for termIfBody). For
-// termIfBody it returns the terminator macro's name token via
-// `endTok` so `parseIf` can decide whether the next thing is an Else
-// branch, an ElseIf chain, or the ENDIF closer. INCLUDE is
-// transparently expanded inline (the IncludeStmt itself is dropped
-// from the result).
+// parseStmts collects Stmts until the terminator. For termIfBody it
+// returns the terminator macro's name token via endTok so parseIf can
+// decide between Else / ElseIf / ENDIF. INCLUDE expands inline (the
+// IncludeStmt itself is dropped from the result).
 func (p *parser) parseStmts(term stmtTerminator) (stmts []Stmt, endTok token) {
 	for {
 		tok := p.lex.next()
@@ -962,10 +878,9 @@ func (p *parser) parseStmts(term stmtTerminator) (stmts []Stmt, endTok token) {
 	}
 }
 
-// parseMacroInto consumes `(args...)` for the macro whose name token
-// is `nameTok` and appends the resulting Stmts to `into`. Most macros
-// produce exactly one Stmt; INCLUDE expands inline (zero-or-more
-// Stmts from the included file) and IF reads its own block bodies via
+// parseMacroInto consumes `(args...)` for nameTok and appends the
+// resulting Stmts to into. Most macros produce one Stmt; INCLUDE
+// expands inline (zero-or-more); IF reads its own block bodies via
 // parseStmts(termIfBody) so the caller's loop sees the IF as one Stmt.
 func (p *parser) parseMacroInto(into []Stmt, nameTok token) []Stmt {
 	switch nameTok.val {
@@ -1181,10 +1096,9 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 	case "RESOURCE":
 		// RESOURCE([DONT_PARSE] [DONT_COMPRESS] path1 key1 ...)
 		// Mirrors upstream `devtools/ymake/plugins/resource_handler/impl.cpp:23-26`
-		// which strips the leading DONT_PARSE / DONT_COMPRESS tokens before
-		// pairing.  The remaining args are (path, key) pairs in declaration
-		// order; an odd-count arg list is an upstream error and we throw
-		// rather than silently truncate.
+		// Strips leading DONT_PARSE / DONT_COMPRESS, then pairs the
+		// remaining args as (path, key). Odd-count residual = parse
+		// error.
 		return parseResource(args, nameTok)
 	case "RESOURCE_FILES":
 		// RESOURCE_FILES([DONT_COMPRESS] [PREFIX p] [DEST d] [STRIP s]
@@ -1352,12 +1266,10 @@ func parseRunProgram(args []string, line int) *RunProgramStmt {
 	return stmt
 }
 
-// parseResource parses RESOURCE(...) into a ResourceStmt by stripping
-// the leading DONT_PARSE / DONT_COMPRESS keywords (per upstream
-// `devtools/ymake/plugins/resource_handler/impl.cpp:23-26`) and
-// folding the remaining args into (path, key) pairs in declaration
-// order.  An odd-count residual list is a malformed RESOURCE call and
-// surfaces as a parse error.
+// parseResource parses RESOURCE(...) by stripping leading DONT_PARSE /
+// DONT_COMPRESS (per upstream
+// `devtools/ymake/plugins/resource_handler/impl.cpp:23-26`) and pairing
+// the remaining args. Odd-count residual = parse error.
 func parseResource(args []string, nameTok token) *ResourceStmt {
 	rest := args
 	// Strip up to two leading modifier tokens (DONT_PARSE, DONT_COMPRESS).
@@ -1387,10 +1299,9 @@ func parseResource(args []string, nameTok token) *ResourceStmt {
 	return &ResourceStmt{Pairs: pairs, Line: nameTok.line}
 }
 
-// splitGlobalModifier extracts a leading "GLOBAL" pseudo-arg from an
-// arg list (used by CFLAGS). Returns ("GLOBAL", rest) when the first
-// arg is exactly "GLOBAL"; otherwise ("", args) — the uppercase match
-// is deliberate, mirroring the upstream macro syntax where a lowercase
+// splitGlobalModifier extracts a leading "GLOBAL" pseudo-arg.
+// Returns ("GLOBAL", rest) when args[0] is exactly "GLOBAL";
+// otherwise ("", args). Uppercase match deliberate: lowercase
 // "global" is a regular token, not a modifier.
 func splitGlobalModifier(args []string) (string, []string) {
 	if len(args) > 0 && args[0] == "GLOBAL" {
@@ -1400,30 +1311,19 @@ func splitGlobalModifier(args []string) (string, []string) {
 	return "", append([]string(nil), args...)
 }
 
-// unescapeFlag converts backslash-quoted double-quotes in compiler
-// flag tokens to bare double-quotes. The ya.make source writes flag
-// values like -DFOO=\"bar\" (a single bare-word token with literal
-// backslash-quote pairs); the reference graph stores the unescaped
-// form -DFOO="bar". PR-M3-F-2 applies this at the flag-split boundary
-// so all downstream emitters see the unescaped string.
+// unescapeFlag converts backslash-quoted double-quotes (`\"`) to
+// bare double-quotes (`"`). ya.make source writes -DFOO=\"bar\" but
+// the reference stores the unescaped -DFOO="bar". Applied at the
+// flag-split boundary so downstream emitters see the unescaped form.
 func unescapeFlag(s string) string {
 	return strings.ReplaceAll(s, `\"`, `"`)
 }
 
 // splitFlagsByGlobal separates CFLAGS / CXXFLAGS / CONLYFLAGS args
-// into a global and own slice using per-path GLOBAL semantics
-// (PR-32 D04). A flag token immediately following the literal
-// `GLOBAL` keyword goes to globalFlags; all other tokens go to
-// ownFlags. Mirrors `splitAddInclPaths`. Empirical M2 closure
-// verifies all GLOBAL CFLAGS / CXXFLAGS callsites take the
-// single-arg `(GLOBAL -DX)` shape, so the per-path vs statement-
-// level distinction has no observable difference today; the
-// per-path shape future-proofs against later mixed-token call
-// sites.
-//
-// PR-M3-F-2: each flag token is passed through unescapeFlag so
-// backslash-quoted double-quotes (\"…\") are stored as bare
-// double-quotes ("…"), matching the reference cmd_args encoding.
+// into global and own slices using per-flag GLOBAL semantics.
+// Mirrors splitAddInclPaths. Each flag passes through unescapeFlag
+// so `\"…\"` becomes `"…"`, matching the reference cmd_args
+// encoding.
 func splitFlagsByGlobal(args []string) (globalFlags, ownFlags []string) {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "GLOBAL" {
@@ -1441,30 +1341,13 @@ func splitFlagsByGlobal(args []string) (globalFlags, ownFlags []string) {
 }
 
 // splitAddInclPaths separates ADDINCL args into global and own path
-// lists. In ymake syntax, GLOBAL is a per-path modifier: a path token
-// immediately following the literal "GLOBAL" is added to the
-// propagated (global) set; all other path tokens go to the module-own
-// set. For example, given:
+// lists using per-path GLOBAL semantics: a path immediately after
+// "GLOBAL" is global; all others are own.
 //
-//	ADDINCL(
-//	    GLOBAL contrib/libs/cxxsupp/libcxx/include
-//	    contrib/libs/cxxsupp/libcxx/src
-//	)
+//	ADDINCL(GLOBAL a b)  →  global=[a], own=[b]
 //
-// args = ["GLOBAL", "contrib/libs/cxxsupp/libcxx/include",
-// "contrib/libs/cxxsupp/libcxx/src"] and the return is
-// (["contrib/libs/cxxsupp/libcxx/include"],
-// ["contrib/libs/cxxsupp/libcxx/src"]).
-//
-// PR-31 D13: replaces the old statement-level splitGlobalModifier for
-// ADDINCL, which incorrectly treated all paths after a leading GLOBAL
-// as global, leaking module-own paths to consumers.
-//
-// PR-M3-F-2 (Q-M3-B): FOR <kind> qualifiers are dropped unconditionally.
-// ADDINCL(GLOBAL FOR proto path) and ADDINCL(FOR cython path) both
-// record only the bare path (global or own respectively); the FOR
-// qualifier selects a non-C/C++ language axis that is irrelevant for
-// CC/AS include paths.
+// FOR <kind> qualifiers are dropped unconditionally — they select a
+// non-C/C++ language axis irrelevant for CC/AS include paths.
 func splitAddInclPaths(args []string) (globalPaths, ownPaths, allPaths []string) {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "FOR" {
@@ -1495,15 +1378,11 @@ func splitAddInclPaths(args []string) (globalPaths, ownPaths, allPaths []string)
 	return globalPaths, ownPaths, allPaths
 }
 
-// parseIf is invoked with the `IF` name token already consumed. It
-// reads the condition args inside `(...)`, parses them into an Expr,
-// then collects the THEN body until ELSE/ELSEIF/ENDIF, recursing into
-// nested IfStmts for ELSEIF and reading the ELSE body until ENDIF.
-//
-// The semantics of ELSEIF are exactly "an IF inside the parent's
-// Else", so the nested IfStmt holds the elseif's condition and body;
-// chained ELSEIFs become right-leaning nested IfStmts, just like the
-// `else if` chain in C.
+// parseIf is invoked with the `IF` name token already consumed. Reads
+// `(...)` args into an Expr, collects THEN body until ELSE/ELSEIF/
+// ENDIF, recurses for ELSEIF, reads ELSE body until ENDIF. ELSEIF =
+// "an IF inside the parent's Else"; chained ELSEIFs become
+// right-leaning nested IfStmts (like C's `else if`).
 func (p *parser) parseIf(ifTok token) *IfStmt {
 	condToks := p.readCondTokens(ifTok)
 
@@ -1553,11 +1432,9 @@ func (p *parser) parseIf(ifTok token) *IfStmt {
 	return nil
 }
 
-// readCondTokens reads the IF's `(...)` args, allowing arbitrary
-// inner-paren grouping (the cond grammar supports it for precedence
-// override). Returns the token sequence WITHOUT the outer `(`/`)`
-// pair; inner parens are preserved as tokLParen/tokRParen so
-// parseCondExpr can use them.
+// readCondTokens reads IF's `(...)` args, allowing arbitrary
+// inner-paren grouping. Returns tokens WITHOUT the outer `(`/`)`
+// pair; inner parens stay as tokLParen/tokRParen for parseCondExpr.
 func (p *parser) readCondTokens(ifTok token) []token {
 	lp := p.lex.next()
 
@@ -1614,16 +1491,12 @@ type condParser struct {
 	ifTok  token   // the IF keyword's token, used as fallback location
 }
 
-// parseCondExpr parses the IF's condition tokens into an Expr ADT.
-// Precedence (lowest → highest): OR, AND, NOT, comparator (`==` /
+// parseCondExpr parses IF condition tokens into an Expr ADT.
+// Precedence (lowest → highest): OR, AND, NOT, comparator (`==`, `!=`,
 // `<`), atom. Comparators bind tighter than NOT so `NOT X == Y`
-// parses as `NOT (X == Y)`, which matches the libcxxrt usage
-// `IF (SANITIZER_TYPE == undefined OR FUZZING)` (the OR's RHS is
-// just FUZZING, the LHS is the whole comparison). Comparators are
-// non-associative: `A == B == C` is a syntax error, not a chain.
-// Parentheses override precedence. AND/OR are left-associative;
-// NOT is right-associative. Throws *ParseError on syntactic
-// problems.
+// parses as `NOT (X == Y)`. Comparators are non-associative:
+// `A == B == C` is a syntax error. AND/OR left-associative; NOT
+// right-associative.
 func parseCondExpr(parent *parser, ifTok token, toks []token) Expr {
 	cp := &condParser{toks: toks, parent: parent, ifTok: ifTok}
 	expr := cp.parseOr()
@@ -1695,11 +1568,9 @@ func (c *condParser) parseNot() Expr {
 	return c.parseCmp()
 }
 
-// parseCmp recognises a single comparator `X op Y` between two atoms,
-// where op is `==` or `<`. Non-associative: a second comparator after
-// the first throws (so `A == B == C` is a clear syntax error rather
-// than silently associating left or right). When no comparator
-// follows the leading atom, parseCmp returns the atom as-is.
+// parseCmp recognises a single `X op Y` (op = `==`, `!=`, `<`).
+// Non-associative: `A == B == C` throws. When no comparator follows
+// the leading atom, parseCmp returns it as-is.
 func (c *condParser) parseCmp() Expr {
 	left := c.parseAtom()
 
@@ -1813,25 +1684,16 @@ func (c *condParser) parseAtom() Expr {
 }
 
 // expandInclude parses `INCLUDE(path)` and inlines the included
-// file's top-level Stmts into `into`. The IncludeStmt type stays
-// defined for symmetry with the rest of the M2 ADT, but
-// Parse/ParseFile NEVER emit it — downstream walkers see a flat list.
+// file's top-level Stmts. Parse/ParseFile NEVER emit IncludeStmt —
+// downstream walkers see a flat list.
 //
-// Path resolution: relative to `filepath.Dir(p.name)`. When the
-// caller used `Parse(name, src)` with a non-path label (e.g.
-// `"test.input"`), `filepath.Dir` returns `.`, so an INCLUDE in such
-// a stream resolves against the process CWD. The include test path
-// uses `t.TempDir()` so this surfaces as a real file lookup, which
-// is the documented contract.
+// Path resolution: relative to filepath.Dir(p.name). With a non-path
+// label, Dir returns `.` (resolves against process CWD).
 //
-// Cycle detection: expandInclude maintains p.includeStack, a slice of
-// absolute paths forming the current include chain from the outermost
-// file to the immediately-enclosing one. Before recursing, it checks
-// whether the target path already appears in the stack; if so, it
-// throws a *ParseError pinned at the INCLUDE site with message
-// "INCLUDE cycle: <chain> -> <target>". The stack is propagated to
-// the child parser so cycles spanning more than one hop are also
-// caught.
+// Cycle detection via p.includeStack (absolute paths, outermost
+// first). Throws a *ParseError pinned at the INCLUDE site if the
+// target already appears in the stack. Stack propagates to the child
+// parser so transitive cycles (a→b→a) are also caught.
 func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 	args := p.parseMacroArgs(nameTok)
 
@@ -1841,32 +1703,12 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 
 	rel := args[0]
 
-	// Resolve ${ARCADIA_ROOT}/... INCLUDE paths by replacing the variable
-	// with the source-root directory (the parent of the top-level ya.make's
-	// directory chain). For any ya.make whose absolute path is
-	// <sourceRoot>/some/path/ya.make the source root is found by walking
-	// up until the path begins with the known prefix. We approximate it
-	// as filepath.Dir(p.name) for N levels up until a canonical marker
-	// file exists — but a simpler heuristic is to strip exactly as many
-	// components as the module path has, using the fact that p.name is
-	// always <sourceRoot>/<modulePath>/ya.make. For M3 purposes we just
-	// resolve ${ARCADIA_ROOT} by stripping "/ya.make" suffix and enough
-	// parent directories to reach the source root. The portable approach:
-	// the source root equals the path that, when joined with the module's
-	// relative include path, produces a file that exists on disk. Simplest
-	// safe implementation: replace ${ARCADIA_ROOT} with the root computed
-	// from p.name (three levels: strip <file>, <dir>, … until a
-	// recognizable marker is found). For the M3 closure, all
-	// ARCADIA_ROOT-rooted INCLUDEs live at paths that are child-of the
-	// same directory as p.name minus the module subpath. We derive
-	// sourceRoot by detecting the ${ARCADIA_ROOT} prefix and computing
-	// the root via the parser's stored name.
+	// Resolve ${ARCADIA_ROOT}/... by walking up from dir(p.name) a
+	// bounded number of steps and testing each candidate join against
+	// the filesystem. The first existing candidate wins. If nothing
+	// resolves the original rel is left intact and ReadFile below
+	// surfaces the error.
 	if strings.HasPrefix(rel, "${ARCADIA_ROOT}/") {
-		// Derive sourceRoot from p.name: p.name = <sourceRoot>/<modulePath>/ya.make.
-		// Walk up from p.name's directory until we find the root that, when
-		// joined with the remainder of rel, names an existing file. As a
-		// conservative heuristic, walk up from dir(p.name) a bounded number
-		// of steps and try each.
 		suffix := strings.TrimPrefix(rel, "${ARCADIA_ROOT}/")
 		dir := filepath.Dir(p.name)
 
@@ -1904,10 +1746,9 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 		absTarget = full
 	}
 
-	// Build the full chain: the current parser's own file plus its
-	// inherited stack. p.name is the absolute path of the file being
-	// parsed right now (set by parseInternalWithStack); it is the last
-	// element of the chain leading into this INCLUDE site.
+	// Chain = inherited stack + p.name (the file we're parsing right
+	// now, set by parseInternalWithStack); p.name is the chain's last
+	// element leading into this INCLUDE site.
 	chain := append(p.includeStack, p.name)
 
 	// Check for a cycle: does absTarget already appear anywhere in chain?
@@ -1928,13 +1769,12 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 
 	data, ioErr := os.ReadFile(absTarget)
 	if ioErr != nil {
-		// Silently skip optional includes that do not exist on disk.
-		// This handles conditional branches such as
-		// `IF (USE_SYSTEM_OPENSSL) INCLUDE(system_openssl.ya.inc)`
-		// where the included file is absent in the open-source tree.
-		// Because our parser expands INCLUDE in both branches of an IF
-		// before we evaluate the condition, a missing file in a dead
-		// branch must not be a fatal error.
+		// Silently skip optional includes (file missing). Handles
+		// conditional branches like
+		// `IF (USE_SYSTEM_OPENSSL) INCLUDE(system_openssl.ya.inc)` —
+		// the parser expands INCLUDE in both branches before
+		// evaluating the condition, so missing files in dead branches
+		// must not be fatal.
 		if os.IsNotExist(ioErr) {
 			return into
 		}
