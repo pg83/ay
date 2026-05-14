@@ -527,8 +527,8 @@ var linuxMuslSysInclOrder = []string{
 // platform-specific file by default. For host (x86_64) builds use
 // `LoadSysInclSetFor("x86_64", ...)` instead — the platform
 // dispatch is explicit.
-func LoadSysInclSet(sourceRoot string) SysInclSet {
-	return LoadSysInclSetFor(sourceRoot, "aarch64")
+func LoadSysInclSet(sourceRoot string, onWarn func(string)) SysInclSet {
+	return LoadSysInclSetFor(sourceRoot, "aarch64", onWarn)
 }
 
 // LoadSysInclSetFor loads the M2 sysincl YAMLs with the given
@@ -541,7 +541,7 @@ func LoadSysInclSet(sourceRoot string) SysInclSet {
 // that supply only the modules the test cares about), the loader
 // returns an empty set rather than throwing — the include scanner
 // then falls back to its own AddIncl + peer-GLOBAL search path.
-func LoadSysInclSetFor(sourceRoot, arch string) SysInclSet {
+func LoadSysInclSetFor(sourceRoot, arch string, onWarn func(string)) SysInclSet {
 	dir := filepath.Join(sourceRoot, "build", "sysincl")
 
 	if _, err := os.Stat(dir); err != nil {
@@ -580,7 +580,7 @@ func LoadSysInclSetFor(sourceRoot, arch string) SysInclSet {
 			continue
 		}
 
-		records := parseSysInclYAML(name, string(data))
+		records := parseSysInclYAML(name, string(data), onWarn)
 		set = append(set, records...)
 	}
 
@@ -596,7 +596,7 @@ var _ = sort.Strings
 // records. The filename is carried for error messages only. Throws
 // with a precise location ("name.yml:LINE: <reason>") on any
 // construct outside the documented subset.
-func parseSysInclYAML(name, text string) []SysIncl {
+func parseSysInclYAML(name, text string, onWarn func(string)) []SysIncl {
 	lines := strings.Split(text, "\n")
 
 	var (
@@ -689,7 +689,7 @@ func parseSysInclYAML(name, text string) []SysIncl {
 
 			rest := strings.TrimSpace(body[2:])
 
-			handleRecordHeader(name, lineno, rest, current, &inIncludes)
+			handleRecordHeader(name, lineno, rest, current, &inIncludes, onWarn)
 
 			continue
 		}
@@ -701,7 +701,7 @@ func parseSysInclYAML(name, text string) []SysIncl {
 		// Sub-key at indent ≥ 2: either `source_filter: ...`,
 		// `includes:`, or — when inIncludes — a mapping entry.
 		if !inIncludes {
-			handleRecordHeader(name, lineno, body, current, &inIncludes)
+			handleRecordHeader(name, lineno, body, current, &inIncludes, onWarn)
 
 			continue
 		}
@@ -777,7 +777,7 @@ func parseSysInclYAML(name, text string) []SysIncl {
 // line at the record level (either after `- ` on a top-level list
 // entry, or as a continuation key inside an existing record). Sets
 // inIncludes to true when `includes:` is seen.
-func handleRecordHeader(name string, lineno int, body string, rec *SysIncl, inIncludes *bool) {
+func handleRecordHeader(name string, lineno int, body string, rec *SysIncl, inIncludes *bool, onWarn func(string)) {
 	if body == "" || body == "includes:" {
 		*inIncludes = true
 
@@ -787,7 +787,7 @@ func handleRecordHeader(name string, lineno int, body string, rec *SysIncl, inIn
 	if strings.HasPrefix(body, "source_filter:") {
 		rest := strings.TrimSpace(body[len("source_filter:"):])
 		pat := unquote(rest)
-		rec.Filter = compileSourceFilter(name, lineno, pat)
+		rec.Filter = compileSourceFilter(name, lineno, pat, onWarn)
 		// Negative-lookahead filters (`(?!...)`) are meant to reject
 		// SOURCES rooted in particular subtrees. Empirically these
 		// records key by the compile-unit source path — using the
@@ -817,7 +817,7 @@ func handleRecordHeader(name string, lineno int, body string, rec *SysIncl, inIn
 	// filter unsupported so its mappings never fire — dropping the
 	// record outright is preferable to throwing because windows.yml
 	// and similar exotic files are not in the M2 Linux closure.
-	warnUnsupportedSysInclFilter(name, lineno, body, "unrecognised record header")
+	onWarn(fmt.Sprintf("sysincl: %s:%d: source_filter %q unsupported (unrecognised record header) — record disabled", name, lineno, body))
 	rec.Filter = &sourceFilter{unsupported: true}
 }
 
@@ -995,7 +995,7 @@ func (a *filterAlt) matches(sourcePath string) bool {
 // musl/tests via the second alt (regex) and excludes plain musl/foo
 // via the first alt's exclude prefix. Verified against every
 // alternation pattern in build/sysincl/*.yml.
-func compileSourceFilter(name string, lineno int, pat string) *sourceFilter {
+func compileSourceFilter(name string, lineno int, pat string, onWarn func(string)) *sourceFilter {
 	if pat == "" {
 		return nil
 	}
@@ -1060,9 +1060,10 @@ func compileSourceFilter(name string, lineno int, pat string) *sourceFilter {
 
 	if exc != nil {
 		// Fail soft: mark the filter as unsupported so the record's
-		// mappings never fire. Print one stderr line per
-		// distinct failure so an audit run surfaces the gap.
-		warnUnsupportedSysInclFilter(name, lineno, pat, exc.Error())
+		// mappings never fire. Surface one diagnostic per distinct
+		// failure through `onWarn` — caller-supplied (no-op for the
+		// quiet default, stderr for `--verbose`).
+		onWarn(fmt.Sprintf("sysincl: %s:%d: source_filter %q unsupported (%s) — record disabled", name, lineno, pat, exc.Error()))
 
 		return &sourceFilter{unsupported: true}
 	}
@@ -1070,13 +1071,6 @@ func compileSourceFilter(name string, lineno int, pat string) *sourceFilter {
 	return f
 }
 
-// warnUnsupportedSysInclFilter is invoked once per unrecognised
-// source_filter regex during sysincl loading. We print to stderr —
-// the ledger captures the gap for follow-up; the runtime continues
-// with that record dead.
-func warnUnsupportedSysInclFilter(name string, lineno int, pat, why string) {
-	fmt.Fprintf(os.Stderr, "sysincl: %s:%d: source_filter %q unsupported (%s) — record disabled\n", name, lineno, pat, why)
-}
 
 // splitTopLevelOr splits a regex on top-level `|` (not inside
 // parentheses or character classes). Returns the original string in a

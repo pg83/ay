@@ -62,6 +62,7 @@ type makeFlags struct {
 	tflags      map[string]string
 	hflags      map[string]string
 	targets     []string
+	verbose     bool
 }
 
 // cmdMake parses CLI args, runs Gen (target axis only — host walks
@@ -124,14 +125,19 @@ func cmdMake(args []string) int {
 	//     buffered emitter (byte-exact match for `yatool gen --out -`).
 	//   - without `-G`, Gen streams to a discard sink — a smoke test
 	//     for the streaming pipeline itself.
+	onWarn := func(string) {}
+	if mf.verbose {
+		onWarn = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
+	}
+
 	if mf.threads == 0 {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
-				g := GenWithMode(mf.srcRoot, target, hostP, targetP, defaultScanCtxMode)
+				g := GenWithMode(mf.srcRoot, target, hostP, targetP, defaultScanCtxMode, onWarn)
 				writeGraph("-", g)
 			}
 		} else {
-			genStream(mf.srcRoot, mf.targets, hostP, targetP, func(*Node) {})
+			genStream(mf.srcRoot, mf.targets, hostP, targetP, func(*Node) {}, onWarn)
 		}
 
 		return 0
@@ -143,7 +149,7 @@ func cmdMake(args []string) int {
 
 	defer ex.close()
 
-	results := genStream(mf.srcRoot, mf.targets, hostP, targetP, ex.onNode)
+	results := genStream(mf.srcRoot, mf.targets, hostP, targetP, ex.onNode, onWarn)
 
 	ex.run(results)
 
@@ -159,20 +165,20 @@ func cmdMake(args []string) int {
 // every target. Targets are emitted serially today; the executor
 // inside makes the cost of one target's emission overlap with the
 // previous target's execution.
-func genStream(srcRoot string, targets []string, hostP, targetP *Platform, onNode func(*Node)) []string {
+func genStream(srcRoot string, targets []string, hostP, targetP *Platform, onNode func(*Node), onWarn func(string)) []string {
 	all := []string{}
 
 	for _, t := range targets {
-		ec := genStreamOne(srcRoot, t, hostP, targetP, onNode)
+		ec := genStreamOne(srcRoot, t, hostP, targetP, onNode, onWarn)
 		all = append(all, ec...)
 	}
 
 	return all
 }
 
-func genStreamOne(srcRoot, target string, hostP, targetP *Platform, onNode func(*Node)) []string {
+func genStreamOne(srcRoot, target string, hostP, targetP *Platform, onNode func(*Node), onWarn func(string)) []string {
 	emitter := NewStreamingEmitter(onNode)
-	runGenInto(srcRoot, target, hostP, targetP, emitter, defaultScanCtxMode)
+	runGenInto(srcRoot, target, hostP, targetP, emitter, defaultScanCtxMode, onWarn)
 
 	return emitter.Finish()
 }
@@ -555,7 +561,7 @@ func parseMakeFlags(args []string) *makeFlags {
 
 	config := getopt.Config{
 		Opts:     getopt.OptStr("GrdkThD:j:B:o:I:"),
-		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:"),
+		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose"),
 		Mode:     getopt.ModeInOrder,
 		Func:     getopt.FuncGetOptLong,
 	}
@@ -614,6 +620,8 @@ func parseMakeFlags(args []string) *makeFlags {
 			mf.hostPlat = opt.OptArg
 		case opt.Name == "host-platform-flag":
 			parseKV(mf.hflags, opt.OptArg)
+		case opt.Name == "verbose":
+			mf.verbose = true
 		case opt.Char == 1:
 			// Positional argument (target).
 			mf.targets = append(mf.targets, opt.OptArg)
@@ -679,6 +687,7 @@ Execution flags:
     -T, --ninja                   Ninja-style per-line output (default: in-place repaint).
     --stats                       Print per-kind execution stats after the build.
     -G, --dump-graph              Log a graph summary to stderr after Gen.
+    --verbose                     Emit Gen-time diagnostics (unsupported sysincl records, …) to stderr.
 
 Configuration flags:
     -r, --release                 GG_BUILD_TYPE=release (default).

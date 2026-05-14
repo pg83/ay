@@ -155,6 +155,8 @@ func cmdGen(args []string) int {
 	strip := fs.String("strip", "", "override the mined STRIP_TOOL (llvm-strip); empty = use $PATH discovery")
 	lld := fs.String("lld", "", "override the mined LLD_TOOL (linker); empty = use $PATH discovery")
 
+	verbose := fs.Bool("verbose", false, "emit diagnostic warnings (unsupported sysincl source_filter records)")
+
 	err := fs.Parse(args)
 
 	if errors.Is(err, flag.ErrHelp) {
@@ -167,6 +169,11 @@ func cmdGen(args []string) int {
 
 	if *target == "" {
 		ThrowFmt("gen: --target is required")
+	}
+
+	onWarn := func(string) {}
+	if *verbose {
+		onWarn = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
 	}
 
 	if *cpuProfile != "" {
@@ -239,7 +246,7 @@ func cmdGen(args []string) int {
 	targetP := NewPlatform(tOS, tISA, targetFlags, nil, false)
 
 	genStart := time.Now()
-	g := GenWithMode(*sourceRoot, *target, hostP, targetP, *scanCtxMode)
+	g := GenWithMode(*sourceRoot, *target, hostP, targetP, *scanCtxMode, onWarn)
 	genDur := time.Since(genStart)
 
 	if *memProfile != "" {
@@ -338,6 +345,7 @@ Flags:
     --lld <path>           Override mined LLD_TOOL (linker).
     --cpuprofile <path>    Write CPU profile (pprof) over the run. Empty disables.
     --memprofile <path>    Write heap profile after Gen. Empty disables.
+    --verbose              Emit Gen-time diagnostics (unsupported sysincl records, …) to stderr.
 `)
 }
 
