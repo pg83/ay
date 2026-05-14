@@ -125,9 +125,18 @@ func cmdMake(args []string) int {
 	//     buffered emitter (byte-exact match for `yatool gen --out -`).
 	//   - without `-G`, Gen streams to a discard sink — a smoke test
 	//     for the streaming pipeline itself.
-	onWarn := func(Warn) {}
-	if mf.verbose {
-		onWarn = printWarn
+	onWarn := func(w Warn) {
+		// Unresolved includes are a build-stopping error by default —
+		// they signal a real resolver gap and should not silently
+		// produce a graph with missing input edges. `--keep-going`
+		// downgrades them to a warning (still surfaced under
+		// `--verbose`).
+		if w.Kind == WarnMissingInclude && !mf.keepGoing {
+			ThrowFmt("%s: %s", w.Kind, w.Message)
+		}
+		if mf.verbose {
+			fmt.Fprintf(os.Stderr, "\x1b[33m%s: %s\x1b[0m\n", w.Kind, w.Message)
+		}
 	}
 
 	if mf.threads == 0 {

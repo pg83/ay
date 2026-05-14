@@ -1,10 +1,5 @@
 package main
 
-import (
-	"fmt"
-	"os"
-)
-
 // Warn is the diagnostic payload threaded through every Gen-time
 // `onWarn` callback. Kind discriminates the category (so receivers
 // can route, count, or dedup per type); Message is the human-readable
@@ -49,9 +44,3 @@ func (k WarnKind) String() string {
 	return "warn"
 }
 
-// printWarn is the default `onWarn` receiver the CLI installs under
-// `--verbose`: one stderr line per Warn, prefixed with the kind's
-// label.
-func printWarn(w Warn) {
-	fmt.Fprintf(os.Stderr, "%s: %s\n", w.Kind, w.Message)
-}
