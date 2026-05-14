@@ -1111,29 +1111,26 @@ func isMultimoduleLibraryType(name string) bool {
 }
 
 // buildIfEnv constructs the per-instance bound-variable environment
-// for IF predicates. The base set is `DefaultIfEnv` (M2 default =
-// aarch64 / linux / clang / musl). For host instances (Flags.PIC),
-// flip ARCH_AARCH64↔ARCH_X86_64 so the same ya.make produces the
-// other architecture's branches. The result is a fresh Environment;
-// the caller is free to mutate it.
+// for IF predicates. The base set is `DefaultIfEnv` (every ARCH_*
+// defaults to false — no ISA is presumed); buildIfEnv flips exactly
+// one ISA's bits to true based on the instance's Platform.ISA. The
+// result is a fresh Environment; the caller is free to mutate it.
 //
-// PR-35o: ARCH_ARM64 is the upstream alias for ARCH_AARCH64 (Arcadia
-// sets both together). Flip it alongside ARCH_AARCH64 so any
-// `IF (ARCH_ARM64 ...)` predicate sees the same binding as
-// `ARCH_AARCH64` — required for `contrib/libs/cxxsupp/builtins`'s
-// bf16 SRCS block whose gate uses `ARCH_ARM64 OR ARCH_X86_64`.
+// ARCH_ARM64 is the upstream alias for ARCH_AARCH64 (Arcadia sets
+// both together for the aarch64 target). Flip it alongside
+// ARCH_AARCH64 so any `IF (ARCH_ARM64 ...)` predicate sees the same
+// binding — `contrib/libs/cxxsupp/builtins`'s bf16 SRCS block gate
+// uses `ARCH_ARM64 OR ARCH_X86_64` and must agree with ARCH_AARCH64
+// in both directions.
 func buildIfEnv(instance ModuleInstance) Environment {
 	env := DefaultIfEnv.Clone()
 
 	switch instance.Platform.ISA {
 	case ISAX8664:
-		env.SetBool("ARCH_AARCH64", false)
-		env.SetBool("ARCH_ARM64", false)
 		env.SetBool("ARCH_X86_64", true)
 	case ISAAArch64:
 		env.SetBool("ARCH_AARCH64", true)
 		env.SetBool("ARCH_ARM64", true)
-		env.SetBool("ARCH_X86_64", false)
 	}
 
 	return env

@@ -511,13 +511,11 @@ func (v PerSourceView) computeActiveIncluderRecords(includerPath string) []*SysI
 // the include scanner's transitive walk, not through sysincl
 // resolution.
 //
-// Platform-dependent files (`linux-musl-aarch64.yml` vs
-// `linux-musl.yml`) are routed through `LoadSysInclSetFor`'s
-// `arch` argument because `bits/alltypes.h` and similar `bits/*`
-// mappings differ between aarch64 and x86_64. For dual-platform
-// emission (M2's archiver closure has both aarch64 target and
-// x86_64 host CC nodes) the walker keeps a separate scanner per
-// architecture.
+// Platform-dependent files (`linux-musl-<isa>.yml`) are routed
+// through `LoadSysInclSetFor`'s `arch` argument because `bits/*`
+// mappings differ per ISA. The walker keeps a separate scanner per
+// ISA so each axis resolves against its own architecture-specific
+// records.
 var linuxMuslSysInclOrder = []string{
 	"macro.yml",
 	"libc-to-compat.yml",
@@ -552,21 +550,10 @@ var linuxMuslSysInclOrder = []string{
 	"python-2-disable-numpy.yml",
 }
 
-// LoadSysInclSet parses the sysincl YAML files in
-// `<sourceRoot>/build/sysincl/` per the configuration order
-// documented in `linuxMuslSysInclOrder`. Loads the aarch64
-// platform-specific file by default. For host (x86_64) builds use
-// `LoadSysInclSetFor("x86_64", ...)` instead — the platform
-// dispatch is explicit.
-func LoadSysInclSet(sourceRoot string, onWarn func(Warn)) SysInclSet {
-	return LoadSysInclSetFor(sourceRoot, "aarch64", onWarn)
-}
-
-// LoadSysInclSetFor loads the M2 sysincl YAMLs with the given
-// architecture's `linux-musl-<arch>.yml` injected after
-// `libc-to-musl.yml` (mirroring `build/conf/sysincl.conf:53-58`'s
-// when-block). `arch` must be "aarch64" or "x86_64"; other values
-// throw.
+// LoadSysInclSetFor loads the sysincl YAMLs with the given ISA's
+// `linux-musl-<arch>.yml` injected after `libc-to-musl.yml`
+// (mirroring `build/conf/sysincl.conf:53-58`'s when-block). `arch`
+// must be "aarch64" or "x86_64"; other values throw.
 //
 // When the sysincl directory does not exist (synthetic test trees
 // that supply only the modules the test cares about), the loader

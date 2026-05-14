@@ -78,14 +78,14 @@ func TestEvalCond_UnknownVarThrows(t *testing.T) {
 	}
 }
 
-// TestEvalCond_DefaultEnvCoversArchiverClosureCanaries pins the four
-// canary identifiers that PR-13's DefaultIfEnv MUST bind true for the
-// reference graph (`default-linux-aarch64` + clang + musl). If any of
-// these flips false, downstream gen.go (PR-20) will emit the wrong
-// branch of an IF and the comparator will report missing nodes; if
-// any becomes UNBOUND, EvalCond throws upstream of that.
+// TestEvalCond_DefaultEnvCoversArchiverClosureCanaries pins the
+// build-wide canary identifiers that DefaultIfEnv MUST bind true.
+// These are independent of the instance ISA (OS_LINUX + clang + musl);
+// ARCH_* booleans are deliberately not canaries since `buildIfEnv`
+// flips them per instance.Platform.ISA — see
+// TestEvalCond_ARCH_ARM64_Aliased for the ISA-dispatch coverage.
 func TestEvalCond_DefaultEnvCoversArchiverClosureCanaries(t *testing.T) {
-	canaries := []string{"OS_LINUX", "ARCH_AARCH64", "CLANG", "MUSL"}
+	canaries := []string{"OS_LINUX", "CLANG", "MUSL"}
 
 	for _, name := range canaries {
 		expr := &ExprIdent{Name: name}

@@ -3097,16 +3097,33 @@ func TestGen_SRC_RejectsZeroArgs(t *testing.T) {
 	}
 }
 
-// TestEvalCond_ARCH_ARM64_Aliased pins PR-35o's ARCH_ARM64↔ARCH_AARCH64
+// TestEvalCond_ARCH_ARM64_Aliased pins the ARCH_ARM64↔ARCH_AARCH64
 // alias: the `contrib/libs/cxxsupp/builtins/ya.make` bf16 SRCS block is
 // guarded by `IF (ARCH_ARM64 OR ARCH_X86_64)` and Arcadia binds
 // ARCH_ARM64=true whenever ARCH_AARCH64=true. Without the alias 5
 // .c.o nodes would be silently dropped from the L0 closure on aarch64.
+// `buildIfEnv` flips both bits in lockstep per instance.Platform.ISA.
 func TestEvalCond_ARCH_ARM64_Aliased(t *testing.T) {
-	got := EvalCond(&ExprIdent{Name: "ARCH_ARM64"}, DefaultIfEnv)
+	inst := ModuleInstance{Platform: testTargetP}
+	env := buildIfEnv(inst)
 
-	if !got {
-		t.Errorf("EvalCond(ARCH_ARM64) on default (aarch64) env = false, want true (alias for ARCH_AARCH64)")
+	if !EvalCond(&ExprIdent{Name: "ARCH_ARM64"}, env) {
+		t.Errorf("EvalCond(ARCH_ARM64) on aarch64 instance = false, want true (alias for ARCH_AARCH64)")
+	}
+
+	if !EvalCond(&ExprIdent{Name: "ARCH_AARCH64"}, env) {
+		t.Errorf("EvalCond(ARCH_AARCH64) on aarch64 instance = false, want true")
+	}
+
+	hostInst := ModuleInstance{Platform: testHostP}
+	hostEnv := buildIfEnv(hostInst)
+
+	if EvalCond(&ExprIdent{Name: "ARCH_ARM64"}, hostEnv) {
+		t.Errorf("EvalCond(ARCH_ARM64) on x86_64 instance = true, want false")
+	}
+
+	if !EvalCond(&ExprIdent{Name: "ARCH_X86_64"}, hostEnv) {
+		t.Errorf("EvalCond(ARCH_X86_64) on x86_64 instance = false, want true")
 	}
 }
 

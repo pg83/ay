@@ -16,7 +16,7 @@ func TestLoadSysInclSet_RealTree(t *testing.T) {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
 	}
 
-	set := LoadSysInclSet(sourceRoot, func(Warn) {})
+	set := LoadSysInclSetFor(sourceRoot, "aarch64", func(Warn) {})
 
 	if len(set) == 0 {
 		t.Fatalf("expected non-zero records loaded")
@@ -212,7 +212,7 @@ func TestSysIncl_PerRecordKeying(t *testing.T) {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
 	}
 
-	set := LoadSysInclSet(sourceRoot, func(Warn) {})
+	set := LoadSysInclSetFor(sourceRoot, "aarch64", func(Warn) {})
 
 	// Source-keyed branch: libcxx-source reaching uchar.h via a
 	// libcxx-internal includer (__mbstate_t.h).
@@ -286,7 +286,7 @@ func TestSysIncl_KeyBySourceCompiledFromFilter(t *testing.T) {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
 	}
 
-	set := LoadSysInclSet(sourceRoot, func(Warn) {})
+	set := LoadSysInclSetFor(sourceRoot, "aarch64", func(Warn) {})
 
 	srcKeyed := 0
 	incKeyed := 0
@@ -329,7 +329,7 @@ func TestSysIncl_IncluderFilterCache_HitProducesEqualResult(t *testing.T) {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
 	}
 
-	set := LoadSysInclSet(sourceRoot, func(Warn) {})
+	set := LoadSysInclSetFor(sourceRoot, "aarch64", func(Warn) {})
 	view := set.PreparePerSource("contrib/libs/musl/src/string/strlen.c")
 
 	// First call warms the cache for this includerPath.
@@ -393,7 +393,7 @@ func TestLoadSysInclSet_Stats(t *testing.T) {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
 	}
 
-	set := LoadSysInclSet(sourceRoot, func(Warn) {})
+	set := LoadSysInclSetFor(sourceRoot, "aarch64", func(Warn) {})
 
 	mapCount := 0
 	suppress := 0
