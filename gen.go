@@ -660,7 +660,7 @@ const defaultScanCtxMode = "interned"
 // one line per diagnostic surfaced during loading (sysincl
 // source_filter records the runtime cannot model, …); callers route
 // it to stderr under `--verbose` and to a no-op otherwise.
-func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string, onWarn func(string)) NodeRef {
+func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string, onWarn func(Warn)) NodeRef {
 	if mode != "local" && mode != "interned" {
 		ThrowFmt("gen: --scan-ctx-mode must be \"local\" or \"interned\", got %q", mode)
 	}
@@ -716,7 +716,7 @@ func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emi
 // both Platforms from CLI flags + mining before invoking this entry;
 // the walker reads every flag, tool path, and tag off the Platform
 // pointers. `onWarn` receives one line per diagnostic.
-func GenWithMode(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(string)) *Graph {
+func GenWithMode(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn)) *Graph {
 	emitter := NewBufferedEmitter()
 	runGenInto(sourceRoot, targetDir, hostP, targetP, emitter, mode, onWarn)
 

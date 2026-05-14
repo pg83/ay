@@ -171,9 +171,9 @@ func cmdGen(args []string) int {
 		ThrowFmt("gen: --target is required")
 	}
 
-	onWarn := func(string) {}
+	onWarn := func(Warn) {}
 	if *verbose {
-		onWarn = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
+		onWarn = printWarn
 	}
 
 	if *cpuProfile != "" {

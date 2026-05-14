@@ -307,7 +307,7 @@ type IncludeScanner struct {
 	// directives that found no match in source tree, build tree, OR
 	// sysincl mappings. Caller-supplied; no-op in the default-quiet
 	// CLI, stderr printer under `--verbose`.
-	onWarn func(string)
+	onWarn func(Warn)
 
 	// subgraphHits/subgraphMisses count cache traffic for verification.
 	// Plain uint64; single-goroutine like the rest of scanner.go.
@@ -430,7 +430,7 @@ type sysinclCacheEntry struct {
 // source-root absolute path. Allocates a private sharedParseCache; use
 // newIncludeScannerWith to share a parse cache between scanners.
 func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
-	return newIncludeScannerWith(sourceRoot, sysincl, newSharedParseCache(), func(string) {})
+	return newIncludeScannerWith(sourceRoot, sysincl, newSharedParseCache(), func(Warn) {})
 }
 
 // newIncludeScannerWith is the internal constructor used when a
@@ -445,7 +445,7 @@ func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
 // linux-musl.yml produce different mappings for bits/alltypes.h and similar
 // platform-specific headers). Only the parse tier — reading file bytes and
 // extracting #include directives — is architecture-neutral.
-func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedParseCache, onWarn func(string)) *IncludeScanner {
+func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedParseCache, onWarn func(Warn)) *IncludeScanner {
 	// PR-34n: pre-sizes set to the upper bound of the observed working
 	// set for tools/archiver. Under-pre-sizing was the actual finding from
 	// the re-profile — sysinclSourceCache reaches ~328k entries on the
@@ -1448,8 +1448,11 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 		if d.kind == includeQuoted {
 			open, close = `"`, `"`
 		}
-		s.onWarn(fmt.Sprintf("scanner: %s: unresolved include %s%s%s — not found in source, build, search path, or sysincl",
-			includerAbs.String(), open, d.target, close))
+		s.onWarn(Warn{
+			Kind: WarnMissingInclude,
+			Message: fmt.Sprintf("%s: unresolved include %s%s%s — not found in source, build, search path, or sysincl",
+				includerAbs.String(), open, d.target, close),
+		})
 	}()
 	// `#include_next` directives resolve to nothing in the upstream
 	// reference scan: every observed live use is the libcxx
