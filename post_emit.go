@@ -1,16 +1,13 @@
 package main
 
-// post_emit.go — umbrella + back-peer ADDINCL post-emit patch.
+// post_emit.go — umbrella ADDINCL post-emit patch.
 //
 // Threaded through emitter Finalize/FinalizeStream as the per-node
 // prepare hook returned by newPostEmitPrepare. mightNeedAddInclPatch
 // is the static hold predicate used by StreamingEmitter to identify
 // CC nodes whose finalize must defer to the prepare hook.
 
-import (
-	"path/filepath"
-	"strings"
-)
+import "strings"
 
 // umbrellaPropagatedPaths is the set of ADDINCL paths upstream ymake
 // propagates from a path-prefix umbrella LIBRARY to its sub-libraries'
@@ -114,30 +111,20 @@ var ccLanguageDefaultInclude = map[string]bool{
 
 // mightNeedAddInclPatch is the hold predicate used by StreamingEmitter
 // (yatool make) to identify CC nodes whose cmd_args may be mutated by
-// the post-emit umbrella / back-peer patch. Such nodes cannot finalize
-// inline at Emit time — the patch's input state (ctx.memo path-prefix
-// ancestors, back-peer cycle parents) is incomplete until Gen
-// finishes — so they must be deferred to the post-pass.
+// the post-emit umbrella patch. Such nodes cannot finalize inline at
+// Emit time — the patch's input state (ctx.memo path-prefix ancestors)
+// is incomplete until Gen finishes — so they must be deferred to the
+// post-pass.
 //
-// Both checks are deliberately statically derivable from the Node
-// alone (modulePath only):
+// The check is deliberately statically derivable from the Node alone
+// (modulePath only): the umbrella branch fires only when a path-prefix
+// ancestor sits in `umbrellaPropagatingAncestors` (currently a
+// one-element set: `devtools/ymake`). Held: every CC whose modulePath
+// starts with `devtools/ymake/`.
 //
-//   - Umbrella branch fires only when a path-prefix ancestor sits in
-//     `umbrellaPropagatingAncestors` (currently a one-element set:
-//     `devtools/ymake`). Held: every CC whose modulePath starts with
-//     `devtools/ymake/`.
-//   - Back-peer branch fires only when both the CC's module and its
-//     PEER parent are PY*_LIBRARY-family. The actual gate
-//     (backPeerCycleParticipant on ModuleStmtName) needs ctx.memo,
-//     which we don't have inline; the path heuristic
-//     `library/python/symbols/module` is the narrowest cover that
-//     reproduces every M3-closure back-peer target without dragging
-//     in unrelated CC nodes. Extend if other auto-PEERDIR cycles
-//     surface in future closures.
-//
-// Over-holding is sound (the held node still gets finalized
-// correctly in Finish); under-holding silently breaks the patch by
-// firing onNode with stale cmd_args. When in doubt, hold.
+// Over-holding is sound (the held node still gets finalized correctly
+// in Finish); under-holding silently breaks the patch by firing onNode
+// with stale cmd_args. When in doubt, hold.
 func mightNeedAddInclPatch(n *Node) bool {
 	if n == nil || n.KV == nil || n.KV["p"] != "CC" {
 		return false
@@ -152,11 +139,6 @@ func mightNeedAddInclPatch(n *Node) bool {
 		if modulePath == anc || strings.HasPrefix(modulePath, anc+"/") {
 			return true
 		}
-	}
-
-	if modulePath == "library/python/symbols/module" ||
-		strings.HasPrefix(modulePath, "library/python/symbols/module/") {
-		return true
 	}
 
 	return false
@@ -213,61 +195,6 @@ func newPostEmitPrepare(ctx *genCtx) func(*Node) {
 		}
 
 		return out
-	}
-
-	// ─── Back-peer state ────────────────────────────────────────
-	// Per (modulePath, platform): the list of parent paths P (with
-	// their AddInclGlobal slices) that declared this module in their
-	// effective Peerdirs AND participate in the back-peer cycle.
-	type backPeer struct {
-		parentPath    string
-		addInclGlobal []string
-	}
-
-	type backPeerEntry struct {
-		peerdirs       []string
-		addInclGlobal  []string
-		moduleStmtName string
-	}
-
-	resultsByKey := map[key]backPeerEntry{}
-
-	for inst, res := range ctx.memo {
-		if res == nil {
-			continue
-		}
-
-		resultsByKey[key{path: inst.Path, platform: string(inst.Platform.Target)}] = backPeerEntry{
-			peerdirs:       res.Peerdirs,
-			addInclGlobal:  res.AddInclGlobal,
-			moduleStmtName: res.ModuleStmtName,
-		}
-	}
-
-	backPeersByKey := map[key][]backPeer{}
-
-	for k, entry := range resultsByKey {
-		if !backPeerCycleParticipant(entry.moduleStmtName) {
-			continue
-		}
-
-		for _, peer := range entry.peerdirs {
-			peerKey := key{path: filepath.Clean(peer), platform: k.platform}
-
-			peerEntry, ok := resultsByKey[peerKey]
-			if !ok {
-				continue
-			}
-
-			if !backPeerCycleParticipant(peerEntry.moduleStmtName) {
-				continue
-			}
-
-			backPeersByKey[peerKey] = append(backPeersByKey[peerKey], backPeer{
-				parentPath:    k.path,
-				addInclGlobal: entry.addInclGlobal,
-			})
-		}
 	}
 
 	// ─── Per-node mutator ───────────────────────────────────────
@@ -390,20 +317,6 @@ func newPostEmitPrepare(ctx *genCtx) func(*Node) {
 			}
 		}
 
-		// Back-peer: PY*_LIBRARY-family child M whose parent P also
-		// participates in the cycle inherits P's allow-listed paths.
-		if parents := backPeersByKey[nodeKey]; len(parents) > 0 {
-			for _, parent := range parents {
-				for _, p := range parent.addInclGlobal {
-					if _, allowed := backPeerPropagatedPaths[p]; !allowed {
-						continue
-					}
-
-					appendIfNew("-I$(S)/" + p)
-				}
-			}
-		}
-
 		if len(inject) == 0 {
 			return
 		}
@@ -417,39 +330,3 @@ func newPostEmitPrepare(ctx *genCtx) func(*Node) {
 	}
 }
 
-// backPeerPropagatedPaths is the allow-list of GLOBAL ADDINCL paths that
-// propagate through a back-peer edge (parent P PEERDIRs child M) into M's
-// CC compilations. Restricted to the minimal set empirically observed in
-// REF for the M3 closure:
-//   - `contrib/restricted/abseil-cpp` reaches `library/python/symbols/
-//     module`'s PY3 sub-walk via the chain `contrib/libs/python →
-//     library/python/runtime_py3 → library/cpp/resource → library/cpp/
-//     containers/absl_flat_hash → contrib/restricted/abseil-cpp`.
-//
-// Other GLOBAL ADDINCL contributions reachable through `contrib/libs/
-// python`'s peer chain (lzma, openssl, libffi, brought in via `contrib/
-// tools/python3`) do NOT propagate to its back-peered children in the
-// reference graph — confirmed by inspecting `library/python/symbols/{libc,
-// python,registry}` which gain no non-language-default `-I` flags despite
-// also being peered FROM `contrib/libs/python`. The exact upstream filter
-// is unclear; this allow-list is the narrowest set that closes the 2-node
-// L3 gap without injecting flags that would regress paired nodes.
-var backPeerPropagatedPaths = map[string]struct{}{
-	"contrib/restricted/abseil-cpp": {},
-}
-
-// backPeerCycleParticipant returns true when the module declaration type
-// auto-PEERDIRs `contrib/libs/python` (build/conf/python.conf:697-743) and
-// therefore participates in the contrib/libs/python peer-SCC for GLOBAL
-// ADDINCL propagation. Mirrors `pyLibraryAutoPythonPeer` (used by the
-// forward auto-injection at gen.go:2575); kept separate so the back-peer
-// post-pass can be extended (e.g. to other auto-PEERDIR cycles) without
-// perturbing the forward gate.
-func backPeerCycleParticipant(name string) bool {
-	switch name {
-	case "PY3_LIBRARY", "PY2_LIBRARY", "PY23_LIBRARY":
-		return true
-	}
-
-	return false
-}
