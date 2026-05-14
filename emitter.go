@@ -173,29 +173,14 @@ type Graph struct {
 // FinalizeStream is the streaming sibling of Finalize: it yields each
 // node by reference once its UID has been computed, in dep-first
 // topological order, and returns the resolved root UIDs (one per
-// e.results entry, in declaration order, deduped). Used by `yatool
-// make` to start executing leaf nodes as soon as they are ready,
-// without materialising the full `[]*Node` first.
-//
-// The yielded node's identity-fields (UID/SelfUID) and resolved
-// Deps/ForeignDeps are populated; the internal *Refs are cleared.
-// Callers retain ownership of each yielded *Node — it lives in the
-// emitter's nodes slice and is not copied.
-//
-// Cannot run concurrently with Finalize on the same emitter; both
-// set e.finalized.
+// e.results entry, in declaration order, deduped). The yielded node's
+// identity-fields (UID/SelfUID) and resolved Deps/ForeignDeps are
+// populated; the internal *Refs are cleared. Callers retain ownership
+// of each yielded *Node — it lives in the emitter's nodes slice and
+// is not copied. Cannot run concurrently with Finalize on the same
+// emitter; both set e.finalized.
 func FinalizeStream(e *BufferedEmitter, yield func(*Node)) []string {
-	return FinalizeStreamWith(e, nil, yield)
-}
-
-// FinalizeStreamWith is FinalizeStream plus an optional `prepare`
-// hook invoked on each node BEFORE its UID is computed. Used by the
-// `yatool make` pipeline to fold the umbrella + back-peer cmd_args
-// mutations into the per-node loop so leaf nodes can fire into the
-// executor as soon as Gen finishes — no separate full-graph walks
-// stand between Gen and the first compile.
-func FinalizeStreamWith(e *BufferedEmitter, prepare, yield func(*Node)) []string {
-	uids := finalizeNodes(e, prepare, yield)
+	uids := finalizeNodes(e, yield)
 
 	results := make([]string, 0, len(e.results))
 	seen := map[string]struct{}{}
@@ -224,7 +209,7 @@ func FinalizeStreamWith(e *BufferedEmitter, prepare, yield func(*Node)) []string
 // Sets e.finalized when it returns successfully. Throws on
 // re-finalize, on pre-populated Deps/ForeignDeps, on out-of-range
 // NodeRefs, or on dependency cycles.
-func finalizeNodes(e *BufferedEmitter, prepare, yield func(*Node)) []string {
+func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
 	if e.finalized {
 		ThrowFmt("finalize: emitter already finalized")
 	}
@@ -378,16 +363,6 @@ func finalizeNodes(e *BufferedEmitter, prepare, yield func(*Node)) []string {
 	uids := make([]string, n)
 	for _, i := range order {
 		node := e.nodes[i]
-
-		if prepare != nil {
-			// Run prepare BEFORE resolveAndUID — prepare mutates
-			// cmd_args; we want the mutation to participate in the UID
-			// hash. (The legacy behaviour: prepare ran AFTER Deps/
-			// ForeignDeps resolve but BEFORE nodeUID; resolveAndUID
-			// does both, so we sequence prepare first.)
-			prepare(node)
-		}
-
 		uids[i] = resolveAndUID(node, uids)
 
 		if yield != nil {
@@ -500,43 +475,32 @@ func resolveAndUID(node *Node, uids []string) string {
 }
 
 // StreamingEmitter is an Emitter that finalizes each node inline at
-// Emit time when possible: resolves DepRefs from already-emitted nodes'
-// UIDs, computes the node's UID, and fires `onNode(n)` synchronously
-// from Emit. Used by `yatool make` so leaf compiles can start
-// immediately as Gen produces them, instead of waiting for all of Gen
-// to buffer first.
+// Emit time: resolves DepRefs from already-emitted nodes' UIDs,
+// computes the node's UID, and fires `onNode(n)` synchronously from
+// Emit. Used by `yatool make` so leaf compiles can start immediately
+// as Gen produces them, instead of waiting for all of Gen to buffer
+// first.
 //
-// Some CC nodes are eligible for the post-emit umbrella / back-peer
-// cmd_args patch (newPostEmitPrepare); those need ctx.memo to be fully
-// populated, so we cannot finalize them inline. Such nodes are
-// identified by the `hold` predicate passed at construction and parked
-// in a pending pool. Any node whose DepRefs include a still-pending
-// node is also held (cascade through the "all deps must have UIDs"
-// invariant). Finish() drains the pending pool with `prepare` applied,
-// in the order the nodes were emitted (which is already a valid
-// dep-first topo order under the post-order DFS invariant Gen
-// satisfies).
+// Gen emits in dep-first post-order DFS, so every dep's UID is known
+// by the time a parent reaches Emit. If a node's DepRef references a
+// not-yet-resolved peer (out-of-order emission), it is parked in a
+// pending pool and drained in Finish(); this is a safety net, not the
+// hot path.
 type StreamingEmitter struct {
-	nodes       []*Node
-	uids        []string
-	pendingIdx  []int64
-	pendingSet  map[int64]bool
-	results     []int64
-	onNode      func(*Node)
-	hold        func(*Node) bool
-	finalized   bool
-	readyCh     chan struct{}
+	nodes      []*Node
+	uids       []string
+	pendingIdx []int64
+	pendingSet map[int64]bool
+	results    []int64
+	onNode     func(*Node)
+	finalized  bool
+	readyCh    chan struct{}
 }
 
-// NewStreamingEmitter constructs a StreamingEmitter with the given
-// onNode callback (invoked synchronously from Emit, or from Finish for
-// held-back nodes) and `hold` predicate (returns true when the node
-// must be deferred to the post-emit prepare pass).
-func NewStreamingEmitter(onNode func(*Node), hold func(*Node) bool) *StreamingEmitter {
+func NewStreamingEmitter(onNode func(*Node)) *StreamingEmitter {
 	return &StreamingEmitter{
 		pendingSet: map[int64]bool{},
 		onNode:     onNode,
-		hold:       hold,
 		readyCh:    make(chan struct{}),
 	}
 }
@@ -550,7 +514,7 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 	e.nodes = append(e.nodes, n)
 	e.uids = append(e.uids, "")
 
-	if e.shouldHold(n) {
+	if e.hasUnresolvedDeps(n) {
 		e.pendingSet[id] = true
 		e.pendingIdx = append(e.pendingIdx, id)
 		return NodeRef{id: id}
@@ -564,16 +528,10 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 	return NodeRef{id: id}
 }
 
-// shouldHold returns true when the node cannot be finalized inline:
-// either the explicit `hold` predicate matched, or one of its DepRefs/
-// ForeignDepRefs points at a still-pending node. The DepRef check
-// cascades hold through the graph: anything depending on a held node
-// must also be held.
-func (e *StreamingEmitter) shouldHold(n *Node) bool {
-	if e.hold != nil && e.hold(n) {
-		return true
-	}
-
+// hasUnresolvedDeps reports whether any DepRef / ForeignDepRef points
+// at a not-yet-finalised peer. Should be false on the hot path —
+// Gen emits in DFS post-order, so deps land before their parents.
+func (e *StreamingEmitter) hasUnresolvedDeps(n *Node) bool {
 	for _, r := range n.DepRefs {
 		if e.uids[r.id] == "" {
 			return true
@@ -603,22 +561,18 @@ func (e *StreamingEmitter) OnReady(_ NodeRef) <-chan struct{} {
 	return e.readyCh
 }
 
-// Finish drains the pending pool: applies `prepare` to each held node
-// (if non-nil), runs resolveAndUID, and fires onNode. Returns the
-// deduped slice of result UIDs in declaration order. Must be called
-// exactly once after Gen completes; further Emit/Result calls panic.
-func (e *StreamingEmitter) Finish(prepare func(*Node)) []string {
+// Finish drains the pending pool (out-of-order emits parked by
+// `hasUnresolvedDeps`), runs resolveAndUID, fires onNode, and returns
+// the deduped slice of result UIDs in declaration order. Must be
+// called exactly once after Gen completes; further Emit/Result calls
+// panic.
+func (e *StreamingEmitter) Finish() []string {
 	if e.finalized {
 		panic("StreamingEmitter.Finish called twice")
 	}
 
 	for _, id := range e.pendingIdx {
 		n := e.nodes[id]
-
-		if prepare != nil {
-			prepare(n)
-		}
-
 		e.uids[id] = resolveAndUID(n, e.uids)
 		if e.onNode != nil {
 			e.onNode(n)
@@ -645,16 +599,7 @@ func (e *StreamingEmitter) Finish(prepare func(*Node)) []string {
 }
 
 func Finalize(e *BufferedEmitter) *Graph {
-	return FinalizeWith(e, nil)
-}
-
-// FinalizeWith is Finalize plus an optional `prepare` hook invoked on
-// each node BEFORE its UID is computed. Mirrors the prepare slot of
-// FinalizeStreamWith for callers that still want a fully-materialised
-// *Graph (e.g. `yatool gen`'s JSON dumper) but need the same per-node
-// pre-UID mutations the streaming pipeline applies.
-func FinalizeWith(e *BufferedEmitter, prepare func(*Node)) *Graph {
-	uids := finalizeNodes(e, prepare, nil)
+	uids := finalizeNodes(e, nil)
 	n := len(e.nodes)
 
 	// Build the output Graph. Result UIDs are computed first.
