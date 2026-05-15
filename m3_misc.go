@@ -128,7 +128,6 @@ var antlr4JarPath = antlr4JarVFS.String()
 var stdout2stderrVFS = Source("build/scripts/stdout2stderr.py")
 var stdout2stderrPath = stdout2stderrVFS.String()
 
-
 // EmitJV emits a JV node for a single RUN_ANTLR4_CPP grammar (.g4
 // relative to module dir). Options are extra cmd_args tokens.
 // visitor=true → -visitor; listener=false (default split) → -no-listener.
@@ -483,9 +482,10 @@ var buildInfoGenPyPath = buildInfoGenPyVFS.String()
 
 // EmitBI emits a BI node for CREATE_BUILDINFO_FOR(outputHeader).
 // Three cmds:
-//   cmd[0]: yield_line.py -- <module>/__args <cxx_compiler>
-//   cmd[1]: yield_line.py -- <module>/__args <cxx_flags...>
-//   cmd[2]: xargs.py -- <module>/__args python3 build_info_gen.py <out>
+//
+//	cmd[0]: yield_line.py -- <module>/__args <cxx_compiler>
+//	cmd[1]: yield_line.py -- <module>/__args <cxx_flags...>
+//	cmd[2]: xargs.py -- <module>/__args python3 build_info_gen.py <out>
 //
 // Flags come from the target CXX bundle (same as a target CC for this
 // module, minus -c, -o, input path).
@@ -587,24 +587,17 @@ func EmitBI(
 // suppressions in each noLibcUndebugBlock half. Reference:
 // library/cpp/build_info/buildinfo_data.h on default-linux-aarch64.
 func biFlagsForInstance(targetP *Platform) []string {
+	bundle := compileFlagBundleFor(targetP)
 	flags := make([]string, 0, 100)
 	flags = append(flags, debugPrefixMapFlags...)
 	flags = append(flags, xclangDebugCompilationDir...)
-	flags = append(flags, commonCFlags...)
+	flags = append(flags, bundle.CFlags...)
 	flags = append(flags, warningFlags...)
-	flags = append(flags, commonDefines...)
-	flags = append(flags, "-UNDEBUG")
-	if targetP.ISA == ISAAArch64 {
-		flags = append(flags, "-mno-outline-atomics")
-	}
-	flags = append(flags, noLibcWarningSuppressions...)
+	flags = append(flags, bundle.Defines...)
+	flags = append(flags, bundle.NoLibcBlock...)
 	flags = append(flags, catboostOpenSourceDefine...)
-	flags = append(flags, "-D_musl_")
-	flags = append(flags, "-UNDEBUG")
-	if targetP.ISA == ISAAArch64 {
-		flags = append(flags, "-mno-outline-atomics")
-	}
-	flags = append(flags, noLibcWarningSuppressions...)
+	flags = appendAutoPeerAndCPUFeatures(flags, bundle, []string{"-D_musl_"})
+	flags = append(flags, bundle.NoLibcBlock...)
 	flags = append(flags, cxxStandardFlag)
 	// CXX warning extensions (from appendCxxStdAndOwn).
 	flags = append(flags,

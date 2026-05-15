@@ -47,7 +47,7 @@ func canonicalizeRagel6BinaryPath(p string) string {
 // read [ragel6Binary, .rl6 source, ...closure].
 //
 // ragel6Flags carries the per-module `SET(RAGEL6_FLAGS …)` override; empty
-// → platform default (x86_64 → -CG2 optimized, else -CT0 debug). SET does
+// → platform default (release and unsanitized → -CG2, otherwise -CT0). SET does
 // not concatenate; upstream `_SRC("rl6", …)` in build/ymake.core.conf:3284
 // expands $RAGEL6_FLAGS first.
 //
@@ -69,15 +69,13 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	canonicalBinary := canonicalizeRagel6BinaryPath(ragel6BinaryPath)
 
 	// Effective RAGEL6_FLAGS: module SET wins; else platform default
-	// (x86_64 → -CG2 optimized, else -CT0 debug). Dispatches on
-	// instance.Platform.ISA — platform-specific compile flags, not
-	// host/target-axis flags.
+	// follows ymake_conf.py's Ragel.configure_toolchain:
+	// build.is_release && !build.is_sanitized -> -CG2, else -CT0.
 	effectiveFlags := ragel6Flags
 	if len(effectiveFlags) == 0 {
-		switch instance.Platform.ISA {
-		case ISAX8664:
+		if instance.Platform.Ragel6Optimized {
 			effectiveFlags = []string{ragel6DefaultFlagOptimized}
-		default:
+		} else {
 			effectiveFlags = []string{ragel6DefaultFlagDebug}
 		}
 	}

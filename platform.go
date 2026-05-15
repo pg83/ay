@@ -32,8 +32,12 @@ type Platform struct {
 	// marker ModuleInstance.Flags.LibcMusl ("module belongs to
 	// contrib/libs/musl"); conflating the two broke 64 nodes during the
 	// platform-pair refactor.
-	PIC      bool
-	LibcMusl bool
+	PIC             bool
+	LibcMusl        bool
+	BuildType       string
+	BuildRelease    bool
+	BuildSanitized  bool
+	Ragel6Optimized bool
 
 	// Triple is the clang `--target=<triple>` arg (e.g. `aarch64-linux-gnu`),
 	// derived from `<isa>-<os>-gnu`. March is `-march=<arch>`; empty for
@@ -92,22 +96,55 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, isHost 
 	if tags == nil {
 		tags = []string{}
 	}
+	buildType := platformBuildType(flags)
+	buildSanitized := platformBuildSanitized(flags)
+	buildRelease := isReleaseBuildType(buildType)
 
 	return &Platform{
-		OS:       os,
-		ISA:      isa,
-		Target:   MakePlatformID(os, isa),
-		Flags:    flags,
-		Tags:     tags,
-		IsHost:   isHost,
-		Tools:    toolchainFromFlags(flags),
-		PIC:      flags["PIC"] == "yes",
-		LibcMusl: flags["MUSL"] == "yes",
-		Triple:   string(isa) + "-" + string(os) + "-gnu",
-		March:    marchFor(isa),
-		CFlags:   parseCompilerFlags(cflagsEnv),
-		CXXFlags: parseCompilerFlags(cxxflagsEnv),
+		OS:              os,
+		ISA:             isa,
+		Target:          MakePlatformID(os, isa),
+		Flags:           flags,
+		Tags:            tags,
+		IsHost:          isHost,
+		Tools:           toolchainFromFlags(flags),
+		PIC:             flags["PIC"] == "yes",
+		LibcMusl:        flags["MUSL"] == "yes",
+		BuildType:       buildType,
+		BuildRelease:    buildRelease,
+		BuildSanitized:  buildSanitized,
+		Ragel6Optimized: buildRelease && !buildSanitized,
+		Triple:          string(isa) + "-" + string(os) + "-gnu",
+		March:           marchFor(isa),
+		CFlags:          parseCompilerFlags(cflagsEnv),
+		CXXFlags:        parseCompilerFlags(cxxflagsEnv),
 	}
+}
+
+func platformBuildType(flags map[string]string) string {
+	if v := flags["GG_BUILD_TYPE"]; v != "" {
+		return strings.ToLower(v)
+	}
+	if v := flags["BUILD_TYPE"]; v != "" {
+		return strings.ToLower(v)
+	}
+
+	return "debug"
+}
+
+func isReleaseBuildType(buildType string) bool {
+	switch buildType {
+	case "release", "relwithdebinfo", "minsizerel", "profile", "gprof":
+		return true
+	}
+
+	return strings.HasSuffix(buildType, "-release")
+}
+
+func platformBuildSanitized(flags map[string]string) bool {
+	sanitizer := strings.ToLower(flags["SANITIZER_TYPE"])
+
+	return sanitizer != "" && sanitizer != "no" && sanitizer != "false" && sanitizer != "0"
 }
 
 // parseCompilerFlags splits a CFLAGS/CXXFLAGS-style string into argv

@@ -939,9 +939,7 @@ func derivePeerInstance(parent ModuleInstance, peerPath string) ModuleInstance {
 		Path:     peerPath,
 		Language: parent.Language,
 		Platform: parent.Platform,
-		// Pass platform identity rather than the bare PIC flag so
-		// inferFlagsFromPath seeds the peer's PIC from the parent's
-		// platform identity, not Flags.PIC directly.
-		Flags: inferFlagsFromPath(peerPath, parent.Platform.ISA == ISAX8664),
+		// PIC follows platform settings rather than ISA/host identity.
+		Flags: inferFlagsFromPath(peerPath, parent.Platform.PIC),
 	}
 }

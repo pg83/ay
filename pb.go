@@ -555,7 +555,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		// on consumer CCs whose IncludeInputs carry the .pb.h/.pb.cc path.
 		// Keyed per-platform: x86_64 consumers reach the x86_64 PB,
 		// aarch64 consumers reach the aarch64 PB.
-		pbKey := codegenOutputKey{platform: instance.Platform.Target}
+		pbKey := codegenOutputKey{platform: instance.Platform}
 		pbKey.path = pbH
 		ctx.pbOutputs[pbKey] = pbRef
 		pbKey.path = pbCC
@@ -632,7 +632,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 
 			// Stash the EV NodeRef under both outputs on the emitting
 			// platform. See PB branch above for keying rationale.
-			evKey := codegenOutputKey{platform: instance.Platform.Target}
+			evKey := codegenOutputKey{platform: instance.Platform}
 			evKey.path = evH
 			ctx.evOutputs[evKey] = evRef
 			evKey.path = evPbCC
