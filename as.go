@@ -184,7 +184,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 		"--replace=$(B)=/-B",
 		"--replace=$(S)=/-S",
 		"--replace=$(TOOL_ROOT)=/-T",
-		"-D", "_" + string(instance.Platform.ISA) + "_",
+		"-D", "_"+string(instance.Platform.ISA)+"_",
 		"-D_YASM_",
 	)
 	cmdArgs = append(cmdArgs, predefinedFlags...)
@@ -251,10 +251,10 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 
 // composeASPaths derives (outputPath, inputPath) for the clang AS path
 // (mirror of composeCCPaths):
-//   1. Flat srcRel: `$(B)/<path>/<srcRel>.o`, `$(S)/<path>/<srcRel>`.
-//   2. Nested srcRel no SRCDIR: `$(B)/<path>/_/<srcRel>.o`, same input.
-//   3. SRCDIR + non-local source: composeSrcDirOutputRel (`__/` ancestor
-//      infix); input `$(S)/<srcDir>/<srcRel>`.
+//  1. Flat srcRel: `$(B)/<path>/<srcRel>.o`, `$(S)/<path>/<srcRel>`.
+//  2. Nested srcRel no SRCDIR: `$(B)/<path>/_/<srcRel>.o`, same input.
+//  3. SRCDIR + non-local source: composeSrcDirOutputRel (`__/` ancestor
+//     infix); input `$(S)/<srcDir>/<srcRel>`.
 func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (out, input VFS) {
 	useSrcDir := in.SrcDir != "" && in.SrcDir != instance.Path && !sourceExistsLocally(in.SourceRoot, instance.Path, srcRel)
 
@@ -280,11 +280,12 @@ func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (
 // composeASCmdArgs builds the cmd_args bundle. Three flavours dispatched
 // on (Platform.IsHost, Flags.LibcMusl):
 //   - Target: aarch64; commonCFlags+Defines (+muslExtraDefines if musl)
-//     + noLibcUndebugBlock×2 with catboost between.
+//   - noLibcUndebugBlock×2 with catboost between.
 //   - Host non-musl: x86_64; hostCFlags+Defines + ndebugPicBlock×2 with
 //     catboost + hostSseFeatures between.
 //   - Host musl: host non-musl + muslExtraDefines between hostDefines
 //     and the first ndebugPicBlock.
+//
 // Warning bundle honours Flags.NoCompilerWarnings (CC's pickWarningFlags
 // rule); own/auto-peer CFLAGS and the includes tail thread via
 // ModuleCCInputs (same struct CC consumes).
@@ -336,7 +337,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	var ownCFlags, autoPeerCFlags []string
 
 	if !isMusl {
-		ownCFlags = composeOwnAndPeerCFlagsAtOwnSlot(in)
+		ownCFlags = composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
 		autoPeerCFlags = in.AutoPeerCFlags
 	}
 

@@ -34,7 +34,7 @@ func newTestPlatform(os OS, isa ISA, pic string, tags []string, isHost bool) *Pl
 		flags[k] = v
 	}
 	flags["PIC"] = pic
-	return NewPlatform(os, isa, flags, tags, isHost)
+	return NewPlatform(os, isa, flags, tags, isHost, "", "")
 }
 
 func targetInstance(path string) ModuleInstance {

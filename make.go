@@ -80,7 +80,7 @@ func cmdMake(args []string) int {
 		hostFlags[k] = v
 	}
 	hostFlags["PIC"] = "yes"
-	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, true)
+	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, true, "", "")
 
 	// Target platform: `--target-platform` selects axes (defaults to
 	// host when empty), `-D KEY=VALUE` (mf.tflags) lands on target Flags,
@@ -105,7 +105,7 @@ func cmdMake(args []string) int {
 		targetFlags["GG_BUILD_TYPE"] = mf.buildType
 	}
 	targetFlags["PIC"] = "no"
-	targetP := NewPlatform(tOS, tISA, targetFlags, nil, false)
+	targetP := NewPlatform(tOS, tISA, targetFlags, nil, false, os.Getenv("CFLAGS"), os.Getenv("CXXFLAGS"))
 
 	// `-j 0` is no-exec mode (Gen runs, no subprocesses):
 	//   - with `-G`: dump the graph as stable JSON (byte-exact match

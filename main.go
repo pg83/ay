@@ -204,7 +204,7 @@ func cmdGen(args []string) int {
 		hostFlags[k] = v
 	}
 	hostFlags["PIC"] = "yes"
-	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, true)
+	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, true, "", "")
 
 	// Target platform: defaults to host axes when --target-platform
 	// is empty; --define KEY=VALUE entries land on TARGET's flags
@@ -225,7 +225,7 @@ func cmdGen(args []string) int {
 		targetFlags["MUSL"] = "yes"
 	}
 	targetFlags["PIC"] = "no"
-	targetP := NewPlatform(tOS, tISA, targetFlags, nil, false)
+	targetP := NewPlatform(tOS, tISA, targetFlags, nil, false, os.Getenv("CFLAGS"), os.Getenv("CXXFLAGS"))
 
 	genStart := time.Now()
 	g := GenWithMode(*sourceRoot, *target, hostP, targetP, *scanCtxMode, onWarn)
@@ -353,4 +353,3 @@ func writeGraph(out string, g *Graph) {
 	writeGraphIndented(bw, g)
 	Throw(bw.Flush())
 }
-
