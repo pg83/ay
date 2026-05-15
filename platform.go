@@ -41,6 +41,13 @@ type Platform struct {
 	// `-m64`/`-msseN` instead). When March=="" the arg is omitted entirely.
 	Triple string
 	March  string
+
+	// Raw compiler flags supplied by the caller (usually CFLAGS /
+	// CXXFLAGS from the environment) and parsed once at construction.
+	// They are target-platform inputs; host platforms normally pass
+	// empty strings so build tools stay byte-exact.
+	CFlags   []string
+	CXXFlags []string
 }
 
 // Toolchain captures absolute paths embedded in cmd_args. Populated from
@@ -73,10 +80,12 @@ func toolchainFromFlags(flags map[string]string) Toolchain {
 }
 
 // NewPlatform constructs *Platform from an explicit (os, isa, flags, tags,
-// isHost) tuple and pre-fills boolean shadows. Caller must not mutate flags
-// or tags after construction (NewPlatform retains references). Flag
-// convention: "yes" is truthy; anything else (empty/missing/"no") is falsy.
-func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, isHost bool) *Platform {
+// isHost) tuple and pre-fills boolean shadows. cflagsEnv / cxxflagsEnv
+// are shell-like flag strings parsed once into Platform.CFlags /
+// Platform.CXXFlags. Caller must not mutate flags or tags after
+// construction (NewPlatform retains references). Flag convention:
+// "yes" is truthy; anything else (empty/missing/"no") is falsy.
+func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, isHost bool, cflagsEnv, cxxflagsEnv string) *Platform {
 	if flags == nil {
 		flags = map[string]string{}
 	}
@@ -96,7 +105,77 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, isHost 
 		LibcMusl: flags["MUSL"] == "yes",
 		Triple:   string(isa) + "-" + string(os) + "-gnu",
 		March:    marchFor(isa),
+		CFlags:   parseCompilerFlags(cflagsEnv),
+		CXXFlags: parseCompilerFlags(cxxflagsEnv),
 	}
+}
+
+// parseCompilerFlags splits a CFLAGS/CXXFLAGS-style string into argv
+// tokens. It supports whitespace separation, single/double quotes, and
+// backslash escaping. Quotes are not retained; backslash preserves the
+// following byte verbatim.
+func parseCompilerFlags(s string) []string {
+	if s == "" {
+		return nil
+	}
+
+	var out []string
+	var b strings.Builder
+	var quote byte
+	escaped := false
+
+	flush := func() {
+		if b.Len() == 0 {
+			return
+		}
+
+		out = append(out, b.String())
+		b.Reset()
+	}
+
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+
+		if escaped {
+			b.WriteByte(ch)
+			escaped = false
+
+			continue
+		}
+
+		if ch == '\\' {
+			escaped = true
+
+			continue
+		}
+
+		if quote != 0 {
+			if ch == quote {
+				quote = 0
+			} else {
+				b.WriteByte(ch)
+			}
+
+			continue
+		}
+
+		switch ch {
+		case '\t', '\n', '\r', ' ':
+			flush()
+		case '\'', '"':
+			quote = ch
+		default:
+			b.WriteByte(ch)
+		}
+	}
+
+	if escaped {
+		b.WriteByte('\\')
+	}
+
+	flush()
+
+	return out
 }
 
 // marchFor returns the `-march=<arg>` value for an ISA. Empty when the

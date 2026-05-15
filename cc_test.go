@@ -314,6 +314,46 @@ func TestEmitCC_COnlyFlags_AppliesOnlyToCSources(t *testing.T) {
 	}
 }
 
+func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
+	flags := make(map[string]string, len(testToolchainFlags)+1)
+	for k, v := range testToolchainFlags {
+		flags[k] = v
+	}
+	flags["PIC"] = "no"
+
+	target := NewPlatform(OSLinux, ISAAArch64, flags, nil, false, "-DENV_C=1", "-DENV_CXX=1")
+	instance := ModuleInstance{
+		Path:     "build/cow/on",
+		Language: LangCPP,
+		Platform: target,
+		Flags:    inferFlagsFromPath("build/cow/on", false),
+	}
+
+	e := NewBufferedEmitter()
+	EmitCC(instance, "lib.c", ModuleCCInputs{}, testHostP, e)
+	cArgs := e.nodes[0].Cmds[0].CmdArgs
+
+	if !contains(cArgs, "-DENV_C=1") {
+		t.Fatalf("C cmd_args missing env CFLAGS: %v", cArgs)
+	}
+
+	if contains(cArgs, "-DENV_CXX=1") {
+		t.Fatalf("C cmd_args unexpectedly contain env CXXFLAGS: %v", cArgs)
+	}
+
+	e = NewBufferedEmitter()
+	EmitCC(instance, "lib.cpp", ModuleCCInputs{}, testHostP, e)
+	cxxArgs := e.nodes[0].Cmds[0].CmdArgs
+
+	if !contains(cxxArgs, "-DENV_C=1") {
+		t.Fatalf("C++ cmd_args missing env CFLAGS: %v", cxxArgs)
+	}
+
+	if !contains(cxxArgs, "-DENV_CXX=1") {
+		t.Fatalf("C++ cmd_args missing env CXXFLAGS: %v", cxxArgs)
+	}
+}
+
 func contains(xs []string, target string) bool {
 	for _, x := range xs {
 		if x == target {

@@ -205,6 +205,9 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	} else {
 		ownExtras = in.COnlyFlags
 	}
+	if isCxx && len(instance.Platform.CXXFlags) > 0 {
+		ownExtras = append(append([]string{}, ownExtras...), instance.Platform.CXXFlags...)
+	}
 
 	var cmdArgs []string
 
@@ -215,7 +218,7 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	// (minus GLOBAL -D_musl_=1 which is peer-propagated). The caller's
 	// ADDINCL and COnlyFlags are dropped for musl modules to avoid
 	// duplication.
-	muslOwnExtras := []string(nil)
+	muslOwnExtras := platformCompilerFlags(instance.Platform, isCxx)
 
 	// ADDINCL slot order: own ADDINCL BEFORE ccIncludesSuffix
 	// (linux-headers); peer-propagated GLOBAL ADDINCL AFTER it.
@@ -244,7 +247,7 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 		// PeerCFlagsGlobal (all CFLAGS axes concatenated). Empirical:
 		// antlr4 SetTransition.cpp.o idx 52-54 (own GLOBAL) and
 		// python mysnprintf.c.pic.o idx 76-78 (peer GLOBAL).
-		ownCFlags = composeOwnAndPeerCFlagsAtOwnSlot(in)
+		ownCFlags = composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
 	}
 
 	// Compose-flavour dispatch keys off instance.Platform.IsHost (host =
@@ -571,15 +574,30 @@ func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
 //
 // Musl flavours skip this helper — they fold CFLAGS into
 // muslExtraDefines and zero out peer-propagation upstream in EmitCC.
-func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs) []string {
+func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []string {
 	// Rule: [own non-GLOBAL, peer-GLOBAL, own GLOBAL]. Verified
 	// against asio.cpp.o / lang/*.cpp.o idx ~53/71 (peer-GLOBAL ahead
 	// of own GLOBAL) and python mysnprintf.c.pic.o idx 73-78
 	// (in.CFlags first, then peer-GLOBAL).
-	out := make([]string, 0, len(in.CFlags)+len(in.PeerCFlagsGlobal)+len(in.OwnCFlagsGlobal))
+	out := make([]string, 0, len(in.CFlags)+len(p.CFlags)+len(in.PeerCFlagsGlobal)+len(in.OwnCFlagsGlobal))
 	out = append(out, in.CFlags...)
+	out = append(out, p.CFlags...)
 	out = append(out, in.PeerCFlagsGlobal...)
 	out = append(out, in.OwnCFlagsGlobal...)
+
+	return out
+}
+
+func platformCompilerFlags(p *Platform, isCxx bool) []string {
+	if len(p.CFlags) == 0 && (!isCxx || len(p.CXXFlags) == 0) {
+		return nil
+	}
+
+	out := make([]string, 0, len(p.CFlags)+len(p.CXXFlags))
+	out = append(out, p.CFlags...)
+	if isCxx {
+		out = append(out, p.CXXFlags...)
+	}
 
 	return out
 }

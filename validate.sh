@@ -19,7 +19,7 @@ mkdir -p "$(dirname "$OUT")"
 
 go build -o yatool .
 
-./yatool gen \
+env -u CFLAGS -u CXXFLAGS ./yatool gen \
     --target tools/archiver \
     --out "$OUT" \
     --target-platform default-linux-aarch64 \
