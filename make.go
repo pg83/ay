@@ -356,7 +356,7 @@ func (ex *executor) execute(n *Node) {
 
 	outFirst := ""
 	if len(n.Outputs) > 0 {
-		outFirst = mountVFS(n.Outputs[0], ex.srcRoot, tmp)
+		outFirst = n.Outputs[0].String()
 	}
 
 	rec := fmt.Sprintf("[%s] {%d/%d} %s", display, done, pending, outFirst)
