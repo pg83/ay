@@ -91,6 +91,26 @@ var commonCFlags = []string{
 	"-fstack-protector",
 }
 
+// x86TargetCFlags are the target-build x86_64 counterpart of
+// commonCFlags: still debug/non-PIC, but with the x86_64 ABI switch
+// used by the reference graph.
+var x86TargetCFlags = []string{
+	"-pipe",
+	"-m64",
+	"-g",
+	"-fdebug-default-version=4",
+	"-ggnu-pubnames",
+	"-fno-common",
+	"-ffunction-sections",
+	"-fdata-sections",
+	"-fsized-deallocation",
+	"-fexceptions",
+	"-fuse-init-array",
+	"-fcolor-diagnostics",
+	"-faligned-allocation",
+	"-fstack-protector",
+}
+
 // hostCFlags is the host-build counterpart of commonCFlags (release: -m64
 // replaces -g/-fdebug-default-version/-ggnu-pubnames, +-O3, drops
 // -fsigned-char/-fstack-protector). Verified against
@@ -207,6 +227,60 @@ var noLibcUndebugBlock = func() []string {
 	return out
 }()
 
+var x86NoLibcUndebugBlock = func() []string {
+	out := make([]string, 0, 1+len(noLibcWarningSuppressions))
+	out = append(out, "-UNDEBUG")
+	out = append(out, noLibcWarningSuppressions...)
+
+	return out
+}()
+
+type compileFlagBundle struct {
+	ArchArgs               []string
+	CFlags                 []string
+	Defines                []string
+	NoLibcBlock            []string
+	CPUFeatures            []string
+	SplitAutoPeerAroundCPU bool
+}
+
+func compileFlagBundleFor(p *Platform) compileFlagBundle {
+	if p.PIC {
+		return compileFlagBundle{
+			CFlags:                 hostCFlags,
+			Defines:                hostDefines,
+			NoLibcBlock:            ndebugPicBlock,
+			CPUFeatures:            hostSseFeatures,
+			SplitAutoPeerAroundCPU: true,
+		}
+	}
+
+	switch p.ISA {
+	case ISAX8664:
+		return compileFlagBundle{
+			CFlags:                 x86TargetCFlags,
+			Defines:                hostDefines,
+			NoLibcBlock:            x86NoLibcUndebugBlock,
+			CPUFeatures:            hostSseFeatures,
+			SplitAutoPeerAroundCPU: true,
+		}
+	case ISAAArch64:
+		bundle := compileFlagBundle{
+			CFlags:      commonCFlags,
+			Defines:     commonDefines,
+			NoLibcBlock: noLibcUndebugBlock,
+		}
+		if p.March != "" {
+			bundle.ArchArgs = []string{"-march=" + p.March}
+		}
+
+		return bundle
+	}
+
+	ThrowFmt("compileFlagBundleFor: unsupported platform ISA %q", p.ISA)
+	return compileFlagBundle{}
+}
+
 // ndebugPicBlock is the HOST-build counterpart of noLibcUndebugBlock.
 // Replaces `-UNDEBUG -mno-outline-atomics` with `-DNDEBUG -fPIC` (host
 // is release + position-independent), keeping the same 20-flag
@@ -296,13 +370,14 @@ var cxxStandardWarnings = []string{
 
 // muslExtraDefines is the 9-arg block injected between commonDefines and
 // the no-libc bundle for musl CC nodes:
-//   -D_XOPEN_SOURCE=700: POSIX.1-2008 XSI feature gates.
-//   -U_GNU_SOURCE: undo commonDefines' -D_GNU_SOURCE; musl rejects glibc-style.
-//   -nostdinc / -ffreestanding: strip host toolchain's <stdlib.h> family.
-//   -fno-stack-protector: musl startup runs before stack canary init.
-//   -D__libc_calloc=calloc / __libc_malloc / __libc_free: route musl's
-//   internal allocator references to public symbols.
-//   -D_musl_=1: project-wide musl-build sentinel.
+//
+//	-D_XOPEN_SOURCE=700: POSIX.1-2008 XSI feature gates.
+//	-U_GNU_SOURCE: undo commonDefines' -D_GNU_SOURCE; musl rejects glibc-style.
+//	-nostdinc / -ffreestanding: strip host toolchain's <stdlib.h> family.
+//	-fno-stack-protector: musl startup runs before stack canary init.
+//	-D__libc_calloc=calloc / __libc_malloc / __libc_free: route musl's
+//	internal allocator references to public symbols.
+//	-D_musl_=1: project-wide musl-build sentinel.
 var muslExtraDefines = []string{
 	"-D_XOPEN_SOURCE=700",
 	"-U_GNU_SOURCE",

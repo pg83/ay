@@ -273,8 +273,21 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
+	releaseHostFlags := map[string]string{}
+	for k, v := range testToolchainFlags {
+		releaseHostFlags[k] = v
+	}
+	releaseHostFlags["PIC"] = "yes"
+	releaseHostFlags["GG_BUILD_TYPE"] = "release"
+	releaseHost := NewPlatform(OSLinux, ISAX8664, releaseHostFlags, []string{"tool"}, true, "", "")
+
 	r6Ref, _ := EmitR6(
-		hostInstance("util"),
+		ModuleInstance{
+			Path:     "util",
+			Language: LangCPP,
+			Platform: releaseHost,
+			Flags:    inferFlagsFromPath("util", true),
+		},
 		"datetime/parser.rl6",
 		ragel6LD,
 		"$(B)/contrib/tools/ragel6/ragel6",

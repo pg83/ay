@@ -100,7 +100,6 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// assemble via clang's built-in assembler.
 		var yasmRef *NodeRef
 
-		// Dispatch on ISA, not Flags.PIC; x86_64 IS the host axis.
 		if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
 			const yasmPath = "contrib/tools/yasm"
 
@@ -329,7 +328,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			// platform so consumer CCs in other modules whose
 			// IncludeInputs include this .ev.pb.h / .ev.pb.cc dep on
 			// the producer.
-			evKey := codegenOutputKey{platform: srcInstance.Platform.Target}
+			evKey := codegenOutputKey{platform: srcInstance.Platform}
 			evKey.path = evH
 			ctx.evOutputs[evKey] = evRef
 			evKey.path = evPbCC

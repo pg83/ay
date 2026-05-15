@@ -326,11 +326,14 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, muslOn bool,
 		return composeLDCmdVcsCompileHost(p, vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, noCompilerWarnings)
 	}
 
+	bundle := compileFlagBundleFor(p)
 	cmdArgs := make([]string, 0, 94+len(peerCFlagsGlobal))
 	cmdArgs = append(cmdArgs,
 		p.Tools.CC,
 		"--target="+p.Triple,
-		"-march="+p.March,
+	)
+	cmdArgs = append(cmdArgs, bundle.ArchArgs...)
+	cmdArgs = append(cmdArgs,
 		"-B"+binPath,
 		"-c",
 		"-o",
@@ -340,9 +343,9 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, muslOn bool,
 	cmdArgs = append(cmdArgs, "-I$(S)")
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
-	cmdArgs = append(cmdArgs, commonCFlags...)
+	cmdArgs = append(cmdArgs, bundle.CFlags...)
 	cmdArgs = append(cmdArgs, warningFlags...)
-	cmdArgs = append(cmdArgs, commonDefines...)
+	cmdArgs = append(cmdArgs, bundle.Defines...)
 
 	if muslOn {
 		cmdArgs = append(cmdArgs, ldVcsMuslSelfDefine)
@@ -353,21 +356,19 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, muslOn bool,
 	// cmd[1] ref:48..58.
 	cmdArgs = append(cmdArgs, peerCFlagsGlobal...)
 
-	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
+	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
 
+	var autoPeerCFlags []string
 	if muslOn {
-		cmdArgs = append(cmdArgs, muslConsumerSentinel)
+		autoPeerCFlags = append(autoPeerCFlags, muslConsumerSentinel)
 	}
-
-	// USE_PYTHON3 (defaultPeerCFlags slot for target LD vcs compile)
-	// between muslConsumerSentinel and the second noLibcUndebugBlock.
-	// Anchor: devtools/ymake/bin/ymake cmd[1] ref:83.
 	if usePython3 {
-		cmdArgs = append(cmdArgs, "-DUSE_PYTHON3")
+		autoPeerCFlags = append(autoPeerCFlags, "-DUSE_PYTHON3")
 	}
 
-	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
+	cmdArgs = appendAutoPeerAndCPUFeatures(cmdArgs, bundle, autoPeerCFlags)
+	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
 
 	return cmdArgs
 }
@@ -515,11 +516,10 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 			"-B"+binPath,
 		)
 	} else {
-		cmdArgs = append(cmdArgs,
-			"--target="+p.Triple,
-			"-march="+p.March,
-			"-B"+binPath,
-		)
+		bundle := compileFlagBundleFor(p)
+		cmdArgs = append(cmdArgs, "--target="+p.Triple)
+		cmdArgs = append(cmdArgs, bundle.ArchArgs...)
+		cmdArgs = append(cmdArgs, "-B"+binPath)
 	}
 
 	cmdArgs = append(cmdArgs, "-Wl,--start-group")

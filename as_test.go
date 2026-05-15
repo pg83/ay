@@ -175,6 +175,7 @@ func TestEmitAS_KV(t *testing.T) {
 //   - no `-march=` flag (host is generic x86_64).
 //   - `-D_musl_=1` is present (muslExtraDefines).
 //   - host_platform=true and tags=["tool"].
+//
 // TestEmitAS_HostNonMusl_X8664Chkstk_ByteExact (PR-35a / PR-35m closure)
 // pins the full cmd_args bundle for a host x86_64 non-musl AS node
 // (`$(B)/contrib/libs/cxxsupp/builtins/_/x86_64/chkstk.S.o`)
@@ -240,26 +241,23 @@ func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
 	}
 }
 
-// TestEmitAS_AsmlibYasm_TargetSide_NoYasmBranch (PR-35q) verifies that
-// the yasm branch fires ONLY for host-PIC asmlib invocations. A
-// hypothetical target-side asmlib AS (PIC=false) must take the clang
-// AS path — the `_/<srcRel>.o` output, the clang cmd_args bundle, the
-// `Cwd: $(B)`. The asmlib reference graph contains no such
-// target-side node (asmlib is host-only by construction), but
-// defending the predicate against PIC=false is the cheapest way to
-// guarantee the branch never accidentally hijacks a future target AS
-// node living under a similarly-named module path.
-func TestEmitAS_AsmlibYasm_TargetSide_NoYasmBranch(t *testing.T) {
+// TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix verifies that target
+// x86_64 `.asm` sources still use yasm, but keep target-shaped object
+// names without the host `.pic` suffix.
+func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 	e := NewBufferedEmitter()
-	// PIC=false → target-side. Even though asmlibYasmModules matches
-	// instance.Path, the predicate is gated on PIC=true.
-	_, outPath := EmitAS(targetInstance("contrib/libs/asmlib"), "memset64.asm", ModuleCCInputs{}, nil, testHostP, e)
-	// PR-35r: flat srcRel → flat output path (no _/ infix). memset64.asm
-	// has no "/" so the clang AS path emits a flat output.
-	wantClangPath := "$(B)/contrib/libs/asmlib/memset64.asm.o"
+	targetX86 := newTestPlatform(OSLinux, ISAX8664, "no", nil, false)
+	instance := ModuleInstance{
+		Path:     "contrib/libs/asmlib",
+		Language: LangCPP,
+		Platform: targetX86,
+		Flags:    inferFlagsFromPath("contrib/libs/asmlib", false),
+	}
+	_, outPath := EmitAS(instance, "memset64.asm", ModuleCCInputs{}, nil, testHostP, e)
+	wantYasmPath := "$(B)/contrib/libs/asmlib/memset64.o"
 
-	if outPath.String() != wantClangPath {
-		t.Errorf("outPath = %q, want %q (clang AS path; yasm branch must not fire for target-side)", outPath, wantClangPath)
+	if outPath.String() != wantYasmPath {
+		t.Errorf("outPath = %q, want %q", outPath, wantYasmPath)
 	}
 
 	if len(e.nodes) != 1 {
@@ -268,9 +266,8 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoYasmBranch(t *testing.T) {
 
 	got := e.nodes[0]
 
-	// Clang path sets Cwd; yasm path leaves it empty. A non-empty Cwd
-	// confirms the clang branch ran.
-	if got.Cmds[0].Cwd != "$(B)" {
-		t.Errorf("Cmds[0].Cwd = %q, want $(B) (clang AS path)", got.Cmds[0].Cwd)
+	// Yasm path leaves cwd empty; clang AS sets "$(B)".
+	if got.Cmds[0].Cwd != "" {
+		t.Errorf("Cmds[0].Cwd = %q, want empty (yasm path)", got.Cmds[0].Cwd)
 	}
 }

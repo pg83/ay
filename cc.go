@@ -719,12 +719,31 @@ type ccComposeArgs struct {
 	NoCompilerWarnings bool
 }
 
+func appendAutoPeerAndCPUFeatures(cmdArgs []string, bundle compileFlagBundle, autoPeerCFlags []string) []string {
+	if !bundle.SplitAutoPeerAroundCPU {
+		cmdArgs = append(cmdArgs, autoPeerCFlags...)
+		cmdArgs = append(cmdArgs, bundle.CPUFeatures...)
+
+		return cmdArgs
+	}
+
+	preSse, postSse := partitionPython3FromAutoPeer(autoPeerCFlags)
+	cmdArgs = append(cmdArgs, preSse...)
+	cmdArgs = append(cmdArgs, bundle.CPUFeatures...)
+	cmdArgs = append(cmdArgs, postSse...)
+
+	return cmdArgs
+}
+
 func composeTargetCC(a ccComposeArgs) []string {
+	bundle := compileFlagBundleFor(a.Platform)
 	cmdArgs := make([]string, 0, 101+len(a.OwnAddIncl)+len(a.PeerAddIncl)+len(a.OwnCFlags)+len(a.OwnExtras)+len(a.AutoPeerCFlags)+len(a.PeerExtras)+2*len(a.OwnGlobalBucket)+len(a.PerSrcCFlags)+4)
 	cmdArgs = append(cmdArgs,
 		pickCompiler(a.Platform.Tools, a.IsCxx),
 		"--target="+a.Platform.Triple,
-		"-march="+a.Platform.March,
+	)
+	cmdArgs = append(cmdArgs, bundle.ArchArgs...)
+	cmdArgs = append(cmdArgs,
 		"-B"+binPath,
 		"-c",
 		"-o",
@@ -736,14 +755,14 @@ func composeTargetCC(a ccComposeArgs) []string {
 	cmdArgs = appendAddIncl(cmdArgs, a.PeerAddIncl)
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
-	cmdArgs = append(cmdArgs, commonCFlags...)
+	cmdArgs = append(cmdArgs, bundle.CFlags...)
 	cmdArgs = append(cmdArgs, pickWarningFlags(a.NoCompilerWarnings)...)
-	cmdArgs = append(cmdArgs, commonDefines...)
+	cmdArgs = append(cmdArgs, bundle.Defines...)
 	cmdArgs = append(cmdArgs, a.OwnCFlags...)
-	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
+	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-	cmdArgs = append(cmdArgs, a.AutoPeerCFlags...)
-	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
+	cmdArgs = appendAutoPeerAndCPUFeatures(cmdArgs, bundle, a.AutoPeerCFlags)
+	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
 
 	// C sources: CONLYFLAGS (ownExtras) trails AFTER
 	// macroPrefixMapFlags — base64 neon32/64/plain32/64 CC nodes show
@@ -802,6 +821,7 @@ func composeTargetCC(a ccComposeArgs) []string {
 // Own-CFLAGS / cxxStandardWarnings / own-GLOBAL-bucket × 2 redux
 // pattern matches composeTargetCC.
 func composeHostCC(a ccComposeArgs) []string {
+	bundle := compileFlagBundleFor(a.Platform)
 	cmdArgs := make([]string, 0, 105+len(a.OwnAddIncl)+len(a.PeerAddIncl)+len(a.OwnCFlags)+len(a.OwnExtras)+len(a.AutoPeerCFlags)+len(a.PeerExtras)+2*len(a.OwnGlobalBucket)+len(a.PerSrcCFlags)+4)
 	cmdArgs = append(cmdArgs,
 		pickCompiler(a.Platform.Tools, a.IsCxx),
@@ -817,11 +837,11 @@ func composeHostCC(a ccComposeArgs) []string {
 	cmdArgs = appendAddIncl(cmdArgs, a.PeerAddIncl)
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
-	cmdArgs = append(cmdArgs, hostCFlags...)
+	cmdArgs = append(cmdArgs, bundle.CFlags...)
 	cmdArgs = append(cmdArgs, pickWarningFlags(a.NoCompilerWarnings)...)
-	cmdArgs = append(cmdArgs, hostDefines...)
+	cmdArgs = append(cmdArgs, bundle.Defines...)
 	cmdArgs = append(cmdArgs, a.OwnCFlags...)
-	cmdArgs = append(cmdArgs, ndebugPicBlock...)
+	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
 	// Host autoPeerCFlags slot: catboost → -D_musl_ → hostSseFeatures
 	// → -DUSE_PYTHON3 → 2nd ndebugPicBlock. `-DUSE_PYTHON3` is also
@@ -830,11 +850,8 @@ func composeHostCC(a ccComposeArgs) []string {
 	// -mcx16 at :96 and the 2nd ndebugPicBlock at :98); partition
 	// here so pre-SSE keeps `-D_musl_` and post-SSE picks up
 	// `-DUSE_PYTHON3`.
-	preSse, postSse := partitionPython3FromAutoPeer(a.AutoPeerCFlags)
-	cmdArgs = append(cmdArgs, preSse...)
-	cmdArgs = append(cmdArgs, hostSseFeatures...)
-	cmdArgs = append(cmdArgs, postSse...)
-	cmdArgs = append(cmdArgs, ndebugPicBlock...)
+	cmdArgs = appendAutoPeerAndCPUFeatures(cmdArgs, bundle, a.AutoPeerCFlags)
+	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
 	// Mirror composeTargetCC's C-source trailer: CONLYFLAGS slot AFTER
 	// macroPrefixMapFlags + perSrcCFlags (not via
 	// appendCxxStdAndOwn's tail). Empirical: base64 plain32/ssse3 host
@@ -871,11 +888,14 @@ func composeHostCC(a ccComposeArgs) []string {
 // muslWarningFlags (1) replaces warningFlags (6); muslExtraDefines (9)
 // inserted after commonDefines, before the noLibc block.
 func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl, ownExtras []string, isCxx bool) []string {
+	bundle := compileFlagBundleFor(p)
 	cmdArgs := make([]string, 0, 111+len(addIncl)+len(ownExtras)+2)
 	cmdArgs = append(cmdArgs,
 		pickCompiler(p.Tools, isCxx),
 		"--target="+p.Triple,
-		"-march="+p.March,
+	)
+	cmdArgs = append(cmdArgs, bundle.ArchArgs...)
+	cmdArgs = append(cmdArgs,
 		"-B"+binPath,
 		"-c",
 		"-o",
@@ -884,13 +904,14 @@ func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl, ownExtras
 	cmdArgs = appendMuslIncludes(cmdArgs, muslCcIncludesFor(p.ISA), addIncl)
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
-	cmdArgs = append(cmdArgs, commonCFlags...)
+	cmdArgs = append(cmdArgs, bundle.CFlags...)
 	cmdArgs = append(cmdArgs, muslWarningFlags...) // musl always uses muslWarningFlags by definition.
-	cmdArgs = append(cmdArgs, commonDefines...)
+	cmdArgs = append(cmdArgs, bundle.Defines...)
 	cmdArgs = append(cmdArgs, muslExtraDefines...)
-	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
+	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-	cmdArgs = append(cmdArgs, noLibcUndebugBlock...)
+	cmdArgs = append(cmdArgs, bundle.CPUFeatures...)
+	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
 	// musl already added muslWarningFlags above; suppress duplicate injection in helper.
 	cmdArgs = appendCxxStdAndOwn(cmdArgs, isCxx, true, false, ownExtras)
 	cmdArgs = append(cmdArgs, builtinMacroDateTime...)

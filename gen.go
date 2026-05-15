@@ -227,11 +227,11 @@ type scanCtxCacheKey struct {
 }
 
 // codegenOutputKey identifies a codegen producer's output on a specific
-// platform axis. PB/EV emit on both target and host; CC consumers must
-// dep on the producer matching their own platform, so flat path-only
-// keying would collapse the two and produce wrong-axis deps.
+// Platform instance. PB/EV emit on both target and host; when host and
+// target share the same PlatformID (x86_64 native target), the Platform
+// pointer still distinguishes the two configured axes.
 type codegenOutputKey struct {
-	platform PlatformID
+	platform *Platform
 	path     VFS
 }
 
@@ -284,9 +284,9 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 
 		if r, found := ctx.enOutputs[v]; found {
 			ref, ok = r, true
-		} else if r, found := ctx.pbOutputs[codegenOutputKey{platform: consumer.Platform.Target, path: v}]; found {
+		} else if r, found := ctx.pbOutputs[codegenOutputKey{platform: consumer.Platform, path: v}]; found {
 			ref, ok = r, true
-		} else if r, found := ctx.evOutputs[codegenOutputKey{platform: consumer.Platform.Target, path: v}]; found {
+		} else if r, found := ctx.evOutputs[codegenOutputKey{platform: consumer.Platform, path: v}]; found {
 			ref, ok = r, true
 		} else {
 			reg := codegenRegForInstance(ctx, consumer)
@@ -3060,9 +3060,8 @@ func (ctx *genCtx) scannerFor(instance ModuleInstance) *IncludeScanner {
 // (e.g. JOIN_SRCS forcing target-arch search paths during a host walk)
 // call this overload directly.
 func (ctx *genCtx) scannerForPlatform(p *Platform) *IncludeScanner {
-	if p.ISA == ISAX8664 {
+	if p == ctx.host {
 		return ctx.scannerHost
 	}
 	return ctx.scannerTarget
 }
-

@@ -80,6 +80,9 @@ func cmdMake(args []string) int {
 		hostFlags[k] = v
 	}
 	hostFlags["PIC"] = "yes"
+	if _, ok := hostFlags["GG_BUILD_TYPE"]; !ok {
+		hostFlags["GG_BUILD_TYPE"] = "release"
+	}
 	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, true, "", "")
 
 	// Target platform: `--target-platform` selects axes (defaults to
