@@ -305,9 +305,11 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
 	// then hash. Because we go dependency-first, every child's UID is
 	// known by the time we hash a parent.
 	uids := make([]string, n)
+	var uidScratch canonBuf
+
 	for _, i := range order {
 		node := e.nodes[i]
-		uids[i] = resolveAndUID(node, uids)
+		uids[i] = resolveAndUID(node, uids, &uidScratch)
 
 		if yield != nil {
 			yield(node)
@@ -332,7 +334,7 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
 // LD/AR nodes preserve emit (insertion) order in their final Deps slice;
 // the hash always sees the SORTED form for order-independence, then
 // insertion order is restored.
-func resolveAndUID(node *Node, uids []string) string {
+func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 	var insertionOrderDeps []string
 
 	if len(node.DepRefs) > 0 {
@@ -397,7 +399,7 @@ func resolveAndUID(node *Node, uids []string) string {
 	// Sandboxing is always true in the reference closure.
 	node.Sandboxing = true
 
-	u := nodeUID(node)
+	u := nodeUIDWithBuf(node, uidScratch)
 	node.UID = u
 	// SelfUID is a PR-02 placeholder; pinned by t.Logf rather than t.Errorf.
 	node.SelfUID = u
@@ -427,6 +429,7 @@ type StreamingEmitter struct {
 	onNode     func(*Node)
 	finalized  bool
 	readyCh    chan struct{}
+	uidScratch canonBuf
 }
 
 func NewStreamingEmitter(onNode func(*Node)) *StreamingEmitter {
@@ -452,7 +455,7 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 		return NodeRef{id: id}
 	}
 
-	e.uids[id] = resolveAndUID(n, e.uids)
+	e.uids[id] = resolveAndUID(n, e.uids, &e.uidScratch)
 	if e.onNode != nil {
 		e.onNode(n)
 	}
@@ -504,7 +507,7 @@ func (e *StreamingEmitter) Finish() []string {
 
 	for _, id := range e.pendingIdx {
 		n := e.nodes[id]
-		e.uids[id] = resolveAndUID(n, e.uids)
+		e.uids[id] = resolveAndUID(n, e.uids, &e.uidScratch)
 		if e.onNode != nil {
 			e.onNode(n)
 		}

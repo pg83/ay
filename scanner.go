@@ -353,16 +353,17 @@ type ScanContext struct {
 // construction.
 func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 	// Pre-sizes cover the largest single-context working set with one
-	// or two grows — each scanCtx serves one ctxHash only, so the
-	// scanner-wide totals split across many distinct ctxHashes.
+	// or two grows on M2. M3 creates many more distinct ctxHashes, so
+	// over-sizing every context wastes hundreds of MB and feeds GC; keep
+	// the initial buckets modest and let the few large contexts grow.
 	return &scanCtx{
 		scanner:              s,
 		cfg:                  cfg,
 		ctxHash:              hashScanContext(&cfg),
-		resolveCache:         make(map[resolveInnerKey][]VFS, 8192),
-		subgraphCache:        make(map[subgraphInnerKey][]VFS, 4096),
-		subgraphTaintedKnown: make(map[subgraphInnerKey]struct{}, 256),
-		subgraphInProgress:   make(map[subgraphInnerKey]struct{}, 64),
+		resolveCache:         make(map[resolveInnerKey][]VFS, 4096),
+		subgraphCache:        make(map[subgraphInnerKey][]VFS, 2048),
+		subgraphTaintedKnown: make(map[subgraphInnerKey]struct{}, 128),
+		subgraphInProgress:   make(map[subgraphInnerKey]struct{}, 32),
 	}
 }
 
@@ -612,11 +613,10 @@ func (sc *scanCtx) dfs(absPath VFS, visited VFSSet, order *[]VFS) {
 		// Cached or freshly-computed clean canonical subgraph. Merge
 		// into caller's visited+order, skipping pre-visited entries.
 		for _, p := range sg {
-			if visited.Has(p) {
+			if !visited.AddIfAbsent(p) {
 				continue
 			}
 
-			visited.Add(p)
 			*order = append(*order, p)
 		}
 
@@ -636,11 +636,10 @@ func (sc *scanCtx) dfs(absPath VFS, visited VFSSet, order *[]VFS) {
 // through `dfs()` so non-cycle descendants benefit from the
 // `subgraphCache`.
 func (sc *scanCtx) plainDfs(absPath VFS, visited VFSSet, order *[]VFS) {
-	if visited.Has(absPath) {
+	if !visited.AddIfAbsent(absPath) {
 		return
 	}
 
-	visited.Add(absPath)
 	*order = append(*order, absPath)
 
 	sc.forEachResolvedChild(absPath, func(rabs VFS) {
@@ -794,11 +793,10 @@ func (sc *scanCtx) subgraph(absPath VFS, srcClassHash uint64) ([]VFS, bool) {
 // propagated clean=false just prevents caching. Pure-DAG paths cache
 // normally.
 func (sc *scanCtx) walkSubgraph(absPath VFS, srcClassHash uint64, visited VFSSet, order *[]VFS) bool {
-	if visited.Has(absPath) {
+	if !visited.AddIfAbsent(absPath) {
 		return true
 	}
 
-	visited.Add(absPath)
 	*order = append(*order, absPath)
 
 	clean := true
@@ -813,11 +811,10 @@ func (sc *scanCtx) walkSubgraph(absPath VFS, srcClassHash uint64, visited VFSSet
 		if ok {
 			// Clean child subgraph — merge into our walk.
 			for _, p := range childSg {
-				if visited.Has(p) {
+				if !visited.AddIfAbsent(p) {
 					continue
 				}
 
-				visited.Add(p)
 				*order = append(*order, p)
 			}
 
@@ -840,11 +837,10 @@ func (sc *scanCtx) walkSubgraph(absPath VFS, srcClassHash uint64, visited VFSSet
 // computation) visited+order. Each child still goes through subgraph()
 // so non-cycle descendants reuse the persistent cache.
 func (sc *scanCtx) walkSubgraphTainted(absPath VFS, srcClassHash uint64, visited VFSSet, order *[]VFS) {
-	if visited.Has(absPath) {
+	if !visited.AddIfAbsent(absPath) {
 		return
 	}
 
-	visited.Add(absPath)
 	*order = append(*order, absPath)
 
 	sc.forEachResolvedChild(absPath, func(rabs VFS) {
@@ -856,11 +852,10 @@ func (sc *scanCtx) walkSubgraphTainted(absPath VFS, srcClassHash uint64, visited
 
 		if ok {
 			for _, p := range childSg {
-				if visited.Has(p) {
+				if !visited.AddIfAbsent(p) {
 					continue
 				}
 
-				visited.Add(p)
 				*order = append(*order, p)
 			}
 
@@ -1067,15 +1062,15 @@ func isYasmLike(absPath VFS) bool {
 //     musl/include/stddef.h.
 //   - Quoted includes (`#include "X"`): sysincl is GATED by search-
 //     path resolution and tier:
-//       (a) Same-directory hit → sysincl ALWAYS suppressed
-//           (`#include "elf.h"` from yasm/ targets yasm/elf.h, not
-//           musl/include/elf.h).
-//       (b) ADDINCL/peer/base hit + single-target sysincl → suppressed.
-//       (c) ADDINCL/peer/base hit + multi-target sysincl (≥ 2 non-
-//           empty paths) → sysincl IS added on top. Example:
-//           `#include "cxxabi.h"` from libcxxabi-parts resolves
-//           locally via OwnAddIncl but the reference also expects
-//           libcxxrt/include/cxxabi.h from sysincl.
+//     (a) Same-directory hit → sysincl ALWAYS suppressed
+//     (`#include "elf.h"` from yasm/ targets yasm/elf.h, not
+//     musl/include/elf.h).
+//     (b) ADDINCL/peer/base hit + single-target sysincl → suppressed.
+//     (c) ADDINCL/peer/base hit + multi-target sysincl (≥ 2 non-
+//     empty paths) → sysincl IS added on top. Example:
+//     `#include "cxxabi.h"` from libcxxabi-parts resolves
+//     locally via OwnAddIncl but the reference also expects
+//     libcxxrt/include/cxxabi.h from sysincl.
 func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	s := sc.scanner
 	ctx := &sc.cfg
