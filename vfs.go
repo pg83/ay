@@ -234,3 +234,16 @@ func (m VFSMap[T]) Add(v VFS) {
 	var zero T
 	m[vfsBucket(v)][v.Rel] = zero
 }
+
+// AddIfAbsent inserts v and reports whether it was newly added.
+func (m VFSMap[T]) AddIfAbsent(v VFS) bool {
+	b := m[vfsBucket(v)]
+	if _, ok := b[v.Rel]; ok {
+		return false
+	}
+
+	var zero T
+	b[v.Rel] = zero
+
+	return true
+}

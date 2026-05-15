@@ -50,6 +50,15 @@ func canonicalNodeBytes(n *Node) []byte {
 // that `hash.Hash`-streaming carried.
 func nodeUID(n *Node) string {
 	var c canonBuf
+
+	return nodeUIDWithBuf(n, &c)
+}
+
+// nodeUIDWithBuf is nodeUID with caller-owned scratch storage. Finalize
+// hashes thousands of nodes; reusing the canonicalization buffer avoids
+// repeatedly allocating large transient byte slices for wide input lists.
+func nodeUIDWithBuf(n *Node, c *canonBuf) string {
+	c.buf = c.buf[:0]
 	c.writeNode(n)
 
 	sum := sha1.Sum(c.buf)
