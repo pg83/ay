@@ -797,6 +797,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// dedicated path: they do not flow through the regular SRCS/AR
 	// pipeline, but emit their own specialised artefacts.
 	if isMultimoduleLibraryType(d.moduleStmt.Name) {
+		if d.moduleStmt.Name == "DYNAMIC_LIBRARY" {
+			result := emitDynamicLibrary(ctx, instance, d)
+			ctx.memo[originalInstance] = result
+			ctx.memo[instance] = result
+
+			return result
+		}
+
 		// Multimodule modules may declare ADDINCL(GLOBAL ...) /
 		// {C,CXX,CONLY}FLAGS(GLOBAL ...) that peer-propagate without
 		// emitting an AR. Walk peers (so their transitive closures reach

@@ -56,6 +56,8 @@ type moduleData struct {
 	optimizePyProtos    bool     // mirrors OPTIMIZE_PY_PROTOS_FLAG; default-on for PY{2,3}_PROTO variants.
 	optimizePyProtosSet bool
 	excludeTags         map[string]bool
+	dynamicLibraryFrom  []string
+	exportsScript       string
 	ldPlugins           []string // filenames from LD_PLUGIN(name.py); each becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs. Only contrib/libs/musl/include uses this in M2.
 	arPlugin            string   // name from AR_PLUGIN(name); resolves to `$(S)/<modulePath>/<name>.pyplugin` and is injected into AR cmd_args (`--plugin <path>`) and inputs. Mirror of AR_PLUGIN (ymake.core.conf:3396-3398) + _LD_ARCHIVER_KV_PLUGIN (ld.conf:366-368).
 	// per-source extra CFLAGS keyed by source filename, populated by
@@ -758,6 +760,17 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			ThrowFmt("gen: AR_PLUGIN expects exactly 1 argument, got %d", len(v.Args))
 		}
 		d.arPlugin = v.Args[0] + ".pyplugin"
+	case "DYNAMIC_LIBRARY_FROM":
+		if len(v.Args) == 0 {
+			ThrowFmt("gen: DYNAMIC_LIBRARY_FROM expects at least 1 argument")
+		}
+		d.dynamicLibraryFrom = append(d.dynamicLibraryFrom, v.Args...)
+		d.peerdirs = append(d.peerdirs, v.Args...)
+	case "EXPORTS_SCRIPT":
+		if len(v.Args) != 1 {
+			ThrowFmt("gen: EXPORTS_SCRIPT expects exactly 1 argument, got %d", len(v.Args))
+		}
+		d.exportsScript = v.Args[0]
 	case "USE_PYTHON3":
 		// USE_PYTHON3() implicit PEERDIRs per python.conf:1064-1071:
 		// contrib/libs/python + library/python/runtime_py3 (under
@@ -1187,7 +1200,7 @@ func isPythonModuleType(name string) bool {
 func isMultimoduleLibraryType(name string) bool {
 	switch name {
 	case "PROTO_LIBRARY",
-		"DLL", "SO_PROGRAM",
+		"DLL", "SO_PROGRAM", "DYNAMIC_LIBRARY",
 		"PACKAGE", "UNION", "RESOURCES_LIBRARY":
 		return true
 	}
