@@ -224,6 +224,10 @@ type executor struct {
 	done    atomic.Uint64
 }
 
+type commandResult struct {
+	Stderr string
+}
+
 var fatalOnce sync.Once
 
 type nodeFuture struct {
@@ -385,7 +389,7 @@ func (ex *executor) execute(n *Node) {
 	}
 
 	start := time.Now()
-	ex.runNode(n, tmp)
+	cmdResult := ex.runNode(n, tmp)
 	dur := time.Since(start)
 
 	ex.storeOutputs(n, tmp)
@@ -405,6 +409,10 @@ func (ex *executor) execute(n *Node) {
 	rec := fmt.Sprintf("[%s] {%d/%d} %s", display, done, pending, outFirst)
 
 	ex.events <- func() {
+		if cmdResult.Stderr != "" {
+			fmt.Fprintln(os.Stderr, cmdResult.Stderr)
+		}
+
 		ex.stats[kind] = append(ex.stats[kind], dur)
 		fmt.Fprintln(os.Stderr, rec)
 	}
@@ -413,7 +421,9 @@ func (ex *executor) execute(n *Node) {
 // runNode executes every Cmd in n. cwd / env / cmd_args paths are
 // substituted with the per-node tmp dir for $(B) and the configured
 // SrcRoot for $(S).
-func (ex *executor) runNode(n *Node, tmp string) {
+func (ex *executor) runNode(n *Node, tmp string) commandResult {
+	var result commandResult
+
 	// Pre-create every output's parent directory inside the tmp area
 	// so subprocesses can write directly to their declared paths.
 	for _, out := range n.Outputs {
@@ -477,7 +487,17 @@ func (ex *executor) runNode(n *Node, tmp string) {
 
 			ThrowFmt("%s", msg)
 		}
+
+		if stderr.Len() > 0 {
+			if result.Stderr != "" {
+				result.Stderr += "\n"
+			}
+
+			result.Stderr += strings.TrimRight(stderr.String(), "\n")
+		}
 	}
+
+	return result
 }
 
 // storeOutputs moves each declared Build-rooted output from the tmp
