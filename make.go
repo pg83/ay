@@ -662,7 +662,7 @@ func parseMakeFlags(args []string) *makeFlags {
 	}
 
 	mf := &makeFlags{
-		buildType: "release",
+		buildType: "debug",
 		threads:   runtime.NumCPU(),
 		tflags:    map[string]string{},
 		hflags:    map[string]string{},
@@ -785,8 +785,8 @@ Execution flags:
     --verbose                     Emit Gen-time diagnostics (unsupported sysincl records, …) to stderr.
 
 Configuration flags:
-    -r, --release                 GG_BUILD_TYPE=release (default).
-    -d, --debug                   GG_BUILD_TYPE=debug.
+    -r, --release                 GG_BUILD_TYPE=release.
+    -d, --debug                   GG_BUILD_TYPE=debug (default).
     --xbuild <value>              GG_BUILD_TYPE=<value> (overrides -r/-d).
     --musl                        MUSL=yes.
     --target-platform <id>        Target platform id (default: <host>).
