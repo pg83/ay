@@ -71,7 +71,7 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 	// tcmalloc/no_percpu_cache: SRCDIR = contrib/libs/tcmalloc (ancestor).
 	// srcRel = tcmalloc/internal/percpu_rseq_asm.S
 	// Expected: __/tcmalloc/internal/percpu_rseq_asm.S.o
-	in := ModuleCCInputs{SrcDir: "contrib/libs/tcmalloc"}
+	in := ModuleCCInputs{SrcDir: stringPtr("contrib/libs/tcmalloc")}
 	_, outPath := EmitAS(
 		targetInstance("contrib/libs/tcmalloc/no_percpu_cache"),
 		"tcmalloc/internal/percpu_rseq_asm.S",

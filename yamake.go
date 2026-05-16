@@ -194,9 +194,9 @@ type RunProgramStmt struct {
 	INFiles        []string
 	OUTFiles       []string
 	OUTNoAutoFiles []string
-	StdoutFile     string   // empty when STDOUT not specified
+	StdoutFile     *string  // nil when STDOUT not specified
 	EnvPairs       []string // "KEY=VALUE" strings from ENV
-	CWD            string
+	CWD            *string
 	OutputIncludes []string
 	Line           int
 }
@@ -1289,14 +1289,14 @@ func parseRunProgram(args []string, line int) *RunProgramStmt {
 		case "OUT_NOAUTO":
 			stmt.OUTNoAutoFiles = append(stmt.OUTNoAutoFiles, tok)
 		case "STDOUT", "STDOUT_NOAUTO":
-			if stmt.StdoutFile == "" {
-				stmt.StdoutFile = tok
+			if stmt.StdoutFile == nil {
+				stmt.StdoutFile = &tok
 			}
 		case "ENV":
 			stmt.EnvPairs = append(stmt.EnvPairs, tok)
 		case "CWD":
-			if stmt.CWD == "" {
-				stmt.CWD = tok
+			if stmt.CWD == nil {
+				stmt.CWD = &tok
 			}
 		case "OUTPUT_INCLUDES", "INDUCED_DEPS", "TOOL":
 			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)

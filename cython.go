@@ -2,7 +2,7 @@ package main
 
 type CythonStmt struct {
 	Src       string
-	Generated string
+	Generated *string
 	Options   []string
 }
 
@@ -14,9 +14,10 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 	out := make([]*sourceEmit, 0, len(d.cythonCpp))
 
 	for _, stmt := range d.cythonCpp {
-		generated := stmt.Generated
-		if generated == "" {
-			generated = stmt.Src + ".py3.cpp"
+		generatedExplicit := stmt.Generated != nil
+		generated := stmt.Src + ".py3.cpp"
+		if generatedExplicit {
+			generated = *stmt.Generated
 		}
 		generatedVFS := Build(instance.Path + "/" + generated)
 		srcVFS := Source(instance.Path + "/" + stmt.Src)
@@ -76,7 +77,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		ccIn.IsGenerated = true
 		ccIn.HasGenerator = true
 		ccIn.Generator = cyRef
-		ccIn.Py3Suffix = stmt.Generated == "" && d.moduleStmt != nil && resourceModuleTag(d.moduleStmt.Name) != ""
+		ccIn.Py3Suffix = !generatedExplicit && d.moduleStmt != nil && resourceModuleTag(d.moduleStmt.Name) != nil
 		ccIn.IncludeInputs = inputs
 
 		ccRef, ccOut := EmitCC(instance, generated, ccIn, ctx.host, ctx.emit)

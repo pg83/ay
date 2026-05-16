@@ -309,7 +309,7 @@ var pbCcDeepRuntimeHeaders = []VFS{
 // `cppStyleguideLDRef` and `protocLDRef` are the host LD NodeRefs for the two
 // tool programs (zeroed when the host walk failed). `cppStyleguideBinary` and
 // `protocBinary` are the $(B)-rooted paths for the tool binaries.
-// `moduleTag` is "cpp_proto" for PROTO_LIBRARY modules (may be empty for future use).
+// `moduleTag` is "cpp_proto" for PROTO_LIBRARY modules (nil when absent).
 // `sourceRoot` is the absolute path to the source tree root (for descriptor-import scanning).
 //
 // Returns the emitted NodeRef.
@@ -323,7 +323,7 @@ func EmitPB(
 	protocBinary string,
 	grpcCppBinary string,
 	grpc bool,
-	moduleTag string,
+	moduleTag *string,
 	sourceRoot string,
 	emit Emitter,
 ) NodeRef {
@@ -402,8 +402,8 @@ func EmitPB(
 		"module_dir": moduleDir,
 	}
 
-	if moduleTag != "" {
-		targetProps["module_tag"] = moduleTag
+	if moduleTag != nil {
+		targetProps["module_tag"] = *moduleTag
 	}
 
 	// deps and foreign_deps both carry the two tool refs.
@@ -457,8 +457,8 @@ func EmitPB(
 }
 
 func protoCPPModulePath(instance ModuleInstance, d *moduleData) string {
-	if d != nil && d.protoNamespace != "" {
-		base := filepath.ToSlash(filepath.Clean(filepath.Dir(d.protoNamespace)))
+	if d != nil && d.protoNamespace != nil {
+		base := filepath.ToSlash(filepath.Clean(filepath.Dir(*d.protoNamespace)))
 		if base != "." && base != "" {
 			return base
 		}
@@ -525,12 +525,12 @@ func protoImportsDescriptor(sourceRoot, srcRel string) bool {
 // caller can surface it through moduleEmitResult's archive closure;
 // nil when no .proto/.ev sources.
 type protoSrcsResult struct {
-	ARRef             NodeRef
-	ARPath            VFS
-	GlobalRef         *NodeRef
-	GlobalPath        VFS
-	WholeArchiveRefs  []NodeRef
-	WholeArchivePaths []string
+	ARRef                NodeRef
+	ARPath               *VFS
+	GlobalRef            *NodeRef
+	GlobalPath           *VFS
+	WholeArchiveRefs     []NodeRef
+	WholeArchivePaths    []string
 	WholeArchiveCmdPaths []string
 }
 
@@ -543,8 +543,8 @@ func protoSourceRelPath(sourceRoot string, instance ModuleInstance, d *moduleDat
 	}
 
 	baseDir := instance.Path
-	if d.srcDir != "" {
-		cleaned := filepath.Clean(d.srcDir)
+	if d.srcDir != nil {
+		cleaned := filepath.Clean(*d.srcDir)
 		if cleaned != "." {
 			baseDir = cleaned
 		}
@@ -556,15 +556,15 @@ func protoSourceRelPath(sourceRoot string, instance ModuleInstance, d *moduleDat
 func protoPythonResourceKey(instance ModuleInstance, d *moduleData, src, suffix string) string {
 	base := strings.TrimSuffix(src, ".proto")
 
-	switch d.pyNamespace {
-	case ".":
-		return base + suffix
-	case "":
+	if d.pyNamespace == nil {
 		return instance.Path + "/" + base + suffix
-	default:
-		nsPath := strings.ReplaceAll(d.pyNamespace, ".", "/")
-		return filepath.ToSlash(filepath.Clean(nsPath + "/" + filepath.Base(base) + suffix))
 	}
+	if *d.pyNamespace == "." {
+		return base + suffix
+	}
+
+	nsPath := strings.ReplaceAll(*d.pyNamespace, ".", "/")
+	return filepath.ToSlash(filepath.Clean(nsPath + "/" + filepath.Base(base) + suffix))
 }
 
 func moduleExcludesTag(d *moduleData, tag string) bool {
@@ -572,11 +572,11 @@ func moduleExcludesTag(d *moduleData, tag string) bool {
 }
 
 func protoPythonNamespaceArg(d *moduleData) string {
-	if d == nil || d.protoNamespace == "" {
+	if d == nil || d.protoNamespace == nil {
 		return "/"
 	}
 
-	return "/" + filepath.ToSlash(filepath.Clean(d.protoNamespace))
+	return "/" + filepath.ToSlash(filepath.Clean(*d.protoNamespace))
 }
 
 func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs) *protoSrcsResult {
@@ -617,7 +617,9 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	if exc := Try(func() {
 		result := genModule(ctx, protocHostInst)
 		protocLDRef = result.LDRef
-		protocBinary = result.LDPath
+		if result.LDPath != nil {
+			protocBinary = *result.LDPath
+		}
 	}); exc != nil {
 		// Swallow ParseError; use canonical fallback path.
 		_ = exc
@@ -629,7 +631,9 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	if exc := Try(func() {
 		result := genModule(ctx, cppStyleguideHostInst)
 		cppStyleguideLDRef = result.LDRef
-		cppStyleguideBinary = result.LDPath
+		if result.LDPath != nil {
+			cppStyleguideBinary = *result.LDPath
+		}
 	}); exc != nil {
 		// Swallow ParseError; use canonical fallback path.
 		_ = exc
@@ -642,7 +646,9 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		if exc := Try(func() {
 			result := genModule(ctx, grpcCppHostInst)
 			grpcCppLDRef = result.LDRef
-			grpcCppBinary = result.LDPath
+			if result.LDPath != nil {
+				grpcCppBinary = *result.LDPath
+			}
 		}); exc != nil {
 			_ = exc
 		}
@@ -668,7 +674,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
 			grpcCppLDRef, cppStyleguideBinary, protocBinary,
 			grpcCppBinary, d.grpc,
-			"cpp_proto", ctx.sourceRoot, ctx.emit)
+			stringPtr("cpp_proto"), ctx.sourceRoot, ctx.emit)
 
 		// Register the .pb.h with EmitsIncludes: .pb.h's of every imported
 		// proto plus the constant protobuf runtime header set.
@@ -771,7 +777,9 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		if exc := Try(func() {
 			result := genModule(ctx, event2cppHostInst)
 			event2cppLDRef = result.LDRef
-			event2cppBinary = result.LDPath
+			if result.LDPath != nil {
+				event2cppBinary = *result.LDPath
+			}
 		}); exc != nil {
 			_ = exc
 		}
@@ -782,7 +790,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			evRef := EmitEV(
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
-				"cpp_proto", ctx.sourceRoot, ctx.emit)
+				stringPtr("cpp_proto"), ctx.sourceRoot, ctx.emit)
 
 			// Register .ev.pb.h with EmitsIncludes: .ev source's direct
 			// imports + protobuf runtime headers + EV-specific runtime
@@ -874,7 +882,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		SourceRoot:           ctx.sourceRoot,
 		DefaultVars:          d.defaultVars,
 		DefaultVarOrder:      d.defaultVarOrder,
-		ModuleTag:            "cpp_proto",
+		ModuleTag:            stringPtr("cpp_proto"),
 	}
 
 	// Per-source downstream-CC emission for the PROTO_LIBRARY context.
@@ -938,9 +946,9 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	// AR emission with module_tag=cpp_proto.
 	arBaseName := ArchiveName(instance.Path)
 	archivePath := Build(instance.Path + "/" + arBaseName)
-	arRef := emitARNode(instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, nil, ctx.host, ctx.emit)
+	arRef := emitARNode(instance, archivePath, stringPtr("cpp_proto"), ccRefs, ccOutputs, nil, memberInputs, nil, ctx.host, ctx.emit)
 
-	return &protoSrcsResult{ARRef: arRef, ARPath: archivePath}
+	return &protoSrcsResult{ARRef: arRef, ARPath: &archivePath}
 }
 
 func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, protoSrcs, evSrcs []string) *protoSrcsResult {
@@ -960,7 +968,9 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, protoS
 	if exc := Try(func() {
 		result := genModule(ctx, protocHostInst)
 		protocLDRef = result.LDRef
-		protocBinary = result.LDPath
+		if result.LDPath != nil {
+			protocBinary = *result.LDPath
+		}
 	}); exc != nil {
 		_ = exc
 	}
@@ -992,9 +1002,10 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, protoS
 	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", "")
 	gRef := EmitARGlobalNamedTagged(pyInstance, globalBaseName, "py3_proto_global", pyProtoRefs, pyProtoOutputs, pyProtoMemberInputs, ctx.host, ctx.emit)
 
+	globalPath := Build(instance.Path + "/" + globalBaseName)
 	result := &protoSrcsResult{
 		GlobalRef:  &gRef,
-		GlobalPath: Build(instance.Path + "/" + globalBaseName),
+		GlobalPath: &globalPath,
 	}
 	if cppSibling != nil && cppSibling.ARPath != nil {
 		if v, ok := ParseVFS(*cppSibling.ARPath); ok {
@@ -1002,7 +1013,7 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, protoS
 			result.WholeArchivePaths = append(result.WholeArchivePaths, strings.TrimPrefix(*cppSibling.ARPath, "$(B)/"))
 			if d.optimizePyProtos {
 				result.ARRef = cppSibling.ARRef
-				result.ARPath = v
+				result.ARPath = &v
 			}
 		}
 	} else if moduleExcludesTag(d, "CPP_PROTO") {
@@ -1046,8 +1057,8 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		if exc := Try(func() {
 			res := genModule(ctx, grpcPyInst)
 			grpcPyRef = res.LDRef
-			if res.LDPath != "" {
-				grpcPyBinary = res.LDPath
+			if res.LDPath != nil {
+				grpcPyBinary = *res.LDPath
 			}
 		}); exc != nil {
 			_ = exc
@@ -1059,8 +1070,8 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		if exc := Try(func() {
 			res := genModule(ctx, mypyInst)
 			mypyRef = res.LDRef
-			if res.LDPath != "" {
-				mypyBinary = res.LDPath
+			if res.LDPath != nil {
+				mypyBinary = *res.LDPath
 			}
 		}); exc != nil {
 			_ = exc
@@ -1277,7 +1288,7 @@ func emitPyProtoAux(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		HasGenerator:    true,
 		Generator:       prRef,
 		Py3Suffix:       true,
-		ModuleTag:       "py3_proto",
+		ModuleTag:       stringPtr("py3_proto"),
 		IncludeInputs:   inputs,
 	}
 	ccRef, ccOut := EmitCC(instance, aux.Rel[strings.LastIndex(aux.Rel, "/")+1:], ccIn, ctx.host, ctx.emit)
@@ -1294,8 +1305,8 @@ func py3ccToolRefs(ctx *genCtx, instance ModuleInstance) (NodeRef, NodeRef, stri
 	if exc := Try(func() {
 		res := genModule(ctx, inst)
 		py3ccRef = res.LDRef
-		if res.LDPath != "" {
-			py3ccBinary = canonicalizePy3ccBinaryPath(res.LDPath)
+		if res.LDPath != nil {
+			py3ccBinary = canonicalizePy3ccBinaryPath(*res.LDPath)
 		}
 	}); exc != nil {
 		_ = exc
@@ -1306,8 +1317,8 @@ func py3ccToolRefs(ctx *genCtx, instance ModuleInstance) (NodeRef, NodeRef, stri
 	if exc := Try(func() {
 		res := genModule(ctx, slowInst)
 		py3ccSlowRef = res.LDRef
-		if res.LDPath != "" {
-			py3ccSlowBin = res.LDPath
+		if res.LDPath != nil {
+			py3ccSlowBin = *res.LDPath
 		}
 	}); exc != nil {
 		_ = exc

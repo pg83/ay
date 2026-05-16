@@ -664,8 +664,8 @@ func EmitPR(
 	for _, f := range stmt.OUTNoAutoFiles {
 		outSet[f] = true
 	}
-	if stmt.StdoutFile != "" {
-		outSet[stmt.StdoutFile] = true
+	if stmt.StdoutFile != nil {
+		outSet[*stmt.StdoutFile] = true
 	}
 
 	cmdArgs := make([]string, 0, 1+len(stmt.Args))
@@ -713,8 +713,8 @@ func EmitPR(
 	// Build outputs list.
 	var outputs []VFS
 	var stdoutPath string
-	if stmt.StdoutFile != "" {
-		stdoutVFS := Build(instance.Path + "/" + stmt.StdoutFile)
+	if stmt.StdoutFile != nil {
+		stdoutVFS := Build(instance.Path + "/" + *stmt.StdoutFile)
 		stdoutPath = stdoutVFS.String()
 		outputs = append(outputs, stdoutVFS)
 	}
@@ -748,8 +748,8 @@ func EmitPR(
 	if stdoutPath != "" {
 		cmd.Stdout = stdoutPath
 	}
-	if stmt.CWD != "" {
-		cmd.Cwd = stmt.CWD
+	if stmt.CWD != nil {
+		cmd.Cwd = *stmt.CWD
 	}
 
 	// Empty instance.Platform.Tags must stay non-nil so JSON
@@ -926,8 +926,8 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 	}
 
 	// BI: emit one node when CREATE_BUILDINFO_FOR was declared.
-	if d.createBuildInfoFor != "" {
-		biRef := EmitBI(instance, d.createBuildInfoFor, biFlagsForInstance(instance.Platform), ctx.emit)
+	if d.createBuildInfoFor != nil {
+		biRef := EmitBI(instance, *d.createBuildInfoFor, biFlagsForInstance(instance.Platform), ctx.emit)
 		// Register BI output (buildinfo_data.h). The BI-script trio
 		// (build_info_gen.py + xargs.py + yield_line.py) flows up into
 		// CC consumers via EmitsIncludes. ProducerRef = biRef so the
@@ -935,7 +935,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		if reg != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP: "BI",
-				OutputPath:  Build(outPrefix + d.createBuildInfoFor),
+				OutputPath:  Build(outPrefix + *d.createBuildInfoFor),
 				EmitsIncludes: []VFS{
 					buildInfoGenPyVFS,
 					xargsPyVFS,
@@ -1104,8 +1104,8 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 		for _, f := range rp.OUTNoAutoFiles {
 			d.prOutputProducer[f] = prRef
 		}
-		if rp.StdoutFile != "" {
-			d.prOutputProducer[rp.StdoutFile] = prRef
+		if rp.StdoutFile != nil {
+			d.prOutputProducer[*rp.StdoutFile] = prRef
 		}
 
 		// Classify outputs by extension. CC-compilable outputs
@@ -1116,8 +1116,8 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 		// OUT_NOAUTO suppresses auto-promote-to-source upstream, so
 		// rp.OUTNoAutoFiles is skipped for CC dispatch even when its
 		// extension is .cpp/.c/...
-		if rp.StdoutFile != "" {
-			outs = append(outs, rp.StdoutFile)
+		if rp.StdoutFile != nil {
+			outs = append(outs, *rp.StdoutFile)
 		}
 
 		for _, out := range outs {
@@ -1170,8 +1170,8 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	if exc := Try(func() {
 		res := genModule(ctx, toolInstance)
 		toolLDRef = res.LDRef
-		if res.LDPath != "" {
-			toolBinPath = res.LDPath
+		if res.LDPath != nil {
+			toolBinPath = *res.LDPath
 		}
 	}); exc != nil {
 		// Tool walk failure surfaces as a fallback path; matches
@@ -1305,8 +1305,8 @@ func emitArchive(
 					}
 				}
 			}
-			if !rpProduces && rp.StdoutFile != "" {
-				if _, ok := producerSet[d.prOutputProducer[rp.StdoutFile]]; ok {
+			if !rpProduces && rp.StdoutFile != nil {
+				if _, ok := producerSet[d.prOutputProducer[*rp.StdoutFile]]; ok {
 					rpProduces = true
 				}
 			}
@@ -1330,8 +1330,8 @@ func emitArchive(
 			for _, f := range rp.OUTNoAutoFiles {
 				collect(f)
 			}
-			if rp.StdoutFile != "" {
-				collect(rp.StdoutFile)
+			if rp.StdoutFile != nil {
+				collect(*rp.StdoutFile)
 			}
 		}
 	}
@@ -1577,7 +1577,9 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	if exc := Try(func() {
 		res := genModule(ctx, toolInstance)
 		toolLDRef = res.LDRef
-		toolBinPath = res.LDPath
+		if res.LDPath != nil {
+			toolBinPath = *res.LDPath
+		}
 		toolInducedDeps = res.InducedDeps
 	}); exc != nil {
 		// Swallow parse errors (tool may not fully parse); use fallback path.
@@ -1613,11 +1615,11 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 				EmitsIncludes: prEmitsIncludes(instance, f, stmt, toolInducedDeps),
 			})
 		}
-		if stmt.StdoutFile != "" {
+		if stmt.StdoutFile != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
-				OutputPath:    Build(instance.Path + "/" + stmt.StdoutFile),
-				EmitsIncludes: prEmitsIncludes(instance, stmt.StdoutFile, stmt, toolInducedDeps),
+				OutputPath:    Build(instance.Path + "/" + *stmt.StdoutFile),
+				EmitsIncludes: prEmitsIncludes(instance, *stmt.StdoutFile, stmt, toolInducedDeps),
 			})
 		}
 	}
@@ -1650,8 +1652,8 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		for _, f := range stmt.OUTNoAutoFiles {
 			reg.SetProducerRef(Build(instance.Path+"/"+f), prRef)
 		}
-		if stmt.StdoutFile != "" {
-			reg.SetProducerRef(Build(instance.Path+"/"+stmt.StdoutFile), prRef)
+		if stmt.StdoutFile != nil {
+			reg.SetProducerRef(Build(instance.Path+"/"+*stmt.StdoutFile), prRef)
 		}
 	}
 
@@ -1693,8 +1695,8 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		}
 		walkOne(f)
 	}
-	if stmt.StdoutFile != "" && isCCSourceExt(stmt.StdoutFile) {
-		walkOne(stmt.StdoutFile)
+	if stmt.StdoutFile != nil && isCCSourceExt(*stmt.StdoutFile) {
+		walkOne(*stmt.StdoutFile)
 	}
 
 	if len(out) == 0 {

@@ -105,8 +105,8 @@ func swigTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
 	swigInstance := NewToolInstance(ctx.host, swigPath)
 	swigInstance.Flags = inferFlagsFromPath(swigPath, true)
 	res := genModule(ctx, swigInstance)
-	if res.LDPath != "" {
-		return res.LDRef, res.LDPath
+	if res.LDPath != nil {
+		return res.LDRef, *res.LDPath
 	}
 
 	return res.LDRef, Build("contrib/tools/swig/swig").String()

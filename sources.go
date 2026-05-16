@@ -30,7 +30,7 @@ type sourceEmit struct {
 	PrimaryCount int
 }
 
-func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel string, in ModuleCCInputs, ancestorRebase bool) *sourceEmit {
+func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel string, in ModuleCCInputs, ancestorRebase bool) *sourceEmit {
 	if isHeaderSource(srcRel) {
 		return nil
 	}
@@ -43,7 +43,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 	srcInstance := instance
 
 	if ancestorRebase {
-		srcInstance.Path = srcDir
+		srcInstance.Path = *srcDir
 	}
 
 	// When instance is rebased (ragel6/bin), clear SrcDir so the
@@ -52,7 +52,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 	// resolution.
 	srcIn := in
 	if ancestorRebase {
-		srcIn.SrcDir = ""
+		srcIn.SrcDir = nil
 	}
 
 	switch {
@@ -130,8 +130,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// `contrib/libs/tcmalloc/tcmalloc/internal/percpu_rseq_asm.S`.
 		asInputRel := srcInstance.Path + "/" + srcRel
 
-		if srcDir != "" && srcDir != srcInstance.Path && !sourceExistsLocally(ctx.sourceRoot, srcInstance.Path, srcRel) {
-			asInputRel = srcDir + "/" + srcRel
+		if srcDir != nil && *srcDir != srcInstance.Path && !sourceExistsLocally(ctx.sourceRoot, srcInstance.Path, srcRel) {
+			asInputRel = *srcDir + "/" + srcRel
 		}
 
 		// Collapse `..` segments so openssl's `crypto/../asm/...`
@@ -167,7 +167,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		if exc := Try(func() {
 			ragelResult := genModule(ctx, ragelInstance)
 			ragelLDRef = ragelResult.LDRef
-			ragelBinaryStr = ragelResult.LDPath
+			if ragelResult.LDPath != nil {
+				ragelBinaryStr = *ragelResult.LDPath
+			}
 		}); exc != nil {
 			// Only swallow *ParseError — the documented gap for
 			// INCLUDE(${ARCADIA_ROOT}/...) the parser can't expand.
@@ -290,7 +292,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			if exc := Try(func() {
 				result := genModule(ctx, protocHostInst)
 				protocLDRef = result.LDRef
-				protocBinary = result.LDPath
+				if result.LDPath != nil {
+					protocBinary = *result.LDPath
+				}
 			}); exc != nil {
 				_ = exc
 			}
@@ -301,7 +305,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			if exc := Try(func() {
 				result := genModule(ctx, cppStyleguideHostInst)
 				cppStyleguideLDRef = result.LDRef
-				cppStyleguideBinary = result.LDPath
+				if result.LDPath != nil {
+					cppStyleguideBinary = *result.LDPath
+				}
 			}); exc != nil {
 				_ = exc
 			}
@@ -312,7 +318,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			if exc := Try(func() {
 				result := genModule(ctx, event2cppHostInst)
 				event2cppLDRef = result.LDRef
-				event2cppBinary = result.LDPath
+				if result.LDPath != nil {
+					event2cppBinary = *result.LDPath
+				}
 			}); exc != nil {
 				_ = exc
 			}
@@ -322,7 +330,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				srcInstance, evRelPath,
 				cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
-				"", ctx.sourceRoot, ctx.emit)
+				nil, ctx.sourceRoot, ctx.emit)
 
 			// Register .ev.pb.h with EmitsIncludes from .ev imports
 			// plus protobuf runtime headers.
@@ -434,7 +442,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		if exc := Try(func() {
 			res := genModule(ctx, ragel5Instance)
 			ragel5LDRef = res.LDRef
-			ragel5BinStr = res.LDPath
+			if res.LDPath != nil {
+				ragel5BinStr = *res.LDPath
+			}
 		}); exc != nil {
 			var pe *ParseError
 			if !errors.As(exc.AsError(), &pe) {
@@ -448,7 +458,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		if exc := Try(func() {
 			res := genModule(ctx, rlgenCdInstance)
 			rlgenCdLDRef = res.LDRef
-			rlgenCdBinStr = res.LDPath
+			if res.LDPath != nil {
+				rlgenCdBinStr = *res.LDPath
+			}
 		}); exc != nil {
 			var pe *ParseError
 			if !errors.As(exc.AsError(), &pe) {
@@ -614,12 +626,12 @@ func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCI
 		return Build(instance.Path + "/" + srcRel)
 	}
 
-	if in.SrcDir != "" && in.SrcDir != instance.Path {
+	if in.SrcDir != nil && *in.SrcDir != instance.Path {
 		localCandidate := filepath.Join(sourceRoot, instance.Path, srcRel)
 		info, err := os.Stat(localCandidate)
 
 		if err != nil || info.IsDir() {
-			return Source(in.SrcDir + "/" + srcRel)
+			return Source(*in.SrcDir + "/" + srcRel)
 		}
 	}
 
@@ -649,12 +661,12 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	for _, src := range sources {
 		srcRelOnDisk := srcInstance.Path + "/" + src
 
-		if in.SrcDir != "" && in.SrcDir != srcInstance.Path {
+		if in.SrcDir != nil && *in.SrcDir != srcInstance.Path {
 			localCandidate := filepath.Join(ctx.sourceRoot, srcInstance.Path, src)
 			info, err := os.Stat(localCandidate)
 
 			if err != nil || info.IsDir() {
-				srcRelOnDisk = in.SrcDir + "/" + src
+				srcRelOnDisk = *in.SrcDir + "/" + src
 			}
 		}
 
@@ -772,11 +784,11 @@ func jsTargetPeerAddIncl(hostPeerAddIncl []string, from, to ISA) []string {
 // and no local file exists at instance.Path/<srcRel>, resolve under
 // SRCDIR. Registration-time resolution; os.Stat is legitimate here
 // because it feeds path composition, not scanner-internal dispatch.
-func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDir string) VFS {
+func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDir *string) VFS {
 	srcRelOnDisk := srcInstance.Path + "/" + srcRel
 
-	cleanSrcDir := filepath.Clean(srcDir)
-	if srcDir != "" && cleanSrcDir != "." && cleanSrcDir != srcInstance.Path {
+	if srcDir != nil && filepath.Clean(*srcDir) != "." && filepath.Clean(*srcDir) != srcInstance.Path {
+		cleanSrcDir := filepath.Clean(*srcDir)
 		localCandidate := filepath.Join(ctx.sourceRoot, srcInstance.Path, srcRel)
 		info, err := os.Stat(localCandidate)
 

@@ -45,9 +45,9 @@ type moduleEmitResult struct {
 	ARPath     *string
 	isPROGRAM  bool
 	LDRef      NodeRef
-	LDPath     string
+	LDPath     *string
 	GlobalRef  *NodeRef // non-nil when the module has GLOBAL_SRCS (EmitARGlobal was called)
-	GlobalPath string   // BUILD_ROOT-relative path to the .global.a archive; empty when GlobalRef is nil
+	GlobalPath *string  // BUILD_ROOT-relative path to the .global.a archive; non-nil when GlobalRef is non-nil
 	// WholeArchiveRefs / WholeArchivePaths are this module's own
 	// `_WHOLE_ARCHIVE_LIBS_VALUE_GLOBAL` contribution. Upstream uses
 	// this for PY{2,3}_PROTO to inject sibling CPP_PROTO archives via
@@ -143,12 +143,8 @@ type moduleEmitResult struct {
 	ModuleStmtName string
 }
 
-func derefString(p *string) string {
-	if p == nil {
-		return ""
-	}
-
-	return *p
+func stringPtr(s string) *string {
+	return &s
 }
 
 func protoResultWholeArchiveCmdPaths(res *protoSrcsResult) []string {
@@ -881,7 +877,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// LIBRARY (`certs`) and PY3_LIBRARY PY_SRCS modules' `.global.a`
 		// archives reach the graph but are orphaned from every LD inputs.
 		var hOnlyGlobalRef *NodeRef
-		var hOnlyGlobalPath string
+		var hOnlyGlobalPath *string
 		var hOnlyWholeArchiveRefs []NodeRef
 		var hOnlyWholeArchivePaths []string
 
@@ -916,7 +912,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRefs, objcopyOutputs, objcopyGlobalInputs, ctx.host, ctx.emit)
 			hOnlyGlobalRef = &gRef
-			hOnlyGlobalPath = instance.Path + "/" + globalBaseName
+			hOnlyGlobalPath = stringPtr(instance.Path + "/" + globalBaseName)
 		}
 
 		// Emit EN nodes for GENERATE_ENUM_SERIALIZATION(*). Multimodule
@@ -947,14 +943,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		hOnlyARRef := NodeRef{}
 		var hOnlyARPath *string
 		if protoResult != nil {
-			if protoResult.ARPath.Rel != "" {
+			if protoResult.ARPath != nil {
 				hOnlyARRef = protoResult.ARRef
 				arPath := protoResult.ARPath.String()
 				hOnlyARPath = &arPath
 			}
-			if protoResult.GlobalRef != nil {
+			if protoResult.GlobalRef != nil && protoResult.GlobalPath != nil {
 				hOnlyGlobalRef = protoResult.GlobalRef
-				hOnlyGlobalPath = protoResult.GlobalPath.Rel
+				globalPath := protoResult.GlobalPath.Rel
+				hOnlyGlobalPath = &globalPath
 			}
 			hOnlyWholeArchiveRefs = append(hOnlyWholeArchiveRefs, protoResult.WholeArchiveRefs...)
 			hOnlyWholeArchivePaths = append(hOnlyWholeArchivePaths, protoResult.WholeArchivePaths...)
@@ -1376,8 +1373,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// Header-only peers may expose their own `.global.a` (e.g. `certs`
 		// RESOURCE-only LIBRARY emits `libcerts.global.a` from objcopy
 		// outputs). Fold regardless of headerOnly.
-		if peerResult.GlobalRef != nil {
-			peerGlobalAddPath(*peerResult.GlobalRef, peerResult.GlobalPath)
+		if peerResult.GlobalRef != nil && peerResult.GlobalPath != nil {
+			peerGlobalAddPath(*peerResult.GlobalRef, *peerResult.GlobalPath)
 		}
 
 		for i, p := range peerResult.PeerWholeArchiveClosurePaths {
@@ -1395,8 +1392,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		for i, p := range peerResult.PeerDynamicClosurePaths {
 			peerDynamicAddPath(peerResult.PeerDynamicClosureRefs[i], p)
 		}
-		if peerResult.ModuleStmtName == "DYNAMIC_LIBRARY" && peerResult.LDPath != "" {
-			peerDynamicAddPath(peerResult.LDRef, strings.TrimPrefix(peerResult.LDPath, "$(B)/"))
+		if peerResult.ModuleStmtName == "DYNAMIC_LIBRARY" && peerResult.LDPath != nil {
+			peerDynamicAddPath(peerResult.LDRef, strings.TrimPrefix(*peerResult.LDPath, "$(B)/"))
 		}
 
 		// peerResult.ARPath carries the py3-prefixed name for Python
@@ -1756,12 +1753,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// module_tag — inherits its type default; upstream omits redundant
 	// properties. The "global" / "py3_global" / "py3_native_global" tags
 	// on .global.a archives are set at EmitARGlobalNamedTagged below.
-	var perModuleCCTag string
+	var perModuleCCTag *string
 	switch d.moduleStmt.Name {
 	case "PY23_NATIVE_LIBRARY":
-		perModuleCCTag = "py3_native"
+		perModuleCCTag = stringPtr("py3_native")
 	case "PY23_LIBRARY":
-		perModuleCCTag = "py3"
+		perModuleCCTag = stringPtr("py3")
 	}
 
 	// arNameFn selects the archive naming function for this module:
@@ -1826,7 +1823,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// is the only shape where REF rebases module_dir to SRCDIR. LIBRARYs
 	// with SRCDIR keep module_dir at instance.Path and route per-source
 	// via composeCCPaths' SRCDIR-aware composer.
-	ancestorRebase := d.srcDir != "" && d.moduleStmt.Name == "PROGRAM" && isAncestorPath(d.srcDir, instance.Path)
+	ancestorRebase := d.srcDir != nil && d.moduleStmt.Name == "PROGRAM" && isAncestorPath(*d.srcDir, instance.Path)
 
 	// Emit EN nodes BEFORE the per-source CC loop so the codegen registry
 	// is populated when consumer sources scan their include closures.
@@ -2045,7 +2042,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	for _, e := range d.simdSrcs {
 		variantIn := moduleInputs
 		variantIn.FlatOutput = true
-		variantIn.Variant = e.Variant
+		variantIn.Variant = stringPtr(e.Variant)
 		// Compose PerSourceCFlags = (variant CFLAGS + macro extras) +
 		// any pre-existing PerSourceCFlags for this filename declared
 		// via SRC(filename extra...) — although the reference shows no
@@ -2086,7 +2083,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		srcInstance := instance
 
 		if ancestorRebase {
-			srcInstance.Path = d.srcDir
+			srcInstance.Path = *d.srcDir
 		}
 
 		// Per-source include closure threaded into the JS node Inputs and
@@ -2298,7 +2295,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		var ldObjcopyRefs []NodeRef
 		var ldObjcopyPaths []VFS
 
-		if resourceModuleTag(d.moduleStmt.Name) != "" {
+		if resourceModuleTag(d.moduleStmt.Name) != nil {
 			emitPySrcs(ctx, instance, d)
 
 			objcopyRefs, objcopyOutputs, objcopyLDInputs := emitResourceObjcopy(ctx, instance, d)
@@ -2327,7 +2324,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			// in the LD node's inputs (mirror of the reference shape for
 			// tools/py3cc/slow/py3cc: build/scripts/objcopy.py +
 			// tools/py3cc/slow/main.py + each declared RESOURCE source).
-			if resourceModuleTag(d.moduleStmt.Name) != "" {
+			if resourceModuleTag(d.moduleStmt.Name) != nil {
 				var resourcePaths []string
 				for _, e := range d.resources {
 					if e.Path == "-" {
@@ -2392,7 +2389,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			isPROGRAM:                       true,
 			isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
 			LDRef:                           ldRef,
-			LDPath:                          ldPath,
+			LDPath:                          &ldPath,
 			AddInclGlobal:                   effectiveAddInclGlobal,
 			OwnAddInclGlobal:                append([]string(nil), d.addInclGlobal...),
 			CFlagsGlobal:                    effectiveCFlagsGlobal,
@@ -2455,7 +2452,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// injecting the same set into combinedMemberInputs before AR emission.
 	// Gate on resourceModuleTag (same as emitPySrcObjcopy) so non-PY3
 	// modules stay unaffected.
-	if d.moduleStmt != nil && resourceModuleTag(d.moduleStmt.Name) != "" {
+	if d.moduleStmt != nil && resourceModuleTag(d.moduleStmt.Name) != nil {
 		// Collect non-kv-only RESOURCE / RESOURCE_FILES source paths;
 		// kv-only entries (Path == "-") do not point at a real file and
 		// would inject an invalid input path.
@@ -2520,8 +2517,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// Resolve AR_PLUGIN path (`$(S)/<modulePath>/<name>.pyplugin`) when
 	// the macro fired on this module's ya.make.
 	var arPluginVFS *VFS
-	if d.arPlugin != "" {
-		v := Source(instance.Path + "/" + d.arPlugin)
+	if d.arPlugin != nil {
+		v := Source(instance.Path + "/" + *d.arPlugin)
 		arPluginVFS = &v
 	}
 
@@ -2530,8 +2527,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// `module_tag=py3` / `module_tag=py3_native`. openssl AR_PLUGIN(ar)
 		// injects `--plugin <ar.pyplugin>` between the link_lib.py `--`
 		// separators.
-		if perModuleCCTag != "" {
-			arRef = EmitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.host, ctx.emit)
+		if perModuleCCTag != nil {
+			arRef = EmitARNamedTagged(arInstance, arBaseName, *perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.host, ctx.emit)
 		} else {
 			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.host, ctx.emit)
 		}
@@ -2578,7 +2575,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		isPROGRAM:                       false,
 		isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
 		LDRef:                           arRef,
-		LDPath:                          derefString(arPath),
+		LDPath:                          arPath,
 		AddInclGlobal:                   effectiveAddInclGlobal,
 		OwnAddInclGlobal:                append([]string(nil), d.addInclGlobal...),
 		CFlagsGlobal:                    effectiveCFlagsGlobal,
@@ -2628,7 +2625,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))
 		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, globalAggregated, ctx.host, ctx.emit)
 		result.GlobalRef = &globalRef
-		result.GlobalPath = instance.Path + "/" + globalBaseName
+		result.GlobalPath = stringPtr(instance.Path + "/" + globalBaseName)
 	}
 
 	ctx.memo[originalInstance] = result
@@ -2991,7 +2988,9 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		}
 
 		if peerResult.GlobalRef != nil {
-			addGlobal(*peerResult.GlobalRef, peerResult.GlobalPath)
+			if peerResult.GlobalPath != nil {
+				addGlobal(*peerResult.GlobalRef, *peerResult.GlobalPath)
+			}
 		}
 
 		for i, p := range peerResult.PeerWholeArchiveClosurePaths {
@@ -3016,8 +3015,8 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		for i, p := range peerResult.PeerDynamicClosurePaths {
 			addDynamic(peerResult.PeerDynamicClosureRefs[i], p)
 		}
-		if peerResult.ModuleStmtName == "DYNAMIC_LIBRARY" && peerResult.LDPath != "" {
-			addDynamic(peerResult.LDRef, strings.TrimPrefix(peerResult.LDPath, "$(B)/"))
+		if peerResult.ModuleStmtName == "DYNAMIC_LIBRARY" && peerResult.LDPath != nil {
+			addDynamic(peerResult.LDRef, strings.TrimPrefix(*peerResult.LDPath, "$(B)/"))
 		}
 	}
 
@@ -3172,7 +3171,7 @@ func hasSkippedSource(d *moduleData) bool {
 // return `(_, _, nil, false)`. Unknown extensions throw so a new source
 // kind surfaces during integration.
 //
-// `srcDir` is the module's `SRCDIR(...)` setting (empty when none).
+// `srcDir` is the module's `SRCDIR(...)` setting (nil when none).
 // When non-empty it relocates the per-source emitter's view: SRCS
 // resolve to `$(S)/<srcDir>/<rel>` and the emitted node's `module_dir`
 // becomes `<srcDir>`. The LD/AR/Global archives wrapping these sources

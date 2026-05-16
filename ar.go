@@ -109,7 +109,7 @@ func globalArchiveNameWithPrefixOrName(moduleDir, prefix, name string) string {
 }
 
 // emitARNode is the shared implementation behind EmitAR and EmitARGlobal.
-// tag (when non-empty, e.g. "global") lands in target_properties.
+// tag (when present, e.g. "global") lands in target_properties.
 // peerArchiveRefs go into DepRefs only (NOT cmd_args/inputs): ar(1)
 // archives .o files; peer archives are link-time inputs for LD.
 //
@@ -121,7 +121,7 @@ func globalArchiveNameWithPrefixOrName(moduleDir, prefix, name string) string {
 func emitARNode(
 	instance ModuleInstance,
 	archivePath VFS,
-	tag string,
+	tag *string,
 	objRefs []NodeRef,
 	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
@@ -218,8 +218,8 @@ func emitARNode(
 		targetProperties["module_lang"] = "py3"
 	}
 
-	if tag != "" {
-		targetProperties["module_tag"] = tag
+	if tag != nil {
+		targetProperties["module_tag"] = *tag
 	}
 
 	// DepRefs: own CC refs first, then peer archive refs. Peer archives
@@ -285,7 +285,7 @@ func EmitAR(
 
 	archivePath := Build(instance.Path + "/" + ArchiveName(instance.Path))
 
-	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, nil, hostP, emit)
+	return emitARNode(instance, archivePath, nil, objRefs, objPaths, peerArchiveRefs, memberInputs, nil, hostP, emit)
 }
 
 // EmitARNamed is EmitAR with an explicit archive base name (e.g.
@@ -310,7 +310,7 @@ func EmitARNamed(
 
 	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
-	return emitARNode(instance, archivePath, "", objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, hostP, emit)
+	return emitARNode(instance, archivePath, nil, objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, hostP, emit)
 }
 
 // EmitARNamedTagged is EmitARNamed with an explicit module_tag
@@ -335,7 +335,7 @@ func EmitARNamedTagged(
 
 	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
-	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, hostP, emit)
+	return emitARNode(instance, archivePath, &tag, objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, hostP, emit)
 }
 
 // EmitARGlobalNamedTagged is EmitARGlobalNamed with an explicit module_tag
@@ -357,5 +357,5 @@ func EmitARGlobalNamedTagged(
 
 	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
-	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, memberInputs, nil, hostP, emit)
+	return emitARNode(instance, archivePath, &tag, objRefs, objPaths, nil, memberInputs, nil, hostP, emit)
 }

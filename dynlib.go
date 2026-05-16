@@ -6,14 +6,14 @@ import (
 )
 
 var (
-	ldLinkDynLibVFS               = Source("build/scripts/link_dyn_lib.py")
-	ldThinltoCacheVFS             = Source("build/scripts/thinlto_cache.py")
-	ldProcessCommandFilesVFS      = Source("build/scripts/process_command_files.py")
+	ldLinkDynLibVFS                = Source("build/scripts/link_dyn_lib.py")
+	ldThinltoCacheVFS              = Source("build/scripts/thinlto_cache.py")
+	ldProcessCommandFilesVFS       = Source("build/scripts/process_command_files.py")
 	ldProcessWholeArchiveOptionVFS = Source("build/scripts/process_whole_archive_option.py")
 
-	ldLinkDynLibPath               = ldLinkDynLibVFS.String()
-	ldThinltoCachePath             = ldThinltoCacheVFS.String()
-	ldProcessCommandFilesPath      = ldProcessCommandFilesVFS.String()
+	ldLinkDynLibPath                = ldLinkDynLibVFS.String()
+	ldThinltoCachePath              = ldThinltoCacheVFS.String()
+	ldProcessCommandFilesPath       = ldProcessCommandFilesVFS.String()
 	ldProcessWholeArchiveOptionPath = ldProcessWholeArchiveOptionVFS.String()
 )
 
@@ -24,7 +24,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	if len(d.dynamicLibraryFrom) == 0 {
 		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires DYNAMIC_LIBRARY_FROM(...)", instance.Path)
 	}
-	if d.exportsScript == "" {
+	if d.exportsScript == nil {
 		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires EXPORTS_SCRIPT(...)", instance.Path)
 	}
 
@@ -71,8 +71,8 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	if exc := Try(func() {
 		res := genModule(ctx, fixElfInst)
 		fixElfRef = res.LDRef
-		if res.LDPath != "" {
-			fixElfPath = res.LDPath
+		if res.LDPath != nil {
+			fixElfPath = *res.LDPath
 		}
 	}); exc != nil {
 		_ = exc
@@ -85,13 +85,13 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 
 	cmd0 := composeLDCmdVcsInfo(instance.Platform.Tools, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, moduleMuslOn(ctx, d), d.ldFlags, nil, false, instance.Platform.IsHost, d.flags.NoCompilerWarnings)
-	cmd2 := composeDynLibCmd(instance.Platform, instance.Path, outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, d.exportsScript, fixElfPath)
+	cmd2 := composeDynLibCmd(instance.Platform, instance.Path, outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, *d.exportsScript, fixElfPath)
 	cmd3 := composeLDCmdLinkOrCopy(instance.Platform.Tools, instance.Path)
 
 	envVcsOnly := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 	envFull := ctx.host.ToolEnv()
 
-	inputs := composeDynLibInputs(peerArchivePaths, pluginPaths, fixElfPath, instance.Path, d.exportsScript)
+	inputs := composeDynLibInputs(peerArchivePaths, pluginPaths, fixElfPath, instance.Path, *d.exportsScript)
 
 	depRefs := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+1)
 	depRefs = append(depRefs, peerArchiveRefs...)
@@ -135,27 +135,27 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	ref := ctx.emit.Emit(n)
 
 	return &moduleEmitResult{
-		ARPath:                    nil,
-		isPROGRAM:                 false,
-		LDRef:                     ref,
-		LDPath:                    outputPath,
-		AddInclGlobal:             append([]string(nil), d.addInclGlobal...),
-		OwnAddInclGlobal:          append([]string(nil), d.addInclGlobal...),
-		CFlagsGlobal:              append([]string(nil), d.cFlagsGlobal...),
-		CXXFlagsGlobal:            append([]string(nil), d.cxxFlagsGlobal...),
-		COnlyFlagsGlobal:          append([]string(nil), d.cOnlyFlagsGlobal...),
-		PeerArchiveClosureRefs:    nil,
-		PeerArchiveClosurePaths:   nil,
-		isPyLibrary:               false,
-		PeerGlobalClosureRefs:     nil,
-		PeerGlobalClosurePaths:    nil,
-		PeerWholeArchiveClosureRefs: nil,
+		ARPath:                       nil,
+		isPROGRAM:                    false,
+		LDRef:                        ref,
+		LDPath:                       &outputPath,
+		AddInclGlobal:                append([]string(nil), d.addInclGlobal...),
+		OwnAddInclGlobal:             append([]string(nil), d.addInclGlobal...),
+		CFlagsGlobal:                 append([]string(nil), d.cFlagsGlobal...),
+		CXXFlagsGlobal:               append([]string(nil), d.cxxFlagsGlobal...),
+		COnlyFlagsGlobal:             append([]string(nil), d.cOnlyFlagsGlobal...),
+		PeerArchiveClosureRefs:       nil,
+		PeerArchiveClosurePaths:      nil,
+		isPyLibrary:                  false,
+		PeerGlobalClosureRefs:        nil,
+		PeerGlobalClosurePaths:       nil,
+		PeerWholeArchiveClosureRefs:  nil,
 		PeerWholeArchiveClosurePaths: nil,
-		LDPluginRefs:              pluginRefs,
-		LDPluginPaths:             pluginPaths,
-		InducedDeps:               append([]string(nil), d.inducedDeps...),
-		Peerdirs:                  append([]string(nil), d.peerdirs...),
-		ModuleStmtName:            d.moduleStmt.Name,
+		LDPluginRefs:                 pluginRefs,
+		LDPluginPaths:                pluginPaths,
+		InducedDeps:                  append([]string(nil), d.inducedDeps...),
+		Peerdirs:                     append([]string(nil), d.peerdirs...),
+		ModuleStmtName:               d.moduleStmt.Name,
 	}
 }
 

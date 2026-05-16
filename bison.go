@@ -5,9 +5,10 @@ import (
 	"strings"
 )
 
-func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCCInputs, genExt string) *sourceEmit {
-	if genExt == "" {
-		genExt = ".cpp"
+func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCCInputs, genExt *string) *sourceEmit {
+	ext := ".cpp"
+	if genExt != nil {
+		ext = *genExt
 	}
 
 	bisonRef, bisonBin := bisonTool(ctx, instance)
@@ -15,7 +16,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	baseNoExt := strings.TrimSuffix(srcRel, filepath.Ext(srcRel))
 	headerRel := baseNoExt + ".h"
-	generatedRel := "_/" + srcRel + genExt
+	generatedRel := "_/" + srcRel + ext
 	headerVFS := Build(instance.Path + "/" + headerRel)
 	generatedVFS := Build(instance.Path + "/" + generatedRel)
 	srcVFS := Source(instance.Path + "/" + srcRel)
@@ -84,8 +85,8 @@ func bisonTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
 	tool := NewToolInstance(ctx.host, p)
 	tool.Flags = inferFlagsFromPath(p, true)
 	res := genModule(ctx, tool)
-	if res.LDPath != "" {
-		return res.LDRef, res.LDPath
+	if res.LDPath != nil {
+		return res.LDRef, *res.LDPath
 	}
 
 	return res.LDRef, Build("contrib/tools/bison/bison").String()
@@ -97,8 +98,8 @@ func m4Tool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
 	tool := NewToolInstance(ctx.host, p)
 	tool.Flags = inferFlagsFromPath(p, true)
 	res := genModule(ctx, tool)
-	if res.LDPath != "" {
-		return res.LDRef, res.LDPath
+	if res.LDPath != nil {
+		return res.LDRef, *res.LDPath
 	}
 
 	return res.LDRef, Build("contrib/tools/m4/m4").String()

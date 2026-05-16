@@ -257,14 +257,14 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 //  3. SRCDIR + non-local source: composeSrcDirOutputRel (`__/` ancestor
 //     infix); input `$(S)/<srcDir>/<srcRel>`.
 func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (out, input VFS) {
-	useSrcDir := in.SrcDir != "" && in.SrcDir != instance.Path && !sourceExistsLocally(in.SourceRoot, instance.Path, srcRel)
+	useSrcDir := in.SrcDir != nil && *in.SrcDir != instance.Path && !sourceExistsLocally(in.SourceRoot, instance.Path, srcRel)
 
 	if useSrcDir {
-		outputRel := composeSrcDirOutputRel(instance.Path, in.SrcDir, srcRel)
+		outputRel := composeSrcDirOutputRel(instance.Path, *in.SrcDir, srcRel)
 		// path.Clean canonicalises ".." segments from srcRels that ascend
 		// out of SrcDir (e.g. openssl's "crypto/../asm/aarch64/…").
 		return Build(instance.Path + "/" + outputRel + ".o"),
-			Source(path.Clean(in.SrcDir + "/" + srcRel))
+			Source(path.Clean(*in.SrcDir + "/" + srcRel))
 	}
 
 	var outRel string
