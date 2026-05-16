@@ -472,7 +472,7 @@ isCxx=false). Expected: pass byte-exact unchanged.
 
 ### D07 — full-graph regression gate
 
-Re-run `./yatool gen --target tools/archiver --out our.json && ./yatool
+Re-run `./yatool make -j 0 -G tools/archiver > our.json && ./yatool
 compare --level=3 our.json /yatool_orig/sg.json`. Acceptance per the
 plan target:
 

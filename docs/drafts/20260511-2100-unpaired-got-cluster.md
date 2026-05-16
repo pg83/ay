@@ -1,7 +1,7 @@
 # Unpaired-got cluster analysis — 223 nodes REF has and OUR misses
 
 Date: 2026-05-11
-Generator output: `./.out/m3.json` (regenerated; `./yatool gen --target devtools/ymake/bin --out ./.out/m3.json`, wall 4.5s).
+Generator output: `./.out/m3.json` (regenerated; `./yatool make -j 0 -G devtools/ymake/bin > ./.out/m3.json`, wall 4.5s).
 Reference: `/home/pg/monorepo/yatool_orig/sg2.json` (8750 nodes).
 Comparator: `./yatool compare --level=3 ./.out/m3.json /home/pg/monorepo/yatool_orig/sg2.json` →
 `L0=88.45%, L1=97.30%, L2=93.95%, L3=92.79%; 8527 pairs / 0 unpaired-want / 223 unpaired-got`.

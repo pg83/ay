@@ -1,7 +1,7 @@
 # M3 residue after PR-C (PR-M3-residue-B) — read-only probe
 
 Date: 2026-05-12
-Generator output: `./.out/m3.json` (freshly regenerated; `./yatool gen --target devtools/ymake/bin --out ./.out/m3.json`, wall **4.5 s**).
+Generator output: `./.out/m3.json` (freshly regenerated; `./yatool make -j 0 -G devtools/ymake/bin > ./.out/m3.json`, wall **4.5 s**).
 Reference: `/home/pg/monorepo/yatool_orig/sg2.json` (8 750 nodes).
 Comparator: `./yatool compare --level=3 ./.out/m3.json sg2.json` →
 `L0 = 88.45%, L1 = 97.43%, L2 = 94.13%, L3 = 92.91%; pairs = 8 538, unpaired-want = 117, unpaired-got = 212`.

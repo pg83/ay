@@ -2,7 +2,7 @@
 
 ## Ground truth
 
-`./yatool gen --target devtools/ymake/bin --out ./.out/m3.json` vs
+`./yatool make -j 0 -G devtools/ymake/bin > ./.out/m3.json` vs
 `/home/pg/monorepo/yatool_orig/sg2.json`:
 
 | Layer | Ours | Ref  | Match               |

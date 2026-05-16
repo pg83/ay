@@ -4,7 +4,7 @@
 
 **Acceptance criterion (verbatim from `GOALS.md` §Definition-of-done item 2):**
 
-> **L4 byte-exact**: `sha256(./yatool gen --target tools/archiver --out -)`
+> **L4 byte-exact**: `sha256(./yatool make -j 0 -G tools/archiver > -)`
 > equals `sha256(normalized-ref-for-tools-archiver.json)`, where the
 > normalized reference is produced by the documented one-time
 > normalization pass over `/home/pg/monorepo/yatool_orig/sg.json` (strip
@@ -30,7 +30,7 @@ the L4 gate.
 
 All commands assume working directory `/home/pg/monorepo/yatool`.
 Reference is `/home/pg/monorepo/yatool_orig/sg.json`; OUR latest output
-is `./.out/sg.json` (produced by `./yatool gen --target tools/archiver`,
+is `./.out/sg.json` (produced by `./yatool make -j 0 -G tools/archiver`,
 73 MB vs 63 MB on disk).
 
 ### 1.1 File metadata
@@ -675,7 +675,7 @@ until M3+ rolls it into CI gating.
 
 - Does not normalize on the fly. Both inputs must be already-canonical
   (i.e., one is `normalized-ref-for-tools-archiver.json`, the other is
-  `./yatool gen --target tools/archiver --out -`).
+  `./yatool make -j 0 -G tools/archiver > -`).
 - Does not parse the JSON; pure byte compare.
 - Does not load `*Graph`. The L0..L3 comparators load both as Graphs; L4
   is path-by-path bytes only.
@@ -728,14 +728,14 @@ func TestCompareBytes_OneByteDiff(t *testing.T) {
 
 - **M2 archiver** L4: load `normalized-ref-for-tools-archiver.json` (a
   fixture checked in OR regenerated reproducibly), run
-  `./yatool gen --target tools/archiver --out -`, `bytes.Equal` them.
+  `./yatool make -j 0 -G tools/archiver > -`, `bytes.Equal` them.
 - **M1 build/cow/on** L4: same shape, 2-node subgraph. The fixture is
   much smaller (~6 KB); check in.
 
 ```go
 // gen_l4_test.go
 func TestGen_L4_BuildCowOn(t *testing.T) {
-    out := capture(cmdGen([]string{"--target", "build/cow/on", "--out", "-"}))
+    out := capture(cmdMake([]string{"--target", "build/cow/on", "--out", "-"}))
     fixture := mustRead("testdata/normalized-build-cow-on.json")
     if !bytes.Equal(out, fixture) { t.Fail() }
 }
@@ -743,7 +743,7 @@ func TestGen_L4_BuildCowOn(t *testing.T) {
 func TestGen_L4_ToolsArchiver(t *testing.T) {
     // Larger; skip with -short for quick CI runs.
     if testing.Short() { t.Skip() }
-    out := capture(cmdGen([]string{"--target", "tools/archiver", "--out", "-"}))
+    out := capture(cmdMake([]string{"--target", "tools/archiver", "--out", "-"}))
     fixture := mustRead("testdata/normalized-ref-for-tools-archiver.json")
     if !bytes.Equal(out, fixture) { t.Fail() }
 }
@@ -753,8 +753,8 @@ func TestGen_L4_ToolsArchiver(t *testing.T) {
 
 ```go
 func TestGen_Deterministic(t *testing.T) {
-    a := capture(cmdGen([]string{"--target", "tools/archiver", "--out", "-"}))
-    b := capture(cmdGen([]string{"--target", "tools/archiver", "--out", "-"}))
+    a := capture(cmdMake([]string{"--target", "tools/archiver", "--out", "-"}))
+    b := capture(cmdMake([]string{"--target", "tools/archiver", "--out", "-"}))
     if sha256(a) != sha256(b) { t.Fatal("non-deterministic") }
 }
 ```
@@ -854,7 +854,7 @@ fixture with a 2-line inline file.
 - All sub-tasks land.
 - `./yatool compare --level=4 ./.out/sg.json ./.out/normalized-ref-for-tools-archiver.json` → `L4: byte-exact`.
 - L0=L1=L2=L3=100 % preserved on `tools/archiver` and `build/cow/on`.
-- `time ./yatool gen --target tools/archiver` ≤ 5 s (DoD item 3).
+- `time ./yatool make -j 0 -G tools/archiver` ≤ 5 s (DoD item 3).
 - `go test ./...` passes; `go build`, `go vet`, `gofmt -l *.go` clean.
 
 **Parallelism (within PR-L4-C):**
@@ -940,7 +940,7 @@ the current run produces). The normalizer's `result[0]` is the
 new-UID of the original `Ze_eMOLqyMsa6WlbbMhgvQ`'s node post-cascade.
 
 **Verify after PR-L4-A lands:** the normalizer's `result[0]` matches
-OUR `gen --target tools/archiver`'s `result[0]` exactly. If not, the
+OUR `make -j 0 -G tools/archiver`'s `result[0]` exactly. If not, the
 DFS-preorder rule (Step 7) is the likely culprit — debug first.
 
 ### 8.4 Determinism after `graph[]` reorder (DoD item 8)

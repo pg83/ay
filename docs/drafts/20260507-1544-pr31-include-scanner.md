@@ -658,7 +658,7 @@ explicitly not asserted, per Design Decision #6). Plus a synthetic
 test exercising `#include_next` and a multi-mapping sysincl entry to
 pin the fan-out behaviour.
 
-D11 — `gen_test.go`: probe-test that `./yatool gen --target tools/archiver`
+D11 — `gen_test.go`: probe-test that `./yatool make -j 0 -G tools/archiver`
 produces a graph whose CC nodes have non-trivial input sets (≥10
 median header inputs across the 50+ in-closure CCs). Soft floor; the
 real acceptance is the comparator output.

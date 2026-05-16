@@ -485,7 +485,7 @@ paste ref_peers.txt our_peers.txt | awk -F'\t' \
   '{ if ($1 != $2) printf "%s    |    %s\n", $1, $2; else printf "%s    ==\n", $1 }'
 
 # 6. Regenerate OUR graph after a fix
-./yatool gen --target tools/archiver --out ./.out/sg.json
+./yatool make -j 0 -G tools/archiver > ./.out/sg.json
 ./yatool compare --level=3 ./.out/sg.json /home/pg/monorepo/yatool_orig/sg.json
 ```
 

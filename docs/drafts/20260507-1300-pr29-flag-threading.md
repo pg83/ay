@@ -15,7 +15,7 @@ bundle** plus DEFAULT_ALLOCATOR / abseil-cpp follow-up. The PR-28
 ledger entry rewrote that scope into "thread CXXFLAGS / CONLYFLAGS
 / SRCDIR / ADDINCL through EmitCC + EmitCCFromBuildRoot". An
 empirical divergence-by-token probe of the 1947 paired-but-diverging
-nodes (`./yatool gen --target tools/archiver` vs the reference)
+nodes (`./yatool make -j 0 -G tools/archiver` vs the reference)
 shows **the dominant lever is host-musl, not flag threading**:
 
 - **1297 of 1947 divergent CC pairs** are host musl nodes
@@ -51,7 +51,7 @@ the main archiver chain.
 ## Empirical findings
 
 All probes run against `/home/pg/monorepo/yatool_orig/g.json`
-(reference) and `./yatool gen --target tools/archiver` (current
+(reference) and `./yatool make -j 0 -G tools/archiver` (current
 HEAD output, 3321 nodes). Probe source archived at
 `./.tmp/probe/probe.go` (gitignored).
 
@@ -348,7 +348,7 @@ to that count (some may have secondary divergences exposed).
    `$(BUILD_ROOT)/contrib/libs/musl/_/src/string/strlen.c.pic.o`
    (platform `default-linux-x86_64`).
 
-**Verification:** `./yatool gen --target tools/archiver --out
+**Verification:** `./yatool make -j 0 -G tools/archiver --out
 .tmp/our.json && ./yatool compare --level=3 .tmp/our.json
 /yatool_orig/g.json` — L3 jumps from 36.46% to ≥ 67% (1360 + 1297
 = 2657 byte-exact / 3307 = 80.3% optimistic; conservative ≥ 67%
@@ -682,10 +682,10 @@ input path AND DepRefs against a JS-derived reference node.
 
 ```
 go build ./... && go vet ./... && gofmt -l *.go && go test -count=1 ./...
-./yatool gen --target build/cow/on --out .tmp/m1.json
+./yatool make -j 0 -G build/cow/on > .tmp/m1.json
 ./yatool compare --level=3 .tmp/m1.json /yatool_orig/g.json
   → expect: L0/L1/L2/L3 = 100% / 100% / 100% / 100% (M1 regression)
-./yatool gen --target tools/archiver --out .tmp/our.json
+./yatool make -j 0 -G tools/archiver > .tmp/our.json
 ./yatool compare --level=3 .tmp/our.json /yatool_orig/g.json
   → expect:
     L0 ≥ 88.34%   (no regression — PR-29 adds zero new nodes)
@@ -712,7 +712,7 @@ Estimated additional flip: ≈ 50-80 nodes (libcxx GLOBAL
 
 ## Acceptance criteria
 
-- M1 regression preserved: `./yatool gen --target build/cow/on`
+- M1 regression preserved: `./yatool make -j 0 -G build/cow/on`
   produces 2 byte-exact pairs at L0/L1/L2/L3.
 - `tools/archiver` target nodes ≥ 1739 (no regression).
 - `tools/archiver` host nodes ≥ 1582 (no regression).
