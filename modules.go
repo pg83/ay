@@ -18,39 +18,46 @@ import (
 )
 
 type moduleData struct {
-	moduleStmt         *ModuleStmt
-	srcs               []string
-	globalSrcs         []string
-	pySrcs             []string // PR-M3-A: python sources from PY_SRCS(...); each entry is a .py filename
-	pyBuildNoPYC       bool     // PR-M3-A: set by ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
-	pyBuildNoPY        bool     // PR-M3-resource-objcopy-C: set by ENABLE(PYBUILD_NO_PY); suppresses raw .py resfs embedding from PY_SRCS (only the yapyc3 form is embedded)
-	pyTopLevel         bool     // PR-M3-resource-objcopy-C: set by TOP_LEVEL prefix in PY_SRCS(...); the resfs key for each source omits the dotted module-path prefix
-	noExtendedPySearch bool
-	enumSrcs           []*GenerateEnumSerializationStmt // PR-M3-D: GENERATE_ENUM_SERIALIZATION(*) declarations
-	peerdirs           []string
-	joinSrcs           []*JoinSrcsStmt
-	addIncl            []string // collected non-GLOBAL ADDINCL paths
-	addInclGlobal      []string // PR-31 D04: collected ADDINCL(GLOBAL ...) paths; peer-propagated to consumers
-	cFlags             []string // collected non-GLOBAL CFLAGS values (apply to module's own C+C++ sources)
-	cFlagsGlobal       []string // PR-32 D04: collected CFLAGS(GLOBAL ...) values; peer-propagated to consumers' C+C++ sources
-	cxxFlags           []string // collected non-GLOBAL CXXFLAGS values (C++ only); PR-29-D02 threads into ModuleCCInputs.CXXFlags
-	cxxFlagsGlobal     []string // PR-32 D05: collected CXXFLAGS(GLOBAL ...) values; peer-propagated to consumers' C++ sources
-	cOnlyFlags         []string // collected non-GLOBAL CONLYFLAGS values (C only); PR-29-D02 threads into ModuleCCInputs.COnlyFlags
-	cOnlyFlagsGlobal   []string // PR-32 D06: collected CONLYFLAGS(GLOBAL ...) values; peer-propagated to consumers' C / .S sources
-	sFlags             []string // PR-M3-openssl-as-cflags: SET_APPEND(SFLAGS ...) values; appended to AS compiles only.
-	ldFlags            []string // collected LDFLAGS values
-	srcDir             string   // last SRCDIR setting (empty = module dir)
-	flags              FlagSet  // overlay of inferFlagsFromPath + macro bools
-	hadAllocator       bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
-	allocatorName      string   // PR-35g: name passed to ALLOCATOR(...); empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE).
-	muslLite           bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
-	muslEnabled        bool     // module-local MUSL value after SET()/DEFAULT()/CLI env evaluation.
-	splitDwarf         bool     // set by SPLIT_DWARF(); PROGRAM LD emits a separate <binary>.debug output.
-	noPythonIncl       bool     // set by NO_PYTHON_INCLUDES(); suppresses PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (build/conf/python.conf:741-743).
-	noImportTracing    bool     // set by NO_IMPORT_TRACING(); suppresses PY*_PROGRAM implicit import_tracing constructor peer.
-	usePython3         bool     // set by USE_PYTHON3() or PY3-family module types; normalised by applyPython3AddIncl. Triggers _PYTHON3_ADDINCL (python.conf:1018-1023): -DUSE_PYTHON3 + contrib/libs/python/Include.
-	ldPlugins          []string // filenames from LD_PLUGIN(name.py); each becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs. Only contrib/libs/musl/include uses this in M2.
-	arPlugin           string   // name from AR_PLUGIN(name); resolves to `$(S)/<modulePath>/<name>.pyplugin` and is injected into AR cmd_args (`--plugin <path>`) and inputs. Mirror of AR_PLUGIN (ymake.core.conf:3396-3398) + _LD_ARCHIVER_KV_PLUGIN (ld.conf:366-368).
+	moduleStmt          *ModuleStmt
+	srcs                []string
+	globalSrcs          []string
+	pySrcs              []string // PR-M3-A: python sources from PY_SRCS(...); each entry is a .py filename
+	pyBuildNoPYC        bool     // PR-M3-A: set by ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
+	pyBuildNoPY         bool     // PR-M3-resource-objcopy-C: set by ENABLE(PYBUILD_NO_PY); suppresses raw .py resfs embedding from PY_SRCS (only the yapyc3 form is embedded)
+	pyTopLevel          bool     // PR-M3-resource-objcopy-C: set by TOP_LEVEL prefix in PY_SRCS(...); the resfs key for each source omits the dotted module-path prefix
+	noExtendedPySearch  bool
+	enumSrcs            []*GenerateEnumSerializationStmt // PR-M3-D: GENERATE_ENUM_SERIALIZATION(*) declarations
+	peerdirs            []string
+	joinSrcs            []*JoinSrcsStmt
+	addIncl             []string // collected non-GLOBAL ADDINCL paths
+	addInclGlobal       []string // PR-31 D04: collected ADDINCL(GLOBAL ...) paths; peer-propagated to consumers
+	cFlags              []string // collected non-GLOBAL CFLAGS values (apply to module's own C+C++ sources)
+	cFlagsGlobal        []string // PR-32 D04: collected CFLAGS(GLOBAL ...) values; peer-propagated to consumers' C+C++ sources
+	cxxFlags            []string // collected non-GLOBAL CXXFLAGS values (C++ only); PR-29-D02 threads into ModuleCCInputs.CXXFlags
+	cxxFlagsGlobal      []string // PR-32 D05: collected CXXFLAGS(GLOBAL ...) values; peer-propagated to consumers' C++ sources
+	cOnlyFlags          []string // collected non-GLOBAL CONLYFLAGS values (C only); PR-29-D02 threads into ModuleCCInputs.COnlyFlags
+	cOnlyFlagsGlobal    []string // PR-32 D06: collected CONLYFLAGS(GLOBAL ...) values; peer-propagated to consumers' C / .S sources
+	sFlags              []string // PR-M3-openssl-as-cflags: SET_APPEND(SFLAGS ...) values; appended to AS compiles only.
+	ldFlags             []string // collected LDFLAGS values
+	srcDir              string   // last SRCDIR setting (empty = module dir)
+	flags               FlagSet  // overlay of inferFlagsFromPath + macro bools
+	hadAllocator        bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
+	allocatorName       string   // PR-35g: name passed to ALLOCATOR(...); empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE).
+	muslLite            bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
+	muslEnabled         bool     // module-local MUSL value after SET()/DEFAULT()/CLI env evaluation.
+	splitDwarf          bool     // set by SPLIT_DWARF(); PROGRAM LD emits a separate <binary>.debug output.
+	noPythonIncl        bool     // set by NO_PYTHON_INCLUDES(); suppresses PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (build/conf/python.conf:741-743).
+	noImportTracing     bool     // set by NO_IMPORT_TRACING(); suppresses PY*_PROGRAM implicit import_tracing constructor peer.
+	usePython3          bool     // set by USE_PYTHON3() or PY3-family module types; normalised by applyPython3AddIncl. Triggers _PYTHON3_ADDINCL (python.conf:1018-1023): -DUSE_PYTHON3 + contrib/libs/python/Include.
+	pythonSQLite3       bool     // default-on; DISABLE(PYTHON_SQLITE3) flips off the implicit `_sqlite` peer for PY*_PROGRAM modules.
+	pyNamespace         string   // set by PY_NAMESPACE(...); used by py-proto resource key layout.
+	protoNamespace      string   // set by PROTO_NAMESPACE(...); drives py-proto --ns and output layout.
+	noMypy              bool     // set by NO_MYPY(); suppresses mypy plugin and .pyi outputs for py-proto.
+	optimizePyProtos    bool     // mirrors OPTIMIZE_PY_PROTOS_FLAG; default-on for PY{2,3}_PROTO variants.
+	optimizePyProtosSet bool
+	excludeTags         map[string]bool
+	ldPlugins           []string // filenames from LD_PLUGIN(name.py); each becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs. Only contrib/libs/musl/include uses this in M2.
+	arPlugin            string   // name from AR_PLUGIN(name); resolves to `$(S)/<modulePath>/<name>.pyplugin` and is injected into AR cmd_args (`--plugin <path>`) and inputs. Mirror of AR_PLUGIN (ymake.core.conf:3396-3398) + _LD_ARCHIVER_KV_PLUGIN (ld.conf:366-368).
 	// per-source extra CFLAGS keyed by source filename, populated by
 	// `SRC(filename extra_cflags...)`. Threaded into
 	// ModuleCCInputs.PerSourceCFlags so the composer appends them right
@@ -105,6 +112,10 @@ type moduleData struct {
 	// emitNoCheckImportsObjcopy to build the resfs kv with args joined
 	// by ' ' (pathid() + value, build/plugins/ytest.py:811).
 	noCheckImports []string
+	// Explicit empty NO_CHECK_IMPORTS() sets NO_CHECK_IMPORTS_FOR_VALUE=""
+	// upstream, which suppresses ADD_CHECK_PY_IMPORTS without emitting
+	// any resource kv.
+	noCheckImportsDisabled bool
 	// PY_REGISTER(args...) dotted module names. emitPyRegister emits
 	// gen_py3_reg.py(<arg>, <output>) → `<arg>.reg3.cpp` plus a CC
 	// compiling it; mirror of _PY3_REGISTER (ymake.core.conf:4086-4089).
@@ -172,7 +183,10 @@ type antlr4GrammarInfo struct {
 // `pathFlags` seeds the path-based heuristic; macro overlays mutate it
 // in place on the returned moduleData.
 func collectModule(modulePath string, stmts []Stmt, env Environment, pathFlags FlagSet) *moduleData {
-	d := &moduleData{flags: pathFlags}
+	d := &moduleData{
+		flags:         pathFlags,
+		pythonSQLite3: true,
+	}
 
 	collectStmts(modulePath, stmts, env, d)
 	d.muslEnabled = env.Bool("MUSL")
@@ -209,6 +223,9 @@ func collectModule(modulePath string, stmts []Stmt, env Environment, pathFlags F
 	// protobuf-runtime consumers.
 	if hasProto && !hasEv && d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" {
 		d.peerdirs = append(d.peerdirs, "contrib/libs/protobuf")
+		if !d.optimizePyProtosSet {
+			d.optimizePyProtos = true
+		}
 	}
 
 	// pybuild processes PY_SRCS / PY_REGISTER by emitting RESOURCE(...)
@@ -589,6 +606,23 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 	case "GRPC":
 		d.grpc = true
 		d.peerdirs = append(d.peerdirs, "contrib/libs/grpc")
+	case "PY_NAMESPACE":
+		if len(v.Args) != 1 {
+			ThrowFmt("gen: PY_NAMESPACE expects exactly 1 argument, got %d", len(v.Args))
+		}
+		d.pyNamespace = v.Args[0]
+	case "PROTO_NAMESPACE":
+		if len(v.Args) == 0 {
+			ThrowFmt("gen: PROTO_NAMESPACE expects at least 1 argument")
+		}
+		d.protoNamespace = v.Args[len(v.Args)-1]
+	case "EXCLUDE_TAGS":
+		if d.excludeTags == nil {
+			d.excludeTags = make(map[string]bool)
+		}
+		for _, arg := range v.Args {
+			d.excludeTags[arg] = true
+		}
 	case "YA_CONF_JSON":
 		if len(v.Args) != 1 {
 			ThrowFmt("YA_CONF_JSON expects exactly 1 argument, got %d", len(v.Args))
@@ -620,7 +654,27 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			if a == "PYBUILD_NO_PY" {
 				d.pyBuildNoPY = true
 			}
+			if a == "PY_PROTO_MYPY_ENABLED" {
+				d.noMypy = false
+			}
+			if a == "PYTHON_SQLITE3" {
+				d.pythonSQLite3 = true
+			}
 		}
+	case "DISABLE":
+		for _, a := range v.Args {
+			if a == "PYTHON_SQLITE3" {
+				d.pythonSQLite3 = false
+			}
+		}
+	case "NO_MYPY":
+		d.noMypy = true
+	case "NO_OPTIMIZE_PY_PROTOS":
+		d.optimizePyProtos = false
+		d.optimizePyProtosSet = true
+	case "OPTIMIZE_PY_PROTOS":
+		d.optimizePyProtos = true
+		d.optimizePyProtosSet = true
 	case "SRC":
 		// SRC(filename [extra_cflags...]) registers a single source and
 		// attaches per-source extra CFLAGS. Output path is FLAT (no
@@ -834,6 +888,18 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 				continue
 			}
 
+			if strings.HasSuffix(src, ".pyi") {
+				modName := modNameOverride
+				if modName == "" {
+					modName = pythonModuleName(modulePath, src, topLevel)
+				}
+				dest := "py/" + strings.ReplaceAll(modName, ".", "/") + ".pyi"
+				d.resources = append(d.resources, expandResourceFiles([]string{"DEST", dest, src})...)
+				mainNext = false
+
+				continue
+			}
+
 			if strings.Contains(a, "=") && !strings.HasSuffix(src, ".py") {
 				continue
 			}
@@ -892,9 +958,13 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		// NO_CHECK_IMPORTS(args...) per ytest.py:on_register_no_check_imports
 		// (build/plugins/ytest.py:808). Args joined by ' ' in declaration
 		// order become both the resfs value and the pathid() input
-		// (md5 → lower-cased unpadded base32). Empty args = no-op.
+		// (md5 → lower-cased unpadded base32). Empty args are not a no-op:
+		// upstream sets NO_CHECK_IMPORTS_FOR_VALUE="" and suppresses
+		// ADD_CHECK_PY_IMPORTS.
 		if len(v.Args) > 0 {
 			d.noCheckImports = append(d.noCheckImports, v.Args...)
+		} else {
+			d.noCheckImportsDisabled = true
 		}
 	case "PY_REGISTER":
 		// PY_REGISTER(args...) dotted module names. emitPyRegister
@@ -1263,9 +1333,14 @@ type moduleTypeCacheKey struct {
 	Flags    FlagSet
 }
 
-func moduleTypeForInstance(ctx *genCtx, instance ModuleInstance) string {
+type moduleTypeInfo struct {
+	Name        string
+	ExcludeTags map[string]bool
+}
+
+func moduleInfoForInstance(ctx *genCtx, instance ModuleInstance) moduleTypeInfo {
 	if ctx.moduleTypeCache == nil {
-		ctx.moduleTypeCache = make(map[moduleTypeCacheKey]string)
+		ctx.moduleTypeCache = make(map[moduleTypeCacheKey]moduleTypeInfo)
 	}
 
 	key := moduleTypeCacheKey{
@@ -1273,8 +1348,8 @@ func moduleTypeForInstance(ctx *genCtx, instance ModuleInstance) string {
 		Platform: instance.Platform,
 		Flags:    instance.Flags,
 	}
-	if name, ok := ctx.moduleTypeCache[key]; ok {
-		return name
+	if info, ok := ctx.moduleTypeCache[key]; ok {
+		return info
 	}
 
 	yamakePath := filepath.Join(ctx.sourceRoot, instance.Path, "ya.make")
@@ -1289,9 +1364,21 @@ func moduleTypeForInstance(ctx *genCtx, instance ModuleInstance) string {
 		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path)
 	}
 
-	ctx.moduleTypeCache[key] = d.moduleStmt.Name
+	info := moduleTypeInfo{Name: d.moduleStmt.Name}
+	if len(d.excludeTags) > 0 {
+		info.ExcludeTags = make(map[string]bool, len(d.excludeTags))
+		for k, v := range d.excludeTags {
+			info.ExcludeTags[k] = v
+		}
+	}
 
-	return d.moduleStmt.Name
+	ctx.moduleTypeCache[key] = info
+
+	return info
+}
+
+func moduleTypeForInstance(ctx *genCtx, instance ModuleInstance) string {
+	return moduleInfoForInstance(ctx, instance).Name
 }
 
 func peerLanguageFor(ctx *genCtx, parent ModuleInstance, parentModuleName, peerPath string) Language {
@@ -1306,16 +1393,17 @@ func peerLanguageFor(ctx *genCtx, parent ModuleInstance, parentModuleName, peerP
 		Flags:    inferFlagsFromPath(peerPath, parent.Platform.PIC),
 	}
 
-	if moduleTypeForInstance(ctx, peerSeed) != "PROTO_LIBRARY" {
-		return LangCPP
-	}
-
+	peerInfo := moduleInfoForInstance(ctx, peerSeed)
 	if isPythonModuleType(parentModuleName) {
-		return LangPy
+		if peerInfo.Name == "PROTO_LIBRARY" || isPythonModuleType(peerInfo.Name) {
+			return LangPy
+		}
 	}
 
 	if parentModuleName == "PROTO_LIBRARY" && parent.Language == LangPy {
-		return LangPy
+		if peerInfo.Name == "PROTO_LIBRARY" || isPythonModuleType(peerInfo.Name) {
+			return LangPy
+		}
 	}
 
 	return LangCPP
@@ -1328,10 +1416,10 @@ func peerLanguageFor(ctx *genCtx, parent ModuleInstance, parentModuleName, peerP
 // axis continue to flow from the parent. Macro overlay (NO_LIBC /
 // NO_UTIL / ...) happens inside genModule when the peer's ya.make is
 // parsed.
-func derivePeerInstance(ctx *genCtx, parent ModuleInstance, parentModuleName, peerPath string) ModuleInstance {
+func derivePeerInstance(ctx *genCtx, parent ModuleInstance, d *moduleData, peerPath string) ModuleInstance {
 	return ModuleInstance{
 		Path:     peerPath,
-		Language: peerLanguageFor(ctx, parent, parentModuleName, peerPath),
+		Language: peerLanguageFor(ctx, parent, d.moduleStmt.Name, peerPath),
 		Platform: parent.Platform,
 		// PIC follows platform settings rather than ISA/host identity.
 		Flags: inferFlagsFromPath(peerPath, parent.Platform.PIC),

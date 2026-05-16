@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -132,6 +133,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		nil, nil,
 		nil, nil,
 		nil, nil,
+		nil, nil,
 		nil, nil, // PR-M3-py3cc-objcopy-shape: objcopy slot
 		nil,
 		true,  // PR-32 D10: synthetic test pin runs MUSL=yes
@@ -228,6 +230,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		nil, nil,
 		nil, nil,
 		nil, nil,
+		nil, nil,
 		nil, nil, // PR-M3-py3cc-objcopy-shape: objcopy slot
 		nil,
 		true,  // PR-32 D10: host pin runs MUSL=yes (M2 default)
@@ -255,20 +258,71 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 	}
 }
 
+func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
+	emit := NewBufferedEmitter()
+	mainRef := emit.Emit(&Node{KV: map[string]string{"p": "STUB"}})
+	wholeRef := emit.Emit(&Node{KV: map[string]string{"p": "STUB"}})
+
+	instance := targetInstance("some/prog")
+	wholeArchivePath := "some/prog/libproto_cpp.a"
+
+	ldRef := EmitLD(
+		instance,
+		"",
+		[]NodeRef{mainRef}, []VFS{Build("some/prog/main.cpp.o")},
+		nil, nil,
+		nil, nil,
+		nil, nil,
+		[]NodeRef{wholeRef}, []string{wholeArchivePath},
+		nil, nil,
+		nil,
+		true,
+		nil,
+		nil,
+		false,
+		false,
+		false,
+		testHostP,
+		emit,
+	)
+
+	got := emit.nodes[ldRef.id]
+	if !slices.Contains(got.Inputs, Build(wholeArchivePath)) {
+		t.Fatalf("inputs do not contain whole-archive path %q: %#v", wholeArchivePath, got.Inputs)
+	}
+
+	if !slices.Contains(got.DepRefs, wholeRef) {
+		t.Fatalf("DepRefs do not contain whole-archive ref %+v: %#v", wholeRef, got.DepRefs)
+	}
+
+	cmdArgs := got.Cmds[2].CmdArgs
+	found := false
+	for i := 0; i+1 < len(cmdArgs); i++ {
+		if cmdArgs[i] == "--whole-archive-libs" && cmdArgs[i+1] == wholeArchivePath {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("cmd[2] missing whole-archive marker for %q: %#v", wholeArchivePath, cmdArgs)
+	}
+}
+
 // TestEmitLD_LengthMismatchPanics verifies the precondition checks on all
 // four ref/path slice pairs (cc, peerLD, plugin, global).
 func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 	tests := []struct {
-		name                                     string
-		ccRefs, peerRefs, pluginRefs, globalRefs []NodeRef
-		ccPaths                                  []VFS
-		peerPaths, pluginPaths, globalPaths      []string
-		wantSubstr                               string
+		name                                                string
+		ccRefs, peerRefs, pluginRefs, globalRefs, wholeRefs []NodeRef
+		ccPaths                                             []VFS
+		peerPaths, pluginPaths, globalPaths, wholePaths     []string
+		wantSubstr                                          string
 	}{
-		{"ccRefs vs ccPaths", []NodeRef{{}}, nil, nil, nil, nil, nil, nil, nil, "ccRefs"},
-		{"peerLDRefs vs peerLibPaths", nil, []NodeRef{{}}, nil, nil, nil, nil, nil, nil, "peerLD"},
-		{"pluginRefs vs pluginPaths", nil, nil, []NodeRef{{}}, nil, nil, nil, nil, nil, "plugin"},
-		{"globalRefs vs globalPaths", nil, nil, nil, []NodeRef{{}}, nil, nil, nil, nil, "global"},
+		{name: "ccRefs vs ccPaths", ccRefs: []NodeRef{{}}, wantSubstr: "ccRefs"},
+		{name: "peerLDRefs vs peerLibPaths", peerRefs: []NodeRef{{}}, wantSubstr: "peerLD"},
+		{name: "pluginRefs vs pluginPaths", pluginRefs: []NodeRef{{}}, wantSubstr: "plugin"},
+		{name: "globalRefs vs globalPaths", globalRefs: []NodeRef{{}}, wantSubstr: "global"},
+		{name: "wholeArchiveRefs vs wholeArchivePaths", wholeRefs: []NodeRef{{}}, wantSubstr: "wholeArchive"},
 	}
 
 	for _, tc := range tests {
@@ -277,7 +331,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 			instance := targetInstance("test/prog")
 
 			exc := Try(func() {
-				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, nil, nil, nil, true, nil, nil, false, false, false, testHostP, e)
+				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, true, nil, nil, false, false, false, testHostP, e)
 			})
 
 			if exc == nil {

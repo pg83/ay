@@ -274,6 +274,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// trace.ev). Emits one EV node (generating .ev.pb.cc +
 		// .ev.pb.h) then a downstream CC node compiling .ev.pb.cc.
 		{
+			evSource := resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir)
+			evRelPath := evSource.Rel
+
 			// Walk host tool programs.
 			cppStyleguideBinary := pbCppStyleguidePath
 			protocBinary := pbProtocBinaryPath
@@ -316,14 +319,13 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 
 			// moduleTag is empty for LIBRARY modules (no "cpp_proto" tag).
 			evRef := EmitEV(
-				srcInstance, srcRel,
+				srcInstance, evRelPath,
 				cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
 				"", ctx.sourceRoot, ctx.emit)
 
 			// Register .ev.pb.h with EmitsIncludes from .ev imports
 			// plus protobuf runtime headers.
-			evRelPath := srcInstance.Path + "/" + srcRel
 			evH := Build(evRelPath + ".pb.h")
 			evPbCC := Build(evRelPath + ".pb.cc")
 
@@ -773,12 +775,13 @@ func jsTargetPeerAddIncl(hostPeerAddIncl []string, from, to ISA) []string {
 func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDir string) VFS {
 	srcRelOnDisk := srcInstance.Path + "/" + srcRel
 
-	if srcDir != "" && srcDir != srcInstance.Path {
+	cleanSrcDir := filepath.Clean(srcDir)
+	if srcDir != "" && cleanSrcDir != "." && cleanSrcDir != srcInstance.Path {
 		localCandidate := filepath.Join(ctx.sourceRoot, srcInstance.Path, srcRel)
 		info, err := os.Stat(localCandidate)
 
 		if err != nil || info.IsDir() {
-			srcRelOnDisk = srcDir + "/" + srcRel
+			srcRelOnDisk = cleanSrcDir + "/" + srcRel
 		}
 	}
 
