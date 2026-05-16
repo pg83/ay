@@ -41,21 +41,10 @@ import (
 //
 // `isPROGRAM` flags shape for the caller (Gen).
 //
-// `headerOnly` distinguishes header-only LIBRARY modules with no
-// compilable sources (e.g. `library/cpp/sanitizer/include`). They are
-// walked for transitive PEERDIR discovery but emit no AR/LD/Global;
-// callers must skip archive-dep wiring rather than read a zero NodeRef.
 type moduleEmitResult struct {
 	ARRef      NodeRef
-	ARPath     string
+	ARPath     *string
 	isPROGRAM  bool
-	headerOnly bool
-	// hasPlainAR is true when EmitAR(Named) was called — i.e. at least
-	// one regular (non-global) CC output. False for modules whose only
-	// compilable sources are GLOBAL_SRCS (blockcodecs codecs, getopt):
-	// these emit only `.global.a` and the consumer's peerLibPaths must
-	// not include the plain `.a` path.
-	hasPlainAR bool
 	LDRef      NodeRef
 	LDPath     string
 	GlobalRef  *NodeRef // non-nil when the module has GLOBAL_SRCS (EmitARGlobal was called)
@@ -143,11 +132,19 @@ type moduleEmitResult struct {
 	ModuleStmtName string
 }
 
+func derefString(p *string) string {
+	if p == nil {
+		return ""
+	}
+
+	return *p
+}
+
 // genCtx threads state through the recursive walk. `emit` accumulates
 // emitted nodes; `memo` deduplicates per-instance emission; `walking` is
 // the cycle-detection stack. Both maps are keyed on `ModuleInstance`.
 //
-// `cyclesTolerated` counts back-edges suppressed by the headerOnly stub
+// `cyclesTolerated` counts back-edges suppressed by the zero-result stub
 // path. Tests assert known cycles fire exactly once.
 //
 // Host-tool walks fire eagerly from inside `emitOneSource`: `.rl6`
@@ -611,7 +608,7 @@ func GenWithModeWithResources(sourceRoot string, targetDir string, hostP, target
 //
 //  1. Memo hit → return.
 //  2. Cycle check: instance on the walking stack → throw (tolerated by
-//     headerOnly stub for the runtime-stack DEFAULT_PEERDIR cases).
+//     zero-result stub for the runtime-stack DEFAULT_PEERDIR cases).
 //  3. Parse `<sourceRoot>/<instance.Path>/ya.make`.
 //  4. `collectModule` resolves IF branches, collects SRCS / PEERDIR /
 //     JOIN_SRCS / GLOBAL_SRCS / NO_* / ADDINCL / CFLAGS / SRCDIR; macro
@@ -667,7 +664,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// between runtime-stack modules (libcxx ↔ libcxxrt, libunwind ↔
 	// libcxxrt via sanitizer/include's ancestor chain, etc.) which
 	// upstream handles via exclusion lists not yet modelled here.
-	// Returning a `headerOnly` stub suffices: the peer's own walk
+	// Returning a zero-result stub suffices: the peer's own walk
 	// completes elsewhere on the stack, and consumers skip the empty
 	// archive-ref instead of pinning a zero NodeRef. REF emits no
 	// peer-archive deps in AR anyway (every LIBRARY's AR has only its
@@ -676,7 +673,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ctx.cyclesTolerated++
 		fmt.Fprintf(os.Stderr, "gen: PEERDIR cycle tolerated at %s\n", instance.Path)
 
-		return &moduleEmitResult{headerOnly: true}
+		return &moduleEmitResult{}
 	}
 
 	ctx.walking[instance] = true
@@ -796,29 +793,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		d.peerdirs = append(d.peerdirs, "tools/enum_parser/enum_serialization_runtime")
 	}
 
-	// Header-only LIBRARYs (e.g. library/cpp/sanitizer/include) have no
-	// compilable sources but a valid module declaration; REF emits no AR
-	// for them. Walk peers so their transitive closure is discovered,
-	// then return `headerOnly: true`; callers skip archive-dep wiring.
-	// PROGRAMs with zero compilable sources are a hard error (except
-	// PROGRAMs whose only sources are deferred kinds — treated as
-	// header-only stubs).
-	//
-	// Multimodule library types (PROTO_LIBRARY etc.) always take the
-	// header-only path; their .proto/.ev sources are emitted by
-	// emitProtoSrcs below.
-	//
-	// Program-shaped modules are excluded: PY*_PROGRAM may have no C++
-	// sources but still needs the full PROGRAM walk + EmitLD dispatch.
-	// PY3_LIBRARY etc. with compilable C++ sources take the LIBRARY path;
-	// without sources they reach this header-only path via
-	// !hasCompilableSource.
-	if (!hasCompilableSource(d) && !isProgramModuleType(d.moduleStmt.Name)) || isMultimoduleLibraryType(d.moduleStmt.Name) {
-		if d.moduleStmt.Name == "PROGRAM" && !hasSkippedSource(d) {
-			ThrowFmt("gen: %s has no compilable sources (after IF/header filter)", instance.Path)
-		}
-
-		// Header-only LIBRARYs may declare ADDINCL(GLOBAL ...) /
+	// Multimodule library types (PROTO_LIBRARY, DLL, ...) still need a
+	// dedicated path: they do not flow through the regular SRCS/AR
+	// pipeline, but emit their own specialised artefacts.
+	if isMultimoduleLibraryType(d.moduleStmt.Name) {
+		// Multimodule modules may declare ADDINCL(GLOBAL ...) /
 		// {C,CXX,CONLY}FLAGS(GLOBAL ...) that peer-propagate without
 		// emitting an AR. Walk peers (so their transitive closures reach
 		// genModule) and aggregate own + peer GLOBAL per axis.
@@ -831,18 +810,34 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ownLDPluginRefs, ownLDPluginPaths := emitOwnLDPlugins(ctx, instance, d.ldPlugins)
 		ldPluginRefs, ldPluginPaths := mergeLDPlugins(ownLDPluginRefs, ownLDPluginPaths, peerContribs.ldPluginRefs, peerContribs.ldPluginPaths)
 
+		// Multimodule modules may still declare RUN_PROGRAM whose OUT is
+		// later consumed by RESOURCE/RESOURCE_FILES (libmagic/magic:
+		// Magdir.mgc). Emit PR nodes early so d.prOutputProducer is
+		// populated before emitResourceObjcopy resolves resource paths.
+		// Any downstream CCs returned here are intentionally ignored:
+		// this branch models modules with no compilable own sources.
+		headerOnlyInputs := ModuleCCInputs{
+			AddIncl:           mergeDedup(d.addIncl, nil),
+			PeerAddInclGlobal: peerContribs.addIncl,
+			SrcDir:            d.srcDir,
+			SourceRoot:        ctx.sourceRoot,
+			DefaultVars:       d.defaultVars,
+			DefaultVarOrder:   d.defaultVarOrder,
+		}
+		_, _, _ = emitRunProgramsForAR(ctx, instance, d, headerOnlyInputs)
+
 		// Emit yapyc3 PY nodes for PY_SRCS() declarations. PY3_LIBRARY /
 		// PY23_LIBRARY often have only PY_SRCS (no C/C++ sources) and
 		// reach this branch; their Python sources still need PY emission.
 		emitPySrcs(ctx, instance, d)
 
-		// Emit objcopy PY nodes for RESOURCE / RESOURCE_FILES. Header-only
+		// Emit objcopy PY nodes for RESOURCE / RESOURCE_FILES. Multimodule
 		// LIBRARYs (e.g. certs, PY3_LIBRARY-only-PY_SRCS) host the
 		// only-resource shape; when there are objcopy outputs, emit a
 		// .global.a archiving them.
 		objcopyRefs, objcopyOutputs, objcopyGlobalInputs := emitResourceObjcopy(ctx, instance, d)
 
-		// Capture the header-only `.global.a` ref so consumers see it via
+		// Capture the `.global.a` ref so consumers see it via
 		// `moduleEmitResult.GlobalRef/GlobalPath`. Otherwise RESOURCE-only
 		// LIBRARY (`certs`) and PY3_LIBRARY PY_SRCS modules' `.global.a`
 		// archives reach the graph but are orphaned from every LD inputs.
@@ -885,7 +880,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			hOnlyGlobalPath = instance.Path + "/" + globalBaseName
 		}
 
-		// Emit EN nodes for GENERATE_ENUM_SERIALIZATION(*). Header-only
+		// Emit EN nodes for GENERATE_ENUM_SERIALIZATION(*). Multimodule
 		// modules never compile the `_serialized.cpp` output (every
 		// EN-emitting module has a regular AR archiving the output); pass
 		// nil consumerInputs to suppress downstream-CC emission here.
@@ -907,18 +902,16 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		// PROTO_LIBRARY emits a regular `.a` via `emitProtoSrcs` above;
 		// surface it so downstream peer-archive closures pick it up. The
-		// module stays `headerOnly: true` (its AR's members are
-		// protoc-generated CCs, none of its own C/C++); `hasPlainAR=true`
-		// lets consumers fold the AR into `peerArchiveRefs` without
-		// reintroducing the AR-on-AR dependency LIBRARY ARs drop.
+		// A non-empty ARPath lets consumers fold the AR into
+		// `peerArchiveRefs` without reintroducing the AR-on-AR dependency
+		// LIBRARY ARs drop.
 		hOnlyARRef := NodeRef{}
-		hOnlyARPath := ""
-		hOnlyHasAR := false
+		var hOnlyARPath *string
 		if protoResult != nil {
 			if protoResult.ARPath.Rel != "" {
 				hOnlyARRef = protoResult.ARRef
-				hOnlyARPath = protoResult.ARPath.String()
-				hOnlyHasAR = true
+				arPath := protoResult.ARPath.String()
+				hOnlyARPath = &arPath
 			}
 			if protoResult.GlobalRef != nil {
 				hOnlyGlobalRef = protoResult.GlobalRef
@@ -934,9 +927,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerGlobalRefsH := peerContribs.globalRefs
 
 		result := &moduleEmitResult{
-			headerOnly:       true,
 			isPyLibrary:      isPyLibraryType(d.moduleStmt.Name),
-			hasPlainAR:       hOnlyHasAR,
 			ARRef:            hOnlyARRef,
 			ARPath:           hOnlyARPath,
 			GlobalRef:        hOnlyGlobalRef,
@@ -1328,15 +1319,13 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 
 		// peerResult.ARPath carries the py3-prefixed name for Python
-		// modules — use it instead of recomputing ArchiveName. Skip when
-		// hasPlainAR is false (only-GLOBAL_SRCS module, no regular .a).
-		// PROTO_LIBRARY emits a regular `.a` from the header-only branch
-		// (members are protoc-generated CCs); `hasPlainAR` is set on its
-		// result so the AR flows through here regardless of `headerOnly`.
-		if peerResult.hasPlainAR {
+		// modules — use it instead of recomputing ArchiveName. Empty path
+		// means this module produced no plain `.a` (for example, only a
+		// `.global.a`).
+		if peerResult.ARPath != nil {
 			// ARPath has "$(B)/" prefix; cmd_args use a
 			// bare relative path. Strip the prefix for consistency.
-			arRelPath := strings.TrimPrefix(peerResult.ARPath, "$(B)/")
+			arRelPath := strings.TrimPrefix(*peerResult.ARPath, "$(B)/")
 			peerArchiveAddPath(peerResult.ARRef, arRelPath)
 		}
 	}
@@ -2301,7 +2290,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		result := &moduleEmitResult{
 			ARRef:                        ldRef,
-			ARPath:                       ldPath,
+			ARPath:                       &ldPath,
 			isPROGRAM:                    true,
 			isPyLibrary:                  isPyLibraryType(d.moduleStmt.Name),
 			LDRef:                        ldRef,
@@ -2447,7 +2436,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	_ = peerArchiveRefs // retained as a loop accumulator for the PROGRAM LD branch above; intentionally unused for the LIBRARY AR.
-	arPath := Build(instance.Path + "/" + arBaseName).String()
+	var arPath *string
+	if len(ccRefs) > 0 {
+		path := Build(instance.Path + "/" + arBaseName).String()
+		arPath = &path
+	}
 
 	// Emit yapyc3 PY nodes for PY_SRCS(). Modules with both SRCS and
 	// PY_SRCS (rare but valid) get CC/AR nodes from the SRCS path above
@@ -2480,11 +2473,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	result := &moduleEmitResult{
 		ARRef:                        arRef,
 		ARPath:                       arPath,
-		hasPlainAR:                   len(ccRefs) > 0,
 		isPROGRAM:                    false,
 		isPyLibrary:                  isPyLibraryType(d.moduleStmt.Name),
 		LDRef:                        arRef,
-		LDPath:                       arPath,
+		LDPath:                       derefString(arPath),
 		AddInclGlobal:                effectiveAddInclGlobal,
 		OwnAddInclGlobal:             append([]string(nil), d.addInclGlobal...),
 		CFlagsGlobal:                 effectiveCFlagsGlobal,
@@ -2853,11 +2845,9 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		}
 
 		// Use peerResult.ARPath (py3-prefixed for Python modules); skip
-		// when hasPlainAR is false. Gate on `hasPlainAR` alone —
-		// PROTO_LIBRARY has `headerOnly=true` AND `hasPlainAR=true`, so
-		// a `!headerOnly` guard would wrongly suppress its AR.
-		if peerResult.hasPlainAR {
-			arRelPath := strings.TrimPrefix(peerResult.ARPath, "$(B)/")
+		// Empty ARPath means this peer produced no plain `.a`.
+		if peerResult.ARPath != nil {
+			arRelPath := strings.TrimPrefix(*peerResult.ARPath, "$(B)/")
 			addArchive(peerResult.ARRef, arRelPath)
 		}
 

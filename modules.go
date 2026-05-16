@@ -1394,16 +1394,16 @@ func peerLanguageFor(ctx *genCtx, parent ModuleInstance, parentModuleName, peerP
 	}
 
 	peerInfo := moduleInfoForInstance(ctx, peerSeed)
+	if peerInfo.Name != "PROTO_LIBRARY" {
+		return LangCPP
+	}
+
 	if isPythonModuleType(parentModuleName) {
-		if peerInfo.Name == "PROTO_LIBRARY" || isPythonModuleType(peerInfo.Name) {
-			return LangPy
-		}
+		return LangPy
 	}
 
 	if parentModuleName == "PROTO_LIBRARY" && parent.Language == LangPy {
-		if peerInfo.Name == "PROTO_LIBRARY" || isPythonModuleType(peerInfo.Name) {
-			return LangPy
-		}
+		return LangPy
 	}
 
 	return LangCPP
