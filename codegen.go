@@ -62,7 +62,9 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		// $(B)/tools/py3cc/py3cc to match the reference yapyc3 cmd_args[0].
 		// tools/py3cc/bin/ya.make declares SRCDIR(tools/py3cc) so the
 		// upstream intent is a top-level binary.
-		py3ccBinary = canonicalizePy3ccBinaryPath(result.LDPath)
+		if result.LDPath != nil {
+			py3ccBinary = canonicalizePy3ccBinaryPath(*result.LDPath)
+		}
 	}); exc != nil {
 		var pe *ParseError
 		if !errors.As(exc.AsError(), &pe) {
@@ -82,8 +84,8 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	if exc := Try(func() {
 		result := genModule(ctx, py3ccSlowHostInst)
 		py3ccSlowLDRef = result.LDRef
-		if result.LDPath != "" {
-			py3ccSlowBin = result.LDPath
+		if result.LDPath != nil {
+			py3ccSlowBin = *result.LDPath
 		}
 		// If LDPath is empty (PY3_PROGRAM_BIN → header-only stub),
 		// py3ccSlowBin retains its canonical fallback value.
@@ -368,7 +370,9 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 	if exc := Try(func() {
 		result := genModule(ctx, enumHostInst)
 		enumParserLD = result.LDRef
-		enumParserBin = result.LDPath
+		if result.LDPath != nil {
+			enumParserBin = *result.LDPath
+		}
 	}); exc != nil {
 		var pe *ParseError
 		if !errors.As(exc.AsError(), &pe) {

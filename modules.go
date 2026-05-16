@@ -41,7 +41,7 @@ type moduleData struct {
 	sFlags                []string // PR-M3-openssl-as-cflags: SET_APPEND(SFLAGS ...) values; appended to AS compiles only.
 	ldFlags               []string // collected LDFLAGS values
 	objAddLibsGlobal      []string // EXTRALIBS / PY_EXTRALIBS → OBJADDE_LIB_GLOBAL, peer-propagated to final link steps.
-	srcDir                string   // last SRCDIR setting (empty = module dir)
+	srcDir                *string  // last SRCDIR setting (nil = module dir)
 	flags                 FlagSet  // overlay of inferFlagsFromPath + macro bools
 	hadAllocator          bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
 	allocatorName         string   // PR-35g: name passed to ALLOCATOR(...); empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE).
@@ -52,16 +52,16 @@ type moduleData struct {
 	noImportTracing       bool     // set by NO_IMPORT_TRACING(); suppresses PY*_PROGRAM implicit import_tracing constructor peer.
 	usePython3            bool     // set by USE_PYTHON3() or PY3-family module types; normalised by applyPython3AddIncl. Triggers _PYTHON3_ADDINCL (python.conf:1018-1023): -DUSE_PYTHON3 + contrib/libs/python/Include.
 	pythonSQLite3         bool     // default-on; DISABLE(PYTHON_SQLITE3) flips off the implicit `_sqlite` peer for PY*_PROGRAM modules.
-	pyNamespace           string   // set by PY_NAMESPACE(...); used by py-proto resource key layout.
-	protoNamespace        string   // set by PROTO_NAMESPACE(...); drives py-proto --ns and output layout.
+	pyNamespace           *string  // set by PY_NAMESPACE(...); used by py-proto resource key layout.
+	protoNamespace        *string  // set by PROTO_NAMESPACE(...); drives py-proto --ns and output layout.
 	noMypy                bool     // set by NO_MYPY(); suppresses mypy plugin and .pyi outputs for py-proto.
 	optimizePyProtos      bool     // mirrors OPTIMIZE_PY_PROTOS_FLAG; default-on for PY{2,3}_PROTO variants.
 	optimizePyProtosSet   bool
 	excludeTags           map[string]bool
 	dynamicLibraryFrom    []string
-	exportsScript         string
+	exportsScript         *string
 	ldPlugins             []string // filenames from LD_PLUGIN(name.py); each becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs. Only contrib/libs/musl/include uses this in M2.
-	arPlugin              string   // name from AR_PLUGIN(name); resolves to `$(S)/<modulePath>/<name>.pyplugin` and is injected into AR cmd_args (`--plugin <path>`) and inputs. Mirror of AR_PLUGIN (ymake.core.conf:3396-3398) + _LD_ARCHIVER_KV_PLUGIN (ld.conf:366-368).
+	arPlugin              *string  // name from AR_PLUGIN(name); resolves to `$(S)/<modulePath>/<name>.pyplugin` and is injected into AR cmd_args (`--plugin <path>`) and inputs. Mirror of AR_PLUGIN (ymake.core.conf:3396-3398) + _LD_ARCHIVER_KV_PLUGIN (ld.conf:366-368).
 	// per-source extra CFLAGS keyed by source filename, populated by
 	// `SRC(filename extra_cflags...)`. Threaded into
 	// ModuleCCInputs.PerSourceCFlags so the composer appends them right
@@ -78,7 +78,7 @@ type moduleData struct {
 	// CONFIGURE_FILE() / .cpp.in / .c.in sources → CF nodes.
 	configureFiles []*ConfigureFileStmt
 	// CREATE_BUILDINFO_FOR(output_header) → BI node.
-	createBuildInfoFor string
+	createBuildInfoFor *string
 	// RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT → JV nodes.
 	antlr4Grammars []antlr4GrammarInfo
 	// RUN_PROGRAM → PR nodes.
@@ -86,7 +86,7 @@ type moduleData struct {
 	checkConfigHeaders []string
 	cythonCpp          []*CythonStmt
 	swigC              []swigSrc
-	bisonGenExt        string
+	bisonGenExt        *string
 	grpc               bool
 	yaConfJSON         []string
 	allPySrcs          []*UnknownStmt
@@ -111,7 +111,7 @@ type moduleData struct {
 	// pyMain captures `PY_MAIN(<arg>)` or the `MAIN <src.py>` modifier
 	// of `PY_SRCS(...)`. Produces a single `PY_MAIN=<dotted-mod>:<func>`
 	// kv per pybuild.py:py_main (build/plugins/pybuild.py:759).
-	pyMain string
+	pyMain *string
 	// NO_CHECK_IMPORTS(args...) verbatim arg list. Used by
 	// emitNoCheckImportsObjcopy to build the resfs kv with args joined
 	// by ' ' (pathid() + value, build/plugins/ytest.py:811).
@@ -325,7 +325,7 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 // PEER consumers too (witnessed by `main.cpp.o` / `print.cpp.o` carrying
 // `-I$(B)/library/cpp/build_info` via their peer chain).
 func applyBuildInfoAddIncl(modulePath string, d *moduleData) {
-	if d.createBuildInfoFor == "" {
+	if d.createBuildInfoFor == nil {
 		return
 	}
 	biDir := "$(B)/" + modulePath
@@ -463,7 +463,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// AS / R6 / JOIN_SRCS nodes. LD/AR stay at instance.Path —
 			// the binary/archive lives where declared, even if sources
 			// are elsewhere.
-			d.srcDir = v.Dir
+			d.srcDir = &v.Dir
 		case *GlobalSrcsStmt:
 			d.globalSrcs = append(d.globalSrcs, v.Sources...)
 		case *GenerateEnumSerializationStmt:
@@ -489,7 +489,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			d.configureFiles = append(d.configureFiles, v)
 		case *CreateBuildInfoStmt:
 			// PR-M3-E: CREATE_BUILDINFO_FOR(header) → BI node.
-			d.createBuildInfoFor = v.OutputHeader
+			d.createBuildInfoFor = &v.OutputHeader
 		case *RunAntlr4CppStmt:
 			// PR-M3-E: single-grammar ANTLR4 invocation → JV node.
 			d.antlr4Grammars = append(d.antlr4Grammars, antlr4GrammarInfo{
@@ -626,9 +626,9 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 
 		d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: v.Args[0], Options: append([]string(nil), v.Args[1:]...)})
 	case "BISON_GEN_C":
-		d.bisonGenExt = ".c"
+		d.bisonGenExt = stringPtr(".c")
 	case "BISON_GEN_CPP":
-		d.bisonGenExt = ".cpp"
+		d.bisonGenExt = stringPtr(".cpp")
 	case "GRPC":
 		d.grpc = true
 		d.peerdirs = append(d.peerdirs, "contrib/libs/grpc")
@@ -636,12 +636,12 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		if len(v.Args) != 1 {
 			ThrowFmt("gen: PY_NAMESPACE expects exactly 1 argument, got %d", len(v.Args))
 		}
-		d.pyNamespace = v.Args[0]
+		d.pyNamespace = stringPtr(v.Args[0])
 	case "PROTO_NAMESPACE":
 		if len(v.Args) == 0 {
 			ThrowFmt("gen: PROTO_NAMESPACE expects at least 1 argument")
 		}
-		d.protoNamespace = v.Args[len(v.Args)-1]
+		d.protoNamespace = stringPtr(v.Args[len(v.Args)-1])
 	case "EXCLUDE_TAGS":
 		if d.excludeTags == nil {
 			d.excludeTags = make(map[string]bool)
@@ -783,7 +783,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		if len(v.Args) != 1 {
 			ThrowFmt("gen: AR_PLUGIN expects exactly 1 argument, got %d", len(v.Args))
 		}
-		d.arPlugin = v.Args[0] + ".pyplugin"
+		d.arPlugin = stringPtr(v.Args[0] + ".pyplugin")
 	case "DYNAMIC_LIBRARY_FROM":
 		if len(v.Args) == 0 {
 			ThrowFmt("gen: DYNAMIC_LIBRARY_FROM expects at least 1 argument")
@@ -794,7 +794,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		if len(v.Args) != 1 {
 			ThrowFmt("gen: EXPORTS_SCRIPT expects exactly 1 argument, got %d", len(v.Args))
 		}
-		d.exportsScript = v.Args[0]
+		d.exportsScript = stringPtr(v.Args[0])
 	case "EXTRALIBS":
 		for _, arg := range v.Args {
 			lib := arg
@@ -887,7 +887,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 					},
 				}
 				if cythonPlainCpp {
-					stmt.Generated = src + ".cpp"
+					stmt.Generated = stringPtr(src + ".cpp")
 				}
 				d.cythonCpp = append(d.cythonCpp, stmt)
 				appendPyRegister(d, modName)
@@ -903,7 +903,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 				}
 				d.cythonCpp = append(d.cythonCpp, &CythonStmt{
 					Src:       src,
-					Generated: src + ".cpp",
+					Generated: stringPtr(src + ".cpp"),
 					Options: []string{
 						"--module-name", modName,
 						"--init-suffix", pythonInitSuffix(modName),
@@ -968,7 +968,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 					modName = strings.ReplaceAll(modName, "/", ".")
 					modName = ns + modName
 				}
-				d.pyMain = modName + ":main"
+				d.pyMain = stringPtr(modName + ":main")
 				mainNext = false
 			}
 		}
@@ -986,7 +986,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		if !strings.Contains(arg, ":") {
 			arg += ":main"
 		}
-		d.pyMain = arg
+		d.pyMain = stringPtr(arg)
 	case "PY_CONSTRUCTOR":
 		// PY_CONSTRUCTOR(<module[:func]>) per pybuild.py:onpy_constructor:
 		// emits a kv-only resource under py/constructors/, defaulting

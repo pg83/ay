@@ -48,7 +48,7 @@ var (
 // it is sorted, comma-joined, suffixed with moduleTag, and MD5'd; the
 // first hashLen hex chars (lower-case) are returned. Mirrors
 // `devtools/ymake/plugins/resource_handler/packer.h:73-85`.
-func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath, moduleTag string) string {
+func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string, moduleTag *string) string {
 	list := make([]string, 0, len(paths)+len(keysB64)+len(kvs)+1)
 	list = append(list, paths...)
 	list = append(list, keysB64...)
@@ -57,7 +57,10 @@ func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath, modul
 
 	sort.Strings(list)
 
-	stringify := strings.Join(list, ",") + moduleTag
+	stringify := strings.Join(list, ",")
+	if moduleTag != nil {
+		stringify += *moduleTag
+	}
 	sum := md5.Sum([]byte(stringify))
 
 	return strings.ToLower(enchex.EncodeToString(sum[:]))[:hashLen]
@@ -133,20 +136,20 @@ func expandResourceFiles(args []string) []resourceEntry {
 }
 
 // resourceModuleTag returns the upstream MODULE_TAG seen by the packer.
-// Plain LIBRARY/PROGRAM → ""; PY3_LIBRARY/PY3_PROGRAM_BIN/PY23_* → "PY3".
+// Plain LIBRARY/PROGRAM → nil. PY3_LIBRARY/PY3_PROGRAM_BIN/PY23_* → "PY3".
 // PY3_PROGRAM is a multimodule whose resource-bearing submodule is
 // PY3_BIN/PY3_PROGRAM_BIN; upstream surfaces `module_tag=py3_bin` there.
 // (`build/conf/python.conf:1126`). GEN_LIBRARY ("RESOURCE_LIB", core
 // conf:598) and DLL ("DLL", core conf:2197,2379) are not yet handled.
-func resourceModuleTag(modName string) string {
+func resourceModuleTag(modName string) *string {
 	switch modName {
 	case "PY3_PROGRAM":
-		return "PY3_BIN"
+		return stringPtr("PY3_BIN")
 	case "PY3_LIBRARY", "PY3_PROGRAM_BIN", "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
-		return "PY3"
+		return stringPtr("PY3")
 	}
 
-	return ""
+	return nil
 }
 
 // emitResourceObjcopy emits one objcopy PY node per flush of the
@@ -166,7 +169,7 @@ func emitResourceObjcopy(
 	// Emit kv_only sibling shapes (PY_MAIN, py/namespace,
 	// py/no_check_imports) alongside RESOURCE/RESOURCE_FILES. Each
 	// sibling is independent and conditional on its own per-module data.
-	hasKvOnly := d.pyMain != "" || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
+	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
 	if len(d.resources) == 0 && !hasKvOnly {
 		return nil, nil, nil
 	}
@@ -236,7 +239,7 @@ func emitResourceObjcopy(
 		return false
 	}
 
-type acc struct {
+	type acc struct {
 		paths      []string
 		pathInputs []VFS
 		pathDeps   []NodeRef
@@ -246,7 +249,7 @@ type acc struct {
 	}
 	cur := acc{}
 
-	moduleTag := ""
+	var moduleTag *string
 	if d.moduleStmt != nil {
 		moduleTag = resourceModuleTag(d.moduleStmt.Name)
 	}
@@ -574,7 +577,7 @@ func emitYaConfJSONObjcopy(
 	}
 
 	out := make([]*objcopyEmit, 0, len(d.yaConfJSON))
-	moduleTag := ""
+	var moduleTag *string
 	if d.moduleStmt != nil {
 		moduleTag = resourceModuleTag(d.moduleStmt.Name)
 	}
@@ -678,7 +681,7 @@ func emitPyNamespaceObjcopy(
 	if d.moduleStmt == nil {
 		return nil
 	}
-	if resourceModuleTag(d.moduleStmt.Name) == "" {
+	if resourceModuleTag(d.moduleStmt.Name) == nil {
 		return nil
 	}
 
@@ -731,7 +734,7 @@ func emitPyMainObjcopy(
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
 ) *objcopyEmit {
-	if d.pyMain == "" {
+	if d.pyMain == nil {
 		return nil
 	}
 	if d.moduleStmt == nil {
@@ -740,7 +743,7 @@ func emitPyMainObjcopy(
 
 	// PY_MAIN= is unquoted in both hash and cmd_args (pybuild.py:759
 	// `'PY_MAIN={}'.format(arg)` — no quotes around the value).
-	kv := "PY_MAIN=" + d.pyMain
+	kv := "PY_MAIN=" + *d.pyMain
 	return emitKvOnlyObjcopyNode(ctx, instance, []string{kv}, []string{kv}, d.moduleStmt.Name, rescompilerLDRef, rescompressorLDRef)
 }
 
@@ -791,10 +794,10 @@ type pySrcEntry struct {
 	// extraSrcInput is the additional `.py` source-tree input the scanner
 	// threads into objcopy `inputs[]` whenever the entry's resfs target
 	// is a `.yapyc3` bytecode (built from the `.py` by
-	// on_py3_compile_bytecode). Empty for raw .py entries; for yapyc3
-	// entries `$(S)/<actualUnit>/<srcRel>`. REF Lib chunks: .py count
+	// on_py3_compile_bytecode). Nil for raw .py entries; for yapyc3
+	// entries non-nil `$(S)/<actualUnit>/<srcRel>`. REF Lib chunks: .py count
 	// matches .yapyc3 count one-to-one even across chunk straddles.
-	extraSrcInput string
+	extraSrcInput *string
 }
 
 // buildPySrcEntries derives the ordered (kv,path,key) triples that the
@@ -807,8 +810,8 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 	}
 
 	actualUnit := modulePath
-	if d.srcDir != "" {
-		actualUnit = d.srcDir
+	if d.srcDir != nil {
+		actualUnit = *d.srcDir
 	}
 
 	// keyPrefix is the dotted-module-path prefix prepended to each
@@ -867,7 +870,7 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 				kvHash:        ypKvHash,
 				kvCmd:         ypKvCmd,
 				inputDep:      ypPathInput,
-				extraSrcInput: Source(actualUnit + "/" + srcRel).String(),
+				extraSrcInput: stringPtr(Source(actualUnit + "/" + srcRel).String()),
 			})
 		}
 	}
@@ -887,7 +890,7 @@ type pySrcChunk struct {
 
 	// inps holds the scanner-discovered `inputs[]` fragment for this
 	// chunk: every entry whose KV add OR path+key add lands here
-	// contributes its `pathInput` and (when non-empty) `extraSrcInput`,
+	// contributes its `pathInput` and (when present) `extraSrcInput`,
 	// in declaration order with per-chunk dedup. Captures chunk-straddle
 	// where an entry's KV is in chunk N but its path+key is in N+1
 	// (REF byte-exact, see resource_test.go).
@@ -942,12 +945,12 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 			cur.inps = append(cur.inps, e.pathInput)
 			inpsSeen[e.pathInput] = struct{}{}
 		}
-		if e.extraSrcInput == "" {
+		if e.extraSrcInput == nil {
 			return
 		}
-		if _, ok := inpsSeen[e.extraSrcInput]; !ok {
-			cur.inps = append(cur.inps, e.extraSrcInput)
-			inpsSeen[e.extraSrcInput] = struct{}{}
+		if _, ok := inpsSeen[*e.extraSrcInput]; !ok {
+			cur.inps = append(cur.inps, *e.extraSrcInput)
+			inpsSeen[*e.extraSrcInput] = struct{}{}
 		}
 	}
 
@@ -999,7 +1002,7 @@ func emitPySrcObjcopy(
 	}
 
 	// PY3-flavoured modules only — gate mirrors emitPyNamespaceObjcopy.
-	if resourceModuleTag(d.moduleStmt.Name) == "" {
+	if resourceModuleTag(d.moduleStmt.Name) == nil {
 		return nil, nil, nil
 	}
 

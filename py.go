@@ -58,17 +58,17 @@ const runtimePy3ModulePath = "library/python/runtime_py3"
 // flows through build/scripts/objcopy.py; the script and source paths land
 // in the AR multiset because AR unions member-compile inputs.
 //
-// modulePath: canonical $(B)-relative path. srcDir: SRCDIR() (empty when
+// modulePath: canonical $(B)-relative path. srcDir: SRCDIR() (nil when
 // none). pySrcs / resourcePaths: declaration-ordered macro args. Returns
 // nil when nothing contributes.
-func pySrcsARExtraInputs(modulePath, srcDir string, pySrcs, resourcePaths []string) []VFS {
+func pySrcsARExtraInputs(modulePath string, srcDir *string, pySrcs, resourcePaths []string) []VFS {
 	if len(pySrcs) == 0 && len(resourcePaths) == 0 {
 		return nil
 	}
 
 	actualUnit := modulePath
-	if srcDir != "" {
-		actualUnit = srcDir
+	if srcDir != nil {
+		actualUnit = *srcDir
 	}
 
 	out := make([]VFS, 0, 1+len(pySrcs)+len(resourcePaths))

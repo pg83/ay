@@ -158,7 +158,7 @@ func EmitEV(
 	cppStyleguideBinary string,
 	protocBinary string,
 	event2cppBinary string,
-	moduleTag string,
+	moduleTag *string,
 	sourceRoot string,
 	emit Emitter,
 ) NodeRef {
@@ -213,8 +213,8 @@ func EmitEV(
 		"module_dir": moduleDir,
 	}
 
-	if moduleTag != "" {
-		targetProps["module_tag"] = moduleTag
+	if moduleTag != nil {
+		targetProps["module_tag"] = *moduleTag
 	}
 
 	// deps and foreign_deps carry all three tool refs.

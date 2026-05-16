@@ -63,12 +63,12 @@ type ModuleCCInputs struct {
 	// whose `_serialized.h` participates in the consumer's header
 	// closure) — two deps, not one.
 	ExtraDepRefs []NodeRef
-	// SrcDir is the module's `SRCDIR(...)` setting (empty when none).
-	// When non-empty AND the source is non-local, the composer uses
+	// SrcDir is the module's `SRCDIR(...)` setting (nil when none).
+	// When non-nil AND the source is non-local, the composer uses
 	// `__/<rel>` as the output-path infix and `<srcdir>/<src>` as the
 	// input path. Per-source local-vs-srcdir resolution happens via
 	// filesystem stat of the candidate local path.
-	SrcDir string
+	SrcDir *string
 	// SourceRoot is the walker's source root (genCtx.sourceRoot),
 	// needed to stat candidate local source paths so flat sources that
 	// exist locally (e.g. musl_extra's all.c) keep local resolution
@@ -142,16 +142,16 @@ type ModuleCCInputs struct {
 	// PY23_NATIVE_LIBRARY modules whose reference emits <src>.py3.o.
 	// PIC still wins (".pic.o" used when Flags.PIC is set).
 	Py3Suffix bool
-	// ModuleTag, when non-empty, adds `module_tag=<ModuleTag>` to
+	// ModuleTag, when present, adds `module_tag=<ModuleTag>` to
 	// target_properties. PROTO_LIBRARY CCs consuming .pb.cc / .ev.pb.cc
-	// carry `cpp_proto`; regular LIBRARY CCs leave this empty.
-	ModuleTag string
+	// carry `cpp_proto`; regular LIBRARY CCs leave this nil.
+	ModuleTag *string
 	// Variant marks this compile as a SIMD permutation of `srcRel`
 	// emitted via one of the `SRC_C_AVX / SSE2 / SSE3 / SSSE3 / SSE4 /
-	// SSE41 / XOP` macros. When non-empty the output path becomes
+	// SSE41 / XOP` macros. When present the output path becomes
 	// `<srcRel>.<variant><suffix>` (flat) and PerSourceCFlags carries
 	// the `-m<flag>` bundle plus any extra `-DSUFFIX=…`.
-	Variant string
+	Variant *string
 	// Ragel6Flags is the per-module `SET(RAGEL6_FLAGS <value>)`
 	// override threaded into EmitR6. When empty the platform default
 	// fires (`-CG2` on x86_64 host / `-CT0` on aarch64 target — mirror
@@ -159,8 +159,8 @@ type ModuleCCInputs struct {
 	// `set_default_flags(optimized)`). M3 witness:
 	// `devtools/ymake/lang/makelists/ya.make:6` sets `-lF1`.
 	Ragel6Flags []string
-	// BisonGenExt is ".c" for BISON_GEN_C and ".cpp" for BISON_GEN_CPP/default.
-	BisonGenExt string
+	// BisonGenExt is ".c" for BISON_GEN_C and ".cpp" for BISON_GEN_CPP.
+	BisonGenExt *string
 }
 
 // EmitCC emits a CC node for compiling `srcRel` (relative to
@@ -183,8 +183,8 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	// PR-M3-simd-permutations: prefix the suffix with `.<variant>` so the
 	// output path becomes `<srcRel>.<variant><suffix>`. The reference
 	// emits e.g. `<src>.avx.pic.o`, `<src>.sse41.pic.o`, etc.
-	if in.Variant != "" {
-		suffix = "." + in.Variant + suffix
+	if in.Variant != nil {
+		suffix = "." + *in.Variant + suffix
 	}
 
 	outVFS, inVFS := composeCCPaths(instance, srcRel, in, suffix)
@@ -310,8 +310,8 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 		Tags: instance.Platform.Tags,
 		TargetProperties: func() map[string]string {
 			tp := map[string]string{"module_dir": instance.Path}
-			if in.ModuleTag != "" {
-				tp["module_tag"] = in.ModuleTag
+			if in.ModuleTag != nil {
+				tp["module_tag"] = *in.ModuleTag
 			}
 			return tp
 		}(),
@@ -375,11 +375,11 @@ func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, s
 	}
 
 	// PR-30 D06 SRCDIR routing.
-	useSrcDir := in.SrcDir != "" && in.SrcDir != instance.Path && !sourceExistsLocally(in.SourceRoot, instance.Path, srcRel)
+	useSrcDir := in.SrcDir != nil && *in.SrcDir != instance.Path && !sourceExistsLocally(in.SourceRoot, instance.Path, srcRel)
 
 	if useSrcDir {
-		outputRel := composeSrcDirOutputRel(instance.Path, in.SrcDir, srcRel)
-		return Build(instance.Path + "/" + outputRel + suffix), Source(in.SrcDir + "/" + srcRel)
+		outputRel := composeSrcDirOutputRel(instance.Path, *in.SrcDir, srcRel)
+		return Build(instance.Path + "/" + outputRel + suffix), Source(*in.SrcDir + "/" + srcRel)
 	}
 
 	var outRel string
@@ -403,7 +403,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, s
 // sourceExistsLocally reports whether `<sourceRoot>/<modulePath>/<srcRel>`
 // is a regular file — distinguishes composeCCPaths cases (2) and (3).
 // Empty sourceRoot returns false (synthetic-test path); tests wanting
-// local-resolution shape pass an empty SrcDir, not an empty SourceRoot.
+// local-resolution shape leave SrcDir nil, not SourceRoot empty.
 func sourceExistsLocally(sourceRoot, modulePath, srcRel string) bool {
 	if sourceRoot == "" {
 		return false

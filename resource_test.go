@@ -21,7 +21,7 @@ func TestObjcopyHashCerts(t *testing.T) {
 	keysB64 := []string{base64.StdEncoding.EncodeToString([]byte("/builtin/cacert"))}
 	kvs := []string{}
 	unitPath := "certs"
-	moduleTag := ""
+	var moduleTag *string
 
 	got := objcopyHash(paths, keysB64, kvs, unitPath, moduleTag)
 	want := "c27c99b2d9d5eade92fd72d0aa"
@@ -55,7 +55,7 @@ func TestObjcopyHashRapidjson(t *testing.T) {
 		keysB64[i] = base64.StdEncoding.EncodeToString([]byte(k))
 	}
 
-	got := objcopyHash(paths, keysB64, kvs, "devtools/ymake/contrib/python-rapidjson", "PY3")
+	got := objcopyHash(paths, keysB64, kvs, "devtools/ymake/contrib/python-rapidjson", stringPtr("PY3"))
 	want := "55c44b1fdbfda511798cd895e2"
 	if got != want {
 		t.Fatalf("rapidjson objcopy hash: got %q, want %q", got, want)
@@ -181,7 +181,7 @@ func TestPyNamespaceModListMD5Py3ccSlow(t *testing.T) {
 func TestPyNamespaceObjcopyHashRuntimePy3(t *testing.T) {
 	kv := `py/namespace/bd17cfe3d9af11d01ff7b15ebc3786a7/library/python/runtime_py3="library.python.runtime_py3."`
 
-	got := objcopyHash(nil, nil, []string{kv}, "library/python/runtime_py3", "PY3")
+	got := objcopyHash(nil, nil, []string{kv}, "library/python/runtime_py3", stringPtr("PY3"))
 	want := "3b0561f75631281b973aa8b64e"
 	if got != want {
 		t.Fatalf("runtime_py3 namespace objcopy hash: got %q, want %q", got, want)
@@ -199,7 +199,7 @@ func TestNoCheckImportsObjcopyHashLib2Py(t *testing.T) {
 	value := "_ios_support _pyrepl.* antigravity asyncio.unix_events asyncio.windows_events asyncio.windows_utils ctypes.wintypes curses.* dbm.gnu dbm.ndbm dbm.sqlite3 encodings.mbcs encodings.oem lzma multiprocessing.popen_fork multiprocessing.popen_forkserver multiprocessing.popen_spawn_posix multiprocessing.popen_spawn_win32 sqlite3.* turtle pty tty"
 	kv := `py/no_check_imports/2fepmfaacurvvaalmzqchmko4a="` + value + `"`
 
-	got := objcopyHash(nil, nil, []string{kv}, "contrib/tools/python3/lib2/py", "PY3")
+	got := objcopyHash(nil, nil, []string{kv}, "contrib/tools/python3/lib2/py", stringPtr("PY3"))
 	want := "cd47bcaec327e5eb9db4641ec8"
 	if got != want {
 		t.Fatalf("contrib/tools/python3/lib2/py no_check_imports objcopy hash: got %q, want %q", got, want)
@@ -216,7 +216,7 @@ func TestNoCheckImportsObjcopyHashLib2Py(t *testing.T) {
 func TestPyMainObjcopyHashPy3ccSlow(t *testing.T) {
 	kv := "PY_MAIN=tools.py3cc.slow.main:main"
 
-	got := objcopyHash(nil, nil, []string{kv}, "tools/py3cc/slow", "PY3")
+	got := objcopyHash(nil, nil, []string{kv}, "tools/py3cc/slow", stringPtr("PY3"))
 	want := "4b1c18d0dc6973976969ad23be"
 	if got != want {
 		t.Fatalf("tools/py3cc/slow PY_MAIN objcopy hash: got %q, want %q", got, want)
@@ -306,7 +306,7 @@ func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
 		t.Fatalf("chunks: got %d, want 1", len(chunks))
 	}
 	ch := chunks[0]
-	got := objcopyHash(ch.paths, ch.keys, ch.kvsHash, "library/python/runtime_py3", "PY3")
+	got := objcopyHash(ch.paths, ch.keys, ch.kvsHash, "library/python/runtime_py3", stringPtr("PY3"))
 	want := "84a3659770bdea15f8ae77837d"
 	if got != want {
 		t.Fatalf("runtime_py3 entry_points objcopy hash: got %q, want %q", got, want)
@@ -329,7 +329,7 @@ func TestPySrcObjcopyHashPy3ccSlowMain(t *testing.T) {
 	if len(chunks) != 1 {
 		t.Fatalf("chunks: got %d, want 1", len(chunks))
 	}
-	got := objcopyHash(chunks[0].paths, chunks[0].keys, chunks[0].kvsHash, "tools/py3cc/slow", "PY3")
+	got := objcopyHash(chunks[0].paths, chunks[0].keys, chunks[0].kvsHash, "tools/py3cc/slow", stringPtr("PY3"))
 	want := "c3a5182796bc68c054c676bcc0"
 	if got != want {
 		t.Fatalf("py3cc/slow main.py objcopy hash: got %q, want %q", got, want)
@@ -356,7 +356,7 @@ func TestPySrcObjcopyHashSymbolsModuleDualEntry(t *testing.T) {
 	if len(chunks) != 1 {
 		t.Fatalf("chunks: got %d, want 1", len(chunks))
 	}
-	got := objcopyHash(chunks[0].paths, chunks[0].keys, chunks[0].kvsHash, "library/python/symbols/module", "PY3")
+	got := objcopyHash(chunks[0].paths, chunks[0].keys, chunks[0].kvsHash, "library/python/symbols/module", stringPtr("PY3"))
 	want := "c325f0009e9625395005936d90"
 	if got != want {
 		t.Fatalf("symbols/module __init__.py objcopy hash: got %q, want %q", got, want)
@@ -394,7 +394,7 @@ func TestChunkPySrcEntriesLibInputsAggregate(t *testing.T) {
 	// Locate the chunk whose hash matches REF objcopy_0299ac47a...
 	var found *pySrcChunk
 	for i := range chunks {
-		if objcopyHash(chunks[i].paths, chunks[i].keys, chunks[i].kvsHash, "contrib/tools/python3/Lib", "PY3") == "0299ac47a84f85e85182c986c0" {
+		if objcopyHash(chunks[i].paths, chunks[i].keys, chunks[i].kvsHash, "contrib/tools/python3/Lib", stringPtr("PY3")) == "0299ac47a84f85e85182c986c0" {
 			found = &chunks[i]
 			break
 		}
@@ -512,7 +512,7 @@ func TestChunkPySrcEntriesLibByteExact(t *testing.T) {
 
 	got := make(map[string]bool, len(chunks))
 	for _, ch := range chunks {
-		got[objcopyHash(ch.paths, ch.keys, ch.kvsHash, "contrib/tools/python3/Lib", "PY3")] = true
+		got[objcopyHash(ch.paths, ch.keys, ch.kvsHash, "contrib/tools/python3/Lib", stringPtr("PY3"))] = true
 	}
 	want := []string{
 		"0299ac47a84f85e85182c986c0", "05979015660e1af70ece36165c",
@@ -573,7 +573,7 @@ func TestChunkPySrcEntriesLib2PyByteExact(t *testing.T) {
 
 	got := make(map[string]bool, len(chunks))
 	for _, ch := range chunks {
-		got[objcopyHash(ch.paths, ch.keys, ch.kvsHash, "contrib/tools/python3/lib2/py", "PY3")] = true
+		got[objcopyHash(ch.paths, ch.keys, ch.kvsHash, "contrib/tools/python3/lib2/py", stringPtr("PY3"))] = true
 	}
 	want := []string{
 		"08e492c72f789cad4a22ae67dd", "167456915a92189129fdafa2de",
