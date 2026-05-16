@@ -42,6 +42,8 @@ func dispatch(argv []string) {
 	switch argv[1] {
 	case "help", "-h", "--help":
 		os.Exit(cmdHelp(argv[2:]))
+	case "fetch":
+		os.Exit(cmdFetch(argv[2:]))
 	case "gen":
 		os.Exit(cmdGen(argv[2:]))
 	case "make":
@@ -60,6 +62,7 @@ Usage:
     yatool <subcommand> [flags]
 
 Subcommands:
+    fetch      Fetch and unpack an external resource.
     gen        Generate a build graph for a target.
     make       Generate and execute the build graph for a target.
     help       Show this message.
@@ -207,6 +210,7 @@ func cmdGen(args []string) int {
 		hostFlags["GG_BUILD_TYPE"] = "release"
 	}
 	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, true, "", "")
+	resourceFetches := newResourceFetchPlan(*sourceRoot, conf, hostP)
 
 	// Target platform: defaults to host axes when --target-platform
 	// is empty; --define KEY=VALUE entries land on TARGET's flags
@@ -233,7 +237,7 @@ func cmdGen(args []string) int {
 	targetP := NewPlatform(tOS, tISA, targetFlags, nil, false, os.Getenv("CFLAGS"), os.Getenv("CXXFLAGS"))
 
 	genStart := time.Now()
-	g := GenWithMode(*sourceRoot, *target, hostP, targetP, *scanCtxMode, onWarn)
+	g := GenWithModeWithResources(*sourceRoot, *target, hostP, targetP, *scanCtxMode, onWarn, resourceFetches)
 	applyGraphConf(g, conf)
 	genDur := time.Since(genStart)
 

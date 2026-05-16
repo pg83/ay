@@ -89,6 +89,7 @@ func cmdMake(args []string) int {
 		hostFlags["GG_BUILD_TYPE"] = "release"
 	}
 	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, true, "", "")
+	resourceFetches := newResourceFetchPlan(mf.srcRoot, conf, hostP)
 
 	// Target platform: `--target-platform` selects axes (defaults to
 	// host when empty), `-D KEY=VALUE` (mf.tflags) lands on target Flags,
@@ -137,26 +138,31 @@ func cmdMake(args []string) int {
 	if mf.threads == 0 {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
-				g := GenWithMode(mf.srcRoot, target, hostP, targetP, defaultScanCtxMode, onWarn)
+				g := GenWithModeWithResources(mf.srcRoot, target, hostP, targetP, defaultScanCtxMode, onWarn, resourceFetches)
 				applyGraphConf(g, conf)
 				writeGraph("-", g)
 			}
 		} else {
-			genStream(mf.srcRoot, mf.targets, hostP, targetP, func(*Node) {}, onWarn)
+			genStream(mf.srcRoot, mf.targets, hostP, targetP, resourceFetches, func(*Node) {}, onWarn)
 		}
 
 		return 0
 	}
 
-	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing)
+	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, resourceFetches.mountMap())
 
 	go ex.eventLoop()
 
 	defer ex.close()
 
-	results := genStream(mf.srcRoot, mf.targets, hostP, targetP, ex.onNode, onWarn)
+	results := genStream(mf.srcRoot, mf.targets, hostP, targetP, resourceFetches, ex.onNode, onWarn)
 
 	ex.run(results)
+
+	failedRoots := ex.failedRoots(results)
+	if len(failedRoots) > 0 {
+		ThrowFmt("build failed: %s", strings.Join(failedRoots, ", "))
+	}
 
 	for _, uid := range results {
 		ex.installRoot(uid, mf.installRoot)
@@ -169,30 +175,31 @@ func cmdMake(args []string) int {
 // nodes to onNode. Returns the union of root UIDs. Targets run serially;
 // the executor overlaps one target's emission with the previous one's
 // execution.
-func genStream(srcRoot string, targets []string, hostP, targetP *Platform, onNode func(*Node), onWarn func(Warn)) []string {
+func genStream(srcRoot string, targets []string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn)) []string {
 	all := []string{}
 
 	for _, t := range targets {
-		ec := genStreamOne(srcRoot, t, hostP, targetP, onNode, onWarn)
+		ec := genStreamOne(srcRoot, t, hostP, targetP, resources, onNode, onWarn)
 		all = append(all, ec...)
 	}
 
 	return all
 }
 
-func genStreamOne(srcRoot, target string, hostP, targetP *Platform, onNode func(*Node), onWarn func(Warn)) []string {
+func genStreamOne(srcRoot, target string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn)) []string {
 	emitter := NewStreamingEmitter(onNode)
-	runGenInto(srcRoot, target, hostP, targetP, emitter, defaultScanCtxMode, onWarn)
+	runGenIntoWithResources(srcRoot, target, hostP, targetP, emitter, defaultScanCtxMode, onWarn, resources)
 
 	return emitter.Finish()
 }
 
 // executor — schedules and runs Node executions.
 type executor struct {
-	srcRoot   string
-	bldRoot   string
-	sema      chan struct{}
-	keepGoing bool
+	srcRoot        string
+	bldRoot        string
+	sema           chan struct{}
+	keepGoing      bool
+	resourceMounts map[string]string
 
 	mu      sync.Mutex
 	byUID   map[string]*nodeFuture
@@ -208,15 +215,16 @@ type nodeFuture struct {
 	err  *Exception
 }
 
-func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool) *executor {
+func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, resourceMounts map[string]string) *executor {
 	return &executor{
-		srcRoot:   srcRoot,
-		bldRoot:   bldRoot,
-		sema:      make(chan struct{}, threads),
-		keepGoing: keepGoing,
-		byUID:     make(map[string]*nodeFuture, 8192),
-		events:    make(chan func(), 4096),
-		stats:     map[string][]time.Duration{},
+		srcRoot:        srcRoot,
+		bldRoot:        bldRoot,
+		sema:           make(chan struct{}, threads),
+		keepGoing:      keepGoing,
+		resourceMounts: resourceMounts,
+		byUID:          make(map[string]*nodeFuture, 8192),
+		events:         make(chan func(), 4096),
+		stats:          map[string][]time.Duration{},
 	}
 }
 
@@ -306,6 +314,21 @@ func (ex *executor) visit(uid string) {
 	}
 }
 
+func (ex *executor) failedRoots(roots []string) []string {
+	var failed []string
+
+	for _, uid := range roots {
+		f := ex.lookup(uid)
+		if f == nil || f.err == nil {
+			continue
+		}
+
+		failed = append(failed, uid)
+	}
+
+	return failed
+}
+
 func (ex *executor) lookup(uid string) *nodeFuture {
 	ex.mu.Lock()
 	f := ex.byUID[uid]
@@ -337,6 +360,11 @@ func (ex *executor) execute(n *Node) {
 	}
 
 	wg.Wait()
+
+	failedDeps := ex.failedDeps(n)
+	if len(failedDeps) > 0 {
+		ThrowFmt("deps failed: %s", strings.Join(failedDeps, ", "))
+	}
 
 	ex.sema <- struct{}{}
 	defer func() { <-ex.sema }()
@@ -377,6 +405,21 @@ func (ex *executor) execute(n *Node) {
 	fmt.Fprintln(os.Stderr, rec)
 }
 
+func (ex *executor) failedDeps(n *Node) []string {
+	var failed []string
+
+	for _, dep := range n.Deps {
+		f := ex.lookup(dep)
+		if f == nil || f.err == nil {
+			continue
+		}
+
+		failed = append(failed, dep)
+	}
+
+	return failed
+}
+
 // runNode executes every Cmd in n. cwd / env / cmd_args paths are
 // substituted with the per-node tmp dir for $(B) and the configured
 // SrcRoot for $(S).
@@ -395,21 +438,21 @@ func (ex *executor) runNode(n *Node, tmp string) {
 	for _, c := range n.Cmds {
 		args := make([]string, len(c.CmdArgs))
 		for i, a := range c.CmdArgs {
-			args[i] = mountString(a, ex.srcRoot, tmp)
+			args[i] = mountString(a, ex.srcRoot, tmp, ex.resourceMounts)
 		}
 
 		dir := tmp
 		if c.Cwd != "" {
-			dir = mountString(c.Cwd, ex.srcRoot, tmp)
+			dir = mountString(c.Cwd, ex.srcRoot, tmp, ex.resourceMounts)
 		}
 
 		env := os.Environ()
 		for k, v := range n.Env {
-			env = append(env, k+"="+mountString(v, ex.srcRoot, tmp))
+			env = append(env, k+"="+mountString(v, ex.srcRoot, tmp, ex.resourceMounts))
 		}
 
 		for k, v := range c.Env {
-			env = append(env, k+"="+mountString(v, ex.srcRoot, tmp))
+			env = append(env, k+"="+mountString(v, ex.srcRoot, tmp, ex.resourceMounts))
 		}
 
 		cmd := &exec.Cmd{
@@ -422,7 +465,7 @@ func (ex *executor) runNode(n *Node, tmp string) {
 		var stdoutW io.Writer = os.Stdout
 
 		if c.Stdout != "" {
-			path := mountString(c.Stdout, ex.srcRoot, tmp)
+			path := mountString(c.Stdout, ex.srcRoot, tmp, ex.resourceMounts)
 			Throw(os.MkdirAll(filepath.Dir(path), 0o755))
 
 			f := Throw2(os.Create(path))
@@ -456,6 +499,7 @@ func (ex *executor) storeOutputs(n *Node, tmp string) {
 		dst := casPath(ex.bldRoot, src)
 
 		Throw(os.MkdirAll(filepath.Dir(dst), 0o755))
+		_ = os.RemoveAll(dst)
 		Throw(os.Rename(src, dst))
 
 		meta[out.String()] = dst
@@ -526,11 +570,15 @@ func mountVFS(v VFS, srcRoot, bldRoot string) string {
 
 // mountString substitutes "$(S)/" → srcRoot+"/", "$(B)/" → bldRoot+"/"
 // inside a free-form cmd_arg / env value. Single pass per substring.
-func mountString(s, srcRoot, bldRoot string) string {
+func mountString(s, srcRoot, bldRoot string, resources map[string]string) string {
 	s = strings.ReplaceAll(s, "$(S)/", srcRoot+"/")
 	s = strings.ReplaceAll(s, "$(B)/", bldRoot+"/")
 	s = strings.ReplaceAll(s, "$(S)", srcRoot)
 	s = strings.ReplaceAll(s, "$(B)", bldRoot)
+
+	for pattern, rel := range resources {
+		s = strings.ReplaceAll(s, "$("+pattern+")", filepath.Join(bldRoot, rel))
+	}
 
 	return s
 }
@@ -540,6 +588,13 @@ func mountString(s, srcRoot, bldRoot string) string {
 // across different uids share a single on-disk copy.
 func casPath(bldRoot, src string) string {
 	h := sha256.New()
+	info := Throw2(os.Stat(src))
+
+	if info.IsDir() {
+		hashDir(h, src)
+
+		return filepath.Join(bldRoot, "cas", fmt.Sprintf("%x", h.Sum(nil)))
+	}
 
 	f := Throw2(os.Open(src))
 	defer f.Close()
@@ -547,6 +602,43 @@ func casPath(bldRoot, src string) string {
 	Throw2(io.Copy(h, f))
 
 	return filepath.Join(bldRoot, "cas", fmt.Sprintf("%x", h.Sum(nil)))
+}
+
+func hashDir(h hashWriter, root string) {
+	Throw(filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if path == root {
+			return nil
+		}
+
+		rel := Throw2(filepath.Rel(root, path))
+		h.Write([]byte(rel))
+		h.Write([]byte{0})
+
+		if d.IsDir() {
+			h.Write([]byte("dir"))
+			h.Write([]byte{0})
+
+			return nil
+		}
+
+		h.Write([]byte("file"))
+		h.Write([]byte{0})
+
+		f := Throw2(os.Open(path))
+		defer f.Close()
+
+		Throw2(io.Copy(h, f))
+
+		return nil
+	}))
+}
+
+type hashWriter interface {
+	Write([]byte) (int, error)
 }
 
 // --------------------------- CLI parsing ---------------------------

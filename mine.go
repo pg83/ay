@@ -213,22 +213,35 @@ func flagsUsePrefix(flags map[string]string, prefix string) bool {
 
 func envToolOverrides() []toolOverride {
 	return []toolOverride{
-		{Key: "BUILD_PYTHON_BIN", Val: os.Getenv("PYTHON")},
-		{Key: "BUILD_PYTHON3_BIN", Val: os.Getenv("PYTHON")},
-		{Key: "CLANG_TOOL", Val: firstEnv("CC", "C_COMPILER")},
-		{Key: "CLANG_pl_pl_TOOL", Val: firstEnv("CXX", "CXX_COMPILER")},
-		{Key: "OBJCOPY_TOOL", Val: os.Getenv("OBJCOPY")},
-		{Key: "AR_TOOL", Val: os.Getenv("AR")},
-		{Key: "STRIP_TOOL", Val: os.Getenv("STRIP")},
-		{Key: "LLD_TOOL", Val: firstEnv("LLD", "LD")},
+		{Key: "BUILD_PYTHON_BIN", Val: envToolPath("PYTHON")},
+		{Key: "BUILD_PYTHON3_BIN", Val: envToolPath("PYTHON")},
+		{Key: "CLANG_TOOL", Val: firstEnvToolPath("CC", "C_COMPILER")},
+		{Key: "CLANG_pl_pl_TOOL", Val: firstEnvToolPath("CXX", "CXX_COMPILER")},
+		{Key: "OBJCOPY_TOOL", Val: envToolPath("OBJCOPY")},
+		{Key: "AR_TOOL", Val: envToolPath("AR")},
+		{Key: "STRIP_TOOL", Val: envToolPath("STRIP")},
+		{Key: "LLD_TOOL", Val: firstEnvToolPath("LLD", "LD")},
 	}
 }
 
-func firstEnv(names ...string) string {
+func firstEnvToolPath(names ...string) string {
 	for _, name := range names {
-		if v := os.Getenv(name); v != "" {
+		if v := envToolPath(name); v != "" {
 			return v
 		}
+	}
+
+	return ""
+}
+
+func envToolPath(name string) string {
+	v := os.Getenv(name)
+	if v == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(v, "$(") || filepath.IsAbs(v) || strings.ContainsRune(v, os.PathSeparator) {
+		return v
 	}
 
 	return ""
