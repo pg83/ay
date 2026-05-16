@@ -52,6 +52,14 @@ func archiveNameWithPrefix(moduleDir, prefix string) string {
 	return prefix + strings.Join(parts, "-") + ".a"
 }
 
+func archiveNameWithPrefixOrName(moduleDir, prefix, name string) string {
+	if name != "" {
+		return prefix + name + ".a"
+	}
+
+	return archiveNameWithPrefix(moduleDir, prefix)
+}
+
 // ArchiveName returns the on-disk archive base name for a module dir.
 //
 // Rule (from upstream devtools/ymake/module_confs.cpp:48-57,
@@ -90,6 +98,12 @@ func globalArchiveName(moduleDir string) string {
 // explicit prefix (e.g. "libpy3") instead of "lib".
 func globalArchiveNameWithPrefix(moduleDir, prefix string) string {
 	base := archiveNameWithPrefix(moduleDir, prefix)
+
+	return base[:len(base)-2] + ".global.a"
+}
+
+func globalArchiveNameWithPrefixOrName(moduleDir, prefix, name string) string {
+	base := archiveNameWithPrefixOrName(moduleDir, prefix, name)
 
 	return base[:len(base)-2] + ".global.a"
 }

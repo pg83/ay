@@ -2,8 +2,12 @@ package main
 
 import (
 	"bufio"
+	"crypto/md5"
+	"encoding/base32"
+	enchex "encoding/hex"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -21,6 +25,9 @@ const (
 	// Tool module paths for host-walk recursion.
 	pbProtocModule        = "contrib/tools/protoc"
 	pbCppStyleguideModule = "contrib/tools/protoc/plugins/cpp_styleguide"
+	pbGrpcCppModule       = "contrib/tools/protoc/plugins/grpc_cpp"
+	pbGrpcPyModule        = "contrib/tools/protoc/plugins/grpc_python"
+	pbMypyModule          = "contrib/python/mypy-protobuf/bin/protoc-gen-mypy"
 
 	// pbRuntimeBase is the SOURCE_ROOT-relative prefix for all protobuf
 	// runtime headers (under contrib/libs/protobuf/src/). Combined with
@@ -40,13 +47,21 @@ const (
 // raw string.
 var (
 	pbWrapperVFS       = Source("build/scripts/cpp_proto_wrapper.py")
+	pbPyWrapperVFS     = Source("build/scripts/gen_py_protos.py")
 	pbProtocBinaryVFS  = Build("contrib/tools/protoc/protoc")
 	pbCppStyleguideVFS = Build("contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide")
+	pbGrpcCppVFS       = Build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp")
+	pbGrpcPyVFS        = Build("contrib/tools/protoc/plugins/grpc_python/grpc_python")
+	pbMypyVFS          = Build("contrib/python/mypy-protobuf/bin/protoc-gen-mypy/protoc-gen-mypy")
 	pbDescriptorVFS    = Source("contrib/libs/protobuf/src/google/protobuf/descriptor.proto")
 
 	pbWrapperPath       = pbWrapperVFS.String()
+	pbPyWrapperPath     = pbPyWrapperVFS.String()
 	pbProtocBinaryPath  = pbProtocBinaryVFS.String()
 	pbCppStyleguidePath = pbCppStyleguideVFS.String()
+	pbGrpcCppPath       = pbGrpcCppVFS.String()
+	pbGrpcPyPath        = pbGrpcPyVFS.String()
+	pbMypyPath          = pbMypyVFS.String()
 	pbDescriptorProto   = pbDescriptorVFS.String()
 )
 
@@ -303,8 +318,11 @@ func EmitPB(
 	srcRel string,
 	cppStyleguideLDRef NodeRef,
 	protocLDRef NodeRef,
+	grpcCppLDRef NodeRef,
 	cppStyleguideBinary string,
 	protocBinary string,
+	grpcCppBinary string,
+	grpc bool,
 	moduleTag string,
 	sourceRoot string,
 	emit Emitter,
@@ -316,7 +334,14 @@ func EmitPB(
 
 	pbH := Build(protoBase + ".pb.h")
 	pbCC := Build(protoBase + ".pb.cc")
+	grpcPbCC := Build(protoBase + ".grpc.pb.cc")
+	grpcPbH := Build(protoBase + ".grpc.pb.h")
 	srcVFS := Source(protoRelPath)
+
+	outputs := []VFS{pbH, pbCC}
+	if grpc {
+		outputs = append(outputs, grpcPbCC, grpcPbH)
+	}
 
 	cmdArgs := []string{
 		instance.Platform.Tools.Python3,
@@ -324,6 +349,11 @@ func EmitPB(
 		"--outputs",
 		pbH.String(),
 		pbCC.String(),
+	}
+	if grpc {
+		cmdArgs = append(cmdArgs, grpcPbCC.String(), grpcPbH.String())
+	}
+	cmdArgs = append(cmdArgs,
 		"--",
 		protocBinary,
 		"-I=./",
@@ -335,8 +365,14 @@ func EmitPB(
 		"-I=$(S)/contrib/libs/protobuf/src",
 		"--cpp_out=:$(B)/",
 		"--cpp_styleguide_out=:$(B)/",
-		"--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary,
+		"--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary,
 		protoRelPath,
+	)
+	if grpc {
+		cmdArgs = append(cmdArgs,
+			"--plugin=protoc-gen-grpc_cpp="+grpcCppBinary,
+			"--grpc_cpp_out=$(B)/",
+		)
 	}
 
 	env := map[string]string{
@@ -345,10 +381,13 @@ func EmitPB(
 
 	// inputs: [cpp_styleguide, protoc, wrapper, source, optionally descriptor.proto]
 	inputs := []VFS{
-		ParseVFSOrSource(cppStyleguideBinary),
-		ParseVFSOrSource(protocBinary),
+		pbCppStyleguideVFS,
+		pbProtocBinaryVFS,
 		pbWrapperVFS,
 		srcVFS,
+	}
+	if grpc {
+		inputs = append([]VFS{pbGrpcCppVFS}, inputs...)
 	}
 
 	// If the source file imports "google/protobuf/descriptor.proto", add descriptor.proto.
@@ -372,13 +411,16 @@ func EmitPB(
 	var depRefs []NodeRef
 	var foreignDepRefs map[string][]NodeRef
 
-	if cppStyleguideLDRef != (NodeRef{}) || protocLDRef != (NodeRef{}) {
+	if cppStyleguideLDRef != (NodeRef{}) || protocLDRef != (NodeRef{}) || grpcCppLDRef != (NodeRef{}) {
 		var toolRefs []NodeRef
 		if cppStyleguideLDRef != (NodeRef{}) {
 			toolRefs = append(toolRefs, cppStyleguideLDRef)
 		}
 		if protocLDRef != (NodeRef{}) {
 			toolRefs = append(toolRefs, protocLDRef)
+		}
+		if grpcCppLDRef != (NodeRef{}) {
+			toolRefs = append(toolRefs, grpcCppLDRef)
 		}
 		depRefs = append([]NodeRef(nil), toolRefs...)
 		foreignDepRefs = map[string][]NodeRef{"tool": toolRefs}
@@ -394,7 +436,7 @@ func EmitPB(
 		},
 		Env:     env,
 		Inputs:  inputs,
-		Outputs: []VFS{pbH, pbCC},
+		Outputs: outputs,
 		KV: map[string]string{
 			"p":  "PB",
 			"pc": "yellow",
@@ -473,8 +515,10 @@ func protoImportsDescriptor(sourceRoot, srcRel string) bool {
 // caller can surface it through moduleEmitResult's archive closure;
 // nil when no .proto/.ev sources.
 type protoSrcsResult struct {
-	ARRef  NodeRef
-	ARPath VFS
+	ARRef      NodeRef
+	ARPath     VFS
+	GlobalRef  *NodeRef
+	GlobalPath VFS
 }
 
 func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs) *protoSrcsResult {
@@ -497,8 +541,9 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	// Walk host protoc and cpp_styleguide tool programs.
 	cppStyleguideBinary := pbCppStyleguidePath
 	protocBinary := pbProtocBinaryPath
+	grpcCppBinary := pbGrpcCppPath
 
-	var cppStyleguideLDRef, protocLDRef NodeRef
+	var cppStyleguideLDRef, protocLDRef, grpcCppLDRef NodeRef
 
 	protocHostInst := NewToolInstance(ctx.host, pbProtocModule, instance.Language)
 	protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
@@ -524,6 +569,19 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		_ = exc
 	}
 
+	if d.grpc {
+		grpcCppHostInst := NewToolInstance(ctx.host, pbGrpcCppModule, instance.Language)
+		grpcCppHostInst.Flags = inferFlagsFromPath(pbGrpcCppModule, true)
+
+		if exc := Try(func() {
+			result := genModule(ctx, grpcCppHostInst)
+			grpcCppLDRef = result.LDRef
+			grpcCppBinary = result.LDPath
+		}); exc != nil {
+			_ = exc
+		}
+	}
+
 	// Collect per-codegen-source (genRef, .pb.cc path) pairs so the AR
 	// step can fold them into ccRefs/ccOutputs/memberInputs in
 	// declaration order.
@@ -535,12 +593,16 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	}
 
 	var codegenOutputs []protoCodegenOutput
+	var pyProtoRefs []NodeRef
+	var pyProtoOutputs []VFS
+	var pyProtoMemberInputs []VFS
 
 	// Emit PB nodes.
 	for _, src := range protoSrcs {
 		pbRef := EmitPB(
 			instance, src, cppStyleguideLDRef, protocLDRef,
-			cppStyleguideBinary, protocBinary,
+			grpcCppLDRef, cppStyleguideBinary, protocBinary,
+			grpcCppBinary, d.grpc,
 			"cpp_proto", ctx.sourceRoot, ctx.emit)
 
 		// Register the .pb.h with EmitsIncludes: .pb.h's of every imported
@@ -549,6 +611,8 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 		pbH := Build(protoBase + ".pb.h")
 		pbCC := Build(protoBase + ".pb.cc")
+		grpcPbH := Build(protoBase + ".grpc.pb.h")
+		grpcPbCC := Build(protoBase + ".grpc.pb.cc")
 
 		// Stash the PB NodeRef under both output paths on the emitting
 		// platform so resolveCodegenDepRefs can thread it as a direct dep
@@ -560,6 +624,12 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		ctx.pbOutputs[pbKey] = pbRef
 		pbKey.path = pbCC
 		ctx.pbOutputs[pbKey] = pbRef
+		if d.grpc {
+			pbKey.path = grpcPbH
+			ctx.pbOutputs[pbKey] = pbRef
+			pbKey.path = grpcPbCC
+			ctx.pbOutputs[pbKey] = pbRef
+		}
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
 			directImports := protoDirectImportIncludes(ctx.sourceRoot, protoRelPath)
 			extras := pbDescriptorImporterExtras(ctx.sourceRoot, protoRelPath)
@@ -590,6 +660,19 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 				OutputPath:    pbCC,
 				EmitsIncludes: pbCCEmits,
 			})
+			if d.grpc {
+				grpcCCEmits := make([]VFS, 0, len(pbCCEmits))
+				grpcCCEmits = append(grpcCCEmits, grpcPbH)
+				grpcCCEmits = append(grpcCCEmits, Source(protoRelPath))
+				grpcCCEmits = append(grpcCCEmits, pbWrapperVFS)
+				grpcCCEmits = append(grpcCCEmits, protobufRuntimeHeaders...)
+				grpcCCEmits = append(grpcCCEmits, pbCcDeepRuntimeHeaders...)
+				reg.Register(&GeneratedFileInfo{
+					ProducerKvP:   "PB",
+					OutputPath:    grpcPbCC,
+					EmitsIncludes: grpcCCEmits,
+				})
+			}
 		}
 
 		// Stash the (PB ref, .pb.cc, src-with-suffix) for downstream-CC + AR.
@@ -599,6 +682,19 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 			srcRel:  strings.TrimSuffix(src, ".proto") + ".pb.cc",
 			primSrc: Source(protoRelPath),
 		})
+		if d.grpc {
+			codegenOutputs = append(codegenOutputs, protoCodegenOutput{
+				genRef:  pbRef,
+				pbCC:    grpcPbCC,
+				srcRel:  strings.TrimSuffix(src, ".proto") + ".grpc.pb.cc",
+				primSrc: Source(protoRelPath),
+			})
+		}
+
+		pyRefs, pyOuts, pyInputs := emitPyProtoSrc(ctx, instance, d, src, protocLDRef, protocBinary)
+		pyProtoRefs = append(pyProtoRefs, pyRefs...)
+		pyProtoOutputs = append(pyProtoOutputs, pyOuts...)
+		pyProtoMemberInputs = append(pyProtoMemberInputs, pyInputs...)
 	}
 
 	// Emit EV nodes (PROTO_LIBRARY with .ev sources → module_tag:"cpp_proto").
@@ -774,5 +870,330 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	arBaseName := ArchiveName(instance.Path)
 	archivePath := Build(instance.Path + "/" + arBaseName)
 	arRef := emitARNode(instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, nil, ctx.host, ctx.emit)
-	return &protoSrcsResult{ARRef: arRef, ARPath: archivePath}
+
+	result := &protoSrcsResult{ARRef: arRef, ARPath: archivePath}
+	if len(pyProtoRefs) > 0 {
+		pyInstance := instance
+		pyInstance.Language = LangPy
+		globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", "")
+		gRef := EmitARGlobalNamedTagged(pyInstance, globalBaseName, "py3_proto_global", pyProtoRefs, pyProtoOutputs, pyProtoMemberInputs, ctx.host, ctx.emit)
+		result.GlobalRef = &gRef
+		result.GlobalPath = Build(instance.Path + "/" + globalBaseName)
+	}
+
+	return result
+}
+
+func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src string, protocLDRef NodeRef, protocBinary string) ([]NodeRef, []VFS, []VFS) {
+	if d.moduleStmt == nil || d.moduleStmt.Name != "PROTO_LIBRARY" {
+		return nil, nil, nil
+	}
+
+	base := strings.TrimSuffix(src, ".proto")
+	pyBase := base + "__intpy3___pb2.py"
+	pyOut := Build(instance.Path + "/" + pyBase)
+	pyiOut := Build(instance.Path + "/" + base + "__intpy3___pb2.pyi")
+	var grpcPyOut VFS
+
+	outputs := []VFS{pyOut}
+	suffixes := []string{"_pb2.py"}
+	if d.grpc {
+		grpcPyOut = Build(instance.Path + "/" + base + "__intpy3___pb2_grpc.py")
+		outputs = append(outputs, grpcPyOut)
+		suffixes = append(suffixes, "_pb2_grpc.py")
+	}
+	outputs = append(outputs, pyiOut)
+	suffixes = append(suffixes, "_pb2.pyi")
+
+	grpcPyBinary := pbGrpcPyPath
+	mypyBinary := pbMypyPath
+	var grpcPyRef, mypyRef NodeRef
+	if d.grpc {
+		grpcPyInst := NewToolInstance(ctx.host, pbGrpcPyModule, instance.Language)
+		grpcPyInst.Flags = inferFlagsFromPath(pbGrpcPyModule, true)
+		if exc := Try(func() {
+			res := genModule(ctx, grpcPyInst)
+			grpcPyRef = res.LDRef
+			if res.LDPath != "" {
+				grpcPyBinary = res.LDPath
+			}
+		}); exc != nil {
+			_ = exc
+		}
+	}
+	mypyInst := NewToolInstance(ctx.host, pbMypyModule, instance.Language)
+	mypyInst.Flags = inferFlagsFromPath(pbMypyModule, true)
+	if exc := Try(func() {
+		res := genModule(ctx, mypyInst)
+		mypyRef = res.LDRef
+		if res.LDPath != "" {
+			mypyBinary = res.LDPath
+		}
+	}); exc != nil {
+		_ = exc
+	}
+
+	cmdArgs := []string{
+		instance.Platform.Tools.Python3,
+		pbPyWrapperPath,
+		"--py_ver", "py3",
+		"--suffixes",
+	}
+	cmdArgs = append(cmdArgs, suffixes...)
+	cmdArgs = append(cmdArgs,
+		"--input", instance.Path+"/"+src,
+		"--ns", "/",
+		"--",
+		protocBinary,
+		"-I=./",
+		"-I=$(S)/",
+		"-I=$(B)",
+		"-I=$(S)",
+		"-I=$(S)/contrib/libs/protobuf/src",
+		"-I=$(S)/contrib/libs/protoc/src",
+		"-I=$(B)",
+		"-I=$(S)/contrib/libs/protobuf/src",
+		"--python_out=$(B)/",
+		instance.Path+"/"+src,
+	)
+	if d.grpc {
+		cmdArgs = append(cmdArgs,
+			"--plugin=protoc-gen-grpc_py="+grpcPyBinary,
+			"--grpc_py_out=$(B)/",
+		)
+	}
+	cmdArgs = append(cmdArgs,
+		"--plugin=protoc-gen-mypy="+mypyBinary,
+		"--mypy_out=$(B)/",
+	)
+
+	toolRefs := make([]NodeRef, 0, 3)
+	if protocLDRef != (NodeRef{}) {
+		toolRefs = append(toolRefs, protocLDRef)
+	}
+	if grpcPyRef != (NodeRef{}) {
+		toolRefs = append(toolRefs, grpcPyRef)
+	}
+	if mypyRef != (NodeRef{}) {
+		toolRefs = append(toolRefs, mypyRef)
+	}
+
+	inputs := []VFS{pbProtocBinaryVFS, pbPyWrapperVFS, Source(instance.Path + "/" + src)}
+	if d.grpc {
+		inputs = append(inputs, pbGrpcPyVFS)
+	}
+	inputs = append(inputs, pbMypyVFS)
+
+	pyPBNode := &Node{
+		Cmds:             []Cmd{{CmdArgs: cmdArgs, Cwd: "$(S)", Env: map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}}},
+		Env:              map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"},
+		Inputs:           inputs,
+		Outputs:          outputs,
+		KV:               map[string]string{"p": "PB", "pc": "yellow"},
+		Tags:             instance.Platform.Tags,
+		TargetProperties: map[string]string{"module_dir": instance.Path, "module_tag": "py3_proto"},
+		Platform:         string(instance.Platform.Target),
+		HostPlatform:     instance.Platform.IsHost,
+		Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
+		DepRefs:          toolRefs,
+	}
+	if len(toolRefs) > 0 {
+		pyPBNode.ForeignDepRefs = map[string][]NodeRef{"tool": toolRefs}
+	}
+	pyPBRef := ctx.emit.Emit(pyPBNode)
+
+	yapyRefs, yapyOuts := emitGeneratedPyProtoYapyc(ctx, instance, []VFS{pyOut, grpcPyOut}, pyPBRef)
+	auxRef, auxOut, auxInputs := emitPyProtoAux(ctx, instance, d, src, pyPBRef, outputs, yapyRefs, yapyOuts)
+
+	refs := []NodeRef{auxRef}
+	outs := []VFS{auxOut}
+	memberInputs := []VFS{pbPyWrapperVFS}
+	memberInputs = append(memberInputs, auxInputs...)
+
+	return refs, outs, memberInputs
+}
+
+func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs []VFS, pyPBRef NodeRef) ([]NodeRef, []VFS) {
+	py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin := py3ccToolRefs(ctx, instance)
+	suffix := protoPySuffix(instance.Path)
+
+	var refs []NodeRef
+	var outs []VFS
+	for _, pyOut := range pyOutputs {
+		if pyOut.Rel == "" {
+			continue
+		}
+
+		out := Build(pyOut.Rel + "." + suffix + ".yapyc3")
+		cmdArgs := []string{
+			py3ccBinary,
+			"--slow-py3cc",
+			py3ccSlowBin,
+			pyOut.Rel + "-",
+			pyOut.String(),
+			out.String(),
+		}
+
+		deps := []NodeRef{pyPBRef}
+		var toolRefs []NodeRef
+		if py3ccRef != (NodeRef{}) {
+			deps = append(deps, py3ccRef)
+			toolRefs = append(toolRefs, py3ccRef)
+		}
+		if py3ccSlowRef != (NodeRef{}) {
+			deps = append(deps, py3ccSlowRef)
+			toolRefs = append(toolRefs, py3ccSlowRef)
+		}
+
+		node := &Node{
+			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)", "PYTHONHASHSEED": "0"}}},
+			Env:              map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)", "PYTHONHASHSEED": "0"},
+			Inputs:           []VFS{Build("tools/py3cc/py3cc"), Build("tools/py3cc/slow/py3cc"), pyOut},
+			Outputs:          []VFS{out},
+			KV:               map[string]string{"p": "PY", "pc": "yellow"},
+			Tags:             []string{},
+			TargetProperties: map[string]string{"module_dir": instance.Path, "module_tag": "py3_proto"},
+			Platform:         string(instance.Platform.Target),
+			Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
+			DepRefs:          deps,
+		}
+		if len(toolRefs) > 0 {
+			node.ForeignDepRefs = map[string][]NodeRef{"tool": toolRefs}
+		}
+		refs = append(refs, ctx.emit.Emit(node))
+		outs = append(outs, out)
+	}
+
+	return refs, outs
+}
+
+func emitPyProtoAux(ctx *genCtx, instance ModuleInstance, d *moduleData, src string, pyPBRef NodeRef, pyOutputs []VFS, yapyRefs []NodeRef, yapyOuts []VFS) (NodeRef, VFS, []VFS) {
+	rescompilerRef := walkHostToolForRef(ctx, instance, "tools/rescompiler/bin")
+
+	base := strings.TrimSuffix(src, ".proto")
+	pyBase := base + "__intpy3___pb2.py"
+	type resource struct {
+		path VFS
+		key  string
+	}
+
+	var resources []resource
+	addResource := func(srcPath VFS, key string) {
+		resources = append(resources, resource{path: srcPath, key: key})
+	}
+	addResource(pyOutputs[0], instance.Path+"/"+strings.TrimSuffix(pyBase, "__intpy3___pb2.py")+"_pb2.py")
+	if len(yapyOuts) > 0 {
+		addResource(yapyOuts[0], instance.Path+"/"+strings.TrimSuffix(pyBase, "__intpy3___pb2.py")+"_pb2.py.yapyc3")
+	}
+	if d.grpc && len(pyOutputs) > 2 && pyOutputs[1].Rel != "" {
+		addResource(pyOutputs[1], instance.Path+"/"+base+"_pb2_grpc.py")
+		if len(yapyOuts) > 1 {
+			addResource(yapyOuts[1], instance.Path+"/"+base+"_pb2_grpc.py.yapyc3")
+		}
+	}
+
+	auxHashInputs := make([]string, 0, len(resources)*4)
+	for _, r := range resources {
+		key := "resfs/file/py/" + r.key
+		arcBuildPath := "${ARCADIA_BUILD_ROOT}/" + r.path.Rel
+		kv := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + arcBuildPath + "\"}"
+		auxHashInputs = append(auxHashInputs, "-", kv, arcBuildPath, "-"+key)
+	}
+
+	aux := Build(instance.Path + "/" + protoResourceHash(auxHashInputs, "$S/"+instance.Path, "PY3_PROTO") + "_raw.auxcpp")
+	cmdArgs := []string{rescompilerBinPath, aux.String()}
+	for _, r := range resources {
+		key := "resfs/file/py/" + r.key
+		cmdArgs = append(cmdArgs, "-", "resfs/src/"+key+"="+r.path.Rel, r.path.String(), "-"+key)
+	}
+
+	deps := []NodeRef{pyPBRef}
+	deps = append(deps, yapyRefs...)
+	if rescompilerRef != (NodeRef{}) {
+		deps = append(deps, rescompilerRef)
+	}
+	inputs := append([]VFS{rescompilerBinVFS}, pyOutputs...)
+	inputs = append(inputs, yapyOuts...)
+
+	prRef := ctx.emit.Emit(&Node{
+		Cmds:             []Cmd{{CmdArgs: cmdArgs}},
+		Inputs:           inputs,
+		Outputs:          []VFS{aux},
+		KV:               map[string]string{"p": "PR", "pc": "yellow"},
+		Tags:             []string{},
+		TargetProperties: map[string]string{"module_dir": instance.Path, "module_tag": "py3_proto"},
+		Platform:         string(instance.Platform.Target),
+		Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
+		DepRefs:          deps,
+	})
+
+	ccIn := ModuleCCInputs{
+		AddIncl:         d.addIncl,
+		CFlags:          d.cFlags,
+		CXXFlags:        d.cxxFlags,
+		COnlyFlags:      d.cOnlyFlags,
+		SourceRoot:      ctx.sourceRoot,
+		DefaultVars:     d.defaultVars,
+		DefaultVarOrder: d.defaultVarOrder,
+		IsGenerated:     true,
+		HasGenerator:    true,
+		Generator:       prRef,
+		Py3Suffix:       true,
+		ModuleTag:       "py3_proto",
+		IncludeInputs:   inputs,
+	}
+	ccRef, ccOut := EmitCC(instance, aux.Rel[strings.LastIndex(aux.Rel, "/")+1:], ccIn, ctx.host, ctx.emit)
+	return ccRef, ccOut, inputs
+}
+
+func py3ccToolRefs(ctx *genCtx, instance ModuleInstance) (NodeRef, NodeRef, string, string) {
+	py3ccBinary := Build("tools/py3cc/py3cc").String()
+	py3ccSlowBin := Build("tools/py3cc/slow/py3cc").String()
+	var py3ccRef, py3ccSlowRef NodeRef
+
+	inst := NewToolInstance(ctx.host, "tools/py3cc/bin", instance.Language)
+	inst.Flags = inferFlagsFromPath("tools/py3cc/bin", true)
+	if exc := Try(func() {
+		res := genModule(ctx, inst)
+		py3ccRef = res.LDRef
+		if res.LDPath != "" {
+			py3ccBinary = canonicalizePy3ccBinaryPath(res.LDPath)
+		}
+	}); exc != nil {
+		_ = exc
+	}
+
+	slowInst := NewToolInstance(ctx.host, "tools/py3cc/slow", instance.Language)
+	slowInst.Flags = inferFlagsFromPath("tools/py3cc/slow", true)
+	if exc := Try(func() {
+		res := genModule(ctx, slowInst)
+		py3ccSlowRef = res.LDRef
+		if res.LDPath != "" {
+			py3ccSlowBin = res.LDPath
+		}
+	}); exc != nil {
+		_ = exc
+	}
+
+	return py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin
+}
+
+func protoPySuffix(modulePath string) string {
+	return protoPathID("$S/" + modulePath)[:4]
+}
+
+func protoPathID(path string) string {
+	sum := md5.Sum([]byte(path))
+	encoded := base32.StdEncoding.EncodeToString(sum[:])
+	encoded = strings.ToLower(encoded)
+	return strings.TrimRight(encoded, "=")
+}
+
+func protoResourceHash(items []string, modulePath, moduleTag string) string {
+	list := append([]string(nil), items...)
+	list = append(list, modulePath)
+	sort.Strings(list)
+
+	sum := md5.Sum([]byte(strings.Join(list, ",") + moduleTag))
+	return strings.ToLower(enchex.EncodeToString(sum[:]))[:26]
 }

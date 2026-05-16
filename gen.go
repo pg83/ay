@@ -674,6 +674,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	env := buildIfEnv(instance)
 	d := collectModule(instance.Path, mf.Stmts, env, instance.Flags)
+	for _, stmt := range d.allPySrcs {
+		applyAllPySrcs(ctx.sourceRoot, instance.Path, stmt, d)
+	}
 
 	if d.conflictMod != nil {
 		ThrowFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path, d.moduleStmt.Name, d.conflictMod.Name)
@@ -683,7 +686,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path)
 	}
 
-	if d.moduleStmt.Name != "LIBRARY" && d.moduleStmt.Name != "PROGRAM" && d.moduleStmt.Name != "PY3_PROGRAM_BIN" && !isPyLibraryType(d.moduleStmt.Name) && !isMultimoduleLibraryType(d.moduleStmt.Name) {
+	if d.moduleStmt.Name != "LIBRARY" && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isMultimoduleLibraryType(d.moduleStmt.Name) {
 		ThrowFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path, d.moduleStmt.Name)
 	}
 
@@ -702,9 +705,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// _BASE_PY3_PROGRAM (build/conf/python.conf:877-883) applies an
 	// implicit `ALLOCATOR($_MY_ALLOCATOR)`; the otherwise-branch
 	// (non-ARCH_PPC64LE) sets _MY_ALLOCATOR=J. Linux-x86_64/aarch64 takes
-	// this branch, so PY3_PROGRAM_BIN modules without explicit ALLOCATOR
+	// this branch, so PY3_PROGRAM modules without explicit ALLOCATOR
 	// inherit jemalloc rather than the plain-PROGRAM TCMALLOC_TC default.
-	if !d.hadAllocator && d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+	if !d.hadAllocator && (d.moduleStmt.Name == "PY3_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN") {
 		d.hadAllocator = true
 		d.allocatorName = "J"
 	}
@@ -728,6 +731,26 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		d.peerdirs = append([]string{"contrib/libs/python"}, d.peerdirs...)
 	}
 
+	if d.moduleStmt.Name == "PY3_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+		// `_BASE_PY3_PROGRAM` adds the Python runtime main library,
+		// optional sqlite extension, and import-test peer from
+		// ADD_CHECK_PY_IMPORTS(). These are implicit module-body peers,
+		// not `_BASE_PROGRAM` defaults.
+		for _, peer := range []string{
+			"library/python/runtime_py3/main",
+			"contrib/tools/python3/Modules/_sqlite",
+			"library/python/testing/import_test",
+		} {
+			if instance.Path != peer {
+				d.peerdirs = append(d.peerdirs, peer)
+			}
+		}
+	}
+
+	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noImportTracing && instance.Path != "library/python/import_tracing/constructor" {
+		d.peerdirs = append(d.peerdirs, "library/python/import_tracing/constructor")
+	}
+
 	// GENERATE_ENUM_SERIALIZATION* injects an implicit PEERDIR to
 	// tools/enum_parser/enum_serialization_runtime (upstream
 	// `_GENERATE_ENUM_SERIALIZATION_BASE` in build/ymake.core.conf). The
@@ -749,12 +772,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// header-only path; their .proto/.ev sources are emitted by
 	// emitProtoSrcs below.
 	//
-	// PY3_PROGRAM_BIN is excluded: it has no C++ sources but is a PROGRAM
-	// and needs the full PROGRAM walk + EmitLD dispatch.
+	// Program-shaped modules are excluded: PY*_PROGRAM may have no C++
+	// sources but still needs the full PROGRAM walk + EmitLD dispatch.
 	// PY3_LIBRARY etc. with compilable C++ sources take the LIBRARY path;
 	// without sources they reach this header-only path via
 	// !hasCompilableSource.
-	if (!hasCompilableSource(d) && d.moduleStmt.Name != "PY3_PROGRAM_BIN") || isMultimoduleLibraryType(d.moduleStmt.Name) {
+	if (!hasCompilableSource(d) && !isProgramModuleType(d.moduleStmt.Name)) || isMultimoduleLibraryType(d.moduleStmt.Name) {
 		if d.moduleStmt.Name == "PROGRAM" && !hasSkippedSource(d) {
 			ThrowFmt("gen: %s has no compilable sources (after IF/header filter)", instance.Path)
 		}
@@ -799,20 +822,24 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			// LangCPP.
 			arInstance := instance
 			var globalBaseName, tag string
+			archiveName := ""
+			if len(d.moduleStmt.Args) > 0 {
+				archiveName = d.moduleStmt.Args[0]
+			}
 			switch d.moduleStmt.Name {
 			case "PY23_NATIVE_LIBRARY":
-				globalBaseName = globalArchiveNameWithPrefix(instance.Path, "libpy3c")
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "libpy3c", archiveName)
 				tag = "py3_native_global"
 			case "PY23_LIBRARY":
 				arInstance.Language = LangPy
-				globalBaseName = globalArchiveNameWithPrefix(instance.Path, "libpy3")
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", archiveName)
 				tag = "py3_global"
 			case "PY3_LIBRARY", "PY2_LIBRARY", "PY2_PROGRAM", "PY3_PROGRAM":
 				arInstance.Language = LangPy
-				globalBaseName = globalArchiveNameWithPrefix(instance.Path, "libpy3")
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", archiveName)
 				tag = "global"
 			default:
-				globalBaseName = globalArchiveName(instance.Path)
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "lib", archiveName)
 				tag = "global"
 			}
 			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRefs, objcopyOutputs, objcopyGlobalInputs, ctx.host, ctx.emit)
@@ -853,6 +880,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			hOnlyARRef = protoResult.ARRef
 			hOnlyARPath = protoResult.ARPath.String()
 			hOnlyHasAR = true
+			if protoResult.GlobalRef != nil {
+				hOnlyGlobalRef = protoResult.GlobalRef
+				hOnlyGlobalPath = protoResult.GlobalPath.Rel
+			}
 		}
 
 		peerArchivePathsH := peerContribs.archivePaths
@@ -927,7 +958,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// ordering for the ragel6 CC include case).
 	languageDefaultsCount := len(defaults)
 
-	isProgram := (d.moduleStmt.Name == "PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN") && !isRuntimeAncestor(instance.Path)
+	isProgram := isProgramModuleType(d.moduleStmt.Name) && !isRuntimeAncestor(instance.Path)
 
 	var preUserProgDefaults []string
 	var postUserProgDefaults []string
@@ -1602,16 +1633,20 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	//   - everything else → standard "lib" prefix (ArchiveName)
 	var arNameFn func(string) string
 	var globalArNameFn func(string) string
+	archiveName := ""
+	if len(d.moduleStmt.Args) > 0 {
+		archiveName = d.moduleStmt.Args[0]
+	}
 	switch d.moduleStmt.Name {
 	case "PY23_NATIVE_LIBRARY":
-		arNameFn = Py3cArchiveName
-		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefix(dir, "libpy3c") }
+		arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, "libpy3c", archiveName) }
+		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, "libpy3c", archiveName) }
 	case "PY3_LIBRARY", "PY2_LIBRARY", "PY23_LIBRARY", "PY2_PROGRAM", "PY3_PROGRAM":
-		arNameFn = Py3ArchiveName
-		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefix(dir, "libpy3") }
+		arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, "libpy3", archiveName) }
+		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, "libpy3", archiveName) }
 	default:
-		arNameFn = ArchiveName
-		globalArNameFn = globalArchiveName
+		arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, "lib", archiveName) }
+		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, "lib", archiveName) }
 	}
 
 	// Drop BUILD_ROOT-rooted addincl paths from the peer slot when the
@@ -1645,6 +1680,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		Py3Suffix:            isPy3NativeLib,
 		ModuleTag:            perModuleCCTag,
 		Ragel6Flags:          d.ragel6Flags,
+		BisonGenExt:          d.bisonGenExt,
 	}
 
 	// Ancestor-only SRCDIR rebase. The "PROGRAM with SRCDIR pointing at
@@ -1759,6 +1795,42 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// the member's primary source(s): .cpp/.c/.cc/.cxx/.S dispatch
 		// yields 1; .rl6 yields 1 (the .rl6 source) or 2 (when the `.h`
 		// companion exists on disk).
+		for i := 0; i < emit.PrimaryCount && i < len(emit.CcIns); i++ {
+			addRegularPrimary(emit.CcIns[i])
+		}
+	}
+
+	for _, emit := range emitCheckConfigH(ctx, instance, d, moduleInputs) {
+		ccRefs = append(ccRefs, emit.Ref)
+		ccOutputs = append(ccOutputs, emit.OutPath)
+		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
+		ccIsCFGenerated = append(ccIsCFGenerated, true)
+		addMemberInputs(emit.CcIns)
+
+		for i := 0; i < emit.PrimaryCount && i < len(emit.CcIns); i++ {
+			addRegularPrimary(emit.CcIns[i])
+		}
+	}
+
+	for _, emit := range emitCythonCpp(ctx, instance, d, moduleInputs) {
+		ccRefs = append(ccRefs, emit.Ref)
+		ccOutputs = append(ccOutputs, emit.OutPath)
+		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
+		ccIsCFGenerated = append(ccIsCFGenerated, true)
+		addMemberInputs(emit.CcIns)
+
+		for i := 0; i < emit.PrimaryCount && i < len(emit.CcIns); i++ {
+			addRegularPrimary(emit.CcIns[i])
+		}
+	}
+
+	for _, emit := range emitSwigC(ctx, instance, d, moduleInputs) {
+		ccRefs = append(ccRefs, emit.Ref)
+		ccOutputs = append(ccOutputs, emit.OutPath)
+		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
+		ccIsCFGenerated = append(ccIsCFGenerated, true)
+		addMemberInputs(emit.CcIns)
+
 		for i := 0; i < emit.PrimaryCount && i < len(emit.CcIns); i++ {
 			addRegularPrimary(emit.CcIns[i])
 		}
@@ -2027,7 +2099,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ownLDPluginRefs, ownLDPluginPaths := emitOwnLDPlugins(ctx, instance, d.ldPlugins)
 	mergedLDPluginRefs, mergedLDPluginPaths := mergeLDPlugins(ownLDPluginRefs, ownLDPluginPaths, peerLDPluginRefs, peerLDPluginPaths)
 
-	if d.moduleStmt.Name == "PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+	if isProgramModuleType(d.moduleStmt.Name) {
 		// PROGRAM(name) declares the linker output basename directly.
 		// Most ya.makes elide the argument (PROGRAM() → binary inherits
 		// the directory's last component); `contrib/tools/ragel6/bin/
@@ -2066,17 +2138,17 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 		}
 
-		// PY3_PROGRAM_BIN emits module_lang="py3". Tag the instance at
+		// Python PROGRAM modules emit module_lang="py3". Tag the instance at
 		// the EmitLD call site only so Language does not propagate into
 		// derivePeerInstance's peer walks (peers are C++ LIBRARY modules
 		// and must stay Language=LangCPP to share memo entries with the
 		// rest of the target/host closure).
 		ldInstance := instance
-		if d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+		if d.moduleStmt.Name == "PY2_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
 			ldInstance.Language = LangPy
 		}
 
-		// PY3_PROGRAM_BIN must emit yapyc3 and objcopy nodes BEFORE
+		// Python PROGRAM modules must emit yapyc3 and objcopy nodes BEFORE
 		// EmitLD so the objcopy outputs can be folded into the LD's
 		// SRCS_GLOBAL slot (REF wraps the program LD around per-resource
 		// objcopy `.o` files). Objcopy paths flow through a dedicated
@@ -2089,7 +2161,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		var ldObjcopyRefs []NodeRef
 		var ldObjcopyPaths []VFS
 
-		if d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+		if resourceModuleTag(d.moduleStmt.Name) != "" {
 			emitPySrcs(ctx, instance, d)
 
 			objcopyRefs, objcopyOutputs, _ := emitResourceObjcopy(ctx, instance, d)
@@ -2154,6 +2226,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			peerCFlagsGlobal,
 			d.usePython3,
 			wantsStrip,
+			d.splitDwarf,
 			ctx.host,
 			ctx.emit,
 		)
@@ -2787,6 +2860,14 @@ func hasCompilableSource(d *moduleData) bool {
 		return true
 	}
 
+	if len(d.cythonCpp) > 0 {
+		return true
+	}
+
+	if len(d.swigC) > 0 {
+		return true
+	}
+
 	for _, s := range d.globalSrcs {
 		if !isHeaderSource(s) && !isSkippedSource(s) {
 			return true
@@ -2831,6 +2912,7 @@ func isCodegenProducingSrc(srcRel string) bool {
 	return strings.HasSuffix(srcRel, ".ev") ||
 		strings.HasSuffix(srcRel, ".rl6") ||
 		strings.HasSuffix(srcRel, ".rl") ||
+		strings.HasSuffix(srcRel, ".y") ||
 		strings.HasSuffix(srcRel, ".cpp.in") ||
 		strings.HasSuffix(srcRel, ".c.in")
 }

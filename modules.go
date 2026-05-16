@@ -11,40 +11,46 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 )
 
 type moduleData struct {
-	moduleStmt       *ModuleStmt
-	srcs             []string
-	globalSrcs       []string
-	pySrcs           []string                         // PR-M3-A: python sources from PY_SRCS(...); each entry is a .py filename
-	pyBuildNoPYC     bool                             // PR-M3-A: set by ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
-	pyBuildNoPY      bool                             // PR-M3-resource-objcopy-C: set by ENABLE(PYBUILD_NO_PY); suppresses raw .py resfs embedding from PY_SRCS (only the yapyc3 form is embedded)
-	pyTopLevel       bool                             // PR-M3-resource-objcopy-C: set by TOP_LEVEL prefix in PY_SRCS(...); the resfs key for each source omits the dotted module-path prefix
-	enumSrcs         []*GenerateEnumSerializationStmt // PR-M3-D: GENERATE_ENUM_SERIALIZATION(*) declarations
-	peerdirs         []string
-	joinSrcs         []*JoinSrcsStmt
-	addIncl          []string // collected non-GLOBAL ADDINCL paths
-	addInclGlobal    []string // PR-31 D04: collected ADDINCL(GLOBAL ...) paths; peer-propagated to consumers
-	cFlags           []string // collected non-GLOBAL CFLAGS values (apply to module's own C+C++ sources)
-	cFlagsGlobal     []string // PR-32 D04: collected CFLAGS(GLOBAL ...) values; peer-propagated to consumers' C+C++ sources
-	cxxFlags         []string // collected non-GLOBAL CXXFLAGS values (C++ only); PR-29-D02 threads into ModuleCCInputs.CXXFlags
-	cxxFlagsGlobal   []string // PR-32 D05: collected CXXFLAGS(GLOBAL ...) values; peer-propagated to consumers' C++ sources
-	cOnlyFlags       []string // collected non-GLOBAL CONLYFLAGS values (C only); PR-29-D02 threads into ModuleCCInputs.COnlyFlags
-	cOnlyFlagsGlobal []string // PR-32 D06: collected CONLYFLAGS(GLOBAL ...) values; peer-propagated to consumers' C / .S sources
-	sFlags           []string // PR-M3-openssl-as-cflags: SET_APPEND(SFLAGS ...) values; appended to AS compiles only.
-	ldFlags          []string // collected LDFLAGS values
-	srcDir           string   // last SRCDIR setting (empty = module dir)
-	flags            FlagSet  // overlay of inferFlagsFromPath + macro bools
-	hadAllocator     bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
-	allocatorName    string   // PR-35g: name passed to ALLOCATOR(...); empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE).
-	muslLite         bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
-	muslEnabled      bool     // module-local MUSL value after SET()/DEFAULT()/CLI env evaluation.
-	noPythonIncl     bool     // set by NO_PYTHON_INCLUDES(); suppresses PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (build/conf/python.conf:741-743).
-	usePython3       bool     // set by USE_PYTHON3() or PY3-family module types; normalised by applyPython3AddIncl. Triggers _PYTHON3_ADDINCL (python.conf:1018-1023): -DUSE_PYTHON3 + contrib/libs/python/Include.
-	ldPlugins        []string // filenames from LD_PLUGIN(name.py); each becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs. Only contrib/libs/musl/include uses this in M2.
-	arPlugin         string   // name from AR_PLUGIN(name); resolves to `$(S)/<modulePath>/<name>.pyplugin` and is injected into AR cmd_args (`--plugin <path>`) and inputs. Mirror of AR_PLUGIN (ymake.core.conf:3396-3398) + _LD_ARCHIVER_KV_PLUGIN (ld.conf:366-368).
+	moduleStmt         *ModuleStmt
+	srcs               []string
+	globalSrcs         []string
+	pySrcs             []string // PR-M3-A: python sources from PY_SRCS(...); each entry is a .py filename
+	pyBuildNoPYC       bool     // PR-M3-A: set by ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
+	pyBuildNoPY        bool     // PR-M3-resource-objcopy-C: set by ENABLE(PYBUILD_NO_PY); suppresses raw .py resfs embedding from PY_SRCS (only the yapyc3 form is embedded)
+	pyTopLevel         bool     // PR-M3-resource-objcopy-C: set by TOP_LEVEL prefix in PY_SRCS(...); the resfs key for each source omits the dotted module-path prefix
+	noExtendedPySearch bool
+	enumSrcs           []*GenerateEnumSerializationStmt // PR-M3-D: GENERATE_ENUM_SERIALIZATION(*) declarations
+	peerdirs           []string
+	joinSrcs           []*JoinSrcsStmt
+	addIncl            []string // collected non-GLOBAL ADDINCL paths
+	addInclGlobal      []string // PR-31 D04: collected ADDINCL(GLOBAL ...) paths; peer-propagated to consumers
+	cFlags             []string // collected non-GLOBAL CFLAGS values (apply to module's own C+C++ sources)
+	cFlagsGlobal       []string // PR-32 D04: collected CFLAGS(GLOBAL ...) values; peer-propagated to consumers' C+C++ sources
+	cxxFlags           []string // collected non-GLOBAL CXXFLAGS values (C++ only); PR-29-D02 threads into ModuleCCInputs.CXXFlags
+	cxxFlagsGlobal     []string // PR-32 D05: collected CXXFLAGS(GLOBAL ...) values; peer-propagated to consumers' C++ sources
+	cOnlyFlags         []string // collected non-GLOBAL CONLYFLAGS values (C only); PR-29-D02 threads into ModuleCCInputs.COnlyFlags
+	cOnlyFlagsGlobal   []string // PR-32 D06: collected CONLYFLAGS(GLOBAL ...) values; peer-propagated to consumers' C / .S sources
+	sFlags             []string // PR-M3-openssl-as-cflags: SET_APPEND(SFLAGS ...) values; appended to AS compiles only.
+	ldFlags            []string // collected LDFLAGS values
+	srcDir             string   // last SRCDIR setting (empty = module dir)
+	flags              FlagSet  // overlay of inferFlagsFromPath + macro bools
+	hadAllocator       bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
+	allocatorName      string   // PR-35g: name passed to ALLOCATOR(...); empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE).
+	muslLite           bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
+	muslEnabled        bool     // module-local MUSL value after SET()/DEFAULT()/CLI env evaluation.
+	splitDwarf         bool     // set by SPLIT_DWARF(); PROGRAM LD emits a separate <binary>.debug output.
+	noPythonIncl       bool     // set by NO_PYTHON_INCLUDES(); suppresses PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (build/conf/python.conf:741-743).
+	noImportTracing    bool     // set by NO_IMPORT_TRACING(); suppresses PY*_PROGRAM implicit import_tracing constructor peer.
+	usePython3         bool     // set by USE_PYTHON3() or PY3-family module types; normalised by applyPython3AddIncl. Triggers _PYTHON3_ADDINCL (python.conf:1018-1023): -DUSE_PYTHON3 + contrib/libs/python/Include.
+	ldPlugins          []string // filenames from LD_PLUGIN(name.py); each becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs. Only contrib/libs/musl/include uses this in M2.
+	arPlugin           string   // name from AR_PLUGIN(name); resolves to `$(S)/<modulePath>/<name>.pyplugin` and is injected into AR cmd_args (`--plugin <path>`) and inputs. Mirror of AR_PLUGIN (ymake.core.conf:3396-3398) + _LD_ARCHIVER_KV_PLUGIN (ld.conf:366-368).
 	// per-source extra CFLAGS keyed by source filename, populated by
 	// `SRC(filename extra_cflags...)`. Threaded into
 	// ModuleCCInputs.PerSourceCFlags so the composer appends them right
@@ -65,7 +71,14 @@ type moduleData struct {
 	// RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT → JV nodes.
 	antlr4Grammars []antlr4GrammarInfo
 	// RUN_PROGRAM → PR nodes.
-	runPrograms []*RunProgramStmt
+	runPrograms        []*RunProgramStmt
+	checkConfigHeaders []string
+	cythonCpp          []*CythonStmt
+	swigC              []swigSrc
+	bisonGenExt        string
+	grpc               bool
+	yaConfJSON         []string
+	allPySrcs          []*UnknownStmt
 	// ARCHIVE(NAME <out> [DONTCOMPRESS] files...) invocations in
 	// declaration order. Each produces an AR node invoking
 	// `$(B)/tools/archiver/archiver` to pack the listed files into NAME.
@@ -336,7 +349,7 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 			// d.globalSrcs.
 			globalNext := false
 
-			for _, src := range v.Sources {
+			for _, src := range expandListVars(v.Sources, env) {
 				if src == "GLOBAL" {
 					globalNext = true
 
@@ -536,6 +549,10 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		d.flags.NoUtil = true
 	case "NO_COMPILER_WARNINGS":
 		d.flags.NoCompilerWarnings = true
+	case "SPLIT_DWARF":
+		d.splitDwarf = true
+	case "NO_SPLIT_DWARF":
+		d.splitDwarf = false
 	case "NO_PYTHON_INCLUDES":
 		// NO_PYTHON_INCLUDES() sets NO_PYTHON_INCLS=yes
 		// (build/conf/python.conf:928-929). The PY*_LIBRARY implicit
@@ -543,6 +560,41 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		// at python.conf:741-743 is gated by this; the implicit-peer
 		// code in genModule reads d.noPythonIncl.
 		d.noPythonIncl = true
+	case "NO_IMPORT_TRACING":
+		d.noImportTracing = true
+	case "NO_EXTENDED_SOURCE_SEARCH":
+		d.noExtendedPySearch = true
+	case "STYLE_RUFF":
+		// Linter-only macro. It does not emit build nodes for `yatool make`
+		// target graphs.
+	case "MAVEN_GROUP_ID":
+		// Java export metadata. build/conf/java.conf documents no effect
+		// on regular builds.
+	case "CHECK_CONFIG_H":
+		if len(v.Args) != 1 {
+			ThrowFmt("CHECK_CONFIG_H expects exactly 1 argument, got %d", len(v.Args))
+		}
+
+		d.checkConfigHeaders = append(d.checkConfigHeaders, v.Args[0])
+	case "BUILDWITH_CYTHON_CPP":
+		if len(v.Args) == 0 {
+			ThrowFmt("BUILDWITH_CYTHON_CPP expects at least 1 argument")
+		}
+
+		d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: v.Args[0], Options: append([]string(nil), v.Args[1:]...)})
+	case "BISON_GEN_C":
+		d.bisonGenExt = ".c"
+	case "BISON_GEN_CPP":
+		d.bisonGenExt = ".cpp"
+	case "GRPC":
+		d.grpc = true
+		d.peerdirs = append(d.peerdirs, "contrib/libs/grpc")
+	case "YA_CONF_JSON":
+		if len(v.Args) != 1 {
+			ThrowFmt("YA_CONF_JSON expects exactly 1 argument, got %d", len(v.Args))
+		}
+
+		d.yaConfJSON = append(d.yaConfJSON, v.Args[0])
 	case "ALLOCATOR":
 		applyAllocatorStmt(v, d)
 	case "ARCHIVE":
@@ -678,17 +730,115 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		// resource.go consumes it.
 		topLevel := false
 		mainNext := false
-		for _, a := range v.Args {
+		cythonizePy := false
+		cythonPlainCpp := false
+		swigCMode := false
+		for i := 0; i < len(v.Args); i++ {
+			a := v.Args[i]
+
 			switch a {
 			case "TOP_LEVEL":
 				topLevel = true
 				d.pyTopLevel = true
 				continue
+			case "NAMESPACE":
+				i++
+
+				continue
+			case "CYTHONIZE_PY":
+				cythonizePy = true
+				continue
+			case "CYTHON_CPP":
+				cythonPlainCpp = true
+				continue
+			case "CYTHON_C", "CYTHON_DIRECTIVE":
+				continue
+			case "SWIG_C":
+				swigCMode = true
+				continue
+			case "SWIG_CPP":
+				swigCMode = false
+				continue
 			case "MAIN":
 				mainNext = true
 				continue
 			}
-			d.pySrcs = append(d.pySrcs, a)
+
+			src := a
+			modNameOverride := ""
+			if eq := strings.IndexByte(a, '='); eq >= 0 {
+				src = a[:eq]
+				modNameOverride = a[eq+1:]
+			}
+
+			if strings.HasSuffix(src, ".pyx") {
+				modName := modNameOverride
+				if modName == "" {
+					modName = pythonModuleName(modulePath, src, topLevel)
+				}
+				stmt := &CythonStmt{
+					Src: src,
+					Options: []string{
+						"--module-name", modName,
+						"--init-suffix", pythonInitSuffix(modName),
+						"--source-root", "$(S)",
+						"-X", "set_initial_path=" + modulePath + "/" + src,
+					},
+				}
+				if cythonPlainCpp {
+					stmt.Generated = src + ".cpp"
+				}
+				d.cythonCpp = append(d.cythonCpp, stmt)
+				appendPyRegister(d, modName)
+				mainNext = false
+
+				continue
+			}
+
+			if cythonizePy && strings.HasSuffix(src, ".py") {
+				modName := modNameOverride
+				if modName == "" {
+					modName = pythonModuleName(modulePath, src, topLevel)
+				}
+				d.cythonCpp = append(d.cythonCpp, &CythonStmt{
+					Src:       src,
+					Generated: src + ".cpp",
+					Options: []string{
+						"--module-name", modName,
+						"--init-suffix", pythonInitSuffix(modName),
+						"--source-root", "$(S)",
+						"-X", "set_initial_path=" + modulePath + "/" + src,
+					},
+				})
+				appendPyRegister(d, modName)
+				mainNext = false
+
+				continue
+			}
+
+			if strings.HasSuffix(src, ".swg") {
+				modName := modNameOverride
+				if modName == "" {
+					ns := strings.ReplaceAll(modulePath, "/", ".") + "."
+					if topLevel {
+						ns = ""
+					}
+					modName = ns + strings.ReplaceAll(strings.TrimSuffix(src, ".swg"), "/", ".")
+				}
+				if swigCMode {
+					d.swigC = append(d.swigC, swigSrc{Src: src, Module: modName})
+					appendPyRegister(d, modName+"_swg")
+				}
+				mainNext = false
+
+				continue
+			}
+
+			if strings.Contains(a, "=") && !strings.HasSuffix(src, ".py") {
+				continue
+			}
+
+			d.pySrcs = append(d.pySrcs, src)
 			if mainNext {
 				// Compute the dotted module name per pybuild.py:289,385:
 				//   ns = upath.replace('/','.') + '.'   (default)
@@ -699,12 +849,18 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 				if topLevel {
 					ns = ""
 				}
-				modName := strings.TrimSuffix(a, ".py")
-				modName = strings.ReplaceAll(modName, "/", ".")
-				d.pyMain = ns + modName + ":main"
+				modName := modNameOverride
+				if modName == "" {
+					modName = strings.TrimSuffix(src, ".py")
+					modName = strings.ReplaceAll(modName, "/", ".")
+					modName = ns + modName
+				}
+				d.pyMain = modName + ":main"
 				mainNext = false
 			}
 		}
+	case "ALL_PY_SRCS":
+		d.allPySrcs = append(d.allPySrcs, v)
 	case "PY_MAIN":
 		// PY_MAIN(<arg>) per pybuild.py:onpy_main
 		// (build/plugins/pybuild.py:762). Argument normalised: `/` → `.`
@@ -718,6 +874,20 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			arg += ":main"
 		}
 		d.pyMain = arg
+	case "PY_CONSTRUCTOR":
+		// PY_CONSTRUCTOR(<module[:func]>) per pybuild.py:onpy_constructor:
+		// emits a kv-only resource under py/constructors/, defaulting
+		// to "=init" when no function is specified.
+		if len(v.Args) != 1 {
+			ThrowFmt("gen: PY_CONSTRUCTOR expects exactly 1 argument, got %d", len(v.Args))
+		}
+		arg := v.Args[0]
+		if strings.Contains(arg, ":") {
+			arg = strings.Replace(arg, ":", "=", 1)
+		} else {
+			arg += "=init"
+		}
+		d.resources = append(d.resources, resourceEntry{Path: "-", Key: "py/constructors/" + arg})
 	case "NO_CHECK_IMPORTS":
 		// NO_CHECK_IMPORTS(args...) per ytest.py:on_register_no_check_imports
 		// (build/plugins/ytest.py:808). Args joined by ' ' in declaration
@@ -732,25 +902,8 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		// CC compiling it; both flow into the module's `.global.a`
 		// (mirror of SRCS(GLOBAL $Func.reg3.cpp) inside _PY3_REGISTER
 		// at ymake.core.conf:4086-4089).
-		d.pyRegister = append(d.pyRegister, v.Args...)
-		// Mirror pybuild.py:740-750 — for each dotted PY_REGISTER arg,
-		// inject the two -D macro renames so every CC in the same
-		// module compiles with them.
 		for _, name := range v.Args {
-			dot := strings.LastIndexByte(name, '.')
-			if dot < 0 {
-				continue
-			}
-			shortname := name[dot+1:]
-			// mangle: "a.b.c" → "1a1b1c" (len(seg)+seg per segment).
-			var mangled strings.Builder
-			for _, seg := range strings.Split(name, ".") {
-				fmt.Fprintf(&mangled, "%d%s", len(seg), seg)
-			}
-			d.cFlags = append(d.cFlags,
-				"-DPyInit_"+shortname+"=PyInit_"+mangled.String(),
-				"-Dinit_module_"+shortname+"=init_module_"+mangled.String(),
-			)
+			appendPyRegister(d, name)
 		}
 	case "SET_APPEND":
 		// SET_APPEND(<var> <values...>) appends to a ymake variable.
@@ -776,6 +929,47 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			ThrowFmt("gen: PR-25 does not yet support macro %q (extend whitelistedMetadataMacros or add a typed Stmt)", v.Name)
 		}
 	}
+}
+
+func appendPyRegister(d *moduleData, name string) {
+	d.pyRegister = append(d.pyRegister, name)
+
+	// Mirror pybuild.py:740-750 — for each dotted PY_REGISTER arg,
+	// inject the two -D macro renames so every CC in the same
+	// module compiles with them.
+	dot := strings.LastIndexByte(name, '.')
+	if dot < 0 {
+		return
+	}
+
+	shortname := name[dot+1:]
+	mangled := pythonInitSuffix(name)
+	d.cFlags = append(d.cFlags,
+		"-DPyInit_"+shortname+"=PyInit_"+mangled,
+		"-Dinit_module_"+shortname+"=init_module_"+mangled,
+	)
+}
+
+func pythonModuleName(modulePath, src string, topLevel bool) string {
+	ns := strings.ReplaceAll(modulePath, "/", ".") + "."
+	if topLevel {
+		ns = ""
+	}
+
+	modName := strings.TrimSuffix(src, ".py")
+	modName = strings.TrimSuffix(modName, ".pyx")
+	modName = strings.ReplaceAll(modName, "/", ".")
+
+	return ns + modName
+}
+
+func pythonInitSuffix(name string) string {
+	var mangled strings.Builder
+	for _, seg := range strings.Split(name, ".") {
+		fmt.Fprintf(&mangled, "%d%s", len(seg), seg)
+	}
+
+	return mangled.String()
 }
 
 // allocatorPeers maps `ALLOCATOR(<name>)` to implicit PEERDIR additions
@@ -876,6 +1070,15 @@ func applyAllocatorStmt(v *UnknownStmt, d *moduleData) {
 	d.allocatorName = name
 }
 
+func isProgramModuleType(name string) bool {
+	switch name {
+	case "PROGRAM", "PY2_PROGRAM", "PY3_PROGRAM", "PY3_PROGRAM_BIN":
+		return true
+	}
+
+	return false
+}
+
 // isPyLibraryType returns true for Python library/program module names
 // that behave as LIBRARY-shaped modules (emit AR/CC for their C++ SRCS,
 // header-only when they have none). Unlike isMultimoduleLibraryType
@@ -926,6 +1129,17 @@ func isMultimoduleLibraryType(name string) bool {
 func buildIfEnv(instance ModuleInstance) Environment {
 	env := DefaultIfEnv.Clone()
 
+	for k, v := range instance.Platform.Flags {
+		env.SetFromString(k, v)
+	}
+
+	if env.Bool("OPENSOURCE") || env.String("OPENSOURCE_PROJECT") == "ymake" || env.String("OPENSOURCE_PROJECT") == "ya" {
+		env.SetBool("YA_OPENSOURCE", true)
+	}
+	if env.Bool("OPENSOURCE") {
+		env.SetBool("CATBOOST_OPENSOURCE", true)
+	}
+
 	switch instance.Platform.ISA {
 	case ISAX8664:
 		env.SetBool("ARCH_X86_64", true)
@@ -937,6 +1151,7 @@ func buildIfEnv(instance ModuleInstance) Environment {
 	useRuntime := instance.Platform.Flags["USE_ARCADIA_COMPILER_RUNTIME"]
 	env.SetBool("USE_ARCADIA_COMPILER_RUNTIME", useRuntime != "no")
 	env.SetString("COMPILER_VERSION", instance.Platform.ClangVer)
+	env.SetString("BUILD_TYPE", strings.ToUpper(instance.Platform.BuildType))
 
 	return env
 }
@@ -953,6 +1168,89 @@ func expandConfigPaths(paths []string, env Environment) []string {
 
 func expandConfigString(s string, env Environment) string {
 	return strings.ReplaceAll(s, "${COMPILER_VERSION}", env.String("COMPILER_VERSION"))
+}
+
+func expandListVars(items []string, env Environment) []string {
+	out := make([]string, 0, len(items))
+
+	for _, item := range items {
+		if strings.HasPrefix(item, "${") && strings.HasSuffix(item, "}") {
+			name := strings.TrimSuffix(strings.TrimPrefix(item, "${"), "}")
+			if !env.HasBinding(name) {
+				continue
+			}
+
+			value := env.String(name)
+			if value == "" || value == "no" {
+				continue
+			}
+
+			out = append(out, strings.Fields(value)...)
+
+			continue
+		}
+
+		out = append(out, item)
+	}
+
+	return out
+}
+
+func applyAllPySrcs(sourceRoot, modulePath string, v *UnknownStmt, d *moduleData) {
+	dirs := []string{"."}
+	noTestFiles := false
+
+	for i := 0; i < len(v.Args); i++ {
+		a := v.Args[i]
+
+		switch a {
+		case "TOP_LEVEL":
+			d.pyTopLevel = true
+		case "NAMESPACE":
+			i++
+		case "RECURSIVE":
+		case "NO_TEST_FILES":
+			noTestFiles = true
+		default:
+			dirs = append(dirs, a)
+		}
+	}
+
+	if len(dirs) > 1 {
+		dirs = dirs[1:]
+	}
+
+	var files []string
+	for _, dir := range dirs {
+		moduleRoot := filepath.Join(sourceRoot, modulePath)
+		root := filepath.Join(moduleRoot, dir)
+
+		err := filepath.WalkDir(root, func(path string, ent os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if ent.IsDir() {
+				return nil
+			}
+			if filepath.Ext(path) != ".py" {
+				return nil
+			}
+
+			base := filepath.Base(path)
+			if noTestFiles && (strings.HasPrefix(base, "test_") || strings.HasSuffix(base, "_test.py")) {
+				return nil
+			}
+
+			rel := Throw2(filepath.Rel(moduleRoot, path))
+			files = append(files, filepath.ToSlash(rel))
+
+			return nil
+		})
+		Throw(err)
+	}
+
+	sort.Strings(files)
+	d.pySrcs = append(d.pySrcs, files...)
 }
 
 // derivePeerInstance builds the peer's ModuleInstance. The peer

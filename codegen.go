@@ -99,9 +99,9 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	// as host tools — referenced by PY (objcopy) and AR (pyc.inc) nodes.
 	// Walks are eager (memoized in ctx).
 	const (
-		rescompilerBinPath  = "tools/rescompiler/bin"
+		rescompilerBinPath   = "tools/rescompiler/bin"
 		rescompressorBinPath = "tools/rescompressor/bin"
-		archiverPath        = "tools/archiver"
+		archiverPath         = "tools/archiver"
 	)
 
 	walkHostTool := func(path string) {
@@ -128,11 +128,11 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		// The "module name" arg: <modulePath>/<srcRel>- (trailing dash).
 		moduleName := instance.Path + "/" + srcRel + "-"
 
-		// Output suffix: flat → .py.yapyc3; subdir → .py.3kp2.yapyc3.
+		// Output suffix: flat → .py.yapyc3; subdir →
+		// .py.<pathid($S/unit)[:4]>.yapyc3.
 		var outputPath VFS
 		if strings.Contains(srcRel, "/") {
-			// The srcRel already ends in ".py"; insert ".3kp2" before ".yapyc3".
-			outputPath = Build(instance.Path + "/" + srcRel + ".3kp2.yapyc3")
+			outputPath = Build(instance.Path + "/" + srcRel + "." + pySrcYapycSuffix(instance.Path) + ".yapyc3")
 		} else {
 			outputPath = Build(instance.Path + "/" + srcRel + ".yapyc3")
 		}
@@ -230,7 +230,7 @@ var genPy3RegScriptPath = genPy3RegScriptVFS.String()
 // d.pyRegister:
 //   - PY:  python3 gen_py3_reg.py <arg> $(B)/<modPath>/<arg>.reg3.cpp
 //   - CC:  compiles `.reg3.cpp` → `.reg3.cpp.o` (or `.reg3.cpp.py3.o`
-//          when py3Suffix is set).
+//     when py3Suffix is set).
 //
 // Both refs flow into globalRefs/globalOutputs — _PY3_REGISTER emits
 // `SRCS(GLOBAL ...)`, so the CC output lands in `.global.a`.
@@ -607,6 +607,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 	return ccRefs, ccOutputs, memberInputsList
 }
+
 // codegenRegForInstance returns the CodegenRegistry attached to the
 // scanner picked by scannerFor (nil-safe).
 func codegenRegForInstance(ctx *genCtx, instance ModuleInstance) *CodegenRegistry {
@@ -619,8 +620,10 @@ func codegenRegForInstance(ctx *genCtx, instance ModuleInstance) *CodegenRegistr
 
 // protoDirectImportIncludes parses direct `import "..."` statements
 // from a .proto/.ev source and converts them to protoc's $(B) outputs:
-//   import "x/y/z.proto" → "$(B)/x/y/z.pb.h"
-//   import "x/y/z.ev"    → "$(B)/x/y/z.ev.pb.h"
+//
+//	import "x/y/z.proto" → "$(B)/x/y/z.pb.h"
+//	import "x/y/z.ev"    → "$(B)/x/y/z.ev.pb.h"
+//
 // Direct imports only (no recursion). Returns nil on read failure;
 // results sorted. Upstream pattern:
 // proto_processor.cpp:43-56::TProtoIncludeProcessor::PrepareIncludes.
@@ -699,4 +702,3 @@ func cfIncludeDirectives(diskPath string) []VFS {
 	SortVFS(out)
 	return out
 }
-

@@ -73,6 +73,7 @@ func EmitLD(
 	peerCFlagsGlobal []string,
 	usePython3 bool,
 	wantsStrip bool,
+	wantsSplitDwarf bool,
 	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
@@ -134,6 +135,7 @@ func EmitLD(
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
 	cmd2 := composeLDCmdLinkExe(instance.Platform, outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths, hostBuild, wantsStrip)
 	cmd3 := composeLDCmdLinkOrCopy(tools, binaryDir)
+	splitDwarfCmds := composeLDSplitDwarfCmds(tools, outputPath, wantsSplitDwarf)
 
 	// vcs_info.py and fs_tools.py only carry ARCADIA_ROOT_DISTBUILD;
 	// the clang compile and link_exe.py invocations both carry the
@@ -150,6 +152,7 @@ func EmitLD(
 		{CmdArgs: cmd2, Cwd: "$(B)", Env: envFull},
 		{CmdArgs: cmd3, Env: envVcsOnly},
 	}
+	cmds = append(cmds, splitDwarfCmds...)
 
 	inputs := composeLDInputs(instance.Path, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths)
 
@@ -196,11 +199,16 @@ func EmitLD(
 	depRefs = append(depRefs, peerLDRefs...)
 	depRefs = append(depRefs, objcopyRefs...)
 
+	outputs := []VFS{outputVFS}
+	if wantsSplitDwarf {
+		outputs = append(outputs, Build(binPrefix+binaryName+".debug"))
+	}
+
 	n := &Node{
 		Cmds:    cmds,
 		Env:     envFull,
 		Inputs:  inputs,
-		Outputs: []VFS{outputVFS},
+		Outputs: outputs,
 		KV: map[string]string{
 			"p":        "LD",
 			"pc":       "light-blue",
@@ -594,6 +602,20 @@ func composeLDCmdLinkOrCopy(tools Toolchain, modulePath string) []string {
 		"link_or_copy_to_dir",
 		"--no-check",
 		Build(modulePath).String(),
+	}
+}
+
+func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) []Cmd {
+	if !enabled {
+		return nil
+	}
+
+	debugPath := outputPath + ".debug"
+
+	return []Cmd{
+		{CmdArgs: []string{tools.Objcopy, "--only-keep-debug", outputPath, debugPath}},
+		{CmdArgs: []string{tools.Strip, "--strip-debug", outputPath}},
+		{CmdArgs: []string{tools.Objcopy, "--remove-section=.gnu_debuglink", "--add-gnu-debuglink", debugPath, outputPath}},
 	}
 }
 

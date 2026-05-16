@@ -179,6 +179,13 @@ func (e Environment) SetDefaultString(name, value string) {
 func EvalCond(e Expr, env Environment) bool {
 	switch x := e.(type) {
 	case *ExprIdent:
+		if x.Name == "yes" {
+			return true
+		}
+		if x.Name == "no" {
+			return false
+		}
+
 		return env.Bool(x.Name)
 	case *ExprNot:
 		return !EvalCond(x.Of, env)
@@ -208,6 +215,10 @@ func EvalCond(e Expr, env Environment) bool {
 func evalAtom(e Expr, env Environment) any {
 	switch x := e.(type) {
 	case *ExprIdent:
+		if x.Name == "yes" || x.Name == "no" {
+			return x.Name
+		}
+
 		return env.Lookup(x.Name)
 	case *ExprString:
 		return x.Value
@@ -348,6 +359,8 @@ var DefaultIfEnv = Environment{
 		// (each takes ELSE when true). Verified via REF stage0pycc
 		// `-I$(S)/contrib/tools/python3/Include` and 14 symbols/* nodes.
 		"USE_ARCADIA_PYTHON":                true,
+		"PYTHON2":                           false,
+		"PYTHON3":                           true,
 		"USE_PYTHON3_PREV":                  false, // M3: use previous Python3 toolchain.
 		"PREBUILT":                          false, // M3: use prebuilt tools (tools/py3cc, rescompiler, etc.).
 		"PY_PROTOS_FOR":                     false, // M3: PROTO_LIBRARY PY_PROTOS_FOR flag; false = no Python proto.
@@ -357,6 +370,7 @@ var DefaultIfEnv = Environment{
 		"PYTHON_SQLITE3":                    false, // M3: tools/py3cc/slow sqlite3 variant.
 		"USE_SYSTEM_OPENSSL":                false, // M3: contrib/libs/openssl system variant.
 		"OPENSOURCE_REPLACE_OPENSSL":        false, // M3: contrib/libs/openssl export replacement.
+		"ARCADIA_ICONV_NOCJK":               false, // M3: libiconv full table variant; false keeps CJK tables enabled.
 		"PYBUILD_NO_PYC":                    false, // M3: Python build variant.
 		"USE_LIGHT_PY2CC":                   false, // M3: Python 2 build variant.
 		"PYBIND_SRC":                        false, // M3: pybind source variant.
@@ -369,21 +383,28 @@ var DefaultIfEnv = Environment{
 		"LSAN":                              false, // M3: LeakSanitizer build.
 		"HAVE_OPENSSL":                      false, // M3: OpenSSL availability.
 		"NO_OPENSSL":                        false, // M3: OpenSSL suppression flag.
-		"DARWIN_ARM64":                      false, // M3: macOS ARM64 arch flag; false on Linux.
-		"DARWIN_X86_64":                     false, // M3: macOS x86_64 arch flag; false on Linux.
-		"OS_HAIKU":                          false, // M3: Haiku OS; false on Linux.
-		"OS_NETBSD":                         false, // M3: NetBSD; false on Linux.
-		"OS_OPENBSD":                        false, // M3: OpenBSD; false on Linux.
-		"OS_VXWORKS":                        false, // M3: VxWorks RTOS; false on Linux.
-		"OS_ZOS":                            false, // M3: z/OS; false on Linux.
-		"CPU_ARM":                           false, // M3: generic ARM flag (not aarch64).
-		"CPU_X86":                           false, // M3: generic x86 flag (not x86_64).
-		"NO_CPU_CHECK":                      false, // M3: CPU capability check suppression.
-		"HAVE_POSIX_MEMALIGN":               false, // M3: POSIX memalign availability.
-		"HAVE_MREMAP":                       false, // M3: mremap syscall availability.
-		"NO_UTIL":                           false, // M3: util/generic suppression flag (also whitelist).
-		"TCLANG":                            false, // M3: ThinLTO clang variant.
-		"CLANG_VER":                         false, // M3: Clang version flag (bool use in some IFs).
+		"YT_DISABLE_REF_COUNTED_TRACKING":   false, // M3: optional YT memory tracking flag.
+		"YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE": false, // M3: optional YT diagnostics flag.
+		"YT_CUSTOM_INTERNAL_BUILD":                   false, // M3: internal YT build flag.
+		"YT_ROPSAN_ENABLE_ACCESS_CHECK":              false, // M3: optional YT ropsan flag.
+		"YT_ROPSAN_ENABLE_SERIALIZATION_CHECK":       false, // M3: optional YT ropsan flag.
+		"YT_ROPSAN_ENABLE_LEAK_DETECTION":            false, // M3: optional YT ropsan flag.
+		"YT_ROPSAN_ENABLE_PTR_TAGGING":               false, // M3: optional YT ropsan flag.
+		"DARWIN_ARM64":                               false, // M3: macOS ARM64 arch flag; false on Linux.
+		"DARWIN_X86_64":                              false, // M3: macOS x86_64 arch flag; false on Linux.
+		"OS_HAIKU":                                   false, // M3: Haiku OS; false on Linux.
+		"OS_NETBSD":                                  false, // M3: NetBSD; false on Linux.
+		"OS_OPENBSD":                                 false, // M3: OpenBSD; false on Linux.
+		"OS_VXWORKS":                                 false, // M3: VxWorks RTOS; false on Linux.
+		"OS_ZOS":                                     false, // M3: z/OS; false on Linux.
+		"CPU_ARM":                                    false, // M3: generic ARM flag (not aarch64).
+		"CPU_X86":                                    false, // M3: generic x86 flag (not x86_64).
+		"NO_CPU_CHECK":                               false, // M3: CPU capability check suppression.
+		"HAVE_POSIX_MEMALIGN":                        false, // M3: POSIX memalign availability.
+		"HAVE_MREMAP":                                false, // M3: mremap syscall availability.
+		"NO_UTIL":                                    false, // M3: util/generic suppression flag (also whitelist).
+		"TCLANG":                                     false, // M3: ThinLTO clang variant.
+		"CLANG_VER":                                  false, // M3: Clang version flag (bool use in some IFs).
 		// M3 additional platform/arch booleans — all false on standard linux-aarch64 build.
 		"ANDROID_ARMV7":                      false, // M3: Android ARMv7 target.
 		"ANDROID_I686":                       false, // M3: Android i686 target.

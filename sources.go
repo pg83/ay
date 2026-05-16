@@ -266,6 +266,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 
 		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: ccInputs, PrimaryCount: primaryCount}
 
+	case strings.HasSuffix(srcRel, ".y"):
+		return emitBisonY(ctx, srcInstance, srcRel, srcIn, srcIn.BisonGenExt)
+
 	case strings.HasSuffix(srcRel, ".ev"):
 		// `.ev` sources in a LIBRARY module (e.g. devtools/ymake/diag/
 		// trace.ev). Emits one EV node (generating .ev.pb.cc +
@@ -508,6 +511,25 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// sibling stays scoped to the CC consumer.
 		rlMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, ccClosure...)
 		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: rlMemberInputs, PrimaryCount: 1}
+
+	case strings.HasSuffix(srcRel, ".h.in"):
+		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
+		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
+
+		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
+		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:    "CF",
+				OutputPath:     cfOut,
+				EmitsIncludes:  []VFS{inSourceVFS, configureFilePyVFS},
+				ProducerRef:    cfRef,
+				HasProducerRef: true,
+			})
+		}
+
+		cfMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, srcIn.IncludeInputs...)
+
+		return &sourceEmit{Ref: cfRef, OutPath: cfOut, CcIns: cfMemberInputs, PrimaryCount: 1}
 
 	case strings.HasSuffix(srcRel, ".cpp.in"),
 		strings.HasSuffix(srcRel, ".c.in"):

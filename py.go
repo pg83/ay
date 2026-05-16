@@ -4,11 +4,12 @@ import "strings"
 
 // py.go — emitter helpers for PY (Python) source-compilation nodes.
 //
-// yapyc3 shape: .py.yapyc3 / .py.3kp2.yapyc3 bytecode via tools/py3cc, driven
-// by PY_SRCS() in PY3_LIBRARY / PY23_LIBRARY. cmd_args:
+// yapyc3 shape: .py.yapyc3 / .py.<unit-pathid>.yapyc3 bytecode via tools/py3cc,
+// driven by PY_SRCS() in PY3_LIBRARY / PY23_LIBRARY. cmd_args:
 //   [py3cc, --slow-py3cc, slow_py3cc, <modulePath>/<srcRel>-,
 //    $(S)/<path>/<src>, $(B)/<output>]
-// Output suffix: flat src → .py.yapyc3; subdir src → .py.3kp2.yapyc3.
+// Output suffix: flat src → .py.yapyc3; subdir src →
+// .py.<pathid($S/unit)[:4]>.yapyc3.
 // The show_out/objcopy RESOURCE shape is handled elsewhere.
 //
 // Binary canonicalization: tools/py3cc/bin LD lands at
