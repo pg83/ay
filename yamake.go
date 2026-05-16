@@ -1015,7 +1015,7 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		"PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",
 		"PY3_PROGRAM_BIN", "PY2_PROGRAM", "PY3_PROGRAM",
 		"PROTO_LIBRARY",
-		"DLL", "SO_PROGRAM",
+		"DLL", "SO_PROGRAM", "DYNAMIC_LIBRARY",
 		"PACKAGE", "UNION", "RESOURCES_LIBRARY":
 		return &ModuleStmt{Name: nameTok.val, Args: args, Line: nameTok.line}
 	case "PEERDIR":
