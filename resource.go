@@ -1093,7 +1093,7 @@ func emitPySrcObjcopy(
 // propagate. Memoized in ctx.memo so back-to-back calls from emitPySrcs
 // and emitResourceObjcopy do not duplicate node emission.
 func walkHostToolForRef(ctx *genCtx, instance ModuleInstance, path string) NodeRef {
-	hostInst := NewToolInstance(ctx.host, path, instance.Language)
+	hostInst := NewToolInstance(ctx.host, path)
 	hostInst.Flags = inferFlagsFromPath(path, true)
 
 	var ref NodeRef

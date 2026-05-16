@@ -52,7 +52,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	)
 
 	// Walk tools/py3cc/bin (the main py3cc binary).
-	py3ccHostInst := NewToolInstance(ctx.host, py3ccBinPath, instance.Language)
+	py3ccHostInst := NewToolInstance(ctx.host, py3ccBinPath)
 	py3ccHostInst.Flags = inferFlagsFromPath(py3ccBinPath, true)
 
 	if exc := Try(func() {
@@ -76,7 +76,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	// (PREBUILT=false). tools/py3cc/slow/bin declares PY3_PROGRAM_BIN
 	// which isMultimoduleLibraryType routes to a header-only path, so
 	// LDPath is empty. Only update py3ccSlowBin when non-empty.
-	py3ccSlowHostInst := NewToolInstance(ctx.host, py3ccSlowPath, instance.Language)
+	py3ccSlowHostInst := NewToolInstance(ctx.host, py3ccSlowPath)
 	py3ccSlowHostInst.Flags = inferFlagsFromPath(py3ccSlowPath, true)
 
 	if exc := Try(func() {
@@ -105,7 +105,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	)
 
 	walkHostTool := func(path string) {
-		hostInst := NewToolInstance(ctx.host, path, instance.Language)
+		hostInst := NewToolInstance(ctx.host, path)
 		hostInst.Flags = inferFlagsFromPath(path, true)
 		if exc := Try(func() {
 			genModule(ctx, hostInst)
@@ -356,7 +356,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 	)
 
 	// Walk enum_parser as a HOST tool (x86_64).
-	enumHostInst := NewToolInstance(ctx.host, enumParserPath, instance.Language)
+	enumHostInst := NewToolInstance(ctx.host, enumParserPath)
 	enumHostInst.Flags = inferFlagsFromPath(enumParserPath, true)
 
 	if exc := Try(func() {

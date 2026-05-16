@@ -1160,7 +1160,7 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	// Walk the archiver as a host program to resolve its binary path + LD
 	// ref. Mirrors emitRunProgram's tool-walk shape; archiver lives at
 	// tools/archiver and is hard-pinned by const archiverToolPath above.
-	toolInstance := NewToolInstance(ctx.host, archiverToolPath, instance.Language)
+	toolInstance := NewToolInstance(ctx.host, archiverToolPath)
 	toolInstance.Flags = inferFlagsFromPath(archiverToolPath, true)
 
 	var (
@@ -1567,7 +1567,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, d *moduleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
 	// Walk the tool as a host program.
 	toolPath := filepath.Clean(stmt.ToolPath)
-	toolInstance := NewToolInstance(ctx.host, toolPath, instance.Language)
+	toolInstance := NewToolInstance(ctx.host, toolPath)
 	toolInstance.Flags = inferFlagsFromPath(toolPath, true)
 
 	var toolBinPath string

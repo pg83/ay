@@ -59,7 +59,7 @@ func TestModuleInstance_Equality_Hashing(t *testing.T) {
 // instance from scratch — fresh Flags inferred from the tool's own
 // path, not copied from a surrounding module.
 func TestNewToolInstance(t *testing.T) {
-	tool := NewToolInstance(testHostP, "contrib/tools/ragel6", LangCPP)
+	tool := NewToolInstance(testHostP, "contrib/tools/ragel6")
 
 	if tool.Path != "contrib/tools/ragel6" {
 		t.Errorf("Path = %q, want contrib/tools/ragel6", tool.Path)

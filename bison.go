@@ -81,7 +81,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 func bisonTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
 	const p = "contrib/tools/bison"
 
-	tool := NewToolInstance(ctx.host, p, instance.Language)
+	tool := NewToolInstance(ctx.host, p)
 	tool.Flags = inferFlagsFromPath(p, true)
 	res := genModule(ctx, tool)
 	if res.LDPath != "" {
@@ -94,7 +94,7 @@ func bisonTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
 func m4Tool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
 	const p = "contrib/tools/m4"
 
-	tool := NewToolInstance(ctx.host, p, instance.Language)
+	tool := NewToolInstance(ctx.host, p)
 	tool.Flags = inferFlagsFromPath(p, true)
 	res := genModule(ctx, tool)
 	if res.LDPath != "" {

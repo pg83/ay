@@ -148,6 +148,7 @@ type genCtx struct {
 	sourceRoot      string
 	emit            Emitter
 	memo            map[ModuleInstance]*moduleEmitResult
+	moduleTypeCache map[moduleTypeCacheKey]string
 	walking         map[ModuleInstance]bool
 	cyclesTolerated int
 	// traceStack is populated when YATOOL_TRACE=1: each entry is
@@ -540,6 +541,7 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 		sourceRoot:      srcRoot,
 		emit:            emitter,
 		memo:            make(map[ModuleInstance]*moduleEmitResult),
+		moduleTypeCache: make(map[moduleTypeCacheKey]string),
 		walking:         make(map[ModuleInstance]bool),
 		host:            hostP,
 		target:          targetP,
@@ -877,9 +879,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		hOnlyARPath := ""
 		hOnlyHasAR := false
 		if protoResult != nil {
-			hOnlyARRef = protoResult.ARRef
-			hOnlyARPath = protoResult.ARPath.String()
-			hOnlyHasAR = true
+			if protoResult.ARPath.Rel != "" {
+				hOnlyARRef = protoResult.ARRef
+				hOnlyARPath = protoResult.ARPath.String()
+				hOnlyHasAR = true
+			}
 			if protoResult.GlobalRef != nil {
 				hOnlyGlobalRef = protoResult.GlobalRef
 				hOnlyGlobalPath = protoResult.GlobalPath.Rel
@@ -1170,7 +1174,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			continue
 		}
 
-		peerInstance := derivePeerInstance(instance, peerPath)
+		peerInstance := derivePeerInstance(ctx, instance, d.moduleStmt.Name, peerPath)
 		peerResult := genModule(ctx, peerInstance)
 
 		if peerResult.isPROGRAM {
@@ -2753,7 +2757,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	}
 
 	walk := func(peerPath string) {
-		peerInstance := derivePeerInstance(instance, peerPath)
+		peerInstance := derivePeerInstance(ctx, instance, d.moduleStmt.Name, peerPath)
 		peerResult := genModule(ctx, peerInstance)
 		addEach(addInclSeen, &out.addIncl, peerResult.AddInclGlobal)
 		addEach(cFlagsSeen, &out.cFlags, peerResult.CFlagsGlobal)

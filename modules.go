@@ -1110,6 +1110,10 @@ func pyLibraryAutoPythonPeer(name string) bool {
 	return false
 }
 
+func isPythonModuleType(name string) bool {
+	return isPyLibraryType(name) || name == "PY3_PROGRAM_BIN"
+}
+
 func isMultimoduleLibraryType(name string) bool {
 	switch name {
 	case "PROTO_LIBRARY",
@@ -1253,15 +1257,81 @@ func applyAllPySrcs(sourceRoot, modulePath string, v *UnknownStmt, d *moduleData
 	d.pySrcs = append(d.pySrcs, files...)
 }
 
-// derivePeerInstance builds the peer's ModuleInstance. The peer
-// inherits the parent's Language, Platform, and PIC axis. Its FlagSet
-// is seeded from inferFlagsFromPath; macro overlay (NO_LIBC / NO_UTIL /
-// ...) happens inside genModule when the peer's ya.make is parsed.
-// This helper only constructs the cycle-detection key.
-func derivePeerInstance(parent ModuleInstance, peerPath string) ModuleInstance {
+type moduleTypeCacheKey struct {
+	Path     string
+	Platform *Platform
+	Flags    FlagSet
+}
+
+func moduleTypeForInstance(ctx *genCtx, instance ModuleInstance) string {
+	if ctx.moduleTypeCache == nil {
+		ctx.moduleTypeCache = make(map[moduleTypeCacheKey]string)
+	}
+
+	key := moduleTypeCacheKey{
+		Path:     instance.Path,
+		Platform: instance.Platform,
+		Flags:    instance.Flags,
+	}
+	if name, ok := ctx.moduleTypeCache[key]; ok {
+		return name
+	}
+
+	yamakePath := filepath.Join(ctx.sourceRoot, instance.Path, "ya.make")
+	mf := Throw2(ParseFile(yamakePath))
+
+	env := buildIfEnv(instance)
+	d := collectModule(instance.Path, mf.Stmts, env, instance.Flags)
+	if d.conflictMod != nil {
+		ThrowFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path, d.moduleStmt.Name, d.conflictMod.Name)
+	}
+	if d.moduleStmt == nil {
+		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path)
+	}
+
+	ctx.moduleTypeCache[key] = d.moduleStmt.Name
+
+	return d.moduleStmt.Name
+}
+
+func peerLanguageFor(ctx *genCtx, parent ModuleInstance, parentModuleName, peerPath string) Language {
+	if !peerYaMakeExists(ctx.sourceRoot, peerPath) {
+		return LangCPP
+	}
+
+	peerSeed := ModuleInstance{
+		Path:     peerPath,
+		Language: LangCPP,
+		Platform: parent.Platform,
+		Flags:    inferFlagsFromPath(peerPath, parent.Platform.PIC),
+	}
+
+	if moduleTypeForInstance(ctx, peerSeed) != "PROTO_LIBRARY" {
+		return LangCPP
+	}
+
+	if isPythonModuleType(parentModuleName) {
+		return LangPy
+	}
+
+	if parentModuleName == "PROTO_LIBRARY" && parent.Language == LangPy {
+		return LangPy
+	}
+
+	return LangCPP
+}
+
+// derivePeerInstance builds the peer's ModuleInstance. Peer language is
+// explicit rather than inherited: only Python modules entering a
+// PROTO_LIBRARY (and py-addressed PROTO_LIBRARY -> PROTO_LIBRARY hops)
+// use LangPy; every other peer walk stays LangCPP. Platform and PIC
+// axis continue to flow from the parent. Macro overlay (NO_LIBC /
+// NO_UTIL / ...) happens inside genModule when the peer's ya.make is
+// parsed.
+func derivePeerInstance(ctx *genCtx, parent ModuleInstance, parentModuleName, peerPath string) ModuleInstance {
 	return ModuleInstance{
 		Path:     peerPath,
-		Language: parent.Language,
+		Language: peerLanguageFor(ctx, parent, parentModuleName, peerPath),
 		Platform: parent.Platform,
 		// PIC follows platform settings rather than ISA/host identity.
 		Flags: inferFlagsFromPath(peerPath, parent.Platform.PIC),
