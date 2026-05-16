@@ -40,6 +40,7 @@ func newTestPlatform(os OS, isa ISA, pic string, tags []string, isHost bool) *Pl
 func targetInstance(path string) ModuleInstance {
 	return ModuleInstance{
 		Path:     path,
+		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
 		Flags:    inferFlagsFromPath(path, false),
@@ -50,6 +51,7 @@ func targetInstance(path string) ModuleInstance {
 func hostInstance(path string) ModuleInstance {
 	return ModuleInstance{
 		Path:     path,
+		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testHostP,
 		Flags:    inferFlagsFromPath(path, true),

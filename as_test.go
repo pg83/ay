@@ -249,6 +249,7 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 	targetX86 := newTestPlatform(OSLinux, ISAX8664, "no", nil, false)
 	instance := ModuleInstance{
 		Path:     "contrib/libs/asmlib",
+		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: targetX86,
 		Flags:    inferFlagsFromPath("contrib/libs/asmlib", false),

@@ -2,9 +2,9 @@ package main
 
 // module.go — module-instance addressing.
 //
-// A module's identity is the tuple (Path, Language, Platform, Flags). Two
-// platforms of the same directory are two different ModuleInstances —
-// distinct memo keys, separate node sets, one Graph.
+// A module's identity is the tuple (Path, Kind, Language, Platform, Flags).
+// Two platforms or submodule kinds of the same directory are different
+// ModuleInstances — distinct memo keys, separate node sets, one Graph.
 //
 // Language is a string newtype so the parser tag (cpp/proto/go/py/java)
 // flows through as one token. PlatformID is a string newtype identical to
@@ -30,6 +30,24 @@ const (
 	LangPy    Language = "py"    // reserved
 	LangJava  Language = "java"  // reserved
 )
+
+type ModuleKind int
+
+const (
+	KindBin ModuleKind = iota
+	KindLib
+)
+
+func (k ModuleKind) String() string {
+	switch k {
+	case KindBin:
+		return "bin"
+	case KindLib:
+		return "lib"
+	default:
+		return "unknown"
+	}
+}
 
 // OS names the operating system axis of a Platform. Surfaced into
 // the on-disk `node.platform` string via MakePlatformID.
@@ -113,6 +131,7 @@ func NewFlagSet(extra ...string) FlagSet {
 // remains a valid map key.
 type ModuleInstance struct {
 	Path     string
+	Kind     ModuleKind
 	Language Language
 	Platform *Platform
 	Flags    FlagSet
@@ -126,6 +145,7 @@ type ModuleInstance struct {
 func NewToolInstance(host *Platform, path string) ModuleInstance {
 	return ModuleInstance{
 		Path:     path,
+		Kind:     KindBin,
 		Language: LangCPP,
 		Platform: host,
 		Flags:    inferFlagsFromPath(path, true),
@@ -138,6 +158,9 @@ func NewToolInstance(host *Platform, path string) ModuleInstance {
 func (mi ModuleInstance) String() string {
 	var b strings.Builder
 	b.WriteString(mi.Path)
+	b.WriteString("[")
+	b.WriteString(mi.Kind.String())
+	b.WriteString("]")
 	b.WriteString(":")
 	b.WriteString(string(mi.Language))
 	b.WriteString("@")

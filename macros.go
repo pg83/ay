@@ -458,6 +458,10 @@ var DefaultIfEnv = Environment{
 		// which requires MODULE_TAG != "PY2". Mirrors `module PY3_LIBRARY`'s
 		// SET(MODULE_LANG PY3) in build/conf/python.conf.
 		"MODULE_TAG": "PY3",
+		// build/conf/opensource.conf sets _USE_ICONV=dynamic under
+		// OPENSOURCE=yes; contrib/libs/libiconv/ya.make consumes it via
+		// DEFAULT(USE_ICONV ${_USE_ICONV}).
+		"_USE_ICONV": "dynamic",
 		"PY2":        "PY2", // bare-ident literal used in `IF (MODULE_TAG == "PY2")`.
 	},
 	ints: map[string]int{

@@ -246,6 +246,7 @@ func TestGen_PeerdirCycle_Tolerated(t *testing.T) {
 
 	seed := ModuleInstance{
 		Path:     "a",
+		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
 		Flags:    inferFlagsFromPath("a", false),
@@ -538,7 +539,7 @@ END()
 		t.Fatalf("path flags pre-set; test premise broken: %+v", pathFlags)
 	}
 
-	d := collectModule("nolibcmod", mf.Stmts, buildIfEnv(ModuleInstance{Platform: testTargetP}), pathFlags)
+	d := collectModule("nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}), pathFlags)
 
 	if !d.flags.NoLibc {
 		t.Errorf("flags.NoLibc = false, want true (macro overlay should have flipped it)")
@@ -574,6 +575,7 @@ func TestCollectModule_SetMuslNoSuppressesConsumerDefaults(t *testing.T) {
 	target := NewPlatform(OSLinux, ISAX8664, targetFlags, nil, false, "", "")
 	instance := ModuleInstance{
 		Path:     "bridge",
+		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: target,
 	}
@@ -586,7 +588,7 @@ SRCS(x.cpp)
 END()
 `)))
 
-	d := collectModule("bridge", mf.Stmts, buildIfEnv(instance), instance.Flags)
+	d := collectModule("bridge", instance.Kind, mf.Stmts, buildIfEnv(instance), instance.Flags)
 
 	if d.muslEnabled {
 		t.Fatalf("muslEnabled = true, want false after SET(MUSL no)")
@@ -1217,6 +1219,7 @@ func TestGen_HostWalk_AsmlibYasmWired(t *testing.T) {
 
 	hostAsmlib := ModuleInstance{
 		Path:     "contrib/libs/asmlib",
+		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testHostP,
 		Flags:    inferFlagsFromPath("contrib/libs/asmlib", true),
@@ -1281,6 +1284,7 @@ func TestGen_HostWalk_NonAsmlibAS_NoYasmDep(t *testing.T) {
 
 	hostInstance := ModuleInstance{
 		Path:     "myasm",
+		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testHostP,
 		Flags:    inferFlagsFromPath("myasm", true),
@@ -1332,6 +1336,7 @@ func TestGen_DefaultPeerdirs_BuildCowOnUnaffected(t *testing.T) {
 	// nothing for an effectively-no-platform CPP module.
 	bcOn := ModuleInstance{
 		Path:     targetDir,
+		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
 		Flags:    inferFlagsFromPath(targetDir, false),
@@ -1378,6 +1383,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	// seven paths for a fresh CPP LIBRARY with zero NO_* flags.
 	plain := ModuleInstance{
 		Path:     "consumer",
+		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
 		Flags:    FlagSet{},
@@ -1471,6 +1477,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			name: "effective_no_platform",
 			mi: ModuleInstance{
 				Path:     "x",
+				Kind:     KindLib,
 				Language: LangCPP,
 				Flags:    FlagSet{NoLibc: true, NoRuntime: true, NoUtil: true},
 			},
@@ -1480,6 +1487,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			name: "explicit_no_platform",
 			mi: ModuleInstance{
 				Path:     "x",
+				Kind:     KindLib,
 				Language: LangCPP,
 				Flags:    FlagSet{NoPlatform: true},
 			},
@@ -1489,6 +1497,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			name: "no_libc_only",
 			mi: ModuleInstance{
 				Path:     "x",
+				Kind:     KindLib,
 				Language: LangCPP,
 				Platform: testTargetP,
 				Flags:    FlagSet{NoLibc: true},
@@ -1501,6 +1510,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			name: "no_runtime_only",
 			mi: ModuleInstance{
 				Path:     "x",
+				Kind:     KindLib,
 				Language: LangCPP,
 				Platform: testTargetP,
 				Flags:    FlagSet{NoRuntime: true},
@@ -1513,6 +1523,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			name: "non_cpp",
 			mi: ModuleInstance{
 				Path:     "x",
+				Kind:     KindLib,
 				Language: LangProto,
 				Flags:    FlagSet{},
 			},
@@ -1526,6 +1537,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			name: "self_musl_runtime_ancestor",
 			mi: ModuleInstance{
 				Path:     "contrib/libs/musl",
+				Kind:     KindLib,
 				Language: LangCPP,
 				Flags:    FlagSet{NoStdInc: true},
 			},
@@ -1538,6 +1550,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			name: "self_musl_subdir_runtime_ancestor",
 			mi: ModuleInstance{
 				Path:     "contrib/libs/musl/full",
+				Kind:     KindLib,
 				Language: LangCPP,
 				Flags:    FlagSet{NoStdInc: true, NoLibc: true, NoUtil: true, NoRuntime: true},
 			},
@@ -1545,7 +1558,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		},
 		{
 			name: "no_util_only",
-			mi:   ModuleInstance{Path: "x", Language: LangCPP, Flags: FlagSet{NoUtil: true}},
+			mi:   ModuleInstance{Path: "x", Kind: KindLib, Language: LangCPP, Flags: FlagSet{NoUtil: true}},
 			// PR-42: musl, builtins, malloc/api removed from direct peers.
 			// NO_UTIL drops util. PR-32 D03: musl/include still fires.
 			want: []string{
@@ -1560,7 +1573,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		// runtime root); it gets the full default set.
 		{
 			name: "musl_extra_not_runtime_ancestor",
-			mi:   ModuleInstance{Path: "contrib/libs/musl_extra", Language: LangCPP, Platform: testTargetP, Flags: FlagSet{}},
+			mi:   ModuleInstance{Path: "contrib/libs/musl_extra", Kind: KindLib, Language: LangCPP, Platform: testTargetP, Flags: FlagSet{}},
 			want: fullSet,
 		},
 		// PR-32 D03: non-NoStdInc runtime ancestors (builtins,
@@ -1573,6 +1586,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			name: "self_builtins_runtime_ancestor",
 			mi: ModuleInstance{
 				Path:     "contrib/libs/cxxsupp/builtins",
+				Kind:     KindLib,
 				Language: LangCPP,
 				Flags:    FlagSet{},
 			},
@@ -1582,6 +1596,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			name: "self_malloc_api_runtime_ancestor",
 			mi: ModuleInstance{
 				Path:     "library/cpp/malloc/api",
+				Kind:     KindLib,
 				Language: LangCPP,
 				Flags:    FlagSet{},
 			},
@@ -1591,6 +1606,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			name: "self_libcxx_runtime_ancestor",
 			mi: ModuleInstance{
 				Path:     "contrib/libs/cxxsupp/libcxx",
+				Kind:     KindLib,
 				Language: LangCPP,
 				Flags:    FlagSet{},
 			},
@@ -1600,6 +1616,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			name: "self_util_runtime_ancestor",
 			mi: ModuleInstance{
 				Path:     "util",
+				Kind:     KindLib,
 				Language: LangCPP,
 				Flags:    FlagSet{},
 			},
@@ -3151,7 +3168,7 @@ func TestGen_SRC_RejectsZeroArgs(t *testing.T) {
 // .c.o nodes would be silently dropped from the L0 closure on aarch64.
 // `buildIfEnv` flips both bits in lockstep per instance.Platform.ISA.
 func TestEvalCond_ARCH_ARM64_Aliased(t *testing.T) {
-	inst := ModuleInstance{Platform: testTargetP}
+	inst := ModuleInstance{Kind: KindLib, Platform: testTargetP}
 	env := buildIfEnv(inst)
 
 	if !EvalCond(&ExprIdent{Name: "ARCH_ARM64"}, env) {
@@ -3162,7 +3179,7 @@ func TestEvalCond_ARCH_ARM64_Aliased(t *testing.T) {
 		t.Errorf("EvalCond(ARCH_AARCH64) on aarch64 instance = false, want true")
 	}
 
-	hostInst := ModuleInstance{Platform: testHostP}
+	hostInst := ModuleInstance{Kind: KindLib, Platform: testHostP}
 	hostEnv := buildIfEnv(hostInst)
 
 	if EvalCond(&ExprIdent{Name: "ARCH_ARM64"}, hostEnv) {

@@ -12,6 +12,7 @@ import (
 func TestModuleInstance_Equality_Hashing(t *testing.T) {
 	a := ModuleInstance{
 		Path:     "build/cow/on",
+		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
 		Flags:    inferFlagsFromPath("build/cow/on", false),
@@ -19,6 +20,7 @@ func TestModuleInstance_Equality_Hashing(t *testing.T) {
 
 	b := ModuleInstance{
 		Path:     "build/cow/on",
+		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
 		Flags:    inferFlagsFromPath("build/cow/on", false),
@@ -42,6 +44,7 @@ func TestModuleInstance_Equality_Hashing(t *testing.T) {
 	// NewToolInstance.
 	host := ModuleInstance{
 		Path:     a.Path,
+		Kind:     KindLib,
 		Language: a.Language,
 		Platform: testHostP,
 		Flags:    inferFlagsFromPath(a.Path, true),
@@ -89,12 +92,13 @@ func TestNewToolInstance(t *testing.T) {
 func TestModuleInstance_String_Diagnostic(t *testing.T) {
 	mi := ModuleInstance{
 		Path:     "build/cow/on",
+		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
 	}
 
 	got := mi.String()
-	want := "build/cow/on:cpp@default-linux-aarch64"
+	want := "build/cow/on[lib]:cpp@default-linux-aarch64"
 
 	if got != want {
 		t.Errorf("String() = %q, want %q", got, want)
