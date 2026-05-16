@@ -103,7 +103,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
 			const yasmPath = "contrib/tools/yasm"
 
-			yasmInstance := NewToolInstance(ctx.host, yasmPath, instance.Language)
+			yasmInstance := NewToolInstance(ctx.host, yasmPath)
 			yasmInstance.Flags = inferFlagsFromPath(yasmPath, true)
 
 			yasmResult := genModule(ctx, yasmInstance)
@@ -161,7 +161,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			ragelBinaryStr = ragelFallbackPath
 		)
 
-		ragelInstance := NewToolInstance(ctx.host, ragelBinPath, instance.Language)
+		ragelInstance := NewToolInstance(ctx.host, ragelBinPath)
 		ragelInstance.Flags = inferFlagsFromPath(ragelInstance.Path, true)
 
 		if exc := Try(func() {
@@ -281,7 +281,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 
 			var cppStyleguideLDRef, protocLDRef, event2cppLDRef NodeRef
 
-			protocHostInst := NewToolInstance(ctx.host, pbProtocModule, instance.Language)
+			protocHostInst := NewToolInstance(ctx.host, pbProtocModule)
 			protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
 
 			if exc := Try(func() {
@@ -292,7 +292,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				_ = exc
 			}
 
-			cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule, instance.Language)
+			cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule)
 			cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
 
 			if exc := Try(func() {
@@ -303,7 +303,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 				_ = exc
 			}
 
-			event2cppHostInst := NewToolInstance(ctx.host, evEvent2cppModule, instance.Language)
+			event2cppHostInst := NewToolInstance(ctx.host, evEvent2cppModule)
 			event2cppHostInst.Flags = inferFlagsFromPath(evEvent2cppModule, true)
 
 			if exc := Try(func() {
@@ -426,7 +426,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			rlgenCdBinStr = rlgenCdFallback
 		)
 
-		ragel5Instance := NewToolInstance(ctx.host, ragel5Path, srcInstance.Language)
+		ragel5Instance := NewToolInstance(ctx.host, ragel5Path)
 		ragel5Instance.Flags = inferFlagsFromPath(ragel5Path, true)
 
 		if exc := Try(func() {
@@ -440,7 +440,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 			}
 		}
 
-		rlgenCdInstance := NewToolInstance(ctx.host, rlgenCdPath, srcInstance.Language)
+		rlgenCdInstance := NewToolInstance(ctx.host, rlgenCdPath)
 		rlgenCdInstance.Flags = inferFlagsFromPath(rlgenCdPath, true)
 
 		if exc := Try(func() {

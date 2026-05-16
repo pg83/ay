@@ -522,7 +522,6 @@ type protoSrcsResult struct {
 }
 
 func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs) *protoSrcsResult {
-	// Collect .proto and .ev sources from d.srcs.
 	var protoSrcs, evSrcs []string
 
 	for _, src := range d.srcs {
@@ -538,6 +537,15 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		return nil
 	}
 
+	switch instance.Language {
+	case LangPy:
+		return emitPyProtoSrcs(ctx, instance, d, protoSrcs, evSrcs)
+	default:
+		return emitCPPProtoSrcs(ctx, instance, d, peerContribs, protoSrcs, evSrcs)
+	}
+}
+
+func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, protoSrcs, evSrcs []string) *protoSrcsResult {
 	// Walk host protoc and cpp_styleguide tool programs.
 	cppStyleguideBinary := pbCppStyleguidePath
 	protocBinary := pbProtocBinaryPath
@@ -545,7 +553,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 
 	var cppStyleguideLDRef, protocLDRef, grpcCppLDRef NodeRef
 
-	protocHostInst := NewToolInstance(ctx.host, pbProtocModule, instance.Language)
+	protocHostInst := NewToolInstance(ctx.host, pbProtocModule)
 	protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
 
 	if exc := Try(func() {
@@ -557,7 +565,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		_ = exc
 	}
 
-	cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule, instance.Language)
+	cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule)
 	cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
 
 	if exc := Try(func() {
@@ -570,7 +578,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	}
 
 	if d.grpc {
-		grpcCppHostInst := NewToolInstance(ctx.host, pbGrpcCppModule, instance.Language)
+		grpcCppHostInst := NewToolInstance(ctx.host, pbGrpcCppModule)
 		grpcCppHostInst.Flags = inferFlagsFromPath(pbGrpcCppModule, true)
 
 		if exc := Try(func() {
@@ -593,9 +601,6 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	}
 
 	var codegenOutputs []protoCodegenOutput
-	var pyProtoRefs []NodeRef
-	var pyProtoOutputs []VFS
-	var pyProtoMemberInputs []VFS
 
 	// Emit PB nodes.
 	for _, src := range protoSrcs {
@@ -690,11 +695,6 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 				primSrc: Source(protoRelPath),
 			})
 		}
-
-		pyRefs, pyOuts, pyInputs := emitPyProtoSrc(ctx, instance, d, src, protocLDRef, protocBinary)
-		pyProtoRefs = append(pyProtoRefs, pyRefs...)
-		pyProtoOutputs = append(pyProtoOutputs, pyOuts...)
-		pyProtoMemberInputs = append(pyProtoMemberInputs, pyInputs...)
 	}
 
 	// Emit EV nodes (PROTO_LIBRARY with .ev sources → module_tag:"cpp_proto").
@@ -702,7 +702,7 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 		event2cppBinary := evEvent2cppBinaryPath
 		var event2cppLDRef NodeRef
 
-		event2cppHostInst := NewToolInstance(ctx.host, evEvent2cppModule, instance.Language)
+		event2cppHostInst := NewToolInstance(ctx.host, evEvent2cppModule)
 		event2cppHostInst.Flags = inferFlagsFromPath(evEvent2cppModule, true)
 
 		if exc := Try(func() {
@@ -871,17 +871,55 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 	archivePath := Build(instance.Path + "/" + arBaseName)
 	arRef := emitARNode(instance, archivePath, "cpp_proto", ccRefs, ccOutputs, nil, memberInputs, nil, ctx.host, ctx.emit)
 
-	result := &protoSrcsResult{ARRef: arRef, ARPath: archivePath}
-	if len(pyProtoRefs) > 0 {
-		pyInstance := instance
-		pyInstance.Language = LangPy
-		globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", "")
-		gRef := EmitARGlobalNamedTagged(pyInstance, globalBaseName, "py3_proto_global", pyProtoRefs, pyProtoOutputs, pyProtoMemberInputs, ctx.host, ctx.emit)
-		result.GlobalRef = &gRef
-		result.GlobalPath = Build(instance.Path + "/" + globalBaseName)
+	return &protoSrcsResult{ARRef: arRef, ARPath: archivePath}
+}
+
+func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, protoSrcs, evSrcs []string) *protoSrcsResult {
+	if len(evSrcs) > 0 {
+		ThrowFmt("gen: py-addressed PROTO_LIBRARY %s with .ev sources is not modelled", instance.Path)
+	}
+	if len(protoSrcs) == 0 {
+		return nil
 	}
 
-	return result
+	protocBinary := pbProtocBinaryPath
+	var protocLDRef NodeRef
+
+	protocHostInst := NewToolInstance(ctx.host, pbProtocModule)
+	protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
+
+	if exc := Try(func() {
+		result := genModule(ctx, protocHostInst)
+		protocLDRef = result.LDRef
+		protocBinary = result.LDPath
+	}); exc != nil {
+		_ = exc
+	}
+
+	var pyProtoRefs []NodeRef
+	var pyProtoOutputs []VFS
+	var pyProtoMemberInputs []VFS
+
+	for _, src := range protoSrcs {
+		pyRefs, pyOuts, pyInputs := emitPyProtoSrc(ctx, instance, d, src, protocLDRef, protocBinary)
+		pyProtoRefs = append(pyProtoRefs, pyRefs...)
+		pyProtoOutputs = append(pyProtoOutputs, pyOuts...)
+		pyProtoMemberInputs = append(pyProtoMemberInputs, pyInputs...)
+	}
+
+	if len(pyProtoRefs) == 0 {
+		return nil
+	}
+
+	pyInstance := instance
+	pyInstance.Language = LangPy
+	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", "")
+	gRef := EmitARGlobalNamedTagged(pyInstance, globalBaseName, "py3_proto_global", pyProtoRefs, pyProtoOutputs, pyProtoMemberInputs, ctx.host, ctx.emit)
+
+	return &protoSrcsResult{
+		GlobalRef:  &gRef,
+		GlobalPath: Build(instance.Path + "/" + globalBaseName),
+	}
 }
 
 func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src string, protocLDRef NodeRef, protocBinary string) ([]NodeRef, []VFS, []VFS) {
@@ -909,7 +947,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	mypyBinary := pbMypyPath
 	var grpcPyRef, mypyRef NodeRef
 	if d.grpc {
-		grpcPyInst := NewToolInstance(ctx.host, pbGrpcPyModule, instance.Language)
+		grpcPyInst := NewToolInstance(ctx.host, pbGrpcPyModule)
 		grpcPyInst.Flags = inferFlagsFromPath(pbGrpcPyModule, true)
 		if exc := Try(func() {
 			res := genModule(ctx, grpcPyInst)
@@ -921,7 +959,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 			_ = exc
 		}
 	}
-	mypyInst := NewToolInstance(ctx.host, pbMypyModule, instance.Language)
+	mypyInst := NewToolInstance(ctx.host, pbMypyModule)
 	mypyInst.Flags = inferFlagsFromPath(pbMypyModule, true)
 	if exc := Try(func() {
 		res := genModule(ctx, mypyInst)
@@ -1151,7 +1189,7 @@ func py3ccToolRefs(ctx *genCtx, instance ModuleInstance) (NodeRef, NodeRef, stri
 	py3ccSlowBin := Build("tools/py3cc/slow/py3cc").String()
 	var py3ccRef, py3ccSlowRef NodeRef
 
-	inst := NewToolInstance(ctx.host, "tools/py3cc/bin", instance.Language)
+	inst := NewToolInstance(ctx.host, "tools/py3cc/bin")
 	inst.Flags = inferFlagsFromPath("tools/py3cc/bin", true)
 	if exc := Try(func() {
 		res := genModule(ctx, inst)
@@ -1163,7 +1201,7 @@ func py3ccToolRefs(ctx *genCtx, instance ModuleInstance) (NodeRef, NodeRef, stri
 		_ = exc
 	}
 
-	slowInst := NewToolInstance(ctx.host, "tools/py3cc/slow", instance.Language)
+	slowInst := NewToolInstance(ctx.host, "tools/py3cc/slow")
 	slowInst.Flags = inferFlagsFromPath("tools/py3cc/slow", true)
 	if exc := Try(func() {
 		res := genModule(ctx, slowInst)

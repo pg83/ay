@@ -119,15 +119,14 @@ type ModuleInstance struct {
 }
 
 // NewToolInstance builds a ModuleInstance for a host-platform tool at
-// `path`. Flags are inferred from path (via inferFlagsFromPath) so the
-// tool's own ya.make properties — not the caller's — drive dispatch.
-// `lang` carries over because language is a rule-engine selector, not a
-// per-module fact. The older "swap path on a copied instance" pattern
-// produced instances whose Flags described the wrong ya.make.
-func NewToolInstance(host *Platform, path string, lang Language) ModuleInstance {
+// `path`. Tool entry is always addressed as LangCPP: the caller's
+// language must not leak into the tool's own peer walk or default-peer
+// selection. Flags are inferred from path (via inferFlagsFromPath) so
+// the tool's own ya.make properties — not the caller's — drive dispatch.
+func NewToolInstance(host *Platform, path string) ModuleInstance {
 	return ModuleInstance{
 		Path:     path,
-		Language: lang,
+		Language: LangCPP,
 		Platform: host,
 		Flags:    inferFlagsFromPath(path, true),
 	}
