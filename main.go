@@ -13,8 +13,7 @@ func main() {
 	})
 
 	exc.Catch(func(e *Exception) {
-		fmt.Fprintf(os.Stderr, "\x1b[31m%s\x1b[0m\n", e.Error())
-		os.Exit(1)
+		fatalException(e)
 	})
 }
 

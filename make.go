@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -223,6 +224,8 @@ type executor struct {
 	done    atomic.Uint64
 }
 
+var fatalOnce sync.Once
+
 type nodeFuture struct {
 	node *Node
 	once sync.Once
@@ -264,12 +267,19 @@ func (ex *executor) fire(f *nodeFuture) {
 	Try(func() {
 		ex.visit(f.node.UID)
 	}).Catch(func(e *Exception) {
-		// Errors are recorded on the future via the same path
-		// ex.visit uses; nothing else to do here. The root waiter
-		// in ex.run re-throws when it sees f.err != nil and
-		// keepGoing is off.
-		_ = e
+		if !ex.keepGoing {
+			fatalException(e)
+		}
 	})
+}
+
+func fatalException(e *Exception) {
+	fatalOnce.Do(func() {
+		fmt.Fprintf(os.Stderr, "\x1b[31m%s\x1b[0m\n", e.Error())
+		os.Exit(1)
+	})
+
+	select {}
 }
 
 func (ex *executor) eventLoop() {
@@ -287,17 +297,9 @@ func (ex *executor) run(roots []string) {
 		return
 	}
 
-	var wg sync.WaitGroup
-
 	for _, uid := range roots {
-		wg.Add(1)
-		go func(u string) {
-			defer wg.Done()
-			ex.visit(u)
-		}(uid)
+		ex.visit(uid)
 	}
-
-	wg.Wait()
 }
 
 // visit forces uid's future to run, blocking until it (and its
@@ -309,21 +311,12 @@ func (ex *executor) visit(uid string) {
 	}
 
 	f.once.Do(func() {
-		exc := Try(func() {
+		f.err = Try(func() {
 			ex.execute(f.node)
 		})
-
-		if exc != nil {
-			f.err = exc
-			if !ex.keepGoing {
-				exc.throw()
-			}
-
-			fmt.Fprintf(os.Stderr, "node %s: %s\n", uid, exc.Error())
-		}
 	})
 
-	if f.err != nil && !ex.keepGoing {
+	if f.err != nil {
 		f.err.throw()
 	}
 }
@@ -362,22 +355,21 @@ func (ex *executor) execute(n *Node) {
 	ex.pending.Add(1)
 	defer ex.done.Add(1)
 
-	// Visit deps in parallel.
-	var wg sync.WaitGroup
+	if ex.keepGoing {
+		for _, dep := range n.Deps {
+			exc := Try(func() {
+				ex.visit(dep)
+			})
+			if exc == nil {
+				continue
+			}
 
-	for _, dep := range n.Deps {
-		wg.Add(1)
-		go func(d string) {
-			defer wg.Done()
-			ex.visit(d)
-		}(dep)
-	}
-
-	wg.Wait()
-
-	failedDeps := ex.failedDeps(n)
-	if len(failedDeps) > 0 {
-		ThrowFmt("deps failed: %s", strings.Join(failedDeps, ", "))
+			ThrowFmt("deps failed: %s", dep)
+		}
+	} else {
+		for _, dep := range n.Deps {
+			ex.visit(dep)
+		}
 	}
 
 	ex.sema <- struct{}{}
@@ -416,21 +408,6 @@ func (ex *executor) execute(n *Node) {
 		ex.stats[kind] = append(ex.stats[kind], dur)
 		fmt.Fprintln(os.Stderr, rec)
 	}
-}
-
-func (ex *executor) failedDeps(n *Node) []string {
-	var failed []string
-
-	for _, dep := range n.Deps {
-		f := ex.lookup(dep)
-		if f == nil || f.err == nil {
-			continue
-		}
-
-		failed = append(failed, dep)
-	}
-
-	return failed
 }
 
 // runNode executes every Cmd in n. cwd / env / cmd_args paths are
@@ -487,11 +464,18 @@ func (ex *executor) runNode(n *Node, tmp string) {
 			stdoutW = f
 		}
 
+		var stderr bytes.Buffer
+
 		cmd.Stdout = stdoutW
-		cmd.Stderr = os.Stderr
+		cmd.Stderr = &stderr
 
 		if err := cmd.Run(); err != nil {
-			ThrowFmt("cmd failed (uid=%s): %v: %s", n.UID, err, strings.Join(args, " "))
+			msg := fmt.Sprintf("cmd failed (uid=%s): %v: %s", n.UID, err, strings.Join(args, " "))
+			if stderr.Len() > 0 {
+				msg += "\n" + strings.TrimRight(stderr.String(), "\n")
+			}
+
+			ThrowFmt("%s", msg)
 		}
 	}
 }
