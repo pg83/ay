@@ -611,7 +611,7 @@ func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCI
 // `srcInstance.Platform` normally; the JS-target override passes
 // `ctx.target` so the closure resolves against target-arch musl even
 // when the surrounding walk is host-axis. instance.Platform is read
-// for module-level facts (Path, Flags.LibcMusl), NOT mutated.
+// for module-level facts (Path, Flags.NoStdInc), NOT mutated.
 func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerForPlatform(scanPlatform)
 	if scanner == nil {
@@ -638,7 +638,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 			SourceRel:       srcRelOnDisk,
 			OwnAddIncl:      in.AddIncl,
 			PeerAddInclSet:  in.PeerAddInclGlobal,
-			BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.LibcMusl, scanPlatform),
+			BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.NoStdInc, scanPlatform),
 		}
 
 		// scanCtx dispatch via genCtx.getScanCtx — one scanCtx per
@@ -766,7 +766,7 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 		SourceRel:       vfsPath.Rel,
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
-		BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.LibcMusl, srcInstance.Platform),
+		BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.NoStdInc, srcInstance.Platform),
 	}
 
 	sc := ctx.getScanCtx(scanner, cfg)

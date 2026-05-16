@@ -681,12 +681,12 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 
 	// Compose ModuleCCInputs for the downstream CCs. Per-axis peer-GLOBAL
 	// slices come from the header-only walker's peerContribs.
-	// LibcMusl-self modules zero their own GLOBAL CFLAGS.
+	// NoStdInc modules zero their own GLOBAL CFLAGS.
 	ownCFlagsGlobalSelf := d.cFlagsGlobal
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
 
-	if instance.Flags.LibcMusl {
+	if instance.Flags.NoStdInc {
 		ownCFlagsGlobalSelf = nil
 		ownCXXFlagsGlobalSelf = nil
 		ownCOnlyFlagsGlobalSelf = nil

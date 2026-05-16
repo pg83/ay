@@ -224,6 +224,14 @@ func hoistRuntimeStackAddIncl(paths []string) []string {
 //
 // Returns empty for non-CPP languages.
 func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
+	return defaultPeerdirsForMusl(ctx, instance, cliMuslOn(ctx))
+}
+
+func defaultPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
+	return defaultPeerdirsForMusl(ctx, instance, moduleMuslOn(ctx, d))
+}
+
+func defaultPeerdirsForMusl(ctx *genCtx, instance ModuleInstance, muslOn bool) []string {
 	if instance.Language != LangCPP {
 		return nil
 	}
@@ -231,7 +239,7 @@ func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
 	// Runtime-ancestor modules (libcxx, libcxxrt, libunwind, musl,
 	// malloc/api, util, ...) get zero RUNTIME-stack implicit peers
 	// AND the musl/include auto-PEERDIR (when MUSL=yes and not
-	// LibcMusl-self). Two-phase peer-aggregation ensures musl-arch
+	// no-stdinc itself). Two-phase peer-aggregation ensures musl-arch
 	// paths propagate AFTER libcxx/libcxxrt include paths, matching
 	// the reference cmd_args ordering.
 	noPlatform := effectiveNoPlatform(instance.Flags)
@@ -239,7 +247,7 @@ func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
 	if isRuntimeAncestor(instance.Path) {
 		var only []string
 
-		if !noPlatform && !instance.Flags.LibcMusl && cliMuslOn(ctx) {
+		if !noPlatform && !instance.Flags.NoStdInc && muslOn {
 			only = append(only, "contrib/libs/musl/include")
 		}
 
@@ -290,7 +298,7 @@ func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
 	//
 	// Suppression: musl-self subtree (caught by isRuntimeAncestor),
 	// effective NO_PLATFORM, MUSL != "yes" in cliDefines.
-	if !noPlatform && cliMuslOn(ctx) {
+	if !noPlatform && muslOn {
 		peers = append(peers, "contrib/libs/musl/include")
 	}
 
@@ -299,6 +307,14 @@ func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
 	}
 
 	return peers
+}
+
+func moduleMuslOn(ctx *genCtx, d *moduleData) bool {
+	if d != nil {
+		return d.muslEnabled
+	}
+
+	return cliMuslOn(ctx)
 }
 
 func useArcadiaCompilerRuntime(ctx *genCtx, instance ModuleInstance) bool {
@@ -336,13 +352,13 @@ func cliMuslOn(ctx *genCtx) bool {
 // `when ($MUSL == "yes") { CFLAGS+=-D_musl_ }` (ymake.core.conf:781).
 // `-D_musl_` (no `=1`) is consumer-side; musl-self CC nodes get
 // `-D_musl_=1` from `muslExtraDefines` instead, gated off this
-// injection via LibcMusl + effective-NO_PLATFORM checks.
+// injection via NoStdInc + effective-NO_PLATFORM checks.
 func defaultPeerCFlags(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
-	if !cliMuslOn(ctx) {
+	if !moduleMuslOn(ctx, d) {
 		return nil
 	}
 
-	if instance.Flags.LibcMusl {
+	if instance.Flags.NoStdInc {
 		return nil
 	}
 
@@ -388,19 +404,19 @@ const muslConsumerSentinel = "-D_musl_"
 // post-user (true: musl + cpuid_check) halves. genModule calls twice
 // to interleave allocator explicit peers and d.peerdirs between halves.
 func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocator bool, allocatorName string, muslLiteOverride bool, includeMusl bool) []string {
+	return defaultProgramPeerdirsForMusl(ctx, instance, hadAllocator, allocatorName, muslLiteOverride, includeMusl, cliMuslOn(ctx))
+}
+
+func defaultProgramPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData, includeMusl bool) []string {
+	return defaultProgramPeerdirsForMusl(ctx, instance, d.hadAllocator, d.allocatorName, d.muslLite, includeMusl, moduleMuslOn(ctx, d))
+}
+
+func defaultProgramPeerdirsForMusl(ctx *genCtx, instance ModuleInstance, hadAllocator bool, allocatorName string, muslLiteOverride bool, includeMusl bool, muslOn bool) []string {
 	if instance.Language != LangCPP {
 		return nil
 	}
 
 	env := buildIfEnv(instance)
-	// MUSL gate reads from cliDefines (CLI -DMUSL=yes/no); falls back
-	// to env.Bool("MUSL") when ctx is nil (test helper path).
-	muslOn := env.Bool("MUSL")
-
-	if ctx != nil {
-		muslOn = ctx.target.Flags["MUSL"] == "yes"
-	}
-
 	muslLite := env.Bool("MUSL_LITE") || muslLiteOverride
 	osLinux := env.Bool("OS_LINUX")
 

@@ -79,7 +79,7 @@ func TestNewToolInstance(t *testing.T) {
 
 	// Tool path is not in inferFlagsFromPath's special-case set, so
 	// no extra flags should be set.
-	if tool.Flags.NoLibc || tool.Flags.LibcMusl {
+	if tool.Flags.NoLibc || tool.Flags.NoStdInc {
 		t.Errorf("tool Flags carry unrelated module flags: %+v", tool.Flags)
 	}
 }

@@ -11,7 +11,7 @@ import "strings"
 // read instance.Platform.{Target, Flags, Tags, IsHost}. IsHost is set once
 // by the CLI; recursion just plumbs the pointer.
 //
-// Flags is the canonical source of truth; PIC/LibcMusl/… boolean shadows
+// Flags is the canonical source of truth; PIC/MUSL/… boolean shadows
 // are read-only caches filled at construction so hot paths avoid the map
 // lookup. Treat the struct as immutable post-construction.
 type Platform struct {
@@ -28,10 +28,7 @@ type Platform struct {
 
 	// Shadow accessors derived from Flags at construction. Read-only.
 	// LibcMusl is the Platform-level libc selector (host and target halves
-	// can independently be musl/glibc). It is distinct from the per-MODULE
-	// marker ModuleInstance.Flags.LibcMusl ("module belongs to
-	// contrib/libs/musl"); conflating the two broke 64 nodes during the
-	// platform-pair refactor.
+	// can independently be musl/glibc).
 	PIC             bool
 	LibcMusl        bool
 	BuildType       string
