@@ -154,7 +154,22 @@ func cmdMake(args []string) int {
 
 	defer ex.close()
 
-	results := genStream(mf.srcRoot, mf.targets, hostP, targetP, resourceFetches, ex.onNode, onWarn)
+	executorWarn := func(w Warn) {
+		if w.Kind == WarnMissingInclude && !mf.keepGoing {
+			ThrowFmt("%s: %s", w.Kind, w.Message)
+		}
+
+		if mf.verbose {
+			kind := w.Kind
+			message := w.Message
+
+			ex.events <- func() {
+				fmt.Fprintf(os.Stderr, "\x1b[33m%s: %s\x1b[0m\n", kind, message)
+			}
+		}
+	}
+
+	results := genStream(mf.srcRoot, mf.targets, hostP, targetP, resourceFetches, ex.onNode, executorWarn)
 
 	ex.run(results)
 
@@ -399,9 +414,8 @@ func (ex *executor) execute(n *Node) {
 
 	ex.events <- func() {
 		ex.stats[kind] = append(ex.stats[kind], dur)
+		fmt.Fprintln(os.Stderr, rec)
 	}
-
-	fmt.Fprintln(os.Stderr, rec)
 }
 
 func (ex *executor) failedDeps(n *Node) []string {
