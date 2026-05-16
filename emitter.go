@@ -609,3 +609,11 @@ func Finalize(e *BufferedEmitter) *Graph {
 
 	return out
 }
+
+func applyGraphConf(g *Graph, conf *graphConf) {
+	if conf == nil || len(conf.Resources) == 0 {
+		return
+	}
+
+	g.Conf = map[string]interface{}{"resources": conf.Resources}
+}

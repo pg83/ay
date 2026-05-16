@@ -52,6 +52,8 @@ type Platform struct {
 	// empty strings so build tools stay byte-exact.
 	CFlags   []string
 	CXXFlags []string
+
+	ClangVer string
 }
 
 // Toolchain captures absolute paths embedded in cmd_args. Populated from
@@ -118,7 +120,16 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, isHost 
 		March:           marchFor(isa),
 		CFlags:          parseCompilerFlags(cflagsEnv),
 		CXXFlags:        parseCompilerFlags(cxxflagsEnv),
+		ClangVer:        platformClangVersion(flags),
 	}
+}
+
+func platformClangVersion(flags map[string]string) string {
+	if v := flags["CLANG_VER"]; v != "" {
+		return v
+	}
+
+	return "20"
 }
 
 func platformBuildType(flags map[string]string) string {
@@ -233,7 +244,84 @@ func marchFor(isa ISA) string {
 // machine running the build — so emitters call this on the host
 // Platform regardless of which axis the node belongs to.
 func (p *Platform) MultiarchLibPath() string {
-	return "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/" + p.Triple
+	path := "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/" + p.Triple
+
+	if p.UsesResourceClang() {
+		return "$(CLANG)/lib:" + path
+	}
+
+	return path
+}
+
+func (p *Platform) ToolEnv() map[string]string {
+	env := map[string]string{
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
+		"DYLD_LIBRARY_PATH":      p.MultiarchLibPath(),
+	}
+
+	if p.UsesResourceClang() {
+		env["CPATH"] = ""
+		env["LIBRARY_PATH"] = ""
+		env["SDKROOT"] = ""
+	}
+
+	return env
+}
+
+func (p *Platform) WithLinkerSelectionFlags(trailer []string) []string {
+	if !p.UsesResourceLLD() {
+		return trailer
+	}
+
+	flags := []string{
+		"-Wl,--gdb-index",
+		"-fuse-ld=lld",
+		"--ld-path=$(LLD_ROOT)/bin/ld.lld",
+		"-Wl,--no-rosegment",
+		"-Wl,--build-id=sha1",
+	}
+
+	if len(trailer) > 3 && trailer[2] == "-fPIC" && trailer[3] == "-fPIC" {
+		out := make([]string, 0, len(trailer)+len(flags))
+		out = append(out, trailer[:3]...)
+		out = append(out, flags[0])
+		out = append(out, trailer[3])
+		out = append(out, flags[1:]...)
+		out = append(out, trailer[4:]...)
+
+		return out
+	}
+
+	if len(trailer) < 2 {
+		return append(flags, trailer...)
+	}
+
+	out := make([]string, 0, len(trailer)+len(flags))
+	out = append(out, trailer[:2]...)
+	out = append(out, flags...)
+	out = append(out, trailer[2:]...)
+
+	if !p.PIC {
+		out = append(out, "-Wl,-no-pie")
+	}
+
+	return out
+}
+
+func (p *Platform) ArchiverArgs() (string, string, string) {
+	if p.UsesResourceClang() {
+		return p.Tools.AR, "LLVM_AR", "gnu"
+	}
+
+	return "ar", "GNU_AR", "None"
+}
+
+func (p *Platform) UsesResourceClang() bool {
+	return strings.HasPrefix(p.Tools.CC, "$(") || strings.HasPrefix(p.Tools.CXX, "$(") || strings.HasPrefix(p.Tools.AR, "$(")
+}
+
+func (p *Platform) UsesResourceLLD() bool {
+	return strings.HasPrefix(p.Tools.LLD, "$(")
 }
 
 // ParsePlatformID splits a "default-<os>-<isa>" string into its OS

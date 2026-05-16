@@ -25,6 +25,7 @@ import argparse
 import base64
 import hashlib
 import json
+import re
 import sys
 import time
 from collections import deque
@@ -49,6 +50,7 @@ def _load(path: str) -> dict[str, Any]:
         with open(path, "rb") as fh:
             raw = fh.read()
         raw = raw.replace(b"$(BUILD_ROOT)", b"$(B)").replace(b"$(SOURCE_ROOT)", b"$(S)")
+        raw = re.sub(rb"\$\((CLANG|LLD_ROOT|YMAKE_PYTHON3)-[0-9]+\)", rb"$(\1)", raw)
         return json.loads(raw)
     except (OSError, json.JSONDecodeError) as exc:
         _die(f"cannot load {path}: {exc}")

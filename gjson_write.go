@@ -39,8 +39,9 @@ func writeGraphIndented(w io.Writer, g *Graph) {
 
 	buf = append(buf, '{', '\n')
 
-	// "conf": {} — always empty per emitter.go's Finalize contract.
-	buf = append(buf, `    "conf": {},`...)
+	buf = append(buf, `    "conf": `...)
+	buf = appendGraphConf(buf, g.Conf, "    ")
+	buf = append(buf, ',')
 	buf = append(buf, '\n')
 
 	// "graph": [ ...nodes... ]
@@ -318,6 +319,146 @@ func appendVFSSlice(buf []byte, vs []VFS, pad string) []byte {
 		buf = appendVFS(buf, v)
 
 		if i < len(vs)-1 {
+			buf = append(buf, ',')
+		}
+
+		buf = append(buf, '\n')
+	}
+
+	buf = append(buf, pad...)
+	buf = append(buf, ']')
+
+	return buf
+}
+
+func appendGraphConf(buf []byte, conf map[string]interface{}, pad string) []byte {
+	if len(conf) == 0 {
+		return append(buf, '{', '}')
+	}
+
+	resourcesAny, ok := conf["resources"]
+	if !ok || len(conf) != 1 {
+		ThrowFmt("writeGraphIndented: unsupported conf shape")
+	}
+
+	resources, ok := resourcesAny.([]graphConfResource)
+	if !ok {
+		ThrowFmt("writeGraphIndented: unsupported conf.resources type %T", resourcesAny)
+	}
+
+	buf = append(buf, '{', '\n')
+	itemPad := pad + "    "
+
+	buf = append(buf, itemPad...)
+	buf = append(buf, `"resources": `...)
+	buf = appendGraphConfResources(buf, resources, itemPad)
+	buf = append(buf, '\n')
+
+	buf = append(buf, pad...)
+	buf = append(buf, '}')
+
+	return buf
+}
+
+func appendGraphConfResources(buf []byte, resources []graphConfResource, pad string) []byte {
+	if len(resources) == 0 {
+		return append(buf, '[', ']')
+	}
+
+	buf = append(buf, '[', '\n')
+	itemPad := pad + "    "
+
+	for i, r := range resources {
+		buf = appendGraphConfResource(buf, r, itemPad)
+
+		if i < len(resources)-1 {
+			buf = append(buf, ',')
+		}
+
+		buf = append(buf, '\n')
+	}
+
+	buf = append(buf, pad...)
+	buf = append(buf, ']')
+
+	return buf
+}
+
+func appendGraphConfResource(buf []byte, r graphConfResource, pad string) []byte {
+	buf = append(buf, pad...)
+	buf = append(buf, '{', '\n')
+	itemPad := pad + "    "
+
+	first := true
+	addComma := func() {
+		if !first {
+			buf = append(buf, ',')
+			buf = append(buf, '\n')
+		}
+
+		first = false
+	}
+
+	if r.Name != "" {
+		addComma()
+		buf = append(buf, itemPad...)
+		buf = append(buf, `"name": `...)
+		buf = appendString(buf, r.Name)
+	}
+
+	addComma()
+	buf = append(buf, itemPad...)
+	buf = append(buf, `"pattern": `...)
+	buf = appendString(buf, r.Pattern)
+
+	if r.Resource != "" {
+		addComma()
+		buf = append(buf, itemPad...)
+		buf = append(buf, `"resource": `...)
+		buf = appendString(buf, r.Resource)
+	}
+
+	if len(r.Resources) != 0 {
+		addComma()
+		buf = append(buf, itemPad...)
+		buf = append(buf, `"resources": `...)
+		buf = appendGraphConfResourceURIs(buf, r.Resources, itemPad)
+	}
+
+	buf = append(buf, '\n')
+	buf = append(buf, pad...)
+	buf = append(buf, '}')
+
+	return buf
+}
+
+func appendGraphConfResourceURIs(buf []byte, resources []graphConfResourceURI, pad string) []byte {
+	if len(resources) == 0 {
+		return append(buf, '[', ']')
+	}
+
+	buf = append(buf, '[', '\n')
+	itemPad := pad + "    "
+
+	for i, r := range resources {
+		buf = append(buf, itemPad...)
+		buf = append(buf, '{', '\n')
+		fieldPad := itemPad + "    "
+
+		buf = append(buf, fieldPad...)
+		buf = append(buf, `"platform": `...)
+		buf = appendString(buf, r.Platform)
+		buf = append(buf, ',', '\n')
+
+		buf = append(buf, fieldPad...)
+		buf = append(buf, `"resource": `...)
+		buf = appendString(buf, r.Resource)
+		buf = append(buf, '\n')
+
+		buf = append(buf, itemPad...)
+		buf = append(buf, '}')
+
+		if i < len(resources)-1 {
 			buf = append(buf, ',')
 		}
 

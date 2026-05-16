@@ -18,10 +18,10 @@ type moduleData struct {
 	moduleStmt       *ModuleStmt
 	srcs             []string
 	globalSrcs       []string
-	pySrcs           []string // PR-M3-A: python sources from PY_SRCS(...); each entry is a .py filename
-	pyBuildNoPYC     bool     // PR-M3-A: set by ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
-	pyBuildNoPY      bool     // PR-M3-resource-objcopy-C: set by ENABLE(PYBUILD_NO_PY); suppresses raw .py resfs embedding from PY_SRCS (only the yapyc3 form is embedded)
-	pyTopLevel       bool     // PR-M3-resource-objcopy-C: set by TOP_LEVEL prefix in PY_SRCS(...); the resfs key for each source omits the dotted module-path prefix
+	pySrcs           []string                         // PR-M3-A: python sources from PY_SRCS(...); each entry is a .py filename
+	pyBuildNoPYC     bool                             // PR-M3-A: set by ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
+	pyBuildNoPY      bool                             // PR-M3-resource-objcopy-C: set by ENABLE(PYBUILD_NO_PY); suppresses raw .py resfs embedding from PY_SRCS (only the yapyc3 form is embedded)
+	pyTopLevel       bool                             // PR-M3-resource-objcopy-C: set by TOP_LEVEL prefix in PY_SRCS(...); the resfs key for each source omits the dotted module-path prefix
 	enumSrcs         []*GenerateEnumSerializationStmt // PR-M3-D: GENERATE_ENUM_SERIALIZATION(*) declarations
 	peerdirs         []string
 	joinSrcs         []*JoinSrcsStmt
@@ -41,7 +41,7 @@ type moduleData struct {
 	allocatorName    string   // PR-35g: name passed to ALLOCATOR(...); empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE).
 	muslLite         bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
 	noPythonIncl     bool     // set by NO_PYTHON_INCLUDES(); suppresses PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (build/conf/python.conf:741-743).
-	usePython3      bool      // set by USE_PYTHON3() or PY3-family module types; normalised by applyPython3AddIncl. Triggers _PYTHON3_ADDINCL (python.conf:1018-1023): -DUSE_PYTHON3 + contrib/libs/python/Include.
+	usePython3       bool     // set by USE_PYTHON3() or PY3-family module types; normalised by applyPython3AddIncl. Triggers _PYTHON3_ADDINCL (python.conf:1018-1023): -DUSE_PYTHON3 + contrib/libs/python/Include.
 	ldPlugins        []string // filenames from LD_PLUGIN(name.py); each becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs. Only contrib/libs/musl/include uses this in M2.
 	arPlugin         string   // name from AR_PLUGIN(name); resolves to `$(S)/<modulePath>/<name>.pyplugin` and is injected into AR cmd_args (`--plugin <path>`) and inputs. Mirror of AR_PLUGIN (ymake.core.conf:3396-3398) + _LD_ARCHIVER_KV_PLUGIN (ld.conf:366-368).
 	// per-source extra CFLAGS keyed by source filename, populated by
@@ -78,7 +78,7 @@ type moduleData struct {
 	// `_/` infix), unlike `SRCS(subdir/foo.cpp)` which emits
 	// `<modulePath>/_/subdir/foo.cpp.o`. Consulted by emitOneSource to
 	// set ModuleCCInputs.FlatOutput.
-	flatSrcs    map[string]struct{}
+	flatSrcs map[string]struct{}
 	// RESOURCE() / RESOURCE_FILES() pair lists, expanded inline at
 	// collect time. resources is the canonical view for the objcopy
 	// packer in resource.go.
@@ -377,8 +377,8 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 			// declaration order (AllPaths). Empirically the reference
 			// emits own GLOBAL ADDINCL on the module's own CC compiles
 			// (libcxx algorithm.cpp.o cmd_args[9..11]).
-			d.addInclGlobal = append(d.addInclGlobal, v.GlobalPaths...)
-			d.addIncl = append(d.addIncl, v.AllPaths...)
+			d.addInclGlobal = append(d.addInclGlobal, expandConfigPaths(v.GlobalPaths, env)...)
+			d.addIncl = append(d.addIncl, expandConfigPaths(v.AllPaths, env)...)
 		case *CFlagsStmt:
 			// GLOBAL flags peer-propagate (d.cFlagsGlobal); non-GLOBAL
 			// applies to own C+C++ sources only (d.cFlags). composeCC
@@ -926,7 +926,25 @@ func buildIfEnv(instance ModuleInstance) Environment {
 		env.SetBool("ARCH_ARM64", true)
 	}
 
+	useRuntime := instance.Platform.Flags["USE_ARCADIA_COMPILER_RUNTIME"]
+	env.SetBool("USE_ARCADIA_COMPILER_RUNTIME", useRuntime != "no")
+	env.SetString("COMPILER_VERSION", instance.Platform.ClangVer)
+
 	return env
+}
+
+func expandConfigPaths(paths []string, env Environment) []string {
+	out := make([]string, 0, len(paths))
+
+	for _, path := range paths {
+		out = append(out, expandConfigString(path, env))
+	}
+
+	return out
+}
+
+func expandConfigString(s string, env Environment) string {
+	return strings.ReplaceAll(s, "${COMPILER_VERSION}", env.String("COMPILER_VERSION"))
 }
 
 // derivePeerInstance builds the peer's ModuleInstance. The peer

@@ -197,9 +197,9 @@ type genCtx struct {
 	//                  Gen call; cross-module reuse when ctxHash matches.
 	//
 	// Plumbed from CLI `--scan-ctx-mode`. Default = "interned".
-	scanCtxMode        string
-	localScanCtxStack  []map[scanCtxCacheKey]*scanCtx
-	internedScanCtx    map[scanCtxCacheKey]*scanCtx
+	scanCtxMode       string
+	localScanCtxStack []map[scanCtxCacheKey]*scanCtx
+	internedScanCtx   map[scanCtxCacheKey]*scanCtx
 	// Debug counters (printed when YATOOL_SCANCTX_STATS=1). scanCtxAllocs
 	// counts every fresh allocation; scanCtxPeak is the max bucket size
 	// observed at any store. Local-mode peak = deepest in-flight bucket;
@@ -438,51 +438,51 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	// SRC_C_SSE41 / SSE2 / SSSE3 / AVX / XOP / SSE3 / SSE4: handled in
 	// applyUnknownStmt → d.simdSrcs (one CC node per variant). Not in
 	// the whitelist.
-	"NO_CLANG_COVERAGE":     {}, // contrib/tools/yasm
-	"NO_PROFILE_RUNTIME":    {}, // contrib/tools/yasm
-	"WITHOUT_VERSION": {}, // contrib/libs/musl/include neighbours; metadata-only.
+	"NO_CLANG_COVERAGE":  {}, // contrib/tools/yasm
+	"NO_PROFILE_RUNTIME": {}, // contrib/tools/yasm
+	"WITHOUT_VERSION":    {}, // contrib/libs/musl/include neighbours; metadata-only.
 
 	// USE_PYTHON3 / NO_PYTHON_INCLUDES / NO_CHECK_IMPORTS / PYBUILD_NO_PYC /
 	// RESOURCE / RESOURCE_FILES / PY_REGISTER / RUN_PROGRAM /
 	// RUN_ANTLR4_CPP[_SPLIT] / GENERATE_ENUM_SERIALIZATION[_WITH_HEADER|
 	// _NOUTF] / ARCHIVE / CREATE_BUILDINFO_FOR are NOT in this whitelist
 	// — they have typed handlers in applyUnknownStmt / yamake.go.
-	"USE_PYTHON2":                       {}, // Python 2 dependency marker.
-	"PYTHON3_ADDINCL":                   {}, // Adds Python3 include paths (system python, handled by emitter).
-	"PYTHON2_ADDINCL":                   {}, // Adds Python2 include paths.
-	"NO_PYTHON_COVERAGE":                {}, // Suppresses Python coverage instrumentation.
-	"NO_IMPORT_TRACING":                 {}, // Suppresses import tracing.
-	"NO_LINT":                           {}, // Suppresses linting.
-	"STYLE_PYTHON":                      {}, // Python style checker metadata.
-	"WINDOWS_LONG_PATH_MANIFEST":        {}, // Windows-only manifest; no-op on Linux.
-	"INCLUDE_TAGS":                      {}, // Proto include-tag filter; metadata.
-	"INDUCED_DEPS":                      {}, // Adds header deps without PEERDIR; metadata.
-	"NO_PYTHON2":                        {}, // Marks PY2 unavailability; metadata.
-	"CHECK_DEPENDENT_DIRS":              {}, // Dependency restriction check; metadata.
-	"SUBSCRIBER":                        {}, // Ownership metadata.
-	"OWNER":                             {}, // Ownership metadata.
-	"LICENSE_RESTRICTION_EXCEPTIONS":    {}, // License metadata.
-	"LICENSE_RESTRICTION":               {}, // License metadata.
-	"RESTRICT_PATH":                     {}, // Path-restriction metadata.
-	"NO_OPTIMIZE":                       {}, // Suppresses optimization; metadata.
-	"TASKLET":                           {}, // Tasklet metadata; deferred.
-	"TASKLETSUPPORT":                    {}, // Tasklet support metadata; deferred.
+	"USE_PYTHON2":                    {}, // Python 2 dependency marker.
+	"PYTHON3_ADDINCL":                {}, // Adds Python3 include paths (system python, handled by emitter).
+	"PYTHON2_ADDINCL":                {}, // Adds Python2 include paths.
+	"NO_PYTHON_COVERAGE":             {}, // Suppresses Python coverage instrumentation.
+	"NO_IMPORT_TRACING":              {}, // Suppresses import tracing.
+	"NO_LINT":                        {}, // Suppresses linting.
+	"STYLE_PYTHON":                   {}, // Python style checker metadata.
+	"WINDOWS_LONG_PATH_MANIFEST":     {}, // Windows-only manifest; no-op on Linux.
+	"INCLUDE_TAGS":                   {}, // Proto include-tag filter; metadata.
+	"INDUCED_DEPS":                   {}, // Adds header deps without PEERDIR; metadata.
+	"NO_PYTHON2":                     {}, // Marks PY2 unavailability; metadata.
+	"CHECK_DEPENDENT_DIRS":           {}, // Dependency restriction check; metadata.
+	"SUBSCRIBER":                     {}, // Ownership metadata.
+	"OWNER":                          {}, // Ownership metadata.
+	"LICENSE_RESTRICTION_EXCEPTIONS": {}, // License metadata.
+	"LICENSE_RESTRICTION":            {}, // License metadata.
+	"RESTRICT_PATH":                  {}, // Path-restriction metadata.
+	"NO_OPTIMIZE":                    {}, // Suppresses optimization; metadata.
+	"TASKLET":                        {}, // Tasklet metadata; deferred.
+	"TASKLETSUPPORT":                 {}, // Tasklet support metadata; deferred.
 	// SET_APPEND is handled by applyUnknownStmt for the SFLAGS axis;
 	// other SET_APPEND targets remain as no-ops (handled there).
-	"OPENSOURCE_PROJECT":                {}, // Metadata.
-	"SPLIT_FACTOR":                      {}, // Test metadata.
-	"FORK_TESTS":                        {}, // Test metadata.
-	"FORK_SUBTESTS":                     {}, // Test metadata.
-	"SIZE":                              {}, // Test size metadata.
-	"TAG":                               {}, // Test tag metadata.
-	"REQUIREMENTS":                      {}, // Test requirements metadata.
-	"TIMEOUT":                           {}, // Test timeout metadata.
-	"ENV":                               {}, // Test env metadata.
-	"DATA":                              {}, // Test data metadata.
-	"TEST_SRCS":                         {}, // Test source list.
-	"LINT":                              {}, // Lint metadata.
-	"NO_YMAKE_PYTHON":                   {}, // Suppresses ymake python binding; metadata.
-	"USE_LIGHT_PY2CC":                   {}, // Python build variant; metadata.
+	"OPENSOURCE_PROJECT": {}, // Metadata.
+	"SPLIT_FACTOR":       {}, // Test metadata.
+	"FORK_TESTS":         {}, // Test metadata.
+	"FORK_SUBTESTS":      {}, // Test metadata.
+	"SIZE":               {}, // Test size metadata.
+	"TAG":                {}, // Test tag metadata.
+	"REQUIREMENTS":       {}, // Test requirements metadata.
+	"TIMEOUT":            {}, // Test timeout metadata.
+	"ENV":                {}, // Test env metadata.
+	"DATA":               {}, // Test data metadata.
+	"TEST_SRCS":          {}, // Test source list.
+	"LINT":               {}, // Lint metadata.
+	"NO_YMAKE_PYTHON":    {}, // Suppresses ymake python binding; metadata.
+	"USE_LIGHT_PY2CC":    {}, // Python build variant; metadata.
 
 	"SUPPRESSIONS":                    {}, // Sanitizer suppression file; metadata.
 	"OPENSOURCE_EXPORT_REPLACEMENT":   {}, // CMake/Conan export replacement; metadata.
@@ -599,6 +599,7 @@ func GenWithMode(sourceRoot string, targetDir string, hostP, targetP *Platform, 
 //  8. JOIN_SRCS: EmitJS + EmitCC against the joined output.
 //  9. LIBRARY: EmitAR over own CCs (+EmitARGlobal when GLOBAL_SRCS).
 //     PROGRAM: EmitLD over own CCs and peer archives.
+//
 // 10. Memoise and return.
 func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// Capture the seed key BEFORE the `instance.Flags = d.flags` overlay
@@ -861,15 +862,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerGlobalRefsH := peerContribs.globalRefs
 
 		result := &moduleEmitResult{
-			headerOnly:              true,
-			isPyLibrary:             isPyLibraryType(d.moduleStmt.Name),
-			hasPlainAR:              hOnlyHasAR,
-			ARRef:                   hOnlyARRef,
-			ARPath:                  hOnlyARPath,
-			GlobalRef:               hOnlyGlobalRef,
-			GlobalPath:              hOnlyGlobalPath,
-			AddInclGlobal:           mergeDedup(d.addInclGlobal, peerContribs.addIncl),
-			OwnAddInclGlobal:        append([]string(nil), d.addInclGlobal...),
+			headerOnly:       true,
+			isPyLibrary:      isPyLibraryType(d.moduleStmt.Name),
+			hasPlainAR:       hOnlyHasAR,
+			ARRef:            hOnlyARRef,
+			ARPath:           hOnlyARPath,
+			GlobalRef:        hOnlyGlobalRef,
+			GlobalPath:       hOnlyGlobalPath,
+			AddInclGlobal:    mergeDedup(d.addInclGlobal, peerContribs.addIncl),
+			OwnAddInclGlobal: append([]string(nil), d.addInclGlobal...),
 			// peer-transitive first, own last per upstream
 			// `TGlobalVarsCollector` semantics. ADDINCL keeps the opposite
 			// (own first, peer second) per `TModuleIncDirs::Get()`.

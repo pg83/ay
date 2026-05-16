@@ -214,6 +214,7 @@ func hoistRuntimeStackAddIncl(paths []string) []string {
 //   - contrib/libs/libunwind         — NO_RUNTIME / NO_PLATFORM
 //   - util                           — NO_UTIL / NO_PLATFORM
 //   - contrib/libs/musl/include      — NO_PLATFORM (gated on MUSL=yes)
+//
 // libcxx/libcxxrt/libunwind are runtime-support libs gated by
 // NO_RUNTIME; util is the Yandex stdlib analogue gated by NO_UTIL.
 //
@@ -240,6 +241,10 @@ func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
 
 		if !noPlatform && !instance.Flags.LibcMusl && cliMuslOn(ctx) {
 			only = append(only, "contrib/libs/musl/include")
+		}
+
+		if runtimeAncestorCxxConsumers[instance.Path] && useArcadiaCompilerRuntime(ctx, instance) && instance.Path != "library/cpp/sanitizer/include" {
+			only = append(only, "library/cpp/sanitizer/include")
 		}
 
 		return only
@@ -289,7 +294,29 @@ func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
 		peers = append(peers, "contrib/libs/musl/include")
 	}
 
+	if !instance.Flags.NoRuntime && !noPlatform && useArcadiaCompilerRuntime(ctx, instance) && instance.Path != "library/cpp/sanitizer/include" {
+		peers = append(peers, "library/cpp/sanitizer/include")
+	}
+
 	return peers
+}
+
+func useArcadiaCompilerRuntime(ctx *genCtx, instance ModuleInstance) bool {
+	if instance.Platform != nil {
+		if v := instance.Platform.Flags["USE_ARCADIA_COMPILER_RUNTIME"]; v != "" {
+			return v != "no"
+		}
+	}
+
+	if ctx == nil {
+		return false
+	}
+
+	if v := ctx.target.Flags["USE_ARCADIA_COMPILER_RUNTIME"]; v != "" {
+		return v != "no"
+	}
+
+	return true
 }
 
 // cliMuslOn reports whether the CLI bound `MUSL` to `"yes"`.

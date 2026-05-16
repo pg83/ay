@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 	"strings"
@@ -171,33 +172,31 @@ func cmdGen(args []string) int {
 		}()
 	}
 
-	// Toolchain mining + per-tool CLI overrides. Tools are
-	// build-host facilities and land on both Platform halves; the
-	// per-tool --override flags win over the $PATH-mined value.
-	tools := commonFlags(mineTools())
-	for _, o := range []struct {
-		key, val string
-	}{
-		{"BUILD_PYTHON_BIN", *pythonBin},
-		{"BUILD_PYTHON3_BIN", *pythonBin},
-		{"CLANG_TOOL", *cCompiler},
-		{"CLANG_pl_pl_TOOL", *cxxCompiler},
-		{"OBJCOPY_TOOL", *objcopy},
-		{"AR_TOOL", *ar},
-		{"STRIP_TOOL", *strip},
-		{"LLD_TOOL", *lld},
-	} {
-		if o.val != "" {
-			tools[o.key] = o.val
-		}
-	}
+	// Toolchain flags are build-host facilities and land on both Platform
+	// halves. Prebuilt resource paths are the default; CLI/env overrides
+	// replace individual tools with caller-provided paths.
+	tools, conf := toolchainFlags(*sourceRoot, []toolOverride{
+		{Key: "BUILD_PYTHON_BIN", Val: *pythonBin},
+		{Key: "BUILD_PYTHON3_BIN", Val: *pythonBin},
+		{Key: "CLANG_TOOL", Val: *cCompiler},
+		{Key: "CLANG_pl_pl_TOOL", Val: *cxxCompiler},
+		{Key: "OBJCOPY_TOOL", Val: *objcopy},
+		{Key: "AR_TOOL", Val: *ar},
+		{Key: "STRIP_TOOL", Val: *strip},
+		{Key: "LLD_TOOL", Val: *lld},
+	})
+	hostYaFlags := readYaConfSection(filepath.Join(*sourceRoot, "ya.conf"), "host_platform_flags")
+	targetYaFlags := readYaConfSection(filepath.Join(*sourceRoot, "ya.conf"), "flags")
 
 	// Host platform: mined OS/ISA when --host-platform is empty;
 	// mined toolchain + PIC=yes; baseline tag "tool" so every host
 	// node carries it.
 	hOS, hISA := resolvePlatform(*hostPlatform)
-	hostFlags := make(map[string]string, len(tools)+len(hostPlatformFlags.toMap())+1)
+	hostFlags := make(map[string]string, len(tools)+len(hostYaFlags)+len(hostPlatformFlags.toMap())+1)
 	for k, v := range tools {
+		hostFlags[k] = v
+	}
+	for k, v := range hostYaFlags {
 		hostFlags[k] = v
 	}
 	for k, v := range hostPlatformFlags.toMap() {
@@ -217,8 +216,11 @@ func cmdGen(args []string) int {
 		targetSpec = string(MakePlatformID(hOS, hISA))
 	}
 	tOS, tISA := resolvePlatform(targetSpec)
-	targetFlags := make(map[string]string, len(tools)+len(defines.toMap())+2)
+	targetFlags := make(map[string]string, len(tools)+len(targetYaFlags)+len(defines.toMap())+2)
 	for k, v := range tools {
+		targetFlags[k] = v
+	}
+	for k, v := range targetYaFlags {
 		targetFlags[k] = v
 	}
 	for k, v := range defines.toMap() {
@@ -232,6 +234,7 @@ func cmdGen(args []string) int {
 
 	genStart := time.Now()
 	g := GenWithMode(*sourceRoot, *target, hostP, targetP, *scanCtxMode, onWarn)
+	applyGraphConf(g, conf)
 	genDur := time.Since(genStart)
 
 	if *memProfile != "" {
