@@ -571,9 +571,9 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 
 // GenWithMode runs Gen against an explicit (host, target) Platform pair
 // with the chosen scanCtxMode (`local` or `interned`). Callers (`yatool
-// gen`, `yatool make -G`, test helpers) construct both Platforms from
-// CLI flags + mining; the walker reads every flag, tool path, and tag
-// off the Platform pointers. `onWarn` receives one line per diagnostic.
+// make -G`, test helpers) construct both Platforms from CLI flags +
+// mining; the walker reads every flag, tool path, and tag off the
+// Platform pointers. `onWarn` receives one line per diagnostic.
 func GenWithMode(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn)) *Graph {
 	return GenWithModeWithResources(sourceRoot, targetDir, hostP, targetP, mode, onWarn, nil)
 }

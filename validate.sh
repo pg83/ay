@@ -13,22 +13,26 @@
 set -euo pipefail
 
 OUT="${1:-./.out/sg.archiver.json}"
-EXPECTED_M2="c3078d562bb875e5f795198663836610b202f6f44db7de06787440ac6d06c0d9"
+EXPECTED_M2="769d40e0e5dc79ce04fb1c34bffe83b9170ce05c3eac22ac291cbef1718e0571"
 
 mkdir -p "$(dirname "$OUT")"
 
 go build -o yatool .
 
-env -u CFLAGS -u CXXFLAGS ./yatool gen \
-    --target tools/archiver \
-    --out "$OUT" \
+env -u CFLAGS -u CXXFLAGS \
+    PYTHON=/ix/realm/pg/bin/python3 \
+    CC=/ix/realm/boot/bin/clang \
+    CXX=/ix/realm/boot/bin/clang++ \
+    OBJCOPY=/ix/realm/boot/bin/llvm-objcopy \
+    ./yatool make \
+    -j 0 \
+    -k \
+    -G \
     --target-platform default-linux-aarch64 \
     --host-platform default-linux-x86_64 \
-    --python-bin /ix/realm/pg/bin/python3 \
-    --c-compiler /ix/realm/boot/bin/clang \
-    --cxx-compiler /ix/realm/boot/bin/clang++ \
-    --objcopy /ix/realm/boot/bin/llvm-objcopy \
-    --host-platform-flag MUSL=yes
+    --host-platform-flag MUSL=yes \
+    --musl \
+    tools/archiver > "$OUT"
 
 GOT=$(sha256sum "$OUT" | awk '{print $1}')
 

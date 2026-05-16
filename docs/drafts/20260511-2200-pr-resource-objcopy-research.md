@@ -289,7 +289,7 @@ For any PR landing under this banner:
 
   - M1 sha = `bf30a6676a660ce3b416edc2ea1c2956bbf93ae1f94f0f773d2a62e4c77ca7f6` (no regression).
   - M2 sha = `c1c750215f476d121a5815096cd06353a79d9942ab1565298fde5d8d9c0898df` (no regression).
-  - `./yatool gen --target tools/archiver` wall time ≤ 5s.
+  - `./yatool make -j 0 -G tools/archiver` wall time ≤ 5s.
   - M3 pairs strictly non-decreasing; per-level L0/L1/L2/L3 strictly
     non-decreasing.
 

@@ -35,7 +35,7 @@ budget.
 | L2 | Paired-node `inputs` / `tags` / `requirements` multiset equality | 100.00% (3730 / 3730) | **100.00%** |
 | L3 | Paired-node `cmd_args` / `env` / `cwd` byte-exact equality | 100.00% (3730 / 3730) | **100.00%** |
 | L4 | `sha256(our.json) == sha256(normalized-ref.json)` — byte-exact equality of the full on-disk graph file | not yet measured | **byte-exact equal** |
-| `gen` wall time | `time ./yatool gen --target tools/archiver` warm-cache (3-run avg) | ~0.92 s | **≤ 5 s** (hard gate; deviations are emergency tickets) |
+| Graph generation wall time | `time ./yatool make -j 0 -G tools/archiver > /dev/null` warm-cache (3-run avg) | ~0.92 s | **≤ 5 s** (hard gate; deviations are emergency tickets) |
 
 #### L4 — byte-exact on-disk equality
 
@@ -157,13 +157,13 @@ The project is complete when **all of the following hold simultaneously** on
 main, against the canonical reference graph at `/home/pg/monorepo/yatool_orig/sg.json`:
 
 1. L0 = L1 = L2 = L3 = **100.00 %** for `tools/archiver`.
-2. **L4 byte-exact**: `sha256(./yatool gen --target tools/archiver --out -)`
+2. **L4 byte-exact**: `sha256(./yatool make -j 0 -G tools/archiver)`
    equals `sha256(normalized-ref-for-tools-archiver.json)`, where the
    normalized reference is produced by the documented one-time
    normalization pass over `/home/pg/monorepo/yatool_orig/sg.json` (strip
    `conf`; re-canonicalize syntactic-equivalent JSON; re-UID via our
    fingerprint).
-3. `time ./yatool gen --target tools/archiver` ≤ 5 s warm-cache, 3-run avg.
+3. `time ./yatool make -j 0 -G tools/archiver > /dev/null` ≤ 5 s warm-cache, 3-run avg.
 4. M1 (`build/cow/on`) byte-exact at all four levels — preserved.
 5. `go test ./... -count=1` passes; `go build`, `go vet`, `gofmt -l *.go` clean.
 6. `defects.md` has zero open entries (`resolved` or `resolved (deferred)` only).

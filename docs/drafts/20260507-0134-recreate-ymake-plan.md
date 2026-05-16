@@ -106,8 +106,8 @@ All paths absolute. Concurrency assumes orchestrator's worktree mechanism.
   - Deps: PR-02. Parallel with PR-08.
 - **PR-10 — `gen` driver + first vertical slice.** [Opus — integration]
   - Files: `gen.go`, `gen_test.go`. Updates `main.go`.
-  - Scope: `gen --target <module-dir> --out our.json` parses one `ya.make` (no recursion in M1), emits CC per SRCS + AR closing module, finalizes, writes JSON. Single platform pass.
-  - Success: `gen --target <leaf-module-dir> --out /tmp/our.json && compare g.json /tmp/our.json` prints `L3=100%-of-2-nodes` (full L3 on the 2 emitted; small percentages overall — that's expected).
+  - Scope: `make -j 0 -G <module-dir> > our.json` parses one `ya.make` (no recursion in M1), emits CC per SRCS + AR closing module, finalizes, writes JSON. Single platform pass.
+  - Success: `make -j 0 -G <leaf-module-dir> > /tmp/our.json && compare g.json /tmp/our.json` prints `L3=100%-of-2-nodes` (full L3 on the 2 emitted; small percentages overall — that's expected).
   - Deps: PR-06, PR-08, PR-09. Last PR of M1.
 
 **Concurrency map.**

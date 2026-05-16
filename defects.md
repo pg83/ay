@@ -21,17 +21,17 @@ Entry schema:
 ### [PR-01-D01] `gen -h`/`-help`/`--help` short-circuits to flag's auto-usage and exits 0 instead of printing the stub message and returning 1
 **Status:** resolved
 **Severity:** major
-**Location:** main.go:50-69 (cmdGen, cmdCompare, cmdInspect)
-**Description:** Spec for PR-01 stubs is unconditional: `gen`/`compare`/`inspect` "print `<name>: not implemented yet` to stderr and return 1." Each stub called `flag.NewFlagSet(name, flag.ExitOnError).Parse(args)` with no flags registered; passing `-h`/`-help`/`--help` made the flag package invoke its built-in usage printer and `os.Exit(0)` BEFORE the `fmt.Fprintln(os.Stderr, ...)` line ever ran. Reproduced: `./yatool gen -h` → stderr `Usage of gen:`, exit 0. Two failures: stub message missing, exit code 0 not 1. Same for `compare`/`inspect`.
+**Location:** main.go:50-69 (cmdMake, cmdCompare, cmdInspect)
+**Description:** Spec for PR-01 stubs is unconditional: `gen`/`compare`/`inspect` "print `<name>: not implemented yet` to stderr and return 1." Each stub called `flag.NewFlagSet(name, flag.ExitOnError).Parse(args)` with no flags registered; passing `-h`/`-help`/`--help` made the flag package invoke its built-in usage printer and `os.Exit(0)` BEFORE the `fmt.Fprintln(os.Stderr, ...)` line ever ran. Reproduced: `./yatool make -j 0 -G -h` → stderr `Usage of gen:`, exit 0. Two failures: stub message missing, exit code 0 not 1. Same for `compare`/`inspect`.
 **Root cause:** `flag.NewFlagSet(..., flag.ExitOnError)` registers an implicit `-h`/`-help`/`--help` handler that prints `Usage of <name>:` and calls `os.Exit(0)` even when no flags are defined.
-**Fix:** Removed the `fs.Parse(args)` call in `cmdGen`/`cmdCompare`/`cmdInspect` (main.go:50-69). Kept `flag.NewFlagSet(name, flag.ExitOnError)` construction per spec/D3, assigned to `_ =` (since the flagset is now unused). Parameter changed to `_ []string` (args no longer consumed). Verified: `./yatool gen -h`, `./yatool gen --help`, `./yatool gen --foobar`, `./yatool gen foo bar`, `./yatool compare -h`, `./yatool inspect --foobar` all now print `<name>: not implemented yet` to stderr and exit 1.
+**Fix:** Removed the `fs.Parse(args)` call in `cmdMake`/`cmdCompare`/`cmdInspect` (main.go:50-69). Kept `flag.NewFlagSet(name, flag.ExitOnError)` construction per spec/D3, assigned to `_ =` (since the flagset is now unused). Parameter changed to `_ []string` (args no longer consumed). Verified: `./yatool make -j 0 -G -h`, `./yatool make -j 0 -G --help`, `./yatool make -j 0 -G --foobar`, `./yatool make -j 0 -G foo bar`, `./yatool compare -h`, `./yatool inspect --foobar` all now print `<name>: not implemented yet` to stderr and exit 1.
 
 ### [PR-01-D02] `gen --foobar` exits 2 with empty auto-usage, never prints stub message
 **Status:** resolved
 **Severity:** minor
 **Location:** main.go:50-69
 **Description:** Sibling of D01. `flag.ExitOnError` on an unknown flag printed `flag provided but not defined: -foobar` and an empty `Usage of gen:` block to stderr, exited 2. Stub message "gen: not implemented yet" was never emitted; exit code was 2 (which the spec reserves for "no args" / "unknown subcommand"), conflating two distinct exit-code domains.
-**Fix:** Same edit as D01 (removed `fs.Parse(args)` in the three stubs). Verified `./yatool gen --foobar` → exit 1 with stub message.
+**Fix:** Same edit as D01 (removed `fs.Parse(args)` in the three stubs). Verified `./yatool make -j 0 -G --foobar` → exit 1 with stub message.
 
 ### [PR-01-D03] `fs.Parse(args)` return value discarded without explicit `_ =` in three stubs
 **Status:** resolved
@@ -51,7 +51,7 @@ Entry schema:
 **Status:** resolved (deferred to PR-10)
 **Severity:** nit
 **Location:** main.go:51, 57, 63 (and `"flag"` import at line 4)
-**Description:** Round-2 reviewer finding. After the D01/D02/D03 fix removed `fs.Parse(args)`, the surviving `_ = flag.NewFlagSet(name, flag.ExitOnError)` line in each of `cmdGen`/`cmdCompare`/`cmdInspect` constructs an object only to discard it. The `"flag"` import is loaded solely to make this ceremony compile. Three small smells in one: constructing-to-discard, `_ =` on a constructor with no side effect (reads as "pretending to use this"), import existing only for the pretence. D3's intent — keep the architectural mechanism in place for PR-10 — is not actually preserved by `_ =` because PR-10 will rewrite these stubs anyway.
+**Description:** Round-2 reviewer finding. After the D01/D02/D03 fix removed `fs.Parse(args)`, the surviving `_ = flag.NewFlagSet(name, flag.ExitOnError)` line in each of `cmdMake`/`cmdCompare`/`cmdInspect` constructs an object only to discard it. The `"flag"` import is loaded solely to make this ceremony compile. Three small smells in one: constructing-to-discard, `_ =` on a constructor with no side effect (reads as "pretending to use this"), import existing only for the pretence. D3's intent — keep the architectural mechanism in place for PR-10 — is not actually preserved by `_ =` because PR-10 will rewrite these stubs anyway.
 **Fix:** Deferred to PR-10. PR-10 will replace each stub's body with real flag registration, at which point the ceremony is naturally removed. Constraint logged for PR-10: must remove all three `_ = flag.NewFlagSet(...)` lines and either keep the `"flag"` import (if real flags land) or drop it.
 
 ---
@@ -281,7 +281,7 @@ Entry schema:
 **Status:** resolved
 **Severity:** minor
 **Location:** main.go:31-51
-**Description:** `dispatch` calls `os.Exit(cmdGen(...))` etc. Today this is harmless (stubs print + return 1; panics in cmdGen propagate up to Try correctly). But on a CLEAN exit (`os.Exit(0)`), any deferred cleanup placed by the outer Try is silently skipped. Future PR adding profile flush / log close / etc. in `main` would lose it on success exits. Comment over-promises invariance.
+**Description:** `dispatch` calls `os.Exit(cmdMake(...))` etc. Today this is harmless (stubs print + return 1; panics in cmdMake propagate up to Try correctly). But on a CLEAN exit (`os.Exit(0)`), any deferred cleanup placed by the outer Try is silently skipped. Future PR adding profile flush / log close / etc. in `main` would lose it on success exits. Comment over-promises invariance.
 **Suggested fix:** Add a one-line caveat to the dispatch comment: "Note: `os.Exit` from a subcommand bypasses any defers placed by the outer Try; only panics propagate. If success-path cleanup needs to fire from Try, dispatch must return an exit code instead of calling os.Exit." No code change required.
 
 ### [PR-11-D12] `finalizeExc` test helper docstring doesn't warn against wrapping success-path tests
@@ -299,7 +299,7 @@ Entry schema:
 **Status:** resolved
 **Severity:** minor
 **Location:** main.go:100-102 (cmdInspect's flag.Parse + missing flag.ErrHelp handling)
-**Description:** `flag.ContinueOnError` returns the sentinel `flag.ErrHelp` after printing "Usage of inspect:" to stderr. Current code does `Throw(fs.Parse(args))`, so the sentinel becomes a panic carrying "flag: help requested" that main's Catch prints to stderr and the process exits 1. User explicitly asked for help; exit 1 mis-signals "you did something wrong". PR-01-D05 deferred constraint expected the subcommand body to "retain control of exit semantics" — adopted ContinueOnError but didn't actually take control. PR-10's `cmdGen`/`cmdCompare` will inherit this UX unless solved here.
+**Description:** `flag.ContinueOnError` returns the sentinel `flag.ErrHelp` after printing "Usage of inspect:" to stderr. Current code does `Throw(fs.Parse(args))`, so the sentinel becomes a panic carrying "flag: help requested" that main's Catch prints to stderr and the process exits 1. User explicitly asked for help; exit 1 mis-signals "you did something wrong". PR-01-D05 deferred constraint expected the subcommand body to "retain control of exit semantics" — adopted ContinueOnError but didn't actually take control. PR-10's `cmdMake`/`cmdCompare` will inherit this UX unless solved here.
 **Suggested fix:** In cmdInspect, discriminate `flag.ErrHelp` (STYLE.md "Discriminate" pattern):
 ```go
 fs.SetOutput(os.Stdout) // help is not an error → stdout
@@ -552,14 +552,14 @@ Codify same shape for PR-10.
 
 ## PR-10
 
-### [PR-10-D01] printGenUsage Usage line has double-space before `[--source-root`
+### [PR-10-D01] printMakeUsage Usage line has double-space before `[--source-root`
 **Status:** resolved
 **Severity:** nit
 **Location:** main.go:132
-**Description:** First line of `printGenUsage`: `Usage: yatool gen --target <module-dir> --out <path|->  [--source-root <path>]` — two spaces between `>` and `[`.
+**Description:** First line of `printMakeUsage`: `Usage: yatool make -j 0 -G <module-dir> > <path>  [--source-root <path>]` — two spaces between `>` and `[`.
 **Suggested fix:** Collapse to single space.
 
-### [PR-10-D02] cmdGen has no automated tests for flag handling
+### [PR-10-D02] cmdMake has no automated tests for flag handling
 **Status:** resolved
 **Severity:** minor
 **Location:** main.go:98-129; companion test slot expected as new tests in gen_test.go or main_test.go

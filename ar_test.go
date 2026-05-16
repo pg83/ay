@@ -11,7 +11,7 @@ import (
 // is pinned to arbitrary placeholder paths so byte-exact cmd_args
 // pins in this package stay stable across hosts whose actual $PATH
 // discovery would resolve a different absolute path. Production
-// cmdGen / cmdMake mines $PATH instead.
+// cmdMake mines $PATH instead.
 var testToolchainFlags = map[string]string{
 	"BUILD_PYTHON_BIN":  "/bin/python3",
 	"BUILD_PYTHON3_BIN": "/bin/python3",

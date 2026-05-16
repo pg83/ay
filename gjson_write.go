@@ -30,7 +30,7 @@ import (
 // gjson_write_test.go parallels every code path against json.Encoder.
 
 // writeGraphIndented streams g as indented JSON to w. Errors from w
-// propagate via Throw (the cmdGen / writeGraph contract panics up to
+// propagate via Throw (the make -G / writeGraph contract panics up to
 // main's Catch).
 func writeGraphIndented(w io.Writer, g *Graph) {
 	// Single reusable encode buffer. 1 MiB initial caps the largest

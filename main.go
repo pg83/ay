@@ -2,16 +2,9 @@ package main
 
 import (
 	"bufio"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"runtime"
-	"runtime/pprof"
-	"strings"
-	"time"
 )
 
 func main() {
@@ -44,8 +37,6 @@ func dispatch(argv []string) {
 		os.Exit(cmdHelp(argv[2:]))
 	case "fetch":
 		os.Exit(cmdFetch(argv[2:]))
-	case "gen":
-		os.Exit(cmdGen(argv[2:]))
 	case "make":
 		os.Exit(cmdMake(argv[2:]))
 	default:
@@ -63,12 +54,11 @@ Usage:
 
 Subcommands:
     fetch      Fetch and unpack an external resource.
-    gen        Generate a build graph for a target.
     make       Generate and execute the build graph for a target.
     help       Show this message.
 
-Quality / comparison checks live in normalize.py — run that against the
-generated graph and a reference graph for the canonical L0..L4 verdict.
+Use yatool make -j 0 -G <target> > graph.json for graph-generation
+checks, then compare with normalize.py for the canonical L0..L4 verdict.
 `)
 }
 
@@ -76,269 +66,6 @@ func cmdHelp(_ []string) int {
 	printUsage(os.Stdout)
 
 	return 0
-}
-
-// cmdGen parses a ya.make and writes the resulting build graph as JSON.
-// Uses ContinueOnError + SetOutput(io.Discard) so all diagnostics are owned
-// here and by the outer Catch; flag.ErrHelp is discriminated explicitly so
-// -h/--help exits 0 with usage on stdout.
-//
-// --target: module-relative ya.make dir. --out: JSON path ("-" = stdout).
-// --source-root: defaults to the upstream snapshot used by reference tests.
-// Exit 0 on success; argument/IO/parse failures throw to main()'s Catch
-// which prints to stderr and exits 1.
-func cmdGen(args []string) int {
-	fs := flag.NewFlagSet("gen", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-
-	target := fs.String("target", "", "module-relative path to the ya.make directory (e.g. build/cow/on)")
-	out := fs.String("out", "", "path to write the generated JSON (use '-' for stdout; empty skips serialisation, useful for build-only timing)")
-	timeReport := fs.Bool("time", false, "print wall-time breakdown (gen + serialise) to stderr")
-	sourceRoot := fs.String("source-root", "/home/pg/monorepo/yatool_orig", "absolute path to the source tree (defaults to the upstream snapshot)")
-
-	// --define KEY=VALUE drives flag-conditional auto-PEERDIRs and
-	// peer-CFLAGs (mirrors ymake `-D`; e.g. `--define MUSL=yes` ↔
-	// `when ($MUSL == "yes") { PEERDIR+=contrib/libs/musl/include }`).
-	// Repeatable; bare KEY rejected.
-	var defines stringMapValue
-
-	fs.Var(&defines, "define", "ymake-style -D KEY=VALUE; repeatable; default: -DMUSL=yes")
-
-	// scanCtx lifecycle policy. "interned" (default): one scanCtx per
-	// (scanner, ctxHash) for the whole Gen call. "local": fresh scanCtx
-	// per genModule frame (no cross-module reuse).
-	scanCtxMode := fs.String("scan-ctx-mode", defaultScanCtxMode, "scanCtx lifecycle: \"local\" or \"interned\"")
-
-	// --target-platform / --host-platform let cross-compile callers
-	// override defaults; empty preserves reference-canonical behaviour.
-	targetPlatform := fs.String("target-platform", "", "target platform id (e.g. default-linux-aarch64); empty preserves M3-reference behaviour")
-	hostPlatform := fs.String("host-platform", "", "host platform id (e.g. default-linux-x86_64); empty preserves M3-reference behaviour")
-
-	// Host-axis flag overrides. `--host-platform-flag KEY=VALUE`
-	// lands on the host Platform's Flags (mirrors `make`'s semantics);
-	// repeatable; bare KEY (without "=") is rejected.
-	var hostPlatformFlags stringMapValue
-
-	fs.Var(&hostPlatformFlags, "host-platform-flag", "host-axis KEY=VALUE flag; repeatable")
-
-	// PR-M3-perf-profile: write a Go pprof CPU profile to PATH for
-	// the duration of the Gen call. Empty (default) disables
-	// profiling. Inspect with `go tool pprof <PATH>`.
-	cpuProfile := fs.String("cpuprofile", "", "write CPU profile to PATH (Go pprof format); empty disables")
-	memProfile := fs.String("memprofile", "", "write heap profile to PATH after Gen completes; empty disables")
-	profileRate := fs.Int("profile-rate", 1000, "CPU profile sampling rate in Hz (default 1000); only effective when -cpuprofile is set")
-
-	// Toolchain overrides win over mineTools() — useful for reproducing
-	// a reference graph whose cmd_args embed specific absolute paths
-	// that the current $PATH does not resolve verbatim.
-	pythonBin := fs.String("python-bin", "", "override the mined BUILD_PYTHON_BIN; empty = use $PATH discovery")
-	cCompiler := fs.String("c-compiler", "", "override the mined CLANG_TOOL (C compile driver); empty = use $PATH discovery")
-	cxxCompiler := fs.String("cxx-compiler", "", "override the mined CLANG_pl_pl_TOOL (C++ compile driver); empty = use $PATH discovery")
-	objcopy := fs.String("objcopy", "", "override the mined OBJCOPY_TOOL (llvm-objcopy); empty = use $PATH discovery")
-	ar := fs.String("ar", "", "override the mined AR_TOOL (llvm-ar); empty = use $PATH discovery")
-	strip := fs.String("strip", "", "override the mined STRIP_TOOL (llvm-strip); empty = use $PATH discovery")
-	lld := fs.String("lld", "", "override the mined LLD_TOOL (linker); empty = use $PATH discovery")
-
-	verbose := fs.Bool("verbose", false, "emit diagnostic warnings (unsupported sysincl source_filter records)")
-
-	err := fs.Parse(args)
-
-	if errors.Is(err, flag.ErrHelp) {
-		printGenUsage(os.Stdout)
-
-		return 0
-	}
-
-	Throw(err)
-
-	if *target == "" {
-		ThrowFmt("gen: --target is required")
-	}
-
-	onWarn := func(Warn) {}
-	if *verbose {
-		onWarn = func(w Warn) {
-			fmt.Fprintf(os.Stderr, "\x1b[33m%s: %s\x1b[0m\n", w.Kind, w.Message)
-		}
-	}
-
-	if *cpuProfile != "" {
-		f, ferr := os.Create(*cpuProfile)
-		Throw(ferr)
-
-		runtime.SetCPUProfileRate(*profileRate)
-		Throw(pprof.StartCPUProfile(f))
-
-		defer func() {
-			pprof.StopCPUProfile()
-			Throw(f.Close())
-		}()
-	}
-
-	// Toolchain flags are build-host facilities and land on both Platform
-	// halves. Prebuilt resource paths are the default; CLI/env overrides
-	// replace individual tools with caller-provided paths.
-	tools, conf := toolchainFlags(*sourceRoot, []toolOverride{
-		{Key: "BUILD_PYTHON_BIN", Val: *pythonBin},
-		{Key: "BUILD_PYTHON3_BIN", Val: *pythonBin},
-		{Key: "CLANG_TOOL", Val: *cCompiler},
-		{Key: "CLANG_pl_pl_TOOL", Val: *cxxCompiler},
-		{Key: "OBJCOPY_TOOL", Val: *objcopy},
-		{Key: "AR_TOOL", Val: *ar},
-		{Key: "STRIP_TOOL", Val: *strip},
-		{Key: "LLD_TOOL", Val: *lld},
-	})
-	hostYaFlags := readYaConfSection(filepath.Join(*sourceRoot, "ya.conf"), "host_platform_flags")
-	targetYaFlags := readYaConfSection(filepath.Join(*sourceRoot, "ya.conf"), "flags")
-
-	// Host platform: mined OS/ISA when --host-platform is empty;
-	// mined toolchain + PIC=yes; baseline tag "tool" so every host
-	// node carries it.
-	hOS, hISA := resolvePlatform(*hostPlatform)
-	hostFlags := make(map[string]string, len(tools)+len(hostYaFlags)+len(hostPlatformFlags.toMap())+1)
-	for k, v := range tools {
-		hostFlags[k] = v
-	}
-	for k, v := range hostYaFlags {
-		hostFlags[k] = v
-	}
-	for k, v := range hostPlatformFlags.toMap() {
-		hostFlags[k] = v
-	}
-	hostFlags["PIC"] = "yes"
-	if _, ok := hostFlags["GG_BUILD_TYPE"]; !ok {
-		hostFlags["GG_BUILD_TYPE"] = "release"
-	}
-	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, true, "", "")
-	resourceFetches := newResourceFetchPlan(*sourceRoot, conf, hostP)
-
-	// Target platform: defaults to host axes when --target-platform
-	// is empty; --define KEY=VALUE entries land on TARGET's flags
-	// only (-D semantics); PIC=no.
-	targetSpec := *targetPlatform
-	if targetSpec == "" {
-		targetSpec = string(MakePlatformID(hOS, hISA))
-	}
-	tOS, tISA := resolvePlatform(targetSpec)
-	targetFlags := make(map[string]string, len(tools)+len(targetYaFlags)+len(defines.toMap())+2)
-	for k, v := range tools {
-		targetFlags[k] = v
-	}
-	for k, v := range targetYaFlags {
-		targetFlags[k] = v
-	}
-	for k, v := range defines.toMap() {
-		targetFlags[k] = v
-	}
-	if _, ok := targetFlags["MUSL"]; !ok {
-		targetFlags["MUSL"] = "yes"
-	}
-	targetFlags["PIC"] = "no"
-	targetP := NewPlatform(tOS, tISA, targetFlags, nil, false, os.Getenv("CFLAGS"), os.Getenv("CXXFLAGS"))
-
-	genStart := time.Now()
-	g := GenWithModeWithResources(*sourceRoot, *target, hostP, targetP, *scanCtxMode, onWarn, resourceFetches)
-	applyGraphConf(g, conf)
-	genDur := time.Since(genStart)
-
-	if *memProfile != "" {
-		f, ferr := os.Create(*memProfile)
-		Throw(ferr)
-
-		runtime.GC()
-		Throw(pprof.WriteHeapProfile(f))
-		Throw(f.Close())
-	}
-
-	var writeDur time.Duration
-
-	if *out != "" {
-		writeStart := time.Now()
-		writeGraph(*out, g)
-		writeDur = time.Since(writeStart)
-	}
-
-	if *timeReport {
-		if *out != "" {
-			fmt.Fprintf(os.Stderr, "time: gen=%s serialise=%s total=%s\n", genDur.Round(time.Millisecond), writeDur.Round(time.Millisecond), (genDur + writeDur).Round(time.Millisecond))
-		} else {
-			fmt.Fprintf(os.Stderr, "time: gen=%s (no --out, serialisation skipped)\n", genDur.Round(time.Millisecond))
-		}
-	}
-
-	return 0
-}
-
-// stringMapValue implements flag.Value for repeatable
-// `--define KEY=VALUE` arguments. The Set method splits on the first
-// `=`; bare KEY (no `=`) returns an error rather than silently binding
-// the key to an empty string. Used by cmdGen's `--define` plumbing
-// (PR-32 D01).
-type stringMapValue struct {
-	pairs []string
-}
-
-func (s *stringMapValue) String() string {
-	return strings.Join(s.pairs, ",")
-}
-
-func (s *stringMapValue) Set(v string) error {
-	idx := strings.IndexByte(v, '=')
-
-	if idx < 0 {
-		return fmt.Errorf("--define expects KEY=VALUE, got %q", v)
-	}
-
-	if idx == 0 {
-		return fmt.Errorf("--define expects KEY=VALUE with non-empty KEY, got %q", v)
-	}
-
-	s.pairs = append(s.pairs, v)
-
-	return nil
-}
-
-// toMap returns the accumulated KEY=VALUE pairs as a freshly-allocated
-// map. Returns nil when no `--define` was supplied so callers can
-// discriminate "no flag" (apply defaults) from "explicit empty".
-func (s *stringMapValue) toMap() map[string]string {
-	if len(s.pairs) == 0 {
-		return nil
-	}
-
-	out := make(map[string]string, len(s.pairs))
-
-	for _, p := range s.pairs {
-		idx := strings.IndexByte(p, '=')
-		out[p[:idx]] = p[idx+1:]
-	}
-
-	return out
-}
-
-func printGenUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage: yatool gen --target <module-dir> [--out <path|->] [--source-root <path>] [--define KEY=VALUE]...
-Parse <source-root>/<module-dir>/ya.make and build the in-memory graph;
-serialise to JSON when --out is given.
-
-Flags:
-    --target <path>        Module-relative ya.make directory (e.g. build/cow/on). Required.
-    --out <path|->         Output JSON path; "-" writes to stdout. Empty (default)
-                           skips serialisation — useful with --time for build-only timing.
-    --source-root <path>   Absolute source-tree root. Defaults to /home/pg/monorepo/yatool_orig.
-    --define KEY=VALUE     Repeatable. Mirrors ymake's -D flag. Default when omitted: MUSL=yes.
-    --time                 Print wall-time breakdown (gen + serialise) to stderr.
-    --python-bin <path>    Override mined BUILD_PYTHON_BIN (Python interpreter).
-    --c-compiler <path>    Override mined CLANG_TOOL (C compile driver).
-    --cxx-compiler <path>  Override mined CLANG_pl_pl_TOOL (C++ compile driver).
-    --objcopy <path>       Override mined OBJCOPY_TOOL (llvm-objcopy).
-    --ar <path>            Override mined AR_TOOL (llvm-ar).
-    --strip <path>         Override mined STRIP_TOOL (llvm-strip).
-    --lld <path>           Override mined LLD_TOOL (linker).
-    --cpuprofile <path>    Write CPU profile (pprof) over the run. Empty disables.
-    --memprofile <path>    Write heap profile after Gen. Empty disables.
-    --verbose              Emit Gen-time diagnostics (unsupported sysincl records, …) to stderr.
-`)
 }
 
 // writeGraph encodes g as JSON to path (or stdout when path == "-").

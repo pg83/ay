@@ -277,7 +277,7 @@ With direct recursion, generator emits BOTH platforms; comparator pairs by `(out
 
 ```bash
 go build ./... && go vet ./... && gofmt -l *.go && go test -count=1 ./...
-./yatool gen --target build/cow/on --out /tmp/m1pivot.json
+./yatool make -j 0 -G build/cow/on > /tmp/m1pivot.json
 ./yatool compare --level=3 /tmp/m1pivot.json /home/pg/monorepo/yatool_orig/g.json
 # Output must include: "4 matched / 4 pairs / 0 unpaired-want / 3726 unpaired-got" at all 4 levels.
 ```

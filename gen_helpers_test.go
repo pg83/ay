@@ -3,10 +3,9 @@ package main
 // gen_helpers_test.go — test-only shim that constructs the canonical
 // (host=linux-x86_64, target=linux-aarch64) Platform pair with the
 // shared testToolchainFlags and dispatches into GenWithMode. Lives
-// alongside the test corpus rather than in production code: every
-// production caller of GenWithMode (cmdGen / cmdMake) constructs
-// platforms inline from CLI + mining, so a generic "Gen" entry that
-// hardcodes defaults would just be misleading.
+// alongside the test corpus rather than in production code: cmdMake
+// constructs platforms inline from CLI + mining, so a generic "Gen"
+// entry that hardcodes defaults would just be misleading.
 
 func testGen(sourceRoot, targetDir string) *Graph {
 	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)

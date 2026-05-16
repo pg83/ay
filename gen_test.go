@@ -17,9 +17,8 @@ import (
 // host condition, not a test failure.
 
 // sourceRoot points at the upstream snapshot used by reference-aware
-// tests. The constant matches the production CLI default
-// (cmdGen's --source-root) so test-only fixtures resolve the same paths
-// the integration harness does.
+// tests. The constant matches the production make default so test-only
+// fixtures resolve the same paths the integration harness does.
 const sourceRoot = "/home/pg/monorepo/yatool_orig"
 
 // TestGen_AcceptsProgramModule_Synthetic verifies PR-24's PROGRAM →
@@ -401,42 +400,6 @@ END()
 // Together these prove that ModuleInstance addressing AND host
 // emission both work; PR-25 will fold the second half into the
 // walker.
-func TestCmdGen_HelpFlag_PrintsUsageAndExits0(t *testing.T) {
-	rc := cmdGen([]string{"-h"})
-
-	if rc != 0 {
-		t.Errorf("rc = %d, want 0", rc)
-	}
-}
-
-func TestCmdGen_UnknownFlag_PanicsWithSingleErrorMessage(t *testing.T) {
-	exc := Try(func() {
-		cmdGen([]string{"-bogus"})
-	})
-
-	if exc == nil {
-		t.Fatal("expected exception")
-	}
-
-	if !strings.Contains(exc.Error(), "flag provided but not defined") {
-		t.Errorf("unexpected error: %v", exc)
-	}
-}
-
-func TestCmdGen_MissingTargetThrows(t *testing.T) {
-	exc := Try(func() {
-		cmdGen([]string{"--out", "/dev/null"})
-	})
-
-	if exc == nil {
-		t.Fatal("expected exception")
-	}
-
-	if !strings.Contains(exc.Error(), "--target is required") {
-		t.Errorf("unexpected error: %v", exc)
-	}
-}
-
 func TestGen_PeerdirDeclarationOrder_Preserved(t *testing.T) {
 	tmp := t.TempDir()
 
