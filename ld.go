@@ -142,10 +142,7 @@ func EmitLD(
 	envVcsOnly := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
-	envFull := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		"DYLD_LIBRARY_PATH":      hostP.MultiarchLibPath(),
-	}
+	envFull := hostP.ToolEnv()
 
 	cmds := []Cmd{
 		{CmdArgs: cmd0, Env: envVcsOnly},
@@ -482,7 +479,7 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 	}
 
 	cmdArgs = append(cmdArgs,
-		"--clang-ver", "21",
+		"--clang-ver", p.ClangVer,
 		"--source-root", "$(S)",
 		"--build-root", "$(B)",
 		"--arch=LINUX",
@@ -536,19 +533,27 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 	} else {
 		trailer = ldStaticMuslTrailingFlags
 	}
+	trailer = p.WithLinkerSelectionFlags(trailer)
 
 	// When STRIP() is set on the module (PY3_PROGRAM_BIN per
 	// `_BASE_PY3_PROGRAM`), splice `-Wl,--strip-all` between the
 	// trailer's `-lm` and its terminating `-Wl,--gc-sections`.
 	if wantsStrip {
-		n := len(trailer)
-		if n == 0 || trailer[n-1] != ldGcSectionsFlag {
-			ThrowFmt("composeLDCmdLinkExe: trailer must end with %q for strip insertion", ldGcSectionsFlag)
+		gcIdx := -1
+
+		for i, arg := range trailer {
+			if arg == ldGcSectionsFlag {
+				gcIdx = i
+			}
 		}
 
-		cmdArgs = append(cmdArgs, trailer[:n-1]...)
+		if gcIdx < 0 {
+			ThrowFmt("composeLDCmdLinkExe: trailer must contain %q for strip insertion", ldGcSectionsFlag)
+		}
+
+		cmdArgs = append(cmdArgs, trailer[:gcIdx]...)
 		cmdArgs = append(cmdArgs, ldStripAllFlag)
-		cmdArgs = append(cmdArgs, trailer[n-1])
+		cmdArgs = append(cmdArgs, trailer[gcIdx:]...)
 	} else {
 		cmdArgs = append(cmdArgs, trailer...)
 	}

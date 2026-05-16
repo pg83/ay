@@ -120,22 +120,21 @@ func emitARNode(
 
 	// Built as separate literals (not a shared variable) so
 	// downstream mutation of one map can't leak into the other.
-	cmdEnv := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		"DYLD_LIBRARY_PATH":      hostP.MultiarchLibPath(),
-	}
+	cmdEnv := hostP.ToolEnv()
 
 	// cmd_args: fixed prefix, archive output, then .o paths in
 	// declaration (caller-supplied) order. When arPluginPath is non-nil
 	// the AR_PLUGIN macro fired on this module's ya.make and
 	// `--plugin <path>` is injected between the inner `-- … --` separators
 	// of _LD_ARCHIVER (upstream ld.conf:366-368 + ld.conf:373).
+	arTool, arType, arFormat := instance.Platform.ArchiverArgs()
+
 	cmdArgs := []string{
 		instance.Platform.Tools.Python3,
 		scriptVFS.String(),
-		"ar",
-		"GNU_AR",
-		"None",
+		arTool,
+		arType,
+		arFormat,
 		"$(B)",
 		"None",
 		"--",
@@ -193,10 +192,7 @@ func emitARNode(
 
 	// Built as separate literals (not a shared variable) so
 	// downstream mutation of one map can't leak into the other.
-	topEnv := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		"DYLD_LIBRARY_PATH":      hostP.MultiarchLibPath(),
-	}
+	topEnv := hostP.ToolEnv()
 
 	targetProperties := map[string]string{
 		"module_dir":  instance.Path,
@@ -349,4 +345,3 @@ func EmitARGlobalNamedTagged(
 
 	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, memberInputs, nil, hostP, emit)
 }
-

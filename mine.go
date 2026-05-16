@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -70,6 +73,7 @@ func commonFlags(tools map[string]string) map[string]string {
 		"USE_PYTHON3":              "yes",
 		"BUILD_PYTHON_BIN":         tools["python3"],
 		"BUILD_PYTHON3_BIN":        tools["python3"],
+		"CLANG_VER":                mineClangMajor(tools["clang"]),
 		"LLD_ROOT_RESOURCE_GLOBAL": filepath.Dir(filepath.Dir(tools["lld"])),
 	}
 
@@ -84,6 +88,259 @@ func commonFlags(tools map[string]string) map[string]string {
 	}
 
 	return res
+}
+
+type graphConfResource struct {
+	Name      string                 `json:"name,omitempty"`
+	Pattern   string                 `json:"pattern"`
+	Resource  string                 `json:"resource,omitempty"`
+	Resources []graphConfResourceURI `json:"resources,omitempty"`
+}
+
+type graphConfResourceURI struct {
+	Platform string `json:"platform"`
+	Resource string `json:"resource"`
+}
+
+type graphConf struct {
+	Resources []graphConfResource `json:"resources,omitempty"`
+}
+
+type toolOverride struct {
+	Key string
+	Val string
+}
+
+func toolchainFlags(sourceRoot string, overrides []toolOverride) (map[string]string, *graphConf) {
+	flags := prebuiltToolchainFlags()
+
+	for _, o := range envToolOverrides() {
+		if o.Val != "" {
+			flags[o.Key] = o.Val
+		}
+	}
+
+	for _, o := range overrides {
+		if o.Val != "" {
+			flags[o.Key] = o.Val
+		}
+	}
+
+	applyExternalClangVersion(flags)
+
+	return flags, graphConfForToolchainFlags(sourceRoot, flags)
+}
+
+func applyExternalClangVersion(flags map[string]string) {
+	clang := flags["CLANG_TOOL"]
+
+	if clang == "" || strings.HasPrefix(clang, "$(") {
+		return
+	}
+
+	flags["CLANG_VER"] = mineClangMajor(clang)
+}
+
+func prebuiltToolchainFlags() map[string]string {
+	const (
+		clangRoot  = "$(CLANG)"
+		lldRoot    = "$(LLD_ROOT)"
+		pythonRoot = "$(YMAKE_PYTHON3)"
+	)
+
+	flags := map[string]string{
+		"CONSISTENT_DEBUG":         "yes",
+		"NO_DEBUGINFO":             "yes",
+		"OS_SDK":                   "local",
+		"TIDY":                     "no",
+		"USE_ARCADIA_PYTHON":       "yes",
+		"USE_PYTHON3":              "yes",
+		"BUILD_PYTHON_BIN":         pythonRoot + "/bin/python3",
+		"BUILD_PYTHON3_BIN":        pythonRoot + "/bin/python3",
+		"CLANG_VER":                "20",
+		"CLANG_TOOL":               clangRoot + "/bin/clang",
+		"CLANG_TOOL_VENDOR":        clangRoot + "/bin/clang",
+		"CLANG_pl_pl_TOOL":         clangRoot + "/bin/clang++",
+		"CLANG_pl_pl_TOOL_VENDOR":  clangRoot + "/bin/clang++",
+		"AR_TOOL":                  clangRoot + "/bin/llvm-ar",
+		"AR_TOOL_VENDOR":           clangRoot + "/bin/llvm-ar",
+		"OBJCOPY_TOOL":             clangRoot + "/bin/llvm-objcopy",
+		"OBJCOPY_TOOL_VENDOR":      clangRoot + "/bin/llvm-objcopy",
+		"STRIP_TOOL":               clangRoot + "/bin/llvm-strip",
+		"STRIP_TOOL_VENDOR":        clangRoot + "/bin/llvm-strip",
+		"LLD_TOOL":                 lldRoot + "/bin/ld.lld",
+		"LLD_TOOL_VENDOR":          lldRoot + "/bin/ld.lld",
+		"LLD_ROOT_RESOURCE_GLOBAL": lldRoot,
+	}
+
+	return flags
+}
+
+func graphConfForToolchainFlags(sourceRoot string, flags map[string]string) *graphConf {
+	resources := make([]graphConfResource, 0, 5)
+
+	if flagsUsePrefix(flags, "$(YMAKE_PYTHON3)") {
+		resources = append(resources, readHostResourcesBundle(sourceRoot, "YMAKE_PYTHON3", "build/platform/python/ymake_python3/resources.json", true))
+	}
+
+	if flagsUsePrefix(flags, "$(LLD_ROOT)") {
+		resources = append(resources, readHostResourcesBundle(sourceRoot, "LLD_ROOT", "build/platform/lld/lld20.json", true))
+	}
+
+	if flagsUsePrefix(flags, "$(CLANG)") {
+		resources = append(resources, readHostResourcesBundle(sourceRoot, "CLANG", "build/platform/clang/clang20.json", false))
+	}
+
+	resources = append(resources, readHostResourcesBundle(sourceRoot, "JDK17-564746473", "build/platform/java/jdk/jdk17/jdk.json", true))
+	resources = append(resources, graphConfResource{
+		Name:     "vcs",
+		Pattern:  "VCS",
+		Resource: "base64:vcs.json:e30=",
+	})
+
+	return &graphConf{Resources: resources}
+}
+
+func flagsUsePrefix(flags map[string]string, prefix string) bool {
+	for _, v := range flags {
+		if strings.HasPrefix(v, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func envToolOverrides() []toolOverride {
+	return []toolOverride{
+		{Key: "BUILD_PYTHON_BIN", Val: os.Getenv("PYTHON")},
+		{Key: "BUILD_PYTHON3_BIN", Val: os.Getenv("PYTHON")},
+		{Key: "CLANG_TOOL", Val: firstEnv("CC", "C_COMPILER")},
+		{Key: "CLANG_pl_pl_TOOL", Val: firstEnv("CXX", "CXX_COMPILER")},
+		{Key: "OBJCOPY_TOOL", Val: os.Getenv("OBJCOPY")},
+		{Key: "AR_TOOL", Val: os.Getenv("AR")},
+		{Key: "STRIP_TOOL", Val: os.Getenv("STRIP")},
+		{Key: "LLD_TOOL", Val: firstEnv("LLD", "LD")},
+	}
+}
+
+func firstEnv(names ...string) string {
+	for _, name := range names {
+		if v := os.Getenv(name); v != "" {
+			return v
+		}
+	}
+
+	return ""
+}
+
+func mineClangMajor(clang string) string {
+	out := Throw2(exec.Command(clang, "--version").Output())
+	fields := strings.Fields(string(out))
+
+	for i, f := range fields {
+		if f != "version" || i+1 >= len(fields) {
+			continue
+		}
+
+		major := fields[i+1]
+		if dot := strings.IndexByte(major, '.'); dot >= 0 {
+			major = major[:dot]
+		}
+
+		if _, err := strconv.Atoi(major); err == nil {
+			return major
+		}
+	}
+
+	ThrowFmt("mineClangMajor: cannot parse clang version from %q", strings.TrimSpace(string(out)))
+
+	return ""
+}
+
+func readYaConfSection(path, wantSection string) map[string]string {
+	raw := Throw2(os.ReadFile(path))
+	out := map[string]string{}
+	section := ""
+
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			section = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "["), "]"))
+
+			continue
+		}
+
+		if section != wantSection {
+			continue
+		}
+
+		key, val, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+
+		key = strings.TrimSpace(key)
+		val = strings.TrimSpace(val)
+		val = strings.Trim(val, `"`)
+
+		if key != "" {
+			out[key] = val
+		}
+	}
+
+	return out
+}
+
+type hostResourcesJSON struct {
+	ByPlatform map[string]struct {
+		URI string `json:"uri"`
+	} `json:"by_platform"`
+}
+
+func readHostResourcesBundle(sourceRoot, pattern, rel string, upperPlatform bool) graphConfResource {
+	var data hostResourcesJSON
+	raw := Throw2(os.ReadFile(filepath.Join(sourceRoot, rel)))
+	Throw(json.Unmarshal(raw, &data))
+
+	order := []string{
+		"darwin-x86_64",
+		"darwin-arm64",
+		"linux-x86_64",
+		"linux-aarch64",
+		"win32-x86_64",
+	}
+
+	res := graphConfResource{Pattern: pattern}
+
+	for _, key := range order {
+		item, ok := data.ByPlatform[key]
+		if !ok {
+			continue
+		}
+
+		res.Resources = append(res.Resources, graphConfResourceURI{
+			Platform: resourcePlatformName(key, upperPlatform),
+			Resource: item.URI,
+		})
+	}
+
+	return res
+}
+
+func resourcePlatformName(key string, upper bool) string {
+	name := strings.TrimSuffix(key, "-x86_64")
+
+	if !upper {
+		return name
+	}
+
+	return strings.ToUpper(name)
 }
 
 // hostOS / hostISA / hostPlatformID surface the running process's

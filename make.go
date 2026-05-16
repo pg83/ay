@@ -64,16 +64,21 @@ func cmdMake(args []string) int {
 		ThrowFmt("make: no targets supplied and current working directory is outside the source root")
 	}
 
-	// Mined toolchain feeds both Platform halves (build-host invokes
+	// Toolchain flags feed both Platform halves (build-host invokes
 	// these binaries regardless of which axis the cmd_args belong to).
-	tools := commonFlags(mineTools())
+	tools, conf := toolchainFlags(mf.srcRoot, nil)
+	hostYaFlags := readYaConfSection(filepath.Join(mf.srcRoot, "ya.conf"), "host_platform_flags")
+	targetYaFlags := readYaConfSection(filepath.Join(mf.srcRoot, "ya.conf"), "flags")
 
 	// Host platform: `--host-platform` selects axes (mined when empty),
 	// `--host-platform-flag KEY=VALUE` (mf.hflags) lands on host Flags,
 	// PIC=yes, baseline tag "tool".
 	hOS, hISA := resolvePlatform(mf.hostPlat)
-	hostFlags := make(map[string]string, len(tools)+len(mf.hflags)+1)
+	hostFlags := make(map[string]string, len(tools)+len(hostYaFlags)+len(mf.hflags)+1)
 	for k, v := range tools {
+		hostFlags[k] = v
+	}
+	for k, v := range hostYaFlags {
 		hostFlags[k] = v
 	}
 	for k, v := range mf.hflags {
@@ -94,8 +99,11 @@ func cmdMake(args []string) int {
 		targetSpec = string(MakePlatformID(hOS, hISA))
 	}
 	tOS, tISA := resolvePlatform(targetSpec)
-	targetFlags := make(map[string]string, len(tools)+len(mf.tflags)+3)
+	targetFlags := make(map[string]string, len(tools)+len(targetYaFlags)+len(mf.tflags)+3)
 	for k, v := range tools {
+		targetFlags[k] = v
+	}
+	for k, v := range targetYaFlags {
 		targetFlags[k] = v
 	}
 	for k, v := range mf.tflags {
@@ -130,6 +138,7 @@ func cmdMake(args []string) int {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
 				g := GenWithMode(mf.srcRoot, target, hostP, targetP, defaultScanCtxMode, onWarn)
+				applyGraphConf(g, conf)
 				writeGraph("-", g)
 			}
 		} else {

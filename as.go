@@ -85,10 +85,7 @@ func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *N
 	// The reference graph carries identical env maps at both the cmd
 	// level and the node top level. A single map is constructed and
 	// aliased to both; EmitAS is single-shot so the alias is safe.
-	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		"DYLD_LIBRARY_PATH":      hostP.MultiarchLibPath(),
-	}
+	env := hostP.ToolEnv()
 
 	allInputs := make([]VFS, 0, 1+len(in.IncludeInputs))
 	allInputs = append(allInputs, inVFS)

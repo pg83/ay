@@ -52,7 +52,22 @@ func encodeWithHandRolled(g *Graph) []byte {
 // localise.
 func TestWriteGraphIndented_ByteExact(t *testing.T) {
 	g := &Graph{
-		Conf: map[string]interface{}{},
+		Conf: map[string]interface{}{
+			"resources": []graphConfResource{
+				{
+					Pattern: "CLANG",
+					Resources: []graphConfResourceURI{
+						{Platform: "linux", Resource: "sbr:1"},
+						{Platform: "darwin", Resource: "sbr:2"},
+					},
+				},
+				{
+					Name:     "vcs",
+					Pattern:  "VCS",
+					Resource: "base64:vcs.json:e30=",
+				},
+			},
+		},
 		Graph: []*Node{
 			{
 				Cmds: []Cmd{
@@ -70,7 +85,7 @@ func TestWriteGraphIndented_ByteExact(t *testing.T) {
 				Env:          map[string]string{"PATH": "/usr/bin"},
 				ForeignDeps:  map[string][]string{"clone": {"u1", "u2"}, "tool": {"u3"}},
 				HostPlatform: true,
-				Inputs: ToVFSSlice([]string{"in1", "in2"}),
+				Inputs:       ToVFSSlice([]string{"in1", "in2"}),
 				KV:           map[string]string{"key1": "val1", "key2": "val2"},
 				Outputs:      ToVFSSlice([]string{"out1"}),
 				Platform:     "default-linux-x86_64",

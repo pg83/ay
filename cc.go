@@ -286,10 +286,7 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	// Reference graph carries the same env map at both cmd-level and
 	// Node top-level. EmitCC is single-shot so the alias is safe;
 	// future mutators MUST clone before mutating.
-	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		"DYLD_LIBRARY_PATH":      hostP.MultiarchLibPath(),
-	}
+	env := hostP.ToolEnv()
 
 	// node.Inputs order: primary source first, then include-inputs in
 	// DFS-discovery order (scanner does no sorting; L2 is multiset).
