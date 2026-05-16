@@ -5,18 +5,13 @@ import (
 	"strings"
 )
 
-func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCCInputs, genExt *string) *sourceEmit {
-	ext := ".cpp"
-	if genExt != nil {
-		ext = *genExt
-	}
-
+func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCCInputs, genExt string) *sourceEmit {
 	bisonRef, bisonBin := bisonTool(ctx, instance)
 	m4Ref, m4Bin := m4Tool(ctx, instance)
 
 	baseNoExt := strings.TrimSuffix(srcRel, filepath.Ext(srcRel))
 	headerRel := baseNoExt + ".h"
-	generatedRel := "_/" + srcRel + ext
+	generatedRel := "_/" + srcRel + genExt
 	headerVFS := Build(instance.Path + "/" + headerRel)
 	generatedVFS := Build(instance.Path + "/" + generatedRel)
 	srcVFS := Source(instance.Path + "/" + srcRel)
