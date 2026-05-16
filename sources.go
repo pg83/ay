@@ -72,7 +72,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir string, srcRel s
 		// node) is reachable via IncludeInputs probe.
 		extras := runtimePy3CCExtraInputs(srcInstance.Path, srcRel)
 		if len(extras) > 0 {
-			srcIn.IncludeInputs = append(srcIn.IncludeInputs, extras...)
+			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, extras)
 		}
 		// Thread codegen producer dep refs into the CC node. PR-M3-L0-codegen-
 		// deps-EV-PB extended this to PB/EV (with platform keying) on top of
@@ -682,6 +682,25 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	}
 
 	return out
+}
+
+func appendVFSUnique(dst []VFS, src []VFS) []VFS {
+	seen := make(map[VFS]struct{}, len(dst)+len(src))
+
+	for _, v := range dst {
+		seen[v] = struct{}{}
+	}
+
+	for _, v := range src {
+		if _, dup := seen[v]; dup {
+			continue
+		}
+
+		seen[v] = struct{}{}
+		dst = append(dst, v)
+	}
+
+	return dst
 }
 
 // jsCCIncludeInputs assembles `[scripts..., sources..., closure...]`

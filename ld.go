@@ -344,7 +344,7 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, muslOn bool,
 	cmdArgs = append(cmdArgs, warningFlags...)
 	cmdArgs = append(cmdArgs, bundle.Defines...)
 
-	if muslOn {
+	if muslOn && !flagsContain(peerCFlagsGlobal, ldVcsMuslSelfDefine) {
 		cmdArgs = append(cmdArgs, ldVcsMuslSelfDefine)
 	}
 
