@@ -1385,6 +1385,39 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		return true
 	}
 
+	addBuildPath := func(rel string) bool {
+		rel = normalisePath(rel)
+
+		if s.codegen == nil {
+			return false
+		}
+
+		v := Build(rel)
+		if _, ok := s.codegen.Lookup(v); !ok {
+			return false
+		}
+
+		dedupKey := "B:" + rel
+		if _, dup := seen[dedupKey]; dup {
+			return false
+		}
+
+		seen[dedupKey] = struct{}{}
+		out = append(out, v)
+
+		return true
+	}
+
+	addInclPath := func(prefix, target string) bool {
+		if strings.HasPrefix(prefix, vfsBuildPrefix) {
+			rel := strings.TrimPrefix(prefix, vfsBuildPrefix)
+
+			return addBuildPath(rel + "/" + target)
+		}
+
+		return addPath(prefix + "/" + target)
+	}
+
 	// First-match-wins across the search path. Order:
 	//   1. quoted-form: same directory as the includer
 	//   2. module's own ADDINCL
@@ -1412,7 +1445,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 
 	if !searchPathFound {
 		for _, p := range ctx.OwnAddIncl {
-			if addPath(p + "/" + d.target) {
+			if addInclPath(p, d.target) {
 				searchPathFound = true
 
 				break
@@ -1422,7 +1455,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 
 	if !searchPathFound {
 		for _, p := range ctx.PeerAddInclSet {
-			if addPath(p + "/" + d.target) {
+			if addInclPath(p, d.target) {
 				searchPathFound = true
 
 				break

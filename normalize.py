@@ -214,6 +214,40 @@ def _strip_and_canonicalize(node: dict, closure: dict[str, dict]) -> dict:
     return out
 
 
+def _drop_fetch_nodes(closure: dict[str, dict]) -> dict[str, dict]:
+    """Remove yatool-local resource fetch nodes from OUR graphs.
+
+    Reference graphs materialize tool resources outside the build graph.
+    yatool intentionally models them as explicit FETCH nodes so local
+    executor UIDs depend on the downloaded resources.  For L4 graph
+    comparison they are non-reference scaffolding, so drop them and
+    remove corresponding deps from consumers.
+    """
+    fetch_uids = {
+        uid
+        for uid, node in closure.items()
+        if (node.get("kv") or {}).get("p") == "FETCH"
+    }
+
+    if not fetch_uids:
+        return closure
+
+    out: dict[str, dict] = {}
+
+    for uid, node in closure.items():
+        if uid in fetch_uids:
+            continue
+
+        copy = dict(node)
+        copy["deps"] = [
+            dep for dep in (node.get("deps") or [])
+            if dep not in fetch_uids
+        ]
+        out[uid] = copy
+
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Step 7 — Bottom-up re-UID (Merkle cascade with sha256)
 # ---------------------------------------------------------------------------
@@ -393,6 +427,7 @@ def _normalize(data: dict[str, Any], target: str) -> tuple[bytes, dict]:
     root = _find_root(graph, target)
     root_uid = root["uid"]
     closure_raw = _bfs_closure(by_uid, root)
+    closure_raw = _drop_fetch_nodes(closure_raw)
 
     t1 = time.monotonic()
 

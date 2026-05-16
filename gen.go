@@ -513,9 +513,16 @@ const defaultScanCtxMode = "interned"
 // source_filter records the runtime cannot model, …); callers route
 // it to stderr under `--verbose` and to a no-op otherwise.
 func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string, onWarn func(Warn)) NodeRef {
+	return runGenIntoWithResources(srcRoot, targetDir, hostP, targetP, emitter, mode, onWarn, nil)
+}
+
+func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string, onWarn func(Warn), resources *resourceFetchPlan) NodeRef {
 	if mode != "local" && mode != "interned" {
 		ThrowFmt("gen: --scan-ctx-mode must be \"local\" or \"interned\", got %q", mode)
 	}
+
+	resources.emitAll(hostP, emitter)
+	emitter = newResourceAwareEmitter(emitter, resources)
 
 	sharedPC := newSharedParseCache()
 
@@ -568,8 +575,12 @@ func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emi
 // CLI flags + mining; the walker reads every flag, tool path, and tag
 // off the Platform pointers. `onWarn` receives one line per diagnostic.
 func GenWithMode(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn)) *Graph {
+	return GenWithModeWithResources(sourceRoot, targetDir, hostP, targetP, mode, onWarn, nil)
+}
+
+func GenWithModeWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn), resources *resourceFetchPlan) *Graph {
 	emitter := NewBufferedEmitter()
-	runGenInto(sourceRoot, targetDir, hostP, targetP, emitter, mode, onWarn)
+	runGenIntoWithResources(sourceRoot, targetDir, hostP, targetP, emitter, mode, onWarn, resources)
 
 	return Finalize(emitter)
 }
