@@ -232,11 +232,13 @@ func emitResourceObjcopy(
 		return false
 	}
 
-	type acc struct {
-		paths  []string
-		keys   []string // base64-encoded (padded) keys for path entries
-		kvs    []string
-		cmdLen int
+type acc struct {
+		paths      []string
+		pathInputs []VFS
+		pathDeps   []NodeRef
+		keys       []string // base64-encoded (padded) keys for path entries
+		kvs        []string
+		cmdLen     int
 	}
 	cur := acc{}
 
@@ -268,8 +270,8 @@ func emitResourceObjcopy(
 		// $(S)/<modulePath>/<path> form.
 		if len(cur.paths) > 0 {
 			cmdArgs = append(cmdArgs, "--inputs")
-			for _, p := range cur.paths {
-				cmdArgs = append(cmdArgs, Source(instance.Path+"/"+p).String())
+			for _, p := range cur.pathInputs {
+				cmdArgs = append(cmdArgs, p.String())
 			}
 			cmdArgs = append(cmdArgs, "--keys")
 			cmdArgs = append(cmdArgs, cur.keys...)
@@ -298,13 +300,9 @@ func emitResourceObjcopy(
 		}
 		if len(cur.paths) <= 1 {
 			inputs = append(inputs, objcopyScriptVFS)
-			for _, p := range cur.paths {
-				inputs = append(inputs, Source(instance.Path+"/"+p))
-			}
+			inputs = append(inputs, cur.pathInputs...)
 		} else {
-			for _, p := range cur.paths {
-				inputs = append(inputs, Source(instance.Path+"/"+p))
-			}
+			inputs = append(inputs, cur.pathInputs...)
 			inputs = append(inputs, objcopyScriptVFS)
 		}
 
@@ -351,14 +349,28 @@ func emitResourceObjcopy(
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
 
+		depSeen := map[NodeRef]struct{}{}
+		for _, ref := range cur.pathDeps {
+			if ref == (NodeRef{}) {
+				continue
+			}
+
+			if _, dup := depSeen[ref]; dup {
+				continue
+			}
+
+			depSeen[ref] = struct{}{}
+			node.DepRefs = append(node.DepRefs, ref)
+		}
+
 		r := ctx.emit.Emit(node)
 		refs = append(refs, r)
 		outputs = append(outputs, outputObj)
 
 		// SOURCE_ROOT inputs (per-entry source paths + objcopy.py) must
 		// propagate to the enclosing module's .global.a `inputs` slot.
-		for _, p := range cur.paths {
-			addGlobal(Source(instance.Path + "/" + p))
+		for _, p := range cur.pathInputs {
+			addGlobal(p)
 		}
 		addGlobal(objcopyScriptVFS)
 
@@ -371,7 +383,18 @@ func emitResourceObjcopy(
 				cur.kvs = append(cur.kvs, e.Key)
 				cur.cmdLen += rootCmdLen + len(e.Key)
 			} else {
+				inputVFS := Source(instance.Path + "/" + e.Path)
+				var producerRef NodeRef
+				if d.prOutputProducer != nil {
+					if ref, ok := d.prOutputProducer[e.Path]; ok {
+						inputVFS = Build(instance.Path + "/" + e.Path)
+						producerRef = ref
+					}
+				}
+
 				cur.paths = append(cur.paths, e.Path)
+				cur.pathInputs = append(cur.pathInputs, inputVFS)
+				cur.pathDeps = append(cur.pathDeps, producerRef)
 				kb := encb64.StdEncoding.EncodeToString([]byte(e.Key))
 				cur.keys = append(cur.keys, kb)
 				cur.cmdLen += rootCmdLen + len(e.Path) + len(kb)

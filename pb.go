@@ -995,10 +995,10 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, protoS
 		GlobalRef:  &gRef,
 		GlobalPath: Build(instance.Path + "/" + globalBaseName),
 	}
-	if cppSibling != nil && cppSibling.hasPlainAR {
-		if v, ok := ParseVFS(cppSibling.ARPath); ok {
+	if cppSibling != nil && cppSibling.ARPath != nil {
+		if v, ok := ParseVFS(*cppSibling.ARPath); ok {
 			result.WholeArchiveRefs = append(result.WholeArchiveRefs, cppSibling.ARRef)
-			result.WholeArchivePaths = append(result.WholeArchivePaths, strings.TrimPrefix(cppSibling.ARPath, "$(B)/"))
+			result.WholeArchivePaths = append(result.WholeArchivePaths, strings.TrimPrefix(*cppSibling.ARPath, "$(B)/"))
 			if d.optimizePyProtos {
 				result.ARRef = cppSibling.ARRef
 				result.ARPath = v
