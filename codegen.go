@@ -123,6 +123,10 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 	// Emit one yapyc3 PY node per .py source.
 	for _, srcRel := range d.pySrcs {
+		if strings.HasSuffix(srcRel, ".pyi") {
+			continue
+		}
+
 		srcAbs := Source(instance.Path + "/" + srcRel)
 
 		// The "module name" arg: <modulePath>/<srcRel>- (trailing dash).
@@ -177,7 +181,8 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				}
 				return tp
 			}(),
-			Platform: string(instance.Platform.Target),
+			Platform:     string(instance.Platform.Target),
+			HostPlatform: instance.Platform.IsHost,
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",
@@ -271,7 +276,8 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			TargetProperties: map[string]string{
 				"module_dir": instance.Path,
 			},
-			Platform: string(instance.Platform.Target),
+			Platform:     string(instance.Platform.Target),
+			HostPlatform: instance.Platform.IsHost,
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",

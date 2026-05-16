@@ -378,9 +378,9 @@ func emitResourceObjcopy(
 			}
 		}
 
-		// Single-flush only here (end-of-stream `flush()` below).
-		// Chunking is handled by chunkPySrcEntries for PY_SRCS.
-		_ = maxCmdLen
+		if cur.cmdLen > maxCmdLen {
+			flush()
+		}
 	}
 
 	flush()
@@ -653,6 +653,16 @@ func emitPyNamespaceObjcopy(
 		return nil
 	}
 
+	pySources := make([]string, 0, len(d.pySrcs))
+	for _, srcRel := range d.pySrcs {
+		if strings.HasSuffix(srcRel, ".py") {
+			pySources = append(pySources, srcRel)
+		}
+	}
+	if len(pySources) == 0 {
+		return nil
+	}
+
 	// Default namespace: `<upath-dotted>.`. TOP_LEVEL empties ns; we
 	// conservatively derive ns from upath (REF modules in scope do not
 	// use TOP_LEVEL for entries that drive the namespace hash).
@@ -661,7 +671,7 @@ func emitPyNamespaceObjcopy(
 	// Compute mod_list_md5: streaming md5 over each `mod` in pys order.
 	// mod = ns + stripext(arg).replace('/','.')   (pybuild.py:385,391).
 	h := md5.New()
-	for _, srcRel := range d.pySrcs {
+	for _, srcRel := range pySources {
 		modName := strings.TrimSuffix(srcRel, ".py")
 		modName = strings.ReplaceAll(modName, "/", ".")
 		mod := ns + modName
@@ -782,6 +792,10 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 
 	out := make([]pySrcEntry, 0, len(d.pySrcs)*2)
 	for _, srcRel := range d.pySrcs {
+		if strings.HasSuffix(srcRel, ".pyi") {
+			continue
+		}
+
 		suffix := ".yapyc3"
 		if strings.Contains(srcRel, "/") {
 			suffix = "." + pySrcYapycSuffix(modulePath) + ".yapyc3"

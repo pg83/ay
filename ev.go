@@ -148,10 +148,10 @@ func evWitnessExtras(sourceRoot, evRelPath string, evPbCC VFS) []VFS {
 	return out
 }
 
-// EmitEV emits an EV node for `srcRel` (a .ev file relative to `instance.Path`).
+// EmitEV emits an EV node for `evRelPath` (a SOURCE_ROOT-relative .ev path).
 func EmitEV(
 	instance ModuleInstance,
-	srcRel string,
+	evRelPath string,
 	cppStyleguideLDRef NodeRef,
 	protocLDRef NodeRef,
 	event2cppLDRef NodeRef,
@@ -163,7 +163,6 @@ func EmitEV(
 	emit Emitter,
 ) NodeRef {
 	moduleDir := instance.Path
-	evRelPath := moduleDir + "/" + srcRel
 
 	// EV outputs: .ev.pb.cc first, then .ev.pb.h (reference order).
 	evCC := Build(evRelPath + ".pb.cc")
@@ -208,7 +207,7 @@ func EmitEV(
 	}
 
 	// Resolve transitive imports from the .ev source file and append them.
-	inputs = append(inputs, resolveEvImports(sourceRoot, moduleDir+"/"+srcRel)...)
+	inputs = append(inputs, resolveEvImports(sourceRoot, evRelPath)...)
 
 	targetProps := map[string]string{
 		"module_dir": moduleDir,
@@ -254,7 +253,7 @@ func EmitEV(
 			"p":  "EV",
 			"pc": "yellow",
 		},
-		Tags: instance.Platform.Tags,
+		Tags:             instance.Platform.Tags,
 		TargetProperties: targetProps,
 		Platform:         string(instance.Platform.Target),
 		HostPlatform:     instance.Platform.IsHost,

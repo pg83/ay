@@ -65,6 +65,8 @@ func EmitLD(
 	pluginPaths []string,
 	globalRefs []NodeRef,
 	globalPaths []string,
+	wholeArchiveRefs []NodeRef,
+	wholeArchivePaths []string,
 	objcopyRefs []NodeRef,
 	objcopyPaths []VFS,
 	memberInputs []VFS, //nolint:vfs-stay // cascade from gen.go member-inputs bucket
@@ -92,6 +94,9 @@ func EmitLD(
 
 	if len(globalRefs) != len(globalPaths) {
 		ThrowFmt("EmitLD: globalRefs/globalPaths length mismatch (%d vs %d)", len(globalRefs), len(globalPaths))
+	}
+	if len(wholeArchiveRefs) != len(wholeArchivePaths) {
+		ThrowFmt("EmitLD: wholeArchiveRefs/wholeArchivePaths length mismatch (%d vs %d)", len(wholeArchiveRefs), len(wholeArchivePaths))
 	}
 
 	if len(objcopyRefs) != len(objcopyPaths) {
@@ -133,7 +138,7 @@ func EmitLD(
 	tools := instance.Platform.Tools
 	cmd0 := composeLDCmdVcsInfo(tools, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
-	cmd2 := composeLDCmdLinkExe(instance.Platform, outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths, hostBuild, wantsStrip)
+	cmd2 := composeLDCmdLinkExe(instance.Platform, outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, objcopyPaths, hostBuild, wantsStrip)
 	cmd3 := composeLDCmdLinkOrCopy(tools, binaryDir)
 	splitDwarfCmds := composeLDSplitDwarfCmds(tools, outputPath, wantsSplitDwarf)
 
@@ -154,7 +159,7 @@ func EmitLD(
 	}
 	cmds = append(cmds, splitDwarfCmds...)
 
-	inputs := composeLDInputs(instance.Path, ccPaths, peerLibPaths, pluginPaths, globalPaths, objcopyPaths)
+	inputs := composeLDInputs(instance.Path, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, objcopyPaths)
 
 	// Append per-CC member inputs (source + headers) after the script
 	// bundle, deduplicated. Matches sg.json LD shape: BUILD_ROOT block
@@ -196,6 +201,7 @@ func EmitLD(
 	depRefs = append(depRefs, ccRefs...)
 	depRefs = append(depRefs, pluginRefs...)
 	depRefs = append(depRefs, globalRefs...)
+	depRefs = append(depRefs, wholeArchiveRefs...)
 	depRefs = append(depRefs, peerLDRefs...)
 	depRefs = append(depRefs, objcopyRefs...)
 
@@ -464,7 +470,7 @@ const ldVcsMuslSelfDefine = "-D_musl_=1"
 // `wantsStrip` controls insertion of `-Wl,--strip-all` between the
 // trailer's `-lm` and `-Wl,--gc-sections`. Set true for PY3_PROGRAM_BIN
 // (STRIP() in _BASE_PY3_PROGRAM, python.conf:884).
-func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths []string, objcopyPaths []VFS, hostBuild, wantsStrip bool) []string {
+func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths []string, objcopyPaths []VFS, hostBuild, wantsStrip bool) []string {
 	// Capacity hint matches the reference graph's structure plus the
 	// caller-supplied slices.
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 12 + 1 + len(ccPaths) + len(peerLibPaths) + len(globalPaths) + len(objcopyPaths)
@@ -490,6 +496,11 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 		"--clang-ver", p.ClangVer,
 		"--source-root", "$(S)",
 		"--build-root", "$(B)",
+	)
+	for _, p := range wholeArchivePaths {
+		cmdArgs = append(cmdArgs, "--whole-archive-libs", p)
+	}
+	cmdArgs = append(cmdArgs,
 		"--arch=LINUX",
 		"--objcopy-exe", p.Tools.Objcopy,
 		p.Tools.CXX,
@@ -632,12 +643,12 @@ func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) [
 //
 // Reference tools/archiver: 35 BUILD_ROOT entries (32 peer .a + 1
 // plugin + 1 global + 1 own main.cpp.o).
-func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []string, pluginPaths []string, globalPaths []string, objcopyPaths []VFS) []VFS {
+func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []string, pluginPaths []string, globalPaths []string, wholeArchivePaths []string, objcopyPaths []VFS) []VFS {
 	// peerLibPaths / globalPaths arrive BUILD_ROOT-relative (caller convention);
 	// pluginPaths arrive as full $(B)/... strings. ccPaths and
 	// objcopyPaths are already VFS-typed. Lift all into the VFS-typed
 	// BUILD_ROOT block before alphabetising.
-	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(ccPaths)+len(objcopyPaths))
+	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(wholeArchivePaths)+len(ccPaths)+len(objcopyPaths))
 
 	for _, p := range peerLibPaths {
 		buildRootBlock = append(buildRootBlock, Build(p))
@@ -649,6 +660,9 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []string, pl
 
 	for _, g := range globalPaths {
 		buildRootBlock = append(buildRootBlock, Build(g))
+	}
+	for _, w := range wholeArchivePaths {
+		buildRootBlock = append(buildRootBlock, Build(w))
 	}
 
 	buildRootBlock = append(buildRootBlock, ccPaths...)
