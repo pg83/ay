@@ -37,7 +37,7 @@ type SrcsStmt struct {
 	Line    int
 }
 
-// SetStmt represents SET(NAME value) or SET(NAME "value").
+// SetStmt represents SET(NAME value...) or SET(NAME "value").
 type SetStmt struct {
 	Name  string
 	Value string
@@ -276,31 +276,31 @@ type ResourceFilesStmt struct {
 	Line int
 }
 
-func (*ModuleStmt) stmtMarker()                   {}
-func (*PeerdirStmt) stmtMarker()                  {}
-func (*SrcsStmt) stmtMarker()                     {}
-func (*SetStmt) stmtMarker()                      {}
-func (*EndStmt) stmtMarker()                      {}
-func (*UnknownStmt) stmtMarker()                  {}
-func (*IfStmt) stmtMarker()                       {}
-func (*IncludeStmt) stmtMarker()                  {}
-func (*JoinSrcsStmt) stmtMarker()                 {}
-func (*AddInclStmt) stmtMarker()                  {}
-func (*CFlagsStmt) stmtMarker()                   {}
-func (*CXXFlagsStmt) stmtMarker()                 {}
-func (*CONLYFlagsStmt) stmtMarker()               {}
-func (*LDFlagsStmt) stmtMarker()                  {}
-func (*SrcDirStmt) stmtMarker()                   {}
-func (*GlobalSrcsStmt) stmtMarker()               {}
+func (*ModuleStmt) stmtMarker()                    {}
+func (*PeerdirStmt) stmtMarker()                   {}
+func (*SrcsStmt) stmtMarker()                      {}
+func (*SetStmt) stmtMarker()                       {}
+func (*EndStmt) stmtMarker()                       {}
+func (*UnknownStmt) stmtMarker()                   {}
+func (*IfStmt) stmtMarker()                        {}
+func (*IncludeStmt) stmtMarker()                   {}
+func (*JoinSrcsStmt) stmtMarker()                  {}
+func (*AddInclStmt) stmtMarker()                   {}
+func (*CFlagsStmt) stmtMarker()                    {}
+func (*CXXFlagsStmt) stmtMarker()                  {}
+func (*CONLYFlagsStmt) stmtMarker()                {}
+func (*LDFlagsStmt) stmtMarker()                   {}
+func (*SrcDirStmt) stmtMarker()                    {}
+func (*GlobalSrcsStmt) stmtMarker()                {}
 func (*GenerateEnumSerializationStmt) stmtMarker() {}
-func (*DefaultVarStmt) stmtMarker()               {}
-func (*RunProgramStmt) stmtMarker()               {}
-func (*ConfigureFileStmt) stmtMarker()            {}
-func (*CreateBuildInfoStmt) stmtMarker()          {}
-func (*RunAntlr4CppStmt) stmtMarker()             {}
-func (*RunAntlr4CppSplitStmt) stmtMarker()        {}
-func (*ResourceStmt) stmtMarker()                 {}
-func (*ResourceFilesStmt) stmtMarker()            {}
+func (*DefaultVarStmt) stmtMarker()                {}
+func (*RunProgramStmt) stmtMarker()                {}
+func (*ConfigureFileStmt) stmtMarker()             {}
+func (*CreateBuildInfoStmt) stmtMarker()           {}
+func (*RunAntlr4CppStmt) stmtMarker()              {}
+func (*RunAntlr4CppSplitStmt) stmtMarker()         {}
+func (*ResourceStmt) stmtMarker()                  {}
+func (*ResourceFilesStmt) stmtMarker()             {}
 
 // Expr is the sealed-interface marker for IF-predicate AST nodes.
 // Evaluator: macros.go:EvalCond. Constructors: ident, NOT, AND, OR,
@@ -729,7 +729,7 @@ func (l *lexer) readIdentOrWord(startLine, startCol int) token {
 			continue
 		}
 
-		if isWordByte(b) {
+		if isWordByte(b) || (b == '@' && len(buf) > 0) {
 			pureIdent = false
 			buf = append(buf, l.advance())
 
@@ -766,7 +766,7 @@ func (l *lexer) readWord(startLine, startCol int) token {
 			continue
 		}
 
-		if !isWordByte(b) {
+		if !isWordByte(b) && !(b == '@' && len(buf) > 0) {
 			break
 		}
 
@@ -829,11 +829,23 @@ func parseInternal(name string, src []byte) *MakeFile {
 }
 
 func parseInternalWithStack(name string, src []byte, stack []string) *MakeFile {
-	p := &parser{lex: newLexer(name, src), name: name, includeStack: stack}
+	return parseInternalWithState(name, src, stack, newIncludeState())
+}
+
+func parseInternalWithState(name string, src []byte, stack []string, includes *includeState) *MakeFile {
+	p := &parser{lex: newLexer(name, src), name: name, includeStack: stack, includes: includes}
 	mf := &MakeFile{Path: name}
 	mf.Stmts, _ = p.parseStmts(termTopLevel)
 
 	return mf
+}
+
+type includeState struct {
+	once map[string]struct{}
+}
+
+func newIncludeState() *includeState {
+	return &includeState{once: map[string]struct{}{}}
 }
 
 // stmtTerminator names the boundary ending a Stmt sequence.
@@ -888,12 +900,39 @@ func (p *parser) parseMacroInto(into []Stmt, nameTok token) []Stmt {
 		return append(into, p.parseIf(nameTok))
 	case "INCLUDE":
 		return p.expandInclude(into, nameTok)
+	case "INCLUDE_ONCE":
+		p.applyIncludeOnce(nameTok)
+
+		return into
 	}
 
 	args := p.parseMacroArgs(nameTok)
 	stmt := p.buildStmt(nameTok, args)
 
 	return append(into, stmt)
+}
+
+func (p *parser) applyIncludeOnce(nameTok token) {
+	args := p.parseMacroArgs(nameTok)
+	enabled := true
+
+	if len(args) > 1 {
+		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE_ONCE expects 0 or 1 arguments, got %d", len(args))
+	}
+	if len(args) == 1 && args[0] == "no" {
+		enabled = false
+	}
+
+	if !enabled {
+		return
+	}
+
+	abs, err := filepath.Abs(p.name)
+	if err != nil {
+		abs = p.name
+	}
+
+	p.includes.once[abs] = struct{}{}
 }
 
 // parseMacroArgs reads `( args... )`. The leading `(` and the trailing
@@ -960,6 +999,7 @@ type parser struct {
 	lex          *lexer
 	name         string
 	includeStack []string // absolute paths of files being parsed, outermost first; used for cycle detection
+	includes     *includeState
 }
 
 // buildStmt routes recognized macro names to typed Stmt; everything else
@@ -983,11 +1023,11 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 	case "SRCS":
 		return &SrcsStmt{Sources: args, Line: nameTok.line}
 	case "SET":
-		if len(args) != 2 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "SET expects exactly 2 arguments (name and value), got %d", len(args))
+		if len(args) < 2 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "SET expects at least 2 arguments (name and value), got %d", len(args))
 		}
 
-		return &SetStmt{Name: args[0], Value: args[1], Line: nameTok.line}
+		return &SetStmt{Name: args[0], Value: strings.Join(args[1:], " "), Line: nameTok.line}
 	case "END":
 		return &EndStmt{Line: nameTok.line}
 	case "JOIN_SRCS":
@@ -1745,6 +1785,9 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 	if absErr != nil {
 		absTarget = full
 	}
+	if _, skip := p.includes.once[absTarget]; skip {
+		return into
+	}
 
 	// Chain = inherited stack + p.name (the file we're parsing right
 	// now, set by parseInternalWithStack); p.name is the chain's last
@@ -1784,7 +1827,7 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 
 	// Recurse with the updated chain propagated into the child parser so
 	// transitive cycles (a→b→a) are also caught.
-	included := parseInternalWithStack(absTarget, data, chain)
+	included := parseInternalWithState(absTarget, data, chain, p.includes)
 
 	return append(into, included.Stmts...)
 }

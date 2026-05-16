@@ -159,6 +159,8 @@ type ModuleCCInputs struct {
 	// `set_default_flags(optimized)`). M3 witness:
 	// `devtools/ymake/lang/makelists/ya.make:6` sets `-lF1`.
 	Ragel6Flags []string
+	// BisonGenExt is ".c" for BISON_GEN_C and ".cpp" for BISON_GEN_CPP/default.
+	BisonGenExt string
 }
 
 // EmitCC emits a CC node for compiling `srcRel` (relative to

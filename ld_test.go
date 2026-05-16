@@ -139,6 +139,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		nil,   // PR-M3-final-LD-trailer-and-cflags: peerCFlagsGlobal nil
 		false, // PR-M3-final-LD-trailer-and-cflags: usePython3 false
 		false, // PR-M3-py3-program-bin-strip-all: synthetic test is cpp PROGRAM
+		false, // SPLIT_DWARF disabled in this legacy LD shape test
 		testHostP,
 		emit,
 	)
@@ -234,6 +235,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		nil,   // PR-M3-final-LD-trailer-and-cflags: peerCFlagsGlobal nil
 		false, // PR-M3-final-LD-trailer-and-cflags: usePython3 false
 		false, // PR-M3-py3-program-bin-strip-all: synthetic host test, no STRIP()
+		false, // SPLIT_DWARF disabled in this legacy LD shape test
 		testHostP,
 		emit,
 	)
@@ -275,7 +277,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 			instance := targetInstance("test/prog")
 
 			exc := Try(func() {
-				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, nil, nil, nil, true, nil, nil, false, false, testHostP, e)
+				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, nil, nil, nil, true, nil, nil, false, false, false, testHostP, e)
 			})
 
 			if exc == nil {

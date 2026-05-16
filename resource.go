@@ -65,7 +65,9 @@ func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath, modul
 
 // expandResourceFiles applies the upstream
 // `build/plugins/res.py:onresource_files` expansion. Keyword grammar:
-//   DONT_COMPRESS (dropped), PREFIX <p>, DEST <d>, STRIP <p>, <path>.
+//
+//	DONT_COMPRESS (dropped), PREFIX <p>, DEST <d>, STRIP <p>, <path>.
+//
 // For each plain path P emits a kv-only entry (Path="-") plus a source
 // entry (Path=P, Key="resfs/file/<computed-key>"). computed-key =
 // (dest) | (prefix + (strip(P) or P)); DEST is per-path and resets
@@ -160,7 +162,7 @@ func emitResourceObjcopy(
 	// Emit kv_only sibling shapes (PY_MAIN, py/namespace,
 	// py/no_check_imports) alongside RESOURCE/RESOURCE_FILES. Each
 	// sibling is independent and conditional on its own per-module data.
-	hasKvOnly := d.pyMain != "" || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0
+	hasKvOnly := d.pyMain != "" || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
 	if len(d.resources) == 0 && !hasKvOnly {
 		return nil, nil, nil
 	}
@@ -199,6 +201,13 @@ func emitResourceObjcopy(
 		addGlobal(objcopyScriptVFS)
 	}
 
+	for _, res := range emitYaConfJSONObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef) {
+		refs = append(refs, res.Ref)
+		outputs = append(outputs, res.Out)
+		addGlobal(objcopyScriptVFS)
+		addGlobal(res.Input)
+	}
+
 	// Per-PY_SRCS resfs entry objcopy nodes. One node per packer-flush
 	// chunk; large modules (Lib, lib2/py) split via chunkPySrcEntries.
 	srcRefs, srcOuts, srcGlobalInputs := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
@@ -224,10 +233,10 @@ func emitResourceObjcopy(
 	}
 
 	type acc struct {
-		paths   []string
-		keys    []string // base64-encoded (padded) keys for path entries
-		kvs     []string
-		cmdLen  int
+		paths  []string
+		keys   []string // base64-encoded (padded) keys for path entries
+		kvs    []string
+		cmdLen int
 	}
 	cur := acc{}
 
@@ -519,8 +528,94 @@ func emitKvOnlyObjcopyNode(
 // (PY_MAIN / namespace / no_check_imports). nil = trigger absent on this
 // module → nothing emitted; non-nil = (NodeRef, output path) pair.
 type objcopyEmit struct {
-	Ref NodeRef
-	Out VFS
+	Ref   NodeRef
+	Out   VFS
+	Input VFS
+}
+
+func emitYaConfJSONObjcopy(
+	ctx *genCtx,
+	instance ModuleInstance,
+	d *moduleData,
+	rescompilerLDRef NodeRef,
+	rescompressorLDRef NodeRef,
+) []*objcopyEmit {
+	if len(d.yaConfJSON) == 0 {
+		return nil
+	}
+
+	out := make([]*objcopyEmit, 0, len(d.yaConfJSON))
+	moduleTag := ""
+	if d.moduleStmt != nil {
+		moduleTag = resourceModuleTag(d.moduleStmt.Name)
+	}
+
+	for _, file := range d.yaConfJSON {
+		key := "resfs/file/ya.conf.json"
+		keyB64 := encb64.StdEncoding.EncodeToString([]byte(key))
+		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + file + "\"}"
+		kvCmd := "resfs/src/" + key + "=" + file
+		hash := objcopyHash([]string{file}, []string{keyB64}, []string{kvHash}, instance.Path, moduleTag)
+		outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
+		input := Source(file)
+
+		cmdArgs := []string{
+			instance.Platform.Tools.Python3,
+			objcopyScriptPath,
+			"--compiler", instance.Platform.Tools.CXX,
+			"--objcopy", instance.Platform.Tools.Objcopy,
+			"--compressor", rescompressorBinPath,
+			"--rescompiler", rescompilerBinPath,
+			"--output_obj", outputObj.String(),
+			"--target", instance.Platform.Triple,
+			"--inputs", input.String(),
+			"--keys", keyB64,
+			"--kvs", kvCmd,
+		}
+
+		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
+		node := &Node{
+			Cmds: []Cmd{
+				{
+					CmdArgs: cmdArgs,
+					Env:     env,
+				},
+			},
+			Env:     env,
+			Inputs:  []VFS{rescompilerBinVFS, rescompressorBinVFS, input, objcopyScriptVFS},
+			Outputs: []VFS{outputObj},
+			KV: map[string]string{
+				"p":        "PY",
+				"pc":       "yellow",
+				"show_out": "yes",
+			},
+			Tags: []string{},
+			TargetProperties: map[string]string{
+				"module_dir": instance.Path,
+			},
+			Platform:     string(instance.Platform.Target),
+			HostPlatform: instance.Platform.IsHost,
+			Requirements: map[string]interface{}{
+				"cpu":     float64(1),
+				"network": "restricted",
+				"ram":     float64(32),
+			},
+		}
+
+		if len(instance.Platform.Tags) > 0 {
+			node.Tags = append([]string(nil), instance.Platform.Tags...)
+		}
+		if rescompilerLDRef != (NodeRef{}) {
+			node.DepRefs = append(node.DepRefs, rescompilerLDRef)
+		}
+		if rescompressorLDRef != (NodeRef{}) {
+			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
+		}
+
+		out = append(out, &objcopyEmit{Ref: ctx.emit.Emit(node), Out: outputObj, Input: input})
+	}
+
+	return out
 }
 
 // emitPyNamespaceObjcopy emits the `py/namespace/<mod_list_md5>/<unit>=<ns>.`
@@ -536,6 +631,9 @@ func emitPyNamespaceObjcopy(
 	rescompressorLDRef NodeRef,
 ) *objcopyEmit {
 	if len(d.pySrcs) == 0 {
+		return nil
+	}
+	if d.noExtendedPySearch {
 		return nil
 	}
 
@@ -644,7 +742,7 @@ func emitNoCheckImportsObjcopy(
 //   - PYBUILD_NO_PY: only .yapyc3
 //   - PYBUILD_NO_PYC: only raw .py
 type pySrcEntry struct {
-	pathHash  string // srcRel.yapyc3 (flat) or srcRel.3kp2.yapyc3 (subdir); used as `paths` for the hash
+	pathHash  string // srcRel.yapyc3 (flat) or srcRel.<unit-pathid>.yapyc3 (subdir); used as `paths` for the hash
 	pathInput string // cmd_args --inputs slot: $(B)/<actualUnit>/<srcRel>{.suffix} (yapyc3) or $(S)/<actualUnit>/<srcRel> (raw)
 	key       string // pre-base64 key: resfs/file/py/[<ns>/]<srcRel>[.yapyc3]
 	kvHash    string // pre-rootrel-expansion form (placeholder retained)
@@ -686,7 +784,7 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 	for _, srcRel := range d.pySrcs {
 		suffix := ".yapyc3"
 		if strings.Contains(srcRel, "/") {
-			suffix = ".3kp2.yapyc3"
+			suffix = "." + pySrcYapycSuffix(modulePath) + ".yapyc3"
 		}
 
 		// When both raw .py and .yapyc3 entries fire (default), REF
@@ -759,8 +857,10 @@ type pySrcChunk struct {
 // Upstream semantics (`objcopy.h:17-29`): per RESOURCE() entry the
 // `res.py:onresource_files` macro appends `[-, src_kv, path, key]` so
 // `HandleResource` is called TWICE per entry:
-//   (1) kv add:       EstimatedCmdLen_ += ROOT_CMD_LEN + len(src_kv_hash)
-//   (2) path+key add: EstimatedCmdLen_ += ROOT_CMD_LEN + len(path_arg) + len(b64(key))
+//
+//	(1) kv add:       EstimatedCmdLen_ += ROOT_CMD_LEN + len(src_kv_hash)
+//	(2) path+key add: EstimatedCmdLen_ += ROOT_CMD_LEN + len(path_arg) + len(b64(key))
+//
 // After each add, `Finalize(force=false)` flushes when
 // EstimatedCmdLen_ >= MAX_CMD_LEN — a single entry can straddle a
 // chunk boundary (kv in N, path+key in N+1).
@@ -832,6 +932,10 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 	flush()
 
 	return chunks
+}
+
+func pySrcYapycSuffix(modulePath string) string {
+	return protoPathID("$S/" + modulePath)[:4]
 }
 
 // emitPySrcObjcopy emits one objcopy PY node per chunk of PY_SRCS-derived
