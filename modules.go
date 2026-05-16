@@ -86,7 +86,7 @@ type moduleData struct {
 	checkConfigHeaders []string
 	cythonCpp          []*CythonStmt
 	swigC              []swigSrc
-	bisonGenExt        *string
+	bisonGenExt        string
 	grpc               bool
 	yaConfJSON         []string
 	allPySrcs          []*UnknownStmt
@@ -190,6 +190,7 @@ func collectModule(modulePath string, kind ModuleKind, stmts []Stmt, env Environ
 	d := &moduleData{
 		flags:         pathFlags,
 		pythonSQLite3: true,
+		bisonGenExt:   ".cpp",
 	}
 
 	collectStmts(modulePath, kind, stmts, env, d)
@@ -626,9 +627,9 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 
 		d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: v.Args[0], Options: append([]string(nil), v.Args[1:]...)})
 	case "BISON_GEN_C":
-		d.bisonGenExt = stringPtr(".c")
+		d.bisonGenExt = ".c"
 	case "BISON_GEN_CPP":
-		d.bisonGenExt = stringPtr(".cpp")
+		d.bisonGenExt = ".cpp"
 	case "GRPC":
 		d.grpc = true
 		d.peerdirs = append(d.peerdirs, "contrib/libs/grpc")
