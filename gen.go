@@ -765,18 +765,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// genModule) and aggregate own + peer GLOBAL per axis.
 		peerContribs := walkPeersForGlobalAddIncl(ctx, instance, d)
 
-		// Drop musl-self GLOBAL CFLAGS contributions from the propagated
-		// set (mirror of the main-walker gate).
-		ownCFlagsGlobalH := d.cFlagsGlobal
-		ownCXXFlagsGlobalH := d.cxxFlagsGlobal
-		ownCOnlyFlagsGlobalH := d.cOnlyFlagsGlobal
-
-		if instance.Flags.LibcMusl {
-			ownCFlagsGlobalH = nil
-			ownCXXFlagsGlobalH = nil
-			ownCOnlyFlagsGlobalH = nil
-		}
-
 		// Emit own LD_PLUGIN CP nodes (e.g. musl.py → musl.py.pyplugin)
 		// BEFORE composing the result so the refs propagate alongside the
 		// peer-walked plugin closure. The CP node carries
@@ -885,9 +873,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			// peer-transitive first, own last per upstream
 			// `TGlobalVarsCollector` semantics. ADDINCL keeps the opposite
 			// (own first, peer second) per `TModuleIncDirs::Get()`.
-			CFlagsGlobal:            mergeDedup(peerContribs.cFlags, ownCFlagsGlobalH),
-			CXXFlagsGlobal:          mergeDedup(peerContribs.cxxFlags, ownCXXFlagsGlobalH),
-			COnlyFlagsGlobal:        mergeDedup(peerContribs.cOnlyFlags, ownCOnlyFlagsGlobalH),
+			CFlagsGlobal:            mergeDedup(peerContribs.cFlags, d.cFlagsGlobal),
+			CXXFlagsGlobal:          mergeDedup(peerContribs.cxxFlags, d.cxxFlagsGlobal),
+			COnlyFlagsGlobal:        mergeDedup(peerContribs.cOnlyFlags, d.cOnlyFlagsGlobal),
 			PeerArchiveClosureRefs:  peerArchiveRefsH,
 			PeerArchiveClosurePaths: peerArchivePathsH,
 			PeerGlobalClosureRefs:   peerGlobalRefsH,
@@ -914,7 +902,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// populate only modules they care about, and a helper-supplied
 	// default (musl / builtins / malloc/api) may not exist there. A
 	// missing EXPLICIT peer is still a hard error (fixture bug).
-	defaults := defaultPeerdirsFor(ctx, instance)
+	defaults := defaultPeerdirsForModule(ctx, instance, d)
 
 	// ALLOCATOR(FAKE) suppresses the implicit malloc/api auto-peer
 	// (mirrors upstream `_BASE_UNIT`'s skip when ALLOCATOR=FAKE). yasm:
@@ -944,8 +932,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	var preUserProgDefaults []string
 	var postUserProgDefaults []string
 	if isProgram {
-		preUserProgDefaults = defaultProgramPeerdirsFor(ctx, instance, d.hadAllocator, d.allocatorName, d.muslLite, false)
-		postUserProgDefaults = defaultProgramPeerdirsFor(ctx, instance, d.hadAllocator, d.allocatorName, d.muslLite, true)
+		preUserProgDefaults = defaultProgramPeerdirsForModule(ctx, instance, d, false)
+		postUserProgDefaults = defaultProgramPeerdirsForModule(ctx, instance, d, true)
 		defaults = append(defaults, preUserProgDefaults...)
 	}
 
@@ -1359,11 +1347,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerAddInclGlobal = hoistRuntimeStackAddIncl(peerAddInclGlobal)
 	}
 
-	// CFLAGS / CXXFLAGS / CONLYFLAGS: no module today has both
-	// own-GLOBAL and transitive peer-GLOBAL on the same axis (musl-self
-	// CFLAGS are suppressed; libcxx's `-nostdinc++` is GLOBAL-CXXFLAGS
-	// but its peers add nothing further). Two-phase still applied for
-	// symmetry and forward-compatibility.
+	// CFLAGS / CXXFLAGS / CONLYFLAGS: collect every peer's transitive
+	// GLOBAL flags. No-stdinc modules still propagate their GLOBAL flags
+	// to explicit consumers; their own compile nodes suppress those flags
+	// separately because the no-stdinc composer folds them into its fixed
+	// compile shape.
 	for _, rp := range resolved {
 		addEach(cFlagsSeen, &peerCFlagsGlobal, rp.result.CFlagsGlobal)
 		addEach(cxxFlagsSeen, &peerCXXFlagsGlobal, rp.result.CXXFlagsGlobal)
@@ -1416,23 +1404,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		effectiveAddInclGlobal = spliced
 	}
 
-	// Same shape for CFLAGS / CXXFLAGS / CONLYFLAGS. Musl-self modules'
-	// GLOBAL CFLAGS (which include `-D_musl_=1` from `contrib/libs/musl/
-	// ya.make`) are NOT propagated to non-musl consumers. REF shows only
-	// one M2-closure module (tools/archiver/main.cpp.o) carries
-	// `-D_musl_=1`; the `-D_musl_` (no `=1`) consumer-side sentinel comes
-	// from AutoPeerCFlags instead. Suppression is keyed on Flags.LibcMusl
-	// (data, not path).
-	ownCFlagsGlobal := d.cFlagsGlobal
-	ownCXXFlagsGlobal := d.cxxFlagsGlobal
-	ownCOnlyFlagsGlobal := d.cOnlyFlagsGlobal
-
-	if instance.Flags.LibcMusl {
-		ownCFlagsGlobal = nil
-		ownCXXFlagsGlobal = nil
-		ownCOnlyFlagsGlobal = nil
-	}
-
 	// Peer-transitive CFLAGS GLOBAL precede this module's OWN CFLAGS
 	// GLOBAL in the effective propagated slice. Upstream rule
 	// (devtools/ymake/global_vars_collector.cpp):
@@ -1451,9 +1422,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// PEERDIR of devtools/ymake and PEERDIRs OpenSSL; per-peer
 	// AppendUnique places asio's OpenSSL transitive ahead of asio's
 	// own ASIO_*.
-	effectiveCFlagsGlobal := mergeDedup(peerCFlagsGlobal, ownCFlagsGlobal)
-	effectiveCXXFlagsGlobal := mergeDedup(peerCXXFlagsGlobal, ownCXXFlagsGlobal)
-	effectiveCOnlyFlagsGlobal := mergeDedup(peerCOnlyFlagsGlobal, ownCOnlyFlagsGlobal)
+	effectiveCFlagsGlobal := mergeDedup(peerCFlagsGlobal, d.cFlagsGlobal)
+	effectiveCXXFlagsGlobal := mergeDedup(peerCXXFlagsGlobal, d.cxxFlagsGlobal)
+	effectiveCOnlyFlagsGlobal := mergeDedup(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
 
 	// Inject libcxx's GLOBAL ADDINCL + GLOBAL CXXFLAGS into runtime-
 	// ancestor C++ consumers' OWN CC emission only — not into the
@@ -1569,14 +1540,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// Auto-injected peer-CFLAG -D_musl_ for every TARGET module that is
 	// not effectively NO_PLATFORM, when the CLI says MUSL=yes. Mirrors
 	// `_BASE_UNIT`'s `when ($MUSL == "yes") { CFLAGS+=-D_musl_ }`.
-	// Suppressed for musl-self (LibcMusl=true) modules — those receive
+	// Suppressed for no-stdinc modules — those receive
 	// `-D_musl_=1` from `muslExtraDefines` and upstream NO_PLATFORM
 	// gates off the extra `-D_musl_`.
 	autoPeerCFlags := defaultPeerCFlags(ctx, instance, d)
 
 	// Thread the module's own non-GLOBAL CFLAGS and own GLOBAL
 	// CFLAGS / CXXFLAGS / CONLYFLAGS into ModuleCCInputs so the composer
-	// emits them on this module's own CC compiles. LibcMusl-self modules
+	// emits them on this module's own CC compiles. NoStdInc modules
 	// zero them: musl's CFLAGS are folded into `muslExtraDefines` and
 	// the musl composers ignore these slots.
 	ownCFlags := d.cFlags
@@ -1584,53 +1555,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
 
-	if instance.Flags.LibcMusl {
+	if instance.Flags.NoStdInc {
 		ownCFlags = nil
 		ownCFlagsGlobalSelf = nil
 		ownCXXFlagsGlobalSelf = nil
 		ownCOnlyFlagsGlobalSelf = nil
-	}
-
-	// PROGRAM-only `-D_musl_=1` injection. The musl GLOBAL CFLAG
-	// `-D_musl_=1` (`contrib/libs/musl/ya.make:52`) reaches a PROGRAM
-	// consumer's ownCFlags slot, appended AFTER the module's own CFLAGS
-	// and BEFORE noLibcUndebugBlock / ndebugPicBlock. LIBRARY consumers
-	// (util, util/charset, libcxxrt, ...) do NOT receive this flag —
-	// only the consumer-side `-D_musl_` sentinel from
-	// `defaultPeerCFlags` (which slots after catboost).
-	//
-	// PROGRAM-vs-LIBRARY discrimination is empirical: tools/archiver/
-	// main.cpp.o (target PROGRAM, slot 60), yasm libyasm/assocdat.c.pic.o
-	// (host PROGRAM, slot 52), ragel6/all_cd.cpp.pic.o (host PROGRAM,
-	// slot 51) all carry `-D_musl_=1`; util/_/digest/city.cpp.o,
-	// util/charset/all_charset.cpp.o, libcxxrt/auxhelper.cc.o (LIBRARY)
-	// do not.
-	//
-	// Suppressed for LibcMusl-self (ownCFlags already nil; explicit
-	// guard for clarity) and for effectively-NO_PLATFORM modules
-	// (mirror of `defaultPeerCFlags`'s consumer-sentinel gate).
-	if isPROGRAMForMuslDef(d.moduleStmt.Name) && cliMuslOn(ctx) && !instance.Flags.LibcMusl && !effectiveNoPlatform(instance.Flags) {
-		// Copy before append: `ownCFlags = d.cFlags` aliases the
-		// underlying array, and a future caller iterating d.cFlags
-		// directly must not see the injected flag.
-		ownCFlagsWithMusl := make([]string, 0, len(ownCFlags)+1)
-		ownCFlagsWithMusl = append(ownCFlagsWithMusl, ownCFlags...)
-		ownCFlagsWithMusl = append(ownCFlagsWithMusl, "-D_musl_=1")
-		ownCFlags = ownCFlagsWithMusl
-	}
-
-	// `contrib/libs/musl/full` is a non-musl LIBRARY inside the musl
-	// subtree (`SET(MUSL no)` in its ya.make). CC dispatch routes through
-	// composeTargetCC / composeHostCC (LibcMusl=false), but the upstream
-	// build context is still MUSL=yes, so REF injects -D_musl_=1 into
-	// the ownCFlags slot — same position as the PROGRAM injection above
-	// but keyed on the musl-subtree path. TODO: remove when SET()
-	// parsing drives this from the ya.make flag.
-	if instance.Path == "contrib/libs/musl/full" && cliMuslOn(ctx) {
-		ownCFlagsWithMusl := make([]string, 0, len(ownCFlags)+1)
-		ownCFlagsWithMusl = append(ownCFlagsWithMusl, ownCFlags...)
-		ownCFlagsWithMusl = append(ownCFlagsWithMusl, "-D_musl_=1")
-		ownCFlags = ownCFlagsWithMusl
 	}
 
 	// Dedup d.addIncl in first-occurrence-wins order. REF (openssl
@@ -2693,7 +2622,7 @@ type peerGlobalContribs struct {
 // modules emit no AR; archive refs are dropped except for the GLOBAL
 // peer-propagation path.
 func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleData) peerGlobalContribs {
-	defaults := defaultPeerdirsFor(ctx, instance)
+	defaults := defaultPeerdirsForModule(ctx, instance, d)
 
 	// Mirror genModule's ALLOCATOR(FAKE) malloc/api suppression. No
 	// current header-only case declares ALLOCATOR, so normally a no-op.

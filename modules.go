@@ -40,6 +40,7 @@ type moduleData struct {
 	hadAllocator     bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
 	allocatorName    string   // PR-35g: name passed to ALLOCATOR(...); empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE).
 	muslLite         bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
+	muslEnabled      bool     // module-local MUSL value after SET()/DEFAULT()/CLI env evaluation.
 	noPythonIncl     bool     // set by NO_PYTHON_INCLUDES(); suppresses PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (build/conf/python.conf:741-743).
 	usePython3       bool     // set by USE_PYTHON3() or PY3-family module types; normalised by applyPython3AddIncl. Triggers _PYTHON3_ADDINCL (python.conf:1018-1023): -DUSE_PYTHON3 + contrib/libs/python/Include.
 	ldPlugins        []string // filenames from LD_PLUGIN(name.py); each becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs. Only contrib/libs/musl/include uses this in M2.
@@ -161,6 +162,9 @@ func collectModule(modulePath string, stmts []Stmt, env Environment, pathFlags F
 	d := &moduleData{flags: pathFlags}
 
 	collectStmts(modulePath, stmts, env, d)
+	d.muslEnabled = env.Bool("MUSL")
+
+	deriveGenericCompileFlags(d)
 
 	applyPython3AddIncl(modulePath, d)
 	applyBuildInfoAddIncl(modulePath, d)
@@ -213,6 +217,22 @@ func collectModule(modulePath string, stmts []Stmt, env Environment, pathFlags F
 	}
 
 	return d
+}
+
+func deriveGenericCompileFlags(d *moduleData) {
+	if flagsContain(d.cFlags, "-nostdinc") || flagsContain(d.cFlagsGlobal, "-nostdinc") {
+		d.flags.NoStdInc = true
+	}
+}
+
+func flagsContain(flags []string, want string) bool {
+	for _, flag := range flags {
+		if flag == want {
+			return true
+		}
+	}
+
+	return false
 }
 
 // applyPython3AddIncl mirrors _PYTHON3_ADDINCL's
@@ -358,12 +378,15 @@ func collectStmts(modulePath string, stmts []Stmt, env Environment, d *moduleDat
 				d.peerdirs = append(d.peerdirs, p)
 			}
 		case *SetStmt:
-			// SET has no general evaluator; IF branches were already
-			// flattened above. Only the RAGEL6_FLAGS case is wired:
-			// `_SRC("rl6", ...)` (ymake.core.conf:3284) interpolates
-			// $RAGEL6_FLAGS before everything else, so SET replaces the
-			// default (last-write-wins).
+			// SET updates the module-local env for following IF branches
+			// and config-derived defaults. yes/no stay bools so bare
+			// IF(MUSL) and IF(MUSL == "no") both behave as expected.
+			env.SetFromString(v.Name, v.Value)
+
 			if v.Name == "RAGEL6_FLAGS" {
+				// `_SRC("rl6", ...)` (ymake.core.conf:3284)
+				// interpolates $RAGEL6_FLAGS before everything else, so
+				// SET replaces the default (last-write-wins).
 				d.ragel6Flags = []string{v.Value}
 			}
 		case *EndStmt:
@@ -863,21 +886,6 @@ func isPyLibraryType(name string) bool {
 	switch name {
 	case "PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",
 		"PY2_PROGRAM", "PY3_PROGRAM":
-		return true
-	}
-
-	return false
-}
-
-// isPROGRAMForMuslDef reports whether the module type behaves as a
-// terminal PROGRAM for the purposes of the `-D_musl_=1` ownCFlags
-// injection. PROGRAM plus PY3_PROGRAM_BIN both link a final binary via
-// EmitLD and observe the same musl-self CFLAG in the reference graph
-// (tools/py3cc/slow/py3cc cmd[1] ref:44 — `-D_musl_=1` precedes the
-// peer-GLOBAL CFLAGS block; PR-M3-final-LD-trailer-and-cflags).
-func isPROGRAMForMuslDef(name string) bool {
-	switch name {
-	case "PROGRAM", "PY3_PROGRAM_BIN":
 		return true
 	}
 

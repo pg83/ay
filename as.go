@@ -58,7 +58,7 @@ import (
 //     hostSseFeatures between) vs target (aarch64;
 //     --target=aarch64-linux-gnu -march=armv8-a, commonCFlags/Defines/
 //     noLibcUndebugBlock×2).
-//   - instance.Flags.LibcMusl injects muslExtraDefines (incl. -D_musl_=1)
+//   - instance.Flags.NoStdInc injects muslExtraDefines (incl. -D_musl_=1)
 //     between defines and suppression blocks.
 //
 // Returns (NodeRef, outputPath).
@@ -283,7 +283,7 @@ func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (
 }
 
 // composeASCmdArgs builds the cmd_args bundle. Three flavours dispatched
-// on (Platform.IsHost, Flags.LibcMusl):
+// on (Platform.IsHost, Flags.NoStdInc):
 //   - Target: aarch64; commonCFlags+Defines (+muslExtraDefines if musl)
 //   - noLibcUndebugBlock×2 with catboost between.
 //   - Host non-musl: x86_64; hostCFlags+Defines + ndebugPicBlock×2 with
@@ -295,10 +295,10 @@ func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (
 // rule); own/auto-peer CFLAGS and the includes tail thread via
 // ModuleCCInputs (same struct CC consumes).
 func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in ModuleCCInputs) []string {
-	// instance.Flags.LibcMusl is the PER-MODULE flag (module is part of
-	// the musl subtree), distinct from Platform.Flags["MUSL"] which is
-	// the CLI-level "build everything in musl mode" toggle.
-	isMusl := instance.Flags.LibcMusl
+	// instance.Flags.NoStdInc is the per-module compile-shape flag,
+	// distinct from Platform.Flags["MUSL"] which is the CLI-level
+	// "build everything in musl mode" toggle.
+	isMusl := instance.Flags.NoStdInc
 
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 3 + len(bundle.ArchArgs)
@@ -382,7 +382,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 
 // composeASIncludes derives the include-tail slice following the source
 // path in cmd_args:
-//   - musl-self (LibcMusl=true): muslCcIncludesFor(ISA) — the
+//   - no-stdinc: muslCcIncludesFor(ISA) — the
 //     structurally-folded musl include set with arch/<isa>.
 //   - non-musl: ccIncludesPrefix + AddIncl + ccIncludesSuffix +
 //     PeerAddInclGlobal (mirror of CC). Own ADDINCL slots between the

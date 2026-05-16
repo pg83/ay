@@ -80,11 +80,10 @@ type FlagSet struct {
 	NoCompilerWarnings bool
 	IsCpp              bool
 	PIC                bool
-	// LibcMusl marks an instance as a member of the musl-libc subtree;
-	// dispatch key for the musl flavours of EmitCC. Seeded heuristically
-	// by inferFlagsFromPath today; macro-driven inference (NO_PLATFORM +
-	// SET(MUSL no)) will eventually replace the path heuristic.
-	LibcMusl bool
+	// NoStdInc marks modules whose own compiles declare -nostdinc.
+	// This is a generic compile property parsed from CFLAGS, used for
+	// scanner base-path and no-stdinc compile-shape decisions.
+	NoStdInc bool
 	// Extra carries opaque per-instance digests as a `\n`-joined sorted
 	// token concatenation (slice fields would disqualify the struct from
 	// being a map key). Populate via NewFlagSet to keep the sort stable.
@@ -159,27 +158,6 @@ func inferFlagsFromPath(path string, isPIC bool) FlagSet {
 		fs.NoLibc = true
 		fs.NoUtil = true
 		fs.NoRuntime = true
-	}
-
-	// Musl-prefix path heuristic seeds Flags.LibcMusl. This is the SOLE
-	// remaining musl-path-prefix dispatch in the codebase — every other
-	// call site reads Flags.LibcMusl instead. Removable once ya.make-
-	// driven flag inference (NO_PLATFORM + path-conditional SET(MUSL no))
-	// lands.
-	//
-	// contrib/libs/musl/full is a LIBRARY (ya.make has SET(MUSL no)) that
-	// bridges the musl ABI to glibc — it must NOT receive the musl CC
-	// bundle. It still carries NO_LIBC/NO_UTIL/NO_RUNTIME (keeping
-	// effectiveNoPlatform=true to suppress default peer injection); only
-	// LibcMusl is withheld so the CC dispatch routes to composeTargetCC.
-	if path == "contrib/libs/musl" || strings.HasPrefix(path, "contrib/libs/musl/") {
-		fs.NoLibc = true
-		fs.NoUtil = true
-		fs.NoRuntime = true
-
-		if path != "contrib/libs/musl/full" {
-			fs.LibcMusl = true
-		}
 	}
 
 	return fs

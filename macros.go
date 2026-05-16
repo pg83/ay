@@ -117,11 +117,28 @@ func (e Environment) Clone() Environment {
 // SetBool overrides (or adds) a boolean binding. Per-instance env tweaks
 // must Clone first to avoid leaking into DefaultIfEnv.
 func (e Environment) SetBool(name string, v bool) {
+	delete(e.strings, name)
+	delete(e.ints, name)
+
 	e.bools[name] = v
 }
 
 func (e Environment) SetString(name, v string) {
+	delete(e.bools, name)
+	delete(e.ints, name)
+
 	e.strings[name] = v
+}
+
+func (e Environment) SetFromString(name, v string) {
+	switch v {
+	case "yes":
+		e.SetBool(name, true)
+	case "no":
+		e.SetBool(name, false)
+	default:
+		e.SetString(name, v)
+	}
 }
 
 // HasBinding reports whether name has any typed binding in this env.

@@ -7,7 +7,7 @@ package main
 // modules in the same closure but stay constant for a single
 // (instance, source) pair (ADDINCL, own CXXFLAGS/CONLYFLAGS, the
 // IsGenerated bit, source-generator NodeRef, etc.). Composer dispatch
-// is flag-driven (`instance.Flags.LibcMusl`) — musl is a libc flavour
+// is flag-driven (`instance.Flags.NoStdInc`) — musl is a no-stdinc libc flavour
 // selected by a CLI -D flag, not a special-cased module class.
 //
 // Output path convention:
@@ -189,10 +189,9 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	outputPath := outVFS.String()
 	inputPath := inVFS.String()
 
-	// PR-32 D02: dispatch via Flags.LibcMusl, not the path-prefix
-	// test. The flag is seeded by `inferFlagsFromPath` for the M2
-	// shim; macro-driven inference replaces the heuristic in M5+.
-	isMusl := instance.Flags.LibcMusl
+	// No-stdinc modules use the musl-shaped compile pipeline: their
+	// ya.make owns the full include set and libc CFLAGS.
+	isMusl := instance.Flags.NoStdInc
 	isCxx := isCxxSource(srcRel)
 
 	// Filter own per-source extras by source language. CXXFLAGS apply
@@ -251,9 +250,7 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	}
 
 	// Compose-flavour dispatch keys off instance.Platform.IsHost (host =
-	// release/PIC, target = debug/noPIC) and instance.Flags.LibcMusl
-	// (per-MODULE musl-subtree membership — NOT Platform.LibcMusl, the
-	// platform-wide libc selector).
+	// release/PIC, target = debug/noPIC) and instance.Flags.NoStdInc.
 	isHost := instance.Platform.IsHost
 	switch {
 	case isMusl && isHost:

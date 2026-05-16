@@ -547,14 +547,9 @@ END()
 
 // TestGen_MacroEvaluation_NoLibcFlag verifies that NO_LIBC() in a
 // module's ya.make sets `instance.Flags.NoLibc=true` for the
-// resulting CC node. The instance's flags drive the cmd_args bundle
-// composition; PR-25 only checks the FlagSet flow (PR-26 verifies
-// the bundle output byte-exact). Because PR-25's CC composer still
-// uses path-based dispatch (musl path → muslCC), the NO_LIBC bool
-// is observable via the moduleData accumulator's effect on the
-// instance carried into EmitCC. We use a probe ya.make whose path
-// does NOT match the path-based seed (so the only way Flags.NoLibc
-// becomes true is via the macro overlay).
+// resulting CC node. We use a probe ya.make whose path does NOT match
+// the path-based seed, so the only way Flags.NoLibc becomes true is
+// via the macro overlay.
 func TestGen_MacroEvaluation_NoLibcFlag(t *testing.T) {
 	root := t.TempDir()
 	modDir := filepath.Join(root, "nolibcmod")
@@ -602,6 +597,98 @@ END()
 
 	if len(g.Graph) != 2 {
 		t.Errorf("Gen produced %d nodes, want 2 (1 CC + 1 AR)", len(g.Graph))
+	}
+}
+
+func TestCollectModule_SetMuslNoSuppressesConsumerDefaults(t *testing.T) {
+	targetFlags := make(map[string]string, len(testToolchainFlags)+2)
+	for k, v := range testToolchainFlags {
+		targetFlags[k] = v
+	}
+	targetFlags["PIC"] = "no"
+	targetFlags["MUSL"] = "yes"
+
+	target := NewPlatform(OSLinux, ISAX8664, targetFlags, nil, false, "", "")
+	instance := ModuleInstance{
+		Path:     "bridge",
+		Language: LangCPP,
+		Platform: target,
+	}
+
+	mf := Throw2(Parse("bridge/ya.make", []byte(`LIBRARY()
+SET(MUSL no)
+NO_RUNTIME()
+PEERDIR(contrib/libs/musl)
+SRCS(x.cpp)
+END()
+`)))
+
+	d := collectModule("bridge", mf.Stmts, buildIfEnv(instance), instance.Flags)
+
+	if d.muslEnabled {
+		t.Fatalf("muslEnabled = true, want false after SET(MUSL no)")
+	}
+
+	if got := defaultPeerCFlags(&genCtx{target: target}, instance, d); got != nil {
+		t.Fatalf("defaultPeerCFlags = %v, want nil", got)
+	}
+
+	defaults := defaultPeerdirsForModule(&genCtx{target: target}, instance, d)
+	for _, peer := range defaults {
+		if peer == "contrib/libs/musl/include" {
+			t.Fatalf("defaultPeerdirsForModule included musl/include despite SET(MUSL no): %v", defaults)
+		}
+	}
+}
+
+func TestGen_NoStdIncGlobalCFlagsPropagateToExplicitPeer(t *testing.T) {
+	root := t.TempDir()
+
+	muslDir := filepath.Join(root, "contrib/libs/musl")
+	bridgeDir := filepath.Join(root, "bridge")
+	Throw(os.MkdirAll(muslDir, 0o755))
+	Throw(os.MkdirAll(bridgeDir, 0o755))
+
+	Throw(os.WriteFile(filepath.Join(muslDir, "ya.make"), []byte(`LIBRARY()
+NO_PLATFORM()
+CFLAGS(
+    GLOBAL -D_musl_=1
+    -nostdinc
+)
+SRCS(m.c)
+END()
+`), 0o644))
+	Throw(os.WriteFile(filepath.Join(muslDir, "m.c"), []byte("int musl_symbol(void) { return 1; }\n"), 0o644))
+
+	Throw(os.WriteFile(filepath.Join(bridgeDir, "ya.make"), []byte(`LIBRARY()
+SET(MUSL no)
+NO_RUNTIME()
+PEERDIR(contrib/libs/musl)
+SRCS(x.cpp)
+END()
+`), 0o644))
+	Throw(os.WriteFile(filepath.Join(bridgeDir, "x.cpp"), []byte("int bridge_symbol(void) { return 2; }\n"), 0o644))
+
+	g := testGen(root, "bridge")
+	var args []string
+
+	for _, n := range g.Graph {
+		if len(n.Outputs) == 1 && n.Outputs[0].String() == "$(B)/bridge/x.cpp.o" {
+			args = n.Cmds[0].CmdArgs
+			break
+		}
+	}
+
+	if len(args) == 0 {
+		t.Fatalf("bridge CC node not found")
+	}
+
+	if !flagsContain(args, "-D_musl_=1") {
+		t.Fatalf("bridge CC args missing GLOBAL CFLAG from explicit musl peer: %v", args)
+	}
+
+	if flagsContain(args, "-D_musl_") {
+		t.Fatalf("bridge CC args contain consumer MUSL sentinel despite SET(MUSL no): %v", args)
 	}
 }
 
@@ -1468,31 +1555,28 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			},
 			want: nil,
 		},
-		// PR-27 + PR-32 D03: `contrib/libs/musl` (LibcMusl=true) is
+		// PR-27 + PR-32 D03: `contrib/libs/musl` (NoStdInc=true) is
 		// a runtime ancestor AND musl-self — gets zero defaults
-		// (the auto-peer is suppressed for LibcMusl modules to avoid
+		// (the auto-peer is suppressed for no-stdinc modules to avoid
 		// musl peering itself).
 		{
 			name: "self_musl_runtime_ancestor",
 			mi: ModuleInstance{
 				Path:     "contrib/libs/musl",
 				Language: LangCPP,
-				Flags:    FlagSet{LibcMusl: true},
+				Flags:    FlagSet{NoStdInc: true},
 			},
 			want: nil,
 		},
-		// PR-33 D01: `contrib/libs/musl/full` is no longer a runtime
-		// ancestor by literal entry (the subtree extension was dropped).
-		// The empty-default-set is preserved because `inferFlagsFromPath`
-		// seeds musl-subtree paths with NoLibc+NoUtil+NoRuntime, which
-		// `effectiveNoPlatform` collapses to NO_PLATFORM. Tests that
-		// construct the ModuleInstance directly must mirror this seed.
+		// `contrib/libs/musl/full` is not a literal runtime ancestor.
+		// When a test bypasses ya.make parsing, it must model the
+		// module's effective NO_PLATFORM flags explicitly.
 		{
 			name: "self_musl_subdir_runtime_ancestor",
 			mi: ModuleInstance{
 				Path:     "contrib/libs/musl/full",
 				Language: LangCPP,
-				Flags:    FlagSet{LibcMusl: true, NoLibc: true, NoUtil: true, NoRuntime: true},
+				Flags:    FlagSet{NoStdInc: true, NoLibc: true, NoUtil: true, NoRuntime: true},
 			},
 			want: nil,
 		},
@@ -1516,7 +1600,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			mi:   ModuleInstance{Path: "contrib/libs/musl_extra", Language: LangCPP, Platform: testTargetP, Flags: FlagSet{}},
 			want: fullSet,
 		},
-		// PR-32 D03: non-LibcMusl runtime ancestors (builtins,
+		// PR-32 D03: non-NoStdInc runtime ancestors (builtins,
 		// malloc/api, libcxx, util) get the auto-PEERDIR
 		// `contrib/libs/musl/include` only — the runtime-stack peers
 		// stay suppressed. The two-phase peer-aggregation in the
