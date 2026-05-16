@@ -74,6 +74,7 @@ func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
 func muslHostInstance(path string) ModuleInstance {
 	return ModuleInstance{
 		Path:     path,
+		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testHostP,
 		Flags:    inferFlagsFromPath(path, true),
@@ -324,6 +325,7 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 	target := NewPlatform(OSLinux, ISAAArch64, flags, nil, false, "-DENV_C=1", "-DENV_CXX=1")
 	instance := ModuleInstance{
 		Path:     "build/cow/on",
+		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: target,
 		Flags:    inferFlagsFromPath("build/cow/on", false),

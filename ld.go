@@ -67,12 +67,16 @@ func EmitLD(
 	globalPaths []string,
 	wholeArchiveRefs []NodeRef,
 	wholeArchivePaths []string,
+	wholeArchiveCmdPaths []string,
+	dynamicRefs []NodeRef,
+	dynamicPaths []string,
 	objcopyRefs []NodeRef,
 	objcopyPaths []VFS,
 	memberInputs []VFS, //nolint:vfs-stay // cascade from gen.go member-inputs bucket
 	muslOn bool,
 	moduleCFlags []string,
 	peerCFlagsGlobal []string,
+	objAddLibsGlobal []string,
 	usePython3 bool,
 	wantsStrip bool,
 	wantsSplitDwarf bool,
@@ -101,6 +105,9 @@ func EmitLD(
 
 	if len(objcopyRefs) != len(objcopyPaths) {
 		ThrowFmt("EmitLD: objcopyRefs/objcopyPaths length mismatch (%d vs %d)", len(objcopyRefs), len(objcopyPaths))
+	}
+	if len(dynamicRefs) != len(dynamicPaths) {
+		ThrowFmt("EmitLD: dynamicRefs/dynamicPaths length mismatch (%d vs %d)", len(dynamicRefs), len(dynamicPaths))
 	}
 
 	// Fall back to last path component when caller omits binaryName
@@ -138,8 +145,12 @@ func EmitLD(
 	tools := instance.Platform.Tools
 	cmd0 := composeLDCmdVcsInfo(tools, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
-	cmd2 := composeLDCmdLinkExe(instance.Platform, outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, objcopyPaths, hostBuild, wantsStrip)
-	cmd3 := composeLDCmdLinkOrCopy(tools, binaryDir)
+	ldObjAddLibs := objAddLibsGlobal
+	if hostBuild {
+		ldObjAddLibs = nil
+	}
+	cmd2 := composeLDCmdLinkExe(instance.Platform, outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, hostBuild, ldObjAddLibs, wantsStrip)
+	cmd3 := composeLDCmdLinkOrCopy(tools, binaryDir, dynamicPaths...)
 	splitDwarfCmds := composeLDSplitDwarfCmds(tools, outputPath, wantsSplitDwarf)
 
 	// vcs_info.py and fs_tools.py only carry ARCADIA_ROOT_DISTBUILD;
@@ -159,7 +170,7 @@ func EmitLD(
 	}
 	cmds = append(cmds, splitDwarfCmds...)
 
-	inputs := composeLDInputs(instance.Path, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, objcopyPaths)
+	inputs := composeLDInputs(instance.Path, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths)
 
 	// Append per-CC member inputs (source + headers) after the script
 	// bundle, deduplicated. Matches sg.json LD shape: BUILD_ROOT block
@@ -197,15 +208,19 @@ func EmitLD(
 	// DepRefs capture every node whose UID flows into the LD's
 	// content hash: own .cpp.o files, plugin inputs, global
 	// archives, and peer LIBRARY archives.
-	depRefs := make([]NodeRef, 0, len(ccRefs)+len(pluginRefs)+len(globalRefs)+len(peerLDRefs)+len(objcopyRefs))
+	depRefs := make([]NodeRef, 0, len(ccRefs)+len(pluginRefs)+len(globalRefs)+len(peerLDRefs)+len(dynamicRefs)+len(objcopyRefs))
 	depRefs = append(depRefs, ccRefs...)
 	depRefs = append(depRefs, pluginRefs...)
 	depRefs = append(depRefs, globalRefs...)
 	depRefs = append(depRefs, wholeArchiveRefs...)
 	depRefs = append(depRefs, peerLDRefs...)
+	depRefs = append(depRefs, dynamicRefs...)
 	depRefs = append(depRefs, objcopyRefs...)
 
 	outputs := []VFS{outputVFS}
+	for _, p := range dynamicPaths {
+		outputs = append(outputs, Build(binaryDir+"/"+lastPathComponent(p)))
+	}
 	if wantsSplitDwarf {
 		outputs = append(outputs, Build(binPrefix+binaryName+".debug"))
 	}
@@ -470,10 +485,10 @@ const ldVcsMuslSelfDefine = "-D_musl_=1"
 // `wantsStrip` controls insertion of `-Wl,--strip-all` between the
 // trailer's `-lm` and `-Wl,--gc-sections`. Set true for PY3_PROGRAM_BIN
 // (STRIP() in _BASE_PY3_PROGRAM, python.conf:884).
-func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths []string, objcopyPaths []VFS, hostBuild, wantsStrip bool) []string {
+func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []string, objcopyPaths []VFS, hostBuild bool, objAddLibsGlobal []string, wantsStrip bool) []string {
 	// Capacity hint matches the reference graph's structure plus the
 	// caller-supplied slices.
-	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 12 + 1 + len(ccPaths) + len(peerLibPaths) + len(globalPaths) + len(objcopyPaths)
+	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 12 + 1 + len(ccPaths) + len(peerLibPaths) + len(dynamicPaths) + len(globalPaths) + len(objcopyPaths)
 
 	if len(pluginPaths) > 0 {
 		argCap += 2 + len(pluginPaths)
@@ -497,6 +512,9 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 		"--source-root", "$(S)",
 		"--build-root", "$(B)",
 	)
+	for _, p := range wholeArchiveCmdPaths {
+		cmdArgs = append(cmdArgs, "--whole-archive-libs", p)
+	}
 	for _, p := range wholeArchivePaths {
 		cmdArgs = append(cmdArgs, "--whole-archive-libs", p)
 	}
@@ -540,6 +558,7 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 
 	cmdArgs = append(cmdArgs, "-Wl,--start-group")
 	cmdArgs = append(cmdArgs, peerLibPaths...)
+	cmdArgs = append(cmdArgs, dynamicPaths...)
 	cmdArgs = append(cmdArgs, "-Wl,--end-group")
 
 	var trailer []string
@@ -576,8 +595,47 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 	} else {
 		cmdArgs = append(cmdArgs, trailer...)
 	}
+	cmdArgs = appendObjAddLibs(cmdArgs, objAddLibsGlobal)
 
 	return cmdArgs
+}
+
+func appendObjAddLibs(cmdArgs, objAddLibs []string) []string {
+	if len(objAddLibs) == 0 {
+		return cmdArgs
+	}
+	seen := make(map[string]struct{}, len(cmdArgs))
+	for _, arg := range cmdArgs {
+		seen[arg] = struct{}{}
+	}
+	filtered := make([]string, 0, len(objAddLibs))
+	for _, arg := range objAddLibs {
+		if _, dup := seen[arg]; dup {
+			continue
+		}
+		seen[arg] = struct{}{}
+		filtered = append(filtered, arg)
+	}
+	if len(filtered) == 0 {
+		return cmdArgs
+	}
+
+	insertAt := -1
+	for i, arg := range cmdArgs {
+		if arg == "-nostdlib" {
+			insertAt = i
+			break
+		}
+	}
+	if insertAt < 0 {
+		return append(cmdArgs, filtered...)
+	}
+
+	out := make([]string, 0, len(cmdArgs)+len(filtered))
+	out = append(out, cmdArgs[:insertAt]...)
+	out = append(out, filtered...)
+	out = append(out, cmdArgs[insertAt:]...)
+	return out
 }
 
 // ldStripAllFlag is the linker flag injected when STRIP() is in effect
@@ -606,14 +664,19 @@ func peersIncludeLibcCompat(peerLibPaths []string) bool {
 // composeLDCmdLinkOrCopy composes cmd[3]: invokes fs_tools.py
 // `link_or_copy_to_dir` to drop the linked binary into its containing
 // directory. 5 args, fixed.
-func composeLDCmdLinkOrCopy(tools Toolchain, modulePath string) []string {
-	return []string{
+func composeLDCmdLinkOrCopy(tools Toolchain, modulePath string, dynamicPaths ...string) []string {
+	cmd := []string{
 		tools.Python3,
 		ldFsToolsPath,
 		"link_or_copy_to_dir",
 		"--no-check",
-		Build(modulePath).String(),
 	}
+	for _, p := range dynamicPaths {
+		cmd = append(cmd, Build(p).String())
+	}
+	cmd = append(cmd, Build(modulePath).String())
+
+	return cmd
 }
 
 func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) []Cmd {
@@ -643,12 +706,12 @@ func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) [
 //
 // Reference tools/archiver: 35 BUILD_ROOT entries (32 peer .a + 1
 // plugin + 1 global + 1 own main.cpp.o).
-func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []string, pluginPaths []string, globalPaths []string, wholeArchivePaths []string, objcopyPaths []VFS) []VFS {
+func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []string, pluginPaths []string, globalPaths []string, wholeArchivePaths []string, dynamicPaths []string, objcopyPaths []VFS) []VFS {
 	// peerLibPaths / globalPaths arrive BUILD_ROOT-relative (caller convention);
 	// pluginPaths arrive as full $(B)/... strings. ccPaths and
 	// objcopyPaths are already VFS-typed. Lift all into the VFS-typed
 	// BUILD_ROOT block before alphabetising.
-	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(wholeArchivePaths)+len(ccPaths)+len(objcopyPaths))
+	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(wholeArchivePaths)+len(dynamicPaths)+len(ccPaths)+len(objcopyPaths))
 
 	for _, p := range peerLibPaths {
 		buildRootBlock = append(buildRootBlock, Build(p))
@@ -663,6 +726,9 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []string, pl
 	}
 	for _, w := range wholeArchivePaths {
 		buildRootBlock = append(buildRootBlock, Build(w))
+	}
+	for _, d := range dynamicPaths {
+		buildRootBlock = append(buildRootBlock, Build(d))
 	}
 
 	buildRootBlock = append(buildRootBlock, ccPaths...)

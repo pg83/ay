@@ -40,7 +40,6 @@ import (
 //     but no LIBRARY peers a PROGRAM (consumer never reads ARRef).
 //
 // `isPROGRAM` flags shape for the caller (Gen).
-//
 type moduleEmitResult struct {
 	ARRef      NodeRef
 	ARPath     *string
@@ -55,6 +54,11 @@ type moduleEmitResult struct {
 	// `--whole-archive-libs <path>` in LD.
 	WholeArchiveRefs  []NodeRef
 	WholeArchivePaths []string
+	// WholeArchiveCmdPaths are command-only whole-archive paths with no
+	// corresponding graph node/dependency. Upstream builtin py-proto uses
+	// `_WHOLE_ARCHIVE_LIBS_VALUE_GLOBAL` this way even when the CPP peer-self
+	// is suppressed.
+	WholeArchiveCmdPaths []string
 	// AddInclGlobal is this module's own GLOBAL ADDINCL UNION the
 	// transitive peer-GLOBAL ADDINCL across every PEERDIR. Consumers use
 	// the set for (a) cmd_args -I emission (peer slot after module's own
@@ -73,6 +77,7 @@ type moduleEmitResult struct {
 	CFlagsGlobal     []string
 	CXXFlagsGlobal   []string
 	COnlyFlagsGlobal []string
+	ObjAddLibsGlobal []string
 	// PeerArchiveClosureRefs / PeerArchiveClosurePaths: transitive archive
 	// closure exposed to consumers — every peer's own AR UNION every
 	// peer's PeerArchiveClosure*, deduplicated in DFS post-order (first
@@ -97,8 +102,9 @@ type moduleEmitResult struct {
 	// PeerWholeArchiveClosureRefs / Paths: transitive
 	// `_WHOLE_ARCHIVE_LIBS_VALUE_GLOBAL` closure reachable through this
 	// module's PEERDIR walk (dedup by path, first occurrence wins).
-	PeerWholeArchiveClosureRefs  []NodeRef
-	PeerWholeArchiveClosurePaths []string
+	PeerWholeArchiveClosureRefs     []NodeRef
+	PeerWholeArchiveClosurePaths    []string
+	PeerWholeArchiveCmdClosurePaths []string
 	// LDPluginRefs / LDPluginPaths: transitive set of LD plugin CP nodes a
 	// consumer PROGRAM wires into its `--start-plugins ... --end-plugins`
 	// block. The only M2-closure case is `contrib/libs/musl/include`'s
@@ -111,6 +117,11 @@ type moduleEmitResult struct {
 	// through but never consume.
 	LDPluginRefs  []NodeRef
 	LDPluginPaths []string
+	// PeerDynamicClosureRefs / Paths: transitive shared-library outputs
+	// reachable through this module's PEERDIR closure. PROGRAM LDs link
+	// against them and copy them into their output dir.
+	PeerDynamicClosureRefs  []NodeRef
+	PeerDynamicClosurePaths []string
 	// InducedDeps is the module-level INDUCED_DEPS(<ext-filter> headers...)
 	// declaration list (repo-relative). emitRunProgram, when walking a
 	// tool PROGRAM via genModule, reads this to seed the PR output's
@@ -139,6 +150,19 @@ func derefString(p *string) string {
 
 	return *p
 }
+
+func protoResultWholeArchiveCmdPaths(res *protoSrcsResult) []string {
+	if res == nil {
+		return nil
+	}
+
+	return append([]string(nil), res.WholeArchiveCmdPaths...)
+}
+
+const (
+	py3ProgramVariantBin    = "py3_bin"
+	py3ProgramVariantBinLib = "py3_bin_lib"
+)
 
 // genCtx threads state through the recursive walk. `emit` accumulates
 // emitted nodes; `memo` deduplicates per-instance emission; `walking` is
@@ -567,6 +591,7 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 
 	seed := ModuleInstance{
 		Path:     filepath.Clean(targetDir),
+		Kind:     KindBin,
 		Language: LangCPP,
 		Platform: targetP,
 		Flags:    inferFlagsFromPath(filepath.Clean(targetDir), false),
@@ -683,7 +708,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	mf := Throw2(ParseFile(yamakePath))
 
 	env := buildIfEnv(instance)
-	d := collectModule(instance.Path, mf.Stmts, env, instance.Flags)
+	d := collectModule(instance.Path, instance.Kind, mf.Stmts, env, instance.Flags)
 	for _, stmt := range d.allPySrcs {
 		applyAllPySrcs(ctx.sourceRoot, instance.Path, stmt, d)
 	}
@@ -763,12 +788,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	if d.moduleStmt.Name == "PY3_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+		if d.py3ProgramMultimodule && instance.Kind == KindBin && instance.Path != "" {
+			d.peerdirs = append([]string{instance.Path}, d.peerdirs...)
+		}
 		// `_BASE_PY3_PROGRAM` adds runtime_py3/main unconditionally,
 		// `_sqlite` only when PYTHON_SQLITE3 != "no", and import_test
 		// only when ADD_CHECK_PY_IMPORTS remains enabled.
-		implicitPeers := []string{"library/python/runtime_py3/main"}
 		if d.pythonSQLite3 {
-			implicitPeers = append(implicitPeers, "contrib/tools/python3/Modules/_sqlite")
+			d.peerdirs = append(d.peerdirs, "contrib/tools/python3/Modules/_sqlite")
+		}
+		implicitPeers := []string{"library/python/runtime_py3/main"}
+		if !d.noImportTracing && instance.Path != "library/python/import_tracing/constructor" {
+			implicitPeers = append(implicitPeers, "library/python/import_tracing/constructor")
 		}
 		if !d.noCheckImportsDisabled {
 			implicitPeers = append(implicitPeers, "library/python/testing/import_test")
@@ -780,7 +811,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
-	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noImportTracing && instance.Path != "library/python/import_tracing/constructor" {
+	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && d.moduleStmt.Name != "PY3_PROGRAM" && d.moduleStmt.Name != "PY3_PROGRAM_BIN" && !d.noImportTracing && instance.Path != "library/python/import_tracing/constructor" {
 		d.peerdirs = append(d.peerdirs, "library/python/import_tracing/constructor")
 	}
 
@@ -945,22 +976,27 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			// peer-transitive first, own last per upstream
 			// `TGlobalVarsCollector` semantics. ADDINCL keeps the opposite
 			// (own first, peer second) per `TModuleIncDirs::Get()`.
-			CFlagsGlobal:                 mergeDedup(peerContribs.cFlags, d.cFlagsGlobal),
-			CXXFlagsGlobal:               mergeDedup(peerContribs.cxxFlags, d.cxxFlagsGlobal),
-			COnlyFlagsGlobal:             mergeDedup(peerContribs.cOnlyFlags, d.cOnlyFlagsGlobal),
-			PeerArchiveClosureRefs:       peerArchiveRefsH,
-			PeerArchiveClosurePaths:      peerArchivePathsH,
-			PeerGlobalClosureRefs:        peerGlobalRefsH,
-			PeerGlobalClosurePaths:       peerGlobalPathsH,
-			WholeArchiveRefs:             append([]NodeRef(nil), hOnlyWholeArchiveRefs...),
-			WholeArchivePaths:            append([]string(nil), hOnlyWholeArchivePaths...),
-			PeerWholeArchiveClosureRefs:  append([]NodeRef(nil), peerContribs.wholeArchiveRefs...),
-			PeerWholeArchiveClosurePaths: append([]string(nil), peerContribs.wholeArchivePaths...),
-			LDPluginRefs:                 ldPluginRefs,
-			LDPluginPaths:                ldPluginPaths,
-			InducedDeps:                  append([]string(nil), d.inducedDeps...),
-			Peerdirs:                     append([]string(nil), d.peerdirs...),
-			ModuleStmtName:               d.moduleStmt.Name,
+			CFlagsGlobal:                    mergeDedup(peerContribs.cFlags, d.cFlagsGlobal),
+			CXXFlagsGlobal:                  mergeDedup(peerContribs.cxxFlags, d.cxxFlagsGlobal),
+			COnlyFlagsGlobal:                mergeDedup(peerContribs.cOnlyFlags, d.cOnlyFlagsGlobal),
+			ObjAddLibsGlobal:                mergeDedup(peerContribs.objAddLibs, d.objAddLibsGlobal),
+			PeerArchiveClosureRefs:          peerArchiveRefsH,
+			PeerArchiveClosurePaths:         peerArchivePathsH,
+			PeerGlobalClosureRefs:           peerGlobalRefsH,
+			PeerGlobalClosurePaths:          peerGlobalPathsH,
+			WholeArchiveRefs:                append([]NodeRef(nil), hOnlyWholeArchiveRefs...),
+			WholeArchivePaths:               append([]string(nil), hOnlyWholeArchivePaths...),
+			WholeArchiveCmdPaths:            append([]string(nil), protoResultWholeArchiveCmdPaths(protoResult)...),
+			PeerWholeArchiveClosureRefs:     append([]NodeRef(nil), peerContribs.wholeArchiveRefs...),
+			PeerWholeArchiveClosurePaths:    append([]string(nil), peerContribs.wholeArchivePaths...),
+			PeerWholeArchiveCmdClosurePaths: append([]string(nil), peerContribs.wholeArchiveCmdPaths...),
+			LDPluginRefs:                    ldPluginRefs,
+			LDPluginPaths:                   ldPluginPaths,
+			PeerDynamicClosureRefs:          append([]NodeRef(nil), peerContribs.dynamicRefs...),
+			PeerDynamicClosurePaths:         append([]string(nil), peerContribs.dynamicPaths...),
+			InducedDeps:                     append([]string(nil), d.inducedDeps...),
+			Peerdirs:                        append([]string(nil), d.peerdirs...),
+			ModuleStmtName:                  d.moduleStmt.Name,
 		}
 		ctx.memo[originalInstance] = result
 		ctx.memo[instance] = result
@@ -1102,6 +1138,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	peerGlobalPaths := make([]string, 0, len(allPeers))
 	peerWholeArchiveRefs := make([]NodeRef, 0, len(allPeers))
 	peerWholeArchivePaths := make([]string, 0, len(allPeers))
+	peerWholeArchiveCmdPaths := make([]string, 0, len(allPeers))
+	peerDynamicRefs := make([]NodeRef, 0, len(allPeers))
+	peerDynamicPaths := make([]string, 0, len(allPeers))
 
 	// Dedup table for the transitive `.global.a` closure. Each direct
 	// peer contributes its own `.global.a` (when GlobalRef != nil) AND
@@ -1129,6 +1168,27 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerWholeArchiveSeen[path] = struct{}{}
 		peerWholeArchiveRefs = append(peerWholeArchiveRefs, ref)
 		peerWholeArchivePaths = append(peerWholeArchivePaths, path)
+	}
+
+	peerWholeArchiveCmdSeen := map[string]struct{}{}
+	peerWholeArchiveAddCmdPath := func(path string) {
+		if _, dup := peerWholeArchiveCmdSeen[path]; dup {
+			return
+		}
+
+		peerWholeArchiveCmdSeen[path] = struct{}{}
+		peerWholeArchiveCmdPaths = append(peerWholeArchiveCmdPaths, path)
+	}
+
+	peerDynamicSeen := map[string]struct{}{}
+	peerDynamicAddPath := func(ref NodeRef, path string) {
+		if _, dup := peerDynamicSeen[path]; dup {
+			return
+		}
+
+		peerDynamicSeen[path] = struct{}{}
+		peerDynamicRefs = append(peerDynamicRefs, ref)
+		peerDynamicPaths = append(peerDynamicPaths, path)
 	}
 
 	// Dedup table for the transitive peer-archive closure. For each
@@ -1165,6 +1225,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerLDPluginRefs = append(peerLDPluginRefs, ref)
 		peerLDPluginPaths = append(peerLDPluginPaths, path)
 	}
+
+	objAddLibSeen := map[string]struct{}{}
+	peerObjAddLibsGlobal := make([]string, 0, 8)
 
 	// Aggregate peer-GLOBAL across all four axes (ADDINCL / CFLAGS /
 	// CXXFLAGS / CONLYFLAGS) with TWO-PHASE traversal:
@@ -1230,7 +1293,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		peerInstance := derivePeerInstance(ctx, instance, d, peerPath)
 		peerResult := genModule(ctx, peerInstance)
-
 		if peerResult.isPROGRAM {
 			ThrowFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path, peerPath)
 		}
@@ -1292,7 +1354,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			archiveOrder = append(head, tail...)
 		}
 	}
-
 	for _, rp := range archiveOrder {
 		peerResult := rp.result
 
@@ -1324,6 +1385,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 		for i, p := range peerResult.WholeArchivePaths {
 			peerWholeArchiveAddPath(peerResult.WholeArchiveRefs[i], p)
+		}
+		for _, p := range peerResult.PeerWholeArchiveCmdClosurePaths {
+			peerWholeArchiveAddCmdPath(p)
+		}
+		for _, p := range peerResult.WholeArchiveCmdPaths {
+			peerWholeArchiveAddCmdPath(p)
+		}
+		for i, p := range peerResult.PeerDynamicClosurePaths {
+			peerDynamicAddPath(peerResult.PeerDynamicClosureRefs[i], p)
+		}
+		if peerResult.ModuleStmtName == "DYNAMIC_LIBRARY" && peerResult.LDPath != "" {
+			peerDynamicAddPath(peerResult.LDRef, strings.TrimPrefix(peerResult.LDPath, "$(B)/"))
 		}
 
 		// peerResult.ARPath carries the py3-prefixed name for Python
@@ -1450,6 +1523,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		addEach(cFlagsSeen, &peerCFlagsGlobal, rp.result.CFlagsGlobal)
 		addEach(cxxFlagsSeen, &peerCXXFlagsGlobal, rp.result.CXXFlagsGlobal)
 		addEach(cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, rp.result.COnlyFlagsGlobal)
+		addEach(objAddLibSeen, &peerObjAddLibsGlobal, rp.result.ObjAddLibsGlobal)
 	}
 
 	// Effective AddInclGlobal = own GLOBAL ADDINCL ∪ every peer's
@@ -2227,11 +2301,25 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if resourceModuleTag(d.moduleStmt.Name) != "" {
 			emitPySrcs(ctx, instance, d)
 
-			objcopyRefs, objcopyOutputs, _ := emitResourceObjcopy(ctx, instance, d)
+			objcopyRefs, objcopyOutputs, objcopyLDInputs := emitResourceObjcopy(ctx, instance, d)
 
 			if len(objcopyRefs) > 0 {
 				ldObjcopyRefs = objcopyRefs
 				ldObjcopyPaths = objcopyOutputs
+			}
+			if len(objcopyLDInputs) > 0 {
+				seen := make(map[VFS]struct{}, len(ldMemberInputs))
+				for _, p := range ldMemberInputs {
+					seen[p] = struct{}{}
+				}
+				ldMemberInputs = append([]VFS(nil), ldMemberInputs...)
+				for _, p := range objcopyLDInputs {
+					if _, dup := seen[p]; dup {
+						continue
+					}
+					seen[p] = struct{}{}
+					ldMemberInputs = append(ldMemberInputs, p)
+				}
 			}
 
 			// Fold the objcopy script + PY_SRCS source paths + RESOURCE
@@ -2274,7 +2362,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// STRIP_FLAG=$LD_STRIP_FLAG=-Wl,--strip-all on Linux. PY3_PROGRAM
 		// (cpp module_lang) does not exercise the strip path today.
 		wantsStrip := d.moduleStmt.Name == "PY3_PROGRAM_BIN"
-
 		ldRef := EmitLD(
 			ldInstance,
 			binaryName,
@@ -2283,11 +2370,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			mergedLDPluginRefs, mergedLDPluginPaths,
 			peerGlobalRefs, peerGlobalPaths,
 			peerWholeArchiveRefs, peerWholeArchivePaths,
+			peerWholeArchiveCmdPaths,
+			peerDynamicRefs, peerDynamicPaths,
 			ldObjcopyRefs, ldObjcopyPaths,
 			ldMemberInputs,
 			cliMuslOn(ctx),
 			ownCFlags,
 			peerCFlagsGlobal,
+			peerObjAddLibsGlobal,
 			d.usePython3,
 			wantsStrip,
 			d.splitDwarf,
@@ -2297,28 +2387,32 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ldPath := LDOutputPath(instance, binaryName)
 
 		result := &moduleEmitResult{
-			ARRef:                        ldRef,
-			ARPath:                       &ldPath,
-			isPROGRAM:                    true,
-			isPyLibrary:                  isPyLibraryType(d.moduleStmt.Name),
-			LDRef:                        ldRef,
-			LDPath:                       ldPath,
-			AddInclGlobal:                effectiveAddInclGlobal,
-			OwnAddInclGlobal:             append([]string(nil), d.addInclGlobal...),
-			CFlagsGlobal:                 effectiveCFlagsGlobal,
-			CXXFlagsGlobal:               effectiveCXXFlagsGlobal,
-			COnlyFlagsGlobal:             effectiveCOnlyFlagsGlobal,
-			PeerArchiveClosureRefs:       append([]NodeRef(nil), peerArchiveRefs...),
-			PeerArchiveClosurePaths:      append([]string(nil), peerArchivePaths...),
-			PeerGlobalClosureRefs:        append([]NodeRef(nil), peerGlobalRefs...),
-			PeerGlobalClosurePaths:       append([]string(nil), peerGlobalPaths...),
-			PeerWholeArchiveClosureRefs:  append([]NodeRef(nil), peerWholeArchiveRefs...),
-			PeerWholeArchiveClosurePaths: append([]string(nil), peerWholeArchivePaths...),
-			LDPluginRefs:                 mergedLDPluginRefs,
-			LDPluginPaths:                mergedLDPluginPaths,
-			InducedDeps:                  append([]string(nil), d.inducedDeps...),
-			Peerdirs:                     append([]string(nil), d.peerdirs...),
-			ModuleStmtName:               d.moduleStmt.Name,
+			ARRef:                           ldRef,
+			ARPath:                          &ldPath,
+			isPROGRAM:                       true,
+			isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
+			LDRef:                           ldRef,
+			LDPath:                          ldPath,
+			AddInclGlobal:                   effectiveAddInclGlobal,
+			OwnAddInclGlobal:                append([]string(nil), d.addInclGlobal...),
+			CFlagsGlobal:                    effectiveCFlagsGlobal,
+			CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
+			COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
+			ObjAddLibsGlobal:                mergeDedup(peerObjAddLibsGlobal, d.objAddLibsGlobal),
+			PeerArchiveClosureRefs:          append([]NodeRef(nil), peerArchiveRefs...),
+			PeerArchiveClosurePaths:         append([]string(nil), peerArchivePaths...),
+			PeerGlobalClosureRefs:           append([]NodeRef(nil), peerGlobalRefs...),
+			PeerGlobalClosurePaths:          append([]string(nil), peerGlobalPaths...),
+			PeerWholeArchiveClosureRefs:     append([]NodeRef(nil), peerWholeArchiveRefs...),
+			PeerWholeArchiveClosurePaths:    append([]string(nil), peerWholeArchivePaths...),
+			PeerWholeArchiveCmdClosurePaths: append([]string(nil), peerWholeArchiveCmdPaths...),
+			LDPluginRefs:                    mergedLDPluginRefs,
+			LDPluginPaths:                   mergedLDPluginPaths,
+			PeerDynamicClosureRefs:          append([]NodeRef(nil), peerDynamicRefs...),
+			PeerDynamicClosurePaths:         append([]string(nil), peerDynamicPaths...),
+			InducedDeps:                     append([]string(nil), d.inducedDeps...),
+			Peerdirs:                        append([]string(nil), d.peerdirs...),
+			ModuleStmtName:                  d.moduleStmt.Name,
 		}
 		ctx.memo[originalInstance] = result
 		ctx.memo[instance] = result
@@ -2479,30 +2573,33 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// CCs scan their inputs.
 
 	result := &moduleEmitResult{
-		ARRef:                        arRef,
-		ARPath:                       arPath,
-		isPROGRAM:                    false,
-		isPyLibrary:                  isPyLibraryType(d.moduleStmt.Name),
-		LDRef:                        arRef,
-		LDPath:                       derefString(arPath),
-		AddInclGlobal:                effectiveAddInclGlobal,
-		OwnAddInclGlobal:             append([]string(nil), d.addInclGlobal...),
-		CFlagsGlobal:                 effectiveCFlagsGlobal,
-		CXXFlagsGlobal:               effectiveCXXFlagsGlobal,
-		COnlyFlagsGlobal:             effectiveCOnlyFlagsGlobal,
-		PeerArchiveClosureRefs:       append([]NodeRef(nil), peerArchiveRefs...),
-		PeerArchiveClosurePaths:      append([]string(nil), peerArchivePaths...),
-		PeerGlobalClosureRefs:        append([]NodeRef(nil), peerGlobalRefs...),
-		PeerGlobalClosurePaths:       append([]string(nil), peerGlobalPaths...),
-		PeerWholeArchiveClosureRefs:  append([]NodeRef(nil), peerWholeArchiveRefs...),
-		PeerWholeArchiveClosurePaths: append([]string(nil), peerWholeArchivePaths...),
-		LDPluginRefs:                 mergedLDPluginRefs,
-		LDPluginPaths:                mergedLDPluginPaths,
-		InducedDeps:                  append([]string(nil), d.inducedDeps...),
-		Peerdirs:                     append([]string(nil), d.peerdirs...),
-		ModuleStmtName:               d.moduleStmt.Name,
+		ARRef:                           arRef,
+		ARPath:                          arPath,
+		isPROGRAM:                       false,
+		isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
+		LDRef:                           arRef,
+		LDPath:                          derefString(arPath),
+		AddInclGlobal:                   effectiveAddInclGlobal,
+		OwnAddInclGlobal:                append([]string(nil), d.addInclGlobal...),
+		CFlagsGlobal:                    effectiveCFlagsGlobal,
+		CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
+		COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
+		ObjAddLibsGlobal:                mergeDedup(peerObjAddLibsGlobal, d.objAddLibsGlobal),
+		PeerArchiveClosureRefs:          append([]NodeRef(nil), peerArchiveRefs...),
+		PeerArchiveClosurePaths:         append([]string(nil), peerArchivePaths...),
+		PeerGlobalClosureRefs:           append([]NodeRef(nil), peerGlobalRefs...),
+		PeerGlobalClosurePaths:          append([]string(nil), peerGlobalPaths...),
+		PeerWholeArchiveClosureRefs:     append([]NodeRef(nil), peerWholeArchiveRefs...),
+		PeerWholeArchiveClosurePaths:    append([]string(nil), peerWholeArchivePaths...),
+		PeerWholeArchiveCmdClosurePaths: append([]string(nil), peerWholeArchiveCmdPaths...),
+		LDPluginRefs:                    mergedLDPluginRefs,
+		LDPluginPaths:                   mergedLDPluginPaths,
+		PeerDynamicClosureRefs:          append([]NodeRef(nil), peerDynamicRefs...),
+		PeerDynamicClosurePaths:         append([]string(nil), peerDynamicPaths...),
+		InducedDeps:                     append([]string(nil), d.inducedDeps...),
+		Peerdirs:                        append([]string(nil), d.peerdirs...),
+		ModuleStmtName:                  d.moduleStmt.Name,
 	}
-
 	if len(globalRefs) > 0 {
 		// The `.global.a` aggregator gets the GLOBAL_SRCS-local closure
 		// ONLY, not the regular AR's header closure. REF constrains
@@ -2739,6 +2836,7 @@ type peerGlobalContribs struct {
 	cFlags     []string
 	cxxFlags   []string
 	cOnlyFlags []string
+	objAddLibs []string
 	// Archive closure transitively reachable from this header-only
 	// LIBRARY's peers — DFS post-order, dedup-by-path (same discipline as
 	// the main walker). Header-only LIBRARYs emit no AR themselves but
@@ -2755,12 +2853,15 @@ type peerGlobalContribs struct {
 	globalPaths []string
 	// `_WHOLE_ARCHIVE_LIBS_VALUE_GLOBAL` closure transitively reachable
 	// through this header-only LIBRARY's peers.
-	wholeArchiveRefs  []NodeRef
-	wholeArchivePaths []string
+	wholeArchiveRefs     []NodeRef
+	wholeArchivePaths    []string
+	wholeArchiveCmdPaths []string
 	// LD plugin closure surfaced through the header-only walker. Same
 	// dedup-by-path / declaration-order / first-occurrence-wins.
 	ldPluginRefs  []NodeRef
 	ldPluginPaths []string
+	dynamicRefs   []NodeRef
+	dynamicPaths  []string
 }
 
 // walkPeersForGlobalAddIncl walks a header-only LIBRARY's peers,
@@ -2782,10 +2883,13 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	cFlagsSeen := map[string]struct{}{}
 	cxxFlagsSeen := map[string]struct{}{}
 	cOnlyFlagsSeen := map[string]struct{}{}
+	objAddLibSeen := map[string]struct{}{}
 	archiveSeen := map[string]struct{}{}
 	globalSeen := map[string]struct{}{}
 	wholeArchiveSeen := map[string]struct{}{}
+	wholeArchiveCmdSeen := map[string]struct{}{}
 	ldPluginSeen := map[string]struct{}{}
+	dynamicSeen := map[string]struct{}{}
 
 	addEach := func(seenSet map[string]struct{}, dst *[]string, src []string) {
 		for _, x := range src {
@@ -2828,6 +2932,15 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		out.wholeArchivePaths = append(out.wholeArchivePaths, path)
 	}
 
+	addWholeArchiveCmd := func(path string) {
+		if _, dup := wholeArchiveCmdSeen[path]; dup {
+			return
+		}
+
+		wholeArchiveCmdSeen[path] = struct{}{}
+		out.wholeArchiveCmdPaths = append(out.wholeArchiveCmdPaths, path)
+	}
+
 	addLDPlugin := func(ref NodeRef, path string) {
 		if _, dup := ldPluginSeen[path]; dup {
 			return
@@ -2838,6 +2951,16 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		out.ldPluginPaths = append(out.ldPluginPaths, path)
 	}
 
+	addDynamic := func(ref NodeRef, path string) {
+		if _, dup := dynamicSeen[path]; dup {
+			return
+		}
+
+		dynamicSeen[path] = struct{}{}
+		out.dynamicRefs = append(out.dynamicRefs, ref)
+		out.dynamicPaths = append(out.dynamicPaths, path)
+	}
+
 	walk := func(peerPath string) {
 		peerInstance := derivePeerInstance(ctx, instance, d, peerPath)
 		peerResult := genModule(ctx, peerInstance)
@@ -2845,6 +2968,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		addEach(cFlagsSeen, &out.cFlags, peerResult.CFlagsGlobal)
 		addEach(cxxFlagsSeen, &out.cxxFlags, peerResult.CXXFlagsGlobal)
 		addEach(cOnlyFlagsSeen, &out.cOnlyFlags, peerResult.COnlyFlagsGlobal)
+		addEach(objAddLibSeen, &out.objAddLibs, peerResult.ObjAddLibsGlobal)
 
 		// Fold peer's transitive archive closure plus peer's own AR
 		// (when present) in DFS post-order.
@@ -2876,12 +3000,24 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		for i, p := range peerResult.WholeArchivePaths {
 			addWholeArchive(peerResult.WholeArchiveRefs[i], p)
 		}
+		for _, p := range peerResult.PeerWholeArchiveCmdClosurePaths {
+			addWholeArchiveCmd(p)
+		}
+		for _, p := range peerResult.WholeArchiveCmdPaths {
+			addWholeArchiveCmd(p)
+		}
 
 		// Fold peer's transitive LD plugin closure. Header-only peers
 		// (musl/include) populate from their own LD_PLUGIN macro;
 		// non-header peers carry through if any transitive PEERDIR did.
 		for i, p := range peerResult.LDPluginPaths {
 			addLDPlugin(peerResult.LDPluginRefs[i], p)
+		}
+		for i, p := range peerResult.PeerDynamicClosurePaths {
+			addDynamic(peerResult.PeerDynamicClosureRefs[i], p)
+		}
+		if peerResult.ModuleStmtName == "DYNAMIC_LIBRARY" && peerResult.LDPath != "" {
+			addDynamic(peerResult.LDRef, strings.TrimPrefix(peerResult.LDPath, "$(B)/"))
 		}
 	}
 

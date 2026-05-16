@@ -531,6 +531,7 @@ type protoSrcsResult struct {
 	GlobalPath        VFS
 	WholeArchiveRefs  []NodeRef
 	WholeArchivePaths []string
+	WholeArchiveCmdPaths []string
 }
 
 func protoSourceRelPath(sourceRoot string, instance ModuleInstance, d *moduleData, src string) string {
@@ -1004,6 +1005,9 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, protoS
 				result.ARPath = v
 			}
 		}
+	} else if moduleExcludesTag(d, "CPP_PROTO") {
+		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, ArchiveName(instance.Path))
+		result.WholeArchiveCmdPaths[len(result.WholeArchiveCmdPaths)-1] = instance.Path + "/" + result.WholeArchiveCmdPaths[len(result.WholeArchiveCmdPaths)-1]
 	}
 
 	return result

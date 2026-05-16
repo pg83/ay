@@ -133,12 +133,16 @@ func expandResourceFiles(args []string) []resourceEntry {
 }
 
 // resourceModuleTag returns the upstream MODULE_TAG seen by the packer.
-// Plain LIBRARY/PROGRAM → ""; PY3_LIBRARY/PY3_PROGRAM_BIN/PY23_* → "PY3"
+// Plain LIBRARY/PROGRAM → ""; PY3_LIBRARY/PY3_PROGRAM_BIN/PY23_* → "PY3".
+// PY3_PROGRAM is a multimodule whose resource-bearing submodule is
+// PY3_BIN/PY3_PROGRAM_BIN; upstream surfaces `module_tag=py3_bin` there.
 // (`build/conf/python.conf:1126`). GEN_LIBRARY ("RESOURCE_LIB", core
 // conf:598) and DLL ("DLL", core conf:2197,2379) are not yet handled.
 func resourceModuleTag(modName string) string {
 	switch modName {
-	case "PY3_LIBRARY", "PY3_PROGRAM_BIN", "PY3_PROGRAM", "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
+	case "PY3_PROGRAM":
+		return "PY3_BIN"
+	case "PY3_LIBRARY", "PY3_PROGRAM_BIN", "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
 		return "PY3"
 	}
 
@@ -503,6 +507,8 @@ func emitKvOnlyObjcopyNode(
 	switch moduleName {
 	case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
 		targetProps["module_tag"] = "py3"
+	case "PY3_PROGRAM":
+		targetProps["module_tag"] = "py3_bin"
 	}
 
 	// Empty Tags stays non-nil so JSON serialises as `[]`. REF: kv_only
