@@ -279,7 +279,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		nil, nil,
 		nil, nil,
 		nil, nil,
-		[]NodeRef{wholeRef}, []string{wholeArchivePath},
+		[]NodeRef{wholeRef}, []VFS{Build(wholeArchivePath)},
 		nil,
 		nil, nil,
 		nil, nil,
@@ -324,7 +324,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 		name                                                string
 		ccRefs, peerRefs, pluginRefs, globalRefs, wholeRefs []NodeRef
 		ccPaths                                             []VFS
-		peerPaths, pluginPaths, globalPaths, wholePaths     []string
+		peerPaths, pluginPaths, globalPaths, wholePaths     []VFS
 		wantSubstr                                          string
 	}{
 		{name: "ccRefs vs ccPaths", ccRefs: []NodeRef{{}}, wantSubstr: "ccRefs"},

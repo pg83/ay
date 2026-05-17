@@ -2,7 +2,6 @@ package main
 
 import (
 	"sort"
-	"strings"
 )
 
 var (
@@ -36,10 +35,10 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 
 	seen := make(map[string]struct{}, len(peerPaths))
 	peerArchiveRefs := make([]NodeRef, 0, len(peerPaths))
-	peerArchivePaths := make([]string, 0, len(peerPaths))
+	peerArchivePaths := make([]VFS, 0, len(peerPaths))
 	pluginRefs := []NodeRef{}
-	pluginPaths := []string{}
-	pluginSeen := map[string]struct{}{}
+	pluginPaths := []VFS{}
+	pluginSeen := map[VFS]struct{}{}
 	addInclSeen := map[string]struct{}{}
 	cFlagsSeen := map[string]struct{}{}
 	cxxFlagsSeen := map[string]struct{}{}
@@ -71,7 +70,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 
 		if peerResult.ARPath != nil {
 			peerArchiveRefs = append(peerArchiveRefs, peerResult.ARRef)
-			peerArchivePaths = append(peerArchivePaths, strings.TrimPrefix(*peerResult.ARPath, "$(B)/"))
+			peerArchivePaths = append(peerArchivePaths, *peerResult.ARPath)
 		}
 
 		addEach(addInclSeen, &peerAddInclGlobal, peerResult.AddInclGlobal)
@@ -89,15 +88,15 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		}
 	}
 
-	fixElfPath := Build("tools/fix_elf/fix_elf").String()
+	fixElfPath := Build("tools/fix_elf/fix_elf")
 	var fixElfRef NodeRef
 	fixElfInst := NewToolInstance(ctx.host, "tools/fix_elf")
 	if exc := Try(func() {
 		res := genModule(ctx, fixElfInst)
-		fixElfRef = res.LDRef
-		if res.LDPath != nil {
-			fixElfPath = *res.LDPath
-		}
+			fixElfRef = res.LDRef
+			if res.LDPath != nil {
+				fixElfPath = *res.LDPath
+			}
 	}); exc != nil {
 		_ = exc
 	}
@@ -109,7 +108,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 
 	cmd0 := composeLDCmdVcsInfo(instance.Platform.Tools, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, moduleMuslOn(ctx, d), d.ldFlags, nil, false, instance.Platform.IsHost, d.flags.NoCompilerWarnings)
-	cmd2 := composeDynLibCmd(instance.Platform, instance.Path, outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, *d.exportsScript, fixElfPath)
+	cmd2 := composeDynLibCmd(instance.Platform, instance.Path, outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, *d.exportsScript, fixElfPath.String())
 	cmd3 := composeLDCmdLinkOrCopy(instance.Platform.Tools, instance.Path)
 
 	envVcsOnly := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
@@ -162,32 +161,32 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	cxxFlagsGlobal := mergeDedup(d.cxxFlagsGlobal, peerCXXFlagsGlobal)
 	cOnlyFlagsGlobal := mergeDedup(d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
 
-	return &moduleEmitResult{
-		ARPath:                       nil,
-		isPROGRAM:                    false,
-		LDRef:                        ref,
-		LDPath:                       &outputPath,
+		return &moduleEmitResult{
+			ARPath:                       nil,
+			isPROGRAM:                    false,
+			LDRef:                        ref,
+			LDPath:                       vfsPtr(Build(instance.Path + "/" + outputName)),
 		AddInclGlobal:                addInclGlobal,
 		OwnAddInclGlobal:             append([]string(nil), d.addInclGlobal...),
 		CFlagsGlobal:                 cFlagsGlobal,
 		CXXFlagsGlobal:               cxxFlagsGlobal,
 		COnlyFlagsGlobal:             cOnlyFlagsGlobal,
 		PeerArchiveClosureRefs:       nil,
-		PeerArchiveClosurePaths:      nil,
+			PeerArchiveClosurePaths:      nil,
 		isPyLibrary:                  false,
 		PeerGlobalClosureRefs:        nil,
-		PeerGlobalClosurePaths:       nil,
+			PeerGlobalClosurePaths:       nil,
 		PeerWholeArchiveClosureRefs:  nil,
-		PeerWholeArchiveClosurePaths: nil,
-		LDPluginRefs:                 pluginRefs,
-		LDPluginPaths:                pluginPaths,
+			PeerWholeArchiveClosurePaths: nil,
+			LDPluginRefs:                 pluginRefs,
+			LDPluginPaths:                pluginPaths,
 		InducedDeps:                  append([]string(nil), d.inducedDeps...),
 		Peerdirs:                     append([]string(nil), d.peerdirs...),
 		ModuleStmtName:               d.moduleStmt.Name,
 	}
 }
 
-func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath string, peerLibPaths, pluginPaths, wholeArchivePeers []string, exportsScript, fixElfPath string) []string {
+func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath string, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript, fixElfPath string) []string {
 	cmdArgs := []string{
 		p.Tools.Python3,
 		ldLinkDynLibPath,
@@ -195,7 +194,9 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 	}
 	if len(pluginPaths) > 0 {
 		cmdArgs = append(cmdArgs, "--start-plugins")
-		cmdArgs = append(cmdArgs, pluginPaths...)
+		for _, p := range pluginPaths {
+			cmdArgs = append(cmdArgs, p.String())
+		}
 		cmdArgs = append(cmdArgs, "--end-plugins")
 	}
 	for _, p := range wholeArchivePeers {
@@ -220,7 +221,9 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 		"-B"+binPath,
 		"-Wl,--start-group",
 	)
-	cmdArgs = append(cmdArgs, peerLibPaths...)
+	for _, p := range peerLibPaths {
+		cmdArgs = append(cmdArgs, p.Rel)
+	}
 	cmdArgs = append(cmdArgs, "-Wl,--end-group")
 	cmdArgs = append(cmdArgs,
 		"-rdynamic",
@@ -242,15 +245,11 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 	return cmdArgs
 }
 
-func composeDynLibInputs(peerLibPaths, pluginPaths []string, fixElfPath, modulePath, exportsScript string) []VFS {
+func composeDynLibInputs(peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string) []VFS {
 	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+1)
-	for _, p := range peerLibPaths {
-		buildRootBlock = append(buildRootBlock, Build(p))
-	}
-	for _, p := range pluginPaths {
-		buildRootBlock = append(buildRootBlock, ParseVFSOrSource(p))
-	}
-	buildRootBlock = append(buildRootBlock, ParseVFSOrSource(fixElfPath))
+	buildRootBlock = append(buildRootBlock, peerLibPaths...)
+	buildRootBlock = append(buildRootBlock, pluginPaths...)
+	buildRootBlock = append(buildRootBlock, fixElfPath)
 	sort.Slice(buildRootBlock, func(i, j int) bool { return buildRootBlock[i].Rel < buildRootBlock[j].Rel })
 
 	out := make([]VFS, 0, len(buildRootBlock)+10)

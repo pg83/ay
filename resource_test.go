@@ -435,10 +435,10 @@ func TestChunkPySrcEntriesLibInputsAggregate(t *testing.T) {
 		"$(S)/contrib/tools/python3/Lib/multiprocessing/synchronize.py",
 	}
 
-	inSet := func(xs []string) map[string]struct{} {
+	inSet := func(xs []VFS) map[string]struct{} {
 		m := make(map[string]struct{}, len(xs))
 		for _, x := range xs {
-			m[x] = struct{}{}
+			m[x.String()] = struct{}{}
 		}
 		return m
 	}

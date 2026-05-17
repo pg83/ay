@@ -916,11 +916,11 @@ func emitNoCheckImportsObjcopy(
 //   - PYBUILD_NO_PYC: only raw .py
 type pySrcEntry struct {
 	pathHash  string // srcRel.yapyc3 (flat) or srcRel.<unit-pathid>.yapyc3 (subdir); used as `paths` for the hash
-	pathInput string // cmd_args --inputs slot: $(B)/<actualUnit>/<srcRel>{.suffix} (yapyc3) or $(S)/<actualUnit>/<srcRel> (raw)
+	pathInput VFS    // cmd_args --inputs slot: $(B)/<actualUnit>/<srcRel>{.suffix} (yapyc3) or $(S)/<actualUnit>/<srcRel> (raw)
 	key       string // pre-base64 key: resfs/file/py/[<ns>/]<srcRel>[.yapyc3]
 	kvHash    string // pre-rootrel-expansion form (placeholder retained)
 	kvCmd     string // post-rootrel-expansion form
-	inputDep  string // inputs[] graph slot: same as pathInput
+	inputDep  VFS    // inputs[] graph slot: same as pathInput
 
 	// extraSrcInput is the additional `.py` source-tree input the scanner
 	// threads into objcopy `inputs[]` whenever the entry's resfs target
@@ -928,7 +928,7 @@ type pySrcEntry struct {
 	// on_py3_compile_bytecode). Nil for raw .py entries; for yapyc3
 	// entries non-nil `$(S)/<actualUnit>/<srcRel>`. REF Lib chunks: .py count
 	// matches .yapyc3 count one-to-one even across chunk straddles.
-	extraSrcInput *string
+	extraSrcInput *VFS
 }
 
 // buildPySrcEntries derives the ordered (kv,path,key) triples that the
@@ -984,9 +984,9 @@ func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLe
 		// raw .py entry — emitted unless PYBUILD_NO_PY is set.
 		if !d.pyBuildNoPY {
 			pyKey := "resfs/file/py/" + keyPrefix + srcRel
-			pyPathInput := Source(actualUnit + "/" + srcRel).String()
+			pyPathInput := Source(actualUnit + "/" + srcRel)
 			if d.pyGeneratedSrcs[srcRel] != nil {
-				pyPathInput = Build(modulePath + "/" + srcRel).String()
+				pyPathInput = Build(modulePath + "/" + srcRel)
 			}
 			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
 			pyKvCmd := "resfs/src/" + pyKey + "=" + actualUnit + "/" + srcRel
@@ -1006,19 +1006,16 @@ func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLe
 		// yapyc3 entry — always emitted unless PYBUILD_NO_PYC is set.
 		if !d.pyBuildNoPYC {
 			ypKey := "resfs/file/py/" + keyPrefix + srcRel + ".yapyc3"
-			ypPathInput := Build(modulePath + "/" + srcRel + suffix).String()
-			if d.pyGeneratedSrcs[srcRel] != nil {
-				ypPathInput = Build(modulePath + "/" + srcRel + suffix).String()
-			}
-			// kv hash retains the ${rootrel;...} placeholder; cmd_args
-			// form expands to <actualUnit>/<srcRel><suffix>.
-			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
-			ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
-			extraSrcInput := stringPtr(Source(actualUnit + "/" + srcRel).String())
-			if d.pyGeneratedSrcs[srcRel] != nil {
-				ypKvCmd = "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
-				extraSrcInput = stringPtr(Build(modulePath + "/" + srcRel).String())
-			}
+				ypPathInput := Build(modulePath + "/" + srcRel + suffix)
+				// kv hash retains the ${rootrel;...} placeholder; cmd_args
+				// form expands to <actualUnit>/<srcRel><suffix>.
+				ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
+				ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
+				extraSrcInput := vfsPtr(Source(actualUnit + "/" + srcRel))
+				if d.pyGeneratedSrcs[srcRel] != nil {
+					ypKvCmd = "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
+					extraSrcInput = vfsPtr(Build(modulePath + "/" + srcRel))
+				}
 			out = append(out, pySrcEntry{
 				pathHash:      srcRel + suffix,
 				pathInput:     ypPathInput,
@@ -1050,7 +1047,7 @@ type pySrcChunk struct {
 	// in declaration order with per-chunk dedup. Captures chunk-straddle
 	// where an entry's KV is in chunk N but its path+key is in N+1
 	// (REF byte-exact, see resource_test.go).
-	inps []string
+	inps []VFS
 }
 
 // chunkPySrcEntries partitions a declaration-ordered entry list into
@@ -1081,7 +1078,7 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 	// (reset on flush). A chunk-straddling entry still contributes to
 	// both kv-add chunk and path+key-add chunk because the map resets
 	// between them.
-	inpsSeen := make(map[string]struct{})
+	inpsSeen := make(map[VFS]struct{})
 
 	flush := func() {
 		if cmdLen == 0 {
@@ -1090,7 +1087,7 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 		chunks = append(chunks, cur)
 		cur = pySrcChunk{}
 		cmdLen = 0
-		inpsSeen = make(map[string]struct{})
+		inpsSeen = make(map[VFS]struct{})
 	}
 
 	// addInps records pathInput + extraSrcInput on `cur.inps`, deduped
@@ -1124,7 +1121,7 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 		kb64 := encb64.StdEncoding.EncodeToString([]byte(e.key))
 		cur.paths = append(cur.paths, e.pathHash)
 		cur.keys = append(cur.keys, kb64)
-		cur.pathInps = append(cur.pathInps, e.pathInput)
+		cur.pathInps = append(cur.pathInps, e.pathInput.String())
 		addInps(e)
 		cmdLen += rootCmdLen + len(e.pathHash) + len(kb64)
 		if cmdLen >= maxCmdLen {
@@ -1230,7 +1227,7 @@ func emitPySrcObjcopy(
 				Build("tools/rescompressor/rescompressor"),
 			}
 			for _, p := range ch.inps {
-				inputs = append(inputs, ParseVFSOrSource(p))
+				inputs = append(inputs, p)
 			}
 			inputs = append(inputs, objcopyScriptVFS)
 
@@ -1286,11 +1283,7 @@ func emitPySrcObjcopy(
 			if rescompressorLDRef != (NodeRef{}) {
 				exclude = append(exclude, rescompressorLDRef)
 			}
-			chInpsVFS := make([]VFS, 0, len(ch.inps))
-			for _, p := range ch.inps {
-				chInpsVFS = append(chInpsVFS, ParseVFSOrSource(p))
-			}
-			if extras := resolveCodegenDepRefsExt(ctx, instance, nil, chInpsVFS, exclude...); len(extras) > 0 {
+			if extras := resolveCodegenDepRefsExt(ctx, instance, nil, ch.inps, exclude...); len(extras) > 0 {
 				node.DepRefs = append(node.DepRefs, extras...)
 			}
 
@@ -1304,8 +1297,8 @@ func emitPySrcObjcopy(
 			// yapyc3-only modules like python3-Lib) so the global AR's
 			// inputs[] carries every .py source the chunk references.
 			for _, p := range ch.inps {
-				if strings.HasPrefix(p, "$(S)/") {
-					globalMemberInputs = append(globalMemberInputs, ParseVFSOrSource(p))
+				if p.IsSource() {
+					globalMemberInputs = append(globalMemberInputs, p)
 				}
 			}
 			globalMemberInputs = append(globalMemberInputs, objcopyScriptVFS)

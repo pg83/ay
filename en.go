@@ -29,7 +29,7 @@ func EmitEN(
 	headerSrc VFS,
 	withHeader bool,
 	enumParserLD NodeRef,
-	enumParserBin string,
+	enumParserBin VFS,
 	depENRefs []NodeRef,
 	depENOutputs []VFS,
 	headerIncludeClosure []VFS,
@@ -40,7 +40,7 @@ func EmitEN(
 	serializedCPPVFS := Build(headerSrc.Rel + "_serialized.cpp")
 
 	cmdArgs := []string{
-		enumParserBin,
+			enumParserBin.String(),
 		headerSrc.String(),
 		"--include-path",
 		headerSrc.Rel,
@@ -64,7 +64,7 @@ func EmitEN(
 	// then the source header, then its transitive include closure.
 	inputs := make([]VFS, 0, len(depENOutputs)+2+len(headerIncludeClosure))
 	inputs = append(inputs, depENOutputs...)
-	inputs = append(inputs, ParseVFSOrSource(enumParserBin))
+	inputs = append(inputs, enumParserBin)
 	inputs = append(inputs, headerSrc)
 	inputs = append(inputs, headerIncludeClosure...)
 
