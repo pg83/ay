@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -26,6 +27,10 @@ var includeRe = regexp.MustCompile(`^\s*#\s*(include|include_next)\s*[<"]([^>"]+
 var yasmIncludeRe = regexp.MustCompile(`(?i)^\s*%\s*include\s*[<"]([^>"]+)[>"]`)
 
 var swigIncludeRe = regexp.MustCompile(`^%(include|import|insert\s*\([^\)]*\))\s*([<"].*?[">])`)
+var cythonCimportFromRe = regexp.MustCompile(`^\s*from\s+([A-Za-z0-9_\.]+)\s+cimport\b`)
+var cythonCimportRe = regexp.MustCompile(`^\s*cimport\s+(.+)$`)
+var cythonIncludeRe = regexp.MustCompile(`^\s*include\s+["']([^"']+)["']`)
+var cythonExternFromRe = regexp.MustCompile(`^\s*cdef\s+extern\s+from\s+([<"].*?[">])`)
 
 // macroIndirectIncludes augments the C-like raw scanner for sources
 // that use macro-indirect `#include MACRO_NAME` forms. The text-blind
@@ -53,7 +58,7 @@ var macroIndirectIncludes = map[string][]macroIndirectInclude{
 }
 
 type includeDirectiveParser interface {
-	Parse(vfsPath VFS, data []byte) parsedIncludeSet
+	Parse(rel string, data []byte) parsedIncludeSet
 }
 
 type includeDirectiveParserRegistry struct {
@@ -62,6 +67,7 @@ type includeDirectiveParserRegistry struct {
 }
 
 type cIncludeDirectiveParser struct{}
+type cythonIncludeDirectiveParser struct{}
 type protoIncludeDirectiveParser struct{}
 type ragelIncludeDirectiveParser struct{}
 type swigIncludeDirectiveParser struct{}
@@ -95,6 +101,7 @@ func newIncludeDirectiveParserRegistry() includeDirectiveParserRegistry {
 		".go",
 	)
 	r.register(ragelLike, ".rl", ".rh", ".rli", ".rl6", ".rl5")
+	r.register(cythonIncludeDirectiveParser{}, ".pyx", ".pxd", ".pxi", ".pyx.pxi", ".pxd.pxi")
 	r.register(protoLike, ".proto", ".ev", ".gzt", ".gztproto")
 	r.register(swigLike, ".swg")
 	r.register(yasm, ".asm", ".asi")
@@ -109,8 +116,8 @@ func (r includeDirectiveParserRegistry) register(parser includeDirectiveParser, 
 	}
 }
 
-func (r includeDirectiveParserRegistry) parserFor(vfsPath VFS) includeDirectiveParser {
-	if parser, ok := r.byExt[directiveParserExt(vfsPath.Rel)]; ok {
+func (r includeDirectiveParserRegistry) parserFor(rel string) includeDirectiveParser {
+	if parser, ok := r.byExt[directiveParserExt(rel)]; ok {
 		return parser
 	}
 
@@ -132,10 +139,10 @@ func directiveParserExt(rel string) string {
 	return rel[idx:]
 }
 
-func (cIncludeDirectiveParser) Parse(vfsPath VFS, data []byte) parsedIncludeSet {
+func (cIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 	out := parseCIncludes(data)
 
-	if extras, ok := macroIndirectIncludes[vfsPath.Rel]; ok {
+	if extras, ok := macroIndirectIncludes[rel]; ok {
 		for _, m := range extras {
 			out = append(out, includeDirective{kind: m.kind, target: m.target})
 		}
@@ -144,7 +151,64 @@ func (cIncludeDirectiveParser) Parse(vfsPath VFS, data []byte) parsedIncludeSet 
 	return rawParsedIncludeSet(parsedIncludesLocal, out...)
 }
 
-func (protoIncludeDirectiveParser) Parse(_ VFS, data []byte) parsedIncludeSet {
+func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
+	out := make([]includeDirective, 0, 8)
+	seen := make(map[includeDirective]struct{}, 8)
+	add := func(d includeDirective) {
+		if _, dup := seen[d]; dup {
+			return
+		}
+		seen[d] = struct{}{}
+		out = append(out, d)
+	}
+
+	if strings.HasSuffix(rel, ".pyx") {
+		base := strings.TrimSuffix(rel, ".pyx")
+		add(includeDirective{kind: includeQuoted, target: path.Base(base) + ".pxd"})
+	}
+
+	eachLine(data, func(line []byte) {
+		s := strings.TrimSpace(string(line))
+		if s == "" || strings.HasPrefix(s, "#") {
+			return
+		}
+
+		if m := cythonIncludeRe.FindStringSubmatch(s); len(m) == 2 {
+			add(includeDirective{kind: includeQuoted, target: m[1]})
+			return
+		}
+
+		if m := cythonExternFromRe.FindStringSubmatch(s); len(m) == 2 {
+			target, kind, ok := parseDelimitedIncludeTarget(m[1])
+			if ok {
+				add(includeDirective{kind: kind, target: target})
+			}
+			return
+		}
+
+		if m := cythonCimportFromRe.FindStringSubmatch(s); len(m) == 2 {
+			add(includeDirective{kind: includeQuoted, target: strings.ReplaceAll(m[1], ".", "/") + ".pxd"})
+			return
+		}
+
+		if m := cythonCimportRe.FindStringSubmatch(s); len(m) == 2 {
+			for _, part := range strings.Split(m[1], ",") {
+				part = strings.TrimSpace(part)
+				if part == "" {
+					continue
+				}
+				if idx := strings.IndexAny(part, " \t"); idx >= 0 {
+					part = part[:idx]
+				}
+				add(includeDirective{kind: includeQuoted, target: strings.ReplaceAll(part, ".", "/") + ".pxd"})
+			}
+		}
+	})
+
+	return rawParsedIncludeSet(parsedIncludesLocal, out...)
+}
+
+func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet {
 	out := make([]includeDirective, 0, 8)
 
 	eachLine(data, func(line []byte) {
@@ -159,7 +223,7 @@ func (protoIncludeDirectiveParser) Parse(_ VFS, data []byte) parsedIncludeSet {
 	return rawParsedIncludeSet(parsedIncludesLocal, out...)
 }
 
-func (ragelIncludeDirectiveParser) Parse(vfsPath VFS, data []byte) parsedIncludeSet {
+func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 	local := parseCIncludes(data)
 	if len(local) == 0 {
 		local = make([]includeDirective, 0, 4)
@@ -203,13 +267,13 @@ func (ragelIncludeDirectiveParser) Parse(vfsPath VFS, data []byte) parsedInclude
 	set = appendParsedDirectives(set, parsedIncludesLocal, local...)
 	set = appendParsedDirectives(set, parsedIncludesHCPP, includeDirective{
 		kind:   includeQuoted,
-		target: vfsPath.Rel,
+		target: rel,
 	})
 
 	return set
 }
 
-func (swigIncludeDirectiveParser) Parse(_ VFS, data []byte) parsedIncludeSet {
+func (swigIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet {
 	direct := make([]includeDirective, 0, 8)
 	induced := make([]includeDirective, 0, 4)
 	inBlock := false
@@ -247,11 +311,11 @@ func (swigIncludeDirectiveParser) Parse(_ VFS, data []byte) parsedIncludeSet {
 	return set
 }
 
-func (yasmIncludeDirectiveParser) Parse(_ VFS, data []byte) parsedIncludeSet {
+func (yasmIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet {
 	return rawParsedIncludeSet(parsedIncludesLocal, parseYasmIncludes(data)...)
 }
 
-func (emptyIncludeDirectiveParser) Parse(_ VFS, _ []byte) parsedIncludeSet {
+func (emptyIncludeDirectiveParser) Parse(_ string, _ []byte) parsedIncludeSet {
 	return nil
 }
 
