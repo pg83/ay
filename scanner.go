@@ -297,9 +297,9 @@ func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedPars
 		sourceRoot:           sourceRoot,
 		sourceRootSlash:      sourceRoot + "/",
 		pc:                   pc,
-		viewCache:            make(map[string]PerSourceView, 4096),
-		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 524288),
-		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 32768),
+		viewCache:            make(map[string]PerSourceView, 1024),
+		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 131072),
+		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
 		walkClosureCache:     make(map[uint64]*scanCtx, 8),
 		onWarn:               onWarn,
 	}
@@ -360,10 +360,10 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 		scanner:              s,
 		cfg:                  cfg,
 		ctxHash:              hashScanContext(&cfg),
-		resolveCache:         make(map[resolveInnerKey][]VFS, 4096),
-		subgraphCache:        make(map[subgraphInnerKey][]VFS, 2048),
-		subgraphTaintedKnown: make(map[subgraphInnerKey]struct{}, 128),
-		subgraphInProgress:   make(map[subgraphInnerKey]struct{}, 32),
+		resolveCache:         make(map[resolveInnerKey][]VFS, 1024),
+		subgraphCache:        make(map[subgraphInnerKey][]VFS, 512),
+		subgraphTaintedKnown: make(map[subgraphInnerKey]struct{}, 64),
+		subgraphInProgress:   make(map[subgraphInnerKey]struct{}, 16),
 	}
 }
 
@@ -605,7 +605,6 @@ func (sc *scanCtx) dfs(absPath VFS, visited VFSSet, order *[]VFS) {
 
 		return
 	}
-
 	srcClassHash := sc.scanner.sourceClassHash(sc.cfg.SourceRel)
 	sg, ok := sc.subgraph(absPath, srcClassHash)
 
