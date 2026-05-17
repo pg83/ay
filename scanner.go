@@ -943,6 +943,9 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	// keyed). includerAbs is $(S)/-rooted here (BUILD_ROOT dispatches
 	// in forEachResolvedChild); strip to the sysincl-keyed rel form.
 	includerRel := includerAbs.Rel
+	if includerAbs.IsBuild() && ctx.SourceRel != "" {
+		includerRel = ctx.SourceRel
+	}
 	var mappings []VFS
 	var hasMultiTarget bool
 	mappings, hasMultiTarget, sysinclClaimed = s.sysinclLookup(ctx.SourceRel, includerRel, d.target)
@@ -1246,6 +1249,20 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	//   3. peer-propagated GLOBAL ADDINCL
 	//   4. baseline (linux-headers, musl arch when applicable)
 	searchPathFound := false
+
+	if includerAbs.IsBuild() && strings.Contains(d.target, "/") {
+		rel := normalisePath(d.target)
+
+		if addBuildPath(rel) {
+			searchPathFound = true
+		} else {
+			if _, dup := seen[rel]; !dup {
+				seen[rel] = struct{}{}
+				out = append(out, Source(rel))
+			}
+			searchPathFound = true
+		}
+	}
 
 	if d.kind == includeQuoted {
 		// includerAbs is SOURCE-rooted here (BUILD_ROOT dispatches in

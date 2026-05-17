@@ -878,6 +878,10 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 // mirrors cmd_args -I: own AddIncl + peer GLOBAL AddIncl + cc-bundle
 // implicit baseline (linux-headers + active musl-arch).
 func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
+	return walkClosureWithSourceRel(ctx, srcInstance, vfsPath, vfsPath.Rel, in)
+}
+
+func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourceRel string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerFor(srcInstance)
 	if scanner == nil {
 		return nil
@@ -887,7 +891,7 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 	// WalkClosure overwrites it per-call for SOURCE_ROOT paths;
 	// BUILD_ROOT paths leave it as set and never consult it.
 	cfg := ScanContext{
-		SourceRel:       vfsPath.Rel,
+		SourceRel:       sourceRel,
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
 		BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.NoStdInc, srcInstance.Platform),

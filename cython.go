@@ -29,7 +29,9 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		}
 		generatedVFS := Build(instance.Path + "/" + generated)
 		srcVFS := Source(instance.Path + "/" + stmt.Src)
-		sourceClosure := walkClosure(ctx, instance, srcVFS, in)
+		srcScanIn := in
+		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl)
+		sourceClosure := walkClosure(ctx, instance, srcVFS, srcScanIn)
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(srcVFS, sourceClosure, stmt.CMode)
 		parsed := make([]includeDirective, 0, len(emitsIncludes))
 		for _, include := range emitsIncludes {
@@ -110,7 +112,9 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		if !stmt.CMode {
 			ccIn.PerSourceCFlags = append(ccIn.PerSourceCFlags, "-Wno-implicit-fallthrough")
 		}
-		ccIn.IncludeInputs = generatedOutputClosure(ctx, instance, generatedVFS, ccIn)
+		scanIn := ccIn
+		scanIn.AddIncl = appendCythonScanAddIncl(in.AddIncl, d.cythonAddIncl)
+		ccIn.IncludeInputs = walkClosureWithSourceRel(ctx, instance, generatedVFS, srcVFS.Rel, scanIn)
 
 		ccRef, ccOut := EmitCC(instance, generated, ccIn, ctx.host, ctx.emit)
 		ccInputs := append([]VFS{generatedVFS}, ccIn.IncludeInputs...)
@@ -130,14 +134,13 @@ func cythonGeneratedOutputInputs(src VFS, sourceClosure []VFS, cMode bool) ([]VF
 	toolInputs := make([]VFS, 0, 2+len(py3CythonEmbeddedFiles)+len(py3CythonOutputIncludes)+len(sourceClosure))
 	emitsIncludes := make([]VFS, 0, 1+len(py3CythonEmbeddedFiles)+len(py3CythonOutputIncludes)+len(sourceClosure))
 
-	toolInputs = append(toolInputs, Source("contrib/tools/cython/cython.py"))
+	cythonPy := Source("contrib/tools/cython/cython.py")
+	toolInputs = append(toolInputs, cythonPy)
+	emitsIncludes = append(emitsIncludes, cythonPy)
 	emitsIncludes = append(emitsIncludes, src)
 
 	for _, v := range py3CythonOutputIncludes {
 		if v.Rel == "contrib/tools/cython/generated_cpp_headers.h" && cMode {
-			continue
-		}
-		if v.Rel == "contrib/tools/cython/generated_c_headers.h" && !cMode {
 			continue
 		}
 		toolInputs = append(toolInputs, v)
@@ -180,6 +183,17 @@ func appendCythonCCAddIncl(addIncl []VFS) []VFS {
 	out = append(out, cythonNumpyAddIncl...)
 
 	return out
+}
+
+func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS) []VFS {
+	out := make([]VFS, 0, len(addIncl)+len(cythonAddIncl)+2+len(cythonNumpyAddIncl))
+	out = append(out, addIncl...)
+	out = append(out, cythonAddIncl...)
+	out = append(out, Source("contrib/tools/cython/Cython/Includes"))
+	out = append(out, Source("contrib/libs/cxxsupp/libcxx/include"))
+	out = append(out, cythonNumpyAddIncl...)
+
+	return dedupVFS(out)
 }
 
 func filterPyRegisterCFlags(cflags []string) []string {
