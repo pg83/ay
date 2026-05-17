@@ -323,16 +323,16 @@ func TestScanner_IncludeNextSuppressed(t *testing.T) {
 	// implicit -I set).
 	libcxxCtx := ScanContext{
 		SourceRel: "contrib/libs/cxxsupp/libcxx/src/algorithm.cpp",
-		OwnAddIncl: []string{
+		OwnAddIncl: searchPathsFromStrings([]string{
 			"contrib/libs/cxxsupp/libcxx/include",
-		},
-		BaseSearchPaths: []string{
+		}),
+		BaseSearchPaths: searchPathsFromStrings([]string{
 			"contrib/libs/musl/include",
 			"contrib/libs/musl/arch/aarch64",
 			"contrib/libs/musl/arch/generic",
 			"contrib/libs/linux-headers",
 			"",
-		},
+		}),
 	}
 
 	closure := scanner.WalkClosure(libcxxCtx)
@@ -389,16 +389,16 @@ func TestScanner_RegularIncludeStillResolvesViaSysincl(t *testing.T) {
 
 	libcxxCtx := ScanContext{
 		SourceRel: "contrib/libs/cxxsupp/libcxx/src/algorithm.cpp",
-		OwnAddIncl: []string{
+		OwnAddIncl: searchPathsFromStrings([]string{
 			"contrib/libs/cxxsupp/libcxx/include",
-		},
-		BaseSearchPaths: []string{
+		}),
+		BaseSearchPaths: searchPathsFromStrings([]string{
 			"contrib/libs/musl/include",
 			"contrib/libs/musl/arch/aarch64",
 			"contrib/libs/musl/arch/generic",
 			"contrib/libs/linux-headers",
 			"",
-		},
+		}),
 	}
 
 	closure := scanner.WalkClosure(libcxxCtx)
@@ -450,16 +450,16 @@ func TestScanner_SubgraphCacheReuse(t *testing.T) {
 	makeCtx := func(srcRel string) ScanContext {
 		return ScanContext{
 			SourceRel: srcRel,
-			OwnAddIncl: []string{
+			OwnAddIncl: searchPathsFromStrings([]string{
 				"contrib/libs/cxxsupp/libcxx/include",
-			},
-			BaseSearchPaths: []string{
+			}),
+			BaseSearchPaths: searchPathsFromStrings([]string{
 				"contrib/libs/musl/include",
 				"contrib/libs/musl/arch/aarch64",
 				"contrib/libs/musl/arch/generic",
 				"contrib/libs/linux-headers",
 				"",
-			},
+			}),
 		}
 	}
 
@@ -688,7 +688,7 @@ func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 	scanner := NewIncludeScanner(dir, sysincl)
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel:  "src/source.cpp",
-		OwnAddIncl: []string{"libcxxabi/include"},
+		OwnAddIncl: searchPathsFromStrings([]string{"libcxxabi/include"}),
 	})
 
 	hasLibcxxabi := false
@@ -780,7 +780,7 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 	scanner := NewIncludeScanner(dir, sysincl)
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel:  "libcxxrt/source.cc",
-		OwnAddIncl: []string{"libcxxrt"},
+		OwnAddIncl: searchPathsFromStrings([]string{"libcxxrt"}),
 	})
 
 	hasLibcxxrt := false
@@ -918,7 +918,7 @@ func TestScanner_AngleSysinclUnaffected(t *testing.T) {
 	scanner := NewIncludeScanner(dir, sysincl)
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel:  "libcxxrt/source.cpp",
-		OwnAddIncl: []string{"libcxxrt"},
+		OwnAddIncl: searchPathsFromStrings([]string{"libcxxrt"}),
 	})
 
 	hasLocal := false
@@ -978,16 +978,16 @@ func TestScanner_LibcxxrtUnwindQuoted_ProductionParity(t *testing.T) {
 	// indirectly via libcxxrt/unwind.h's fully-qualified include.
 	ctx := ScanContext{
 		SourceRel: "contrib/libs/cxxsupp/libcxxrt/exception.cc",
-		OwnAddIncl: []string{
+		OwnAddIncl: searchPathsFromStrings([]string{
 			"contrib/libs/cxxsupp/libcxxrt",
-		},
-		BaseSearchPaths: []string{
+		}),
+		BaseSearchPaths: searchPathsFromStrings([]string{
 			"contrib/libs/musl/include",
 			"contrib/libs/musl/arch/aarch64",
 			"contrib/libs/musl/arch/generic",
 			"contrib/libs/linux-headers",
 			"",
-		},
+		}),
 	}
 
 	closure := scanner.WalkClosure(ctx)

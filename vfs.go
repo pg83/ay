@@ -5,11 +5,6 @@ import (
 	"sort"
 )
 
-const (
-	vfsSourcePrefix = "$(S)/"
-	vfsBuildPrefix  = "$(B)/"
-)
-
 // vfs.go — typed VFS path.
 //
 // A VFS value addresses a file in one of two virtual roots (SOURCE_ROOT /
@@ -61,9 +56,9 @@ func (v VFS) IsBuild() bool { return v.Root == VFSRootBuild }
 func (v VFS) String() string {
 	switch v.Root {
 	case VFSRootSource:
-		return vfsSourcePrefix + v.Rel
+		return "$(S)/" + v.Rel
 	case VFSRootBuild:
-		return vfsBuildPrefix + v.Rel
+		return "$(B)/" + v.Rel
 	}
 	panic("VFS.String: zero-valued VFS (missing Root)")
 }
@@ -73,10 +68,10 @@ func (v VFS) String() string {
 // s lacks both recognised prefixes — callers handling such tokens
 // (e.g. compound CmdArg substrings) keep them as strings.
 func ParseVFS(s string) (VFS, bool) {
-	if rel, ok := trimVFSPrefix(s, vfsSourcePrefix); ok {
+	if rel, ok := trimVFSPrefix(s, Source("").String()); ok {
 		return Source(rel), true
 	}
-	if rel, ok := trimVFSPrefix(s, vfsBuildPrefix); ok {
+	if rel, ok := trimVFSPrefix(s, Build("").String()); ok {
 		return Build(rel), true
 	}
 	return VFS{}, false

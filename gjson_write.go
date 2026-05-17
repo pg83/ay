@@ -472,24 +472,13 @@ func appendGraphConfResourceURIs(buf []byte, resources []graphConfResourceURI, p
 }
 
 // appendVFS emits a single VFS in JSON-string form. Materialises the
-// "$(S)/<rel>" / "$(B)/<rel>" prefix inline so we
-// pay one buffer-append per part, not one string concat per VFS.
+// canonical VFS string through VFS.String().
 func appendVFS(buf []byte, v VFS) []byte {
-	switch v.Root {
-	case VFSRootSource:
-		buf = append(buf, '"')
-		buf = appendStringEscapedBody(buf, vfsSourcePrefix)
-		buf = appendStringEscapedBody(buf, v.Rel)
-		buf = append(buf, '"')
-		return buf
-	case VFSRootBuild:
-		buf = append(buf, '"')
-		buf = appendStringEscapedBody(buf, vfsBuildPrefix)
-		buf = appendStringEscapedBody(buf, v.Rel)
-		buf = append(buf, '"')
-		return buf
-	}
-	panic("appendVFS: zero-valued VFS")
+	buf = append(buf, '"')
+	buf = appendStringEscapedBody(buf, v.String())
+	buf = append(buf, '"')
+
+	return buf
 }
 
 // appendStringMap emits map[string]string with keys sorted (json default).

@@ -711,9 +711,9 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 
 		cfg := ScanContext{
 			SourceRel:       srcRelOnDisk,
-			OwnAddIncl:      in.AddIncl,
-			PeerAddInclSet:  in.PeerAddInclGlobal,
-			BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.NoStdInc, scanPlatform),
+			OwnAddIncl:      searchPathsFromStrings(in.AddIncl),
+			PeerAddInclSet:  searchPathsFromStrings(in.PeerAddInclGlobal),
+			BaseSearchPaths: searchPathsFromStrings(includeScannerBasePaths(srcInstance.Flags.NoStdInc, scanPlatform)),
 		}
 
 		// scanCtx dispatch via genCtx.getScanCtx — one scanCtx per
@@ -859,9 +859,9 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 	// BUILD_ROOT paths leave it as set and never consult it.
 	cfg := ScanContext{
 		SourceRel:       vfsPath.Rel,
-		OwnAddIncl:      in.AddIncl,
-		PeerAddInclSet:  in.PeerAddInclGlobal,
-		BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.NoStdInc, srcInstance.Platform),
+		OwnAddIncl:      searchPathsFromStrings(in.AddIncl),
+		PeerAddInclSet:  searchPathsFromStrings(in.PeerAddInclGlobal),
+		BaseSearchPaths: searchPathsFromStrings(includeScannerBasePaths(srcInstance.Flags.NoStdInc, srcInstance.Platform)),
 	}
 
 	sc := ctx.getScanCtx(scanner, cfg)

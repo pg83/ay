@@ -383,13 +383,21 @@ func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedPars
 // ADDINCL search path and the source-relative path of the primary input
 // (for sysincl source_filter matching). The search path concatenates:
 // source's own directory (quoted only), module's own ADDINCL, peer-
-// propagated GLOBAL ADDINCL, and the BaseSearchPaths baseline. All
-// paths are SOURCE_ROOT-relative.
+// propagated GLOBAL ADDINCL, and the BaseSearchPaths baseline.
 type ScanContext struct {
-	SourceRel       string   // SOURCE_ROOT-relative path of the primary source
-	OwnAddIncl      []string // module's own non-GLOBAL ADDINCL
-	PeerAddInclSet  []string // peer-propagated GLOBAL ADDINCL (transitive)
-	BaseSearchPaths []string // baseline include set (linux-headers, musl arch when applicable)
+	SourceRel       string // SOURCE_ROOT-relative path of the primary source
+	OwnAddIncl      []VFS  // module's own non-GLOBAL ADDINCL
+	PeerAddInclSet  []VFS  // peer-propagated GLOBAL ADDINCL (transitive)
+	BaseSearchPaths []VFS  // baseline include set (linux-headers, musl arch when applicable)
+}
+
+func searchPathsFromStrings(ss []string) []VFS {
+	out := make([]VFS, len(ss))
+	for i, s := range ss {
+		out[i] = ParseVFSOrSource(s)
+	}
+
+	return out
 }
 
 // NewScanCtx allocates a fresh per-context resolution object bound to
@@ -679,9 +687,15 @@ func hashScanContext(ctx *ScanContext) uint64 {
 		h *= prime
 	}
 
-	mixSlice := func(ss []string) {
+	mixVFS := func(v VFS) {
+		h ^= uint64(v.Root)
+		h *= prime
+		mix(v.Rel)
+	}
+
+	mixSlice := func(ss []VFS) {
 		for _, s := range ss {
-			mix(s)
+			mixVFS(s)
 		}
 
 		h ^= 0xfe
@@ -1511,14 +1525,23 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		return true
 	}
 
-	addInclPath := func(prefix, target string) bool {
-		if strings.HasPrefix(prefix, vfsBuildPrefix) {
-			rel := strings.TrimPrefix(prefix, vfsBuildPrefix)
+	addInclPath := func(prefix VFS, target string) bool {
+		switch prefix.Root {
+		case VFSRootBuild:
+			if prefix.Rel == "" {
+				return addBuildPath(target)
+			}
 
-			return addBuildPath(rel + "/" + target)
+			return addBuildPath(prefix.Rel + "/" + target)
+		case VFSRootSource:
+			if prefix.Rel == "" {
+				return addPath(target)
+			}
+
+			return addPath(prefix.Rel + "/" + target)
 		}
 
-		return addPath(prefix + "/" + target)
+		panic("resolveSearchPath: zero-valued search path")
 	}
 
 	// First-match-wins across the search path. Order:
@@ -1570,19 +1593,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 
 	if !searchPathFound {
 		for _, p := range ctx.BaseSearchPaths {
-			// An empty prefix represents SOURCE_ROOT itself: resolve
-			// the target directly (no prefix + separator) so that
-			// `<util/foo.h>` tries $(sourceRoot)/util/foo.h rather
-			// than $(sourceRoot)//util/foo.h.
-			var candidate string
-
-			if p == "" {
-				candidate = d.target
-			} else {
-				candidate = p + "/" + d.target
-			}
-
-			if addPath(candidate) {
+			if addInclPath(p, d.target) {
 				searchPathFound = true
 
 				break
