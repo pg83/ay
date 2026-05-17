@@ -25,6 +25,8 @@ var includeRe = regexp.MustCompile(`^\s*#\s*(include|include_next)\s*[<"]([^>"]+
 // only quoted appears in practice. Single capture group: target.
 var yasmIncludeRe = regexp.MustCompile(`(?i)^\s*%\s*include\s*[<"]([^>"]+)[>"]`)
 
+var swigIncludeRe = regexp.MustCompile(`^%(include|import|insert\s*\([^\)]*\))\s*([<"].*?[">])`)
+
 // macroIndirectIncludes augments the C-like raw scanner for sources
 // that use macro-indirect `#include MACRO_NAME` forms. The text-blind
 // scanner cannot expand macros, so e.g. `#include OPENSSL_UNISTD`
@@ -60,6 +62,9 @@ type includeDirectiveParserRegistry struct {
 }
 
 type cIncludeDirectiveParser struct{}
+type protoIncludeDirectiveParser struct{}
+type ragelIncludeDirectiveParser struct{}
+type swigIncludeDirectiveParser struct{}
 type yasmIncludeDirectiveParser struct{}
 type emptyIncludeDirectiveParser struct{}
 
@@ -67,6 +72,9 @@ var includeDirectiveParsers = newIncludeDirectiveParserRegistry()
 
 func newIncludeDirectiveParserRegistry() includeDirectiveParserRegistry {
 	cLike := cIncludeDirectiveParser{}
+	protoLike := protoIncludeDirectiveParser{}
+	ragelLike := ragelIncludeDirectiveParser{}
+	swigLike := swigIncludeDirectiveParser{}
 	yasm := yasmIncludeDirectiveParser{}
 	empty := emptyIncludeDirectiveParser{}
 
@@ -84,10 +92,11 @@ func newIncludeDirectiveParserRegistry() includeDirectiveParserRegistry {
 		".vert", ".frag", ".tesc", ".tese", ".geom", ".comp",
 		".cu", ".S", ".s", ".sfdl", ".m", ".mm",
 		".l", ".lex", ".lpp", ".y", ".ypp", ".gperf", ".asp",
-		".rl", ".rh", ".rli", ".rl6", ".rl5",
-		".proto", ".ev", ".gzt", ".gztproto",
 		".go",
 	)
+	r.register(ragelLike, ".rl", ".rh", ".rli", ".rl6", ".rl5")
+	r.register(protoLike, ".proto", ".ev", ".gzt", ".gztproto")
+	r.register(swigLike, ".swg")
 	r.register(yasm, ".asm", ".asi")
 	r.register(empty, ".g4")
 
@@ -133,6 +142,98 @@ func (cIncludeDirectiveParser) Parse(vfsPath VFS, data []byte) []includeDirectiv
 	}
 
 	return out
+}
+
+func (protoIncludeDirectiveParser) Parse(_ VFS, data []byte) []includeDirective {
+	out := make([]includeDirective, 0, 8)
+
+	eachLine(data, func(line []byte) {
+		target, kind, ok := parseProtoImportLine(line)
+		if !ok {
+			return
+		}
+
+		out = append(out, includeDirective{kind: kind, target: target})
+	})
+
+	return out
+}
+
+func (ragelIncludeDirectiveParser) Parse(_ VFS, data []byte) []includeDirective {
+	out := parseCIncludes(data)
+	if len(out) == 0 {
+		out = make([]includeDirective, 0, 4)
+	}
+
+	seenNative := make(map[string]struct{}, 4)
+	inSpecification := false
+
+	eachLine(data, func(line []byte) {
+		trimmed := strings.TrimLeft(string(line), " \t")
+		if trimmed == "" {
+			return
+		}
+
+		switch {
+		case strings.HasPrefix(trimmed, "%%{"):
+			inSpecification = true
+			return
+		case strings.HasPrefix(trimmed, "}%%"):
+			inSpecification = false
+			return
+		}
+
+		if !inSpecification {
+			return
+		}
+
+		target, ok := parseRagelNativeIncludeLine(trimmed)
+		if !ok {
+			return
+		}
+
+		if _, dup := seenNative[target]; dup {
+			return
+		}
+		seenNative[target] = struct{}{}
+		out = append(out, includeDirective{kind: includeQuoted, target: target})
+	})
+
+	return out
+}
+
+func (swigIncludeDirectiveParser) Parse(_ VFS, data []byte) []includeDirective {
+	direct := make([]includeDirective, 0, 8)
+	induced := make([]includeDirective, 0, 4)
+	inBlock := false
+
+	eachLine(data, func(line []byte) {
+		trimmed := strings.TrimSpace(string(line))
+		if trimmed == "" {
+			return
+		}
+
+		if !inBlock && (strings.HasPrefix(trimmed, "%include") || strings.HasPrefix(trimmed, "%import") || strings.HasPrefix(trimmed, "%insert")) {
+			target, kind, ok := parseSwigIncludeLine(trimmed)
+			if ok {
+				direct = append(direct, includeDirective{kind: kind, target: target})
+			}
+		}
+
+		if strings.HasPrefix(trimmed, "%{") || strings.HasSuffix(trimmed, "%{") {
+			inBlock = true
+		}
+
+		if inBlock && strings.HasPrefix(trimmed, "#") {
+			induced = append(induced, parseCIncludes([]byte(trimmed+"\n"))...)
+		}
+
+		if strings.HasSuffix(trimmed, "%}") {
+			inBlock = false
+		}
+	})
+
+	return append(direct, induced...)
 }
 
 func (yasmIncludeDirectiveParser) Parse(_ VFS, data []byte) []includeDirective {
@@ -235,4 +336,440 @@ func parseYasmIncludes(data []byte) []includeDirective {
 	})
 
 	return out
+}
+
+func parseProtoImportLine(line []byte) (string, includeKind, bool) {
+	trimmed := strings.TrimSpace(string(line))
+	if trimmed == "" {
+		return "", includeSystem, false
+	}
+
+	if idx := strings.Index(trimmed, "//"); idx >= 0 {
+		trimmed = trimmed[:idx]
+		trimmed = strings.TrimSpace(trimmed)
+	}
+
+	if !strings.HasPrefix(trimmed, "import") || isParserIdentContinuation(trimmed, len("import")) {
+		return "", includeSystem, false
+	}
+
+	rest := strings.TrimSpace(trimmed[len("import"):])
+	for _, qualifier := range [...]string{"public", "weak"} {
+		if strings.HasPrefix(rest, qualifier) && !isParserIdentContinuation(rest, len(qualifier)) {
+			rest = strings.TrimSpace(rest[len(qualifier):])
+			break
+		}
+	}
+
+	return parseDelimitedIncludeTarget(rest)
+}
+
+func parseRagelNativeIncludeLine(line string) (string, bool) {
+	if idx := strings.IndexByte(line, '#'); idx >= 0 {
+		line = line[:idx]
+	}
+	line = strings.TrimSpace(line)
+	if !strings.HasPrefix(line, "include") || isParserIdentContinuation(line, len("include")) {
+		return "", false
+	}
+
+	rest := strings.TrimSpace(line[len("include"):])
+	firstQuote := strings.IndexAny(rest, `"'`)
+	if firstQuote < 0 {
+		return "", false
+	}
+
+	target, _, ok := parseDelimitedIncludeTarget(rest[firstQuote:])
+	return target, ok
+}
+
+func parseSwigIncludeLine(line string) (string, includeKind, bool) {
+	m := swigIncludeRe.FindStringSubmatch(line)
+	if len(m) != 3 {
+		return "", includeSystem, false
+	}
+
+	return parseDelimitedIncludeTarget(m[2])
+}
+
+func parseDelimitedIncludeTarget(s string) (string, includeKind, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", includeSystem, false
+	}
+
+	kind := includeSystem
+	switch s[0] {
+	case '"', '\'':
+		kind = includeQuoted
+	case '<':
+		kind = includeSystem
+	default:
+		return "", includeSystem, false
+	}
+
+	close := s[0]
+	if close == '<' {
+		close = '>'
+	}
+
+	end := strings.IndexByte(s[1:], close)
+	if end < 0 {
+		return "", includeSystem, false
+	}
+
+	target := s[1 : 1+end]
+	if target == "" {
+		return "", includeSystem, false
+	}
+
+	return target, kind, true
+}
+
+func isParserIdentContinuation(s string, idx int) bool {
+	if idx >= len(s) {
+		return false
+	}
+
+	switch c := s[idx]; {
+	case c >= 'a' && c <= 'z':
+		return true
+	case c >= 'A' && c <= 'Z':
+		return true
+	case c >= '0' && c <= '9':
+		return true
+	case c == '_':
+		return true
+	default:
+		return false
+	}
+}
+
+// eachLine invokes `fn` for every newline-terminated record in `data`,
+// passing a sub-slice (no per-line alloc). Trailing `\r` stripped.
+// The callback must not retain the slice past invocation.
+func eachLine(data []byte, fn func(line []byte)) {
+	start := 0
+
+	for i := 0; i < len(data); i++ {
+		if data[i] == '\n' {
+			line := data[start:i]
+			if len(line) > 0 && line[len(line)-1] == '\r' {
+				line = line[:len(line)-1]
+			}
+
+			fn(line)
+			start = i + 1
+		}
+	}
+
+	if start < len(data) {
+		fn(data[start:])
+	}
+}
+
+// indexOfAngleOrQuote returns the index of the first `<` or `"` in `b`,
+// or -1 when neither is present.
+func indexOfAngleOrQuote(b []byte) int {
+	for i := 0; i < len(b); i++ {
+		c := b[i]
+
+		if c == '<' || c == '"' {
+			return i
+		}
+	}
+
+	return -1
+}
+
+// stripComments rewrites C/C++ source bytes so the include-directive
+// regex never matches text inside non-code regions. Block and line
+// comments are replaced with spaces; newlines preserved so per-line
+// `^\s*#` anchoring continues to address the same lines.
+//
+// String and char literals are recognised but not stripped: bytes are
+// walked so a `/*` or `//` inside a string body cannot enter comment
+// state, but the bytes themselves stay unchanged. This matters because
+// `#include "header.h"` is a string literal at lexer level — stripping
+// its payload would erase every quoted include.
+//
+// Raw string literals (`R"delim(...)delim"`) are walked transparently
+// and have their bodies blanked: protoc's `R"(#include "$path$")"`
+// codegen templates would otherwise expose fake `#include` lines.
+//
+// Mutates `data` in place; the buffer comes from os.ReadFile and is
+// not retained past scanDirectives. The state machine is intentionally
+// simple: no trigraphs, no line-continuation backslash splicing, no
+// alternative tokens (`%:include`).
+func stripComments(data []byte) []byte {
+	hasTrigger := false
+
+	for i := 0; i < len(data); i++ {
+		c := data[i]
+
+		if c == '/' || c == '"' || c == '\'' {
+			hasTrigger = true
+
+			break
+		}
+	}
+
+	if !hasTrigger {
+		return data
+	}
+
+	n := len(data)
+	i := 0
+	atLineStart := true
+
+	for i < n {
+		c := data[i]
+
+		if atLineStart {
+			if next, ok := scanIncludeDirectiveTarget(data, i); ok {
+				i = next
+				atLineStart = false
+				continue
+			}
+		}
+
+		if c == '/' && i+1 < n && data[i+1] == '/' {
+			data[i] = ' '
+			data[i+1] = ' '
+			i += 2
+
+			for i < n && data[i] != '\n' {
+				data[i] = ' '
+				i++
+			}
+			atLineStart = true
+
+			continue
+		}
+
+		if c == '/' && i+1 < n && data[i+1] == '*' {
+			data[i] = ' '
+			data[i+1] = ' '
+			i += 2
+
+			for i < n {
+				if i+1 < n && data[i] == '*' && data[i+1] == '/' {
+					data[i] = ' '
+					data[i+1] = ' '
+					i += 2
+
+					break
+				}
+
+				if data[i] != '\n' {
+					data[i] = ' '
+				}
+
+				i++
+			}
+			atLineStart = true
+
+			continue
+		}
+
+		if c == 'R' && i+1 < n && data[i+1] == '"' && !isIdentByte(prevByte(data, i)) {
+			delimStart := i + 2
+			j := delimStart
+
+			for j < n && data[j] != '(' && data[j] != '\n' && j-delimStart < 16 {
+				j++
+			}
+
+			if j >= n || data[j] != '(' {
+				i++
+
+				continue
+			}
+
+			delim := make([]byte, j-delimStart)
+			copy(delim, data[delimStart:j])
+
+			i = j + 1
+
+			for i < n {
+				if data[i] == ')' && i+1+len(delim)+1 <= n {
+					match := true
+
+					for k, b := range delim {
+						if data[i+1+k] != b {
+							match = false
+
+							break
+						}
+					}
+
+					if match && data[i+1+len(delim)] == '"' {
+						for k := 0; k <= len(delim); k++ {
+							data[i+k] = ' '
+						}
+						data[i+1+len(delim)] = ' '
+						i += 1 + len(delim) + 1
+
+						break
+					}
+				}
+
+				if data[i] != '\n' {
+					data[i] = ' '
+				}
+				i++
+			}
+
+			continue
+		}
+
+		if c == '"' {
+			i++
+
+			for i < n {
+				if data[i] == '\\' && i+1 < n && data[i+1] != '\n' {
+					i += 2
+
+					continue
+				}
+
+				if data[i] == '"' {
+					i++
+
+					break
+				}
+
+				if data[i] == '\n' {
+					break
+				}
+
+				i++
+			}
+
+			continue
+		}
+
+		if c == '\'' {
+			i++
+
+			for i < n {
+				if data[i] == '\\' && i+1 < n && data[i+1] != '\n' {
+					i += 2
+
+					continue
+				}
+
+				if data[i] == '\'' {
+					i++
+
+					break
+				}
+
+				if data[i] == '\n' {
+					break
+				}
+
+				i++
+			}
+
+			continue
+		}
+
+		i++
+		atLineStart = c == '\n'
+	}
+
+	return data
+}
+
+func scanIncludeDirectiveTarget(data []byte, i int) (int, bool) {
+	n := len(data)
+	j := i
+	for j < n {
+		switch data[j] {
+		case ' ', '\t':
+			j++
+		default:
+			goto nonSpace
+		}
+	}
+	return 0, false
+
+nonSpace:
+	if data[j] != '#' {
+		return 0, false
+	}
+	j++
+	for j < n {
+		switch data[j] {
+		case ' ', '\t':
+			j++
+		default:
+			goto directive
+		}
+	}
+	return 0, false
+
+directive:
+	switch {
+	case bytes.HasPrefix(data[j:], []byte("include_next")):
+		j += len("include_next")
+	case bytes.HasPrefix(data[j:], []byte("include")):
+		j += len("include")
+	default:
+		return 0, false
+	}
+	for j < n {
+		switch data[j] {
+		case ' ', '\t':
+			j++
+		default:
+			goto target
+		}
+	}
+	return 0, false
+
+target:
+	if j >= n {
+		return 0, false
+	}
+	var close byte
+	switch data[j] {
+	case '<':
+		close = '>'
+	case '"':
+		close = '"'
+	default:
+		return 0, false
+	}
+	j++
+	for j < n {
+		if data[j] == '\\' && close == '"' && j+1 < n && data[j+1] != '\n' {
+			j += 2
+			continue
+		}
+		if data[j] == close {
+			return j + 1, true
+		}
+		if data[j] == '\n' {
+			return 0, false
+		}
+		j++
+	}
+	return 0, false
+}
+
+func prevByte(data []byte, i int) byte {
+	if i == 0 {
+		return 0
+	}
+
+	return data[i-1]
+}
+
+func isIdentByte(b byte) bool {
+	return (b >= 'a' && b <= 'z') ||
+		(b >= 'A' && b <= 'Z') ||
+		(b >= '0' && b <= '9') ||
+		b == '_'
 }

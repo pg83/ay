@@ -1156,6 +1156,105 @@ func TestParseYasmIncludes_AngleBracketForm(t *testing.T) {
 	}
 }
 
+func TestScanDirectives_ProtoImports(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "src.proto")
+
+	if err := os.WriteFile(path, []byte(`import "a.proto";
+import public "b.proto";
+import weak 'c.proto';
+// import "ghost.proto";
+`), 0o644); err != nil {
+		t.Fatalf("write src.proto: %v", err)
+	}
+
+	scanner := NewIncludeScanner(dir, SysInclSet{})
+	dirs := scanner.scanDirectives(Source("src.proto"))
+
+	if len(dirs) != 3 {
+		t.Fatalf("got %d directives, want 3; %+v", len(dirs), dirs)
+	}
+
+	got := []string{dirs[0].target, dirs[1].target, dirs[2].target}
+	want := []string{"a.proto", "b.proto", "c.proto"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("targets = %v, want %v", got, want)
+		}
+		if dirs[i].kind != includeQuoted {
+			t.Fatalf("dirs[%d].kind = %v, want includeQuoted", i, dirs[i].kind)
+		}
+	}
+}
+
+func TestScanDirectives_RagelSpecAndCppIncludes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "src.rl6")
+
+	if err := os.WriteFile(path, []byte(`#include <outer.h>
+%%{
+include "machine.rl";
+include Foo "machine2.rl";
+include "machine.rl";
+}%%
+#include "tail.h"
+`), 0o644); err != nil {
+		t.Fatalf("write src.rl6: %v", err)
+	}
+
+	scanner := NewIncludeScanner(dir, SysInclSet{})
+	dirs := scanner.scanDirectives(Source("src.rl6"))
+
+	if len(dirs) != 4 {
+		t.Fatalf("got %d directives, want 4; %+v", len(dirs), dirs)
+	}
+
+	wantTargets := []string{"outer.h", "tail.h", "machine.rl", "machine2.rl"}
+	wantKinds := []includeKind{includeSystem, includeQuoted, includeQuoted, includeQuoted}
+	for i := range wantTargets {
+		if dirs[i].target != wantTargets[i] {
+			t.Fatalf("dirs[%d].target = %q, want %q; all=%+v", i, dirs[i].target, wantTargets[i], dirs)
+		}
+		if dirs[i].kind != wantKinds[i] {
+			t.Fatalf("dirs[%d].kind = %v, want %v", i, dirs[i].kind, wantKinds[i])
+		}
+	}
+}
+
+func TestScanDirectives_SwigAndBlockCpp(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "src.swg")
+
+	if err := os.WriteFile(path, []byte(`%module x
+%include "a.i"
+%import <b.i>
+%insert(runtime) "c.h"
+%{
+#include "block.h"
+%}
+`), 0o644); err != nil {
+		t.Fatalf("write src.swg: %v", err)
+	}
+
+	scanner := NewIncludeScanner(dir, SysInclSet{})
+	dirs := scanner.scanDirectives(Source("src.swg"))
+
+	if len(dirs) != 4 {
+		t.Fatalf("got %d directives, want 4; %+v", len(dirs), dirs)
+	}
+
+	wantTargets := []string{"a.i", "b.i", "c.h", "block.h"}
+	wantKinds := []includeKind{includeQuoted, includeSystem, includeQuoted, includeQuoted}
+	for i := range wantTargets {
+		if dirs[i].target != wantTargets[i] {
+			t.Fatalf("dirs[%d].target = %q, want %q; all=%+v", i, dirs[i].target, wantTargets[i], dirs)
+		}
+		if dirs[i].kind != wantKinds[i] {
+			t.Fatalf("dirs[%d].kind = %v, want %v", i, dirs[i].kind, wantKinds[i])
+		}
+	}
+}
+
 // TestScanDirectives_DispatchByExtension pins raw-scan dispatch
 // by file extension: a `.asm` file routes to the yasm parser; a `.h`
 // file routes to the C parser. The two parsers agree on the
