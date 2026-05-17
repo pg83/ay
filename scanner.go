@@ -35,10 +35,6 @@ import (
 // String materialization is kept only at the boundaries that still need
 // the canonical `$(S)/...` / `$(B)/...` spelling (serializer and a few
 // compatibility interfaces).
-const (
-	vfsSourcePrefix = "$(S)/"
-	vfsBuildPrefix  = "$(B)/"
-)
 
 // includeRe matches `#include` / `#include_next` directives in their
 // angle-bracket and quoted-string forms, tolerating arbitrary

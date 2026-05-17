@@ -5,6 +5,11 @@ import (
 	"sort"
 )
 
+const (
+	vfsSourcePrefix = "$(S)/"
+	vfsBuildPrefix  = "$(B)/"
+)
+
 // vfs.go — typed VFS path.
 //
 // A VFS value addresses a file in one of two virtual roots (SOURCE_ROOT /
