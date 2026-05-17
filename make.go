@@ -59,6 +59,8 @@ type makeFlags struct {
 // pipes the resulting node stream into the executor. Exit 0 on success;
 // throws on any subcommand failure so main's Catch prints + exits non-zero.
 func cmdMake(args []string) int {
+	defer startProfilesFromEnv()()
+
 	mf := parseMakeFlags(args)
 
 	if len(mf.targets) == 0 {
