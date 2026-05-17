@@ -42,13 +42,13 @@ import (
 //   - SrcDir: module's SRCDIR setting; drives `__/<rel>` output infix
 //     and SRCDIR-based input path for sibling/non-local sources.
 type ModuleCCInputs struct {
-	AddIncl []string
+	AddIncl []VFS
 	// PeerAddInclGlobal is the union of every PEERDIR's transitive
 	// ADDINCL(GLOBAL ...) contributions in declaration order. Slotted
 	// AFTER own AddIncl and BEFORE ccIncludesSuffix (linux-headers).
 	// Also queried by the include scanner as a search-path fallback
 	// when a `<header>` does not resolve from own AddIncl.
-	PeerAddInclGlobal []string
+	PeerAddInclGlobal []VFS
 	CXXFlags          []string
 	COnlyFlags        []string
 	IsGenerated       bool
@@ -713,8 +713,8 @@ type ccComposeArgs struct {
 	Platform           *Platform
 	OutputPath         string
 	InputPath          string
-	OwnAddIncl         []string
-	PeerAddIncl        []string
+	OwnAddIncl         []VFS
+	PeerAddIncl        []VFS
 	OwnCFlags          []string
 	OwnExtras          []string
 	AutoPeerCFlags     []string
@@ -893,7 +893,7 @@ func composeHostCC(a ccComposeArgs) []string {
 // composeTargetCC: muslCcIncludes (10 args) replaces ccIncludes (4);
 // muslWarningFlags (1) replaces warningFlags (6); muslExtraDefines (9)
 // inserted after commonDefines, before the noLibc block.
-func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl, ownExtras []string, isCxx bool) []string {
+func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl []VFS, ownExtras []string, isCxx bool) []string {
 	bundle := compileFlagBundleFor(p)
 	cmdArgs := make([]string, 0, 111+len(addIncl)+len(ownExtras)+2)
 	cmdArgs = append(cmdArgs,
@@ -939,7 +939,7 @@ func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl, ownExtras
 // `-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE`); ndebugPicBlock × 2
 // with hostSseFeatures between replaces noLibcUndebugBlock × 2 with
 // catboostOpenSourceDefine. Net +4 args.
-func composeMuslHostCC(p *Platform, outputPath, inputPath string, addIncl, ownExtras []string, isCxx bool) []string {
+func composeMuslHostCC(p *Platform, outputPath, inputPath string, addIncl []VFS, ownExtras []string, isCxx bool) []string {
 	cmdArgs := make([]string, 0, 115+len(addIncl)+len(ownExtras)+2)
 	cmdArgs = append(cmdArgs,
 		pickCompiler(p.Tools, isCxx),
@@ -1004,7 +1004,7 @@ func partitionPython3FromAutoPeer(autoPeer []string) ([]string, []string) {
 // library/python/runtime_py3's build-tree dir) pass through verbatim
 // under a literal `-I` prefix; SOURCE_ROOT wrapping would produce
 // `-I$(S)/$(B)/…` which mismatches REF.
-func appendAddIncl(cmdArgs []string, addIncl []string) []string {
+func appendAddIncl(cmdArgs []string, addIncl []VFS) []string {
 	for _, p := range addIncl {
 		cmdArgs = append(cmdArgs, includeArg(p))
 	}
@@ -1012,12 +1012,8 @@ func appendAddIncl(cmdArgs []string, addIncl []string) []string {
 	return cmdArgs
 }
 
-func includeArg(path string) string {
-	if strings.HasPrefix(path, "$(B)/") || strings.HasPrefix(path, "$(S)/") {
-		return "-I" + path
-	}
-
-	return "-I$(S)/" + path
+func includeArg(path VFS) string {
+	return "-I" + path.String()
 }
 
 // appendMuslIncludes splices per-module ADDINCL paths into the musl
@@ -1027,7 +1023,7 @@ func includeArg(path string) string {
 // (builtins fp_mode.c.o cmd_args[7..14] anchors the slot, though
 // builtins is NOT a musl module — its musl-arch entries come from its
 // own IF(MUSL) ADDINCL block routed through composeTargetCC).
-func appendMuslIncludes(cmdArgs []string, muslSet []string, addIncl []string) []string {
+func appendMuslIncludes(cmdArgs []string, muslSet []string, addIncl []VFS) []string {
 	cmdArgs = append(cmdArgs, muslSet[:2]...)
 	cmdArgs = appendAddIncl(cmdArgs, addIncl)
 	cmdArgs = append(cmdArgs, muslSet[2:]...)

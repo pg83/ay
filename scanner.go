@@ -391,15 +391,6 @@ type ScanContext struct {
 	BaseSearchPaths []VFS  // baseline include set (linux-headers, musl arch when applicable)
 }
 
-func searchPathsFromStrings(ss []string) []VFS {
-	out := make([]VFS, len(ss))
-	for i, s := range ss {
-		out[i] = ParseVFSOrSource(s)
-	}
-
-	return out
-}
-
 // NewScanCtx allocates a fresh per-context resolution object bound to
 // this scanner and the given ScanContext. The returned scanCtx owns its
 // own resolveCache and subgraphCache; lifetime is the caller's (see

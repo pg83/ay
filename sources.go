@@ -167,11 +167,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		ragelInstance.Flags = inferFlagsFromPath(ragelInstance.Path, true)
 
 		if exc := Try(func() {
-				ragelResult := genModule(ctx, ragelInstance)
-				ragelLDRef = ragelResult.LDRef
-				if ragelResult.LDPath != nil {
-					ragelBinaryVFS = *ragelResult.LDPath
-				}
+			ragelResult := genModule(ctx, ragelInstance)
+			ragelLDRef = ragelResult.LDRef
+			if ragelResult.LDPath != nil {
+				ragelBinaryVFS = *ragelResult.LDPath
+			}
 		}); exc != nil {
 			// Only swallow *ParseError — the documented gap for
 			// INCLUDE(${ARCADIA_ROOT}/...) the parser can't expand.
@@ -286,8 +286,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 			protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
 
 			if exc := Try(func() {
-					result := genModule(ctx, protocHostInst)
-					protocLDRef = result.LDRef
+				result := genModule(ctx, protocHostInst)
+				protocLDRef = result.LDRef
 				if result.LDPath != nil {
 					protocBinary = *result.LDPath
 				}
@@ -299,8 +299,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 			cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
 
 			if exc := Try(func() {
-					result := genModule(ctx, cppStyleguideHostInst)
-					cppStyleguideLDRef = result.LDRef
+				result := genModule(ctx, cppStyleguideHostInst)
+				cppStyleguideLDRef = result.LDRef
 				if result.LDPath != nil {
 					cppStyleguideBinary = *result.LDPath
 				}
@@ -312,8 +312,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 			event2cppHostInst.Flags = inferFlagsFromPath(evEvent2cppModule, true)
 
 			if exc := Try(func() {
-					result := genModule(ctx, event2cppHostInst)
-					event2cppLDRef = result.LDRef
+				result := genModule(ctx, event2cppHostInst)
+				event2cppLDRef = result.LDRef
 				if result.LDPath != nil {
 					event2cppBinary = *result.LDPath
 				}
@@ -428,11 +428,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		ragel5Instance.Flags = inferFlagsFromPath(ragel5Path, true)
 
 		if exc := Try(func() {
-				res := genModule(ctx, ragel5Instance)
-				ragel5LDRef = res.LDRef
-				if res.LDPath != nil {
-					ragel5BinVFS = *res.LDPath
-				}
+			res := genModule(ctx, ragel5Instance)
+			ragel5LDRef = res.LDRef
+			if res.LDPath != nil {
+				ragel5BinVFS = *res.LDPath
+			}
 		}); exc != nil {
 			var pe *ParseError
 			if !errors.As(exc.AsError(), &pe) {
@@ -444,11 +444,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		rlgenCdInstance.Flags = inferFlagsFromPath(rlgenCdPath, true)
 
 		if exc := Try(func() {
-				res := genModule(ctx, rlgenCdInstance)
-				rlgenCdLDRef = res.LDRef
-				if res.LDPath != nil {
-					rlgenCdBinVFS = *res.LDPath
-				}
+			res := genModule(ctx, rlgenCdInstance)
+			rlgenCdLDRef = res.LDRef
+			if res.LDPath != nil {
+				rlgenCdBinVFS = *res.LDPath
+			}
 		}); exc != nil {
 			var pe *ParseError
 			if !errors.As(exc.AsError(), &pe) {
@@ -584,11 +584,11 @@ func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, srcDir *string
 	protocHostInst := NewToolInstance(ctx.host, pbProtocModule)
 	protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
 	if exc := Try(func() {
-			result := genModule(ctx, protocHostInst)
-			protocLDRef = result.LDRef
-			if result.LDPath != nil {
-				protocBinary = *result.LDPath
-			}
+		result := genModule(ctx, protocHostInst)
+		protocLDRef = result.LDRef
+		if result.LDPath != nil {
+			protocBinary = *result.LDPath
+		}
 	}); exc != nil {
 		_ = exc
 	}
@@ -596,21 +596,21 @@ func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, srcDir *string
 	cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule)
 	cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
 	if exc := Try(func() {
-			result := genModule(ctx, cppStyleguideHostInst)
-			cppStyleguideLDRef = result.LDRef
-			if result.LDPath != nil {
-				cppStyleguideBinary = *result.LDPath
-			}
+		result := genModule(ctx, cppStyleguideHostInst)
+		cppStyleguideLDRef = result.LDRef
+		if result.LDPath != nil {
+			cppStyleguideBinary = *result.LDPath
+		}
 	}); exc != nil {
 		_ = exc
 	}
 
 	protoRelPath := protoSourceRelPath(ctx.sourceRoot, instance, &moduleData{srcDir: srcDir}, srcRel)
-		pbRef := EmitPB(
-			instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
-			NodeRef{}, cppStyleguideBinary, protocBinary, pbGrpcCppVFS,
-			false, nil, "", false, ctx.sourceRoot, ctx.emit,
-		)
+	pbRef := EmitPB(
+		instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
+		NodeRef{}, cppStyleguideBinary, protocBinary, pbGrpcCppVFS,
+		false, nil, "", false, ctx.sourceRoot, ctx.emit,
+	)
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pbH := Build(protoBase + ".pb.h")
@@ -711,9 +711,9 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 
 		cfg := ScanContext{
 			SourceRel:       srcRelOnDisk,
-			OwnAddIncl:      searchPathsFromStrings(in.AddIncl),
-			PeerAddInclSet:  searchPathsFromStrings(in.PeerAddInclGlobal),
-			BaseSearchPaths: searchPathsFromStrings(includeScannerBasePaths(srcInstance.Flags.NoStdInc, scanPlatform)),
+			OwnAddIncl:      in.AddIncl,
+			PeerAddInclSet:  in.PeerAddInclGlobal,
+			BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.NoStdInc, scanPlatform),
 		}
 
 		// scanCtx dispatch via genCtx.getScanCtx — one scanCtx per
@@ -801,11 +801,11 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []V
 //
 // Narrow shim — only the musl-arch entry is rewritten; other entries
 // pass through. TODO: replace with general target-addincl propagation.
-func jsTargetPeerAddIncl(hostPeerAddIncl []string, from, to ISA) []string {
-	fromMuslArch := "contrib/libs/musl/arch/" + string(from)
-	toMuslArch := "contrib/libs/musl/arch/" + string(to)
+func jsTargetPeerAddIncl(hostPeerAddIncl []VFS, from, to ISA) []VFS {
+	fromMuslArch := Source("contrib/libs/musl/arch/" + string(from))
+	toMuslArch := Source("contrib/libs/musl/arch/" + string(to))
 
-	out := make([]string, len(hostPeerAddIncl))
+	out := make([]VFS, len(hostPeerAddIncl))
 
 	for i, p := range hostPeerAddIncl {
 		if p == fromMuslArch {
@@ -859,9 +859,9 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 	// BUILD_ROOT paths leave it as set and never consult it.
 	cfg := ScanContext{
 		SourceRel:       vfsPath.Rel,
-		OwnAddIncl:      searchPathsFromStrings(in.AddIncl),
-		PeerAddInclSet:  searchPathsFromStrings(in.PeerAddInclGlobal),
-		BaseSearchPaths: searchPathsFromStrings(includeScannerBasePaths(srcInstance.Flags.NoStdInc, srcInstance.Platform)),
+		OwnAddIncl:      in.AddIncl,
+		PeerAddInclSet:  in.PeerAddInclGlobal,
+		BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.NoStdInc, srcInstance.Platform),
 	}
 
 	sc := ctx.getScanCtx(scanner, cfg)
@@ -887,26 +887,26 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 // `libcMusl` is the per-MODULE flag; `scanPlatform` is the platform
 // to resolve against (typically instance.Platform, but JOIN_SRCS
 // during a host walk passes ctx.target to force target-arch paths).
-func includeScannerBasePaths(libcMusl bool, scanPlatform *Platform) []string {
-	base := []string{
-		"contrib/libs/linux-headers",
-		"contrib/libs/linux-headers/_nf",
+func includeScannerBasePaths(libcMusl bool, scanPlatform *Platform) []VFS {
+	base := []VFS{
+		Source("contrib/libs/linux-headers"),
+		Source("contrib/libs/linux-headers/_nf"),
 	}
 
 	if libcMusl {
 		// Mirror muslCcIncludes / muslCcIncludesX8664: arch + generic
 		// + src/include + src/internal + include + extra.
-		muslPaths := []string{
-			"contrib/libs/musl/arch/" + string(scanPlatform.ISA),
-			"contrib/libs/musl/arch/generic",
-			"contrib/libs/musl/src/include",
-			"contrib/libs/musl/src/internal",
-			"contrib/libs/musl/include",
-			"contrib/libs/musl/extra",
+		muslPaths := []VFS{
+			Source("contrib/libs/musl/arch/" + string(scanPlatform.ISA)),
+			Source("contrib/libs/musl/arch/generic"),
+			Source("contrib/libs/musl/src/include"),
+			Source("contrib/libs/musl/src/internal"),
+			Source("contrib/libs/musl/include"),
+			Source("contrib/libs/musl/extra"),
 		}
 
 		// Musl paths come BEFORE linux-headers in the cmd_args ordering.
-		out := make([]string, 0, len(muslPaths)+len(base))
+		out := make([]VFS, 0, len(muslPaths)+len(base))
 		out = append(out, muslPaths...)
 		out = append(out, base...)
 
@@ -916,8 +916,8 @@ func includeScannerBasePaths(libcMusl bool, scanPlatform *Platform) []string {
 	// Non-musl: prepend the empty-prefix entry (SOURCE_ROOT itself) so
 	// repo-rooted system-form includes like `<util/folder/path.h>`
 	// resolve against $(S)/util/folder/path.h.
-	out := make([]string, 0, 1+len(base))
-	out = append(out, "")
+	out := make([]VFS, 0, 1+len(base))
+	out = append(out, Source(""))
 	out = append(out, base...)
 
 	return out

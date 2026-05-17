@@ -1006,16 +1006,16 @@ func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLe
 		// yapyc3 entry — always emitted unless PYBUILD_NO_PYC is set.
 		if !d.pyBuildNoPYC {
 			ypKey := "resfs/file/py/" + keyPrefix + srcRel + ".yapyc3"
-				ypPathInput := Build(modulePath + "/" + srcRel + suffix)
-				// kv hash retains the ${rootrel;...} placeholder; cmd_args
-				// form expands to <actualUnit>/<srcRel><suffix>.
-				ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
-				ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
-				extraSrcInput := vfsPtr(Source(actualUnit + "/" + srcRel))
-				if d.pyGeneratedSrcs[srcRel] != nil {
-					ypKvCmd = "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
-					extraSrcInput = vfsPtr(Build(modulePath + "/" + srcRel))
-				}
+			ypPathInput := Build(modulePath + "/" + srcRel + suffix)
+			// kv hash retains the ${rootrel;...} placeholder; cmd_args
+			// form expands to <actualUnit>/<srcRel><suffix>.
+			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
+			ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
+			extraSrcInput := vfsPtr(Source(actualUnit + "/" + srcRel))
+			if d.pyGeneratedSrcs[srcRel] != nil {
+				ypKvCmd = "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
+				extraSrcInput = vfsPtr(Build(modulePath + "/" + srcRel))
+			}
 			out = append(out, pySrcEntry{
 				pathHash:      srcRel + suffix,
 				pathInput:     ypPathInput,

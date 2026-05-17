@@ -47,17 +47,17 @@ func EmitR5(
 	}
 
 	cmd0 := Cmd{
-			CmdArgs: []string{
-				ragel5BinPath.String(),
-				"-o",
+		CmdArgs: []string{
+			ragel5BinPath.String(),
+			"-o",
 			tmpPath,
 			srcPath,
 		},
 		Env: env,
 	}
 	cmd1 := Cmd{
-			CmdArgs: []string{
-				rlgenCdBinPath.String(),
+		CmdArgs: []string{
+			rlgenCdBinPath.String(),
 			"-G2",
 			"-o",
 			cppPath,
@@ -1180,11 +1180,11 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		toolLDRef   NodeRef
 	)
 	if exc := Try(func() {
-			res := genModule(ctx, toolInstance)
-			toolLDRef = res.LDRef
-			if res.LDPath != nil {
-				toolBinPath = *res.LDPath
-			}
+		res := genModule(ctx, toolInstance)
+		toolLDRef = res.LDRef
+		if res.LDPath != nil {
+			toolBinPath = *res.LDPath
+		}
 	}); exc != nil {
 		// Tool walk failure surfaces as a fallback path; matches
 		// emitRunProgram's pattern (the build will still record the
@@ -1582,11 +1582,11 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	var toolInducedDeps []string
 
 	if exc := Try(func() {
-			res := genModule(ctx, toolInstance)
-			toolLDRef = res.LDRef
-			if res.LDPath != nil {
-				toolBinPath = *res.LDPath
-			}
+		res := genModule(ctx, toolInstance)
+		toolLDRef = res.LDRef
+		if res.LDPath != nil {
+			toolBinPath = *res.LDPath
+		}
 		toolInducedDeps = res.InducedDeps
 	}); exc != nil {
 		// Swallow parse errors (tool may not fully parse); use fallback path.

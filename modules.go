@@ -36,9 +36,9 @@ type moduleData struct {
 	enumSrcs              []*GenerateEnumSerializationStmt // PR-M3-D: GENERATE_ENUM_SERIALIZATION(*) declarations
 	peerdirs              []string
 	joinSrcs              []*JoinSrcsStmt
-	addIncl               []string // collected non-GLOBAL ADDINCL paths
-	addInclGlobal         []string // PR-31 D04: collected ADDINCL(GLOBAL ...) paths; peer-propagated to consumers
-	cythonAddIncl         []string // ADDINCL(FOR cython ...) paths; consumed by CY command, not downstream CC.
+	addIncl               []VFS    // collected non-GLOBAL ADDINCL paths
+	addInclGlobal         []VFS    // PR-31 D04: collected ADDINCL(GLOBAL ...) paths; peer-propagated to consumers
+	cythonAddIncl         []VFS    // ADDINCL(FOR cython ...) paths; consumed by CY command, not downstream CC.
 	cFlags                []string // collected non-GLOBAL CFLAGS values (apply to module's own C+C++ sources)
 	cFlagsGlobal          []string // PR-32 D04: collected CFLAGS(GLOBAL ...) values; peer-propagated to consumers' C+C++ sources
 	cxxFlags              []string // collected non-GLOBAL CXXFLAGS values (C++ only); PR-29-D02 threads into ModuleCCInputs.CXXFlags
@@ -297,7 +297,7 @@ func filterInvalidAddIncl(sourceRoot string, d *moduleData) {
 	d.cythonAddIncl = filterExistingSourceDirs(sourceRoot, d.cythonAddIncl)
 }
 
-func filterExistingSourceDirs(sourceRoot string, paths []string) []string {
+func filterExistingSourceDirs(sourceRoot string, paths []VFS) []VFS {
 	if len(paths) == 0 {
 		return paths
 	}
@@ -305,7 +305,7 @@ func filterExistingSourceDirs(sourceRoot string, paths []string) []string {
 	out := paths[:0]
 	for _, path := range paths {
 		if shouldCheckSourceDir(path) {
-			info, err := os.Stat(filepath.Join(sourceRoot, path))
+			info, err := os.Stat(filepath.Join(sourceRoot, path.Rel))
 			if err != nil || !info.IsDir() {
 				continue
 			}
@@ -317,14 +317,14 @@ func filterExistingSourceDirs(sourceRoot string, paths []string) []string {
 	return out
 }
 
-func shouldCheckSourceDir(path string) bool {
-	if path == "" {
+func shouldCheckSourceDir(path VFS) bool {
+	if !path.IsSource() {
 		return false
 	}
-	if strings.HasPrefix(path, "/") {
+	if path.Rel == "" {
 		return false
 	}
-	if strings.Contains(path, "$") {
+	if strings.Contains(path.Rel, "$") {
 		return false
 	}
 
@@ -384,8 +384,8 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 	// module-type set.
 	d.usePython3 = true
 
-	d.addInclGlobal = append(d.addInclGlobal, "contrib/libs/python/Include")
-	d.addIncl = append(d.addIncl, "contrib/libs/python/Include")
+	d.addInclGlobal = append(d.addInclGlobal, Source("contrib/libs/python/Include"))
+	d.addIncl = append(d.addIncl, Source("contrib/libs/python/Include"))
 
 	// ARCHIVE(NAME ...) in library/python/runtime_py3 auto-injects
 	// `${addincl;noauto;output:NAME}` (ymake.core.conf:4143): owner-
@@ -393,7 +393,7 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 	// it via d.addIncl; consumers see it via genModule's post-merge
 	// splice (after abseil-cpp).
 	if modulePath == "library/python/runtime_py3" {
-		d.addIncl = append(d.addIncl, "$(B)/library/python/runtime_py3")
+		d.addIncl = append(d.addIncl, Build("library/python/runtime_py3"))
 	}
 }
 
@@ -406,7 +406,7 @@ func applyBuildInfoAddIncl(modulePath string, d *moduleData) {
 	if d.createBuildInfoFor == nil {
 		return
 	}
-	biDir := "$(B)/" + modulePath
+	biDir := Build(modulePath)
 	d.addIncl = append(d.addIncl, biDir)
 	d.addInclGlobal = append(d.addInclGlobal, biDir)
 }
@@ -496,7 +496,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 					continue
 				}
 				if addInclNext {
-					d.addIncl = append(d.addIncl, p)
+					d.addIncl = append(d.addIncl, ParseVFSOrSource(p))
 					addInclNext = false
 				}
 				d.peerdirs = append(d.peerdirs, p)
@@ -525,9 +525,9 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// declaration order (AllPaths). Empirically the reference
 			// emits own GLOBAL ADDINCL on the module's own CC compiles
 			// (libcxx algorithm.cpp.o cmd_args[9..11]).
-			d.addInclGlobal = append(d.addInclGlobal, expandConfigPaths(v.GlobalPaths, env)...)
-			d.addIncl = append(d.addIncl, expandConfigPaths(v.AllPaths, env)...)
-			d.cythonAddIncl = append(d.cythonAddIncl, expandConfigPaths(v.CythonPaths, env)...)
+			d.addInclGlobal = append(d.addInclGlobal, VFSesFromStrings(expandConfigPaths(v.GlobalPaths, env))...)
+			d.addIncl = append(d.addIncl, VFSesFromStrings(expandConfigPaths(v.AllPaths, env))...)
+			d.cythonAddIncl = append(d.cythonAddIncl, VFSesFromStrings(expandConfigPaths(v.CythonPaths, env))...)
 		case *CFlagsStmt:
 			// GLOBAL flags peer-propagate (d.cFlagsGlobal); non-GLOBAL
 			// applies to own C+C++ sources only (d.cFlags). composeCC
@@ -681,7 +681,7 @@ func addGeneratedHeaderInclude(modulePath, dst string, d *moduleData) {
 		rel = filepath.ToSlash(filepath.Clean(modulePath + "/" + dir))
 	}
 
-	include := "$(B)/" + rel
+	include := Build(rel)
 	d.addIncl = append(d.addIncl, include)
 	d.addInclGlobal = append(d.addInclGlobal, include)
 }
@@ -693,7 +693,7 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *moduleData) {
 		rel = filepath.ToSlash(filepath.Clean(modulePath + "/" + dir))
 	}
 
-	d.addIncl = append(d.addIncl, "$(B)/"+rel)
+	d.addIncl = append(d.addIncl, Build(rel))
 }
 
 // applyUnknownStmt routes an UnknownStmt by name. NO_LIBC / NO_UTIL /
@@ -784,7 +784,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 				d.protoNamespaceGlobal = true
 			}
 		}
-		protoBuildRoot := "$(B)/" + filepath.ToSlash(filepath.Clean(*d.protoNamespace))
+		protoBuildRoot := Build(filepath.ToSlash(filepath.Clean(*d.protoNamespace)))
 		d.addIncl = append(d.addIncl, protoBuildRoot)
 		if d.protoNamespaceGlobal || (d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY") {
 			d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
