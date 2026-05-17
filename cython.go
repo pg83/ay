@@ -31,7 +31,11 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		srcVFS := Source(instance.Path + "/" + stmt.Src)
 		sourceClosure := walkClosure(ctx, instance, srcVFS, in)
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(srcVFS, sourceClosure)
-		registerGeneratedOutput(ctx, instance, "CY", generatedVFS, emitsIncludes)
+		parsed := make([]includeDirective, 0, len(emitsIncludes))
+		for _, include := range emitsIncludes {
+			parsed = append(parsed, includeDirective{kind: includeQuoted, target: include.Rel})
+		}
+		registerGeneratedParsedOutput(ctx, instance, "CY", generatedVFS, parsed)
 
 		env := map[string]string{
 			"ARCADIA_ROOT_DISTBUILD": "$(S)",

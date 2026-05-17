@@ -201,7 +201,10 @@ func (ragelIncludeDirectiveParser) Parse(vfsPath VFS, data []byte) parsedInclude
 
 	var set parsedIncludeSet
 	set = appendParsedDirectives(set, parsedIncludesLocal, local...)
-	set = appendParsedDirect(set, parsedIncludesHCPP, vfsPath)
+	set = appendParsedDirectives(set, parsedIncludesHCPP, includeDirective{
+		kind:   includeQuoted,
+		target: vfsPath.Rel,
+	})
 
 	return set
 }

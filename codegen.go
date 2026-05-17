@@ -235,7 +235,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		// Register the .yapyc3 output in the codegen registry so the
 		// downstream objcopy CC's input-driven resolveCodegenDepRefsExt
 		// lookup threads the PY producer into its deps[].
-		registerBoundGeneratedOutput(ctx, instance, "PY", outputPath, nil, pyRef)
+		registerBoundGeneratedParsedOutput(ctx, instance, "PY", outputPath, nil, pyRef)
 	}
 }
 
@@ -511,23 +511,23 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		}
 		if ctx.scannerTarget.codegen != nil {
 			headerSrc := Source(instance.Path + "/" + headerRel)
-			cppIncludes := []VFS{
-				headerSrc,
-				Source("tools/enum_parser/enum_parser/stdlib_deps.h"),
-				Source("tools/enum_parser/enum_serialization_runtime/dispatch_methods.h"),
-				Source("tools/enum_parser/enum_serialization_runtime/enum_runtime.h"),
-				Source("tools/enum_parser/enum_serialization_runtime/ordered_pairs.h"),
-				Source("util/generic/map.h"),
-				Source("util/generic/serialized_enum.h"),
-				Source("util/generic/singleton.h"),
-				Source("util/generic/string.h"),
-				Source("util/generic/typetraits.h"),
-				Source("util/generic/vector.h"),
-				Source("util/stream/output.h"),
-				Source("util/string/cast.h"),
+			cppParsed := []includeDirective{
+				{kind: includeQuoted, target: headerSrc.Rel},
+				{kind: includeQuoted, target: "tools/enum_parser/enum_parser/stdlib_deps.h"},
+				{kind: includeQuoted, target: "tools/enum_parser/enum_serialization_runtime/dispatch_methods.h"},
+				{kind: includeQuoted, target: "tools/enum_parser/enum_serialization_runtime/enum_runtime.h"},
+				{kind: includeQuoted, target: "tools/enum_parser/enum_serialization_runtime/ordered_pairs.h"},
+				{kind: includeQuoted, target: "util/generic/map.h"},
+				{kind: includeQuoted, target: "util/generic/serialized_enum.h"},
+				{kind: includeQuoted, target: "util/generic/singleton.h"},
+				{kind: includeQuoted, target: "util/generic/string.h"},
+				{kind: includeQuoted, target: "util/generic/typetraits.h"},
+				{kind: includeQuoted, target: "util/generic/vector.h"},
+				{kind: includeQuoted, target: "util/stream/output.h"},
+				{kind: includeQuoted, target: "util/string/cast.h"},
 			}
-			SortVFS(cppIncludes)
-			registerGeneratedOutput(ctx, instance, "EN", serializedCPPPath, cppIncludes)
+			sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target < cppParsed[j].target })
+			registerGeneratedParsedOutput(ctx, instance, "EN", serializedCPPPath, cppParsed)
 			if withHeader {
 				// Include the sibling _serialized.cpp so CC consumers
 				// that #include the _serialized.h transitively pull the
@@ -535,13 +535,13 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 				// enum_serialization_runtime header set. REF bundles
 				// the EN producer's .h and .cpp outputs together in
 				// every downstream CC's inputs.
-				hIncludes := []VFS{
-					headerSrc,
-					serializedCPPPath,
-					Source("util/generic/serialized_enum.h"),
+				hParsed := []includeDirective{
+					{kind: includeQuoted, target: headerSrc.Rel},
+					{kind: includeQuoted, target: serializedCPPPath.Rel},
+					{kind: includeQuoted, target: "util/generic/serialized_enum.h"},
 				}
-				SortVFS(hIncludes)
-				registerGeneratedOutput(ctx, instance, "EN", serializedHPath, hIncludes)
+				sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target < hParsed[j].target })
+				registerGeneratedParsedOutput(ctx, instance, "EN", serializedHPath, hParsed)
 			}
 		}
 
@@ -669,7 +669,7 @@ func codegenRegForInstance(ctx *genCtx, instance ModuleInstance) *CodegenRegistr
 //
 // Legitimate disk read: extracts structured `import` directives at
 // registration time to populate EmitsIncludes. NOT for closure walks.
-func protoDirectImportIncludes(sourceRoot, srcRel, outputRoot string) []VFS {
+func protoDirectImportIncludes(sourceRoot, srcRel, outputRoot string) []includeDirective {
 	absPath := filepath.Join(sourceRoot, srcRel)
 	f, err := os.Open(absPath)
 	if err != nil {
@@ -677,7 +677,7 @@ func protoDirectImportIncludes(sourceRoot, srcRel, outputRoot string) []VFS {
 	}
 	defer f.Close()
 
-	var out []VFS
+	var out []includeDirective
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -691,19 +691,19 @@ func protoDirectImportIncludes(sourceRoot, srcRel, outputRoot string) []VFS {
 		}
 		imp := line[start+1 : end]
 		if strings.HasSuffix(imp, ".ev") {
-			out = append(out, Build(protoOutputRel(outputRoot, strings.TrimSuffix(imp, ".ev")+".ev.pb.h")))
+			out = append(out, includeDirective{kind: includeQuoted, target: protoOutputRel(outputRoot, strings.TrimSuffix(imp, ".ev")+".ev.pb.h")})
 		} else if strings.HasSuffix(imp, ".proto") {
 			base := strings.TrimSuffix(imp, ".proto")
 			if imp == "google/protobuf/descriptor.proto" {
 				// descriptor.pb.h is pre-committed, not a codegen output.
 				// Upstream tree: contrib/libs/protobuf/src/google/protobuf/descriptor.pb.h
-				out = append(out, Source(pbRuntimeBase+"google/protobuf/descriptor.pb.h"))
+				out = append(out, includeDirective{kind: includeQuoted, target: pbRuntimeBase + "google/protobuf/descriptor.pb.h"})
 			} else {
-				out = append(out, Build(protoOutputRel(outputRoot, base+".pb.h")))
+				out = append(out, includeDirective{kind: includeQuoted, target: protoOutputRel(outputRoot, base+".pb.h")})
 			}
 		}
 	}
-	SortVFS(out)
+	sort.Slice(out, func(i, j int) bool { return out[i].target < out[j].target })
 	return out
 }
 
@@ -722,12 +722,12 @@ func protoOutputRel(outputRoot, rel string) string {
 //
 // Legitimate disk read: extracts structured `#include` directives at
 // registration time to populate EmitsIncludes. NOT for closure walks.
-func cfIncludeDirectives(diskPath string) []VFS {
+func cfIncludeDirectives(diskPath string) []includeDirective {
 	data, err := os.ReadFile(diskPath)
 	if err != nil {
 		return nil
 	}
-	var out []VFS
+	var out []includeDirective
 	for _, line := range strings.Split(string(data), "\n") {
 		t := strings.TrimSpace(line)
 		if !strings.HasPrefix(t, "#include ") {
@@ -743,9 +743,9 @@ func cfIncludeDirectives(diskPath string) []VFS {
 		}
 		inc := t[start+1 : start+1+end]
 		if inc != "" {
-			out = append(out, Source(inc))
+			out = append(out, includeDirective{kind: includeQuoted, target: inc})
 		}
 	}
-	SortVFS(out)
+	sort.Slice(out, func(i, j int) bool { return out[i].target < out[j].target })
 	return out
 }

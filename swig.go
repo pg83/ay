@@ -83,8 +83,12 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 		}
 		d.pySrcs = append(d.pySrcs, pyOutRel)
 		d.pyGeneratedSrcs[pyOutRel] = append([]VFS{cOutVFS, srcVFS}, libInputs...)
-		registerBoundGeneratedParsedOutput(ctx, instance, "SW", cOutVFS, remapSourceParsedIncludesToLocal(ctx, instance, srcVFS, parsedIncludesHCPP), swRef)
-		registerBoundGeneratedOutput(ctx, instance, "SW", pyOutVFS, nil, swRef)
+		var cParsed []includeDirective
+		if scanner := ctx.scannerFor(instance); scanner != nil {
+			cParsed = scanner.parsers.sourceParsedBuckets(srcVFS).bucket(parsedIncludesHCPP)
+		}
+		registerBoundGeneratedParsedOutput(ctx, instance, "SW", cOutVFS, cParsed, swRef)
+		registerBoundGeneratedParsedOutput(ctx, instance, "SW", pyOutVFS, nil, swRef)
 
 		ccIn := in
 		ccIn.IsGenerated = true

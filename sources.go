@@ -211,7 +211,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		// source-relative resolution and keeps the original .rl6 in the
 		// downstream closure.
 		rl6SourceVFS := Source(srcInstance.Path + "/" + srcRel)
-		registerGeneratedParsedOutput(ctx, srcInstance, "R6", r6Out, remapSourceParsedIncludesToLocal(ctx, srcInstance, rl6SourceVFS, parsedIncludesHCPP))
+		var r6Parsed []includeDirective
+		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
+			r6Parsed = scanner.parsers.sourceParsedBuckets(rl6SourceVFS).bucket(parsedIncludesHCPP)
+		}
+		registerGeneratedParsedOutput(ctx, srcInstance, "R6", r6Out, r6Parsed)
 
 		// Pass IsGenerated so the downstream CC composes inputPath
 		// under $(B)/<srcInstance.Path>/<rel>; thread r6Ref as
@@ -345,15 +349,22 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 			if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath, "")
 				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC)
-				evEmitsIncludes := make([]VFS, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
-				evEmitsIncludes = append(evEmitsIncludes, directImports...)
-				evEmitsIncludes = append(evEmitsIncludes, protobufRuntimeHeaders...)
-				evEmitsIncludes = append(evEmitsIncludes, evExtras...)
-				registerGeneratedOutput(ctx, srcInstance, "EV", evH, evEmitsIncludes)
+				evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
+				evHParsed = append(evHParsed, directImports...)
+				for _, include := range protobufRuntimeHeaders {
+					evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				}
+				evHParsed = append(evHParsed, evExtras...)
+				registerGeneratedParsedOutput(ctx, srcInstance, "EV", evH, evHParsed)
 				// Register the .ev.pb.cc output. event2cpp emits a
 				// `#include "<base>.ev.pb.h"` plus protobuf runtime
 				// headers. Mirror the .pb.h list for symmetry with PB.
-				registerGeneratedOutput(ctx, srcInstance, "EV", evPbCC, append([]VFS{evH}, protobufRuntimeHeaders...))
+				evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders))
+				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: evH.Rel})
+				for _, include := range protobufRuntimeHeaders {
+					evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				}
+				registerGeneratedParsedOutput(ctx, srcInstance, "EV", evPbCC, evCCParsed)
 			}
 
 			// Emit downstream CC for the generated .ev.pb.cc via the
@@ -467,8 +478,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		// consumer-visible includes. ProducerRef = r5Ref so the
 		// downstream CC threads R5 into its deps[].
 		rlSourceVFS := Source(srcInstance.Path + "/" + srcRel)
-		registerBoundGeneratedOutput(ctx, srcInstance, "R5", r5TmpOut, nil, r5Ref)
-		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5CppOut, remapSourceParsedIncludesToLocal(ctx, srcInstance, rlSourceVFS, parsedIncludesHCPP), r5Ref)
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5TmpOut, nil, r5Ref)
+		var r5Parsed []includeDirective
+		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
+			r5Parsed = scanner.parsers.sourceParsedBuckets(rlSourceVFS).bucket(parsedIncludesHCPP)
+		}
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5CppOut, r5Parsed, r5Ref)
 
 		// Downstream CC for the generated .rl5.cpp via the unified
 		// VFS-path entry — the .rl5.cpp is registered above with the
@@ -507,7 +522,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
 
 		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
-		registerBoundGeneratedOutput(ctx, srcInstance, "CF", cfOut, []VFS{inSourceVFS, configureFilePyVFS}, cfRef)
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{
+			{kind: includeQuoted, target: inSourceVFS.Rel},
+			{kind: includeQuoted, target: configureFilePyVFS.Rel},
+		}, cfRef)
 
 		cfMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, srcIn.IncludeInputs...)
 
@@ -537,7 +555,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		// ProducerRef = cfRef so downstream resolveCodegenDepRefs
 		// threads the CF producer into deps[].
 		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
-		registerBoundGeneratedOutput(ctx, srcInstance, "CF", cfOut, []VFS{inSourceVFS, configureFilePyVFS}, cfRef)
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{
+			{kind: includeQuoted, target: inSourceVFS.Rel},
+			{kind: includeQuoted, target: configureFilePyVFS.Rel},
+		}, cfRef)
 
 		// Downstream CC for the generated .cpp / .c via the unified
 		// VFS-path entry — the .cpp is registered with the .cpp.in as
@@ -627,19 +648,25 @@ func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, srcDir *string
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
 		directImports := protoDirectImportIncludes(ctx.sourceRoot, protoRelPath, "")
 		extras := pbDescriptorImporterExtras(ctx.sourceRoot, protoRelPath)
-		emitsIncludes := make([]VFS, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
-		emitsIncludes = append(emitsIncludes, directImports...)
-		emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
-		emitsIncludes = append(emitsIncludes, extras...)
-		registerGeneratedOutput(ctx, instance, "PB", pbH, emitsIncludes)
+		pbHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
+		pbHParsed = append(pbHParsed, directImports...)
+		for _, include := range protobufRuntimeHeaders {
+			pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+		}
+		pbHParsed = append(pbHParsed, extras...)
+		registerGeneratedParsedOutput(ctx, instance, "PB", pbH, pbHParsed)
 
-		pbCCEmits := make([]VFS, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
-		pbCCEmits = append(pbCCEmits, pbH)
-		pbCCEmits = append(pbCCEmits, Source(protoRelPath))
-		pbCCEmits = append(pbCCEmits, pbWrapperVFS)
-		pbCCEmits = append(pbCCEmits, protobufRuntimeHeaders...)
-		pbCCEmits = append(pbCCEmits, pbCcDeepRuntimeHeaders...)
-		registerGeneratedOutput(ctx, instance, "PB", pbCC, pbCCEmits)
+		pbCCParsed := make([]includeDirective, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
+		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: pbH.Rel})
+		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: protoRelPath})
+		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
+		for _, include := range protobufRuntimeHeaders {
+			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+		}
+		for _, include := range pbCcDeepRuntimeHeaders {
+			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+		}
+		registerGeneratedParsedOutput(ctx, instance, "PB", pbCC, pbCCParsed)
 	}
 
 	ccIn := in
