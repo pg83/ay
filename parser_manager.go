@@ -124,7 +124,7 @@ func (pm *includeParserManager) sourceParsedBuckets(rel string) parsedIncludeSet
 		return nil
 	}
 
-	out := includeDirectiveParsers.parserFor(vfsPath).Parse(vfsPath, data)
+	out := includeDirectiveParsers.parserFor(rel).Parse(rel, data)
 	pm.cache.parsed.Set(vfsPath, out)
 
 	return out

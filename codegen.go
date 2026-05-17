@@ -332,6 +332,9 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		ccIn.Generator = pyRef
 		ccIn.HasGenerator = true
 		ccIn.Py3Suffix = py3Suffix
+		if len(d.cythonCpp) > 0 {
+			ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl)
+		}
 		ccIn.IncludeInputs = []VFS{genPy3RegScriptVFS}
 		// PyInit_/init_module_ defines added by `onpy_register` AFTER
 		// `_PY3_REGISTER`'s `SRCS(GLOBAL …)` attach only to user-declared

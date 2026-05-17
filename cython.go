@@ -30,7 +30,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		generatedVFS := Build(instance.Path + "/" + generated)
 		srcVFS := Source(instance.Path + "/" + stmt.Src)
 		sourceClosure := walkClosure(ctx, instance, srcVFS, in)
-		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(srcVFS, sourceClosure)
+		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(srcVFS, sourceClosure, stmt.CMode)
 		parsed := make([]includeDirective, 0, len(emitsIncludes))
 		for _, include := range emitsIncludes {
 			parsed = append(parsed, includeDirective{kind: includeQuoted, target: include.Rel})
@@ -106,7 +106,10 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		ccIn.Py3Suffix = !stmt.CMode && !generatedExplicit && py23Variant
 		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl)
 		ccIn.CFlags = filterPyRegisterCFlags(ccIn.CFlags)
-		ccIn.PerSourceCFlags = append(append([]string(nil), in.PerSourceCFlags...), "-Wno-implicit-fallthrough")
+		ccIn.PerSourceCFlags = append([]string(nil), in.PerSourceCFlags...)
+		if !stmt.CMode {
+			ccIn.PerSourceCFlags = append(ccIn.PerSourceCFlags, "-Wno-implicit-fallthrough")
+		}
 		ccIn.IncludeInputs = generatedOutputClosure(ctx, instance, generatedVFS, ccIn)
 
 		ccRef, ccOut := EmitCC(instance, generated, ccIn, ctx.host, ctx.emit)
@@ -123,12 +126,23 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 	return out
 }
 
-func cythonGeneratedOutputInputs(src VFS, sourceClosure []VFS) ([]VFS, []VFS) {
-	toolInputs := make([]VFS, 0, 2+len(py3CythonEmbeddedFiles)+len(sourceClosure))
-	emitsIncludes := make([]VFS, 0, 1+len(py3CythonEmbeddedFiles)+len(sourceClosure))
+func cythonGeneratedOutputInputs(src VFS, sourceClosure []VFS, cMode bool) ([]VFS, []VFS) {
+	toolInputs := make([]VFS, 0, 2+len(py3CythonEmbeddedFiles)+len(py3CythonOutputIncludes)+len(sourceClosure))
+	emitsIncludes := make([]VFS, 0, 1+len(py3CythonEmbeddedFiles)+len(py3CythonOutputIncludes)+len(sourceClosure))
 
 	toolInputs = append(toolInputs, Source("contrib/tools/cython/cython.py"))
 	emitsIncludes = append(emitsIncludes, src)
+
+	for _, v := range py3CythonOutputIncludes {
+		if v.Rel == "contrib/tools/cython/generated_cpp_headers.h" && cMode {
+			continue
+		}
+		if v.Rel == "contrib/tools/cython/generated_c_headers.h" && !cMode {
+			continue
+		}
+		toolInputs = append(toolInputs, v)
+		emitsIncludes = append(emitsIncludes, v)
+	}
 
 	for _, rel := range py3CythonEmbeddedFiles {
 		v := Source(rel)
@@ -194,6 +208,20 @@ var cythonNumpyAddIncl = []VFS{
 	Source("contrib/python/numpy/include/numpy/core/src/common"),
 	Source("contrib/python/numpy/include/numpy/core/src/npymath"),
 	Source("contrib/python/numpy/include/numpy/distutils/include"),
+}
+
+var py3CythonOutputIncludes = []VFS{
+	Source("contrib/tools/cython/generated_c_headers.h"),
+	Source("contrib/tools/cython/generated_cpp_headers.h"),
+	Source("contrib/libs/python/Include/compile.h"),
+	Source("contrib/libs/python/Include/frameobject.h"),
+	Source("contrib/libs/python/Include/longintrepr.h"),
+	Source("contrib/libs/python/Include/pyconfig.h"),
+	Source("contrib/libs/python/Include/Python.h"),
+	Source("contrib/libs/python/Include/pythread.h"),
+	Source("contrib/libs/python/Include/structmember.h"),
+	Source("contrib/libs/python/Include/traceback.h"),
+	Source("contrib/libs/cxxsupp/openmp/omp.h"),
 }
 
 func dedupVFS(in []VFS) []VFS {

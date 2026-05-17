@@ -446,7 +446,6 @@ func emitResourceObjcopy(
 	}
 
 	emitEntries(d.resources)
-	emitEntries(d.pyPyiResources)
 
 	// Explicit RESOURCE/RESOURCE_FILES flush before PY_SRCS pybuild
 	// resources in upstream, even when PY_SRCS appears earlier in ya.make.
@@ -456,6 +455,7 @@ func emitResourceObjcopy(
 		out.Outputs = append(out.Outputs, srcRes.Outputs...)
 		globalMemberInputs = append(globalMemberInputs, srcRes.GlobalMemberInputs...)
 	}
+	emitEntries(d.pyPyiResources)
 
 	out.GlobalMemberInputs = globalMemberInputs
 	return out
