@@ -56,34 +56,6 @@ type includeDirective struct {
 	target string
 }
 
-// sharedParseCache holds the parse-level caches that are architecture-
-// independent: file-byte parsing (parsed) and file existence (exists).
-// Both depend only on the source tree, not on which sysincl YAML records
-// are loaded, so target/host scanner pairs in GenWith share one cache.
-//
-// Full unification is not safe: sysincl resolution IS arch-dependent
-// (linux-musl-aarch64.yml vs linux-musl.yml map bits/* headers to
-// different paths). The resolve chain (resolveCache, subgraphCache,
-// sysincl{Source,Includer}Cache) stays per-scanner.
-type sharedParseCache struct {
-	// parsed memoises include directives per VFS-rooted path
-	// ($(S)/<rel>). 8192 pre-size covers the tools/archiver peak
-	// (4354 target + 3559 host, mostly overlapping).
-	parsed VFSMap[[]includeDirective]
-	// exists memoises os.Stat results, keyed by SOURCE_ROOT-relative
-	// tail. 16384 covers the observed peak.
-	exists map[string]bool
-}
-
-// newSharedParseCache allocates a sharedParseCache with pre-sized maps
-// matched to the observed peak for the tools/archiver closure.
-func newSharedParseCache() *sharedParseCache {
-	return &sharedParseCache{
-		parsed: NewVFSMap[[]includeDirective](8192),
-		exists: make(map[string]bool, 16384),
-	}
-}
-
 // scannerInterner assigns scanner-local numeric IDs to repeated strings,
 // VFS paths, and source-class signatures so hot cache keys stay compact
 // and avoid repeated string hashing in their own maps.
@@ -130,24 +102,19 @@ func (si *scannerInterner) internVFS(v VFS) uint32 {
 }
 
 // IncludeScanner is the per-walker include-resolver state. It owns the
-// SysInclSet, sourceRoot, the shared parse cache (parsed + exists), the
-// per-scanCtx resolve/subgraph caches, scratch-buffer sync.Pools, and
-// the sysincl per-half caches.
+// SysInclSet, the parser manager (SOURCE_ROOT FS access + raw scan),
+// the per-scanCtx resolve/subgraph caches, scratch-buffer sync.Pools,
+// and the sysincl per-half caches.
 //
 // The scanner is invoked exclusively from gen.go's serial walker — no
 // locking. If a future change introduces per-source goroutines, every
 // cache access site needs a mutex reintroduced.
 type IncludeScanner struct {
-	sysincl    SysInclSet
-	sourceRoot string
-	// sourceRootSlash is the precomputed `sourceRoot + "/"` prefix
-	// used at the FS-translation boundary (scanDirectives / fileExists
-	// / fsLocator.Exists) to keep the concat alloc-free.
-	sourceRootSlash string
-
-	// pc holds the parse-level caches shared between target and host
-	// scanners. Never nil.
-	pc *sharedParseCache
+	sysincl SysInclSet
+	// parsers owns SOURCE_ROOT FS access, parse/existence caches, and
+	// ext-dispatch for raw include scanning. Shared between target/host
+	// scanners so they reuse the same source-tree work.
+	parsers *includeParserManager
 	// interner assigns scanner-local numeric IDs for hot cache keys.
 	interner scannerInterner
 	// anySrcView is a PerSourceView prepared with an empty source path.
@@ -277,26 +244,23 @@ type sysinclCacheEntry struct {
 }
 
 // NewIncludeScanner constructs a scanner bound to a SysInclSet and a
-// source-root absolute path. Allocates a private sharedParseCache; use
-// newIncludeScannerWith to share a parse cache between scanners.
+// source-root absolute path. Allocates a private parser manager; use
+// newIncludeScannerWith to share one between scanners.
 func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
-	return newIncludeScannerWith(sourceRoot, sysincl, newSharedParseCache(), func(Warn) {})
+	return newIncludeScannerWith(newIncludeParserManager(sourceRoot), sysincl, func(Warn) {})
 }
 
-// newIncludeScannerWith is the internal constructor used when a
-// sharedParseCache is provided externally (target/host pair in GenWith).
-// pc must be non-nil; both scanners must share the same sourceRoot (the
-// cache is keyed by absolute path, so a mismatched root returns stale
-// results).
-func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedParseCache, onWarn func(Warn)) *IncludeScanner {
+// newIncludeScannerWith is the internal constructor used when a parser
+// manager is provided externally (target/host pair in GenWith).
+// parsers must be non-nil and tied to the same source root consumed by
+// both scanners.
+func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, onWarn func(Warn)) *IncludeScanner {
 	// Pre-sizes set to the upper bound of the observed working set for
 	// tools/archiver; sysinclSourceCache reaches ~328k entries on the
 	// target scanner, so pre-sizing past the peak eliminates rehashing.
 	s := &IncludeScanner{
 		sysincl:              sysincl,
-		sourceRoot:           sourceRoot,
-		sourceRootSlash:      sourceRoot + "/",
-		pc:                   pc,
+		parsers:              parsers,
 		interner:             newScannerInterner(),
 		sourceClassCache:     make(map[string]uint32, 1024),
 		sourceClassViews:     make(map[uint32]PerSourceView, 1024),
@@ -948,42 +912,11 @@ func (sc *scanCtx) walkSubgraphTainted(absPath VFS, sourceClass uint32, visited 
 	})
 }
 
-// scanDirectives returns the raw include directives for the $(S)/-
-// rooted file `vfsPath`. The FS translation happens here at the
-// os.ReadFile call; raw parsing itself is delegated to a per-extension
-// parser from parsers.go. Memoised by VFS path; returns nil for missing
-// files (DFS may reach dangling sysincl mappings).
-//
+// scanDirectives delegates raw include scanning to the parser manager.
 // Callers must NOT pass a $(B)/ path — generated outputs are read via
 // the CodegenRegistry. forEachResolvedChild enforces this dispatch.
-//
-// Parser selection mirrors upstream parser_manager at a smaller scope:
-// ext decides the raw scanner (`.asm`/`.asi` yasm, `.g4` empty, most
-// others C-like), then the resolver consumes the uniform
-// includeDirective stream.
 func (s *IncludeScanner) scanDirectives(vfsPath VFS) []includeDirective {
-	// Parsed cache is shared between target and host scanners via s.pc.
-	if cached, ok := s.pc.parsed.Get(vfsPath); ok {
-		return cached
-	}
-
-	// Any non-SOURCE path here is a bug (a $(B)/ should have
-	// been dispatched to the registry by forEachResolvedChild).
-	fsPath := s.sourceRootSlash + vfsPath.Rel
-
-	data, err := os.ReadFile(fsPath)
-
-	if err != nil {
-		s.pc.parsed.Set(vfsPath, nil)
-
-		return nil
-	}
-
-	out := includeDirectiveParsers.parserFor(vfsPath).Parse(vfsPath, data)
-
-	s.pc.parsed.Set(vfsPath, out)
-
-	return out
+	return s.parsers.scanDirectives(vfsPath)
 }
 
 // resolve returns the absolute paths the directive resolves to, in
@@ -1581,22 +1514,12 @@ func (c codegenLocator) Exists(vfsPath VFS) bool {
 // unified with fileExistsByRel so hot callers (resolveSearchPath, ~4.7M
 // calls) skip the `$(S)/` concat.
 func (s *IncludeScanner) fileExists(vfsPath VFS) bool {
-	return s.fileExistsByRel(vfsPath.Rel)
+	return s.parsers.fileExists(vfsPath)
 }
 
 // fileExistsByRel is the inner, rel-keyed existence check.
 func (s *IncludeScanner) fileExistsByRel(rel string) bool {
-	// Exists cache is shared between target and host scanners via s.pc.
-	if cached, ok := s.pc.exists[rel]; ok {
-		return cached
-	}
-
-	info, err := os.Stat(s.sourceRootSlash + rel)
-	val := err == nil && !info.IsDir()
-
-	s.pc.exists[rel] = val
-
-	return val
+	return s.parsers.fileExistsByRel(rel)
 }
 
 // eachLine invokes `fn` for every newline-terminated record in `data`,
