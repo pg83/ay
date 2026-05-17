@@ -85,7 +85,7 @@ type includeParserManager struct {
 	// buildParsed is the parser-layer VFS overlay for generated
 	// outputs. Emitters register `$(B)` paths here explicitly; parser
 	// lookup for build-rooted paths consults ONLY this map.
-	buildParsed VFSMap[[]includeDirective]
+	buildParsed map[string][]includeDirective
 }
 
 func newIncludeParserManager(sourceRoot string) *includeParserManager {
@@ -97,7 +97,7 @@ func newIncludeParserManagerWithCache(sourceRoot string, cache *sharedParseCache
 		sourceRoot:      sourceRoot,
 		sourceRootSlash: sourceRoot + "/",
 		cache:           cache,
-		buildParsed:     NewVFSMap[[]includeDirective](256),
+		buildParsed:     make(map[string][]includeDirective, 256),
 	}
 }
 
@@ -108,18 +108,14 @@ func newIncludeParserManagerWithCache(sourceRoot string, cache *sharedParseCache
 // files (DFS may reach dangling sysincl mappings).
 //
 // sourceParsedBuckets returns the full parser result for one source
-// file. Only SOURCE-rooted paths are valid here; generated outputs are
-// mounted directly as flat `[]parsedInclude` lists.
-func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSet {
-	if vfsPath.IsBuild() {
-		ThrowFmt("includeParserManager.sourceParsedBuckets: build-rooted path %q", vfsPath.String())
-	}
-
+// file. Parameter is SOURCE_ROOT-relative.
+func (pm *includeParserManager) sourceParsedBuckets(rel string) parsedIncludeSet {
+	vfsPath := Source(rel)
 	if cached, ok := pm.cache.parsed.Get(vfsPath); ok {
 		return cached
 	}
 
-	fsPath := pm.sourceRootSlash + vfsPath.Rel
+	fsPath := pm.sourceRootSlash + rel
 
 	data, err := os.ReadFile(fsPath)
 	if err != nil {
@@ -139,39 +135,18 @@ func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSe
 // BUILD-rooted paths expose only what emitters registered in buildParsed.
 func (pm *includeParserManager) parsedIncludes(vfsPath VFS) []includeDirective {
 	if vfsPath.IsBuild() {
-		if parsed, ok := pm.buildParsed.Get(vfsPath); ok {
+		if parsed, ok := pm.buildParsed[vfsPath.Rel]; ok {
 			return parsed
 		}
 
 		return nil
 	}
 
-	return pm.sourceParsedBuckets(vfsPath).bucket(parsedIncludesLocal)
+	return pm.sourceParsedBuckets(vfsPath.Rel).bucket(parsedIncludesLocal)
 }
 
-func (pm *includeParserManager) RegisterBuildParsedIncludes(vfsPath VFS, parsed []includeDirective) {
-	if !vfsPath.IsBuild() {
-		ThrowFmt("includeParserManager.RegisterBuildParsedIncludes: source-rooted path %q", vfsPath.String())
-	}
-
-	pm.buildParsed.Set(vfsPath, parsed)
-}
-
-func (pm *includeParserManager) scanDirectives(vfsPath VFS) []includeDirective {
-	entries := pm.parsedIncludes(vfsPath)
-	if len(entries) == 0 {
-		return nil
-	}
-
-	return append([]includeDirective(nil), entries...)
-}
-
-// fileExists is a cached wrapper around os.Stat. Returns true for
-// regular files only. Parameter must be $(S)/-rooted — $(B)/ paths
-// belong to the codegen registry tier. Cache key is the rel-form tail,
-// unified with fileExistsByRel so hot callers skip the `$(S)/` concat.
-func (pm *includeParserManager) fileExists(vfsPath VFS) bool {
-	return pm.fileExistsByRel(vfsPath.Rel)
+func (pm *includeParserManager) RegisterBuildParsedIncludes(rel string, parsed []includeDirective) {
+	pm.buildParsed[rel] = parsed
 }
 
 // fileExistsByRel is the inner, rel-keyed existence check.

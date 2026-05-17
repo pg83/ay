@@ -855,6 +855,9 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 				lexerG4 := Source(instance.Path + "/" + g.Lexer)
 				parserG4 := Source(instance.Path + "/" + g.Parser)
 				lexerCpp := Build(outPrefix + lexerBase + ".cpp")
+				parserCpp := Build(outPrefix + parserBase + ".cpp")
+				registerBoundGeneratedParsedOutput(ctx, instance, "JV", lexerCpp, nil, jvRef)
+				registerBoundGeneratedParsedOutput(ctx, instance, "JV", parserCpp, nil, jvRef)
 				witnessIncludes := []VFS{
 					antlr4RuntimeHeaderVFS,
 					lexerCpp,
@@ -903,6 +906,9 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			if reg != nil {
 				grammarG4 := Source(instance.Path + "/" + g.Grammar)
 				lexerCpp := Build(outPrefix + base + "Lexer.cpp")
+				parserCpp := Build(outPrefix + base + "Parser.cpp")
+				registerBoundGeneratedParsedOutput(ctx, instance, "JV", lexerCpp, nil, jvRef)
+				registerBoundGeneratedParsedOutput(ctx, instance, "JV", parserCpp, nil, jvRef)
 				witnessIncludes := []VFS{
 					antlr4RuntimeHeaderVFS,
 					lexerCpp,

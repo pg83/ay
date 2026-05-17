@@ -1461,15 +1461,6 @@ func (c codegenLocator) Exists(vfsPath VFS) bool {
 	return ok
 }
 
-// fileExists is a cached wrapper around os.Stat. Returns true for
-// regular files only. Parameter must be $(S)/-rooted — $(B)/ paths
-// belong to the codegen registry tier. Cache key is the rel-form tail,
-// unified with fileExistsByRel so hot callers (resolveSearchPath, ~4.7M
-// calls) skip the `$(S)/` concat.
-func (s *IncludeScanner) fileExists(vfsPath VFS) bool {
-	return s.parsers.fileExists(vfsPath)
-}
-
 // fileExistsByRel is the inner, rel-keyed existence check.
 func (s *IncludeScanner) fileExistsByRel(rel string) bool {
 	return s.parsers.fileExistsByRel(rel)

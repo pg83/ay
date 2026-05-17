@@ -140,7 +140,7 @@ func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind st
 
 	scanner := ctx.scannerFor(instance)
 	if scanner != nil {
-		scanner.parsers.RegisterBuildParsedIncludes(output, parsed)
+		scanner.parsers.RegisterBuildParsedIncludes(output.Rel, parsed)
 	}
 }
 
@@ -166,7 +166,7 @@ func registerBoundGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, ki
 
 	scanner := ctx.scannerFor(instance)
 	if scanner != nil {
-		scanner.parsers.RegisterBuildParsedIncludes(output, parsed)
+		scanner.parsers.RegisterBuildParsedIncludes(output.Rel, parsed)
 	}
 }
 
