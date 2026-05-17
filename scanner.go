@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"unsafe"
@@ -35,43 +34,6 @@ import (
 // String materialization is kept only at the boundaries that still need
 // the canonical `$(S)/...` / `$(B)/...` spelling (serializer and a few
 // compatibility interfaces).
-
-// includeRe matches `#include` / `#include_next` directives in their
-// angle-bracket and quoted-string forms, tolerating arbitrary
-// whitespace between `#`, the keyword, and the bracket. Two capture
-// groups: directive (`include` or `include_next`) and target.
-var includeRe = regexp.MustCompile(`^\s*#\s*(include|include_next)\s*[<"]([^>"]+)[>"]`)
-
-// macroIndirectIncludes augments parseIncludes for sources that use
-// macro-indirect `#include MACRO_NAME` forms. The text-blind scanner
-// cannot expand macros, so e.g. `#include OPENSSL_UNISTD` parses to
-// nothing. Each entry lists the include targets the source's macro-
-// indirect lines expand to on a linux-musl target — what the upstream
-// scanner emits. Resolution flows through the normal resolve()/sysincl
-// pipeline.
-type macroIndirectInclude struct {
-	target string
-	kind   includeKind
-}
-
-var macroIndirectIncludes = map[string][]macroIndirectInclude{
-	"contrib/libs/openssl/crypto/rand/rand_egd.c": {{target: "unistd.h", kind: includeSystem}},
-	"contrib/libs/openssl/crypto/uid.c":           {{target: "unistd.h", kind: includeSystem}},
-	// pugixml.hpp's header-only-mode trailer:
-	//   #if defined(PUGIXML_HEADER_ONLY) && !defined(PUGIXML_SOURCE)
-	//   #    define PUGIXML_SOURCE "pugixml.cpp"
-	//   #    include PUGIXML_SOURCE
-	// The macro-indirect `#include PUGIXML_SOURCE` expands to a quoted
-	// include of pugixml.cpp, which then pulls in the standard <float.h>
-	// + <setjmp.h> XPath dependencies — both reach musl-self on linux.
-	"contrib/libs/pugixml/pugixml.hpp": {{target: "pugixml.cpp", kind: includeQuoted}},
-}
-
-// yasmIncludeRe matches NASM/yasm `%include` directives in `.asm` /
-// `.asi` sources. Token is case-insensitive (`%include` and `%INCLUDE`
-// both occur in asmlib). Both quoted and angle-bracket forms accepted;
-// only quoted appears in practice. Single capture group: target.
-var yasmIncludeRe = regexp.MustCompile(`(?i)^\s*%\s*include\s*[<"]([^>"]+)[>"]`)
 
 // includeKind discriminates `<...>` (system) from `"..."` (quoted).
 // `#include_next` retains its directive form via `next` and is
@@ -179,7 +141,7 @@ type IncludeScanner struct {
 	sysincl    SysInclSet
 	sourceRoot string
 	// sourceRootSlash is the precomputed `sourceRoot + "/"` prefix
-	// used at the FS-translation boundary (parseIncludes / fileExists
+	// used at the FS-translation boundary (scanDirectives / fileExists
 	// / fsLocator.Exists) to keep the concat alloc-free.
 	sourceRootSlash string
 
@@ -508,12 +470,13 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 	return out
 }
 
-// IncludeDirectiveTargets returns the raw `#include` directive target
-// strings parsed from `vfsPath`, in source order, with no resolution
+// IncludeDirectiveTargets returns the raw include-directive target
+// strings scanned from `vfsPath`, in source order, with no resolution
 // applied. Memoised through the same parse-cache WalkClosure populates;
-// dispatches on provenance: $(S)/ uses the FS parser, $(B)/ returns the
-// registered EmitsIncludes list as-is. Re-opening the file with os.Open
-// and re-implementing bracket extraction is forbidden.
+// dispatches on provenance: $(S)/ uses the per-ext raw parser,
+// $(B)/ returns the registered EmitsIncludes list as-is. Re-opening the
+// file with os.Open and re-implementing bracket extraction is
+// forbidden.
 func (s *IncludeScanner) IncludeDirectiveTargets(vfsPath VFS) []string {
 	if vfsPath.IsBuild() {
 		if s.codegen != nil {
@@ -528,7 +491,7 @@ func (s *IncludeScanner) IncludeDirectiveTargets(vfsPath VFS) []string {
 		return nil
 	}
 
-	directives := s.parseIncludes(vfsPath)
+	directives := s.scanDirectives(vfsPath)
 	if len(directives) == 0 {
 		return nil
 	}
@@ -768,8 +731,8 @@ func (sc *scanCtx) plainDfs(absPath VFS, visited VFSSet, order *[]VFS) {
 //
 //   - $(B)/ path in the per-scanner CodegenRegistry: children are the
 //     entry's EmitsIncludes (already in VFS form, pre-resolved). No
-//     parseIncludes/resolve — the file does not exist on disk.
-//   - $(S)/ path: children come from parseIncludes(vfsPath) piped
+//     raw-scan/resolve — the file does not exist on disk.
+//   - $(S)/ path: children come from scanDirectives(vfsPath) piped
 //     through resolve().
 //
 // Registry children are emitted in EmitsIncludes order (sorted by the
@@ -791,11 +754,11 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 
 		// $(B) path not in the registry: nothing to walk (either a
 		// registered output reached as a leaf, or an unknown BUILD_ROOT
-		// path). parseIncludes would fail os.ReadFile in either case.
+		// path). scanDirectives would fail os.ReadFile in either case.
 		return
 	}
 
-	directives := s.parseIncludes(vfsPath)
+	directives := s.scanDirectives(vfsPath)
 
 	for _, d := range directives {
 		resolved := sc.resolve(vfsPath, d)
@@ -985,18 +948,20 @@ func (sc *scanCtx) walkSubgraphTainted(absPath VFS, sourceClass uint32, visited 
 	})
 }
 
-// parseIncludes returns the parsed include directives for the $(S)/-
+// scanDirectives returns the raw include directives for the $(S)/-
 // rooted file `vfsPath`. The FS translation happens here at the
-// os.ReadFile call. Memoised by VFS path; returns nil for missing files
-// (DFS may reach dangling sysincl mappings).
+// os.ReadFile call; raw parsing itself is delegated to a per-extension
+// parser from parsers.go. Memoised by VFS path; returns nil for missing
+// files (DFS may reach dangling sysincl mappings).
 //
 // Callers must NOT pass a $(B)/ path — generated outputs are read via
 // the CodegenRegistry. forEachResolvedChild enforces this dispatch.
 //
-// Dispatches on file extension: .asm/.asi use parseYasmIncludes
-// (`%include`); everything else uses parseCIncludes. Both produce the
-// same includeDirective shape and feed the same resolver pipeline.
-func (s *IncludeScanner) parseIncludes(vfsPath VFS) []includeDirective {
+// Parser selection mirrors upstream parser_manager at a smaller scope:
+// ext decides the raw scanner (`.asm`/`.asi` yasm, `.g4` empty, most
+// others C-like), then the resolver consumes the uniform
+// includeDirective stream.
+func (s *IncludeScanner) scanDirectives(vfsPath VFS) []includeDirective {
 	// Parsed cache is shared between target and host scanners via s.pc.
 	if cached, ok := s.pc.parsed.Get(vfsPath); ok {
 		return cached
@@ -1014,157 +979,11 @@ func (s *IncludeScanner) parseIncludes(vfsPath VFS) []includeDirective {
 		return nil
 	}
 
-	var out []includeDirective
-
-	if isYasmLike(vfsPath) {
-		out = parseYasmIncludes(data)
-	} else if isAntlrGrammar(vfsPath) {
-		// .g4 grammars carry C++ snippets with `#include` lines
-		// resolved by the generated .cpp/.h pair, not by direct
-		// compilation. The grammar joins the closure as an
-		// EmitsIncludes input-dep edge on the generated headers; its
-		// own `#include` lines are not real C directives.
-		out = nil
-	} else {
-		out = parseCIncludes(data)
-		// Inject synthetic angle-includes for macroIndirectIncludes
-		// entries (e.g. openssl's `#include OPENSSL_UNISTD` → unistd.h).
-		// The text-blind parser cannot expand the macro; the upstream
-		// scanner sees the post-expansion target.
-		if extras, ok := macroIndirectIncludes[vfsPath.Rel]; ok {
-			for _, m := range extras {
-				out = append(out, includeDirective{kind: m.kind, target: m.target})
-			}
-		}
-	}
+	out := includeDirectiveParsers.parserFor(vfsPath).Parse(vfsPath, data)
 
 	s.pc.parsed.Set(vfsPath, out)
 
 	return out
-}
-
-// parseCIncludes extracts C/C++ `#include` / `#include_next` directives
-// from `data`. stripComments runs first so the regex never matches
-// include text inside non-code spans.
-func parseCIncludes(data []byte) []includeDirective {
-	data = stripComments(data)
-
-	out := make([]includeDirective, 0, 8)
-
-	eachLine(data, func(line []byte) {
-		// Short-circuit lines without `#` before the regex.
-		// stripComments fills block-comment regions with spaces, and
-		// the `^\s*#` anchor would otherwise greedily match leading
-		// whitespace, multiplying regex cost ~3× on the M2 closure.
-		if bytes.IndexByte(line, '#') < 0 {
-			return
-		}
-
-		// FindSubmatchIndex returns offsets in a stack-cap'd []int (no
-		// alloc for tiny matches); the [][]byte form allocates a slice
-		// header per call.
-		m := includeRe.FindSubmatchIndex(line)
-
-		if m == nil {
-			return
-		}
-
-		// Determine kind by inspecting the line's bracket character
-		// after the keyword.
-		kind := includeSystem
-		idx := indexOfAngleOrQuote(line)
-
-		if idx >= 0 && line[idx] == '"' {
-			kind = includeQuoted
-		}
-
-		// m[2:4] are start/end offsets of the directive keyword
-		// (`include` or `include_next`). Comparing on length avoids
-		// `string(line[m[2]:m[3]])` allocation per matched line.
-		next := (m[3] - m[2]) == len("include_next")
-
-		// m[4:6] are the target capture's byte offsets. The single
-		// remaining string allocation per match is converting the
-		// target bytes to a string for the cache value.
-		target := string(line[m[4]:m[5]])
-
-		out = append(out, includeDirective{kind: kind, next: next, target: target})
-	})
-
-	return out
-}
-
-// parseYasmIncludes extracts NASM/yasm `%include` directives from
-// `data`. Token matches case-insensitively; yasm's `;` line comments
-// are not stripped (the anchor cannot fire from a comment line, and
-// yasm has no C-style block comments). String literals are preserved
-// verbatim — the directive's quoted form IS a string literal at lexer
-// level. Result uses includeDirective with next=false (no
-// `%include_next` exists in NASM).
-func parseYasmIncludes(data []byte) []includeDirective {
-	out := make([]includeDirective, 0, 4)
-
-	eachLine(data, func(line []byte) {
-		// Short-circuit lines without `%` before invoking the regex
-		// engine — most yasm source lines are instruction mnemonics
-		// or labels that never start with `%`.
-		if bytes.IndexByte(line, '%') < 0 {
-			return
-		}
-
-		m := yasmIncludeRe.FindSubmatchIndex(line)
-
-		if m == nil {
-			return
-		}
-
-		// Discriminate kind by bracket character. Practice is always
-		// quoted; angle-bracket branch is kept for C-scanner parity.
-		kind := includeSystem
-
-		idx := indexOfAngleOrQuote(line)
-		if idx >= 0 && line[idx] == '"' {
-			kind = includeQuoted
-		}
-
-		// m[2:4] are the target capture's byte offsets (the regex has
-		// only one capture group; m[0:2] is the full match span).
-		target := string(line[m[2]:m[3]])
-
-		out = append(out, includeDirective{kind: kind, next: false, target: target})
-	})
-
-	return out
-}
-
-// isYasmLike returns true when `absPath` ends with `.asm` or `.asi`
-// — the NASM/yasm assembly source extensions. `.S`/`.s` files use
-// GAS / AT&T syntax with C preprocessor `#include` directives and
-// continue to use the C-include scanner path.
-// isAntlrGrammar returns true when `absPath` ends with `.g4` — an
-// ANTLR4 grammar source. The grammar contains C++ snippet sections
-// with `#include` directives that are emitted into the generated
-// .cpp/.h, not compiled in place.
-func isAntlrGrammar(absPath VFS) bool {
-	return strings.HasSuffix(string(absPath.Rel), ".g4")
-}
-
-func isYasmLike(absPath VFS) bool {
-	rel := absPath.Rel
-	idx := strings.LastIndexByte(rel, '.')
-
-	if idx < 0 {
-		return false
-	}
-
-	ext := rel[idx:]
-
-	switch ext {
-	case ".asm", ".asi":
-		return true
-	}
-
-	return false
 }
 
 // resolve returns the absolute paths the directive resolves to, in
@@ -1834,7 +1653,7 @@ func indexOfAngleOrQuote(b []byte) int {
 // codegen templates would otherwise expose fake `#include` lines.
 //
 // Mutates `data` in place; the buffer comes from os.ReadFile and is
-// not retained past parseIncludes. The state machine is intentionally
+// not retained past scanDirectives. The state machine is intentionally
 // simple: no trigraphs, no line-continuation backslash splicing, no
 // alternative tokens (`%:include`).
 func stripComments(data []byte) []byte {
