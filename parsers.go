@@ -30,7 +30,7 @@ var swigIncludeRe = regexp.MustCompile(`^%(include|import|insert\s*\([^\)]*\))\s
 var cythonCimportFromRe = regexp.MustCompile(`^\s*from\s+([A-Za-z0-9_\.]+)\s+cimport\b`)
 var cythonCimportRe = regexp.MustCompile(`^\s*cimport\s+(.+)$`)
 var cythonIncludeRe = regexp.MustCompile(`^\s*include\s+["']([^"']+)["']`)
-var cythonExternFromRe = regexp.MustCompile(`^\s*cdef\s+extern\s+from\s+([<"].*?[">])`)
+var cythonExternFromRe = regexp.MustCompile(`^\s*cdef\s+extern\s+from\s+(<[^>]+>|"[^"]+")`)
 
 // macroIndirectIncludes augments the C-like raw scanner for sources
 // that use macro-indirect `#include MACRO_NAME` forms. The text-blind
@@ -187,7 +187,7 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 		}
 
 		if m := cythonCimportFromRe.FindStringSubmatch(s); len(m) == 2 {
-			add(includeDirective{kind: includeQuoted, target: strings.ReplaceAll(m[1], ".", "/") + ".pxd"})
+			add(includeDirective{kind: includeQuoted, target: cythonPxdTarget(m[1])})
 			return
 		}
 
@@ -200,12 +200,21 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 				if idx := strings.IndexAny(part, " \t"); idx >= 0 {
 					part = part[:idx]
 				}
-				add(includeDirective{kind: includeQuoted, target: strings.ReplaceAll(part, ".", "/") + ".pxd"})
+				add(includeDirective{kind: includeQuoted, target: cythonPxdTarget(part)})
 			}
 		}
 	})
 
 	return rawParsedIncludeSet(parsedIncludesLocal, out...)
+}
+
+func cythonPxdTarget(module string) string {
+	switch module {
+	case "cpython", "libc", "libcpp", "cython":
+		return module + "/__init__.pxd"
+	default:
+		return strings.ReplaceAll(module, ".", "/") + ".pxd"
+	}
 }
 
 func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet {
