@@ -145,9 +145,7 @@ func newSharedParseCache() *sharedParseCache {
 // and avoid repeated string hashing in their own maps.
 type scannerInterner struct {
 	stringIDs map[string]uint32
-	classIDs  map[uint64]uint32
 	nextStr   uint32
-	nextClass uint32
 }
 
 const scannerInternerBuildBit = uint32(1) << 31
@@ -155,7 +153,6 @@ const scannerInternerBuildBit = uint32(1) << 31
 func newScannerInterner() scannerInterner {
 	return scannerInterner{
 		stringIDs: make(map[string]uint32, 32768),
-		classIDs:  make(map[uint64]uint32, 1024),
 	}
 }
 
@@ -188,18 +185,6 @@ func (si *scannerInterner) internVFS(v VFS) uint32 {
 	panic("scannerInterner.internVFS: zero-valued VFS")
 }
 
-func (si *scannerInterner) internClass(sig uint64) uint32 {
-	if id, ok := si.classIDs[sig]; ok {
-		return id
-	}
-
-	si.nextClass++
-	id := si.nextClass
-	si.classIDs[sig] = id
-
-	return id
-}
-
 // IncludeScanner is the per-walker include-resolver state. It owns the
 // SysInclSet, sourceRoot, the shared parse cache (parsed + exists), the
 // per-scanCtx resolve/subgraph caches, scratch-buffer sync.Pools, and
@@ -227,14 +212,19 @@ type IncludeScanner struct {
 	// half is empty (no source-keyed filter accepts ""). Used as a
 	// lock-free shortcut by sysinclIncluderLookup.
 	anySrcView PerSourceView
-	// viewCache caches per-source PerSourceViews so repeat WalkClosure
-	// calls (and the multi-source dfs in joinSrcsIncludeClosure) reuse
-	// the precomputed source-keyed filter results. Keyed by SourceRel.
-	viewCache map[string]PerSourceView
-	// sourceClassCache interns SOURCE-keyed sysincl equivalence classes
-	// per source path so repeated dfs/sysincl lookups reuse one numeric
-	// class ID rather than re-hashing the active record set.
+	// sourceClassCache maps a concrete source path to its SOURCE-keyed
+	// sysincl equivalence class ID.
 	sourceClassCache map[string]uint32
+	// sourceClassViews stores one source-only view per equivalence class.
+	// Unlike PerSourceView from PreparePerSource, these views keep only
+	// activeSourceKeyed; includer-side state stays solely in anySrcView.
+	sourceClassViews map[uint32]PerSourceView
+	// sourceClassBuckets guards against sourceClassSignature collisions:
+	// equal signatures only reuse an ID after the active record pointer
+	// lists compare equal.
+	sourceClassBuckets map[uint64][]uint32
+	nextSourceClass    uint32
+	sourceKeyedCount   int
 	// sysinclSourceCache memoises the source-keyed sysincl half by
 	// (sourceClass, target). Source-keyed records are includer-
 	// independent, so every source in the same active-record class hits
@@ -364,12 +354,18 @@ func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedPars
 		sourceRootSlash:      sourceRoot + "/",
 		pc:                   pc,
 		interner:             newScannerInterner(),
-		viewCache:            make(map[string]PerSourceView, 1024),
 		sourceClassCache:     make(map[string]uint32, 1024),
+		sourceClassViews:     make(map[uint32]PerSourceView, 1024),
+		sourceClassBuckets:   make(map[uint64][]uint32, 1024),
 		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 131072),
 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
 		walkClosureCache:     make(map[uint64]*scanCtx, 8),
 		onWarn:               onWarn,
+	}
+	for i := range sysincl {
+		if sysincl[i].KeyBySource {
+			s.sourceKeyedCount++
+		}
 	}
 	s.anySrcView = s.sysincl.PreparePerSource("")
 
@@ -613,15 +609,69 @@ func sourceClassSignature(view PerSourceView) uint64 {
 // sourceClassID returns the scanner-local numeric ID of the active
 // SOURCE-keyed sysincl equivalence class for sourceRel.
 func (s *IncludeScanner) sourceClassID(sourceRel string) uint32 {
-	if id, ok := s.sourceClassCache[sourceRel]; ok {
-		return id
-	}
-
-	view := s.perSourceView(sourceRel)
-	id := s.interner.internClass(sourceClassSignature(view))
-	s.sourceClassCache[sourceRel] = id
+	id, _ := s.sourceClass(sourceRel)
 
 	return id
+}
+
+func (s *IncludeScanner) sourceClass(sourceRel string) (uint32, PerSourceView) {
+	if id, ok := s.sourceClassCache[sourceRel]; ok {
+		return id, s.sourceClassViews[id]
+	}
+
+	view := s.prepareSourceView(sourceRel)
+	sig := sourceClassSignature(view)
+
+	for _, id := range s.sourceClassBuckets[sig] {
+		cached := s.sourceClassViews[id]
+		if sameSourceClassView(cached, view) {
+			s.sourceClassCache[sourceRel] = id
+
+			return id, cached
+		}
+	}
+
+	s.nextSourceClass++
+	id := s.nextSourceClass
+	s.sourceClassCache[sourceRel] = id
+	s.sourceClassViews[id] = view
+	s.sourceClassBuckets[sig] = append(s.sourceClassBuckets[sig], id)
+
+	return id, view
+}
+
+func (s *IncludeScanner) prepareSourceView(sourceRel string) PerSourceView {
+	view := PerSourceView{
+		activeSourceKeyed: make([]*SysIncl, 0, s.sourceKeyedCount),
+	}
+
+	for i := range s.sysincl {
+		rec := &s.sysincl[i]
+
+		if !rec.KeyBySource {
+			continue
+		}
+
+		if rec.Filter == nil || rec.Filter.match(sourceRel) {
+			view.activeSourceKeyed = append(view.activeSourceKeyed, rec)
+		}
+	}
+
+	return view
+}
+
+func sameSourceClassView(a, b PerSourceView) bool {
+	if len(a.activeSourceKeyed) != len(b.activeSourceKeyed) {
+		return false
+	}
+
+	for i, rec := range a.activeSourceKeyed {
+		if rec != b.activeSourceKeyed[i] {
+			return false
+		}
+	}
+
+	return true
 }
 
 // hashScanContext is an FNV-1a hash over OwnAddIncl + PeerAddInclSet +
@@ -1345,8 +1395,9 @@ incLoop:
 }
 
 func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, bool, bool) {
+	classID, view := s.sourceClass(sourceRel)
 	key := sysinclSourceKey{
-		sourceClass: s.sourceClassID(sourceRel),
+		sourceClass: classID,
 		target:      s.interner.internString(target),
 	}
 
@@ -1355,7 +1406,6 @@ func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, b
 		return cached.paths, cached.hasMultiTarget, cached.claimed
 	}
 
-	view := s.perSourceView(sourceRel)
 	rels, claimed, hasMultiTarget := view.LookupSourceKeyed(target)
 
 	entry := sysinclCacheEntry{
@@ -1409,22 +1459,6 @@ func (s *IncludeScanner) absifyRels(rels []string) []VFS {
 	}
 
 	return out
-}
-
-// perSourceView returns a cached SysInclSet view with SOURCE-keyed
-// filters pre-resolved against `sourceRel`. Computed once per source;
-// viewCache is keyed by SourceRel so two CCs with the same SourceRel
-// share the view.
-func (s *IncludeScanner) perSourceView(sourceRel string) PerSourceView {
-	// PR-34n: lock removed (single-goroutine).
-	if cached, ok := s.viewCache[sourceRel]; ok {
-		return cached
-	}
-
-	view := s.sysincl.PreparePerSource(sourceRel)
-	s.viewCache[sourceRel] = view
-
-	return view
 }
 
 // resolveSearchPath returns the search-path-only resolved set for the
