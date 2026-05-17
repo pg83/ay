@@ -221,7 +221,6 @@ type genCtx struct {
 	// any host walk recursion, so the cached entry carries the target
 	// platform per REF.
 	ldPluginCPCache map[string]NodeRef
-
 	// scanCtx (per-ctxHash resolve/subgraph cache) lifecycle policy:
 	//
 	//   - "local"    — one scanCtx per (genModule, scanner, ctxHash);
