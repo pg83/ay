@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
+	"runtime/pprof"
 )
 
 func main() {
@@ -65,6 +67,28 @@ func cmdHelp(_ []string) int {
 	printUsage(os.Stdout)
 
 	return 0
+}
+
+func startProfilesFromEnv() func() {
+	var cpuFile *os.File
+	if path := os.Getenv("YATOOL_CPUPROFILE"); path != "" {
+		cpuFile = Throw2(os.Create(path))
+		Throw(pprof.StartCPUProfile(cpuFile))
+	}
+
+	return func() {
+		if cpuFile != nil {
+			pprof.StopCPUProfile()
+			Throw(cpuFile.Close())
+		}
+
+		if path := os.Getenv("YATOOL_MEMPROFILE"); path != "" {
+			f := Throw2(os.Create(path))
+			runtime.GC()
+			Throw(pprof.WriteHeapProfile(f))
+			Throw(f.Close())
+		}
+	}
 }
 
 // writeGraph encodes g as JSON to path (or stdout when path == "-").
