@@ -496,7 +496,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 					continue
 				}
 				if addInclNext {
-					d.addIncl = append(d.addIncl, ParseVFSOrSource(p))
+					d.addIncl = append(d.addIncl, parseModulePathVFS(p))
 					addInclNext = false
 				}
 				d.peerdirs = append(d.peerdirs, p)
@@ -525,9 +525,9 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// declaration order (AllPaths). Empirically the reference
 			// emits own GLOBAL ADDINCL on the module's own CC compiles
 			// (libcxx algorithm.cpp.o cmd_args[9..11]).
-			d.addInclGlobal = append(d.addInclGlobal, VFSesFromStrings(expandConfigPaths(v.GlobalPaths, env))...)
-			d.addIncl = append(d.addIncl, VFSesFromStrings(expandConfigPaths(v.AllPaths, env))...)
-			d.cythonAddIncl = append(d.cythonAddIncl, VFSesFromStrings(expandConfigPaths(v.CythonPaths, env))...)
+			d.addInclGlobal = append(d.addInclGlobal, expandConfigVFSPaths(v.GlobalPaths, env)...)
+			d.addIncl = append(d.addIncl, expandConfigVFSPaths(v.AllPaths, env)...)
+			d.cythonAddIncl = append(d.cythonAddIncl, expandConfigVFSPaths(v.CythonPaths, env)...)
 		case *CFlagsStmt:
 			// GLOBAL flags peer-propagate (d.cFlagsGlobal); non-GLOBAL
 			// applies to own C+C++ sources only (d.cFlags). composeCC
@@ -1461,6 +1461,24 @@ func expandConfigPaths(paths []string, env Environment) []string {
 	}
 
 	return out
+}
+
+func expandConfigVFSPaths(paths []string, env Environment) []VFS {
+	out := make([]VFS, 0, len(paths))
+
+	for _, path := range paths {
+		out = append(out, parseModulePathVFS(expandConfigString(path, env)))
+	}
+
+	return out
+}
+
+func parseModulePathVFS(path string) VFS {
+	if v, ok := ParseVFS(path); ok {
+		return v
+	}
+
+	return Source(path)
 }
 
 func expandConfigString(s string, env Environment) string {
