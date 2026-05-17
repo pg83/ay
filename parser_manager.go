@@ -17,11 +17,100 @@ import "os"
 // (linux-musl-aarch64.yml vs linux-musl.yml map bits/* headers to
 // different paths). The resolve chain (resolveCache, subgraphCache,
 // sysincl{Source,Includer}Cache) stays per-scanner.
+type parsedIncludeBucket string
+
+const (
+	parsedIncludesLocal parsedIncludeBucket = "local"
+	parsedIncludesCPP   parsedIncludeBucket = "cpp"
+	parsedIncludesHCPP  parsedIncludeBucket = "h+cpp"
+)
+
+type parsedIncludeKind uint8
+
+const (
+	parsedIncludeDirective parsedIncludeKind = iota
+	parsedIncludeDirectVFS
+)
+
+type parsedInclude struct {
+	kind      parsedIncludeKind
+	directive includeDirective
+	path      VFS
+}
+
+type parsedIncludeSet map[parsedIncludeBucket][]parsedInclude
+
+func rawParsedIncludeSet(bucket parsedIncludeBucket, directives ...includeDirective) parsedIncludeSet {
+	if len(directives) == 0 {
+		return nil
+	}
+
+	out := make([]parsedInclude, 0, len(directives))
+	for _, d := range directives {
+		out = append(out, parsedInclude{kind: parsedIncludeDirective, directive: d})
+	}
+
+	return parsedIncludeSet{bucket: out}
+}
+
+func directParsedIncludeSet(bucket parsedIncludeBucket, paths ...VFS) parsedIncludeSet {
+	if len(paths) == 0 {
+		return nil
+	}
+
+	out := make([]parsedInclude, 0, len(paths))
+	for _, p := range paths {
+		out = append(out, parsedInclude{kind: parsedIncludeDirectVFS, path: p})
+	}
+
+	return parsedIncludeSet{bucket: out}
+}
+
+func appendParsedDirectives(set parsedIncludeSet, bucket parsedIncludeBucket, directives ...includeDirective) parsedIncludeSet {
+	if len(directives) == 0 {
+		return set
+	}
+	if set == nil {
+		set = make(parsedIncludeSet)
+	}
+	for _, d := range directives {
+		set[bucket] = append(set[bucket], parsedInclude{kind: parsedIncludeDirective, directive: d})
+	}
+
+	return set
+}
+
+func appendParsedDirect(set parsedIncludeSet, bucket parsedIncludeBucket, paths ...VFS) parsedIncludeSet {
+	if len(paths) == 0 {
+		return set
+	}
+	if set == nil {
+		set = make(parsedIncludeSet)
+	}
+	for _, p := range paths {
+		set[bucket] = append(set[bucket], parsedInclude{kind: parsedIncludeDirectVFS, path: p})
+	}
+
+	return set
+}
+
+func (set parsedIncludeSet) bucket(bucket parsedIncludeBucket) []parsedInclude {
+	if set == nil {
+		return nil
+	}
+
+	return set[bucket]
+}
+
+type parsedIncludeLocator interface {
+	LookupParsedIncludes(vfsPath VFS) (parsedIncludeSet, bool)
+}
+
 type sharedParseCache struct {
-	// parsed memoises include directives per VFS-rooted path
+	// parsed memoises raw parser results per VFS-rooted path
 	// ($(S)/<rel>). 8192 pre-size covers the tools/archiver peak
 	// (4354 target + 3559 host, mostly overlapping).
-	parsed VFSMap[[]includeDirective]
+	parsed VFSMap[parsedIncludeSet]
 	// exists memoises os.Stat results, keyed by SOURCE_ROOT-relative
 	// tail. 16384 covers the observed peak.
 	exists map[string]bool
@@ -31,7 +120,7 @@ type sharedParseCache struct {
 // matched to the observed peak for the tools/archiver closure.
 func newSharedParseCache() *sharedParseCache {
 	return &sharedParseCache{
-		parsed: NewVFSMap[[]includeDirective](8192),
+		parsed: NewVFSMap[parsedIncludeSet](8192),
 		exists: make(map[string]bool, 16384),
 	}
 }
@@ -62,7 +151,17 @@ func newIncludeParserManagerWithCache(sourceRoot string, cache *sharedParseCache
 //
 // Callers must NOT pass a $(B)/ path — generated outputs are read via
 // the CodegenRegistry. IncludeScanner's dispatch layer enforces this.
-func (pm *includeParserManager) scanDirectives(vfsPath VFS) []includeDirective {
+func (pm *includeParserManager) parsedIncludes(vfsPath VFS, locators []parsedIncludeLocator) parsedIncludeSet {
+	if vfsPath.IsBuild() {
+		for _, loc := range locators {
+			if parsed, ok := loc.LookupParsedIncludes(vfsPath); ok {
+				return parsed
+			}
+		}
+
+		return nil
+	}
+
 	if cached, ok := pm.cache.parsed.Get(vfsPath); ok {
 		return cached
 	}
@@ -78,6 +177,29 @@ func (pm *includeParserManager) scanDirectives(vfsPath VFS) []includeDirective {
 
 	out := includeDirectiveParsers.parserFor(vfsPath).Parse(vfsPath, data)
 	pm.cache.parsed.Set(vfsPath, out)
+
+	return out
+}
+
+func (pm *includeParserManager) scanDirectives(vfsPath VFS, locators []parsedIncludeLocator) []includeDirective {
+	parsed := pm.parsedIncludes(vfsPath, locators)
+	if len(parsed) == 0 {
+		return nil
+	}
+
+	entries := parsed.bucket(parsedIncludesLocal)
+	if len(entries) == 0 {
+		return nil
+	}
+
+	out := make([]includeDirective, 0, len(entries))
+	for _, entry := range entries {
+		if entry.kind != parsedIncludeDirective {
+			continue
+		}
+
+		out = append(out, entry.directive)
+	}
 
 	return out
 }

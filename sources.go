@@ -205,20 +205,18 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 
 		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryVFS, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
 
-		// Register the R6 output (.rl6.cpp). Ragel emits the .rl6's
-		// `#include` directives verbatim into the generated .cpp, so
-		// the .cpp's direct-include set is the .rl6's. Register the
-		// .rl6 source as the single EmitsIncludes child; WalkClosure
-		// on the .rl6.cpp recurses into the .rl6 via the FS locator.
+		// Register the R6 output (.rl6.cpp). Only Ragel's C/C++ include
+		// bucket belongs to the generated .cpp parser view; native
+		// Ragel includes stay on the .rl6 source side.
 		rl6SourceVFS := Source(srcInstance.Path + "/" + srcRel)
-		registerGeneratedOutput(ctx, srcInstance, "R6", r6Out, []VFS{rl6SourceVFS})
+		registerGeneratedParsedOutput(ctx, srcInstance, "R6", r6Out, remapSourceParsedIncludesToLocal(ctx, srcInstance, rl6SourceVFS, parsedIncludesHCPP))
 
 		// Pass IsGenerated so the downstream CC composes inputPath
 		// under $(B)/<srcInstance.Path>/<rel>; thread r6Ref as
 		// Generator so the CC node carries an explicit dep on its R6
 		// source-generator. Dispatch through the unified VFS-path
-		// entry — the scanner walks both BUILD_ROOT and SOURCE_ROOT
-		// children uniformly via the registered EmitsIncludes edge.
+		// entry — the scanner walks the generated file's virtual parser
+		// payload rather than flattening back to the `.rl6` source.
 		ccSrcRel := strings.TrimPrefix(r6Out.Rel, srcInstance.Path+"/")
 		ccIncludeInputs := walkClosure(ctx, srcInstance, r6Out, srcIn)
 
@@ -459,18 +457,19 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		r5Ref, r5TmpOut, r5CppOut := EmitR5(srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
 		_ = r5Ref
 
-		// Register R5 outputs. ragel5 emits the .rl source's #include
-		// directives verbatim into .rl5.cpp; the .tmp intermediate has
-		// no consumer-visible includes. ProducerRef = r5Ref so the
-		// downstream CC threads R5 into its deps[].
+		// Register R5 outputs. Only Ragel's C/C++ include bucket
+		// belongs to the generated .rl5.cpp parser view; native
+		// Ragel includes stay on the .rl source side. The .tmp
+		// intermediate has no consumer-visible includes. ProducerRef =
+		// r5Ref so the downstream CC threads R5 into its deps[].
 		rlSourceVFS := Source(srcInstance.Path + "/" + srcRel)
 		registerBoundGeneratedOutput(ctx, srcInstance, "R5", r5TmpOut, nil, r5Ref)
-		registerBoundGeneratedOutput(ctx, srcInstance, "R5", r5CppOut, []VFS{rlSourceVFS}, r5Ref)
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5CppOut, remapSourceParsedIncludesToLocal(ctx, srcInstance, rlSourceVFS, parsedIncludesHCPP), r5Ref)
 
 		// Downstream CC for the generated .rl5.cpp via the unified
-		// VFS-path entry — the .rl5.cpp is registered above with the
-		// .rl source as its single direct include; WalkClosure
-		// recurses into the .rl via the FS locator.
+		// VFS-path entry — the .rl5.cpp is registered above with a
+		// virtual parser payload derived from the .rl source's h+cpp
+		// bucket.
 		ccSrcRel := strings.TrimPrefix(r5CppOut.Rel, srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IsGenerated = true

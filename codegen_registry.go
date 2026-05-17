@@ -20,7 +20,8 @@ import "sort"
 
 // GeneratedFileInfo describes one codegen-emitted file. Populated during the
 // emit walk by each codegen emitter (EN, PB, EV, R5, R6, CF, BI, JV, PR, AR,
-// PY). EmitsIncludes is filled per emitter where available.
+// PY). ParsedIncludes is the parser-level virtual include payload for
+// `$(B)` outputs.
 //
 // Some emitters Register BEFORE the producer NodeRef is known (CP/PR/EN
 // publish output paths early for the scanner's existence tier, then
@@ -38,12 +39,11 @@ type GeneratedFileInfo struct {
 	// VFS{Build, "devtools/ymake/diag/stats_enums.h_serialized.cpp"}).
 	OutputPath VFS
 
-	// EmitsIncludes lists the #include targets that the generated file
-	// contains. Each entry is either a $(B)/... path (another generated
-	// file → transitive lookup) or a $(S)/... path (real on-disk file).
-	// Stored in discovery order; no deduplication required at this level
-	// (the scanner's DFS visited-set deduplicates at traversal time).
-	EmitsIncludes []VFS
+	// ParsedIncludes is the parser-level virtual include payload
+	// associated with this generated output. For legacy registrations
+	// that only know the scanner-visible local closure, helpers below
+	// populate the `local` bucket with direct VFS edges.
+	ParsedIncludes parsedIncludeSet
 
 	// ProducerRef is the NodeRef of the emitted producer node. Valid only when
 	// HasProducerRef is true. resolveCodegenDepRefs uses this to thread the
@@ -59,6 +59,23 @@ type GeneratedFileInfo struct {
 // consults it as a third existence tier.
 type CodegenRegistry struct {
 	byOutput VFSMap[*GeneratedFileInfo]
+}
+
+type codegenParsedIncludeLocator struct {
+	reg *CodegenRegistry
+}
+
+func (c codegenParsedIncludeLocator) LookupParsedIncludes(vfsPath VFS) (parsedIncludeSet, bool) {
+	if c.reg == nil || !vfsPath.IsBuild() {
+		return nil, false
+	}
+
+	info, ok := c.reg.Lookup(vfsPath)
+	if !ok {
+		return nil, false
+	}
+
+	return info.ParsedIncludes, true
 }
 
 // NewCodegenRegistry allocates an empty CodegenRegistry. Pre-sized for the
@@ -136,16 +153,39 @@ func (r *CodegenRegistry) Len() int {
 	return r.byOutput.Len()
 }
 
+func remapSourceParsedIncludesToLocal(ctx *genCtx, instance ModuleInstance, source VFS, bucket parsedIncludeBucket) parsedIncludeSet {
+	scanner := ctx.scannerFor(instance)
+	if scanner == nil {
+		return nil
+	}
+
+	entries := scanner.parsedIncludes(source).bucket(bucket)
+	if len(entries) == 0 {
+		return nil
+	}
+
+	cloned := make([]parsedInclude, len(entries))
+	copy(cloned, entries)
+
+	return parsedIncludeSet{
+		parsedIncludesLocal: cloned,
+	}
+}
+
 func registerGeneratedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, emits []VFS) {
+	registerGeneratedParsedOutput(ctx, instance, kind, output, directParsedIncludeSet(parsedIncludesLocal, emits...))
+}
+
+func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, parsed parsedIncludeSet) {
 	reg := codegenRegForInstance(ctx, instance)
 	if reg == nil {
 		return
 	}
 
 	reg.Register(&GeneratedFileInfo{
-		ProducerKvP:   kind,
-		OutputPath:    output,
-		EmitsIncludes: emits,
+		ProducerKvP:    kind,
+		OutputPath:     output,
+		ParsedIncludes: parsed,
 	})
 }
 
@@ -159,6 +199,10 @@ func bindGeneratedOutput(ctx *genCtx, instance ModuleInstance, output VFS, ref N
 }
 
 func registerBoundGeneratedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, emits []VFS, ref NodeRef) {
+	registerBoundGeneratedParsedOutput(ctx, instance, kind, output, directParsedIncludeSet(parsedIncludesLocal, emits...), ref)
+}
+
+func registerBoundGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, parsed parsedIncludeSet, ref NodeRef) {
 	reg := codegenRegForInstance(ctx, instance)
 	if reg == nil {
 		return
@@ -167,7 +211,7 @@ func registerBoundGeneratedOutput(ctx *genCtx, instance ModuleInstance, kind str
 	reg.Register(&GeneratedFileInfo{
 		ProducerKvP:    kind,
 		OutputPath:     output,
-		EmitsIncludes:  emits,
+		ParsedIncludes: parsed,
 		ProducerRef:    ref,
 		HasProducerRef: true,
 	})

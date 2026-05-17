@@ -572,9 +572,11 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 
 	targetScanner := newIncludeScannerWith(parsers, LoadSysInclSetFor(srcRoot, string(targetP.ISA), onWarn), onWarn)
 	targetScanner.codegen = targetReg
+	targetScanner.parseLocators = []parsedIncludeLocator{codegenParsedIncludeLocator{reg: targetReg}}
 	targetScanner.fallbackLocators = []pathLocator{codegenLocator{reg: targetReg}}
 	hostScanner := newIncludeScannerWith(parsers, LoadSysInclSetFor(srcRoot, string(hostP.ISA), onWarn), onWarn)
 	hostScanner.codegen = hostReg
+	hostScanner.parseLocators = []parsedIncludeLocator{codegenParsedIncludeLocator{reg: hostReg}}
 	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
 
 	ctx := &genCtx{

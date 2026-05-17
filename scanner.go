@@ -176,6 +176,11 @@ type IncludeScanner struct {
 	// construct scanners directly via NewIncludeScanner). GenWith wires
 	// it; resolveSearchPath consults it via codegenLocator.
 	codegen *CodegenRegistry
+	// parseLocators expose virtual parser payloads for BUILD-rooted
+	// outputs. This is the parser-level counterpart of fallbackLocators:
+	// parser manager asks them for `$(B)` parsed includes before the
+	// resolver ever sees the path.
+	parseLocators []parsedIncludeLocator
 
 	// fallbackLocators holds the VFS-codegen tier (and any future non-FS
 	// resolution tier). Consulted by resolveSearchPath only AFTER the
@@ -435,33 +440,25 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 
 // IncludeDirectiveTargets returns the raw include-directive target
 // strings scanned from `vfsPath`, in source order, with no resolution
-// applied. Memoised through the same parse-cache WalkClosure populates;
-// dispatches on provenance: $(S)/ uses the per-ext raw parser,
-// $(B)/ returns the registered EmitsIncludes list as-is. Re-opening the
-// file with os.Open and re-implementing bracket extraction is
-// forbidden.
+// applied. Memoised through the same parse-cache WalkClosure populates.
+// Only raw-directive entries from the `local` parser bucket are
+// surfaced; direct VFS virtual includes are materialised as canonical
+// strings.
 func (s *IncludeScanner) IncludeDirectiveTargets(vfsPath VFS) []string {
-	if vfsPath.IsBuild() {
-		if s.codegen != nil {
-			if info, ok := s.codegen.Lookup(vfsPath); ok {
-				out := make([]string, len(info.EmitsIncludes))
-				for i, v := range info.EmitsIncludes {
-					out[i] = v.String()
-				}
-				return out
-			}
+	parsed := s.parsedIncludes(vfsPath)
+	entries := parsed.bucket(parsedIncludesLocal)
+	if len(entries) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		switch entry.kind {
+		case parsedIncludeDirective:
+			out = append(out, entry.directive.target)
+		case parsedIncludeDirectVFS:
+			out = append(out, entry.path.String())
 		}
-		return nil
-	}
-
-	directives := s.scanDirectives(vfsPath)
-	if len(directives) == 0 {
-		return nil
-	}
-
-	out := make([]string, len(directives))
-	for i, d := range directives {
-		out[i] = d.target
 	}
 	return out
 }
@@ -690,44 +687,25 @@ func (sc *scanCtx) plainDfs(absPath VFS, visited VFSSet, order *[]VFS) {
 }
 
 // forEachResolvedChild invokes `fn` once per resolved-child VFS path of
-// `vfsPath`, dispatching on path provenance:
+// `vfsPath`. Parsing is fully delegated to the parser layer:
 //
-//   - $(B)/ path in the per-scanner CodegenRegistry: children are the
-//     entry's EmitsIncludes (already in VFS form, pre-resolved). No
-//     raw-scan/resolve — the file does not exist on disk.
-//   - $(S)/ path: children come from scanDirectives(vfsPath) piped
-//     through resolve().
+//   - source files: per-extension parser returns bucketed raw includes;
+//   - generated $(B) outputs: parser locators return virtual buckets.
 //
-// Registry children are emitted in EmitsIncludes order (sorted by the
-// emitters: protoDirectImportIncludes, cfIncludeDirectives, EN
-// registration). Caller handles visited-set deduplication.
+// Scanner closure walks only the `local` bucket. Raw directives from that
+// bucket go through resolve(); direct VFS entries are emitted as-is.
 func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
 
-	if vfsPath.IsBuild() {
-		if s.codegen != nil {
-			if info, ok := s.codegen.Lookup(vfsPath); ok {
-				for _, rabs := range info.EmitsIncludes {
-					fn(rabs)
-				}
-
-				return
+	for _, entry := range s.parsedIncludes(vfsPath).bucket(parsedIncludesLocal) {
+		switch entry.kind {
+		case parsedIncludeDirectVFS:
+			fn(entry.path)
+		case parsedIncludeDirective:
+			resolved := sc.resolve(vfsPath, entry.directive)
+			for _, rabs := range resolved {
+				fn(rabs)
 			}
-		}
-
-		// $(B) path not in the registry: nothing to walk (either a
-		// registered output reached as a leaf, or an unknown BUILD_ROOT
-		// path). scanDirectives would fail os.ReadFile in either case.
-		return
-	}
-
-	directives := s.scanDirectives(vfsPath)
-
-	for _, d := range directives {
-		resolved := sc.resolve(vfsPath, d)
-
-		for _, rabs := range resolved {
-			fn(rabs)
 		}
 	}
 }
@@ -915,7 +893,11 @@ func (sc *scanCtx) walkSubgraphTainted(absPath VFS, sourceClass uint32, visited 
 // Callers must NOT pass a $(B)/ path — generated outputs are read via
 // the CodegenRegistry. forEachResolvedChild enforces this dispatch.
 func (s *IncludeScanner) scanDirectives(vfsPath VFS) []includeDirective {
-	return s.parsers.scanDirectives(vfsPath)
+	return s.parsers.scanDirectives(vfsPath, s.parseLocators)
+}
+
+func (s *IncludeScanner) parsedIncludes(vfsPath VFS) parsedIncludeSet {
+	return s.parsers.parsedIncludes(vfsPath, s.parseLocators)
 }
 
 // resolve returns the absolute paths the directive resolves to, in

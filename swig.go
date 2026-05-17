@@ -83,7 +83,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 		}
 		d.pySrcs = append(d.pySrcs, pyOutRel)
 		d.pyGeneratedSrcs[pyOutRel] = append([]VFS{cOutVFS, srcVFS}, libInputs...)
-		registerBoundGeneratedOutput(ctx, instance, "SW", cOutVFS, nil, swRef)
+		registerBoundGeneratedParsedOutput(ctx, instance, "SW", cOutVFS, remapSourceParsedIncludesToLocal(ctx, instance, srcVFS, parsedIncludesHCPP), swRef)
 		registerBoundGeneratedOutput(ctx, instance, "SW", pyOutVFS, nil, swRef)
 
 		ccIn := in
