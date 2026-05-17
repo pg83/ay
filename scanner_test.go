@@ -1207,33 +1207,26 @@ include "machine.rl";
 	local := parsed.bucket(parsedIncludesLocal)
 	hcpp := parsed.bucket(parsedIncludesHCPP)
 
-	if len(local) != 2 {
-		t.Fatalf("got %d local entries, want 2; %+v", len(local), local)
+	if len(local) != 4 {
+		t.Fatalf("got %d local entries, want 4; %+v", len(local), local)
 	}
 
-	wantLocalTargets := []string{"machine.rl", "machine2.rl"}
+	wantLocalTargets := []string{"outer.h", "tail.h", "machine.rl", "machine2.rl"}
+	wantLocalKinds := []includeKind{includeSystem, includeQuoted, includeQuoted, includeQuoted}
 	for i := range wantLocalTargets {
 		if local[i].directive.target != wantLocalTargets[i] {
 			t.Fatalf("local[%d].target = %q, want %q; all=%+v", i, local[i].directive.target, wantLocalTargets[i], local)
 		}
-		if local[i].directive.kind != includeQuoted {
-			t.Fatalf("local[%d].kind = %v, want includeQuoted", i, local[i].directive.kind)
+		if local[i].directive.kind != wantLocalKinds[i] {
+			t.Fatalf("local[%d].kind = %v, want %v", i, local[i].directive.kind, wantLocalKinds[i])
 		}
 	}
 
-	if len(hcpp) != 2 {
-		t.Fatalf("got %d h+cpp entries, want 2; %+v", len(hcpp), hcpp)
+	if len(hcpp) != 1 {
+		t.Fatalf("got %d h+cpp entries, want 1; %+v", len(hcpp), hcpp)
 	}
-
-	wantHCPPTargets := []string{"outer.h", "tail.h"}
-	wantHCPPKinds := []includeKind{includeSystem, includeQuoted}
-	for i := range wantHCPPTargets {
-		if hcpp[i].directive.target != wantHCPPTargets[i] {
-			t.Fatalf("hcpp[%d].target = %q, want %q; all=%+v", i, hcpp[i].directive.target, wantHCPPTargets[i], hcpp)
-		}
-		if hcpp[i].directive.kind != wantHCPPKinds[i] {
-			t.Fatalf("hcpp[%d].kind = %v, want %v", i, hcpp[i].directive.kind, wantHCPPKinds[i])
-		}
+	if hcpp[0].kind != parsedIncludeDirectVFS || hcpp[0].path != Source("src.rl6") {
+		t.Fatalf("h+cpp = %+v, want direct self VFS Source(\"src.rl6\")", hcpp)
 	}
 }
 
