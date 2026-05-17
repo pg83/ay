@@ -84,6 +84,53 @@ type sysinclIncluderKey struct {
 
 The first implementation can keep maps typed as structs. Packing into a single `uint64` is a later micro-optimization if profile still shows key equality/hashing.
 
+## Implemented Design
+
+The implementation took the narrower scanner-local route, not a repo-wide
+`VFS` representation change.
+
+Chosen shape:
+
+- one scanner-local `string -> uint32` pool
+- VFS encoded as `(interned rel-string-id) | root-bit`
+- one scanner-local `sourceClassSignature -> uint32` pool
+
+Why this shape:
+
+- changing global `VFS` to `(root, string-id)` is a wider migration than
+  PLAN 1 and would touch serializer/emitter/codegen boundaries
+- interning plain strings without replacing the hot cache keys would not
+  help enough, because Go would still hash string bytes inside those keys
+- scanner-local IDs preserve correctness boundaries: cache identity stays
+  local to one `IncludeScanner`
+- VFS does not need its own second lookup table: SOURCE vs BUILD fits in
+  one reserved high bit over the interned rel-string ID
+
+Resulting hot keys:
+
+```go
+type resolveInnerKey struct {
+	includer uint32
+	target   uint32
+	flags    uint8
+}
+
+type subgraphInnerKey struct {
+	abs         uint32
+	sourceClass uint32
+}
+
+type sysinclSourceKey struct {
+	sourceClass uint32
+	target      uint32
+}
+
+type sysinclIncluderKey struct {
+	includer uint32
+	target   uint32
+}
+```
+
 ## Implementation Steps
 
 1. Add an `intern.go` or scanner-local type in `scanner.go`:
@@ -139,6 +186,48 @@ env -u CFLAGS -u CXXFLAGS \
 - `go test ./...`
 - `./validate.sh` must keep `sg2.aarch64` and `sg2.x86_64` exact.
 - `sg3` node/cmd diff must not change except for intentionally accepted graph fixes. This plan should be behavior-preserving.
+
+## Measured Result
+
+Correctness:
+
+- `go test ./...` = `ok`
+- `validate.sh`
+- `sg2.aarch64` = byte-exact
+- `sg2.x86_64` = byte-exact
+- `sg3.aarch64` keeps the same non-zero state as before:
+- ours `e7dfcb960dcfec5ae8ca1a4388897bc00f56535a2705fd90bc797b951815bc87`
+- ref  `ab7bbc788651077896a68e2c5fbdb647ed72af23791bb4744f4c635bebc342cc`
+
+Perf on `devtools/ya/bin` (`make -j 0 -k -G`, same profile setup as baseline):
+
+- wall time: `8.16s -> 8.03s`
+- user CPU: `10.71s -> 10.47s`
+- max RSS: `1457860 kB -> 1209140 kB`
+- `go test ./...`: `4.313s -> 4.179s`
+
+CPU profile deltas:
+
+- `internal/runtime/maps.ctrlGroup.matchH2`: `21.21% -> 10.09%`
+- `aeshashbody`: `12.82% -> 7.08%`
+- `type:.eq.main.resolveInnerKey`: `4.16% -> 0.85%`
+- `type:.eq.main.sysinclIncluderKey`: dropped out of the top report
+- new interner overhead exists but is smaller than the saved key-hash cost:
+- `main.(*scannerInterner).internString`: `0.69s` cumulative
+- `main.(*scannerInterner).internVFS`: `0.50s` cumulative
+
+Memory profile deltas:
+
+- in-use heap after GC: about `300MB -> 187.49MB`
+- previous `sysinclSourceLookup` retained about `150MB`; after switching
+  to `(sourceClass, target)` keys that retention no longer dominates the
+  heap profile
+
+Conclusion:
+
+- the numeric-key conversion is worth keeping
+- biggest remaining scanner costs are now `subgraph`, `resolveSearchPath`,
+  and generic DFS/materialization, not string-heavy cache keys
 
 ## Expected Impact
 
