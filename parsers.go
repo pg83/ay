@@ -53,7 +53,7 @@ var macroIndirectIncludes = map[string][]macroIndirectInclude{
 }
 
 type includeDirectiveParser interface {
-	Parse(vfsPath VFS, data []byte) []includeDirective
+	Parse(vfsPath VFS, data []byte) parsedIncludeSet
 }
 
 type includeDirectiveParserRegistry struct {
@@ -132,7 +132,7 @@ func directiveParserExt(rel string) string {
 	return rel[idx:]
 }
 
-func (cIncludeDirectiveParser) Parse(vfsPath VFS, data []byte) []includeDirective {
+func (cIncludeDirectiveParser) Parse(vfsPath VFS, data []byte) parsedIncludeSet {
 	out := parseCIncludes(data)
 
 	if extras, ok := macroIndirectIncludes[vfsPath.Rel]; ok {
@@ -141,10 +141,10 @@ func (cIncludeDirectiveParser) Parse(vfsPath VFS, data []byte) []includeDirectiv
 		}
 	}
 
-	return out
+	return rawParsedIncludeSet(parsedIncludesLocal, out...)
 }
 
-func (protoIncludeDirectiveParser) Parse(_ VFS, data []byte) []includeDirective {
+func (protoIncludeDirectiveParser) Parse(_ VFS, data []byte) parsedIncludeSet {
 	out := make([]includeDirective, 0, 8)
 
 	eachLine(data, func(line []byte) {
@@ -156,14 +156,12 @@ func (protoIncludeDirectiveParser) Parse(_ VFS, data []byte) []includeDirective 
 		out = append(out, includeDirective{kind: kind, target: target})
 	})
 
-	return out
+	return rawParsedIncludeSet(parsedIncludesLocal, out...)
 }
 
-func (ragelIncludeDirectiveParser) Parse(_ VFS, data []byte) []includeDirective {
-	out := parseCIncludes(data)
-	if len(out) == 0 {
-		out = make([]includeDirective, 0, 4)
-	}
+func (ragelIncludeDirectiveParser) Parse(_ VFS, data []byte) parsedIncludeSet {
+	local := make([]includeDirective, 0, 4)
+	induced := parseCIncludes(data)
 
 	seenNative := make(map[string]struct{}, 4)
 	inSpecification := false
@@ -196,13 +194,17 @@ func (ragelIncludeDirectiveParser) Parse(_ VFS, data []byte) []includeDirective 
 			return
 		}
 		seenNative[target] = struct{}{}
-		out = append(out, includeDirective{kind: includeQuoted, target: target})
+		local = append(local, includeDirective{kind: includeQuoted, target: target})
 	})
 
-	return out
+	var set parsedIncludeSet
+	set = appendParsedDirectives(set, parsedIncludesLocal, local...)
+	set = appendParsedDirectives(set, parsedIncludesHCPP, induced...)
+
+	return set
 }
 
-func (swigIncludeDirectiveParser) Parse(_ VFS, data []byte) []includeDirective {
+func (swigIncludeDirectiveParser) Parse(_ VFS, data []byte) parsedIncludeSet {
 	direct := make([]includeDirective, 0, 8)
 	induced := make([]includeDirective, 0, 4)
 	inBlock := false
@@ -233,14 +235,18 @@ func (swigIncludeDirectiveParser) Parse(_ VFS, data []byte) []includeDirective {
 		}
 	})
 
-	return append(direct, induced...)
+	var set parsedIncludeSet
+	set = appendParsedDirectives(set, parsedIncludesLocal, direct...)
+	set = appendParsedDirectives(set, parsedIncludesHCPP, induced...)
+
+	return set
 }
 
-func (yasmIncludeDirectiveParser) Parse(_ VFS, data []byte) []includeDirective {
-	return parseYasmIncludes(data)
+func (yasmIncludeDirectiveParser) Parse(_ VFS, data []byte) parsedIncludeSet {
+	return rawParsedIncludeSet(parsedIncludesLocal, parseYasmIncludes(data)...)
 }
 
-func (emptyIncludeDirectiveParser) Parse(_ VFS, _ []byte) []includeDirective {
+func (emptyIncludeDirectiveParser) Parse(_ VFS, _ []byte) parsedIncludeSet {
 	return nil
 }
 

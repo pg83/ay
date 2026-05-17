@@ -1187,7 +1187,7 @@ import weak 'c.proto';
 	}
 }
 
-func TestScanDirectives_RagelSpecAndCppIncludes(t *testing.T) {
+func TestParsedIncludes_RagelBuckets(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "src.rl6")
 
@@ -1203,25 +1203,41 @@ include "machine.rl";
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	dirs := scanner.scanDirectives(Source("src.rl6"))
+	parsed := scanner.parsedIncludes(Source("src.rl6"))
+	local := parsed.bucket(parsedIncludesLocal)
+	hcpp := parsed.bucket(parsedIncludesHCPP)
 
-	if len(dirs) != 4 {
-		t.Fatalf("got %d directives, want 4; %+v", len(dirs), dirs)
+	if len(local) != 2 {
+		t.Fatalf("got %d local entries, want 2; %+v", len(local), local)
 	}
 
-	wantTargets := []string{"outer.h", "tail.h", "machine.rl", "machine2.rl"}
-	wantKinds := []includeKind{includeSystem, includeQuoted, includeQuoted, includeQuoted}
-	for i := range wantTargets {
-		if dirs[i].target != wantTargets[i] {
-			t.Fatalf("dirs[%d].target = %q, want %q; all=%+v", i, dirs[i].target, wantTargets[i], dirs)
+	wantLocalTargets := []string{"machine.rl", "machine2.rl"}
+	for i := range wantLocalTargets {
+		if local[i].directive.target != wantLocalTargets[i] {
+			t.Fatalf("local[%d].target = %q, want %q; all=%+v", i, local[i].directive.target, wantLocalTargets[i], local)
 		}
-		if dirs[i].kind != wantKinds[i] {
-			t.Fatalf("dirs[%d].kind = %v, want %v", i, dirs[i].kind, wantKinds[i])
+		if local[i].directive.kind != includeQuoted {
+			t.Fatalf("local[%d].kind = %v, want includeQuoted", i, local[i].directive.kind)
+		}
+	}
+
+	if len(hcpp) != 2 {
+		t.Fatalf("got %d h+cpp entries, want 2; %+v", len(hcpp), hcpp)
+	}
+
+	wantHCPPTargets := []string{"outer.h", "tail.h"}
+	wantHCPPKinds := []includeKind{includeSystem, includeQuoted}
+	for i := range wantHCPPTargets {
+		if hcpp[i].directive.target != wantHCPPTargets[i] {
+			t.Fatalf("hcpp[%d].target = %q, want %q; all=%+v", i, hcpp[i].directive.target, wantHCPPTargets[i], hcpp)
+		}
+		if hcpp[i].directive.kind != wantHCPPKinds[i] {
+			t.Fatalf("hcpp[%d].kind = %v, want %v", i, hcpp[i].directive.kind, wantHCPPKinds[i])
 		}
 	}
 }
 
-func TestScanDirectives_SwigAndBlockCpp(t *testing.T) {
+func TestParsedIncludes_SwigBuckets(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "src.swg")
 
@@ -1237,21 +1253,30 @@ func TestScanDirectives_SwigAndBlockCpp(t *testing.T) {
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	dirs := scanner.scanDirectives(Source("src.swg"))
+	parsed := scanner.parsedIncludes(Source("src.swg"))
+	local := parsed.bucket(parsedIncludesLocal)
+	hcpp := parsed.bucket(parsedIncludesHCPP)
 
-	if len(dirs) != 4 {
-		t.Fatalf("got %d directives, want 4; %+v", len(dirs), dirs)
+	if len(local) != 3 {
+		t.Fatalf("got %d local entries, want 3; %+v", len(local), local)
 	}
 
-	wantTargets := []string{"a.i", "b.i", "c.h", "block.h"}
-	wantKinds := []includeKind{includeQuoted, includeSystem, includeQuoted, includeQuoted}
-	for i := range wantTargets {
-		if dirs[i].target != wantTargets[i] {
-			t.Fatalf("dirs[%d].target = %q, want %q; all=%+v", i, dirs[i].target, wantTargets[i], dirs)
+	wantLocalTargets := []string{"a.i", "b.i", "c.h"}
+	wantLocalKinds := []includeKind{includeQuoted, includeSystem, includeQuoted}
+	for i := range wantLocalTargets {
+		if local[i].directive.target != wantLocalTargets[i] {
+			t.Fatalf("local[%d].target = %q, want %q; all=%+v", i, local[i].directive.target, wantLocalTargets[i], local)
 		}
-		if dirs[i].kind != wantKinds[i] {
-			t.Fatalf("dirs[%d].kind = %v, want %v", i, dirs[i].kind, wantKinds[i])
+		if local[i].directive.kind != wantLocalKinds[i] {
+			t.Fatalf("local[%d].kind = %v, want %v", i, local[i].directive.kind, wantLocalKinds[i])
 		}
+	}
+
+	if len(hcpp) != 1 {
+		t.Fatalf("got %d h+cpp entries, want 1; %+v", len(hcpp), hcpp)
+	}
+	if hcpp[0].directive.target != "block.h" || hcpp[0].directive.kind != includeQuoted {
+		t.Fatalf("h+cpp = %+v, want block.h quoted", hcpp)
 	}
 }
 
