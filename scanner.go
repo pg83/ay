@@ -26,33 +26,19 @@ import (
 	"unsafe"
 )
 
-// Internal scanner paths are VFS-rooted strings of two shapes:
+// The scanner core works on typed VFS paths:
 //
-//   - `$(S)/<rel>` — real on-disk file under sourceRoot. fileExists and
-//     fsLocator translate this prefix to `sourceRoot + "/" + rel` at the
-//     os.Stat / os.ReadFile site, never above it.
-//   - `$(B)/<rel>` — generated output tracked by the per-scanner
-//     CodegenRegistry. codegenLocator answers Exists for these; children
-//     come from GeneratedFileInfo.EmitsIncludes (already in VFS form),
-//     not from parseIncludes.
+//   - `Source(rel)` — real on-disk file under sourceRoot
+//   - `Build(rel)` — generated output tracked by the per-scanner
+//     CodegenRegistry
 //
-// FS translation is localised to fileExists / fsLocator.Exists /
-// parseIncludes; cache keys and parameters use plain `string` (a named
-// VFSPath type would force `map[VFSPath]…` everywhere without changing
-// semantics).
+// String materialization is kept only at the boundaries that still need
+// the canonical `$(S)/...` / `$(B)/...` spelling (serializer and a few
+// compatibility interfaces).
 const (
 	vfsSourcePrefix = "$(S)/"
 	vfsBuildPrefix  = "$(B)/"
 )
-
-// vfsSource builds the canonical VFS form of a SOURCE_ROOT-relative path.
-func vfsSource(rel string) string { return vfsSourcePrefix + rel }
-
-// isSourceVFS reports whether p is a $(S)/-prefixed VFS path.
-func isSourceVFS(p string) bool { return strings.HasPrefix(p, vfsSourcePrefix) }
-
-// isBuildVFS reports whether p is a $(B)/-prefixed VFS path.
-func isBuildVFS(p string) bool { return strings.HasPrefix(p, vfsBuildPrefix) }
 
 // includeRe matches `#include` / `#include_next` directives in their
 // angle-bracket and quoted-string forms, tolerating arbitrary
@@ -1619,10 +1605,9 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		// BUILD-rooted candidate. The Exists locator is the codegen
 		// registry; its API still takes the string form.
 		abs := Build(d.target)
-		absStr := abs.String()
 
 		for _, loc := range s.fallbackLocators {
-			if !loc.Exists(absStr) {
+			if !loc.Exists(abs) {
 				continue
 			}
 
@@ -1734,7 +1719,7 @@ type pathLocator interface {
 	// Exists reports whether `vfsPath` is reachable through this
 	// locator. Each locator answers for one VFS root only (FS returns
 	// false for $(B)/, codegen returns false for $(S)/).
-	Exists(vfsPath string) bool
+	Exists(vfsPath VFS) bool
 }
 
 // fsLocator answers Exists for $(S)/-rooted paths via the shared
@@ -1744,12 +1729,12 @@ type fsLocator struct {
 	scanner *IncludeScanner
 }
 
-func (f fsLocator) Exists(vfsPath string) bool {
-	if !isSourceVFS(vfsPath) {
+func (f fsLocator) Exists(vfsPath VFS) bool {
+	if !vfsPath.IsSource() {
 		return false
 	}
 
-	return f.scanner.fileExistsByRel(strings.TrimPrefix(vfsPath, vfsSourcePrefix))
+	return f.scanner.fileExistsByRel(vfsPath.Rel)
 }
 
 // codegenLocator answers Exists for $(B)/-rooted paths via the per-
@@ -1759,21 +1744,16 @@ type codegenLocator struct {
 	reg *CodegenRegistry
 }
 
-func (c codegenLocator) Exists(vfsPath string) bool {
+func (c codegenLocator) Exists(vfsPath VFS) bool {
 	if c.reg == nil {
 		return false
 	}
 
-	if !isBuildVFS(vfsPath) {
+	if !vfsPath.IsBuild() {
 		return false
 	}
 
-	v, ok := ParseVFS(vfsPath)
-	if !ok {
-		return false
-	}
-
-	_, ok = c.reg.Lookup(v)
+	_, ok := c.reg.Lookup(vfsPath)
 
 	return ok
 }
@@ -1783,8 +1763,8 @@ func (c codegenLocator) Exists(vfsPath string) bool {
 // belong to the codegen registry tier. Cache key is the rel-form tail,
 // unified with fileExistsByRel so hot callers (resolveSearchPath, ~4.7M
 // calls) skip the `$(S)/` concat.
-func (s *IncludeScanner) fileExists(vfsPath string) bool {
-	return s.fileExistsByRel(strings.TrimPrefix(vfsPath, vfsSourcePrefix))
+func (s *IncludeScanner) fileExists(vfsPath VFS) bool {
+	return s.fileExistsByRel(vfsPath.Rel)
 }
 
 // fileExistsByRel is the inner, rel-keyed existence check.
