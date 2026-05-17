@@ -6,6 +6,9 @@ import (
 	encb64 "encoding/base64"
 	enchex "encoding/hex"
 	"errors"
+	"os"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -136,20 +139,28 @@ func expandResourceFiles(args []string) []resourceEntry {
 }
 
 // resourceModuleTag returns the upstream MODULE_TAG seen by the packer.
-// Plain LIBRARY/PROGRAM → nil. PY3_LIBRARY/PY3_PROGRAM_BIN/PY23_* → "PY3".
-// PY3_PROGRAM is a multimodule whose resource-bearing submodule is
-// PY3_BIN/PY3_PROGRAM_BIN; upstream surfaces `module_tag=py3_bin` there.
+// Plain LIBRARY/PROGRAM → nil. PY3_LIBRARY/PY23_* → "PY3".
+// PY3_PROGRAM_BIN is the executable half of PY3_PROGRAM; upstream surfaces
+// `module_tag=py3_bin` there.
 // (`build/conf/python.conf:1126`). GEN_LIBRARY ("RESOURCE_LIB", core
 // conf:598) and DLL ("DLL", core conf:2197,2379) are not yet handled.
 func resourceModuleTag(modName string) *string {
 	switch modName {
-	case "PY3_PROGRAM":
-		return stringPtr("PY3_BIN")
 	case "PY3_LIBRARY", "PY3_PROGRAM_BIN", "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
 		return stringPtr("PY3")
 	}
 
 	return nil
+}
+
+func resourceModuleTagForData(d *moduleData) *string {
+	if d == nil || d.moduleStmt == nil {
+		return nil
+	}
+	if d.py3ProgramMultimodule && d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+		return stringPtr("PY3_BIN")
+	}
+	return resourceModuleTag(d.moduleStmt.Name)
 }
 
 // emitResourceObjcopy emits one objcopy PY node per flush of the
@@ -170,7 +181,7 @@ func emitResourceObjcopy(
 	// py/no_check_imports) alongside RESOURCE/RESOURCE_FILES. Each
 	// sibling is independent and conditional on its own per-module data.
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
-	if len(d.resources) == 0 && !hasKvOnly {
+	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
 		return nil, nil, nil
 	}
 
@@ -196,10 +207,12 @@ func emitResourceObjcopy(
 		addGlobal(objcopyScriptVFS)
 	}
 
-	if res := emitPyNamespaceObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); res != nil {
-		refs = append(refs, res.Ref)
-		outputs = append(outputs, res.Out)
-		addGlobal(objcopyScriptVFS)
+	for _, res := range emitPyNamespaceObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef) {
+		if res != nil {
+			refs = append(refs, res.Ref)
+			outputs = append(outputs, res.Out)
+			addGlobal(objcopyScriptVFS)
+		}
 	}
 
 	if res := emitNoCheckImportsObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); res != nil {
@@ -215,14 +228,14 @@ func emitResourceObjcopy(
 		addGlobal(res.Input)
 	}
 
-	// Per-PY_SRCS resfs entry objcopy nodes. One node per packer-flush
-	// chunk; large modules (Lib, lib2/py) split via chunkPySrcEntries.
-	srcRefs, srcOuts, srcGlobalInputs := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
-	refs = append(refs, srcRefs...)
-	outputs = append(outputs, srcOuts...)
-	globalMemberInputs = append(globalMemberInputs, srcGlobalInputs...)
+	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 {
+		// Per-PY_SRCS resfs entry objcopy nodes. One node per packer-flush
+		// chunk; large modules (Lib, lib2/py) split via chunkPySrcEntries.
+		srcRefs, srcOuts, srcGlobalInputs := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
+		refs = append(refs, srcRefs...)
+		outputs = append(outputs, srcOuts...)
+		globalMemberInputs = append(globalMemberInputs, srcGlobalInputs...)
 
-	if len(d.resources) == 0 {
 		return refs, outputs, globalMemberInputs
 	}
 
@@ -240,18 +253,19 @@ func emitResourceObjcopy(
 	}
 
 	type acc struct {
-		paths      []string
-		pathInputs []VFS
-		pathDeps   []NodeRef
-		keys       []string // base64-encoded (padded) keys for path entries
-		kvs        []string
-		cmdLen     int
+		paths       []string
+		pathInputs  []VFS
+		extraInputs []VFS
+		pathDeps    []NodeRef
+		keys        []string // base64-encoded (padded) keys for path entries
+		kvs         []string
+		cmdLen      int
 	}
 	cur := acc{}
 
 	var moduleTag *string
 	if d.moduleStmt != nil {
-		moduleTag = resourceModuleTag(d.moduleStmt.Name)
+		moduleTag = resourceModuleTagForData(d)
 	}
 
 	flush := func() {
@@ -308,9 +322,11 @@ func emitResourceObjcopy(
 		if len(cur.paths) <= 1 {
 			inputs = append(inputs, objcopyScriptVFS)
 			inputs = append(inputs, cur.pathInputs...)
+			inputs = append(inputs, cur.extraInputs...)
 		} else {
 			inputs = append(inputs, cur.pathInputs...)
 			inputs = append(inputs, objcopyScriptVFS)
+			inputs = append(inputs, cur.extraInputs...)
 		}
 
 		// tags + host_platform + platform plumbed from the Platform pair
@@ -379,43 +395,75 @@ func emitResourceObjcopy(
 		for _, p := range cur.pathInputs {
 			addGlobal(p)
 		}
+		for _, p := range cur.extraInputs {
+			addGlobal(p)
+		}
 		addGlobal(objcopyScriptVFS)
 
 		cur = acc{}
 	}
 
-	for _, e := range d.resources {
-		if !contains(e.Path) && !contains(e.Key) {
-			if e.Path == "-" {
-				cur.kvs = append(cur.kvs, e.Key)
-				cur.cmdLen += rootCmdLen + len(e.Key)
-			} else {
-				inputVFS := Source(instance.Path + "/" + e.Path)
-				var producerRef NodeRef
-				if d.prOutputProducer != nil {
-					if ref, ok := d.prOutputProducer[e.Path]; ok {
-						inputVFS = Build(instance.Path + "/" + e.Path)
-						producerRef = ref
+	emitEntries := func(entries []resourceEntry) {
+		for _, e := range entries {
+			if !contains(e.Path) && !contains(e.Key) {
+				if e.Path == "-" {
+					cur.kvs = append(cur.kvs, e.Key)
+					cur.cmdLen += rootCmdLen + len(e.Key)
+				} else {
+					inputVFS := Source(instance.Path + "/" + e.Path)
+					var producerRef NodeRef
+					if d.prOutputProducer != nil {
+						if ref, ok := d.prOutputProducer[e.Path]; ok {
+							inputVFS = Build(instance.Path + "/" + e.Path)
+							producerRef = ref
+							cur.extraInputs = mergeDedupVFS(cur.extraInputs, prResourceExtraInputs(d, e.Path))
+						}
 					}
-				}
 
-				cur.paths = append(cur.paths, e.Path)
-				cur.pathInputs = append(cur.pathInputs, inputVFS)
-				cur.pathDeps = append(cur.pathDeps, producerRef)
-				kb := encb64.StdEncoding.EncodeToString([]byte(e.Key))
-				cur.keys = append(cur.keys, kb)
-				cur.cmdLen += rootCmdLen + len(e.Path) + len(kb)
+					cur.paths = append(cur.paths, e.Path)
+					cur.pathInputs = append(cur.pathInputs, inputVFS)
+					cur.pathDeps = append(cur.pathDeps, producerRef)
+					kb := encb64.StdEncoding.EncodeToString([]byte(e.Key))
+					cur.keys = append(cur.keys, kb)
+					cur.cmdLen += rootCmdLen + len(e.Path) + len(kb)
+				}
+			}
+
+			if cur.cmdLen > maxCmdLen {
+				flush()
 			}
 		}
 
-		if cur.cmdLen > maxCmdLen {
-			flush()
+		flush()
+	}
+
+	emitEntries(d.resources)
+	emitEntries(d.pyPyiResources)
+
+	// Explicit RESOURCE/RESOURCE_FILES flush before PY_SRCS pybuild
+	// resources in upstream, even when PY_SRCS appears earlier in ya.make.
+	srcRefs, srcOuts, srcGlobalInputs := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
+	refs = append(refs, srcRefs...)
+	outputs = append(outputs, srcOuts...)
+	globalMemberInputs = append(globalMemberInputs, srcGlobalInputs...)
+
+	return refs, outputs, globalMemberInputs
+}
+
+func prResourceExtraInputs(d *moduleData, output string) []VFS {
+	if d == nil || d.prOutputInputs == nil {
+		return nil
+	}
+
+	inputs := d.prOutputInputs[output]
+	out := make([]VFS, 0, len(inputs))
+	for _, p := range inputs {
+		if p.IsSource() {
+			out = append(out, p)
 		}
 	}
 
-	flush()
-
-	return refs, outputs, globalMemberInputs
+	return out
 }
 
 // expandRootrel substitutes the upstream
@@ -467,11 +515,11 @@ func emitKvOnlyObjcopyNode(
 	instance ModuleInstance,
 	kvsHash []string,
 	kvsCmd []string,
-	moduleName string,
+	d *moduleData,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
 ) *objcopyEmit {
-	moduleTag := resourceModuleTag(moduleName)
+	moduleTag := resourceModuleTagForData(d)
 	hash := objcopyHash(nil, nil, kvsHash, instance.Path, moduleTag)
 	outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
@@ -505,12 +553,14 @@ func emitKvOnlyObjcopyNode(
 
 	// PY23_LIBRARY / PY23_NATIVE_LIBRARY have MODULE_TAG=PY3 but REF
 	// surfaces `target_properties.module_tag="py3"` (lower-case) only
-	// for those flavours; PY3_LIBRARY / PY3_PROGRAM_BIN suppress it
-	// (upstream omits redundant properties matching the default).
-	switch moduleName {
+	// for those flavours; PY3_LIBRARY suppresses it (upstream omits
+	// redundant properties matching the default). PY3_PROGRAM_BIN uses
+	// its executable-half tag.
+	switch d.moduleStmt.Name {
 	case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
 		targetProps["module_tag"] = "py3"
-	case "PY3_PROGRAM":
+	}
+	if d.py3ProgramMultimodule && d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
 		targetProps["module_tag"] = "py3_bin"
 	}
 
@@ -576,20 +626,42 @@ func emitYaConfJSONObjcopy(
 		return nil
 	}
 
-	out := make([]*objcopyEmit, 0, len(d.yaConfJSON))
-	var moduleTag *string
-	if d.moduleStmt != nil {
-		moduleTag = resourceModuleTag(d.moduleStmt.Name)
+	type yaConfResource struct {
+		sourcePath string
+		keyPath    string
+		hashPath   string
 	}
 
+	var resources []yaConfResource
 	for _, file := range d.yaConfJSON {
-		key := "resfs/file/ya.conf.json"
+		for _, formula := range yaConfFormulaResources(ctx.sourceRoot, file) {
+			resources = append(resources, yaConfResource{
+				sourcePath: formula,
+				keyPath:    formula,
+				hashPath:   formula,
+			})
+		}
+		resources = append(resources, yaConfResource{
+			sourcePath: file,
+			keyPath:    "ya.conf.json",
+			hashPath:   "ya.conf.json",
+		})
+	}
+
+	out := make([]*objcopyEmit, 0, len(resources))
+	var moduleTag *string
+	if d.moduleStmt != nil {
+		moduleTag = resourceModuleTagForData(d)
+	}
+
+	for _, res := range resources {
+		key := "resfs/file/" + res.keyPath
 		keyB64 := encb64.StdEncoding.EncodeToString([]byte(key))
-		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + file + "\"}"
-		kvCmd := "resfs/src/" + key + "=" + file
-		hash := objcopyHash([]string{file}, []string{keyB64}, []string{kvHash}, instance.Path, moduleTag)
+		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + res.hashPath + "\"}"
+		kvCmd := "resfs/src/" + key + "=" + res.sourcePath
+		hash := objcopyHash([]string{res.hashPath}, []string{keyB64}, []string{kvHash}, instance.Path, moduleTag)
 		outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
-		input := Source(file)
+		input := Source(res.sourcePath)
 
 		cmdArgs := []string{
 			instance.Platform.Tools.Python3,
@@ -650,6 +722,32 @@ func emitYaConfJSONObjcopy(
 	return out
 }
 
+func yaConfFormulaResources(sourceRoot string, confPath string) []string {
+	if sourceRoot == "" {
+		return nil
+	}
+
+	raw, err := os.ReadFile(filepath.Join(sourceRoot, filepath.FromSlash(confPath)))
+	if err != nil {
+		return nil
+	}
+
+	var out []string
+	seen := map[string]struct{}{}
+	for _, m := range yaConfFormulaRE.FindAllSubmatch(raw, -1) {
+		formula := string(m[1])
+		if _, dup := seen[formula]; dup {
+			continue
+		}
+		seen[formula] = struct{}{}
+		out = append(out, formula)
+	}
+
+	return out
+}
+
+var yaConfFormulaRE = regexp.MustCompile(`"formula"\s*:\s*"([^"]+\.json)"`)
+
 // emitPyNamespaceObjcopy emits the `py/namespace/<mod_list_md5>/<unit>=<ns>.`
 // kv objcopy node per pybuild.py:587-594. The mod_list_md5 is a
 // streaming md5 over each `(path, mod)` pair's `mod` UTF-8 bytes,
@@ -661,7 +759,7 @@ func emitPyNamespaceObjcopy(
 	d *moduleData,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) *objcopyEmit {
+) []*objcopyEmit {
 	if len(d.pySrcs) == 0 {
 		return nil
 	}
@@ -685,42 +783,64 @@ func emitPyNamespaceObjcopy(
 		return nil
 	}
 
-	pySources := make([]string, 0, len(d.pySrcs))
-	for _, srcRel := range d.pySrcs {
-		if strings.HasSuffix(srcRel, ".py") {
-			pySources = append(pySources, srcRel)
+	groups := d.pySrcGroups
+	if len(groups) == 0 {
+		groups = []pySrcGroup{{
+			Srcs:      d.pySrcs,
+			TopLevel:  d.pyTopLevel,
+			Namespace: d.pyNamespace,
+		}}
+	}
+
+	var out []*objcopyEmit
+	for _, group := range groups {
+		pySources := make([]string, 0, len(group.Srcs))
+		for _, srcRel := range group.Srcs {
+			if strings.HasSuffix(srcRel, ".py") {
+				pySources = append(pySources, srcRel)
+			}
 		}
+		if len(pySources) == 0 {
+			continue
+		}
+
+		nsPrefix := strings.ReplaceAll(instance.Path, "/", ".") + "."
+		if group.Namespace != nil {
+			nsPrefix = strings.TrimSuffix(*group.Namespace, ".") + "."
+		}
+		nsValue := nsPrefix
+		if group.TopLevel {
+			nsPrefix = ""
+			nsValue = "."
+		}
+
+		// Compute mod_list_md5: streaming md5 over each `mod` in pys order.
+		// mod = ns + stripext(arg).replace('/','.')   (pybuild.py:385,391).
+		h := md5.New()
+		for _, srcRel := range pySources {
+			modName := strings.TrimSuffix(srcRel, ".py")
+			modName = strings.ReplaceAll(modName, "/", ".")
+			mod := nsPrefix + modName
+			h.Write([]byte(mod))
+		}
+		modListMD5 := enchex.EncodeToString(h.Sum(nil))
+
+		// Build the kv. pybuild.py:591: key = '{prefix}/{md5}/{path}';
+		// value joins sorted ns set by ':' (each module in scope has one
+		// ns so the join collapses to that entry).
+		keyPath := instance.Path
+		if group.TopLevel && d.srcDir != nil {
+			keyPath = *d.srcDir
+		}
+		key := "py/namespace/" + modListMD5 + "/" + keyPath
+		// Hash form retains the outer double quotes (pybuild.py:593
+		// `'{}="{}"'.format(key, namespaces)`); cmd_args strips them.
+		kvHash := key + "=\"" + nsValue + "\""
+		kvCmd := key + "=" + nsValue
+		out = append(out, emitKvOnlyObjcopyNode(ctx, instance, []string{kvHash}, []string{kvCmd}, d, rescompilerLDRef, rescompressorLDRef))
 	}
-	if len(pySources) == 0 {
-		return nil
-	}
 
-	// Default namespace: `<upath-dotted>.`. TOP_LEVEL empties ns; we
-	// conservatively derive ns from upath (REF modules in scope do not
-	// use TOP_LEVEL for entries that drive the namespace hash).
-	ns := strings.ReplaceAll(instance.Path, "/", ".") + "."
-
-	// Compute mod_list_md5: streaming md5 over each `mod` in pys order.
-	// mod = ns + stripext(arg).replace('/','.')   (pybuild.py:385,391).
-	h := md5.New()
-	for _, srcRel := range pySources {
-		modName := strings.TrimSuffix(srcRel, ".py")
-		modName = strings.ReplaceAll(modName, "/", ".")
-		mod := ns + modName
-		h.Write([]byte(mod))
-	}
-	modListMD5 := enchex.EncodeToString(h.Sum(nil))
-
-	// Build the kv. pybuild.py:591: key = '{prefix}/{md5}/{path}';
-	// value joins sorted ns set by ':' (each module in scope has one
-	// ns so the join collapses to that entry).
-	key := "py/namespace/" + modListMD5 + "/" + instance.Path
-	// Hash form retains the outer double quotes (pybuild.py:593
-	// `'{}="{}"'.format(key, namespaces)`); cmd_args strips them.
-	kvHash := key + "=\"" + ns + "\""
-	kvCmd := key + "=" + ns
-
-	return emitKvOnlyObjcopyNode(ctx, instance, []string{kvHash}, []string{kvCmd}, d.moduleStmt.Name, rescompilerLDRef, rescompressorLDRef)
+	return out
 }
 
 // emitPyMainObjcopy emits the `PY_MAIN=<dotted>:<func>` kv objcopy node
@@ -744,7 +864,7 @@ func emitPyMainObjcopy(
 	// PY_MAIN= is unquoted in both hash and cmd_args (pybuild.py:759
 	// `'PY_MAIN={}'.format(arg)` — no quotes around the value).
 	kv := "PY_MAIN=" + *d.pyMain
-	return emitKvOnlyObjcopyNode(ctx, instance, []string{kv}, []string{kv}, d.moduleStmt.Name, rescompilerLDRef, rescompressorLDRef)
+	return emitKvOnlyObjcopyNode(ctx, instance, []string{kv}, []string{kv}, d, rescompilerLDRef, rescompressorLDRef)
 }
 
 // emitNoCheckImportsObjcopy emits the
@@ -775,7 +895,7 @@ func emitNoCheckImportsObjcopy(
 	kvHash := key + "=\"" + value + "\""
 	kvCmd := key + "=" + value
 
-	return emitKvOnlyObjcopyNode(ctx, instance, []string{kvHash}, []string{kvCmd}, d.moduleStmt.Name, rescompilerLDRef, rescompressorLDRef)
+	return emitKvOnlyObjcopyNode(ctx, instance, []string{kvHash}, []string{kvCmd}, d, rescompilerLDRef, rescompressorLDRef)
 }
 
 // pySrcEntry is one element of the per-PY_SRCS objcopy emission. Per
@@ -805,7 +925,11 @@ type pySrcEntry struct {
 // declaration order (matches REF). Each entry is independent of chunk
 // boundaries — the chunker decides which chunk it lands in.
 func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
-	if len(d.pySrcs) == 0 {
+	return buildPySrcEntriesFor(d, modulePath, d.pySrcs, d.pyTopLevel, d.pyNamespace)
+}
+
+func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLevel bool, namespace *string) []pySrcEntry {
+	if len(srcs) == 0 {
 		return nil
 	}
 
@@ -818,13 +942,20 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 	// per-source resfs key. TOP_LEVEL strips the prefix, leaving the
 	// raw source path as the resfs key root.
 	keyPrefix := ""
-	if !d.pyTopLevel {
-		keyPrefix = modulePath + "/"
+	if !topLevel {
+		if namespace != nil {
+			keyPrefix = strings.ReplaceAll(strings.TrimSuffix(*namespace, "."), ".", "/") + "/"
+		} else {
+			keyPrefix = modulePath + "/"
+		}
 	}
 
-	out := make([]pySrcEntry, 0, len(d.pySrcs)*2)
-	for _, srcRel := range d.pySrcs {
+	out := make([]pySrcEntry, 0, len(srcs)*2)
+	for _, srcRel := range srcs {
 		if strings.HasSuffix(srcRel, ".pyi") {
+			continue
+		}
+		if d.pyGeneratedSrcs[srcRel] != nil {
 			continue
 		}
 
@@ -843,8 +974,14 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 		if !d.pyBuildNoPY {
 			pyKey := "resfs/file/py/" + keyPrefix + srcRel
 			pyPathInput := Source(actualUnit + "/" + srcRel).String()
+			if d.pyGeneratedSrcs[srcRel] != nil {
+				pyPathInput = Build(modulePath + "/" + srcRel).String()
+			}
 			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
 			pyKvCmd := "resfs/src/" + pyKey + "=" + actualUnit + "/" + srcRel
+			if d.pyGeneratedSrcs[srcRel] != nil {
+				pyKvCmd = "resfs/src/" + pyKey + "=" + modulePath + "/" + srcRel
+			}
 			out = append(out, pySrcEntry{
 				pathHash:  srcRel,
 				pathInput: pyPathInput,
@@ -858,11 +995,19 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 		// yapyc3 entry — always emitted unless PYBUILD_NO_PYC is set.
 		if !d.pyBuildNoPYC {
 			ypKey := "resfs/file/py/" + keyPrefix + srcRel + ".yapyc3"
-			ypPathInput := Build(actualUnit + "/" + srcRel + suffix).String()
+			ypPathInput := Build(modulePath + "/" + srcRel + suffix).String()
+			if d.pyGeneratedSrcs[srcRel] != nil {
+				ypPathInput = Build(modulePath + "/" + srcRel + suffix).String()
+			}
 			// kv hash retains the ${rootrel;...} placeholder; cmd_args
 			// form expands to <actualUnit>/<srcRel><suffix>.
 			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
-			ypKvCmd := "resfs/src/" + ypKey + "=" + actualUnit + "/" + srcRel + suffix
+			ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
+			extraSrcInput := stringPtr(Source(actualUnit + "/" + srcRel).String())
+			if d.pyGeneratedSrcs[srcRel] != nil {
+				ypKvCmd = "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
+				extraSrcInput = stringPtr(Build(modulePath + "/" + srcRel).String())
+			}
 			out = append(out, pySrcEntry{
 				pathHash:      srcRel + suffix,
 				pathInput:     ypPathInput,
@@ -870,7 +1015,7 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 				kvHash:        ypKvHash,
 				kvCmd:         ypKvCmd,
 				inputDep:      ypPathInput,
-				extraSrcInput: stringPtr(Source(actualUnit + "/" + srcRel).String()),
+				extraSrcInput: extraSrcInput,
 			})
 		}
 	}
@@ -1002,133 +1147,156 @@ func emitPySrcObjcopy(
 	}
 
 	// PY3-flavoured modules only — gate mirrors emitPyNamespaceObjcopy.
-	if resourceModuleTag(d.moduleStmt.Name) == nil {
+	if resourceModuleTagForData(d) == nil {
 		return nil, nil, nil
 	}
 
-	entries := buildPySrcEntries(d, instance.Path)
-	if len(entries) == 0 {
+	groups := d.pySrcGroups
+	if len(groups) == 0 {
+		groups = []pySrcGroup{{
+			Srcs:      d.pySrcs,
+			TopLevel:  d.pyTopLevel,
+			Namespace: d.pyNamespace,
+		}}
+	}
+
+	var chunkGroups [][]pySrcChunk
+	chunkCount := 0
+	for _, group := range groups {
+		entries := buildPySrcEntriesFor(d, instance.Path, group.Srcs, group.TopLevel, group.Namespace)
+		if len(entries) == 0 {
+			continue
+		}
+		chunks := chunkPySrcEntries(entries)
+		chunkGroups = append(chunkGroups, chunks)
+		chunkCount += len(chunks)
+	}
+	if chunkCount == 0 {
 		return nil, nil, nil
 	}
 
-	chunks := chunkPySrcEntries(entries)
-	moduleTag := resourceModuleTag(d.moduleStmt.Name)
+	moduleTag := resourceModuleTagForData(d)
 
-	refs := make([]NodeRef, 0, len(chunks))
-	outputs := make([]VFS, 0, len(chunks))
+	refs := make([]NodeRef, 0, chunkCount)
+	outputs := make([]VFS, 0, chunkCount)
 	// Per-chunk SOURCE_ROOT inputs (PY_SRCS raw .py paths + objcopy.py)
 	// feed the enclosing module's .global.a. BUILD_ROOT-rooted .yapyc3
 	// entries are excluded — codegen artefacts that the AR aggregator's
 	// isBuildRootCodegenProduct filter would drop anyway.
 	var globalMemberInputs []VFS
-	for _, ch := range chunks {
-		hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path, moduleTag)
-		outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
+	for _, chunks := range chunkGroups {
+		for _, ch := range chunks {
+			hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path, moduleTag)
+			outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
-		cmdArgs := []string{
-			instance.Platform.Tools.Python3,
-			objcopyScriptPath,
-			"--compiler", instance.Platform.Tools.CXX,
-			"--objcopy", instance.Platform.Tools.Objcopy,
-			"--compressor", rescompressorBinPath,
-			"--rescompiler", rescompilerBinPath,
-			"--output_obj", outputObj.String(),
-			"--target", instance.Platform.Triple,
-		}
-
-		cmdArgs = append(cmdArgs, "--inputs")
-		cmdArgs = append(cmdArgs, ch.pathInps...)
-		cmdArgs = append(cmdArgs, "--keys")
-		cmdArgs = append(cmdArgs, ch.keys...)
-		cmdArgs = append(cmdArgs, "--kvs")
-		cmdArgs = append(cmdArgs, ch.kvsCmd...)
-
-		// inputs[]: rescompiler + rescompressor + per-entry source files
-		// + objcopy.py (script last). Uses `ch.inps` (KV and path+key
-		// slots, deduped per chunk); for yapyc3-only modules this adds
-		// the underlying .py; on chunk straddles the spillover entry's
-		// yapyc3 + .py land in BOTH chunks' inputs[].
-		inputs := []VFS{
-			Build("tools/rescompiler/rescompiler"),
-			Build("tools/rescompressor/rescompressor"),
-		}
-		for _, p := range ch.inps {
-			inputs = append(inputs, ParseVFSOrSource(p))
-		}
-		inputs = append(inputs, objcopyScriptVFS)
-
-		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
-
-		targetProps := map[string]string{"module_dir": instance.Path}
-		switch d.moduleStmt.Name {
-		case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
-			targetProps["module_tag"] = "py3"
-		}
-
-		// Empty Tags stays non-nil so JSON serialises as `[]`.
-		pyTags := []string{}
-		if len(instance.Platform.Tags) > 0 {
-			pyTags = append(pyTags, instance.Platform.Tags...)
-		}
-
-		node := &Node{
-			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
-			Env:              env,
-			Inputs:           inputs,
-			Outputs:          []VFS{outputObj},
-			KV:               map[string]string{"p": "PY", "pc": "yellow", "show_out": "yes"},
-			Tags:             pyTags,
-			TargetProperties: targetProps,
-			Platform:         string(instance.Platform.Target),
-			HostPlatform:     instance.Platform.IsHost,
-			Requirements: map[string]interface{}{
-				"cpu":     float64(1),
-				"network": "restricted",
-				"ram":     float64(32),
-			},
-		}
-
-		if rescompilerLDRef != (NodeRef{}) {
-			node.DepRefs = append(node.DepRefs, rescompilerLDRef)
-		}
-		if rescompressorLDRef != (NodeRef{}) {
-			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
-		}
-
-		// Thread PY (yapyc3) producer refs into the objcopy node's deps[].
-		// The .yapyc3 paths live in `inps` as BUILD_ROOT-rooted inputs;
-		// resolveCodegenDepRefsExt's input-driven branch matches each
-		// against the codegen registry and returns the PY producer ref.
-		exclude := []NodeRef{}
-		if rescompilerLDRef != (NodeRef{}) {
-			exclude = append(exclude, rescompilerLDRef)
-		}
-		if rescompressorLDRef != (NodeRef{}) {
-			exclude = append(exclude, rescompressorLDRef)
-		}
-		chInpsVFS := make([]VFS, 0, len(ch.inps))
-		for _, p := range ch.inps {
-			chInpsVFS = append(chInpsVFS, ParseVFSOrSource(p))
-		}
-		if extras := resolveCodegenDepRefsExt(ctx, instance, nil, chInpsVFS, exclude...); len(extras) > 0 {
-			node.DepRefs = append(node.DepRefs, extras...)
-		}
-
-		r := ctx.emit.Emit(node)
-		refs = append(refs, r)
-		outputs = append(outputs, outputObj)
-
-		// SOURCE_ROOT-rooted inputs propagate into .global.a; BUILD_ROOT
-		// .yapyc3 entries are filtered by the AR aggregator. Include
-		// extraSrcInput .py paths (in ch.inps but not ch.pathInps for
-		// yapyc3-only modules like python3-Lib) so the global AR's
-		// inputs[] carries every .py source the chunk references.
-		for _, p := range ch.inps {
-			if strings.HasPrefix(p, "$(S)/") {
-				globalMemberInputs = append(globalMemberInputs, ParseVFSOrSource(p))
+			cmdArgs := []string{
+				instance.Platform.Tools.Python3,
+				objcopyScriptPath,
+				"--compiler", instance.Platform.Tools.CXX,
+				"--objcopy", instance.Platform.Tools.Objcopy,
+				"--compressor", rescompressorBinPath,
+				"--rescompiler", rescompilerBinPath,
+				"--output_obj", outputObj.String(),
+				"--target", instance.Platform.Triple,
 			}
+
+			cmdArgs = append(cmdArgs, "--inputs")
+			cmdArgs = append(cmdArgs, ch.pathInps...)
+			cmdArgs = append(cmdArgs, "--keys")
+			cmdArgs = append(cmdArgs, ch.keys...)
+			cmdArgs = append(cmdArgs, "--kvs")
+			cmdArgs = append(cmdArgs, ch.kvsCmd...)
+
+			// inputs[]: rescompiler + rescompressor + per-entry source files
+			// + objcopy.py (script last). Uses `ch.inps` (KV and path+key
+			// slots, deduped per chunk); for yapyc3-only modules this adds
+			// the underlying .py; on chunk straddles the spillover entry's
+			// yapyc3 + .py land in BOTH chunks' inputs[].
+			inputs := []VFS{
+				Build("tools/rescompiler/rescompiler"),
+				Build("tools/rescompressor/rescompressor"),
+			}
+			for _, p := range ch.inps {
+				inputs = append(inputs, ParseVFSOrSource(p))
+			}
+			inputs = append(inputs, objcopyScriptVFS)
+
+			env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
+
+			targetProps := map[string]string{"module_dir": instance.Path}
+			switch d.moduleStmt.Name {
+			case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
+				targetProps["module_tag"] = "py3"
+			}
+			if d.py3ProgramMultimodule && d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+				targetProps["module_tag"] = "py3_bin"
+			}
+
+			// Empty Tags stays non-nil so JSON serialises as `[]`.
+			pyTags := []string{}
+			if len(instance.Platform.Tags) > 0 {
+				pyTags = append(pyTags, instance.Platform.Tags...)
+			}
+
+			node := &Node{
+				Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
+				Env:              env,
+				Inputs:           inputs,
+				Outputs:          []VFS{outputObj},
+				KV:               map[string]string{"p": "PY", "pc": "yellow", "show_out": "yes"},
+				Tags:             pyTags,
+				TargetProperties: targetProps,
+				Platform:         string(instance.Platform.Target),
+				HostPlatform:     instance.Platform.IsHost,
+				Requirements: map[string]interface{}{
+					"cpu":     float64(1),
+					"network": "restricted",
+					"ram":     float64(32),
+				},
+			}
+
+			if rescompilerLDRef != (NodeRef{}) {
+				node.DepRefs = append(node.DepRefs, rescompilerLDRef)
+			}
+			if rescompressorLDRef != (NodeRef{}) {
+				node.DepRefs = append(node.DepRefs, rescompressorLDRef)
+			}
+
+			// Thread PY (yapyc3) producer refs into the objcopy node's deps[].
+			// The .yapyc3 paths live in `inps` as BUILD_ROOT-rooted inputs;
+			// resolveCodegenDepRefsExt's input-driven branch matches each
+			// against the codegen registry and returns the PY producer ref.
+			exclude := []NodeRef{}
+			if rescompilerLDRef != (NodeRef{}) {
+				exclude = append(exclude, rescompilerLDRef)
+			}
+			if rescompressorLDRef != (NodeRef{}) {
+				exclude = append(exclude, rescompressorLDRef)
+			}
+			chInpsVFS := make([]VFS, 0, len(ch.inps))
+			for _, p := range ch.inps {
+				chInpsVFS = append(chInpsVFS, ParseVFSOrSource(p))
+			}
+			if extras := resolveCodegenDepRefsExt(ctx, instance, nil, chInpsVFS, exclude...); len(extras) > 0 {
+				node.DepRefs = append(node.DepRefs, extras...)
+			}
+
+			r := ctx.emit.Emit(node)
+			refs = append(refs, r)
+			outputs = append(outputs, outputObj)
+
+			// SOURCE_ROOT-rooted inputs propagate into .global.a; BUILD_ROOT
+			// .yapyc3 entries are filtered by the AR aggregator. Include
+			// extraSrcInput .py paths (in ch.inps but not ch.pathInps for
+			// yapyc3-only modules like python3-Lib) so the global AR's
+			// inputs[] carries every .py source the chunk references.
+			for _, p := range ch.inps {
+				if strings.HasPrefix(p, "$(S)/") {
+					globalMemberInputs = append(globalMemberInputs, ParseVFSOrSource(p))
+				}
+			}
+			globalMemberInputs = append(globalMemberInputs, objcopyScriptVFS)
 		}
-		globalMemberInputs = append(globalMemberInputs, objcopyScriptVFS)
 	}
 
 	return refs, outputs, globalMemberInputs

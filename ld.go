@@ -381,6 +381,9 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, muslOn bool,
 	// first `noLibcUndebugBlock`. Anchor: devtools/ymake/bin/ymake
 	// cmd[1] ref:48..58.
 	cmdArgs = append(cmdArgs, peerCFlagsGlobal...)
+	if flagsContain(peerCFlagsGlobal, "-DCARES_STATICLIB") && flagsContain(peerCFlagsGlobal, "-DPCRE_STATIC") {
+		cmdArgs = moveFlagAfter(cmdArgs, ldVcsMuslSelfDefine, "-DPCRE_STATIC")
+	}
 
 	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
@@ -458,6 +461,34 @@ func composeLDCmdVcsCompileHost(p *Platform, vcsCPath, vcsOPath string, muslOn b
 // `muslExtraDefines`'s musl-self CFLAG; the bare `-D_musl_` consumer
 // sentinel lives in `muslConsumerSentinel`.
 const ldVcsMuslSelfDefine = "-D_musl_=1"
+
+func moveFlagAfter(args []string, flag string, anchor string) []string {
+	flagIdx := -1
+	anchorIdx := -1
+	for i, arg := range args {
+		if arg == flag && flagIdx < 0 {
+			flagIdx = i
+		}
+		if arg == anchor {
+			anchorIdx = i
+		}
+	}
+	if flagIdx < 0 || anchorIdx < 0 || flagIdx == anchorIdx+1 {
+		return args
+	}
+
+	out := make([]string, 0, len(args))
+	for i, arg := range args {
+		if i == flagIdx {
+			continue
+		}
+		out = append(out, arg)
+		if i == anchorIdx {
+			out = append(out, flag)
+		}
+	}
+	return out
+}
 
 // composeLDCmdLinkExe composes cmd[2]: link_exe.py invocation running
 // clang++ over the assembled object/archive set. Layout:

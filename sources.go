@@ -56,6 +56,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 	}
 
 	switch {
+	case strings.HasSuffix(srcRel, ".proto"):
+		return emitLibraryProtoSource(ctx, srcInstance, srcDir, srcRel, srcIn)
 	case strings.HasSuffix(srcRel, ".c"),
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
@@ -347,7 +349,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 			evKey.path = evPbCC
 			ctx.evOutputs[evKey] = evRef
 			if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
-				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath)
+				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath, "")
 				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC)
 				evEmitsIncludes := make([]VFS, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
 				evEmitsIncludes = append(evEmitsIncludes, directImports...)
@@ -615,6 +617,95 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 	ThrowFmt("gen: %s: unsupported source extension in %q", instance.Path, srcRel)
 
 	return nil
+}
+
+func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel string, in ModuleCCInputs) *sourceEmit {
+	cppStyleguideBinary := pbCppStyleguidePath
+	protocBinary := pbProtocBinaryPath
+
+	var cppStyleguideLDRef, protocLDRef NodeRef
+
+	protocHostInst := NewToolInstance(ctx.host, pbProtocModule)
+	protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
+	if exc := Try(func() {
+		result := genModule(ctx, protocHostInst)
+		protocLDRef = result.LDRef
+		if result.LDPath != nil {
+			protocBinary = *result.LDPath
+		}
+	}); exc != nil {
+		_ = exc
+	}
+
+	cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule)
+	cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
+	if exc := Try(func() {
+		result := genModule(ctx, cppStyleguideHostInst)
+		cppStyleguideLDRef = result.LDRef
+		if result.LDPath != nil {
+			cppStyleguideBinary = *result.LDPath
+		}
+	}); exc != nil {
+		_ = exc
+	}
+
+	protoRelPath := protoSourceRelPath(ctx.sourceRoot, instance, &moduleData{srcDir: srcDir}, srcRel)
+	pbRef := EmitPB(
+		instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
+		NodeRef{}, cppStyleguideBinary, protocBinary, pbGrpcCppPath,
+		false, nil, "", ctx.sourceRoot, ctx.emit,
+	)
+
+	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
+	pbH := Build(protoBase + ".pb.h")
+	pbCC := Build(protoBase + ".pb.cc")
+
+	pbKey := codegenOutputKey{platform: instance.Platform}
+	pbKey.path = pbH
+	ctx.pbOutputs[pbKey] = pbRef
+	pbKey.path = pbCC
+	ctx.pbOutputs[pbKey] = pbRef
+
+	if reg := codegenRegForInstance(ctx, instance); reg != nil {
+		directImports := protoDirectImportIncludes(ctx.sourceRoot, protoRelPath, "")
+		extras := pbDescriptorImporterExtras(ctx.sourceRoot, protoRelPath)
+		emitsIncludes := make([]VFS, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
+		emitsIncludes = append(emitsIncludes, directImports...)
+		emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
+		emitsIncludes = append(emitsIncludes, extras...)
+		reg.Register(&GeneratedFileInfo{
+			ProducerKvP:   "PB",
+			OutputPath:    pbH,
+			EmitsIncludes: emitsIncludes,
+		})
+
+		pbCCEmits := make([]VFS, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
+		pbCCEmits = append(pbCCEmits, pbH)
+		pbCCEmits = append(pbCCEmits, Source(protoRelPath))
+		pbCCEmits = append(pbCCEmits, pbWrapperVFS)
+		pbCCEmits = append(pbCCEmits, protobufRuntimeHeaders...)
+		pbCCEmits = append(pbCCEmits, pbCcDeepRuntimeHeaders...)
+		reg.Register(&GeneratedFileInfo{
+			ProducerKvP:   "PB",
+			OutputPath:    pbCC,
+			EmitsIncludes: pbCCEmits,
+		})
+	}
+
+	ccIn := in
+	ccIn.IsGenerated = true
+	ccIn.Generator = pbRef
+	ccIn.HasGenerator = true
+	ccIn.IncludeInputs = walkClosure(ctx, instance, pbCC, in)
+	ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pbRef)
+
+	ccSrcRel := strings.TrimPrefix(protoBase+".pb.cc", instance.Path+"/")
+	ccRef, ccOut := EmitCC(instance, ccSrcRel, ccIn, ctx.host, ctx.emit)
+	ccInputs := make([]VFS, 0, 1+len(ccIn.IncludeInputs))
+	ccInputs = append(ccInputs, Source(protoRelPath))
+	ccInputs = append(ccInputs, ccIn.IncludeInputs...)
+
+	return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: ccInputs, PrimaryCount: 1}
 }
 
 // emittedSourceInputPath mirrors composeCCPaths' inputPath logic so

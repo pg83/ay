@@ -539,7 +539,7 @@ END()
 		t.Fatalf("path flags pre-set; test premise broken: %+v", pathFlags)
 	}
 
-	d := collectModule("nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}), pathFlags)
+	d := collectModule("", "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}), pathFlags)
 
 	if !d.flags.NoLibc {
 		t.Errorf("flags.NoLibc = false, want true (macro overlay should have flipped it)")
@@ -588,7 +588,7 @@ SRCS(x.cpp)
 END()
 `)))
 
-	d := collectModule("bridge", instance.Kind, mf.Stmts, buildIfEnv(instance), instance.Flags)
+	d := collectModule("", "bridge", instance.Kind, mf.Stmts, buildIfEnv(instance), instance.Flags)
 
 	if d.muslEnabled {
 		t.Fatalf("muslEnabled = true, want false after SET(MUSL no)")
@@ -2468,6 +2468,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	// lib/ya.make: LIBRARY with mixed ADDINCL — GLOBAL include, bare src.
 	libDir := filepath.Join(root, "lib")
 	Throw(os.MkdirAll(libDir, 0o755))
+	Throw(os.MkdirAll(filepath.Join(root, "lib/include"), 0o755))
 	Throw(os.WriteFile(filepath.Join(libDir, "ya.make"), []byte(
 		"LIBRARY()\nADDINCL(\n    GLOBAL lib/include\n    lib/src\n)\nSRCS(lib.cpp)\nEND()\n",
 	), 0o644))

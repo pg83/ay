@@ -1440,6 +1440,8 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 
 		if addPath(candidate) {
 			searchPathFound = true
+		} else if addBuildPath(candidate) {
+			searchPathFound = true
 		}
 	}
 
