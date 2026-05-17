@@ -26,8 +26,6 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	outVFS := Build(instance.Path + "/" + allName)
 
-	// cmd_args: python3, script, output, --ya-start-command-file,
-	// <instance.Path>/<src>..., --ya-end-command-file.
 	cmdArgs := make([]string, 0, 4+len(sources))
 	cmdArgs = append(cmdArgs,
 		instance.Platform.Tools.Python3,
@@ -46,9 +44,6 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
-	// inputs: scripts first, then source files expanded to
-	// $(S)/<instance.Path>/<src>, then the caller-supplied
-	// per-source include closure (PR-35d).
 	inputs := make([]VFS, 0, 2+len(sources)+len(closure))
 	inputs = append(inputs, joinSrcs, procCmdFiles)
 

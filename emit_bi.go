@@ -1,0 +1,110 @@
+package main
+
+// yieldLinePyPath is the source-relative path to the yield_line.py script.
+var yieldLinePyVFS = Source("build/scripts/yield_line.py")
+var yieldLinePyPath = yieldLinePyVFS.String()
+
+// xargsPyPath is the source-relative path to the xargs.py script.
+var xargsPyVFS = Source("build/scripts/xargs.py")
+var xargsPyPath = xargsPyVFS.String()
+
+// buildInfoGenPyPath is the source-relative path to the build_info_gen.py
+// script invoked by xargs.py in the BI node.
+var buildInfoGenPyVFS = Source("build/scripts/build_info_gen.py")
+var buildInfoGenPyPath = buildInfoGenPyVFS.String()
+
+// EmitBI emits a BI node for CREATE_BUILDINFO_FOR(outputHeader).
+// Three cmds:
+//
+//	cmd[0]: yield_line.py -- <module>/__args <cxx_compiler>
+//	cmd[1]: yield_line.py -- <module>/__args <cxx_flags...>
+//	cmd[2]: xargs.py -- <module>/__args python3 build_info_gen.py <out>
+//
+// Flags come from the target CXX bundle (same as a target CC for this
+// module, minus -c, -o, input path).
+//
+// cache:false at top level matches REF; normalize.py drops it during
+// M1/M2 canonicalization so byte-exact hashes are unaffected.
+// inputs: [yield_line.py, xargs.py, build_info_gen.py];
+// outputs: [$(B)/<modulePath>/<outputHeader>].
+func EmitBI(
+	instance ModuleInstance,
+	outputHeader string,
+	cxxFlags []string,
+	emit Emitter,
+) NodeRef {
+	outPrefix := instance.Path + "/"
+	argsFileVFS := Build(outPrefix + "__args")
+	outVFS := Build(outPrefix + outputHeader)
+	argsFile := argsFileVFS.String()
+
+	env := map[string]string{
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
+	}
+
+	cmd0Args := []string{
+		instance.Platform.Tools.Python3,
+		yieldLinePyPath,
+		"--",
+		argsFile,
+		instance.Platform.Tools.CXX,
+	}
+
+	cmd1Args := make([]string, 0, 4+len(cxxFlags))
+	cmd1Args = append(cmd1Args,
+		instance.Platform.Tools.Python3,
+		yieldLinePyPath,
+		"--",
+		argsFile,
+	)
+	cmd1Args = append(cmd1Args, cxxFlags...)
+
+	cmd2Args := []string{
+		instance.Platform.Tools.Python3,
+		xargsPyPath,
+		"--",
+		argsFile,
+		instance.Platform.Tools.Python3,
+		buildInfoGenPyPath,
+		outVFS.String(),
+	}
+
+	inputs := []VFS{
+		yieldLinePyVFS,
+		xargsPyVFS,
+		buildInfoGenPyVFS,
+	}
+
+	cacheFalse := false
+	node := &Node{
+		Cache: &cacheFalse,
+		Cmds: []Cmd{
+			{CmdArgs: cmd0Args, Env: env},
+			{CmdArgs: cmd1Args, Env: env},
+			{CmdArgs: cmd2Args, Env: env},
+		},
+		Env:    env,
+		Inputs: inputs,
+		KV: map[string]string{
+			"disable_cache": "yes",
+			"p":             "BI",
+			"pc":            "yellow",
+			"show_out":      "yes",
+		},
+		Outputs: []VFS{outVFS},
+		Tags:    []string{},
+		TargetProperties: map[string]string{
+			"module_dir": instance.Path,
+		},
+		Platform:     string(instance.Platform.Target),
+		HostPlatform: instance.Platform.IsHost,
+		Requirements: map[string]interface{}{
+			"cpu":     float64(1),
+			"network": "restricted",
+			"ram":     float64(32),
+		},
+		DepRefs: []NodeRef{},
+	}
+
+	return emit.Emit(node)
+}

@@ -1,233 +1,235 @@
 # План переноса эмиттеров
 
-## Цель
+## Текущее состояние
 
-Разнести `emit*`-функции по файлам `emit_*.go` не по принципу "одна функция = один файл", а по смысловым семействам:
+Первый этап уже по сути завершен:
 
-- по `KV` узла (`PY`, `PR`, `AR`, `EN`, `PB`, `JV`, `CP`, `CF`);
-- по общему pipeline;
-- по общим helper-ам и общим типам результатов.
+- все `emit*`-функции вынесены в `emit_*.go`;
+- старые большие carrier-файлы (`codegen.go`, `m3_misc.go`, `pb.go`, `resource.go`, часть `sources.go`) в основном очищены от верхнеуровневой `emit*`-логики;
+- `go test ./...` проходит на текущем состоянии.
 
-Идея: один `emit_*.go` должен соответствовать одному семейству эмиссии, а не случайной исторической куче из большого файла.
+Новый remaining scope:
 
-## Правила раскладки
+- в кодовой базе все еще много `Emit*`-функций вне `emit_*.go`;
+- это уже не orchestration-слой, а low-level node emitters и их непосредственные helper-ы;
+- нужен второй план: не про `emit*`, а про перенос `Emit*` и вычищение старых тематических файлов.
 
-1. В одном `emit_*.go` держать только тесно связанные эмиттеры.
-2. Локальные `result`-типы переносить рядом с их семейством.
-3. Helper-ы без `emit` оставлять рядом с тем семейством, которое они обслуживают.
-4. Не размазывать один pipeline по 5-6 файлам без причины.
-5. После каждого смыслового семейства прогонять `gofmt` и `go test ./...`.
+## Что осталось
 
-## Целевая раскладка
+Сейчас вне `emit_*.go` остаются такие `Emit*`:
 
-### 1. Базовые одиночные emit-файлы
+- `ar.go`
+  - `EmitAR`
+  - `EmitARNamed`
+  - `EmitARNamedTagged`
+  - `EmitARGlobalNamedTagged`
+- `as.go`
+  - `EmitAS`
+- `cc.go`
+  - `EmitCC`
+- `cp.go`
+  - `EmitJVCPG4`
+  - `EmitCP`
+- `en.go`
+  - `EmitEN`
+- `ev.go`
+  - `EmitEV`
+- `js.go`
+  - `EmitJS`
+- `ld.go`
+  - `EmitLD`
+- `m3_misc.go`
+  - `EmitR5`
+  - `EmitJV`
+  - `EmitJVSplit`
+  - `EmitCF`
+  - `EmitBI`
+  - `EmitPR`
+- `pb.go`
+  - `EmitPB`
+- `r6.go`
+  - `EmitR6`
 
-Эти функции уже сами по себе являются отдельными сущностями и не требуют дополнительной группировки:
+## Новая цель
 
-- `emit_ar_node.go`
+Разнести не только `emit*`, но и `Emit*` primitives по `emit_*.go`, сохранив при этом нормальные смысловые family, а не делая "одна функция = один файл" без причины.
+
+Нужно прийти к состоянию, где:
+
+1. orchestration-слой (`emit*`) уже разложен;
+2. primitive emitter-слой (`Emit*`) тоже собран в `emit_*.go`;
+3. старые carrier-файлы либо исчезают, либо становятся helper-only;
+4. в каждом `emit_*.go` лежит один coherent pipeline/family.
+
+## Принципы
+
+1. Не смешивать orchestration `emit*` и primitive `Emit*` в одном файле без причины.
+2. Primitive `Emit*` группировать по реальному pipeline, а не по случайной исторической близости.
+3. Helper-ы оставлять рядом с соответствующим primitive emitter family.
+4. Не делать абстрактный `emit_helpers.go`.
+5. После каждого meaningful family прогонять `gofmt` и `go test ./...`.
+
+## Целевая раскладка для `Emit*`
+
+### 1. Archive family
+
+- `emit_ar.go`
+  - `EmitAR`
+  - `EmitARNamed`
+  - `EmitARNamedTagged`
+  - `EmitARGlobalNamedTagged`
   - `emitARNode`
-- `emit_as_yasm.go`
+
+Примечание:
+- helper-ы из `ar.go`, связанные с именованием архивов и фильтрацией member inputs, должны жить рядом;
+- после этого `ar.go` либо исчезает, либо становится чисто helper-file для archive naming, если это окажется чище.
+
+### 2. Assembly family
+
+- `emit_as.go`
+  - `EmitAS`
   - `emitASYasm`
-- `emit_bison_y.go`
-  - `emitBisonY`
-- `emit_check_config_h.go`
-  - `emitCheckConfigH`
-- `emit_cython_cpp.go`
-  - `emitCythonCpp`
+
+Примечание:
+- `composeASPaths`, `composeASCmdArgs`, yasm-константы и связанные helper-ы должны остаться рядом;
+- цель — чтобы `as.go` исчез или стал helper-only.
+
+### 3. C/C++ compile family
+
+- `emit_cc.go`
+  - `EmitCC`
+
+Примечание:
+- это центральный primitive emitter, вокруг него likely останется отдельный большой family-файл;
+- helper-ы из `cc.go` не дробить механически.
+
+### 4. Copy / CP family
+
+- `emit_cp.go`
+  - `EmitCP`
+  - `EmitJVCPG4`
+
+Примечание:
+- это один family про copy-style nodes и JV downstream rename step.
+
+### 5. Enum / proto / event generator primitives
+
+- `emit_en_primitive.go`
+  - `EmitEN`
+
+- `emit_pb_primitive.go`
+  - `EmitPB`
+
+- `emit_ev_primitive.go`
+  - `EmitEV`
+
+Примечание:
+- если окажется, что `EmitPB` и `EmitEV` share too much runtime plumbing, можно оставить их в одном файле:
+  - `emit_pb_ev.go`
+
+### 6. LD / link family
+
+- `emit_ld.go`
+  - `EmitLD`
+
 - `emit_dynamic_library.go`
   - `emitDynamicLibrary`
-- `emit_swig_c.go`
-  - `emitSwigC`
-
-### 2. Python codegen family (`PY`)
-
-Сюда входят эмиттеры, которые производят Python-related узлы или Python-generated inputs.
-
-- `emit_py_codegen.go`
-  - `emitPySrcs`
-  - `emitPyRegister`
-
-- `emit_py_aux.go`
-  - `emitGeneratedPyAuxChunks`
-  - `emitRawAuxResourceChunks`
-
-### 3. Python resource / objcopy family (`PY` + objcopy pipeline)
-
-Это один pipeline упаковки ресурсов, и его лучше держать вместе.
-
-- `emit_py_objcopy.go`
-  - `emitResourceObjcopy`
-  - `emitKvOnlyObjcopyNode`
-  - `emitYaConfJSONObjcopy`
-  - `emitPyNamespaceObjcopy`
-  - `emitPyMainObjcopy`
-  - `emitNoCheckImportsObjcopy`
-  - `emitPySrcObjcopy`
 
 Примечание:
-- helper-ы `objcopyHash`, `expandRootrel`, `prResourceExtraInputs`, `buildPySrcEntries*`, `chunkPySrcEntries` и связанные типы должны жить рядом с этим файлом или в соседнем `emit_py_objcopy_helpers.go`, если файл станет слишком длинным.
+- `EmitLD` и DYNAMIC_LIBRARY — соседние, но не одинаковые уровни.
+- Сводить их в один файл только если helper-слой реально общий.
 
-### 4. Enum / protobuf / event codegen family (`EN`, `PB`, `EV`)
+### 7. Ragel / parser generators family
 
-Это единый блок generator-driven codegen, сейчас размазанный между `codegen.go` и `pb.go`.
+- `emit_r5.go`
+  - `EmitR5`
 
-- `emit_en.go`
-  - `emitEnumSrcs`
+- `emit_r6.go`
+  - `EmitR6`
 
-- `emit_proto.go`
-  - `emitProtoSrcs`
-  - `emitCPPProtoSrcs`
-
-- `emit_py_proto.go`
-  - `emitPyProtoSrcs`
-  - `emitPyProtoSrc`
-  - `emitGeneratedPyProtoYapyc`
-  - `emitPyProtoAuxChunks`
+- `emit_bison_y.go`
+  - `emitBisonY`
 
 Примечание:
-- `protoDirectImportIncludes`, `protoOutputRel`, `protoPythonResourceKey`, `protoPythonOutputRoot`, `protoPythonNamespaceArg` и связанные proto helper-ы оставить рядом с proto-family, а не в общем `codegen.go`.
+- это family generator-based source producers;
+- orchestration `emitBisonY` уже вынесен, next step — primitive `EmitR5` / `EmitR6`.
 
-### 5. RUN_PROGRAM / downstream-CC family (`PR`)
+### 8. Misc small-node primitives from old `m3_misc.go`
 
-Это один цельный pipeline:
-
-- эмитим `PR`;
-- регистрируем generated outputs;
-- при необходимости эмитим downstream `CC`.
-
-Целевая раскладка:
-
-- `emit_pr.go`
-  - `emitRunProgram`
-  - `emitRunProgramsForAR`
-
-- `emit_codegen_cc.go`
-  - `emitPRDownstreamCC`
-  - `emitCodegenDownstreamCC`
-
-Примечание:
-- `prInputClosure`, `prEmitsIncludes` и прочие helper-ы для этого пути должны лежать рядом.
-
-### 6. Archive family (`AR`)
-
-Архивный pipeline тоже нужно держать целиком:
-
-- `emit_archives.go`
-  - `emitArchives`
-  - `emitArchive`
-
-- `emit_ar_node.go`
-  - `emitARNode`
-
-Примечание:
-- если будет удобнее, `emitArchives`, `emitArchive` и `emitARNode` можно оставить в двух файлах:
-  - low-level `emit_ar_node.go`
-  - high-level `emit_archives.go`
-
-### 7. JV / CF / BI misc family
-
-Сейчас `emitMiscNodes` смешивает несколько семейств. Его не надо переносить "как есть" в новый файл и консервировать смесь.
-
-Нормальная цель:
-
-- `emit_jv.go`
-  - `emitJVDownstreamCPCC`
-  - JV-ветки из `emitMiscNodes`, если они будут выделены в отдельный entrypoint
-
-- `emit_cf.go`
-  - `emitExplicitCF`
+- `emit_cf_primitive.go`
+  - `EmitCF`
 
 - `emit_bi.go`
-  - если появится отдельный `emitBuildInfo`, выделить его из `emitMiscNodes`
+  - `EmitBI`
 
-- `emit_misc_nodes.go`
-  - временный файл/агрегатор, пока `emitMiscNodes` не будет распилен по смыслу
+- `emit_pr_primitive.go`
+  - `EmitPR`
 
-Принцип:
-- `emitMiscNodes` должен либо исчезнуть совсем, либо стать тонким оркестратором, который вызывает более конкретные emit-функции.
-- Не оставлять в нем реальную meat-логику надолго.
+- `emit_jv_primitive.go`
+  - `EmitJV`
+  - `EmitJVSplit`
 
-### 8. Source-dispatch family
+Примечание:
+- после этого `m3_misc.go` должен стать helper-only или исчезнуть.
 
-Это верхний уровень маршрутизации по типам исходников.
+### 9. JS family
+
+- `emit_js.go`
+  - `EmitJS`
+
+### 10. Source dispatch family
 
 - `emit_sources.go`
   - `emitOneSource`
   - `emitLibraryProtoSource`
 
-Эти функции можно оставить вместе, потому что это не отдельный `KV`, а точка dispatch-а в compilation pipeline.
+Это уже сделано по сути; дальше трогать только если понадобится подтянуть к ним какие-то helper-ы из `sources.go`.
 
-### 9. LD plugins family (`CP`)
+## Порядок работ
 
-- `emit_ld_plugins.go`
-  - `emitOwnLDPlugins`
-
-## Порядок переноса
-
-### Фаза 1. Вычистить `codegen.go`
-
-Цель:
-- убрать из него конкретные emitters;
-- оставить только действительно общие helper-ы, если они еще нужны нескольким семействам.
+### Фаза A. Закрыть old carrier-файлы с `Emit*`
 
 Порядок:
-1. Python codegen family
-2. Enum family
-3. Proto helper-ы, если они логически ближе к `pb.go`
+1. `m3_misc.go` primitives
+2. `ar.go`
+3. `as.go`
+4. `dynlib/ld` соседние family
 
-### Фаза 2. Вычистить `m3_misc.go`
+Причина:
+- именно эти файлы сейчас сильнее всего остаются "старыми носителями".
 
-Порядок:
-1. `PR` family
-2. `AR` family
-3. `CF`
-4. `JV`
-5. распилить или упростить `emitMiscNodes`
-
-Ключевая цель:
-- `m3_misc.go` не должен остаться "свалкой эмиттеров".
-
-### Фаза 3. Вычистить `pb.go`
+### Фаза B. Primitive families вокруг core toolchain
 
 Порядок:
-1. `emitProtoSrcs`
-2. `emitCPPProtoSrcs`
-3. весь `PY proto` хвост
-4. рядом перенести proto-specific helper-ы
+1. `cc.go`
+2. `cp.go`
+3. `pb.go` / `ev.go` / `en.go`
+4. `r5.go` / `r6.go` / `js.go`
 
-### Фаза 4. Вычистить `resource.go`
+Причина:
+- это более чувствительные low-level emitters;
+- их надо переносить уже после вычищения более простых и локальных family.
 
-Порядок:
-1. собрать весь objcopy/resource pipeline в один family
-2. рядом оставить типы `objcopyEmitResult`, `objcopyEmit`, `pySrcEntry`, `pySrcChunk`
-3. helper-ы либо оставить в том же файле, либо выделить в `emit_py_objcopy_helpers.go`
+### Фаза C. Финальная зачистка helper-файлов
 
-### Фаза 5. Довести одиночные emit-файлы
-
-Файлы:
-- `ar.go`
-- `as.go`
-- `bison.go`
-- `check_config_h.go`
-- `cython.go`
-- `dynlib.go`
-- `swig.go`
-
-Цель:
-- чтобы `emit*` из них переехали в явные `emit_*.go`,
-- а low-level `Emit*`/helper-ы остались в тематических файлах.
+Задачи:
+1. пересмотреть заголовки файлов;
+2. убрать устаревшие комментарии, которые еще говорят про старую раскладку;
+3. проверить, не осталось ли `Emit*`/`emit*` вне `emit_*.go`;
+4. проверить, не осталось ли пустых/полупустых старых файлов.
 
 ## Что не делать
 
-- Не делать "одна функция = один файл" без причины.
-- Не переносить helper-ы в абстрактный `emit_helpers.go`.
-- Не оставлять семейство размазанным между `codegen.go`, `pb.go`, `resource.go`, `m3_misc.go` после завершения фазы.
+- Не смешивать `EmitCC` с unrelated `EmitPB`/`EmitEV` только ради уменьшения числа файлов.
+- Не дробить один coherent primitive pipeline на множество микро-файлов.
+- Не трогать working behavior ради косметики.
+- Не переименовывать helper-ы массово без необходимости.
 
 ## Критерий завершения
 
 Работа считается законченной, когда:
 
-1. все `emit*` лежат в `emit_*.go`;
-2. большие исторические файлы (`codegen.go`, `m3_misc.go`, `pb.go`, `resource.go`) больше не содержат meat-логики emitters;
-3. в каждом `emit_*.go` собрана одна смысловая family, а не случайный набор;
-4. `go test ./...` проходит после каждого завершенного семейства и в конце целиком.
+1. `grep 'func emit[A-Z]'` показывает только `emit_*.go`;
+2. `grep 'func Emit[A-Z]'` тоже показывает только `emit_*.go`;
+3. старые carrier-файлы либо исчезли, либо стали helper-only;
+4. `go test ./...` проходит на финальном состоянии.
