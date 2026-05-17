@@ -29,7 +29,9 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		}
 		generatedVFS := Build(instance.Path + "/" + generated)
 		srcVFS := Source(instance.Path + "/" + stmt.Src)
-		inputs := cythonInputs(ctx, instance, srcVFS, in)
+		sourceClosure := walkClosure(ctx, instance, srcVFS, in)
+		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(srcVFS, sourceClosure)
+		registerGeneratedOutput(ctx, instance, "CY", generatedVFS, emitsIncludes)
 
 		env := map[string]string{
 			"ARCADIA_ROOT_DISTBUILD": "$(S)",
@@ -60,6 +62,13 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			generatedVFS.String(),
 		)
 
+		targetProps := map[string]string{
+			"module_dir": instance.Path,
+		}
+		if !stmt.CMode && !generatedExplicit && py23Variant {
+			targetProps["module_tag"] = "py3"
+		}
+
 		cyRef := ctx.emit.Emit(&Node{
 			Cmds: []Cmd{
 				{
@@ -68,7 +77,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 				},
 			},
 			Env:     env,
-			Inputs:  inputs,
+			Inputs:  toolInputs,
 			Outputs: []VFS{generatedVFS},
 			KV: map[string]string{
 				"p":  "CY",
@@ -81,11 +90,10 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 				"network": "restricted",
 				"ram":     float64(32),
 			},
-			Tags: instance.Platform.Tags,
-			TargetProperties: map[string]string{
-				"module_dir": instance.Path,
-			},
+			Tags:             instance.Platform.Tags,
+			TargetProperties: targetProps,
 		})
+		bindGeneratedOutput(ctx, instance, generatedVFS, cyRef)
 
 		ccIn := in
 		ccIn.IsGenerated = true
@@ -95,10 +103,10 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl)
 		ccIn.CFlags = filterPyRegisterCFlags(ccIn.CFlags)
 		ccIn.PerSourceCFlags = append(append([]string(nil), in.PerSourceCFlags...), "-Wno-implicit-fallthrough")
-		ccIn.IncludeInputs = inputs
+		ccIn.IncludeInputs = generatedOutputClosure(ctx, instance, generatedVFS, ccIn)
 
 		ccRef, ccOut := EmitCC(instance, generated, ccIn, ctx.host, ctx.emit)
-		ccInputs := append([]VFS{generatedVFS}, inputs...)
+		ccInputs := append([]VFS{generatedVFS}, ccIn.IncludeInputs...)
 
 		out = append(out, &sourceEmit{
 			Ref:          ccRef,
@@ -109,6 +117,26 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 	}
 
 	return out
+}
+
+func cythonGeneratedOutputInputs(src VFS, sourceClosure []VFS) ([]VFS, []VFS) {
+	toolInputs := make([]VFS, 0, 2+len(py3CythonEmbeddedFiles)+len(sourceClosure))
+	emitsIncludes := make([]VFS, 0, 1+len(py3CythonEmbeddedFiles)+len(sourceClosure))
+
+	toolInputs = append(toolInputs, Source("contrib/tools/cython/cython.py"))
+	emitsIncludes = append(emitsIncludes, src)
+
+	for _, rel := range py3CythonEmbeddedFiles {
+		v := Source(rel)
+		toolInputs = append(toolInputs, v)
+		emitsIncludes = append(emitsIncludes, v)
+	}
+
+	toolInputs = append(toolInputs, src)
+	toolInputs = append(toolInputs, sourceClosure...)
+	emitsIncludes = append(emitsIncludes, sourceClosure...)
+
+	return dedupVFS(toolInputs), dedupVFS(emitsIncludes)
 }
 
 func cythonUsesPy23Variant(modName string) bool {
@@ -162,20 +190,6 @@ var cythonNumpyAddIncl = []string{
 	"contrib/python/numpy/include/numpy/core/src/common",
 	"contrib/python/numpy/include/numpy/core/src/npymath",
 	"contrib/python/numpy/include/numpy/distutils/include",
-}
-
-func cythonInputs(ctx *genCtx, instance ModuleInstance, src VFS, in ModuleCCInputs) []VFS {
-	inputs := make([]VFS, 0, 2+len(py3CythonEmbeddedFiles))
-	inputs = append(inputs, Source("contrib/tools/cython/cython.py"))
-
-	for _, rel := range py3CythonEmbeddedFiles {
-		inputs = append(inputs, Source(rel))
-	}
-
-	inputs = append(inputs, src)
-	inputs = append(inputs, walkClosure(ctx, instance, src, in)...)
-
-	return dedupVFS(inputs)
 }
 
 func dedupVFS(in []VFS) []VFS {
