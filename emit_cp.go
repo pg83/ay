@@ -36,8 +36,6 @@ func EmitJVCPG4(
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
-	// Inputs: jvPrimary first, then src only when it differs from
-	// jvPrimary (i.e. this is the parser output, not the lexer).
 	inputCap := 2 + len(jvInputs) + len(closure) + 2
 	inputs := make([]VFS, 0, inputCap)
 	inputs = append(inputs, jvPrimary)
