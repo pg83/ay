@@ -18,8 +18,8 @@ import "strings"
 // segment. Same pattern as canonicalizeRagel6BinaryPath in r6.go.
 
 const (
-	py3ccBinSubpath   = "$(B)/tools/py3cc/bin/"
-	py3ccCanonicalDir = "$(B)/tools/py3cc/"
+	py3ccBinSubrel   = "tools/py3cc/bin/"
+	py3ccCanonicalRel = "tools/py3cc/"
 )
 
 // canonicalizePy3ccBinaryPath maps the host walker's
@@ -27,12 +27,12 @@ const (
 // shaped $(B)/tools/py3cc/<basename>.  All other inputs pass
 // through unchanged so the canonical-fallback codepath (which already
 // supplies the correct literal) is not double-rewritten.
-func canonicalizePy3ccBinaryPath(p string) string {
-	if !strings.HasPrefix(p, py3ccBinSubpath) {
-		return p
+func canonicalizePy3ccBinary(v VFS) VFS {
+	if !v.IsBuild() || !strings.HasPrefix(v.Rel, py3ccBinSubrel) {
+		return v
 	}
 
-	return py3ccCanonicalDir + p[len(py3ccBinSubpath):]
+	return Build(py3ccCanonicalRel + v.Rel[len(py3ccBinSubrel):])
 }
 
 // runtimePy3ModulePath is the canonical path of the PY3_LIBRARY module

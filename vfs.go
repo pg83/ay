@@ -131,6 +131,18 @@ func vfsStringsSlice(vs []VFS) []string {
 	return out
 }
 
+// vfsRelsSlice materialises a []VFS as a []string of root-relative paths.
+// Used at command-composition boundaries where the tool contract wants
+// bare BUILD_ROOT-relative or SOURCE_ROOT-relative paths, not canonical
+// `$(S)/...` / `$(B)/...` strings.
+func vfsRelsSlice(vs []VFS) []string {
+	out := make([]string, len(vs))
+	for i, v := range vs {
+		out[i] = v.Rel
+	}
+	return out
+}
+
 // SortVFS sorts in-place to match the canonical String() form's
 // lexicographic order without materialising the strings: `$(B)/<rel>`
 // sorts before `$(S)/<rel>` (B < S), and within the same Root the

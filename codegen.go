@@ -40,8 +40,8 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	// Canonical binary paths ($(B)-rooted) used in cmd_args
 	// and inputs when the host walk succeeds or as fallbacks when it fails.
 	var (
-		py3ccBinaryCanonical     = Build("tools/py3cc/py3cc").String()
-		py3ccSlowBinaryCanonical = Build("tools/py3cc/slow/py3cc").String()
+		py3ccBinaryCanonical     = Build("tools/py3cc/py3cc")
+		py3ccSlowBinaryCanonical = Build("tools/py3cc/slow/py3cc")
 	)
 
 	var (
@@ -60,11 +60,11 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		py3ccLDRef = result.LDRef
 		// canonicalizePy3ccBinaryPath: $(B)/tools/py3cc/bin/py3cc →
 		// $(B)/tools/py3cc/py3cc to match the reference yapyc3 cmd_args[0].
-		// tools/py3cc/bin/ya.make declares SRCDIR(tools/py3cc) so the
-		// upstream intent is a top-level binary.
-		if result.LDPath != nil {
-			py3ccBinary = canonicalizePy3ccBinaryPath(*result.LDPath)
-		}
+			// tools/py3cc/bin/ya.make declares SRCDIR(tools/py3cc) so the
+			// upstream intent is a top-level binary.
+			if result.LDPath != nil {
+				py3ccBinary = canonicalizePy3ccBinary(*result.LDPath)
+			}
 	}); exc != nil {
 		var pe *ParseError
 		if !errors.As(exc.AsError(), &pe) {
@@ -82,11 +82,11 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	py3ccSlowHostInst.Flags = inferFlagsFromPath(py3ccSlowPath, true)
 
 	if exc := Try(func() {
-		result := genModule(ctx, py3ccSlowHostInst)
-		py3ccSlowLDRef = result.LDRef
-		if result.LDPath != nil {
-			py3ccSlowBin = *result.LDPath
-		}
+			result := genModule(ctx, py3ccSlowHostInst)
+			py3ccSlowLDRef = result.LDRef
+			if result.LDPath != nil {
+					py3ccSlowBin = *result.LDPath
+			}
 		// If LDPath is empty (PY3_PROGRAM_BIN → header-only stub),
 		// py3ccSlowBin retains its canonical fallback value.
 	}); exc != nil {
@@ -148,9 +148,9 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		}
 
 		cmdArgs := []string{
-			py3ccBinary,
-			"--slow-py3cc",
-			py3ccSlowBin,
+				py3ccBinary.String(),
+				"--slow-py3cc",
+				py3ccSlowBin.String(),
 			moduleName,
 			srcAbs.String(),
 			outputPath.String(),
@@ -161,11 +161,11 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			"PYTHONHASHSEED":         "0",
 		}
 
-		inputs := []VFS{ParseVFSOrSource(py3ccBinary), ParseVFSOrSource(py3ccSlowBin), srcAbs}
-		if generatedInputs != nil {
-			inputs = []VFS{srcAbs}
-			inputs = append(inputs, generatedInputs...)
-			inputs = append(inputs, ParseVFSOrSource(py3ccBinary), ParseVFSOrSource(py3ccSlowBin))
+			inputs := []VFS{py3ccBinary, py3ccSlowBin, srcAbs}
+			if generatedInputs != nil {
+				inputs = []VFS{srcAbs}
+				inputs = append(inputs, generatedInputs...)
+				inputs = append(inputs, py3ccBinary, py3ccSlowBin)
 			if len(inputs) > 4 {
 				toolA := inputs[len(inputs)-2]
 				toolB := inputs[len(inputs)-1]
@@ -395,7 +395,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 	var (
 		enumParserLD  NodeRef
-		enumParserBin = enumParserBinaryPath
+		enumParserBin = enumParserBinaryVFS
 	)
 
 	// Walk enum_parser as a HOST tool (x86_64).
@@ -403,12 +403,12 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 	enumHostInst.Flags = inferFlagsFromPath(enumParserPath, true)
 
 	if exc := Try(func() {
-		result := genModule(ctx, enumHostInst)
-		enumParserLD = result.LDRef
-		if result.LDPath != nil {
-			enumParserBin = *result.LDPath
-		}
-	}); exc != nil {
+			result := genModule(ctx, enumHostInst)
+			enumParserLD = result.LDRef
+			if result.LDPath != nil {
+				enumParserBin = *result.LDPath
+			}
+		}); exc != nil {
 		var pe *ParseError
 		if !errors.As(exc.AsError(), &pe) {
 			panic(exc)

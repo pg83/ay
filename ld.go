@@ -43,14 +43,12 @@ import (
 //     Order matters for cmd[2] argv: emitted between whole-archive
 //     block and `-o` flag in the order supplied.
 //   - `peerLDRefs` / `peerLibPaths`: peer LIBRARY archives in PEERDIR
-//     walk order (non-alphabetical). Paths are BUILD_ROOT-relative
-//     (link_exe.py uses cwd=$(B)). peerLDRefs wire DepRefs.
+//     walk order (non-alphabetical). peerLDRefs wire DepRefs.
 //   - `pluginRefs` / `pluginPaths`: plugins for `--start-plugins ...
-//     --end-plugins` (e.g. musl pyplugin). `pluginPaths` are full
-//     `$(B)/...`. Pass nil when none.
+//     --end-plugins` (e.g. musl pyplugin). Pass nil when none.
 //   - `globalRefs` / `globalPaths`: peer `.global.a` archives wrapped
-//     in `-Wl,--whole-archive ... -Wl,--no-whole-archive`. Paths
-//     BUILD_ROOT-relative. Pass nil when none.
+//     in `-Wl,--whole-archive ... -Wl,--no-whole-archive`. Pass nil
+//     when none.
 //
 // Returns the LD NodeRef. Output path is `$(B)/<instance.Path>/<binaryName>`;
 // callers can re-derive via `LDOutputPath(instance, binaryName)`.
@@ -60,16 +58,16 @@ func EmitLD(
 	ccRefs []NodeRef,
 	ccPaths []VFS,
 	peerLDRefs []NodeRef,
-	peerLibPaths []string,
+	peerLibPaths []VFS,
 	pluginRefs []NodeRef,
-	pluginPaths []string,
+	pluginPaths []VFS,
 	globalRefs []NodeRef,
-	globalPaths []string,
+	globalPaths []VFS,
 	wholeArchiveRefs []NodeRef,
-	wholeArchivePaths []string,
-	wholeArchiveCmdPaths []string,
+	wholeArchivePaths []VFS,
+	wholeArchiveCmdPaths []VFS,
 	dynamicRefs []NodeRef,
-	dynamicPaths []string,
+	dynamicPaths []VFS,
 	objcopyRefs []NodeRef,
 	objcopyPaths []VFS,
 	memberInputs []VFS, //nolint:vfs-stay // cascade from gen.go member-inputs bucket
@@ -219,7 +217,7 @@ func EmitLD(
 
 	outputs := []VFS{outputVFS}
 	for _, p := range dynamicPaths {
-		outputs = append(outputs, Build(binaryDir+"/"+lastPathComponent(p)))
+		outputs = append(outputs, Build(binaryDir+"/"+lastPathComponent(p.Rel)))
 	}
 	if wantsSplitDwarf {
 		outputs = append(outputs, Build(binPrefix+binaryName+".debug"))
@@ -258,12 +256,12 @@ func EmitLD(
 // `instance`. Exposed so callers (gen.go) can stash the path in
 // `moduleEmitResult` without re-deriving the binary-name rule.
 // `binaryName` mirrors EmitLD's contract.
-func LDOutputPath(instance ModuleInstance, binaryName string) string {
+func LDOutputPath(instance ModuleInstance, binaryName string) VFS {
 	if binaryName == "" {
 		binaryName = lastPathComponent(instance.Path)
 	}
 
-	return Build(ldBinaryDir(instance) + "/" + binaryName).String()
+	return Build(ldBinaryDir(instance) + "/" + binaryName)
 }
 
 // ldBinaryDir returns the effective BUILD_ROOT-relative directory for
@@ -516,7 +514,7 @@ func moveFlagAfter(args []string, flag string, anchor string) []string {
 // `wantsStrip` controls insertion of `-Wl,--strip-all` between the
 // trailer's `-lm` and `-Wl,--gc-sections`. Set true for PY3_PROGRAM_BIN
 // (STRIP() in _BASE_PY3_PROGRAM, python.conf:884).
-func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []string, objcopyPaths []VFS, hostBuild bool, objAddLibsGlobal []string, wantsStrip bool) []string {
+func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, hostBuild bool, objAddLibsGlobal []string, wantsStrip bool) []string {
 	// Capacity hint matches the reference graph's structure plus the
 	// caller-supplied slices.
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 12 + 1 + len(ccPaths) + len(peerLibPaths) + len(dynamicPaths) + len(globalPaths) + len(objcopyPaths)
@@ -534,7 +532,9 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 
 	if len(pluginPaths) > 0 {
 		cmdArgs = append(cmdArgs, "--start-plugins")
-		cmdArgs = append(cmdArgs, pluginPaths...)
+		for _, p := range pluginPaths {
+			cmdArgs = append(cmdArgs, p.String())
+		}
 		cmdArgs = append(cmdArgs, "--end-plugins")
 	}
 
@@ -544,10 +544,10 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 		"--build-root", "$(B)",
 	)
 	for _, p := range wholeArchiveCmdPaths {
-		cmdArgs = append(cmdArgs, "--whole-archive-libs", p)
+		cmdArgs = append(cmdArgs, "--whole-archive-libs", p.Rel)
 	}
 	for _, p := range wholeArchivePaths {
-		cmdArgs = append(cmdArgs, "--whole-archive-libs", p)
+		cmdArgs = append(cmdArgs, "--whole-archive-libs", p.Rel)
 	}
 	cmdArgs = append(cmdArgs,
 		"--arch=LINUX",
@@ -556,7 +556,9 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 		"-Wl,--whole-archive",
 		"--ya-start-command-file",
 	)
-	cmdArgs = append(cmdArgs, globalPaths...)
+	for _, p := range globalPaths {
+		cmdArgs = append(cmdArgs, p.Rel)
+	}
 	cmdArgs = append(cmdArgs,
 		"--ya-end-command-file",
 		"-Wl,--no-whole-archive",
@@ -588,8 +590,12 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 	}
 
 	cmdArgs = append(cmdArgs, "-Wl,--start-group")
-	cmdArgs = append(cmdArgs, peerLibPaths...)
-	cmdArgs = append(cmdArgs, dynamicPaths...)
+	for _, p := range peerLibPaths {
+		cmdArgs = append(cmdArgs, p.Rel)
+	}
+	for _, p := range dynamicPaths {
+		cmdArgs = append(cmdArgs, p.Rel)
+	}
 	cmdArgs = append(cmdArgs, "-Wl,--end-group")
 
 	var trailer []string
@@ -682,9 +688,9 @@ const ldGcSectionsFlag = "-Wl,--gc-sections"
 // peersIncludeLibcCompat reports whether the host LD's peer-archive
 // slot includes `contrib/libs/libc_compat`. Used to select the
 // `-lrt`/`-ldl`-augmented trailer.
-func peersIncludeLibcCompat(peerLibPaths []string) bool {
+func peersIncludeLibcCompat(peerLibPaths []VFS) bool {
 	for _, p := range peerLibPaths {
-		if p == libcCompatPeerPath {
+		if p.Rel == libcCompatPeerPath {
 			return true
 		}
 	}
@@ -695,7 +701,7 @@ func peersIncludeLibcCompat(peerLibPaths []string) bool {
 // composeLDCmdLinkOrCopy composes cmd[3]: invokes fs_tools.py
 // `link_or_copy_to_dir` to drop the linked binary into its containing
 // directory. 5 args, fixed.
-func composeLDCmdLinkOrCopy(tools Toolchain, modulePath string, dynamicPaths ...string) []string {
+func composeLDCmdLinkOrCopy(tools Toolchain, modulePath string, dynamicPaths ...VFS) []string {
 	cmd := []string{
 		tools.Python3,
 		ldFsToolsPath,
@@ -703,7 +709,7 @@ func composeLDCmdLinkOrCopy(tools Toolchain, modulePath string, dynamicPaths ...
 		"--no-check",
 	}
 	for _, p := range dynamicPaths {
-		cmd = append(cmd, Build(p).String())
+		cmd = append(cmd, p.String())
 	}
 	cmd = append(cmd, Build(modulePath).String())
 
@@ -737,31 +743,16 @@ func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) [
 //
 // Reference tools/archiver: 35 BUILD_ROOT entries (32 peer .a + 1
 // plugin + 1 global + 1 own main.cpp.o).
-func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []string, pluginPaths []string, globalPaths []string, wholeArchivePaths []string, dynamicPaths []string, objcopyPaths []VFS) []VFS {
-	// peerLibPaths / globalPaths arrive BUILD_ROOT-relative (caller convention);
-	// pluginPaths arrive as full $(B)/... strings. ccPaths and
-	// objcopyPaths are already VFS-typed. Lift all into the VFS-typed
-	// BUILD_ROOT block before alphabetising.
+func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS) []VFS {
+	// Lift every build-root participant into one VFS-typed block before
+	// alphabetising.
 	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(wholeArchivePaths)+len(dynamicPaths)+len(ccPaths)+len(objcopyPaths))
 
-	for _, p := range peerLibPaths {
-		buildRootBlock = append(buildRootBlock, Build(p))
-	}
-
-	for _, p := range pluginPaths {
-		buildRootBlock = append(buildRootBlock, ParseVFSOrSource(p))
-	}
-
-	for _, g := range globalPaths {
-		buildRootBlock = append(buildRootBlock, Build(g))
-	}
-	for _, w := range wholeArchivePaths {
-		buildRootBlock = append(buildRootBlock, Build(w))
-	}
-	for _, d := range dynamicPaths {
-		buildRootBlock = append(buildRootBlock, Build(d))
-	}
-
+	buildRootBlock = append(buildRootBlock, peerLibPaths...)
+	buildRootBlock = append(buildRootBlock, pluginPaths...)
+	buildRootBlock = append(buildRootBlock, globalPaths...)
+	buildRootBlock = append(buildRootBlock, wholeArchivePaths...)
+	buildRootBlock = append(buildRootBlock, dynamicPaths...)
 	buildRootBlock = append(buildRootBlock, ccPaths...)
 	// objcopy `.o` paths arrive $(B)-rooted; they belong in the
 	// BUILD_ROOT block alongside own .cpp.o and peer .a entries.

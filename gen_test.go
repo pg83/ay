@@ -935,7 +935,7 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Fatalf("host LD node has no Outputs; got Outputs=%v", ldNode.Outputs)
 	}
 
-	wantCmd0 := canonicalizeRagel6BinaryPath(ldNode.Outputs[0].String())
+	wantCmd0 := canonicalizeRagel6Binary(ldNode.Outputs[0]).String()
 
 	if r6Node.Cmds[0].CmdArgs[0] != wantCmd0 {
 		t.Errorf("R6 cmd_args[0] = %q, want canonicalised host ragel6 LD outputs[0] = %q (raw outputs[0] = %q)",

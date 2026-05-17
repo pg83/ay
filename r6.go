@@ -15,24 +15,24 @@ import "strings"
 // EmitR6 rewrites the invocation path back to the canonical parent location
 // so cmd_args[0] matches the reference byte-exact.
 const (
-	ragel6BinSubpath   = "$(B)/contrib/tools/ragel6/bin/"
-	ragel6CanonicalDir = "$(B)/contrib/tools/ragel6/"
+	ragel6BinSubrel    = "contrib/tools/ragel6/bin/"
+	ragel6CanonicalRel = "contrib/tools/ragel6/"
 	// Mirror `set_default_flags(optimized)` in upstream
 	// build/ymake_conf.py:2271-2277: release → -CG2, debug → -CT0.
 	ragel6DefaultFlagOptimized = "-CG2"
 	ragel6DefaultFlagDebug     = "-CT0"
 )
 
-// canonicalizeRagel6BinaryPath maps `$(B)/contrib/tools/ragel6/bin/<base>`
+// canonicalizeRagel6Binary maps `$(B)/contrib/tools/ragel6/bin/<base>`
 // back to `$(B)/contrib/tools/ragel6/<base>`. All other inputs pass through
 // unchanged so canonical-shape paths (fallback literal, synthetic tests)
 // are not double-rewritten.
-func canonicalizeRagel6BinaryPath(p string) string {
-	if !strings.HasPrefix(p, ragel6BinSubpath) {
-		return p
+func canonicalizeRagel6Binary(v VFS) VFS {
+	if !v.IsBuild() || !strings.HasPrefix(v.Rel, ragel6BinSubrel) {
+		return v
 	}
 
-	return ragel6CanonicalDir + p[len(ragel6BinSubpath):]
+	return Build(ragel6CanonicalRel + v.Rel[len(ragel6BinSubrel):])
 }
 
 // EmitR6 emits an R6 node generating `<srcRel>.cpp` from
@@ -53,7 +53,7 @@ func canonicalizeRagel6BinaryPath(p string) string {
 //
 // Returns (NodeRef, outputPath) so the caller can wire R6 as the input of
 // a downstream EmitCC.
-func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath string, ragel6Flags []string, closure []VFS, emit Emitter) (NodeRef, VFS) {
+func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []string, closure []VFS, emit Emitter) (NodeRef, VFS) {
 	// Add `_/` infix only when srcRel contains a `/` (subdir source). Flat
 	// .rl6 at module root must land at `$(B)/<module>/<srcRel>.cpp` without
 	// the infix. Reference: util/datetime/parser.rl6 → `util/_/datetime/
@@ -66,7 +66,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		outVFS = Build(instance.Path + "/" + srcRel + ".cpp")
 	}
 	inVFS := Source(instance.Path + "/" + srcRel)
-	canonicalBinary := canonicalizeRagel6BinaryPath(ragel6BinaryPath)
+	canonicalBinary := canonicalizeRagel6Binary(ragel6BinaryPath)
 
 	// Effective RAGEL6_FLAGS: module SET wins; else platform default
 	// follows ymake_conf.py's Ragel.configure_toolchain:
@@ -81,7 +81,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	}
 
 	cmdArgs := make([]string, 0, 5+len(effectiveFlags)+1)
-	cmdArgs = append(cmdArgs, canonicalBinary)
+	cmdArgs = append(cmdArgs, canonicalBinary.String())
 	cmdArgs = append(cmdArgs, effectiveFlags...)
 	cmdArgs = append(cmdArgs,
 		"-L",
@@ -99,7 +99,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	// Binary entry matches the reference shape (inputs[0] = canonical
 	// ragel6 path); closure is in DFS-discovery order.
 	inputs := make([]VFS, 0, 2+len(closure))
-	inputs = append(inputs, ParseVFSOrSource(canonicalBinary), inVFS)
+	inputs = append(inputs, canonicalBinary, inVFS)
 	inputs = append(inputs, closure...)
 
 	// tags + host_platform come from instance.Platform. Empty

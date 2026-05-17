@@ -27,8 +27,8 @@ func EmitR5(
 	srcRel string,
 	ragel5LD NodeRef,
 	rlgenCdLD NodeRef,
-	ragel5BinPath string,
-	rlgenCdBinPath string,
+	ragel5BinPath VFS,
+	rlgenCdBinPath VFS,
 	emit Emitter,
 ) (NodeRef, VFS, VFS) {
 	srcVFS := Source(instance.Path + "/" + srcRel)
@@ -47,17 +47,17 @@ func EmitR5(
 	}
 
 	cmd0 := Cmd{
-		CmdArgs: []string{
-			ragel5BinPath,
-			"-o",
+			CmdArgs: []string{
+				ragel5BinPath.String(),
+				"-o",
 			tmpPath,
 			srcPath,
 		},
 		Env: env,
 	}
 	cmd1 := Cmd{
-		CmdArgs: []string{
-			rlgenCdBinPath,
+			CmdArgs: []string{
+				rlgenCdBinPath.String(),
 			"-G2",
 			"-o",
 			cppPath,
@@ -67,7 +67,7 @@ func EmitR5(
 	}
 
 	// inputs = [ragel5 binary, rlgen-cd binary, source .rl]
-	inputs := []VFS{ParseVFSOrSource(ragel5BinPath), ParseVFSOrSource(rlgenCdBinPath), srcVFS}
+	inputs := []VFS{ragel5BinPath, rlgenCdBinPath, srcVFS}
 
 	// deps / foreign_deps.tool = both host tool LD refs (in order).
 	depRefs := make([]NodeRef, 0, 2)
@@ -639,7 +639,7 @@ func EmitPR(
 	instance ModuleInstance,
 	srcDir *string,
 	stmt *RunProgramStmt,
-	toolBinPath string,
+	toolBinPath VFS,
 	toolLDRef NodeRef,
 	inputClosure []VFS,
 	extraDepRefs []NodeRef,
@@ -675,7 +675,7 @@ func EmitPR(
 	}
 
 	cmdArgs := make([]string, 0, 1+len(stmt.Args))
-	cmdArgs = append(cmdArgs, toolBinPath)
+	cmdArgs = append(cmdArgs, toolBinPath.String())
 	for _, a := range stmt.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path)
@@ -709,7 +709,7 @@ func EmitPR(
 		seen[p] = struct{}{}
 		inputs = append(inputs, p)
 	}
-	appendUnique(ParseVFSOrSource(toolBinPath))
+	appendUnique(toolBinPath)
 	for _, p := range inAbsPaths {
 		appendUnique(p)
 	}
@@ -1176,15 +1176,15 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	toolInstance.Flags = inferFlagsFromPath(archiverToolPath, true)
 
 	var (
-		toolBinPath = "$(B)/" + archiverToolPath + "/archiver"
+		toolBinPath = Build(archiverToolPath + "/archiver")
 		toolLDRef   NodeRef
 	)
 	if exc := Try(func() {
-		res := genModule(ctx, toolInstance)
-		toolLDRef = res.LDRef
-		if res.LDPath != nil {
-			toolBinPath = *res.LDPath
-		}
+			res := genModule(ctx, toolInstance)
+			toolLDRef = res.LDRef
+			if res.LDPath != nil {
+				toolBinPath = *res.LDPath
+			}
 	}); exc != nil {
 		// Tool walk failure surfaces as a fallback path; matches
 		// emitRunProgram's pattern (the build will still record the
@@ -1195,12 +1195,12 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	// in this module — REF includes the full upstream set in each
 	// ARCHIVE's inputs[], not just the producing PR's IN list. Sort +
 	// dedup once.
-	var prInSources []string
+	var prInSources []VFS
 	{
-		seen := map[string]struct{}{}
+		seen := map[VFS]struct{}{}
 		for _, rp := range d.runPrograms {
 			for _, f := range rp.INFiles {
-				p := "$(S)/" + instance.Path + "/" + f
+				p := Source(instance.Path + "/" + f)
 				if _, dup := seen[p]; dup {
 					continue
 				}
@@ -1208,7 +1208,7 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				prInSources = append(prInSources, p)
 			}
 		}
-		sort.Strings(prInSources)
+		SortVFS(prInSources)
 	}
 
 	reg := codegenRegForInstance(ctx, instance)
@@ -1224,9 +1224,9 @@ func emitArchive(
 	instance ModuleInstance,
 	a archiveEntry,
 	d *moduleData,
-	toolBinPath string,
+	toolBinPath VFS,
 	toolLDRef NodeRef,
-	prInSources []string,
+	prInSources []VFS,
 	emit Emitter,
 	reg *CodegenRegistry,
 ) {
@@ -1236,7 +1236,7 @@ func emitArchive(
 	// Build cmd_args. Each archived file is rendered with a trailing
 	// colon per upstream `${suf=\:;input:Files}`.
 	cmdArgs := make([]string, 0, 4+len(a.Files)+2)
-	cmdArgs = append(cmdArgs, toolBinPath, "-q", "-x")
+	cmdArgs = append(cmdArgs, toolBinPath.String(), "-q", "-x")
 	if a.DontCompress {
 		cmdArgs = append(cmdArgs, "-p")
 	}
@@ -1372,18 +1372,17 @@ func emitArchive(
 	}
 	SortVFS(buildRootSorted)
 	inputs = append(inputs, buildRootSorted...)
-	inputs = append(inputs, ParseVFSOrSource(toolBinPath))
+	inputs = append(inputs, toolBinPath)
 	inSet := map[VFS]struct{}{}
 	for _, p := range inputs {
 		inSet[p] = struct{}{}
 	}
 	for _, p := range prInSources {
-		v := ParseVFSOrSource(p)
-		if _, dup := inSet[v]; dup {
+		if _, dup := inSet[p]; dup {
 			continue
 		}
-		inSet[v] = struct{}{}
-		inputs = append(inputs, v)
+		inSet[p] = struct{}{}
+		inputs = append(inputs, p)
 	}
 
 	depRefs := make([]NodeRef, 0, len(producerRefs)+1)
@@ -1578,20 +1577,19 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	toolInstance := NewToolInstance(ctx.host, toolPath)
 	toolInstance.Flags = inferFlagsFromPath(toolPath, true)
 
-	var toolBinPath string
+	toolBinPath := Build(toolPath + "/" + filepath.Base(toolPath))
 	var toolLDRef NodeRef
 	var toolInducedDeps []string
 
 	if exc := Try(func() {
-		res := genModule(ctx, toolInstance)
-		toolLDRef = res.LDRef
-		if res.LDPath != nil {
-			toolBinPath = *res.LDPath
-		}
+			res := genModule(ctx, toolInstance)
+			toolLDRef = res.LDRef
+			if res.LDPath != nil {
+				toolBinPath = *res.LDPath
+			}
 		toolInducedDeps = res.InducedDeps
 	}); exc != nil {
 		// Swallow parse errors (tool may not fully parse); use fallback path.
-		toolBinPath = "$(B)/" + toolPath + "/" + filepath.Base(toolPath)
 	}
 
 	// Register PR outputs FIRST so the closure walk below resolves

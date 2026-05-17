@@ -155,9 +155,9 @@ func EmitEV(
 	cppStyleguideLDRef NodeRef,
 	protocLDRef NodeRef,
 	event2cppLDRef NodeRef,
-	cppStyleguideBinary string,
-	protocBinary string,
-	event2cppBinary string,
+	cppStyleguideBinary VFS,
+	protocBinary VFS,
+	event2cppBinary VFS,
 	moduleTag *string,
 	sourceRoot string,
 	emit Emitter,
@@ -176,7 +176,7 @@ func EmitEV(
 		evCC.String(),
 		evH.String(),
 		"--",
-		protocBinary,
+		protocBinary.String(),
 		"-I=./",
 		"-I=$(S)/",
 		"-I=$(B)",
@@ -186,9 +186,9 @@ func EmitEV(
 		"-I=$(S)/contrib/libs/protobuf/src",
 		"--cpp_out=:$(B)/",
 		"--cpp_styleguide_out=:$(B)/",
-		"--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary,
+		"--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary.String(),
 		evRelPath,
-		"--plugin=protoc-gen-event2cpp=" + event2cppBinary,
+		"--plugin=protoc-gen-event2cpp=" + event2cppBinary.String(),
 		"--event2cpp_out=$(B)",
 		"-I=" + evEventlogIncludePath,
 	}
@@ -199,9 +199,9 @@ func EmitEV(
 
 	// Build inputs: tool binaries + wrapper + source + transitive imports.
 	inputs := []VFS{
-		ParseVFSOrSource(cppStyleguideBinary),
-		ParseVFSOrSource(protocBinary),
-		ParseVFSOrSource(event2cppBinary),
+		cppStyleguideBinary,
+		protocBinary,
+		event2cppBinary,
 		pbWrapperVFS,
 		srcVFS,
 	}

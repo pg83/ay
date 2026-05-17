@@ -81,7 +81,7 @@ func bisonTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
 	tool.Flags = inferFlagsFromPath(p, true)
 	res := genModule(ctx, tool)
 	if res.LDPath != nil {
-		return res.LDRef, *res.LDPath
+		return res.LDRef, res.LDPath.String()
 	}
 
 	return res.LDRef, Build("contrib/tools/bison/bison").String()
@@ -94,7 +94,7 @@ func m4Tool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
 	tool.Flags = inferFlagsFromPath(p, true)
 	res := genModule(ctx, tool)
 	if res.LDPath != nil {
-		return res.LDRef, *res.LDPath
+		return res.LDRef, res.LDPath.String()
 	}
 
 	return res.LDRef, Build("contrib/tools/m4/m4").String()
