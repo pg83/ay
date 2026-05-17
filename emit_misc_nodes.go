@@ -1,0 +1,152 @@
+package main
+
+import (
+	"path/filepath"
+	"strings"
+)
+
+// emitMiscNodes emits all module-level JV, CF, BI, PR nodes. With
+// non-nil consumerInputs, also emits the downstream CP+CC chain for
+// each JV grammar .cpp output, returning per-CC (refs, outputs,
+// memberInputs) for the caller's AR-member accumulators.
+func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS, memberInputsList [][]VFS) {
+	outPrefix := instance.Path + "/"
+	reg := codegenRegForInstance(ctx, instance)
+
+	// JV: emit one node per ANTLR4 grammar declaration.
+	for _, g := range d.antlr4Grammars {
+		if g.IsSplit {
+			jvRef := EmitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ctx.emit)
+			// Register .h outputs. ANTLR4-generated headers include
+			// antlr4-runtime.h; JV-generated .h also carries the
+			// antlr4 toolchain witnesses (antlr.jar, stdout2stderr.py,
+			// .g4 sources) and the sibling .cpp output.
+			// ProducerRef = jvRef so consumer CC reaching a JV-generated
+			// .h transitively threads JV into deps[].
+			lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
+			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
+			if reg != nil {
+				lexerG4 := Source(instance.Path + "/" + g.Lexer)
+				parserG4 := Source(instance.Path + "/" + g.Parser)
+				lexerCpp := Build(outPrefix + lexerBase + ".cpp")
+				parserCpp := Build(outPrefix + parserBase + ".cpp")
+				registerBoundGeneratedParsedOutput(ctx, instance, "JV", lexerCpp, nil, jvRef)
+				registerBoundGeneratedParsedOutput(ctx, instance, "JV", parserCpp, nil, jvRef)
+				witnessIncludes := []VFS{
+					antlr4RuntimeHeaderVFS,
+					lexerCpp,
+					stdout2stderrVFS,
+					antlr4JarVFS,
+					lexerG4,
+					parserG4,
+				}
+				for _, suffix := range []string{
+					lexerBase + ".h",
+					parserBase + ".h",
+					parserBase + "Visitor.h",
+					parserBase + "BaseVisitor.h",
+				} {
+					parsed := make([]includeDirective, 0, len(witnessIncludes))
+					for _, include := range witnessIncludes {
+						parsed = append(parsed, includeDirective{kind: includeQuoted, target: include.Rel})
+					}
+					registerBoundGeneratedParsedOutput(ctx, instance, "JV", Build(outPrefix+suffix), parsed, jvRef)
+				}
+			}
+			// PR-M3-antlr-g4-cpp: emit CP+CC for each grammar .cpp output.
+			if consumerInputs != nil {
+				// JV inputs (grammar files + scripts + jar) are the JV node's Inputs.
+				jvInputs := []VFS{
+					Source(instance.Path + "/" + g.Lexer),
+					Source(instance.Path + "/" + g.Parser),
+					stdout2stderrVFS,
+					antlr4JarVFS,
+				}
+				jvPrimary := Build(outPrefix + lexerBase + ".cpp")
+				cpccPairs := []struct{ cpp, h VFS }{
+					{Build(outPrefix + lexerBase + ".cpp"), Build(outPrefix + lexerBase + ".h")},
+					{Build(outPrefix + parserBase + ".cpp"), Build(outPrefix + parserBase + ".h")},
+				}
+				refs, outs, inputs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
+				ccRefs = append(ccRefs, refs...)
+				ccOutputs = append(ccOutputs, outs...)
+				memberInputsList = append(memberInputsList, inputs...)
+			}
+		} else {
+			jvRef := EmitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ctx.emit)
+			// Register .h outputs (same witness set as split path).
+			// ProducerRef = jvRef.
+			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
+			if reg != nil {
+				grammarG4 := Source(instance.Path + "/" + g.Grammar)
+				lexerCpp := Build(outPrefix + base + "Lexer.cpp")
+				parserCpp := Build(outPrefix + base + "Parser.cpp")
+				registerBoundGeneratedParsedOutput(ctx, instance, "JV", lexerCpp, nil, jvRef)
+				registerBoundGeneratedParsedOutput(ctx, instance, "JV", parserCpp, nil, jvRef)
+				witnessIncludes := []VFS{
+					antlr4RuntimeHeaderVFS,
+					lexerCpp,
+					stdout2stderrVFS,
+					antlr4JarVFS,
+					grammarG4,
+				}
+				for _, suffix := range []string{
+					base + "Lexer.h",
+					base + "Parser.h",
+					base + "Visitor.h",
+					base + "BaseVisitor.h",
+				} {
+					parsed := make([]includeDirective, 0, len(witnessIncludes))
+					for _, include := range witnessIncludes {
+						parsed = append(parsed, includeDirective{kind: includeQuoted, target: include.Rel})
+					}
+					registerBoundGeneratedParsedOutput(ctx, instance, "JV", Build(outPrefix+suffix), parsed, jvRef)
+				}
+			}
+			// PR-M3-antlr-g4-cpp: emit CP+CC for each grammar .cpp output.
+			if consumerInputs != nil {
+				jvInputs := []VFS{
+					Source(instance.Path + "/" + g.Grammar),
+					stdout2stderrVFS,
+					antlr4JarVFS,
+				}
+				jvPrimary := Build(outPrefix + base + "Lexer.cpp")
+				cpccPairs := []struct{ cpp, h VFS }{
+					{Build(outPrefix + base + "Lexer.cpp"), Build(outPrefix + base + "Lexer.h")},
+					{Build(outPrefix + base + "Parser.cpp"), Build(outPrefix + base + "Parser.h")},
+				}
+				refs, outs, inputs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
+				ccRefs = append(ccRefs, refs...)
+				ccOutputs = append(ccOutputs, outs...)
+				memberInputsList = append(memberInputsList, inputs...)
+			}
+		}
+	}
+
+	// CF: emit one node per explicit CONFIGURE_FILE() declaration.
+	for _, cf := range d.configureFiles {
+		emitExplicitCF(ctx, instance, cf, d, reg)
+	}
+
+	// BI: emit one node when CREATE_BUILDINFO_FOR was declared.
+	if d.createBuildInfoFor != nil {
+		biRef := EmitBI(instance, *d.createBuildInfoFor, biFlagsForInstance(instance.Platform), ctx.emit)
+		// Register BI output (buildinfo_data.h). The BI-script trio
+		// (build_info_gen.py + xargs.py + yield_line.py) flows up into
+		// CC consumers via EmitsIncludes. ProducerRef = biRef so the
+		// consumer CC carries BI in deps[].
+		if reg != nil {
+			registerBoundGeneratedParsedOutput(ctx, instance, "BI", Build(outPrefix+*d.createBuildInfoFor), []includeDirective{
+				{kind: includeQuoted, target: buildInfoGenPyVFS.Rel},
+				{kind: includeQuoted, target: xargsPyVFS.Rel},
+				{kind: includeQuoted, target: yieldLinePyVFS.Rel},
+			}, biRef)
+		}
+	}
+
+	// RUN_PROGRAM emission lives in emitRunProgramsForAR (gen.go) —
+	// ahead of AR so PR outputs with CC-compilable extensions can be
+	// threaded into the module's AR member list. No-op here.
+	_ = d.runPrograms
+	return
+}

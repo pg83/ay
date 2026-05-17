@@ -1,0 +1,273 @@
+package main
+
+import (
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+// emitRunProgramsForAR emits PR nodes ahead of the module's AR step and,
+// for each PR output whose extension is a CC-compilable source kind,
+// emits a downstream CC consuming the registered BUILD_ROOT source.
+//
+// Implements the PR→CC terminal case. A RUN_PROGRAM with
+// `STDOUT/OUT foo.cpp` emits the .cpp under $(B)/<instance.Path>/foo.cpp
+// and the consuming CC compiles it into foo.cpp.o which the AR/LD
+// archives alongside the module's regular SRCS. Mirrors upstream
+// ymake's auto-promote of compilable-extension RUN_PROGRAM outputs.
+//
+// Empirical: devtools/ymake/symbols emits dep_types.h_dumper.cpp via
+// STDOUT, then archives dep_types.h_dumper.cpp.o.
+//
+// Returns per-CC (refs, outputs, memberInputs) for the caller's
+// AR-member accumulators.
+type runProgramsForARResult struct {
+	CCRefs       []NodeRef
+	CCOutputs    []VFS
+	MemberInputs [][]VFS
+}
+
+func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) *runProgramsForARResult {
+	if len(d.runPrograms) == 0 {
+		return nil
+	}
+
+	reg := codegenRegForInstance(ctx, instance)
+	res := &runProgramsForARResult{}
+
+	for _, rp := range d.runPrograms {
+		prRef := emitRunProgram(ctx, instance, rp, d, reg, in)
+		// Record (output filename → PR NodeRef) so ARCHIVE() in the
+		// same module can wire the AR's dep set to the producing PR.
+		if d.prOutputProducer == nil {
+			d.prOutputProducer = map[string]NodeRef{}
+		}
+		for _, f := range rp.OUTFiles {
+			d.prOutputProducer[f] = prRef
+		}
+		for _, f := range rp.OUTNoAutoFiles {
+			d.prOutputProducer[f] = prRef
+		}
+		if rp.StdoutFile != nil {
+			d.prOutputProducer[*rp.StdoutFile] = prRef
+		}
+
+		// Classify outputs by extension. CC-compilable outputs
+		// trigger a downstream CC; opaque outputs (.pyc etc.) stay
+		// as registry-only entries.
+		outs := make([]string, 0, len(rp.OUTFiles)+len(rp.OUTNoAutoFiles)+1)
+		outs = append(outs, rp.OUTFiles...)
+		// OUT_NOAUTO suppresses auto-promote-to-source upstream, so
+		// rp.OUTNoAutoFiles is skipped for CC dispatch even when its
+		// extension is .cpp/.c/...
+		if rp.StdoutFile != nil {
+			outs = append(outs, *rp.StdoutFile)
+		}
+
+		for _, out := range outs {
+			if !isCCSourceExt(out) {
+				continue
+			}
+
+			ccRef, ccOut, ccIns := emitPRDownstreamCC(ctx, instance, out, prRef, in)
+			res.CCRefs = append(res.CCRefs, ccRef)
+			res.CCOutputs = append(res.CCOutputs, ccOut)
+			res.MemberInputs = append(res.MemberInputs, ccIns)
+		}
+	}
+
+	return res
+}
+
+// emitRunProgram emits a PR node for a RUN_PROGRAM declaration.
+// It walks the tool PROGRAM as a host instance to get its LD ref/path.
+func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, d *moduleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
+	// Walk the tool as a host program.
+	toolPath := filepath.Clean(stmt.ToolPath)
+	toolInstance := NewToolInstance(ctx.host, toolPath)
+	toolInstance.Flags = inferFlagsFromPath(toolPath, true)
+
+	toolBinPath := Build(toolPath + "/" + filepath.Base(toolPath))
+	var toolLDRef NodeRef
+	var toolInducedDeps []string
+
+	if exc := Try(func() {
+		res := genModule(ctx, toolInstance)
+		toolLDRef = res.LDRef
+		if res.LDPath != nil {
+			toolBinPath = *res.LDPath
+		}
+		toolInducedDeps = res.InducedDeps
+	}); exc != nil {
+		// Swallow parse errors (tool may not fully parse); use fallback path.
+	}
+
+	// Register PR outputs FIRST so the closure walk below resolves
+	// each output's $(B) path through the codegen registry.
+	//
+	// For CC-compilable outputs (.cpp/.cc/.cxx/.c): populate
+	// EmitsIncludes with SOURCE_ROOT-rooted IN + OUTPUT_INCLUDES so
+	// the downstream CC's closure picks up the transitive header set.
+	// Non-compilable outputs (.h, .pyc) leave EmitsIncludes nil —
+	// content is opaque without invoking the tool.
+	//
+	// The tool's INDUCED_DEPS(<ext> headers...) names headers the
+	// tool injects into every output of the listed extensions; treat
+	// as additional EmitsIncludes (e.g. struct2fieldcalc declares
+	// INDUCED_DEPS(h+cpp field_calc_int.h) → scanner walks
+	// field_calc_int.h → field_calc.h → autoarray.h).
+	if reg != nil {
+		for _, f := range stmt.OUTFiles {
+			registerGeneratedParsedOutput(ctx, instance, "PR", Build(instance.Path+"/"+f), prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps))
+		}
+		for _, f := range stmt.OUTNoAutoFiles {
+			registerGeneratedParsedOutput(ctx, instance, "PR", Build(instance.Path+"/"+f), prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps))
+		}
+		if stmt.StdoutFile != nil {
+			registerGeneratedParsedOutput(ctx, instance, "PR", Build(instance.Path+"/"+*stmt.StdoutFile), prEmitsIncludes(instance, d.srcDir, *stmt.StdoutFile, stmt, toolInducedDeps))
+		}
+	}
+
+	// Fold the transitive include closure of each CC-compilable
+	// output into THIS PR node's inputs[] — REF's PR carries the full
+	// closure (dep_types.h_dumper.cpp PR holds 1500 entries). Driven
+	// by the registry: each output's EmitsIncludes is the SOURCE_ROOT
+	// IN/OUTPUT_INCLUDES set; scanner follows real `#include`s from
+	// there. Non-CC outputs contribute nothing.
+	inputClosure := prInputClosure(ctx, instance, stmt, moduleInputs)
+
+	// Resolve codegen-producer refs reached via the PR's inputClosure.
+	// PR's deps[] must include any cross-module EN/PB/EV producer
+	// whose generated header appears in the PR's transitive input
+	// set (dep_types.h_dumper.cpp PR depends on diag's EN
+	// stats_enums.h_serialized.cpp via dep_types.h → stats_enums.h).
+	prExtraDepRefs := resolveCodegenDepRefs(ctx, instance, inputClosure, toolLDRef)
+
+	prResult := EmitPR(instance, d.srcDir, stmt, toolBinPath, toolLDRef, inputClosure, prExtraDepRefs, ctx.emit)
+	prRef := prResult.Ref
+	if d.prOutputInputs == nil {
+		d.prOutputInputs = map[string][]VFS{}
+	}
+	for _, f := range stmt.OUTFiles {
+		d.prOutputInputs[f] = append([]VFS(nil), prResult.Inputs...)
+	}
+	for _, f := range stmt.OUTNoAutoFiles {
+		d.prOutputInputs[f] = append([]VFS(nil), prResult.Inputs...)
+	}
+	if stmt.StdoutFile != nil {
+		d.prOutputInputs[*stmt.StdoutFile] = append([]VFS(nil), prResult.Inputs...)
+	}
+
+	// Backfill PR ProducerRef so the downstream CC's
+	// resolveCodegenDepRefs threads PR into deps[]. Registry entries
+	// above were created with HasProducerRef=false (ref not yet
+	// known); SetProducerRef fills it atomically.
+	if reg != nil {
+		for _, f := range stmt.OUTFiles {
+			bindGeneratedOutput(ctx, instance, Build(instance.Path+"/"+f), prRef)
+		}
+		for _, f := range stmt.OUTNoAutoFiles {
+			bindGeneratedOutput(ctx, instance, Build(instance.Path+"/"+f), prRef)
+		}
+		if stmt.StdoutFile != nil {
+			bindGeneratedOutput(ctx, instance, Build(instance.Path+"/"+*stmt.StdoutFile), prRef)
+		}
+	}
+
+	return prRef
+}
+
+// isCCSourceExt reports whether path names a CC-compilable source.
+// PR outputs with these extensions become implicit module sources
+// (.c/.cpp/.cc/.cxx). .S/.s/.asm are excluded — PR currently produces
+// no assembly outputs and the AS path has its own toolchain
+// prerequisites (yasm walk).
+func isCCSourceExt(p string) bool {
+	return strings.HasSuffix(p, ".cpp") ||
+		strings.HasSuffix(p, ".cc") ||
+		strings.HasSuffix(p, ".cxx") ||
+		strings.HasSuffix(p, ".c")
+}
+
+// prInputClosure returns the union of transitive include closures
+// over every CC-compilable PR output (OUT / OUT_NOAUTO / STDOUT).
+// Scanner walks registered EmitsIncludes (SOURCE_ROOT IN +
+// OUTPUT_INCLUDES) and follows `#include`s from there. Non-CC outputs
+// have nil EmitsIncludes and contribute nothing.
+func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []VFS {
+	// Use the consuming module's full scan-input bag so peer headers
+	// reachable from the PR output's EmitsIncludes chain resolve.
+	// Mirrors emitEnumSrcs (gen.go).
+	scanIn := ModuleCCInputs{
+		AddIncl:           moduleInputs.AddIncl,
+		PeerAddInclGlobal: moduleInputs.PeerAddInclGlobal,
+		SrcDir:            moduleInputs.SrcDir,
+		SourceRoot:        ctx.sourceRoot,
+	}
+
+	var out []VFS
+	walkOne := func(rel string) {
+		buildRootPath := Build(instance.Path + "/" + rel)
+		sub := walkClosure(ctx, instance, buildRootPath, scanIn)
+		out = append(out, sub...)
+	}
+
+	for _, f := range stmt.OUTFiles {
+		if !isCCSourceExt(f) {
+			continue
+		}
+		walkOne(f)
+	}
+	for _, f := range stmt.OUTNoAutoFiles {
+		if !isCCSourceExt(f) {
+			continue
+		}
+		walkOne(f)
+	}
+	if stmt.StdoutFile != nil && isCCSourceExt(*stmt.StdoutFile) {
+		walkOne(*stmt.StdoutFile)
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	out = mergeDedupVFS(out, nil)
+	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	return out
+}
+
+// prEmitsIncludes returns the EmitsIncludes set to register for a PR
+// output named `outFile`. For CC-compilable outputs the convention is
+// that the generated source textually `#include`s its IN files and any
+// OUTPUT_INCLUDES-declared headers; for everything else the content is
+// opaque and we return nil. PR-AUDIT-5.
+//
+// PR-M3-runprogram-closure: toolInducedDeps carries the tool PROGRAM's
+// module-level INDUCED_DEPS(...) header list (repo-relative). Append
+// those to the seed-include set so the include scanner reaches the
+// transitive closure of headers the tool injects into its outputs.
+func prEmitsIncludes(instance ModuleInstance, srcDir *string, outFile string, stmt *RunProgramStmt, toolInducedDeps []string) []includeDirective {
+	if !isCCSourceExt(outFile) {
+		return nil
+	}
+
+	includes := make([]includeDirective, 0, len(stmt.INFiles)+len(stmt.OutputIncludes)+len(toolInducedDeps))
+
+	// IN files are module-relative; rebase to SOURCE_ROOT.
+	for _, f := range stmt.INFiles {
+		includes = append(includes, includeDirective{kind: includeQuoted, target: runProgramSourceRel(instance, srcDir, f)})
+	}
+
+	// OUTPUT_INCLUDES entries are repo-relative.
+	for _, f := range stmt.OutputIncludes {
+		includes = append(includes, includeDirective{kind: includeQuoted, target: f})
+	}
+
+	// Tool-declared INDUCED_DEPS (repo-relative).
+	for _, f := range toolInducedDeps {
+		includes = append(includes, includeDirective{kind: includeQuoted, target: f})
+	}
+
+	return includes
+}
