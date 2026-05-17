@@ -848,8 +848,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// BEFORE composing the result so the refs propagate alongside the
 		// peer-walked plugin closure. The CP node carries
 		// `module_dir = instance.Path` per REF; src/dst anchor under it.
-		ownLDPluginRefs, ownLDPluginPaths := emitOwnLDPlugins(ctx, instance, d.ldPlugins)
-		ldPluginRefs, ldPluginPaths := mergeLDPlugins(ownLDPluginRefs, ownLDPluginPaths, peerContribs.ldPluginRefs, peerContribs.ldPluginPaths)
+		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins)
+		ldPlugins := mergeLDPlugins(ownLDPlugins, &ldPluginsResult{
+			Refs:  peerContribs.ldPluginRefs,
+			Paths: peerContribs.ldPluginPaths,
+		})
+		if ldPlugins == nil {
+			ldPlugins = &ldPluginsResult{}
+		}
 
 		// Multimodule modules may still declare RUN_PROGRAM whose OUT is
 		// later consumed by RESOURCE/RESOURCE_FILES (libmagic/magic:
@@ -865,7 +871,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			DefaultVars:       d.defaultVars,
 			DefaultVarOrder:   d.defaultVarOrder,
 		}
-		_, _, _ = emitRunProgramsForAR(ctx, instance, d, headerOnlyInputs)
+		_ = emitRunProgramsForAR(ctx, instance, d, headerOnlyInputs)
 
 		// Emit yapyc3 PY nodes for PY_SRCS() declarations. PY3_LIBRARY /
 		// PY23_LIBRARY often have only PY_SRCS (no C/C++ sources) and
@@ -876,7 +882,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// LIBRARYs (e.g. certs, PY3_LIBRARY-only-PY_SRCS) host the
 		// only-resource shape; when there are objcopy outputs, emit a
 		// .global.a archiving them.
-		objcopyRefs, objcopyOutputs, objcopyGlobalInputs := emitResourceObjcopy(ctx, instance, d)
+		objcopyRes := emitResourceObjcopy(ctx, instance, d)
 
 		// Capture the `.global.a` ref so consumers see it via
 		// `moduleEmitResult.GlobalRef/GlobalPath`. Otherwise RESOURCE-only
@@ -887,7 +893,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		var hOnlyWholeArchiveRefs []NodeRef
 		var hOnlyWholeArchivePaths []string
 
-		if len(objcopyRefs) > 0 {
+		if objcopyRes != nil && len(objcopyRes.Refs) > 0 {
 			// REF surfaces module_lang="py3" for PY*_LIBRARY archives
 			// (module_tag=global, or py3_global on PY23_LIBRARY) and
 			// "cpp" for plain LIBRARY (module_tag=global) and for
@@ -916,7 +922,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "lib", archiveName)
 				tag = "global"
 			}
-			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRefs, objcopyOutputs, objcopyGlobalInputs, ctx.host, ctx.emit)
+			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, objcopyRes.GlobalMemberInputs, ctx.host, ctx.emit)
 			hOnlyGlobalRef = &gRef
 			hOnlyGlobalPath = stringPtr(instance.Path + "/" + globalBaseName)
 		}
@@ -993,8 +999,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			PeerWholeArchiveClosureRefs:     append([]NodeRef(nil), peerContribs.wholeArchiveRefs...),
 			PeerWholeArchiveClosurePaths:    append([]string(nil), peerContribs.wholeArchivePaths...),
 			PeerWholeArchiveCmdClosurePaths: append([]string(nil), peerContribs.wholeArchiveCmdPaths...),
-			LDPluginRefs:                    ldPluginRefs,
-			LDPluginPaths:                   ldPluginPaths,
+			LDPluginRefs:                    ldPlugins.Refs,
+			LDPluginPaths:                   ldPlugins.Paths,
 			PeerDynamicClosureRefs:          append([]NodeRef(nil), peerContribs.dynamicRefs...),
 			PeerDynamicClosurePaths:         append([]string(nil), peerContribs.dynamicPaths...),
 			InducedDeps:                     append([]string(nil), d.inducedDeps...),
@@ -1902,7 +1908,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// `(refs, outputs, memberInputs)` are folded into the AR member
 	// buckets below (alongside PR-downstream CCs) so the regular `.a`
 	// archives the EN-derived `.o`s after declared SRCS.
-	enCCRefs, enCCOutputs, enCCMemberInputs := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
+	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
 
 	// Hoist JV/CF/BI/PR node emission before the per-source loop so the
 	// codegen registry is fully populated when any source's WalkClosure
@@ -1917,7 +1923,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// .pyc.inc / PR-emitted output paths. Returned PR-downstream-CC
 	// triples are folded into the AR-member bucket at the original site
 	// below so the existing AR.cmd_args order stays byte-exact.
-	prCCRefs, prCCOutputs, prMemberInputsList := emitRunProgramsForAR(ctx, instance, d, moduleInputs)
+	prCCRes := emitRunProgramsForAR(ctx, instance, d, moduleInputs)
 	emitArchives(ctx, instance, d)
 
 	// Two-pass source emission. Codegen-producing sources
@@ -2070,12 +2076,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// JOIN_SRCS / PR-derived members (sg2.json devtools/ymake's
 	// `libdevtools-ymake.a` cmd_args positions 134..142 — trailing the
 	// 124-entry regular SRCS bucket).
-	for i, ref := range enCCRefs {
-		ccRefs = append(ccRefs, ref)
-		ccOutputs = append(ccOutputs, enCCOutputs[i])
-		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
-		ccIsCFGenerated = append(ccIsCFGenerated, false)
-		addMemberInputs(enCCMemberInputs[i])
+	if enCCRes != nil {
+		for i, ref := range enCCRes.CCRefs {
+			ccRefs = append(ccRefs, ref)
+			ccOutputs = append(ccOutputs, enCCRes.CCOutputs[i])
+			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
+			ccIsCFGenerated = append(ccIsCFGenerated, false)
+			addMemberInputs(enCCRes.MemberInputsList[i])
+		}
 	}
 
 	// PR-downstream CC fold. emitRunProgramsForAR + emitArchives are
@@ -2084,12 +2092,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// library/python/runtime_py3/__res.cpp) scan their inputs[]. The
 	// AR.cmd_args bucket ordering (PR-downstream CCs AFTER regular SRCS,
 	// before JOIN_SRCS) is preserved by deferring the fold to this site.
-	for i, ref := range prCCRefs {
-		ccRefs = append(ccRefs, ref)
-		ccOutputs = append(ccOutputs, prCCOutputs[i])
-		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
-		ccIsCFGenerated = append(ccIsCFGenerated, false)
-		addMemberInputs(prMemberInputsList[i])
+	if prCCRes != nil {
+		for i, ref := range prCCRes.CCRefs {
+			ccRefs = append(ccRefs, ref)
+			ccOutputs = append(ccOutputs, prCCRes.CCOutputs[i])
+			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
+			ccIsCFGenerated = append(ccIsCFGenerated, false)
+			addMemberInputs(prCCRes.MemberInputs[i])
+		}
 	}
 
 	// Emit one CC node per SRC_C_<V> entry. Each variant compile reuses
@@ -2271,20 +2281,21 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// library/python/symbols/module — PY23_LIBRARY multimodule whose py3
 	// submodule tags CC outputs with module_tag=py3 and .py3.o suffix).
 	regCCPy3Suffix := isPy3NativeLib || d.moduleStmt.Name == "PY23_LIBRARY"
-	regRefs, regOutputs, regMemberInputs := emitPyRegister(ctx, instance, d, moduleInputs, regCCPy3Suffix)
-
-	for i, ref := range regRefs {
-		globalRefs = append(globalRefs, ref)
-		globalOutputs = append(globalOutputs, regOutputs[i])
-	}
-
-	for _, p := range regMemberInputs {
-		if _, dup := globalMemberInputsSeen[p]; dup {
-			continue
+	regRes := emitPyRegister(ctx, instance, d, moduleInputs, regCCPy3Suffix)
+	if regRes != nil {
+		for i, ref := range regRes.Refs {
+			globalRefs = append(globalRefs, ref)
+			globalOutputs = append(globalOutputs, regRes.Outputs[i])
 		}
 
-		globalMemberInputsSeen[p] = struct{}{}
-		globalMemberInputs = append(globalMemberInputs, p)
+		for _, p := range regRes.MemberInputs {
+			if _, dup := globalMemberInputsSeen[p]; dup {
+				continue
+			}
+
+			globalMemberInputsSeen[p] = struct{}{}
+			globalMemberInputs = append(globalMemberInputs, p)
+		}
 	}
 
 	// Emit own LD_PLUGIN CP nodes. No current M2 case fires here
@@ -2293,8 +2304,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// gets the same wiring. Merged with the transitive peer plugin
 	// closure; feeds EmitLD's `--start-plugins ... --end-plugins` block
 	// (PROGRAMs) and the LDPluginRefs/Paths slot on `moduleEmitResult`.
-	ownLDPluginRefs, ownLDPluginPaths := emitOwnLDPlugins(ctx, instance, d.ldPlugins)
-	mergedLDPluginRefs, mergedLDPluginPaths := mergeLDPlugins(ownLDPluginRefs, ownLDPluginPaths, peerLDPluginRefs, peerLDPluginPaths)
+	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins)
+	mergedLDPlugins := mergeLDPlugins(ownLDPlugins, &ldPluginsResult{
+		Refs:  peerLDPluginRefs,
+		Paths: peerLDPluginPaths,
+	})
+	if mergedLDPlugins == nil {
+		mergedLDPlugins = &ldPluginsResult{}
+	}
 
 	if isProgramModuleType(d.moduleStmt.Name) {
 		// PROGRAM(name) declares the linker output basename directly.
@@ -2381,19 +2398,19 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if resourceModuleTag(d.moduleStmt.Name) != nil {
 			emitPySrcs(ctx, instance, d)
 
-			objcopyRefs, objcopyOutputs, objcopyLDInputs := emitResourceObjcopy(ctx, instance, d)
+			objcopyRes := emitResourceObjcopy(ctx, instance, d)
 
-			if len(objcopyRefs) > 0 {
-				ldObjcopyRefs = objcopyRefs
-				ldObjcopyPaths = objcopyOutputs
+			if objcopyRes != nil && len(objcopyRes.Refs) > 0 {
+				ldObjcopyRefs = objcopyRes.Refs
+				ldObjcopyPaths = objcopyRes.Outputs
 			}
-			if len(objcopyLDInputs) > 0 {
+			if objcopyRes != nil && len(objcopyRes.GlobalMemberInputs) > 0 {
 				seen := make(map[VFS]struct{}, len(ldMemberInputs))
 				for _, p := range ldMemberInputs {
 					seen[p] = struct{}{}
 				}
 				ldMemberInputs = append([]VFS(nil), ldMemberInputs...)
-				for _, p := range objcopyLDInputs {
+				for _, p := range objcopyRes.GlobalMemberInputs {
 					if _, dup := seen[p]; dup {
 						continue
 					}
@@ -2446,7 +2463,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			binaryName,
 			ldCCRefs, ldCCOutputs,
 			ldPeerArchiveRefs, ldPeerArchivePaths,
-			mergedLDPluginRefs, mergedLDPluginPaths,
+			mergedLDPlugins.Refs, mergedLDPlugins.Paths,
 			peerGlobalRefs, peerGlobalPaths,
 			peerWholeArchiveRefs, peerWholeArchivePaths,
 			peerWholeArchiveCmdPaths,
@@ -2485,8 +2502,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			PeerWholeArchiveClosureRefs:     append([]NodeRef(nil), peerWholeArchiveRefs...),
 			PeerWholeArchiveClosurePaths:    append([]string(nil), peerWholeArchivePaths...),
 			PeerWholeArchiveCmdClosurePaths: append([]string(nil), peerWholeArchiveCmdPaths...),
-			LDPluginRefs:                    mergedLDPluginRefs,
-			LDPluginPaths:                   mergedLDPluginPaths,
+			LDPluginRefs:                    mergedLDPlugins.Refs,
+			LDPluginPaths:                   mergedLDPlugins.Paths,
 			PeerDynamicClosureRefs:          append([]NodeRef(nil), peerDynamicRefs...),
 			PeerDynamicClosurePaths:         append([]string(nil), peerDynamicPaths...),
 			InducedDeps:                     append([]string(nil), d.inducedDeps...),
@@ -2635,16 +2652,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// AND yapyc3 nodes here.
 	emitPySrcs(ctx, instance, d)
 
-	genPyAuxRefs, genPyAuxOutputs, genPyAuxInputs := emitGeneratedPyAuxChunks(ctx, instance, d, moduleInputs)
-	globalRefs = append(globalRefs, genPyAuxRefs...)
-	globalOutputs = append(globalOutputs, genPyAuxOutputs...)
-	for _, p := range genPyAuxInputs {
-		if _, dup := globalMemberInputsSeen[p]; dup {
-			continue
-		}
+	genPyAuxRes := emitGeneratedPyAuxChunks(ctx, instance, d, moduleInputs)
+	if genPyAuxRes != nil {
+		globalRefs = append(globalRefs, genPyAuxRes.Refs...)
+		globalOutputs = append(globalOutputs, genPyAuxRes.Outputs...)
+		for _, p := range genPyAuxRes.MemberInputs {
+			if _, dup := globalMemberInputsSeen[p]; dup {
+				continue
+			}
 
-		globalMemberInputsSeen[p] = struct{}{}
-		globalMemberInputs = append(globalMemberInputs, p)
+			globalMemberInputsSeen[p] = struct{}{}
+			globalMemberInputs = append(globalMemberInputs, p)
+		}
 	}
 
 	// Emit objcopy PY nodes for RESOURCE / RESOURCE_FILES. Returned `.o`
@@ -2653,21 +2672,23 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// inputs (per-entry source paths + objcopy.py) are folded into the
 	// GLOBAL_SRCS-local closure feeding `.global.a`'s `inputs` slot;
 	// dedup against the existing accumulator.
-	objcopyRefs, objcopyOutputs, objcopyGlobalInputs := emitResourceObjcopy(ctx, instance, d)
-	globalRefs = append(globalRefs, objcopyRefs...)
-	globalOutputs = append(globalOutputs, objcopyOutputs...)
-	if resourceBeforeGlobalSrcs(d) && globalSrcMemberCount > 0 && len(objcopyRefs) > 0 {
-		globalRefs = moveTailNodeRefsToFront(globalRefs, len(objcopyRefs))
-		globalOutputs = moveTailVFSToFront(globalOutputs, len(objcopyOutputs))
-	}
-
-	for _, p := range objcopyGlobalInputs {
-		if _, dup := globalMemberInputsSeen[p]; dup {
-			continue
+	objcopyRes := emitResourceObjcopy(ctx, instance, d)
+	if objcopyRes != nil {
+		globalRefs = append(globalRefs, objcopyRes.Refs...)
+		globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
+		if resourceBeforeGlobalSrcs(d) && globalSrcMemberCount > 0 && len(objcopyRes.Refs) > 0 {
+			globalRefs = moveTailNodeRefsToFront(globalRefs, len(objcopyRes.Refs))
+			globalOutputs = moveTailVFSToFront(globalOutputs, len(objcopyRes.Outputs))
 		}
 
-		globalMemberInputsSeen[p] = struct{}{}
-		globalMemberInputs = append(globalMemberInputs, p)
+		for _, p := range objcopyRes.GlobalMemberInputs {
+			if _, dup := globalMemberInputsSeen[p]; dup {
+				continue
+			}
+
+			globalMemberInputsSeen[p] = struct{}{}
+			globalMemberInputs = append(globalMemberInputs, p)
+		}
 	}
 
 	// EN and JV/CF/BI/PR emissions are hoisted to the pre-source-loop
@@ -2694,8 +2715,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		PeerWholeArchiveClosureRefs:     append([]NodeRef(nil), peerWholeArchiveRefs...),
 		PeerWholeArchiveClosurePaths:    append([]string(nil), peerWholeArchivePaths...),
 		PeerWholeArchiveCmdClosurePaths: append([]string(nil), peerWholeArchiveCmdPaths...),
-		LDPluginRefs:                    mergedLDPluginRefs,
-		LDPluginPaths:                   mergedLDPluginPaths,
+		LDPluginRefs:                    mergedLDPlugins.Refs,
+		LDPluginPaths:                   mergedLDPlugins.Paths,
 		PeerDynamicClosureRefs:          append([]NodeRef(nil), peerDynamicRefs...),
 		PeerDynamicClosurePaths:         append([]string(nil), peerDynamicPaths...),
 		InducedDeps:                     append([]string(nil), d.inducedDeps...),
@@ -2864,13 +2885,20 @@ func filterEnSerializedSiblings(in []VFS) []VFS {
 // duplicate on `default-linux-x86_64` (Platform is part of the
 // canonical hash). First-emit wins — the seed runs target-first, so
 // the cached entry carries the target platform per REF.
-func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string) ([]NodeRef, []string) {
+type ldPluginsResult struct {
+	Refs  []NodeRef
+	Paths []string
+}
+
+func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string) *ldPluginsResult {
 	if len(plugins) == 0 {
-		return nil, nil
+		return nil
 	}
 
-	refs := make([]NodeRef, 0, len(plugins))
-	paths := make([]string, 0, len(plugins))
+	res := &ldPluginsResult{
+		Refs:  make([]NodeRef, 0, len(plugins)),
+		Paths: make([]string, 0, len(plugins)),
+	}
 
 	for _, name := range plugins {
 		src := Source(instance.Path + "/" + name)
@@ -2883,11 +2911,11 @@ func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string) ([
 			ctx.ldPluginCPCache[dst.String()] = ref
 		}
 
-		refs = append(refs, ref)
-		paths = append(paths, dst.String())
+		res.Refs = append(res.Refs, ref)
+		res.Paths = append(res.Paths, dst.String())
 	}
 
-	return refs, paths
+	return res
 }
 
 func moveArchivePathsAfter(refs []NodeRef, paths []string, anchor string, moved []string) ([]NodeRef, []string) {
@@ -3017,14 +3045,28 @@ func moveTailVFSToFront(in []VFS, tailLen int) []VFS {
 // mergeLDPlugins concatenates `(ownRefs, ownPaths)` with `(peerRefs,
 // peerPaths)`, dropping any peer entry whose path appears in own.
 // Mirrors `mergeDedup` for the parallel-slice case (LD plugin propagation).
-func mergeLDPlugins(ownRefs []NodeRef, ownPaths []string, peerRefs []NodeRef, peerPaths []string) ([]NodeRef, []string) {
+func mergeLDPlugins(own, peer *ldPluginsResult) *ldPluginsResult {
+	var ownRefs []NodeRef
+	var ownPaths []string
+	if own != nil {
+		ownRefs = own.Refs
+		ownPaths = own.Paths
+	}
+	var peerRefs []NodeRef
+	var peerPaths []string
+	if peer != nil {
+		peerRefs = peer.Refs
+		peerPaths = peer.Paths
+	}
 	if len(ownPaths) == 0 && len(peerPaths) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	seen := make(map[string]struct{}, len(ownPaths)+len(peerPaths))
-	outRefs := make([]NodeRef, 0, len(ownPaths)+len(peerPaths))
-	outPaths := make([]string, 0, len(ownPaths)+len(peerPaths))
+	out := &ldPluginsResult{
+		Refs:  make([]NodeRef, 0, len(ownPaths)+len(peerPaths)),
+		Paths: make([]string, 0, len(ownPaths)+len(peerPaths)),
+	}
 
 	for i, p := range ownPaths {
 		if _, dup := seen[p]; dup {
@@ -3032,8 +3074,8 @@ func mergeLDPlugins(ownRefs []NodeRef, ownPaths []string, peerRefs []NodeRef, pe
 		}
 
 		seen[p] = struct{}{}
-		outRefs = append(outRefs, ownRefs[i])
-		outPaths = append(outPaths, p)
+		out.Refs = append(out.Refs, ownRefs[i])
+		out.Paths = append(out.Paths, p)
 	}
 
 	for i, p := range peerPaths {
@@ -3042,11 +3084,11 @@ func mergeLDPlugins(ownRefs []NodeRef, ownPaths []string, peerRefs []NodeRef, pe
 		}
 
 		seen[p] = struct{}{}
-		outRefs = append(outRefs, peerRefs[i])
-		outPaths = append(outPaths, p)
+		out.Refs = append(out.Refs, peerRefs[i])
+		out.Paths = append(out.Paths, p)
 	}
 
-	return outRefs, outPaths
+	return out
 }
 
 // peerGlobalContribs is the per-axis aggregation of a header-only

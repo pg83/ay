@@ -261,10 +261,18 @@ var genPy3RegScriptPath = genPy3RegScriptVFS.String()
 // Both refs flow into globalRefs/globalOutputs — _PY3_REGISTER emits
 // `SRCS(GLOBAL ...)`, so the CC output lands in `.global.a`.
 // Mirror of _PY3_REGISTER at build/ymake.core.conf:4086-4089.
-func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs, py3Suffix bool) (refs []NodeRef, outputs []VFS, memberInputs []VFS) {
+type pyRegisterResult struct {
+	Refs         []NodeRef
+	Outputs      []VFS
+	MemberInputs []VFS
+}
+
+func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs, py3Suffix bool) *pyRegisterResult {
 	if len(d.pyRegister) == 0 {
-		return nil, nil, nil
+		return nil
 	}
+
+	res := &pyRegisterResult{}
 
 	for _, arg := range d.pyRegister {
 		regCpp := arg + ".reg3.cpp"
@@ -349,15 +357,15 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 
 		ccRef, ccOut := EmitCC(instance, regCpp, ccIn, ctx.host, ctx.emit)
 
-		refs = append(refs, ccRef)
-		outputs = append(outputs, ccOut)
+		res.Refs = append(res.Refs, ccRef)
+		res.Outputs = append(res.Outputs, ccOut)
 		// memberInputs feeds the .global.a aggregator. CC's own inputs
 		// = [reg3.cpp, gen_py3_reg.py]; only gen_py3_reg.py contributes
 		// (reg3.cpp is BUILD_ROOT-rooted and AR aggregator strips those).
-		memberInputs = append(memberInputs, genPy3RegScriptVFS)
+		res.MemberInputs = append(res.MemberInputs, genPy3RegScriptVFS)
 	}
 
-	return refs, outputs, memberInputs
+	return res
 }
 
 // emitEnumSrcs emits one EN node per GENERATE_ENUM_SERIALIZATION(*)
@@ -379,9 +387,15 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 // `_serialized.cpp` output (the EN-emitted .cpp is an implicit module
 // source archived alongside declared SRCS). consumerInputs must carry
 // the consuming module's full CC compile bag. nil → EN nodes only.
-func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddInclGlobal []string, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS, memberInputsList [][]VFS) {
+type enumSrcsResult struct {
+	CCRefs           []NodeRef
+	CCOutputs        []VFS
+	MemberInputsList [][]VFS
+}
+
+func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddInclGlobal []string, consumerInputs *ModuleCCInputs) *enumSrcsResult {
 	if len(d.enumSrcs) == 0 {
-		return nil, nil, nil
+		return nil
 	}
 
 	const enumParserPath = "tools/enum_parser/enum_parser"
@@ -418,6 +432,8 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		PeerAddInclGlobal: peerAddInclGlobal,
 		SourceRoot:        ctx.sourceRoot,
 	}
+
+	res := &enumSrcsResult{}
 
 	for _, stmt := range d.enumSrcs {
 		headerRel := stmt.Header
@@ -637,13 +653,13 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			allDepRefs = append(allDepRefs, enRef)
 			allDepRefs = append(allDepRefs, depENRefs...)
 			ccRef, ccOut, ccIns := emitCodegenDownstreamCC(ctx, instance, cppRel, depENOutputs, allDepRefs, *consumerInputs)
-			ccRefs = append(ccRefs, ccRef)
-			ccOutputs = append(ccOutputs, ccOut)
-			memberInputsList = append(memberInputsList, ccIns)
+			res.CCRefs = append(res.CCRefs, ccRef)
+			res.CCOutputs = append(res.CCOutputs, ccOut)
+			res.MemberInputsList = append(res.MemberInputsList, ccIns)
 		}
 	}
 
-	return ccRefs, ccOutputs, memberInputsList
+	return res
 }
 
 // codegenRegForInstance returns the CodegenRegistry attached to the

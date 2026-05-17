@@ -1111,12 +1111,19 @@ func emitJVDownstreamCPCC(
 //
 // Returns per-CC (refs, outputs, memberInputs) for the caller's
 // AR-member accumulators.
-func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS, memberInputs [][]VFS) {
+type runProgramsForARResult struct {
+	CCRefs       []NodeRef
+	CCOutputs    []VFS
+	MemberInputs [][]VFS
+}
+
+func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) *runProgramsForARResult {
 	if len(d.runPrograms) == 0 {
-		return nil, nil, nil
+		return nil
 	}
 
 	reg := codegenRegForInstance(ctx, instance)
+	res := &runProgramsForARResult{}
 
 	for _, rp := range d.runPrograms {
 		prRef := emitRunProgram(ctx, instance, rp, d, reg, in)
@@ -1153,13 +1160,13 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 			}
 
 			ccRef, ccOut, ccIns := emitPRDownstreamCC(ctx, instance, out, prRef, in)
-			ccRefs = append(ccRefs, ccRef)
-			ccOutputs = append(ccOutputs, ccOut)
-			memberInputs = append(memberInputs, ccIns)
+			res.CCRefs = append(res.CCRefs, ccRef)
+			res.CCOutputs = append(res.CCOutputs, ccOut)
+			res.MemberInputs = append(res.MemberInputs, ccIns)
 		}
 	}
 
-	return ccRefs, ccOutputs, memberInputs
+	return res
 }
 
 // ─── ARCHIVE (PR-M3-unpaired-got-closure) ───────────────────────────────────
