@@ -159,9 +159,11 @@ func (protoIncludeDirectiveParser) Parse(_ VFS, data []byte) parsedIncludeSet {
 	return rawParsedIncludeSet(parsedIncludesLocal, out...)
 }
 
-func (ragelIncludeDirectiveParser) Parse(_ VFS, data []byte) parsedIncludeSet {
-	local := make([]includeDirective, 0, 4)
-	induced := parseCIncludes(data)
+func (ragelIncludeDirectiveParser) Parse(vfsPath VFS, data []byte) parsedIncludeSet {
+	local := parseCIncludes(data)
+	if len(local) == 0 {
+		local = make([]includeDirective, 0, 4)
+	}
 
 	seenNative := make(map[string]struct{}, 4)
 	inSpecification := false
@@ -199,7 +201,7 @@ func (ragelIncludeDirectiveParser) Parse(_ VFS, data []byte) parsedIncludeSet {
 
 	var set parsedIncludeSet
 	set = appendParsedDirectives(set, parsedIncludesLocal, local...)
-	set = appendParsedDirectives(set, parsedIncludesHCPP, induced...)
+	set = appendParsedDirect(set, parsedIncludesHCPP, vfsPath)
 
 	return set
 }
