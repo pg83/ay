@@ -1,0 +1,454 @@
+package main
+
+import (
+	"errors"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+)
+
+// sourceEmit is the emit-product of emitOneSource: a single
+// CC/AS/R5/R6/CF/etc. node from one declared source. nil = silently
+// skipped (e.g. `.h` headers, deferred-kind sources). PrimaryCount is
+// the leading-CcIns count naming the member's primary source(s) —
+// `.c/.cpp/.cc/.cxx/.S/.s/.asm` yield 1; `.rl6` yields 1 or 2 (source
+// ± companion `.h`).
+type sourceEmit struct {
+	Ref          NodeRef
+	OutPath      VFS
+	CcIns        []VFS
+	PrimaryCount int
+}
+
+func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel string, in ModuleCCInputs, ancestorRebase bool) *sourceEmit {
+	if isHeaderSource(srcRel) {
+		return nil
+	}
+
+	srcInstance := instance
+	if ancestorRebase {
+		srcInstance.Path = *srcDir
+	}
+
+	srcIn := in
+	if ancestorRebase {
+		srcIn.SrcDir = nil
+	}
+
+	switch {
+	case strings.HasSuffix(srcRel, ".proto"):
+		return emitLibraryProtoSource(ctx, srcInstance, srcDir, srcRel, srcIn)
+	case strings.HasSuffix(srcRel, ".c"),
+		strings.HasSuffix(srcRel, ".cpp"),
+		strings.HasSuffix(srcRel, ".cc"),
+		strings.HasSuffix(srcRel, ".cxx"):
+		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
+		extras := runtimePy3CCExtraInputs(srcInstance.Path, srcRel)
+		if len(extras) > 0 {
+			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, extras)
+		}
+		srcIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, srcIn.IncludeInputs)
+
+		ref, outPath := EmitCC(srcInstance, srcRel, srcIn, ctx.host, ctx.emit)
+		inputPath := emittedSourceInputPath(srcInstance, srcRel, srcIn, ctx.sourceRoot)
+		ccInputs := append([]VFS{inputPath}, srcIn.IncludeInputs...)
+
+		return &sourceEmit{Ref: ref, OutPath: outPath, CcIns: ccInputs, PrimaryCount: 1}
+	case strings.HasSuffix(srcRel, ".S"),
+		strings.HasSuffix(srcRel, ".s"),
+		strings.HasSuffix(srcRel, ".asm"):
+		var yasmRef *NodeRef
+
+		if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
+			const yasmPath = "contrib/tools/yasm"
+
+			yasmInstance := NewToolInstance(ctx.host, yasmPath)
+			yasmInstance.Flags = inferFlagsFromPath(yasmPath, true)
+
+			yasmResult := genModule(ctx, yasmInstance)
+			ldRef := yasmResult.LDRef
+			yasmRef = &ldRef
+		}
+
+		asIn := srcIn
+		asIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
+		ref, outPath := EmitAS(srcInstance, srcRel, asIn, yasmRef, ctx.host, ctx.emit)
+
+		asInputRel := srcInstance.Path + "/" + srcRel
+		if srcDir != nil && *srcDir != srcInstance.Path && !sourceExistsLocally(ctx.sourceRoot, srcInstance.Path, srcRel) {
+			asInputRel = *srcDir + "/" + srcRel
+		}
+		asInputRel = path.Clean(asInputRel)
+
+		asInputs := append([]VFS{Source(asInputRel)}, asIn.IncludeInputs...)
+		return &sourceEmit{Ref: ref, OutPath: outPath, CcIns: asInputs, PrimaryCount: 1}
+	case strings.HasSuffix(srcRel, ".rl6"):
+		const ragelBinPath = "contrib/tools/ragel6/bin"
+		var ragelFallbackPath = Build("contrib/tools/ragel6/ragel6")
+
+		var (
+			ragelLDRef     NodeRef
+			ragelBinaryVFS = ragelFallbackPath
+		)
+
+		ragelInstance := NewToolInstance(ctx.host, ragelBinPath)
+		ragelInstance.Flags = inferFlagsFromPath(ragelInstance.Path, true)
+
+		if exc := Try(func() {
+			ragelResult := genModule(ctx, ragelInstance)
+			ragelLDRef = ragelResult.LDRef
+			if ragelResult.LDPath != nil {
+				ragelBinaryVFS = *ragelResult.LDPath
+			}
+		}); exc != nil {
+			var pe *ParseError
+			if !errors.As(exc.AsError(), &pe) {
+				panic(exc)
+			}
+		}
+
+		rl6Closure := walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
+		rl6Closure = filterEnSerializedSiblings(rl6Closure)
+
+		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryVFS, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
+
+		rl6SourceVFS := Source(srcInstance.Path + "/" + srcRel)
+		var r6Parsed []includeDirective
+		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
+			r6Parsed = scanner.parsers.sourceParsedBuckets(rl6SourceVFS.Rel).bucket(parsedIncludesHCPP)
+		}
+		registerGeneratedParsedOutput(ctx, srcInstance, "R6", r6Out, r6Parsed)
+
+		ccSrcRel := strings.TrimPrefix(r6Out.Rel, srcInstance.Path+"/")
+		ccIncludeInputs := walkClosure(ctx, srcInstance, r6Out, srcIn)
+
+		ccIn := srcIn
+		ccIn.IsGenerated = true
+		ccIn.Generator = r6Ref
+		ccIn.HasGenerator = true
+		ccIn.IncludeInputs = ccIncludeInputs
+		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
+		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r6Ref)
+
+		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.host, ctx.emit)
+
+		ccInputs := []VFS{rl6SourceVFS}
+		primaryCount := 1
+
+		companionRel := strings.TrimSuffix(srcRel, ".rl6") + ".h"
+		companionAbs := filepath.Join(ctx.sourceRoot, srcInstance.Path, companionRel)
+		if info, err := os.Stat(companionAbs); err == nil && !info.IsDir() {
+			ccInputs = append(ccInputs, Source(srcInstance.Path+"/"+companionRel))
+			primaryCount = 2
+		}
+		ccInputs = append(ccInputs, ccIncludeInputs...)
+
+		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: ccInputs, PrimaryCount: primaryCount}
+	case strings.HasSuffix(srcRel, ".y"):
+		return emitBisonY(ctx, srcInstance, srcRel, srcIn, srcIn.BisonGenExt)
+	case strings.HasSuffix(srcRel, ".ev"):
+		evSource := resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir)
+		evRelPath := evSource.Rel
+
+		cppStyleguideBinary := pbCppStyleguideVFS
+		protocBinary := pbProtocBinaryVFS
+		event2cppBinary := evEvent2cppBinaryVFS
+
+		var cppStyleguideLDRef, protocLDRef, event2cppLDRef NodeRef
+
+		protocHostInst := NewToolInstance(ctx.host, pbProtocModule)
+		protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
+		if exc := Try(func() {
+			result := genModule(ctx, protocHostInst)
+			protocLDRef = result.LDRef
+			if result.LDPath != nil {
+				protocBinary = *result.LDPath
+			}
+		}); exc != nil {
+			_ = exc
+		}
+
+		cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule)
+		cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
+		if exc := Try(func() {
+			result := genModule(ctx, cppStyleguideHostInst)
+			cppStyleguideLDRef = result.LDRef
+			if result.LDPath != nil {
+				cppStyleguideBinary = *result.LDPath
+			}
+		}); exc != nil {
+			_ = exc
+		}
+
+		event2cppHostInst := NewToolInstance(ctx.host, evEvent2cppModule)
+		event2cppHostInst.Flags = inferFlagsFromPath(evEvent2cppModule, true)
+		if exc := Try(func() {
+			result := genModule(ctx, event2cppHostInst)
+			event2cppLDRef = result.LDRef
+			if result.LDPath != nil {
+				event2cppBinary = *result.LDPath
+			}
+		}); exc != nil {
+			_ = exc
+		}
+
+		evRef := EmitEV(
+			srcInstance, evRelPath,
+			cppStyleguideLDRef, protocLDRef, event2cppLDRef,
+			cppStyleguideBinary, protocBinary, event2cppBinary,
+			nil, ctx.sourceRoot, ctx.emit)
+
+		evH := Build(evRelPath + ".pb.h")
+		evPbCC := Build(evRelPath + ".pb.cc")
+
+		evKey := codegenOutputKey{platform: srcInstance.Platform}
+		evKey.path = evH
+		ctx.evOutputs[evKey] = evRef
+		evKey.path = evPbCC
+		ctx.evOutputs[evKey] = evRef
+		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
+			directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath, "")
+			evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC)
+			evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
+			evHParsed = append(evHParsed, directImports...)
+			for _, include := range protobufRuntimeHeaders {
+				evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+			}
+			evHParsed = append(evHParsed, evExtras...)
+			registerGeneratedParsedOutput(ctx, srcInstance, "EV", evH, evHParsed)
+			evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders))
+			evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: evH.Rel})
+			for _, include := range protobufRuntimeHeaders {
+				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+			}
+			registerGeneratedParsedOutput(ctx, srcInstance, "EV", evPbCC, evCCParsed)
+		}
+
+		evPbCCSuffix := srcRel + ".pb.cc"
+		ccIn := srcIn
+		ccIn.IsGenerated = true
+		ccIn.Generator = evRef
+		ccIn.HasGenerator = true
+		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, evPbCC, srcIn)
+		{
+			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
+			for _, in := range ccIn.IncludeInputs {
+				if in == evH {
+					continue
+				}
+				filtered = append(filtered, in)
+			}
+			ccIn.IncludeInputs = filtered
+		}
+		wireFormatVFS := Source(pbRuntimeBase + "google/protobuf/wire_format.h")
+		ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
+		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, evRef)
+
+		ref, outPath := EmitCC(srcInstance, evPbCCSuffix, ccIn, ctx.host, ctx.emit)
+
+		return &sourceEmit{
+			Ref:          ref,
+			OutPath:      outPath,
+			CcIns:        []VFS{Source(srcInstance.Path + "/" + srcRel), wireFormatVFS},
+			PrimaryCount: 1,
+		}
+	case strings.HasSuffix(srcRel, ".rl"):
+		const (
+			ragel5Path  = "contrib/tools/ragel5/ragel"
+			rlgenCdPath = "contrib/tools/ragel5/rlgen-cd"
+		)
+		var (
+			ragel5Fallback  = Build("contrib/tools/ragel5/ragel/ragel5")
+			rlgenCdFallback = Build("contrib/tools/ragel5/rlgen-cd/rlgen-cd")
+		)
+
+		var (
+			ragel5LDRef   NodeRef
+			rlgenCdLDRef  NodeRef
+			ragel5BinVFS  = ragel5Fallback
+			rlgenCdBinVFS = rlgenCdFallback
+		)
+
+		ragel5Instance := NewToolInstance(ctx.host, ragel5Path)
+		ragel5Instance.Flags = inferFlagsFromPath(ragel5Path, true)
+		if exc := Try(func() {
+			res := genModule(ctx, ragel5Instance)
+			ragel5LDRef = res.LDRef
+			if res.LDPath != nil {
+				ragel5BinVFS = *res.LDPath
+			}
+		}); exc != nil {
+			var pe *ParseError
+			if !errors.As(exc.AsError(), &pe) {
+				panic(exc)
+			}
+		}
+
+		rlgenCdInstance := NewToolInstance(ctx.host, rlgenCdPath)
+		rlgenCdInstance.Flags = inferFlagsFromPath(rlgenCdPath, true)
+		if exc := Try(func() {
+			res := genModule(ctx, rlgenCdInstance)
+			rlgenCdLDRef = res.LDRef
+			if res.LDPath != nil {
+				rlgenCdBinVFS = *res.LDPath
+			}
+		}); exc != nil {
+			var pe *ParseError
+			if !errors.As(exc.AsError(), &pe) {
+				panic(exc)
+			}
+		}
+
+		r5Ref, r5TmpOut, r5CppOut := EmitR5(srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
+		_ = r5Ref
+
+		rlSourceVFS := Source(srcInstance.Path + "/" + srcRel)
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5TmpOut, nil, r5Ref)
+		var r5Parsed []includeDirective
+		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
+			r5Parsed = scanner.parsers.sourceParsedBuckets(rlSourceVFS.Rel).bucket(parsedIncludesHCPP)
+		}
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5CppOut, r5Parsed, r5Ref)
+
+		ccSrcRel := strings.TrimPrefix(r5CppOut.Rel, srcInstance.Path+"/")
+		ccIn := srcIn
+		ccIn.IsGenerated = true
+		ccClosure := walkClosure(ctx, srcInstance, r5CppOut, srcIn)
+		ccIn.IncludeInputs = append([]VFS{r5TmpOut}, ccClosure...)
+		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
+		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r5Ref)
+		ccIn.ExtraDepRefs = append([]NodeRef{r5Ref}, ccIn.ExtraDepRefs...)
+
+		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.host, ctx.emit)
+		rlMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, ccClosure...)
+		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: rlMemberInputs, PrimaryCount: 1}
+	case strings.HasSuffix(srcRel, ".h.in"):
+		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
+		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
+
+		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{
+			{kind: includeQuoted, target: inSourceVFS.Rel},
+			{kind: includeQuoted, target: configureFilePyVFS.Rel},
+		}, cfRef)
+
+		cfMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, srcIn.IncludeInputs...)
+		return &sourceEmit{Ref: cfRef, OutPath: cfOut, CcIns: cfMemberInputs, PrimaryCount: 1}
+	case strings.HasSuffix(srcRel, ".cpp.in"),
+		strings.HasSuffix(srcRel, ".c.in"):
+		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
+		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
+
+		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{
+			{kind: includeQuoted, target: inSourceVFS.Rel},
+			{kind: includeQuoted, target: configureFilePyVFS.Rel},
+		}, cfRef)
+
+		ccSrcRel := strings.TrimPrefix(cfOut.Rel, srcInstance.Path+"/")
+		ccIn := srcIn
+		ccIn.IsGenerated = true
+		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, cfOut, srcIn)
+		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, cfRef)
+		ccIn.ExtraDepRefs = append([]NodeRef{cfRef}, ccIn.ExtraDepRefs...)
+
+		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, ccIn, ctx.host, ctx.emit)
+		cfMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, ccIn.IncludeInputs...)
+		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: cfMemberInputs, PrimaryCount: 1}
+	}
+
+	if isSkippedSource(srcRel) {
+		return nil
+	}
+
+	ThrowFmt("gen: %s: unsupported source extension in %q", instance.Path, srcRel)
+	return nil
+}
+
+func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel string, in ModuleCCInputs) *sourceEmit {
+	cppStyleguideBinary := pbCppStyleguideVFS
+	protocBinary := pbProtocBinaryVFS
+
+	var cppStyleguideLDRef, protocLDRef NodeRef
+
+	protocHostInst := NewToolInstance(ctx.host, pbProtocModule)
+	protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
+	if exc := Try(func() {
+		result := genModule(ctx, protocHostInst)
+		protocLDRef = result.LDRef
+		if result.LDPath != nil {
+			protocBinary = *result.LDPath
+		}
+	}); exc != nil {
+		_ = exc
+	}
+
+	cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule)
+	cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
+	if exc := Try(func() {
+		result := genModule(ctx, cppStyleguideHostInst)
+		cppStyleguideLDRef = result.LDRef
+		if result.LDPath != nil {
+			cppStyleguideBinary = *result.LDPath
+		}
+	}); exc != nil {
+		_ = exc
+	}
+
+	protoRelPath := protoSourceRelPath(ctx.sourceRoot, instance, &moduleData{srcDir: srcDir}, srcRel)
+	pbRef := EmitPB(
+		instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
+		NodeRef{}, cppStyleguideBinary, protocBinary, pbGrpcCppVFS,
+		false, nil, "", false, ctx.sourceRoot, ctx.emit,
+	)
+
+	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
+	pbH := Build(protoBase + ".pb.h")
+	pbCC := Build(protoBase + ".pb.cc")
+
+	pbKey := codegenOutputKey{platform: instance.Platform}
+	pbKey.path = pbH
+	ctx.pbOutputs[pbKey] = pbRef
+	pbKey.path = pbCC
+	ctx.pbOutputs[pbKey] = pbRef
+
+	if reg := codegenRegForInstance(ctx, instance); reg != nil {
+		directImports := protoDirectImportIncludes(ctx.sourceRoot, protoRelPath, "")
+		extras := pbDescriptorImporterExtras(ctx.sourceRoot, protoRelPath)
+		pbHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
+		pbHParsed = append(pbHParsed, directImports...)
+		for _, include := range protobufRuntimeHeaders {
+			pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+		}
+		pbHParsed = append(pbHParsed, extras...)
+		registerGeneratedParsedOutput(ctx, instance, "PB", pbH, pbHParsed)
+
+		pbCCParsed := make([]includeDirective, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
+		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: pbH.Rel})
+		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: protoRelPath})
+		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
+		for _, include := range protobufRuntimeHeaders {
+			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+		}
+		for _, include := range pbCcDeepRuntimeHeaders {
+			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+		}
+		registerGeneratedParsedOutput(ctx, instance, "PB", pbCC, pbCCParsed)
+	}
+
+	ccIn := in
+	ccIn.IsGenerated = true
+	ccIn.Generator = pbRef
+	ccIn.HasGenerator = true
+	ccIn.IncludeInputs = walkClosure(ctx, instance, pbCC, in)
+	ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pbRef)
+
+	ccSrcRel := strings.TrimPrefix(protoBase+".pb.cc", instance.Path+"/")
+	ccRef, ccOut := EmitCC(instance, ccSrcRel, ccIn, ctx.host, ctx.emit)
+	ccInputs := make([]VFS, 0, 1+len(ccIn.IncludeInputs))
+	ccInputs = append(ccInputs, Source(protoRelPath))
+	ccInputs = append(ccInputs, ccIn.IncludeInputs...)
+
+	return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: ccInputs, PrimaryCount: 1}
+}
