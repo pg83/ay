@@ -135,3 +135,44 @@ func (r *CodegenRegistry) All() []*GeneratedFileInfo {
 func (r *CodegenRegistry) Len() int {
 	return r.byOutput.Len()
 }
+
+func registerGeneratedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, emits []VFS) {
+	reg := codegenRegForInstance(ctx, instance)
+	if reg == nil {
+		return
+	}
+
+	reg.Register(&GeneratedFileInfo{
+		ProducerKvP:   kind,
+		OutputPath:    output,
+		EmitsIncludes: emits,
+	})
+}
+
+func bindGeneratedOutput(ctx *genCtx, instance ModuleInstance, output VFS, ref NodeRef) {
+	reg := codegenRegForInstance(ctx, instance)
+	if reg == nil {
+		return
+	}
+
+	reg.SetProducerRef(output, ref)
+}
+
+func registerBoundGeneratedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, emits []VFS, ref NodeRef) {
+	reg := codegenRegForInstance(ctx, instance)
+	if reg == nil {
+		return
+	}
+
+	reg.Register(&GeneratedFileInfo{
+		ProducerKvP:    kind,
+		OutputPath:     output,
+		EmitsIncludes:  emits,
+		ProducerRef:    ref,
+		HasProducerRef: true,
+	})
+}
+
+func generatedOutputClosure(ctx *genCtx, instance ModuleInstance, output VFS, in ModuleCCInputs) []VFS {
+	return walkClosure(ctx, instance, output, in)
+}

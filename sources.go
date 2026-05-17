@@ -211,13 +211,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		// .rl6 source as the single EmitsIncludes child; WalkClosure
 		// on the .rl6.cpp recurses into the .rl6 via the FS locator.
 		rl6SourceVFS := Source(srcInstance.Path + "/" + srcRel)
-		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
-			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:   "R6",
-				OutputPath:    r6Out,
-				EmitsIncludes: []VFS{rl6SourceVFS},
-			})
-		}
+		registerGeneratedOutput(ctx, srcInstance, "R6", r6Out, []VFS{rl6SourceVFS})
 
 		// Pass IsGenerated so the downstream CC composes inputPath
 		// under $(B)/<srcInstance.Path>/<rel>; thread r6Ref as
@@ -355,19 +349,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 				evEmitsIncludes = append(evEmitsIncludes, directImports...)
 				evEmitsIncludes = append(evEmitsIncludes, protobufRuntimeHeaders...)
 				evEmitsIncludes = append(evEmitsIncludes, evExtras...)
-				reg.Register(&GeneratedFileInfo{
-					ProducerKvP:   "EV",
-					OutputPath:    evH,
-					EmitsIncludes: evEmitsIncludes,
-				})
+				registerGeneratedOutput(ctx, srcInstance, "EV", evH, evEmitsIncludes)
 				// Register the .ev.pb.cc output. event2cpp emits a
 				// `#include "<base>.ev.pb.h"` plus protobuf runtime
 				// headers. Mirror the .pb.h list for symmetry with PB.
-				reg.Register(&GeneratedFileInfo{
-					ProducerKvP:   "EV",
-					OutputPath:    evPbCC,
-					EmitsIncludes: append([]VFS{evH}, protobufRuntimeHeaders...),
-				})
+				registerGeneratedOutput(ctx, srcInstance, "EV", evPbCC, append([]VFS{evH}, protobufRuntimeHeaders...))
 			}
 
 			// Emit downstream CC for the generated .ev.pb.cc via the
@@ -478,22 +464,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		// no consumer-visible includes. ProducerRef = r5Ref so the
 		// downstream CC threads R5 into its deps[].
 		rlSourceVFS := Source(srcInstance.Path + "/" + srcRel)
-		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
-			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:    "R5",
-				OutputPath:     r5TmpOut,
-				EmitsIncludes:  nil,
-				ProducerRef:    r5Ref,
-				HasProducerRef: true,
-			})
-			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:    "R5",
-				OutputPath:     r5CppOut,
-				EmitsIncludes:  []VFS{rlSourceVFS},
-				ProducerRef:    r5Ref,
-				HasProducerRef: true,
-			})
-		}
+		registerBoundGeneratedOutput(ctx, srcInstance, "R5", r5TmpOut, nil, r5Ref)
+		registerBoundGeneratedOutput(ctx, srcInstance, "R5", r5CppOut, []VFS{rlSourceVFS}, r5Ref)
 
 		// Downstream CC for the generated .rl5.cpp via the unified
 		// VFS-path entry — the .rl5.cpp is registered above with the
@@ -533,15 +505,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
 
 		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
-		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
-			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:    "CF",
-				OutputPath:     cfOut,
-				EmitsIncludes:  []VFS{inSourceVFS, configureFilePyVFS},
-				ProducerRef:    cfRef,
-				HasProducerRef: true,
-			})
-		}
+		registerBoundGeneratedOutput(ctx, srcInstance, "CF", cfOut, []VFS{inSourceVFS, configureFilePyVFS}, cfRef)
 
 		cfMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, srcIn.IncludeInputs...)
 
@@ -571,15 +535,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		// ProducerRef = cfRef so downstream resolveCodegenDepRefs
 		// threads the CF producer into deps[].
 		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
-		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
-			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:    "CF",
-				OutputPath:     cfOut,
-				EmitsIncludes:  []VFS{inSourceVFS, configureFilePyVFS},
-				ProducerRef:    cfRef,
-				HasProducerRef: true,
-			})
-		}
+		registerBoundGeneratedOutput(ctx, srcInstance, "CF", cfOut, []VFS{inSourceVFS, configureFilePyVFS}, cfRef)
 
 		// Downstream CC for the generated .cpp / .c via the unified
 		// VFS-path entry — the .cpp is registered with the .cpp.in as
@@ -673,11 +629,7 @@ func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, srcDir *string
 		emitsIncludes = append(emitsIncludes, directImports...)
 		emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
 		emitsIncludes = append(emitsIncludes, extras...)
-		reg.Register(&GeneratedFileInfo{
-			ProducerKvP:   "PB",
-			OutputPath:    pbH,
-			EmitsIncludes: emitsIncludes,
-		})
+		registerGeneratedOutput(ctx, instance, "PB", pbH, emitsIncludes)
 
 		pbCCEmits := make([]VFS, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
 		pbCCEmits = append(pbCCEmits, pbH)
@@ -685,11 +637,7 @@ func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, srcDir *string
 		pbCCEmits = append(pbCCEmits, pbWrapperVFS)
 		pbCCEmits = append(pbCCEmits, protobufRuntimeHeaders...)
 		pbCCEmits = append(pbCCEmits, pbCcDeepRuntimeHeaders...)
-		reg.Register(&GeneratedFileInfo{
-			ProducerKvP:   "PB",
-			OutputPath:    pbCC,
-			EmitsIncludes: pbCCEmits,
-		})
+		registerGeneratedOutput(ctx, instance, "PB", pbCC, pbCCEmits)
 	}
 
 	ccIn := in

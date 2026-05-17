@@ -869,13 +869,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					parserBase + "Visitor.h",
 					parserBase + "BaseVisitor.h",
 				} {
-					reg.Register(&GeneratedFileInfo{
-						ProducerKvP:    "JV",
-						OutputPath:     Build(outPrefix + suffix),
-						EmitsIncludes:  witnessIncludes,
-						ProducerRef:    jvRef,
-						HasProducerRef: true,
-					})
+					registerBoundGeneratedOutput(ctx, instance, "JV", Build(outPrefix+suffix), witnessIncludes, jvRef)
 				}
 			}
 			// PR-M3-antlr-g4-cpp: emit CP+CC for each grammar .cpp output.
@@ -918,13 +912,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					base + "Visitor.h",
 					base + "BaseVisitor.h",
 				} {
-					reg.Register(&GeneratedFileInfo{
-						ProducerKvP:    "JV",
-						OutputPath:     Build(outPrefix + suffix),
-						EmitsIncludes:  witnessIncludes,
-						ProducerRef:    jvRef,
-						HasProducerRef: true,
-					})
+					registerBoundGeneratedOutput(ctx, instance, "JV", Build(outPrefix+suffix), witnessIncludes, jvRef)
 				}
 			}
 			// PR-M3-antlr-g4-cpp: emit CP+CC for each grammar .cpp output.
@@ -960,17 +948,11 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		// CC consumers via EmitsIncludes. ProducerRef = biRef so the
 		// consumer CC carries BI in deps[].
 		if reg != nil {
-			reg.Register(&GeneratedFileInfo{
-				ProducerKvP: "BI",
-				OutputPath:  Build(outPrefix + *d.createBuildInfoFor),
-				EmitsIncludes: []VFS{
-					buildInfoGenPyVFS,
-					xargsPyVFS,
-					yieldLinePyVFS,
-				},
-				ProducerRef:    biRef,
-				HasProducerRef: true,
-			})
+			registerBoundGeneratedOutput(ctx, instance, "BI", Build(outPrefix+*d.createBuildInfoFor), []VFS{
+				buildInfoGenPyVFS,
+				xargsPyVFS,
+				yieldLinePyVFS,
+			}, biRef)
 		}
 	}
 
@@ -1025,11 +1007,7 @@ func emitJVDownstreamCPCC(
 			for _, h := range outputIncludes {
 				emits = append(emits, Source(h))
 			}
-			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:   "CP",
-				OutputPath:    g4CppPath,
-				EmitsIncludes: emits,
-			})
+			registerGeneratedOutput(ctx, instance, "CP", g4CppPath, emits)
 		}
 
 		// Compute the include closure from the g4.cpp (through the registry).
@@ -1588,13 +1566,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	// F-7-B: register the explicit CF output with EmitsIncludes.
 	if reg != nil {
 		diskPath := ctx.sourceRoot + "/" + instance.Path + "/" + cf.Src
-		reg.Register(&GeneratedFileInfo{
-			ProducerKvP:    "CF",
-			OutputPath:     cfOut,
-			EmitsIncludes:  cfIncludeDirectives(diskPath),
-			ProducerRef:    cfRef,
-			HasProducerRef: true,
-		})
+		registerBoundGeneratedOutput(ctx, instance, "CF", cfOut, cfIncludeDirectives(diskPath), cfRef)
 	}
 }
 
@@ -1638,25 +1610,13 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// field_calc_int.h → field_calc.h → autoarray.h).
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:   "PR",
-				OutputPath:    Build(instance.Path + "/" + f),
-				EmitsIncludes: prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps),
-			})
+			registerGeneratedOutput(ctx, instance, "PR", Build(instance.Path+"/"+f), prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps))
 		}
 		for _, f := range stmt.OUTNoAutoFiles {
-			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:   "PR",
-				OutputPath:    Build(instance.Path + "/" + f),
-				EmitsIncludes: prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps),
-			})
+			registerGeneratedOutput(ctx, instance, "PR", Build(instance.Path+"/"+f), prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps))
 		}
 		if stmt.StdoutFile != nil {
-			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:   "PR",
-				OutputPath:    Build(instance.Path + "/" + *stmt.StdoutFile),
-				EmitsIncludes: prEmitsIncludes(instance, d.srcDir, *stmt.StdoutFile, stmt, toolInducedDeps),
-			})
+			registerGeneratedOutput(ctx, instance, "PR", Build(instance.Path+"/"+*stmt.StdoutFile), prEmitsIncludes(instance, d.srcDir, *stmt.StdoutFile, stmt, toolInducedDeps))
 		}
 	}
 
@@ -1696,13 +1656,13 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// known); SetProducerRef fills it atomically.
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			reg.SetProducerRef(Build(instance.Path+"/"+f), prRef)
+			bindGeneratedOutput(ctx, instance, Build(instance.Path+"/"+f), prRef)
 		}
 		for _, f := range stmt.OUTNoAutoFiles {
-			reg.SetProducerRef(Build(instance.Path+"/"+f), prRef)
+			bindGeneratedOutput(ctx, instance, Build(instance.Path+"/"+f), prRef)
 		}
 		if stmt.StdoutFile != nil {
-			reg.SetProducerRef(Build(instance.Path+"/"+*stmt.StdoutFile), prRef)
+			bindGeneratedOutput(ctx, instance, Build(instance.Path+"/"+*stmt.StdoutFile), prRef)
 		}
 	}
 

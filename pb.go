@@ -874,11 +874,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			emitsIncludes = append(emitsIncludes, directImports...)
 			emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
 			emitsIncludes = append(emitsIncludes, extras...)
-			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:   "PB",
-				OutputPath:    pbH,
-				EmitsIncludes: emitsIncludes,
-			})
+			registerGeneratedOutput(ctx, instance, "PB", pbH, emitsIncludes)
 			// Register the .pb.cc output: protoc emits `#include
 			// "<base>.pb.h"` plus the protobuf runtime headers; the .pb.cc.o
 			// consumer also reaches the deep protobuf+abseil-cpp-tstring
@@ -892,11 +888,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			pbCCEmits = append(pbCCEmits, pbWrapperVFS)
 			pbCCEmits = append(pbCCEmits, protobufRuntimeHeaders...)
 			pbCCEmits = append(pbCCEmits, pbCcDeepRuntimeHeaders...)
-			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:   "PB",
-				OutputPath:    pbCC,
-				EmitsIncludes: pbCCEmits,
-			})
+			registerGeneratedOutput(ctx, instance, "PB", pbCC, pbCCEmits)
 			if d.grpc {
 				grpcCCEmits := make([]VFS, 0, len(pbCCEmits))
 				grpcCCEmits = append(grpcCCEmits, grpcPbH)
@@ -904,11 +896,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 				grpcCCEmits = append(grpcCCEmits, pbWrapperVFS)
 				grpcCCEmits = append(grpcCCEmits, protobufRuntimeHeaders...)
 				grpcCCEmits = append(grpcCCEmits, pbCcDeepRuntimeHeaders...)
-				reg.Register(&GeneratedFileInfo{
-					ProducerKvP:   "PB",
-					OutputPath:    grpcPbCC,
-					EmitsIncludes: grpcCCEmits,
-				})
+				registerGeneratedOutput(ctx, instance, "PB", grpcPbCC, grpcCCEmits)
 			}
 		}
 
@@ -980,22 +968,14 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 				emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
 				emitsIncludes = append(emitsIncludes, eventRuntimeHeaders...)
 				emitsIncludes = append(emitsIncludes, evExtras...)
-				reg.Register(&GeneratedFileInfo{
-					ProducerKvP:   "EV",
-					OutputPath:    evH,
-					EmitsIncludes: emitsIncludes,
-				})
+				registerGeneratedOutput(ctx, instance, "EV", evH, emitsIncludes)
 				// Register .ev.pb.cc: event2cpp emits `#include
 				// "<base>.ev.pb.h"` plus protobuf + event runtime headers.
 				ccEmits := make([]VFS, 0, 1+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
 				ccEmits = append(ccEmits, evH)
 				ccEmits = append(ccEmits, protobufRuntimeHeaders...)
 				ccEmits = append(ccEmits, eventRuntimeHeaders...)
-				reg.Register(&GeneratedFileInfo{
-					ProducerKvP:   "EV",
-					OutputPath:    evPbCC,
-					EmitsIncludes: ccEmits,
-				})
+				registerGeneratedOutput(ctx, instance, "EV", evPbCC, ccEmits)
 			}
 
 			cppInstance := instance
@@ -1631,11 +1611,7 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 			}
 		}
 		emits = dedupVFS(emits)
-		reg.Register(&GeneratedFileInfo{
-			ProducerKvP:   "PR",
-			OutputPath:    aux,
-			EmitsIncludes: emits,
-		})
+		registerGeneratedOutput(ctx, instance, "PR", aux, emits)
 	}
 
 	scanIn := ModuleCCInputs{

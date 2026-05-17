@@ -235,14 +235,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		// Register the .yapyc3 output in the codegen registry so the
 		// downstream objcopy CC's input-driven resolveCodegenDepRefsExt
 		// lookup threads the PY producer into its deps[].
-		if reg := codegenRegForInstance(ctx, instance); reg != nil {
-			reg.Register(&GeneratedFileInfo{
-				ProducerKvP:    "PY",
-				OutputPath:     outputPath,
-				ProducerRef:    pyRef,
-				HasProducerRef: true,
-			})
-		}
+		registerBoundGeneratedOutput(ctx, instance, "PY", outputPath, nil, pyRef)
 	}
 }
 
@@ -534,11 +527,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 				Source("util/string/cast.h"),
 			}
 			SortVFS(cppIncludes)
-			ctx.scannerTarget.codegen.Register(&GeneratedFileInfo{
-				ProducerKvP:   "EN",
-				OutputPath:    serializedCPPPath,
-				EmitsIncludes: cppIncludes,
-			})
+			registerGeneratedOutput(ctx, instance, "EN", serializedCPPPath, cppIncludes)
 			if withHeader {
 				// Include the sibling _serialized.cpp so CC consumers
 				// that #include the _serialized.h transitively pull the
@@ -552,11 +541,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 					Source("util/generic/serialized_enum.h"),
 				}
 				SortVFS(hIncludes)
-				ctx.scannerTarget.codegen.Register(&GeneratedFileInfo{
-					ProducerKvP:   "EN",
-					OutputPath:    serializedHPath,
-					EmitsIncludes: hIncludes,
-				})
+				registerGeneratedOutput(ctx, instance, "EN", serializedHPath, hIncludes)
 			}
 		}
 
