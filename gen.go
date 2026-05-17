@@ -565,15 +565,15 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 	resources.emitAll(hostP, emitter)
 	emitter = newResourceAwareEmitter(emitter, resources)
 
-	sharedPC := newSharedParseCache()
+	parsers := newIncludeParserManager(srcRoot)
 
 	targetReg := NewCodegenRegistry()
 	hostReg := NewCodegenRegistry()
 
-	targetScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, string(targetP.ISA), onWarn), sharedPC, onWarn)
+	targetScanner := newIncludeScannerWith(parsers, LoadSysInclSetFor(srcRoot, string(targetP.ISA), onWarn), onWarn)
 	targetScanner.codegen = targetReg
 	targetScanner.fallbackLocators = []pathLocator{codegenLocator{reg: targetReg}}
-	hostScanner := newIncludeScannerWith(srcRoot, LoadSysInclSetFor(srcRoot, string(hostP.ISA), onWarn), sharedPC, onWarn)
+	hostScanner := newIncludeScannerWith(parsers, LoadSysInclSetFor(srcRoot, string(hostP.ISA), onWarn), onWarn)
 	hostScanner.codegen = hostReg
 	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
 
