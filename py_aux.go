@@ -4,9 +4,15 @@ import (
 	"strings"
 )
 
-func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) ([]NodeRef, []VFS, []VFS) {
+type generatedPyAuxChunksResult struct {
+	Refs         []NodeRef
+	Outputs      []VFS
+	MemberInputs []VFS
+}
+
+func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) *generatedPyAuxChunksResult {
 	if len(d.pyGeneratedSrcs) == 0 {
-		return nil, nil, nil
+		return nil
 	}
 
 	var entries []pyProtoAuxEntry
@@ -29,32 +35,34 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 		}
 	}
 	if len(entries) == 0 {
-		return nil, nil, nil
+		return nil
 	}
 
 	rescompilerRef := walkHostToolForRef(ctx, instance, "tools/rescompiler/bin")
-	_, _, memberInputs, prRefs, prOuts := emitRawAuxResourceChunks(ctx, instance, entries, "PY3", nil, rescompilerRef)
+	rawRes := emitRawAuxResourceChunks(ctx, instance, entries, "PY3", nil, rescompilerRef)
+	if rawRes == nil {
+		return nil
+	}
 
-	var refs []NodeRef
-	var outs []VFS
-	for i, prRef := range prRefs {
-		aux := prOuts[i]
+	res := &generatedPyAuxChunksResult{MemberInputs: rawRes.MemberInputs}
+	for i, prRef := range rawRes.PRRefs {
+		aux := rawRes.PROutputs[i]
 		ccIn := in
 		ccIn.IsGenerated = true
 		ccIn.HasGenerator = true
 		ccIn.Generator = prRef
 		ccIn.ForceCxx = true
 		ccIn.PerSourceCFlags = append(append([]string(nil), in.PerSourceCFlags...), "-x", "c++")
-		ccInputs := append([]VFS{aux}, memberInputs...)
+		ccInputs := append([]VFS{aux}, rawRes.MemberInputs...)
 		ccInputs = dedupVFS(ccInputs)
 		ccIn.IncludeInputs = ccInputs
 
 		ccRef, ccOut := EmitCC(instance, aux.Rel[strings.LastIndex(aux.Rel, "/")+1:], ccIn, ctx.host, ctx.emit)
-		refs = append(refs, ccRef)
-		outs = append(outs, ccOut)
+		res.Refs = append(res.Refs, ccRef)
+		res.Outputs = append(res.Outputs, ccOut)
 	}
 
-	return refs, outs, memberInputs
+	return res
 }
 
 func generatedPyResourceKey(modulePath string, d *moduleData, srcRel string) string {
@@ -65,7 +73,19 @@ func generatedPyResourceKey(modulePath string, d *moduleData, srcRel string) str
 	return keyPrefix + srcRel
 }
 
-func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []pyProtoAuxEntry, moduleTag string, deps []NodeRef, rescompilerRef NodeRef) ([]NodeRef, []VFS, []VFS, []NodeRef, []VFS) {
+type rawAuxResourceChunksResult struct {
+	Refs         []NodeRef
+	Outputs      []VFS
+	MemberInputs []VFS
+	PRRefs       []NodeRef
+	PROutputs    []VFS
+}
+
+func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []pyProtoAuxEntry, moduleTag string, deps []NodeRef, rescompilerRef NodeRef) *rawAuxResourceChunksResult {
+	if len(entries) == 0 {
+		return nil
+	}
+
 	type chunk struct {
 		hashInputs []string
 		cmdArgs    []string
@@ -139,11 +159,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 	}
 	flush()
 
-	var refs []NodeRef
-	var outs []VFS
-	var memberInputs []VFS
-	var prRefs []NodeRef
-	var prOuts []VFS
+	res := &rawAuxResourceChunksResult{}
 	memberSeen := map[VFS]struct{}{}
 	for _, ch := range chunks {
 		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, moduleTag) + "_raw.auxcpp")
@@ -172,19 +188,19 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 			Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
 			DepRefs:          chDeps,
 		})
-		refs = append(refs, ref)
-		outs = append(outs, aux)
-		prRefs = append(prRefs, ref)
-		prOuts = append(prOuts, aux)
+		res.Refs = append(res.Refs, ref)
+		res.Outputs = append(res.Outputs, aux)
+		res.PRRefs = append(res.PRRefs, ref)
+		res.PROutputs = append(res.PROutputs, aux)
 
 		for _, v := range inputs {
 			if _, ok := memberSeen[v]; ok {
 				continue
 			}
 			memberSeen[v] = struct{}{}
-			memberInputs = append(memberInputs, v)
+			res.MemberInputs = append(res.MemberInputs, v)
 		}
 	}
 
-	return refs, outs, memberInputs, prRefs, prOuts
+	return res
 }

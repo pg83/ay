@@ -172,24 +172,29 @@ func resourceModuleTagForData(d *moduleData) *string {
 // recover their LD NodeRefs and threads them as deps; both walks are
 // memoized in ctx.memo so the parallel call site in emitPySrcs does
 // not double-emit.
+type objcopyEmitResult struct {
+	Refs               []NodeRef
+	Outputs            []VFS
+	GlobalMemberInputs []VFS
+}
+
 func emitResourceObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
 	d *moduleData,
-) ([]NodeRef, []VFS, []VFS) {
+) *objcopyEmitResult {
 	// Emit kv_only sibling shapes (PY_MAIN, py/namespace,
 	// py/no_check_imports) alongside RESOURCE/RESOURCE_FILES. Each
 	// sibling is independent and conditional on its own per-module data.
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
-		return nil, nil, nil
+		return nil
 	}
 
 	rescompilerLDRef := walkHostToolForRef(ctx, instance, "tools/rescompiler/bin")
 	rescompressorLDRef := walkHostToolForRef(ctx, instance, "tools/rescompressor/bin")
 
-	var refs []NodeRef
-	var outputs []VFS
+	out := &objcopyEmitResult{}
 	// Collect the SOURCE_ROOT-rooted member inputs each emitted objcopy
 	// node would contribute to the enclosing module's .global.a archive.
 	// Every node carries `objcopy.py`; path-based flushes also carry
@@ -201,42 +206,45 @@ func emitResourceObjcopy(
 	// PY_MAIN fires BEFORE py/namespace (upstream pybuild.py:395-398
 	// invokes py_main first; namespace is emitted at pybuild.py:587-594).
 	// Order affects the LD cmd[2] SRCS_GLOBAL emission sequence.
-	if res := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); res != nil {
-		refs = append(refs, res.Ref)
-		outputs = append(outputs, res.Out)
+	if nodeRes := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); nodeRes != nil {
+		out.Refs = append(out.Refs, nodeRes.Ref)
+		out.Outputs = append(out.Outputs, nodeRes.Out)
 		addGlobal(objcopyScriptVFS)
 	}
 
-	for _, res := range emitPyNamespaceObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef) {
-		if res != nil {
-			refs = append(refs, res.Ref)
-			outputs = append(outputs, res.Out)
+	for _, nodeRes := range emitPyNamespaceObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef) {
+		if nodeRes != nil {
+			out.Refs = append(out.Refs, nodeRes.Ref)
+			out.Outputs = append(out.Outputs, nodeRes.Out)
 			addGlobal(objcopyScriptVFS)
 		}
 	}
 
-	if res := emitNoCheckImportsObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); res != nil {
-		refs = append(refs, res.Ref)
-		outputs = append(outputs, res.Out)
+	if nodeRes := emitNoCheckImportsObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); nodeRes != nil {
+		out.Refs = append(out.Refs, nodeRes.Ref)
+		out.Outputs = append(out.Outputs, nodeRes.Out)
 		addGlobal(objcopyScriptVFS)
 	}
 
-	for _, res := range emitYaConfJSONObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef) {
-		refs = append(refs, res.Ref)
-		outputs = append(outputs, res.Out)
+	for _, nodeRes := range emitYaConfJSONObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef) {
+		out.Refs = append(out.Refs, nodeRes.Ref)
+		out.Outputs = append(out.Outputs, nodeRes.Out)
 		addGlobal(objcopyScriptVFS)
-		addGlobal(res.Input)
+		addGlobal(nodeRes.Input)
 	}
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 {
 		// Per-PY_SRCS resfs entry objcopy nodes. One node per packer-flush
 		// chunk; large modules (Lib, lib2/py) split via chunkPySrcEntries.
-		srcRefs, srcOuts, srcGlobalInputs := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
-		refs = append(refs, srcRefs...)
-		outputs = append(outputs, srcOuts...)
-		globalMemberInputs = append(globalMemberInputs, srcGlobalInputs...)
+		srcRes := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
+		if srcRes != nil {
+			out.Refs = append(out.Refs, srcRes.Refs...)
+			out.Outputs = append(out.Outputs, srcRes.Outputs...)
+			globalMemberInputs = append(globalMemberInputs, srcRes.GlobalMemberInputs...)
+		}
 
-		return refs, outputs, globalMemberInputs
+		out.GlobalMemberInputs = globalMemberInputs
+		return out
 	}
 
 	// Filter rejected entries (mirrors objcopy.h:84-96 CanHandle):
@@ -387,8 +395,8 @@ func emitResourceObjcopy(
 		}
 
 		r := ctx.emit.Emit(node)
-		refs = append(refs, r)
-		outputs = append(outputs, outputObj)
+		out.Refs = append(out.Refs, r)
+		out.Outputs = append(out.Outputs, outputObj)
 
 		// SOURCE_ROOT inputs (per-entry source paths + objcopy.py) must
 		// propagate to the enclosing module's .global.a `inputs` slot.
@@ -442,12 +450,15 @@ func emitResourceObjcopy(
 
 	// Explicit RESOURCE/RESOURCE_FILES flush before PY_SRCS pybuild
 	// resources in upstream, even when PY_SRCS appears earlier in ya.make.
-	srcRefs, srcOuts, srcGlobalInputs := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
-	refs = append(refs, srcRefs...)
-	outputs = append(outputs, srcOuts...)
-	globalMemberInputs = append(globalMemberInputs, srcGlobalInputs...)
+	srcRes := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
+	if srcRes != nil {
+		out.Refs = append(out.Refs, srcRes.Refs...)
+		out.Outputs = append(out.Outputs, srcRes.Outputs...)
+		globalMemberInputs = append(globalMemberInputs, srcRes.GlobalMemberInputs...)
+	}
 
-	return refs, outputs, globalMemberInputs
+	out.GlobalMemberInputs = globalMemberInputs
+	return out
 }
 
 func prResourceExtraInputs(d *moduleData, output string) []VFS {
@@ -1138,17 +1149,17 @@ func emitPySrcObjcopy(
 	d *moduleData,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) ([]NodeRef, []VFS, []VFS) {
+) *objcopyEmitResult {
 	if len(d.pySrcs) == 0 {
-		return nil, nil, nil
+		return nil
 	}
 	if d.moduleStmt == nil {
-		return nil, nil, nil
+		return nil
 	}
 
 	// PY3-flavoured modules only — gate mirrors emitPyNamespaceObjcopy.
 	if resourceModuleTagForData(d) == nil {
-		return nil, nil, nil
+		return nil
 	}
 
 	groups := d.pySrcGroups
@@ -1172,13 +1183,15 @@ func emitPySrcObjcopy(
 		chunkCount += len(chunks)
 	}
 	if chunkCount == 0 {
-		return nil, nil, nil
+		return nil
 	}
 
 	moduleTag := resourceModuleTagForData(d)
 
-	refs := make([]NodeRef, 0, chunkCount)
-	outputs := make([]VFS, 0, chunkCount)
+	res := &objcopyEmitResult{
+		Refs:    make([]NodeRef, 0, chunkCount),
+		Outputs: make([]VFS, 0, chunkCount),
+	}
 	// Per-chunk SOURCE_ROOT inputs (PY_SRCS raw .py paths + objcopy.py)
 	// feed the enclosing module's .global.a. BUILD_ROOT-rooted .yapyc3
 	// entries are excluded — codegen artefacts that the AR aggregator's
@@ -1282,8 +1295,8 @@ func emitPySrcObjcopy(
 			}
 
 			r := ctx.emit.Emit(node)
-			refs = append(refs, r)
-			outputs = append(outputs, outputObj)
+			res.Refs = append(res.Refs, r)
+			res.Outputs = append(res.Outputs, outputObj)
 
 			// SOURCE_ROOT-rooted inputs propagate into .global.a; BUILD_ROOT
 			// .yapyc3 entries are filtered by the AR aggregator. Include
@@ -1299,7 +1312,8 @@ func emitPySrcObjcopy(
 		}
 	}
 
-	return refs, outputs, globalMemberInputs
+	res.GlobalMemberInputs = globalMemberInputs
+	return res
 }
 
 // walkHostToolForRef walks `path` as a host tool and returns the LD

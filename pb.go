@@ -1029,12 +1029,14 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 		auxEntries = append(auxEntries, emitPyProtoSrc(ctx, instance, d, src, protocLDRef, protocBinary)...)
 	}
 
-	auxRefs, auxOuts, auxInputs := emitPyProtoAuxChunks(ctx, instance, d, peerContribs, auxEntries)
-	pyProtoRefs = append(pyProtoRefs, auxRefs...)
-	pyProtoOutputs = append(pyProtoOutputs, auxOuts...)
-	if len(auxInputs) > 0 {
+	auxRes := emitPyProtoAuxChunks(ctx, instance, d, peerContribs, auxEntries)
+	if auxRes != nil {
+		pyProtoRefs = append(pyProtoRefs, auxRes.Refs...)
+		pyProtoOutputs = append(pyProtoOutputs, auxRes.Outputs...)
+	}
+	if auxRes != nil && len(auxRes.MemberInputs) > 0 {
 		pyProtoMemberInputs = append(pyProtoMemberInputs, pbPyWrapperVFS)
-		pyProtoMemberInputs = append(pyProtoMemberInputs, auxInputs...)
+		pyProtoMemberInputs = append(pyProtoMemberInputs, auxRes.MemberInputs...)
 	}
 
 	if len(pyProtoRefs) == 0 {
@@ -1200,8 +1202,11 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 	pyPBRef := ctx.emit.Emit(pyPBNode)
 
-	yapyRefs, yapyOuts := emitGeneratedPyProtoYapyc(ctx, instance, []VFS{pyOut, grpcPyOut}, pyPBRef)
-	return pyProtoAuxEntriesForSource(instance, d, src, pyPBRef, outputs, yapyRefs, yapyOuts)
+	yapyRes := emitGeneratedPyProtoYapyc(ctx, instance, []VFS{pyOut, grpcPyOut}, pyPBRef)
+	if yapyRes == nil {
+		yapyRes = &generatedPyProtoYapycResult{}
+	}
+	return pyProtoAuxEntriesForSource(instance, d, src, pyPBRef, outputs, yapyRes.Refs, yapyRes.Outputs)
 }
 
 func protoPythonOutputRoot(instance ModuleInstance, d *moduleData) string {
@@ -1215,12 +1220,16 @@ func protoPythonOutputRoot(instance ModuleInstance, d *moduleData) string {
 	return instance.Path
 }
 
-func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs []VFS, pyPBRef NodeRef) ([]NodeRef, []VFS) {
+type generatedPyProtoYapycResult struct {
+	Refs    []NodeRef
+	Outputs []VFS
+}
+
+func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs []VFS, pyPBRef NodeRef) *generatedPyProtoYapycResult {
 	py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin := py3ccToolRefs(ctx, instance)
 	suffix := protoPySuffix(instance.Path)
 
-	var refs []NodeRef
-	var outs []VFS
+	res := &generatedPyProtoYapycResult{}
 	for _, pyOut := range pyOutputs {
 		if pyOut.Rel == "" {
 			continue
@@ -1263,11 +1272,11 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 		if len(toolRefs) > 0 {
 			node.ForeignDepRefs = map[string][]NodeRef{"tool": toolRefs}
 		}
-		refs = append(refs, ctx.emit.Emit(node))
-		outs = append(outs, out)
+		res.Refs = append(res.Refs, ctx.emit.Emit(node))
+		res.Outputs = append(res.Outputs, out)
 	}
 
-	return refs, outs
+	return res
 }
 
 type pyProtoAuxEntry struct {
@@ -1296,9 +1305,15 @@ func pyProtoAuxEntriesForSource(instance ModuleInstance, d *moduleData, src stri
 	return entries
 }
 
-func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, entries []pyProtoAuxEntry) ([]NodeRef, []VFS, []VFS) {
+type pyProtoAuxChunksResult struct {
+	Refs         []NodeRef
+	Outputs      []VFS
+	MemberInputs []VFS
+}
+
+func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, entries []pyProtoAuxEntry) *pyProtoAuxChunksResult {
 	if len(entries) == 0 {
-		return nil, nil, nil
+		return nil
 	}
 
 	rescompilerRef := walkHostToolForRef(ctx, instance, "tools/rescompiler/bin")
@@ -1369,9 +1384,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 	}
 	flush()
 
-	var refs []NodeRef
-	var outs []VFS
-	var memberInputs []VFS
+	res := &pyProtoAuxChunksResult{}
 	memberSeen := map[VFS]struct{}{}
 	for _, ch := range chunks {
 		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, "PY3_PROTO") + "_raw.auxcpp")
@@ -1416,18 +1429,18 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			IncludeInputs:        inputs,
 		}
 		ccRef, ccOut := EmitCC(instance, aux.Rel[strings.LastIndex(aux.Rel, "/")+1:], ccIn, ctx.host, ctx.emit)
-		refs = append(refs, ccRef)
-		outs = append(outs, ccOut)
+		res.Refs = append(res.Refs, ccRef)
+		res.Outputs = append(res.Outputs, ccOut)
 		for _, v := range inputs {
 			if _, ok := memberSeen[v]; ok {
 				continue
 			}
 			memberSeen[v] = struct{}{}
-			memberInputs = append(memberInputs, v)
+			res.MemberInputs = append(res.MemberInputs, v)
 		}
 	}
 
-	return refs, outs, memberInputs
+	return res
 }
 
 func pyProtoAuxOwnAddIncl(d *moduleData) []string {
