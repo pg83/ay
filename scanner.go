@@ -140,6 +140,66 @@ func newSharedParseCache() *sharedParseCache {
 	}
 }
 
+// scannerInterner assigns scanner-local numeric IDs to repeated strings,
+// VFS paths, and source-class signatures so hot cache keys stay compact
+// and avoid repeated string hashing in their own maps.
+type scannerInterner struct {
+	stringIDs map[string]uint32
+	classIDs  map[uint64]uint32
+	nextStr   uint32
+	nextClass uint32
+}
+
+const scannerInternerBuildBit = uint32(1) << 31
+
+func newScannerInterner() scannerInterner {
+	return scannerInterner{
+		stringIDs: make(map[string]uint32, 32768),
+		classIDs:  make(map[uint64]uint32, 1024),
+	}
+}
+
+func (si *scannerInterner) internString(s string) uint32 {
+	if id, ok := si.stringIDs[s]; ok {
+		return id
+	}
+
+	if si.nextStr == scannerInternerBuildBit-1 {
+		panic("scannerInterner: exhausted 31-bit string ID space")
+	}
+
+	si.nextStr++
+	id := si.nextStr
+	si.stringIDs[s] = id
+
+	return id
+}
+
+func (si *scannerInterner) internVFS(v VFS) uint32 {
+	relID := si.internString(v.Rel)
+
+	switch v.Root {
+	case VFSRootSource:
+		return relID
+	case VFSRootBuild:
+		return relID | scannerInternerBuildBit
+	}
+
+	panic("scannerInterner.internVFS: zero-valued VFS")
+}
+
+func (si *scannerInterner) internClass(sig uint64) uint32 {
+	if id, ok := si.classIDs[sig]; ok {
+		return id
+	}
+
+	si.nextClass++
+	id := si.nextClass
+	si.classIDs[sig] = id
+
+	return id
+}
+
 // IncludeScanner is the per-walker include-resolver state. It owns the
 // SysInclSet, sourceRoot, the shared parse cache (parsed + exists), the
 // per-scanCtx resolve/subgraph caches, scratch-buffer sync.Pools, and
@@ -159,6 +219,8 @@ type IncludeScanner struct {
 	// pc holds the parse-level caches shared between target and host
 	// scanners. Never nil.
 	pc *sharedParseCache
+	// interner assigns scanner-local numeric IDs for hot cache keys.
+	interner scannerInterner
 	// anySrcView is a PerSourceView prepared with an empty source path.
 	// Its `includerKeyed` slice is the canonical includer-keyed record
 	// list (every view derives the same slice); the `activeSourceKeyed`
@@ -169,9 +231,14 @@ type IncludeScanner struct {
 	// calls (and the multi-source dfs in joinSrcsIncludeClosure) reuse
 	// the precomputed source-keyed filter results. Keyed by SourceRel.
 	viewCache map[string]PerSourceView
+	// sourceClassCache interns SOURCE-keyed sysincl equivalence classes
+	// per source path so repeated dfs/sysincl lookups reuse one numeric
+	// class ID rather than re-hashing the active record set.
+	sourceClassCache map[string]uint32
 	// sysinclSourceCache memoises the source-keyed sysincl half by
-	// (sourceRel, target). Source-keyed records are includer-
-	// independent, so two CCs sharing a sourceRel hit the same entry.
+	// (sourceClass, target). Source-keyed records are includer-
+	// independent, so every source in the same active-record class hits
+	// the same entry.
 	sysinclSourceCache map[sysinclSourceKey]sysinclCacheEntry
 	// sysinclIncluderCache memoises the includer-keyed half by
 	// (includerRel, target). Includer-keyed records are source-
@@ -223,18 +290,17 @@ type IncludeScanner struct {
 // part of the key — the scanCtx is bound to a single ctxHash, so every
 // entry in its resolveCache is implicitly that-ctxHash-only.
 type resolveInnerKey struct {
-	includer VFS
-	target   string
-	kind     includeKind
-	next     bool
+	includer uint32
+	target   uint32
+	flags    uint8
 }
 
 // subgraphInnerKey is the per-scanCtx subgraph cache key. ctxHash is
-// implicit; srcClassHash stays because a single scanCtx serves many
+// implicit; sourceClass stays because a single scanCtx serves many
 // sources whose sysincl branches differ even within one ctxHash.
 type subgraphInnerKey struct {
-	abs          VFS
-	srcClassHash uint64
+	abs         uint32
+	sourceClass uint32
 }
 
 // scanCtx is the per-ctxHash runtime context for include resolution. It
@@ -253,13 +319,13 @@ type scanCtx struct {
 }
 
 type sysinclSourceKey struct {
-	sourceRel string
-	target    string
+	sourceClass uint32
+	target      uint32
 }
 
 type sysinclIncluderKey struct {
-	includerRel string
-	target      string
+	includer uint32
+	target   uint32
 }
 
 // sysinclCacheEntry stores the resolved sysincl paths plus two flags.
@@ -297,7 +363,9 @@ func newIncludeScannerWith(sourceRoot string, sysincl SysInclSet, pc *sharedPars
 		sourceRoot:           sourceRoot,
 		sourceRootSlash:      sourceRoot + "/",
 		pc:                   pc,
+		interner:             newScannerInterner(),
 		viewCache:            make(map[string]PerSourceView, 1024),
+		sourceClassCache:     make(map[string]uint32, 1024),
 		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 131072),
 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
 		walkClosureCache:     make(map[uint64]*scanCtx, 8),
@@ -507,19 +575,17 @@ func (s *IncludeScanner) emittedRel(abs string) string {
 	return abs
 }
 
-// sourceClassHash returns an FNV-1a digest of the pointer addresses of
-// the source-keyed sysincl records active for `sourceRel`. Two sources
-// sharing this digest belong to the same equivalence class — identical
-// source-keyed mappings, identical resolve() outputs, identical
-// subgraphs. Used as the third component of the subgraph cache key so
-// per-class subgraphs (not per-source) reuse cleanly.
-func (s *IncludeScanner) sourceClassHash(sourceRel string) uint64 {
+// sourceClassSignature returns an FNV-1a digest of the pointer
+// addresses of the source-keyed sysincl records active for `sourceRel`.
+// Two sources sharing this digest belong to the same equivalence class:
+// identical source-keyed mappings, identical resolve() outputs,
+// identical subgraphs.
+func sourceClassSignature(view PerSourceView) uint64 {
 	const (
 		offset uint64 = 1469598103934665603
 		prime  uint64 = 1099511628211
 	)
 
-	view := s.perSourceView(sourceRel)
 	active := view.activeSourceKeyed
 
 	h := offset
@@ -542,6 +608,20 @@ func (s *IncludeScanner) sourceClassHash(sourceRel string) uint64 {
 	h *= prime
 
 	return h
+}
+
+// sourceClassID returns the scanner-local numeric ID of the active
+// SOURCE-keyed sysincl equivalence class for sourceRel.
+func (s *IncludeScanner) sourceClassID(sourceRel string) uint32 {
+	if id, ok := s.sourceClassCache[sourceRel]; ok {
+		return id
+	}
+
+	view := s.perSourceView(sourceRel)
+	id := s.interner.internClass(sourceClassSignature(view))
+	s.sourceClassCache[sourceRel] = id
+
+	return id
 }
 
 // hashScanContext is an FNV-1a hash over OwnAddIncl + PeerAddInclSet +
@@ -605,8 +685,8 @@ func (sc *scanCtx) dfs(absPath VFS, visited VFSSet, order *[]VFS) {
 
 		return
 	}
-	srcClassHash := sc.scanner.sourceClassHash(sc.cfg.SourceRel)
-	sg, ok := sc.subgraph(absPath, srcClassHash)
+	sourceClass := sc.scanner.sourceClassID(sc.cfg.SourceRel)
+	sg, ok := sc.subgraph(absPath, sourceClass)
 
 	if ok {
 		// Cached or freshly-computed clean canonical subgraph. Merge
@@ -697,7 +777,7 @@ func (s *IncludeScanner) SubgraphCacheStats() (hits, misses, tainted uint64) {
 }
 
 // subgraph returns the canonical transitive include closure rooted at
-// `absPath` for the (ctxHash, srcClassHash) equivalence class — root-
+// `absPath` for the (ctxHash, sourceClass) equivalence class — root-
 // included DFS-discovery order. The returned slice is cache-owned;
 // callers must only iterate.
 //
@@ -710,9 +790,12 @@ func (s *IncludeScanner) SubgraphCacheStats() (hits, misses, tainted uint64) {
 // Cycle detection: a call for a key in subgraphInProgress is a back-
 // edge; returns (nil, false) and propagates upward — every header on
 // the SCC ends up marked taintedKnown.
-func (sc *scanCtx) subgraph(absPath VFS, srcClassHash uint64) ([]VFS, bool) {
+func (sc *scanCtx) subgraph(absPath VFS, sourceClass uint32) ([]VFS, bool) {
 	s := sc.scanner
-	key := subgraphInnerKey{abs: absPath, srcClassHash: srcClassHash}
+	key := subgraphInnerKey{
+		abs:         s.interner.internVFS(absPath),
+		sourceClass: sourceClass,
+	}
 
 	if cached, ok := sc.subgraphCache[key]; ok {
 		s.subgraphHits++
@@ -747,7 +830,7 @@ func (sc *scanCtx) subgraph(absPath VFS, srcClassHash uint64) ([]VFS, bool) {
 	visited := *visitedP
 	order := (*orderP)[:0]
 
-	clean := sc.walkSubgraph(absPath, srcClassHash, visited, &order)
+	clean := sc.walkSubgraph(absPath, sourceClass, visited, &order)
 
 	delete(sc.subgraphInProgress, key)
 
@@ -791,7 +874,7 @@ func (sc *scanCtx) subgraph(absPath VFS, srcClassHash uint64) ([]VFS, bool) {
 // enumerates reachable headers in the canonical first-visit order; the
 // propagated clean=false just prevents caching. Pure-DAG paths cache
 // normally.
-func (sc *scanCtx) walkSubgraph(absPath VFS, srcClassHash uint64, visited VFSSet, order *[]VFS) bool {
+func (sc *scanCtx) walkSubgraph(absPath VFS, sourceClass uint32, visited VFSSet, order *[]VFS) bool {
 	if !visited.AddIfAbsent(absPath) {
 		return true
 	}
@@ -805,7 +888,7 @@ func (sc *scanCtx) walkSubgraph(absPath VFS, srcClassHash uint64, visited VFSSet
 			return
 		}
 
-		childSg, ok := sc.subgraph(rabs, srcClassHash)
+		childSg, ok := sc.subgraph(rabs, sourceClass)
 
 		if ok {
 			// Clean child subgraph — merge into our walk.
@@ -825,7 +908,7 @@ func (sc *scanCtx) walkSubgraph(absPath VFS, srcClassHash uint64, visited VFSSet
 		// `clean=false` propagates upward.
 		clean = false
 
-		sc.walkSubgraphTainted(rabs, srcClassHash, visited, order)
+		sc.walkSubgraphTainted(rabs, sourceClass, visited, order)
 	})
 
 	return clean
@@ -835,7 +918,7 @@ func (sc *scanCtx) walkSubgraph(absPath VFS, srcClassHash uint64, visited VFSSet
 // reported tainted. Mirrors plainDfs but on the local (subgraph-
 // computation) visited+order. Each child still goes through subgraph()
 // so non-cycle descendants reuse the persistent cache.
-func (sc *scanCtx) walkSubgraphTainted(absPath VFS, srcClassHash uint64, visited VFSSet, order *[]VFS) {
+func (sc *scanCtx) walkSubgraphTainted(absPath VFS, sourceClass uint32, visited VFSSet, order *[]VFS) {
 	if !visited.AddIfAbsent(absPath) {
 		return
 	}
@@ -847,7 +930,7 @@ func (sc *scanCtx) walkSubgraphTainted(absPath VFS, srcClassHash uint64, visited
 			return
 		}
 
-		childSg, ok := sc.subgraph(rabs, srcClassHash)
+		childSg, ok := sc.subgraph(rabs, sourceClass)
 
 		if ok {
 			for _, p := range childSg {
@@ -861,7 +944,7 @@ func (sc *scanCtx) walkSubgraphTainted(absPath VFS, srcClassHash uint64, visited
 			return
 		}
 
-		sc.walkSubgraphTainted(rabs, srcClassHash, visited, order)
+		sc.walkSubgraphTainted(rabs, sourceClass, visited, order)
 	})
 }
 
@@ -1262,7 +1345,10 @@ incLoop:
 }
 
 func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, bool, bool) {
-	key := sysinclSourceKey{sourceRel: sourceRel, target: target}
+	key := sysinclSourceKey{
+		sourceClass: s.sourceClassID(sourceRel),
+		target:      s.interner.internString(target),
+	}
 
 	// PR-34n: lock removed (single-goroutine).
 	if cached, ok := s.sysinclSourceCache[key]; ok {
@@ -1283,7 +1369,10 @@ func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, b
 }
 
 func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) ([]VFS, bool, bool) {
-	key := sysinclIncluderKey{includerRel: includerRel, target: target}
+	key := sysinclIncluderKey{
+		includer: s.interner.internString(includerRel),
+		target:   s.interner.internString(target),
+	}
 
 	// PR-34n: lock removed (single-goroutine).
 	if cached, ok := s.sysinclIncluderCache[key]; ok {
@@ -1345,10 +1434,9 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	s := sc.scanner
 	ctx := &sc.cfg
 	key := resolveInnerKey{
-		includer: includerAbs,
-		target:   d.target,
-		kind:     d.kind,
-		next:     d.next,
+		includer: s.interner.internVFS(includerAbs),
+		target:   s.interner.internString(d.target),
+		flags:    packResolveFlags(d.kind, d.next),
 	}
 
 	// PR-34n: lock removed (single-goroutine).
@@ -1526,6 +1614,16 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	sc.resolveCache[key] = out
 
 	return out
+}
+
+func packResolveFlags(kind includeKind, next bool) uint8 {
+	flags := uint8(kind)
+
+	if next {
+		flags |= 1 << 7
+	}
+
+	return flags
 }
 
 // isSourceLike returns true for compile-unit extensions (.cpp, .cc,
