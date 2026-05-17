@@ -132,18 +132,24 @@ var evAbseilCleanupHeaders = []VFS{
 // descriptor.proto, the .ev source, the companion .ev.pb.cc,
 // pbDescriptorImporterHeaders, evExtraProtobufHeaders, and
 // evAbseilCleanupHeaders.
-func evWitnessExtras(sourceRoot, evRelPath string, evPbCC VFS) []VFS {
+func evWitnessExtras(sourceRoot, evRelPath string, evPbCC VFS) []includeDirective {
 	_ = sourceRoot // every .ev imports descriptor.proto transitively; no source-scan needed.
 
-	out := make([]VFS, 0,
+	out := make([]includeDirective, 0,
 		3+len(pbDescriptorImporterHeaders)+len(evExtraProtobufHeaders)+len(evAbseilCleanupHeaders))
-	out = append(out, pbWrapperVFS)
-	out = append(out, pbDescriptorVFS)
-	out = append(out, Source(evRelPath))
-	out = append(out, evPbCC)
-	out = append(out, pbDescriptorImporterHeaders...)
-	out = append(out, evExtraProtobufHeaders...)
-	out = append(out, evAbseilCleanupHeaders...)
+	out = append(out, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
+	out = append(out, includeDirective{kind: includeQuoted, target: pbDescriptorVFS.Rel})
+	out = append(out, includeDirective{kind: includeQuoted, target: evRelPath})
+	out = append(out, includeDirective{kind: includeQuoted, target: evPbCC.Rel})
+	for _, v := range pbDescriptorImporterHeaders {
+		out = append(out, includeDirective{kind: includeQuoted, target: v.Rel})
+	}
+	for _, v := range evExtraProtobufHeaders {
+		out = append(out, includeDirective{kind: includeQuoted, target: v.Rel})
+	}
+	for _, v := range evAbseilCleanupHeaders {
+		out = append(out, includeDirective{kind: includeQuoted, target: v.Rel})
+	}
 
 	return out
 }

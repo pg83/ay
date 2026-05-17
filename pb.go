@@ -531,15 +531,17 @@ func protoCPPOutRoot(d *moduleData) string {
 // (7 reflection-cluster headers), cpp_proto_wrapper.py, the proto source,
 // and descriptor.proto when imported. Verified by intersecting CC-consumer
 // inputs across all .pb.h's in /home/pg/monorepo/yatool_orig/sg2.json.
-func pbDescriptorImporterExtras(sourceRoot, protoRelPath string) []VFS {
-	out := make([]VFS, 0, len(pbDescriptorImporterHeaders)+3)
-	out = append(out, pbWrapperVFS)
-	out = append(out, Source(protoRelPath))
-	out = append(out, pbDescriptorImporterHeaders...)
+func pbDescriptorImporterExtras(sourceRoot, protoRelPath string) []includeDirective {
+	out := make([]includeDirective, 0, len(pbDescriptorImporterHeaders)+3)
+	out = append(out, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
+	out = append(out, includeDirective{kind: includeQuoted, target: protoRelPath})
+	for _, v := range pbDescriptorImporterHeaders {
+		out = append(out, includeDirective{kind: includeQuoted, target: v.Rel})
+	}
 
 	protoImports := resolveProtoImports(sourceRoot, protoRelPath)
 	if protoImports != nil && protoImports.HasDescriptor {
-		out = append(out, pbDescriptorVFS)
+		out = append(out, includeDirective{kind: includeQuoted, target: pbDescriptorVFS.Rel})
 	}
 
 	return out
@@ -879,11 +881,13 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
 			directImports := protoDirectImportIncludes(ctx.sourceRoot, protoRelPath, protoCPPOutRoot(d))
 			extras := pbDescriptorImporterExtras(ctx.sourceRoot, protoRelPath)
-			emitsIncludes := make([]VFS, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
-			emitsIncludes = append(emitsIncludes, directImports...)
-			emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
-			emitsIncludes = append(emitsIncludes, extras...)
-			registerGeneratedOutput(ctx, instance, "PB", pbH, emitsIncludes)
+			pbHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
+			pbHParsed = append(pbHParsed, directImports...)
+			for _, include := range protobufRuntimeHeaders {
+				pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+			}
+			pbHParsed = append(pbHParsed, extras...)
+			registerGeneratedParsedOutput(ctx, instance, "PB", pbH, pbHParsed)
 			// Register the .pb.cc output: protoc emits `#include
 			// "<base>.pb.h"` plus the protobuf runtime headers; the .pb.cc.o
 			// consumer also reaches the deep protobuf+abseil-cpp-tstring
@@ -891,21 +895,29 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			// source itself and cpp_proto_wrapper.py. Scope is narrow: ONLY
 			// on the .pb.cc, never the .pb.h — broad .pb.h consumers must
 			// NOT inherit the abseil closure.
-			pbCCEmits := make([]VFS, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
-			pbCCEmits = append(pbCCEmits, pbH)
-			pbCCEmits = append(pbCCEmits, Source(protoRelPath))
-			pbCCEmits = append(pbCCEmits, pbWrapperVFS)
-			pbCCEmits = append(pbCCEmits, protobufRuntimeHeaders...)
-			pbCCEmits = append(pbCCEmits, pbCcDeepRuntimeHeaders...)
-			registerGeneratedOutput(ctx, instance, "PB", pbCC, pbCCEmits)
+			pbCCParsed := make([]includeDirective, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
+			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: pbH.Rel})
+			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: protoRelPath})
+			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
+			for _, include := range protobufRuntimeHeaders {
+				pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+			}
+			for _, include := range pbCcDeepRuntimeHeaders {
+				pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+			}
+			registerGeneratedParsedOutput(ctx, instance, "PB", pbCC, pbCCParsed)
 			if d.grpc {
-				grpcCCEmits := make([]VFS, 0, len(pbCCEmits))
-				grpcCCEmits = append(grpcCCEmits, grpcPbH)
-				grpcCCEmits = append(grpcCCEmits, Source(protoRelPath))
-				grpcCCEmits = append(grpcCCEmits, pbWrapperVFS)
-				grpcCCEmits = append(grpcCCEmits, protobufRuntimeHeaders...)
-				grpcCCEmits = append(grpcCCEmits, pbCcDeepRuntimeHeaders...)
-				registerGeneratedOutput(ctx, instance, "PB", grpcPbCC, grpcCCEmits)
+				grpcCCParsed := make([]includeDirective, 0, len(pbCCParsed))
+				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: grpcPbH.Rel})
+				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: protoRelPath})
+				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
+				for _, include := range protobufRuntimeHeaders {
+					grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				}
+				for _, include := range pbCcDeepRuntimeHeaders {
+					grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				}
+				registerGeneratedParsedOutput(ctx, instance, "PB", grpcPbCC, grpcCCParsed)
 			}
 		}
 
@@ -972,19 +984,27 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			if reg := codegenRegForInstance(ctx, instance); reg != nil {
 				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath, protoCPPOutRoot(d))
 				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC)
-				emitsIncludes := make([]VFS, 0, len(directImports)+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders)+len(evExtras))
-				emitsIncludes = append(emitsIncludes, directImports...)
-				emitsIncludes = append(emitsIncludes, protobufRuntimeHeaders...)
-				emitsIncludes = append(emitsIncludes, eventRuntimeHeaders...)
-				emitsIncludes = append(emitsIncludes, evExtras...)
-				registerGeneratedOutput(ctx, instance, "EV", evH, emitsIncludes)
+				evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders)+len(evExtras))
+				evHParsed = append(evHParsed, directImports...)
+				for _, include := range protobufRuntimeHeaders {
+					evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				}
+				for _, include := range eventRuntimeHeaders {
+					evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				}
+				evHParsed = append(evHParsed, evExtras...)
+				registerGeneratedParsedOutput(ctx, instance, "EV", evH, evHParsed)
 				// Register .ev.pb.cc: event2cpp emits `#include
 				// "<base>.ev.pb.h"` plus protobuf + event runtime headers.
-				ccEmits := make([]VFS, 0, 1+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
-				ccEmits = append(ccEmits, evH)
-				ccEmits = append(ccEmits, protobufRuntimeHeaders...)
-				ccEmits = append(ccEmits, eventRuntimeHeaders...)
-				registerGeneratedOutput(ctx, instance, "EV", evPbCC, ccEmits)
+				evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
+				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: evH.Rel})
+				for _, include := range protobufRuntimeHeaders {
+					evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				}
+				for _, include := range eventRuntimeHeaders {
+					evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				}
+				registerGeneratedParsedOutput(ctx, instance, "EV", evPbCC, evCCParsed)
 			}
 
 			cppInstance := instance
@@ -1607,17 +1627,16 @@ func pyProtoAuxOwnAddIncl(d *moduleData) []VFS {
 func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, aux VFS, seed []VFS) []VFS {
 	reg := codegenRegForInstance(ctx, instance)
 	if reg != nil {
-		emits := []VFS{
-			Source("library/cpp/resource/resource.h"),
-			Source("library/cpp/resource/registry.h"),
+		emits := []includeDirective{
+			{kind: includeQuoted, target: "library/cpp/resource/resource.h"},
+			{kind: includeQuoted, target: "library/cpp/resource/registry.h"},
 		}
 		for _, in := range seed {
 			if in.IsSource() {
-				emits = append(emits, in)
+				emits = append(emits, includeDirective{kind: includeQuoted, target: in.Rel})
 			}
 		}
-		emits = dedupVFS(emits)
-		registerGeneratedOutput(ctx, instance, "PR", aux, emits)
+		registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits)
 	}
 
 	scanIn := ModuleCCInputs{

@@ -1214,19 +1214,19 @@ include "machine.rl";
 	wantLocalTargets := []string{"outer.h", "tail.h", "machine.rl", "machine2.rl"}
 	wantLocalKinds := []includeKind{includeSystem, includeQuoted, includeQuoted, includeQuoted}
 	for i := range wantLocalTargets {
-		if local[i].directive.target != wantLocalTargets[i] {
-			t.Fatalf("local[%d].target = %q, want %q; all=%+v", i, local[i].directive.target, wantLocalTargets[i], local)
+		if local[i].target != wantLocalTargets[i] {
+			t.Fatalf("local[%d].target = %q, want %q; all=%+v", i, local[i].target, wantLocalTargets[i], local)
 		}
-		if local[i].directive.kind != wantLocalKinds[i] {
-			t.Fatalf("local[%d].kind = %v, want %v", i, local[i].directive.kind, wantLocalKinds[i])
+		if local[i].kind != wantLocalKinds[i] {
+			t.Fatalf("local[%d].kind = %v, want %v", i, local[i].kind, wantLocalKinds[i])
 		}
 	}
 
 	if len(hcpp) != 1 {
 		t.Fatalf("got %d h+cpp entries, want 1; %+v", len(hcpp), hcpp)
 	}
-	if hcpp[0].kind != parsedIncludeDirectVFS || hcpp[0].path != Source("src.rl6") {
-		t.Fatalf("h+cpp = %+v, want direct self VFS Source(\"src.rl6\")", hcpp)
+	if hcpp[0].target != "src.rl6" || hcpp[0].kind != includeQuoted {
+		t.Fatalf("h+cpp = %+v, want quoted self target \"src.rl6\"", hcpp)
 	}
 }
 
@@ -1257,18 +1257,18 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 	wantLocalTargets := []string{"a.i", "b.i", "c.h"}
 	wantLocalKinds := []includeKind{includeQuoted, includeSystem, includeQuoted}
 	for i := range wantLocalTargets {
-		if local[i].directive.target != wantLocalTargets[i] {
-			t.Fatalf("local[%d].target = %q, want %q; all=%+v", i, local[i].directive.target, wantLocalTargets[i], local)
+		if local[i].target != wantLocalTargets[i] {
+			t.Fatalf("local[%d].target = %q, want %q; all=%+v", i, local[i].target, wantLocalTargets[i], local)
 		}
-		if local[i].directive.kind != wantLocalKinds[i] {
-			t.Fatalf("local[%d].kind = %v, want %v", i, local[i].directive.kind, wantLocalKinds[i])
+		if local[i].kind != wantLocalKinds[i] {
+			t.Fatalf("local[%d].kind = %v, want %v", i, local[i].kind, wantLocalKinds[i])
 		}
 	}
 
 	if len(hcpp) != 1 {
 		t.Fatalf("got %d h+cpp entries, want 1; %+v", len(hcpp), hcpp)
 	}
-	if hcpp[0].directive.target != "block.h" || hcpp[0].directive.kind != includeQuoted {
+	if hcpp[0].target != "block.h" || hcpp[0].kind != includeQuoted {
 		t.Fatalf("h+cpp = %+v, want block.h quoted", hcpp)
 	}
 }

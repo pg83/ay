@@ -869,7 +869,11 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					parserBase + "Visitor.h",
 					parserBase + "BaseVisitor.h",
 				} {
-					registerBoundGeneratedOutput(ctx, instance, "JV", Build(outPrefix+suffix), witnessIncludes, jvRef)
+					parsed := make([]includeDirective, 0, len(witnessIncludes))
+					for _, include := range witnessIncludes {
+						parsed = append(parsed, includeDirective{kind: includeQuoted, target: include.Rel})
+					}
+					registerBoundGeneratedParsedOutput(ctx, instance, "JV", Build(outPrefix+suffix), parsed, jvRef)
 				}
 			}
 			// PR-M3-antlr-g4-cpp: emit CP+CC for each grammar .cpp output.
@@ -912,7 +916,11 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					base + "Visitor.h",
 					base + "BaseVisitor.h",
 				} {
-					registerBoundGeneratedOutput(ctx, instance, "JV", Build(outPrefix+suffix), witnessIncludes, jvRef)
+					parsed := make([]includeDirective, 0, len(witnessIncludes))
+					for _, include := range witnessIncludes {
+						parsed = append(parsed, includeDirective{kind: includeQuoted, target: include.Rel})
+					}
+					registerBoundGeneratedParsedOutput(ctx, instance, "JV", Build(outPrefix+suffix), parsed, jvRef)
 				}
 			}
 			// PR-M3-antlr-g4-cpp: emit CP+CC for each grammar .cpp output.
@@ -948,10 +956,10 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		// CC consumers via EmitsIncludes. ProducerRef = biRef so the
 		// consumer CC carries BI in deps[].
 		if reg != nil {
-			registerBoundGeneratedOutput(ctx, instance, "BI", Build(outPrefix+*d.createBuildInfoFor), []VFS{
-				buildInfoGenPyVFS,
-				xargsPyVFS,
-				yieldLinePyVFS,
+			registerBoundGeneratedParsedOutput(ctx, instance, "BI", Build(outPrefix+*d.createBuildInfoFor), []includeDirective{
+				{kind: includeQuoted, target: buildInfoGenPyVFS.Rel},
+				{kind: includeQuoted, target: xargsPyVFS.Rel},
+				{kind: includeQuoted, target: yieldLinePyVFS.Rel},
 			}, biRef)
 		}
 	}
@@ -1002,12 +1010,12 @@ func emitJVDownstreamCPCC(
 		// antlr4-runtime.h chain and the macro's OUTPUT_INCLUDES
 		// (rebased to $(S)/...). Scanner walks each entry transitively.
 		if reg != nil {
-			emits := make([]VFS, 0, 1+len(outputIncludes))
-			emits = append(emits, antlr4RuntimeHeaderVFS)
+			emits := make([]includeDirective, 0, 1+len(outputIncludes))
+			emits = append(emits, includeDirective{kind: includeQuoted, target: antlr4RuntimeHeaderVFS.Rel})
 			for _, h := range outputIncludes {
-				emits = append(emits, Source(h))
+				emits = append(emits, includeDirective{kind: includeQuoted, target: h})
 			}
-			registerGeneratedOutput(ctx, instance, "CP", g4CppPath, emits)
+			registerGeneratedParsedOutput(ctx, instance, "CP", g4CppPath, emits)
 		}
 
 		// Compute the include closure from the g4.cpp (through the registry).
@@ -1565,7 +1573,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	// F-7-B: register the explicit CF output with EmitsIncludes.
 	if reg != nil {
 		diskPath := ctx.sourceRoot + "/" + instance.Path + "/" + cf.Src
-		registerBoundGeneratedOutput(ctx, instance, "CF", cfOut, cfIncludeDirectives(diskPath), cfRef)
+		registerBoundGeneratedParsedOutput(ctx, instance, "CF", cfOut, cfIncludeDirectives(diskPath), cfRef)
 	}
 }
 
@@ -1608,13 +1616,13 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// field_calc_int.h → field_calc.h → autoarray.h).
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			registerGeneratedOutput(ctx, instance, "PR", Build(instance.Path+"/"+f), prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps))
+			registerGeneratedParsedOutput(ctx, instance, "PR", Build(instance.Path+"/"+f), prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps))
 		}
 		for _, f := range stmt.OUTNoAutoFiles {
-			registerGeneratedOutput(ctx, instance, "PR", Build(instance.Path+"/"+f), prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps))
+			registerGeneratedParsedOutput(ctx, instance, "PR", Build(instance.Path+"/"+f), prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps))
 		}
 		if stmt.StdoutFile != nil {
-			registerGeneratedOutput(ctx, instance, "PR", Build(instance.Path+"/"+*stmt.StdoutFile), prEmitsIncludes(instance, d.srcDir, *stmt.StdoutFile, stmt, toolInducedDeps))
+			registerGeneratedParsedOutput(ctx, instance, "PR", Build(instance.Path+"/"+*stmt.StdoutFile), prEmitsIncludes(instance, d.srcDir, *stmt.StdoutFile, stmt, toolInducedDeps))
 		}
 	}
 
@@ -1725,26 +1733,26 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 // module-level INDUCED_DEPS(...) header list (repo-relative). Append
 // those to the seed-include set so the include scanner reaches the
 // transitive closure of headers the tool injects into its outputs.
-func prEmitsIncludes(instance ModuleInstance, srcDir *string, outFile string, stmt *RunProgramStmt, toolInducedDeps []string) []VFS {
+func prEmitsIncludes(instance ModuleInstance, srcDir *string, outFile string, stmt *RunProgramStmt, toolInducedDeps []string) []includeDirective {
 	if !isCCSourceExt(outFile) {
 		return nil
 	}
 
-	includes := make([]VFS, 0, len(stmt.INFiles)+len(stmt.OutputIncludes)+len(toolInducedDeps))
+	includes := make([]includeDirective, 0, len(stmt.INFiles)+len(stmt.OutputIncludes)+len(toolInducedDeps))
 
 	// IN files are module-relative; rebase to SOURCE_ROOT.
 	for _, f := range stmt.INFiles {
-		includes = append(includes, Source(runProgramSourceRel(instance, srcDir, f)))
+		includes = append(includes, includeDirective{kind: includeQuoted, target: runProgramSourceRel(instance, srcDir, f)})
 	}
 
 	// OUTPUT_INCLUDES entries are repo-relative.
 	for _, f := range stmt.OutputIncludes {
-		includes = append(includes, Source(f))
+		includes = append(includes, includeDirective{kind: includeQuoted, target: f})
 	}
 
 	// Tool-declared INDUCED_DEPS (repo-relative).
 	for _, f := range toolInducedDeps {
-		includes = append(includes, Source(f))
+		includes = append(includes, includeDirective{kind: includeQuoted, target: f})
 	}
 
 	return includes

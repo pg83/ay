@@ -25,43 +25,16 @@ const (
 	parsedIncludesHCPP  parsedIncludeBucket = "h+cpp"
 )
 
-type parsedIncludeKind uint8
+type parsedInclude = includeDirective
 
-const (
-	parsedIncludeDirective parsedIncludeKind = iota
-	parsedIncludeDirectVFS
-)
-
-type parsedInclude struct {
-	kind      parsedIncludeKind
-	directive includeDirective
-	path      VFS
-}
-
-type parsedIncludeSet map[parsedIncludeBucket][]parsedInclude
+type parsedIncludeSet map[parsedIncludeBucket][]includeDirective
 
 func rawParsedIncludeSet(bucket parsedIncludeBucket, directives ...includeDirective) parsedIncludeSet {
 	if len(directives) == 0 {
 		return nil
 	}
 
-	out := make([]parsedInclude, 0, len(directives))
-	for _, d := range directives {
-		out = append(out, parsedInclude{kind: parsedIncludeDirective, directive: d})
-	}
-
-	return parsedIncludeSet{bucket: out}
-}
-
-func directParsedIncludeSet(bucket parsedIncludeBucket, paths ...VFS) parsedIncludeSet {
-	if len(paths) == 0 {
-		return nil
-	}
-
-	out := make([]parsedInclude, 0, len(paths))
-	for _, p := range paths {
-		out = append(out, parsedInclude{kind: parsedIncludeDirectVFS, path: p})
-	}
+	out := append([]includeDirective(nil), directives...)
 
 	return parsedIncludeSet{bucket: out}
 }
@@ -73,37 +46,17 @@ func appendParsedDirectives(set parsedIncludeSet, bucket parsedIncludeBucket, di
 	if set == nil {
 		set = make(parsedIncludeSet)
 	}
-	for _, d := range directives {
-		set[bucket] = append(set[bucket], parsedInclude{kind: parsedIncludeDirective, directive: d})
-	}
+	set[bucket] = append(set[bucket], directives...)
 
 	return set
 }
 
-func appendParsedDirect(set parsedIncludeSet, bucket parsedIncludeBucket, paths ...VFS) parsedIncludeSet {
-	if len(paths) == 0 {
-		return set
-	}
-	if set == nil {
-		set = make(parsedIncludeSet)
-	}
-	for _, p := range paths {
-		set[bucket] = append(set[bucket], parsedInclude{kind: parsedIncludeDirectVFS, path: p})
-	}
-
-	return set
-}
-
-func (set parsedIncludeSet) bucket(bucket parsedIncludeBucket) []parsedInclude {
+func (set parsedIncludeSet) bucket(bucket parsedIncludeBucket) []includeDirective {
 	if set == nil {
 		return nil
 	}
 
 	return set[bucket]
-}
-
-type parsedIncludeLocator interface {
-	LookupParsedIncludes(vfsPath VFS) (parsedIncludeSet, bool)
 }
 
 type sharedParseCache struct {
@@ -129,6 +82,10 @@ type includeParserManager struct {
 	sourceRoot      string
 	sourceRootSlash string
 	cache           *sharedParseCache
+	// buildParsed is the parser-layer VFS overlay for generated
+	// outputs. Emitters register `$(B)` paths here explicitly; parser
+	// lookup for build-rooted paths consults ONLY this map.
+	buildParsed VFSMap[[]includeDirective]
 }
 
 func newIncludeParserManager(sourceRoot string) *includeParserManager {
@@ -140,6 +97,7 @@ func newIncludeParserManagerWithCache(sourceRoot string, cache *sharedParseCache
 		sourceRoot:      sourceRoot,
 		sourceRootSlash: sourceRoot + "/",
 		cache:           cache,
+		buildParsed:     NewVFSMap[[]includeDirective](256),
 	}
 }
 
@@ -149,17 +107,12 @@ func newIncludeParserManagerWithCache(sourceRoot string, cache *sharedParseCache
 // parser from parsers.go. Memoised by VFS path; returns nil for missing
 // files (DFS may reach dangling sysincl mappings).
 //
-// Callers must NOT pass a $(B)/ path — generated outputs are read via
-// the CodegenRegistry. IncludeScanner's dispatch layer enforces this.
-func (pm *includeParserManager) parsedIncludes(vfsPath VFS, locators []parsedIncludeLocator) parsedIncludeSet {
+// sourceParsedBuckets returns the full parser result for one source
+// file. Only SOURCE-rooted paths are valid here; generated outputs are
+// mounted directly as flat `[]parsedInclude` lists.
+func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSet {
 	if vfsPath.IsBuild() {
-		for _, loc := range locators {
-			if parsed, ok := loc.LookupParsedIncludes(vfsPath); ok {
-				return parsed
-			}
-		}
-
-		return nil
+		ThrowFmt("includeParserManager.sourceParsedBuckets: build-rooted path %q", vfsPath.String())
 	}
 
 	if cached, ok := pm.cache.parsed.Get(vfsPath); ok {
@@ -181,27 +134,36 @@ func (pm *includeParserManager) parsedIncludes(vfsPath VFS, locators []parsedInc
 	return out
 }
 
-func (pm *includeParserManager) scanDirectives(vfsPath VFS, locators []parsedIncludeLocator) []includeDirective {
-	parsed := pm.parsedIncludes(vfsPath, locators)
-	if len(parsed) == 0 {
+// parsedIncludes is the flat parser-VFS view consumed by the scanner:
+// SOURCE-rooted paths expose the source parser's `local` bucket;
+// BUILD-rooted paths expose only what emitters registered in buildParsed.
+func (pm *includeParserManager) parsedIncludes(vfsPath VFS) []includeDirective {
+	if vfsPath.IsBuild() {
+		if parsed, ok := pm.buildParsed.Get(vfsPath); ok {
+			return parsed
+		}
+
 		return nil
 	}
 
-	entries := parsed.bucket(parsedIncludesLocal)
+	return pm.sourceParsedBuckets(vfsPath).bucket(parsedIncludesLocal)
+}
+
+func (pm *includeParserManager) RegisterBuildParsedIncludes(vfsPath VFS, parsed []includeDirective) {
+	if !vfsPath.IsBuild() {
+		ThrowFmt("includeParserManager.RegisterBuildParsedIncludes: source-rooted path %q", vfsPath.String())
+	}
+
+	pm.buildParsed.Set(vfsPath, parsed)
+}
+
+func (pm *includeParserManager) scanDirectives(vfsPath VFS) []includeDirective {
+	entries := pm.parsedIncludes(vfsPath)
 	if len(entries) == 0 {
 		return nil
 	}
 
-	out := make([]includeDirective, 0, len(entries))
-	for _, entry := range entries {
-		if entry.kind != parsedIncludeDirective {
-			continue
-		}
-
-		out = append(out, entry.directive)
-	}
-
-	return out
+	return append([]includeDirective(nil), entries...)
 }
 
 // fileExists is a cached wrapper around os.Stat. Returns true for
