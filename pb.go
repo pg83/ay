@@ -325,6 +325,7 @@ func EmitPB(
 	grpc bool,
 	moduleTag *string,
 	cppOutRoot string,
+	duplicateOutputRootInclude bool,
 	sourceRoot string,
 	emit Emitter,
 ) NodeRef {
@@ -367,13 +368,13 @@ func EmitPB(
 	)
 	if cppOutRoot != "" {
 		cmdArgs = append(cmdArgs, "-I=$(S)/"+cppOutRoot)
+		if duplicateOutputRootInclude {
+			cmdArgs = append(cmdArgs, "-I=$(S)/"+cppOutRoot)
+		}
 	} else {
-		cmdArgs = append(cmdArgs, "-I=$(S)/contrib/libs/protobuf/src")
 		cmdArgs = append(cmdArgs, protoExtraIncludeArgs(protoRelPath)...)
 	}
-	if cppOutRoot != "" {
-		cmdArgs = append(cmdArgs, "-I=$(S)/contrib/libs/protobuf/src")
-	}
+	cmdArgs = append(cmdArgs, "-I=$(S)/contrib/libs/protobuf/src")
 	cmdArgs = append(cmdArgs,
 		"-I=$(B)",
 		"-I=$(S)/contrib/libs/protobuf/src",
@@ -394,19 +395,21 @@ func EmitPB(
 	}
 
 	// inputs: [cpp_styleguide, protoc, wrapper, source, optionally descriptor.proto]
+	protoImports := resolveProtoImports(sourceRoot, protoRelPath)
 	inputs := []VFS{
 		pbCppStyleguideVFS,
 		pbProtocBinaryVFS,
 		pbWrapperVFS,
-		srcVFS,
 	}
 	if grpc {
 		inputs = append([]VFS{pbGrpcCppVFS}, inputs...)
 	}
-
-	// If the source file imports "google/protobuf/descriptor.proto", add descriptor.proto.
-	if protoImportsDescriptor(sourceRoot, protoRelPath) {
+	if protoImports != nil && protoImports.HasDescriptor {
 		inputs = append(inputs, pbDescriptorVFS)
+	}
+	inputs = append(inputs, srcVFS)
+	if protoImports != nil {
+		inputs = append(inputs, protoImports.Imports...)
 	}
 
 	// tags come from instance.Platform (["tool"] on host, [] on target);
@@ -478,6 +481,15 @@ func protoExtraIncludeArgs(protoRelPath string) []string {
 	return nil
 }
 
+func slicesContains(xs []string, want string) bool {
+	for _, x := range xs {
+		if x == want {
+			return true
+		}
+	}
+	return false
+}
+
 func protoCPPModulePath(instance ModuleInstance, d *moduleData) string {
 	if d != nil && d.protoNamespace != nil {
 		if d.protoNamespaceGlobal {
@@ -516,37 +528,150 @@ func pbDescriptorImporterExtras(sourceRoot, protoRelPath string) []VFS {
 	out = append(out, Source(protoRelPath))
 	out = append(out, pbDescriptorImporterHeaders...)
 
-	if protoImportsDescriptor(sourceRoot, protoRelPath) {
+	protoImports := resolveProtoImports(sourceRoot, protoRelPath)
+	if protoImports != nil && protoImports.HasDescriptor {
 		out = append(out, pbDescriptorVFS)
 	}
 
 	return out
 }
 
-// protoImportsDescriptor reports whether `<sourceRoot>/<srcRel>` imports
-// "google/protobuf/descriptor.proto". Returns false when unreadable (no
-// descriptor dep). Legitimate disk read scoped to PB-node-emission, not
-// closure walks.
-func protoImportsDescriptor(sourceRoot, srcRel string) bool {
-	absPath := filepath.Join(sourceRoot, srcRel)
-	f, err := os.Open(absPath)
+type protoImportResolution struct {
+	HasDescriptor bool
+	Imports       []VFS
+}
 
-	if err != nil {
-		return false
+func resolveProtoImportPath(sourceRoot, importedRel string) string {
+	clean := filepath.ToSlash(filepath.Clean(importedRel))
+	candidates := []string{clean}
+	if !strings.HasPrefix(clean, "yt/") {
+		candidates = append(candidates, filepath.ToSlash(filepath.Clean("yt/"+clean)))
 	}
+	candidates = append(candidates, filepath.ToSlash(filepath.Clean(pbRuntimeBase+clean)))
 
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.Contains(line, `"google/protobuf/descriptor.proto"`) {
-			return true
+	for _, cand := range candidates {
+		if _, err := os.Stat(filepath.Join(sourceRoot, cand)); err == nil {
+			return cand
 		}
 	}
 
-	return false
+	return ""
+}
+
+// resolveProtoImports returns the transitive raw `.proto` import set for
+// `<sourceRoot>/<srcRel>`, preserving the upstream shape: direct imports of
+// each file are emitted before their transitive closure, and descriptor.proto
+// is surfaced separately because its input slot precedes the source file.
+func resolveProtoImports(sourceRoot, srcRel string) *protoImportResolution {
+	absPath := filepath.Join(sourceRoot, srcRel)
+	f, err := os.Open(absPath)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	var rootImports []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "import ") {
+			continue
+		}
+		start := strings.IndexByte(line, '"')
+		end := strings.LastIndexByte(line, '"')
+		if start < 0 || end <= start {
+			continue
+		}
+		rootImports = append(rootImports, line[start+1:end])
+	}
+
+	res := &protoImportResolution{}
+	seen := map[string]struct{}{}
+	scanned := map[string]struct{}{}
+	var walk func(string)
+	walk = func(rel string) {
+		if _, done := scanned[rel]; done {
+			return
+		}
+		scanned[rel] = struct{}{}
+
+		abs := filepath.Join(sourceRoot, rel)
+		f, err := os.Open(abs)
+		if err != nil {
+			return
+		}
+
+		var imports []string
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if !strings.HasPrefix(line, "import ") {
+				continue
+			}
+			start := strings.IndexByte(line, '"')
+			end := strings.LastIndexByte(line, '"')
+			if start < 0 || end <= start {
+				continue
+			}
+			imports = append(imports, line[start+1:end])
+		}
+		f.Close()
+
+		for _, imp := range imports {
+			if imp == "google/protobuf/descriptor.proto" {
+				res.HasDescriptor = true
+				continue
+			}
+			resolved := resolveProtoImportPath(sourceRoot, imp)
+			if resolved == "" {
+				continue
+			}
+			if _, ok := seen[resolved]; ok {
+				continue
+			}
+			seen[resolved] = struct{}{}
+			res.Imports = append(res.Imports, Source(resolved))
+		}
+
+		for _, imp := range imports {
+			if imp == "google/protobuf/descriptor.proto" {
+				continue
+			}
+			if resolved := resolveProtoImportPath(sourceRoot, imp); resolved != "" {
+				walk(resolved)
+			}
+		}
+	}
+
+	for _, imp := range rootImports {
+		if imp == "google/protobuf/descriptor.proto" {
+			res.HasDescriptor = true
+			continue
+		}
+		resolved := resolveProtoImportPath(sourceRoot, imp)
+		if resolved == "" {
+			continue
+		}
+		if _, ok := seen[resolved]; ok {
+			continue
+		}
+		seen[resolved] = struct{}{}
+		res.Imports = append(res.Imports, Source(resolved))
+	}
+	for _, imp := range rootImports {
+		if imp == "google/protobuf/descriptor.proto" {
+			continue
+		}
+		if resolved := resolveProtoImportPath(sourceRoot, imp); resolved != "" {
+			walk(resolved)
+		}
+	}
+
+	if !res.HasDescriptor && len(res.Imports) == 0 {
+		return nil
+	}
+
+	return res
 }
 
 // emitProtoSrcs emits PB/EV nodes for .proto/.ev entries in d.srcs when
@@ -703,6 +828,10 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	}
 
 	var codegenOutputs []protoCodegenOutput
+	duplicateOutputRootInclude := false
+	if cppOutRoot := protoCPPOutRoot(d); cppOutRoot != "" {
+		duplicateOutputRootInclude = slicesContains(peerContribs.addIncl, "$(B)/"+cppOutRoot)
+	}
 
 	// Emit PB nodes.
 	for _, src := range protoSrcs {
@@ -712,7 +841,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
 			grpcCppLDRef, cppStyleguideBinary, protocBinary,
 			grpcCppBinary, d.grpc,
-			stringPtr("cpp_proto"), protoCPPOutRoot(d), ctx.sourceRoot, ctx.emit)
+			stringPtr("cpp_proto"), protoCPPOutRoot(d), duplicateOutputRootInclude, ctx.sourceRoot, ctx.emit)
 
 		// Register the .pb.h with EmitsIncludes: .pb.h's of every imported
 		// proto plus the constant protobuf runtime header set.
@@ -1177,6 +1306,12 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 
 	inputs := []VFS{pbProtocBinaryVFS, pbPyWrapperVFS, Source(protoRelPath)}
+	if protoImports := resolveProtoImports(ctx.sourceRoot, protoRelPath); protoImports != nil {
+		if protoImports.HasDescriptor {
+			inputs = append(inputs, pbDescriptorVFS)
+		}
+		inputs = append(inputs, protoImports.Imports...)
+	}
 	if d.grpc {
 		inputs = append(inputs, pbGrpcPyVFS)
 	}
@@ -1206,7 +1341,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	if yapyRes == nil {
 		yapyRes = &generatedPyProtoYapycResult{}
 	}
-	return pyProtoAuxEntriesForSource(instance, d, src, pyPBRef, outputs, yapyRes.Refs, yapyRes.Outputs)
+	return pyProtoAuxEntriesForSource(instance, d, src, pyPBRef, pyProtoSourceInputs(inputs), outputs, yapyRes.Refs, yapyRes.Outputs)
 }
 
 func protoPythonOutputRoot(instance ModuleInstance, d *moduleData) string {
@@ -1286,10 +1421,10 @@ type pyProtoAuxEntry struct {
 	inputs   []VFS
 }
 
-func pyProtoAuxEntriesForSource(instance ModuleInstance, d *moduleData, src string, pyPBRef NodeRef, pyOutputs []VFS, yapyRefs []NodeRef, yapyOuts []VFS) []pyProtoAuxEntry {
+func pyProtoAuxEntriesForSource(instance ModuleInstance, d *moduleData, src string, pyPBRef NodeRef, producerInputs []VFS, pyOutputs []VFS, yapyRefs []NodeRef, yapyOuts []VFS) []pyProtoAuxEntry {
 	var entries []pyProtoAuxEntry
 	addResource := func(srcPath VFS, key string, producer NodeRef) {
-		entries = append(entries, pyProtoAuxEntry{path: srcPath, key: key, producer: producer})
+		entries = append(entries, pyProtoAuxEntry{path: srcPath, key: key, producer: producer, inputs: producerInputs})
 	}
 	addResource(pyOutputs[0], protoPythonResourceKey(instance, d, src, "_pb2.py"), pyPBRef)
 	if len(yapyOuts) > 0 {
@@ -1303,6 +1438,22 @@ func pyProtoAuxEntriesForSource(instance ModuleInstance, d *moduleData, src stri
 	}
 
 	return entries
+}
+
+func pyProtoSourceInputs(inputs []VFS) []VFS {
+	out := make([]VFS, 0, len(inputs))
+	seen := map[VFS]struct{}{}
+	for _, input := range inputs {
+		if !input.IsSource() {
+			continue
+		}
+		if _, ok := seen[input]; ok {
+			continue
+		}
+		seen[input] = struct{}{}
+		out = append(out, input)
+	}
+	return out
 }
 
 type pyProtoAuxChunksResult struct {
@@ -1367,6 +1518,9 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		cur.hashInputs = append(cur.hashInputs, "-", kvHash)
 		cur.cmdArgs = append(cur.cmdArgs, "-", kvCmd)
 		addInput(e.path)
+		for _, input := range e.inputs {
+			addInput(input)
+		}
 		addDep(e.producer)
 		cmdLen += rootCmdLen + len("-") + len(kvHash)
 		if cmdLen >= maxCmdLen {
@@ -1376,6 +1530,9 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		cur.hashInputs = append(cur.hashInputs, arcBuildPath, "-"+key)
 		cur.cmdArgs = append(cur.cmdArgs, e.path.String(), "-"+key)
 		addInput(e.path)
+		for _, input := range e.inputs {
+			addInput(input)
+		}
 		addDep(e.producer)
 		cmdLen += rootCmdLen + len(arcBuildPath) + len(key)
 		if cmdLen >= maxCmdLen {
@@ -1388,6 +1545,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 	memberSeen := map[VFS]struct{}{}
 	for _, ch := range chunks {
 		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, "PY3_PROTO") + "_raw.auxcpp")
+		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, peerContribs, aux, ch.inputs)
 		cmdArgs := []string{rescompilerBinPath, aux.String()}
 		cmdArgs = append(cmdArgs, ch.cmdArgs...)
 
@@ -1396,12 +1554,17 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			deps = append(deps, rescompilerRef)
 		}
 
-		inputs := append([]VFS{rescompilerBinVFS}, ch.inputs...)
+		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
+		inputs := append([]VFS(nil), ch.inputs...)
+		inputs = append(inputs, rescompilerBinVFS)
+		inputs = append(inputs, auxClosure...)
+		inputs = dedupVFS(inputs)
 		ref := ctx.emit.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: cmdArgs}},
+			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
+			Env:              env,
 			Inputs:           inputs,
 			Outputs:          []VFS{aux},
-			KV:               map[string]string{"p": "PR", "pc": "yellow"},
+			KV:               map[string]string{"p": "PR", "pc": "yellow", "show_out": "yes"},
 			Tags:             instance.Platform.Tags,
 			TargetProperties: map[string]string{"module_dir": instance.Path, "module_tag": "py3_proto"},
 			Platform:         string(instance.Platform.Target),
@@ -1413,7 +1576,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		ccIn := ModuleCCInputs{
 			AddIncl:              pyProtoAuxOwnAddIncl(d),
 			CFlags:               []string{"-DLZMA_API_STATIC", "-DOPENSSL_RENAME_SYMBOLS=1", "-DFFI_STATIC_BUILD", "-DUSE_PYTHON3"},
-			PeerAddInclGlobal:    pyProtoAuxPeerAddIncl(peerContribs, d),
+			PeerAddInclGlobal:    pyProtoAuxPeerAddIncl(instance, peerContribs, d),
 			PeerCFlagsGlobal:     nil,
 			PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
 			PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
@@ -1426,7 +1589,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			Py3Suffix:            true,
 			ForceCxx:             true,
 			ModuleTag:            stringPtr("py3_proto"),
-			IncludeInputs:        inputs,
+			IncludeInputs:        auxClosure,
 		}
 		ccRef, ccOut := EmitCC(instance, aux.Rel[strings.LastIndex(aux.Rel, "/")+1:], ccIn, ctx.host, ctx.emit)
 		res.Refs = append(res.Refs, ccRef)
@@ -1455,7 +1618,41 @@ func pyProtoAuxOwnAddIncl(d *moduleData) []string {
 	return out
 }
 
-func pyProtoAuxPeerAddIncl(peerContribs peerGlobalContribs, d *moduleData) []string {
+func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, aux VFS, seed []VFS) []VFS {
+	reg := codegenRegForInstance(ctx, instance)
+	if reg != nil {
+		emits := []VFS{
+			Source("library/cpp/resource/resource.h"),
+			Source("library/cpp/resource/registry.h"),
+		}
+		for _, in := range seed {
+			if in.IsSource() {
+				emits = append(emits, in)
+			}
+		}
+		emits = dedupVFS(emits)
+		reg.Register(&GeneratedFileInfo{
+			ProducerKvP:   "PR",
+			OutputPath:    aux,
+			EmitsIncludes: emits,
+		})
+	}
+
+	scanIn := ModuleCCInputs{
+		AddIncl:           pyProtoAuxOwnAddIncl(d),
+		PeerAddInclGlobal: pyProtoAuxPeerAddIncl(instance, peerContribs, d),
+		SourceRoot:        ctx.sourceRoot,
+	}
+
+	closure := walkClosure(ctx, instance, aux, scanIn)
+	if len(closure) == 0 {
+		return nil
+	}
+
+	return dedupVFS(closure)
+}
+
+func pyProtoAuxPeerAddIncl(instance ModuleInstance, peerContribs peerGlobalContribs, d *moduleData) []string {
 	out := make([]string, 0, len(peerContribs.addIncl)+8)
 	for _, p := range peerContribs.addIncl {
 		if p == "contrib/libs/protobuf/src" || p == "contrib/restricted/abseil-cpp-tstring" || p == "contrib/restricted/abseil-cpp" {
@@ -1470,7 +1667,7 @@ func pyProtoAuxPeerAddIncl(peerContribs peerGlobalContribs, d *moduleData) []str
 		"contrib/libs/lzma/liblzma/api",
 		"contrib/libs/openssl/include",
 		"contrib/restricted/libffi/include",
-		"contrib/restricted/libffi/configs/x86_64-unknown-linux-gnu/include",
+		"contrib/restricted/libffi/configs/"+libffiConfigTriple(instance.Platform)+"/include",
 	)
 	if d != nil && d.protoNamespace != nil {
 		base := filepath.ToSlash(filepath.Clean(*d.protoNamespace))
@@ -1479,6 +1676,17 @@ func pyProtoAuxPeerAddIncl(peerContribs peerGlobalContribs, d *moduleData) []str
 		}
 	}
 	return out
+}
+
+func libffiConfigTriple(p *Platform) string {
+	switch p.ISA {
+	case ISAAArch64:
+		return "aarch64-unknown-linux-gnu"
+	case ISAX8664:
+		return "x86_64-unknown-linux-gnu"
+	default:
+		return p.Triple
+	}
 }
 
 func py3ccToolRefs(ctx *genCtx, instance ModuleInstance) (NodeRef, NodeRef, string, string) {

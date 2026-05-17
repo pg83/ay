@@ -1569,7 +1569,7 @@ func pathDir(p string) string {
 // path. Empty result implies the path normalised away to the source
 // root itself. Does not consult the filesystem.
 func normalisePath(p string) string {
-	if !strings.Contains(p, "..") && !strings.Contains(p, "./") {
+	if !strings.Contains(p, "..") && !strings.Contains(p, "./") && !strings.Contains(p, "//") {
 		return p
 	}
 
@@ -1748,9 +1748,18 @@ func stripComments(data []byte) []byte {
 
 	n := len(data)
 	i := 0
+	atLineStart := true
 
 	for i < n {
 		c := data[i]
+
+		if atLineStart {
+			if next, ok := scanIncludeDirectiveTarget(data, i); ok {
+				i = next
+				atLineStart = false
+				continue
+			}
+		}
 
 		// Line comment: `//` runs to end of line. Newline is preserved.
 		if c == '/' && i+1 < n && data[i+1] == '/' {
@@ -1762,6 +1771,7 @@ func stripComments(data []byte) []byte {
 				data[i] = ' '
 				i++
 			}
+			atLineStart = true
 
 			continue
 		}
@@ -1788,6 +1798,7 @@ func stripComments(data []byte) []byte {
 
 				i++
 			}
+			atLineStart = true
 
 			continue
 		}
@@ -1916,9 +1927,87 @@ func stripComments(data []byte) []byte {
 		}
 
 		i++
+		atLineStart = c == '\n'
 	}
 
 	return data
+}
+
+func scanIncludeDirectiveTarget(data []byte, i int) (int, bool) {
+	n := len(data)
+	j := i
+	for j < n {
+		switch data[j] {
+		case ' ', '\t':
+			j++
+		default:
+			goto nonSpace
+		}
+	}
+	return 0, false
+
+nonSpace:
+	if data[j] != '#' {
+		return 0, false
+	}
+	j++
+	for j < n {
+		switch data[j] {
+		case ' ', '\t':
+			j++
+		default:
+			goto directive
+		}
+	}
+	return 0, false
+
+directive:
+	switch {
+	case bytes.HasPrefix(data[j:], []byte("include_next")):
+		j += len("include_next")
+	case bytes.HasPrefix(data[j:], []byte("include")):
+		j += len("include")
+	default:
+		return 0, false
+	}
+	for j < n {
+		switch data[j] {
+		case ' ', '\t':
+			j++
+		default:
+			goto target
+		}
+	}
+	return 0, false
+
+target:
+	if j >= n {
+		return 0, false
+	}
+	var close byte
+	switch data[j] {
+	case '<':
+		close = '>'
+	case '"':
+		close = '"'
+	default:
+		return 0, false
+	}
+	j++
+	for j < n {
+		if data[j] == '\\' && close == '"' && j+1 < n && data[j+1] != '\n' {
+			j += 2
+			continue
+		}
+		if data[j] == close {
+			return j + 1, true
+		}
+		if data[j] == '\n' {
+			return 0, false
+		}
+		j++
+	}
+	return 0, false
 }
 
 // prevByte returns the byte immediately before index `i` in `data`, or

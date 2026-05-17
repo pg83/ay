@@ -470,6 +470,8 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				}
 				if strings.HasSuffix(src, ".h.in") {
 					addGeneratedHeaderInclude(modulePath, strings.TrimSuffix(src, ".in"), d)
+				} else if strings.HasSuffix(src, ".y") {
+					addGeneratedOwnHeaderInclude(modulePath, strings.TrimSuffix(src, filepath.Ext(src))+".h", d)
 				}
 			}
 		case *PeerdirStmt:
@@ -682,6 +684,16 @@ func addGeneratedHeaderInclude(modulePath, dst string, d *moduleData) {
 	include := "$(B)/" + rel
 	d.addIncl = append(d.addIncl, include)
 	d.addInclGlobal = append(d.addInclGlobal, include)
+}
+
+func addGeneratedOwnHeaderInclude(modulePath, dst string, d *moduleData) {
+	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(dst)))
+	rel := modulePath
+	if dir != "." && dir != "" {
+		rel = filepath.ToSlash(filepath.Clean(modulePath + "/" + dir))
+	}
+
+	d.addIncl = append(d.addIncl, "$(B)/"+rel)
 }
 
 // applyUnknownStmt routes an UnknownStmt by name. NO_LIBC / NO_UTIL /

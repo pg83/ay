@@ -653,7 +653,7 @@ func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, srcDir *string
 	pbRef := EmitPB(
 		instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
 		NodeRef{}, cppStyleguideBinary, protocBinary, pbGrpcCppPath,
-		false, nil, "", ctx.sourceRoot, ctx.emit,
+		false, nil, "", false, ctx.sourceRoot, ctx.emit,
 	)
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
