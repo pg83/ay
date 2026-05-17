@@ -100,6 +100,7 @@ type JoinSrcsStmt struct {
 type AddInclStmt struct {
 	GlobalPaths []string
 	OwnPaths    []string
+	CythonPaths []string
 	// AllPaths preserves declaration order across the GLOBAL split.
 	// own cmd_args emission uses AllPaths so -I slots match the
 	// reference's declaration-order layout (e.g. libffi
@@ -1041,9 +1042,9 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 
 		return &JoinSrcsStmt{OutputName: args[0], Sources: sources, Line: nameTok.line}
 	case "ADDINCL":
-		globalPaths, ownPaths, allPaths := splitAddInclPaths(args)
+		globalPaths, ownPaths, cythonPaths, allPaths := splitAddInclPaths(args)
 
-		return &AddInclStmt{GlobalPaths: globalPaths, OwnPaths: ownPaths, AllPaths: allPaths, Line: nameTok.line}
+		return &AddInclStmt{GlobalPaths: globalPaths, OwnPaths: ownPaths, CythonPaths: cythonPaths, AllPaths: allPaths, Line: nameTok.line}
 	case "CFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
 
@@ -1386,12 +1387,21 @@ func splitFlagsByGlobal(args []string) (globalFlags, ownFlags []string) {
 //
 //	ADDINCL(GLOBAL a b)  →  global=[a], own=[b]
 //
-// FOR <kind> qualifiers are dropped unconditionally — they select a
-// non-C/C++ language axis irrelevant for CC/AS include paths.
-func splitAddInclPaths(args []string) (globalPaths, ownPaths, allPaths []string) {
+// FOR cython paths feed only the CY command. Other FOR <kind> qualifiers
+// keep the historic proto behaviour: drop the selector tokens, keep the path
+// as a normal include.
+func splitAddInclPaths(args []string) (globalPaths, ownPaths, cythonPaths, allPaths []string) {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "FOR" {
-			// FOR <kind> — drop both tokens; not a C/C++ include path.
+			if i+2 < len(args) && args[i+1] == "cython" {
+				cythonPaths = append(cythonPaths, args[i+2])
+				i += 2
+
+				continue
+			}
+
+			// FOR <kind> — drop both tokens; the following path remains
+			// a normal include for the legacy proto shape.
 			i++ // skip kind
 			continue
 		}
@@ -1401,6 +1411,13 @@ func splitAddInclPaths(args []string) (globalPaths, ownPaths, allPaths []string)
 
 			// GLOBAL FOR <kind> <path>: skip the FOR <kind> pair.
 			if i < len(args) && args[i] == "FOR" {
+				if i+2 < len(args) && args[i+1] == "cython" {
+					cythonPaths = append(cythonPaths, args[i+2])
+					i += 2
+
+					continue
+				}
+
 				i++ // skip FOR
 				i++ // skip kind
 			}
@@ -1415,7 +1432,7 @@ func splitAddInclPaths(args []string) (globalPaths, ownPaths, allPaths []string)
 		}
 	}
 
-	return globalPaths, ownPaths, allPaths
+	return globalPaths, ownPaths, cythonPaths, allPaths
 }
 
 // parseIf is invoked with the `IF` name token already consumed. Reads

@@ -40,6 +40,25 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	pluginRefs := []NodeRef{}
 	pluginPaths := []string{}
 	pluginSeen := map[string]struct{}{}
+	addInclSeen := map[string]struct{}{}
+	cFlagsSeen := map[string]struct{}{}
+	cxxFlagsSeen := map[string]struct{}{}
+	cOnlyFlagsSeen := map[string]struct{}{}
+	var peerAddInclGlobal []string
+	var peerCFlagsGlobal []string
+	var peerCXXFlagsGlobal []string
+	var peerCOnlyFlagsGlobal []string
+
+	addEach := func(seenSet map[string]struct{}, dst *[]string, src []string) {
+		for _, x := range src {
+			if _, dup := seenSet[x]; dup {
+				continue
+			}
+
+			seenSet[x] = struct{}{}
+			*dst = append(*dst, x)
+		}
+	}
 
 	for _, p := range peerPaths {
 		if _, dup := seen[p]; dup {
@@ -54,6 +73,11 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 			peerArchiveRefs = append(peerArchiveRefs, peerResult.ARRef)
 			peerArchivePaths = append(peerArchivePaths, strings.TrimPrefix(*peerResult.ARPath, "$(B)/"))
 		}
+
+		addEach(addInclSeen, &peerAddInclGlobal, peerResult.AddInclGlobal)
+		addEach(cFlagsSeen, &peerCFlagsGlobal, peerResult.CFlagsGlobal)
+		addEach(cxxFlagsSeen, &peerCXXFlagsGlobal, peerResult.CXXFlagsGlobal)
+		addEach(cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, peerResult.COnlyFlagsGlobal)
 
 		for i, pp := range peerResult.LDPluginPaths {
 			if _, dup := pluginSeen[pp]; dup {
@@ -133,17 +157,21 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	}
 
 	ref := ctx.emit.Emit(n)
+	addInclGlobal := mergeDedup(d.addInclGlobal, peerAddInclGlobal)
+	cFlagsGlobal := mergeDedup(d.cFlagsGlobal, peerCFlagsGlobal)
+	cxxFlagsGlobal := mergeDedup(d.cxxFlagsGlobal, peerCXXFlagsGlobal)
+	cOnlyFlagsGlobal := mergeDedup(d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
 
 	return &moduleEmitResult{
 		ARPath:                       nil,
 		isPROGRAM:                    false,
 		LDRef:                        ref,
 		LDPath:                       &outputPath,
-		AddInclGlobal:                append([]string(nil), d.addInclGlobal...),
+		AddInclGlobal:                addInclGlobal,
 		OwnAddInclGlobal:             append([]string(nil), d.addInclGlobal...),
-		CFlagsGlobal:                 append([]string(nil), d.cFlagsGlobal...),
-		CXXFlagsGlobal:               append([]string(nil), d.cxxFlagsGlobal...),
-		COnlyFlagsGlobal:             append([]string(nil), d.cOnlyFlagsGlobal...),
+		CFlagsGlobal:                 cFlagsGlobal,
+		CXXFlagsGlobal:               cxxFlagsGlobal,
+		COnlyFlagsGlobal:             cOnlyFlagsGlobal,
 		PeerArchiveClosureRefs:       nil,
 		PeerArchiveClosurePaths:      nil,
 		isPyLibrary:                  false,

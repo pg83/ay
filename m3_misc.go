@@ -630,15 +630,21 @@ func biFlagsForInstance(targetP *Platform) []string {
 // $(S)/.../ or $(B)/.../ respectively. inputs: tool + IN abs paths +
 // closure. outputs: STDOUT or OUT/OUT_NOAUTO abs paths.
 // deps/foreign_deps.tool carry toolLDRef.
+type prEmitResult struct {
+	Ref    NodeRef
+	Inputs []VFS
+}
+
 func EmitPR(
 	instance ModuleInstance,
+	srcDir *string,
 	stmt *RunProgramStmt,
 	toolBinPath string,
 	toolLDRef NodeRef,
 	inputClosure []VFS,
 	extraDepRefs []NodeRef,
 	emit Emitter,
-) NodeRef {
+) prEmitResult {
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
@@ -673,10 +679,11 @@ func EmitPR(
 	for _, a := range stmt.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path)
+		a = strings.ReplaceAll(a, "$CURDIR", Source(instance.Path).String())
 		// If the arg is a plain filename (no path sep, no - prefix, no =),
 		// and appears in IN list, expand to SOURCE_ROOT abs.
 		if inSet[a] && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = Source(instance.Path + "/" + a).String()
+			a = Source(runProgramSourceRel(instance, srcDir, a)).String()
 		} else if outSet[a] && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			// Bare OUT / OUT_NOAUTO / STDOUT basenames are rewritten to
 			// $(B)/<modulePath>/<basename> so the consumer
@@ -690,7 +697,7 @@ func EmitPR(
 	// reached transitively via closure appear once, matching REF).
 	inAbsPaths := make([]VFS, 0, len(stmt.INFiles))
 	for _, f := range stmt.INFiles {
-		inAbsPaths = append(inAbsPaths, Source(instance.Path+"/"+f))
+		inAbsPaths = append(inAbsPaths, Source(runProgramSourceRel(instance, srcDir, f)))
 	}
 
 	inputs := make([]VFS, 0, 1+len(inAbsPaths)+len(inputClosure))
@@ -749,7 +756,7 @@ func EmitPR(
 		cmd.Stdout = stdoutPath
 	}
 	if stmt.CWD != nil {
-		cmd.Cwd = *stmt.CWD
+		cmd.Cwd = expandRunProgramCWD(instance, *stmt.CWD)
 	}
 
 	// Empty instance.Platform.Tags must stay non-nil so JSON
@@ -781,7 +788,27 @@ func EmitPR(
 		ForeignDepRefs: map[string][]NodeRef{"tool": foreignDepTool},
 	}
 
-	return emit.Emit(node)
+	return prEmitResult{
+		Ref:    emit.Emit(node),
+		Inputs: append([]VFS(nil), inputs...),
+	}
+}
+
+func runProgramSourceRel(instance ModuleInstance, srcDir *string, rel string) string {
+	if srcDir != nil {
+		return *srcDir + "/" + rel
+	}
+
+	return instance.Path + "/" + rel
+}
+
+func expandRunProgramCWD(instance ModuleInstance, cwd string) string {
+	cwd = strings.ReplaceAll(cwd, "$BINDIR", Build(instance.Path).String())
+	cwd = strings.ReplaceAll(cwd, "$CURDIR", Source(instance.Path).String())
+	cwd = strings.ReplaceAll(cwd, "${ARCADIA_BUILD_ROOT}", "$(B)")
+	cwd = strings.ReplaceAll(cwd, "${ARCADIA_ROOT}", "$(S)")
+
+	return cwd
 }
 
 // ─── emitMiscNodes ────────────────────────────────────────────────────────────
@@ -1549,15 +1576,17 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	}
 	in.IncludeInputs = walkClosure(ctx, instance, resolveSourceVFS(ctx, instance, cf.Src, in.SrcDir), in)
 
-	_, cfOut := EmitCF(instance, cf.Src, in, ctx.emit)
+	cfRef, cfOut := EmitCF(instance, cf.Src, in, ctx.emit)
 
 	// F-7-B: register the explicit CF output with EmitsIncludes.
 	if reg != nil {
 		diskPath := ctx.sourceRoot + "/" + instance.Path + "/" + cf.Src
 		reg.Register(&GeneratedFileInfo{
-			ProducerKvP:   "CF",
-			OutputPath:    cfOut,
-			EmitsIncludes: cfIncludeDirectives(diskPath),
+			ProducerKvP:    "CF",
+			OutputPath:     cfOut,
+			EmitsIncludes:  cfIncludeDirectives(diskPath),
+			ProducerRef:    cfRef,
+			HasProducerRef: true,
 		})
 	}
 }
@@ -1605,21 +1634,21 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
 				OutputPath:    Build(instance.Path + "/" + f),
-				EmitsIncludes: prEmitsIncludes(instance, f, stmt, toolInducedDeps),
+				EmitsIncludes: prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps),
 			})
 		}
 		for _, f := range stmt.OUTNoAutoFiles {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
 				OutputPath:    Build(instance.Path + "/" + f),
-				EmitsIncludes: prEmitsIncludes(instance, f, stmt, toolInducedDeps),
+				EmitsIncludes: prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps),
 			})
 		}
 		if stmt.StdoutFile != nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP:   "PR",
 				OutputPath:    Build(instance.Path + "/" + *stmt.StdoutFile),
-				EmitsIncludes: prEmitsIncludes(instance, *stmt.StdoutFile, stmt, toolInducedDeps),
+				EmitsIncludes: prEmitsIncludes(instance, d.srcDir, *stmt.StdoutFile, stmt, toolInducedDeps),
 			})
 		}
 	}
@@ -1639,7 +1668,20 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// stats_enums.h_serialized.cpp via dep_types.h → stats_enums.h).
 	prExtraDepRefs := resolveCodegenDepRefs(ctx, instance, inputClosure, toolLDRef)
 
-	prRef := EmitPR(instance, stmt, toolBinPath, toolLDRef, inputClosure, prExtraDepRefs, ctx.emit)
+	prResult := EmitPR(instance, d.srcDir, stmt, toolBinPath, toolLDRef, inputClosure, prExtraDepRefs, ctx.emit)
+	prRef := prResult.Ref
+	if d.prOutputInputs == nil {
+		d.prOutputInputs = map[string][]VFS{}
+	}
+	for _, f := range stmt.OUTFiles {
+		d.prOutputInputs[f] = append([]VFS(nil), prResult.Inputs...)
+	}
+	for _, f := range stmt.OUTNoAutoFiles {
+		d.prOutputInputs[f] = append([]VFS(nil), prResult.Inputs...)
+	}
+	if stmt.StdoutFile != nil {
+		d.prOutputInputs[*stmt.StdoutFile] = append([]VFS(nil), prResult.Inputs...)
+	}
 
 	// Backfill PR ProducerRef so the downstream CC's
 	// resolveCodegenDepRefs threads PR into deps[]. Registry entries
@@ -1718,7 +1760,7 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 // module-level INDUCED_DEPS(...) header list (repo-relative). Append
 // those to the seed-include set so the include scanner reaches the
 // transitive closure of headers the tool injects into its outputs.
-func prEmitsIncludes(instance ModuleInstance, outFile string, stmt *RunProgramStmt, toolInducedDeps []string) []VFS {
+func prEmitsIncludes(instance ModuleInstance, srcDir *string, outFile string, stmt *RunProgramStmt, toolInducedDeps []string) []VFS {
 	if !isCCSourceExt(outFile) {
 		return nil
 	}
@@ -1727,7 +1769,7 @@ func prEmitsIncludes(instance ModuleInstance, outFile string, stmt *RunProgramSt
 
 	// IN files are module-relative; rebase to SOURCE_ROOT.
 	for _, f := range stmt.INFiles {
-		includes = append(includes, Source(instance.Path+"/"+f))
+		includes = append(includes, Source(runProgramSourceRel(instance, srcDir, f)))
 	}
 
 	// OUTPUT_INCLUDES entries are repo-relative.

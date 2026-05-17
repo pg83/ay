@@ -22,16 +22,23 @@ type moduleData struct {
 	py3ProgramMultimodule bool
 	srcs                  []string
 	globalSrcs            []string
+	globalEventSeq        int
+	firstResourceEvent    int
+	firstGlobalSrcsEvent  int
 	pySrcs                []string // PR-M3-A: python sources from PY_SRCS(...); each entry is a .py filename
-	pyBuildNoPYC          bool     // PR-M3-A: set by ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
-	pyBuildNoPY           bool     // PR-M3-resource-objcopy-C: set by ENABLE(PYBUILD_NO_PY); suppresses raw .py resfs embedding from PY_SRCS (only the yapyc3 form is embedded)
-	pyTopLevel            bool     // PR-M3-resource-objcopy-C: set by TOP_LEVEL prefix in PY_SRCS(...); the resfs key for each source omits the dotted module-path prefix
+	pySrcGroups           []pySrcGroup
+	pyGeneratedSrcs       map[string][]VFS
+	pyPyiResources        []resourceEntry
+	pyBuildNoPYC          bool // PR-M3-A: set by ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
+	pyBuildNoPY           bool // PR-M3-resource-objcopy-C: set by ENABLE(PYBUILD_NO_PY); suppresses raw .py resfs embedding from PY_SRCS (only the yapyc3 form is embedded)
+	pyTopLevel            bool // PR-M3-resource-objcopy-C: set by TOP_LEVEL prefix in PY_SRCS(...); the resfs key for each source omits the dotted module-path prefix
 	noExtendedPySearch    bool
 	enumSrcs              []*GenerateEnumSerializationStmt // PR-M3-D: GENERATE_ENUM_SERIALIZATION(*) declarations
 	peerdirs              []string
 	joinSrcs              []*JoinSrcsStmt
 	addIncl               []string // collected non-GLOBAL ADDINCL paths
 	addInclGlobal         []string // PR-31 D04: collected ADDINCL(GLOBAL ...) paths; peer-propagated to consumers
+	cythonAddIncl         []string // ADDINCL(FOR cython ...) paths; consumed by CY command, not downstream CC.
 	cFlags                []string // collected non-GLOBAL CFLAGS values (apply to module's own C+C++ sources)
 	cFlagsGlobal          []string // PR-32 D04: collected CFLAGS(GLOBAL ...) values; peer-propagated to consumers' C+C++ sources
 	cxxFlags              []string // collected non-GLOBAL CXXFLAGS values (C++ only); PR-29-D02 threads into ModuleCCInputs.CXXFlags
@@ -54,8 +61,9 @@ type moduleData struct {
 	pythonSQLite3         bool     // default-on; DISABLE(PYTHON_SQLITE3) flips off the implicit `_sqlite` peer for PY*_PROGRAM modules.
 	pyNamespace           *string  // set by PY_NAMESPACE(...); used by py-proto resource key layout.
 	protoNamespace        *string  // set by PROTO_NAMESPACE(...); drives py-proto --ns and output layout.
-	noMypy                bool     // set by NO_MYPY(); suppresses mypy plugin and .pyi outputs for py-proto.
-	optimizePyProtos      bool     // mirrors OPTIMIZE_PY_PROTOS_FLAG; default-on for PY{2,3}_PROTO variants.
+	protoNamespaceGlobal  bool
+	noMypy                bool // set by NO_MYPY(); suppresses mypy plugin and .pyi outputs for py-proto.
+	optimizePyProtos      bool // mirrors OPTIMIZE_PY_PROTOS_FLAG; default-on for PY{2,3}_PROTO variants.
 	optimizePyProtosSet   bool
 	excludeTags           map[string]bool
 	dynamicLibraryFrom    []string
@@ -98,6 +106,11 @@ type moduleData struct {
 	// Populated by emitRunProgramsForAR as each RUN_PROGRAM is emitted;
 	// consumed by emitArchives to wire AR dep sets to the producer.
 	prOutputProducer map[string]NodeRef
+	// Map of PR-emitted output filename → PR node inputs[]. RESOURCE
+	// consumers keep the generated file as the only objcopy cmd input, but
+	// upstream still threads the producer's source inputs into node inputs
+	// and enclosing global archive inputs.
+	prOutputInputs map[string][]VFS
 	// Set of source filenames declared via `SRC(...)` or
 	// `SRC_C_NO_LTO(...)`. These macros emit a FLAT output path (no
 	// `_/` infix), unlike `SRCS(subdir/foo.cpp)` which emits
@@ -153,6 +166,12 @@ type resourceEntry struct {
 	Key  string
 }
 
+type pySrcGroup struct {
+	Srcs      []string
+	TopLevel  bool
+	Namespace *string
+}
+
 // archiveEntry captures one `ARCHIVE(NAME <out> [DONTCOMPRESS] files...)`
 // invocation. Files are in declaration order; each is either a module-
 // relative source path or the basename of a build-tree artifact
@@ -186,14 +205,23 @@ type antlr4GrammarInfo struct {
 //
 // `pathFlags` seeds the path-based heuristic; macro overlays mutate it
 // in place on the returned moduleData.
-func collectModule(modulePath string, kind ModuleKind, stmts []Stmt, env Environment, pathFlags FlagSet) *moduleData {
+func collectModule(sourceRoot string, modulePath string, kind ModuleKind, stmts []Stmt, env Environment, pathFlags FlagSet) *moduleData {
 	d := &moduleData{
-		flags:         pathFlags,
-		pythonSQLite3: true,
-		bisonGenExt:   ".cpp",
+		flags:                pathFlags,
+		pythonSQLite3:        true,
+		bisonGenExt:          ".cpp",
+		firstResourceEvent:   -1,
+		firstGlobalSrcsEvent: -1,
 	}
 
 	collectStmts(modulePath, kind, stmts, env, d)
+	filterInvalidAddIncl(sourceRoot, d)
+	if d.py3ProgramMultimodule && kind == KindLib {
+		// PY_MAIN belongs to the executable half of PY3_PROGRAM. The
+		// library half is a self-peer that contributes importable code, not
+		// the program entrypoint resource.
+		d.pyMain = nil
+	}
 	d.muslEnabled = env.Bool("MUSL")
 
 	deriveGenericCompileFlags(d)
@@ -233,25 +261,74 @@ func collectModule(modulePath string, kind ModuleKind, stmts []Stmt, env Environ
 		}
 	}
 
-	// pybuild processes PY_SRCS / PY_REGISTER by emitting RESOURCE(...)
-	// calls; each RESOURCE() expands to PEERDIR(library/cpp/resource)
-	// (build/ymake.core.conf:522-524). Mirror that side effect here.
-	if len(d.pySrcs) > 0 || len(d.pyRegister) > 0 {
-		if modulePath != "library/cpp/resource" {
-			already := false
-			for _, p := range d.peerdirs {
-				if p == "library/cpp/resource" {
-					already = true
-					break
-				}
-			}
-			if !already {
-				d.peerdirs = append(d.peerdirs, "library/cpp/resource")
-			}
-		}
+	// pybuild lowers PY_SRCS / PY_REGISTER / .pyi resources into
+	// RESOURCE() calls. Keep this fallback at module-finalisation time
+	// for the synthetic pybuild resources; explicit RESOURCE macros add
+	// the peer at their declaration site in collectStmts.
+	if len(d.pyPyiResources) > 0 || len(d.pySrcs) > 0 || len(d.pyRegister) > 0 {
+		ensureResourcePeer(modulePath, d)
 	}
 
 	return d
+}
+
+func ensureResourcePeer(modulePath string, d *moduleData) {
+	const resourcePeer = "library/cpp/resource"
+	if modulePath == resourcePeer {
+		return
+	}
+
+	for _, p := range d.peerdirs {
+		if p == resourcePeer {
+			return
+		}
+	}
+
+	d.peerdirs = append(d.peerdirs, resourcePeer)
+}
+
+func filterInvalidAddIncl(sourceRoot string, d *moduleData) {
+	if sourceRoot == "" {
+		return
+	}
+
+	d.addIncl = filterExistingSourceDirs(sourceRoot, d.addIncl)
+	d.addInclGlobal = filterExistingSourceDirs(sourceRoot, d.addInclGlobal)
+	d.cythonAddIncl = filterExistingSourceDirs(sourceRoot, d.cythonAddIncl)
+}
+
+func filterExistingSourceDirs(sourceRoot string, paths []string) []string {
+	if len(paths) == 0 {
+		return paths
+	}
+
+	out := paths[:0]
+	for _, path := range paths {
+		if shouldCheckSourceDir(path) {
+			info, err := os.Stat(filepath.Join(sourceRoot, path))
+			if err != nil || !info.IsDir() {
+				continue
+			}
+		}
+
+		out = append(out, path)
+	}
+
+	return out
+}
+
+func shouldCheckSourceDir(path string) bool {
+	if path == "" {
+		return false
+	}
+	if strings.HasPrefix(path, "/") {
+		return false
+	}
+	if strings.Contains(path, "$") {
+		return false
+	}
+
+	return true
 }
 
 func deriveGenericCompileFlags(d *moduleData) {
@@ -382,10 +459,17 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				}
 
 				if globalNext {
+					if d.firstGlobalSrcsEvent < 0 {
+						d.firstGlobalSrcsEvent = d.globalEventSeq
+					}
+					d.globalEventSeq++
 					d.globalSrcs = append(d.globalSrcs, src)
 					globalNext = false
 				} else {
 					d.srcs = append(d.srcs, src)
+				}
+				if strings.HasSuffix(src, ".h.in") {
+					addGeneratedHeaderInclude(modulePath, strings.TrimSuffix(src, ".in"), d)
 				}
 			}
 		case *PeerdirStmt:
@@ -441,6 +525,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// (libcxx algorithm.cpp.o cmd_args[9..11]).
 			d.addInclGlobal = append(d.addInclGlobal, expandConfigPaths(v.GlobalPaths, env)...)
 			d.addIncl = append(d.addIncl, expandConfigPaths(v.AllPaths, env)...)
+			d.cythonAddIncl = append(d.cythonAddIncl, expandConfigPaths(v.CythonPaths, env)...)
 		case *CFlagsStmt:
 			// GLOBAL flags peer-propagate (d.cFlagsGlobal); non-GLOBAL
 			// applies to own C+C++ sources only (d.cFlags). composeCC
@@ -466,6 +551,10 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// are elsewhere.
 			d.srcDir = &v.Dir
 		case *GlobalSrcsStmt:
+			if d.firstGlobalSrcsEvent < 0 {
+				d.firstGlobalSrcsEvent = d.globalEventSeq
+			}
+			d.globalEventSeq++
 			d.globalSrcs = append(d.globalSrcs, v.Sources...)
 		case *GenerateEnumSerializationStmt:
 			d.enumSrcs = append(d.enumSrcs, v)
@@ -488,6 +577,9 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 		case *ConfigureFileStmt:
 			// PR-M3-E: explicit CONFIGURE_FILE(src dst) declaration.
 			d.configureFiles = append(d.configureFiles, v)
+			if strings.HasSuffix(v.Src, ".h.in") || strings.HasSuffix(v.Dst, ".h") {
+				addGeneratedHeaderInclude(modulePath, v.Dst, d)
+			}
 		case *CreateBuildInfoStmt:
 			// PR-M3-E: CREATE_BUILDINFO_FOR(header) → BI node.
 			d.createBuildInfoFor = &v.OutputHeader
@@ -515,6 +607,15 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// PR-M3-E: RUN_PROGRAM → PR node.
 			d.runPrograms = append(d.runPrograms, v)
 		case *ResourceStmt:
+			if d.firstResourceEvent < 0 {
+				d.firstResourceEvent = d.globalEventSeq
+			}
+			d.globalEventSeq++
+			// RESOURCE() has an immediate `.PEERDIR=library/cpp/resource`
+			// side effect in ymake.core.conf. Preserve statement order:
+			// RESOURCE before PEERDIR must place resource's GLOBAL
+			// ADDINCL before later explicit peers.
+			ensureResourcePeer(modulePath, d)
 			// PR-M3-resource-objcopy-A: RESOURCE pairs feed the objcopy
 			// packer as-is. Pairs whose path is "-" are kv-only entries;
 			// non-"-" pairs are (source path, raw key) pairs.
@@ -522,6 +623,11 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				d.resources = append(d.resources, resourceEntry{Path: pair.Path, Key: pair.Key})
 			}
 		case *ResourceFilesStmt:
+			if d.firstResourceEvent < 0 {
+				d.firstResourceEvent = d.globalEventSeq
+			}
+			d.globalEventSeq++
+			ensureResourcePeer(modulePath, d)
 			// Expand RESOURCE_FILES into resource entries per
 			// build/plugins/res.py:onresource_files. For each path P
 			// (after DONT_COMPRESS / PREFIX / DEST / STRIP keywords are
@@ -564,6 +670,18 @@ func moduleStmtForKind(stmt *ModuleStmt, kind ModuleKind) *ModuleStmt {
 	}
 
 	return &out
+}
+
+func addGeneratedHeaderInclude(modulePath, dst string, d *moduleData) {
+	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(dst)))
+	rel := modulePath
+	if dir != "." && dir != "" {
+		rel = filepath.ToSlash(filepath.Clean(modulePath + "/" + dir))
+	}
+
+	include := "$(B)/" + rel
+	d.addIncl = append(d.addIncl, include)
+	d.addInclGlobal = append(d.addInclGlobal, include)
 }
 
 // applyUnknownStmt routes an UnknownStmt by name. NO_LIBC / NO_UTIL /
@@ -626,6 +744,12 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		}
 
 		d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: v.Args[0], Options: append([]string(nil), v.Args[1:]...)})
+	case "BUILDWITH_CYTHON_C":
+		if len(v.Args) == 0 {
+			ThrowFmt("BUILDWITH_CYTHON_C expects at least 1 argument")
+		}
+
+		d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: v.Args[0], Options: append([]string(nil), v.Args[1:]...), CMode: true})
 	case "BISON_GEN_C":
 		d.bisonGenExt = ".c"
 	case "BISON_GEN_CPP":
@@ -643,6 +767,16 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			ThrowFmt("gen: PROTO_NAMESPACE expects at least 1 argument")
 		}
 		d.protoNamespace = stringPtr(v.Args[len(v.Args)-1])
+		for _, arg := range v.Args[:len(v.Args)-1] {
+			if arg == "GLOBAL" {
+				d.protoNamespaceGlobal = true
+			}
+		}
+		protoBuildRoot := "$(B)/" + filepath.ToSlash(filepath.Clean(*d.protoNamespace))
+		d.addIncl = append(d.addIncl, protoBuildRoot)
+		if d.protoNamespaceGlobal || (d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY") {
+			d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
+		}
 	case "EXCLUDE_TAGS":
 		if d.excludeTags == nil {
 			d.excludeTags = make(map[string]bool)
@@ -834,7 +968,10 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		mainNext := false
 		cythonizePy := false
 		cythonPlainCpp := false
+		cythonCMode := false
 		swigCMode := false
+		var namespace *string
+		var groupSrcs []string
 		for i := 0; i < len(v.Args); i++ {
 			a := v.Args[i]
 
@@ -845,6 +982,11 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 				continue
 			case "NAMESPACE":
 				i++
+				if i >= len(v.Args) {
+					ThrowFmt("PY_SRCS NAMESPACE expects a value")
+				}
+				namespace = stringPtr(v.Args[i])
+				d.pyNamespace = namespace
 
 				continue
 			case "CYTHONIZE_PY":
@@ -852,8 +994,13 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 				continue
 			case "CYTHON_CPP":
 				cythonPlainCpp = true
+				cythonCMode = false
 				continue
-			case "CYTHON_C", "CYTHON_DIRECTIVE":
+			case "CYTHON_C":
+				cythonCMode = true
+				cythonPlainCpp = false
+				continue
+			case "CYTHON_DIRECTIVE":
 				continue
 			case "SWIG_C":
 				swigCMode = true
@@ -876,10 +1023,11 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			if strings.HasSuffix(src, ".pyx") {
 				modName := modNameOverride
 				if modName == "" {
-					modName = pythonModuleName(modulePath, src, topLevel)
+					modName = pythonModuleName(modulePath, src, topLevel, namespace)
 				}
 				stmt := &CythonStmt{
-					Src: src,
+					Src:   src,
+					CMode: cythonCMode,
 					Options: []string{
 						"--module-name", modName,
 						"--init-suffix", pythonInitSuffix(modName),
@@ -900,11 +1048,10 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			if cythonizePy && strings.HasSuffix(src, ".py") {
 				modName := modNameOverride
 				if modName == "" {
-					modName = pythonModuleName(modulePath, src, topLevel)
+					modName = pythonModuleName(modulePath, src, topLevel, namespace)
 				}
 				d.cythonCpp = append(d.cythonCpp, &CythonStmt{
-					Src:       src,
-					Generated: stringPtr(src + ".cpp"),
+					Src: src,
 					Options: []string{
 						"--module-name", modName,
 						"--init-suffix", pythonInitSuffix(modName),
@@ -939,10 +1086,10 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			if strings.HasSuffix(src, ".pyi") {
 				modName := modNameOverride
 				if modName == "" {
-					modName = pythonModuleName(modulePath, src, topLevel)
+					modName = pythonModuleName(modulePath, strings.TrimSuffix(src, ".pyi"), topLevel, namespace)
 				}
 				dest := "py/" + strings.ReplaceAll(modName, ".", "/") + ".pyi"
-				d.resources = append(d.resources, expandResourceFiles([]string{"DEST", dest, src})...)
+				d.pyPyiResources = append(d.pyPyiResources, expandResourceFiles([]string{"DEST", dest, src})...)
 				mainNext = false
 
 				continue
@@ -953,6 +1100,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			}
 
 			d.pySrcs = append(d.pySrcs, src)
+			groupSrcs = append(groupSrcs, src)
 			if mainNext {
 				// Compute the dotted module name per pybuild.py:289,385:
 				//   ns = upath.replace('/','.') + '.'   (default)
@@ -973,6 +1121,13 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 				mainNext = false
 			}
 		}
+		if len(groupSrcs) > 0 {
+			d.pySrcGroups = append(d.pySrcGroups, pySrcGroup{
+				Srcs:      groupSrcs,
+				TopLevel:  topLevel,
+				Namespace: namespace,
+			})
+		}
 	case "ALL_PY_SRCS":
 		d.allPySrcs = append(d.allPySrcs, v)
 	case "PY_MAIN":
@@ -992,6 +1147,11 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		// PY_CONSTRUCTOR(<module[:func]>) per pybuild.py:onpy_constructor:
 		// emits a kv-only resource under py/constructors/, defaulting
 		// to "=init" when no function is specified.
+		if d.firstResourceEvent < 0 {
+			d.firstResourceEvent = d.globalEventSeq
+		}
+		d.globalEventSeq++
+		ensureResourcePeer(modulePath, d)
 		if len(v.Args) != 1 {
 			ThrowFmt("gen: PY_CONSTRUCTOR expects exactly 1 argument, got %d", len(v.Args))
 		}
@@ -1068,8 +1228,11 @@ func appendPyRegister(d *moduleData, name string) {
 	)
 }
 
-func pythonModuleName(modulePath, src string, topLevel bool) string {
+func pythonModuleName(modulePath, src string, topLevel bool, namespace *string) string {
 	ns := strings.ReplaceAll(modulePath, "/", ".") + "."
+	if namespace != nil {
+		ns = strings.TrimSuffix(*namespace, ".") + "."
+	}
 	if topLevel {
 		ns = ""
 	}
@@ -1289,7 +1452,11 @@ func expandConfigPaths(paths []string, env Environment) []string {
 }
 
 func expandConfigString(s string, env Environment) string {
-	return strings.ReplaceAll(s, "${COMPILER_VERSION}", env.String("COMPILER_VERSION"))
+	s = strings.ReplaceAll(s, "${COMPILER_VERSION}", env.String("COMPILER_VERSION"))
+	s = strings.ReplaceAll(s, "${ARCADIA_BUILD_ROOT}", "$(B)")
+	s = strings.ReplaceAll(s, "${ARCADIA_ROOT}", "$(S)")
+
+	return s
 }
 
 func expandScalarVarRef(s string, env Environment) string {
@@ -1341,6 +1508,10 @@ func applyAllPySrcs(sourceRoot, modulePath string, v *UnknownStmt, d *moduleData
 			d.pyTopLevel = true
 		case "NAMESPACE":
 			i++
+			if i >= len(v.Args) {
+				ThrowFmt("ALL_PY_SRCS NAMESPACE expects a value")
+			}
+			d.pyNamespace = stringPtr(v.Args[i])
 		case "RECURSIVE":
 		case "NO_TEST_FILES":
 			noTestFiles = true
@@ -1384,6 +1555,13 @@ func applyAllPySrcs(sourceRoot, modulePath string, v *UnknownStmt, d *moduleData
 
 	sort.Strings(files)
 	d.pySrcs = append(d.pySrcs, files...)
+	if len(files) > 0 {
+		d.pySrcGroups = append(d.pySrcGroups, pySrcGroup{
+			Srcs:      files,
+			TopLevel:  d.pyTopLevel,
+			Namespace: d.pyNamespace,
+		})
+	}
 }
 
 type moduleTypeCacheKey struct {
@@ -1417,7 +1595,7 @@ func moduleInfoForInstance(ctx *genCtx, instance ModuleInstance) moduleTypeInfo 
 	mf := Throw2(ParseFile(yamakePath))
 
 	env := buildIfEnv(instance)
-	d := collectModule(instance.Path, instance.Kind, mf.Stmts, env, instance.Flags)
+	d := collectModule(ctx.sourceRoot, instance.Path, instance.Kind, mf.Stmts, env, instance.Flags)
 	if d.conflictMod != nil {
 		ThrowFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path, d.moduleStmt.Name, d.conflictMod.Name)
 	}

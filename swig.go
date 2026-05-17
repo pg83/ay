@@ -78,6 +78,25 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 				"module_dir": instance.Path,
 			},
 		})
+		if d.pyGeneratedSrcs == nil {
+			d.pyGeneratedSrcs = make(map[string][]VFS)
+		}
+		d.pySrcs = append(d.pySrcs, pyOutRel)
+		d.pyGeneratedSrcs[pyOutRel] = append([]VFS{cOutVFS, srcVFS}, libInputs...)
+		if reg := codegenRegForInstance(ctx, instance); reg != nil {
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:    "SW",
+				OutputPath:     cOutVFS,
+				ProducerRef:    swRef,
+				HasProducerRef: true,
+			})
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP:    "SW",
+				OutputPath:     pyOutVFS,
+				ProducerRef:    swRef,
+				HasProducerRef: true,
+			})
+		}
 
 		ccIn := in
 		ccIn.IsGenerated = true

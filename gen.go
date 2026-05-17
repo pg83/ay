@@ -206,6 +206,11 @@ type genCtx struct {
 	// the BUILD_ROOT path of a generated .pb.h / .pb.cc / .ev.pb.h / .ev.pb.cc.
 	pbOutputs map[codegenOutputKey]NodeRef
 	evOutputs map[codegenOutputKey]NodeRef
+	// pyRegisterOutputs caches PY_REGISTER producer nodes by their
+	// platform-independent generated source path. Upstream emits the
+	// gen_py3_reg.py PY node on the target axis and reuses that producer
+	// as the generator dep for both target and host reg3.cpp compiles.
+	pyRegisterOutputs map[VFS]NodeRef
 	// ldPluginCPCache deduplicates LD_PLUGIN CP NodeRefs across the
 	// target/host walk pair. Without dedup, `contrib/libs/musl/include`'s
 	// `musl.py` would yield two CP nodes (one per platform). REF emits
@@ -566,21 +571,22 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
 
 	ctx := &genCtx{
-		sourceRoot:      srcRoot,
-		emit:            emitter,
-		memo:            make(map[ModuleInstance]*moduleEmitResult),
-		moduleTypeCache: make(map[moduleTypeCacheKey]moduleTypeInfo),
-		walking:         make(map[ModuleInstance]bool),
-		host:            hostP,
-		target:          targetP,
-		scannerTarget:   targetScanner,
-		scannerHost:     hostScanner,
-		enOutputs:       make(map[VFS]NodeRef),
-		pbOutputs:       make(map[codegenOutputKey]NodeRef),
-		evOutputs:       make(map[codegenOutputKey]NodeRef),
-		ldPluginCPCache: make(map[string]NodeRef),
-		scanCtxMode:     mode,
-		internedScanCtx: make(map[scanCtxCacheKey]*scanCtx, 64),
+		sourceRoot:        srcRoot,
+		emit:              emitter,
+		memo:              make(map[ModuleInstance]*moduleEmitResult),
+		moduleTypeCache:   make(map[moduleTypeCacheKey]moduleTypeInfo),
+		walking:           make(map[ModuleInstance]bool),
+		host:              hostP,
+		target:            targetP,
+		scannerTarget:     targetScanner,
+		scannerHost:       hostScanner,
+		enOutputs:         make(map[VFS]NodeRef),
+		pbOutputs:         make(map[codegenOutputKey]NodeRef),
+		evOutputs:         make(map[codegenOutputKey]NodeRef),
+		pyRegisterOutputs: make(map[VFS]NodeRef),
+		ldPluginCPCache:   make(map[string]NodeRef),
+		scanCtxMode:       mode,
+		internedScanCtx:   make(map[scanCtxCacheKey]*scanCtx, 64),
 	}
 
 	ctx.localScanCtxStack = []map[scanCtxCacheKey]*scanCtx{make(map[scanCtxCacheKey]*scanCtx, 4)}
@@ -704,7 +710,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	mf := Throw2(ParseFile(yamakePath))
 
 	env := buildIfEnv(instance)
-	d := collectModule(instance.Path, instance.Kind, mf.Stmts, env, instance.Flags)
+	d := collectModule(ctx.sourceRoot, instance.Path, instance.Kind, mf.Stmts, env, instance.Flags)
 	for _, stmt := range d.allPySrcs {
 		applyAllPySrcs(ctx.sourceRoot, instance.Path, stmt, d)
 	}
@@ -1325,7 +1331,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// depend on the existing peer order for PeerArchiveClosurePaths
 	// propagation (LIBRARY-scope deferral regressed 100+ L3 nodes).
 	archiveOrder := resolved
-	if d.usePython3 && d.moduleStmt != nil {
+	if d.moduleStmt != nil {
 		// Tail-defer USE_PYTHON3 implicit peers ONLY for PY*_PROGRAM*.
 		// For plain PROGRAM modules with USE_PYTHON3 (devtools/ymake/bin),
 		// upstream's macro prepends these peers BEFORE the user PEERDIR
@@ -1334,7 +1340,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// where user-PEERDIR(runtime_py3) intentionally dedups against
 		// the implicit macro injection.
 		switch d.moduleStmt.Name {
-		case "PY3_PROGRAM_BIN", "PY2_PROGRAM", "PY3_PROGRAM":
+		case "PY2_PROGRAM":
 			head := make([]resolvedPeer, 0, len(resolved))
 			tail := make([]resolvedPeer, 0, 2)
 
@@ -1349,6 +1355,62 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 
 			archiveOrder = append(head, tail...)
+		case "PY3_PROGRAM", "PY3_PROGRAM_BIN":
+			if d.moduleStmt.Name == "PY3_PROGRAM_BIN" && !d.py3ProgramMultimodule {
+				head := make([]resolvedPeer, 0, len(resolved))
+				tail := make([]resolvedPeer, 0, 2)
+
+				for _, rp := range resolved {
+					if rp.path == "contrib/libs/python" || rp.path == "library/python/runtime_py3" {
+						tail = append(tail, rp)
+
+						continue
+					}
+
+					head = append(head, rp)
+				}
+
+				archiveOrder = append(head, tail...)
+
+				break
+			}
+
+			allocatorExplicitSet := make(map[string]struct{}, len(allocatorExplicitPeers))
+			for _, p := range allocatorExplicitPeers {
+				allocatorExplicitSet[filepath.Clean(p)] = struct{}{}
+			}
+
+			head := make([]resolvedPeer, 0, len(resolved))
+			programTail := make([]resolvedPeer, 0, len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(postUserProgDefaults))
+			pythonTail := make([]resolvedPeer, 0, 4)
+
+			for _, rp := range resolved {
+				if rp.path == "contrib/tools/python3/Modules/_sqlite" ||
+					rp.path == "library/python/runtime_py3/main" ||
+					rp.path == "library/python/import_tracing/constructor" ||
+					rp.path == "library/python/testing/import_test" {
+					pythonTail = append(pythonTail, rp)
+
+					continue
+				}
+
+				if rp.kind == peerKindProgramDefault {
+					programTail = append(programTail, rp)
+
+					continue
+				}
+
+				if _, ok := allocatorExplicitSet[rp.path]; ok {
+					programTail = append(programTail, rp)
+
+					continue
+				}
+
+				head = append(head, rp)
+			}
+
+			archiveOrder = append(head, programTail...)
+			archiveOrder = append(archiveOrder, pythonTail...)
 		}
 	}
 	for _, rp := range archiveOrder {
@@ -2199,6 +2261,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			globalMemberInputs = append(globalMemberInputs, p)
 		}
 	}
+	globalSrcMemberCount := len(globalRefs)
 
 	// Emit PY+CC pairs for each PY_REGISTER(arg). Both flow into
 	// globalRefs/globalOutputs (upstream macro `_PY3_REGISTER` appends
@@ -2271,6 +2334,26 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				ldPeerArchivePaths = append(ldPeerArchivePaths, p)
 			}
 		}
+		if d.py3ProgramMultimodule && d.moduleStmt.Name == "PY3_PROGRAM_BIN" && d.allocatorName == "J" {
+			ldPeerArchiveRefs, ldPeerArchivePaths = moveArchivePathsAfter(
+				ldPeerArchiveRefs,
+				ldPeerArchivePaths,
+				"build/cow/on/libbuild-cow-on.a",
+				[]string{
+					"library/cpp/malloc/api/libcpp-malloc-api.a",
+					"contrib/libs/jemalloc/libcontrib-libs-jemalloc.a",
+					"library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a",
+				},
+			)
+			ldPeerArchiveRefs, ldPeerArchivePaths = moveArchivePathsBefore(
+				ldPeerArchiveRefs,
+				ldPeerArchivePaths,
+				"library/cpp/json/common/libcpp-json-common.a",
+				[]string{
+					"tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a",
+				},
+			)
+		}
 
 		// Python PROGRAM modules emit module_lang="py3". Tag the instance at
 		// the EmitLD call site only so Language does not propagate into
@@ -2334,7 +2417,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 					resourcePaths = append(resourcePaths, e.Path)
 				}
 
-				if extras := pySrcsARExtraInputs(instance.Path, d.srcDir, d.pySrcs, resourcePaths); len(extras) > 0 {
+				if extras := pySrcsARExtraInputs(instance.Path, d.srcDir, d.pySrcs, d.pyGeneratedSrcs, resourcePaths); len(extras) > 0 {
 					seen := make(map[VFS]struct{}, len(ldMemberInputs))
 					for _, p := range ldMemberInputs {
 						seen[p] = struct{}{}
@@ -2354,11 +2437,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 		}
 
-		// PY3_PROGRAM_BIN's upstream `_BASE_PY3_PROGRAM` macro
-		// (build/conf/python.conf:884) calls STRIP(), setting
-		// STRIP_FLAG=$LD_STRIP_FLAG=-Wl,--strip-all on Linux. PY3_PROGRAM
-		// (cpp module_lang) does not exercise the strip path today.
-		wantsStrip := d.moduleStmt.Name == "PY3_PROGRAM_BIN"
+		// Explicit PY3_PROGRAM_BIN modules inherit _BASE_PY3_PROGRAM's
+		// STRIP(). The PY3_PROGRAM multimodule bin-half does not surface
+		// STRIP_FLAG in the observed reference shape for devtools/ya/bin.
+		wantsStrip := d.moduleStmt.Name == "PY3_PROGRAM_BIN" && !d.py3ProgramMultimodule
 		ldRef := EmitLD(
 			ldInstance,
 			binaryName,
@@ -2464,8 +2546,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 			resourcePaths = append(resourcePaths, e.Path)
 		}
+		for _, e := range d.pyPyiResources {
+			if e.Path == "-" {
+				continue
+			}
 
-		if extras := pySrcsARExtraInputs(instance.Path, d.srcDir, d.pySrcs, resourcePaths); len(extras) > 0 {
+			resourcePaths = append(resourcePaths, e.Path)
+		}
+
+		if extras := pySrcsARExtraInputs(instance.Path, d.srcDir, d.pySrcs, d.pyGeneratedSrcs, resourcePaths); len(extras) > 0 {
 			// Ensure combinedMemberInputs is its own slice header so the
 			// append below cannot alias the caller's memberInputs backing
 			// array when the no-global branch above kept the alias.
@@ -2546,6 +2635,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// AND yapyc3 nodes here.
 	emitPySrcs(ctx, instance, d)
 
+	genPyAuxRefs, genPyAuxOutputs, genPyAuxInputs := emitGeneratedPyAuxChunks(ctx, instance, d, moduleInputs)
+	globalRefs = append(globalRefs, genPyAuxRefs...)
+	globalOutputs = append(globalOutputs, genPyAuxOutputs...)
+	for _, p := range genPyAuxInputs {
+		if _, dup := globalMemberInputsSeen[p]; dup {
+			continue
+		}
+
+		globalMemberInputsSeen[p] = struct{}{}
+		globalMemberInputs = append(globalMemberInputs, p)
+	}
+
 	// Emit objcopy PY nodes for RESOURCE / RESOURCE_FILES. Returned `.o`
 	// paths flow into the module's `.global.a` (appended into
 	// globalRefs/globalOutputs below). The objcopy nodes' SOURCE_ROOT
@@ -2555,6 +2656,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	objcopyRefs, objcopyOutputs, objcopyGlobalInputs := emitResourceObjcopy(ctx, instance, d)
 	globalRefs = append(globalRefs, objcopyRefs...)
 	globalOutputs = append(globalOutputs, objcopyOutputs...)
+	if resourceBeforeGlobalSrcs(d) && globalSrcMemberCount > 0 && len(objcopyRefs) > 0 {
+		globalRefs = moveTailNodeRefsToFront(globalRefs, len(objcopyRefs))
+		globalOutputs = moveTailVFSToFront(globalOutputs, len(objcopyOutputs))
+	}
 
 	for _, p := range objcopyGlobalInputs {
 		if _, dup := globalMemberInputsSeen[p]; dup {
@@ -2783,6 +2888,130 @@ func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string) ([
 	}
 
 	return refs, paths
+}
+
+func moveArchivePathsAfter(refs []NodeRef, paths []string, anchor string, moved []string) ([]NodeRef, []string) {
+	if len(moved) == 0 || len(refs) != len(paths) {
+		return refs, paths
+	}
+
+	moveSet := make(map[string]struct{}, len(moved))
+	for _, path := range moved {
+		moveSet[path] = struct{}{}
+	}
+
+	outRefs := make([]NodeRef, 0, len(refs))
+	outPaths := make([]string, 0, len(paths))
+	movedRefs := make(map[string]NodeRef, len(moved))
+	movedPaths := make(map[string]string, len(moved))
+
+	for i, path := range paths {
+		if _, ok := moveSet[path]; ok {
+			movedRefs[path] = refs[i]
+			movedPaths[path] = path
+			continue
+		}
+
+		outRefs = append(outRefs, refs[i])
+		outPaths = append(outPaths, path)
+		if path == anchor {
+			for _, movedPath := range moved {
+				if p, ok := movedPaths[movedPath]; ok {
+					outRefs = append(outRefs, movedRefs[movedPath])
+					outPaths = append(outPaths, p)
+				}
+			}
+		}
+	}
+
+	if len(outPaths) != len(paths) {
+		return refs, paths
+	}
+
+	return outRefs, outPaths
+}
+
+func moveArchivePathsBefore(refs []NodeRef, paths []string, anchor string, moved []string) ([]NodeRef, []string) {
+	if len(moved) == 0 || len(refs) != len(paths) {
+		return refs, paths
+	}
+
+	moveSet := make(map[string]struct{}, len(moved))
+	for _, path := range moved {
+		moveSet[path] = struct{}{}
+	}
+
+	movedRefs := make(map[string]NodeRef, len(moved))
+	movedPaths := make(map[string]string, len(moved))
+	for i, path := range paths {
+		if _, ok := moveSet[path]; ok {
+			movedRefs[path] = refs[i]
+			movedPaths[path] = path
+		}
+	}
+
+	if len(movedPaths) != len(moved) {
+		return refs, paths
+	}
+
+	outRefs := make([]NodeRef, 0, len(refs))
+	outPaths := make([]string, 0, len(paths))
+
+	for i, path := range paths {
+		if _, ok := moveSet[path]; ok {
+			continue
+		}
+
+		if path == anchor {
+			for _, movedPath := range moved {
+				if p, ok := movedPaths[movedPath]; ok {
+					outRefs = append(outRefs, movedRefs[movedPath])
+					outPaths = append(outPaths, p)
+				}
+			}
+		}
+
+		outRefs = append(outRefs, refs[i])
+		outPaths = append(outPaths, path)
+	}
+
+	if len(outPaths) != len(paths) {
+		return refs, paths
+	}
+
+	return outRefs, outPaths
+}
+
+func resourceBeforeGlobalSrcs(d *moduleData) bool {
+	return d.firstResourceEvent >= 0 &&
+		d.firstGlobalSrcsEvent >= 0 &&
+		d.firstResourceEvent < d.firstGlobalSrcsEvent
+}
+
+func moveTailNodeRefsToFront(in []NodeRef, tailLen int) []NodeRef {
+	if tailLen <= 0 || tailLen >= len(in) {
+		return in
+	}
+
+	pivot := len(in) - tailLen
+	out := make([]NodeRef, 0, len(in))
+	out = append(out, in[pivot:]...)
+	out = append(out, in[:pivot]...)
+
+	return out
+}
+
+func moveTailVFSToFront(in []VFS, tailLen int) []VFS {
+	if tailLen <= 0 || tailLen >= len(in) {
+		return in
+	}
+
+	pivot := len(in) - tailLen
+	out := make([]VFS, 0, len(in))
+	out = append(out, in[pivot:]...)
+	out = append(out, in[:pivot]...)
+
+	return out
 }
 
 // mergeLDPlugins concatenates `(ownRefs, ownPaths)` with `(peerRefs,
@@ -3118,8 +3347,7 @@ func isHeaderSource(srcRel string) bool {
 //   - .py    → PY via runtime library
 //   - .g4    → ANTLR4 grammar via RUN_ANTLR4_CPP
 func isSkippedSource(srcRel string) bool {
-	return strings.HasSuffix(srcRel, ".proto") ||
-		strings.HasSuffix(srcRel, ".ev") ||
+	return strings.HasSuffix(srcRel, ".ev") ||
 		strings.HasSuffix(srcRel, ".py") ||
 		strings.HasSuffix(srcRel, ".g4")
 }
@@ -3130,12 +3358,9 @@ func isSkippedSource(srcRel string) bool {
 // the SAME module may #include those outputs, so the two-pass loop runs
 // these first to populate the registry before any consumer CC scans
 // its closure.
-//
-// `.proto` is excluded: it runs only via emitProtoSrcs in the
-// PROTO_LIBRARY header-only branch (those modules emit codegen ahead of
-// any consumer module's CC walk via normal peer-walk ordering).
 func isCodegenProducingSrc(srcRel string) bool {
-	return strings.HasSuffix(srcRel, ".ev") ||
+	return strings.HasSuffix(srcRel, ".proto") ||
+		strings.HasSuffix(srcRel, ".ev") ||
 		strings.HasSuffix(srcRel, ".rl6") ||
 		strings.HasSuffix(srcRel, ".rl") ||
 		strings.HasSuffix(srcRel, ".y") ||

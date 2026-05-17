@@ -4,6 +4,7 @@ type CythonStmt struct {
 	Src       string
 	Generated *string
 	Options   []string
+	CMode     bool
 }
 
 func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) []*sourceEmit {
@@ -15,7 +16,14 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 
 	for _, stmt := range d.cythonCpp {
 		generatedExplicit := stmt.Generated != nil
-		generated := stmt.Src + ".py3.cpp"
+		py23Variant := d.moduleStmt != nil && cythonUsesPy23Variant(d.moduleStmt.Name)
+		generated := stmt.Src + ".cpp"
+		if py23Variant {
+			generated = stmt.Src + ".py3.cpp"
+		}
+		if stmt.CMode {
+			generated = stmt.Src + ".c"
+		}
 		if generatedExplicit {
 			generated = *stmt.Generated
 		}
@@ -36,10 +44,16 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			"UNAME_SYSNAME=Linux",
 		}
 		cmdArgs = append(cmdArgs, stmt.Options...)
+		if !stmt.CMode {
+			cmdArgs = append(cmdArgs, "--cplus")
+		}
 		cmdArgs = append(cmdArgs,
-			"--cplus",
 			"-I$(B)",
 			"-I$(S)",
+		)
+		cmdArgs = appendCythonAddIncl(cmdArgs, d.addIncl)
+		cmdArgs = appendCythonAddIncl(cmdArgs, d.cythonAddIncl)
+		cmdArgs = append(cmdArgs,
 			"-I$(S)/contrib/tools/cython/Cython/Includes",
 			srcVFS.String(),
 			"-o",
@@ -77,7 +91,10 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		ccIn.IsGenerated = true
 		ccIn.HasGenerator = true
 		ccIn.Generator = cyRef
-		ccIn.Py3Suffix = !generatedExplicit && d.moduleStmt != nil && resourceModuleTag(d.moduleStmt.Name) != nil
+		ccIn.Py3Suffix = !stmt.CMode && !generatedExplicit && py23Variant
+		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl)
+		ccIn.CFlags = filterPyRegisterCFlags(ccIn.CFlags)
+		ccIn.PerSourceCFlags = append(append([]string(nil), in.PerSourceCFlags...), "-Wno-implicit-fallthrough")
 		ccIn.IncludeInputs = inputs
 
 		ccRef, ccOut := EmitCC(instance, generated, ccIn, ctx.host, ctx.emit)
@@ -92,6 +109,59 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 	}
 
 	return out
+}
+
+func cythonUsesPy23Variant(modName string) bool {
+	switch modName {
+	case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
+		return true
+	}
+
+	return false
+}
+
+func appendCythonAddIncl(cmdArgs []string, addIncl []string) []string {
+	for _, path := range addIncl {
+		cmdArgs = append(cmdArgs, includeArg(path))
+	}
+
+	return cmdArgs
+}
+
+func appendCythonCCAddIncl(addIncl []string) []string {
+	out := make([]string, 0, len(addIncl)+len(cythonNumpyAddIncl))
+	out = append(out, addIncl...)
+	out = append(out, cythonNumpyAddIncl...)
+
+	return out
+}
+
+func filterPyRegisterCFlags(cflags []string) []string {
+	if len(cflags) == 0 {
+		return cflags
+	}
+
+	out := make([]string, 0, len(cflags))
+	for _, flag := range cflags {
+		if hasPrefix(flag, "-DPyInit_") || hasPrefix(flag, "-Dinit_module_") {
+			continue
+		}
+		out = append(out, flag)
+	}
+
+	return out
+}
+
+func hasPrefix(s, prefix string) bool {
+	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
+var cythonNumpyAddIncl = []string{
+	"contrib/python/numpy/include/numpy/core/include",
+	"contrib/python/numpy/include/numpy/core/include/numpy",
+	"contrib/python/numpy/include/numpy/core/src/common",
+	"contrib/python/numpy/include/numpy/core/src/npymath",
+	"contrib/python/numpy/include/numpy/distutils/include",
 }
 
 func cythonInputs(ctx *genCtx, instance ModuleInstance, src VFS, in ModuleCCInputs) []VFS {

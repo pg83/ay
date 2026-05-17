@@ -61,7 +61,7 @@ const runtimePy3ModulePath = "library/python/runtime_py3"
 // modulePath: canonical $(B)-relative path. srcDir: SRCDIR() (nil when
 // none). pySrcs / resourcePaths: declaration-ordered macro args. Returns
 // nil when nothing contributes.
-func pySrcsARExtraInputs(modulePath string, srcDir *string, pySrcs, resourcePaths []string) []VFS {
+func pySrcsARExtraInputs(modulePath string, srcDir *string, pySrcs []string, generatedPySrcs map[string][]VFS, resourcePaths []string) []VFS {
 	if len(pySrcs) == 0 && len(resourcePaths) == 0 {
 		return nil
 	}
@@ -75,7 +75,11 @@ func pySrcsARExtraInputs(modulePath string, srcDir *string, pySrcs, resourcePath
 	out = append(out, Source("build/scripts/objcopy.py"))
 
 	for _, srcRel := range pySrcs {
-		out = append(out, Source(actualUnit+"/"+srcRel))
+		if generatedPySrcs[srcRel] != nil {
+			out = append(out, Build(modulePath+"/"+srcRel))
+		} else {
+			out = append(out, Source(actualUnit+"/"+srcRel))
+		}
 	}
 
 	for _, srcRel := range resourcePaths {

@@ -129,7 +129,11 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			continue
 		}
 
+		generatedInputs := d.pyGeneratedSrcs[srcRel]
 		srcAbs := Source(instance.Path + "/" + srcRel)
+		if generatedInputs != nil {
+			srcAbs = Build(instance.Path + "/" + srcRel)
+		}
 
 		// The "module name" arg: <modulePath>/<srcRel>- (trailing dash).
 		moduleName := instance.Path + "/" + srcRel + "-"
@@ -157,6 +161,21 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			"PYTHONHASHSEED":         "0",
 		}
 
+		inputs := []VFS{ParseVFSOrSource(py3ccBinary), ParseVFSOrSource(py3ccSlowBin), srcAbs}
+		if generatedInputs != nil {
+			inputs = []VFS{srcAbs}
+			inputs = append(inputs, generatedInputs...)
+			inputs = append(inputs, ParseVFSOrSource(py3ccBinary), ParseVFSOrSource(py3ccSlowBin))
+			if len(inputs) > 4 {
+				toolA := inputs[len(inputs)-2]
+				toolB := inputs[len(inputs)-1]
+				copy(inputs[4:], inputs[2:len(inputs)-2])
+				inputs[2] = toolA
+				inputs[3] = toolB
+			}
+			inputs = dedupVFS(inputs)
+		}
+
 		node := &Node{
 			Cmds: []Cmd{
 				{
@@ -165,13 +184,13 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				},
 			},
 			Env:     env,
-			Inputs:  []VFS{ParseVFSOrSource(py3ccBinary), ParseVFSOrSource(py3ccSlowBin), srcAbs},
+			Inputs:  inputs,
 			Outputs: []VFS{outputPath},
 			KV: map[string]string{
 				"p":  "PY",
 				"pc": "yellow",
 			},
-			Tags: []string{},
+			Tags: instance.Platform.Tags,
 			TargetProperties: func() map[string]string {
 				tp := map[string]string{"module_dir": instance.Path}
 				// PY23_LIBRARY's .yapyc3 nodes carry `module_tag=py3`
@@ -263,36 +282,45 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			regCppAbs,
 		}
 
-		pyNode := &Node{
-			Cmds: []Cmd{
-				{CmdArgs: pyCmdArgs, Env: env},
-			},
-			Env:     env,
-			Inputs:  []VFS{genPy3RegScriptVFS},
-			Outputs: []VFS{regCppVFS},
-			KV: map[string]string{
-				"p":  "PY",
-				"pc": "yellow",
-			},
-			Tags: []string{},
-			TargetProperties: map[string]string{
-				"module_dir": instance.Path,
-			},
-			Platform:     string(instance.Platform.Target),
-			HostPlatform: instance.Platform.IsHost,
-			Requirements: map[string]interface{}{
-				"cpu":     float64(1),
-				"network": "restricted",
-				"ram":     float64(32),
-			},
-			DepRefs: []NodeRef{},
-		}
+		pyRef, ok := ctx.pyRegisterOutputs[regCppVFS]
+		if !ok {
+			pyInstance := instance
+			if pyInstance.Platform.IsHost {
+				pyInstance.Platform = ctx.target
+			}
 
-		if py3Suffix {
-			pyNode.TargetProperties["module_tag"] = "py3"
-		}
+			pyNode := &Node{
+				Cmds: []Cmd{
+					{CmdArgs: pyCmdArgs, Env: env},
+				},
+				Env:     env,
+				Inputs:  []VFS{genPy3RegScriptVFS},
+				Outputs: []VFS{regCppVFS},
+				KV: map[string]string{
+					"p":  "PY",
+					"pc": "yellow",
+				},
+				Tags: []string{},
+				TargetProperties: map[string]string{
+					"module_dir": instance.Path,
+				},
+				Platform:     string(pyInstance.Platform.Target),
+				HostPlatform: pyInstance.Platform.IsHost,
+				Requirements: map[string]interface{}{
+					"cpu":     float64(1),
+					"network": "restricted",
+					"ram":     float64(32),
+				},
+				DepRefs: []NodeRef{},
+			}
 
-		pyRef := ctx.emit.Emit(pyNode)
+			if py3Suffix {
+				pyNode.TargetProperties["module_tag"] = "py3"
+			}
+
+			pyRef = ctx.emit.Emit(pyNode)
+			ctx.pyRegisterOutputs[regCppVFS] = pyRef
+		}
 
 		// CC node compiling `.reg3.cpp`. IsGenerated=true so
 		// composeCCPaths reads from $(B)/<modPath>/<reg>. The
@@ -640,7 +668,7 @@ func codegenRegForInstance(ctx *genCtx, instance ModuleInstance) *CodegenRegistr
 //
 // Legitimate disk read: extracts structured `import` directives at
 // registration time to populate EmitsIncludes. NOT for closure walks.
-func protoDirectImportIncludes(sourceRoot, srcRel string) []VFS {
+func protoDirectImportIncludes(sourceRoot, srcRel, outputRoot string) []VFS {
 	absPath := filepath.Join(sourceRoot, srcRel)
 	f, err := os.Open(absPath)
 	if err != nil {
@@ -662,7 +690,7 @@ func protoDirectImportIncludes(sourceRoot, srcRel string) []VFS {
 		}
 		imp := line[start+1 : end]
 		if strings.HasSuffix(imp, ".ev") {
-			out = append(out, Build(strings.TrimSuffix(imp, ".ev")+".ev.pb.h"))
+			out = append(out, Build(protoOutputRel(outputRoot, strings.TrimSuffix(imp, ".ev")+".ev.pb.h")))
 		} else if strings.HasSuffix(imp, ".proto") {
 			base := strings.TrimSuffix(imp, ".proto")
 			if imp == "google/protobuf/descriptor.proto" {
@@ -670,12 +698,20 @@ func protoDirectImportIncludes(sourceRoot, srcRel string) []VFS {
 				// Upstream tree: contrib/libs/protobuf/src/google/protobuf/descriptor.pb.h
 				out = append(out, Source(pbRuntimeBase+"google/protobuf/descriptor.pb.h"))
 			} else {
-				out = append(out, Build(base+".pb.h"))
+				out = append(out, Build(protoOutputRel(outputRoot, base+".pb.h")))
 			}
 		}
 	}
 	SortVFS(out)
 	return out
+}
+
+func protoOutputRel(outputRoot, rel string) string {
+	if outputRoot == "" {
+		return rel
+	}
+
+	return filepath.ToSlash(filepath.Clean(outputRoot + "/" + rel))
 }
 
 // cfIncludeDirectives parses `#include "..."` directives from a
