@@ -260,22 +260,17 @@ func composeDynLibInputs(peerLibPaths, pluginPaths []VFS, fixElfPath VFS, module
 	buildRootBlock = append(buildRootBlock, peerLibPaths...)
 	buildRootBlock = append(buildRootBlock, pluginPaths...)
 	buildRootBlock = append(buildRootBlock, fixElfPath)
-	sort.Slice(buildRootBlock, func(i, j int) bool { return buildRootBlock[i].Rel < buildRootBlock[j].Rel })
+	sort.Slice(buildRootBlock, func(i, j int) bool { return buildRootBlock[i].String() < buildRootBlock[j].String() })
 
-	out := make([]VFS, 0, len(buildRootBlock)+10)
-	out = append(out, buildRootBlock...)
-	out = append(out,
-		ldVcsInfoVFS,
-		ldSvnInterfaceVFS,
+	inputs := make([]VFS, 0, len(buildRootBlock)+6)
+	inputs = append(inputs, buildRootBlock...)
+	inputs = append(inputs,
 		ldLinkDynLibVFS,
-		ldLinkExeVFS,
-		Source(modulePath+"/"+exportsScript),
 		ldThinltoCacheVFS,
 		ldProcessCommandFilesVFS,
 		ldProcessWholeArchiveOptionVFS,
-		ldFsToolsVFS,
-		ldSvnversionHVFS,
+		Source(modulePath+"/"+exportsScript),
 	)
 
-	return out
+	return inputs
 }
