@@ -104,11 +104,11 @@ func isRuntimeAncestor(path string) bool {
 // runtime ancestors regardless of which aggregation phase picked them
 // up. Paths are SOURCE_ROOT-relative; `appendAddIncl` adds the
 // literal `-I$(S)/` prefix at emit time.
-var runtimeStackAddInclPaths = map[string]int{
-	"contrib/libs/cxxsupp/libcxx/include":    0,
-	"contrib/libs/cxxsupp/libcxxrt/include":  1,
-	"contrib/libs/cxxsupp/libcxxabi/include": 2,
-	"contrib/libs/libunwind/include":         3,
+var runtimeStackAddInclPaths = map[VFS]int{
+	Source("contrib/libs/cxxsupp/libcxx/include"):    0,
+	Source("contrib/libs/cxxsupp/libcxxrt/include"):  1,
+	Source("contrib/libs/cxxsupp/libcxxabi/include"): 2,
+	Source("contrib/libs/libunwind/include"):         3,
 }
 
 // bundledAddInclPaths is the set of ADDINCL paths the cc bundle's
@@ -125,9 +125,9 @@ var runtimeStackAddInclPaths = map[string]int{
 // Musl flavours bypass this filter: their composer drops
 // PeerAddInclGlobal entirely (`-nostdinc` + muslCcIncludes define
 // the entire include search path).
-var bundledAddInclPaths = map[string]bool{
-	"contrib/libs/linux-headers":     true,
-	"contrib/libs/linux-headers/_nf": true,
+var bundledAddInclPaths = map[VFS]bool{
+	Source("contrib/libs/linux-headers"):     true,
+	Source("contrib/libs/linux-headers/_nf"): true,
 }
 
 // suppressMallocAPIDefault drops `library/cpp/malloc/api` from a
@@ -162,13 +162,13 @@ func suppressMallocAPIDefault(defaults []string, allocatorName string) []string 
 // user PEERDIRs, landing them at the peerAddInclGlobal TAIL — after
 // musl-arch and user paths — diverging from the reference. Modules
 // that already declare libcxx/libcxxrt as direct peers see no change.
-func hoistRuntimeStackAddIncl(paths []string) []string {
+func hoistRuntimeStackAddIncl(paths []VFS) []VFS {
 	if len(paths) == 0 {
 		return paths
 	}
 
-	hoisted := make([]string, 0, len(paths))
-	rest := make([]string, 0, len(paths))
+	hoisted := make([]VFS, 0, len(paths))
+	rest := make([]VFS, 0, len(paths))
 
 	for _, p := range paths {
 		if _, ok := runtimeStackAddInclPaths[p]; ok {
@@ -189,7 +189,7 @@ func hoistRuntimeStackAddIncl(paths []string) []string {
 		return runtimeStackAddInclPaths[hoisted[i]] < runtimeStackAddInclPaths[hoisted[j]]
 	})
 
-	out := make([]string, 0, len(paths))
+	out := make([]VFS, 0, len(paths))
 	out = append(out, hoisted...)
 	out = append(out, rest...)
 

@@ -126,11 +126,11 @@ func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 	emit := NewBufferedEmitter()
 	in := ModuleCCInputs{
-		AddIncl: []string{
-			"contrib/libs/musl/arch/aarch64",
-			"contrib/libs/musl/arch/generic",
-			"contrib/libs/musl/include",
-			"contrib/libs/musl/extra",
+		AddIncl: []VFS{
+			Source("contrib/libs/musl/arch/aarch64"),
+			Source("contrib/libs/musl/arch/generic"),
+			Source("contrib/libs/musl/include"),
+			Source("contrib/libs/musl/extra"),
 		},
 	}
 	EmitCC(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/fp_mode.c", in, testHostP, emit)

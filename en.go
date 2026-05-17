@@ -40,7 +40,7 @@ func EmitEN(
 	serializedCPPVFS := Build(headerSrc.Rel + "_serialized.cpp")
 
 	cmdArgs := []string{
-			enumParserBin.String(),
+		enumParserBin.String(),
 		headerSrc.String(),
 		"--include-path",
 		headerSrc.Rel,
@@ -104,7 +104,7 @@ func EmitEN(
 			"ram":     float64(32),
 		},
 		Sandboxing: true,
-		Tags: instance.Platform.Tags,
+		Tags:       instance.Platform.Tags,
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},

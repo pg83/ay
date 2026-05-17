@@ -39,16 +39,26 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	pluginRefs := []NodeRef{}
 	pluginPaths := []VFS{}
 	pluginSeen := map[VFS]struct{}{}
-	addInclSeen := map[string]struct{}{}
+	addInclSeen := map[VFS]struct{}{}
 	cFlagsSeen := map[string]struct{}{}
 	cxxFlagsSeen := map[string]struct{}{}
 	cOnlyFlagsSeen := map[string]struct{}{}
-	var peerAddInclGlobal []string
+	var peerAddInclGlobal []VFS
 	var peerCFlagsGlobal []string
 	var peerCXXFlagsGlobal []string
 	var peerCOnlyFlagsGlobal []string
 
 	addEach := func(seenSet map[string]struct{}, dst *[]string, src []string) {
+		for _, x := range src {
+			if _, dup := seenSet[x]; dup {
+				continue
+			}
+
+			seenSet[x] = struct{}{}
+			*dst = append(*dst, x)
+		}
+	}
+	addEachVFS := func(seenSet map[VFS]struct{}, dst *[]VFS, src []VFS) {
 		for _, x := range src {
 			if _, dup := seenSet[x]; dup {
 				continue
@@ -73,7 +83,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 			peerArchivePaths = append(peerArchivePaths, *peerResult.ARPath)
 		}
 
-		addEach(addInclSeen, &peerAddInclGlobal, peerResult.AddInclGlobal)
+		addEachVFS(addInclSeen, &peerAddInclGlobal, peerResult.AddInclGlobal)
 		addEach(cFlagsSeen, &peerCFlagsGlobal, peerResult.CFlagsGlobal)
 		addEach(cxxFlagsSeen, &peerCXXFlagsGlobal, peerResult.CXXFlagsGlobal)
 		addEach(cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, peerResult.COnlyFlagsGlobal)
@@ -93,10 +103,10 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	fixElfInst := NewToolInstance(ctx.host, "tools/fix_elf")
 	if exc := Try(func() {
 		res := genModule(ctx, fixElfInst)
-			fixElfRef = res.LDRef
-			if res.LDPath != nil {
-				fixElfPath = *res.LDPath
-			}
+		fixElfRef = res.LDRef
+		if res.LDPath != nil {
+			fixElfPath = *res.LDPath
+		}
 	}); exc != nil {
 		_ = exc
 	}
@@ -156,30 +166,30 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	}
 
 	ref := ctx.emit.Emit(n)
-	addInclGlobal := mergeDedup(d.addInclGlobal, peerAddInclGlobal)
+	addInclGlobal := mergeDedupVFS(d.addInclGlobal, peerAddInclGlobal)
 	cFlagsGlobal := mergeDedup(d.cFlagsGlobal, peerCFlagsGlobal)
 	cxxFlagsGlobal := mergeDedup(d.cxxFlagsGlobal, peerCXXFlagsGlobal)
 	cOnlyFlagsGlobal := mergeDedup(d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
 
-		return &moduleEmitResult{
-			ARPath:                       nil,
-			isPROGRAM:                    false,
-			LDRef:                        ref,
-			LDPath:                       vfsPtr(Build(instance.Path + "/" + outputName)),
+	return &moduleEmitResult{
+		ARPath:                       nil,
+		isPROGRAM:                    false,
+		LDRef:                        ref,
+		LDPath:                       vfsPtr(Build(instance.Path + "/" + outputName)),
 		AddInclGlobal:                addInclGlobal,
-		OwnAddInclGlobal:             append([]string(nil), d.addInclGlobal...),
+		OwnAddInclGlobal:             cloneVFSs(d.addInclGlobal),
 		CFlagsGlobal:                 cFlagsGlobal,
 		CXXFlagsGlobal:               cxxFlagsGlobal,
 		COnlyFlagsGlobal:             cOnlyFlagsGlobal,
 		PeerArchiveClosureRefs:       nil,
-			PeerArchiveClosurePaths:      nil,
+		PeerArchiveClosurePaths:      nil,
 		isPyLibrary:                  false,
 		PeerGlobalClosureRefs:        nil,
-			PeerGlobalClosurePaths:       nil,
+		PeerGlobalClosurePaths:       nil,
 		PeerWholeArchiveClosureRefs:  nil,
-			PeerWholeArchiveClosurePaths: nil,
-			LDPluginRefs:                 pluginRefs,
-			LDPluginPaths:                pluginPaths,
+		PeerWholeArchiveClosurePaths: nil,
+		LDPluginRefs:                 pluginRefs,
+		LDPluginPaths:                pluginPaths,
 		InducedDeps:                  append([]string(nil), d.inducedDeps...),
 		Peerdirs:                     append([]string(nil), d.peerdirs...),
 		ModuleStmtName:               d.moduleStmt.Name,

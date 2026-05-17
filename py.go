@@ -18,7 +18,7 @@ import "strings"
 // segment. Same pattern as canonicalizeRagel6BinaryPath in r6.go.
 
 const (
-	py3ccBinSubrel   = "tools/py3cc/bin/"
+	py3ccBinSubrel    = "tools/py3cc/bin/"
 	py3ccCanonicalRel = "tools/py3cc/"
 )
 

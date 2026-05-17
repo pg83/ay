@@ -28,11 +28,11 @@ const referenceASOutput = "$(B)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S
 // tail from these (own AddIncl) plus `ccIncludesPrefix`/`ccIncludesSuffix`
 // (BUILD_ROOT/SOURCE_ROOT + linux-headers pair) so the previously
 // pre-baked flat list now derives structurally.
-var builtinsASOwnAddIncl = []string{
-	"contrib/libs/musl/arch/aarch64",
-	"contrib/libs/musl/arch/generic",
-	"contrib/libs/musl/include",
-	"contrib/libs/musl/extra",
+var builtinsASOwnAddIncl = []VFS{
+	Source("contrib/libs/musl/arch/aarch64"),
+	Source("contrib/libs/musl/arch/generic"),
+	Source("contrib/libs/musl/include"),
+	Source("contrib/libs/musl/extra"),
 }
 
 // loadReferenceASNode reads the on-disk reference graph and returns the

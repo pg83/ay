@@ -148,7 +148,7 @@ func cythonUsesPy23Variant(modName string) bool {
 	return false
 }
 
-func appendCythonAddIncl(cmdArgs []string, addIncl []string) []string {
+func appendCythonAddIncl(cmdArgs []string, addIncl []VFS) []string {
 	for _, path := range addIncl {
 		cmdArgs = append(cmdArgs, includeArg(path))
 	}
@@ -156,8 +156,8 @@ func appendCythonAddIncl(cmdArgs []string, addIncl []string) []string {
 	return cmdArgs
 }
 
-func appendCythonCCAddIncl(addIncl []string) []string {
-	out := make([]string, 0, len(addIncl)+len(cythonNumpyAddIncl))
+func appendCythonCCAddIncl(addIncl []VFS) []VFS {
+	out := make([]VFS, 0, len(addIncl)+len(cythonNumpyAddIncl))
 	out = append(out, addIncl...)
 	out = append(out, cythonNumpyAddIncl...)
 
@@ -184,12 +184,12 @@ func hasPrefix(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
 
-var cythonNumpyAddIncl = []string{
-	"contrib/python/numpy/include/numpy/core/include",
-	"contrib/python/numpy/include/numpy/core/include/numpy",
-	"contrib/python/numpy/include/numpy/core/src/common",
-	"contrib/python/numpy/include/numpy/core/src/npymath",
-	"contrib/python/numpy/include/numpy/distutils/include",
+var cythonNumpyAddIncl = []VFS{
+	Source("contrib/python/numpy/include/numpy/core/include"),
+	Source("contrib/python/numpy/include/numpy/core/include/numpy"),
+	Source("contrib/python/numpy/include/numpy/core/src/common"),
+	Source("contrib/python/numpy/include/numpy/core/src/npymath"),
+	Source("contrib/python/numpy/include/numpy/distutils/include"),
 }
 
 func dedupVFS(in []VFS) []VFS {
