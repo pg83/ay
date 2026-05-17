@@ -96,30 +96,6 @@ func (v VFS) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.String())
 }
 
-// ParseVFSOrSource parses s as a VFS path if it carries a recognised
-// "$(S)/" or "$(B)/" prefix; otherwise it returns
-// Source(s) verbatim. Used by `ToVFSSlice` for the migration period —
-// synthetic emitter tests use bare relative strings (e.g. "c.in") that
-// don't carry a prefix; treating those as SOURCE_ROOT-rooted keeps the
-// test fixtures working without forcing every test literal to be
-// rewritten.
-func ParseVFSOrSource(s string) VFS {
-	if v, ok := ParseVFS(s); ok {
-		return v
-	}
-	return Source(s)
-}
-
-// VFSesFromStrings is the bulk variant of ParseVFSOrSource used by
-// scanner-result conversion sites.
-func VFSesFromStrings(ss []string) []VFS {
-	out := make([]VFS, len(ss))
-	for i, s := range ss {
-		out[i] = ParseVFSOrSource(s)
-	}
-	return out
-}
-
 // vfsStringsSlice materialises a []VFS as a []string of canonical VFS
 // strings. Used at boundaries where downstream APIs still take
 // []string (memberInputs aggregator, AR input bucket, etc.).
@@ -160,24 +136,6 @@ func lessVFS(a, b VFS) bool {
 		return a.Root == VFSRootBuild
 	}
 	return a.Rel < b.Rel
-}
-
-// ToVFSSlice converts a []string (each already in VFS form or a bare
-// rel) to []VFS. Migration shim: emitter sites currently assemble
-// Inputs / Outputs as []string; wrapping the result here keeps the
-// build green while each site is independently rewritten to construct
-// VFS values directly (which is where the alloc-reduction win lives).
-//
-// Returns `[]VFS{}` (non-nil, length 0) for an empty input so the
-// downstream JSON serializer emits `[]` rather than `null` — the
-// reference graph and the production writer both use the non-nil
-// empty form.
-func ToVFSSlice(ss []string) []VFS {
-	out := make([]VFS, len(ss))
-	for i, s := range ss {
-		out[i] = ParseVFSOrSource(s)
-	}
-	return out
 }
 
 // VFSMap is a two-bucket map keyed by VFS (Source → 0, Build → 1) that
