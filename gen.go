@@ -1859,7 +1859,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// `python/Include`) are NOT filtered — REF deliberately emits the
 	// own + peer duplicate (sitecustomize.cpp.pic.o ref:8+26,
 	// ymakeyaml.cpp.o ref:9+21).
-	selfPeerAddInclGlobal := filterBuildRootSelfPaths(peerAddInclGlobal, dedupedAddIncl)
+	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path, peerAddInclGlobal, dedupedAddIncl)
 
 	moduleInputs := ModuleCCInputs{
 		AddIncl:              dedupedAddIncl,
@@ -2765,21 +2765,20 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 // module's effective peer-GLOBAL slices (own first, then transitive
 // peer) uniformly across ADDINCL / CFLAGS / CXXFLAGS / CONLYFLAGS.
 //
-// filterBuildRootSelfPaths drops `$(B)/...` paths from `peer` that also
-// appear in `own`. Returns a fresh slice (input unchanged) so unfiltered
-// `peerAddInclGlobal` continues to flow into peer-prop channels.
-// Applied at the SELF-compile cmd_args boundary only. SOURCE_ROOT paths
-// (e.g. `python/Include`) are left alone — REF emits the own + peer
-// duplicate for those.
-func filterBuildRootSelfPaths(peer, own []string) []string {
+// filterBuildRootSelfPaths drops peer `$(B)/<this-module>/...` paths that
+// also appear in `own`. Broader BUILD_ROOT dedup is incorrect: modules like
+// `yt/yt/client` legitimately keep an own `$(B)/yt` and a peer-propagated
+// `$(B)/yt` from PROTO_NAMESPACE peers as two separate include slots.
+func filterBuildRootSelfPaths(instancePath string, peer, own []string) []string {
 	if len(peer) == 0 {
 		return peer
 	}
 
 	ownSet := make(map[string]struct{}, len(own))
+	ownPrefix := "$(B)/" + instancePath
 
 	for _, p := range own {
-		if strings.HasPrefix(p, "$(B)/") {
+		if p == ownPrefix || strings.HasPrefix(p, ownPrefix+"/") {
 			ownSet[p] = struct{}{}
 		}
 	}
