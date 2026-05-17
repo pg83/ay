@@ -252,7 +252,7 @@ func TestStripComments_DivisionOperatorNotMistaken(t *testing.T) {
 	}
 }
 
-// TestScanner_BlockCommentIncludeIgnored exercises parseIncludes
+// TestScanner_BlockCommentIncludeIgnored exercises raw include scanning
 // end-to-end through stripComments. A header with a real `#include`
 // plus a block-comment-buried `#include` must produce ONLY the real
 // directive in the parsed list.
@@ -274,10 +274,10 @@ func TestScanner_BlockCommentIncludeIgnored(t *testing.T) {
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
 
-	// PR-M3-vfs-paths: parseIncludes takes a VFS path. The test file
+	// PR-M3-vfs-paths: scanDirectives takes a VFS path. The test file
 	// `<dir>/fake.h` becomes `$(S)/fake.h` under the scanner's
 	// dir-as-sourceRoot.
-	dirs := scanner.parseIncludes(Source("fake.h"))
+	dirs := scanner.scanDirectives(Source("fake.h"))
 
 	if len(dirs) != 1 {
 		t.Fatalf("got %d directives, want 1; directives=%+v", len(dirs), dirs)
@@ -1156,13 +1156,13 @@ func TestParseYasmIncludes_AngleBracketForm(t *testing.T) {
 	}
 }
 
-// TestParseIncludes_DispatchByExtension pins parseIncludes' dispatch
+// TestScanDirectives_DispatchByExtension pins raw-scan dispatch
 // by file extension: a `.asm` file routes to the yasm parser; a `.h`
 // file routes to the C parser. The two parsers agree on the
 // `includeDirective` shape but only one fires per file. Without the
 // dispatch the asmlib AS scanner missed every `%include` (PR-35t R4
 // root cause).
-func TestParseIncludes_DispatchByExtension(t *testing.T) {
+func TestScanDirectives_DispatchByExtension(t *testing.T) {
 	dir := t.TempDir()
 
 	asmPath := filepath.Join(dir, "src.asm")
@@ -1182,9 +1182,9 @@ func TestParseIncludes_DispatchByExtension(t *testing.T) {
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
 
-	// PR-M3-vfs-paths: parseIncludes takes a VFS path.
-	asmDirs := scanner.parseIncludes(Source("src.asm"))
-	hDirs := scanner.parseIncludes(Source("src.h"))
+	// PR-M3-vfs-paths: scanDirectives takes a VFS path.
+	asmDirs := scanner.scanDirectives(Source("src.asm"))
+	hDirs := scanner.scanDirectives(Source("src.h"))
 
 	if len(asmDirs) != 1 || asmDirs[0].target != "defs.asm" {
 		t.Errorf("asm dispatch failed: got %+v, want one directive targeting defs.asm", asmDirs)
@@ -1195,12 +1195,12 @@ func TestParseIncludes_DispatchByExtension(t *testing.T) {
 	}
 }
 
-// TestParseIncludes_AsiDispatchesToYasm pins that `.asi` (yasm
+// TestScanDirectives_AsiDispatchesToYasm pins that `.asi` (yasm
 // include-only file) extension also routes to the yasm parser.
 // asmlib's `randomah.asi` is a `.asi` file; without `.asi` in the
 // dispatch list, transitive scans through it would silently miss any
 // nested `%include` it might hold.
-func TestParseIncludes_AsiDispatchesToYasm(t *testing.T) {
+func TestScanDirectives_AsiDispatchesToYasm(t *testing.T) {
 	dir := t.TempDir()
 	asiPath := filepath.Join(dir, "src.asi")
 
@@ -1210,11 +1210,55 @@ func TestParseIncludes_AsiDispatchesToYasm(t *testing.T) {
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	// PR-M3-vfs-paths: parseIncludes takes a VFS path.
-	dirs := scanner.parseIncludes(Source("src.asi"))
+	// PR-M3-vfs-paths: scanDirectives takes a VFS path.
+	dirs := scanner.scanDirectives(Source("src.asi"))
 
 	if len(dirs) != 1 || dirs[0].target != "nested.asi" {
 		t.Errorf(".asi dispatch failed: got %+v, want one directive targeting nested.asi", dirs)
+	}
+}
+
+// TestScanDirectives_G4UsesEmptyParser pins the upstream-like `.g4`
+// parser split: ANTLR grammars are not scanned as C/C++ text even if
+// they contain embedded `#include` snippets. Those snippets belong to
+// generated outputs, not to the grammar node itself.
+func TestScanDirectives_G4UsesEmptyParser(t *testing.T) {
+	dir := t.TempDir()
+	g4Path := filepath.Join(dir, "src.g4")
+
+	if err := os.WriteFile(g4Path, []byte(`#include "ghost.h"
+grammar X;
+`), 0o644); err != nil {
+		t.Fatalf("write src.g4: %v", err)
+	}
+
+	scanner := NewIncludeScanner(dir, SysInclSet{})
+	dirs := scanner.scanDirectives(Source("src.g4"))
+
+	if len(dirs) != 0 {
+		t.Errorf(".g4 should use empty parser, got %+v", dirs)
+	}
+}
+
+// TestScanDirectives_InSuffixUsesUnderlyingExtension pins the upstream
+// `.in` dispatch rule: `foo.ext.in` must select the parser for
+// `foo.ext`, not the literal `.in` suffix. Without this, `src.g4.in`
+// would fall back to the default C parser and emit a phantom include.
+func TestScanDirectives_InSuffixUsesUnderlyingExtension(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "src.g4.in")
+
+	if err := os.WriteFile(path, []byte(`#include "ghost.h"
+grammar X;
+`), 0o644); err != nil {
+		t.Fatalf("write src.g4.in: %v", err)
+	}
+
+	scanner := NewIncludeScanner(dir, SysInclSet{})
+	dirs := scanner.scanDirectives(Source("src.g4.in"))
+
+	if len(dirs) != 0 {
+		t.Errorf(".g4.in should inherit .g4 empty parser, got %+v", dirs)
 	}
 }
 
@@ -1273,12 +1317,12 @@ func TestScanner_AsmlibAsmInputsParity(t *testing.T) {
 	}
 }
 
-// TestParseIncludes_MacroIndirectAugmentation pins the
+// TestScanDirectives_MacroIndirectAugmentation pins the
 // PR-M3-musl-self-closure behaviour: sources known to use macro-indirect
 // `#include MACRO_NAME` forms get synthetic includeDirectives appended
 // after the regex-extracted set. The text-blind regex parser cannot
 // expand the macro; the table-driven augmenter is the surgical fix.
-func TestParseIncludes_MacroIndirectAugmentation(t *testing.T) {
+func TestScanDirectives_MacroIndirectAugmentation(t *testing.T) {
 	dir := t.TempDir()
 	rel := "contrib/libs/openssl/crypto/uid.c"
 	full := filepath.Join(dir, rel)
@@ -1296,7 +1340,7 @@ func TestParseIncludes_MacroIndirectAugmentation(t *testing.T) {
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	dirs := scanner.parseIncludes(Source(rel))
+	dirs := scanner.scanDirectives(Source(rel))
 
 	var hasCrypto, hasUnistd bool
 

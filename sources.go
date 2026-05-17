@@ -729,7 +729,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 		sc.cfg.SourceRel = srcRelOnDisk
 
 		// Scanner walks operate on VFS values; the FS translation
-		// happens at parseIncludes / fileExists.
+		// happens at scanDirectives / fileExists.
 		srcAbs := Source(srcRelOnDisk)
 		srcAbsSet[srcAbs] = struct{}{}
 		sc.dfs(srcAbs, visited, &order)
