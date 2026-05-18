@@ -756,7 +756,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	mf := Throw2(ParseFile(yamakePath))
 
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.sourceRoot, instance.Path, instance.Kind, mf.Stmts, env, instance.Flags)
+	d := collectModule(ctx.fs, instance.Path, instance.Kind, mf.Stmts, env, instance.Flags)
 	for _, stmt := range d.allPySrcs {
 		applyAllPySrcs(ctx.sourceRoot, instance.Path, stmt, d)
 	}
@@ -914,6 +914,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			PeerAddInclGlobal: peerContribs.addIncl,
 			SrcDir:            d.srcDir,
 			SourceRoot:        ctx.sourceRoot,
+			FS:                ctx.fs,
 			DefaultVars:       d.defaultVars,
 			DefaultVarOrder:   d.defaultVarOrder,
 		}
@@ -1327,7 +1328,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// Language-defaults AND program-defaults tolerate a missing
 		// ya.make (synthetic test fixtures). Only user-declared PEERDIRs
 		// must exist.
-		if kind != peerKindUserPeer && !peerYaMakeExists(ctx.sourceRoot, peerPath) {
+		if kind != peerKindUserPeer && !peerYaMakeExists(ctx.fs, peerPath) {
 			continue
 		}
 
@@ -1834,6 +1835,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		SFlags:               d.sFlags,
 		SrcDir:               d.srcDir,
 		SourceRoot:           ctx.sourceRoot,
+		FS:                   ctx.fs,
 		DefaultVars:          d.defaultVars,
 		DefaultVarOrder:      d.defaultVarOrder,
 		Py3Suffix:            isPy3NativeLib,
@@ -3185,7 +3187,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		seen[p] = struct{}{}
 		peerPath := filepath.Clean(p)
 
-		if !peerYaMakeExists(ctx.sourceRoot, peerPath) {
+		if !peerYaMakeExists(ctx.fs, peerPath) {
 			continue
 		}
 

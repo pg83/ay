@@ -15,6 +15,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		DefaultVars:     d.defaultVars,
 		DefaultVarOrder: d.defaultVarOrder,
 		SourceRoot:      ctx.sourceRoot,
+		FS:              ctx.fs,
 	}
 
 	// Scan the .in file for its header closure (same as a .cpp source).

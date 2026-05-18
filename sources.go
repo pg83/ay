@@ -4,7 +4,6 @@ package main
 // composition used by emit_sources.go.
 
 import (
-	"os"
 	"path/filepath"
 )
 
@@ -12,16 +11,13 @@ import (
 // when IsGenerated, otherwise `$(S)/...` with SRCDIR-aware fallback when
 // the local file is absent. Lets the walker compose AR/LD inputs without
 // round-tripping through the emitted node.
-func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCInputs, sourceRoot string) VFS {
+func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCInputs, fs *FS) VFS {
 	if in.IsGenerated {
 		return Build(instance.Path + "/" + srcRel)
 	}
 
 	if in.SrcDir != nil && *in.SrcDir != instance.Path {
-		localCandidate := filepath.Join(sourceRoot, instance.Path, srcRel)
-		info, err := os.Stat(localCandidate)
-
-		if err != nil || info.IsDir() {
+		if fs != nil && !fs.IsFile(instance.Path+"/"+srcRel) {
 			return Source(*in.SrcDir + "/" + srcRel)
 		}
 	}
@@ -50,10 +46,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 		srcRelOnDisk := srcInstance.Path + "/" + src
 
 		if in.SrcDir != nil && *in.SrcDir != srcInstance.Path {
-			localCandidate := filepath.Join(ctx.sourceRoot, srcInstance.Path, src)
-			info, err := os.Stat(localCandidate)
-
-			if err != nil || info.IsDir() {
+			if !ctx.fs.IsFile(srcInstance.Path + "/" + src) {
 				srcRelOnDisk = *in.SrcDir + "/" + src
 			}
 		}
@@ -131,17 +124,14 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []V
 // resolveSourceVFS composes the `$(S)/...` VFS path of a SRCS-declared
 // source with SRCDIR-aware fallback: when SRCDIR is set and no local
 // file exists at instance.Path/<srcRel>, resolve under SRCDIR.
-// Registration-time resolution; os.Stat is legitimate here because it
-// feeds path composition, not scanner-internal dispatch.
+// Registration-time resolution — feeds path composition, not scanner
+// dispatch.
 func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDir *string) VFS {
 	srcRelOnDisk := srcInstance.Path + "/" + srcRel
 
 	if srcDir != nil && filepath.Clean(*srcDir) != "." && filepath.Clean(*srcDir) != srcInstance.Path {
 		cleanSrcDir := filepath.Clean(*srcDir)
-		localCandidate := filepath.Join(ctx.sourceRoot, srcInstance.Path, srcRel)
-		info, err := os.Stat(localCandidate)
-
-		if err != nil || info.IsDir() {
+		if !ctx.fs.IsFile(srcInstance.Path + "/" + srcRel) {
 			srcRelOnDisk = cleanSrcDir + "/" + srcRel
 		}
 	}

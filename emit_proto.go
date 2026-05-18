@@ -307,6 +307,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		AutoPeerCFlags:       defaultPeerCFlags(ctx, instance, d),
 		SrcDir:               d.srcDir,
 		SourceRoot:           ctx.sourceRoot,
+		FS:                   ctx.fs,
 		DefaultVars:          d.defaultVars,
 		DefaultVarOrder:      d.defaultVarOrder,
 		ModuleTag:            stringPtr("cpp_proto"),

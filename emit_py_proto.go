@@ -458,6 +458,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			AutoPeerCFlags:       consumerAutoPeerCFlags(true, true),
 			PerSourceCFlags:      []string{"-x", "c++"},
 			SourceRoot:           ctx.sourceRoot,
+			FS:                   ctx.fs,
 			IsGenerated:          true,
 			HasGenerator:         true,
 			Generator:            ref,

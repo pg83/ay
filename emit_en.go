@@ -40,6 +40,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		AddIncl:           mergeDedupVFS(d.addIncl, nil),
 		PeerAddInclGlobal: peerAddInclGlobal,
 		SourceRoot:        ctx.sourceRoot,
+		FS:                ctx.fs,
 	}
 
 	res := &enumSrcsResult{}

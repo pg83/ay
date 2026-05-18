@@ -13,7 +13,6 @@ package main
 // Suffix is `.o` for target, `.pic.o` for host (Flags.PIC=true).
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -49,12 +48,16 @@ type ModuleCCInputs struct {
 	// input path. Per-source local-vs-srcdir resolution happens via
 	// filesystem stat of the candidate local path.
 	SrcDir *string
-	// SourceRoot is the walker's source root (genCtx.sourceRoot),
-	// needed to stat candidate local source paths so flat sources that
-	// exist locally (e.g. musl_extra's all.c) keep local resolution
-	// rather than SRCDIR-rebased. Empty disables the check (synthetic
-	// tests pinning the SRCDIR-rebased shape directly).
+	// SourceRoot is the walker's source root (genCtx.sourceRoot).
+	// Kept alongside FS for the small number of call sites that still
+	// build absolute disk paths directly (emit_cf_primitive). Empty
+	// SourceRoot + nil FS = synthetic test shape (skip existence checks).
 	SourceRoot string
+	// FS is the cached source-tree FS abstraction (genCtx.fs). Carriers
+	// of ModuleCCInputs use it for local-vs-SRCDIR resolution without
+	// re-statting per source. nil in synthetic tests pinning a fixed
+	// resolution shape.
+	FS *FS
 	// IncludeInputs is the transitive header set produced by the
 	// include scanner. Appended to node.Inputs after the primary
 	// source path in DFS-discovery order. Empty for synthetic paths
@@ -326,7 +329,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, s
 	}
 
 	// SRCDIR routing.
-	useSrcDir := in.SrcDir != nil && *in.SrcDir != instance.Path && !sourceExistsLocally(in.SourceRoot, instance.Path, srcRel)
+	useSrcDir := in.SrcDir != nil && *in.SrcDir != instance.Path && !sourceExistsLocally(in.FS, instance.Path, srcRel)
 
 	if useSrcDir {
 		outputRel := composeSrcDirOutputRel(instance.Path, *in.SrcDir, srcRel)
@@ -351,21 +354,14 @@ func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, s
 
 // sourceExistsLocally reports whether `<sourceRoot>/<modulePath>/<srcRel>`
 // is a regular file — distinguishes composeCCPaths cases (2) and (3).
-// Empty sourceRoot returns false (synthetic-test path); tests wanting
-// local-resolution shape leave SrcDir nil, not SourceRoot empty.
-func sourceExistsLocally(sourceRoot, modulePath, srcRel string) bool {
-	if sourceRoot == "" {
+// nil FS returns false (synthetic-test path); tests wanting
+// local-resolution shape leave SrcDir nil, not FS nil.
+func sourceExistsLocally(fs *FS, modulePath, srcRel string) bool {
+	if fs == nil {
 		return false
 	}
 
-	candidate := filepath.Join(sourceRoot, modulePath, srcRel)
-	info, err := os.Stat(candidate)
-
-	if err != nil {
-		return false
-	}
-
-	return !info.IsDir()
+	return fs.IsFile(modulePath + "/" + srcRel)
 }
 
 // composeSrcDirOutputRel computes case-3 output infix: relative path
