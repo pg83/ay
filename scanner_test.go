@@ -288,6 +288,15 @@ func TestScanner_BlockCommentIncludeIgnored(t *testing.T) {
 	}
 }
 
+func muslConsumerPeerAddIncl(isa ISA) []VFS {
+	return []VFS{
+		Source("contrib/libs/musl/arch/" + string(isa)),
+		Source("contrib/libs/musl/arch/generic"),
+		Source("contrib/libs/musl/include"),
+		Source("contrib/libs/musl/extra"),
+	}
+}
+
 // TestScanner_IncludeNextSuppressed pins the PR-35e fix: the scanner
 // does NOT follow `#include_next` directives through sysincl OR the
 // search path. The directive in libcxx's shadow-header pattern (e.g.
@@ -319,20 +328,16 @@ func TestScanner_IncludeNextSuppressed(t *testing.T) {
 	// libcxx-source case. The ScanContext mirrors what gen.go's
 	// `walkClosure` constructs for a libcxx CC consumer:
 	// libcxx/include is in OwnAddIncl (the libcxx module's own
-	// ADDINCL). musl/include is in BaseSearchPaths (the cc bundle's
-	// implicit -I set).
+	// ADDINCL). musl consumer paths arrive through the peer
+	// contrib/libs/musl/include module's GLOBAL ADDINCL; the baseline
+	// stays limited to repo-root + linux-headers.
 	libcxxCtx := ScanContext{
 		SourceRel: "contrib/libs/cxxsupp/libcxx/src/algorithm.cpp",
 		OwnAddIncl: VFSesFromStrings([]string{
 			"contrib/libs/cxxsupp/libcxx/include",
 		}),
-		BaseSearchPaths: VFSesFromStrings([]string{
-			"contrib/libs/musl/include",
-			"contrib/libs/musl/arch/aarch64",
-			"contrib/libs/musl/arch/generic",
-			"contrib/libs/linux-headers",
-			"",
-		}),
+		PeerAddInclSet:  muslConsumerPeerAddIncl(ISA("aarch64")),
+		BaseSearchPaths: includeScannerBasePaths(false),
 	}
 
 	closure := scanner.WalkClosure(libcxxCtx)
@@ -392,13 +397,8 @@ func TestScanner_RegularIncludeStillResolvesViaSysincl(t *testing.T) {
 		OwnAddIncl: VFSesFromStrings([]string{
 			"contrib/libs/cxxsupp/libcxx/include",
 		}),
-		BaseSearchPaths: VFSesFromStrings([]string{
-			"contrib/libs/musl/include",
-			"contrib/libs/musl/arch/aarch64",
-			"contrib/libs/musl/arch/generic",
-			"contrib/libs/linux-headers",
-			"",
-		}),
+		PeerAddInclSet:  muslConsumerPeerAddIncl(ISA("aarch64")),
+		BaseSearchPaths: includeScannerBasePaths(false),
 	}
 
 	closure := scanner.WalkClosure(libcxxCtx)
@@ -453,13 +453,8 @@ func TestScanner_SubgraphCacheReuse(t *testing.T) {
 			OwnAddIncl: VFSesFromStrings([]string{
 				"contrib/libs/cxxsupp/libcxx/include",
 			}),
-			BaseSearchPaths: VFSesFromStrings([]string{
-				"contrib/libs/musl/include",
-				"contrib/libs/musl/arch/aarch64",
-				"contrib/libs/musl/arch/generic",
-				"contrib/libs/linux-headers",
-				"",
-			}),
+			PeerAddInclSet:  muslConsumerPeerAddIncl(ISA("aarch64")),
+			BaseSearchPaths: includeScannerBasePaths(false),
 		}
 	}
 
@@ -975,19 +970,15 @@ func TestScanner_LibcxxrtUnwindQuoted_ProductionParity(t *testing.T) {
 
 	// ScanContext mirrors the libcxxrt CC consumer's emission shape:
 	// libcxxrt is its own ADDINCL root; cxx-tail picks up libunwind
-	// indirectly via libcxxrt/unwind.h's fully-qualified include.
+	// indirectly via libcxxrt/unwind.h's fully-qualified include. musl
+	// consumer paths arrive through peer GLOBAL ADDINCL, not baseline.
 	ctx := ScanContext{
 		SourceRel: "contrib/libs/cxxsupp/libcxxrt/exception.cc",
 		OwnAddIncl: VFSesFromStrings([]string{
 			"contrib/libs/cxxsupp/libcxxrt",
 		}),
-		BaseSearchPaths: VFSesFromStrings([]string{
-			"contrib/libs/musl/include",
-			"contrib/libs/musl/arch/aarch64",
-			"contrib/libs/musl/arch/generic",
-			"contrib/libs/linux-headers",
-			"",
-		}),
+		PeerAddInclSet:  muslConsumerPeerAddIncl(ISA("aarch64")),
+		BaseSearchPaths: includeScannerBasePaths(false),
 	}
 
 	closure := scanner.WalkClosure(ctx)

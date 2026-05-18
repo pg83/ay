@@ -34,11 +34,12 @@ func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCI
 // (mirroring the joined compile — headers reached once stay deduped),
 // so total work is O(union closure) not O(sum per-source).
 //
-// `scanPlatform` chooses scanner + arch search-paths: callers pass
+// `scanPlatform` chooses scanner + sysincl ISA: callers pass
 // `srcInstance.Platform` normally; the JS-target override passes
-// `ctx.target` so the closure resolves against target-arch musl even
-// when the surrounding walk is host-axis. instance.Platform is read
-// for module-level facts (Path, Flags.NoStdInc), NOT mutated.
+// `ctx.target` so the closure resolves against target-arch musl peer
+// ADDINCL even when the surrounding walk is host-axis.
+// instance.Platform is read for module-level facts (Path,
+// Flags.NoStdInc), NOT mutated.
 func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerForPlatform(scanPlatform)
 	if scanner == nil {
@@ -65,7 +66,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 			SourceRel:       srcRelOnDisk,
 			OwnAddIncl:      in.AddIncl,
 			PeerAddInclSet:  in.PeerAddInclGlobal,
-			BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.NoStdInc, scanPlatform),
+			BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.NoStdInc),
 		}
 
 		sc := ctx.getScanCtx(scanner, cfg)
@@ -182,8 +183,8 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 // rooted at any VFS path — `$(S)/...` for FS-resident sources or
 // `$(B)/...` for codegen outputs registered in the CodegenRegistry.
 // Scanner's locator dispatches FS-vs-codegen internally. ScanContext
-// mirrors cmd_args -I: own AddIncl + peer GLOBAL AddIncl + cc-bundle
-// implicit baseline (linux-headers + active musl-arch).
+// mirrors cmd_args -I: own AddIncl + peer GLOBAL AddIncl + the small
+// scanner-only baseline for bundled fallbacks (repo-root + linux-headers).
 func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
 	return walkClosureWithSourceRel(ctx, srcInstance, vfsPath, vfsPath.Rel, in)
 }
@@ -198,7 +199,7 @@ func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath V
 		SourceRel:       sourceRel,
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
-		BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.NoStdInc, srcInstance.Platform),
+		BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.NoStdInc),
 	}
 
 	sc := ctx.getScanCtx(scanner, cfg)
@@ -206,45 +207,38 @@ func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath V
 	return sc.WalkClosure(vfsPath)
 }
 
-// includeScannerBasePaths returns the implicit include search path
-// the cc bundle adds via cmd_args (SOURCE_ROOT + linux-headers +
-// musl-arch when applicable). Used as fallback resolution candidates
-// so `<util/folder/path.h>` and `<linux/types.h>` resolve compiler-
-// identically.
+// includeScannerBasePaths returns the scanner baseline that is NOT
+// expected to arrive via module/peer ADDINCL propagation:
+//   - repo-root fallback (`-I$(S)` shape) for non-no-stdinc consumers;
+//   - bundled linux-headers fallback for all C/C++ scanner contexts.
 //
-// Non-musl flavours prepend an empty-string entry representing
+// Musl include roots are intentionally NOT part of this baseline.
+// Upstream models them through ordinary module ADDINCL:
+//   - musl-self gets `arch/<isa>`, `arch/generic`, `src/include`,
+//     `src/internal`, `include`, `extra` from contrib/libs/musl/ya.make;
+//   - consumers get `arch/<isa>`, `arch/generic`, `include`, `extra`
+//     from contrib/libs/musl/include's GLOBAL ADDINCL.
+//
+// Keeping musl out of the baseline avoids smuggling musl-self-only
+// paths (`src/include`, `src/internal`) into arbitrary consumers'
+// resolution context.
+//
+// Non-no-stdinc flavours prepend an empty-string entry representing
 // SOURCE_ROOT itself (mirrors `-I$(S)`); `<util/foo.h>` tries
 // $(S)/util/foo.h before linux-headers.
 //
-// Musl flavours MUST NOT get the empty prefix — `-nostdinc` plus a
+// No-stdinc flavours MUST NOT get the empty prefix — `-nostdinc` plus a
 // fully explicit muslCcIncludes search path. Adding SOURCE_ROOT
 // would cause false resolution of system-form includes against the
 // repo root, silently expanding musl CC input sets.
-//
-// `libcMusl` is the per-MODULE flag; `scanPlatform` is the platform
-// to resolve against (typically instance.Platform, but JOIN_SRCS
-// during a host walk passes ctx.target to force target-arch paths).
-func includeScannerBasePaths(libcMusl bool, scanPlatform *Platform) []VFS {
+func includeScannerBasePaths(noStdInc bool) []VFS {
 	base := []VFS{
 		Source("contrib/libs/linux-headers"),
 		Source("contrib/libs/linux-headers/_nf"),
 	}
 
-	if libcMusl {
-		muslPaths := []VFS{
-			Source("contrib/libs/musl/arch/" + string(scanPlatform.ISA)),
-			Source("contrib/libs/musl/arch/generic"),
-			Source("contrib/libs/musl/src/include"),
-			Source("contrib/libs/musl/src/internal"),
-			Source("contrib/libs/musl/include"),
-			Source("contrib/libs/musl/extra"),
-		}
-
-		out := make([]VFS, 0, len(muslPaths)+len(base))
-		out = append(out, muslPaths...)
-		out = append(out, base...)
-
-		return out
+	if noStdInc {
+		return base
 	}
 
 	out := make([]VFS, 0, 1+len(base))
