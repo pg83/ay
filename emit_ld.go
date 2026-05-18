@@ -5,9 +5,7 @@ package main
 // An LD node has ONE Node with FOUR Cmds:
 //   cmd[0]: vcs_info.py — generates `__vcs_version__.c` (5 args).
 //   cmd[1]: clang compile of `__vcs_version__.c` → `__vcs_version__.c.o`.
-//           94 args. Same shape as CC but with single `-I$(S)` and
-//           `-D_musl_=1` / `-D_musl_` sentinels around the two
-//           `noLibcUndebugBlock` copies.
+//           Same shape as CC but with single `-I$(S)`.
 //   cmd[2]: link_exe.py — link invocation (73 args). Carries
 //           `cwd: $(B)` because emitted command-file paths are
 //           BUILD_ROOT-relative.
@@ -71,11 +69,10 @@ func EmitLD(
 	objcopyRefs []NodeRef,
 	objcopyPaths []VFS,
 	memberInputs []VFS, //nolint:vfs-stay // cascade from gen.go member-inputs bucket
-	muslOn bool,
 	moduleCFlags []string,
 	peerCFlagsGlobal []string,
+	autoPeerCFlags []string,
 	objAddLibsGlobal []string,
-	usePython3 bool,
 	wantsStrip bool,
 	wantsSplitDwarf bool,
 	hostP *Platform,
@@ -142,7 +139,7 @@ func EmitLD(
 
 	tools := instance.Platform.Tools
 	cmd0 := composeLDCmdVcsInfo(tools, vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, hostBuild, instance.Flags.NoCompilerWarnings)
+	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, autoPeerCFlags, hostBuild, instance.Flags.NoCompilerWarnings)
 	ldObjAddLibs := objAddLibsGlobal
 	if hostBuild {
 		ldObjAddLibs = nil
@@ -329,25 +326,26 @@ func composeLDCmdVcsInfo(tools Toolchain, vcsCPath string) []string {
 }
 
 // composeLDCmdVcsCompile composes cmd[1]: clang compile of
-// `__vcs_version__.c` → `__vcs_version__.c.o` (target, 94 args) or
+// `__vcs_version__.c` → `__vcs_version__.c.o` (target) or
 // `__vcs_version__.c.pic.o` (host).
 //
+// Mirrors upstream `_SRC_C_NODEPS_CMD` (gnu_compiler.conf:328): the
+// vcs compile is a regular C-compile that threads the module's own
+// `$CFLAGS` and per-module auto-peer CFLAGS. `autoPeerCFlags` is the
+// pre-resolved slice produced by `defaultPeerCFlags` upstream of the
+// caller; this composer is agnostic about its contents.
+//
 // Target (hostBuild=false): target triple, -march=, commonCFlags,
-// warningFlags, commonDefines. `moduleCFlags` unused.
+// warningFlags, commonDefines. `moduleCFlags` unused on target — the
+// reference cmd_args do not surface own CFLAGS at that position.
 //
 // Host (hostBuild=true): host triple (no -march), hostCFlags, the
 // warning bundle picked by `pickWarningFlags(noCompilerWarnings)`,
-// hostDefines, then moduleCFlags (carries own CFLAGS + `-D_musl_=1`
-// when muslOn), then ndebugPicBlock × 2 with catboostOpenSourceDefine
-// + muslConsumerSentinel + hostSseFeatures between them.
-//
-// The musl D-flag pair (`-D_musl_=1` and `-D_musl_`) is driven by the
-// CLI's `--define MUSL=...`; when MUSL=no the sentinels collapse to
-// bare double-`noLibcUndebugBlock` (target) or no muslConsumerSentinel
-// between catboost and SSE (host).
-func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, muslOn bool, moduleCFlags, peerCFlagsGlobal []string, usePython3 bool, hostBuild bool, noCompilerWarnings bool) []string {
+// hostDefines, then moduleCFlags, then ndebugPicBlock × 2 with
+// catboostOpenSourceDefine + hostSseFeatures between them.
+func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, autoPeerCFlags []string, hostBuild bool, noCompilerWarnings bool) []string {
 	if hostBuild {
-		return composeLDCmdVcsCompileHost(p, vcsCPath, vcsOPath, muslOn, moduleCFlags, peerCFlagsGlobal, usePython3, noCompilerWarnings)
+		return composeLDCmdVcsCompileHost(p, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, autoPeerCFlags, noCompilerWarnings)
 	}
 
 	bundle := compileFlagBundleFor(p)
@@ -366,40 +364,24 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, muslOn bool,
 	)
 	cmdArgs = append(cmdArgs, "-I$(S)")
 
-	preNoLibcExtras := make([]string, 0, len(peerCFlagsGlobal)+1)
-
-	if muslOn && !flagsContain(peerCFlagsGlobal, ldVcsMuslSelfDefine) {
-		preNoLibcExtras = append(preNoLibcExtras, ldVcsMuslSelfDefine)
-	}
-
-	// PEERDIR-derived GLOBAL CFLAGS between musl-self sentinel and the
-	// first `noLibcUndebugBlock`. Anchor: devtools/ymake/bin/ymake
-	// cmd[1] ref:48..58.
-	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
-
-	autoPeerCFlags := consumerAutoPeerCFlags(muslOn, usePython3)
+	preNoLibcExtras := append([]string(nil), peerCFlagsGlobal...)
 
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningFlags, bundle.Defines, preNoLibcExtras, autoPeerCFlags)
-
-	if flagsContain(peerCFlagsGlobal, "-DCARES_STATICLIB") && flagsContain(peerCFlagsGlobal, "-DPCRE_STATIC") {
-		cmdArgs = moveFlagAfter(cmdArgs, ldVcsMuslSelfDefine, "-DPCRE_STATIC")
-	}
 
 	return cmdArgs
 }
 
 // composeLDCmdVcsCompileHost composes the HOST variant of cmd[1]:
 // x86_64 toolchain, hostCFlags, warning bundle, hostDefines, then
-// `moduleCFlags` (own + `-D_musl_=1` when muslOn), then ndebugPicBlock
-// twice with catboostOpenSourceDefine + muslConsumerSentinel +
-// hostSseFeatures between them. Matches ragel6/yasm host LD cmd[1].
+// `moduleCFlags`, then ndebugPicBlock twice with
+// catboostOpenSourceDefine + hostSseFeatures between them.
 //
 // Warning bundle selection (mirror of `pickWarningFlags`):
 // NO_COMPILER_WARNINGS modules (vendored upstream contrib/tools)
 // get the single-arg `-Wno-everything`; regular host PROGRAMs get the
 // 6-arg standard bundle. Canonical composition at
 // `ymake_conf.py:1550-1556` and `gnu_compiler.conf:124-140`.
-func composeLDCmdVcsCompileHost(p *Platform, vcsCPath, vcsOPath string, muslOn bool, moduleCFlags, peerCFlagsGlobal []string, usePython3 bool, noCompilerWarnings bool) []string {
+func composeLDCmdVcsCompileHost(p *Platform, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, autoPeerCFlags []string, noCompilerWarnings bool) []string {
 	bundle := compileFlagBundleFor(p)
 	cmdArgs := make([]string, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal))
 	cmdArgs = append(cmdArgs,
@@ -415,52 +397,11 @@ func composeLDCmdVcsCompileHost(p *Platform, vcsCPath, vcsOPath string, muslOn b
 
 	preNoLibcExtras := make([]string, 0, len(moduleCFlags)+len(peerCFlagsGlobal))
 	preNoLibcExtras = append(preNoLibcExtras, moduleCFlags...)
-	// PEERDIR-derived GLOBAL CFLAGS between moduleCFlags (terminating
-	// with -D_musl_=1 when MUSL=yes) and the first ndebugPicBlock.
-	// Anchor: tools/py3cc/py3cc cmd[1] ref:45..47.
 	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
-
-	// USE_PYTHON3 slot anchors at tools/py3cc/slow/py3cc cmd[1] ref:78
-	// (between hostSseFeatures and the second ndebugPicBlock).
-	autoPeerCFlags := consumerAutoPeerCFlags(muslOn, usePython3)
 
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings), bundle.Defines, preNoLibcExtras, autoPeerCFlags)
 
 	return cmdArgs
-}
-
-// ldVcsMuslSelfDefine is `-D_musl_=1`, injected between commonDefines
-// and the first noLibcUndebugBlock when MUSL=yes. The =1 form matches
-// `muslExtraDefines`'s musl-self CFLAG; the bare `-D_musl_` consumer
-// sentinel lives in `muslConsumerSentinel`.
-const ldVcsMuslSelfDefine = "-D_musl_=1"
-
-func moveFlagAfter(args []string, flag string, anchor string) []string {
-	flagIdx := -1
-	anchorIdx := -1
-	for i, arg := range args {
-		if arg == flag && flagIdx < 0 {
-			flagIdx = i
-		}
-		if arg == anchor {
-			anchorIdx = i
-		}
-	}
-	if flagIdx < 0 || anchorIdx < 0 || flagIdx == anchorIdx+1 {
-		return args
-	}
-
-	out := make([]string, 0, len(args))
-	for i, arg := range args {
-		if i == flagIdx {
-			continue
-		}
-		out = append(out, arg)
-		if i == anchorIdx {
-			out = append(out, flag)
-		}
-	}
-	return out
 }
 
 // composeLDCmdLinkExe composes cmd[2]: link_exe.py invocation running
@@ -484,7 +425,7 @@ func moveFlagAfter(args []string, flag string, anchor string) []string {
 //
 // `hostBuild` selects host triple (x86_64, no -march) and
 // `ldHostStaticTrailingFlags` (no -lrt/-ldl) in place of target's
-// `ldStaticMuslTrailingFlags`.
+// `ldStaticTargetTrailingFlags`.
 //
 // `wantsStrip` controls insertion of `-Wl,--strip-all` between the
 // trailer's `-lm` and `-Wl,--gc-sections`. Set true for PY3_PROGRAM_BIN
@@ -581,7 +522,7 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 			trailer = ldHostStaticTrailingFlags
 		}
 	} else {
-		trailer = ldStaticMuslTrailingFlags
+		trailer = ldStaticTargetTrailingFlags
 	}
 	trailer = p.WithLinkerSelectionFlags(trailer)
 
@@ -745,14 +686,14 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, plugi
 	return out
 }
 
-// ldStaticMuslTrailingFlags is the 12-flag trailer the reference
-// `tools/archiver/archiver` LD cmd[2] emits AFTER `-Wl,--end-group`.
-// Encodes static-musl Linux: no PIE, no dynamic linker, hand-rolled
-// libc/libdl/libm linkage, explicit section gc.
+// ldStaticTargetTrailingFlags is the 12-flag trailer for target
+// PROGRAM LD cmd[2] AFTER `-Wl,--end-group`. Encodes static-linux:
+// no PIE, no dynamic linker, hand-rolled libc/libdl/libm linkage,
+// explicit section gc.
 //
 // `-nostdlib` appears TWICE; the duplication is part of the reference
 // output — do not deduplicate.
-var ldStaticMuslTrailingFlags = []string{
+var ldStaticTargetTrailingFlags = []string{
 	"-rdynamic",
 	"-Wl,--no-as-needed",
 	"-static",
@@ -769,7 +710,7 @@ var ldStaticMuslTrailingFlags = []string{
 
 // ldHostStaticTrailingFlags is the 12-flag trailer the reference host
 // PROGRAM LD cmd[2] (ragel6, yasm) emits AFTER `-Wl,--end-group`.
-// Differs from `ldStaticMuslTrailingFlags`: `-lrt`/`-ldl` absent
+// Differs from `ldStaticTargetTrailingFlags`: `-lrt`/`-ldl` absent
 // (host binaries skip glibc-compat shims), replaced by two `-fPIC`
 // flags satisfying the static-PIC link invariant.
 var ldHostStaticTrailingFlags = []string{
