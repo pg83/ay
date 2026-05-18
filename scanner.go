@@ -60,6 +60,7 @@ type includeDirective struct {
 // and avoid repeated string hashing in their own maps.
 type scannerInterner struct {
 	stringIDs map[string]uint32
+	strings   []string
 	nextStr   uint32
 }
 
@@ -68,6 +69,7 @@ const scannerInternerBuildBit = uint32(1) << 31
 func newScannerInterner() scannerInterner {
 	return scannerInterner{
 		stringIDs: make(map[string]uint32, 32768),
+		strings:   make([]string, 1, 32769),
 	}
 }
 
@@ -83,6 +85,7 @@ func (si *scannerInterner) internString(s string) uint32 {
 	si.nextStr++
 	id := si.nextStr
 	si.stringIDs[s] = id
+	si.strings = append(si.strings, s)
 
 	return id
 }
@@ -98,6 +101,22 @@ func (si *scannerInterner) internVFS(v VFS) uint32 {
 	}
 
 	panic("scannerInterner.internVFS: zero-valued VFS")
+}
+
+// vfsByID reconstructs a VFS previously interned through internVFS.
+// The caller must pass an ID produced by internVFS, not a raw string ID.
+func (si *scannerInterner) vfsByID(id uint32) VFS {
+	root := VFSRootSource
+	if id&scannerInternerBuildBit != 0 {
+		root = VFSRootBuild
+		id &^= scannerInternerBuildBit
+	}
+
+	if id == 0 || id >= uint32(len(si.strings)) {
+		panic("scannerInterner.vfsByID: out-of-range VFS ID")
+	}
+
+	return VFS{Root: root, Rel: si.strings[id]}
 }
 
 // IncludeScanner is the per-walker include-resolver state. It owns the
@@ -226,7 +245,7 @@ type scanCtx struct {
 
 	resolveCache         map[resolveInnerKey][]VFS
 	searchTierCache      map[uint32]searchTierResult
-	subgraphCache        map[subgraphInnerKey][]VFS
+	subgraphCache        map[subgraphInnerKey][]uint32
 	subgraphTaintedKnown map[subgraphInnerKey]struct{}
 	subgraphInProgress   map[subgraphInnerKey]struct{}
 }
@@ -368,7 +387,7 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 		ctxHash:              hashScanContext(&cfg),
 		resolveCache:         make(map[resolveInnerKey][]VFS, 1024),
 		searchTierCache:      make(map[uint32]searchTierResult, 256),
-		subgraphCache:        make(map[subgraphInnerKey][]VFS, 512),
+		subgraphCache:        make(map[subgraphInnerKey][]uint32, 512),
 		subgraphTaintedKnown: make(map[subgraphInnerKey]struct{}, 64),
 		subgraphInProgress:   make(map[subgraphInnerKey]struct{}, 16),
 	}
@@ -682,7 +701,8 @@ func (sc *scanCtx) dfs(absPath VFS, visited VFSSet, order *[]VFS) {
 	if ok {
 		// Cached or freshly-computed clean canonical subgraph. Merge
 		// into caller's visited+order, skipping pre-visited entries.
-		for _, p := range sg {
+		for _, id := range sg {
+			p := sc.scanner.interner.vfsByID(id)
 			if !visited.AddIfAbsent(p) {
 				continue
 			}
@@ -781,7 +801,7 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 // Cycle detection: a call for a key in subgraphInProgress is a back-
 // edge; returns (nil, false) and propagates upward — every header on
 // the SCC ends up marked taintedKnown.
-func (sc *scanCtx) subgraph(absPath VFS, sourceClass uint32) ([]VFS, bool) {
+func (sc *scanCtx) subgraph(absPath VFS, sourceClass uint32) ([]uint32, bool) {
 	s := sc.scanner
 	key := subgraphInnerKey{
 		abs:         s.interner.internVFS(absPath),
@@ -844,8 +864,10 @@ func (sc *scanCtx) subgraph(absPath VFS, sourceClass uint32) ([]VFS, bool) {
 	// Trim any unused capacity — the slice will live in the cache for
 	// the rest of the run, so paying the one-time copy avoids holding
 	// over-allocated buffers across millions of cached subgraphs.
-	out := make([]VFS, len(order))
-	copy(out, order)
+	out := make([]uint32, len(order))
+	for i, p := range order {
+		out[i] = s.interner.internVFS(p)
+	}
 
 	// Return scratch buffers to the pool.
 	visited.Clear()
@@ -883,7 +905,8 @@ func (sc *scanCtx) walkSubgraph(absPath VFS, sourceClass uint32, visited VFSSet,
 
 		if ok {
 			// Clean child subgraph — merge into our walk.
-			for _, p := range childSg {
+			for _, id := range childSg {
+				p := sc.scanner.interner.vfsByID(id)
 				if !visited.AddIfAbsent(p) {
 					continue
 				}
@@ -924,7 +947,8 @@ func (sc *scanCtx) walkSubgraphTainted(absPath VFS, sourceClass uint32, visited 
 		childSg, ok := sc.subgraph(rabs, sourceClass)
 
 		if ok {
-			for _, p := range childSg {
+			for _, id := range childSg {
+				p := sc.scanner.interner.vfsByID(id)
 				if !visited.AddIfAbsent(p) {
 					continue
 				}
