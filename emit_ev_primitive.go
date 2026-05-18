@@ -1,9 +1,5 @@
 package main
 
-import (
-	"bufio"
-	"strings"
-)
 
 // ev.go — emitter for EV (event-log .ev → .ev.pb.cc/.ev.pb.h) nodes.
 //
@@ -159,7 +155,7 @@ func EmitEV(
 	protocBinary VFS,
 	event2cppBinary VFS,
 	moduleTag *string,
-	fs *FS,
+	transitiveImports []VFS,
 	emit Emitter,
 ) NodeRef {
 	moduleDir := instance.Path
@@ -206,8 +202,7 @@ func EmitEV(
 		srcVFS,
 	}
 
-	// Resolve transitive imports from the .ev source file and append them.
-	inputs = append(inputs, resolveEvImports(fs, evRelPath)...)
+	inputs = append(inputs, transitiveImports...)
 
 	targetProps := map[string]string{
 		"module_dir": moduleDir,
@@ -269,79 +264,3 @@ func EmitEV(
 	return emit.Emit(node)
 }
 
-// resolveEvImports returns the deduplicated transitive import set for a
-// .ev/.proto file at srcRel: every imported file found on disk plus
-// descriptor.proto when any chain transitively reaches it. Reads each
-// file for `import "..."` lines and follows them. events_extension.proto
-// is the primary descriptor.proto chain.
-func resolveEvImports(fs *FS, srcRel string) []VFS {
-	visited := map[string]struct{}{}
-	order := make([]VFS, 0, 8)
-	descriptorAdded := false
-
-	importsOf := func(rel string) []string {
-		data, err := fs.Read(rel)
-		if err != nil {
-			return nil
-		}
-		var imports []string
-		scanner := bufio.NewScanner(strings.NewReader(string(data)))
-		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
-			if !strings.HasPrefix(line, "import ") {
-				continue
-			}
-			start := strings.IndexByte(line, '"')
-			end := strings.LastIndexByte(line, '"')
-			if start < 0 || end <= start {
-				continue
-			}
-			imports = append(imports, line[start+1:end])
-		}
-		return imports
-	}
-
-	var walk func(rel string)
-	walk = func(rel string) {
-		if _, seen := visited[rel]; seen {
-			return
-		}
-
-		visited[rel] = struct{}{}
-
-		raw := importsOf(rel)
-		if raw == nil {
-			return
-		}
-
-		var imports []string
-		for _, importedRel := range raw {
-			if importedRel == "google/protobuf/descriptor.proto" {
-				if !descriptorAdded {
-					order = append(order, pbDescriptorVFS)
-					descriptorAdded = true
-				}
-				continue
-			}
-			imports = append(imports, importedRel)
-		}
-
-		// Emit this file's absolute $(S)/... entry.
-		order = append(order, Source(rel))
-
-		for _, imp := range imports {
-			walk(imp)
-		}
-	}
-
-	topImports := importsOf(srcRel)
-	if topImports == nil {
-		return nil
-	}
-
-	for _, imp := range topImports {
-		walk(imp)
-	}
-
-	return order
-}

@@ -218,7 +218,8 @@ func cythonPxdTarget(module string) string {
 }
 
 func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet {
-	out := make([]includeDirective, 0, 8)
+	local := make([]includeDirective, 0, 8)
+	hcpp := make([]includeDirective, 0, 8)
 
 	eachLine(data, func(line []byte) {
 		target, kind, ok := parseProtoImportLine(line)
@@ -226,10 +227,24 @@ func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet
 			return
 		}
 
-		out = append(out, includeDirective{kind: kind, target: target})
+		local = append(local, includeDirective{kind: kind, target: target})
+
+		// HCPP bucket carries the codegen schema: protoc-generated
+		// outputs `#include` the .pb.h / .ev.pb.h of each import.
+		// Paths are import-relative — the walker applies the codegen
+		// output-root prefix and the runtime-base prefix for the
+		// descriptor.proto special case.
+		switch {
+		case strings.HasSuffix(target, ".ev"):
+			hcpp = append(hcpp, includeDirective{kind: kind, target: strings.TrimSuffix(target, ".ev") + ".ev.pb.h"})
+		case strings.HasSuffix(target, ".proto"):
+			hcpp = append(hcpp, includeDirective{kind: kind, target: strings.TrimSuffix(target, ".proto") + ".pb.h"})
+		}
 	})
 
-	return rawParsedIncludeSet(parsedIncludesLocal, out...)
+	set := rawParsedIncludeSet(parsedIncludesLocal, local...)
+	set = appendParsedDirectives(set, parsedIncludesHCPP, hcpp...)
+	return set
 }
 
 func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
