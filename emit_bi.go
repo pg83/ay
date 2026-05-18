@@ -108,3 +108,35 @@ func EmitBI(
 
 	return emit.Emit(node)
 }
+
+// biFlagsForInstance composes the CXX flag bundle for a BI node.
+func biFlagsForInstance(targetP *Platform) []string {
+	bundle := compileFlagBundleFor(targetP)
+	flags := make([]string, 0, 100)
+	flags = append(flags, debugPrefixMapFlags...)
+	flags = append(flags, xclangDebugCompilationDir...)
+	flags = append(flags, bundle.CFlags...)
+	flags = append(flags, warningFlags...)
+	flags = append(flags, bundle.Defines...)
+	flags = append(flags, bundle.NoLibcBlock...)
+	flags = append(flags, catboostOpenSourceDefine...)
+	flags = appendAutoPeerAndCPUFeatures(flags, bundle, []string{"-D_musl_"})
+	flags = append(flags, bundle.NoLibcBlock...)
+	flags = append(flags, cxxStandardFlag)
+	flags = append(flags,
+		"-Wimport-preprocessor-directive-pedantic",
+		"-Woverloaded-virtual",
+		"-Wno-ambiguous-reversed-operator",
+		"-Wno-defaulted-function-deleted",
+		"-Wno-deprecated-anon-enum-enum-conversion",
+		"-Wno-deprecated-enum-enum-conversion",
+		"-Wno-deprecated-enum-float-conversion",
+		"-Wno-deprecated-volatile",
+		"-Wno-pessimizing-move",
+		"-Wno-undefined-var-template",
+	)
+	flags = append(flags, "-nostdinc++")
+	flags = append(flags, catboostOpenSourceDefine...)
+	flags = append(flags, "-nostdinc++")
+	return flags
+}
