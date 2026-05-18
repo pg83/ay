@@ -1,0 +1,17 @@
+#!/bin/sh
+
+export PYTHONDONTWRITEBYTECODE=1
+export LD_LIBRARY_PATH=/home/pg/.claude/downloads/usr/lib
+export PATH=/home/pg/venv/bin/:/ix/realm/llm/bin/:$PATH
+
+. /ix/realm/llm/env
+
+exec subreaper \
+    /home/pg/monorepo/wirez/wirez -q \
+    -F 127.0.0.1:1083 \
+    -L 53:8.8.8.8:53/udp \
+    -- \
+    /home/pg/monorepo/jail/jail --rw=/var/run/dropbear/tmp --rw=/tmp --rw=/home/pg/monorepo --rw=/home/pg/.claude --rw=/home/pg/.claude.json --rw=/home/pg/.cache --rw=/home/pg/go \
+    -- \
+    /home/pg/.claude/downloads/usr/lib/ld-linux-x86-64.so.2 \
+    /home/pg/.local/bin/claude --dangerously-skip-permissions "${@}"
