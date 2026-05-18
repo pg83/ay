@@ -136,15 +136,14 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		nil, nil,
 		nil,
 		nil, nil,
-		nil, nil, // PR-M3-py3cc-objcopy-shape: objcopy slot
+		nil, nil, // objcopy slot
 		nil,
-		true,  // PR-32 D10: synthetic test pin runs MUSL=yes
-		nil,   // PR-38: moduleCFlags nil for synthetic target test
-		nil,   // PR-M3-final-LD-trailer-and-cflags: peerCFlagsGlobal nil
+		nil,   // moduleCFlags
+		nil,   // peerCFlagsGlobal
+		nil,   // autoPeerCFlags
 		nil,   // EXTRALIBS / OBJADDE_LIB_GLOBAL
-		false, // PR-M3-final-LD-trailer-and-cflags: usePython3 false
-		false, // PR-M3-py3-program-bin-strip-all: synthetic test is cpp PROGRAM
-		false, // SPLIT_DWARF disabled in this legacy LD shape test
+		false, // wantsStrip (cpp PROGRAM)
+		false, // SPLIT_DWARF
 		testHostP,
 		emit,
 	)
@@ -236,15 +235,14 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		nil, nil,
 		nil,
 		nil, nil,
-		nil, nil, // PR-M3-py3cc-objcopy-shape: objcopy slot
+		nil, nil, // objcopy slot
 		nil,
-		true,  // PR-32 D10: host pin runs MUSL=yes (M2 default)
-		nil,   // PR-38: moduleCFlags nil for synthetic host test
-		nil,   // PR-M3-final-LD-trailer-and-cflags: peerCFlagsGlobal nil
+		nil,   // moduleCFlags
+		nil,   // peerCFlagsGlobal
+		nil,   // autoPeerCFlags
 		nil,   // EXTRALIBS / OBJADDE_LIB_GLOBAL
-		false, // PR-M3-final-LD-trailer-and-cflags: usePython3 false
-		false, // PR-M3-py3-program-bin-strip-all: synthetic host test, no STRIP()
-		false, // SPLIT_DWARF disabled in this legacy LD shape test
+		false, // wantsStrip
+		false, // SPLIT_DWARF
 		testHostP,
 		emit,
 	)
@@ -284,11 +282,10 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		nil, nil,
 		nil, nil,
 		nil,
-		true,
-		nil,
-		nil,
-		nil,
-		false,
+		nil, // moduleCFlags
+		nil, // peerCFlagsGlobal
+		nil, // autoPeerCFlags
+		nil, // objAddLibsGlobal
 		false,
 		false,
 		testHostP,
@@ -340,7 +337,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 			instance := targetInstance("test/prog")
 
 			exc := Try(func() {
-				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, nil, nil, nil, true, nil, nil, nil, false, false, false, testHostP, e)
+				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, false, false, testHostP, e)
 			})
 
 			if exc == nil {
