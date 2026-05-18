@@ -30,15 +30,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	py3ccLDRef, py3ccRaw := ctx.tool(py3ccBinPath)
 	py3ccBinary := canonicalizePy3ccBinary(py3ccRaw)
 
-	// Walk tools/py3cc/slow. tools/py3cc/slow/bin declares PY3_PROGRAM_BIN
-	// which isMultimoduleLibraryType routes to a header-only path, so
-	// LDPath is empty. Use canonical fallback when LDPath is nil.
-	py3ccSlowRes := genModule(ctx, NewToolInstance(ctx.host, py3ccSlowPath))
-	py3ccSlowLDRef := py3ccSlowRes.LDRef
-	py3ccSlowBin := Build("tools/py3cc/slow/py3cc")
-	if py3ccSlowRes.LDPath != nil {
-		py3ccSlowBin = *py3ccSlowRes.LDPath
-	}
+	py3ccSlowLDRef, py3ccSlowBin := ctx.tool(py3ccSlowPath)
 
 	// Walk tools/rescompiler/bin, tools/rescompressor/bin, tools/archiver
 	// as host tools — referenced by PY (objcopy) and AR (pyc.inc) nodes.
