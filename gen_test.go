@@ -540,7 +540,7 @@ END()
 		t.Fatalf("path flags pre-set; test premise broken: %+v", pathFlags)
 	}
 
-	d := collectModule(nil, "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}), pathFlags)
+	d := collectModule(NewFS(root), "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}), pathFlags)
 
 	if !d.flags.NoLibc {
 		t.Errorf("flags.NoLibc = false, want true (macro overlay should have flipped it)")
@@ -581,7 +581,9 @@ func TestCollectModule_SetMuslNoSuppressesConsumerDefaults(t *testing.T) {
 		Platform: target,
 	}
 
-	mf := Throw2(Parse("bridge/ya.make", []byte(`LIBRARY()
+	tmp := t.TempDir()
+	tmpFS := NewFS(tmp)
+	mf := Throw2(Parse(tmpFS, "bridge/ya.make", []byte(`LIBRARY()
 SET(MUSL no)
 NO_RUNTIME()
 PEERDIR(contrib/libs/musl)
@@ -589,7 +591,7 @@ SRCS(x.cpp)
 END()
 `)))
 
-	d := collectModule(nil, "bridge", instance.Kind, mf.Stmts, buildIfEnv(instance), instance.Flags)
+	d := collectModule(tmpFS, "bridge", instance.Kind, mf.Stmts, buildIfEnv(instance), instance.Flags)
 
 	if d.muslEnabled {
 		t.Fatalf("muslEnabled = true, want false after SET(MUSL no)")

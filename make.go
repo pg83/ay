@@ -60,11 +60,15 @@ func cmdMake(args []string) int {
 		ThrowFmt("make: no targets supplied and current working directory is outside the source root")
 	}
 
+	// One FS for the whole run: shared by toolchain mining, ya.conf
+	// reads, sysincl loading, and every per-target Gen call.
+	fs := NewFS(mf.srcRoot)
+
 	// Toolchain flags feed both Platform halves (build-host invokes
 	// these binaries regardless of which axis the cmd_args belong to).
-	tools, conf := toolchainFlags(mf.srcRoot, nil)
-	hostYaFlags := readYaConfSection(filepath.Join(mf.srcRoot, "ya.conf"), "host_platform_flags")
-	targetYaFlags := readYaConfSection(filepath.Join(mf.srcRoot, "ya.conf"), "flags")
+	tools, conf := toolchainFlags(fs, nil)
+	hostYaFlags := readYaConfSection(fs, "ya.conf", "host_platform_flags")
+	targetYaFlags := readYaConfSection(fs, "ya.conf", "flags")
 
 	// Host platform: `--host-platform` selects axes (mined when empty),
 	// `--host-platform-flag KEY=VALUE` (mf.hflags) lands on host Flags,

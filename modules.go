@@ -266,10 +266,6 @@ func ensureResourcePeer(modulePath string, d *moduleData) {
 }
 
 func filterInvalidAddIncl(fs *FS, d *moduleData) {
-	if fs == nil || fs.SourceRoot() == "" {
-		return
-	}
-
 	d.addIncl = filterExistingSourceDirs(fs, d.addIncl)
 	d.addInclGlobal = filterExistingSourceDirs(fs, d.addInclGlobal)
 	d.cythonAddIncl = filterExistingSourceDirs(fs, d.cythonAddIncl)

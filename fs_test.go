@@ -155,13 +155,6 @@ func TestFS_ReadAbsRoutesThroughRel(t *testing.T) {
 	}
 }
 
-func TestFS_EmptySourceRoot(t *testing.T) {
-	fs := NewFS("")
-	if p, _ := fs.Exists("anything"); p {
-		t.Error("empty sourceRoot should report nothing exists")
-	}
-}
-
 func TestFS_CleanRel(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"", ""},

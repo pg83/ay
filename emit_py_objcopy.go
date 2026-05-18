@@ -391,7 +391,7 @@ func emitYaConfJSONObjcopy(
 
 	var resources []yaConfResource
 	for _, file := range d.yaConfJSON {
-		for _, formula := range yaConfFormulaResources(ctx.sourceRoot, file) {
+		for _, formula := range yaConfFormulaResources(ctx.fs, file) {
 			resources = append(resources, yaConfResource{
 				sourcePath: formula,
 				keyPath:    formula,

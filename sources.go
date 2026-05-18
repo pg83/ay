@@ -16,10 +16,8 @@ func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCI
 		return Build(instance.Path + "/" + srcRel)
 	}
 
-	if in.SrcDir != nil && *in.SrcDir != instance.Path {
-		if fs != nil && !fs.IsFile(instance.Path+"/"+srcRel) {
-			return Source(*in.SrcDir + "/" + srcRel)
-		}
+	if in.SrcDir != nil && *in.SrcDir != instance.Path && !fs.IsFile(instance.Path+"/"+srcRel) {
+		return Source(*in.SrcDir + "/" + srcRel)
 	}
 
 	return Source(instance.Path + "/" + srcRel)
