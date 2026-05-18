@@ -263,11 +263,21 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	// Compose-flavour dispatch keys off instance.Platform.IsHost (host =
 	// release/PIC, target = debug/noPIC) and instance.Flags.NoStdInc.
 	isHost := instance.Platform.IsHost
+	// No-stdinc preNoLibcExtras: module's own CFLAGS followed by its
+	// GLOBAL CFLAGS. For contrib/libs/musl/ya.make this materialises as
+	// the 8 own flags (-nostdinc, -ffreestanding, …) followed by
+	// `-D_musl_=1` — identical to the former `muslExtraDefines` block.
+	var noStdIncCFlags []string
+	if isMusl {
+		noStdIncCFlags = make([]string, 0, len(in.CFlags)+len(in.OwnCFlagsGlobal))
+		noStdIncCFlags = append(noStdIncCFlags, in.CFlags...)
+		noStdIncCFlags = append(noStdIncCFlags, in.OwnCFlagsGlobal...)
+	}
 	switch {
 	case isMusl && isHost:
-		cmdArgs = composeMuslHostCC(instance.Platform, outputPath, inputPath, in.AddIncl, muslOwnExtras, isCxx)
+		cmdArgs = composeMuslHostCC(instance.Platform, outputPath, inputPath, in.AddIncl, noStdIncCFlags, muslOwnExtras, isCxx, instance.Flags.NoCompilerWarnings)
 	case isMusl:
-		cmdArgs = composeMuslCC(instance.Platform, outputPath, inputPath, in.AddIncl, muslOwnExtras, isCxx)
+		cmdArgs = composeMuslCC(instance.Platform, outputPath, inputPath, in.AddIncl, noStdIncCFlags, muslOwnExtras, isCxx, instance.Flags.NoCompilerWarnings)
 	default:
 		args := ccComposeArgs{
 			Platform:           instance.Platform,
@@ -494,12 +504,12 @@ func pickCompiler(tools Toolchain, isCxx bool) string {
 	return tools.CC
 }
 
-// pickWarningFlags substitutes `-Wno-everything` (the muslWarningFlags
-// single-arg bundle) for the full `-Werror`/`-Wall`/... set when the
-// module declares NO_COMPILER_WARNINGS. PR-29-D06.
+// pickWarningFlags substitutes the 1-arg `-Wno-everything` bundle for
+// the full `-Werror`/`-Wall`/... set when the module declares
+// NO_COMPILER_WARNINGS.
 func pickWarningFlags(noCompilerWarnings bool) []string {
 	if noCompilerWarnings {
-		return muslWarningFlags
+		return noWarningsBundle
 	}
 
 	return warningFlags
@@ -513,8 +523,8 @@ func pickWarningFlags(noCompilerWarnings bool) []string {
 // CONLYFLAGS.
 //
 // `injectCxxWarningBundle` gates the warning bundle injection. Pass
-// true for target/host composers; false for musl composers (they
-// added muslWarningFlags earlier).
+// true for target/host composers; false for no-stdinc composers (they
+// emitted the warning bundle earlier in the pipeline).
 func appendCxxStdAndOwn(cmdArgs []string, isCxx bool, noCompilerWarnings bool, injectCxxWarningBundle bool, ownExtras []string) []string {
 	if isCxx {
 		cmdArgs = append(cmdArgs, cxxStandardFlag)
@@ -524,7 +534,7 @@ func appendCxxStdAndOwn(cmdArgs []string, isCxx bool, noCompilerWarnings bool, i
 				// `-Wno-everything` replaces the cxx-warning-bundle
 				// when NO_COMPILER_WARNINGS is set (libcxx
 				// algorithm.cpp.o cmd_args[99]).
-				cmdArgs = append(cmdArgs, muslWarningFlags...)
+				cmdArgs = append(cmdArgs, noWarningsBundle...)
 			} else {
 				// Every clang C++ compile without NO_COMPILER_WARNINGS
 				// gets the 10-arg cxxStandardWarnings bundle
@@ -887,13 +897,15 @@ func composeHostCC(a ccComposeArgs) []string {
 	return cmdArgs
 }
 
-// composeMuslCC composes the cmd_args bundle for a TARGET musl
-// non-PIC CC. 111 args for musl's production own-ADDINCL set.
-// Differences from composeTargetCC: no-stdinc own ADDINCL slots
-// between `ccIncludesPrefix` and `ccIncludesSuffix`;
-// muslWarningFlags (1) replaces warningFlags (6); muslExtraDefines (9)
-// inserted after commonDefines, before the noLibc block.
-func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl []VFS, ownExtras []string, isCxx bool) []string {
+// composeMuslCC composes the cmd_args bundle for a TARGET no-stdinc CC
+// (the musl-self compile shape). 111 args for musl's production
+// own-ADDINCL set. Differences from composeTargetCC: no-stdinc own
+// ADDINCL slots between `ccIncludesPrefix` and `ccIncludesSuffix`;
+// `pickWarningFlags(noCompilerWarnings)` collapses to the 1-arg
+// `-Wno-everything` bundle for NO_COMPILER_WARNINGS modules; `noStdIncCFlags`
+// (own + GLOBAL CFLAGS parsed from the module's ya.make) replaces the
+// preNoLibcExtras slot.
+func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl []VFS, noStdIncCFlags, ownExtras []string, isCxx, noCompilerWarnings bool) []string {
 	bundle := compileFlagBundleFor(p)
 	cmdArgs := make([]string, 0, 111+len(addIncl)+len(ownExtras)+2)
 	cmdArgs = append(cmdArgs,
@@ -908,8 +920,7 @@ func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl []VFS, own
 		outputPath,
 	)
 	cmdArgs = append(cmdArgs, composeNoStdIncIncludes(addIncl)...)
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, muslWarningFlags, bundle.Defines, muslExtraDefines, nil) // musl always uses muslWarningFlags by definition.
-	// musl already added muslWarningFlags above; suppress duplicate injection in helper.
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings), bundle.Defines, noStdIncCFlags, nil)
 	cmdArgs = appendCxxStdAndOwn(cmdArgs, isCxx, true, false, ownExtras)
 	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
 	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)
@@ -918,17 +929,18 @@ func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl []VFS, own
 	return cmdArgs
 }
 
-// composeMuslHostCC composes the cmd_args bundle for a HOST musl PIC
-// CC. 115 args for musl's production own-ADDINCL set. Pinned byte-exact against
+// composeMuslHostCC composes the cmd_args bundle for a HOST no-stdinc
+// PIC CC (the musl-self compile shape). 115 args for musl's production
+// own-ADDINCL set. Pinned byte-exact against
 // `$(B)/contrib/libs/musl/_/src/string/strlen.c.pic.o` (platform
 // default-linux-x86_64).
 //
-// Differences from composeMuslCC: host triple, no `-march=`; hostCFlags / hostDefines replace commonCFlags /
-// commonDefines (hostDefines adds
+// Differences from composeMuslCC: host triple, no `-march=`; hostCFlags /
+// hostDefines replace commonCFlags / commonDefines (hostDefines adds
 // `-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE`); ndebugPicBlock × 2
 // with hostSseFeatures between replaces noLibcUndebugBlock × 2 with
 // catboostOpenSourceDefine. Net +4 args.
-func composeMuslHostCC(p *Platform, outputPath, inputPath string, addIncl []VFS, ownExtras []string, isCxx bool) []string {
+func composeMuslHostCC(p *Platform, outputPath, inputPath string, addIncl []VFS, noStdIncCFlags, ownExtras []string, isCxx, noCompilerWarnings bool) []string {
 	bundle := compileFlagBundleFor(p)
 	cmdArgs := make([]string, 0, 115+len(addIncl)+len(ownExtras)+2)
 	cmdArgs = append(cmdArgs,
@@ -940,8 +952,7 @@ func composeMuslHostCC(p *Platform, outputPath, inputPath string, addIncl []VFS,
 		outputPath,
 	)
 	cmdArgs = append(cmdArgs, composeNoStdIncIncludes(addIncl)...)
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, muslWarningFlags, bundle.Defines, muslExtraDefines, nil) // musl always uses muslWarningFlags by definition.
-	// musl already added muslWarningFlags above; suppress duplicate injection in helper.
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings), bundle.Defines, noStdIncCFlags, nil)
 	cmdArgs = appendCxxStdAndOwn(cmdArgs, isCxx, true, false, ownExtras)
 	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
 	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)

@@ -1883,16 +1883,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// Thread the module's own non-GLOBAL CFLAGS and own GLOBAL
 	// CFLAGS / CXXFLAGS / CONLYFLAGS into ModuleCCInputs so the composer
 	// emits them on this module's own CC compiles. NoStdInc modules
-	// zero them: musl's CFLAGS are folded into `muslExtraDefines` and
-	// the musl composers ignore these slots.
+	// (musl-self) consume CFlags + OwnCFlagsGlobal via the dedicated
+	// no-stdinc composer slot; cxx/conly remain zeroed because musl's
+	// ya.make declares no CXXFLAGS/CONLYFLAGS.
 	ownCFlags := d.cFlags
 	ownCFlagsGlobalSelf := d.cFlagsGlobal
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
 
 	if instance.Flags.NoStdInc {
-		ownCFlags = nil
-		ownCFlagsGlobalSelf = nil
 		ownCXXFlagsGlobalSelf = nil
 		ownCOnlyFlagsGlobalSelf = nil
 	}

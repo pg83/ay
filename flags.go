@@ -308,12 +308,11 @@ var macroPrefixMapFlags = []string{
 	"-fmacro-prefix-map=$(TOOL_ROOT)/=",
 }
 
-// muslWarningFlags is the single-flag warning bundle the reference
-// graph applies to musl CC nodes in place of the 6-arg
-// `-Werror`/`-Wall`/`-Wextra` + 3× `-Wno-*` set used elsewhere.
-// musl silences everything because it's a vendored upstream codebase
-// the tree refuses to patch into clang's diagnostic style.
-var muslWarningFlags = []string{
+// noWarningsBundle is the 1-arg warning bundle emitted in place of the
+// 6-arg `-Werror`/`-Wall`/`-Wextra` + 3× `-Wno-*` standard set when a
+// module declares NO_COMPILER_WARNINGS (vendored upstream codebases the
+// tree refuses to patch into clang's diagnostic style).
+var noWarningsBundle = []string{
 	"-Wno-everything",
 }
 
@@ -336,24 +335,3 @@ var cxxStandardWarnings = []string{
 	"-Wno-undefined-var-template",
 }
 
-// muslExtraDefines is the 9-arg block injected between commonDefines and
-// the no-libc bundle for musl CC nodes:
-//
-//	-D_XOPEN_SOURCE=700: POSIX.1-2008 XSI feature gates.
-//	-U_GNU_SOURCE: undo commonDefines' -D_GNU_SOURCE; musl rejects glibc-style.
-//	-nostdinc / -ffreestanding: strip host toolchain's <stdlib.h> family.
-//	-fno-stack-protector: musl startup runs before stack canary init.
-//	-D__libc_calloc=calloc / __libc_malloc / __libc_free: route musl's
-//	internal allocator references to public symbols.
-//	-D_musl_=1: project-wide musl-build sentinel.
-var muslExtraDefines = []string{
-	"-D_XOPEN_SOURCE=700",
-	"-U_GNU_SOURCE",
-	"-nostdinc",
-	"-ffreestanding",
-	"-fno-stack-protector",
-	"-D__libc_calloc=calloc",
-	"-D__libc_malloc=malloc",
-	"-D__libc_free=free",
-	"-D_musl_=1",
-}
