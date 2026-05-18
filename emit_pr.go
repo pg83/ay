@@ -271,3 +271,20 @@ func prEmitsIncludes(instance ModuleInstance, srcDir *string, outFile string, st
 
 	return includes
 }
+
+func runProgramSourceRel(instance ModuleInstance, srcDir *string, rel string) string {
+	if srcDir != nil {
+		return *srcDir + "/" + rel
+	}
+
+	return instance.Path + "/" + rel
+}
+
+func expandRunProgramCWD(instance ModuleInstance, cwd string) string {
+	cwd = strings.ReplaceAll(cwd, "$BINDIR", Build(instance.Path).String())
+	cwd = strings.ReplaceAll(cwd, "$CURDIR", Source(instance.Path).String())
+	cwd = strings.ReplaceAll(cwd, "${ARCADIA_BUILD_ROOT}", "$(B)")
+	cwd = strings.ReplaceAll(cwd, "${ARCADIA_ROOT}", "$(S)")
+
+	return cwd
+}
