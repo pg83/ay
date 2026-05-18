@@ -117,7 +117,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	vcsOPath := Build(instance.Path + "/__vcs_version__.c.pic.o").String()
 
 	cmd0 := composeLDCmdVcsInfo(instance.Platform.Tools, vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, d.ldFlags, nil, defaultPeerCFlags(ctx, instance, d), instance.Platform.IsHost, d.flags.NoCompilerWarnings)
+	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, nil, defaultPeerCFlags(ctx, instance, d))
 	cmd2 := composeDynLibCmd(instance.Platform, instance.Path, outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, *d.exportsScript, fixElfPath.String())
 	cmd3 := composeLDCmdLinkOrCopy(instance.Platform.Tools, instance.Path)
 

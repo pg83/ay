@@ -69,7 +69,6 @@ func EmitLD(
 	objcopyRefs []NodeRef,
 	objcopyPaths []VFS,
 	memberInputs []VFS, //nolint:vfs-stay // cascade from gen.go member-inputs bucket
-	moduleCFlags []string,
 	peerCFlagsGlobal []string,
 	autoPeerCFlags []string,
 	objAddLibsGlobal []string,
@@ -116,20 +115,11 @@ func EmitLD(
 	// attributes the LD output to the parent contrib/tools/ragel6.
 	// TODO: remove shim when a general RECURSE-driven BinaryDir lift lands.
 	binaryDir := ldBinaryDir(instance)
-	hostBuild := instance.Platform.IsHost
 
 	binPrefix := binaryDir + "/"
 	outputVFS := Build(binPrefix + binaryName)
 	vcsCVFS := Build(binPrefix + "__vcs_version__.c")
-
-	// Host PROGRAM nodes use `.pic.o` for vcs_version compile output;
-	// target nodes use plain `.o`.
-	vcsOSuffix := ".o"
-	if hostBuild {
-		vcsOSuffix = ".pic.o"
-	}
-
-	vcsOVFS := Build(binPrefix + "__vcs_version__.c" + vcsOSuffix)
+	vcsOVFS := Build(binPrefix + "__vcs_version__.c.o")
 
 	// Pre-materialise the three .String() forms — vcsCVFS / vcsOVFS
 	// flow into multiple cmd composers; .String() them once each.
@@ -139,12 +129,8 @@ func EmitLD(
 
 	tools := instance.Platform.Tools
 	cmd0 := composeLDCmdVcsInfo(tools, vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, autoPeerCFlags, hostBuild, instance.Flags.NoCompilerWarnings)
-	ldObjAddLibs := objAddLibsGlobal
-	if hostBuild {
-		ldObjAddLibs = nil
-	}
-	cmd2 := composeLDCmdLinkExe(instance.Platform, outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, hostBuild, ldObjAddLibs, wantsStrip)
+	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, peerCFlagsGlobal, autoPeerCFlags)
+	cmd2 := composeLDCmdLinkExe(instance.Platform, outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, objAddLibsGlobal, wantsStrip)
 	cmd3 := composeLDCmdLinkOrCopy(tools, binaryDir, dynamicPaths...)
 	splitDwarfCmds := composeLDSplitDwarfCmds(tools, outputPath, wantsSplitDwarf)
 
@@ -326,28 +312,14 @@ func composeLDCmdVcsInfo(tools Toolchain, vcsCPath string) []string {
 }
 
 // composeLDCmdVcsCompile composes cmd[1]: clang compile of
-// `__vcs_version__.c` → `__vcs_version__.c.o` (target) or
-// `__vcs_version__.c.pic.o` (host).
+// `__vcs_version__.c` → `__vcs_version__.c.o`.
 //
 // Mirrors upstream `_SRC_C_NODEPS_CMD` (gnu_compiler.conf:328): the
-// vcs compile is a regular C-compile that threads the module's own
-// `$CFLAGS` and per-module auto-peer CFLAGS. `autoPeerCFlags` is the
-// pre-resolved slice produced by `defaultPeerCFlags` upstream of the
-// caller; this composer is agnostic about its contents.
-//
-// Target (hostBuild=false): target triple, -march=, commonCFlags,
-// warningFlags, commonDefines. `moduleCFlags` unused on target — the
-// reference cmd_args do not surface own CFLAGS at that position.
-//
-// Host (hostBuild=true): host triple (no -march), hostCFlags, the
-// warning bundle picked by `pickWarningFlags(noCompilerWarnings)`,
-// hostDefines, then moduleCFlags, then ndebugPicBlock × 2 with
-// catboostOpenSourceDefine + hostSseFeatures between them.
-func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, autoPeerCFlags []string, hostBuild bool, noCompilerWarnings bool) []string {
-	if hostBuild {
-		return composeLDCmdVcsCompileHost(p, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, autoPeerCFlags, noCompilerWarnings)
-	}
-
+// vcs compile is a regular C-compile that threads the per-module
+// auto-peer CFLAGS. `autoPeerCFlags` is the pre-resolved slice
+// produced by `defaultPeerCFlags` upstream of the caller; this
+// composer is agnostic about its contents.
+func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, peerCFlagsGlobal, autoPeerCFlags []string) []string {
 	bundle := compileFlagBundleFor(p)
 	cmdArgs := make([]string, 0, 94+len(peerCFlagsGlobal))
 	cmdArgs = append(cmdArgs,
@@ -371,39 +343,6 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 	return cmdArgs
 }
 
-// composeLDCmdVcsCompileHost composes the HOST variant of cmd[1]:
-// x86_64 toolchain, hostCFlags, warning bundle, hostDefines, then
-// `moduleCFlags`, then ndebugPicBlock twice with
-// catboostOpenSourceDefine + hostSseFeatures between them.
-//
-// Warning bundle selection (mirror of `pickWarningFlags`):
-// NO_COMPILER_WARNINGS modules (vendored upstream contrib/tools)
-// get the single-arg `-Wno-everything`; regular host PROGRAMs get the
-// 6-arg standard bundle. Canonical composition at
-// `ymake_conf.py:1550-1556` and `gnu_compiler.conf:124-140`.
-func composeLDCmdVcsCompileHost(p *Platform, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, autoPeerCFlags []string, noCompilerWarnings bool) []string {
-	bundle := compileFlagBundleFor(p)
-	cmdArgs := make([]string, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal))
-	cmdArgs = append(cmdArgs,
-		p.Tools.CC,
-		"--target="+p.Triple,
-		"-B"+binPath,
-		"-c",
-		"-o",
-		vcsOPath,
-		vcsCPath,
-	)
-	cmdArgs = append(cmdArgs, "-I$(S)")
-
-	preNoLibcExtras := make([]string, 0, len(moduleCFlags)+len(peerCFlagsGlobal))
-	preNoLibcExtras = append(preNoLibcExtras, moduleCFlags...)
-	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
-
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings), bundle.Defines, preNoLibcExtras, autoPeerCFlags)
-
-	return cmdArgs
-}
-
 // composeLDCmdLinkExe composes cmd[2]: link_exe.py invocation running
 // clang++ over the assembled object/archive set. Layout:
 //
@@ -417,20 +356,16 @@ func composeLDCmdVcsCompileHost(p *Platform, vcsCPath, vcsOPath string, moduleCF
 //	--ya-start-command-file / globals /           1 + len(globals) + 1 args
 //	--ya-end-command-file
 //	-Wl,--no-whole-archive                        1 arg
-//	__vcs_version__.c[.pic].o + ccPaths           1 + len(ccPaths) args
+//	__vcs_version__.c.o + ccPaths                 1 + len(ccPaths) args
 //	-o / outputPath                               2 args
-//	--target / [-march] / -B/usr/bin              2-3 args (host omits -march)
+//	--target / -march / -B/usr/bin                3 args
 //	-Wl,--start-group / peerLibs / -Wl,--end-group  1 + len(peerLibs) + 1 args
 //	trailing static flags                         12 args
-//
-// `hostBuild` selects host triple (x86_64, no -march) and
-// `ldHostStaticTrailingFlags` (no -lrt/-ldl) in place of target's
-// `ldStaticTargetTrailingFlags`.
 //
 // `wantsStrip` controls insertion of `-Wl,--strip-all` between the
 // trailer's `-lm` and `-Wl,--gc-sections`. Set true for PY3_PROGRAM_BIN
 // (STRIP() in _BASE_PY3_PROGRAM, python.conf:884).
-func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, hostBuild bool, objAddLibsGlobal []string, wantsStrip bool) []string {
+func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, objAddLibsGlobal []string, wantsStrip bool) []string {
 	// Capacity hint matches the reference graph's structure plus the
 	// caller-supplied slices.
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 12 + 1 + len(ccPaths) + len(peerLibPaths) + len(dynamicPaths) + len(globalPaths) + len(objcopyPaths)
@@ -493,17 +428,10 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 	}
 	cmdArgs = append(cmdArgs, "-o", outputPath)
 
-	if hostBuild {
-		cmdArgs = append(cmdArgs,
-			"--target="+p.Triple,
-			"-B"+binPath,
-		)
-	} else {
-		bundle := compileFlagBundleFor(p)
-		cmdArgs = append(cmdArgs, "--target="+p.Triple)
-		cmdArgs = append(cmdArgs, bundle.ArchArgs...)
-		cmdArgs = append(cmdArgs, "-B"+binPath)
-	}
+	bundle := compileFlagBundleFor(p)
+	cmdArgs = append(cmdArgs, "--target="+p.Triple)
+	cmdArgs = append(cmdArgs, bundle.ArchArgs...)
+	cmdArgs = append(cmdArgs, "-B"+binPath)
 
 	cmdArgs = append(cmdArgs, "-Wl,--start-group")
 	for _, p := range peerLibPaths {
@@ -514,17 +442,7 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 	}
 	cmdArgs = append(cmdArgs, "-Wl,--end-group")
 
-	var trailer []string
-	if hostBuild {
-		if peersIncludeLibcCompat(peerLibPaths) {
-			trailer = ldHostStaticRTTrailingFlags
-		} else {
-			trailer = ldHostStaticTrailingFlags
-		}
-	} else {
-		trailer = ldStaticTargetTrailingFlags
-	}
-	trailer = p.WithLinkerSelectionFlags(trailer)
+	trailer := p.WithLinkerSelectionFlags(ldStaticTargetTrailingFlags)
 
 	// When STRIP() is set on the module (PY3_PROGRAM_BIN per
 	// `_BASE_PY3_PROGRAM`), splice `-Wl,--strip-all` between the
@@ -600,19 +518,6 @@ const ldStripAllFlag = "-Wl,--strip-all"
 // trailer ends with. The strip-all splice in composeLDCmdLinkExe
 // asserts this postfix to keep the insertion order pinned.
 const ldGcSectionsFlag = "-Wl,--gc-sections"
-
-// peersIncludeLibcCompat reports whether the host LD's peer-archive
-// slot includes `contrib/libs/libc_compat`. Used to select the
-// `-lrt`/`-ldl`-augmented trailer.
-func peersIncludeLibcCompat(peerLibPaths []VFS) bool {
-	for _, p := range peerLibPaths {
-		if p.Rel == libcCompatPeerPath {
-			return true
-		}
-	}
-
-	return false
-}
 
 // composeLDCmdLinkOrCopy composes cmd[3]: invokes fs_tools.py
 // `link_or_copy_to_dir` to drop the linked binary into its containing
@@ -707,54 +612,6 @@ var ldStaticTargetTrailingFlags = []string{
 	"-lm",
 	"-Wl,--gc-sections",
 }
-
-// ldHostStaticTrailingFlags is the 12-flag trailer the reference host
-// PROGRAM LD cmd[2] (ragel6, yasm) emits AFTER `-Wl,--end-group`.
-// Differs from `ldStaticTargetTrailingFlags`: `-lrt`/`-ldl` absent
-// (host binaries skip glibc-compat shims), replaced by two `-fPIC`
-// flags satisfying the static-PIC link invariant.
-var ldHostStaticTrailingFlags = []string{
-	"-rdynamic",
-	"-Wl,--no-as-needed",
-	"-fPIC",
-	"-fPIC",
-	"-static",
-	"-Wl,--no-dynamic-linker",
-	"-nostdlib",
-	"-fno-pie",
-	"-Wl,-no-pie",
-	"-nostdlib",
-	"-lm",
-	"-Wl,--gc-sections",
-}
-
-// ldHostStaticRTTrailingFlags is the 14-flag trailer for host PROGRAM
-// LD cmd[2] when the binary links `contrib/libs/libc_compat` (and
-// typically `contrib/libs/linuxvdso`). Differs from
-// `ldHostStaticTrailingFlags` by the inserted `-lrt`/`-ldl` pair
-// between `--no-dynamic-linker` and the first `-nostdlib`.
-var ldHostStaticRTTrailingFlags = []string{
-	"-rdynamic",
-	"-Wl,--no-as-needed",
-	"-fPIC",
-	"-fPIC",
-	"-static",
-	"-Wl,--no-dynamic-linker",
-	"-lrt",
-	"-ldl",
-	"-nostdlib",
-	"-fno-pie",
-	"-Wl,-no-pie",
-	"-nostdlib",
-	"-lm",
-	"-Wl,--gc-sections",
-}
-
-// libcCompatPeerPath is the peer-library path whose presence triggers
-// the `-lrt`/`-ldl` host LD trailer. Host PROGRAMs that PEERDIR
-// `contrib/libs/libc_compat` (archiver, protoc, py3cc, stage0pycc, ...)
-// pull in glibc-compat shims requiring `-lrt`/`-ldl`; ragel6/yasm omit.
-const libcCompatPeerPath = "contrib/libs/libc_compat/libcontrib-libs-libc_compat.a"
 
 // ldScriptInputs is the 7-script bundle appended at the tail of every
 // LD node's `inputs` array, in the NON-ALPHABETICAL registration order
