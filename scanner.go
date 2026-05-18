@@ -308,12 +308,12 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 // ADDINCL search path and the source-relative path of the primary input
 // (for sysincl source_filter matching). The search path concatenates:
 // source's own directory (quoted only), module's own ADDINCL, peer-
-// propagated GLOBAL ADDINCL, and the BaseSearchPaths baseline.
+// propagated GLOBAL ADDINCL, and the BaseSearchPaths fallback baseline.
 type ScanContext struct {
 	SourceRel       string // SOURCE_ROOT-relative path of the primary source
 	OwnAddIncl      []VFS  // module's own non-GLOBAL ADDINCL
 	PeerAddInclSet  []VFS  // peer-propagated GLOBAL ADDINCL (transitive)
-	BaseSearchPaths []VFS  // baseline include set (linux-headers, musl arch when applicable)
+	BaseSearchPaths []VFS  // bundled fallback include set (repo-root/linux-headers)
 }
 
 // NewScanCtx allocates a fresh per-context resolution object bound to
@@ -1247,7 +1247,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	//   1. quoted-form: same directory as the includer
 	//   2. module's own ADDINCL
 	//   3. peer-propagated GLOBAL ADDINCL
-	//   4. baseline (linux-headers, musl arch when applicable)
+	//   4. baseline fallback (repo-root/linux-headers)
 	searchPathFound := false
 
 	if includerAbs.IsBuild() && strings.Contains(d.target, "/") {
