@@ -26,21 +26,9 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	toolInstance := NewToolInstance(ctx.host, archiverToolPath)
 	toolInstance.Flags = inferFlagsFromPath(archiverToolPath, true)
 
-	var (
-		toolBinPath = Build(archiverToolPath + "/archiver")
-		toolLDRef   NodeRef
-	)
-	if exc := Try(func() {
-		res := genModule(ctx, toolInstance)
-		toolLDRef = res.LDRef
-		if res.LDPath != nil {
-			toolBinPath = *res.LDPath
-		}
-	}); exc != nil {
-		// Tool walk failure surfaces as a fallback path; matches
-		// emitRunProgram's pattern (the build will still record the
-		// node, but with the conventional binary path).
-	}
+	res := genModule(ctx, toolInstance)
+	toolLDRef := res.LDRef
+	toolBinPath := *res.LDPath
 
 	// Aggregate SOURCE_ROOT-rooted IN files contributed by every PR
 	// in this module — REF includes the full upstream set in each

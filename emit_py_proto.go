@@ -39,21 +39,11 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 		return nil
 	}
 
-	protocBinary := pbProtocBinaryVFS
-	var protocLDRef NodeRef
-
 	protocHostInst := NewToolInstance(ctx.host, pbProtocModule)
 	protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
-
-	if exc := Try(func() {
-		result := genModule(ctx, protocHostInst)
-		protocLDRef = result.LDRef
-		if result.LDPath != nil {
-			protocBinary = *result.LDPath
-		}
-	}); exc != nil {
-		_ = exc
-	}
+	protocRes := genModule(ctx, protocHostInst)
+	protocLDRef := protocRes.LDRef
+	protocBinary := *protocRes.LDPath
 
 	var cppSibling *moduleEmitResult
 	if !moduleExcludesTag(d, "CPP_PROTO") {
@@ -134,34 +124,21 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		suffixes = append(suffixes, "_pb2.pyi")
 	}
 
-	grpcPyBinary := pbGrpcPyVFS
-	mypyBinary := pbMypyVFS
+	var grpcPyBinary, mypyBinary VFS
 	var grpcPyRef, mypyRef NodeRef
 	if d.grpc {
 		grpcPyInst := NewToolInstance(ctx.host, pbGrpcPyModule)
 		grpcPyInst.Flags = inferFlagsFromPath(pbGrpcPyModule, true)
-		if exc := Try(func() {
-			res := genModule(ctx, grpcPyInst)
-			grpcPyRef = res.LDRef
-			if res.LDPath != nil {
-				grpcPyBinary = *res.LDPath
-			}
-		}); exc != nil {
-			_ = exc
-		}
+		grpcRes := genModule(ctx, grpcPyInst)
+		grpcPyRef = grpcRes.LDRef
+		grpcPyBinary = *grpcRes.LDPath
 	}
 	if !d.noMypy {
 		mypyInst := NewToolInstance(ctx.host, pbMypyModule)
 		mypyInst.Flags = inferFlagsFromPath(pbMypyModule, true)
-		if exc := Try(func() {
-			res := genModule(ctx, mypyInst)
-			mypyRef = res.LDRef
-			if res.LDPath != nil {
-				mypyBinary = *res.LDPath
-			}
-		}); exc != nil {
-			_ = exc
-		}
+		mypyRes := genModule(ctx, mypyInst)
+		mypyRef = mypyRes.LDRef
+		mypyBinary = *mypyRes.LDPath
 	}
 
 	cmdArgs := []string{

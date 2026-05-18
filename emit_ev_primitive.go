@@ -27,9 +27,6 @@ const (
 )
 
 var (
-	evEvent2cppBinaryVFS  = Build("tools/event2cpp/event2cpp")
-	evEvent2cppBinaryPath = evEvent2cppBinaryVFS.String()
-
 	evEventlogIncludeVFS  = Source("library/cpp/eventlog")
 	evEventlogIncludePath = evEventlogIncludeVFS.String()
 )

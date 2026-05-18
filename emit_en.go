@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"sort"
 	"strings"
 )
@@ -38,28 +37,13 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 	const enumParserPath = "tools/enum_parser/enum_parser"
 
-	var (
-		enumParserLD  NodeRef
-		enumParserBin = enumParserBinaryVFS
-	)
-
 	// Walk enum_parser as a HOST tool (x86_64).
 	enumHostInst := NewToolInstance(ctx.host, enumParserPath)
 	enumHostInst.Flags = inferFlagsFromPath(enumParserPath, true)
 
-	if exc := Try(func() {
-		result := genModule(ctx, enumHostInst)
-		enumParserLD = result.LDRef
-		if result.LDPath != nil {
-			enumParserBin = *result.LDPath
-		}
-	}); exc != nil {
-		var pe *ParseError
-		if !errors.As(exc.AsError(), &pe) {
-			panic(exc)
-		}
-		// ParseError: leave zero LD ref; enumParserBin stays at canonical fallback.
-	}
+	result := genModule(ctx, enumHostInst)
+	enumParserLD := result.LDRef
+	enumParserBin := *result.LDPath
 
 	// Synthesize a ModuleCCInputs for the include scanner using the
 	// module's own ADDINCL + peer-global ADDINCL set so headers from

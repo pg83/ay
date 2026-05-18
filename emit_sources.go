@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"os"
 	"path"
 	"path/filepath"
@@ -85,28 +84,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		return &sourceEmit{Ref: ref, OutPath: outPath, CcIns: asInputs, PrimaryCount: 1}
 	case strings.HasSuffix(srcRel, ".rl6"):
 		const ragelBinPath = "contrib/tools/ragel6/bin"
-		var ragelFallbackPath = Build("contrib/tools/ragel6/ragel6")
-
-		var (
-			ragelLDRef     NodeRef
-			ragelBinaryVFS = ragelFallbackPath
-		)
 
 		ragelInstance := NewToolInstance(ctx.host, ragelBinPath)
 		ragelInstance.Flags = inferFlagsFromPath(ragelInstance.Path, true)
-
-		if exc := Try(func() {
-			ragelResult := genModule(ctx, ragelInstance)
-			ragelLDRef = ragelResult.LDRef
-			if ragelResult.LDPath != nil {
-				ragelBinaryVFS = *ragelResult.LDPath
-			}
-		}); exc != nil {
-			var pe *ParseError
-			if !errors.As(exc.AsError(), &pe) {
-				panic(exc)
-			}
-		}
+		ragelResult := genModule(ctx, ragelInstance)
+		ragelLDRef := ragelResult.LDRef
+		ragelBinaryVFS := *ragelResult.LDPath
 
 		rl6Closure := walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 		rl6Closure = filterEnSerializedSiblings(rl6Closure)
@@ -151,47 +134,23 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		evSource := resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir)
 		evRelPath := evSource.Rel
 
-		cppStyleguideBinary := pbCppStyleguideVFS
-		protocBinary := pbProtocBinaryVFS
-		event2cppBinary := evEvent2cppBinaryVFS
-
-		var cppStyleguideLDRef, protocLDRef, event2cppLDRef NodeRef
-
 		protocHostInst := NewToolInstance(ctx.host, pbProtocModule)
 		protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
-		if exc := Try(func() {
-			result := genModule(ctx, protocHostInst)
-			protocLDRef = result.LDRef
-			if result.LDPath != nil {
-				protocBinary = *result.LDPath
-			}
-		}); exc != nil {
-			_ = exc
-		}
+		protocRes := genModule(ctx, protocHostInst)
+		protocLDRef := protocRes.LDRef
+		protocBinary := *protocRes.LDPath
 
 		cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule)
 		cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
-		if exc := Try(func() {
-			result := genModule(ctx, cppStyleguideHostInst)
-			cppStyleguideLDRef = result.LDRef
-			if result.LDPath != nil {
-				cppStyleguideBinary = *result.LDPath
-			}
-		}); exc != nil {
-			_ = exc
-		}
+		cppStyleguideRes := genModule(ctx, cppStyleguideHostInst)
+		cppStyleguideLDRef := cppStyleguideRes.LDRef
+		cppStyleguideBinary := *cppStyleguideRes.LDPath
 
 		event2cppHostInst := NewToolInstance(ctx.host, evEvent2cppModule)
 		event2cppHostInst.Flags = inferFlagsFromPath(evEvent2cppModule, true)
-		if exc := Try(func() {
-			result := genModule(ctx, event2cppHostInst)
-			event2cppLDRef = result.LDRef
-			if result.LDPath != nil {
-				event2cppBinary = *result.LDPath
-			}
-		}); exc != nil {
-			_ = exc
-		}
+		evRes := genModule(ctx, event2cppHostInst)
+		event2cppLDRef := evRes.LDRef
+		event2cppBinary := *evRes.LDPath
 
 		evRef := EmitEV(
 			srcInstance, evRelPath,
@@ -258,47 +217,18 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 			ragel5Path  = "contrib/tools/ragel5/ragel"
 			rlgenCdPath = "contrib/tools/ragel5/rlgen-cd"
 		)
-		var (
-			ragel5Fallback  = Build("contrib/tools/ragel5/ragel/ragel5")
-			rlgenCdFallback = Build("contrib/tools/ragel5/rlgen-cd/rlgen-cd")
-		)
-
-		var (
-			ragel5LDRef   NodeRef
-			rlgenCdLDRef  NodeRef
-			ragel5BinVFS  = ragel5Fallback
-			rlgenCdBinVFS = rlgenCdFallback
-		)
 
 		ragel5Instance := NewToolInstance(ctx.host, ragel5Path)
 		ragel5Instance.Flags = inferFlagsFromPath(ragel5Path, true)
-		if exc := Try(func() {
-			res := genModule(ctx, ragel5Instance)
-			ragel5LDRef = res.LDRef
-			if res.LDPath != nil {
-				ragel5BinVFS = *res.LDPath
-			}
-		}); exc != nil {
-			var pe *ParseError
-			if !errors.As(exc.AsError(), &pe) {
-				panic(exc)
-			}
-		}
+		ragel5Res := genModule(ctx, ragel5Instance)
+		ragel5LDRef := ragel5Res.LDRef
+		ragel5BinVFS := *ragel5Res.LDPath
 
 		rlgenCdInstance := NewToolInstance(ctx.host, rlgenCdPath)
 		rlgenCdInstance.Flags = inferFlagsFromPath(rlgenCdPath, true)
-		if exc := Try(func() {
-			res := genModule(ctx, rlgenCdInstance)
-			rlgenCdLDRef = res.LDRef
-			if res.LDPath != nil {
-				rlgenCdBinVFS = *res.LDPath
-			}
-		}); exc != nil {
-			var pe *ParseError
-			if !errors.As(exc.AsError(), &pe) {
-				panic(exc)
-			}
-		}
+		rlgenCdRes := genModule(ctx, rlgenCdInstance)
+		rlgenCdLDRef := rlgenCdRes.LDRef
+		rlgenCdBinVFS := *rlgenCdRes.LDPath
 
 		r5Ref, r5TmpOut, r5CppOut := EmitR5(srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
 		_ = r5Ref
@@ -367,34 +297,17 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 }
 
 func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel string, in ModuleCCInputs) *sourceEmit {
-	cppStyleguideBinary := pbCppStyleguideVFS
-	protocBinary := pbProtocBinaryVFS
-
-	var cppStyleguideLDRef, protocLDRef NodeRef
-
 	protocHostInst := NewToolInstance(ctx.host, pbProtocModule)
 	protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
-	if exc := Try(func() {
-		result := genModule(ctx, protocHostInst)
-		protocLDRef = result.LDRef
-		if result.LDPath != nil {
-			protocBinary = *result.LDPath
-		}
-	}); exc != nil {
-		_ = exc
-	}
+	protocRes := genModule(ctx, protocHostInst)
+	protocLDRef := protocRes.LDRef
+	protocBinary := *protocRes.LDPath
 
 	cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule)
 	cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
-	if exc := Try(func() {
-		result := genModule(ctx, cppStyleguideHostInst)
-		cppStyleguideLDRef = result.LDRef
-		if result.LDPath != nil {
-			cppStyleguideBinary = *result.LDPath
-		}
-	}); exc != nil {
-		_ = exc
-	}
+	cppStyleguideRes := genModule(ctx, cppStyleguideHostInst)
+	cppStyleguideLDRef := cppStyleguideRes.LDRef
+	cppStyleguideBinary := *cppStyleguideRes.LDPath
 
 	protoRelPath := protoSourceRelPath(ctx.sourceRoot, instance, &moduleData{srcDir: srcDir}, srcRel)
 	pbRef := EmitPB(
