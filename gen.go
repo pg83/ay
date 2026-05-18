@@ -156,6 +156,7 @@ const (
 // instance.
 type genCtx struct {
 	sourceRoot      string
+	fs              *FS
 	emit            Emitter
 	memo            map[ModuleInstance]*moduleEmitResult
 	moduleTypeCache map[moduleTypeCacheKey]moduleTypeInfo
@@ -439,10 +440,13 @@ func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, 
 	}
 
 	parserStats := parsers.perfStats()
+	fsStats := ctx.fs.perfStats()
 	fmt.Fprintf(os.Stderr, "perf: gen mode=%s scanCtxAllocs=%d scanCtxPeak=%d internedScanCtx=%d localBuckets=%d\n",
 		ctx.scanCtxMode, ctx.scanCtxAllocs, ctx.scanCtxPeak, len(ctx.internedScanCtx), len(ctx.localScanCtxStack))
-	fmt.Fprintf(os.Stderr, "perf: parser parsedHits=%d parsedMisses=%d existsHits=%d existsMisses=%d buildParsed=%d\n",
-		parserStats.parsedHits, parserStats.parsedMisses, parserStats.existsHits, parserStats.existsMisses, parserStats.buildParsed)
+	fmt.Fprintf(os.Stderr, "perf: parser parsedHits=%d parsedMisses=%d buildParsed=%d\n",
+		parserStats.parsedHits, parserStats.parsedMisses, parserStats.buildParsed)
+	fmt.Fprintf(os.Stderr, "perf: fs listdirHits=%d listdirMisses=%d existsHits=%d existsMisses=%d dirsCached=%d\n",
+		fsStats.listdirHits, fsStats.listdirMisses, fsStats.existsHits, fsStats.existsMisses, fsStats.dirsCached)
 
 	reportScanner := func(label string, scanner *IncludeScanner) {
 		scanStats := scanner.perfStats()
@@ -612,20 +616,22 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 	resources.emitAll(hostP, emitter)
 	emitter = newResourceAwareEmitter(emitter, resources)
 
-	parsers := newIncludeParserManager(srcRoot)
+	fs := NewFS(srcRoot)
+	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
 
 	targetReg := NewCodegenRegistry()
 	hostReg := NewCodegenRegistry()
 
-	targetScanner := newIncludeScannerWith(parsers, LoadSysInclSetFor(srcRoot, string(targetP.ISA), onWarn), onWarn)
+	targetScanner := newIncludeScannerWith(parsers, LoadSysInclSetForFS(fs, string(targetP.ISA), onWarn), onWarn)
 	targetScanner.codegen = targetReg
 	targetScanner.fallbackLocators = []pathLocator{codegenLocator{reg: targetReg}}
-	hostScanner := newIncludeScannerWith(parsers, LoadSysInclSetFor(srcRoot, string(hostP.ISA), onWarn), onWarn)
+	hostScanner := newIncludeScannerWith(parsers, LoadSysInclSetForFS(fs, string(hostP.ISA), onWarn), onWarn)
 	hostScanner.codegen = hostReg
 	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
 
 	ctx := &genCtx{
 		sourceRoot:        srcRoot,
+		fs:                fs,
 		emit:              emitter,
 		memo:              make(map[ModuleInstance]*moduleEmitResult),
 		moduleTypeCache:   make(map[moduleTypeCacheKey]moduleTypeInfo),

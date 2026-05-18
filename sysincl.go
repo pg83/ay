@@ -15,8 +15,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -448,9 +446,13 @@ var supportedSysInclArchs = map[string]struct{}{
 // returns an empty set rather than throwing — the include scanner
 // falls back to its AddIncl + peer-GLOBAL search path.
 func LoadSysInclSetFor(sourceRoot, arch string, onWarn func(Warn)) SysInclSet {
-	dir := filepath.Join(sourceRoot, "build", "sysincl")
+	return LoadSysInclSetForFS(NewFS(sourceRoot), arch, onWarn)
+}
 
-	if _, err := os.Stat(dir); err != nil {
+// LoadSysInclSetForFS is the FS-based variant used by production code
+// so the directory-listing cache is shared with the rest of the run.
+func LoadSysInclSetForFS(fs *FS, arch string, onWarn func(Warn)) SysInclSet {
+	if !fs.IsDir("build/sysincl") {
 		return nil
 	}
 
@@ -467,10 +469,7 @@ func LoadSysInclSetFor(sourceRoot, arch string, onWarn func(Warn)) SysInclSet {
 			continue
 		}
 
-		path := filepath.Join(dir, entry.file)
-
-		data, err := os.ReadFile(path)
-
+		data, err := fs.Read("build/sysincl/" + entry.file)
 		if err != nil {
 			continue
 		}

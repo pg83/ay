@@ -10,6 +10,8 @@
 /out/
 /.tmp/
 /scratch/
+/.gen/
+/.out/
 
 # OS
 .DS_Store

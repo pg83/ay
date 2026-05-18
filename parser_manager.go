@@ -1,7 +1,5 @@
 package main
 
-import "os"
-
 // parser_manager.go — source-tree file access + raw include scanning.
 //
 // This is the layer below IncludeScanner's resolver/closure engine:
@@ -64,30 +62,24 @@ type sharedParseCache struct {
 	// ($(S)/<rel>). 8192 pre-size covers the tools/archiver peak
 	// (4354 target + 3559 host, mostly overlapping).
 	parsed VFSMap[parsedIncludeSet]
-	// exists memoises os.Stat results, keyed by SOURCE_ROOT-relative
-	// tail. 16384 covers the observed peak.
-	exists map[string]bool
 
 	// Perf counters are plain uint64: generation runs single-threaded.
 	parsedHits   uint64
 	parsedMisses uint64
-	existsHits   uint64
-	existsMisses uint64
 }
 
-// newSharedParseCache allocates a sharedParseCache with pre-sized maps
-// matched to the observed peak for the tools/archiver closure.
+// newSharedParseCache allocates a sharedParseCache with the pre-sized
+// parsed-include map. File existence and directory listings are owned
+// by FS (shared across the entire Gen run).
 func newSharedParseCache() *sharedParseCache {
 	return &sharedParseCache{
 		parsed: NewVFSMap[parsedIncludeSet](8192),
-		exists: make(map[string]bool, 16384),
 	}
 }
 
 type includeParserManager struct {
-	sourceRoot      string
-	sourceRootSlash string
-	cache           *sharedParseCache
+	fs    *FS
+	cache *sharedParseCache
 	// buildParsed is the parser-layer VFS overlay for generated
 	// outputs. Emitters register `$(B)` paths here explicitly; parser
 	// lookup for build-rooted paths consults ONLY this map.
@@ -97,21 +89,22 @@ type includeParserManager struct {
 type parserPerfStats struct {
 	parsedHits   uint64
 	parsedMisses uint64
-	existsHits   uint64
-	existsMisses uint64
 	buildParsed  int
 }
 
+// newIncludeParserManager constructs a parser manager with a fresh FS
+// rooted at sourceRoot. Test-only entry; production wires an externally
+// constructed FS through newIncludeParserManagerFS so the same FS is
+// shared with the rest of the Gen run.
 func newIncludeParserManager(sourceRoot string) *includeParserManager {
-	return newIncludeParserManagerWithCache(sourceRoot, newSharedParseCache())
+	return newIncludeParserManagerFS(NewFS(sourceRoot), newSharedParseCache())
 }
 
-func newIncludeParserManagerWithCache(sourceRoot string, cache *sharedParseCache) *includeParserManager {
+func newIncludeParserManagerFS(fs *FS, cache *sharedParseCache) *includeParserManager {
 	return &includeParserManager{
-		sourceRoot:      sourceRoot,
-		sourceRootSlash: sourceRoot + "/",
-		cache:           cache,
-		buildParsed:     make(map[string][]includeDirective, 256),
+		fs:          fs,
+		cache:       cache,
+		buildParsed: make(map[string][]includeDirective, 256),
 	}
 }
 
@@ -128,9 +121,7 @@ func (pm *includeParserManager) sourceParsedBuckets(rel string) parsedIncludeSet
 
 	pm.cache.parsedMisses++
 
-	fsPath := pm.sourceRootSlash + rel
-
-	data, err := os.ReadFile(fsPath)
+	data, err := pm.fs.Read(rel)
 	if err != nil {
 		pm.cache.parsed.Set(vfsPath, nil)
 
@@ -164,26 +155,13 @@ func (pm *includeParserManager) RegisterBuildParsedIncludes(rel string, parsed [
 
 // fileExistsByRel is the inner, rel-keyed existence check.
 func (pm *includeParserManager) fileExistsByRel(rel string) bool {
-	if cached, ok := pm.cache.exists[rel]; ok {
-		pm.cache.existsHits++
-		return cached
-	}
-
-	pm.cache.existsMisses++
-
-	info, err := os.Stat(pm.sourceRootSlash + rel)
-	val := err == nil && !info.IsDir()
-	pm.cache.exists[rel] = val
-
-	return val
+	return pm.fs.IsFile(rel)
 }
 
 func (pm *includeParserManager) perfStats() parserPerfStats {
 	return parserPerfStats{
 		parsedHits:   pm.cache.parsedHits,
 		parsedMisses: pm.cache.parsedMisses,
-		existsHits:   pm.cache.existsHits,
-		existsMisses: pm.cache.existsMisses,
 		buildParsed:  len(pm.buildParsed),
 	}
 }
