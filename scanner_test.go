@@ -527,6 +527,124 @@ func TestScanner_SubgraphCacheReuse(t *testing.T) {
 	}
 }
 
+func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
+	dir := t.TempDir()
+
+	for _, p := range []string{"pkg", "include"} {
+		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", p, err)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "include/foo.h"), []byte("// foo\n"), 0o644); err != nil {
+		t.Fatalf("write include/foo.h: %v", err)
+	}
+
+	scanner := NewIncludeScanner(dir, nil)
+	sc := scanner.NewScanCtx(ScanContext{
+		OwnAddIncl: VFSesFromStrings([]string{"include"}),
+	})
+	d := includeDirective{kind: includeSystem, target: "foo.h"}
+
+	got1 := sc.resolveSearchPath(Source("pkg/a.cpp"), d)
+	got2 := sc.resolveSearchPath(Source("pkg/b.cpp"), d)
+	want := []VFS{Source("include/foo.h")}
+
+	if len(got1) != len(want) || got1[0] != want[0] {
+		t.Fatalf("first resolve = %v, want %v", got1, want)
+	}
+
+	if len(got2) != len(want) || got2[0] != want[0] {
+		t.Fatalf("second resolve = %v, want %v", got2, want)
+	}
+
+	if len(sc.resolveCache) != 2 {
+		t.Fatalf("resolveCache entries = %d, want 2 (one per includer)", len(sc.resolveCache))
+	}
+
+	if len(sc.searchTierCache) != 1 {
+		t.Fatalf("searchTierCache entries = %d, want 1 (shared by target)", len(sc.searchTierCache))
+	}
+
+	if scanner.searchTierMisses != 1 || scanner.searchTierHits != 1 {
+		t.Fatalf("searchTier hits/misses = %d/%d, want 1/1", scanner.searchTierHits, scanner.searchTierMisses)
+	}
+}
+
+func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(dir, "pkg"), 0o755); err != nil {
+		t.Fatalf("mkdir pkg: %v", err)
+	}
+
+	scanner := NewIncludeScanner(dir, nil)
+	sc := scanner.NewScanCtx(ScanContext{
+		OwnAddIncl: VFSesFromStrings([]string{"include"}),
+	})
+	d := includeDirective{kind: includeSystem, target: "missing.h"}
+
+	got1 := sc.resolveSearchPath(Source("pkg/a.cpp"), d)
+	got2 := sc.resolveSearchPath(Source("pkg/b.cpp"), d)
+
+	if got1 != nil || got2 != nil {
+		t.Fatalf("missing header resolved unexpectedly: first=%v second=%v", got1, got2)
+	}
+
+	if len(sc.resolveCache) != 2 {
+		t.Fatalf("resolveCache entries = %d, want 2", len(sc.resolveCache))
+	}
+
+	if len(sc.searchTierCache) != 1 {
+		t.Fatalf("searchTierCache entries = %d, want 1", len(sc.searchTierCache))
+	}
+
+	if sc.searchTierCache[scanner.interner.internString("missing.h")].found {
+		t.Fatalf("missing header cached as found")
+	}
+
+	if scanner.searchTierMisses != 1 || scanner.searchTierHits != 1 {
+		t.Fatalf("searchTier hits/misses = %d/%d, want 1/1", scanner.searchTierHits, scanner.searchTierMisses)
+	}
+}
+
+func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
+	dir := t.TempDir()
+
+	for _, p := range []string{"pkg", "include"} {
+		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", p, err)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "pkg/foo.h"), []byte("// local\n"), 0o644); err != nil {
+		t.Fatalf("write pkg/foo.h: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "include/foo.h"), []byte("// addincl\n"), 0o644); err != nil {
+		t.Fatalf("write include/foo.h: %v", err)
+	}
+
+	scanner := NewIncludeScanner(dir, nil)
+	sc := scanner.NewScanCtx(ScanContext{
+		OwnAddIncl: VFSesFromStrings([]string{"include"}),
+	})
+	got := sc.resolveSearchPath(Source("pkg/a.cpp"), includeDirective{kind: includeQuoted, target: "foo.h"})
+	want := []VFS{Source("pkg/foo.h")}
+
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("quoted same-dir resolve = %v, want %v", got, want)
+	}
+
+	if len(sc.searchTierCache) != 0 {
+		t.Fatalf("searchTierCache entries = %d, want 0 when same-dir quoted wins", len(sc.searchTierCache))
+	}
+
+	if scanner.searchTierHits != 0 || scanner.searchTierMisses != 0 {
+		t.Fatalf("searchTier hits/misses = %d/%d, want 0/0", scanner.searchTierHits, scanner.searchTierMisses)
+	}
+}
+
 // TestScanner_QuotedSysinclGated_LocalResolved pins the PR-35w
 // gate: a quoted include `#include "foo.h"` whose local search-path
 // resolution succeeded MUST NOT pick up the matching sysincl record's
