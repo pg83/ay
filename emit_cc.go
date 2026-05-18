@@ -222,13 +222,12 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 
 	var cmdArgs []string
 
-	// musl-self isolation: muslCcIncludes / muslCcIncludesX8664
-	// already carries every path the musl ya.make's own ADDINCL block
-	// declares (arch/X, arch/generic, src/include, src/internal,
-	// include, extra), and muslExtraDefines carries its own CFLAGS
-	// (minus GLOBAL -D_musl_=1 which is peer-propagated). The caller's
-	// ADDINCL and COnlyFlags are dropped for musl modules to avoid
-	// duplication.
+	// No-stdinc modules still take their OWN ADDINCL from ya.make:
+	// contrib/libs/musl/ya.make declares the full musl-self include
+	// set (arch/X, arch/generic, src/include, src/internal, include,
+	// extra), which parser->moduleData threads into in.AddIncl.
+	// What stays special-cased here is only peer-GLOBAL suppression
+	// and muslExtraDefines.
 	muslOwnExtras := platformCompilerFlags(instance.Platform, isCxx)
 
 	// ADDINCL slot order: own ADDINCL BEFORE ccIncludesSuffix
@@ -266,9 +265,9 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	isHost := instance.Platform.IsHost
 	switch {
 	case isMusl && isHost:
-		cmdArgs = composeMuslHostCC(instance.Platform, outputPath, inputPath, nil, muslOwnExtras, isCxx)
+		cmdArgs = composeMuslHostCC(instance.Platform, outputPath, inputPath, in.AddIncl, muslOwnExtras, isCxx)
 	case isMusl:
-		cmdArgs = composeMuslCC(instance.Platform, outputPath, inputPath, nil, muslOwnExtras, isCxx)
+		cmdArgs = composeMuslCC(instance.Platform, outputPath, inputPath, in.AddIncl, muslOwnExtras, isCxx)
 	default:
 		args := ccComposeArgs{
 			Platform:           instance.Platform,
@@ -889,8 +888,9 @@ func composeHostCC(a ccComposeArgs) []string {
 }
 
 // composeMuslCC composes the cmd_args bundle for a TARGET musl
-// non-PIC CC. 111 args (no per-module extras). Differences from
-// composeTargetCC: muslCcIncludes (10 args) replaces ccIncludes (4);
+// non-PIC CC. 111 args for musl's production own-ADDINCL set.
+// Differences from composeTargetCC: no-stdinc own ADDINCL slots
+// between `ccIncludesPrefix` and `ccIncludesSuffix`;
 // muslWarningFlags (1) replaces warningFlags (6); muslExtraDefines (9)
 // inserted after commonDefines, before the noLibc block.
 func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl []VFS, ownExtras []string, isCxx bool) []string {
@@ -907,7 +907,7 @@ func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl []VFS, own
 		"-o",
 		outputPath,
 	)
-	cmdArgs = appendMuslIncludes(cmdArgs, muslCcIncludesFor(p.ISA), addIncl)
+	cmdArgs = append(cmdArgs, composeNoStdIncIncludes(addIncl)...)
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
 	cmdArgs = append(cmdArgs, bundle.CFlags...)
@@ -928,13 +928,11 @@ func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl []VFS, own
 }
 
 // composeMuslHostCC composes the cmd_args bundle for a HOST musl PIC
-// CC. 115 args (no per-module extras). Pinned byte-exact against
+// CC. 115 args for musl's production own-ADDINCL set. Pinned byte-exact against
 // `$(B)/contrib/libs/musl/_/src/string/strlen.c.pic.o` (platform
 // default-linux-x86_64).
 //
-// Differences from composeMuslCC: muslCcIncludesX8664 replaces
-// muslCcIncludes (arch/x86_64 vs arch/aarch64); host triple, no
-// `-march=`; hostCFlags / hostDefines replace commonCFlags /
+// Differences from composeMuslCC: host triple, no `-march=`; hostCFlags / hostDefines replace commonCFlags /
 // commonDefines (hostDefines adds
 // `-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE`); ndebugPicBlock × 2
 // with hostSseFeatures between replaces noLibcUndebugBlock × 2 with
@@ -949,7 +947,7 @@ func composeMuslHostCC(p *Platform, outputPath, inputPath string, addIncl []VFS,
 		"-o",
 		outputPath,
 	)
-	cmdArgs = appendMuslIncludes(cmdArgs, muslCcIncludesFor(p.ISA), addIncl)
+	cmdArgs = append(cmdArgs, composeNoStdIncIncludes(addIncl)...)
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
 	cmdArgs = append(cmdArgs, hostCFlags...)
@@ -1016,17 +1014,17 @@ func includeArg(path VFS) string {
 	return "-I" + path.String()
 }
 
-// appendMuslIncludes splices per-module ADDINCL paths into the musl
-// include set. Slot: BETWEEN prefix `-I$(B) -I$(S)` (entries [0..1] of
-// muslCcIncludes*) and the body of musl arch/include/extra +
-// linux-headers (entries [2..]). Matches the empirical byte position
-// (builtins fp_mode.c.o cmd_args[7..14] anchors the slot, though
-// builtins is NOT a musl module — its musl-arch entries come from its
-// own IF(MUSL) ADDINCL block routed through composeTargetCC).
-func appendMuslIncludes(cmdArgs []string, muslSet []string, addIncl []VFS) []string {
-	cmdArgs = append(cmdArgs, muslSet[:2]...)
-	cmdArgs = appendAddIncl(cmdArgs, addIncl)
-	cmdArgs = append(cmdArgs, muslSet[2:]...)
+// composeNoStdIncIncludes builds the no-stdinc include tail:
+// `-I$(B) -I$(S)` + OWN ADDINCL + linux-headers.
+//
+// For musl-self this means the six paths declared directly in
+// contrib/libs/musl/ya.make arrive through `addIncl`, rather than via
+// a separate hardcoded list in the composer.
+func composeNoStdIncIncludes(addIncl []VFS) []string {
+	out := make([]string, 0, len(ccIncludesPrefix)+len(addIncl)+len(ccIncludesSuffix))
+	out = append(out, ccIncludesPrefix...)
+	out = appendAddIncl(out, addIncl)
+	out = append(out, ccIncludesSuffix...)
 
-	return cmdArgs
+	return out
 }

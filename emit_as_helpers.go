@@ -59,7 +59,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 		autoPeerCFlags = in.AutoPeerCFlags
 	}
 
-	includes := composeASIncludes(in, isMusl, instance.Platform.ISA)
+	includes := composeASIncludes(in, isMusl)
 
 	betweenBlocks := len(catboostOpenSourceDefine) + len(autoPeerCFlags)
 	betweenBlocks += len(bundle.CPUFeatures)
@@ -91,9 +91,9 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 }
 
 // composeASIncludes derives the include-tail slice following the source path in cmd_args.
-func composeASIncludes(in ModuleCCInputs, isMusl bool, isa ISA) []string {
+func composeASIncludes(in ModuleCCInputs, isMusl bool) []string {
 	if isMusl {
-		return muslCcIncludesFor(isa)
+		return composeNoStdIncIncludes(in.AddIncl)
 	}
 
 	out := make([]string, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(ccIncludesSuffix)+len(in.PeerAddInclGlobal))
