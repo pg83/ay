@@ -138,8 +138,10 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		nil, nil,
 		nil, nil, // objcopy slot
 		nil,
+		nil,   // moduleCFlags
 		nil,   // peerCFlagsGlobal
 		nil,   // autoPeerCFlags
+		nil,   // peerLDFlagsGlobal
 		nil,   // EXTRALIBS / OBJADDE_LIB_GLOBAL
 		false, // wantsStrip (cpp PROGRAM)
 		false, // SPLIT_DWARF
@@ -236,8 +238,10 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		nil, nil,
 		nil, nil, // objcopy slot
 		nil,
+		nil,   // moduleCFlags
 		nil,   // peerCFlagsGlobal
 		nil,   // autoPeerCFlags
+		nil,   // peerLDFlagsGlobal
 		nil,   // EXTRALIBS / OBJADDE_LIB_GLOBAL
 		false, // wantsStrip
 		false, // SPLIT_DWARF
@@ -280,8 +284,10 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		nil, nil,
 		nil, nil,
 		nil,
+		nil, // moduleCFlags
 		nil, // peerCFlagsGlobal
 		nil, // autoPeerCFlags
+		nil, // peerLDFlagsGlobal
 		nil, // objAddLibsGlobal
 		false,
 		false,
@@ -334,7 +340,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 			instance := targetInstance("test/prog")
 
 			exc := Try(func() {
-				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, nil, nil, nil, nil, nil, nil, false, false, testHostP, e)
+				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, false, false, testHostP, e)
 			})
 
 			if exc == nil {

@@ -78,6 +78,11 @@ type moduleEmitResult struct {
 	CXXFlagsGlobal   []string
 	COnlyFlagsGlobal []string
 	ObjAddLibsGlobal []string
+	// LDFlagsGlobal: peer-aggregated `LDFLAGS()` from every PEERDIR'd
+	// ya.make plus the module's own. Mirrors upstream `LDFLAGS_GLOBAL`
+	// (`_EXE_FLAGS` slot in ld.conf:168). musl/ya.make contributes
+	// `-static -Wl,--no-dynamic-linker` via this channel.
+	LDFlagsGlobal []string
 	// PeerArchiveClosureRefs / PeerArchiveClosurePaths: transitive archive
 	// closure exposed to consumers — every peer's own AR UNION every
 	// peer's PeerArchiveClosure*, deduplicated in DFS post-order (first
@@ -1084,6 +1089,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			CXXFlagsGlobal:                  mergeDedup(peerContribs.cxxFlags, d.cxxFlagsGlobal),
 			COnlyFlagsGlobal:                mergeDedup(peerContribs.cOnlyFlags, d.cOnlyFlagsGlobal),
 			ObjAddLibsGlobal:                mergeDedup(peerContribs.objAddLibs, d.objAddLibsGlobal),
+			LDFlagsGlobal:                   mergeDedup(peerContribs.ldFlags, d.ldFlags),
 			PeerArchiveClosureRefs:          peerArchiveRefsH,
 			PeerArchiveClosurePaths:         peerArchivePathsH,
 			PeerGlobalClosureRefs:           peerGlobalRefsH,
@@ -1332,6 +1338,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	objAddLibSeen := map[string]struct{}{}
 	peerObjAddLibsGlobal := make([]string, 0, 8)
+
+	ldFlagsSeen := map[string]struct{}{}
+	peerLDFlagsGlobal := make([]string, 0, 4)
 
 	// Aggregate peer-GLOBAL across all four axes (ADDINCL / CFLAGS /
 	// CXXFLAGS / CONLYFLAGS) with TWO-PHASE traversal:
@@ -1691,6 +1700,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		addEach(cxxFlagsSeen, &peerCXXFlagsGlobal, rp.result.CXXFlagsGlobal)
 		addEach(cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, rp.result.COnlyFlagsGlobal)
 		addEach(objAddLibSeen, &peerObjAddLibsGlobal, rp.result.ObjAddLibsGlobal)
+		addEach(ldFlagsSeen, &peerLDFlagsGlobal, rp.result.LDFlagsGlobal)
 	}
 
 	// Effective AddInclGlobal = own GLOBAL ADDINCL ∪ every peer's
@@ -2571,8 +2581,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			peerDynamicRefs, peerDynamicPaths,
 			ldObjcopyRefs, ldObjcopyPaths,
 			ldMemberInputs,
+			ownCFlags,
 			peerCFlagsGlobal,
 			autoPeerCFlags,
+			peerLDFlagsGlobal,
 			peerObjAddLibsGlobal,
 			wantsStrip,
 			d.splitDwarf,
@@ -2594,6 +2606,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
 			COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
 			ObjAddLibsGlobal:                mergeDedup(peerObjAddLibsGlobal, d.objAddLibsGlobal),
+			LDFlagsGlobal:                   mergeDedup(peerLDFlagsGlobal, d.ldFlags),
 			PeerArchiveClosureRefs:          append([]NodeRef(nil), peerArchiveRefs...),
 			PeerArchiveClosurePaths:         cloneVFSs(peerArchivePaths),
 			PeerGlobalClosureRefs:           append([]NodeRef(nil), peerGlobalRefs...),
@@ -2806,6 +2819,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
 		COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
 		ObjAddLibsGlobal:                mergeDedup(peerObjAddLibsGlobal, d.objAddLibsGlobal),
+		LDFlagsGlobal:                   mergeDedup(peerLDFlagsGlobal, d.ldFlags),
 		PeerArchiveClosureRefs:          append([]NodeRef(nil), peerArchiveRefs...),
 		PeerArchiveClosurePaths:         cloneVFSs(peerArchivePaths),
 		PeerGlobalClosureRefs:           append([]NodeRef(nil), peerGlobalRefs...),
@@ -3156,6 +3170,7 @@ type peerGlobalContribs struct {
 	cxxFlags   []string
 	cOnlyFlags []string
 	objAddLibs []string
+	ldFlags    []string
 	// Archive closure transitively reachable from this header-only
 	// LIBRARY's peers — DFS post-order, dedup-by-path (same discipline as
 	// the main walker). Header-only LIBRARYs emit no AR themselves but
@@ -3203,6 +3218,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	cxxFlagsSeen := map[string]struct{}{}
 	cOnlyFlagsSeen := map[string]struct{}{}
 	objAddLibSeen := map[string]struct{}{}
+	ldFlagsSeen := map[string]struct{}{}
 	archiveSeen := map[VFS]struct{}{}
 	globalSeen := map[VFS]struct{}{}
 	wholeArchiveSeen := map[VFS]struct{}{}
@@ -3298,6 +3314,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		addEach(cxxFlagsSeen, &out.cxxFlags, peerResult.CXXFlagsGlobal)
 		addEach(cOnlyFlagsSeen, &out.cOnlyFlags, peerResult.COnlyFlagsGlobal)
 		addEach(objAddLibSeen, &out.objAddLibs, peerResult.ObjAddLibsGlobal)
+		addEach(ldFlagsSeen, &out.ldFlags, peerResult.LDFlagsGlobal)
 
 		// Fold peer's transitive archive closure plus peer's own AR
 		// (when present) in DFS post-order.

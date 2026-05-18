@@ -301,6 +301,17 @@ func (p *Platform) WithLinkerSelectionFlags(trailer []string) []string {
 	return out
 }
 
+// ObjectSuffix is the upstream `$OBJECT_SUF` value (no `OBJ_SUF`
+// prefix — that comes from Python-multimodule variants only).
+// `OBJECT_SUF=$OBJ_SUF$_CROSS_SUFFIX.o` (gnu_compiler.conf:215) with
+// `_CROSS_SUFFIX=.pic` for PIC builds (gnu_compiler.conf:26-34).
+func (p *Platform) ObjectSuffix() string {
+	if p.PIC {
+		return ".pic.o"
+	}
+	return ".o"
+}
+
 func (p *Platform) ArchiverArgs() (string, string, string) {
 	if p.UsesResourceClang() {
 		return p.Tools.AR, "LLVM_AR", "gnu"
