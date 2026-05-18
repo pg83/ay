@@ -155,6 +155,47 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 	}
 }
 
+func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
+	emit := NewBufferedEmitter()
+	inst := muslHostInstance("contrib/libs/musl")
+	in := ModuleCCInputs{
+		AddIncl: []VFS{
+			Source("custom/musl/arch/x86_64"),
+			Source("custom/musl/include"),
+		},
+	}
+	EmitCC(inst, "src/string/strlen.c", in, testHostP, emit)
+
+	args := emit.nodes[0].Cmds[0].CmdArgs
+	wantSlot := []string{
+		"-I$(B)",
+		"-I$(S)",
+		"-I$(S)/custom/musl/arch/x86_64",
+		"-I$(S)/custom/musl/include",
+		"-I$(S)/contrib/libs/linux-headers",
+		"-I$(S)/contrib/libs/linux-headers/_nf",
+	}
+
+	for i, want := range wantSlot {
+		if args[6+i] != want {
+			t.Fatalf("cmd_args[%d] = %q, want %q; args=%v", 6+i, args[6+i], want, args)
+		}
+	}
+
+	for _, banned := range []string{
+		"-I$(S)/contrib/libs/musl/arch/x86_64",
+		"-I$(S)/contrib/libs/musl/arch/generic",
+		"-I$(S)/contrib/libs/musl/src/include",
+		"-I$(S)/contrib/libs/musl/src/internal",
+		"-I$(S)/contrib/libs/musl/include",
+		"-I$(S)/contrib/libs/musl/extra",
+	} {
+		if contains(args, banned) {
+			t.Fatalf("cmd_args unexpectedly contain hardcoded musl include %q: %v", banned, args)
+		}
+	}
+}
+
 // TestEmitCC_CxxSource_UsesClangPlusPlus verifies PR-29-D05: a `.cpp`
 // source dispatches to clang++ and threads `-std=c++20` after the
 // second suppression block.

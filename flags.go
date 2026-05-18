@@ -4,7 +4,7 @@ package main
 //
 // Bundles emit byte-exact against the reference graph in the natural order
 // observed there:
-//   prologue → ccIncludes / muslCcIncludes → debugPrefixMapFlags →
+//   prologue → include-prefix/own-ADDINCL/suffix → debugPrefixMapFlags →
 //   xclangDebugCompilationDir → commonCFlags / hostCFlags →
 //   warningFlags / muslWarningFlags → commonDefines / hostDefines →
 //   noLibcUndebugBlock / ndebugPicBlock → catboostOpenSourceDefine →
@@ -38,19 +38,6 @@ var ccIncludesSuffix = []string{
 	"-I$(S)/contrib/libs/linux-headers",
 	"-I$(S)/contrib/libs/linux-headers/_nf",
 }
-
-// ccIncludes is the original 4-arg flat composition retained for the
-// musl-target case where own ADDINCL slots inside muslCcIncludes
-// (which interleaves musl arch paths between the prefix and suffix
-// halves). Composed at init time from prefix + suffix to keep the
-// declaration single-source.
-var ccIncludes = func() []string {
-	out := make([]string, 0, len(ccIncludesPrefix)+len(ccIncludesSuffix))
-	out = append(out, ccIncludesPrefix...)
-	out = append(out, ccIncludesSuffix...)
-
-	return out
-}()
 
 // debugPrefixMapFlags rewrite source paths in DWARF info so the
 // debug output is reproducible across build hosts. Identical for
@@ -319,25 +306,6 @@ var macroPrefixMapFlags = []string{
 	"-fmacro-prefix-map=$(B)/=",
 	"-fmacro-prefix-map=$(S)/=",
 	"-fmacro-prefix-map=$(TOOL_ROOT)/=",
-}
-
-// muslCcIncludesFor returns the include set for contrib/libs/musl CC nodes
-// on the given ISA. Inserts eight musl-specific -I paths between $(S) and
-// the linux-headers pair so musl's headers shadow the global linux-headers.
-// ISA enters in exactly one slot (musl/arch/<isa>).
-func muslCcIncludesFor(isa ISA) []string {
-	return []string{
-		"-I$(B)",
-		"-I$(S)",
-		"-I$(S)/contrib/libs/musl/arch/" + string(isa),
-		"-I$(S)/contrib/libs/musl/arch/generic",
-		"-I$(S)/contrib/libs/musl/src/include",
-		"-I$(S)/contrib/libs/musl/src/internal",
-		"-I$(S)/contrib/libs/musl/include",
-		"-I$(S)/contrib/libs/musl/extra",
-		"-I$(S)/contrib/libs/linux-headers",
-		"-I$(S)/contrib/libs/linux-headers/_nf",
-	}
 }
 
 // muslWarningFlags is the single-flag warning bundle the reference
