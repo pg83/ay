@@ -365,26 +365,17 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, muslOn bool,
 		vcsCPath,
 	)
 	cmdArgs = append(cmdArgs, "-I$(S)")
-	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
-	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
-	cmdArgs = append(cmdArgs, bundle.CFlags...)
-	cmdArgs = append(cmdArgs, warningFlags...)
-	cmdArgs = append(cmdArgs, bundle.Defines...)
+
+	preNoLibcExtras := make([]string, 0, len(peerCFlagsGlobal)+1)
 
 	if muslOn && !flagsContain(peerCFlagsGlobal, ldVcsMuslSelfDefine) {
-		cmdArgs = append(cmdArgs, ldVcsMuslSelfDefine)
+		preNoLibcExtras = append(preNoLibcExtras, ldVcsMuslSelfDefine)
 	}
 
 	// PEERDIR-derived GLOBAL CFLAGS between musl-self sentinel and the
 	// first `noLibcUndebugBlock`. Anchor: devtools/ymake/bin/ymake
 	// cmd[1] ref:48..58.
-	cmdArgs = append(cmdArgs, peerCFlagsGlobal...)
-	if flagsContain(peerCFlagsGlobal, "-DCARES_STATICLIB") && flagsContain(peerCFlagsGlobal, "-DPCRE_STATIC") {
-		cmdArgs = moveFlagAfter(cmdArgs, ldVcsMuslSelfDefine, "-DPCRE_STATIC")
-	}
-
-	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
-	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
+	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
 
 	var autoPeerCFlags []string
 	if muslOn {
@@ -394,8 +385,11 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, muslOn bool,
 		autoPeerCFlags = append(autoPeerCFlags, "-DUSE_PYTHON3")
 	}
 
-	cmdArgs = appendAutoPeerAndCPUFeatures(cmdArgs, bundle, autoPeerCFlags)
-	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningFlags, bundle.Defines, preNoLibcExtras, autoPeerCFlags)
+
+	if flagsContain(peerCFlagsGlobal, "-DCARES_STATICLIB") && flagsContain(peerCFlagsGlobal, "-DPCRE_STATIC") {
+		cmdArgs = moveFlagAfter(cmdArgs, ldVcsMuslSelfDefine, "-DPCRE_STATIC")
+	}
 
 	return cmdArgs
 }
@@ -412,6 +406,7 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, muslOn bool,
 // 6-arg standard bundle. Canonical composition at
 // `ymake_conf.py:1550-1556` and `gnu_compiler.conf:124-140`.
 func composeLDCmdVcsCompileHost(p *Platform, vcsCPath, vcsOPath string, muslOn bool, moduleCFlags, peerCFlagsGlobal []string, usePython3 bool, noCompilerWarnings bool) []string {
+	bundle := compileFlagBundleFor(p)
 	cmdArgs := make([]string, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal))
 	cmdArgs = append(cmdArgs,
 		p.Tools.CC,
@@ -423,33 +418,26 @@ func composeLDCmdVcsCompileHost(p *Platform, vcsCPath, vcsOPath string, muslOn b
 		vcsCPath,
 	)
 	cmdArgs = append(cmdArgs, "-I$(S)")
-	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
-	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
-	cmdArgs = append(cmdArgs, hostCFlags...)
-	cmdArgs = append(cmdArgs, pickWarningFlags(noCompilerWarnings)...)
-	cmdArgs = append(cmdArgs, hostDefines...)
-	cmdArgs = append(cmdArgs, moduleCFlags...)
+
+	preNoLibcExtras := make([]string, 0, len(moduleCFlags)+len(peerCFlagsGlobal))
+	preNoLibcExtras = append(preNoLibcExtras, moduleCFlags...)
 	// PEERDIR-derived GLOBAL CFLAGS between moduleCFlags (terminating
 	// with -D_musl_=1 when MUSL=yes) and the first ndebugPicBlock.
 	// Anchor: tools/py3cc/py3cc cmd[1] ref:45..47.
-	cmdArgs = append(cmdArgs, peerCFlagsGlobal...)
-	cmdArgs = append(cmdArgs, ndebugPicBlock...)
-	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
+	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
 
+	var autoPeerCFlags []string
 	if muslOn {
-		cmdArgs = append(cmdArgs, muslConsumerSentinel)
+		autoPeerCFlags = append(autoPeerCFlags, muslConsumerSentinel)
 	}
-
-	cmdArgs = append(cmdArgs, hostSseFeatures...)
-
-	// USE_PYTHON3 (defaultPeerCFlags slot for host LD vcs compile)
-	// between hostSseFeatures and the second ndebugPicBlock.
-	// Anchor: tools/py3cc/slow/py3cc cmd[1] ref:78.
 	if usePython3 {
-		cmdArgs = append(cmdArgs, "-DUSE_PYTHON3")
+		// USE_PYTHON3 (defaultPeerCFlags slot for host LD vcs compile)
+		// between hostSseFeatures and the second ndebugPicBlock.
+		// Anchor: tools/py3cc/slow/py3cc cmd[1] ref:78.
+		autoPeerCFlags = append(autoPeerCFlags, "-DUSE_PYTHON3")
 	}
 
-	cmdArgs = append(cmdArgs, ndebugPicBlock...)
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings), bundle.Defines, preNoLibcExtras, autoPeerCFlags)
 
 	return cmdArgs
 }

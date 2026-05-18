@@ -113,15 +113,7 @@ func EmitBI(
 func biFlagsForInstance(targetP *Platform) []string {
 	bundle := compileFlagBundleFor(targetP)
 	flags := make([]string, 0, 100)
-	flags = append(flags, debugPrefixMapFlags...)
-	flags = append(flags, xclangDebugCompilationDir...)
-	flags = append(flags, bundle.CFlags...)
-	flags = append(flags, warningFlags...)
-	flags = append(flags, bundle.Defines...)
-	flags = append(flags, bundle.NoLibcBlock...)
-	flags = append(flags, catboostOpenSourceDefine...)
-	flags = appendAutoPeerAndCPUFeatures(flags, bundle, []string{"-D_musl_"})
-	flags = append(flags, bundle.NoLibcBlock...)
+	flags = appendCompileFlagPipeline(flags, bundle, warningFlags, bundle.Defines, nil, []string{"-D_musl_"})
 	flags = append(flags, cxxStandardFlag)
 	flags = append(flags,
 		"-Wimport-preprocessor-directive-pedantic",
