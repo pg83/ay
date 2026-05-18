@@ -46,9 +46,13 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 3 + len(bundle.ArchArgs)
 
-	musl := []string(nil)
+	// No-stdinc preNoLibcExtras: module's own CFLAGS + GLOBAL CFLAGS,
+	// mirroring composeMuslCC. Empty for non-musl modules.
+	noStdIncCFlags := []string(nil)
 	if isMusl {
-		musl = muslExtraDefines
+		noStdIncCFlags = make([]string, 0, len(in.CFlags)+len(in.OwnCFlagsGlobal))
+		noStdIncCFlags = append(noStdIncCFlags, in.CFlags...)
+		noStdIncCFlags = append(noStdIncCFlags, in.OwnCFlagsGlobal...)
 	}
 
 	warnBundle := pickWarningFlags(instance.Flags.NoCompilerWarnings)
@@ -59,8 +63,8 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 		autoPeerCFlags = in.AutoPeerCFlags
 	}
 
-	preNoLibcExtras := make([]string, 0, len(musl)+len(ownCFlags))
-	preNoLibcExtras = append(preNoLibcExtras, musl...)
+	preNoLibcExtras := make([]string, 0, len(noStdIncCFlags)+len(ownCFlags))
+	preNoLibcExtras = append(preNoLibcExtras, noStdIncCFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, ownCFlags...)
 
 	includes := composeASIncludes(in, isMusl)
@@ -69,7 +73,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	betweenBlocks += len(bundle.CPUFeatures)
 
 	fixed := prologueArgs + len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
-		len(bundle.CFlags) + len(warnBundle) + len(bundle.Defines) + len(musl) + len(ownCFlags) +
+		len(bundle.CFlags) + len(warnBundle) + len(bundle.Defines) + len(noStdIncCFlags) + len(ownCFlags) +
 		len(bundle.NoLibcBlock) + betweenBlocks + len(bundle.NoLibcBlock) + len(in.SFlags) + 4
 	cmdArgs := make([]string, 0, fixed+len(includes))
 
