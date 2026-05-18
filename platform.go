@@ -27,10 +27,7 @@ type Platform struct {
 	Tools Toolchain
 
 	// Shadow accessors derived from Flags at construction. Read-only.
-	// LibcMusl is the Platform-level libc selector (host and target halves
-	// can independently be musl/glibc).
 	PIC             bool
-	LibcMusl        bool
 	BuildType       string
 	BuildRelease    bool
 	BuildSanitized  bool
@@ -108,7 +105,6 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, isHost 
 		IsHost:          isHost,
 		Tools:           toolchainFromFlags(flags),
 		PIC:             flags["PIC"] == "yes",
-		LibcMusl:        flags["MUSL"] == "yes",
 		BuildType:       buildType,
 		BuildRelease:    buildRelease,
 		BuildSanitized:  buildSanitized,
