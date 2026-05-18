@@ -59,6 +59,10 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 		autoPeerCFlags = in.AutoPeerCFlags
 	}
 
+	preNoLibcExtras := make([]string, 0, len(musl)+len(ownCFlags))
+	preNoLibcExtras = append(preNoLibcExtras, musl...)
+	preNoLibcExtras = append(preNoLibcExtras, ownCFlags...)
+
 	includes := composeASIncludes(in, isMusl)
 
 	betweenBlocks := len(catboostOpenSourceDefine) + len(autoPeerCFlags)
@@ -72,17 +76,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	cmdArgs = append(cmdArgs, instance.Platform.Tools.CC, "--target="+instance.Platform.Triple)
 	cmdArgs = append(cmdArgs, bundle.ArchArgs...)
 	cmdArgs = append(cmdArgs, "-B"+binPath)
-	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
-	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
-	cmdArgs = append(cmdArgs, bundle.CFlags...)
-	cmdArgs = append(cmdArgs, warnBundle...)
-	cmdArgs = append(cmdArgs, bundle.Defines...)
-	cmdArgs = append(cmdArgs, musl...)
-	cmdArgs = append(cmdArgs, ownCFlags...)
-	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
-	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-	cmdArgs = appendAutoPeerAndCPUFeatures(cmdArgs, bundle, autoPeerCFlags)
-	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, preNoLibcExtras, autoPeerCFlags)
 	cmdArgs = append(cmdArgs, in.SFlags...)
 	cmdArgs = append(cmdArgs, "-c", "-o", outputPath, inputPath)
 	cmdArgs = append(cmdArgs, includes...)
