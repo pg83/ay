@@ -327,6 +327,22 @@ var autoCFlags = []autoCFlagRule{
 Порядок — от низкого риска к высокому, с byte-exact gate'ом на каждом
 шаге. Ниже у каждой стадии: scope / steps / acceptance / risk.
 
+### Execution Status
+
+| Phase | Status | Commit | Notes |
+| --- | --- | --- | --- |
+| 0 — Freeze | partial | (existing `dev/validate.sh`) | M2+M3 sg2 byte-exact gate exists; explicit characterization tests deferred |
+| 1 — `LibcMusl` snos | **done** | `aef9914` | dead shadow removed |
+| 2 — auto-peer CFlag funnel | **done** | `c28ee6a` | `consumerAutoPeerCFlags` helper; emit_ld + emit_py_proto routed through it |
+| 3 — implicit peer rule tables | **done** | `074409f` | `implicitPeerRule` + 3 tables (unit/program/allocator) |
+| 4 — musl-self compile data → moduleData | pending | — | high risk; needs Phase 0 explicit tests for `composeMuslCC{,Host}` byte-pin |
+| 5 — sysincl YAML routing → table | **done** | `e0e7105` | `sysInclYamlSequence []sysInclEntry` |
+| 6 — host/target propagation | pending | — | `jsTargetPeerAddIncl` shim removal |
+| 7 — cleanup + grep guard | pending | — | run after 4+6 |
+
+Byte-exact M2 (sg2.aarch64) + M3 (sg2.x86_64) preserved on every commit
+above; sg3.aarch64 pre-existing diff (first byte 61971) is unchanged.
+
 ### Phase 0 — Freeze (PREREQUISITE)
 
 **Scope**: characterization tests + perf gate, чтобы любая стадия имела
