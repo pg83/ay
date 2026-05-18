@@ -127,11 +127,3 @@ All `.go` files live in the repo root. No `internal/`, no `cmd/`, no `pkg/`. The
 ## Config
 
 JSON only. No YAML, ever.
-
-## Dependencies
-
-- S3: `github.com/aws/aws-sdk-go-v2/service/s3`, configured for S3-compatible endpoints (works against MinIO with `UsePathStyle=true`).
-- etcd: `go.etcd.io/etcd/client/v3` and `.../concurrency`.
-- SSH: **we shell out** to the `ssh` binary via `exec.Command`. A native Go SSH library is tempting, but the separate process gives operational isolation — a stuck connection can be killed on the target host (or locally) without touching the daemon. Classification doesn't need a richer error surface here: the final outcome is read as JSON printed by `gorn wrap` on stdout, not inferred from the ssh exit code.
-
-The shape is "native library when the binary has no clean protocol, shell out when process isolation is worth more than library ergonomics."
