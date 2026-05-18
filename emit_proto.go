@@ -1,51 +1,223 @@
 package main
 
 import (
-	"bufio"
 	"path/filepath"
 	"sort"
 	"strings"
 )
 
-// protoDirectImportIncludes converts direct `import "..."` statements
-// in a .proto/.ev source to protoc's $(B) outputs (.pb.h / .ev.pb.h).
-// Direct imports only — no recursion; results sorted; nil on read failure.
-// Upstream: proto_processor.cpp:43-56::TProtoIncludeProcessor::PrepareIncludes.
-// Disk read is intentional: feeds EmitsIncludes at registration time, not closure walks.
-func protoDirectImportIncludes(fs *FS, srcRel, outputRoot string) []includeDirective {
-	data, err := fs.Read(srcRel)
-	if err != nil {
+// protoDirectPbHIncludes returns the `.pb.h`-textual-includes set of a
+// protoc-generated `.pb.h` (or `.ev.pb.h`) by transforming the
+// parsedIncludesHCPP bucket of its source `.proto`/`.ev`:
+//   - relative entries get the codegen output-root prefix applied;
+//   - `google/protobuf/descriptor.pb.h` is rebased onto the protobuf
+//     runtime tree (pre-committed header, not a codegen output).
+//
+// Mirrors upstream proto_processor.cpp::PrepareIncludes; the parser
+// (parsers.go::protoIncludeDirectiveParser) extracts the raw mapping,
+// the walker applies the prefixes here.
+func protoDirectPbHIncludes(pm *includeParserManager, srcRel, outputRoot string) []includeDirective {
+	hcpp := pm.sourceParsedBuckets(srcRel).bucket(parsedIncludesHCPP)
+	if len(hcpp) == 0 {
 		return nil
 	}
 
-	var out []includeDirective
-	sc := bufio.NewScanner(strings.NewReader(string(data)))
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if !strings.HasPrefix(line, "import ") {
-			continue
+	out := make([]includeDirective, 0, len(hcpp))
+	for _, d := range hcpp {
+		target := d.target
+		if target == "google/protobuf/descriptor.pb.h" {
+			target = pbRuntimeBase + target
+		} else {
+			target = protoOutputRel(outputRoot, target)
 		}
-		start := strings.IndexByte(line, '"')
-		end := strings.LastIndexByte(line, '"')
-		if start < 0 || end <= start {
-			continue
-		}
-		imp := line[start+1 : end]
-		if strings.HasSuffix(imp, ".ev") {
-			out = append(out, includeDirective{kind: includeQuoted, target: protoOutputRel(outputRoot, strings.TrimSuffix(imp, ".ev")+".ev.pb.h")})
-		} else if strings.HasSuffix(imp, ".proto") {
-			base := strings.TrimSuffix(imp, ".proto")
-			if imp == "google/protobuf/descriptor.proto" {
-				// descriptor.pb.h is pre-committed, not a codegen output.
-				// Upstream tree: contrib/libs/protobuf/src/google/protobuf/descriptor.pb.h
-				out = append(out, includeDirective{kind: includeQuoted, target: pbRuntimeBase + "google/protobuf/descriptor.pb.h"})
-			} else {
-				out = append(out, includeDirective{kind: includeQuoted, target: protoOutputRel(outputRoot, base+".pb.h")})
-			}
-		}
+		out = append(out, includeDirective{kind: d.kind, target: target})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].target < out[j].target })
 	return out
+}
+
+// pbHEmitsIncludesExtras returns the constant witness inputs propagated
+// through a protoc-generated .pb.h to its CC consumers:
+// pbDescriptorImporterHeaders (7 reflection-cluster headers),
+// cpp_proto_wrapper.py, the proto source itself, and descriptor.pb.h
+// when hasDescriptor (caller computes this once via protoTransitiveImports).
+func pbHEmitsIncludesExtras(protoRelPath string, hasDescriptor bool) []includeDirective {
+	out := make([]includeDirective, 0, len(pbDescriptorImporterHeaders)+3)
+	out = append(out, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
+	out = append(out, includeDirective{kind: includeQuoted, target: protoRelPath})
+	for _, v := range pbDescriptorImporterHeaders {
+		out = append(out, includeDirective{kind: includeQuoted, target: v.Rel})
+	}
+	if hasDescriptor {
+		out = append(out, includeDirective{kind: includeQuoted, target: pbDescriptorVFS.Rel})
+	}
+	return out
+}
+
+// protoTransitiveImports walks the .proto/.ev import graph starting at
+// srcRel and returns the deduplicated set of imported sources plus a
+// HasDescriptor flag (true iff `google/protobuf/descriptor.proto`
+// appears anywhere in the closure). Each per-file import list comes
+// from the parser_manager cache (parsedIncludesLocal); file-on-disk
+// resolution uses the proto-specific search list (yt/ prefix and the
+// protobuf runtime tree).
+func protoTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) ([]VFS, bool) {
+	rootImports := protoDirectImportNames(pm, srcRel)
+	if rootImports == nil {
+		return nil, false
+	}
+
+	var imports []VFS
+	hasDescriptor := false
+	seen := map[string]struct{}{}
+	scanned := map[string]struct{}{}
+
+	var walk func(string)
+	walk = func(rel string) {
+		if _, done := scanned[rel]; done {
+			return
+		}
+		scanned[rel] = struct{}{}
+
+		direct := protoDirectImportNames(pm, rel)
+
+		for _, imp := range direct {
+			if imp == "google/protobuf/descriptor.proto" {
+				hasDescriptor = true
+				continue
+			}
+			resolved := resolveProtoImportPath(fs, imp)
+			if resolved == "" {
+				continue
+			}
+			if _, ok := seen[resolved]; ok {
+				continue
+			}
+			seen[resolved] = struct{}{}
+			imports = append(imports, Source(resolved))
+		}
+		for _, imp := range direct {
+			if imp == "google/protobuf/descriptor.proto" {
+				continue
+			}
+			if resolved := resolveProtoImportPath(fs, imp); resolved != "" {
+				walk(resolved)
+			}
+		}
+	}
+
+	for _, imp := range rootImports {
+		if imp == "google/protobuf/descriptor.proto" {
+			hasDescriptor = true
+			continue
+		}
+		resolved := resolveProtoImportPath(fs, imp)
+		if resolved == "" {
+			continue
+		}
+		if _, ok := seen[resolved]; ok {
+			continue
+		}
+		seen[resolved] = struct{}{}
+		imports = append(imports, Source(resolved))
+	}
+	for _, imp := range rootImports {
+		if imp == "google/protobuf/descriptor.proto" {
+			continue
+		}
+		if resolved := resolveProtoImportPath(fs, imp); resolved != "" {
+			walk(resolved)
+		}
+	}
+
+	return imports, hasDescriptor
+}
+
+// evTransitiveImports returns the deduplicated transitive import set
+// for a .ev/.proto file at srcRel: every imported file resolved against
+// the proto search list plus descriptor.pb.h when any chain reaches
+// `google/protobuf/descriptor.proto`. Per-file imports come from the
+// parser_manager cache.
+func evTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) []VFS {
+	visited := map[string]struct{}{}
+	order := make([]VFS, 0, 8)
+	descriptorAdded := false
+
+	var walk func(rel string)
+	walk = func(rel string) {
+		if _, seen := visited[rel]; seen {
+			return
+		}
+		visited[rel] = struct{}{}
+
+		direct := protoDirectImportNames(pm, rel)
+		if direct == nil {
+			return
+		}
+
+		var imports []string
+		for _, importedRel := range direct {
+			if importedRel == "google/protobuf/descriptor.proto" {
+				if !descriptorAdded {
+					order = append(order, pbDescriptorVFS)
+					descriptorAdded = true
+				}
+				continue
+			}
+			imports = append(imports, importedRel)
+		}
+
+		order = append(order, Source(rel))
+
+		for _, imp := range imports {
+			walk(imp)
+		}
+	}
+
+	topImports := protoDirectImportNames(pm, srcRel)
+	if topImports == nil {
+		return nil
+	}
+
+	for _, imp := range topImports {
+		walk(imp)
+	}
+
+	return order
+}
+
+// protoDirectImportNames returns the raw `import "..."` strings the
+// proto parser cached for srcRel.
+func protoDirectImportNames(pm *includeParserManager, srcRel string) []string {
+	direct := pm.sourceParsedBuckets(srcRel).bucket(parsedIncludesLocal)
+	if len(direct) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(direct))
+	for _, d := range direct {
+		out = append(out, d.target)
+	}
+	return out
+}
+
+// resolveProtoImportPath returns the SOURCE_ROOT-relative path of an
+// imported .proto/.ev file, searching the proto-specific candidate
+// list: bare, "yt/" prefix (Yandex namespacing), protobuf runtime base.
+func resolveProtoImportPath(fs *FS, importedRel string) string {
+	clean := filepath.ToSlash(filepath.Clean(importedRel))
+	candidates := []string{clean}
+	if !strings.HasPrefix(clean, "yt/") {
+		candidates = append(candidates, filepath.ToSlash(filepath.Clean("yt/"+clean)))
+	}
+	candidates = append(candidates, filepath.ToSlash(filepath.Clean(pbRuntimeBase+clean)))
+
+	for _, cand := range candidates {
+		if fs.IsFile(cand) {
+			return cand
+		}
+	}
+
+	return ""
 }
 
 func protoOutputRel(outputRoot, rel string) string {
@@ -109,12 +281,14 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	// Emit PB nodes.
 	for _, src := range protoSrcs {
 		protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
+		transitiveImports, hasDescriptor := protoTransitiveImports(ctx.parsers, ctx.fs, protoRelPath)
 
 		pbRef := EmitPB(
 			instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
 			grpcCppLDRef, cppStyleguideBinary, protocBinary,
 			grpcCppBinary, d.grpc,
-			stringPtr("cpp_proto"), protoCPPOutRoot(d), duplicateOutputRootInclude, ctx.fs, ctx.emit)
+			stringPtr("cpp_proto"), protoCPPOutRoot(d), duplicateOutputRootInclude,
+			transitiveImports, hasDescriptor, ctx.emit)
 
 		// Register the .pb.h with EmitsIncludes: .pb.h's of every imported
 		// proto plus the constant protobuf runtime header set.
@@ -141,8 +315,8 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			ctx.pbOutputs[pbKey] = pbRef
 		}
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
-			directImports := protoDirectImportIncludes(ctx.fs, protoRelPath, protoCPPOutRoot(d))
-			extras := pbDescriptorImporterExtras(ctx.fs, protoRelPath)
+			directImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, protoCPPOutRoot(d))
+			extras := pbHEmitsIncludesExtras(protoRelPath, hasDescriptor)
 			pbHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
 			pbHParsed = append(pbHParsed, directImports...)
 			for _, include := range protobufRuntimeHeaders {
@@ -210,11 +384,12 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 
 		for _, src := range evSrcs {
 			evRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
+			evImports := evTransitiveImports(ctx.parsers, ctx.fs, evRelPath)
 
 			evRef := EmitEV(
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
-				stringPtr("cpp_proto"), ctx.fs, ctx.emit)
+				stringPtr("cpp_proto"), evImports, ctx.emit)
 
 			// Register .ev.pb.h with EmitsIncludes: .ev source's direct
 			// imports + protobuf runtime headers + EV-specific runtime
@@ -230,7 +405,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			evKey.path = evPbCC
 			ctx.evOutputs[evKey] = evRef
 			if reg := codegenRegForInstance(ctx, instance); reg != nil {
-				directImports := protoDirectImportIncludes(ctx.fs, evRelPath, protoCPPOutRoot(d))
+				directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
 				evExtras := evWitnessExtras(evRelPath, evPbCC)
 				evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders)+len(evExtras))
 				evHParsed = append(evHParsed, directImports...)

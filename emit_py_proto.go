@@ -181,12 +181,11 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, Source(protoRelPath)}
-	if protoImports := resolveProtoImports(ctx.fs, protoRelPath); protoImports != nil {
-		if protoImports.HasDescriptor {
-			inputs = append(inputs, pbDescriptorVFS)
-		}
-		inputs = append(inputs, protoImports.Imports...)
+	transitive, hasDescriptor := protoTransitiveImports(ctx.parsers, ctx.fs, protoRelPath)
+	if hasDescriptor {
+		inputs = append(inputs, pbDescriptorVFS)
 	}
+	inputs = append(inputs, transitive...)
 	if d.grpc {
 		inputs = append(inputs, grpcPyBinary)
 	}

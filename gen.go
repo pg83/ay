@@ -157,6 +157,7 @@ const (
 type genCtx struct {
 	sourceRoot      string
 	fs              *FS
+	parsers         *includeParserManager
 	emit            Emitter
 	memo            map[ModuleInstance]*moduleEmitResult
 	moduleTypeCache map[moduleTypeCacheKey]moduleTypeInfo
@@ -632,6 +633,7 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 	ctx := &genCtx{
 		sourceRoot:        srcRoot,
 		fs:                fs,
+		parsers:           parsers,
 		emit:              emitter,
 		memo:              make(map[ModuleInstance]*moduleEmitResult),
 		moduleTypeCache:   make(map[moduleTypeCacheKey]moduleTypeInfo),

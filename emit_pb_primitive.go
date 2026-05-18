@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"crypto/md5"
 	"encoding/base32"
 	enchex "encoding/hex"
@@ -288,8 +287,10 @@ var pbCcDeepRuntimeHeaders = []VFS{
 // The *LDRef params are host LD NodeRefs (zeroed when the host walk failed);
 // the *Binary params are the corresponding $(B)-rooted tool paths. grpcCppLDRef
 // and grpcCppBinary are only used when grpc is true. moduleTag is "cpp_proto"
-// for PROTO_LIBRARY modules (nil when absent). fs feeds descriptor-import
-// scanning.
+// for PROTO_LIBRARY modules (nil when absent). transitiveProtoImports is the
+// caller-resolved set of imported .proto sources (Source-rooted); hasDescriptor
+// signals that descriptor.proto is in the transitive closure so its pre-built
+// .pb.h gets injected as an extra input.
 func EmitPB(
 	instance ModuleInstance,
 	protoRelPath string,
@@ -303,7 +304,8 @@ func EmitPB(
 	moduleTag *string,
 	cppOutRoot string,
 	duplicateOutputRootInclude bool,
-	fs *FS,
+	transitiveProtoImports []VFS,
+	hasDescriptor bool,
 	emit Emitter,
 ) NodeRef {
 	moduleDir := instance.Path
@@ -371,7 +373,6 @@ func EmitPB(
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
-	protoImports := resolveProtoImports(fs, protoRelPath)
 	inputs := []VFS{
 		cppStyleguideBinary,
 		protocBinary,
@@ -380,13 +381,11 @@ func EmitPB(
 	if grpc {
 		inputs = append([]VFS{grpcCppBinary}, inputs...)
 	}
-	if protoImports != nil && protoImports.HasDescriptor {
+	if hasDescriptor {
 		inputs = append(inputs, pbDescriptorVFS)
 	}
 	inputs = append(inputs, srcVFS)
-	if protoImports != nil {
-		inputs = append(inputs, protoImports.Imports...)
-	}
+	inputs = append(inputs, transitiveProtoImports...)
 
 	// tags come from instance.Platform (["tool"] on host, [] on target);
 	// non-nil empty slice keeps JSON `[]`, not `null`.
@@ -500,154 +499,6 @@ func protoCPPOutRoot(d *moduleData) string {
 	}
 
 	return root
-}
-
-// pbDescriptorImporterExtras returns the witness inputs propagated through
-// a protoc-generated .pb.h to its CC consumers: pbDescriptorImporterHeaders
-// (7 reflection-cluster headers), cpp_proto_wrapper.py, the proto source,
-// and descriptor.proto when imported. Verified by intersecting CC-consumer
-// inputs across all .pb.h's in /home/pg/monorepo/yatool_orig/sg2.json.
-func pbDescriptorImporterExtras(fs *FS, protoRelPath string) []includeDirective {
-	out := make([]includeDirective, 0, len(pbDescriptorImporterHeaders)+3)
-	out = append(out, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
-	out = append(out, includeDirective{kind: includeQuoted, target: protoRelPath})
-	for _, v := range pbDescriptorImporterHeaders {
-		out = append(out, includeDirective{kind: includeQuoted, target: v.Rel})
-	}
-
-	protoImports := resolveProtoImports(fs, protoRelPath)
-	if protoImports != nil && protoImports.HasDescriptor {
-		out = append(out, includeDirective{kind: includeQuoted, target: pbDescriptorVFS.Rel})
-	}
-
-	return out
-}
-
-type protoImportResolution struct {
-	HasDescriptor bool
-	Imports       []VFS
-}
-
-func resolveProtoImportPath(fs *FS, importedRel string) string {
-	clean := filepath.ToSlash(filepath.Clean(importedRel))
-	candidates := []string{clean}
-	if !strings.HasPrefix(clean, "yt/") {
-		candidates = append(candidates, filepath.ToSlash(filepath.Clean("yt/"+clean)))
-	}
-	candidates = append(candidates, filepath.ToSlash(filepath.Clean(pbRuntimeBase+clean)))
-
-	for _, cand := range candidates {
-		if fs.IsFile(cand) {
-			return cand
-		}
-	}
-
-	return ""
-}
-
-// resolveProtoImports returns the transitive raw `.proto` import set for
-// srcRel, preserving the upstream shape: direct imports of each file
-// are emitted before their transitive closure, and descriptor.proto is
-// surfaced separately because its input slot precedes the source file.
-func resolveProtoImports(fs *FS, srcRel string) *protoImportResolution {
-	rootImports := parseProtoImports(fs, srcRel)
-	if rootImports == nil {
-		return nil
-	}
-
-	res := &protoImportResolution{}
-	seen := map[string]struct{}{}
-	scanned := map[string]struct{}{}
-	var walk func(string)
-	walk = func(rel string) {
-		if _, done := scanned[rel]; done {
-			return
-		}
-		scanned[rel] = struct{}{}
-
-		imports := parseProtoImports(fs, rel)
-
-		for _, imp := range imports {
-			if imp == "google/protobuf/descriptor.proto" {
-				res.HasDescriptor = true
-				continue
-			}
-			resolved := resolveProtoImportPath(fs, imp)
-			if resolved == "" {
-				continue
-			}
-			if _, ok := seen[resolved]; ok {
-				continue
-			}
-			seen[resolved] = struct{}{}
-			res.Imports = append(res.Imports, Source(resolved))
-		}
-
-		for _, imp := range imports {
-			if imp == "google/protobuf/descriptor.proto" {
-				continue
-			}
-			if resolved := resolveProtoImportPath(fs, imp); resolved != "" {
-				walk(resolved)
-			}
-		}
-	}
-
-	for _, imp := range rootImports {
-		if imp == "google/protobuf/descriptor.proto" {
-			res.HasDescriptor = true
-			continue
-		}
-		resolved := resolveProtoImportPath(fs, imp)
-		if resolved == "" {
-			continue
-		}
-		if _, ok := seen[resolved]; ok {
-			continue
-		}
-		seen[resolved] = struct{}{}
-		res.Imports = append(res.Imports, Source(resolved))
-	}
-	for _, imp := range rootImports {
-		if imp == "google/protobuf/descriptor.proto" {
-			continue
-		}
-		if resolved := resolveProtoImportPath(fs, imp); resolved != "" {
-			walk(resolved)
-		}
-	}
-
-	if !res.HasDescriptor && len(res.Imports) == 0 {
-		return nil
-	}
-
-	return res
-}
-
-// parseProtoImports returns the raw `import "..."` strings from rel.
-// Returns nil if the file cannot be read.
-func parseProtoImports(fs *FS, rel string) []string {
-	data, err := fs.Read(rel)
-	if err != nil {
-		return nil
-	}
-
-	var imports []string
-	scanner := bufio.NewScanner(strings.NewReader(string(data)))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "import ") {
-			continue
-		}
-		start := strings.IndexByte(line, '"')
-		end := strings.LastIndexByte(line, '"')
-		if start < 0 || end <= start {
-			continue
-		}
-		imports = append(imports, line[start+1:end])
-	}
-
-	return imports
 }
 
 // protoSrcsResult carries the AR and whole-archive closure emitted for a

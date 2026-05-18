@@ -123,11 +123,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(pbCppStyleguideModule)
 		event2cppLDRef, event2cppBinary := ctx.tool(evEvent2cppModule)
 
+		evImports := evTransitiveImports(ctx.parsers, ctx.fs, evRelPath)
 		evRef := EmitEV(
 			srcInstance, evRelPath,
 			cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 			cppStyleguideBinary, protocBinary, event2cppBinary,
-			nil, ctx.fs, ctx.emit)
+			nil, evImports, ctx.emit)
 
 		evH := Build(evRelPath + ".pb.h")
 		evPbCC := Build(evRelPath + ".pb.cc")
@@ -138,7 +139,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		evKey.path = evPbCC
 		ctx.evOutputs[evKey] = evRef
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
-			directImports := protoDirectImportIncludes(ctx.fs, evRelPath, "")
+			directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, "")
 			evExtras := evWitnessExtras(evRelPath, evPbCC)
 			evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
 			evHParsed = append(evHParsed, directImports...)
@@ -258,10 +259,11 @@ func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, srcDir *string
 	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(pbCppStyleguideModule)
 
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, &moduleData{srcDir: srcDir}, srcRel)
+	transitiveImports, hasDescriptor := protoTransitiveImports(ctx.parsers, ctx.fs, protoRelPath)
 	pbRef := EmitPB(
 		instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
 		NodeRef{}, cppStyleguideBinary, protocBinary, pbGrpcCppVFS,
-		false, nil, "", false, ctx.fs, ctx.emit,
+		false, nil, "", false, transitiveImports, hasDescriptor, ctx.emit,
 	)
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
@@ -275,8 +277,8 @@ func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, srcDir *string
 	ctx.pbOutputs[pbKey] = pbRef
 
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
-		directImports := protoDirectImportIncludes(ctx.fs, protoRelPath, "")
-		extras := pbDescriptorImporterExtras(ctx.fs, protoRelPath)
+		directImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, "")
+		extras := pbHEmitsIncludesExtras(protoRelPath, hasDescriptor)
 		pbHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
 		pbHParsed = append(pbHParsed, directImports...)
 		for _, include := range protobufRuntimeHeaders {
