@@ -725,6 +725,7 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 		AddIncl:           pyProtoAuxOwnAddIncl(d),
 		PeerAddInclGlobal: pyProtoAuxPeerAddIncl(instance, peerContribs, d),
 		SourceRoot:        ctx.sourceRoot,
+		FS:                ctx.fs,
 	}
 
 	closure := walkClosure(ctx, instance, aux, scanIn)

@@ -1,9 +1,7 @@
 package main
 
 import (
-	"os"
 	"path"
-	"path/filepath"
 	"strings"
 )
 
@@ -50,7 +48,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		srcIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, srcIn.IncludeInputs)
 
 		ref, outPath := EmitCC(srcInstance, srcRel, srcIn, ctx.host, ctx.emit)
-		inputPath := emittedSourceInputPath(srcInstance, srcRel, srcIn, ctx.sourceRoot)
+		inputPath := emittedSourceInputPath(srcInstance, srcRel, srcIn, ctx.fs)
 		ccInputs := append([]VFS{inputPath}, srcIn.IncludeInputs...)
 
 		return &sourceEmit{Ref: ref, OutPath: outPath, CcIns: ccInputs, PrimaryCount: 1}
@@ -69,7 +67,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		ref, outPath := EmitAS(srcInstance, srcRel, asIn, yasmRef, ctx.host, ctx.emit)
 
 		asInputRel := srcInstance.Path + "/" + srcRel
-		if srcDir != nil && *srcDir != srcInstance.Path && !sourceExistsLocally(ctx.sourceRoot, srcInstance.Path, srcRel) {
+		if srcDir != nil && *srcDir != srcInstance.Path && !ctx.fs.IsFile(srcInstance.Path+"/"+srcRel) {
 			asInputRel = *srcDir + "/" + srcRel
 		}
 		asInputRel = path.Clean(asInputRel)
@@ -108,8 +106,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		primaryCount := 1
 
 		companionRel := strings.TrimSuffix(srcRel, ".rl6") + ".h"
-		companionAbs := filepath.Join(ctx.sourceRoot, srcInstance.Path, companionRel)
-		if info, err := os.Stat(companionAbs); err == nil && !info.IsDir() {
+		if ctx.fs.IsFile(srcInstance.Path + "/" + companionRel) {
 			ccInputs = append(ccInputs, Source(srcInstance.Path+"/"+companionRel))
 			primaryCount = 2
 		}

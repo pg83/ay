@@ -16,7 +16,7 @@ var (
 
 // composeASPaths derives (outputPath, inputPath) for the clang AS path.
 func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (out, input VFS) {
-	useSrcDir := in.SrcDir != nil && *in.SrcDir != instance.Path && !sourceExistsLocally(in.SourceRoot, instance.Path, srcRel)
+	useSrcDir := in.SrcDir != nil && *in.SrcDir != instance.Path && !sourceExistsLocally(in.FS, instance.Path, srcRel)
 
 	if useSrcDir {
 		outputRel := composeSrcDirOutputRel(instance.Path, *in.SrcDir, srcRel)

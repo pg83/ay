@@ -183,7 +183,7 @@ type antlr4GrammarInfo struct {
 //
 // `pathFlags` seeds the path-based heuristic; macro overlays mutate it
 // in place on the returned moduleData.
-func collectModule(sourceRoot string, modulePath string, kind ModuleKind, stmts []Stmt, env Environment, pathFlags FlagSet) *moduleData {
+func collectModule(fs *FS, modulePath string, kind ModuleKind, stmts []Stmt, env Environment, pathFlags FlagSet) *moduleData {
 	d := &moduleData{
 		flags:                pathFlags,
 		pythonSQLite3:        true,
@@ -193,7 +193,7 @@ func collectModule(sourceRoot string, modulePath string, kind ModuleKind, stmts 
 	}
 
 	collectStmts(modulePath, kind, stmts, env, d)
-	filterInvalidAddIncl(sourceRoot, d)
+	filterInvalidAddIncl(fs, d)
 	if d.py3ProgramMultimodule && kind == KindLib {
 		// PY_MAIN belongs to the executable half of PY3_PROGRAM. The
 		// library half is a self-peer that contributes importable code, not
@@ -265,28 +265,25 @@ func ensureResourcePeer(modulePath string, d *moduleData) {
 	d.peerdirs = append(d.peerdirs, resourcePeer)
 }
 
-func filterInvalidAddIncl(sourceRoot string, d *moduleData) {
-	if sourceRoot == "" {
+func filterInvalidAddIncl(fs *FS, d *moduleData) {
+	if fs == nil || fs.SourceRoot() == "" {
 		return
 	}
 
-	d.addIncl = filterExistingSourceDirs(sourceRoot, d.addIncl)
-	d.addInclGlobal = filterExistingSourceDirs(sourceRoot, d.addInclGlobal)
-	d.cythonAddIncl = filterExistingSourceDirs(sourceRoot, d.cythonAddIncl)
+	d.addIncl = filterExistingSourceDirs(fs, d.addIncl)
+	d.addInclGlobal = filterExistingSourceDirs(fs, d.addInclGlobal)
+	d.cythonAddIncl = filterExistingSourceDirs(fs, d.cythonAddIncl)
 }
 
-func filterExistingSourceDirs(sourceRoot string, paths []VFS) []VFS {
+func filterExistingSourceDirs(fs *FS, paths []VFS) []VFS {
 	if len(paths) == 0 {
 		return paths
 	}
 
 	out := paths[:0]
 	for _, path := range paths {
-		if shouldCheckSourceDir(path) {
-			info, err := os.Stat(filepath.Join(sourceRoot, path.Rel))
-			if err != nil || !info.IsDir() {
-				continue
-			}
+		if shouldCheckSourceDir(path) && !fs.IsDir(path.Rel) {
+			continue
 		}
 
 		out = append(out, path)
@@ -1574,7 +1571,7 @@ func moduleInfoForInstance(ctx *genCtx, instance ModuleInstance) moduleTypeInfo 
 	mf := Throw2(ParseFile(yamakePath))
 
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.sourceRoot, instance.Path, instance.Kind, mf.Stmts, env, instance.Flags)
+	d := collectModule(ctx.fs, instance.Path, instance.Kind, mf.Stmts, env, instance.Flags)
 	if d.conflictMod != nil {
 		ThrowFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path, d.moduleStmt.Name, d.conflictMod.Name)
 	}
@@ -1600,7 +1597,7 @@ func moduleTypeForInstance(ctx *genCtx, instance ModuleInstance) string {
 }
 
 func peerLanguageFor(ctx *genCtx, parent ModuleInstance, parentModuleName, peerPath string) Language {
-	if !peerYaMakeExists(ctx.sourceRoot, peerPath) {
+	if !peerYaMakeExists(ctx.fs, peerPath) {
 		return LangCPP
 	}
 

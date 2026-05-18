@@ -174,6 +174,7 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		PeerAddInclGlobal: moduleInputs.PeerAddInclGlobal,
 		SrcDir:            moduleInputs.SrcDir,
 		SourceRoot:        ctx.sourceRoot,
+		FS:                ctx.fs,
 	}
 
 	var out []VFS

@@ -237,6 +237,7 @@ func TestGen_PeerdirCycle_Tolerated(t *testing.T) {
 	// walking stack.
 	ctx := &genCtx{
 		sourceRoot: root,
+		fs:         NewFS(root),
 		emit:       NewBufferedEmitter(),
 		memo:       make(map[ModuleInstance]*moduleEmitResult),
 		walking:    make(map[ModuleInstance]bool),
@@ -539,7 +540,7 @@ END()
 		t.Fatalf("path flags pre-set; test premise broken: %+v", pathFlags)
 	}
 
-	d := collectModule("", "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}), pathFlags)
+	d := collectModule(nil, "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}), pathFlags)
 
 	if !d.flags.NoLibc {
 		t.Errorf("flags.NoLibc = false, want true (macro overlay should have flipped it)")
@@ -588,7 +589,7 @@ SRCS(x.cpp)
 END()
 `)))
 
-	d := collectModule("", "bridge", instance.Kind, mf.Stmts, buildIfEnv(instance), instance.Flags)
+	d := collectModule(nil, "bridge", instance.Kind, mf.Stmts, buildIfEnv(instance), instance.Flags)
 
 	if d.muslEnabled {
 		t.Fatalf("muslEnabled = true, want false after SET(MUSL no)")
@@ -1210,6 +1211,7 @@ func TestGen_HostWalk_AsmlibYasmWired(t *testing.T) {
 	// shortcuts to the AS+yasm wiring.)
 	ctx := &genCtx{
 		sourceRoot: root,
+		fs:         NewFS(root),
 		emit:       NewBufferedEmitter(),
 		memo:       make(map[ModuleInstance]*moduleEmitResult),
 		walking:    make(map[ModuleInstance]bool),
@@ -1275,6 +1277,7 @@ func TestGen_HostWalk_NonAsmlibAS_NoYasmDep(t *testing.T) {
 
 	ctx := &genCtx{
 		sourceRoot: root,
+		fs:         NewFS(root),
 		emit:       NewBufferedEmitter(),
 		memo:       make(map[ModuleInstance]*moduleEmitResult),
 		walking:    make(map[ModuleInstance]bool),

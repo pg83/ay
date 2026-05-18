@@ -7,10 +7,6 @@ package main
 // reference-graph anchors that pin the empirical shape.
 
 import (
-	"errors"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -564,18 +560,6 @@ func effectiveNoPlatform(f FlagSet) bool {
 // peers not present in (possibly synthetic) source roots, rather than
 // throwing the parser's "no such file" error. Explicit PEERDIRs do
 // not go through this filter — a missing explicit peer is a defect.
-func peerYaMakeExists(sourceRoot, peerPath string) bool {
-	_, err := os.Stat(filepath.Join(sourceRoot, peerPath, "ya.make"))
-
-	if err == nil {
-		return true
-	}
-
-	if errors.Is(err, fs.ErrNotExist) {
-		return false
-	}
-
-	ThrowFmt("gen: failed to stat default-peer ya.make %q: %v", filepath.Join(sourceRoot, peerPath, "ya.make"), err)
-
-	return false // unreachable
+func peerYaMakeExists(fs *FS, peerPath string) bool {
+	return fs.IsFile(peerPath + "/ya.make")
 }
