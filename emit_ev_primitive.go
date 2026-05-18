@@ -2,8 +2,6 @@ package main
 
 import (
 	"bufio"
-	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -128,10 +126,9 @@ var evAbseilCleanupHeaders = []VFS{
 // through every .ev.pb.h to its CC consumers: cpp_proto_wrapper.py,
 // descriptor.proto, the .ev source, the companion .ev.pb.cc,
 // pbDescriptorImporterHeaders, evExtraProtobufHeaders, and
-// evAbseilCleanupHeaders.
-func evWitnessExtras(sourceRoot, evRelPath string, evPbCC VFS) []includeDirective {
-	_ = sourceRoot // every .ev imports descriptor.proto transitively; no source-scan needed.
-
+// evAbseilCleanupHeaders. Every .ev imports descriptor.proto
+// transitively, so no source-scan is needed.
+func evWitnessExtras(evRelPath string, evPbCC VFS) []includeDirective {
 	out := make([]includeDirective, 0,
 		3+len(pbDescriptorImporterHeaders)+len(evExtraProtobufHeaders)+len(evAbseilCleanupHeaders))
 	out = append(out, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
@@ -162,7 +159,7 @@ func EmitEV(
 	protocBinary VFS,
 	event2cppBinary VFS,
 	moduleTag *string,
-	sourceRoot string,
+	fs *FS,
 	emit Emitter,
 ) NodeRef {
 	moduleDir := instance.Path
@@ -210,7 +207,7 @@ func EmitEV(
 	}
 
 	// Resolve transitive imports from the .ev source file and append them.
-	inputs = append(inputs, resolveEvImports(sourceRoot, evRelPath)...)
+	inputs = append(inputs, resolveEvImports(fs, evRelPath)...)
 
 	targetProps := map[string]string{
 		"module_dir": moduleDir,
@@ -273,19 +270,37 @@ func EmitEV(
 }
 
 // resolveEvImports returns the deduplicated transitive import set for a
-// .ev/.proto file at `<sourceRoot>/<srcRel>`: every imported file found on
-// disk plus descriptor.proto when any chain transitively reaches it. Reads
-// each file for `import "..."` lines and follows them relative to
-// sourceRoot. events_extension.proto is the primary descriptor.proto
-// chain. Legitimate disk read scoped to EV-node-emission input listing,
-// not closure walks.
-func resolveEvImports(sourceRoot, srcRel string) []VFS {
+// .ev/.proto file at srcRel: every imported file found on disk plus
+// descriptor.proto when any chain transitively reaches it. Reads each
+// file for `import "..."` lines and follows them. events_extension.proto
+// is the primary descriptor.proto chain.
+func resolveEvImports(fs *FS, srcRel string) []VFS {
 	visited := map[string]struct{}{}
 	order := make([]VFS, 0, 8)
 	descriptorAdded := false
 
-	// Queue starting from the source's imports (not the source itself —
-	// it is already in inputs from the caller).
+	importsOf := func(rel string) []string {
+		data, err := fs.Read(rel)
+		if err != nil {
+			return nil
+		}
+		var imports []string
+		scanner := bufio.NewScanner(strings.NewReader(string(data)))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if !strings.HasPrefix(line, "import ") {
+				continue
+			}
+			start := strings.IndexByte(line, '"')
+			end := strings.LastIndexByte(line, '"')
+			if start < 0 || end <= start {
+				continue
+			}
+			imports = append(imports, line[start+1:end])
+		}
+		return imports
+	}
+
 	var walk func(rel string)
 	walk = func(rel string) {
 		if _, seen := visited[rel]; seen {
@@ -294,37 +309,13 @@ func resolveEvImports(sourceRoot, srcRel string) []VFS {
 
 		visited[rel] = struct{}{}
 
-		// Read the file for imports.
-		absPath := filepath.Join(sourceRoot, rel)
-		f, err := os.Open(absPath)
-
-		if err != nil {
+		raw := importsOf(rel)
+		if raw == nil {
 			return
 		}
 
 		var imports []string
-		scanner := bufio.NewScanner(f)
-
-		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
-
-			if !strings.HasPrefix(line, "import ") {
-				continue
-			}
-
-			// import "path/to/file.proto";
-			// Extract the quoted path.
-			start := strings.IndexByte(line, '"')
-			end := strings.LastIndexByte(line, '"')
-
-			if start < 0 || end <= start {
-				continue
-			}
-
-			importedRel := line[start+1 : end]
-			// google/protobuf/descriptor.proto is resolved via the
-			// protobuf include path, not directly under sourceRoot.
-			// Detect and emit the canonical path once.
+		for _, importedRel := range raw {
 			if importedRel == "google/protobuf/descriptor.proto" {
 				if !descriptorAdded {
 					order = append(order, pbDescriptorVFS)
@@ -335,47 +326,18 @@ func resolveEvImports(sourceRoot, srcRel string) []VFS {
 			imports = append(imports, importedRel)
 		}
 
-		f.Close()
-
 		// Emit this file's absolute $(S)/... entry.
 		order = append(order, Source(rel))
 
-		// Recurse into imports.
 		for _, imp := range imports {
 			walk(imp)
 		}
 	}
 
-	// Start from the imports of the primary source file.
-	absPath := filepath.Join(sourceRoot, srcRel)
-	f, err := os.Open(absPath)
-
-	if err != nil {
+	topImports := importsOf(srcRel)
+	if topImports == nil {
 		return nil
 	}
-
-	var topImports []string
-	scanner := bufio.NewScanner(f)
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-
-		if !strings.HasPrefix(line, "import ") {
-			continue
-		}
-
-		start := strings.IndexByte(line, '"')
-		end := strings.LastIndexByte(line, '"')
-
-		if start < 0 || end <= start {
-			continue
-		}
-
-		importedRel := line[start+1 : end]
-		topImports = append(topImports, importedRel)
-	}
-
-	f.Close()
 
 	for _, imp := range topImports {
 		walk(imp)

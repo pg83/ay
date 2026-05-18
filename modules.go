@@ -11,7 +11,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -1468,7 +1467,7 @@ func expandListVars(items []string, env Environment) []string {
 	return out
 }
 
-func applyAllPySrcs(sourceRoot, modulePath string, v *UnknownStmt, d *moduleData) {
+func applyAllPySrcs(fs *FS, modulePath string, v *UnknownStmt, d *moduleData) {
 	dirs := []string{"."}
 	noTestFiles := false
 
@@ -1497,32 +1496,27 @@ func applyAllPySrcs(sourceRoot, modulePath string, v *UnknownStmt, d *moduleData
 	}
 
 	var files []string
+	moduleRootRel := modulePath
 	for _, dir := range dirs {
-		moduleRoot := filepath.Join(sourceRoot, modulePath)
-		root := filepath.Join(moduleRoot, dir)
+		walkRoot := filepath.ToSlash(filepath.Join(moduleRootRel, dir))
 
-		err := filepath.WalkDir(root, func(path string, ent os.DirEntry, err error) error {
-			if err != nil {
-				return err
+		fs.Walk(walkRoot, func(rel string, isDir bool) {
+			if isDir {
+				return
 			}
-			if ent.IsDir() {
-				return nil
-			}
-			if filepath.Ext(path) != ".py" {
-				return nil
+			if filepath.Ext(rel) != ".py" {
+				return
 			}
 
-			base := filepath.Base(path)
+			base := filepath.Base(rel)
 			if noTestFiles && (strings.HasPrefix(base, "test_") || strings.HasSuffix(base, "_test.py")) {
-				return nil
+				return
 			}
 
-			rel := Throw2(filepath.Rel(moduleRoot, path))
-			files = append(files, filepath.ToSlash(rel))
-
-			return nil
+			// rel is module-root-rooted (e.g. "modulePath/subdir/x.py");
+			// the consumer wants module-relative ("subdir/x.py").
+			files = append(files, strings.TrimPrefix(rel, moduleRootRel+"/"))
 		})
-		Throw(err)
 	}
 
 	sort.Strings(files)

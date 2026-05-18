@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -18,7 +17,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 	}
 
 	swigRef, swigBin := swigTool(ctx, instance)
-	libInputs := swigLibInputs(ctx.sourceRoot)
+	libInputs := swigLibInputs(ctx.fs)
 
 	out := make([]*sourceEmit, 0, len(d.swigC))
 	for _, stmt := range d.swigC {
@@ -132,21 +131,13 @@ func swigModuleName(module string) string {
 	return module
 }
 
-func swigLibInputs(sourceRoot string) []VFS {
-	root := filepath.Join(sourceRoot, "contrib/tools/swig/Lib")
+func swigLibInputs(fs *FS) []VFS {
 	var rels []string
-	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
+	fs.Walk("contrib/tools/swig/Lib", func(rel string, isDir bool) {
+		if isDir {
+			return
 		}
-
-		rel, err := filepath.Rel(sourceRoot, path)
-		if err != nil {
-			return nil
-		}
-		rels = append(rels, filepath.ToSlash(rel))
-
-		return nil
+		rels = append(rels, rel)
 	})
 	sort.Strings(rels)
 
