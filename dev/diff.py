@@ -2,7 +2,7 @@
 """diff.py - inspect already-normalized yatool graphs.
 
 Typical use:
-    ./diff.py --our .out/sg3.our.norm.json --ref .out/sg3.ref.norm.json \
+    ./dev/diff.py --our .out/sg3.our.norm.json --ref .out/sg3.ref.norm.json \
         --root-output /devtools/ya/bin/ya-bin
 
 This script expects inputs produced by normalize.py. It does not normalize

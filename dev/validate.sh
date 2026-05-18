@@ -11,10 +11,15 @@
 # saved reference graphs. On mismatch, the script prints a ready-to-run
 # `diff.py` command for the failing case.
 #
-# Usage: ./validate.sh [out-dir]
-# Default output dir: ./.out/validate
+# Usage: ./dev/validate.sh [out-dir]
+# Default output dir: <repo-root>/.out/validate
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+
+cd "$REPO_ROOT"
 
 OUT_DIR="${1:-./.out/validate}"
 REF_DIR="/home/pg/monorepo/yatool_orig"
@@ -53,7 +58,7 @@ run_case() {
 
     echo "[$case_name] normalize + L4 compare"
 
-    if ./normalize.py \
+    if ./dev/normalize.py \
         --our "$make_json" \
         --ref "$ref_json" \
         --target "$target_path" \
@@ -65,7 +70,7 @@ run_case() {
 
     echo "[$case_name] FAIL"
     echo "  inspect with:"
-    echo "  ./diff.py --our $our_norm --ref $ref_norm --root-output $root_output --show-cmd-diff"
+    echo "  ./dev/diff.py --our $our_norm --ref $ref_norm --root-output $root_output --show-cmd-diff"
     return 1
 }
 

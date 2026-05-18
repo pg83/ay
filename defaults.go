@@ -224,14 +224,14 @@ func hoistRuntimeStackAddIncl(paths []VFS) []VFS {
 //
 // Returns empty for non-CPP languages.
 func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
-	return defaultPeerdirsForMusl(ctx, instance, cliMuslOn(ctx))
+	return defaultPeerdirsForWithState(ctx, instance, effectiveMuslOn(ctx, nil))
 }
 
 func defaultPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
-	return defaultPeerdirsForMusl(ctx, instance, moduleMuslOn(ctx, d))
+	return defaultPeerdirsForWithState(ctx, instance, effectiveMuslOn(ctx, d))
 }
 
-func defaultPeerdirsForMusl(ctx *genCtx, instance ModuleInstance, muslOn bool) []string {
+func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, muslOn bool) []string {
 	if instance.Language != LangCPP {
 		return nil
 	}
@@ -309,12 +309,12 @@ func defaultPeerdirsForMusl(ctx *genCtx, instance ModuleInstance, muslOn bool) [
 	return peers
 }
 
-func moduleMuslOn(ctx *genCtx, d *moduleData) bool {
+func effectiveMuslOn(ctx *genCtx, d *moduleData) bool {
 	if d != nil {
 		return d.muslEnabled
 	}
 
-	return cliMuslOn(ctx)
+	return cliMuslEnabled(ctx)
 }
 
 func useArcadiaCompilerRuntime(ctx *genCtx, instance ModuleInstance) bool {
@@ -335,11 +335,11 @@ func useArcadiaCompilerRuntime(ctx *genCtx, instance ModuleInstance) bool {
 	return true
 }
 
-// cliMuslOn reports whether the CLI bound `MUSL` to `"yes"`.
+// cliMuslEnabled reports whether the CLI bound `MUSL` to `"yes"`.
 // Centralised so auto-PEERDIR and `-D_musl_` peer-CFLAG injection
 // share the same predicate. nil `ctx` defaults to MUSL=yes for
 // direct-call tests.
-func cliMuslOn(ctx *genCtx) bool {
+func cliMuslEnabled(ctx *genCtx) bool {
 	if ctx == nil {
 		return true
 	}
@@ -354,7 +354,7 @@ func cliMuslOn(ctx *genCtx) bool {
 // `-D_musl_=1` from `muslExtraDefines` instead, gated off this
 // injection via NoStdInc + effective-NO_PLATFORM checks.
 func defaultPeerCFlags(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
-	if !moduleMuslOn(ctx, d) {
+	if !effectiveMuslOn(ctx, d) {
 		return nil
 	}
 
@@ -404,14 +404,14 @@ const muslConsumerSentinel = "-D_musl_"
 // post-user (true: musl + cpuid_check) halves. genModule calls twice
 // to interleave allocator explicit peers and d.peerdirs between halves.
 func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocator bool, allocatorName string, muslLiteOverride bool, includeMusl bool) []string {
-	return defaultProgramPeerdirsForMusl(ctx, instance, hadAllocator, allocatorName, muslLiteOverride, includeMusl, cliMuslOn(ctx))
+	return defaultProgramPeerdirsForWithState(ctx, instance, hadAllocator, allocatorName, muslLiteOverride, includeMusl, effectiveMuslOn(ctx, nil))
 }
 
 func defaultProgramPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData, includeMusl bool) []string {
-	return defaultProgramPeerdirsForMusl(ctx, instance, d.hadAllocator, d.allocatorName, d.muslLite, includeMusl, moduleMuslOn(ctx, d))
+	return defaultProgramPeerdirsForWithState(ctx, instance, d.hadAllocator, d.allocatorName, d.muslLite, includeMusl, effectiveMuslOn(ctx, d))
 }
 
-func defaultProgramPeerdirsForMusl(ctx *genCtx, instance ModuleInstance, hadAllocator bool, allocatorName string, muslLiteOverride bool, includeMusl bool, muslOn bool) []string {
+func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, hadAllocator bool, allocatorName string, muslLiteOverride bool, includeMusl bool, muslOn bool) []string {
 	if instance.Language != LangCPP {
 		return nil
 	}
