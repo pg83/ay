@@ -1,18 +1,14 @@
 package main
 
-// emitOwnLDPlugins emits one CP node per `LD_PLUGIN(name.py)` entry.
-// CP src = `$(S)/<modulePath>/<name>`, dst =
-// `$(B)/<modulePath>/<name>.pyplugin` (verified against REF for
-// `contrib/libs/musl/include`'s `musl.py`). Returns parallel ref + path
-// slices in declaration order.
+// emitOwnLDPlugins emits one CP node per `LD_PLUGIN(name.py)` entry,
+// copying `$(S)/<modulePath>/<name>` to `$(B)/<modulePath>/<name>.pyplugin`.
+// Returns parallel ref + path slices in declaration order.
 //
-// The CP NodeRef is cached on `genCtx.ldPluginCPCache` keyed by output
-// path: REF emits each CP node once (on the target platform) and shares
-// its UID across target and host LD deps; without dedup the host walk
-// re-fires `emitOwnLDPlugins` on the same plugin and produces a
-// duplicate on `default-linux-x86_64` (Platform is part of the
-// canonical hash). First-emit wins — the seed runs target-first, so
-// the cached entry carries the target platform per REF.
+// CP NodeRefs are deduped via `genCtx.ldPluginCPCache` keyed by output
+// path: without it the host walk re-fires on the same plugin and
+// produces a duplicate node (Platform participates in the canonical
+// hash). First-emit wins — the seed runs target-first, so the cached
+// entry carries the target platform.
 type ldPluginsResult struct {
 	Refs  []NodeRef
 	Paths []VFS

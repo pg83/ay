@@ -75,9 +75,9 @@ func EmitARNamedTagged(
 	return emitARNode(instance, archivePath, &tag, objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, hostP, emit)
 }
 
-// EmitARGlobalNamedTagged is EmitARGlobalNamed with an explicit module_tag
-// (e.g. "py3_global", "py3_native_global"). "global" stays the default;
-// PY23_LIBRARY uses "py3_global"; PY23_NATIVE_LIBRARY uses "py3_native_global".
+// EmitARGlobalNamedTagged emits a GLOBAL_SRCS archive with an explicit
+// module_tag (e.g. "py3_global", "py3_native_global"). PY23_LIBRARY uses
+// "py3_global"; PY23_NATIVE_LIBRARY uses "py3_native_global".
 func EmitARGlobalNamedTagged(
 	instance ModuleInstance,
 	archiveBaseName string,

@@ -25,71 +25,62 @@ type moduleData struct {
 	globalEventSeq        int
 	firstResourceEvent    int
 	firstGlobalSrcsEvent  int
-	pySrcs                []string // PR-M3-A: python sources from PY_SRCS(...); each entry is a .py filename
+	pySrcs                []string // .py filenames from PY_SRCS(...)
 	pySrcGroups           []pySrcGroup
 	pyGeneratedSrcs       map[string][]VFS
 	pyPyiResources        []resourceEntry
-	pyBuildNoPYC          bool // PR-M3-A: set by ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
-	pyBuildNoPY           bool // PR-M3-resource-objcopy-C: set by ENABLE(PYBUILD_NO_PY); suppresses raw .py resfs embedding from PY_SRCS (only the yapyc3 form is embedded)
-	pyTopLevel            bool // PR-M3-resource-objcopy-C: set by TOP_LEVEL prefix in PY_SRCS(...); the resfs key for each source omits the dotted module-path prefix
+	pyBuildNoPYC          bool // ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
+	pyBuildNoPY           bool // ENABLE(PYBUILD_NO_PY); suppresses raw .py resfs embedding (only the yapyc3 form is embedded)
+	pyTopLevel            bool // TOP_LEVEL prefix in PY_SRCS(...); resfs key omits the dotted module-path prefix
 	noExtendedPySearch    bool
-	enumSrcs              []*GenerateEnumSerializationStmt // PR-M3-D: GENERATE_ENUM_SERIALIZATION(*) declarations
+	enumSrcs              []*GenerateEnumSerializationStmt
 	peerdirs              []string
 	joinSrcs              []*JoinSrcsStmt
-	addIncl               []VFS    // collected non-GLOBAL ADDINCL paths
-	addInclGlobal         []VFS    // PR-31 D04: collected ADDINCL(GLOBAL ...) paths; peer-propagated to consumers
-	cythonAddIncl         []VFS    // ADDINCL(FOR cython ...) paths; consumed by CY command, not downstream CC.
-	cFlags                []string // collected non-GLOBAL CFLAGS values (apply to module's own C+C++ sources)
-	cFlagsGlobal          []string // PR-32 D04: collected CFLAGS(GLOBAL ...) values; peer-propagated to consumers' C+C++ sources
-	cxxFlags              []string // collected non-GLOBAL CXXFLAGS values (C++ only); PR-29-D02 threads into ModuleCCInputs.CXXFlags
-	cxxFlagsGlobal        []string // PR-32 D05: collected CXXFLAGS(GLOBAL ...) values; peer-propagated to consumers' C++ sources
-	cOnlyFlags            []string // collected non-GLOBAL CONLYFLAGS values (C only); PR-29-D02 threads into ModuleCCInputs.COnlyFlags
-	cOnlyFlagsGlobal      []string // PR-32 D06: collected CONLYFLAGS(GLOBAL ...) values; peer-propagated to consumers' C / .S sources
-	sFlags                []string // PR-M3-openssl-as-cflags: SET_APPEND(SFLAGS ...) values; appended to AS compiles only.
-	ldFlags               []string // collected LDFLAGS values
-	objAddLibsGlobal      []string // EXTRALIBS / PY_EXTRALIBS → OBJADDE_LIB_GLOBAL, peer-propagated to final link steps.
+	addIncl               []VFS    // non-GLOBAL ADDINCL paths
+	addInclGlobal         []VFS    // ADDINCL(GLOBAL ...); peer-propagated to consumers
+	cythonAddIncl         []VFS    // ADDINCL(FOR cython ...); consumed by CY command, not downstream CC
+	cFlags                []string // non-GLOBAL CFLAGS (own C+C++ sources)
+	cFlagsGlobal          []string // CFLAGS(GLOBAL ...); peer-propagated to consumers' C+C++ sources
+	cxxFlags              []string // non-GLOBAL CXXFLAGS (own C++ sources)
+	cxxFlagsGlobal        []string // CXXFLAGS(GLOBAL ...); peer-propagated to consumers' C++ sources
+	cOnlyFlags            []string // non-GLOBAL CONLYFLAGS (own C / .S sources)
+	cOnlyFlagsGlobal      []string // CONLYFLAGS(GLOBAL ...); peer-propagated to consumers' C / .S sources
+	sFlags                []string // SET_APPEND(SFLAGS ...); appended to AS compiles only
+	ldFlags               []string
+	objAddLibsGlobal      []string // EXTRALIBS / PY_EXTRALIBS → OBJADDE_LIB_GLOBAL, peer-propagated to final link steps
 	srcDir                *string  // last SRCDIR setting (nil = module dir)
 	flags                 FlagSet  // overlay of inferFlagsFromPath + macro bools
-	hadAllocator          bool     // PR-30 D03: set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
-	allocatorName         string   // PR-35g: name passed to ALLOCATOR(...); empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE).
-	muslLite              bool     // PR-30 D02: set by ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
-	muslEnabled           bool     // module-local MUSL value after SET()/DEFAULT()/CLI env evaluation.
-	splitDwarf            bool     // set by SPLIT_DWARF(); PROGRAM LD emits a separate <binary>.debug output.
-	noPythonIncl          bool     // set by NO_PYTHON_INCLUDES(); suppresses PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (build/conf/python.conf:741-743).
-	noImportTracing       bool     // set by NO_IMPORT_TRACING(); suppresses PY*_PROGRAM implicit import_tracing constructor peer.
-	usePython3            bool     // set by USE_PYTHON3() or PY3-family module types; normalised by applyPython3AddIncl. Triggers _PYTHON3_ADDINCL (python.conf:1018-1023): -DUSE_PYTHON3 + contrib/libs/python/Include.
-	pythonSQLite3         bool     // default-on; DISABLE(PYTHON_SQLITE3) flips off the implicit `_sqlite` peer for PY*_PROGRAM modules.
-	pyNamespace           *string  // set by PY_NAMESPACE(...); used by py-proto resource key layout.
-	protoNamespace        *string  // set by PROTO_NAMESPACE(...); drives py-proto --ns and output layout.
+	hadAllocator          bool     // set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
+	allocatorName         string   // ALLOCATOR(...) name; empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE)
+	muslLite              bool     // ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
+	muslEnabled           bool     // module-local MUSL value after SET()/DEFAULT()/CLI env evaluation
+	splitDwarf            bool     // SPLIT_DWARF(); PROGRAM LD emits a separate <binary>.debug output
+	noPythonIncl          bool     // NO_PYTHON_INCLUDES(); suppresses PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (build/conf/python.conf:741-743)
+	noImportTracing       bool     // NO_IMPORT_TRACING(); suppresses PY*_PROGRAM implicit import_tracing constructor peer
+	usePython3            bool     // USE_PYTHON3() or PY3-family module types; normalised by applyPython3AddIncl. Triggers _PYTHON3_ADDINCL (python.conf:1018-1023): -DUSE_PYTHON3 + contrib/libs/python/Include
+	pythonSQLite3         bool     // default-on; DISABLE(PYTHON_SQLITE3) flips off the implicit `_sqlite` peer for PY*_PROGRAM modules
+	pyNamespace           *string  // PY_NAMESPACE(...); used by py-proto resource key layout
+	protoNamespace        *string  // PROTO_NAMESPACE(...); drives py-proto --ns and output layout
 	protoNamespaceGlobal  bool
-	noMypy                bool // set by NO_MYPY(); suppresses mypy plugin and .pyi outputs for py-proto.
-	optimizePyProtos      bool // mirrors OPTIMIZE_PY_PROTOS_FLAG; default-on for PY{2,3}_PROTO variants.
+	noMypy                bool // NO_MYPY(); suppresses mypy plugin and .pyi outputs for py-proto
+	optimizePyProtos      bool // mirrors OPTIMIZE_PY_PROTOS_FLAG; default-on for PY{2,3}_PROTO variants
 	optimizePyProtosSet   bool
 	excludeTags           map[string]bool
 	dynamicLibraryFrom    []string
 	exportsScript         *string
-	ldPlugins             []string // filenames from LD_PLUGIN(name.py); each becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs. Only contrib/libs/musl/include uses this in M2.
-	arPlugin              *string  // name from AR_PLUGIN(name); resolves to `$(S)/<modulePath>/<name>.pyplugin` and is injected into AR cmd_args (`--plugin <path>`) and inputs. Mirror of AR_PLUGIN (ymake.core.conf:3396-3398) + _LD_ARCHIVER_KV_PLUGIN (ld.conf:366-368).
-	// per-source extra CFLAGS keyed by source filename, populated by
-	// `SRC(filename extra_cflags...)`. Threaded into
-	// ModuleCCInputs.PerSourceCFlags so the composer appends them right
-	// before the input path. Example: `SRC(wide_sse41.cpp -DSSE41_STUB)`
-	// at util/charset/ya.make:22-25.
+	ldPlugins             []string // LD_PLUGIN(name.py); each becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs
+	arPlugin              *string  // AR_PLUGIN(name); resolves to `$(S)/<modulePath>/<name>.pyplugin`, injected into AR cmd_args as `--plugin <path>` (ymake.core.conf:3396-3398, ld.conf:366-368)
+	// Per-source extra CFLAGS from `SRC(filename extra_cflags...)`,
+	// appended right before the input path in ModuleCCInputs.PerSourceCFlags.
 	perSrcCFlags map[string][]string
-	// DEFAULT(name value) declarations collected per module. Used by
-	// ConfigureFileStmt processing to expand $CFG_VARS. Empty string
-	// for DEFAULT(name "").
+	// DEFAULT(name value) bindings used by ConfigureFileStmt to expand
+	// $CFG_VARS. Empty string for DEFAULT(name "").
 	defaultVars map[string]string
-	// Ordered list of DEFAULT var names for deterministic $CFG_VARS
-	// expansion matching the reference cmd_args order.
-	defaultVarOrder []string
-	// CONFIGURE_FILE() / .cpp.in / .c.in sources → CF nodes.
-	configureFiles []*ConfigureFileStmt
-	// CREATE_BUILDINFO_FOR(output_header) → BI node.
+	// Ordered DEFAULT var names for deterministic $CFG_VARS expansion.
+	defaultVarOrder    []string
+	configureFiles     []*ConfigureFileStmt
 	createBuildInfoFor *string
-	// RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT → JV nodes.
-	antlr4Grammars []antlr4GrammarInfo
-	// RUN_PROGRAM → PR nodes.
+	antlr4Grammars     []antlr4GrammarInfo
 	runPrograms        []*RunProgramStmt
 	checkConfigHeaders []string
 	cythonCpp          []*CythonStmt
@@ -98,61 +89,48 @@ type moduleData struct {
 	grpc               bool
 	yaConfJSON         []string
 	allPySrcs          []*UnknownStmt
-	// ARCHIVE(NAME <out> [DONTCOMPRESS] files...) invocations in
-	// declaration order. Each produces an AR node invoking
-	// `$(B)/tools/archiver/archiver` to pack the listed files into NAME.
+	// ARCHIVE(NAME <out> [DONTCOMPRESS] files...) in declaration order;
+	// each becomes an AR node invoking `$(B)/tools/archiver/archiver`.
 	archives []archiveEntry
-	// Map of PR-emitted output filename → producing PR NodeRef.
-	// Populated by emitRunProgramsForAR as each RUN_PROGRAM is emitted;
-	// consumed by emitArchives to wire AR dep sets to the producer.
+	// PR-emitted output filename → producing PR NodeRef; consumed by
+	// emitArchives to wire AR dep sets to the producer.
 	prOutputProducer map[string]NodeRef
-	// Map of PR-emitted output filename → PR node inputs[]. RESOURCE
-	// consumers keep the generated file as the only objcopy cmd input, but
-	// upstream still threads the producer's source inputs into node inputs
-	// and enclosing global archive inputs.
+	// PR-emitted output filename → PR node inputs[]. RESOURCE consumers
+	// keep the generated file as the only objcopy cmd input, but upstream
+	// still threads the producer's source inputs into node inputs and
+	// enclosing global archive inputs.
 	prOutputInputs map[string][]VFS
-	// Set of source filenames declared via `SRC(...)` or
-	// `SRC_C_NO_LTO(...)`. These macros emit a FLAT output path (no
-	// `_/` infix), unlike `SRCS(subdir/foo.cpp)` which emits
-	// `<modulePath>/_/subdir/foo.cpp.o`. Consulted by emitOneSource to
-	// set ModuleCCInputs.FlatOutput.
+	// SRC(...) / SRC_C_NO_LTO(...) declarations emit a FLAT output path
+	// (no `_/` infix) — unlike SRCS(subdir/foo.cpp) which emits
+	// `<modulePath>/_/subdir/foo.cpp.o`. Consulted by emitOneSource.
 	flatSrcs map[string]struct{}
-	// RESOURCE() / RESOURCE_FILES() pair lists, expanded inline at
-	// collect time. resources is the canonical view for the objcopy
-	// packer in resource.go.
+	// RESOURCE() / RESOURCE_FILES() pairs, expanded inline at collect
+	// time; canonical view for the objcopy packer in resource.go.
 	resources []resourceEntry
-	// pyMain captures `PY_MAIN(<arg>)` or the `MAIN <src.py>` modifier
-	// of `PY_SRCS(...)`. Produces a single `PY_MAIN=<dotted-mod>:<func>`
-	// kv per pybuild.py:py_main (build/plugins/pybuild.py:759).
+	// PY_MAIN(<arg>) or the MAIN <src.py> modifier of PY_SRCS(...).
+	// Produces a single `PY_MAIN=<dotted-mod>:<func>` kv (build/plugins/pybuild.py:759).
 	pyMain *string
-	// NO_CHECK_IMPORTS(args...) verbatim arg list. Used by
-	// emitNoCheckImportsObjcopy to build the resfs kv with args joined
-	// by ' ' (pathid() + value, build/plugins/ytest.py:811).
+	// NO_CHECK_IMPORTS(args...) verbatim arg list; emitNoCheckImportsObjcopy
+	// joins by ' ' for the resfs kv (build/plugins/ytest.py:811).
 	noCheckImports []string
 	// Explicit empty NO_CHECK_IMPORTS() sets NO_CHECK_IMPORTS_FOR_VALUE=""
-	// upstream, which suppresses ADD_CHECK_PY_IMPORTS without emitting
-	// any resource kv.
+	// upstream, suppressing ADD_CHECK_PY_IMPORTS without emitting any kv.
 	noCheckImportsDisabled bool
-	// PY_REGISTER(args...) dotted module names. emitPyRegister emits
-	// gen_py3_reg.py(<arg>, <output>) → `<arg>.reg3.cpp` plus a CC
-	// compiling it; mirror of _PY3_REGISTER (ymake.core.conf:4086-4089).
+	// PY_REGISTER(args...) dotted module names; emitPyRegister emits
+	// `<arg>.reg3.cpp` via gen_py3_reg.py plus a CC compiling it
+	// (ymake.core.conf:4086-4089).
 	pyRegister []string
-	// Per-`SRC_C_<VARIANT>` entries in declaration order. Each
-	// produces one CC node alongside any plain listing of the same
-	// file. Entries share the FLAT bucket with SRC()/SRC_C_NO_LTO;
-	// reorderARMembers hoists them to the front of the archive.
+	// SRC_C_<VARIANT> entries in declaration order; share the FLAT bucket
+	// with SRC()/SRC_C_NO_LTO and are hoisted to the front of the archive.
 	simdSrcs []simdSrc
-	// Per-module RAGEL6_FLAGS override from `SET(RAGEL6_FLAGS <value>)`.
-	// Upstream ymake.core.conf:3284 expands `$RAGEL6_FLAGS ${SRCFLAGS}`
-	// before the rest of the ragel6 cmd line. Empty → platform default
-	// fires inside EmitR6.
+	// SET(RAGEL6_FLAGS ...) override; ymake.core.conf:3284 expands
+	// `$RAGEL6_FLAGS ${SRCFLAGS}` ahead of the rest of the ragel6 cmd line.
 	ragel6Flags []string
 	conflictMod *ModuleStmt
-	// Module-level INDUCED_DEPS(<exts> headers...) declarations. Each
-	// is a SOURCE_ROOT-rooted header path the tool (when this module is
-	// a PROGRAM invoked via RUN_PROGRAM) injects into its generated
-	// outputs. Seeds the PR output's EmitsIncludes; the scanner walks
-	// the headers' real #include graph to reach the full closure.
+	// INDUCED_DEPS(<exts> headers...) repo-relative header paths. When
+	// this module runs as a PROGRAM via RUN_PROGRAM, the headers seed the
+	// PR output's EmitsIncludes; the scanner walks their real #include
+	// graph to reach the full closure.
 	inducedDeps []string
 }
 
@@ -347,25 +325,17 @@ func flagsContain(flags []string, want string) bool {
 	return false
 }
 
-// applyPython3AddIncl mirrors _PYTHON3_ADDINCL's
-// USE_ARCADIA_PYTHON=="yes" branch (build/conf/python.conf:1018-1023):
-// `CFLAGS+=-DUSE_PYTHON3` and `ADDINCL+=GLOBAL contrib/libs/python/Include`.
-// Invoked by PY3-family module types and USE_PYTHON3()
-// (python.conf:738-739, 862, 1064, 1250).
+// applyPython3AddIncl mirrors _PYTHON3_ADDINCL's USE_ARCADIA_PYTHON=="yes"
+// branch (build/conf/python.conf:1018-1023): `CFLAGS+=-DUSE_PYTHON3` and
+// `ADDINCL+=GLOBAL contrib/libs/python/Include`. The Include path goes to
+// BOTH d.addInclGlobal (peer-propagated) AND d.addIncl (own).
 //
-// `-DUSE_PYTHON3` is injected via defaultPeerCFlags so it lands at the
-// AutoPeerCFlags cmd_args slot (after -D_musl_, before the second
-// noLibcUndebug block copy). The contrib/libs/python/Include path
-// flows to BOTH d.addInclGlobal (peer-propagated) AND d.addIncl (own).
-//
-// contrib/libs/python is skipped (its own ya.make emits both); the same
-// cycle-guard mirrors the PY*_LIBRARY auto-peerdir code at the
-// genModule call site.
+// contrib/libs/python skips this to break a cycle with its own ya.make.
 //
 // NO_PYTHON_INCLUDES() does NOT gate this — upstream gates only the
-// implicit `PEERDIR+=contrib/libs/python` (python.conf:741-743), not
-// _PYTHON3_ADDINCL itself. library/python/runtime_py3 declares
-// NO_PYTHON_INCLUDES() yet its CC nodes carry both flag and include.
+// implicit `PEERDIR+=contrib/libs/python` (python.conf:741-743). Witness:
+// library/python/runtime_py3 declares NO_PYTHON_INCLUDES() yet still
+// carries both flag and include on its CC nodes.
 func applyPython3AddIncl(modulePath string, d *moduleData) {
 	if d.moduleStmt == nil {
 		return
@@ -398,10 +368,8 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 }
 
 // applyBuildInfoAddIncl mirrors the implicit `ADDINCL(<build_info_dir>)`
-// upstream CREATE_BUILDINFO_FOR macros emit. PR-M3-final-surgical (fix 5):
-// the implicit ADDINCL is GLOBAL — the generated header must be visible to
-// PEER consumers too (witnessed by `main.cpp.o` / `print.cpp.o` carrying
-// `-I$(B)/library/cpp/build_info` via their peer chain).
+// upstream CREATE_BUILDINFO_FOR emits. The implicit ADDINCL is GLOBAL — the
+// generated header must be visible to PEER consumers too.
 func applyBuildInfoAddIncl(modulePath string, d *moduleData) {
 	if d.createBuildInfoFor == nil {
 		return
@@ -577,16 +545,13 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// module clone, so this does not leak across modules.
 			env.SetDefaultString(v.VarName, expandScalarVarRef(v.Value, env))
 		case *ConfigureFileStmt:
-			// PR-M3-E: explicit CONFIGURE_FILE(src dst) declaration.
 			d.configureFiles = append(d.configureFiles, v)
 			if strings.HasSuffix(v.Src, ".h.in") || strings.HasSuffix(v.Dst, ".h") {
 				addGeneratedHeaderInclude(modulePath, v.Dst, d)
 			}
 		case *CreateBuildInfoStmt:
-			// PR-M3-E: CREATE_BUILDINFO_FOR(header) → BI node.
 			d.createBuildInfoFor = &v.OutputHeader
 		case *RunAntlr4CppStmt:
-			// PR-M3-E: single-grammar ANTLR4 invocation → JV node.
 			d.antlr4Grammars = append(d.antlr4Grammars, antlr4GrammarInfo{
 				IsSplit:        false,
 				Grammar:        v.Grammar,
@@ -596,7 +561,6 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				OutputIncludes: append([]string(nil), v.OutputIncludes...),
 			})
 		case *RunAntlr4CppSplitStmt:
-			// PR-M3-E: lexer+parser split ANTLR4 invocation → JV node.
 			d.antlr4Grammars = append(d.antlr4Grammars, antlr4GrammarInfo{
 				IsSplit:        true,
 				Lexer:          v.Lexer,
@@ -606,7 +570,6 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				OutputIncludes: append([]string(nil), v.OutputIncludes...),
 			})
 		case *RunProgramStmt:
-			// PR-M3-E: RUN_PROGRAM → PR node.
 			d.runPrograms = append(d.runPrograms, v)
 		case *ResourceStmt:
 			if d.firstResourceEvent < 0 {
@@ -618,9 +581,8 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// RESOURCE before PEERDIR must place resource's GLOBAL
 			// ADDINCL before later explicit peers.
 			ensureResourcePeer(modulePath, d)
-			// PR-M3-resource-objcopy-A: RESOURCE pairs feed the objcopy
-			// packer as-is. Pairs whose path is "-" are kv-only entries;
-			// non-"-" pairs are (source path, raw key) pairs.
+			// RESOURCE pairs feed the objcopy packer as-is. Path "-" marks
+			// kv-only entries; otherwise (source path, raw key).
 			for _, pair := range v.Pairs {
 				d.resources = append(d.resources, resourceEntry{Path: pair.Path, Key: pair.Key})
 			}
@@ -809,14 +771,10 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		// ymake.core.conf:4142-4145.
 		applyArchiveStmt(v, d)
 	case "ENABLE":
-		// ENABLE(MUSL_LITE): yasm declares this inside IF(MUSL); without
-		// the flip defaultProgramPeerdirsFor pulls musl/full and creates
-		// a cross-PROGRAM cycle (yasm → musl/full → asmlib → yasm).
-		// ENABLE(PYBUILD_NO_PYC): suppresses yapyc3 node emission for
-		// modules that declare Python sources but do not want
-		// .pyc/.yapyc3 generated. ENABLE(PYBUILD_NO_PY) (no 'C') is
-		// separate: suppresses raw .py resfs embedding while still
-		// running yapyc3 compilation (contrib/tools/python3/Lib).
+		// MUSL_LITE flips defaultProgramPeerdirsFor to musl (not musl/full),
+		// breaking the yasm → musl/full → asmlib → yasm cycle. PYBUILD_NO_PYC
+		// suppresses yapyc3 node emission; PYBUILD_NO_PY (no 'C') suppresses
+		// raw .py resfs embedding but keeps yapyc3 running.
 		for _, a := range v.Args {
 			if a == "MUSL_LITE" {
 				d.muslLite = true
@@ -953,22 +911,16 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			}
 		}
 	case "USE_PYTHON3":
-		// USE_PYTHON3() implicit PEERDIRs per python.conf:1064-1071:
-		// contrib/libs/python + library/python/runtime_py3 (under
-		// USE_ARCADIA_PYTHON=="yes"). contrib/tools/python3 and
-		// contrib/tools/python3/Lib are NOT added here — they come
-		// from the PYTHON3_MODULE() macro (python.conf:644-647) gated
-		// by USE_ARCADIA_PYTHON && (MSVC || IS_CROSS_TOOLS), and plain
-		// PROGRAM / LIBRARY callers reach python3 transitively via
-		// contrib/libs/python's own peer list. Adding them here would
-		// reorder peer-AddInclGlobal across ~158 nodes.
+		// Implicit PEERDIRs per python.conf:1064-1071. contrib/tools/python3
+		// is intentionally absent: PROGRAM/LIBRARY callers reach it
+		// transitively via contrib/libs/python, and adding it here would
+		// reorder peer-AddInclGlobal across the closure.
 		d.peerdirs = append(d.peerdirs,
 			"contrib/libs/python",
 			"library/python/runtime_py3",
 		)
-		// USE_PYTHON3() also invokes _PYTHON3_ADDINCL (python.conf:1064);
-		// applyPython3AddIncl performs the -DUSE_PYTHON3 + Include
-		// injection in collectModule's post-pass.
+		// applyPython3AddIncl runs the -DUSE_PYTHON3 + Include injection
+		// in collectModule's post-pass.
 		d.usePython3 = true
 	case "PY_SRCS":
 		// PY_SRCS accepts TOP_LEVEL (ns="" instead of dotted modulePath)
@@ -1143,10 +1095,8 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 	case "ALL_PY_SRCS":
 		d.allPySrcs = append(d.allPySrcs, v)
 	case "PY_MAIN":
-		// PY_MAIN(<arg>) per pybuild.py:onpy_main
-		// (build/plugins/pybuild.py:762). Argument normalised: `/` → `.`
-		// and `:main` appended when there's no colon. The M3 closure
-		// contains only single-PY_MAIN modules.
+		// PY_MAIN(<arg>) per build/plugins/pybuild.py:762.
+		// Normalise: `/` → `.`, append `:main` when there's no colon.
 		if len(v.Args) != 1 {
 			ThrowFmt("gen: PY_MAIN expects exactly 1 argument, got %d", len(v.Args))
 		}
@@ -1216,7 +1166,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		}
 	default:
 		if _, ok := whitelistedMetadataMacros[v.Name]; !ok {
-			ThrowFmt("gen: PR-25 does not yet support macro %q (extend whitelistedMetadataMacros or add a typed Stmt)", v.Name)
+			ThrowFmt("gen: does not yet support macro %q (extend whitelistedMetadataMacros or add a typed Stmt)", v.Name)
 		}
 	}
 }
@@ -1340,10 +1290,9 @@ func applyArchiveStmt(v *UnknownStmt, d *moduleData) {
 	d.archives = append(d.archives, entry)
 }
 
-// applyAllocatorStmt resolves `ALLOCATOR(<name>)` to a PEERDIR
-// addition per `build/ymake.core.conf:961-1035`. The macro takes
-// exactly one argument; multi-arg or unknown allocator names throw
-// loudly per D27 discipline.
+// applyAllocatorStmt resolves `ALLOCATOR(<name>)` to a PEERDIR addition
+// per `build/ymake.core.conf:961-1035`. Multi-arg or unknown allocator
+// names throw.
 func applyAllocatorStmt(v *UnknownStmt, d *moduleData) {
 	if len(v.Args) != 1 {
 		ThrowFmt("gen: ALLOCATOR expects exactly 1 argument, got %d (line %d)", len(v.Args), v.Line)

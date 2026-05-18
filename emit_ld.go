@@ -2,26 +2,14 @@ package main
 
 // ld.go — emitter for LD (link executable) nodes.
 //
-// An LD node has ONE Node with FOUR Cmds:
-//   cmd[0]: vcs_info.py — generates `__vcs_version__.c` (5 args).
-//   cmd[1]: clang compile of `__vcs_version__.c` → `__vcs_version__.c.o`.
-//           Same shape as CC but with single `-I$(S)`.
-//   cmd[2]: link_exe.py — link invocation (73 args). Carries
-//           `cwd: $(B)` because emitted command-file paths are
-//           BUILD_ROOT-relative.
-//   cmd[3]: fs_tools.py link_or_copy_to_dir — drops the linked binary
-//           into its module dir's output slot (5 args).
+// One Node, four Cmds: vcs_info.py, clang compile of __vcs_version__.c,
+// link_exe.py (carries `cwd: $(B)` because command-file paths are
+// BUILD_ROOT-relative), fs_tools.py link_or_copy_to_dir.
 //
-// `TestEmitLD_ToolsArchiver_ByteExact` pins each cmd_args slice
-// entry-by-entry against the reference `tools/archiver/archiver` LD.
-//
-// inputs[]: BUILD_ROOT block (peer .a + pyplugin + .global.a + own
-// .cpp.o files) emitted as one alphabetically-sorted set, then the
-// 7-script bundle in REGISTRATION ORDER (NOT alphabetical: vcs_info.py,
-// svn_interface.c, link_exe.py, thinlto_cache.py,
-// process_command_files.py, process_whole_archive_option.py,
-// fs_tools.py), then union of every member CC's inputs in DFS order
-// (1052 entries for reference tools/archiver).
+// inputs[] order is load-bearing: alphabetically-sorted BUILD_ROOT block,
+// then the 7-script bundle in REGISTRATION ORDER (not alphabetical),
+// then union of member-CC inputs. __vcs_version__.c{,.o} are produced
+// in-node and not listed.
 
 import (
 	"sort"
@@ -29,27 +17,16 @@ import (
 
 // EmitLD emits the 4-cmd LD node for a PROGRAM module.
 //
-// Caller-supplied inputs:
-//   - `instance`: PROGRAM ModuleInstance; `instance.Path` names the
-//     module dir. Target binary at `$(B)/<path>/<binaryName>`.
-//   - `binaryName`: linker output basename — `PROGRAM(name)`'s parsed
-//     argument; when empty falls back to `lastPathComponent(instance.Path)`.
-//     Most PROGRAMs match the directory's trailing component; divergent
-//     case is `contrib/tools/ragel6/bin/ya.make` declaring `PROGRAM(ragel6)`
-//     (binary is `bin/ragel6`, not `bin/bin`).
-//   - `ccRefs` / `ccPaths`: module's own .cpp.o files, one per source.
-//     Order matters for cmd[2] argv: emitted between whole-archive
-//     block and `-o` flag in the order supplied.
-//   - `peerLDRefs` / `peerLibPaths`: peer LIBRARY archives in PEERDIR
-//     walk order (non-alphabetical). peerLDRefs wire DepRefs.
-//   - `pluginRefs` / `pluginPaths`: plugins for `--start-plugins ...
-//     --end-plugins` (e.g. musl pyplugin). Pass nil when none.
-//   - `globalRefs` / `globalPaths`: peer `.global.a` archives wrapped
-//     in `-Wl,--whole-archive ... -Wl,--no-whole-archive`. Pass nil
-//     when none.
+// `binaryName` is PROGRAM(name)'s parsed argument; when empty falls back
+// to lastPathComponent(instance.Path). Divergent case: ragel6 lives in
+// contrib/tools/ragel6/bin/ya.make but declares PROGRAM(ragel6).
 //
-// Returns the LD NodeRef. Output path is `$(B)/<instance.Path>/<binaryName>`;
-// callers can re-derive via `LDOutputPath(instance, binaryName)`.
+// `ccPaths` order is load-bearing for cmd[2] argv (between whole-archive
+// block and `-o`). `peerLDRefs`/`peerLibPaths` arrive in PEERDIR walk
+// order (non-alphabetical). Pass nil for plugin/global slices when empty.
+//
+// Output path: $(B)/ldBinaryDir(instance)/binaryName; LDOutputPath
+// re-derives it for callers.
 func EmitLD(
 	instance ModuleInstance,
 	binaryName string,
@@ -350,28 +327,12 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 	return cmdArgs
 }
 
-// composeLDCmdLinkExe composes cmd[2]: link_exe.py invocation running
-// clang++ over the assembled object/archive set. Layout:
+// composeLDCmdLinkExe composes cmd[2]: link_exe.py wrapping clang++ over
+// the assembled object/archive set.
 //
-//	prologue (python3 + link_exe.py)              2 args
-//	--start-plugins / paths / --end-plugins       2 + len(plugins) args  (omitted if empty)
-//	--clang-ver / --source-root / --build-root    6 args
-//	--arch=LINUX                                  1 arg
-//	--objcopy-exe / llvm-objcopy                  2 args
-//	clang++                                       1 arg
-//	-Wl,--whole-archive                           1 arg
-//	--ya-start-command-file / globals /           1 + len(globals) + 1 args
-//	--ya-end-command-file
-//	-Wl,--no-whole-archive                        1 arg
-//	__vcs_version__.c.o + ccPaths                 1 + len(ccPaths) args
-//	-o / outputPath                               2 args
-//	--target / -march / -B/usr/bin                3 args
-//	-Wl,--start-group / peerLibs / -Wl,--end-group  1 + len(peerLibs) + 1 args
-//	trailing static flags                         12 args
-//
-// `wantsStrip` controls insertion of `-Wl,--strip-all` between the
-// trailer's `-lm` and `-Wl,--gc-sections`. Set true for PY3_PROGRAM_BIN
-// (STRIP() in _BASE_PY3_PROGRAM, python.conf:884).
+// `wantsStrip` inserts `-Wl,--strip-all` between the trailer's `-lm`
+// and `-Wl,--gc-sections` (set true for PY3_PROGRAM_BIN via STRIP() in
+// _BASE_PY3_PROGRAM, python.conf:884).
 func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, objAddLibsGlobal []string, wantsStrip bool) []string {
 	// Capacity hint matches the reference graph's structure plus the
 	// caller-supplied slices.
@@ -528,19 +489,11 @@ func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) [
 	}
 }
 
-// composeLDInputs composes the `inputs` array for an LD node. The
-// BUILD_ROOT block interleaves peer-archives, plugins, globals, and
-// own .o files, alphabetically sorted as one set, followed by the
-// 7-script bundle in REGISTRATION ORDER (vcs_info.py, svn_interface.c,
-// link_exe.py, thinlto_cache.py, process_command_files.py,
-// process_whole_archive_option.py, fs_tools.py). Caller appends
-// member-CC inputs afterwards.
-//
-// `__vcs_version__.c.o` / `__vcs_version__.c` are NOT in inputs:
-// produced by cmd[0]/cmd[1] inside the same node (implicit deps).
-//
-// Reference tools/archiver: 35 BUILD_ROOT entries (32 peer .a + 1
-// plugin + 1 global + 1 own main.cpp.o).
+// composeLDInputs composes the `inputs` array for an LD node:
+// alphabetically-sorted BUILD_ROOT block (peer archives, plugins,
+// globals, own .o, objcopy .o) followed by ldScriptInputs in registration
+// order. Caller appends member-CC inputs afterwards. __vcs_version__.c{,.o}
+// are produced by cmd[0]/cmd[1] in-node and excluded.
 func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS) []VFS {
 	// Lift every build-root participant into one VFS-typed block before
 	// alphabetising.

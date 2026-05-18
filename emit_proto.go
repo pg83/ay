@@ -8,18 +8,11 @@ import (
 	"strings"
 )
 
-// protoDirectImportIncludes parses direct `import "..."` statements
-// from a .proto/.ev source and converts them to protoc's $(B) outputs:
-//
-//	import "x/y/z.proto" → "$(B)/x/y/z.pb.h"
-//	import "x/y/z.ev"    → "$(B)/x/y/z.ev.pb.h"
-//
-// Direct imports only (no recursion). Returns nil on read failure;
-// results sorted. Upstream pattern:
-// proto_processor.cpp:43-56::TProtoIncludeProcessor::PrepareIncludes.
-//
-// Legitimate disk read: extracts structured `import` directives at
-// registration time to populate EmitsIncludes. NOT for closure walks.
+// protoDirectImportIncludes converts direct `import "..."` statements
+// in a .proto/.ev source to protoc's $(B) outputs (.pb.h / .ev.pb.h).
+// Direct imports only — no recursion; results sorted; nil on read failure.
+// Upstream: proto_processor.cpp:43-56::TProtoIncludeProcessor::PrepareIncludes.
+// Disk read is intentional: feeds EmitsIncludes at registration time, not closure walks.
 func protoDirectImportIncludes(sourceRoot, srcRel, outputRoot string) []includeDirective {
 	absPath := filepath.Join(sourceRoot, srcRel)
 	f, err := os.Open(absPath)

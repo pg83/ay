@@ -2,26 +2,15 @@ package main
 
 // cc.go — emitter for CC compilation nodes.
 //
-// `EmitCC` takes a `ModuleCCInputs` struct alongside `ModuleInstance`
-// and `srcRel`. The struct carries per-module knobs that vary across
-// modules in the same closure but stay constant for a single
-// (instance, source) pair (ADDINCL, own CXXFLAGS/CONLYFLAGS, the
-// IsGenerated bit, source-generator NodeRef, etc.). Composer dispatch
-// is flag-driven (`instance.Flags.NoStdInc`) — musl is a no-stdinc libc flavour
-// selected by a CLI -D flag, not a special-cased module class.
+// Composer dispatch is flag-driven (`instance.Flags.NoStdInc`) — musl
+// is a no-stdinc libc flavour selected by a CLI -D flag, not a
+// special-cased module class.
 //
 // Output path convention:
 //   - Flat source: `$(B)/<path>/<srcRel><.o|.pic.o>`
 //   - Nested source (contains "/"): `$(B)/<path>/_/<srcRel><.o|.pic.o>`
 //
 // Suffix is `.o` for target, `.pic.o` for host (Flags.PIC=true).
-//
-// Four cmd_args composition flavours (all byte-exact pinned):
-//   - target-default: 101 args (`build/cow/on/lib.c.o`).
-//   - host-PIC: 105 args (`build/cow/on/lib.c.pic.o`).
-//   - musl target: 111 args (`muslCcIncludes` + `muslExtraDefines`).
-//   - musl host: 115 args
-//     (`contrib/libs/musl/_/src/string/strlen.c.pic.o`).
 
 import (
 	"os"
@@ -29,18 +18,9 @@ import (
 	"strings"
 )
 
-// ModuleCCInputs carries per-module compile knobs that vary between
-// modules in the same closure but stay constant per (instance,
-// source). Threaded through EmitCC by the walker. The zero value is
-// the "no per-module flags" behaviour. Fields:
-//   - AddIncl: own ADDINCL paths.
-//   - CXXFlags / COnlyFlags: own CXXFLAGS (C++ only) / CONLYFLAGS (C/.S only).
-//   - IsGenerated: source lives under $(B)/... (output of an upstream
-//     JS or R6 generator).
-//   - Generator: NodeRef of the upstream JS/R6 generator node; wired
-//     into DepRefs so the CC carries its source-generator dep.
-//   - SrcDir: module's SRCDIR setting; drives `__/<rel>` output infix
-//     and SRCDIR-based input path for sibling/non-local sources.
+// ModuleCCInputs carries per-module compile knobs threaded through
+// EmitCC by the walker. The zero value is the "no per-module flags"
+// behaviour.
 type ModuleCCInputs struct {
 	AddIncl []VFS
 	// PeerAddInclGlobal is the union of every PEERDIR's transitive
@@ -117,10 +97,7 @@ type ModuleCCInputs struct {
 	// ...)`. Slotted by composeASCmdArgs immediately before the
 	// trailing `-c -o <out> <in>` block, mirroring upstream
 	// `$CFLAGS $SFLAGS $SRCFLAGS -c -o ...` at
-	// `build/ymake.core.conf:3217`. Only openssl-internal modules
-	// carry a non-empty SFlags set in the M3 closure
-	// (`contrib/libs/openssl/crypto/ya.make.inc:179-186`'s AVX512
-	// bundle for x86_64).
+	// `build/ymake.core.conf:3217`.
 	SFlags []string
 	// PerSourceCFlags is the per-source extra CFLAGS attached via the
 	// `SRC(filename extra_cflags...)` macro. Slotted BETWEEN
@@ -134,8 +111,8 @@ type ModuleCCInputs struct {
 	// `util/system/compiler.cpp.o`.
 	FlatOutput bool
 	// DefaultVars is the per-module DEFAULT(name value) map collected
-	// from the ya.make. Used by EmitCF to expand $CFG_VARS (PR-M3-E).
-	// Keys are variable names; values are the DEFAULT-declared values.
+	// from the ya.make. Used by EmitCF to expand $CFG_VARS. Keys are
+	// variable names; values are the DEFAULT-declared values.
 	DefaultVars     map[string]string
 	DefaultVarOrder []string
 	// Py3Suffix selects ".py3.o" as output suffix. Set for
@@ -161,8 +138,7 @@ type ModuleCCInputs struct {
 	// override threaded into EmitR6. When empty the platform default
 	// fires (`-CG2` on x86_64 host / `-CT0` on aarch64 target — mirror
 	// of `build/ymake_conf.py:2271-2277`'s
-	// `set_default_flags(optimized)`). M3 witness:
-	// `devtools/ymake/lang/makelists/ya.make:6` sets `-lF1`.
+	// `set_default_flags(optimized)`).
 	Ragel6Flags []string
 	// BisonGenExt is ".c" for BISON_GEN_C and ".cpp" by default.
 	BisonGenExt string
@@ -172,10 +148,7 @@ type ModuleCCInputs struct {
 // `instance.Path`, e.g. "lib.c" or "src/algorithm.cpp") into an object
 // file. Returns the NodeRef (so callers — typically AR — can wire it
 // as a dependency) plus the output path. `in` carries per-module
-// knobs; pass `ModuleCCInputs{}` for flag-less behaviour. Composed
-// cmd_args length is 101 / 105 / 111 / 115 by flavour, modulo
-// per-module ADDINCL / own-flags / -std=c++20 / NoCompilerWarnings
-// adjustments.
+// knobs; pass `ModuleCCInputs{}` for flag-less behaviour.
 func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS) {
 
 	suffix := ".o"
@@ -190,9 +163,9 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 		}
 	}
 
-	// PR-M3-simd-permutations: prefix the suffix with `.<variant>` so the
-	// output path becomes `<srcRel>.<variant><suffix>`. The reference
-	// emits e.g. `<src>.avx.pic.o`, `<src>.sse41.pic.o`, etc.
+	// SIMD permutation: prefix the suffix with `.<variant>` so the
+	// output path becomes `<srcRel>.<variant><suffix>`
+	// (e.g. `<src>.avx.pic.o`, `<src>.sse41.pic.o`).
 	if in.Variant != nil {
 		suffix = "." + *in.Variant + suffix
 	}
@@ -226,16 +199,10 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 
 	// ADDINCL slot order: own ADDINCL BEFORE ccIncludesSuffix
 	// (linux-headers); peer-propagated GLOBAL ADDINCL AFTER it.
-	// Empirical (util/charset/all_charset.cpp.o cmd_args[7..16]):
-	// prefix → linux-headers suffix → libcxx-include + libcxxrt-include
-	// + musl-arch (peer-GLOBAL). For musl flavours BOTH slots are
-	// dropped — `-nostdinc` + muslCcIncludes defines the entire include
-	// search path; peer-GLOBAL `-I` would violate musl-self isolation.
 
 	// One composer for every CC: host, target, no-stdinc all funnel
 	// through composeTargetCC with platform-specific differences
-	// expressed via Platform / ccComposeArgs fields, not via separate
-	// compose functions.
+	// expressed via Platform / ccComposeArgs fields.
 	var autoPeerCFlags, peerExtras, ownGlobalBucket, ownCFlags []string
 
 	if noStdInc {
@@ -336,12 +303,8 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 //     srcRel contains "/"); input `$(S)/<instance.Path>/<srcRel>` (or
 //     `$(B)/...` when IsGenerated).
 //  2. SRCDIR set, source resolves locally: SRCDIR ignored (same as 1).
-//     Empirical: musl_extra's `all.c`, tcmalloc/no_percpu_cache's
-//     `aligned_alloc.c`.
 //  3. SRCDIR set, non-local: input `$(S)/<srcdir>/<srcRel>`; output
 //     `$(B)/<instance.Path>/__/<rel>.o` with `..` rendered as `__`.
-//     Empirical: libcxxabi-parts's `src/abort_message.cpp`,
-//     tcmalloc/no_percpu_cache's `tcmalloc/want_hpaa.cc`.
 //
 // IsGenerated skips case (3) — generators emit to
 // `$(B)/<srcInstance.Path>/<rel>` where srcInstance is already
@@ -362,7 +325,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, s
 		return Build(outRel), Build(instance.Path + "/" + srcRel)
 	}
 
-	// PR-30 D06 SRCDIR routing.
+	// SRCDIR routing.
 	useSrcDir := in.SrcDir != nil && *in.SrcDir != instance.Path && !sourceExistsLocally(in.SourceRoot, instance.Path, srcRel)
 
 	if useSrcDir {
@@ -374,10 +337,8 @@ func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, s
 
 	switch {
 	case in.FlatOutput:
-		// PR-35o: SRC / SRC_C_NO_LTO emit a flat output path even when
-		// `srcRel` contains a `/`. Empirical reference:
-		// `SRC_C_NO_LTO(system/compiler.cpp)` →
-		// `util/system/compiler.cpp.o` (no `_/` infix).
+		// SRC / SRC_C_NO_LTO emit a flat output path even when
+		// `srcRel` contains a `/` (no `_/` infix).
 		outRel = instance.Path + "/" + srcRel + suffix
 	case strings.Contains(srcRel, "/"):
 		outRel = instance.Path + "/_/" + srcRel + suffix
@@ -424,14 +385,12 @@ func composeSrcDirOutputRel(instancePath, srcDir, srcRel string) string {
 	}
 
 	// Replace each `..` segment with `__` to match ymake's path
-	// rendering (the same convention the reference graph uses for
-	// SRCDIR-redirected outputs that go outside the module dir).
-	// When there are NO `..` segments, the target is under instancePath.
-	// ymake still uses a `_/` prefix for SRCDIR-based outputs that land
-	// under the module directory, mirroring the non-SRCDIR `_/` infix
-	// for sources with slashes (line 420 of composeCCPaths). Without the
-	// `_/`, openssl's `SRCDIR(crypto)` + `../asm/aarch64/...` sources
-	// would emit to `openssl/asm/...` instead of `openssl/_/asm/...`.
+	// rendering for SRCDIR-redirected outputs that go outside the
+	// module dir. When there are NO `..` segments, the target is
+	// under instancePath; ymake still uses a `_/` prefix
+	// (mirroring the non-SRCDIR `_/` infix). Without it, openssl's
+	// `SRCDIR(crypto)` + `../asm/aarch64/...` would emit to
+	// `openssl/asm/...` instead of `openssl/_/asm/...`.
 	parts := strings.Split(rel, string(filepath.Separator))
 
 	hasParent := false
@@ -464,7 +423,7 @@ func isCxxSource(srcRel string) bool {
 }
 
 // pickCompiler dispatches between clang and clang++ per source
-// language. PR-29-D05.
+// language.
 func pickCompiler(tools Toolchain, isCxx bool) string {
 	if isCxx {
 		return tools.CXX
@@ -518,17 +477,11 @@ func appendCxxStdAndOwn(cmdArgs []string, isCxx bool, noCompilerWarnings bool, i
 	return cmdArgs
 }
 
-// composePeerExtras assembles the peer-propagated GLOBAL CXXFLAGS /
+// composePeerExtras returns the peer-propagated GLOBAL CXXFLAGS /
 // CONLYFLAGS contribution per source-language axis. The CFlags axis
 // itself lives in the ownCFlags slot (see
-// composeOwnAndPeerCFlagsAtOwnSlot); peerExtras carries CXXFLAGS /
-// CONLYFLAGS only.
-//
-//   - PeerCXXFlagsGlobal applies to C++ sources only.
-//   - PeerCOnlyFlagsGlobal applies to C / .S sources only.
-//
-// AutoPeerCFlags (e.g. -D_musl_) is NOT included here — it slots
-// between catboost and the 2nd noLibcUndebugBlock; see the dedicated
+// composeOwnAndPeerCFlagsAtOwnSlot). AutoPeerCFlags (e.g. -D_musl_)
+// is NOT included here — it slots separately via the
 // `autoPeerCFlags` composer argument.
 func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
 	if isCxx {
@@ -552,17 +505,8 @@ func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
 //
 // Order: [own non-GLOBAL, peer-GLOBAL, own GLOBAL]. No dedup — the
 // reference preserves duplicates (e.g. openssl's `-DOPENSSL_BUILD=1`
-// from top-level CFLAGS and crypto/ya.make.inc). Empirical anchors:
-// lzma tuklib_cpucores.c.o idx 58-60, python mysnprintf.c.pic.o idx
-// 73-78, devtools/ymake/bin/main.cpp.o idx 79-90.
-//
-// Musl flavours skip this helper — they fold CFLAGS into
-// muslExtraDefines and zero out peer-propagation upstream in EmitCC.
+// from top-level CFLAGS and crypto/ya.make.inc).
 func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []string {
-	// Rule: [own non-GLOBAL, peer-GLOBAL, own GLOBAL]. Verified
-	// against asio.cpp.o / lang/*.cpp.o idx ~53/71 (peer-GLOBAL ahead
-	// of own GLOBAL) and python mysnprintf.c.pic.o idx 73-78
-	// (in.CFlags first, then peer-GLOBAL).
 	out := make([]string, 0, len(in.CFlags)+len(p.CFlags)+len(in.PeerCFlagsGlobal)+len(in.OwnCFlagsGlobal))
 	out = append(out, in.CFlags...)
 	out = append(out, p.CFlags...)
@@ -589,14 +533,9 @@ func platformCompilerFlags(p *Platform, isCxx bool) []string {
 // baseUnitCxxNostdinc is `_BASE_UNIT.CXXFLAGS += -nostdinc++` from
 // `build/ymake.core.conf:807`. Applies to every _BASE_UNIT-derived
 // module in the default closure (USE_STL_SYSTEM != "yes" && MSVC !=
-// "yes"). Empirically the injection lands ONLY at the post-catboost
-// bucket slot, NEVER deduped against own-extras: libcxxrt emits
-// `-nostdinc++` both at the ownExtras slot (via its own
-// `CXXFLAGS(-nostdinc++)`) AND at the post-catboost bucket slot.
-//
-// Musl skips the catboost-redux, so the injection is naturally absent
-// for musl. NO_RUNTIME / NO_PLATFORM / NO_UTIL do NOT gate the
-// _BASE_UNIT body — libunwind has NO_RUNTIME and still receives this.
+// "yes"). The injection lands ONLY at the post-catboost bucket slot,
+// NEVER deduped against own-extras: a module with its own
+// `CXXFLAGS(-nostdinc++)` emits the flag at both slots.
 const baseUnitCxxNostdinc = "-nostdinc++"
 
 // composeOwnAndPeerGlobalBucket assembles the (own GLOBAL ∪ peer
@@ -604,17 +543,11 @@ const baseUnitCxxNostdinc = "-nostdinc++"
 // sources emit this bucket flanking `-DCATBOOST_OPENSOURCE=yes` (the
 // catboost-redux); the post-catboost half is augmented with
 // `baseUnitCxxNostdinc` via composePostCatboostBucket. C sources emit
-// no redux.
-//
-// The CFlags axis lives in the ownCFlags slot, NOT in this bucket
-// (composeOwnAndPeerCFlagsAtOwnSlot). antlr4's `-DANTLR4CPP_STATIC`
-// (a CFLAGS GLOBAL) appears at idx 52-54, never in the bucket.
+// no redux. The CFlags axis lives in the ownCFlags slot, NOT here
+// (composeOwnAndPeerCFlagsAtOwnSlot).
 //
 // Dedup is first-occurrence-wins: an own-GLOBAL flag also present in
-// peer-GLOBAL appears once, in the own slot. Empirical anchors:
-// libcxx algorithm.cpp.o cmd_args[105]+[107], util/charset/
-// all_charset.cpp.o [112]+[114], abseil casts.cc.o [99]+[101],
-// libcxxrt auxhelper.cc.o [101]+post[103].
+// peer-GLOBAL appears once, in the own slot.
 func composeOwnAndPeerGlobalBucket(in ModuleCCInputs, isCxx bool) []string {
 	out := make([]string, 0,
 		len(in.OwnCXXFlagsGlobal)+len(in.PeerCXXFlagsGlobal)+
@@ -667,26 +600,21 @@ func composePostCatboostBucket(preBucket []string) []string {
 }
 
 // composeTargetCC composes the cmd_args bundle for a TARGET no-libc
-// CC. Pinned byte-exact (101 args, no per-module extras) against
-// build/cow/on/lib.c.o in /home/pg/monorepo/yatool_orig/sg.json.
+// CC. Pinned byte-exact against the reference graph.
 //
 // Slot layout (in addition to the static blocks):
 //   - `ownCFlags`: own non-GLOBAL CFLAGS, between commonDefines and
-//     the 1st noLibcUndebugBlock. Empirical: libcxx algorithm.cpp.o
-//     cmd_args[51] = `-DLIBCXXRT`.
+//     the 1st noLibcUndebugBlock.
 //   - `autoPeerCFlags`: between catboost and 2nd noLibcUndebugBlock.
-//     Empirical: util/charset/all_charset.cpp.o cmd_args[78].
 //   - C++ only: `ownGlobalBucket` twice flanking a second
 //     `-DCATBOOST_OPENSOURCE=yes`, AFTER own CXXFLAGS / CONLYFLAGS.
-//     Empirical: libcxx algorithm.cpp.o cmd_args[101..103].
-//   - C only: `peerExtras` once, no catboost-redux. Empirical:
-//     tcmalloc aligned_alloc.c.o.
+//   - C only: `peerExtras` once, no catboost-redux.
 //   - cxxStandardWarnings bundle injected by appendCxxStdAndOwn for
 //     C++ without NoCompilerWarnings.
 //
-// ccComposeArgs packs the composer's parameter bundle (was twelve
-// positional parameters; every entry is []string or string so type
-// mismatch wouldn't surface from the type system).
+// ccComposeArgs is the parameter bundle — every entry is []string or
+// string, so type mismatch wouldn't surface as a compile error if
+// passed positionally.
 type ccComposeArgs struct {
 	Platform           *Platform
 	OutputPath         string
@@ -774,23 +702,19 @@ func composeTargetCC(a ccComposeArgs) []string {
 		cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
 		cmdArgs = append(cmdArgs, composePostCatboostBucket(a.OwnGlobalBucket)...)
 	} else {
-		// C source: empirical reference shows no catboost-redux for
-		// C compiles (build/cow/on lib.c.o, tcmalloc aligned_alloc.c.o).
-		// peerExtras is sufficient (own GLOBAL CFLAGS / CONLYFLAGS for
-		// C are unused in the M2 closure; if a future closure
-		// surfaces such a case, revisit).
+		// C source: no catboost-redux. peerExtras is sufficient;
+		// own GLOBAL CFLAGS / CONLYFLAGS for C are unused in the
+		// current closure.
 		cmdArgs = append(cmdArgs, a.PeerExtras...)
 	}
 
 	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
 	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)
-	// PR-35o: per-source extra CFLAGS (from `SRC(filename
-	// extra_cflags...)`) slot BETWEEN macroPrefixMapFlags and the
-	// input path. Empirical reference: util/charset/wide_sse41.cpp.o
-	// cmd_args show `-DSSE41_STUB` immediately before the source path.
+	// Per-source extra CFLAGS (from `SRC(filename extra_cflags...)`)
+	// slot BETWEEN macroPrefixMapFlags and the input path.
 	cmdArgs = append(cmdArgs, a.PerSrcCFlags...)
-	// PR-37: C-source CONLYFLAGS trail after macroPrefixMapFlags (and
-	// after perSrcCFlags). Empirical: base64 plain32/neon64 CC nodes.
+	// C-source CONLYFLAGS trail after macroPrefixMapFlags and after
+	// perSrcCFlags.
 	cmdArgs = append(cmdArgs, cOnlyExtras...)
 	cmdArgs = append(cmdArgs, a.InputPath)
 

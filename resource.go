@@ -369,21 +369,13 @@ type pySrcChunk struct {
 }
 
 // chunkPySrcEntries partitions a declaration-ordered entry list into
-// chunks byte-exact with the upstream packer.
+// chunks byte-exact with the upstream packer (`objcopy.h:17-29`).
 //
-// Upstream semantics (`objcopy.h:17-29`): per RESOURCE() entry the
-// `res.py:onresource_files` macro appends `[-, src_kv, path, key]` so
-// `HandleResource` is called TWICE per entry:
-//
-//	(1) kv add:       EstimatedCmdLen_ += ROOT_CMD_LEN + len(src_kv_hash)
-//	(2) path+key add: EstimatedCmdLen_ += ROOT_CMD_LEN + len(path_arg) + len(b64(key))
-//
-// After each add, `Finalize(force=false)` flushes when
-// EstimatedCmdLen_ >= MAX_CMD_LEN — a single entry can straddle a
-// chunk boundary (kv in N, path+key in N+1).
-//
-// Accumulator uses pre-expansion forms: kv keeps `${rootrel;...}`
-// (e.kvHash); path is the bare source-relative string (e.pathHash).
+// Per entry `HandleResource` is called twice — kv add then path+key
+// add — each bumping EstimatedCmdLen_ by ROOT_CMD_LEN+len(payload);
+// a flush at MAX_CMD_LEN can straddle a single entry across chunks
+// (kv in N, path+key in N+1). Accumulator uses pre-expansion forms
+// (kvHash retains `${rootrel;...}`, pathHash is source-relative).
 func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 	if len(entries) == 0 {
 		return nil

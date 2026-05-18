@@ -8,38 +8,17 @@ import (
 )
 
 // gen.go — top-level "parse a ya.make and emit its build subgraph"
-// driver. Walks PEERDIR DFS, post-order, declaration-order (R14 link
-// order), keyed on `ModuleInstance`.
-//
-// Macros understood by the walker:
-//
-//   - `IF (cond) ... [ELSE ...] ENDIF` — evaluated via macros.go's
-//     EvalCond against a per-instance env (target/host platform + ARCH /
-//     MUSL flags). Unreached branches contribute nothing.
-//   - `NO_LIBC` / `NO_UTIL` / `NO_RUNTIME` / `NO_PLATFORM` /
-//     `NO_COMPILER_WARNINGS` — override `inferFlagsFromPath` heuristic.
-//   - `ADDINCL([GLOBAL] ...)`, `CFLAGS([GLOBAL] ...)`,
-//     `CXXFLAGS([GLOBAL] ...)`, `CONLYFLAGS(...)`, `LDFLAGS(...)`,
-//     `SRCDIR(dir)` — per-module; threaded into EmitCC via ModuleCCInputs.
-//   - `JOIN_SRCS(name srcs...)` — JS node + CC compiling the joined output.
-//   - `GLOBAL_SRCS(srcs...)` — separate CC nodes feeding `<lib>.global.a`.
-//   - `INCLUDE(path)` — inlined by the parser; walker never sees an IncludeStmt.
-//
-// Source dispatch by extension: `.c/.cpp/.cc/.cxx` → EmitCC; `.h/.hpp`
-// silently skipped; `.S/.s` → EmitAS (host yasm LD threaded for asmlib
-// PIC); `.rl6` → EmitR6 (recurses into `contrib/tools/ragel6` for host
-// ragel6 LD) then EmitCC of the generated `.cpp`.
+// driver. Walks PEERDIR DFS, post-order, declaration-order, keyed on
+// `ModuleInstance`. IF/ELSE branches are evaluated against a per-instance
+// env; unreached branches contribute nothing. Source dispatch by
+// extension: `.c/.cpp/.cc/.cxx` → EmitCC; `.h/.hpp` silently skipped;
+// `.S/.s` → EmitAS; `.rl6` → EmitR6 then EmitCC of the generated `.cpp`.
 
 // moduleEmitResult is the per-instance "what did we emit?" record
-// kept by `genCtx.memo`. ARRef/LDRef split:
-//
-//   - LIBRARY modules populate ARRef (the .a archive); LDRef/LDPath
-//     alias to ARRef/ARPath so a PROGRAM peering this LIBRARY wires
-//     it via the AR fields.
-//   - PROGRAM modules populate LDRef; ARRef/ARPath alias defensively
-//     but no LIBRARY peers a PROGRAM (consumer never reads ARRef).
-//
-// `isPROGRAM` flags shape for the caller (Gen).
+// kept by `genCtx.memo`. LIBRARY populates ARRef; LDRef/LDPath alias
+// to ARRef/ARPath so a PROGRAM peering this LIBRARY wires through the
+// AR fields. PROGRAM populates LDRef; ARRef/ARPath alias defensively.
+// `isPROGRAM` flags shape for the caller.
 type moduleEmitResult struct {
 	ARRef      NodeRef
 	ARPath     *VFS
@@ -112,10 +91,7 @@ type moduleEmitResult struct {
 	PeerWholeArchiveCmdClosurePaths []VFS
 	// LDPluginRefs / LDPluginPaths: transitive set of LD plugin CP nodes a
 	// consumer PROGRAM wires into its `--start-plugins ... --end-plugins`
-	// block. The only M2-closure case is `contrib/libs/musl/include`'s
-	// `LD_PLUGIN(musl.py)`, becoming
-	// `$(B)/contrib/libs/musl/include/musl.py.pyplugin`, reaching archiver
-	// / ragel6 / yasm through their PEERDIR walk through musl/include.
+	// block (e.g. `contrib/libs/musl/include`'s `LD_PLUGIN(musl.py)`).
 	// Aggregation mirrors archive closure (peer's own ∪ PeerLDPluginPaths,
 	// dedup by path, first-occurrence wins). Header-only LIBRARYs emit
 	// their own CP node AND propagate it; non-PROGRAM consumers carry
@@ -175,16 +151,9 @@ const (
 
 // genCtx threads state through the recursive walk. `emit` accumulates
 // emitted nodes; `memo` deduplicates per-instance emission; `walking` is
-// the cycle-detection stack. Both maps are keyed on `ModuleInstance`.
-//
-// `cyclesTolerated` counts back-edges suppressed by the zero-result stub
-// path. Tests assert known cycles fire exactly once.
-//
-// Host-tool walks fire eagerly from inside `emitOneSource`: `.rl6`
-// recurses into ragel6/bin, `.S`/`.s` in a yasm-using host module
-// recurses into yasm. The resulting host LD ref + output path wire into
-// the per-source emitter (R6 cmd_args[0], AS foreign_deps.tool).
-// `genModule`'s memo prevents re-walking the same host instance.
+// the cycle-detection stack. Host-tool walks fire eagerly from inside
+// `emitOneSource`; `genModule`'s memo prevents re-walking the same host
+// instance.
 type genCtx struct {
 	sourceRoot      string
 	emit            Emitter
@@ -292,24 +261,12 @@ type scanCtxPerfStats struct {
 }
 
 // resolveCodegenDepRefs scans `includeInputs` for $(B)-rooted paths that
-// match a previously emitted EN/PB/EV/AR/CF/BI/JV/PR/R5/PY producer
-// output, returning the producer NodeRefs deduped in scan order. Each
-// consumer CC carries these as ExtraDepRefs so the resulting `deps` list
-// mirrors REF (every CC whose inputs[] references a $(B)/<gen>.h or
-// <gen>.cc carries an explicit codegen-producer dep).
-//
-// `consumer.Platform.Target` disambiguates per-platform PB/EV lookup. EN
-// always emits on the target axis so ctx.enOutputs is consulted by path
-// alone.
-//
-// `exclude` suppresses NodeRefs from the result (typically the downstream
-// CC's `Generator` ref, which EmitCC already threads into DepRefs as the
-// leading entry — without filtering, a CC compiling its own producer's
-// .cc would carry the producer twice).
-//
-// In addition to the legacy enOutputs/pbOutputs/evOutputs maps, the
-// function consults the per-scanner CodegenRegistry for any entry whose
-// HasProducerRef is set — the general path covering AR/CF/BI/JV/PR/R5/PY.
+// match a previously emitted codegen producer's output, returning the
+// producer NodeRefs deduped in scan order. Each consumer CC carries
+// these as ExtraDepRefs. `exclude` suppresses NodeRefs from the result
+// (typically the downstream CC's `Generator` ref already in DepRefs).
+// Consults enOutputs/pbOutputs/evOutputs and the per-scanner
+// CodegenRegistry.
 func resolveCodegenDepRefs(ctx *genCtx, consumer ModuleInstance, includeInputs []VFS, exclude ...NodeRef) []NodeRef {
 	return resolveCodegenDepRefsExt(ctx, consumer, includeInputs, nil, exclude...)
 }
@@ -420,8 +377,6 @@ func (ctx *genCtx) getScanCtx(scanner *IncludeScanner, cfg ScanContext) *scanCtx
 // pushLocalScanCtx pushes a fresh empty scanCtx cache map onto the
 // per-genModule stack. Called at genModule entry; the matching pop runs
 // in a deferred cleanup. No-op in "interned" mode.
-//
-// PR-M3-perf-E.
 func (ctx *genCtx) pushLocalScanCtx() {
 	if ctx.scanCtxMode != "local" {
 		return
@@ -432,8 +387,6 @@ func (ctx *genCtx) pushLocalScanCtx() {
 
 // popLocalScanCtx pops the top entry from the stack. No-op in "interned"
 // mode.
-//
-// PR-M3-perf-E.
 func (ctx *genCtx) popLocalScanCtx() {
 	if ctx.scanCtxMode != "local" {
 		return
@@ -731,26 +684,11 @@ func GenWithModeWithResources(sourceRoot string, targetDir string, hostP, target
 // (NO_LIBC etc.).
 
 // genModule emits the subgraph for `instance` and returns its
-// `*moduleEmitResult`. Memoised: a second call returns the cached result.
-//
-// Algorithm:
-//
-//  1. Memo hit → return.
-//  2. Cycle check: instance on the walking stack → throw (tolerated by
-//     zero-result stub for the runtime-stack DEFAULT_PEERDIR cases).
-//  3. Parse `<sourceRoot>/<instance.Path>/ya.make`.
-//  4. `collectModule` resolves IF branches, collects SRCS / PEERDIR /
-//     JOIN_SRCS / GLOBAL_SRCS / NO_* / ADDINCL / CFLAGS / SRCDIR; macro
-//     NO_* flags override the path-based seed FlagSet.
-//  5. Validate exactly one module declaration; non-empty sources.
-//  6. Recurse into each PEERDIR in declaration order (post-order).
-//  7. Per-source dispatch by extension (EmitCC / EmitAS / EmitR6 / ...);
-//     headers silently skipped.
-//  8. JOIN_SRCS: EmitJS + EmitCC against the joined output.
-//  9. LIBRARY: EmitAR over own CCs (+EmitARGlobal when GLOBAL_SRCS).
-//     PROGRAM: EmitLD over own CCs and peer archives.
-//
-// 10. Memoise and return.
+// `*moduleEmitResult`. Memoised: cycles on the walking stack tolerate
+// and return a zero-result stub. After parse + collectModule, recurses
+// into each PEERDIR in declaration order and dispatches per source by
+// extension; LIBRARY ends with EmitAR over own CCs, PROGRAM with EmitLD
+// over own CCs and peer archives.
 func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// Capture the seed key BEFORE the `instance.Flags = d.flags` overlay
 	// below rebinds Flags to the macro-derived FlagSet. Callers pass the
@@ -1132,21 +1070,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// peer-archive ref.
 	defaults = suppressMallocAPIDefault(defaults, d.allocatorName)
 
-	// PROGRAM-only implicit peerdirs. `_BASE_PROGRAM` adds musl/full
-	// (when MUSL=yes && !MUSL_LITE) and the default ALLOCATOR's peer set
-	// (TCMALLOC_TC for our environment) on top of language defaults.
-	// `hadAllocator` suppresses the allocator-default when the PROGRAM
-	// declared `ALLOCATOR(NAME)` itself.
-	//
-	// Split into language-defaults and program-defaults so peer-GLOBAL
-	// aggregation can apply different orderings per group (language two-
-	// phase, program single-phase). Program-defaults are further split
-	// into pre-user (cow/on + optional tcmalloc) and post-user (musl/full
-	// or musl). Explicit ALLOCATOR peers and d.peerdirs interleave
-	// between the halves so they appear before musl/full in archive
-	// accumulation (correct LD link order for the mimalloc cluster)
-	// while retaining peerKindUserPeer (correct AddInclGlobal Phase 3
-	// ordering for the ragel6 CC include case).
+	// Program-defaults split into pre-user (cow/on + optional tcmalloc)
+	// and post-user (musl/full or musl). Explicit ALLOCATOR peers and
+	// d.peerdirs interleave between the halves so they appear before
+	// musl/full in archive accumulation while retaining peerKindUserPeer
+	// (correct AddInclGlobal Phase 3 ordering).
 	languageDefaultsCount := len(defaults)
 
 	isProgram := isProgramModuleType(d.moduleStmt.Name) && !isRuntimeAncestor(instance.Path)
@@ -1169,18 +1097,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	allPeers := make([]string, 0, len(defaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
 
 	// Track per-peer category so peer-GLOBAL aggregation applies the
-	// right ordering rule per group:
-	//   - language-defaults: two-phase (own first, then transitive) —
-	//     preserves libcxx/libcxxrt OWN ahead of the musl-arch
-	//     transitive chain (archiver invariant).
-	//   - user-peers: single-phase AddInclGlobal in declaration order —
-	//     places an ALLOCATOR-derived peer's transitive GLOBAL ahead of
-	//     a later user PEERDIR's OWN GLOBAL (ragel6 mimalloc/include vs
-	//     ragel5/aapl invariant).
-	//   - program-defaults: single-phase AddInclGlobal — implicit
-	//     TCMALLOC_TC peer-set's OWN GLOBAL falls after util's
-	//     transitive zlib/double-conversion/libc_compat (archiver
-	//     default-allocator invariant).
+	// right ordering: language-defaults use two-phase (own first, then
+	// transitive); user-peers and program-defaults use single-phase
+	// AddInclGlobal in declaration order.
 	const (
 		peerKindLangDefault    = 0
 		peerKindProgramDefault = 1
@@ -1342,19 +1261,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ldFlagsSeen := map[string]struct{}{}
 	peerLDFlagsGlobal := make([]string, 0, 4)
 
-	// Aggregate peer-GLOBAL across all four axes (ADDINCL / CFLAGS /
-	// CXXFLAGS / CONLYFLAGS) with TWO-PHASE traversal:
-	//
-	//   Phase 1 — each peer's OWN GLOBAL declarations (declaration order).
-	//   Phase 2 — each peer's TRANSITIVE peer-GLOBAL contributions
-	//             (everything except its own), in declaration order.
-	//
-	// Empirical: tools/archiver/main.cpp.o cmd_args[11..16] in sg.json
-	// has libcxx-include + libcxxrt-include (OWN GLOBAL) BEFORE musl-arch
-	// (transitive via libcxx's auto-PEERDIR of musl/include).
-	// Single-phase DFS-completion would put musl-arch first (builtins is
-	// walked before libcxx and already has musl-arch via its
-	// musl/include peer); two-phase puts the OWN libcxx/libcxxrt first.
+	// Aggregate peer-GLOBAL across ADDINCL / CFLAGS / CXXFLAGS / CONLYFLAGS
+	// with two-phase traversal: Phase 1 collects each peer's OWN GLOBAL
+	// in declaration order; Phase 2 collects each peer's transitive
+	// peer-GLOBAL. Single-phase DFS would put musl-arch ahead of
+	// libcxx/libcxxrt OWN.
 	addInclSeen := map[VFS]struct{}{}
 	peerAddInclGlobal := make([]VFS, 0, 16)
 
@@ -1393,7 +1304,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	type resolvedPeer struct {
 		path   string
 		result *moduleEmitResult
-		kind   int // PR-35g: peerKindLangDefault / peerKindProgramDefault / peerKindUserPeer
+		kind   int // peerKindLangDefault / peerKindProgramDefault / peerKindUserPeer
 	}
 
 	resolved := make([]resolvedPeer, 0, len(allPeers))
@@ -1423,33 +1334,19 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult, kind: kind})
 
 		// Fold peer's LD plugin closure (own ∪ transitive) into ours.
-		// Runs for header-only and non-header peers alike — the only M2
-		// plugin (musl.py.pyplugin) is owned by the header-only
-		// `contrib/libs/musl/include` LIBRARY.
+		// Runs for header-only and non-header peers alike (musl.py.pyplugin
+		// is owned by the header-only `contrib/libs/musl/include`).
 		for i, p := range peerResult.LDPluginPaths {
 			peerLDPluginAddPath(peerResult.LDPluginRefs[i], p)
 		}
 	}
 
-	// PASS B: archive + .global.a aggregation. Iterates `resolved` in an
-	// archive-specific order so PROGRAM-class consumers (ymake/bin,
-	// py3cc/slow/bin) defer USE_PYTHON3's implicit peers (contrib/libs/
-	// python, library/python/runtime_py3) to AFTER user-declared
-	// PEERDIRs. The AddInclGlobal aggregation below continues in source
-	// order — source-order is empirically correct for include path slots;
-	// deferral there regressed 142 nodes.
-	//
-	// Upstream's `macro USE_PYTHON3() { PEERDIR(contrib/libs/python);
-	// when (...) { PEERDIR+=runtime_py3 } }` (python.conf:1063-1071)
-	// effectively appends both peers to the tail of the module's peer
-	// list (the `when` block is deferred; a plain PEERDIR inside a macro
-	// body behaves the same way upstream). For PY*_PROGRAM consumers
-	// (py3cc/slow/bin) REF places runtime_py3 AFTER user-
-	// PEERDIR(runtime_py3/main).
-	//
-	// Scoped to PROGRAM/PY*_PROGRAM only — LIBRARY-class consumers
-	// depend on the existing peer order for PeerArchiveClosurePaths
-	// propagation (LIBRARY-scope deferral regressed 100+ L3 nodes).
+	// PASS B: archive + .global.a aggregation in an archive-specific
+	// order. PY*_PROGRAM consumers defer USE_PYTHON3's implicit peers
+	// (contrib/libs/python, library/python/runtime_py3) to AFTER
+	// user-declared PEERDIRs. Scoped to PY*_PROGRAM only — LIBRARY-scope
+	// deferral regresses peer order for PeerArchiveClosurePaths
+	// propagation.
 	archiveOrder := resolved
 	if d.moduleStmt != nil {
 		// Tail-defer USE_PYTHON3 implicit peers ONLY for PY*_PROGRAM*.
@@ -1667,25 +1564,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	// Hoist runtime-stack include paths (libcxx/include, libcxxrt/include,
 	// libcxxabi/include, libunwind/include) to the FRONT of the aggregated
-	// peer-GLOBAL ADDINCL slice so they slot immediately after the
-	// linux-headers ccIncludesSuffix in composeTargetCC / composeHostCC.
-	//
-	// Fires only when THIS module is itself a runtime ancestor (`util`,
-	// `library/cpp/malloc/api`, ...). Upstream propagates libcxx/libcxxrt
-	// header search paths to runtime-ancestor consumers as if they were
-	// direct GLOBAL peers, even though `defaultPeerdirsFor` returns only
-	// `[contrib/libs/musl/include]` for them. Without the hoist, util's
-	// own CC nodes get libcxx/libcxxrt at the tail of peerAddInclGlobal
-	// via Phase 2 transitive walk through util's user PEERDIRs.
-	//
-	// Non-runtime-ancestor consumers do NOT get the hoist:
-	//   - Modules with no NO_RUNTIME (tools/archiver, util/charset,
-	//     ragel6/bin) see libcxx/libcxxrt as direct defaults via Phase 1.
-	//   - Modules with NO_RUNTIME (yasm) intentionally pick up
-	//     libcxx/libcxxrt at the TAIL via musl_extra / jemalloc
-	//     transitive walks (REF: yasm libyasm/assocdat.c.pic.o has
-	//     libcxx/libcxxrt at slots 17-18, AFTER musl-arch). Unconditional
-	//     hoist would regress this case.
+	// peer-GLOBAL ADDINCL slice. Fires only when THIS module is itself a
+	// runtime ancestor; non-runtime-ancestor consumers (yasm with
+	// NO_RUNTIME) intentionally pick up libcxx/libcxxrt at the TAIL via
+	// musl_extra / jemalloc transitive walks, so the hoist is gated.
 	if isRuntimeAncestor(instance.Path) {
 		peerAddInclGlobal = hoistRuntimeStackAddIncl(peerAddInclGlobal)
 	}
@@ -1709,20 +1591,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	effectiveAddInclGlobal := mergeDedupVFS(d.addInclGlobal, peerAddInclGlobal)
 
 	// `library/python/runtime_py3` propagates `$(B)/library/python/
-	// runtime_py3` to consumers via its `effectiveAddInclGlobal`, but at
-	// a position AFTER `contrib/restricted/abseil-cpp` (NOT at the head
-	// as a regular own-GLOBAL would). Upstream `_PYTHON3_ADDINCL` runs at
-	// module-eval time (adds `python/Include`); then PEERDIR processing
-	// propagates abseil-cpp into runtime_py3's UserGlobalPropagated via
-	// `library/cpp/resource → absl_flat_hash`; the `ARCHIVE` macro fires
-	// later and adds the BUILD_ROOT path via the `addincl` modifier,
-	// landing AFTER abseil-cpp. Splice to match REF ordering on 145
-	// consumer nodes (devtools/ymake LIBRARY preeval.cpp.o slots 21-23
-	// `[python/Include, abseil-cpp, BUILD_ROOT/runtime_py3]`).
-	//
-	// Fallback: when abseil-cpp is absent from the merged set, append at
-	// the tail — preserves the path so consumers can resolve
-	// runtime_py3's generated headers.
+	// runtime_py3` to consumers AFTER `contrib/restricted/abseil-cpp`,
+	// not at the head as a regular own-GLOBAL would. Splice
+	// matches upstream ordering: ARCHIVE's `addincl` modifier fires after
+	// PEERDIR processing has already propagated abseil-cpp into
+	// UserGlobalPropagated. Fallback: when abseil-cpp is absent, append
+	// at the tail.
 	if instance.Path == "library/python/runtime_py3" {
 		buildRootPath := Build("library/python/runtime_py3")
 		abseilPath := Source("contrib/restricted/abseil-cpp")
@@ -1750,45 +1624,22 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	// Peer-transitive CFLAGS GLOBAL precede this module's OWN CFLAGS
-	// GLOBAL in the effective propagated slice. Upstream rule
-	// (devtools/ymake/global_vars_collector.cpp):
-	// `TGlobalVarsCollector::Collect` (json_visitor.cpp:558) runs at
-	// DFS-Left for every direct peerdir edge, accumulating each peer's
-	// USER_CFLAGS with `AppendUnique` (first-occurrence-wins); `Finish`
-	// runs at PrepareLeaving and only then pushes the module's OWN
-	// CFLAGS. ADDINCL follows the opposite rule via
-	// `TModuleIncDirs::Get()` returning `LocalUserGlobal` (own) before
-	// `UserGlobalPropagated` (peer), so `effectiveAddInclGlobal` keeps
-	// `(own, peer)` order above.
-	//
-	// Empirical anchor: devtools/ymake/_/commands/compilation.cpp.o
-	// (aarch64) cmd_args[68..70]: REF has [OPENSSL_RENAME_SYMBOLS=1,
-	// ASIO_STANDALONE, ASIO_SEPARATE_COMPILATION]. ASIO is a direct
-	// PEERDIR of devtools/ymake and PEERDIRs OpenSSL; per-peer
-	// AppendUnique places asio's OpenSSL transitive ahead of asio's
-	// own ASIO_*.
+	// GLOBAL in the propagated slice (upstream `TGlobalVarsCollector`
+	// pushes peers at DFS-Left and OWN only at PrepareLeaving). ADDINCL
+	// follows the opposite rule (own before peer), so
+	// `effectiveAddInclGlobal` keeps `(own, peer)` order above.
 	effectiveCFlagsGlobal := mergeDedup(peerCFlagsGlobal, d.cFlagsGlobal)
 	effectiveCXXFlagsGlobal := mergeDedup(peerCXXFlagsGlobal, d.cxxFlagsGlobal)
 	effectiveCOnlyFlagsGlobal := mergeDedup(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
 
 	// Inject libcxx's GLOBAL ADDINCL + GLOBAL CXXFLAGS into runtime-
 	// ancestor C++ consumers' OWN CC emission only — not into the
-	// `effective*` propagation slices already snapshotted above.
-	//
-	// Local-only because making libcxx an implicit DEFAULT peer would
-	// also push libcxx/include + libcxxrt/include into
-	// `effectiveAddInclGlobal`, which every downstream consumer's Phase 2
-	// walk reads — producing spurious -I flags on unrelated CC nodes
-	// (zlib, mimalloc, libcxxabi-parts, etc.) for a 100+-node L3
-	// regression.
-	//
-	// Mutating `peerAddInclGlobal` and `peerCXXFlagsGlobal` AFTER the
-	// `effective*` snapshot keeps the propagated view clean. The local
-	// view (consumed by `ModuleCCInputs` for THIS module's own CC
-	// compile) gains the slots; the runtime-stack hoist below re-runs
-	// on the post-injection slice so the injected libcxx/include +
-	// libcxxrt/include land immediately after the linux-headers
-	// ccIncludesSuffix.
+	// `effective*` propagation slices already snapshotted above. Making
+	// libcxx an implicit DEFAULT peer would propagate the includes to
+	// every downstream consumer's Phase 2 walk, producing spurious -I
+	// flags on unrelated CC nodes (zlib, mimalloc, libcxxabi-parts).
+	// Mutating `peerAddInclGlobal`/`peerCXXFlagsGlobal` AFTER the snapshot
+	// keeps the propagated view clean.
 	if !effectiveNoPlatform(instance.Flags) && runtimeAncestorCxxConsumers[instance.Path] {
 		// libcxx's CLANG-branch GLOBAL CXXFLAG (`-nostdinc++`) — see
 		// `contrib/libs/cxxsupp/libcxx/ya.make:67-69`.
@@ -1861,22 +1712,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
-	// Track "primary sources" of regular SRCS / JOIN_SRCS / .rl6 dispatch
-	// — distinct from header closures. REF treats the splits asymmetrically:
-	//
-	//   - regular AR (`.a`) inputs: regular primaries + global primaries
-	//     + everyone's header/closure;
-	//   - global AR (`.global.a`) inputs: global primaries + everyone's
-	//     header/closure (NO regular primaries).
-	//
-	// Empirical: contrib/libs/tcmalloc/no_percpu_cache regular `.a`
-	// archives `aligned_alloc.c` AND every `tcmalloc/*` global source +
-	// 1311 shared headers; `.global.a` archives every `tcmalloc/*`
-	// source + the same headers, but NOT `aligned_alloc.c`.
-	//
-	// The narrowed `.global.a` uses `globalMemberInputs` directly (the
-	// GLOBAL_SRCS-local closure) and never sees regular primaries; the
-	// set is retained so call sites don't have to be untangled.
+	// Track primary sources of regular SRCS / JOIN_SRCS / .rl6 dispatch
+	// — distinct from header closures. Regular AR archives regular
+	// primaries + global primaries + everyone's header closures;
+	// .global.a archives global primaries + everyone's header closures
+	// (no regular primaries). The set is retained so call sites stay
+	// untangled.
 	regularPrimariesSet := map[VFS]struct{}{}
 	addRegularPrimary := func(p VFS) {
 		regularPrimariesSet[p] = struct{}{}
@@ -1885,9 +1726,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// Auto-injected peer-CFLAG -D_musl_ for every TARGET module that is
 	// not effectively NO_PLATFORM, when the CLI says MUSL=yes. Mirrors
 	// `_BASE_UNIT`'s `when ($MUSL == "yes") { CFLAGS+=-D_musl_ }`.
-	// Suppressed for no-stdinc modules — those receive
-	// `-D_musl_=1` from `muslExtraDefines` and upstream NO_PLATFORM
-	// gates off the extra `-D_musl_`.
+	// Suppressed for no-stdinc modules — those receive `-D_musl_=1`
+	// directly via their dedicated composer slot.
 	autoPeerCFlags := defaultPeerCFlags(ctx, instance, d)
 
 	// Thread the module's own non-GLOBAL CFLAGS and own GLOBAL
@@ -2006,19 +1846,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	// Emit EN nodes BEFORE the per-source CC loop so the codegen registry
 	// is populated when consumer sources scan their include closures.
-	// E.g. `stats.cpp`/`trace.cpp` in `devtools/ymake/diag`
-	// `#include <devtools/ymake/diag/stats_enums.h_serialized.h>`; the
-	// scanner consults `IncludeScanner.codegen` populated by
-	// `emitEnumSrcs`. If EN ran AFTER the source loop, the registry would
-	// be empty at scan time and resolveCache / subgraphCache would lock
-	// in a "not found" miss. EN node emission order in the output graph
-	// does not affect L4 byte-exactness (normalizer re-sorts by UID).
-	//
-	// Passing `moduleInputs` causes `emitEnumSrcs` to also emit the
-	// downstream CC for each EN's `_serialized.cpp`. The returned
-	// `(refs, outputs, memberInputs)` are folded into the AR member
-	// buckets below (alongside PR-downstream CCs) so the regular `.a`
-	// archives the EN-derived `.o`s after declared SRCS.
+	// If EN ran AFTER the source loop, the registry would be empty at
+	// scan time and resolveCache / subgraphCache would lock in a
+	// "not found" miss. Passing `moduleInputs` causes `emitEnumSrcs` to
+	// also emit the downstream CC for each EN's `_serialized.cpp`.
 	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
 
 	// Hoist JV/CF/BI/PR node emission before the per-source loop so the
@@ -2039,20 +1870,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	// Two-pass source emission. Codegen-producing sources
 	// (.ev/.proto/.rl6/.rl/.cpp.in/.c.in) emit nodes whose outputs
-	// (`.ev.pb.h`, `.rl6.cpp`, `*.cpp`, …) consumer CCs in the same
-	// module may #include. Processing in d.srcs order would have a
-	// consumer .cpp preceding a codegen producer scan its closure against
-	// an unpopulated registry; resolveCache/subgraphCache would lock in
-	// a "not found" miss surviving the producer's later registration
-	// (witnessed on devtools/ymake/diag: display.cpp idx 3, trace.ev
-	// idx 4; display.cpp's scan of trace.h → trace.ev.pb.h missed and
-	// poisoned the trace.h subgraph for every subsequent consumer).
-	//
-	// Fix: emit codegen-producing sources FIRST (Pass A), then iterate
-	// d.srcs in declaration order (Pass B) using Pass A's cached results
-	// for codegen producers and emitOneSource fresh for the rest. AR
-	// member order is preserved (Pass B appends to ccRefs in d.srcs
-	// order), so AR.cmd_args stays byte-exact.
+	// consumer CCs in the same module may #include. Pass A emits all
+	// codegen producers first to populate the registry; Pass B iterates
+	// d.srcs in declaration order, using Pass A's cached results for
+	// codegen producers and emitOneSource for the rest. AR member order
+	// is preserved (Pass B appends in d.srcs order).
 	preEmitted := make(map[string]*sourceEmit, 4)
 
 	for _, src := range d.srcs {
@@ -2261,27 +2083,20 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// Rebase onto SRCDIR only when `ancestorRebase` is set (PROGRAM
 		// with ancestor SRCDIR; the ragel6/bin pattern). Otherwise keep
 		// srcInstance at instance.Path — JOIN_SRCS in
-		// LIBRARY-with-sibling-SRCDIR modules (none in M2 closure today)
-		// emit at the LIBRARY's own dir.
+		// LIBRARY-with-sibling-SRCDIR modules emit at the LIBRARY's own dir.
 		srcInstance := instance
 
 		if ancestorRebase {
 			srcInstance.Path = *d.srcDir
 		}
 
-		// Per-source include closure threaded into the JS node Inputs and
-		// the JS-derived CC's IncludeInputs (mirror of REF: the joined
-		// .cpp textually #includes each member, so its closure is the
-		// union of member closures).
-		//
 		// JS nodes are anchored to the outer-target platform axis, so the
-		// JS closure must resolve with the TARGET scanner and TARGET musl
-		// arch search paths even when srcInstance is a host (PIC)
-		// instance. The downstream CC node still compiles on the host
-		// axis and needs the HOST closure. Compute them separately when
-		// srcInstance.Flags.PIC — for the target case they are identical
-		// so a single call suffices. TODO: remove the Flags.PIC guard
-		// when a general target-vs-host axis parameter is plumbed through.
+		// JS closure resolves with the TARGET scanner and arch search
+		// paths even when srcInstance is a host (PIC) instance. The
+		// downstream CC node compiles on the host axis and needs the
+		// HOST closure; compute them separately for x86_64 (host PIC).
+		// TODO: remove the ISA guard when a general target-vs-host axis
+		// parameter is plumbed through.
 		joinClosure := joinSrcsIncludeClosure(ctx, srcInstance.Platform, srcInstance, js.Sources, moduleInputs)
 
 		ccClosure := joinClosure
@@ -2409,10 +2224,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
-	// Emit own LD_PLUGIN CP nodes. No current M2 case fires here
-	// (musl/include is header-only and handled above) but the emission
-	// is symmetric so a future LIBRARY/PROGRAM declaring LD_PLUGIN inline
-	// gets the same wiring. Merged with the transitive peer plugin
+	// Emit own LD_PLUGIN CP nodes. Merged with the transitive peer plugin
 	// closure; feeds EmitLD's `--start-plugins ... --end-plugins` block
 	// (PROGRAMs) and the LDPluginRefs/Paths slot on `moduleEmitResult`.
 	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins)
@@ -2441,11 +2253,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// ALLOCATOR(FAKE) at PROGRAM level filters `library/cpp/malloc/
 		// api` out of the link closure even when a transitive peer
 		// (musl_extra, jemalloc, ...) reintroduces it via its own
-		// default-peer set. yasm is the M2-closure case: yasm drops
-		// malloc/api via `suppressMallocAPIDefault` above, but its peers
-		// musl_extra and jemalloc each carry malloc/api in their own
-		// defaults — re-introduced via the archive closure. Apply the
-		// same suppression at the PROGRAM boundary.
+		// default-peer set. Apply the same suppression that
+		// `suppressMallocAPIDefault` applies to direct peers, at the
+		// PROGRAM link-closure boundary.
 		ldPeerArchiveRefs := peerArchiveRefs
 		ldPeerArchivePaths := peerArchivePaths
 
@@ -2629,17 +2439,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	// LIBRARY: regular AR over own CCs. Peer-archive DepRefs are
-	// intentionally NOT threaded — REF probe confirmed every reference
-	// AR has zero AR-on-AR deps. Peer archives flow into the consumer's
-	// downstream LD via the `peerArchiveRefs` slot in EmitLD below; the
-	// LIBRARY AR drops them.
-	//
-	// The regular AR receives the union of regular and global members'
-	// inputs (primaries + header closures). REF: tcmalloc/no_percpu_cache
-	// `liblibs-tcmalloc-no_percpu_cache.a` archives `aligned_alloc.c`
-	// (regular SRCS), every `tcmalloc/*` GLOBAL_SRCS source, and the
-	// 1286 shared header closure. Without the union, the regular AR
-	// would miss GLOBAL_SRCS' resolved closures.
+	// intentionally NOT threaded — every reference AR has zero AR-on-AR
+	// deps; peer archives flow into the consumer's downstream LD via
+	// `peerArchiveRefs` in EmitLD. The regular AR receives the union of
+	// regular and global members' inputs (primaries + header closures).
 	combinedMemberInputs := memberInputs
 
 	if len(globalMemberInputs) > 0 {
@@ -3392,10 +3195,8 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		walk(filepath.Clean(p))
 	}
 
-	// Header-only LIBRARYs keep the natural Phase 1+2 order — none of
-	// the M2-closure header-only modules are runtime ancestors needing
-	// libcxx/libcxxrt as transitive header-only contributions. The hoist
-	// gate in genModule keys on `isRuntimeAncestor`; a future header-only
+	// Header-only LIBRARYs keep the natural Phase 1+2 order — the hoist
+	// gate in genModule keys on `isRuntimeAncestor`. A future header-only
 	// LIBRARY needing the same treatment can flip this to mirror it.
 
 	// Drop bundled-include paths (linux-headers, linux-headers/_nf) from
@@ -3507,57 +3308,26 @@ func hasSkippedSource(d *moduleData) bool {
 	return false
 }
 
-// emitOneSource dispatches a single source by extension. Returns
-// `(ref, outputPath, ccInputs, true)` when a node was emitted; the
-// ccInputs entries are the CC node's input list (primary source +
-// IncludeInputs) so the caller's downstream AR/LD step folds them into
-// its own `inputs` aggregate per the sg.json AR/LD shape. Headers
-// return `(_, _, nil, false)`. Unknown extensions throw so a new source
-// kind surfaces during integration.
-//
-// `srcDir` is the module's `SRCDIR(...)` setting (nil when none).
-// When non-empty it relocates the per-source emitter's view: SRCS
-// resolve to `$(S)/<srcDir>/<rel>` and the emitted node's `module_dir`
-// becomes `<srcDir>`. The LD/AR/Global archives wrapping these sources
-// stay at `instance.Path`. For ragel6/bin: `instance.Path =
-// contrib/tools/ragel6/bin`, `srcDir = contrib/tools/ragel6` →
-// per-source CC nodes show `module_dir = contrib/tools/ragel6` and
-// inputs `$(S)/contrib/tools/ragel6/<src>`, while the LD lands at
-// `bin/ragel6`.
-//
-// `in` carries the module's per-source-language compile knobs
-// (CXXFLAGS / CONLYFLAGS / ADDINCL).
-//
-// `primaryCount` is the number of leading entries in `ccInputs` that
-// are "primary sources" of this member (vs header/closure entries) —
-// the .global.a aggregator drops these primaries when the member
-// belongs to regular SRCS. .c/.cpp/.cc/.cxx/.S/.s/.asm yield
-// primaryCount=1; .rl6 yields 1 (just the .rl6) or 2 (when the `.h`
-// companion exists on disk).
+// emitOneSource dispatches a single source by extension and returns a
+// `*sourceEmit` with the emitted ref, output path, CC inputs (primary
+// source + IncludeInputs), and primaryCount. Headers return nil.
+// Unknown extensions throw. When `srcDir` is set, per-source emitter
+// view relocates SRCS to `$(S)/<srcDir>/<rel>` and the node's
+// `module_dir` becomes `<srcDir>`; LD/AR archives stay at
+// `instance.Path`. `primaryCount` distinguishes member primaries from
+// header/closure entries so the .global.a aggregator can drop
+// regular-SRCS primaries.
 
 // reorderARMembers reorders (refs, paths) so AR cmd_args match ymake's
 // canonical member ordering:
 //
-//  1. SRC_C_NO_LTO sources — hoisted to the front in original relative order.
-//  2. Regular SRCS hand-written .o (non-SRC_C_NO_LTO, non-R6, no codegen
-//     suffix) — kept in declaration order.
-//  3. JOIN_SRCS (entries at [numSrcsDerived, len)) — declaration order.
-//  4. Codegen-derived .o files, partitioned by source-extension and
-//     emitted in canonical order: .g4.cpp → .h_serialized.cpp →
-//     .ev.pb.cc → .rl6.cpp → .reg3.cpp. Within each category
-//     declaration order is preserved. REF places hand-written .cpp.o
-//     before generated .o files.
-//  5. R6-generated paths with the legacy `/_/_/` infix go last
-//     (util/_/_/datetime/parser.rl6.cpp.o family).
-//
-// `isFlatNoLto` is a parallel bool slice marking SRC_C_NO_LTO entries
-// (len == len(refs) == len(paths) at call time).
-//
-// `isCFGenerated` marks entries whose CC was driven by a CONFIGURE_FILE
-// expansion (`.cpp.in` / `.c.in`). CF outputs share the plain `.cpp.o`
-// / `.c.o` suffix with hand-written SRCS, so the path heuristic cannot
-// distinguish them; this parallel signal tail-buckets CF entries after
-// hand-written regulars.
+//  1. SRC_C_NO_LTO sources — hoisted to the front in original order.
+//  2. Regular hand-written SRCS — declaration order.
+//  3. CONFIGURE_FILE-derived (parallel signal — path-indistinguishable).
+//  4. JOIN_SRCS — declaration order.
+//  5. Codegen-derived .o files: .g4 → .h_serialized → .ev.pb →
+//     .rl6 → .reg3 (declaration order within each).
+//  6. Legacy R6 paths with the `/_/_/` infix go last.
 func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGenerated []bool, numSrcsDerived int) ([]NodeRef, []VFS) {
 	if len(paths) == 0 {
 		return refs, paths
@@ -3634,18 +3404,9 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 
 // ─── F-7-B: codegen registry helpers ─────────────────────────────────────────
 
-// scannerFor returns the IncludeScanner for `instance`'s platform axis.
-// Target-axis (aarch64) → target scanner; host-axis (x86_64) → host
-// scanner. Returns nil when the matching scanner is not allocated (tests).
-//
-// This is the single dispatch point for the target-vs-host scanner
-// choice. Callers wanting "the parsed-includes pool for this instance"
-// MUST go through this helper. EN's `ctx.scannerTarget` direct accesses
-// remain explicit because EN nodes always emit on the target axis
-// tool walks `modulePath` as a host-platform tool and returns its
-// LD NodeRef + binary path. Memoised by genModule via ctx.memo, so
-// repeated calls for the same path are free. Panics if the module
-// does not emit an LD (LDPath nil).
+// tool walks `modulePath` as a host-platform tool and returns its LD
+// NodeRef + binary path. Memoised via ctx.memo. Panics if the module
+// does not emit an LD.
 func (ctx *genCtx) tool(modulePath string) (NodeRef, VFS) {
 	res := ctx.toolResult(modulePath)
 	return res.LDRef, *res.LDPath
@@ -3653,14 +3414,13 @@ func (ctx *genCtx) tool(modulePath string) (NodeRef, VFS) {
 
 // toolResult returns the full moduleEmitResult of walking `modulePath`
 // as a host-platform tool. Callers needing more than (LDRef, LDPath)
-// — e.g. InducedDeps for RUN_PROGRAM — use this; everyone else uses
-// the slimmer `tool()`.
+// use this; everyone else uses the slimmer `tool()`.
 func (ctx *genCtx) toolResult(modulePath string) *moduleEmitResult {
 	return genModule(ctx, NewToolInstance(ctx.host, modulePath))
 }
 
-// regardless of the surrounding walk's axis — a deliberate cross-axis
-// reach, not a per-instance dispatch.
+// scannerFor returns the IncludeScanner for `instance`'s platform axis.
+// Single dispatch point for the target-vs-host scanner choice.
 func (ctx *genCtx) scannerFor(instance ModuleInstance) *IncludeScanner {
 	return ctx.scannerForPlatform(instance.Platform)
 }

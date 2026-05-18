@@ -20,19 +20,12 @@ var antlr4FsToolsPath = antlr4FsToolsVFS.String()
 var antlr4ProcCmdFiles = antlr4ProcCmdVFS.String()
 
 // emitJVDownstreamCPCC emits one CP + one CC for each (cpp, h) pair
-// from a JV grammar invocation. Returns per-CC (refs, outputPaths,
-// memberInputs).
+// from a JV grammar invocation. Pattern: JV outputs CmdLexer.cpp →
+// CP renames to CmdLexer.g4.cpp → CC compiles CmdLexer.g4.cpp.o.
 //
-// Pattern: JV outputs CmdLexer.cpp → CP renames to CmdLexer.g4.cpp
-// → CC compiles CmdLexer.g4.cpp.o.
-//
-// CP inputs: [jvPrimary, (srcCpp if != primary), fsTools, procCmd,
-// jvInputs..., antlr4-runtime closure...].
-// CC inputs add srcH between jvPrimary and fsTools.
-//
-// outputIncludes carries repo-relative headers from the macro's
-// OUTPUT_INCLUDES; rebased to $(S)/... and added to the CP .g4.cpp
-// EmitsIncludes so CC scan walks the transitive closure.
+// outputIncludes (from the macro's OUTPUT_INCLUDES) are attached as
+// EmitsIncludes on the CP .g4.cpp so the CC scan walks the transitive
+// closure (antlr4-runtime + macro-declared headers).
 func emitJVDownstreamCPCC(
 	ctx *genCtx,
 	instance ModuleInstance,
@@ -55,8 +48,7 @@ func emitJVDownstreamCPCC(
 		g4CppRel := base + ".g4.cpp"
 
 		// Register .g4.cpp so walkClosure resolves its transitive
-		// antlr4-runtime.h chain and the macro's OUTPUT_INCLUDES
-		// (rebased to $(S)/...). Scanner walks each entry transitively.
+		// antlr4-runtime.h chain and the macro's OUTPUT_INCLUDES.
 		if reg != nil {
 			emits := make([]includeDirective, 0, 1+len(outputIncludes))
 			emits = append(emits, includeDirective{kind: includeQuoted, target: antlr4RuntimeHeaderVFS.Rel})
@@ -97,14 +89,12 @@ func emitJVDownstreamCPCC(
 		ccIncludeInputs = append(ccIncludeInputs, closure...)
 
 		ccIn.IncludeInputs = ccIncludeInputs
-		// Deps: [jvRef, cpRef] — matching reference sg2.json shape.
+		// Deps: [jvRef, cpRef].
 		ccIn.HasGenerator = true
 		ccIn.Generator = jvRef
 		ccIn.ExtraDepRefs = []NodeRef{cpRef}
 		// ANTLR4-generated .g4.cpp files have per-rule unused locals;
 		// `-Wno-unused-variable` silences the `-Werror` diagnostic.
-		// Slotted by the composer between macroPrefixMapFlags and the
-		// input path (sg2.json TConfLexer.g4.cpp.o cmd_args[144..145]).
 		ccIn.PerSourceCFlags = []string{"-Wno-unused-variable"}
 
 		ccRef, ccOut := EmitCC(instance, g4CppRel, ccIn, ctx.host, ctx.emit)

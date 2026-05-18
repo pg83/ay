@@ -12,8 +12,8 @@ import (
 var configureFilePyVFS = Source("build/scripts/configure_file.py")
 var configureFilePyPath = configureFilePyVFS.String()
 
-// buildTypeDebug is the BUILD_TYPE configuration variable injected by the
-// build system. Hardcoded to DEBUG for the M3 debug build.
+// buildTypeDebug is injected when @BUILD_TYPE@ is referenced but not
+// DEFAULT-declared. Hardcoded to DEBUG.
 const buildTypeDebug = "BUILD_TYPE=DEBUG"
 
 // EmitCF emits a CF node expanding a .cpp.in / .c.in template via
@@ -88,18 +88,11 @@ func EmitCF(
 // cfgVarRefRe matches @VAR_NAME@ substitution markers in .in template files.
 var cfgVarRefRe = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
 
-// buildCFGVars constructs $CFG_VARS from the module's DEFAULT
-// declarations, filtered to vars actually @VAR@-referenced in the .in
-// source, sorted alphabetically (ymake's order).
+// buildCFGVars filters the module's DEFAULT declarations to vars actually
+// @VAR@-referenced in the .in source, sorted alphabetically (ymake's order).
 //
-// srcDiskPath is the on-disk path to the .in (not the $(S)/... macro
-// path) so the file is readable to scan for @VAR@.
-//
-// If @BUILD_TYPE@ is referenced but not DEFAULT-declared, ymake injects
-// BUILD_TYPE=DEBUG.
-//
-// Empirical: build_info.cpp.in → ["BUILD_TYPE=DEBUG"]; sandbox.cpp.in
-// → ["KOSHER_SVN_VERSION=", "SANDBOX_TASK_ID=0"].
+// srcDiskPath is the on-disk path (not $(S)/...) so the file is readable
+// to scan for @VAR@. @BUILD_TYPE@ without a DEFAULT falls back to DEBUG.
 func buildCFGVars(srcDiskPath string, defaultVars map[string]string, defaultVarOrder []string) []string {
 	referenced := map[string]bool{}
 

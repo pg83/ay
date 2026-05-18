@@ -5,25 +5,17 @@ import (
 	"strings"
 )
 
-// emitEnumSrcs emits one EN node per GENERATE_ENUM_SERIALIZATION(*)
-// in d.enumSrcs.
+// emitEnumSrcs emits one EN node per GENERATE_ENUM_SERIALIZATION(*).
 //
-// Algorithm:
-//  1. Walk tools/enum_parser/enum_parser as host tool → LD NodeRef
-//     (ParseError → canonical binary path fallback).
-//  2. For each stmt, scan the header's transitive include closure
-//     (same scanner as CC nodes).
-//  3. Cross-EN deps: any previously emitted EN output appearing in
-//     the closure contributes its NodeRef and path.
-//  4. Call EmitEN, record outputs in ctx.enOutputs.
-//
-// EN nodes are always emitted on the TARGET platform; enum_parser is
-// host x86_64 but the EN outputs are target-axis.
+// enum_parser walks as a HOST tool; the EN outputs themselves are
+// target-axis. Cross-EN deps surface when a previously emitted EN's
+// _serialized.h appears in the current header's include closure (the
+// scanner cannot resolve $(B)/_serialized.h, so the signal is a literal
+// `#include` match against known EN outputs).
 //
 // When `consumerInputs` is non-nil, also emit one downstream CC per
-// `_serialized.cpp` output (the EN-emitted .cpp is an implicit module
-// source archived alongside declared SRCS). consumerInputs must carry
-// the consuming module's full CC compile bag. nil → EN nodes only.
+// `_serialized.cpp` carrying the consuming module's full compile bag.
+// nil → EN nodes only.
 type enumSrcsResult struct {
 	CCRefs           []NodeRef
 	CCOutputs        []VFS

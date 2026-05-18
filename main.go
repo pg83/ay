@@ -95,7 +95,7 @@ func startProfilesFromEnv() func() {
 // writeGraph encodes g as JSON to path (or stdout when path == "-").
 // Delegates to writeGraphIndented (gjson_write.go), a hand-rolled streaming
 // serializer that matches json.Encoder with SetEscapeHTML(false) +
-// SetIndent("", "  ") byte-for-byte in a single pass. Output is buffered
+// SetIndent("", "    ") byte-for-byte in a single pass. Output is buffered
 // through a 1 MiB bufio.Writer.
 func writeGraph(out string, g *Graph) {
 	var w io.Writer

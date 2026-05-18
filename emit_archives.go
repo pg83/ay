@@ -1,8 +1,7 @@
 package main
 
 // archiverToolPath is the upstream host-tool that the ARCHIVE() macro
-// invokes per `build/ymake.core.conf:4142-4145` (`$ARCH_TOOL`). Pinned to
-// the M3 layout: tools/archiver builds a single binary named `archiver`.
+// invokes per `build/ymake.core.conf:4142-4145` (`$ARCH_TOOL`).
 const archiverToolPath = "tools/archiver"
 
 // emitArchives emits one AR node per `ARCHIVE(NAME <out> [DONTCOMPRESS]
@@ -20,9 +19,7 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		return
 	}
 
-	// Walk the archiver as a host program to resolve its binary path + LD
-	// ref. Mirrors emitRunProgram's tool-walk shape; archiver lives at
-	// tools/archiver and is hard-pinned by const archiverToolPath above.
+	// Walk the archiver as a host program to resolve its binary path + LD ref.
 	toolLDRef, toolBinPath := ctx.tool(archiverToolPath)
 
 	// Aggregate SOURCE_ROOT-rooted IN files contributed by every PR
@@ -227,9 +224,8 @@ func emitArchive(
 
 	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 
-	// PR-M3-platform-pair-step5: tags + host_platform + platform from
-	// the Platform pair passed by caller. Empty `instance.Platform.Tags` keeps
-	// the slice non-nil so JSON serialises as `[]`, not `null`.
+	// Empty `instance.Platform.Tags` keeps the slice non-nil so JSON
+	// serialises as `[]`, not `null`.
 	tags := instance.Platform.Tags
 
 	n := &Node{

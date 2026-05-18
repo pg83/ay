@@ -2,23 +2,16 @@ package main
 
 import "strings"
 
-// platform.go — the `(host, target)` Platform pair threaded from CLI entry
-// through every emitter.
-//
-// CLI constructs exactly two *Platform values (host + target). Pair is
-// always propagated as (host, target); when the walker spawns a tool
-// sub-graph it calls (host, host). Renderers never ask "am I host?" — they
-// read instance.Platform.{Target, Flags, Tags, IsHost}. IsHost is set once
-// by the CLI; recursion just plumbs the pointer.
-//
-// Flags is the canonical source of truth; PIC/MUSL/… boolean shadows
-// are read-only caches filled at construction so hot paths avoid the map
-// lookup. Treat the struct as immutable post-construction.
+// platform.go — the `(host, target)` Platform pair threaded from CLI
+// through every emitter. Tool sub-graphs are walked as (host, host).
+// Flags is the canonical source of truth; boolean shadows are read-only
+// caches populated at construction. Treat the struct as immutable
+// post-construction.
 type Platform struct {
 	OS     OS                // OS axis (linux / darwin / windows)
 	ISA    ISA               // ISA axis (x86_64 / aarch64 / arm64)
 	Target PlatformID        // = MakePlatformID(OS, ISA); surfaces as `node.platform`
-	Flags  map[string]string // canonical per-platform toggles ("PIC"="yes", "MUSL"="yes", …)
+	Flags  map[string]string // canonical per-platform toggles ("PIC"="yes", …)
 	Tags   []string          // baseline tags every node on this platform carries (e.g. `["tool"]` on host)
 	IsHost bool              // is this the host machine's platform? Set by CLI; surfaces as `node.host_platform`.
 

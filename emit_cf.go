@@ -26,7 +26,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 
 	cfRef, cfOut := EmitCF(instance, cf.Src, in, ctx.emit)
 
-	// F-7-B: register the explicit CF output with EmitsIncludes.
+	// Register the explicit CF output with EmitsIncludes.
 	if reg != nil {
 		diskPath := ctx.sourceRoot + "/" + instance.Path + "/" + cf.Src
 		registerBoundGeneratedParsedOutput(ctx, instance, "CF", cfOut, cfIncludeDirectives(diskPath), cfRef)
@@ -36,7 +36,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 // cfIncludeDirectives parses `#include "..."` directives from a
 // configure_file template (.cpp.in / .c.in). Quoted only (angle-bracket
 // forms are system headers, resolved by the compiler search path).
-// Returns Source-rooted VFSes sorted; nil on read failure.
+// Returns directives sorted by target; nil on read failure.
 //
 // Legitimate disk read: extracts structured `#include` directives at
 // registration time to populate EmitsIncludes. NOT for closure walks.

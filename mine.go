@@ -12,15 +12,12 @@ import (
 
 // mine.go — toolchain discovery and flag mining.
 //
-// mineTools resolves a fixed set of programs via $PATH (clang, clang++, ar,
-// objcopy, strip, python3, lld); commonFlags projects those into the
+// Resolves a fixed set of programs via $PATH and projects them into the
 // ymake-style flag namespace (BUILD_PYTHON_BIN, CLANG_TOOL,
-// CLANG_pl_pl_TOOL, etc.). Both `gen` and `make` consult these to populate
-// cliDefines so the graph is pinned to the host's actual toolchain layout.
+// CLANG_pl_pl_TOOL, etc.).
 
 // mineTools resolves each tool's absolute path via exec.LookPath.
-// Missing tools throw with a clear message; per MVP scope we require
-// the full set, no partial discovery.
+// Missing tools throw; the full set is required, no partial discovery.
 func mineTools() map[string]string {
 	names := []string{
 		"clang",
@@ -58,10 +55,9 @@ func mineTools() map[string]string {
 }
 
 // commonFlags builds the ymake-style flag map from a mined tools map.
-// The shape mirrors the old gg/ya.go commonFlags() function: each tool
-// surfaces as `<UPPER>_TOOL` and `<UPPER>_TOOL_VENDOR` keys (with `+`
-// transliterated to `_pl` for ymake's `clang++` → `CLANG_pl_pl_TOOL`),
-// plus baseline scalars used by the conf templates.
+// Each tool surfaces as `<UPPER>_TOOL` and `<UPPER>_TOOL_VENDOR` keys
+// (with `+` transliterated to `_pl` for ymake's `clang++` →
+// `CLANG_pl_pl_TOOL`), plus baseline scalars used by the conf templates.
 func commonFlags(tools map[string]string) map[string]string {
 	res := map[string]string{
 		"CONSISTENT_DEBUG":         "yes",

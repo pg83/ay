@@ -24,19 +24,12 @@ func (h *intHeap) Pop() interface{} {
 	return x
 }
 
-// emitter.go — Emitter interface, NodeRef placeholder, BufferedEmitter,
-// Graph wrapper, and the Finalize Merkle pass.
-//
-// Rules call Emit(*Node) → NodeRef (opaque buffer index; the UID isn't
-// known until every transitive dep has been hashed). Deps are wired by
-// storing NodeRefs in DepRefs/ForeignDepRefs. Result(NodeRef) marks a
-// final output; Graph.Result holds those UIDs in call order.
-//
-// Finalize topo-sorts buffered nodes, then walks dependency-first
-// computing each UID from a canonicalised serialisation whose children's
-// UIDs are already filled in (Merkle). Cycles throw. Resolved Deps and
-// each ForeignDeps[key] are sorted alphabetically before canonicalisation
-// so the hash is order-independent.
+// Rules call Emit(*Node) → NodeRef (opaque buffer index — UID isn't
+// known until every transitive dep has been hashed). Deps are wired via
+// DepRefs/ForeignDepRefs. Finalize topo-sorts dep-first and Merkle-hashes
+// each node from its children's already-computed UIDs. Resolved Deps and
+// each ForeignDeps[key] are sorted before canonicalisation so the hash
+// is order-independent. Cycles throw.
 
 // NodeRef is the indirection that lets rules express "this node depends
 // on that node" without knowing yet what the dependee's UID will be.
@@ -47,10 +40,8 @@ type NodeRef struct {
 
 // Emitter is the interface rules use to publish nodes and mark results.
 // OnReady returns a channel that closes when the referenced node's deps
-// are resolved. BufferedEmitter returns one shared channel that closes at
-// Finalize for any input ref. StreamingEmitter MUST close a per-ref
-// channel as each node's deps resolve — the shared-channel shortcut is
-// buffered-only.
+// are resolved. Both implementations currently return a single shared
+// channel that closes when finalize/Finish runs.
 type Emitter interface {
 	Emit(n *Node) NodeRef
 	Result(NodeRef)
@@ -122,17 +113,10 @@ type Graph struct {
 	Result []string               `json:"result"`
 }
 
-// Finalize converts a BufferedEmitter into *Graph: topo-sort, walk dep-
-// first computing UID Merkle-style, populate Deps/ForeignDeps from
-// resolved children's UIDs (sorted), clear internal *Refs, and return a
-// Graph whose Result is the result-ref ids translated to UIDs in call
-// order. Cycles or out-of-range NodeRefs throw via ThrowFmt.
-//
-// FinalizeStream is the streaming sibling: yields each finalized node
-// (UID/SelfUID + resolved Deps/ForeignDeps populated, internal *Refs
-// cleared) in dep-first topological order, then returns deduped root
-// UIDs. Yielded *Node lives in the emitter's slice; not copied. Cannot
-// run concurrently with Finalize on the same emitter.
+// FinalizeStream yields each finalized node in dep-first topological
+// order, then returns deduped root UIDs. Yielded *Node lives in the
+// emitter's slice; not copied. Cannot run concurrently with Finalize on
+// the same emitter.
 func FinalizeStream(e *BufferedEmitter, yield func(*Node)) []string {
 	uids := finalizeNodes(e, yield)
 
@@ -192,9 +176,8 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
 			checkRef(i, r)
 		}
 
-		// Iterate ForeignDepRefs in sorted-key order: this loop is
-		// validation-only (no output bytes), but we keep the discipline
-		// (D14) so reviewers don't have to second-guess.
+		// Iterate ForeignDepRefs in sorted-key order: validation-only
+		// here, but we keep the discipline so reviewers don't second-guess.
 		fkeys := make([]string, 0, len(node.ForeignDepRefs))
 		for k := range node.ForeignDepRefs {
 			fkeys = append(fkeys, k)
@@ -401,7 +384,7 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 
 	u := nodeUIDWithBuf(node, uidScratch)
 	node.UID = u
-	// SelfUID is a PR-02 placeholder; pinned by t.Logf rather than t.Errorf.
+	// SelfUID currently mirrors UID (placeholder).
 	node.SelfUID = u
 	node.StatsUID = ""
 

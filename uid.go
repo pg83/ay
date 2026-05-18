@@ -10,15 +10,9 @@ import (
 
 // uid.go — content-derived UID hashing.
 //
-// UID = base64url(sha1(canonical-node-bytes))[:22] (length verified against
-// /home/pg/monorepo/yatool_orig/sg.json). Canonical bytes are an internal
-// binary format — not JSON; the only contract is hash stability per
-// semantic node content.
-//
-// Accumulated via concrete-typed canonBuf whose writeXxx methods inline as
-// direct appends — avoids the per-write interface dispatch / slice-header
-// boxing that profiling flagged at 25% of allocs when streaming through
-// hash.Hash.
+// UID = base64url(sha1(canonical-node-bytes))[:22]. Canonical bytes are an
+// internal binary format (not JSON); the only contract is hash stability
+// per semantic node content.
 //
 // Field encoding is positional in alphabetical order (matching node.go);
 // variable-length items are 4-byte little-endian length-prefixed. UID,

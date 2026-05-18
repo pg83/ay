@@ -22,14 +22,13 @@ const (
 
 	// WarnMissingInclude is an include-resolver diagnostic: an `#include`
 	// with no hit in source/build dirs, search path, or sysincl mappings.
-	// Build proceeds (upstream tolerates these) but no input edge emitted.
+	// Fatal by default; `--keep-going` downgrades to warning.
 	WarnMissingInclude
 )
 
 // String returns a stable lower-case label for the kind, suitable
-// as a stderr-line prefix (`sysincl:`, `missing-include:`). Used by
-// the default `printWarn` formatter; receivers that route programmatically
-// dispatch on the Kind value directly and ignore this.
+// as a stderr-line prefix (`sysincl:`, `missing-include:`). Receivers
+// that route programmatically dispatch on the Kind value directly.
 func (k WarnKind) String() string {
 	switch k {
 	case WarnSysIncl:
