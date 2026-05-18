@@ -41,15 +41,15 @@ func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (
 
 // composeASCmdArgs builds the cmd_args bundle.
 func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in ModuleCCInputs) []string {
-	isMusl := instance.Flags.NoStdInc
+	noStdInc := instance.Flags.NoStdInc
 
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 3 + len(bundle.ArchArgs)
 
 	// No-stdinc preNoLibcExtras: module's own CFLAGS + GLOBAL CFLAGS,
-	// mirroring composeMuslCC. Empty for non-musl modules.
+	// mirroring composeNoStdIncCC. Empty for normal modules.
 	noStdIncCFlags := []string(nil)
-	if isMusl {
+	if noStdInc {
 		noStdIncCFlags = make([]string, 0, len(in.CFlags)+len(in.OwnCFlagsGlobal))
 		noStdIncCFlags = append(noStdIncCFlags, in.CFlags...)
 		noStdIncCFlags = append(noStdIncCFlags, in.OwnCFlagsGlobal...)
@@ -58,7 +58,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	warnBundle := pickWarningFlags(instance.Flags.NoCompilerWarnings)
 
 	var ownCFlags, autoPeerCFlags []string
-	if !isMusl {
+	if !noStdInc {
 		ownCFlags = composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
 		autoPeerCFlags = in.AutoPeerCFlags
 	}
@@ -67,7 +67,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	preNoLibcExtras = append(preNoLibcExtras, noStdIncCFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, ownCFlags...)
 
-	includes := composeASIncludes(in, isMusl)
+	includes := composeASIncludes(in, noStdInc)
 
 	betweenBlocks := len(catboostOpenSourceDefine) + len(autoPeerCFlags)
 	betweenBlocks += len(bundle.CPUFeatures)
@@ -89,8 +89,8 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 }
 
 // composeASIncludes derives the include-tail slice following the source path in cmd_args.
-func composeASIncludes(in ModuleCCInputs, isMusl bool) []string {
-	if isMusl {
+func composeASIncludes(in ModuleCCInputs, noStdInc bool) []string {
+	if noStdInc {
 		return composeNoStdIncIncludes(in.AddIncl)
 	}
 

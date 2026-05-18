@@ -201,9 +201,11 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	outputPath := outVFS.String()
 	inputPath := inVFS.String()
 
-	// No-stdinc modules use the musl-shaped compile pipeline: their
-	// ya.make owns the full include set and libc CFLAGS.
-	isMusl := instance.Flags.NoStdInc
+	// No-stdinc modules own the full include set and libc CFLAGS via
+	// their ya.make; they take a dedicated composer path with
+	// composeNoStdIncIncludes instead of the ccIncludesPrefix/suffix
+	// pair, and dispatch through composeNoStdIncCC{,Host}.
+	noStdInc := instance.Flags.NoStdInc
 	isCxx := in.ForceCxx || isCxxSource(srcRel)
 
 	// Filter own per-source extras by source language. CXXFLAGS apply
@@ -223,12 +225,11 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	var cmdArgs []string
 
 	// No-stdinc modules still take their OWN ADDINCL from ya.make:
-	// contrib/libs/musl/ya.make declares the full musl-self include
-	// set (arch/X, arch/generic, src/include, src/internal, include,
-	// extra), which parser->moduleData threads into in.AddIncl.
-	// What stays special-cased here is only peer-GLOBAL suppression
-	// and muslExtraDefines.
-	muslOwnExtras := platformCompilerFlags(instance.Platform, isCxx)
+	// the parser threads the module's full include set (arch/X,
+	// arch/generic, src/include, src/internal, include, extra for
+	// contrib/libs/musl) into in.AddIncl. What stays special-cased here
+	// is peer-GLOBAL suppression and the no-stdinc cmd-arg layout.
+	platformOwnExtras := platformCompilerFlags(instance.Platform, isCxx)
 
 	// ADDINCL slot order: own ADDINCL BEFORE ccIncludesSuffix
 	// (linux-headers); peer-propagated GLOBAL ADDINCL AFTER it.
@@ -239,17 +240,17 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	// search path; peer-GLOBAL `-I` would violate musl-self isolation.
 
 	// Peer / auto-CFLAG injection splits across two slots:
-	//   - autoPeerCFlags (`-D_musl_`) BETWEEN catboost flag and the
+	//   - autoPeerCFlags (e.g. `-D_musl_`) BETWEEN catboost flag and the
 	//     2nd noLibcUndebugBlock copy. Empirical:
 	//     util/charset/all_charset.cpp.o cmd_args[78].
 	//   - peerExtras (per-language peer-GLOBAL CXXFLAGS / CONLYFLAGS)
 	//     at the cxx-extras tail (AFTER own CXXFLAGS, BEFORE
 	//     builtinMacroDateTime).
-	// Both slots stay empty for musl flavours; muslExtraDefines carries
-	// the musl-self `-D_musl_=1`.
+	// Both slots stay empty for no-stdinc modules; the noStdInc composer
+	// folds CFLAGS/GLOBAL-CFLAGS into a single preNoLibcExtras block.
 	var autoPeerCFlags, peerExtras, ownGlobalBucket, ownCFlags []string
 
-	if !isMusl {
+	if !noStdInc {
 		autoPeerCFlags = in.AutoPeerCFlags
 		peerExtras = composePeerExtras(in, isCxx)
 		ownGlobalBucket = composeOwnAndPeerGlobalBucket(in, isCxx)
@@ -265,19 +266,19 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	isHost := instance.Platform.IsHost
 	// No-stdinc preNoLibcExtras: module's own CFLAGS followed by its
 	// GLOBAL CFLAGS. For contrib/libs/musl/ya.make this materialises as
-	// the 8 own flags (-nostdinc, -ffreestanding, …) followed by
-	// `-D_musl_=1` — identical to the former `muslExtraDefines` block.
+	// the 8 own flags (-nostdinc, -ffreestanding, …) followed by the
+	// GLOBAL `-D_musl_=1`.
 	var noStdIncCFlags []string
-	if isMusl {
+	if noStdInc {
 		noStdIncCFlags = make([]string, 0, len(in.CFlags)+len(in.OwnCFlagsGlobal))
 		noStdIncCFlags = append(noStdIncCFlags, in.CFlags...)
 		noStdIncCFlags = append(noStdIncCFlags, in.OwnCFlagsGlobal...)
 	}
 	switch {
-	case isMusl && isHost:
-		cmdArgs = composeMuslHostCC(instance.Platform, outputPath, inputPath, in.AddIncl, noStdIncCFlags, muslOwnExtras, isCxx, instance.Flags.NoCompilerWarnings)
-	case isMusl:
-		cmdArgs = composeMuslCC(instance.Platform, outputPath, inputPath, in.AddIncl, noStdIncCFlags, muslOwnExtras, isCxx, instance.Flags.NoCompilerWarnings)
+	case noStdInc && isHost:
+		cmdArgs = composeNoStdIncHostCC(instance.Platform, outputPath, inputPath, in.AddIncl, noStdIncCFlags, platformOwnExtras, isCxx, instance.Flags.NoCompilerWarnings)
+	case noStdInc:
+		cmdArgs = composeNoStdIncCC(instance.Platform, outputPath, inputPath, in.AddIncl, noStdIncCFlags, platformOwnExtras, isCxx, instance.Flags.NoCompilerWarnings)
 	default:
 		args := ccComposeArgs{
 			Platform:           instance.Platform,
@@ -897,15 +898,15 @@ func composeHostCC(a ccComposeArgs) []string {
 	return cmdArgs
 }
 
-// composeMuslCC composes the cmd_args bundle for a TARGET no-stdinc CC
-// (the musl-self compile shape). 111 args for musl's production
-// own-ADDINCL set. Differences from composeTargetCC: no-stdinc own
-// ADDINCL slots between `ccIncludesPrefix` and `ccIncludesSuffix`;
+// composeNoStdIncCC composes the cmd_args bundle for a TARGET no-stdinc
+// CC. 111 args for the musl-self production own-ADDINCL set.
+// Differences from composeTargetCC: no-stdinc own ADDINCL slots between
+// `ccIncludesPrefix` and `ccIncludesSuffix`;
 // `pickWarningFlags(noCompilerWarnings)` collapses to the 1-arg
-// `-Wno-everything` bundle for NO_COMPILER_WARNINGS modules; `noStdIncCFlags`
-// (own + GLOBAL CFLAGS parsed from the module's ya.make) replaces the
-// preNoLibcExtras slot.
-func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl []VFS, noStdIncCFlags, ownExtras []string, isCxx, noCompilerWarnings bool) []string {
+// `-Wno-everything` bundle for NO_COMPILER_WARNINGS modules;
+// `noStdIncCFlags` (own + GLOBAL CFLAGS parsed from the module's
+// ya.make) replaces the preNoLibcExtras slot.
+func composeNoStdIncCC(p *Platform, outputPath, inputPath string, addIncl []VFS, noStdIncCFlags, ownExtras []string, isCxx, noCompilerWarnings bool) []string {
 	bundle := compileFlagBundleFor(p)
 	cmdArgs := make([]string, 0, 111+len(addIncl)+len(ownExtras)+2)
 	cmdArgs = append(cmdArgs,
@@ -929,18 +930,18 @@ func composeMuslCC(p *Platform, outputPath, inputPath string, addIncl []VFS, noS
 	return cmdArgs
 }
 
-// composeMuslHostCC composes the cmd_args bundle for a HOST no-stdinc
-// PIC CC (the musl-self compile shape). 115 args for musl's production
-// own-ADDINCL set. Pinned byte-exact against
+// composeNoStdIncHostCC composes the cmd_args bundle for a HOST
+// no-stdinc PIC CC. 115 args for the musl-self production own-ADDINCL
+// set. Pinned byte-exact against
 // `$(B)/contrib/libs/musl/_/src/string/strlen.c.pic.o` (platform
 // default-linux-x86_64).
 //
-// Differences from composeMuslCC: host triple, no `-march=`; hostCFlags /
-// hostDefines replace commonCFlags / commonDefines (hostDefines adds
-// `-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE`); ndebugPicBlock × 2
-// with hostSseFeatures between replaces noLibcUndebugBlock × 2 with
-// catboostOpenSourceDefine. Net +4 args.
-func composeMuslHostCC(p *Platform, outputPath, inputPath string, addIncl []VFS, noStdIncCFlags, ownExtras []string, isCxx, noCompilerWarnings bool) []string {
+// Differences from composeNoStdIncCC: host triple, no `-march=`;
+// hostCFlags / hostDefines replace commonCFlags / commonDefines
+// (hostDefines adds `-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE`);
+// ndebugPicBlock × 2 with hostSseFeatures between replaces
+// noLibcUndebugBlock × 2 with catboostOpenSourceDefine. Net +4 args.
+func composeNoStdIncHostCC(p *Platform, outputPath, inputPath string, addIncl []VFS, noStdIncCFlags, ownExtras []string, isCxx, noCompilerWarnings bool) []string {
 	bundle := compileFlagBundleFor(p)
 	cmdArgs := make([]string, 0, 115+len(addIncl)+len(ownExtras)+2)
 	cmdArgs = append(cmdArgs,
