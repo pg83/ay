@@ -51,7 +51,7 @@ RECURSE_FOR_TESTS(
 `
 
 func TestParseArchiverYaMake(t *testing.T) {
-	mf, err := Parse("tools/archiver/ya.make", []byte(archiverYaMake))
+	mf, err := Parse(testParserFS, "tools/archiver/ya.make", []byte(archiverYaMake))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestParseArchiverYaMake(t *testing.T) {
 }
 
 func TestParseLibraryArchiveYaMake(t *testing.T) {
-	mf, err := Parse("library/cpp/archive/ya.make", []byte(libraryArchiveYaMake))
+	mf, err := Parse(testParserFS, "library/cpp/archive/ya.make", []byte(libraryArchiveYaMake))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestParseArchiverYaMakeOnDisk(t *testing.T) {
 
 func TestUnknownMacro(t *testing.T) {
 	src := []byte("FROBNICATE(foo bar)\n")
-	mf, err := Parse("test.input", src)
+	mf, err := Parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestUnknownMacro(t *testing.T) {
 
 func TestCommentHandling(t *testing.T) {
 	src := []byte("# this is a comment\nPROGRAM()\n")
-	mf, err := Parse("test.input", src)
+	mf, err := Parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestCommentHandling(t *testing.T) {
 
 func TestMultilineMacro(t *testing.T) {
 	src := []byte("PEERDIR(\n  a/b\n  c/d\n)\n")
-	mf, err := Parse("test.input", src)
+	mf, err := Parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestSetQuotedAndUnquoted(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			mf, err := Parse("test.input", []byte(tc.src))
+			mf, err := Parse(testParserFS, "test.input", []byte(tc.src))
 			if err != nil {
 				t.Fatalf("Parse(%q) failed: %v", tc.src, err)
 			}
@@ -261,7 +261,7 @@ func TestErrorCases(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := Parse("test.input", []byte(tc.src))
+			_, err := Parse(testParserFS, "test.input", []byte(tc.src))
 			if err == nil {
 				t.Fatalf("Parse(%q) returned nil error, want *ParseError", tc.src)
 			}
@@ -280,7 +280,7 @@ func TestErrorCases(t *testing.T) {
 }
 
 func TestSetArityError(t *testing.T) {
-	_, err := Parse("test.input", []byte(`SET(only_one_arg)`))
+	_, err := Parse(testParserFS, "test.input", []byte(`SET(only_one_arg)`))
 	if err == nil {
 		t.Fatalf("Parse returned nil error, want *ParseError")
 	}
@@ -313,7 +313,7 @@ func TestLineEndings(t *testing.T) {
 	var got [3][]int
 	for i, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			mf, err := Parse("test.input", []byte(tc.src))
+			mf, err := Parse(testParserFS, "test.input", []byte(tc.src))
 			if err != nil {
 				t.Fatalf("Parse failed: %v", err)
 			}
@@ -360,7 +360,7 @@ func TestStringRejectsNewline(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := Parse("test.input", []byte(tc.src))
+			_, err := Parse(testParserFS, "test.input", []byte(tc.src))
 			if err == nil {
 				t.Fatalf("Parse returned nil error, want *ParseError")
 			}
@@ -385,7 +385,7 @@ func TestStringRejectsNewline(t *testing.T) {
 // the lexer level. Genuinely-broken input (e.g. "@@@()") still errors.
 func TestLowercaseAndMixedCaseMacro(t *testing.T) {
 	t.Run("lowercase", func(t *testing.T) {
-		mf, err := Parse("test.input", []byte("lowercase_macro()\n"))
+		mf, err := Parse(testParserFS, "test.input", []byte("lowercase_macro()\n"))
 		if err != nil {
 			t.Fatalf("Parse failed: %v", err)
 		}
@@ -401,7 +401,7 @@ func TestLowercaseAndMixedCaseMacro(t *testing.T) {
 		}
 	})
 	t.Run("mixed_case_with_args", func(t *testing.T) {
-		mf, err := Parse("test.input", []byte(`Mixed_Case(arg1 "arg2")`))
+		mf, err := Parse(testParserFS, "test.input", []byte(`Mixed_Case(arg1 "arg2")`))
 		if err != nil {
 			t.Fatalf("Parse failed: %v", err)
 		}
@@ -421,7 +421,7 @@ func TestLowercaseAndMixedCaseMacro(t *testing.T) {
 		}
 	})
 	t.Run("garbage_still_errors", func(t *testing.T) {
-		_, err := Parse("test.input", []byte("@@@()"))
+		_, err := Parse(testParserFS, "test.input", []byte("@@@()"))
 		if err == nil {
 			t.Fatalf("Parse(@@@()): want error, got nil")
 		}
@@ -460,7 +460,7 @@ func TestIsWordByteBoundary(t *testing.T) {
 // swallows the rest of the line up to (and past) the closing ')'.
 func TestMidWordHashIsLiteral(t *testing.T) {
 	src := []byte("PEERDIR(a/b#x  # this IS a comment\n)\n")
-	mf, err := Parse("test.input", src)
+	mf, err := Parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -483,7 +483,7 @@ func TestMidWordHashIsLiteral(t *testing.T) {
 // comment in readString and update this test together.
 func TestStringHasNoEscapeProcessing(t *testing.T) {
 	src := []byte(`SET(N "ab\X")`)
-	mf, err := Parse("test.input", src)
+	mf, err := Parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -514,7 +514,7 @@ ELSE()
 ENDIF()
 `)
 
-	mf, err := Parse("test.input", src)
+	mf, err := Parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -571,7 +571,7 @@ ELSE()
 ENDIF()
 `)
 
-	mf, err := Parse("test.input", src)
+	mf, err := Parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -656,7 +656,7 @@ func TestParseInclude_RelativePath(t *testing.T) {
 
 // TestParseJoinSrcs pins `JOIN_SRCS(name srcs...)` parsing.
 func TestParseJoinSrcs(t *testing.T) {
-	mf, err := Parse("test.input", []byte("JOIN_SRCS(allfoo a.cpp b.cpp)\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("JOIN_SRCS(allfoo a.cpp b.cpp)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -678,7 +678,7 @@ func TestParseJoinSrcs(t *testing.T) {
 // TestParseJoinSrcs_RejectsEmpty pins that JOIN_SRCS with zero args
 // throws — at minimum the output name is required.
 func TestParseJoinSrcs_RejectsEmpty(t *testing.T) {
-	_, err := Parse("test.input", []byte("JOIN_SRCS()\n"))
+	_, err := Parse(testParserFS, "test.input", []byte("JOIN_SRCS()\n"))
 	if err == nil {
 		t.Fatal("Parse returned nil error, want *ParseError")
 	}
@@ -694,7 +694,7 @@ func TestParseJoinSrcs_RejectsEmpty(t *testing.T) {
 // TestParseAddIncl_AllGlobal pins ADDINCL where every path is prefixed
 // with GLOBAL (e.g. ADDINCL(GLOBAL include1 GLOBAL include2)).
 func TestParseAddIncl_AllGlobal(t *testing.T) {
-	mf, err := Parse("test.input", []byte("ADDINCL(GLOBAL include1 GLOBAL include2)\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("ADDINCL(GLOBAL include1 GLOBAL include2)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -719,7 +719,7 @@ func TestParseAddIncl_AllGlobal(t *testing.T) {
 
 // TestParseAddIncl_NoGlobal pins ADDINCL without any GLOBAL prefix.
 func TestParseAddIncl_NoGlobal(t *testing.T) {
-	mf, err := Parse("test.input", []byte("ADDINCL(include1)\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("ADDINCL(include1)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -751,7 +751,7 @@ func TestParseAddIncl_NoGlobal(t *testing.T) {
 // the remaining paths are module-own and must NOT propagate to peers.
 func TestParseAddIncl_Mixed(t *testing.T) {
 	src := "ADDINCL(\n    GLOBAL libcxx/include\n    libcxx/src\n)\n"
-	mf, err := Parse("test.input", []byte(src))
+	mf, err := Parse(testParserFS, "test.input", []byte(src))
 
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -780,7 +780,7 @@ func TestParseAddIncl_Mixed(t *testing.T) {
 // case is ADDINCL(FOR proto path) which must not emit -I.../FOR
 // or -I.../proto; only -I.../path is wanted.
 func TestParseAddIncl_ForKindDropped(t *testing.T) {
-	mf, err := Parse("test.input", []byte("ADDINCL(FOR proto contrib/libs/protobuf/src)\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("ADDINCL(FOR proto contrib/libs/protobuf/src)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -802,7 +802,7 @@ func TestParseAddIncl_ForKindDropped(t *testing.T) {
 // contrib/libs/protobuf/ya.make: ADDINCL(GLOBAL FOR proto path).
 func TestParseAddIncl_GlobalForKindDropped(t *testing.T) {
 	src := "ADDINCL(\n    GLOBAL contrib/libs/protobuf/src\n    GLOBAL FOR\n    proto\n    contrib/libs/protobuf/src\n)\n"
-	mf, err := Parse("test.input", []byte(src))
+	mf, err := Parse(testParserFS, "test.input", []byte(src))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -823,7 +823,7 @@ func TestParseAddIncl_GlobalForKindDropped(t *testing.T) {
 // backslash-quoted double-quotes in CFLAGS tokens are unescaped
 // at the parse boundary. Source: -DFOO=\"bar\" → stored as -DFOO="bar".
 func TestParseCFlags_BackslashQuoteUnescaped(t *testing.T) {
-	mf, err := Parse("test.input", []byte("CFLAGS(-DENGINESDIR=\\\"/usr/local/lib/engines-1.1\\\")\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("CFLAGS(-DENGINESDIR=\\\"/usr/local/lib/engines-1.1\\\")\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -842,7 +842,7 @@ func TestParseCFlags_BackslashQuoteUnescaped(t *testing.T) {
 // the literal `GLOBAL` keyword goes to GlobalFlags; later flags
 // without their own GLOBAL prefix go to OwnFlags.
 func TestParseCFlags_Global(t *testing.T) {
-	mf, err := Parse("test.input", []byte("CFLAGS(GLOBAL -O2 -Wall)\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("CFLAGS(GLOBAL -O2 -Wall)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -860,7 +860,7 @@ func TestParseCFlags_Global(t *testing.T) {
 
 // TestParseCFlags_NoModifier pins CFLAGS without the GLOBAL prefix.
 func TestParseCFlags_NoModifier(t *testing.T) {
-	mf, err := Parse("test.input", []byte("CFLAGS(-O2)\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("CFLAGS(-O2)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -881,7 +881,7 @@ func TestParseCFlags_NoModifier(t *testing.T) {
 // without `GLOBAL` go to OwnFlags. Mirror of TestParseAddIncl_PerPath
 // (PR-31 D13).
 func TestParseCFlags_PerPathGlobal(t *testing.T) {
-	mf, err := Parse("test.input", []byte("CFLAGS(GLOBAL -DA -DB GLOBAL -DC)\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("CFLAGS(GLOBAL -DA -DB GLOBAL -DC)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -900,7 +900,7 @@ func TestParseCFlags_PerPathGlobal(t *testing.T) {
 // TestParseCXXFlags_Global pins CXXFLAGS dispatch to *CXXFlagsStmt
 // with per-path GLOBAL semantics (PR-32 D05).
 func TestParseCXXFlags_Global(t *testing.T) {
-	mf, err := Parse("test.input", []byte("CXXFLAGS(GLOBAL -nostdinc++)\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("CXXFLAGS(GLOBAL -nostdinc++)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -919,7 +919,7 @@ func TestParseCXXFlags_Global(t *testing.T) {
 // TestParseCONLYFlags_Own pins CONLYFLAGS dispatch to *CONLYFlagsStmt
 // (PR-32 D06).
 func TestParseCONLYFlags_Own(t *testing.T) {
-	mf, err := Parse("test.input", []byte("CONLYFLAGS(-Wno-pointer-sign)\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("CONLYFLAGS(-Wno-pointer-sign)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -937,7 +937,7 @@ func TestParseCONLYFlags_Own(t *testing.T) {
 
 // TestParseLDFlags pins LDFLAGS — no modifier, just a flat flag list.
 func TestParseLDFlags(t *testing.T) {
-	mf, err := Parse("test.input", []byte("LDFLAGS(-lpthread -lm)\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("LDFLAGS(-lpthread -lm)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -952,7 +952,7 @@ func TestParseLDFlags(t *testing.T) {
 
 // TestParseSrcDir pins SRCDIR(dir) — single-arg, exposes the path.
 func TestParseSrcDir(t *testing.T) {
-	mf, err := Parse("test.input", []byte("SRCDIR(./xx)\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("SRCDIR(./xx)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -968,7 +968,7 @@ func TestParseSrcDir(t *testing.T) {
 // TestParseGlobalSrcs pins GLOBAL_SRCS — flat source list, no
 // modifier.
 func TestParseGlobalSrcs(t *testing.T) {
-	mf, err := Parse("test.input", []byte("GLOBAL_SRCS(a.cpp b.cpp c.cpp)\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("GLOBAL_SRCS(a.cpp b.cpp c.cpp)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -1027,7 +1027,7 @@ func TestParseIf_StringEquality(t *testing.T) {
 ENDIF()
 `)
 
-	mf, err := Parse("test.input", src)
+	mf, err := Parse(testParserFS, "test.input", src)
 
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -1066,7 +1066,7 @@ func TestParseIf_NumericLessThan(t *testing.T) {
 ENDIF()
 `)
 
-	mf, err := Parse("test.input", src)
+	mf, err := Parse(testParserFS, "test.input", src)
 
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -1105,7 +1105,7 @@ func TestParseIf_NotEqualDesugars(t *testing.T) {
 ENDIF()
 `)
 
-	mf, err := Parse("test.input", src)
+	mf, err := Parse(testParserFS, "test.input", src)
 
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -1143,7 +1143,7 @@ ENDIF()
 // error, not silently associated. The error pinpoints the second
 // `==` so the user knows which one is the chain offender.
 func TestParseIf_ChainedComparisonRejected(t *testing.T) {
-	_, err := Parse("test.input", []byte("IF (A == B == C)\nENDIF()\n"))
+	_, err := Parse(testParserFS, "test.input", []byte("IF (A == B == C)\nENDIF()\n"))
 
 	if err == nil {
 		t.Fatal("expected error for chained comparison, got nil")
@@ -1165,7 +1165,7 @@ func TestParseIf_ComparisonInAndOr(t *testing.T) {
 ENDIF()
 `)
 
-	mf, err := Parse("test.input", src)
+	mf, err := Parse(testParserFS, "test.input", src)
 
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -1194,7 +1194,7 @@ ENDIF()
 // bytes; it must still lex as a single tokWord, not be split into
 // tokInt + tokWord by the new digit-leading path.
 func TestParseIf_VersionLiteralStillWord(t *testing.T) {
-	mf, err := Parse("test.input", []byte("VERSION(2025-06-20)\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("VERSION(2025-06-20)\n"))
 
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -1219,7 +1219,7 @@ func TestParseIf_VersionLiteralStillWord(t *testing.T) {
 // macro arg lexes as tokInt and is preserved verbatim when surfaced
 // as a string in UnknownStmt.Args (e.g. `IDE_FOLDER(42)`).
 func TestParseIf_PureIntInMacroArg(t *testing.T) {
-	mf, err := Parse("test.input", []byte("IDE_FOLDER(42)\n"))
+	mf, err := Parse(testParserFS, "test.input", []byte("IDE_FOLDER(42)\n"))
 
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)

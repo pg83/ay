@@ -13,7 +13,7 @@ func parseCondForTest(t *testing.T, condSrc string) Expr {
 	t.Helper()
 
 	src := []byte("IF (" + condSrc + ")\nENDIF()\n")
-	mf, err := Parse("test.input", src)
+	mf, err := Parse(testParserFS, "test.input", src)
 
 	if err != nil {
 		t.Fatalf("Parse(%q) failed: %v", condSrc, err)

@@ -354,13 +354,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, s
 
 // sourceExistsLocally reports whether `<sourceRoot>/<modulePath>/<srcRel>`
 // is a regular file — distinguishes composeCCPaths cases (2) and (3).
-// nil FS returns false (synthetic-test path); tests wanting
-// local-resolution shape leave SrcDir nil, not FS nil.
 func sourceExistsLocally(fs *FS, modulePath, srcRel string) bool {
-	if fs == nil {
-		return false
-	}
-
 	return fs.IsFile(modulePath + "/" + srcRel)
 }
 

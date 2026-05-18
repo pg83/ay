@@ -8,15 +8,16 @@ import (
 
 // FS — read-only abstraction over the SOURCE_ROOT-rooted source tree.
 //
-// All paths are SOURCE_ROOT-relative forward-slash strings. Directory
-// listings and per-entry presence flags are cached for the lifetime of
-// the FS; file contents are NOT cached (callers layer their own caches
-// — e.g. includeParserManager caches parsed include directives).
+// All paths are SOURCE_ROOT-relative forward-slash strings ("" addresses
+// the root). Directory listings and per-entry presence are cached for
+// the lifetime of the FS; file contents are not cached (callers layer
+// their own caches — e.g. includeParserManager caches parsed include
+// directives).
 //
-// Exists routes through Listdir(dirname): on miss the directory is
-// read once and every subsequent lookup against the same dir is O(1).
-// Cache never invalidates — sources are immutable for the duration of
-// a Gen run.
+// Exists routes through Listdir(dirname): on miss the directory is read
+// once and every subsequent lookup against the same dir is O(1). Cache
+// never invalidates — sources are immutable for the duration of a Gen
+// run.
 type FS struct {
 	sourceRoot string
 	rootSlash  string
@@ -28,8 +29,8 @@ type FS struct {
 	existsMisses  uint64
 }
 
-// NewFS constructs an FS rooted at sourceRoot. Empty sourceRoot is
-// legal (synthetic test trees) — Listdir of any rel returns nil.
+// NewFS constructs an FS rooted at sourceRoot. sourceRoot must be a
+// non-empty absolute path.
 func NewFS(sourceRoot string) *FS {
 	return &FS{
 		sourceRoot: sourceRoot,
@@ -51,11 +52,6 @@ func (fs *FS) Listdir(rel string) map[string]bool {
 		return cached
 	}
 	fs.listdirMisses++
-
-	if fs.sourceRoot == "" {
-		fs.dirs[rel] = nil
-		return nil
-	}
 
 	full := fs.rootSlash + rel
 	if rel == "" {
@@ -115,16 +111,14 @@ func (fs *FS) IsDir(rel string) bool {
 	return p && d
 }
 
-// Read returns the raw bytes of <sourceRoot>/<rel>. Uncached — each
-// call hits disk fresh; consumers that need memoisation must layer it
-// themselves.
+// Read returns the raw bytes of <sourceRoot>/<rel>. Uncached.
 func (fs *FS) Read(rel string) ([]byte, error) {
 	return os.ReadFile(fs.rootSlash + cleanRel(rel))
 }
 
-// ReadAbs reads an absolute path. Paths that fall inside sourceRoot
-// route through Read so cache invariants stay consistent for callers
-// that mix both forms (yamake INCLUDE resolution).
+// ReadAbs reads an absolute path. Paths under sourceRoot route through
+// Read so cache invariants stay consistent for callers that mix both
+// forms (yamake INCLUDE resolution).
 func (fs *FS) ReadAbs(absPath string) ([]byte, error) {
 	if rel, ok := fs.relForAbs(absPath); ok {
 		return fs.Read(rel)
@@ -132,8 +126,7 @@ func (fs *FS) ReadAbs(absPath string) ([]byte, error) {
 	return os.ReadFile(absPath)
 }
 
-// ExistsAbs is the absolute-path counterpart of Exists. Outside
-// sourceRoot it falls back to os.Stat.
+// ExistsAbs is the absolute-path counterpart of Exists.
 func (fs *FS) ExistsAbs(absPath string) (present bool, isDir bool) {
 	if rel, ok := fs.relForAbs(absPath); ok {
 		return fs.Exists(rel)
@@ -146,9 +139,6 @@ func (fs *FS) ExistsAbs(absPath string) (present bool, isDir bool) {
 }
 
 func (fs *FS) relForAbs(absPath string) (string, bool) {
-	if fs.sourceRoot == "" {
-		return "", false
-	}
 	if absPath == fs.sourceRoot {
 		return "", true
 	}

@@ -388,7 +388,7 @@ func ParseFile(fs *FS, path string) (mf *MakeFile, err error) {
 			abs = path
 		}
 
-		mf = Throw2(ParseFS(fs, abs, data))
+		mf = Throw2(Parse(fs, abs, data))
 	})
 
 	if exc != nil {
@@ -786,18 +786,11 @@ func (l *lexer) readNumberOrWord(startLine, startCol int) token {
 // Parser
 // ----------------------------------------------------------------------
 
-// Parse parses src as a ya.make file. INCLUDE statements are forbidden
-// — use ParseFS when the source under test exercises INCLUDE. Returns a
-// typed *ParseError on syntactic problems (errors.As-able). Lexer/parser
-// raise via throw; Parse wraps the entry point in Try.
-func Parse(name string, src []byte) (mf *MakeFile, err error) {
-	return ParseFS(nil, name, src)
-}
-
-// ParseFS is the FS-aware variant of Parse. fs is required when the
-// parsed text contains INCLUDE statements; pass nil only when the
-// caller guarantees the input is INCLUDE-free.
-func ParseFS(fs *FS, name string, src []byte) (mf *MakeFile, err error) {
+// Parse parses src as a ya.make file. Returns a typed *ParseError on
+// syntactic problems (errors.As-able). Lexer/parser raise via throw;
+// Parse wraps the entry point in Try. fs is required for INCLUDE
+// expansion (transitive reads route through it).
+func Parse(fs *FS, name string, src []byte) (mf *MakeFile, err error) {
 	exc := Try(func() {
 		mf = parseInternal(fs, name, src)
 	})
@@ -1736,10 +1729,6 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 	}
 
 	rel := args[0]
-
-	if p.fs == nil {
-		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE requires an FS (parser was constructed without one)")
-	}
 
 	// Resolve ${ARCADIA_ROOT}/... by walking up from dir(p.name) a
 	// bounded number of steps and testing each candidate join against

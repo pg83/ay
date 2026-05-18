@@ -4,8 +4,6 @@ import (
 	"crypto/md5"
 	encb64 "encoding/base64"
 	enchex "encoding/hex"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -201,12 +199,8 @@ func expandRootrel(kv string, unitPath string) string {
 	return kv[:idx] + expanded + tail[end+len("\"}"):]
 }
 
-func yaConfFormulaResources(sourceRoot string, confPath string) []string {
-	if sourceRoot == "" {
-		return nil
-	}
-
-	raw, err := os.ReadFile(filepath.Join(sourceRoot, filepath.FromSlash(confPath)))
+func yaConfFormulaResources(fs *FS, confPath string) []string {
+	raw, err := fs.Read(confPath)
 	if err != nil {
 		return nil
 	}

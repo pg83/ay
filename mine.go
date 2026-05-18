@@ -107,7 +107,7 @@ type toolOverride struct {
 	Val string
 }
 
-func toolchainFlags(sourceRoot string, overrides []toolOverride) (map[string]string, *graphConf) {
+func toolchainFlags(fs *FS, overrides []toolOverride) (map[string]string, *graphConf) {
 	flags := prebuiltToolchainFlags()
 
 	for _, o := range envToolOverrides() {
@@ -124,7 +124,7 @@ func toolchainFlags(sourceRoot string, overrides []toolOverride) (map[string]str
 
 	applyExternalClangVersion(flags)
 
-	return flags, graphConfForToolchainFlags(sourceRoot, flags)
+	return flags, graphConfForToolchainFlags(fs, flags)
 }
 
 func applyExternalClangVersion(flags map[string]string) {
@@ -172,22 +172,22 @@ func prebuiltToolchainFlags() map[string]string {
 	return flags
 }
 
-func graphConfForToolchainFlags(sourceRoot string, flags map[string]string) *graphConf {
+func graphConfForToolchainFlags(fs *FS, flags map[string]string) *graphConf {
 	resources := make([]graphConfResource, 0, 5)
 
 	if flagsUsePrefix(flags, "$(YMAKE_PYTHON3)") {
-		resources = append(resources, readHostResourcesBundle(sourceRoot, "YMAKE_PYTHON3", "build/platform/python/ymake_python3/resources.json", true))
+		resources = append(resources, readHostResourcesBundle(fs, "YMAKE_PYTHON3", "build/platform/python/ymake_python3/resources.json", true))
 	}
 
 	if flagsUsePrefix(flags, "$(LLD_ROOT)") {
-		resources = append(resources, readHostResourcesBundle(sourceRoot, "LLD_ROOT", "build/platform/lld/lld20.json", true))
+		resources = append(resources, readHostResourcesBundle(fs, "LLD_ROOT", "build/platform/lld/lld20.json", true))
 	}
 
 	if flagsUsePrefix(flags, "$(CLANG)") {
-		resources = append(resources, readHostResourcesBundle(sourceRoot, "CLANG", "build/platform/clang/clang20.json", false))
+		resources = append(resources, readHostResourcesBundle(fs, "CLANG", "build/platform/clang/clang20.json", false))
 	}
 
-	resources = append(resources, readHostResourcesBundle(sourceRoot, "JDK17-564746473", "build/platform/java/jdk/jdk17/jdk.json", true))
+	resources = append(resources, readHostResourcesBundle(fs, "JDK17-564746473", "build/platform/java/jdk/jdk17/jdk.json", true))
 	resources = append(resources, graphConfResource{
 		Name:     "vcs",
 		Pattern:  "VCS",
@@ -267,8 +267,8 @@ func mineClangMajor(clang string) string {
 	return ""
 }
 
-func readYaConfSection(path, wantSection string) map[string]string {
-	raw := Throw2(os.ReadFile(path))
+func readYaConfSection(fs *FS, rel, wantSection string) map[string]string {
+	raw := Throw2(fs.Read(rel))
 	out := map[string]string{}
 	section := ""
 
@@ -312,9 +312,9 @@ type hostResourcesJSON struct {
 	} `json:"by_platform"`
 }
 
-func readHostResourcesBundle(sourceRoot, pattern, rel string, upperPlatform bool) graphConfResource {
+func readHostResourcesBundle(fs *FS, pattern, rel string, upperPlatform bool) graphConfResource {
 	var data hostResourcesJSON
-	raw := Throw2(os.ReadFile(filepath.Join(sourceRoot, rel)))
+	raw := Throw2(fs.Read(rel))
 	Throw(json.Unmarshal(raw, &data))
 
 	order := []string{
