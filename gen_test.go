@@ -533,7 +533,7 @@ END()
 	// outcome. (Gen's path goes through Finalize which strips refs;
 	// we want to see the flags that flow into EmitCC for "nolibcmod"
 	// — which is NOT a path inferFlagsFromPath bumps NoLibc on.)
-	mf := Throw2(ParseFile(filepath.Join(modDir, "ya.make")))
+	mf := Throw2(ParseFile(NewFS(root), filepath.Join(modDir, "ya.make")))
 	pathFlags := inferFlagsFromPath("nolibcmod", false)
 
 	if pathFlags.NoLibc || pathFlags.NoUtil || pathFlags.NoRuntime {

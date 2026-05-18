@@ -1568,7 +1568,7 @@ func moduleInfoForInstance(ctx *genCtx, instance ModuleInstance) moduleTypeInfo 
 	}
 
 	yamakePath := filepath.Join(ctx.sourceRoot, instance.Path, "ya.make")
-	mf := Throw2(ParseFile(yamakePath))
+	mf := Throw2(ParseFile(ctx.fs, yamakePath))
 
 	env := buildIfEnv(instance)
 	d := collectModule(ctx.fs, instance.Path, instance.Kind, mf.Stmts, env, instance.Flags)
