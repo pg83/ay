@@ -372,12 +372,14 @@ func (e *ParseError) Error() string {
 	return fmt.Sprintf("%d:%d: %s", e.Line, e.Col, e.Message)
 }
 
-// ParseFile reads path and parses it as a ya.make. Returns a typed
-// *ParseError for syntax errors (errors.As-able for line/col); I/O
-// errors surface as plain *fs.PathError.
-func ParseFile(path string) (mf *MakeFile, err error) {
+// ParseFile reads path through fs and parses it as a ya.make. Returns a
+// typed *ParseError for syntax errors (errors.As-able for line/col); I/O
+// errors surface as plain *fs.PathError. fs is required: INCLUDE
+// expansion threads it through the recursive parse so transitive reads
+// share the directory cache.
+func ParseFile(fs *FS, path string) (mf *MakeFile, err error) {
 	exc := Try(func() {
-		data := Throw2(os.ReadFile(path))
+		data := Throw2(fs.ReadAbs(path))
 
 		abs, absErr := filepath.Abs(path)
 
@@ -386,7 +388,7 @@ func ParseFile(path string) (mf *MakeFile, err error) {
 			abs = path
 		}
 
-		mf = Throw2(Parse(abs, data))
+		mf = Throw2(ParseFS(fs, abs, data))
 	})
 
 	if exc != nil {
@@ -784,17 +786,23 @@ func (l *lexer) readNumberOrWord(startLine, startCol int) token {
 // Parser
 // ----------------------------------------------------------------------
 
-// Parse parses src as a ya.make file. Returns a typed *ParseError on
-// syntactic problems (errors.As-able). Lexer/parser raise via throw;
-// Parse wraps the entry point in Try.
+// Parse parses src as a ya.make file. INCLUDE statements are forbidden
+// — use ParseFS when the source under test exercises INCLUDE. Returns a
+// typed *ParseError on syntactic problems (errors.As-able). Lexer/parser
+// raise via throw; Parse wraps the entry point in Try.
 func Parse(name string, src []byte) (mf *MakeFile, err error) {
+	return ParseFS(nil, name, src)
+}
+
+// ParseFS is the FS-aware variant of Parse. fs is required when the
+// parsed text contains INCLUDE statements; pass nil only when the
+// caller guarantees the input is INCLUDE-free.
+func ParseFS(fs *FS, name string, src []byte) (mf *MakeFile, err error) {
 	exc := Try(func() {
-		mf = parseInternal(name, src)
+		mf = parseInternal(fs, name, src)
 	})
 
 	if exc != nil {
-		// For lexer/parser errors AsError returns the underlying
-		// *ParseError verbatim so callers' errors.As keeps working.
 		err = exc.AsError()
 		mf = nil
 	}
@@ -802,16 +810,16 @@ func Parse(name string, src []byte) (mf *MakeFile, err error) {
 	return mf, err
 }
 
-func parseInternal(name string, src []byte) *MakeFile {
-	return parseInternalWithStack(name, src, nil)
+func parseInternal(fs *FS, name string, src []byte) *MakeFile {
+	return parseInternalWithStack(fs, name, src, nil)
 }
 
-func parseInternalWithStack(name string, src []byte, stack []string) *MakeFile {
-	return parseInternalWithState(name, src, stack, newIncludeState())
+func parseInternalWithStack(fs *FS, name string, src []byte, stack []string) *MakeFile {
+	return parseInternalWithState(fs, name, src, stack, newIncludeState())
 }
 
-func parseInternalWithState(name string, src []byte, stack []string, includes *includeState) *MakeFile {
-	p := &parser{lex: newLexer(name, src), name: name, includeStack: stack, includes: includes}
+func parseInternalWithState(fs *FS, name string, src []byte, stack []string, includes *includeState) *MakeFile {
+	p := &parser{lex: newLexer(name, src), name: name, includeStack: stack, includes: includes, fs: fs}
 	mf := &MakeFile{Path: name}
 	mf.Stmts, _ = p.parseStmts(termTopLevel)
 
@@ -978,6 +986,7 @@ type parser struct {
 	name         string
 	includeStack []string // absolute paths of files being parsed, outermost first; used for cycle detection
 	includes     *includeState
+	fs           *FS // source-tree FS for INCLUDE resolution; nil → direct os.{Stat,ReadFile} fallback
 }
 
 // buildStmt routes recognized macro names to typed Stmt; everything else
@@ -1728,10 +1737,14 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 
 	rel := args[0]
 
+	if p.fs == nil {
+		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE requires an FS (parser was constructed without one)")
+	}
+
 	// Resolve ${ARCADIA_ROOT}/... by walking up from dir(p.name) a
 	// bounded number of steps and testing each candidate join against
 	// the filesystem. The first existing candidate wins. If nothing
-	// resolves the original rel is left intact and ReadFile below
+	// resolves the original rel is left intact and the FS read below
 	// surfaces the error.
 	if strings.HasPrefix(rel, "${ARCADIA_ROOT}/") {
 		suffix := strings.TrimPrefix(rel, "${ARCADIA_ROOT}/")
@@ -1740,7 +1753,7 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 		for i := 0; i < 20; i++ {
 			candidate := filepath.Join(dir, suffix)
 
-			if _, err := os.Stat(candidate); err == nil {
+			if present, _ := p.fs.ExistsAbs(candidate); present {
 				rel = candidate
 
 				break
@@ -1754,7 +1767,7 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 			dir = parent
 		}
 		// If no candidate was found, rel still has ${ARCADIA_ROOT}/ prefix
-		// and the os.ReadFile below will produce a clear parse error.
+		// and the ReadAbs below will produce a clear parse error.
 	}
 
 	dir := filepath.Dir(p.name)
@@ -1795,7 +1808,7 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 		}
 	}
 
-	data, ioErr := os.ReadFile(absTarget)
+	data, ioErr := p.fs.ReadAbs(absTarget)
 	if ioErr != nil {
 		// Silently skip optional includes (file missing). Handles
 		// conditional branches like
@@ -1812,7 +1825,7 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 
 	// Recurse with the updated chain propagated into the child parser so
 	// transitive cycles (a→b→a) are also caught.
-	included := parseInternalWithState(absTarget, data, chain, p.includes)
+	included := parseInternalWithState(p.fs, absTarget, data, chain, p.includes)
 
 	return append(into, included.Stmts...)
 }

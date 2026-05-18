@@ -629,7 +629,7 @@ func TestParseInclude_RelativePath(t *testing.T) {
 		t.Fatalf("write sub: %v", err)
 	}
 
-	mf, err := ParseFile(parentPath)
+	mf, err := ParseFile(NewFS(dir), parentPath)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
 	}
@@ -987,7 +987,7 @@ func TestParseInclude_RejectsSelfCycle(t *testing.T) {
 	tmp := t.TempDir()
 	Throw(os.WriteFile(filepath.Join(tmp, "a.inc"), []byte("INCLUDE(a.inc)\n"), 0644))
 
-	_, err := ParseFile(filepath.Join(tmp, "a.inc"))
+	_, err := ParseFile(NewFS(tmp), filepath.Join(tmp, "a.inc"))
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -1006,7 +1006,7 @@ func TestParseInclude_RejectsTransitiveCycle(t *testing.T) {
 	Throw(os.WriteFile(filepath.Join(tmp, "a.inc"), []byte("INCLUDE(b.inc)\n"), 0644))
 	Throw(os.WriteFile(filepath.Join(tmp, "b.inc"), []byte("INCLUDE(a.inc)\n"), 0644))
 
-	_, err := ParseFile(filepath.Join(tmp, "a.inc"))
+	_, err := ParseFile(NewFS(tmp), filepath.Join(tmp, "a.inc"))
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
