@@ -490,7 +490,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			PeerCFlagsGlobal:     nil,
 			PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
 			PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
-			AutoPeerCFlags:       []string{muslConsumerSentinel, "-DUSE_PYTHON3"},
+			AutoPeerCFlags:       consumerAutoPeerCFlags(true, true),
 			PerSourceCFlags:      []string{"-x", "c++"},
 			SourceRoot:           ctx.sourceRoot,
 			IsGenerated:          true,

@@ -377,13 +377,7 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, muslOn bool,
 	// cmd[1] ref:48..58.
 	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
 
-	var autoPeerCFlags []string
-	if muslOn {
-		autoPeerCFlags = append(autoPeerCFlags, muslConsumerSentinel)
-	}
-	if usePython3 {
-		autoPeerCFlags = append(autoPeerCFlags, "-DUSE_PYTHON3")
-	}
+	autoPeerCFlags := consumerAutoPeerCFlags(muslOn, usePython3)
 
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningFlags, bundle.Defines, preNoLibcExtras, autoPeerCFlags)
 
@@ -426,16 +420,9 @@ func composeLDCmdVcsCompileHost(p *Platform, vcsCPath, vcsOPath string, muslOn b
 	// Anchor: tools/py3cc/py3cc cmd[1] ref:45..47.
 	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
 
-	var autoPeerCFlags []string
-	if muslOn {
-		autoPeerCFlags = append(autoPeerCFlags, muslConsumerSentinel)
-	}
-	if usePython3 {
-		// USE_PYTHON3 (defaultPeerCFlags slot for host LD vcs compile)
-		// between hostSseFeatures and the second ndebugPicBlock.
-		// Anchor: tools/py3cc/slow/py3cc cmd[1] ref:78.
-		autoPeerCFlags = append(autoPeerCFlags, "-DUSE_PYTHON3")
-	}
+	// USE_PYTHON3 slot anchors at tools/py3cc/slow/py3cc cmd[1] ref:78
+	// (between hostSseFeatures and the second ndebugPicBlock).
+	autoPeerCFlags := consumerAutoPeerCFlags(muslOn, usePython3)
 
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings), bundle.Defines, preNoLibcExtras, autoPeerCFlags)
 
