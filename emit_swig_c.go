@@ -111,16 +111,8 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 }
 
 func swigTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
-	const swigPath = "contrib/tools/swig"
-
-	swigInstance := NewToolInstance(ctx.host, swigPath)
-	swigInstance.Flags = inferFlagsFromPath(swigPath, true)
-	res := genModule(ctx, swigInstance)
-	if res.LDPath != nil {
-		return res.LDRef, res.LDPath.String()
-	}
-
-	return res.LDRef, Build("contrib/tools/swig/swig").String()
+	ref, bin := ctx.tool("contrib/tools/swig")
+	return ref, bin.String()
 }
 
 func swigOutputPrefix(src, module string) string {

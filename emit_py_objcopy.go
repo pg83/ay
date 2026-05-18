@@ -36,8 +36,8 @@ func emitResourceObjcopy(
 		return nil
 	}
 
-	rescompilerLDRef := walkHostToolForRef(ctx, instance, "tools/rescompiler/bin")
-	rescompressorLDRef := walkHostToolForRef(ctx, instance, "tools/rescompressor/bin")
+	rescompilerLDRef, _ := ctx.tool("tools/rescompiler/bin")
+	rescompressorLDRef, _ := ctx.tool("tools/rescompressor/bin")
 
 	out := &objcopyEmitResult{}
 	// Collect the SOURCE_ROOT-rooted member inputs each emitted objcopy

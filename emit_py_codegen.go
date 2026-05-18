@@ -23,22 +23,17 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	)
 
 	// Walk tools/py3cc/bin (the main py3cc binary).
-	py3ccHostInst := NewToolInstance(ctx.host, py3ccBinPath)
-	py3ccHostInst.Flags = inferFlagsFromPath(py3ccBinPath, true)
-	py3ccRes := genModule(ctx, py3ccHostInst)
-	py3ccLDRef := py3ccRes.LDRef
 	// canonicalizePy3ccBinaryPath: $(B)/tools/py3cc/bin/py3cc →
 	// $(B)/tools/py3cc/py3cc to match the reference yapyc3 cmd_args[0].
 	// tools/py3cc/bin/ya.make declares SRCDIR(tools/py3cc) so the
 	// upstream intent is a top-level binary.
-	py3ccBinary := canonicalizePy3ccBinary(*py3ccRes.LDPath)
+	py3ccLDRef, py3ccRaw := ctx.tool(py3ccBinPath)
+	py3ccBinary := canonicalizePy3ccBinary(py3ccRaw)
 
 	// Walk tools/py3cc/slow. tools/py3cc/slow/bin declares PY3_PROGRAM_BIN
 	// which isMultimoduleLibraryType routes to a header-only path, so
 	// LDPath is empty. Use canonical fallback when LDPath is nil.
-	py3ccSlowHostInst := NewToolInstance(ctx.host, py3ccSlowPath)
-	py3ccSlowHostInst.Flags = inferFlagsFromPath(py3ccSlowPath, true)
-	py3ccSlowRes := genModule(ctx, py3ccSlowHostInst)
+	py3ccSlowRes := genModule(ctx, NewToolInstance(ctx.host, py3ccSlowPath))
 	py3ccSlowLDRef := py3ccSlowRes.LDRef
 	py3ccSlowBin := Build("tools/py3cc/slow/py3cc")
 	if py3ccSlowRes.LDPath != nil {
@@ -48,21 +43,9 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	// Walk tools/rescompiler/bin, tools/rescompressor/bin, tools/archiver
 	// as host tools — referenced by PY (objcopy) and AR (pyc.inc) nodes.
 	// Walks are eager (memoized in ctx).
-	const (
-		rescompilerBinPath   = "tools/rescompiler/bin"
-		rescompressorBinPath = "tools/rescompressor/bin"
-		archiverPath         = "tools/archiver"
-	)
-
-	walkHostTool := func(path string) {
-		hostInst := NewToolInstance(ctx.host, path)
-		hostInst.Flags = inferFlagsFromPath(path, true)
-		genModule(ctx, hostInst)
-	}
-
-	walkHostTool(rescompilerBinPath)
-	walkHostTool(rescompressorBinPath)
-	walkHostTool(archiverPath)
+	ctx.tool("tools/rescompiler/bin")
+	ctx.tool("tools/rescompressor/bin")
+	ctx.tool("tools/archiver")
 
 	// Emit one yapyc3 PY node per .py source.
 	for _, srcRel := range d.pySrcs {

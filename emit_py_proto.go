@@ -39,11 +39,7 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 		return nil
 	}
 
-	protocHostInst := NewToolInstance(ctx.host, pbProtocModule)
-	protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
-	protocRes := genModule(ctx, protocHostInst)
-	protocLDRef := protocRes.LDRef
-	protocBinary := *protocRes.LDPath
+	protocLDRef, protocBinary := ctx.tool(pbProtocModule)
 
 	var cppSibling *moduleEmitResult
 	if !moduleExcludesTag(d, "CPP_PROTO") {
@@ -127,18 +123,10 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	var grpcPyBinary, mypyBinary VFS
 	var grpcPyRef, mypyRef NodeRef
 	if d.grpc {
-		grpcPyInst := NewToolInstance(ctx.host, pbGrpcPyModule)
-		grpcPyInst.Flags = inferFlagsFromPath(pbGrpcPyModule, true)
-		grpcRes := genModule(ctx, grpcPyInst)
-		grpcPyRef = grpcRes.LDRef
-		grpcPyBinary = *grpcRes.LDPath
+		grpcPyRef, grpcPyBinary = ctx.tool(pbGrpcPyModule)
 	}
 	if !d.noMypy {
-		mypyInst := NewToolInstance(ctx.host, pbMypyModule)
-		mypyInst.Flags = inferFlagsFromPath(pbMypyModule, true)
-		mypyRes := genModule(ctx, mypyInst)
-		mypyRef = mypyRes.LDRef
-		mypyBinary = *mypyRes.LDPath
+		mypyRef, mypyBinary = ctx.tool(pbMypyModule)
 	}
 
 	cmdArgs := []string{
@@ -354,7 +342,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		return nil
 	}
 
-	rescompilerRef := walkHostToolForRef(ctx, instance, "tools/rescompiler/bin")
+	rescompilerRef, _ := ctx.tool("tools/rescompiler/bin")
 	type chunk struct {
 		hashInputs []string
 		cmdArgs    []string

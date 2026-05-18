@@ -98,10 +98,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		}
 	}
 
-	fixElfInst := NewToolInstance(ctx.host, "tools/fix_elf")
-	fixElfRes := genModule(ctx, fixElfInst)
-	fixElfRef := fixElfRes.LDRef
-	fixElfPath := *fixElfRes.LDPath
+	fixElfRef, fixElfPath := ctx.tool("tools/fix_elf")
 
 	outputName := "lib" + d.moduleStmt.Args[0] + ".so"
 	outputPath := Build(instance.Path + "/" + outputName).String()

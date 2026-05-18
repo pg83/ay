@@ -84,10 +84,7 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, d *moduleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
 	// Walk the tool as a host program.
 	toolPath := filepath.Clean(stmt.ToolPath)
-	toolInstance := NewToolInstance(ctx.host, toolPath)
-	toolInstance.Flags = inferFlagsFromPath(toolPath, true)
-
-	res := genModule(ctx, toolInstance)
+	res := genModule(ctx, NewToolInstance(ctx.host, toolPath))
 	toolLDRef := res.LDRef
 	toolBinPath := *res.LDPath
 	toolInducedDeps := res.InducedDeps

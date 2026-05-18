@@ -75,27 +75,11 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 }
 
 func bisonTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
-	const p = "contrib/tools/bison"
-
-	tool := NewToolInstance(ctx.host, p)
-	tool.Flags = inferFlagsFromPath(p, true)
-	res := genModule(ctx, tool)
-	if res.LDPath != nil {
-		return res.LDRef, res.LDPath.String()
-	}
-
-	return res.LDRef, Build("contrib/tools/bison/bison").String()
+	ref, bin := ctx.tool("contrib/tools/bison")
+	return ref, bin.String()
 }
 
 func m4Tool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
-	const p = "contrib/tools/m4"
-
-	tool := NewToolInstance(ctx.host, p)
-	tool.Flags = inferFlagsFromPath(p, true)
-	res := genModule(ctx, tool)
-	if res.LDPath != nil {
-		return res.LDRef, res.LDPath.String()
-	}
-
-	return res.LDRef, Build("contrib/tools/m4/m4").String()
+	ref, bin := ctx.tool("contrib/tools/m4")
+	return ref, bin.String()
 }

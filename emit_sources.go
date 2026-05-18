@@ -60,13 +60,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		var yasmRef *NodeRef
 
 		if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
-			const yasmPath = "contrib/tools/yasm"
-
-			yasmInstance := NewToolInstance(ctx.host, yasmPath)
-			yasmInstance.Flags = inferFlagsFromPath(yasmPath, true)
-
-			yasmResult := genModule(ctx, yasmInstance)
-			ldRef := yasmResult.LDRef
+			ldRef, _ := ctx.tool("contrib/tools/yasm")
 			yasmRef = &ldRef
 		}
 
@@ -83,13 +77,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		asInputs := append([]VFS{Source(asInputRel)}, asIn.IncludeInputs...)
 		return &sourceEmit{Ref: ref, OutPath: outPath, CcIns: asInputs, PrimaryCount: 1}
 	case strings.HasSuffix(srcRel, ".rl6"):
-		const ragelBinPath = "contrib/tools/ragel6/bin"
-
-		ragelInstance := NewToolInstance(ctx.host, ragelBinPath)
-		ragelInstance.Flags = inferFlagsFromPath(ragelInstance.Path, true)
-		ragelResult := genModule(ctx, ragelInstance)
-		ragelLDRef := ragelResult.LDRef
-		ragelBinaryVFS := *ragelResult.LDPath
+		ragelLDRef, ragelBinaryVFS := ctx.tool("contrib/tools/ragel6/bin")
 
 		rl6Closure := walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 		rl6Closure = filterEnSerializedSiblings(rl6Closure)
@@ -134,23 +122,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		evSource := resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir)
 		evRelPath := evSource.Rel
 
-		protocHostInst := NewToolInstance(ctx.host, pbProtocModule)
-		protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
-		protocRes := genModule(ctx, protocHostInst)
-		protocLDRef := protocRes.LDRef
-		protocBinary := *protocRes.LDPath
-
-		cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule)
-		cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
-		cppStyleguideRes := genModule(ctx, cppStyleguideHostInst)
-		cppStyleguideLDRef := cppStyleguideRes.LDRef
-		cppStyleguideBinary := *cppStyleguideRes.LDPath
-
-		event2cppHostInst := NewToolInstance(ctx.host, evEvent2cppModule)
-		event2cppHostInst.Flags = inferFlagsFromPath(evEvent2cppModule, true)
-		evRes := genModule(ctx, event2cppHostInst)
-		event2cppLDRef := evRes.LDRef
-		event2cppBinary := *evRes.LDPath
+		protocLDRef, protocBinary := ctx.tool(pbProtocModule)
+		cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(pbCppStyleguideModule)
+		event2cppLDRef, event2cppBinary := ctx.tool(evEvent2cppModule)
 
 		evRef := EmitEV(
 			srcInstance, evRelPath,
@@ -213,22 +187,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 			PrimaryCount: 1,
 		}
 	case strings.HasSuffix(srcRel, ".rl"):
-		const (
-			ragel5Path  = "contrib/tools/ragel5/ragel"
-			rlgenCdPath = "contrib/tools/ragel5/rlgen-cd"
-		)
-
-		ragel5Instance := NewToolInstance(ctx.host, ragel5Path)
-		ragel5Instance.Flags = inferFlagsFromPath(ragel5Path, true)
-		ragel5Res := genModule(ctx, ragel5Instance)
-		ragel5LDRef := ragel5Res.LDRef
-		ragel5BinVFS := *ragel5Res.LDPath
-
-		rlgenCdInstance := NewToolInstance(ctx.host, rlgenCdPath)
-		rlgenCdInstance.Flags = inferFlagsFromPath(rlgenCdPath, true)
-		rlgenCdRes := genModule(ctx, rlgenCdInstance)
-		rlgenCdLDRef := rlgenCdRes.LDRef
-		rlgenCdBinVFS := *rlgenCdRes.LDPath
+		ragel5LDRef, ragel5BinVFS := ctx.tool("contrib/tools/ragel5/ragel")
+		rlgenCdLDRef, rlgenCdBinVFS := ctx.tool("contrib/tools/ragel5/rlgen-cd")
 
 		r5Ref, r5TmpOut, r5CppOut := EmitR5(srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
 		_ = r5Ref
@@ -297,17 +257,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 }
 
 func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel string, in ModuleCCInputs) *sourceEmit {
-	protocHostInst := NewToolInstance(ctx.host, pbProtocModule)
-	protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
-	protocRes := genModule(ctx, protocHostInst)
-	protocLDRef := protocRes.LDRef
-	protocBinary := *protocRes.LDPath
-
-	cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule)
-	cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
-	cppStyleguideRes := genModule(ctx, cppStyleguideHostInst)
-	cppStyleguideLDRef := cppStyleguideRes.LDRef
-	cppStyleguideBinary := *cppStyleguideRes.LDPath
+	protocLDRef, protocBinary := ctx.tool(pbProtocModule)
+	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(pbCppStyleguideModule)
 
 	protoRelPath := protoSourceRelPath(ctx.sourceRoot, instance, &moduleData{srcDir: srcDir}, srcRel)
 	pbRef := EmitPB(
