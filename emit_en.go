@@ -38,12 +38,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 	const enumParserPath = "tools/enum_parser/enum_parser"
 
 	// Walk enum_parser as a HOST tool (x86_64).
-	enumHostInst := NewToolInstance(ctx.host, enumParserPath)
-	enumHostInst.Flags = inferFlagsFromPath(enumParserPath, true)
-
-	result := genModule(ctx, enumHostInst)
-	enumParserLD := result.LDRef
-	enumParserBin := *result.LDPath
+	enumParserLD, enumParserBin := ctx.tool(enumParserPath)
 
 	// Synthesize a ModuleCCInputs for the include scanner using the
 	// module's own ADDINCL + peer-global ADDINCL set so headers from

@@ -797,18 +797,9 @@ func libffiConfigTriple(p *Platform) string {
 }
 
 func py3ccToolRefs(ctx *genCtx, instance ModuleInstance) (NodeRef, NodeRef, VFS, VFS) {
-	inst := NewToolInstance(ctx.host, "tools/py3cc/bin")
-	inst.Flags = inferFlagsFromPath("tools/py3cc/bin", true)
-	res := genModule(ctx, inst)
-	py3ccRef := res.LDRef
-	py3ccBinary := canonicalizePy3ccBinary(*res.LDPath)
-
-	slowInst := NewToolInstance(ctx.host, "tools/py3cc/slow")
-	slowInst.Flags = inferFlagsFromPath("tools/py3cc/slow", true)
-	slowRes := genModule(ctx, slowInst)
-	py3ccSlowRef := slowRes.LDRef
-	py3ccSlowBin := *slowRes.LDPath
-
+	py3ccRef, py3ccRaw := ctx.tool("tools/py3cc/bin")
+	py3ccBinary := canonicalizePy3ccBinary(py3ccRaw)
+	py3ccSlowRef, py3ccSlowBin := ctx.tool("tools/py3cc/slow")
 	return py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin
 }
 

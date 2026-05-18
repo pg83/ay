@@ -23,12 +23,7 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	// Walk the archiver as a host program to resolve its binary path + LD
 	// ref. Mirrors emitRunProgram's tool-walk shape; archiver lives at
 	// tools/archiver and is hard-pinned by const archiverToolPath above.
-	toolInstance := NewToolInstance(ctx.host, archiverToolPath)
-	toolInstance.Flags = inferFlagsFromPath(archiverToolPath, true)
-
-	res := genModule(ctx, toolInstance)
-	toolLDRef := res.LDRef
-	toolBinPath := *res.LDPath
+	toolLDRef, toolBinPath := ctx.tool(archiverToolPath)
 
 	// Aggregate SOURCE_ROOT-rooted IN files contributed by every PR
 	// in this module — REF includes the full upstream set in each

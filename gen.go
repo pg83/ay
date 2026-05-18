@@ -3642,6 +3642,16 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 // choice. Callers wanting "the parsed-includes pool for this instance"
 // MUST go through this helper. EN's `ctx.scannerTarget` direct accesses
 // remain explicit because EN nodes always emit on the target axis
+// tool walks `modulePath` as a host-platform tool and returns its
+// LD NodeRef + binary path. Memoised by genModule via ctx.memo, so
+// repeated calls for the same path are free. Panics on LDPath nil —
+// callers using paths whose module is a header-only multimodule (e.g.
+// tools/py3cc/slow) must invoke genModule directly and handle the nil.
+func (ctx *genCtx) tool(modulePath string) (NodeRef, VFS) {
+	res := genModule(ctx, NewToolInstance(ctx.host, modulePath))
+	return res.LDRef, *res.LDPath
+}
+
 // regardless of the surrounding walk's axis — a deliberate cross-axis
 // reach, not a per-instance dispatch.
 func (ctx *genCtx) scannerFor(instance ModuleInstance) *IncludeScanner {

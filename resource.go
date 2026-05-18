@@ -4,7 +4,6 @@ import (
 	"crypto/md5"
 	encb64 "encoding/base64"
 	enchex "encoding/hex"
-	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -456,24 +455,3 @@ func pySrcYapycSuffix(modulePath string) string {
 	return protoPathID("$S/" + modulePath)[:4]
 }
 
-// walkHostToolForRef walks `path` as a host tool and returns the LD
-// NodeRef. ParseError-class failures surface a zero ref; other panics
-// propagate. Memoized in ctx.memo so back-to-back calls from emitPySrcs
-// and emitResourceObjcopy do not duplicate node emission.
-func walkHostToolForRef(ctx *genCtx, instance ModuleInstance, path string) NodeRef {
-	hostInst := NewToolInstance(ctx.host, path)
-	hostInst.Flags = inferFlagsFromPath(path, true)
-
-	var ref NodeRef
-	if exc := Try(func() {
-		result := genModule(ctx, hostInst)
-		ref = result.LDRef
-	}); exc != nil {
-		var pe *ParseError
-		if !errors.As(exc.AsError(), &pe) {
-			panic(exc)
-		}
-	}
-
-	return ref
-}
