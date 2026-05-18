@@ -366,17 +366,28 @@ func defaultPeerCFlags(ctx *genCtx, instance ModuleInstance, d *moduleData) []st
 		return nil
 	}
 
-	out := []string{muslConsumerSentinel}
-
 	// `_PYTHON3_ADDINCL`'s `CFLAGS+=-DUSE_PYTHON3` (python.conf:1019,
 	// gated on $USE_ARCADIA_PYTHON == "yes"). Reference places it at
 	// the AutoPeerCFlags slot — right after `-D_musl_`, before the
 	// second `noLibcUndebugBlock`. `contrib/libs/python` is skipped via
 	// the modulePath guard in `applyPython3AddIncl`.
-	if d.usePython3 && instance.Path != "contrib/libs/python" {
+	usePython3 := d.usePython3 && instance.Path != "contrib/libs/python"
+
+	return consumerAutoPeerCFlags(true, usePython3)
+}
+
+// consumerAutoPeerCFlags is the single source of literal strings for
+// the consumer-side auto-peer CFLAG slice. Predicate evaluation stays
+// at the caller; this helper just centralises flag names + ordering so
+// emitter composers cannot drift. Order: musl sentinel, then USE_PYTHON3.
+func consumerAutoPeerCFlags(muslOn, usePython3 bool) []string {
+	var out []string
+	if muslOn {
+		out = append(out, muslConsumerSentinel)
+	}
+	if usePython3 {
 		out = append(out, "-DUSE_PYTHON3")
 	}
-
 	return out
 }
 
