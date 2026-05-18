@@ -244,12 +244,17 @@ func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, muslOn bo
 	// the reference cmd_args ordering.
 	noPlatform := effectiveNoPlatform(instance.Flags)
 
-	if isRuntimeAncestor(instance.Path) {
+	rc := implicitPeerCtx{
+		flags:             instance.Flags,
+		noPlatform:        noPlatform,
+		isRuntimeAncestor: isRuntimeAncestor(instance.Path),
+		muslOn:            muslOn,
+	}
+
+	if rc.isRuntimeAncestor {
 		var only []string
 
-		if !noPlatform && !instance.Flags.NoStdInc && muslOn {
-			only = append(only, "contrib/libs/musl/include")
-		}
+		only = appendImplicitPeers(only, unitImplicitPeers, rc)
 
 		if runtimeAncestorCxxConsumers[instance.Path] && useArcadiaCompilerRuntime(ctx, instance) && instance.Path != "library/cpp/sanitizer/include" {
 			only = append(only, "library/cpp/sanitizer/include")
@@ -290,17 +295,7 @@ func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, muslOn bo
 		}
 	}
 
-	// Mirrors `build/ymake.core.conf:781`:
-	// `when ($MUSL == "yes") { PEERDIR+=contrib/libs/musl/include }`.
-	// Every LIBRARY/PROGRAM that is not NO_PLATFORM gets an implicit
-	// peer on `contrib/libs/musl/include`. Header-only so its 4 GLOBAL
-	// ADDINCL paths propagate to consumers' CC cmd_args + scanner.
-	//
-	// Suppression: musl-self subtree (caught by isRuntimeAncestor),
-	// effective NO_PLATFORM, MUSL != "yes" in cliDefines.
-	if !noPlatform && muslOn {
-		peers = append(peers, "contrib/libs/musl/include")
-	}
+	peers = appendImplicitPeers(peers, unitImplicitPeers, rc)
 
 	if !instance.Flags.NoRuntime && !noPlatform && useArcadiaCompilerRuntime(ctx, instance) && instance.Path != "library/cpp/sanitizer/include" {
 		peers = append(peers, "library/cpp/sanitizer/include")
@@ -396,6 +391,97 @@ func consumerAutoPeerCFlags(muslOn, usePython3 bool) []string {
 // Distinct from `-D_musl_=1` (musl-self only, in `muslExtraDefines`).
 const muslConsumerSentinel = "-D_musl_"
 
+// implicitPeerCtx is the read-only view of a module instance that
+// implicitPeerRule predicates evaluate against. Engine-agnostic — same
+// shape for unit-level, program-level, and allocator-default rule sets.
+type implicitPeerCtx struct {
+	flags             FlagSet
+	noPlatform        bool
+	isRuntimeAncestor bool
+	muslOn            bool
+	muslLite          bool
+	osLinux           bool
+	hadAllocator      bool
+	allocatorName     string
+}
+
+// implicitPeerRule maps a predicate to an implicit PEERDIR injection.
+// Engine: appendImplicitPeers iterates rules in declaration order and
+// appends `peer` whenever `predicate` matches. Self-suppression for
+// runtime-stack subtrees lives in the predicate, not in the engine.
+type implicitPeerRule struct {
+	name      string
+	peer      string
+	predicate func(implicitPeerCtx) bool
+}
+
+func appendImplicitPeers(dst []string, rules []implicitPeerRule, rc implicitPeerCtx) []string {
+	for _, r := range rules {
+		if r.predicate(rc) {
+			dst = append(dst, r.peer)
+		}
+	}
+	return dst
+}
+
+// unitImplicitPeers mirrors `_BASE_UNIT`'s `when ($MUSL == "yes") {
+// PEERDIR += contrib/libs/musl/include }` at ymake.core.conf:781.
+// Fires both in the runtime-ancestor branch (provided !NoStdInc) and in
+// the general branch. Other unit-level peers (libcxx/libcxxrt/libunwind,
+// util, sanitizer/include) remain inline pending the broader rule lift.
+var unitImplicitPeers = []implicitPeerRule{
+	{
+		name: "musl/include",
+		peer: "contrib/libs/musl/include",
+		predicate: func(rc implicitPeerCtx) bool {
+			return rc.muslOn && !rc.noPlatform && (!rc.isRuntimeAncestor || !rc.flags.NoStdInc)
+		},
+	},
+}
+
+// programImplicitPeers mirrors `_BASE_PROGRAM`'s musl PEERDIR block at
+// ymake.core.conf:1238-1244. Fires in the post-user half
+// (`includeMusl=true`) so explicit ALLOCATOR peers land before
+// musl/full in the archive walk. MUSL_LITE selects bare musl (used by
+// contrib/tools/yasm); the default branch selects musl/full.
+var programImplicitPeers = []implicitPeerRule{
+	{
+		name: "musl/full",
+		peer: "contrib/libs/musl/full",
+		predicate: func(rc implicitPeerCtx) bool {
+			return rc.muslOn && !rc.muslLite
+		},
+	},
+	{
+		name: "musl",
+		peer: "contrib/libs/musl",
+		predicate: func(rc implicitPeerCtx) bool {
+			return rc.muslOn && rc.muslLite
+		},
+	},
+}
+
+// programAllocatorDefaults mirrors `DEFAULT_ALLOCATOR=TCMALLOC_TC` for
+// MUSL+OS_LINUX at ymake.core.conf:409. Fires in the pre-user half
+// (`includeMusl=false`) only when the module declared no explicit
+// ALLOCATOR(NAME). Mirrors `allocatorPeers["TCMALLOC_TC"]` peer set.
+var programAllocatorDefaults = []implicitPeerRule{
+	{
+		name: "tcmalloc (MUSL default)",
+		peer: "library/cpp/malloc/tcmalloc",
+		predicate: func(rc implicitPeerCtx) bool {
+			return !rc.hadAllocator && rc.muslOn && rc.osLinux
+		},
+	},
+	{
+		name: "tcmalloc/no_percpu_cache (MUSL default)",
+		peer: "contrib/libs/tcmalloc/no_percpu_cache",
+		predicate: func(rc implicitPeerCtx) bool {
+			return !rc.hadAllocator && rc.muslOn && rc.osLinux
+		},
+	},
+}
+
 // defaultProgramPeerdirsFor returns the implicit DEFAULT_PEERDIRs that
 // upstream `_BASE_PROGRAM` (build/ymake.core.conf:1219-1253) attaches
 // to PROGRAM modules in our environment (MUSL=yes, OS_LINUX=yes,
@@ -429,7 +515,15 @@ func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, ha
 
 	env := buildIfEnv(instance)
 	muslLite := env.Bool("MUSL_LITE") || muslLiteOverride
-	osLinux := env.Bool("OS_LINUX")
+
+	rc := implicitPeerCtx{
+		flags:         instance.Flags,
+		muslOn:        muslOn,
+		muslLite:      muslLite,
+		osLinux:       env.Bool("OS_LINUX"),
+		hadAllocator:  hadAllocator,
+		allocatorName: allocatorName,
+	}
 
 	var peers []string
 
@@ -444,13 +538,7 @@ func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, ha
 		// Default ALLOCATOR=TCMALLOC_TC for MUSL=yes + OS_LINUX=yes.
 		// PROGRAMs declaring ALLOCATOR(NAME) go through allocatorPeers;
 		// this default fires only when neither was declared.
-		if !hadAllocator && muslOn && osLinux {
-			// TCMALLOC_TC peer set; mirrors allocatorPeers["TCMALLOC_TC"].
-			peers = append(peers,
-				"library/cpp/malloc/tcmalloc",
-				"contrib/libs/tcmalloc/no_percpu_cache",
-			)
-		}
+		peers = appendImplicitPeers(peers, programAllocatorDefaults, rc)
 	} else {
 		// musl block declared AFTER allocator in upstream conf
 		// (ymake.core.conf:1238-1244 vs allocator select :959-1036).
@@ -458,18 +546,7 @@ func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, ha
 		// slots 47-48 (musl, musl/full) vs 41-46 (cow + tcmalloc).
 		// In the post-user half so explicit ALLOCATOR peers land
 		// before musl/full in the archive walk.
-		if muslOn && !muslLite {
-			const muslFullPath = "contrib/libs/musl/full"
-			peers = append(peers, muslFullPath)
-		}
-
-		if muslOn && muslLite {
-			// MUSL_LITE branch: bare contrib/libs/musl (not /full),
-			// per ymake.core.conf:1239-1240. e.g. contrib/tools/yasm
-			// declares ENABLE(MUSL_LITE) to get musl without the
-			// allocator+tcmalloc cascade.
-			peers = append(peers, "contrib/libs/musl")
-		}
+		peers = appendImplicitPeers(peers, programImplicitPeers, rc)
 
 		// `_BASE_PROGRAM` at ymake.core.conf:1247-1254 declares
 		// `DEFAULT(CPU_CHECK yes)` gated off by
