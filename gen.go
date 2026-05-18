@@ -277,12 +277,13 @@ type codegenOutputKey struct {
 }
 
 type scanCtxPerfStats struct {
-	activeScanCtx    int
-	resolveEntries   int
-	subgraphEntries  int
-	taintedKnown     int
-	inProgress       int
-	walkClosureCache int
+	activeScanCtx     int
+	resolveEntries    int
+	searchTierEntries int
+	subgraphEntries   int
+	taintedKnown      int
+	inProgress        int
+	walkClosureCache  int
 }
 
 // resolveCodegenDepRefs scans `includeInputs` for $(B)-rooted paths that
@@ -457,6 +458,7 @@ func (ctx *genCtx) perfScanCtxStats(scanner *IncludeScanner) scanCtxPerfStats {
 			seen[sc] = struct{}{}
 			stats.activeScanCtx++
 			stats.resolveEntries += len(sc.resolveCache)
+			stats.searchTierEntries += len(sc.searchTierCache)
 			stats.subgraphEntries += len(sc.subgraphCache)
 			stats.taintedKnown += len(sc.subgraphTaintedKnown)
 			stats.inProgress += len(sc.subgraphInProgress)
@@ -487,11 +489,12 @@ func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, 
 	reportScanner := func(label string, scanner *IncludeScanner) {
 		scanStats := scanner.perfStats()
 		ctxStats := ctx.perfScanCtxStats(scanner)
-		fmt.Fprintf(os.Stderr, "perf: scanner %s activeScanCtx=%d walkClosureCache=%d resolveEntries=%d subgraphEntries=%d taintedKnown=%d inProgress=%d walkClosure=%d dfs=%d plainDfs=%d subgraphHits=%d subgraphMisses=%d tainted=%d resolveCalls=%d resolveHits=%d resolveMisses=%d sysinclSourceHits=%d sysinclSourceMisses=%d sysinclIncluderHits=%d sysinclIncluderMisses=%d\n",
+		fmt.Fprintf(os.Stderr, "perf: scanner %s activeScanCtx=%d walkClosureCache=%d resolveEntries=%d searchTierEntries=%d subgraphEntries=%d taintedKnown=%d inProgress=%d walkClosure=%d dfs=%d plainDfs=%d subgraphHits=%d subgraphMisses=%d tainted=%d searchTierHits=%d searchTierMisses=%d resolveCalls=%d resolveHits=%d resolveMisses=%d sysinclSourceHits=%d sysinclSourceMisses=%d sysinclIncluderHits=%d sysinclIncluderMisses=%d\n",
 			label,
 			ctxStats.activeScanCtx,
 			ctxStats.walkClosureCache,
 			ctxStats.resolveEntries,
+			ctxStats.searchTierEntries,
 			ctxStats.subgraphEntries,
 			ctxStats.taintedKnown,
 			ctxStats.inProgress,
@@ -501,6 +504,8 @@ func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, 
 			scanStats.subgraphHits,
 			scanStats.subgraphMisses,
 			scanStats.subgraphTainted,
+			scanStats.searchTierHits,
+			scanStats.searchTierMisses,
 			scanStats.resolveSearchPathCalls,
 			scanStats.resolveCacheHits,
 			scanStats.resolveCacheMisses,

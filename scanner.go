@@ -172,6 +172,8 @@ type IncludeScanner struct {
 	subgraphHits           uint64
 	subgraphMisses         uint64
 	subgraphTainted        uint64
+	searchTierHits         uint64
+	searchTierMisses       uint64
 	resolveSearchPathCalls uint64
 	resolveCacheHits       uint64
 	resolveCacheMisses     uint64
@@ -223,9 +225,15 @@ type scanCtx struct {
 	ctxHash uint64
 
 	resolveCache         map[resolveInnerKey][]VFS
+	searchTierCache      map[uint32]searchTierResult
 	subgraphCache        map[subgraphInnerKey][]VFS
 	subgraphTaintedKnown map[subgraphInnerKey]struct{}
 	subgraphInProgress   map[subgraphInnerKey]struct{}
+}
+
+type searchTierResult struct {
+	paths []VFS
+	found bool
 }
 
 type sysinclSourceKey struct {
@@ -259,6 +267,8 @@ type scannerPerfStats struct {
 	subgraphHits           uint64
 	subgraphMisses         uint64
 	subgraphTainted        uint64
+	searchTierHits         uint64
+	searchTierMisses       uint64
 	resolveSearchPathCalls uint64
 	resolveCacheHits       uint64
 	resolveCacheMisses     uint64
@@ -357,6 +367,7 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 		cfg:                  cfg,
 		ctxHash:              hashScanContext(&cfg),
 		resolveCache:         make(map[resolveInnerKey][]VFS, 1024),
+		searchTierCache:      make(map[uint32]searchTierResult, 256),
 		subgraphCache:        make(map[subgraphInnerKey][]VFS, 512),
 		subgraphTaintedKnown: make(map[subgraphInnerKey]struct{}, 64),
 		subgraphInProgress:   make(map[subgraphInnerKey]struct{}, 16),
@@ -744,6 +755,8 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 		subgraphHits:           s.subgraphHits,
 		subgraphMisses:         s.subgraphMisses,
 		subgraphTainted:        s.subgraphTainted,
+		searchTierHits:         s.searchTierHits,
+		searchTierMisses:       s.searchTierMisses,
 		resolveSearchPathCalls: s.resolveSearchPathCalls,
 		resolveCacheHits:       s.resolveCacheHits,
 		resolveCacheMisses:     s.resolveCacheMisses,
@@ -1216,13 +1229,108 @@ func (s *IncludeScanner) absifyRels(rels []string) []VFS {
 	return out
 }
 
+// resolveContextSearchTier resolves the source-independent search tiers
+// for one target within a bound scanCtx:
+//  1. module's own ADDINCL
+//  2. peer-propagated GLOBAL ADDINCL
+//  3. baseline fallback (repo-root/linux-headers)
+//
+// The result is keyed only by target because the receiver scanCtx
+// already binds the relevant OwnAddIncl/PeerAddInclSet/BaseSearchPaths.
+// Same-directory quoted lookup and BUILD-root direct handling stay in
+// resolveSearchPath because they depend on the includer.
+func (sc *scanCtx) resolveContextSearchTier(targetID uint32, target string) searchTierResult {
+	s := sc.scanner
+
+	if cached, ok := sc.searchTierCache[targetID]; ok {
+		s.searchTierHits++
+		return cached
+	}
+
+	s.searchTierMisses++
+
+	var out searchTierResult
+
+	addPath := func(rel string) bool {
+		rel = normalisePath(rel)
+		if !s.fileExistsByRel(rel) {
+			return false
+		}
+
+		out.paths = []VFS{Source(rel)}
+		out.found = true
+
+		return true
+	}
+
+	addBuildPath := func(rel string) bool {
+		rel = normalisePath(rel)
+		if s.codegen == nil {
+			return false
+		}
+
+		v := Build(rel)
+		if _, ok := s.codegen.Lookup(v); !ok {
+			return false
+		}
+
+		out.paths = []VFS{v}
+		out.found = true
+
+		return true
+	}
+
+	addInclPath := func(prefix VFS) bool {
+		switch prefix.Root {
+		case VFSRootBuild:
+			if prefix.Rel == "" {
+				return addBuildPath(target)
+			}
+
+			return addBuildPath(prefix.Rel + "/" + target)
+		case VFSRootSource:
+			if prefix.Rel == "" {
+				return addPath(target)
+			}
+
+			return addPath(prefix.Rel + "/" + target)
+		}
+
+		panic("resolveContextSearchTier: zero-valued search path")
+	}
+
+	for _, p := range sc.cfg.OwnAddIncl {
+		if addInclPath(p) {
+			sc.searchTierCache[targetID] = out
+			return out
+		}
+	}
+
+	for _, p := range sc.cfg.PeerAddInclSet {
+		if addInclPath(p) {
+			sc.searchTierCache[targetID] = out
+			return out
+		}
+	}
+
+	for _, p := range sc.cfg.BaseSearchPaths {
+		if addInclPath(p) {
+			sc.searchTierCache[targetID] = out
+			return out
+		}
+	}
+
+	sc.searchTierCache[targetID] = out
+
+	return out
+}
+
 // resolveSearchPath returns the search-path-only resolved set for the
 // given directive. Cached on the scanCtx by (includer, target, kind,
 // next) — ctxHash is implicit in the scanCtx receiver.
 func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS {
 	s := sc.scanner
 	s.resolveSearchPathCalls++
-	ctx := &sc.cfg
 	key := resolveInnerKey{
 		includer: s.interner.internVFS(includerAbs),
 		target:   s.interner.internString(d.target),
@@ -1288,25 +1396,6 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		return true
 	}
 
-	addInclPath := func(prefix VFS, target string) bool {
-		switch prefix.Root {
-		case VFSRootBuild:
-			if prefix.Rel == "" {
-				return addBuildPath(target)
-			}
-
-			return addBuildPath(prefix.Rel + "/" + target)
-		case VFSRootSource:
-			if prefix.Rel == "" {
-				return addPath(target)
-			}
-
-			return addPath(prefix.Rel + "/" + target)
-		}
-
-		panic("resolveSearchPath: zero-valued search path")
-	}
-
 	// First-match-wins across the search path. Order:
 	//   1. quoted-form: same directory as the includer
 	//   2. module's own ADDINCL
@@ -1349,32 +1438,10 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	}
 
 	if !searchPathFound {
-		for _, p := range ctx.OwnAddIncl {
-			if addInclPath(p, d.target) {
-				searchPathFound = true
-
-				break
-			}
-		}
-	}
-
-	if !searchPathFound {
-		for _, p := range ctx.PeerAddInclSet {
-			if addInclPath(p, d.target) {
-				searchPathFound = true
-
-				break
-			}
-		}
-	}
-
-	if !searchPathFound {
-		for _, p := range ctx.BaseSearchPaths {
-			if addInclPath(p, d.target) {
-				searchPathFound = true
-
-				break
-			}
+		tier := sc.resolveContextSearchTier(key.target, d.target)
+		if tier.found {
+			out = append(out, tier.paths...)
+			searchPathFound = true
 		}
 	}
 
