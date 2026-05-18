@@ -67,6 +67,12 @@ type sharedParseCache struct {
 	// exists memoises os.Stat results, keyed by SOURCE_ROOT-relative
 	// tail. 16384 covers the observed peak.
 	exists map[string]bool
+
+	// Perf counters are plain uint64: generation runs single-threaded.
+	parsedHits   uint64
+	parsedMisses uint64
+	existsHits   uint64
+	existsMisses uint64
 }
 
 // newSharedParseCache allocates a sharedParseCache with pre-sized maps
@@ -86,6 +92,14 @@ type includeParserManager struct {
 	// outputs. Emitters register `$(B)` paths here explicitly; parser
 	// lookup for build-rooted paths consults ONLY this map.
 	buildParsed map[string][]includeDirective
+}
+
+type parserPerfStats struct {
+	parsedHits   uint64
+	parsedMisses uint64
+	existsHits   uint64
+	existsMisses uint64
+	buildParsed  int
 }
 
 func newIncludeParserManager(sourceRoot string) *includeParserManager {
@@ -112,8 +126,11 @@ func newIncludeParserManagerWithCache(sourceRoot string, cache *sharedParseCache
 func (pm *includeParserManager) sourceParsedBuckets(rel string) parsedIncludeSet {
 	vfsPath := Source(rel)
 	if cached, ok := pm.cache.parsed.Get(vfsPath); ok {
+		pm.cache.parsedHits++
 		return cached
 	}
+
+	pm.cache.parsedMisses++
 
 	fsPath := pm.sourceRootSlash + rel
 
@@ -152,12 +169,25 @@ func (pm *includeParserManager) RegisterBuildParsedIncludes(rel string, parsed [
 // fileExistsByRel is the inner, rel-keyed existence check.
 func (pm *includeParserManager) fileExistsByRel(rel string) bool {
 	if cached, ok := pm.cache.exists[rel]; ok {
+		pm.cache.existsHits++
 		return cached
 	}
+
+	pm.cache.existsMisses++
 
 	info, err := os.Stat(pm.sourceRootSlash + rel)
 	val := err == nil && !info.IsDir()
 	pm.cache.exists[rel] = val
 
 	return val
+}
+
+func (pm *includeParserManager) perfStats() parserPerfStats {
+	return parserPerfStats{
+		parsedHits:   pm.cache.parsedHits,
+		parsedMisses: pm.cache.parsedMisses,
+		existsHits:   pm.cache.existsHits,
+		existsMisses: pm.cache.existsMisses,
+		buildParsed:  len(pm.buildParsed),
+	}
 }

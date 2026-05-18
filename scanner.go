@@ -166,10 +166,20 @@ type IncludeScanner struct {
 
 	// subgraphHits/subgraphMisses count cache traffic for verification.
 	// Plain uint64; single-goroutine.
-	subgraphHits    uint64
-	subgraphMisses  uint64
-	subgraphTainted uint64
-	statsCallCount  uint64
+	walkClosureCalls       uint64
+	dfsCalls               uint64
+	plainDfsCalls          uint64
+	subgraphHits           uint64
+	subgraphMisses         uint64
+	subgraphTainted        uint64
+	resolveSearchPathCalls uint64
+	resolveCacheHits       uint64
+	resolveCacheMisses     uint64
+	sysinclSourceHits      uint64
+	sysinclSourceMisses    uint64
+	sysinclIncluderHits    uint64
+	sysinclIncluderMisses  uint64
+	statsCallCount         uint64
 
 	// codegen is the per-scanner registry of codegen-emitted file
 	// metadata. Nil means the registry is not active (tests that
@@ -240,6 +250,22 @@ type sysinclCacheEntry struct {
 	paths          []VFS
 	hasMultiTarget bool
 	claimed        bool
+}
+
+type scannerPerfStats struct {
+	walkClosureCalls       uint64
+	dfsCalls               uint64
+	plainDfsCalls          uint64
+	subgraphHits           uint64
+	subgraphMisses         uint64
+	subgraphTainted        uint64
+	resolveSearchPathCalls uint64
+	resolveCacheHits       uint64
+	resolveCacheMisses     uint64
+	sysinclSourceHits      uint64
+	sysinclSourceMisses    uint64
+	sysinclIncluderHits    uint64
+	sysinclIncluderMisses  uint64
 }
 
 // NewIncludeScanner constructs a scanner bound to a SysInclSet and a
@@ -383,6 +409,7 @@ func (sc *scanCtx) WalkSource(sourceRel string) []VFS {
 // EmitsIncludes).
 func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 	s := sc.scanner
+	s.walkClosureCalls++
 
 	// scanCtx is shared across sources within a module; overwrite
 	// cfg.SourceRel so resolve()'s sysinclSourceLookup keys on the
@@ -453,6 +480,11 @@ func (s *IncludeScanner) IncludeDirectiveTargets(vfsPath VFS) []string {
 // PR-34r perf instrumentation: when set, WalkClosure periodically dumps
 // subgraph cache hit/miss counters to stderr. No-op when env not set.
 var scannerStatsEnabled = os.Getenv("SCANNER_STATS") != ""
+
+// perfStatsEnabled is set once at process start from
+// $YATOOL_PERF_STATS. When enabled, Gen prints a final scanner/parser
+// summary to stderr after each root walk.
+var perfStatsEnabled = os.Getenv("YATOOL_PERF_STATS") != ""
 
 // emittedRel returns the VFS-rooted form that the scanner emits for a
 // header path. Internal paths are already VFS-rooted, so this is now an
@@ -617,6 +649,8 @@ func hashScanContext(ctx *ScanContext) uint64 {
 // preserves the canonical first-visit order an uncached DFS would
 // produce from the same partially-populated visited state.
 func (sc *scanCtx) dfs(absPath VFS, visited VFSSet, order *[]VFS) {
+	sc.scanner.dfsCalls++
+
 	if visited.Has(absPath) {
 		return
 	}
@@ -661,6 +695,8 @@ func (sc *scanCtx) dfs(absPath VFS, visited VFSSet, order *[]VFS) {
 // through `dfs()` so non-cycle descendants benefit from the
 // `subgraphCache`.
 func (sc *scanCtx) plainDfs(absPath VFS, visited VFSSet, order *[]VFS) {
+	sc.scanner.plainDfsCalls++
+
 	if !visited.AddIfAbsent(absPath) {
 		return
 	}
@@ -698,6 +734,24 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 // is ~87% (target) / ~92% (host).
 func (s *IncludeScanner) SubgraphCacheStats() (hits, misses, tainted uint64) {
 	return s.subgraphHits, s.subgraphMisses, s.subgraphTainted
+}
+
+func (s *IncludeScanner) perfStats() scannerPerfStats {
+	return scannerPerfStats{
+		walkClosureCalls:       s.walkClosureCalls,
+		dfsCalls:               s.dfsCalls,
+		plainDfsCalls:          s.plainDfsCalls,
+		subgraphHits:           s.subgraphHits,
+		subgraphMisses:         s.subgraphMisses,
+		subgraphTainted:        s.subgraphTainted,
+		resolveSearchPathCalls: s.resolveSearchPathCalls,
+		resolveCacheHits:       s.resolveCacheHits,
+		resolveCacheMisses:     s.resolveCacheMisses,
+		sysinclSourceHits:      s.sysinclSourceHits,
+		sysinclSourceMisses:    s.sysinclSourceMisses,
+		sysinclIncluderHits:    s.sysinclIncluderHits,
+		sysinclIncluderMisses:  s.sysinclIncluderMisses,
+	}
 }
 
 // subgraph returns the canonical transitive include closure rooted at
@@ -1098,8 +1152,11 @@ func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, b
 
 	// PR-34n: lock removed (single-goroutine).
 	if cached, ok := s.sysinclSourceCache[key]; ok {
+		s.sysinclSourceHits++
 		return cached.paths, cached.hasMultiTarget, cached.claimed
 	}
+
+	s.sysinclSourceMisses++
 
 	rels, claimed, hasMultiTarget := view.LookupSourceKeyed(target)
 
@@ -1121,8 +1178,11 @@ func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) ([]VF
 
 	// PR-34n: lock removed (single-goroutine).
 	if cached, ok := s.sysinclIncluderCache[key]; ok {
+		s.sysinclIncluderHits++
 		return cached.paths, cached.hasMultiTarget, cached.claimed
 	}
+
+	s.sysinclIncluderMisses++
 
 	// PerSourceView's includerKeyed slice is identical regardless of
 	// which source it was prepared for. anySrcView (initialised once)
@@ -1161,6 +1221,7 @@ func (s *IncludeScanner) absifyRels(rels []string) []VFS {
 // next) — ctxHash is implicit in the scanCtx receiver.
 func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS {
 	s := sc.scanner
+	s.resolveSearchPathCalls++
 	ctx := &sc.cfg
 	key := resolveInnerKey{
 		includer: s.interner.internVFS(includerAbs),
@@ -1170,8 +1231,11 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 
 	// PR-34n: lock removed (single-goroutine).
 	if cached, ok := sc.resolveCache[key]; ok {
+		s.resolveCacheHits++
 		return cached
 	}
+
+	s.resolveCacheMisses++
 
 	var out []VFS
 

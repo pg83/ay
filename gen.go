@@ -241,7 +241,7 @@ type genCtx struct {
 	scanCtxMode       string
 	localScanCtxStack []map[scanCtxCacheKey]*scanCtx
 	internedScanCtx   map[scanCtxCacheKey]*scanCtx
-	// Debug counters (printed when YATOOL_SCANCTX_STATS=1). scanCtxAllocs
+	// Debug counters (printed when YATOOL_PERF_STATS=1). scanCtxAllocs
 	// counts every fresh allocation; scanCtxPeak is the max bucket size
 	// observed at any store. Local-mode peak = deepest in-flight bucket;
 	// interned-mode peak = total scanCtx count (bucket never shrinks).
@@ -274,6 +274,15 @@ type scanCtxCacheKey struct {
 type codegenOutputKey struct {
 	platform *Platform
 	path     VFS
+}
+
+type scanCtxPerfStats struct {
+	activeScanCtx    int
+	resolveEntries   int
+	subgraphEntries  int
+	taintedKnown     int
+	inProgress       int
+	walkClosureCache int
 }
 
 // resolveCodegenDepRefs scans `includeInputs` for $(B)-rooted paths that
@@ -429,6 +438,81 @@ func (ctx *genCtx) popLocalScanCtx() {
 	}
 
 	ctx.localScanCtxStack = ctx.localScanCtxStack[:len(ctx.localScanCtxStack)-1]
+}
+
+func (ctx *genCtx) perfScanCtxStats(scanner *IncludeScanner) scanCtxPerfStats {
+	stats := scanCtxPerfStats{}
+	seen := make(map[*scanCtx]struct{})
+
+	addBucket := func(bucket map[scanCtxCacheKey]*scanCtx) {
+		for key, sc := range bucket {
+			if key.scanner != scanner {
+				continue
+			}
+
+			if _, ok := seen[sc]; ok {
+				continue
+			}
+
+			seen[sc] = struct{}{}
+			stats.activeScanCtx++
+			stats.resolveEntries += len(sc.resolveCache)
+			stats.subgraphEntries += len(sc.subgraphCache)
+			stats.taintedKnown += len(sc.subgraphTaintedKnown)
+			stats.inProgress += len(sc.subgraphInProgress)
+		}
+	}
+
+	addBucket(ctx.internedScanCtx)
+	for _, bucket := range ctx.localScanCtxStack {
+		addBucket(bucket)
+	}
+
+	stats.walkClosureCache = len(scanner.walkClosureCache)
+
+	return stats
+}
+
+func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, hostScanner *IncludeScanner) {
+	if !perfStatsEnabled {
+		return
+	}
+
+	parserStats := parsers.perfStats()
+	fmt.Fprintf(os.Stderr, "perf: gen mode=%s scanCtxAllocs=%d scanCtxPeak=%d internedScanCtx=%d localBuckets=%d\n",
+		ctx.scanCtxMode, ctx.scanCtxAllocs, ctx.scanCtxPeak, len(ctx.internedScanCtx), len(ctx.localScanCtxStack))
+	fmt.Fprintf(os.Stderr, "perf: parser parsedHits=%d parsedMisses=%d existsHits=%d existsMisses=%d buildParsed=%d\n",
+		parserStats.parsedHits, parserStats.parsedMisses, parserStats.existsHits, parserStats.existsMisses, parserStats.buildParsed)
+
+	reportScanner := func(label string, scanner *IncludeScanner) {
+		scanStats := scanner.perfStats()
+		ctxStats := ctx.perfScanCtxStats(scanner)
+		fmt.Fprintf(os.Stderr, "perf: scanner %s activeScanCtx=%d walkClosureCache=%d resolveEntries=%d subgraphEntries=%d taintedKnown=%d inProgress=%d walkClosure=%d dfs=%d plainDfs=%d subgraphHits=%d subgraphMisses=%d tainted=%d resolveCalls=%d resolveHits=%d resolveMisses=%d sysinclSourceHits=%d sysinclSourceMisses=%d sysinclIncluderHits=%d sysinclIncluderMisses=%d\n",
+			label,
+			ctxStats.activeScanCtx,
+			ctxStats.walkClosureCache,
+			ctxStats.resolveEntries,
+			ctxStats.subgraphEntries,
+			ctxStats.taintedKnown,
+			ctxStats.inProgress,
+			scanStats.walkClosureCalls,
+			scanStats.dfsCalls,
+			scanStats.plainDfsCalls,
+			scanStats.subgraphHits,
+			scanStats.subgraphMisses,
+			scanStats.subgraphTainted,
+			scanStats.resolveSearchPathCalls,
+			scanStats.resolveCacheHits,
+			scanStats.resolveCacheMisses,
+			scanStats.sysinclSourceHits,
+			scanStats.sysinclSourceMisses,
+			scanStats.sysinclIncluderHits,
+			scanStats.sysinclIncluderMisses,
+		)
+	}
+
+	reportScanner("target", targetScanner)
+	reportScanner("host", hostScanner)
 }
 
 // asmlibYasmModules lists module paths whose host `.S`/`.s` sources
@@ -609,6 +693,7 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 	root := genModule(ctx, seed)
 
 	ctx.emit.Result(root.LDRef)
+	reportPerfStats(ctx, parsers, targetScanner, hostScanner)
 
 	return root.LDRef
 }
