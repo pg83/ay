@@ -3644,12 +3644,19 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 // remain explicit because EN nodes always emit on the target axis
 // tool walks `modulePath` as a host-platform tool and returns its
 // LD NodeRef + binary path. Memoised by genModule via ctx.memo, so
-// repeated calls for the same path are free. Panics on LDPath nil —
-// callers using paths whose module is a header-only multimodule (e.g.
-// tools/py3cc/slow) must invoke genModule directly and handle the nil.
+// repeated calls for the same path are free. Panics if the module
+// does not emit an LD (LDPath nil).
 func (ctx *genCtx) tool(modulePath string) (NodeRef, VFS) {
-	res := genModule(ctx, NewToolInstance(ctx.host, modulePath))
+	res := ctx.toolResult(modulePath)
 	return res.LDRef, *res.LDPath
+}
+
+// toolResult returns the full moduleEmitResult of walking `modulePath`
+// as a host-platform tool. Callers needing more than (LDRef, LDPath)
+// — e.g. InducedDeps for RUN_PROGRAM — use this; everyone else uses
+// the slimmer `tool()`.
+func (ctx *genCtx) toolResult(modulePath string) *moduleEmitResult {
+	return genModule(ctx, NewToolInstance(ctx.host, modulePath))
 }
 
 // regardless of the surrounding walk's axis — a deliberate cross-axis

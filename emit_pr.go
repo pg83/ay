@@ -83,8 +83,7 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 // It walks the tool PROGRAM as a host instance to get its LD ref/path.
 func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, d *moduleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
 	// Walk the tool as a host program.
-	toolPath := filepath.Clean(stmt.ToolPath)
-	res := genModule(ctx, NewToolInstance(ctx.host, toolPath))
+	res := ctx.toolResult(filepath.Clean(stmt.ToolPath))
 	toolLDRef := res.LDRef
 	toolBinPath := *res.LDPath
 	toolInducedDeps := res.InducedDeps
