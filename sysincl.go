@@ -418,59 +418,79 @@ func (v PerSourceView) computeActiveIncluderRecords(includerPath string) []*SysI
 	return active
 }
 
-// linuxMuslSysInclOrder lists the platform-INDEPENDENT sysincl YAML
-// files loaded for the build configuration (Linux, MUSL,
-// USE_STL_SYSTEM=no, NORUNTIME=no, USE_ARCADIA_COMPILER_RUNTIME=yes,
-// OPENSOURCE=yes). Order from build/conf/sysincl.conf and
-// build/ymake.core.conf:340-351.
-//
-// Union-of-matches semantics: each record contributes its mapping;
-// bare-key entries are sysincl-known but emit nothing.
+// sysInclEnv is the read-only environment passed to sysInclEntry
+// predicates. Mirrors the var-bag ymake evaluates `when (...)` blocks
+// against in build/conf/sysincl.conf; for now the only varying axis is
+// target ISA (used by linux-musl-<arch>.yml selection at conf:53-58).
+type sysInclEnv struct {
+	arch string
+}
+
+// sysInclEntry is one YAML in the load order. nil `predicate` means
+// "always include" (mirrors `SYSINCL+=...` outside any `when` block).
+type sysInclEntry struct {
+	file      string
+	predicate func(sysInclEnv) bool
+}
+
+func archIs(want string) func(sysInclEnv) bool {
+	return func(e sysInclEnv) bool { return e.arch == want }
+}
+
+// sysInclYamlSequence mirrors the SYSINCL+= ordering from
+// build/conf/sysincl.conf + ymake.core.conf:340-351 for our build
+// configuration (Linux, MUSL=yes, USE_STL_SYSTEM=no, NORUNTIME=no,
+// USE_ARCADIA_COMPILER_RUNTIME=yes, OPENSOURCE=yes).
 //
 // linux-headers.yml is absent: ymake loads it only when OS_LINUX !=
 // "yes" (sysincl.conf:69). Linux headers reach the closure via
 // per-bundle ADDINCL (-I$(S)/contrib/libs/linux-headers) and the
 // include scanner's transitive walk.
 //
-// Platform-dependent files (`linux-musl-<isa>.yml`) are routed through
-// `LoadSysInclSetFor`'s `arch` argument because `bits/*` mappings
-// differ per ISA. The walker keeps a separate scanner per ISA.
-var linuxMuslSysInclOrder = []string{
-	"macro.yml",
-	"libc-to-compat.yml",
-	"libc-to-nothing.yml",
-	"stl-to-libstdcxx.yml",
-	"stl-to-nothing.yml",
-	"windows.yml",
-	"darwin.yml",
-	"android.yml",
-	"freebsd.yml",
-	"intrinsic.yml",
-	"nvidia.yml",
-	"misc.yml",
-	"unsorted.yml",
-	"swig.yml",
-	"libiconv.yml",
-	"libidn.yml",
-	"jdk-to-arcadia.yml",
-	"opensource.yml",
-	"libc-to-musl.yml",
-	// linux-musl-<arch>.yml is injected here by LoadSysInclSetFor.
-	"emscripten-to-nothing.yml",
-	"nvidia-cccl.yml",
-	"stl-to-libcxx.yml",
-	"libc-musl-libcxx.yml",
+// The two `linux-musl-<arch>.yml` entries differ per ISA because
+// `bits/*` mappings differ; one predicate per entry mirrors the
+// `when ($ARCH_AARCH64) / otherwise` block at sysincl.conf:53-58.
+var sysInclYamlSequence = []sysInclEntry{
+	{file: "macro.yml"},
+	{file: "libc-to-compat.yml"},
+	{file: "libc-to-nothing.yml"},
+	{file: "stl-to-libstdcxx.yml"},
+	{file: "stl-to-nothing.yml"},
+	{file: "windows.yml"},
+	{file: "darwin.yml"},
+	{file: "android.yml"},
+	{file: "freebsd.yml"},
+	{file: "intrinsic.yml"},
+	{file: "nvidia.yml"},
+	{file: "misc.yml"},
+	{file: "unsorted.yml"},
+	{file: "swig.yml"},
+	{file: "libiconv.yml"},
+	{file: "libidn.yml"},
+	{file: "jdk-to-arcadia.yml"},
+	{file: "opensource.yml"},
+	{file: "libc-to-musl.yml"},
+	{file: "linux-musl-aarch64.yml", predicate: archIs("aarch64")},
+	{file: "linux-musl.yml", predicate: archIs("x86_64")},
+	{file: "emscripten-to-nothing.yml"},
+	{file: "nvidia-cccl.yml"},
+	{file: "stl-to-libcxx.yml"},
+	{file: "libc-musl-libcxx.yml"},
 	// python.conf:244-245 — gated by $OPENSOURCE. Bare-key suppression
 	// for `<contrib/tools/python/src/Include/*>` shims in
 	// `contrib/libs/python/Include/*.h`'s `#else` (USE_PYTHON3=no) branches.
-	"python-2-disable.yml",
-	"python-2-disable-numpy.yml",
+	{file: "python-2-disable.yml"},
+	{file: "python-2-disable-numpy.yml"},
 }
 
-// LoadSysInclSetFor loads the sysincl YAMLs with the given ISA's
-// `linux-musl-<arch>.yml` injected after `libc-to-musl.yml` (mirrors
-// `build/conf/sysincl.conf:53-58`). `arch` must be "aarch64" or
-// "x86_64"; other values throw.
+var supportedSysInclArchs = map[string]struct{}{
+	"aarch64": {},
+	"x86_64":  {},
+}
+
+// LoadSysInclSetFor walks sysInclYamlSequence for the given ISA,
+// loading every YAML whose predicate matches. `arch` must be "aarch64"
+// or "x86_64"; other values throw.
 //
 // When the sysincl directory does not exist (synthetic test trees),
 // returns an empty set rather than throwing — the include scanner
@@ -482,31 +502,20 @@ func LoadSysInclSetFor(sourceRoot, arch string, onWarn func(Warn)) SysInclSet {
 		return nil
 	}
 
-	var archFile string
-
-	switch arch {
-	case "aarch64":
-		archFile = "linux-musl-aarch64.yml"
-	case "x86_64":
-		archFile = "linux-musl.yml"
-	default:
+	if _, ok := supportedSysInclArchs[arch]; !ok {
 		ThrowFmt("LoadSysInclSetFor: unsupported arch %q (want aarch64 or x86_64)", arch)
 	}
 
-	order := make([]string, 0, len(linuxMuslSysInclOrder)+1)
-
-	for _, name := range linuxMuslSysInclOrder {
-		order = append(order, name)
-
-		if name == "libc-to-musl.yml" {
-			order = append(order, archFile)
-		}
-	}
+	env := sysInclEnv{arch: arch}
 
 	var set SysInclSet
 
-	for _, name := range order {
-		path := filepath.Join(dir, name)
+	for _, entry := range sysInclYamlSequence {
+		if entry.predicate != nil && !entry.predicate(env) {
+			continue
+		}
+
+		path := filepath.Join(dir, entry.file)
 
 		data, err := os.ReadFile(path)
 
@@ -514,7 +523,7 @@ func LoadSysInclSetFor(sourceRoot, arch string, onWarn func(Warn)) SysInclSet {
 			continue
 		}
 
-		records := parseSysInclYAML(name, string(data), onWarn)
+		records := parseSysInclYAML(entry.file, string(data), onWarn)
 		set = append(set, records...)
 	}
 
