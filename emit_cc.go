@@ -224,13 +224,6 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 
 	var cmdArgs []string
 
-	// No-stdinc modules still take their OWN ADDINCL from ya.make:
-	// the parser threads the module's full include set (arch/X,
-	// arch/generic, src/include, src/internal, include, extra for
-	// contrib/libs/musl) into in.AddIncl. What stays special-cased here
-	// is peer-GLOBAL suppression and the no-stdinc cmd-arg layout.
-	platformOwnExtras := platformCompilerFlags(instance.Platform, isCxx)
-
 	// ADDINCL slot order: own ADDINCL BEFORE ccIncludesSuffix
 	// (linux-headers); peer-propagated GLOBAL ADDINCL AFTER it.
 	// Empirical (util/charset/all_charset.cpp.o cmd_args[7..16]):
@@ -239,68 +232,43 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	// dropped — `-nostdinc` + muslCcIncludes defines the entire include
 	// search path; peer-GLOBAL `-I` would violate musl-self isolation.
 
-	// Peer / auto-CFLAG injection splits across two slots:
-	//   - autoPeerCFlags (e.g. `-D_musl_`) BETWEEN catboost flag and the
-	//     2nd noLibcUndebugBlock copy. Empirical:
-	//     util/charset/all_charset.cpp.o cmd_args[78].
-	//   - peerExtras (per-language peer-GLOBAL CXXFLAGS / CONLYFLAGS)
-	//     at the cxx-extras tail (AFTER own CXXFLAGS, BEFORE
-	//     builtinMacroDateTime).
-	// Both slots stay empty for no-stdinc modules; the noStdInc composer
-	// folds CFLAGS/GLOBAL-CFLAGS into a single preNoLibcExtras block.
+	// One composer for every CC: host, target, no-stdinc all funnel
+	// through composeTargetCC with platform-specific differences
+	// expressed via Platform / ccComposeArgs fields, not via separate
+	// compose functions.
 	var autoPeerCFlags, peerExtras, ownGlobalBucket, ownCFlags []string
 
-	if !noStdInc {
+	if noStdInc {
+		// No-stdinc modules' own CFLAGS + GLOBAL CFLAGS (e.g.
+		// contrib/libs/musl/ya.make's 8 own flags + GLOBAL -D_musl_=1)
+		// occupy the same own-CFLAGS slot as a regular module's
+		// composeOwnAndPeerCFlagsAtOwnSlot output.
+		ownCFlags = make([]string, 0, len(in.CFlags)+len(in.OwnCFlagsGlobal))
+		ownCFlags = append(ownCFlags, in.CFlags...)
+		ownCFlags = append(ownCFlags, in.OwnCFlagsGlobal...)
+	} else {
 		autoPeerCFlags = in.AutoPeerCFlags
 		peerExtras = composePeerExtras(in, isCxx)
 		ownGlobalBucket = composeOwnAndPeerGlobalBucket(in, isCxx)
-		// ownCFlags slot carries in.CFlags + OwnCFlagsGlobal +
-		// PeerCFlagsGlobal (all CFLAGS axes concatenated). Empirical:
-		// antlr4 SetTransition.cpp.o idx 52-54 (own GLOBAL) and
-		// python mysnprintf.c.pic.o idx 76-78 (peer GLOBAL).
 		ownCFlags = composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
 	}
 
-	// Compose-flavour dispatch keys off instance.Platform.IsHost (host =
-	// release/PIC, target = debug/noPIC) and instance.Flags.NoStdInc.
-	isHost := instance.Platform.IsHost
-	// No-stdinc preNoLibcExtras: module's own CFLAGS followed by its
-	// GLOBAL CFLAGS. For contrib/libs/musl/ya.make this materialises as
-	// the 8 own flags (-nostdinc, -ffreestanding, …) followed by the
-	// GLOBAL `-D_musl_=1`.
-	var noStdIncCFlags []string
-	if noStdInc {
-		noStdIncCFlags = make([]string, 0, len(in.CFlags)+len(in.OwnCFlagsGlobal))
-		noStdIncCFlags = append(noStdIncCFlags, in.CFlags...)
-		noStdIncCFlags = append(noStdIncCFlags, in.OwnCFlagsGlobal...)
+	args := ccComposeArgs{
+		Platform:           instance.Platform,
+		OutputPath:         outputPath,
+		InputPath:          inputPath,
+		OwnAddIncl:         in.AddIncl,
+		PeerAddIncl:        in.PeerAddInclGlobal,
+		OwnCFlags:          ownCFlags,
+		OwnExtras:          ownExtras,
+		AutoPeerCFlags:     autoPeerCFlags,
+		PeerExtras:         peerExtras,
+		OwnGlobalBucket:    ownGlobalBucket,
+		PerSrcCFlags:       in.PerSourceCFlags,
+		IsCxx:              isCxx,
+		NoCompilerWarnings: instance.Flags.NoCompilerWarnings,
 	}
-	switch {
-	case noStdInc && isHost:
-		cmdArgs = composeNoStdIncHostCC(instance.Platform, outputPath, inputPath, in.AddIncl, noStdIncCFlags, platformOwnExtras, isCxx, instance.Flags.NoCompilerWarnings)
-	case noStdInc:
-		cmdArgs = composeNoStdIncCC(instance.Platform, outputPath, inputPath, in.AddIncl, noStdIncCFlags, platformOwnExtras, isCxx, instance.Flags.NoCompilerWarnings)
-	default:
-		args := ccComposeArgs{
-			Platform:           instance.Platform,
-			OutputPath:         outputPath,
-			InputPath:          inputPath,
-			OwnAddIncl:         in.AddIncl,
-			PeerAddIncl:        in.PeerAddInclGlobal,
-			OwnCFlags:          ownCFlags,
-			OwnExtras:          ownExtras,
-			AutoPeerCFlags:     autoPeerCFlags,
-			PeerExtras:         peerExtras,
-			OwnGlobalBucket:    ownGlobalBucket,
-			PerSrcCFlags:       in.PerSourceCFlags,
-			IsCxx:              isCxx,
-			NoCompilerWarnings: instance.Flags.NoCompilerWarnings,
-		}
-		if isHost {
-			cmdArgs = composeHostCC(args)
-		} else {
-			cmdArgs = composeTargetCC(args)
-		}
-	}
+	cmdArgs = composeTargetCC(args)
 
 	// Reference graph carries the same env map at both cmd-level and
 	// Node top-level. EmitCC is single-shot so the alias is safe;
@@ -825,139 +793,6 @@ func composeTargetCC(a ccComposeArgs) []string {
 	// after perSrcCFlags). Empirical: base64 plain32/neon64 CC nodes.
 	cmdArgs = append(cmdArgs, cOnlyExtras...)
 	cmdArgs = append(cmdArgs, a.InputPath)
-
-	return cmdArgs
-}
-
-// composeHostCC composes the cmd_args bundle for a HOST PIC CC.
-// Pinned byte-exact (105 args, no per-module extras) against
-// build/cow/on/lib.c.pic.o in /home/pg/monorepo/yatool_orig/sg.json.
-//
-// Differences from composeTargetCC:
-//   - No `-march=` (host is generic x86_64; arch encoded as `-m64`
-//     inside hostCFlags).
-//   - Release-flavoured: `-O3` (vs target's `-g`); `-fPIC`, `-DNDEBUG`
-//     (vs target's `-UNDEBUG`).
-//   - hostDefines adds `-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE`.
-//   - ndebugPicBlock × 2 with hostSseFeatures (7 args) and
-//     catboostOpenSourceDefine between, replacing
-//     noLibcUndebugBlock × 2 + catboost.
-//
-// Own-CFLAGS / cxxStandardWarnings / own-GLOBAL-bucket × 2 redux
-// pattern matches composeTargetCC.
-func composeHostCC(a ccComposeArgs) []string {
-	bundle := compileFlagBundleFor(a.Platform)
-	cmdArgs := make([]string, 0, 105+len(a.OwnAddIncl)+len(a.PeerAddIncl)+len(a.OwnCFlags)+len(a.OwnExtras)+len(a.AutoPeerCFlags)+len(a.PeerExtras)+2*len(a.OwnGlobalBucket)+len(a.PerSrcCFlags)+4)
-	cmdArgs = append(cmdArgs,
-		pickCompiler(a.Platform.Tools, a.IsCxx),
-		"--target="+a.Platform.Triple,
-		"-B"+binPath,
-		"-c",
-		"-o",
-		a.OutputPath,
-	)
-	cmdArgs = append(cmdArgs, ccIncludesPrefix...)
-	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl)
-	cmdArgs = append(cmdArgs, ccIncludesSuffix...)
-	cmdArgs = appendAddIncl(cmdArgs, a.PeerAddIncl)
-	// Host autoPeerCFlags slot: catboost → -D_musl_ → hostSseFeatures
-	// → -DUSE_PYTHON3 → 2nd ndebugPicBlock. `-DUSE_PYTHON3` is also
-	// routed via defaultPeerCFlags but the host reference places it
-	// AFTER hostSseFeatures (sitecustomize.cpp.pic.o ref:97 between
-	// -mcx16 at :96 and the 2nd ndebugPicBlock at :98); partition
-	// here so pre-SSE keeps `-D_musl_` and post-SSE picks up
-	// `-DUSE_PYTHON3`.
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(a.NoCompilerWarnings), bundle.Defines, a.OwnCFlags, a.AutoPeerCFlags)
-	// Mirror composeTargetCC's C-source trailer: CONLYFLAGS slot AFTER
-	// macroPrefixMapFlags + perSrcCFlags (not via
-	// appendCxxStdAndOwn's tail). Empirical: base64 plain32/ssse3 host
-	// PIC nodes show -std=c11 (and -mssse3) immediately before the
-	// source path.
-	var cOnlyExtrasHost []string
-	if a.IsCxx {
-		cmdArgs = appendCxxStdAndOwn(cmdArgs, true, a.NoCompilerWarnings, true, a.OwnExtras)
-	} else {
-		cOnlyExtrasHost = a.OwnExtras
-	}
-
-	if a.IsCxx {
-		cmdArgs = append(cmdArgs, a.OwnGlobalBucket...)
-		cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-		cmdArgs = append(cmdArgs, composePostCatboostBucket(a.OwnGlobalBucket)...)
-	} else {
-		cmdArgs = append(cmdArgs, a.PeerExtras...)
-	}
-
-	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
-	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)
-	// PR-35o: per-source extra CFLAGS slot (mirror of composeTargetCC).
-	cmdArgs = append(cmdArgs, a.PerSrcCFlags...)
-	cmdArgs = append(cmdArgs, cOnlyExtrasHost...)
-	cmdArgs = append(cmdArgs, a.InputPath)
-
-	return cmdArgs
-}
-
-// composeNoStdIncCC composes the cmd_args bundle for a TARGET no-stdinc
-// CC. 111 args for the musl-self production own-ADDINCL set.
-// Differences from composeTargetCC: no-stdinc own ADDINCL slots between
-// `ccIncludesPrefix` and `ccIncludesSuffix`;
-// `pickWarningFlags(noCompilerWarnings)` collapses to the 1-arg
-// `-Wno-everything` bundle for NO_COMPILER_WARNINGS modules;
-// `noStdIncCFlags` (own + GLOBAL CFLAGS parsed from the module's
-// ya.make) replaces the preNoLibcExtras slot.
-func composeNoStdIncCC(p *Platform, outputPath, inputPath string, addIncl []VFS, noStdIncCFlags, ownExtras []string, isCxx, noCompilerWarnings bool) []string {
-	bundle := compileFlagBundleFor(p)
-	cmdArgs := make([]string, 0, 111+len(addIncl)+len(ownExtras)+2)
-	cmdArgs = append(cmdArgs,
-		pickCompiler(p.Tools, isCxx),
-		"--target="+p.Triple,
-	)
-	cmdArgs = append(cmdArgs, bundle.ArchArgs...)
-	cmdArgs = append(cmdArgs,
-		"-B"+binPath,
-		"-c",
-		"-o",
-		outputPath,
-	)
-	cmdArgs = append(cmdArgs, composeNoStdIncIncludes(addIncl)...)
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings), bundle.Defines, noStdIncCFlags, nil)
-	cmdArgs = appendCxxStdAndOwn(cmdArgs, isCxx, true, false, ownExtras)
-	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
-	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)
-	cmdArgs = append(cmdArgs, inputPath)
-
-	return cmdArgs
-}
-
-// composeNoStdIncHostCC composes the cmd_args bundle for a HOST
-// no-stdinc PIC CC. 115 args for the musl-self production own-ADDINCL
-// set. Pinned byte-exact against
-// `$(B)/contrib/libs/musl/_/src/string/strlen.c.pic.o` (platform
-// default-linux-x86_64).
-//
-// Differences from composeNoStdIncCC: host triple, no `-march=`;
-// hostCFlags / hostDefines replace commonCFlags / commonDefines
-// (hostDefines adds `-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE`);
-// ndebugPicBlock × 2 with hostSseFeatures between replaces
-// noLibcUndebugBlock × 2 with catboostOpenSourceDefine. Net +4 args.
-func composeNoStdIncHostCC(p *Platform, outputPath, inputPath string, addIncl []VFS, noStdIncCFlags, ownExtras []string, isCxx, noCompilerWarnings bool) []string {
-	bundle := compileFlagBundleFor(p)
-	cmdArgs := make([]string, 0, 115+len(addIncl)+len(ownExtras)+2)
-	cmdArgs = append(cmdArgs,
-		pickCompiler(p.Tools, isCxx),
-		"--target="+p.Triple,
-		"-B"+binPath,
-		"-c",
-		"-o",
-		outputPath,
-	)
-	cmdArgs = append(cmdArgs, composeNoStdIncIncludes(addIncl)...)
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings), bundle.Defines, noStdIncCFlags, nil)
-	cmdArgs = appendCxxStdAndOwn(cmdArgs, isCxx, true, false, ownExtras)
-	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
-	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)
-	cmdArgs = append(cmdArgs, inputPath)
 
 	return cmdArgs
 }
