@@ -115,14 +115,10 @@ func newIncludeParserManagerWithCache(sourceRoot string, cache *sharedParseCache
 	}
 }
 
-// scanDirectives returns the raw include directives for the $(S)/-
-// rooted file `vfsPath`. The FS translation happens here at the
-// os.ReadFile call; raw parsing itself is delegated to a per-extension
-// parser from parsers.go. Memoised by VFS path; returns nil for missing
-// files (DFS may reach dangling sysincl mappings).
-//
-// sourceParsedBuckets returns the full parser result for one source
-// file. Parameter is SOURCE_ROOT-relative.
+// sourceParsedBuckets returns the full parser result for a SOURCE_ROOT-
+// relative file, dispatching to a per-extension parser from parsers.go.
+// Memoised by VFS path; returns nil for missing files (DFS may reach
+// dangling sysincl mappings).
 func (pm *includeParserManager) sourceParsedBuckets(rel string) parsedIncludeSet {
 	vfsPath := Source(rel)
 	if cached, ok := pm.cache.parsed.Get(vfsPath); ok {

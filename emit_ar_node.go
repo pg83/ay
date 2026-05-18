@@ -2,16 +2,14 @@ package main
 
 import "sort"
 
-// emitARNode is the shared implementation behind EmitAR and EmitARGlobal.
-// tag (when present, e.g. "global") lands in target_properties.
-// peerArchiveRefs go into DepRefs only (NOT cmd_args/inputs): ar(1)
-// archives .o files; peer archives are link-time inputs for LD.
-//
-// objPaths is in caller (declaration) order for cmd_args; `inputs` sorts
-// the .o set alphabetically, then appends the link script, then the
-// memberInputs union (every member CC's source + headers in DFS order,
-// deduped against the .o set). Production passes nil for peerArchiveRefs
-// (reference graph carries zero AR-on-AR deps); parameter retained for tests.
+// Shared implementation behind EmitAR / EmitARNamed / EmitARNamedTagged /
+// EmitARGlobalNamedTagged. peerArchiveRefs go into DepRefs only (NOT
+// cmd_args/inputs): ar(1) archives .o files; peer archives are link-time
+// inputs for LD. objPaths is caller (declaration) order for cmd_args; the
+// .o set is sorted alphabetically in `inputs`, then the link script and
+// optional ar plugin, then the memberInputs union deduped against prior
+// inputs. peerArchiveRefs is nil in production (reference graph carries
+// zero AR-on-AR deps); parameter retained for tests.
 func emitARNode(
 	instance ModuleInstance,
 	archivePath VFS,

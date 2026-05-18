@@ -2,36 +2,28 @@ package main
 
 // codegen_registry.go — per-scanner registry of codegen-emitted file metadata.
 //
-// The C/C++ include scanner resolves `#include` by walking the source tree;
-// generated files (.pb.h, *_serialized.h, .rl6 outputs, configure_file, …)
-// do not yet exist at gen time. CodegenRegistry provides a flat
-// buildRootPath → producerInfo map that the scanner consults as a third
-// existence tier.
+// Generated files do not exist at gen time, so the include scanner consults
+// this buildRootPath → producerInfo map as an existence tier alongside the
+// source tree.
 //
-// One registry per IncludeScanner (target and host each get their own) so
-// same-filename outputs across axes do not collide; mirrors the per-scanner
-// resolveCache/sysincl architecture.
+// One registry per IncludeScanner so same-filename outputs across target/host
+// axes do not collide.
 //
 // Uniqueness invariant mirrors upstream's DupSrc (macro_processor.cpp:957):
-// duplicate Register for the same OutputPath throws. All() returns entries
-// sorted by OutputPath so no map-iteration order leaks into output.
+// duplicate Register throws. All() returns entries sorted by OutputPath.
 
 import "sort"
 
 // GeneratedFileInfo describes one codegen-emitted file. Populated during the
-// emit walk by each codegen emitter (EN, PB, EV, R5, R6, CF, BI, JV, PR, AR,
-// PY).
+// emit walk by each codegen emitter.
 //
-// Some emitters Register BEFORE the producer NodeRef is known (CP/PR/EN
-// publish output paths early for the scanner's existence tier, then
-// SetProducerRef backfills the NodeRef post-Emit). HasProducerRef
-// discriminates "registered, no ref yet" from "registered, ref valid" —
-// NodeRef{} (id=0) collides with the first emitted node so the flag is
-// mandatory.
+// Some emitters Register before the producer NodeRef is known, then
+// SetProducerRef backfills it post-Emit. HasProducerRef discriminates
+// "registered, no ref yet" from "registered, ref valid" — NodeRef{} (id=0)
+// collides with the first emitted node so the flag is mandatory.
 type GeneratedFileInfo struct {
-	// ProducerKvP is the node-kind key ("EN", "PB", "EV", "R5", "R6", "CF",
-	// "BI", "JV", "PR", "AR", "PY"). Matches the KV["p"] value emitted by
-	// the producer node.
+	// ProducerKvP is the node-kind key matching the KV["p"] value emitted by
+	// the producer node (e.g. "EN", "PB", "AR", "CP").
 	ProducerKvP string
 
 	// OutputPath is the $(B)-rooted path of this generated file (e.g.
@@ -55,8 +47,7 @@ type CodegenRegistry struct {
 }
 
 // NewCodegenRegistry allocates an empty CodegenRegistry. Pre-sized for the
-// observed M3 codegen output count (~200 EN+PB+EV+R6 outputs in the
-// devtools/ymake/bin closure).
+// observed codegen output count in the devtools/ymake/bin closure.
 func NewCodegenRegistry() *CodegenRegistry {
 	return &CodegenRegistry{
 		byOutput: NewVFSMap[*GeneratedFileInfo](256),

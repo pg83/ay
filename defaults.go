@@ -15,20 +15,12 @@ import (
 	"strings"
 )
 
-// runtimeAncestorPaths is the set of module paths that are part of the
-// platform/runtime stack and therefore receive NO implicit default
-// peers. Matches the reference: each has zero peer-archive deps in AR.
-//
-// Upstream ymake special-cases these in `_BUILTIN_PEERDIR`; we
-// hard-code the closure-membership set instead. The list is the union
-// of C runtime (musl, libc_compat, linuxvdso[/original]), C++ runtime
-// (cxxsupp/{builtins, libcxx, libcxxrt, libcxxabi, libcxxabi-parts},
-// libunwind), allocator API (library/cpp/malloc/api), sanitizer shim
-// (library/cpp/sanitizer/include), and the Yandex stdlib root (util).
-//
-// Membership causes `defaultPeerdirsFor` to return empty regardless
-// of FlagSet. New entries require the reference graph to confirm
-// zero peer-archive deps AND a walker cycle through the module.
+// runtimeAncestorPaths is the platform/runtime closure: modules that
+// receive NO implicit default peers because they ARE the runtime stack
+// (C runtime, C++ runtime, allocator API, sanitizer shim, util).
+// Membership causes `defaultPeerdirsFor` to return empty regardless of
+// FlagSet. New entries require zero peer-archive deps in the reference
+// graph AND a walker cycle through the module.
 var runtimeAncestorPaths = map[string]bool{
 	"contrib/libs/musl":                    true,
 	"contrib/libs/libc_compat":             true,
@@ -47,24 +39,11 @@ var runtimeAncestorPaths = map[string]bool{
 
 // runtimeAncestorCxxConsumers is the subset of runtimeAncestorPaths
 // whose C++ sources include libcxx headers and therefore need libcxx
-// as an implicit GLOBAL header peer to supply `-I libcxx/include`,
-// `-I libcxxrt/include`, and `-nostdinc++`.
+// wired in as an implicit GLOBAL header peer.
 //
-// Without this set, runtime ancestors whose `defaultPeerdirsFor`
-// returns empty (`library/cpp/malloc/api`: NO_UTIL only, zero explicit
-// PEERDIRs) lack libcxx wiring — the C01 hoist reorders only, it
-// never injects.
-//
-// Deliberately narrow:
-//   - C-runtime (musl, libc_compat, linuxvdso, builtins) compiles
-//     only C; adding libcxx would emit spurious -I.
-//   - C++-runtime (libcxx, libcxxrt, libcxxabi, libcxxabi-parts,
-//     libunwind) carries its own ADDINCL/CXXFLAGS; adding peers
-//     would introduce flags it intentionally drops.
-//   - util reaches libcxx/libcxxrt via existing user-PEERDIRs.
-//   - sanitizer/include consumers see GLOBAL via walkPeersForGlobalAddIncl.
-//
-// Currently a single member: `library/cpp/malloc/api`.
+// Deliberately narrow — C-only runtime, self-configuring C++ runtime,
+// and modules already reaching libcxx via existing user-PEERDIRs are
+// excluded so we don't emit spurious or duplicate -I flags.
 var runtimeAncestorCxxConsumers = map[string]bool{
 	"library/cpp/malloc/api": true,
 }
@@ -93,17 +72,11 @@ func isRuntimeAncestor(path string) bool {
 }
 
 // runtimeStackAddInclPaths is the set of peer-GLOBAL ADDINCL paths
-// upstream `_BUILTIN_PEERDIR` hoists to the FRONT of a consumer's
-// peer-GLOBAL include bundle, ahead of musl/arch and user-PEERDIRs.
-// The runtime-stack header roots: libcxx, libcxxrt, libcxxabi, libunwind.
-// Reference emits these immediately after linux-headers ccIncludesSuffix
-// in every non-musl CC node — both for direct peers and for transitive
-// reach through user PEERDIRs.
-//
-// `hoistRuntimeStackAddIncl` preserves the relative order across
-// runtime ancestors regardless of which aggregation phase picked them
-// up. Paths are SOURCE_ROOT-relative; `appendAddIncl` adds the
-// literal `-I$(S)/` prefix at emit time.
+// (libcxx, libcxxrt, libcxxabi, libunwind) that `_BUILTIN_PEERDIR`
+// hoists to the FRONT of a consumer's peer-GLOBAL include bundle,
+// ahead of musl/arch and user-PEERDIRs. `hoistRuntimeStackAddIncl`
+// preserves canonical relative order regardless of aggregation phase.
+// Paths are SOURCE_ROOT-relative; `appendAddIncl` prefixes `-I$(S)/`.
 var runtimeStackAddInclPaths = map[VFS]int{
 	Source("contrib/libs/cxxsupp/libcxx/include"):    0,
 	Source("contrib/libs/cxxsupp/libcxxrt/include"):  1,
@@ -115,16 +88,11 @@ var runtimeStackAddInclPaths = map[VFS]int{
 // `ccIncludesSuffix` injects directly into every non-musl CC node's
 // cmd_args. Peer-propagated GLOBAL ADDINCL contributions covered by
 // the bundle MUST be deduped out of `peerAddInclGlobal` so they do
-// not re-emit at a later slot.
-//
-// Empirically: ragel6 host PIC walks musl/full → linux-headers,
-// producing a duplicate `-I$(S)/contrib/libs/linux-headers{,/_nf}`
-// at the peer-AddIncl tail; reference drops it because the cc bundle
-// already supplies these flags.
+// not re-emit at a later slot (e.g. ragel6 host PIC walking
+// musl/full → linux-headers would otherwise emit a duplicate -I).
 //
 // Musl flavours bypass this filter: their composer drops
-// PeerAddInclGlobal entirely (`-nostdinc` + muslCcIncludes define
-// the entire include search path).
+// PeerAddInclGlobal entirely.
 var bundledAddInclPaths = map[VFS]bool{
 	Source("contrib/libs/linux-headers"):     true,
 	Source("contrib/libs/linux-headers/_nf"): true,
@@ -198,15 +166,12 @@ func hoistRuntimeStackAddIncl(paths []VFS) []VFS {
 
 // defaultPeerdirsFor returns the implicit DEFAULT_PEERDIRs ymake adds
 // based on language + module flavor. Hand-coded mirror of upstream
-// `_BUILTIN_PEERDIR`; the implicit peers dominate the closure
-// (musl alone is 2,656 of 3,730 nodes for tools/archiver).
+// `_BUILTIN_PEERDIR`; implicit peers dominate the closure.
 //
-// Suppression model: ymake's `NO_PLATFORM` is the umbrella switch
-// disabling every implicit peer; granular flags (`NO_LIBC`,
-// `NO_RUNTIME`, `NO_UTIL`) each disable one piece. A module setting
-// all three granular flags is effectively platform-less even without
-// typing `NO_PLATFORM` (e.g. `build/cow/on`). `effectiveNoPlatform`
-// captures this.
+// Suppression: `NO_PLATFORM` is the umbrella switch; granular flags
+// (`NO_LIBC`, `NO_RUNTIME`, `NO_UTIL`) each disable one piece. A module
+// setting all three granular flags is effectively platform-less even
+// without `NO_PLATFORM` (captured by `effectiveNoPlatform`).
 //
 // CPP modules implicitly PEERDIR (unless suppressed):
 //   - contrib/libs/cxxsupp/libcxx    — NO_RUNTIME / NO_PLATFORM
@@ -215,13 +180,8 @@ func hoistRuntimeStackAddIncl(paths []VFS) []VFS {
 //   - util                           — NO_UTIL / NO_PLATFORM
 //   - contrib/libs/musl/include      — NO_PLATFORM (gated on MUSL=yes)
 //
-// libcxx/libcxxrt/libunwind are runtime-support libs gated by
-// NO_RUNTIME; util is the Yandex stdlib analogue gated by NO_UTIL.
-//
-// Cycle prevention: path-equality guards against adding a module as
-// its own peer, plus prefix matches for musl/libcxx/util subtrees.
-// The walker's `walking` stack catches deeper cycles.
-//
+// Cycle prevention: path-equality + prefix matches for musl/libcxx/util
+// subtrees. The walker's `walking` stack catches deeper cycles.
 // Returns empty for non-CPP languages.
 func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
 	return defaultPeerdirsForWithState(ctx, instance, effectiveMuslOn(ctx, nil))
@@ -346,8 +306,8 @@ func cliMuslEnabled(ctx *genCtx) bool {
 // ModuleCCInputs.AutoPeerCFlags. Mirrors `_BASE_UNIT`'s
 // `when ($MUSL == "yes") { CFLAGS+=-D_musl_ }` (ymake.core.conf:781).
 // `-D_musl_` (no `=1`) is consumer-side; musl-self CC nodes get
-// `-D_musl_=1` from `muslExtraDefines` instead, gated off this
-// injection via NoStdInc + effective-NO_PLATFORM checks.
+// `-D_musl_=1` separately, gated off this injection via NoStdInc +
+// effective-NO_PLATFORM checks.
 func defaultPeerCFlags(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
 	if !effectiveMuslOn(ctx, d) {
 		return nil
@@ -388,7 +348,7 @@ func consumerAutoPeerCFlags(muslOn, usePython3 bool) []string {
 
 // muslConsumerSentinel is `-D_musl_`, auto-injected by `_BASE_UNIT`'s
 // `when ($MUSL == "yes")` into every non-NO_PLATFORM module's CFLAGS.
-// Distinct from `-D_musl_=1` (musl-self only, in `muslExtraDefines`).
+// Distinct from `-D_musl_=1` (musl-self only).
 const muslConsumerSentinel = "-D_musl_"
 
 // implicitPeerCtx is the read-only view of a module instance that
@@ -465,13 +425,8 @@ var programImplicitPeers = []implicitPeerRule{
 // prefixes whose final segment is the consumer's target ISA. These
 // paths come from `IF (ARCH_<ISA>) ADDINCL(...)` blocks in upstream
 // ya.make and therefore differ between host-axis and target-axis
-// walks. `rebasePerArchPeerAddIncl` substitutes the from-ISA suffix
-// with the to-ISA suffix when a host-axis closure is re-anchored on
-// the target axis (currently only the JS-node closure scan).
-//
-// Each prefix MUST end in `/`; the matcher appends the literal ISA
-// string. Currently lists `contrib/libs/musl/arch/<ISA>` from
-// contrib/libs/musl/ya.make:27-37.
+// walks. Each prefix MUST end in `/`; the matcher appends the literal
+// ISA string.
 var archDependentPeerAddInclPrefixes = []string{
 	"contrib/libs/musl/arch/",
 }
@@ -521,22 +476,14 @@ var programAllocatorDefaults = []implicitPeerRule{
 
 // defaultProgramPeerdirsFor returns the implicit DEFAULT_PEERDIRs that
 // upstream `_BASE_PROGRAM` (build/ymake.core.conf:1219-1253) attaches
-// to PROGRAM modules in our environment (MUSL=yes, OS_LINUX=yes,
-// CLANG=yes, no sanitizer):
+// to PROGRAM modules under MUSL=yes, OS_LINUX=yes, CLANG=yes, no
+// sanitizer. GCC, sanitizer, non-Linux paths not modelled.
 //
-//   - `MUSL=yes && !MUSL_LITE` → `contrib/libs/musl/full`, driving
-//     the musl/full → asmlib + asmglibc + linux-headers cascade and
-//     the asmlib AS sources' yasm trigger.
-//   - PROGRAM with no explicit ALLOCATOR(...) AND MUSL=yes AND
-//     OS_LINUX=yes → default ALLOCATOR=TCMALLOC_TC →
-//     `library/cpp/malloc/tcmalloc` + `contrib/libs/tcmalloc/no_percpu_cache`
-//     (which transitively peers malloc_extension + abseil-cpp).
-//
-// GCC, sanitizer, non-Linux paths not modelled.
-//
-// `includeMusl` splits into pre-user (false: cow/on + tcmalloc) and
-// post-user (true: musl + cpuid_check) halves. genModule calls twice
-// to interleave allocator explicit peers and d.peerdirs between halves.
+// `includeMusl` splits the output: false → pre-user (cow/on + tcmalloc
+// default); true → post-user (musl + cpuid_check). genModule calls
+// twice to interleave allocator explicit peers and d.peerdirs between
+// halves so explicit ALLOCATOR peers land before musl/full in the
+// archive walk.
 func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocator bool, allocatorName string, muslLiteOverride bool, includeMusl bool) []string {
 	return defaultProgramPeerdirsForWithState(ctx, instance, hadAllocator, allocatorName, muslLiteOverride, includeMusl, effectiveMuslOn(ctx, nil))
 }
@@ -602,8 +549,8 @@ func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, ha
 
 // effectiveNoPlatform reports true when the FlagSet combination behaves
 // as `NO_PLATFORM` in upstream ymake — NoLibc + NoUtil + NoRuntime all
-// set. `build/cow/on` exhibits this pattern via `inferFlagsFromPath`
-// (module.go:161-165) which seeds the triple from the path alone.
+// set. `build/cow/on` exhibits this pattern via `inferFlagsFromPath`,
+// which seeds the triple from the path alone.
 func effectiveNoPlatform(f FlagSet) bool {
 	if f.NoPlatform {
 		return true

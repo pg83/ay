@@ -6,12 +6,9 @@ package main
 // Two platforms or submodule kinds of the same directory are different
 // ModuleInstances — distinct memo keys, separate node sets, one Graph.
 //
-// Language is a string newtype so the parser tag (cpp/proto/go/py/java)
-// flows through as one token. PlatformID is a string newtype identical to
-// on-disk node.platform. FlagSet is a comparable-by-value typed bag whose
-// Extra field is a `\n`-joined sorted concatenation (string, not []string,
-// because slice fields disqualify a struct from being a map key);
-// NewFlagSet enforces the sort discipline.
+// FlagSet.Extra is a `\n`-joined sorted string (not []string) because slice
+// fields disqualify a struct from being a map key; NewFlagSet enforces the
+// sort discipline.
 
 import (
 	"sort"
@@ -19,16 +16,15 @@ import (
 )
 
 // Language is the parser-level tag picking which rule emitter a module
-// routes through. Only LangCPP is exercised today; the other constants
-// reserve forward-compatibility for language polymorphism.
+// routes through. LangCPP and LangPy are exercised; the others are reserved.
 type Language string
 
 const (
 	LangCPP   Language = "cpp"
-	LangProto Language = "proto" // reserved for M5+ proto rules
-	LangGo    Language = "go"    // reserved
-	LangPy    Language = "py"    // reserved
-	LangJava  Language = "java"  // reserved
+	LangProto Language = "proto"
+	LangGo    Language = "go"
+	LangPy    Language = "py"
+	LangJava  Language = "java"
 )
 
 type ModuleKind int
@@ -153,7 +149,7 @@ func NewToolInstance(host *Platform, path string) ModuleInstance {
 }
 
 // String returns a stable diagnostic representation in the form
-// "<path>:<lang>@<platform>" (flag bag elided). Used in error
+// "<path>[<kind>]:<lang>@<platform>" (flag bag elided). Used in error
 // messages and ledger entries.
 func (mi ModuleInstance) String() string {
 	var b strings.Builder
@@ -169,10 +165,9 @@ func (mi ModuleInstance) String() string {
 	return b.String()
 }
 
-// inferFlagsFromPath is the path-only stopgap that derives a FlagSet
-// without parsing the module's ya.make. Replacement: macro-driven
-// inference from the parsed UnknownStmt set. isPIC threads the
-// host/target axis from the caller (target = false; host = true).
+// inferFlagsFromPath derives a FlagSet from `path` without parsing the
+// module's ya.make. isPIC threads the host/target axis from the caller
+// (target = false; host = true).
 func inferFlagsFromPath(path string, isPIC bool) FlagSet {
 	fs := FlagSet{PIC: isPIC}
 

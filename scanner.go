@@ -1,20 +1,15 @@
 package main
 
-// scanner.go — C/C++ #include transitive-closure scanner. Mirrors
-// upstream ymake closely enough for L2-multiset acceptance: text-based
+// scanner.go — C/C++ #include transitive-closure scanner. Text-based
 // regex match, conditional-blind, ADDINCL + peer-GLOBAL ADDINCL +
-// sysincl resolution, DFS with per-source visited set, file-level
-// memoization of parsed directives.
+// sysincl resolution, DFS with per-source visited set.
 //
-// Documented gaps: `#include MACRO_NAME` macro-expanded forms (handled
-// case-by-case via `macroIndirectIncludes`); exact ymake scanner-order
-// traversal (L2 compares as multiset, so DFS-discovery is sufficient).
-//
-// `stripComments` runs before regex matching so block-comment / line-
-// comment / string-literal payloads are replaced with spaces (newlines
-// kept for per-line `^\s*#` anchoring). Without it, a `/* ... #include
-// <iostream> ... */` block inside `from_chars_integral.h` floods every
-// `<charconv>` consumer with phantom `<iostream>` and its cascade.
+// `#include MACRO_NAME` macro-expanded forms handled case-by-case via
+// `macroIndirectIncludes`. `stripComments` (in parsers.go) blanks
+// comment / string-literal payloads before regex matching — without it
+// a `/* ... #include <iostream> ... */` block inside
+// `from_chars_integral.h` would flood every `<charconv>` consumer with
+// phantom `<iostream>`.
 
 import (
 	"fmt"
@@ -267,14 +262,12 @@ type sysinclIncluderKey struct {
 	target   uint32
 }
 
-// sysinclCacheEntry stores the resolved sysincl paths plus two flags.
-// hasMultiTarget is true when any contributing record maps the queried
-// header to ≥ 2 non-empty paths (used by the quoted-include gate).
-// claimed is true when at least one record's filter matched and its
-// Mappings contained the queried header — even with empty paths
-// (bare-key suppression). Lets resolve() distinguish "sysincl knows
-// this header but suppresses it" (no warning) from "sysincl doesn't
-// know this header" (warn under --verbose).
+// sysinclCacheEntry stores resolved sysincl paths plus two flags.
+// hasMultiTarget: any contributing record maps the header to ≥ 2 non-
+// empty paths (drives the quoted-include gate). claimed: at least one
+// record's filter matched and listed the header, even with empty paths
+// (bare-key suppression) — lets resolve() distinguish "known but
+// suppressed" (no warning) from "unknown" (warn under --verbose).
 type sysinclCacheEntry struct {
 	paths          []VFS
 	hasMultiTarget bool
@@ -379,10 +372,8 @@ type ScanContext struct {
 // gen.go's local vs interned dispatch). ctxHash is computed once at
 // construction.
 func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
-	// Pre-sizes cover the largest single-context working set with one
-	// or two grows on M2. M3 creates many more distinct ctxHashes, so
-	// over-sizing every context wastes hundreds of MB and feeds GC; keep
-	// the initial buckets modest and let the few large contexts grow.
+	// Modest pre-sizes: many distinct ctxHashes exist, so over-sizing
+	// every context wastes memory; the few large contexts grow.
 	return &scanCtx{
 		scanner:              s,
 		cfg:                  cfg,
@@ -427,18 +418,13 @@ func (sc *scanCtx) WalkSource(sourceRel string) []VFS {
 	return sc.WalkClosure(Source(sourceRel))
 }
 
-// WalkClosure walks the include closure rooted at `vfsPath`. vfsPath
-// MUST be VFS-rooted — $(S)/... (FS-backed) or $(B)/...
-// (codegen-registry-backed). Dispatch on provenance lives in
-// forEachResolvedChild's locator branch, not in callers.
+// WalkClosure walks the include closure rooted at `vfsPath` ($(S)/ or
+// $(B)/-rooted). Returns the transitive header set excluding the root,
+// in DFS-discovery order; the result slice is freshly allocated.
 //
-// Returns the transitive header set excluding the root itself, in DFS-
-// discovery order. The result slice is freshly allocated.
-//
-// For $(S)/ roots SourceRel is derived from the VFS path so cross-
-// source DFS within one scanCtx keys sysincl per source. For $(B)/
-// roots no sysincl fires at the root (children come from pre-resolved
-// EmitsIncludes).
+// For $(S)/ roots SourceRel is overwritten from the VFS path so cross-
+// source DFS within one scanCtx keys sysincl per source. $(B)/ roots
+// pull children from pre-resolved EmitsIncludes — no sysincl at root.
 func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 	s := sc.scanner
 	s.walkClosureCalls++
@@ -510,8 +496,8 @@ func (s *IncludeScanner) IncludeDirectiveTargets(vfsPath VFS) []string {
 }
 
 // scannerStatsEnabled is set once at process start from $SCANNER_STATS.
-// PR-34r perf instrumentation: when set, WalkClosure periodically dumps
-// subgraph cache hit/miss counters to stderr. No-op when env not set.
+// When set, WalkClosure periodically dumps subgraph cache hit/miss
+// counters to stderr.
 var scannerStatsEnabled = os.Getenv("SCANNER_STATS") != ""
 
 // perfStatsEnabled is set once at process start from
@@ -725,11 +711,9 @@ func (sc *scanCtx) dfsID(absID uint32, visited idSet, order *[]uint32) {
 }
 
 // plainDfsID walks `absID`'s subtree using the caller's shared
-// visited+order. Used as the fall-back path for headers known to be on
-// a cycle (`subgraphTaintedKnown`) and recursively from `walkSubgraph`
-// when a child reports it is on a cycle. Per-child dispatch goes
-// through `dfsID()` so non-cycle descendants benefit from the
-// `subgraphCache`.
+// visited+order. Fall-back path for headers known to be on a cycle
+// (`subgraphTaintedKnown`). Per-child dispatch goes through `dfsID()`
+// so non-cycle descendants still benefit from the `subgraphCache`.
 func (sc *scanCtx) plainDfsID(absID uint32, visited idSet, order *[]uint32) {
 	sc.scanner.plainDfsCalls++
 
@@ -745,16 +729,11 @@ func (sc *scanCtx) plainDfsID(absID uint32, visited idSet, order *[]uint32) {
 	})
 }
 
-// forEachResolvedChild invokes `fn` once per resolved-child VFS path of
-// `vfsPath`. Parsing is fully delegated to the parser layer:
-//
-//   - source files: per-extension parser returns the source file's local
-//     parse surface;
-//   - generated $(B) outputs: parser manager returns exactly the parsed
-//     include list the emitter mounted for that output path.
-//
-// Raw parser entries go through resolve(); canonical `$(S)/...` /
-// `$(B)/...` targets are recognised there as direct anchors.
+// forEachResolvedChild invokes `fn` once per resolved-child VFS path
+// of `vfsPath`. Parsing is delegated to the parser layer: per-extension
+// parser for source files, parser manager for generated $(B) outputs
+// (which serve the emitter-mounted include list). Each parser entry
+// then goes through resolve().
 func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
 
@@ -801,19 +780,12 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 }
 
 // subgraph returns the canonical transitive include closure rooted at
-// `absID` for the (ctxHash, sourceClass) equivalence class — root-
-// included DFS-discovery order. The returned slice is cache-owned;
-// callers must only iterate.
-//
-// Returns (sg, true) on success; the caller merges with skip-on-already-
-// visited. Returns (nil, false) when absID is on a cycle (no cacheable
-// canonical subgraph); caller falls back to plain DFS into its OWN
-// visited+order. subgraphTaintedKnown short-circuits future requests so
-// the wasted speculative walk is paid at most once per key.
-//
-// Cycle detection: a call for a key in subgraphInProgress is a back-
-// edge; returns (nil, false) and propagates upward — every header on
-// the SCC ends up marked taintedKnown.
+// `absID` for the (ctxHash, sourceClass) equivalence class. The slice
+// is cache-owned (iterate only). (nil, false) means absID is on a
+// cycle and not cacheable — caller plain-DFSes into its own
+// visited+order. subgraphTaintedKnown caches that verdict so the
+// wasted walk is paid at most once per key. A call for a key already
+// in subgraphInProgress is a back-edge and returns (nil, false).
 func (sc *scanCtx) subgraph(absID uint32, sourceClass uint32) ([]uint32, bool) {
 	s := sc.scanner
 	key := subgraphInnerKey{
@@ -976,29 +948,20 @@ func (sc *scanCtx) walkSubgraphTaintedID(absID uint32, sourceClass uint32, visit
 	})
 }
 
-// resolve returns the absolute paths the directive resolves to, in
-// declaration order, deduplicated. Memoised via resolveCache.
+// resolve returns the paths the directive resolves to, in declaration
+// order, deduplicated. Memoised via resolveCache.
 //
 // Two-tier semantics from upstream ymake:
-//
 //   - Search-path candidates (samedir, own AddIncl, peer-GLOBAL, base)
-//     are FIRST-MATCH-WINS, mirroring the compiler's `-I` precedence.
-//   - Angle-bracket includes (`#include <X>`): every matching sysincl
-//     record's paths are UNIONED on top of the search-path result.
-//     Example: `<stddef.h>` from a non-musl C source legitimately
-//     resolves to both libcxx/include/stddef.h and
-//     musl/include/stddef.h.
-//   - Quoted includes (`#include "X"`): sysincl is GATED by search-
-//     path resolution and tier:
-//     (a) Same-directory hit → sysincl ALWAYS suppressed
-//     (`#include "elf.h"` from yasm/ targets yasm/elf.h, not
-//     musl/include/elf.h).
-//     (b) ADDINCL/peer/base hit + single-target sysincl → suppressed.
-//     (c) ADDINCL/peer/base hit + multi-target sysincl (≥ 2 non-
-//     empty paths) → sysincl IS added on top. Example:
-//     `#include "cxxabi.h"` from libcxxabi-parts resolves
-//     locally via OwnAddIncl but the reference also expects
-//     libcxxrt/include/cxxabi.h from sysincl.
+//     are FIRST-MATCH-WINS — compiler `-I` precedence.
+//   - `#include <X>`: every matching sysincl record's paths are
+//     UNIONED on top of the search-path result (`<stddef.h>` from non-
+//     musl C unions libcxx and musl `stddef.h`).
+//   - `#include "X"`: sysincl is gated. Same-directory hit always
+//     suppresses sysincl. ADDINCL/peer/base hit suppresses single-
+//     target sysincl, but multi-target sysincl (≥ 2 non-empty paths)
+//     IS unioned on top (e.g. `"cxxabi.h"` from libcxxabi-parts unions
+//     libcxxabi and libcxxrt).
 func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	s := sc.scanner
 	ctx := &sc.cfg
@@ -1063,8 +1026,8 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	// libcxxabi/include/cxxabi.h and libcxxrt/include/cxxabi.h.
 	if d.kind == includeQuoted && len(searchOut) > 0 {
 		// Single-target → bypass unconditionally (dominates sysincl).
-		// Compute sameDirRel lazily; the concat would otherwise fire
-		// ~2.4M times per M3 gen.
+		// Compute sameDirRel lazily — the concat fires millions of
+		// times per gen.
 		bypass := !hasMultiTarget
 		if !bypass && searchOut[0].IsSource() {
 			incDir := pathDir(includerRel)
@@ -1200,7 +1163,6 @@ func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, b
 		target:      s.interner.internString(target),
 	}
 
-	// PR-34n: lock removed (single-goroutine).
 	if cached, ok := s.sysinclSourceCache[key]; ok {
 		s.sysinclSourceHits++
 		return cached.paths, cached.hasMultiTarget, cached.claimed
@@ -1226,7 +1188,6 @@ func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) ([]VF
 		target:   s.interner.internString(target),
 	}
 
-	// PR-34n: lock removed (single-goroutine).
 	if cached, ok := s.sysinclIncluderCache[key]; ok {
 		s.sysinclIncluderHits++
 		return cached.paths, cached.hasMultiTarget, cached.claimed
@@ -1374,7 +1335,6 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		flags:    packResolveFlags(d.kind, d.next),
 	}
 
-	// PR-34n: lock removed (single-goroutine).
 	if cached, ok := sc.resolveCache[key]; ok {
 		s.resolveCacheHits++
 		return cached
@@ -1486,9 +1446,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	// only when every on-disk search-path candidate missed. Generated
 	// files (.pb.h, _serialized.h, .ev.pb.h, ...) don't exist on disk
 	// at gen time. Locator is queried with the canonical $(B)/<target>
-	// form: consumer #includes use the full BUILD_ROOT-relative path,
-	// never basename-only. On-disk wins over VFS — preserves M2 byte-
-	// exactness (M2's closure contains no generated-file includes).
+	// form; consumers always use the full BUILD_ROOT-relative path.
 	if !searchPathFound && len(s.fallbackLocators) > 0 {
 		// BUILD-rooted candidate. The Exists locator is the codegen
 		// registry; its API still takes the string form.
@@ -1517,7 +1475,6 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	clear(seen)
 	s.seenPool.Put(seenP)
 
-	// PR-34n: lock removed (single-goroutine).
 	sc.resolveCache[key] = out
 
 	return out

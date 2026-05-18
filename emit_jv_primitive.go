@@ -5,9 +5,8 @@ import (
 	"strings"
 )
 
-// jdkResourcePath is the literal JDK17 resource path used in the reference
-// sg2.json. The hash suffix (564746473) is the resource bundle ID and
-// is pinned byte-exact for the M3 closure.
+// jdkResourcePath is the literal JDK17 resource path. The hash suffix
+// (564746473) is the resource bundle ID and is pinned byte-exact.
 const jdkResourcePath = "$(JDK17-564746473)/bin/java"
 
 // antlr4JarVFS is the source-relative VFS path to the ANTLR4 jar.

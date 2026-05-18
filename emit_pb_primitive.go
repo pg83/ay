@@ -11,15 +11,13 @@ import (
 	"strings"
 )
 
-// pb.go — emitter for PB (Protocol Buffers compile) nodes.
+// Emitter for PB (Protocol Buffers compile) nodes.
 //
 // One PB node per .proto in a PROTO_LIBRARY. Invokes cpp_proto_wrapper.py
-// driving protoc + cpp_styleguide plugin (both from contrib/tools/protoc).
-//
-// inputs = [cpp_styleguide, protoc, cpp_proto_wrapper.py, $(S)/<src>,
-//           descriptor.proto?] — descriptor.proto when the source imports it.
-// deps and foreign_deps["tool"] both carry [cpp_styleguide_LD, protoc_LD].
-// target_properties: module_dir + module_tag:"cpp_proto".
+// driving protoc + cpp_styleguide (and grpc_cpp plugin when grpc is set),
+// all from contrib/tools/protoc. descriptor.proto is added to inputs when
+// the source imports it; deps and foreign_deps["tool"] carry the tool LD
+// refs.
 
 const (
 	// Tool module paths for host-walk recursion.
@@ -42,9 +40,8 @@ const (
 	abslTstringBase = "contrib/restricted/abseil-cpp-tstring/"
 )
 
-// pb tool/asset VFS constants. The `…Path` legacy strings are
-// derived once via .String() and used wherever a cmd_arg expects a
-// raw string.
+// pb tool/asset VFS constants. The `…Path` strings are derived once
+// via .String() for cmd_arg slots that take a raw string.
 var (
 	pbWrapperVFS    = Source("build/scripts/cpp_proto_wrapper.py")
 	pbPyWrapperVFS  = Source("build/scripts/gen_py_protos.py")
@@ -92,16 +89,8 @@ var pbDescriptorImporterHeaders = []VFS{
 
 // pbCcDeepRuntimeHeaders is the deep protobuf+abseil transitive set every
 // protoc-generated .pb.cc reaches. Registered as EmitsIncludes on the
-// .pb.cc output ONLY — NOT on the .pb.h: .pb.h is consumed by ~100
-// non-protobuf CC nodes that must not inherit the abseil closure;
-// .pb.cc has exactly one CC consumer per file, so the closure is
-// tightly scoped.
-//
-// Group 1: deep protobuf set via port_def.inc + message/runtime chain
-// (descriptor.h, parse_context.h, map.h, wire_format*.h, stubs/*, …).
-// Group 2: abseil-cpp-tstring transitive closure via port_def.inc →
-// y_absl/strings/string_view.h → … . libcxx <vector>/<string>/… inside
-// y_absl resolve through the consumer's own libcxx peer. Sorted lex.
+// .pb.cc ONLY — never on .pb.h, which has many non-protobuf CC consumers
+// that must not inherit the abseil closure. Sorted lex.
 var pbCcDeepRuntimeHeaders = []VFS{
 	// Group 1: deep protobuf transitive set.
 	Source(pbRuntimeBase + "google/protobuf/any.h"),
@@ -297,13 +286,11 @@ var pbCcDeepRuntimeHeaders = []VFS{
 }
 
 // EmitPB emits a PB node for `protoRelPath` (a SOURCE_ROOT-relative .proto path).
-// `cppStyleguideLDRef` and `protocLDRef` are the host LD NodeRefs for the two
-// tool programs (zeroed when the host walk failed). `cppStyleguideBinary` and
-// `protocBinary` are the $(B)-rooted paths for the tool binaries.
-// `moduleTag` is "cpp_proto" for PROTO_LIBRARY modules (nil when absent).
-// `sourceRoot` is the absolute path to the source tree root (for descriptor-import scanning).
-//
-// Returns the emitted NodeRef.
+// The *LDRef params are host LD NodeRefs (zeroed when the host walk failed);
+// the *Binary params are the corresponding $(B)-rooted tool paths. grpcCppLDRef
+// and grpcCppBinary are only used when grpc is true. moduleTag is "cpp_proto"
+// for PROTO_LIBRARY modules (nil when absent). sourceRoot is used for
+// descriptor-import scanning.
 func EmitPB(
 	instance ModuleInstance,
 	protoRelPath string,
@@ -385,7 +372,6 @@ func EmitPB(
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
-	// inputs: [cpp_styleguide, protoc, wrapper, source, optionally descriptor.proto]
 	protoImports := resolveProtoImports(sourceRoot, protoRelPath)
 	inputs := []VFS{
 		cppStyleguideBinary,
@@ -415,7 +401,7 @@ func EmitPB(
 		targetProps["module_tag"] = *moduleTag
 	}
 
-	// deps and foreign_deps both carry the two tool refs.
+	// deps and foreign_deps both carry the same tool refs.
 	var depRefs []NodeRef
 	var foreignDepRefs map[string][]NodeRef
 
@@ -676,19 +662,9 @@ func resolveProtoImports(sourceRoot, srcRel string) *protoImportResolution {
 	return res
 }
 
-// emitProtoSrcs emits PB/EV nodes for .proto/.ev entries in d.srcs when
-// the module is a PROTO_LIBRARY. Walks host protoc + cpp_styleguide once
-// (cached in genCtx memo).
-//
-// For module name == PROTO_LIBRARY, also emits the downstream CC per
-// generated .pb.cc/.ev.pb.cc and an AR archiving them into
-// `lib<dotted-path>.a` with module_tag=cpp_proto. peerContribs carries
-// the transitive per-axis peer-GLOBAL union the header-only walker
-// computed so flags reach consumer CCs.
-//
-// Returns (ARRef, ARPath) when a PROTO_LIBRARY AR was emitted so the
-// caller can surface it through moduleEmitResult's archive closure;
-// nil when no .proto/.ev sources.
+// protoSrcsResult carries the AR and whole-archive closure emitted for a
+// PROTO_LIBRARY's generated .pb.cc/.ev.pb.cc set, surfaced via
+// moduleEmitResult. ARRef/ARPath are zero when no .proto/.ev sources.
 type protoSrcsResult struct {
 	ARRef                NodeRef
 	ARPath               *VFS

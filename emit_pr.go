@@ -6,21 +6,13 @@ import (
 	"strings"
 )
 
-// emitRunProgramsForAR emits PR nodes ahead of the module's AR step and,
-// for each PR output whose extension is a CC-compilable source kind,
-// emits a downstream CC consuming the registered BUILD_ROOT source.
+// runProgramsForARResult carries per-CC (refs, outputs, memberInputs)
+// for the caller's AR-member accumulators.
 //
-// Implements the PR→CC terminal case. A RUN_PROGRAM with
-// `STDOUT/OUT foo.cpp` emits the .cpp under $(B)/<instance.Path>/foo.cpp
-// and the consuming CC compiles it into foo.cpp.o which the AR/LD
-// archives alongside the module's regular SRCS. Mirrors upstream
-// ymake's auto-promote of compilable-extension RUN_PROGRAM outputs.
-//
-// Empirical: devtools/ymake/symbols emits dep_types.h_dumper.cpp via
-// STDOUT, then archives dep_types.h_dumper.cpp.o.
-//
-// Returns per-CC (refs, outputs, memberInputs) for the caller's
-// AR-member accumulators.
+// A RUN_PROGRAM with `STDOUT/OUT foo.cpp` emits the .cpp under
+// $(B)/<instance.Path>/foo.cpp and a downstream CC compiles it into
+// foo.cpp.o for the AR/LD. Mirrors upstream ymake's auto-promote of
+// compilable-extension RUN_PROGRAM outputs.
 type runProgramsForARResult struct {
 	CCRefs       []NodeRef
 	CCOutputs    []VFS
@@ -91,17 +83,10 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// Register PR outputs FIRST so the closure walk below resolves
 	// each output's $(B) path through the codegen registry.
 	//
-	// For CC-compilable outputs (.cpp/.cc/.cxx/.c): populate
-	// EmitsIncludes with SOURCE_ROOT-rooted IN + OUTPUT_INCLUDES so
-	// the downstream CC's closure picks up the transitive header set.
-	// Non-compilable outputs (.h, .pyc) leave EmitsIncludes nil —
-	// content is opaque without invoking the tool.
-	//
-	// The tool's INDUCED_DEPS(<ext> headers...) names headers the
-	// tool injects into every output of the listed extensions; treat
-	// as additional EmitsIncludes (e.g. struct2fieldcalc declares
-	// INDUCED_DEPS(h+cpp field_calc_int.h) → scanner walks
-	// field_calc_int.h → field_calc.h → autoarray.h).
+	// CC-compilable outputs get EmitsIncludes = SOURCE_ROOT-rooted IN
+	// + OUTPUT_INCLUDES + tool INDUCED_DEPS, so the include scanner
+	// reaches headers the tool injects into every output. Non-CC
+	// outputs (.h, .pyc) leave EmitsIncludes nil — opaque content.
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
 			registerGeneratedParsedOutput(ctx, instance, "PR", Build(instance.Path+"/"+f), prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps))
@@ -224,15 +209,10 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 }
 
 // prEmitsIncludes returns the EmitsIncludes set to register for a PR
-// output named `outFile`. For CC-compilable outputs the convention is
-// that the generated source textually `#include`s its IN files and any
-// OUTPUT_INCLUDES-declared headers; for everything else the content is
-// opaque and we return nil. PR-AUDIT-5.
-//
-// PR-M3-runprogram-closure: toolInducedDeps carries the tool PROGRAM's
-// module-level INDUCED_DEPS(...) header list (repo-relative). Append
-// those to the seed-include set so the include scanner reaches the
-// transitive closure of headers the tool injects into its outputs.
+// output named `outFile`. CC-compilable outputs are assumed to textually
+// `#include` their IN files, OUTPUT_INCLUDES headers, and the tool's
+// module-level INDUCED_DEPS list; non-CC outputs are opaque and return
+// nil.
 func prEmitsIncludes(instance ModuleInstance, srcDir *string, outFile string, stmt *RunProgramStmt, toolInducedDeps []string) []includeDirective {
 	if !isCCSourceExt(outFile) {
 		return nil

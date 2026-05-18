@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 )
 
-// emittedSourceInputPath mirrors composeCCPaths' inputPath logic so
-// the walker composes the AR/LD inputs aggregator without round-
-// tripping through the emitted node. Returns `$(S)/...` (or
-// `$(B)/...` for IsGenerated).
+// emittedSourceInputPath returns the VFS input path for a source: `$(B)/...`
+// when IsGenerated, otherwise `$(S)/...` with SRCDIR-aware fallback when
+// the local file is absent. Lets the walker compose AR/LD inputs without
+// round-tripping through the emitted node.
 func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCInputs, sourceRoot string) VFS {
 	if in.IsGenerated {
 		return Build(instance.Path + "/" + srcRel)
@@ -30,16 +30,12 @@ func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCI
 }
 
 // joinSrcsIncludeClosure walks the include graph for a JOIN_SRCS
-// member set. DFS runs over all members with a SHARED visited set
-// (mirroring the joined compile — headers reached once stay deduped),
-// so total work is O(union closure) not O(sum per-source).
+// member set with a SHARED visited set across members, mirroring the
+// joined compile so total work is O(union closure).
 //
-// `scanPlatform` chooses scanner + sysincl ISA: callers pass
-// `srcInstance.Platform` normally; the JS-target override passes
-// `ctx.target` so the closure resolves against target-arch musl peer
-// ADDINCL even when the surrounding walk is host-axis.
-// instance.Platform is read for module-level facts (Path,
-// Flags.NoStdInc), NOT mutated.
+// `scanPlatform` chooses scanner + sysincl ISA independently of
+// srcInstance.Platform so a JS-target override can resolve against
+// target-arch peer ADDINCL during a host-axis walk.
 func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerForPlatform(scanPlatform)
 	if scanner == nil {
@@ -117,7 +113,7 @@ func appendVFSUnique(dst []VFS, src []VFS) []VFS {
 }
 
 // jsCCIncludeInputs assembles `[scripts..., sources..., closure...]`
-// for the JS-derived CC's IncludeInputs slot (PR-35d).
+// for the JS-derived CC's include-inputs slot.
 func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []VFS) []VFS {
 	out := make([]VFS, 0, 2+len(sources)+len(closure))
 	out = append(out, Source("build/scripts/gen_join_srcs.py"))
@@ -133,10 +129,10 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []V
 }
 
 // resolveSourceVFS composes the `$(S)/...` VFS path of a SRCS-declared
-// source with composeCCPaths' SRCDIR-aware fallback: when SRCDIR is set
-// and no local file exists at instance.Path/<srcRel>, resolve under
-// SRCDIR. Registration-time resolution; os.Stat is legitimate here
-// because it feeds path composition, not scanner-internal dispatch.
+// source with SRCDIR-aware fallback: when SRCDIR is set and no local
+// file exists at instance.Path/<srcRel>, resolve under SRCDIR.
+// Registration-time resolution; os.Stat is legitimate here because it
+// feeds path composition, not scanner-internal dispatch.
 func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDir *string) VFS {
 	srcRelOnDisk := srcInstance.Path + "/" + srcRel
 
@@ -152,9 +148,6 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 
 	return Source(srcRelOnDisk)
 }
-
-// resolveCodegenDepRefs replaced by the EN/PB/EV-aware version at line 344
-// (PR-M3-L0-codegen-deps-EV-PB).
 
 // walkClosure resolves the transitive include closure of a source
 // rooted at any VFS path — `$(S)/...` for FS-resident sources or
@@ -184,30 +177,18 @@ func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath V
 	return sc.WalkClosure(vfsPath)
 }
 
-// includeScannerBasePaths returns the scanner baseline that is NOT
-// expected to arrive via module/peer ADDINCL propagation:
-//   - repo-root fallback (`-I$(S)` shape) for non-no-stdinc consumers;
-//   - bundled linux-headers fallback for all C/C++ scanner contexts.
+// includeScannerBasePaths returns the scanner baseline NOT expected to
+// arrive via module/peer ADDINCL: bundled linux-headers (always), plus
+// a repo-root fallback (empty prefix, mirrors `-I$(S)`) for non-no-stdinc
+// consumers.
 //
-// Musl include roots are intentionally NOT part of this baseline.
-// Upstream models them through ordinary module ADDINCL:
-//   - musl-self gets `arch/<isa>`, `arch/generic`, `src/include`,
-//     `src/internal`, `include`, `extra` from contrib/libs/musl/ya.make;
-//   - consumers get `arch/<isa>`, `arch/generic`, `include`, `extra`
-//     from contrib/libs/musl/include's GLOBAL ADDINCL.
+// Musl include roots are intentionally absent — upstream models them
+// through ordinary module/peer ADDINCL, so musl-self-only paths
+// (`src/include`, `src/internal`) never leak into arbitrary consumers.
 //
-// Keeping musl out of the baseline avoids smuggling musl-self-only
-// paths (`src/include`, `src/internal`) into arbitrary consumers'
-// resolution context.
-//
-// Non-no-stdinc flavours prepend an empty-string entry representing
-// SOURCE_ROOT itself (mirrors `-I$(S)`); `<util/foo.h>` tries
-// $(S)/util/foo.h before linux-headers.
-//
-// No-stdinc flavours MUST NOT get the empty prefix — `-nostdinc` plus a
-// fully explicit muslCcIncludes search path. Adding SOURCE_ROOT
-// would cause false resolution of system-form includes against the
-// repo root, silently expanding musl CC input sets.
+// No-stdinc flavours MUST NOT get the empty prefix: under `-nostdinc`
+// the search path is fully explicit, and adding SOURCE_ROOT would falsely
+// resolve system-form includes against the repo root.
 func includeScannerBasePaths(noStdInc bool) []VFS {
 	base := []VFS{
 		Source("contrib/libs/linux-headers"),

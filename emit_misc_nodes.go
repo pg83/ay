@@ -17,10 +17,8 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 	for _, g := range d.antlr4Grammars {
 		if g.IsSplit {
 			jvRef := EmitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ctx.emit)
-			// Register .h outputs. ANTLR4-generated headers include
-			// antlr4-runtime.h; JV-generated .h also carries the
-			// antlr4 toolchain witnesses (antlr.jar, stdout2stderr.py,
-			// .g4 sources) and the sibling .cpp output.
+			// Generated .h witness set: antlr4-runtime.h, sibling .cpp,
+			// stdout2stderr.py, antlr.jar, and the .g4 sources.
 			// ProducerRef = jvRef so consumer CC reaching a JV-generated
 			// .h transitively threads JV into deps[].
 			lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
@@ -53,9 +51,8 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					registerBoundGeneratedParsedOutput(ctx, instance, "JV", Build(outPrefix+suffix), parsed, jvRef)
 				}
 			}
-			// PR-M3-antlr-g4-cpp: emit CP+CC for each grammar .cpp output.
+			// Emit CP+CC for each grammar .cpp output.
 			if consumerInputs != nil {
-				// JV inputs (grammar files + scripts + jar) are the JV node's Inputs.
 				jvInputs := []VFS{
 					Source(instance.Path + "/" + g.Lexer),
 					Source(instance.Path + "/" + g.Parser),
@@ -74,8 +71,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			}
 		} else {
 			jvRef := EmitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ctx.emit)
-			// Register .h outputs (same witness set as split path).
-			// ProducerRef = jvRef.
+			// Same witness set as the split path; ProducerRef = jvRef.
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 			if reg != nil {
 				grammarG4 := Source(instance.Path + "/" + g.Grammar)
@@ -103,7 +99,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					registerBoundGeneratedParsedOutput(ctx, instance, "JV", Build(outPrefix+suffix), parsed, jvRef)
 				}
 			}
-			// PR-M3-antlr-g4-cpp: emit CP+CC for each grammar .cpp output.
+			// Emit CP+CC for each grammar .cpp output.
 			if consumerInputs != nil {
 				jvInputs := []VFS{
 					Source(instance.Path + "/" + g.Grammar),

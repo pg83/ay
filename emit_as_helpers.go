@@ -46,8 +46,8 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 3 + len(bundle.ArchArgs)
 
-	// No-stdinc preNoLibcExtras: module's own CFLAGS + GLOBAL CFLAGS,
-	// mirroring composeNoStdIncCC. Empty for normal modules.
+	// No-stdinc preNoLibcExtras: module's own CFLAGS + GLOBAL CFLAGS.
+	// Empty for normal modules.
 	noStdIncCFlags := []string(nil)
 	if noStdInc {
 		noStdIncCFlags = make([]string, 0, len(in.CFlags)+len(in.OwnCFlagsGlobal))

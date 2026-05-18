@@ -3,24 +3,12 @@ package main
 import "strings"
 
 // EmitAS emits an AS node for assembling `srcRel` (relative to
-// instance.Path) into an object file.
-//
-// `in` carries per-module compile knobs (own/peer ADDINCL, own CFLAGS,
-// auto peer CFLAGS, transitive header closure); synthetic tests can
-// pass ModuleCCInputs{} for "no per-module flags".
+// instance.Path) into an object file. Synthetic tests can pass
+// ModuleCCInputs{} for "no per-module flags".
 //
 // `yasmLD` is the host yasm linker NodeRef (real for asmlib .pic.o, nil
 // elsewhere); when non-nil, wired into BOTH ForeignDepRefs["tool"] and
-// DepRefs (foreign-deps-only diverged on L0 fingerprint).
-//
-// cmd_args branches on two orthogonal flags:
-//   - instance.Flags.PIC selects host (x86_64; --target=x86_64-linux-gnu,
-//     no -march, hostCFlags/hostDefines/ndebugPicBlock×2 with
-//     hostSseFeatures between) vs target (aarch64;
-//     --target=aarch64-linux-gnu -march=armv8-a, commonCFlags/Defines/
-//     noLibcUndebugBlock×2).
-//   - instance.Flags.NoStdInc injects muslExtraDefines (incl. -D_musl_=1)
-//     between defines and suppression blocks.
+// DepRefs — foreign-deps-only diverges on the L0 fingerprint.
 //
 // Returns (NodeRef, outputPath).
 func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, hostP *Platform, emit Emitter) (NodeRef, VFS) {

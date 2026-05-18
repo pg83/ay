@@ -19,22 +19,15 @@ import (
 	"github.com/jon-codes/getopt"
 )
 
-// make.go — `yatool make` subcommand.
+// Pipelined Gen → Exec: the emitter streams finalised Nodes (dep-first)
+// into a per-node goroutine that waits on dep-futures then runs cmds.
+// The full []*Node is never materialised.
 //
-// Pipelined Gen → Exec: as the emitter finalises each Node (UID + Deps
-// resolved, dep-first order), it goes to an executor that schedules a
-// goroutine per node. Each node's goroutine waits on its dep-futures,
-// then runs the node's cmds. Leaf nodes start executing as soon as they
-// arrive — the full materialised []*Node is never assembled.
-//
-// Cache layout matches the legacy gg layout so on-disk artefacts stay
-// usable side-by-side:
+// Cache layout:
 //   <BldRoot>/cas/<sha256> — content-addressed output blobs
 //   <BldRoot>/uid/<uid>    — per-node meta JSON: {output → cas path}
 
-// makeFlags captures every CLI option `yatool make` accepts. Mirrors the
-// legacy handleMake getopt grammar; the original short letters survive
-// as Go-flag long names (stdlib flag rejects single-dash multi-char).
+// makeFlags captures every CLI option `yatool make` accepts.
 type makeFlags struct {
 	srcRoot     string
 	bldRoot     string
@@ -662,10 +655,9 @@ type hashWriter interface {
 
 // --------------------------- CLI parsing ---------------------------
 
-// parseMakeFlags parses argv via the same getopt grammar as the
-// gg/ya.go original — short letters (-G/-r/-d/-k/-T) + value-bearing
-// short letters (-D/-j/-B/-o/-I) + long names. Bare `-h`/`--help`
-// prints usage and exits 0 (the gg/ya.go original didn't have one).
+// parseMakeFlags parses argv: short letters (-G/-r/-d/-k/-T) +
+// value-bearing short letters (-D/-j/-B/-o/-I) + long names. Bare
+// `-h`/`--help` prints usage and exits 0.
 func parseMakeFlags(args []string) *makeFlags {
 	// getopt's NewState convention: args[0] is the program name and is
 	// skipped by the iterator. dispatch() hands us argv[2:] (the user
@@ -772,8 +764,7 @@ func parseMakeFlags(args []string) *makeFlags {
 }
 
 // parseKV splits `KEY=VALUE` on the first `=` and stores into `into`.
-// A bare `KEY` (no `=`) is treated as `KEY=yes`, matching gg/ya.go's
-// `Flags.parseInto` semantics.
+// A bare `KEY` (no `=`) is treated as `KEY=yes`.
 func parseKV(into map[string]string, kv string) {
 	idx := strings.IndexByte(kv, '=')
 

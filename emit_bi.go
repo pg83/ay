@@ -14,19 +14,11 @@ var buildInfoGenPyVFS = Source("build/scripts/build_info_gen.py")
 var buildInfoGenPyPath = buildInfoGenPyVFS.String()
 
 // EmitBI emits a BI node for CREATE_BUILDINFO_FOR(outputHeader).
-// Three cmds:
-//
-//	cmd[0]: yield_line.py -- <module>/__args <cxx_compiler>
-//	cmd[1]: yield_line.py -- <module>/__args <cxx_flags...>
-//	cmd[2]: xargs.py -- <module>/__args python3 build_info_gen.py <out>
-//
-// Flags come from the target CXX bundle (same as a target CC for this
-// module, minus -c, -o, input path).
-//
-// cache:false at top level matches REF; normalize.py drops it during
-// M1/M2 canonicalization so byte-exact hashes are unaffected.
-// inputs: [yield_line.py, xargs.py, build_info_gen.py];
-// outputs: [$(B)/<modulePath>/<outputHeader>].
+// cmd[0] and cmd[1] stage the compiler invocation into <module>/__args via
+// yield_line.py; cmd[2] feeds those args to build_info_gen.py through xargs.py.
+// Flags come from the target CXX bundle (same as a target CC for this module,
+// minus -c, -o, input path). cache:false is required at top level; normalize.py
+// strips it during canonicalization so it doesn't affect hashes.
 func EmitBI(
 	instance ModuleInstance,
 	outputHeader string,

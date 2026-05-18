@@ -8,15 +8,9 @@ import (
 	"strings"
 )
 
-// emitResourceObjcopy emits one objcopy PY node per flush of the
-// upstream `TObjCopyResourcePacker`. Returned slice is the
-// `$(B)/...objcopy_*.o` output paths in flush order, intended to be
-// appended to the module's `.global.a` `srcs[]` by the caller.
-//
-// Walks `tools/rescompiler/bin` and `tools/rescompressor/bin` to
-// recover their LD NodeRefs and threads them as deps; both walks are
-// memoized in ctx.memo so the parallel call site in emitPySrcs does
-// not double-emit.
+// objcopyEmitResult collects the emitted objcopy node refs, output
+// `$(B)/...objcopy_*.o` paths, and the SOURCE_ROOT-rooted inputs the
+// caller must fold into the module's `.global.a` member set.
 type objcopyEmitResult struct {
 	Refs               []NodeRef
 	Outputs            []VFS

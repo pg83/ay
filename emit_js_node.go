@@ -7,19 +7,13 @@ package main
 // R13: sources stay in DECLARATION ORDER — never sort.
 
 // EmitJS emits a JS node for JOIN_SRCS(allName srcs...).
-// Output: $(B)/<instance.Path>/<allName>. Sources are bare module-relative
-// names composed against instance.Path for both cmd_args and inputs (so a
-// SRCDIR-rebased instance flows through transparently).
+// Sources compose against instance.Path so a SRCDIR-rebased instance flows
+// through transparently. Closure order matters only for the byte-exact JS
+// test pin in js_test.go (L2 compares Inputs as a multiset).
 //
-// Inputs order: gen_join_srcs.py, process_command_files.py, sources in
-// DECLARATION ORDER (R13), then caller-supplied `closure` (union of
-// per-source include closures). L2 compares Inputs as a multiset; closure
-// order matters only for the byte-exact JS test pin in js_test.go.
-//
-// `platform` overrides Node.Platform: JS nodes anchor to the outer-target
-// axis even when the surrounding module is reached via a host-PROGRAM walk,
-// while the downstream JS-derived CC still uses instance.Platform.Target —
-// only the JS axis is detached, not the per-source compile axis.
+// `platform` overrides Node.Platform: JS anchors to the outer-target axis
+// even when the surrounding module is reached via a host-PROGRAM walk; the
+// downstream JS-derived CC still uses instance.Platform.Target.
 func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, platform PlatformID, emit Emitter) (NodeRef, VFS) {
 	joinSrcs := Source("build/scripts/gen_join_srcs.py")
 	procCmdFiles := Source("build/scripts/process_command_files.py")

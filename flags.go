@@ -1,24 +1,17 @@
 package main
 
-// flags.go — CC compile flag bundles.
+// flags.go — CC compile flag bundles, emitted byte-exact against the
+// reference graph.
 //
-// Bundles emit byte-exact against the reference graph in the natural order
-// observed there:
-//   prologue → include-prefix/own-ADDINCL/suffix → debugPrefixMapFlags →
-//   xclangDebugCompilationDir → commonCFlags / hostCFlags →
-//   warningFlags / muslWarningFlags → commonDefines / hostDefines →
-//   noLibcUndebugBlock / ndebugPicBlock → catboostOpenSourceDefine →
-//   builtinMacroDateTime → macroPrefixMapFlags → input source path.
-//
-// The reference repeats the suppression bundle on either side of
-// `-DCATBOOST_OPENSOURCE=yes` (host inserts `hostSseFeatures` between the
-// two copies); reusing one slice keeps the duplication explicit.
+// The suppression bundle is repeated on either side of
+// `-DCATBOOST_OPENSOURCE=yes` (host inserts `hostSseFeatures` between
+// the two copies); reusing one slice keeps the duplication explicit.
 //
 // $(B) / $(S) / $(TOOL_ROOT) are LITERAL strings the build system
 // substitutes at execution time — not Go template variables.
 
 // cxxStandardFlag is the C++ language-standard switch the reference
-// graph applies to every C++ compilation (PR-29-D05).
+// graph applies to every C++ compilation.
 const cxxStandardFlag = "-std=c++20"
 
 // binPath is the value of -B (assembler/linker driver search path)
@@ -27,8 +20,7 @@ const binPath = "/usr/bin"
 
 // ccIncludesPrefix and ccIncludesSuffix are the two halves of the non-musl
 // include set. Per-module ADDINCL paths slot BETWEEN the baseline pair
-// ($(B)+$(S)) and the linux-headers pair. Verified against fp_mode.c.o
-// cmd_args[7..14]: prefix → own ADDINCL → suffix.
+// ($(B)+$(S)) and the linux-headers pair.
 var ccIncludesPrefix = []string{
 	"-I$(B)",
 	"-I$(S)",
@@ -100,8 +92,7 @@ var x86TargetCFlags = []string{
 
 // hostCFlags is the host-build counterpart of commonCFlags (release: -m64
 // replaces -g/-fdebug-default-version/-ggnu-pubnames, +-O3, drops
-// -fsigned-char/-fstack-protector). Verified against
-// build/cow/on/lib.c.pic.o cmd_args[17..27]; 11 args.
+// -fsigned-char/-fstack-protector).
 var hostCFlags = []string{
 	"-pipe",
 	"-m64",
@@ -117,8 +108,8 @@ var hostCFlags = []string{
 }
 
 // warningFlags is `-Werror/-Wall/-Wextra` plus the three baseline `-Wno-*`
-// suppressions accompanying them in the reference (without these clang
-// refuses to compile parts of the tree). Target AND host.
+// suppressions (without these clang refuses to compile parts of the tree).
+// Target AND host.
 var warningFlags = []string{
 	"-Werror",
 	"-Wall",
@@ -129,7 +120,7 @@ var warningFlags = []string{
 }
 
 // commonDefines is the baseline `-D` set the reference graph applies
-// to every TARGET CC compilation. 11 args.
+// to every TARGET CC compilation.
 var commonDefines = []string{
 	"-DARCADIA_ROOT=$(S)",
 	"-DARCADIA_BUILD_ROOT=$(B)",
@@ -146,7 +137,7 @@ var commonDefines = []string{
 
 // hostDefines is the host counterpart of commonDefines: adds
 // `-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE` (host-only libunwind shim)
-// between -D_GNU_SOURCE and -D__LONG_LONG_SUPPORTED. 12 args.
+// between -D_GNU_SOURCE and -D__LONG_LONG_SUPPORTED.
 var hostDefines = []string{
 	"-DARCADIA_ROOT=$(S)",
 	"-DARCADIA_BUILD_ROOT=$(B)",
@@ -163,8 +154,7 @@ var hostDefines = []string{
 }
 
 // hostSseFeatures is the SSE/CPU-feature bundle inserted between the two
-// halves of the host PIC build's ndebug block. 7 args; observed at
-// cmd_args[71..77] of build/cow/on/lib.c.pic.o.
+// halves of the host PIC build's ndebug block.
 var hostSseFeatures = []string{
 	"-msse2",
 	"-msse3",
@@ -203,9 +193,8 @@ var noLibcWarningSuppressions = []string{
 }
 
 // noLibcUndebugBlock is the TARGET-build counterpart used by build/cow/on,
-// musl, and similar no-libc modules. Begins with `-UNDEBUG -mno-outline-atomics`,
-// then the 20 -Wno-* flags. 22 entries total. Emitted twice in the
-// reference cmd_args (once before, once after `-DCATBOOST_OPENSOURCE=yes`).
+// musl, and similar no-libc modules. Emitted twice in the reference
+// cmd_args (once before, once after `-DCATBOOST_OPENSOURCE=yes`).
 var noLibcUndebugBlock = func() []string {
 	out := make([]string, 0, 2+len(noLibcWarningSuppressions))
 	out = append(out, "-UNDEBUG", "-mno-outline-atomics")
@@ -270,10 +259,10 @@ func compileFlagBundleFor(p *Platform) compileFlagBundle {
 
 // ndebugPicBlock is the HOST-build counterpart of noLibcUndebugBlock.
 // Replaces `-UNDEBUG -mno-outline-atomics` with `-DNDEBUG -fPIC` (host
-// is release + position-independent), keeping the same 20-flag
-// suppression tail. 22 entries total. Emitted twice in the host
-// reference cmd_args, with `hostSseFeatures` between the two copies
-// instead of just `catboostOpenSourceDefine`.
+// is release + position-independent), keeping the same suppression
+// tail. Emitted twice in the host reference cmd_args, with
+// `hostSseFeatures` between the two copies instead of just
+// `catboostOpenSourceDefine`.
 var ndebugPicBlock = func() []string {
 	out := make([]string, 0, 2+len(noLibcWarningSuppressions))
 	out = append(out, "-DNDEBUG", "-fPIC")

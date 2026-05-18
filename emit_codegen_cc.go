@@ -15,18 +15,13 @@ func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef 
 }
 
 // emitCodegenDownstreamCC emits the downstream CC for a codegen
-// producer's `.cpp/.cc/.cxx/.c` output (EN's `.h_serialized.cpp`,
-// PR's STDOUT/OUT .cpp, etc.). The producer's .cpp lives at
-// $(B)/<instance.Path>/<cppRel> and the owning module compiles it as
+// producer's `.cpp/.cc/.cxx/.c` output. Owning module compiles it as
 // an implicit AR member.
 //
-//   - IsGenerated=true → composeCCPaths roots input/output under $(B).
-//   - IncludeInputs from walkClosure() over the registered .cpp;
-//     producer MUST register EmitsIncludes in the codegen registry
-//     first.
-//   - depPrefix prepends cross-codegen dep entries the reference
-//     places ahead of the primary source (EN consumers prepend cross-EN
-//     `_serialized.cpp` + `_serialized.h`; PR has no cross-deps).
+// Producer MUST register EmitsIncludes in the codegen registry first
+// (walkClosure reads it). depPrefix entries are prepended ahead of the
+// scanner closure so cross-codegen deps appear before the consumer's
+// own .cpp in Inputs[] (EN: cross-EN `_serialized.{cpp,h}`; PR: none).
 func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string, depPrefix []VFS, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS, []VFS) {
 	cppPath := Build(instance.Path + "/" + cppRel)
 

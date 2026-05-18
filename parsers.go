@@ -340,7 +340,7 @@ func parseCIncludes(data []byte) []includeDirective {
 		// Short-circuit lines without `#` before the regex.
 		// stripComments fills block-comment regions with spaces, and
 		// the `^\s*#` anchor would otherwise greedily match leading
-		// whitespace, multiplying regex cost ~3× on the M2 closure.
+		// whitespace, multiplying regex cost ~3×.
 		if bytes.IndexByte(line, '#') < 0 {
 			return
 		}
@@ -566,25 +566,13 @@ func indexOfAngleOrQuote(b []byte) int {
 	return -1
 }
 
-// stripComments rewrites C/C++ source bytes so the include-directive
-// regex never matches text inside non-code regions. Block and line
-// comments are replaced with spaces; newlines preserved so per-line
-// `^\s*#` anchoring continues to address the same lines.
-//
-// String and char literals are recognised but not stripped: bytes are
-// walked so a `/*` or `//` inside a string body cannot enter comment
-// state, but the bytes themselves stay unchanged. This matters because
-// `#include "header.h"` is a string literal at lexer level — stripping
-// its payload would erase every quoted include.
-//
-// Raw string literals (`R"delim(...)delim"`) are walked transparently
-// and have their bodies blanked: protoc's `R"(#include "$path$")"`
-// codegen templates would otherwise expose fake `#include` lines.
-//
-// Mutates `data` in place; the buffer comes from os.ReadFile and is
-// not retained past scanDirectives. The state machine is intentionally
-// simple: no trigraphs, no line-continuation backslash splicing, no
-// alternative tokens (`%:include`).
+// stripComments blanks C/C++ comment bytes (spaces, newlines preserved)
+// so the include regex cannot match inside non-code spans. String and
+// char literals are walked but left intact — `#include "header.h"` is
+// itself a string literal at lexer level. Raw string bodies
+// (`R"delim(...)delim"`) are blanked to suppress protoc codegen
+// templates like `R"(#include "$path$")"`. Mutates `data` in place. No
+// trigraphs, no line-continuation splicing, no `%:include`.
 func stripComments(data []byte) []byte {
 	hasTrigger := false
 

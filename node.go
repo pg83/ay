@@ -3,18 +3,15 @@ package main
 // node.go — on-disk-aligned types mirroring the JSON shape produced by ymake.
 //
 // Field declaration order matters: encoding/json emits in declaration order,
-// and the reference /home/pg/monorepo/yatool_orig/sg.json lists keys
-// alphabetically. Keep field ordering in lockstep.
+// and reference sg.json lists keys alphabetically. Keep in lockstep.
 //
-// `omitempty` is used only on fields sg.json itself omits on most nodes —
-// host_platform (~half of nodes, always true when present) and foreign_deps
-// (~26 of ~3730). Everything else is always-present so empty maps/arrays
-// render as `[]`/`{}` rather than vanish. stats_uid is json:"-": REF's
-// 32-char hex derivation is out of scope and the normalizer also drops it.
+// `omitempty` is used only on fields sg.json itself omits on most nodes
+// (host_platform, foreign_deps); everything else always serializes so empty
+// maps/arrays render as `[]`/`{}` rather than vanish. stats_uid is json:"-":
+// its 32-char hex derivation is out of scope and the normalizer drops it too.
 //
-// Rule authors assemble Deps/ForeignDeps indirectly via NodeRef; Finalize
-// resolves refs to UID strings during the Merkle pass. The internal
-// DepRefs/ForeignDepRefs fields carry the unresolved refs (json:"-").
+// Rule authors assemble deps via NodeRef; Finalize resolves refs to UID
+// strings during the Merkle pass.
 
 // Cmd is one command line in a node's `cmds` list. Field order is
 // alphabetical (cmd_args, cwd, env, stdout). Cwd/Stdout are omitempty: only
@@ -28,7 +25,7 @@ type Cmd struct {
 }
 
 // Node is the on-disk representation of a build-graph node (alphabetical
-// field order matches reference g.json). DepRefs/ForeignDepRefs carry
+// field order matches reference sg.json). DepRefs/ForeignDepRefs carry
 // rule-author input that Finalize resolves into public Deps/ForeignDeps.
 //
 // Cache is tri-state: nil omits the key (the common case); non-nil emits

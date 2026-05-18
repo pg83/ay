@@ -33,24 +33,15 @@ func canonicalizeRagel6Binary(v VFS) VFS {
 	return Build(ragel6CanonicalRel + v.Rel[len(ragel6BinSubrel):])
 }
 
-// EmitR6 emits an R6 node generating `<srcRel>.cpp` from
-// `<instance.Path>/<srcRel>` via the host ragel6 binary referenced by
-// ragel6LD at ragel6BinaryPath. canonicalizeRagel6BinaryPath rewrites the
-// walker's `/bin/` path back to the reference's canonical parent path; a
-// canonical fallback string passes through as a no-op.
+// EmitR6 emits an R6 node generating `<srcRel>.cpp` from `<instance.Path>/<srcRel>`
+// via the host ragel6 binary referenced by ragel6LD at ragel6BinaryPath.
 //
-// Output path: `$(B)/<instance.Path>/_/<srcRel>.cpp` when srcRel has a `/`,
-// else `$(B)/<instance.Path>/<srcRel>.cpp`. closure is the SOURCE_ROOT-
-// relative transitive header closure scanned from the .rl6 source; inputs
-// read [ragel6Binary, .rl6 source, ...closure].
+// closure is the SOURCE_ROOT-relative transitive header closure scanned from the
+// .rl6 source.
 //
-// ragel6Flags carries the per-module `SET(RAGEL6_FLAGS …)` override; empty
-// → platform default (release and unsanitized → -CG2, otherwise -CT0). SET does
-// not concatenate; upstream `_SRC("rl6", …)` in build/ymake.core.conf:3284
-// expands $RAGEL6_FLAGS first.
-//
-// Returns (NodeRef, outputPath) so the caller can wire R6 as the input of
-// a downstream EmitCC.
+// ragel6Flags carries the per-module `SET(RAGEL6_FLAGS …)` override; empty falls
+// back to platform default. SET does not concatenate; upstream `_SRC("rl6", …)`
+// in build/ymake.core.conf:3284 expands $RAGEL6_FLAGS first.
 func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []string, closure []VFS, emit Emitter) (NodeRef, VFS) {
 	var outVFS VFS
 	if strings.Contains(srcRel, "/") {

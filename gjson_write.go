@@ -9,25 +9,18 @@ import (
 
 // gjson_write.go — hand-rolled streaming JSON serializer, byte-identical
 // to json.Encoder with SetEscapeHTML(false) + SetIndent("", "    ") for
-// the Graph shape.
-//
-// Stock json.Encoder's indent path is two-pass (encode-compact, then
-// json.Indent); on the 63 MiB tools/archiver graph that doubled wall
-// time (~300 ms of ~1.5 s, ~20%). This walks Graph once, writing
-// indentation inline, reusing a per-Node buffer to avoid per-field
-// allocations. Specialised to Graph/Node/Cmd, not reflection-driven.
+// the Graph shape. Replaces json.Encoder's two-pass indent path; walks
+// Graph once with inline indentation and a reused per-Node buffer.
 //
 // Byte-exactness invariants:
 //   - Map keys alphabetical (json default).
-//   - omitempty fields (host_platform, foreign_deps on Node; cwd on
-//     Cmd) dropped when zero.
+//   - omitempty fields (host_platform, foreign_deps, cache on Node;
+//     cwd, stdout on Cmd) dropped when zero.
 //   - Empty slices/maps render as `[]`/`{}` inline.
-//   - Strings: same escape table as encoding/json with EscapeHTML=false
-//     (control chars, quote, backslash, U+2028/U+2029; '<>&' pass through).
+//   - Strings: encoding/json escape table with EscapeHTML=false
+//     (U+2028/U+2029 still escaped; '<>&' pass through).
 //   - Floats: strconv.AppendFloat(_, 'f', -1, 64).
 //   - No trailing newline — final byte is '}'.
-//
-// gjson_write_test.go parallels every code path against json.Encoder.
 
 // writeGraphIndented streams g as indented JSON to w. Errors from w
 // propagate via Throw (the make -G / writeGraph contract panics up to
@@ -83,7 +76,7 @@ func writeGraphIndented(w io.Writer, g *Graph) {
 	buf = appendStringSlice(buf, g.Result, "    ")
 	buf = append(buf, '\n')
 
-	// PR-L4-C/03: no trailing newline — REF's last byte is '}'.
+	// No trailing newline — REF's last byte is '}'.
 	buf = append(buf, '}')
 
 	Throw2(w.Write(buf))
@@ -172,8 +165,7 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 	buf = appendInterfaceMap(buf, n.Requirements, innerPad)
 	buf = append(buf, ',', '\n')
 
-	// sandboxing: bool — always true for every node in the M2 closure;
-	// PR-L4-C/01 emits it unconditionally to match REF.
+	// sandboxing: bool — emitted unconditionally to match REF.
 	buf = append(buf, innerPad...)
 	if n.Sandboxing {
 		buf = append(buf, `"sandboxing": true,`...)
@@ -248,10 +240,8 @@ func appendCmdSlice(buf []byte, cmds []Cmd, pad string) []byte {
 		buf = append(buf, `"env": `...)
 		buf = appendStringMap(buf, c.Env, innerPad)
 
-		// stdout: omitempty, emitted after env to keep alphabetical
-		// key order (cmd_args, cwd, env, stdout). Only REF cmd carrying
-		// stdout is the PR node devtools/ymake/symbols
-		// dep_types.h_dumper.cpp.
+		// stdout: omitempty; emitted after env for alphabetical key order
+		// (cmd_args, cwd, env, stdout).
 		if c.Stdout != "" {
 			buf = append(buf, ',', '\n')
 			buf = append(buf, innerPad...)
@@ -304,8 +294,7 @@ func appendStringSlice(buf []byte, ss []string, pad string) []byte {
 }
 
 // appendVFSSlice emits []VFS in the same shape as appendStringSlice —
-// each VFS materialises to its canonical "$(S)/<rel>" or "$(B)/<rel>"
-// inline at emit time, avoiding the v.String() concat allocation.
+// each element renders as its canonical "$(S)/<rel>" or "$(B)/<rel>".
 func appendVFSSlice(buf []byte, vs []VFS, pad string) []byte {
 	if len(vs) == 0 {
 		return append(buf, '[', ']')
@@ -605,18 +594,10 @@ func appendInterfaceMap(buf []byte, m map[string]interface{}, pad string) []byte
 // hex is the lookup table for \u00xx escapes in appendString.
 const hex = "0123456789abcdef"
 
-// appendString emits s as a JSON-escaped string with EscapeHTML=false,
-// matching encoding/json. The escape table is the EscapeHTML=false branch
-// of encoding/json/encode.go encodeState.string:
-//
-//   - 0x00..0x1f : \uXXXX, with shortcuts \b \t \n \f \r for 0x08..0x0d
-//     (skipping 0x0b which has no shortcut).
-//   - 0x22 ('"') : \"
-//   - 0x5c ('\\'): \\
-//   - 0x80..0xff: pass through as part of UTF-8 sequences except for
-//     U+2028 (E2 80 A8) and U+2029 (E2 80 A9), which become   and
-//     — JavaScript-compat carve-out preserved by encoding/json.
-//   - Invalid UTF-8: replaced with �.
+// appendString emits s as a JSON-escaped string matching encoding/json
+// with EscapeHTML=false: 0x00..0x1f as \uXXXX (with \b\t\n\f\r shortcuts),
+// '"' and '\\' escaped, U+2028/U+2029 escaped (JS-compat carve-out),
+// invalid UTF-8 replaced with U+FFFD; '<>&' pass through.
 func appendString(buf []byte, s string) []byte {
 	buf = append(buf, '"')
 	buf = appendStringEscapedBody(buf, s)
