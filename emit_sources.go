@@ -213,7 +213,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: rlMemberInputs, PrimaryCount: 1}
 	case strings.HasSuffix(srcRel, ".h.in"):
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
-		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
+		cfgVars := buildCFGVars(ctx.fs, srcInstance.Path+"/"+srcRel, srcIn.DefaultVars, srcIn.DefaultVarOrder)
+		cfRef, cfOut := EmitCF(srcInstance, srcRel, cfgVars, srcIn.IncludeInputs, ctx.emit)
 
 		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{
@@ -226,7 +227,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 	case strings.HasSuffix(srcRel, ".cpp.in"),
 		strings.HasSuffix(srcRel, ".c.in"):
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
-		cfRef, cfOut := EmitCF(srcInstance, srcRel, srcIn, ctx.emit)
+		cfgVars := buildCFGVars(ctx.fs, srcInstance.Path+"/"+srcRel, srcIn.DefaultVars, srcIn.DefaultVarOrder)
+		cfRef, cfOut := EmitCF(srcInstance, srcRel, cfgVars, srcIn.IncludeInputs, ctx.emit)
 
 		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"regexp"
-	"sort"
 	"strings"
 )
 
@@ -24,11 +22,15 @@ const buildTypeDebug = "BUILD_TYPE=DEBUG"
 // vars actually @VAR@-referenced in the .in; BUILD_TYPE=DEBUG is
 // injected when referenced but not DEFAULT-declared.
 //
-// Returns (CF NodeRef, outputPath).
+// Returns (CF NodeRef, outputPath). cfgVars is the pre-filtered
+// `NAME=VALUE` cmd-arg fragment list (walker computes via
+// buildCFGVars); includeInputs is the source-closure already walked
+// from the .in template.
 func EmitCF(
 	instance ModuleInstance,
 	srcRel string,
-	in ModuleCCInputs,
+	cfgVars []string,
+	includeInputs []VFS,
 	emit Emitter,
 ) (NodeRef, VFS) {
 	srcVFS := Source(instance.Path + "/" + srcRel)
@@ -38,8 +40,6 @@ func EmitCF(
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
-	cfgVars := buildCFGVars(in.FS, instance.Path+"/"+srcRel, in.DefaultVars, in.DefaultVarOrder)
-
 	cmdArgs := []string{
 		instance.Platform.Tools.Python3,
 		configureFilePyPath,
@@ -48,9 +48,9 @@ func EmitCF(
 	}
 	cmdArgs = append(cmdArgs, cfgVars...)
 
-	inputs := make([]VFS, 0, 2+len(in.IncludeInputs))
+	inputs := make([]VFS, 0, 2+len(includeInputs))
 	inputs = append(inputs, configureFilePyVFS, srcVFS)
-	inputs = append(inputs, in.IncludeInputs...)
+	inputs = append(inputs, includeInputs...)
 
 	node := &Node{
 		Cmds: []Cmd{
@@ -83,43 +83,3 @@ func EmitCF(
 	return emit.Emit(node), outVFS
 }
 
-// cfgVarRefRe matches @VAR_NAME@ substitution markers in .in template files.
-var cfgVarRefRe = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
-
-// buildCFGVars filters the module's DEFAULT declarations to vars actually
-// @VAR@-referenced in the .in source, sorted alphabetically (ymake's order).
-// @BUILD_TYPE@ without a DEFAULT falls back to DEBUG.
-func buildCFGVars(fs *FS, rel string, defaultVars map[string]string, defaultVarOrder []string) []string {
-	referenced := map[string]bool{}
-
-	if data, err := fs.Read(rel); err == nil {
-		for _, m := range cfgVarRefRe.FindAllSubmatch(data, -1) {
-			referenced[string(m[1])] = true
-		}
-	}
-
-	var vars []string
-	declaredSet := map[string]bool{}
-
-	for _, name := range defaultVarOrder {
-		if !referenced[name] {
-			continue
-		}
-
-		val, ok := defaultVars[name]
-		if !ok {
-			continue
-		}
-
-		vars = append(vars, name+"="+val)
-		declaredSet[name] = true
-	}
-
-	if referenced["BUILD_TYPE"] && !declaredSet["BUILD_TYPE"] {
-		vars = append(vars, buildTypeDebug)
-	}
-
-	sort.Strings(vars)
-
-	return vars
-}
