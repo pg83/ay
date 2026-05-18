@@ -11,13 +11,6 @@ package main
 //            [--header, $(B)/<hdr>_serialized.h]]
 // inputs: [dep-EN-outputs..., enumParserBin, $(S)/<hdr>, ...includeClosure]
 
-// enumParserBinary is the canonical invocation path for the
-// enum_parser host binary. Used in cmd_args[0] and inputs.
-var (
-	enumParserBinaryVFS  = Build("tools/enum_parser/enum_parser/enum_parser")
-	enumParserBinaryPath = enumParserBinaryVFS.String()
-)
-
 // EmitEN emits one EN node for a GENERATE_ENUM_SERIALIZATION(*) invocation.
 // headerSrc.Rel drives serialized output paths and --include-path.
 // withHeader adds --header + .h output. enumParserLD may be zero when the

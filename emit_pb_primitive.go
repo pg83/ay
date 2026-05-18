@@ -46,23 +46,14 @@ const (
 // derived once via .String() and used wherever a cmd_arg expects a
 // raw string.
 var (
-	pbWrapperVFS       = Source("build/scripts/cpp_proto_wrapper.py")
-	pbPyWrapperVFS     = Source("build/scripts/gen_py_protos.py")
-	pbProtocBinaryVFS  = Build("contrib/tools/protoc/protoc")
-	pbCppStyleguideVFS = Build("contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide")
-	pbGrpcCppVFS       = Build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp")
-	pbGrpcPyVFS        = Build("contrib/tools/protoc/plugins/grpc_python/grpc_python")
-	pbMypyVFS          = Build("contrib/python/mypy-protobuf/bin/protoc-gen-mypy/protoc-gen-mypy")
-	pbDescriptorVFS    = Source("contrib/libs/protobuf/src/google/protobuf/descriptor.proto")
+	pbWrapperVFS    = Source("build/scripts/cpp_proto_wrapper.py")
+	pbPyWrapperVFS  = Source("build/scripts/gen_py_protos.py")
+	pbGrpcCppVFS    = Build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp")
+	pbDescriptorVFS = Source("contrib/libs/protobuf/src/google/protobuf/descriptor.proto")
 
-	pbWrapperPath       = pbWrapperVFS.String()
-	pbPyWrapperPath     = pbPyWrapperVFS.String()
-	pbProtocBinaryPath  = pbProtocBinaryVFS.String()
-	pbCppStyleguidePath = pbCppStyleguideVFS.String()
-	pbGrpcCppPath       = pbGrpcCppVFS.String()
-	pbGrpcPyPath        = pbGrpcPyVFS.String()
-	pbMypyPath          = pbMypyVFS.String()
-	pbDescriptorProto   = pbDescriptorVFS.String()
+	pbWrapperPath     = pbWrapperVFS.String()
+	pbPyWrapperPath   = pbPyWrapperVFS.String()
+	pbDescriptorProto = pbDescriptorVFS.String()
 )
 
 // protobufRuntimeHeaders is the set every protoc-generated .pb.h directly
@@ -806,33 +797,17 @@ func libffiConfigTriple(p *Platform) string {
 }
 
 func py3ccToolRefs(ctx *genCtx, instance ModuleInstance) (NodeRef, NodeRef, VFS, VFS) {
-	py3ccBinary := Build("tools/py3cc/py3cc")
-	py3ccSlowBin := Build("tools/py3cc/slow/py3cc")
-	var py3ccRef, py3ccSlowRef NodeRef
-
 	inst := NewToolInstance(ctx.host, "tools/py3cc/bin")
 	inst.Flags = inferFlagsFromPath("tools/py3cc/bin", true)
-	if exc := Try(func() {
-		res := genModule(ctx, inst)
-		py3ccRef = res.LDRef
-		if res.LDPath != nil {
-			py3ccBinary = canonicalizePy3ccBinary(*res.LDPath)
-		}
-	}); exc != nil {
-		_ = exc
-	}
+	res := genModule(ctx, inst)
+	py3ccRef := res.LDRef
+	py3ccBinary := canonicalizePy3ccBinary(*res.LDPath)
 
 	slowInst := NewToolInstance(ctx.host, "tools/py3cc/slow")
 	slowInst.Flags = inferFlagsFromPath("tools/py3cc/slow", true)
-	if exc := Try(func() {
-		res := genModule(ctx, slowInst)
-		py3ccSlowRef = res.LDRef
-		if res.LDPath != nil {
-			py3ccSlowBin = *res.LDPath
-		}
-	}); exc != nil {
-		_ = exc
-	}
+	slowRes := genModule(ctx, slowInst)
+	py3ccSlowRef := slowRes.LDRef
+	py3ccSlowBin := *slowRes.LDPath
 
 	return py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin
 }

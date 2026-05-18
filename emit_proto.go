@@ -91,54 +91,26 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 }
 
 func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, protoSrcs, evSrcs []string) *protoSrcsResult {
-	// Walk host protoc and cpp_styleguide tool programs.
-	cppStyleguideBinary := pbCppStyleguideVFS
-	protocBinary := pbProtocBinaryVFS
-	grpcCppBinary := pbGrpcCppVFS
-
-	var cppStyleguideLDRef, protocLDRef, grpcCppLDRef NodeRef
-
 	protocHostInst := NewToolInstance(ctx.host, pbProtocModule)
 	protocHostInst.Flags = inferFlagsFromPath(pbProtocModule, true)
-
-	if exc := Try(func() {
-		result := genModule(ctx, protocHostInst)
-		protocLDRef = result.LDRef
-		if result.LDPath != nil {
-			protocBinary = *result.LDPath
-		}
-	}); exc != nil {
-		// Swallow ParseError; use canonical fallback path.
-		_ = exc
-	}
+	protocRes := genModule(ctx, protocHostInst)
+	protocLDRef := protocRes.LDRef
+	protocBinary := *protocRes.LDPath
 
 	cppStyleguideHostInst := NewToolInstance(ctx.host, pbCppStyleguideModule)
 	cppStyleguideHostInst.Flags = inferFlagsFromPath(pbCppStyleguideModule, true)
+	cppStyleguideRes := genModule(ctx, cppStyleguideHostInst)
+	cppStyleguideLDRef := cppStyleguideRes.LDRef
+	cppStyleguideBinary := *cppStyleguideRes.LDPath
 
-	if exc := Try(func() {
-		result := genModule(ctx, cppStyleguideHostInst)
-		cppStyleguideLDRef = result.LDRef
-		if result.LDPath != nil {
-			cppStyleguideBinary = *result.LDPath
-		}
-	}); exc != nil {
-		// Swallow ParseError; use canonical fallback path.
-		_ = exc
-	}
-
+	var grpcCppLDRef NodeRef
+	grpcCppBinary := pbGrpcCppVFS
 	if d.grpc {
 		grpcCppHostInst := NewToolInstance(ctx.host, pbGrpcCppModule)
 		grpcCppHostInst.Flags = inferFlagsFromPath(pbGrpcCppModule, true)
-
-		if exc := Try(func() {
-			result := genModule(ctx, grpcCppHostInst)
-			grpcCppLDRef = result.LDRef
-			if result.LDPath != nil {
-				grpcCppBinary = *result.LDPath
-			}
-		}); exc != nil {
-			_ = exc
-		}
+		grpcRes := genModule(ctx, grpcCppHostInst)
+		grpcCppLDRef = grpcRes.LDRef
+		grpcCppBinary = *grpcRes.LDPath
 	}
 
 	// Collect per-codegen-source (genRef, .pb.cc path) pairs so the AR
@@ -257,21 +229,11 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 
 	// Emit EV nodes (PROTO_LIBRARY with .ev sources → module_tag:"cpp_proto").
 	if len(evSrcs) > 0 {
-		event2cppBinary := evEvent2cppBinaryVFS
-		var event2cppLDRef NodeRef
-
 		event2cppHostInst := NewToolInstance(ctx.host, evEvent2cppModule)
 		event2cppHostInst.Flags = inferFlagsFromPath(evEvent2cppModule, true)
-
-		if exc := Try(func() {
-			result := genModule(ctx, event2cppHostInst)
-			event2cppLDRef = result.LDRef
-			if result.LDPath != nil {
-				event2cppBinary = *result.LDPath
-			}
-		}); exc != nil {
-			_ = exc
-		}
+		evRes := genModule(ctx, event2cppHostInst)
+		event2cppLDRef := evRes.LDRef
+		event2cppBinary := *evRes.LDPath
 
 		for _, src := range evSrcs {
 			evRelPath := protoSourceRelPath(ctx.sourceRoot, instance, d, src)

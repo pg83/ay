@@ -87,20 +87,10 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	toolInstance := NewToolInstance(ctx.host, toolPath)
 	toolInstance.Flags = inferFlagsFromPath(toolPath, true)
 
-	toolBinPath := Build(toolPath + "/" + filepath.Base(toolPath))
-	var toolLDRef NodeRef
-	var toolInducedDeps []string
-
-	if exc := Try(func() {
-		res := genModule(ctx, toolInstance)
-		toolLDRef = res.LDRef
-		if res.LDPath != nil {
-			toolBinPath = *res.LDPath
-		}
-		toolInducedDeps = res.InducedDeps
-	}); exc != nil {
-		// Swallow parse errors (tool may not fully parse); use fallback path.
-	}
+	res := genModule(ctx, toolInstance)
+	toolLDRef := res.LDRef
+	toolBinPath := *res.LDPath
+	toolInducedDeps := res.InducedDeps
 
 	// Register PR outputs FIRST so the closure walk below resolves
 	// each output's $(B) path through the codegen registry.

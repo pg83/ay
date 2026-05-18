@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"strings"
 )
 
@@ -23,64 +22,27 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		py3ccSlowPath = "tools/py3cc/slow"
 	)
 
-	// Canonical binary paths ($(B)-rooted) used in cmd_args
-	// and inputs when the host walk succeeds or as fallbacks when it fails.
-	var (
-		py3ccBinaryCanonical     = Build("tools/py3cc/py3cc")
-		py3ccSlowBinaryCanonical = Build("tools/py3cc/slow/py3cc")
-	)
-
-	var (
-		py3ccLDRef     NodeRef
-		py3ccSlowLDRef NodeRef
-		py3ccBinary    = py3ccBinaryCanonical
-		py3ccSlowBin   = py3ccSlowBinaryCanonical
-	)
-
 	// Walk tools/py3cc/bin (the main py3cc binary).
 	py3ccHostInst := NewToolInstance(ctx.host, py3ccBinPath)
 	py3ccHostInst.Flags = inferFlagsFromPath(py3ccBinPath, true)
+	py3ccRes := genModule(ctx, py3ccHostInst)
+	py3ccLDRef := py3ccRes.LDRef
+	// canonicalizePy3ccBinaryPath: $(B)/tools/py3cc/bin/py3cc →
+	// $(B)/tools/py3cc/py3cc to match the reference yapyc3 cmd_args[0].
+	// tools/py3cc/bin/ya.make declares SRCDIR(tools/py3cc) so the
+	// upstream intent is a top-level binary.
+	py3ccBinary := canonicalizePy3ccBinary(*py3ccRes.LDPath)
 
-	if exc := Try(func() {
-		result := genModule(ctx, py3ccHostInst)
-		py3ccLDRef = result.LDRef
-		// canonicalizePy3ccBinaryPath: $(B)/tools/py3cc/bin/py3cc →
-		// $(B)/tools/py3cc/py3cc to match the reference yapyc3 cmd_args[0].
-		// tools/py3cc/bin/ya.make declares SRCDIR(tools/py3cc) so the
-		// upstream intent is a top-level binary.
-		if result.LDPath != nil {
-			py3ccBinary = canonicalizePy3ccBinary(*result.LDPath)
-		}
-	}); exc != nil {
-		var pe *ParseError
-		if !errors.As(exc.AsError(), &pe) {
-			panic(exc)
-		}
-		// Leave zero ref; py3ccBinary stays at canonical fallback.
-	}
-
-	// Walk tools/py3cc/slow. tools/py3cc/slow/ya.make uses
-	// IF(NOT PREBUILT) INCLUDE(bin/ya.make); our parser expands it
-	// (PREBUILT=false). tools/py3cc/slow/bin declares PY3_PROGRAM_BIN
+	// Walk tools/py3cc/slow. tools/py3cc/slow/bin declares PY3_PROGRAM_BIN
 	// which isMultimoduleLibraryType routes to a header-only path, so
-	// LDPath is empty. Only update py3ccSlowBin when non-empty.
+	// LDPath is empty. Use canonical fallback when LDPath is nil.
 	py3ccSlowHostInst := NewToolInstance(ctx.host, py3ccSlowPath)
 	py3ccSlowHostInst.Flags = inferFlagsFromPath(py3ccSlowPath, true)
-
-	if exc := Try(func() {
-		result := genModule(ctx, py3ccSlowHostInst)
-		py3ccSlowLDRef = result.LDRef
-		if result.LDPath != nil {
-			py3ccSlowBin = *result.LDPath
-		}
-		// If LDPath is empty (PY3_PROGRAM_BIN → header-only stub),
-		// py3ccSlowBin retains its canonical fallback value.
-	}); exc != nil {
-		var pe *ParseError
-		if !errors.As(exc.AsError(), &pe) {
-			panic(exc)
-		}
-		// Leave zero ref; py3ccSlowBin stays at canonical fallback.
+	py3ccSlowRes := genModule(ctx, py3ccSlowHostInst)
+	py3ccSlowLDRef := py3ccSlowRes.LDRef
+	py3ccSlowBin := Build("tools/py3cc/slow/py3cc")
+	if py3ccSlowRes.LDPath != nil {
+		py3ccSlowBin = *py3ccSlowRes.LDPath
 	}
 
 	// Walk tools/rescompiler/bin, tools/rescompressor/bin, tools/archiver
@@ -95,14 +57,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	walkHostTool := func(path string) {
 		hostInst := NewToolInstance(ctx.host, path)
 		hostInst.Flags = inferFlagsFromPath(path, true)
-		if exc := Try(func() {
-			genModule(ctx, hostInst)
-		}); exc != nil {
-			var pe *ParseError
-			if !errors.As(exc.AsError(), &pe) {
-				panic(exc)
-			}
-		}
+		genModule(ctx, hostInst)
 	}
 
 	walkHostTool(rescompilerBinPath)
