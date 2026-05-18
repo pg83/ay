@@ -461,6 +461,43 @@ var programImplicitPeers = []implicitPeerRule{
 	},
 }
 
+// archDependentPeerAddInclPrefixes lists PEER GLOBAL ADDINCL path
+// prefixes whose final segment is the consumer's target ISA. These
+// paths come from `IF (ARCH_<ISA>) ADDINCL(...)` blocks in upstream
+// ya.make and therefore differ between host-axis and target-axis
+// walks. `rebasePerArchPeerAddIncl` substitutes the from-ISA suffix
+// with the to-ISA suffix when a host-axis closure is re-anchored on
+// the target axis (currently only the JS-node closure scan).
+//
+// Each prefix MUST end in `/`; the matcher appends the literal ISA
+// string. Currently lists `contrib/libs/musl/arch/<ISA>` from
+// contrib/libs/musl/ya.make:27-37.
+var archDependentPeerAddInclPrefixes = []string{
+	"contrib/libs/musl/arch/",
+}
+
+// rebasePerArchPeerAddIncl returns a copy of `hostPeerAddIncl` with
+// any path matching `<prefix><from>` replaced by `<prefix><to>`, where
+// prefix iterates `archDependentPeerAddInclPrefixes`. Used by the JS
+// closure scan to re-anchor a host-axis PeerAddInclGlobal slice on
+// the target ISA without re-walking the dep tree.
+func rebasePerArchPeerAddIncl(hostPeerAddIncl []VFS, from, to ISA) []VFS {
+	out := make([]VFS, len(hostPeerAddIncl))
+
+	for i, p := range hostPeerAddIncl {
+		out[i] = p
+
+		for _, prefix := range archDependentPeerAddInclPrefixes {
+			if p == Source(prefix+string(from)) {
+				out[i] = Source(prefix + string(to))
+				break
+			}
+		}
+	}
+
+	return out
+}
+
 // programAllocatorDefaults mirrors `DEFAULT_ALLOCATOR=TCMALLOC_TC` for
 // MUSL+OS_LINUX at ymake.core.conf:409. Fires in the pre-user half
 // (`includeMusl=false`) only when the module declared no explicit

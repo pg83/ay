@@ -2281,11 +2281,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			// the JS node nevertheless emits on the target axis (see the
 			// EmitJS call below — Platform is anchored to the outer-target
 			// ID). Recompute the include closure with the target scanner +
-			// target-arch musl search paths rebased; the surrounding host
-			// walk's instance is kept verbatim — only the override
-			// `scanPlatform` argument flips.
+			// arch-suffixed peer ADDINCL paths rebased to the target ISA;
+			// the surrounding host walk's instance is kept verbatim — only
+			// the override `scanPlatform` argument flips.
 			jsModuleInputs := moduleInputs
-			jsModuleInputs.PeerAddInclGlobal = jsTargetPeerAddIncl(moduleInputs.PeerAddInclGlobal, srcInstance.Platform.ISA, ctx.target.ISA)
+			jsModuleInputs.PeerAddInclGlobal = rebasePerArchPeerAddIncl(moduleInputs.PeerAddInclGlobal, srcInstance.Platform.ISA, ctx.target.ISA)
 
 			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, srcInstance, js.Sources, jsModuleInputs)
 		}

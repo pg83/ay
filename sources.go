@@ -132,30 +132,6 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []V
 	return out
 }
 
-// jsTargetPeerAddIncl rebases a host-axis PeerAddInclGlobal slice to
-// the target-axis musl-arch layout for the JS-node closure scan. JS
-// nodes are anchored to the target platform axis, so their include
-// closure reflects the target's musl-arch paths.
-//
-// Narrow shim — only the musl-arch entry is rewritten; other entries
-// pass through. TODO: replace with general target-addincl propagation.
-func jsTargetPeerAddIncl(hostPeerAddIncl []VFS, from, to ISA) []VFS {
-	fromMuslArch := Source("contrib/libs/musl/arch/" + string(from))
-	toMuslArch := Source("contrib/libs/musl/arch/" + string(to))
-
-	out := make([]VFS, len(hostPeerAddIncl))
-
-	for i, p := range hostPeerAddIncl {
-		if p == fromMuslArch {
-			out[i] = toMuslArch
-		} else {
-			out[i] = p
-		}
-	}
-
-	return out
-}
-
 // resolveSourceVFS composes the `$(S)/...` VFS path of a SRCS-declared
 // source with composeCCPaths' SRCDIR-aware fallback: when SRCDIR is set
 // and no local file exists at instance.Path/<srcRel>, resolve under
