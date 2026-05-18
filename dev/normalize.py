@@ -8,11 +8,11 @@ and field-insertion order in the emitter become irrelevant; only graph
 structure and build-content matter.
 
 CLI (primary mode — canonicalize both + compare):
-    ./normalize.py --our OUR.json --ref REF.json --target tools/archiver
-                   [--our-out OUR-CANON.json] [--ref-out REF-CANON.json]
+    ./dev/normalize.py --our OUR.json --ref REF.json --target tools/archiver
+                       [--our-out OUR-CANON.json] [--ref-out REF-CANON.json]
 
 CLI (single-file debug mode):
-    ./normalize.py --in SOME.json --target tools/archiver --out CANON.json
+    ./dev/normalize.py --in SOME.json --target tools/archiver --out CANON.json
 
 Exit codes:
     0 — L4 byte-exact match (or single-file mode succeeded)

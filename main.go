@@ -59,7 +59,8 @@ Subcommands:
     help       Show this message.
 
 Use yatool make -j 0 -G <target> > graph.json for graph-generation
-checks, then compare with normalize.py for the canonical L0..L4 verdict.
+checks, then compare with ./dev/normalize.py for the canonical L0..L4
+verdict.
 `)
 }
 

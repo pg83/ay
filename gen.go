@@ -2572,7 +2572,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			peerDynamicRefs, peerDynamicPaths,
 			ldObjcopyRefs, ldObjcopyPaths,
 			ldMemberInputs,
-			cliMuslOn(ctx),
+			cliMuslEnabled(ctx),
 			ownCFlags,
 			peerCFlagsGlobal,
 			peerObjAddLibsGlobal,
