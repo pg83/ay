@@ -164,8 +164,8 @@ type IncludeScanner struct {
 	// independent.
 	sysinclIncluderCache map[sysinclIncluderKey]sysinclCacheEntry
 
-	visitedPool sync.Pool // *VFSSet
-	orderPool   sync.Pool // *[]VFS
+	visitedIDPool sync.Pool // *idSet
+	orderIDPool   sync.Pool // *[]uint32
 	// seenPool reuses the per-resolveSearchPath dedup map across calls.
 	// Keys are rel-form strings — dedup never crosses VFS roots, and
 	// rel keys are slightly cheaper than VFS-keyed.
@@ -249,6 +249,8 @@ type scanCtx struct {
 	subgraphTaintedKnown map[subgraphInnerKey]struct{}
 	subgraphInProgress   map[subgraphInnerKey]struct{}
 }
+
+type idSet map[uint32]struct{}
 
 type searchTierResult struct {
 	paths []VFS
@@ -335,14 +337,14 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 	// non-pooled WalkClosure used (64 entries). Pooled items are
 	// returned as pointers to keep `Pool.Put` from boxing the
 	// value (a plain map or slice would box-allocate on Put).
-	s.visitedPool.New = func() any {
-		m := NewVFSSet(64)
+	s.visitedIDPool.New = func() any {
+		m := make(idSet, 64)
 
 		return &m
 	}
 
-	s.orderPool.New = func() any {
-		o := make([]VFS, 0, 64)
+	s.orderIDPool.New = func() any {
+		o := make([]uint32, 0, 64)
 
 		return &o
 	}
@@ -449,33 +451,34 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 		sc.cfg.SourceRel = vfsPath.Rel
 	}
 
-	visitedP := s.visitedPool.Get().(*VFSSet)
-	orderP := s.orderPool.Get().(*[]VFS)
+	visitedP := s.visitedIDPool.Get().(*idSet)
+	orderP := s.orderIDPool.Get().(*[]uint32)
 
 	visited := *visitedP
 	order := (*orderP)[:0]
+	rootID := s.interner.internVFS(vfsPath)
 
-	sc.dfs(vfsPath, visited, &order)
+	sc.dfsID(rootID, visited, &order)
 
 	out := make([]VFS, 0, len(order))
 
-	for _, abs := range order {
+	for _, absID := range order {
 		// Skip the root itself; only headers are emitted.
-		if abs == vfsPath {
+		if absID == rootID {
 			continue
 		}
 
-		out = append(out, abs)
+		out = append(out, s.interner.vfsByID(absID))
 	}
 
-	// Reset and return scratch buffers to the pool. VFSSet.Clear
-	// drops every entry in both buckets while retaining the
-	// underlying bucket allocations for reuse.
-	visited.Clear()
+	// Reset and return scratch buffers to the pool. `clear(visited)`
+	// drops every entry while retaining the underlying bucket
+	// allocation for reuse.
+	clear(visited)
 	*orderP = order[:0]
 
-	s.visitedPool.Put(visitedP)
-	s.orderPool.Put(orderP)
+	s.visitedIDPool.Put(visitedP)
+	s.orderIDPool.Put(orderP)
 
 	if scannerStatsEnabled {
 		s.statsCallCount++
@@ -671,19 +674,21 @@ func hashScanContext(ctx *ScanContext) uint64 {
 	return h
 }
 
-// dfs walks the include closure in depth-first discovery order via the
-// per-includer subgraph cache. On a hit, the pre-computed canonical-
-// order subgraph rooted at `absPath` is merged into the caller's
-// visited+order, skipping pre-visited entries. On a miss, the subgraph
-// is computed and memoised. Skipping pre-visited entries during merge
-// preserves the canonical first-visit order an uncached DFS would
-// produce from the same partially-populated visited state.
-func (sc *scanCtx) dfs(absPath VFS, visited VFSSet, order *[]VFS) {
+// dfsID walks the include closure in depth-first discovery order via
+// the per-includer subgraph cache. On a hit, the pre-computed
+// canonical-order subgraph rooted at `absID` is merged into the
+// caller's visited+order, skipping pre-visited entries. On a miss, the
+// subgraph is computed and memoised. Skipping pre-visited entries
+// during merge preserves the canonical first-visit order an uncached
+// DFS would produce from the same partially-populated visited state.
+func (sc *scanCtx) dfsID(absID uint32, visited idSet, order *[]uint32) {
 	sc.scanner.dfsCalls++
 
-	if visited.Has(absPath) {
+	if _, ok := visited[absID]; ok {
 		return
 	}
+
+	absPath := sc.scanner.interner.vfsByID(absID)
 
 	// External callers invoke dfs only with source files; each source
 	// compiles once, so a subgraph cache probe always misses. Skip the
@@ -691,23 +696,23 @@ func (sc *scanCtx) dfs(absPath VFS, visited VFSSet, order *[]VFS) {
 	// caller's visited+order — per-header descendants reached
 	// recursively still take the subgraph cache fast path.
 	if isSourceLike(absPath) {
-		sc.plainDfs(absPath, visited, order)
+		sc.plainDfsID(absID, visited, order)
 
 		return
 	}
 	sourceClass := sc.scanner.sourceClassID(sc.cfg.SourceRel)
-	sg, ok := sc.subgraph(absPath, sourceClass)
+	sg, ok := sc.subgraph(absID, sourceClass)
 
 	if ok {
 		// Cached or freshly-computed clean canonical subgraph. Merge
 		// into caller's visited+order, skipping pre-visited entries.
 		for _, id := range sg {
-			p := sc.scanner.interner.vfsByID(id)
-			if !visited.AddIfAbsent(p) {
+			if _, ok := visited[id]; ok {
 				continue
 			}
 
-			*order = append(*order, p)
+			visited[id] = struct{}{}
+			*order = append(*order, id)
 		}
 
 		return
@@ -716,26 +721,27 @@ func (sc *scanCtx) dfs(absPath VFS, visited VFSSet, order *[]VFS) {
 	// absPath is on a cycle (no cacheable canonical subgraph). Plain
 	// DFS into the caller's shared visited+order; non-cycle descendants
 	// reached recursively still hit the persistent subgraph cache.
-	sc.plainDfs(absPath, visited, order)
+	sc.plainDfsID(absID, visited, order)
 }
 
-// plainDfs walks `absPath`'s subtree using the caller's shared
+// plainDfsID walks `absID`'s subtree using the caller's shared
 // visited+order. Used as the fall-back path for headers known to be on
 // a cycle (`subgraphTaintedKnown`) and recursively from `walkSubgraph`
 // when a child reports it is on a cycle. Per-child dispatch goes
-// through `dfs()` so non-cycle descendants benefit from the
+// through `dfsID()` so non-cycle descendants benefit from the
 // `subgraphCache`.
-func (sc *scanCtx) plainDfs(absPath VFS, visited VFSSet, order *[]VFS) {
+func (sc *scanCtx) plainDfsID(absID uint32, visited idSet, order *[]uint32) {
 	sc.scanner.plainDfsCalls++
 
-	if !visited.AddIfAbsent(absPath) {
+	if _, ok := visited[absID]; ok {
 		return
 	}
 
-	*order = append(*order, absPath)
+	visited[absID] = struct{}{}
+	*order = append(*order, absID)
 
-	sc.forEachResolvedChild(absPath, func(rabs VFS) {
-		sc.dfs(rabs, visited, order)
+	sc.forEachResolvedChildID(absID, func(childID uint32) {
+		sc.dfsID(childID, visited, order)
 	})
 }
 
@@ -758,6 +764,13 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 			fn(rabs)
 		}
 	}
+}
+
+func (sc *scanCtx) forEachResolvedChildID(absID uint32, fn func(uint32)) {
+	vfsPath := sc.scanner.interner.vfsByID(absID)
+	sc.forEachResolvedChild(vfsPath, func(rabs VFS) {
+		fn(sc.scanner.interner.internVFS(rabs))
+	})
 }
 
 // SubgraphCacheStats reports per-includer subgraph cache traffic since
@@ -788,12 +801,12 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 }
 
 // subgraph returns the canonical transitive include closure rooted at
-// `absPath` for the (ctxHash, sourceClass) equivalence class — root-
+// `absID` for the (ctxHash, sourceClass) equivalence class — root-
 // included DFS-discovery order. The returned slice is cache-owned;
 // callers must only iterate.
 //
 // Returns (sg, true) on success; the caller merges with skip-on-already-
-// visited. Returns (nil, false) when absPath is on a cycle (no cacheable
+// visited. Returns (nil, false) when absID is on a cycle (no cacheable
 // canonical subgraph); caller falls back to plain DFS into its OWN
 // visited+order. subgraphTaintedKnown short-circuits future requests so
 // the wasted speculative walk is paid at most once per key.
@@ -801,10 +814,10 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 // Cycle detection: a call for a key in subgraphInProgress is a back-
 // edge; returns (nil, false) and propagates upward — every header on
 // the SCC ends up marked taintedKnown.
-func (sc *scanCtx) subgraph(absPath VFS, sourceClass uint32) ([]uint32, bool) {
+func (sc *scanCtx) subgraph(absID uint32, sourceClass uint32) ([]uint32, bool) {
 	s := sc.scanner
 	key := subgraphInnerKey{
-		abs:         s.interner.internVFS(absPath),
+		abs:         absID,
 		sourceClass: sourceClass,
 	}
 
@@ -835,28 +848,28 @@ func (sc *scanCtx) subgraph(absPath VFS, sourceClass uint32) ([]uint32, bool) {
 	// Each subgraph computation needs its own isolated visited+order
 	// (isolation is what makes the cache correct). Pool the throwaway
 	// buffers to avoid per-call make(map)+make([]) allocs.
-	visitedP := s.visitedPool.Get().(*VFSSet)
-	orderP := s.orderPool.Get().(*[]VFS)
+	visitedP := s.visitedIDPool.Get().(*idSet)
+	orderP := s.orderIDPool.Get().(*[]uint32)
 
 	visited := *visitedP
 	order := (*orderP)[:0]
 
-	clean := sc.walkSubgraph(absPath, sourceClass, visited, &order)
+	clean := sc.walkSubgraphID(absID, sourceClass, visited, &order)
 
 	delete(sc.subgraphInProgress, key)
 
 	if !clean {
-		// A descendant of `absPath` was on a cycle (back-edge to our
+		// A descendant of `absID` was on a cycle (back-edge to our
 		// own sentinel, or a descendant reported tainted). This key
 		// cannot be cached; future visits short-circuit via taintedKnown.
 		s.subgraphTainted++
 		sc.subgraphTaintedKnown[key] = struct{}{}
 
 		// Return scratch buffers to the pool before returning.
-		visited.Clear()
+		clear(visited)
 		*orderP = order[:0]
-		s.visitedPool.Put(visitedP)
-		s.orderPool.Put(orderP)
+		s.visitedIDPool.Put(visitedP)
+		s.orderIDPool.Put(orderP)
 
 		return nil, false
 	}
@@ -865,53 +878,52 @@ func (sc *scanCtx) subgraph(absPath VFS, sourceClass uint32) ([]uint32, bool) {
 	// the rest of the run, so paying the one-time copy avoids holding
 	// over-allocated buffers across millions of cached subgraphs.
 	out := make([]uint32, len(order))
-	for i, p := range order {
-		out[i] = s.interner.internVFS(p)
-	}
+	copy(out, order)
 
 	// Return scratch buffers to the pool.
-	visited.Clear()
+	clear(visited)
 	*orderP = order[:0]
-	s.visitedPool.Put(visitedP)
-	s.orderPool.Put(orderP)
+	s.visitedIDPool.Put(visitedP)
+	s.orderIDPool.Put(orderP)
 
 	sc.subgraphCache[key] = out
 
 	return out, true
 }
 
-// walkSubgraph is the cycle-safe core of canonical-subgraph computation.
-// Returns clean=true when every descendant produced a cacheable subgraph;
-// clean=false when at least one descendant reported tainted. Tainted
-// children plain-dfs INTO THE LOCAL visited+order so the walk still
-// enumerates reachable headers in the canonical first-visit order; the
-// propagated clean=false just prevents caching. Pure-DAG paths cache
-// normally.
-func (sc *scanCtx) walkSubgraph(absPath VFS, sourceClass uint32, visited VFSSet, order *[]VFS) bool {
-	if !visited.AddIfAbsent(absPath) {
+// walkSubgraphID is the cycle-safe core of canonical-subgraph
+// computation. Returns clean=true when every descendant produced a
+// cacheable subgraph; clean=false when at least one descendant
+// reported tainted. Tainted children plain-dfs INTO THE LOCAL
+// visited+order so the walk still enumerates reachable headers in the
+// canonical first-visit order; the propagated clean=false just
+// prevents caching. Pure-DAG paths cache normally.
+func (sc *scanCtx) walkSubgraphID(absID uint32, sourceClass uint32, visited idSet, order *[]uint32) bool {
+	if _, ok := visited[absID]; ok {
 		return true
 	}
 
-	*order = append(*order, absPath)
+	visited[absID] = struct{}{}
+	*order = append(*order, absID)
 
 	clean := true
 
-	sc.forEachResolvedChild(absPath, func(rabs VFS) {
-		if visited.Has(rabs) {
+	sc.forEachResolvedChildID(absID, func(childID uint32) {
+		if _, ok := visited[childID]; ok {
 			return
 		}
 
-		childSg, ok := sc.subgraph(rabs, sourceClass)
+		childSg, ok := sc.subgraph(childID, sourceClass)
 
 		if ok {
 			// Clean child subgraph — merge into our walk.
 			for _, id := range childSg {
-				p := sc.scanner.interner.vfsByID(id)
-				if !visited.AddIfAbsent(p) {
+				if _, ok := visited[id]; ok {
 					continue
 				}
 
-				*order = append(*order, p)
+				visited[id] = struct{}{}
+				*order = append(*order, id)
 			}
 
 			return
@@ -922,44 +934,45 @@ func (sc *scanCtx) walkSubgraph(absPath VFS, sourceClass uint32, visited VFSSet,
 		// `clean=false` propagates upward.
 		clean = false
 
-		sc.walkSubgraphTainted(rabs, sourceClass, visited, order)
+		sc.walkSubgraphTaintedID(childID, sourceClass, visited, order)
 	})
 
 	return clean
 }
 
-// walkSubgraphTainted is the in-walk plain-DFS used when a child
-// reported tainted. Mirrors plainDfs but on the local (subgraph-
-// computation) visited+order. Each child still goes through subgraph()
-// so non-cycle descendants reuse the persistent cache.
-func (sc *scanCtx) walkSubgraphTainted(absPath VFS, sourceClass uint32, visited VFSSet, order *[]VFS) {
-	if !visited.AddIfAbsent(absPath) {
+// walkSubgraphTaintedID is the in-walk plain-DFS used when a child
+// reported tainted. Mirrors plainDfsID but on the local
+// (subgraph-computation) visited+order. Each child still goes through
+// subgraph() so non-cycle descendants reuse the persistent cache.
+func (sc *scanCtx) walkSubgraphTaintedID(absID uint32, sourceClass uint32, visited idSet, order *[]uint32) {
+	if _, ok := visited[absID]; ok {
 		return
 	}
 
-	*order = append(*order, absPath)
+	visited[absID] = struct{}{}
+	*order = append(*order, absID)
 
-	sc.forEachResolvedChild(absPath, func(rabs VFS) {
-		if visited.Has(rabs) {
+	sc.forEachResolvedChildID(absID, func(childID uint32) {
+		if _, ok := visited[childID]; ok {
 			return
 		}
 
-		childSg, ok := sc.subgraph(rabs, sourceClass)
+		childSg, ok := sc.subgraph(childID, sourceClass)
 
 		if ok {
 			for _, id := range childSg {
-				p := sc.scanner.interner.vfsByID(id)
-				if !visited.AddIfAbsent(p) {
+				if _, ok := visited[id]; ok {
 					continue
 				}
 
-				*order = append(*order, p)
+				visited[id] = struct{}{}
+				*order = append(*order, id)
 			}
 
 			return
 		}
 
-		sc.walkSubgraphTainted(rabs, sourceClass, visited, order)
+		sc.walkSubgraphTaintedID(childID, sourceClass, visited, order)
 	})
 }
 
