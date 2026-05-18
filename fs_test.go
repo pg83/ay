@@ -155,6 +155,39 @@ func TestFS_ReadAbsRoutesThroughRel(t *testing.T) {
 	}
 }
 
+func TestFS_Walk(t *testing.T) {
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{
+		"a/b/c.txt":  "1",
+		"a/b/d.txt":  "2",
+		"a/e.txt":    "3",
+		"top.txt":    "4",
+	})
+
+	fs := NewFS(root)
+
+	files := map[string]bool{}
+	fs.Walk("a", func(rel string, isDir bool) {
+		if !isDir {
+			files[rel] = true
+		}
+	})
+
+	want := map[string]bool{
+		"a/b/c.txt": true,
+		"a/b/d.txt": true,
+		"a/e.txt":   true,
+	}
+	for k := range want {
+		if !files[k] {
+			t.Errorf("Walk missed %q", k)
+		}
+	}
+	if files["top.txt"] {
+		t.Errorf("Walk leaked outside the subtree")
+	}
+}
+
 func TestFS_CleanRel(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"", ""},

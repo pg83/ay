@@ -148,6 +148,41 @@ func (fs *FS) relForAbs(absPath string) (string, bool) {
 	return "", false
 }
 
+// Walk traverses the subtree rooted at rel in DFS order, invoking
+// visit(relPath, isDir) for every entry (including rel itself when
+// present). Children of a directory are visited in the OS-returned
+// order — callers that need a stable order must sort the collected
+// output themselves. Built on Listdir so the traversal shares the FS
+// directory cache.
+func (fs *FS) Walk(rel string, visit func(rel string, isDir bool)) {
+	rel = cleanRel(rel)
+
+	present, isDir := fs.Exists(rel)
+	if !present {
+		return
+	}
+
+	visit(rel, isDir)
+
+	if !isDir {
+		return
+	}
+
+	prefix := rel
+	if prefix != "" {
+		prefix += "/"
+	}
+
+	for name, childIsDir := range fs.Listdir(rel) {
+		child := prefix + name
+		if childIsDir {
+			fs.Walk(child, visit)
+			continue
+		}
+		visit(child, false)
+	}
+}
+
 type fsPerfStats struct {
 	listdirHits   uint64
 	listdirMisses uint64

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"sort"
 	"strings"
 )
@@ -29,8 +28,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 
 	// Register the explicit CF output with EmitsIncludes.
 	if reg != nil {
-		diskPath := ctx.sourceRoot + "/" + instance.Path + "/" + cf.Src
-		registerBoundGeneratedParsedOutput(ctx, instance, "CF", cfOut, cfIncludeDirectives(diskPath), cfRef)
+		registerBoundGeneratedParsedOutput(ctx, instance, "CF", cfOut, cfIncludeDirectives(ctx.fs, instance.Path+"/"+cf.Src), cfRef)
 	}
 }
 
@@ -41,8 +39,8 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 //
 // Legitimate disk read: extracts structured `#include` directives at
 // registration time to populate EmitsIncludes. NOT for closure walks.
-func cfIncludeDirectives(diskPath string) []includeDirective {
-	data, err := os.ReadFile(diskPath)
+func cfIncludeDirectives(fs *FS, rel string) []includeDirective {
+	data, err := fs.Read(rel)
 	if err != nil {
 		return nil
 	}

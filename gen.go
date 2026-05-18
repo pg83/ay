@@ -758,7 +758,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	env := buildIfEnv(instance)
 	d := collectModule(ctx.fs, instance.Path, instance.Kind, mf.Stmts, env, instance.Flags)
 	for _, stmt := range d.allPySrcs {
-		applyAllPySrcs(ctx.sourceRoot, instance.Path, stmt, d)
+		applyAllPySrcs(ctx.fs, instance.Path, stmt, d)
 	}
 
 	if d.conflictMod != nil {

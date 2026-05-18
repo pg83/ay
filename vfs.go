@@ -8,12 +8,11 @@ import (
 // vfs.go — typed VFS path.
 //
 // A VFS value addresses a file in one of two virtual roots (SOURCE_ROOT /
-// BUILD_ROOT) by its root-relative path. Replaces the prior plain
-// "$(S)/<rel>" / "$(B)/<rel>" string carry, which cost 4.7M allocations per
-// run (#1 alloc hotspot) and lost type info at scanner/emitter/serializer
-// boundaries. The struct is comparable (map key / struct field);
-// materialisation happens only at the serializer boundary (gjson_write.go)
-// and the os.Stat boundary in the scanner.
+// BUILD_ROOT) by its root-relative path. The struct is comparable (map
+// key / struct field); materialisation to "$(S)/<rel>" / "$(B)/<rel>"
+// happens only at the serializer boundary (gjson_write.go). Source-tree
+// existence and reads route through the FS abstraction (fs.go) keyed on
+// the bare rel, bypassing String() entirely.
 
 // VFSRoot identifies which root a `VFS` is anchored under.
 type VFSRoot uint8
@@ -46,10 +45,9 @@ func (v VFS) IsSource() bool { return v.Root == VFSRootSource }
 // IsBuild reports whether v is anchored under BUILD_ROOT.
 func (v VFS) IsBuild() bool { return v.Root == VFSRootBuild }
 
-// String materialises the canonical "$(S)/<rel>" or
-// "$(B)/<rel>" form. Used at the serializer boundary; the
-// scanner os.Stat path bypasses it and concatenates `sourceRoot + rel`
-// directly to avoid two materialisations.
+// String materialises the canonical "$(S)/<rel>" or "$(B)/<rel>" form
+// used at the serializer boundary. The scanner / FS access path keys on
+// the bare rel and never materialises.
 //
 // Panics on a zero-valued VFS. Construction MUST go through
 // Source()/Build() (or struct-literal with an explicit Root).

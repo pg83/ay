@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -39,8 +38,7 @@ func EmitCF(
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
-	srcDiskPath := in.SourceRoot + "/" + instance.Path + "/" + srcRel
-	cfgVars := buildCFGVars(srcDiskPath, in.DefaultVars, in.DefaultVarOrder)
+	cfgVars := buildCFGVars(in.FS, instance.Path+"/"+srcRel, in.DefaultVars, in.DefaultVarOrder)
 
 	cmdArgs := []string{
 		instance.Platform.Tools.Python3,
@@ -90,13 +88,11 @@ var cfgVarRefRe = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
 
 // buildCFGVars filters the module's DEFAULT declarations to vars actually
 // @VAR@-referenced in the .in source, sorted alphabetically (ymake's order).
-//
-// srcDiskPath is the on-disk path (not $(S)/...) so the file is readable
-// to scan for @VAR@. @BUILD_TYPE@ without a DEFAULT falls back to DEBUG.
-func buildCFGVars(srcDiskPath string, defaultVars map[string]string, defaultVarOrder []string) []string {
+// @BUILD_TYPE@ without a DEFAULT falls back to DEBUG.
+func buildCFGVars(fs *FS, rel string, defaultVars map[string]string, defaultVarOrder []string) []string {
 	referenced := map[string]bool{}
 
-	if data, err := os.ReadFile(srcDiskPath); err == nil {
+	if data, err := fs.Read(rel); err == nil {
 		for _, m := range cfgVarRefRe.FindAllSubmatch(data, -1) {
 			referenced[string(m[1])] = true
 		}

@@ -100,7 +100,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		return nil
 	}
 
-	protoRelPath := protoSourceRelPath(ctx.sourceRoot, instance, d, src)
+	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	protoRoot := protoPythonOutputRoot(instance, d)
 	pyBase := protoBase + "__intpy3___pb2.py"
@@ -181,7 +181,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, Source(protoRelPath)}
-	if protoImports := resolveProtoImports(ctx.sourceRoot, protoRelPath); protoImports != nil {
+	if protoImports := resolveProtoImports(ctx.fs, protoRelPath); protoImports != nil {
 		if protoImports.HasDescriptor {
 			inputs = append(inputs, pbDescriptorVFS)
 		}

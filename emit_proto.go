@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -13,16 +12,14 @@ import (
 // Direct imports only — no recursion; results sorted; nil on read failure.
 // Upstream: proto_processor.cpp:43-56::TProtoIncludeProcessor::PrepareIncludes.
 // Disk read is intentional: feeds EmitsIncludes at registration time, not closure walks.
-func protoDirectImportIncludes(sourceRoot, srcRel, outputRoot string) []includeDirective {
-	absPath := filepath.Join(sourceRoot, srcRel)
-	f, err := os.Open(absPath)
+func protoDirectImportIncludes(fs *FS, srcRel, outputRoot string) []includeDirective {
+	data, err := fs.Read(srcRel)
 	if err != nil {
 		return nil
 	}
-	defer f.Close()
 
 	var out []includeDirective
-	sc := bufio.NewScanner(f)
+	sc := bufio.NewScanner(strings.NewReader(string(data)))
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if !strings.HasPrefix(line, "import ") {
@@ -111,13 +108,13 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 
 	// Emit PB nodes.
 	for _, src := range protoSrcs {
-		protoRelPath := protoSourceRelPath(ctx.sourceRoot, instance, d, src)
+		protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 
 		pbRef := EmitPB(
 			instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
 			grpcCppLDRef, cppStyleguideBinary, protocBinary,
 			grpcCppBinary, d.grpc,
-			stringPtr("cpp_proto"), protoCPPOutRoot(d), duplicateOutputRootInclude, ctx.sourceRoot, ctx.emit)
+			stringPtr("cpp_proto"), protoCPPOutRoot(d), duplicateOutputRootInclude, ctx.fs, ctx.emit)
 
 		// Register the .pb.h with EmitsIncludes: .pb.h's of every imported
 		// proto plus the constant protobuf runtime header set.
@@ -144,8 +141,8 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			ctx.pbOutputs[pbKey] = pbRef
 		}
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
-			directImports := protoDirectImportIncludes(ctx.sourceRoot, protoRelPath, protoCPPOutRoot(d))
-			extras := pbDescriptorImporterExtras(ctx.sourceRoot, protoRelPath)
+			directImports := protoDirectImportIncludes(ctx.fs, protoRelPath, protoCPPOutRoot(d))
+			extras := pbDescriptorImporterExtras(ctx.fs, protoRelPath)
 			pbHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
 			pbHParsed = append(pbHParsed, directImports...)
 			for _, include := range protobufRuntimeHeaders {
@@ -212,12 +209,12 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		event2cppLDRef, event2cppBinary := ctx.tool(evEvent2cppModule)
 
 		for _, src := range evSrcs {
-			evRelPath := protoSourceRelPath(ctx.sourceRoot, instance, d, src)
+			evRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 
 			evRef := EmitEV(
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
-				stringPtr("cpp_proto"), ctx.sourceRoot, ctx.emit)
+				stringPtr("cpp_proto"), ctx.fs, ctx.emit)
 
 			// Register .ev.pb.h with EmitsIncludes: .ev source's direct
 			// imports + protobuf runtime headers + EV-specific runtime
@@ -233,8 +230,8 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			evKey.path = evPbCC
 			ctx.evOutputs[evKey] = evRef
 			if reg := codegenRegForInstance(ctx, instance); reg != nil {
-				directImports := protoDirectImportIncludes(ctx.sourceRoot, evRelPath, protoCPPOutRoot(d))
-				evExtras := evWitnessExtras(ctx.sourceRoot, evRelPath, evPbCC)
+				directImports := protoDirectImportIncludes(ctx.fs, evRelPath, protoCPPOutRoot(d))
+				evExtras := evWitnessExtras(evRelPath, evPbCC)
 				evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders)+len(evExtras))
 				evHParsed = append(evHParsed, directImports...)
 				for _, include := range protobufRuntimeHeaders {

@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"encoding/base32"
 	enchex "encoding/hex"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -289,8 +288,8 @@ var pbCcDeepRuntimeHeaders = []VFS{
 // The *LDRef params are host LD NodeRefs (zeroed when the host walk failed);
 // the *Binary params are the corresponding $(B)-rooted tool paths. grpcCppLDRef
 // and grpcCppBinary are only used when grpc is true. moduleTag is "cpp_proto"
-// for PROTO_LIBRARY modules (nil when absent). sourceRoot is used for
-// descriptor-import scanning.
+// for PROTO_LIBRARY modules (nil when absent). fs feeds descriptor-import
+// scanning.
 func EmitPB(
 	instance ModuleInstance,
 	protoRelPath string,
@@ -304,7 +303,7 @@ func EmitPB(
 	moduleTag *string,
 	cppOutRoot string,
 	duplicateOutputRootInclude bool,
-	sourceRoot string,
+	fs *FS,
 	emit Emitter,
 ) NodeRef {
 	moduleDir := instance.Path
@@ -372,7 +371,7 @@ func EmitPB(
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
-	protoImports := resolveProtoImports(sourceRoot, protoRelPath)
+	protoImports := resolveProtoImports(fs, protoRelPath)
 	inputs := []VFS{
 		cppStyleguideBinary,
 		protocBinary,
@@ -508,7 +507,7 @@ func protoCPPOutRoot(d *moduleData) string {
 // (7 reflection-cluster headers), cpp_proto_wrapper.py, the proto source,
 // and descriptor.proto when imported. Verified by intersecting CC-consumer
 // inputs across all .pb.h's in /home/pg/monorepo/yatool_orig/sg2.json.
-func pbDescriptorImporterExtras(sourceRoot, protoRelPath string) []includeDirective {
+func pbDescriptorImporterExtras(fs *FS, protoRelPath string) []includeDirective {
 	out := make([]includeDirective, 0, len(pbDescriptorImporterHeaders)+3)
 	out = append(out, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
 	out = append(out, includeDirective{kind: includeQuoted, target: protoRelPath})
@@ -516,7 +515,7 @@ func pbDescriptorImporterExtras(sourceRoot, protoRelPath string) []includeDirect
 		out = append(out, includeDirective{kind: includeQuoted, target: v.Rel})
 	}
 
-	protoImports := resolveProtoImports(sourceRoot, protoRelPath)
+	protoImports := resolveProtoImports(fs, protoRelPath)
 	if protoImports != nil && protoImports.HasDescriptor {
 		out = append(out, includeDirective{kind: includeQuoted, target: pbDescriptorVFS.Rel})
 	}
@@ -529,7 +528,7 @@ type protoImportResolution struct {
 	Imports       []VFS
 }
 
-func resolveProtoImportPath(sourceRoot, importedRel string) string {
+func resolveProtoImportPath(fs *FS, importedRel string) string {
 	clean := filepath.ToSlash(filepath.Clean(importedRel))
 	candidates := []string{clean}
 	if !strings.HasPrefix(clean, "yt/") {
@@ -538,7 +537,7 @@ func resolveProtoImportPath(sourceRoot, importedRel string) string {
 	candidates = append(candidates, filepath.ToSlash(filepath.Clean(pbRuntimeBase+clean)))
 
 	for _, cand := range candidates {
-		if _, err := os.Stat(filepath.Join(sourceRoot, cand)); err == nil {
+		if fs.IsFile(cand) {
 			return cand
 		}
 	}
@@ -547,30 +546,13 @@ func resolveProtoImportPath(sourceRoot, importedRel string) string {
 }
 
 // resolveProtoImports returns the transitive raw `.proto` import set for
-// `<sourceRoot>/<srcRel>`, preserving the upstream shape: direct imports of
-// each file are emitted before their transitive closure, and descriptor.proto
-// is surfaced separately because its input slot precedes the source file.
-func resolveProtoImports(sourceRoot, srcRel string) *protoImportResolution {
-	absPath := filepath.Join(sourceRoot, srcRel)
-	f, err := os.Open(absPath)
-	if err != nil {
+// srcRel, preserving the upstream shape: direct imports of each file
+// are emitted before their transitive closure, and descriptor.proto is
+// surfaced separately because its input slot precedes the source file.
+func resolveProtoImports(fs *FS, srcRel string) *protoImportResolution {
+	rootImports := parseProtoImports(fs, srcRel)
+	if rootImports == nil {
 		return nil
-	}
-	defer f.Close()
-
-	var rootImports []string
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "import ") {
-			continue
-		}
-		start := strings.IndexByte(line, '"')
-		end := strings.LastIndexByte(line, '"')
-		if start < 0 || end <= start {
-			continue
-		}
-		rootImports = append(rootImports, line[start+1:end])
 	}
 
 	res := &protoImportResolution{}
@@ -583,34 +565,14 @@ func resolveProtoImports(sourceRoot, srcRel string) *protoImportResolution {
 		}
 		scanned[rel] = struct{}{}
 
-		abs := filepath.Join(sourceRoot, rel)
-		f, err := os.Open(abs)
-		if err != nil {
-			return
-		}
-
-		var imports []string
-		scanner := bufio.NewScanner(f)
-		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
-			if !strings.HasPrefix(line, "import ") {
-				continue
-			}
-			start := strings.IndexByte(line, '"')
-			end := strings.LastIndexByte(line, '"')
-			if start < 0 || end <= start {
-				continue
-			}
-			imports = append(imports, line[start+1:end])
-		}
-		f.Close()
+		imports := parseProtoImports(fs, rel)
 
 		for _, imp := range imports {
 			if imp == "google/protobuf/descriptor.proto" {
 				res.HasDescriptor = true
 				continue
 			}
-			resolved := resolveProtoImportPath(sourceRoot, imp)
+			resolved := resolveProtoImportPath(fs, imp)
 			if resolved == "" {
 				continue
 			}
@@ -625,7 +587,7 @@ func resolveProtoImports(sourceRoot, srcRel string) *protoImportResolution {
 			if imp == "google/protobuf/descriptor.proto" {
 				continue
 			}
-			if resolved := resolveProtoImportPath(sourceRoot, imp); resolved != "" {
+			if resolved := resolveProtoImportPath(fs, imp); resolved != "" {
 				walk(resolved)
 			}
 		}
@@ -636,7 +598,7 @@ func resolveProtoImports(sourceRoot, srcRel string) *protoImportResolution {
 			res.HasDescriptor = true
 			continue
 		}
-		resolved := resolveProtoImportPath(sourceRoot, imp)
+		resolved := resolveProtoImportPath(fs, imp)
 		if resolved == "" {
 			continue
 		}
@@ -650,7 +612,7 @@ func resolveProtoImports(sourceRoot, srcRel string) *protoImportResolution {
 		if imp == "google/protobuf/descriptor.proto" {
 			continue
 		}
-		if resolved := resolveProtoImportPath(sourceRoot, imp); resolved != "" {
+		if resolved := resolveProtoImportPath(fs, imp); resolved != "" {
 			walk(resolved)
 		}
 	}
@@ -660,6 +622,32 @@ func resolveProtoImports(sourceRoot, srcRel string) *protoImportResolution {
 	}
 
 	return res
+}
+
+// parseProtoImports returns the raw `import "..."` strings from rel.
+// Returns nil if the file cannot be read.
+func parseProtoImports(fs *FS, rel string) []string {
+	data, err := fs.Read(rel)
+	if err != nil {
+		return nil
+	}
+
+	var imports []string
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "import ") {
+			continue
+		}
+		start := strings.IndexByte(line, '"')
+		end := strings.LastIndexByte(line, '"')
+		if start < 0 || end <= start {
+			continue
+		}
+		imports = append(imports, line[start+1:end])
+	}
+
+	return imports
 }
 
 // protoSrcsResult carries the AR and whole-archive closure emitted for a
@@ -675,12 +663,10 @@ type protoSrcsResult struct {
 	WholeArchiveCmdPaths []VFS
 }
 
-func protoSourceRelPath(sourceRoot string, instance ModuleInstance, d *moduleData, src string) string {
+func protoSourceRelPath(fs *FS, instance ModuleInstance, d *moduleData, src string) string {
 	moduleRel := filepath.ToSlash(filepath.Clean(instance.Path + "/" + src))
-	if sourceRoot != "" {
-		if _, err := os.Stat(filepath.Join(sourceRoot, filepath.FromSlash(moduleRel))); err == nil {
-			return moduleRel
-		}
+	if fs.IsFile(moduleRel) {
+		return moduleRel
 	}
 
 	baseDir := instance.Path
