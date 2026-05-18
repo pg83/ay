@@ -173,3 +173,11 @@ func registerBoundGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, ki
 func generatedOutputClosure(ctx *genCtx, instance ModuleInstance, output VFS, in ModuleCCInputs) []VFS {
 	return walkClosure(ctx, instance, output, in)
 }
+
+func codegenRegForInstance(ctx *genCtx, instance ModuleInstance) *CodegenRegistry {
+	sc := ctx.scannerFor(instance)
+	if sc == nil {
+		return nil
+	}
+	return sc.codegen
+}
