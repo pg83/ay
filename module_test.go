@@ -15,7 +15,6 @@ func TestModuleInstance_Equality_Hashing(t *testing.T) {
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
-		Flags:    inferFlagsFromPath("build/cow/on", false),
 	}
 
 	b := ModuleInstance{
@@ -23,7 +22,6 @@ func TestModuleInstance_Equality_Hashing(t *testing.T) {
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
-		Flags:    inferFlagsFromPath("build/cow/on", false),
 	}
 
 	if a != b {
@@ -47,7 +45,6 @@ func TestModuleInstance_Equality_Hashing(t *testing.T) {
 		Kind:     KindLib,
 		Language: a.Language,
 		Platform: testHostP,
-		Flags:    inferFlagsFromPath(a.Path, true),
 	}
 	if host == a {
 		t.Errorf("host-axis copy compared equal to target-axis original: %v == %v", host, a)
@@ -76,14 +73,12 @@ func TestNewToolInstance(t *testing.T) {
 		t.Errorf("Platform != testHostP")
 	}
 
-	if !tool.Flags.PIC {
-		t.Errorf("Flags.PIC = false, want true (host axis)")
+	if !tool.Platform.PIC {
+		t.Errorf("Platform.PIC = false, want true (host axis)")
 	}
 
-	// Tool path is not in inferFlagsFromPath's special-case set, so
-	// no extra flags should be set.
-	if tool.Flags.NoLibc || tool.Flags.NoStdInc {
-		t.Errorf("tool Flags carry unrelated module flags: %+v", tool.Flags)
+	if (tool.Flags != FlagSet{}) {
+		t.Errorf("tool Flags should be empty until parser overlays: %+v", tool.Flags)
 	}
 }
 

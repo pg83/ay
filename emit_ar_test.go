@@ -43,7 +43,6 @@ func targetInstance(path string) ModuleInstance {
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
-		Flags:    inferFlagsFromPath(path, false),
 	}
 }
 
@@ -54,7 +53,6 @@ func hostInstance(path string) ModuleInstance {
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testHostP,
-		Flags:    inferFlagsFromPath(path, true),
 	}
 }
 

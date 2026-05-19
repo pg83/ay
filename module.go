@@ -93,7 +93,6 @@ type FlagSet struct {
 	NoPlatform         bool
 	NoCompilerWarnings bool
 	IsCpp              bool
-	PIC                bool
 	// NoStdInc marks modules whose own compiles declare -nostdinc.
 	// This is a generic compile property parsed from CFLAGS, used for
 	// scanner base-path and no-stdinc compile-shape decisions.
@@ -136,15 +135,15 @@ type ModuleInstance struct {
 // NewToolInstance builds a ModuleInstance for a host-platform tool at
 // `path`. Tool entry is always addressed as LangCPP: the caller's
 // language must not leak into the tool's own peer walk or default-peer
-// selection. Flags are inferred from path (via inferFlagsFromPath) so
-// the tool's own ya.make properties — not the caller's — drive dispatch.
+// selection. PIC flows from Platform; the tool's own ya.make properties
+// drive every other FlagSet axis once the parser overlays them inside
+// genModule.
 func NewToolInstance(host *Platform, path string) ModuleInstance {
 	return ModuleInstance{
 		Path:     path,
 		Kind:     KindBin,
 		Language: LangCPP,
 		Platform: host,
-		Flags:    inferFlagsFromPath(path, true),
 	}
 }
 
@@ -165,17 +164,3 @@ func (mi ModuleInstance) String() string {
 	return b.String()
 }
 
-// inferFlagsFromPath derives a FlagSet from `path` without parsing the
-// module's ya.make. isPIC threads the host/target axis from the caller
-// (target = false; host = true).
-func inferFlagsFromPath(path string, isPIC bool) FlagSet {
-	fs := FlagSet{PIC: isPIC}
-
-	if path == "build/cow/on" {
-		fs.NoLibc = true
-		fs.NoUtil = true
-		fs.NoRuntime = true
-	}
-
-	return fs
-}

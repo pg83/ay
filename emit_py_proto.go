@@ -347,7 +347,6 @@ func pyProtoAuxPeerCFlags(ctx *genCtx, instance ModuleInstance, peerContribs pee
 		Kind:     KindLib,
 		Language: LangPy,
 		Platform: instance.Platform,
-		Flags:    inferFlagsFromPath("contrib/libs/python", instance.Platform.PIC),
 	}
 	pythonResult := genModule(ctx, pythonInstance)
 	return mergeDedup(peerContribs.cFlags, pythonResult.CFlagsGlobal)
