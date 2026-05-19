@@ -4,7 +4,7 @@ import "strings"
 
 // emitASYasm composes the yasm-shaped AS node for a host-PIC `.asm`
 // source — the asmlib-only counterpart to the clang AS path.
-func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, VFS) {
+func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, VFS) {
 	stem := strings.TrimSuffix(srcRel, ".asm")
 	suffix := ".o"
 	if instance.Platform.PIC {
@@ -16,7 +16,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmL
 	} else {
 		outVFS = Build(instance.Path + "/" + stem + suffix)
 	}
-	inVFS := Source(instance.Path + "/" + srcRel)
+	inVFS := srcVFS
 	outputPath := outVFS.String()
 	inputPath := inVFS.String()
 

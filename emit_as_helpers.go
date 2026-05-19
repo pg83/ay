@@ -1,7 +1,6 @@
 package main
 
 import (
-	"path"
 	"strings"
 )
 
@@ -15,13 +14,15 @@ var (
 )
 
 // composeASPaths derives (outputPath, inputPath) for the clang AS path.
-func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (out, input VFS) {
-	useSrcDir := in.SrcDir != nil && *in.SrcDir != instance.Path && !sourceExistsLocally(in.FS, instance.Path, srcRel)
-
-	if useSrcDir {
+// `srcVFS` is the resolved input path; the output is computed from
+// (instance.Path, srcRel, srcVFS.Root) — SRCDIR redirect when
+// srcVFS.Rel diverges from `instance.Path/<srcRel>`. `in.SrcDir` (if
+// non-nil) carries the original SRCDIR value used to compose the
+// case-3 output infix.
+func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs) (out, input VFS) {
+	if srcVFS.IsSource() && srcVFS.Rel != instance.Path+"/"+srcRel {
 		outputRel := composeSrcDirOutputRel(instance.Path, *in.SrcDir, srcRel)
-		return Build(instance.Path + "/" + outputRel + ".o"),
-			Source(path.Clean(*in.SrcDir + "/" + srcRel))
+		return Build(instance.Path + "/" + outputRel + ".o"), srcVFS
 	}
 
 	var outRel string
@@ -36,7 +37,7 @@ func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (
 		outRel = instance.Path + "/" + outName
 	}
 
-	return Build(outRel), Source(instance.Path + "/" + srcRel)
+	return Build(outRel), srcVFS
 }
 
 // composeASCmdArgs builds the cmd_args bundle.

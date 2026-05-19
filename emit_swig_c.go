@@ -90,12 +90,11 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 		registerBoundGeneratedParsedOutput(ctx, instance, "SW", pyOutVFS, nil, swRef)
 
 		ccIn := in
-		ccIn.IsGenerated = true
 		ccIn.HasGenerator = true
 		ccIn.Generator = swRef
 		ccIn.IncludeInputs = inputs
 
-		ccRef, ccOut := EmitCC(instance, cOutRel, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut := EmitCC(instance, cOutRel, cOutVFS, ccIn, ctx.host, ctx.emit)
 		ccInputs := append([]VFS{cOutVFS}, inputs...)
 
 		out = append(out, &sourceEmit{

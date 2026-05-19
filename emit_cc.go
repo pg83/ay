@@ -33,7 +33,6 @@ type ModuleCCInputs struct {
 	PeerAddInclGlobal []VFS
 	CXXFlags          []string
 	COnlyFlags        []string
-	IsGenerated       bool
 	Generator         NodeRef
 	// HasGenerator distinguishes "no generator" from "generator with
 	// zero-valued NodeRef.id" — BufferedEmitter ids start at 0 so a
@@ -64,8 +63,7 @@ type ModuleCCInputs struct {
 	// IncludeInputs is the transitive header set produced by the
 	// include scanner. Appended to node.Inputs after the primary
 	// source path in DFS-discovery order. Empty for synthetic paths
-	// bypassing the walker or for IsGenerated CCs (scanner skipped;
-	// generated CCs use a separate input shape).
+	// bypassing the walker.
 	IncludeInputs []VFS
 	// PeerCFlagsGlobal: transitive union of every PEERDIR's GLOBAL
 	// CFLAGS. Applies to BOTH C and C++ sources; slotted at the
@@ -150,12 +148,14 @@ type ModuleCCInputs struct {
 	BisonGenExt string
 }
 
-// EmitCC emits a CC node for compiling `srcRel` (relative to
-// `instance.Path`, e.g. "lib.c" or "src/algorithm.cpp") into an object
-// file. Returns the NodeRef (so callers — typically AR — can wire it
-// as a dependency) plus the output path. `in` carries per-module
-// knobs; pass `ModuleCCInputs{}` for flag-less behaviour.
-func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS) {
+// EmitCC emits a CC node for compiling `srcVFS` (the resolved input
+// path) into an object file. `srcRel` is the within-module name used
+// to derive the output filename ("lib.c", "src/algorithm.cpp"); for
+// SRCDIR redirects it is the SRCS-declared rel, NOT the on-disk rel.
+// Returns the NodeRef (so callers — typically AR — can wire it as a
+// dependency) plus the output path. `in` carries per-module knobs;
+// pass `ModuleCCInputs{}` for flag-less behaviour.
+func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS) {
 
 	suffix := ".o"
 	if instance.Platform.PIC {
@@ -176,7 +176,7 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 		suffix = "." + *in.Variant + suffix
 	}
 
-	outVFS, inVFS := composeCCPaths(instance, srcRel, in, suffix)
+	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, suffix)
 	outputPath := outVFS.String()
 	inputPath := inVFS.String()
 
@@ -286,44 +286,33 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	return emit.Emit(node), outVFS
 }
 
-// composeCCPaths derives (outputPath, inputPath) per SRCDIR-aware
-// semantics. Three shapes:
-//  1. No SRCDIR: output `$(B)/<instance.Path>/<rel>.o` (`_/` infix when
-//     srcRel contains "/"); input `$(S)/<instance.Path>/<srcRel>` (or
-//     `$(B)/...` when IsGenerated).
-//  2. SRCDIR set, source resolves locally: SRCDIR ignored (same as 1).
-//  3. SRCDIR set, non-local: input `$(S)/<srcdir>/<srcRel>`; output
-//     `$(B)/<instance.Path>/__/<rel>.o` with `..` rendered as `__`.
+// composeCCPaths derives the output VFS for a CC compile. The input
+// VFS is taken as-is; the output path is computed from
+// (instance.Path, srcRel, srcVFS.Root). Three shapes:
+//  1. srcVFS = $(S)/<instance.Path>/<srcRel> — local source: output
+//     `$(B)/<instance.Path>/[+_/]<srcRel><suffix>`.
+//  2. srcVFS = $(S)/<srcdir>/<srcRel>        — SRCDIR redirect: output
+//     `$(B)/<instance.Path>/<composed>/<srcRel><suffix>` with `..`
+//     rendered as `__`. `in.SrcDir` carries the original SRCDIR path
+//     for `composeSrcDirOutputRel`.
+//  3. srcVFS.IsBuild()                       — generated source: output
+//     `$(B)/<instance.Path>/[+_/]<srcRel><suffix>`.
 //
-// IsGenerated skips case (3) — generators emit to
-// `$(B)/<srcInstance.Path>/<rel>` where srcInstance is already
-// SRCDIR-aware.
-func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, suffix string) (out, input VFS) {
-	if in.IsGenerated {
-		// Generators (JS/R6) write under $(B)/<srcInstance.Path>/.
-		// SrcDir handling for those branches is upstream (in gen.go's
-		// JOIN_SRCS / .rl6 dispatch where srcInstance is constructed).
-		var outRel string
+// The discriminant is srcVFS itself; callers have always known where
+// the path came from and now pass it explicitly.
+func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, suffix string) (out, input VFS) {
+	input = srcVFS
 
-		if strings.Contains(srcRel, "/") {
-			outRel = instance.Path + "/_/" + srcRel + suffix
-		} else {
-			outRel = instance.Path + "/" + srcRel + suffix
-		}
-
-		return Build(outRel), Build(instance.Path + "/" + srcRel)
-	}
-
-	// SRCDIR routing.
-	useSrcDir := in.SrcDir != nil && *in.SrcDir != instance.Path && !sourceExistsLocally(in.FS, instance.Path, srcRel)
-
-	if useSrcDir {
+	if srcVFS.IsSource() && srcVFS.Rel != instance.Path+"/"+srcRel {
+		// SRCDIR redirect: input lives outside the module dir.
+		// in.SrcDir is the original SRCDIR value (callers set it on
+		// ModuleCCInputs before invoking EmitCC).
 		outputRel := composeSrcDirOutputRel(instance.Path, *in.SrcDir, srcRel)
-		return Build(instance.Path + "/" + outputRel + suffix), Source(*in.SrcDir + "/" + srcRel)
+		out = Build(instance.Path + "/" + outputRel + suffix)
+		return out, input
 	}
 
 	var outRel string
-
 	switch {
 	case in.FlatOutput:
 		// SRC / SRC_C_NO_LTO emit a flat output path even when
@@ -334,8 +323,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs, s
 	default:
 		outRel = instance.Path + "/" + srcRel + suffix
 	}
-
-	return Build(outRel), Source(instance.Path + "/" + srcRel)
+	return Build(outRel), input
 }
 
 // sourceExistsLocally reports whether `<sourceRoot>/<modulePath>/<srcRel>`

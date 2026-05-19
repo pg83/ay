@@ -239,12 +239,11 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			ctx.pyRegisterOutputs[regCppVFS] = pyRef
 		}
 
-		// CC node compiling `.reg3.cpp`. IsGenerated=true so
-		// composeCCPaths reads from $(B)/<modPath>/<reg>. The
-		// reference reg3 CC node lists only [.reg3.cpp, gen_py3_reg.py]
-		// — no transitive header scan (generated stub).
+		// CC node compiling `.reg3.cpp`. srcVFS = $(B)/<modPath>/<reg>
+		// (regCppVFS, built above). The reference reg3 CC node lists
+		// only [.reg3.cpp, gen_py3_reg.py] — no transitive header scan
+		// (generated stub).
 		ccIn := in
-		ccIn.IsGenerated = true
 		ccIn.Generator = pyRef
 		ccIn.HasGenerator = true
 		ccIn.Py3Suffix = py3Suffix
@@ -267,7 +266,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			ccIn.CFlags = filtered
 		}
 
-		ccRef, ccOut := EmitCC(instance, regCpp, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut := EmitCC(instance, regCpp, regCppVFS, ccIn, ctx.host, ctx.emit)
 
 		res.Refs = append(res.Refs, ccRef)
 		res.Outputs = append(res.Outputs, ccOut)

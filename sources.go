@@ -7,22 +7,6 @@ import (
 	"path/filepath"
 )
 
-// emittedSourceInputPath returns the VFS input path for a source: `$(B)/...`
-// when IsGenerated, otherwise `$(S)/...` with SRCDIR-aware fallback when
-// the local file is absent. Lets the walker compose AR/LD inputs without
-// round-tripping through the emitted node.
-func emittedSourceInputPath(instance ModuleInstance, srcRel string, in ModuleCCInputs, fs *FS) VFS {
-	if in.IsGenerated {
-		return Build(instance.Path + "/" + srcRel)
-	}
-
-	if in.SrcDir != nil && *in.SrcDir != instance.Path && !fs.IsFile(instance.Path+"/"+srcRel) {
-		return Source(*in.SrcDir + "/" + srcRel)
-	}
-
-	return Source(instance.Path + "/" + srcRel)
-}
-
 // joinSrcsIncludeClosure walks the include graph for a JOIN_SRCS
 // member set with a SHARED visited set across members, mirroring the
 // joined compile so total work is O(union closure).
@@ -123,14 +107,15 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []V
 // source with SRCDIR-aware fallback: when SRCDIR is set and no local
 // file exists at instance.Path/<srcRel>, resolve under SRCDIR.
 // Registration-time resolution — feeds path composition, not scanner
-// dispatch.
+// dispatch. The joined path is path-cleaned so `crypto/../asm/...`
+// collapses to `asm/...` (openssl AS sources use this form).
 func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDir *string) VFS {
 	srcRelOnDisk := srcInstance.Path + "/" + srcRel
 
 	if srcDir != nil && filepath.Clean(*srcDir) != "." && filepath.Clean(*srcDir) != srcInstance.Path {
 		cleanSrcDir := filepath.Clean(*srcDir)
 		if !ctx.fs.IsFile(srcInstance.Path + "/" + srcRel) {
-			srcRelOnDisk = cleanSrcDir + "/" + srcRel
+			srcRelOnDisk = filepath.ToSlash(filepath.Clean(cleanSrcDir + "/" + srcRel))
 		}
 	}
 

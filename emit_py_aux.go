@@ -46,7 +46,6 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 	for i, prRef := range rawRes.PRRefs {
 		aux := rawRes.PROutputs[i]
 		ccIn := in
-		ccIn.IsGenerated = true
 		ccIn.HasGenerator = true
 		ccIn.Generator = prRef
 		ccIn.ForceCxx = true
@@ -55,7 +54,7 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 		ccInputs = dedupVFS(ccInputs)
 		ccIn.IncludeInputs = ccInputs
 
-		ccRef, ccOut := EmitCC(instance, aux.Rel[strings.LastIndex(aux.Rel, "/")+1:], ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut := EmitCC(instance, aux.Rel[strings.LastIndex(aux.Rel, "/")+1:], aux, ccIn, ctx.host, ctx.emit)
 		res.Refs = append(res.Refs, ccRef)
 		res.Outputs = append(res.Outputs, ccOut)
 	}

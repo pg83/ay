@@ -102,7 +102,6 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		bindGeneratedOutput(ctx, instance, generatedVFS, cyRef)
 
 		ccIn := in
-		ccIn.IsGenerated = true
 		ccIn.HasGenerator = true
 		ccIn.Generator = cyRef
 		ccIn.Py3Suffix = !stmt.CMode && !generatedExplicit && py23Variant
@@ -116,7 +115,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		scanIn.AddIncl = appendCythonScanAddIncl(in.AddIncl, d.cythonAddIncl)
 		ccIn.IncludeInputs = walkClosureWithSourceRel(ctx, instance, generatedVFS, srcVFS.Rel, scanIn)
 
-		ccRef, ccOut := EmitCC(instance, generated, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut := EmitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
 		ccInputs := append([]VFS{generatedVFS}, ccIn.IncludeInputs...)
 
 		out = append(out, &sourceEmit{
