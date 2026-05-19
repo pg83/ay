@@ -243,59 +243,16 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 }
 
 func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, in ModuleCCInputs) *sourceEmit {
-	protocLDRef, protocBinary := ctx.tool(pbProtocModule)
-	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(pbCppStyleguideModule)
-
-	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
-	transitiveImports, hasDescriptor := protoTransitiveImports(ctx.parsers, ctx.fs, protoRelPath)
-	pbRef := EmitPB(
-		instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
-		NodeRef{}, cppStyleguideBinary, protocBinary, pbGrpcCppVFS,
-		false, nil, "", false, transitiveImports, hasDescriptor, ctx.emit,
-	)
-
-	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
-	pbH := Build(protoBase + ".pb.h")
-	pbCC := Build(protoBase + ".pb.cc")
-
-	pbKey := codegenOutputKey{platform: instance.Platform}
-	pbKey.path = pbH
-	ctx.pbOutputs[pbKey] = pbRef
-	pbKey.path = pbCC
-	ctx.pbOutputs[pbKey] = pbRef
-
-	if reg := codegenRegForInstance(ctx, instance); reg != nil {
-		directImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, "")
-		extras := pbHEmitsIncludesExtras(protoRelPath, hasDescriptor)
-		pbHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
-		pbHParsed = append(pbHParsed, directImports...)
-		for _, include := range protobufRuntimeHeaders {
-			pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
-		}
-		pbHParsed = append(pbHParsed, extras...)
-		registerGeneratedParsedOutput(ctx, instance, "PB", pbH, pbHParsed)
-
-		pbCCParsed := make([]includeDirective, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
-		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: pbH.Rel})
-		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: protoRelPath})
-		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
-		for _, include := range protobufRuntimeHeaders {
-			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
-		}
-		for _, include := range pbCcDeepRuntimeHeaders {
-			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
-		}
-		registerGeneratedParsedOutput(ctx, instance, "PB", pbCC, pbCCParsed)
-	}
+	pb := emitProtoPB(ctx, instance, d, srcRel, protoPBConfig{})
 
 	ccIn := in
-	ccIn.IncludeInputs = walkClosure(ctx, instance, pbCC, in)
-	ccIn.ExtraDepRefs = append([]NodeRef{pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pbRef)...)
+	ccIn.IncludeInputs = walkClosure(ctx, instance, pb.pbCC, in)
+	ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)
 
-	ccSrcRel := strings.TrimPrefix(protoBase+".pb.cc", instance.Path+"/")
-	ccRef, ccOut := EmitCC(instance, ccSrcRel, pbCC, ccIn, ctx.host, ctx.emit)
+	ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel, instance.Path+"/")
+	ccRef, ccOut := EmitCC(instance, ccSrcRel, pb.pbCC, ccIn, ctx.host, ctx.emit)
 	ccInputs := make([]VFS, 0, 1+len(ccIn.IncludeInputs))
-	ccInputs = append(ccInputs, Source(protoRelPath))
+	ccInputs = append(ccInputs, Source(pb.relPath))
 	ccInputs = append(ccInputs, ccIn.IncludeInputs...)
 
 	return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: ccInputs, PrimaryCount: 1}
