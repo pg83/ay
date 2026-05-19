@@ -46,8 +46,7 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 	for i, prRef := range rawRes.PRRefs {
 		aux := rawRes.PROutputs[i]
 		ccIn := in
-		ccIn.HasGenerator = true
-		ccIn.Generator = prRef
+		ccIn.ExtraDepRefs = []NodeRef{prRef}
 		ccIn.ForceCxx = true
 		ccIn.PerSourceCFlags = append(append([]string(nil), in.PerSourceCFlags...), "-x", "c++")
 		ccInputs := append([]VFS{aux}, rawRes.MemberInputs...)

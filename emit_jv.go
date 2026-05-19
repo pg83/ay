@@ -60,7 +60,6 @@ func emitJVDownstreamCPCC(
 
 		// Compute the include closure from the g4.cpp (through the registry).
 		ccIn := in
-		ccIn.HasGenerator = false
 		ccIn.ExtraDepRefs = nil
 		closure := walkClosure(ctx, instance, g4CppPath, ccIn)
 
@@ -89,9 +88,7 @@ func emitJVDownstreamCPCC(
 
 		ccIn.IncludeInputs = ccIncludeInputs
 		// Deps: [jvRef, cpRef].
-		ccIn.HasGenerator = true
-		ccIn.Generator = jvRef
-		ccIn.ExtraDepRefs = []NodeRef{cpRef}
+		ccIn.ExtraDepRefs = []NodeRef{jvRef, cpRef}
 		// ANTLR4-generated .g4.cpp files have per-rule unused locals;
 		// `-Wno-unused-variable` silences the `-Werror` diagnostic.
 		ccIn.PerSourceCFlags = []string{"-Wno-unused-variable"}

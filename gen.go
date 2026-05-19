@@ -2125,8 +2125,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccIncludeInputs := jsCCIncludeInputs(srcInstance, js.Sources, ccClosure)
 
 		ccIn := moduleInputs
-		ccIn.Generator = jsRef
-		ccIn.HasGenerator = true
+		ccIn.ExtraDepRefs = []NodeRef{jsRef}
 		ccIn.IncludeInputs = ccIncludeInputs
 
 		ref, outPath := EmitCC(srcInstance, jsRel, joinOutVFS, ccIn, ctx.host, ctx.emit)

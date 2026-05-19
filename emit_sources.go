@@ -87,11 +87,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		ccIncludeInputs := walkClosure(ctx, srcInstance, r6Out, srcIn)
 
 		ccIn := srcIn
-		ccIn.Generator = r6Ref
-		ccIn.HasGenerator = true
 		ccIn.IncludeInputs = ccIncludeInputs
 		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
-		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r6Ref)
+		ccIn.ExtraDepRefs = append([]NodeRef{r6Ref}, resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r6Ref)...)
 
 		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, r6Out, ccIn, ctx.host, ctx.emit)
 
@@ -151,8 +149,6 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 
 		evPbCCSuffix := srcRel + ".pb.cc"
 		ccIn := srcIn
-		ccIn.Generator = evRef
-		ccIn.HasGenerator = true
 		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, evPbCC, srcIn)
 		{
 			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
@@ -166,7 +162,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 		}
 		wireFormatVFS := Source(pbRuntimeBase + "google/protobuf/wire_format.h")
 		ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
-		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, evRef)
+		ccIn.ExtraDepRefs = append([]NodeRef{evRef}, resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, evRef)...)
 
 		ref, outPath := EmitCC(srcInstance, evPbCCSuffix, evPbCC, ccIn, ctx.host, ctx.emit)
 
@@ -293,10 +289,8 @@ func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, srcDir *string
 	}
 
 	ccIn := in
-	ccIn.Generator = pbRef
-	ccIn.HasGenerator = true
 	ccIn.IncludeInputs = walkClosure(ctx, instance, pbCC, in)
-	ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pbRef)
+	ccIn.ExtraDepRefs = append([]NodeRef{pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pbRef)...)
 
 	ccSrcRel := strings.TrimPrefix(protoBase+".pb.cc", instance.Path+"/")
 	ccRef, ccOut := EmitCC(instance, ccSrcRel, pbCC, ccIn, ctx.host, ctx.emit)

@@ -102,8 +102,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		bindGeneratedOutput(ctx, instance, generatedVFS, cyRef)
 
 		ccIn := in
-		ccIn.HasGenerator = true
-		ccIn.Generator = cyRef
+		ccIn.ExtraDepRefs = []NodeRef{cyRef}
 		ccIn.Py3Suffix = !stmt.CMode && !generatedExplicit && py23Variant
 		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl)
 		ccIn.CFlags = filterPyRegisterCFlags(ccIn.CFlags)
