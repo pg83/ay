@@ -336,6 +336,23 @@ type pyProtoAuxChunksResult struct {
 	MemberInputs []VFS
 }
 
+// pyProtoAuxPeerCFlags returns peer-GLOBAL CFLAGS for the PY3_PROTO aux
+// compile: peerContribs.cFlags (PROTO_LIBRARY peers) ∪ contrib/libs/python
+// PY3-variant transitive. The python peer is injected here because PY3_PROTO
+// inherits PY3_LIBRARY's `PEERDIR(contrib/libs/python)` (python.conf:742),
+// which our multimodule model does not surface in `d.peerdirs`.
+func pyProtoAuxPeerCFlags(ctx *genCtx, instance ModuleInstance, peerContribs peerGlobalContribs) []string {
+	pythonInstance := ModuleInstance{
+		Path:     "contrib/libs/python",
+		Kind:     KindLib,
+		Language: LangPy,
+		Platform: instance.Platform,
+		Flags:    inferFlagsFromPath("contrib/libs/python", instance.Platform.PIC),
+	}
+	pythonResult := genModule(ctx, pythonInstance)
+	return mergeDedup(peerContribs.cFlags, pythonResult.CFlagsGlobal)
+}
+
 func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, entries []pyProtoAuxEntry) *pyProtoAuxChunksResult {
 	if len(entries) == 0 {
 		return nil
@@ -449,9 +466,8 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 
 		ccIn := ModuleCCInputs{
 			AddIncl:              pyProtoAuxOwnAddIncl(d),
-			CFlags:               []string{"-DLZMA_API_STATIC", "-DOPENSSL_RENAME_SYMBOLS=1", "-DFFI_STATIC_BUILD", "-DUSE_PYTHON3"},
 			PeerAddInclGlobal:    pyProtoAuxPeerAddIncl(instance, peerContribs, d),
-			PeerCFlagsGlobal:     nil,
+			PeerCFlagsGlobal:     pyProtoAuxPeerCFlags(ctx, instance, peerContribs),
 			PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
 			PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
 			AutoPeerCFlags:       consumerAutoPeerCFlags(true, true),
