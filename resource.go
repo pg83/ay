@@ -153,7 +153,7 @@ func resourceModuleTagForData(d *moduleData) *string {
 	if d == nil || d.moduleStmt == nil {
 		return nil
 	}
-	if d.py3ProgramMultimodule && d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+	if d.moduleStmt.Name == "PY3_PROGRAM" {
 		return stringPtr("PY3_BIN")
 	}
 	return resourceModuleTag(d.moduleStmt.Name)
