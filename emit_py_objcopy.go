@@ -190,7 +190,6 @@ func emitResourceObjcopy(
 				"module_dir": instance.Path,
 			},
 			Platform:     string(instance.Platform.Target),
-			HostPlatform: instance.Platform.IsHost,
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",
@@ -353,7 +352,6 @@ func emitKvOnlyObjcopyNode(
 		Tags:             kvTags,
 		TargetProperties: targetProps,
 		Platform:         string(instance.Platform.Target),
-		HostPlatform:     instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -455,7 +453,6 @@ func emitYaConfJSONObjcopy(
 				"module_dir": instance.Path,
 			},
 			Platform:     string(instance.Platform.Target),
-			HostPlatform: instance.Platform.IsHost,
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",
@@ -691,7 +688,6 @@ func emitPySrcObjcopy(
 				Tags:             pyTags,
 				TargetProperties: targetProps,
 				Platform:         string(instance.Platform.Target),
-				HostPlatform:     instance.Platform.IsHost,
 				Requirements: map[string]interface{}{
 					"cpu":     float64(1),
 					"network": "restricted",

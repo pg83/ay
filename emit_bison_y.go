@@ -45,7 +45,6 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 			"pc": "light-green",
 		},
 		Platform:     string(instance.Platform.Target),
-		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",

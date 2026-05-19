@@ -105,7 +105,6 @@ func EmitJV(
 			"module_dir": instance.Path,
 		},
 		Platform:     string(instance.Platform.Target),
-		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -202,7 +201,6 @@ func EmitJVSplit(
 			"module_dir": instance.Path,
 		},
 		Platform:     string(instance.Platform.Target),
-		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",

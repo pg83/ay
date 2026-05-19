@@ -139,7 +139,6 @@ func EmitPR(
 			"show_out": "yes",
 		},
 		Tags:         tags,
-		HostPlatform: instance.Platform.IsHost,
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},

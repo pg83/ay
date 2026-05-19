@@ -12,21 +12,20 @@ import (
 // PR-12 (the comparator) will rely on:
 //   - Field order in the marshalled object matches the alphabetical key
 //     order observed in /home/pg/monorepo/yatool_orig/sg.json.
-//   - host_platform and foreign_deps are omitted when zero (per D5).
+//   - foreign_deps is omitted when zero (per D5). host_platform is no
+//     longer a struct field — gjson_write derives it from Tags at
+//     serialization time and stdlib json.Marshal does not emit it.
 //   - All other fields are present even when empty (no omitempty), so
 //     empty arrays/maps render as []/{}.
 
 // expectedKeyOrder is the sequence of keys observed in the reference
-// sg.json (alphabetical, including the two omitempty fields). Tests that
-// supply non-zero values for the omitempty fields expect this full order.
-// PR-L4-C/01: sandboxing added between requirements and self_uid.
-// PR-L4-C/04: stats_uid removed (json:"-").
+// sg.json (alphabetical, including the foreign_deps omitempty field).
+// Tests that supply non-zero values for foreign_deps expect this full order.
 var expectedKeyOrder = []string{
 	"cmds",
 	"deps",
 	"env",
 	"foreign_deps",
-	"host_platform",
 	"inputs",
 	"kv",
 	"outputs",
@@ -39,8 +38,8 @@ var expectedKeyOrder = []string{
 	"uid",
 }
 
-// expectedKeyOrderMinimal is what we expect when host_platform and
-// foreign_deps are zero (i.e. the typical "small" node shape).
+// expectedKeyOrderMinimal is what we expect when foreign_deps is zero
+// (i.e. the typical "small" node shape).
 var expectedKeyOrderMinimal = []string{
 	"cmds",
 	"deps",
@@ -96,7 +95,6 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 		Deps:             []string{"dep1"},
 		Env:              map[string]string{"FOO": "bar"},
 		ForeignDeps:      map[string][]string{"tool": {"tooluid"}},
-		HostPlatform:     true,
 		Inputs:           ToVFSSlice([]string{"in"}),
 		KV:               map[string]string{"p": "LD"},
 		Outputs:          ToVFSSlice([]string{"out"}),
@@ -124,9 +122,8 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 }
 
 func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
-	// HostPlatform=false (zero) and ForeignDeps=nil (zero) must drop
-	// the corresponding keys. Everything else must remain present even
-	// with empty values.
+	// ForeignDeps=nil (zero) must drop the corresponding key.
+	// Everything else must remain present even with empty values.
 	n := &Node{
 		Cmds:             []Cmd{},
 		Deps:             []string{},

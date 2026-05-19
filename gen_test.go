@@ -836,7 +836,7 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		counts[n.KV["p"]]++
 		platforms[n.Platform]++
 
-		if n.HostPlatform {
+		if nodeHasHostTag(n.Tags) {
 			hostNodes++
 		}
 	}
@@ -1093,7 +1093,7 @@ func TestGen_ToolsArchiver_DualPlatform_HostAndTargetCounts(t *testing.T) {
 	var hostNodes, targetNodes int
 
 	for _, n := range g.Graph {
-		if n.HostPlatform {
+		if nodeHasHostTag(n.Tags) {
 			hostNodes++
 		} else {
 			targetNodes++
@@ -1131,7 +1131,7 @@ func TestGen_BuildCowOn_NoHostWalk(t *testing.T) {
 	}
 
 	for _, n := range g.Graph {
-		if n.HostPlatform {
+		if nodeHasHostTag(n.Tags) {
 			t.Errorf("unexpected host node %s emitted for build/cow/on", n.UID)
 		}
 	}
@@ -1229,7 +1229,7 @@ func TestGen_HostWalk_AsmlibYasmWired(t *testing.T) {
 		case "AS":
 			asNode = n
 		case "LD":
-			if n.HostPlatform {
+			if nodeHasHostTag(n.Tags) {
 				yasmLD = n
 			}
 		}
@@ -3490,12 +3490,12 @@ func TestD41_PICCoincidesWithHostTarget(t *testing.T) {
 
 		switch n.Platform {
 		case hostID:
-			if !n.HostPlatform {
+			if !nodeHasHostTag(n.Tags) {
 				t.Errorf("node %q on host platform %q has HostPlatform=false (D41 invariant violated)", out, hostID)
 			}
 
 		case targetID:
-			if n.HostPlatform {
+			if nodeHasHostTag(n.Tags) {
 				t.Errorf("node %q on target platform %q has HostPlatform=true (D41 invariant violated)", out, targetID)
 			}
 		}

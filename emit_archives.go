@@ -243,7 +243,6 @@ func emitArchive(
 		},
 		Outputs:      []VFS{archiveVFS},
 		Platform:     string(instance.Platform.Target),
-		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",

@@ -45,7 +45,6 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 				"pc": "yellow",
 			},
 			Platform:     string(instance.Platform.Target),
-			HostPlatform: instance.Platform.IsHost,
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",

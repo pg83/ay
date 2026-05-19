@@ -84,7 +84,6 @@ func TestWriteGraphIndented_ByteExact(t *testing.T) {
 				Deps:         []string{"depUid1", "depUid2"},
 				Env:          map[string]string{"PATH": "/usr/bin"},
 				ForeignDeps:  map[string][]string{"clone": {"u1", "u2"}, "tool": {"u3"}},
-				HostPlatform: true,
 				Inputs:       ToVFSSlice([]string{"in1", "in2"}),
 				KV:           map[string]string{"key1": "val1", "key2": "val2"},
 				Outputs:      ToVFSSlice([]string{"out1"}),

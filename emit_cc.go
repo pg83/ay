@@ -255,7 +255,6 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 			return tp
 		}(),
 		Platform:     string(instance.Platform.Target),
-		HostPlatform: instance.Platform.IsHost,
 		// Numeric values are float64 to match encoding/json's default
 		// when unmarshalling into `map[string]interface{}`. Int
 		// literals would make reflect.DeepEqual against the reference

@@ -119,7 +119,6 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				return tp
 			}(),
 			Platform:     string(instance.Platform.Target),
-			HostPlatform: instance.Platform.IsHost,
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",
@@ -222,7 +221,6 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 					"module_dir": instance.Path,
 				},
 				Platform:     string(pyInstance.Platform.Target),
-				HostPlatform: pyInstance.Platform.IsHost,
 				Requirements: map[string]interface{}{
 					"cpu":     float64(1),
 					"network": "restricted",
