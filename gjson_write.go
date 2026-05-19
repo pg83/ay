@@ -128,8 +128,10 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 		buf = append(buf, ',', '\n')
 	}
 
-	// host_platform: bool, omitempty (only emitted when true)
-	if n.HostPlatform {
+	// host_platform: derived from the presence of the "tool" tag (host
+	// nodes carry it baseline; target nodes don't). omitempty: emitted
+	// only when true.
+	if nodeHasHostTag(n.Tags) {
 		buf = append(buf, innerPad...)
 		buf = append(buf, `"host_platform": true,`...)
 		buf = append(buf, '\n')

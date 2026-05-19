@@ -37,7 +37,6 @@ type Node struct {
 	Deps             []string               `json:"deps"`
 	Env              map[string]string      `json:"env"`
 	ForeignDeps      map[string][]string    `json:"foreign_deps,omitempty"`
-	HostPlatform     bool                   `json:"host_platform,omitempty"`
 	Inputs           []VFS                  `json:"inputs"`
 	KV               map[string]string      `json:"kv"`
 	Outputs          []VFS                  `json:"outputs"`
@@ -54,4 +53,16 @@ type Node struct {
 	// Deps/ForeignDeps using the children's computed UIDs.
 	DepRefs        []NodeRef            `json:"-"`
 	ForeignDepRefs map[string][]NodeRef `json:"-"`
+}
+
+// nodeHasHostTag reports whether tags carry the baseline `"tool"` tag
+// that Platform.Tags injects on the host axis. Drives `host_platform`
+// JSON emission.
+func nodeHasHostTag(tags []string) bool {
+	for _, t := range tags {
+		if t == "tool" {
+			return true
+		}
+	}
+	return false
 }

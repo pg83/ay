@@ -257,8 +257,8 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		t.Errorf("platform = %q, want %q", got.Platform, PlatformDefaultLinuxX8664)
 	}
 
-	if !got.HostPlatform {
-		t.Errorf("host_platform = false, want true")
+	if !nodeHasHostTag(got.Tags) {
+		t.Errorf("tags do not carry \"tool\" baseline (host_platform-equivalent): %v", got.Tags)
 	}
 
 	if len(got.Tags) != 1 || got.Tags[0] != "tool" {

@@ -154,10 +154,11 @@ func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
 }
 
 // writeNode emits the canonical form of n into c. Field order matches
-// node.go (alphabetical: cache, cmds, deps, env, foreign_deps,
-// host_platform, inputs, kv, outputs, platform, requirements, sandboxing,
-// tags, target_properties); self_uid/uid/stats_uid are excluded. `omitempty`
-// fields stream their "absent" form (Cache=nil → 0x00, HostPlatform=false →
+// node.go (alphabetical: cache, cmds, deps, env, foreign_deps, inputs,
+// kv, outputs, platform, requirements, sandboxing, tags,
+// target_properties); self_uid/uid/stats_uid are excluded. host-vs-target
+// discrimination flows through Tags ("tool" baseline on host; empty on
+// target). `omitempty` fields stream their "absent" form (Cache=nil →
 // 0x00, ForeignDeps=nil → count 0); position is always present.
 func (c *canonBuf) writeNode(n *Node) {
 	switch {
@@ -173,7 +174,6 @@ func (c *canonBuf) writeNode(n *Node) {
 	c.writeStringSlice(n.Deps)
 	c.writeStringMap(n.Env)
 	c.writeStringSliceMap(n.ForeignDeps)
-	c.writeBool(n.HostPlatform)
 	c.writeVFSSlice(n.Inputs)
 	c.writeStringMap(n.KV)
 	c.writeVFSSlice(n.Outputs)

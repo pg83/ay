@@ -29,7 +29,6 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		KV:               map[string]string{"p": "LD"},
 		Outputs:          ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 		Platform:         "default-linux-x86_64",
-		HostPlatform:     true,
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{"tool"},
 		TargetProperties: map[string]string{"module_dir": "contrib/tools/ragel6"},
@@ -87,9 +86,9 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	}
 
 	// host_platform is false (R6 is target-side; host dep is via
-	// foreign_deps, not host_platform).
-	if got.HostPlatform {
-		t.Errorf("host_platform = true, want false")
+	// foreign_deps, not the "tool" baseline tag).
+	if nodeHasHostTag(got.Tags) {
+		t.Errorf("tags carry \"tool\" → host_platform = true, want false; tags=%v", got.Tags)
 	}
 
 	// PR-M3-rl6-host-platform-and-cctype: target-side (aarch64) R6 nodes
@@ -302,10 +301,10 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	}
 
 	// PR-M3-rl6-host-platform-and-cctype: x86_64 R6 nodes carry
-	// `host_platform=true` and `tags=["tool"]` matching the reference
-	// graph's classification of host-side codegen invocations.
-	if !got.HostPlatform {
-		t.Errorf("host_platform = false, want true (x86_64 R6 is host-side)")
+	// `tags=["tool"]` — the same baseline matched by `nodeHasHostTag`
+	// for the serialised `host_platform: true`.
+	if !nodeHasHostTag(got.Tags) {
+		t.Errorf("tags do not carry \"tool\"; want host_platform-equivalent. tags=%v", got.Tags)
 	}
 
 	if len(got.Tags) != 1 || got.Tags[0] != "tool" {

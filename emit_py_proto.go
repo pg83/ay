@@ -202,7 +202,6 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		Tags:             instance.Platform.Tags,
 		TargetProperties: map[string]string{"module_dir": instance.Path, "module_tag": "py3_proto"},
 		Platform:         string(instance.Platform.Target),
-		HostPlatform:     instance.Platform.IsHost,
 		Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
 		DepRefs:          toolRefs,
 	}
@@ -274,7 +273,6 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			Tags:             []string{},
 			TargetProperties: map[string]string{"module_dir": instance.Path, "module_tag": "py3_proto"},
 			Platform:         string(instance.Platform.Target),
-			HostPlatform:     instance.Platform.IsHost,
 			Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
 			DepRefs:          deps,
 		}
@@ -458,7 +456,6 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			Tags:             instance.Platform.Tags,
 			TargetProperties: map[string]string{"module_dir": instance.Path, "module_tag": "py3_proto"},
 			Platform:         string(instance.Platform.Target),
-			HostPlatform:     instance.Platform.IsHost,
 			Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
 			DepRefs:          deps,
 		})

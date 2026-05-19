@@ -139,7 +139,6 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		},
 		Tags:         append([]string(nil), instance.Platform.Tags...),
 		Platform:     string(instance.Platform.Target),
-		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
 		Sandboxing:   true,
 		TargetProperties: map[string]string{

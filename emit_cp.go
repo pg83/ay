@@ -61,7 +61,6 @@ func EmitJVCPG4(
 		},
 		Outputs:      []VFS{dst},
 		Platform:     string(instance.Platform.Target),
-		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -117,7 +116,6 @@ func EmitCP(instance ModuleInstance, src VFS, dst VFS, emit Emitter) NodeRef {
 		},
 		Outputs:      []VFS{dst},
 		Platform:     string(instance.Platform.Target),
-		HostPlatform: instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",

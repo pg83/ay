@@ -133,7 +133,6 @@ func fetchNode(host *Platform, item resourceFetch) *Node {
 		TargetProperties: map[string]string{
 			"module_dir": "build/resources",
 		},
-		HostPlatform: host.IsHost,
 	}
 }
 

@@ -180,7 +180,6 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 			Tags:             instance.Platform.Tags,
 			TargetProperties: map[string]string{"module_dir": instance.Path},
 			Platform:         string(instance.Platform.Target),
-			HostPlatform:     instance.Platform.IsHost,
 			Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
 			DepRefs:          chDeps,
 		})

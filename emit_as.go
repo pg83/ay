@@ -40,7 +40,6 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Env:          env,
 		Inputs:       allInputs,
 		Outputs:      []VFS{outVFS},
-		HostPlatform: instance.Platform.IsHost,
 		KV: map[string]string{
 			"p":  "AS",
 			"pc": "light-green",

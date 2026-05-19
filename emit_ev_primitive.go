@@ -251,7 +251,6 @@ func EmitEV(
 		Tags:             instance.Platform.Tags,
 		TargetProperties: targetProps,
 		Platform:         string(instance.Platform.Target),
-		HostPlatform:     instance.Platform.IsHost,
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",

@@ -81,7 +81,6 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	inputs = append(inputs, closure...)
 
 	tags := instance.Platform.Tags
-	hostPlatform := instance.Platform.IsHost
 
 	node := &Node{
 		Cmds: []Cmd{
@@ -90,10 +89,9 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 				Env:     env,
 			},
 		},
-		Env:          env,
-		Inputs:       inputs,
-		Outputs:      []VFS{outVFS},
-		HostPlatform: hostPlatform,
+		Env:     env,
+		Inputs:  inputs,
+		Outputs: []VFS{outVFS},
 		KV: map[string]string{
 			"p":  "R6",
 			"pc": "yellow",
