@@ -295,7 +295,8 @@ func (p *Platform) WithLinkerSelectionFlags(trailer []string) []string {
 }
 
 // ObjectSuffix is the upstream `$OBJECT_SUF` value (no `OBJ_SUF`
-// prefix — that comes from Python-multimodule variants only).
+// prefix — that prefix is set only inside Python LIBRARY variants by
+// upstream macros and is not modelled here).
 // `OBJECT_SUF=$OBJ_SUF$_CROSS_SUFFIX.o` (gnu_compiler.conf:215) with
 // `_CROSS_SUFFIX=.pic` for PIC builds (gnu_compiler.conf:26-34).
 func (p *Platform) ObjectSuffix() string {

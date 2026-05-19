@@ -608,11 +608,12 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 }
 
 func moduleStmtForKind(stmt *ModuleStmt, kind ModuleKind) *ModuleStmt {
-	// PY3_PROGRAM is multimodule: the BIN-half keeps the original
-	// "PY3_PROGRAM" name (uniquely distinguishes it from a standalone
-	// PY3_PROGRAM_BIN()), the LIB-half is renamed to PY3_LIBRARY so
-	// downstream emitters share the same PY3_LIBRARY codepath as
-	// standalone PY3_LIBRARY() declarations.
+	// PY3_PROGRAM enters genModule twice — once with Kind=Bin and once
+	// with Kind=Lib (the latter reached via the self-PEERDIR injected
+	// in collectStmts). The Bin visit keeps the original "PY3_PROGRAM"
+	// name so it stays distinguishable from a standalone
+	// PY3_PROGRAM_BIN(); the Lib visit is renamed to PY3_LIBRARY so it
+	// shares the PY3_LIBRARY emit codepath with standalone PY3_LIBRARY.
 	if stmt.Name == "PY3_PROGRAM" && kind == KindLib {
 		out := *stmt
 		out.Name = "PY3_LIBRARY"
@@ -1308,7 +1309,7 @@ func isProgramModuleType(name string) bool {
 
 // isPyLibraryType returns true for Python library/program module names
 // that behave as LIBRARY-shaped modules (emit AR/CC for their C++ SRCS,
-// header-only when they have none). Unlike isMultimoduleLibraryType
+// header-only when they have none). Unlike isSpecializedLibraryType
 // these are NOT unconditionally header-only — hasCompilableSource gates
 // the path. Separated so the gate check at the top of genModule admits
 // them without routing every one to the header-only path.
@@ -1341,7 +1342,7 @@ func isPythonModuleType(name string) bool {
 	return isPyLibraryType(name) || name == "PY3_PROGRAM_BIN"
 }
 
-func isMultimoduleLibraryType(name string) bool {
+func isSpecializedLibraryType(name string) bool {
 	switch name {
 	case "PROTO_LIBRARY",
 		"DLL", "SO_PROGRAM", "DYNAMIC_LIBRARY",

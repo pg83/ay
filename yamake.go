@@ -988,8 +988,9 @@ type parser struct {
 func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 	switch nameTok.val {
 	case "PROGRAM", "LIBRARY",
-		// Multimodule types: parsed as ModuleStmt with canonical name so
-		// genModule can route them.
+		// Other recognized module-declaration names. Each parses as a
+		// ModuleStmt and is dispatched in genModule by name and by the
+		// instance's Kind/Language.
 		"PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",
 		"PY3_PROGRAM_BIN", "PY2_PROGRAM", "PY3_PROGRAM",
 		"PROTO_LIBRARY",
