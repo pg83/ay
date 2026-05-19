@@ -329,7 +329,7 @@ func emitKvOnlyObjcopyNode(
 	case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
 		targetProps["module_tag"] = "py3"
 	}
-	if d.py3ProgramMultimodule && d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+	if d.moduleStmt.Name == "PY3_PROGRAM" {
 		targetProps["module_tag"] = "py3_bin"
 	}
 
@@ -670,7 +670,7 @@ func emitPySrcObjcopy(
 			case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
 				targetProps["module_tag"] = "py3"
 			}
-			if d.py3ProgramMultimodule && d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+			if d.moduleStmt.Name == "PY3_PROGRAM" {
 				targetProps["module_tag"] = "py3_bin"
 			}
 

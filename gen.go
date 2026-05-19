@@ -144,11 +144,6 @@ func protoResultWholeArchiveCmdPaths(res *protoSrcsResult) []VFS {
 	return cloneVFSs(res.WholeArchiveCmdPaths)
 }
 
-const (
-	py3ProgramVariantBin    = "py3_bin"
-	py3ProgramVariantBinLib = "py3_bin_lib"
-)
-
 // genCtx threads state through the recursive walk. `emit` accumulates
 // emitted nodes; `memo` deduplicates per-instance emission; `walking` is
 // the cycle-detection stack. Host-tool walks fire eagerly from inside
@@ -821,9 +816,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	if d.moduleStmt.Name == "PY3_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
-		if d.py3ProgramMultimodule && instance.Kind == KindBin && instance.Path != "" {
-			d.peerdirs = append([]string{instance.Path}, d.peerdirs...)
-		}
+		// The PY3_PROGRAM → PY3_PROGRAM_BIN-with-self-peer desugaring
+		// happens at parse time in collectStmts; the LIB-variant
+		// self-peer is already in d.peerdirs by now. Standalone
+		// PY3_PROGRAM_BIN() carries no self-peer.
+		//
 		// `_BASE_PY3_PROGRAM` adds runtime_py3/main unconditionally,
 		// `_sqlite` only when PYTHON_SQLITE3 != "no", and import_test
 		// only when ADD_CHECK_PY_IMPORTS remains enabled.
@@ -1363,26 +1360,29 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 
 			archiveOrder = append(head, tail...)
-		case "PY3_PROGRAM", "PY3_PROGRAM_BIN":
-			if d.moduleStmt.Name == "PY3_PROGRAM_BIN" && !d.py3ProgramMultimodule {
-				head := make([]resolvedPeer, 0, len(resolved))
-				tail := make([]resolvedPeer, 0, 2)
+		case "PY3_PROGRAM_BIN":
+			// Standalone PY3_PROGRAM_BIN() (e.g. tools/py3cc/slow): just
+			// tail-defer the USE_PYTHON3 implicit peers; no
+			// programDefault/allocator dance — those apply only to the
+			// multimodule PY3_PROGRAM bin-half below.
+			head := make([]resolvedPeer, 0, len(resolved))
+			tail := make([]resolvedPeer, 0, 2)
 
-				for _, rp := range resolved {
-					if rp.path == "contrib/libs/python" || rp.path == "library/python/runtime_py3" {
-						tail = append(tail, rp)
+			for _, rp := range resolved {
+				if rp.path == "contrib/libs/python" || rp.path == "library/python/runtime_py3" {
+					tail = append(tail, rp)
 
-						continue
-					}
-
-					head = append(head, rp)
+					continue
 				}
 
-				archiveOrder = append(head, tail...)
-
-				break
+				head = append(head, rp)
 			}
 
+			archiveOrder = append(head, tail...)
+		case "PY3_PROGRAM":
+			// Multimodule PY3_PROGRAM bin-half (name kept as "PY3_PROGRAM"
+			// by moduleStmtForKind). Applies the full programDefault +
+			// allocator + python-tail reorder.
 			allocatorExplicitSet := make(map[string]struct{}, len(allocatorExplicitPeers))
 			for _, p := range allocatorExplicitPeers {
 				allocatorExplicitSet[filepath.Clean(p)] = struct{}{}
@@ -2253,7 +2253,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				ldPeerArchivePaths = append(ldPeerArchivePaths, p)
 			}
 		}
-		if d.py3ProgramMultimodule && d.moduleStmt.Name == "PY3_PROGRAM_BIN" && d.allocatorName == "J" {
+		if d.moduleStmt.Name == "PY3_PROGRAM" && d.allocatorName == "J" {
 			ldPeerArchiveRefs, ldPeerArchivePaths = moveArchivePathsAfter(
 				ldPeerArchiveRefs,
 				ldPeerArchivePaths,
@@ -2356,10 +2356,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 		}
 
-		// Explicit PY3_PROGRAM_BIN modules inherit _BASE_PY3_PROGRAM's
-		// STRIP(). The PY3_PROGRAM multimodule bin-half does not surface
-		// STRIP_FLAG in the observed reference shape for devtools/ya/bin.
-		wantsStrip := d.moduleStmt.Name == "PY3_PROGRAM_BIN" && !d.py3ProgramMultimodule
+		// Standalone PY3_PROGRAM_BIN() inherits _BASE_PY3_PROGRAM's
+		// STRIP(); multimodule PY3_PROGRAM BIN-half keeps the
+		// "PY3_PROGRAM" name and does NOT surface STRIP_FLAG (matches the
+		// devtools/ya/bin reference shape).
+		wantsStrip := d.moduleStmt.Name == "PY3_PROGRAM_BIN"
 		ldRef := EmitLD(
 			ldInstance,
 			binaryName,

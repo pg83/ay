@@ -18,7 +18,6 @@ import (
 
 type moduleData struct {
 	moduleStmt            *ModuleStmt
-	py3ProgramMultimodule bool
 	srcs                  []string
 	globalSrcs            []string
 	globalEventSeq        int
@@ -192,10 +191,11 @@ func collectModule(fs *FS, modulePath string, kind ModuleKind, stmts []Stmt, env
 
 	collectStmts(modulePath, kind, stmts, env, d)
 	filterInvalidAddIncl(fs, d)
-	if d.py3ProgramMultimodule && kind == KindLib {
+	if kind == KindLib {
 		// PY_MAIN belongs to the executable half of PY3_PROGRAM. The
 		// library half is a self-peer that contributes importable code, not
-		// the program entrypoint resource.
+		// the program entrypoint resource. No-op for standalone PY3_LIBRARY
+		// (which never declares PY_MAIN).
 		d.pyMain = nil
 	}
 	d.muslEnabled = env.Bool("MUSL")
@@ -391,9 +391,15 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				return
 			}
 
-			if v.Name == "PY3_PROGRAM" {
-				d.py3ProgramMultimodule = true
+			// PY3_PROGRAM is sugar for `PY3_PROGRAM_BIN + PEERDIR(self at Kind=Lib)`:
+			// the BIN-half PEERDIRs its own LIB-variant. derivePeerInstance
+			// resolves the peer with Kind=Lib + Lang=Py, so the same path
+			// re-enters genModule as the LIB-variant. Standalone
+			// PY3_PROGRAM_BIN() declarations carry no self-peer.
+			if v.Name == "PY3_PROGRAM" && kind == KindBin {
+				d.peerdirs = append([]string{modulePath}, d.peerdirs...)
 			}
+
 			d.moduleStmt = moduleStmtForKind(v, kind)
 		case *SrcsStmt:
 			// SRCS(GLOBAL foo.cpp) uses GLOBAL as a per-source modifier
@@ -602,21 +608,17 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 }
 
 func moduleStmtForKind(stmt *ModuleStmt, kind ModuleKind) *ModuleStmt {
-	if stmt.Name != "PY3_PROGRAM" {
-		return stmt
-	}
-
-	out := *stmt
-	switch kind {
-	case KindBin:
-		out.Name = "PY3_PROGRAM_BIN"
-	case KindLib:
+	// PY3_PROGRAM is multimodule: the BIN-half keeps the original
+	// "PY3_PROGRAM" name (uniquely distinguishes it from a standalone
+	// PY3_PROGRAM_BIN()), the LIB-half is renamed to PY3_LIBRARY so
+	// downstream emitters share the same PY3_LIBRARY codepath as
+	// standalone PY3_LIBRARY() declarations.
+	if stmt.Name == "PY3_PROGRAM" && kind == KindLib {
+		out := *stmt
 		out.Name = "PY3_LIBRARY"
-	default:
-		ThrowFmt("gen: unsupported PY3_PROGRAM module kind %s", kind.String())
+		return &out
 	}
-
-	return &out
+	return stmt
 }
 
 func addGeneratedHeaderInclude(modulePath, dst string, d *moduleData) {
