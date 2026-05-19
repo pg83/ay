@@ -58,8 +58,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	})
 
 	ccIn := in
-	ccIn.HasGenerator = true
-	ccIn.Generator = ycRef
+	ccIn.ExtraDepRefs = []NodeRef{ycRef}
 	ccIn.IncludeInputs = append([]VFS{headerVFS}, walkClosure(ctx, instance, srcVFS, in)...)
 
 	ccRef, ccOut := EmitCC(instance, generatedRel, generatedVFS, ccIn, ctx.host, ctx.emit)

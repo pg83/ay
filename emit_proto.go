@@ -500,8 +500,6 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	wireFormatVFS := Source(pbRuntimeBase + "google/protobuf/wire_format.h")
 	for _, co := range codegenOutputs {
 		ccIn := moduleInputs
-		ccIn.Generator = co.genRef
-		ccIn.HasGenerator = true
 		ccIn.IncludeInputs = walkClosure(ctx, instance, co.pbCC, moduleInputs)
 		// .ev.pb.cc.o consumer must not carry its own .ev.pb.h in inputs[]
 		// (REF omits the self-include). Drop just the sibling header.
@@ -521,8 +519,8 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
 			ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
 		}
-		// Cross-codegen deps via .pb.h imports.
-		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, co.genRef)
+		// Generator + cross-codegen deps via .pb.h imports.
+		ccIn.ExtraDepRefs = append([]NodeRef{co.genRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, co.genRef)...)
 
 		ccRef, ccOut := EmitCC(cppInstance, co.srcRel, co.pbCC, ccIn, ctx.host, ctx.emit)
 		ccRefs = append(ccRefs, ccRef)

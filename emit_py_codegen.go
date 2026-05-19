@@ -244,8 +244,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		// only [.reg3.cpp, gen_py3_reg.py] — no transitive header scan
 		// (generated stub).
 		ccIn := in
-		ccIn.Generator = pyRef
-		ccIn.HasGenerator = true
+		ccIn.ExtraDepRefs = []NodeRef{pyRef}
 		ccIn.Py3Suffix = py3Suffix
 		if len(d.cythonCpp) > 0 {
 			ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl)

@@ -33,16 +33,11 @@ type ModuleCCInputs struct {
 	PeerAddInclGlobal []VFS
 	CXXFlags          []string
 	COnlyFlags        []string
-	Generator         NodeRef
-	// HasGenerator distinguishes "no generator" from "generator with
-	// zero-valued NodeRef.id" — BufferedEmitter ids start at 0 so a
-	// bare-struct nil check false-negatives on the first emitted node.
-	HasGenerator bool
-	// ExtraDepRefs threads additional NodeRefs into DepRefs alongside
-	// `Generator` (when HasGenerator). An EN-downstream CC carries its
-	// consumer EN ref (via Generator) plus cross-EN dep refs (EN nodes
-	// whose `_serialized.h` participates in the consumer's header
-	// closure) — two deps, not one.
+	// ExtraDepRefs is appended verbatim into node.DepRefs. For codegen-
+	// downstream CCs the convention is generator-first (e.g. JS/R6 ref
+	// at position 0) plus any cross-codegen deps reached through the
+	// `.pb.h`/`_serialized.h` closure. Order is load-bearing — the
+	// reference graph encodes a stable Deps multiset.
 	ExtraDepRefs []NodeRef
 	// SrcDir is the module's `SRCDIR(...)` setting (nil when none).
 	// When non-nil AND the source is non-local, the composer uses
@@ -272,14 +267,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		},
 	}
 
-	// When HasGenerator is set, thread Generator into DepRefs so the
-	// CC carries an explicit dep on its source-generating JS/R6 node
-	// (every JS/R6-derived CC in the reference has Deps=[gen UID]).
-	// ExtraDepRefs threads additional cross-EN dep refs so the Deps
-	// multiset matches the reference for codegen-downstream CCs.
-	if in.HasGenerator {
-		node.DepRefs = append([]NodeRef{in.Generator}, in.ExtraDepRefs...)
-	} else if len(in.ExtraDepRefs) > 0 {
+	if len(in.ExtraDepRefs) > 0 {
 		node.DepRefs = append([]NodeRef(nil), in.ExtraDepRefs...)
 	}
 
