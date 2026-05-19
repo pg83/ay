@@ -1336,7 +1336,7 @@ func TestGen_DefaultPeerdirs_BuildCowOnUnaffected(t *testing.T) {
 		Platform: testTargetP,
 	}
 
-	got := defaultPeerdirsFor(nil, bcOn, FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true})
+	got := defaultPeerdirsFor(nil, bcOn, FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true}, true)
 
 	if len(got) != 0 {
 		t.Errorf("defaultPeerdirsFor(build/cow/on) = %v, want []", got)
@@ -1394,7 +1394,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"contrib/libs/musl/include",
 	}
 
-	gotDefaults := defaultPeerdirsFor(nil, plain, FlagSet{})
+	gotDefaults := defaultPeerdirsFor(nil, plain, FlagSet{}, true)
 
 	if !stringSlicesEqual(gotDefaults, wantDefaults) {
 		t.Errorf("defaultPeerdirsFor(plain CPP) = %v, want %v", gotDefaults, wantDefaults)
@@ -1616,7 +1616,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := defaultPeerdirsFor(nil, c.mi, c.flags)
+			got := defaultPeerdirsFor(nil, c.mi, c.flags, true)
 
 			if !stringSlicesEqual(got, c.want) {
 				t.Errorf("defaultPeerdirsFor(%+v, %+v) = %v, want %v", c.mi, c.flags, got, c.want)
