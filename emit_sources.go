@@ -17,14 +17,14 @@ type sourceEmit struct {
 	PrimaryCount int
 }
 
-func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel string, in ModuleCCInputs, ancestorRebase bool) *sourceEmit {
+func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, in ModuleCCInputs, ancestorRebase bool) *sourceEmit {
 	if isHeaderSource(srcRel) {
 		return nil
 	}
 
 	srcInstance := instance
 	if ancestorRebase {
-		srcInstance.Path = *srcDir
+		srcInstance.Path = *d.srcDir
 	}
 
 	srcIn := in
@@ -34,7 +34,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 
 	switch {
 	case strings.HasSuffix(srcRel, ".proto"):
-		return emitLibraryProtoSource(ctx, srcInstance, srcDir, srcRel, srcIn)
+		return emitLibraryProtoSource(ctx, srcInstance, d, srcRel, srcIn)
 	case strings.HasSuffix(srcRel, ".c"),
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
@@ -242,11 +242,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel 
 	return nil
 }
 
-func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, srcDir *string, srcRel string, in ModuleCCInputs) *sourceEmit {
+func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, in ModuleCCInputs) *sourceEmit {
 	protocLDRef, protocBinary := ctx.tool(pbProtocModule)
 	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(pbCppStyleguideModule)
 
-	protoRelPath := protoSourceRelPath(ctx.fs, instance, &moduleData{srcDir: srcDir}, srcRel)
+	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
 	transitiveImports, hasDescriptor := protoTransitiveImports(ctx.parsers, ctx.fs, protoRelPath)
 	pbRef := EmitPB(
 		instance, protoRelPath, cppStyleguideLDRef, protocLDRef,

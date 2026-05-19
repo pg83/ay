@@ -1877,7 +1877,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			srcInputs.FlatOutput = true
 		}
 
-		preEmitted[src] = emitOneSource(ctx, instance, d.srcDir, src, srcInputs, ancestorRebase)
+		preEmitted[src] = emitOneSource(ctx, instance, d, src, srcInputs, ancestorRebase)
 	}
 
 	for _, src := range d.srcs {
@@ -1900,7 +1900,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		emit, hadPre := preEmitted[src]
 		if !hadPre {
-			emit = emitOneSource(ctx, instance, d.srcDir, src, srcInputs, ancestorRebase)
+			emit = emitOneSource(ctx, instance, d, src, srcInputs, ancestorRebase)
 		}
 
 		if emit == nil {
@@ -2046,7 +2046,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 		variantIn.PerSourceCFlags = flags
 
-		emit := emitOneSource(ctx, instance, d.srcDir, e.Src, variantIn, ancestorRebase)
+		emit := emitOneSource(ctx, instance, d, e.Src, variantIn, ancestorRebase)
 		if emit == nil {
 			continue
 		}
@@ -2164,7 +2164,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	globalMemberInputsSeen := map[VFS]struct{}{}
 
 	for _, src := range d.globalSrcs {
-		emit := emitOneSource(ctx, instance, d.srcDir, src, moduleInputs, ancestorRebase)
+		emit := emitOneSource(ctx, instance, d, src, moduleInputs, ancestorRebase)
 
 		if emit == nil {
 			continue
