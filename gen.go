@@ -775,7 +775,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
-	if d.moduleStmt.Name != "LIBRARY" && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isMultimoduleLibraryType(d.moduleStmt.Name) {
+	if d.moduleStmt.Name != "LIBRARY" && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) {
 		ThrowFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path, d.moduleStmt.Name)
 	}
 
@@ -854,10 +854,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		d.peerdirs = append(d.peerdirs, "tools/enum_parser/enum_serialization_runtime")
 	}
 
-	// Multimodule library types (PROTO_LIBRARY, DLL, ...) still need a
-	// dedicated path: they do not flow through the regular SRCS/AR
-	// pipeline, but emit their own specialised artefacts.
-	if isMultimoduleLibraryType(d.moduleStmt.Name) {
+	// Specialized library types (PROTO_LIBRARY, DLL, ...) do not flow
+	// through the regular SRCS/AR pipeline. DYNAMIC_LIBRARY has its
+	// own emitter; the rest take the header-only branch below and emit
+	// only codegen / resource / package artefacts.
+	if isSpecializedLibraryType(d.moduleStmt.Name) {
 		if d.moduleStmt.Name == "DYNAMIC_LIBRARY" {
 			result := emitDynamicLibrary(ctx, instance, d)
 			ctx.memo[instance] = result
@@ -865,10 +866,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			return result
 		}
 
-		// Multimodule modules may declare ADDINCL(GLOBAL ...) /
-		// {C,CXX,CONLY}FLAGS(GLOBAL ...) that peer-propagate without
-		// emitting an AR. Walk peers (so their transitive closures reach
-		// genModule) and aggregate own + peer GLOBAL per axis.
+		// Walk peers (so their transitive closures reach genModule) and
+		// aggregate own + peer GLOBAL ADDINCL / {C,CXX,CONLY}FLAGS per
+		// axis. ADDINCL(GLOBAL ...) / FLAGS(GLOBAL ...) peer-propagate
+		// from any module type; we still need that propagation here even
+		// though this branch emits no AR.
 		peerContribs := walkPeersForGlobalAddIncl(ctx, instance, d)
 
 		// Emit own LD_PLUGIN CP nodes (e.g. musl.py → musl.py.pyplugin)
@@ -884,7 +886,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ldPlugins = &ldPluginsResult{}
 		}
 
-		// Multimodule modules may still declare RUN_PROGRAM whose OUT is
+		// These modules may still declare RUN_PROGRAM whose OUT is
 		// later consumed by RESOURCE/RESOURCE_FILES (libmagic/magic:
 		// Magdir.mgc). Emit PR nodes early so d.prOutputProducer is
 		// populated before emitResourceObjcopy resolves resource paths.
@@ -907,9 +909,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// reach this branch; their Python sources still need PY emission.
 		emitPySrcs(ctx, instance, d)
 
-		// Emit objcopy PY nodes for RESOURCE / RESOURCE_FILES. Multimodule
-		// LIBRARYs (e.g. certs, PY3_LIBRARY-only-PY_SRCS) host the
-		// only-resource shape; when there are objcopy outputs, emit a
+		// Emit objcopy PY nodes for RESOURCE / RESOURCE_FILES. Specialized
+		// LIBRARY types (e.g. RESOURCES_LIBRARY `certs`) host the only-
+		// resource shape; when there are objcopy outputs, emit a
 		// .global.a archiving them.
 		objcopyRes := emitResourceObjcopy(ctx, instance, d)
 
@@ -956,18 +958,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			hOnlyGlobalPath = vfsPtr(Build(instance.Path + "/" + globalBaseName))
 		}
 
-		// Emit EN nodes for GENERATE_ENUM_SERIALIZATION(*). Multimodule
-		// modules never compile the `_serialized.cpp` output (every
-		// EN-emitting module has a regular AR archiving the output); pass
-		// nil consumerInputs to suppress downstream-CC emission here.
+		// Emit EN nodes for GENERATE_ENUM_SERIALIZATION(*). This branch
+		// has no own CC/AR pipeline, so pass nil consumerInputs and skip
+		// downstream-CC emission for the generated `_serialized.cpp`.
 		emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, nil)
 
 		// Emit PB/EV nodes for PROTO_LIBRARY .proto/.ev sources.
-		// PROTO_LIBRARY modules always reach the header-only branch.
-		// Also emits downstream CC + AR scaffolding for true
-		// PROTO_LIBRARY (skipped for other multimodule types).
+		// PROTO_LIBRARY always reaches this branch. emitProtoSrcs also
+		// emits downstream CC + AR scaffolding when the module is a
+		// PROTO_LIBRARY (its internal guard skips the scaffolding for
+		// other specialized types that have no proto sources anyway).
 		// peerContribs is threaded so downstream CCs see the same
-		// peer-GLOBAL CFLAGS / ADDINCL the header-only walker aggregated.
+		// peer-GLOBAL CFLAGS / ADDINCL aggregated above.
 		// Surfaces PROTO_LIBRARY's emitted `.a` for downstream LD walks
 		// (otherwise the AR is orphaned from every LD inputs).
 		protoResult := emitProtoSrcs(ctx, instance, d, peerContribs)
@@ -1361,10 +1363,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 			archiveOrder = append(head, tail...)
 		case "PY3_PROGRAM_BIN":
-			// Standalone PY3_PROGRAM_BIN() (e.g. tools/py3cc/slow): just
-			// tail-defer the USE_PYTHON3 implicit peers; no
+			// PY3_PROGRAM_BIN() declarations (e.g. tools/py3cc/slow):
+			// just tail-defer the USE_PYTHON3 implicit peers; no
 			// programDefault/allocator dance — those apply only to the
-			// multimodule PY3_PROGRAM bin-half below.
+			// PY3_PROGRAM case below.
 			head := make([]resolvedPeer, 0, len(resolved))
 			tail := make([]resolvedPeer, 0, 2)
 
@@ -1380,9 +1382,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 			archiveOrder = append(head, tail...)
 		case "PY3_PROGRAM":
-			// Multimodule PY3_PROGRAM bin-half (name kept as "PY3_PROGRAM"
-			// by moduleStmtForKind). Applies the full programDefault +
-			// allocator + python-tail reorder.
+			// PY3_PROGRAM at Kind=Bin (moduleStmtForKind keeps the
+			// "PY3_PROGRAM" name on the Bin visit; the Lib visit is
+			// renamed to PY3_LIBRARY and lands in the LIBRARY path).
+			// Applies the full programDefault + allocator + python-tail
+			// reorder.
 			allocatorExplicitSet := make(map[string]struct{}, len(allocatorExplicitPeers))
 			for _, p := range allocatorExplicitPeers {
 				allocatorExplicitSet[filepath.Clean(p)] = struct{}{}
@@ -2184,9 +2188,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// globalRefs/globalOutputs (upstream macro `_PY3_REGISTER` appends
 	// `SRCS(GLOBAL $Func.reg3.cpp)` so the .o lands in `.global.a`).
 	// PY3_LIBRARY (rapidjson, ymakeyaml) emits plain `.reg3.cpp.o`;
-	// PY23_LIBRARY and PY23_NATIVE_LIBRARY emit `.reg3.cpp.py3.o` (REF:
-	// library/python/symbols/module — PY23_LIBRARY multimodule whose py3
-	// submodule tags CC outputs with module_tag=py3 and .py3.o suffix).
+	// PY23_LIBRARY and PY23_NATIVE_LIBRARY emit `.reg3.cpp.py3.o` (REF
+	// e.g. library/python/symbols/module: PY23_LIBRARY's py3-language
+	// visit tags CC outputs with module_tag=py3 and the .py3.o suffix).
 	regCCPy3Suffix := isPy3NativeLib || d.moduleStmt.Name == "PY23_LIBRARY"
 	regRes := emitPyRegister(ctx, instance, d, moduleInputs, regCCPy3Suffix)
 	if regRes != nil {
@@ -2356,10 +2360,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 		}
 
-		// Standalone PY3_PROGRAM_BIN() inherits _BASE_PY3_PROGRAM's
-		// STRIP(); multimodule PY3_PROGRAM BIN-half keeps the
-		// "PY3_PROGRAM" name and does NOT surface STRIP_FLAG (matches the
-		// devtools/ya/bin reference shape).
+		// PY3_PROGRAM_BIN() declarations inherit _BASE_PY3_PROGRAM's
+		// STRIP(); the PY3_PROGRAM Kind=Bin visit keeps the "PY3_PROGRAM"
+		// name (see moduleStmtForKind) and does NOT surface STRIP_FLAG
+		// (matches the devtools/ya/bin reference shape).
 		wantsStrip := d.moduleStmt.Name == "PY3_PROGRAM_BIN"
 		ldRef := EmitLD(
 			ldInstance,

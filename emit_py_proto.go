@@ -337,8 +337,9 @@ type pyProtoAuxChunksResult struct {
 // pyProtoAuxPeerCFlags returns peer-GLOBAL CFLAGS for the PY3_PROTO aux
 // compile: peerContribs.cFlags (PROTO_LIBRARY peers) ∪ contrib/libs/python
 // PY3-variant transitive. The python peer is injected here because PY3_PROTO
-// inherits PY3_LIBRARY's `PEERDIR(contrib/libs/python)` (python.conf:742),
-// which our multimodule model does not surface in `d.peerdirs`.
+// inherits PY3_LIBRARY's `PEERDIR(contrib/libs/python)` (python.conf:742) —
+// our parser doesn't add that implicit peer to `d.peerdirs`, so we resolve
+// it explicitly through genModule here.
 func pyProtoAuxPeerCFlags(ctx *genCtx, instance ModuleInstance, peerContribs peerGlobalContribs) []string {
 	pythonInstance := ModuleInstance{
 		Path:     "contrib/libs/python",
