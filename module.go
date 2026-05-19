@@ -93,10 +93,6 @@ type FlagSet struct {
 	NoPlatform         bool
 	NoCompilerWarnings bool
 	IsCpp              bool
-	// NoStdInc marks modules whose own compiles declare -nostdinc.
-	// This is a generic compile property parsed from CFLAGS, used for
-	// scanner base-path and no-stdinc compile-shape decisions.
-	NoStdInc bool
 	// Extra carries opaque per-instance digests as a `\n`-joined sorted
 	// token concatenation (slice fields would disqualify the struct from
 	// being a map key). Populate via NewFlagSet to keep the sort stable.

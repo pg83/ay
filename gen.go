@@ -1717,25 +1717,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// Auto-injected peer-CFLAG -D_musl_ for every TARGET module that is
 	// not effectively NO_PLATFORM, when the CLI says MUSL=yes. Mirrors
 	// `_BASE_UNIT`'s `when ($MUSL == "yes") { CFLAGS+=-D_musl_ }`.
-	// Suppressed for no-stdinc modules — those receive `-D_musl_=1`
-	// directly via their dedicated composer slot.
 	autoPeerCFlags := defaultPeerCFlags(ctx, instance, d)
 
 	// Thread the module's own non-GLOBAL CFLAGS and own GLOBAL
 	// CFLAGS / CXXFLAGS / CONLYFLAGS into ModuleCCInputs so the composer
-	// emits them on this module's own CC compiles. NoStdInc modules
-	// (musl-self) consume CFlags + OwnCFlagsGlobal via the dedicated
-	// no-stdinc composer slot; cxx/conly remain zeroed because musl's
-	// ya.make declares no CXXFLAGS/CONLYFLAGS.
+	// emits them on this module's own CC compiles.
 	ownCFlags := d.cFlags
 	ownCFlagsGlobalSelf := d.cFlagsGlobal
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
-
-	if d.flags.NoStdInc {
-		ownCXXFlagsGlobalSelf = nil
-		ownCOnlyFlagsGlobalSelf = nil
-	}
 
 	// Dedup d.addIncl in first-occurrence-wins order. REF (openssl
 	// drbg_lib.c.o idx 9-14: 6 unique entries) does not emit duplicate -I

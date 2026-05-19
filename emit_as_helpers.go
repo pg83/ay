@@ -41,46 +41,28 @@ func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (
 
 // composeASCmdArgs builds the cmd_args bundle.
 func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in ModuleCCInputs) []string {
-	noStdInc := in.Flags.NoStdInc
-
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 3 + len(bundle.ArchArgs)
 
-	// No-stdinc preNoLibcExtras: module's own CFLAGS + GLOBAL CFLAGS.
-	// Empty for normal modules.
-	noStdIncCFlags := []string(nil)
-	if noStdInc {
-		noStdIncCFlags = make([]string, 0, len(in.CFlags)+len(in.OwnCFlagsGlobal))
-		noStdIncCFlags = append(noStdIncCFlags, in.CFlags...)
-		noStdIncCFlags = append(noStdIncCFlags, in.OwnCFlagsGlobal...)
-	}
-
 	warnBundle := pickWarningFlags(in.Flags.NoCompilerWarnings)
 
-	var ownCFlags, autoPeerCFlags []string
-	if !noStdInc {
-		ownCFlags = composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
-		autoPeerCFlags = in.AutoPeerCFlags
-	}
+	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
+	autoPeerCFlags := in.AutoPeerCFlags
 
-	preNoLibcExtras := make([]string, 0, len(noStdIncCFlags)+len(ownCFlags))
-	preNoLibcExtras = append(preNoLibcExtras, noStdIncCFlags...)
-	preNoLibcExtras = append(preNoLibcExtras, ownCFlags...)
-
-	includes := composeASIncludes(in, noStdInc)
+	includes := composeASIncludes(in)
 
 	betweenBlocks := len(catboostOpenSourceDefine) + len(autoPeerCFlags)
 	betweenBlocks += len(bundle.CPUFeatures)
 
 	fixed := prologueArgs + len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
-		len(bundle.CFlags) + len(warnBundle) + len(bundle.Defines) + len(noStdIncCFlags) + len(ownCFlags) +
+		len(bundle.CFlags) + len(warnBundle) + len(bundle.Defines) + len(ownCFlags) +
 		len(bundle.NoLibcBlock) + betweenBlocks + len(bundle.NoLibcBlock) + len(in.SFlags) + 4
 	cmdArgs := make([]string, 0, fixed+len(includes))
 
 	cmdArgs = append(cmdArgs, instance.Platform.Tools.CC, "--target="+instance.Platform.Triple)
 	cmdArgs = append(cmdArgs, bundle.ArchArgs...)
 	cmdArgs = append(cmdArgs, "-B"+binPath)
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, preNoLibcExtras, autoPeerCFlags)
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, autoPeerCFlags)
 	cmdArgs = append(cmdArgs, in.SFlags...)
 	cmdArgs = append(cmdArgs, "-c", "-o", outputPath, inputPath)
 	cmdArgs = append(cmdArgs, includes...)
@@ -89,11 +71,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 }
 
 // composeASIncludes derives the include-tail slice following the source path in cmd_args.
-func composeASIncludes(in ModuleCCInputs, noStdInc bool) []string {
-	if noStdInc {
-		return composeNoStdIncIncludes(in.AddIncl)
-	}
-
+func composeASIncludes(in ModuleCCInputs) []string {
 	out := make([]string, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(ccIncludesSuffix)+len(in.PeerAddInclGlobal))
 	out = append(out, ccIncludesPrefix...)
 	out = appendAddIncl(out, in.AddIncl)

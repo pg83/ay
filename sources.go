@@ -53,7 +53,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 			SourceRel:       srcRelOnDisk,
 			OwnAddIncl:      in.AddIncl,
 			PeerAddInclSet:  in.PeerAddInclGlobal,
-			BaseSearchPaths: includeScannerBasePaths(in.Flags.NoStdInc),
+			BaseSearchPaths: includeScannerBasePaths(),
 		}
 
 		sc := ctx.getScanCtx(scanner, cfg)
@@ -157,7 +157,7 @@ func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath V
 		SourceRel:       sourceRel,
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
-		BaseSearchPaths: includeScannerBasePaths(in.Flags.NoStdInc),
+		BaseSearchPaths: includeScannerBasePaths(),
 	}
 
 	sc := ctx.getScanCtx(scanner, cfg)
@@ -166,30 +166,16 @@ func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath V
 }
 
 // includeScannerBasePaths returns the scanner baseline NOT expected to
-// arrive via module/peer ADDINCL: bundled linux-headers (always), plus
-// a repo-root fallback (empty prefix, mirrors `-I$(S)`) for non-no-stdinc
-// consumers.
+// arrive via module/peer ADDINCL: a repo-root fallback (empty prefix,
+// mirrors `-I$(S)`) plus bundled linux-headers.
 //
 // Musl include roots are intentionally absent — upstream models them
 // through ordinary module/peer ADDINCL, so musl-self-only paths
 // (`src/include`, `src/internal`) never leak into arbitrary consumers.
-//
-// No-stdinc flavours MUST NOT get the empty prefix: under `-nostdinc`
-// the search path is fully explicit, and adding SOURCE_ROOT would falsely
-// resolve system-form includes against the repo root.
-func includeScannerBasePaths(noStdInc bool) []VFS {
-	base := []VFS{
+func includeScannerBasePaths() []VFS {
+	return []VFS{
+		Source(""),
 		Source("contrib/libs/linux-headers"),
 		Source("contrib/libs/linux-headers/_nf"),
 	}
-
-	if noStdInc {
-		return base
-	}
-
-	out := make([]VFS, 0, 1+len(base))
-	out = append(out, Source(""))
-	out = append(out, base...)
-
-	return out
 }

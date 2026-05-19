@@ -200,8 +200,6 @@ func collectModule(fs *FS, modulePath string, kind ModuleKind, stmts []Stmt, env
 	}
 	d.muslEnabled = env.Bool("MUSL")
 
-	deriveGenericCompileFlags(d)
-
 	applyPython3AddIncl(modulePath, d)
 	applyBuildInfoAddIncl(modulePath, d)
 
@@ -298,12 +296,6 @@ func shouldCheckSourceDir(path VFS) bool {
 	}
 
 	return true
-}
-
-func deriveGenericCompileFlags(d *moduleData) {
-	if flagsContain(d.cFlags, "-nostdinc") || flagsContain(d.cFlagsGlobal, "-nostdinc") {
-		d.flags.NoStdInc = true
-	}
 }
 
 func flagsContain(flags []string, want string) bool {
