@@ -2,10 +2,6 @@ package main
 
 // cc.go — emitter for CC compilation nodes.
 //
-// Composer dispatch is flag-driven (`in.Flags.NoStdInc`) — musl
-// is a no-stdinc libc flavour selected by a CLI -D flag, not a
-// special-cased module class.
-//
 // Output path convention:
 //   - Flat source: `$(B)/<path>/<srcRel><.o|.pic.o>`
 //   - Nested source (contains "/"): `$(B)/<path>/_/<srcRel><.o|.pic.o>`
@@ -22,7 +18,7 @@ import (
 // behaviour.
 type ModuleCCInputs struct {
 	// Flags is the module's parsed FlagSet (NoLibc / NoUtil / NoRuntime /
-	// NoPlatform / NoCompilerWarnings / NoStdInc / IsCpp / Extra). The
+	// NoPlatform / NoCompilerWarnings / IsCpp / Extra). The
 	// walker populates it from d.flags before invoking the emitter;
 	// emitters that need per-module shape choices (musl-self CC, no-stdinc
 	// scanner base paths, no-compiler-warnings dispatch) read through
@@ -184,11 +180,6 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	outputPath := outVFS.String()
 	inputPath := inVFS.String()
 
-	// No-stdinc modules own the full include set and libc CFLAGS via
-	// their ya.make; they take a dedicated composer path with
-	// composeNoStdIncIncludes instead of the ccIncludesPrefix/suffix
-	// pair, and dispatch through composeNoStdIncCC{,Host}.
-	noStdInc := in.Flags.NoStdInc
 	isCxx := in.ForceCxx || isCxxSource(srcRel)
 
 	// Filter own per-source extras by source language. CXXFLAGS apply
@@ -210,25 +201,13 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	// ADDINCL slot order: own ADDINCL BEFORE ccIncludesSuffix
 	// (linux-headers); peer-propagated GLOBAL ADDINCL AFTER it.
 
-	// One composer for every CC: host, target, no-stdinc all funnel
-	// through composeTargetCC with platform-specific differences
-	// expressed via Platform / ccComposeArgs fields.
-	var autoPeerCFlags, peerExtras, ownGlobalBucket, ownCFlags []string
-
-	if noStdInc {
-		// No-stdinc modules' own CFLAGS + GLOBAL CFLAGS (e.g.
-		// contrib/libs/musl/ya.make's 8 own flags + GLOBAL -D_musl_=1)
-		// occupy the same own-CFLAGS slot as a regular module's
-		// composeOwnAndPeerCFlagsAtOwnSlot output.
-		ownCFlags = make([]string, 0, len(in.CFlags)+len(in.OwnCFlagsGlobal))
-		ownCFlags = append(ownCFlags, in.CFlags...)
-		ownCFlags = append(ownCFlags, in.OwnCFlagsGlobal...)
-	} else {
-		autoPeerCFlags = in.AutoPeerCFlags
-		peerExtras = composePeerExtras(in, isCxx)
-		ownGlobalBucket = composeOwnAndPeerGlobalBucket(in, isCxx)
-		ownCFlags = composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
-	}
+	// One composer for every CC: host, target funnel through
+	// composeTargetCC with platform-specific differences expressed via
+	// Platform / ccComposeArgs fields.
+	autoPeerCFlags := in.AutoPeerCFlags
+	peerExtras := composePeerExtras(in, isCxx)
+	ownGlobalBucket := composeOwnAndPeerGlobalBucket(in, isCxx)
+	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
 
 	args := ccComposeArgs{
 		Platform:           instance.Platform,
@@ -765,17 +744,3 @@ func includeArg(path VFS) string {
 	return "-I" + path.String()
 }
 
-// composeNoStdIncIncludes builds the no-stdinc include tail:
-// `-I$(B) -I$(S)` + OWN ADDINCL + linux-headers.
-//
-// For musl-self this means the six paths declared directly in
-// contrib/libs/musl/ya.make arrive through `addIncl`, rather than via
-// a separate hardcoded list in the composer.
-func composeNoStdIncIncludes(addIncl []VFS) []string {
-	out := make([]string, 0, len(ccIncludesPrefix)+len(addIncl)+len(ccIncludesSuffix))
-	out = append(out, ccIncludesPrefix...)
-	out = appendAddIncl(out, addIncl)
-	out = append(out, ccIncludesSuffix...)
-
-	return out
-}

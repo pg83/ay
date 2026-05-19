@@ -1522,10 +1522,9 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			},
 			want: nil,
 		},
-		// PR-27 + PR-32 D03: `contrib/libs/musl` (NoStdInc=true) is
-		// a runtime ancestor AND musl-self — gets zero defaults
-		// (the auto-peer is suppressed for no-stdinc modules to avoid
-		// musl peering itself).
+		// `contrib/libs/musl` is a runtime ancestor with no NO_PLATFORM
+		// effective flags — only the implicit musl/include auto-peer
+		// fires.
 		{
 			name: "self_musl_runtime_ancestor",
 			mi: ModuleInstance{
@@ -1533,8 +1532,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
-			flags: FlagSet{NoStdInc: true},
-			want:  nil,
+			want: []string{"contrib/libs/musl/include"},
 		},
 		// `contrib/libs/musl/full` is not a literal runtime ancestor.
 		// When a test bypasses ya.make parsing, it must model the
@@ -1546,7 +1544,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
-			flags: FlagSet{NoStdInc: true, NoLibc: true, NoUtil: true, NoRuntime: true},
+			flags: FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true},
 			want:  nil,
 		},
 		{

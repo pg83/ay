@@ -337,7 +337,7 @@ func TestScanner_IncludeNextSuppressed(t *testing.T) {
 			"contrib/libs/cxxsupp/libcxx/include",
 		}),
 		PeerAddInclSet:  muslConsumerPeerAddIncl(ISA("aarch64")),
-		BaseSearchPaths: includeScannerBasePaths(false),
+		BaseSearchPaths: includeScannerBasePaths(),
 	}
 
 	closure := scanner.WalkClosure(libcxxCtx)
@@ -398,7 +398,7 @@ func TestScanner_RegularIncludeStillResolvesViaSysincl(t *testing.T) {
 			"contrib/libs/cxxsupp/libcxx/include",
 		}),
 		PeerAddInclSet:  muslConsumerPeerAddIncl(ISA("aarch64")),
-		BaseSearchPaths: includeScannerBasePaths(false),
+		BaseSearchPaths: includeScannerBasePaths(),
 	}
 
 	closure := scanner.WalkClosure(libcxxCtx)
@@ -454,7 +454,7 @@ func TestScanner_SubgraphCacheReuse(t *testing.T) {
 				"contrib/libs/cxxsupp/libcxx/include",
 			}),
 			PeerAddInclSet:  muslConsumerPeerAddIncl(ISA("aarch64")),
-			BaseSearchPaths: includeScannerBasePaths(false),
+			BaseSearchPaths: includeScannerBasePaths(),
 		}
 	}
 
@@ -1124,7 +1124,7 @@ func TestScanner_LibcxxrtUnwindQuoted_ProductionParity(t *testing.T) {
 			"contrib/libs/cxxsupp/libcxxrt",
 		}),
 		PeerAddInclSet:  muslConsumerPeerAddIncl(ISA("aarch64")),
-		BaseSearchPaths: includeScannerBasePaths(false),
+		BaseSearchPaths: includeScannerBasePaths(),
 	}
 
 	closure := scanner.WalkClosure(ctx)

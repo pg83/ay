@@ -282,14 +282,10 @@ func useArcadiaCompilerRuntime(ctx *genCtx, instance ModuleInstance) bool {
 // ModuleCCInputs.AutoPeerCFlags. Mirrors `_BASE_UNIT`'s
 // `when ($MUSL == "yes") { CFLAGS+=-D_musl_ }` (ymake.core.conf:781).
 // `-D_musl_` (no `=1`) is consumer-side; musl-self CC nodes get
-// `-D_musl_=1` separately, gated off this injection via NoStdInc +
-// effective-NO_PLATFORM checks.
+// `-D_musl_=1` separately, gated off this injection via the
+// effective-NO_PLATFORM check.
 func defaultPeerCFlags(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
 	if !d.muslEnabled {
-		return nil
-	}
-
-	if d.flags.NoStdInc {
 		return nil
 	}
 
@@ -362,15 +358,14 @@ func appendImplicitPeers(dst []string, rules []implicitPeerRule, rc implicitPeer
 
 // unitImplicitPeers mirrors `_BASE_UNIT`'s `when ($MUSL == "yes") {
 // PEERDIR += contrib/libs/musl/include }` at ymake.core.conf:781.
-// Fires both in the runtime-ancestor branch (provided !NoStdInc) and in
-// the general branch. Other unit-level peers (libcxx/libcxxrt/libunwind,
-// util, sanitizer/include) remain inline pending the broader rule lift.
+// Other unit-level peers (libcxx/libcxxrt/libunwind, util,
+// sanitizer/include) remain inline pending the broader rule lift.
 var unitImplicitPeers = []implicitPeerRule{
 	{
 		name: "musl/include",
 		peer: "contrib/libs/musl/include",
 		predicate: func(rc implicitPeerCtx) bool {
-			return rc.muslOn && !rc.noPlatform && (!rc.isRuntimeAncestor || !rc.flags.NoStdInc)
+			return rc.muslOn && !rc.noPlatform
 		},
 	},
 }
