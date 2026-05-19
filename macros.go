@@ -333,7 +333,7 @@ var DefaultIfEnv = Environment{
 		"PROVIDE_QUEUE":                     false,
 		"PROVIDE_GETSERVBYNAME":             false,
 		"PROVIDE_MEMFD_CREATE":              false,
-		// MUSL_LITE=false → defaultProgramPeerdirsFor picks contrib/libs/musl/full
+		// MUSL_LITE=false → defaultProgramPeerdirsForModule picks contrib/libs/musl/full
 		// when MUSL=yes && !MUSL_LITE.
 		"MUSL_LITE":                        false,
 		"OPENSOURCE_REPLACE_LINUX_HEADERS": false,

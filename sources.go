@@ -53,7 +53,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 			SourceRel:       srcRelOnDisk,
 			OwnAddIncl:      in.AddIncl,
 			PeerAddInclSet:  in.PeerAddInclGlobal,
-			BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.NoStdInc),
+			BaseSearchPaths: includeScannerBasePaths(in.Flags.NoStdInc),
 		}
 
 		sc := ctx.getScanCtx(scanner, cfg)
@@ -157,7 +157,7 @@ func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath V
 		SourceRel:       sourceRel,
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
-		BaseSearchPaths: includeScannerBasePaths(srcInstance.Flags.NoStdInc),
+		BaseSearchPaths: includeScannerBasePaths(in.Flags.NoStdInc),
 	}
 
 	sc := ctx.getScanCtx(scanner, cfg)

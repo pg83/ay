@@ -697,16 +697,6 @@ func GenWithModeWithResources(sourceRoot string, targetDir string, hostP, target
 // extension; LIBRARY ends with EmitAR over own CCs, PROGRAM with EmitLD
 // over own CCs and peer archives.
 func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
-	// Capture the seed key BEFORE the `instance.Flags = d.flags` overlay
-	// below rebinds Flags to the macro-derived FlagSet. Callers pass an
-	// empty FlagSet (only Platform.PIC is preset); the post-parse
-	// NO_PLATFORM / NO_COMPILER_WARNINGS / NO_UTIL / NO_RUNTIME / NO_LIBC
-	// bits are applied by `collectModule`. Memo writes run AFTER the
-	// overlay; without an alias under the seed key the top-of-function
-	// lookup misses every consumer call and the body re-executes 7-138
-	// times per module. Memo writes below store under both keys.
-	originalInstance := instance
-
 	if existing, ok := ctx.memo[instance]; ok {
 		return existing
 	}
@@ -756,7 +746,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	mf := Throw2(ParseFile(ctx.fs, yamakePath))
 
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.fs, instance.Path, instance.Kind, mf.Stmts, env, instance.Flags)
+	d := collectModule(ctx.fs, instance.Path, instance.Kind, mf.Stmts, env)
 	for _, stmt := range d.allPySrcs {
 		applyAllPySrcs(ctx.fs, instance.Path, stmt, d)
 	}
@@ -794,16 +784,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ThrowFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path, d.moduleStmt.Name)
 	}
 
-	// Update the instance's flags from macro overlay so downstream
-	// emitters see the post-macro view. The instance is value-typed
-	// so this rebinds locally without affecting the caller.
-	instance.Flags = d.flags
-
 	// Upstream ymake.core.conf has `when ($MUSL_LITE == "yes") { NO_UTIL() }`.
 	// Apply the implication: MUSL_LITE=yes → NoUtil=true. Prevents yasm
 	// (ENABLE(MUSL_LITE)) from receiving util as a default peer.
 	if d.muslLite {
-		instance.Flags.NoUtil = true
+		d.flags.NoUtil = true
 	}
 
 	// _BASE_PY3_PROGRAM (build/conf/python.conf:877-883) applies an
@@ -878,7 +863,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if isMultimoduleLibraryType(d.moduleStmt.Name) {
 		if d.moduleStmt.Name == "DYNAMIC_LIBRARY" {
 			result := emitDynamicLibrary(ctx, instance, d)
-			ctx.memo[originalInstance] = result
 			ctx.memo[instance] = result
 
 			return result
@@ -910,6 +894,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// Any downstream CCs returned here are intentionally ignored:
 		// this branch models modules with no compilable own sources.
 		headerOnlyInputs := ModuleCCInputs{
+			Flags:             d.flags,
 			AddIncl:           mergeDedupVFS(d.addIncl, nil),
 			PeerAddInclGlobal: peerContribs.addIncl,
 			SrcDir:            d.srcDir,
@@ -1053,7 +1038,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			Peerdirs:                        append([]string(nil), d.peerdirs...),
 			ModuleStmtName:                  d.moduleStmt.Name,
 		}
-		ctx.memo[originalInstance] = result
 		ctx.memo[instance] = result
 
 		return result
@@ -1647,7 +1631,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// flags on unrelated CC nodes (zlib, mimalloc, libcxxabi-parts).
 	// Mutating `peerAddInclGlobal`/`peerCXXFlagsGlobal` AFTER the snapshot
 	// keeps the propagated view clean.
-	if !effectiveNoPlatform(instance.Flags) && runtimeAncestorCxxConsumers[instance.Path] {
+	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path] {
 		// libcxx's CLANG-branch GLOBAL CXXFLAG (`-nostdinc++`) — see
 		// `contrib/libs/cxxsupp/libcxx/ya.make:67-69`.
 		const nostdincPP = "-nostdinc++"
@@ -1748,7 +1732,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
 
-	if instance.Flags.NoStdInc {
+	if d.flags.NoStdInc {
 		ownCXXFlagsGlobalSelf = nil
 		ownCOnlyFlagsGlobalSelf = nil
 	}
@@ -1820,6 +1804,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path, peerAddInclGlobal, dedupedAddIncl)
 
 	moduleInputs := ModuleCCInputs{
+		Flags:                d.flags,
 		AddIncl:              dedupedAddIncl,
 		PeerAddInclGlobal:    selfPeerAddInclGlobal,
 		CFlags:               ownCFlags,
@@ -2404,6 +2389,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			autoPeerCFlags,
 			peerLDFlagsGlobal,
 			peerObjAddLibsGlobal,
+			d.flags.NoCompilerWarnings,
 			wantsStrip,
 			d.splitDwarf,
 			ctx.host,
@@ -2440,7 +2426,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			Peerdirs:                        append([]string(nil), d.peerdirs...),
 			ModuleStmtName:                  d.moduleStmt.Name,
 		}
-		ctx.memo[originalInstance] = result
 		ctx.memo[instance] = result
 
 		return result
@@ -2677,7 +2662,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		result.GlobalPath = vfsPtr(Build(instance.Path + "/" + globalBaseName))
 	}
 
-	ctx.memo[originalInstance] = result
 	ctx.memo[instance] = result
 
 	return result

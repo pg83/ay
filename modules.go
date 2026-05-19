@@ -180,11 +180,10 @@ type antlr4GrammarInfo struct {
 // recursively inlined; nested statements inside taken branches are
 // treated as top-level. INCLUDE was already inlined by the parser.
 //
-// `pathFlags` seeds the path-based heuristic; macro overlays mutate it
-// in place on the returned moduleData.
-func collectModule(fs *FS, modulePath string, kind ModuleKind, stmts []Stmt, env Environment, pathFlags FlagSet) *moduleData {
+// The returned moduleData's `flags` accumulates from the parsed NO_*
+// macros — starting from a zero FlagSet.
+func collectModule(fs *FS, modulePath string, kind ModuleKind, stmts []Stmt, env Environment) *moduleData {
 	d := &moduleData{
-		flags:                pathFlags,
 		pythonSQLite3:        true,
 		bisonGenExt:          ".cpp",
 		firstResourceEvent:   -1,
@@ -1534,7 +1533,6 @@ type moduleTypeCacheKey struct {
 	Path     string
 	Kind     ModuleKind
 	Platform *Platform
-	Flags    FlagSet
 }
 
 type moduleTypeInfo struct {
@@ -1551,7 +1549,6 @@ func moduleInfoForInstance(ctx *genCtx, instance ModuleInstance) moduleTypeInfo 
 		Path:     instance.Path,
 		Kind:     instance.Kind,
 		Platform: instance.Platform,
-		Flags:    instance.Flags,
 	}
 	if info, ok := ctx.moduleTypeCache[key]; ok {
 		return info
@@ -1561,7 +1558,7 @@ func moduleInfoForInstance(ctx *genCtx, instance ModuleInstance) moduleTypeInfo 
 	mf := Throw2(ParseFile(ctx.fs, yamakePath))
 
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.fs, instance.Path, instance.Kind, mf.Stmts, env, instance.Flags)
+	d := collectModule(ctx.fs, instance.Path, instance.Kind, mf.Stmts, env)
 	if d.conflictMod != nil {
 		ThrowFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path, d.moduleStmt.Name, d.conflictMod.Name)
 	}

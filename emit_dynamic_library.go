@@ -28,7 +28,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	}
 
 	peerPaths := make([]string, 0, 1+len(d.dynamicLibraryFrom))
-	if !effectiveNoPlatform(instance.Flags) {
+	if !effectiveNoPlatform(d.flags) {
 		peerPaths = append(peerPaths, "build/cow/on")
 	}
 	peerPaths = append(peerPaths, d.dynamicLibraryFrom...)
