@@ -25,7 +25,7 @@ func TestNewPlatform_ParsesCompilerFlags(t *testing.T) {
 		"PIC": "no",
 	}
 
-	p := NewPlatform(OSLinux, ISAAArch64, flags, nil, false, `-O2 -DNAME="hello world"`, `-stdlib=libc++ -DCPP=1`)
+	p := NewPlatform(OSLinux, ISAAArch64, flags, nil, `-O2 -DNAME="hello world"`, `-stdlib=libc++ -DCPP=1`)
 
 	if !reflect.DeepEqual(p.CFlags, []string{"-O2", "-DNAME=hello world"}) {
 		t.Fatalf("CFlags = %#v", p.CFlags)

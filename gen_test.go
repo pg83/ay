@@ -563,7 +563,7 @@ func TestCollectModule_SetMuslNoSuppressesConsumerDefaults(t *testing.T) {
 	targetFlags["PIC"] = "no"
 	targetFlags["MUSL"] = "yes"
 
-	target := NewPlatform(OSLinux, ISAX8664, targetFlags, nil, false, "", "")
+	target := NewPlatform(OSLinux, ISAX8664, targetFlags, nil, "", "")
 	instance := ModuleInstance{
 		Path:     "bridge",
 		Kind:     KindLib,
@@ -3510,13 +3510,13 @@ func TestD41_PICCoincidesWithHostTarget(t *testing.T) {
 // entry that hardcodes defaults would just be misleading.
 
 func testGen(sourceRoot, targetDir string) *Graph {
-	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)
+	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
 	targetFlags := make(map[string]string, len(testToolchainFlags)+2)
 	for k, v := range testToolchainFlags {
 		targetFlags[k] = v
 	}
 	targetFlags["PIC"] = "no"
 	targetFlags["MUSL"] = "yes"
-	target := NewPlatform(OSLinux, ISAAArch64, targetFlags, nil, false, "", "")
+	target := NewPlatform(OSLinux, ISAAArch64, targetFlags, nil, "", "")
 	return GenWithMode(sourceRoot, targetDir, host, target, defaultScanCtxMode, func(Warn) {})
 }

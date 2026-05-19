@@ -88,7 +88,7 @@ func cmdMake(args []string) int {
 	if _, ok := hostFlags["GG_BUILD_TYPE"]; !ok {
 		hostFlags["GG_BUILD_TYPE"] = "release"
 	}
-	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, true, "", "")
+	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, "", "")
 	resourceFetches := newResourceFetchPlan(mf.srcRoot, conf, hostP)
 
 	// Target platform: `--target-platform` selects axes (defaults to
@@ -117,7 +117,7 @@ func cmdMake(args []string) int {
 		targetFlags["GG_BUILD_TYPE"] = mf.buildType
 	}
 	targetFlags["PIC"] = "no"
-	targetP := NewPlatform(tOS, tISA, targetFlags, nil, false, os.Getenv("CFLAGS"), os.Getenv("CXXFLAGS"))
+	targetP := NewPlatform(tOS, tISA, targetFlags, nil, os.Getenv("CFLAGS"), os.Getenv("CXXFLAGS"))
 
 	// `-j 0` is no-exec mode (Gen runs, no subprocesses):
 	//   - with `-G`: dump the graph as stable JSON for ./dev/normalize.py.

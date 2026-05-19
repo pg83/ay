@@ -24,17 +24,17 @@ var testToolchainFlags = map[string]string{
 }
 
 var (
-	testHostP   = newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)
-	testTargetP = newTestPlatform(OSLinux, ISAAArch64, "no", nil, false)
+	testHostP   = newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
+	testTargetP = newTestPlatform(OSLinux, ISAAArch64, "no", nil)
 )
 
-func newTestPlatform(os OS, isa ISA, pic string, tags []string, isHost bool) *Platform {
+func newTestPlatform(os OS, isa ISA, pic string, tags []string) *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+1)
 	for k, v := range testToolchainFlags {
 		flags[k] = v
 	}
 	flags["PIC"] = pic
-	return NewPlatform(os, isa, flags, tags, isHost, "", "")
+	return NewPlatform(os, isa, flags, tags, "", "")
 }
 
 func targetInstance(path string) ModuleInstance {
