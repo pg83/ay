@@ -3203,40 +3203,6 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	return out
 }
 
-// hasCompilableSource reports whether the module has at least one
-// source the rule emitter would compile (excluding pure headers in
-// SRCS, which upstream uses as IDE/dependency-tracking metadata, and
-// known-deferred sources handled by dedicated emitters — e.g.
-// .proto/.ev via emitProtoSrcs). Modules with only JOIN_SRCS / globals
-// also count.
-func hasCompilableSource(d *moduleData) bool {
-	for _, s := range d.srcs {
-		if !isHeaderSource(s) && !isSkippedSource(s) {
-			return true
-		}
-	}
-
-	if len(d.joinSrcs) > 0 {
-		return true
-	}
-
-	if len(d.cythonCpp) > 0 {
-		return true
-	}
-
-	if len(d.swigC) > 0 {
-		return true
-	}
-
-	for _, s := range d.globalSrcs {
-		if !isHeaderSource(s) && !isSkippedSource(s) {
-			return true
-		}
-	}
-
-	return false
-}
-
 // isHeaderSource reports whether `srcRel` is a header file the
 // emitter should skip.
 func isHeaderSource(srcRel string) bool {

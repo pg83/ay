@@ -1308,11 +1308,9 @@ func isProgramModuleType(name string) bool {
 }
 
 // isPyLibraryType returns true for Python library/program module names
-// that behave as LIBRARY-shaped modules (emit AR/CC for their C++ SRCS,
-// header-only when they have none). Unlike isSpecializedLibraryType
-// these are NOT unconditionally header-only — hasCompilableSource gates
-// the path. Separated so the gate check at the top of genModule admits
-// them without routing every one to the header-only path.
+// that behave as LIBRARY-shaped modules: they take the regular genModule
+// pipeline (peer walk → emit codegen → emit own CC if any → emit AR if
+// any CC outputs), distinct from the specialized-types branch.
 func isPyLibraryType(name string) bool {
 	switch name {
 	case "PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",
