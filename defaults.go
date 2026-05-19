@@ -179,15 +179,15 @@ func hoistRuntimeStackAddIncl(paths []VFS) []VFS {
 // Cycle prevention: path-equality + prefix matches for musl/libcxx/util
 // subtrees. The walker's `walking` stack catches deeper cycles.
 // Returns empty for non-CPP languages.
-func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance) []string {
-	return defaultPeerdirsForWithState(ctx, instance, effectiveMuslOn(ctx, nil))
+func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance, flags FlagSet) []string {
+	return defaultPeerdirsForWithState(ctx, instance, flags, effectiveMuslOn(ctx, nil))
 }
 
 func defaultPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
-	return defaultPeerdirsForWithState(ctx, instance, effectiveMuslOn(ctx, d))
+	return defaultPeerdirsForWithState(ctx, instance, d.flags, effectiveMuslOn(ctx, d))
 }
 
-func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, muslOn bool) []string {
+func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, flags FlagSet, muslOn bool) []string {
 	if instance.Language != LangCPP {
 		return nil
 	}
@@ -198,10 +198,10 @@ func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, muslOn bo
 	// no-stdinc itself). Two-phase peer-aggregation ensures musl-arch
 	// paths propagate AFTER libcxx/libcxxrt include paths, matching
 	// the reference cmd_args ordering.
-	noPlatform := effectiveNoPlatform(instance.Flags)
+	noPlatform := effectiveNoPlatform(flags)
 
 	rc := implicitPeerCtx{
-		flags:             instance.Flags,
+		flags:             flags,
 		noPlatform:        noPlatform,
 		isRuntimeAncestor: isRuntimeAncestor(instance.Path),
 		muslOn:            muslOn,
@@ -227,7 +227,7 @@ func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, muslOn bo
 
 	// libcxx / libcxxrt / libunwind: gated by NO_RUNTIME; util gated
 	// by NO_UTIL. Each suppressed for its own subtree (self-cycle).
-	if !instance.Flags.NoRuntime && !noPlatform {
+	if !flags.NoRuntime && !noPlatform {
 		if instance.Path != "contrib/libs/cxxsupp/libcxx" && !strings.HasPrefix(instance.Path, "contrib/libs/cxxsupp/libcxx/") {
 			peers = append(peers, "contrib/libs/cxxsupp/libcxx")
 		}
@@ -245,7 +245,7 @@ func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, muslOn bo
 	// unless suppressed by NO_UTIL / effective NO_PLATFORM. The
 	// reference includes util on default-linux-x86_64 for host PROGRAM
 	// modules (tools/archiver, tools/rescompiler, etc.).
-	if !instance.Flags.NoUtil && !noPlatform {
+	if !flags.NoUtil && !noPlatform {
 		if instance.Path != "util" && !strings.HasPrefix(instance.Path, "util/") {
 			peers = append(peers, "util")
 		}
@@ -253,7 +253,7 @@ func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, muslOn bo
 
 	peers = appendImplicitPeers(peers, unitImplicitPeers, rc)
 
-	if !instance.Flags.NoRuntime && !noPlatform && useArcadiaCompilerRuntime(ctx, instance) && instance.Path != "library/cpp/sanitizer/include" {
+	if !flags.NoRuntime && !noPlatform && useArcadiaCompilerRuntime(ctx, instance) && instance.Path != "library/cpp/sanitizer/include" {
 		peers = append(peers, "library/cpp/sanitizer/include")
 	}
 
@@ -309,7 +309,7 @@ func defaultPeerCFlags(ctx *genCtx, instance ModuleInstance, d *moduleData) []st
 		return nil
 	}
 
-	if instance.Flags.NoStdInc {
+	if d.flags.NoStdInc {
 		return nil
 	}
 
@@ -480,15 +480,11 @@ var programAllocatorDefaults = []implicitPeerRule{
 // twice to interleave allocator explicit peers and d.peerdirs between
 // halves so explicit ALLOCATOR peers land before musl/full in the
 // archive walk.
-func defaultProgramPeerdirsFor(ctx *genCtx, instance ModuleInstance, hadAllocator bool, allocatorName string, muslLiteOverride bool, includeMusl bool) []string {
-	return defaultProgramPeerdirsForWithState(ctx, instance, hadAllocator, allocatorName, muslLiteOverride, includeMusl, effectiveMuslOn(ctx, nil))
-}
-
 func defaultProgramPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData, includeMusl bool) []string {
-	return defaultProgramPeerdirsForWithState(ctx, instance, d.hadAllocator, d.allocatorName, d.muslLite, includeMusl, effectiveMuslOn(ctx, d))
+	return defaultProgramPeerdirsForWithState(ctx, instance, d.flags, d.hadAllocator, d.allocatorName, d.muslLite, includeMusl, effectiveMuslOn(ctx, d))
 }
 
-func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, hadAllocator bool, allocatorName string, muslLiteOverride bool, includeMusl bool, muslOn bool) []string {
+func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, flags FlagSet, hadAllocator bool, allocatorName string, muslLiteOverride bool, includeMusl bool, muslOn bool) []string {
 	if instance.Language != LangCPP {
 		return nil
 	}
@@ -497,7 +493,7 @@ func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, ha
 	muslLite := env.Bool("MUSL_LITE") || muslLiteOverride
 
 	rc := implicitPeerCtx{
-		flags:         instance.Flags,
+		flags:         flags,
 		muslOn:        muslOn,
 		muslLite:      muslLite,
 		osLinux:       env.Bool("OS_LINUX"),
@@ -535,7 +531,7 @@ func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, ha
 		// (conf:3057-3132); the predicate collapses to
 		// (ARCH_X86_64 && !NoUtil && ALLOCATOR != "FAKE") in our env.
 		// Declared after musl/full to mirror conf order.
-		if env.Bool("ARCH_X86_64") && !instance.Flags.NoUtil && allocatorName != "FAKE" {
+		if env.Bool("ARCH_X86_64") && !flags.NoUtil && allocatorName != "FAKE" {
 			peers = append(peers, "library/cpp/cpuid_check")
 		}
 	}

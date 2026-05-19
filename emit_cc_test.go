@@ -257,8 +257,7 @@ func TestEmitCC_CSource_UsesClang(t *testing.T) {
 func TestEmitCC_NoCompilerWarnings_SelectsMuslWarningFlags(t *testing.T) {
 	emit := NewBufferedEmitter()
 	inst := targetInstance("contrib/libs/cxxsupp/libcxxrt")
-	inst.Flags.NoCompilerWarnings = true
-	EmitCC(inst, "exception.cc", ModuleCCInputs{}, testHostP, emit)
+	EmitCC(inst, "exception.cc", ModuleCCInputs{Flags: FlagSet{NoCompilerWarnings: true}}, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -289,10 +288,10 @@ func TestEmitCC_NoCompilerWarnings_SelectsMuslWarningFlags(t *testing.T) {
 func TestEmitCC_OwnCXXFlags_SlotsAfterSuppressionBlock(t *testing.T) {
 	emit := NewBufferedEmitter()
 	in := ModuleCCInputs{
+		Flags:    FlagSet{NoCompilerWarnings: true},
 		CXXFlags: []string{"-D_LIBCPP_BUILDING_LIBRARY"},
 	}
 	inst := targetInstance("contrib/libs/cxxsupp/libcxx")
-	inst.Flags.NoCompilerWarnings = true
 	EmitCC(inst, "src/algorithm.cpp", in, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
@@ -368,11 +367,10 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: target,
-		Flags:    FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true},
 	}
 
 	e := NewBufferedEmitter()
-	EmitCC(instance, "lib.c", ModuleCCInputs{}, testHostP, e)
+	EmitCC(instance, "lib.c", ModuleCCInputs{Flags: FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true}}, testHostP, e)
 	cArgs := e.nodes[0].Cmds[0].CmdArgs
 
 	if !contains(cArgs, "-DENV_C=1") {

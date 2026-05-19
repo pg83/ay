@@ -41,7 +41,7 @@ func composeASPaths(instance ModuleInstance, srcRel string, in ModuleCCInputs) (
 
 // composeASCmdArgs builds the cmd_args bundle.
 func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in ModuleCCInputs) []string {
-	noStdInc := instance.Flags.NoStdInc
+	noStdInc := in.Flags.NoStdInc
 
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 3 + len(bundle.ArchArgs)
@@ -55,7 +55,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 		noStdIncCFlags = append(noStdIncCFlags, in.OwnCFlagsGlobal...)
 	}
 
-	warnBundle := pickWarningFlags(instance.Flags.NoCompilerWarnings)
+	warnBundle := pickWarningFlags(in.Flags.NoCompilerWarnings)
 
 	var ownCFlags, autoPeerCFlags []string
 	if !noStdInc {

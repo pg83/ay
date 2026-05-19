@@ -2,7 +2,7 @@ package main
 
 // cc.go — emitter for CC compilation nodes.
 //
-// Composer dispatch is flag-driven (`instance.Flags.NoStdInc`) — musl
+// Composer dispatch is flag-driven (`in.Flags.NoStdInc`) — musl
 // is a no-stdinc libc flavour selected by a CLI -D flag, not a
 // special-cased module class.
 //
@@ -21,6 +21,13 @@ import (
 // EmitCC by the walker. The zero value is the "no per-module flags"
 // behaviour.
 type ModuleCCInputs struct {
+	// Flags is the module's parsed FlagSet (NoLibc / NoUtil / NoRuntime /
+	// NoPlatform / NoCompilerWarnings / NoStdInc / IsCpp / Extra). The
+	// walker populates it from d.flags before invoking the emitter;
+	// emitters that need per-module shape choices (musl-self CC, no-stdinc
+	// scanner base paths, no-compiler-warnings dispatch) read through
+	// this field rather than via ModuleInstance.
+	Flags FlagSet
 	AddIncl []VFS
 	// PeerAddInclGlobal is the union of every PEERDIR's transitive
 	// ADDINCL(GLOBAL ...) contributions in declaration order. Slotted
@@ -181,7 +188,7 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 	// their ya.make; they take a dedicated composer path with
 	// composeNoStdIncIncludes instead of the ccIncludesPrefix/suffix
 	// pair, and dispatch through composeNoStdIncCC{,Host}.
-	noStdInc := instance.Flags.NoStdInc
+	noStdInc := in.Flags.NoStdInc
 	isCxx := in.ForceCxx || isCxxSource(srcRel)
 
 	// Filter own per-source extras by source language. CXXFLAGS apply
@@ -236,7 +243,7 @@ func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Pl
 		OwnGlobalBucket:    ownGlobalBucket,
 		PerSrcCFlags:       in.PerSourceCFlags,
 		IsCxx:              isCxx,
-		NoCompilerWarnings: instance.Flags.NoCompilerWarnings,
+		NoCompilerWarnings: in.Flags.NoCompilerWarnings,
 	}
 	cmdArgs = composeTargetCC(args)
 

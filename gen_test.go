@@ -510,10 +510,7 @@ END()
 }
 
 // TestGen_MacroEvaluation_NoLibcFlag verifies that NO_LIBC() in a
-// module's ya.make sets `instance.Flags.NoLibc=true` for the
-// resulting CC node. We use a probe ya.make whose path does NOT match
-// the path-based seed, so the only way Flags.NoLibc becomes true is
-// via the macro overlay.
+// module's ya.make sets `d.flags.NoLibc=true` after collectModule.
 func TestGen_MacroEvaluation_NoLibcFlag(t *testing.T) {
 	root := t.TempDir()
 	modDir := filepath.Join(root, "nolibcmod")
@@ -533,7 +530,7 @@ END()
 	// we want to see the flags that flow into EmitCC for "nolibcmod".)
 	mf := Throw2(ParseFile(NewFS(root), filepath.Join(modDir, "ya.make")))
 
-	d := collectModule(NewFS(root), "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}), FlagSet{})
+	d := collectModule(NewFS(root), "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}))
 
 	if !d.flags.NoLibc {
 		t.Errorf("flags.NoLibc = false, want true (macro overlay should have flipped it)")
@@ -584,7 +581,7 @@ SRCS(x.cpp)
 END()
 `)))
 
-	d := collectModule(tmpFS, "bridge", instance.Kind, mf.Stmts, buildIfEnv(instance), instance.Flags)
+	d := collectModule(tmpFS, "bridge", instance.Kind, mf.Stmts, buildIfEnv(instance))
 
 	if d.muslEnabled {
 		t.Fatalf("muslEnabled = true, want false after SET(MUSL no)")
@@ -1337,10 +1334,9 @@ func TestGen_DefaultPeerdirs_BuildCowOnUnaffected(t *testing.T) {
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
-		Flags:    FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true},
 	}
 
-	got := defaultPeerdirsFor(nil, bcOn)
+	got := defaultPeerdirsFor(nil, bcOn, FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true})
 
 	if len(got) != 0 {
 		t.Errorf("defaultPeerdirsFor(build/cow/on) = %v, want []", got)
@@ -1384,7 +1380,6 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
-		Flags:    FlagSet{},
 	}
 
 	// PR-42: contrib/libs/musl, contrib/libs/cxxsupp/builtins, and
@@ -1399,7 +1394,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"contrib/libs/musl/include",
 	}
 
-	gotDefaults := defaultPeerdirsFor(nil, plain)
+	gotDefaults := defaultPeerdirsFor(nil, plain, FlagSet{})
 
 	if !stringSlicesEqual(gotDefaults, wantDefaults) {
 		t.Errorf("defaultPeerdirsFor(plain CPP) = %v, want %v", gotDefaults, wantDefaults)
@@ -1467,9 +1462,10 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 	}
 
 	cases := []struct {
-		name string
-		mi   ModuleInstance
-		want []string
+		name  string
+		mi    ModuleInstance
+		flags FlagSet
+		want  []string
 	}{
 		{
 			name: "effective_no_platform",
@@ -1477,9 +1473,9 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Path:     "x",
 				Kind:     KindLib,
 				Language: LangCPP,
-				Flags:    FlagSet{NoLibc: true, NoRuntime: true, NoUtil: true},
 			},
-			want: nil,
+			flags: FlagSet{NoLibc: true, NoRuntime: true, NoUtil: true},
+			want:  nil,
 		},
 		{
 			name: "explicit_no_platform",
@@ -1487,9 +1483,9 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Path:     "x",
 				Kind:     KindLib,
 				Language: LangCPP,
-				Flags:    FlagSet{NoPlatform: true},
 			},
-			want: nil,
+			flags: FlagSet{NoPlatform: true},
+			want:  nil,
 		},
 		{
 			name: "no_libc_only",
@@ -1498,8 +1494,8 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Kind:     KindLib,
 				Language: LangCPP,
 				Platform: testTargetP,
-				Flags:    FlagSet{NoLibc: true},
 			},
+			flags: FlagSet{NoLibc: true},
 			// PR-42: musl was already removed from direct peers; NO_LIBC no
 			// longer changes the set. PR-32 D03: musl/include still fires.
 			want: fullSet,
@@ -1511,8 +1507,8 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Kind:     KindLib,
 				Language: LangCPP,
 				Platform: testTargetP,
-				Flags:    FlagSet{NoRuntime: true},
 			},
+			flags: FlagSet{NoRuntime: true},
 			// PR-42: musl and malloc/api removed from direct peers. NO_RUNTIME drops
 			// libcxx/libcxxrt/libunwind. PR-32 D03: musl/include still fires.
 			want: []string{"util", "contrib/libs/musl/include"},
@@ -1523,7 +1519,6 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Path:     "x",
 				Kind:     KindLib,
 				Language: LangProto,
-				Flags:    FlagSet{},
 			},
 			want: nil,
 		},
@@ -1537,9 +1532,9 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Path:     "contrib/libs/musl",
 				Kind:     KindLib,
 				Language: LangCPP,
-				Flags:    FlagSet{NoStdInc: true},
 			},
-			want: nil,
+			flags: FlagSet{NoStdInc: true},
+			want:  nil,
 		},
 		// `contrib/libs/musl/full` is not a literal runtime ancestor.
 		// When a test bypasses ya.make parsing, it must model the
@@ -1550,13 +1545,14 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Path:     "contrib/libs/musl/full",
 				Kind:     KindLib,
 				Language: LangCPP,
-				Flags:    FlagSet{NoStdInc: true, NoLibc: true, NoUtil: true, NoRuntime: true},
 			},
-			want: nil,
+			flags: FlagSet{NoStdInc: true, NoLibc: true, NoUtil: true, NoRuntime: true},
+			want:  nil,
 		},
 		{
-			name: "no_util_only",
-			mi:   ModuleInstance{Path: "x", Kind: KindLib, Language: LangCPP, Flags: FlagSet{NoUtil: true}},
+			name:  "no_util_only",
+			mi:    ModuleInstance{Path: "x", Kind: KindLib, Language: LangCPP},
+			flags: FlagSet{NoUtil: true},
 			// PR-42: musl, builtins, malloc/api removed from direct peers.
 			// NO_UTIL drops util. PR-32 D03: musl/include still fires.
 			want: []string{
@@ -1571,7 +1567,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		// runtime root); it gets the full default set.
 		{
 			name: "musl_extra_not_runtime_ancestor",
-			mi:   ModuleInstance{Path: "contrib/libs/musl_extra", Kind: KindLib, Language: LangCPP, Platform: testTargetP, Flags: FlagSet{}},
+			mi:   ModuleInstance{Path: "contrib/libs/musl_extra", Kind: KindLib, Language: LangCPP, Platform: testTargetP},
 			want: fullSet,
 		},
 		// PR-32 D03: non-NoStdInc runtime ancestors (builtins,
@@ -1586,7 +1582,6 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Path:     "contrib/libs/cxxsupp/builtins",
 				Kind:     KindLib,
 				Language: LangCPP,
-				Flags:    FlagSet{},
 			},
 			want: []string{"contrib/libs/musl/include"},
 		},
@@ -1596,7 +1591,6 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Path:     "library/cpp/malloc/api",
 				Kind:     KindLib,
 				Language: LangCPP,
-				Flags:    FlagSet{},
 			},
 			want: []string{"contrib/libs/musl/include"},
 		},
@@ -1606,7 +1600,6 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Path:     "contrib/libs/cxxsupp/libcxx",
 				Kind:     KindLib,
 				Language: LangCPP,
-				Flags:    FlagSet{},
 			},
 			want: []string{"contrib/libs/musl/include"},
 		},
@@ -1616,7 +1609,6 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Path:     "util",
 				Kind:     KindLib,
 				Language: LangCPP,
-				Flags:    FlagSet{},
 			},
 			want: []string{"contrib/libs/musl/include"},
 		},
@@ -1624,10 +1616,10 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := defaultPeerdirsFor(nil, c.mi)
+			got := defaultPeerdirsFor(nil, c.mi, c.flags)
 
 			if !stringSlicesEqual(got, c.want) {
-				t.Errorf("defaultPeerdirsFor(%+v) = %v, want %v", c.mi, got, c.want)
+				t.Errorf("defaultPeerdirsFor(%+v, %+v) = %v, want %v", c.mi, c.flags, got, c.want)
 			}
 		})
 	}

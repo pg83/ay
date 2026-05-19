@@ -76,10 +76,6 @@ func TestNewToolInstance(t *testing.T) {
 	if !tool.Platform.PIC {
 		t.Errorf("Platform.PIC = false, want true (host axis)")
 	}
-
-	if (tool.Flags != FlagSet{}) {
-		t.Errorf("tool Flags should be empty until parser overlays: %+v", tool.Flags)
-	}
 }
 
 // TestModuleInstance_String_Diagnostic verifies that String()

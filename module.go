@@ -129,7 +129,6 @@ type ModuleInstance struct {
 	Kind     ModuleKind
 	Language Language
 	Platform *Platform
-	Flags    FlagSet
 }
 
 // NewToolInstance builds a ModuleInstance for a host-platform tool at
