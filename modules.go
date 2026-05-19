@@ -1343,8 +1343,21 @@ func isPythonModuleType(name string) bool {
 func isSpecializedLibraryType(name string) bool {
 	switch name {
 	case "PROTO_LIBRARY",
-		"DLL", "SO_PROGRAM", "DYNAMIC_LIBRARY",
-		"PACKAGE", "UNION", "RESOURCES_LIBRARY":
+		"DLL", "SO_PROGRAM", "DYNAMIC_LIBRARY":
+		return true
+	}
+
+	return false
+}
+
+// isResourceContainerType returns true for module types that carry only
+// RESOURCE/RESOURCE_FILES/PY_SRCS and no compilable C++ SRCS of their
+// own. They take the regular genModule path; len(ccRefs)==0 naturally
+// suppresses the AR emission, and the `.global.a` from objcopy outputs
+// is emitted via the regular path's globalRefs.
+func isResourceContainerType(name string) bool {
+	switch name {
+	case "PACKAGE", "UNION", "RESOURCES_LIBRARY":
 		return true
 	}
 
