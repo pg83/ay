@@ -201,9 +201,6 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		pyRef, ok := ctx.pyRegisterOutputs[regCppVFS]
 		if !ok {
 			pyInstance := instance
-			if pyInstance.Platform.IsHost {
-				pyInstance.Platform = ctx.target
-			}
 
 			pyNode := &Node{
 				Cmds: []Cmd{

@@ -289,7 +289,7 @@ func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
 // names without the host `.pic` suffix.
 func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 	e := NewBufferedEmitter()
-	targetX86 := newTestPlatform(OSLinux, ISAX8664, "no", nil, false)
+	targetX86 := newTestPlatform(OSLinux, ISAX8664, "no", nil)
 	instance := ModuleInstance{
 		Path:     "contrib/libs/asmlib",
 		Kind:     KindLib,

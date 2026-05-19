@@ -12,8 +12,7 @@ type Platform struct {
 	ISA    ISA               // ISA axis (x86_64 / aarch64 / arm64)
 	Target PlatformID        // = MakePlatformID(OS, ISA); surfaces as `node.platform`
 	Flags  map[string]string // canonical per-platform toggles ("PIC"="yes", …)
-	Tags   []string          // baseline tags every node on this platform carries (e.g. `["tool"]` on host)
-	IsHost bool              // is this the host machine's platform? Set by CLI; surfaces as `node.host_platform`.
+	Tags []string // baseline tags every node on this platform carries (e.g. `["tool"]` on host). "tool" is the host-axis discriminant that surfaces as `node.host_platform`.
 
 	// Tools is the absolute-path toolchain bound to this Platform. Populated
 	// by NewPlatform from Flags entries written by mine.go::commonFlags.
@@ -72,13 +71,15 @@ func toolchainFromFlags(flags map[string]string) Toolchain {
 	}
 }
 
-// NewPlatform constructs *Platform from an explicit (os, isa, flags, tags,
-// isHost) tuple and pre-fills boolean shadows. cflagsEnv / cxxflagsEnv
-// are shell-like flag strings parsed once into Platform.CFlags /
-// Platform.CXXFlags. Caller must not mutate flags or tags after
-// construction (NewPlatform retains references). Flag convention:
-// "yes" is truthy; anything else (empty/missing/"no") is falsy.
-func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, isHost bool, cflagsEnv, cxxflagsEnv string) *Platform {
+// NewPlatform constructs *Platform from an explicit (os, isa, flags,
+// tags) tuple and pre-fills boolean shadows. Host-vs-target discrimination
+// flows through `tags` — host platforms pass `["tool"]`, target platforms
+// pass nil. cflagsEnv / cxxflagsEnv are shell-like flag strings parsed
+// once into Platform.CFlags / Platform.CXXFlags. Caller must not mutate
+// flags or tags after construction (NewPlatform retains references).
+// Flag convention: "yes" is truthy; anything else (empty/missing/"no")
+// is falsy.
+func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsEnv, cxxflagsEnv string) *Platform {
 	if flags == nil {
 		flags = map[string]string{}
 	}
@@ -95,7 +96,6 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, isHost 
 		Target:          MakePlatformID(os, isa),
 		Flags:           flags,
 		Tags:            tags,
-		IsHost:          isHost,
 		Tools:           toolchainFromFlags(flags),
 		PIC:             flags["PIC"] == "yes",
 		BuildType:       buildType,
