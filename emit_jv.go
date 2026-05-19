@@ -60,7 +60,6 @@ func emitJVDownstreamCPCC(
 
 		// Compute the include closure from the g4.cpp (through the registry).
 		ccIn := in
-		ccIn.IsGenerated = true
 		ccIn.HasGenerator = false
 		ccIn.ExtraDepRefs = nil
 		closure := walkClosure(ctx, instance, g4CppPath, ccIn)
@@ -79,7 +78,7 @@ func emitJVDownstreamCPCC(
 		// Pass only the closure part to EmitJVCPG4 (it assembles the prefix itself).
 		cpRef := EmitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, closure, ctx.emit)
 
-		// CC node inputs: EmitCC with IsGenerated=true sets inputPath=g4CppPath.
+		// CC node inputs: srcVFS=g4CppPath (Build root) is the input.
 		// IncludeInputs = [jvPrimary, srcH, fsTools, procCmd, jvInputs..., closure...]
 		ccIncludeInputs := make([]VFS, 0, 3+len(jvInputs)+len(closure)+2)
 		ccIncludeInputs = append(ccIncludeInputs, jvPrimary)
@@ -97,7 +96,7 @@ func emitJVDownstreamCPCC(
 		// `-Wno-unused-variable` silences the `-Werror` diagnostic.
 		ccIn.PerSourceCFlags = []string{"-Wno-unused-variable"}
 
-		ccRef, ccOut := EmitCC(instance, g4CppRel, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut := EmitCC(instance, g4CppRel, g4CppPath, ccIn, ctx.host, ctx.emit)
 
 		// AR memberInputs: SOURCE_ROOT closure entries only. fs_tools.py
 		// and process_command_files.py are CP-step helpers witnessed

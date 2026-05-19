@@ -11,12 +11,12 @@ import "strings"
 // DepRefs — foreign-deps-only diverges on the L0 fingerprint.
 //
 // Returns (NodeRef, outputPath).
-func EmitAS(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, hostP *Platform, emit Emitter) (NodeRef, VFS) {
+func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD *NodeRef, hostP *Platform, emit Emitter) (NodeRef, VFS) {
 	if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
-		return emitASYasm(instance, srcRel, in, yasmLD, emit)
+		return emitASYasm(instance, srcRel, srcVFS, in, yasmLD, emit)
 	}
 
-	outVFS, inVFS := composeASPaths(instance, srcRel, in)
+	outVFS, inVFS := composeASPaths(instance, srcRel, srcVFS, in)
 	outputPath := outVFS.String()
 	inputPath := inVFS.String()
 

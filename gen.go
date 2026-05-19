@@ -2109,12 +2109,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		jsRef, joinOutVFS := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.target.Target, ctx.emit)
 
 		// EmitJS returns a $(B)/<srcInstance.Path>/<name> absolute path;
-		// convert to srcInstance-relative for the downstream EmitCC. The
-		// JS output lives under $(B), so pass IsGenerated so EmitCC
-		// composes inputPath under $(B) instead of $(S). The JS NodeRef
-		// is threaded as the downstream CC's `Generator` so the CC
-		// carries an explicit dep on its source-generating JS node,
-		// matching REF (every JS-derived CC has DepRefs=[js UID]).
+		// convert to srcInstance-relative for the downstream EmitCC.
+		// joinOutVFS is Build-rooted, so EmitCC's composer treats it
+		// as a generated source. The JS NodeRef is threaded as the
+		// downstream CC's `Generator` so the CC carries an explicit
+		// dep on its source-generating JS node, matching REF (every
+		// JS-derived CC has DepRefs=[js UID]).
 		jsRel := strings.TrimPrefix(joinOutVFS.Rel, srcInstance.Path+"/")
 
 		// Thread (scripts + sources + closure) as the JS-derived CC's
@@ -2125,12 +2125,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccIncludeInputs := jsCCIncludeInputs(srcInstance, js.Sources, ccClosure)
 
 		ccIn := moduleInputs
-		ccIn.IsGenerated = true
 		ccIn.Generator = jsRef
 		ccIn.HasGenerator = true
 		ccIn.IncludeInputs = ccIncludeInputs
 
-		ref, outPath := EmitCC(srcInstance, jsRel, ccIn, ctx.host, ctx.emit)
+		ref, outPath := EmitCC(srcInstance, jsRel, joinOutVFS, ccIn, ctx.host, ctx.emit)
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, false) // JOIN_SRCS are never SRC_C_NO_LTO
