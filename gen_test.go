@@ -250,7 +250,6 @@ func TestGen_PeerdirCycle_Tolerated(t *testing.T) {
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
-		Flags:    inferFlagsFromPath("a", false),
 	}
 
 	var exc *Exception
@@ -531,16 +530,10 @@ END()
 
 	// Drive collectModule directly to inspect the FlagSet overlay
 	// outcome. (Gen's path goes through Finalize which strips refs;
-	// we want to see the flags that flow into EmitCC for "nolibcmod"
-	// — which is NOT a path inferFlagsFromPath bumps NoLibc on.)
+	// we want to see the flags that flow into EmitCC for "nolibcmod".)
 	mf := Throw2(ParseFile(NewFS(root), filepath.Join(modDir, "ya.make")))
-	pathFlags := inferFlagsFromPath("nolibcmod", false)
 
-	if pathFlags.NoLibc || pathFlags.NoUtil || pathFlags.NoRuntime {
-		t.Fatalf("path flags pre-set; test premise broken: %+v", pathFlags)
-	}
-
-	d := collectModule(NewFS(root), "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}), pathFlags)
+	d := collectModule(NewFS(root), "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}), FlagSet{})
 
 	if !d.flags.NoLibc {
 		t.Errorf("flags.NoLibc = false, want true (macro overlay should have flipped it)")
@@ -1226,7 +1219,6 @@ func TestGen_HostWalk_AsmlibYasmWired(t *testing.T) {
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testHostP,
-		Flags:    inferFlagsFromPath("contrib/libs/asmlib", true),
 	}
 
 	genModule(ctx, hostAsmlib)
@@ -1292,7 +1284,6 @@ func TestGen_HostWalk_NonAsmlibAS_NoYasmDep(t *testing.T) {
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testHostP,
-		Flags:    inferFlagsFromPath("myasm", true),
 	}
 
 	genModule(ctx, hostInstance)
@@ -1338,13 +1329,15 @@ func TestGen_DefaultPeerdirs_BuildCowOnUnaffected(t *testing.T) {
 	}
 
 	// Belt-and-braces unit assertion: the helper itself returns
-	// nothing for an effectively-no-platform CPP module.
+	// nothing for an effectively-no-platform CPP module. Flags mirror
+	// the post-parse overlay for build/cow/on (NO_LIBC / NO_UTIL /
+	// NO_RUNTIME) since this synthetic instance bypasses the parser.
 	bcOn := ModuleInstance{
 		Path:     targetDir,
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
-		Flags:    inferFlagsFromPath(targetDir, false),
+		Flags:    FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true},
 	}
 
 	got := defaultPeerdirsFor(nil, bcOn)
@@ -3484,9 +3477,9 @@ END()
 // node.Platform — so the two fields must agree.
 //
 // If this test ever fails, either a walker site failed to flip Target
-// when descending into a host dependency, or an emitter site still
-// reads Flags.PIC for HostPlatform assignment. Update D41 and fix the
-// offending site; do not remove the test.
+// when descending into a host dependency, or an emitter site is
+// reading PIC from the wrong source. Update D41 and fix the offending
+// site; do not remove the test.
 func TestD41_PICCoincidesWithHostTarget(t *testing.T) {
 	const targetDir = "tools/archiver"
 

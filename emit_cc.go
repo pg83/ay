@@ -10,7 +10,7 @@ package main
 //   - Flat source: `$(B)/<path>/<srcRel><.o|.pic.o>`
 //   - Nested source (contains "/"): `$(B)/<path>/_/<srcRel><.o|.pic.o>`
 //
-// Suffix is `.o` for target, `.pic.o` for host (Flags.PIC=true).
+// Suffix is `.o` for target, `.pic.o` for host (Platform.PIC=true).
 
 import (
 	"path/filepath"
@@ -155,11 +155,11 @@ type ModuleCCInputs struct {
 func EmitCC(instance ModuleInstance, srcRel string, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS) {
 
 	suffix := ".o"
-	if instance.Flags.PIC {
+	if instance.Platform.PIC {
 		suffix = ".pic.o"
 	}
 	if in.Py3Suffix {
-		if instance.Flags.PIC {
+		if instance.Platform.PIC {
 			suffix = ".py3.pic.o"
 		} else {
 			suffix = ".py3.o"

@@ -218,7 +218,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 // TestEmitLD_AcceptsHostPIC verifies PR-25's lift of PR-24's
 // host-PIC guard. Cross-platform recursion (D31) requires building
 // host PROGRAM modules (ragel6/yasm), so EmitLD now accepts
-// `Flags.PIC=true`. The cmd_args bundle is still the target shape;
+// `Platform.PIC=true`. The cmd_args bundle is still the target shape;
 // byte-exact host LD pinning is PR-26+ scope. This test only
 // asserts the call no longer throws and the resulting node carries
 // `host_platform=true`.

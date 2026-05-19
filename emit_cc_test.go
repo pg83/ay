@@ -77,7 +77,6 @@ func muslHostInstance(path string) ModuleInstance {
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testHostP,
-		Flags:    inferFlagsFromPath(path, true),
 	}
 }
 
@@ -369,7 +368,7 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: target,
-		Flags:    inferFlagsFromPath("build/cow/on", false),
+		Flags:    FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true},
 	}
 
 	e := NewBufferedEmitter()

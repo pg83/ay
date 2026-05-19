@@ -294,7 +294,6 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: targetX86,
-		Flags:    inferFlagsFromPath("contrib/libs/asmlib", false),
 	}
 	_, outPath := EmitAS(instance, "memset64.asm", ModuleCCInputs{}, nil, testHostP, e)
 	wantYasmPath := "$(B)/contrib/libs/asmlib/memset64.o"

@@ -48,7 +48,7 @@ type moduleData struct {
 	ldFlags               []string
 	objAddLibsGlobal      []string // EXTRALIBS / PY_EXTRALIBS → OBJADDE_LIB_GLOBAL, peer-propagated to final link steps
 	srcDir                *string  // last SRCDIR setting (nil = module dir)
-	flags                 FlagSet  // overlay of inferFlagsFromPath + macro bools
+	flags                 FlagSet  // FlagSet derived from parsed macro bools
 	hadAllocator          bool     // set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
 	allocatorName         string   // ALLOCATOR(...) name; empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE)
 	muslLite              bool     // ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
@@ -651,11 +651,11 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *moduleData) {
 }
 
 // applyUnknownStmt routes an UnknownStmt by name. NO_LIBC / NO_UTIL /
-// NO_RUNTIME / NO_PLATFORM / NO_COMPILER_WARNINGS override the
-// inferFlagsFromPath heuristic. ALLOCATOR(NAME) resolves to an implicit
-// PEERDIR (ymake.core.conf:961-1035). Anything else must be in the
-// metadata whitelist; unknown names throw so a new ya.make macro
-// surfaces immediately rather than being silently dropped.
+// NO_RUNTIME / NO_PLATFORM / NO_COMPILER_WARNINGS flip the matching
+// FlagSet bits. ALLOCATOR(NAME) resolves to an implicit PEERDIR
+// (ymake.core.conf:961-1035). Anything else must be in the metadata
+// whitelist; unknown names throw so a new ya.make macro surfaces
+// immediately rather than being silently dropped.
 func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 	switch v.Name {
 	case "NO_LIBC":
@@ -1596,7 +1596,6 @@ func peerLanguageFor(ctx *genCtx, parent ModuleInstance, parentModuleName, peerP
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: parent.Platform,
-		Flags:    inferFlagsFromPath(peerPath, parent.Platform.PIC),
 	}
 
 	peerInfo := moduleInfoForInstance(ctx, peerSeed)
@@ -1618,17 +1617,15 @@ func peerLanguageFor(ctx *genCtx, parent ModuleInstance, parentModuleName, peerP
 // derivePeerInstance builds the peer's ModuleInstance. Peer language is
 // explicit rather than inherited: only Python modules entering a
 // PROTO_LIBRARY (and py-addressed PROTO_LIBRARY -> PROTO_LIBRARY hops)
-// use LangPy; every other peer walk stays LangCPP. Platform and PIC
-// axis continue to flow from the parent. Macro overlay (NO_LIBC /
-// NO_UTIL / ...) happens inside genModule when the peer's ya.make is
-// parsed.
+// use LangPy; every other peer walk stays LangCPP. Platform (which
+// carries PIC) flows from the parent. FlagSet stays empty here — macro
+// overlay (NO_LIBC / NO_UTIL / ...) happens inside genModule when the
+// peer's ya.make is parsed.
 func derivePeerInstance(ctx *genCtx, parent ModuleInstance, d *moduleData, peerPath string) ModuleInstance {
 	return ModuleInstance{
 		Path:     peerPath,
 		Kind:     KindLib,
 		Language: peerLanguageFor(ctx, parent, d.moduleStmt.Name, peerPath),
 		Platform: parent.Platform,
-		// PIC follows platform settings rather than ISA/host identity.
-		Flags: inferFlagsFromPath(peerPath, parent.Platform.PIC),
 	}
 }

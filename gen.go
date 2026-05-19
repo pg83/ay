@@ -658,7 +658,6 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 		Kind:     KindBin,
 		Language: LangCPP,
 		Platform: targetP,
-		Flags:    inferFlagsFromPath(filepath.Clean(targetDir), false),
 	}
 
 	root := genModule(ctx, seed)
@@ -699,14 +698,13 @@ func GenWithModeWithResources(sourceRoot string, targetDir string, hostP, target
 // over own CCs and peer archives.
 func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// Capture the seed key BEFORE the `instance.Flags = d.flags` overlay
-	// below rebinds Flags to the macro-derived FlagSet. Callers pass the
-	// seed FlagSet from `derivePeerInstance`/`inferFlagsFromPath`, which
-	// lacks the post-parse NO_PLATFORM / NO_COMPILER_WARNINGS / NO_UTIL /
-	// NO_RUNTIME / NO_LIBC bits applied by `collectModule`. Memo writes
-	// run AFTER the overlay; without an alias under the seed key the
-	// top-of-function lookup misses every consumer call and the body
-	// re-executes 7-138 times per module. Memo writes below store under
-	// both keys.
+	// below rebinds Flags to the macro-derived FlagSet. Callers pass an
+	// empty FlagSet (only Platform.PIC is preset); the post-parse
+	// NO_PLATFORM / NO_COMPILER_WARNINGS / NO_UTIL / NO_RUNTIME / NO_LIBC
+	// bits are applied by `collectModule`. Memo writes run AFTER the
+	// overlay; without an alias under the seed key the top-of-function
+	// lookup misses every consumer call and the body re-executes 7-138
+	// times per module. Memo writes below store under both keys.
 	originalInstance := instance
 
 	if existing, ok := ctx.memo[instance]; ok {

@@ -7,7 +7,7 @@ import "strings"
 func emitASYasm(instance ModuleInstance, srcRel string, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, VFS) {
 	stem := strings.TrimSuffix(srcRel, ".asm")
 	suffix := ".o"
-	if instance.Flags.PIC {
+	if instance.Platform.PIC {
 		suffix = ".pic.o"
 	}
 	var outVFS VFS

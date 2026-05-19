@@ -545,8 +545,8 @@ func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, ha
 
 // effectiveNoPlatform reports true when the FlagSet combination behaves
 // as `NO_PLATFORM` in upstream ymake — NoLibc + NoUtil + NoRuntime all
-// set. `build/cow/on` exhibits this pattern via `inferFlagsFromPath`,
-// which seeds the triple from the path alone.
+// set. `build/cow/on` exhibits this pattern via its NO_LIBC + NO_UTIL +
+// NO_RUNTIME ya.make declarations parsed by collectModule.
 func effectiveNoPlatform(f FlagSet) bool {
 	if f.NoPlatform {
 		return true
