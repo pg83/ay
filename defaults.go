@@ -179,12 +179,12 @@ func hoistRuntimeStackAddIncl(paths []VFS) []VFS {
 // Cycle prevention: path-equality + prefix matches for musl/libcxx/util
 // subtrees. The walker's `walking` stack catches deeper cycles.
 // Returns empty for non-CPP languages.
-func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance, flags FlagSet) []string {
-	return defaultPeerdirsForWithState(ctx, instance, flags, effectiveMuslOn(ctx, nil))
+func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance, flags FlagSet, muslOn bool) []string {
+	return defaultPeerdirsForWithState(ctx, instance, flags, muslOn)
 }
 
 func defaultPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
-	return defaultPeerdirsForWithState(ctx, instance, d.flags, effectiveMuslOn(ctx, d))
+	return defaultPeerdirsForWithState(ctx, instance, d.flags, d.muslEnabled)
 }
 
 func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, flags FlagSet, muslOn bool) []string {
@@ -260,14 +260,6 @@ func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, flags Fla
 	return peers
 }
 
-func effectiveMuslOn(ctx *genCtx, d *moduleData) bool {
-	if d != nil {
-		return d.muslEnabled
-	}
-
-	return cliMuslEnabled(ctx)
-}
-
 func useArcadiaCompilerRuntime(ctx *genCtx, instance ModuleInstance) bool {
 	if instance.Platform != nil {
 		if v := instance.Platform.Flags["USE_ARCADIA_COMPILER_RUNTIME"]; v != "" {
@@ -286,18 +278,6 @@ func useArcadiaCompilerRuntime(ctx *genCtx, instance ModuleInstance) bool {
 	return true
 }
 
-// cliMuslEnabled reports whether the CLI bound `MUSL` to `"yes"`.
-// Centralised so auto-PEERDIR and `-D_musl_` peer-CFLAG injection
-// share the same predicate. nil `ctx` defaults to MUSL=yes for
-// direct-call tests.
-func cliMuslEnabled(ctx *genCtx) bool {
-	if ctx == nil {
-		return true
-	}
-
-	return ctx.target.Flags["MUSL"] == "yes"
-}
-
 // defaultPeerCFlags returns the auto-injected peer-CFLAG set for
 // ModuleCCInputs.AutoPeerCFlags. Mirrors `_BASE_UNIT`'s
 // `when ($MUSL == "yes") { CFLAGS+=-D_musl_ }` (ymake.core.conf:781).
@@ -305,7 +285,7 @@ func cliMuslEnabled(ctx *genCtx) bool {
 // `-D_musl_=1` separately, gated off this injection via NoStdInc +
 // effective-NO_PLATFORM checks.
 func defaultPeerCFlags(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
-	if !effectiveMuslOn(ctx, d) {
+	if !d.muslEnabled {
 		return nil
 	}
 
@@ -481,7 +461,7 @@ var programAllocatorDefaults = []implicitPeerRule{
 // halves so explicit ALLOCATOR peers land before musl/full in the
 // archive walk.
 func defaultProgramPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData, includeMusl bool) []string {
-	return defaultProgramPeerdirsForWithState(ctx, instance, d.flags, d.hadAllocator, d.allocatorName, d.muslLite, includeMusl, effectiveMuslOn(ctx, d))
+	return defaultProgramPeerdirsForWithState(ctx, instance, d.flags, d.hadAllocator, d.allocatorName, d.muslLite, includeMusl, d.muslEnabled)
 }
 
 func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, flags FlagSet, hadAllocator bool, allocatorName string, muslLiteOverride bool, includeMusl bool, muslOn bool) []string {
