@@ -114,6 +114,9 @@ type ModuleCCInputs struct {
 	// variable names; values are the DEFAULT-declared values.
 	DefaultVars     map[string]string
 	DefaultVarOrder []string
+	// SetVars is the per-module SET(name value) map; the higher-precedence
+	// source for $CFG_VARS expansion (SET overrides DEFAULT).
+	SetVars map[string]string
 	// Py3Suffix selects ".py3.o" as output suffix. Set for
 	// PY23_NATIVE_LIBRARY modules whose reference emits <src>.py3.o.
 	// PIC combines with it as ".py3.pic.o".

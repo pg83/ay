@@ -15,6 +15,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		Flags:           d.flags,
 		DefaultVars:     d.defaultVars,
 		DefaultVarOrder: d.defaultVarOrder,
+		SetVars:         d.setVars,
 		SourceRoot:      ctx.sourceRoot,
 		FS:              ctx.fs,
 	}
@@ -25,11 +26,23 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	}
 	in.IncludeInputs = walkClosure(ctx, instance, resolveSourceVFS(ctx, instance, cf.Src, in.SrcDir), in)
 
-	cfgVars := buildCFGVars(ctx.fs, instance.Path+"/"+cf.Src, d.defaultVars, d.defaultVarOrder)
+	cfgVars := buildCFGVars(ctx.fs, instance.Path+"/"+cf.Src, d.setVars, d.defaultVars)
 	cfRef, cfOut := EmitCF(instance, cf.Src, cfgVars, in.IncludeInputs, ctx.emit)
 
 	if reg != nil {
-		registerBoundGeneratedParsedOutput(ctx, instance, "CF", cfOut, cfIncludeDirectives(ctx.parsers, instance.Path+"/"+cf.Src), cfRef)
+		// The generated header carries its generation inputs (the .in
+		// template + configure_file.py) as parsed includes, so every CC
+		// that #includes it inherits them in its input closure — matching
+		// the SRCS .cpp.in/.h.in path (emit_sources.go) and ymake's
+		// transitive-input semantics. The template's own quoted #includes
+		// follow (empty for pure @VAR@ headers like config.h /
+		// protocol_version_variables.h).
+		parsed := []includeDirective{
+			{kind: includeQuoted, target: Source(instance.Path + "/" + cf.Src).Rel},
+			{kind: includeQuoted, target: configureFilePyVFS.Rel},
+		}
+		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, instance.Path+"/"+cf.Src)...)
+		registerBoundGeneratedParsedOutput(ctx, instance, "CF", cfOut, parsed, cfRef)
 	}
 }
 
@@ -57,42 +70,48 @@ func cfIncludeDirectives(pm *includeParserManager, rel string) []includeDirectiv
 // cfgVarRefRe matches @VAR_NAME@ substitution markers in .in template files.
 var cfgVarRefRe = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
 
-// buildCFGVars filters the module's DEFAULT declarations to vars actually
-// @VAR@-referenced in the .in template at rel, sorted alphabetically
-// (ymake's order). @BUILD_TYPE@ without a DEFAULT falls back to DEBUG.
-// Reads the template via fs at the walker layer — primitive emitters
-// never touch FS.
-func buildCFGVars(fs *FS, rel string, defaultVars map[string]string, defaultVarOrder []string) []string {
+// cfgCmakeDefineRe matches `#cmakedefine VAR` and `#cmakedefine01 VAR`
+// markers (configure_file.py handles both). ymake scans the template
+// textually for $CFG_VARS, so it picks these up regardless of any
+// surrounding `#ifdef` (e.g. config.h.in's `#ifdef __x86_64__` guard).
+var cfgCmakeDefineRe = regexp.MustCompile(`#cmakedefine(?:01)?[ \t]+([A-Z_][A-Z0-9_]*)`)
+
+// buildCFGVars filters the module's SET/DEFAULT declarations to vars
+// actually referenced in the .in template at rel — as `@VAR@` or
+// `#cmakedefine[01] VAR` — and emits `NAME=value` sorted alphabetically
+// (ymake's $CFG_VARS order). SET overrides DEFAULT. @BUILD_TYPE@ with no
+// declaration falls back to DEBUG. Reads the template via fs at the
+// walker layer — primitive emitters never touch FS.
+func buildCFGVars(fs *FS, rel string, setVars, defaultVars map[string]string) []string {
 	referenced := map[string]bool{}
 
 	if data, err := fs.Read(rel); err == nil {
 		for _, m := range cfgVarRefRe.FindAllSubmatch(data, -1) {
 			referenced[string(m[1])] = true
 		}
+		for _, m := range cfgCmakeDefineRe.FindAllSubmatch(data, -1) {
+			referenced[string(m[1])] = true
+		}
 	}
 
 	var vars []string
-	declaredSet := map[string]bool{}
-
-	for _, name := range defaultVarOrder {
-		if !referenced[name] {
-			continue
+	for name := range referenced {
+		switch {
+		case hasKey(setVars, name):
+			vars = append(vars, name+"="+setVars[name])
+		case hasKey(defaultVars, name):
+			vars = append(vars, name+"="+defaultVars[name])
+		case name == "BUILD_TYPE":
+			vars = append(vars, buildTypeDebug)
 		}
-
-		val, ok := defaultVars[name]
-		if !ok {
-			continue
-		}
-
-		vars = append(vars, name+"="+val)
-		declaredSet[name] = true
-	}
-
-	if referenced["BUILD_TYPE"] && !declaredSet["BUILD_TYPE"] {
-		vars = append(vars, buildTypeDebug)
 	}
 
 	sort.Strings(vars)
 
 	return vars
+}
+
+func hasKey(m map[string]string, k string) bool {
+	_, ok := m[k]
+	return ok
 }
