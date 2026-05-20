@@ -105,7 +105,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		ccIn.CFlags = filterPyRegisterCFlags(ccIn.CFlags)
 		ccIn.PerSourceCFlags = append([]string(nil), in.PerSourceCFlags...)
-		if !stmt.CMode {
+		if cythonImplicitFallthrough(stmt, py23Variant) {
 			ccIn.PerSourceCFlags = append(ccIn.PerSourceCFlags, "-Wno-implicit-fallthrough")
 		}
 		scanIn := ccIn
@@ -172,6 +172,14 @@ func cythonUsesPy23Variant(modName string) bool {
 	return false
 }
 
+// cythonImplicitFallthrough reports whether the cython-generated cpp compile
+// should carry -Wno-implicit-fallthrough, mirroring upstream
+// _LANG_CFLAGS_VALUE_NEW (ext .pyx / .pyx.py{2,3} / .py.py{2,3}). Plain
+// CYTHONIZE_PY .py in a PY3_LIBRARY (-> <src>.py.cpp) is excluded.
+func cythonImplicitFallthrough(stmt *CythonStmt, py23Variant bool) bool {
+	return !stmt.CMode && (hasSuffix(stmt.Src, ".pyx") || py23Variant)
+}
+
 func appendCythonAddIncl(cmdArgs []string, addIncl []VFS) []string {
 	for _, path := range addIncl {
 		cmdArgs = append(cmdArgs, includeArg(path))
@@ -236,6 +244,10 @@ func filterPyRegisterCFlags(cflags []string) []string {
 
 func hasPrefix(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
+func hasSuffix(s, suffix string) bool {
+	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
 }
 
 var cythonNumpyAddIncl = []VFS{
