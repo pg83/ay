@@ -88,7 +88,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 				"p":  "CY",
 				"pc": "yellow",
 			},
-			Platform:     string(instance.Platform.Target),
+			Platform: string(instance.Platform.Target),
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",
@@ -102,7 +102,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{cyRef}
 		ccIn.Py3Suffix = !stmt.CMode && !generatedExplicit && py23Variant
-		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl)
+		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		ccIn.CFlags = filterPyRegisterCFlags(ccIn.CFlags)
 		ccIn.PerSourceCFlags = append([]string(nil), in.PerSourceCFlags...)
 		if !stmt.CMode {
@@ -180,8 +180,18 @@ func appendCythonAddIncl(cmdArgs []string, addIncl []VFS) []string {
 	return cmdArgs
 }
 
-func appendCythonCCAddIncl(addIncl []VFS) []VFS {
+func appendCythonCCAddIncl(addIncl []VFS, numpyBeforeInclude bool) []VFS {
 	out := make([]VFS, 0, len(addIncl)+len(cythonNumpyAddIncl))
+	if numpyBeforeInclude {
+		for i, path := range addIncl {
+			if path == pythonIncludeDir {
+				out = append(out, addIncl[:i]...)
+				out = append(out, cythonNumpyAddIncl...)
+				out = append(out, addIncl[i:]...)
+				return out
+			}
+		}
+	}
 	out = append(out, addIncl...)
 	out = append(out, cythonNumpyAddIncl...)
 
@@ -235,6 +245,8 @@ var cythonNumpyAddIncl = []VFS{
 	Source("contrib/python/numpy/include/numpy/core/src/npymath"),
 	Source("contrib/python/numpy/include/numpy/distutils/include"),
 }
+
+var pythonIncludeDir = Source("contrib/libs/python/Include")
 
 var py3CythonOutputIncludes = []VFS{
 	Source("contrib/tools/cython/generated_c_headers.h"),
