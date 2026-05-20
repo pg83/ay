@@ -527,7 +527,6 @@ func parseDelimitedIncludeTarget(s string) (string, includeKind, bool) {
 		if target == "" {
 			return "", includeSystem, false
 		}
-
 		kind = includeSystem
 	}
 

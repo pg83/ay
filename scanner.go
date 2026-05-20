@@ -1331,6 +1331,36 @@ func (sc *scanCtx) resolveContextSearchTier(targetID uint32, target string) sear
 	return out
 }
 
+func resolveCythonPy2Override(includerAbs VFS, d includeDirective) (string, bool) {
+	if !includerAbs.IsSource() || d.kind != includeQuoted {
+		return "", false
+	}
+
+	switch includerAbs.Rel {
+	case "util/generic/string.pxd":
+		if d.target == "libcpp/string.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/libcpp/string.pxd", true
+		}
+	case "util/generic/hash.pxd":
+		if d.target == "libcpp/pair.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/libcpp/pair.pxd", true
+		}
+	case "util/system/types.pxd":
+		if d.target == "libc/stdint.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd", true
+		}
+	}
+
+	if strings.HasPrefix(includerAbs.Rel, "contrib/tools/cython_py2/Cython/Includes/") {
+		switch d.target {
+		case "libc/string.pxd", "libcpp/string.pxd", "libcpp/pair.pxd", "libcpp/utility.pxd":
+			return "contrib/tools/cython_py2/Cython/Includes/" + d.target, true
+		}
+	}
+
+	return "", false
+}
+
 // resolveSearchPath returns the search-path-only resolved set for the
 // given directive. Cached on the scanCtx by (includer, target, kind,
 // next) — ctxHash is implicit in the scanCtx receiver.
@@ -1424,6 +1454,10 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 			}
 			searchPathFound = true
 		}
+	}
+
+	if candidate, ok := resolveCythonPy2Override(includerAbs, d); ok && addPath(candidate) {
+		searchPathFound = true
 	}
 
 	if d.kind == includeQuoted {
