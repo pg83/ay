@@ -320,6 +320,67 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 	}
 }
 
+func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T) {
+	emit := NewBufferedEmitter()
+	mainRef := emit.Emit(&Node{KV: map[string]string{"p": "STUB"}})
+	peerRef := emit.Emit(&Node{KV: map[string]string{"p": "STUB"}})
+	wholeRef := emit.Emit(&Node{KV: map[string]string{"p": "STUB"}})
+
+	instance := targetInstance("some/prog")
+	dupPath := Build("some/prog/libproto_cpp.a")
+
+	ldRef := EmitLD(
+		instance,
+		"",
+		[]NodeRef{mainRef}, []VFS{Build("some/prog/main.cpp.o")},
+		[]NodeRef{peerRef}, []VFS{dupPath},
+		nil, nil,
+		nil, nil,
+		[]NodeRef{wholeRef}, []VFS{dupPath},
+		nil,
+		nil, nil,
+		nil, nil,
+		nil,
+		nil, // moduleCFlags
+		nil, // peerCFlagsGlobal
+		nil, // autoPeerCFlags
+		nil, // peerLDFlagsGlobal
+		nil, // objAddLibsGlobal
+		false,
+		false,
+		false,
+		testHostP,
+		emit,
+	)
+
+	got := emit.nodes[ldRef.id]
+	count := 0
+	for _, input := range got.Inputs {
+		if input == dupPath {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("inputs contain %d copies of %q, want 1: %#v", count, dupPath.String(), got.Inputs)
+	}
+
+	if !slices.Contains(got.DepRefs, wholeRef) {
+		t.Fatalf("DepRefs do not contain whole-archive ref %+v: %#v", wholeRef, got.DepRefs)
+	}
+
+	cmdArgs := got.Cmds[2].CmdArgs
+	found := false
+	for i := 0; i+1 < len(cmdArgs); i++ {
+		if cmdArgs[i] == "--whole-archive-libs" && cmdArgs[i+1] == dupPath.Rel {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("cmd[2] missing whole-archive marker for %q: %#v", dupPath.Rel, cmdArgs)
+	}
+}
+
 // TestEmitLD_LengthMismatchPanics verifies the precondition checks on all
 // four ref/path slice pairs (cc, peerLD, plugin, global).
 func TestEmitLD_LengthMismatchPanics(t *testing.T) {

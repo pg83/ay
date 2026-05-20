@@ -1952,6 +1952,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			srcInputs.FlatOutput = true
 			isFlatNoLto = true
 		}
+		srcInputs = adjustCythonCompanionSourceInputs(d, src, srcInputs)
 
 		emit, hadPre := preEmitted[src]
 		if !hadPre {
@@ -2479,73 +2480,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		return result
 	}
 
-	// LIBRARY: regular AR over own CCs. Peer-archive DepRefs are
-	// intentionally NOT threaded — every reference AR has zero AR-on-AR
-	// deps; peer archives flow into the consumer's downstream LD via
-	// `peerArchiveRefs` in EmitLD. The regular AR receives the union of
-	// regular and global members' inputs (primaries + header closures).
-	combinedMemberInputs := memberInputs
-
-	if len(globalMemberInputs) > 0 {
-		combinedMemberInputs = make([]VFS, 0, len(memberInputs)+len(globalMemberInputs))
-		combinedMemberInputs = append(combinedMemberInputs, memberInputs...)
-
-		for _, p := range globalMemberInputs {
-			if _, dup := memberInputsSeen[p]; dup {
-				continue
-			}
-
-			memberInputsSeen[p] = struct{}{}
-			combinedMemberInputs = append(combinedMemberInputs, p)
-		}
-	}
-
-	// PY*_LIBRARY modules with PY_SRCS emit objcopy nodes (see
-	// emitPySrcObjcopy) whose inputs include build/scripts/objcopy.py
-	// plus every PY_SRCS source `.py` path. REF union-aggregates those
-	// into the module's regular `.a` and `.global.a` inputs. Mirror by
-	// injecting the same set into combinedMemberInputs before AR emission.
-	// Gate on resourceModuleTag (same as emitPySrcObjcopy) so non-PY3
-	// modules stay unaffected.
-	if d.moduleStmt != nil && resourceModuleTag(d.moduleStmt.Name) != nil {
-		// Collect non-kv-only RESOURCE / RESOURCE_FILES source paths;
-		// kv-only entries (Path == "-") do not point at a real file and
-		// would inject an invalid input path.
-		var resourcePaths []string
-		for _, e := range d.resources {
-			if e.Path == "-" {
-				continue
-			}
-
-			resourcePaths = append(resourcePaths, e.Path)
-		}
-		for _, e := range d.pyPyiResources {
-			if e.Path == "-" {
-				continue
-			}
-
-			resourcePaths = append(resourcePaths, e.Path)
-		}
-
-		if extras := pySrcsARExtraInputs(instance.Path, d.srcDir, d.pySrcs, d.pyGeneratedSrcs, resourcePaths); len(extras) > 0 {
-			// Ensure combinedMemberInputs is its own slice header so the
-			// append below cannot alias the caller's memberInputs backing
-			// array when the no-global branch above kept the alias.
-			if len(globalMemberInputs) == 0 {
-				combinedMemberInputs = append([]VFS(nil), memberInputs...)
-			}
-
-			for _, p := range extras {
-				if _, dup := memberInputsSeen[p]; dup {
-					continue
-				}
-
-				memberInputsSeen[p] = struct{}{}
-				combinedMemberInputs = append(combinedMemberInputs, p)
-			}
-		}
-	}
-
 	// Reorder AR members into ymake's canonical bucket order: SRC_C_NO_LTO
 	// first, then regular SRCS (declaration order), then JOIN_SRCS, then
 	// R6-generated last.
@@ -2582,24 +2516,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if d.arPlugin != nil {
 		v := Source(instance.Path + "/" + *d.arPlugin)
 		arPluginVFS = &v
-	}
-
-	if len(ccRefs) > 0 {
-		// PY23_LIBRARY / PY23_NATIVE_LIBRARY surface
-		// `module_tag=py3` / `module_tag=py3_native`. openssl AR_PLUGIN(ar)
-		// injects `--plugin <ar.pyplugin>` between the link_lib.py `--`
-		// separators.
-		if perModuleCCTag != nil {
-			arRef = EmitARNamedTagged(arInstance, arBaseName, *perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.host, ctx.emit)
-		} else {
-			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.host, ctx.emit)
-		}
-	}
-
-	_ = peerArchiveRefs // retained as a loop accumulator for the PROGRAM LD branch above; intentionally unused for the LIBRARY AR.
-	var arPath *VFS
-	if len(ccRefs) > 0 {
-		arPath = vfsPtr(Build(instance.Path + "/" + arBaseName))
 	}
 
 	// Emit yapyc3 PY nodes for PY_SRCS(). Modules with both SRCS and
@@ -2644,6 +2560,58 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			globalMemberInputsSeen[p] = struct{}{}
 			globalMemberInputs = append(globalMemberInputs, p)
 		}
+	}
+
+	// LIBRARY: regular AR over own CCs. Peer-archive DepRefs are
+	// intentionally NOT threaded — every reference AR has zero AR-on-AR
+	// deps; peer archives flow into the consumer's downstream LD via
+	// `peerArchiveRefs` in EmitLD. The regular AR receives the union of
+	// regular and global members' inputs (primaries + header closures),
+	// including late PY/resource producers that append to globalMemberInputs.
+	combinedMemberInputs := mergeDedupVFS(memberInputs, globalMemberInputs)
+
+	// PY*_LIBRARY modules with PY_SRCS emit objcopy nodes (see
+	// emitPySrcObjcopy) whose inputs include build/scripts/objcopy.py
+	// plus every PY_SRCS source `.py` path. REF union-aggregates those
+	// into the module's regular `.a` and `.global.a` inputs.
+	if d.moduleStmt != nil && resourceModuleTag(d.moduleStmt.Name) != nil {
+		var resourcePaths []string
+		for _, e := range d.resources {
+			if e.Path == "-" {
+				continue
+			}
+
+			resourcePaths = append(resourcePaths, e.Path)
+		}
+		for _, e := range d.pyPyiResources {
+			if e.Path == "-" {
+				continue
+			}
+
+			resourcePaths = append(resourcePaths, e.Path)
+		}
+
+		if extras := pySrcsARExtraInputs(instance.Path, d.srcDir, d.pySrcs, d.pyGeneratedSrcs, resourcePaths); len(extras) > 0 {
+			combinedMemberInputs = mergeDedupVFS(combinedMemberInputs, extras)
+		}
+	}
+
+	if len(ccRefs) > 0 {
+		// PY23_LIBRARY / PY23_NATIVE_LIBRARY surface
+		// `module_tag=py3` / `module_tag=py3_native`. openssl AR_PLUGIN(ar)
+		// injects `--plugin <ar.pyplugin>` between the link_lib.py `--`
+		// separators.
+		if perModuleCCTag != nil {
+			arRef = EmitARNamedTagged(arInstance, arBaseName, *perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.host, ctx.emit)
+		} else {
+			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.host, ctx.emit)
+		}
+	}
+
+	_ = peerArchiveRefs // retained as a loop accumulator for the PROGRAM LD branch above; intentionally unused for the LIBRARY AR.
+	var arPath *VFS
+	if len(ccRefs) > 0 {
+		arPath = vfsPtr(Build(instance.Path + "/" + arBaseName))
 	}
 
 	// EN and JV/CF/BI/PR emissions are hoisted to the pre-source-loop

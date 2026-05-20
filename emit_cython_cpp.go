@@ -206,6 +206,28 @@ func appendCythonCCAddIncl(addIncl []VFS, numpyBeforeInclude bool) []VFS {
 	return out
 }
 
+func adjustCythonCompanionSourceInputs(d *moduleData, src string, in ModuleCCInputs) ModuleCCInputs {
+	if len(d.cythonCpp) == 0 {
+		return in
+	}
+
+	if isHeaderSource(src) || isCodegenProducingSrc(src) {
+		return in
+	}
+
+	if !hasSuffix(src, ".c") &&
+		!hasSuffix(src, ".cc") &&
+		!hasSuffix(src, ".cpp") &&
+		!hasSuffix(src, ".cxx") {
+		return in
+	}
+
+	in.AddIncl = appendCythonCCAddIncl(in.AddIncl, d.cythonNumpyBeforeInclude)
+	in.CFlags = filterPyRegisterCFlags(in.CFlags)
+
+	return in
+}
+
 func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, py23 bool) []VFS {
 	out := make([]VFS, 0, len(addIncl)+len(cythonAddIncl)+3+len(cythonNumpyAddIncl))
 	out = append(out, addIncl...)
