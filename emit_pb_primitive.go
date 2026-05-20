@@ -70,6 +70,33 @@ var protobufRuntimeHeaders = []VFS{
 	Source(pbRuntimeBase + "google/protobuf/unknown_field_set.h"),
 }
 
+// grpcServiceHeaderIncludes is the fixed include preamble every protoc
+// grpc_cpp-generated .grpc.pb.h emits (contrib/libs/grpc cpp_generator.cc
+// GetHeaderIncludes): <functional> + the grpcpp service infrastructure.
+// Registered as EmitsIncludes on the .grpc.pb.h so the scanner propagates
+// the grpc + protobuf + abseil + libcxx closure into its CC consumers;
+// scanner recursion finds the transitive includes. Sorted lex.
+var grpcServiceHeaderIncludes = []VFS{
+	Source("contrib/libs/cxxsupp/libcxx/include/functional"),
+	Source("contrib/libs/grpc/include/grpcpp/client_context.h"),
+	Source("contrib/libs/grpc/include/grpcpp/completion_queue.h"),
+	Source("contrib/libs/grpc/include/grpcpp/generic/async_generic_service.h"),
+	Source("contrib/libs/grpc/include/grpcpp/impl/proto_utils.h"),
+	Source("contrib/libs/grpc/include/grpcpp/impl/rpc_method.h"),
+	Source("contrib/libs/grpc/include/grpcpp/impl/server_callback_handlers.h"),
+	Source("contrib/libs/grpc/include/grpcpp/impl/service_type.h"),
+	Source("contrib/libs/grpc/include/grpcpp/server_context.h"),
+	Source("contrib/libs/grpc/include/grpcpp/support/async_stream.h"),
+	Source("contrib/libs/grpc/include/grpcpp/support/async_unary_call.h"),
+	Source("contrib/libs/grpc/include/grpcpp/support/client_callback.h"),
+	Source("contrib/libs/grpc/include/grpcpp/support/message_allocator.h"),
+	Source("contrib/libs/grpc/include/grpcpp/support/method_handler.h"),
+	Source("contrib/libs/grpc/include/grpcpp/support/server_callback.h"),
+	Source("contrib/libs/grpc/include/grpcpp/support/status.h"),
+	Source("contrib/libs/grpc/include/grpcpp/support/stub_options.h"),
+	Source("contrib/libs/grpc/include/grpcpp/support/sync_stream.h"),
+}
+
 // pbDescriptorImporterHeaders are the protobuf runtime headers in CC
 // consumers of any .pb.h whose source proto imports
 // "google/protobuf/descriptor.proto". Pull in the map/reflection_ops

@@ -328,6 +328,19 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
 			}
 			registerGeneratedParsedOutput(ctx, instance, "PB", grpcPbCC, grpcCCParsed)
+
+			// The .grpc.pb.h directly includes its message .pb.h plus the
+			// fixed grpcpp service preamble (+ port_def.inc); the scanner
+			// recurses those into the full grpc/protobuf/abseil/libcxx
+			// closure for every CC that includes the .grpc.pb.h.
+			grpcHParsed := make([]includeDirective, 0, 2+len(directImports)+len(grpcServiceHeaderIncludes))
+			grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: pbH.Rel})
+			grpcHParsed = append(grpcHParsed, directImports...)
+			for _, include := range grpcServiceHeaderIncludes {
+				grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+			}
+			grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: pbRuntimeBase + "google/protobuf/port_def.inc"})
+			registerGeneratedParsedOutput(ctx, instance, "PB", grpcPbH, grpcHParsed)
 		}
 	}
 
