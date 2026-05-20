@@ -17,58 +17,58 @@ import (
 )
 
 type moduleData struct {
-	moduleStmt            *ModuleStmt
-	srcs                  []string
-	globalSrcs            []string
-	globalEventSeq        int
-	firstResourceEvent    int
-	firstGlobalSrcsEvent  int
-	pySrcs                []string // .py filenames from PY_SRCS(...)
-	pySrcGroups           []pySrcGroup
-	pyGeneratedSrcs       map[string][]VFS
-	pyPyiResources        []resourceEntry
-	pyBuildNoPYC          bool // ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
-	pyBuildNoPY           bool // ENABLE(PYBUILD_NO_PY); suppresses raw .py resfs embedding (only the yapyc3 form is embedded)
-	pyTopLevel            bool // TOP_LEVEL prefix in PY_SRCS(...); resfs key omits the dotted module-path prefix
-	noExtendedPySearch    bool
-	enumSrcs              []*GenerateEnumSerializationStmt
-	peerdirs              []string
-	joinSrcs              []*JoinSrcsStmt
-	addIncl               []VFS    // non-GLOBAL ADDINCL paths
-	addInclGlobal         []VFS    // ADDINCL(GLOBAL ...); peer-propagated to consumers
-	cythonAddIncl         []VFS    // ADDINCL(FOR cython ...); consumed by CY command, not downstream CC
-	asmAddIncl            []VFS    // ADDINCL(FOR asm ...); assembler-only include search path, not CC/CXX
-	cFlags                []string // non-GLOBAL CFLAGS (own C+C++ sources)
-	cFlagsGlobal          []string // CFLAGS(GLOBAL ...); peer-propagated to consumers' C+C++ sources
-	cxxFlags              []string // non-GLOBAL CXXFLAGS (own C++ sources)
-	cxxFlagsGlobal        []string // CXXFLAGS(GLOBAL ...); peer-propagated to consumers' C++ sources
-	cOnlyFlags            []string // non-GLOBAL CONLYFLAGS (own C / .S sources)
-	cOnlyFlagsGlobal      []string // CONLYFLAGS(GLOBAL ...); peer-propagated to consumers' C / .S sources
-	sFlags                []string // SET_APPEND(SFLAGS ...); appended to AS compiles only
-	ldFlags               []string
-	objAddLibsGlobal      []string // EXTRALIBS / PY_EXTRALIBS → OBJADDE_LIB_GLOBAL, peer-propagated to final link steps
-	srcDir                *string  // last SRCDIR setting (nil = module dir)
-	flags                 FlagSet  // FlagSet derived from parsed macro bools
-	hadAllocator          bool     // set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
-	allocatorName         string   // ALLOCATOR(...) name; empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE)
-	muslLite              bool     // ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
-	muslEnabled           bool     // module-local MUSL value after SET()/DEFAULT()/CLI env evaluation
-	splitDwarf            bool     // SPLIT_DWARF(); PROGRAM LD emits a separate <binary>.debug output
-	noPythonIncl          bool     // NO_PYTHON_INCLUDES(); suppresses PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (build/conf/python.conf:741-743)
-	noImportTracing       bool     // NO_IMPORT_TRACING(); suppresses PY*_PROGRAM implicit import_tracing constructor peer
-	usePython3            bool     // USE_PYTHON3() or PY3-family module types; normalised by applyPython3AddIncl. Triggers _PYTHON3_ADDINCL (python.conf:1018-1023): -DUSE_PYTHON3 + contrib/libs/python/Include
-	pythonSQLite3         bool     // default-on; DISABLE(PYTHON_SQLITE3) flips off the implicit `_sqlite` peer for PY*_PROGRAM modules
-	pyNamespace           *string  // PY_NAMESPACE(...); used by py-proto resource key layout
-	protoNamespace        *string  // PROTO_NAMESPACE(...); drives py-proto --ns and output layout
-	protoNamespaceGlobal  bool
-	noMypy                bool // NO_MYPY(); suppresses mypy plugin and .pyi outputs for py-proto
-	optimizePyProtos      bool // mirrors OPTIMIZE_PY_PROTOS_FLAG; default-on for PY{2,3}_PROTO variants
-	optimizePyProtosSet   bool
-	excludeTags           map[string]bool
-	dynamicLibraryFrom    []string
-	exportsScript         *string
-	ldPlugins             []string // LD_PLUGIN(name.py); each becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs
-	arPlugin              *string  // AR_PLUGIN(name); resolves to `$(S)/<modulePath>/<name>.pyplugin`, injected into AR cmd_args as `--plugin <path>` (ymake.core.conf:3396-3398, ld.conf:366-368)
+	moduleStmt           *ModuleStmt
+	srcs                 []string
+	globalSrcs           []string
+	globalEventSeq       int
+	firstResourceEvent   int
+	firstGlobalSrcsEvent int
+	pySrcs               []string // .py filenames from PY_SRCS(...)
+	pySrcGroups          []pySrcGroup
+	pyGeneratedSrcs      map[string][]VFS
+	pyPyiResources       []resourceEntry
+	pyBuildNoPYC         bool // ENABLE(PYBUILD_NO_PYC); suppresses yapyc3 node emission from PY_SRCS
+	pyBuildNoPY          bool // ENABLE(PYBUILD_NO_PY); suppresses raw .py resfs embedding (only the yapyc3 form is embedded)
+	pyTopLevel           bool // TOP_LEVEL prefix in PY_SRCS(...); resfs key omits the dotted module-path prefix
+	noExtendedPySearch   bool
+	enumSrcs             []*GenerateEnumSerializationStmt
+	peerdirs             []string
+	joinSrcs             []*JoinSrcsStmt
+	addIncl              []VFS    // non-GLOBAL ADDINCL paths
+	addInclGlobal        []VFS    // ADDINCL(GLOBAL ...); peer-propagated to consumers
+	cythonAddIncl        []VFS    // ADDINCL(FOR cython ...); consumed by CY command, not downstream CC
+	asmAddIncl           []VFS    // ADDINCL(FOR asm ...); assembler-only include search path, not CC/CXX
+	cFlags               []string // non-GLOBAL CFLAGS (own C+C++ sources)
+	cFlagsGlobal         []string // CFLAGS(GLOBAL ...); peer-propagated to consumers' C+C++ sources
+	cxxFlags             []string // non-GLOBAL CXXFLAGS (own C++ sources)
+	cxxFlagsGlobal       []string // CXXFLAGS(GLOBAL ...); peer-propagated to consumers' C++ sources
+	cOnlyFlags           []string // non-GLOBAL CONLYFLAGS (own C / .S sources)
+	cOnlyFlagsGlobal     []string // CONLYFLAGS(GLOBAL ...); peer-propagated to consumers' C / .S sources
+	sFlags               []string // SET_APPEND(SFLAGS ...); appended to AS compiles only
+	ldFlags              []string
+	objAddLibsGlobal     []string // EXTRALIBS / PY_EXTRALIBS → OBJADDE_LIB_GLOBAL, peer-propagated to final link steps
+	srcDir               *string  // last SRCDIR setting (nil = module dir)
+	flags                FlagSet  // FlagSet derived from parsed macro bools
+	hadAllocator         bool     // set by applyAllocatorStmt; PROGRAM-default-allocator routing fires only when this is false
+	allocatorName        string   // ALLOCATOR(...) name; empty when no ALLOCATOR macro. Used to suppress malloc/api when ALLOCATOR(FAKE)
+	muslLite             bool     // ENABLE(MUSL_LITE); flips the default-program-peers musl/full → musl gate
+	muslEnabled          bool     // module-local MUSL value after SET()/DEFAULT()/CLI env evaluation
+	splitDwarf           bool     // SPLIT_DWARF(); PROGRAM LD emits a separate <binary>.debug output
+	noPythonIncl         bool     // NO_PYTHON_INCLUDES(); suppresses PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (build/conf/python.conf:741-743)
+	noImportTracing      bool     // NO_IMPORT_TRACING(); suppresses PY*_PROGRAM implicit import_tracing constructor peer
+	usePython3           bool     // USE_PYTHON3() or PY3-family module types; normalised by applyPython3AddIncl. Triggers _PYTHON3_ADDINCL (python.conf:1018-1023): -DUSE_PYTHON3 + contrib/libs/python/Include
+	pythonSQLite3        bool     // default-on; DISABLE(PYTHON_SQLITE3) flips off the implicit `_sqlite` peer for PY*_PROGRAM modules
+	pyNamespace          *string  // PY_NAMESPACE(...); used by py-proto resource key layout
+	protoNamespace       *string  // PROTO_NAMESPACE(...); drives py-proto --ns and output layout
+	protoNamespaceGlobal bool
+	noMypy               bool // NO_MYPY(); suppresses mypy plugin and .pyi outputs for py-proto
+	optimizePyProtos     bool // mirrors OPTIMIZE_PY_PROTOS_FLAG; default-on for PY{2,3}_PROTO variants
+	optimizePyProtosSet  bool
+	excludeTags          map[string]bool
+	dynamicLibraryFrom   []string
+	exportsScript        *string
+	ldPlugins            []string // LD_PLUGIN(name.py); each becomes a CP node and feeds `--start-plugins ... --end-plugins` in consumer LDs
+	arPlugin             *string  // AR_PLUGIN(name); resolves to `$(S)/<modulePath>/<name>.pyplugin`, injected into AR cmd_args as `--plugin <path>` (ymake.core.conf:3396-3398, ld.conf:366-368)
 	// Per-source extra CFLAGS from `SRC(filename extra_cflags...)`,
 	// appended right before the input path in ModuleCCInputs.PerSourceCFlags.
 	perSrcCFlags map[string][]string
@@ -83,11 +83,15 @@ type moduleData struct {
 	runPrograms        []*RunProgramStmt
 	checkConfigHeaders []string
 	cythonCpp          []*CythonStmt
-	swigC              []swigSrc
-	bisonGenExt        string
-	grpc               bool
-	yaConfJSON         []string
-	allPySrcs          []*UnknownStmt
+	// Standalone BUILDWITH_CYTHON_* injects numpy at macro-body position,
+	// before the later global python include; PY_SRCS modules keep numpy
+	// appended after their regular ADDINCL set.
+	cythonNumpyBeforeInclude bool
+	swigC                    []swigSrc
+	bisonGenExt              string
+	grpc                     bool
+	yaConfJSON               []string
+	allPySrcs                []*UnknownStmt
 	// ARCHIVE(NAME <out> [DONTCOMPRESS] files...) in declaration order;
 	// each becomes an AR node invoking `$(B)/tools/archiver/archiver`.
 	archives []archiveEntry
@@ -722,12 +726,14 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		}
 
 		d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: v.Args[0], Options: append([]string(nil), v.Args[1:]...)})
+		d.cythonNumpyBeforeInclude = true
 	case "BUILDWITH_CYTHON_C":
 		if len(v.Args) == 0 {
 			ThrowFmt("BUILDWITH_CYTHON_C expects at least 1 argument")
 		}
 
 		d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: v.Args[0], Options: append([]string(nil), v.Args[1:]...), CMode: true})
+		d.cythonNumpyBeforeInclude = true
 	case "BISON_GEN_C":
 		d.bisonGenExt = ".c"
 	case "BISON_GEN_CPP":
@@ -940,6 +946,8 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		swigCMode := false
 		var namespace *string
 		var groupSrcs []string
+		cythonStmtStart := len(d.cythonCpp)
+		var cythonDirectives []string
 		for i := 0; i < len(v.Args); i++ {
 			a := v.Args[i]
 
@@ -969,6 +977,11 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 				cythonPlainCpp = false
 				continue
 			case "CYTHON_DIRECTIVE":
+				i++
+				if i >= len(v.Args) {
+					ThrowFmt("PY_SRCS CYTHON_DIRECTIVE expects a value")
+				}
+				cythonDirectives = append(cythonDirectives, "-X", v.Args[i])
 				continue
 			case "SWIG_C":
 				swigCMode = true
@@ -1087,6 +1100,11 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 				}
 				d.pyMain = stringPtr(modName + ":main")
 				mainNext = false
+			}
+		}
+		if len(cythonDirectives) > 0 {
+			for j := cythonStmtStart; j < len(d.cythonCpp); j++ {
+				d.cythonCpp[j].Options = append(d.cythonCpp[j].Options, cythonDirectives...)
 			}
 		}
 		if len(groupSrcs) > 0 {
