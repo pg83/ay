@@ -383,27 +383,31 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 	instance := targetInstance("some/prog")
 	dupPath := Build("some/prog/libproto_cpp.a")
 
-	ldRef := EmitLD(
-		instance,
-		"",
-		[]NodeRef{mainRef}, []VFS{Build("some/prog/main.cpp.o")},
-		[]NodeRef{peerRef}, []VFS{dupPath},
-		nil, nil,
-		nil, nil,
-		[]NodeRef{wholeRef}, []VFS{dupPath},
-		nil,
-		nil, nil,
-		nil, nil,
-		nil,
-		nil, // moduleCFlags
-		nil, // peerCFlagsGlobal
-		nil, // autoPeerCFlags
-		nil, // peerLDFlagsGlobal
-		nil, // objAddLibsGlobal
-		false,
-		false,
-		false,
-		testHostP,
+		ldRef := EmitLD(
+			instance,
+			"",
+			[]NodeRef{mainRef}, []VFS{Build("some/prog/main.cpp.o")},
+			[]NodeRef{peerRef}, []VFS{dupPath},
+			nil,
+			nil, nil,
+			nil, nil,
+			[]NodeRef{wholeRef}, []VFS{dupPath},
+			nil,
+			nil, nil,
+			nil, nil,
+			nil,
+			nil, // moduleCFlags
+			nil, // peerCFlagsGlobal
+			nil, // autoPeerCFlags
+			nil, // peerLDFlagsGlobal
+			nil, // ownLDFlags
+			nil, // ownRPathFlags
+			nil, // peerRPathFlagsGlobal
+			nil, // objAddLibsGlobal
+			false,
+			false,
+			false,
+			testHostP,
 		emit,
 	)
 
