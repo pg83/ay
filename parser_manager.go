@@ -128,6 +128,15 @@ func (pm *includeParserManager) sourceParsedBuckets(rel string) parsedIncludeSet
 		return nil
 	}
 
+	// Strip a leading UTF-8 BOM (EF BB BF) before parsing: some sources
+	// (e.g. library/cpp/threading/future/subscription/subscription.cpp)
+	// carry one, and it would otherwise hide the first `#include` from the
+	// line-oriented parsers, collapsing the whole include closure. ymake
+	// ignores the BOM the same way.
+	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
+		data = data[3:]
+	}
+
 	out := includeDirectiveParsers.parserFor(rel).Parse(rel, data)
 	pm.cache.parsed.Set(vfsPath, out)
 
