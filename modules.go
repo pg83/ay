@@ -130,6 +130,10 @@ type moduleData struct {
 	// PR output's EmitsIncludes; the scanner walks their real #include
 	// graph to reach the full closure.
 	inducedDeps []string
+	// SET(name value) bindings (last-write-wins); higher-precedence source
+	// for $CFG_VARS expansion (SET overrides DEFAULT). Captures vars set in
+	// taken IF branches and INCLUDEd .inc files.
+	setVars map[string]string
 }
 
 // resourceEntry is one packer input as produced by upstream
@@ -464,6 +468,11 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// IF(MUSL) and IF(MUSL == "no") both behave as expected.
 			value := expandScalarVarRef(v.Value, env)
 			env.SetFromString(v.Name, value)
+
+			if d.setVars == nil {
+				d.setVars = map[string]string{}
+			}
+			d.setVars[v.Name] = value
 
 			if v.Name == "RAGEL6_FLAGS" {
 				// `_SRC("rl6", ...)` (ymake.core.conf:3284)
