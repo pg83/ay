@@ -36,6 +36,24 @@ type GeneratedFileInfo struct {
 	// closure) and input-driven (inputs[] $(B) paths) lookups.
 	ProducerRef    NodeRef
 	HasProducerRef bool
+
+	// DeferredCF, when non-nil, describes a CONFIGURE_FILE-generated header
+	// (.h.in declared in SRCS) whose owning module is the first CONSUMER to
+	// #include it, not the declaring module. The CF node is emitted lazily by
+	// the probe in resolveCodegenDepRefsExt with module_dir = the consuming
+	// module, mirroring ymake realizing a generated header in the module that
+	// includes it. nil for eagerly-emitted producers.
+	DeferredCF *deferredCF
+}
+
+// deferredCF captures everything EmitCF needs to realize a deferred .h.in
+// header in a consuming module. instance is the DECLARING module (provides the
+// $(S)/$(B) paths); the module_dir is supplied by the consumer at emit time.
+type deferredCF struct {
+	instance      ModuleInstance
+	srcRel        string
+	cfgVars       []string
+	includeInputs []VFS
 }
 
 // CodegenRegistry maps every $(B)-prefixed generated file path to its
@@ -126,6 +144,28 @@ func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind st
 		reg.Register(&GeneratedFileInfo{
 			ProducerKvP: kind,
 			OutputPath:  output,
+		})
+	}
+
+	scanner := ctx.scannerFor(instance)
+	if scanner != nil {
+		scanner.parsers.RegisterBuildParsedIncludes(output.Rel, parsed)
+	}
+}
+
+// registerDeferredCF registers a .h.in generated header whose CF node is
+// emitted lazily by the first consumer that #includes it (see deferredCF).
+// The scanner's build-parsed-includes are registered eagerly so consumer
+// walkClosure resolves the generated header into includeInputs even before the
+// node exists; resolveCodegenDepRefsExt then emits the node and threads it into
+// the consumer's deps.
+func registerDeferredCF(ctx *genCtx, instance ModuleInstance, output VFS, parsed []includeDirective, def *deferredCF) {
+	reg := codegenRegForInstance(ctx, instance)
+	if reg != nil {
+		reg.Register(&GeneratedFileInfo{
+			ProducerKvP: "CF",
+			OutputPath:  output,
+			DeferredCF:  def,
 		})
 	}
 

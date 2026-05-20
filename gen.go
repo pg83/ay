@@ -301,8 +301,20 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 		} else {
 			reg := codegenRegForInstance(ctx, consumer)
 			if reg != nil {
-				if info, found := reg.Lookup(v); found && info.HasProducerRef {
-					ref, ok = info.ProducerRef, true
+				if info, found := reg.Lookup(v); found {
+					if !info.HasProducerRef && info.DeferredCF != nil {
+						// First consumer to #include this generated header owns
+						// it: emit the CF node now with the consumer's module_dir
+						// (ymake realizes generated headers in the consuming
+						// module). Subsequent consumers reuse the backfilled ref.
+						def := info.DeferredCF
+						cfRef, _ := EmitCF(def.instance, def.srcRel, def.cfgVars, def.includeInputs, consumer.Path, ctx.emit)
+						reg.SetProducerRef(v, cfRef)
+					}
+
+					if info.HasProducerRef {
+						ref, ok = info.ProducerRef, true
+					}
 				}
 			}
 		}
