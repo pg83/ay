@@ -69,6 +69,10 @@ run_case() {
     fi
 
     echo "[$case_name] FAIL"
+    if [[ "$case_name" == "sg3.aarch64" ]]; then
+        echo "  self_uid mismatch breakdown:"
+        ./dev/mismatch.py --our "$our_norm" --ref "$ref_norm" || true
+    fi
     echo "  inspect with:"
     echo "  ./dev/diff.py --our $our_norm --ref $ref_norm --root-output $root_output --show-cmd-diff"
     return 1
