@@ -824,17 +824,55 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// `_BASE_PY3_PROGRAM` adds runtime_py3/main unconditionally,
 		// `_sqlite` only when PYTHON_SQLITE3 != "no", and import_test
 		// only when ADD_CHECK_PY_IMPORTS remains enabled.
+		var earlyPeers []string
 		if d.pythonSQLite3 {
-			d.peerdirs = append(d.peerdirs, "contrib/tools/python3/Modules/_sqlite")
+			earlyPeers = append(earlyPeers, "contrib/tools/python3/Modules/_sqlite")
 		}
-		implicitPeers := []string{"library/python/runtime_py3/main"}
+		earlyPeers = append(earlyPeers, "library/python/runtime_py3/main")
 		if !d.noImportTracing && instance.Path != "library/python/import_tracing/constructor" {
-			implicitPeers = append(implicitPeers, "library/python/import_tracing/constructor")
+			earlyPeers = append(earlyPeers, "library/python/import_tracing/constructor")
 		}
+
+		var latePeers []string
 		if !d.noCheckImportsDisabled {
-			implicitPeers = append(implicitPeers, "library/python/testing/import_test")
+			latePeers = append(latePeers, "library/python/testing/import_test")
 		}
-		for _, peer := range implicitPeers {
+
+		// PY3_PROGRAM carries a self-peer (the LIB variant prepended at
+		// parse time) holding the user PEERDIR closure, so the macro-body
+		// program peers land AFTER user code — append all. Standalone
+		// PY3_PROGRAM_BIN has no self-peer; upstream's module-decl body
+		// PEERDIRs (`runtime_py3/main`, `_sqlite`, `import_tracing/
+		// constructor`) precede the ya.make-body user PEERDIRs, so they
+		// splice in directly after `contrib/libs/python`. `import_test`
+		// (from ADD_CHECK_PY_IMPORTS) trails the user block in both.
+		if d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+			insertAt := 0
+			if len(d.peerdirs) > 0 && d.peerdirs[0] == "contrib/libs/python" {
+				insertAt = 1
+			}
+
+			filteredEarly := earlyPeers[:0]
+			for _, peer := range earlyPeers {
+				if instance.Path != peer {
+					filteredEarly = append(filteredEarly, peer)
+				}
+			}
+
+			spliced := make([]string, 0, len(d.peerdirs)+len(filteredEarly))
+			spliced = append(spliced, d.peerdirs[:insertAt]...)
+			spliced = append(spliced, filteredEarly...)
+			spliced = append(spliced, d.peerdirs[insertAt:]...)
+			d.peerdirs = spliced
+		} else {
+			for _, peer := range earlyPeers {
+				if instance.Path != peer {
+					d.peerdirs = append(d.peerdirs, peer)
+				}
+			}
+		}
+
+		for _, peer := range latePeers {
 			if instance.Path != peer {
 				d.peerdirs = append(d.peerdirs, peer)
 			}
@@ -1572,7 +1610,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// to explicit consumers; their own compile nodes suppress those flags
 	// separately because the no-stdinc composer folds them into its fixed
 	// compile shape.
-	for _, rp := range resolved {
+	cflagsAggOrder := resolved
+	if d.moduleStmt != nil && d.moduleStmt.Name == "PY3_PROGRAM" {
+		cflagsAggOrder = archiveOrder
+	}
+	for _, rp := range cflagsAggOrder {
 		addEach(cFlagsSeen, &peerCFlagsGlobal, rp.result.CFlagsGlobal)
 		addEach(cxxFlagsSeen, &peerCXXFlagsGlobal, rp.result.CXXFlagsGlobal)
 		addEach(cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, rp.result.COnlyFlagsGlobal)
