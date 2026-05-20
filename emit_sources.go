@@ -63,7 +63,18 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		asIn := srcIn
 		srcVFS := resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir)
-		asIn.IncludeInputs = walkClosure(ctx, srcInstance, srcVFS, srcIn)
+
+		// FOR asm ADDINCL paths are assembler-only includes: they feed the
+		// AS source scan (so `%include "reg_sizes.asm"` resolves) but never
+		// the CC/CXX -I list. Re-merge them into the scan input here; cmd_args
+		// composition (yasm hardcodes -I; clang-AS unused by FOR-asm modules)
+		// is left untouched.
+		scanIn := srcIn
+		if len(d.asmAddIncl) > 0 {
+			scanIn.AddIncl = mergeDedupVFS(srcIn.AddIncl, d.asmAddIncl)
+		}
+
+		asIn.IncludeInputs = walkClosure(ctx, srcInstance, srcVFS, scanIn)
 		ref, outPath := EmitAS(srcInstance, srcRel, srcVFS, asIn, yasmRef, ctx.host, ctx.emit)
 
 		asInputs := append([]VFS{srcVFS}, asIn.IncludeInputs...)

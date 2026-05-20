@@ -819,6 +819,58 @@ func TestParseAddIncl_GlobalForKindDropped(t *testing.T) {
 	}
 }
 
+// TestParseAddIncl_ForAsmRouted (T11) pins that ADDINCL(FOR asm <path>)
+// routes <path> to AsmPaths (assembler-only) and keeps it out of the
+// own/global/all include buckets that feed CC -I args. Upstream pattern:
+// yt/yt/core/misc/isa_crc64/ya.make ADDINCL(FOR asm .../isa_crc64/include).
+func TestParseAddIncl_ForAsmRouted(t *testing.T) {
+	mf, err := Parse(testParserFS, "test.input",
+		[]byte("ADDINCL(FOR asm yt/yt/core/misc/isa_crc64/include)\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	a, ok := mf.Stmts[0].(*AddInclStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
+	}
+	if !equalStrings(a.AsmPaths, []string{"yt/yt/core/misc/isa_crc64/include"}) {
+		t.Errorf("AsmPaths = %v, want [yt/yt/core/misc/isa_crc64/include]", a.AsmPaths)
+	}
+	if len(a.OwnPaths) != 0 {
+		t.Errorf("OwnPaths = %v, want empty", a.OwnPaths)
+	}
+	if len(a.GlobalPaths) != 0 {
+		t.Errorf("GlobalPaths = %v, want empty", a.GlobalPaths)
+	}
+	if len(a.AllPaths) != 0 {
+		t.Errorf("AllPaths = %v, want empty", a.AllPaths)
+	}
+}
+
+// TestParseAddIncl_GlobalForAsmRouted (T11) mirrors the bare-FOR case for
+// the GLOBAL FOR asm shape (no upstream user today; pinned for symmetry):
+// <path> routes to AsmPaths, GlobalPaths/AllPaths stay empty.
+func TestParseAddIncl_GlobalForAsmRouted(t *testing.T) {
+	src := "ADDINCL(\n    GLOBAL FOR\n    asm\n    yt/yt/core/misc/isa_crc64/include\n)\n"
+	mf, err := Parse(testParserFS, "test.input", []byte(src))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	a, ok := mf.Stmts[0].(*AddInclStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
+	}
+	if !equalStrings(a.AsmPaths, []string{"yt/yt/core/misc/isa_crc64/include"}) {
+		t.Errorf("AsmPaths = %v, want [yt/yt/core/misc/isa_crc64/include]", a.AsmPaths)
+	}
+	if len(a.GlobalPaths) != 0 {
+		t.Errorf("GlobalPaths = %v, want empty", a.GlobalPaths)
+	}
+	if len(a.AllPaths) != 0 {
+		t.Errorf("AllPaths = %v, want empty", a.AllPaths)
+	}
+}
+
 // TestParseCFlags_BackslashQuoteUnescaped (PR-M3-F-2) pins that
 // backslash-quoted double-quotes in CFLAGS tokens are unescaped
 // at the parse boundary. Source: -DFOO=\"bar\" → stored as -DFOO="bar".
