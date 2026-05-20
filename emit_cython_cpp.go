@@ -32,7 +32,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		srcScanIn := in
 		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl)
 		sourceClosure := walkClosure(ctx, instance, srcVFS, srcScanIn)
-		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(srcVFS, sourceClosure, stmt.CMode)
+		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(ctx, instance, srcVFS, sourceClosure, stmt.CMode, srcScanIn)
 		parsed := make([]includeDirective, 0, len(emitsIncludes))
 		for _, include := range emitsIncludes {
 			parsed = append(parsed, includeDirective{kind: includeQuoted, target: include.Rel})
@@ -126,7 +126,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 	return out
 }
 
-func cythonGeneratedOutputInputs(src VFS, sourceClosure []VFS, cMode bool) ([]VFS, []VFS) {
+func cythonGeneratedOutputInputs(ctx *genCtx, instance ModuleInstance, src VFS, sourceClosure []VFS, cMode bool, scanIn ModuleCCInputs) ([]VFS, []VFS) {
 	toolInputs := make([]VFS, 0, 2+len(py3CythonEmbeddedFiles)+len(py3CythonOutputIncludes)+len(sourceClosure))
 	emitsIncludes := make([]VFS, 0, 1+len(py3CythonEmbeddedFiles)+len(py3CythonOutputIncludes)+len(sourceClosure))
 
@@ -147,6 +147,13 @@ func cythonGeneratedOutputInputs(src VFS, sourceClosure []VFS, cMode bool) ([]VF
 		v := Source(rel)
 		toolInputs = append(toolInputs, v)
 		emitsIncludes = append(emitsIncludes, v)
+		// The bundled utility code is inlined into the generated source, so
+		// its own #include closure (numpy via UFuncs_C.c, python internals
+		// via Coroutine.c, libcxx/musl via ModuleSetupCode.c) belongs in the
+		// CY node inputs. Scan each through the universal include scanner.
+		cl := walkClosure(ctx, instance, v, scanIn)
+		toolInputs = append(toolInputs, cl...)
+		emitsIncludes = append(emitsIncludes, cl...)
 	}
 
 	toolInputs = append(toolInputs, src)
