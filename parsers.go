@@ -30,7 +30,7 @@ var swigIncludeRe = regexp.MustCompile(`^%(include|import|insert\s*\([^\)]*\))\s
 var cythonCimportFromRe = regexp.MustCompile(`^\s*from\s+([A-Za-z0-9_\.]+)\s+cimport\b`)
 var cythonCimportRe = regexp.MustCompile(`^\s*cimport\s+(.+)$`)
 var cythonIncludeRe = regexp.MustCompile(`^\s*include\s+["']([^"']+)["']`)
-var cythonExternFromRe = regexp.MustCompile(`^\s*cdef\s+extern\s+from\s+(<[^>]+>|"[^"]+")`)
+var cythonExternFromRe = regexp.MustCompile(`^\s*cdef\s+extern\s+from\s+(<[^>]+>|"[^"]+"|'[^']+')`)
 
 // macroIndirectIncludes augments the C-like raw scanner for sources
 // that use macro-indirect `#include MACRO_NAME` forms. The text-blind
@@ -520,6 +520,15 @@ func parseDelimitedIncludeTarget(s string) (string, includeKind, bool) {
 	target := s[1 : 1+end]
 	if target == "" {
 		return "", includeSystem, false
+	}
+
+	if kind == includeQuoted && len(target) >= 2 && target[0] == '<' && target[len(target)-1] == '>' {
+		target = target[1 : len(target)-1]
+		if target == "" {
+			return "", includeSystem, false
+		}
+
+		kind = includeSystem
 	}
 
 	return target, kind, true
