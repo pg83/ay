@@ -182,7 +182,24 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 
 	res := &pyRegisterResult{}
 
-	for _, arg := range d.pyRegister {
+	for i, arg := range d.pyRegister {
+		// reg3[i] keeps the PyInit_/init_module_ defines contributed by the
+		// explicit PY_REGISTER args declared BEFORE it: upstream invokes
+		// _PY3_REGISTER once per arg, doing SRCS(GLOBAL <arg>.reg3.cpp)
+		// against the current CFLAGS snapshot before onpy_register appends
+		// this arg's own define, so reg3[i] sees defines[0..i-1]. Only
+		// explicit PY_REGISTER args carry onpy_register defines; implicit
+		// cython/swig registrations do not, so their reg3 compiles drop
+		// every PyInit_/init_module_ define (shortname never in priorShort).
+		priorShort := make(map[string]struct{}, i)
+		for j := 0; j < i; j++ {
+			if j < len(d.pyRegisterExplicit) && !d.pyRegisterExplicit[j] {
+				continue
+			}
+			prior := d.pyRegister[j]
+			priorShort[prior[strings.LastIndexByte(prior, '.')+1:]] = struct{}{}
+		}
+
 		regCpp := arg + ".reg3.cpp"
 		regCppVFS := Build(instance.Path + "/" + regCpp)
 		regCppAbs := regCppVFS.String()
@@ -248,12 +265,16 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		// PyInit_/init_module_ defines added by `onpy_register` AFTER
 		// `_PY3_REGISTER`'s `SRCS(GLOBAL …)` attach only to user-declared
 		// sources; the synthetic reg3.cpp keeps the pre-call CFLAGS
-		// snapshot. Strip the two families from this CC's bundle.
+		// snapshot. Drop only the defines for THIS arg and later ones
+		// (shortname not in priorShort); keep prior args' and every
+		// non-PyInit flag.
 		if len(in.CFlags) > 0 {
 			filtered := make([]string, 0, len(in.CFlags))
 			for _, f := range in.CFlags {
-				if strings.HasPrefix(f, "-DPyInit_") || strings.HasPrefix(f, "-Dinit_module_") {
-					continue
+				if short, ok := pyInitDefineShortname(f); ok {
+					if _, keep := priorShort[short]; !keep {
+						continue
+					}
 				}
 				filtered = append(filtered, f)
 			}
@@ -271,4 +292,22 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 	}
 
 	return res
+}
+
+// pyInitDefineShortname extracts the module shortname from a
+// `-DPyInit_<short>=…` or `-Dinit_module_<short>=…` flag (the shortname is
+// the substring between the prefix and the `=`). Returns ok=false for any
+// other flag. Mirrors appendPyRegister's `-DPyInit_<shortname>` / shortname
+// = segment after the last '.'.
+func pyInitDefineShortname(flag string) (string, bool) {
+	for _, pfx := range []string{"-DPyInit_", "-Dinit_module_"} {
+		if strings.HasPrefix(flag, pfx) {
+			rest := flag[len(pfx):]
+			if eq := strings.IndexByte(rest, '='); eq >= 0 {
+				return rest[:eq], true
+			}
+			return rest, true
+		}
+	}
+	return "", false
 }

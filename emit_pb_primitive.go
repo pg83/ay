@@ -387,10 +387,15 @@ func EmitPB(
 		if duplicateOutputRootInclude {
 			cmdArgs = append(cmdArgs, "-I=$(S)/"+cppOutRoot)
 		}
-	} else {
-		cmdArgs = append(cmdArgs, protoExtraIncludeArgs(protoRelPath)...)
 	}
 	cmdArgs = append(cmdArgs, "-I=$(S)/contrib/libs/protobuf/src")
+	// LIBRARY-embedded yt/ .proto (moduleTag == nil) gets -I=$(S)/yt after
+	// the first protobuf/src include. PROTO_LIBRARY modules with
+	// PROTO_NAMESPACE reach yt via the cppOutRoot path above; PROTO_LIBRARY
+	// without one (moduleTag == "cpp_proto") gets no -I=$(S)/yt.
+	if moduleTag == nil && strings.HasPrefix(protoRelPath, "yt/") {
+		cmdArgs = append(cmdArgs, "-I=$(S)/yt")
+	}
 	cmdArgs = append(cmdArgs,
 		"-I=$(B)",
 		"-I=$(S)/contrib/libs/protobuf/src",
@@ -485,13 +490,6 @@ func EmitPB(
 	return emit.Emit(node)
 }
 
-func protoExtraIncludeArgs(protoRelPath string) []string {
-	if strings.HasPrefix(protoRelPath, "yt/") {
-		return []string{"-I=$(S)/yt"}
-	}
-	return nil
-}
-
 func slicesContains(xs []string, want string) bool {
 	for _, x := range xs {
 		if x == want {
@@ -579,7 +577,7 @@ func pyProtoAuxOwnAddIncl(d *moduleData) []VFS {
 	return out
 }
 
-func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, aux VFS, seed []VFS) []VFS {
+func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, aux VFS, seed []VFS, cppSibling *moduleEmitResult) []VFS {
 	reg := codegenRegForInstance(ctx, instance)
 	if reg != nil {
 		emits := []includeDirective{
@@ -597,7 +595,7 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	scanIn := ModuleCCInputs{
 		Flags:             d.flags,
 		AddIncl:           pyProtoAuxOwnAddIncl(d),
-		PeerAddInclGlobal: pyProtoAuxPeerAddIncl(instance, peerContribs, d),
+		PeerAddInclGlobal: pyProtoAuxPeerAddIncl(instance, peerContribs, d, cppSibling),
 		SourceRoot:        ctx.sourceRoot,
 		FS:                ctx.fs,
 	}
@@ -610,10 +608,30 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	return dedupVFS(closure)
 }
 
-func pyProtoAuxPeerAddIncl(instance ModuleInstance, peerContribs peerGlobalContribs, d *moduleData) []VFS {
+// pyProtoAuxPeerAddIncl computes the peer-GLOBAL ADDINCL block for the
+// PY3_PROTO `.auxcpp.py3.o` C++ compile.
+//
+// When the module has a CPP_PROTO sibling (the common case), the sibling's
+// AddInclGlobal is the correctly-ordered C++ include block (grpc placed
+// late, abseil-cpp-tstring/protobuf/src inline) that the sibling's own
+// `.pb.cc.o` carries. The py3 peer set (`peerContribs.addIncl`) differs only
+// by grpc placement and adds the python-PEERDIR entries (python/Include,
+// runtime_py3, lzma, libffi) plus the $(B) protobuf/protoc generated roots;
+// `mergeDedupVFS` takes the cpp ordering for the shared entries and appends
+// the python-only tail.
+//
+// When CPP_PROTO is excluded (EXCLUDE_TAGS(CPP_PROTO), e.g. the protobuf
+// builtin protos), there is no sibling: rebuild from the py3 peer set,
+// stripping the protobuf/abseil entries that the hardcoded block (and the
+// PROTO_NAMESPACE tail) re-add in canonical order.
+func pyProtoAuxPeerAddIncl(instance ModuleInstance, peerContribs peerGlobalContribs, d *moduleData, cppSibling *moduleEmitResult) []VFS {
+	if cppSibling != nil {
+		return mergeDedupVFS(cppSibling.AddInclGlobal, peerContribs.addIncl)
+	}
+
 	out := make([]VFS, 0, len(peerContribs.addIncl)+8)
 	for _, p := range peerContribs.addIncl {
-		if p == Source("contrib/libs/protobuf/src") || p == Source("contrib/restricted/abseil-cpp-tstring") || p == Source("contrib/restricted/abseil-cpp") {
+		if p == Source("contrib/libs/protobuf/src") || p == Build("contrib/libs/protobuf/src") || p == Source("contrib/restricted/abseil-cpp-tstring") || p == Source("contrib/restricted/abseil-cpp") {
 			continue
 		}
 		out = append(out, p)

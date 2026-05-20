@@ -57,7 +57,7 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 		auxEntries = append(auxEntries, emitPyProtoSrc(ctx, instance, d, src, protocLDRef, protocBinary)...)
 	}
 
-	auxRes := emitPyProtoAuxChunks(ctx, instance, d, peerContribs, auxEntries)
+	auxRes := emitPyProtoAuxChunks(ctx, instance, d, peerContribs, auxEntries, cppSibling)
 	if auxRes != nil {
 		pyProtoRefs = append(pyProtoRefs, auxRes.Refs...)
 		pyProtoOutputs = append(pyProtoOutputs, auxRes.Outputs...)
@@ -369,7 +369,7 @@ func pyProtoAuxPeerCFlags(ctx *genCtx, instance ModuleInstance, peerContribs pee
 	return mergeDedup(peerContribs.cFlags, pythonResult.CFlagsGlobal)
 }
 
-func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, entries []pyProtoAuxEntry) *pyProtoAuxChunksResult {
+func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, entries []pyProtoAuxEntry, cppSibling *moduleEmitResult) *pyProtoAuxChunksResult {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -452,7 +452,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 	memberSeen := map[VFS]struct{}{}
 	for _, ch := range chunks {
 		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, "PY3_PROTO") + "_raw.auxcpp")
-		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, peerContribs, aux, ch.inputs)
+		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, peerContribs, aux, ch.inputs, cppSibling)
 		cmdArgs := []string{rescompilerBinPath, aux.String()}
 		cmdArgs = append(cmdArgs, ch.cmdArgs...)
 
@@ -482,7 +482,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		ccIn := ModuleCCInputs{
 			Flags:                d.flags,
 			AddIncl:              pyProtoAuxOwnAddIncl(d),
-			PeerAddInclGlobal:    pyProtoAuxPeerAddIncl(instance, peerContribs, d),
+			PeerAddInclGlobal:    pyProtoAuxPeerAddIncl(instance, peerContribs, d, cppSibling),
 			PeerCFlagsGlobal:     pyProtoAuxPeerCFlags(ctx, instance, peerContribs),
 			PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
 			PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
