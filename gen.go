@@ -1871,6 +1871,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		FS:                   ctx.fs,
 		DefaultVars:          d.defaultVars,
 		DefaultVarOrder:      d.defaultVarOrder,
+		SetVars:              d.setVars,
 		Py3Suffix:            isPy3NativeLib,
 		ModuleTag:            perModuleCCTag,
 		Ragel6Flags:          d.ragel6Flags,
