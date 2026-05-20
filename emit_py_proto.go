@@ -288,7 +288,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			Inputs:           append([]VFS{py3ccBinary, py3ccSlowBin, pyOut}, sourceInputs...),
 			Outputs:          []VFS{out},
 			KV:               map[string]string{"p": "PY", "pc": "yellow"},
-			Tags:             []string{},
+			Tags:             instance.Platform.Tags,
 			TargetProperties: map[string]string{"module_dir": instance.Path, "module_tag": "py3_proto"},
 			Platform:         string(instance.Platform.Target),
 			Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
