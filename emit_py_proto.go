@@ -256,7 +256,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 	suffix := protoPySuffix(instance.Path)
 
 	res := &generatedPyProtoYapycResult{}
-	for _, pyOut := range pyOutputs {
+	for i, pyOut := range pyOutputs {
 		if pyOut.Rel == "" {
 			continue
 		}
@@ -282,10 +282,19 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			toolRefs = append(toolRefs, py3ccSlowRef)
 		}
 
+		// The gRPC service stub (`_pb2_grpc.py`, pyOutputs[1]) imports the
+		// sibling message stub (`_pb2.py`, pyOutputs[0]); its bytecode compile
+		// lists that module as an input. The message stub has no such sibling
+		// dependency, so it is added only for the non-first (grpc) output.
+		nodeInputs := append([]VFS{py3ccBinary, py3ccSlowBin, pyOut}, sourceInputs...)
+		if i > 0 && pyOutputs[0].Rel != "" {
+			nodeInputs = append(nodeInputs, pyOutputs[0])
+		}
+
 		node := &Node{
 			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)", "PYTHONHASHSEED": "0"}}},
 			Env:              map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)", "PYTHONHASHSEED": "0"},
-			Inputs:           append([]VFS{py3ccBinary, py3ccSlowBin, pyOut}, sourceInputs...),
+			Inputs:           nodeInputs,
 			Outputs:          []VFS{out},
 			KV:               map[string]string{"p": "PY", "pc": "yellow"},
 			Tags:             instance.Platform.Tags,
