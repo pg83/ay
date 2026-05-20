@@ -46,13 +46,16 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		}
 
 		generatedInputs := d.pyGeneratedSrcs[srcRel]
-		srcAbs := Source(instance.Path + "/" + srcRel)
+		srcAbs := resolveSourceVFS(ctx, instance, srcRel, d.srcDir)
 		if generatedInputs != nil {
 			srcAbs = Build(instance.Path + "/" + srcRel)
 		}
 
-		// The "module name" arg: <modulePath>/<srcRel>- (trailing dash).
-		moduleName := instance.Path + "/" + srcRel + "-"
+		// The "module name" arg: <srcRel>- (trailing dash), tracking the
+		// SRCDIR-resolved source path. SRCDIR(devtools/ya) + PY_SRCS(entry/
+		// main.py) redirects the source to devtools/ya/entry/main.py, so
+		// the module-name arg follows the resolved rel, not modulePath/srcRel.
+		moduleName := srcAbs.Rel + "-"
 
 		// Output suffix: flat → .py.yapyc3; subdir →
 		// .py.<pathid($S/unit)[:4]>.yapyc3.
