@@ -59,7 +59,6 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			"-I$(B)",
 			"-I$(S)",
 		)
-		cmdArgs = appendCythonAddIncl(cmdArgs, d.addIncl)
 		cmdArgs = appendCythonAddIncl(cmdArgs, d.cythonAddIncl)
 		cmdArgs = append(cmdArgs,
 			"-I$(S)/contrib/tools/cython/Cython/Includes",
@@ -256,8 +255,10 @@ var py3CythonEmbeddedFiles = []string{
 	"contrib/tools/cython/Cython/Utility/AsyncGen.c",
 	"contrib/tools/cython/Cython/Utility/Buffer.c",
 	"contrib/tools/cython/Cython/Utility/Builtins.c",
+	"contrib/tools/cython/Cython/Utility/CConvert.pyx",
 	"contrib/tools/cython/Cython/Utility/CMath.c",
 	"contrib/tools/cython/Cython/Utility/CommonStructures.c",
+	"contrib/tools/cython/Cython/Utility/CommonTypes.c",
 	"contrib/tools/cython/Cython/Utility/Complex.c",
 	"contrib/tools/cython/Cython/Utility/Coroutine.c",
 	"contrib/tools/cython/Cython/Utility/CpdefEnums.pyx",
@@ -271,6 +272,7 @@ var py3CythonEmbeddedFiles = []string{
 	"contrib/tools/cython/Cython/Utility/FunctionArguments.c",
 	"contrib/tools/cython/Cython/Utility/ImportExport.c",
 	"contrib/tools/cython/Cython/Utility/MemoryView.pyx",
+	"contrib/tools/cython/Cython/Utility/MemoryView_C.c",
 	"contrib/tools/cython/Cython/Utility/ModuleSetupCode.c",
 	"contrib/tools/cython/Cython/Utility/NumpyImportArray.c",
 	"contrib/tools/cython/Cython/Utility/ObjectHandling.c",
@@ -279,9 +281,9 @@ var py3CythonEmbeddedFiles = []string{
 	"contrib/tools/cython/Cython/Utility/Printing.c",
 	"contrib/tools/cython/Cython/Utility/Profile.c",
 	"contrib/tools/cython/Cython/Utility/StringTools.c",
-	"contrib/tools/cython/Cython/Utility/Synchronization.c",
+	"contrib/tools/cython/Cython/Utility/TestCyUtilityLoader.pyx",
+	"contrib/tools/cython/Cython/Utility/TestCythonScope.pyx",
 	"contrib/tools/cython/Cython/Utility/TestUtilityLoader.c",
-	"contrib/tools/cython/Cython/Utility/TypeConversion.c",
 	"contrib/tools/cython/Cython/Utility/UFuncs_C.c",
 	"contrib/tools/cython/Cython/Utility/arrayarray.h",
 }

@@ -193,12 +193,22 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		inputs = append(inputs, mypyBinary)
 	}
 
+	// ext_out_name_for_<mangled output basename> maps each mangled python
+	// proto output back to its de-namespaced name (e.g.
+	// any__intpy3___pb2.py → any_pb2.py). outputs[i] aligns with
+	// suffixes[i] by construction above.
+	pbKV := map[string]string{"p": "PB", "pc": "yellow"}
+	protoBaseName := filepath.Base(protoBase)
+	for i, out := range outputs {
+		pbKV["ext_out_name_for_"+filepath.Base(out.Rel)] = protoBaseName + suffixes[i]
+	}
+
 	pyPBNode := &Node{
 		Cmds:             []Cmd{{CmdArgs: cmdArgs, Cwd: "$(S)", Env: map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}}},
 		Env:              map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"},
 		Inputs:           inputs,
 		Outputs:          outputs,
-		KV:               map[string]string{"p": "PB", "pc": "yellow"},
+		KV:               pbKV,
 		Tags:             instance.Platform.Tags,
 		TargetProperties: map[string]string{"module_dir": instance.Path, "module_tag": "py3_proto"},
 		Platform:         string(instance.Platform.Target),
@@ -210,7 +220,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 	pyPBRef := ctx.emit.Emit(pyPBNode)
 
-	yapyRes := emitGeneratedPyProtoYapyc(ctx, instance, []VFS{pyOut, grpcPyOut}, pyPBRef)
+	yapyRes := emitGeneratedPyProtoYapyc(ctx, instance, []VFS{pyOut, grpcPyOut}, pyPBRef, pyProtoSourceInputs(inputs))
 	if yapyRes == nil {
 		yapyRes = &generatedPyProtoYapycResult{}
 	}
@@ -233,7 +243,7 @@ type generatedPyProtoYapycResult struct {
 	Outputs []VFS
 }
 
-func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs []VFS, pyPBRef NodeRef) *generatedPyProtoYapycResult {
+func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs []VFS, pyPBRef NodeRef, sourceInputs []VFS) *generatedPyProtoYapycResult {
 	py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin := py3ccToolRefs(ctx, instance)
 	suffix := protoPySuffix(instance.Path)
 
@@ -267,7 +277,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 		node := &Node{
 			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)", "PYTHONHASHSEED": "0"}}},
 			Env:              map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)", "PYTHONHASHSEED": "0"},
-			Inputs:           []VFS{py3ccBinary, py3ccSlowBin, pyOut},
+			Inputs:           append([]VFS{py3ccBinary, py3ccSlowBin, pyOut}, sourceInputs...),
 			Outputs:          []VFS{out},
 			KV:               map[string]string{"p": "PY", "pc": "yellow"},
 			Tags:             []string{},
