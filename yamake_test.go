@@ -223,6 +223,7 @@ func TestSetQuotedAndUnquoted(t *testing.T) {
 		wantVal  string
 	}{
 		{"quoted", `SET(IDE_FOLDER "_Builders")`, "IDE_FOLDER", "_Builders"},
+		{"single-quoted", `SET(IDE_FOLDER '_Builders')`, "IDE_FOLDER", "_Builders"},
 		{"unquoted", `SET(NAME bare_value)`, "NAME", "bare_value"},
 	}
 	for _, tc := range cases {

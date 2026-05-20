@@ -62,6 +62,11 @@ type moduleEmitResult struct {
 	// (`_EXE_FLAGS` slot in ld.conf:168). musl/ya.make contributes
 	// `-static -Wl,--no-dynamic-linker` via this channel.
 	LDFlagsGlobal []string
+	// RPathFlagsGlobal: peer-aggregated `RPATH_GLOBAL` from every
+	// PEERDIR'd ya.make plus the module's own. Kept separate from
+	// LDFlagsGlobal because PROGRAM LDs place rpath flags in dedicated
+	// trailer slots around the two `-fPIC` positions.
+	RPathFlagsGlobal []string
 	// PeerArchiveClosureRefs / PeerArchiveClosurePaths: transitive archive
 	// closure exposed to consumers — every peer's own AR UNION every
 	// peer's PeerArchiveClosure*, deduplicated in DFS post-order (first
@@ -567,8 +572,8 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"NO_OPTIMIZE":                    {}, // Suppresses optimization; metadata.
 	"TASKLET":                        {}, // Tasklet metadata; deferred.
 	"TASKLETSUPPORT":                 {}, // Tasklet support metadata; deferred.
-	// SET_APPEND is handled by applyUnknownStmt for the SFLAGS axis;
-	// other SET_APPEND targets remain as no-ops (handled there).
+	// SET_APPEND is handled by applyUnknownStmt for the SFLAGS and
+	// RPATH_GLOBAL axes; other SET_APPEND targets remain as no-ops.
 	"OPENSOURCE_PROJECT": {}, // Metadata.
 	"SPLIT_FACTOR":       {}, // Test metadata.
 	"FORK_TESTS":         {}, // Test metadata.
@@ -1069,6 +1074,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			COnlyFlagsGlobal:                mergeDedup(peerContribs.cOnlyFlags, d.cOnlyFlagsGlobal),
 			ObjAddLibsGlobal:                mergeDedup(peerContribs.objAddLibs, d.objAddLibsGlobal),
 			LDFlagsGlobal:                   mergeDedup(peerContribs.ldFlags, d.ldFlags),
+			RPathFlagsGlobal:                mergeDedup(peerContribs.rpathFlags, d.rpathFlagsGlobal),
 			PeerArchiveClosureRefs:          peerArchiveRefsH,
 			PeerArchiveClosurePaths:         peerArchivePathsH,
 			PeerGlobalClosureRefs:           peerGlobalRefsH,
@@ -1210,6 +1216,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	peerWholeArchiveCmdPaths := make([]VFS, 0, len(allPeers))
 	peerDynamicRefs := make([]NodeRef, 0, len(allPeers))
 	peerDynamicPaths := make([]VFS, 0, len(allPeers))
+	peerLinkCmdPaths := make([]VFS, 0, len(allPeers))
 
 	// Dedup table for the transitive `.global.a` closure. Each direct
 	// peer contributes its own `.global.a` (when GlobalRef != nil) AND
@@ -1250,6 +1257,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	peerDynamicSeen := map[VFS]struct{}{}
+	peerLinkCmdSeen := map[VFS]struct{}{}
+	peerLinkCmdAddPath := func(path VFS) {
+		if _, dup := peerLinkCmdSeen[path]; dup {
+			return
+		}
+
+		peerLinkCmdSeen[path] = struct{}{}
+		peerLinkCmdPaths = append(peerLinkCmdPaths, path)
+	}
 	peerDynamicAddPath := func(ref NodeRef, path VFS) {
 		if _, dup := peerDynamicSeen[path]; dup {
 			return
@@ -1258,6 +1274,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerDynamicSeen[path] = struct{}{}
 		peerDynamicRefs = append(peerDynamicRefs, ref)
 		peerDynamicPaths = append(peerDynamicPaths, path)
+		peerLinkCmdAddPath(path)
 	}
 
 	// Dedup table for the transitive peer-archive closure. For each
@@ -1275,6 +1292,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerArchiveSeen[path] = struct{}{}
 		peerArchiveRefs = append(peerArchiveRefs, ref)
 		peerArchivePaths = append(peerArchivePaths, path)
+		peerLinkCmdAddPath(path)
 	}
 
 	// Dedup table for the transitive LD plugin closure. Each direct peer
@@ -1300,6 +1318,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	ldFlagsSeen := map[string]struct{}{}
 	peerLDFlagsGlobal := make([]string, 0, 4)
+	rpathFlagsSeen := map[string]struct{}{}
+	peerRPathFlagsGlobal := make([]string, 0, 4)
 
 	// Aggregate peer-GLOBAL across ADDINCL / CFLAGS / CXXFLAGS / CONLYFLAGS
 	// with two-phase traversal: Phase 1 collects each peer's OWN GLOBAL
@@ -1632,6 +1652,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		addEach(cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, rp.result.COnlyFlagsGlobal)
 		addEach(objAddLibSeen, &peerObjAddLibsGlobal, rp.result.ObjAddLibsGlobal)
 		addEach(ldFlagsSeen, &peerLDFlagsGlobal, rp.result.LDFlagsGlobal)
+		addEach(rpathFlagsSeen, &peerRPathFlagsGlobal, rp.result.RPathFlagsGlobal)
 	}
 
 	// Effective AddInclGlobal = own GLOBAL ADDINCL ∪ every peer's
@@ -1680,6 +1701,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	effectiveCFlagsGlobal := mergeDedup(peerCFlagsGlobal, d.cFlagsGlobal)
 	effectiveCXXFlagsGlobal := mergeDedup(peerCXXFlagsGlobal, d.cxxFlagsGlobal)
 	effectiveCOnlyFlagsGlobal := mergeDedup(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
+	effectiveRPathFlagsGlobal := mergeDedup(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
 
 	// Inject libcxx's GLOBAL ADDINCL + GLOBAL CXXFLAGS into runtime-
 	// ancestor C++ consumers' OWN CC emission only — not into the
@@ -2420,12 +2442,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// STRIP(); the PY3_PROGRAM Kind=Bin visit keeps the "PY3_PROGRAM"
 		// name (see moduleStmtForKind) and does NOT surface STRIP_FLAG
 		// (matches the devtools/ya/bin reference shape).
+		var ownRPathFlags []string
+		if len(peerDynamicPaths) > 0 {
+			ownRPathFlags = append([]string(nil), peerRPathFlagsGlobal...)
+		}
+
 		wantsStrip := d.moduleStmt.Name == "PY3_PROGRAM_BIN"
 		ldRef := EmitLD(
 			ldInstance,
 			binaryName,
 			ldCCRefs, ldCCOutputs,
 			ldPeerArchiveRefs, ldPeerArchivePaths,
+			peerLinkCmdPaths,
 			mergedLDPlugins.Refs, mergedLDPlugins.Paths,
 			peerGlobalRefs, peerGlobalPaths,
 			peerWholeArchiveRefs, peerWholeArchivePaths,
@@ -2437,6 +2465,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			peerCFlagsGlobal,
 			autoPeerCFlags,
 			peerLDFlagsGlobal,
+			d.ldFlags,
+			ownRPathFlags,
+			peerRPathFlagsGlobal,
 			peerObjAddLibsGlobal,
 			d.flags.NoCompilerWarnings,
 			wantsStrip,
@@ -2460,6 +2491,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
 			ObjAddLibsGlobal:                mergeDedup(peerObjAddLibsGlobal, d.objAddLibsGlobal),
 			LDFlagsGlobal:                   mergeDedup(peerLDFlagsGlobal, d.ldFlags),
+			RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
 			PeerArchiveClosureRefs:          append([]NodeRef(nil), peerArchiveRefs...),
 			PeerArchiveClosurePaths:         cloneVFSs(peerArchivePaths),
 			PeerGlobalClosureRefs:           append([]NodeRef(nil), peerGlobalRefs...),
@@ -2632,6 +2664,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
 		ObjAddLibsGlobal:                mergeDedup(peerObjAddLibsGlobal, d.objAddLibsGlobal),
 		LDFlagsGlobal:                   mergeDedup(peerLDFlagsGlobal, d.ldFlags),
+		RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
 		PeerArchiveClosureRefs:          append([]NodeRef(nil), peerArchiveRefs...),
 		PeerArchiveClosurePaths:         cloneVFSs(peerArchivePaths),
 		PeerGlobalClosureRefs:           append([]NodeRef(nil), peerGlobalRefs...),
@@ -2982,6 +3015,7 @@ type peerGlobalContribs struct {
 	cOnlyFlags []string
 	objAddLibs []string
 	ldFlags    []string
+	rpathFlags []string
 	// Archive closure transitively reachable from this header-only
 	// LIBRARY's peers — DFS post-order, dedup-by-path (same discipline as
 	// the main walker). Header-only LIBRARYs emit no AR themselves but
@@ -3030,6 +3064,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	cOnlyFlagsSeen := map[string]struct{}{}
 	objAddLibSeen := map[string]struct{}{}
 	ldFlagsSeen := map[string]struct{}{}
+	rpathFlagsSeen := map[string]struct{}{}
 	archiveSeen := map[VFS]struct{}{}
 	globalSeen := map[VFS]struct{}{}
 	wholeArchiveSeen := map[VFS]struct{}{}
@@ -3126,6 +3161,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		addEach(cOnlyFlagsSeen, &out.cOnlyFlags, peerResult.COnlyFlagsGlobal)
 		addEach(objAddLibSeen, &out.objAddLibs, peerResult.ObjAddLibsGlobal)
 		addEach(ldFlagsSeen, &out.ldFlags, peerResult.LDFlagsGlobal)
+		addEach(rpathFlagsSeen, &out.rpathFlags, peerResult.RPathFlagsGlobal)
 
 		// Fold peer's transitive archive closure plus peer's own AR
 		// (when present) in DFS post-order.
