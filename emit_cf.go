@@ -27,7 +27,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	in.IncludeInputs = walkClosure(ctx, instance, resolveSourceVFS(ctx, instance, cf.Src, in.SrcDir), in)
 
 	cfgVars := buildCFGVars(ctx.fs, instance.Path+"/"+cf.Src, d.setVars, d.defaultVars)
-	cfRef, cfOut := EmitCF(instance, cf.Src, cfgVars, in.IncludeInputs, ctx.emit)
+	cfRef, cfOut := EmitCF(instance, cf.Src, cfgVars, in.IncludeInputs, instance.Path, ctx.emit)
 
 	if reg != nil {
 		// The generated header carries its generation inputs (the .in
