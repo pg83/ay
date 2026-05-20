@@ -376,7 +376,7 @@ func hostISA() ISA {
 }
 
 // hostPlatformID returns the canonical `default-<os>-<isa>` triple
-// for the running process. Used by `yatool make` to seed
+// for the running process. Used by `ay make` to seed
 // `GG_TARGET_PLATFORM` when the CLI flag is not supplied.
 func hostPlatformID() string {
 	return string(MakePlatformID(hostOS(), hostISA()))

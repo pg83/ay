@@ -1,4 +1,4 @@
-module yatool
+module ay
 
 go 1.25
 

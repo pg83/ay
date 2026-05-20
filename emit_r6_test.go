@@ -15,7 +15,7 @@ import (
 // the edge from `ForeignDepRefs["tool"]` to `DepRefs` to match the
 // reference shape: `deps=[ragel6 host LD UID]`, no foreign_deps),
 // and that cmd_args/kv/tags/requirements match the reference shape
-// observed in /home/pg/monorepo/yatool_orig/sg.json.
+// observed in /home/pg/monorepo/yatool/sg.json.
 func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	e := NewBufferedEmitter()
 
@@ -128,7 +128,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 // at the parent level), EmitR6 rewrites cmd_args[0] to the
 // reference-shaped parent path `/contrib/tools/ragel6/ragel6`.
 // Reference verification source:
-// /home/pg/monorepo/yatool_orig/sg.json — the util R6 node invokes
+// /home/pg/monorepo/yatool/sg.json — the util R6 node invokes
 // ragel6 at the parent path, NOT under bin/.
 func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
 	e := NewBufferedEmitter()

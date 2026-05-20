@@ -90,7 +90,7 @@ func newIncludeDirectiveParserRegistry() includeDirectiveParserRegistry {
 	}
 
 	// Keep the explicit ext table close to upstream parser_manager.cpp,
-	// but preserve current yatool behaviour by falling back to the
+	// but preserve current ay behaviour by falling back to the
 	// C-like parser for any not-yet-modelled extension.
 	r.register(cLike,
 		".cpp", ".cc", ".cxx", ".c", ".C", ".auxcpp",

@@ -231,7 +231,7 @@ func TestPyMainObjcopyHashPy3ccSlow(t *testing.T) {
 // declaration order; pathid is computed on that joined string.
 func TestNoCheckImportsPathidLib2Py(t *testing.T) {
 	// Declaration order copied verbatim from
-	// /home/pg/monorepo/yatool_orig/contrib/tools/python3/lib2/py/ya.make:13-36.
+	// /home/pg/monorepo/yatool/contrib/tools/python3/lib2/py/ya.make:13-36.
 	imports := []string{
 		"_ios_support",
 		"_pyrepl.*",
@@ -381,7 +381,7 @@ func TestChunkPySrcEntriesEmptyReturnsNil(t *testing.T) {
 // REF objcopy_0299ac47a... has 13 yapyc3 + 13 .py in inputs[] while
 // cmd_args --inputs only carries the 12 non-straddler yapyc3s.
 func TestChunkPySrcEntriesLibInputsAggregate(t *testing.T) {
-	srcs := parsePySrcsTopLevel(t, "/home/pg/monorepo/yatool_orig/contrib/tools/python3/Lib/ya.make")
+	srcs := parsePySrcsTopLevel(t, "/home/pg/monorepo/yatool/contrib/tools/python3/Lib/ya.make")
 	d := &moduleData{
 		pySrcs:       srcs,
 		pyBuildNoPY:  true,
@@ -488,7 +488,7 @@ func parsePySrcsTopLevel(t *testing.T, path string) []string {
 // TOP_LEVEL: only yapyc3 entries; ~1070 HandleResource calls partitioned
 // by the upstream per-call flush check.
 func TestChunkPySrcEntriesLibByteExact(t *testing.T) {
-	srcs := parsePySrcsTopLevel(t, "/home/pg/monorepo/yatool_orig/contrib/tools/python3/Lib/ya.make")
+	srcs := parsePySrcsTopLevel(t, "/home/pg/monorepo/yatool/contrib/tools/python3/Lib/ya.make")
 	if len(srcs) < 100 {
 		t.Fatalf("Lib PY_SRCS sources: got %d, want >=100", len(srcs))
 	}
@@ -549,7 +549,7 @@ func TestChunkPySrcEntriesLibByteExact(t *testing.T) {
 // 38 unique hashes for this module; the extra one is the
 // `py/no_check_imports/...` kv-only chunk emitted by emitNoCheckImportsObjcopy.
 func TestChunkPySrcEntriesLib2PyByteExact(t *testing.T) {
-	srcs := parsePySrcsTopLevel(t, "/home/pg/monorepo/yatool_orig/contrib/tools/python3/lib2/py/ya.make")
+	srcs := parsePySrcsTopLevel(t, "/home/pg/monorepo/yatool/contrib/tools/python3/lib2/py/ya.make")
 	if len(srcs) < 100 {
 		t.Fatalf("lib2/py PY_SRCS sources: got %d, want >=100", len(srcs))
 	}

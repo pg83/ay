@@ -1,5 +1,5 @@
 # Build artifacts
-/yatool
+/ay
 *.test
 *.out
 

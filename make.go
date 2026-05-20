@@ -27,7 +27,7 @@ import (
 //   <BldRoot>/cas/<sha256> — content-addressed output blobs
 //   <BldRoot>/uid/<uid>    — per-node meta JSON: {output → cas path}
 
-// makeFlags captures every CLI option `yatool make` accepts.
+// makeFlags captures every CLI option `ay make` accepts.
 type makeFlags struct {
 	srcRoot     string
 	bldRoot     string
@@ -667,7 +667,7 @@ func parseMakeFlags(args []string) *makeFlags {
 	// skipped by the iterator. dispatch() hands us argv[2:] (the user
 	// args only), so prepend a sentinel so the iterator sees every
 	// flag the user typed.
-	state := getopt.NewState(append([]string{"yatool-make"}, args...))
+	state := getopt.NewState(append([]string{"ay-make"}, args...))
 
 	config := getopt.Config{
 		Opts:     getopt.OptStr("GrdkThD:j:B:o:I:"),
@@ -741,7 +741,7 @@ func parseMakeFlags(args []string) *makeFlags {
 	}
 
 	if mf.srcRoot == "" {
-		mf.srcRoot = "/home/pg/monorepo/yatool_orig"
+		mf.srcRoot = "/home/pg/monorepo/yatool"
 	}
 
 	if mf.bldRoot == "" {
@@ -781,7 +781,7 @@ func parseKV(into map[string]string, kv string) {
 }
 
 func printMakeUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage: yatool make [flags] [targets...]
+	fmt.Fprint(w, `Usage: ay make [flags] [targets...]
 Build the targets in dependency order, executing per-node cmds.
 
 Layout flags:

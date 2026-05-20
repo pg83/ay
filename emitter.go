@@ -400,7 +400,7 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 
 // StreamingEmitter finalizes each node inline at Emit time: resolves
 // DepRefs from already-emitted nodes' UIDs, computes UID, fires
-// onNode(n) synchronously. Used by `yatool make` so leaf compiles can
+// onNode(n) synchronously. Used by `ay make` so leaf compiles can
 // start immediately. Gen emits in dep-first post-order DFS, so deps land
 // before parents; out-of-order emits are parked and drained in Finish().
 type StreamingEmitter struct {

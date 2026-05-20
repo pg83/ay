@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""diff.py - inspect already-normalized yatool graphs.
+"""diff.py - inspect already-normalized ay graphs.
 
 Typical use:
     ./dev/diff.py --our .out/sg3.our.norm.json --ref .out/sg3.ref.norm.json \
@@ -194,7 +194,7 @@ def print_buckets(our: list[dict[str, Any]], ref: list[dict[str, Any]], depth: i
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Diff already-normalized yatool graphs")
+    p = argparse.ArgumentParser(description="Diff already-normalized ay graphs")
     p.add_argument("--our", required=True, help="normalized OUR graph JSON")
     p.add_argument("--ref", required=True, help="normalized REF graph JSON")
     p.add_argument("--root-output", help="substring or suffix identifying root output")
