@@ -25,12 +25,17 @@ const buildTypeDebug = "BUILD_TYPE=DEBUG"
 // Returns (CF NodeRef, outputPath). cfgVars is the pre-filtered
 // `NAME=VALUE` cmd-arg fragment list (walker computes via
 // buildCFGVars); includeInputs is the source-closure already walked
-// from the .in template.
+// from the .in template. moduleDir is the target_properties module_dir:
+// the declaring module for compiled-in-place templates (.cpp.in/.c.in,
+// explicit CONFIGURE_FILE) but the consuming module for a generated
+// header realized by a peer (.h.in) — ymake attributes a generated
+// header to the module that #includes it.
 func EmitCF(
 	instance ModuleInstance,
 	srcRel string,
 	cfgVars []string,
 	includeInputs []VFS,
+	moduleDir string,
 	emit Emitter,
 ) (NodeRef, VFS) {
 	srcVFS := Source(instance.Path + "/" + srcRel)
@@ -68,7 +73,7 @@ func EmitCF(
 		Outputs: []VFS{outVFS},
 		Tags:    []string{},
 		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
+			"module_dir": moduleDir,
 		},
 		Platform:     string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
