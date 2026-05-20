@@ -5,6 +5,7 @@ import (
 	enc32 "encoding/base32"
 	encb64 "encoding/base64"
 	enchex "encoding/hex"
+	"sort"
 	"strings"
 )
 
@@ -51,13 +52,11 @@ func emitResourceObjcopy(
 		addGlobal(objcopyScriptVFS)
 	}
 
-	for _, nodeRes := range emitPyNamespaceObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef) {
-		if nodeRes != nil {
-			out.Refs = append(out.Refs, nodeRes.Ref)
-			out.Outputs = append(out.Outputs, nodeRes.Out)
-			addGlobal(objcopyScriptVFS)
-		}
-	}
+	// py/namespace objcopy nodes are emitted by emitPySrcObjcopy, interleaved
+	// before each PY_SRCS group's py-source chunks (matches ya.make macro
+	// evaluation order: pybuild.py:587-594 emits the namespace resource
+	// immediately ahead of that group's resfs entries, and RESOURCE-class
+	// macros precede the PY_SRCS macros).
 
 	if nodeRes := emitNoCheckImportsObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); nodeRes != nil {
 		out.Refs = append(out.Refs, nodeRes.Ref)
@@ -423,20 +422,26 @@ func emitYaConfJSONObjcopy(
 		hashPath   string
 	}
 
+	// Member order: the YA_CONF_JSON file resource first, then its formula
+	// resources sorted lexicographically by full formula path. Matches the
+	// REF .global.a cmd_args order; emission order is what normalize.py
+	// preserves (inputs/deps are sorted, cmds are not).
 	var resources []yaConfResource
 	for _, file := range d.yaConfJSON {
-		for _, formula := range yaConfFormulaResources(ctx.fs, file) {
+		resources = append(resources, yaConfResource{
+			sourcePath: file,
+			keyPath:    "ya.conf.json",
+			hashPath:   "ya.conf.json",
+		})
+		formulas := yaConfFormulaResources(ctx.fs, file)
+		sort.Strings(formulas)
+		for _, formula := range formulas {
 			resources = append(resources, yaConfResource{
 				sourcePath: formula,
 				keyPath:    formula,
 				hashPath:   formula,
 			})
 		}
-		resources = append(resources, yaConfResource{
-			sourcePath: file,
-			keyPath:    "ya.conf.json",
-			hashPath:   "ya.conf.json",
-		})
 	}
 
 	out := make([]*objcopyEmit, 0, len(resources))
@@ -512,76 +517,58 @@ func emitYaConfJSONObjcopy(
 	return out
 }
 
-// emitPyNamespaceObjcopy emits the `py/namespace/<mod_list_md5>/<unit>=<ns>.`
-// kv objcopy node per pybuild.py:587-594. The mod_list_md5 is a
-// streaming md5 over each `(path, mod)` pair's `mod` UTF-8 bytes,
-// iteration-ordered. Skipped for `contrib/tools/python3*` modules
-// (pybuild.py:40-48) and for modules whose PY_SRCS is TOP_LEVEL.
-func emitPyNamespaceObjcopy(
+// emitPyNamespaceForGroup emits the `py/namespace/<mod_list_md5>/<unit>=<ns>.`
+// kv objcopy node for a single PY_SRCS group (pybuild.py:587-594). The
+// mod_list_md5 is a streaming md5 over each source's dotted `mod` UTF-8
+// bytes in declaration order. Returns nil when the group carries no `.py`
+// sources. The module-level namespace guards (noExtendedPySearch,
+// contrib/python*, contrib/tools/python3*, resourceModuleTag) are checked
+// by the caller (emitPySrcObjcopy) before invoking this.
+func emitPyNamespaceForGroup(
 	ctx *genCtx,
 	instance ModuleInstance,
 	d *moduleData,
+	group pySrcGroup,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
-) []*objcopyEmit {
-	if len(d.pySrcs) == 0 || d.noExtendedPySearch {
+) *objcopyEmit {
+	pySources := make([]string, 0, len(group.Srcs))
+	for _, srcRel := range group.Srcs {
+		if strings.HasSuffix(srcRel, ".py") {
+			pySources = append(pySources, srcRel)
+		}
+	}
+	if len(pySources) == 0 {
 		return nil
 	}
-	if strings.HasPrefix(instance.Path, "contrib/python") ||
-		strings.HasPrefix(instance.Path, "contrib/tools/python3") {
-		return nil
-	}
-	if d.moduleStmt == nil || resourceModuleTag(d.moduleStmt.Name) == nil {
-		return nil
-	}
 
-	groups := d.pySrcGroups
-	if len(groups) == 0 {
-		groups = []pySrcGroup{{Srcs: d.pySrcs, TopLevel: d.pyTopLevel, Namespace: d.pyNamespace}}
+	nsPrefix := strings.ReplaceAll(instance.Path, "/", ".") + "."
+	if group.Namespace != nil {
+		nsPrefix = strings.TrimSuffix(*group.Namespace, ".") + "."
+	}
+	nsValue := nsPrefix
+	if group.TopLevel {
+		nsPrefix = ""
+		nsValue = "."
 	}
 
-	var out []*objcopyEmit
-	for _, group := range groups {
-		pySources := make([]string, 0, len(group.Srcs))
-		for _, srcRel := range group.Srcs {
-			if strings.HasSuffix(srcRel, ".py") {
-				pySources = append(pySources, srcRel)
-			}
-		}
-		if len(pySources) == 0 {
-			continue
-		}
-
-		nsPrefix := strings.ReplaceAll(instance.Path, "/", ".") + "."
-		if group.Namespace != nil {
-			nsPrefix = strings.TrimSuffix(*group.Namespace, ".") + "."
-		}
-		nsValue := nsPrefix
-		if group.TopLevel {
-			nsPrefix = ""
-			nsValue = "."
-		}
-
-		h := md5.New()
-		for _, srcRel := range pySources {
-			modName := strings.TrimSuffix(srcRel, ".py")
-			modName = strings.ReplaceAll(modName, "/", ".")
-			mod := nsPrefix + modName
-			h.Write([]byte(mod))
-		}
-		modListMD5 := enchex.EncodeToString(h.Sum(nil))
-
-		keyPath := instance.Path
-		if group.TopLevel && d.srcDir != nil {
-			keyPath = *d.srcDir
-		}
-		key := "py/namespace/" + modListMD5 + "/" + keyPath
-		kvHash := key + "=\"" + nsValue + "\""
-		kvCmd := key + "=" + nsValue
-		out = append(out, emitKvOnlyObjcopyNode(ctx, instance, []string{kvHash}, []string{kvCmd}, d, rescompilerLDRef, rescompressorLDRef))
+	h := md5.New()
+	for _, srcRel := range pySources {
+		modName := strings.TrimSuffix(srcRel, ".py")
+		modName = strings.ReplaceAll(modName, "/", ".")
+		mod := nsPrefix + modName
+		h.Write([]byte(mod))
 	}
+	modListMD5 := enchex.EncodeToString(h.Sum(nil))
 
-	return out
+	keyPath := instance.Path
+	if group.TopLevel && d.srcDir != nil {
+		keyPath = *d.srcDir
+	}
+	key := "py/namespace/" + modListMD5 + "/" + keyPath
+	kvHash := key + "=\"" + nsValue + "\""
+	kvCmd := key + "=" + nsValue
+	return emitKvOnlyObjcopyNode(ctx, instance, []string{kvHash}, []string{kvCmd}, d, rescompilerLDRef, rescompressorLDRef)
 }
 
 // emitPyMainObjcopy emits the `PY_MAIN=<dotted>:<func>` kv objcopy node
@@ -647,29 +634,33 @@ func emitPySrcObjcopy(
 		groups = []pySrcGroup{{Srcs: d.pySrcs, TopLevel: d.pyTopLevel, Namespace: d.pyNamespace}}
 	}
 
-	var chunkGroups [][]pySrcChunk
-	chunkCount := 0
+	// Per-group namespace objcopy nodes interleave ahead of that group's
+	// py-source chunks. The namespace guard set differs from the chunk
+	// guard: PY3_PROGRAM emits chunks but no namespace (resourceModuleTag
+	// returns nil for it), and noExtendedPySearch / contrib/python* /
+	// contrib/tools/python3* suppress only the namespace.
+	namespaceEnabled := !d.noExtendedPySearch &&
+		!strings.HasPrefix(instance.Path, "contrib/python") &&
+		!strings.HasPrefix(instance.Path, "contrib/tools/python3") &&
+		resourceModuleTag(d.moduleStmt.Name) != nil
+
+	moduleTag := resourceModuleTagForData(d)
+	res := &objcopyEmitResult{}
+	var globalMemberInputs []VFS
 	for _, group := range groups {
+		if namespaceEnabled {
+			if nsRes := emitPyNamespaceForGroup(ctx, instance, d, group, rescompilerLDRef, rescompressorLDRef); nsRes != nil {
+				res.Refs = append(res.Refs, nsRes.Ref)
+				res.Outputs = append(res.Outputs, nsRes.Out)
+				globalMemberInputs = append(globalMemberInputs, objcopyScriptVFS)
+			}
+		}
+
 		entries := buildPySrcEntriesFor(d, instance.Path, group.Srcs, group.TopLevel, group.Namespace)
 		if len(entries) == 0 {
 			continue
 		}
-		chunks := chunkPySrcEntries(entries)
-		chunkGroups = append(chunkGroups, chunks)
-		chunkCount += len(chunks)
-	}
-	if chunkCount == 0 {
-		return nil
-	}
-
-	moduleTag := resourceModuleTagForData(d)
-	res := &objcopyEmitResult{
-		Refs:    make([]NodeRef, 0, chunkCount),
-		Outputs: make([]VFS, 0, chunkCount),
-	}
-	var globalMemberInputs []VFS
-	for _, chunks := range chunkGroups {
-		for _, ch := range chunks {
+		for _, ch := range chunkPySrcEntries(entries) {
 			hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path, moduleTag)
 			outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
@@ -760,6 +751,10 @@ func emitPySrcObjcopy(
 			}
 			globalMemberInputs = append(globalMemberInputs, objcopyScriptVFS)
 		}
+	}
+
+	if len(res.Refs) == 0 {
+		return nil
 	}
 
 	res.GlobalMemberInputs = globalMemberInputs

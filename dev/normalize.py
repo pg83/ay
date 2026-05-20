@@ -443,9 +443,8 @@ def _normalize(data: dict[str, Any], target: str) -> tuple[bytes, dict]:
 
     t3 = time.monotonic()
 
-    # Step 8 — DFS preorder ordering.  Children are visited in sorted order of
-    # their NEW UIDs so the traversal order is canonical and identical between
-    # OUR and REF (whose original UIDs differ for semantically equal nodes).
+    # Step 8 — DFS preorder gives a deterministic base ordering (children
+    # visited in sorted order of their NEW UIDs).
     preorder_old = _dfs_preorder(root_uid, closure, old_to_new)
 
     # Step 6 — build output graph[]
@@ -467,6 +466,21 @@ def _normalize(data: dict[str, Any], target: str) -> tuple[bytes, dict]:
         canon["self_uid"] = new_uid  # step: self_uid := uid
 
         result_graph.append(canon)
+
+    # graph[] array order is non-semantic: nodes reference their
+    # dependencies by UID (deps[]), never by array position, so any
+    # permutation of graph[] denotes the same graph. DFS preorder alone is
+    # NOT a complete canonicalization — the relative position of two
+    # identical-content nodes reachable through different ancestors depends
+    # on those ancestors' UIDs, so while OUR and REF are not yet isomorphic
+    # (some cluster still diverging) the same node can land at different
+    # indices in OUR vs REF. Positional / keep-last analyses then misread
+    # that as a content change, most visibly for dual-variant (host+target)
+    # outputs that share one output path (e.g. $(B)/certs/objcopy_*.o
+    # emitted by both the x86_64 host-tool and aarch64 target builds). A
+    # final total-order sort by the canonical NEW UID removes that degree of
+    # freedom; at convergence OUR and REF still serialize byte-identically.
+    result_graph.sort(key=lambda canon: canon["uid"])
 
     # Build result[] using new UIDs; fall back to root if original result
     # UIDs are outside the closure (e.g. build/cow/on against full sg.json).
