@@ -2301,7 +2301,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		var ldObjcopyRefs []NodeRef
 		var ldObjcopyPaths []VFS
 
-		if resourceModuleTag(d.moduleStmt.Name) != nil {
+		if resourceModuleTagForData(d) != nil {
 			emitPySrcs(ctx, instance, d)
 
 			objcopyRes := emitResourceObjcopy(ctx, instance, d)

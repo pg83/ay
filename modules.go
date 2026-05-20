@@ -1193,8 +1193,15 @@ func pythonModuleName(modulePath, src string, topLevel bool, namespace *string) 
 }
 
 func pythonInitSuffix(name string) string {
+	// Single-segment (top-level) module names pass through verbatim; only
+	// dotted (namespaced) names get the `<len><seg>` per-segment mangling.
+	segs := strings.Split(name, ".")
+	if len(segs) == 1 {
+		return name
+	}
+
 	var mangled strings.Builder
-	for _, seg := range strings.Split(name, ".") {
+	for _, seg := range segs {
 		fmt.Fprintf(&mangled, "%d%s", len(seg), seg)
 	}
 
