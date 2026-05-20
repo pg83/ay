@@ -121,7 +121,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				}
 				return tp
 			}(),
-			Platform:     string(instance.Platform.Target),
+			Platform: string(instance.Platform.Target),
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",
@@ -237,7 +237,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 				TargetProperties: map[string]string{
 					"module_dir": instance.Path,
 				},
-				Platform:     string(pyInstance.Platform.Target),
+				Platform: string(pyInstance.Platform.Target),
 				Requirements: map[string]interface{}{
 					"cpu":     float64(1),
 					"network": "restricted",
@@ -262,7 +262,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		ccIn.ExtraDepRefs = []NodeRef{pyRef}
 		ccIn.Py3Suffix = py3Suffix
 		if len(d.cythonCpp) > 0 {
-			ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl)
+			ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		}
 		ccIn.IncludeInputs = []VFS{genPy3RegScriptVFS}
 		// PyInit_/init_module_ defines added by `onpy_register` AFTER
