@@ -199,6 +199,27 @@ func expandRootrel(kv string, unitPath string) string {
 	return kv[:idx] + expanded + tail[end+len("\"}"):]
 }
 
+// rootrelInputPath extracts the unit-relative path P from a
+// `${rootrel;context=TEXT;input=TEXT:"P"}` placeholder embedded in a kv
+// value. The `input=TEXT:"P"` modifier registers P as a graph input of
+// the objcopy node even though P is not listed in `--inputs/__PATHS`.
+// Returns ("", false) when no such placeholder is present.
+func rootrelInputPath(kv string) (string, bool) {
+	const marker = "${rootrel;context=TEXT;input=TEXT:\""
+	idx := strings.Index(kv, marker)
+	if idx < 0 {
+		return "", false
+	}
+
+	tail := kv[idx+len(marker):]
+	end := strings.Index(tail, "\"}")
+	if end < 0 {
+		return "", false
+	}
+
+	return tail[:end], true
+}
+
 func yaConfFormulaResources(fs *FS, confPath string) []string {
 	raw, err := fs.Read(confPath)
 	if err != nil {
@@ -440,4 +461,3 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 func pySrcYapycSuffix(modulePath string) string {
 	return protoPathID("$S/" + modulePath)[:4]
 }
-
