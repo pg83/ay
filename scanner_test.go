@@ -1367,6 +1367,30 @@ include "machine.rl";
 	}
 }
 
+func TestParsedIncludes_LeadingUTF8BOM(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bom.cpp")
+
+	// A UTF-8 BOM (EF BB BF) precedes the first directive — observed on
+	// library/cpp/threading/future/subscription/subscription.cpp. ymake
+	// ignores it; the scanner must too, or the whole include closure
+	// collapses (the file's first #include pulls everything).
+	content := append([]byte{0xEF, 0xBB, 0xBF}, []byte("#include \"sibling.h\"\n#include <system.h>\n")...)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("write bom.cpp: %v", err)
+	}
+
+	scanner := NewIncludeScanner(dir, SysInclSet{})
+	local := scanner.parsedIncludes(Source("bom.cpp")).bucket(parsedIncludesLocal)
+
+	if len(local) != 2 {
+		t.Fatalf("got %d local entries, want 2 (BOM not stripped?); %+v", len(local), local)
+	}
+	if local[0].target != "sibling.h" || local[0].kind != includeQuoted {
+		t.Fatalf("local[0] = %+v, want quoted \"sibling.h\"", local[0])
+	}
+}
+
 func TestParsedIncludes_SwigBuckets(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "src.swg")
