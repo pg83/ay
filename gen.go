@@ -2702,7 +2702,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 		// The `.global.a` aggregator uses the same member-order discipline
 		// as the regular AR — hand-written / objcopy_* .o files precede
-		// codegen-derived .reg3.cpp.o etc.
+		// codegen-derived reg3 objects, including host PIC variants.
 		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))
 		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, globalAggregated, ctx.host, ctx.emit)
 		result.GlobalRef = &globalRef
@@ -3331,7 +3331,8 @@ func hasSkippedSource(d *moduleData) bool {
 //  3. CONFIGURE_FILE-derived (parallel signal — path-indistinguishable).
 //  4. JOIN_SRCS — declaration order.
 //  5. Codegen-derived .o files: .g4 → .h_serialized → .ev.pb →
-//     .rl6 → .reg3 (declaration order within each).
+//     .rl6 → .reg3, including host PIC variants (declaration order
+//     within each).
 //  6. Legacy R6 paths with the `/_/_/` infix go last.
 func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGenerated []bool, numSrcsDerived int) ([]NodeRef, []VFS) {
 	if len(paths) == 0 {
@@ -3359,7 +3360,7 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 			legacyR6 = append(legacyR6, m)
 		case i < len(isFlatNoLto) && isFlatNoLto[i]:
 			noLtoSrcs = append(noLtoSrcs, m)
-		case strings.HasSuffix(rel, ".reg3.cpp.o") || strings.Contains(rel, ".reg3.cpp.py3.o"):
+		case strings.Contains(rel, ".reg3.cpp") && strings.HasSuffix(rel, ".o"):
 			reg3Srcs = append(reg3Srcs, m)
 		case strings.HasSuffix(rel, ".rl6.cpp.o"):
 			rl6Srcs = append(rl6Srcs, m)
