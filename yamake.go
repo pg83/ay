@@ -94,6 +94,7 @@ type AddInclStmt struct {
 	GlobalPaths []string
 	OwnPaths    []string
 	CythonPaths []string
+	AsmPaths    []string
 	// AllPaths preserves declaration order across the GLOBAL split, so
 	// own cmd_args emission gets -I slots in declaration-order layout
 	// (not Global-first).
@@ -1020,9 +1021,9 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 
 		return &JoinSrcsStmt{OutputName: args[0], Sources: sources, Line: nameTok.line}
 	case "ADDINCL":
-		globalPaths, ownPaths, cythonPaths, allPaths := splitAddInclPaths(args)
+		globalPaths, ownPaths, cythonPaths, asmPaths, allPaths := splitAddInclPaths(args)
 
-		return &AddInclStmt{GlobalPaths: globalPaths, OwnPaths: ownPaths, CythonPaths: cythonPaths, AllPaths: allPaths, Line: nameTok.line}
+		return &AddInclStmt{GlobalPaths: globalPaths, OwnPaths: ownPaths, CythonPaths: cythonPaths, AsmPaths: asmPaths, AllPaths: allPaths, Line: nameTok.line}
 	case "CFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
 
@@ -1364,14 +1365,26 @@ func splitFlagsByGlobal(args []string) (globalFlags, ownFlags []string) {
 //
 //	ADDINCL(GLOBAL a b)  →  global=[a], own=[b]
 //
-// FOR cython paths feed only the CY command. Other FOR <kind> qualifiers
+// FOR cython paths feed only the CY command; FOR asm paths feed only the
+// assembler source scan (never a C/C++ -I). Other FOR <kind> qualifiers
 // keep the historic proto behaviour: drop the selector tokens, keep the path
 // as a normal include.
-func splitAddInclPaths(args []string) (globalPaths, ownPaths, cythonPaths, allPaths []string) {
+func splitAddInclPaths(args []string) (globalPaths, ownPaths, cythonPaths, asmPaths, allPaths []string) {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "FOR" {
 			if i+2 < len(args) && args[i+1] == "cython" {
 				cythonPaths = append(cythonPaths, args[i+2])
+				i += 2
+
+				continue
+			}
+
+			if i+2 < len(args) && args[i+1] == "asm" {
+				// FOR asm — assembler-only include (yasm/clang AS search
+				// path); never a C/C++ -I. Routed to asmPaths, consumed by
+				// the AS source scan; excluded from own/global/all so it
+				// does not leak onto CC compiles.
+				asmPaths = append(asmPaths, args[i+2])
 				i += 2
 
 				continue
@@ -1395,6 +1408,13 @@ func splitAddInclPaths(args []string) (globalPaths, ownPaths, cythonPaths, allPa
 					continue
 				}
 
+				if i+2 < len(args) && args[i+1] == "asm" {
+					asmPaths = append(asmPaths, args[i+2])
+					i += 2
+
+					continue
+				}
+
 				i++ // skip FOR
 				i++ // skip kind
 			}
@@ -1409,7 +1429,7 @@ func splitAddInclPaths(args []string) (globalPaths, ownPaths, cythonPaths, allPa
 		}
 	}
 
-	return globalPaths, ownPaths, cythonPaths, allPaths
+	return globalPaths, ownPaths, cythonPaths, asmPaths, allPaths
 }
 
 // parseIf is invoked with the `IF` name token already consumed. Reads

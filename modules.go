@@ -37,6 +37,7 @@ type moduleData struct {
 	addIncl               []VFS    // non-GLOBAL ADDINCL paths
 	addInclGlobal         []VFS    // ADDINCL(GLOBAL ...); peer-propagated to consumers
 	cythonAddIncl         []VFS    // ADDINCL(FOR cython ...); consumed by CY command, not downstream CC
+	asmAddIncl            []VFS    // ADDINCL(FOR asm ...); assembler-only include search path, not CC/CXX
 	cFlags                []string // non-GLOBAL CFLAGS (own C+C++ sources)
 	cFlagsGlobal          []string // CFLAGS(GLOBAL ...); peer-propagated to consumers' C+C++ sources
 	cxxFlags              []string // non-GLOBAL CXXFLAGS (own C++ sources)
@@ -269,6 +270,7 @@ func filterInvalidAddIncl(fs *FS, d *moduleData) {
 	d.addIncl = filterExistingSourceDirs(fs, d.addIncl)
 	d.addInclGlobal = filterExistingSourceDirs(fs, d.addInclGlobal)
 	d.cythonAddIncl = filterExistingSourceDirs(fs, d.cythonAddIncl)
+	d.asmAddIncl = filterExistingSourceDirs(fs, d.asmAddIncl)
 }
 
 func filterExistingSourceDirs(fs *FS, paths []VFS) []VFS {
@@ -494,6 +496,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			d.addInclGlobal = append(d.addInclGlobal, expandConfigVFSPaths(v.GlobalPaths, env)...)
 			d.addIncl = append(d.addIncl, expandConfigVFSPaths(v.AllPaths, env)...)
 			d.cythonAddIncl = append(d.cythonAddIncl, expandConfigVFSPaths(v.CythonPaths, env)...)
+			d.asmAddIncl = append(d.asmAddIncl, expandConfigVFSPaths(v.AsmPaths, env)...)
 		case *CFlagsStmt:
 			// GLOBAL flags peer-propagate (d.cFlagsGlobal); non-GLOBAL
 			// applies to own C+C++ sources only (d.cFlags). composeCC
