@@ -13,13 +13,13 @@ import (
 // of the upstream reference graph.
 //
 // Skip-if-missing pattern follows cc_test.go / ar_test.go: the reference
-// snapshot under /home/pg/monorepo/yatool_orig is required; absence is a
+// snapshot under /home/pg/monorepo/yatool is required; absence is a
 // host condition, not a test failure.
 
 // sourceRoot points at the upstream snapshot used by reference-aware
 // tests. The constant matches the production make default so test-only
 // fixtures resolve the same paths the integration harness does.
-const sourceRoot = "/home/pg/monorepo/yatool_orig"
+const sourceRoot = "/home/pg/monorepo/yatool"
 
 // TestGen_AcceptsProgramModule_Synthetic verifies PR-24's PROGRAM →
 // LD wiring on a synthetic source tree:
@@ -1045,7 +1045,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 // malloc/api), so the closure now reaches ≥150 nodes (in practice
 // ~1500). The full byte-exact L0/L3 acceptance gates land in a
 // later PR once the flag-bundle and host-tool gaps are filled.
-// Skipped when /home/pg/monorepo/yatool_orig is not present.
+// Skipped when /home/pg/monorepo/yatool is not present.
 //
 // The call may still throw a *ParseError or a domain error from a
 // deeply-peered ya.make whose macros PR-26 cannot evaluate (e.g.
@@ -2527,7 +2527,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 
 // TestGen_ToolsArchiver_L0_AtLeast95 is the M2 acceptance closer: PR-30
 // must lift L0 ≥ 95% on the tools/archiver target against the reference
-// graph at /home/pg/monorepo/yatool_orig/sg.json.
+// graph at /home/pg/monorepo/yatool/sg.json.
 // TestIsRuntimeAncestor_LiteralOnly pins PR-33 D01: `isRuntimeAncestor`
 // matches only literal entries in `runtimeAncestorPaths`. Subtree
 // members (`util/charset`, `contrib/libs/musl/full`,
@@ -2845,7 +2845,7 @@ func TestGen_ToolsArchiver_LDPluginSection(t *testing.T) {
 // TestGen_MuslPyplugin_HostCPDedup pins PR-35l's host CP dedup. The
 // reference graph emits exactly ONE CP node for `musl.py.pyplugin`
 // (on the target platform, UID `nPHkMSIqOHBrXsoclNuu6g` in
-// /home/pg/monorepo/yatool_orig/sg.json:105555) and reuses its UID
+// /home/pg/monorepo/yatool/sg.json:105555) and reuses its UID
 // from both target consumer LDs (archiver) and host consumer LDs
 // (yasm, ragel6). PR-35k initially emitted a second CP node on the
 // host platform because `WithHost`-recursed walks of

@@ -11,7 +11,7 @@ import (
 // These tests pin down the contract that PR-04 (the JSON serializer) and
 // PR-12 (the comparator) will rely on:
 //   - Field order in the marshalled object matches the alphabetical key
-//     order observed in /home/pg/monorepo/yatool_orig/sg.json.
+//     order observed in /home/pg/monorepo/yatool/sg.json.
 //   - foreign_deps is omitted when zero (per D5). host_platform is no
 //     longer a struct field — gjson_write derives it from Tags at
 //     serialization time and stdlib json.Marshal does not emit it.

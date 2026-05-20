@@ -48,17 +48,17 @@ func dispatch(argv []string) {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprint(w, `yatool — recreate ymake build-graph generator
+	fmt.Fprint(w, `ay — recreate ymake build-graph generator
 
 Usage:
-    yatool <subcommand> [flags]
+    ay <subcommand> [flags]
 
 Subcommands:
     fetch      Fetch and unpack an external resource.
     make       Generate and execute the build graph for a target.
     help       Show this message.
 
-Use yatool make -j 0 -G <target> > graph.json for graph-generation
+Use ay make -j 0 -G <target> > graph.json for graph-generation
 checks, then compare with ./dev/normalize.py for the canonical L0..L4
 verdict.
 `)

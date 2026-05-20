@@ -74,7 +74,7 @@ func vfsStrings(vs []VFS) []string {
 
 // TestEmitAR_BuildCowOn_Target_ByteExact verifies that EmitAR
 // produces a node that is field-for-field identical to the
-// reference TARGET AR node in /home/pg/monorepo/yatool_orig/sg.json
+// reference TARGET AR node in /home/pg/monorepo/yatool/sg.json
 // for the build/cow/on module.
 // TestEmitAR_BuildCowOn_Host_ByteExact verifies the host AR for
 // build/cow/on. Reference uses the SAME archive name

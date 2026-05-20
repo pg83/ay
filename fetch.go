@@ -240,7 +240,7 @@ func (p *resourceFetchPlan) mountMap() map[string]string {
 
 func cmdFetch(args []string) int {
 	if len(args) != 3 && len(args) != 4 {
-		ThrowFmt("fetch: usage: yatool fetch <build-root> <source-root> <uri> [output-dir]")
+		ThrowFmt("fetch: usage: ay fetch <build-root> <source-root> <uri> [output-dir]")
 	}
 
 	buildRoot := args[0]
@@ -269,7 +269,7 @@ func fetchResource(sourceRoot, uri, out string) {
 	Throw(os.RemoveAll(out))
 	Throw(os.MkdirAll(out, 0o755))
 
-	tmp := Throw2(os.MkdirTemp("", "yatool-fetch-*"))
+	tmp := Throw2(os.MkdirTemp("", "ay-fetch-*"))
 	defer os.RemoveAll(tmp)
 
 	archivePath := filepath.Join(tmp, "resource")

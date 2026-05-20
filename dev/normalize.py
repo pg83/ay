@@ -39,7 +39,7 @@ from typing import Any
 def _load(path: str) -> dict[str, Any]:
     """Parse a JSON file and return the top-level object.
 
-    The yatool emitter writes paths as `$(S)/<rel>` / `$(B)/<rel>` to
+    The ay emitter writes paths as `$(S)/<rel>` / `$(B)/<rel>` to
     keep node strings short; the reference graph uses the legacy
     `$(SOURCE_ROOT)/<rel>` / `$(BUILD_ROOT)/<rel>`. Compress the
     long forms to the short ones at file-load time (textual,
@@ -215,10 +215,10 @@ def _strip_and_canonicalize(node: dict, closure: dict[str, dict]) -> dict:
 
 
 def _drop_fetch_nodes(closure: dict[str, dict]) -> dict[str, dict]:
-    """Remove yatool-local resource fetch nodes from OUR graphs.
+    """Remove ay-local resource fetch nodes from OUR graphs.
 
     Reference graphs materialize tool resources outside the build graph.
-    yatool intentionally models them as explicit FETCH nodes so local
+    ay intentionally models them as explicit FETCH nodes so local
     executor UIDs depend on the downloaded resources.  For L4 graph
     comparison they are non-reference scaffolding, so drop them and
     remove corresponding deps from consumers.

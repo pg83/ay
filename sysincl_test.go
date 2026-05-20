@@ -10,7 +10,7 @@ import (
 // directory and checks (a) the parser does not throw on any file,
 // (b) a few well-known mappings resolve as expected.
 func TestLoadSysInclSet_RealTree(t *testing.T) {
-	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+	const sourceRoot = "/home/pg/monorepo/yatool"
 
 	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
@@ -206,7 +206,7 @@ func TestSourceFilter_NegativeLookahead(t *testing.T) {
 //     this record continue to fire — the PR-33 D05 deferred regression
 //     it documented.
 func TestSysIncl_PerRecordKeying(t *testing.T) {
-	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+	const sourceRoot = "/home/pg/monorepo/yatool"
 
 	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
@@ -280,7 +280,7 @@ func TestSysIncl_PerRecordKeying(t *testing.T) {
 // has `^(?!...)` and must come out source-keyed; misc.yml glibcasm
 // has `^contrib/libs/glibcasm` and must come out includer-keyed.
 func TestSysIncl_KeyBySourceCompiledFromFilter(t *testing.T) {
-	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+	const sourceRoot = "/home/pg/monorepo/yatool"
 
 	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
@@ -323,7 +323,7 @@ func TestSysIncl_KeyBySourceCompiledFromFilter(t *testing.T) {
 // cache, then again with a different header, and asserts the second
 // call's result matches an uncached recompute.
 func TestSysIncl_IncluderFilterCache_HitProducesEqualResult(t *testing.T) {
-	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+	const sourceRoot = "/home/pg/monorepo/yatool"
 
 	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
@@ -387,7 +387,7 @@ func stringSlicesEqualUnordered(a, b []string) bool {
 // PR-31 acceptance reporting. Emitted via t.Logf so `go test -v`
 // shows it.
 func TestLoadSysInclSet_Stats(t *testing.T) {
-	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+	const sourceRoot = "/home/pg/monorepo/yatool"
 
 	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)

@@ -316,7 +316,7 @@ func muslConsumerPeerAddIncl(isa ISA) []VFS {
 //
 // Both checks skip when the production tree is not present.
 func TestScanner_IncludeNextSuppressed(t *testing.T) {
-	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+	const sourceRoot = "/home/pg/monorepo/yatool"
 
 	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
@@ -383,7 +383,7 @@ func TestScanner_IncludeNextSuppressed(t *testing.T) {
 // preserves this behaviour; the suppression only affects the
 // `next: true` branch.
 func TestScanner_RegularIncludeStillResolvesViaSysincl(t *testing.T) {
-	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+	const sourceRoot = "/home/pg/monorepo/yatool"
 
 	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
@@ -438,7 +438,7 @@ func TestScanner_RegularIncludeStillResolvesViaSysincl(t *testing.T) {
 // the same equivalence class because their `activeSourceKeyed` records
 // (PerSourceView) match pointer-for-pointer.
 func TestScanner_SubgraphCacheReuse(t *testing.T) {
-	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+	const sourceRoot = "/home/pg/monorepo/yatool"
 
 	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
@@ -1101,7 +1101,7 @@ func TestScanner_AngleSysinclUnaffected(t *testing.T) {
 // contain libcxxrt/unwind.h and libunwind/include/unwind.h, but
 // NOT libcxx/include/unwind.h.
 func TestScanner_LibcxxrtUnwindQuoted_ProductionParity(t *testing.T) {
-	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+	const sourceRoot = "/home/pg/monorepo/yatool"
 
 	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
 		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
@@ -1527,7 +1527,7 @@ grammar X;
 //
 // Skips when the production tree is not present.
 func TestScanner_AsmlibAsmInputsParity(t *testing.T) {
-	const sourceRoot = "/home/pg/monorepo/yatool_orig"
+	const sourceRoot = "/home/pg/monorepo/yatool"
 
 	if _, err := os.Stat(filepath.Join(sourceRoot, "contrib/libs/asmlib/sfmt64.asm")); err != nil {
 		t.Skipf("asmlib source not present: %v", err)

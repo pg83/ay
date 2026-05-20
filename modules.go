@@ -687,7 +687,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 	case "NO_EXTENDED_SOURCE_SEARCH":
 		d.noExtendedPySearch = true
 	case "STYLE_RUFF":
-		// Linter-only macro. It does not emit build nodes for `yatool make`
+		// Linter-only macro. It does not emit build nodes for `ay make`
 		// target graphs.
 	case "MAVEN_GROUP_ID":
 		// Java export metadata. build/conf/java.conf documents no effect

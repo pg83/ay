@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # validate.sh — M3 normalized L4 regression check.
 #
-# Builds `yatool`, generates the `devtools/ymake/bin` graph for both
+# Builds `ay`, generates the `devtools/ymake/bin` graph for both
 # supported target platforms, and checks normalized L4 equality against
 # the checked-in upstream references:
 #   - sg2.json          → default-linux-aarch64 target
@@ -22,11 +22,11 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 OUT_DIR="${1:-./.out/validate}"
-REF_DIR="/home/pg/monorepo/yatool_orig"
+REF_DIR="/home/pg/monorepo/yatool"
 
 mkdir -p "$OUT_DIR"
 
-go build -o yatool .
+go build -o ay .
 
 run_case() {
     local case_name="$1"
@@ -46,7 +46,7 @@ run_case() {
         CC='$(CLANG)/bin/clang' \
         CXX='$(CLANG)/bin/clang++' \
         OBJCOPY='$(CLANG)/bin/llvm-objcopy' \
-        ./yatool make \
+        ./ay make \
         -j 0 \
         -k \
         -G \

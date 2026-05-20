@@ -10,7 +10,7 @@ import (
 //
 // The reference node is located by its output path
 // ("$(B)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o")
-// in /home/pg/monorepo/yatool_orig/sg.json. If the file is absent the
+// in /home/pg/monorepo/yatool/sg.json. If the file is absent the
 // test is skipped (per STYLE.md filter pattern), not failed.
 //
 // Comparison is field-by-field (not a single DeepEqual on the whole
