@@ -118,6 +118,12 @@ type moduleData struct {
 	// `<arg>.reg3.cpp` via gen_py3_reg.py plus a CC compiling it
 	// (ymake.core.conf:4086-4089).
 	pyRegister []string
+	// pyRegisterExplicit[i] is true when pyRegister[i] came from an explicit
+	// PY_REGISTER() macro (vs implicit cython .pyx / swig .swg
+	// auto-registration). Only explicit args carry the onpy_register
+	// PyInit_/init_module_ defines that the per-register reg3 snapshot keeps
+	// for earlier args; cython/swig reg3 compiles drop all such defines.
+	pyRegisterExplicit []bool
 	// SRC_C_<VARIANT> entries in declaration order; share the FLAT bucket
 	// with SRC()/SRC_C_NO_LTO and are hoisted to the front of the archive.
 	simdSrcs []simdSrc
@@ -998,7 +1004,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 					stmt.Generated = stringPtr(src + ".cpp")
 				}
 				d.cythonCpp = append(d.cythonCpp, stmt)
-				appendPyRegister(d, modName)
+				appendPyRegister(d, modName, false)
 				mainNext = false
 
 				continue
@@ -1018,7 +1024,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 						"-X", "set_initial_path=" + modulePath + "/" + src,
 					},
 				})
-				appendPyRegister(d, modName)
+				appendPyRegister(d, modName, false)
 				mainNext = false
 
 				continue
@@ -1035,7 +1041,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 				}
 				if swigCMode {
 					d.swigC = append(d.swigC, swigSrc{Src: src, Module: modName})
-					appendPyRegister(d, modName+"_swg")
+					appendPyRegister(d, modName+"_swg", false)
 				}
 				mainNext = false
 
@@ -1138,7 +1144,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		// (mirror of SRCS(GLOBAL $Func.reg3.cpp) inside _PY3_REGISTER
 		// at ymake.core.conf:4086-4089).
 		for _, name := range v.Args {
-			appendPyRegister(d, name)
+			appendPyRegister(d, name, true)
 		}
 	case "SET_APPEND":
 		// SET_APPEND(<var> <values...>) appends to a ymake variable.
@@ -1166,8 +1172,9 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 	}
 }
 
-func appendPyRegister(d *moduleData, name string) {
+func appendPyRegister(d *moduleData, name string, explicit bool) {
 	d.pyRegister = append(d.pyRegister, name)
+	d.pyRegisterExplicit = append(d.pyRegisterExplicit, explicit)
 
 	// Mirror pybuild.py:740-750 — for each dotted PY_REGISTER arg,
 	// inject the two -D macro renames so every CC in the same
