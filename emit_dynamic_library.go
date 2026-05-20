@@ -27,13 +27,25 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires EXPORTS_SCRIPT(...)", instance.Path)
 	}
 
+	dynLibRPathHelperPeers := []string{"build/platform/local_so"}
+	rpathHelperSet := make(map[string]struct{}, len(dynLibRPathHelperPeers))
+	for _, p := range dynLibRPathHelperPeers {
+		rpathHelperSet[p] = struct{}{}
+	}
+
 	peerPaths := make([]string, 0, 1+len(d.dynamicLibraryFrom))
 	if !effectiveNoPlatform(d.flags) {
 		peerPaths = append(peerPaths, "build/cow/on")
 	}
-	peerPaths = append(peerPaths, d.dynamicLibraryFrom...)
+	for _, p := range d.dynamicLibraryFrom {
+		if _, helper := rpathHelperSet[p]; helper {
+			continue
+		}
 
-	seen := make(map[string]struct{}, len(peerPaths))
+		peerPaths = append(peerPaths, p)
+	}
+
+	seen := make(map[string]struct{}, len(peerPaths)+len(dynLibRPathHelperPeers))
 	peerArchiveRefs := make([]NodeRef, 0, len(peerPaths))
 	peerArchivePaths := make([]VFS, 0, len(peerPaths))
 	pluginRefs := []NodeRef{}
@@ -43,10 +55,12 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	cFlagsSeen := map[string]struct{}{}
 	cxxFlagsSeen := map[string]struct{}{}
 	cOnlyFlagsSeen := map[string]struct{}{}
+	rpathFlagsSeen := map[string]struct{}{}
 	var peerAddInclGlobal []VFS
 	var peerCFlagsGlobal []string
 	var peerCXXFlagsGlobal []string
 	var peerCOnlyFlagsGlobal []string
+	var peerRPathFlagsGlobal []string
 
 	addEach := func(seenSet map[string]struct{}, dst *[]string, src []string) {
 		for _, x := range src {
@@ -87,6 +101,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		addEach(cFlagsSeen, &peerCFlagsGlobal, peerResult.CFlagsGlobal)
 		addEach(cxxFlagsSeen, &peerCXXFlagsGlobal, peerResult.CXXFlagsGlobal)
 		addEach(cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, peerResult.COnlyFlagsGlobal)
+		addEach(rpathFlagsSeen, &peerRPathFlagsGlobal, peerResult.RPathFlagsGlobal)
 
 		for i, pp := range peerResult.LDPluginPaths {
 			if _, dup := pluginSeen[pp]; dup {
@@ -96,6 +111,17 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 			pluginRefs = append(pluginRefs, peerResult.LDPluginRefs[i])
 			pluginPaths = append(pluginPaths, pp)
 		}
+	}
+
+	for _, p := range dynLibRPathHelperPeers {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+		seen[p] = struct{}{}
+
+		peerInstance := derivePeerInstance(ctx, instance, d, p)
+		peerResult := genModule(ctx, peerInstance)
+		addEach(rpathFlagsSeen, &peerRPathFlagsGlobal, peerResult.RPathFlagsGlobal)
 	}
 
 	fixElfRef, fixElfPath := ctx.tool("tools/fix_elf")
@@ -169,6 +195,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		CFlagsGlobal:                 cFlagsGlobal,
 		CXXFlagsGlobal:               cxxFlagsGlobal,
 		COnlyFlagsGlobal:             cOnlyFlagsGlobal,
+		RPathFlagsGlobal:             mergeDedup(peerRPathFlagsGlobal, d.rpathFlagsGlobal),
 		PeerArchiveClosureRefs:       nil,
 		PeerArchiveClosurePaths:      nil,
 		isPyLibrary:                  false,

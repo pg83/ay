@@ -600,8 +600,8 @@ func (l *lexer) readToken() token {
 		l.advance()
 
 		return token{kind: tokRParen, line: startLine, col: startCol}
-	case b == '"':
-		return l.readString(startLine, startCol)
+	case b == '"' || b == '\'':
+		return l.readString(startLine, startCol, b)
 	case b == '<':
 		// `<` is the only single-character relational operator we
 		// model. `<=` and `>=` are not in the closure subset; if a
@@ -645,13 +645,14 @@ func (l *lexer) readToken() token {
 	}
 }
 
-// readString reads a double-quoted string (val excludes the quotes).
+// readString reads a quoted string (val excludes the quotes). Both
+// single-quoted and double-quoted forms occur in real ya.makes.
 // Body is RAW — no escape processing. \X is two literal bytes; \" is
 // NOT an escape (pinned by TestStringHasNoEscapeProcessing). A literal
 // newline inside a string is rejected as "unterminated string" at the
 // opening-quote's line/col — ya.make strings are single-line.
-func (l *lexer) readString(startLine, startCol int) token {
-	l.advance() // consume opening "
+func (l *lexer) readString(startLine, startCol int, quote byte) token {
+	l.advance() // consume opening quote
 
 	var buf []byte
 
@@ -662,8 +663,8 @@ func (l *lexer) readString(startLine, startCol int) token {
 
 		b := l.src[l.pos]
 
-		if b == '"' {
-			l.advance() // consume closing "
+		if b == quote {
+			l.advance() // consume closing quote
 
 			return token{kind: tokString, val: string(buf), line: startLine, col: startCol}
 		}

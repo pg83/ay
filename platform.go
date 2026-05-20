@@ -12,7 +12,7 @@ type Platform struct {
 	ISA    ISA               // ISA axis (x86_64 / aarch64 / arm64)
 	Target PlatformID        // = MakePlatformID(OS, ISA); surfaces as `node.platform`
 	Flags  map[string]string // canonical per-platform toggles ("PIC"="yes", …)
-	Tags []string // baseline tags every node on this platform carries (e.g. `["tool"]` on host). "tool" is the host-axis discriminant that surfaces as `node.host_platform`.
+	Tags   []string          // baseline tags every node on this platform carries (e.g. `["tool"]` on host). "tool" is the host-axis discriminant that surfaces as `node.host_platform`.
 
 	// Tools is the absolute-path toolchain bound to this Platform. Populated
 	// by NewPlatform from Flags entries written by mine.go::commonFlags.
@@ -255,24 +255,27 @@ func (p *Platform) ToolEnv() map[string]string {
 }
 
 func (p *Platform) WithLinkerSelectionFlags(trailer []string) []string {
-	if !p.UsesResourceLLD() {
+	gdbIndex := p.LinkerSelectionGDBIndexFlags()
+	rest := p.LinkerSelectionTailFlags()
+	if len(gdbIndex) == 0 && len(rest) == 0 {
 		return trailer
 	}
 
-	flags := []string{
-		"-Wl,--gdb-index",
-		"-fuse-ld=lld",
-		"--ld-path=$(LLD_ROOT)/bin/ld.lld",
-		"-Wl,--no-rosegment",
-		"-Wl,--build-id=sha1",
+	flags := append(append([]string(nil), gdbIndex...), rest...)
+	if len(gdbIndex) == 0 {
+		flags = append([]string(nil), rest...)
+	}
+
+	if !p.UsesResourceLLD() {
+		return trailer
 	}
 
 	if len(trailer) > 3 && trailer[2] == "-fPIC" && trailer[3] == "-fPIC" {
 		out := make([]string, 0, len(trailer)+len(flags))
 		out = append(out, trailer[:3]...)
-		out = append(out, flags[0])
+		out = append(out, gdbIndex...)
 		out = append(out, trailer[3])
-		out = append(out, flags[1:]...)
+		out = append(out, rest...)
 		out = append(out, trailer[4:]...)
 
 		return out
@@ -287,11 +290,40 @@ func (p *Platform) WithLinkerSelectionFlags(trailer []string) []string {
 	out = append(out, flags...)
 	out = append(out, trailer[2:]...)
 
-	if !p.PIC {
-		out = append(out, "-Wl,-no-pie")
-	}
+	out = append(out, p.LinkerSelectionNoPieFlags()...)
 
 	return out
+}
+
+func (p *Platform) LinkerSelectionGDBIndexFlags() []string {
+	if !p.UsesResourceLLD() {
+		return nil
+	}
+
+	return []string{"-Wl,--gdb-index"}
+}
+
+func (p *Platform) LinkerSelectionTailFlags() []string {
+	if !p.UsesResourceLLD() {
+		return nil
+	}
+
+	flags := []string{
+		"-fuse-ld=lld",
+		"--ld-path=$(LLD_ROOT)/bin/ld.lld",
+		"-Wl,--no-rosegment",
+		"-Wl,--build-id=sha1",
+	}
+
+	return flags
+}
+
+func (p *Platform) LinkerSelectionNoPieFlags() []string {
+	if !p.UsesResourceLLD() || p.PIC {
+		return nil
+	}
+
+	return []string{"-Wl,-no-pie"}
 }
 
 // ObjectSuffix is the upstream `$OBJECT_SUF` value (no `OBJ_SUF`

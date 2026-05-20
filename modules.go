@@ -46,6 +46,7 @@ type moduleData struct {
 	cOnlyFlagsGlobal     []string // CONLYFLAGS(GLOBAL ...); peer-propagated to consumers' C / .S sources
 	sFlags               []string // SET_APPEND(SFLAGS ...); appended to AS compiles only
 	ldFlags              []string
+	rpathFlagsGlobal     []string // SET_APPEND(RPATH_GLOBAL ...); peer-propagated to PROGRAM LD rpath slots
 	objAddLibsGlobal     []string // EXTRALIBS / PY_EXTRALIBS → OBJADDE_LIB_GLOBAL, peer-propagated to final link steps
 	srcDir               *string  // last SRCDIR setting (nil = module dir)
 	flags                FlagSet  // FlagSet derived from parsed macro bools
@@ -1169,11 +1170,19 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		}
 	case "SET_APPEND":
 		// SET_APPEND(<var> <values...>) appends to a ymake variable.
-		// Only SFLAGS is wired (openssl/crypto/ya.make.inc:179-186); it
-		// threads between CFLAGS and `-c -o` in AS cmd_args
-		// (ymake.core.conf:3217). Other targets no-op.
-		if len(v.Args) >= 2 && v.Args[0] == "SFLAGS" {
-			d.sFlags = append(d.sFlags, v.Args[1:]...)
+		// SFLAGS threads between CFLAGS and `-c -o` in AS cmd_args
+		// (ymake.core.conf:3217). RPATH_GLOBAL propagates on its own axis
+		// so PROGRAM LD emission can place it separately from LDFLAGS.
+		if len(v.Args) >= 2 {
+			switch v.Args[0] {
+			case "SFLAGS":
+				d.sFlags = append(d.sFlags, v.Args[1:]...)
+			case "RPATH_GLOBAL":
+				for _, arg := range v.Args[1:] {
+					arg = strings.ReplaceAll(arg, `${"$"}`, "$")
+					d.rpathFlagsGlobal = append(d.rpathFlagsGlobal, arg)
+				}
+			}
 		}
 	case "INDUCED_DEPS":
 		// INDUCED_DEPS(<ext-filter> headers...): the first arg filters
