@@ -103,6 +103,7 @@ func emitResourceObjcopy(
 		paths       []string
 		pathInputs  []VFS
 		extraInputs []VFS
+		kvInputs    []VFS // input=TEXT files from kv-only entries (graph inputs only, not --inputs)
 		pathDeps    []NodeRef
 		keys        []string // base64-encoded (padded) keys for path entries
 		kvs         []string
@@ -165,6 +166,21 @@ func emitResourceObjcopy(
 			inputs = append(inputs, cur.extraInputs...)
 		}
 
+		// Fold in kv input=TEXT files not already present (path entries for
+		// non-straddling files dedup away; only the chunk-straddle file —
+		// kv in this chunk, path+key in the next — is genuinely new).
+		inputSeen := make(map[VFS]struct{}, len(inputs))
+		for _, p := range inputs {
+			inputSeen[p] = struct{}{}
+		}
+		for _, p := range cur.kvInputs {
+			if _, dup := inputSeen[p]; dup {
+				continue
+			}
+			inputSeen[p] = struct{}{}
+			inputs = append(inputs, p)
+		}
+
 		objcopyTags := []string{}
 		if len(instance.Platform.Tags) > 0 {
 			objcopyTags = append(objcopyTags, instance.Platform.Tags...)
@@ -200,7 +216,7 @@ func emitResourceObjcopy(
 			},
 			Tags:             objcopyTags,
 			TargetProperties: resTargetProps,
-			Platform:     string(instance.Platform.Target),
+			Platform:         string(instance.Platform.Target),
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",
@@ -249,6 +265,15 @@ func emitResourceObjcopy(
 				if e.Path == "-" {
 					cur.kvs = append(cur.kvs, e.Key)
 					cur.cmdLen += rootCmdLen + len(e.Key)
+					// The `resfs/src/...=${rootrel;...;input=TEXT:"P"}` kv
+					// (RESOURCE_FILES) registers P as a graph input via the
+					// input=TEXT modifier. Upstream lists P in inputs[] even
+					// when this kv lands in a different chunk than P's path+key
+					// add (chunk straddle). flush() folds these into inputs[]
+					// (deduped), but never into --inputs/__PATHS.
+					if inner, ok := rootrelInputPath(e.Key); ok {
+						cur.kvInputs = append(cur.kvInputs, Source(instance.Path+"/"+inner))
+					}
 				} else {
 					inputVFS := Source(instance.Path + "/" + e.Path)
 					var producerRef NodeRef
@@ -463,7 +488,7 @@ func emitYaConfJSONObjcopy(
 			TargetProperties: map[string]string{
 				"module_dir": instance.Path,
 			},
-			Platform:     string(instance.Platform.Target),
+			Platform: string(instance.Platform.Target),
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",
