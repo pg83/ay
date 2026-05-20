@@ -211,6 +211,13 @@ func EmitLD(
 		DepRefs: depRefs,
 	}
 
+	// PY3_PROGRAM LDs carry module_tag=py3_bin (mirror of _BASE_PY3_PROGRAM
+	// in python.conf). PY3_PROGRAM_BIN (wantsStrip) and C++ PROGRAMs emit
+	// no module_tag.
+	if instance.Language == LangPy && !wantsStrip {
+		n.TargetProperties["module_tag"] = "py3_bin"
+	}
+
 	return emit.Emit(n)
 }
 

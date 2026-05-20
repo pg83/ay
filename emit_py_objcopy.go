@@ -170,6 +170,19 @@ func emitResourceObjcopy(
 			objcopyTags = append(objcopyTags, instance.Platform.Tags...)
 		}
 
+		// RESOURCE/RESOURCE_FILES objcopy nodes carry the same module_tag
+		// as the kv-only/PY_SRCS objcopy nodes: PY23 library variants → py3,
+		// PY3_PROGRAM → py3_bin. PY3_LIBRARY and non-PY modules emit none.
+		resTargetProps := map[string]string{"module_dir": instance.Path}
+		if d.moduleStmt != nil {
+			switch d.moduleStmt.Name {
+			case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
+				resTargetProps["module_tag"] = "py3"
+			case "PY3_PROGRAM":
+				resTargetProps["module_tag"] = "py3_bin"
+			}
+		}
+
 		node := &Node{
 			Cmds: []Cmd{
 				{
@@ -185,10 +198,8 @@ func emitResourceObjcopy(
 				"pc":       "yellow",
 				"show_out": "yes",
 			},
-			Tags: objcopyTags,
-			TargetProperties: map[string]string{
-				"module_dir": instance.Path,
-			},
+			Tags:             objcopyTags,
+			TargetProperties: resTargetProps,
 			Platform:     string(instance.Platform.Target),
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
