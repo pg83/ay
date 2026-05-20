@@ -1408,6 +1408,10 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	//   4. baseline fallback (repo-root/linux-headers)
 	searchPathFound := false
 
+	if candidate, ok := cythonPy2SiblingOverride(includerAbs, d); ok && addPath(candidate) {
+		searchPathFound = true
+	}
+
 	if includerAbs.IsBuild() && strings.Contains(d.target, "/") {
 		rel := normalisePath(d.target)
 
@@ -1486,6 +1490,37 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	sc.resolveCache[key] = out
 
 	return out
+}
+
+func cythonPy2SiblingOverride(includerAbs VFS, d includeDirective) (string, bool) {
+	if !includerAbs.IsSource() || d.kind != includeQuoted {
+		return "", false
+	}
+
+	if hasPrefix(includerAbs.Rel, "contrib/tools/cython_py2/Cython/Includes/") {
+		if hasPrefix(d.target, "libc/") || hasPrefix(d.target, "libcpp/") {
+			return "contrib/tools/cython_py2/Cython/Includes/" + d.target, true
+		}
+
+		return "", false
+	}
+
+	switch includerAbs.Rel {
+	case "util/generic/string.pxd":
+		if d.target == "libcpp/string.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + d.target, true
+		}
+	case "util/generic/hash.pxd", "util/generic/hash_set.pxd":
+		if d.target == "libcpp/pair.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + d.target, true
+		}
+	case "util/system/types.pxd":
+		if d.target == "libc/stdint.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + d.target, true
+		}
+	}
+
+	return "", false
 }
 
 func packResolveFlags(kind includeKind, next bool) uint8 {
