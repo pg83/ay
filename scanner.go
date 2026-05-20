@@ -1128,32 +1128,40 @@ mapLoop:
 func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel, target string) (paths []VFS, hasMultiTarget, claimed bool) {
 	srcMappings, srcMT, srcClaimed := s.sysinclSourceLookup(sourceRel, target)
 	incMappings, incMT, incClaimed := s.sysinclIncluderLookup(includerRel, target)
-	hasMultiTarget = srcMT || incMT
 	claimed = srcClaimed || incClaimed
 
-	if len(srcMappings) == 0 {
-		return incMappings, hasMultiTarget, claimed
-	}
+	switch {
+	case len(srcMappings) == 0:
+		paths = incMappings
+	case len(incMappings) == 0:
+		paths = srcMappings
+	default:
+		out := make([]VFS, 0, len(srcMappings)+len(incMappings))
+		out = append(out, srcMappings...)
 
-	if len(incMappings) == 0 {
-		return srcMappings, hasMultiTarget, claimed
-	}
-
-	out := make([]VFS, 0, len(srcMappings)+len(incMappings))
-	out = append(out, srcMappings...)
-
-incLoop:
-	for _, p := range incMappings {
-		for _, q := range out {
-			if p == q {
-				continue incLoop
+	incLoop:
+		for _, p := range incMappings {
+			for _, q := range out {
+				if p == q {
+					continue incLoop
+				}
 			}
+
+			out = append(out, p)
 		}
 
-		out = append(out, p)
+		paths = out
 	}
 
-	return out, hasMultiTarget, claimed
+	// Multi-target: a single record maps to ≥2 files (e.g. cxxabi.h →
+	// libcxxabi+libcxxrt) OR the union across distinct matching records
+	// resolves to ≥2 files (e.g. quoted "math.h" → musl + libcxx via
+	// libc-to-musl + stl-to-libcxx). Upstream's sysincl resolver unions
+	// every matching rule, so the quoted-include bypass must treat the
+	// cross-record union as multi-target too.
+	hasMultiTarget = srcMT || incMT || len(paths) >= 2
+
+	return paths, hasMultiTarget, claimed
 }
 
 func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, bool, bool) {
