@@ -30,7 +30,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		generatedVFS := Build(instance.Path + "/" + generated)
 		srcVFS := Source(instance.Path + "/" + stmt.Src)
 		srcScanIn := in
-		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl)
+		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl, py23Variant)
 		sourceClosure := walkClosure(ctx, instance, srcVFS, srcScanIn)
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(ctx, instance, srcVFS, sourceClosure, stmt.CMode, srcScanIn)
 		parsed := make([]includeDirective, 0, len(emitsIncludes))
@@ -109,7 +109,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			ccIn.PerSourceCFlags = append(ccIn.PerSourceCFlags, "-Wno-implicit-fallthrough")
 		}
 		scanIn := ccIn
-		scanIn.AddIncl = appendCythonScanAddIncl(in.AddIncl, d.cythonAddIncl)
+		scanIn.AddIncl = appendCythonScanAddIncl(in.AddIncl, d.cythonAddIncl, py23Variant)
 		ccIn.IncludeInputs = walkClosureWithSourceRel(ctx, instance, generatedVFS, srcVFS.Rel, scanIn)
 
 		ccRef, ccOut := EmitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
@@ -188,10 +188,19 @@ func appendCythonCCAddIncl(addIncl []VFS) []VFS {
 	return out
 }
 
-func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS) []VFS {
-	out := make([]VFS, 0, len(addIncl)+len(cythonAddIncl)+2+len(cythonNumpyAddIncl))
+func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, py23 bool) []VFS {
+	out := make([]VFS, 0, len(addIncl)+len(cythonAddIncl)+3+len(cythonNumpyAddIncl))
 	out = append(out, addIncl...)
 	out = append(out, cythonAddIncl...)
+	// PY23_LIBRARY runs its cython step with $PYTHON3=no (the .py3.cpp
+	// suffix is cosmetic), so upstream `_CYTHON_SYS_INCLUDES` resolves to
+	// the cython_py2 tree; the rendered -I flag stays cython. The py2 tree
+	// precedes cython so cimports of files present in both (libc/string.pxd,
+	// libcpp/string.pxd, ...) resolve to cython_py2, while cython-only files
+	// fall through to cython. Pure PY3_LIBRARY keeps $PYTHON3=yes → cython.
+	if py23 {
+		out = append(out, Source("contrib/tools/cython_py2/Cython/Includes"))
+	}
 	out = append(out, Source("contrib/tools/cython/Cython/Includes"))
 	out = append(out, Source("contrib/libs/cxxsupp/libcxx/include"))
 	out = append(out, cythonNumpyAddIncl...)
