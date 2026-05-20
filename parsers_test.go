@@ -24,13 +24,16 @@ func TestParseDelimitedIncludeTarget_QuotedAngleSystem(t *testing.T) {
 func TestScanner_CythonExternFromQuotedAngleResolves(t *testing.T) {
 	dir := t.TempDir()
 
-	for _, rel := range []string{"pkg", "util/system"} {
+	for _, rel := range []string{
+		"pkg",
+		"util/system",
+	} {
 		if err := os.MkdirAll(filepath.Join(dir, rel), 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", rel, err)
 		}
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "pkg/error.pxd"), []byte(`cdef extern from "<util/system/error.h>"`+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "pkg/error.pxd"), []byte("cdef extern from \"<util/system/error.h>\"\n"), 0o644); err != nil {
 		t.Fatalf("write pkg/error.pxd: %v", err)
 	}
 
@@ -56,7 +59,10 @@ func TestScanner_CythonExternFromQuotedAngleResolves(t *testing.T) {
 func TestScanner_CythonExternFromSingleQuotedResolves(t *testing.T) {
 	dir := t.TempDir()
 
-	for _, rel := range []string{"pkg", "library/cpp/logger"} {
+	for _, rel := range []string{
+		"pkg",
+		"library/cpp/logger",
+	} {
 		if err := os.MkdirAll(filepath.Join(dir, rel), 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", rel, err)
 		}
