@@ -97,6 +97,16 @@ var grpcServiceHeaderIncludes = []VFS{
 	Source("contrib/libs/grpc/include/grpcpp/support/sync_stream.h"),
 }
 
+// grpcSourceExtraIncludes are the grpcpp headers a protoc-generated
+// .grpc.pb.cc adds beyond the .grpc.pb.h preamble (cpp_generator.cc
+// GetSourceIncludes). They reach both .grpc.pb.cc.o and the sibling
+// message .pb.cc.o via the proto OutTogether output group.
+var grpcSourceExtraIncludes = []VFS{
+	Source("contrib/libs/grpc/include/grpcpp/impl/channel_interface.h"),
+	Source("contrib/libs/grpc/include/grpcpp/impl/client_unary_call.h"),
+	Source("contrib/libs/grpc/include/grpcpp/impl/rpc_service_method.h"),
+}
+
 // pbDescriptorImporterHeaders are the protobuf runtime headers in CC
 // consumers of any .pb.h whose source proto imports
 // "google/protobuf/descriptor.proto". Pull in the map/reflection_ops
