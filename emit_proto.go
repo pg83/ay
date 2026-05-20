@@ -296,12 +296,21 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
 		directImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, cfg.cppOutRoot)
 		extras := pbHEmitsIncludesExtras(protoRelPath, hasDescriptor)
-		pbHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras))
+		pbHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(extras)+len(grpcServiceHeaderIncludes))
 		pbHParsed = append(pbHParsed, directImports...)
 		for _, include := range protobufRuntimeHeaders {
 			pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
 		}
 		pbHParsed = append(pbHParsed, extras...)
+		if cfg.grpc {
+			// A grpc PROTO_LIBRARY's message .pb.h carries the grpcpp service
+			// preamble (sg3.dep: runner.pb.h directly includes the grpcpp
+			// service headers alongside protobuf runtime), so every consumer
+			// of the .pb.h reaches the grpc closure.
+			for _, include := range grpcServiceHeaderIncludes {
+				pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+			}
+		}
 		registerGeneratedParsedOutput(ctx, instance, "PB", pbH, pbHParsed)
 
 		pbCCParsed := make([]includeDirective, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
