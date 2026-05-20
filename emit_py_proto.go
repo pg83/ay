@@ -103,6 +103,11 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	protoRoot := protoPythonOutputRoot(instance, d)
+	if d.grpc {
+		// gRPC python protos resolve imports from the repo root (protoc -I
+		// and --*_out roots are empty) and pull in protoc's own proto tree.
+		protoRoot = ""
+	}
 	pyBase := protoBase + "__intpy3___pb2.py"
 	pyOut := Build(pyBase)
 	pyiOut := Build(protoBase + "__intpy3___pb2.pyi")
@@ -146,11 +151,14 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		"-I=$(B)",
 		"-I=$(S)",
 	)
-	if protoRoot != "contrib/libs/protobuf/src" {
+	if !d.grpc && protoRoot != "contrib/libs/protobuf/src" {
 		cmdArgs = append(cmdArgs, "-I=$(S)/"+protoRoot)
 	}
+	cmdArgs = append(cmdArgs, "-I=$(S)/contrib/libs/protobuf/src")
+	if d.grpc {
+		cmdArgs = append(cmdArgs, "-I=$(S)/contrib/libs/protoc/src")
+	}
 	cmdArgs = append(cmdArgs,
-		"-I=$(S)/contrib/libs/protobuf/src",
 		"-I=$(B)",
 		"-I=$(S)/contrib/libs/protobuf/src",
 		"--python_out=$(B)/"+protoRoot,
