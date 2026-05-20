@@ -607,3 +607,50 @@ func TestChunkPySrcEntriesLib2PyByteExact(t *testing.T) {
 		t.Fatalf("%d REF hashes missing from chunker output", missing)
 	}
 }
+
+// TestRootrelInputPath pins the extractor that recovers the input=TEXT
+// path P from a `resfs/src/...=${rootrel;context=TEXT;input=TEXT:"P"}`
+// kv. emitResourceObjcopy folds P into a chunk-straddle node's inputs[]
+// (the upstream input=TEXT semantics), so the extractor must return P for
+// RESOURCE_FILES srcKvs and (",false) for every marker-less / malformed kv.
+func TestRootrelInputPath(t *testing.T) {
+	cases := []struct {
+		name   string
+		kv     string
+		want   string
+		wantOK bool
+	}{
+		{
+			name:   "resource_files srcKv",
+			kv:     "resfs/src/resfs/file/contrib/python/pytz/py3/pytz/zoneinfo/Asia/Muscat=${rootrel;context=TEXT;input=TEXT:\"pytz/zoneinfo/Asia/Muscat\"}",
+			want:   "pytz/zoneinfo/Asia/Muscat",
+			wantOK: true,
+		},
+		{
+			name:   "py_main kv (no marker)",
+			kv:     "PY_MAIN=tools.x.main:main",
+			want:   "",
+			wantOK: false,
+		},
+		{
+			name:   "namespace kv (no marker)",
+			kv:     "py/namespace/contrib/python/pytz/py3=\"pytz.\"",
+			want:   "",
+			wantOK: false,
+		},
+		{
+			name:   "malformed marker (no closing)",
+			kv:     "resfs/src/x=${rootrel;context=TEXT;input=TEXT:\"pytz/zoneinfo/Asia/Muscat",
+			want:   "",
+			wantOK: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := rootrelInputPath(tc.kv)
+			if got != tc.want || ok != tc.wantOK {
+				t.Fatalf("rootrelInputPath(%q) = (%q, %v), want (%q, %v)", tc.kv, got, ok, tc.want, tc.wantOK)
+			}
+		})
+	}
+}
