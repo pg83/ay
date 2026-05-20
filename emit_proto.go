@@ -323,17 +323,30 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		for _, include := range pbCcDeepRuntimeHeaders {
 			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
 		}
+		if cfg.grpc {
+			// OutTogether-shared grpcpp source headers from the sibling
+			// .grpc.pb.cc reach this message .pb.cc.o too.
+			for _, include := range grpcSourceExtraIncludes {
+				pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+			}
+		}
 		registerGeneratedParsedOutput(ctx, instance, "PB", pbCC, pbCCParsed)
 
 		if cfg.grpc {
-			grpcCCParsed := make([]includeDirective, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
-			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: grpcPbH.Rel})
+			grpcCCParsed := make([]includeDirective, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders)+len(grpcSourceExtraIncludes))
+			// The .grpc.pb.cc includes its message .pb.h (cross-sibling, not
+			// its own .grpc.pb.h, which is the OutTogether self) plus the
+			// grpcpp source preamble.
+			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: pbH.Rel})
 			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: protoRelPath})
 			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
 			for _, include := range protobufRuntimeHeaders {
 				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
 			}
 			for _, include := range pbCcDeepRuntimeHeaders {
+				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+			}
+			for _, include := range grpcSourceExtraIncludes {
 				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
 			}
 			registerGeneratedParsedOutput(ctx, instance, "PB", grpcPbCC, grpcCCParsed)
