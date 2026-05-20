@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	enchex "encoding/hex"
 	"os"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -605,6 +606,78 @@ func TestChunkPySrcEntriesLib2PyByteExact(t *testing.T) {
 	}
 	if missing > 0 {
 		t.Fatalf("%d REF hashes missing from chunker output", missing)
+	}
+}
+
+func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
+	d := &moduleData{
+		pySrcs: []string{
+			"shellingham/__init__.py",
+			"shellingham/_core.py",
+			"shellingham/nt.py",
+			"shellingham/posix/__init__.py",
+			"shellingham/posix/_core.py",
+			"shellingham/posix/proc.py",
+			"shellingham/posix/ps.py",
+		},
+		pyBuildNoPY:  false,
+		pyBuildNoPYC: false,
+		pyTopLevel:   true,
+		moduleStmt:   &ModuleStmt{Name: "PY3_LIBRARY"},
+	}
+
+	entries := buildPySrcEntries(d, "contrib/python/shellingham")
+	chunks := chunkPySrcEntries(entries)
+	if got := len(chunks); got != 2 {
+		t.Fatalf("chunks: got %d, want 2", got)
+	}
+	if got := len(chunks[1].kvsCmd); got != 0 {
+		t.Fatalf("tail chunk kvsCmd len: got %d, want 0", got)
+	}
+	if got := len(chunks[1].paths); got != 1 {
+		t.Fatalf("tail chunk paths len: got %d, want 1", got)
+	}
+
+	ctx := &genCtx{emit: NewBufferedEmitter()}
+	instance := ModuleInstance{
+		Path:     "contrib/python/shellingham",
+		Kind:     KindLib,
+		Language: LangCPP,
+		Platform: testTargetP,
+	}
+	res := emitPySrcObjcopy(ctx, instance, d, NodeRef{}, NodeRef{})
+	if res == nil {
+		t.Fatal("emitPySrcObjcopy returned nil")
+	}
+
+	emit := ctx.emit.(*BufferedEmitter)
+	if got := len(emit.nodes); got != 2 {
+		t.Fatalf("emitted nodes: got %d, want 2", got)
+	}
+
+	tail := emit.nodes[1]
+	if got := tail.Outputs[0].String(); got != "$(B)/contrib/python/shellingham/objcopy_e79ae9e993a07f847435dcf3c2.o" {
+		t.Fatalf("tail output = %q, want %q", got, "$(B)/contrib/python/shellingham/objcopy_e79ae9e993a07f847435dcf3c2.o")
+	}
+
+	wantArgs := []string{
+		testTargetP.Tools.Python3,
+		objcopyScriptPath,
+		"--compiler", testTargetP.Tools.CXX,
+		"--objcopy", testTargetP.Tools.Objcopy,
+		"--compressor", rescompressorBinPath,
+		"--rescompiler", rescompilerBinPath,
+		"--output_obj", "$(B)/contrib/python/shellingham/objcopy_e79ae9e993a07f847435dcf3c2.o",
+		"--target", testTargetP.Triple,
+		"--inputs", "$(B)/contrib/python/shellingham/shellingham/posix/ps.py.yjsy.yapyc3",
+		"--keys", "cmVzZnMvZmlsZS9weS9zaGVsbGluZ2hhbS9wb3NpeC9wcy5weS55YXB5YzM=",
+	}
+	gotArgs := tail.Cmds[0].CmdArgs
+	if !reflect.DeepEqual(gotArgs, wantArgs) {
+		t.Fatalf("tail cmd args mismatch:\n got: %v\nwant: %v", gotArgs, wantArgs)
+	}
+	if contains(gotArgs, "--kvs") {
+		t.Fatalf("tail cmd args unexpectedly contain --kvs: %v", gotArgs)
 	}
 }
 

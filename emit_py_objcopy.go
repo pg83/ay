@@ -679,8 +679,10 @@ func emitPySrcObjcopy(
 			cmdArgs = append(cmdArgs, ch.pathInps...)
 			cmdArgs = append(cmdArgs, "--keys")
 			cmdArgs = append(cmdArgs, ch.keys...)
-			cmdArgs = append(cmdArgs, "--kvs")
-			cmdArgs = append(cmdArgs, ch.kvsCmd...)
+			if len(ch.kvsCmd) > 0 {
+				cmdArgs = append(cmdArgs, "--kvs")
+				cmdArgs = append(cmdArgs, ch.kvsCmd...)
+			}
 
 			inputs := []VFS{
 				Build("tools/rescompiler/rescompiler"),
