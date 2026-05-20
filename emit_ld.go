@@ -196,7 +196,7 @@ func EmitLD(
 			"pc":       "light-blue",
 			"show_out": "yes",
 		},
-		Platform:     string(instance.Platform.Target),
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -503,18 +503,31 @@ func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) [
 // are produced by cmd[0]/cmd[1] in-node and excluded.
 func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS) []VFS {
 	// Lift every build-root participant into one VFS-typed block before
-	// alphabetising.
+	// alphabetising. Keep the first occurrence when multiple categories
+	// contribute the same BUILD_ROOT path.
 	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(wholeArchivePaths)+len(dynamicPaths)+len(ccPaths)+len(objcopyPaths))
+	buildRootSeen := make(map[VFS]struct{}, cap(buildRootBlock))
 
-	buildRootBlock = append(buildRootBlock, peerLibPaths...)
-	buildRootBlock = append(buildRootBlock, pluginPaths...)
-	buildRootBlock = append(buildRootBlock, globalPaths...)
-	buildRootBlock = append(buildRootBlock, wholeArchivePaths...)
-	buildRootBlock = append(buildRootBlock, dynamicPaths...)
-	buildRootBlock = append(buildRootBlock, ccPaths...)
+	appendBuildRoot := func(paths []VFS) {
+		for _, p := range paths {
+			if _, dup := buildRootSeen[p]; dup {
+				continue
+			}
+
+			buildRootSeen[p] = struct{}{}
+			buildRootBlock = append(buildRootBlock, p)
+		}
+	}
+
+	appendBuildRoot(peerLibPaths)
+	appendBuildRoot(pluginPaths)
+	appendBuildRoot(globalPaths)
+	appendBuildRoot(wholeArchivePaths)
+	appendBuildRoot(dynamicPaths)
+	appendBuildRoot(ccPaths)
 	// objcopy `.o` paths arrive $(B)-rooted; they belong in the
 	// BUILD_ROOT block alongside own .cpp.o and peer .a entries.
-	buildRootBlock = append(buildRootBlock, objcopyPaths...)
+	appendBuildRoot(objcopyPaths)
 	sort.Slice(buildRootBlock, func(i, j int) bool {
 		return string(buildRootBlock[i].Rel) < string(buildRootBlock[j].Rel)
 	})
