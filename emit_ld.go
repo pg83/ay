@@ -23,7 +23,9 @@ import (
 //
 // `ccPaths` order is load-bearing for cmd[2] argv (between whole-archive
 // block and `-o`). `peerLDRefs`/`peerLibPaths` arrive in PEERDIR walk
-// order (non-alphabetical). Pass nil for plugin/global slices when empty.
+// order (non-alphabetical). `peerLinkCmdPaths` preserves the combined
+// static/dynamic discovery order for the `--start-group ... --end-group`
+// block. Pass nil for plugin/global slices when empty.
 //
 // Output path: $(B)/ldBinaryDir(instance)/binaryName; LDOutputPath
 // re-derives it for callers.
@@ -34,6 +36,7 @@ func EmitLD(
 	ccPaths []VFS,
 	peerLDRefs []NodeRef,
 	peerLibPaths []VFS,
+	peerLinkCmdPaths []VFS,
 	pluginRefs []NodeRef,
 	pluginPaths []VFS,
 	globalRefs []NodeRef,
@@ -50,6 +53,9 @@ func EmitLD(
 	peerCFlagsGlobal []string,
 	autoPeerCFlags []string,
 	peerLDFlagsGlobal []string,
+	ownLDFlags []string,
+	ownRPathFlags []string,
+	peerRPathFlagsGlobal []string,
 	objAddLibsGlobal []string,
 	noCompilerWarnings bool,
 	wantsStrip bool,
@@ -110,7 +116,7 @@ func EmitLD(
 	tools := instance.Platform.Tools
 	cmd0 := composeLDCmdVcsInfo(tools, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, autoPeerCFlags, noCompilerWarnings)
-	cmd2 := composeLDCmdLinkExe(instance.Platform, outputPath, vcsOPath, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, peerLDFlagsGlobal, objAddLibsGlobal, wantsStrip)
+	cmd2 := composeLDCmdLinkExe(instance.Platform, outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, wantsStrip)
 	cmd3 := composeLDCmdLinkOrCopy(tools, binaryDir, dynamicPaths...)
 	splitDwarfCmds := composeLDSplitDwarfCmds(tools, outputPath, wantsSplitDwarf)
 
@@ -340,10 +346,10 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 // `wantsStrip` inserts `-Wl,--strip-all` between the trailer's `-lm`
 // and `-Wl,--gc-sections` (set true for PY3_PROGRAM_BIN via STRIP() in
 // _BASE_PY3_PROGRAM, python.conf:884).
-func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, objAddLibsGlobal []string, wantsStrip bool) []string {
+func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []string, wantsStrip bool) []string {
 	// Capacity hint matches the reference graph's structure plus the
 	// caller-supplied slices.
-	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 12 + 1 + len(ccPaths) + len(peerLibPaths) + len(dynamicPaths) + len(globalPaths) + len(objcopyPaths)
+	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	if len(pluginPaths) > 0 {
 		argCap += 2 + len(pluginPaths)
@@ -409,59 +415,57 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 	cmdArgs = append(cmdArgs, "-B"+binPath)
 
 	cmdArgs = append(cmdArgs, "-Wl,--start-group")
-	for _, p := range peerLibPaths {
-		cmdArgs = append(cmdArgs, p.Rel)
-	}
-	for _, p := range dynamicPaths {
+	for _, p := range peerLinkCmdPaths {
 		cmdArgs = append(cmdArgs, p.Rel)
 	}
 	cmdArgs = append(cmdArgs, "-Wl,--end-group")
 
-	// _EXE_FLAGS layout after `-Wl,--end-group` per build/conf/linkers/
-	// ld.conf:158-179.
+	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, dynamicPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, wantsStrip)...)
 
-	// EXPORTS_VALUE (ld.conf:130-132): OS_LINUX → -rdynamic.
-	trailer := []string{"-rdynamic"}
+	return cmdArgs
+}
 
-	// LDFLAGS = USER_LDFLAGS + _LD_FLAGS (ld.conf:1). _LD_FLAGS from
-	// ymake_conf.py:1803-1812: MUSL=yes Linux → ["-Wl,--no-as-needed"].
-	// Plus -fPIC pair from gnu_compiler.conf:43-46 when PIC=yes
-	// (`CFLAGS+=-fPIC; LDFLAGS+=-fPIC` both surface in clang++ link cmd).
-	trailer = append(trailer, "-Wl,--no-as-needed")
-	if p.PIC {
-		trailer = append(trailer, "-fPIC", "-fPIC")
+func composeProgramLinkTrailer(p *Platform, dynamicPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []string, wantsStrip bool) []string {
+	if len(ownRPathFlags) == 0 && len(peerRPathFlagsGlobal) == 0 {
+		trailer := []string{"-rdynamic", "-Wl,--no-as-needed"}
+		if p.PIC {
+			trailer = append(trailer, "-fPIC", "-fPIC")
+		}
+		trailer = append(trailer, peerLDFlagsGlobal...)
+		trailer = append(trailer, ownLDFlags...)
+		trailer = append(trailer, objAddLibsGlobal...)
+		trailer = append(trailer, "-nostdlib", "-lm")
+		if wantsStrip {
+			trailer = append(trailer, "-Wl,--strip-all")
+		}
+		trailer = append(trailer, "-Wl,--gc-sections")
+
+		return p.WithLinkerSelectionFlags(trailer)
 	}
+	_ = dynamicPaths
 
-	// LDFLAGS_GLOBAL (ld.conf:168): peer-aggregated `LDFLAGS()`.
-	// musl/ya.make contributes -static, -Wl,--no-dynamic-linker.
+	trailer := []string{"-rdynamic", "-Wl,--no-as-needed"}
+	trailer = append(trailer, ownRPathFlags...)
+	if p.PIC {
+		trailer = append(trailer, "-fPIC")
+	}
+	trailer = append(trailer, p.LinkerSelectionGDBIndexFlags()...)
+	trailer = append(trailer, peerRPathFlagsGlobal...)
+	if p.PIC {
+		trailer = append(trailer, "-fPIC")
+	}
+	trailer = append(trailer, p.LinkerSelectionTailFlags()...)
 	trailer = append(trailer, peerLDFlagsGlobal...)
-
-	// OBJADDE_LIB_GLOBAL (ld.conf:171): peer-aggregated `EXTRALIBS()`.
-	// util/ya.make contributes -lrt -ldl (OS_LINUX); musl/ya.make
-	// contributes -nostdlib -fno-pie -Wl,-no-pie.
+	trailer = append(trailer, ownLDFlags...)
 	trailer = append(trailer, objAddLibsGlobal...)
-
-	// C_SYSTEM_LIBRARIES (ld.conf:120): MUSL=yes → -nostdlib. Plus
-	// -lm appended in ymake.core.conf:942 (USE_ARCADIA_LIBM=no).
 	trailer = append(trailer, "-nostdlib", "-lm")
-
-	// STRIP_FLAG (ld.conf:22): emitted before DCE_FLAG when STRIP() in
-	// effect (PY3_PROGRAM_BIN via _BASE_PY3_PROGRAM, python.conf:884).
 	if wantsStrip {
 		trailer = append(trailer, "-Wl,--strip-all")
 	}
-
-	// DCE_FLAG (ld.conf:46): OS_LINUX → -Wl,--gc-sections.
 	trailer = append(trailer, "-Wl,--gc-sections")
+	trailer = append(trailer, p.LinkerSelectionNoPieFlags()...)
 
-	// ICF_FLAG and _LD_NO_PIE_FLAG (ld.conf:73-78) are LLD-specific;
-	// WithLinkerSelectionFlags adds them at the canonical slots
-	// (prefix-LLD ICF + trailing -Wl,-no-pie when !PIC).
-	trailer = p.WithLinkerSelectionFlags(trailer)
-
-	cmdArgs = append(cmdArgs, trailer...)
-
-	return cmdArgs
+	return trailer
 }
 
 // composeLDCmdLinkOrCopy composes cmd[3]: invokes fs_tools.py

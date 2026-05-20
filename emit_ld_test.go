@@ -131,6 +131,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		"", // empty falls back to lastPathComponent → "prog"
 		[]NodeRef{mainRef}, []VFS{ParseVFSOrSource(mainPath)},
 		nil, nil,
+		nil,
 		nil, nil,
 		nil, nil,
 		nil, nil,
@@ -142,6 +143,9 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		nil,   // peerCFlagsGlobal
 		nil,   // autoPeerCFlags
 		nil,   // peerLDFlagsGlobal
+		nil,   // ownLDFlags
+		nil,   // ownRPathFlags
+		nil,   // peerRPathFlagsGlobal
 		nil,   // EXTRALIBS / OBJADDE_LIB_GLOBAL
 		false, // noCompilerWarnings
 		false, // wantsStrip (cpp PROGRAM)
@@ -232,6 +236,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		"", // empty falls back to lastPathComponent → "prog"
 		[]NodeRef{stub}, []VFS{Build("some/prog/main.cpp.o")},
 		nil, nil,
+		nil,
 		nil, nil,
 		nil, nil,
 		nil, nil,
@@ -243,6 +248,9 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		nil,   // peerCFlagsGlobal
 		nil,   // autoPeerCFlags
 		nil,   // peerLDFlagsGlobal
+		nil,   // ownLDFlags
+		nil,   // ownRPathFlags
+		nil,   // peerRPathFlagsGlobal
 		nil,   // EXTRALIBS / OBJADDE_LIB_GLOBAL
 		false, // noCompilerWarnings
 		false, // wantsStrip
@@ -266,6 +274,48 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 	}
 }
 
+func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
+	flags := make(map[string]string, len(testToolchainFlags)+1)
+	for k, v := range testToolchainFlags {
+		flags[k] = v
+	}
+	flags["LLD_TOOL"] = "$(LLD_ROOT)/bin/ld.lld"
+	flags["PIC"] = "no"
+
+	p := NewPlatform(OSLinux, ISAAArch64, flags, nil, "", "")
+
+	got := composeProgramLinkTrailer(
+		p,
+		nil,
+		nil,
+		nil,
+		[]string{"-Wl,-rpath,$ORIGIN"},
+		[]string{"-Wl,-rpath,$ORIGIN"},
+		nil,
+		false,
+	)
+
+	want := []string{
+		"-rdynamic",
+		"-Wl,--no-as-needed",
+		"-Wl,-rpath,$ORIGIN",
+		"-Wl,--gdb-index",
+		"-Wl,-rpath,$ORIGIN",
+		"-fuse-ld=lld",
+		"--ld-path=$(LLD_ROOT)/bin/ld.lld",
+		"-Wl,--no-rosegment",
+		"-Wl,--build-id=sha1",
+		"-nostdlib",
+		"-lm",
+		"-Wl,--gc-sections",
+		"-Wl,-no-pie",
+	}
+
+	if !slices.Equal(got, want) {
+		t.Fatalf("composeProgramLinkTrailer mismatch:\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
 func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 	emit := NewBufferedEmitter()
 	mainRef := emit.Emit(&Node{KV: map[string]string{"p": "STUB"}})
@@ -279,6 +329,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		"",
 		[]NodeRef{mainRef}, []VFS{Build("some/prog/main.cpp.o")},
 		nil, nil,
+		nil,
 		nil, nil,
 		nil, nil,
 		[]NodeRef{wholeRef}, []VFS{Build(wholeArchivePath)},
@@ -290,6 +341,9 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		nil, // peerCFlagsGlobal
 		nil, // autoPeerCFlags
 		nil, // peerLDFlagsGlobal
+		nil, // ownLDFlags
+		nil, // ownRPathFlags
+		nil, // peerRPathFlagsGlobal
 		nil, // objAddLibsGlobal
 		false,
 		false,
@@ -404,7 +458,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 			instance := targetInstance("test/prog")
 
 			exc := Try(func() {
-				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, false, false, false, testHostP, e)
+				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, nil, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, false, false, false, testHostP, e)
 			})
 
 			if exc == nil {
