@@ -210,23 +210,33 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		rlMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, ccClosure...)
 		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: rlMemberInputs, PrimaryCount: 1}
 	case strings.HasSuffix(srcRel, ".h.in"):
+		// A generated header declared in SRCS is not compiled in its declaring
+		// module — ymake realizes it in the module that #includes it. Register
+		// it as a deferred CF: the scanner sees the output so consumer closures
+		// resolve it, but the CF node is emitted by the first consumer (with
+		// that consumer's module_dir) in resolveCodegenDepRefsExt. Returning nil
+		// keeps the header out of the declaring module's archive.
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 		cfgVars := buildCFGVars(ctx.fs, srcInstance.Path+"/"+srcRel, srcIn.SetVars, srcIn.DefaultVars)
-		cfRef, cfOut := EmitCF(srcInstance, srcRel, cfgVars, srcIn.IncludeInputs, ctx.emit)
+		cfOut := Build(srcInstance.Path + "/" + strings.TrimSuffix(srcRel, ".in"))
 
 		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
-		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{
+		registerDeferredCF(ctx, srcInstance, cfOut, []includeDirective{
 			{kind: includeQuoted, target: inSourceVFS.Rel},
 			{kind: includeQuoted, target: configureFilePyVFS.Rel},
-		}, cfRef)
+		}, &deferredCF{
+			instance:      srcInstance,
+			srcRel:        srcRel,
+			cfgVars:       cfgVars,
+			includeInputs: srcIn.IncludeInputs,
+		})
 
-		cfMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, srcIn.IncludeInputs...)
-		return &sourceEmit{Ref: cfRef, OutPath: cfOut, CcIns: cfMemberInputs, PrimaryCount: 1}
+		return nil
 	case strings.HasSuffix(srcRel, ".cpp.in"),
 		strings.HasSuffix(srcRel, ".c.in"):
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
 		cfgVars := buildCFGVars(ctx.fs, srcInstance.Path+"/"+srcRel, srcIn.SetVars, srcIn.DefaultVars)
-		cfRef, cfOut := EmitCF(srcInstance, srcRel, cfgVars, srcIn.IncludeInputs, ctx.emit)
+		cfRef, cfOut := EmitCF(srcInstance, srcRel, cfgVars, srcIn.IncludeInputs, srcInstance.Path, ctx.emit)
 
 		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{
