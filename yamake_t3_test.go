@@ -121,3 +121,34 @@ func TestParseRunPy3ProgramAsRunProgramStmt(t *testing.T) {
 		t.Fatalf("OUTFiles = %v, want [output.txt]", stmt.OUTFiles)
 	}
 }
+
+func TestParseRunProgramToolSection(t *testing.T) {
+	src := []byte(`RUN_PROGRAM(
+    tools/protoc
+    --plugin=protoc-gen-cpp_styleguide=contrib/tools/protoc/plugins/cpp_styleguide
+    foo.proto
+    IN foo.proto
+    TOOL contrib/tools/protoc/plugins/cpp_styleguide
+    OUTPUT_INCLUDES contrib/libs/protobuf/src/google/protobuf/message.h
+    OUT_NOAUTO foo.pb.h foo.pb.cc
+)
+`)
+	mf, err := Parse(testParserFS, "test.input", src)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if len(mf.Stmts) != 1 {
+		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
+	}
+
+	stmt, ok := mf.Stmts[0].(*RunProgramStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *RunProgramStmt", mf.Stmts[0])
+	}
+	if !equalStrings(stmt.ToolPaths, []string{"contrib/tools/protoc/plugins/cpp_styleguide"}) {
+		t.Fatalf("ToolPaths = %v, want [contrib/tools/protoc/plugins/cpp_styleguide]", stmt.ToolPaths)
+	}
+	if !equalStrings(stmt.OutputIncludes, []string{"contrib/libs/protobuf/src/google/protobuf/message.h"}) {
+		t.Fatalf("OutputIncludes = %v, want [contrib/libs/protobuf/src/google/protobuf/message.h]", stmt.OutputIncludes)
+	}
+}

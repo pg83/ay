@@ -237,17 +237,18 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		// resolve it, but the CF node is emitted by the first consumer (with
 		// that consumer's module_dir) in resolveCodegenDepRefsExt. Returning nil
 		// keeps the header out of the declaring module's archive.
-		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir), srcIn)
-		cfgVars := buildCFGVars(ctx.fs, srcInstance.Path+"/"+srcRel, srcIn.SetVars, srcIn.DefaultVars)
+		inSourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
+		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, inSourceVFS, srcIn)
+		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.Rel, srcIn.SetVars, srcIn.DefaultVars)
 		cfOut := Build(srcInstance.Path + "/" + strings.TrimSuffix(srcRel, ".in"))
 
-		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
 		registerDeferredCF(ctx, srcInstance, cfOut, []includeDirective{
 			{kind: includeQuoted, target: inSourceVFS.Rel},
 			{kind: includeQuoted, target: configureFilePyVFS.Rel},
 		}, &deferredCF{
 			instance:      srcInstance,
-			srcRel:        srcRel,
+			srcVFS:        inSourceVFS,
+			outVFS:        cfOut,
 			cfgVars:       cfgVars,
 			includeInputs: srcIn.IncludeInputs,
 		})
@@ -255,11 +256,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		return nil
 	case strings.HasSuffix(srcRel, ".cpp.in"),
 		strings.HasSuffix(srcRel, ".c.in"):
-		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir), srcIn)
-		cfgVars := buildCFGVars(ctx.fs, srcInstance.Path+"/"+srcRel, srcIn.SetVars, srcIn.DefaultVars)
-		cfRef, cfOut := EmitCF(srcInstance, srcRel, cfgVars, srcIn.IncludeInputs, srcInstance.Path, ctx.emit)
+		inSourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
+		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, inSourceVFS, srcIn)
+		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.Rel, srcIn.SetVars, srcIn.DefaultVars)
+		cfOut := Build(srcInstance.Path + "/" + strings.TrimSuffix(srcRel, ".in"))
+		cfRef, cfOut := EmitCF(srcInstance, inSourceVFS, cfOut, cfgVars, srcIn.IncludeInputs, srcInstance.Path, ctx.emit)
 
-		inSourceVFS := Source(srcInstance.Path + "/" + srcRel)
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{
 			{kind: includeQuoted, target: inSourceVFS.Rel},
 			{kind: includeQuoted, target: configureFilePyVFS.Rel},

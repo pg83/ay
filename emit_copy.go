@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+)
 
 func copyFileAutoSourceVFS(modulePath string, d *moduleData, srcRel string) (VFS, bool) {
 	if d == nil || d.copyFileAutoOutputs == nil {
@@ -42,8 +45,25 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	}
 }
 
+func generatedModuleSourceVFS(ctx *genCtx, instance ModuleInstance, srcRel string) (VFS, bool) {
+	reg := codegenRegForInstance(ctx, instance)
+	if reg == nil {
+		return VFS{}, false
+	}
+
+	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path + "/" + srcRel)))
+	if _, found := reg.Lookup(buildVFS); found {
+		return buildVFS, true
+	}
+
+	return VFS{}, false
+}
+
 func resolveModuleSourceVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, srcDir *string) VFS {
 	if buildVFS, ok := copyFileAutoSourceVFS(instance.Path, d, srcRel); ok {
+		return buildVFS
+	}
+	if buildVFS, ok := generatedModuleSourceVFS(ctx, instance, srcRel); ok {
 		return buildVFS
 	}
 

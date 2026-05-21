@@ -424,8 +424,8 @@ func TestGen_PeerdirCycle_Tolerated(t *testing.T) {
 // hits its default `*Stmt` arm with an "unhandled Stmt type" message
 // for those. Any name NOT in `whitelistedMetadataMacros` AND NOT a
 // typed Stmt name still flows through `*UnknownStmt` and trips the
-// original whitelist check; `RUN_PYTHON3` is a stable example of
-// that path.
+// original whitelist check; a made-up macro name is the stable canary
+// for that path now that more real generated-source macros are typed.
 func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 	root := t.TempDir()
 
@@ -435,7 +435,7 @@ func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 		t.Fatalf("mkdir mod: %v", err)
 	}
 
-	yamake := []byte("LIBRARY()\nRUN_PYTHON3(foo bar)\nSRCS(main.cpp)\nEND()\n")
+	yamake := []byte("LIBRARY()\nTOTALLY_UNKNOWN(foo bar)\nSRCS(main.cpp)\nEND()\n")
 
 	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644); err != nil {
 		t.Fatalf("write mod/ya.make: %v", err)
@@ -3641,6 +3641,209 @@ func TestD41_PICCoincidesWithHostTarget(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestGen_ProtoAstStylePipelineExpandsLowercaseVarsAndRootedPaths(t *testing.T) {
+	root := t.TempDir()
+
+	writeFile := func(rel, body string) {
+		full := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	writeToolProgram(t, root, "contrib/tools/protoc/bin", "protoc")
+	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+
+	writeFile("proto/ya.make", `LIBRARY()
+SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
+SET(antlr_templates ${antlr_output}/templates)
+SET(sql_grammar ${antlr_output}/Grammar.g)
+SET(PROTOC_PATH contrib/tools/protoc/bin)
+
+CONFIGURE_FILE(${ARCADIA_ROOT}/templates/Java.stg.in ${antlr_templates}/Java/Java.stg)
+CONFIGURE_FILE(${ARCADIA_ROOT}/templates/Grammar.g.in ${sql_grammar})
+
+RUN_ANTLR4(
+    ${sql_grammar}
+    -lib .
+    -o ${antlr_output}
+    IN ${sql_grammar} ${antlr_templates}/Java/Java.stg
+	    OUT_NOAUTO Generated.proto
+	    CWD ${antlr_output}
+)
+
+RUN_PROGRAM(
+	    $PROTOC_PATH
+	    -I=${CURDIR} -I=${ARCADIA_ROOT} -I=${ARCADIA_BUILD_ROOT} -I=${ARCADIA_ROOT}/contrib/libs/protobuf/src
+	    --cpp_out=${ARCADIA_BUILD_ROOT} --cpp_styleguide_out=${ARCADIA_BUILD_ROOT}
+	    --plugin=protoc-gen-cpp_styleguide=contrib/tools/protoc/plugins/cpp_styleguide
+	    Generated.proto
+	    IN Generated.proto
+	    TOOL contrib/tools/protoc/plugins/cpp_styleguide
+	    OUT_NOAUTO Generated.pb.h Generated.pb.cc
+	    CWD ${antlr_output}
+)
+
+RUN_PYTHON3(
+	    ${ARCADIA_ROOT}/tools/multiproto.py Generated
+	    IN Generated.pb.h Generated.pb.cc
+	    OUT_NOAUTO Generated.code0.cc Generated.main.h
+	    CWD ${antlr_output}
+)
+
+SRCS(Generated.code0.cc)
+END()
+`)
+	writeFile("templates/Java.stg.in", "java template\n")
+	writeFile("templates/Grammar.g.in", "grammar Generated;\n")
+	writeFile("tools/multiproto.py", "print('ok')\n")
+	writeFile("build/scripts/configure_file.py", "print('cfg')\n")
+	writeFile("build/scripts/stdout2stderr.py", "print('stderr')\n")
+	writeFile("contrib/java/antlr/antlr4/antlr.jar", "")
+
+	g := testGen(root, "proto")
+
+	cfTemplate := findGraphNodeByOutputs(t, g, "$(B)/proto/templates/Java/Java.stg")
+	cfGrammar := findGraphNodeByOutputs(t, g, "$(B)/proto/Grammar.g")
+	antlr := findGraphNodeByOutputs(t, g, "$(B)/proto/Generated.proto")
+	protoc := findGraphNodeByOutputs(t, g, "$(B)/proto/Generated.pb.h", "$(B)/proto/Generated.pb.cc")
+	py := findGraphNodeByOutputs(t, g, "$(B)/proto/Generated.code0.cc", "$(B)/proto/Generated.main.h")
+	cc := findGraphNodeByOutputs(t, g, "$(B)/proto/Generated.code0.cc.o")
+	ar := findGraphNodeByOutputs(t, g, "$(B)/proto/libproto.a")
+
+	if got := cfTemplate.Inputs[1].String(); got != "$(S)/templates/Java.stg.in" {
+		t.Fatalf("template CF input = %q, want $(S)/templates/Java.stg.in", got)
+	}
+	if got := cfTemplate.Cmds[0].CmdArgs[3]; got != "$(B)/proto/templates/Java/Java.stg" {
+		t.Fatalf("template CF output arg = %q, want $(B)/proto/templates/Java/Java.stg", got)
+	}
+	if got := cfGrammar.Cmds[0].CmdArgs[3]; got != "$(B)/proto/Grammar.g" {
+		t.Fatalf("grammar CF output arg = %q, want $(B)/proto/Grammar.g", got)
+	}
+
+	if got := antlr.Cmds[0].CmdArgs[5]; got != "$(B)/proto/Grammar.g" {
+		t.Fatalf("antlr grammar arg = %q, want $(B)/proto/Grammar.g", got)
+	}
+	if got := antlr.Cmds[0].CmdArgs[9]; got != "$(B)/proto" {
+		t.Fatalf("antlr output dir arg = %q, want $(B)/proto", got)
+	}
+	if got := antlr.Cmds[0].Cwd; got != "$(B)/proto" {
+		t.Fatalf("antlr cwd = %q, want $(B)/proto", got)
+	}
+
+	if got := protoc.Cmds[0].CmdArgs[0]; got != "$(B)/contrib/tools/protoc/bin/protoc" {
+		t.Fatalf("protoc tool arg = %q, want $(B)/contrib/tools/protoc/bin/protoc", got)
+	}
+	wantPluginArg := "--plugin=protoc-gen-cpp_styleguide=$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"
+	if !containsString(protoc.Cmds[0].CmdArgs, wantPluginArg) {
+		t.Fatalf("protoc cmd args missing %q: %v", wantPluginArg, protoc.Cmds[0].CmdArgs)
+	}
+	if !nodeHasInput(protoc, "$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide") {
+		t.Fatalf("protoc inputs missing built plugin binary: %v", protoc.Inputs)
+	}
+	if nodeHasInput(protoc, "$(S)/contrib/tools/protoc/plugins/cpp_styleguide") {
+		t.Fatalf("protoc inputs still contain source-root plugin path: %v", protoc.Inputs)
+	}
+
+	if got := py.Inputs[0].String(); got != "$(S)/tools/multiproto.py" {
+		t.Fatalf("python script input = %q, want $(S)/tools/multiproto.py", got)
+	}
+	if got := py.Inputs[1].String(); got != "$(B)/proto/Generated.pb.h" {
+		t.Fatalf("python generated header input = %q, want $(B)/proto/Generated.pb.h", got)
+	}
+	if got := py.Inputs[2].String(); got != "$(B)/proto/Generated.pb.cc" {
+		t.Fatalf("python generated source input = %q, want $(B)/proto/Generated.pb.cc", got)
+	}
+	if got := py.Cmds[0].CmdArgs[1]; got != "$(S)/tools/multiproto.py" {
+		t.Fatalf("python script arg = %q, want $(S)/tools/multiproto.py", got)
+	}
+	if got := py.Cmds[0].Cwd; got != "$(B)/proto" {
+		t.Fatalf("python cwd = %q, want $(B)/proto", got)
+	}
+
+	if !containsString(cc.Cmds[0].CmdArgs, "$(B)/proto/Generated.code0.cc") {
+		t.Fatalf("cc cmd args missing built generated source: %v", cc.Cmds[0].CmdArgs)
+	}
+	if containsString(cc.Cmds[0].CmdArgs, "$(S)/proto/Generated.code0.cc") {
+		t.Fatalf("cc cmd args still contain source-root generated source: %v", cc.Cmds[0].CmdArgs)
+	}
+	if !nodeHasInput(cc, "$(B)/proto/Generated.code0.cc") {
+		t.Fatalf("cc inputs missing built generated source: %v", cc.Inputs)
+	}
+	for _, want := range []string{
+		"$(S)/tools/multiproto.py",
+		"$(S)/build/scripts/stdout2stderr.py",
+		"$(S)/contrib/java/antlr/antlr4/antlr.jar",
+		"$(S)/build/scripts/configure_file.py",
+		"$(S)/templates/Java.stg.in",
+		"$(S)/templates/Grammar.g.in",
+	} {
+		if !nodeHasInput(cc, want) {
+			t.Fatalf("cc inputs missing generator closure %q: %v", want, cc.Inputs)
+		}
+	}
+
+	if nodeHasInput(ar, "$(S)/proto/Generated.code0.cc") {
+		t.Fatalf("ar inputs still contain source-root generated source: %v", ar.Inputs)
+	}
+	if nodeHasInput(ar, "$(B)/proto/Generated.code0.cc") {
+		t.Fatalf("ar inputs still contain build-root generated source: %v", ar.Inputs)
+	}
+	for _, want := range []string{
+		"$(S)/tools/multiproto.py",
+		"$(S)/build/scripts/stdout2stderr.py",
+		"$(S)/contrib/java/antlr/antlr4/antlr.jar",
+		"$(S)/build/scripts/configure_file.py",
+		"$(S)/templates/Java.stg.in",
+		"$(S)/templates/Grammar.g.in",
+	} {
+		if !nodeHasInput(ar, want) {
+			t.Fatalf("ar inputs missing generator closure %q: %v", want, ar.Inputs)
+		}
+	}
+
+	assertNodeHasNoRawProtoAstPlaceholders := func(node *Node) {
+		t.Helper()
+
+		var values []string
+		for _, input := range node.Inputs {
+			values = append(values, input.String())
+		}
+		for _, output := range node.Outputs {
+			values = append(values, output.String())
+		}
+		for _, cmd := range node.Cmds {
+			values = append(values, cmd.CmdArgs...)
+			if cmd.Cwd != "" {
+				values = append(values, cmd.Cwd)
+			}
+			if cmd.Stdout != "" {
+				values = append(values, cmd.Stdout)
+			}
+		}
+
+		for _, value := range values {
+			if strings.Contains(value, "${") {
+				t.Fatalf("%s contains unresolved placeholder %q", node.KV["p"], value)
+			}
+			if strings.Contains(value, "/$(S)/") || strings.Contains(value, "/$(B)/") {
+				t.Fatalf("%s contains duplicated rooted path %q", node.KV["p"], value)
+			}
+		}
+	}
+
+	assertNodeHasNoRawProtoAstPlaceholders(cfTemplate)
+	assertNodeHasNoRawProtoAstPlaceholders(cfGrammar)
+	assertNodeHasNoRawProtoAstPlaceholders(antlr)
+	assertNodeHasNoRawProtoAstPlaceholders(protoc)
+	assertNodeHasNoRawProtoAstPlaceholders(py)
+	assertNodeHasNoRawProtoAstPlaceholders(cc)
+	assertNodeHasNoRawProtoAstPlaceholders(ar)
 }
 
 // gen_helpers_test.go — test-only shim that constructs the canonical
