@@ -40,11 +40,11 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 			Env:     env,
 			Inputs:  inputs,
 			Outputs: []VFS{generatedVFS},
-			KV: map[string]string{
+			KV: map[string]interface{}{
 				"p":  "CH",
 				"pc": "yellow",
 			},
-			Platform:     string(instance.Platform.Target),
+			Platform: string(instance.Platform.Target),
 			Requirements: map[string]interface{}{
 				"cpu":     float64(1),
 				"network": "restricted",

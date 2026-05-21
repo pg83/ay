@@ -19,7 +19,7 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 		Cmds:             []Cmd{{CmdArgs: []string{"build", "C"}, Env: map[string]string{}}},
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{"c.in"}),
-		KV:               map[string]string{"name": "C"},
+		KV:               map[string]interface{}{"name": "C"},
 		Outputs:          ToVFSSlice([]string{"c.out"}),
 		Platform:         "linux",
 		Requirements:     map[string]interface{}{},
@@ -30,7 +30,7 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 		Cmds:             []Cmd{{CmdArgs: []string{"build", "B"}, Env: map[string]string{}}},
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{"b.in"}),
-		KV:               map[string]string{"name": "B"},
+		KV:               map[string]interface{}{"name": "B"},
 		Outputs:          ToVFSSlice([]string{"b.out"}),
 		Platform:         "linux",
 		Requirements:     map[string]interface{}{},
@@ -42,7 +42,7 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 		Cmds:             []Cmd{{CmdArgs: []string{"build", "A"}, Env: map[string]string{}}},
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{"a.in"}),
-		KV:               map[string]string{"name": "A"},
+		KV:               map[string]interface{}{"name": "A"},
 		Outputs:          ToVFSSlice([]string{"a.out"}),
 		Platform:         "linux",
 		Requirements:     map[string]interface{}{},
@@ -56,7 +56,9 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 }
 
 func nodeNameByKV(g *Graph, idx int) string {
-	return g.Graph[idx].KV["name"]
+	name, _ := g.Graph[idx].KV["name"].(string)
+
+	return name
 }
 
 // finalizeExc is a small helper that runs Finalize inside Try and
@@ -147,7 +149,7 @@ func TestFinalize_DepsAreSortedAlphabetically(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds:   []Cmd{{CmdArgs: []string{name}, Env: map[string]string{}}},
 			Env:    map[string]string{},
-			Inputs: ToVFSSlice([]string{}), KV: map[string]string{"name": name},
+			Inputs: ToVFSSlice([]string{}), KV: map[string]interface{}{"name": name},
 			Outputs:      ToVFSSlice([]string{}),
 			Requirements: map[string]interface{}{}, Tags: []string{},
 			TargetProperties: map[string]string{},
@@ -162,7 +164,7 @@ func TestFinalize_DepsAreSortedAlphabetically(t *testing.T) {
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
+		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -199,7 +201,7 @@ func TestFinalize_DedupesDuplicateDeps(t *testing.T) {
 	c := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"C"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]string{"name": "C"}, Outputs: ToVFSSlice([]string{}),
+		KV: map[string]interface{}{"name": "C"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -207,7 +209,7 @@ func TestFinalize_DedupesDuplicateDeps(t *testing.T) {
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
+		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -239,7 +241,7 @@ func TestFinalize_CycleReturnsError(t *testing.T) {
 	aNode := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
+		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -247,7 +249,7 @@ func TestFinalize_CycleReturnsError(t *testing.T) {
 	bNode := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"B"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]string{"name": "B"}, Outputs: ToVFSSlice([]string{}),
+		KV: map[string]interface{}{"name": "B"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -269,7 +271,7 @@ func TestFinalize_OutOfRangeRefReturnsError(t *testing.T) {
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
+		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -308,7 +310,7 @@ func TestFinalize_ForeignDepsResolvedAndSorted(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds: []Cmd{{CmdArgs: []string{name}, Env: map[string]string{}}},
 			Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-			KV: map[string]string{"name": name}, Outputs: ToVFSSlice([]string{}),
+			KV: map[string]interface{}{"name": name}, Outputs: ToVFSSlice([]string{}),
 			Requirements:     map[string]interface{}{},
 			Tags:             []string{},
 			TargetProperties: map[string]string{},
@@ -319,7 +321,7 @@ func TestFinalize_ForeignDepsResolvedAndSorted(t *testing.T) {
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
+		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -360,7 +362,7 @@ func TestFinalize_RejectsPreSetDeps(t *testing.T) {
 	e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
+		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -383,7 +385,7 @@ func TestFinalize_RejectsPreSetForeignDeps(t *testing.T) {
 	e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
+		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -409,7 +411,7 @@ func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds: []Cmd{{CmdArgs: []string{"identical"}, Env: map[string]string{}}},
 			Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-			KV: map[string]string{"name": "L"}, Outputs: ToVFSSlice([]string{}),
+			KV: map[string]interface{}{"name": "L"}, Outputs: ToVFSSlice([]string{}),
 			Requirements:     map[string]interface{}{},
 			Tags:             []string{},
 			TargetProperties: map[string]string{},
@@ -452,7 +454,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
+		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -489,7 +491,7 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]string{"name": "A"}, Outputs: ToVFSSlice([]string{}),
+		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
@@ -512,7 +514,7 @@ func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 	r := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"X"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]string{"name": "X"}, Outputs: ToVFSSlice([]string{}),
+		KV: map[string]interface{}{"name": "X"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: map[string]interface{}{},
 		Tags:         []string{}, TargetProperties: map[string]string{},
 	})
@@ -539,7 +541,7 @@ func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 
 func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
 	e := NewBufferedEmitter()
-	e.Emit(&Node{KV: map[string]string{"p": "TEST"}})
+	e.Emit(&Node{KV: map[string]interface{}{"p": "TEST"}})
 	Finalize(e)
 
 	defer func() {
@@ -558,12 +560,12 @@ func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
 		}
 	}()
 
-	e.Emit(&Node{KV: map[string]string{"p": "TEST2"}})
+	e.Emit(&Node{KV: map[string]interface{}{"p": "TEST2"}})
 }
 
 func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
 	e := NewBufferedEmitter()
-	ref := e.Emit(&Node{KV: map[string]string{"p": "TEST"}})
+	ref := e.Emit(&Node{KV: map[string]interface{}{"p": "TEST"}})
 	Finalize(e)
 
 	defer func() {
@@ -591,13 +593,13 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 	e1 := NewBufferedEmitter()
 	c1 := e1.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"C", "v1"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]interface{}{},
 		Outputs: ToVFSSlice([]string{}), Requirements: map[string]interface{}{},
 		Tags: []string{}, TargetProperties: map[string]string{},
 	})
 	a1 := e1.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]interface{}{},
 		Outputs: ToVFSSlice([]string{}), Requirements: map[string]interface{}{},
 		Tags: []string{}, TargetProperties: map[string]string{},
 		DepRefs: []NodeRef{c1},
@@ -608,13 +610,13 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 	e2 := NewBufferedEmitter()
 	c2 := e2.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"C", "v2"}, Env: map[string]string{}}}, // changed
-		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]interface{}{},
 		Outputs: ToVFSSlice([]string{}), Requirements: map[string]interface{}{},
 		Tags: []string{}, TargetProperties: map[string]string{},
 	})
 	a2 := e2.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}}, // unchanged
-		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]interface{}{},
 		Outputs: ToVFSSlice([]string{}), Requirements: map[string]interface{}{},
 		Tags: []string{}, TargetProperties: map[string]string{},
 		DepRefs: []NodeRef{c2},
@@ -657,7 +659,7 @@ func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 			Cmds:             []Cmd{{CmdArgs: []string{name}, Env: map[string]string{}}},
 			Env:              map[string]string{},
 			Inputs:           ToVFSSlice([]string{}),
-			KV:               map[string]string{"name": name},
+			KV:               map[string]interface{}{"name": name},
 			Outputs:          ToVFSSlice([]string{}),
 			Requirements:     map[string]interface{}{},
 			Tags:             []string{},
@@ -686,7 +688,8 @@ func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 	// Build position map for DFS invariant check.
 	pos := make(map[string]int, 6)
 	for i, n := range g.Graph {
-		pos[n.KV["name"]] = i
+		name, _ := n.KV["name"].(string)
+		pos[name] = i
 	}
 
 	// DFS invariant: every dep appears AFTER its parent in the output.

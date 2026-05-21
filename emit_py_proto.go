@@ -205,7 +205,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	// proto output back to its de-namespaced name (e.g.
 	// any__intpy3___pb2.py → any_pb2.py). outputs[i] aligns with
 	// suffixes[i] by construction above.
-	pbKV := map[string]string{"p": "PB", "pc": "yellow"}
+	pbKV := map[string]interface{}{"p": "PB", "pc": "yellow"}
 	protoBaseName := filepath.Base(protoBase)
 	for i, out := range outputs {
 		pbKV["ext_out_name_for_"+filepath.Base(out.Rel)] = protoBaseName + suffixes[i]
@@ -296,7 +296,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			Env:              map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)", "PYTHONHASHSEED": "0"},
 			Inputs:           nodeInputs,
 			Outputs:          []VFS{out},
-			KV:               map[string]string{"p": "PY", "pc": "yellow"},
+			KV:               map[string]interface{}{"p": "PY", "pc": "yellow"},
 			Tags:             instance.Platform.Tags,
 			TargetProperties: map[string]string{"module_dir": instance.Path, "module_tag": "py3_proto"},
 			Platform:         string(instance.Platform.Target),
@@ -480,7 +480,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			Env:              env,
 			Inputs:           inputs,
 			Outputs:          []VFS{aux},
-			KV:               map[string]string{"p": "PR", "pc": "yellow", "show_out": "yes"},
+			KV:               map[string]interface{}{"p": "PR", "pc": "yellow", "show_out": "yes"},
 			Tags:             instance.Platform.Tags,
 			TargetProperties: map[string]string{"module_dir": instance.Path, "module_tag": "py3_proto"},
 			Platform:         string(instance.Platform.Target),

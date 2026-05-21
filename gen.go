@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -127,6 +128,9 @@ type moduleEmitResult struct {
 	// gates the back-peer propagation on the parent declaring a
 	// PY*_LIBRARY family that auto-PEERDIRs contrib/libs/python.
 	ModuleStmtName string
+	// testSuiteInfo is populated for test modules when the caller asked
+	// for test-mode graph emission.
+	testSuiteInfo *testSuiteInfo
 }
 
 func stringPtr(s string) *string {
@@ -233,6 +237,9 @@ type genCtx struct {
 	// without renderer branches.
 	host   *Platform
 	target *Platform
+	// testMode requests emission of the extra test-run nodes for test
+	// modules (e.g. UNITTEST_FOR under `ay make -ttt`).
+	testMode bool
 }
 
 // scanCtxCacheKey identifies a scanCtx by (scanner pointer, ctxHash).
@@ -618,16 +625,17 @@ const defaultScanCtxMode = "interned"
 // source_filter records the runtime cannot model, …); callers route
 // it to stderr under `--verbose` and to a no-op otherwise.
 func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string, onWarn func(Warn)) NodeRef {
-	return runGenIntoWithResources(srcRoot, targetDir, hostP, targetP, emitter, mode, onWarn, nil)
+	return runGenIntoWithResources(srcRoot, targetDir, hostP, targetP, emitter, mode, onWarn, nil, false)
 }
 
-func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string, onWarn func(Warn), resources *resourceFetchPlan) NodeRef {
+func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) NodeRef {
 	if mode != "local" && mode != "interned" {
 		ThrowFmt("gen: --scan-ctx-mode must be \"local\" or \"interned\", got %q", mode)
 	}
 
-	resources.emitAll(hostP, emitter)
-	emitter = newResourceAwareEmitter(emitter, resources)
+	plainEmit := emitter
+	resources.emitAll(hostP, plainEmit)
+	resourceEmit := newResourceAwareEmitter(plainEmit, resources)
 
 	fs := NewFS(srcRoot)
 	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
@@ -646,7 +654,7 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 		sourceRoot:        srcRoot,
 		fs:                fs,
 		parsers:           parsers,
-		emit:              emitter,
+		emit:              resourceEmit,
 		memo:              make(map[ModuleInstance]*moduleEmitResult),
 		moduleTypeCache:   make(map[moduleTypeCacheKey]moduleTypeInfo),
 		walking:           make(map[ModuleInstance]bool),
@@ -661,6 +669,7 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 		ldPluginCPCache:   make(map[VFS]NodeRef),
 		scanCtxMode:       mode,
 		internedScanCtx:   make(map[scanCtxCacheKey]*scanCtx, 64),
+		testMode:          testMode,
 	}
 
 	ctx.localScanCtxStack = []map[scanCtxCacheKey]*scanCtx{make(map[scanCtxCacheKey]*scanCtx, 4)}
@@ -675,6 +684,11 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 	root := genModule(ctx, seed)
 
 	ctx.emit.Result(root.LDRef)
+	if ctx.testMode && root.testSuiteInfo != nil {
+		for _, ref := range emitTestRunNodes(plainEmit, resourceEmit, targetP, *root.testSuiteInfo, root.LDRef) {
+			ctx.emit.Result(ref)
+		}
+	}
 	reportPerfStats(ctx, parsers, targetScanner, hostScanner)
 
 	return root.LDRef
@@ -686,14 +700,40 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 // mining; the walker reads every flag, tool path, and tag off the
 // Platform pointers. `onWarn` receives one line per diagnostic.
 func GenWithMode(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn)) *Graph {
-	return GenWithModeWithResources(sourceRoot, targetDir, hostP, targetP, mode, onWarn, nil)
+	return GenWithModeWithResources(sourceRoot, targetDir, hostP, targetP, mode, onWarn, nil, false)
 }
 
-func GenWithModeWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn), resources *resourceFetchPlan) *Graph {
+func GenWithModeWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
 	emitter := NewBufferedEmitter()
-	runGenIntoWithResources(sourceRoot, targetDir, hostP, targetP, emitter, mode, onWarn, resources)
+	runGenIntoWithResources(sourceRoot, targetDir, hostP, targetP, emitter, mode, onWarn, resources, testMode)
 
 	return Finalize(emitter)
+}
+
+func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
+	if moduleStmt == nil {
+		return ""
+	}
+
+	if moduleStmt.Name == "UNITTEST_FOR" {
+		return strings.ReplaceAll(path.Clean(instance.Path), "/", "-")
+	}
+
+	if len(moduleStmt.Args) > 0 {
+		return moduleStmt.Args[0]
+	}
+
+	return ""
+}
+
+func programSourceDir(moduleStmt *ModuleStmt) *string {
+	if moduleStmt == nil || moduleStmt.Name != "UNITTEST_FOR" || len(moduleStmt.Args) == 0 {
+		return nil
+	}
+
+	dir := path.Clean(moduleStmt.Args[0])
+
+	return &dir
 }
 
 // moduleData is the per-module accumulator populated by `collectModule`,
@@ -1873,6 +1913,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// ymakeyaml.cpp.o ref:9+21).
 	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path, peerAddInclGlobal, dedupedAddIncl)
 
+	effectiveSrcDir := d.srcDir
+	if effectiveSrcDir == nil {
+		effectiveSrcDir = programSourceDir(d.moduleStmt)
+	}
+
 	moduleInputs := ModuleCCInputs{
 		Flags:                d.flags,
 		AddIncl:              dedupedAddIncl,
@@ -1888,7 +1933,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		PeerCOnlyFlagsGlobal: peerCOnlyFlagsGlobal,
 		AutoPeerCFlags:       autoPeerCFlags,
 		SFlags:               d.sFlags,
-		SrcDir:               d.srcDir,
+		SrcDir:               effectiveSrcDir,
 		SourceRoot:           ctx.sourceRoot,
 		FS:                   ctx.fs,
 		DefaultVars:          d.defaultVars,
@@ -2307,11 +2352,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// `bin/ragel6`, not `bin/bin`. EmitLD's empty-fallback matches
 		// the elided case. PY3_PROGRAM_BIN shares this dispatch with no
 		// own CC outputs; its peer closure and LD node emit identically.
-		var binaryName string
-
-		if len(d.moduleStmt.Args) > 0 && d.moduleStmt.Name != "UNITTEST_FOR" {
-			binaryName = d.moduleStmt.Args[0]
-		}
+		binaryName := programBinaryName(instance, d.moduleStmt)
 
 		// ALLOCATOR(FAKE) at PROGRAM level filters `library/cpp/malloc/
 		// api` out of the link closure even when a transitive peer
@@ -2494,6 +2535,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ctx.emit,
 		)
 		ldPath := LDOutputPath(instance, binaryName)
+		var suiteInfo *testSuiteInfo
+		if ctx.testMode && d.moduleStmt.Name == "UNITTEST_FOR" {
+			// TODO: extend test-mode emission to other test module types.
+			suiteInfo = buildTestSuiteInfo(instance, d, ldPath)
+		}
 
 		result := &moduleEmitResult{
 			ARRef:                           ldRef,
@@ -2524,6 +2570,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			InducedDeps:                     append([]string(nil), d.inducedDeps...),
 			Peerdirs:                        append([]string(nil), d.peerdirs...),
 			ModuleStmtName:                  d.moduleStmt.Name,
+			testSuiteInfo:                   suiteInfo,
 		}
 		ctx.memo[instance] = result
 

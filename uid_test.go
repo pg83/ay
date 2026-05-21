@@ -60,7 +60,7 @@ func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 		Deps:             []string{},
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
-		KV:               map[string]string{},
+		KV:               map[string]interface{}{},
 		Outputs:          ToVFSSlice([]string{}),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
@@ -99,7 +99,7 @@ func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
 	n := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"sh", "-c", "echo <a> & echo b"}, Env: map[string]string{}}},
 		Deps: []string{}, Env: map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]string{"p": "CC", "html": "a<b>c"}, Outputs: ToVFSSlice([]string{}),
+		KV: map[string]interface{}{"p": "CC", "html": "a<b>c"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: map[string]interface{}{}, Tags: []string{},
 		TargetProperties: map[string]string{},
 	}
@@ -139,7 +139,7 @@ func TestCanonicalNodeBytes_DoesNotEscapeHTML(t *testing.T) {
 	n := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"sh", "-c", "echo <a> & echo b"}, Env: map[string]string{}}},
 		Deps: []string{}, Env: map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]string{}, Outputs: ToVFSSlice([]string{}),
+		KV: map[string]interface{}{}, Outputs: ToVFSSlice([]string{}),
 		Requirements: map[string]interface{}{}, Tags: []string{},
 		TargetProperties: map[string]string{},
 	}

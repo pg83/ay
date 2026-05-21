@@ -77,7 +77,7 @@ func EmitBI(
 		},
 		Env:    env,
 		Inputs: inputs,
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"disable_cache": "yes",
 			"p":             "BI",
 			"pc":            "yellow",
@@ -88,7 +88,7 @@ func EmitBI(
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform:     string(instance.Platform.Target),
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",

@@ -56,7 +56,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		},
 		Env:    env,
 		Inputs: inputs,
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":  "JS",
 			"pc": "magenta",
 		},

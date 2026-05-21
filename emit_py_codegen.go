@@ -105,7 +105,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			Env:     env,
 			Inputs:  inputs,
 			Outputs: []VFS{outputPath},
-			KV: map[string]string{
+			KV: map[string]interface{}{
 				"p":  "PY",
 				"pc": "yellow",
 			},
@@ -235,7 +235,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 				Env:     env,
 				Inputs:  []VFS{genPy3RegScriptVFS},
 				Outputs: []VFS{regCppVFS},
-				KV: map[string]string{
+				KV: map[string]interface{}{
 					"p":  "PY",
 					"pc": "yellow",
 				},

@@ -471,7 +471,7 @@ func EmitPB(
 		Env:     env,
 		Inputs:  inputs,
 		Outputs: outputs,
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":  "PB",
 			"pc": "yellow",
 		},

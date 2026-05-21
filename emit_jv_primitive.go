@@ -94,7 +94,7 @@ func EmitJV(
 		},
 		Env:    env,
 		Inputs: inputs,
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":        "JV",
 			"pc":       "light-blue",
 			"show_out": "yes",
@@ -104,7 +104,7 @@ func EmitJV(
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform:     string(instance.Platform.Target),
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -190,7 +190,7 @@ func EmitJVSplit(
 		},
 		Env:    env,
 		Inputs: inputs,
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":        "JV",
 			"pc":       "light-blue",
 			"show_out": "yes",
@@ -200,7 +200,7 @@ func EmitJVSplit(
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform:     string(instance.Platform.Target),
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",

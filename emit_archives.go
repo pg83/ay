@@ -237,12 +237,12 @@ func emitArchive(
 		},
 		Env:    env,
 		Inputs: inputs,
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":  "AR",
 			"pc": "light-red",
 		},
-		Outputs:      []VFS{archiveVFS},
-		Platform:     string(instance.Platform.Target),
+		Outputs:  []VFS{archiveVFS},
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
