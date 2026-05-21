@@ -285,8 +285,9 @@ func evalLt(x *ExprLt, env Environment) bool {
 // DefaultIfEnv is the bound-variable environment for IF predicates —
 // per-build bindings independent of instance.Platform.ISA. Every ARCH_*
 // defaults to false; buildIfEnv (modules.go) flips the matching ISA's
-// bits per instance. Other shape (OS_LINUX, CLANG, MUSL, …) reflects
-// the reference closure's build configuration (linux + clang + musl).
+// bits per instance. Other shape (OS_LINUX, CLANG, …) reflects the
+// reference closure's build configuration (linux + clang); MUSL is
+// supplied per-platform via flags and defaults to "no" when absent.
 // Extend this set to teach EvalCond about a new identifier.
 var DefaultIfEnv = Environment{
 	bools: map[string]bool{
@@ -314,7 +315,7 @@ var DefaultIfEnv = Environment{
 		"CLANG_CL":                          false,
 		"GCC":                               false,
 		"MSVC":                              false,
-		"MUSL":                              true,
+		"MUSL":                              false,
 		"USE_EAT_MY_DATA":                   false,
 		"WITH_MAPKIT":                       false,
 		"WITH_VALGRIND":                     false,
@@ -414,7 +415,8 @@ var DefaultIfEnv = Environment{
 		"OPENSOURCE_REPLACE_PROTOBUF":        false,
 		"OS_IOSSIM":                          false,
 		"OS_NONE":                            false,
-		"OS_SDK":                             false,
+		"OS_FREERTOS":                        false,
+		"STATIC_STL":                         false,
 		"USE_LTO":                            false,
 		"USE_SYSTEM_PYTHON":                  false,
 		"WINDOWS_I686":                       false,
@@ -445,6 +447,7 @@ var DefaultIfEnv = Environment{
 		// DEFAULT(USE_ICONV ${_USE_ICONV}).
 		"_USE_ICONV": "dynamic",
 		"PY2":        "PY2", // bare-ident literal for IF (MODULE_TAG == "PY2").
+		"OS_SDK":     "",
 	},
 	ints: map[string]int{
 		// ANDROID_API: defensive default for libc_compat `<` branches;
