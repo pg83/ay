@@ -105,13 +105,13 @@ func emitARNode(
 		},
 		Env:    topEnv,
 		Inputs: inputs,
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":        "AR",
 			"pc":       "light-red",
 			"show_out": "yes",
 		},
-		Outputs:      []VFS{archivePath},
-		Platform:     string(instance.Platform.Target),
+		Outputs:  []VFS{archivePath},
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",

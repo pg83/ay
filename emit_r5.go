@@ -62,7 +62,7 @@ func EmitR5(
 		Env:     env,
 		Inputs:  inputs,
 		Outputs: []VFS{tmpVFS, cppVFS},
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":  "R5",
 			"pc": "yellow",
 		},
@@ -70,7 +70,7 @@ func EmitR5(
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		Platform:     string(instance.Platform.Target),
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",

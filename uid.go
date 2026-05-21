@@ -143,6 +143,25 @@ func (c *canonBuf) writeInterfaceMap(m map[string]interface{}) {
 	}
 }
 
+func (c *canonBuf) writeKVMap(m map[string]interface{}) {
+	c.writeUint32(uint32(len(m)))
+	for _, k := range canonKeysOf(m) {
+		c.writeBytes(k)
+		switch v := m[k].(type) {
+		case string:
+			c.writeBytes(v)
+		case bool:
+			if v {
+				c.writeBytes("true")
+			} else {
+				c.writeBytes("false")
+			}
+		default:
+			ThrowFmt("canonBuf.writeKVMap: unsupported value type %T for key %q", v, k)
+		}
+	}
+}
+
 func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
 	c.writeUint32(uint32(len(cmds)))
 	for _, cm := range cmds {
@@ -175,7 +194,7 @@ func (c *canonBuf) writeNode(n *Node) {
 	c.writeStringMap(n.Env)
 	c.writeStringSliceMap(n.ForeignDeps)
 	c.writeVFSSlice(n.Inputs)
-	c.writeStringMap(n.KV)
+	c.writeKVMap(n.KV)
 	c.writeVFSSlice(n.Outputs)
 	c.writeBytes(n.Platform)
 	c.writeInterfaceMap(n.Requirements)

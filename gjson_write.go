@@ -143,10 +143,10 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 	buf = appendVFSSlice(buf, n.Inputs, innerPad)
 	buf = append(buf, ',', '\n')
 
-	// kv: map[string]string
+	// kv: map[string]interface{}
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"kv": `...)
-	buf = appendStringMap(buf, n.KV, innerPad)
+	buf = appendInterfaceMap(buf, n.KV, innerPad)
 	buf = append(buf, ',', '\n')
 
 	// outputs: []VFS
@@ -223,24 +223,26 @@ func appendCmdSlice(buf []byte, cmds []Cmd, pad string) []byte {
 		buf = append(buf, itemPad...)
 		buf = append(buf, '{', '\n')
 
-		// cmd_args: []string
+		// cmd_args: []string — always present, first key.
 		buf = append(buf, innerPad...)
 		buf = append(buf, `"cmd_args": `...)
 		buf = appendStringSlice(buf, c.CmdArgs, innerPad)
-		buf = append(buf, ',', '\n')
 
 		// cwd: string, omitempty
 		if c.Cwd != "" {
+			buf = append(buf, ',', '\n')
 			buf = append(buf, innerPad...)
 			buf = append(buf, `"cwd": `...)
 			buf = appendString(buf, c.Cwd)
-			buf = append(buf, ',', '\n')
 		}
 
-		// env: map[string]string
-		buf = append(buf, innerPad...)
-		buf = append(buf, `"env": `...)
-		buf = appendStringMap(buf, c.Env, innerPad)
+		// env: map[string]string, omitempty
+		if len(c.Env) > 0 {
+			buf = append(buf, ',', '\n')
+			buf = append(buf, innerPad...)
+			buf = append(buf, `"env": `...)
+			buf = appendStringMap(buf, c.Env, innerPad)
+		}
 
 		// stdout: omitempty; emitted after env for alphabetical key order
 		// (cmd_args, cwd, env, stdout).

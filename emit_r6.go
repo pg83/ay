@@ -92,7 +92,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		Env:     env,
 		Inputs:  inputs,
 		Outputs: []VFS{outVFS},
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":  "R6",
 			"pc": "yellow",
 		},

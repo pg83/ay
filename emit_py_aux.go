@@ -182,7 +182,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 			Env:              env,
 			Inputs:           inputs,
 			Outputs:          []VFS{aux},
-			KV:               map[string]string{"p": "PR", "pc": "yellow", "show_out": "yes"},
+			KV:               map[string]interface{}{"p": "PR", "pc": "yellow", "show_out": "yes"},
 			Tags:             instance.Platform.Tags,
 			TargetProperties: map[string]string{"module_dir": instance.Path},
 			Platform:         string(instance.Platform.Target),

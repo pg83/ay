@@ -120,7 +120,7 @@ func ldFieldName(ci int, suffix string) string {
 func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	emit := NewBufferedEmitter()
 	mainRef := emit.Emit(&Node{
-		KV: map[string]string{"p": "STUB"},
+		KV: map[string]interface{}{"p": "STUB"},
 	})
 	mainPath := "$(B)/some/prog/main.cpp.o"
 
@@ -223,7 +223,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 	emit := NewBufferedEmitter()
 	mainRef := emit.Emit(&Node{
-		KV: map[string]string{"p": "STUB"},
+		KV: map[string]interface{}{"p": "STUB"},
 	})
 	mainPath := "$(B)/some/prog/main.cpp.o"
 
@@ -305,7 +305,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 // `host_platform=true`.
 func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 	emit := NewBufferedEmitter()
-	stub := emit.Emit(&Node{KV: map[string]string{"p": "STUB"}})
+	stub := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
 
 	ref := EmitLD(
 		hostInstance("some/prog"),
@@ -394,8 +394,8 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 
 func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 	emit := NewBufferedEmitter()
-	mainRef := emit.Emit(&Node{KV: map[string]string{"p": "STUB"}})
-	wholeRef := emit.Emit(&Node{KV: map[string]string{"p": "STUB"}})
+	mainRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
+	wholeRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
 
 	instance := targetInstance("some/prog")
 	wholeArchivePath := "some/prog/libproto_cpp.a"
@@ -452,38 +452,38 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 
 func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T) {
 	emit := NewBufferedEmitter()
-	mainRef := emit.Emit(&Node{KV: map[string]string{"p": "STUB"}})
-	peerRef := emit.Emit(&Node{KV: map[string]string{"p": "STUB"}})
-	wholeRef := emit.Emit(&Node{KV: map[string]string{"p": "STUB"}})
+	mainRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
+	peerRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
+	wholeRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
 
 	instance := targetInstance("some/prog")
 	dupPath := Build("some/prog/libproto_cpp.a")
 
-		ldRef := EmitLD(
-			instance,
-			"",
-			[]NodeRef{mainRef}, []VFS{Build("some/prog/main.cpp.o")},
-			[]NodeRef{peerRef}, []VFS{dupPath},
-			nil,
-			nil, nil,
-			nil, nil,
-			[]NodeRef{wholeRef}, []VFS{dupPath},
-			nil,
-			nil, nil,
-			nil, nil,
-			nil,
-			nil, // moduleCFlags
-			nil, // peerCFlagsGlobal
-			nil, // autoPeerCFlags
-			nil, // peerLDFlagsGlobal
-			nil, // ownLDFlags
-			nil, // ownRPathFlags
-			nil, // peerRPathFlagsGlobal
-			nil, // objAddLibsGlobal
-			false,
-			false,
-			false,
-			testHostP,
+	ldRef := EmitLD(
+		instance,
+		"",
+		[]NodeRef{mainRef}, []VFS{Build("some/prog/main.cpp.o")},
+		[]NodeRef{peerRef}, []VFS{dupPath},
+		nil,
+		nil, nil,
+		nil, nil,
+		[]NodeRef{wholeRef}, []VFS{dupPath},
+		nil,
+		nil, nil,
+		nil, nil,
+		nil,
+		nil, // moduleCFlags
+		nil, // peerCFlagsGlobal
+		nil, // autoPeerCFlags
+		nil, // peerLDFlagsGlobal
+		nil, // ownLDFlags
+		nil, // ownRPathFlags
+		nil, // peerRPathFlagsGlobal
+		nil, // objAddLibsGlobal
+		false,
+		false,
+		false,
+		testHostP,
 		emit,
 	)
 

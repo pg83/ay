@@ -153,7 +153,7 @@ func TestEmitAS_YasmLD_PopulatesDepRefs(t *testing.T) {
 		Env:          map[string]string{},
 		Inputs:       ToVFSSlice([]string{}),
 		Outputs:      ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
-		KV:           map[string]string{"p": "LD", "pc": "light-cyan"},
+		KV:           map[string]interface{}{"p": "LD", "pc": "light-cyan"},
 		Tags:         []string{"tool"},
 		Platform:     string(PlatformDefaultLinuxX8664),
 		Requirements: map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
@@ -197,7 +197,7 @@ func TestEmitAS_KV(t *testing.T) {
 	}
 
 	got := e.nodes[0]
-	want := map[string]string{
+	want := map[string]interface{}{
 		"p":  "AS",
 		"pc": "light-green",
 	}

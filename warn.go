@@ -38,4 +38,3 @@ func (k WarnKind) String() string {
 	}
 	return "warn"
 }
-

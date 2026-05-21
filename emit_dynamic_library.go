@@ -158,7 +158,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		Env:     envFull,
 		Inputs:  inputs,
 		Outputs: []VFS{Build(instance.Path + "/" + outputName)},
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":        "LD",
 			"pc":       "light-blue",
 			"show_out": "yes",
