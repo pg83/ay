@@ -23,6 +23,7 @@ cd "$REPO_ROOT"
 
 OUT_DIR="${1:-./.out/validate}"
 REF_DIR="/home/pg/monorepo/yatool"
+YDB_ROOT="/home/pg/monorepo/ydb"
 
 mkdir -p "$OUT_DIR"
 
@@ -78,6 +79,52 @@ run_case() {
     return 1
 }
 
+run_ydb_sg4() {
+    local case_name="sg4.ydb"
+    local target_path="util/ut"
+    local ref_json="$YDB_ROOT/sg4.json"
+    local root_output="/util/ut/util-ut"
+
+    local make_json="$OUT_DIR/${case_name}.make.json"
+    local our_norm="$OUT_DIR/${case_name}.our.norm.json"
+    local ref_norm="$OUT_DIR/${case_name}.ref.norm.json"
+
+    echo "[$case_name] generating graph (native x86_64, non-musl, -ttt --sandboxing, OS_SDK=local)"
+
+    env -u CFLAGS -u CXXFLAGS \
+        PYTHON='$(YMAKE_PYTHON3)/bin/python3' \
+        CC='$(CLANG)/bin/clang' \
+        CXX='$(CLANG)/bin/clang++' \
+        OBJCOPY='$(CLANG)/bin/llvm-objcopy' \
+        ./ay make \
+        -j 0 \
+        -k \
+        -G \
+        -ttt \
+        --sandboxing \
+        --source-root "$YDB_ROOT" \
+        -DOS_SDK=local \
+        --host-platform-flag OS_SDK=local \
+        "$target_path" > "$make_json"
+
+    echo "[$case_name] normalize + L4 compare"
+
+    if ./dev/normalize.py \
+        --our "$make_json" \
+        --ref "$ref_json" \
+        --target "$target_path" \
+        --our-out "$our_norm" \
+        --ref-out "$ref_norm"; then
+        echo "[$case_name] OK"
+        return 0
+    fi
+
+    echo "[$case_name] FAIL"
+    echo "  inspect with:"
+    echo "  ./dev/diff.py --our $our_norm --ref $ref_norm --root-output $root_output --show-cmd-diff"
+    return 1
+}
+
 status=0
 
 if ! run_case "sg2.aarch64" "devtools/ymake/bin" "default-linux-aarch64" "$REF_DIR/sg2.json" "/devtools/ymake/bin/ymake"; then
@@ -89,6 +136,10 @@ if ! run_case "sg2.x86_64" "devtools/ymake/bin" "default-linux-x86_64" "$REF_DIR
 fi
 
 if ! run_case "sg3.aarch64" "devtools/ya/bin" "default-linux-aarch64" "$REF_DIR/sg3.json" "/devtools/ya/bin/ya-bin"; then
+    status=1
+fi
+
+if ! run_ydb_sg4; then
     status=1
 fi
 
