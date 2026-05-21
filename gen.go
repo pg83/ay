@@ -2309,7 +2309,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// own CC outputs; its peer closure and LD node emit identically.
 		var binaryName string
 
-		if len(d.moduleStmt.Args) > 0 {
+		if len(d.moduleStmt.Args) > 0 && d.moduleStmt.Name != "UNITTEST_FOR" {
 			binaryName = d.moduleStmt.Args[0]
 		}
 
