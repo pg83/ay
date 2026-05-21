@@ -37,7 +37,7 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 	}
 
 	rescompilerRef, _ := ctx.tool("tools/rescompiler/bin")
-	rawRes := emitRawAuxResourceChunks(ctx, instance, entries, "PY3", nil, rescompilerRef)
+	rawRes := emitRawAuxResourceChunks(ctx, instance, entries, "PY3", nil, in, rescompilerRef)
 	if rawRes == nil {
 		return nil
 	}
@@ -49,9 +49,7 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 		ccIn.ExtraDepRefs = []NodeRef{prRef}
 		ccIn.ForceCxx = true
 		ccIn.PerSourceCFlags = append(append([]string(nil), in.PerSourceCFlags...), "-x", "c++")
-		ccInputs := append([]VFS{aux}, rawRes.MemberInputs...)
-		ccInputs = dedupVFS(ccInputs)
-		ccIn.IncludeInputs = ccInputs
+		ccIn.IncludeInputs = rawRes.AuxClosures[i]
 
 		ccRef, ccOut := EmitCC(instance, aux.Rel[strings.LastIndex(aux.Rel, "/")+1:], aux, ccIn, ctx.host, ctx.emit)
 		res.Refs = append(res.Refs, ccRef)
@@ -75,9 +73,10 @@ type rawAuxResourceChunksResult struct {
 	MemberInputs []VFS
 	PRRefs       []NodeRef
 	PROutputs    []VFS
+	AuxClosures  [][]VFS
 }
 
-func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []pyProtoAuxEntry, moduleTag string, deps []NodeRef, rescompilerRef NodeRef) *rawAuxResourceChunksResult {
+func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []pyProtoAuxEntry, moduleTag string, deps []NodeRef, in ModuleCCInputs, rescompilerRef NodeRef) *rawAuxResourceChunksResult {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -159,6 +158,8 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 	memberSeen := map[VFS]struct{}{}
 	for _, ch := range chunks {
 		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, moduleTag) + "_raw.auxcpp")
+		sourceInputs := pyProtoSourceInputs(ch.inputs)
+		auxClosure := rawAuxInputClosure(ctx, instance, aux, sourceInputs, in)
 		cmdArgs := []string{rescompilerBinPath, aux.String()}
 		cmdArgs = append(cmdArgs, ch.cmdArgs...)
 
@@ -168,25 +169,32 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 			chDeps = append(chDeps, rescompilerRef)
 		}
 
-		inputs := append([]VFS{rescompilerBinVFS}, ch.inputs...)
+		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
+		inputs := append([]VFS(nil), ch.inputs...)
+		inputs = append(inputs, rescompilerBinVFS)
+		inputs = append(inputs, auxClosure...)
+		inputs = dedupVFS(inputs)
 		if extras := resolveCodegenDepRefsExt(ctx, instance, nil, ch.inputs, chDeps...); len(extras) > 0 {
 			chDeps = append(chDeps, extras...)
 		}
 		ref := ctx.emit.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: cmdArgs}},
+			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
+			Env:              env,
 			Inputs:           inputs,
 			Outputs:          []VFS{aux},
-			KV:               map[string]string{"p": "PR", "pc": "yellow"},
+			KV:               map[string]string{"p": "PR", "pc": "yellow", "show_out": "yes"},
 			Tags:             instance.Platform.Tags,
 			TargetProperties: map[string]string{"module_dir": instance.Path},
 			Platform:         string(instance.Platform.Target),
 			Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
 			DepRefs:          chDeps,
 		})
+		bindGeneratedOutput(ctx, instance, aux, ref)
 		res.Refs = append(res.Refs, ref)
 		res.Outputs = append(res.Outputs, aux)
 		res.PRRefs = append(res.PRRefs, ref)
 		res.PROutputs = append(res.PROutputs, aux)
+		res.AuxClosures = append(res.AuxClosures, auxClosure)
 
 		for _, v := range inputs {
 			if _, ok := memberSeen[v]; ok {
@@ -198,4 +206,22 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 	}
 
 	return res
+}
+
+func rawAuxInputClosure(ctx *genCtx, instance ModuleInstance, aux VFS, seed []VFS, in ModuleCCInputs) []VFS {
+	emits := []includeDirective{
+		{kind: includeQuoted, target: "library/cpp/resource/resource.h"},
+		{kind: includeQuoted, target: "library/cpp/resource/registry.h"},
+	}
+	for _, v := range seed {
+		emits = append(emits, includeDirective{kind: includeQuoted, target: v.Rel})
+	}
+	registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits)
+
+	closure := walkClosure(ctx, instance, aux, in)
+	if len(closure) == 0 {
+		return nil
+	}
+
+	return dedupVFS(closure)
 }
