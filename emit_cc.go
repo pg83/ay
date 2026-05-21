@@ -23,7 +23,7 @@ type ModuleCCInputs struct {
 	// emitters that need per-module shape choices (musl-self CC, no-stdinc
 	// scanner base paths, no-compiler-warnings dispatch) read through
 	// this field rather than via ModuleInstance.
-	Flags FlagSet
+	Flags   FlagSet
 	AddIncl []VFS
 	// PeerAddInclGlobal is the union of every PEERDIR's transitive
 	// ADDINCL(GLOBAL ...) contributions in declaration order. Slotted
@@ -245,7 +245,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Env:     env,
 		Inputs:  allInputs,
 		Outputs: []VFS{outVFS},
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":  "CC",
 			"pc": "green",
 		},
@@ -257,7 +257,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 			}
 			return tp
 		}(),
-		Platform:     string(instance.Platform.Target),
+		Platform: string(instance.Platform.Target),
 		// Numeric values are float64 to match encoding/json's default
 		// when unmarshalling into `map[string]interface{}`. Int
 		// literals would make reflect.DeepEqual against the reference
@@ -721,4 +721,3 @@ func appendAddIncl(cmdArgs []string, addIncl []VFS) []string {
 func includeArg(path VFS) string {
 	return "-I" + path.String()
 }
-

@@ -20,7 +20,7 @@ package main
 type Cmd struct {
 	CmdArgs []string          `json:"cmd_args"`
 	Cwd     string            `json:"cwd,omitempty"`
-	Env     map[string]string `json:"env"`
+	Env     map[string]string `json:"env,omitempty"`
 	Stdout  string            `json:"stdout,omitempty"`
 }
 
@@ -38,7 +38,7 @@ type Node struct {
 	Env              map[string]string      `json:"env"`
 	ForeignDeps      map[string][]string    `json:"foreign_deps,omitempty"`
 	Inputs           []VFS                  `json:"inputs"`
-	KV               map[string]string      `json:"kv"`
+	KV               map[string]interface{} `json:"kv"`
 	Outputs          []VFS                  `json:"outputs"`
 	Platform         string                 `json:"platform"`
 	Requirements     map[string]interface{} `json:"requirements"`

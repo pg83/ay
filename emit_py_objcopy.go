@@ -208,7 +208,7 @@ func emitResourceObjcopy(
 			Env:     env,
 			Inputs:  inputs,
 			Outputs: []VFS{outputObj},
-			KV: map[string]string{
+			KV: map[string]interface{}{
 				"p":        "PY",
 				"pc":       "yellow",
 				"show_out": "yes",
@@ -383,7 +383,7 @@ func emitKvOnlyObjcopyNode(
 		Env:              env,
 		Inputs:           inputs,
 		Outputs:          []VFS{outputObj},
-		KV:               map[string]string{"p": "PY", "pc": "yellow", "show_out": "yes"},
+		KV:               map[string]interface{}{"p": "PY", "pc": "yellow", "show_out": "yes"},
 		Tags:             kvTags,
 		TargetProperties: targetProps,
 		Platform:         string(instance.Platform.Target),
@@ -484,7 +484,7 @@ func emitYaConfJSONObjcopy(
 			Env:     env,
 			Inputs:  []VFS{rescompilerBinVFS, rescompressorBinVFS, input, objcopyScriptVFS},
 			Outputs: []VFS{outputObj},
-			KV: map[string]string{
+			KV: map[string]interface{}{
 				"p":        "PY",
 				"pc":       "yellow",
 				"show_out": "yes",
@@ -713,7 +713,7 @@ func emitPySrcObjcopy(
 				Env:              env,
 				Inputs:           inputs,
 				Outputs:          []VFS{outputObj},
-				KV:               map[string]string{"p": "PY", "pc": "yellow", "show_out": "yes"},
+				KV:               map[string]interface{}{"p": "PY", "pc": "yellow", "show_out": "yes"},
 				Tags:             pyTags,
 				TargetProperties: targetProps,
 				Platform:         string(instance.Platform.Target),

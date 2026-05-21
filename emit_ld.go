@@ -200,7 +200,7 @@ func EmitLD(
 		Env:     envFull,
 		Inputs:  inputs,
 		Outputs: outputs,
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":        "LD",
 			"pc":       "light-blue",
 			"show_out": "yes",
@@ -365,7 +365,7 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 		ldLinkExePath,
 	)
 
-	if len(pluginPaths) > 0 {
+	if len(pluginPaths) > 0 || p.Flags["SANDBOXING"] == "yes" {
 		cmdArgs = append(cmdArgs, "--start-plugins")
 		for _, p := range pluginPaths {
 			cmdArgs = append(cmdArgs, p.String())

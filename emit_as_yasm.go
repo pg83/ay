@@ -61,10 +61,10 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 				Env:     env,
 			},
 		},
-		Env:          env,
-		Inputs:       allInputs,
-		Outputs:      []VFS{outVFS},
-		KV: map[string]string{
+		Env:     env,
+		Inputs:  allInputs,
+		Outputs: []VFS{outVFS},
+		KV: map[string]interface{}{
 			"p":  "AS",
 			"pc": "light-green",
 		},

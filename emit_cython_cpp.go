@@ -84,7 +84,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			Env:     env,
 			Inputs:  toolInputs,
 			Outputs: []VFS{generatedVFS},
-			KV: map[string]string{
+			KV: map[string]interface{}{
 				"p":  "CY",
 				"pc": "yellow",
 			},

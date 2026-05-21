@@ -84,12 +84,12 @@ func EmitEN(
 		},
 		Env:    env,
 		Inputs: inputs,
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":  "EN",
 			"pc": "yellow",
 		},
-		Outputs:      outputs,
-		Platform:     string(instance.Platform.Target),
+		Outputs:  outputs,
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
