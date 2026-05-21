@@ -995,6 +995,7 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		// instance's Kind/Language.
 		"PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",
 		"PY3_PROGRAM_BIN", "PY2_PROGRAM", "PY3_PROGRAM",
+		"YQL_UDF_YDB", "YQL_UDF_CONTRIB",
 		"PROTO_LIBRARY",
 		"DLL", "SO_PROGRAM", "DYNAMIC_LIBRARY",
 		"PACKAGE", "UNION", "RESOURCES_LIBRARY",
@@ -1005,11 +1006,16 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 	case "SRCS":
 		return &SrcsStmt{Sources: args, Line: nameTok.line}
 	case "SET":
-		if len(args) < 2 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "SET expects at least 2 arguments (name and value), got %d", len(args))
+		if len(args) == 0 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "SET expects at least 1 argument (name), got %d", len(args))
 		}
 
-		return &SetStmt{Name: args[0], Value: strings.Join(args[1:], " "), Line: nameTok.line}
+		value := ""
+		if len(args) > 1 {
+			value = strings.Join(args[1:], " ")
+		}
+
+		return &SetStmt{Name: args[0], Value: value, Line: nameTok.line}
 	case "END":
 		return &EndStmt{Line: nameTok.line}
 	case "JOIN_SRCS":
@@ -1107,12 +1113,12 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_ANTLR4_CPP_SPLIT expects at least 2 arguments (lexer parser)")
 		}
 		return parseRunAntlr4CppSplit(args, nameTok.line)
-	case "RUN_PROGRAM":
+	case "RUN_PROGRAM", "RUN_PY3_PROGRAM":
 		// RUN_PROGRAM(tool args... [IN files...]
 		//             [OUT files...] [OUT_NOAUTO files...] [STDOUT file] [ENV key=val...]
 		//             [CWD dir] [OUTPUT_INCLUDES files...])
 		if len(args) == 0 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_PROGRAM expects at least 1 argument (tool path)")
+			p.lex.throwParse(nameTok.line, nameTok.col, "%s expects at least 1 argument (tool path)", nameTok.val)
 		}
 		return parseRunProgram(args, nameTok.line)
 	case "RESOURCE":
@@ -1527,15 +1533,12 @@ func (p *parser) readCondTokens(ifTok token) []token {
 }
 
 // consumeEmptyMacroArgs reads `()` after one of the IF block keywords
-// (ELSE/ELSEIF/ENDIF). ELSE/ENDIF accept only the empty arg list;
-// ELSEIF's condition is parsed by `parseIf` recursively. The caller
-// passes the keyword token in for line/col error reporting.
+// (ELSE/ELSEIF/ENDIF). ELSEIF's condition is parsed by `parseIf`
+// recursively. ELSE/ENDIF tolerate ymake's optional branch tag payload
+// (e.g. ELSE(OS_LINUX), ENDIF(OS_LINUX)) but ignore it semantically.
+// The caller passes the keyword token in for line/col error reporting.
 func (p *parser) consumeEmptyMacroArgs(kwTok token) {
-	args := p.parseMacroArgs(kwTok)
-
-	if len(args) != 0 {
-		p.lex.throwParse(kwTok.line, kwTok.col, "%s does not take arguments, got %d", kwTok.val, len(args))
-	}
+	_ = p.parseMacroArgs(kwTok)
 }
 
 // condParser is the cursor state for the IF-cond recursive-descent

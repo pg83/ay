@@ -5,10 +5,10 @@ import (
 )
 
 // sourceEmit is the emit-product of emitOneSource: a single
-// CC/AS/R5/R6/CF/etc. node from one declared source. nil = silently
+// CC/AS/RD/R5/R6/CF/etc. node from one declared source. nil = silently
 // skipped (e.g. `.h` headers, deferred-kind sources). PrimaryCount is
 // the leading-CcIns count naming the member's primary source(s) —
-// `.c/.cpp/.cc/.cxx/.S/.s/.asm` yield 1; `.rl6` yields 1 or 2 (source
+// `.c/.cpp/.cc/.cxx/.S/.s/.asm/.rodata` yield 1; `.rl6` yields 1 or 2 (source
 // ± companion `.h`).
 type sourceEmit struct {
 	Ref          NodeRef
@@ -35,17 +35,38 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 	switch {
 	case strings.HasSuffix(srcRel, ".proto"):
 		return emitLibraryProtoSource(ctx, srcInstance, d, srcRel, srcIn)
+	case strings.HasSuffix(srcRel, ".fbs"):
+		return emitLibraryFlatcSource(ctx, srcInstance, d, srcRel, srcIn)
+	case strings.HasSuffix(srcRel, ".rodata"):
+		if instance.Platform.ISA != ISAX8664 {
+			ThrowFmt("gen: unsupported .rodata platform %s for %q", instance.Platform.ISA, srcRel)
+		}
+
+		yasmLDRef, _ := ctx.tool("contrib/tools/yasm")
+		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
+		ref, asmOut, outPath := EmitRD(srcInstance, srcRel, srcVFS, yasmLDRef, ctx.emit)
+
+		return &sourceEmit{
+			Ref:          ref,
+			OutPath:      outPath,
+			CcIns:        []VFS{srcVFS, rodataScriptVFS, asmOut},
+			PrimaryCount: 1,
+		}
 	case strings.HasSuffix(srcRel, ".c"),
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
 		strings.HasSuffix(srcRel, ".cxx"):
-		srcVFS := resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir)
+		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, srcVFS, srcIn)
+		flatcExtras := flatcCCExtraInputs(ctx, srcIn.IncludeInputs)
+		if len(flatcExtras) > 0 {
+			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, flatcExtras)
+		}
 		extras := runtimePy3CCExtraInputs(srcInstance.Path, srcRel)
 		if len(extras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, extras)
 		}
-		srcIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, srcIn.IncludeInputs)
+		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})
 
 		ref, outPath := EmitCC(srcInstance, srcRel, srcVFS, srcIn, ctx.host, ctx.emit)
 		ccInputs := append([]VFS{srcVFS}, srcIn.IncludeInputs...)
@@ -62,7 +83,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		}
 
 		asIn := srcIn
-		srcVFS := resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir)
+		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 
 		// FOR asm ADDINCL paths are assembler-only includes: they feed the
 		// AS source scan (so `%include "reg_sizes.asm"` resolves) but never
@@ -82,7 +103,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 	case strings.HasSuffix(srcRel, ".rl6"):
 		ragelLDRef, ragelBinaryVFS := ctx.tool("contrib/tools/ragel6/bin")
 
-		rl6SourceVFS := resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir)
+		rl6SourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 		rl6Closure := walkClosure(ctx, srcInstance, rl6SourceVFS, srcIn)
 		rl6Closure = filterEnSerializedSiblings(rl6Closure)
 
@@ -118,7 +139,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 	case strings.HasSuffix(srcRel, ".y"):
 		return emitBisonY(ctx, srcInstance, srcRel, srcIn, srcIn.BisonGenExt)
 	case strings.HasSuffix(srcRel, ".ev"):
-		evSource := resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir)
+		evSource := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 		evRelPath := evSource.Rel
 
 		protocLDRef, protocBinary := ctx.tool(pbProtocModule)
@@ -216,7 +237,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		// resolve it, but the CF node is emitted by the first consumer (with
 		// that consumer's module_dir) in resolveCodegenDepRefsExt. Returning nil
 		// keeps the header out of the declaring module's archive.
-		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
+		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir), srcIn)
 		cfgVars := buildCFGVars(ctx.fs, srcInstance.Path+"/"+srcRel, srcIn.SetVars, srcIn.DefaultVars)
 		cfOut := Build(srcInstance.Path + "/" + strings.TrimSuffix(srcRel, ".in"))
 
@@ -234,7 +255,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		return nil
 	case strings.HasSuffix(srcRel, ".cpp.in"),
 		strings.HasSuffix(srcRel, ".c.in"):
-		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveSourceVFS(ctx, srcInstance, srcRel, srcIn.SrcDir), srcIn)
+		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir), srcIn)
 		cfgVars := buildCFGVars(ctx.fs, srcInstance.Path+"/"+srcRel, srcIn.SetVars, srcIn.DefaultVars)
 		cfRef, cfOut := EmitCF(srcInstance, srcRel, cfgVars, srcIn.IncludeInputs, srcInstance.Path, ctx.emit)
 
@@ -274,6 +295,25 @@ func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	ccRef, ccOut := EmitCC(instance, ccSrcRel, pb.pbCC, ccIn, ctx.host, ctx.emit)
 	ccInputs := make([]VFS, 0, 1+len(ccIn.IncludeInputs))
 	ccInputs = append(ccInputs, Source(pb.relPath))
+	ccInputs = append(ccInputs, ccIn.IncludeInputs...)
+
+	return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: ccInputs, PrimaryCount: 1}
+}
+
+func emitLibraryFlatcSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, in ModuleCCInputs) *sourceEmit {
+	fl := ensureFlatcEmission(ctx, instance, d, srcRel)
+
+	ccIn := in
+	ccIn.IncludeInputs = walkClosure(ctx, instance, fl.cpp, in)
+	if extras := flatcCCExtraInputs(ctx, ccIn.IncludeInputs); len(extras) > 0 {
+		ccIn.IncludeInputs = appendVFSUnique(ccIn.IncludeInputs, extras)
+	}
+	ccIn.ExtraDepRefs = append([]NodeRef{fl.flRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, fl.flRef)...)
+
+	ccSrcRel := strings.TrimPrefix(fl.cpp.Rel, instance.Path+"/")
+	ccRef, ccOut := EmitCC(instance, ccSrcRel, fl.cpp, ccIn, ctx.host, ctx.emit)
+	ccInputs := make([]VFS, 0, 1+len(ccIn.IncludeInputs))
+	ccInputs = append(ccInputs, Source(fl.relPath))
 	ccInputs = append(ccInputs, ccIn.IncludeInputs...)
 
 	return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: ccInputs, PrimaryCount: 1}

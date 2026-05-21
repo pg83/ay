@@ -82,7 +82,8 @@ var (
 
 // FlagSet is the per-instance flag bag. Booleans capture the macro
 // vocabulary (NO_LIBC / NO_UTIL / NO_RUNTIME / NO_PLATFORM /
-// NO_COMPILER_WARNINGS) plus the host/target axis (PIC = host build).
+// NO_COMPILER_WARNINGS / NO_WSHADOW) plus the host/target axis (PIC =
+// host build).
 // IsCpp is the per-source language tag; Extra reserves space for
 // ADDINCL/CFLAGS digests. NewFlagSet enforces sort discipline so
 // equality checks stay stable regardless of declaration order.
@@ -92,6 +93,7 @@ type FlagSet struct {
 	NoRuntime          bool
 	NoPlatform         bool
 	NoCompilerWarnings bool
+	NoWShadow          bool
 	IsCpp              bool
 	// Extra carries opaque per-instance digests as a `\n`-joined sorted
 	// token concatenation (slice fields would disqualify the struct from

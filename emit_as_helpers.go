@@ -45,7 +45,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 3 + len(bundle.ArchArgs)
 
-	warnBundle := pickWarningFlags(in.Flags.NoCompilerWarnings)
+	warnBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
 	autoPeerCFlags := in.AutoPeerCFlags
