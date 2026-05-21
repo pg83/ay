@@ -118,8 +118,17 @@ func cmdMake(args []string) int {
 	if mf.buildType != "" {
 		targetFlags["GG_BUILD_TYPE"] = mf.buildType
 	}
+	if mf.testLevel > 0 {
+		targetFlags["TESTS_REQUESTED"] = "yes"
+	}
+	if mf.sandboxing {
+		targetFlags["SANDBOXING"] = "yes"
+	}
 	targetFlags["PIC"] = "no"
 	targetP := NewPlatform(tOS, tISA, targetFlags, nil, os.Getenv("CFLAGS"), os.Getenv("CXXFLAGS"))
+	if mf.sandboxing {
+		targetP.Tags = sandboxingNodeTags(targetP)
+	}
 
 	// `-j 0` is no-exec mode (Gen runs, no subprocesses):
 	//   - with `-G`: dump the graph as stable JSON for ./dev/normalize.py.
@@ -139,12 +148,12 @@ func cmdMake(args []string) int {
 	if mf.threads == 0 {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
-				g := GenWithModeWithResources(mf.srcRoot, target, hostP, targetP, defaultScanCtxMode, onWarn, resourceFetches)
+				g := GenWithModeWithResources(mf.srcRoot, target, hostP, targetP, defaultScanCtxMode, onWarn, resourceFetches, mf.testLevel > 0)
 				applyGraphConf(g, conf)
 				writeGraph("-", g)
 			}
 		} else {
-			genStream(mf.srcRoot, mf.targets, hostP, targetP, resourceFetches, func(*Node) {}, onWarn)
+			genStream(mf.srcRoot, mf.targets, hostP, targetP, resourceFetches, func(*Node) {}, onWarn, mf.testLevel > 0)
 		}
 
 		return 0
@@ -171,7 +180,7 @@ func cmdMake(args []string) int {
 		}
 	}
 
-	results := genStream(mf.srcRoot, mf.targets, hostP, targetP, resourceFetches, ex.onNode, executorWarn)
+	results := genStream(mf.srcRoot, mf.targets, hostP, targetP, resourceFetches, ex.onNode, executorWarn, mf.testLevel > 0)
 
 	ex.run(results)
 
@@ -191,20 +200,20 @@ func cmdMake(args []string) int {
 // nodes to onNode. Returns the union of root UIDs. Targets run serially;
 // the executor overlaps one target's emission with the previous one's
 // execution.
-func genStream(srcRoot string, targets []string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn)) []string {
+func genStream(srcRoot string, targets []string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn), testMode bool) []string {
 	all := []string{}
 
 	for _, t := range targets {
-		ec := genStreamOne(srcRoot, t, hostP, targetP, resources, onNode, onWarn)
+		ec := genStreamOne(srcRoot, t, hostP, targetP, resources, onNode, onWarn, testMode)
 		all = append(all, ec...)
 	}
 
 	return all
 }
 
-func genStreamOne(srcRoot, target string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn)) []string {
+func genStreamOne(srcRoot, target string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn), testMode bool) []string {
 	emitter := NewStreamingEmitter(onNode)
-	runGenIntoWithResources(srcRoot, target, hostP, targetP, emitter, defaultScanCtxMode, onWarn, resources)
+	runGenIntoWithResources(srcRoot, target, hostP, targetP, emitter, defaultScanCtxMode, onWarn, resources, testMode)
 
 	return emitter.Finish()
 }
@@ -395,8 +404,8 @@ func (ex *executor) execute(n *Node) {
 
 	ex.storeOutputs(n, tmp)
 
-	col := n.KV["pc"]
-	kind := n.KV["p"]
+	col, _ := n.KV["pc"].(string)
+	kind, _ := n.KV["p"].(string)
 	display := color(col, kind)
 
 	done := ex.done.Load() + 1

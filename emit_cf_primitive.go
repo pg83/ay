@@ -66,7 +66,7 @@ func EmitCF(
 		},
 		Env:    env,
 		Inputs: inputs,
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":  "CF",
 			"pc": "yellow",
 		},
@@ -75,7 +75,7 @@ func EmitCF(
 		TargetProperties: map[string]string{
 			"module_dir": moduleDir,
 		},
-		Platform:     string(instance.Platform.Target),
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -86,4 +86,3 @@ func EmitCF(
 
 	return emit.Emit(node), outVFS
 }
-

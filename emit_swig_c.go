@@ -65,7 +65,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 			Env:     map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"},
 			Inputs:  inputs,
 			Outputs: []VFS{cOutVFS, pyOutVFS},
-			KV: map[string]string{
+			KV: map[string]interface{}{
 				"p":  "SW",
 				"pc": "yellow",
 			},

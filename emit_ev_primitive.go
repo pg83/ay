@@ -1,6 +1,5 @@
 package main
 
-
 // ev.go — emitter for EV (event-log .ev → .ev.pb.cc/.ev.pb.h) nodes.
 //
 // Structurally identical to PB but appends three extra cmd_args for the
@@ -244,7 +243,7 @@ func EmitEV(
 		Env:     env,
 		Inputs:  inputs,
 		Outputs: []VFS{evCC, evH},
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":  "EV",
 			"pc": "yellow",
 		},
@@ -262,4 +261,3 @@ func EmitEV(
 
 	return emit.Emit(node)
 }
-

@@ -220,6 +220,27 @@ type compileFlagBundle struct {
 	SplitAutoPeerAroundCPU bool
 }
 
+func withSandboxingDebugCompression(base []string, p *Platform) []string {
+	if p == nil || p.PIC || p.Flags["SANDBOXING"] != "yes" {
+		return base
+	}
+
+	out := make([]string, 0, len(base)+1)
+	inserted := false
+	for _, flag := range base {
+		out = append(out, flag)
+		if !inserted && flag == "-g" {
+			out = append(out, "-gz=zstd")
+			inserted = true
+		}
+	}
+	if !inserted {
+		out = append(out, "-gz=zstd")
+	}
+
+	return out
+}
+
 func compileFlagBundleFor(p *Platform) compileFlagBundle {
 	if p.PIC {
 		return compileFlagBundle{
@@ -234,7 +255,7 @@ func compileFlagBundleFor(p *Platform) compileFlagBundle {
 	switch p.ISA {
 	case ISAX8664:
 		return compileFlagBundle{
-			CFlags:                 x86TargetCFlags,
+			CFlags:                 withSandboxingDebugCompression(x86TargetCFlags, p),
 			Defines:                hostDefines,
 			NoLibcBlock:            x86NoLibcUndebugBlock,
 			CPUFeatures:            hostSseFeatures,
@@ -242,7 +263,7 @@ func compileFlagBundleFor(p *Platform) compileFlagBundle {
 		}
 	case ISAAArch64:
 		bundle := compileFlagBundle{
-			CFlags:      commonCFlags,
+			CFlags:      withSandboxingDebugCompression(commonCFlags, p),
 			Defines:     commonDefines,
 			NoLibcBlock: noLibcUndebugBlock,
 		}
@@ -323,4 +344,3 @@ var cxxStandardWarnings = []string{
 	"-Wno-pessimizing-move",
 	"-Wno-undefined-var-template",
 }
-

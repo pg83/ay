@@ -37,10 +37,10 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 				Env:     env,
 			},
 		},
-		Env:          env,
-		Inputs:       allInputs,
-		Outputs:      []VFS{outVFS},
-		KV: map[string]string{
+		Env:     env,
+		Inputs:  allInputs,
+		Outputs: []VFS{outVFS},
+		KV: map[string]interface{}{
 			"p":  "AS",
 			"pc": "light-green",
 		},

@@ -26,7 +26,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		Cmds:             []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
-		KV:               map[string]string{"p": "LD"},
+		KV:               map[string]interface{}{"p": "LD"},
 		Outputs:          ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 		Platform:         "default-linux-x86_64",
 		Requirements:     map[string]interface{}{},
@@ -139,7 +139,7 @@ func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:     map[string]string{},
 		Inputs:  ToVFSSlice([]string{}),
-		KV:      map[string]string{"p": "LD"},
+		KV:      map[string]interface{}{"p": "LD"},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/bin/ragel6"}),
 	})
 
@@ -220,7 +220,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:     map[string]string{},
 		Inputs:  ToVFSSlice([]string{}),
-		KV:      map[string]string{"p": "LD"},
+		KV:      map[string]interface{}{"p": "LD"},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
@@ -267,7 +267,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:     map[string]string{},
 		Inputs:  ToVFSSlice([]string{}),
-		KV:      map[string]string{"p": "LD"},
+		KV:      map[string]interface{}{"p": "LD"},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
@@ -328,7 +328,7 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:     map[string]string{},
 		Inputs:  ToVFSSlice([]string{}),
-		KV:      map[string]string{"p": "LD"},
+		KV:      map[string]interface{}{"p": "LD"},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 

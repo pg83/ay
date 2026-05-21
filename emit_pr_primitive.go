@@ -133,12 +133,12 @@ func EmitPR(
 		Env:     env,
 		Inputs:  inputs,
 		Outputs: outputs,
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":        "PR",
 			"pc":       "yellow",
 			"show_out": "yes",
 		},
-		Tags:         tags,
+		Tags: tags,
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},

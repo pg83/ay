@@ -124,7 +124,7 @@ func fetchNode(host *Platform, item resourceFetch) *Node {
 		}},
 		Env:          map[string]string{},
 		Inputs:       fetchScriptInputs(),
-		KV:           map[string]string{"p": "FETCH", "pc": "yellow", "show_out": "yes"},
+		KV:           map[string]interface{}{"p": "FETCH", "pc": "yellow", "show_out": "yes"},
 		Outputs:      []VFS{item.Output},
 		Platform:     string(host.Target),
 		Requirements: map[string]interface{}{"cpu": float64(1), "network": "full", "ram": float64(32)},

@@ -48,7 +48,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		Env:     env,
 		Inputs:  []VFS{Build("contrib/tools/bison/bison"), Build("contrib/tools/m4/m4"), srcVFS},
 		Outputs: []VFS{headerVFS, generatedVFS},
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":  "YC",
 			"pc": "light-green",
 		},

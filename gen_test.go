@@ -157,9 +157,22 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		}
 	}
 
+	mkfile := func(rel, body string) {
+		full := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
 	mk("mod", "UNITTEST_FOR(thelib)\nSRCS(a_ut.cpp)\nEND()\n")
 	mk("thelib", "LIBRARY()\nSRCS(lib.cpp)\nEND()\n")
 	mk("library/cpp/testing/unittest_main", "LIBRARY()\nSRCS(main.cpp)\nEND()\n")
+	mkfile("thelib/a_ut.cpp", "int a_ut() { return 0; }\n")
+	mkfile("thelib/lib.cpp", "int thelib() { return 0; }\n")
+	mkfile("library/cpp/testing/unittest_main/main.cpp", "int unittest_main() { return 0; }\n")
 
 	// Reaching the assertions at all proves UNITTEST_FOR did not trip the
 	// "does not yet support macro" throw (that would panic out of testGen).
@@ -172,7 +185,7 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		}
 	}
 
-	// Binary name falls back to the module-dir basename ("mod"), NOT the
+	// Full-path naming keeps a single-component module as "mod", NOT the
 	// UNITTEST_FOR argument ("thelib").
 	ld := byOut["$(B)/mod/mod"]
 	if ld == nil {
@@ -210,10 +223,25 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		t.Errorf("LD deps missing unittest_main AR uid %q (implicit PEERDIR not walked)", umAR.UID)
 	}
 
-	// ADDINCL($arg): the module's own compile gets -I$(S)/thelib.
-	cc := byOut["$(B)/mod/a_ut.cpp.o"]
+	// UNITTEST_FOR sources resolve under the tested dir, while outputs stay
+	// under the declaring module via the SRCDIR-style composed path. With a
+	// sibling tested dir (`thelib`) that becomes `__/thelib/...`. The
+	// module's own compile also gets -I$(S)/thelib from ADDINCL($arg).
+	cc := byOut["$(B)/mod/__/thelib/a_ut.cpp.o"]
 	if cc == nil {
-		t.Fatal("missing own CC $(B)/mod/a_ut.cpp.o")
+		t.Fatal("missing own CC $(B)/mod/__/thelib/a_ut.cpp.o")
+	}
+
+	if cc.TargetProperties["module_dir"] != "mod" {
+		t.Fatalf("cc module_dir = %q, want mod", cc.TargetProperties["module_dir"])
+	}
+
+	inputs := make([]string, 0, len(cc.Inputs))
+	for _, in := range cc.Inputs {
+		inputs = append(inputs, in.String())
+	}
+	if !slicesContains(inputs, "$(S)/thelib/a_ut.cpp") {
+		t.Fatalf("cc inputs missing $(S)/thelib/a_ut.cpp: %v", inputs)
 	}
 
 	found := false
@@ -764,7 +792,8 @@ END()
 
 	counts := make(map[string]int)
 	for _, n := range g.Graph {
-		counts[n.KV["p"]]++
+		p, _ := n.KV["p"].(string)
+		counts[p]++
 	}
 
 	if counts["JS"] != 1 {
@@ -858,7 +887,8 @@ END()
 
 	counts := make(map[string]int)
 	for _, n := range g.Graph {
-		counts[n.KV["p"]]++
+		p, _ := n.KV["p"].(string)
+		counts[p]++
 	}
 
 	if counts["CC"] != 2 {
@@ -926,7 +956,8 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	hostNodes := 0
 
 	for _, n := range g.Graph {
-		counts[n.KV["p"]]++
+		p, _ := n.KV["p"].(string)
+		counts[p]++
 		platforms[n.Platform]++
 
 		if nodeHasHostTag(n.Tags) {

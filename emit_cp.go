@@ -55,12 +55,12 @@ func EmitJVCPG4(
 		},
 		Env:    env,
 		Inputs: inputs,
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":  "CP",
 			"pc": "light-cyan",
 		},
-		Outputs:      []VFS{dst},
-		Platform:     string(instance.Platform.Target),
+		Outputs:  []VFS{dst},
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -110,12 +110,12 @@ func EmitCP(instance ModuleInstance, src VFS, dst VFS, emit Emitter) NodeRef {
 		},
 		Env:    env,
 		Inputs: inputs,
-		KV: map[string]string{
+		KV: map[string]interface{}{
 			"p":  "CP",
 			"pc": "light-cyan",
 		},
-		Outputs:      []VFS{dst},
-		Platform:     string(instance.Platform.Target),
+		Outputs:  []VFS{dst},
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
