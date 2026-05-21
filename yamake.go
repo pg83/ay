@@ -997,7 +997,8 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		"PY3_PROGRAM_BIN", "PY2_PROGRAM", "PY3_PROGRAM",
 		"PROTO_LIBRARY",
 		"DLL", "SO_PROGRAM", "DYNAMIC_LIBRARY",
-		"PACKAGE", "UNION", "RESOURCES_LIBRARY":
+		"PACKAGE", "UNION", "RESOURCES_LIBRARY",
+		"UNITTEST_FOR":
 		return &ModuleStmt{Name: nameTok.val, Args: args, Line: nameTok.line}
 	case "PEERDIR":
 		return &PeerdirStmt{Paths: args, Line: nameTok.line}
