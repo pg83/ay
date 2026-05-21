@@ -80,12 +80,13 @@ func TestEvalCond_UnknownVarThrows(t *testing.T) {
 
 // TestEvalCond_DefaultEnvCoversArchiverClosureCanaries pins the
 // build-wide canary identifiers that DefaultIfEnv MUST bind true.
-// These are independent of the instance ISA (OS_LINUX + clang + musl);
+// These are independent of the instance ISA (OS_LINUX + clang);
 // ARCH_* booleans are deliberately not canaries since `buildIfEnv`
-// flips them per instance.Platform.ISA — see
-// TestEvalCond_ARCH_ARM64_Aliased for the ISA-dispatch coverage.
+// flips them per instance.Platform.ISA, and MUSL is per-platform
+// rather than a build-wide default — see TestEvalCond_ARCH_ARM64_Aliased
+// for the ISA-dispatch coverage.
 func TestEvalCond_DefaultEnvCoversArchiverClosureCanaries(t *testing.T) {
-	canaries := []string{"OS_LINUX", "CLANG", "MUSL"}
+	canaries := []string{"OS_LINUX", "CLANG"}
 
 	for _, name := range canaries {
 		expr := &ExprIdent{Name: name}
@@ -94,6 +95,40 @@ func TestEvalCond_DefaultEnvCoversArchiverClosureCanaries(t *testing.T) {
 		if !got {
 			t.Errorf("EvalCond(%s) = false, want true (DefaultIfEnv canary)", name)
 		}
+	}
+}
+
+// TestEvalCond_NonMuslYdbIfBindings pins ticket-5 IF-flag bindings for the
+// ydb (non-musl, OS_SDK=local) walk: OS_FREERTOS/STATIC_STL bind false in
+// bool position, OS_SDK is a string (compared to SDK literals, not a bool),
+// and MUSL is no longer a build-wide always-true default.
+func TestEvalCond_NonMuslYdbIfBindings(t *testing.T) {
+	for _, name := range []string{"OS_FREERTOS", "STATIC_STL"} {
+		if EvalCond(&ExprIdent{Name: name}, DefaultIfEnv) {
+			t.Errorf("EvalCond(%s) = true, want false", name)
+		}
+	}
+
+	if EvalCond(parseCondForTest(t, `OS_SDK == "ubuntu-12"`), DefaultIfEnv) {
+		t.Error(`EvalCond(OS_SDK == "ubuntu-12") = true, want false`)
+	}
+
+	localEnv := DefaultIfEnv.Clone()
+	localEnv.SetFromString("OS_SDK", "local")
+	if !EvalCond(parseCondForTest(t, `OS_SDK == "local"`), localEnv) {
+		t.Error(`EvalCond(OS_SDK == "local") with OS_SDK=local = false, want true`)
+	}
+
+	if EvalCond(&ExprIdent{Name: "MUSL"}, DefaultIfEnv) {
+		t.Error("EvalCond(MUSL) on DefaultIfEnv = true, want false (CLI-driven)")
+	}
+
+	muslEnv := buildIfEnv(ModuleInstance{
+		Kind:     KindLib,
+		Platform: NewPlatform(OSLinux, ISAX8664, map[string]string{"MUSL": "yes"}, nil, "", ""),
+	})
+	if !EvalCond(&ExprIdent{Name: "MUSL"}, muslEnv) {
+		t.Error("EvalCond(MUSL) with platform MUSL=yes = false, want true")
 	}
 }
 
