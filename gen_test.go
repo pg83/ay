@@ -137,6 +137,99 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	}
 }
 
+// TestGen_UnittestFor_Synthetic verifies T-1's UNITTEST_FOR desugaring:
+// UNITTEST_FOR(<dir>) parses as a program-like ModuleStmt (no
+// unsupported-macro throw), emits an LD, implicitly PEERDIRs both
+// library/cpp/testing/unittest_main and the tested dir (their ARs land in
+// the LD link closure), and ADDINCLs the tested dir onto its own compiles.
+// The tested-dir argument is NOT used as the binary name (it is a path).
+func TestGen_UnittestFor_Synthetic(t *testing.T) {
+	root := t.TempDir()
+
+	mk := func(dir, body string) {
+		d := filepath.Join(root, dir)
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+
+		if err := os.WriteFile(filepath.Join(d, "ya.make"), []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s/ya.make: %v", dir, err)
+		}
+	}
+
+	mk("mod", "UNITTEST_FOR(thelib)\nSRCS(a_ut.cpp)\nEND()\n")
+	mk("thelib", "LIBRARY()\nSRCS(lib.cpp)\nEND()\n")
+	mk("library/cpp/testing/unittest_main", "LIBRARY()\nSRCS(main.cpp)\nEND()\n")
+
+	// Reaching the assertions at all proves UNITTEST_FOR did not trip the
+	// "does not yet support macro" throw (that would panic out of testGen).
+	g := testGen(root, "mod")
+
+	byOut := make(map[string]*Node, len(g.Graph))
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 {
+			byOut[n.Outputs[0].String()] = n
+		}
+	}
+
+	// Binary name falls back to the module-dir basename ("mod"), NOT the
+	// UNITTEST_FOR argument ("thelib").
+	ld := byOut["$(B)/mod/mod"]
+	if ld == nil {
+		t.Fatalf("missing UNITTEST_FOR LD output $(B)/mod/mod")
+	}
+
+	if ld.KV["p"] != "LD" {
+		t.Errorf("root node kv.p = %q, want LD", ld.KV["p"])
+	}
+
+	if ld.TargetProperties["module_type"] != "bin" {
+		t.Errorf("module_type = %q, want bin", ld.TargetProperties["module_type"])
+	}
+
+	deps := make(map[string]struct{}, len(ld.Deps))
+	for _, d := range ld.Deps {
+		deps[d] = struct{}{}
+	}
+
+	libAR := byOut["$(B)/thelib/libthelib.a"]
+	if libAR == nil {
+		t.Fatal("missing tested-lib AR $(B)/thelib/libthelib.a")
+	}
+
+	if _, ok := deps[libAR.UID]; !ok {
+		t.Errorf("LD deps missing tested-lib AR uid %q (implicit PEERDIR($arg) not walked)", libAR.UID)
+	}
+
+	umAR := byOut["$(B)/library/cpp/testing/unittest_main/libcpp-testing-unittest_main.a"]
+	if umAR == nil {
+		t.Fatal("missing unittest_main AR")
+	}
+
+	if _, ok := deps[umAR.UID]; !ok {
+		t.Errorf("LD deps missing unittest_main AR uid %q (implicit PEERDIR not walked)", umAR.UID)
+	}
+
+	// ADDINCL($arg): the module's own compile gets -I$(S)/thelib.
+	cc := byOut["$(B)/mod/a_ut.cpp.o"]
+	if cc == nil {
+		t.Fatal("missing own CC $(B)/mod/a_ut.cpp.o")
+	}
+
+	found := false
+	for _, c := range cc.Cmds {
+		for _, a := range c.CmdArgs {
+			if a == "-I$(S)/thelib" {
+				found = true
+			}
+		}
+	}
+
+	if !found {
+		t.Errorf("own CC missing -I$(S)/thelib (ADDINCL($arg) not applied); cmds=%+v", cc.Cmds)
+	}
+}
+
 // TestGen_SyntheticPROGRAM_EmitsLD verifies a PROGRAM module with
 // one source and zero PEERDIR emits exactly 2 nodes (1 CC + 1 LD)
 // per the PR-24 brief's synthetic-test acceptance line. The LD node

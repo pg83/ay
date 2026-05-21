@@ -417,6 +417,22 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				d.peerdirs = append([]string{modulePath}, d.peerdirs...)
 			}
 
+			if v.Name == "UNITTEST_FOR" {
+				// Mirror `module UNITTEST_FOR: UNITTEST`
+				// (ymake.core.conf:1877). MRO order: UNITTEST's
+				// PEERDIR(library/cpp/testing/unittest_main) first, then
+				// UNITTEST_FOR's PEERDIR(ADDINCL $UNITTEST_DIR) — peer the
+				// tested dir AND add it to this module's own ADDINCL.
+				// $UNITTEST_DIR is the macro argument.
+				const unittestMainPeer = "library/cpp/testing/unittest_main"
+
+				d.peerdirs = append(d.peerdirs, unittestMainPeer)
+				if len(v.Args) > 0 {
+					d.peerdirs = append(d.peerdirs, v.Args[0])
+					d.addIncl = append(d.addIncl, parseModulePathVFS(v.Args[0]))
+				}
+			}
+
 			d.moduleStmt = moduleStmtForKind(v, kind)
 		case *SrcsStmt:
 			// SRCS(GLOBAL foo.cpp) uses GLOBAL as a per-source modifier
@@ -1353,7 +1369,7 @@ func applyAllocatorStmt(v *UnknownStmt, d *moduleData) {
 
 func isProgramModuleType(name string) bool {
 	switch name {
-	case "PROGRAM", "PY2_PROGRAM", "PY3_PROGRAM", "PY3_PROGRAM_BIN":
+	case "PROGRAM", "PY2_PROGRAM", "PY3_PROGRAM", "PY3_PROGRAM_BIN", "UNITTEST_FOR":
 		return true
 	}
 
