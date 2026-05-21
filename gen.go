@@ -727,13 +727,20 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 }
 
 func programSourceDir(moduleStmt *ModuleStmt) *string {
-	if moduleStmt == nil || moduleStmt.Name != "UNITTEST_FOR" || len(moduleStmt.Args) == 0 {
+	peerPath := unittestForPeerPath(moduleStmt)
+	if peerPath == "" {
 		return nil
 	}
 
-	dir := path.Clean(moduleStmt.Args[0])
+	return &peerPath
+}
 
-	return &dir
+func unittestForPeerPath(moduleStmt *ModuleStmt) string {
+	if moduleStmt == nil || moduleStmt.Name != "UNITTEST_FOR" || len(moduleStmt.Args) == 0 {
+		return ""
+	}
+
+	return path.Clean(moduleStmt.Args[0])
 }
 
 // moduleData is the per-module accumulator populated by `collectModule`,
@@ -1138,39 +1145,36 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		return result
 	}
 
-	// Recurse into peers. Implicit DEFAULT_PEERDIRs are prepended to the
-	// explicit `PEERDIR(...)` list so the closure includes the runtime /
-	// libc / allocator scaffolding ymake adds via `_BUILTIN_PEERDIR`. R14
-	// (declaration order) preserved for the explicit set — defaults
-	// sort first, then explicit.
+	// Recurse into peers. Language defaults come first so the runtime /
+	// libc scaffolding still mirrors `_BUILTIN_PEERDIR`, but UNITTEST_FOR's
+	// tested-dir peer must land ahead of PROGRAM defaults so its util-side
+	// closure and include paths precede build/cow/on + allocator defaults.
 	//
 	// Defaults are tolerant of a missing ya.make: synthetic test fixtures
 	// populate only modules they care about, and a helper-supplied
 	// default (musl / builtins / malloc/api) may not exist there. A
 	// missing EXPLICIT peer is still a hard error (fixture bug).
-	defaults := defaultPeerdirsForModule(ctx, instance, d)
+	languageDefaults := defaultPeerdirsForModule(ctx, instance, d)
 
 	// ALLOCATOR(FAKE) suppresses the implicit malloc/api auto-peer
 	// (mirrors upstream `_BASE_UNIT`'s skip when ALLOCATOR=FAKE). yasm:
 	// no allocator peer AND no malloc/api → yasm's LD drops one
 	// peer-archive ref.
-	defaults = suppressMallocAPIDefault(defaults, d.allocatorName)
+	languageDefaults = suppressMallocAPIDefault(languageDefaults, d.allocatorName)
 
 	// Program-defaults split into pre-user (cow/on + optional tcmalloc)
 	// and post-user (musl/full or musl). Explicit ALLOCATOR peers and
 	// d.peerdirs interleave between the halves so they appear before
 	// musl/full in archive accumulation while retaining peerKindUserPeer
 	// (correct AddInclGlobal Phase 3 ordering).
-	languageDefaultsCount := len(defaults)
-
 	isProgram := isProgramModuleType(d.moduleStmt.Name) && !isRuntimeAncestor(instance.Path)
+	unitTestPeer := unittestForPeerPath(d.moduleStmt)
 
 	var preUserProgDefaults []string
 	var postUserProgDefaults []string
 	if isProgram {
 		preUserProgDefaults = defaultProgramPeerdirsForModule(ctx, instance, d, false)
 		postUserProgDefaults = defaultProgramPeerdirsForModule(ctx, instance, d, true)
-		defaults = append(defaults, preUserProgDefaults...)
 	}
 
 	// Peers declared by ALLOCATOR(NAME) (nil for FAKE/DEFAULT/SYSTEM, or
@@ -1179,8 +1183,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// later user-PEERDIRs.
 	allocatorExplicitPeers := allocatorPeers[d.allocatorName]
 
-	seen := make(map[string]struct{}, len(defaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
-	allPeers := make([]string, 0, len(defaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
+	unitTestPeerCount := 0
+	if unitTestPeer != "" {
+		unitTestPeerCount = 1
+	}
+	seen := make(map[string]struct{}, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
+	allPeers := make([]string, 0, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
 
 	// Track per-peer category so peer-GLOBAL aggregation applies the
 	// right ordering: language-defaults use two-phase (own first, then
@@ -1190,26 +1198,43 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerKindLangDefault    = 0
 		peerKindProgramDefault = 1
 		peerKindUserPeer       = 2
+		peerKindUnitTestPeer   = 3
 	)
 
-	peerKinds := make([]int, 0, len(defaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
+	peerKinds := make([]int, 0, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
 
-	// 1. Language-defaults and pre-user program-defaults.
-	for i, p := range defaults {
+	// 1. Language-default peers.
+	for _, p := range languageDefaults {
 		if _, dup := seen[p]; dup {
 			continue
 		}
 		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
+		peerKinds = append(peerKinds, peerKindLangDefault)
+	}
 
-		if i < languageDefaultsCount {
-			peerKinds = append(peerKinds, peerKindLangDefault)
-		} else {
-			peerKinds = append(peerKinds, peerKindProgramDefault)
+	// 2. UNITTEST_FOR's tested-dir peer. It must precede PROGRAM defaults
+	// so the tested module's transitive util closure lands before the
+	// build/cow/on + allocator cluster.
+	if unitTestPeer != "" {
+		if _, dup := seen[unitTestPeer]; !dup {
+			seen[unitTestPeer] = struct{}{}
+			allPeers = append(allPeers, unitTestPeer)
+			peerKinds = append(peerKinds, peerKindUnitTestPeer)
 		}
 	}
 
-	// 2. Explicit allocator peers (peerKindUserPeer so Phase 3 handles
+	// 3. Pre-user program-defaults (cow/on + optional default allocator).
+	for _, p := range preUserProgDefaults {
+		if _, dup := seen[p]; dup {
+			continue
+		}
+		seen[p] = struct{}{}
+		allPeers = append(allPeers, p)
+		peerKinds = append(peerKinds, peerKindProgramDefault)
+	}
+
+	// 4. Explicit allocator peers (peerKindUserPeer so Phase 3 handles
 	//    their AddInclGlobal — mimalloc/include before ragel5/aapl).
 	//    Placed BEFORE the musl post-user block so the allocator cluster
 	//    (mimalloc → malloc/api + mimalloc AR) precedes musl/full's
@@ -1224,7 +1249,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerKinds = append(peerKinds, peerKindUserPeer)
 	}
 
-	// 3. Post-user program-defaults (musl/full or bare musl). Placed
+	// 5. Post-user program-defaults (musl/full or bare musl). Placed
 	//    after allocator explicit peers but before regular user PEERDIRs
 	//    so musl/full's transitive closure lands before user-peerdir
 	//    libraries in the archive walk.
@@ -1237,7 +1262,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerKinds = append(peerKinds, peerKindProgramDefault)
 	}
 
-	// 4. Regular user-declared PEERDIRs.
+	// 6. Regular user-declared PEERDIRs.
 	for _, p := range d.peerdirs {
 		if _, dup := seen[p]; dup {
 			continue
@@ -1616,14 +1641,24 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		addEachVFS(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
 	}
 
-	// Program-defaults emit BEFORE user-peers in peer-GLOBAL ADDINCL
-	// aggregation. In every REF cluster (archiver, ragel5/rlgen-cd,
-	// protoc/bin, rescompiler/rescompressor, py3cc, library/python/
-	// runtime_py3/stage0pycc) the program-default tcmalloc + abseil-cpp
-	// pair appears AHEAD of any user-peer's OWN or transitive GLOBAL.
-	// Archiver's user-peers contribute only dedups of lang-default paths
-	// so program-defaults-first yields the same trailing tcmalloc +
-	// abseil-cpp pair as user-peers-first.
+	// Program-defaults usually emit BEFORE user-peers in peer-GLOBAL
+	// ADDINCL aggregation. In every established REF cluster (archiver,
+	// ragel5/rlgen-cd, protoc/bin, rescompiler/rescompressor, py3cc,
+	// library/python/runtime_py3/stage0pycc) the program-default
+	// tcmalloc + abseil-cpp pair appears AHEAD of any regular user-peer's
+	// OWN or transitive GLOBAL. UNITTEST_FOR's tested-dir peer is the one
+	// local exception: it must seed util's transitive include paths ahead
+	// of that program-default pair.
+	emitUnitTestPeers := func() {
+		for _, rp := range resolved {
+			if rp.kind != peerKindUnitTestPeer {
+				continue
+			}
+
+			addEachVFS(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
+		}
+	}
+
 	emitUserPeers := func() {
 		for _, rp := range resolved {
 			if rp.kind != peerKindUserPeer {
@@ -1644,6 +1679,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
+	emitUnitTestPeers()
 	emitProgramDefaults()
 	emitUserPeers()
 
@@ -2233,7 +2269,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// axis detaches; the downstream JS-derived CC below still
 		// compiles at `srcInstance.Platform.Target` (host x86_64 for
 		// ragel6/bin) so the .pic.o output stays on the correct axis.
-		jsRef, joinOutVFS := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.target.Target, ctx.emit)
+		jsRef, joinOutVFS := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.target, ctx.emit)
 
 		// EmitJS returns a $(B)/<srcInstance.Path>/<name> absolute path;
 		// convert to srcInstance-relative for the downstream EmitCC.
