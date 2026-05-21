@@ -270,25 +270,38 @@ func (p *Platform) WithLinkerSelectionFlags(trailer []string) []string {
 		return trailer
 	}
 
-	if len(trailer) > 3 && trailer[2] == "-fPIC" && trailer[3] == "-fPIC" {
+	noAsNeededIdx := -1
+	for i, arg := range trailer {
+		if arg == "-Wl,--no-as-needed" {
+			noAsNeededIdx = i
+			break
+		}
+	}
+
+	if noAsNeededIdx >= 0 && len(trailer) > noAsNeededIdx+2 && trailer[noAsNeededIdx+1] == "-fPIC" && trailer[noAsNeededIdx+2] == "-fPIC" {
 		out := make([]string, 0, len(trailer)+len(flags))
-		out = append(out, trailer[:3]...)
+		out = append(out, trailer[:noAsNeededIdx+2]...)
 		out = append(out, gdbIndex...)
-		out = append(out, trailer[3])
+		out = append(out, trailer[noAsNeededIdx+2])
 		out = append(out, rest...)
-		out = append(out, trailer[4:]...)
+		out = append(out, trailer[noAsNeededIdx+3:]...)
 
 		return out
 	}
 
-	if len(trailer) < 2 {
+	insertAt := noAsNeededIdx + 1
+	if noAsNeededIdx < 0 {
+		insertAt = 0
+	}
+
+	if len(trailer) < insertAt {
 		return append(flags, trailer...)
 	}
 
 	out := make([]string, 0, len(trailer)+len(flags))
-	out = append(out, trailer[:2]...)
+	out = append(out, trailer[:insertAt]...)
 	out = append(out, flags...)
-	out = append(out, trailer[2:]...)
+	out = append(out, trailer[insertAt:]...)
 
 	out = append(out, p.LinkerSelectionNoPieFlags()...)
 
