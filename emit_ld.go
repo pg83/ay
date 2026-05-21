@@ -354,9 +354,7 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 	// caller-supplied slices.
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
-	if len(pluginPaths) > 0 {
-		argCap += 2 + len(pluginPaths)
-	}
+	argCap += 2 + len(pluginPaths)
 
 	cmdArgs := make([]string, 0, argCap)
 
@@ -365,13 +363,11 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 		ldLinkExePath,
 	)
 
-	if len(pluginPaths) > 0 || p.Flags["SANDBOXING"] == "yes" {
-		cmdArgs = append(cmdArgs, "--start-plugins")
-		for _, p := range pluginPaths {
-			cmdArgs = append(cmdArgs, p.String())
-		}
-		cmdArgs = append(cmdArgs, "--end-plugins")
+	cmdArgs = append(cmdArgs, "--start-plugins")
+	for _, p := range pluginPaths {
+		cmdArgs = append(cmdArgs, p.String())
 	}
+	cmdArgs = append(cmdArgs, "--end-plugins")
 
 	cmdArgs = append(cmdArgs,
 		"--clang-ver", p.ClangVer,
@@ -429,15 +425,26 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 }
 
 func composeProgramLinkTrailer(p *Platform, dynamicPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []string, wantsStrip bool) []string {
+	linkPrelude := []string{"-rdynamic"}
+	if p != nil && !p.PIC && p.Flags["SANDBOXING"] == "yes" {
+		linkPrelude = append(linkPrelude, "-Wl,--compress-debug-sections=zstd")
+	}
+	systemLibs := []string{"-nostdlib", "-lm"}
+	if p == nil || p.Flags["MUSL"] != "yes" {
+		linkPrelude = append(linkPrelude, "-ldl", "-lrt")
+		systemLibs = []string{"-nodefaultlibs", "-lpthread", "-lc", "-lm"}
+	}
+	linkPrelude = append(linkPrelude, "-Wl,--no-as-needed")
+
 	if len(ownRPathFlags) == 0 && len(peerRPathFlagsGlobal) == 0 {
-		trailer := []string{"-rdynamic", "-Wl,--no-as-needed"}
+		trailer := append([]string(nil), linkPrelude...)
 		if p.PIC {
 			trailer = append(trailer, "-fPIC", "-fPIC")
 		}
 		trailer = append(trailer, peerLDFlagsGlobal...)
 		trailer = append(trailer, ownLDFlags...)
 		trailer = append(trailer, objAddLibsGlobal...)
-		trailer = append(trailer, "-nostdlib", "-lm")
+		trailer = append(trailer, systemLibs...)
 		if wantsStrip {
 			trailer = append(trailer, "-Wl,--strip-all")
 		}
@@ -447,7 +454,7 @@ func composeProgramLinkTrailer(p *Platform, dynamicPaths []VFS, peerLDFlagsGloba
 	}
 	_ = dynamicPaths
 
-	trailer := []string{"-rdynamic", "-Wl,--no-as-needed"}
+	trailer := append([]string(nil), linkPrelude...)
 	trailer = append(trailer, ownRPathFlags...)
 	if p.PIC {
 		trailer = append(trailer, "-fPIC")
@@ -461,7 +468,7 @@ func composeProgramLinkTrailer(p *Platform, dynamicPaths []VFS, peerLDFlagsGloba
 	trailer = append(trailer, peerLDFlagsGlobal...)
 	trailer = append(trailer, ownLDFlags...)
 	trailer = append(trailer, objAddLibsGlobal...)
-	trailer = append(trailer, "-nostdlib", "-lm")
+	trailer = append(trailer, systemLibs...)
 	if wantsStrip {
 		trailer = append(trailer, "-Wl,--strip-all")
 	}

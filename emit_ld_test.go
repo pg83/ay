@@ -191,14 +191,10 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Errorf("outputs = %#v, want [%q]", got.Outputs, wantOut)
 	}
 
-	// Synthetic case has no plugins / no globals; cmd[2] should
-	// not contain --start-plugins.
-	for _, a := range got.Cmds[2].CmdArgs {
-		if a == "--start-plugins" {
-			t.Errorf("synthetic LD cmd[2] unexpectedly contains --start-plugins (no plugins supplied)")
-
-			break
-		}
+	startIdx := slices.Index(got.Cmds[2].CmdArgs, "--start-plugins")
+	endIdx := slices.Index(got.Cmds[2].CmdArgs, "--end-plugins")
+	if startIdx < 0 || endIdx != startIdx+1 {
+		t.Fatalf("synthetic LD plugin markers = %v, want adjacent empty --start-plugins/--end-plugins", got.Cmds[2].CmdArgs)
 	}
 
 	// kv: p=LD, pc=light-blue, show_out=yes.
@@ -373,6 +369,8 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 
 	want := []string{
 		"-rdynamic",
+		"-ldl",
+		"-lrt",
 		"-Wl,--no-as-needed",
 		"-Wl,-rpath,$ORIGIN",
 		"-Wl,--gdb-index",
@@ -381,7 +379,9 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 		"--ld-path=$(LLD_ROOT)/bin/ld.lld",
 		"-Wl,--no-rosegment",
 		"-Wl,--build-id=sha1",
-		"-nostdlib",
+		"-nodefaultlibs",
+		"-lpthread",
+		"-lc",
 		"-lm",
 		"-Wl,--gc-sections",
 		"-Wl,-no-pie",

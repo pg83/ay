@@ -11,6 +11,7 @@ package main
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -421,15 +422,15 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				// Mirror `module UNITTEST_FOR: UNITTEST`
 				// (ymake.core.conf:1877). MRO order: UNITTEST's
 				// PEERDIR(library/cpp/testing/unittest_main) first, then
-				// UNITTEST_FOR's PEERDIR(ADDINCL $UNITTEST_DIR) — peer the
-				// tested dir AND add it to this module's own ADDINCL.
-				// $UNITTEST_DIR is the macro argument.
+				// UNITTEST_FOR's tested-dir peer. Real source resolution
+				// already rebases through the macro argument; threading that
+				// path into own ADDINCL would over-inject `-I$(S)/<dir>` into
+				// the compile closure.
 				const unittestMainPeer = "library/cpp/testing/unittest_main"
 
 				d.peerdirs = append(d.peerdirs, unittestMainPeer)
 				if len(v.Args) > 0 {
-					d.peerdirs = append(d.peerdirs, v.Args[0])
-					d.addIncl = append(d.addIncl, parseModulePathVFS(v.Args[0]))
+					d.peerdirs = append(d.peerdirs, path.Clean(v.Args[0]))
 				}
 			}
 
