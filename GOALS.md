@@ -13,19 +13,20 @@ pg:home#
 
 /home/pg/monorepo/ydb (НЕ yatool!)
 
-pg:home# pwd
-/home/pg/monorepo/ydb
 pg:home# cat run.sh
 YA_TC=no YA_NO_RESPAWN=yes ./exp/ya-bin make --no-yt-store --ymake-bin=./exp/ymake -G -j0 \
     -ttt --sandboxing util/ut \
     -DOS_SDK=local --host-platform-flag=OS_SDK=local \
     > sg4.json
-pg:home# ls sg4.json
-sg4.json
+
+YA_TC=no YA_NO_RESPAWN=yes ./ya make --no-yt-store -G -j0 \
+    --sandboxing ydb/apps/ydbd \
+    -DOS_SDK=local --host-platform-flag=OS_SDK=local \
+    > sg5.json
+pg:home# ls sg*
+sg4.json  sg5.json
+pg:home# pwd
+/home/pg/monorepo/ydb
 pg:home#
 
-Нужно добавить в validate.sh построение графа для этого проекта, и свести его bit to bit.
-
-Важное отличие - не указаны флаги про musl,  И УКАЗАНЫ флаги про то, что надо генерить графовые ноды для запуска тестов -ttt!
-
-Это самое важное отличие.
+Нужно добавить в validate.sh построение графа sg5.json для этого проекта, и свести его bit to bit. sg4.json должен оставаться bit exact, как и все прошлые sg*
