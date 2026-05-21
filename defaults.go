@@ -333,6 +333,7 @@ type implicitPeerCtx struct {
 	muslOn            bool
 	muslLite          bool
 	osLinux           bool
+	archX8664         bool
 	hadAllocator      bool
 	allocatorName     string
 }
@@ -424,31 +425,35 @@ func rebasePerArchPeerAddIncl(hostPeerAddIncl []VFS, from, to ISA) []VFS {
 	return out
 }
 
-// programAllocatorDefaults mirrors `DEFAULT_ALLOCATOR=TCMALLOC_TC` for
-// MUSL+OS_LINUX at ymake.core.conf:409. Fires in the pre-user half
-// (`includeMusl=false`) only when the module declared no explicit
-// ALLOCATOR(NAME). Mirrors `allocatorPeers["TCMALLOC_TC"]` peer set.
+// programAllocatorDefaults mirrors the upstream
+// `DEFAULT_ALLOCATOR=TCMALLOC_TC` branches for `MUSL=yes` and
+// non-musl `OS_LINUX=yes && ARCH_X86_64=yes`. Fires in the pre-user
+// half (`includeMusl=false`) only when the module declared no
+// explicit ALLOCATOR(NAME). Mirrors `allocatorPeers["TCMALLOC_TC"]`
+// peer set. GCC, sanitizer, Android, Windows, arch32, and FAKE
+// allocator branches remain out of scope here.
 var programAllocatorDefaults = []implicitPeerRule{
 	{
-		name: "tcmalloc (MUSL default)",
+		name: "tcmalloc (TCMALLOC_TC default)",
 		peer: "library/cpp/malloc/tcmalloc",
 		predicate: func(rc implicitPeerCtx) bool {
-			return !rc.hadAllocator && rc.muslOn && rc.osLinux
+			return !rc.hadAllocator && rc.osLinux && (rc.muslOn || rc.archX8664)
 		},
 	},
 	{
-		name: "tcmalloc/no_percpu_cache (MUSL default)",
+		name: "tcmalloc/no_percpu_cache (TCMALLOC_TC default)",
 		peer: "contrib/libs/tcmalloc/no_percpu_cache",
 		predicate: func(rc implicitPeerCtx) bool {
-			return !rc.hadAllocator && rc.muslOn && rc.osLinux
+			return !rc.hadAllocator && rc.osLinux && (rc.muslOn || rc.archX8664)
 		},
 	},
 }
 
 // defaultProgramPeerdirsFor returns the implicit DEFAULT_PEERDIRs that
-// upstream `_BASE_PROGRAM` (build/ymake.core.conf:1219-1253) attaches
-// to PROGRAM modules under MUSL=yes, OS_LINUX=yes, CLANG=yes, no
-// sanitizer. GCC, sanitizer, non-Linux paths not modelled.
+// upstream `_BASE_PROGRAM` attaches to the validated Linux PROGRAM
+// branches we model here: the MUSL path plus the non-musl x86_64
+// `TCMALLOC_TC` default. GCC, sanitizer, Android, Windows, arch32,
+// and other allocator-default branches remain out of scope.
 //
 // `includeMusl` splits the output: false → pre-user (cow/on + tcmalloc
 // default); true → post-user (musl + cpuid_check). genModule calls
@@ -472,6 +477,7 @@ func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, fl
 		muslOn:        muslOn,
 		muslLite:      muslLite,
 		osLinux:       env.Bool("OS_LINUX"),
+		archX8664:     env.Bool("ARCH_X86_64"),
 		hadAllocator:  hadAllocator,
 		allocatorName: allocatorName,
 	}
@@ -486,9 +492,10 @@ func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, fl
 		// DFS places build/cow/on before tcmalloc.
 		peers = append(peers, "build/cow/on")
 
-		// Default ALLOCATOR=TCMALLOC_TC for MUSL=yes + OS_LINUX=yes.
-		// PROGRAMs declaring ALLOCATOR(NAME) go through allocatorPeers;
-		// this default fires only when neither was declared.
+		// Default ALLOCATOR=TCMALLOC_TC for MUSL=yes or non-musl
+		// x86_64 Linux. PROGRAMs declaring ALLOCATOR(NAME) go through
+		// allocatorPeers; this default fires only when neither was
+		// declared.
 		peers = appendImplicitPeers(peers, programAllocatorDefaults, rc)
 	} else {
 		// musl block declared AFTER allocator in upstream conf
