@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# validate.sh — M3 normalized L4 regression check.
+# validate.sh — M3 canonical byte-exact regression check.
 #
-# Builds `ay`, generates the `devtools/ymake/bin` graph for both
-# supported target platforms, and checks normalized L4 equality against
-# the checked-in upstream references:
-#   - sg2.json          → default-linux-aarch64 target
-#   - sg2_x86_64.json   → default-linux-x86_64 target
+# Builds `ay`, generates the target graph, canonicalizes the target
+# closure, and compares those bytes against the checked-in compressed
+# canonical refs:
+#   - sg2.aarch64.norm.json.xz
+#   - sg2.x86_64.norm.json.xz
+#   - sg3.aarch64.norm.json.xz
+#   - sg4.ydb.norm.json.xz
 #
-# The toolchain env overrides match the absolute paths embedded in the
-# saved reference graphs. On mismatch, the script prints a ready-to-run
-# `diff.py` command for the failing case.
+# Raw upstream sg*.json carry non-semantic ordering, UID, and metadata
+# differences. The packed refs are generated from those raw graphs via
+# `dev/update_validate_refs.sh` and are stable for direct byte-wise cmp.
 #
 # Usage: ./dev/validate.sh [out-dir]
 # Default output dir: <repo-root>/.out/validate
@@ -22,8 +24,8 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 OUT_DIR="${1:-./.out/validate}"
-REF_DIR="/home/pg/monorepo/yatool"
 YDB_ROOT="/home/pg/monorepo/ydb"
+CANON_REF_DIR="$SCRIPT_DIR/validate_refs"
 
 mkdir -p "$OUT_DIR"
 
@@ -33,10 +35,10 @@ run_case() {
     local case_name="$1"
     local target_path="$2"
     local target_platform="$3"
-    local ref_json="$4"
+    local ref_xz="$4"
     local root_output="$5"
 
-    local make_json="$OUT_DIR/${case_name}.make.json"
+    local raw_json="$OUT_DIR/${case_name}.make.json"
     local our_norm="$OUT_DIR/${case_name}.our.norm.json"
     local ref_norm="$OUT_DIR/${case_name}.ref.norm.json"
 
@@ -55,13 +57,13 @@ run_case() {
         --host-platform default-linux-x86_64 \
         --host-platform-flag MUSL=yes \
         --musl \
-        "$target_path" > "$make_json"
+        "$target_path" > "$raw_json"
 
-    echo "[$case_name] normalize + L4 compare"
+    echo "[$case_name] canonicalize + byte compare"
 
-    if ./dev/normalize.py \
-        --our "$make_json" \
-        --ref "$ref_json" \
+    if ./dev/validate_ref.py compare \
+        --our "$raw_json" \
+        --ref "$ref_xz" \
         --target "$target_path" \
         --our-out "$our_norm" \
         --ref-out "$ref_norm"; then
@@ -82,10 +84,10 @@ run_case() {
 run_ydb_sg4() {
     local case_name="sg4.ydb"
     local target_path="util/ut"
-    local ref_json="$YDB_ROOT/sg4.json"
+    local ref_xz="$CANON_REF_DIR/sg4.ydb.norm.json.xz"
     local root_output="/util/ut/util-ut"
 
-    local make_json="$OUT_DIR/${case_name}.make.json"
+    local raw_json="$OUT_DIR/${case_name}.make.json"
     local our_norm="$OUT_DIR/${case_name}.our.norm.json"
     local ref_norm="$OUT_DIR/${case_name}.ref.norm.json"
 
@@ -105,13 +107,13 @@ run_ydb_sg4() {
         --source-root "$YDB_ROOT" \
         -DOS_SDK=local \
         --host-platform-flag OS_SDK=local \
-        "$target_path" > "$make_json"
+        "$target_path" > "$raw_json"
 
-    echo "[$case_name] normalize + L4 compare"
+    echo "[$case_name] canonicalize + byte compare"
 
-    if ./dev/normalize.py \
-        --our "$make_json" \
-        --ref "$ref_json" \
+    if ./dev/validate_ref.py compare \
+        --our "$raw_json" \
+        --ref "$ref_xz" \
         --target "$target_path" \
         --our-out "$our_norm" \
         --ref-out "$ref_norm"; then
@@ -127,15 +129,15 @@ run_ydb_sg4() {
 
 status=0
 
-if ! run_case "sg2.aarch64" "devtools/ymake/bin" "default-linux-aarch64" "$REF_DIR/sg2.json" "/devtools/ymake/bin/ymake"; then
+if ! run_case "sg2.aarch64" "devtools/ymake/bin" "default-linux-aarch64" "$CANON_REF_DIR/sg2.aarch64.norm.json.xz" "/devtools/ymake/bin/ymake"; then
     status=1
 fi
 
-if ! run_case "sg2.x86_64" "devtools/ymake/bin" "default-linux-x86_64" "$REF_DIR/sg2_x86_64.json" "/devtools/ymake/bin/ymake"; then
+if ! run_case "sg2.x86_64" "devtools/ymake/bin" "default-linux-x86_64" "$CANON_REF_DIR/sg2.x86_64.norm.json.xz" "/devtools/ymake/bin/ymake"; then
     status=1
 fi
 
-if ! run_case "sg3.aarch64" "devtools/ya/bin" "default-linux-aarch64" "$REF_DIR/sg3.json" "/devtools/ya/bin/ya-bin"; then
+if ! run_case "sg3.aarch64" "devtools/ya/bin" "default-linux-aarch64" "$CANON_REF_DIR/sg3.aarch64.norm.json.xz" "/devtools/ya/bin/ya-bin"; then
     status=1
 fi
 
