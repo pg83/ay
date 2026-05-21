@@ -410,6 +410,7 @@ var sysInclYamlSequence = []sysInclEntry{
 	{file: "darwin.yml"},
 	{file: "android.yml"},
 	{file: "freebsd.yml"},
+	{file: "freertos.yml"},
 	{file: "intrinsic.yml"},
 	{file: "nvidia.yml"},
 	{file: "misc.yml"},
@@ -799,6 +800,7 @@ func unquote(s string) string {
 //   - excludePrefixes: `(?!P)` translations (path must NOT start with).
 //   - re: residual positive RE2 regex; nil for pure `^(?!...)` (the
 //     alt matches any path surviving the excludes).
+//
 // `unsupported` kills the filter (no alt fires).
 type sourceFilter struct {
 	alts        []filterAlt
@@ -937,7 +939,6 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 
 	return f
 }
-
 
 // splitTopLevelOr splits a regex on top-level `|` (not inside
 // parentheses or character classes). Returns the original string in a
