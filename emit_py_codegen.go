@@ -143,6 +143,11 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			node.DepRefs = append(node.DepRefs, py3ccSlowLDRef)
 			toolRefs = append(toolRefs, py3ccSlowLDRef)
 		}
+		if generatedInputs != nil {
+			if extras := resolveCodegenDepRefsExt(ctx, instance, nil, inputs, node.DepRefs...); len(extras) > 0 {
+				node.DepRefs = append(node.DepRefs, extras...)
+			}
+		}
 
 		if len(toolRefs) > 0 {
 			node.ForeignDepRefs = map[string][]NodeRef{"tool": toolRefs}
