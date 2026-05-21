@@ -139,10 +139,11 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 
 // TestGen_UnittestFor_Synthetic verifies T-1's UNITTEST_FOR desugaring:
 // UNITTEST_FOR(<dir>) parses as a program-like ModuleStmt (no
-// unsupported-macro throw), emits an LD, implicitly PEERDIRs both
+// unsupported-macro throw), emits an LD, and implicitly PEERDIRs both
 // library/cpp/testing/unittest_main and the tested dir (their ARs land in
-// the LD link closure), and ADDINCLs the tested dir onto its own compiles.
-// The tested-dir argument is NOT used as the binary name (it is a path).
+// the LD link closure). The tested-dir argument is NOT used as the binary
+// name (it is a path), and source rebasing must not also inject a direct
+// `-I$(S)/<tested-dir>` onto the module's own compile.
 func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	root := t.TempDir()
 
@@ -169,9 +170,21 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 
 	mk("mod", "UNITTEST_FOR(thelib)\nSRCS(a_ut.cpp)\nEND()\n")
 	mk("thelib", "LIBRARY()\nSRCS(lib.cpp)\nEND()\n")
+	mk("build/cow/on", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(cow.cpp)\nEND()\n")
+	mk("library/cpp/malloc/api", "LIBRARY()\nSRCS(api.cpp)\nEND()\n")
+	mk("library/cpp/malloc/tcmalloc", "LIBRARY()\nPEERDIR(library/cpp/malloc/api contrib/restricted/abseil-cpp contrib/libs/tcmalloc/malloc_extension contrib/libs/tcmalloc/no_percpu_cache)\nSRCS(tcmalloc.cpp)\nEND()\n")
+	mk("contrib/restricted/abseil-cpp", "LIBRARY()\nSRCS(absl.cpp)\nEND()\n")
+	mk("contrib/libs/tcmalloc/malloc_extension", "LIBRARY()\nSRCS(ext.cpp)\nEND()\n")
+	mk("contrib/libs/tcmalloc/no_percpu_cache", "LIBRARY()\nSRCS(npc.cpp)\nEND()\n")
 	mk("library/cpp/testing/unittest_main", "LIBRARY()\nSRCS(main.cpp)\nEND()\n")
 	mkfile("thelib/a_ut.cpp", "int a_ut() { return 0; }\n")
 	mkfile("thelib/lib.cpp", "int thelib() { return 0; }\n")
+	mkfile("build/cow/on/cow.cpp", "int cow() { return 0; }\n")
+	mkfile("library/cpp/malloc/api/api.cpp", "int malloc_api() { return 0; }\n")
+	mkfile("library/cpp/malloc/tcmalloc/tcmalloc.cpp", "int tcmalloc_lib() { return 0; }\n")
+	mkfile("contrib/restricted/abseil-cpp/absl.cpp", "int absl() { return 0; }\n")
+	mkfile("contrib/libs/tcmalloc/malloc_extension/ext.cpp", "int malloc_ext() { return 0; }\n")
+	mkfile("contrib/libs/tcmalloc/no_percpu_cache/npc.cpp", "int no_percpu_cache() { return 0; }\n")
 	mkfile("library/cpp/testing/unittest_main/main.cpp", "int unittest_main() { return 0; }\n")
 
 	// Reaching the assertions at all proves UNITTEST_FOR did not trip the
@@ -225,8 +238,7 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 
 	// UNITTEST_FOR sources resolve under the tested dir, while outputs stay
 	// under the declaring module via the SRCDIR-style composed path. With a
-	// sibling tested dir (`thelib`) that becomes `__/thelib/...`. The
-	// module's own compile also gets -I$(S)/thelib from ADDINCL($arg).
+	// sibling tested dir (`thelib`) that becomes `__/thelib/...`.
 	cc := byOut["$(B)/mod/__/thelib/a_ut.cpp.o"]
 	if cc == nil {
 		t.Fatal("missing own CC $(B)/mod/__/thelib/a_ut.cpp.o")
@@ -244,17 +256,22 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		t.Fatalf("cc inputs missing $(S)/thelib/a_ut.cpp: %v", inputs)
 	}
 
-	found := false
 	for _, c := range cc.Cmds {
 		for _, a := range c.CmdArgs {
 			if a == "-I$(S)/thelib" {
-				found = true
+				t.Fatalf("own CC unexpectedly carries direct -I$(S)/thelib: cmds=%+v", cc.Cmds)
 			}
 		}
 	}
 
-	if !found {
-		t.Errorf("own CC missing -I$(S)/thelib (ADDINCL($arg) not applied); cmds=%+v", cc.Cmds)
+	linkArgs := ld.Cmds[2].CmdArgs
+	thelibIdx := indexOfArg(linkArgs, "thelib/libthelib.a")
+	cowIdx := indexOfArg(linkArgs, "build/cow/on/libbuild-cow-on.a")
+	if thelibIdx < 0 || cowIdx < 0 {
+		t.Fatalf("LD link args missing expected tested-dir/program-default archives: %v", linkArgs)
+	}
+	if thelibIdx > cowIdx {
+		t.Fatalf("tested-dir archive lands after build/cow/on in LD cmd: thelib=%d cow=%d args=%v", thelibIdx, cowIdx, linkArgs)
 	}
 }
 

@@ -11,14 +11,21 @@ package main
 // through transparently. Closure order matters only for the byte-exact JS
 // test pin in js_test.go (L2 compares Inputs as a multiset).
 //
-// `platform` overrides Node.Platform: JS anchors to the outer-target axis
-// even when the surrounding module is reached via a host-PROGRAM walk; the
-// downstream JS-derived CC still uses instance.Platform.Target.
-func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, platform PlatformID, emit Emitter) (NodeRef, VFS) {
+// `p` overrides the emitted node's platform/tags: JS anchors to the
+// outer-target axis even when the surrounding module is reached via a
+// host-PROGRAM walk, so the generated node must carry the requested target
+// platform shape rather than the source instance's host tags.
+func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, emit Emitter) (NodeRef, VFS) {
 	joinSrcs := Source("build/scripts/gen_join_srcs.py")
 	procCmdFiles := Source("build/scripts/process_command_files.py")
 
 	outVFS := Build(instance.Path + "/" + allName)
+	platformID := instance.Platform.Target
+	tags := []string{}
+	if p != nil {
+		platformID = p.Target
+		tags = append(tags, p.Tags...)
+	}
 
 	cmdArgs := make([]string, 0, 4+len(sources))
 	cmdArgs = append(cmdArgs,
@@ -61,13 +68,13 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 			"pc": "magenta",
 		},
 		Outputs:  []VFS{outVFS},
-		Platform: string(platform),
+		Platform: string(platformID),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
 			"ram":     float64(32),
 		},
-		Tags: []string{},
+		Tags: tags,
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
