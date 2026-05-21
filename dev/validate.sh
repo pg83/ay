@@ -8,6 +8,9 @@
 #   - sg2.x86_64.norm.json.xz
 #   - sg3.aarch64.norm.json.xz
 #   - sg4.ydb.norm.json.xz
+# Optionally, AY_VALIDATE_SG5=1 also checks sg5 directly against the
+# raw upstream reference:
+#   - /home/pg/monorepo/ydb/sg5.json
 #
 # Raw upstream sg*.json carry non-semantic ordering, UID, and metadata
 # differences. The packed refs are generated from those raw graphs via
@@ -127,6 +130,62 @@ run_ydb_sg4() {
     return 1
 }
 
+run_ydb_sg5() {
+    local case_name="sg5.ydb"
+    local target_path="ydb/apps/ydbd"
+    local raw_ref="$YDB_ROOT/sg5.json"
+    local root_output="/ydb/apps/ydbd/ydbd"
+
+    local raw_json="$OUT_DIR/${case_name}.make.json"
+    local our_norm="$OUT_DIR/${case_name}.our.norm.json"
+    local ref_norm="$OUT_DIR/${case_name}.ref.norm.json"
+
+    echo "[$case_name] generating graph (native x86_64, --sandboxing, OS_SDK=local)"
+
+    rm -f "$raw_json"
+
+    if ! env -u CFLAGS -u CXXFLAGS \
+        PYTHON='$(YMAKE_PYTHON3)/bin/python3' \
+        CC='$(CLANG)/bin/clang' \
+        CXX='$(CLANG)/bin/clang++' \
+        OBJCOPY='$(CLANG)/bin/llvm-objcopy' \
+        ./ay make \
+        -j 0 \
+        -k \
+        -G \
+        --sandboxing \
+        --source-root "$YDB_ROOT" \
+        -DOS_SDK=local \
+        --host-platform-flag OS_SDK=local \
+        "$target_path" > "$raw_json"; then
+        echo "[$case_name] FAIL"
+        echo "  graph generation failed"
+        echo "  inspect raw output at: $raw_json"
+        return 1
+    fi
+
+    if [[ ! -s "$raw_json" ]]; then
+        echo "[$case_name] FAIL"
+        echo "  graph generation produced empty output: $raw_json"
+        return 1
+    fi
+
+    echo "[$case_name] raw byte compare"
+
+    if cmp -s "$raw_json" "$raw_ref"; then
+        echo "[$case_name] OK"
+        return 0
+    fi
+
+    echo "[$case_name] FAIL"
+    echo "  first raw byte diffs:"
+    cmp -l "$raw_json" "$raw_ref" | head -n 20 || true
+    echo "  inspect with:"
+    echo "  ./dev/normalize.py --our $raw_json --ref $raw_ref --target $target_path --our-out $our_norm --ref-out $ref_norm"
+    echo "  ./dev/diff.py --our $our_norm --ref $ref_norm --root-output $root_output --show-cmd-diff"
+    return 1
+}
+
 status=0
 
 if ! run_case "sg2.aarch64" "devtools/ymake/bin" "default-linux-aarch64" "$CANON_REF_DIR/sg2.aarch64.norm.json.xz" "/devtools/ymake/bin/ymake"; then
@@ -143,6 +202,12 @@ fi
 
 if ! run_ydb_sg4; then
     status=1
+fi
+
+if [[ "${AY_VALIDATE_SG5:-0}" == "1" ]]; then
+    if ! run_ydb_sg5; then
+        status=1
+    fi
 fi
 
 if [[ "$status" -eq 0 ]]; then

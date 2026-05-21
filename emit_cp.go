@@ -80,6 +80,10 @@ func EmitJVCPG4(
 // only by contrib/libs/musl/include/ya.make (musl.py.pyplugin).
 // cmd_args: [python3, $(S)/build/scripts/fs_tools.py, copy, src, dst].
 func EmitCP(instance ModuleInstance, src VFS, dst VFS, emit Emitter) NodeRef {
+	return EmitCPWithDeps(instance, src, dst, nil, emit)
+}
+
+func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, emit Emitter) NodeRef {
 	fsTools := Source("build/scripts/fs_tools.py")
 	procCmdFiles := Source("build/scripts/process_command_files.py")
 
@@ -125,6 +129,7 @@ func EmitCP(instance ModuleInstance, src VFS, dst VFS, emit Emitter) NodeRef {
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
+		DepRefs: depRefs,
 	}
 
 	return emit.Emit(node)

@@ -31,6 +31,7 @@ var cythonCimportFromRe = regexp.MustCompile(`^\s*from\s+([A-Za-z0-9_\.]+)\s+cim
 var cythonCimportRe = regexp.MustCompile(`^\s*cimport\s+(.+)$`)
 var cythonIncludeRe = regexp.MustCompile(`^\s*include\s+["']([^"']+)["']`)
 var cythonExternFromRe = regexp.MustCompile(`^\s*cdef\s+extern\s+from\s+(<[^>]+>|"[^"]+"|'[^']+')`)
+var flatbuffersIncludeRe = regexp.MustCompile(`^\s*include\s+"([^"]+)"\s*;`)
 
 // macroIndirectIncludes augments the C-like raw scanner for sources
 // that use macro-indirect `#include MACRO_NAME` forms. The text-blind
@@ -68,6 +69,7 @@ type includeDirectiveParserRegistry struct {
 
 type cIncludeDirectiveParser struct{}
 type cythonIncludeDirectiveParser struct{}
+type flatbuffersIncludeDirectiveParser struct{}
 type protoIncludeDirectiveParser struct{}
 type ragelIncludeDirectiveParser struct{}
 type swigIncludeDirectiveParser struct{}
@@ -102,6 +104,7 @@ func newIncludeDirectiveParserRegistry() includeDirectiveParserRegistry {
 	)
 	r.register(ragelLike, ".rl", ".rh", ".rli", ".rl6", ".rl5")
 	r.register(cythonIncludeDirectiveParser{}, ".pyx", ".pxd", ".pxi", ".pyx.pxi", ".pxd.pxi")
+	r.register(flatbuffersIncludeDirectiveParser{}, ".fbs")
 	r.register(protoLike, ".proto", ".ev", ".gzt", ".gztproto")
 	r.register(swigLike, ".swg")
 	r.register(yasm, ".asm", ".asi")
@@ -215,6 +218,23 @@ func cythonPxdTarget(module string) string {
 	default:
 		return strings.ReplaceAll(module, ".", "/") + ".pxd"
 	}
+}
+
+func (flatbuffersIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet {
+	data = stripComments(data)
+
+	out := make([]includeDirective, 0, 4)
+
+	eachLine(data, func(line []byte) {
+		m := flatbuffersIncludeRe.FindSubmatch(line)
+		if len(m) != 2 {
+			return
+		}
+
+		out = append(out, includeDirective{kind: includeQuoted, target: string(m[1])})
+	})
+
+	return rawParsedIncludeSet(parsedIncludesLocal, out...)
 }
 
 func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet {

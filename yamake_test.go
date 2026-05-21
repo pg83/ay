@@ -280,20 +280,24 @@ func TestErrorCases(t *testing.T) {
 	}
 }
 
-func TestSetArityError(t *testing.T) {
-	_, err := Parse(testParserFS, "test.input", []byte(`SET(only_one_arg)`))
-	if err == nil {
-		t.Fatalf("Parse returned nil error, want *ParseError")
+func TestSetAllowsEmptyValue(t *testing.T) {
+	mf, err := Parse(testParserFS, "test.input", []byte(`SET(only_one_arg)`))
+	if err != nil {
+		t.Fatalf("Parse returned %v, want success", err)
 	}
-	var pe *ParseError
-	if !errors.As(err, &pe) {
-		t.Fatalf("Parse returned %T, want *ParseError", err)
+	if len(mf.Stmts) != 1 {
+		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 	}
-	if pe.Line == 0 {
-		t.Errorf("ParseError.Line = 0, want non-zero")
+
+	stmt, ok := mf.Stmts[0].(*SetStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *SetStmt", mf.Stmts[0])
 	}
-	if !strings.Contains(pe.Message, "SET") {
-		t.Errorf("ParseError.Message = %q, want it to mention SET", pe.Message)
+	if stmt.Name != "only_one_arg" {
+		t.Fatalf("SetStmt.Name = %q, want only_one_arg", stmt.Name)
+	}
+	if stmt.Value != "" {
+		t.Fatalf("SetStmt.Value = %q, want empty", stmt.Value)
 	}
 }
 

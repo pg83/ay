@@ -341,6 +341,7 @@ func EmitPB(
 	moduleTag *string,
 	cppOutRoot string,
 	duplicateOutputRootInclude bool,
+	extraProtocFlags []string,
 	transitiveProtoImports []VFS,
 	hasDescriptor bool,
 	emit Emitter,
@@ -400,6 +401,9 @@ func EmitPB(
 		"-I=$(B)",
 		"-I=$(S)/contrib/libs/protobuf/src",
 		"--cpp_out=:$(B)/"+cppOutRoot,
+	)
+	cmdArgs = append(cmdArgs, extraProtocFlags...)
+	cmdArgs = append(cmdArgs,
 		"--cpp_styleguide_out=:$(B)/"+cppOutRoot,
 		"--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.String(),
 		protoRelPath,

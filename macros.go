@@ -5,10 +5,11 @@ import "fmt"
 // macros.go — IF-predicate evaluator and DefaultIfEnv. Expr ADT lives
 // next to the parser in yamake.go.
 //
-// Contract: an unknown identifier throws. Silent default-to-false would
-// hide "we never bound this var" until a comparator reported a missing
-// node. Value space is {bool, string, int}; each binding lives in
-// exactly one of the three typed maps.
+// Contract: an unknown ALL_CAPS build variable defaults to empty/false,
+// matching ymake's practical "unset variable" behaviour for optional
+// feature toggles. Non-build-var names still throw so parser/evaluator
+// defects stay visible. Value space is {bool, string, int}; each binding
+// lives in exactly one of the three typed maps.
 
 // Environment binds IF-condition identifiers to their typed values.
 // Three disjoint maps so comparators (ExprEq, ExprLt) resolve operands of
@@ -18,6 +19,27 @@ type Environment struct {
 	bools   map[string]bool
 	strings map[string]string
 	ints    map[string]int
+}
+
+func isImplicitBuildVar(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	hasUpper := false
+	for i := 0; i < len(name); i++ {
+		b := name[i]
+		switch {
+		case b >= 'A' && b <= 'Z':
+			hasUpper = true
+		case b >= '0' && b <= '9':
+		case b == '_':
+		default:
+			return false
+		}
+	}
+
+	return hasUpper
 }
 
 // Lookup returns the typed value bound to name (or throws). Return type
@@ -37,7 +59,11 @@ func (e Environment) Lookup(name string) any {
 		return v
 	}
 
-	ThrowFmt("macros: unknown IF identifier %q (extend env in macros.go's DefaultIfEnv)", name)
+	if isImplicitBuildVar(name) {
+		return ""
+	}
+
+	ThrowFmt("macros: unknown IF identifier %q", name)
 
 	return nil // unreachable; ThrowFmt panics
 }
@@ -59,7 +85,11 @@ func (e Environment) Bool(name string) bool {
 		ThrowFmt("macros: identifier %q has int binding but is used in boolean position", name)
 	}
 
-	ThrowFmt("macros: unknown IF identifier %q (extend env in macros.go's DefaultIfEnv)", name)
+	if isImplicitBuildVar(name) {
+		return false
+	}
+
+	ThrowFmt("macros: unknown IF identifier %q", name)
 
 	return false // unreachable
 }
@@ -81,7 +111,11 @@ func (e Environment) String(name string) string {
 		return fmt.Sprintf("%d", v)
 	}
 
-	ThrowFmt("macros: unknown IF identifier %q (extend env in macros.go's DefaultIfEnv)", name)
+	if isImplicitBuildVar(name) {
+		return ""
+	}
+
+	ThrowFmt("macros: unknown IF identifier %q", name)
 
 	return "" // unreachable
 }
@@ -236,6 +270,13 @@ func evalEq(x *ExprEq, env Environment) bool {
 
 	switch lv := l.(type) {
 	case string:
+		if rv, ok := r.(bool); ok {
+			if rv {
+				return lv == "yes"
+			}
+
+			return lv == "no"
+		}
 		rv, ok := r.(string)
 
 		if !ok {
@@ -252,6 +293,13 @@ func evalEq(x *ExprEq, env Environment) bool {
 
 		return lv == rv
 	case bool:
+		if rv, ok := r.(string); ok {
+			if lv {
+				return "yes" == rv
+			}
+
+			return "no" == rv
+		}
 		rv, ok := r.(bool)
 
 		if !ok {
@@ -334,6 +382,10 @@ var DefaultIfEnv = Environment{
 		"PROVIDE_QUEUE":                     false,
 		"PROVIDE_GETSERVBYNAME":             false,
 		"PROVIDE_MEMFD_CREATE":              false,
+		"DLL_FOR":                           false,
+		"DYNAMIC_BOOST":                     false,
+		"PROFILE_MEMORY_ALLOCATIONS":        false,
+		"USE_SSE4":                          true,
 		// MUSL_LITE=false → defaultProgramPeerdirsForModule picks contrib/libs/musl/full
 		// when MUSL=yes && !MUSL_LITE.
 		"MUSL_LITE":                        false,
@@ -348,32 +400,32 @@ var DefaultIfEnv = Environment{
 		// in contrib/libs/python/ya.make and the contrib/tools/python3
 		// PEERDIR + Include ADDINCL in stage0pycc / tools/py3cc/bin
 		// (each takes the ELSE arm when true).
-		"USE_ARCADIA_PYTHON":                         true,
-		"PYTHON2":                                    false,
-		"PYTHON3":                                    true,
-		"USE_PYTHON3_PREV":                           false,
-		"PREBUILT":                                   false,
-		"PY_PROTOS_FOR":                              false,
-		"YMAKE_DEBUG":                                false,
-		"USE_VANILLA_PROTOC":                         false,
-		"USE_PREBUILT_TOOLS":                         false,
-		"PYTHON_SQLITE3":                             false,
-		"USE_SYSTEM_OPENSSL":                         false,
-		"OPENSOURCE_REPLACE_OPENSSL":                 false,
-		"ARCADIA_ICONV_NOCJK":                        false,
-		"PYBUILD_NO_PYC":                             false,
-		"USE_LIGHT_PY2CC":                            false,
-		"PYBIND_SRC":                                 false,
-		"PYTHON_FORBIDDEN_PROTOBUFS":                 false,
-		"SANITIZER_ADDRESS_USE_AFTER_SCOPE":          false,
-		"ASAN":                                       false,
-		"TSAN":                                       false,
-		"MSAN":                                       false,
-		"UBSAN":                                      false,
-		"LSAN":                                       false,
-		"HAVE_OPENSSL":                               false,
-		"NO_OPENSSL":                                 false,
-		"YT_DISABLE_REF_COUNTED_TRACKING":            false,
+		"USE_ARCADIA_PYTHON":                true,
+		"PYTHON2":                           false,
+		"PYTHON3":                           true,
+		"USE_PYTHON3_PREV":                  false,
+		"PREBUILT":                          false,
+		"PY_PROTOS_FOR":                     false,
+		"YMAKE_DEBUG":                       false,
+		"USE_VANILLA_PROTOC":                false,
+		"USE_PREBUILT_TOOLS":                false,
+		"PYTHON_SQLITE3":                    false,
+		"USE_SYSTEM_OPENSSL":                false,
+		"OPENSOURCE_REPLACE_OPENSSL":        false,
+		"ARCADIA_ICONV_NOCJK":               false,
+		"PYBUILD_NO_PYC":                    false,
+		"USE_LIGHT_PY2CC":                   false,
+		"PYBIND_SRC":                        false,
+		"PYTHON_FORBIDDEN_PROTOBUFS":        false,
+		"SANITIZER_ADDRESS_USE_AFTER_SCOPE": false,
+		"ASAN":                              false,
+		"TSAN":                              false,
+		"MSAN":                              false,
+		"UBSAN":                             false,
+		"LSAN":                              false,
+		"HAVE_OPENSSL":                      false,
+		"NO_OPENSSL":                        false,
+		"YT_DISABLE_REF_COUNTED_TRACKING":   false,
 		"YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE": false,
 		"YT_CUSTOM_INTERNAL_BUILD":                   false,
 		"YT_ROPSAN_ENABLE_ACCESS_CHECK":              false,
@@ -446,6 +498,7 @@ var DefaultIfEnv = Environment{
 		// OPENSOURCE=yes; contrib/libs/libiconv/ya.make consumes it via
 		// DEFAULT(USE_ICONV ${_USE_ICONV}).
 		"_USE_ICONV": "dynamic",
+		"ALLOCATOR":  "",
 		"PY2":        "PY2", // bare-ident literal for IF (MODULE_TAG == "PY2").
 		"OS_SDK":     "",
 	},

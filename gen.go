@@ -194,6 +194,12 @@ type genCtx struct {
 	// the BUILD_ROOT path of a generated .pb.h / .pb.cc / .ev.pb.h / .ev.pb.cc.
 	pbOutputs map[codegenOutputKey]NodeRef
 	evOutputs map[codegenOutputKey]NodeRef
+	// flatcEmissions caches `.fbs` codegen nodes by generated header path.
+	// Unlike PB/EV the downstream CCs need same-module imported-schema
+	// producers even when those schemas are declared later in SRCS, so the
+	// `.fbs` branch ensures generator nodes through this cache before it
+	// compiles the generated `.fbs.cpp`.
+	flatcEmissions map[codegenOutputKey]flatcEmission
 	// pyRegisterOutputs caches PY_REGISTER producer nodes by their
 	// platform-independent generated source path. Upstream emits the
 	// gen_py3_reg.py PY node on the target axis and reuses that producer
@@ -607,6 +613,7 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"PROTO_NAMESPACE":                 {}, // Proto namespace declaration; metadata.
 	"PY_NAMESPACE":                    {}, // Python namespace declaration; metadata.
 	"GRPC":                            {}, // gRPC service declaration; deferred.
+	"CPP_PROTO_PLUGIN0":               {}, // protoc C++ plugin helper; deferred.
 	"CPP_PROTO_PLUGIN":                {}, // protoc C++ plugin; deferred.
 	"CPP_PROTO_PLUGIN2":               {}, // protoc C++ plugin variant; deferred.
 	"CPP_EV_PLUGIN":                   {}, // event compiler plugin; deferred.
@@ -665,6 +672,7 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 		enOutputs:         make(map[VFS]NodeRef),
 		pbOutputs:         make(map[codegenOutputKey]NodeRef),
 		evOutputs:         make(map[codegenOutputKey]NodeRef),
+		flatcEmissions:    make(map[codegenOutputKey]flatcEmission),
 		pyRegisterOutputs: make(map[VFS]NodeRef),
 		ldPluginCPCache:   make(map[VFS]NodeRef),
 		scanCtxMode:       mode,
@@ -839,7 +847,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
-	if d.moduleStmt.Name != "LIBRARY" && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) {
+	if d.moduleStmt.Name != "LIBRARY" && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) {
 		ThrowFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path, d.moduleStmt.Name)
 	}
 
@@ -1915,6 +1923,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		perModuleCCTag = stringPtr("py3_native")
 	case "PY23_LIBRARY":
 		perModuleCCTag = stringPtr("py3")
+	case "YQL_UDF_YDB", "YQL_UDF_CONTRIB":
+		perModuleCCTag = stringPtr("yql_udf_static")
 	}
 
 	// arNameFn selects the archive naming function for this module:
@@ -1976,9 +1986,16 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		DefaultVarOrder:      d.defaultVarOrder,
 		SetVars:              d.setVars,
 		Py3Suffix:            isPy3NativeLib,
-		ModuleTag:            perModuleCCTag,
-		Ragel6Flags:          d.ragel6Flags,
-		BisonGenExt:          d.bisonGenExt,
+		ObjectSuffixStem: func() *string {
+			if isYqlUdfStaticModule(d.moduleStmt.Name) {
+				return stringPtr("udfs")
+			}
+
+			return nil
+		}(),
+		ModuleTag:   perModuleCCTag,
+		Ragel6Flags: d.ragel6Flags,
+		BisonGenExt: d.bisonGenExt,
 	}
 
 	// Ancestor-only SRCDIR rebase. The "PROGRAM with SRCDIR pointing at
@@ -1988,6 +2005,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// with SRCDIR keep module_dir at instance.Path and route per-source
 	// via composeCCPaths' SRCDIR-aware composer.
 	ancestorRebase := d.srcDir != nil && d.moduleStmt.Name == "PROGRAM" && isAncestorPath(*d.srcDir, instance.Path)
+
+	// Emit COPY_FILE/COPY_FILE_WITH_CONTEXT producers before any source or
+	// helper node scans inputs so AUTO-copied outputs and explicit IN/OUT
+	// consumers resolve through the codegen registry.
+	emitCopyFiles(ctx, instance, d)
 
 	// Emit EN nodes BEFORE the per-source CC loop so the codegen registry
 	// is populated when consumer sources scan their include closures.
@@ -2129,7 +2151,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if !isHeaderSource(src) {
 			continue
 		}
-		headerVFS := resolveSourceVFS(ctx, instance, src, moduleInputs.SrcDir)
+		headerVFS := resolveModuleSourceVFS(ctx, instance, d, src, moduleInputs.SrcDir)
 		headerClosure := walkClosure(ctx, instance, headerVFS, moduleInputs)
 		all := append([]VFS{Source(instance.Path + "/" + src)}, headerClosure...)
 		addMemberInputs(all)
@@ -2802,6 +2824,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			globalTag = "py3_global"
 		case "PY23_NATIVE_LIBRARY":
 			globalTag = "py3_native_global"
+		case "YQL_UDF_YDB", "YQL_UDF_CONTRIB":
+			globalTag = "yql_udf_static_global"
 		}
 		// The `.global.a` aggregator uses the same member-order discipline
 		// as the regular AR — hand-written / objcopy_* .o files precede
@@ -3448,7 +3472,21 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 // isHeaderSource reports whether `srcRel` is a header file the
 // emitter should skip.
 func isHeaderSource(srcRel string) bool {
-	return strings.HasSuffix(srcRel, ".h") || strings.HasSuffix(srcRel, ".hpp")
+	switch {
+	case strings.HasSuffix(srcRel, ".h"),
+		strings.HasSuffix(srcRel, ".hh"),
+		strings.HasSuffix(srcRel, ".hpp"),
+		strings.HasSuffix(srcRel, ".cuh"),
+		strings.HasSuffix(srcRel, ".H"),
+		strings.HasSuffix(srcRel, ".hxx"),
+		strings.HasSuffix(srcRel, ".xh"),
+		strings.HasSuffix(srcRel, ".ipp"),
+		strings.HasSuffix(srcRel, ".ixx"),
+		strings.HasSuffix(srcRel, ".inl"):
+		return true
+	}
+
+	return false
 }
 
 // isSkippedSource reports whether `srcRel` is a deferred source kind
@@ -3473,6 +3511,7 @@ func isSkippedSource(srcRel string) bool {
 // its closure.
 func isCodegenProducingSrc(srcRel string) bool {
 	return strings.HasSuffix(srcRel, ".proto") ||
+		strings.HasSuffix(srcRel, ".fbs") ||
 		strings.HasSuffix(srcRel, ".ev") ||
 		strings.HasSuffix(srcRel, ".rl6") ||
 		strings.HasSuffix(srcRel, ".rl") ||
