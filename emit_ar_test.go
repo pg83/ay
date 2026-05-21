@@ -29,11 +29,12 @@ var (
 )
 
 func newTestPlatform(os OS, isa ISA, pic string, tags []string) *Platform {
-	flags := make(map[string]string, len(testToolchainFlags)+1)
+	flags := make(map[string]string, len(testToolchainFlags)+2)
 	for k, v := range testToolchainFlags {
 		flags[k] = v
 	}
 	flags["PIC"] = pic
+	flags["MUSL"] = "yes"
 	return NewPlatform(os, isa, flags, tags, "", "")
 }
 
