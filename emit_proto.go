@@ -272,6 +272,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
 		grpcCppLDRef, cppStyleguideBinary, protocBinary, grpcCppBinary,
 		cfg.grpc, cfg.moduleTag, cfg.cppOutRoot, cfg.duplicateOutputRootInclude,
+		d.protocFlags,
 		transitiveImports, hasDescriptor, ctx.emit,
 	)
 

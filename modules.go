@@ -46,6 +46,8 @@ type moduleData struct {
 	cOnlyFlags           []string // non-GLOBAL CONLYFLAGS (own C / .S sources)
 	cOnlyFlagsGlobal     []string // CONLYFLAGS(GLOBAL ...); peer-propagated to consumers' C / .S sources
 	sFlags               []string // SET_APPEND(SFLAGS ...); appended to AS compiles only
+	protocFlags          []string // SET_APPEND(_PROTOC_FLAGS ...); appended to protoc invocations
+	flatcFlags           []string // FLATC_FLAGS(...); appended to flatc invocations for `.fbs` sources
 	ldFlags              []string
 	rpathFlagsGlobal     []string // SET_APPEND(RPATH_GLOBAL ...); peer-propagated to PROGRAM LD rpath slots
 	objAddLibsGlobal     []string // EXTRALIBS / PY_EXTRALIBS → OBJADDE_LIB_GLOBAL, peer-propagated to final link steps
@@ -105,6 +107,12 @@ type moduleData struct {
 	// still threads the producer's source inputs into node inputs and
 	// enclosing global archive inputs.
 	prOutputInputs map[string][]VFS
+	// COPY_FILE / COPY_FILE_WITH_CONTEXT declarations in parse order.
+	copyFiles []copyFileEntry
+	// AUTO copied outputs that should re-enter the source loop as
+	// BUILD_ROOT-backed generated sources/headers. Key = module-relative
+	// dest path (e.g. `codegen.cpp`).
+	copyFileAutoOutputs map[string]copyFileEntry
 	// SRC(...) / SRC_C_NO_LTO(...) declarations emit a FLAT output path
 	// (no `_/` infix) — unlike SRCS(subdir/foo.cpp) which emits
 	// `<modulePath>/_/subdir/foo.cpp.o`. Consulted by emitOneSource.
@@ -176,6 +184,14 @@ type archiveEntry struct {
 	Files        []string
 }
 
+type copyFileEntry struct {
+	Src            string
+	Dst            string
+	Auto           bool
+	WithContext    bool
+	OutputIncludes []string
+}
+
 // antlr4GrammarInfo captures a RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT
 // invocation for JV node emission. IsSplit picks the lexer+parser form.
 // OutputIncludes (from the macro's OUTPUT_INCLUDES keyword) are
@@ -189,6 +205,153 @@ type antlr4GrammarInfo struct {
 	Visitor        bool
 	Listener       bool
 	OutputIncludes []string // repo-relative
+}
+
+func parseCopyFileEntry(args []string, withContext bool, line int) copyFileEntry {
+	i := 0
+	auto := false
+	for i < len(args) {
+		switch args[i] {
+		case "AUTO":
+			auto = true
+			i++
+		case "TEXT":
+			i++
+		default:
+			goto parsedFlags
+		}
+	}
+
+parsedFlags:
+	if len(args)-i < 2 {
+		ThrowFmt("gen: COPY_FILE at line %d expects at least source and destination, got %d args", line, len(args))
+	}
+
+	entry := copyFileEntry{
+		Src:         args[i],
+		Dst:         args[i+1],
+		Auto:        auto,
+		WithContext: withContext,
+	}
+	i += 2
+
+	section := ""
+	for i < len(args) {
+		switch args[i] {
+		case "OUTPUT_INCLUDES", "INDUCED_DEPS":
+			section = args[i]
+			i++
+			continue
+		}
+
+		if section == "OUTPUT_INCLUDES" || section == "INDUCED_DEPS" {
+			entry.OutputIncludes = append(entry.OutputIncludes, args[i])
+		}
+		i++
+	}
+
+	return entry
+}
+
+func parseCopyEntries(args []string, line int) []copyFileEntry {
+	i := 0
+	auto := false
+	withContext := false
+	for i < len(args) {
+		switch args[i] {
+		case "AUTO":
+			auto = true
+			i++
+		case "WITH_CONTEXT":
+			withContext = true
+			i++
+		default:
+			goto parsedFlags
+		}
+	}
+
+parsedFlags:
+	if i >= len(args) || args[i] != "FROM" {
+		ThrowFmt("gen: COPY at line %d expects FROM <dir>", line)
+	}
+	i++
+	if i >= len(args) {
+		ThrowFmt("gen: COPY at line %d expects source directory after FROM", line)
+	}
+	fromDir := args[i]
+	i++
+
+	files := make([]string, 0, 8)
+	outputIncludes := make([]string, 0, 8)
+	section := "FILES"
+	for i < len(args) {
+		switch args[i] {
+		case "OUTPUT_INCLUDES", "INDUCED_DEPS":
+			section = args[i]
+			i++
+			continue
+		}
+
+		if section == "FILES" {
+			files = append(files, args[i])
+		} else {
+			outputIncludes = append(outputIncludes, args[i])
+		}
+		i++
+	}
+
+	out := make([]copyFileEntry, 0, len(files))
+	for _, file := range files {
+		src := filepath.ToSlash(filepath.Clean(fromDir + "/" + file))
+		out = append(out, copyFileEntry{
+			Src:            src,
+			Dst:            file,
+			Auto:           auto,
+			WithContext:    withContext,
+			OutputIncludes: append([]string(nil), outputIncludes...),
+		})
+	}
+
+	return out
+}
+
+func copyFileInputVFS(modulePath string, src string) VFS {
+	switch {
+	case strings.HasPrefix(src, "${ARCADIA_ROOT}/"):
+		return Source(filepath.ToSlash(filepath.Clean(strings.TrimPrefix(src, "${ARCADIA_ROOT}/"))))
+	case strings.HasPrefix(src, "${CURDIR}/"):
+		return Source(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(src, "${CURDIR}/"))))
+	case strings.HasPrefix(src, "${ARCADIA_BUILD_ROOT}/"):
+		return Build(filepath.ToSlash(filepath.Clean(strings.TrimPrefix(src, "${ARCADIA_BUILD_ROOT}/"))))
+	case strings.HasPrefix(src, "${BINDIR}/"):
+		return Build(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(src, "${BINDIR}/"))))
+	default:
+		return Source(filepath.ToSlash(filepath.Clean(modulePath + "/" + src)))
+	}
+}
+
+func copyFileOutputVFS(modulePath string, dst string) VFS {
+	switch {
+	case strings.HasPrefix(dst, "${ARCADIA_BUILD_ROOT}/"):
+		return Build(filepath.ToSlash(filepath.Clean(strings.TrimPrefix(dst, "${ARCADIA_BUILD_ROOT}/"))))
+	case strings.HasPrefix(dst, "${BINDIR}/"):
+		return Build(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(dst, "${BINDIR}/"))))
+	default:
+		return Build(filepath.ToSlash(filepath.Clean(modulePath + "/" + dst)))
+	}
+}
+
+func copyFileIncludeTarget(modulePath string, target string) string {
+	switch {
+	case strings.HasPrefix(target, "${ARCADIA_ROOT}/"):
+		return filepath.ToSlash(filepath.Clean(strings.TrimPrefix(target, "${ARCADIA_ROOT}/")))
+	case strings.HasPrefix(target, "${ARCADIA_BUILD_ROOT}/"):
+		return filepath.ToSlash(filepath.Clean(strings.TrimPrefix(target, "${ARCADIA_BUILD_ROOT}/")))
+	case strings.HasPrefix(target, "${BINDIR}/"):
+		return filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(target, "${BINDIR}/")))
+	default:
+		return target
+	}
 }
 
 // collectModule walks `stmts` (IF branches resolved against `env`) and
@@ -214,6 +377,17 @@ func collectModule(fs *FS, modulePath string, kind ModuleKind, stmts []Stmt, env
 		// the program entrypoint resource. No-op for standalone PY3_LIBRARY
 		// (which never declares PY_MAIN).
 		d.pyMain = nil
+	} else if kind == KindBin && d.moduleStmt != nil && d.moduleStmt.Name == "PY3_PROGRAM" {
+		// The Bin half of PY3_PROGRAM owns the executable wrapper
+		// (PY_MAIN/resource objcopy + final LD). The self-peer Lib half owns
+		// the importable PY_SRCS-derived artifacts. Keeping PY_SRCS on both
+		// sides double-emits the same `.yapyc3` / py-resource outputs.
+		d.pySrcs = nil
+		d.pySrcGroups = nil
+		d.pyPyiResources = nil
+		d.pyRegister = nil
+		d.pyRegisterExplicit = nil
+		d.allPySrcs = nil
 	}
 	d.muslEnabled = env.Bool("MUSL")
 
@@ -261,6 +435,25 @@ func collectModule(fs *FS, modulePath string, kind ModuleKind, stmts []Stmt, env
 	}
 
 	return d
+}
+
+func appendGlobalSrcEvent(d *moduleData, src string) {
+	if d.firstGlobalSrcsEvent < 0 {
+		d.firstGlobalSrcsEvent = d.globalEventSeq
+	}
+	d.globalEventSeq++
+	d.globalSrcs = append(d.globalSrcs, src)
+}
+
+func appendGlobalSrcGroup(d *moduleData, srcs []string) {
+	if len(srcs) == 0 {
+		return
+	}
+	if d.firstGlobalSrcsEvent < 0 {
+		d.firstGlobalSrcsEvent = d.globalEventSeq
+	}
+	d.globalEventSeq++
+	d.globalSrcs = append(d.globalSrcs, srcs...)
 }
 
 func ensureResourcePeer(modulePath string, d *moduleData) {
@@ -433,6 +626,9 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 					d.peerdirs = append(d.peerdirs, path.Clean(v.Args[0]))
 				}
 			}
+			if isYqlUdfStaticModule(v.Name) {
+				d.peerdirs = append(d.peerdirs, yqlUdfImplicitPeers()...)
+			}
 
 			d.moduleStmt = moduleStmtForKind(v, kind)
 		case *SrcsStmt:
@@ -440,7 +636,9 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// (symbols exported globally, equivalent to GLOBAL_SRCS).
 			// Strip GLOBAL tokens and route the following sources to
 			// d.globalSrcs.
+			routeAllToGlobal := d.moduleStmt != nil && isYqlUdfStaticModule(d.moduleStmt.Name)
 			globalNext := false
+			globalSrcs := make([]string, 0, len(v.Sources))
 
 			for _, src := range expandListVars(v.Sources, env) {
 				if src == "GLOBAL" {
@@ -449,12 +647,10 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 					continue
 				}
 
-				if globalNext {
-					if d.firstGlobalSrcsEvent < 0 {
-						d.firstGlobalSrcsEvent = d.globalEventSeq
-					}
-					d.globalEventSeq++
-					d.globalSrcs = append(d.globalSrcs, src)
+				if routeAllToGlobal {
+					globalSrcs = append(globalSrcs, src)
+				} else if globalNext {
+					appendGlobalSrcEvent(d, src)
 					globalNext = false
 				} else {
 					d.srcs = append(d.srcs, src)
@@ -464,6 +660,9 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				} else if strings.HasSuffix(src, ".y") {
 					addGeneratedOwnHeaderInclude(modulePath, strings.TrimSuffix(src, filepath.Ext(src))+".h", d)
 				}
+			}
+			if routeAllToGlobal {
+				appendGlobalSrcGroup(d, globalSrcs)
 			}
 		case *PeerdirStmt:
 			// The ADDINCL modifier means "peer this AND add the same
@@ -550,11 +749,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// are elsewhere.
 			d.srcDir = &v.Dir
 		case *GlobalSrcsStmt:
-			if d.firstGlobalSrcsEvent < 0 {
-				d.firstGlobalSrcsEvent = d.globalEventSeq
-			}
-			d.globalEventSeq++
-			d.globalSrcs = append(d.globalSrcs, v.Sources...)
+			appendGlobalSrcGroup(d, v.Sources)
 		case *GenerateEnumSerializationStmt:
 			d.enumSrcs = append(d.enumSrcs, v)
 		case *DefaultVarStmt:
@@ -640,7 +835,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 
 			collectStmts(modulePath, kind, taken, env, d)
 		case *UnknownStmt:
-			applyUnknownStmt(modulePath, v, d)
+			applyUnknownStmt(modulePath, v, d, env)
 		default:
 			ThrowFmt("gen: %s: unhandled Stmt type %T (parser added a new Stmt subclass without updating gen.go)", modulePath, s)
 		}
@@ -690,7 +885,7 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *moduleData) {
 // (ymake.core.conf:961-1035). Anything else must be in the metadata
 // whitelist; unknown names throw so a new ya.make macro surfaces
 // immediately rather than being silently dropped.
-func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
+func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Environment) {
 	switch v.Name {
 	case "NO_LIBC":
 		// build/ymake.core.conf: NO_LIBC() calls NO_RUNTIME() which calls NO_UTIL().
@@ -711,6 +906,8 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		d.flags.NoUtil = true
 	case "NO_COMPILER_WARNINGS":
 		d.flags.NoCompilerWarnings = true
+	case "NO_WSHADOW":
+		d.flags.NoWShadow = true
 	case "SPLIT_DWARF":
 		d.splitDwarf = true
 	case "NO_SPLIT_DWARF":
@@ -764,6 +961,64 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			ThrowFmt("gen: PY_NAMESPACE expects exactly 1 argument, got %d", len(v.Args))
 		}
 		d.pyNamespace = stringPtr(v.Args[0])
+	case "YQL_LAST_ABI_VERSION":
+		if len(v.Args) != 0 {
+			ThrowFmt("YQL_LAST_ABI_VERSION expects exactly 0 arguments, got %d", len(v.Args))
+		}
+		d.cxxFlags = append(d.cxxFlags, "-DUSE_CURRENT_UDF_ABI_VERSION")
+	case "YQL_ABI_VERSION":
+		if len(v.Args) != 3 {
+			ThrowFmt("YQL_ABI_VERSION expects exactly 3 arguments, got %d", len(v.Args))
+		}
+		d.cxxFlags = append(d.cxxFlags,
+			"-DUDF_ABI_VERSION_MAJOR="+v.Args[0],
+			"-DUDF_ABI_VERSION_MINOR="+v.Args[1],
+			"-DUDF_ABI_VERSION_PATCH="+v.Args[2],
+		)
+	case "PROTOC_FATAL_WARNINGS":
+		if len(v.Args) != 0 {
+			ThrowFmt("PROTOC_FATAL_WARNINGS expects exactly 0 arguments, got %d", len(v.Args))
+		}
+		d.protocFlags = append(d.protocFlags, "--fatal_warnings")
+	case "USE_COMMON_GOOGLE_APIS":
+		d.peerdirs = append(d.peerdirs, "contrib/libs/googleapis-common-protos")
+	case "FLATC_FLAGS":
+		d.flatcFlags = append(d.flatcFlags, expandListVars(v.Args, env)...)
+	case "COPY_FILE", "COPY_FILE_WITH_CONTEXT":
+		entry := parseCopyFileEntry(expandListVars(v.Args, env), v.Name == "COPY_FILE_WITH_CONTEXT", v.Line)
+		d.copyFiles = append(d.copyFiles, entry)
+		if entry.Auto {
+			dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
+			prefix := modulePath + "/"
+			if strings.HasPrefix(dstVFS.Rel, prefix) {
+				dstRel := strings.TrimPrefix(dstVFS.Rel, prefix)
+				if isSourceEligibleForCopyAuto(dstRel) && !flagsContain(d.srcs, dstRel) {
+					d.srcs = append(d.srcs, dstRel)
+				}
+				if d.copyFileAutoOutputs == nil {
+					d.copyFileAutoOutputs = make(map[string]copyFileEntry)
+				}
+				d.copyFileAutoOutputs[dstRel] = entry
+			}
+		}
+	case "COPY":
+		for _, entry := range parseCopyEntries(expandListVars(v.Args, env), v.Line) {
+			d.copyFiles = append(d.copyFiles, entry)
+			if entry.Auto {
+				dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
+				prefix := modulePath + "/"
+				if strings.HasPrefix(dstVFS.Rel, prefix) {
+					dstRel := strings.TrimPrefix(dstVFS.Rel, prefix)
+					if isSourceEligibleForCopyAuto(dstRel) && !flagsContain(d.srcs, dstRel) {
+						d.srcs = append(d.srcs, dstRel)
+					}
+					if d.copyFileAutoOutputs == nil {
+						d.copyFileAutoOutputs = make(map[string]copyFileEntry)
+					}
+					d.copyFileAutoOutputs[dstRel] = entry
+				}
+			}
+		}
 	case "PROTO_NAMESPACE":
 		if len(v.Args) == 0 {
 			ThrowFmt("gen: PROTO_NAMESPACE expects at least 1 argument")
@@ -875,7 +1130,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 		}
 
 		d.flatSrcs[filename] = struct{}{}
-	case "SRC_C_AVX", "SRC_C_SSE2", "SRC_C_SSE3", "SRC_C_SSSE3",
+	case "SRC_C_AVX", "SRC_C_AVX2", "SRC_C_AVX512", "SRC_C_AMX", "SRC_C_SSE2", "SRC_C_SSE3", "SRC_C_SSSE3",
 		"SRC_C_SSE4", "SRC_C_SSE41", "SRC_C_XOP":
 		// SRC_C_<V>(filename [extra_flags...]) emits one CC node with
 		// the variant's -m<flag> bundle plus extras, into a FLAT
@@ -1194,6 +1449,8 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData) {
 			switch v.Args[0] {
 			case "SFLAGS":
 				d.sFlags = append(d.sFlags, v.Args[1:]...)
+			case "_PROTOC_FLAGS":
+				d.protocFlags = append(d.protocFlags, v.Args[1:]...)
 			case "RPATH_GLOBAL":
 				for _, arg := range v.Args[1:] {
 					arg = strings.ReplaceAll(arg, `${"$"}`, "$")
@@ -1375,6 +1632,22 @@ func isProgramModuleType(name string) bool {
 	}
 
 	return false
+}
+
+func isYqlUdfStaticModule(name string) bool {
+	switch name {
+	case "YQL_UDF_YDB", "YQL_UDF_CONTRIB":
+		return true
+	}
+
+	return false
+}
+
+func yqlUdfImplicitPeers() []string {
+	return []string{
+		"yql/essentials/public/udf",
+		"yql/essentials/public/udf/support",
+	}
 }
 
 // isPyLibraryType returns true for Python library/program module names

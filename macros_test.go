@@ -59,22 +59,13 @@ func TestEvalCond_AndOrNot(t *testing.T) {
 	}
 }
 
-// TestEvalCond_UnknownVarThrows pins D27: an unknown identifier in an
-// IF predicate throws rather than silently defaulting to false. The
-// error message must mention "unknown IF identifier" so the operator
-// has a fast-track to the fix (extend DefaultIfEnv).
-func TestEvalCond_UnknownVarThrows(t *testing.T) {
+// TestEvalCond_UnknownVarDefaultsFalse pins the ymake-compatible fallback
+// for unset ALL_CAPS build variables: they coerce to false/empty rather
+// than throwing.
+func TestEvalCond_UnknownVarDefaultsFalse(t *testing.T) {
 	expr := parseCondForTest(t, "UNKNOWN_VAR")
-	exc := Try(func() {
-		EvalCond(expr, DefaultIfEnv)
-	})
-
-	if exc == nil {
-		t.Fatal("EvalCond returned nil exception, want throw")
-	}
-
-	if !strings.Contains(exc.Error(), "unknown IF identifier") {
-		t.Errorf("exception %q does not contain %q", exc.Error(), "unknown IF identifier")
+	if EvalCond(expr, DefaultIfEnv) {
+		t.Fatal("EvalCond(UNKNOWN_VAR) = true, want false")
 	}
 }
 
