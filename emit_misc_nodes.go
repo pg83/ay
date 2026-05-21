@@ -13,6 +13,17 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 	outPrefix := instance.Path + "/"
 	reg := codegenRegForInstance(ctx, instance)
 
+	// CF: explicit CONFIGURE_FILE outputs must exist before generic
+	// RUN_ANTLR[4] nodes consume their configured grammar/templates.
+	for _, cf := range d.configureFiles {
+		emitExplicitCF(ctx, instance, cf, d, reg)
+	}
+
+	antlrCCRefs, antlrCCOutputs, antlrCCMemberInputs := emitAntlrRuns(ctx, instance, d, consumerInputs)
+	ccRefs = append(ccRefs, antlrCCRefs...)
+	ccOutputs = append(ccOutputs, antlrCCOutputs...)
+	memberInputsList = append(memberInputsList, antlrCCMemberInputs...)
+
 	// JV: emit one node per ANTLR4 grammar declaration.
 	for _, g := range d.antlr4Grammars {
 		if g.IsSplit {
@@ -117,11 +128,6 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 				memberInputsList = append(memberInputsList, inputs...)
 			}
 		}
-	}
-
-	// CF: emit one node per explicit CONFIGURE_FILE() declaration.
-	for _, cf := range d.configureFiles {
-		emitExplicitCF(ctx, instance, cf, d, reg)
 	}
 
 	// BI: emit one node when CREATE_BUILDINFO_FOR was declared.

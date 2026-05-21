@@ -1,9 +1,5 @@
 package main
 
-import (
-	"strings"
-)
-
 // configureFilePy is the source-relative path to the configure_file.py
 // script used in all CF nodes.
 var configureFilePyVFS = Source("build/scripts/configure_file.py")
@@ -16,8 +12,7 @@ const buildTypeDebug = "BUILD_TYPE=DEBUG"
 // EmitCF emits a CF node expanding a .cpp.in / .c.in template via
 // configure_file.py. Output strips the .in suffix.
 //
-// cmd_args: [python3, configure_file.py, $(S)/<modulePath>/<srcRel>,
-// $(B)/<modulePath>/<srcRel without .in>, <cfgVars...>].
+// cmd_args: [python3, configure_file.py, <src>, <dst>, <cfgVars...>].
 // cfgVars derive from DEFAULT(name value) declarations filtered to
 // vars actually @VAR@-referenced in the .in; BUILD_TYPE=DEBUG is
 // injected when referenced but not DEFAULT-declared.
@@ -32,15 +27,13 @@ const buildTypeDebug = "BUILD_TYPE=DEBUG"
 // header to the module that #includes it.
 func EmitCF(
 	instance ModuleInstance,
-	srcRel string,
+	srcVFS VFS,
+	outVFS VFS,
 	cfgVars []string,
 	includeInputs []VFS,
 	moduleDir string,
 	emit Emitter,
 ) (NodeRef, VFS) {
-	srcVFS := Source(instance.Path + "/" + srcRel)
-	outVFS := Build(instance.Path + "/" + strings.TrimSuffix(srcRel, ".in"))
-
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}

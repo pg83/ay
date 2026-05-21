@@ -84,7 +84,9 @@ type moduleData struct {
 	configureFiles     []*ConfigureFileStmt
 	createBuildInfoFor *string
 	antlr4Grammars     []antlr4GrammarInfo
+	antlrRuns          []antlrRunInfo
 	runPrograms        []*RunProgramStmt
+	runPython          []*RunPythonStmt
 	checkConfigHeaders []string
 	cythonCpp          []*CythonStmt
 	// Standalone BUILDWITH_CYTHON_* injects numpy at macro-body position,
@@ -207,6 +209,16 @@ type antlr4GrammarInfo struct {
 	OutputIncludes []string // repo-relative
 }
 
+type antlrRunInfo struct {
+	Macro          string
+	Args           []string
+	INFiles        []string
+	OUTFiles       []string
+	OUTNoAutoFiles []string
+	CWD            *string
+	OutputIncludes []string
+}
+
 func parseCopyFileEntry(args []string, withContext bool, line int) copyFileEntry {
 	i := 0
 	auto := false
@@ -316,32 +328,45 @@ parsedFlags:
 }
 
 func copyFileInputVFS(modulePath string, src string) VFS {
+	if vfs, ok := moduleRootedVFS(modulePath, src); ok {
+		return vfs
+	}
+
+	return Source(filepath.ToSlash(filepath.Clean(modulePath + "/" + src)))
+}
+
+func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
+	if vfs, ok := ParseVFS(path); ok {
+		return vfs, true
+	}
+
 	switch {
-	case strings.HasPrefix(src, "${ARCADIA_ROOT}/"):
-		return Source(filepath.ToSlash(filepath.Clean(strings.TrimPrefix(src, "${ARCADIA_ROOT}/"))))
-	case strings.HasPrefix(src, "${CURDIR}/"):
-		return Source(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(src, "${CURDIR}/"))))
-	case strings.HasPrefix(src, "${ARCADIA_BUILD_ROOT}/"):
-		return Build(filepath.ToSlash(filepath.Clean(strings.TrimPrefix(src, "${ARCADIA_BUILD_ROOT}/"))))
-	case strings.HasPrefix(src, "${BINDIR}/"):
-		return Build(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(src, "${BINDIR}/"))))
+	case strings.HasPrefix(path, "${ARCADIA_ROOT}/"):
+		return Source(filepath.ToSlash(filepath.Clean(strings.TrimPrefix(path, "${ARCADIA_ROOT}/")))), true
+	case strings.HasPrefix(path, "${CURDIR}/"):
+		return Source(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(path, "${CURDIR}/")))), true
+	case strings.HasPrefix(path, "${ARCADIA_BUILD_ROOT}/"):
+		return Build(filepath.ToSlash(filepath.Clean(strings.TrimPrefix(path, "${ARCADIA_BUILD_ROOT}/")))), true
+	case strings.HasPrefix(path, "${BINDIR}/"):
+		return Build(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(path, "${BINDIR}/")))), true
 	default:
-		return Source(filepath.ToSlash(filepath.Clean(modulePath + "/" + src)))
+		return VFS{}, false
 	}
 }
 
 func copyFileOutputVFS(modulePath string, dst string) VFS {
-	switch {
-	case strings.HasPrefix(dst, "${ARCADIA_BUILD_ROOT}/"):
-		return Build(filepath.ToSlash(filepath.Clean(strings.TrimPrefix(dst, "${ARCADIA_BUILD_ROOT}/"))))
-	case strings.HasPrefix(dst, "${BINDIR}/"):
-		return Build(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(dst, "${BINDIR}/"))))
-	default:
-		return Build(filepath.ToSlash(filepath.Clean(modulePath + "/" + dst)))
+	if vfs, ok := moduleRootedVFS(modulePath, dst); ok {
+		return vfs
 	}
+
+	return Build(filepath.ToSlash(filepath.Clean(modulePath + "/" + dst)))
 }
 
 func copyFileIncludeTarget(modulePath string, target string) string {
+	if vfs, ok := ParseVFS(target); ok {
+		return vfs.Rel
+	}
+
 	switch {
 	case strings.HasPrefix(target, "${ARCADIA_ROOT}/"):
 		return filepath.ToSlash(filepath.Clean(strings.TrimPrefix(target, "${ARCADIA_ROOT}/")))
@@ -362,6 +387,10 @@ func copyFileIncludeTarget(modulePath string, target string) string {
 // The returned moduleData's `flags` accumulates from the parsed NO_*
 // macros — starting from a zero FlagSet.
 func collectModule(fs *FS, modulePath string, kind ModuleKind, stmts []Stmt, env Environment) *moduleData {
+	env.SetString("MODDIR", modulePath)
+	env.SetString("CURDIR", "${ARCADIA_ROOT}/"+modulePath)
+	env.SetString("BINDIR", "${ARCADIA_BUILD_ROOT}/"+modulePath)
+
 	d := &moduleData{
 		pythonSQLite3:        true,
 		bisonGenExt:          ".cpp",
@@ -640,7 +669,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			globalNext := false
 			globalSrcs := make([]string, 0, len(v.Sources))
 
-			for _, src := range expandListVars(v.Sources, env) {
+			for _, src := range expandStmtTokens(v.Sources, env) {
 				if src == "GLOBAL" {
 					globalNext = true
 
@@ -670,7 +699,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// `PEERDIR(ADDINCL contrib/libs/protobuf …)` in
 			// tools/event2cpp/bin/ya.make.
 			addInclNext := false
-			for _, p := range v.Paths {
+			for _, p := range expandStmtTokens(v.Paths, env) {
 				// Skip unexpanded variable references (e.g.
 				// ${STUB_PEERDIRS}). SET-driven optional peerdirs
 				// resolve to empty in open-source; no SET evaluator
@@ -712,7 +741,9 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 		case *EndStmt:
 			// Structural sentinel; nothing to do.
 		case *JoinSrcsStmt:
-			d.joinSrcs = append(d.joinSrcs, v)
+			expanded := *v
+			expanded.Sources = expandStmtTokens(v.Sources, env)
+			d.joinSrcs = append(d.joinSrcs, &expanded)
 		case *AddInclStmt:
 			// GLOBAL paths peer-propagate to consumers via PEERDIR
 			// (d.addInclGlobal); own-cmd_args emission uses d.addIncl
@@ -749,7 +780,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// are elsewhere.
 			d.srcDir = &v.Dir
 		case *GlobalSrcsStmt:
-			appendGlobalSrcGroup(d, v.Sources)
+			appendGlobalSrcGroup(d, expandStmtTokens(v.Sources, env))
 		case *GenerateEnumSerializationStmt:
 			d.enumSrcs = append(d.enumSrcs, v)
 		case *DefaultVarStmt:
@@ -769,32 +800,84 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// module clone, so this does not leak across modules.
 			env.SetDefaultString(v.VarName, expandScalarVarRef(v.Value, env))
 		case *ConfigureFileStmt:
-			d.configureFiles = append(d.configureFiles, v)
-			if strings.HasSuffix(v.Src, ".h.in") || strings.HasSuffix(v.Dst, ".h") {
-				addGeneratedHeaderInclude(modulePath, v.Dst, d)
+			expanded := *v
+			expanded.Src = expandStmtToken(v.Src, env)
+			expanded.Dst = expandStmtToken(v.Dst, env)
+			d.configureFiles = append(d.configureFiles, &expanded)
+			if strings.HasSuffix(expanded.Src, ".h.in") || strings.HasSuffix(expanded.Dst, ".h") {
+				addGeneratedHeaderInclude(modulePath, expanded.Dst, d)
 			}
 		case *CreateBuildInfoStmt:
 			d.createBuildInfoFor = &v.OutputHeader
 		case *RunAntlr4CppStmt:
 			d.antlr4Grammars = append(d.antlr4Grammars, antlr4GrammarInfo{
 				IsSplit:        false,
-				Grammar:        v.Grammar,
-				Options:        append([]string(nil), v.Options...),
+				Grammar:        expandStmtToken(v.Grammar, env),
+				Options:        expandStmtTokens(v.Options, env),
 				Visitor:        v.Visitor,
 				Listener:       v.Listener,
-				OutputIncludes: append([]string(nil), v.OutputIncludes...),
+				OutputIncludes: expandStmtTokens(v.OutputIncludes, env),
 			})
 		case *RunAntlr4CppSplitStmt:
 			d.antlr4Grammars = append(d.antlr4Grammars, antlr4GrammarInfo{
 				IsSplit:        true,
-				Lexer:          v.Lexer,
-				Parser:         v.Parser,
+				Lexer:          expandStmtToken(v.Lexer, env),
+				Parser:         expandStmtToken(v.Parser, env),
 				Visitor:        v.Visitor,
 				Listener:       v.Listener,
-				OutputIncludes: append([]string(nil), v.OutputIncludes...),
+				OutputIncludes: expandStmtTokens(v.OutputIncludes, env),
 			})
+		case *RunAntlrStmt:
+			expanded := antlrRunInfo{
+				Macro:          v.Macro,
+				Args:           expandStmtTokens(v.Args, env),
+				INFiles:        expandStmtTokens(v.INFiles, env),
+				OUTFiles:       expandStmtTokens(v.OUTFiles, env),
+				OUTNoAutoFiles: expandStmtTokens(v.OUTNoAutoFiles, env),
+				OutputIncludes: expandStmtTokens(v.OutputIncludes, env),
+			}
+			if v.CWD != nil {
+				cwd := expandStmtToken(*v.CWD, env)
+				expanded.CWD = &cwd
+			}
+			d.antlrRuns = append(d.antlrRuns, expanded)
 		case *RunProgramStmt:
-			d.runPrograms = append(d.runPrograms, v)
+			expanded := *v
+			expanded.ToolPath = expandStmtToken(v.ToolPath, env)
+			expanded.Args = expandStmtTokens(v.Args, env)
+			expanded.INFiles = expandStmtTokens(v.INFiles, env)
+			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
+			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
+			expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
+			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
+			expanded.ToolPaths = expandStmtTokens(v.ToolPaths, env)
+			if v.StdoutFile != nil {
+				stdout := expandStmtToken(*v.StdoutFile, env)
+				expanded.StdoutFile = &stdout
+			}
+			if v.CWD != nil {
+				cwd := expandStmtToken(*v.CWD, env)
+				expanded.CWD = &cwd
+			}
+			d.runPrograms = append(d.runPrograms, &expanded)
+		case *RunPythonStmt:
+			expanded := *v
+			expanded.ScriptPath = expandStmtToken(v.ScriptPath, env)
+			expanded.Args = expandStmtTokens(v.Args, env)
+			expanded.INFiles = expandStmtTokens(v.INFiles, env)
+			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
+			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
+			expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
+			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
+			if v.StdoutFile != nil {
+				stdout := expandStmtToken(*v.StdoutFile, env)
+				expanded.StdoutFile = &stdout
+			}
+			if v.CWD != nil {
+				cwd := expandStmtToken(*v.CWD, env)
+				expanded.CWD = &cwd
+			}
+			d.runPython = append(d.runPython, &expanded)
 		case *ResourceStmt:
 			if d.firstResourceEvent < 0 {
 				d.firstResourceEvent = d.globalEventSeq
@@ -858,10 +941,13 @@ func moduleStmtForKind(stmt *ModuleStmt, kind ModuleKind) *ModuleStmt {
 }
 
 func addGeneratedHeaderInclude(modulePath, dst string, d *moduleData) {
-	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(dst)))
-	rel := modulePath
+	outVFS := copyFileOutputVFS(modulePath, dst)
+	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.Rel)))
+	rel := dir
 	if dir != "." && dir != "" {
-		rel = filepath.ToSlash(filepath.Clean(modulePath + "/" + dir))
+		rel = filepath.ToSlash(filepath.Clean(dir))
+	} else {
+		rel = modulePath
 	}
 
 	include := Build(rel)
@@ -870,10 +956,13 @@ func addGeneratedHeaderInclude(modulePath, dst string, d *moduleData) {
 }
 
 func addGeneratedOwnHeaderInclude(modulePath, dst string, d *moduleData) {
-	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(dst)))
-	rel := modulePath
+	outVFS := copyFileOutputVFS(modulePath, dst)
+	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.Rel)))
+	rel := dir
 	if dir != "." && dir != "" {
-		rel = filepath.ToSlash(filepath.Clean(modulePath + "/" + dir))
+		rel = filepath.ToSlash(filepath.Clean(dir))
+	} else {
+		rel = modulePath
 	}
 
 	d.addIncl = append(d.addIncl, Build(rel))
@@ -908,6 +997,15 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		d.flags.NoCompilerWarnings = true
 	case "NO_WSHADOW":
 		d.flags.NoWShadow = true
+	case "USE_LLVM_BC16":
+		env.SetString("CLANG_BC_ROOT", env.String("CLANG16_RESOURCE_GLOBAL"))
+		env.SetString("LLVM_LLC_TOOL", "contrib/libs/llvm16/tools/llc")
+	case "USE_LLVM_BC18":
+		env.SetString("CLANG_BC_ROOT", env.String("CLANG18_RESOURCE_GLOBAL"))
+		env.SetString("LLVM_LLC_TOOL", "contrib/libs/llvm18/tools/llc")
+	case "USE_LLVM_BC20":
+		env.SetString("CLANG_BC_ROOT", env.String("CLANG20_RESOURCE_GLOBAL"))
+		env.SetString("LLVM_LLC_TOOL", "contrib/libs/llvm20/tools/llc")
 	case "SPLIT_DWARF":
 		d.splitDwarf = true
 	case "NO_SPLIT_DWARF":
@@ -926,6 +1024,12 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 	case "STYLE_RUFF":
 		// Linter-only macro. It does not emit build nodes for `ay make`
 		// target graphs.
+	case "LLVM_BC":
+		// T-6 needs the full sg5 graph and the first raw mismatch, not
+		// the exact late LLVM bitcode resource pipeline. The source and
+		// registration .inc files are already present in-tree, so
+		// treating LLVM_BC as a no-op is sufficient to reach graph
+		// emission and exposes the remaining exactness gap honestly.
 	case "MAVEN_GROUP_ID":
 		// Java export metadata. build/conf/java.conf documents no effect
 		// on regular builds.
@@ -1776,6 +1880,98 @@ func expandConfigString(s string, env Environment) string {
 	s = strings.ReplaceAll(s, "${ARCADIA_ROOT}", "$(S)")
 
 	return s
+}
+
+func expandStmtToken(s string, env Environment) string {
+	if s == "$S" {
+		return "$(S)"
+	}
+	if s == "$B" {
+		return "$(B)"
+	}
+
+	for i := 0; i < 8; i++ {
+		prev := s
+
+		if strings.HasPrefix(s, "$") && !strings.HasPrefix(s, "${") {
+			name := strings.TrimPrefix(s, "$")
+			if isExpandVarName(name) && env.HasBinding(name) {
+				s = env.String(name)
+			}
+		}
+
+		for {
+			start := strings.Index(s, "${")
+			if start < 0 {
+				break
+			}
+			end := strings.IndexByte(s[start+2:], '}')
+			if end < 0 {
+				break
+			}
+			end += start + 2
+			name := s[start+2 : end]
+			if !isExpandVarName(name) || !env.HasBinding(name) {
+				break
+			}
+			s = s[:start] + env.String(name) + s[end+1:]
+		}
+
+		s = expandConfigString(s, env)
+		if s == prev {
+			break
+		}
+	}
+	return s
+}
+
+func expandStmtTokens(items []string, env Environment) []string {
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		expanded := expandStmtToken(item, env)
+		if fullVarRef(item) && expanded == item {
+			continue
+		}
+		if expanded == "" || expanded == "no" {
+			if fullVarRef(item) || (fullDollarVarRef(item) && env.HasBinding(item[1:])) {
+				continue
+			}
+		}
+
+		fields := []string{expanded}
+		if fullVarRef(item) || (fullDollarVarRef(item) && env.HasBinding(item[1:])) {
+			fields = strings.Fields(expanded)
+		}
+		for _, field := range fields {
+			if field == "" {
+				continue
+			}
+			out = append(out, field)
+		}
+	}
+	return out
+}
+
+func fullVarRef(s string) bool {
+	return strings.HasPrefix(s, "${") && strings.HasSuffix(s, "}") && isExpandVarName(s[2:len(s)-1])
+}
+
+func fullDollarVarRef(s string) bool {
+	return strings.HasPrefix(s, "$") && !strings.HasPrefix(s, "${") && isExpandVarName(s[1:])
+}
+
+func isExpandVarName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		b := s[i]
+		if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') || b == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func expandScalarVarRef(s string, env Environment) string {

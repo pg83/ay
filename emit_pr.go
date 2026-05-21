@@ -19,6 +19,12 @@ type runProgramsForARResult struct {
 	MemberInputs [][]VFS
 }
 
+type runProgramAuxTool struct {
+	token string
+	ref   NodeRef
+	bin   VFS
+}
+
 func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) *runProgramsForARResult {
 	if len(d.runPrograms) == 0 {
 		return nil
@@ -79,6 +85,27 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	toolLDRef := res.LDRef
 	toolBinPath := *res.LDPath
 	toolInducedDeps := res.InducedDeps
+	auxTools := resolveRunProgramAuxTools(ctx, stmt.ToolPaths)
+	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
+	inVFSs := make([]VFS, 0, len(stmt.INFiles))
+	for _, f := range stmt.INFiles {
+		vfs := runProgramInputVFS(ctx, instance, d, f)
+		inVFSByToken[f] = vfs
+		inVFSs = append(inVFSs, vfs)
+	}
+	outVFSByToken := make(map[string]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
+	for _, f := range stmt.OUTFiles {
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path, f)
+	}
+	for _, f := range stmt.OUTNoAutoFiles {
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path, f)
+	}
+	var stdoutVFS *VFS
+	if stmt.StdoutFile != nil {
+		vfs := copyFileOutputVFS(instance.Path, *stmt.StdoutFile)
+		stdoutVFS = &vfs
+		outVFSByToken[*stmt.StdoutFile] = vfs
+	}
 
 	// Register PR outputs FIRST so the closure walk below resolves
 	// each output's $(B) path through the codegen registry.
@@ -89,13 +116,13 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// outputs (.h, .pyc) leave EmitsIncludes nil — opaque content.
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			registerGeneratedParsedOutput(ctx, instance, "PR", Build(instance.Path+"/"+f), prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps))
+			registerGeneratedParsedOutput(ctx, instance, "PR", outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt, toolInducedDeps))
 		}
 		for _, f := range stmt.OUTNoAutoFiles {
-			registerGeneratedParsedOutput(ctx, instance, "PR", Build(instance.Path+"/"+f), prEmitsIncludes(instance, d.srcDir, f, stmt, toolInducedDeps))
+			registerGeneratedParsedOutput(ctx, instance, "PR", outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt, toolInducedDeps))
 		}
 		if stmt.StdoutFile != nil {
-			registerGeneratedParsedOutput(ctx, instance, "PR", Build(instance.Path+"/"+*stmt.StdoutFile), prEmitsIncludes(instance, d.srcDir, *stmt.StdoutFile, stmt, toolInducedDeps))
+			registerGeneratedParsedOutput(ctx, instance, "PR", *stdoutVFS, prEmitsIncludes(ctx, instance, d, *stmt.StdoutFile, stmt, toolInducedDeps))
 		}
 	}
 
@@ -112,9 +139,9 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// whose generated header appears in the PR's transitive input
 	// set (dep_types.h_dumper.cpp PR depends on diag's EN
 	// stats_enums.h_serialized.cpp via dep_types.h → stats_enums.h).
-	prExtraDepRefs := resolveCodegenDepRefs(ctx, instance, inputClosure, toolLDRef)
+	prExtraDepRefs := resolveCodegenDepRefsExt(ctx, instance, inputClosure, inVFSs, toolLDRef)
 
-	prResult := EmitPR(instance, d.srcDir, stmt, toolBinPath, toolLDRef, inputClosure, prExtraDepRefs, ctx.emit)
+	prResult := EmitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, ctx.emit)
 	prRef := prResult.Ref
 	if d.prOutputInputs == nil {
 		d.prOutputInputs = map[string][]VFS{}
@@ -135,13 +162,13 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// known); SetProducerRef fills it atomically.
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			bindGeneratedOutput(ctx, instance, Build(instance.Path+"/"+f), prRef)
+			bindGeneratedOutput(ctx, instance, outVFSByToken[f], prRef)
 		}
 		for _, f := range stmt.OUTNoAutoFiles {
-			bindGeneratedOutput(ctx, instance, Build(instance.Path+"/"+f), prRef)
+			bindGeneratedOutput(ctx, instance, outVFSByToken[f], prRef)
 		}
 		if stmt.StdoutFile != nil {
-			bindGeneratedOutput(ctx, instance, Build(instance.Path+"/"+*stmt.StdoutFile), prRef)
+			bindGeneratedOutput(ctx, instance, *stdoutVFS, prRef)
 		}
 	}
 
@@ -215,7 +242,7 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 // `#include` their IN files, OUTPUT_INCLUDES headers, and the tool's
 // module-level INDUCED_DEPS list; non-CC outputs are opaque and return
 // nil.
-func prEmitsIncludes(instance ModuleInstance, srcDir *string, outFile string, stmt *RunProgramStmt, toolInducedDeps []string) []includeDirective {
+func prEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, outFile string, stmt *RunProgramStmt, toolInducedDeps []string) []includeDirective {
 	if !isCCSourceExt(outFile) {
 		return nil
 	}
@@ -224,7 +251,7 @@ func prEmitsIncludes(instance ModuleInstance, srcDir *string, outFile string, st
 
 	// IN files are module-relative; rebase to SOURCE_ROOT.
 	for _, f := range stmt.INFiles {
-		includes = append(includes, includeDirective{kind: includeQuoted, target: runProgramSourceRel(instance, srcDir, f)})
+		includes = append(includes, includeDirective{kind: includeQuoted, target: runProgramInputVFS(ctx, instance, d, f).Rel})
 	}
 
 	// OUTPUT_INCLUDES entries are repo-relative.
@@ -240,12 +267,50 @@ func prEmitsIncludes(instance ModuleInstance, srcDir *string, outFile string, st
 	return includes
 }
 
-func runProgramSourceRel(instance ModuleInstance, srcDir *string, rel string) string {
-	if srcDir != nil {
-		return *srcDir + "/" + rel
+func resolveRunProgramAuxTools(ctx *genCtx, toolPaths []string) []runProgramAuxTool {
+	if len(toolPaths) == 0 {
+		return nil
 	}
 
-	return instance.Path + "/" + rel
+	out := make([]runProgramAuxTool, 0, len(toolPaths))
+	seen := make(map[string]struct{}, len(toolPaths))
+
+	for _, toolPath := range toolPaths {
+		if _, dup := seen[toolPath]; dup {
+			continue
+		}
+		seen[toolPath] = struct{}{}
+
+		res := ctx.toolResult(filepath.Clean(toolPath))
+		out = append(out, runProgramAuxTool{
+			token: toolPath,
+			ref:   res.LDRef,
+			bin:   *res.LDPath,
+		})
+	}
+
+	return out
+}
+
+func runProgramInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, rel string) VFS {
+	switch {
+	case strings.HasPrefix(rel, "$(S)/"),
+		strings.HasPrefix(rel, "$(B)/"),
+		strings.HasPrefix(rel, "${ARCADIA_ROOT}/"),
+		strings.HasPrefix(rel, "${CURDIR}/"),
+		strings.HasPrefix(rel, "${ARCADIA_BUILD_ROOT}/"),
+		strings.HasPrefix(rel, "${BINDIR}/"):
+		return copyFileInputVFS(instance.Path, rel)
+	}
+
+	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path + "/" + rel)))
+	if reg := codegenRegForInstance(ctx, instance); reg != nil {
+		if _, found := reg.Lookup(buildVFS); found {
+			return buildVFS
+		}
+	}
+
+	return resolveModuleSourceVFS(ctx, instance, d, rel, d.srcDir)
 }
 
 func expandRunProgramCWD(instance ModuleInstance, cwd string) string {

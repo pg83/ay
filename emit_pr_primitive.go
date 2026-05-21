@@ -8,9 +8,9 @@ import "strings"
 // walking the tool PROGRAM's LDPath). toolLDRef: the tool's LD node.
 //
 // cmd_args: [toolBinPath, <args with ${ARCADIA_ROOT}→$(S)>]. Bare
-// filenames matching IN/OUT/OUT_NOAUTO/STDOUT are expanded to
-// $(S)/.../ or $(B)/.../ respectively. inputs: tool + IN abs paths +
-// closure. outputs: STDOUT or OUT/OUT_NOAUTO abs paths.
+// filenames matching IN/OUT/OUT_NOAUTO/STDOUT are expanded via the
+// caller-supplied VFS maps. inputs: tool + IN abs paths + closure.
+// outputs: STDOUT or OUT/OUT_NOAUTO abs paths.
 // deps/foreign_deps.tool carry toolLDRef.
 type prEmitResult struct {
 	Ref    NodeRef
@@ -19,10 +19,13 @@ type prEmitResult struct {
 
 func EmitPR(
 	instance ModuleInstance,
-	srcDir *string,
 	stmt *RunProgramStmt,
 	toolBinPath VFS,
 	toolLDRef NodeRef,
+	auxTools []runProgramAuxTool,
+	inVFSByToken map[string]VFS,
+	outVFSByToken map[string]VFS,
+	stdoutVFS *VFS,
 	inputClosure []VFS,
 	extraDepRefs []NodeRef,
 	emit Emitter,
@@ -39,42 +42,31 @@ func EmitPR(
 		}
 	}
 
-	inSet := make(map[string]bool, len(stmt.INFiles))
-	for _, f := range stmt.INFiles {
-		inSet[f] = true
-	}
-	outSet := make(map[string]bool, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
-	for _, f := range stmt.OUTFiles {
-		outSet[f] = true
-	}
-	for _, f := range stmt.OUTNoAutoFiles {
-		outSet[f] = true
-	}
-	if stmt.StdoutFile != nil {
-		outSet[*stmt.StdoutFile] = true
-	}
-
 	cmdArgs := make([]string, 0, 1+len(stmt.Args))
 	cmdArgs = append(cmdArgs, toolBinPath.String())
 	for _, a := range stmt.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
+		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
+		a = strings.ReplaceAll(a, "${CURDIR}", Source(instance.Path).String())
+		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path).String())
 		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path)
 		a = strings.ReplaceAll(a, "$CURDIR", Source(instance.Path).String())
-		if inSet[a] && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = Source(runProgramSourceRel(instance, srcDir, a)).String()
-		} else if outSet[a] && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = Build(instance.Path + "/" + a).String()
+		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path).String())
+		for _, tool := range auxTools {
+			if strings.Contains(a, tool.token) {
+				a = strings.ReplaceAll(a, tool.token, tool.bin.String())
+			}
+		}
+		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
+			a = vfs.String()
+		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
+			a = vfs.String()
 		}
 		cmdArgs = append(cmdArgs, a)
 	}
 
-	inAbsPaths := make([]VFS, 0, len(stmt.INFiles))
-	for _, f := range stmt.INFiles {
-		inAbsPaths = append(inAbsPaths, Source(runProgramSourceRel(instance, srcDir, f)))
-	}
-
-	inputs := make([]VFS, 0, 1+len(inAbsPaths)+len(inputClosure))
-	seen := make(map[VFS]struct{}, 1+len(inAbsPaths)+len(inputClosure))
+	inputs := make([]VFS, 0, 1+len(auxTools)+len(stmt.INFiles)+len(inputClosure))
+	seen := make(map[VFS]struct{}, 1+len(auxTools)+len(stmt.INFiles)+len(inputClosure))
 	appendUnique := func(p VFS) {
 		if _, dup := seen[p]; dup {
 			return
@@ -83,8 +75,11 @@ func EmitPR(
 		inputs = append(inputs, p)
 	}
 	appendUnique(toolBinPath)
-	for _, p := range inAbsPaths {
-		appendUnique(p)
+	for _, tool := range auxTools {
+		appendUnique(tool.bin)
+	}
+	for _, f := range stmt.INFiles {
+		appendUnique(inVFSByToken[f])
 	}
 	for _, p := range inputClosure {
 		appendUnique(p)
@@ -92,27 +87,41 @@ func EmitPR(
 
 	var outputs []VFS
 	var stdoutPath string
-	if stmt.StdoutFile != nil {
-		stdoutVFS := Build(instance.Path + "/" + *stmt.StdoutFile)
+	if stdoutVFS != nil {
 		stdoutPath = stdoutVFS.String()
-		outputs = append(outputs, stdoutVFS)
+		outputs = append(outputs, *stdoutVFS)
 	}
 	for _, f := range stmt.OUTFiles {
-		outputs = append(outputs, Build(instance.Path+"/"+f))
+		outputs = append(outputs, outVFSByToken[f])
 	}
 	for _, f := range stmt.OUTNoAutoFiles {
-		outputs = append(outputs, Build(instance.Path+"/"+f))
+		outputs = append(outputs, outVFSByToken[f])
 	}
 
-	depRefs := make([]NodeRef, 0, 1+len(extraDepRefs))
-	if toolLDRef != (NodeRef{}) {
-		depRefs = append(depRefs, toolLDRef)
+	toolRefs := make([]NodeRef, 0, len(auxTools)+1)
+	seenToolRefs := make(map[NodeRef]struct{}, len(auxTools)+1)
+	appendToolRef := func(ref NodeRef) {
+		if ref == (NodeRef{}) {
+			return
+		}
+		if _, dup := seenToolRefs[ref]; dup {
+			return
+		}
+		seenToolRefs[ref] = struct{}{}
+		toolRefs = append(toolRefs, ref)
 	}
+	for _, tool := range auxTools {
+		appendToolRef(tool.ref)
+	}
+	appendToolRef(toolLDRef)
+
+	depRefs := make([]NodeRef, 0, len(toolRefs)+len(extraDepRefs))
+	depRefs = append(depRefs, toolRefs...)
 	depRefs = append(depRefs, extraDepRefs...)
 
-	foreignDepTool := make([]NodeRef, 0, 1)
-	if toolLDRef != (NodeRef{}) {
-		foreignDepTool = append(foreignDepTool, toolLDRef)
+	var foreignDepRefs map[string][]NodeRef
+	if len(toolRefs) > 0 {
+		foreignDepRefs = map[string][]NodeRef{"tool": append([]NodeRef(nil), toolRefs...)}
 	}
 
 	cmd := Cmd{
@@ -149,7 +158,7 @@ func EmitPR(
 			"ram":     float64(32),
 		},
 		DepRefs:        depRefs,
-		ForeignDepRefs: map[string][]NodeRef{"tool": foreignDepTool},
+		ForeignDepRefs: foreignDepRefs,
 	}
 
 	return prEmitResult{
