@@ -233,14 +233,14 @@ func TestGen_BisonArchiveMatchesReferenceAfterLocalSoIsolation(t *testing.T) {
 }
 
 func testGenT20(sourceRoot, targetDir string) *Graph {
-	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, false)
+	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)
 	target := newT20ResourcePlatform(OSLinux, ISAAArch64, "yes", nil, true)
 
 	return GenWithMode(sourceRoot, targetDir, host, target, defaultScanCtxMode, func(Warn) {})
 }
 
 func testGenT20Tool(sourceRoot, targetDir string) *Graph {
-	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, false)
+	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)
 
 	return GenWithMode(sourceRoot, targetDir, host, host, defaultScanCtxMode, func(Warn) {})
 }

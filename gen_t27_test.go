@@ -19,7 +19,7 @@ func TestGen_YaBinLinkTailMatchesReference(t *testing.T) {
 		t.Fatalf("stat ya.make: %v", err)
 	}
 
-	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, false)
+	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)
 	target := newT20ResourcePlatform(OSLinux, ISAAArch64, "no", nil, true)
 	our := GenWithMode(sourceRoot, targetDir, host, target, defaultScanCtxMode, func(Warn) {})
 	ourNode := findGraphNodeByOutputs(t, our, "$(B)/devtools/ya/bin/ya-bin", "$(B)/devtools/ya/bin/ya-bin.debug")
