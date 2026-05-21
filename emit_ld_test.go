@@ -220,6 +220,82 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	}
 }
 
+func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
+	emit := NewBufferedEmitter()
+	mainRef := emit.Emit(&Node{
+		KV: map[string]string{"p": "STUB"},
+	})
+	mainPath := "$(B)/some/prog/main.cpp.o"
+
+	instance := targetInstance("some/prog")
+
+	ldRef := EmitLD(
+		instance,
+		"", // empty falls back to lastPathComponent → "prog"
+		[]NodeRef{mainRef}, []VFS{ParseVFSOrSource(mainPath)},
+		nil, nil,
+		nil,
+		nil, nil,
+		nil, nil,
+		nil, nil,
+		nil,
+		nil, nil,
+		nil, nil, // objcopy slot
+		nil,
+		nil,   // moduleCFlags
+		nil,   // peerCFlagsGlobal
+		nil,   // autoPeerCFlags
+		nil,   // peerLDFlagsGlobal
+		nil,   // ownLDFlags
+		nil,   // ownRPathFlags
+		nil,   // peerRPathFlagsGlobal
+		nil,   // EXTRALIBS / OBJADDE_LIB_GLOBAL
+		false, // noCompilerWarnings
+		false, // wantsStrip
+		true,  // SPLIT_DWARF
+		testHostP,
+		emit,
+	)
+
+	got := emit.nodes[ldRef.id]
+
+	if len(got.Cmds) != 7 {
+		t.Fatalf("Cmds = %d, want 7", len(got.Cmds))
+	}
+
+	gotOutputs := vfsStrings(got.Outputs)
+	for _, wantOut := range []string{
+		"$(B)/some/prog/prog",
+		"$(B)/some/prog/prog.debug",
+	} {
+		if !slices.Contains(gotOutputs, wantOut) {
+			t.Fatalf("outputs = %#v, want to contain %q", gotOutputs, wantOut)
+		}
+	}
+
+	if !slices.Equal(got.Cmds[4].CmdArgs, []string{testTargetP.Tools.Objcopy, "--only-keep-debug", "$(B)/some/prog/prog", "$(B)/some/prog/prog.debug"}) {
+		t.Fatalf("cmd[4].cmd_args = %#v", got.Cmds[4].CmdArgs)
+	}
+	if !slices.Equal(got.Cmds[5].CmdArgs, []string{testTargetP.Tools.Strip, "--strip-debug", "$(B)/some/prog/prog"}) {
+		t.Fatalf("cmd[5].cmd_args = %#v", got.Cmds[5].CmdArgs)
+	}
+	if !slices.Equal(got.Cmds[6].CmdArgs, []string{testTargetP.Tools.Objcopy, "--remove-section=.gnu_debuglink", "--add-gnu-debuglink", "$(B)/some/prog/prog.debug", "$(B)/some/prog/prog"}) {
+		t.Fatalf("cmd[6].cmd_args = %#v", got.Cmds[6].CmdArgs)
+	}
+
+	for _, idx := range []int{4, 5, 6} {
+		if len(got.Cmds[idx].Env) != 1 {
+			t.Fatalf("cmd[%d].env len = %d, want 1 (env=%#v)", idx, len(got.Cmds[idx].Env), got.Cmds[idx].Env)
+		}
+		if got.Cmds[idx].Env["ARCADIA_ROOT_DISTBUILD"] != "$(S)" {
+			t.Fatalf("cmd[%d].env[ARCADIA_ROOT_DISTBUILD] = %q, want $(S)", idx, got.Cmds[idx].Env["ARCADIA_ROOT_DISTBUILD"])
+		}
+		if got.Cmds[idx].Cwd != "" {
+			t.Fatalf("cmd[%d].cwd = %q, want empty", idx, got.Cmds[idx].Cwd)
+		}
+	}
+}
+
 // TestEmitLD_AcceptsHostPIC verifies PR-25's lift of PR-24's
 // host-PIC guard. Cross-platform recursion (D31) requires building
 // host PROGRAM modules (ragel6/yasm), so EmitLD now accepts
