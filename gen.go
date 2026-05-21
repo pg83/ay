@@ -2321,6 +2321,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// PROGRAM link-closure boundary.
 		ldPeerArchiveRefs := peerArchiveRefs
 		ldPeerArchivePaths := peerArchivePaths
+		ldPeerLinkCmdPaths := peerLinkCmdPaths
 
 		if d.allocatorName == "FAKE" {
 			ldPeerArchiveRefs = make([]NodeRef, 0, len(peerArchiveRefs))
@@ -2346,9 +2347,25 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 					Build("library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a"),
 				},
 			)
+			ldPeerLinkCmdPaths = movePathsAfter(
+				ldPeerLinkCmdPaths,
+				Build("build/cow/on/libbuild-cow-on.a"),
+				[]VFS{
+					Build("library/cpp/malloc/api/libcpp-malloc-api.a"),
+					Build("contrib/libs/jemalloc/libcontrib-libs-jemalloc.a"),
+					Build("library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a"),
+				},
+			)
 			ldPeerArchiveRefs, ldPeerArchivePaths = moveArchivePathsBefore(
 				ldPeerArchiveRefs,
 				ldPeerArchivePaths,
+				Build("library/cpp/json/common/libcpp-json-common.a"),
+				[]VFS{
+					Build("tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a"),
+				},
+			)
+			ldPeerLinkCmdPaths = movePathsBefore(
+				ldPeerLinkCmdPaths,
 				Build("library/cpp/json/common/libcpp-json-common.a"),
 				[]VFS{
 					Build("tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a"),
@@ -2453,7 +2470,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			binaryName,
 			ldCCRefs, ldCCOutputs,
 			ldPeerArchiveRefs, ldPeerArchivePaths,
-			peerLinkCmdPaths,
+			ldPeerLinkCmdPaths,
 			mergedLDPlugins.Refs, mergedLDPlugins.Paths,
 			peerGlobalRefs, peerGlobalPaths,
 			peerWholeArchiveRefs, peerWholeArchivePaths,
@@ -2868,6 +2885,42 @@ func moveArchivePathsAfter(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS)
 	return outRefs, outPaths
 }
 
+func movePathsAfter(paths []VFS, anchor VFS, moved []VFS) []VFS {
+	if len(moved) == 0 {
+		return paths
+	}
+
+	moveSet := make(map[VFS]struct{}, len(moved))
+	for _, path := range moved {
+		moveSet[path] = struct{}{}
+	}
+
+	outPaths := make([]VFS, 0, len(paths))
+	movedPaths := make(map[VFS]VFS, len(moved))
+
+	for _, path := range paths {
+		if _, ok := moveSet[path]; ok {
+			movedPaths[path] = path
+			continue
+		}
+
+		outPaths = append(outPaths, path)
+		if path == anchor {
+			for _, movedPath := range moved {
+				if p, ok := movedPaths[movedPath]; ok {
+					outPaths = append(outPaths, p)
+				}
+			}
+		}
+	}
+
+	if len(outPaths) != len(paths) {
+		return paths
+	}
+
+	return outPaths
+}
+
 func moveArchivePathsBefore(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS) ([]NodeRef, []VFS) {
 	if len(moved) == 0 || len(refs) != len(paths) {
 		return refs, paths
@@ -2917,6 +2970,52 @@ func moveArchivePathsBefore(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS
 	}
 
 	return outRefs, outPaths
+}
+
+func movePathsBefore(paths []VFS, anchor VFS, moved []VFS) []VFS {
+	if len(moved) == 0 {
+		return paths
+	}
+
+	moveSet := make(map[VFS]struct{}, len(moved))
+	for _, path := range moved {
+		moveSet[path] = struct{}{}
+	}
+
+	movedPaths := make(map[VFS]VFS, len(moved))
+	for _, path := range paths {
+		if _, ok := moveSet[path]; ok {
+			movedPaths[path] = path
+		}
+	}
+
+	if len(movedPaths) != len(moved) {
+		return paths
+	}
+
+	outPaths := make([]VFS, 0, len(paths))
+
+	for _, path := range paths {
+		if _, ok := moveSet[path]; ok {
+			continue
+		}
+
+		if path == anchor {
+			for _, movedPath := range moved {
+				if p, ok := movedPaths[movedPath]; ok {
+					outPaths = append(outPaths, p)
+				}
+			}
+		}
+
+		outPaths = append(outPaths, path)
+	}
+
+	if len(outPaths) != len(paths) {
+		return paths
+	}
+
+	return outPaths
 }
 
 func resourceBeforeGlobalSrcs(d *moduleData) bool {
