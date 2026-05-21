@@ -2375,6 +2375,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// ${rootrel;ext=.o:SRCS_GLOBAL}.
 		ldCCRefs := ccRefs
 		ldCCOutputs := ccOutputs
+		ldCCRefs, ldCCOutputs = reorderLDMembers(ldCCRefs, ldCCOutputs)
 		ldMemberInputs := memberInputs
 		var ldObjcopyRefs []NodeRef
 		var ldObjcopyPaths []VFS
@@ -3327,6 +3328,40 @@ func hasSkippedSource(d *moduleData) bool {
 // `instance.Path`. `primaryCount` distinguishes member primaries from
 // header/closure entries so the .global.a aggregator can drop
 // regular-SRCS primaries.
+func reorderLDMembers(refs []NodeRef, paths []VFS) ([]NodeRef, []VFS) {
+	if len(paths) == 0 {
+		return refs, paths
+	}
+
+	type member struct {
+		ref  NodeRef
+		path VFS
+	}
+
+	regular := make([]member, 0, len(paths))
+	legacy := make([]member, 0, len(paths))
+	for i, path := range paths {
+		m := member{path: path}
+		if i < len(refs) {
+			m.ref = refs[i]
+		}
+		if strings.Contains(path.Rel, "/_/_/") {
+			legacy = append(legacy, m)
+			continue
+		}
+		regular = append(regular, m)
+	}
+
+	out := append(regular, legacy...)
+	outRefs := make([]NodeRef, len(out))
+	outPaths := make([]VFS, len(out))
+	for i, m := range out {
+		outRefs[i] = m.ref
+		outPaths[i] = m.path
+	}
+
+	return outRefs, outPaths
+}
 
 // reorderARMembers reorders (refs, paths) so AR cmd_args match ymake's
 // canonical member ordering:

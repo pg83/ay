@@ -15,6 +15,14 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	headerVFS := Build(instance.Path + "/" + headerRel)
 	generatedVFS := Build(instance.Path + "/" + generatedRel)
 	srcVFS := Source(instance.Path + "/" + srcRel)
+	headerParsed := []includeDirective{{kind: includeQuoted, target: srcVFS.Rel}}
+	if scanner := ctx.scannerFor(instance); scanner != nil {
+		headerParsed = append(headerParsed, scanner.parsers.sourceParsedBuckets(srcVFS.Rel).bucket(parsedIncludesLocal)...)
+	}
+	registerGeneratedParsedOutput(ctx, instance, "YC", headerVFS, headerParsed)
+	registerGeneratedParsedOutput(ctx, instance, "YC", generatedVFS, []includeDirective{
+		{kind: includeQuoted, target: headerVFS.Rel},
+	})
 
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
@@ -44,7 +52,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 			"p":  "YC",
 			"pc": "light-green",
 		},
-		Platform:     string(instance.Platform.Target),
+		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -55,19 +63,21 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 			"module_dir": instance.Path,
 		},
 	})
+	bindGeneratedOutput(ctx, instance, headerVFS, ycRef)
+	bindGeneratedOutput(ctx, instance, generatedVFS, ycRef)
 
 	ccIn := in
 	ccIn.ExtraDepRefs = []NodeRef{ycRef}
-	ccIn.IncludeInputs = append([]VFS{headerVFS}, walkClosure(ctx, instance, srcVFS, in)...)
+	ccIn.IncludeInputs = walkClosure(ctx, instance, generatedVFS, in)
 
 	ccRef, ccOut := EmitCC(instance, generatedRel, generatedVFS, ccIn, ctx.host, ctx.emit)
-	ccInputs := append([]VFS{generatedVFS}, ccIn.IncludeInputs...)
+	ccInputs := append([]VFS{srcVFS}, ccIn.IncludeInputs...)
 
 	return &sourceEmit{
 		Ref:          ccRef,
 		OutPath:      ccOut,
 		CcIns:        ccInputs,
-		PrimaryCount: 2,
+		PrimaryCount: 1,
 	}
 }
 
