@@ -113,6 +113,55 @@ def _find_root(graph: list[dict], target: str) -> dict:
     _die(f"no LD or AR root node found for target {target!r}")
 
 
+def _find_roots(graph: list[dict], target: str) -> list[dict]:
+    """Return all closure roots for *target*.
+
+    This is the binary LD/AR root, plus any TS test-run nodes whose
+    kv.path lives under "<target>/". For non-test targets this remains a
+    single-root pipeline.
+    """
+    ld_prefix = "$(B)/" + target + "/"
+    ar_infix = "/" + target + "/"
+
+    has_binary = False
+    for node in graph:
+        kv_p = node.get("kv", {}).get("p", "")
+        outputs = node.get("outputs") or []
+        if not outputs:
+            continue
+        out0 = outputs[0]
+        if kv_p == "LD" and out0.startswith(ld_prefix):
+            has_binary = True
+            break
+        if kv_p == "AR" and ar_infix in out0:
+            has_binary = True
+
+    ts_roots = [
+        node for node in graph
+        if node.get("kv", {}).get("p") == "TS"
+        and (node.get("kv", {}).get("path") or "").startswith(target + "/")
+    ]
+
+    roots: list[dict] = []
+    if has_binary:
+        roots.append(_find_root(graph, target))
+    roots.extend(ts_roots)
+
+    if not roots:
+        _die(f"no LD/AR/TS root node found for target {target!r}")
+
+    seen: set[str] = set()
+    deduped: list[dict] = []
+    for node in roots:
+        uid = node["uid"]
+        if uid in seen:
+            continue
+        seen.add(uid)
+        deduped.append(node)
+
+    return deduped
+
+
 def _bfs_closure(
     by_uid: dict[str, dict],
     root: dict,
@@ -253,6 +302,7 @@ def _drop_fetch_nodes(closure: dict[str, dict]) -> dict[str, dict]:
 # ---------------------------------------------------------------------------
 
 _UID_LEN = 22
+_SYNTH_ROOT = "__ay_synthetic_superroot__"
 
 
 def _sha256_uid(canonical_bytes: bytes) -> str:
@@ -423,10 +473,23 @@ def _normalize(data: dict[str, Any], target: str) -> tuple[bytes, dict]:
     graph: list[dict] = data.get("graph") or []
     by_uid = {n["uid"]: n for n in graph}
 
-    # Step 2 — find root + BFS closure
-    root = _find_root(graph, target)
-    root_uid = root["uid"]
-    closure_raw = _bfs_closure(by_uid, root)
+    # Step 2 — find root(s) + BFS closure. -ttt TS nodes sit above the LD
+    # binary, so include the binary root and any target-local test-run roots.
+    roots = _find_roots(graph, target)
+    root_uids = [root["uid"] for root in roots]
+    if len(roots) == 1:
+        root_uid = root_uids[0]
+        closure_raw = _bfs_closure(by_uid, roots[0])
+    else:
+        closure_raw = {}
+        for root in roots:
+            closure_raw.update(_bfs_closure(by_uid, root))
+        closure_raw[_SYNTH_ROOT] = {
+            "uid": _SYNTH_ROOT,
+            "deps": sorted(root_uids),
+            "kv": {},
+        }
+        root_uid = _SYNTH_ROOT
     closure_raw = _drop_fetch_nodes(closure_raw)
 
     t1 = time.monotonic()
@@ -482,14 +545,19 @@ def _normalize(data: dict[str, Any], target: str) -> tuple[bytes, dict]:
     # freedom; at convergence OUR and REF still serialize byte-identically.
     result_graph.sort(key=lambda canon: canon["uid"])
 
-    # Build result[] using new UIDs; fall back to root if original result
-    # UIDs are outside the closure (e.g. build/cow/on against full sg.json).
-    orig_result: list[str] = data.get("result") or []
-    result_uids: list[str] = [
-        old_to_new[u] for u in orig_result if u in closure_raw
-    ]
-    if not result_uids:
-        result_uids = [old_to_new[root_uid]]
+    if root_uid == _SYNTH_ROOT:
+        synth_new = old_to_new[root_uid]
+        result_graph = [node for node in result_graph if node["uid"] != synth_new]
+        result_uids = sorted(old_to_new[uid] for uid in root_uids)
+    else:
+        # Build result[] using new UIDs; fall back to root if original result
+        # UIDs are outside the closure (e.g. build/cow/on against full sg.json).
+        orig_result: list[str] = data.get("result") or []
+        result_uids: list[str] = [
+            old_to_new[u] for u in orig_result if u in closure_raw
+        ]
+        if not result_uids:
+            result_uids = [old_to_new[root_uid]]
 
     # Step 6 — keep only graph and result at top level
     output = {
