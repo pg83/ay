@@ -63,4 +63,22 @@ func TestGen_YaBinLinkTailMatchesReference(t *testing.T) {
 	if enumIdx+1 != jsonIdx {
 		t.Fatalf("expected %q immediately before %q in ya-bin link tail: %v", enumRuntime, jsonCommon, gotTail)
 	}
+
+	if len(ourNode.Cmds) < 7 || len(refNode.Cmds) < 7 {
+		t.Fatalf("expected both nodes to have at least 7 cmds")
+	}
+
+	for _, cmdIdx := range []int{4, 5, 6} {
+		gotArgs := normalizeT20Strings(ourNode.Cmds[cmdIdx].CmdArgs)
+		wantArgs := normalizeT20Strings(refNode.Cmds[cmdIdx].CmdArgs)
+		if !reflect.DeepEqual(gotArgs, wantArgs) {
+			t.Fatalf("ya-bin cmd[%d] args mismatch:\n  got:  %#v\n  want: %#v", cmdIdx, gotArgs, wantArgs)
+		}
+
+		gotEnv := normalizeT20Env(ourNode.Cmds[cmdIdx].Env)
+		wantEnv := normalizeT20Env(refNode.Cmds[cmdIdx].Env)
+		if !reflect.DeepEqual(gotEnv, wantEnv) {
+			t.Fatalf("ya-bin cmd[%d] env mismatch:\n  got:  %#v\n  want: %#v", cmdIdx, gotEnv, wantEnv)
+		}
+	}
 }

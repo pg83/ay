@@ -120,10 +120,10 @@ func EmitLD(
 	cmd3 := composeLDCmdLinkOrCopy(tools, binaryDir, dynamicPaths...)
 	splitDwarfCmds := composeLDSplitDwarfCmds(tools, outputPath, wantsSplitDwarf)
 
-	// vcs_info.py and fs_tools.py only carry ARCADIA_ROOT_DISTBUILD;
-	// the clang compile and link_exe.py invocations both carry the
-	// full target-CC env (matches the reference cmd-level env on
-	// each cmd).
+	// vcs_info.py, fs_tools.py, and the split-dwarf tail only carry
+	// ARCADIA_ROOT_DISTBUILD; the clang compile and link_exe.py
+	// invocations both carry the full target-CC env (matches the
+	// reference cmd-level env on each cmd).
 	envVcsOnly := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
@@ -134,6 +134,9 @@ func EmitLD(
 		{CmdArgs: cmd1, Env: envFull},
 		{CmdArgs: cmd2, Cwd: "$(B)", Env: envFull},
 		{CmdArgs: cmd3, Env: envVcsOnly},
+	}
+	for i := range splitDwarfCmds {
+		splitDwarfCmds[i].Env = envVcsOnly
 	}
 	cmds = append(cmds, splitDwarfCmds...)
 
