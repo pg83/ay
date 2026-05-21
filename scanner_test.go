@@ -374,6 +374,58 @@ func TestScanner_IncludeNextSuppressed(t *testing.T) {
 	}
 }
 
+// TestScanner_AbseilTaskHClaimedByFreertosYml pins ticket 6: ydb's
+// abseil-cpp sysinfo.cc has `#include <task.h>` inside a dead
+// `#if defined(__FREERTOS__)`. The scanner is conditional-blind, no file
+// named task.h is on abseil's search path, and the ydb tree satisfies it
+// only via build/sysincl/freertos.yml (`^contrib/restricted/abseil-cpp`
+// -> `task.h`, a suppression mapping). Without freertos.yml in
+// sysInclYamlSequence the directive is an unresolved include, which the
+// production onWarn (make.go) escalates to a fatal Throw — aborting the
+// ydb util/ut walk before graph emission.
+//
+// Asserts ONLY on <task.h>: in this isolated context other includes
+// (e.g. <sanitizer/tsan_interface.h>) report unresolved because the
+// harness omits the compiler-rt search path the full walk supplies; those
+// are real files (178x in sg4.json) and out of scope here.
+func TestScanner_AbseilTaskHClaimedByFreertosYml(t *testing.T) {
+	const sourceRoot = "/home/pg/monorepo/ydb"
+	const absSrc = "contrib/restricted/abseil-cpp/absl/base/internal/sysinfo.cc"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
+		t.Skipf("ydb sysincl tree %s not present: %v", sourceRoot, err)
+	}
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, absSrc)); err != nil {
+		t.Skipf("abseil source %s not present: %v", absSrc, err)
+	}
+
+	sysincl := LoadSysInclSetFor(sourceRoot, "x86_64", func(Warn) {})
+
+	var missing []string
+
+	onWarn := func(w Warn) {
+		if w.Kind == WarnMissingInclude {
+			missing = append(missing, w.Message)
+		}
+	}
+
+	scanner := newIncludeScannerWith(newIncludeParserManager(sourceRoot), sysincl, onWarn)
+
+	ctx := ScanContext{
+		SourceRel:       absSrc,
+		OwnAddIncl:      VFSesFromStrings([]string{"contrib/restricted/abseil-cpp"}),
+		BaseSearchPaths: includeScannerBasePaths(),
+	}
+	scanner.WalkClosure(ctx)
+
+	for _, m := range missing {
+		if strings.Contains(m, "<task.h>") {
+			t.Errorf("ticket 6 regression: <task.h> unresolved; freertos.yml missing from sysInclYamlSequence: %s", m)
+		}
+	}
+}
+
 // TestScanner_RegularIncludeStillResolvesViaSysincl pins the
 // converse: a REGULAR `#include <X.h>` (not `#include_next`) must
 // still resolve through the sysincl chain. cstring's regular
