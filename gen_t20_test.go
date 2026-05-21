@@ -16,6 +16,7 @@ var t20ResourceMacroRE = regexp.MustCompile(`\$\((CLANG|LLD_ROOT|YMAKE_PYTHON3)-
 
 type t20RefCmd struct {
 	CmdArgs []string `json:"cmd_args"`
+	Env     map[string]string `json:"env"`
 }
 
 type t20RefNode struct {
@@ -418,6 +419,19 @@ func normalizeT20Strings(in []string) []string {
 	out := make([]string, len(in))
 	for i, s := range in {
 		out[i] = normalizeT20Token(s)
+	}
+
+	return out
+}
+
+func normalizeT20Env(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = normalizeT20Token(v)
 	}
 
 	return out
