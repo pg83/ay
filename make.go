@@ -46,6 +46,8 @@ type makeFlags struct {
 	hflags      map[string]string
 	targets     []string
 	verbose     bool
+	testLevel   int  // count of -t (0=none, 1=small, 2=+medium, 3=+large); ydb passes -ttt
+	sandboxing  bool // --sandboxing: run test nodes under the fs sandbox
 }
 
 // cmdMake parses CLI args, runs Gen (host walks recurse implicitly), and
@@ -670,8 +672,8 @@ func parseMakeFlags(args []string) *makeFlags {
 	state := getopt.NewState(append([]string{"ay-make"}, args...))
 
 	config := getopt.Config{
-		Opts:     getopt.OptStr("GrdkThD:j:B:o:I:"),
-		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose"),
+		Opts:     getopt.OptStr("GrdktThD:j:B:o:I:"),
+		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing"),
 		Mode:     getopt.ModeInOrder,
 		Func:     getopt.FuncGetOptLong,
 	}
@@ -704,6 +706,8 @@ func parseMakeFlags(args []string) *makeFlags {
 			mf.musl = true
 		case opt.Char == 'T':
 			mf.ninja = true
+		case opt.Char == 't':
+			mf.testLevel++
 		case opt.Char == 'o' || opt.Name == "output":
 			mf.outRoot = opt.OptArg
 		case opt.Char == 'I' || opt.Name == "install":
@@ -732,6 +736,8 @@ func parseMakeFlags(args []string) *makeFlags {
 			parseKV(mf.hflags, opt.OptArg)
 		case opt.Name == "verbose":
 			mf.verbose = true
+		case opt.Name == "sandboxing":
+			mf.sandboxing = true
 		case opt.Char == 1:
 			// Positional argument (target).
 			mf.targets = append(mf.targets, opt.OptArg)
@@ -794,9 +800,11 @@ Execution flags:
     -j, --jobs <N>                Parallel exec slots (default: NumCPU); 0 = build-only.
     -k, --keep-going              Continue past per-node failures.
     -T, --ninja                   Ninja-style per-line output (default: in-place repaint).
+    -t, -tt, -ttt                 Generate test nodes (small / +medium / +large).
     --stats                       Print per-kind execution stats after the build.
     -G, --dump-graph              Log a graph summary to stderr after Gen.
     --verbose                     Emit Gen-time diagnostics (unsupported sysincl records, …) to stderr.
+    --sandboxing                  Run test nodes under the filesystem sandbox.
 
 Configuration flags:
     -r, --release                 GG_BUILD_TYPE=release.
