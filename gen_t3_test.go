@@ -105,6 +105,51 @@ END()
 	}
 }
 
+func TestCollectModule_CPPProtoPluginRecorded(t *testing.T) {
+	root := t.TempDir()
+	modDir := filepath.Join(root, "proto")
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		t.Fatalf("mkdir proto: %v", err)
+	}
+
+	const yamake = `PROTO_LIBRARY()
+CPP_PROTO_PLUGIN(validation ydb/public/lib/validation .validation.pb.h DEPS ydb/public/api/protos/annotations EXTRA_OUT_FLAG lite=true)
+SRCS(test.proto)
+END()
+`
+	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
+		t.Fatalf("write ya.make: %v", err)
+	}
+
+	fs := NewFS(root)
+	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+	d := collectModule(fs, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
+
+	if len(d.cppProtoPlugins) != 1 {
+		t.Fatalf("cppProtoPlugins = %d, want 1", len(d.cppProtoPlugins))
+	}
+
+	plugin := d.cppProtoPlugins[0]
+	if plugin.Name != "validation" {
+		t.Fatalf("plugin.Name = %q, want validation", plugin.Name)
+	}
+	if plugin.ToolPath != "ydb/public/lib/validation" {
+		t.Fatalf("plugin.ToolPath = %q, want ydb/public/lib/validation", plugin.ToolPath)
+	}
+	if !equalStrings(plugin.OutputSuffixes, []string{".validation.pb.h"}) {
+		t.Fatalf("plugin.OutputSuffixes = %v, want [.validation.pb.h]", plugin.OutputSuffixes)
+	}
+	if !equalStrings(plugin.Deps, []string{"ydb/public/api/protos/annotations"}) {
+		t.Fatalf("plugin.Deps = %v, want [ydb/public/api/protos/annotations]", plugin.Deps)
+	}
+	if plugin.ExtraOutFlag != "lite=true" {
+		t.Fatalf("plugin.ExtraOutFlag = %q, want lite=true", plugin.ExtraOutFlag)
+	}
+	if !containsString(d.peerdirs, "ydb/public/api/protos/annotations") {
+		t.Fatalf("peerdirs = %v, want ydb/public/api/protos/annotations", d.peerdirs)
+	}
+}
+
 func TestCollectModule_FlatcFlagsRecorded(t *testing.T) {
 	root := t.TempDir()
 	modDir := filepath.Join(root, "flatcmod")
