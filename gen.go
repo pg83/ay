@@ -1086,11 +1086,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			hOnlyGlobalPath = vfsPtr(Build(instance.Path + "/" + globalBaseName))
 		}
 
-		// Emit EN nodes for GENERATE_ENUM_SERIALIZATION(*). This branch
-		// has no own CC/AR pipeline, so pass nil consumerInputs and skip
-		// downstream-CC emission for the generated `_serialized.cpp`.
-		emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, nil)
-
 		// Emit PB/EV nodes for PROTO_LIBRARY .proto/.ev sources.
 		// PROTO_LIBRARY always reaches this branch. emitProtoSrcs also
 		// emits downstream CC + AR scaffolding when the module is a
@@ -1101,6 +1096,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// Surfaces PROTO_LIBRARY's emitted `.a` for downstream LD walks
 		// (otherwise the AR is orphaned from every LD inputs).
 		protoResult := emitProtoSrcs(ctx, instance, d, peerContribs)
+
+		// Emit EN nodes for GENERATE_ENUM_SERIALIZATION(*). This branch
+		// has no own CC/AR pipeline, so pass nil consumerInputs and skip
+		// downstream-CC emission for the generated `_serialized.cpp`.
+		emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, nil)
 
 		// Emit JV, CF, BI, PR nodes declared at module level. Header-only
 		// branch: no downstream CC/AR, so consumerInputs is nil.
