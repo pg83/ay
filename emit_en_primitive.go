@@ -12,14 +12,15 @@ package main
 // inputs: [dep-EN-outputs..., enumParserBin, $(S)/<hdr>, ...includeClosure]
 
 // EmitEN emits one EN node for a GENERATE_ENUM_SERIALIZATION(*) invocation.
-// headerSrc.Rel drives serialized output paths and --include-path.
+// headerInput.Rel drives serialized output paths and --include-path.
 // withHeader adds --header + .h output. enumParserLD may be zero when the
 // host walk failed. depENRefs/depENOutputs wire cross-EN serialized-header
-// deps; headerIncludeClosure is the include-scanner result for headerSrc.
+// deps; headerIncludeClosure is the include-scanner result for headerInput.
 // Returns NodeRef and output paths (1 or 2).
 func EmitEN(
 	instance ModuleInstance,
-	headerSrc VFS,
+	headerInput VFS,
+	moduleTag *string,
 	withHeader bool,
 	enumParserLD NodeRef,
 	enumParserBin VFS,
@@ -29,14 +30,14 @@ func EmitEN(
 	emit Emitter,
 ) (NodeRef, []VFS) {
 	// The output path mirrors:
-	//   $(B)/<headerSrc.Rel>_serialized.cpp[ .h with _WITH_HEADER]
-	serializedCPPVFS := Build(headerSrc.Rel + "_serialized.cpp")
+	//   $(B)/<headerInput.Rel>_serialized.cpp[ .h with _WITH_HEADER]
+	serializedCPPVFS := Build(headerInput.Rel + "_serialized.cpp")
 
 	cmdArgs := []string{
 		enumParserBin.String(),
-		headerSrc.String(),
+		headerInput.String(),
 		"--include-path",
-		headerSrc.Rel,
+		headerInput.Rel,
 		"--output",
 		serializedCPPVFS.String(),
 	}
@@ -44,7 +45,7 @@ func EmitEN(
 	outputs := []VFS{serializedCPPVFS}
 
 	if withHeader {
-		serializedHVFS := Build(headerSrc.Rel + "_serialized.h")
+		serializedHVFS := Build(headerInput.Rel + "_serialized.h")
 		cmdArgs = append(cmdArgs, "--header", serializedHVFS.String())
 		outputs = append(outputs, serializedHVFS)
 	}
@@ -58,15 +59,14 @@ func EmitEN(
 	inputs := make([]VFS, 0, len(depENOutputs)+2+len(headerIncludeClosure))
 	inputs = append(inputs, depENOutputs...)
 	inputs = append(inputs, enumParserBin)
-	inputs = append(inputs, headerSrc)
+	inputs = append(inputs, headerInput)
 	inputs = append(inputs, headerIncludeClosure...)
 
 	depRefs := make([]NodeRef, 0, len(depENRefs)+1)
-	depRefs = append(depRefs, depENRefs...)
-
 	if enumParserLD != (NodeRef{}) {
 		depRefs = append(depRefs, enumParserLD)
 	}
+	depRefs = append(depRefs, depENRefs...)
 
 	var foreignDepRefs map[string][]NodeRef
 	if enumParserLD != (NodeRef{}) {
@@ -102,6 +102,9 @@ func EmitEN(
 		},
 		DepRefs:        depRefs,
 		ForeignDepRefs: foreignDepRefs,
+	}
+	if moduleTag != nil {
+		node.TargetProperties["module_tag"] = *moduleTag
 	}
 
 	return emit.Emit(bindNodePlatform(node, instance.Platform)), outputs

@@ -473,14 +473,14 @@ func parseProtoImportLine(line []byte) (string, includeKind, bool) {
 	}
 
 	rest := strings.TrimSpace(trimmed[len("import"):])
-	for _, qualifier := range [...]string{"public", "weak"} {
-		if strings.HasPrefix(rest, qualifier) && !isParserIdentContinuation(rest, len(qualifier)) {
-			rest = strings.TrimSpace(rest[len(qualifier):])
-			break
-		}
+	if strings.HasPrefix(rest, "public") && !isParserIdentContinuation(rest, len("public")) {
+		rest = strings.TrimSpace(rest[len("public"):])
+	} else if strings.HasPrefix(rest, "weak") && !isParserIdentContinuation(rest, len("weak")) {
+		rest = strings.TrimSpace(rest[len("weak"):])
 	}
 
-	return parseDelimitedIncludeTarget(rest)
+	target, kind, ok := parseDelimitedIncludeTarget(rest)
+	return target, kind, ok
 }
 
 func parseRagelNativeIncludeLine(line string) (string, bool) {
