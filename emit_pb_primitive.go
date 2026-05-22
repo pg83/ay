@@ -491,7 +491,7 @@ func EmitPB(
 		ForeignDepRefs: foreignDepRefs,
 	}
 
-	return emit.Emit(node)
+	return emit.Emit(bindNodePlatform(node, instance.Platform))
 }
 
 func slicesContains(xs []string, want string) bool {

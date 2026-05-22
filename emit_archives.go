@@ -255,7 +255,7 @@ func emitArchive(
 		DepRefs: depRefs,
 	}
 
-	arRef := emit.Emit(n)
+	arRef := emit.Emit(bindNodePlatform(n, instance.Platform))
 
 	// Register the AR's output (.pyc.inc header for runtime_py3) in
 	// the codegen registry. Consumer CCs (e.g. __res.cpp) carry the

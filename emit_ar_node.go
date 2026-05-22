@@ -122,5 +122,5 @@ func emitARNode(
 		DepRefs:          depRefs,
 	}
 
-	return emit.Emit(n)
+	return emit.Emit(bindNodePlatform(n, instance.Platform))
 }

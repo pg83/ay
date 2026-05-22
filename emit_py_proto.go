@@ -226,7 +226,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	if len(toolRefs) > 0 {
 		pyPBNode.ForeignDepRefs = map[string][]NodeRef{"tool": toolRefs}
 	}
-	pyPBRef := ctx.emit.Emit(pyPBNode)
+	pyPBRef := ctx.emit.Emit(bindNodePlatform(pyPBNode, instance.Platform))
 
 	yapyRes := emitGeneratedPyProtoYapyc(ctx, instance, []VFS{pyOut, grpcPyOut}, pyPBRef, pyProtoSourceInputs(inputs))
 	if yapyRes == nil {
@@ -306,7 +306,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 		if len(toolRefs) > 0 {
 			node.ForeignDepRefs = map[string][]NodeRef{"tool": toolRefs}
 		}
-		res.Refs = append(res.Refs, ctx.emit.Emit(node))
+		res.Refs = append(res.Refs, ctx.emit.Emit(bindNodePlatform(node, instance.Platform)))
 		res.Outputs = append(res.Outputs, out)
 	}
 
@@ -475,7 +475,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		inputs = append(inputs, rescompilerBinVFS)
 		inputs = append(inputs, auxClosure...)
 		inputs = dedupVFS(inputs)
-		ref := ctx.emit.Emit(&Node{
+		ref := ctx.emit.Emit(bindNodePlatform(&Node{
 			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
 			Env:              env,
 			Inputs:           inputs,
@@ -486,7 +486,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			Platform:         string(instance.Platform.Target),
 			Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
 			DepRefs:          deps,
-		})
+		}, instance.Platform))
 
 		ccIn := ModuleCCInputs{
 			Flags:                d.flags,

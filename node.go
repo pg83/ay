@@ -7,8 +7,8 @@ package main
 //
 // `omitempty` is used only on fields sg.json itself omits on most nodes
 // (host_platform, foreign_deps); everything else always serializes so empty
-// maps/arrays render as `[]`/`{}` rather than vanish. stats_uid is json:"-":
-// its 32-char hex derivation is out of scope and the normalizer drops it too.
+// maps/arrays render as `[]`/`{}` rather than vanish. stats_uid is part of
+// the raw graph shape; hidden stats-preimage helpers stay json:"-".
 //
 // Rule authors assemble deps via NodeRef; Finalize resolves refs to UID
 // strings during the Merkle pass.
@@ -44,10 +44,15 @@ type Node struct {
 	Requirements     map[string]interface{} `json:"requirements"`
 	Sandboxing       bool                   `json:"sandboxing"`
 	SelfUID          string                 `json:"self_uid"`
-	StatsUID         string                 `json:"-"`
+	StatsUID         string                 `json:"stats_uid"`
 	Tags             []string               `json:"tags"`
 	TargetProperties map[string]string      `json:"target_properties"`
 	UID              string                 `json:"uid"`
+
+	// Hidden stats-preimage data. Raw refs hash pre-strip tags rather than
+	// the visible post-strip raw JSON tags, so emitters bind the originating
+	// Platform here before Finalize computes StatsUID.
+	StatsTags []string `json:"-"`
 
 	// Rule-author API; not serialized. Finalize resolves these into
 	// Deps/ForeignDeps using the children's computed UIDs.
@@ -65,4 +70,17 @@ func nodeHasHostTag(tags []string) bool {
 		}
 	}
 	return false
+}
+
+// bindNodePlatform keeps the public node platform string and the hidden
+// stats-preimage tags in sync with the source Platform.
+func bindNodePlatform(n *Node, p *Platform) *Node {
+	if n == nil || p == nil {
+		return n
+	}
+
+	n.Platform = string(p.Target)
+	n.StatsTags = statsTagsForPlatform(p)
+
+	return n
 }

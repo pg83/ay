@@ -284,7 +284,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		node.DepRefs = append([]NodeRef(nil), in.ExtraDepRefs...)
 	}
 
-	return emit.Emit(node), outVFS
+	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS
 }
 
 // composeCCPaths derives the output VFS for a CC compile. The input

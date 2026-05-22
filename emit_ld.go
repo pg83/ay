@@ -227,7 +227,7 @@ func EmitLD(
 		n.TargetProperties["module_tag"] = "py3_bin"
 	}
 
-	return emit.Emit(n)
+	return emit.Emit(bindNodePlatform(n, instance.Platform))
 }
 
 // LDOutputPath returns the binary output path for a PROGRAM

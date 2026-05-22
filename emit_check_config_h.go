@@ -25,7 +25,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 			"ARCADIA_ROOT_DISTBUILD": "$(S)",
 		}
 
-		chRef := ctx.emit.Emit(&Node{
+		chRef := ctx.emit.Emit(bindNodePlatform(&Node{
 			Cmds: []Cmd{
 				{
 					CmdArgs: []string{
@@ -54,7 +54,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 			TargetProperties: map[string]string{
 				"module_dir": instance.Path,
 			},
-		})
+		}, instance.Platform))
 
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{chRef}

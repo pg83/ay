@@ -74,7 +74,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			targetProps["module_tag"] = "py3"
 		}
 
-		cyRef := ctx.emit.Emit(&Node{
+		cyRef := ctx.emit.Emit(bindNodePlatform(&Node{
 			Cmds: []Cmd{
 				{
 					CmdArgs: cmdArgs,
@@ -96,7 +96,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			},
 			Tags:             instance.Platform.Tags,
 			TargetProperties: targetProps,
-		})
+		}, instance.Platform))
 		bindGeneratedOutput(ctx, instance, generatedVFS, cyRef)
 
 		ccIn := in

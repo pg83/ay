@@ -153,7 +153,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			node.ForeignDepRefs = map[string][]NodeRef{"tool": toolRefs}
 		}
 
-		pyRef := ctx.emit.Emit(node)
+		pyRef := ctx.emit.Emit(bindNodePlatform(node, instance.Platform))
 
 		// Register the .yapyc3 output in the codegen registry so the
 		// downstream objcopy CC's input-driven resolveCodegenDepRefsExt
@@ -256,7 +256,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 				pyNode.TargetProperties["module_tag"] = "py3"
 			}
 
-			pyRef = ctx.emit.Emit(pyNode)
+			pyRef = ctx.emit.Emit(bindNodePlatform(pyNode, pyInstance.Platform))
 			ctx.pyRegisterOutputs[regCppVFS] = pyRef
 		}
 

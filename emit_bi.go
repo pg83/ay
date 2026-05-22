@@ -97,7 +97,7 @@ func EmitBI(
 		DepRefs: []NodeRef{},
 	}
 
-	return emit.Emit(node)
+	return emit.Emit(bindNodePlatform(node, instance.Platform))
 }
 
 // biFlagsForInstance composes the CXX flag bundle for a BI node.

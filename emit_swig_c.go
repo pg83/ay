@@ -52,7 +52,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 			srcVFS.String(),
 		}
 
-		swRef := ctx.emit.Emit(&Node{
+		swRef := ctx.emit.Emit(bindNodePlatform(&Node{
 			Cmds: []Cmd{
 				{
 					CmdArgs: cmdArgs,
@@ -79,7 +79,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 			TargetProperties: map[string]string{
 				"module_dir": instance.Path,
 			},
-		})
+		}, instance.Platform))
 		if d.pyGeneratedSrcs == nil {
 			d.pyGeneratedSrcs = make(map[string][]VFS)
 		}

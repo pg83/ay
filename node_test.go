@@ -33,6 +33,7 @@ var expectedKeyOrder = []string{
 	"requirements",
 	"sandboxing",
 	"self_uid",
+	"stats_uid",
 	"tags",
 	"target_properties",
 	"uid",
@@ -51,6 +52,7 @@ var expectedKeyOrderMinimal = []string{
 	"requirements",
 	"sandboxing",
 	"self_uid",
+	"stats_uid",
 	"tags",
 	"target_properties",
 	"uid",
@@ -154,7 +156,7 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 	}
 	// Spot-check that empty arrays/maps render as []/{}.
 	s := string(raw)
-	for _, frag := range []string{`"cmds":[]`, `"deps":[]`, `"env":{}`, `"inputs":[]`, `"kv":{}`, `"outputs":[]`, `"requirements":{}`, `"tags":[]`, `"target_properties":{}`} {
+	for _, frag := range []string{`"cmds":[]`, `"deps":[]`, `"env":{}`, `"inputs":[]`, `"kv":{}`, `"outputs":[]`, `"requirements":{}`, `"stats_uid":""`, `"tags":[]`, `"target_properties":{}`} {
 		if !strings.Contains(s, frag) {
 			t.Errorf("expected output to contain %q, got: %s", frag, s)
 		}
