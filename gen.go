@@ -557,11 +557,11 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	// SRC_C_SSE41 / SSE2 / SSSE3 / AVX / XOP / SSE3 / SSE4: handled in
 	// applyUnknownStmt → d.simdSrcs (one CC node per variant). Not in
 	// the whitelist.
-	"NO_CLANG_COVERAGE":  {}, // contrib/tools/yasm
+	"NO_CLANG_COVERAGE":      {}, // contrib/tools/yasm
 	"NO_CLANG_MCDC_COVERAGE": {}, // clang MCDC coverage suppression metadata.
-	"NO_PROFILE_RUNTIME": {}, // contrib/tools/yasm
-	"WITHOUT_VERSION":    {}, // contrib/libs/musl/include neighbours; metadata-only.
-	"NO_CLANG_TIDY":      {}, // clang-tidy suppression metadata.
+	"NO_PROFILE_RUNTIME":     {}, // contrib/tools/yasm
+	"WITHOUT_VERSION":        {}, // contrib/libs/musl/include neighbours; metadata-only.
+	"NO_CLANG_TIDY":          {}, // clang-tidy suppression metadata.
 
 	// USE_PYTHON3 / NO_PYTHON_INCLUDES / NO_CHECK_IMPORTS / PYBUILD_NO_PYC /
 	// RESOURCE / RESOURCE_FILES / PY_REGISTER / RUN_PROGRAM /
@@ -636,17 +636,16 @@ const defaultScanCtxMode = "interned"
 // source_filter records the runtime cannot model, …); callers route
 // it to stderr under `--verbose` and to a no-op otherwise.
 func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string, onWarn func(Warn)) NodeRef {
-	return runGenIntoWithResources(srcRoot, targetDir, hostP, targetP, emitter, mode, onWarn, nil, false)
+	return runGenIntoWithResources(srcRoot, targetDir, hostP, targetP, emitter, mode, onWarn, nil, false, true)
 }
 
-func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) NodeRef {
+func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) NodeRef {
 	if mode != "local" && mode != "interned" {
 		ThrowFmt("gen: --scan-ctx-mode must be \"local\" or \"interned\", got %q", mode)
 	}
 
 	plainEmit := emitter
-	resources.emitAll(hostP, plainEmit)
-	resourceEmit := newResourceAwareEmitter(plainEmit, resources)
+	resourceEmit := resourceGraphEmitter(hostP, plainEmit, resources, materializeResourceFetches)
 
 	fs := NewFS(srcRoot)
 	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
@@ -712,12 +711,23 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 // mining; the walker reads every flag, tool path, and tag off the
 // Platform pointers. `onWarn` receives one line per diagnostic.
 func GenWithMode(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn)) *Graph {
-	return GenWithModeWithResources(sourceRoot, targetDir, hostP, targetP, mode, onWarn, nil, false)
+	return genWithModeWithResources(sourceRoot, targetDir, hostP, targetP, mode, onWarn, nil, false, true)
 }
 
 func GenWithModeWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
+	return genWithModeWithResources(sourceRoot, targetDir, hostP, targetP, mode, onWarn, resources, testMode, true)
+}
+
+// GenDumpGraphWithMode mirrors `ay make -j0 -G`: it keeps test-mode graph
+// shape, but leaves resource FETCH scaffolding out of the buffered graph so
+// finalized UIDs continue to match the serialized deps/output content.
+func GenDumpGraphWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
+	return genWithModeWithResources(sourceRoot, targetDir, hostP, targetP, mode, onWarn, resources, testMode, false)
+}
+
+func genWithModeWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) *Graph {
 	emitter := NewBufferedEmitter()
-	runGenIntoWithResources(sourceRoot, targetDir, hostP, targetP, emitter, mode, onWarn, resources, testMode)
+	runGenIntoWithResources(sourceRoot, targetDir, hostP, targetP, emitter, mode, onWarn, resources, testMode, materializeResourceFetches)
 
 	return Finalize(emitter)
 }

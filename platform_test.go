@@ -81,7 +81,7 @@ func TestStatsTagsForPlatform_TargetBaseFlags(t *testing.T) {
 
 func TestStatsTagsForPlatform_HostTool(t *testing.T) {
 	p := NewPlatform(OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "")
-	p.StatsFlags = buildHostStatsFlags(map[string]string{"MUSL": "yes"}, false)
+	p.StatsFlags = buildHostStatsFlags(map[string]string{"MUSL": "yes"}, nil, false)
 
 	want := []string{
 		"default-linux-x86_64",
@@ -103,7 +103,7 @@ func TestStatsTagsForPlatform_HostTool(t *testing.T) {
 
 func TestStatsTagsForPlatform_HostSandboxing(t *testing.T) {
 	p := NewPlatform(OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "")
-	p.StatsFlags = buildHostStatsFlags(map[string]string{"MUSL": "yes"}, true)
+	p.StatsFlags = buildHostStatsFlags(map[string]string{"MUSL": "yes"}, nil, true)
 
 	want := []string{
 		"default-linux-x86_64",
@@ -125,6 +125,138 @@ func TestStatsTagsForPlatform_HostSandboxing(t *testing.T) {
 	}
 }
 
+func TestStatsTagsForPlatform_HostPlatformFlagBundle(t *testing.T) {
+	p := NewPlatform(OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "")
+	p.StatsFlags = buildHostStatsFlags(map[string]string{
+		"APPLE_SDK_LOCAL":    "yes",
+		"MUSL":               "yes",
+		"OPENSOURCE":         "yes",
+		"OS_SDK":             "local",
+		"USE_CLANG_CL":       "yes",
+		"USE_PREBUILT_TOOLS": "no",
+	}, nil, true)
+
+	want := []string{
+		"default-linux-x86_64",
+		"release",
+		"APPLE_SDK_LOCAL=yes",
+		"CLANG_COVERAGE=no",
+		"CONSISTENT_DEBUG=yes",
+		"FAKEID=sandboxing",
+		"NO_DEBUGINFO=yes",
+		"OPENSOURCE=yes",
+		"OS_SDK=local",
+		"SANDBOXING=yes",
+		"TIDY=no",
+		"TOOL_BUILD_MODE=yes",
+		"TRAVERSE_RECURSE=no",
+		"USE_CLANG_CL=yes",
+		"USE_PREBUILT_TOOLS=no",
+		"musl",
+		"pic",
+	}
+
+	if got := statsTagsForPlatform(p); !reflect.DeepEqual(got, want) {
+		t.Fatalf("statsTagsForPlatform(host flag bundle) mismatch:\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestStatsTagsForPlatform_HostCLIPlatformFlag(t *testing.T) {
+	p := NewPlatform(OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "")
+	p.StatsFlags = buildHostStatsFlags(map[string]string{
+		"MUSL":       "yes",
+		"OPENSOURCE": "yes",
+	}, map[string]string{
+		"USE_PYTHON3_PREV":   "yes",
+		"USE_CLANG_CL":       "yes",
+		"USE_PREBUILT_TOOLS": "no",
+	}, true)
+
+	want := []string{
+		"default-linux-x86_64",
+		"release",
+		"CLANG_COVERAGE=no",
+		"CONSISTENT_DEBUG=yes",
+		"FAKEID=sandboxing",
+		"NO_DEBUGINFO=yes",
+		"OPENSOURCE=yes",
+		"SANDBOXING=yes",
+		"TIDY=no",
+		"TOOL_BUILD_MODE=yes",
+		"TRAVERSE_RECURSE=no",
+		"USE_CLANG_CL=yes",
+		"USE_PREBUILT_TOOLS=no",
+		"USE_PYTHON3_PREV=yes",
+		"musl",
+		"pic",
+	}
+
+	if got := statsTagsForPlatform(p); !reflect.DeepEqual(got, want) {
+		t.Fatalf("statsTagsForPlatform(host CLI flag bundle) mismatch:\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestStatsTagsForPlatform_HostEmptyCLIPlatformFlag(t *testing.T) {
+	p := NewPlatform(OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "")
+	p.StatsFlags = buildHostStatsFlags(map[string]string{
+		"MUSL":       "yes",
+		"OPENSOURCE": "yes",
+	}, map[string]string{
+		"FOO": "",
+	}, true)
+
+	want := []string{
+		"default-linux-x86_64",
+		"release",
+		"CLANG_COVERAGE=no",
+		"CONSISTENT_DEBUG=yes",
+		"FAKEID=sandboxing",
+		"FOO=",
+		"NO_DEBUGINFO=yes",
+		"OPENSOURCE=yes",
+		"SANDBOXING=yes",
+		"TIDY=no",
+		"TOOL_BUILD_MODE=yes",
+		"TRAVERSE_RECURSE=no",
+		"musl",
+		"pic",
+	}
+
+	if got := statsTagsForPlatform(p); !reflect.DeepEqual(got, want) {
+		t.Fatalf("statsTagsForPlatform(host empty CLI flag) mismatch:\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestStatsTagsForPlatform_HostCLIPlatformFlagOSSDK(t *testing.T) {
+	p := NewPlatform(OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "")
+	p.StatsFlags = buildHostStatsFlags(map[string]string{
+		"MUSL":       "yes",
+		"OPENSOURCE": "yes",
+	}, map[string]string{
+		"OS_SDK": "local",
+	}, true)
+
+	want := []string{
+		"default-linux-x86_64",
+		"release",
+		"CLANG_COVERAGE=no",
+		"CONSISTENT_DEBUG=yes",
+		"FAKEID=sandboxing",
+		"NO_DEBUGINFO=yes",
+		"OPENSOURCE=yes",
+		"OS_SDK=local",
+		"SANDBOXING=yes",
+		"TIDY=no",
+		"TOOL_BUILD_MODE=yes",
+		"TRAVERSE_RECURSE=no",
+		"musl",
+		"pic",
+	}
+
+	if got := statsTagsForPlatform(p); !reflect.DeepEqual(got, want) {
+		t.Fatalf("statsTagsForPlatform(host CLI OS_SDK flag) mismatch:\n got: %#v\nwant: %#v", got, want)
+	}
+}
 func TestPlatformMultiarchLibPath_UsesCompilerRoot(t *testing.T) {
 	p := NewPlatform(OSLinux, ISAX8664, map[string]string{
 		"PIC":              "yes",

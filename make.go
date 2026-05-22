@@ -100,7 +100,13 @@ func copyAllowedStatsFlags(dst, src map[string]string, allowlist map[string]stru
 	}
 }
 
-func buildHostStatsFlags(cliFlags map[string]string, sandboxing bool) map[string]string {
+func copyStatsFlags(dst, src map[string]string) {
+	for k, v := range src {
+		dst[k] = v
+	}
+}
+
+func buildHostStatsFlags(hostPlatformFlags, cliFlags map[string]string, sandboxing bool) map[string]string {
 	flags := map[string]string{
 		"CLANG_COVERAGE":   "no",
 		"CONSISTENT_DEBUG": "yes",
@@ -109,9 +115,13 @@ func buildHostStatsFlags(cliFlags map[string]string, sandboxing bool) map[string
 		"TOOL_BUILD_MODE":  "yes",
 		"TRAVERSE_RECURSE": "no",
 	}
-	for k, v := range cliFlags {
-		flags[k] = v
-	}
+	// Upstream host stats_uids hash the merged host_platform_flags stream
+	// plus these fixed defaults. Build from the ya.conf + CLI host flag
+	// sources directly so toolchain paths from Platform.Flags never leak
+	// into stats_uid, while arbitrary explicit --host-platform-flag values
+	// still participate, including explicit KEY= empty values.
+	copyStatsFlags(flags, hostPlatformFlags)
+	copyStatsFlags(flags, cliFlags)
 	if sandboxing {
 		flags["SANDBOXING"] = "yes"
 		flags["FAKEID"] = "sandboxing"
@@ -161,7 +171,7 @@ func cmdMake(args []string) int {
 		hostFlags["GG_BUILD_TYPE"] = "release"
 	}
 	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, "", "")
-	hostP.StatsFlags = buildHostStatsFlags(mf.hflags, mf.sandboxing)
+	hostP.StatsFlags = buildHostStatsFlags(hostYaFlags, mf.hflags, mf.sandboxing)
 	resourceFetches := newResourceFetchPlan(mf.srcRoot, conf, hostP)
 
 	// Target platform: `--target-platform` selects axes (defaults to
@@ -220,7 +230,7 @@ func cmdMake(args []string) int {
 	if mf.threads == 0 {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
-				g := GenWithModeWithResources(mf.srcRoot, target, hostP, targetP, defaultScanCtxMode, onWarn, resourceFetches, mf.testLevel > 0)
+				g := GenDumpGraphWithResources(mf.srcRoot, target, hostP, targetP, defaultScanCtxMode, onWarn, resourceFetches, mf.testLevel > 0)
 				applyGraphConf(g, conf)
 				writeGraph("-", g)
 			}
@@ -285,7 +295,7 @@ func genStream(srcRoot string, targets []string, hostP, targetP *Platform, resou
 
 func genStreamOne(srcRoot, target string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn), testMode bool) []string {
 	emitter := NewStreamingEmitter(onNode)
-	runGenIntoWithResources(srcRoot, target, hostP, targetP, emitter, defaultScanCtxMode, onWarn, resources, testMode)
+	runGenIntoWithResources(srcRoot, target, hostP, targetP, emitter, defaultScanCtxMode, onWarn, resources, testMode, true)
 
 	return emitter.Finish()
 }
