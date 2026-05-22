@@ -3883,6 +3883,307 @@ END()
 	assertNodeHasNoRawProtoAstPlaceholders(ar)
 }
 
+func TestGen_ProtoLibrary_CPPProtoPlugin0WiresToolDeps(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "protos/ya.make", `PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
+GRPC()
+CPP_PROTO_PLUGIN0(config_proto_plugin tools/config_plugin DEPS deps/generated_runtime)
+SRCS(test.proto)
+END()
+`)
+	writeTestModuleFile(t, root, "protos/test.proto", `syntax = "proto3";
+package test;
+message Row {}
+`)
+
+	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
+	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(t, root, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
+
+	writeTestModuleFile(t, root, "tools/config_plugin/ya.make", `PROGRAM(config_proto_plugin)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(
+    deps/plugin_runtime
+)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(t, root, "tools/config_plugin/main.cpp", "int main(){return 0;}\n")
+
+	writeTestModuleFile(t, root, "contrib/libs/grpc/ya.make", "LIBRARY()\nSRCS(grpc.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "contrib/libs/grpc/grpc.cpp", "int grpc(){return 0;}\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeTestModuleFile(t, root, "deps/generated_runtime/ya.make", "LIBRARY()\nSRCS(gen.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "deps/generated_runtime/gen.cpp", "int gen(){return 0;}\n")
+	writeTestModuleFile(t, root, "deps/plugin_runtime/ya.make", "LIBRARY()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "deps/plugin_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	g := testGen(root, "protos")
+
+	pb := findGraphNodeByOutputs(t, g,
+		"$(B)/protos/test.pb.h",
+		"$(B)/protos/test.pb.cc",
+		"$(B)/protos/test.grpc.pb.cc",
+		"$(B)/protos/test.grpc.pb.h",
+	)
+	styleguide := mustNodeByOutput(t, g, "$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide")
+	grpcCpp := mustNodeByOutput(t, g, "$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp")
+	protoc := mustNodeByOutput(t, g, "$(B)/contrib/tools/protoc/protoc")
+	configPlugin := mustNodeByOutput(t, g, "$(B)/tools/config_plugin/config_proto_plugin")
+	pluginRuntime := mustNodeByOutput(t, g, "$(B)/deps/plugin_runtime/libdeps-plugin_runtime.a")
+	_ = mustNodeByOutput(t, g, "$(B)/deps/generated_runtime/libdeps-generated_runtime.a")
+
+	if !containsString(pb.Cmds[0].CmdArgs, "--plugin=protoc-gen-config_proto_plugin=$(B)/tools/config_plugin/config_proto_plugin") {
+		t.Fatalf("pb cmd args missing config proto plugin: %v", pb.Cmds[0].CmdArgs)
+	}
+	if !containsString(pb.Cmds[0].CmdArgs, "--config_proto_plugin_out=$(B)/") {
+		t.Fatalf("pb cmd args missing config proto plugin out flag: %v", pb.Cmds[0].CmdArgs)
+	}
+
+	sourceIdx := indexOfArg(pb.Cmds[0].CmdArgs, "protos/test.proto")
+	grpcIdx := indexOfArg(pb.Cmds[0].CmdArgs, "--plugin=protoc-gen-grpc_cpp=$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp")
+	configIdx := indexOfArg(pb.Cmds[0].CmdArgs, "--plugin=protoc-gen-config_proto_plugin=$(B)/tools/config_plugin/config_proto_plugin")
+	if sourceIdx < 0 || grpcIdx < 0 || configIdx < 0 {
+		t.Fatalf("missing source/grpc/config args in pb cmd: %v", pb.Cmds[0].CmdArgs)
+	}
+	if !(sourceIdx < grpcIdx && grpcIdx < configIdx) {
+		t.Fatalf("pb plugin arg order = source:%d grpc:%d config:%d, want source < grpc < config", sourceIdx, grpcIdx, configIdx)
+	}
+
+	inputs := make([]string, 0, len(pb.Inputs))
+	for _, input := range pb.Inputs {
+		inputs = append(inputs, input.String())
+	}
+	wantInputsPrefix := []string{
+		"$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide",
+		"$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp",
+		"$(B)/contrib/tools/protoc/protoc",
+		"$(B)/tools/config_plugin/config_proto_plugin",
+		"$(S)/build/scripts/cpp_proto_wrapper.py",
+		"$(S)/protos/test.proto",
+	}
+	if len(inputs) < len(wantInputsPrefix) || !equalStrings(inputs[:len(wantInputsPrefix)], wantInputsPrefix) {
+		t.Fatalf("pb inputs prefix = %v, want %v", inputs, wantInputsPrefix)
+	}
+
+	wantDeps := []string{styleguide.UID, grpcCpp.UID, protoc.UID, configPlugin.UID}
+	if len(pb.Deps) != len(wantDeps) {
+		t.Fatalf("pb deps len = %d, want %d (%v)", len(pb.Deps), len(wantDeps), pb.Deps)
+	}
+	for _, want := range wantDeps {
+		if !containsString(pb.Deps, want) {
+			t.Fatalf("pb deps = %v, missing %q", pb.Deps, want)
+		}
+	}
+	if got := pb.ForeignDeps["tool"]; len(got) != len(wantDeps) {
+		t.Fatalf("pb foreign_deps[tool] len = %d, want %d (%v)", len(got), len(wantDeps), got)
+	} else {
+		for _, want := range wantDeps {
+			if !containsString(got, want) {
+				t.Fatalf("pb foreign_deps[tool] = %v, missing %q", got, want)
+			}
+		}
+	}
+	if !nodeHasHostTag(configPlugin.Tags) {
+		t.Fatalf("config proto plugin tags = %v, want host tool tag", configPlugin.Tags)
+	}
+	if !containsString(configPlugin.Deps, pluginRuntime.UID) {
+		t.Fatalf("config proto plugin deps = %v, want runtime peer uid %q", configPlugin.Deps, pluginRuntime.UID)
+	}
+}
+
+func TestGen_ProtoLibrary_CPPProtoPluginOutputsReachWrapper(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "protos/ya.make", `PROTO_LIBRARY()
+CPP_PROTO_PLUGIN(tasklet_cpp tools/tasklet_plugin .tasklet.h)
+SRCS(test.proto)
+END()
+`)
+	writeTestModuleFile(t, root, "protos/test.proto", `syntax = "proto3";
+package test;
+message Row {}
+`)
+
+	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
+	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	writeTestModuleFile(t, root, "tools/tasklet_plugin/ya.make", `PROGRAM(tasklet_cpp)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(t, root, "tools/tasklet_plugin/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(root, "protos")
+
+	pb := findGraphNodeByOutputs(t, g,
+		"$(B)/protos/test.pb.h",
+		"$(B)/protos/test.pb.cc",
+		"$(B)/protos/test.tasklet.h",
+	)
+
+	outputsIdx := indexOfArg(pb.Cmds[0].CmdArgs, "--outputs")
+	separatorIdx := indexOfArg(pb.Cmds[0].CmdArgs, "--")
+	if outputsIdx < 0 || separatorIdx < 0 || separatorIdx <= outputsIdx {
+		t.Fatalf("pb wrapper output section malformed: %v", pb.Cmds[0].CmdArgs)
+	}
+
+	wantWrapperOutputs := []string{
+		"$(B)/protos/test.pb.h",
+		"$(B)/protos/test.pb.cc",
+		"$(B)/protos/test.tasklet.h",
+	}
+	gotWrapperOutputs := pb.Cmds[0].CmdArgs[outputsIdx+1 : separatorIdx]
+	if !equalStrings(gotWrapperOutputs, wantWrapperOutputs) {
+		t.Fatalf("pb wrapper outputs = %v, want %v", gotWrapperOutputs, wantWrapperOutputs)
+	}
+}
+
+func TestGen_ProtoLibrary_CPPProtoPlugin2HeaderConsumerInheritsProtoClosure(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "protos/ya.make", `PROTO_LIBRARY()
+CPP_PROTO_PLUGIN2(grpc_cpp contrib/tools/protoc/plugins/grpc_cpp .grpc.pb.cc .grpc.pb.h DEPS contrib/libs/grpc)
+SRCS(
+    dep.proto
+    main.proto
+)
+END()
+`)
+	writeTestModuleFile(t, root, "protos/dep.proto", `syntax = "proto3";
+package test;
+message Dep {
+  string value = 1;
+}
+`)
+	writeTestModuleFile(t, root, "protos/main.proto", `syntax = "proto3";
+package test;
+import "dep.proto";
+message Main {
+  Dep dep = 1;
+}
+service TestService {
+  rpc Ping(Main) returns (Main);
+}
+`)
+	writeTestModuleFile(t, root, "app/ya.make", `LIBRARY()
+PEERDIR(protos)
+SRCS(use.cpp)
+END()
+`)
+	writeTestModuleFile(t, root, "app/use.cpp", `#include <protos/main.grpc.pb.h>
+int use() { return 0; }
+`)
+
+	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
+	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(t, root, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
+
+	writeTestModuleFile(t, root, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(t, root, "contrib/libs/grpc/ya.make", "LIBRARY()\nSRCS(grpc.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "contrib/libs/grpc/grpc.cpp", "int grpc(){return 0;}\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(root, "app")
+
+	useCC := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
+	mainPB := mustNodeByOutput(t, g, "$(B)/protos/main.pb.h")
+	depPB := mustNodeByOutput(t, g, "$(B)/protos/dep.pb.h")
+
+	for _, want := range []string{
+		"$(B)/protos/main.grpc.pb.h",
+		"$(B)/protos/main.pb.h",
+		"$(B)/protos/dep.pb.h",
+	} {
+		if !nodeHasInput(useCC, want) {
+			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, useCC.Inputs)
+		}
+	}
+
+	for _, want := range []string{mainPB.UID, depPB.UID} {
+		if !containsString(useCC.Deps, want) {
+			t.Fatalf("use.cpp.o deps missing %q: %v", want, useCC.Deps)
+		}
+	}
+}
+
+func TestGen_ProtoLibrary_CPPProtoPlugin2GeneratedSourceCompilesAndArchives(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "protos/ya.make", `PROTO_LIBRARY()
+CPP_PROTO_PLUGIN2(grpc_cpp contrib/tools/protoc/plugins/grpc_cpp .grpc.pb.cc .grpc.pb.h DEPS contrib/libs/grpc)
+SRCS(
+    dep.proto
+    main.proto
+)
+END()
+`)
+	writeTestModuleFile(t, root, "protos/dep.proto", `syntax = "proto3";
+package test;
+message Dep {
+  string value = 1;
+}
+`)
+	writeTestModuleFile(t, root, "protos/main.proto", `syntax = "proto3";
+package test;
+import "dep.proto";
+message Main {
+  Dep dep = 1;
+}
+service TestService {
+  rpc Ping(Main) returns (Main);
+}
+`)
+
+	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
+	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(t, root, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
+
+	writeTestModuleFile(t, root, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(t, root, "contrib/libs/grpc/ya.make", "LIBRARY()\nSRCS(grpc.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "contrib/libs/grpc/grpc.cpp", "int grpc(){return 0;}\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(root, "protos")
+
+	grpcCC := mustNodeByOutput(t, g, "$(B)/protos/main.grpc.pb.cc.o")
+	mainPB := mustNodeByOutput(t, g, "$(B)/protos/main.pb.h")
+	depPB := mustNodeByOutput(t, g, "$(B)/protos/dep.pb.h")
+	ar := mustNodeByOutput(t, g, "$(B)/protos/libprotos.a")
+
+	for _, want := range []string{
+		"$(B)/protos/main.grpc.pb.cc",
+		"$(B)/protos/main.pb.h",
+		"$(B)/protos/dep.pb.h",
+	} {
+		if !nodeHasInput(grpcCC, want) {
+			t.Fatalf("main.grpc.pb.cc.o inputs missing %q: %#v", want, grpcCC.Inputs)
+		}
+	}
+
+	for _, want := range []string{mainPB.UID, depPB.UID} {
+		if !containsString(grpcCC.Deps, want) {
+			t.Fatalf("main.grpc.pb.cc.o deps missing %q: %v", want, grpcCC.Deps)
+		}
+	}
+
+	if !nodeHasInput(ar, "$(B)/protos/main.grpc.pb.cc.o") {
+		t.Fatalf("archive inputs missing grpc object: %#v", ar.Inputs)
+	}
+}
+
 // gen_helpers_test.go — test-only shim that constructs the canonical
 // (host=linux-x86_64, target=linux-aarch64) Platform pair with the
 // shared testToolchainFlags and dispatches into GenWithMode. Lives
