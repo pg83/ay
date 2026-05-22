@@ -768,20 +768,20 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// GLOBAL flags peer-propagate (d.cFlagsGlobal); non-GLOBAL
 			// applies to own C+C++ sources only (d.cFlags). composeCC
 			// emits the GLOBAL bucket flanking catboost-redux.
-			d.cFlagsGlobal = append(d.cFlagsGlobal, v.GlobalFlags...)
-			d.cFlags = append(d.cFlags, v.OwnFlags...)
+			d.cFlagsGlobal = append(d.cFlagsGlobal, expandStmtTokens(v.GlobalFlags, env)...)
+			d.cFlags = append(d.cFlags, expandStmtTokens(v.OwnFlags, env)...)
 		case *CXXFlagsStmt:
 			// GLOBAL CXXFLAGS peer-propagate to consumers' C++
 			// compiles; non-GLOBAL applies to own C++ sources only.
-			d.cxxFlagsGlobal = append(d.cxxFlagsGlobal, v.GlobalFlags...)
-			d.cxxFlags = append(d.cxxFlags, v.OwnFlags...)
+			d.cxxFlagsGlobal = append(d.cxxFlagsGlobal, expandStmtTokens(v.GlobalFlags, env)...)
+			d.cxxFlags = append(d.cxxFlags, expandStmtTokens(v.OwnFlags, env)...)
 		case *CONLYFlagsStmt:
 			// GLOBAL CONLYFLAGS peer-propagate to consumers' C / .S
 			// compiles; non-GLOBAL applies to own C / .S only.
-			d.cOnlyFlagsGlobal = append(d.cOnlyFlagsGlobal, v.GlobalFlags...)
-			d.cOnlyFlags = append(d.cOnlyFlags, v.OwnFlags...)
+			d.cOnlyFlagsGlobal = append(d.cOnlyFlagsGlobal, expandStmtTokens(v.GlobalFlags, env)...)
+			d.cOnlyFlags = append(d.cOnlyFlags, expandStmtTokens(v.OwnFlags, env)...)
 		case *LDFlagsStmt:
-			d.ldFlags = append(d.ldFlags, v.Flags...)
+			d.ldFlags = append(d.ldFlags, expandStmtTokens(v.Flags, env)...)
 		case *SrcDirStmt:
 			// SRCDIR shifts source resolution base for per-source CC /
 			// AS / R6 / JOIN_SRCS nodes. LD/AR stay at instance.Path —
@@ -1047,20 +1047,27 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			ThrowFmt("CHECK_CONFIG_H expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.checkConfigHeaders = append(d.checkConfigHeaders, v.Args[0])
+		d.checkConfigHeaders = append(d.checkConfigHeaders, expandStmtToken(v.Args[0], env))
 	case "BUILDWITH_CYTHON_CPP":
 		if len(v.Args) == 0 {
 			ThrowFmt("BUILDWITH_CYTHON_CPP expects at least 1 argument")
 		}
 
-		d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: v.Args[0], Options: append([]string(nil), v.Args[1:]...)})
+		d.cythonCpp = append(d.cythonCpp, &CythonStmt{
+			Src:     expandStmtToken(v.Args[0], env),
+			Options: expandStmtTokens(v.Args[1:], env),
+		})
 		d.cythonNumpyBeforeInclude = true
 	case "BUILDWITH_CYTHON_C":
 		if len(v.Args) == 0 {
 			ThrowFmt("BUILDWITH_CYTHON_C expects at least 1 argument")
 		}
 
-		d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: v.Args[0], Options: append([]string(nil), v.Args[1:]...), CMode: true})
+		d.cythonCpp = append(d.cythonCpp, &CythonStmt{
+			Src:     expandStmtToken(v.Args[0], env),
+			Options: expandStmtTokens(v.Args[1:], env),
+			CMode:   true,
+		})
 		d.cythonNumpyBeforeInclude = true
 	case "BISON_GEN_C":
 		d.bisonGenExt = ".c"
@@ -1073,7 +1080,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		if len(v.Args) != 1 {
 			ThrowFmt("gen: PY_NAMESPACE expects exactly 1 argument, got %d", len(v.Args))
 		}
-		d.pyNamespace = stringPtr(v.Args[0])
+		d.pyNamespace = stringPtr(expandStmtToken(v.Args[0], env))
 	case "YQL_LAST_ABI_VERSION":
 		if len(v.Args) != 0 {
 			ThrowFmt("YQL_LAST_ABI_VERSION expects exactly 0 arguments, got %d", len(v.Args))
@@ -1140,7 +1147,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		if len(v.Args) == 0 {
 			ThrowFmt("gen: PROTO_NAMESPACE expects at least 1 argument")
 		}
-		d.protoNamespace = stringPtr(v.Args[len(v.Args)-1])
+		d.protoNamespace = stringPtr(expandStmtToken(v.Args[len(v.Args)-1], env))
 		for _, arg := range v.Args[:len(v.Args)-1] {
 			if arg == "GLOBAL" {
 				d.protoNamespaceGlobal = true
@@ -1163,7 +1170,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			ThrowFmt("YA_CONF_JSON expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.yaConfJSON = append(d.yaConfJSON, v.Args[0])
+		d.yaConfJSON = append(d.yaConfJSON, expandStmtToken(v.Args[0], env))
 	case "ALLOCATOR":
 		applyAllocatorStmt(v, d)
 	case "ARCHIVE":
@@ -1214,7 +1221,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			ThrowFmt("gen: SRC() requires at least 1 argument (filename); got 0 at line %d", v.Line)
 		}
 
-		filename := v.Args[0]
+		filename := expandStmtToken(v.Args[0], env)
 		d.srcs = append(d.srcs, filename)
 
 		if d.flatSrcs == nil {
@@ -1228,7 +1235,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				d.perSrcCFlags = map[string][]string{}
 			}
 
-			extras := append([]string(nil), v.Args[1:]...)
+			extras := expandStmtTokens(v.Args[1:], env)
 			d.perSrcCFlags[filename] = append(d.perSrcCFlags[filename], extras...)
 		}
 	case "SRC_C_NO_LTO":
@@ -1261,10 +1268,10 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			ThrowFmt("gen: %s() requires at least 1 argument (filename); got 0 at line %d", v.Name, v.Line)
 		}
 
-		filename := v.Args[0]
+		filename := expandStmtToken(v.Args[0], env)
 		flags := make([]string, 0, len(variant.CFlags)+len(v.Args)-1)
 		flags = append(flags, variant.CFlags...)
-		flags = append(flags, v.Args[1:]...)
+		flags = append(flags, expandStmtTokens(v.Args[1:], env)...)
 
 		d.simdSrcs = append(d.simdSrcs, simdSrc{
 			Src:     filename,
@@ -1569,11 +1576,11 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		if len(v.Args) >= 2 {
 			switch v.Args[0] {
 			case "SFLAGS":
-				d.sFlags = append(d.sFlags, v.Args[1:]...)
+				d.sFlags = append(d.sFlags, expandStmtTokens(v.Args[1:], env)...)
 			case "_PROTOC_FLAGS":
-				d.protocFlags = append(d.protocFlags, v.Args[1:]...)
+				d.protocFlags = append(d.protocFlags, expandStmtTokens(v.Args[1:], env)...)
 			case "RPATH_GLOBAL":
-				for _, arg := range v.Args[1:] {
+				for _, arg := range expandStmtTokens(v.Args[1:], env) {
 					arg = strings.ReplaceAll(arg, `${"$"}`, "$")
 					d.rpathFlagsGlobal = append(d.rpathFlagsGlobal, arg)
 				}
@@ -1975,6 +1982,7 @@ func expandStmtToken(s string, env Environment) string {
 				s = env.String(name)
 			}
 		}
+		s = expandEmbeddedDollarVars(s, env)
 
 		for {
 			start := strings.Index(s, "${")
@@ -1999,6 +2007,56 @@ func expandStmtToken(s string, env Environment) string {
 		}
 	}
 	return s
+}
+
+func expandEmbeddedDollarVars(s string, env Environment) string {
+	if !strings.Contains(s, "$") {
+		return s
+	}
+
+	var b strings.Builder
+	b.Grow(len(s))
+	changed := false
+
+	for i := 0; i < len(s); {
+		if s[i] != '$' || i+1 >= len(s) || s[i+1] == '{' || s[i+1] == '(' {
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+
+		j := i + 1
+		for j < len(s) {
+			c := s[j]
+			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' {
+				j++
+				continue
+			}
+			break
+		}
+		if j == i+1 {
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+
+		name := s[i+1 : j]
+		if !env.HasBinding(name) {
+			b.WriteString(s[i:j])
+			i = j
+			continue
+		}
+
+		b.WriteString(env.String(name))
+		i = j
+		changed = true
+	}
+
+	if !changed {
+		return s
+	}
+
+	return b.String()
 }
 
 func expandStmtTokens(items []string, env Environment) []string {
@@ -2051,14 +2109,7 @@ func isExpandVarName(s string) bool {
 }
 
 func expandScalarVarRef(s string, env Environment) string {
-	if strings.HasPrefix(s, "${") && strings.HasSuffix(s, "}") {
-		name := strings.TrimSuffix(strings.TrimPrefix(s, "${"), "}")
-		if env.HasBinding(name) {
-			return env.String(name)
-		}
-	}
-
-	return s
+	return expandStmtToken(s, env)
 }
 
 func expandListVars(items []string, env Environment) []string {

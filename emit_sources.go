@@ -244,10 +244,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.Rel, srcIn.SetVars, srcIn.DefaultVars)
 		cfOut := Build(srcInstance.Path + "/" + strings.TrimSuffix(srcRel, ".in"))
 
-		registerDeferredCF(ctx, srcInstance, cfOut, []includeDirective{
+		parsed := []includeDirective{
 			{kind: includeQuoted, target: inSourceVFS.Rel},
 			{kind: includeQuoted, target: configureFilePyVFS.Rel},
-		}, &deferredCF{
+		}
+		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, inSourceVFS.Rel)...)
+		registerDeferredCF(ctx, srcInstance, cfOut, parsed, &deferredCF{
 			instance:      srcInstance,
 			srcVFS:        inSourceVFS,
 			outVFS:        cfOut,
