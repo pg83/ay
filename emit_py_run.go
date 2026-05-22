@@ -154,7 +154,7 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, m
 }
 
 func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *RunPythonStmt, outFile string, scriptVFS VFS) []includeDirective {
-	if !isCCSourceExt(outFile) {
+	if !generatedOutputCarriesIncludes(outFile) {
 		return nil
 	}
 
