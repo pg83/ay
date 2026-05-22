@@ -30,7 +30,11 @@ If a task is mostly done, it can already be sent to review when the remaining re
 
 ### REVIEWER
 
-If a task is mostly done, it can be shipped when the remaining refinements would require a new large cycle. In a message, post the rationale for the replanner and merger.
+REWORK is expensive — it costs a full digger → review → merge cycle. Spend it ONLY on things that block the ticket's goal: wrong behavior, failing tests, or a change that diverges from the ticket intent. Everything else is a `message`, not a bounce.
+
+Do NOT REWORK for housekeeping: dead code or orphaned helpers / fields / constants left behind by the change, leftover hygiene, naming, style, or "this could be refactored". If the change is correct and the tests pass, APPROVE and note any such cleanup in a `message` — the replanner can spin a follow-up ticket if it's worth it.
+
+If a task is mostly done, ship it when the remaining refinements would require a new large cycle; post the rationale for the replanner and merger in a `message`.
 
 ### MERGER
 
