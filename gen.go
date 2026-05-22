@@ -835,6 +835,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		applyAllPySrcs(ctx.fs, instance.Path, stmt, d)
 	}
 
+	// PROTO_LIBRARY ya.make files gate constructs like GENERATE_ENUM_SERIALIZATION
+	// behind IF (MODULE_TAG == "CPP_PROTO"). Re-collect with that tag set so
+	// those branches are included in the C++ variant's module data.
+	if d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" && instance.Language != LangPy {
+		cppProtoEnv := env.Clone()
+		cppProtoEnv.SetString("MODULE_TAG", "CPP_PROTO")
+		d = collectModule(ctx.fs, instance.Path, instance.Kind, mf.Stmts, cppProtoEnv)
+	}
+
 	if d.conflictMod != nil {
 		ThrowFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path, d.moduleStmt.Name, d.conflictMod.Name)
 	}
@@ -1097,10 +1106,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// (otherwise the AR is orphaned from every LD inputs).
 		protoResult := emitProtoSrcs(ctx, instance, d, peerContribs)
 
-		// Emit EN nodes for GENERATE_ENUM_SERIALIZATION(*). This branch
-		// has no own CC/AR pipeline, so pass nil consumerInputs and skip
-		// downstream-CC emission for the generated `_serialized.cpp`.
-		emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, nil)
+		// Emit EN nodes for GENERATE_ENUM_SERIALIZATION(*). For
+		// PROTO_LIBRARY, EN emission is handled inside emitCPPProtoSrcs
+		// (with a non-nil consumerInputs) so the EN CC is folded into the
+		// PROTO_LIBRARY archive. All other specialized types (DLL,
+		// SO_PROGRAM) have no own CC/AR pipeline; pass nil here.
+		if d.moduleStmt.Name != "PROTO_LIBRARY" {
+			emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, nil)
+		}
 
 		// Emit JV, CF, BI, PR nodes declared at module level. Header-only
 		// branch: no downstream CC/AR, so consumerInputs is nil.

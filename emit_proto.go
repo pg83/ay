@@ -720,8 +720,24 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		perCC = append(perCC, ccIn.IncludeInputs...)
 		addMemberInputs(perCC)
 	}
+	// Wire EN-sourced CC into the archive when the module declares
+	// GENERATE_ENUM_SERIALIZATION. The EN source + CC are orphaned
+	// without this; normalization would exclude them, inflating ref_only.
+	enRes := emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, &moduleInputs)
+	if enRes != nil {
+		ccRefs = append(ccRefs, enRes.CCRefs...)
+		ccOutputs = append(ccOutputs, enRes.CCOutputs...)
+		for _, mIn := range enRes.MemberInputsList {
+			addMemberInputs(mIn)
+		}
+	}
+
 	// AR emission with module_tag=cpp_proto.
-	arBaseName := ArchiveName(instance.Path)
+	var protoLibName string
+	if len(d.moduleStmt.Args) > 0 {
+		protoLibName = d.moduleStmt.Args[0]
+	}
+	arBaseName := archiveNameWithPrefixOrName(instance.Path, "lib", protoLibName)
 	archivePath := Build(instance.Path + "/" + arBaseName)
 	arRef := emitARNode(instance, archivePath, stringPtr("cpp_proto"), ccRefs, ccOutputs, nil, memberInputs, nil, ctx.host, ctx.emit)
 
