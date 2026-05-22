@@ -110,7 +110,7 @@ func (p *resourceFetchPlan) emitAll(host *Platform, emit Emitter) {
 }
 
 func fetchNode(host *Platform, item resourceFetch) *Node {
-	return &Node{
+	return bindNodePlatform(&Node{
 		Cmds: []Cmd{{
 			CmdArgs: []string{
 				currentYatoolPath(),
@@ -133,7 +133,7 @@ func fetchNode(host *Platform, item resourceFetch) *Node {
 		TargetProperties: map[string]string{
 			"module_dir": "build/resources",
 		},
-	}
+	}, host)
 }
 
 func currentYatoolPath() string {

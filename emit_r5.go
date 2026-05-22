@@ -80,5 +80,5 @@ func EmitR5(
 		ForeignDepRefs: map[string][]NodeRef{"tool": depRefs},
 	}
 
-	return emit.Emit(node), tmpVFS, cppVFS
+	return emit.Emit(bindNodePlatform(node, instance.Platform)), tmpVFS, cppVFS
 }

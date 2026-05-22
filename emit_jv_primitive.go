@@ -58,7 +58,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []string, inputs []VFS, outputs
 		DepRefs: depRefs,
 	}
 
-	return emit.Emit(node)
+	return emit.Emit(bindNodePlatform(node, instance.Platform))
 }
 
 // EmitJV emits a JV node for a single RUN_ANTLR4_CPP grammar (.g4

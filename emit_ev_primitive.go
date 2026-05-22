@@ -259,5 +259,5 @@ func EmitEV(
 		ForeignDepRefs: foreignDepRefs,
 	}
 
-	return emit.Emit(node)
+	return emit.Emit(bindNodePlatform(node, instance.Platform))
 }

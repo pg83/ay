@@ -77,5 +77,5 @@ func EmitCF(
 		DepRefs: []NodeRef{},
 	}
 
-	return emit.Emit(node), outVFS
+	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS
 }

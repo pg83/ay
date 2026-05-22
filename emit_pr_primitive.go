@@ -162,7 +162,7 @@ func EmitPR(
 	}
 
 	return prEmitResult{
-		Ref:    emit.Emit(node),
+		Ref:    emit.Emit(bindNodePlatform(node, instance.Platform)),
 		Inputs: append([]VFS(nil), inputs...),
 	}
 }

@@ -30,7 +30,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		"M4":                     m4Bin,
 	}
 
-	ycRef := ctx.emit.Emit(&Node{
+	ycRef := ctx.emit.Emit(bindNodePlatform(&Node{
 		Cmds: []Cmd{
 			{
 				CmdArgs: []string{
@@ -62,7 +62,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-	})
+	}, instance.Platform))
 	bindGeneratedOutput(ctx, instance, headerVFS, ycRef)
 	bindGeneratedOutput(ctx, instance, generatedVFS, ycRef)
 
