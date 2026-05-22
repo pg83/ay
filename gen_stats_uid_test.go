@@ -103,7 +103,107 @@ func TestGen_YaBinHostStatsUIDsMatchReference(t *testing.T) {
 	assertHostStatsUIDsMatchReference(t, our.Graph, ref, 4000, "sg3.json")
 }
 
+func TestGen_YaBinDumpGraphResidualTargetArchiveStatsUIDsMatchReference(t *testing.T) {
+	const targetDir = "devtools/ya/bin"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "sg3.json")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference graph not present at %s/sg3.json", sourceRoot)
+		}
+
+		t.Fatalf("stat sg3.json: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sourceRoot, targetDir, "ya.make")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	our := genDumpStatsUIDReferenceSample(t, sourceRoot, targetDir)
+	ref := loadStatsUIDRefNodes(t, filepath.Join(sourceRoot, "sg3.json"))
+	ourByKey := indexTargetStatsUIDRefNodes(t, our)
+	refByKey := indexTargetStatsUIDRefNodes(t, ref)
+
+	for _, output := range []string{
+		"$(BUILD_ROOT)/contrib/libs/sqlite3/libcontrib-libs-sqlite3.a",
+		"$(BUILD_ROOT)/contrib/python/protobuf/py3/libpy3python-protobuf-py3.a",
+		"$(BUILD_ROOT)/contrib/tools/python3/Modules/_sqlite/libpy3python3-Modules-_sqlite.a",
+		"$(BUILD_ROOT)/contrib/tools/python3/Modules/_sqlite/libpy3python3-Modules-_sqlite.global.a",
+	} {
+		key := statsUIDNodeKey{
+			Outputs:      statsUIDOutputKey([]string{output}),
+			Kind:         "AR",
+			HostPlatform: false,
+			Platform:     "default-linux-aarch64",
+		}
+
+		ourNode, ok := ourByKey[key]
+		if !ok {
+			t.Fatalf("dump graph missing generated non-host key %s", statsUIDDescribeKey(key))
+		}
+		refNode, ok := refByKey[key]
+		if !ok {
+			t.Fatalf("reference missing non-host key %s", statsUIDDescribeKey(key))
+		}
+		if ourNode.StatsUID != refNode.StatsUID {
+			t.Fatalf("dump graph stats_uid mismatch for %s:\n got: %s\nwant: %s",
+				statsUIDDescribeKey(key), ourNode.StatsUID, refNode.StatsUID)
+		}
+	}
+}
+
 func genStatsUIDReferenceSample(sourceRoot, targetDir string) *Graph {
+	host, target := statsUIDReferencePlatforms()
+
+	return GenWithMode(sourceRoot, targetDir, host, target, defaultScanCtxMode, func(Warn) {})
+}
+
+func genDumpStatsUIDReferenceSample(t *testing.T, sourceRoot, targetDir string) []statsUIDRefNode {
+	t.Helper()
+
+	out, err := os.CreateTemp(t.TempDir(), "sg3-dump-*.json")
+	if err != nil {
+		t.Fatalf("create dump graph capture: %v", err)
+	}
+
+	oldStdout := os.Stdout
+	os.Stdout = out
+
+	var code int
+	exc := Try(func() {
+		code = cmdMake([]string{
+			"-j", "0",
+			"-k",
+			"-G",
+			"--source-root", sourceRoot,
+			"--target-platform", "default-linux-aarch64",
+			"--host-platform", "default-linux-x86_64",
+			"--host-platform-flag", "MUSL=yes",
+			"--host-platform-flag", "OS_SDK=local",
+			"--musl",
+			"--sandboxing",
+			"-DOS_SDK=local",
+			targetDir,
+		})
+	})
+
+	os.Stdout = oldStdout
+	if err := out.Close(); err != nil {
+		t.Fatalf("close dump graph capture: %v", err)
+	}
+	if exc != nil {
+		t.Fatalf("cmdMake dump graph failed: %v", exc)
+	}
+	if code != 0 {
+		t.Fatalf("cmdMake dump graph exit code = %d, want 0", code)
+	}
+
+	return loadStatsUIDRefNodes(t, out.Name())
+}
+
+func statsUIDReferencePlatforms() (*Platform, *Platform) {
 	hostPlatformFlags := map[string]string{
 		"APPLE_SDK_LOCAL":    "yes",
 		"MUSL":               "yes",
@@ -137,7 +237,7 @@ func genStatsUIDReferenceSample(sourceRoot, targetDir string) *Graph {
 	target.Tags = sandboxingNodeTags(target)
 	target.StatsFlags = buildTargetStatsFlags(targetFlags, map[string]string{"MUSL": "yes"})
 
-	return GenWithMode(sourceRoot, targetDir, host, target, defaultScanCtxMode, func(Warn) {})
+	return host, target
 }
 
 func loadStatsUIDRefNodes(t *testing.T, path string) []statsUIDRefNode {
