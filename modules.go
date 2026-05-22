@@ -17,6 +17,14 @@ import (
 	"strings"
 )
 
+type cppProtoPlugin struct {
+	Name           string
+	ToolPath       string
+	OutputSuffixes []string
+	Deps           []string
+	ExtraOutFlag   string
+}
+
 type moduleData struct {
 	moduleStmt           *ModuleStmt
 	srcs                 []string
@@ -68,6 +76,7 @@ type moduleData struct {
 	noMypy               bool // NO_MYPY(); suppresses mypy plugin and .pyi outputs for py-proto
 	optimizePyProtos     bool // mirrors OPTIMIZE_PY_PROTOS_FLAG; default-on for PY{2,3}_PROTO variants
 	optimizePyProtosSet  bool
+	cppProtoPlugins      []cppProtoPlugin // CPP_PROTO_PLUGIN* lowers into extra protoc plugin args + host tool deps on PB nodes
 	excludeTags          map[string]bool
 	dynamicLibraryFrom   []string
 	exportsScript        *string
@@ -1539,6 +1548,10 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		} else {
 			d.noCheckImportsDisabled = true
 		}
+	case "CPP_PROTO_PLUGIN0", "CPP_PROTO_PLUGIN", "CPP_PROTO_PLUGIN2":
+		plugin := parseCPPProtoPlugin(v)
+		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
+		d.peerdirs = append(d.peerdirs, plugin.Deps...)
 	case "PY_REGISTER":
 		// PY_REGISTER(args...) dotted module names. emitPyRegister
 		// later emits one PY node generating `<arg>.reg3.cpp` plus a
@@ -1602,6 +1615,64 @@ func appendPyRegister(d *moduleData, name string, explicit bool) {
 		"-DPyInit_"+shortname+"=PyInit_"+mangled,
 		"-Dinit_module_"+shortname+"=init_module_"+mangled,
 	)
+}
+
+func parseCPPProtoPlugin(v *UnknownStmt) cppProtoPlugin {
+	requiredArgs := 0
+	outputSuffixes := 0
+
+	switch v.Name {
+	case "CPP_PROTO_PLUGIN0":
+		requiredArgs = 2
+	case "CPP_PROTO_PLUGIN":
+		requiredArgs = 3
+		outputSuffixes = 1
+	case "CPP_PROTO_PLUGIN2":
+		requiredArgs = 4
+		outputSuffixes = 2
+	default:
+		ThrowFmt("gen: internal error: parseCPPProtoPlugin called for %q", v.Name)
+	}
+
+	if len(v.Args) < requiredArgs {
+		ThrowFmt("gen: %s expects at least %d arguments, got %d", v.Name, requiredArgs, len(v.Args))
+	}
+
+	plugin := cppProtoPlugin{
+		Name:     v.Args[0],
+		ToolPath: v.Args[1],
+	}
+
+	tail := 2
+	if outputSuffixes > 0 {
+		plugin.OutputSuffixes = append(plugin.OutputSuffixes, v.Args[tail:tail+outputSuffixes]...)
+		tail += outputSuffixes
+	}
+
+	for tail < len(v.Args) {
+		switch v.Args[tail] {
+		case "DEPS":
+			tail++
+			for tail < len(v.Args) && v.Args[tail] != "EXTRA_OUT_FLAG" {
+				plugin.Deps = append(plugin.Deps, v.Args[tail])
+				tail++
+			}
+		case "EXTRA_OUT_FLAG":
+			tail++
+			if tail >= len(v.Args) {
+				ThrowFmt("gen: %s EXTRA_OUT_FLAG expects exactly 1 argument", v.Name)
+			}
+			if plugin.ExtraOutFlag != "" {
+				ThrowFmt("gen: %s repeated EXTRA_OUT_FLAG", v.Name)
+			}
+			plugin.ExtraOutFlag = v.Args[tail]
+			tail++
+		default:
+			ThrowFmt("gen: %s got unexpected tail token %q; supported suffixes are DEPS and EXTRA_OUT_FLAG", v.Name, v.Args[tail])
+		}
+	}
+
+	return plugin
 }
 
 func pythonModuleName(modulePath, src string, topLevel bool, namespace *string) string {
