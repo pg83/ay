@@ -1,11 +1,14 @@
 package main
 
 import (
+	"crypto/md5"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
+	encHex "encoding/hex"
 	"math"
 	"sort"
+	"strings"
 )
 
 // uid.go — content-derived UID hashing.
@@ -58,6 +61,107 @@ func nodeUIDWithBuf(n *Node, c *canonBuf) string {
 	sum := sha1.Sum(c.buf)
 
 	return base64.RawURLEncoding.EncodeToString(sum[:])[:uidLength]
+}
+
+// nodeStatsUID mirrors upstream raw-graph stats_uid production:
+// md5(str([platform, str(sorted(tags)), kv.p, str(sorted(outputs))])).
+func nodeStatsUID(n *Node) string {
+	sum := md5.Sum([]byte(statsUIDPreimage(n)))
+
+	return encHex.EncodeToString(sum[:])
+}
+
+func statsUIDPreimage(n *Node) string {
+	kind, _ := n.KV["p"].(string)
+
+	return pythonStringListRepr([]string{
+		n.Platform,
+		pythonStringListRepr(sortedStatsTags(n)),
+		kind,
+		pythonStringListRepr(sortedLongOutputs(n.Outputs)),
+	})
+}
+
+func sortedStatsTags(n *Node) []string {
+	tags := n.Tags
+	if n.StatsTags != nil {
+		tags = n.StatsTags
+	}
+
+	out := append([]string(nil), tags...)
+	sort.Strings(out)
+
+	return out
+}
+
+func sortedLongOutputs(outputs []VFS) []string {
+	out := make([]string, len(outputs))
+	for i, v := range outputs {
+		out[i] = v.LongString()
+	}
+	sort.Strings(out)
+
+	return out
+}
+
+func pythonStringListRepr(items []string) string {
+	if len(items) == 0 {
+		return "[]"
+	}
+
+	var b strings.Builder
+	b.Grow(len(items) * 8)
+	b.WriteByte('[')
+	for i, item := range items {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(pythonStringRepr(item))
+	}
+	b.WriteByte(']')
+
+	return b.String()
+}
+
+func pythonStringRepr(s string) string {
+	quote := byte('\'')
+	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
+		quote = '"'
+	}
+
+	var b strings.Builder
+	b.Grow(len(s) + 2)
+	b.WriteByte(quote)
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		switch ch {
+		case '\\':
+			b.WriteString(`\\`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			if ch == quote {
+				b.WriteByte('\\')
+				b.WriteByte(ch)
+				continue
+			}
+			if ch < 0x20 || ch == 0x7f {
+				const hexDigits = "0123456789abcdef"
+				b.WriteString(`\x`)
+				b.WriteByte(hexDigits[ch>>4])
+				b.WriteByte(hexDigits[ch&0x0f])
+				continue
+			}
+			b.WriteByte(ch)
+		}
+	}
+	b.WriteByte(quote)
+
+	return b.String()
 }
 
 // canonBuf is a writable byte accumulator with concrete-typed

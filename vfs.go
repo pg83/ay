@@ -61,6 +61,18 @@ func (v VFS) String() string {
 	panic("VFS.String: zero-valued VFS (missing Root)")
 }
 
+// LongString materialises the legacy raw-graph root spelling used by the
+// upstream stats_uid preimage.
+func (v VFS) LongString() string {
+	switch v.Root {
+	case VFSRootSource:
+		return "$(SOURCE_ROOT)/" + v.Rel
+	case VFSRootBuild:
+		return "$(BUILD_ROOT)/" + v.Rel
+	}
+	panic("VFS.LongString: zero-valued VFS (missing Root)")
+}
+
 // ParseVFS recognises s as a "$(S)/..." or "$(B)/..."
 // string and returns the corresponding VFS. Returns (zero, false) when
 // s lacks both recognised prefixes — callers handling such tokens

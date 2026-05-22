@@ -386,7 +386,7 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 	node.UID = u
 	// SelfUID currently mirrors UID (placeholder).
 	node.SelfUID = u
-	node.StatsUID = ""
+	node.StatsUID = nodeStatsUID(node)
 
 	if insertionOrderDeps != nil {
 		node.Deps = insertionOrderDeps

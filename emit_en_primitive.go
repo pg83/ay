@@ -104,5 +104,5 @@ func EmitEN(
 		ForeignDepRefs: foreignDepRefs,
 	}
 
-	return emit.Emit(node), outputs
+	return emit.Emit(bindNodePlatform(node, instance.Platform)), outputs
 }

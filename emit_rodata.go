@@ -87,5 +87,5 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		},
 	}
 
-	return emit.Emit(node), asmVFS, outVFS
+	return emit.Emit(bindNodePlatform(node, instance.Platform)), asmVFS, outVFS
 }
