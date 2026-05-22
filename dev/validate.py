@@ -4,14 +4,16 @@
 For each case: run its gen_<graph>.sh generator, normalize both our output
 and the raw upstream reference into canonical JSONL (streaming `ay dump
 normalize | ay dump sort`), then either byte-compare (gating cases) or run
-diff.py metrics (xfail cases). xfail cases never affect the exit code; the
-suite fails only when a gating case diverges.
+diff.py metrics plus exact normalized-node parity counts (xfail cases).
+xfail cases never affect the exit code; the suite fails only when a gating
+case diverges.
 
 Usage: validate.py [out-dir]   (default: <repo>/.out/validate)
 """
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
@@ -25,6 +27,15 @@ CASES = [
     ("sg4", "util/ut", "/home/pg/monorepo/ydb/sg4.json", False),
     ("sg5", "ydb/apps/ydbd", "/home/pg/monorepo/ydb/sg5.json", True),
 ]
+
+
+@dataclass(frozen=True)
+class ParityCounts:
+    exact: int
+    left_only: int
+    right_only: int
+    left_total: int
+    right_total: int
 
 
 def run(cmd):
@@ -44,6 +55,66 @@ def normalize_sort(raw, target, out):
     p1.stdout.close()
     p2.communicate()
     p1.wait()
+
+
+def _advance_line(handle):
+    line = handle.readline()
+    if line == "":
+        return None
+    return line
+
+
+def normalized_node_parity_counts(left_path, right_path):
+    """Count exact normalized-node matches between two sorted JSONL files."""
+    exact = left_only = right_only = left_total = right_total = 0
+    with open(left_path, encoding="utf-8") as left, open(right_path, encoding="utf-8") as right:
+        left_line = _advance_line(left)
+        right_line = _advance_line(right)
+        if left_line is not None:
+            left_total += 1
+        if right_line is not None:
+            right_total += 1
+
+        while left_line is not None and right_line is not None:
+            if left_line == right_line:
+                exact += 1
+                left_line = _advance_line(left)
+                right_line = _advance_line(right)
+                if left_line is not None:
+                    left_total += 1
+                if right_line is not None:
+                    right_total += 1
+                continue
+            if left_line < right_line:
+                left_only += 1
+                left_line = _advance_line(left)
+                if left_line is not None:
+                    left_total += 1
+                continue
+            right_only += 1
+            right_line = _advance_line(right)
+            if right_line is not None:
+                right_total += 1
+
+        while left_line is not None:
+            left_only += 1
+            left_line = _advance_line(left)
+            if left_line is not None:
+                left_total += 1
+
+        while right_line is not None:
+            right_only += 1
+            right_line = _advance_line(right)
+            if right_line is not None:
+                right_total += 1
+
+    return ParityCounts(
+        exact=exact,
+        left_only=left_only,
+        right_only=right_only,
+        left_total=left_total,
+        right_total=right_total,
+    )
 
 
 def main() -> int:
@@ -71,6 +142,13 @@ def main() -> int:
         normalize_sort(ref, target, ref_n)
 
         if xfail:
+            parity = normalized_node_parity_counts(our_n, ref_n)
+            print(
+                f"[{name}] exact normalized-node parity: "
+                f"matched={parity.exact} "
+                f"our_only={parity.left_only} ref_only={parity.right_only} "
+                f"our_total={parity.left_total} ref_total={parity.right_total}"
+            )
             diff_file = os.path.join(out_dir, f"{name}.diff.txt")
             run([AY, "dump", "diff", "--left", our_n, "--right", ref_n, "--out", diff_file])
             print(f"[{name}] xfail — diff (not gating), first 200 lines:")
