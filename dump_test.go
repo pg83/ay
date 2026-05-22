@@ -230,6 +230,74 @@ func TestDumpDiffModes(t *testing.T) {
 	}
 }
 
+func TestDumpDiffModes_PairDuplicateOutputsByVariant(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.jsonl")
+	right := filepath.Join(dir, "r.jsonl")
+
+	line := func(uid string, host bool) string {
+		hostField := ""
+		tags := "[]"
+		if host {
+			hostField = `,"host_platform":true`
+			tags = `["tool"]`
+		}
+		return `{"self_uid":"` + uid + `","uid":"` + uid + `","outputs":["/dup"],"deps":[],"inputs":[],"cmds":[],"tags":` + tags +
+			`,"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}` + hostField + `}`
+	}
+
+	Throw(os.WriteFile(left, []byte(line("L-host", true)+"\n"+line("L-target", false)+"\n"), 0o644))
+	Throw(os.WriteFile(right, []byte(line("R-host", true)+"\n"+line("R-target", false)+"\n"), 0o644))
+
+	run := func(mode ...string) string {
+		out := filepath.Join(dir, "o.txt")
+		args := append([]string{"--left", left, "--right", right, "--out", out}, mode...)
+		if exc := Try(func() { cmdDumpDiff(args) }); exc != nil {
+			t.Fatalf("diff %v: %v", mode, exc)
+		}
+		return string(Throw2(os.ReadFile(out)))
+	}
+
+	byField := run("--by-field")
+	if strings.Contains(byField, "host_platform") || strings.Contains(byField, "tags") {
+		t.Fatalf("duplicate output pairing leaked variant-only diffs:\n%s", byField)
+	}
+
+	byKind := run("--by-kind")
+	if strings.Contains(byKind, "host_platform:") || !strings.Contains(byKind, "R6") {
+		t.Fatalf("by-kind did not pair duplicate variants cleanly:\n%s", byKind)
+	}
+}
+
+func TestDumpDiffPair_PrefersDivergentDuplicateVariant(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.jsonl")
+	right := filepath.Join(dir, "r.jsonl")
+	out := filepath.Join(dir, "o.txt")
+
+	line := func(selfUID, uid, mode string, host bool) string {
+		hostField := ""
+		tags := "[]"
+		if host {
+			hostField = `,"host_platform":true`
+			tags = `["tool"]`
+		}
+		return `{"self_uid":"` + selfUID + `","uid":"` + uid + `","outputs":["/dup"],"deps":[],"inputs":[],"cmds":[{"cmd_args":["clang","` + mode + `"]}],"tags":` + tags +
+			`,"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}` + hostField + `}`
+	}
+
+	Throw(os.WriteFile(left, []byte(line("same-host", "L-host", "host-clean", true)+"\n"+line("left-target", "L-target", "target-ours", false)+"\n"), 0o644))
+	Throw(os.WriteFile(right, []byte(line("same-host", "R-host", "host-clean", true)+"\n"+line("right-target", "R-target", "target-ref", false)+"\n"), 0o644))
+
+	if exc := Try(func() { cmdDumpDiff([]string{"--left", left, "--right", right, "--out", out, "--pair", "/dup"}) }); exc != nil {
+		t.Fatalf("pair duplicate outputs: %v", exc)
+	}
+	got := string(Throw2(os.ReadFile(out)))
+	if !strings.Contains(got, "[field cmds differs]") || !strings.Contains(got, "+target-ours") || !strings.Contains(got, "+target-ref") {
+		t.Fatalf("pair should report the divergent duplicate variant:\n%s", got)
+	}
+}
+
 func TestDumpDiffRoots(t *testing.T) {
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.jsonl")
@@ -256,5 +324,70 @@ func TestDumpDiffRoots(t *testing.T) {
 		if line == "/p" {
 			t.Fatalf("roots should NOT list /p (child /c diverges):\n%s", got)
 		}
+	}
+}
+
+func TestDumpDiffRoots_DedupDuplicateOutputsByVariant(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.jsonl")
+	right := filepath.Join(dir, "r.jsonl")
+	out := filepath.Join(dir, "o.txt")
+
+	line := func(selfUID, uid string, host bool) string {
+		hostField := ""
+		tags := "[]"
+		if host {
+			hostField = `,"host_platform":true`
+			tags = `["tool"]`
+		}
+		return `{"self_uid":"` + selfUID + `","uid":"` + uid + `","outputs":["/dup"],"deps":[],"inputs":[],"cmds":[],"tags":` + tags +
+			`,"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}` + hostField + `}`
+	}
+
+	Throw(os.WriteFile(left, []byte(line("same-host", "L-host", true)+"\n"+line("left-target", "L-target", false)+"\n"), 0o644))
+	Throw(os.WriteFile(right, []byte(line("same-host", "R-host", true)+"\n"+line("right-target", "R-target", false)+"\n"), 0o644))
+
+	if exc := Try(func() { cmdDumpDiff([]string{"--left", left, "--right", right, "--out", out, "--roots"}) }); exc != nil {
+		t.Fatalf("roots duplicate outputs: %v", exc)
+	}
+	got := string(Throw2(os.ReadFile(out)))
+	if !strings.Contains(got, "=== roots: 1 leaf-most divergent outputs (of 1 divergent) ===") {
+		t.Fatalf("roots should report one divergent duplicate output:\n%s", got)
+	}
+	count := 0
+	for _, line := range strings.Split(got, "\n") {
+		if line == "/dup" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("roots should list /dup exactly once, got %d:\n%s", count, got)
+	}
+}
+
+func TestDumpDiffRoots_PartialOverlapMultiOutputNode(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.jsonl")
+	right := filepath.Join(dir, "r.jsonl")
+	out := filepath.Join(dir, "o.txt")
+
+	leftNode := `{"self_uid":"left","uid":"L","outputs":["/a","/b"],"deps":[],"inputs":[],"cmds":[],"tags":[],"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}}`
+	rightNode := `{"self_uid":"right","uid":"R","outputs":["/a"],"deps":[],"inputs":[],"cmds":[],"tags":[],"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}}`
+
+	Throw(os.WriteFile(left, []byte(leftNode+"\n"), 0o644))
+	Throw(os.WriteFile(right, []byte(rightNode+"\n"), 0o644))
+
+	if exc := Try(func() { cmdDumpDiff([]string{"--left", left, "--right", right, "--out", out, "--roots"}) }); exc != nil {
+		t.Fatalf("roots partial-overlap multi-output: %v", exc)
+	}
+	got := string(Throw2(os.ReadFile(out)))
+	if !strings.Contains(got, "=== roots: 1 leaf-most divergent outputs (of 1 divergent) ===") {
+		t.Fatalf("roots should only count the matched divergent output:\n%s", got)
+	}
+	if !strings.Contains(got, "\n/a\n") {
+		t.Fatalf("roots should list /a as the matched divergent output:\n%s", got)
+	}
+	if strings.Contains(got, "\n/b\n") {
+		t.Fatalf("roots should not list unmatched /b as divergent:\n%s", got)
 	}
 }

@@ -16,7 +16,6 @@ type resourceFetch struct {
 	Pattern string
 	URI     string
 	Output  VFS
-	Ref     NodeRef
 }
 
 type resourceFetchPlan struct {
@@ -98,17 +97,6 @@ func hostResourcePlatformCandidates(host *Platform) []string {
 	}
 }
 
-func (p *resourceFetchPlan) emitAll(host *Platform, emit Emitter) {
-	if p == nil {
-		return
-	}
-
-	for i := range p.items {
-		ref := emit.Emit(fetchNode(host, p.items[i]))
-		p.items[i].Ref = ref
-	}
-}
-
 func fetchNode(host *Platform, item resourceFetch) *Node {
 	return bindNodePlatform(&Node{
 		Cmds: []Cmd{{
@@ -160,14 +148,23 @@ func fetchScriptInputs() []VFS {
 type resourceAwareEmitter struct {
 	inner Emitter
 	plan  *resourceFetchPlan
+	host  *Platform
+	refs  []NodeRef
+	seen  []bool
 }
 
-func newResourceAwareEmitter(inner Emitter, plan *resourceFetchPlan) Emitter {
+func newResourceAwareEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan) Emitter {
 	if plan == nil || len(plan.items) == 0 {
 		return inner
 	}
 
-	return &resourceAwareEmitter{inner: inner, plan: plan}
+	return &resourceAwareEmitter{
+		inner: inner,
+		plan:  plan,
+		host:  host,
+		refs:  make([]NodeRef, len(plan.items)),
+		seen:  make([]bool, len(plan.items)),
+	}
 }
 
 func resourceGraphEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan, materializeFetchNodes bool) Emitter {
@@ -175,9 +172,7 @@ func resourceGraphEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan
 		return inner
 	}
 
-	plan.emitAll(host, inner)
-
-	return newResourceAwareEmitter(inner, plan)
+	return newResourceAwareEmitter(host, inner, plan)
 }
 
 func (e *resourceAwareEmitter) Emit(n *Node) NodeRef {
@@ -195,12 +190,17 @@ func (e *resourceAwareEmitter) OnReady(r NodeRef) <-chan struct{} {
 }
 
 func (e *resourceAwareEmitter) attachResourceDeps(n *Node) {
-	for _, item := range e.plan.items {
+	for i, item := range e.plan.items {
 		if !nodeUsesResourcePattern(n, item.Pattern) {
 			continue
 		}
 
-		n.DepRefs = append(n.DepRefs, item.Ref)
+		if !e.seen[i] {
+			e.refs[i] = e.inner.Emit(fetchNode(e.host, item))
+			e.seen[i] = true
+		}
+
+		n.DepRefs = append(n.DepRefs, e.refs[i])
 	}
 }
 

@@ -1034,11 +1034,17 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		// Linter-only macro. It does not emit build nodes for `ay make`
 		// target graphs.
 	case "LLVM_BC":
-		// T-6 needs the full sg5 graph and the first raw mismatch, not
-		// the exact late LLVM bitcode resource pipeline. The source and
-		// registration .inc files are already present in-tree, so
-		// treating LLVM_BC as a no-op is sufficient to reach graph
-		// emission and exposes the remaining exactness gap honestly.
+		if len(v.Args) < 2 {
+			ThrowFmt("LLVM_BC expects at least source and output, got %d", len(v.Args))
+		}
+		if env.String("CLANG_BC_ROOT") == "" || env.String("LLVM_LLC_TOOL") == "" {
+			ThrowFmt("LLVM_BC requires USE_LLVM_BC16/18/20 before invocation")
+		}
+		// The generated pg_kernels.* and registration .inc files are
+		// checked into the tree and compiled through the regular SRCS
+		// path. Recognize LLVM_BC so the upstream preconditions still
+		// hold, but it does not add extra graph nodes in the current
+		// source-root-driven model.
 	case "MAVEN_GROUP_ID":
 		// Java export metadata. build/conf/java.conf documents no effect
 		// on regular builds.
