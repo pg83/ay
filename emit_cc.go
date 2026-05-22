@@ -320,7 +320,10 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		// `srcRel` contains a `/` (no `_/` infix).
 		outRel = instance.Path + "/" + srcRel + suffix
 	case strings.Contains(srcRel, "/"):
-		outRel = instance.Path + "/_/" + srcRel + suffix
+		// Normalize `..` segments to `__` (ymake convention). Sources
+		// without `..` (e.g. subdir/file.cpp) keep the `_/` infix;
+		// sources with `..` (e.g. ../sibling.cpp) produce `__/sibling.cpp`.
+		outRel = instance.Path + "/" + normalizeDotDotSegments(srcRel) + suffix
 	default:
 		outRel = instance.Path + "/" + srcRel + suffix
 	}
@@ -368,13 +371,37 @@ func composeSrcDirOutputRel(instancePath, srcDir, srcRel string) string {
 
 	joined := strings.Join(parts, "/")
 
-	// No parent traversal → target lands under instancePath: prepend `_/`
-	// to match ymake's convention for SRCDIR-redirected subdirectory outputs.
+	// No parent traversal → target lands under instancePath. Prepend `_/`
+	// only when the target is in a subdirectory (joined contains `/`);
+	// when the source is directly in instancePath (no `/` in joined),
+	// ymake emits it without any infix (e.g. SRCDIR + flat source).
 	if !hasParent {
-		return "_/" + joined
+		if strings.Contains(joined, "/") {
+			return "_/" + joined
+		}
+		return joined
 	}
 
 	return joined
+}
+
+// normalizeDotDotSegments converts `..` path components to `__` (ymake
+// convention for SRCS() entries that reference files above the module dir).
+// When no `..` is present, the source is in a subdirectory of the module
+// dir and the `_/` infix is prepended.
+func normalizeDotDotSegments(rel string) string {
+	parts := strings.Split(rel, "/")
+	hasParent := false
+	for i, p := range parts {
+		if p == ".." {
+			parts[i] = "__"
+			hasParent = true
+		}
+	}
+	if !hasParent {
+		return "_/" + strings.Join(parts, "/")
+	}
+	return strings.Join(parts, "/")
 }
 
 // isCxxSource returns true when `srcRel`'s extension marks it as a

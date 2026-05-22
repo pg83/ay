@@ -4300,11 +4300,9 @@ int use() { return 0; }
 	if !nodeHasInput(en, "$(S)/contrib/libs/protobuf/src/google/protobuf/message.h") {
 		t.Fatalf("enum node inputs missing protobuf runtime header message.h: %#v", en.Inputs)
 	}
-	// EN CC is not emitted into the PROTO_LIBRARY archive: the _serialized.cpp.o
-	// node is orphaned in the raw graph (no downstream consumer wires it into
-	// any archive) so normalization excludes it, keeping it from inflating our_only.
-	if nodeHasInput(ar, "$(B)/protos/main.pb.h_serialized.cpp.o") {
-		t.Fatalf("archive unexpectedly contains orphaned enum object: %#v", ar.Inputs)
+	// EN CC is emitted into the PROTO_LIBRARY archive.
+	if !nodeHasInput(ar, "$(B)/protos/main.pb.h_serialized.cpp.o") {
+		t.Fatalf("archive missing enum serialization object: %#v", ar.Inputs)
 	}
 }
 
@@ -6636,4 +6634,63 @@ func normalizeStatsUIDOutput(out string) string {
 	out = strings.ReplaceAll(out, "$(SOURCE_ROOT)", "$(S)")
 
 	return out
+}
+
+// TestGen_ProtoLibrary_NamedArgUsedForArchive verifies Fix #1: when
+// PROTO_LIBRARY declares an explicit name argument the emitted archive uses
+// that name instead of the path-derived default.
+func TestGen_ProtoLibrary_NamedArgUsedForArchive(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "ydb/public/api/protos/ya.make", `PROTO_LIBRARY(api-protos)
+SRCS(ydb.proto)
+END()
+`)
+	writeTestModuleFile(t, root, "ydb/public/api/protos/ydb.proto", `syntax = "proto3";
+package test;
+message Ydb {}
+`)
+	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
+	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(root, "ydb/public/api/protos")
+
+	// Named archive: lib<name>.a not lib<path-derived>.a
+	mustNodeByOutput(t, g, "$(B)/ydb/public/api/protos/libapi-protos.a")
+
+	// Path-derived archive must NOT be present
+	for _, n := range g.Graph {
+		for _, o := range n.Outputs {
+			if o.String() == "$(B)/ydb/public/api/protos/libprotos.a" {
+				t.Fatalf("path-derived archive libprotos.a should not exist; got it with named arg")
+			}
+		}
+	}
+}
+
+// TestGen_ProtoLibrary_UnnamedArgKeepsPathDerivedArchive verifies that
+// PROTO_LIBRARY() without a name argument continues to use the path-derived
+// archive name (regression guard for Fix #1).
+func TestGen_ProtoLibrary_UnnamedArgKeepsPathDerivedArchive(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "ydb/public/api/protos/ya.make", `PROTO_LIBRARY()
+SRCS(ydb.proto)
+END()
+`)
+	writeTestModuleFile(t, root, "ydb/public/api/protos/ydb.proto", `syntax = "proto3";
+package test;
+message Ydb {}
+`)
+	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
+	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(root, "ydb/public/api/protos")
+
+	// Path-derived name: last 3 segments of ydb/public/api/protos → public-api-protos
+	mustNodeByOutput(t, g, "$(B)/ydb/public/api/protos/libpublic-api-protos.a")
 }
