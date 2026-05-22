@@ -1376,6 +1376,41 @@ import weak 'c.proto';
 	}
 }
 
+func TestParsedIncludes_ProtoBuckets(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "src.proto")
+
+	if err := os.WriteFile(path, []byte(`import "a.proto";
+import public "b.proto";
+import weak "c.proto";
+import public "d.ev";
+`), 0o644); err != nil {
+		t.Fatalf("write src.proto: %v", err)
+	}
+
+	scanner := NewIncludeScanner(dir, SysInclSet{})
+	parsed := scanner.parsedIncludes(Source("src.proto"))
+	local := parsed.bucket(parsedIncludesLocal)
+	hcpp := parsed.bucket(parsedIncludesHCPP)
+
+	if len(local) != 4 {
+		t.Fatalf("got %d local entries, want 4; %+v", len(local), local)
+	}
+	if len(hcpp) != 4 {
+		t.Fatalf("got %d h+cpp entries, want 4; %+v", len(hcpp), hcpp)
+	}
+
+	wantHCPP := []string{"a.pb.h", "b.pb.h", "c.pb.h", "d.ev.pb.h"}
+	for i, want := range wantHCPP {
+		if hcpp[i].target != want {
+			t.Fatalf("hcpp[%d].target = %q, want %q; all=%+v", i, hcpp[i].target, want, hcpp)
+		}
+		if hcpp[i].kind != includeQuoted {
+			t.Fatalf("hcpp[%d].kind = %v, want includeQuoted", i, hcpp[i].kind)
+		}
+	}
+}
+
 func TestParsedIncludes_RagelBuckets(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "src.rl6")

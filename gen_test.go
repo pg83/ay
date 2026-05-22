@@ -4190,6 +4190,194 @@ service TestService {
 	}
 }
 
+func TestGen_ProtoLibrary_TransitiveHeadersNoAddsDepsHeaderAndEnumUsesGeneratedPBHeader(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "protos/ya.make", `PROTO_LIBRARY()
+SET(PROTOC_TRANSITIVE_HEADERS "no")
+GRPC()
+GENERATE_ENUM_SERIALIZATION(main.pb.h)
+SRCS(
+    dep.proto
+    main.proto
+)
+END()
+`)
+	writeTestModuleFile(t, root, "protos/dep.proto", `syntax = "proto3";
+package test;
+message Dep {
+  string value = 1;
+}
+`)
+	writeTestModuleFile(t, root, "protos/main.proto", `syntax = "proto3";
+package test;
+import "dep.proto";
+enum Mode {
+  MODE_UNSPECIFIED = 0;
+  MODE_READY = 1;
+}
+message Main {
+  Dep dep = 1;
+  Mode mode = 2;
+}
+service TestService {
+  rpc Ping(Main) returns (Main);
+}
+`)
+	writeTestModuleFile(t, root, "app/ya.make", `LIBRARY()
+PEERDIR(protos)
+SRCS(use.cpp)
+END()
+`)
+	writeTestModuleFile(t, root, "app/use.cpp", `#include <protos/main.deps.pb.h>
+int use() { return 0; }
+`)
+
+	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
+	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(t, root, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
+	writeToolProgram(t, root, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(t, root, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	writeTestModuleFile(t, root, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(t, root, "contrib/libs/grpc/ya.make", "LIBRARY()\nSRCS(grpc.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "contrib/libs/grpc/grpc.cpp", "int grpc(){return 0;}\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(root, "app")
+
+	pb := findGraphNodeByOutputs(t, g,
+		"$(B)/protos/main.pb.h",
+		"$(B)/protos/main.pb.cc",
+		"$(B)/protos/main.deps.pb.h",
+		"$(B)/protos/main.grpc.pb.cc",
+		"$(B)/protos/main.grpc.pb.h",
+	)
+	if !containsString(pb.Cmds[0].CmdArgs, "--cpp_out=proto_h=true:$(B)/") {
+		t.Fatalf("pb cmd args missing lite-header cpp_out flag: %v", pb.Cmds[0].CmdArgs)
+	}
+
+	useCC := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
+	mainPB := mustNodeByOutput(t, g, "$(B)/protos/main.pb.h")
+	depPB := mustNodeByOutput(t, g, "$(B)/protos/dep.pb.h")
+	ar := mustNodeByOutput(t, g, "$(B)/protos/libprotos.a")
+	for _, want := range []string{
+		"$(B)/protos/main.deps.pb.h",
+		"$(B)/protos/main.pb.h",
+		"$(B)/protos/dep.pb.h",
+	} {
+		if !nodeHasInput(useCC, want) {
+			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, useCC.Inputs)
+		}
+	}
+	for _, want := range []string{mainPB.UID, depPB.UID} {
+		if !containsString(useCC.Deps, want) {
+			t.Fatalf("use.cpp.o deps missing %q: %v", want, useCC.Deps)
+		}
+	}
+
+	en := mustNodeByOutput(t, g, "$(B)/protos/main.pb.h_serialized.cpp")
+	if !nodeHasInput(en, "$(B)/protos/main.pb.h") {
+		t.Fatalf("enum node inputs missing generated pb.h: %#v", en.Inputs)
+	}
+	if nodeHasInput(en, "$(S)/protos/main.pb.h") {
+		t.Fatalf("enum node still consumes source-root pb.h: %#v", en.Inputs)
+	}
+	if !containsString(en.Deps, mainPB.UID) {
+		t.Fatalf("enum node deps missing pb producer uid %q: %v", mainPB.UID, en.Deps)
+	}
+	if !containsString(en.Deps, depPB.UID) {
+		t.Fatalf("enum node deps missing imported pb producer uid %q: %v", depPB.UID, en.Deps)
+	}
+	if got := en.TargetProperties["module_tag"]; got != "cpp_proto" {
+		t.Fatalf("enum node module_tag = %q, want cpp_proto", got)
+	}
+	if !nodeHasInput(en, "$(B)/protos/dep.pb.h") {
+		t.Fatalf("enum node inputs missing imported pb.h dep.pb.h: %#v", en.Inputs)
+	}
+	if !nodeHasInput(en, "$(S)/contrib/libs/protobuf/src/google/protobuf/message.h") {
+		t.Fatalf("enum node inputs missing protobuf runtime header message.h: %#v", en.Inputs)
+	}
+	// EN CC is not emitted into the PROTO_LIBRARY archive: the _serialized.cpp.o
+	// node is orphaned in the raw graph (no downstream consumer wires it into
+	// any archive) so normalization excludes it, keeping it from inflating our_only.
+	if nodeHasInput(ar, "$(B)/protos/main.pb.h_serialized.cpp.o") {
+		t.Fatalf("archive unexpectedly contains orphaned enum object: %#v", ar.Inputs)
+	}
+}
+
+func TestGen_ProtoLibrary_TransitiveHeadersNoKeepsPublicImportsOnLitePBHeader(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "protos/ya.make", `PROTO_LIBRARY()
+SET(PROTOC_TRANSITIVE_HEADERS "no")
+SRCS(
+    leaf.proto
+    public.proto
+    main.proto
+)
+END()
+`)
+	writeTestModuleFile(t, root, "protos/leaf.proto", `syntax = "proto3";
+package test;
+message Leaf {
+  string value = 1;
+}
+`)
+	writeTestModuleFile(t, root, "protos/public.proto", `syntax = "proto3";
+package test;
+import public "leaf.proto";
+message PublicMessage {
+  Leaf leaf = 1;
+}
+`)
+	writeTestModuleFile(t, root, "protos/main.proto", `syntax = "proto3";
+package test;
+import public "public.proto";
+message Main {
+  PublicMessage message = 1;
+}
+`)
+	writeTestModuleFile(t, root, "app/ya.make", `LIBRARY()
+PEERDIR(protos)
+SRCS(use.cpp)
+END()
+`)
+	writeTestModuleFile(t, root, "app/use.cpp", `#include <protos/main.pb.h>
+int use() { return 0; }
+`)
+
+	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
+	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(t, root, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(root, "app")
+
+	useCC := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
+	mainPB := mustNodeByOutput(t, g, "$(B)/protos/main.pb.h")
+	publicPB := mustNodeByOutput(t, g, "$(B)/protos/public.pb.h")
+	leafPB := mustNodeByOutput(t, g, "$(B)/protos/leaf.pb.h")
+
+	for _, want := range []string{
+		"$(B)/protos/main.pb.h",
+		"$(B)/protos/public.pb.h",
+		"$(B)/protos/leaf.pb.h",
+	} {
+		if !nodeHasInput(useCC, want) {
+			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, useCC.Inputs)
+		}
+	}
+	for _, want := range []string{mainPB.UID, publicPB.UID, leafPB.UID} {
+		if !containsString(useCC.Deps, want) {
+			t.Fatalf("use.cpp.o deps missing %q: %v", want, useCC.Deps)
+		}
+	}
+}
+
 // gen_helpers_test.go — test-only shim that constructs the canonical
 // (host=linux-x86_64, target=linux-aarch64) Platform pair with the
 // shared testToolchainFlags and dispatches into GenWithMode. Lives
