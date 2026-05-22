@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -71,6 +72,8 @@ func commonFlags(tools map[string]string) map[string]string {
 		"BUILD_PYTHON3_BIN":        canonicalizeResourcePatternRefs(tools["python3"]),
 		"CLANG_VER":                mineClangMajor(tools["clang"]),
 		"CLANG16_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG16_RESOURCE_GLOBAL", resourcePatternClang16),
+		"CLANG18_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG18_RESOURCE_GLOBAL", resourcePatternClang18),
+		"CLANG20_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG20_RESOURCE_GLOBAL", resourcePatternClang20),
 		"LLD_ROOT_RESOURCE_GLOBAL": resourceGlobalRef("LLD_ROOT_RESOURCE_GLOBAL", resourcePatternLLDRoot),
 	}
 
@@ -168,6 +171,8 @@ func prebuiltToolchainFlags() map[string]string {
 		"LLD_TOOL":                 lldRoot + "/bin/ld.lld",
 		"LLD_TOOL_VENDOR":          lldRoot + "/bin/ld.lld",
 		"CLANG16_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG16_RESOURCE_GLOBAL", resourcePatternClang16),
+		"CLANG18_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG18_RESOURCE_GLOBAL", resourcePatternClang18),
+		"CLANG20_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG20_RESOURCE_GLOBAL", resourcePatternClang20),
 		"LLD_ROOT_RESOURCE_GLOBAL": resourceGlobalRef("LLD_ROOT_RESOURCE_GLOBAL", resourcePatternLLDRoot),
 	}
 
@@ -185,12 +190,20 @@ func graphConfForToolchainFlags(fs *FS, flags map[string]string) *graphConf {
 		resources = append(resources, readHostResourcesBundle(fs, resourcePatternClang16, "build/platform/clang/clang16.json", true))
 	}
 
+	if flagsUsePattern(flags, resourcePatternClang18) {
+		resources = append(resources, readHostResourcesBundle(fs, resourcePatternClang18, "build/platform/clang/clang18.json", true))
+	}
+
 	if flagsUsePattern(flags, resourcePatternLLDRoot) {
 		resources = append(resources, readHostResourcesBundle(fs, resourcePatternLLDRoot, "build/platform/lld/lld20.json", true))
 	}
 
 	if flagsUsePattern(flags, resourcePatternClangTool) {
 		resources = append(resources, readHostResourcesBundle(fs, resourcePatternClangTool, "build/platform/clang/clang20.json", false))
+	}
+
+	if flagsUsePattern(flags, resourcePatternClang20) {
+		resources = append(resources, readHostResourcesBundle(fs, resourcePatternClang20, "build/platform/clang/clang20.json", true))
 	}
 
 	resources = append(resources, readHostResourcesBundle(fs, resourcePatternJDK17, "build/platform/java/jdk/jdk17/jdk.json", true))
@@ -307,6 +320,54 @@ func readYaConfSection(fs *FS, rel, wantSection string) map[string]string {
 
 		if key != "" {
 			out[key] = val
+		}
+	}
+
+	return out
+}
+
+func readYaConfSections(fs *FS, wantSection string, rels ...string) map[string]string {
+	out := map[string]string{}
+
+	for _, rel := range rels {
+		raw, err := fs.Read(rel)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			Throw(err)
+		}
+
+		section := ""
+		for _, line := range strings.Split(string(raw), "\n") {
+			line = strings.TrimSpace(line)
+
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+
+			if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+				section = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "["), "]"))
+
+				continue
+			}
+
+			if section != wantSection {
+				continue
+			}
+
+			key, val, ok := strings.Cut(line, "=")
+			if !ok {
+				continue
+			}
+
+			key = strings.TrimSpace(key)
+			val = strings.TrimSpace(val)
+			val = strings.Trim(val, `"`)
+
+			if key != "" {
+				out[key] = val
+			}
 		}
 	}
 

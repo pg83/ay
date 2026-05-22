@@ -205,6 +205,11 @@ type genCtx struct {
 	// gen_py3_reg.py PY node on the target axis and reuses that producer
 	// as the generator dep for both target and host reg3.cpp compiles.
 	pyRegisterOutputs map[VFS]NodeRef
+	// checkConfigOutputs caches CHECK_CONFIG_H CH producer nodes by their
+	// generated source path. The generated .config.cpp is path-stable
+	// across host/target native walks, so upstream emits it once and
+	// reuses that producer for both target and host downstream CCs.
+	checkConfigOutputs map[VFS]NodeRef
 	// ldPluginCPCache deduplicates LD_PLUGIN CP NodeRefs across the
 	// target/host walk pair. Without dedup, `contrib/libs/musl/include`'s
 	// `musl.py` would yield two CP nodes (one per platform). REF emits
@@ -661,26 +666,27 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
 
 	ctx := &genCtx{
-		sourceRoot:        srcRoot,
-		fs:                fs,
-		parsers:           parsers,
-		emit:              resourceEmit,
-		memo:              make(map[ModuleInstance]*moduleEmitResult),
-		moduleTypeCache:   make(map[moduleTypeCacheKey]moduleTypeInfo),
-		walking:           make(map[ModuleInstance]bool),
-		host:              hostP,
-		target:            targetP,
-		scannerTarget:     targetScanner,
-		scannerHost:       hostScanner,
-		enOutputs:         make(map[VFS]NodeRef),
-		pbOutputs:         make(map[codegenOutputKey]NodeRef),
-		evOutputs:         make(map[codegenOutputKey]NodeRef),
-		flatcEmissions:    make(map[codegenOutputKey]flatcEmission),
-		pyRegisterOutputs: make(map[VFS]NodeRef),
-		ldPluginCPCache:   make(map[VFS]NodeRef),
-		scanCtxMode:       mode,
-		internedScanCtx:   make(map[scanCtxCacheKey]*scanCtx, 64),
-		testMode:          testMode,
+		sourceRoot:         srcRoot,
+		fs:                 fs,
+		parsers:            parsers,
+		emit:               resourceEmit,
+		memo:               make(map[ModuleInstance]*moduleEmitResult),
+		moduleTypeCache:    make(map[moduleTypeCacheKey]moduleTypeInfo),
+		walking:            make(map[ModuleInstance]bool),
+		host:               hostP,
+		target:             targetP,
+		scannerTarget:      targetScanner,
+		scannerHost:        hostScanner,
+		enOutputs:          make(map[VFS]NodeRef),
+		pbOutputs:          make(map[codegenOutputKey]NodeRef),
+		evOutputs:          make(map[codegenOutputKey]NodeRef),
+		flatcEmissions:     make(map[codegenOutputKey]flatcEmission),
+		pyRegisterOutputs:  make(map[VFS]NodeRef),
+		checkConfigOutputs: make(map[VFS]NodeRef),
+		ldPluginCPCache:    make(map[VFS]NodeRef),
+		scanCtxMode:        mode,
+		internedScanCtx:    make(map[scanCtxCacheKey]*scanCtx, 64),
+		testMode:           testMode,
 	}
 
 	ctx.localScanCtxStack = []map[scanCtxCacheKey]*scanCtx{make(map[scanCtxCacheKey]*scanCtx, 4)}
@@ -696,7 +702,7 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 
 	ctx.emit.Result(root.LDRef)
 	if ctx.testMode && root.testSuiteInfo != nil {
-		for _, ref := range emitTestRunNodes(plainEmit, resourceEmit, targetP, *root.testSuiteInfo, root.LDRef) {
+		for _, ref := range emitTestRunNodes(resourceEmit, resourceEmit, targetP, *root.testSuiteInfo, root.LDRef) {
 			ctx.emit.Result(ref)
 		}
 	}
