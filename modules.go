@@ -1089,7 +1089,11 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 	case "FLATC_FLAGS":
 		d.flatcFlags = append(d.flatcFlags, expandListVars(v.Args, env)...)
 	case "COPY_FILE", "COPY_FILE_WITH_CONTEXT":
-		entry := parseCopyFileEntry(expandListVars(v.Args, env), v.Name == "COPY_FILE_WITH_CONTEXT", v.Line)
+		args := expandListVars(v.Args, env)
+		for i := range args {
+			args[i] = expandConfigString(args[i], env)
+		}
+		entry := parseCopyFileEntry(args, v.Name == "COPY_FILE_WITH_CONTEXT", v.Line)
 		d.copyFiles = append(d.copyFiles, entry)
 		if entry.Auto {
 			dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
@@ -1878,6 +1882,7 @@ func expandConfigString(s string, env Environment) string {
 	s = strings.ReplaceAll(s, "${COMPILER_VERSION}", env.String("COMPILER_VERSION"))
 	s = strings.ReplaceAll(s, "${ARCADIA_BUILD_ROOT}", "$(B)")
 	s = strings.ReplaceAll(s, "${ARCADIA_ROOT}", "$(S)")
+	s = strings.ReplaceAll(s, "${MODDIR}", env.String("MODDIR"))
 
 	return s
 }

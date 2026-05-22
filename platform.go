@@ -315,7 +315,7 @@ func (p *Platform) MultiarchLibPath() string {
 	path := "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/" + p.Triple
 
 	if p.UsesResourceClang() {
-		return "$(CLANG)/lib:" + path
+		return p.resourceClangRoot() + "/lib:" + path
 	}
 
 	return path
@@ -405,7 +405,7 @@ func (p *Platform) LinkerSelectionTailFlags() []string {
 
 	flags := []string{
 		"-fuse-ld=lld",
-		"--ld-path=$(LLD_ROOT)/bin/ld.lld",
+		"--ld-path=" + p.Tools.LLD,
 		"-Wl,--no-rosegment",
 		"-Wl,--build-id=sha1",
 	}
@@ -447,6 +447,23 @@ func (p *Platform) UsesResourceClang() bool {
 
 func (p *Platform) UsesResourceLLD() bool {
 	return strings.HasPrefix(p.Tools.LLD, "$(")
+}
+
+func (p *Platform) resourceClangRoot() string {
+	for _, tool := range []struct {
+		path   string
+		suffix string
+	}{
+		{path: p.Tools.CC, suffix: "/bin/clang"},
+		{path: p.Tools.CXX, suffix: "/bin/clang++"},
+		{path: p.Tools.AR, suffix: "/bin/llvm-ar"},
+	} {
+		if strings.HasSuffix(tool.path, tool.suffix) {
+			return strings.TrimSuffix(tool.path, tool.suffix)
+		}
+	}
+
+	return resourcePatternRef(resourcePatternClangTool)
 }
 
 // ParsePlatformID splits a "default-<os>-<isa>" string into its OS

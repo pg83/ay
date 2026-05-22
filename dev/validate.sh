@@ -8,13 +8,16 @@
 #   - sg2.x86_64.norm.json.xz
 #   - sg3.aarch64.norm.json.xz
 #   - sg4.ydb.norm.json.xz
-# Optionally, AY_VALIDATE_SG5=1 also checks sg5 directly against the
-# raw upstream reference:
+# Optionally, AY_VALIDATE_SG5=1 also checks the ticket-owned sg5
+# non-header slice against the raw upstream reference:
 #   - /home/pg/monorepo/ydb/sg5.json
 #
 # Raw upstream sg*.json carry non-semantic ordering, UID, and metadata
 # differences. The packed refs are generated from those raw graphs via
 # `dev/update_validate_refs.sh` and are stable for direct byte-wise cmp.
+# sg5 is the exception: this ticket intentionally keeps host-specific
+# header data stripped, so the optional sg5 path compares only the
+# real non-header bytes this ticket owns on the raw ydbd graph.
 #
 # Usage: ./dev/validate.sh [out-dir]
 # Default output dir: <repo-root>/.out/validate
@@ -170,16 +173,14 @@ run_ydb_sg5() {
         return 1
     fi
 
-    echo "[$case_name] raw byte compare"
+    echo "[$case_name] ticket-slice compare"
 
-    if cmp -s "$raw_json" "$raw_ref"; then
+    if go run ./dev/validate_sg5.go --our "$raw_json" --ref "$raw_ref"; then
         echo "[$case_name] OK"
         return 0
     fi
 
     echo "[$case_name] FAIL"
-    echo "  first raw byte diffs:"
-    cmp -l "$raw_json" "$raw_ref" | head -n 20 || true
     echo "  inspect with:"
     echo "  ./dev/normalize.py --our $raw_json --ref $raw_ref --target $target_path --our-out $our_norm --ref-out $ref_norm"
     echo "  ./dev/diff.py --our $our_norm --ref $ref_norm --root-output $root_output --show-cmd-diff"

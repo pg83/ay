@@ -2019,6 +2019,43 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Errorf("CC outputs = %v, want first = %q", ccNode.Outputs, wantOutput)
 		}
 	})
+
+	t.Run("ancestor_program_nested_source_keeps_module_dir", func(t *testing.T) {
+		root := t.TempDir()
+
+		modDir := filepath.Join(root, "tools/r6/bin")
+		Throw(os.MkdirAll(filepath.Join(root, "tools/r6/sub"), 0o755))
+		Throw(os.MkdirAll(modDir, 0o755))
+
+		yamake := []byte("PROGRAM(myprog)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nALLOCATOR(FAKE)\nSRCDIR(tools/r6)\nSRCS(sub/main.cpp)\nEND()\n")
+		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+		Throw(os.WriteFile(filepath.Join(root, "tools/r6/sub/main.cpp"), []byte("int main() { return 0; }\n"), 0o644))
+
+		g := testGen(root, "tools/r6/bin")
+
+		var ccNode *Node
+		for _, n := range g.Graph {
+			if n.KV["p"] == "CC" {
+				ccNode = n
+				break
+			}
+		}
+		if ccNode == nil {
+			t.Fatal("no CC node emitted")
+		}
+
+		if ccNode.TargetProperties["module_dir"] != "tools/r6/bin" {
+			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "tools/r6/bin")
+		}
+
+		if got := ccNode.Inputs[0].String(); got != "$(S)/tools/r6/sub/main.cpp" {
+			t.Errorf("CC input = %q, want %q", got, "$(S)/tools/r6/sub/main.cpp")
+		}
+
+		if got := ccNode.Outputs[0].String(); got != "$(B)/tools/r6/bin/__/sub/main.cpp.o" {
+			t.Errorf("CC output = %q, want %q", got, "$(B)/tools/r6/bin/__/sub/main.cpp.o")
+		}
+	})
 }
 
 // TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs pins the PR-33 D02
