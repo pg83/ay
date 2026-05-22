@@ -636,8 +636,8 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		t.Fatalf("ld output = %q, want $(B)/util/ut/util-ut", got)
 	}
 
-	if len(ctxNode.Deps) != 0 {
-		t.Fatalf("ctx deps = %v, want []", ctxNode.Deps)
+	if len(ctxNode.Deps) != 1 || ctxNode.Deps[0] != fetchNode.UID {
+		t.Fatalf("ctx deps = %v, want [%s]", ctxNode.Deps, fetchNode.UID)
 	}
 
 	unittestDeps := make(map[string]struct{}, len(unittestNode.Deps))

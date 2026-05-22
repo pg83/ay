@@ -180,16 +180,23 @@ func cmdMake(args []string) int {
 	// Toolchain flags feed both Platform halves (build-host invokes
 	// these binaries regardless of which axis the cmd_args belong to).
 	tools, conf := toolchainFlags(fs, nil)
-	hostYaFlags := readYaConfSection(fs, "ya.conf", "host_platform_flags")
-	targetYaFlags := readYaConfSection(fs, "ya.conf", "flags")
+	rootHostYaFlags := readYaConfSection(fs, "ya.conf", "host_platform_flags")
+	rootTargetYaFlags := readYaConfSection(fs, "ya.conf", "flags")
+	hostYaFlags := map[string]string{}
+	targetYaFlags := map[string]string{}
+	copyStatsFlags(hostYaFlags, rootHostYaFlags)
+	copyStatsFlags(targetYaFlags, rootTargetYaFlags)
 	var hostInternalYaFlags map[string]string
 	var targetInternalYaFlags map[string]string
 	if mf.testLevel == 0 {
-		// sg5's non-test reference graph carries the extra common CFLAGS
-		// from build/internal/ya.conf, while sg4's -ttt test build does
-		// not. Keep that split explicit so sg4 stays byte-exact.
+		// sg5's non-test reference graph carries build/internal/ya.conf,
+		// including USE_ICONV=static and the extra common compiler flags,
+		// while sg4's -ttt test build does not. Keep that split explicit
+		// so sg4 stays byte-exact.
 		hostInternalYaFlags = readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
 		targetInternalYaFlags = readOptionalYaConfSection(fs, "build/internal/ya.conf", "flags")
+		copyStatsFlags(hostYaFlags, hostInternalYaFlags)
+		copyStatsFlags(targetYaFlags, targetInternalYaFlags)
 	}
 
 	// Host platform: `--host-platform` selects axes (mined when empty),
@@ -215,8 +222,8 @@ func cmdMake(args []string) int {
 		hISA,
 		hostFlags,
 		[]string{"tool"},
-		compilerFlagsFromConfig(hostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
-		compilerFlagsFromConfig(hostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
+		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
+		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
 	)
 	hostP.StatsFlags = buildHostStatsFlags(hostYaFlags, mf.hflags, mf.sandboxing)
 	resourceFetches := newResourceFetchPlan(mf.srcRoot, conf, hostP)
@@ -258,8 +265,8 @@ func cmdMake(args []string) int {
 		tISA,
 		targetFlags,
 		nil,
-		compilerFlagsFromConfig(targetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS")),
-		compilerFlagsFromConfig(targetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
+		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS")),
+		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
 	)
 	targetP.StatsFlags = buildTargetStatsFlags(targetFlags, mf.tflags)
 	if shouldExposeSandboxingTargetTags(mf) {

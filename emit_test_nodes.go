@@ -39,9 +39,10 @@ type testSuiteInfo struct {
 }
 
 // emitTestRunNodes emits the test-context node and the per-suite run nodes
-// for a UNITTEST_FOR module, wiring deps to ldRef. The context node can use a
-// different emitter so test-mode resource deps stay local to the run nodes.
-// Returns the run-node refs (unittest, clang_format) in result order.
+// for a UNITTEST_FOR module, wiring deps to ldRef. Callers may pass different
+// emitters when they want the context node to participate in a different
+// resource/materialization policy than the run nodes. Returns the run-node
+// refs (unittest, clang_format) in result order.
 func emitTestRunNodes(ctxEmit Emitter, runEmit Emitter, p *Platform, info testSuiteInfo, ldRef NodeRef) []NodeRef {
 	ctxRef := ctxEmit.Emit(buildTestCtxNode(p))
 
