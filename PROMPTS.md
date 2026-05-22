@@ -40,7 +40,7 @@ The pre→post numbers that must improve or stay flat:
 
 - gating `[<case>] OK` count (the byte-exact cases sg2 / sg2_x86_64 / sg3 / sg4) — must not drop;
 - `XFAIL` count — must not grow;
-- the `[sg5] exact normalized-node parity: matched=… our_total=… ref_total=…` line — `matched` must not decrease, and `our_total` must move toward `ref_total` (the gap shrinks or holds).
+- the `[sg5] exact normalized-node parity: matched=… our_only=… ref_only=…` line — `matched` must not decrease, AND the total mismatch `our_only + ref_only` must not increase. Removing spurious `our_only` nodes and recovering `ref_only` nodes both count as progress. Do NOT gate on `our_total`: `our_total = matched + our_only`, so dropping junk `our_only` nodes (often the whole point of a ticket) lowers `our_total` — that is an improvement, not a regression.
 
 ### ARBITER
 
