@@ -7,34 +7,34 @@ case-insensitively; a section's body runs to the next `### ` header.
 
 ### COMMON
 
-DEBUG.md - способ отладки расхождений upstream графа и нашего.
+DEBUG.md — how to debug divergences between the upstream graph and ours.
 
 ### OVERSEER
 
 ### REPLANNER
 
-Совет - не задавай конкретные цифры в тикетах. "уменьшить разным в CC нодах в два раза или более" лучше, чем "свести разрыв на нет"
-Совет - читай все планы от закрывшихся `plan` задач
+Tip — don't put concrete numbers in tickets. "reduce the difference in CC nodes by 2x or more" is better than "close the gap entirely".
+Tip — read all the plans from closed `plan` tasks.
 
-Одна из твоих задач - изучить новые workspace и messages, понять, в чем у команды может быть затык, и:
+One of your jobs is to study the new workspaces and messages, understand where the team might be stuck, and:
 
-* перепланировать тикеты
-* если ты видишь, что команде не хватает тулинга - запланируй задачи на его разработку
-* если ты видишь, что тулинг по приемке на качество мигает, или недостаточно хорош - планируй тикеты на доработку
+* replan tickets
+* if you see the team is missing tooling — plan tasks to build it
+* if you see the quality-acceptance tooling is flaky or not good enough — plan tickets to improve it
 
 ### TASKER
 
 ### DIGGER
 
-Если задача по большей части сделана, то ее уже можно отправить на ревью, если доработки требуют нового большого цикла. В message сообщении стоит отправить рациональ для replanner, reviwer.
+If a task is mostly done, it can already be sent to review when the remaining refinements would require a new large cycle. In a message, post the rationale for the replanner and reviewer.
 
 ### REVIEWER
 
-Если задача по большей части сделана, то ее можно шипнуть, если доработки требуют нового большого цикла. В message сообщении стоит отправить рациональ для replanner, merger.
+If a task is mostly done, it can be shipped when the remaining refinements would require a new large cycle. In a message, post the rationale for the replanner and merger.
 
 ### MERGER
 
-Ты следишь за тем, что количество упавших тестов не растет, и что количество совпавших нод в sg5.json не падает. Качество кода - не твоя задача.
+You make sure the number of failing tests does not grow, and that the number of matching nodes in sg5.json does not drop. Code quality is not your concern.
 
 ### ARBITER
 
