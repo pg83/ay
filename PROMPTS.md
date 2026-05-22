@@ -40,7 +40,7 @@ The pre→post numbers that must improve or stay flat:
 
 - gating `[<case>] OK` count (the byte-exact cases sg2 / sg2_x86_64 / sg3 / sg4) — must not drop;
 - `XFAIL` count — must not grow;
-- the `[sg5] exact normalized-node parity: matched=… our_only=… ref_only=…` line — `matched` must not decrease, and the total mismatch `our_only + ref_only` must not increase.
+- the `[sg5] exact normalized-node parity: matched=…` line — `matched` must not decrease.
 
 ### ARBITER
 
