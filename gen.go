@@ -722,7 +722,10 @@ func GenWithModeWithResources(sourceRoot string, targetDir string, hostP, target
 // shape, but leaves resource FETCH scaffolding out of the buffered graph so
 // finalized UIDs continue to match the serialized deps/output content.
 func GenDumpGraphWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
-	return genWithModeWithResources(sourceRoot, targetDir, hostP, targetP, mode, onWarn, resources, testMode, false)
+	emitter := NewBufferedEmitter()
+	runGenIntoWithResources(sourceRoot, targetDir, hostP, targetP, emitter, mode, onWarn, resources, testMode, false)
+
+	return finalizeDumpGraph(emitter)
 }
 
 func genWithModeWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) *Graph {
