@@ -9,11 +9,11 @@ import (
 
 func TestNormPath(t *testing.T) {
 	cases := map[string]string{
-		"$(BUILD_ROOT)/a/b.o":            "$(B)/a/b.o",
-		"$(SOURCE_ROOT)/a/b.c":           "$(S)/a/b.c",
-		"$(CLANG-243881345)/bin/clang":   "$(CLANG)/bin/clang",
+		"$(BUILD_ROOT)/a/b.o":                   "$(B)/a/b.o",
+		"$(SOURCE_ROOT)/a/b.c":                  "$(S)/a/b.c",
+		"$(CLANG-243881345)/bin/clang":          "$(CLANG)/bin/clang",
 		"$(LLD_ROOT-12)/x $(YMAKE_PYTHON3-9)/p": "$(LLD_ROOT)/x $(YMAKE_PYTHON3)/p",
-		"/usr/bin/clang":                 "/usr/bin/clang", // no markers, untouched
+		"/usr/bin/clang":                        "/usr/bin/clang", // no markers, untouched
 	}
 	for in, want := range cases {
 		if got := normPath(in); got != want {
@@ -176,5 +176,85 @@ func TestDumpGrep(t *testing.T) {
 	bySU := captureStdout(t, func() { cmdDumpGrep([]string{"--in", in, "BB"}) })
 	if !strings.Contains(bySU, `"BB"`) || strings.Contains(bySU, `"AA"`) {
 		t.Fatalf("grep by self_uid: want BB only, got:\n%s", bySU)
+	}
+}
+
+func TestDumpGrepSubstrRegex(t *testing.T) {
+	dir := t.TempDir()
+	in := filepath.Join(dir, "g.jsonl")
+	Throw(os.WriteFile(in, []byte(
+		`{"self_uid":"AA","outputs":["/a.o"],"cmds":[{"cmd_args":["clang","${SSE41_CFLAGS}"]}]}`+"\n"+
+			`{"self_uid":"BB","outputs":["/b.o"],"cmds":[{"cmd_args":["clang","-O2"]}]}`+"\n"), 0o644))
+
+	// --substr searches the whole node, so it finds a cmd_args token
+	sub := captureStdout(t, func() { cmdDumpGrep([]string{"--in", in, "--substr", "${SSE41_CFLAGS}"}) })
+	if !strings.Contains(sub, `"AA"`) || strings.Contains(sub, `"BB"`) {
+		t.Fatalf("grep --substr: want AA only, got:\n%s", sub)
+	}
+	rx := captureStdout(t, func() { cmdDumpGrep([]string{"--in", in, "--regex", "SSE[0-9]+_CFLAGS"}) })
+	if !strings.Contains(rx, `"AA"`) || strings.Contains(rx, `"BB"`) {
+		t.Fatalf("grep --regex: want AA only, got:\n%s", rx)
+	}
+}
+
+func TestDumpDiffModes(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.jsonl")
+	right := filepath.Join(dir, "r.jsonl")
+
+	ln := func(su, cmds, tags string) string {
+		return `{"self_uid":"` + su + `","uid":"` + su + `","outputs":["/a.o"],"deps":[],"inputs":["/a.c"],` +
+			`"cmds":[{"cmd_args":` + cmds + `}],"tags":` + tags +
+			`,"kv":{"p":"CC"},"env":{},"platform":"linux","requirements":{},"target_properties":{}}`
+	}
+	Throw(os.WriteFile(left, []byte(ln("L1", `["clang","-c","${SSE}"]`, `["x"]`)+"\n"), 0o644))
+	Throw(os.WriteFile(right, []byte(ln("R1", `["clang","-c","-fno-omit-frame-pointer"]`, `[]`)+"\n"), 0o644))
+
+	run := func(mode ...string) string {
+		out := filepath.Join(dir, "o.txt")
+		args := append([]string{"--left", left, "--right", right, "--out", out}, mode...)
+		if exc := Try(func() { cmdDumpDiff(args) }); exc != nil {
+			t.Fatalf("diff %v: %v", mode, exc)
+		}
+		return string(Throw2(os.ReadFile(out)))
+	}
+
+	if bf := run("--by-field"); !strings.Contains(bf, "cmds") || !strings.Contains(bf, "tags") {
+		t.Fatalf("by-field missing cmds/tags:\n%s", bf)
+	}
+	if bt := run("--by-token"); !strings.Contains(bt, "${SSE}") || !strings.Contains(bt, "-fno-omit-frame-pointer") {
+		t.Fatalf("by-token missing tokens:\n%s", bt)
+	}
+	if pr := run("--pair", "/a.o"); !strings.Contains(pr, "+${SSE}") || !strings.Contains(pr, "+-fno-omit-frame-pointer") {
+		t.Fatalf("pair missing token diffs:\n%s", pr)
+	}
+}
+
+func TestDumpDiffRoots(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.jsonl")
+	right := filepath.Join(dir, "r.jsonl")
+	out := filepath.Join(dir, "o.txt")
+
+	node := func(su, uid, output, deps, tags string) string {
+		return `{"self_uid":"` + su + `","uid":"` + uid + `","outputs":["` + output + `"],"deps":` + deps +
+			`,"inputs":[],"cmds":[],"tags":` + tags + `,"kv":{},"env":{},"platform":"x","requirements":{},"target_properties":{}}`
+	}
+	// /p depends on /c; both content-differ from right. /c is a leaf (no
+	// divergent child); /p is not (its child /c diverges).
+	Throw(os.WriteFile(left, []byte(node("Ps", "Pu", "/p", `["Cu"]`, `["a"]`)+"\n"+node("Cs", "Cu", "/c", `[]`, `["a"]`)+"\n"), 0o644))
+	Throw(os.WriteFile(right, []byte(node("Ps2", "Pu2", "/p", `["Cu2"]`, `[]`)+"\n"+node("Cs2", "Cu2", "/c", `[]`, `[]`)+"\n"), 0o644))
+
+	if exc := Try(func() { cmdDumpDiff([]string{"--left", left, "--right", right, "--out", out, "--roots"}) }); exc != nil {
+		t.Fatalf("roots: %v", exc)
+	}
+	got := string(Throw2(os.ReadFile(out)))
+	if !strings.Contains(got, "\n/c\n") {
+		t.Fatalf("roots should list /c as a leaf:\n%s", got)
+	}
+	for _, line := range strings.Split(got, "\n") {
+		if line == "/p" {
+			t.Fatalf("roots should NOT list /p (child /c diverges):\n%s", got)
+		}
 	}
 }

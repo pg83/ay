@@ -58,7 +58,7 @@ Usage:
 Subcommands:
     fetch      Fetch and unpack an external resource.
     make       Generate and execute the build graph for a target.
-    dump       Graph canonicalization: dump normalize | dump sort.
+    dump       Graph tools: dump normalize | sort | diff | grep.
     help       Show this message.
 
 Use ay make -j 0 -G <target> > graph.json for graph-generation

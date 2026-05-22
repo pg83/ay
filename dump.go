@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"sort"
@@ -220,6 +221,41 @@ func streamGraphFanout[R any](path string, workers int, process func(map[string]
 	wg.Wait()
 	close(results)
 	<-done
+}
+
+// streamJSONL calls fn once per line of a JSONL graph (the normalize output),
+// decoding each line into a node map. Single goroutine; fn runs sequentially.
+func streamJSONL(path string, fn func(map[string]any)) {
+	f := Throw2(os.Open(path))
+	defer func() { Throw(f.Close()) }()
+
+	r := bufio.NewReaderSize(f, 1<<20)
+	for {
+		line, err := r.ReadString('\n')
+		if len(line) > 0 {
+			n := map[string]any{}
+			Throw(json.Unmarshal([]byte(line), &n))
+			fn(n)
+		}
+		if err == io.EOF {
+			break
+		}
+		Throw(err)
+	}
+}
+
+// dumpContentFields are the canonical node fields that feed self_uid (deps,
+// uid, self_uid, sandboxing excluded); the diff analyses compare these.
+var dumpContentFields = []string{
+	"cmds", "env", "inputs", "kv", "outputs",
+	"platform", "requirements", "tags", "target_properties", "host_platform",
+}
+
+// nodeKVP returns kv["p"] (node kind: CC/AR/LD/PB/...), "" if absent.
+func nodeKVP(n map[string]any) string {
+	kv, _ := n["kv"].(map[string]any)
+	p, _ := kv["p"].(string)
+	return p
 }
 
 // seekToGraph advances dec to the first element of the top-level "graph"

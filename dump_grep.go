@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 
 	json "github.com/goccy/go-json"
@@ -17,7 +18,7 @@ import (
 // $(BUILD_ROOT)/$(B) canonicalization.
 func cmdDumpGrep(args []string) int {
 	var inPath string
-	raw := false
+	raw, substr, useRegex := false, false, false
 	var keys []string
 
 	for i := 0; i < len(args); i++ {
@@ -27,11 +28,19 @@ func cmdDumpGrep(args []string) int {
 			inPath = arg(args, i)
 		case args[i] == "--raw":
 			raw = true
+		case args[i] == "--substr":
+			substr = true
+		case args[i] == "--regex":
+			useRegex = true
 		case strings.HasPrefix(args[i], "--"):
 			ThrowFmt("dump grep: unknown argument %q", args[i])
 		default:
 			keys = append(keys, args[i])
 		}
+	}
+
+	if substr && useRegex {
+		ThrowFmt("dump grep: --substr and --regex are mutually exclusive")
 	}
 
 	if inPath == "" {
@@ -52,26 +61,67 @@ func cmdDumpGrep(args []string) int {
 		ThrowFmt("dump grep: no keys given (positional args or stdin)")
 	}
 
-	want := make(map[string]bool, len(keys))
-	for _, k := range keys {
-		want[normPath(strings.TrimSpace(k))] = true
+	// matchStr tests one candidate string (a self_uid or a canonicalized
+	// output path) against the keys, per match mode.
+	var matchStr func(string) bool
+	switch {
+	case useRegex:
+		res := make([]*regexp.Regexp, len(keys))
+		for i, k := range keys {
+			res[i] = Throw2(regexp.Compile(k))
+		}
+		matchStr = func(s string) bool {
+			for _, re := range res {
+				if re.MatchString(s) {
+					return true
+				}
+			}
+			return false
+		}
+	case substr:
+		want := make([]string, len(keys))
+		for i, k := range keys {
+			want[i] = strings.TrimSpace(k)
+		}
+		matchStr = func(s string) bool {
+			for _, k := range want {
+				if strings.Contains(s, k) {
+					return true
+				}
+			}
+			return false
+		}
+	default:
+		want := make(map[string]bool, len(keys))
+		for _, k := range keys {
+			want[normPath(strings.TrimSpace(k))] = true
+		}
+		matchStr = func(s string) bool { return want[s] }
 	}
 
 	bw := bufio.NewWriterSize(os.Stdout, 1<<20)
 	defer func() { Throw(bw.Flush()) }()
 
+	// Exact mode finds a specific node by self_uid/output; substr/regex are
+	// general greps over the whole node (so they catch flags/${VAR} leaks in
+	// cmd_args, etc.).
+	exact := !substr && !useRegex
 	emit := func(node map[string]any) {
 		hit := false
-		if su, _ := node["self_uid"].(string); want[su] {
-			hit = true
-		}
-		if !hit {
+		if exact {
+			if matchStr(getString(node, "self_uid")) {
+				hit = true
+			}
 			for _, o := range toStrings(node["outputs"]) {
-				if want[normPath(o)] {
-					hit = true
+				if hit {
 					break
 				}
+				if matchStr(normPath(o)) {
+					hit = true
+				}
 			}
+		} else {
+			hit = matchStr(string(marshalCompact(node)))
 		}
 		if !hit {
 			return
