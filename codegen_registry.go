@@ -51,7 +51,8 @@ type GeneratedFileInfo struct {
 // $(S)/$(B) paths); the module_dir is supplied by the consumer at emit time.
 type deferredCF struct {
 	instance      ModuleInstance
-	srcRel        string
+	srcVFS        VFS
+	outVFS        VFS
 	cfgVars       []string
 	includeInputs []VFS
 }
@@ -188,9 +189,9 @@ func registerBoundGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, ki
 	reg := codegenRegForInstance(ctx, instance)
 	if reg != nil {
 		reg.Register(&GeneratedFileInfo{
-			ProducerKvP: kind,
-			OutputPath:  output,
-			ProducerRef: ref,
+			ProducerKvP:    kind,
+			OutputPath:     output,
+			ProducerRef:    ref,
 			HasProducerRef: true,
 		})
 	}
