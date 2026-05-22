@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // platform.go — the `(host, target)` Platform pair threaded from CLI
 // through every emitter. Tool sub-graphs are walked as (host, host).
@@ -13,6 +16,12 @@ type Platform struct {
 	Target PlatformID        // = MakePlatformID(OS, ISA); surfaces as `node.platform`
 	Flags  map[string]string // canonical per-platform toggles ("PIC"="yes", …)
 	Tags   []string          // baseline tags every node on this platform carries (e.g. `["tool"]` on host). "tool" is the host-axis discriminant that surfaces as `node.host_platform`.
+
+	// Hidden stats-preimage metadata. Upstream raw graphs hash a platform +
+	// build-type + platform-flag tag vector before public tag stripping, so
+	// the raw node serializer cannot reconstruct it from visible Tags alone.
+	StatsFlags     map[string]string
+	StatsExtraTags []string
 
 	// Tools is the absolute-path toolchain bound to this Platform. Populated
 	// by NewPlatform from Flags entries written by mine.go::commonFlags.
@@ -96,6 +105,8 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsE
 		Target:          MakePlatformID(os, isa),
 		Flags:           flags,
 		Tags:            tags,
+		StatsFlags:      map[string]string{},
+		StatsExtraTags:  defaultStatsExtraTags(flags),
 		Tools:           toolchainFromFlags(flags),
 		PIC:             flags["PIC"] == "yes",
 		BuildType:       buildType,
@@ -107,6 +118,77 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsE
 		CFlags:          parseCompilerFlags(cflagsEnv),
 		CXXFlags:        parseCompilerFlags(cxxflagsEnv),
 		ClangVer:        platformClangVersion(flags),
+	}
+}
+
+var statsFlagsMapping = map[string]string{
+	"MUSL":        "musl",
+	"RACE":        "race",
+	"USE_AFL":     "AFL",
+	"USE_LTO":     "lto",
+	"USE_THINLTO": "thinlto",
+}
+
+func defaultStatsExtraTags(flags map[string]string) []string {
+	if flags["PIC"] == "yes" {
+		return []string{"pic"}
+	}
+
+	return nil
+}
+
+func statsTagsForPlatform(p *Platform) []string {
+	if p == nil {
+		return nil
+	}
+
+	tags := []string{string(p.Target), p.BuildType}
+
+	if len(p.StatsFlags) > 0 {
+		formatted := make([]string, 0, len(p.StatsFlags))
+		for k, v := range p.StatsFlags {
+			if tag := formatStatsTag(k, v); tag != "" {
+				formatted = append(formatted, tag)
+			}
+		}
+		sort.Strings(formatted)
+		tags = append(tags, formatted...)
+	}
+
+	tags = append(tags, p.StatsExtraTags...)
+
+	return tags
+}
+
+func formatStatsTag(k, v string) string {
+	if k == "SANITIZER_TYPE" {
+		if v == "" {
+			return ""
+		}
+
+		return strings.ToLower(v[:1]) + "san"
+	}
+
+	yes, ok := parseStatsBool(v)
+	if tag, mapped := statsFlagsMapping[k]; mapped {
+		if ok && yes {
+			return tag
+		}
+
+		return ""
+	}
+
+	return k + "=" + v
+}
+
+func parseStatsBool(v string) (bool, bool) {
+	switch strings.ToLower(v) {
+	case "y", "yes", "t", "true", "on", "1":
+		return true, true
+	case "n", "no", "f", "false", "off", "0":
+		return false, true
+	default:
+		return false, false
 	}
 }
 

@@ -87,5 +87,5 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		node.DepRefs = []NodeRef{*yasmLD}
 	}
 
-	return emit.Emit(node), outVFS
+	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS
 }

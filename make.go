@@ -50,6 +50,76 @@ type makeFlags struct {
 	sandboxing  bool // --sandboxing: run test nodes under the fs sandbox
 }
 
+// Upstream prepare_tags() starts from tc['flags'] and only overlays
+// these extra target flags; arbitrary -D values must not perturb
+// raw-graph bytes.
+var targetStatsExtraFlagAllowlist = map[string]struct{}{
+	"ALLOCATOR": {},
+	"FAKEID":    {},
+	"MUSL":      {},
+	"RACE":      {},
+}
+
+// Platform.Flags carries far more than upstream tc['flags'] (tool paths,
+// repo defaults, and raw CLI extras all share one map locally), so keep the
+// base target copy to the tag-bearing keys that prepare_tags() actually
+// surfaces in stats_uid.
+var targetStatsBaseFlagAllowlist = map[string]struct{}{
+	"ALLOCATOR":      {},
+	"FAKEID":         {},
+	"MUSL":           {},
+	"RACE":           {},
+	"SANDBOXING":     {},
+	"SANITIZER_TYPE": {},
+	"USE_AFL":        {},
+	"USE_LTO":        {},
+	"USE_THINLTO":    {},
+}
+
+func buildTargetStatsFlags(platformFlags, cliFlags map[string]string) map[string]string {
+	flags := make(map[string]string, len(platformFlags)+len(cliFlags))
+	copyAllowedStatsFlags(flags, platformFlags, targetStatsBaseFlagAllowlist)
+	copyAllowedStatsFlags(flags, cliFlags, targetStatsExtraFlagAllowlist)
+	if yes, ok := parseStatsBool(flags["SANDBOXING"]); ok && yes {
+		if _, ok := flags["FAKEID"]; !ok {
+			flags["FAKEID"] = "sandboxing"
+		}
+	}
+
+	return flags
+}
+
+func copyAllowedStatsFlags(dst, src map[string]string, allowlist map[string]struct{}) {
+	for k, v := range src {
+		if v == "" {
+			continue
+		}
+		if _, ok := allowlist[k]; ok {
+			dst[k] = v
+		}
+	}
+}
+
+func buildHostStatsFlags(cliFlags map[string]string, sandboxing bool) map[string]string {
+	flags := map[string]string{
+		"CLANG_COVERAGE":   "no",
+		"CONSISTENT_DEBUG": "yes",
+		"NO_DEBUGINFO":     "yes",
+		"TIDY":             "no",
+		"TOOL_BUILD_MODE":  "yes",
+		"TRAVERSE_RECURSE": "no",
+	}
+	for k, v := range cliFlags {
+		flags[k] = v
+	}
+	if sandboxing {
+		flags["SANDBOXING"] = "yes"
+		flags["FAKEID"] = "sandboxing"
+	}
+
+	return flags
+}
+
 // cmdMake parses CLI args, runs Gen (host walks recurse implicitly), and
 // pipes the resulting node stream into the executor. Exit 0 on success;
 // throws on any subcommand failure so main's Catch prints + exits non-zero.
@@ -91,6 +161,7 @@ func cmdMake(args []string) int {
 		hostFlags["GG_BUILD_TYPE"] = "release"
 	}
 	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, "", "")
+	hostP.StatsFlags = buildHostStatsFlags(mf.hflags, mf.sandboxing)
 	resourceFetches := newResourceFetchPlan(mf.srcRoot, conf, hostP)
 
 	// Target platform: `--target-platform` selects axes (defaults to
@@ -126,6 +197,7 @@ func cmdMake(args []string) int {
 	}
 	targetFlags["PIC"] = "no"
 	targetP := NewPlatform(tOS, tISA, targetFlags, nil, os.Getenv("CFLAGS"), os.Getenv("CXXFLAGS"))
+	targetP.StatsFlags = buildTargetStatsFlags(targetFlags, mf.tflags)
 	if mf.sandboxing {
 		targetP.Tags = sandboxingNodeTags(targetP)
 	}

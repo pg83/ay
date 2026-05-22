@@ -26,6 +26,10 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		platformID = p.Target
 		tags = append(tags, p.Tags...)
 	}
+	statsPlatform := instance.Platform
+	if p != nil {
+		statsPlatform = p
+	}
 
 	cmdArgs := make([]string, 0, 4+len(sources))
 	cmdArgs = append(cmdArgs,
@@ -80,5 +84,5 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		},
 	}
 
-	return emit.Emit(node), outVFS
+	return emit.Emit(bindNodePlatform(node, statsPlatform)), outVFS
 }

@@ -83,9 +83,8 @@ func writeGraphIndented(w io.Writer, g *Graph) {
 }
 
 // appendNode emits a single Node as a JSON object indented under `pad`.
-// Field order is alphabetical (declaration order in node.go); stats_uid
-// is omitted (json:"-"). cache is emitted only when n.Cache != nil
-// (omitempty equivalent).
+// Field order is alphabetical (declaration order in node.go). cache is
+// emitted only when n.Cache != nil (omitempty equivalent).
 func appendNode(buf []byte, n *Node, pad string) []byte {
 	innerPad := pad + "    "
 	buf = append(buf, pad...)
@@ -182,7 +181,11 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 	buf = appendString(buf, n.SelfUID)
 	buf = append(buf, ',', '\n')
 
-	// stats_uid is tagged json:"-" and omitted; see node.go.
+	// stats_uid: upstream raw-graph field injected after self_uid.
+	buf = append(buf, innerPad...)
+	buf = append(buf, `"stats_uid": `...)
+	buf = appendString(buf, n.StatsUID)
+	buf = append(buf, ',', '\n')
 
 	// tags: []string
 	buf = append(buf, innerPad...)

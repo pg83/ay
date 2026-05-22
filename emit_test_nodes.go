@@ -59,7 +59,7 @@ func emitTestRunNodes(ctxEmit Emitter, runEmit Emitter, p *Platform, info testSu
 func buildTestCtxNode(p *Platform) *Node {
 	cacheTrue := true
 
-	return &Node{
+	return bindNodePlatform(&Node{
 		Cache: &cacheTrue,
 		Cmds: []Cmd{{
 			CmdArgs: []string{
@@ -84,7 +84,7 @@ func buildTestCtxNode(p *Platform) *Node {
 		},
 		Tags:             sandboxingNodeTags(p),
 		TargetProperties: map[string]string{},
-	}
+	}, p)
 }
 
 func buildUnittestNode(p *Platform, info testSuiteInfo) *Node {
@@ -145,7 +145,7 @@ func buildUnittestNode(p *Platform, info testSuiteInfo) *Node {
 		"--ya-end-command-file",
 	}
 
-	return &Node{
+	return bindNodePlatform(&Node{
 		Cache: &cacheFalse,
 		Cmds: []Cmd{{
 			CmdArgs: cmdArgs,
@@ -173,7 +173,7 @@ func buildUnittestNode(p *Platform, info testSuiteInfo) *Node {
 		TargetProperties: map[string]string{
 			"module_lang": "cpp",
 		},
-	}
+	}, p)
 }
 
 func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
@@ -247,7 +247,7 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 		inputs = append(inputs, Source(src))
 	}
 
-	return &Node{
+	return bindNodePlatform(&Node{
 		Cache: &cacheTrue,
 		Cmds: []Cmd{{
 			CmdArgs: cmdArgs,
@@ -275,7 +275,7 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 		TargetProperties: map[string]string{
 			"module_lang": "unknown",
 		},
-	}
+	}, p)
 }
 
 func testEnv(_ *Platform, testName string) map[string]string {

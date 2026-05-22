@@ -73,7 +73,7 @@ func EmitJVCPG4(
 		DepRefs: []NodeRef{jvRef},
 	}
 
-	return emit.Emit(node)
+	return emit.Emit(bindNodePlatform(node, instance.Platform))
 }
 
 // EmitCP emits a CP node copying srcAbsPath to dstAbsPath. Today exercised
@@ -132,5 +132,5 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		DepRefs: depRefs,
 	}
 
-	return emit.Emit(node)
+	return emit.Emit(bindNodePlatform(node, instance.Platform))
 }
