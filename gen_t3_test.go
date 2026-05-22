@@ -409,6 +409,46 @@ int copied() { return 0; }
 	}
 }
 
+func TestGen_CopyFileWithContextExpandsBuildRootModdirDestination(t *testing.T) {
+	root := t.TempDir()
+
+	mkdirWrite := func(rel, body string) {
+		full := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	mkdirWrite("mod/ya.make", `LIBRARY()
+COPY_FILE_WITH_CONTEXT(
+    AUTO
+    original.cpp
+    ${ARCADIA_BUILD_ROOT}/${MODDIR}/copied.cpp
+)
+END()
+`)
+	mkdirWrite("mod/original.cpp", `#include "dep.h"
+int copied() { return 0; }
+`)
+	mkdirWrite("mod/dep.h", "#pragma once\n")
+
+	g := testGen(root, "mod")
+
+	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
+	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
+	wantInputs := []string{
+		"$(B)/mod/copied.cpp",
+		"$(S)/mod/original.cpp",
+		"$(S)/mod/dep.h",
+	}
+	if got := vfsStringsT3(cc.Inputs); !reflect.DeepEqual(got[:len(wantInputs)], wantInputs) {
+		t.Fatalf("copied.cpp inputs prefix = %v, want %v", got[:len(wantInputs)], wantInputs)
+	}
+}
+
 func TestGen_CopyFileAutoDoesNotPropagateSourceContext(t *testing.T) {
 	root := t.TempDir()
 

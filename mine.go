@@ -67,10 +67,11 @@ func commonFlags(tools map[string]string) map[string]string {
 		"USE_ARCADIA_PYTHON":       "yes",
 		"USE_PREBUILT_TOOLS":       "no",
 		"USE_PYTHON3":              "yes",
-		"BUILD_PYTHON_BIN":         tools["python3"],
-		"BUILD_PYTHON3_BIN":        tools["python3"],
+		"BUILD_PYTHON_BIN":         canonicalizeResourcePatternRefs(tools["python3"]),
+		"BUILD_PYTHON3_BIN":        canonicalizeResourcePatternRefs(tools["python3"]),
 		"CLANG_VER":                mineClangMajor(tools["clang"]),
-		"LLD_ROOT_RESOURCE_GLOBAL": filepath.Dir(filepath.Dir(tools["lld"])),
+		"CLANG16_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG16_RESOURCE_GLOBAL", resourcePatternClang16),
+		"LLD_ROOT_RESOURCE_GLOBAL": resourceGlobalRef("LLD_ROOT_RESOURCE_GLOBAL", resourcePatternLLDRoot),
 	}
 
 	for k, v := range tools {
@@ -79,8 +80,8 @@ func commonFlags(tools map[string]string) map[string]string {
 		// `_pl` is a marker token, not a token to upper-case. Uppercase
 		// the alpha component first, then transliterate `+`.
 		key := strings.ReplaceAll(strings.ToUpper(k), "+", "_pl")
-		res[key+"_TOOL"] = v
-		res[key+"_TOOL_VENDOR"] = v
+		res[key+"_TOOL"] = canonicalizeResourcePatternRefs(v)
+		res[key+"_TOOL_VENDOR"] = canonicalizeResourcePatternRefs(v)
 	}
 
 	return res
@@ -139,9 +140,9 @@ func applyExternalClangVersion(flags map[string]string) {
 
 func prebuiltToolchainFlags() map[string]string {
 	const (
-		clangRoot  = "$(CLANG)"
-		lldRoot    = "$(LLD_ROOT)"
-		pythonRoot = "$(YMAKE_PYTHON3)"
+		clangRoot  = "$(" + resourcePatternClangTool + ")"
+		lldRoot    = "$(" + resourcePatternLLDRoot + ")"
+		pythonRoot = "$(" + resourcePatternYMakePython3 + ")"
 	)
 
 	flags := map[string]string{
@@ -166,7 +167,8 @@ func prebuiltToolchainFlags() map[string]string {
 		"STRIP_TOOL_VENDOR":        clangRoot + "/bin/llvm-strip",
 		"LLD_TOOL":                 lldRoot + "/bin/ld.lld",
 		"LLD_TOOL_VENDOR":          lldRoot + "/bin/ld.lld",
-		"LLD_ROOT_RESOURCE_GLOBAL": lldRoot,
+		"CLANG16_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG16_RESOURCE_GLOBAL", resourcePatternClang16),
+		"LLD_ROOT_RESOURCE_GLOBAL": resourceGlobalRef("LLD_ROOT_RESOURCE_GLOBAL", resourcePatternLLDRoot),
 	}
 
 	return flags
@@ -175,19 +177,23 @@ func prebuiltToolchainFlags() map[string]string {
 func graphConfForToolchainFlags(fs *FS, flags map[string]string) *graphConf {
 	resources := make([]graphConfResource, 0, 5)
 
-	if flagsUsePrefix(flags, "$(YMAKE_PYTHON3)") {
-		resources = append(resources, readHostResourcesBundle(fs, "YMAKE_PYTHON3", "build/platform/python/ymake_python3/resources.json", true))
+	if flagsUsePattern(flags, resourcePatternYMakePython3) {
+		resources = append(resources, readHostResourcesBundle(fs, resourcePatternYMakePython3, "build/platform/python/ymake_python3/resources.json", true))
 	}
 
-	if flagsUsePrefix(flags, "$(LLD_ROOT)") {
-		resources = append(resources, readHostResourcesBundle(fs, "LLD_ROOT", "build/platform/lld/lld20.json", true))
+	if flagsUsePattern(flags, resourcePatternClang16) {
+		resources = append(resources, readHostResourcesBundle(fs, resourcePatternClang16, "build/platform/clang/clang16.json", true))
 	}
 
-	if flagsUsePrefix(flags, "$(CLANG)") {
-		resources = append(resources, readHostResourcesBundle(fs, "CLANG", "build/platform/clang/clang20.json", false))
+	if flagsUsePattern(flags, resourcePatternLLDRoot) {
+		resources = append(resources, readHostResourcesBundle(fs, resourcePatternLLDRoot, "build/platform/lld/lld20.json", true))
 	}
 
-	resources = append(resources, readHostResourcesBundle(fs, "JDK17-564746473", "build/platform/java/jdk/jdk17/jdk.json", true))
+	if flagsUsePattern(flags, resourcePatternClangTool) {
+		resources = append(resources, readHostResourcesBundle(fs, resourcePatternClangTool, "build/platform/clang/clang20.json", false))
+	}
+
+	resources = append(resources, readHostResourcesBundle(fs, resourcePatternJDK17, "build/platform/java/jdk/jdk17/jdk.json", true))
 	resources = append(resources, graphConfResource{
 		Name:     "vcs",
 		Pattern:  "VCS",
@@ -197,9 +203,10 @@ func graphConfForToolchainFlags(fs *FS, flags map[string]string) *graphConf {
 	return &graphConf{Resources: resources}
 }
 
-func flagsUsePrefix(flags map[string]string, prefix string) bool {
+func flagsUsePattern(flags map[string]string, pattern string) bool {
+	ref := resourcePatternRef(pattern)
 	for _, v := range flags {
-		if strings.HasPrefix(v, prefix) {
+		if strings.Contains(v, ref) {
 			return true
 		}
 	}
@@ -237,7 +244,7 @@ func envToolPath(name string) string {
 	}
 
 	if strings.HasPrefix(v, "$(") || filepath.IsAbs(v) || strings.ContainsRune(v, os.PathSeparator) {
-		return v
+		return canonicalizeResourcePatternRefs(v)
 	}
 
 	return ""
