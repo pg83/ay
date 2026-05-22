@@ -22,13 +22,15 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		return nil
 	}
 
+	rebaseAncestorSource := ancestorRebase && !strings.Contains(srcRel, "/")
+
 	srcInstance := instance
-	if ancestorRebase {
+	if rebaseAncestorSource {
 		srcInstance.Path = *d.srcDir
 	}
 
 	srcIn := in
-	if ancestorRebase {
+	if rebaseAncestorSource {
 		srcIn.SrcDir = nil
 	}
 

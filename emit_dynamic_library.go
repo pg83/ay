@@ -259,7 +259,7 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 		"-Wl,-z,notext",
 		"-fPIC",
 		"-fuse-ld=lld",
-		"--ld-path=$(LLD_ROOT)/bin/ld.lld",
+		"--ld-path="+p.Tools.LLD,
 		"-Wl,--no-rosegment",
 		"-Wl,--build-id=sha1",
 		"-nostdlib",
