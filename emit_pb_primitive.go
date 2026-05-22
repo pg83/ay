@@ -333,7 +333,9 @@ var pbCcDeepRuntimeHeaders = []VFS{
 // for PROTO_LIBRARY modules (nil when absent). transitiveProtoImports is the
 // caller-resolved set of imported .proto sources (Source-rooted); hasDescriptor
 // signals that descriptor.proto is in the transitive closure so its pre-built
-// .pb.h gets injected as an extra input.
+// .pb.h gets injected as an extra input. liteHeaders mirrors
+// PROTOC_TRANSITIVE_HEADERS=no and adds the extra `.deps.pb.h` output plus
+// the `proto_h=true:` cpp_out option ymake passes to protoc.
 func EmitPB(
 	instance ModuleInstance,
 	protoRelPath string,
@@ -347,6 +349,7 @@ func EmitPB(
 	moduleTag *string,
 	cppOutRoot string,
 	duplicateOutputRootInclude bool,
+	liteHeaders bool,
 	extraProtocFlags []string,
 	extraPlugins []resolvedCPPProtoPlugin,
 	transitiveProtoImports []VFS,
@@ -359,11 +362,15 @@ func EmitPB(
 
 	pbH := Build(protoBase + ".pb.h")
 	pbCC := Build(protoBase + ".pb.cc")
+	pbDepsH := Build(protoBase + ".deps.pb.h")
 	grpcPbCC := Build(protoBase + ".grpc.pb.cc")
 	grpcPbH := Build(protoBase + ".grpc.pb.h")
 	srcVFS := Source(protoRelPath)
 
 	outputs := []VFS{pbH, pbCC}
+	if liteHeaders {
+		outputs = append(outputs, pbDepsH)
+	}
 	if grpc {
 		outputs = append(outputs, grpcPbCC, grpcPbH)
 	}
@@ -384,6 +391,10 @@ func EmitPB(
 	includeRoot := ""
 	if cppOutRoot != "" {
 		includeRoot = cppOutRoot
+	}
+	cppOutArg := ":$(B)/" + cppOutRoot
+	if liteHeaders {
+		cppOutArg = "proto_h=true" + cppOutArg
 	}
 	cmdArgs = append(cmdArgs,
 		"--",
@@ -410,7 +421,7 @@ func EmitPB(
 	cmdArgs = append(cmdArgs,
 		"-I=$(B)",
 		"-I=$(S)/contrib/libs/protobuf/src",
-		"--cpp_out=:$(B)/"+cppOutRoot,
+		"--cpp_out="+cppOutArg,
 	)
 	cmdArgs = append(cmdArgs, extraProtocFlags...)
 	cmdArgs = append(cmdArgs,

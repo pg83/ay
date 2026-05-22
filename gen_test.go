@@ -4796,7 +4796,8 @@ func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 	// declaring module: config.h.in in SRCS, plus a .cpp that does NOT include config.h
 	Throw(os.WriteFile(filepath.Join(genh, "ya.make"),
 		[]byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSET(MYVAR hello)\nSRCS(config.h.in own.cpp)\nEND()\n"), 0o644))
-	Throw(os.WriteFile(filepath.Join(genh, "config.h.in"), []byte("#define X @MYVAR@\n"), 0o644))
+	Throw(os.WriteFile(filepath.Join(genh, "config.h.in"), []byte("#include \"dep.h\"\n#define X @MYVAR@\n"), 0o644))
+	Throw(os.WriteFile(filepath.Join(genh, "dep.h"), []byte("#pragma once\n"), 0o644))
 	Throw(os.WriteFile(filepath.Join(genh, "own.cpp"), []byte("int g(){return 0;}\n"), 0o644))
 	// consuming module: #includes the generated header across PEERDIR
 	Throw(os.WriteFile(filepath.Join(cons, "ya.make"),
@@ -4854,6 +4855,192 @@ func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("use.cpp.o deps %v missing config.h CF uid %q", use.Deps, cf.UID)
+	}
+	if !nodeHasInput(use, "$(S)/genh/config.h.in") {
+		t.Errorf("use.cpp.o inputs missing config.h.in: %#v", use.Inputs)
+	}
+	if !nodeHasInput(use, "$(S)/genh/dep.h") {
+		t.Errorf("use.cpp.o inputs missing dep.h from config.h.in closure: %#v", use.Inputs)
+	}
+}
+
+func TestGen_CmdArgsExpandStmtVars(t *testing.T) {
+	root := t.TempDir()
+	mod := filepath.Join(root, "mod")
+	Throw(os.MkdirAll(mod, 0o755))
+	Throw(os.WriteFile(filepath.Join(mod, "ya.make"), []byte(`LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SET(MKQL_RUNTIME_VERSION 42)
+DEFAULT(ARCADIA_CURL_DNS_RESOLVER ARES)
+SET(SSE41_CFLAGS -msse4.1)
+SET(AVX2_CFLAGS -mavx2)
+CFLAGS(
+    -DMKQL_RUNTIME_VERSION=$MKQL_RUNTIME_VERSION
+    -DARCADIA_CURL_DNS_RESOLVER_${ARCADIA_CURL_DNS_RESOLVER}
+)
+SRC(lib.cpp ${SSE41_CFLAGS} ${AVX2_CFLAGS})
+END()
+`), 0o644))
+	Throw(os.WriteFile(filepath.Join(mod, "lib.cpp"), []byte("int lib(){return 0;}\n"), 0o644))
+
+	g := testGen(root, "mod")
+	cc := mustNodeByOutput(t, g, "$(B)/mod/lib.cpp.o")
+	args := strings.Join(cc.Cmds[0].CmdArgs, " ")
+
+	for _, want := range []string{
+		"-DMKQL_RUNTIME_VERSION=42",
+		"-DARCADIA_CURL_DNS_RESOLVER_ARES",
+		"-msse4.1",
+		"-mavx2",
+	} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("cc cmd args missing %q: %s", want, args)
+		}
+	}
+	for _, bad := range []string{
+		"${",
+		"$MKQL_RUNTIME_VERSION",
+		"${ARCADIA_CURL_DNS_RESOLVER}",
+		"${SSE41_CFLAGS}",
+		"${AVX2_CFLAGS}",
+	} {
+		if strings.Contains(args, bad) {
+			t.Fatalf("cc cmd args still contain %q: %s", bad, args)
+		}
+	}
+}
+
+func TestGen_RunProgramHeaderOutputClosurePropagatesInputs(t *testing.T) {
+	root := t.TempDir()
+
+	writeToolProgram(t, root, "tools/genhdr", "genhdr")
+
+	writeTestModuleFile(t, root, "dep/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(dep.cpp dep.h)
+END()
+`)
+	writeTestModuleFile(t, root, "dep/dep.cpp", "int dep(){return 0;}\n")
+	writeTestModuleFile(t, root, "dep/dep.h", "#pragma once\n")
+
+	writeTestModuleFile(t, root, "gen/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(dep)
+RUN_PROGRAM(
+    tools/genhdr
+        template.h.in
+        gen.h
+    OUTPUT_INCLUDES
+        dep/dep.h
+    IN
+        template.h.in
+    OUT
+        gen.h
+)
+END()
+`)
+	writeTestModuleFile(t, root, "gen/template.h.in", "#pragma once\n")
+
+	writeTestModuleFile(t, root, "cons/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen)
+SRCS(use.cpp)
+END()
+`)
+	writeTestModuleFile(t, root, "cons/use.cpp", `#include <gen/gen.h>
+int use() { return 0; }
+`)
+
+	writeTestModuleFile(t, root, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(cons)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(t, root, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(root, "app")
+	genH := mustNodeByOutput(t, g, "$(B)/gen/gen.h")
+	use := mustNodeByOutput(t, g, "$(B)/cons/use.cpp.o")
+
+	for _, want := range []string{
+		"$(B)/gen/gen.h",
+		"$(S)/gen/template.h.in",
+		"$(S)/dep/dep.h",
+	} {
+		if !nodeHasInput(use, want) {
+			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, use.Inputs)
+		}
+	}
+	if !containsString(use.Deps, genH.UID) {
+		t.Fatalf("use.cpp.o deps missing generated-header PR uid %q: %v", genH.UID, use.Deps)
+	}
+}
+
+func TestGen_ProtoLibrary_TransitiveHeadersNo_DepsHeaderUsesRuntimeRoot(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "protos/ya.make", `PROTO_LIBRARY()
+SET(PROTOC_TRANSITIVE_HEADERS "no")
+SRCS(test.proto)
+END()
+`)
+	writeTestModuleFile(t, root, "protos/test.proto", `syntax = "proto3";
+package test;
+import "google/protobuf/any.proto";
+message Row {
+  google.protobuf.Any body = 1;
+}
+`)
+	writeTestModuleFile(t, root, "app/ya.make", `LIBRARY()
+PEERDIR(protos)
+SRCS(use.cpp)
+END()
+`)
+	writeTestModuleFile(t, root, "app/use.cpp", `#include <protos/test.deps.pb.h>
+int use() { return 0; }
+`)
+
+	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
+	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(t, root, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/src/google/protobuf/any.proto", `syntax = "proto3";
+package google.protobuf;
+message Any {}
+`)
+	writeTestModuleFile(t, root, "contrib/libs/protobuf/src/google/protobuf/any.pb.h", "#pragma once\n")
+
+	g := testGen(root, "app")
+	pb := findGraphNodeByOutputs(t, g,
+		"$(B)/protos/test.pb.h",
+		"$(B)/protos/test.pb.cc",
+		"$(B)/protos/test.deps.pb.h",
+	)
+	use := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
+
+	if !nodeHasInput(use, "$(B)/protos/test.deps.pb.h") {
+		t.Fatalf("use.cpp.o inputs missing deps header output: %#v", use.Inputs)
+	}
+	if !nodeHasInput(use, "$(S)/contrib/libs/protobuf/src/google/protobuf/any.pb.h") {
+		t.Fatalf("use.cpp.o inputs missing protobuf runtime WKT header: %#v", use.Inputs)
+	}
+	if nodeHasInput(use, "$(S)/google/protobuf/any.pb.h") {
+		t.Fatalf("use.cpp.o inputs still contain unrebased WKT header path: %#v", use.Inputs)
+	}
+	if !containsString(use.Deps, pb.UID) {
+		t.Fatalf("use.cpp.o deps missing PB producer uid %q: %v", pb.UID, use.Deps)
 	}
 }
 
