@@ -23,7 +23,7 @@ import (
 // dev/normalize.py); `sort` is a generic external-merge line sorter.
 func cmdDump(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: ay dump <normalize|sort> [flags]")
+		fmt.Fprintln(os.Stderr, "usage: ay dump <normalize|sort|diff|grep> [flags]")
 		return 2
 	}
 
@@ -32,6 +32,10 @@ func cmdDump(args []string) int {
 		return cmdDumpNormalize(args[1:])
 	case "sort":
 		return cmdDumpSort(args[1:])
+	case "diff":
+		return cmdDumpDiff(args[1:])
+	case "grep":
+		return cmdDumpGrep(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown dump subcommand: %s\n", args[0])
 		return 2
