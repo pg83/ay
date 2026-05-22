@@ -29,6 +29,8 @@ const dumpUIDLen = 22
 // JSONL line with deps rewritten to new uids and uid=self_uid=new_uid. Output
 // is UNSORTED; pipe through `ay dump sort` for the canonical total order.
 func cmdDumpNormalize(args []string) int {
+	defer startProfilesFromEnv()()
+
 	var inPath, target, outPath string
 
 	for i := 0; i < len(args); i++ {
