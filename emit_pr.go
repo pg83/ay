@@ -110,10 +110,11 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// Register PR outputs FIRST so the closure walk below resolves
 	// each output's $(B) path through the codegen registry.
 	//
-	// CC-compilable outputs get EmitsIncludes = SOURCE_ROOT-rooted IN
-	// + OUTPUT_INCLUDES + tool INDUCED_DEPS, so the include scanner
-	// reaches headers the tool injects into every output. Non-CC
-	// outputs (.h, .pyc) leave EmitsIncludes nil — opaque content.
+	// CC-compilable outputs and generated headers get EmitsIncludes =
+	// SOURCE_ROOT-rooted IN + OUTPUT_INCLUDES + tool INDUCED_DEPS, so the
+	// include scanner reaches headers the tool injects into every emitted
+	// translation unit/header. Opaque outputs (.pyc, binary blobs) still
+	// leave EmitsIncludes nil.
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
 			registerGeneratedParsedOutput(ctx, instance, "PR", outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt, toolInducedDeps))
@@ -187,6 +188,10 @@ func isCCSourceExt(p string) bool {
 		strings.HasSuffix(p, ".c")
 }
 
+func generatedOutputCarriesIncludes(p string) bool {
+	return isCCSourceExt(p) || isHeaderSource(p) || strings.HasSuffix(p, ".inc")
+}
+
 // prInputClosure returns the union of transitive include closures
 // over every CC-compilable PR output (OUT / OUT_NOAUTO / STDOUT).
 // Scanner walks registered EmitsIncludes (SOURCE_ROOT IN +
@@ -238,12 +243,11 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 }
 
 // prEmitsIncludes returns the EmitsIncludes set to register for a PR
-// output named `outFile`. CC-compilable outputs are assumed to textually
-// `#include` their IN files, OUTPUT_INCLUDES headers, and the tool's
-// module-level INDUCED_DEPS list; non-CC outputs are opaque and return
-// nil.
+// output named `outFile`. Generated C/C++ sources and headers are assumed to
+// textually `#include` their IN files, OUTPUT_INCLUDES headers, and the
+// tool's module-level INDUCED_DEPS list; opaque outputs return nil.
 func prEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, outFile string, stmt *RunProgramStmt, toolInducedDeps []string) []includeDirective {
-	if !isCCSourceExt(outFile) {
+	if !generatedOutputCarriesIncludes(outFile) {
 		return nil
 	}
 

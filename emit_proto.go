@@ -10,8 +10,8 @@ import (
 // protoc-generated `.pb.h` (or `.ev.pb.h`) by transforming the
 // parsedIncludesHCPP bucket of its source `.proto`/`.ev`:
 //   - relative entries get the codegen output-root prefix applied;
-//   - `google/protobuf/descriptor.pb.h` is rebased onto the protobuf
-//     runtime tree (pre-committed header, not a codegen output).
+//   - well-known-type `google/protobuf/*.pb.h` headers are rebased onto the
+//     protobuf runtime tree (pre-committed headers, not codegen outputs).
 //
 // Mirrors upstream proto_processor.cpp::PrepareIncludes; the parser
 // (parsers.go::protoIncludeDirectiveParser) extracts the raw mapping,
@@ -25,7 +25,7 @@ func protoDirectPbHIncludes(pm *includeParserManager, srcRel, outputRoot string)
 	out := make([]includeDirective, 0, len(hcpp))
 	for _, d := range hcpp {
 		target := d.target
-		if target == "google/protobuf/descriptor.pb.h" {
+		if strings.HasPrefix(target, "google/protobuf/") && strings.HasSuffix(target, ".pb.h") {
 			target = pbRuntimeBase + target
 		} else {
 			target = protoOutputRel(outputRoot, target)
@@ -264,6 +264,14 @@ func protoOutputRel(outputRoot, rel string) string {
 	return filepath.ToSlash(filepath.Clean(outputRoot + "/" + rel))
 }
 
+func protoTransitiveHeadersDisabled(d *moduleData) bool {
+	if d == nil || d.setVars == nil {
+		return false
+	}
+
+	return d.setVars["PROTOC_TRANSITIVE_HEADERS"] == "no"
+}
+
 // protoPBConfig parametrizes per-source PB-node emission for the two
 // dispatch points (regular SRCS-loop's .proto handling and the
 // PROTO_LIBRARY orchestrator). LIBRARY callers leave every field zero;
@@ -313,11 +321,13 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
 	transitiveImports, hasDescriptor := protoTransitiveImports(ctx.parsers, ctx.fs, protoRelPath)
+	liteHeaders := protoTransitiveHeadersDisabled(d)
 
 	pbRef := EmitPB(
 		instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
 		grpcCppLDRef, cppStyleguideBinary, protocBinary, grpcCppBinary,
 		cfg.grpc, cfg.moduleTag, cfg.cppOutRoot, cfg.duplicateOutputRootInclude,
+		liteHeaders,
 		d.protocFlags,
 		extraPlugins,
 		transitiveImports, hasDescriptor, ctx.emit,
@@ -326,6 +336,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pbH := Build(protoBase + ".pb.h")
 	pbCC := Build(protoBase + ".pb.cc")
+	pbDepsH := Build(protoBase + ".deps.pb.h")
 	grpcPbH := Build(protoBase + ".grpc.pb.h")
 	grpcPbCC := Build(protoBase + ".grpc.pb.cc")
 
@@ -334,6 +345,10 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 	ctx.pbOutputs[pbKey] = pbRef
 	pbKey.path = pbCC
 	ctx.pbOutputs[pbKey] = pbRef
+	if liteHeaders {
+		pbKey.path = pbDepsH
+		ctx.pbOutputs[pbKey] = pbRef
+	}
 	if cfg.grpc {
 		pbKey.path = grpcPbH
 		ctx.pbOutputs[pbKey] = pbRef
@@ -380,6 +395,10 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			for _, include := range grpcServiceHeaderIncludes {
 				pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
 			}
+		}
+		if liteHeaders {
+			pbHParsed = append([]includeDirective{{kind: includeQuoted, target: pbDepsH.Rel}}, pbHParsed...)
+			registerGeneratedParsedOutput(ctx, instance, "PB", pbDepsH, cloneIncludeDirectives(pbHParsed[1:]))
 		}
 		registerGeneratedParsedOutput(ctx, instance, "PB", pbH, pbHParsed)
 
