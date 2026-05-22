@@ -53,6 +53,11 @@ func cmdDumpNormalize(args []string) int {
 		ThrowFmt("dump normalize: --in and --target are required")
 	}
 
+	// Decode is serial (one streaming decoder) and the heap is shared, so
+	// beyond a handful of workers GC contention eats the gains. 4 balances
+	// parallel canonicalization against allocation pressure.
+	const workers = 4
+
 	// --- Pass 1: content hashes, adjacency, FETCH set, root candidates ---
 	contentHash := map[string][32]byte{}
 	deps := map[string][]string{}
@@ -69,40 +74,69 @@ func cmdDumpNormalize(args []string) int {
 	arInfix := "/" + target + "/"
 	tsPrefix := target + "/"
 
-	streamGraph(inPath, func(node map[string]any) {
-		uid := getString(node, "uid")
-		deps[uid] = toStrings(node["deps"])
-		contentHash[uid] = sha256.Sum256(marshalCompact(canonContent(node)))
+	// Workers canonicalize + hash + classify each node in parallel; the
+	// single collector merges into the maps without locks.
+	type p1Result struct {
+		uid      string
+		deps     []string
+		content  [32]byte
+		isFetch  bool
+		rootKind byte // 'L' | 'A' | 'T', else 0
+		arHost   bool
+	}
 
-		kv, _ := node["kv"].(map[string]any)
-		p, _ := kv["p"].(string)
-		if p == "FETCH" {
-			fetch[uid] = true
-		}
+	streamGraphFanout(inPath, workers,
+		func(node map[string]any) p1Result {
+			uid := getString(node, "uid")
+			kv, _ := node["kv"].(map[string]any)
+			p, _ := kv["p"].(string)
 
-		outs := toStrings(node["outputs"])
-		out0 := ""
-		if len(outs) > 0 {
-			out0 = normPath(outs[0])
-		}
+			r := p1Result{
+				uid:     uid,
+				deps:    toStrings(node["deps"]),
+				content: sha256.Sum256(marshalCompact(canonContent(node))),
+				isFetch: p == "FETCH",
+			}
 
-		switch p {
-		case "LD":
-			if strings.HasPrefix(out0, ldPrefix) {
-				ldRoots = append(ldRoots, uid)
+			outs := toStrings(node["outputs"])
+			out0 := ""
+			if len(outs) > 0 {
+				out0 = normPath(outs[0])
 			}
-		case "AR":
-			if strings.Contains(out0, arInfix) {
-				host, _ := node["host_platform"].(bool)
-				arRoots = append(arRoots, arCand{uid: uid, host: host})
+
+			switch p {
+			case "LD":
+				if strings.HasPrefix(out0, ldPrefix) {
+					r.rootKind = 'L'
+				}
+			case "AR":
+				if strings.Contains(out0, arInfix) {
+					r.rootKind = 'A'
+					r.arHost, _ = node["host_platform"].(bool)
+				}
+			case "TS":
+				path, _ := kv["path"].(string)
+				if strings.HasPrefix(path, tsPrefix) {
+					r.rootKind = 'T'
+				}
 			}
-		case "TS":
-			path, _ := kv["path"].(string)
-			if strings.HasPrefix(path, tsPrefix) {
-				tsRoots = append(tsRoots, uid)
+			return r
+		},
+		func(r p1Result) {
+			contentHash[r.uid] = r.content
+			deps[r.uid] = r.deps
+			if r.isFetch {
+				fetch[r.uid] = true
 			}
-		}
-	})
+			switch r.rootKind {
+			case 'L':
+				ldRoots = append(ldRoots, r.uid)
+			case 'A':
+				arRoots = append(arRoots, arCand{uid: r.uid, host: r.arHost})
+			case 'T':
+				tsRoots = append(tsRoots, r.uid)
+			}
+		})
 
 	// --- Resolve roots (mirror normalize.py::_find_roots) ---
 	roots := []string{}
@@ -168,23 +202,28 @@ func cmdDumpNormalize(args []string) int {
 	}
 	bw := bufio.NewWriterSize(out, 1<<20)
 
-	emitted := 0
-	streamGraph(inPath, func(node map[string]any) {
-		uid := getString(node, "uid")
-		if !closure[uid] {
-			return
-		}
+	// Workers build canonical lines for closure nodes in parallel; the
+	// single collector writes them (order irrelevant — sorted downstream).
+	streamGraphFanout(inPath, workers,
+		func(node map[string]any) []byte {
+			uid := getString(node, "uid")
+			if !closure[uid] {
+				return nil
+			}
 
-		canon := canonContent(node)
-		canon["deps"] = rewriteDeps(deps[uid], closure, fetch, newUID)
-		nu := newUID[uid]
-		canon["uid"] = nu
-		canon["self_uid"] = nu
+			canon := canonContent(node)
+			canon["deps"] = rewriteDeps(deps[uid], closure, fetch, newUID)
+			nu := newUID[uid]
+			canon["uid"] = nu
+			canon["self_uid"] = nu
 
-		Throw2(bw.Write(marshalCompact(canon)))
-		Throw(bw.WriteByte('\n'))
-		emitted++
-	})
+			return append(marshalCompact(canon), '\n')
+		},
+		func(line []byte) {
+			if line != nil {
+				Throw2(bw.Write(line))
+			}
+		})
 	Throw(bw.Flush())
 
 	return 0
