@@ -40,6 +40,8 @@ func dispatch(argv []string) {
 		os.Exit(cmdFetch(argv[2:]))
 	case "make":
 		os.Exit(cmdMake(argv[2:]))
+	case "dump":
+		os.Exit(cmdDump(argv[2:]))
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", argv[1])
 		printUsage(os.Stderr)
@@ -56,6 +58,7 @@ Usage:
 Subcommands:
     fetch      Fetch and unpack an external resource.
     make       Generate and execute the build graph for a target.
+    dump       Graph canonicalization: dump normalize | dump sort.
     help       Show this message.
 
 Use ay make -j 0 -G <target> > graph.json for graph-generation

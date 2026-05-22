@@ -2,9 +2,10 @@
 """validate.py — L4 byte-exact acceptance orchestrator.
 
 For each case: run its gen_<graph>.sh generator, normalize both our output
-and the raw upstream reference into canonical JSONL, then either byte-compare
-(gating cases) or run diff.py metrics (xfail cases). xfail cases never affect
-the exit code; the suite fails only when a gating case diverges.
+and the raw upstream reference into canonical JSONL (streaming `ay dump
+normalize | ay dump sort`), then either byte-compare (gating cases) or run
+diff.py metrics (xfail cases). xfail cases never affect the exit code; the
+suite fails only when a gating case diverges.
 
 Usage: validate.py [out-dir]   (default: <repo>/.out/validate)
 """
@@ -14,7 +15,7 @@ import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
-NORMALIZE = os.path.join(SCRIPT_DIR, "normalize.py")
+AY = os.path.join(REPO_ROOT, "ay")
 DIFF = os.path.join(SCRIPT_DIR, "diff.py")
 
 # name, normalize target, raw upstream reference, xfail
@@ -29,6 +30,21 @@ CASES = [
 
 def run(cmd):
     return subprocess.run(cmd, cwd=REPO_ROOT)
+
+
+def normalize_sort(raw, target, out):
+    """ay dump normalize <raw> | ay dump sort > out (streaming, bounded mem)."""
+    p1 = subprocess.Popen(
+        [AY, "dump", "normalize", "--in", raw, "--target", target, "--out", "-"],
+        cwd=REPO_ROOT, stdout=subprocess.PIPE,
+    )
+    p2 = subprocess.Popen(
+        [AY, "dump", "sort", "--out", out],
+        cwd=REPO_ROOT, stdin=p1.stdout,
+    )
+    p1.stdout.close()
+    p2.communicate()
+    p1.wait()
 
 
 def main() -> int:
@@ -52,8 +68,8 @@ def main() -> int:
             continue
 
         print(f"[{name}] normalize our + ref")
-        run([NORMALIZE, "--in", raw, "--target", target, "--out", our_n])
-        run([NORMALIZE, "--in", ref, "--target", target, "--out", ref_n])
+        normalize_sort(raw, target, our_n)
+        normalize_sort(ref, target, ref_n)
 
         if xfail:
             print(f"[{name}] xfail — metrics (not gating):")
