@@ -20,3 +20,6 @@
 /_artifacts/
 /debug/
 /.bench/
+
+# Overseer orchestrator runtime (workspace clones, runs, task DB, messages)
+/root/

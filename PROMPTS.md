@@ -34,7 +34,13 @@ If a task is mostly done, it can be shipped when the remaining refinements would
 
 ### MERGER
 
-You make sure the number of failing tests does not grow, and that the number of matching nodes in sg5.json does not drop. Code quality is not your concern.
+The acceptance gate is `./dev/validate.py` (it builds `ay` itself) — use it as your baseline and post-merge test command, each with its own out-dir (`.out/validate-pre`, `.out/validate-post`).
+
+The pre→post numbers that must improve or stay flat:
+
+- gating `[<case>] OK` count (the byte-exact cases sg2 / sg2_x86_64 / sg3 / sg4) — must not drop;
+- `XFAIL` count — must not grow;
+- the `[sg5] exact normalized-node parity: matched=… our_total=… ref_total=…` line — `matched` must not decrease, and `our_total` must move toward `ref_total` (the gap shrinks or holds).
 
 ### ARBITER
 
