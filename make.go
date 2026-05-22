@@ -838,7 +838,7 @@ func parseMakeFlags(args []string) *makeFlags {
 	}
 
 	if mf.srcRoot == "" {
-		mf.srcRoot = "/home/pg/monorepo/yatool"
+		ThrowFmt("make: --source-root is required")
 	}
 
 	if mf.bldRoot == "" {

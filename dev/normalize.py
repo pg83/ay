@@ -1,22 +1,18 @@
 #!/usr/bin/env python3
-"""normalize.py — bidirectional canonical normalizer + L4 comparator.
+"""normalize.py — canonical L4 normalizer, emitting JSONL.
 
-Applies an identical canonicalization pipeline to both OUR gen output and
-the REF sg.json, then byte-compares the results.  L4 is a SEMANTIC equality
-check (after canonicalization), not a syntactic one: whitespace, UID values,
-and field-insertion order in the emitter become irrelevant; only graph
-structure and build-content matter.
+Applies the canonicalization pipeline to one raw graph (OUR gen output or a
+REF sg.json) and writes the target closure as JSONL: one canonical node per
+line, sorted by canonical uid. L4 canonicalization makes whitespace, UID
+values, and emitter field order irrelevant; only graph structure and
+build-content survive. JSONL output lets downstream processors (cmp for
+byte-exact cases, diff.py for metrics) stream node-by-node.
 
-CLI (primary mode — canonicalize both + compare):
-    ./dev/normalize.py --our OUR.json --ref REF.json --target tools/archiver
-                       [--our-out OUR-CANON.json] [--ref-out REF-CANON.json]
-
-CLI (single-file debug mode):
-    ./dev/normalize.py --in SOME.json --target tools/archiver --out CANON.json
+CLI:
+    ./dev/normalize.py --in RAW.json --target devtools/ymake/bin --out CANON.jsonl
 
 Exit codes:
-    0 — L4 byte-exact match (or single-file mode succeeded)
-    1 — L4 divergence
+    0 — success
     2 — internal / argument error
 """
 from __future__ import annotations
@@ -449,16 +445,6 @@ def _dfs_preorder(
 # Step 9 — Canonical JSON emission
 # ---------------------------------------------------------------------------
 
-def _emit_canonical(obj: dict) -> bytes:
-    """Canonical JSON bytes: 4-space indent, sort_keys, no trailing newline."""
-    return json.dumps(
-        obj,
-        indent=4,
-        sort_keys=True,
-        ensure_ascii=False,
-    ).encode("utf-8")
-
-
 # ---------------------------------------------------------------------------
 # Top-level pipeline
 # ---------------------------------------------------------------------------
@@ -559,26 +545,19 @@ def _normalize(data: dict[str, Any], target: str) -> tuple[bytes, dict]:
         if not result_uids:
             result_uids = [old_to_new[root_uid]]
 
-    # Step 6 — keep only graph and result at top level
-    output = {
-        "graph": result_graph,
-        "result": result_uids,
-    }
-
-    t4 = time.monotonic()
-    canon_bytes = _emit_canonical(output)
-    t5 = time.monotonic()
-
+    # Step 6 — return the canonical node list (sorted by uid). The JSONL
+    # writer emits one node per line so downstream metrics processors can
+    # stream node-by-node. result_uids is dropped: only the node bodies
+    # ("нодовая часть") are emitted.
     stats = {
         "closure_nodes": len(closure_raw),
         "output_nodes": len(result_graph),
         "t_bfs_ms": round((t1 - t0) * 1000, 1),
         "t_strip_ms": round((t2 - t1) * 1000, 1),
         "t_reuid_ms": round((t3 - t2) * 1000, 1),
-        "t_emit_ms": round((t5 - t4) * 1000, 1),
     }
 
-    return canon_bytes, stats
+    return result_graph, stats
 
 
 # ---------------------------------------------------------------------------
@@ -596,26 +575,21 @@ def _die(msg: str) -> None:
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Bidirectional canonical normalizer + L4 comparator",
+        description="Canonical L4 normalizer → JSONL (one canonical node per line)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--target", required=True, help="target module path (e.g. tools/archiver)")
-
-    grp = p.add_mutually_exclusive_group(required=True)
-    grp.add_argument("--our", metavar="OUR_JSON", help="our gen output (primary mode)")
-    grp.add_argument("--in", dest="single_in", metavar="JSON", help="single-file debug mode")
-
-    p.add_argument("--ref", metavar="REF_JSON", help="reference sg.json (primary mode)")
-    p.add_argument("--our-out", metavar="PATH", help="write canonicalized OUR to PATH")
-    p.add_argument("--ref-out", metavar="PATH", help="write canonicalized REF to PATH")
-    p.add_argument("--out", metavar="PATH", help="write canonicalized output (single-file mode)")
+    p.add_argument("--in", dest="single_in", metavar="JSON", required=True, help="raw graph JSON")
+    p.add_argument("--target", required=True, help="target module path (e.g. devtools/ymake/bin)")
+    p.add_argument("--out", metavar="PATH", required=True, help="write canonical JSONL here")
     return p
 
 
-def _write(path: str, data: bytes) -> None:
+def _write_jsonl(path: str, graph: list[dict]) -> None:
     try:
-        with open(path, "wb") as fh:
-            fh.write(data)
+        with open(path, "w", encoding="utf-8") as fh:
+            for node in graph:
+                fh.write(json.dumps(node, sort_keys=True, ensure_ascii=False, separators=(",", ":")))
+                fh.write("\n")
     except OSError as exc:
         _die(f"cannot write {path}: {exc}")
 
@@ -625,60 +599,12 @@ def main() -> None:
     args = parser.parse_args()
 
     t_start = time.monotonic()
+    data = _load(args.single_in)
+    graph, stats = _normalize(data, args.target)
+    _write_jsonl(args.out, graph)
 
-    # --- Single-file debug mode ---
-    if args.single_in is not None:
-        if args.out is None:
-            _die("single-file mode: --out is required")
-        data = _load(args.single_in)
-        canon_bytes, stats = _normalize(data, args.target)
-        _write(args.out, canon_bytes)
-        print(f"nodes: {stats['output_nodes']}")
-        print(f"t_total_ms: {round((time.monotonic() - t_start) * 1000, 1)}")
-        sys.exit(0)
-
-    # --- Primary mode: compare OUR vs REF ---
-    if args.ref is None:
-        _die("primary mode: --ref is required when --our is given")
-
-    our_data = _load(args.our)
-    ref_data = _load(args.ref)
-
-    our_bytes, our_stats = _normalize(our_data, args.target)
-    ref_bytes, ref_stats = _normalize(ref_data, args.target)
-
-    t_total = time.monotonic() - t_start
-
-    # Metrics output
-    print(f"our_nodes: {our_stats['output_nodes']}")
-    print(f"ref_nodes: {ref_stats['output_nodes']}")
-    print(f"t_total_s: {round(t_total, 2)}")
-    print(f"our_sha256: {hashlib.sha256(our_bytes).hexdigest()}")
-    print(f"ref_sha256: {hashlib.sha256(ref_bytes).hexdigest()}")
-
-    # Optional output files
-    if args.our_out:
-        _write(args.our_out, our_bytes)
-    if args.ref_out:
-        _write(args.ref_out, ref_bytes)
-
-    # L4 comparison
-    if our_bytes == ref_bytes:
-        print("L4: byte-exact")
-        sys.exit(0)
-    else:
-        # Find first differing byte
-        first_diff = next(
-            (i for i, (a, b) in enumerate(zip(our_bytes, ref_bytes)) if a != b),
-            min(len(our_bytes), len(ref_bytes)),
-        )
-        our_sha = hashlib.sha256(our_bytes).hexdigest()
-        ref_sha = hashlib.sha256(ref_bytes).hexdigest()
-        print(
-            f"L4: differ (first diff at byte {first_diff}, "
-            f"sha256 ours={our_sha[:16]}... refs={ref_sha[:16]}...)"
-        )
-        sys.exit(1)
+    print(f"nodes: {stats['output_nodes']}")
+    print(f"t_total_ms: {round((time.monotonic() - t_start) * 1000, 1)}")
 
 
 if __name__ == "__main__":
