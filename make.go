@@ -130,6 +130,37 @@ func buildHostStatsFlags(hostPlatformFlags, cliFlags map[string]string, sandboxi
 	return flags
 }
 
+func readOptionalYaConfSection(fs *FS, rel, wantSection string) map[string]string {
+	if fs == nil || !fs.IsFile(rel) {
+		return nil
+	}
+
+	return readYaConfSection(fs, rel, wantSection)
+}
+
+func joinCompilerFlagStrings(parts ...string) string {
+	out := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		out = append(out, part)
+	}
+
+	return strings.Join(out, " ")
+}
+
+func compilerFlagsFromConfig(primary, internal map[string]string, key, env string) string {
+	return joinCompilerFlagStrings(primary[key], internal[key], env)
+}
+
+func shouldExposeSandboxingTargetTags(mf *makeFlags) bool {
+	return mf != nil && mf.sandboxing && mf.testLevel > 0
+}
+
 // cmdMake parses CLI args, runs Gen (host walks recurse implicitly), and
 // pipes the resulting node stream into the executor. Exit 0 on success;
 // throws on any subcommand failure so main's Catch prints + exits non-zero.
@@ -151,6 +182,15 @@ func cmdMake(args []string) int {
 	tools, conf := toolchainFlags(fs, nil)
 	hostYaFlags := readYaConfSection(fs, "ya.conf", "host_platform_flags")
 	targetYaFlags := readYaConfSection(fs, "ya.conf", "flags")
+	var hostInternalYaFlags map[string]string
+	var targetInternalYaFlags map[string]string
+	if mf.testLevel == 0 {
+		// sg5's non-test reference graph carries the extra common CFLAGS
+		// from build/internal/ya.conf, while sg4's -ttt test build does
+		// not. Keep that split explicit so sg4 stays byte-exact.
+		hostInternalYaFlags = readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
+		targetInternalYaFlags = readOptionalYaConfSection(fs, "build/internal/ya.conf", "flags")
+	}
 
 	// Host platform: `--host-platform` selects axes (mined when empty),
 	// `--host-platform-flag KEY=VALUE` (mf.hflags) lands on host Flags,
@@ -170,7 +210,14 @@ func cmdMake(args []string) int {
 	if _, ok := hostFlags["GG_BUILD_TYPE"]; !ok {
 		hostFlags["GG_BUILD_TYPE"] = "release"
 	}
-	hostP := NewPlatform(hOS, hISA, hostFlags, []string{"tool"}, "", "")
+	hostP := NewPlatform(
+		hOS,
+		hISA,
+		hostFlags,
+		[]string{"tool"},
+		compilerFlagsFromConfig(hostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
+		compilerFlagsFromConfig(hostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
+	)
 	hostP.StatsFlags = buildHostStatsFlags(hostYaFlags, mf.hflags, mf.sandboxing)
 	resourceFetches := newResourceFetchPlan(mf.srcRoot, conf, hostP)
 
@@ -206,9 +253,16 @@ func cmdMake(args []string) int {
 		targetFlags["SANDBOXING"] = "yes"
 	}
 	targetFlags["PIC"] = "no"
-	targetP := NewPlatform(tOS, tISA, targetFlags, nil, os.Getenv("CFLAGS"), os.Getenv("CXXFLAGS"))
+	targetP := NewPlatform(
+		tOS,
+		tISA,
+		targetFlags,
+		nil,
+		compilerFlagsFromConfig(targetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS")),
+		compilerFlagsFromConfig(targetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
+	)
 	targetP.StatsFlags = buildTargetStatsFlags(targetFlags, mf.tflags)
-	if mf.sandboxing {
+	if shouldExposeSandboxingTargetTags(mf) {
 		targetP.Tags = sandboxingNodeTags(targetP)
 	}
 
