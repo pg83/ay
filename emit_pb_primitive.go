@@ -51,6 +51,12 @@ var (
 	pbDescriptorProto = pbDescriptorVFS.String()
 )
 
+type resolvedCPPProtoPlugin struct {
+	Spec   cppProtoPlugin
+	LDRef  NodeRef
+	Binary VFS
+}
+
 // protobufRuntimeHeaders is the set every protoc-generated .pb.h directly
 // #includes. Registered as EmitsIncludes on the .pb.h so the scanner
 // closure propagates them into every CC that includes the .pb.h; scanner
@@ -342,6 +348,7 @@ func EmitPB(
 	cppOutRoot string,
 	duplicateOutputRootInclude bool,
 	extraProtocFlags []string,
+	extraPlugins []resolvedCPPProtoPlugin,
 	transitiveProtoImports []VFS,
 	hasDescriptor bool,
 	emit Emitter,
@@ -360,16 +367,19 @@ func EmitPB(
 	if grpc {
 		outputs = append(outputs, grpcPbCC, grpcPbH)
 	}
+	for _, plugin := range extraPlugins {
+		for _, suffix := range plugin.Spec.OutputSuffixes {
+			outputs = append(outputs, Build(protoBase+suffix))
+		}
+	}
 
 	cmdArgs := []string{
 		instance.Platform.Tools.Python3,
 		pbWrapperPath,
 		"--outputs",
-		pbH.String(),
-		pbCC.String(),
 	}
-	if grpc {
-		cmdArgs = append(cmdArgs, grpcPbCC.String(), grpcPbH.String())
+	for _, output := range outputs {
+		cmdArgs = append(cmdArgs, output.String())
 	}
 	includeRoot := ""
 	if cppOutRoot != "" {
@@ -414,6 +424,15 @@ func EmitPB(
 			"--grpc_cpp_out=$(B)/"+cppOutRoot,
 		)
 	}
+	for _, plugin := range extraPlugins {
+		cmdArgs = append(cmdArgs,
+			"--plugin=protoc-gen-"+plugin.Spec.Name+"="+plugin.Binary.String(),
+			"--"+plugin.Spec.Name+"_out=$(B)/"+cppOutRoot,
+		)
+		if plugin.Spec.ExtraOutFlag != "" {
+			cmdArgs = append(cmdArgs, "--"+plugin.Spec.Name+"_opt=:"+plugin.Spec.ExtraOutFlag)
+		}
+	}
 
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
@@ -421,12 +440,15 @@ func EmitPB(
 
 	inputs := []VFS{
 		cppStyleguideBinary,
-		protocBinary,
-		pbWrapperVFS,
 	}
 	if grpc {
-		inputs = append([]VFS{grpcCppBinary}, inputs...)
+		inputs = append(inputs, grpcCppBinary)
 	}
+	inputs = append(inputs, protocBinary)
+	for _, plugin := range extraPlugins {
+		inputs = append(inputs, plugin.Binary)
+	}
+	inputs = append(inputs, pbWrapperVFS)
 	if hasDescriptor {
 		inputs = append(inputs, pbDescriptorVFS)
 	}
@@ -449,16 +471,22 @@ func EmitPB(
 	var depRefs []NodeRef
 	var foreignDepRefs map[string][]NodeRef
 
-	if cppStyleguideLDRef != (NodeRef{}) || protocLDRef != (NodeRef{}) || grpcCppLDRef != (NodeRef{}) {
+	if cppStyleguideLDRef != (NodeRef{}) || protocLDRef != (NodeRef{}) || grpcCppLDRef != (NodeRef{}) || len(extraPlugins) > 0 {
 		var toolRefs []NodeRef
 		if cppStyleguideLDRef != (NodeRef{}) {
 			toolRefs = append(toolRefs, cppStyleguideLDRef)
 		}
+		if grpcCppLDRef != (NodeRef{}) {
+			toolRefs = append(toolRefs, grpcCppLDRef)
+		}
 		if protocLDRef != (NodeRef{}) {
 			toolRefs = append(toolRefs, protocLDRef)
 		}
-		if grpcCppLDRef != (NodeRef{}) {
-			toolRefs = append(toolRefs, grpcCppLDRef)
+		for _, plugin := range extraPlugins {
+			if plugin.LDRef == (NodeRef{}) {
+				continue
+			}
+			toolRefs = append(toolRefs, plugin.LDRef)
 		}
 		depRefs = append([]NodeRef(nil), toolRefs...)
 		foreignDepRefs = map[string][]NodeRef{"tool": toolRefs}

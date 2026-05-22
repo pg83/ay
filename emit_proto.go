@@ -54,6 +54,42 @@ func pbHEmitsIncludesExtras(protoRelPath string, hasDescriptor bool) []includeDi
 	return out
 }
 
+func cloneIncludeDirectives(parsed []includeDirective) []includeDirective {
+	if len(parsed) == 0 {
+		return nil
+	}
+
+	return append([]includeDirective(nil), parsed...)
+}
+
+// extraProtoOutputParsedIncludes gives output-bearing CPP_PROTO_PLUGIN*
+// outputs enough structure for downstream closure: generic plugin
+// headers/sources at least reach the sibling .pb.h, while grpc_cpp-style
+// outputs reuse the exact grpc parsed witness set so they carry the same
+// service/source closure as the built-in GRPC() path.
+func extraProtoOutputParsedIncludes(output, pbH, grpcPbH, grpcPbCC VFS, grpcHParsed, grpcCCParsed []includeDirective) []includeDirective {
+	switch output.Rel {
+	case grpcPbH.Rel:
+		return cloneIncludeDirectives(grpcHParsed)
+	case grpcPbCC.Rel:
+		return cloneIncludeDirectives(grpcCCParsed)
+	}
+
+	switch {
+	case strings.HasSuffix(output.Rel, ".h"),
+		strings.HasSuffix(output.Rel, ".hh"),
+		strings.HasSuffix(output.Rel, ".hpp"),
+		strings.HasSuffix(output.Rel, ".hxx"),
+		strings.HasSuffix(output.Rel, ".inc"),
+		strings.HasSuffix(output.Rel, ".inl"):
+		return []includeDirective{{kind: includeQuoted, target: pbH.Rel}}
+	case isCCSourceExt(output.Rel):
+		return []includeDirective{{kind: includeQuoted, target: pbH.Rel}}
+	default:
+		return nil
+	}
+}
+
 // protoTransitiveImports walks the .proto/.ev import graph starting at
 // srcRel and returns the deduplicated set of imported sources plus a
 // HasDescriptor flag (true iff `google/protobuf/descriptor.proto`
@@ -244,10 +280,11 @@ type protoPBConfig struct {
 // NodeRef + the .pb.cc output (and the .grpc.pb.cc when cfg.grpc) and
 // the resolved .proto source-relative path.
 type protoPBEmission struct {
-	pbRef    NodeRef
-	pbCC     VFS
-	grpcPbCC VFS
-	relPath  string
+	pbRef         NodeRef
+	pbCC          VFS
+	grpcPbCC      VFS
+	extraSourceCC []VFS
+	relPath       string
 }
 
 // emitProtoPB emits the PB codegen node for `srcRel`, registers the
@@ -264,6 +301,15 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 	if cfg.grpc {
 		grpcCppLDRef, grpcCppBinary = ctx.tool(pbGrpcCppModule)
 	}
+	extraPlugins := make([]resolvedCPPProtoPlugin, 0, len(d.cppProtoPlugins))
+	for _, spec := range d.cppProtoPlugins {
+		ldRef, binary := ctx.tool(spec.ToolPath)
+		extraPlugins = append(extraPlugins, resolvedCPPProtoPlugin{
+			Spec:   spec,
+			LDRef:  ldRef,
+			Binary: binary,
+		})
+	}
 
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
 	transitiveImports, hasDescriptor := protoTransitiveImports(ctx.parsers, ctx.fs, protoRelPath)
@@ -273,6 +319,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		grpcCppLDRef, cppStyleguideBinary, protocBinary, grpcCppBinary,
 		cfg.grpc, cfg.moduleTag, cfg.cppOutRoot, cfg.duplicateOutputRootInclude,
 		d.protocFlags,
+		extraPlugins,
 		transitiveImports, hasDescriptor, ctx.emit,
 	)
 
@@ -292,6 +339,28 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		ctx.pbOutputs[pbKey] = pbRef
 		pbKey.path = grpcPbCC
 		ctx.pbOutputs[pbKey] = pbRef
+	}
+	extraOutputPaths := make([]VFS, 0, 4)
+	extraSourceOutputs := make([]VFS, 0, 2)
+	for _, plugin := range d.cppProtoPlugins {
+		for _, suffix := range plugin.OutputSuffixes {
+			out := Build(protoBase + suffix)
+			extraOutputPaths = append(extraOutputPaths, out)
+			if isCCSourceExt(out.Rel) {
+				extraSourceOutputs = append(extraSourceOutputs, out)
+			}
+			pbKey.path = out
+			ctx.pbOutputs[pbKey] = pbRef
+		}
+	}
+	needsGRPCParsed := cfg.grpc
+	if !needsGRPCParsed {
+		for _, out := range extraOutputPaths {
+			if out.Rel == grpcPbH.Rel || out.Rel == grpcPbCC.Rel {
+				needsGRPCParsed = true
+				break
+			}
+		}
 	}
 
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
@@ -333,8 +402,9 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		}
 		registerGeneratedParsedOutput(ctx, instance, "PB", pbCC, pbCCParsed)
 
-		if cfg.grpc {
-			grpcCCParsed := make([]includeDirective, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders)+len(grpcSourceExtraIncludes))
+		var grpcCCParsed, grpcHParsed []includeDirective
+		if needsGRPCParsed {
+			grpcCCParsed = make([]includeDirective, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders)+len(grpcSourceExtraIncludes))
 			// The .grpc.pb.cc includes its message .pb.h (cross-sibling, not
 			// its own .grpc.pb.h, which is the OutTogether self) plus the
 			// grpcpp source preamble.
@@ -350,24 +420,35 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			for _, include := range grpcSourceExtraIncludes {
 				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
 			}
-			registerGeneratedParsedOutput(ctx, instance, "PB", grpcPbCC, grpcCCParsed)
 
 			// The .grpc.pb.h directly includes its message .pb.h plus the
 			// fixed grpcpp service preamble (+ port_def.inc); the scanner
 			// recurses those into the full grpc/protobuf/abseil/libcxx
 			// closure for every CC that includes the .grpc.pb.h.
-			grpcHParsed := make([]includeDirective, 0, 2+len(directImports)+len(grpcServiceHeaderIncludes))
+			grpcHParsed = make([]includeDirective, 0, 2+len(directImports)+len(grpcServiceHeaderIncludes))
 			grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: pbH.Rel})
 			grpcHParsed = append(grpcHParsed, directImports...)
 			for _, include := range grpcServiceHeaderIncludes {
 				grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
 			}
 			grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: pbRuntimeBase + "google/protobuf/port_def.inc"})
+		}
+		if cfg.grpc {
+			registerGeneratedParsedOutput(ctx, instance, "PB", grpcPbCC, grpcCCParsed)
 			registerGeneratedParsedOutput(ctx, instance, "PB", grpcPbH, grpcHParsed)
+		}
+		for _, out := range extraOutputPaths {
+			registerGeneratedParsedOutput(ctx, instance, "PB", out, extraProtoOutputParsedIncludes(out, pbH, grpcPbH, grpcPbCC, grpcHParsed, grpcCCParsed))
 		}
 	}
 
-	return protoPBEmission{pbRef: pbRef, pbCC: pbCC, grpcPbCC: grpcPbCC, relPath: protoRelPath}
+	return protoPBEmission{
+		pbRef:         pbRef,
+		pbCC:          pbCC,
+		grpcPbCC:      grpcPbCC,
+		extraSourceCC: extraSourceOutputs,
+		relPath:       protoRelPath,
+	}
 }
 
 func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs) *protoSrcsResult {
@@ -406,6 +487,19 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	}
 
 	var codegenOutputs []protoCodegenOutput
+	codegenOutputSeen := make(map[string]struct{})
+	appendCodegenOutput := func(genRef NodeRef, pbCC VFS, srcRel string, primSrc VFS) {
+		if _, dup := codegenOutputSeen[pbCC.Rel]; dup {
+			return
+		}
+		codegenOutputSeen[pbCC.Rel] = struct{}{}
+		codegenOutputs = append(codegenOutputs, protoCodegenOutput{
+			genRef:  genRef,
+			pbCC:    pbCC,
+			srcRel:  srcRel,
+			primSrc: primSrc,
+		})
+	}
 	cfg := protoPBConfig{
 		grpc:       d.grpc,
 		moduleTag:  stringPtr("cpp_proto"),
@@ -422,20 +516,14 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		pb := emitProtoPB(ctx, instance, d, src, cfg)
 
 		ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel, cppInstance.Path+"/")
-		codegenOutputs = append(codegenOutputs, protoCodegenOutput{
-			genRef:  pb.pbRef,
-			pbCC:    pb.pbCC,
-			srcRel:  ccSrcRel,
-			primSrc: Source(pb.relPath),
-		})
+		appendCodegenOutput(pb.pbRef, pb.pbCC, ccSrcRel, Source(pb.relPath))
 		if d.grpc {
 			grpcSrcRel := strings.TrimPrefix(pb.grpcPbCC.Rel, cppInstance.Path+"/")
-			codegenOutputs = append(codegenOutputs, protoCodegenOutput{
-				genRef:  pb.pbRef,
-				pbCC:    pb.grpcPbCC,
-				srcRel:  grpcSrcRel,
-				primSrc: Source(pb.relPath),
-			})
+			appendCodegenOutput(pb.pbRef, pb.grpcPbCC, grpcSrcRel, Source(pb.relPath))
+		}
+		for _, extraSrc := range pb.extraSourceCC {
+			extraSrcRel := strings.TrimPrefix(extraSrc.Rel, cppInstance.Path+"/")
+			appendCodegenOutput(pb.pbRef, extraSrc, extraSrcRel, Source(pb.relPath))
 		}
 	}
 
