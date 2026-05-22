@@ -1,8 +1,97 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
+
+func writeTestResourceBundle(t *testing.T, root, rel string) {
+	t.Helper()
+
+	full := filepath.Join(root, rel)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
+	}
+
+	body := `{"by_platform":{"linux-x86_64":{"uri":"sbr:linux"}}}`
+	if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+		t.Fatalf("write %s: %v", rel, err)
+	}
+}
+
+func writeTestToolchainResourceBundles(t *testing.T, root string) {
+	t.Helper()
+
+	for _, rel := range []string{
+		"build/platform/python/ymake_python3/resources.json",
+		"build/platform/clang/clang16.json",
+		"build/platform/clang/clang18.json",
+		"build/platform/lld/lld20.json",
+		"build/platform/clang/clang20.json",
+		"build/platform/java/jdk/jdk17/jdk.json",
+	} {
+		writeTestResourceBundle(t, root, rel)
+	}
+}
+
+func emitTestCompileGraph(t *testing.T, host, target *Platform, plan *resourceFetchPlan) *Graph {
+	t.Helper()
+
+	execEmit := NewBufferedEmitter()
+	execResourceEmit := resourceGraphEmitter(host, execEmit, plan, true)
+	clangTool := prebuiltToolchainFlags()["CLANG_TOOL"]
+	ref := execResourceEmit.Emit(bindNodePlatform(&Node{
+		Cmds: []Cmd{{
+			CmdArgs: []string{clangTool, "-c", "$(S)/pkg/app/main.cpp", "-o", "$(B)/pkg/app/main.o"},
+			Env:     map[string]string{},
+		}},
+		Env:              map[string]string{},
+		Inputs:           []VFS{Source("pkg/app/main.cpp")},
+		KV:               map[string]interface{}{"p": "CC"},
+		Outputs:          []VFS{Build("pkg/app/main.o")},
+		Requirements:     map[string]interface{}{},
+		TargetProperties: map[string]string{},
+	}, target))
+	execResourceEmit.Result(ref)
+
+	return Finalize(execEmit)
+}
+
+func assertSingleUsedClangFetch(t *testing.T, graph *Graph) {
+	t.Helper()
+
+	fetchOutputs := map[string]bool{}
+	var cc *Node
+	for _, node := range graph.Graph {
+		if len(node.Outputs) == 1 && node.Outputs[0].String() == "$(B)/pkg/app/main.o" {
+			cc = node
+			continue
+		}
+		if len(node.Outputs) == 1 {
+			fetchOutputs[node.Outputs[0].String()] = true
+		}
+	}
+
+	if cc == nil {
+		t.Fatal("execution graph missing expected CC node")
+	}
+	if len(cc.Deps) != 1 {
+		t.Fatalf("execution graph CC deps = %v, want single used-resource FETCH dep", cc.Deps)
+	}
+	if len(fetchOutputs) != 1 {
+		t.Fatalf("execution graph fetch outputs = %#v, want only the used CLANG fetch node", fetchOutputs)
+	}
+	if !fetchOutputs["$(B)/resources/"+resourcePatternClangTool] {
+		t.Fatalf("execution graph missing used CLANG fetch node: %#v", fetchOutputs)
+	}
+	if fetchOutputs["$(B)/resources/"+resourcePatternClang18] {
+		t.Fatalf("execution graph unexpectedly contains unused CLANG18 fetch node: %#v", fetchOutputs)
+	}
+	if fetchOutputs["$(B)/resources/"+resourcePatternClang20] {
+		t.Fatalf("execution graph unexpectedly contains unused CLANG20 fetch node: %#v", fetchOutputs)
+	}
+}
 
 func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 	p := sandboxedX8664TargetPlatform()
@@ -89,4 +178,29 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestResourceGraphEmitter_OnlyMaterializesUsedFetchNodes(t *testing.T) {
+	root := t.TempDir()
+	writeTestToolchainResourceBundles(t, root)
+
+	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
+	target := sandboxedX8664TargetPlatform()
+	conf := graphConfForToolchainFlags(NewFS(root), prebuiltToolchainFlags())
+	plan := newResourceFetchPlan(root, conf, host)
+
+	assertSingleUsedClangFetch(t, emitTestCompileGraph(t, host, target, plan))
+}
+
+func TestResourceGraphEmitter_ReusedPlanEmitsFetchPerEmitter(t *testing.T) {
+	root := t.TempDir()
+	writeTestToolchainResourceBundles(t, root)
+
+	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
+	target := sandboxedX8664TargetPlatform()
+	conf := graphConfForToolchainFlags(NewFS(root), prebuiltToolchainFlags())
+	plan := newResourceFetchPlan(root, conf, host)
+
+	assertSingleUsedClangFetch(t, emitTestCompileGraph(t, host, target, plan))
+	assertSingleUsedClangFetch(t, emitTestCompileGraph(t, host, target, plan))
 }
