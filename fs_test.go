@@ -22,10 +22,10 @@ func writeTree(t *testing.T, root string, files map[string]string) {
 func TestFS_ExistsAndIsDir(t *testing.T) {
 	root := t.TempDir()
 	writeTree(t, root, map[string]string{
-		"a/b/c.txt":      "hi",
-		"a/b/d.txt":      "bye",
-		"a/empty/.keep":  "",
-		"top.txt":        "top",
+		"a/b/c.txt":     "hi",
+		"a/b/d.txt":     "bye",
+		"a/empty/.keep": "",
+		"top.txt":       "top",
 	})
 
 	fs := NewFS(root)
@@ -158,10 +158,10 @@ func TestFS_ReadAbsRoutesThroughRel(t *testing.T) {
 func TestFS_Walk(t *testing.T) {
 	root := t.TempDir()
 	writeTree(t, root, map[string]string{
-		"a/b/c.txt":  "1",
-		"a/b/d.txt":  "2",
-		"a/e.txt":    "3",
-		"top.txt":    "4",
+		"a/b/c.txt": "1",
+		"a/b/d.txt": "2",
+		"a/e.txt":   "3",
+		"top.txt":   "4",
 	})
 
 	fs := NewFS(root)
@@ -206,3 +206,9 @@ func TestFS_CleanRel(t *testing.T) {
 		}
 	}
 }
+
+// testParserFS is a sentinel FS for parser tests that never trigger
+// INCLUDE expansion. Rooted at "/" so Read / Listdir attempts would
+// fail loudly rather than silently no-op — but ya.make parse tests
+// don't touch FS unless INCLUDE is present.
+var testParserFS = NewFS("/")
