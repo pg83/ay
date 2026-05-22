@@ -1,8 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"regexp"
+	"slices"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -4201,4 +4207,2058 @@ func testGen(sourceRoot, targetDir string) *Graph {
 	targetFlags["MUSL"] = "yes"
 	target := NewPlatform(OSLinux, ISAAArch64, targetFlags, nil, "", "")
 	return GenWithMode(sourceRoot, targetDir, host, target, defaultScanCtxMode, func(Warn) {})
+}
+
+func TestCollectModule_YqlAbiMacrosAppendCXXFlags(t *testing.T) {
+	root := t.TempDir()
+	modDir := filepath.Join(root, "mod")
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		t.Fatalf("mkdir mod: %v", err)
+	}
+
+	const yamake = `LIBRARY()
+YQL_LAST_ABI_VERSION()
+YQL_ABI_VERSION(2 44 0)
+SRCS(lib.cpp)
+END()
+`
+	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
+		t.Fatalf("write ya.make: %v", err)
+	}
+
+	fs := NewFS(root)
+	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+	d := collectModule(fs, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}))
+
+	want := []string{
+		"-DUSE_CURRENT_UDF_ABI_VERSION",
+		"-DUDF_ABI_VERSION_MAJOR=2",
+		"-DUDF_ABI_VERSION_MINOR=44",
+		"-DUDF_ABI_VERSION_PATCH=0",
+	}
+	if !reflect.DeepEqual(d.cxxFlags, want) {
+		t.Fatalf("cxxFlags = %#v, want %#v", d.cxxFlags, want)
+	}
+}
+
+func TestCollectModule_YqlUdfStaticRoutesSrcsToGlobal(t *testing.T) {
+	root := t.TempDir()
+	modDir := filepath.Join(root, "mod")
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		t.Fatalf("mkdir mod: %v", err)
+	}
+
+	const yamake = `YQL_UDF_CONTRIB(my_udf)
+SRCS(lib.cpp nested/extra.cpp)
+PEERDIR(custom/peer)
+END()
+`
+	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
+		t.Fatalf("write ya.make: %v", err)
+	}
+
+	fs := NewFS(root)
+	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+	d := collectModule(fs, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}))
+
+	if d.moduleStmt == nil || d.moduleStmt.Name != "YQL_UDF_CONTRIB" {
+		t.Fatalf("moduleStmt = %#v, want YQL_UDF_CONTRIB", d.moduleStmt)
+	}
+	if !equalStrings(d.moduleStmt.Args, []string{"my_udf"}) {
+		t.Fatalf("module args = %v, want [my_udf]", d.moduleStmt.Args)
+	}
+	if len(d.srcs) != 0 {
+		t.Fatalf("srcs = %v, want empty (SRCS must alias to GLOBAL_SRCS)", d.srcs)
+	}
+	if !equalStrings(d.globalSrcs, []string{"lib.cpp", "nested/extra.cpp"}) {
+		t.Fatalf("globalSrcs = %v, want [lib.cpp nested/extra.cpp]", d.globalSrcs)
+	}
+	if !equalStrings(d.peerdirs, []string{
+		"yql/essentials/public/udf",
+		"yql/essentials/public/udf/support",
+		"custom/peer",
+	}) {
+		t.Fatalf("peerdirs = %v", d.peerdirs)
+	}
+}
+
+func TestCollectModule_ProtocFatalWarningsAddsProtoFlag(t *testing.T) {
+	root := t.TempDir()
+	modDir := filepath.Join(root, "proto")
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		t.Fatalf("mkdir proto: %v", err)
+	}
+
+	const yamake = `PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
+SRCS(test.proto)
+END()
+`
+	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
+		t.Fatalf("write ya.make: %v", err)
+	}
+
+	fs := NewFS(root)
+	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+	d := collectModule(fs, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
+
+	if !equalStrings(d.protocFlags, []string{"--fatal_warnings"}) {
+		t.Fatalf("protocFlags = %v, want [--fatal_warnings]", d.protocFlags)
+	}
+}
+
+func TestCollectModule_CPPProtoPluginRecorded(t *testing.T) {
+	root := t.TempDir()
+	modDir := filepath.Join(root, "proto")
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		t.Fatalf("mkdir proto: %v", err)
+	}
+
+	const yamake = `PROTO_LIBRARY()
+CPP_PROTO_PLUGIN(validation ydb/public/lib/validation .validation.pb.h DEPS ydb/public/api/protos/annotations EXTRA_OUT_FLAG lite=true)
+SRCS(test.proto)
+END()
+`
+	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
+		t.Fatalf("write ya.make: %v", err)
+	}
+
+	fs := NewFS(root)
+	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+	d := collectModule(fs, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
+
+	if len(d.cppProtoPlugins) != 1 {
+		t.Fatalf("cppProtoPlugins = %d, want 1", len(d.cppProtoPlugins))
+	}
+
+	plugin := d.cppProtoPlugins[0]
+	if plugin.Name != "validation" {
+		t.Fatalf("plugin.Name = %q, want validation", plugin.Name)
+	}
+	if plugin.ToolPath != "ydb/public/lib/validation" {
+		t.Fatalf("plugin.ToolPath = %q, want ydb/public/lib/validation", plugin.ToolPath)
+	}
+	if !equalStrings(plugin.OutputSuffixes, []string{".validation.pb.h"}) {
+		t.Fatalf("plugin.OutputSuffixes = %v, want [.validation.pb.h]", plugin.OutputSuffixes)
+	}
+	if !equalStrings(plugin.Deps, []string{"ydb/public/api/protos/annotations"}) {
+		t.Fatalf("plugin.Deps = %v, want [ydb/public/api/protos/annotations]", plugin.Deps)
+	}
+	if plugin.ExtraOutFlag != "lite=true" {
+		t.Fatalf("plugin.ExtraOutFlag = %q, want lite=true", plugin.ExtraOutFlag)
+	}
+	if !containsString(d.peerdirs, "ydb/public/api/protos/annotations") {
+		t.Fatalf("peerdirs = %v, want ydb/public/api/protos/annotations", d.peerdirs)
+	}
+}
+
+func TestCollectModule_FlatcFlagsRecorded(t *testing.T) {
+	root := t.TempDir()
+	modDir := filepath.Join(root, "flatcmod")
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		t.Fatalf("mkdir flatcmod: %v", err)
+	}
+
+	const yamake = `LIBRARY()
+FLATC_FLAGS(--scoped-enums --gen-all)
+SRCS(Schema.fbs)
+END()
+`
+	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
+		t.Fatalf("write ya.make: %v", err)
+	}
+
+	fs := NewFS(root)
+	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+	d := collectModule(fs, "flatcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "flatcmod", Kind: KindLib, Platform: testTargetP}))
+
+	if !equalStrings(d.flatcFlags, []string{"--scoped-enums", "--gen-all"}) {
+		t.Fatalf("flatcFlags = %v, want [--scoped-enums --gen-all]", d.flatcFlags)
+	}
+}
+
+func TestCollectModule_UseCommonGoogleApisAddsPeer(t *testing.T) {
+	root := t.TempDir()
+	modDir := filepath.Join(root, "proto")
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		t.Fatalf("mkdir proto: %v", err)
+	}
+
+	const yamake = `PROTO_LIBRARY()
+USE_COMMON_GOOGLE_APIS(api/annotations)
+SRCS(test.proto)
+END()
+`
+	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
+		t.Fatalf("write ya.make: %v", err)
+	}
+
+	fs := NewFS(root)
+	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+	d := collectModule(fs, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
+
+	if !containsString(d.peerdirs, "contrib/libs/googleapis-common-protos") {
+		t.Fatalf("peerdirs = %v, want contrib/libs/googleapis-common-protos", d.peerdirs)
+	}
+}
+
+func TestCollectModule_Py3ProgramSplitsPyMainFromPySrcs(t *testing.T) {
+	root := t.TempDir()
+	modDir := filepath.Join(root, "pytool")
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		t.Fatalf("mkdir pytool: %v", err)
+	}
+
+	const yamake = `PY3_PROGRAM()
+PY_SRCS(
+    MAIN
+    __main__.py
+)
+END()
+`
+	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
+		t.Fatalf("write ya.make: %v", err)
+	}
+
+	fs := NewFS(root)
+	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+
+	bin := collectModule(fs, "pytool", KindBin, mf.Stmts, buildIfEnv(ModuleInstance{Path: "pytool", Kind: KindBin, Platform: testTargetP}))
+	if got := bin.pyMain; got == nil || *got != "pytool.__main__:main" {
+		t.Fatalf("bin pyMain = %#v, want pytool.__main__:main", got)
+	}
+	if len(bin.pySrcs) != 0 {
+		t.Fatalf("bin pySrcs = %v, want empty", bin.pySrcs)
+	}
+
+	lib := collectModule(fs, "pytool", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "pytool", Kind: KindLib, Platform: testTargetP}))
+	if lib.pyMain != nil {
+		t.Fatalf("lib pyMain = %#v, want nil", lib.pyMain)
+	}
+	if !equalStrings(lib.pySrcs, []string{"__main__.py"}) {
+		t.Fatalf("lib pySrcs = %v, want [__main__.py]", lib.pySrcs)
+	}
+}
+
+func TestCollectModule_CopyExpandsVarsIntoAutoSources(t *testing.T) {
+	root := t.TempDir()
+	modDir := filepath.Join(root, "copymod")
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		t.Fatalf("mkdir copymod: %v", err)
+	}
+
+	const yamake = `LIBRARY()
+SET(ORIG_SRC_DIR src)
+SET(ORIG_SOURCES a.cpp b.h)
+COPY(
+    WITH_CONTEXT
+    AUTO
+    FROM ${ORIG_SRC_DIR}
+    ${ORIG_SOURCES}
+    OUTPUT_INCLUDES dep.h
+)
+END()
+`
+	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
+		t.Fatalf("write ya.make: %v", err)
+	}
+
+	fs := NewFS(root)
+	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+	d := collectModule(fs, "copymod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "copymod", Kind: KindLib, Platform: testTargetP}))
+
+	if !equalStrings(d.srcs, []string{"a.cpp", "b.h"}) {
+		t.Fatalf("srcs = %v, want [a.cpp b.h]", d.srcs)
+	}
+	if len(d.copyFiles) != 2 {
+		t.Fatalf("len(copyFiles) = %d, want 2", len(d.copyFiles))
+	}
+	if d.copyFiles[0].Src != "src/a.cpp" || d.copyFiles[1].Src != "src/b.h" {
+		t.Fatalf("copyFiles srcs = %#v", d.copyFiles)
+	}
+}
+
+func TestGen_YqlUdfStatic_UsesGlobalArchiveOnly(t *testing.T) {
+	root := t.TempDir()
+
+	mkdirWrite := func(rel, body string) {
+		full := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	mkdirWrite("udfmod/ya.make", `YQL_UDF_CONTRIB(my_udf)
+YQL_ABI_VERSION(2 44 0)
+SRCS(lib.cpp)
+END()
+`)
+	mkdirWrite("udfmod/lib.cpp", "int udf() { return 0; }\n")
+	mkdirWrite("yql/essentials/public/udf/ya.make", "LIBRARY()\nEND()\n")
+	mkdirWrite("yql/essentials/public/udf/support/ya.make", "LIBRARY()\nEND()\n")
+
+	g := testGen(root, "udfmod")
+
+	cc := findGraphNodeByOutputs(t, g, "$(B)/udfmod/lib.cpp.udfs.o")
+	if cc.TargetProperties["module_tag"] != "yql_udf_static" {
+		t.Fatalf("cc module_tag = %q, want yql_udf_static", cc.TargetProperties["module_tag"])
+	}
+
+	for _, want := range []string{
+		"-DUDF_ABI_VERSION_MAJOR=2",
+		"-DUDF_ABI_VERSION_MINOR=44",
+		"-DUDF_ABI_VERSION_PATCH=0",
+	} {
+		if !contains(cc.Cmds[0].CmdArgs, want) {
+			t.Fatalf("cc cmd_args missing %q: %v", want, cc.Cmds[0].CmdArgs)
+		}
+	}
+
+	globalAR := findGraphNodeByOutputs(t, g, "$(B)/udfmod/libmy_udf.global.a")
+	if globalAR.TargetProperties["module_tag"] != "yql_udf_static_global" {
+		t.Fatalf("global AR module_tag = %q, want yql_udf_static_global", globalAR.TargetProperties["module_tag"])
+	}
+
+	for _, n := range g.Graph {
+		for _, out := range n.Outputs {
+			if out.String() == "$(B)/udfmod/libmy_udf.a" {
+				t.Fatalf("unexpected regular archive output %q present in graph", out)
+			}
+		}
+	}
+}
+
+func TestGen_FlatcSourcesEmitConsumerInputsAndDeps(t *testing.T) {
+	root := t.TempDir()
+
+	mkdirWrite := func(rel, body string) {
+		full := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	mkdirWrite("mod/ya.make", `LIBRARY()
+FLATC_FLAGS(--scoped-enums)
+SRCS(
+    File.fbs
+    Schema.fbs
+    consumer.cpp
+)
+END()
+`)
+	mkdirWrite("mod/consumer.cpp", `#include "File.fbs.h"
+int consume() { return 0; }
+`)
+	mkdirWrite("mod/Schema.fbs", `namespace test;
+table Foo {
+  value:int;
+}
+`)
+	mkdirWrite("mod/File.fbs", `include "Schema.fbs";
+namespace test;
+table Bar {
+  foo:Foo;
+}
+root_type Bar;
+`)
+	mkdirWrite("build/scripts/cpp_flatc_wrapper.py", "print('stub')\n")
+	mkdirWrite("contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h", "#pragma once\n")
+	mkdirWrite("contrib/libs/flatbuffers/flatc/ya.make", "PROGRAM(flatc)\nSRCS(main.cpp)\nEND()\n")
+	mkdirWrite("contrib/libs/flatbuffers/flatc/main.cpp", "int main() { return 0; }\n")
+
+	g := testGen(root, "mod")
+
+	findGraphNodeByOutputs(t, g, "$(B)/mod/File.fbs.h", "$(B)/mod/File.fbs.cpp", "$(B)/mod/File.bfbs")
+	findGraphNodeByOutputs(t, g, "$(B)/mod/Schema.fbs.h", "$(B)/mod/Schema.fbs.cpp", "$(B)/mod/Schema.bfbs")
+
+	fileCC := findGraphNodeByOutputs(t, g, "$(B)/mod/File.fbs.cpp.o")
+	wantFileInputs := []string{
+		"$(B)/mod/File.fbs.cpp",
+		"$(B)/mod/File.fbs.h",
+		"$(B)/mod/Schema.fbs.h",
+		"$(S)/build/scripts/cpp_flatc_wrapper.py",
+		"$(S)/mod/File.fbs",
+		"$(S)/mod/Schema.fbs",
+		"$(S)/contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h",
+	}
+	if got := vfsStringsT3(fileCC.Inputs); !reflect.DeepEqual(got[:len(wantFileInputs)], wantFileInputs) {
+		t.Fatalf("File.fbs.cpp inputs prefix = %v, want %v", got[:len(wantFileInputs)], wantFileInputs)
+	}
+	if len(fileCC.Deps) != 2 {
+		t.Fatalf("len(File.fbs.cpp deps) = %d, want 2 (self + imported schema)", len(fileCC.Deps))
+	}
+
+	consumerCC := findGraphNodeByOutputs(t, g, "$(B)/mod/consumer.cpp.o")
+	wantConsumerInputs := []string{
+		"$(S)/mod/consumer.cpp",
+		"$(B)/mod/File.fbs.h",
+		"$(B)/mod/Schema.fbs.h",
+		"$(S)/build/scripts/cpp_flatc_wrapper.py",
+		"$(S)/mod/File.fbs",
+		"$(S)/mod/Schema.fbs",
+		"$(S)/contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h",
+	}
+	if got := vfsStringsT3(consumerCC.Inputs); !reflect.DeepEqual(got[:len(wantConsumerInputs)], wantConsumerInputs) {
+		t.Fatalf("consumer.cpp inputs prefix = %v, want %v", got[:len(wantConsumerInputs)], wantConsumerInputs)
+	}
+	if len(consumerCC.Deps) != 2 {
+		t.Fatalf("len(consumer.cpp deps) = %d, want 2 (reachable flatc producers)", len(consumerCC.Deps))
+	}
+}
+
+func TestGen_CopyFileWithContextAutoCompilesBuildOutput(t *testing.T) {
+	root := t.TempDir()
+
+	mkdirWrite := func(rel, body string) {
+		full := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	mkdirWrite("mod/ya.make", `LIBRARY()
+COPY_FILE_WITH_CONTEXT(
+    AUTO
+    original.cpp
+    copied.cpp
+)
+END()
+`)
+	mkdirWrite("mod/original.cpp", `#include "dep.h"
+int copied() { return 0; }
+`)
+	mkdirWrite("mod/dep.h", "#pragma once\n")
+
+	g := testGen(root, "mod")
+
+	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
+	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
+	wantInputs := []string{
+		"$(B)/mod/copied.cpp",
+		"$(S)/mod/original.cpp",
+		"$(S)/mod/dep.h",
+	}
+	if got := vfsStringsT3(cc.Inputs); !reflect.DeepEqual(got[:len(wantInputs)], wantInputs) {
+		t.Fatalf("copied.cpp inputs prefix = %v, want %v", got[:len(wantInputs)], wantInputs)
+	}
+	if len(cc.Deps) != 1 {
+		t.Fatalf("len(copied.cpp deps) = %d, want 1 (copy producer)", len(cc.Deps))
+	}
+}
+
+func TestGen_CopyFileWithContextExpandsBuildRootModdirDestination(t *testing.T) {
+	root := t.TempDir()
+
+	mkdirWrite := func(rel, body string) {
+		full := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	mkdirWrite("mod/ya.make", `LIBRARY()
+COPY_FILE_WITH_CONTEXT(
+    AUTO
+    original.cpp
+    ${ARCADIA_BUILD_ROOT}/${MODDIR}/copied.cpp
+)
+END()
+`)
+	mkdirWrite("mod/original.cpp", `#include "dep.h"
+int copied() { return 0; }
+`)
+	mkdirWrite("mod/dep.h", "#pragma once\n")
+
+	g := testGen(root, "mod")
+
+	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
+	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
+	wantInputs := []string{
+		"$(B)/mod/copied.cpp",
+		"$(S)/mod/original.cpp",
+		"$(S)/mod/dep.h",
+	}
+	if got := vfsStringsT3(cc.Inputs); !reflect.DeepEqual(got[:len(wantInputs)], wantInputs) {
+		t.Fatalf("copied.cpp inputs prefix = %v, want %v", got[:len(wantInputs)], wantInputs)
+	}
+}
+
+func TestGen_CopyFileAutoDoesNotPropagateSourceContext(t *testing.T) {
+	root := t.TempDir()
+
+	mkdirWrite := func(rel, body string) {
+		full := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	mkdirWrite("mod/ya.make", `LIBRARY()
+COPY_FILE(
+    AUTO
+    original.cpp
+    copied.cpp
+)
+END()
+`)
+	mkdirWrite("mod/original.cpp", `#include "dep.h"
+int copied() { return 0; }
+`)
+	mkdirWrite("mod/dep.h", "#pragma once\n")
+
+	g := testGen(root, "mod")
+
+	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
+	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
+	wantInputs := []string{"$(B)/mod/copied.cpp"}
+	if got := vfsStringsT3(cc.Inputs); !reflect.DeepEqual(got[:len(wantInputs)], wantInputs) {
+		t.Fatalf("copied.cpp inputs prefix = %v, want %v", got[:len(wantInputs)], wantInputs)
+	}
+	for _, unexpected := range []string{"$(S)/mod/original.cpp", "$(S)/mod/dep.h"} {
+		for _, in := range vfsStringsT3(cc.Inputs) {
+			if in == unexpected {
+				t.Fatalf("copied.cpp inputs unexpectedly contain %s: %v", unexpected, vfsStringsT3(cc.Inputs))
+			}
+		}
+	}
+	if len(cc.Deps) != 1 {
+		t.Fatalf("len(copied.cpp deps) = %d, want 1 (copy producer)", len(cc.Deps))
+	}
+}
+
+func vfsStringsT3(in []VFS) []string {
+	out := make([]string, len(in))
+	for i, v := range in {
+		out[i] = v.String()
+	}
+	return out
+}
+
+// TestGen_CF_SetVarsReachCfgVars reproduces T9: SET(...)-derived vars must
+// reach the CFG_VARS of a CF node emitted through the SRCS .cpp.in path.
+func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
+	root := t.TempDir()
+	libDir := filepath.Join(root, "thelib")
+	Throw(os.MkdirAll(libDir, 0o755))
+	Throw(os.WriteFile(filepath.Join(libDir, "ya.make"),
+		[]byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSET(MYVAR hello)\nDEFAULT(MYDEF world)\nSRCS(lib.cpp x.cpp.in)\nEND()\n"), 0o644))
+	Throw(os.WriteFile(filepath.Join(libDir, "lib.cpp"), []byte("int f(){return 0;}\n"), 0o644))
+	Throw(os.WriteFile(filepath.Join(libDir, "x.cpp.in"), []byte("int a = @MYVAR@;\nint b = @MYDEF@;\n"), 0o644))
+
+	g := testGen(root, "thelib")
+	var cf *Node
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0].String() == "$(B)/thelib/x.cpp" {
+			cf = n
+			break
+		}
+	}
+	if cf == nil {
+		t.Fatal("no CF node emitted for thelib/x.cpp")
+	}
+	args := strings.Join(cf.Cmds[0].CmdArgs, " ")
+	if !strings.Contains(args, "MYVAR=hello") {
+		t.Errorf("CF cmd_args missing SET var MYVAR=hello; got: %s", args)
+	}
+	if !strings.Contains(args, "MYDEF=world") {
+		t.Errorf("CF cmd_args missing DEFAULT var MYDEF=world; got: %s", args)
+	}
+}
+
+// TestGen_HInGeneratedHeader_RealizedInConsumer reproduces T13: a .h.in
+// generated header declared in SRCS of one module but #included only by a
+// PEERDIR consumer must have module_dir = the consuming module (not the
+// declaring one) and must NOT be archived into the declaring module's .a.
+func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
+	root := t.TempDir()
+	genh := filepath.Join(root, "genh")
+	cons := filepath.Join(root, "cons")
+	app := filepath.Join(root, "app")
+	for _, d := range []string{genh, cons, app} {
+		Throw(os.MkdirAll(d, 0o755))
+	}
+	// declaring module: config.h.in in SRCS, plus a .cpp that does NOT include config.h
+	Throw(os.WriteFile(filepath.Join(genh, "ya.make"),
+		[]byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSET(MYVAR hello)\nSRCS(config.h.in own.cpp)\nEND()\n"), 0o644))
+	Throw(os.WriteFile(filepath.Join(genh, "config.h.in"), []byte("#define X @MYVAR@\n"), 0o644))
+	Throw(os.WriteFile(filepath.Join(genh, "own.cpp"), []byte("int g(){return 0;}\n"), 0o644))
+	// consuming module: #includes the generated header across PEERDIR
+	Throw(os.WriteFile(filepath.Join(cons, "ya.make"),
+		[]byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(genh)\nSRCS(use.cpp)\nEND()\n"), 0o644))
+	Throw(os.WriteFile(filepath.Join(cons, "use.cpp"),
+		[]byte("#include <genh/config.h>\nint u(){return 0;}\n"), 0o644))
+	// root program
+	Throw(os.WriteFile(filepath.Join(app, "ya.make"),
+		[]byte("PROGRAM()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(cons)\nSRCS(main.cpp)\nEND()\n"), 0o644))
+	Throw(os.WriteFile(filepath.Join(app, "main.cpp"), []byte("int main(){return 0;}\n"), 0o644))
+
+	g := testGen(root, "app")
+
+	byOut := map[string]*Node{}
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 {
+			byOut[n.Outputs[0].String()] = n
+		}
+	}
+
+	cf := byOut["$(B)/genh/config.h"]
+	if cf == nil {
+		t.Fatal("no CF node emitted for genh/config.h")
+	}
+	if got := cf.TargetProperties["module_dir"]; got != "cons" {
+		t.Errorf("config.h module_dir = %q, want %q (consuming module)", got, "cons")
+	}
+
+	ar := byOut["$(B)/genh/libgenh.a"]
+	if ar == nil {
+		t.Fatal("no AR node for genh")
+	}
+	for _, c := range ar.Cmds {
+		for _, a := range c.CmdArgs {
+			if a == "$(B)/genh/config.h" {
+				t.Errorf("genh AR cmd_args archives config.h as a member: %v", c.CmdArgs)
+			}
+		}
+	}
+	for _, in := range ar.Inputs {
+		if in.String() == "$(B)/genh/config.h" || in.String() == "$(S)/genh/config.h.in" {
+			t.Errorf("genh AR inputs include %q (generated header must not be archived)", in.String())
+		}
+	}
+
+	use := byOut["$(B)/cons/use.cpp.o"]
+	if use == nil {
+		t.Fatal("no CC node for cons/use.cpp")
+	}
+	found := false
+	for _, d := range use.Deps {
+		if d == cf.UID {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("use.cpp.o deps %v missing config.h CF uid %q", use.Deps, cf.UID)
+	}
+}
+
+func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		paths     []string
+		wantOrder []int
+	}{
+		{
+			name: "protobuf-style host reg3",
+			paths: []string{
+				"contrib/python/protobuf/py3/google.protobuf.internal._api_implementation.reg3.cpp.pic.o",
+				"contrib/python/protobuf/py3/google.protobuf.pyext._message.reg3.cpp.pic.o",
+				"contrib/python/protobuf/py3/objcopy_a.o",
+				"contrib/python/protobuf/py3/objcopy_b.o",
+			},
+			wantOrder: []int{2, 3, 0, 1},
+		},
+		{
+			name: "symbols/module-style host py3 reg3",
+			paths: []string{
+				"library/python/symbols/module/library.python.symbols.module.syms.reg3.cpp.py3.pic.o",
+				"library/python/symbols/module/objcopy_a.o",
+				"library/python/symbols/module/objcopy_b.o",
+			},
+			wantOrder: []int{1, 2, 0},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			refs := make([]NodeRef, len(tc.paths))
+			paths := make([]VFS, len(tc.paths))
+			for i, rel := range tc.paths {
+				refs[i] = NodeRef{id: int64(i + 1)}
+				paths[i] = Build(rel)
+			}
+
+			gotRefs, gotPaths := reorderARMembers(
+				refs,
+				paths,
+				make([]bool, len(tc.paths)),
+				make([]bool, len(tc.paths)),
+				len(tc.paths),
+			)
+
+			wantRefs := make([]NodeRef, len(tc.wantOrder))
+			wantPaths := make([]string, len(tc.wantOrder))
+			for i, idx := range tc.wantOrder {
+				wantRefs[i] = refs[idx]
+				wantPaths[i] = Build(tc.paths[idx]).String()
+			}
+
+			gotPathStrings := make([]string, len(gotPaths))
+			for i, path := range gotPaths {
+				gotPathStrings[i] = path.String()
+			}
+
+			if !reflect.DeepEqual(gotPathStrings, wantPaths) {
+				t.Fatalf("paths mismatch:\n got: %v\nwant: %v", gotPathStrings, wantPaths)
+			}
+			if !reflect.DeepEqual(gotRefs, wantRefs) {
+				t.Fatalf("refs mismatch:\n got: %v\nwant: %v", gotRefs, wantRefs)
+			}
+		})
+	}
+}
+
+const t17SwigTargetDir = "contrib/tools/swig"
+
+func TestReorderLDMembers_LegacyDoubleUnderscorePathsTrailRegularSources(t *testing.T) {
+	refs := []NodeRef{{id: 1}, {id: 2}, {id: 3}}
+	paths := []VFS{
+		Build("contrib/tools/swig/_/Source/CParse/cscanner.c.pic.o"),
+		Build("contrib/tools/swig/_/_/Source/CParse/parser.y.c.pic.o"),
+		Build("contrib/tools/swig/_/Source/CParse/templ.c.pic.o"),
+	}
+
+	gotRefs, gotPaths := reorderLDMembers(refs, paths)
+
+	wantRefs := []NodeRef{{id: 1}, {id: 3}, {id: 2}}
+	if !reflect.DeepEqual(gotRefs, wantRefs) {
+		t.Fatalf("ld refs mismatch:\n  got:  %#v\n  want: %#v", gotRefs, wantRefs)
+	}
+
+	wantPaths := []string{
+		"$(B)/contrib/tools/swig/_/Source/CParse/cscanner.c.pic.o",
+		"$(B)/contrib/tools/swig/_/Source/CParse/templ.c.pic.o",
+		"$(B)/contrib/tools/swig/_/_/Source/CParse/parser.y.c.pic.o",
+	}
+	if got := vfsStrings(gotPaths); !reflect.DeepEqual(got, wantPaths) {
+		t.Fatalf("ld paths mismatch:\n  got:  %#v\n  want: %#v", got, wantPaths)
+	}
+}
+
+func TestGen_SwigToolBisonCompileNodesMatchReference(t *testing.T) {
+	requireT17SwigFixture(t)
+
+	our := testGenT20Tool(sourceRoot, t17SwigTargetDir)
+	ref := loadT20RefGraph(t)
+
+	tests := []struct {
+		name      string
+		ourOutput string
+		refOutput string
+	}{
+		{
+			name:      "cscanner",
+			ourOutput: "$(B)/contrib/tools/swig/_/Source/CParse/cscanner.c.pic.o",
+			refOutput: "$(BUILD_ROOT)/contrib/tools/swig/_/Source/CParse/cscanner.c.pic.o",
+		},
+		{
+			name:      "parser-y-generated-cc",
+			ourOutput: "$(B)/contrib/tools/swig/_/_/Source/CParse/parser.y.c.pic.o",
+			refOutput: "$(BUILD_ROOT)/contrib/tools/swig/_/_/Source/CParse/parser.y.c.pic.o",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ourNode := findGraphNodeByOutputs(t, our, tc.ourOutput)
+			refNode := findT20RefNodeByOutputs(t, ref, tc.refOutput)
+			if len(ourNode.Cmds) == 0 || len(refNode.Cmds) == 0 {
+				t.Fatalf("expected both nodes to have at least 1 cmd")
+			}
+
+			gotArgs := append([]string(nil), ourNode.Cmds[0].CmdArgs...)
+			wantArgs := normalizeT20Strings(refNode.Cmds[0].CmdArgs)
+			if !reflect.DeepEqual(gotArgs, wantArgs) {
+				t.Fatalf("%s cmd_args mismatch:\n  got:  %#v\n  want: %#v", tc.name, gotArgs, wantArgs)
+			}
+
+			gotInputs := sortedStrings(vfsStrings(ourNode.Inputs))
+			wantInputs := sortedStrings(normalizeT20Strings(refNode.Inputs))
+			if !reflect.DeepEqual(gotInputs, wantInputs) {
+				t.Fatalf("%s inputs mismatch:\n  got:  %#v\n  want: %#v", tc.name, gotInputs, wantInputs)
+			}
+
+			gotDepOutputs := projectGraphDepOutputs(t, our, ourNode.Deps)
+			wantDepOutputs := projectT20RefDepOutputs(t, ref, refNode.Deps)
+			if !reflect.DeepEqual(gotDepOutputs, wantDepOutputs) {
+				t.Fatalf("%s dep outputs mismatch:\n  got:  %#v\n  want: %#v", tc.name, gotDepOutputs, wantDepOutputs)
+			}
+		})
+	}
+}
+
+func TestGen_SwigToolLDMatchesReference(t *testing.T) {
+	requireT17SwigFixture(t)
+
+	our := testGenT20Tool(sourceRoot, t17SwigTargetDir)
+	ref := loadT20RefGraph(t)
+
+	ourNode := findGraphNodeByOutputs(t, our, "$(B)/contrib/tools/swig/swig")
+	refNode := findT20RefNodeByOutputs(t, ref, "$(BUILD_ROOT)/contrib/tools/swig/swig")
+	if len(ourNode.Cmds) < 3 || len(refNode.Cmds) < 3 {
+		t.Fatalf("expected both nodes to have at least 3 cmds")
+	}
+
+	gotArgs := append([]string(nil), ourNode.Cmds[2].CmdArgs...)
+	wantArgs := normalizeT20Strings(refNode.Cmds[2].CmdArgs)
+	if !reflect.DeepEqual(gotArgs, wantArgs) {
+		t.Fatalf("swig ld cmd_args mismatch:\n  got:  %#v\n  want: %#v", gotArgs, wantArgs)
+	}
+
+	gotInputs := sortedStrings(vfsStrings(ourNode.Inputs))
+	wantInputs := sortedStrings(normalizeT20Strings(refNode.Inputs))
+	if !reflect.DeepEqual(gotInputs, wantInputs) {
+		t.Fatalf("swig ld inputs mismatch:\n  got:  %#v\n  want: %#v", gotInputs, wantInputs)
+	}
+
+	gotDepOutputs := projectGraphDepOutputs(t, our, ourNode.Deps)
+	wantDepOutputs := projectT20RefDepOutputs(t, ref, refNode.Deps)
+	if !reflect.DeepEqual(gotDepOutputs, wantDepOutputs) {
+		t.Fatalf("swig ld dep outputs mismatch:\n  got:  %#v\n  want: %#v", gotDepOutputs, wantDepOutputs)
+	}
+
+	parserIdx := slices.Index(gotArgs, "$(B)/contrib/tools/swig/_/_/Source/CParse/parser.y.c.pic.o")
+	swigLibIdx := slices.Index(gotArgs, "$(B)/contrib/tools/swig/swig_lib.cpp.pic.o")
+	if parserIdx < 0 || swigLibIdx < 0 {
+		t.Fatalf("expected parser.y.c.pic.o and swig_lib.cpp.pic.o in swig link cmd_args: %v", gotArgs)
+	}
+	if parserIdx <= swigLibIdx {
+		t.Fatalf("expected parser.y.c.pic.o after swig_lib.cpp.pic.o in swig link cmd_args: %v", gotArgs)
+	}
+}
+
+func requireT17SwigFixture(t *testing.T) {
+	t.Helper()
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, t17SwigTargetDir, "ya.make")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, t17SwigTargetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+}
+
+var t20ResourceMacroRE = regexp.MustCompile(`\$\((CLANG|LLD_ROOT|YMAKE_PYTHON3)-[0-9]+\)`)
+
+type t20RefCmd struct {
+	CmdArgs []string          `json:"cmd_args"`
+	Env     map[string]string `json:"env"`
+}
+
+type t20RefNode struct {
+	Cmds    []t20RefCmd `json:"cmds"`
+	Deps    []string    `json:"deps"`
+	Inputs  []string    `json:"inputs"`
+	Outputs []string    `json:"outputs"`
+	UID     string      `json:"uid"`
+}
+
+func TestCollectModule_SETAPPENDRPathGlobal(t *testing.T) {
+	root := t.TempDir()
+	modDir := filepath.Join(root, "mod")
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		t.Fatalf("mkdir mod: %v", err)
+	}
+
+	content := "RESOURCES_LIBRARY()\nSET_APPEND(RPATH_GLOBAL '-Wl,-rpath,${\"$\"}ORIGIN')\nEND()\n"
+	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write ya.make: %v", err)
+	}
+
+	fs := NewFS(root)
+	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+	instance := ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}
+	d := collectModule(fs, "mod", KindLib, mf.Stmts, buildIfEnv(instance))
+
+	want := []string{"-Wl,-rpath,$ORIGIN"}
+	if !reflect.DeepEqual(d.rpathFlagsGlobal, want) {
+		t.Fatalf("rpathFlagsGlobal mismatch:\n  got:  %#v\n  want: %#v", d.rpathFlagsGlobal, want)
+	}
+}
+
+func TestGen_LibiconvDynamic_InputsMatchReference(t *testing.T) {
+	const targetDir = "contrib/libs/libiconv/dynamic"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, targetDir, "ya.make")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	our := testGenT20Tool(sourceRoot, targetDir)
+	ourNode := findGraphNodeByOutputs(t, our, "$(B)/contrib/libs/libiconv/dynamic/libiconv.so")
+	refNode := loadT20RefNode(t, "$(BUILD_ROOT)/contrib/libs/libiconv/dynamic/libiconv.so")
+
+	gotInputs := sortedStrings(vfsStrings(ourNode.Inputs))
+	wantInputs := sortedStrings(normalizeT20Strings(refNode.Inputs))
+
+	if !reflect.DeepEqual(gotInputs, wantInputs) {
+		t.Fatalf("libiconv inputs mismatch:\n  got:  %#v\n  want: %#v", gotInputs, wantInputs)
+	}
+
+	for _, want := range []string{
+		"$(S)/build/scripts/c_templates/svn_interface.c",
+		"$(S)/build/scripts/c_templates/svnversion.h",
+		"$(S)/build/scripts/fs_tools.py",
+		"$(S)/build/scripts/link_exe.py",
+		"$(S)/build/scripts/vcs_info.py",
+	} {
+		if !slices.Contains(gotInputs, want) {
+			t.Fatalf("libiconv inputs missing %q", want)
+		}
+	}
+}
+
+func TestGen_BisonLinkTailMatchesReference(t *testing.T) {
+	const targetDir = "contrib/tools/bison"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, targetDir, "ya.make")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	our := testGenT20Tool(sourceRoot, targetDir)
+	ourNode := findGraphNodeByOutputs(t, our, "$(B)/contrib/tools/bison/bison", "$(B)/contrib/tools/bison/libiconv.so")
+	refNode := loadT20RefNode(t, "$(BUILD_ROOT)/contrib/tools/bison/bison", "$(BUILD_ROOT)/contrib/tools/bison/libiconv.so")
+
+	if len(ourNode.Cmds) < 3 || len(refNode.Cmds) < 3 {
+		t.Fatalf("expected both nodes to have at least 3 cmds")
+	}
+
+	gotTail := cmdArgsFrom(t, ourNode.Cmds[2].CmdArgs, "-Wl,--start-group")
+	wantTail := normalizeT20Strings(cmdArgsFrom(t, refNode.Cmds[2].CmdArgs, "-Wl,--start-group"))
+
+	if !reflect.DeepEqual(gotTail, wantTail) {
+		t.Fatalf("bison link tail mismatch:\n  got:  %#v\n  want: %#v", gotTail, wantTail)
+	}
+
+	libiconvIdx := slices.Index(gotTail, "contrib/libs/libiconv/dynamic/libiconv.so")
+	bisonLibIdx := slices.Index(gotTail, "contrib/tools/bison/lib/libtools-bison-lib.a")
+	if libiconvIdx < 0 || bisonLibIdx < 0 {
+		t.Fatalf("expected both libiconv.so and libtools-bison-lib.a in bison link tail: %v", gotTail)
+	}
+	if libiconvIdx >= bisonLibIdx {
+		t.Fatalf("expected libiconv.so before libtools-bison-lib.a in bison link tail: %v", gotTail)
+	}
+
+	rpathCount := 0
+	for _, arg := range gotTail {
+		if arg == "-Wl,-rpath,$ORIGIN" {
+			rpathCount++
+		}
+	}
+	if rpathCount != 2 {
+		t.Fatalf("expected 2 rpath entries in bison link tail, got %d: %v", rpathCount, gotTail)
+	}
+
+	if !slices.Contains(gotTail, "-Wl,--allow-multiple-definition") {
+		t.Fatalf("bison link tail missing -Wl,--allow-multiple-definition: %v", gotTail)
+	}
+}
+
+func TestGen_BisonCompileCommands_DoNotLeakLocalSoGlobals(t *testing.T) {
+	const targetDir = "contrib/tools/bison"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, targetDir, "ya.make")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	our := testGenT20Tool(sourceRoot, targetDir)
+	ref := loadT20RefGraph(t)
+
+	tests := []struct {
+		name      string
+		ourOutput string
+		refOutput string
+		banned    []string
+	}{
+		{
+			name:      "program-side",
+			ourOutput: "$(B)/contrib/tools/bison/_/src/print-xml.c.pic.o",
+			refOutput: "$(BUILD_ROOT)/contrib/tools/bison/_/src/print-xml.c.pic.o",
+			banned: []string{
+				"-I$(S)/contrib/libs/zlib/include",
+				"-I$(S)/contrib/libs/double-conversion",
+				"-I$(S)/contrib/libs/libc_compat/include/readpassphrase",
+			},
+		},
+		{
+			name:      "library-side",
+			ourOutput: "$(B)/contrib/tools/bison/lib/mbchar.c.pic.o",
+			refOutput: "$(BUILD_ROOT)/contrib/tools/bison/lib/mbchar.c.pic.o",
+			banned: []string{
+				"-I$(S)/contrib/libs/zlib/include",
+				"-I$(S)/contrib/libs/double-conversion",
+				"-I$(S)/contrib/libs/libc_compat/include/readpassphrase",
+				"-I$(S)/contrib/libs/cxxsupp/libcxx/include",
+				"-I$(S)/contrib/libs/cxxsupp/libcxxrt/include",
+				"-I$(S)/contrib/libs/clang20-rt/include",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ourNode := findGraphNodeByOutputs(t, our, tc.ourOutput)
+			refNode := findT20RefNodeByOutputs(t, ref, tc.refOutput)
+			if len(ourNode.Cmds) == 0 || len(refNode.Cmds) == 0 {
+				t.Fatalf("expected both nodes to have at least 1 cmd")
+			}
+
+			gotArgs := append([]string(nil), ourNode.Cmds[0].CmdArgs...)
+			wantArgs := normalizeT20Strings(refNode.Cmds[0].CmdArgs)
+			if !reflect.DeepEqual(gotArgs, wantArgs) {
+				t.Fatalf("%s compile cmd_args mismatch:\n  got:  %#v\n  want: %#v", tc.name, gotArgs, wantArgs)
+			}
+
+			assertCmdArgsAbsent(t, gotArgs, tc.banned...)
+		})
+	}
+}
+
+func TestGen_BisonArchiveMatchesReferenceAfterLocalSoIsolation(t *testing.T) {
+	const targetDir = "contrib/tools/bison"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, targetDir, "ya.make")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	our := testGenT20Tool(sourceRoot, targetDir)
+	ref := loadT20RefGraph(t)
+
+	ourNode := findGraphNodeByOutputs(t, our, "$(B)/contrib/tools/bison/lib/libtools-bison-lib.a")
+	refNode := findT20RefNodeByOutputs(t, ref, "$(BUILD_ROOT)/contrib/tools/bison/lib/libtools-bison-lib.a")
+	if len(ourNode.Cmds) == 0 || len(refNode.Cmds) == 0 {
+		t.Fatalf("expected both archive nodes to have at least 1 cmd")
+	}
+
+	gotArgs := append([]string(nil), ourNode.Cmds[0].CmdArgs...)
+	wantArgs := normalizeT20Strings(refNode.Cmds[0].CmdArgs)
+	if !reflect.DeepEqual(gotArgs, wantArgs) {
+		t.Fatalf("bison archive cmd_args mismatch:\n  got:  %#v\n  want: %#v", gotArgs, wantArgs)
+	}
+
+	gotDepOutputs := projectGraphDepOutputs(t, our, ourNode.Deps)
+	wantDepOutputs := projectT20RefDepOutputs(t, ref, refNode.Deps)
+	if !reflect.DeepEqual(gotDepOutputs, wantDepOutputs) {
+		t.Fatalf("bison archive dep outputs mismatch:\n  got:  %#v\n  want: %#v", gotDepOutputs, wantDepOutputs)
+	}
+}
+
+func testGenT20(sourceRoot, targetDir string) *Graph {
+	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)
+	target := newT20ResourcePlatform(OSLinux, ISAAArch64, "yes", nil, true)
+
+	return GenWithMode(sourceRoot, targetDir, host, target, defaultScanCtxMode, func(Warn) {})
+}
+
+func testGenT20Tool(sourceRoot, targetDir string) *Graph {
+	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)
+
+	return GenWithMode(sourceRoot, targetDir, host, host, defaultScanCtxMode, func(Warn) {})
+}
+
+func newT20ResourcePlatform(os OS, isa ISA, pic string, tags []string, musl bool) *Platform {
+	flags := map[string]string{
+		"AR_TOOL":           "$(CLANG)/bin/llvm-ar",
+		"BUILD_PYTHON_BIN":  "$(YMAKE_PYTHON3)/bin/python3",
+		"BUILD_PYTHON3_BIN": "$(YMAKE_PYTHON3)/bin/python3",
+		"CLANG_TOOL":        "$(CLANG)/bin/clang",
+		"CLANG_pl_pl_TOOL":  "$(CLANG)/bin/clang++",
+		"LLD_TOOL":          "$(LLD_ROOT)/bin/ld.lld",
+		"OBJCOPY_TOOL":      "$(CLANG)/bin/llvm-objcopy",
+		"PIC":               pic,
+		"STRIP_TOOL":        "$(CLANG)/bin/llvm-strip",
+	}
+	if musl {
+		flags["MUSL"] = "yes"
+	}
+
+	return NewPlatform(os, isa, flags, tags, "", "")
+}
+
+type t20RefGraph struct {
+	nodes []*t20RefNode
+	byUID map[string]*t20RefNode
+}
+
+func loadT20RefGraph(t *testing.T) *t20RefGraph {
+	t.Helper()
+
+	path := filepath.Join(sourceRoot, "sg3.json")
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference graph not present at %s", path)
+		}
+
+		t.Fatalf("open %s: %v", path, err)
+	}
+	defer f.Close()
+
+	dec := json.NewDecoder(f)
+
+	tok, err := dec.Token()
+	if err != nil {
+		t.Fatalf("read opening token from %s: %v", path, err)
+	}
+	if d, ok := tok.(json.Delim); !ok || d != '{' {
+		t.Fatalf("unexpected opening token in %s: %v", path, tok)
+	}
+
+	for dec.More() {
+		keyTok, err := dec.Token()
+		if err != nil {
+			t.Fatalf("read object key from %s: %v", path, err)
+		}
+
+		key, ok := keyTok.(string)
+		if !ok {
+			t.Fatalf("unexpected key token in %s: %v", path, keyTok)
+		}
+
+		if key != "graph" {
+			var skip json.RawMessage
+			if err := dec.Decode(&skip); err != nil {
+				t.Fatalf("skip %q in %s: %v", key, path, err)
+			}
+
+			continue
+		}
+
+		tok, err = dec.Token()
+		if err != nil {
+			t.Fatalf("read graph opener from %s: %v", path, err)
+		}
+		if d, ok := tok.(json.Delim); !ok || d != '[' {
+			t.Fatalf("unexpected graph opener in %s: %v", path, tok)
+		}
+
+		ref := &t20RefGraph{byUID: make(map[string]*t20RefNode)}
+		for dec.More() {
+			var node t20RefNode
+			if err := dec.Decode(&node); err != nil {
+				t.Fatalf("decode graph node from %s: %v", path, err)
+			}
+
+			nodeCopy := node
+			ref.nodes = append(ref.nodes, &nodeCopy)
+			if nodeCopy.UID != "" {
+				ref.byUID[nodeCopy.UID] = &nodeCopy
+			}
+		}
+
+		return ref
+	}
+
+	t.Fatalf("graph array not found in %s", path)
+
+	return nil
+}
+
+func loadT20RefNode(t *testing.T, wantOutputs ...string) *t20RefNode {
+	t.Helper()
+
+	return findT20RefNodeByOutputs(t, loadT20RefGraph(t), wantOutputs...)
+}
+
+func findT20RefNodeByOutputs(t *testing.T, ref *t20RefGraph, wantOutputs ...string) *t20RefNode {
+	t.Helper()
+
+	for _, node := range ref.nodes {
+		if slices.Equal(node.Outputs, wantOutputs) {
+			return node
+		}
+	}
+
+	t.Fatalf("reference node with outputs %v not found", wantOutputs)
+	return nil
+}
+
+func findGraphNodeByOutputs(t *testing.T, g *Graph, wantOutputs ...string) *Node {
+	t.Helper()
+
+	for _, node := range g.Graph {
+		if len(node.Outputs) != len(wantOutputs) {
+			continue
+		}
+
+		match := true
+		for i, out := range node.Outputs {
+			if out.String() != wantOutputs[i] {
+				match = false
+
+				break
+			}
+		}
+
+		if match {
+			return node
+		}
+	}
+
+	t.Fatalf("graph node with outputs %v not found", wantOutputs)
+	return nil
+}
+
+func cmdArgsFrom[T interface{ ~[]string }](t *testing.T, args T, marker string) []string {
+	t.Helper()
+
+	idx := slices.Index(args, marker)
+	if idx < 0 {
+		t.Fatalf("marker %q not found in cmd args: %v", marker, args)
+	}
+
+	return append([]string(nil), args[idx:]...)
+}
+
+func normalizeT20Token(s string) string {
+	s = strings.NewReplacer(
+		"$(BUILD_ROOT)", "$(B)",
+		"$(SOURCE_ROOT)", "$(S)",
+	).Replace(s)
+
+	return t20ResourceMacroRE.ReplaceAllStringFunc(s, func(match string) string {
+		dash := strings.IndexByte(match, '-')
+		if dash < 0 {
+			return match
+		}
+
+		return "$(" + match[2:dash] + ")"
+	})
+}
+
+func normalizeT20Strings(in []string) []string {
+	out := make([]string, len(in))
+	for i, s := range in {
+		out[i] = normalizeT20Token(s)
+	}
+
+	return out
+}
+
+func normalizeT20Env(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = normalizeT20Token(v)
+	}
+
+	return out
+}
+
+func sortedStrings(in []string) []string {
+	out := append([]string(nil), in...)
+	sort.Strings(out)
+
+	return out
+}
+
+func assertCmdArgsAbsent(t *testing.T, args []string, banned ...string) {
+	t.Helper()
+
+	for _, wantAbsent := range banned {
+		if slices.Contains(args, wantAbsent) {
+			t.Fatalf("cmd_args unexpectedly contain %q: %v", wantAbsent, args)
+		}
+	}
+}
+
+func projectGraphDepOutputs(t *testing.T, g *Graph, deps []string) [][]string {
+	t.Helper()
+
+	byUID := make(map[string]*Node, len(g.Graph))
+	for _, node := range g.Graph {
+		byUID[node.UID] = node
+	}
+
+	out := make([][]string, 0, len(deps))
+	for _, uid := range deps {
+		node := byUID[uid]
+		if node == nil {
+			t.Fatalf("dep uid %q not found in generated graph", uid)
+		}
+
+		out = append(out, append([]string(nil), vfsStrings(node.Outputs)...))
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return strings.Join(out[i], "\x00") < strings.Join(out[j], "\x00")
+	})
+
+	return out
+}
+
+func projectT20RefDepOutputs(t *testing.T, ref *t20RefGraph, deps []string) [][]string {
+	t.Helper()
+
+	out := make([][]string, 0, len(deps))
+	for _, uid := range deps {
+		node := ref.byUID[uid]
+		if node == nil {
+			t.Fatalf("dep uid %q not found in reference graph", uid)
+		}
+
+		out = append(out, normalizeT20Strings(node.Outputs))
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return strings.Join(out[i], "\x00") < strings.Join(out[j], "\x00")
+	})
+
+	return out
+}
+
+func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(t, root, "pkg/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nSRCS(helper.cpp)\nPY_SRCS(NAMESPACE pkg mod.pyx)\nEND()\n")
+	writeTestModuleFile(t, root, "pkg/helper.cpp", "int f(){return 0;}\n")
+	writeTestModuleFile(t, root, "pkg/mod.pyx", "def f():\n    return 0\n")
+
+	g := testGen(root, "pkg")
+	helper := mustNodeByOutput(t, g, "$(B)/pkg/helper.cpp.o")
+	args := helper.Cmds[0].CmdArgs
+
+	pythonIncludeIdx := indexOfArg(args, "-I$(S)/contrib/libs/python/Include")
+	if pythonIncludeIdx < 0 {
+		t.Fatalf("helper.cpp.o cmd_args missing python include: %#v", args)
+	}
+
+	wantNumpy := []string{
+		"-I$(S)/contrib/python/numpy/include/numpy/core/include",
+		"-I$(S)/contrib/python/numpy/include/numpy/core/include/numpy",
+		"-I$(S)/contrib/python/numpy/include/numpy/core/src/common",
+		"-I$(S)/contrib/python/numpy/include/numpy/core/src/npymath",
+		"-I$(S)/contrib/python/numpy/include/numpy/distutils/include",
+	}
+
+	if pythonIncludeIdx+1+len(wantNumpy) > len(args) {
+		t.Fatalf("helper.cpp.o cmd_args too short for numpy include bundle: %#v", args)
+	}
+
+	for i, want := range wantNumpy {
+		if got := args[pythonIncludeIdx+1+i]; got != want {
+			t.Fatalf("numpy include bundle mismatch at offset %d: got %q, want %q; cmd_args=%#v", i, got, want, args)
+		}
+	}
+
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-DPyInit_") || strings.HasPrefix(arg, "-Dinit_module_") {
+			t.Fatalf("helper.cpp.o cmd_args still carry PY_REGISTER define %q: %#v", arg, args)
+		}
+	}
+}
+
+func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(t, root, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(t, root, "tools/rescompressor/bin", "rescompressor")
+
+	writeTestModuleFile(t, root, "db/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nRESOURCE(data.sql key)\nEND()\n")
+	writeTestModuleFile(t, root, "db/main.cpp", "int f(){return 0;}\n")
+	writeTestModuleFile(t, root, "db/data.sql", "select 1;\n")
+
+	g := testGen(root, "db")
+	regularAR := mustNodeByOutput(t, g, "$(B)/db/libdb.a")
+	mustNodeByOutput(t, g, "$(B)/db/libdb.global.a")
+	if findNodeByOutputPrefix(g, "$(B)/db/objcopy_") == nil {
+		t.Fatal("graph is missing db objcopy output")
+	}
+
+	for _, want := range []string{"$(S)/db/data.sql", "$(S)/build/scripts/objcopy.py"} {
+		if !nodeHasInput(regularAR, want) {
+			t.Fatalf("libdb.a inputs missing %q: %#v", want, regularAR.Inputs)
+		}
+	}
+}
+
+func writeToolProgram(t *testing.T, root, modulePath, binaryName string) {
+	t.Helper()
+
+	writeTestModuleFile(t, root, filepath.ToSlash(filepath.Join(modulePath, "ya.make")), "PROGRAM("+binaryName+")\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, filepath.ToSlash(filepath.Join(modulePath, "main.cpp")), "int main(){return 0;}\n")
+}
+
+func writeTestModuleFile(t *testing.T, root, rel, content string) {
+	t.Helper()
+
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func mustNodeByOutput(t *testing.T, g *Graph, output string) *Node {
+	t.Helper()
+
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0].String() == output {
+			return n
+		}
+	}
+
+	t.Fatalf("graph is missing output %q", output)
+	return nil
+}
+
+func findNodeByOutputPrefix(g *Graph, prefix string) *Node {
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].String(), prefix) {
+			return n
+		}
+	}
+
+	return nil
+}
+
+func nodeHasInput(n *Node, input string) bool {
+	for _, got := range n.Inputs {
+		if got.String() == input {
+			return true
+		}
+	}
+
+	return false
+}
+
+func indexOfArg(args []string, want string) int {
+	for i, arg := range args {
+		if arg == want {
+			return i
+		}
+	}
+
+	return -1
+}
+
+func TestGen_YaBinLinkTailMatchesReference(t *testing.T) {
+	const targetDir = "devtools/ya/bin"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, targetDir, "ya.make")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)
+	target := newT20ResourcePlatform(OSLinux, ISAAArch64, "no", nil, true)
+	our := GenWithMode(sourceRoot, targetDir, host, target, defaultScanCtxMode, func(Warn) {})
+	ourNode := findGraphNodeByOutputs(t, our, "$(B)/devtools/ya/bin/ya-bin", "$(B)/devtools/ya/bin/ya-bin.debug")
+	refNode := loadT20RefNode(t, "$(BUILD_ROOT)/devtools/ya/bin/ya-bin", "$(BUILD_ROOT)/devtools/ya/bin/ya-bin.debug")
+
+	if len(ourNode.Cmds) < 3 || len(refNode.Cmds) < 3 {
+		t.Fatalf("expected both nodes to have at least 3 cmds")
+	}
+
+	gotTail := cmdArgsFrom(t, ourNode.Cmds[2].CmdArgs, "-Wl,--start-group")
+	wantTail := normalizeT20Strings(cmdArgsFrom(t, refNode.Cmds[2].CmdArgs, "-Wl,--start-group"))
+
+	if !reflect.DeepEqual(gotTail, wantTail) {
+		t.Fatalf("ya-bin link tail mismatch:\n  got:  %#v\n  want: %#v", gotTail, wantTail)
+	}
+
+	anchor := "build/cow/on/libbuild-cow-on.a"
+	wantAfterAnchor := []string{
+		"library/cpp/malloc/api/libcpp-malloc-api.a",
+		"contrib/libs/jemalloc/libcontrib-libs-jemalloc.a",
+		"library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a",
+	}
+	anchorIdx := slices.Index(gotTail, anchor)
+	if anchorIdx < 0 {
+		t.Fatalf("expected %q in ya-bin link tail: %v", anchor, gotTail)
+	}
+	if anchorIdx+1+len(wantAfterAnchor) > len(gotTail) {
+		t.Fatalf("expected %q to be followed by %v in ya-bin link tail: %v", anchor, wantAfterAnchor, gotTail)
+	}
+	if !slices.Equal(gotTail[anchorIdx+1:anchorIdx+1+len(wantAfterAnchor)], wantAfterAnchor) {
+		t.Fatalf("expected %q to be followed by %v in ya-bin link tail: %v", anchor, wantAfterAnchor, gotTail)
+	}
+
+	enumRuntime := "tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a"
+	jsonCommon := "library/cpp/json/common/libcpp-json-common.a"
+	enumIdx := slices.Index(gotTail, enumRuntime)
+	jsonIdx := slices.Index(gotTail, jsonCommon)
+	if enumIdx < 0 || jsonIdx < 0 {
+		t.Fatalf("expected both %q and %q in ya-bin link tail: %v", enumRuntime, jsonCommon, gotTail)
+	}
+	if enumIdx+1 != jsonIdx {
+		t.Fatalf("expected %q immediately before %q in ya-bin link tail: %v", enumRuntime, jsonCommon, gotTail)
+	}
+
+	if len(ourNode.Cmds) < 7 || len(refNode.Cmds) < 7 {
+		t.Fatalf("expected both nodes to have at least 7 cmds")
+	}
+
+	for _, cmdIdx := range []int{4, 5, 6} {
+		gotArgs := normalizeT20Strings(ourNode.Cmds[cmdIdx].CmdArgs)
+		wantArgs := normalizeT20Strings(refNode.Cmds[cmdIdx].CmdArgs)
+		if !reflect.DeepEqual(gotArgs, wantArgs) {
+			t.Fatalf("ya-bin cmd[%d] args mismatch:\n  got:  %#v\n  want: %#v", cmdIdx, gotArgs, wantArgs)
+		}
+
+		gotEnv := normalizeT20Env(ourNode.Cmds[cmdIdx].Env)
+		wantEnv := normalizeT20Env(refNode.Cmds[cmdIdx].Env)
+		if !reflect.DeepEqual(gotEnv, wantEnv) {
+			t.Fatalf("ya-bin cmd[%d] env mismatch:\n  got:  %#v\n  want: %#v", cmdIdx, gotEnv, wantEnv)
+		}
+	}
+}
+
+func TestIsHeaderSource_ExtendedHeaderExtensions(t *testing.T) {
+	for _, src := range []string{
+		"a.h",
+		"a.hh",
+		"a.hpp",
+		"a.hxx",
+		"a.ipp",
+		"a.ixx",
+		"a.inl",
+	} {
+		if !isHeaderSource(src) {
+			t.Fatalf("isHeaderSource(%q) = false, want true", src)
+		}
+	}
+}
+
+type statsUIDRefNode struct {
+	HostPlatform bool `json:"host_platform,omitempty"`
+	KV           struct {
+		P string `json:"p"`
+	} `json:"kv"`
+	Platform string   `json:"platform"`
+	Outputs  []string `json:"outputs"`
+	StatsUID string   `json:"stats_uid"`
+}
+
+type statsUIDNodeKey struct {
+	Outputs      string
+	Kind         string
+	HostPlatform bool
+	Platform     string
+}
+
+type indexedStatsUIDNode struct {
+	StatsUID string
+}
+
+func TestGen_ToolsArchiver_TargetStatsUIDsMatchReference(t *testing.T) {
+	const targetDir = "tools/archiver"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "sg.json")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference graph not present at %s/sg.json", sourceRoot)
+		}
+
+		t.Fatalf("stat sg.json: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sourceRoot, targetDir, "ya.make")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	our := genStatsUIDReferenceSample(sourceRoot, targetDir)
+	ref := loadStatsUIDRefNodes(t, filepath.Join(sourceRoot, "sg.json"))
+
+	assertTargetStatsUIDsMatchReference(t, our.Graph, ref, 1, "sg.json")
+}
+
+func TestGen_YaBinTargetStatsUIDsMatchReference(t *testing.T) {
+	const targetDir = "devtools/ya/bin"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "sg3.json")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference graph not present at %s/sg3.json", sourceRoot)
+		}
+
+		t.Fatalf("stat sg3.json: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sourceRoot, targetDir, "ya.make")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	our := genStatsUIDReferenceSample(sourceRoot, targetDir)
+	ref := loadStatsUIDRefNodes(t, filepath.Join(sourceRoot, "sg3.json"))
+
+	assertTargetStatsUIDsMatchReference(t, our.Graph, ref, 5000, "sg3.json")
+}
+
+func TestGen_YaBinHostStatsUIDsMatchReference(t *testing.T) {
+	const targetDir = "devtools/ya/bin"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "sg3.json")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference graph not present at %s/sg3.json", sourceRoot)
+		}
+
+		t.Fatalf("stat sg3.json: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sourceRoot, targetDir, "ya.make")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	our := genStatsUIDReferenceSample(sourceRoot, targetDir)
+	ref := loadStatsUIDRefNodes(t, filepath.Join(sourceRoot, "sg3.json"))
+
+	assertHostStatsUIDsMatchReference(t, our.Graph, ref, 4000, "sg3.json")
+}
+
+func TestGen_YaBinDumpGraphResidualTargetArchiveStatsUIDsMatchReference(t *testing.T) {
+	const targetDir = "devtools/ya/bin"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "sg3.json")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference graph not present at %s/sg3.json", sourceRoot)
+		}
+
+		t.Fatalf("stat sg3.json: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sourceRoot, targetDir, "ya.make")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	our := genDumpStatsUIDReferenceSample(t, sourceRoot, targetDir)
+	ref := loadStatsUIDRefNodes(t, filepath.Join(sourceRoot, "sg3.json"))
+	ourByKey := indexTargetStatsUIDRefNodes(t, our)
+	refByKey := indexTargetStatsUIDRefNodes(t, ref)
+
+	for _, output := range []string{
+		"$(BUILD_ROOT)/contrib/libs/sqlite3/libcontrib-libs-sqlite3.a",
+		"$(BUILD_ROOT)/contrib/python/protobuf/py3/libpy3python-protobuf-py3.a",
+		"$(BUILD_ROOT)/contrib/tools/python3/Modules/_sqlite/libpy3python3-Modules-_sqlite.a",
+		"$(BUILD_ROOT)/contrib/tools/python3/Modules/_sqlite/libpy3python3-Modules-_sqlite.global.a",
+	} {
+		key := statsUIDNodeKey{
+			Outputs:      statsUIDOutputKey([]string{output}),
+			Kind:         "AR",
+			HostPlatform: false,
+			Platform:     "default-linux-aarch64",
+		}
+
+		ourNode, ok := ourByKey[key]
+		if !ok {
+			t.Fatalf("dump graph missing generated non-host key %s", statsUIDDescribeKey(key))
+		}
+		refNode, ok := refByKey[key]
+		if !ok {
+			t.Fatalf("reference missing non-host key %s", statsUIDDescribeKey(key))
+		}
+		if ourNode.StatsUID != refNode.StatsUID {
+			t.Fatalf("dump graph stats_uid mismatch for %s:\n got: %s\nwant: %s",
+				statsUIDDescribeKey(key), ourNode.StatsUID, refNode.StatsUID)
+		}
+	}
+}
+
+func genStatsUIDReferenceSample(sourceRoot, targetDir string) *Graph {
+	host, target := statsUIDReferencePlatforms()
+
+	return GenWithMode(sourceRoot, targetDir, host, target, defaultScanCtxMode, func(Warn) {})
+}
+
+func genDumpStatsUIDReferenceSample(t *testing.T, sourceRoot, targetDir string) []statsUIDRefNode {
+	t.Helper()
+
+	out, err := os.CreateTemp(t.TempDir(), "sg3-dump-*.json")
+	if err != nil {
+		t.Fatalf("create dump graph capture: %v", err)
+	}
+
+	oldStdout := os.Stdout
+	os.Stdout = out
+
+	var code int
+	exc := Try(func() {
+		code = cmdMake([]string{
+			"-j", "0",
+			"-k",
+			"-G",
+			"--source-root", sourceRoot,
+			"--target-platform", "default-linux-aarch64",
+			"--host-platform", "default-linux-x86_64",
+			"--host-platform-flag", "MUSL=yes",
+			"--host-platform-flag", "OS_SDK=local",
+			"--musl",
+			"--sandboxing",
+			"-DOS_SDK=local",
+			targetDir,
+		})
+	})
+
+	os.Stdout = oldStdout
+	if err := out.Close(); err != nil {
+		t.Fatalf("close dump graph capture: %v", err)
+	}
+	if exc != nil {
+		t.Fatalf("cmdMake dump graph failed: %v", exc)
+	}
+	if code != 0 {
+		t.Fatalf("cmdMake dump graph exit code = %d, want 0", code)
+	}
+
+	return loadStatsUIDRefNodes(t, out.Name())
+}
+
+func statsUIDReferencePlatforms() (*Platform, *Platform) {
+	hostPlatformFlags := map[string]string{
+		"APPLE_SDK_LOCAL":    "yes",
+		"MUSL":               "yes",
+		"OPENSOURCE":         "yes",
+		"OS_SDK":             "local",
+		"USE_CLANG_CL":       "yes",
+		"USE_PREBUILT_TOOLS": "no",
+	}
+	hostFlags := make(map[string]string, len(testToolchainFlags)+8)
+	for k, v := range testToolchainFlags {
+		hostFlags[k] = v
+	}
+	for k, v := range hostPlatformFlags {
+		hostFlags[k] = v
+	}
+	hostFlags["GG_BUILD_TYPE"] = "release"
+	hostFlags["PIC"] = "yes"
+	hostFlags["SANDBOXING"] = "yes"
+	host := NewPlatform(OSLinux, ISAX8664, hostFlags, []string{"tool"}, "", "")
+	host.StatsFlags = buildHostStatsFlags(hostPlatformFlags, nil, true)
+
+	targetFlags := make(map[string]string, len(testToolchainFlags)+4)
+	for k, v := range testToolchainFlags {
+		targetFlags[k] = v
+	}
+	targetFlags["GG_BUILD_TYPE"] = "debug"
+	targetFlags["MUSL"] = "yes"
+	targetFlags["PIC"] = "no"
+	targetFlags["SANDBOXING"] = "yes"
+	target := NewPlatform(OSLinux, ISAAArch64, targetFlags, nil, "", "")
+	target.Tags = sandboxingNodeTags(target)
+	target.StatsFlags = buildTargetStatsFlags(targetFlags, map[string]string{"MUSL": "yes"})
+
+	return host, target
+}
+
+func loadStatsUIDRefNodes(t *testing.T, path string) []statsUIDRefNode {
+	t.Helper()
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+
+	var graph struct {
+		Graph []statsUIDRefNode `json:"graph"`
+	}
+	if err := json.Unmarshal(raw, &graph); err != nil {
+		t.Fatalf("decode %s: %v", path, err)
+	}
+
+	return graph.Graph
+}
+
+func assertTargetStatsUIDsMatchReference(t *testing.T, our []*Node, ref []statsUIDRefNode, minCommon int, refName string) {
+	t.Helper()
+
+	ourByKey := indexTargetStatsUIDNodes(t, our)
+	refByKey := indexTargetStatsUIDRefNodes(t, ref)
+
+	commonKeys, onlyOur, onlyRef := diffStatsUIDNodeKeys(ourByKey, refByKey)
+	if len(onlyOur) > 0 || len(onlyRef) > 0 {
+		var problems []string
+		if len(onlyOur) > 0 {
+			problems = append(problems,
+				"extra generated non-host key "+statsUIDDescribeKey(onlyOur[0])+
+					" ("+strconv.Itoa(len(onlyOur))+" total)")
+		}
+		if len(onlyRef) > 0 {
+			problems = append(problems,
+				"missing generated non-host key "+statsUIDDescribeKey(onlyRef[0])+
+					" ("+strconv.Itoa(len(onlyRef))+" total)")
+		}
+		t.Fatalf("non-host node key drift vs %s: %s", refName, strings.Join(problems, "; "))
+	}
+
+	for _, key := range commonKeys {
+		ourNode := ourByKey[key]
+		refNode := refByKey[key]
+		if ourNode.StatsUID != refNode.StatsUID {
+			t.Fatalf("stats_uid mismatch for %s:\n got: %s\nwant: %s",
+				statsUIDDescribeKey(key), ourNode.StatsUID, refNode.StatsUID)
+		}
+	}
+
+	if len(commonKeys) < minCommon {
+		t.Fatalf("expected at least %d common non-host nodes vs %s, found %d", minCommon, refName, len(commonKeys))
+	}
+}
+
+func assertHostStatsUIDsMatchReference(t *testing.T, our []*Node, ref []statsUIDRefNode, minCommon int, refName string) {
+	t.Helper()
+
+	ourByKey := indexHostStatsUIDNodes(t, our)
+	refByKey := indexHostStatsUIDRefNodes(t, ref)
+
+	commonKeys, onlyOur, onlyRef := diffStatsUIDNodeKeys(ourByKey, refByKey)
+	if len(onlyOur) > 0 || len(onlyRef) > 0 {
+		var problems []string
+		if len(onlyOur) > 0 {
+			problems = append(problems,
+				"extra generated host key "+statsUIDDescribeKey(onlyOur[0])+
+					" ("+strconv.Itoa(len(onlyOur))+" total)")
+		}
+		if len(onlyRef) > 0 {
+			problems = append(problems,
+				"missing generated host key "+statsUIDDescribeKey(onlyRef[0])+
+					" ("+strconv.Itoa(len(onlyRef))+" total)")
+		}
+		t.Fatalf("host node key drift vs %s: %s", refName, strings.Join(problems, "; "))
+	}
+
+	for _, key := range commonKeys {
+		ourNode := ourByKey[key]
+		refNode := refByKey[key]
+		if ourNode.StatsUID != refNode.StatsUID {
+			t.Fatalf("host stats_uid mismatch for %s:\n got: %s\nwant: %s",
+				statsUIDDescribeKey(key), ourNode.StatsUID, refNode.StatsUID)
+		}
+	}
+
+	if len(commonKeys) < minCommon {
+		t.Fatalf("expected at least %d common host nodes vs %s, found %d", minCommon, refName, len(commonKeys))
+	}
+}
+
+func indexTargetStatsUIDNodes(t *testing.T, nodes []*Node) map[statsUIDNodeKey]indexedStatsUIDNode {
+	t.Helper()
+
+	out := make(map[statsUIDNodeKey]indexedStatsUIDNode)
+	for _, node := range nodes {
+		if nodeHasHostTag(node.Tags) {
+			continue
+		}
+
+		key := statsUIDNodeKeyFromNode(node)
+		value := indexedStatsUIDNode{StatsUID: node.StatsUID}
+		if _, exists := out[key]; exists {
+			t.Fatalf("duplicate generated non-host key %s", statsUIDDescribeKey(key))
+		}
+		out[key] = value
+	}
+
+	return out
+}
+
+func indexHostStatsUIDNodes(t *testing.T, nodes []*Node) map[statsUIDNodeKey]indexedStatsUIDNode {
+	t.Helper()
+
+	out := make(map[statsUIDNodeKey]indexedStatsUIDNode)
+	for _, node := range nodes {
+		if !nodeHasHostTag(node.Tags) {
+			continue
+		}
+
+		key := statsUIDNodeKeyFromNode(node)
+		value := indexedStatsUIDNode{StatsUID: node.StatsUID}
+		if _, exists := out[key]; exists {
+			t.Fatalf("duplicate generated host key %s", statsUIDDescribeKey(key))
+		}
+		out[key] = value
+	}
+
+	return out
+}
+
+func indexTargetStatsUIDRefNodes(t *testing.T, nodes []statsUIDRefNode) map[statsUIDNodeKey]indexedStatsUIDNode {
+	t.Helper()
+
+	out := make(map[statsUIDNodeKey]indexedStatsUIDNode)
+	for _, node := range nodes {
+		if node.HostPlatform {
+			continue
+		}
+
+		key := statsUIDNodeKeyFromRef(node)
+		value := indexedStatsUIDNode{StatsUID: node.StatsUID}
+		if _, exists := out[key]; exists {
+			t.Fatalf("duplicate reference non-host key %s", statsUIDDescribeKey(key))
+		}
+		out[key] = value
+	}
+
+	return out
+}
+
+func indexHostStatsUIDRefNodes(t *testing.T, nodes []statsUIDRefNode) map[statsUIDNodeKey]indexedStatsUIDNode {
+	t.Helper()
+
+	out := make(map[statsUIDNodeKey]indexedStatsUIDNode)
+	for _, node := range nodes {
+		if !node.HostPlatform {
+			continue
+		}
+
+		key := statsUIDNodeKeyFromRef(node)
+		value := indexedStatsUIDNode{StatsUID: node.StatsUID}
+		if _, exists := out[key]; exists {
+			t.Fatalf("duplicate reference host key %s", statsUIDDescribeKey(key))
+		}
+		out[key] = value
+	}
+
+	return out
+}
+
+func diffStatsUIDNodeKeys(our, ref map[statsUIDNodeKey]indexedStatsUIDNode) ([]statsUIDNodeKey, []statsUIDNodeKey, []statsUIDNodeKey) {
+	commonKeys := make([]statsUIDNodeKey, 0, len(our))
+	onlyOur := make([]statsUIDNodeKey, 0)
+	onlyRef := make([]statsUIDNodeKey, 0)
+
+	for key := range our {
+		if _, ok := ref[key]; ok {
+			commonKeys = append(commonKeys, key)
+			continue
+		}
+		onlyOur = append(onlyOur, key)
+	}
+	for key := range ref {
+		if _, ok := our[key]; ok {
+			continue
+		}
+		onlyRef = append(onlyRef, key)
+	}
+
+	sortStatsUIDNodeKeys(commonKeys)
+	sortStatsUIDNodeKeys(onlyOur)
+	sortStatsUIDNodeKeys(onlyRef)
+
+	return commonKeys, onlyOur, onlyRef
+}
+
+func sortStatsUIDNodeKeys(keys []statsUIDNodeKey) {
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].Outputs != keys[j].Outputs {
+			return keys[i].Outputs < keys[j].Outputs
+		}
+		if keys[i].Kind != keys[j].Kind {
+			return keys[i].Kind < keys[j].Kind
+		}
+		if keys[i].HostPlatform != keys[j].HostPlatform {
+			return !keys[i].HostPlatform && keys[j].HostPlatform
+		}
+		return keys[i].Platform < keys[j].Platform
+	})
+}
+
+func statsUIDDescribeKey(key statsUIDNodeKey) string {
+	return "outputs=" + strings.Join(statsUIDOutputsFromKey(key), ",") +
+		" kind=" + key.Kind +
+		" host_platform=" + boolString(key.HostPlatform) +
+		" platform=" + key.Platform
+}
+
+func statsUIDOutputsFromKey(key statsUIDNodeKey) []string {
+	if key.Outputs == "" {
+		return nil
+	}
+	return strings.Split(key.Outputs, "\x00")
+}
+
+func boolString(v bool) string {
+	if v {
+		return "true"
+	}
+	return "false"
+}
+
+func statsUIDOutputKey(outputs []string) string {
+	normalized := append([]string(nil), outputs...)
+	for i, out := range normalized {
+		normalized[i] = normalizeStatsUIDOutput(out)
+	}
+	sort.Strings(normalized)
+
+	return strings.Join(normalized, "\x00")
+}
+
+func statsUIDNodeKeyFromNode(node *Node) statsUIDNodeKey {
+	kind, _ := node.KV["p"].(string)
+
+	return statsUIDNodeKey{
+		Outputs:      statsUIDOutputKey(vfsStrings(node.Outputs)),
+		Kind:         kind,
+		HostPlatform: nodeHasHostTag(node.Tags),
+		Platform:     node.Platform,
+	}
+}
+
+func statsUIDNodeKeyFromRef(node statsUIDRefNode) statsUIDNodeKey {
+	return statsUIDNodeKey{
+		Outputs:      statsUIDOutputKey(node.Outputs),
+		Kind:         node.KV.P,
+		HostPlatform: node.HostPlatform,
+		Platform:     node.Platform,
+	}
+}
+
+func normalizeStatsUIDOutput(out string) string {
+	out = strings.ReplaceAll(out, "$(BUILD_ROOT)", "$(B)")
+	out = strings.ReplaceAll(out, "$(SOURCE_ROOT)", "$(S)")
+
+	return out
 }
