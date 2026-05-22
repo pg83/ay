@@ -3,13 +3,18 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
+
+	// goccy/go-json is a drop-in encoding/json replacement (~2-3x faster
+	// decode); its Delim/Token/RawMessage are aliases of encoding/json's,
+	// and it sorts map keys on marshal, so canonicalization stays
+	// deterministic. Used only by the dump streaming path.
+	json "github.com/goccy/go-json"
 )
 
 // cmdDump routes `ay dump <normalize|sort>`. The dump family operates on
@@ -49,9 +54,15 @@ func normPath(s string) string {
 
 	s = strings.ReplaceAll(s, "$(BUILD_ROOT)", "$(B)")
 	s = strings.ReplaceAll(s, "$(SOURCE_ROOT)", "$(S)")
-	s = versionedResourceRe.ReplaceAllStringFunc(s, func(m string) string {
-		return "$(" + versionedResourceRe.FindStringSubmatch(m)[1] + ")"
-	})
+
+	// The versioned-resource collapse is rare; the regex is ~11% of the
+	// run if applied to every "$(" string. Gate it on a cheap substring
+	// check for an actual "$(NAME-" before paying for the regex.
+	if strings.Contains(s, "CLANG-") || strings.Contains(s, "LLD_ROOT-") || strings.Contains(s, "YMAKE_PYTHON3-") {
+		s = versionedResourceRe.ReplaceAllStringFunc(s, func(m string) string {
+			return "$(" + versionedResourceRe.FindStringSubmatch(m)[1] + ")"
+		})
+	}
 
 	return s
 }
