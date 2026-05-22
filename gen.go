@@ -326,7 +326,7 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 						// (ymake realizes generated headers in the consuming
 						// module). Subsequent consumers reuse the backfilled ref.
 						def := info.DeferredCF
-						cfRef, _ := EmitCF(def.instance, def.srcRel, def.cfgVars, def.includeInputs, consumer.Path, ctx.emit)
+						cfRef, _ := EmitCF(def.instance, def.srcVFS, def.outVFS, def.cfgVars, def.includeInputs, consumer.Path, ctx.emit)
 						reg.SetProducerRef(v, cfRef)
 					}
 
@@ -537,6 +537,7 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"ORIGINAL_SOURCE":       {},
 	"RECURSE":               {},
 	"RECURSE_FOR_TESTS":     {},
+	"RECURSE_ROOT_RELATIVE": {},
 	"ALLOCATOR_IMPL":        {},
 	"NEED_CHECK":            {},
 	"IDE_FOLDER":            {},
@@ -557,8 +558,10 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	// applyUnknownStmt → d.simdSrcs (one CC node per variant). Not in
 	// the whitelist.
 	"NO_CLANG_COVERAGE":  {}, // contrib/tools/yasm
+	"NO_CLANG_MCDC_COVERAGE": {}, // clang MCDC coverage suppression metadata.
 	"NO_PROFILE_RUNTIME": {}, // contrib/tools/yasm
 	"WITHOUT_VERSION":    {}, // contrib/libs/musl/include neighbours; metadata-only.
+	"NO_CLANG_TIDY":      {}, // clang-tidy suppression metadata.
 
 	// USE_PYTHON3 / NO_PYTHON_INCLUDES / NO_CHECK_IMPORTS / PYBUILD_NO_PYC /
 	// RESOURCE / RESOURCE_FILES / PY_REGISTER / RUN_PROGRAM /
@@ -605,6 +608,7 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"SUPPRESSIONS":                    {}, // Sanitizer suppression file; metadata.
 	"OPENSOURCE_EXPORT_REPLACEMENT":   {}, // CMake/Conan export replacement; metadata.
 	"EXCLUDE_TAGS":                    {}, // Build-system tag exclusion; metadata.
+	"ONLY_TAGS":                       {}, // Build-system tag filter; metadata.
 	"FILES":                           {}, // Proto library file listing; metadata.
 	"NO_JOIN_SRC":                     {}, // Suppresses JOIN_SRCS optimisation; metadata.
 	"MASMFLAGS":                       {}, // MASM compiler flags (Windows); no-op on Linux.
@@ -1013,6 +1017,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			DefaultVarOrder:   d.defaultVarOrder,
 		}
 		_ = emitRunProgramsForAR(ctx, instance, d, headerOnlyInputs)
+		_ = emitRunPythonForAR(ctx, instance, d, headerOnlyInputs)
 
 		// Emit yapyc3 PY nodes for PY_SRCS() declarations. PY3_LIBRARY /
 		// PY23_LIBRARY often have only PY_SRCS (no C/C++ sources) and
@@ -2033,6 +2038,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// triples are folded into the AR-member bucket at the original site
 	// below so the existing AR.cmd_args order stays byte-exact.
 	prCCRes := emitRunProgramsForAR(ctx, instance, d, moduleInputs)
+	pyCCRes := emitRunPythonForAR(ctx, instance, d, moduleInputs)
 	emitArchives(ctx, instance, d)
 
 	// Two-pass source emission. Codegen-producing sources
@@ -2200,6 +2206,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 			ccIsCFGenerated = append(ccIsCFGenerated, false)
 			addMemberInputs(prCCRes.MemberInputs[i])
+		}
+	}
+	if pyCCRes != nil {
+		for i, ref := range pyCCRes.CCRefs {
+			ccRefs = append(ccRefs, ref)
+			ccOutputs = append(ccOutputs, pyCCRes.CCOutputs[i])
+			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
+			ccIsCFGenerated = append(ccIsCFGenerated, false)
+			addMemberInputs(pyCCRes.MemberInputs[i])
 		}
 	}
 

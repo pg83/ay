@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -177,9 +178,9 @@ type DefaultVarStmt struct {
 
 // RunProgramStmt represents `RUN_PROGRAM(tool args... [IN ...]
 // [OUT ...] [OUT_NOAUTO ...] [STDOUT file] [ENV k=v...] [CWD dir]
-// [OUTPUT_INCLUDES ...])`. ToolPath is the PROGRAM's module-relative
-// path; Args are positional args before the first keyword. STDOUT (if
-// any) goes to outputs[0] of the generated node.
+// [OUTPUT_INCLUDES ...] [TOOL module...])`. ToolPath is the PROGRAM's
+// module-relative path; Args are positional args before the first
+// keyword. STDOUT (if any) goes to outputs[0] of the generated node.
 type RunProgramStmt struct {
 	ToolPath       string
 	Args           []string
@@ -188,6 +189,23 @@ type RunProgramStmt struct {
 	OUTNoAutoFiles []string
 	StdoutFile     *string  // nil when STDOUT not specified
 	EnvPairs       []string // "KEY=VALUE" strings from ENV
+	CWD            *string
+	OutputIncludes []string
+	ToolPaths      []string
+	Line           int
+}
+
+// RunPythonStmt represents `RUN_PYTHON3(script args... [IN ...]
+// [OUT ...] [OUT_NOAUTO ...] [STDOUT file] [ENV k=v...] [CWD dir]
+// [OUTPUT_INCLUDES ...])`.
+type RunPythonStmt struct {
+	ScriptPath     string
+	Args           []string
+	INFiles        []string
+	OUTFiles       []string
+	OUTNoAutoFiles []string
+	StdoutFile     *string
+	EnvPairs       []string
 	CWD            *string
 	OutputIncludes []string
 	Line           int
@@ -238,6 +256,20 @@ type RunAntlr4CppSplitStmt struct {
 	Line           int
 }
 
+// RunAntlrStmt represents the generic `RUN_ANTLR(...)` /
+// `RUN_ANTLR4(...)` forms. Args are the positional tool arguments
+// before the first keyword section (IN/OUT/OUT_NOAUTO/CWD/...).
+type RunAntlrStmt struct {
+	Macro          string
+	Args           []string
+	INFiles        []string
+	OUTFiles       []string
+	OUTNoAutoFiles []string
+	CWD            *string
+	OutputIncludes []string
+	Line           int
+}
+
 // ResourcePair holds one (path, key) pair from a RESOURCE / RESOURCE_FILES
 // macro. The Path is the source-file path (module-relative) or "-" for a
 // kv-only entry; in the latter case Key carries the raw "name=value"
@@ -284,10 +316,12 @@ func (*GlobalSrcsStmt) stmtMarker()                {}
 func (*GenerateEnumSerializationStmt) stmtMarker() {}
 func (*DefaultVarStmt) stmtMarker()                {}
 func (*RunProgramStmt) stmtMarker()                {}
+func (*RunPythonStmt) stmtMarker()                 {}
 func (*ConfigureFileStmt) stmtMarker()             {}
 func (*CreateBuildInfoStmt) stmtMarker()           {}
 func (*RunAntlr4CppStmt) stmtMarker()              {}
 func (*RunAntlr4CppSplitStmt) stmtMarker()         {}
+func (*RunAntlrStmt) stmtMarker()                  {}
 func (*ResourceStmt) stmtMarker()                  {}
 func (*ResourceFilesStmt) stmtMarker()             {}
 
@@ -814,6 +848,7 @@ func parseInternalWithStack(fs *FS, name string, src []byte, stack []string) *Ma
 }
 
 func parseInternalWithState(fs *FS, name string, src []byte, stack []string, includes *includeState) *MakeFile {
+	src = bytes.TrimPrefix(src, []byte{0xEF, 0xBB, 0xBF})
 	p := &parser{lex: newLexer(name, src), name: name, includeStack: stack, includes: includes, fs: fs}
 	mf := &MakeFile{Path: name}
 	mf.Stmts, _ = p.parseStmts(termTopLevel)
@@ -1113,6 +1148,11 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_ANTLR4_CPP_SPLIT expects at least 2 arguments (lexer parser)")
 		}
 		return parseRunAntlr4CppSplit(args, nameTok.line)
+	case "RUN_ANTLR", "RUN_ANTLR4":
+		if len(args) == 0 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "%s expects at least 1 argument", nameTok.val)
+		}
+		return parseRunAntlr(args, nameTok)
 	case "RUN_PROGRAM", "RUN_PY3_PROGRAM":
 		// RUN_PROGRAM(tool args... [IN files...]
 		//             [OUT files...] [OUT_NOAUTO files...] [STDOUT file] [ENV key=val...]
@@ -1121,6 +1161,11 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 			p.lex.throwParse(nameTok.line, nameTok.col, "%s expects at least 1 argument (tool path)", nameTok.val)
 		}
 		return parseRunProgram(args, nameTok.line)
+	case "RUN_PYTHON3":
+		if len(args) == 0 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_PYTHON3 expects at least 1 argument (script path)")
+		}
+		return parseRunPython(args, nameTok.line)
 	case "RESOURCE":
 		// RESOURCE([DONT_PARSE] [DONT_COMPRESS] path1 key1 ...)
 		// Mirrors upstream `devtools/ymake/plugins/resource_handler/impl.cpp:23-26`
@@ -1221,15 +1266,63 @@ func parseRunAntlr4CppSplit(args []string, line int) *RunAntlr4CppSplitStmt {
 	return stmt
 }
 
+func parseRunAntlr(args []string, nameTok token) *RunAntlrStmt {
+	stmt := &RunAntlrStmt{Macro: nameTok.val, Line: nameTok.line}
+	currentSection := "ARGS"
+	for i := 0; i < len(args); i++ {
+		tok := args[i]
+		if runAntlrKeywords[tok] {
+			currentSection = tok
+			continue
+		}
+		switch currentSection {
+		case "ARGS":
+			stmt.Args = append(stmt.Args, tok)
+		case "IN", "IN_NOPARSE", "IN_DEPS":
+			stmt.INFiles = append(stmt.INFiles, tok)
+		case "OUT":
+			stmt.OUTFiles = append(stmt.OUTFiles, tok)
+		case "OUT_NOAUTO":
+			stmt.OUTNoAutoFiles = append(stmt.OUTNoAutoFiles, tok)
+		case "CWD":
+			if stmt.CWD == nil {
+				stmt.CWD = &tok
+			}
+		case "OUTPUT_INCLUDES", "INDUCED_DEPS", "TOOL", "ENV", "GRAMMAR_FILES", "GRAMMAR_CWD":
+			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
+		}
+	}
+	return stmt
+}
+
 // isRunAntlrKeyword reports whether s is a keyword that terminates a
 // positional-arg section in RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT.
 func isRunAntlrKeyword(s string) bool {
 	switch s {
 	case "VISITOR", "LISTENER", "NO_LISTENER", "OUTPUT_INCLUDES",
-		"IN", "OUT", "OUT_NOAUTO", "INDUCED_DEPS", "TOOL":
+		"IN", "IN_NOPARSE", "IN_DEPS", "OUT", "OUT_NOAUTO",
+		"INDUCED_DEPS", "TOOL", "CWD", "ENV", "STDOUT",
+		"STDOUT_NOAUTO", "GRAMMAR_FILES", "GRAMMAR_CWD":
 		return true
 	}
 	return false
+}
+
+var runAntlrKeywords = map[string]bool{
+	"IN":              true,
+	"IN_NOPARSE":      true,
+	"IN_DEPS":         true,
+	"OUT":             true,
+	"OUT_NOAUTO":      true,
+	"CWD":             true,
+	"OUTPUT_INCLUDES": true,
+	"INDUCED_DEPS":    true,
+	"TOOL":            true,
+	"ENV":             true,
+	"STDOUT":          true,
+	"STDOUT_NOAUTO":   true,
+	"GRAMMAR_FILES":   true,
+	"GRAMMAR_CWD":     true,
 }
 
 // runProgramKeywords is the set of keyword tokens in RUN_PROGRAM that
@@ -1257,6 +1350,46 @@ var runProgramKeywords = map[string]bool{
 // STDOUT, ENV, CWD, OUTPUT_INCLUDES, INDUCED_DEPS, TOOL).
 func parseRunProgram(args []string, line int) *RunProgramStmt {
 	stmt := &RunProgramStmt{ToolPath: args[0], Line: line}
+	i := 1
+	currentSection := "ARGS"
+	for i < len(args) {
+		tok := args[i]
+		if runProgramKeywords[tok] {
+			currentSection = tok
+			i++
+			continue
+		}
+		switch currentSection {
+		case "ARGS":
+			stmt.Args = append(stmt.Args, tok)
+		case "IN", "IN_NOPARSE", "IN_DEPS":
+			stmt.INFiles = append(stmt.INFiles, tok)
+		case "OUT":
+			stmt.OUTFiles = append(stmt.OUTFiles, tok)
+		case "OUT_NOAUTO":
+			stmt.OUTNoAutoFiles = append(stmt.OUTNoAutoFiles, tok)
+		case "STDOUT", "STDOUT_NOAUTO":
+			if stmt.StdoutFile == nil {
+				stmt.StdoutFile = &tok
+			}
+		case "ENV":
+			stmt.EnvPairs = append(stmt.EnvPairs, tok)
+		case "CWD":
+			if stmt.CWD == nil {
+				stmt.CWD = &tok
+			}
+		case "OUTPUT_INCLUDES", "INDUCED_DEPS":
+			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
+		case "TOOL":
+			stmt.ToolPaths = append(stmt.ToolPaths, tok)
+		}
+		i++
+	}
+	return stmt
+}
+
+func parseRunPython(args []string, line int) *RunPythonStmt {
+	stmt := &RunPythonStmt{ScriptPath: args[0], Line: line}
 	i := 1
 	currentSection := "ARGS"
 	for i < len(args) {

@@ -3,7 +3,6 @@ package main
 import (
 	"regexp"
 	"sort"
-	"strings"
 )
 
 // emitExplicitCF emits a CF node for an explicit CONFIGURE_FILE(src dst)
@@ -20,14 +19,12 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		FS:              ctx.fs,
 	}
 
-	srcPath := cf.Src
-	if !strings.Contains(srcPath, "/") {
-		srcPath = instance.Path + "/" + cf.Src
-	}
-	in.IncludeInputs = walkClosure(ctx, instance, resolveSourceVFS(ctx, instance, cf.Src, in.SrcDir), in)
+	srcVFS := copyFileInputVFS(instance.Path, cf.Src)
+	outVFS := copyFileOutputVFS(instance.Path, cf.Dst)
+	in.IncludeInputs = walkClosure(ctx, instance, srcVFS, in)
 
-	cfgVars := buildCFGVars(ctx.fs, instance.Path+"/"+cf.Src, d.setVars, d.defaultVars)
-	cfRef, cfOut := EmitCF(instance, cf.Src, cfgVars, in.IncludeInputs, instance.Path, ctx.emit)
+	cfgVars := buildCFGVars(ctx.fs, srcVFS.Rel, d.setVars, d.defaultVars)
+	cfRef, cfOut := EmitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path, ctx.emit)
 
 	if reg != nil {
 		// The generated header carries its generation inputs (the .in
@@ -38,10 +35,10 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		// follow (empty for pure @VAR@ headers like config.h /
 		// protocol_version_variables.h).
 		parsed := []includeDirective{
-			{kind: includeQuoted, target: Source(instance.Path + "/" + cf.Src).Rel},
+			{kind: includeQuoted, target: srcVFS.Rel},
 			{kind: includeQuoted, target: configureFilePyVFS.Rel},
 		}
-		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, instance.Path+"/"+cf.Src)...)
+		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, srcVFS.Rel)...)
 		registerBoundGeneratedParsedOutput(ctx, instance, "CF", cfOut, parsed, cfRef)
 	}
 }

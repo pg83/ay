@@ -11,16 +11,55 @@ const jdkResourcePath = "$(JDK17-564746473)/bin/java"
 
 // antlr4JarVFS is the source-relative VFS path to the ANTLR4 jar.
 var antlr4JarVFS = Source("contrib/java/antlr/antlr4/antlr.jar")
+var antlr3JarVFS = Source("contrib/java/antlr/antlr3/antlr.jar")
 
 // antlr4JarPath is the legacy string form (used in cmd_args). Equal
 // to antlr4JarVFS.String().
 var antlr4JarPath = antlr4JarVFS.String()
+var antlr3JarPath = antlr3JarVFS.String()
 
 // stdout2stderr is the wrapper script that redirects antlr4's stdout
 // to stderr (required so the build system captures diagnostic output
 // correctly).
 var stdout2stderrVFS = Source("build/scripts/stdout2stderr.py")
 var stdout2stderrPath = stdout2stderrVFS.String()
+
+func emitJVNode(instance ModuleInstance, cmdArgs []string, inputs []VFS, outputs []VFS, cwd string, depRefs []NodeRef, emit Emitter) NodeRef {
+	env := map[string]string{
+		"ARCADIA_ROOT_DISTBUILD": "$(S)",
+	}
+
+	node := &Node{
+		Cmds: []Cmd{
+			{
+				CmdArgs: cmdArgs,
+				Env:     env,
+				Cwd:     cwd,
+			},
+		},
+		Env:    env,
+		Inputs: inputs,
+		KV: map[string]interface{}{
+			"p":        "JV",
+			"pc":       "light-blue",
+			"show_out": "yes",
+		},
+		Outputs: outputs,
+		Tags:    []string{},
+		TargetProperties: map[string]string{
+			"module_dir": instance.Path,
+		},
+		Platform: string(instance.Platform.Target),
+		Requirements: map[string]interface{}{
+			"cpu":     float64(1),
+			"network": "restricted",
+			"ram":     float64(32),
+		},
+		DepRefs: depRefs,
+	}
+
+	return emit.Emit(node)
+}
 
 // EmitJV emits a JV node for a single RUN_ANTLR4_CPP grammar (.g4
 // relative to module dir). Options are extra cmd_args tokens.
@@ -63,10 +102,6 @@ func EmitJV(
 	}
 	cmdArgs = append(cmdArgs, options...)
 
-	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-	}
-
 	inputs := []VFS{
 		grammarVFS,
 		stdout2stderrVFS,
@@ -84,36 +119,7 @@ func EmitJV(
 		Build(outPrefix + "BaseVisitor.h"),
 	}
 
-	node := &Node{
-		Cmds: []Cmd{
-			{
-				CmdArgs: cmdArgs,
-				Env:     env,
-				Cwd:     outDir,
-			},
-		},
-		Env:    env,
-		Inputs: inputs,
-		KV: map[string]interface{}{
-			"p":        "JV",
-			"pc":       "light-blue",
-			"show_out": "yes",
-		},
-		Outputs: outputs,
-		Tags:    []string{},
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		DepRefs: []NodeRef{},
-	}
-
-	return emit.Emit(node)
+	return emitJVNode(instance, cmdArgs, inputs, outputs, outDir, nil, emit)
 }
 
 // EmitJVSplit emits a JV node for RUN_ANTLR4_CPP_SPLIT (separate lexer
@@ -156,10 +162,6 @@ func EmitJVSplit(
 		cmdArgs = append(cmdArgs, "-listener")
 	}
 
-	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-	}
-
 	inputs := []VFS{
 		lexerVFS,
 		parserVFS,
@@ -180,34 +182,32 @@ func EmitJVSplit(
 		Build(outPrefix + visitorBase + "BaseVisitor.h"),
 	}
 
-	node := &Node{
-		Cmds: []Cmd{
-			{
-				CmdArgs: cmdArgs,
-				Env:     env,
-				Cwd:     outDir,
-			},
-		},
-		Env:    env,
-		Inputs: inputs,
-		KV: map[string]interface{}{
-			"p":        "JV",
-			"pc":       "light-blue",
-			"show_out": "yes",
-		},
-		Outputs: outputs,
-		Tags:    []string{},
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		DepRefs: []NodeRef{},
-	}
+	return emitJVNode(instance, cmdArgs, inputs, outputs, outDir, nil, emit)
+}
 
-	return emit.Emit(node)
+func EmitJVGeneral(
+	instance ModuleInstance,
+	jarVFS VFS,
+	args []string,
+	inputs []VFS,
+	outputs []VFS,
+	cwd string,
+	depRefs []NodeRef,
+	emit Emitter,
+) NodeRef {
+	cmdArgs := make([]string, 0, 5+len(args))
+	cmdArgs = append(cmdArgs,
+		instance.Platform.Tools.Python3,
+		stdout2stderrPath,
+		jdkResourcePath,
+		"-jar",
+		jarVFS.String(),
+	)
+	cmdArgs = append(cmdArgs, args...)
+
+	jvInputs := make([]VFS, 0, len(inputs)+2)
+	jvInputs = append(jvInputs, inputs...)
+	jvInputs = append(jvInputs, stdout2stderrVFS, jarVFS)
+
+	return emitJVNode(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, emit)
 }
