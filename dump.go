@@ -170,12 +170,14 @@ func marshalCompact(v any) []byte {
 	return b
 }
 
-// streamGraph parses the "graph" array of a raw build-graph JSON file and
-// calls process once per node. Parsing and processing run in two goroutines
-// joined by a channel: the decode loop (CPU-heavy JSON parse) overlaps with
-// per-node canonicalization/hashing. process is invoked sequentially by a
-// single worker, so it may mutate shared state without locks.
-func streamGraph(path string, process func(map[string]any)) {
+// streamGraphFanout parses the "graph" array of a raw build-graph JSON file
+// and fans nodes out to `workers` parallel processors. A single decoder
+// goroutine feeds a node channel; each worker runs process() (CPU-heavy
+// canonicalization / hashing / marshaling) and sends its result to a single
+// collector running collect(), which may therefore mutate shared state
+// without locks. Results arrive in completion order — callers must not
+// depend on input order (the dump pipeline sorts downstream).
+func streamGraphFanout[R any](path string, workers int, process func(map[string]any) R, collect func(R)) {
 	f := Throw2(os.Open(path))
 	defer func() { Throw(f.Close()) }()
 
@@ -183,23 +185,37 @@ func streamGraph(path string, process func(map[string]any)) {
 	dec.UseNumber()
 	seekToGraph(dec, path)
 
-	ch := make(chan map[string]any, 256)
+	nodes := make(chan map[string]any, workers*2)
+	results := make(chan R, workers*2)
+
 	var wg sync.WaitGroup
-	wg.Add(1)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for n := range nodes {
+				results <- process(n)
+			}
+		}()
+	}
+
+	done := make(chan struct{})
 	go func() {
-		defer wg.Done()
-		for node := range ch {
-			process(node)
+		for r := range results {
+			collect(r)
 		}
+		close(done)
 	}()
 
 	for dec.More() {
 		node := map[string]any{}
 		Throw(dec.Decode(&node))
-		ch <- node
+		nodes <- node
 	}
-	close(ch)
+	close(nodes)
 	wg.Wait()
+	close(results)
+	<-done
 }
 
 // seekToGraph advances dec to the first element of the top-level "graph"
