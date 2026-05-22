@@ -79,17 +79,51 @@ func TestGen_YaBinTargetStatsUIDsMatchReference(t *testing.T) {
 	assertTargetStatsUIDsMatchReference(t, our.Graph, ref, 5000, "sg3.json")
 }
 
+func TestGen_YaBinHostStatsUIDsMatchReference(t *testing.T) {
+	const targetDir = "devtools/ya/bin"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "sg3.json")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference graph not present at %s/sg3.json", sourceRoot)
+		}
+
+		t.Fatalf("stat sg3.json: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sourceRoot, targetDir, "ya.make")); err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("reference ya.make not present at %s/%s/ya.make", sourceRoot, targetDir)
+		}
+
+		t.Fatalf("stat ya.make: %v", err)
+	}
+
+	our := genStatsUIDReferenceSample(sourceRoot, targetDir)
+	ref := loadStatsUIDRefNodes(t, filepath.Join(sourceRoot, "sg3.json"))
+
+	assertHostStatsUIDsMatchReference(t, our.Graph, ref, 4000, "sg3.json")
+}
+
 func genStatsUIDReferenceSample(sourceRoot, targetDir string) *Graph {
-	hostFlags := make(map[string]string, len(testToolchainFlags)+4)
+	hostPlatformFlags := map[string]string{
+		"APPLE_SDK_LOCAL":    "yes",
+		"MUSL":               "yes",
+		"OPENSOURCE":         "yes",
+		"OS_SDK":             "local",
+		"USE_CLANG_CL":       "yes",
+		"USE_PREBUILT_TOOLS": "no",
+	}
+	hostFlags := make(map[string]string, len(testToolchainFlags)+8)
 	for k, v := range testToolchainFlags {
 		hostFlags[k] = v
 	}
+	for k, v := range hostPlatformFlags {
+		hostFlags[k] = v
+	}
 	hostFlags["GG_BUILD_TYPE"] = "release"
-	hostFlags["MUSL"] = "yes"
 	hostFlags["PIC"] = "yes"
 	hostFlags["SANDBOXING"] = "yes"
 	host := NewPlatform(OSLinux, ISAX8664, hostFlags, []string{"tool"}, "", "")
-	host.StatsFlags = buildHostStatsFlags(map[string]string{"MUSL": "yes"}, true)
+	host.StatsFlags = buildHostStatsFlags(hostPlatformFlags, nil, true)
 
 	targetFlags := make(map[string]string, len(testToolchainFlags)+4)
 	for k, v := range testToolchainFlags {
@@ -160,6 +194,42 @@ func assertTargetStatsUIDsMatchReference(t *testing.T, our []*Node, ref []statsU
 	}
 }
 
+func assertHostStatsUIDsMatchReference(t *testing.T, our []*Node, ref []statsUIDRefNode, minCommon int, refName string) {
+	t.Helper()
+
+	ourByKey := indexHostStatsUIDNodes(t, our)
+	refByKey := indexHostStatsUIDRefNodes(t, ref)
+
+	commonKeys, onlyOur, onlyRef := diffStatsUIDNodeKeys(ourByKey, refByKey)
+	if len(onlyOur) > 0 || len(onlyRef) > 0 {
+		var problems []string
+		if len(onlyOur) > 0 {
+			problems = append(problems,
+				"extra generated host key "+statsUIDDescribeKey(onlyOur[0])+
+					" ("+strconv.Itoa(len(onlyOur))+" total)")
+		}
+		if len(onlyRef) > 0 {
+			problems = append(problems,
+				"missing generated host key "+statsUIDDescribeKey(onlyRef[0])+
+					" ("+strconv.Itoa(len(onlyRef))+" total)")
+		}
+		t.Fatalf("host node key drift vs %s: %s", refName, strings.Join(problems, "; "))
+	}
+
+	for _, key := range commonKeys {
+		ourNode := ourByKey[key]
+		refNode := refByKey[key]
+		if ourNode.StatsUID != refNode.StatsUID {
+			t.Fatalf("host stats_uid mismatch for %s:\n got: %s\nwant: %s",
+				statsUIDDescribeKey(key), ourNode.StatsUID, refNode.StatsUID)
+		}
+	}
+
+	if len(commonKeys) < minCommon {
+		t.Fatalf("expected at least %d common host nodes vs %s, found %d", minCommon, refName, len(commonKeys))
+	}
+}
+
 func indexTargetStatsUIDNodes(t *testing.T, nodes []*Node) map[statsUIDNodeKey]indexedStatsUIDNode {
 	t.Helper()
 
@@ -180,6 +250,26 @@ func indexTargetStatsUIDNodes(t *testing.T, nodes []*Node) map[statsUIDNodeKey]i
 	return out
 }
 
+func indexHostStatsUIDNodes(t *testing.T, nodes []*Node) map[statsUIDNodeKey]indexedStatsUIDNode {
+	t.Helper()
+
+	out := make(map[statsUIDNodeKey]indexedStatsUIDNode)
+	for _, node := range nodes {
+		if !nodeHasHostTag(node.Tags) {
+			continue
+		}
+
+		key := statsUIDNodeKeyFromNode(node)
+		value := indexedStatsUIDNode{StatsUID: node.StatsUID}
+		if _, exists := out[key]; exists {
+			t.Fatalf("duplicate generated host key %s", statsUIDDescribeKey(key))
+		}
+		out[key] = value
+	}
+
+	return out
+}
+
 func indexTargetStatsUIDRefNodes(t *testing.T, nodes []statsUIDRefNode) map[statsUIDNodeKey]indexedStatsUIDNode {
 	t.Helper()
 
@@ -193,6 +283,26 @@ func indexTargetStatsUIDRefNodes(t *testing.T, nodes []statsUIDRefNode) map[stat
 		value := indexedStatsUIDNode{StatsUID: node.StatsUID}
 		if _, exists := out[key]; exists {
 			t.Fatalf("duplicate reference non-host key %s", statsUIDDescribeKey(key))
+		}
+		out[key] = value
+	}
+
+	return out
+}
+
+func indexHostStatsUIDRefNodes(t *testing.T, nodes []statsUIDRefNode) map[statsUIDNodeKey]indexedStatsUIDNode {
+	t.Helper()
+
+	out := make(map[statsUIDNodeKey]indexedStatsUIDNode)
+	for _, node := range nodes {
+		if !node.HostPlatform {
+			continue
+		}
+
+		key := statsUIDNodeKeyFromRef(node)
+		value := indexedStatsUIDNode{StatsUID: node.StatsUID}
+		if _, exists := out[key]; exists {
+			t.Fatalf("duplicate reference host key %s", statsUIDDescribeKey(key))
 		}
 		out[key] = value
 	}

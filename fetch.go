@@ -170,6 +170,16 @@ func newResourceAwareEmitter(inner Emitter, plan *resourceFetchPlan) Emitter {
 	return &resourceAwareEmitter{inner: inner, plan: plan}
 }
 
+func resourceGraphEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan, materializeFetchNodes bool) Emitter {
+	if !materializeFetchNodes || plan == nil || len(plan.items) == 0 {
+		return inner
+	}
+
+	plan.emitAll(host, inner)
+
+	return newResourceAwareEmitter(inner, plan)
+}
+
 func (e *resourceAwareEmitter) Emit(n *Node) NodeRef {
 	e.attachResourceDeps(n)
 
