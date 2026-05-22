@@ -136,14 +136,41 @@ func FinalizeStream(e *BufferedEmitter, yield func(*Node)) []string {
 	return results
 }
 
-// finalizeNodes is the shared implementation behind Finalize and
-// FinalizeStream: validate buffer state, topo-sort, resolve Deps/
-// ForeignDeps from DepRefs/ForeignDepRefs, compute per-node UID, yield
-// via the optional callback in dep-first order. Returns uids[i] indexed
-// by buffer position. Sets e.finalized on success; throws on
-// re-finalize, pre-populated Deps/ForeignDeps, out-of-range NodeRefs,
-// or cycles.
-func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
+func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) []string {
+	if e.finalized {
+		ThrowFmt("finalize: emitter already finalized")
+	}
+
+	n := len(e.nodes)
+	if len(order) != n {
+		ThrowFmt("finalize: order length %d does not match buffer size %d", len(order), n)
+	}
+
+	// Walk in topo order, fill Deps/ForeignDeps from resolved children,
+	// then hash. Because we go dependency-first, every child's UID is
+	// known by the time we hash a parent.
+	uids := make([]string, n)
+	var uidScratch canonBuf
+
+	for _, i := range order {
+		node := e.nodes[i]
+		uids[i] = resolveAndUID(node, uids, &uidScratch)
+
+		if yield != nil {
+			yield(node)
+		}
+	}
+
+	e.finalized = true
+
+	if e.readyCh != nil {
+		close(e.readyCh)
+	}
+
+	return uids
+}
+
+func finalizeOrder(e *BufferedEmitter) []int {
 	if e.finalized {
 		ThrowFmt("finalize: emitter already finalized")
 	}
@@ -284,28 +311,18 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
 		ThrowFmt("cycle detected (could not order all %d nodes; ordered %d)", n, len(order))
 	}
 
-	// Walk in topo order, fill Deps/ForeignDeps from resolved children,
-	// then hash. Because we go dependency-first, every child's UID is
-	// known by the time we hash a parent.
-	uids := make([]string, n)
-	var uidScratch canonBuf
+	return order
+}
 
-	for _, i := range order {
-		node := e.nodes[i]
-		uids[i] = resolveAndUID(node, uids, &uidScratch)
-
-		if yield != nil {
-			yield(node)
-		}
-	}
-
-	e.finalized = true
-
-	if e.readyCh != nil {
-		close(e.readyCh)
-	}
-
-	return uids
+// finalizeNodes is the shared implementation behind Finalize and
+// FinalizeStream: validate buffer state, topo-sort, resolve Deps/
+// ForeignDeps from DepRefs/ForeignDepRefs, compute per-node UID, yield
+// via the optional callback in dep-first order. Returns uids[i] indexed
+// by buffer position. Sets e.finalized on success; throws on
+// re-finalize, pre-populated Deps/ForeignDeps, out-of-range NodeRefs,
+// or cycles.
+func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
+	return finalizeNodesInOrder(e, finalizeOrder(e), yield)
 }
 
 // resolveAndUID is the per-node finalize step: resolves DepRefs and
@@ -515,8 +532,7 @@ func (e *StreamingEmitter) Finish() []string {
 	return results
 }
 
-func Finalize(e *BufferedEmitter) *Graph {
-	uids := finalizeNodes(e, nil)
+func graphFromFinalizedEmitter(e *BufferedEmitter, uids []string) *Graph {
 	n := len(e.nodes)
 
 	// Build output Graph. Graph[] is DFS preorder rooted at each Result
@@ -591,6 +607,14 @@ func Finalize(e *BufferedEmitter) *Graph {
 	}
 
 	return out
+}
+
+func finalizeGraphInOrder(e *BufferedEmitter, order []int) *Graph {
+	return graphFromFinalizedEmitter(e, finalizeNodesInOrder(e, order, nil))
+}
+
+func Finalize(e *BufferedEmitter) *Graph {
+	return graphFromFinalizedEmitter(e, finalizeNodes(e, nil))
 }
 
 func applyGraphConf(g *Graph, conf *graphConf) {
