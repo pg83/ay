@@ -17,8 +17,9 @@ import (
 //	              outputs in both with a differing self_uid.
 //	--summary     group the only-one-side outputs by kind / ext / dir.
 //	--by-field    pair nodes by output; count which content fields differ.
-//	--by-token    pair nodes by output; rank cmd_args/input tokens that are
-//	              systematically only-ours / only-ref, by category.
+//	--by-token    pair nodes by output; rank cmds/inputs/tags/outputs tokens
+//	              that are systematically only-ours / only-ref, by category.
+//	--by-kind     classify content divergence per node kind (kv.p).
 //	--roots       content-divergent outputs whose dependency children are all
 //	              non-divergent — the leaf-most root causes to fix first.
 //	--pair OUTPUT field-by-field diff of the single node producing OUTPUT.
@@ -49,6 +50,8 @@ func cmdDumpDiff(args []string) int {
 			setMode("by-field")
 		case "--by-token":
 			setMode("by-token")
+		case "--by-kind":
+			setMode("by-kind")
 		case "--roots":
 			setMode("roots")
 		case "--pair":
@@ -80,6 +83,8 @@ func cmdDumpDiff(args []string) int {
 		diffByField(leftPath, rightPath, bw)
 	case "by-token":
 		diffByToken(leftPath, rightPath, bw)
+	case "by-kind":
+		diffByKind(leftPath, rightPath, bw)
 	case "roots":
 		diffRoots(leftPath, rightPath, bw)
 	case "pair":
@@ -250,44 +255,58 @@ func nodeFieldHashes(n map[string]any) [10]uint64 {
 
 // --- #2 by-token: systematic cmd_args / input token diffs ---
 
-func diffByToken(leftPath, rightPath string, bw *bufio.Writer) {
-	type rec struct {
-		cmds   []string
-		inputs []string
+// tokenFields are the list-valued node fields whose tokens by-token
+// multiset-diffs. cmds is flattened cmd_args; the rest are taken verbatim.
+var tokenFields = []string{"cmds", "inputs", "tags", "outputs"}
+
+func tokenize(n map[string]any, field string) []string {
+	if field == "cmds" {
+		return cmdArgTokens(n)
 	}
-	ridx := map[string]rec{}
+	return toStrings(n[field])
+}
+
+func diffByToken(leftPath, rightPath string, bw *bufio.Writer) {
+	ridx := map[string]map[string][]string{}
 	streamJSONL(rightPath, func(n map[string]any) {
-		r := rec{cmds: cmdArgTokens(n), inputs: toStrings(n["inputs"])}
+		rec := map[string][]string{}
+		for _, f := range tokenFields {
+			rec[f] = tokenize(n, f)
+		}
 		for _, o := range toStrings(n["outputs"]) {
-			ridx[o] = r
+			ridx[o] = rec
 		}
 	})
 
-	cmdOur, cmdRef := map[string]int{}, map[string]int{}
-	inOur, inRef := map[string]int{}, map[string]int{}
+	our := map[string]map[string]int{}
+	ref := map[string]map[string]int{}
+	for _, f := range tokenFields {
+		our[f], ref[f] = map[string]int{}, map[string]int{}
+	}
+
 	paired := 0
 	streamJSONL(leftPath, func(n map[string]any) {
-		var r rec
-		found := false
+		var rec map[string][]string
 		for _, o := range toStrings(n["outputs"]) {
 			if v, ok := ridx[o]; ok {
-				r, found = v, true
+				rec = v
 				break
 			}
 		}
-		if !found {
+		if rec == nil {
 			return
 		}
 		paired++
-		accumMultisetDiff(cmdArgTokens(n), r.cmds, cmdOur, cmdRef)
-		accumMultisetDiff(toStrings(n["inputs"]), r.inputs, inOur, inRef)
+		for _, f := range tokenFields {
+			accumMultisetDiff(tokenize(n, f), rec[f], our[f], ref[f])
+		}
 	})
 
 	Throw2(fmt.Fprintf(bw, "=== by-token: %d outputs in both ===\n", paired))
-	writeTokenRanking(bw, "cmd_args tokens only in OURS", cmdOur)
-	writeTokenRanking(bw, "cmd_args tokens only in REF", cmdRef)
-	writeTokenRanking(bw, "input paths only in OURS", inOur)
-	writeTokenRanking(bw, "input paths only in REF", inRef)
+	for _, f := range tokenFields {
+		writeTokenRanking(bw, f+" tokens only in OURS", our[f])
+		writeTokenRanking(bw, f+" tokens only in REF", ref[f])
+	}
 }
 
 func cmdArgTokens(n map[string]any) []string {
@@ -374,6 +393,95 @@ func tokenCategory(t string) string {
 		return "path"
 	default:
 		return "other"
+	}
+}
+
+// --- by-kind: classify content divergence per node kind (kv.p) ---
+
+func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
+	type rrec struct {
+		kind string
+		h    [10]uint64
+	}
+	ridx := map[string]rrec{}
+	streamJSONL(rightPath, func(n map[string]any) {
+		rr := rrec{kind: nodeKVP(n), h: nodeFieldHashes(n)}
+		for _, o := range toStrings(n["outputs"]) {
+			ridx[o] = rr
+		}
+	})
+
+	total := map[string]int{}   // kind -> paired nodes
+	diverge := map[string]int{} // kind -> nodes with any field diff
+	fieldDiff := map[string][]int{}
+	combo := map[string]map[string]int{}
+
+	streamJSONL(leftPath, func(n map[string]any) {
+		var rr rrec
+		found := false
+		for _, o := range toStrings(n["outputs"]) {
+			if v, ok := ridx[o]; ok {
+				rr, found = v, true
+				break
+			}
+		}
+		if !found {
+			return
+		}
+		kind := nodeKVP(n)
+		if kind == "" {
+			kind = "(none)"
+		}
+		total[kind]++
+
+		lh := nodeFieldHashes(n)
+		fd := fieldDiff[kind]
+		if fd == nil {
+			fd = make([]int, len(dumpContentFields))
+		}
+		var diffs []string
+		for i := range dumpContentFields {
+			if lh[i] != rr.h[i] {
+				fd[i]++
+				diffs = append(diffs, dumpContentFields[i])
+			}
+		}
+		fieldDiff[kind] = fd
+		if len(diffs) > 0 {
+			diverge[kind]++
+			if combo[kind] == nil {
+				combo[kind] = map[string]int{}
+			}
+			combo[kind][strings.Join(diffs, "+")]++
+		}
+	})
+
+	kinds := make([]string, 0, len(total))
+	for k := range total {
+		kinds = append(kinds, k)
+	}
+	sort.Slice(kinds, func(a, b int) bool { return total[kinds[a]] > total[kinds[b]] })
+
+	Throw2(fmt.Fprintf(bw, "=== by-kind: content divergence per node kind ===\n"))
+	Throw2(fmt.Fprintf(bw, "%-8s %8s %8s   %s\n", "kind", "paired", "diverge", "top differing fields / combos"))
+	for _, k := range kinds {
+		fd := fieldDiff[k]
+		var parts []string
+		for i, f := range dumpContentFields {
+			if fd[i] > 0 {
+				parts = append(parts, fmt.Sprintf("%s:%d", f, fd[i]))
+			}
+		}
+		sort.Slice(parts, func(a, b int) bool { return parts[a] > parts[b] }) // rough: keep stable-ish
+		topCombo := ""
+		best := 0
+		for c, n := range combo[k] {
+			if n > best {
+				best, topCombo = n, c
+			}
+		}
+		Throw2(fmt.Fprintf(bw, "%-8s %8d %8d   %s   [top combo: %s ×%d]\n",
+			k, total[k], diverge[k], strings.Join(parts, " "), topCombo, best))
 	}
 }
 
