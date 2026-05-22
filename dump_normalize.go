@@ -213,9 +213,13 @@ func cmdDumpNormalize(args []string) int {
 
 			canon := canonContent(node)
 			canon["deps"] = rewriteDeps(deps[uid], closure, fetch, newUID)
-			nu := newUID[uid]
-			canon["uid"] = nu
-			canon["self_uid"] = nu
+			// uid = full Merkle (content + subtree); self_uid = intrinsic
+			// content hash (no deps) so diffs isolate root-cause content
+			// divergences from cascade. Both match for isomorphic nodes,
+			// so byte-exact cases stay byte-exact.
+			canon["uid"] = newUID[uid]
+			ch := contentHash[uid]
+			canon["self_uid"] = base64.RawURLEncoding.EncodeToString(ch[:])[:dumpUIDLen]
 
 			return append(marshalCompact(canon), '\n')
 		},

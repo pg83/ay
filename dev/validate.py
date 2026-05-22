@@ -16,7 +16,6 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 AY = os.path.join(REPO_ROOT, "ay")
-DIFF = os.path.join(SCRIPT_DIR, "diff.py")
 
 # name, normalize target, raw upstream reference, xfail
 CASES = [
@@ -72,8 +71,15 @@ def main() -> int:
         normalize_sort(ref, target, ref_n)
 
         if xfail:
-            print(f"[{name}] xfail — metrics (not gating):")
-            run([DIFF, our_n, ref_n])
+            diff_file = os.path.join(out_dir, f"{name}.diff.txt")
+            run([AY, "dump", "diff", "--left", our_n, "--right", ref_n, "--out", diff_file])
+            print(f"[{name}] xfail — diff (not gating), first 200 lines:")
+            with open(diff_file) as fh:
+                for i, line in enumerate(fh):
+                    if i >= 200:
+                        break
+                    sys.stdout.write(line)
+            print(f"[{name}] full diff: {diff_file}")
             print(f"[{name}] XFAIL")
             continue
 

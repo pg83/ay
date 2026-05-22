@@ -111,3 +111,70 @@ func TestDumpNormalizeSemanticEquivalence(t *testing.T) {
 		t.Fatalf("expected 2 nodes in closure, got %d lines:\n%s", n, na)
 	}
 }
+
+func TestDumpDiff(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.jsonl")
+	right := filepath.Join(dir, "r.jsonl")
+	out := filepath.Join(dir, "d.txt")
+
+	Throw(os.WriteFile(left, []byte(
+		`{"self_uid":"A","outputs":["/x"]}`+"\n"+
+			`{"self_uid":"B","outputs":["/y"]}`+"\n"+
+			`{"self_uid":"C","outputs":["/shared"]}`+"\n"), 0o644))
+	Throw(os.WriteFile(right, []byte(
+		`{"self_uid":"A","outputs":["/x"]}`+"\n"+
+			`{"self_uid":"D","outputs":["/z"]}`+"\n"+
+			`{"self_uid":"E","outputs":["/shared"]}`+"\n"), 0o644))
+
+	if exc := Try(func() { cmdDumpDiff([]string{"--left", left, "--right", right, "--out", out}) }); exc != nil {
+		t.Fatalf("dump diff: %v", exc)
+	}
+
+	got := string(Throw2(os.ReadFile(out)))
+	for _, want := range []string{
+		"=== self_uid only in LEFT (2) ===\nB\nC\n",
+		"=== self_uid only in RIGHT (2) ===\nD\nE\n",
+		"=== outputs only in LEFT (1) ===\n/y\n",
+		"=== outputs only in RIGHT (1) ===\n/z\n",
+		"=== outputs in both with mismatched self_uid (1) ===\n/shared  left=[C] right=[E]\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("diff output missing %q\n--- got ---\n%s", want, got)
+		}
+	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	f := Throw2(os.CreateTemp(t.TempDir(), "stdout"))
+	os.Stdout = f
+	exc := Try(fn)
+	os.Stdout = old
+	Throw(f.Close())
+	if exc != nil {
+		t.Fatalf("captured call threw: %v", exc)
+	}
+	return string(Throw2(os.ReadFile(f.Name())))
+}
+
+func TestDumpGrep(t *testing.T) {
+	dir := t.TempDir()
+	in := filepath.Join(dir, "g.jsonl")
+	Throw(os.WriteFile(in, []byte(
+		`{"self_uid":"AA","outputs":["$(B)/p/a.o"],"kv":{"p":"CC"}}`+"\n"+
+			`{"self_uid":"BB","outputs":["$(B)/p/b.o"],"kv":{"p":"CC"}}`+"\n"), 0o644))
+
+	// match by output, given in long form — normPath canonicalizes both sides
+	byOut := captureStdout(t, func() { cmdDumpGrep([]string{"--in", in, "$(BUILD_ROOT)/p/a.o"}) })
+	if !strings.Contains(byOut, `"AA"`) || strings.Contains(byOut, `"BB"`) {
+		t.Fatalf("grep by output: want AA only, got:\n%s", byOut)
+	}
+
+	// match by self_uid
+	bySU := captureStdout(t, func() { cmdDumpGrep([]string{"--in", in, "BB"}) })
+	if !strings.Contains(bySU, `"BB"`) || strings.Contains(bySU, `"AA"`) {
+		t.Fatalf("grep by self_uid: want BB only, got:\n%s", bySU)
+	}
+}
