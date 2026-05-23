@@ -275,8 +275,7 @@ type scanCtxPerfStats struct {
 	resolveEntries    int
 	searchTierEntries int
 	subgraphEntries   int
-	taintedKnown      int
-	inProgress        int
+	childrenEntries   int
 	walkClosureCache  int
 }
 
@@ -450,8 +449,7 @@ func (ctx *genCtx) perfScanCtxStats(scanner *IncludeScanner) scanCtxPerfStats {
 			stats.resolveEntries += len(sc.resolveCache)
 			stats.searchTierEntries += len(sc.searchTierCache)
 			stats.subgraphEntries += len(sc.subgraphCache)
-			stats.taintedKnown += len(sc.subgraphTaintedKnown)
-			stats.inProgress += len(sc.subgraphInProgress)
+			stats.childrenEntries += len(sc.childrenCache)
 		}
 	}
 
@@ -482,15 +480,14 @@ func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, 
 	reportScanner := func(label string, scanner *IncludeScanner) {
 		scanStats := scanner.perfStats()
 		ctxStats := ctx.perfScanCtxStats(scanner)
-		fmt.Fprintf(os.Stderr, "perf: scanner %s activeScanCtx=%d walkClosureCache=%d resolveEntries=%d searchTierEntries=%d subgraphEntries=%d taintedKnown=%d inProgress=%d walkClosure=%d dfs=%d plainDfs=%d subgraphHits=%d subgraphMisses=%d tainted=%d searchTierHits=%d searchTierMisses=%d resolveCalls=%d resolveHits=%d resolveMisses=%d sysinclSourceHits=%d sysinclSourceMisses=%d sysinclIncluderHits=%d sysinclIncluderMisses=%d\n",
+		fmt.Fprintf(os.Stderr, "perf: scanner %s activeScanCtx=%d walkClosureCache=%d resolveEntries=%d searchTierEntries=%d closureEntries=%d childrenEntries=%d walkClosure=%d dfs=%d plainDfs=%d closureHits=%d closureMisses=%d cyclicSCCs=%d searchTierHits=%d searchTierMisses=%d resolveCalls=%d resolveHits=%d resolveMisses=%d sysinclSourceHits=%d sysinclSourceMisses=%d sysinclIncluderHits=%d sysinclIncluderMisses=%d\n",
 			label,
 			ctxStats.activeScanCtx,
 			ctxStats.walkClosureCache,
 			ctxStats.resolveEntries,
 			ctxStats.searchTierEntries,
 			ctxStats.subgraphEntries,
-			ctxStats.taintedKnown,
-			ctxStats.inProgress,
+			ctxStats.childrenEntries,
 			scanStats.walkClosureCalls,
 			scanStats.dfsCalls,
 			scanStats.plainDfsCalls,

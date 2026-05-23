@@ -165,6 +165,18 @@ type IncludeScanner struct {
 	// independent.
 	sysinclIncluderCache map[sysinclIncluderKey]sysinclCacheEntry
 
+	// Tarjan SCC scratch, shared across closure explorations (gen scanning
+	// is single-goroutine). closureOf clears index/low/onStack and resets
+	// stack/next per top-level exploration; tjClosure + tjBuf are the
+	// reusable dedup set + accumulator for an SCC's merged closure.
+	tjIndex   map[uint32]int32
+	tjLow     map[uint32]int32
+	tjOnStack map[uint32]bool
+	tjStack   []uint32
+	tjNext    int32
+	tjClosure idSet
+	tjBuf     []uint32
+
 	visitedIDPool sync.Pool // *idSet
 	orderIDPool   sync.Pool // *[]uint32
 	// seenPool reuses the per-resolveSearchPath dedup map across calls.
@@ -244,17 +256,21 @@ type scanCtx struct {
 	cfg     ScanContext
 	ctxHash uint64
 
-	resolveCache         map[resolveInnerKey][]VFS
-	searchTierCache      map[uint32]searchTierResult
-	subgraphCache        map[subgraphInnerKey][]uint32
-	subgraphTaintedKnown map[subgraphInnerKey]struct{}
-	subgraphInProgress   map[subgraphInnerKey]struct{}
+	resolveCache    map[resolveInnerKey][]VFS
+	searchTierCache map[uint32]searchTierResult
+	// subgraphCache holds the full transitive include closure (INCLUDING
+	// the node itself), deduplicated and ascending-sorted by interned ID,
+	// per (absID, sourceClass). Computed by closureOf via Tarjan SCC, so
+	// cycle-containing closures are cached exactly like acyclic ones (every
+	// member of a strongly-connected component shares one closure slice);
+	// no node is ever re-walked. Order within the closure is irrelevant —
+	// dump normalize sorts inputs/deps — so a sorted set suffices.
+	subgraphCache map[subgraphInnerKey][]uint32
 	// childrenCache memoises forEachResolvedChildID's resolved-child ID
-	// list per (absID, sourceClass). The resolved children of a node are a
-	// pure function of that key within one scanCtx, so tainted (uncacheable
-	// subgraph) re-walks reuse the resolution instead of re-running resolve
-	// for every parsed include on every visit. curSourceClass mirrors the
-	// active walk's sourceClassID(cfg.SourceRel) (set in WalkClosure).
+	// list per (absID, sourceClass): closureOf reads each node's children
+	// twice (edge classification + SCC-finalize union), and resolution is a
+	// pure function of that key within one scanCtx. curSourceClass mirrors
+	// the active walk's sourceClassID(cfg.SourceRel) (set in WalkClosure).
 	childrenCache  map[subgraphInnerKey][]uint32
 	curSourceClass uint32
 }
@@ -409,6 +425,9 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
 		walkClosureCache:     make(map[uint64]*scanCtx, 8),
 		onWarn:               onWarn,
+		tjIndex:              make(map[uint32]int32, 4096),
+		tjLow:                make(map[uint32]int32, 4096),
+		tjOnStack:            make(map[uint32]bool, 4096),
 	}
 	for i := range sysincl {
 		if sysincl[i].KeyBySource {
@@ -464,15 +483,13 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 	// Modest pre-sizes: many distinct ctxHashes exist, so over-sizing
 	// every context wastes memory; the few large contexts grow.
 	return &scanCtx{
-		scanner:              s,
-		cfg:                  cfg,
-		ctxHash:              hashScanContext(&cfg),
-		resolveCache:         make(map[resolveInnerKey][]VFS, 1024),
-		searchTierCache:      make(map[uint32]searchTierResult, 256),
-		subgraphCache:        make(map[subgraphInnerKey][]uint32, 512),
-		subgraphTaintedKnown: make(map[subgraphInnerKey]struct{}, 64),
-		subgraphInProgress:   make(map[subgraphInnerKey]struct{}, 16),
-		childrenCache:        make(map[subgraphInnerKey][]uint32, 1024),
+		scanner:         s,
+		cfg:             cfg,
+		ctxHash:         hashScanContext(&cfg),
+		resolveCache:    make(map[resolveInnerKey][]VFS, 1024),
+		searchTierCache: make(map[uint32]searchTierResult, 256),
+		subgraphCache:   make(map[subgraphInnerKey][]uint32, 512),
+		childrenCache:   make(map[subgraphInnerKey][]uint32, 1024),
 	}
 }
 
@@ -753,13 +770,12 @@ func hashScanContext(ctx *ScanContext) uint64 {
 	return h
 }
 
-// dfsID walks the include closure in depth-first discovery order via
-// the per-includer subgraph cache. On a hit, the pre-computed
-// canonical-order subgraph rooted at `absID` is merged into the
-// caller's visited+order, skipping pre-visited entries. On a miss, the
-// subgraph is computed and memoised. Skipping pre-visited entries
-// during merge preserves the canonical first-visit order an uncached
-// DFS would produce from the same partially-populated visited state.
+// dfsID merges the full transitive closure of `absID` into the caller's
+// visited+order, skipping pre-visited entries. closureOf returns the
+// node's complete reachable set (cycle-safe, cached), so unlike a plain
+// DFS this never recurses per child — the whole subtree arrives in one
+// merge. Source-like roots are not cached (each compiles once); they
+// plain-DFS so their per-header descendants still hit closureOf.
 func (sc *scanCtx) dfsID(absID uint32, visited *idSet, order *[]uint32) {
 	sc.scanner.dfsCalls++
 
@@ -769,44 +785,28 @@ func (sc *scanCtx) dfsID(absID uint32, visited *idSet, order *[]uint32) {
 
 	absPath := sc.scanner.interner.vfsByID(absID)
 
-	// External callers invoke dfs only with source files; each source
-	// compiles once, so a subgraph cache probe always misses. Skip the
-	// speculative walk for source extensions and plain-dfs into the
-	// caller's visited+order — per-header descendants reached
-	// recursively still take the subgraph cache fast path.
 	if isSourceLike(absPath) {
 		sc.plainDfsID(absID, visited, order)
 
 		return
 	}
-	sourceClass := sc.curSourceClass
-	sg, ok := sc.subgraph(absID, sourceClass)
 
-	if ok {
-		// Cached or freshly-computed clean canonical subgraph. Merge
-		// into caller's visited+order, skipping pre-visited entries.
-		for _, id := range sg {
-			if visited.has(id) {
-				continue
-			}
-
-			visited.add(id)
-			*order = append(*order, id)
+	// Merge the cached/computed closure (includes absID), skipping
+	// pre-visited entries.
+	for _, id := range sc.closureOf(absID) {
+		if visited.has(id) {
+			continue
 		}
 
-		return
+		visited.add(id)
+		*order = append(*order, id)
 	}
-
-	// absPath is on a cycle (no cacheable canonical subgraph). Plain
-	// DFS into the caller's shared visited+order; non-cycle descendants
-	// reached recursively still hit the persistent subgraph cache.
-	sc.plainDfsID(absID, visited, order)
 }
 
-// plainDfsID walks `absID`'s subtree using the caller's shared
-// visited+order. Fall-back path for headers known to be on a cycle
-// (`subgraphTaintedKnown`). Per-child dispatch goes through `dfsID()`
-// so non-cycle descendants still benefit from the `subgraphCache`.
+// plainDfsID walks `absID` into the caller's shared visited+order without
+// caching absID itself — used for source-like roots, which compile once.
+// Per-child dispatch goes through dfsID(), so each header descendant still
+// resolves to a cached closureOf() set.
 func (sc *scanCtx) plainDfsID(absID uint32, visited *idSet, order *[]uint32) {
 	sc.scanner.plainDfsCalls++
 
@@ -893,171 +893,124 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 	}
 }
 
-// subgraph returns the canonical transitive include closure rooted at
-// `absID` for the (ctxHash, sourceClass) equivalence class. The slice
-// is cache-owned (iterate only). (nil, false) means absID is on a
-// cycle and not cacheable — caller plain-DFSes into its own
-// visited+order. subgraphTaintedKnown caches that verdict so the
-// wasted walk is paid at most once per key. A call for a key already
-// in subgraphInProgress is a back-edge and returns (nil, false).
-func (sc *scanCtx) subgraph(absID uint32, sourceClass uint32) ([]uint32, bool) {
-	s := sc.scanner
-	key := subgraphInnerKey{
-		abs:         absID,
-		sourceClass: sourceClass,
-	}
-
+// closureOf returns the full transitive include closure of absID
+// (INCLUDING absID) for the active sourceClass: a deduplicated,
+// cache-owned []uint32 (iterate only). Cycle-safe via Tarjan SCC — each
+// (node, sourceClass) is explored at most once for the whole run, and
+// every member of a strongly-connected component shares one closure
+// slice, so include cycles cost no more than acyclic fan-out. Element
+// order is the deterministic first-exploration order; downstream callers
+// treat the result as a set (dump normalize sorts inputs), so no sort.
+func (sc *scanCtx) closureOf(absID uint32) []uint32 {
+	key := subgraphInnerKey{abs: absID, sourceClass: sc.curSourceClass}
 	if cached, ok := sc.subgraphCache[key]; ok {
-		s.subgraphHits++
+		sc.scanner.subgraphHits++
 
-		return cached, true
+		return cached
 	}
 
-	if _, taintedKnown := sc.subgraphTaintedKnown[key]; taintedKnown {
-		// Already discovered as on-a-cycle; tell the caller to plain-
-		// DFS into its own visited+order.
-		s.subgraphHits++
+	s := sc.scanner
 
-		return nil, false
-	}
+	// Fresh exploration. Tarjan scratch is scanner-shared (gen scanning is
+	// single-goroutine) and reset per top-level miss; uncached descendants
+	// are reached via strongconnect recursion, not another closureOf call.
+	clear(s.tjIndex)
+	clear(s.tjLow)
+	clear(s.tjOnStack)
+	s.tjStack = s.tjStack[:0]
+	s.tjNext = 0
 
-	if _, busy := sc.subgraphInProgress[key]; busy {
-		// Back-edge into an ancestor's in-progress computation. The
-		// caller plain-dfs into its shared visited (already contains
-		// the ancestors); the cycle terminates without re-walking.
-		return nil, false
-	}
+	sc.strongconnect(absID)
 
-	s.subgraphMisses++
-	sc.subgraphInProgress[key] = struct{}{}
-
-	// Each subgraph computation needs its own isolated visited+order
-	// (isolation is what makes the cache correct). Pool the throwaway
-	// buffers to avoid per-call make(map)+make([]) allocs.
-	visited := s.visitedIDPool.Get().(*idSet)
-	visited.reset(s.interner.relIDBound())
-	orderP := s.orderIDPool.Get().(*[]uint32)
-
-	order := (*orderP)[:0]
-
-	clean := sc.walkSubgraphID(absID, sourceClass, visited, &order)
-
-	delete(sc.subgraphInProgress, key)
-
-	if !clean {
-		// A descendant of `absID` was on a cycle (back-edge to our
-		// own sentinel, or a descendant reported tainted). This key
-		// cannot be cached; future visits short-circuit via taintedKnown.
-		s.subgraphTainted++
-		sc.subgraphTaintedKnown[key] = struct{}{}
-
-		// Return scratch buffers to the pool before returning.
-		*orderP = order[:0]
-		s.visitedIDPool.Put(visited)
-		s.orderIDPool.Put(orderP)
-
-		return nil, false
-	}
-
-	// Trim any unused capacity — the slice will live in the cache for
-	// the rest of the run, so paying the one-time copy avoids holding
-	// over-allocated buffers across millions of cached subgraphs.
-	out := make([]uint32, len(order))
-	copy(out, order)
-
-	// Return scratch buffers to the pool.
-	*orderP = order[:0]
-	s.visitedIDPool.Put(visited)
-	s.orderIDPool.Put(orderP)
-
-	sc.subgraphCache[key] = out
-
-	return out, true
+	return sc.subgraphCache[key]
 }
 
-// walkSubgraphID is the cycle-safe core of canonical-subgraph
-// computation. Returns clean=true when every descendant produced a
-// cacheable subgraph; clean=false when at least one descendant
-// reported tainted. Tainted children plain-dfs INTO THE LOCAL
-// visited+order so the walk still enumerates reachable headers in the
-// canonical first-visit order; the propagated clean=false just
-// prevents caching. Pure-DAG paths cache normally.
-func (sc *scanCtx) walkSubgraphID(absID uint32, sourceClass uint32, visited *idSet, order *[]uint32) bool {
-	if visited.has(absID) {
-		return true
-	}
+// strongconnect is the recursive Tarjan core. It finalizes every SCC it
+// discovers into subgraphCache in reverse-topological order, so when an
+// SCC's closure is built each of its external successors is already
+// cached. A child already in subgraphCache is an external successor of a
+// previously-finalized SCC (or an earlier run) and is not re-explored.
+func (sc *scanCtx) strongconnect(v uint32) {
+	s := sc.scanner
 
-	visited.add(absID)
-	*order = append(*order, absID)
+	s.tjNext++
+	s.tjIndex[v] = s.tjNext
+	s.tjLow[v] = s.tjNext
+	s.tjStack = append(s.tjStack, v)
+	s.tjOnStack[v] = true
 
-	clean := true
+	sc.forEachResolvedChildID(v, func(w uint32) {
+		if _, cached := sc.subgraphCache[subgraphInnerKey{abs: w, sourceClass: sc.curSourceClass}]; cached {
+			s.subgraphHits++ // reuse of a previously-finalized node's closure
 
-	sc.forEachResolvedChildID(absID, func(childID uint32) {
-		if visited.has(childID) {
 			return
 		}
 
-		childSg, ok := sc.subgraph(childID, sourceClass)
-
-		if ok {
-			// Clean child subgraph — merge into our walk.
-			for _, id := range childSg {
-				if visited.has(id) {
-					continue
-				}
-
-				visited.add(id)
-				*order = append(*order, id)
+		if s.tjIndex[w] == 0 {
+			sc.strongconnect(w)
+			if s.tjLow[w] < s.tjLow[v] {
+				s.tjLow[v] = s.tjLow[w]
 			}
-
-			return
+		} else if s.tjOnStack[w] {
+			if s.tjIndex[w] < s.tjLow[v] {
+				s.tjLow[v] = s.tjIndex[w]
+			}
 		}
-
-		// Tainted child. Plain-dfs into our local visited+order
-		// so the walk enumerates the cycle's reachable nodes.
-		// `clean=false` propagates upward.
-		clean = false
-
-		sc.walkSubgraphTaintedID(childID, sourceClass, visited, order)
 	})
 
-	return clean
-}
-
-// walkSubgraphTaintedID is the in-walk plain-DFS used when a child
-// reported tainted. Mirrors plainDfsID but on the local
-// (subgraph-computation) visited+order. Each child still goes through
-// subgraph() so non-cycle descendants reuse the persistent cache.
-func (sc *scanCtx) walkSubgraphTaintedID(absID uint32, sourceClass uint32, visited *idSet, order *[]uint32) {
-	if visited.has(absID) {
-		return
+	if s.tjLow[v] != s.tjIndex[v] {
+		return // not an SCC root; members stay on the stack
 	}
 
-	visited.add(absID)
-	*order = append(*order, absID)
+	// v roots an SCC. Its members are the stack suffix back through v;
+	// every member's children are now either members (still on stack) or
+	// external nodes already present in subgraphCache.
+	sccStart := len(s.tjStack) - 1
+	for s.tjStack[sccStart] != v {
+		sccStart--
+	}
+	members := s.tjStack[sccStart:]
 
-	sc.forEachResolvedChildID(absID, func(childID uint32) {
-		if visited.has(childID) {
-			return
+	s.tjClosure.reset(s.interner.relIDBound())
+	buf := s.tjBuf[:0]
+
+	for _, u := range members {
+		if !s.tjClosure.has(u) {
+			s.tjClosure.add(u)
+			buf = append(buf, u)
 		}
+	}
 
-		childSg, ok := sc.subgraph(childID, sourceClass)
-
-		if ok {
-			for _, id := range childSg {
-				if visited.has(id) {
-					continue
-				}
-
-				visited.add(id)
-				*order = append(*order, id)
+	for _, u := range members {
+		sc.forEachResolvedChildID(u, func(w uint32) {
+			if s.tjOnStack[w] {
+				return // same SCC; already added as a member
 			}
 
-			return
-		}
+			for _, id := range sc.subgraphCache[subgraphInnerKey{abs: w, sourceClass: sc.curSourceClass}] {
+				if !s.tjClosure.has(id) {
+					s.tjClosure.add(id)
+					buf = append(buf, id)
+				}
+			}
+		})
+	}
 
-		sc.walkSubgraphTaintedID(childID, sourceClass, visited, order)
-	})
+	out := make([]uint32, len(buf))
+	copy(out, buf)
+	s.tjBuf = buf[:0]
+
+	s.subgraphMisses += uint64(len(members)) // nodes whose closure was computed
+	if len(members) > 1 {
+		s.subgraphTainted++ // count non-trivial SCCs (genuine include cycles)
+	}
+
+	for _, u := range members {
+		sc.subgraphCache[subgraphInnerKey{abs: u, sourceClass: sc.curSourceClass}] = out
+		s.tjOnStack[u] = false
+	}
+
+	s.tjStack = s.tjStack[:sccStart]
 }
 
 // resolve returns the paths the directive resolves to, in declaration
