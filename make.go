@@ -291,7 +291,7 @@ func cmdMake(args []string) int {
 	if mf.threads == 0 {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
-				g := GenDumpGraphWithResources(mf.srcRoot, target, hostP, targetP, defaultScanCtxMode, onWarn, resourceFetches, mf.testLevel > 0)
+				g := GenDumpGraphWithResources(mf.srcRoot, target, hostP, targetP, onWarn, resourceFetches, mf.testLevel > 0)
 				applyGraphConf(g, conf)
 				writeGraph("-", g)
 			}
@@ -356,7 +356,7 @@ func genStream(srcRoot string, targets []string, hostP, targetP *Platform, resou
 
 func genStreamOne(srcRoot, target string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn), testMode bool) []string {
 	emitter := NewStreamingEmitter(onNode)
-	runGenIntoWithResources(srcRoot, target, hostP, targetP, emitter, defaultScanCtxMode, onWarn, resources, testMode, true)
+	runGenIntoWithResources(srcRoot, target, hostP, targetP, emitter, onWarn, resources, testMode, true)
 
 	return emitter.Finish()
 }

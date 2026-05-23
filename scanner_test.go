@@ -610,10 +610,6 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 		t.Fatalf("second resolve = %v, want %v", got2, want)
 	}
 
-	if len(sc.resolveCache) != 2 {
-		t.Fatalf("resolveCache entries = %d, want 2 (one per includer)", len(sc.resolveCache))
-	}
-
 	if len(sc.searchTierCache) != 1 {
 		t.Fatalf("searchTierCache entries = %d, want 1 (shared by target)", len(sc.searchTierCache))
 	}
@@ -641,10 +637,6 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 
 	if got1 != nil || got2 != nil {
 		t.Fatalf("missing header resolved unexpectedly: first=%v second=%v", got1, got2)
-	}
-
-	if len(sc.resolveCache) != 2 {
-		t.Fatalf("resolveCache entries = %d, want 2", len(sc.resolveCache))
 	}
 
 	if len(sc.searchTierCache) != 1 {

@@ -121,8 +121,8 @@ func (si *scannerInterner) vfsByID(id uint32) VFS {
 }
 
 // IncludeScanner is the per-walker include-resolver state. It owns the
-// SysInclSet, the parser manager (SOURCE_ROOT FS access + raw scan),
-// the per-scanCtx resolve/subgraph caches, scratch-buffer sync.Pools,
+// SysInclSet, the parser manager (SOURCE_ROOT FS access + raw scan), the
+// run-global per-file closure/children caches, scratch-buffer sync.Pools,
 // and the sysincl per-half caches.
 //
 // The scanner is invoked exclusively from gen.go's serial walker — no
@@ -201,12 +201,6 @@ type IncludeScanner struct {
 	// rel keys are slightly cheaper than VFS-keyed.
 	seenPool sync.Pool // *map[string]struct{}
 
-	// walkClosureCache interns scanCtx instances created via the
-	// top-level WalkClosure entry (test-facing path) so repeat calls on
-	// the same ctxHash hit shared resolve / subgraph caches. Production
-	// callers intern through genCtx.getScanCtx instead.
-	walkClosureCache map[uint64]*scanCtx
-
 	// onWarn surfaces resolve-time diagnostics — primarily include
 	// directives that found no match in source tree, build tree, OR
 	// sysincl mappings. Caller-supplied; no-op in the default-quiet
@@ -224,8 +218,6 @@ type IncludeScanner struct {
 	searchTierHits         uint64
 	searchTierMisses       uint64
 	resolveSearchPathCalls uint64
-	resolveCacheHits       uint64
-	resolveCacheMisses     uint64
 	sysinclSourceHits      uint64
 	sysinclSourceMisses    uint64
 	sysinclIncluderHits    uint64
@@ -247,25 +239,17 @@ type IncludeScanner struct {
 	fallbackLocators []pathLocator
 }
 
-// resolveInnerKey is the per-scanCtx resolve cache key. ctxHash is NOT
-// part of the key — the scanCtx is bound to a single ctxHash, so every
-// entry in its resolveCache is implicitly that-ctxHash-only.
-type resolveInnerKey struct {
-	includer uint32
-	target   uint32
-	flags    uint8
-}
-
-// scanCtx is the per-ctxHash runtime context for include resolution. It
-// owns every cache whose key contains ctxHash. Two lifecycle policies
-// (see gen.go): "local" (fresh per genModule call) and "interned"
-// (genCtx-owned, shared across modules whose ScanContext shape matches).
+// scanCtx is a transient per-walk resolution context: the search config
+// (ADDINCL/peer/base) plus a within-walk searchTier scratch cache. It is
+// created fresh per closure walk (not interned) — the reusable per-file
+// caches (childrenCache, subgraphCache) live on the scanner and are shared
+// across every walk, so a file's includes are resolved once for the whole
+// run regardless of which module's walk first reaches it. searchTierCache
+// memoises the ADDINCL-tier resolution by target within this walk, since
+// resolving it touches the (often large) peer-ADDINCL list.
 type scanCtx struct {
-	scanner *IncludeScanner
-	cfg     ScanContext
-	ctxHash uint64
-
-	resolveCache    map[resolveInnerKey][]VFS
+	scanner         *IncludeScanner
+	cfg             ScanContext
 	searchTierCache map[uint32]searchTierResult
 }
 
@@ -385,8 +369,6 @@ type scannerPerfStats struct {
 	searchTierHits         uint64
 	searchTierMisses       uint64
 	resolveSearchPathCalls uint64
-	resolveCacheHits       uint64
-	resolveCacheMisses     uint64
 	sysinclSourceHits      uint64
 	sysinclSourceMisses    uint64
 	sysinclIncluderHits    uint64
@@ -417,7 +399,6 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		sourceClassBuckets:   make(map[uint64][]uint32, 1024),
 		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 131072),
 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
-		walkClosureCache:     make(map[uint64]*scanCtx, 8),
 		onWarn:               onWarn,
 		subgraphCache:        make(map[uint32][]uint32, 65536),
 		childrenCache:        make(map[uint32][]uint32, 65536),
@@ -470,19 +451,14 @@ type ScanContext struct {
 	BaseSearchPaths []VFS  // bundled fallback include set (repo-root/linux-headers)
 }
 
-// NewScanCtx allocates a fresh per-context resolution object bound to
-// this scanner and the given ScanContext. The returned scanCtx owns its
-// own resolveCache and subgraphCache; lifetime is the caller's (see
-// gen.go's local vs interned dispatch). ctxHash is computed once at
-// construction.
+// NewScanCtx allocates a fresh transient resolution context for one closure
+// walk, bound to this scanner and the given search config. The reusable
+// per-file caches live on the scanner, not here, so this is cheap to create
+// per walk; only searchTierCache is walk-local scratch.
 func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
-	// Modest pre-sizes: many distinct ctxHashes exist, so over-sizing
-	// every context wastes memory; the few large contexts grow.
 	return &scanCtx{
 		scanner:         s,
 		cfg:             cfg,
-		ctxHash:         hashScanContext(&cfg),
-		resolveCache:    make(map[resolveInnerKey][]VFS, 1024),
 		searchTierCache: make(map[uint32]searchTierResult, 256),
 	}
 }
@@ -491,23 +467,15 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 // for the given source file (excluding the source itself), in DFS-
 // discovery order. Suitable for `node.Inputs[1:]`. Test-facing entry —
 // production callers in gen.go hold a scanCtx and call WalkSource so
-// multiple sources within a module share caches.
+// multiple sources within a module share the walk-local searchTier cache.
+//
+// A fresh scanCtx per call is fine: the file-level caches are scanner-global
+// and persist across calls, so repeat walks still reuse prior resolution.
 //
 // visited/order are pulled from sync.Pools; the returned slice is freshly
 // allocated, so the caller may keep it past Pool.Put.
 func (s *IncludeScanner) WalkClosure(cfg ScanContext) []VFS {
-	// Intern per (scanner, ctxHash) so repeat calls on the same context
-	// hit the previous call's resolve/subgraph caches.
-	ctxHash := hashScanContext(&cfg)
-
-	sc, ok := s.walkClosureCache[ctxHash]
-
-	if !ok {
-		sc = s.NewScanCtx(cfg)
-		s.walkClosureCache[ctxHash] = sc
-	}
-
-	return sc.WalkSource(cfg.SourceRel)
+	return s.NewScanCtx(cfg).WalkSource(cfg.SourceRel)
 }
 
 // WalkSource walks the include closure starting from `sourceRel` using
@@ -706,51 +674,6 @@ func sameSourceClassView(a, b PerSourceView) bool {
 	return true
 }
 
-// hashScanContext is an FNV-1a hash over OwnAddIncl + PeerAddInclSet +
-// BaseSearchPaths. SourceRel is intentionally NOT in the hash because
-// search-path resolution is source-independent; sysincl resolution IS
-// source-dependent and is handled outside resolveCache via the per-half
-// sysincl caches.
-func hashScanContext(ctx *ScanContext) uint64 {
-	const (
-		offset uint64 = 1469598103934665603
-		prime  uint64 = 1099511628211
-	)
-
-	h := offset
-
-	mix := func(s string) {
-		for i := 0; i < len(s); i++ {
-			h ^= uint64(s[i])
-			h *= prime
-		}
-
-		h ^= 0xff
-		h *= prime
-	}
-
-	mixVFS := func(v VFS) {
-		h ^= uint64(v.Root)
-		h *= prime
-		mix(v.Rel)
-	}
-
-	mixSlice := func(ss []VFS) {
-		for _, s := range ss {
-			mixVFS(s)
-		}
-
-		h ^= 0xfe
-		h *= prime
-	}
-
-	mixSlice(ctx.OwnAddIncl)
-	mixSlice(ctx.PeerAddInclSet)
-	mixSlice(ctx.BaseSearchPaths)
-
-	return h
-}
-
 // dfsID merges the full transitive closure of `absID` into the caller's
 // visited+order, skipping pre-visited entries. closureOf returns the
 // node's complete reachable set (cycle-safe, cached), so unlike a plain
@@ -865,8 +788,6 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 		searchTierHits:         s.searchTierHits,
 		searchTierMisses:       s.searchTierMisses,
 		resolveSearchPathCalls: s.resolveSearchPathCalls,
-		resolveCacheHits:       s.resolveCacheHits,
-		resolveCacheMisses:     s.resolveCacheMisses,
 		sysinclSourceHits:      s.sysinclSourceHits,
 		sysinclSourceMisses:    s.sysinclSourceMisses,
 		sysinclIncluderHits:    s.sysinclIncluderHits,
@@ -993,7 +914,9 @@ func (sc *scanCtx) strongconnect(v uint32) {
 }
 
 // resolve returns the paths the directive resolves to, in declaration
-// order, deduplicated. Memoised via resolveCache.
+// order, deduplicated. Not separately memoised — the scanner-global
+// childrenCache caches the resolved children of each file, so resolve runs
+// at most once per (file, directive).
 //
 // Two-tier semantics from upstream ymake:
 //   - Search-path candidates (samedir, own AddIncl, peer-GLOBAL, base)
@@ -1041,10 +964,6 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 		return nil
 	}
 
-	// Search-path resolution is source-independent and uses resolveCache
-	// (ctxHash + includer + target + kind) for cross-source reuse.
-	// Sysincl is source-dependent and uses per-half caches: source-keyed
-	// by (sourceRel, target), includer-keyed by (includer, target).
 	searchOut := sc.resolveSearchPath(includerAbs, d)
 
 	// Sysincl: per-record source-vs-includer keying. Each SysIncl record
@@ -1410,23 +1329,13 @@ func resolveCythonPy2Override(includerAbs VFS, d includeDirective) (string, bool
 }
 
 // resolveSearchPath returns the search-path-only resolved set for the
-// given directive. Cached on the scanCtx by (includer, target, kind,
-// next) — ctxHash is implicit in the scanCtx receiver.
+// given directive. Not separately cached: the scanner-global childrenCache
+// resolves each file's includes once, so this runs at most once per
+// (file, directive); the per-target ADDINCL tier it consults is memoised in
+// the walk-local searchTierCache.
 func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS {
 	s := sc.scanner
 	s.resolveSearchPathCalls++
-	key := resolveInnerKey{
-		includer: s.interner.internVFS(includerAbs),
-		target:   s.interner.internString(d.target),
-		flags:    packResolveFlags(d.kind, d.next),
-	}
-
-	if cached, ok := sc.resolveCache[key]; ok {
-		s.resolveCacheHits++
-		return cached
-	}
-
-	s.resolveCacheMisses++
 
 	var out []VFS
 
@@ -1535,7 +1444,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	}
 
 	if !searchPathFound {
-		tier := sc.resolveContextSearchTier(key.target, d.target)
+		tier := sc.resolveContextSearchTier(s.interner.internString(d.target), d.target)
 		if tier.found {
 			out = append(out, tier.paths...)
 			searchPathFound = true
@@ -1587,8 +1496,6 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	clear(seen)
 	s.seenPool.Put(seenP)
 
-	sc.resolveCache[key] = out
-
 	return out
 }
 
@@ -1621,16 +1528,6 @@ func cythonPy2SiblingOverride(includerAbs VFS, d includeDirective) (string, bool
 	}
 
 	return "", false
-}
-
-func packResolveFlags(kind includeKind, next bool) uint8 {
-	flags := uint8(kind)
-
-	if next {
-		flags |= 1 << 7
-	}
-
-	return flags
 }
 
 // isSourceLike returns true for compile-unit extensions (.cpp, .cc,
