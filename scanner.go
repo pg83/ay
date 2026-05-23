@@ -98,6 +98,12 @@ func (si *scannerInterner) internVFS(v VFS) uint32 {
 	panic("scannerInterner.internVFS: zero-valued VFS")
 }
 
+// relIDBound returns an exclusive upper bound on relIDs interned so far,
+// suitable for sizing a relID-indexed idSet.
+func (si *scannerInterner) relIDBound() uint32 {
+	return si.nextStr + 1
+}
+
 // vfsByID reconstructs a VFS previously interned through internVFS.
 // The caller must pass an ID produced by internVFS, not a raw string ID.
 func (si *scannerInterner) vfsByID(id uint32) VFS {
@@ -243,9 +249,94 @@ type scanCtx struct {
 	subgraphCache        map[subgraphInnerKey][]uint32
 	subgraphTaintedKnown map[subgraphInnerKey]struct{}
 	subgraphInProgress   map[subgraphInnerKey]struct{}
+	// childrenCache memoises forEachResolvedChildID's resolved-child ID
+	// list per (absID, sourceClass). The resolved children of a node are a
+	// pure function of that key within one scanCtx, so tainted (uncacheable
+	// subgraph) re-walks reuse the resolution instead of re-running resolve
+	// for every parsed include on every visit. curSourceClass mirrors the
+	// active walk's sourceClassID(cfg.SourceRel) (set in WalkClosure).
+	childrenCache  map[subgraphInnerKey][]uint32
+	curSourceClass uint32
 }
 
-type idSet map[uint32]struct{}
+// idSet is a membership set over interned scanner IDs, used as the DFS
+// `visited` set. Interned IDs are NOT dense (build-VFS IDs carry
+// scannerInternerBuildBit), but the underlying relID space is, so the set
+// is backed by two generation-stamped slices indexed by relID — one for
+// source roots, one for build roots. Membership is O(1) array indexing
+// with no hashing, and reset is an O(1) epoch bump instead of an O(n) map
+// clear. Reused across walks via the scanner's idSet pool; large graphs
+// re-walk tainted subgraphs millions of times, so the per-access constant
+// dominates. Pass by pointer: add() may reallocate the backing slices.
+type idSet struct {
+	srcGen []uint32
+	bldGen []uint32
+	epoch  uint32
+}
+
+// reset clears the set in O(1) by bumping the epoch, ensuring backing
+// capacity for relIDs in [0, size). On epoch wraparound (every 2^32
+// resets) the slices are zeroed so stale stamps cannot alias the new
+// epoch.
+func (s *idSet) reset(size uint32) {
+	if uint32(len(s.srcGen)) < size {
+		s.srcGen = make([]uint32, size)
+		s.bldGen = make([]uint32, size)
+		s.epoch = 1
+
+		return
+	}
+
+	s.epoch++
+	if s.epoch == 0 {
+		for i := range s.srcGen {
+			s.srcGen[i] = 0
+			s.bldGen[i] = 0
+		}
+
+		s.epoch = 1
+	}
+}
+
+func (s *idSet) has(id uint32) bool {
+	if id&scannerInternerBuildBit != 0 {
+		rel := id &^ scannerInternerBuildBit
+
+		return rel < uint32(len(s.bldGen)) && s.bldGen[rel] == s.epoch
+	}
+
+	return id < uint32(len(s.srcGen)) && s.srcGen[id] == s.epoch
+}
+
+// add records id as a member, growing the backing slices if a freshly
+// interned relID outran the size pinned at reset.
+func (s *idSet) add(id uint32) {
+	rel := id
+	build := id&scannerInternerBuildBit != 0
+	if build {
+		rel = id &^ scannerInternerBuildBit
+	}
+
+	if rel >= uint32(len(s.srcGen)) {
+		grown := uint32(len(s.srcGen)) * 2
+		if grown <= rel {
+			grown = rel + 1
+		}
+
+		src := make([]uint32, grown)
+		bld := make([]uint32, grown)
+		copy(src, s.srcGen)
+		copy(bld, s.bldGen)
+		s.srcGen = src
+		s.bldGen = bld
+	}
+
+	if build {
+		s.bldGen[rel] = s.epoch
+	} else {
+		s.srcGen[rel] = s.epoch
+	}
+}
 
 type searchTierResult struct {
 	paths []VFS
@@ -331,9 +422,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 	// returned as pointers to keep `Pool.Put` from boxing the
 	// value (a plain map or slice would box-allocate on Put).
 	s.visitedIDPool.New = func() any {
-		m := make(idSet, 64)
-
-		return &m
+		return &idSet{}
 	}
 
 	s.orderIDPool.New = func() any {
@@ -383,6 +472,7 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 		subgraphCache:        make(map[subgraphInnerKey][]uint32, 512),
 		subgraphTaintedKnown: make(map[subgraphInnerKey]struct{}, 64),
 		subgraphInProgress:   make(map[subgraphInnerKey]struct{}, 16),
+		childrenCache:        make(map[subgraphInnerKey][]uint32, 1024),
 	}
 }
 
@@ -437,10 +527,15 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 		sc.cfg.SourceRel = vfsPath.Rel
 	}
 
-	visitedP := s.visitedIDPool.Get().(*idSet)
+	// childrenCache and the subgraph caches key on the active source's
+	// equivalence class; cache it once per walk so forEachResolvedChildID
+	// keys without re-deriving it on every node visit.
+	sc.curSourceClass = s.sourceClassID(sc.cfg.SourceRel)
+
+	visited := s.visitedIDPool.Get().(*idSet)
+	visited.reset(s.interner.relIDBound())
 	orderP := s.orderIDPool.Get().(*[]uint32)
 
-	visited := *visitedP
 	order := (*orderP)[:0]
 	rootID := s.interner.internVFS(vfsPath)
 
@@ -457,13 +552,11 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 		out = append(out, s.interner.vfsByID(absID))
 	}
 
-	// Reset and return scratch buffers to the pool. `clear(visited)`
-	// drops every entry while retaining the underlying bucket
-	// allocation for reuse.
-	clear(visited)
+	// Return scratch buffers to the pool. The idSet is cleared lazily by
+	// the next reset()'s epoch bump, not here.
 	*orderP = order[:0]
 
-	s.visitedIDPool.Put(visitedP)
+	s.visitedIDPool.Put(visited)
 	s.orderIDPool.Put(orderP)
 
 	if scannerStatsEnabled {
@@ -667,10 +760,10 @@ func hashScanContext(ctx *ScanContext) uint64 {
 // subgraph is computed and memoised. Skipping pre-visited entries
 // during merge preserves the canonical first-visit order an uncached
 // DFS would produce from the same partially-populated visited state.
-func (sc *scanCtx) dfsID(absID uint32, visited idSet, order *[]uint32) {
+func (sc *scanCtx) dfsID(absID uint32, visited *idSet, order *[]uint32) {
 	sc.scanner.dfsCalls++
 
-	if _, ok := visited[absID]; ok {
+	if visited.has(absID) {
 		return
 	}
 
@@ -686,18 +779,18 @@ func (sc *scanCtx) dfsID(absID uint32, visited idSet, order *[]uint32) {
 
 		return
 	}
-	sourceClass := sc.scanner.sourceClassID(sc.cfg.SourceRel)
+	sourceClass := sc.curSourceClass
 	sg, ok := sc.subgraph(absID, sourceClass)
 
 	if ok {
 		// Cached or freshly-computed clean canonical subgraph. Merge
 		// into caller's visited+order, skipping pre-visited entries.
 		for _, id := range sg {
-			if _, ok := visited[id]; ok {
+			if visited.has(id) {
 				continue
 			}
 
-			visited[id] = struct{}{}
+			visited.add(id)
 			*order = append(*order, id)
 		}
 
@@ -714,14 +807,14 @@ func (sc *scanCtx) dfsID(absID uint32, visited idSet, order *[]uint32) {
 // visited+order. Fall-back path for headers known to be on a cycle
 // (`subgraphTaintedKnown`). Per-child dispatch goes through `dfsID()`
 // so non-cycle descendants still benefit from the `subgraphCache`.
-func (sc *scanCtx) plainDfsID(absID uint32, visited idSet, order *[]uint32) {
+func (sc *scanCtx) plainDfsID(absID uint32, visited *idSet, order *[]uint32) {
 	sc.scanner.plainDfsCalls++
 
-	if _, ok := visited[absID]; ok {
+	if visited.has(absID) {
 		return
 	}
 
-	visited[absID] = struct{}{}
+	visited.add(absID)
 	*order = append(*order, absID)
 
 	sc.forEachResolvedChildID(absID, func(childID uint32) {
@@ -745,11 +838,32 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	}
 }
 
+// forEachResolvedChildID invokes `fn` once per resolved-child ID of
+// `absID`. The resolved-child ID list is memoised per (absID,
+// curSourceClass): the resolution is a pure function of that key within
+// one scanCtx, so tainted-subgraph re-walks (which dominate large graphs)
+// reuse it instead of re-running resolve() for every parsed include on
+// every visit.
 func (sc *scanCtx) forEachResolvedChildID(absID uint32, fn func(uint32)) {
+	key := subgraphInnerKey{abs: absID, sourceClass: sc.curSourceClass}
+	if cached, ok := sc.childrenCache[key]; ok {
+		for _, id := range cached {
+			fn(id)
+		}
+
+		return
+	}
+
 	vfsPath := sc.scanner.interner.vfsByID(absID)
+	var children []uint32
 	sc.forEachResolvedChild(vfsPath, func(rabs VFS) {
-		fn(sc.scanner.interner.internVFS(rabs))
+		children = append(children, sc.scanner.interner.internVFS(rabs))
 	})
+	sc.childrenCache[key] = children
+
+	for _, id := range children {
+		fn(id)
+	}
 }
 
 // SubgraphCacheStats reports per-includer subgraph cache traffic since
@@ -820,10 +934,10 @@ func (sc *scanCtx) subgraph(absID uint32, sourceClass uint32) ([]uint32, bool) {
 	// Each subgraph computation needs its own isolated visited+order
 	// (isolation is what makes the cache correct). Pool the throwaway
 	// buffers to avoid per-call make(map)+make([]) allocs.
-	visitedP := s.visitedIDPool.Get().(*idSet)
+	visited := s.visitedIDPool.Get().(*idSet)
+	visited.reset(s.interner.relIDBound())
 	orderP := s.orderIDPool.Get().(*[]uint32)
 
-	visited := *visitedP
 	order := (*orderP)[:0]
 
 	clean := sc.walkSubgraphID(absID, sourceClass, visited, &order)
@@ -838,9 +952,8 @@ func (sc *scanCtx) subgraph(absID uint32, sourceClass uint32) ([]uint32, bool) {
 		sc.subgraphTaintedKnown[key] = struct{}{}
 
 		// Return scratch buffers to the pool before returning.
-		clear(visited)
 		*orderP = order[:0]
-		s.visitedIDPool.Put(visitedP)
+		s.visitedIDPool.Put(visited)
 		s.orderIDPool.Put(orderP)
 
 		return nil, false
@@ -853,9 +966,8 @@ func (sc *scanCtx) subgraph(absID uint32, sourceClass uint32) ([]uint32, bool) {
 	copy(out, order)
 
 	// Return scratch buffers to the pool.
-	clear(visited)
 	*orderP = order[:0]
-	s.visitedIDPool.Put(visitedP)
+	s.visitedIDPool.Put(visited)
 	s.orderIDPool.Put(orderP)
 
 	sc.subgraphCache[key] = out
@@ -870,18 +982,18 @@ func (sc *scanCtx) subgraph(absID uint32, sourceClass uint32) ([]uint32, bool) {
 // visited+order so the walk still enumerates reachable headers in the
 // canonical first-visit order; the propagated clean=false just
 // prevents caching. Pure-DAG paths cache normally.
-func (sc *scanCtx) walkSubgraphID(absID uint32, sourceClass uint32, visited idSet, order *[]uint32) bool {
-	if _, ok := visited[absID]; ok {
+func (sc *scanCtx) walkSubgraphID(absID uint32, sourceClass uint32, visited *idSet, order *[]uint32) bool {
+	if visited.has(absID) {
 		return true
 	}
 
-	visited[absID] = struct{}{}
+	visited.add(absID)
 	*order = append(*order, absID)
 
 	clean := true
 
 	sc.forEachResolvedChildID(absID, func(childID uint32) {
-		if _, ok := visited[childID]; ok {
+		if visited.has(childID) {
 			return
 		}
 
@@ -890,11 +1002,11 @@ func (sc *scanCtx) walkSubgraphID(absID uint32, sourceClass uint32, visited idSe
 		if ok {
 			// Clean child subgraph — merge into our walk.
 			for _, id := range childSg {
-				if _, ok := visited[id]; ok {
+				if visited.has(id) {
 					continue
 				}
 
-				visited[id] = struct{}{}
+				visited.add(id)
 				*order = append(*order, id)
 			}
 
@@ -916,16 +1028,16 @@ func (sc *scanCtx) walkSubgraphID(absID uint32, sourceClass uint32, visited idSe
 // reported tainted. Mirrors plainDfsID but on the local
 // (subgraph-computation) visited+order. Each child still goes through
 // subgraph() so non-cycle descendants reuse the persistent cache.
-func (sc *scanCtx) walkSubgraphTaintedID(absID uint32, sourceClass uint32, visited idSet, order *[]uint32) {
-	if _, ok := visited[absID]; ok {
+func (sc *scanCtx) walkSubgraphTaintedID(absID uint32, sourceClass uint32, visited *idSet, order *[]uint32) {
+	if visited.has(absID) {
 		return
 	}
 
-	visited[absID] = struct{}{}
+	visited.add(absID)
 	*order = append(*order, absID)
 
 	sc.forEachResolvedChildID(absID, func(childID uint32) {
-		if _, ok := visited[childID]; ok {
+		if visited.has(childID) {
 			return
 		}
 
@@ -933,11 +1045,11 @@ func (sc *scanCtx) walkSubgraphTaintedID(absID uint32, sourceClass uint32, visit
 
 		if ok {
 			for _, id := range childSg {
-				if _, ok := visited[id]; ok {
+				if visited.has(id) {
 					continue
 				}
 
-				visited[id] = struct{}{}
+				visited.add(id)
 				*order = append(*order, id)
 			}
 
