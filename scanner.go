@@ -1433,10 +1433,20 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 
 	// First-match-wins across the search path. Order:
 	//   1. quoted-form: same directory as the includer
-	//   2. module's own ADDINCL
-	//   3. peer-propagated GLOBAL ADDINCL
-	//   4. baseline fallback (repo-root/linux-headers)
+	//   2. BUILD-root BUILD-only check (generated header in codegen registry)
+	//   3. module's own ADDINCL
+	//   4. peer-propagated GLOBAL ADDINCL
+	//   5. baseline fallback (repo-root/linux-headers)
+	//   6. BUILD-root Source fallback (after all search paths fail)
 	searchPathFound := false
+
+	// buildRootFallbackRel is set when the includer is a BUILD-root file
+	// and the target contains a path separator, but the BUILD-root codegen
+	// registry didn't claim it. We defer the Source(rel) fallback until
+	// after the ADDINCL tier so that headers like llvm/IR/Value.h resolve
+	// to $(S)/contrib/libs/llvm16/include/llvm/IR/Value.h (via the GLOBAL
+	// ADDINCL for that module) rather than the spurious $(S)/llvm/IR/Value.h.
+	var buildRootFallbackRel string
 
 	if candidate, ok := cythonPy2SiblingOverride(includerAbs, d); ok && addPath(candidate) {
 		searchPathFound = true
@@ -1448,11 +1458,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		if addBuildPath(rel) {
 			searchPathFound = true
 		} else {
-			if _, dup := seen[rel]; !dup {
-				seen[rel] = struct{}{}
-				out = append(out, Source(rel))
-			}
-			searchPathFound = true
+			buildRootFallbackRel = rel
 		}
 	}
 
@@ -1514,6 +1520,18 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 
 			break
 		}
+	}
+
+	// BUILD-root Source fallback: after all on-disk search paths (ADDINCL,
+	// VFS locators) failed, emit Source(rel) unconditionally. The upstream
+	// scanner does the same for BUILD-root generated-header includes that
+	// cannot be verified on disk at graph-gen time.
+	if !searchPathFound && buildRootFallbackRel != "" {
+		if _, dup := seen[buildRootFallbackRel]; !dup {
+			seen[buildRootFallbackRel] = struct{}{}
+			out = append(out, Source(buildRootFallbackRel))
+		}
+		searchPathFound = true
 	}
 
 	// `clear()` drops every key without releasing the bucket allocation
