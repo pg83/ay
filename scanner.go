@@ -277,13 +277,22 @@ type idSet struct {
 }
 
 // reset clears the set in O(1) by bumping the epoch, ensuring backing
-// capacity for relIDs in [0, size). On epoch wraparound (every 2^32
-// resets) the slices are zeroed so stale stamps cannot alias the new
-// epoch.
+// capacity for relIDs in [0, size). When the backing slices are too small
+// it grows them GEOMETRICALLY, not to the exact `size`: relIDBound creeps
+// up on nearly every walk as new files are interned, so exact-size
+// reallocation would re-grow the (hundreds-of-thousands-element) slices on
+// almost every reset — O(walks) full reallocations. Doubling makes it
+// O(log) per pooled set. On epoch wraparound (every 2^32 resets) the slices
+// are zeroed so stale stamps cannot alias the new epoch.
 func (s *idSet) reset(size uint32) {
 	if uint32(len(s.srcGen)) < size {
-		s.srcGen = make([]uint32, size)
-		s.bldGen = make([]uint32, size)
+		grown := uint32(len(s.srcGen)) * 2
+		if grown < size {
+			grown = size
+		}
+
+		s.srcGen = make([]uint32, grown)
+		s.bldGen = make([]uint32, grown)
 		s.epoch = 1
 
 		return
