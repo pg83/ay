@@ -240,13 +240,15 @@ type IncludeScanner struct {
 }
 
 // scanCtx is a transient per-walk resolution context: the search config
-// (ADDINCL/peer/base) plus a within-walk searchTier scratch cache. It is
-// created fresh per closure walk (not interned) — the reusable per-file
-// caches (childrenCache, subgraphCache) live on the scanner and are shared
-// across every walk, so a file's includes are resolved once for the whole
-// run regardless of which module's walk first reaches it. searchTierCache
-// memoises the ADDINCL-tier resolution by target within this walk, since
-// resolving it touches the (often large) peer-ADDINCL list.
+// (ADDINCL/peer/base) for the module whose walk this is, plus a searchTier
+// cache. The file-level caches (childrenCache, subgraphCache) are scanner-
+// global, so a file's includes are resolved once for the whole run. The
+// searchTier cache is PER MODULE, not global: the ADDINCL/peer/base
+// resolution of a target depends on the module's config (e.g. errno.h hits
+// libcxx's include/ under one module's ADDINCL but resolves via sysincl→musl
+// under another), so it cannot be shared across configs. gen.getScanCtx
+// points searchTierCache at one map per genModule frame, shared across that
+// module's source walks; the standalone NewScanCtx path gets a fresh one.
 type scanCtx struct {
 	scanner         *IncludeScanner
 	cfg             ScanContext
@@ -452,30 +454,30 @@ type ScanContext struct {
 }
 
 // NewScanCtx allocates a fresh transient resolution context for one closure
-// walk, bound to this scanner and the given search config. The reusable
-// per-file caches live on the scanner, not here, so this is cheap to create
-// per walk; only searchTierCache is walk-local scratch.
-func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
+// walk. searchTier is the caller-owned ADDINCL-tier cache: gen passes one
+// map per genModule frame so a module's source walks share it (and it is
+// not reused across modules of differing config); standalone callers pass a
+// fresh map.
+func (s *IncludeScanner) NewScanCtx(cfg ScanContext, searchTier map[uint32]searchTierResult) *scanCtx {
 	return &scanCtx{
 		scanner:         s,
 		cfg:             cfg,
-		searchTierCache: make(map[uint32]searchTierResult, 256),
+		searchTierCache: searchTier,
 	}
 }
 
 // WalkClosure returns the SOURCE_ROOT-prefixed transitive-header set
 // for the given source file (excluding the source itself), in DFS-
 // discovery order. Suitable for `node.Inputs[1:]`. Test-facing entry —
-// production callers in gen.go hold a scanCtx and call WalkSource so
-// multiple sources within a module share the walk-local searchTier cache.
+// production callers in gen.go hold a scanCtx and call WalkSource.
 //
-// A fresh scanCtx per call is fine: the file-level caches are scanner-global
-// and persist across calls, so repeat walks still reuse prior resolution.
+// A fresh scanCtx per call is fine: every cache is scanner-global and
+// persists across calls, so repeat walks reuse prior resolution.
 //
 // visited/order are pulled from sync.Pools; the returned slice is freshly
 // allocated, so the caller may keep it past Pool.Put.
 func (s *IncludeScanner) WalkClosure(cfg ScanContext) []VFS {
-	return s.NewScanCtx(cfg).WalkSource(cfg.SourceRel)
+	return s.NewScanCtx(cfg, make(map[uint32]searchTierResult, 256)).WalkSource(cfg.SourceRel)
 }
 
 // WalkSource walks the include closure starting from `sourceRel` using
@@ -1202,16 +1204,17 @@ func (s *IncludeScanner) absifyRels(rels []string) []VFS {
 	return out
 }
 
-// resolveContextSearchTier resolves the source-independent search tiers
-// for one target within a bound scanCtx:
+// resolveContextSearchTier resolves the search tiers for one target under
+// the current walk's module config:
 //  1. module's own ADDINCL
 //  2. peer-propagated GLOBAL ADDINCL
 //  3. baseline fallback (repo-root/linux-headers)
 //
-// The result is keyed only by target because the receiver scanCtx
-// already binds the relevant OwnAddIncl/PeerAddInclSet/BaseSearchPaths.
-// Same-directory quoted lookup and BUILD-root direct handling stay in
-// resolveSearchPath because they depend on the includer.
+// Memoised in searchTierCache keyed by target alone — correct because that
+// cache is PER MODULE (one ADDINCL config), shared across the module's
+// source walks via gen.getScanCtx. Same-directory quoted lookup and
+// BUILD-root direct handling stay in resolveSearchPath (they depend on the
+// includer).
 func (sc *scanCtx) resolveContextSearchTier(targetID uint32, target string) searchTierResult {
 	s := sc.scanner
 
