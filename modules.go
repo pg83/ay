@@ -1967,7 +1967,30 @@ func expandConfigString(s string, env Environment) string {
 	s = strings.ReplaceAll(s, "${ARCADIA_BUILD_ROOT}", "$(B)")
 	s = strings.ReplaceAll(s, "${ARCADIA_ROOT}", "$(S)")
 	s = strings.ReplaceAll(s, "${MODDIR}", env.String("MODDIR"))
-
+	// Expand remaining ${varname} references from user-defined SET variables.
+	// Stop at the first unknown variable to avoid infinite loops.
+	for {
+		start := strings.Index(s, "${")
+		if start < 0 {
+			break
+		}
+		end := strings.IndexByte(s[start+2:], '}')
+		if end < 0 {
+			break
+		}
+		end += start + 2
+		name := s[start+2 : end]
+		if !env.HasBinding(name) {
+			break
+		}
+		s = s[:start] + env.String(name) + s[end+1:]
+	}
+	// Re-apply in case expanded SET values contained ${ARCADIA_ROOT} or
+	// ${ARCADIA_BUILD_ROOT} (those are not bound in env; the SET processor
+	// calls expandScalarVarRef which uses env — so stored values may still
+	// hold the literal ${ARCADIA_ROOT} token).
+	s = strings.ReplaceAll(s, "${ARCADIA_BUILD_ROOT}", "$(B)")
+	s = strings.ReplaceAll(s, "${ARCADIA_ROOT}", "$(S)")
 	return s
 }
 

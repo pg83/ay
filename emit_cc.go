@@ -499,13 +499,13 @@ func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
 // axes — own non-GLOBAL, own GLOBAL, peer-propagated GLOBAL — applying
 // to both C and C++ sources of the consumer.
 //
-// Order: [own non-GLOBAL, peer-GLOBAL, own GLOBAL]. No dedup — the
-// reference preserves duplicates (e.g. openssl's `-DOPENSSL_BUILD=1`
-// from top-level CFLAGS and crypto/ya.make.inc).
+// Order: [ya.conf platform, own non-GLOBAL, peer-GLOBAL, own GLOBAL].
+// No dedup — the reference preserves duplicates (e.g. openssl's
+// `-DOPENSSL_BUILD=1` from top-level CFLAGS and crypto/ya.make.inc).
 func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []string {
-	out := make([]string, 0, len(in.CFlags)+len(p.CFlags)+len(in.PeerCFlagsGlobal)+len(in.OwnCFlagsGlobal))
-	out = append(out, in.CFlags...)
+	out := make([]string, 0, len(p.CFlags)+len(in.CFlags)+len(in.PeerCFlagsGlobal)+len(in.OwnCFlagsGlobal))
 	out = append(out, p.CFlags...)
+	out = append(out, in.CFlags...)
 	out = append(out, in.PeerCFlagsGlobal...)
 	out = append(out, in.OwnCFlagsGlobal...)
 
