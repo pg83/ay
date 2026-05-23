@@ -168,13 +168,6 @@ type moduleData struct {
 	// for $CFG_VARS expansion (SET overrides DEFAULT). Captures vars set in
 	// taken IF branches and INCLUDEd .inc files.
 	setVars map[string]string
-	// searchTier is the per-module include-scanner ADDINCL/peer/base tier
-	// cache (target id → resolution), threaded into every ModuleCCInputs
-	// this module builds so its source walks share it. Per module because
-	// the tier resolution is config-dependent (a target hits libcxx's
-	// include/ under this module's ADDINCL but resolves via sysincl→musl
-	// elsewhere), so it must not be shared across modules.
-	searchTier map[uint32]searchTierResult
 }
 
 // resourceEntry is one packer input as produced by upstream
@@ -414,7 +407,6 @@ func collectModule(fs *FS, modulePath string, kind ModuleKind, stmts []Stmt, env
 		bisonGenExt:          ".cpp",
 		firstResourceEvent:   -1,
 		firstGlobalSrcsEvent: -1,
-		searchTier:           make(map[uint32]searchTierResult, 256),
 	}
 
 	collectStmts(modulePath, kind, stmts, env, d)

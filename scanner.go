@@ -181,6 +181,16 @@ type IncludeScanner struct {
 	//     read twice per node (edge classification + SCC-finalize union).
 	subgraphCache map[uint32][]uint32
 	childrenCache map[uint32][]uint32
+	// searchTierByConfig memoises the ADDINCL/peer/base search-tier
+	// resolution: config hash → (target → resolution). One inner map per
+	// distinct include config, shared by every walk with that config (so
+	// same-config modules reuse it); keyed by config rather than a flat
+	// (config,target) because the tier resolution is config-dependent — a
+	// search-path hit under one config's ADDINCL (e.g. libcxx's
+	// include/errno.h) must not be reused by a config without that dir
+	// (which resolves errno.h via sysincl→musl). NewScanCtx fetches the
+	// inner map by config hash; the hot lookup is then target-keyed.
+	searchTierByConfig map[uint64]map[uint32]searchTierResult
 
 	// Tarjan SCC scratch, shared across closure explorations (gen scanning
 	// is single-goroutine). closureOf clears index/low/onStack and resets
@@ -240,15 +250,11 @@ type IncludeScanner struct {
 }
 
 // scanCtx is a transient per-walk resolution context: the search config
-// (ADDINCL/peer/base) for the module whose walk this is, plus a searchTier
-// cache. The file-level caches (childrenCache, subgraphCache) are scanner-
-// global, so a file's includes are resolved once for the whole run. The
-// searchTier cache is PER MODULE, not global: the ADDINCL/peer/base
-// resolution of a target depends on the module's config (e.g. errno.h hits
-// libcxx's include/ under one module's ADDINCL but resolves via sysincl→musl
-// under another), so it cannot be shared across configs. gen.getScanCtx
-// points searchTierCache at one map per genModule frame, shared across that
-// module's source walks; the standalone NewScanCtx path gets a fresh one.
+// (ADDINCL/peer/base) for the module whose walk this is, plus searchTierCache
+// — the target→resolution map for this exact config, fetched from the
+// scanner's per-config registry in NewScanCtx so every walk with an
+// identical config shares one map. (The file-level closure/children caches
+// are scanner-global and keyed by file alone.)
 type scanCtx struct {
 	scanner         *IncludeScanner
 	cfg             ScanContext
@@ -404,6 +410,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		onWarn:               onWarn,
 		subgraphCache:        make(map[uint32][]uint32, 65536),
 		childrenCache:        make(map[uint32][]uint32, 65536),
+		searchTierByConfig:   make(map[uint64]map[uint32]searchTierResult, 1024),
 		tjIndex:              make(map[uint32]int32, 4096),
 		tjLow:                make(map[uint32]int32, 4096),
 		tjOnStack:            make(map[uint32]bool, 4096),
@@ -454,16 +461,63 @@ type ScanContext struct {
 }
 
 // NewScanCtx allocates a fresh transient resolution context for one closure
-// walk. searchTier is the caller-owned ADDINCL-tier cache: gen passes one
-// map per genModule frame so a module's source walks share it (and it is
-// not reused across modules of differing config); standalone callers pass a
-// fresh map.
-func (s *IncludeScanner) NewScanCtx(cfg ScanContext, searchTier map[uint32]searchTierResult) *scanCtx {
+// walk and binds it to the searchTier map for this exact include config,
+// creating it on first use. Walks of any module with an identical config
+// therefore share one searchTier map; differing configs get distinct maps.
+func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
+	ctxHash := hashScanContext(&cfg)
+	searchTier := s.searchTierByConfig[ctxHash]
+	if searchTier == nil {
+		searchTier = make(map[uint32]searchTierResult, 256)
+		s.searchTierByConfig[ctxHash] = searchTier
+	}
+
 	return &scanCtx{
 		scanner:         s,
 		cfg:             cfg,
 		searchTierCache: searchTier,
 	}
+}
+
+// hashScanContext is an FNV-1a digest of OwnAddIncl + PeerAddInclSet +
+// BaseSearchPaths — the inputs to search-tier resolution. SourceRel is
+// intentionally excluded: the tier is source-independent. It keys the
+// scanner-global searchTierCache so two configs that resolve a target
+// differently get distinct entries.
+func hashScanContext(ctx *ScanContext) uint64 {
+	const (
+		offset uint64 = 1469598103934665603
+		prime  uint64 = 1099511628211
+	)
+
+	h := offset
+
+	mix := func(s string) {
+		for i := 0; i < len(s); i++ {
+			h ^= uint64(s[i])
+			h *= prime
+		}
+
+		h ^= 0xff
+		h *= prime
+	}
+
+	mixSlice := func(ss []VFS) {
+		for _, v := range ss {
+			h ^= uint64(v.Root)
+			h *= prime
+			mix(v.Rel)
+		}
+
+		h ^= 0xfe
+		h *= prime
+	}
+
+	mixSlice(ctx.OwnAddIncl)
+	mixSlice(ctx.PeerAddInclSet)
+	mixSlice(ctx.BaseSearchPaths)
+
+	return h
 }
 
 // WalkClosure returns the SOURCE_ROOT-prefixed transitive-header set
@@ -477,7 +531,7 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext, searchTier map[uint32]searc
 // visited/order are pulled from sync.Pools; the returned slice is freshly
 // allocated, so the caller may keep it past Pool.Put.
 func (s *IncludeScanner) WalkClosure(cfg ScanContext) []VFS {
-	return s.NewScanCtx(cfg, make(map[uint32]searchTierResult, 256)).WalkSource(cfg.SourceRel)
+	return s.NewScanCtx(cfg).WalkSource(cfg.SourceRel)
 }
 
 // WalkSource walks the include closure starting from `sourceRel` using
@@ -1210,9 +1264,9 @@ func (s *IncludeScanner) absifyRels(rels []string) []VFS {
 //  2. peer-propagated GLOBAL ADDINCL
 //  3. baseline fallback (repo-root/linux-headers)
 //
-// Memoised in searchTierCache keyed by target alone — correct because that
-// cache is PER MODULE (one ADDINCL config), shared across the module's
-// source walks via gen.getScanCtx. Same-directory quoted lookup and
+// Memoised in sc.searchTierCache (the per-config map bound in NewScanCtx),
+// keyed by target: reused across any walk with an identical include config,
+// never across differing configs. Same-directory quoted lookup and
 // BUILD-root direct handling stay in resolveSearchPath (they depend on the
 // includer).
 func (sc *scanCtx) resolveContextSearchTier(targetID uint32, target string) searchTierResult {

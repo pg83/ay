@@ -41,7 +41,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 			BaseSearchPaths: includeScannerBasePaths(),
 		}
 
-		sc := scanner.NewScanCtx(cfg, in.SearchTier)
+		sc := scanner.NewScanCtx(cfg)
 		sc.cfg.SourceRel = srcRelOnDisk
 
 		srcAbs := Source(srcRelOnDisk)
@@ -146,7 +146,7 @@ func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath V
 		BaseSearchPaths: includeScannerBasePaths(),
 	}
 
-	sc := scanner.NewScanCtx(cfg, in.SearchTier)
+	sc := scanner.NewScanCtx(cfg)
 
 	return sc.WalkClosure(vfsPath)
 }

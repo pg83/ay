@@ -11,7 +11,6 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	// Build a minimal ModuleCCInputs for the header-closure walk — only
 	// the scanner context matters; the compilation flags are not used.
 	in := ModuleCCInputs{
-		SearchTier:      d.searchTier,
 		Flags:           d.flags,
 		DefaultVars:     d.defaultVars,
 		DefaultVarOrder: d.defaultVarOrder,
