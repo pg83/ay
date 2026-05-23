@@ -165,6 +165,23 @@ type IncludeScanner struct {
 	// independent.
 	sysinclIncluderCache map[sysinclIncluderKey]sysinclCacheEntry
 
+	// subgraphCache / childrenCache are GLOBAL to the scanner (per run),
+	// keyed by absID, NOT per scanCtx. Upstream ymake resolves each file's
+	// includes once — in the context of whichever module first reaches it —
+	// and reuses that result everywhere via the shared dep graph; we mirror
+	// that: the first scanCtx to resolve a file populates these caches with
+	// its ADDINCL ctx, and every later module (different ctxHash) reuses it.
+	// This collapses the per-ctxHash duplication (one closure per file for
+	// the whole run instead of one per module-include-config).
+	//   subgraphCache: full transitive include closure (incl. the node),
+	//     deduplicated, computed by closureOf via Tarjan SCC — cyclic
+	//     closures cache exactly like acyclic ones (SCC members share a
+	//     slice); no node is re-walked. Order is irrelevant (normalize sorts).
+	//   childrenCache: forEachResolvedChildID's resolved-child ID list,
+	//     read twice per node (edge classification + SCC-finalize union).
+	subgraphCache map[uint32][]uint32
+	childrenCache map[uint32][]uint32
+
 	// Tarjan SCC scratch, shared across closure explorations (gen scanning
 	// is single-goroutine). closureOf clears index/low/onStack and resets
 	// stack/next per top-level exploration; tjClosure + tjBuf are the
@@ -250,20 +267,6 @@ type scanCtx struct {
 
 	resolveCache    map[resolveInnerKey][]VFS
 	searchTierCache map[uint32]searchTierResult
-	// subgraphCache holds the full transitive include closure (INCLUDING
-	// the node itself), deduplicated by interned ID, keyed by absID alone.
-	// Resolution is a pure function of (file, ctxHash) — sysincl keys on the
-	// immediate includer, never on the originating compile root — so the
-	// closure of a node does not depend on which source the walk started
-	// from; one entry per node per scanCtx suffices. Computed by closureOf
-	// via Tarjan SCC, so cycle-containing closures are cached exactly like
-	// acyclic ones (every member of an SCC shares one closure slice); no
-	// node is re-walked. Order is irrelevant — dump normalize sorts inputs.
-	subgraphCache map[uint32][]uint32
-	// childrenCache memoises forEachResolvedChildID's resolved-child ID list
-	// per absID: closureOf reads each node's children twice (edge
-	// classification + SCC-finalize union).
-	childrenCache map[uint32][]uint32
 }
 
 // idSet is a membership set over interned scanner IDs, used as the DFS
@@ -416,6 +419,8 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
 		walkClosureCache:     make(map[uint64]*scanCtx, 8),
 		onWarn:               onWarn,
+		subgraphCache:        make(map[uint32][]uint32, 65536),
+		childrenCache:        make(map[uint32][]uint32, 65536),
 		tjIndex:              make(map[uint32]int32, 4096),
 		tjLow:                make(map[uint32]int32, 4096),
 		tjOnStack:            make(map[uint32]bool, 4096),
@@ -479,8 +484,6 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 		ctxHash:         hashScanContext(&cfg),
 		resolveCache:    make(map[resolveInnerKey][]VFS, 1024),
 		searchTierCache: make(map[uint32]searchTierResult, 256),
-		subgraphCache:   make(map[uint32][]uint32, 512),
-		childrenCache:   make(map[uint32][]uint32, 1024),
 	}
 }
 
@@ -568,7 +571,7 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 		// SCANNER_STATS env-gated trace; emit every 500 calls. The
 		// boolean check short-circuits in production.
 		if s.statsCallCount%500 == 0 {
-			fmt.Fprintf(os.Stderr, "scanner-stats[%d]: subgraph hits=%d misses=%d tainted=%d cache=%d\n", s.statsCallCount, s.subgraphHits, s.subgraphMisses, s.subgraphTainted, len(sc.subgraphCache))
+			fmt.Fprintf(os.Stderr, "scanner-stats[%d]: subgraph hits=%d misses=%d tainted=%d cache=%d\n", s.statsCallCount, s.subgraphHits, s.subgraphMisses, s.subgraphTainted, len(s.subgraphCache))
 		}
 	}
 
@@ -817,13 +820,14 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 }
 
 // forEachResolvedChildID invokes `fn` once per resolved-child ID of
-// `absID`. The resolved-child ID list is memoised per absID: resolution is
-// a pure function of (file, ctxHash) within one scanCtx, so a node's
-// children are the same whatever the walk's root source — tainted-subgraph
-// re-walks reuse it instead of re-running resolve() for every parsed
-// include on every visit.
+// `absID`. The resolved-child ID list is memoised in the scanner-global
+// childrenCache (keyed by absID): the first scanCtx to reach a file resolves
+// its children in that module's ADDINCL ctx and every later module reuses
+// the result, mirroring upstream's resolve-once-per-file model. Tainted-
+// subgraph re-walks also reuse it instead of re-running resolve().
 func (sc *scanCtx) forEachResolvedChildID(absID uint32, fn func(uint32)) {
-	if cached, ok := sc.childrenCache[absID]; ok {
+	s := sc.scanner
+	if cached, ok := s.childrenCache[absID]; ok {
 		for _, id := range cached {
 			fn(id)
 		}
@@ -831,12 +835,12 @@ func (sc *scanCtx) forEachResolvedChildID(absID uint32, fn func(uint32)) {
 		return
 	}
 
-	vfsPath := sc.scanner.interner.vfsByID(absID)
+	vfsPath := s.interner.vfsByID(absID)
 	var children []uint32
 	sc.forEachResolvedChild(vfsPath, func(rabs VFS) {
-		children = append(children, sc.scanner.interner.internVFS(rabs))
+		children = append(children, s.interner.internVFS(rabs))
 	})
-	sc.childrenCache[absID] = children
+	s.childrenCache[absID] = children
 
 	for _, id := range children {
 		fn(id)
@@ -872,20 +876,19 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 
 // closureOf returns the full transitive include closure of absID
 // (INCLUDING absID): a deduplicated, cache-owned []uint32 (iterate only).
-// Cycle-safe via Tarjan SCC — each node is explored at most once per
-// scanCtx for the whole run, and every member of a strongly-connected
-// component shares one closure slice, so include cycles cost no more than
-// acyclic fan-out. Element order is the deterministic first-exploration
-// order; downstream callers treat the result as a set (dump normalize
-// sorts inputs), so no sort.
+// Cycle-safe via Tarjan SCC — each node is explored at most once for the
+// whole run (the closure cache is scanner-global), and every member of a
+// strongly-connected component shares one closure slice, so include cycles
+// cost no more than acyclic fan-out. Element order is the deterministic
+// first-exploration order; downstream callers treat the result as a set
+// (dump normalize sorts inputs), so no sort.
 func (sc *scanCtx) closureOf(absID uint32) []uint32 {
-	if cached, ok := sc.subgraphCache[absID]; ok {
-		sc.scanner.subgraphHits++
+	s := sc.scanner
+	if cached, ok := s.subgraphCache[absID]; ok {
+		s.subgraphHits++
 
 		return cached
 	}
-
-	s := sc.scanner
 
 	// Fresh exploration. Tarjan scratch is scanner-shared (gen scanning is
 	// single-goroutine) and reset per top-level miss; uncached descendants
@@ -898,7 +901,7 @@ func (sc *scanCtx) closureOf(absID uint32) []uint32 {
 
 	sc.strongconnect(absID)
 
-	return sc.subgraphCache[absID]
+	return s.subgraphCache[absID]
 }
 
 // strongconnect is the recursive Tarjan core. It finalizes every SCC it
@@ -916,7 +919,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 	s.tjOnStack[v] = true
 
 	sc.forEachResolvedChildID(v, func(w uint32) {
-		if _, cached := sc.subgraphCache[w]; cached {
+		if _, cached := s.subgraphCache[w]; cached {
 			s.subgraphHits++ // reuse of a previously-finalized node's closure
 
 			return
@@ -963,7 +966,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 				return // same SCC; already added as a member
 			}
 
-			for _, id := range sc.subgraphCache[w] {
+			for _, id := range s.subgraphCache[w] {
 				if !s.tjClosure.has(id) {
 					s.tjClosure.add(id)
 					buf = append(buf, id)
@@ -982,7 +985,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 	}
 
 	for _, u := range members {
-		sc.subgraphCache[u] = out
+		s.subgraphCache[u] = out
 		s.tjOnStack[u] = false
 	}
 

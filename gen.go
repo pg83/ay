@@ -448,8 +448,6 @@ func (ctx *genCtx) perfScanCtxStats(scanner *IncludeScanner) scanCtxPerfStats {
 			stats.activeScanCtx++
 			stats.resolveEntries += len(sc.resolveCache)
 			stats.searchTierEntries += len(sc.searchTierCache)
-			stats.subgraphEntries += len(sc.subgraphCache)
-			stats.childrenEntries += len(sc.childrenCache)
 		}
 	}
 
@@ -458,6 +456,9 @@ func (ctx *genCtx) perfScanCtxStats(scanner *IncludeScanner) scanCtxPerfStats {
 		addBucket(bucket)
 	}
 
+	// subgraph/children caches are scanner-global (per run), not per scanCtx.
+	stats.subgraphEntries = len(scanner.subgraphCache)
+	stats.childrenEntries = len(scanner.childrenCache)
 	stats.walkClosureCache = len(scanner.walkClosureCache)
 
 	return stats
