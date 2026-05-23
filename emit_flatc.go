@@ -248,14 +248,20 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 		}
 	}
 
-	flatcLDRef, flatcBinary := ctx.tool(flatcModule)
+	flatcRes := ctx.toolResult(flatcModule)
+	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
 	transitiveImports := flatcTransitiveImports(ctx.parsers, ctx.fs, srcVFS.Rel)
 	flRef, headerVFS, cppVFS, bfbsVFS := EmitFL(instance, srcVFS.Rel, srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, ctx.emit)
 
 	registerBoundGeneratedParsedOutput(ctx, instance, "FL", headerVFS, flatcDirectGeneratedHeaderIncludes(ctx.parsers, ctx.fs, srcVFS.Rel), flRef)
-	registerBoundGeneratedParsedOutput(ctx, instance, "FL", cppVFS, []includeDirective{
-		{kind: includeQuoted, target: headerVFS.Rel},
-	}, flRef)
+	// flatc INDUCED_DEPS (e.g. flatbuffers.h, flatbuffers_iter.h) must be
+	// included in the .fbs.cpp's parsed-include set so the scanner reaches them.
+	cppIncludes := make([]includeDirective, 0, 1+len(flatcRes.InducedDeps))
+	cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: headerVFS.Rel})
+	for _, dep := range flatcRes.InducedDeps {
+		cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: dep})
+	}
+	registerBoundGeneratedParsedOutput(ctx, instance, "FL", cppVFS, cppIncludes, flRef)
 	registerBoundGeneratedParsedOutput(ctx, instance, "FL", bfbsVFS, nil, flRef)
 
 	out := flatcEmission{

@@ -847,6 +847,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" && instance.Language != LangPy {
 		cppProtoEnv := env.Clone()
 		cppProtoEnv.SetString("MODULE_TAG", "CPP_PROTO")
+		// _CPP_PROTO module definition calls ENABLE(GEN_PROTO); gate IF(GEN_PROTO)
+		// branches (e.g. jsonpath's antlr3 CONFIGURE_FILE calls) the same way.
+		cppProtoEnv.SetBool("GEN_PROTO", true)
 		d = collectModule(ctx.fs, instance.Path, instance.Kind, mf.Stmts, cppProtoEnv)
 	}
 
