@@ -250,7 +250,28 @@ func evalAtom(e Expr, env Environment) any {
 			return x.Name
 		}
 
-		return env.Lookup(x.Name)
+		if v, ok := env.bools[x.Name]; ok {
+			return v
+		}
+
+		if v, ok := env.strings[x.Name]; ok {
+			return v
+		}
+
+		if v, ok := env.ints[x.Name]; ok {
+			return v
+		}
+
+		// Unbound implicit build vars (all-uppercase names) act as string
+		// literals equal to their own name: IF (ARCADIA_CURL_DNS_RESOLVER == ARES)
+		// evaluates correctly when ARCADIA_CURL_DNS_RESOLVER is "ARES".
+		if isImplicitBuildVar(x.Name) {
+			return x.Name
+		}
+
+		ThrowFmt("macros: unknown IF identifier %q", x.Name)
+
+		return nil
 	case *ExprString:
 		return x.Value
 	case *ExprInt:
@@ -340,6 +361,7 @@ func evalLt(x *ExprLt, env Environment) bool {
 var DefaultIfEnv = Environment{
 	bools: map[string]bool{
 		"OS_LINUX":      true,
+		"LINUX":         true, // legacy alias for OS_LINUX, used in some ya.make files
 		"OS_WINDOWS":    false,
 		"OS_DARWIN":     false,
 		"OS_IOS":        false,
