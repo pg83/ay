@@ -148,6 +148,12 @@ type ModuleCCInputs struct {
 	Ragel6Flags []string
 	// BisonGenExt is ".c" for BISON_GEN_C and ".cpp" by default.
 	BisonGenExt string
+	// SearchTier is the module's include-scanner ADDINCL/peer/base tier
+	// cache (moduleData.searchTier), threaded into every closure walk so a
+	// module's sources share it. Set on every ModuleCCInputs that reaches
+	// walkClosure/joinSrcsIncludeClosure; the include scanner writes through
+	// it during first-resolution.
+	SearchTier map[uint32]searchTierResult
 }
 
 // EmitCC emits a CC node for compiling `srcVFS` (the resolved input

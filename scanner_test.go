@@ -595,7 +595,7 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 	scanner := NewIncludeScanner(dir, nil)
 	sc := scanner.NewScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"include"}),
-	})
+	}, make(map[uint32]searchTierResult, 16))
 	d := includeDirective{kind: includeSystem, target: "foo.h"}
 
 	got1 := sc.resolveSearchPath(Source("pkg/a.cpp"), d)
@@ -629,7 +629,7 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 	scanner := NewIncludeScanner(dir, nil)
 	sc := scanner.NewScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"include"}),
-	})
+	}, make(map[uint32]searchTierResult, 16))
 	d := includeDirective{kind: includeSystem, target: "missing.h"}
 
 	got1 := sc.resolveSearchPath(Source("pkg/a.cpp"), d)
@@ -672,7 +672,7 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 	scanner := NewIncludeScanner(dir, nil)
 	sc := scanner.NewScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"include"}),
-	})
+	}, make(map[uint32]searchTierResult, 16))
 	got := sc.resolveSearchPath(Source("pkg/a.cpp"), includeDirective{kind: includeQuoted, target: "foo.h"})
 	want := []VFS{Source("pkg/foo.h")}
 

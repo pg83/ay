@@ -333,13 +333,6 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 	return out
 }
 
-// getScanCtx returns a fresh transient `*scanCtx` for (scanner, cfg). The
-// reusable per-file caches are scanner-global, so the scanCtx itself is
-// cheap and need not be interned or shared.
-func (ctx *genCtx) getScanCtx(scanner *IncludeScanner, cfg ScanContext) *scanCtx {
-	return scanner.NewScanCtx(cfg)
-}
-
 func (ctx *genCtx) perfScanCtxStats(scanner *IncludeScanner) scanCtxPerfStats {
 	// subgraph/children caches are scanner-global (per run).
 	return scanCtxPerfStats{
@@ -890,6 +883,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// Any downstream CCs returned here are intentionally ignored:
 		// this branch models modules with no compilable own sources.
 		headerOnlyInputs := ModuleCCInputs{
+			SearchTier:        d.searchTier,
 			Flags:             d.flags,
 			AddIncl:           mergeDedupVFS(d.addIncl, nil),
 			PeerAddInclGlobal: peerContribs.addIncl,
@@ -1857,6 +1851,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	moduleInputs := ModuleCCInputs{
+		SearchTier:           d.searchTier,
 		Flags:                d.flags,
 		AddIncl:              dedupedAddIncl,
 		PeerAddInclGlobal:    selfPeerAddInclGlobal,
