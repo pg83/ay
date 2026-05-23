@@ -4378,7 +4378,7 @@ int use() { return 0; }
 
 // gen_helpers_test.go — test-only shim that constructs the canonical
 // (host=linux-x86_64, target=linux-aarch64) Platform pair with the
-// shared testToolchainFlags and dispatches into GenWithMode. Lives
+// shared testToolchainFlags and dispatches into Gen. Lives
 // alongside the test corpus rather than in production code: cmdMake
 // constructs platforms inline from CLI + mining, so a generic "Gen"
 // entry that hardcodes defaults would just be misleading.
@@ -4392,7 +4392,7 @@ func testGen(sourceRoot, targetDir string) *Graph {
 	targetFlags["PIC"] = "no"
 	targetFlags["MUSL"] = "yes"
 	target := NewPlatform(OSLinux, ISAAArch64, targetFlags, nil, "", "")
-	return GenWithMode(sourceRoot, targetDir, host, target, defaultScanCtxMode, func(Warn) {})
+	return Gen(sourceRoot, targetDir, host, target, func(Warn) {})
 }
 
 func TestCollectModule_YqlAbiMacrosAppendCXXFlags(t *testing.T) {
@@ -5654,13 +5654,13 @@ func testGenT20(sourceRoot, targetDir string) *Graph {
 	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)
 	target := newT20ResourcePlatform(OSLinux, ISAAArch64, "yes", nil, true)
 
-	return GenWithMode(sourceRoot, targetDir, host, target, defaultScanCtxMode, func(Warn) {})
+	return Gen(sourceRoot, targetDir, host, target, func(Warn) {})
 }
 
 func testGenT20Tool(sourceRoot, targetDir string) *Graph {
 	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)
 
-	return GenWithMode(sourceRoot, targetDir, host, host, defaultScanCtxMode, func(Warn) {})
+	return Gen(sourceRoot, targetDir, host, host, func(Warn) {})
 }
 
 func newT20ResourcePlatform(os OS, isa ISA, pic string, tags []string, musl bool) *Platform {
@@ -6059,7 +6059,7 @@ func TestGen_YaBinLinkTailMatchesReference(t *testing.T) {
 
 	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)
 	target := newT20ResourcePlatform(OSLinux, ISAAArch64, "no", nil, true)
-	our := GenWithMode(sourceRoot, targetDir, host, target, defaultScanCtxMode, func(Warn) {})
+	our := Gen(sourceRoot, targetDir, host, target, func(Warn) {})
 	ourNode := findGraphNodeByOutputs(t, our, "$(B)/devtools/ya/bin/ya-bin", "$(B)/devtools/ya/bin/ya-bin.debug")
 	refNode := loadT20RefNode(t, "$(BUILD_ROOT)/devtools/ya/bin/ya-bin", "$(BUILD_ROOT)/devtools/ya/bin/ya-bin.debug")
 
@@ -6284,7 +6284,7 @@ func TestGen_YaBinDumpGraphResidualTargetArchiveStatsUIDsMatchReference(t *testi
 func genStatsUIDReferenceSample(sourceRoot, targetDir string) *Graph {
 	host, target := statsUIDReferencePlatforms()
 
-	return GenWithMode(sourceRoot, targetDir, host, target, defaultScanCtxMode, func(Warn) {})
+	return Gen(sourceRoot, targetDir, host, target, func(Warn) {})
 }
 
 func genDumpStatsUIDReferenceSample(t *testing.T, sourceRoot, targetDir string) []statsUIDRefNode {

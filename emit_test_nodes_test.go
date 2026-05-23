@@ -595,7 +595,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		}},
 	}
 
-	g := GenWithModeWithResources(root, "util/ut", host, p, defaultScanCtxMode, func(Warn) {}, resources, true)
+	g := GenWithResources(root, "util/ut", host, p, func(Warn) {}, resources, true)
 	if len(g.Result) != 3 {
 		t.Fatalf("result len = %d, want 3", len(g.Result))
 	}

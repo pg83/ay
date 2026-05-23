@@ -220,27 +220,9 @@ type genCtx struct {
 	// any host walk recursion, so the cached entry carries the target
 	// platform per REF.
 	ldPluginCPCache map[VFS]NodeRef
-	// scanCtx (per-ctxHash resolve/subgraph cache) lifecycle policy:
-	//
-	//   - "local"    — one scanCtx per (genModule, scanner, ctxHash);
-	//                  pushed at genModule entry, popped at exit. No
-	//                  cross-module reuse.
-	//   - "interned" — one scanCtx per (scanner, ctxHash) for the whole
-	//                  Gen call; cross-module reuse when ctxHash matches.
-	//
-	// Plumbed from CLI `--scan-ctx-mode`. Default = "interned".
-	scanCtxMode       string
-	localScanCtxStack []map[scanCtxCacheKey]*scanCtx
-	internedScanCtx   map[scanCtxCacheKey]*scanCtx
-	// Debug counters (printed when YATOOL_PERF_STATS=1). scanCtxAllocs
-	// counts every fresh allocation; scanCtxPeak is the max bucket size
-	// observed at any store. Local-mode peak = deepest in-flight bucket;
-	// interned-mode peak = total scanCtx count (bucket never shrinks).
-	scanCtxAllocs int
-	scanCtxPeak   int
 
 	// Canonical (host, target) Platform pair constructed once in
-	// GenWithMode from CLI args. Threaded through every emitter so
+	// Gen from CLI args. Threaded through every emitter so
 	// renderers read off the Platform pointer directly (see platform.go).
 	// Tool sub-graph emission flips the recursive call to (host, host) so
 	// rendered nodes carry `node.platform = host.Target`,
@@ -253,14 +235,6 @@ type genCtx struct {
 	testMode bool
 }
 
-// scanCtxCacheKey identifies a scanCtx by (scanner pointer, ctxHash).
-// Pointer identity separates target vs host scanners; ctxHash separates
-// module-config equivalence classes within one scanner.
-type scanCtxCacheKey struct {
-	scanner *IncludeScanner
-	ctxHash uint64
-}
-
 // codegenOutputKey identifies a codegen producer's output on a specific
 // Platform instance. PB/EV emit on both target and host; when host and
 // target share the same PlatformID (x86_64 native target), the Platform
@@ -271,12 +245,8 @@ type codegenOutputKey struct {
 }
 
 type scanCtxPerfStats struct {
-	activeScanCtx     int
-	resolveEntries    int
-	searchTierEntries int
-	subgraphEntries   int
-	childrenEntries   int
-	walkClosureCache  int
+	subgraphEntries int
+	childrenEntries int
 }
 
 // resolveCodegenDepRefs scans `includeInputs` for $(B)-rooted paths that
@@ -363,105 +333,19 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 	return out
 }
 
-// getScanCtx returns a `*scanCtx` for (scanner, cfg). Dispatch:
-//
-//   - "local":    the per-genModule cache (top of localScanCtxStack).
-//     Pop drops every scanCtx allocated under that frame.
-//   - "interned": the genCtx-wide internedScanCtx map. The scanCtx
-//     persists across modules and accumulates cache entries reusable by
-//     any later matching ctxHash.
+// getScanCtx returns a fresh transient `*scanCtx` for (scanner, cfg). The
+// reusable per-file caches are scanner-global, so the scanCtx itself is
+// cheap and need not be interned or shared.
 func (ctx *genCtx) getScanCtx(scanner *IncludeScanner, cfg ScanContext) *scanCtx {
-	ctxHash := hashScanContext(&cfg)
-	key := scanCtxCacheKey{scanner: scanner, ctxHash: ctxHash}
-
-	var bucket map[scanCtxCacheKey]*scanCtx
-
-	if ctx.scanCtxMode == "interned" {
-		bucket = ctx.internedScanCtx
-	} else {
-		// "local" — top of stack. The stack is always non-empty between
-		// genModule entry and exit; an empty stack here is a programming
-		// error.
-		if len(ctx.localScanCtxStack) == 0 {
-			ThrowFmt("genCtx.getScanCtx: localScanCtxStack empty (scanCtx requested outside genModule frame)")
-		}
-
-		bucket = ctx.localScanCtxStack[len(ctx.localScanCtxStack)-1]
-	}
-
-	if existing, ok := bucket[key]; ok {
-		return existing
-	}
-
-	sc := scanner.NewScanCtx(cfg)
-	bucket[key] = sc
-
-	ctx.scanCtxAllocs++
-
-	if len(bucket) > ctx.scanCtxPeak {
-		ctx.scanCtxPeak = len(bucket)
-	}
-
-	return sc
-}
-
-// pushLocalScanCtx pushes a fresh empty scanCtx cache map onto the
-// per-genModule stack. Called at genModule entry; the matching pop runs
-// in a deferred cleanup. No-op in "interned" mode.
-func (ctx *genCtx) pushLocalScanCtx() {
-	if ctx.scanCtxMode != "local" {
-		return
-	}
-
-	ctx.localScanCtxStack = append(ctx.localScanCtxStack, make(map[scanCtxCacheKey]*scanCtx, 4))
-}
-
-// popLocalScanCtx pops the top entry from the stack. No-op in "interned"
-// mode.
-func (ctx *genCtx) popLocalScanCtx() {
-	if ctx.scanCtxMode != "local" {
-		return
-	}
-
-	if len(ctx.localScanCtxStack) == 0 {
-		ThrowFmt("genCtx.popLocalScanCtx: stack underflow")
-	}
-
-	ctx.localScanCtxStack = ctx.localScanCtxStack[:len(ctx.localScanCtxStack)-1]
+	return scanner.NewScanCtx(cfg)
 }
 
 func (ctx *genCtx) perfScanCtxStats(scanner *IncludeScanner) scanCtxPerfStats {
-	stats := scanCtxPerfStats{}
-	seen := make(map[*scanCtx]struct{})
-
-	addBucket := func(bucket map[scanCtxCacheKey]*scanCtx) {
-		for key, sc := range bucket {
-			if key.scanner != scanner {
-				continue
-			}
-
-			if _, ok := seen[sc]; ok {
-				continue
-			}
-
-			seen[sc] = struct{}{}
-			stats.activeScanCtx++
-			stats.resolveEntries += len(sc.resolveCache)
-			stats.searchTierEntries += len(sc.searchTierCache)
-		}
+	// subgraph/children caches are scanner-global (per run).
+	return scanCtxPerfStats{
+		subgraphEntries: len(scanner.subgraphCache),
+		childrenEntries: len(scanner.childrenCache),
 	}
-
-	addBucket(ctx.internedScanCtx)
-	for _, bucket := range ctx.localScanCtxStack {
-		addBucket(bucket)
-	}
-
-	// subgraph/children caches are scanner-global (per run), not per scanCtx.
-	stats.subgraphEntries = len(scanner.subgraphCache)
-	stats.childrenEntries = len(scanner.childrenCache)
-	stats.walkClosureCache = len(scanner.walkClosureCache)
-
-	return stats
 }
 
 func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, hostScanner *IncludeScanner) {
@@ -471,8 +355,6 @@ func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, 
 
 	parserStats := parsers.perfStats()
 	fsStats := ctx.fs.perfStats()
-	fmt.Fprintf(os.Stderr, "perf: gen mode=%s scanCtxAllocs=%d scanCtxPeak=%d internedScanCtx=%d localBuckets=%d\n",
-		ctx.scanCtxMode, ctx.scanCtxAllocs, ctx.scanCtxPeak, len(ctx.internedScanCtx), len(ctx.localScanCtxStack))
 	fmt.Fprintf(os.Stderr, "perf: parser parsedHits=%d parsedMisses=%d buildParsed=%d\n",
 		parserStats.parsedHits, parserStats.parsedMisses, parserStats.buildParsed)
 	fmt.Fprintf(os.Stderr, "perf: fs listdirHits=%d listdirMisses=%d existsHits=%d existsMisses=%d dirsCached=%d\n",
@@ -481,12 +363,8 @@ func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, 
 	reportScanner := func(label string, scanner *IncludeScanner) {
 		scanStats := scanner.perfStats()
 		ctxStats := ctx.perfScanCtxStats(scanner)
-		fmt.Fprintf(os.Stderr, "perf: scanner %s activeScanCtx=%d walkClosureCache=%d resolveEntries=%d searchTierEntries=%d closureEntries=%d childrenEntries=%d walkClosure=%d dfs=%d plainDfs=%d closureHits=%d closureMisses=%d cyclicSCCs=%d searchTierHits=%d searchTierMisses=%d resolveCalls=%d resolveHits=%d resolveMisses=%d sysinclSourceHits=%d sysinclSourceMisses=%d sysinclIncluderHits=%d sysinclIncluderMisses=%d\n",
+		fmt.Fprintf(os.Stderr, "perf: scanner %s closureEntries=%d childrenEntries=%d walkClosure=%d dfs=%d plainDfs=%d closureHits=%d closureMisses=%d cyclicSCCs=%d searchTierHits=%d searchTierMisses=%d resolveCalls=%d sysinclSourceHits=%d sysinclSourceMisses=%d sysinclIncluderHits=%d sysinclIncluderMisses=%d\n",
 			label,
-			ctxStats.activeScanCtx,
-			ctxStats.walkClosureCache,
-			ctxStats.resolveEntries,
-			ctxStats.searchTierEntries,
 			ctxStats.subgraphEntries,
 			ctxStats.childrenEntries,
 			scanStats.walkClosureCalls,
@@ -498,8 +376,6 @@ func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, 
 			scanStats.searchTierHits,
 			scanStats.searchTierMisses,
 			scanStats.resolveSearchPathCalls,
-			scanStats.resolveCacheHits,
-			scanStats.resolveCacheMisses,
 			scanStats.sysinclSourceHits,
 			scanStats.sysinclSourceMisses,
 			scanStats.sysinclIncluderHits,
@@ -628,25 +504,16 @@ var whitelistedMetadataMacros = map[string]struct{}{
 	"JAVA_CLASSPATH_IGNORE_CONFLICTZ": {}, // Java classpath; metadata.
 }
 
-// defaultScanCtxMode is the per-Gen scanCtx lifecycle policy used when
-// no explicit mode is passed (tests, Gen wrapper). "interned" was
-// selected for ~6% wall-time reduction over "local".
-const defaultScanCtxMode = "interned"
-
 // runGenInto runs the Gen walk against the supplied emitter without
 // calling Finalize on it. Returns the root NodeRef. `onWarn` receives
 // one line per diagnostic surfaced during loading (sysincl
 // source_filter records the runtime cannot model, …); callers route
 // it to stderr under `--verbose` and to a no-op otherwise.
-func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string, onWarn func(Warn)) NodeRef {
-	return runGenIntoWithResources(srcRoot, targetDir, hostP, targetP, emitter, mode, onWarn, nil, false, true)
+func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn)) NodeRef {
+	return runGenIntoWithResources(srcRoot, targetDir, hostP, targetP, emitter, onWarn, nil, false, true)
 }
 
-func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, mode string, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) NodeRef {
-	if mode != "local" && mode != "interned" {
-		ThrowFmt("gen: --scan-ctx-mode must be \"local\" or \"interned\", got %q", mode)
-	}
-
+func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) NodeRef {
 	plainEmit := emitter
 	resourceEmit := resourceGraphEmitter(hostP, plainEmit, resources, materializeResourceFetches)
 
@@ -682,12 +549,8 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 		pyRegisterOutputs:  make(map[VFS]NodeRef),
 		checkConfigOutputs: make(map[VFS]NodeRef),
 		ldPluginCPCache:    make(map[VFS]NodeRef),
-		scanCtxMode:        mode,
-		internedScanCtx:    make(map[scanCtxCacheKey]*scanCtx, 64),
 		testMode:           testMode,
 	}
-
-	ctx.localScanCtxStack = []map[scanCtxCacheKey]*scanCtx{make(map[scanCtxCacheKey]*scanCtx, 4)}
 
 	seed := ModuleInstance{
 		Path:     filepath.Clean(targetDir),
@@ -709,32 +572,31 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 	return root.LDRef
 }
 
-// GenWithMode runs Gen against an explicit (host, target) Platform pair
-// with the chosen scanCtxMode (`local` or `interned`). Callers (`ay
-// make -G`, test helpers) construct both Platforms from CLI flags +
-// mining; the walker reads every flag, tool path, and tag off the
+// Gen runs the graph walk against an explicit (host, target) Platform pair.
+// Callers (`ay make -G`, test helpers) construct both Platforms from CLI
+// flags + mining; the walker reads every flag, tool path, and tag off the
 // Platform pointers. `onWarn` receives one line per diagnostic.
-func GenWithMode(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn)) *Graph {
-	return genWithModeWithResources(sourceRoot, targetDir, hostP, targetP, mode, onWarn, nil, false, true)
+func Gen(sourceRoot string, targetDir string, hostP, targetP *Platform, onWarn func(Warn)) *Graph {
+	return genWithResources(sourceRoot, targetDir, hostP, targetP, onWarn, nil, false, true)
 }
 
-func GenWithModeWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
-	return genWithModeWithResources(sourceRoot, targetDir, hostP, targetP, mode, onWarn, resources, testMode, true)
+func GenWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
+	return genWithResources(sourceRoot, targetDir, hostP, targetP, onWarn, resources, testMode, true)
 }
 
-// GenDumpGraphWithMode mirrors `ay make -j0 -G`: it keeps test-mode graph
+// GenDumpGraphWithResources mirrors `ay make -j0 -G`: it keeps test-mode graph
 // shape, but leaves resource FETCH scaffolding out of the buffered graph so
 // finalized UIDs continue to match the serialized deps/output content.
-func GenDumpGraphWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
+func GenDumpGraphWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
 	emitter := NewBufferedEmitter()
-	runGenIntoWithResources(sourceRoot, targetDir, hostP, targetP, emitter, mode, onWarn, resources, testMode, false)
+	runGenIntoWithResources(sourceRoot, targetDir, hostP, targetP, emitter, onWarn, resources, testMode, false)
 
 	return finalizeDumpGraph(emitter)
 }
 
-func genWithModeWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, mode string, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) *Graph {
+func genWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) *Graph {
 	emitter := NewBufferedEmitter()
-	runGenIntoWithResources(sourceRoot, targetDir, hostP, targetP, emitter, mode, onWarn, resources, testMode, materializeResourceFetches)
+	runGenIntoWithResources(sourceRoot, targetDir, hostP, targetP, emitter, onWarn, resources, testMode, materializeResourceFetches)
 
 	return Finalize(emitter)
 }
@@ -788,14 +650,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if existing, ok := ctx.memo[instance]; ok {
 		return existing
 	}
-
-	// In "local" mode, push a fresh scanCtx cache map for this module.
-	// Every `walkClosure` / `joinSrcsIncludeClosure` call in this frame
-	// goes through `getScanCtx`, which addresses the top of the stack;
-	// on pop, scanCtxes allocated under this frame become unreachable.
-	// In "interned" mode the pair is a no-op.
-	ctx.pushLocalScanCtx()
-	defer ctx.popLocalScanCtx()
 
 	// YATOOL_TRACE=1: print a trace line on every first-visit so the caller
 	// chain is visible in stderr. Format: indent·<path>@<platform> (caller: <parent>)
