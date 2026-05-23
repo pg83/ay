@@ -646,7 +646,6 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	dedupedAddIncl := mergeDedupVFS(d.addIncl, nil)
 
 	moduleInputs := ModuleCCInputs{
-		SearchTier:           d.searchTier,
 		Flags:                d.flags,
 		AddIncl:              dedupedAddIncl,
 		PeerAddInclGlobal:    peerContribs.addIncl,

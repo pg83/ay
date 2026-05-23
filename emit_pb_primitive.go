@@ -636,7 +636,6 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	}
 
 	scanIn := ModuleCCInputs{
-		SearchTier:        d.searchTier,
 		Flags:             d.flags,
 		AddIncl:           pyProtoAuxOwnAddIncl(d),
 		PeerAddInclGlobal: pyProtoAuxPeerAddIncl(instance, peerContribs, d, cppSibling),

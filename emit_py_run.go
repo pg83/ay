@@ -117,7 +117,6 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 
 func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, moduleInputs ModuleCCInputs) []VFS {
 	scanIn := ModuleCCInputs{
-		SearchTier:        moduleInputs.SearchTier,
 		Flags:             moduleInputs.Flags,
 		AddIncl:           moduleInputs.AddIncl,
 		PeerAddInclGlobal: moduleInputs.PeerAddInclGlobal,

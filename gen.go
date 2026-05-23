@@ -883,7 +883,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// Any downstream CCs returned here are intentionally ignored:
 		// this branch models modules with no compilable own sources.
 		headerOnlyInputs := ModuleCCInputs{
-			SearchTier:        d.searchTier,
 			Flags:             d.flags,
 			AddIncl:           mergeDedupVFS(d.addIncl, nil),
 			PeerAddInclGlobal: peerContribs.addIncl,
@@ -1851,7 +1850,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	moduleInputs := ModuleCCInputs{
-		SearchTier:           d.searchTier,
 		Flags:                d.flags,
 		AddIncl:              dedupedAddIncl,
 		PeerAddInclGlobal:    selfPeerAddInclGlobal,
