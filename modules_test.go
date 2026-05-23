@@ -82,6 +82,57 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 	}
 }
 
+// TestExpandConfigString_SetVar verifies Fix C5+C8: user-defined SET variables
+// (e.g. ORIG_SRC_DIR) are now expanded by expandConfigString, and SET values
+// that contain literal ${ARCADIA_ROOT} are also resolved to $(S).
+func TestExpandConfigString_SetVar(t *testing.T) {
+	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
+	env.SetFromString("MODDIR", "mymod")
+	env.SetFromString("ORIG_SRC_DIR", "$(S)/mylib/src")
+
+	got := expandConfigString("${ORIG_SRC_DIR}", env)
+	if got != "$(S)/mylib/src" {
+		t.Fatalf("expandConfigString(${ORIG_SRC_DIR}) = %q, want $(S)/mylib/src", got)
+	}
+
+	got = expandConfigString("${UNKNOWN_VAR}", env)
+	if got != "${UNKNOWN_VAR}" {
+		t.Fatalf("expandConfigString(${UNKNOWN_VAR}) = %q, want ${UNKNOWN_VAR} (no change)", got)
+	}
+
+	// SET value that still holds literal ${ARCADIA_ROOT}: must be re-expanded.
+	env.SetFromString("SRCDIR_RAW", "${ARCADIA_ROOT}/some/path")
+	got = expandConfigString("${SRCDIR_RAW}", env)
+	if got != "$(S)/some/path" {
+		t.Fatalf("expandConfigString with raw ARCADIA_ROOT in SET = %q, want $(S)/some/path", got)
+	}
+}
+
+// TestPrEmitsIncludes_OutputIncludesVFSPrefixStripped verifies Fix C6:
+// OUTPUT_INCLUDES entries that carry a $(S)/ or $(B)/ prefix (produced by
+// expandStmtTokens expanding ${ARCADIA_ROOT} → $(S)/) have that prefix
+// stripped before they become include directive targets.
+func TestPrEmitsIncludes_OutputIncludesVFSPrefixStripped(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"$(S)/util/generic/hash_set.h", "util/generic/hash_set.h"},
+		{"$(S)/yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h", "yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h"},
+		{"$(B)/generated/foo.pb.h", "generated/foo.pb.h"},
+		{"util/generic/string.h", "util/generic/string.h"}, // bare path unchanged
+	}
+	for _, c := range cases {
+		got := c.input
+		if v, ok := ParseVFS(c.input); ok {
+			got = v.Rel
+		}
+		if got != c.want {
+			t.Errorf("VFS prefix strip(%q) = %q, want %q", c.input, got, c.want)
+		}
+	}
+}
+
 func TestCollectModule_LibiconvUsesStaticPeerWithMergedYdbFlags(t *testing.T) {
 	const ydbSourceRoot = "/home/pg/monorepo/ydb"
 	if _, err := os.Stat(filepath.Join(ydbSourceRoot, "contrib/libs/libiconv/ya.make")); err != nil {

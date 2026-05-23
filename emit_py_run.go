@@ -163,6 +163,9 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 		includes = append(includes, includeDirective{kind: includeQuoted, target: runProgramInputVFS(ctx, instance, d, f).Rel})
 	}
 	for _, f := range stmt.OutputIncludes {
+		if v, ok := ParseVFS(f); ok {
+			f = v.Rel
+		}
 		includes = append(includes, includeDirective{kind: includeQuoted, target: f})
 	}
 	return includes

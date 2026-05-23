@@ -258,8 +258,12 @@ func prEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, outFil
 		includes = append(includes, includeDirective{kind: includeQuoted, target: runProgramInputVFS(ctx, instance, d, f).Rel})
 	}
 
-	// OUTPUT_INCLUDES entries are repo-relative.
+	// OUTPUT_INCLUDES entries are repo-relative; expandStmtTokens may have
+	// expanded ${ARCADIA_ROOT} → $(S)/ — strip the VFS prefix if present.
 	for _, f := range stmt.OutputIncludes {
+		if v, ok := ParseVFS(f); ok {
+			f = v.Rel
+		}
 		includes = append(includes, includeDirective{kind: includeQuoted, target: f})
 	}
 
