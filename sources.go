@@ -20,7 +20,8 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 		return nil
 	}
 
-	visited := make(idSet, 1024)
+	visited := &idSet{}
+	visited.reset(scanner.interner.relIDBound())
 	order := make([]uint32, 0, 1024)
 	srcAbsSet := make(map[uint32]struct{}, len(sources))
 
@@ -42,6 +43,9 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 
 		sc := ctx.getScanCtx(scanner, cfg)
 		sc.cfg.SourceRel = srcRelOnDisk
+		// dfsID keys children/subgraph caches on curSourceClass; this path
+		// calls dfsID directly (not via WalkClosure), so set it per source.
+		sc.curSourceClass = scanner.sourceClassID(srcRelOnDisk)
 
 		srcAbs := Source(srcRelOnDisk)
 		srcID := scanner.interner.internVFS(srcAbs)
