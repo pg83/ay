@@ -8,6 +8,9 @@ diff.py metrics plus exact normalized-node parity counts (xfail cases).
 xfail cases never affect the exit code; the suite fails only when a gating
 case diverges.
 
+xfail values: False = gating (byte-compare); True = xfail (parity metrics only);
+"auto" = gate when byte-exact, xfail otherwise (self-promoting once parity is reached).
+
 Usage: validate.py [out-dir]   (default: <repo>/.out/validate)
 """
 import os
@@ -19,13 +22,13 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 AY = os.path.join(REPO_ROOT, "ay")
 
-# name, normalize target, raw upstream reference, xfail
+# name, normalize target, raw upstream reference, xfail (see docstring for values)
 CASES = [
     ("sg2", "devtools/ymake/bin", "/home/pg/monorepo/yatool/sg2.json", False),
     ("sg2_x86_64", "devtools/ymake/bin", "/home/pg/monorepo/yatool/sg2_x86_64.json", False),
     ("sg3", "devtools/ya/bin", "/home/pg/monorepo/yatool/sg3.json", False),
     ("sg4", "util/ut", "/home/pg/monorepo/ydb/sg4.json", False),
-    ("sg5", "ydb/apps/ydbd", "/home/pg/monorepo/ydb/sg5.json", True),
+    ("sg5", "ydb/apps/ydbd", "/home/pg/monorepo/ydb/sg5.json", "auto"),
 ]
 
 
@@ -142,6 +145,9 @@ def main() -> int:
         normalize_sort(ref, target, ref_n)
 
         if xfail:
+            if xfail == "auto" and run(["cmp", "-s", our_n, ref_n]).returncode == 0:
+                print(f"[{name}] OK")
+                continue
             parity = normalized_node_parity_counts(our_n, ref_n)
             print(
                 f"[{name}] exact normalized-node parity: "
