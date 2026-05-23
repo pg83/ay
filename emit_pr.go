@@ -318,6 +318,14 @@ func runProgramInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, rel
 		}
 	}
 
+	// IN paths in RUN_PROGRAM may be arcadia-root-absolute (e.g.
+	// "contrib/libs/llvm16/lib/Target/RISCV/RISCV.td").  Prepending
+	// instance.Path would produce a spurious double-prefix, so check
+	// the arcadia root first.
+	if ctx.fs.IsFile(rel) {
+		return Source(rel)
+	}
+
 	return resolveModuleSourceVFS(ctx, instance, d, rel, d.srcDir)
 }
 

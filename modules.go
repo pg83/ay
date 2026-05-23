@@ -45,6 +45,8 @@ type moduleData struct {
 	joinSrcs             []*JoinSrcsStmt
 	addIncl              []VFS    // non-GLOBAL ADDINCL paths
 	addInclGlobal        []VFS    // ADDINCL(GLOBAL ...); peer-propagated to consumers
+	cfAddIncl            []VFS    // CONFIGURE_FILE ${addincl;output:Dst}; flushed to addIncl after collectStmts
+	cfAddInclGlobal      []VFS    // CONFIGURE_FILE ${addincl;output:Dst} (Global); flushed to addInclGlobal after collectStmts
 	cythonAddIncl        []VFS    // ADDINCL(FOR cython ...); consumed by CY command, not downstream CC
 	asmAddIncl           []VFS    // ADDINCL(FOR asm ...); assembler-only include search path, not CC/CXX
 	cFlags               []string // non-GLOBAL CFLAGS (own C+C++ sources)
@@ -408,6 +410,12 @@ func collectModule(fs *FS, modulePath string, kind ModuleKind, stmts []Stmt, env
 	}
 
 	collectStmts(modulePath, kind, stmts, env, d)
+	// Flush CONFIGURE_FILE ${addincl;output:Dst} paths after all regular
+	// ADDINCL entries (ymake output-registration phase ordering).
+	d.addIncl = append(d.addIncl, d.cfAddIncl...)
+	d.addInclGlobal = append(d.addInclGlobal, d.cfAddInclGlobal...)
+	d.cfAddIncl = nil
+	d.cfAddInclGlobal = nil
 	filterInvalidAddIncl(fs, d)
 	if kind == KindLib {
 		// PY_MAIN belongs to the executable half of PY3_PROGRAM. The
@@ -815,6 +823,11 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			d.configureFiles = append(d.configureFiles, &expanded)
 			if strings.HasSuffix(expanded.Src, ".h.in") || strings.HasSuffix(expanded.Dst, ".h") {
 				addGeneratedHeaderInclude(modulePath, expanded.Dst, d)
+			} else {
+				// ymake registers ${addincl;output:Dst} in the output-registration
+				// phase, after all macro-level ADDINCL entries. Collect here and
+				// flush to d.addIncl/d.addInclGlobal after collectStmts returns.
+				addGeneratedHeaderIncludeCF(modulePath, expanded.Dst, d)
 			}
 		case *CreateBuildInfoStmt:
 			d.createBuildInfoFor = &v.OutputHeader
@@ -962,6 +975,25 @@ func addGeneratedHeaderInclude(modulePath, dst string, d *moduleData) {
 	include := Build(rel)
 	d.addIncl = append(d.addIncl, include)
 	d.addInclGlobal = append(d.addInclGlobal, include)
+}
+
+// addGeneratedHeaderIncludeCF is like addGeneratedHeaderInclude but appends to
+// d.cfAddIncl / d.cfAddInclGlobal instead of d.addIncl / d.addInclGlobal.
+// These are flushed to d.addIncl/d.addInclGlobal in collectModule AFTER all
+// regular ADDINCL statements, mirroring ymake's output-registration phase.
+func addGeneratedHeaderIncludeCF(modulePath, dst string, d *moduleData) {
+	outVFS := copyFileOutputVFS(modulePath, dst)
+	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.Rel)))
+	rel := dir
+	if dir != "." && dir != "" {
+		rel = filepath.ToSlash(filepath.Clean(dir))
+	} else {
+		rel = modulePath
+	}
+
+	include := Build(rel)
+	d.cfAddIncl = append(d.cfAddIncl, include)
+	d.cfAddInclGlobal = append(d.cfAddInclGlobal, include)
 }
 
 func addGeneratedOwnHeaderInclude(modulePath, dst string, d *moduleData) {
@@ -1930,6 +1962,22 @@ func buildIfEnv(instance ModuleInstance) Environment {
 	env.SetBool("USE_ARCADIA_COMPILER_RUNTIME", useRuntime != "no")
 	env.SetString("COMPILER_VERSION", instance.Platform.ClangVer)
 	env.SetString("BUILD_TYPE", strings.ToUpper(instance.Platform.BuildType))
+
+	// ymake.core.conf:3039-3124: when (($ARCH_X86_64 || $ARCH_I386) && $DISABLE_INSTRUCTION_SETS != "yes" && $CLANG)
+	// set SIMD CFLAGS variables. CLANG is always true for our target platform (DefaultIfEnv).
+	if (instance.Platform.ISA == ISAX8664 || env.Bool("ARCH_I386")) &&
+		!env.Bool("DISABLE_INSTRUCTION_SETS") {
+		env.SetString("SSE41_CFLAGS", "-msse4.1")
+		env.SetString("SSE42_CFLAGS", "-msse4.2")
+		env.SetString("POPCNT_CFLAGS", "-mpopcnt")
+		env.SetString("CX16_FLAGS", "-mcx16")
+		env.SetString("AVX_CFLAGS", "-mavx -mpclmul")
+		env.SetString("AVX2_CFLAGS", "-mavx2 -mfma -mbmi -mbmi2")
+		env.SetString("AVX512_CFLAGS", "-mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
+		env.SetString("SSE_CFLAGS", "-msse2 -msse3 -mssse3")
+		env.SetString("SSE4_CFLAGS", "-msse4.1 -msse4.2 -mpopcnt -mcx16")
+		env.SetString("AMX_CFLAGS", "-mamx-tile -mamx-int8 -mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
+	}
 
 	return env
 }
