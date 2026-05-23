@@ -239,14 +239,6 @@ type resolveInnerKey struct {
 	flags    uint8
 }
 
-// subgraphInnerKey is the per-scanCtx subgraph cache key. ctxHash is
-// implicit; sourceClass stays because a single scanCtx serves many
-// sources whose sysincl branches differ even within one ctxHash.
-type subgraphInnerKey struct {
-	abs         uint32
-	sourceClass uint32
-}
-
 // scanCtx is the per-ctxHash runtime context for include resolution. It
 // owns every cache whose key contains ctxHash. Two lifecycle policies
 // (see gen.go): "local" (fresh per genModule call) and "interned"
@@ -259,20 +251,19 @@ type scanCtx struct {
 	resolveCache    map[resolveInnerKey][]VFS
 	searchTierCache map[uint32]searchTierResult
 	// subgraphCache holds the full transitive include closure (INCLUDING
-	// the node itself), deduplicated and ascending-sorted by interned ID,
-	// per (absID, sourceClass). Computed by closureOf via Tarjan SCC, so
-	// cycle-containing closures are cached exactly like acyclic ones (every
-	// member of a strongly-connected component shares one closure slice);
-	// no node is ever re-walked. Order within the closure is irrelevant —
-	// dump normalize sorts inputs/deps — so a sorted set suffices.
-	subgraphCache map[subgraphInnerKey][]uint32
-	// childrenCache memoises forEachResolvedChildID's resolved-child ID
-	// list per (absID, sourceClass): closureOf reads each node's children
-	// twice (edge classification + SCC-finalize union), and resolution is a
-	// pure function of that key within one scanCtx. curSourceClass mirrors
-	// the active walk's sourceClassID(cfg.SourceRel) (set in WalkClosure).
-	childrenCache  map[subgraphInnerKey][]uint32
-	curSourceClass uint32
+	// the node itself), deduplicated by interned ID, keyed by absID alone.
+	// Resolution is a pure function of (file, ctxHash) — sysincl keys on the
+	// immediate includer, never on the originating compile root — so the
+	// closure of a node does not depend on which source the walk started
+	// from; one entry per node per scanCtx suffices. Computed by closureOf
+	// via Tarjan SCC, so cycle-containing closures are cached exactly like
+	// acyclic ones (every member of an SCC shares one closure slice); no
+	// node is re-walked. Order is irrelevant — dump normalize sorts inputs.
+	subgraphCache map[uint32][]uint32
+	// childrenCache memoises forEachResolvedChildID's resolved-child ID list
+	// per absID: closureOf reads each node's children twice (edge
+	// classification + SCC-finalize union).
+	childrenCache map[uint32][]uint32
 }
 
 // idSet is a membership set over interned scanner IDs, used as the DFS
@@ -488,8 +479,8 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 		ctxHash:         hashScanContext(&cfg),
 		resolveCache:    make(map[resolveInnerKey][]VFS, 1024),
 		searchTierCache: make(map[uint32]searchTierResult, 256),
-		subgraphCache:   make(map[subgraphInnerKey][]uint32, 512),
-		childrenCache:   make(map[subgraphInnerKey][]uint32, 1024),
+		subgraphCache:   make(map[uint32][]uint32, 512),
+		childrenCache:   make(map[uint32][]uint32, 1024),
 	}
 }
 
@@ -543,11 +534,6 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 	if vfsPath.IsSource() {
 		sc.cfg.SourceRel = vfsPath.Rel
 	}
-
-	// childrenCache and the subgraph caches key on the active source's
-	// equivalence class; cache it once per walk so forEachResolvedChildID
-	// keys without re-deriving it on every node visit.
-	sc.curSourceClass = s.sourceClassID(sc.cfg.SourceRel)
 
 	visited := s.visitedIDPool.Get().(*idSet)
 	visited.reset(s.interner.relIDBound())
@@ -655,14 +641,6 @@ func sourceClassSignature(view PerSourceView) uint64 {
 	h *= prime
 
 	return h
-}
-
-// sourceClassID returns the scanner-local numeric ID of the active
-// SOURCE-keyed sysincl equivalence class for sourceRel.
-func (s *IncludeScanner) sourceClassID(sourceRel string) uint32 {
-	id, _ := s.sourceClass(sourceRel)
-
-	return id
 }
 
 func (s *IncludeScanner) sourceClass(sourceRel string) (uint32, PerSourceView) {
@@ -839,14 +817,13 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 }
 
 // forEachResolvedChildID invokes `fn` once per resolved-child ID of
-// `absID`. The resolved-child ID list is memoised per (absID,
-// curSourceClass): the resolution is a pure function of that key within
-// one scanCtx, so tainted-subgraph re-walks (which dominate large graphs)
-// reuse it instead of re-running resolve() for every parsed include on
-// every visit.
+// `absID`. The resolved-child ID list is memoised per absID: resolution is
+// a pure function of (file, ctxHash) within one scanCtx, so a node's
+// children are the same whatever the walk's root source — tainted-subgraph
+// re-walks reuse it instead of re-running resolve() for every parsed
+// include on every visit.
 func (sc *scanCtx) forEachResolvedChildID(absID uint32, fn func(uint32)) {
-	key := subgraphInnerKey{abs: absID, sourceClass: sc.curSourceClass}
-	if cached, ok := sc.childrenCache[key]; ok {
+	if cached, ok := sc.childrenCache[absID]; ok {
 		for _, id := range cached {
 			fn(id)
 		}
@@ -859,7 +836,7 @@ func (sc *scanCtx) forEachResolvedChildID(absID uint32, fn func(uint32)) {
 	sc.forEachResolvedChild(vfsPath, func(rabs VFS) {
 		children = append(children, sc.scanner.interner.internVFS(rabs))
 	})
-	sc.childrenCache[key] = children
+	sc.childrenCache[absID] = children
 
 	for _, id := range children {
 		fn(id)
@@ -894,16 +871,15 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 }
 
 // closureOf returns the full transitive include closure of absID
-// (INCLUDING absID) for the active sourceClass: a deduplicated,
-// cache-owned []uint32 (iterate only). Cycle-safe via Tarjan SCC — each
-// (node, sourceClass) is explored at most once for the whole run, and
-// every member of a strongly-connected component shares one closure
-// slice, so include cycles cost no more than acyclic fan-out. Element
-// order is the deterministic first-exploration order; downstream callers
-// treat the result as a set (dump normalize sorts inputs), so no sort.
+// (INCLUDING absID): a deduplicated, cache-owned []uint32 (iterate only).
+// Cycle-safe via Tarjan SCC — each node is explored at most once per
+// scanCtx for the whole run, and every member of a strongly-connected
+// component shares one closure slice, so include cycles cost no more than
+// acyclic fan-out. Element order is the deterministic first-exploration
+// order; downstream callers treat the result as a set (dump normalize
+// sorts inputs), so no sort.
 func (sc *scanCtx) closureOf(absID uint32) []uint32 {
-	key := subgraphInnerKey{abs: absID, sourceClass: sc.curSourceClass}
-	if cached, ok := sc.subgraphCache[key]; ok {
+	if cached, ok := sc.subgraphCache[absID]; ok {
 		sc.scanner.subgraphHits++
 
 		return cached
@@ -922,7 +898,7 @@ func (sc *scanCtx) closureOf(absID uint32) []uint32 {
 
 	sc.strongconnect(absID)
 
-	return sc.subgraphCache[key]
+	return sc.subgraphCache[absID]
 }
 
 // strongconnect is the recursive Tarjan core. It finalizes every SCC it
@@ -940,7 +916,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 	s.tjOnStack[v] = true
 
 	sc.forEachResolvedChildID(v, func(w uint32) {
-		if _, cached := sc.subgraphCache[subgraphInnerKey{abs: w, sourceClass: sc.curSourceClass}]; cached {
+		if _, cached := sc.subgraphCache[w]; cached {
 			s.subgraphHits++ // reuse of a previously-finalized node's closure
 
 			return
@@ -987,7 +963,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 				return // same SCC; already added as a member
 			}
 
-			for _, id := range sc.subgraphCache[subgraphInnerKey{abs: w, sourceClass: sc.curSourceClass}] {
+			for _, id := range sc.subgraphCache[w] {
 				if !s.tjClosure.has(id) {
 					s.tjClosure.add(id)
 					buf = append(buf, id)
@@ -1006,7 +982,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 	}
 
 	for _, u := range members {
-		sc.subgraphCache[subgraphInnerKey{abs: u, sourceClass: sc.curSourceClass}] = out
+		sc.subgraphCache[u] = out
 		s.tjOnStack[u] = false
 	}
 
@@ -1029,7 +1005,6 @@ func (sc *scanCtx) strongconnect(v uint32) {
 //     libcxxabi and libcxxrt).
 func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	s := sc.scanner
-	ctx := &sc.cfg
 
 	// Unresolved-include diagnostic: surface every directive with no
 	// hit in source dir / build dir / search path AND not claimed by
@@ -1074,13 +1049,18 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	// (negative-lookahead `(?!...)` → source-keyed, otherwise includer-
 	// keyed). includerAbs is $(S)/-rooted here (BUILD_ROOT dispatches
 	// in forEachResolvedChild); strip to the sysincl-keyed rel form.
+	//
+	// Both halves key on the IMMEDIATE INCLUDER (the file that holds the
+	// directive), matching upstream ymake: TModuleResolver resolves a file's
+	// includes with src = that file, and Conf.Sysincl.Resolve(src, ...) keys
+	// the source_filter on it — never on the originating compile root. That
+	// makes a file's resolution a pure function of (file, ADDINCL ctx),
+	// independent of which target pulled it in — including generated $(B)
+	// includers, which key on their own build path just like upstream.
 	includerRel := includerAbs.Rel
-	if includerAbs.IsBuild() && ctx.SourceRel != "" {
-		includerRel = ctx.SourceRel
-	}
 	var mappings []VFS
 	var hasMultiTarget bool
-	mappings, hasMultiTarget, sysinclClaimed = s.sysinclLookup(ctx.SourceRel, includerRel, d.target)
+	mappings, hasMultiTarget, sysinclClaimed = s.sysinclLookup(includerRel, includerRel, d.target)
 
 	// Quoted-include gate. For quoted includes with at least one local
 	// hit, sysincl is suppressed when:
