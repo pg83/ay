@@ -440,6 +440,17 @@ func collectModule(fs *FS, modulePath string, kind ModuleKind, stmts []Stmt, env
 	applyPython3AddIncl(modulePath, d)
 	applyBuildInfoAddIncl(modulePath, d)
 
+	// All ADDINCL contributions are collected now (the parser appends
+	// without deduping, and several phases above add the same dirs). Dedup
+	// once, first-occurrence-wins, so consumers read a clean list instead of
+	// each re-deduping it. Duplicates would otherwise emit duplicate -I flags
+	// — REF (openssl drbg_lib.c.o) carries 6 unique entries though top-level
+	// ADDINCL and an INCLUDE'd crypto/ya.make.inc ADDINCL name the same
+	// paths. d.addIncl/d.addInclGlobal have no in-place mutators downstream,
+	// so consumers can share the slice.
+	d.addIncl = mergeDedupVFS(d.addIncl, nil)
+	d.addInclGlobal = mergeDedupVFS(d.addInclGlobal, nil)
+
 	// _CPP_EVLOG_CMD / _CPP_PROTO_EVLOG_CMD (build/conf/proto.conf:480-491)
 	// append `.PEERDIR=library/cpp/eventlog contrib/libs/protobuf` to
 	// the owning module for every `.ev` source. Visiting eventlog's

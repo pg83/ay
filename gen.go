@@ -894,7 +894,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// this branch models modules with no compilable own sources.
 		headerOnlyInputs := ModuleCCInputs{
 			Flags:             d.flags,
-			AddIncl:           mergeDedupVFS(d.addIncl, nil),
+			AddIncl:           d.addIncl,
 			PeerAddInclGlobal: peerContribs.addIncl,
 			SrcDir:            d.srcDir,
 			SourceRoot:        ctx.sourceRoot,
@@ -1790,15 +1790,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
 
-	// Dedup d.addIncl in first-occurrence-wins order. REF (openssl
-	// drbg_lib.c.o idx 9-14: 6 unique entries) does not emit duplicate -I
-	// flags when the same path appears in both top-level ADDINCL and an
-	// INCLUDE'd `crypto/ya.make.inc` ADDINCL. Our parser appends without
-	// dedup at the AddInclStmt site, so without this dedup openssl emits
-	// 8 entries (6 unique + 2 trailing dupes). Composer-entry dedup keeps
-	// the parser's append-only model while matching upstream's emit-time
-	// behaviour.
-	dedupedAddIncl := mergeDedupVFS(d.addIncl, nil)
+	// d.addIncl is already deduped (first-occurrence-wins) at module
+	// construction; consume it directly.
+	dedupedAddIncl := d.addIncl
 
 	// PY23_NATIVE_LIBRARY and PY23_LIBRARY emit ".py3.o" CC outputs (not
 	// plain ".o") per REF (e.g. library/python/symbols/module/
