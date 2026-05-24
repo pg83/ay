@@ -5975,13 +5975,17 @@ func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
 		t.Fatal("graph is missing db objcopy output")
 	}
 
-	// objcopy.py is a build script — kept. data.sql is a resource SOURCE —
-	// excluded (an archive bundles objects/scripts, not member sources).
-	if !nodeHasInput(regularAR, "$(S)/build/scripts/objcopy.py") {
-		t.Fatalf("libdb.a inputs missing objcopy.py: %#v", regularAR.Inputs)
+	// Neither the resource source (data.sql) nor the objcopy node's script
+	// (objcopy.py) is an AR input — an archive bundles objects + its own
+	// script (link_lib.py), not member sources or other nodes' wrapper
+	// scripts. Both are dropped from AR inputs.
+	if !nodeHasInput(regularAR, "$(S)/build/scripts/link_lib.py") {
+		t.Fatalf("libdb.a inputs missing its own script link_lib.py: %#v", regularAR.Inputs)
 	}
-	if nodeHasInput(regularAR, "$(S)/db/data.sql") {
-		t.Errorf("libdb.a must not list the resource source data.sql: %#v", regularAR.Inputs)
+	for _, absent := range []string{"$(S)/db/data.sql", "$(S)/build/scripts/objcopy.py"} {
+		if nodeHasInput(regularAR, absent) {
+			t.Errorf("libdb.a must not list %q (not an AR input): %#v", absent, regularAR.Inputs)
+		}
 	}
 }
 
