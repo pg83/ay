@@ -59,7 +59,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		strings.HasSuffix(srcRel, ".cc"),
 		strings.HasSuffix(srcRel, ".cxx"):
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
-		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, srcVFS, srcIn)
+		// Primary-first closure: full = [srcVFS, ...headers] (nil when the
+		// module has no scanner). Headers-only view is full[1:].
+		full := walkClosureRoot(ctx, srcInstance, srcVFS, srcVFS.Rel, srcIn)
+		if full != nil {
+			srcIn.IncludeInputs = full[1:]
+		}
 		flatcExtras := flatcCCExtraInputs(ctx, srcIn.IncludeInputs)
 		if len(flatcExtras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, flatcExtras)
@@ -67,6 +72,13 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		extras := runtimePy3CCExtraInputs(srcInstance.Path, srcRel)
 		if len(extras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, extras)
+		}
+		// With no extras perturbing it, `full` is the exact [primary, ...headers]
+		// node.Inputs — hand it to EmitCC to skip the rebuild (and the CcIns
+		// copy). An append above reallocated IncludeInputs away from full, so
+		// there leave NodeInputs nil and let EmitCC build from inVFS+headers.
+		if len(flatcExtras) == 0 && len(extras) == 0 {
+			srcIn.NodeInputs = full
 		}
 		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})
 

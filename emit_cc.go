@@ -60,6 +60,13 @@ type ModuleCCInputs struct {
 	// source path in DFS-discovery order. Empty for synthetic paths
 	// bypassing the walker.
 	IncludeInputs []VFS
+	// NodeInputs, when non-nil, is the pre-built [primary, ...headers]
+	// slice (WalkClosureWithRoot's result) that EmitCC adopts verbatim as
+	// node.Inputs, skipping the [inVFS]+IncludeInputs rebuild. Set only on
+	// the regular-source path, where the walk root IS the compiled primary;
+	// IncludeInputs is then NodeInputs[1:] (the same backing array). nil
+	// everywhere else — EmitCC builds node.Inputs from inVFS+IncludeInputs.
+	NodeInputs []VFS
 	// PeerCFlagsGlobal: transitive union of every PEERDIR's GLOBAL
 	// CFLAGS. Applies to BOTH C and C++ sources; slotted at the
 	// ownCFlags slot (see composeOwnAndPeerCFlagsAtOwnSlot).
@@ -245,11 +252,16 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	// future mutators MUST clone before mutating.
 	env := hostP.ToolEnv()
 
-	// node.Inputs order: primary source first, then include-inputs in
-	// DFS-discovery order (scanner does no sorting; L2 is multiset).
-	allInputs := make([]VFS, 0, 1+len(in.IncludeInputs))
-	allInputs = append(allInputs, inVFS)
-	allInputs = append(allInputs, in.IncludeInputs...)
+	// node.Inputs is [primary, ...headers]. The regular-source path supplies
+	// it pre-built via NodeInputs (WalkClosure's primary-first result), so we
+	// adopt that slice verbatim; otherwise build it from inVFS + IncludeInputs.
+	// Order is irrelevant downstream (L4 normalization sorts node inputs).
+	allInputs := in.NodeInputs
+	if allInputs == nil {
+		allInputs = make([]VFS, 0, 1+len(in.IncludeInputs))
+		allInputs = append(allInputs, inVFS)
+		allInputs = append(allInputs, in.IncludeInputs...)
+	}
 
 	node := &Node{
 		Cmds: []Cmd{

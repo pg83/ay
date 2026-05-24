@@ -133,7 +133,21 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 	return walkClosureWithSourceRel(ctx, srcInstance, vfsPath, vfsPath.Rel, in)
 }
 
+// walkClosureWithSourceRel returns the headers-only closure (root excluded):
+// the [1:] view of walkClosureRoot's primary-first slice.
 func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourceRel string, in ModuleCCInputs) []VFS {
+	full := walkClosureRoot(ctx, srcInstance, vfsPath, sourceRel, in)
+	if full == nil {
+		return nil
+	}
+	return full[1:]
+}
+
+// walkClosureRoot is the primary-first driver: [vfsPath, ...headers], or nil
+// when the module has no scanner. The regular-source path adopts the full
+// slice as node.Inputs (ModuleCCInputs.NodeInputs); every other caller takes
+// the [1:] headers-only view via walkClosure/walkClosureWithSourceRel.
+func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourceRel string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerFor(srcInstance)
 	if scanner == nil {
 		return nil
@@ -146,9 +160,7 @@ func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath V
 		BaseSearchPaths: includeScannerBasePaths(),
 	}
 
-	sc := scanner.NewScanCtx(cfg)
-
-	return sc.WalkClosure(vfsPath)
+	return scanner.NewScanCtx(cfg).WalkClosure(vfsPath)
 }
 
 // includeScannerBasePaths returns the scanner baseline NOT expected to
