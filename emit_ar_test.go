@@ -2,7 +2,6 @@ package main
 
 import (
 	"reflect"
-	"sort"
 	"strings"
 	"testing"
 )
@@ -298,9 +297,10 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 	}
 }
 
-// TestEmitAR_InputsSorted verifies that EmitAR sorts the .o paths
-// alphabetically in inputs, regardless of caller-supplied order.
-func TestEmitAR_InputsSorted(t *testing.T) {
+// TestEmitAR_InputsLeadWithObjPaths verifies that EmitAR's inputs lead with
+// the .o paths in caller (declaration) order. The emitter does not sort —
+// node-input order is normalized away by the gate.
+func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	makeLeaf := func(out VFS) NodeRef {
@@ -333,11 +333,8 @@ func TestEmitAR_InputsSorted(t *testing.T) {
 
 	inputObjs := vfsStrings(inputs[:3])
 
-	if !sort.StringsAreSorted(inputObjs) {
-		t.Errorf("inputs .o paths not sorted: %v", inputObjs)
-	}
-
-	wantInputObjs := []string{a.String(), m.String(), z.String()}
+	// Inputs lead with objPaths in declaration order (z, m, a), not sorted.
+	wantInputObjs := []string{z.String(), m.String(), a.String()}
 
 	if !reflect.DeepEqual(inputObjs, wantInputObjs) {
 		t.Errorf("inputs .o mismatch:\n  want %v\n  got  %v", wantInputObjs, inputObjs)

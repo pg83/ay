@@ -148,7 +148,6 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, m
 		return nil
 	}
 	out = mergeDedupVFS(out, nil)
-	SortVFS(out)
 	return out
 }
 

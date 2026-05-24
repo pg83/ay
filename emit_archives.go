@@ -24,8 +24,8 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 	// Aggregate SOURCE_ROOT-rooted IN files contributed by every PR
 	// in this module — REF includes the full upstream set in each
-	// ARCHIVE's inputs[], not just the producing PR's IN list. Sort +
-	// dedup once.
+	// ARCHIVE's inputs[], not just the producing PR's IN list. Dedup once
+	// in first-occurrence order (normalization sorts node inputs).
 	var prInSources []VFS
 	{
 		seen := map[VFS]struct{}{}
@@ -39,7 +39,6 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				prInSources = append(prInSources, p)
 			}
 		}
-		SortVFS(prInSources)
 	}
 
 	reg := codegenRegForInstance(ctx, instance)
@@ -187,22 +186,25 @@ func emitArchive(
 	// (rebased to SOURCE_ROOT, pre-aggregated by caller). Dedup
 	// against the per-file slot.
 	inputs := make([]VFS, 0, len(pathPerFile)+len(prSiblingOutputs)+1+len(prInSources))
-	// Build a global lexical-order set of BUILD_ROOT entries:
-	// pathPerFile ∪ prSiblingOutputs, sorted by canonical String form,
-	// so REF's "alphabetical merge of producer outputs" shape lines up.
-	buildRootSet := map[VFS]struct{}{}
+	// BUILD_ROOT block = pathPerFile ∪ prSiblingOutputs, deduped in
+	// first-occurrence order (pathPerFile then prSiblingOutputs).
+	// Normalization sorts node inputs, so order here is irrelevant to the
+	// gate; iterating the slices keeps it deterministic without a sort.
+	buildRootSeen := map[VFS]struct{}{}
 	for _, p := range pathPerFile {
-		buildRootSet[p] = struct{}{}
+		if _, dup := buildRootSeen[p]; dup {
+			continue
+		}
+		buildRootSeen[p] = struct{}{}
+		inputs = append(inputs, p)
 	}
 	for _, p := range prSiblingOutputs {
-		buildRootSet[p] = struct{}{}
+		if _, dup := buildRootSeen[p]; dup {
+			continue
+		}
+		buildRootSeen[p] = struct{}{}
+		inputs = append(inputs, p)
 	}
-	buildRootSorted := make([]VFS, 0, len(buildRootSet))
-	for p := range buildRootSet {
-		buildRootSorted = append(buildRootSorted, p)
-	}
-	SortVFS(buildRootSorted)
-	inputs = append(inputs, buildRootSorted...)
 	inputs = append(inputs, toolBinPath)
 	inSet := map[VFS]struct{}{}
 	for _, p := range inputs {

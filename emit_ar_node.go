@@ -1,14 +1,13 @@
 package main
 
-import "sort"
-
 // Shared implementation behind EmitAR / EmitARNamed / EmitARNamedTagged /
 // EmitARGlobalNamedTagged. peerArchiveRefs go into DepRefs only (NOT
 // cmd_args/inputs): ar(1) archives .o files; peer archives are link-time
-// inputs for LD. objPaths is caller (declaration) order for cmd_args; the
-// .o set is sorted alphabetically in `inputs`, then the link script and
-// optional ar plugin, then the memberInputs union deduped against prior
-// inputs. peerArchiveRefs is nil in production (reference graph carries
+// inputs for LD. objPaths (caller/declaration order) goes into cmd_args and
+// `inputs`, then the link script and optional ar plugin, then the
+// memberInputs union deduped against prior inputs. Node-input order is
+// normalized away, so `inputs` is not sorted.
+// peerArchiveRefs is nil in production (reference graph carries
 // zero AR-on-AR deps); parameter retained for tests.
 func emitARNode(
 	instance ModuleInstance,
@@ -46,13 +45,8 @@ func emitARNode(
 		cmdArgs = append(cmdArgs, p.String())
 	}
 
-	sortedObjPaths := append([]VFS(nil), objPaths...)
-	sort.Slice(sortedObjPaths, func(i, j int) bool {
-		return string(sortedObjPaths[i].Rel) < string(sortedObjPaths[j].Rel)
-	})
-
-	inputs := make([]VFS, 0, len(sortedObjPaths)+2+len(memberInputs))
-	inputs = append(inputs, sortedObjPaths...)
+	inputs := make([]VFS, 0, len(objPaths)+2+len(memberInputs))
+	inputs = append(inputs, objPaths...)
 	inputs = append(inputs, scriptVFS)
 	if arPluginPath != nil {
 		inputs = append(inputs, *arPluginPath)

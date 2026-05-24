@@ -6,14 +6,11 @@ package main
 // link_exe.py (carries `cwd: $(B)` because command-file paths are
 // BUILD_ROOT-relative), fs_tools.py link_or_copy_to_dir.
 //
-// inputs[] order is load-bearing: alphabetically-sorted BUILD_ROOT block,
-// then the 7-script bundle in REGISTRATION ORDER (not alphabetical),
-// then union of member-CC inputs. __vcs_version__.c{,.o} are produced
-// in-node and not listed.
-
-import (
-	"sort"
-)
+// inputs[] = BUILD_ROOT block (peer archives, plugins, globals, own .o,
+// objcopy .o), then the 7-script bundle, then union of member-CC inputs.
+// Node-input order is normalized away (the gate sorts inputs), so the block
+// is built in first-occurrence order, not sorted. __vcs_version__.c{,.o} are
+// produced in-node and not listed.
 
 // EmitLD emits the 4-cmd LD node for a PROGRAM module.
 //
@@ -510,15 +507,15 @@ func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) [
 	}
 }
 
-// composeLDInputs composes the `inputs` array for an LD node:
-// alphabetically-sorted BUILD_ROOT block (peer archives, plugins,
-// globals, own .o, objcopy .o) followed by ldScriptInputs in registration
-// order. Caller appends member-CC inputs afterwards. __vcs_version__.c{,.o}
+// composeLDInputs composes the `inputs` array for an LD node: the BUILD_ROOT
+// block (peer archives, plugins, globals, own .o, objcopy .o) followed by
+// ldScriptInputs in registration order. Caller appends member-CC inputs
+// afterwards. Node-input order is normalized away. __vcs_version__.c{,.o}
 // are produced by cmd[0]/cmd[1] in-node and excluded.
 func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS) []VFS {
-	// Lift every build-root participant into one VFS-typed block before
-	// alphabetising. Keep the first occurrence when multiple categories
-	// contribute the same BUILD_ROOT path.
+	// Lift every build-root participant into one VFS-typed block in
+	// first-occurrence order. Keep the first occurrence when multiple
+	// categories contribute the same BUILD_ROOT path.
 	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(wholeArchivePaths)+len(dynamicPaths)+len(ccPaths)+len(objcopyPaths))
 	buildRootSeen := make(map[VFS]struct{}, cap(buildRootBlock))
 
@@ -542,9 +539,6 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, plugi
 	// objcopy `.o` paths arrive $(B)-rooted; they belong in the
 	// BUILD_ROOT block alongside own .cpp.o and peer .a entries.
 	appendBuildRoot(objcopyPaths)
-	sort.Slice(buildRootBlock, func(i, j int) bool {
-		return string(buildRootBlock[i].Rel) < string(buildRootBlock[j].Rel)
-	})
 
 	out := make([]VFS, 0, len(buildRootBlock)+len(ldScriptInputs))
 	out = append(out, buildRootBlock...)
