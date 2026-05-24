@@ -50,7 +50,6 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 
 	var pyProtoRefs []NodeRef
 	var pyProtoOutputs []VFS
-	var pyProtoMemberInputs []VFS
 	var auxEntries []pyProtoAuxEntry
 
 	for _, src := range protoSrcs {
@@ -62,10 +61,6 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 		pyProtoRefs = append(pyProtoRefs, auxRes.Refs...)
 		pyProtoOutputs = append(pyProtoOutputs, auxRes.Outputs...)
 	}
-	if auxRes != nil && len(auxRes.MemberInputs) > 0 {
-		pyProtoMemberInputs = append(pyProtoMemberInputs, pbPyWrapperVFS)
-		pyProtoMemberInputs = append(pyProtoMemberInputs, auxRes.MemberInputs...)
-	}
 
 	if len(pyProtoRefs) == 0 {
 		return nil
@@ -74,7 +69,7 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 	pyInstance := instance
 	pyInstance.Language = LangPy
 	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", "")
-	gRef := EmitARGlobalNamedTagged(pyInstance, globalBaseName, "py3_proto_global", pyProtoRefs, pyProtoOutputs, pyProtoMemberInputs, ctx.host, ctx.emit)
+	gRef := EmitARGlobalNamedTagged(pyInstance, globalBaseName, "py3_proto_global", pyProtoRefs, pyProtoOutputs, ctx.host, ctx.emit)
 
 	globalPath := Build(instance.Path + "/" + globalBaseName)
 	result := &protoSrcsResult{
@@ -356,9 +351,8 @@ func pyProtoSourceInputs(inputs []VFS) []VFS {
 }
 
 type pyProtoAuxChunksResult struct {
-	Refs         []NodeRef
-	Outputs      []VFS
-	MemberInputs []VFS
+	Refs    []NodeRef
+	Outputs []VFS
 }
 
 // pyProtoAuxPeerCFlags returns peer-GLOBAL CFLAGS for the PY3_PROTO aux
@@ -458,7 +452,6 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 	flush()
 
 	res := &pyProtoAuxChunksResult{}
-	memberSeen := map[VFS]struct{}{}
 	for _, ch := range chunks {
 		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, "PY3_PROTO") + "_raw.auxcpp")
 		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, peerContribs, aux, ch.inputs, cppSibling)
@@ -508,13 +501,6 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		ccRef, ccOut, _ := EmitCC(instance, aux.Rel[strings.LastIndex(aux.Rel, "/")+1:], aux, ccIn, ctx.host, ctx.emit)
 		res.Refs = append(res.Refs, ccRef)
 		res.Outputs = append(res.Outputs, ccOut)
-		for _, v := range inputs {
-			if _, ok := memberSeen[v]; ok {
-				continue
-			}
-			memberSeen[v] = struct{}{}
-			res.MemberInputs = append(res.MemberInputs, v)
-		}
 	}
 
 	return res

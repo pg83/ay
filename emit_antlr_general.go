@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS, memberInputsList [][]VFS) {
+func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS) {
 	if len(d.antlrRuns) == 0 {
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	reg := codegenRegForInstance(ctx, instance)
@@ -64,14 +64,13 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			}
 			outVFS := outVFSByToken[outTok]
 			cppRel := antlrOutputModuleRel(instance.Path, outVFS)
-			ccRef, ccOut, ccIns := emitCodegenDownstreamCC(ctx, instance, cppRel, nil, []NodeRef{jvRef}, *consumerInputs)
+			ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, cppRel, nil, []NodeRef{jvRef}, *consumerInputs)
 			ccRefs = append(ccRefs, ccRef)
 			ccOutputs = append(ccOutputs, ccOut)
-			memberInputsList = append(memberInputsList, ccIns)
 		}
 	}
 
-	return ccRefs, ccOutputs, memberInputsList
+	return ccRefs, ccOutputs
 }
 
 func antlrRunCmdArgs(instance ModuleInstance, run antlrRunInfo, inVFSByToken, outVFSByToken map[string]VFS) []string {

@@ -17,9 +17,8 @@ import (
 // `_serialized.cpp` carrying the consuming module's full compile bag.
 // nil → EN nodes only.
 type enumSrcsResult struct {
-	CCRefs           []NodeRef
-	CCOutputs        []VFS
-	MemberInputsList [][]VFS
+	CCRefs    []NodeRef
+	CCOutputs []VFS
 }
 
 func resolveEnumHeaderInput(ctx *genCtx, instance ModuleInstance, headerRel string, srcDir *string) VFS {
@@ -282,10 +281,9 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			allDepRefs := make([]NodeRef, 0, 1+len(augmentedDepENRefs))
 			allDepRefs = append(allDepRefs, enRef)
 			allDepRefs = append(allDepRefs, augmentedDepENRefs...)
-			ccRef, ccOut, ccIns := emitCodegenDownstreamCC(ctx, instance, cppRel, depENOutputs, allDepRefs, *consumerInputs)
+			ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, cppRel, depENOutputs, allDepRefs, *consumerInputs)
 			res.CCRefs = append(res.CCRefs, ccRef)
 			res.CCOutputs = append(res.CCOutputs, ccOut)
-			res.MemberInputsList = append(res.MemberInputsList, ccIns)
 		}
 	}
 

@@ -18,35 +18,6 @@ func canonicalizePy3ccBinary(v VFS) VFS {
 
 const runtimePy3ModulePath = "library/python/runtime_py3"
 
-// pySrcsARExtraInputs returns the extra AR-input set for PY*_LIBRARY modules.
-func pySrcsARExtraInputs(modulePath string, srcDir *string, pySrcs []string, generatedPySrcs map[string][]VFS, resourcePaths []string) []VFS {
-	if len(pySrcs) == 0 && len(resourcePaths) == 0 {
-		return nil
-	}
-
-	actualUnit := modulePath
-	if srcDir != nil {
-		actualUnit = *srcDir
-	}
-
-	out := make([]VFS, 0, 1+len(pySrcs)+len(resourcePaths))
-	out = append(out, Source("build/scripts/objcopy.py"))
-
-	for _, srcRel := range pySrcs {
-		if generatedPySrcs[srcRel] != nil {
-			out = append(out, Build(modulePath+"/"+srcRel))
-		} else {
-			out = append(out, Source(actualUnit+"/"+srcRel))
-		}
-	}
-
-	for _, srcRel := range resourcePaths {
-		out = append(out, Source(modulePath+"/"+srcRel))
-	}
-
-	return out
-}
-
 // runtimePy3CCExtraInputs returns extra CC inputs for runtime_py3 wrappers.
 func runtimePy3CCExtraInputs(modulePath, srcRel string) []VFS {
 	if modulePath != runtimePy3ModulePath {

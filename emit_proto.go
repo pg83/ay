@@ -514,27 +514,24 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 
 func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, protoSrcs, evSrcs []string) *protoSrcsResult {
 	// Collect per-codegen-source (genRef, .pb.cc path) pairs so the AR
-	// step can fold them into ccRefs/ccOutputs/memberInputs in
-	// declaration order.
+	// step can fold them into ccRefs/ccOutputs in declaration order.
 	type protoCodegenOutput struct {
-		genRef  NodeRef // PB or EV node ref (used as Generator dep for the downstream CC)
-		pbCC    VFS     // generated .pb.cc / .ev.pb.cc BUILD_ROOT path
-		srcRel  string  // module-relative source-with-codegen-suffix (".pb.cc" appended)
-		primSrc VFS     // primary source path ($(S)/<module>/<src>) for AR memberInputs
+		genRef NodeRef // PB or EV node ref (used as Generator dep for the downstream CC)
+		pbCC   VFS     // generated .pb.cc / .ev.pb.cc BUILD_ROOT path
+		srcRel string  // module-relative source-with-codegen-suffix (".pb.cc" appended)
 	}
 
 	var codegenOutputs []protoCodegenOutput
 	codegenOutputSeen := make(map[string]struct{})
-	appendCodegenOutput := func(genRef NodeRef, pbCC VFS, srcRel string, primSrc VFS) {
+	appendCodegenOutput := func(genRef NodeRef, pbCC VFS, srcRel string) {
 		if _, dup := codegenOutputSeen[pbCC.Rel]; dup {
 			return
 		}
 		codegenOutputSeen[pbCC.Rel] = struct{}{}
 		codegenOutputs = append(codegenOutputs, protoCodegenOutput{
-			genRef:  genRef,
-			pbCC:    pbCC,
-			srcRel:  srcRel,
-			primSrc: primSrc,
+			genRef: genRef,
+			pbCC:   pbCC,
+			srcRel: srcRel,
 		})
 	}
 	cfg := protoPBConfig{
@@ -553,14 +550,14 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		pb := emitProtoPB(ctx, instance, d, src, cfg)
 
 		ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel, cppInstance.Path+"/")
-		appendCodegenOutput(pb.pbRef, pb.pbCC, ccSrcRel, Source(pb.relPath))
+		appendCodegenOutput(pb.pbRef, pb.pbCC, ccSrcRel)
 		if d.grpc {
 			grpcSrcRel := strings.TrimPrefix(pb.grpcPbCC.Rel, cppInstance.Path+"/")
-			appendCodegenOutput(pb.pbRef, pb.grpcPbCC, grpcSrcRel, Source(pb.relPath))
+			appendCodegenOutput(pb.pbRef, pb.grpcPbCC, grpcSrcRel)
 		}
 		for _, extraSrc := range pb.extraSourceCC {
 			extraSrcRel := strings.TrimPrefix(extraSrc.Rel, cppInstance.Path+"/")
-			appendCodegenOutput(pb.pbRef, extraSrc, extraSrcRel, Source(pb.relPath))
+			appendCodegenOutput(pb.pbRef, extraSrc, extraSrcRel)
 		}
 	}
 
@@ -622,10 +619,9 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			cppInstance.Path = protoCPPModulePath(instance, d)
 			evSrcRel := strings.TrimPrefix(evRelPath+".pb.cc", cppInstance.Path+"/")
 			codegenOutputs = append(codegenOutputs, protoCodegenOutput{
-				genRef:  evRef,
-				pbCC:    evPbCC,
-				srcRel:  evSrcRel,
-				primSrc: Source(evRelPath),
+				genRef: evRef,
+				pbCC:   evPbCC,
+				srcRel: evSrcRel,
 			})
 		}
 	}
@@ -669,18 +665,6 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	// Per-source downstream-CC emission for the PROTO_LIBRARY context.
 	ccRefs := make([]NodeRef, 0, len(codegenOutputs))
 	ccOutputs := make([]VFS, 0, len(codegenOutputs))
-	memberInputs := make([]VFS, 0, 64)
-	memberInputsSeen := make(map[VFS]struct{})
-
-	addMemberInputs := func(paths []VFS) {
-		for _, p := range paths {
-			if _, dup := memberInputsSeen[p]; dup {
-				continue
-			}
-			memberInputsSeen[p] = struct{}{}
-			memberInputs = append(memberInputs, p)
-		}
-	}
 
 	wireFormatVFS := Source(pbRuntimeBase + "google/protobuf/wire_format.h")
 	for _, co := range codegenOutputs {
@@ -710,13 +694,6 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		ccRef, ccOut, _ := EmitCC(cppInstance, co.srcRel, co.pbCC, ccIn, ctx.host, ctx.emit)
 		ccRefs = append(ccRefs, ccRef)
 		ccOutputs = append(ccOutputs, ccOut)
-
-		// AR memberInputs: primary source first, then the CC's include
-		// closure.
-		perCC := make([]VFS, 0, 1+len(ccIn.IncludeInputs))
-		perCC = append(perCC, co.primSrc)
-		perCC = append(perCC, ccIn.IncludeInputs...)
-		addMemberInputs(perCC)
 	}
 	// Wire EN-sourced CC into the archive when the module declares
 	// GENERATE_ENUM_SERIALIZATION. The EN source + CC are orphaned
@@ -725,9 +702,6 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	if enRes != nil {
 		ccRefs = append(ccRefs, enRes.CCRefs...)
 		ccOutputs = append(ccOutputs, enRes.CCOutputs...)
-		for _, mIn := range enRes.MemberInputsList {
-			addMemberInputs(mIn)
-		}
 	}
 
 	// AR emission with module_tag=cpp_proto.
@@ -737,7 +711,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	}
 	arBaseName := archiveNameWithPrefixOrName(instance.Path, "lib", protoLibName)
 	archivePath := Build(instance.Path + "/" + arBaseName)
-	arRef := emitARNode(instance, archivePath, stringPtr("cpp_proto"), ccRefs, ccOutputs, nil, memberInputs, nil, ctx.host, ctx.emit)
+	arRef := emitARNode(instance, archivePath, stringPtr("cpp_proto"), ccRefs, ccOutputs, nil, nil, ctx.host, ctx.emit)
 
 	return &protoSrcsResult{ARRef: arRef, ARPath: &archivePath}
 }

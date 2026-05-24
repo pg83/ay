@@ -7,10 +7,12 @@ package main
 // BUILD_ROOT-relative), fs_tools.py link_or_copy_to_dir.
 //
 // inputs[] = BUILD_ROOT block (peer archives, plugins, globals, own .o,
-// objcopy .o), then the 7-script bundle, then union of member-CC inputs.
-// Node-input order is normalized away (the gate sorts inputs), so the block
-// is built in first-occurrence order, not sorted. __vcs_version__.c{,.o} are
-// produced in-node and not listed.
+// objcopy .o), then the 7-script bundle, then the svnversion.h c_template.
+// No member-CC source/header closure: the link command reads only the
+// objects/archives it bundles plus its own scripts. Node-input order is
+// normalized away (the gate sorts inputs), so the block is built in
+// first-occurrence order, not sorted. __vcs_version__.c{,.o} are produced
+// in-node and not listed.
 
 // EmitLD emits the 4-cmd LD node for a PROGRAM module.
 //
@@ -45,7 +47,6 @@ func EmitLD(
 	dynamicPaths []VFS,
 	objcopyRefs []NodeRef,
 	objcopyPaths []VFS,
-	memberInputs []VFS, //nolint:vfs-stay // cascade from gen.go member-inputs bucket
 	moduleCFlags []string,
 	peerCFlagsGlobal []string,
 	autoPeerCFlags []string,
@@ -139,38 +140,11 @@ func EmitLD(
 
 	inputs := composeLDInputs(instance.Path, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths)
 
-	// Append per-CC member inputs (source + headers) after the script
-	// bundle, deduplicated. Matches sg.json LD shape: BUILD_ROOT block
-	// + 7 scripts + UNION-of-CC-inputs.
-	inputSet := map[VFS]struct{}{}
-	for _, p := range inputs {
-		inputSet[p] = struct{}{}
-	}
-
-	for _, pV := range memberInputs {
-		if _, dup := inputSet[pV]; dup {
-			continue
-		}
-
-		// Drop BUILD_ROOT-rooted codegen products (.pb.h, .pb.cc,
-		// _serialized.*, ANTLR outputs) from LD inputs: BUILD_ROOT
-		// entries on LD's `inputs` are .o / .a / .pyplugin only;
-		// codegen artefacts wire solely through CC's own `inputs`.
-		if pV.IsBuild() && isBuildRootCodegenProductRel(pV.Rel) {
-			continue
-		}
-
-		inputSet[pV] = struct{}{}
-		inputs = append(inputs, pV)
-	}
-
-	// svnversion.h is a c_template consumed by vcs_info.py when
-	// generating __vcs_version__.c. ymake injects it as a static input
-	// on every PROGRAM LD node (last position). Not seen by the CC
-	// include scanner (no user source #includes it), so injected here.
-	if _, dup := inputSet[ldSvnversionHVFS]; !dup {
-		inputs = append(inputs, ldSvnversionHVFS)
-	}
+	// svnversion.h is a c_template consumed by vcs_info.py (cmd[0]) when
+	// generating __vcs_version__.c. ymake injects it as a static input on
+	// every PROGRAM LD node (last position). It is never produced by the
+	// link nor part of composeLDInputs, so it is appended here.
+	inputs = append(inputs, ldSvnversionHVFS)
 
 	// DepRefs capture every node whose UID flows into the LD's
 	// content hash: own .cpp.o files, plugin inputs, global
@@ -509,7 +483,7 @@ func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) [
 
 // composeLDInputs composes the `inputs` array for an LD node: the BUILD_ROOT
 // block (peer archives, plugins, globals, own .o, objcopy .o) followed by
-// ldScriptInputs in registration order. Caller appends member-CC inputs
+// ldScriptInputs in registration order. Caller appends svnversion.h
 // afterwards. Node-input order is normalized away. __vcs_version__.c{,.o}
 // are produced by cmd[0]/cmd[1] in-node and excluded.
 func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS) []VFS {

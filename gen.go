@@ -954,7 +954,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "lib", archiveName)
 				tag = "global"
 			}
-			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, objcopyRes.GlobalMemberInputs, ctx.host, ctx.emit)
+			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, ctx.host, ctx.emit)
 			hOnlyGlobalRef = &gRef
 			hOnlyGlobalPath = vfsPtr(Build(instance.Path + "/" + globalBaseName))
 		}
@@ -1889,7 +1889,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// runs. Mirrors the earlier emitEnumSrcs hoist; no state written by
 	// the per-source loop is read here. Passing moduleInputs causes
 	// emitMiscNodes to emit JV-downstream CP+CC pairs.
-	jvCCRefs, jvCCOutputs, _ := emitMiscNodes(ctx, instance, d, &moduleInputs)
+	jvCCRefs, jvCCOutputs := emitMiscNodes(ctx, instance, d, &moduleInputs)
 
 	// Hoist PR+AR node emission ahead of the SRCS loop so the codegen
 	// registry's AR/PR ProducerRef entries exist when a consumer CC (e.g.
@@ -2293,9 +2293,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ldCCRefs := ccRefs
 		ldCCOutputs := ccOutputs
 		ldCCRefs, ldCCOutputs = reorderLDMembers(ldCCRefs, ldCCOutputs)
-		// No member-source closure; LD member inputs start empty and pick up
-		// only the objcopy script/objects + PY/resource extras below.
-		var ldMemberInputs []VFS
+		// LD bundles only the objects/archives it links plus its own scripts;
+		// no member-source closure. Objcopy objects (the SRCS_GLOBAL .o) feed a
+		// dedicated EmitLD slot and ride into the link cmd BEFORE $VCS_C_OBJ.
 		var ldObjcopyRefs []NodeRef
 		var ldObjcopyPaths []VFS
 
@@ -2307,54 +2307,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			if objcopyRes != nil && len(objcopyRes.Refs) > 0 {
 				ldObjcopyRefs = objcopyRes.Refs
 				ldObjcopyPaths = objcopyRes.Outputs
-			}
-			if objcopyRes != nil && len(objcopyRes.GlobalMemberInputs) > 0 {
-				seen := make(map[VFS]struct{}, len(ldMemberInputs))
-				for _, p := range ldMemberInputs {
-					seen[p] = struct{}{}
-				}
-				ldMemberInputs = append([]VFS(nil), ldMemberInputs...)
-				for _, p := range objcopyRes.GlobalMemberInputs {
-					if _, dup := seen[p]; dup {
-						continue
-					}
-					seen[p] = struct{}{}
-					ldMemberInputs = append(ldMemberInputs, p)
-				}
-			}
-
-			// Fold the objcopy script + PY_SRCS source paths + RESOURCE
-			// source paths into the LD member-input union so they appear
-			// in the LD node's inputs (mirror of the reference shape for
-			// tools/py3cc/slow/py3cc: build/scripts/objcopy.py +
-			// tools/py3cc/slow/main.py + each declared RESOURCE source).
-			if resourceModuleTag(d.moduleStmt.Name) != nil {
-				var resourcePaths []string
-				for _, e := range d.resources {
-					if e.Path == "-" {
-						continue
-					}
-
-					resourcePaths = append(resourcePaths, e.Path)
-				}
-
-				if extras := pySrcsARExtraInputs(instance.Path, d.srcDir, d.pySrcs, d.pyGeneratedSrcs, resourcePaths); len(extras) > 0 {
-					seen := make(map[VFS]struct{}, len(ldMemberInputs))
-					for _, p := range ldMemberInputs {
-						seen[p] = struct{}{}
-					}
-
-					ldMemberInputs = append([]VFS(nil), ldMemberInputs...)
-
-					for _, p := range extras {
-						if _, dup := seen[p]; dup {
-							continue
-						}
-
-						seen[p] = struct{}{}
-						ldMemberInputs = append(ldMemberInputs, p)
-					}
-				}
 			}
 		}
 
@@ -2380,7 +2332,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			peerWholeArchiveCmdPaths,
 			peerDynamicRefs, peerDynamicPaths,
 			ldObjcopyRefs, ldObjcopyPaths,
-			ldMemberInputs,
 			ownCFlags,
 			peerCFlagsGlobal,
 			autoPeerCFlags,
@@ -2506,47 +2457,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	// LIBRARY: regular AR over own CCs. Peer-archive DepRefs are
 	// intentionally NOT threaded — every reference AR has zero AR-on-AR
-	// deps; peer archives flow into the consumer's downstream LD via
-	// The regular AR has no member-input union anymore (objects come via
-	// ccOutputs, its own script via emitARNode). It may still pick up the
-	// PY/resource objcopy extras below.
-	var combinedMemberInputs []VFS
-
-	// PY*_LIBRARY modules with PY_SRCS emit objcopy nodes (see
-	// emitPySrcObjcopy) whose inputs include build/scripts/objcopy.py
-	// plus every PY_SRCS source `.py` path. REF union-aggregates those
-	// into the module's regular `.a` and `.global.a` inputs.
-	if d.moduleStmt != nil && resourceModuleTag(d.moduleStmt.Name) != nil {
-		var resourcePaths []string
-		for _, e := range d.resources {
-			if e.Path == "-" {
-				continue
-			}
-
-			resourcePaths = append(resourcePaths, e.Path)
-		}
-		for _, e := range d.pyPyiResources {
-			if e.Path == "-" {
-				continue
-			}
-
-			resourcePaths = append(resourcePaths, e.Path)
-		}
-
-		if extras := pySrcsARExtraInputs(instance.Path, d.srcDir, d.pySrcs, d.pyGeneratedSrcs, resourcePaths); len(extras) > 0 {
-			combinedMemberInputs = mergeDedupVFS(combinedMemberInputs, extras)
-		}
-	}
-
+	// deps; peer archives flow into the consumer's downstream LD via PEERDIR.
+	// The AR bundles only its objects (ccOutputs) plus its own link script
+	// (emitARNode) — no member source/header closure.
 	if len(ccRefs) > 0 {
 		// PY23_LIBRARY / PY23_NATIVE_LIBRARY surface
 		// `module_tag=py3` / `module_tag=py3_native`. openssl AR_PLUGIN(ar)
 		// injects `--plugin <ar.pyplugin>` between the link_lib.py `--`
 		// separators.
 		if perModuleCCTag != nil {
-			arRef = EmitARNamedTagged(arInstance, arBaseName, *perModuleCCTag, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.host, ctx.emit)
+			arRef = EmitARNamedTagged(arInstance, arBaseName, *perModuleCCTag, ccRefs, ccOutputs, nil, arPluginVFS, ctx.host, ctx.emit)
 		} else {
-			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, combinedMemberInputs, arPluginVFS, ctx.host, ctx.emit)
+			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, arPluginVFS, ctx.host, ctx.emit)
 		}
 	}
 
@@ -2591,17 +2513,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ModuleStmtName:                  d.moduleStmt.Name,
 	}
 	if len(globalRefs) > 0 {
-		// The `.global.a` aggregator gets the GLOBAL_SRCS-local closure
-		// ONLY, not the regular AR's header closure. REF constrains
-		// `.global.a` `inputs` to GLOBAL_SRCS member-CC closures,
-		// PY_REGISTER reg3.cpp closures, and objcopy SOURCE_ROOT inputs
-		// (RESOURCE source paths + objcopy.py). The regular CC closure
-		// of SRCS members (Python.h, libcxx, glibcasm, musl, ...) does
-		// NOT propagate into `.global.a` — it propagates into the
-		// regular `.a`. tcmalloc/no_percpu_cache has no regular SRCS,
-		// so combined == global there.
-		var globalAggregated []VFS
-
+		// The `.global.a` archive bundles only its GLOBAL_SRCS objects plus
+		// its own link script (emitARNode) — no member source/header closure.
 		globalBaseName := globalArNameFn(instance.Path)
 		// module_tag mapping: PY23_LIBRARY → py3_global;
 		// PY23_NATIVE_LIBRARY → py3_native_global; rest → "global".
@@ -2618,7 +2531,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// as the regular AR — hand-written / objcopy_* .o files precede
 		// codegen-derived reg3 objects, including host PIC variants.
 		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))
-		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, globalAggregated, ctx.host, ctx.emit)
+		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, ctx.host, ctx.emit)
 		result.GlobalRef = &globalRef
 		result.GlobalPath = vfsPtr(Build(instance.Path + "/" + globalBaseName))
 	}

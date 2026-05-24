@@ -3,9 +3,8 @@ package main
 import "strings"
 
 type generatedPyAuxChunksResult struct {
-	Refs         []NodeRef
-	Outputs      []VFS
-	MemberInputs []VFS
+	Refs    []NodeRef
+	Outputs []VFS
 }
 
 func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) *generatedPyAuxChunksResult {
@@ -42,7 +41,7 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 		return nil
 	}
 
-	res := &generatedPyAuxChunksResult{MemberInputs: rawRes.MemberInputs}
+	res := &generatedPyAuxChunksResult{}
 	for i, prRef := range rawRes.PRRefs {
 		aux := rawRes.PROutputs[i]
 		ccIn := in
@@ -68,12 +67,11 @@ func generatedPyResourceKey(modulePath string, d *moduleData, srcRel string) str
 }
 
 type rawAuxResourceChunksResult struct {
-	Refs         []NodeRef
-	Outputs      []VFS
-	MemberInputs []VFS
-	PRRefs       []NodeRef
-	PROutputs    []VFS
-	AuxClosures  [][]VFS
+	Refs        []NodeRef
+	Outputs     []VFS
+	PRRefs      []NodeRef
+	PROutputs   []VFS
+	AuxClosures [][]VFS
 }
 
 func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []pyProtoAuxEntry, moduleTag string, deps []NodeRef, in ModuleCCInputs, rescompilerRef NodeRef) *rawAuxResourceChunksResult {
@@ -155,7 +153,6 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 	flush()
 
 	res := &rawAuxResourceChunksResult{}
-	memberSeen := map[VFS]struct{}{}
 	for _, ch := range chunks {
 		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, moduleTag) + "_raw.auxcpp")
 		sourceInputs := pyProtoSourceInputs(ch.inputs)
@@ -195,14 +192,6 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 		res.PRRefs = append(res.PRRefs, ref)
 		res.PROutputs = append(res.PROutputs, aux)
 		res.AuxClosures = append(res.AuxClosures, auxClosure)
-
-		for _, v := range inputs {
-			if _, ok := memberSeen[v]; ok {
-				continue
-			}
-			memberSeen[v] = struct{}{}
-			res.MemberInputs = append(res.MemberInputs, v)
-		}
 	}
 
 	return res
