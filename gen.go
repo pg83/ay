@@ -1743,34 +1743,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// build_info_static.cpp → REF: build_info_static.cpp.o,
 	// sandbox.cpp.o, build_info.cpp.o).
 	ccIsCFGenerated := make([]bool, 0, len(d.srcs)+len(d.joinSrcs))
-	// Accumulate the union of every CC member's inputs (primary source +
-	// IncludeInputs, deduped, in DFS-discovery order) so the downstream
-	// AR/LD step folds these into its `inputs` per sg.json (AR includes
-	// source files of its archived .o files plus their resolved header
-	// closures).
-	memberInputs := make([]VFS, 0, 64)
-	// Dedup keyed by interned VFS ID (run-wide, host/target-stable) rather
-	// than the VFS struct: a 4-byte key through mapaccess_fast32 instead of a
-	// 24-byte struct key through the generic hasher.
-	memberInputsSeen := map[uint32]struct{}{}
-
-	addMemberInputs := func(paths []VFS) {
-		for _, p := range paths {
-			// AR/LD inputs are only objects/archives/scripts (the command
-			// bundles those); the members' source/header closure is dropped
-			// by the normalizer in both graphs, so we never aggregate it.
-			if !arLDMemberKept(p) {
-				continue
-			}
-			id := ctx.vfsInterner.internVFS(p)
-			if _, dup := memberInputsSeen[id]; dup {
-				continue
-			}
-
-			memberInputsSeen[id] = struct{}{}
-			memberInputs = append(memberInputs, p)
-		}
-	}
+	// No regular member-input aggregation: an AR/LD node's inputs are its
+	// objects/archives + its own scripts (emitted directly below); the
+	// members' source/header closure and the codegen wrapper scripts that
+	// ride through it are not this node's inputs (the normalizer drops them
+	// from both graphs), so there is nothing to scan or fold here.
 
 	// Track primary sources of regular SRCS / JOIN_SRCS / .rl6 dispatch
 	// — distinct from header closures. Regular AR archives regular
@@ -1923,7 +1900,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// runs. Mirrors the earlier emitEnumSrcs hoist; no state written by
 	// the per-source loop is read here. Passing moduleInputs causes
 	// emitMiscNodes to emit JV-downstream CP+CC pairs.
-	jvCCRefs, jvCCOutputs, jvCCMemberInputs := emitMiscNodes(ctx, instance, d, &moduleInputs)
+	jvCCRefs, jvCCOutputs, _ := emitMiscNodes(ctx, instance, d, &moduleInputs)
 
 	// Hoist PR+AR node emission ahead of the SRCS loop so the codegen
 	// registry's AR/PR ProducerRef entries exist when a consumer CC (e.g.
@@ -1992,7 +1969,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, isFlatNoLto)
 		ccIsCFGenerated = append(ccIsCFGenerated, strings.HasSuffix(src, ".cpp.in") || strings.HasSuffix(src, ".c.in"))
-		addMemberInputs(emit.CcIns)
 		// Track primary source paths so the .global.a aggregator can
 		// exclude them. The leading `PrimaryCount` entries of ccIns are
 		// the member's primary source(s): .cpp/.c/.cc/.cxx/.S dispatch
@@ -2008,7 +1984,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 		ccIsCFGenerated = append(ccIsCFGenerated, true)
-		addMemberInputs(emit.CcIns)
 
 		for i := 0; i < emit.PrimaryCount && i < len(emit.CcIns); i++ {
 			addRegularPrimary(emit.CcIns[i])
@@ -2020,7 +1995,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 		ccIsCFGenerated = append(ccIsCFGenerated, true)
-		addMemberInputs(emit.CcIns)
 
 		for i := 0; i < emit.PrimaryCount && i < len(emit.CcIns); i++ {
 			addRegularPrimary(emit.CcIns[i])
@@ -2032,30 +2006,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 		ccIsCFGenerated = append(ccIsCFGenerated, true)
-		addMemberInputs(emit.CcIns)
 
 		for i := 0; i < emit.PrimaryCount && i < len(emit.CcIns); i++ {
 			addRegularPrimary(emit.CcIns[i])
 		}
 	}
 
-	// Headers (.h/.hpp) in SRCS do not emit a CC node, but upstream ymake
-	// still walks their #include closure and propagates it up to the
-	// AR/LD via EDT_BuildFrom (`addInput` in mkcmd.cpp:212-228, reached
-	// for every EDT_BuildFrom file child whether or not it has a build
-	// command). Without this pass the AR loses the transitive set reached
-	// only through SRCS-listed headers (e.g. library/cpp/packedtypes:
-	// fixed_point.h / packed.h / zigzag.h drag in libcxx/locale, numeric,
-	// vector and zc_memory_input.h not reached by any .cpp member).
-	for _, src := range d.srcs {
-		if !isHeaderSource(src) {
-			continue
-		}
-		headerVFS := resolveModuleSourceVFS(ctx, instance, d, src, moduleInputs.SrcDir)
-		headerClosure := walkClosure(ctx, instance, headerVFS, moduleInputs)
-		all := append([]VFS{Source(instance.Path + "/" + src)}, headerClosure...)
-		addMemberInputs(all)
-	}
+	// (SRCS-listed headers were walked here only to fold their #include
+	// closure into AR/LD inputs; that closure isn't carried anymore, so the
+	// walk is gone — saving a full closure scan per SRCS header.)
 
 	// Fold JV-downstream CCs (CP-rename + compile per ANTLR-generated
 	// .cpp) into the AR member bucket. REF places them after the regular
@@ -2068,7 +2027,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccOutputs = append(ccOutputs, jvCCOutputs[i])
 		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 		ccIsCFGenerated = append(ccIsCFGenerated, false)
-		addMemberInputs(jvCCMemberInputs[i])
 	}
 
 	// Fold EN-downstream CCs (captured above via emitEnumSrcs) into the
@@ -2083,7 +2041,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ccOutputs = append(ccOutputs, enCCRes.CCOutputs[i])
 			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 			ccIsCFGenerated = append(ccIsCFGenerated, false)
-			addMemberInputs(enCCRes.MemberInputsList[i])
 		}
 	}
 
@@ -2099,7 +2056,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ccOutputs = append(ccOutputs, prCCRes.CCOutputs[i])
 			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 			ccIsCFGenerated = append(ccIsCFGenerated, false)
-			addMemberInputs(prCCRes.MemberInputs[i])
 		}
 	}
 	if pyCCRes != nil {
@@ -2108,7 +2064,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ccOutputs = append(ccOutputs, pyCCRes.CCOutputs[i])
 			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 			ccIsCFGenerated = append(ccIsCFGenerated, false)
-			addMemberInputs(pyCCRes.MemberInputs[i])
 		}
 	}
 
@@ -2145,7 +2100,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, true)
 		ccIsCFGenerated = append(ccIsCFGenerated, false)
-		addMemberInputs(emit.CcIns)
 		for i := 0; i < emit.PrimaryCount && i < len(emit.CcIns); i++ {
 			addRegularPrimary(emit.CcIns[i])
 		}
@@ -2232,7 +2186,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// `$(B)/util/all_*.cpp` even though those are the primary inputs
 		// of the downstream JS-derived CC nodes. The aggregator gets only
 		// scripts + joined source files + their resolved include closure.
-		addMemberInputs(ccIncludeInputs)
 		// The joined source files (`js.Sources`) are "regular primaries"
 		// — only the regular AR archives them; the .global.a aggregator
 		// drops them. Scripts and the resolved header closure flow to
@@ -2403,7 +2356,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ldCCRefs := ccRefs
 		ldCCOutputs := ccOutputs
 		ldCCRefs, ldCCOutputs = reorderLDMembers(ldCCRefs, ldCCOutputs)
-		ldMemberInputs := memberInputs
+		// No member-source closure; LD member inputs start empty and pick up
+		// only the objcopy script/objects + PY/resource extras below.
+		var ldMemberInputs []VFS
 		var ldObjcopyRefs []NodeRef
 		var ldObjcopyPaths []VFS
 
@@ -2617,13 +2572,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// LIBRARY: regular AR over own CCs. Peer-archive DepRefs are
 	// intentionally NOT threaded — every reference AR has zero AR-on-AR
 	// deps; peer archives flow into the consumer's downstream LD via
-	// `peerArchiveRefs` in EmitLD. The regular AR receives the union of
-	// regular and global members' (header-free) inputs, including late
-	// PY/resource producers that append to globalMemberInputs. Concat
-	// without dedup: any regular/global overlap is removed by emitARNode's
-	// objSet (the bulk — shared header closures — is already filtered out at
-	// aggregation, so the leftover overlap is small).
-	combinedMemberInputs := concatVFS(memberInputs, globalMemberInputs)
+	// The regular AR's member inputs are just the global member inputs (the
+	// objcopy script/objects + late PY/resource producers); there is no
+	// regular member-source closure to fold in anymore.
+	combinedMemberInputs := globalMemberInputs
 
 	// PY*_LIBRARY modules with PY_SRCS emit objcopy nodes (see
 	// emitPySrcObjcopy) whose inputs include build/scripts/objcopy.py
