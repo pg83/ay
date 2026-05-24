@@ -134,8 +134,12 @@ type IncludeScanner struct {
 	// ext-dispatch for raw include scanning. Shared between target/host
 	// scanners so they reuse the same source-tree work.
 	parsers *includeParserManager
-	// interner assigns scanner-local numeric IDs for hot cache keys.
-	interner scannerInterner
+	// interner assigns numeric IDs for hot cache keys. Shared across the
+	// host/target scanners (one per program run) so a given VFS path has a
+	// single stable ID everywhere — the closure caches stay per-scanner, but
+	// the ID space is global, which lets non-scanner code (e.g. AR member-input
+	// dedup) key an idSet by interned ID without cross-scanner collisions.
+	interner *scannerInterner
 	// anySrcView is a PerSourceView prepared with an empty source path.
 	// Its `includerKeyed` slice is the canonical includer-keyed record
 	// list (every view derives the same slice); the `activeSourceKeyed`
@@ -396,21 +400,22 @@ type scannerPerfStats struct {
 // source-root absolute path. Allocates a private parser manager; use
 // newIncludeScannerWith to share one between scanners.
 func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
-	return newIncludeScannerWith(newIncludeParserManager(sourceRoot), sysincl, func(Warn) {})
+	interner := newScannerInterner()
+	return newIncludeScannerWith(newIncludeParserManager(sourceRoot), &interner, sysincl, func(Warn) {})
 }
 
 // newIncludeScannerWith is the internal constructor used when a parser
-// manager is provided externally (target/host pair in GenWith).
-// parsers must be non-nil and tied to the same source root consumed by
-// both scanners.
-func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, onWarn func(Warn)) *IncludeScanner {
+// manager and interner are provided externally (target/host pair in GenWith).
+// parsers and interner must be non-nil; both are shared by the scanner pair
+// so they reuse the same source-tree work and ID space.
+func newIncludeScannerWith(parsers *includeParserManager, interner *scannerInterner, sysincl SysInclSet, onWarn func(Warn)) *IncludeScanner {
 	// Pre-sizes set to the upper bound of the observed working set for
 	// tools/archiver; sysinclSourceCache reaches ~328k entries on the
 	// target scanner, so pre-sizing past the peak eliminates rehashing.
 	s := &IncludeScanner{
 		sysincl:              sysincl,
 		parsers:              parsers,
-		interner:             newScannerInterner(),
+		interner:             interner,
 		sourceClassCache:     make(map[string]uint32, 1024),
 		sourceClassViews:     make(map[uint32]PerSourceView, 1024),
 		sourceClassBuckets:   make(map[uint64][]uint32, 1024),
