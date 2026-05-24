@@ -543,18 +543,22 @@ func (s *IncludeScanner) WalkClosure(cfg ScanContext) []VFS {
 	return s.NewScanCtx(cfg).WalkSource(cfg.SourceRel)
 }
 
-// WalkSource walks the include closure starting from `sourceRel` using
-// the receiver's already-bound context. Used by gen.go's per-module
-// dispatch: one scanCtx per (scanner, ctxHash), reused for every source
-// in the module. Thin shim over WalkClosure so callers that already
-// hold a VFS path hit the uniform entry point.
+// WalkSource walks the include closure starting from `sourceRel` and
+// returns the HEADERS-ONLY view (root excluded) — the [1:] of the driver's
+// primary-first result, O(1). Test-facing entry via IncludeScanner.WalkClosure.
 func (sc *scanCtx) WalkSource(sourceRel string) []VFS {
-	return sc.WalkClosure(Source(sourceRel))
+	return sc.WalkClosure(Source(sourceRel))[1:]
 }
 
-// WalkClosure walks the include closure rooted at `vfsPath` ($(S)/ or
-// $(B)/-rooted). Returns the transitive header set excluding the root,
-// in DFS-discovery order; the result slice is freshly allocated.
+// WalkClosure is the include-closure driver. It walks the closure rooted at
+// `vfsPath` ($(S)/ or $(B)/-rooted) and returns the PRIMARY-FIRST slice
+// [root, ...headers]: the root occupies index 0, followed by the transitive
+// header set in DFS-discovery order. The slice is freshly allocated.
+//
+// Callers that compile `vfsPath` adopt this slice verbatim as node.Inputs
+// (primary first). The headers-only view is result[1:] — O(1), same backing
+// array, no copy. Closure order is irrelevant downstream (L4 normalization
+// sorts node inputs).
 //
 // For $(S)/ roots SourceRel is overwritten from the VFS path so cross-
 // source DFS within one scanCtx keys sysincl per source. $(B)/ roots
@@ -580,10 +584,14 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 
 	sc.dfsID(rootID, visited, &order)
 
+	// Primary-first: root at index 0, then headers. cap == len(order)
+	// exactly, so result[1:] carries no spare cap and an append by a
+	// headers-only consumer reallocates rather than aliasing this backing.
 	out := make([]VFS, 0, len(order))
+	out = append(out, s.interner.vfsByID(rootID))
 
 	for _, absID := range order {
-		// Skip the root itself; only headers are emitted.
+		// Skip the root itself; it already occupies index 0.
 		if absID == rootID {
 			continue
 		}
