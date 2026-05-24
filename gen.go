@@ -1756,6 +1756,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	addMemberInputs := func(paths []VFS) {
 		for _, p := range paths {
+			// Headers don't belong in AR/LD inputs (a link/archive bundles
+			// .o/.a, not header build-nodes); the normalizer drops them from
+			// both graphs, so we never aggregate them in the first place.
+			if isHeaderSource(p.Rel) {
+				continue
+			}
 			id := ctx.vfsInterner.internVFS(p)
 			if _, dup := memberInputsSeen[id]; dup {
 				continue
