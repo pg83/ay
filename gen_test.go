@@ -5394,8 +5394,8 @@ func TestGen_SwigToolLDMatchesReference(t *testing.T) {
 	// LD inputs are reduced to objects/archives/scripts in both graphs by the
 	// normalizer (a link node bundles .o/.a, not the member source/header
 	// closure); mirror that on both sides.
-	gotInputs := sortedStrings(filterARLDInputs(vfsStrings(ourNode.Inputs)))
-	wantInputs := sortedStrings(filterARLDInputs(normalizeT20Strings(refNode.Inputs)))
+	gotInputs := sortedStrings(filterARLDInputs(vfsStrings(ourNode.Inputs), "LD"))
+	wantInputs := sortedStrings(filterARLDInputs(normalizeT20Strings(refNode.Inputs), "LD"))
 	if !reflect.DeepEqual(gotInputs, wantInputs) {
 		t.Fatalf("swig ld inputs mismatch:\n  got:  %#v\n  want: %#v", gotInputs, wantInputs)
 	}
