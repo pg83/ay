@@ -2626,7 +2626,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// `peerArchiveRefs` in EmitLD. The regular AR receives the union of
 	// regular and global members' inputs (primaries + header closures),
 	// including late PY/resource producers that append to globalMemberInputs.
-	combinedMemberInputs := mergeDedupVFS(memberInputs, globalMemberInputs)
+	// memberInputs and globalMemberInputs are disjoint (regular vs global
+	// member sets), so concat without dedup.
+	combinedMemberInputs := concatVFS(memberInputs, globalMemberInputs)
 
 	// PY*_LIBRARY modules with PY_SRCS emit objcopy nodes (see
 	// emitPySrcObjcopy) whose inputs include build/scripts/objcopy.py
