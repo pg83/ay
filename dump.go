@@ -128,40 +128,56 @@ func orVal(v, def any) any {
 	return v
 }
 
-// isLinkOrArchiveNode reports whether node bundles object/archive files
-// (kv.p AR or LD) — node kinds that should not carry header inputs.
-func isLinkOrArchiveNode(node map[string]any) bool {
+// nodeProgramKind returns the node's kv.p tag ("AR", "LD", "CC", ...) or "".
+func nodeProgramKind(node map[string]any) string {
 	kv, _ := node["kv"].(map[string]any)
 	p, _ := kv["p"].(string)
-	return p == "AR" || p == "LD"
+	return p
 }
 
-// arLDInputKept reports whether s is a real AR/LD input: an object/archive
-// the command bundles (.o / .a), a build script ($(S)/build/scripts/... —
-// link_lib.py / link_exe.py / vcs templates), the ar plugin (.pyplugin), or a
-// linker version script (.exports). Everything else is the members'
-// transitive source/header closure, which the ar/link command never reads.
-func arLDInputKept(s string) bool {
-	// Headers are never real AR/LD inputs — not even the vcs template
-	// $(S)/build/scripts/c_templates/svnversion.h, which only reaches the
-	// list through a member's include closure. Exclude them first so the
-	// build-scripts prefix below doesn't readmit them.
+// ldOwnScriptRels is the set of build scripts an LD/dynlib node emits itself —
+// its link wrapper plus the helper scripts that wrapper drives. Built from the
+// emission constants (composeLDInputs's ldScriptInputs + the dynlib
+// link_dyn_lib.py) so it cannot drift from what we emit.
+var ldOwnScriptRels = func() map[string]bool {
+	m := map[string]bool{"build/scripts/link_dyn_lib.py": true}
+	for _, v := range ldScriptInputs {
+		m[v.Rel] = true
+	}
+	return m
+}()
+
+// arLDInputKept reports whether s belongs in a `kind` (AR/LD) node's inputs:
+// an object/archive it bundles (.o/.a), the ar plugin (.pyplugin), a linker
+// version script (.exports), or the node's OWN command script — link_lib.py
+// for AR, the link wrappers/helpers for LD. Never a header. Everything else
+// is the members' transitive source/header closure plus codegen wrapper
+// scripts (cpp_proto_wrapper.py, ...) that ride in through it — none of which
+// the ar/link command reads.
+func arLDInputKept(s, kind string) bool {
 	if isHeaderSource(s) {
 		return false
 	}
-	return strings.HasSuffix(s, ".o") ||
-		strings.HasSuffix(s, ".a") ||
-		strings.HasSuffix(s, ".pyplugin") ||
-		strings.HasSuffix(s, ".exports") ||
-		strings.HasPrefix(s, "$(S)/build/scripts/")
+	if strings.HasSuffix(s, ".o") || strings.HasSuffix(s, ".a") ||
+		strings.HasSuffix(s, ".pyplugin") || strings.HasSuffix(s, ".exports") {
+		return true
+	}
+	rel, ok := strings.CutPrefix(s, "$(S)/")
+	if !ok {
+		return false
+	}
+	if kind == "AR" {
+		return rel == "build/scripts/link_lib.py"
+	}
+	return ldOwnScriptRels[rel]
 }
 
-// filterARLDInputs keeps only real AR/LD inputs (see arLDInputKept), dropping
-// the member source/header closure, in place.
-func filterARLDInputs(in []string) []string {
+// filterARLDInputs keeps only a `kind` node's real inputs (see arLDInputKept),
+// dropping the member source/header closure + transitive codegen wrappers.
+func filterARLDInputs(in []string, kind string) []string {
 	out := in[:0]
 	for _, s := range in {
-		if arLDInputKept(s) {
+		if arLDInputKept(s, kind) {
 			out = append(out, s)
 		}
 	}
@@ -180,13 +196,14 @@ func getString(node map[string]any, key string) string {
 // Mirrors dev/normalize.py::_strip_and_canonicalize (minus identity/deps).
 func canonContent(node map[string]any) map[string]any {
 	inputs := normSortedStrings(node["inputs"])
-	// AR/LD nodes consume only the objects/archives the command bundles
-	// (.o/.a), plus the build scripts / version scripts / ar plugin. Upstream
-	// also lists every member CC's entire transitive source+header closure in
-	// inputs[] (58-72% of the list — a defect we neither replicate nor
-	// compare). Keep only the real inputs in BOTH graphs; drop the closure.
-	if isLinkOrArchiveNode(node) {
-		inputs = filterARLDInputs(inputs)
+	// AR/LD nodes consume only the objects/archives the command bundles plus
+	// the node's OWN scripts (its link wrapper + helpers). Upstream also lists
+	// every member CC's transitive source+header closure AND the codegen
+	// wrapper scripts that ride in through it (cpp_proto_wrapper.py, ...) —
+	// none of which the ar/link command reads. Keep only the real inputs in
+	// BOTH graphs; drop the rest.
+	if kind := nodeProgramKind(node); kind == "AR" || kind == "LD" {
+		inputs = filterARLDInputs(inputs, kind)
 	}
 	canon := map[string]any{
 		"cmds":              normRec(orVal(node["cmds"], []any{})),
