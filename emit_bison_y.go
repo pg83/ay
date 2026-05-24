@@ -71,14 +71,8 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	ccIn.IncludeInputs = walkClosure(ctx, instance, generatedVFS, in)
 
 	ccRef, ccOut, _ := EmitCC(instance, generatedRel, generatedVFS, ccIn, ctx.host, ctx.emit)
-	ccInputs := append([]VFS{srcVFS}, ccIn.IncludeInputs...)
 
-	return &sourceEmit{
-		Ref:          ccRef,
-		OutPath:      ccOut,
-		CcIns:        ccInputs,
-		PrimaryCount: 1,
-	}
+	return &sourceEmit{Ref: ccRef, OutPath: ccOut}
 }
 
 func bisonTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {

@@ -2,24 +2,6 @@ package main
 
 import "strings"
 
-// isBuildRootCodegenProduct reports whether a member-input path is a
-// BUILD_ROOT-rooted codegen artifact that must not appear in AR `inputs`.
-// Reference constrains BUILD_ROOT entries in AR `inputs` to .o files;
-// generated sources/headers are wired through the constituent CC only.
-func isBuildRootCodegenProduct(p string) bool {
-	if !strings.HasPrefix(p, "$(B)/") {
-		return false
-	}
-	return !strings.HasSuffix(p, ".o")
-}
-
-// isBuildRootCodegenProductRel is the VFS-internal form of
-// isBuildRootCodegenProduct. The caller has already verified the path is
-// BUILD_ROOT-anchored (VFS.IsBuild()); this checks only the suffix rule.
-func isBuildRootCodegenProductRel(rel string) bool {
-	return !strings.HasSuffix(rel, ".o")
-}
-
 // archiveNameWithPrefix returns the archive base name using the given
 // prefix (e.g. "lib", "libpy3", "libpy3c"). Single special case: "util" ->
 // "<prefix>yutil.a"; "util" is never a Python module in practice.

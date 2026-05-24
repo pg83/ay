@@ -4,9 +4,9 @@ package main
 // EmitARGlobalNamedTagged. peerArchiveRefs go into DepRefs only (NOT
 // cmd_args/inputs): ar(1) archives .o files; peer archives are link-time
 // inputs for LD. objPaths (caller/declaration order) goes into cmd_args and
-// `inputs`, then the link script and optional ar plugin, then the
-// memberInputs union deduped against prior inputs. Node-input order is
-// normalized away, so `inputs` is not sorted.
+// `inputs`, then the link script and optional ar plugin. The archive bundles
+// only those — no member source/header closure (node-input order is
+// normalized away, so `inputs` is not sorted).
 // peerArchiveRefs is nil in production (reference graph carries
 // zero AR-on-AR deps); parameter retained for tests.
 func emitARNode(
@@ -16,7 +16,6 @@ func emitARNode(
 	objRefs []NodeRef,
 	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
-	memberInputs []VFS,
 	arPluginPath *VFS,
 	hostP *Platform,
 	emit Emitter,
@@ -45,27 +44,11 @@ func emitARNode(
 		cmdArgs = append(cmdArgs, p.String())
 	}
 
-	inputs := make([]VFS, 0, len(objPaths)+2+len(memberInputs))
+	inputs := make([]VFS, 0, len(objPaths)+2)
 	inputs = append(inputs, objPaths...)
 	inputs = append(inputs, scriptVFS)
 	if arPluginPath != nil {
 		inputs = append(inputs, *arPluginPath)
-	}
-	objSet := map[VFS]struct{}{}
-	for _, v := range inputs {
-		objSet[v] = struct{}{}
-	}
-
-	for _, pV := range memberInputs {
-		if _, dup := objSet[pV]; dup {
-			continue
-		}
-		if pV.IsBuild() && isBuildRootCodegenProductRel(pV.Rel) {
-			continue
-		}
-
-		objSet[pV] = struct{}{}
-		inputs = append(inputs, pV)
 	}
 
 	topEnv := hostP.ToolEnv()

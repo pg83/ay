@@ -9,13 +9,12 @@ import (
 	"strings"
 )
 
-// objcopyEmitResult collects the emitted objcopy node refs, output
-// `$(B)/...objcopy_*.o` paths, and the SOURCE_ROOT-rooted inputs the
-// caller must fold into the module's `.global.a` member set.
+// objcopyEmitResult collects the emitted objcopy node refs and output
+// `$(B)/...objcopy_*.o` paths. The objects ride into the consumer LD's
+// SRCS_GLOBAL slot; the archive itself carries no member source closure.
 type objcopyEmitResult struct {
-	Refs               []NodeRef
-	Outputs            []VFS
-	GlobalMemberInputs []VFS
+	Refs    []NodeRef
+	Outputs []VFS
 }
 
 func emitResourceObjcopy(
@@ -35,12 +34,6 @@ func emitResourceObjcopy(
 	rescompressorLDRef, _ := ctx.tool("tools/rescompressor/bin")
 
 	out := &objcopyEmitResult{}
-	// Collect the SOURCE_ROOT-rooted member inputs each emitted objcopy
-	// node would contribute to the enclosing module's .global.a archive.
-	// Every node carries `objcopy.py`; path-based flushes also carry
-	// their source paths. Caller dedups + folds into globalMemberInputs.
-	var globalMemberInputs []VFS
-	addGlobal := func(p VFS) { globalMemberInputs = append(globalMemberInputs, p) }
 
 	// kv_only siblings — each fires only when its trigger is present.
 	// PY_MAIN fires BEFORE py/namespace (upstream pybuild.py:395-398
@@ -49,7 +42,6 @@ func emitResourceObjcopy(
 	if nodeRes := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); nodeRes != nil {
 		out.Refs = append(out.Refs, nodeRes.Ref)
 		out.Outputs = append(out.Outputs, nodeRes.Out)
-		addGlobal(objcopyScriptVFS)
 	}
 
 	// py/namespace objcopy nodes are emitted by emitPySrcObjcopy, interleaved
@@ -61,14 +53,11 @@ func emitResourceObjcopy(
 	if nodeRes := emitNoCheckImportsObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); nodeRes != nil {
 		out.Refs = append(out.Refs, nodeRes.Ref)
 		out.Outputs = append(out.Outputs, nodeRes.Out)
-		addGlobal(objcopyScriptVFS)
 	}
 
 	for _, nodeRes := range emitYaConfJSONObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef) {
 		out.Refs = append(out.Refs, nodeRes.Ref)
 		out.Outputs = append(out.Outputs, nodeRes.Out)
-		addGlobal(objcopyScriptVFS)
-		addGlobal(nodeRes.Input)
 	}
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 {
@@ -78,10 +67,8 @@ func emitResourceObjcopy(
 		if srcRes != nil {
 			out.Refs = append(out.Refs, srcRes.Refs...)
 			out.Outputs = append(out.Outputs, srcRes.Outputs...)
-			globalMemberInputs = append(globalMemberInputs, srcRes.GlobalMemberInputs...)
 		}
 
-		out.GlobalMemberInputs = globalMemberInputs
 		return out
 	}
 
@@ -247,14 +234,6 @@ func emitResourceObjcopy(
 		out.Refs = append(out.Refs, r)
 		out.Outputs = append(out.Outputs, outputObj)
 
-		for _, p := range cur.pathInputs {
-			addGlobal(p)
-		}
-		for _, p := range cur.extraInputs {
-			addGlobal(p)
-		}
-		addGlobal(objcopyScriptVFS)
-
 		cur = acc{}
 	}
 
@@ -314,11 +293,9 @@ func emitResourceObjcopy(
 	if srcRes != nil {
 		out.Refs = append(out.Refs, srcRes.Refs...)
 		out.Outputs = append(out.Outputs, srcRes.Outputs...)
-		globalMemberInputs = append(globalMemberInputs, srcRes.GlobalMemberInputs...)
 	}
 	emitEntries(d.pyPyiResources)
 
-	out.GlobalMemberInputs = globalMemberInputs
 	return out
 }
 
@@ -326,9 +303,8 @@ func emitResourceObjcopy(
 // (PY_MAIN / namespace / no_check_imports). nil = trigger absent on this
 // module -> nothing emitted; non-nil = (NodeRef, output path) pair.
 type objcopyEmit struct {
-	Ref   NodeRef
-	Out   VFS
-	Input VFS
+	Ref NodeRef
+	Out VFS
 }
 
 func emitKvOnlyObjcopyNode(
@@ -518,7 +494,7 @@ func emitYaConfJSONObjcopy(
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
 
-		out = append(out, &objcopyEmit{Ref: ctx.emit.Emit(bindNodePlatform(node, instance.Platform)), Out: outputObj, Input: input})
+		out = append(out, &objcopyEmit{Ref: ctx.emit.Emit(bindNodePlatform(node, instance.Platform)), Out: outputObj})
 	}
 
 	return out
@@ -653,13 +629,11 @@ func emitPySrcObjcopy(
 
 	moduleTag := resourceModuleTagForData(d)
 	res := &objcopyEmitResult{}
-	var globalMemberInputs []VFS
 	for _, group := range groups {
 		if namespaceEnabled {
 			if nsRes := emitPyNamespaceForGroup(ctx, instance, d, group, rescompilerLDRef, rescompressorLDRef); nsRes != nil {
 				res.Refs = append(res.Refs, nsRes.Ref)
 				res.Outputs = append(res.Outputs, nsRes.Out)
-				globalMemberInputs = append(globalMemberInputs, objcopyScriptVFS)
 			}
 		}
 
@@ -752,13 +726,6 @@ func emitPySrcObjcopy(
 			r := ctx.emit.Emit(bindNodePlatform(node, instance.Platform))
 			res.Refs = append(res.Refs, r)
 			res.Outputs = append(res.Outputs, outputObj)
-
-			for _, p := range ch.inps {
-				if p.IsSource() {
-					globalMemberInputs = append(globalMemberInputs, p)
-				}
-			}
-			globalMemberInputs = append(globalMemberInputs, objcopyScriptVFS)
 		}
 	}
 
@@ -766,6 +733,5 @@ func emitPySrcObjcopy(
 		return nil
 	}
 
-	res.GlobalMemberInputs = globalMemberInputs
 	return res
 }

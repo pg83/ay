@@ -178,9 +178,8 @@ var genPy3RegScriptPath = genPy3RegScriptVFS.String()
 // `SRCS(GLOBAL ...)`, so the CC output lands in `.global.a`.
 // Mirror of _PY3_REGISTER at build/ymake.core.conf:4086-4089.
 type pyRegisterResult struct {
-	Refs         []NodeRef
-	Outputs      []VFS
-	MemberInputs []VFS
+	Refs    []NodeRef
+	Outputs []VFS
 }
 
 func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs, py3Suffix bool) *pyRegisterResult {
@@ -294,10 +293,6 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 
 		res.Refs = append(res.Refs, ccRef)
 		res.Outputs = append(res.Outputs, ccOut)
-		// memberInputs feeds the .global.a aggregator. CC's own inputs
-		// = [reg3.cpp, gen_py3_reg.py]; only gen_py3_reg.py contributes
-		// (reg3.cpp is BUILD_ROOT-rooted and AR aggregator strips those).
-		res.MemberInputs = append(res.MemberInputs, genPy3RegScriptVFS)
 	}
 
 	return res

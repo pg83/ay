@@ -37,10 +37,9 @@ func emitRunPythonForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in 
 			if !isCCSourceExt(out) {
 				continue
 			}
-			ccRef, ccOut, ccIns := emitPRDownstreamCC(ctx, instance, out, pyRef, in)
+			ccRef, ccOut := emitPRDownstreamCC(ctx, instance, out, pyRef, in)
 			res.CCRefs = append(res.CCRefs, ccRef)
 			res.CCOutputs = append(res.CCOutputs, ccOut)
-			res.MemberInputs = append(res.MemberInputs, ccIns)
 		}
 	}
 

@@ -6,15 +6,10 @@ import (
 
 // sourceEmit is the emit-product of emitOneSource: a single
 // CC/AS/RD/R5/R6/CF/etc. node from one declared source. nil = silently
-// skipped (e.g. `.h` headers, deferred-kind sources). PrimaryCount is
-// the leading-CcIns count naming the member's primary source(s) —
-// `.c/.cpp/.cc/.cxx/.S/.s/.asm/.rodata` yield 1; `.rl6` yields 1 or 2 (source
-// ± companion `.h`).
+// skipped (e.g. `.h` headers, deferred-kind sources).
 type sourceEmit struct {
-	Ref          NodeRef
-	OutPath      VFS
-	CcIns        []VFS
-	PrimaryCount int
+	Ref     NodeRef
+	OutPath VFS
 }
 
 func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, in ModuleCCInputs, ancestorRebase bool) *sourceEmit {
@@ -46,14 +41,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		yasmLDRef, _ := ctx.tool("contrib/tools/yasm")
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
-		ref, asmOut, outPath := EmitRD(srcInstance, srcRel, srcVFS, yasmLDRef, ctx.emit)
+		ref, _, outPath := EmitRD(srcInstance, srcRel, srcVFS, yasmLDRef, ctx.emit)
 
-		return &sourceEmit{
-			Ref:          ref,
-			OutPath:      outPath,
-			CcIns:        []VFS{srcVFS, rodataScriptVFS, asmOut},
-			PrimaryCount: 1,
-		}
+		return &sourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".c"),
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
@@ -74,19 +64,17 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, extras)
 		}
 		// With no extras perturbing it, `full` is the exact [primary, ...headers]
-		// node.Inputs — hand it to EmitCC to skip the rebuild (and the CcIns
-		// copy). An append above reallocated IncludeInputs away from full, so
-		// there leave NodeInputs nil and let EmitCC build from inVFS+headers.
+		// node.Inputs — hand it to EmitCC to skip the rebuild. An append above
+		// reallocated IncludeInputs away from full, so there leave NodeInputs nil
+		// and let EmitCC build from inVFS+headers.
 		if len(flatcExtras) == 0 && len(extras) == 0 {
 			srcIn.NodeInputs = full
 		}
 		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})
 
-		// EmitCC's node.Inputs is [srcVFS]+IncludeInputs and write-once;
-		// reuse it as CcIns instead of rebuilding the identical slice.
-		ref, outPath, ccInputs := EmitCC(srcInstance, srcRel, srcVFS, srcIn, ctx.host, ctx.emit)
+		ref, outPath, _ := EmitCC(srcInstance, srcRel, srcVFS, srcIn, ctx.host, ctx.emit)
 
-		return &sourceEmit{Ref: ref, OutPath: outPath, CcIns: ccInputs, PrimaryCount: 1}
+		return &sourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".S"),
 		strings.HasSuffix(srcRel, ".s"),
 		strings.HasSuffix(srcRel, ".asm"):
@@ -113,8 +101,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		asIn.IncludeInputs = walkClosure(ctx, srcInstance, srcVFS, scanIn)
 		ref, outPath := EmitAS(srcInstance, srcRel, srcVFS, asIn, yasmRef, ctx.host, ctx.emit)
 
-		asInputs := append([]VFS{srcVFS}, asIn.IncludeInputs...)
-		return &sourceEmit{Ref: ref, OutPath: outPath, CcIns: asInputs, PrimaryCount: 1}
+		return &sourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".rl6"):
 		ragelLDRef, ragelBinaryVFS := ctx.tool("contrib/tools/ragel6/bin")
 
@@ -140,17 +127,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		ccRef, ccOut, _ := EmitCC(srcInstance, ccSrcRel, r6Out, ccIn, ctx.host, ctx.emit)
 
-		ccInputs := []VFS{rl6SourceVFS}
-		primaryCount := 1
-
-		companionRel := strings.TrimSuffix(srcRel, ".rl6") + ".h"
-		if ctx.fs.IsFile(srcInstance.Path + "/" + companionRel) {
-			ccInputs = append(ccInputs, Source(srcInstance.Path+"/"+companionRel))
-			primaryCount = 2
-		}
-		ccInputs = append(ccInputs, ccIncludeInputs...)
-
-		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: ccInputs, PrimaryCount: primaryCount}
+		return &sourceEmit{Ref: ccRef, OutPath: ccOut}
 	case strings.HasSuffix(srcRel, ".y"):
 		return emitBisonY(ctx, srcInstance, srcRel, srcIn, srcIn.BisonGenExt)
 	case strings.HasSuffix(srcRel, ".ev"):
@@ -213,12 +190,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		ref, outPath, _ := EmitCC(srcInstance, evPbCCSuffix, evPbCC, ccIn, ctx.host, ctx.emit)
 
-		return &sourceEmit{
-			Ref:          ref,
-			OutPath:      outPath,
-			CcIns:        []VFS{Source(srcInstance.Path + "/" + srcRel), wireFormatVFS},
-			PrimaryCount: 1,
-		}
+		return &sourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".rl"):
 		ragel5LDRef, ragel5BinVFS := ctx.tool("contrib/tools/ragel5/ragel")
 		rlgenCdLDRef, rlgenCdBinVFS := ctx.tool("contrib/tools/ragel5/rlgen-cd")
@@ -243,8 +215,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ccIn.ExtraDepRefs = append([]NodeRef{r5Ref}, ccIn.ExtraDepRefs...)
 
 		ccRef, ccOut, _ := EmitCC(srcInstance, ccSrcRel, r5CppOut, ccIn, ctx.host, ctx.emit)
-		rlMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, ccClosure...)
-		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: rlMemberInputs, PrimaryCount: 1}
+		return &sourceEmit{Ref: ccRef, OutPath: ccOut}
 	case strings.HasSuffix(srcRel, ".h.in"):
 		// A generated header declared in SRCS is not compiled in its declaring
 		// module — ymake realizes it in the module that #includes it. Register
@@ -291,8 +262,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ccIn.ExtraDepRefs = append([]NodeRef{cfRef}, ccIn.ExtraDepRefs...)
 
 		ccRef, ccOut, _ := EmitCC(srcInstance, ccSrcRel, cfOut, ccIn, ctx.host, ctx.emit)
-		cfMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, ccIn.IncludeInputs...)
-		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: cfMemberInputs, PrimaryCount: 1}
+		return &sourceEmit{Ref: ccRef, OutPath: ccOut}
 	}
 
 	if isSkippedSource(srcRel) {
@@ -312,11 +282,8 @@ func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, d *moduleData,
 
 	ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel, instance.Path+"/")
 	ccRef, ccOut, _ := EmitCC(instance, ccSrcRel, pb.pbCC, ccIn, ctx.host, ctx.emit)
-	ccInputs := make([]VFS, 0, 1+len(ccIn.IncludeInputs))
-	ccInputs = append(ccInputs, Source(pb.relPath))
-	ccInputs = append(ccInputs, ccIn.IncludeInputs...)
 
-	return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: ccInputs, PrimaryCount: 1}
+	return &sourceEmit{Ref: ccRef, OutPath: ccOut}
 }
 
 func emitLibraryFlatcSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, in ModuleCCInputs) *sourceEmit {
@@ -331,9 +298,6 @@ func emitLibraryFlatcSource(ctx *genCtx, instance ModuleInstance, d *moduleData,
 
 	ccSrcRel := strings.TrimPrefix(fl.cpp.Rel, instance.Path+"/")
 	ccRef, ccOut, _ := EmitCC(instance, ccSrcRel, fl.cpp, ccIn, ctx.host, ctx.emit)
-	ccInputs := make([]VFS, 0, 1+len(ccIn.IncludeInputs))
-	ccInputs = append(ccInputs, Source(fl.relPath))
-	ccInputs = append(ccInputs, ccIn.IncludeInputs...)
 
-	return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: ccInputs, PrimaryCount: 1}
+	return &sourceEmit{Ref: ccRef, OutPath: ccOut}
 }

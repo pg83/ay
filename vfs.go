@@ -105,17 +105,6 @@ func (v VFS) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.String())
 }
 
-// vfsStringsSlice materialises a []VFS as a []string of canonical VFS
-// strings. Used at boundaries where downstream APIs still take
-// []string (memberInputs aggregator, AR input bucket, etc.).
-func vfsStringsSlice(vs []VFS) []string {
-	out := make([]string, len(vs))
-	for i, v := range vs {
-		out[i] = v.String()
-	}
-	return out
-}
-
 // vfsRelsSlice materialises a []VFS as a []string of root-relative paths.
 // Used at command-composition boundaries where the tool contract wants
 // bare BUILD_ROOT-relative or SOURCE_ROOT-relative paths, not canonical

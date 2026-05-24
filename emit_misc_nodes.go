@@ -7,9 +7,9 @@ import (
 
 // emitMiscNodes emits all module-level JV, CF, BI, PR nodes. With
 // non-nil consumerInputs, also emits the downstream CP+CC chain for
-// each JV grammar .cpp output, returning per-CC (refs, outputs,
-// memberInputs) for the caller's AR-member accumulators.
-func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS, memberInputsList [][]VFS) {
+// each JV grammar .cpp output, returning per-CC (refs, outputs) for the
+// caller's AR-member accumulators.
+func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS) {
 	outPrefix := instance.Path + "/"
 	reg := codegenRegForInstance(ctx, instance)
 
@@ -19,10 +19,9 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		emitExplicitCF(ctx, instance, cf, d, reg)
 	}
 
-	antlrCCRefs, antlrCCOutputs, antlrCCMemberInputs := emitAntlrRuns(ctx, instance, d, consumerInputs)
+	antlrCCRefs, antlrCCOutputs := emitAntlrRuns(ctx, instance, d, consumerInputs)
 	ccRefs = append(ccRefs, antlrCCRefs...)
 	ccOutputs = append(ccOutputs, antlrCCOutputs...)
-	memberInputsList = append(memberInputsList, antlrCCMemberInputs...)
 
 	// JV: emit one node per ANTLR4 grammar declaration.
 	for _, g := range d.antlr4Grammars {
@@ -75,10 +74,9 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					{Build(outPrefix + lexerBase + ".cpp"), Build(outPrefix + lexerBase + ".h")},
 					{Build(outPrefix + parserBase + ".cpp"), Build(outPrefix + parserBase + ".h")},
 				}
-				refs, outs, inputs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
+				refs, outs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 				ccRefs = append(ccRefs, refs...)
 				ccOutputs = append(ccOutputs, outs...)
-				memberInputsList = append(memberInputsList, inputs...)
 			}
 		} else {
 			jvRef := EmitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ctx.emit)
@@ -122,10 +120,9 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					{Build(outPrefix + base + "Lexer.cpp"), Build(outPrefix + base + "Lexer.h")},
 					{Build(outPrefix + base + "Parser.cpp"), Build(outPrefix + base + "Parser.h")},
 				}
-				refs, outs, inputs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
+				refs, outs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 				ccRefs = append(ccRefs, refs...)
 				ccOutputs = append(ccOutputs, outs...)
-				memberInputsList = append(memberInputsList, inputs...)
 			}
 		}
 	}

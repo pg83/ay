@@ -7,7 +7,7 @@ package main
 //
 // PR-emitted source: $(B)/<instance.Path>/<out>; composeCCPaths
 // yields $(B)/<instance.Path>/<out>.o (flat for slash-free <out>).
-func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef NodeRef, in ModuleCCInputs) (NodeRef, VFS, []VFS) {
+func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
 	// Thread prRef as the downstream CC's leading dep. walkClosure
 	// skips the root so a registry probe alone can't surface PR; REF
 	// places PR as CC's leading dep (dep_types.h_dumper.cpp.o → PR).
@@ -22,7 +22,7 @@ func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef 
 // (walkClosure reads it). depPrefix entries are prepended ahead of the
 // scanner closure so cross-codegen deps appear before the consumer's
 // own .cpp in Inputs[] (EN: cross-EN `_serialized.{cpp,h}`; PR: none).
-func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string, depPrefix []VFS, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS, []VFS) {
+func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string, depPrefix []VFS, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
 	cppPath := Build(instance.Path + "/" + cppRel)
 
 	closure := walkClosure(ctx, instance, cppPath, in)
@@ -64,18 +64,5 @@ func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string
 
 	ref, outPath, _ := EmitCC(instance, cppRel, cppPath, ccIn, ctx.host, ctx.emit)
 
-	// AR member-inputs: SOURCE_ROOT-rooted closure entries only.
-	// REF (libdevtools-ymake.a) carries the EN-downstream CC's include-
-	// closure .h entries but never the BUILD_ROOT `_serialized.{cpp,h}`
-	// outputs themselves — those are wired implicitly via the .o
-	// archive members.
-	ccInputs := make([]VFS, 0, len(closure))
-	for _, p := range closure {
-		if p.IsBuild() {
-			continue
-		}
-		ccInputs = append(ccInputs, p)
-	}
-
-	return ref, outPath, ccInputs
+	return ref, outPath
 }

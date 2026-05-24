@@ -5,17 +5,16 @@ import (
 	"strings"
 )
 
-// runProgramsForARResult carries per-CC (refs, outputs, memberInputs)
-// for the caller's AR-member accumulators.
+// runProgramsForARResult carries the per-CC (refs, outputs) the caller
+// archives into the module's AR.
 //
 // A RUN_PROGRAM with `STDOUT/OUT foo.cpp` emits the .cpp under
 // $(B)/<instance.Path>/foo.cpp and a downstream CC compiles it into
 // foo.cpp.o for the AR/LD. Mirrors upstream ymake's auto-promote of
 // compilable-extension RUN_PROGRAM outputs.
 type runProgramsForARResult struct {
-	CCRefs       []NodeRef
-	CCOutputs    []VFS
-	MemberInputs [][]VFS
+	CCRefs    []NodeRef
+	CCOutputs []VFS
 }
 
 type runProgramAuxTool struct {
@@ -66,10 +65,9 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 				continue
 			}
 
-			ccRef, ccOut, ccIns := emitPRDownstreamCC(ctx, instance, out, prRef, in)
+			ccRef, ccOut := emitPRDownstreamCC(ctx, instance, out, prRef, in)
 			res.CCRefs = append(res.CCRefs, ccRef)
 			res.CCOutputs = append(res.CCOutputs, ccOut)
-			res.MemberInputs = append(res.MemberInputs, ccIns)
 		}
 	}
 

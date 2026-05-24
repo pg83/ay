@@ -35,7 +35,7 @@ func emitJVDownstreamCPCC(
 	cpccPairs []struct{ cpp, h VFS },
 	outputIncludes []string,
 	in ModuleCCInputs,
-) (ccRefs []NodeRef, ccOutputs []VFS, memberInputsList [][]VFS) {
+) (ccRefs []NodeRef, ccOutputs []VFS) {
 	reg := codegenRegForInstance(ctx, instance)
 
 	for _, pair := range cpccPairs {
@@ -95,21 +95,8 @@ func emitJVDownstreamCPCC(
 
 		ccRef, ccOut, _ := EmitCC(instance, g4CppRel, g4CppPath, ccIn, ctx.host, ctx.emit)
 
-		// AR memberInputs: SOURCE_ROOT closure entries only. fs_tools.py
-		// and process_command_files.py are CP-step helpers witnessed
-		// in REF on the AR rollup (libdevtools-ymake-lang.a).
-		memberInputs := make([]VFS, 0, len(closure)+2)
-		memberInputs = append(memberInputs, antlr4FsToolsVFS, antlr4ProcCmdVFS)
-		for _, p := range closure {
-			if p.IsBuild() {
-				continue
-			}
-			memberInputs = append(memberInputs, p)
-		}
-
 		ccRefs = append(ccRefs, ccRef)
 		ccOutputs = append(ccOutputs, ccOut)
-		memberInputsList = append(memberInputsList, memberInputs)
 		_ = cpInputs // assembled inside EmitJVCPG4; kept for clarity
 	}
 

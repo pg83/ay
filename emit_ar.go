@@ -3,8 +3,8 @@ package main
 // EmitAR archives .o files (objRefs/objPaths) into
 // $(B)/<instance.Path>/<ArchiveName(instance.Path)>. objRefs/objPaths must
 // be parallel and in SRCS declaration order (cmd_args preserves it; inputs
-// sorts internally). memberInputs is the union of every member CC's
-// inputs (primary source + transitive headers, DFS-discovery order).
+// sorts internally). The archive bundles only those objects plus its own
+// link script — no member source/header closure.
 // peerArchiveRefs go into DepRefs only; production passes nil (reference
 // has zero AR-on-AR deps), parameter retained for tests.
 func EmitAR(
@@ -12,7 +12,6 @@ func EmitAR(
 	objRefs []NodeRef,
 	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
-	memberInputs []VFS,
 	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
@@ -22,7 +21,7 @@ func EmitAR(
 
 	archivePath := Build(instance.Path + "/" + ArchiveName(instance.Path))
 
-	return emitARNode(instance, archivePath, nil, objRefs, objPaths, peerArchiveRefs, memberInputs, nil, hostP, emit)
+	return emitARNode(instance, archivePath, nil, objRefs, objPaths, peerArchiveRefs, nil, hostP, emit)
 }
 
 // EmitARNamed is EmitAR with an explicit archive base name (e.g.
@@ -36,7 +35,6 @@ func EmitARNamed(
 	objRefs []NodeRef,
 	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
-	memberInputs []VFS,
 	arPluginPath *VFS,
 	hostP *Platform,
 	emit Emitter,
@@ -47,7 +45,7 @@ func EmitARNamed(
 
 	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
-	return emitARNode(instance, archivePath, nil, objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, hostP, emit)
+	return emitARNode(instance, archivePath, nil, objRefs, objPaths, peerArchiveRefs, arPluginPath, hostP, emit)
 }
 
 // EmitARNamedTagged is EmitARNamed with an explicit module_tag
@@ -61,7 +59,6 @@ func EmitARNamedTagged(
 	objRefs []NodeRef,
 	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
-	memberInputs []VFS,
 	arPluginPath *VFS,
 	hostP *Platform,
 	emit Emitter,
@@ -72,7 +69,7 @@ func EmitARNamedTagged(
 
 	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
-	return emitARNode(instance, archivePath, &tag, objRefs, objPaths, peerArchiveRefs, memberInputs, arPluginPath, hostP, emit)
+	return emitARNode(instance, archivePath, &tag, objRefs, objPaths, peerArchiveRefs, arPluginPath, hostP, emit)
 }
 
 // EmitARGlobalNamedTagged emits a GLOBAL_SRCS archive with an explicit
@@ -84,7 +81,6 @@ func EmitARGlobalNamedTagged(
 	tag string,
 	objRefs []NodeRef,
 	objPaths []VFS,
-	memberInputs []VFS,
 	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
@@ -94,5 +90,5 @@ func EmitARGlobalNamedTagged(
 
 	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
-	return emitARNode(instance, archivePath, &tag, objRefs, objPaths, nil, memberInputs, nil, hostP, emit)
+	return emitARNode(instance, archivePath, &tag, objRefs, objPaths, nil, nil, hostP, emit)
 }
