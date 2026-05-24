@@ -410,7 +410,8 @@ func TestScanner_AbseilTaskHClaimedByFreertosYml(t *testing.T) {
 		}
 	}
 
-	scanner := newIncludeScannerWith(newIncludeParserManager(sourceRoot), sysincl, onWarn)
+	interner := newScannerInterner()
+	scanner := newIncludeScannerWith(newIncludeParserManager(sourceRoot), &interner, sysincl, onWarn)
 
 	ctx := ScanContext{
 		SourceRel:       absSrc,
