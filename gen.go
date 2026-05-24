@@ -2251,7 +2251,22 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// GLOBAL_SRCS contribute their own member-inputs slice to the
 	// .global.a archive (separate accumulator from regular AR).
 	globalMemberInputs := make([]VFS, 0, 16)
-	globalMemberInputsSeen := map[VFS]struct{}{}
+	globalMemberInputsSeen := map[uint32]struct{}{}
+	// Same contract as addMemberInputs, for the .global.a member set: skip
+	// headers (excluded from AR/LD inputs) and dedup by interned VFS ID.
+	addGlobalMemberInputs := func(paths []VFS) {
+		for _, p := range paths {
+			if isHeaderSource(p.Rel) {
+				continue
+			}
+			id := ctx.vfsInterner.internVFS(p)
+			if _, dup := globalMemberInputsSeen[id]; dup {
+				continue
+			}
+			globalMemberInputsSeen[id] = struct{}{}
+			globalMemberInputs = append(globalMemberInputs, p)
+		}
+	}
 
 	for _, src := range d.globalSrcs {
 		emit := emitOneSource(ctx, instance, d, src, moduleInputs, ancestorRebase)
@@ -2263,14 +2278,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		globalRefs = append(globalRefs, emit.Ref)
 		globalOutputs = append(globalOutputs, emit.OutPath)
 
-		for _, p := range emit.CcIns {
-			if _, dup := globalMemberInputsSeen[p]; dup {
-				continue
-			}
-
-			globalMemberInputsSeen[p] = struct{}{}
-			globalMemberInputs = append(globalMemberInputs, p)
-		}
+		addGlobalMemberInputs(emit.CcIns)
 	}
 	globalSrcMemberCount := len(globalRefs)
 
@@ -2289,14 +2297,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			globalOutputs = append(globalOutputs, regRes.Outputs[i])
 		}
 
-		for _, p := range regRes.MemberInputs {
-			if _, dup := globalMemberInputsSeen[p]; dup {
-				continue
-			}
-
-			globalMemberInputsSeen[p] = struct{}{}
-			globalMemberInputs = append(globalMemberInputs, p)
-		}
+		addGlobalMemberInputs(regRes.MemberInputs)
 	}
 
 	// Emit own LD_PLUGIN CP nodes. Merged with the transitive peer plugin
@@ -2591,14 +2592,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if genPyAuxRes != nil {
 		globalRefs = append(globalRefs, genPyAuxRes.Refs...)
 		globalOutputs = append(globalOutputs, genPyAuxRes.Outputs...)
-		for _, p := range genPyAuxRes.MemberInputs {
-			if _, dup := globalMemberInputsSeen[p]; dup {
-				continue
-			}
-
-			globalMemberInputsSeen[p] = struct{}{}
-			globalMemberInputs = append(globalMemberInputs, p)
-		}
+		addGlobalMemberInputs(genPyAuxRes.MemberInputs)
 	}
 
 	// Emit objcopy PY nodes for RESOURCE / RESOURCE_FILES. Returned `.o`
@@ -2616,24 +2610,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			globalOutputs = moveTailVFSToFront(globalOutputs, len(objcopyRes.Outputs))
 		}
 
-		for _, p := range objcopyRes.GlobalMemberInputs {
-			if _, dup := globalMemberInputsSeen[p]; dup {
-				continue
-			}
-
-			globalMemberInputsSeen[p] = struct{}{}
-			globalMemberInputs = append(globalMemberInputs, p)
-		}
+		addGlobalMemberInputs(objcopyRes.GlobalMemberInputs)
 	}
 
 	// LIBRARY: regular AR over own CCs. Peer-archive DepRefs are
 	// intentionally NOT threaded — every reference AR has zero AR-on-AR
 	// deps; peer archives flow into the consumer's downstream LD via
 	// `peerArchiveRefs` in EmitLD. The regular AR receives the union of
-	// regular and global members' inputs (primaries + header closures),
-	// including late PY/resource producers that append to globalMemberInputs.
-	// memberInputs and globalMemberInputs are disjoint (regular vs global
-	// member sets), so concat without dedup.
+	// regular and global members' (header-free) inputs, including late
+	// PY/resource producers that append to globalMemberInputs. Concat
+	// without dedup: any regular/global overlap is removed by emitARNode's
+	// objSet (the bulk — shared header closures — is already filtered out at
+	// aggregation, so the leftover overlap is small).
 	combinedMemberInputs := concatVFS(memberInputs, globalMemberInputs)
 
 	// PY*_LIBRARY modules with PY_SRCS emit objcopy nodes (see
