@@ -5406,10 +5406,11 @@ func TestGen_SwigToolLDMatchesReference(t *testing.T) {
 		t.Fatalf("swig ld cmd_args mismatch:\n  got:  %#v\n  want: %#v", gotArgs, wantArgs)
 	}
 
-	// Headers are stripped from LD inputs in both graphs by the normalizer
-	// (a link node bundles .o/.a, not headers); mirror that on both sides.
-	gotInputs := sortedStrings(dropHeaderInputs(vfsStrings(ourNode.Inputs)))
-	wantInputs := sortedStrings(dropHeaderInputs(normalizeT20Strings(refNode.Inputs)))
+	// LD inputs are reduced to objects/archives/scripts in both graphs by the
+	// normalizer (a link node bundles .o/.a, not the member source/header
+	// closure); mirror that on both sides.
+	gotInputs := sortedStrings(filterARLDInputs(vfsStrings(ourNode.Inputs)))
+	wantInputs := sortedStrings(filterARLDInputs(normalizeT20Strings(refNode.Inputs)))
 	if !reflect.DeepEqual(gotInputs, wantInputs) {
 		t.Fatalf("swig ld inputs mismatch:\n  got:  %#v\n  want: %#v", gotInputs, wantInputs)
 	}
