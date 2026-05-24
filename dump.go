@@ -136,15 +136,34 @@ func isLinkOrArchiveNode(node map[string]any) bool {
 	return p == "AR" || p == "LD"
 }
 
-// dropHeaderInputs removes C/C++ header paths (per isHeaderSource) from an
-// already-normalized input list, in place.
-func dropHeaderInputs(in []string) []string {
+// arLDInputKept reports whether s is a real AR/LD input: an object/archive
+// the command bundles (.o / .a), a build script ($(S)/build/scripts/... —
+// link_lib.py / link_exe.py / vcs templates), the ar plugin (.pyplugin), or a
+// linker version script (.exports). Everything else is the members'
+// transitive source/header closure, which the ar/link command never reads.
+func arLDInputKept(s string) bool {
+	// Headers are never real AR/LD inputs — not even the vcs template
+	// $(S)/build/scripts/c_templates/svnversion.h, which only reaches the
+	// list through a member's include closure. Exclude them first so the
+	// build-scripts prefix below doesn't readmit them.
+	if isHeaderSource(s) {
+		return false
+	}
+	return strings.HasSuffix(s, ".o") ||
+		strings.HasSuffix(s, ".a") ||
+		strings.HasSuffix(s, ".pyplugin") ||
+		strings.HasSuffix(s, ".exports") ||
+		strings.HasPrefix(s, "$(S)/build/scripts/")
+}
+
+// filterARLDInputs keeps only real AR/LD inputs (see arLDInputKept), dropping
+// the member source/header closure, in place.
+func filterARLDInputs(in []string) []string {
 	out := in[:0]
 	for _, s := range in {
-		if isHeaderSource(s) {
-			continue
+		if arLDInputKept(s) {
+			out = append(out, s)
 		}
-		out = append(out, s)
 	}
 	return out
 }
@@ -161,13 +180,13 @@ func getString(node map[string]any, key string) string {
 // Mirrors dev/normalize.py::_strip_and_canonicalize (minus identity/deps).
 func canonContent(node map[string]any) map[string]any {
 	inputs := normSortedStrings(node["inputs"])
-	// AR (archive) and LD (link) nodes bundle their members' .o/.a files;
-	// they have no business depending on header build-nodes. Upstream lists
-	// every member's full header closure in their inputs[] regardless (an LD
-	// can be 90% headers) — a defect we neither replicate (we stop emitting
-	// them) nor compare: drop headers from AR/LD inputs in BOTH graphs.
+	// AR/LD nodes consume only the objects/archives the command bundles
+	// (.o/.a), plus the build scripts / version scripts / ar plugin. Upstream
+	// also lists every member CC's entire transitive source+header closure in
+	// inputs[] (58-72% of the list — a defect we neither replicate nor
+	// compare). Keep only the real inputs in BOTH graphs; drop the closure.
 	if isLinkOrArchiveNode(node) {
-		inputs = dropHeaderInputs(inputs)
+		inputs = filterARLDInputs(inputs)
 	}
 	canon := map[string]any{
 		"cmds":              normRec(orVal(node["cmds"], []any{})),
