@@ -3481,20 +3481,20 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 		}
 	}
 
-	wantSources := map[string]bool{
-		"$(S)/consumer/parser.rl6": false,
-		"$(S)/consumer/parser.h":   false,
-	}
+	// The .rl6 source appears in AR.Inputs; its paired .h does NOT — headers
+	// are excluded from AR/LD inputs (addMemberInputs drops them, the
+	// normalizer strips them from both graphs).
+	foundRl6 := false
 	for _, in := range arNode.Inputs {
-		if _, want := wantSources[in.String()]; want {
-			wantSources[in.String()] = true
+		switch in.String() {
+		case "$(S)/consumer/parser.rl6":
+			foundRl6 = true
+		case "$(S)/consumer/parser.h":
+			t.Errorf("AR.Inputs contains %q — headers must be excluded from AR inputs", in.String())
 		}
 	}
-
-	for src, found := range wantSources {
-		if !found {
-			t.Errorf("AR.Inputs missing %q — .rl6 + .h source-pair must appear (PR-35y R7)", src)
-		}
+	if !foundRl6 {
+		t.Errorf("AR.Inputs missing %q — the .rl6 source must appear (PR-35y R7)", "$(S)/consumer/parser.rl6")
 	}
 }
 
@@ -5406,8 +5406,10 @@ func TestGen_SwigToolLDMatchesReference(t *testing.T) {
 		t.Fatalf("swig ld cmd_args mismatch:\n  got:  %#v\n  want: %#v", gotArgs, wantArgs)
 	}
 
-	gotInputs := sortedStrings(vfsStrings(ourNode.Inputs))
-	wantInputs := sortedStrings(normalizeT20Strings(refNode.Inputs))
+	// Headers are stripped from LD inputs in both graphs by the normalizer
+	// (a link node bundles .o/.a, not headers); mirror that on both sides.
+	gotInputs := sortedStrings(dropHeaderInputs(vfsStrings(ourNode.Inputs)))
+	wantInputs := sortedStrings(dropHeaderInputs(normalizeT20Strings(refNode.Inputs)))
 	if !reflect.DeepEqual(gotInputs, wantInputs) {
 		t.Fatalf("swig ld inputs mismatch:\n  got:  %#v\n  want: %#v", gotInputs, wantInputs)
 	}
