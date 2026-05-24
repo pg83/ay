@@ -56,7 +56,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 	// Mirrors the ModuleCCInputs built for CC nodes in the same module.
 	scanIn := ModuleCCInputs{
 		Flags:             d.flags,
-		AddIncl:           mergeDedupVFS(d.addIncl, nil),
+		AddIncl:           d.addIncl,
 		PeerAddInclGlobal: peerAddInclGlobal,
 		SourceRoot:        ctx.sourceRoot,
 		FS:                ctx.fs,

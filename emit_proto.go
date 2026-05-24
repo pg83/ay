@@ -643,11 +643,9 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
 
-	dedupedAddIncl := mergeDedupVFS(d.addIncl, nil)
-
 	moduleInputs := ModuleCCInputs{
 		Flags:                d.flags,
-		AddIncl:              dedupedAddIncl,
+		AddIncl:              d.addIncl,
 		PeerAddInclGlobal:    peerContribs.addIncl,
 		CFlags:               d.cFlags,
 		CXXFlags:             d.cxxFlags,
