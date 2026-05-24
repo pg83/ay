@@ -3417,22 +3417,12 @@ END()
 		}
 	}
 
-	// The joined source files (`src1.cpp`, `src2.cpp`) MUST appear in
-	// the AR's inputs — they are the JS member sources, not the
-	// generated cpp shim, and the reference graph carries them.
-	wantSources := map[string]bool{
-		"$(S)/joinmod/src1.cpp": false,
-		"$(S)/joinmod/src2.cpp": false,
-	}
-	for _, in := range arNode.Inputs {
-		if _, want := wantSources[in.String()]; want {
-			wantSources[in.String()] = true
-		}
-	}
-
-	for src, found := range wantSources {
-		if !found {
-			t.Errorf("AR.Inputs missing %q — JS member source must appear (PR-35y R7)", src)
+	// JS member sources are NOT in AR inputs either — an archive bundles the
+	// compiled objects, not source files; the member source/header closure is
+	// excluded from AR/LD inputs (normalizer + emission).
+	for _, src := range []string{"$(S)/joinmod/src1.cpp", "$(S)/joinmod/src2.cpp"} {
+		if nodeHasInput(arNode, src) {
+			t.Errorf("AR.Inputs must not contain JS member source %q: %#v", src, arNode.Inputs)
 		}
 	}
 }
@@ -3481,20 +3471,12 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 		}
 	}
 
-	// The .rl6 source appears in AR.Inputs; its paired .h does NOT — headers
-	// are excluded from AR/LD inputs (addMemberInputs drops them, the
-	// normalizer strips them from both graphs).
-	foundRl6 := false
-	for _, in := range arNode.Inputs {
-		switch in.String() {
-		case "$(S)/consumer/parser.rl6":
-			foundRl6 = true
-		case "$(S)/consumer/parser.h":
-			t.Errorf("AR.Inputs contains %q — headers must be excluded from AR inputs", in.String())
+	// Neither the .rl6 source nor its .h companion appear in AR.Inputs — an
+	// archive bundles the compiled objects, not member sources/headers.
+	for _, src := range []string{"$(S)/consumer/parser.rl6", "$(S)/consumer/parser.h"} {
+		if nodeHasInput(arNode, src) {
+			t.Errorf("AR.Inputs must not contain member source %q: %#v", src, arNode.Inputs)
 		}
-	}
-	if !foundRl6 {
-		t.Errorf("AR.Inputs missing %q — the .rl6 source must appear (PR-35y R7)", "$(S)/consumer/parser.rl6")
 	}
 }
 
@@ -3560,20 +3542,31 @@ END()
 		globalSrc  = "$(S)/globalmod/global.cpp"
 	)
 
-	if !regularInputs[regularSrc] {
-		t.Errorf("regular AR.Inputs missing %q (regular primary must appear)", regularSrc)
+	// AR inputs hold compiled objects + scripts, never member sources — so
+	// the regular/global .cpp sources (and the R8 regular-unions-global
+	// closure) no longer appear. Each AR still archives its own object.
+	for _, src := range []string{regularSrc, globalSrc} {
+		if regularInputs[src] {
+			t.Errorf("regular AR.Inputs must not contain member source %q: %#v", src, regularAR.Inputs)
+		}
+	}
+	if globalInputs[globalSrc] {
+		t.Errorf(".global.a AR.Inputs must not contain member source %q: %#v", globalSrc, globalAR.Inputs)
 	}
 
-	if !regularInputs[globalSrc] {
-		t.Errorf("regular AR.Inputs missing %q — PR-35y R8 requires the regular AR to union global member inputs", globalSrc)
+	hasObject := func(n *Node) bool {
+		for _, in := range n.Inputs {
+			if strings.HasSuffix(in.Rel, ".o") {
+				return true
+			}
+		}
+		return false
 	}
-
-	if !globalInputs[globalSrc] {
-		t.Errorf(".global.a AR.Inputs missing %q (global primary must appear)", globalSrc)
+	if !hasObject(regularAR) {
+		t.Errorf("regular AR.Inputs has no object: %#v", regularAR.Inputs)
 	}
-
-	if globalInputs[regularSrc] {
-		t.Errorf(".global.a AR.Inputs contains %q — regular primaries must be excluded from the .global.a (PR-35y R8)", regularSrc)
+	if !hasObject(globalAR) {
+		t.Errorf(".global.a AR.Inputs has no object: %#v", globalAR.Inputs)
 	}
 }
 
@@ -3612,41 +3605,32 @@ END()
 
 	g := testGen(root, "mod/inner")
 
-	var arNode *Node
+	// The SRCDIR rebase is observable on the AS node that compiles foo.S —
+	// its source input reads from the SRCDIR path, not the instance path.
+	// (AR inputs no longer carry member sources; the rebase lives on the
+	// compile node.)
+	var asNode *Node
 
 	for _, n := range g.Graph {
-		if n.KV["p"] == "AR" && n.TargetProperties["module_dir"] == "mod/inner" {
-			arNode = n
+		if n.KV["p"] == "AS" {
+			asNode = n
 
 			break
 		}
 	}
 
-	if arNode == nil {
-		t.Fatal("no AR node emitted for mod/inner")
+	if asNode == nil {
+		t.Fatal("no AS node emitted for mod/inner")
 	}
 
 	const want = "$(S)/mod/sub/foo.S"
 	const forbidden = "$(S)/mod/inner/sub/foo.S"
 
-	for _, in := range arNode.Inputs {
-		if in.String() == forbidden {
-			t.Errorf("AR.Inputs contains %q — SRCDIR rebase must redirect to %q (PR-35y R8)", forbidden, want)
-		}
+	if nodeHasInput(asNode, forbidden) {
+		t.Errorf("AS.Inputs contains %q — SRCDIR rebase must redirect to %q (PR-35y R8)", forbidden, want)
 	}
-
-	found := false
-
-	for _, in := range arNode.Inputs {
-		if in.String() == want {
-			found = true
-
-			break
-		}
-	}
-
-	if !found {
-		t.Errorf("AR.Inputs missing %q — PR-35y R8 SRCDIR rebase for `.S` source", want)
+	if !nodeHasInput(asNode, want) {
+		t.Errorf("AS.Inputs missing %q — PR-35y R8 SRCDIR rebase for `.S` source: %#v", want, asNode.Inputs)
 	}
 }
 
@@ -3847,16 +3831,17 @@ END()
 	if nodeHasInput(ar, "$(B)/proto/Generated.code0.cc") {
 		t.Fatalf("ar inputs still contain build-root generated source: %v", ar.Inputs)
 	}
-	for _, want := range []string{
+	// The generator toolchain closure is NOT carried into the AR — an archive
+	// bundles objects, not the codegen sources/tools/templates. (The CC node
+	// above still carries the closure; only AR/LD inputs are trimmed.)
+	for _, absent := range []string{
 		"$(S)/tools/multiproto.py",
-		"$(S)/build/scripts/stdout2stderr.py",
 		"$(S)/contrib/java/antlr/antlr4/antlr.jar",
-		"$(S)/build/scripts/configure_file.py",
 		"$(S)/templates/Java.stg.in",
 		"$(S)/templates/Grammar.g.in",
 	} {
-		if !nodeHasInput(ar, want) {
-			t.Fatalf("ar inputs missing generator closure %q: %v", want, ar.Inputs)
+		if nodeHasInput(ar, absent) {
+			t.Fatalf("ar inputs must not contain generator-closure source %q: %v", absent, ar.Inputs)
 		}
 	}
 
@@ -5990,10 +5975,13 @@ func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
 		t.Fatal("graph is missing db objcopy output")
 	}
 
-	for _, want := range []string{"$(S)/db/data.sql", "$(S)/build/scripts/objcopy.py"} {
-		if !nodeHasInput(regularAR, want) {
-			t.Fatalf("libdb.a inputs missing %q: %#v", want, regularAR.Inputs)
-		}
+	// objcopy.py is a build script — kept. data.sql is a resource SOURCE —
+	// excluded (an archive bundles objects/scripts, not member sources).
+	if !nodeHasInput(regularAR, "$(S)/build/scripts/objcopy.py") {
+		t.Fatalf("libdb.a inputs missing objcopy.py: %#v", regularAR.Inputs)
+	}
+	if nodeHasInput(regularAR, "$(S)/db/data.sql") {
+		t.Errorf("libdb.a must not list the resource source data.sql: %#v", regularAR.Inputs)
 	}
 }
 

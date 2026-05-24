@@ -1756,10 +1756,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	addMemberInputs := func(paths []VFS) {
 		for _, p := range paths {
-			// Headers don't belong in AR/LD inputs (a link/archive bundles
-			// .o/.a, not header build-nodes); the normalizer drops them from
-			// both graphs, so we never aggregate them in the first place.
-			if isHeaderSource(p.Rel) {
+			// AR/LD inputs are only objects/archives/scripts (the command
+			// bundles those); the members' source/header closure is dropped
+			// by the normalizer in both graphs, so we never aggregate it.
+			if !arLDMemberKept(p) {
 				continue
 			}
 			id := ctx.vfsInterner.internVFS(p)
@@ -2253,10 +2253,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	globalMemberInputs := make([]VFS, 0, 16)
 	globalMemberInputsSeen := map[uint32]struct{}{}
 	// Same contract as addMemberInputs, for the .global.a member set: skip
-	// headers (excluded from AR/LD inputs) and dedup by interned VFS ID.
+	// objects/archives/scripts only (see addMemberInputs / arLDMemberKept)
+	// and dedup by interned VFS ID.
 	addGlobalMemberInputs := func(paths []VFS) {
 		for _, p := range paths {
-			if isHeaderSource(p.Rel) {
+			if !arLDMemberKept(p) {
 				continue
 			}
 			id := ctx.vfsInterner.internVFS(p)
@@ -3370,6 +3371,24 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 
 // isHeaderSource reports whether `srcRel` is a header file the
 // emitter should skip.
+// arLDMemberKept reports whether a member input belongs in an AR/LD node's
+// inputs: an object/archive (.o/.a), the ar plugin (.pyplugin), a linker
+// version script (.exports), or a build script ($(S)/build/scripts/...).
+// Never a header. Mirrors dump.go's arLDInputKept (the normalizer keep-rule)
+// on VFS — emission and normalization must agree. A member's transitive
+// source/header closure fails this and is never aggregated.
+func arLDMemberKept(v VFS) bool {
+	rel := v.Rel
+	if isHeaderSource(rel) {
+		return false
+	}
+	return strings.HasSuffix(rel, ".o") ||
+		strings.HasSuffix(rel, ".a") ||
+		strings.HasSuffix(rel, ".pyplugin") ||
+		strings.HasSuffix(rel, ".exports") ||
+		(v.Root == VFSRootSource && strings.HasPrefix(rel, "build/scripts/"))
+}
+
 func isHeaderSource(srcRel string) bool {
 	switch {
 	case strings.HasSuffix(srcRel, ".h"),
