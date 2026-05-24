@@ -97,8 +97,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 		incl = append(incl, srcVFS)
 		ccIn.IncludeInputs = swigFilterExistingSources(ctx.fs, dedupVFS(incl))
 
-		ccRef, ccOut := EmitCC(instance, cOutRel, cOutVFS, ccIn, ctx.host, ctx.emit)
-		ccInputs := append([]VFS{cOutVFS}, ccIn.IncludeInputs...)
+		ccRef, ccOut, ccInputs := EmitCC(instance, cOutRel, cOutVFS, ccIn, ctx.host, ctx.emit)
 
 		out = append(out, &sourceEmit{
 			Ref:          ccRef,

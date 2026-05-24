@@ -70,8 +70,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		}
 		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})
 
-		ref, outPath := EmitCC(srcInstance, srcRel, srcVFS, srcIn, ctx.host, ctx.emit)
-		ccInputs := append([]VFS{srcVFS}, srcIn.IncludeInputs...)
+		// EmitCC's node.Inputs is [srcVFS]+IncludeInputs and write-once;
+		// reuse it as CcIns instead of rebuilding the identical slice.
+		ref, outPath, ccInputs := EmitCC(srcInstance, srcRel, srcVFS, srcIn, ctx.host, ctx.emit)
 
 		return &sourceEmit{Ref: ref, OutPath: outPath, CcIns: ccInputs, PrimaryCount: 1}
 	case strings.HasSuffix(srcRel, ".S"),
@@ -125,7 +126,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ccIn.PerSourceCFlags = append(append([]string(nil), srcIn.PerSourceCFlags...), "-Wno-implicit-fallthrough")
 		ccIn.ExtraDepRefs = append([]NodeRef{r6Ref}, resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r6Ref)...)
 
-		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, r6Out, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := EmitCC(srcInstance, ccSrcRel, r6Out, ccIn, ctx.host, ctx.emit)
 
 		ccInputs := []VFS{rl6SourceVFS}
 		primaryCount := 1
@@ -198,7 +199,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
 		ccIn.ExtraDepRefs = append([]NodeRef{evRef}, resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, evRef)...)
 
-		ref, outPath := EmitCC(srcInstance, evPbCCSuffix, evPbCC, ccIn, ctx.host, ctx.emit)
+		ref, outPath, _ := EmitCC(srcInstance, evPbCCSuffix, evPbCC, ccIn, ctx.host, ctx.emit)
 
 		return &sourceEmit{
 			Ref:          ref,
@@ -229,7 +230,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r5Ref)
 		ccIn.ExtraDepRefs = append([]NodeRef{r5Ref}, ccIn.ExtraDepRefs...)
 
-		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, r5CppOut, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := EmitCC(srcInstance, ccSrcRel, r5CppOut, ccIn, ctx.host, ctx.emit)
 		rlMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, ccClosure...)
 		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: rlMemberInputs, PrimaryCount: 1}
 	case strings.HasSuffix(srcRel, ".h.in"):
@@ -277,7 +278,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, cfRef)
 		ccIn.ExtraDepRefs = append([]NodeRef{cfRef}, ccIn.ExtraDepRefs...)
 
-		ccRef, ccOut := EmitCC(srcInstance, ccSrcRel, cfOut, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := EmitCC(srcInstance, ccSrcRel, cfOut, ccIn, ctx.host, ctx.emit)
 		cfMemberInputs := append([]VFS{Source(srcInstance.Path + "/" + srcRel)}, ccIn.IncludeInputs...)
 		return &sourceEmit{Ref: ccRef, OutPath: ccOut, CcIns: cfMemberInputs, PrimaryCount: 1}
 	}
@@ -298,7 +299,7 @@ func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)
 
 	ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel, instance.Path+"/")
-	ccRef, ccOut := EmitCC(instance, ccSrcRel, pb.pbCC, ccIn, ctx.host, ctx.emit)
+	ccRef, ccOut, _ := EmitCC(instance, ccSrcRel, pb.pbCC, ccIn, ctx.host, ctx.emit)
 	ccInputs := make([]VFS, 0, 1+len(ccIn.IncludeInputs))
 	ccInputs = append(ccInputs, Source(pb.relPath))
 	ccInputs = append(ccInputs, ccIn.IncludeInputs...)
@@ -317,7 +318,7 @@ func emitLibraryFlatcSource(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	ccIn.ExtraDepRefs = append([]NodeRef{fl.flRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, fl.flRef)...)
 
 	ccSrcRel := strings.TrimPrefix(fl.cpp.Rel, instance.Path+"/")
-	ccRef, ccOut := EmitCC(instance, ccSrcRel, fl.cpp, ccIn, ctx.host, ctx.emit)
+	ccRef, ccOut, _ := EmitCC(instance, ccSrcRel, fl.cpp, ccIn, ctx.host, ctx.emit)
 	ccInputs := make([]VFS, 0, 1+len(ccIn.IncludeInputs))
 	ccInputs = append(ccInputs, Source(fl.relPath))
 	ccInputs = append(ccInputs, ccIn.IncludeInputs...)

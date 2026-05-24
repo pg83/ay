@@ -62,7 +62,7 @@ func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string
 		ccIn.ExtraDepRefs = append(append([]NodeRef(nil), depRefs...), extra...)
 	}
 
-	ref, outPath := EmitCC(instance, cppRel, cppPath, ccIn, ctx.host, ctx.emit)
+	ref, outPath, _ := EmitCC(instance, cppRel, cppPath, ccIn, ctx.host, ctx.emit)
 
 	// AR member-inputs: SOURCE_ROOT-rooted closure entries only.
 	// REF (libdevtools-ymake.a) carries the EN-downstream CC's include-

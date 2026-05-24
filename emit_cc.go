@@ -157,7 +157,12 @@ type ModuleCCInputs struct {
 // Returns the NodeRef (so callers — typically AR — can wire it as a
 // dependency) plus the output path. `in` carries per-module knobs;
 // pass `ModuleCCInputs{}` for flag-less behaviour.
-func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS) {
+// The returned []VFS is the node's Inputs slice (primary source + include
+// closure, in that order). It is write-once — the node only ever reads it
+// (serialization) — so callers building a `[primary]+IncludeInputs` member-
+// input list with the SAME primary may reuse it directly instead of
+// re-materializing the closure.
+func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS, []VFS) {
 
 	suffix := ".o"
 	if instance.Platform.PIC {
@@ -284,7 +289,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		node.DepRefs = append([]NodeRef(nil), in.ExtraDepRefs...)
 	}
 
-	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS
+	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS, allInputs
 }
 
 // composeCCPaths derives the output VFS for a CC compile. The input

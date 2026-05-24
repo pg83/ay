@@ -93,7 +93,7 @@ func emitJVDownstreamCPCC(
 		// `-Wno-unused-variable` silences the `-Werror` diagnostic.
 		ccIn.PerSourceCFlags = []string{"-Wno-unused-variable"}
 
-		ccRef, ccOut := EmitCC(instance, g4CppRel, g4CppPath, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := EmitCC(instance, g4CppRel, g4CppPath, ccIn, ctx.host, ctx.emit)
 
 		// AR memberInputs: SOURCE_ROOT closure entries only. fs_tools.py
 		// and process_command_files.py are CP-step helpers witnessed
