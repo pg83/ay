@@ -1,9 +1,5 @@
 package main
 
-import (
-	"sort"
-)
-
 var (
 	ldLinkDynLibVFS                = Source("build/scripts/link_dyn_lib.py")
 	ldThinltoCacheVFS              = Source("build/scripts/thinlto_cache.py")
@@ -275,7 +271,7 @@ func composeDynLibInputs(peerLibPaths, pluginPaths []VFS, fixElfPath VFS, module
 	buildRootBlock = append(buildRootBlock, peerLibPaths...)
 	buildRootBlock = append(buildRootBlock, pluginPaths...)
 	buildRootBlock = append(buildRootBlock, fixElfPath)
-	sort.Slice(buildRootBlock, func(i, j int) bool { return buildRootBlock[i].String() < buildRootBlock[j].String() })
+	SortVFS(buildRootBlock)
 
 	inputs := make([]VFS, 0, len(buildRootBlock)+10)
 	inputs = append(inputs, buildRootBlock...)
