@@ -128,6 +128,26 @@ func orVal(v, def any) any {
 	return v
 }
 
+// isARNode reports whether node is an `ar` archive (kv.p == "AR").
+func isARNode(node map[string]any) bool {
+	kv, _ := node["kv"].(map[string]any)
+	p, _ := kv["p"].(string)
+	return p == "AR"
+}
+
+// dropHeaderInputs removes C/C++ header paths (per isHeaderSource) from an
+// already-normalized input list, in place.
+func dropHeaderInputs(in []string) []string {
+	out := in[:0]
+	for _, s := range in {
+		if isHeaderSource(s) {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
 func getString(node map[string]any, key string) string {
 	s, _ := node[key].(string)
 	return s
@@ -139,10 +159,19 @@ func getString(node map[string]any, key string) string {
 // host_platform when false; forces sandboxing=true; sorts inputs/tags.
 // Mirrors dev/normalize.py::_strip_and_canonicalize (minus identity/deps).
 func canonContent(node map[string]any) map[string]any {
+	inputs := normSortedStrings(node["inputs"])
+	// An `ar` archive bundles its members' .o files; it has no business
+	// depending on header build-nodes. Upstream lists every member's full
+	// header closure in the AR's inputs[] regardless — a defect we neither
+	// replicate (we stop emitting them) nor compare: drop headers from AR
+	// inputs in BOTH graphs so the comparison ignores them.
+	if isARNode(node) {
+		inputs = dropHeaderInputs(inputs)
+	}
 	canon := map[string]any{
 		"cmds":              normRec(orVal(node["cmds"], []any{})),
 		"env":               normRec(orVal(node["env"], map[string]any{})),
-		"inputs":            normSortedStrings(node["inputs"]),
+		"inputs":            inputs,
 		"kv":                normRec(orVal(node["kv"], map[string]any{})),
 		"outputs":           normStringsKeepOrder(node["outputs"]),
 		"platform":          normPath(getString(node, "platform")),
