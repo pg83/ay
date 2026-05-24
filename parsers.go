@@ -14,12 +14,6 @@ import (
 // choose a parser by ext, scan raw directives, then feed the result into
 // the separate include resolver.
 
-// includeRe matches `#include` / `#include_next` directives in their
-// angle-bracket and quoted-string forms, tolerating arbitrary
-// whitespace between `#`, the keyword, and the bracket. Two capture
-// groups: directive (`include` or `include_next`) and target.
-var includeRe = regexp.MustCompile(`^\s*#\s*(include|include_next)\s*[<"]([^>"]+)[>"]`)
-
 // yasmIncludeRe matches NASM/yasm `%include` directives in `.asm` /
 // `.asi` sources. Token is case-insensitive (`%include` and `%INCLUDE`
 // both occur in asmlib). Both quoted and angle-bracket forms accepted;
@@ -363,55 +357,157 @@ func (emptyIncludeDirectiveParser) Parse(_ string, _ []byte) parsedIncludeSet {
 	return nil
 }
 
-// parseCIncludes extracts C/C++ `#include` / `#include_next`
-// directives from `data`. stripComments runs first so the regex never
-// matches include text inside non-code spans.
+// parseCIncludes extracts C/C++ `#include` directives from `data` in a
+// single forward pass, mirroring upstream ymake's ScanCppIncludes (Ragel).
+// No comment-strip buffer and no regex: most lines are not directives and
+// are skipped to the next newline at memchr speed; `/* */` block comments
+// are consumed as whitespace at the directive position (so a commented-out
+// `#include` between the `#` and `<` is handled); the target excludes `\n`
+// and `$` (so macro-expanded includes like `<$X>` and protoc codegen
+// templates `R"(#include "$path$")"` are dropped); a trailing `// Y_IGNORE`
+// suppresses the directive. `#include_next`/`#import`-with-no-bracket and
+// bare-macro `#include FOO` simply fail to match (no bracket follows), as
+// upstream — those contribute nothing to the resolved closure here.
 func parseCIncludes(data []byte) []includeDirective {
-	data = stripComments(data)
-
 	out := make([]includeDirective, 0, 8)
+	n := len(data)
+	p := 0
 
-	eachLine(data, func(line []byte) {
-		// Short-circuit lines without `#` before the regex.
-		// stripComments fills block-comment regions with spaces, and
-		// the `^\s*#` anchor would otherwise greedily match leading
-		// whitespace, multiplying regex cost ~3×.
-		if bytes.IndexByte(line, '#') < 0 {
-			return
+	for p < n {
+		// main: ws '#' ws ("include"|"import")
+		q := skipWSAndBlockComments(data, p)
+		if q >= n {
+			break
+		}
+		if data[q] != '#' {
+			p = nextLineStart(data, q)
+			continue
+		}
+		q = skipWSAndBlockComments(data, q+1)
+
+		switch {
+		case bytesHasPrefixAt(data, q, "include"):
+			q += len("include")
+		case bytesHasPrefixAt(data, q, "import"):
+			q += len("import")
+		default:
+			p = nextLineStart(data, q)
+			continue
 		}
 
-		// FindSubmatchIndex returns offsets in a stack-cap'd []int (no
-		// alloc for tiny matches); the [][]byte form allocates a slice
-		// header per call.
-		m := includeRe.FindSubmatchIndex(line)
-
-		if m == nil {
-			return
+		// incl: ws then '<'target'>' or '"'target'"'; target excludes \n,$.
+		q = skipWSAndBlockComments(data, q)
+		if q >= n {
+			break
 		}
+		var closeCh byte
+		switch data[q] {
+		case '<':
+			closeCh = '>'
+		case '"':
+			closeCh = '"'
+		default:
+			p = nextLineStart(data, q)
+			continue
+		}
+		q++
 
-		// Determine kind by inspecting the line's bracket character
-		// after the keyword.
+		start := q
+		for q < n && data[q] != closeCh && data[q] != '\n' && data[q] != '$' {
+			q++
+		}
+		if q >= n || data[q] != closeCh {
+			p = nextLineStart(data, q)
+			continue
+		}
+		target := string(data[start:q])
+		q++ // past closing bracket
+
 		kind := includeSystem
-		idx := indexOfAngleOrQuote(line)
-
-		if idx >= 0 && line[idx] == '"' {
+		if closeCh == '"' {
 			kind = includeQuoted
 		}
 
-		// m[2:4] are start/end offsets of the directive keyword
-		// (`include` or `include_next`). Comparing on length avoids
-		// `string(line[m[2]:m[3]])` allocation per matched line.
-		next := (m[3] - m[2]) == len("include_next")
+		if !hasYIgnoreComment(data, q) {
+			out = append(out, includeDirective{kind: kind, target: target})
+		}
 
-		// m[4:6] are the target capture's byte offsets. The single
-		// remaining string allocation per match is converting the
-		// target bytes to a string for the cache value.
-		target := string(line[m[4]:m[5]])
-
-		out = append(out, includeDirective{kind: kind, next: next, target: target})
-	})
+		p = nextLineStart(data, q)
+	}
 
 	return out
+}
+
+// skipWSAndBlockComments advances past spaces/tabs/\v/\f/\r and `/* */`
+// block comments (which may span newlines), mirroring the Ragel `ws` rule.
+// Newlines outside a block comment are NOT whitespace and stop the scan.
+func skipWSAndBlockComments(data []byte, i int) int {
+	n := len(data)
+	for i < n {
+		switch data[i] {
+		case ' ', '\t', '\v', '\f', '\r':
+			i++
+		case '/':
+			if i+1 < n && data[i+1] == '*' {
+				i += 2
+				for i+1 < n && !(data[i] == '*' && data[i+1] == '/') {
+					i++
+				}
+				if i+1 < n {
+					i += 2
+				} else {
+					i = n
+				}
+				continue
+			}
+			return i
+		default:
+			return i
+		}
+	}
+	return i
+}
+
+// nextLineStart returns the index just past the next '\n' at or after i, or
+// len(data) if none — the include scanner's "skip the rest of this line".
+func nextLineStart(data []byte, i int) int {
+	if i >= len(data) {
+		return len(data)
+	}
+	nl := bytes.IndexByte(data[i:], '\n')
+	if nl < 0 {
+		return len(data)
+	}
+	return i + nl + 1
+}
+
+// bytesHasPrefixAt reports whether data[i:] begins with s.
+func bytesHasPrefixAt(data []byte, i int, s string) bool {
+	if i+len(s) > len(data) {
+		return false
+	}
+	for k := 0; k < len(s); k++ {
+		if data[i+k] != s[k] {
+			return false
+		}
+	}
+	return true
+}
+
+// hasYIgnoreComment reports whether the text at i (after optional ws/block
+// comments) is `// Y_IGNORE` — upstream's marker to drop the just-parsed
+// include (Ragel `ws "//" ' '* "Y_IGNORE"`).
+func hasYIgnoreComment(data []byte, i int) bool {
+	n := len(data)
+	i = skipWSAndBlockComments(data, i)
+	if i+2 > n || data[i] != '/' || data[i+1] != '/' {
+		return false
+	}
+	i += 2
+	for i < n && data[i] == ' ' {
+		i++
+	}
+	return bytesHasPrefixAt(data, i, "Y_IGNORE")
 }
 
 // parseYasmIncludes extracts NASM/yasm `%include` directives from
