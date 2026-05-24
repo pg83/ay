@@ -128,11 +128,12 @@ func orVal(v, def any) any {
 	return v
 }
 
-// isARNode reports whether node is an `ar` archive (kv.p == "AR").
-func isARNode(node map[string]any) bool {
+// isLinkOrArchiveNode reports whether node bundles object/archive files
+// (kv.p AR or LD) — node kinds that should not carry header inputs.
+func isLinkOrArchiveNode(node map[string]any) bool {
 	kv, _ := node["kv"].(map[string]any)
 	p, _ := kv["p"].(string)
-	return p == "AR"
+	return p == "AR" || p == "LD"
 }
 
 // dropHeaderInputs removes C/C++ header paths (per isHeaderSource) from an
@@ -160,12 +161,12 @@ func getString(node map[string]any, key string) string {
 // Mirrors dev/normalize.py::_strip_and_canonicalize (minus identity/deps).
 func canonContent(node map[string]any) map[string]any {
 	inputs := normSortedStrings(node["inputs"])
-	// An `ar` archive bundles its members' .o files; it has no business
-	// depending on header build-nodes. Upstream lists every member's full
-	// header closure in the AR's inputs[] regardless — a defect we neither
-	// replicate (we stop emitting them) nor compare: drop headers from AR
-	// inputs in BOTH graphs so the comparison ignores them.
-	if isARNode(node) {
+	// AR (archive) and LD (link) nodes bundle their members' .o/.a files;
+	// they have no business depending on header build-nodes. Upstream lists
+	// every member's full header closure in their inputs[] regardless (an LD
+	// can be 90% headers) — a defect we neither replicate (we stop emitting
+	// them) nor compare: drop headers from AR/LD inputs in BOTH graphs.
+	if isLinkOrArchiveNode(node) {
 		inputs = dropHeaderInputs(inputs)
 	}
 	canon := map[string]any{
