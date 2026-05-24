@@ -128,6 +128,24 @@ func vfsRelsSlice(vs []VFS) []string {
 	return out
 }
 
+// concatVFS returns a ++ b. When either side is empty it returns the other
+// directly with no copy (the common case: a module has only regular OR only
+// global members). Unlike mergeDedupVFS it does NOT dedup — use only where a
+// and b are disjoint; a duplicate would survive normalization (which sorts
+// but does not dedup inputs) and trip the gate.
+func concatVFS(a, b []VFS) []VFS {
+	if len(a) == 0 {
+		return b
+	}
+	if len(b) == 0 {
+		return a
+	}
+	out := make([]VFS, 0, len(a)+len(b))
+	out = append(out, a...)
+	out = append(out, b...)
+	return out
+}
+
 // lessVFS orders VFS the way `a.String() < b.String()` would, byte-for-byte,
 // without materialising the strings: `$(B)/<rel>` sorts before `$(S)/<rel>`
 // (B < S), and within the same Root the trailing Rel orders lexicographically.
