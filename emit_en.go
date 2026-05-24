@@ -237,7 +237,6 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		}
 		enClosure := mergeDedupVFS(filteredClosure, crossCppClosure)
 		enClosure = mergeDedupVFS(enClosure, ownOutputClosure)
-		SortVFS(enClosure)
 
 		// When this EN's transitive closure pulls in a PB/EV producer's
 		// $(B) output (e.g. EN whose header eventually #includes

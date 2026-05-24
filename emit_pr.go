@@ -237,7 +237,6 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	}
 
 	out = mergeDedupVFS(out, nil)
-	SortVFS(out)
 	return out
 }
 

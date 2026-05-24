@@ -271,7 +271,6 @@ func composeDynLibInputs(peerLibPaths, pluginPaths []VFS, fixElfPath VFS, module
 	buildRootBlock = append(buildRootBlock, peerLibPaths...)
 	buildRootBlock = append(buildRootBlock, pluginPaths...)
 	buildRootBlock = append(buildRootBlock, fixElfPath)
-	SortVFS(buildRootBlock)
 
 	inputs := make([]VFS, 0, len(buildRootBlock)+10)
 	inputs = append(inputs, buildRootBlock...)

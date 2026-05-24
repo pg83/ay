@@ -140,7 +140,6 @@ func fetchScriptInputs() []VFS {
 		Source("build/scripts/process_command_files.py"),
 		Source("build/scripts/retry.py"),
 	}
-	SortVFS(inputs)
 
 	return inputs
 }
