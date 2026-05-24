@@ -179,8 +179,9 @@ type genCtx struct {
 	scannerTarget *IncludeScanner
 	scannerHost   *IncludeScanner
 	// vfsInterner is the run-wide VFS interner shared by both scanners
-	// (one stable ID per path across host/target). Used by member-input
-	// dedup to key an idSet by interned ID instead of a map[VFS]struct{}.
+	// (one stable ID per path across host/target). Member-input dedup keys
+	// a map by interned ID instead of by the VFS struct (smaller key, faster
+	// hash).
 	vfsInterner *scannerInterner
 	// enOutputs maps an emitted EN node's $(B)-rooted output path to its
 	// NodeRef. Cross-EN header-inclusion deps look up previously emitted
@@ -1748,15 +1749,19 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// source files of its archived .o files plus their resolved header
 	// closures).
 	memberInputs := make([]VFS, 0, 64)
-	memberInputsSeen := map[VFS]struct{}{}
+	// Dedup keyed by interned VFS ID (run-wide, host/target-stable) rather
+	// than the VFS struct: a 4-byte key through mapaccess_fast32 instead of a
+	// 24-byte struct key through the generic hasher.
+	memberInputsSeen := map[uint32]struct{}{}
 
 	addMemberInputs := func(paths []VFS) {
 		for _, p := range paths {
-			if _, dup := memberInputsSeen[p]; dup {
+			id := ctx.vfsInterner.internVFS(p)
+			if _, dup := memberInputsSeen[id]; dup {
 				continue
 			}
 
-			memberInputsSeen[p] = struct{}{}
+			memberInputsSeen[id] = struct{}{}
 			memberInputs = append(memberInputs, p)
 		}
 	}
