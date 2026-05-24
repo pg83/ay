@@ -2,7 +2,6 @@ package main
 
 import (
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -238,7 +237,7 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	}
 
 	out = mergeDedupVFS(out, nil)
-	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	SortVFS(out)
 	return out
 }
 

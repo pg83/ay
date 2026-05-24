@@ -1,7 +1,6 @@
 package main
 
 import (
-	"sort"
 	"strings"
 )
 
@@ -149,7 +148,7 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, m
 		return nil
 	}
 	out = mergeDedupVFS(out, nil)
-	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	SortVFS(out)
 	return out
 }
 
