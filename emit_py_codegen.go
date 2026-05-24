@@ -290,7 +290,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			ccIn.CFlags = filtered
 		}
 
-		ccRef, ccOut := EmitCC(instance, regCpp, regCppVFS, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := EmitCC(instance, regCpp, regCppVFS, ccIn, ctx.host, ctx.emit)
 
 		res.Refs = append(res.Refs, ccRef)
 		res.Outputs = append(res.Outputs, ccOut)

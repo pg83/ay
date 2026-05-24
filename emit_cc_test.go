@@ -46,7 +46,7 @@ func fieldEqual(t *testing.T, name string, got, want interface{}) {
 
 func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", Source("contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), ModuleCCInputs{}, testHostP, e)
+	_, outPath, _ := EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", Source("contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), ModuleCCInputs{}, testHostP, e)
 	want := "$(B)/contrib/libs/cxxsupp/libcxx/_/src/algorithm.cpp.o"
 
 	if outPath.String() != want {
@@ -56,7 +56,7 @@ func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 
 func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitCC(targetInstance("build/cow/on"), "lib.c", Source("build/cow/on/lib.c"), ModuleCCInputs{}, testHostP, e)
+	_, outPath, _ := EmitCC(targetInstance("build/cow/on"), "lib.c", Source("build/cow/on/lib.c"), ModuleCCInputs{}, testHostP, e)
 	want := "$(B)/build/cow/on/lib.c.o"
 
 	if outPath.String() != want {
@@ -86,7 +86,7 @@ func muslHostInstance(path string) ModuleInstance {
 func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 	emit := NewBufferedEmitter()
 	srcVFS := Build("util/_/datetime/parser.rl6.cpp")
-	_, outPath := EmitCC(targetInstance("util"), "_/datetime/parser.rl6.cpp", srcVFS, ModuleCCInputs{}, testHostP, emit)
+	_, outPath, _ := EmitCC(targetInstance("util"), "_/datetime/parser.rl6.cpp", srcVFS, ModuleCCInputs{}, testHostP, emit)
 
 	wantOut := "$(B)/util/_/_/datetime/parser.rl6.cpp.o"
 
@@ -413,7 +413,7 @@ func TestEmitCC_OutputPath_YqlUdfSuffix(t *testing.T) {
 	e := NewBufferedEmitter()
 	in := ModuleCCInputs{ObjectSuffixStem: stringPtr("udfs")}
 
-	_, outPath := EmitCC(targetInstance("udfmod"), "lib.cpp", Source("udfmod/lib.cpp"), in, testHostP, e)
+	_, outPath, _ := EmitCC(targetInstance("udfmod"), "lib.cpp", Source("udfmod/lib.cpp"), in, testHostP, e)
 
 	want := "$(B)/udfmod/lib.cpp.udfs.o"
 	if outPath.String() != want {
@@ -431,7 +431,7 @@ func TestEmitCC_OutputPath_YqlUdfSuffixPIC(t *testing.T) {
 		Platform: testHostP,
 	}
 
-	_, outPath := EmitCC(instance, "lib.cpp", Source("udfmod/lib.cpp"), in, testHostP, e)
+	_, outPath, _ := EmitCC(instance, "lib.cpp", Source("udfmod/lib.cpp"), in, testHostP, e)
 
 	want := "$(B)/udfmod/lib.cpp.udfs.pic.o"
 	if outPath.String() != want {
