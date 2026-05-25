@@ -13,6 +13,7 @@ xfail values: False = gating (byte-compare); True = xfail (parity metrics only);
 
 Usage: validate.py [out-dir]   (default: <repo>/.out/validate)
 """
+import fcntl
 import os
 import subprocess
 import sys
@@ -23,6 +24,30 @@ REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 GO = os.path.join(REPO_ROOT, "go")
 AY = os.path.join(REPO_ROOT, "ay")
 NORMALIZE_PY = os.path.join(SCRIPT_DIR, "normalize.py")
+
+# Host-wide, well-known lock path — shared across every worktree (all agents
+# run as the same user, so ~ resolves identically). NOT under the repo (each
+# worktree has its own .out) and NOT /tmp (read-only in some sandboxes).
+LOCK_PATH = os.path.join(
+    os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "ay", "validate.lock"
+)
+
+
+def acquire_global_lock():
+    """Serialize validate.py runs across worktrees so concurrent agents don't
+    collectively OOM — each run drives memory-heavy `ay make` + normalize over
+    multi-GB graphs, and several at once exhaust host RAM (global_oom). flock is
+    released automatically on exit, crash, or OOM SIGKILL, so a reaped holder
+    cannot deadlock the next run. Returns the fd, which the caller must keep
+    open (referenced) for the lifetime of the run."""
+    os.makedirs(os.path.dirname(LOCK_PATH), exist_ok=True)
+    fd = os.open(LOCK_PATH, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print(f"[lock] another validate.py holds {LOCK_PATH}; waiting…", flush=True)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+    return fd
 
 # name, normalize target, raw upstream reference, xfail (see docstring for values)
 CASES = [
@@ -170,6 +195,10 @@ def normalized_node_parity_counts(left_path, right_path):
 
 
 def main() -> int:
+    # Held for the whole run (released on exit/crash/OOM); keep the fd
+    # referenced so the OS does not drop the lock early.
+    lock_fd = acquire_global_lock()  # noqa: F841
+
     out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO_ROOT, ".out", "validate")
     os.makedirs(out_dir, exist_ok=True)
 
