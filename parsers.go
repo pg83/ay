@@ -407,6 +407,23 @@ func parseCIncludes(data []byte) []includeDirective {
 		case '"':
 			closeCh = '"'
 		default:
+			// Macro-form include (`#include BOOST_PP_ITERATE()`): the target is
+			// a bare macro token, not a quoted/angled path. Upstream captures it
+			// verbatim (up to whitespace) as an ordinary include and resolves it
+			// through build/sysincl/macro.yml, which maps every such token
+			// (BOOST_*, Y_MSVC_INCLUDE_NEXT, …) to its header set. `$`-prefixed
+			// tokens (build vars) are dropped, mirroring upstream's
+			// StartsWith('$') skip.
+			start := q
+			for q < n {
+				if c := data[q]; c == ' ' || c == '\t' || c == '\v' || c == '\f' || c == '\r' || c == '\n' {
+					break
+				}
+				q++
+			}
+			if q > start && data[start] != '$' && !hasYIgnoreComment(data, q) {
+				out = append(out, includeDirective{kind: includeQuoted, target: string(data[start:q])})
+			}
 			p = nextLineStart(data, q)
 			continue
 		}

@@ -138,7 +138,6 @@ func (pm *includeParserManager) sourceParsedBuckets(rel string) parsedIncludeSet
 	}
 
 	out := includeDirectiveParsers.parserFor(rel).Parse(rel, data)
-	out = augmentMacroExpandedIncludes(pm.fs, rel, data, out)
 	pm.cache.parsed.Set(vfsPath, out)
 
 	return out
