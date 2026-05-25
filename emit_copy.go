@@ -18,10 +18,10 @@ func copyFileAutoSourceVFS(modulePath string, d *moduleData, srcRel string) (VFS
 	return copyFileOutputVFS(modulePath, entry.Dst), true
 }
 
-func copyFileParsedIncludes(modulePath string, entry copyFileEntry) []includeDirective {
+func copyFileParsedIncludes(fs *FS, modulePath string, entry copyFileEntry) []includeDirective {
 	out := make([]includeDirective, 0, len(entry.OutputIncludes)+1)
 	if entry.WithContext {
-		srcVFS := copyFileInputVFS(modulePath, entry.Src)
+		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
 		out = append(out, includeDirective{kind: includeQuoted, target: srcVFS.Rel})
 	}
 	for _, include := range entry.OutputIncludes {
@@ -35,12 +35,12 @@ func copyFileParsedIncludes(modulePath string, entry copyFileEntry) []includeDir
 
 func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	for _, entry := range d.copyFiles {
-		srcVFS := copyFileInputVFS(instance.Path, entry.Src)
+		srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
 		dstVFS := copyFileOutputVFS(instance.Path, entry.Dst)
 		depRefs := resolveCodegenDepRefsExt(ctx, instance, nil, []VFS{srcVFS})
 		ref := EmitCPWithDeps(instance, srcVFS, dstVFS, depRefs, ctx.emit)
 
-		parsed := copyFileParsedIncludes(instance.Path, entry)
+		parsed := copyFileParsedIncludes(ctx.fs, instance.Path, entry)
 		registerBoundGeneratedParsedOutput(ctx, instance, "CP", dstVFS, parsed, ref)
 	}
 }
