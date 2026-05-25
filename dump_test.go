@@ -179,6 +179,20 @@ func TestDumpGrep(t *testing.T) {
 	}
 }
 
+func TestDumpGrepRaw(t *testing.T) {
+	dir := t.TempDir()
+	in := filepath.Join(dir, "g.json")
+	Throw(os.WriteFile(in, []byte(graph(
+		node("AA", "CC", "$(BUILD_ROOT)/p/a.o", nil, []string{"$(SOURCE_ROOT)/p/a.c"}, `,"env":{}`),
+		node("BB", "CC", "$(BUILD_ROOT)/p/b.o", nil, []string{"$(SOURCE_ROOT)/p/b.c"}, `,"env":{}`),
+	)), 0o644))
+
+	got := captureStdout(t, func() { cmdDumpGrep([]string{"--raw", "--in", in, "$(B)/p/a.o"}) })
+	if !strings.Contains(got, `"AA"`) || strings.Contains(got, `"BB"`) {
+		t.Fatalf("grep --raw by output: want AA only, got:\n%s", got)
+	}
+}
+
 func TestDumpGrepSubstrRegex(t *testing.T) {
 	dir := t.TempDir()
 	in := filepath.Join(dir, "g.jsonl")
