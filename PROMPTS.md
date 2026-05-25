@@ -11,6 +11,10 @@ DEBUG.md — how to debug divergences between the upstream graph and ours.
 
 Fresh worktrees may not expose Go on `PATH`. Use the repo-local `./go` shim for Go commands (`./go test ./...`, `./go build ...`); `./dev/validate.py` builds through the same shim.
 
+If a process dies unexpectedly, suspect an OOM kill first: run `klog` and grep for `Out of memory` / `Killed process`. This box is shared by parallel agents, so the OOM killer reaps memory-heavy runs — don't misread an OOM (SIGKILL) as a code crash or a library bug.
+
+NEVER load a whole graph into memory — graphs reach multiple GB and OOM. Any graph analysis/normalization MUST be a streaming, bounded-memory algorithm (line-at-a-time / fan-out workers), never "decode the entire graph into a map and process it".
+
 ### OVERSEER
 
 ### REPLANNER
