@@ -1203,44 +1203,14 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 
 	var out searchTierResult
 
-	// Both branches work from the target's cleaned form — the same for every
-	// prefix probed below.
+	// The $(B) branch works from the target's cleaned form (the codegen split
+	// index is keyed by canonical rels); the $(S) branch passes the RAW target
+	// to resolveSourceUnder, which handles "." / ".." correctly.
 	normTarget := normalisePath(target)
 
 	addSource := func(prefixRel string) bool {
-		// First-component filter: <prefixRel>/<target> can exist only if
-		// target's leading component is an entry of prefixRel's directory. That
-		// listing is already cached (prefixRel is an ADDINCL dir, reached with no
-		// concat), and for the overwhelming majority of probes the component is
-		// absent — reject with no path concatenation at all. Only a real match
-		// (rare) pays the concat for the full check. A leading ".." escapes the
-		// prefix and can't be filtered this way, so it skips to the full check.
-		first, more := firstComponent(normTarget)
-		if first != ".." {
-			isDir, ok := s.listdir(prefixRel)[first]
-			if !ok {
-				return false
-			}
-
-			if !more {
-				// Single-component target: the entry itself is the file.
-				if isDir {
-					return false
-				}
-
-				out.paths = []VFS{Source(joinRel(prefixRel, normTarget))}
-				out.found = true
-
-				return true
-			}
-
-			if !isDir {
-				return false // leading component is a file, can't be a parent dir
-			}
-		}
-
-		rel := normalisePath(joinRel(prefixRel, normTarget))
-		if !s.fileExistsByRel(rel) {
+		rel, ok := s.resolveSourceUnder(prefixRel, target)
+		if !ok {
 			return false
 		}
 
@@ -1446,21 +1416,37 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 
 	if d.kind == includeQuoted {
 		// includerAbs is SOURCE-rooted here (BUILD_ROOT dispatches in
-		// forEachResolvedChild before reaching resolveSearchPath).
+		// forEachResolvedChild before reaching resolveSearchPath). Probe the
+		// same-directory candidate concat-free: a source sibling via the
+		// first-component filter, then a generated sibling via the codegen split
+		// index. The candidate path is materialised only on a hit.
 		incDir := pathDir(includerAbs.Rel())
 
-		var candidate string
-
-		if incDir != "" {
-			candidate = incDir + "/" + d.target
-		} else {
-			candidate = d.target
+		// Mirror the original addPath/addBuildPath else-if: try the source
+		// sibling, and only if it did NOT match (missing or already seen) fall
+		// back to the codegen sibling. Gate on a LOCAL `matched`, not the global
+		// searchPathFound — an earlier stage (e.g. the BUILD-root check) may have
+		// set it, and gating the codegen probe on it would wrongly skip the
+		// same-dir build candidate.
+		matched := false
+		if rel, ok := s.resolveSourceUnder(incDir, d.target); ok {
+			if _, dup := seen[rel]; !dup {
+				seen[rel] = struct{}{}
+				out = append(out, Source(rel))
+				searchPathFound = true
+				matched = true
+			}
 		}
 
-		if addPath(candidate) {
-			searchPathFound = true
-		} else if addBuildPath(candidate) {
-			searchPathFound = true
+		if !matched {
+			if info := s.codegenUnder(incDir, d.target); info != nil {
+				dedupKey := "B:" + info.OutputPath.Rel()
+				if _, dup := seen[dedupKey]; !dup {
+					seen[dedupKey] = struct{}{}
+					out = append(out, info.OutputPath)
+					searchPathFound = true
+				}
+			}
 		}
 	}
 
@@ -1670,4 +1656,76 @@ func (s *IncludeScanner) fileExistsByRel(rel string) bool {
 // listdir returns the (cached) child name→isDir map of directory rel.
 func (s *IncludeScanner) listdir(rel string) map[string]bool {
 	return s.parsers.fs.Listdir(rel)
+}
+
+// resolveSourceUnder reports whether <prefixDir>/<target> is an existing source
+// file, returning its normalised rel. The concat-free first-component filter —
+// "target's leading component must be a child of prefixDir" — is only valid when
+// target is a plain forward relative path. A "." or ".." component can cancel or
+// escape that segment (e.g. "../common/x.h", "a/../x.h"), so those go straight
+// to the full normalised check. canRelFilter gates this; target is the RAW
+// directive target (NOT pre-normalised — normalising "../x" alone would drop the
+// ".." and mislead the filter).
+func (s *IncludeScanner) resolveSourceUnder(prefixDir, target string) (string, bool) {
+	if first, more := firstComponent(target); canRelFilter(first, target) {
+		isDir, ok := s.listdir(prefixDir)[first]
+		if !ok {
+			return "", false
+		}
+
+		if !more {
+			if isDir {
+				return "", false
+			}
+
+			return joinRel(prefixDir, target), true
+		}
+
+		if !isDir {
+			return "", false // leading component is a file, can't be a parent dir
+		}
+	}
+
+	rel := normalisePath(joinRel(prefixDir, target))
+	if !s.fileExistsByRel(rel) {
+		return "", false
+	}
+
+	return rel, true
+}
+
+// codegenUnder returns the codegen producer of <prefixDir>/<target>, concat-free
+// via the registry's split index when target is a plain canonical relative path;
+// otherwise (prefixDir=="", a "." / ".." component, or non-canonical "/./", "//")
+// it falls back to the full-rel lookup.
+func (s *IncludeScanner) codegenUnder(prefixDir, target string) *GeneratedFileInfo {
+	if s.codegen == nil {
+		return nil
+	}
+
+	if first, _ := firstComponent(target); prefixDir != "" && canRelFilter(first, target) &&
+		!strings.Contains(target, "/./") && !strings.Contains(target, "//") {
+		pid := interned(prefixDir)
+		if pid == nil {
+			return nil
+		}
+
+		sid := interned(target)
+		if sid == nil {
+			return nil
+		}
+
+		return s.codegen.LookupSplit(*pid, *sid)
+	}
+
+	return s.codegen.LookupRel(normalisePath(joinRel(prefixDir, target)))
+}
+
+// canRelFilter reports whether the first-component filter is valid for target:
+// its leading component is a plain name (not empty — a leading "/" — nor "." /
+// "..") and no interior ".." component can cancel an earlier segment. Anything
+// else (leading "/", "./", "../", "a/../") only the full normalised path can
+// resolve.
+func canRelFilter(first, target string) bool {
+	return first != "" && first != "." && first != ".." && !strings.Contains(target, "/..")
 }
