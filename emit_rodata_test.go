@@ -12,7 +12,7 @@ func TestEmitRD_NodeShape(t *testing.T) {
 	}
 
 	e := NewBufferedEmitter()
-	_, asmOut, objOut := EmitRD(instance, "icudt78_dat.rodata", Source("contrib/libs/icu/icudt78_dat.rodata"), NodeRef{id: 7}, e)
+	_, asmOut, objOut := EmitRD(instance, "icudt78_dat.rodata", Intern("$(S)/contrib/libs/icu/icudt78_dat.rodata"), NodeRef{id: 7}, e)
 
 	if asmOut.String() != "$(B)/contrib/libs/icu/icudt78_dat.rodata.asm" {
 		t.Fatalf("asmOut = %q", asmOut)

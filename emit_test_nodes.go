@@ -78,7 +78,7 @@ func buildTestCtxNode(p *Platform) *Node {
 		Env:      map[string]string{},
 		Inputs:   []VFS{Source(testAppendFileScriptRel)},
 		KV:       map[string]interface{}{"p": "CP", "pc": "light-blue"},
-		Outputs:  []VFS{Build("common_test.context")},
+		Outputs:  []VFS{Intern("$(B)/common_test.context")},
 		Platform: string(p.Target),
 		Requirements: map[string]interface{}{
 			"network": "restricted",

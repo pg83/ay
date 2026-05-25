@@ -39,7 +39,7 @@ func TestSwigIncludeClosure_ParsesIAndSystemRoots(t *testing.T) {
 `)
 
 	ctx := &genCtx{fs: NewFS(root)}
-	closure := swigIncludeClosure(ctx, Source("mod/src.swg"))
+	closure := swigIncludeClosure(ctx, Intern("$(S)/mod/src.swg"))
 
 	got := make([]string, 0, len(closure))
 	for _, v := range closure {
@@ -96,8 +96,8 @@ func TestCollectSwigInducedIncludes_DedupsAcrossClosure(t *testing.T) {
 `)
 
 	ctx := &genCtx{fs: NewFS(root)}
-	closure := swigIncludeClosure(ctx, Source("mod/src.swg"))
-	got := collectSwigInducedIncludes(ctx, Source("mod/src.swg"), closure)
+	closure := swigIncludeClosure(ctx, Intern("$(S)/mod/src.swg"))
+	got := collectSwigInducedIncludes(ctx, Intern("$(S)/mod/src.swg"), closure)
 	want := []includeDirective{
 		{kind: includeSystem, target: "Python.h"},
 		{kind: includeQuoted, target: "archive.h"},

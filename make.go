@@ -698,7 +698,7 @@ func (ex *executor) restoreInto(uid, where string) {
 		if !vfsHasPrefix(outVFS) {
 			ThrowFmt("malformed meta entry %q in %s", outVFS, metaPath)
 		}
-		v := ParseVFS(outVFS)
+		v := Intern(outVFS)
 
 		// Mount: $(B)/<rel> → where/<rel>; $(S)/<rel> → srcRoot/<rel>.
 		target := mountVFS(v, ex.srcRoot, where)

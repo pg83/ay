@@ -74,10 +74,10 @@ func isRuntimeAncestor(path string) bool {
 // preserves canonical relative order regardless of aggregation phase.
 // Paths are SOURCE_ROOT-relative; `appendAddIncl` prefixes `-I$(S)/`.
 var runtimeStackAddInclPaths = map[VFS]int{
-	Source("contrib/libs/cxxsupp/libcxx/include"):    0,
-	Source("contrib/libs/cxxsupp/libcxxrt/include"):  1,
-	Source("contrib/libs/cxxsupp/libcxxabi/include"): 2,
-	Source("contrib/libs/libunwind/include"):         3,
+	Intern("$(S)/contrib/libs/cxxsupp/libcxx/include"):    0,
+	Intern("$(S)/contrib/libs/cxxsupp/libcxxrt/include"):  1,
+	Intern("$(S)/contrib/libs/cxxsupp/libcxxabi/include"): 2,
+	Intern("$(S)/contrib/libs/libunwind/include"):         3,
 }
 
 // bundledAddInclPaths is the set of ADDINCL paths the cc bundle's
@@ -90,8 +90,8 @@ var runtimeStackAddInclPaths = map[VFS]int{
 // Musl flavours bypass this filter: their composer drops
 // PeerAddInclGlobal entirely.
 var bundledAddInclPaths = map[VFS]bool{
-	Source("contrib/libs/linux-headers"):     true,
-	Source("contrib/libs/linux-headers/_nf"): true,
+	Intern("$(S)/contrib/libs/linux-headers"):     true,
+	Intern("$(S)/contrib/libs/linux-headers/_nf"): true,
 }
 
 // suppressMallocAPIDefault drops `library/cpp/malloc/api` from a

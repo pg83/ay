@@ -10,8 +10,8 @@ import (
 const jdkResourcePath = "$(JDK17-564746473)/bin/java"
 
 // antlr4JarVFS is the source-relative VFS path to the ANTLR4 jar.
-var antlr4JarVFS = Source("contrib/java/antlr/antlr4/antlr.jar")
-var antlr3JarVFS = Source("contrib/java/antlr/antlr3/antlr.jar")
+var antlr4JarVFS = Intern("$(S)/contrib/java/antlr/antlr4/antlr.jar")
+var antlr3JarVFS = Intern("$(S)/contrib/java/antlr/antlr3/antlr.jar")
 
 // antlr4JarPath is the legacy string form (used in cmd_args). Equal
 // to antlr4JarVFS.String().
@@ -21,7 +21,7 @@ var antlr3JarPath = antlr3JarVFS.String()
 // stdout2stderr is the wrapper script that redirects antlr4's stdout
 // to stderr (required so the build system captures diagnostic output
 // correctly).
-var stdout2stderrVFS = Source("build/scripts/stdout2stderr.py")
+var stdout2stderrVFS = Intern("$(S)/build/scripts/stdout2stderr.py")
 var stdout2stderrPath = stdout2stderrVFS.String()
 
 func emitJVNode(instance ModuleInstance, cmdArgs []string, inputs []VFS, outputs []VFS, cwd string, depRefs []NodeRef, emit Emitter) NodeRef {

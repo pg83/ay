@@ -528,24 +528,24 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, plugi
 // observed in the reference graph. Order is load-bearing for byte-exact
 // `inputs` matching.
 var ldScriptInputs = []VFS{
-	Source("build/scripts/vcs_info.py"),
-	Source("build/scripts/c_templates/svn_interface.c"),
-	Source("build/scripts/link_exe.py"),
-	Source("build/scripts/thinlto_cache.py"),
-	Source("build/scripts/process_command_files.py"),
-	Source("build/scripts/process_whole_archive_option.py"),
-	Source("build/scripts/fs_tools.py"),
+	Intern("$(S)/build/scripts/vcs_info.py"),
+	Intern("$(S)/build/scripts/c_templates/svn_interface.c"),
+	Intern("$(S)/build/scripts/link_exe.py"),
+	Intern("$(S)/build/scripts/thinlto_cache.py"),
+	Intern("$(S)/build/scripts/process_command_files.py"),
+	Intern("$(S)/build/scripts/process_whole_archive_option.py"),
+	Intern("$(S)/build/scripts/fs_tools.py"),
 }
 
 // LD-script VFS constants. cmd_args use the cached .String() form
 // (`…Path` shim) and stitch the same VFS into the inputs slot.
 // ldSvnversionHVFS is input-only; the rest flow into both.
 var (
-	ldVcsInfoVFS      = Source("build/scripts/vcs_info.py")
-	ldSvnInterfaceVFS = Source("build/scripts/c_templates/svn_interface.c")
-	ldLinkExeVFS      = Source("build/scripts/link_exe.py")
-	ldFsToolsVFS      = Source("build/scripts/fs_tools.py")
-	ldSvnversionHVFS  = Source("build/scripts/c_templates/svnversion.h")
+	ldVcsInfoVFS      = Intern("$(S)/build/scripts/vcs_info.py")
+	ldSvnInterfaceVFS = Intern("$(S)/build/scripts/c_templates/svn_interface.c")
+	ldLinkExeVFS      = Intern("$(S)/build/scripts/link_exe.py")
+	ldFsToolsVFS      = Intern("$(S)/build/scripts/fs_tools.py")
+	ldSvnversionHVFS  = Intern("$(S)/build/scripts/c_templates/svnversion.h")
 
 	ldVcsInfoPath      = ldVcsInfoVFS.String()
 	ldSvnInterfacePath = ldSvnInterfaceVFS.String()

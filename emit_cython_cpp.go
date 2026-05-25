@@ -124,7 +124,7 @@ func cythonGeneratedOutputInputs(ctx *genCtx, instance ModuleInstance, src VFS, 
 	toolInputs := make([]VFS, 0, 2+len(py3CythonEmbeddedFiles)+len(py3CythonOutputIncludes)+len(sourceClosure))
 	emitsIncludes := make([]VFS, 0, 1+len(py3CythonEmbeddedFiles)+len(py3CythonOutputIncludes)+len(sourceClosure))
 
-	cythonPy := Source("contrib/tools/cython/cython.py")
+	cythonPy := Intern("$(S)/contrib/tools/cython/cython.py")
 	toolInputs = append(toolInputs, cythonPy)
 	emitsIncludes = append(emitsIncludes, cythonPy)
 	emitsIncludes = append(emitsIncludes, src)
@@ -233,10 +233,10 @@ func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, py23 bool) []VF
 	// libcpp/string.pxd, ...) resolve to cython_py2, while cython-only files
 	// fall through to cython. Pure PY3_LIBRARY keeps $PYTHON3=yes → cython.
 	if py23 {
-		out = append(out, Source("contrib/tools/cython_py2/Cython/Includes"))
+		out = append(out, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes"))
 	}
-	out = append(out, Source("contrib/tools/cython/Cython/Includes"))
-	out = append(out, Source("contrib/libs/cxxsupp/libcxx/include"))
+	out = append(out, Intern("$(S)/contrib/tools/cython/Cython/Includes"))
+	out = append(out, Intern("$(S)/contrib/libs/cxxsupp/libcxx/include"))
 	out = append(out, cythonNumpyAddIncl...)
 
 	return dedupVFS(out)
@@ -267,27 +267,27 @@ func hasSuffix(s, suffix string) bool {
 }
 
 var cythonNumpyAddIncl = []VFS{
-	Source("contrib/python/numpy/include/numpy/core/include"),
-	Source("contrib/python/numpy/include/numpy/core/include/numpy"),
-	Source("contrib/python/numpy/include/numpy/core/src/common"),
-	Source("contrib/python/numpy/include/numpy/core/src/npymath"),
-	Source("contrib/python/numpy/include/numpy/distutils/include"),
+	Intern("$(S)/contrib/python/numpy/include/numpy/core/include"),
+	Intern("$(S)/contrib/python/numpy/include/numpy/core/include/numpy"),
+	Intern("$(S)/contrib/python/numpy/include/numpy/core/src/common"),
+	Intern("$(S)/contrib/python/numpy/include/numpy/core/src/npymath"),
+	Intern("$(S)/contrib/python/numpy/include/numpy/distutils/include"),
 }
 
-var pythonIncludeDir = Source("contrib/libs/python/Include")
+var pythonIncludeDir = Intern("$(S)/contrib/libs/python/Include")
 
 var py3CythonOutputIncludes = []VFS{
-	Source("contrib/tools/cython/generated_c_headers.h"),
-	Source("contrib/tools/cython/generated_cpp_headers.h"),
-	Source("contrib/libs/python/Include/compile.h"),
-	Source("contrib/libs/python/Include/frameobject.h"),
-	Source("contrib/libs/python/Include/longintrepr.h"),
-	Source("contrib/libs/python/Include/pyconfig.h"),
-	Source("contrib/libs/python/Include/Python.h"),
-	Source("contrib/libs/python/Include/pythread.h"),
-	Source("contrib/libs/python/Include/structmember.h"),
-	Source("contrib/libs/python/Include/traceback.h"),
-	Source("contrib/libs/cxxsupp/openmp/omp.h"),
+	Intern("$(S)/contrib/tools/cython/generated_c_headers.h"),
+	Intern("$(S)/contrib/tools/cython/generated_cpp_headers.h"),
+	Intern("$(S)/contrib/libs/python/Include/compile.h"),
+	Intern("$(S)/contrib/libs/python/Include/frameobject.h"),
+	Intern("$(S)/contrib/libs/python/Include/longintrepr.h"),
+	Intern("$(S)/contrib/libs/python/Include/pyconfig.h"),
+	Intern("$(S)/contrib/libs/python/Include/Python.h"),
+	Intern("$(S)/contrib/libs/python/Include/pythread.h"),
+	Intern("$(S)/contrib/libs/python/Include/structmember.h"),
+	Intern("$(S)/contrib/libs/python/Include/traceback.h"),
+	Intern("$(S)/contrib/libs/cxxsupp/openmp/omp.h"),
 }
 
 func dedupVFS(in []VFS) []VFS {

@@ -2,7 +2,7 @@ package main
 
 // configureFilePy is the source-relative path to the configure_file.py
 // script used in all CF nodes.
-var configureFilePyVFS = Source("build/scripts/configure_file.py")
+var configureFilePyVFS = Intern("$(S)/build/scripts/configure_file.py")
 var configureFilePyPath = configureFilePyVFS.String()
 
 // buildTypeDebug is injected when @BUILD_TYPE@ is referenced but not

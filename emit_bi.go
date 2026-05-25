@@ -1,16 +1,16 @@
 package main
 
 // yieldLinePyPath is the source-relative path to the yield_line.py script.
-var yieldLinePyVFS = Source("build/scripts/yield_line.py")
+var yieldLinePyVFS = Intern("$(S)/build/scripts/yield_line.py")
 var yieldLinePyPath = yieldLinePyVFS.String()
 
 // xargsPyPath is the source-relative path to the xargs.py script.
-var xargsPyVFS = Source("build/scripts/xargs.py")
+var xargsPyVFS = Intern("$(S)/build/scripts/xargs.py")
 var xargsPyPath = xargsPyVFS.String()
 
 // buildInfoGenPyPath is the source-relative path to the build_info_gen.py
 // script invoked by xargs.py in the BI node.
-var buildInfoGenPyVFS = Source("build/scripts/build_info_gen.py")
+var buildInfoGenPyVFS = Intern("$(S)/build/scripts/build_info_gen.py")
 var buildInfoGenPyPath = buildInfoGenPyVFS.String()
 
 // EmitBI emits a BI node for CREATE_BUILDINFO_FOR(outputHeader).

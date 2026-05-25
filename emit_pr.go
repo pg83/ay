@@ -270,7 +270,7 @@ func prEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, outFil
 	// expanded ${ARCADIA_ROOT} → $(S)/ — strip the VFS prefix if present.
 	for _, f := range stmt.OutputIncludes {
 		if vfsHasPrefix(f) {
-			f = ParseVFS(f).Rel()
+			f = Intern(f).Rel()
 		}
 		includes = append(includes, includeDirective{kind: includeQuoted, target: f})
 	}

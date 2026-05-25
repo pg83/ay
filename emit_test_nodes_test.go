@@ -93,9 +93,9 @@ func expectedTestCtxNode() *Node {
 			},
 		}},
 		Env:      map[string]string{},
-		Inputs:   []VFS{Source("build/scripts/append_file.py")},
+		Inputs:   []VFS{Intern("$(S)/build/scripts/append_file.py")},
 		KV:       map[string]interface{}{"p": "CP", "pc": "light-blue"},
-		Outputs:  []VFS{Build("common_test.context")},
+		Outputs:  []VFS{Intern("$(B)/common_test.context")},
 		Platform: "default-linux-x86_64",
 		Requirements: map[string]interface{}{
 			"network": "restricted",
@@ -164,7 +164,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 			},
 		}},
 		Env:    expectedTestEnv("unittest"),
-		Inputs: []VFS{Source("util/ut")},
+		Inputs: []VFS{Intern("$(S)/util/ut")},
 		KV: map[string]interface{}{
 			"p":              "TS",
 			"path":           "util/ut/unittest",
@@ -174,10 +174,10 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 			"special_runner": "",
 		},
 		Outputs: []VFS{
-			Build("util/ut/test-results/unittest/meta.json"),
-			Build("util/ut/test-results/unittest/ytest.report.trace"),
-			Build("util/ut/test-results/unittest/run_test.log"),
-			Build("util/ut/test-results/unittest/testing_out_stuff.tar.zstd"),
+			Intern("$(B)/util/ut/test-results/unittest/meta.json"),
+			Intern("$(B)/util/ut/test-results/unittest/ytest.report.trace"),
+			Intern("$(B)/util/ut/test-results/unittest/run_test.log"),
+			Intern("$(B)/util/ut/test-results/unittest/testing_out_stuff.tar.zstd"),
 		},
 		Platform: "default-linux-x86_64",
 		Requirements: map[string]interface{}{
@@ -252,12 +252,12 @@ func expectedClangFormatNode() *Node {
 		}},
 		Env: expectedTestEnv("clang_format"),
 		Inputs: []VFS{
-			Source("build/config/tests/cpp_style/.clang-format"),
-			Source("build/scripts/c_templates/svn_interface.c"),
-			Source("tools/cpp_style_checker/wrapper.py"),
-			Source("util/ut"),
-			Source("util/ysafeptr_ut.cpp"),
-			Source("util/ysaveload_ut.cpp"),
+			Intern("$(S)/build/config/tests/cpp_style/.clang-format"),
+			Intern("$(S)/build/scripts/c_templates/svn_interface.c"),
+			Intern("$(S)/tools/cpp_style_checker/wrapper.py"),
+			Intern("$(S)/util/ut"),
+			Intern("$(S)/util/ysafeptr_ut.cpp"),
+			Intern("$(S)/util/ysaveload_ut.cpp"),
 		},
 		KV: map[string]interface{}{
 			"p":              "TS",
@@ -268,10 +268,10 @@ func expectedClangFormatNode() *Node {
 			"special_runner": "",
 		},
 		Outputs: []VFS{
-			Build("util/ut/test-results/clang_format/meta.json"),
-			Build("util/ut/test-results/clang_format/ytest.report.trace"),
-			Build("util/ut/test-results/clang_format/run_test.log"),
-			Build("util/ut/test-results/clang_format/testing_out_stuff.tar.zstd"),
+			Intern("$(B)/util/ut/test-results/clang_format/meta.json"),
+			Intern("$(B)/util/ut/test-results/clang_format/ytest.report.trace"),
+			Intern("$(B)/util/ut/test-results/clang_format/run_test.log"),
+			Intern("$(B)/util/ut/test-results/clang_format/testing_out_stuff.tar.zstd"),
 		},
 		Platform: "default-linux-x86_64",
 		Requirements: map[string]interface{}{
@@ -509,7 +509,7 @@ func TestEmitTestRunNodes_FixtureCrossCheck(t *testing.T) {
 		Env:              map[string]string{},
 		Inputs:           []VFS{},
 		KV:               map[string]interface{}{"p": "LD"},
-		Outputs:          []VFS{Build("util/ut/util-ut")},
+		Outputs:          []VFS{Intern("$(B)/util/ut/util-ut")},
 		Platform:         string(p.Target),
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
@@ -591,7 +591,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		items: []resourceFetch{{
 			Pattern: "YMAKE_PYTHON3",
 			URI:     "sbr:dummy-ymake-python3",
-			Output:  Build("resources/YMAKE_PYTHON3"),
+			Output:  Intern("$(B)/resources/YMAKE_PYTHON3"),
 		}},
 	}
 

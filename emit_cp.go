@@ -21,8 +21,8 @@ func EmitJVCPG4(
 	closure []VFS,
 	emit Emitter,
 ) NodeRef {
-	fsTools := Source("build/scripts/fs_tools.py")
-	procCmdFiles := Source("build/scripts/process_command_files.py")
+	fsTools := Intern("$(S)/build/scripts/fs_tools.py")
+	procCmdFiles := Intern("$(S)/build/scripts/process_command_files.py")
 
 	cmdArgs := []string{
 		instance.Platform.Tools.Python3,
@@ -84,8 +84,8 @@ func EmitCP(instance ModuleInstance, src VFS, dst VFS, emit Emitter) NodeRef {
 }
 
 func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, emit Emitter) NodeRef {
-	fsTools := Source("build/scripts/fs_tools.py")
-	procCmdFiles := Source("build/scripts/process_command_files.py")
+	fsTools := Intern("$(S)/build/scripts/fs_tools.py")
+	procCmdFiles := Intern("$(S)/build/scripts/process_command_files.py")
 
 	cmdArgs := []string{
 		instance.Platform.Tools.Python3,

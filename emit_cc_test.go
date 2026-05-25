@@ -46,7 +46,7 @@ func fieldEqual(t *testing.T, name string, got, want interface{}) {
 
 func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath, _ := EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", Source("contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), ModuleCCInputs{}, testHostP, e)
+	_, outPath, _ := EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", Intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), ModuleCCInputs{}, testHostP, e)
 	want := "$(B)/contrib/libs/cxxsupp/libcxx/_/src/algorithm.cpp.o"
 
 	if outPath.String() != want {
@@ -56,7 +56,7 @@ func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 
 func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath, _ := EmitCC(targetInstance("build/cow/on"), "lib.c", Source("build/cow/on/lib.c"), ModuleCCInputs{}, testHostP, e)
+	_, outPath, _ := EmitCC(targetInstance("build/cow/on"), "lib.c", Intern("$(S)/build/cow/on/lib.c"), ModuleCCInputs{}, testHostP, e)
 	want := "$(B)/build/cow/on/lib.c.o"
 
 	if outPath.String() != want {
@@ -85,7 +85,7 @@ func muslHostInstance(path string) ModuleInstance {
 // $(B)/<instance>/<rel> and the output mirrors. PR-29-D07.
 func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 	emit := NewBufferedEmitter()
-	srcVFS := Build("util/_/datetime/parser.rl6.cpp")
+	srcVFS := Intern("$(B)/util/_/datetime/parser.rl6.cpp")
 	_, outPath, _ := EmitCC(targetInstance("util"), "_/datetime/parser.rl6.cpp", srcVFS, ModuleCCInputs{}, testHostP, emit)
 
 	wantOut := "$(B)/util/_/_/datetime/parser.rl6.cpp.o"
@@ -122,13 +122,13 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 	emit := NewBufferedEmitter()
 	in := ModuleCCInputs{
 		AddIncl: []VFS{
-			Source("contrib/libs/musl/arch/aarch64"),
-			Source("contrib/libs/musl/arch/generic"),
-			Source("contrib/libs/musl/include"),
-			Source("contrib/libs/musl/extra"),
+			Intern("$(S)/contrib/libs/musl/arch/aarch64"),
+			Intern("$(S)/contrib/libs/musl/arch/generic"),
+			Intern("$(S)/contrib/libs/musl/include"),
+			Intern("$(S)/contrib/libs/musl/extra"),
 		},
 	}
-	EmitCC(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/fp_mode.c", Source("contrib/libs/cxxsupp/builtins/aarch64/fp_mode.c"), in, testHostP, emit)
+	EmitCC(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/fp_mode.c", Intern("$(S)/contrib/libs/cxxsupp/builtins/aarch64/fp_mode.c"), in, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -155,11 +155,11 @@ func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	inst := muslHostInstance("contrib/libs/musl")
 	in := ModuleCCInputs{
 		AddIncl: []VFS{
-			Source("custom/musl/arch/x86_64"),
-			Source("custom/musl/include"),
+			Intern("$(S)/custom/musl/arch/x86_64"),
+			Intern("$(S)/custom/musl/include"),
 		},
 	}
-	EmitCC(inst, "src/string/strlen.c", Source("contrib/libs/musl/src/string/strlen.c"), in, testHostP, emit)
+	EmitCC(inst, "src/string/strlen.c", Intern("$(S)/contrib/libs/musl/src/string/strlen.c"), in, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 	wantSlot := []string{
@@ -196,7 +196,7 @@ func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 // second suppression block.
 func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 	emit := NewBufferedEmitter()
-	EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", Source("contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), ModuleCCInputs{}, testHostP, emit)
+	EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", Intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), ModuleCCInputs{}, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -227,7 +227,7 @@ func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 // dispatches to clang (NOT clang++) and does NOT carry `-std=c++20`.
 func TestEmitCC_CSource_UsesClang(t *testing.T) {
 	emit := NewBufferedEmitter()
-	EmitCC(targetInstance("build/cow/on"), "lib.c", Source("build/cow/on/lib.c"), ModuleCCInputs{}, testHostP, emit)
+	EmitCC(targetInstance("build/cow/on"), "lib.c", Intern("$(S)/build/cow/on/lib.c"), ModuleCCInputs{}, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -253,7 +253,7 @@ func TestEmitCC_CSource_UsesClang(t *testing.T) {
 func TestEmitCC_NoCompilerWarnings_SelectsMuslWarningFlags(t *testing.T) {
 	emit := NewBufferedEmitter()
 	inst := targetInstance("contrib/libs/cxxsupp/libcxxrt")
-	EmitCC(inst, "exception.cc", Source("contrib/libs/cxxsupp/libcxxrt/exception.cc"), ModuleCCInputs{Flags: FlagSet{NoCompilerWarnings: true}}, testHostP, emit)
+	EmitCC(inst, "exception.cc", Intern("$(S)/contrib/libs/cxxsupp/libcxxrt/exception.cc"), ModuleCCInputs{Flags: FlagSet{NoCompilerWarnings: true}}, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -288,7 +288,7 @@ func TestEmitCC_OwnCXXFlags_SlotsAfterSuppressionBlock(t *testing.T) {
 		CXXFlags: []string{"-D_LIBCPP_BUILDING_LIBRARY"},
 	}
 	inst := targetInstance("contrib/libs/cxxsupp/libcxx")
-	EmitCC(inst, "src/algorithm.cpp", Source("contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), in, testHostP, emit)
+	EmitCC(inst, "src/algorithm.cpp", Intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), in, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
@@ -336,14 +336,14 @@ func TestEmitCC_COnlyFlags_AppliesOnlyToCSources(t *testing.T) {
 	in := ModuleCCInputs{COnlyFlags: []string{"-Wno-narrowing"}}
 
 	emitC := NewBufferedEmitter()
-	EmitCC(targetInstance("build/cow/on"), "lib.c", Source("build/cow/on/lib.c"), in, testHostP, emitC)
+	EmitCC(targetInstance("build/cow/on"), "lib.c", Intern("$(S)/build/cow/on/lib.c"), in, testHostP, emitC)
 
 	if !contains(emitC.nodes[0].Cmds[0].CmdArgs, "-Wno-narrowing") {
 		t.Errorf(".c source missing CONLYFLAG -Wno-narrowing; got %v", emitC.nodes[0].Cmds[0].CmdArgs)
 	}
 
 	emitCpp := NewBufferedEmitter()
-	EmitCC(targetInstance("build/cow/on"), "lib.cpp", Source("build/cow/on/lib.cpp"), in, testHostP, emitCpp)
+	EmitCC(targetInstance("build/cow/on"), "lib.cpp", Intern("$(S)/build/cow/on/lib.cpp"), in, testHostP, emitCpp)
 
 	if contains(emitCpp.nodes[0].Cmds[0].CmdArgs, "-Wno-narrowing") {
 		t.Errorf(".cpp source got CONLYFLAG -Wno-narrowing (should be CXXFlags-only); got %v", emitCpp.nodes[0].Cmds[0].CmdArgs)
@@ -366,7 +366,7 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 	}
 
 	e := NewBufferedEmitter()
-	EmitCC(instance, "lib.c", Source("build/cow/on/lib.c"), ModuleCCInputs{Flags: FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true}}, testHostP, e)
+	EmitCC(instance, "lib.c", Intern("$(S)/build/cow/on/lib.c"), ModuleCCInputs{Flags: FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true}}, testHostP, e)
 	cArgs := e.nodes[0].Cmds[0].CmdArgs
 
 	if !contains(cArgs, "-DENV_C=1") {
@@ -378,7 +378,7 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 	}
 
 	e = NewBufferedEmitter()
-	EmitCC(instance, "lib.cpp", Source("build/cow/on/lib.cpp"), ModuleCCInputs{}, testHostP, e)
+	EmitCC(instance, "lib.cpp", Intern("$(S)/build/cow/on/lib.cpp"), ModuleCCInputs{}, testHostP, e)
 	cxxArgs := e.nodes[0].Cmds[0].CmdArgs
 
 	if !contains(cxxArgs, "-DENV_C=1") {
@@ -413,7 +413,7 @@ func TestEmitCC_OutputPath_YqlUdfSuffix(t *testing.T) {
 	e := NewBufferedEmitter()
 	in := ModuleCCInputs{ObjectSuffixStem: stringPtr("udfs")}
 
-	_, outPath, _ := EmitCC(targetInstance("udfmod"), "lib.cpp", Source("udfmod/lib.cpp"), in, testHostP, e)
+	_, outPath, _ := EmitCC(targetInstance("udfmod"), "lib.cpp", Intern("$(S)/udfmod/lib.cpp"), in, testHostP, e)
 
 	want := "$(B)/udfmod/lib.cpp.udfs.o"
 	if outPath.String() != want {
@@ -431,7 +431,7 @@ func TestEmitCC_OutputPath_YqlUdfSuffixPIC(t *testing.T) {
 		Platform: testHostP,
 	}
 
-	_, outPath, _ := EmitCC(instance, "lib.cpp", Source("udfmod/lib.cpp"), in, testHostP, e)
+	_, outPath, _ := EmitCC(instance, "lib.cpp", Intern("$(S)/udfmod/lib.cpp"), in, testHostP, e)
 
 	want := "$(B)/udfmod/lib.cpp.udfs.pic.o"
 	if outPath.String() != want {
@@ -443,7 +443,7 @@ func TestEmitCC_NoWShadowAddsWarningFlag(t *testing.T) {
 	e := NewBufferedEmitter()
 	in := ModuleCCInputs{Flags: FlagSet{NoWShadow: true}}
 
-	EmitCC(targetInstance("build/cow/on"), "lib.cpp", Source("build/cow/on/lib.cpp"), in, testHostP, e)
+	EmitCC(targetInstance("build/cow/on"), "lib.cpp", Intern("$(S)/build/cow/on/lib.cpp"), in, testHostP, e)
 
 	if !contains(e.nodes[0].Cmds[0].CmdArgs, "-Wno-shadow") {
 		t.Fatalf("cmd_args missing -Wno-shadow: %v", e.nodes[0].Cmds[0].CmdArgs)

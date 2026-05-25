@@ -375,7 +375,7 @@ func copyFileInputVFS(fs *FS, modulePath string, src string) VFS {
 
 func moduleRootedVFS(modulePath string, path string) *VFS {
 	if vfsHasPrefix(path) {
-		return vfsPtr(ParseVFS(path))
+		return vfsPtr(Intern(path))
 	}
 
 	switch {
@@ -402,7 +402,7 @@ func copyFileOutputVFS(modulePath string, dst string) VFS {
 
 func copyFileIncludeTarget(modulePath string, target string) string {
 	if vfsHasPrefix(target) {
-		return ParseVFS(target).Rel()
+		return Intern(target).Rel()
 	}
 
 	switch {
@@ -632,8 +632,8 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 	// module-type set.
 	d.usePython3 = true
 
-	d.addInclGlobal = append(d.addInclGlobal, Source("contrib/libs/python/Include"))
-	d.addIncl = append(d.addIncl, Source("contrib/libs/python/Include"))
+	d.addInclGlobal = append(d.addInclGlobal, Intern("$(S)/contrib/libs/python/Include"))
+	d.addIncl = append(d.addIncl, Intern("$(S)/contrib/libs/python/Include"))
 
 	// ARCHIVE(NAME ...) in library/python/runtime_py3 auto-injects
 	// `${addincl;noauto;output:NAME}` (ymake.core.conf:4143): owner-
@@ -641,7 +641,7 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 	// it via d.addIncl; consumers see it via genModule's post-merge
 	// splice (after abseil-cpp).
 	if modulePath == "library/python/runtime_py3" {
-		d.addIncl = append(d.addIncl, Build("library/python/runtime_py3"))
+		d.addIncl = append(d.addIncl, Intern("$(B)/library/python/runtime_py3"))
 	}
 }
 
@@ -2040,7 +2040,7 @@ func expandConfigVFSPaths(paths []string, env Environment) []VFS {
 
 func parseModulePathVFS(path string) VFS {
 	if vfsHasPrefix(path) {
-		return ParseVFS(path)
+		return Intern(path)
 	}
 
 	return Source(path)

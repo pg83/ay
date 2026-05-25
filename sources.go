@@ -92,8 +92,8 @@ func appendVFSUnique(dst []VFS, src []VFS) []VFS {
 // for the JS-derived CC's include-inputs slot.
 func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []VFS) []VFS {
 	out := make([]VFS, 0, 2+len(sources)+len(closure))
-	out = append(out, Source("build/scripts/gen_join_srcs.py"))
-	out = append(out, Source("build/scripts/process_command_files.py"))
+	out = append(out, Intern("$(S)/build/scripts/gen_join_srcs.py"))
+	out = append(out, Intern("$(S)/build/scripts/process_command_files.py"))
 
 	for _, s := range sources {
 		out = append(out, Source(srcInstance.Path+"/"+s))
@@ -172,8 +172,8 @@ func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourc
 // (`src/include`, `src/internal`) never leak into arbitrary consumers.
 func includeScannerBasePaths() []VFS {
 	return []VFS{
-		Source(""),
-		Source("contrib/libs/linux-headers"),
-		Source("contrib/libs/linux-headers/_nf"),
+		Intern("$(S)/"),
+		Intern("$(S)/contrib/libs/linux-headers"),
+		Intern("$(S)/contrib/libs/linux-headers/_nf"),
 	}
 }

@@ -51,8 +51,8 @@ func TestVFSLongString(t *testing.T) {
 		vfs  VFS
 		want string
 	}{
-		{name: "source", vfs: Source("a/b.txt"), want: "$(SOURCE_ROOT)/a/b.txt"},
-		{name: "build", vfs: Build("x/y.o"), want: "$(BUILD_ROOT)/x/y.o"},
+		{name: "source", vfs: Intern("$(S)/a/b.txt"), want: "$(SOURCE_ROOT)/a/b.txt"},
+		{name: "build", vfs: Intern("$(B)/x/y.o"), want: "$(BUILD_ROOT)/x/y.o"},
 	}
 
 	for _, tc := range cases {
@@ -215,7 +215,7 @@ func BenchmarkMapAccess_VFS2Bucket_Inline(b *testing.B) {
 // or as bare source-relative paths.
 func ParseVFSOrSource(s string) VFS {
 	if vfsHasPrefix(s) {
-		return ParseVFS(s)
+		return Intern(s)
 	}
 
 	return Source(s)

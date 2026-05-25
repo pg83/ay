@@ -33,7 +33,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 		swigClosure := swigIncludeClosure(ctx, srcVFS)
 
 		inputs := make([]VFS, 0, 2+len(swigClosure))
-		inputs = append(inputs, Build("contrib/tools/swig/swig"), srcVFS)
+		inputs = append(inputs, Intern("$(B)/contrib/tools/swig/swig"), srcVFS)
 		inputs = append(inputs, swigClosure...)
 
 		cmdArgs := []string{

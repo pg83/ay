@@ -41,10 +41,10 @@ const (
 // pb tool/asset VFS constants. The `…Path` strings are derived once
 // via .String() for cmd_arg slots that take a raw string.
 var (
-	pbWrapperVFS    = Source("build/scripts/cpp_proto_wrapper.py")
-	pbPyWrapperVFS  = Source("build/scripts/gen_py_protos.py")
-	pbGrpcCppVFS    = Build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp")
-	pbDescriptorVFS = Source("contrib/libs/protobuf/src/google/protobuf/descriptor.proto")
+	pbWrapperVFS    = Intern("$(S)/build/scripts/cpp_proto_wrapper.py")
+	pbPyWrapperVFS  = Intern("$(S)/build/scripts/gen_py_protos.py")
+	pbGrpcCppVFS    = Intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp")
+	pbDescriptorVFS = Intern("$(S)/contrib/libs/protobuf/src/google/protobuf/descriptor.proto")
 
 	pbWrapperPath     = pbWrapperVFS.String()
 	pbPyWrapperPath   = pbPyWrapperVFS.String()
@@ -83,24 +83,24 @@ var protobufRuntimeHeaders = []VFS{
 // the grpc + protobuf + abseil + libcxx closure into its CC consumers;
 // scanner recursion finds the transitive includes. Sorted lex.
 var grpcServiceHeaderIncludes = []VFS{
-	Source("contrib/libs/cxxsupp/libcxx/include/functional"),
-	Source("contrib/libs/grpc/include/grpcpp/client_context.h"),
-	Source("contrib/libs/grpc/include/grpcpp/completion_queue.h"),
-	Source("contrib/libs/grpc/include/grpcpp/generic/async_generic_service.h"),
-	Source("contrib/libs/grpc/include/grpcpp/impl/proto_utils.h"),
-	Source("contrib/libs/grpc/include/grpcpp/impl/rpc_method.h"),
-	Source("contrib/libs/grpc/include/grpcpp/impl/server_callback_handlers.h"),
-	Source("contrib/libs/grpc/include/grpcpp/impl/service_type.h"),
-	Source("contrib/libs/grpc/include/grpcpp/server_context.h"),
-	Source("contrib/libs/grpc/include/grpcpp/support/async_stream.h"),
-	Source("contrib/libs/grpc/include/grpcpp/support/async_unary_call.h"),
-	Source("contrib/libs/grpc/include/grpcpp/support/client_callback.h"),
-	Source("contrib/libs/grpc/include/grpcpp/support/message_allocator.h"),
-	Source("contrib/libs/grpc/include/grpcpp/support/method_handler.h"),
-	Source("contrib/libs/grpc/include/grpcpp/support/server_callback.h"),
-	Source("contrib/libs/grpc/include/grpcpp/support/status.h"),
-	Source("contrib/libs/grpc/include/grpcpp/support/stub_options.h"),
-	Source("contrib/libs/grpc/include/grpcpp/support/sync_stream.h"),
+	Intern("$(S)/contrib/libs/cxxsupp/libcxx/include/functional"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/client_context.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/completion_queue.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/generic/async_generic_service.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/impl/proto_utils.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/impl/rpc_method.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/impl/server_callback_handlers.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/impl/service_type.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/server_context.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/support/async_stream.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/support/async_unary_call.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/support/client_callback.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/support/message_allocator.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/support/method_handler.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/support/server_callback.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/support/status.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/support/stub_options.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/support/sync_stream.h"),
 }
 
 // grpcSourceExtraIncludes are the grpcpp headers a protoc-generated
@@ -108,9 +108,9 @@ var grpcServiceHeaderIncludes = []VFS{
 // GetSourceIncludes). They reach both .grpc.pb.cc.o and the sibling
 // message .pb.cc.o via the proto OutTogether output group.
 var grpcSourceExtraIncludes = []VFS{
-	Source("contrib/libs/grpc/include/grpcpp/impl/channel_interface.h"),
-	Source("contrib/libs/grpc/include/grpcpp/impl/client_unary_call.h"),
-	Source("contrib/libs/grpc/include/grpcpp/impl/rpc_service_method.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/impl/channel_interface.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/impl/client_unary_call.h"),
+	Intern("$(S)/contrib/libs/grpc/include/grpcpp/impl/rpc_service_method.h"),
 }
 
 // pbDescriptorImporterHeaders are the protobuf runtime headers in CC
@@ -616,7 +616,7 @@ func pyProtoAuxOwnAddIncl(d *moduleData) []VFS {
 			out = append(out, Build(base))
 		}
 	}
-	out = append(out, Source("contrib/libs/python/Include"))
+	out = append(out, Intern("$(S)/contrib/libs/python/Include"))
 	return out
 }
 
@@ -674,24 +674,24 @@ func pyProtoAuxPeerAddIncl(instance ModuleInstance, peerContribs peerGlobalContr
 
 	out := make([]VFS, 0, len(peerContribs.addIncl)+8)
 	for _, p := range peerContribs.addIncl {
-		if p == Source("contrib/libs/protobuf/src") || p == Build("contrib/libs/protobuf/src") || p == Source("contrib/restricted/abseil-cpp-tstring") || p == Source("contrib/restricted/abseil-cpp") {
+		if p == Intern("$(S)/contrib/libs/protobuf/src") || p == Intern("$(B)/contrib/libs/protobuf/src") || p == Intern("$(S)/contrib/restricted/abseil-cpp-tstring") || p == Intern("$(S)/contrib/restricted/abseil-cpp") {
 			continue
 		}
 		out = append(out, p)
 	}
 	out = append(out,
-		Source("contrib/libs/python/Include"),
-		Source("contrib/restricted/abseil-cpp"),
-		Build("library/python/runtime_py3"),
-		Source("contrib/libs/lzma/liblzma/api"),
-		Source("contrib/libs/openssl/include"),
-		Source("contrib/restricted/libffi/include"),
-		Source("contrib/restricted/libffi/configs/"+libffiConfigTriple(instance.Platform)+"/include"),
+		Intern("$(S)/contrib/libs/python/Include"),
+		Intern("$(S)/contrib/restricted/abseil-cpp"),
+		Intern("$(B)/library/python/runtime_py3"),
+		Intern("$(S)/contrib/libs/lzma/liblzma/api"),
+		Intern("$(S)/contrib/libs/openssl/include"),
+		Intern("$(S)/contrib/restricted/libffi/include"),
+		Intern("$(S)/contrib/restricted/libffi/configs/"+libffiConfigTriple(instance.Platform)+"/include"),
 	)
 	if d != nil && d.protoNamespace != nil {
 		base := filepath.ToSlash(filepath.Clean(*d.protoNamespace))
 		if base != "." && base != "" && base != "contrib/libs/protobuf/src" {
-			out = append(out, Build("contrib/libs/protobuf/src"))
+			out = append(out, Intern("$(B)/contrib/libs/protobuf/src"))
 		}
 	}
 	return out

@@ -27,15 +27,15 @@ func runtimePy3CCExtraInputs(modulePath, srcRel string) []VFS {
 	switch srcRel {
 	case "__res.cpp":
 		return []VFS{
-			Build("library/python/runtime_py3/__res.pyc.inc"),
-			Source("library/python/runtime_py3/__res.py"),
-			Source("library/python/runtime_py3/sitecustomize.py"),
+			Intern("$(B)/library/python/runtime_py3/__res.pyc.inc"),
+			Intern("$(S)/library/python/runtime_py3/__res.py"),
+			Intern("$(S)/library/python/runtime_py3/sitecustomize.py"),
 		}
 	case "sitecustomize.cpp":
 		return []VFS{
-			Build("library/python/runtime_py3/sitecustomize.pyc.inc"),
-			Source("library/python/runtime_py3/__res.py"),
-			Source("library/python/runtime_py3/sitecustomize.py"),
+			Intern("$(B)/library/python/runtime_py3/sitecustomize.pyc.inc"),
+			Intern("$(S)/library/python/runtime_py3/__res.py"),
+			Intern("$(S)/library/python/runtime_py3/sitecustomize.py"),
 		}
 	}
 

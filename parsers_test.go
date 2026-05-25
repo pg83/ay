@@ -44,7 +44,7 @@ func TestScanner_CythonExternFromQuotedAngleResolves(t *testing.T) {
 	scanner := NewIncludeScanner(dir, SysInclSet{})
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel:  "pkg/error.pxd",
-		OwnAddIncl: []VFS{Source("")},
+		OwnAddIncl: []VFS{Intern("$(S)/")},
 	})
 
 	if len(closure) != 1 {
@@ -79,7 +79,7 @@ func TestScanner_CythonExternFromSingleQuotedResolves(t *testing.T) {
 	scanner := NewIncludeScanner(dir, SysInclSet{})
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel:  "pkg/logger.pxd",
-		OwnAddIncl: []VFS{Source("")},
+		OwnAddIncl: []VFS{Intern("$(S)/")},
 	})
 
 	if len(closure) != 1 {

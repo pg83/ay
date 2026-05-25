@@ -32,11 +32,11 @@ const maxCmdLen = 8000
 // script. Carried on every emitted objcopy node's `inputs` and
 // propagated into the enclosing module's `.global.a` member inputs.
 var (
-	objcopyScriptVFS  = Source("build/scripts/objcopy.py")
+	objcopyScriptVFS  = Intern("$(S)/build/scripts/objcopy.py")
 	objcopyScriptPath = objcopyScriptVFS.String()
 
-	rescompressorBinVFS  = Build("tools/rescompressor/rescompressor")
-	rescompilerBinVFS    = Build("tools/rescompiler/rescompiler")
+	rescompressorBinVFS  = Intern("$(B)/tools/rescompressor/rescompressor")
+	rescompilerBinVFS    = Intern("$(B)/tools/rescompiler/rescompiler")
 	rescompressorBinPath = rescompressorBinVFS.String()
 	rescompilerBinPath   = rescompilerBinVFS.String()
 )

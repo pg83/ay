@@ -1,10 +1,10 @@
 package main
 
 var (
-	ldLinkDynLibVFS                = Source("build/scripts/link_dyn_lib.py")
-	ldThinltoCacheVFS              = Source("build/scripts/thinlto_cache.py")
-	ldProcessCommandFilesVFS       = Source("build/scripts/process_command_files.py")
-	ldProcessWholeArchiveOptionVFS = Source("build/scripts/process_whole_archive_option.py")
+	ldLinkDynLibVFS                = Intern("$(S)/build/scripts/link_dyn_lib.py")
+	ldThinltoCacheVFS              = Intern("$(S)/build/scripts/thinlto_cache.py")
+	ldProcessCommandFilesVFS       = Intern("$(S)/build/scripts/process_command_files.py")
+	ldProcessWholeArchiveOptionVFS = Intern("$(S)/build/scripts/process_whole_archive_option.py")
 
 	ldLinkDynLibPath                = ldLinkDynLibVFS.String()
 	ldThinltoCachePath              = ldThinltoCacheVFS.String()

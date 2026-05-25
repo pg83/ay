@@ -5,23 +5,23 @@ import (
 	"strings"
 )
 
-var bisonPreprocessPyVFS = Source("build/scripts/preprocess.py")
+var bisonPreprocessPyVFS = Intern("$(S)/build/scripts/preprocess.py")
 
 var bisonCppSkeletonInputs = []VFS{
-	Source("contrib/tools/bison/data/m4sugar/foreach.m4"),
-	Source("contrib/tools/bison/data/m4sugar/m4sugar.m4"),
-	Source("contrib/tools/bison/data/skeletons/bison.m4"),
-	Source("contrib/tools/bison/data/skeletons/c++-skel.m4"),
-	Source("contrib/tools/bison/data/skeletons/c++.m4"),
-	Source("contrib/tools/bison/data/skeletons/c-like.m4"),
-	Source("contrib/tools/bison/data/skeletons/c-skel.m4"),
-	Source("contrib/tools/bison/data/skeletons/c.m4"),
-	Source("contrib/tools/bison/data/skeletons/glr.cc"),
-	Source("contrib/tools/bison/data/skeletons/lalr1.cc"),
-	Source("contrib/tools/bison/data/skeletons/location.cc"),
-	Source("contrib/tools/bison/data/skeletons/stack.hh"),
-	Source("contrib/tools/bison/data/skeletons/variant.hh"),
-	Source("contrib/tools/bison/data/skeletons/yacc.c"),
+	Intern("$(S)/contrib/tools/bison/data/m4sugar/foreach.m4"),
+	Intern("$(S)/contrib/tools/bison/data/m4sugar/m4sugar.m4"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/bison.m4"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/c++-skel.m4"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/c++.m4"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/c-like.m4"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/c-skel.m4"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/c.m4"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/glr.cc"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/lalr1.cc"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/location.cc"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/stack.hh"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/variant.hh"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/yacc.c"),
 }
 
 func dedupIncludeDirectives(directives []includeDirective) []includeDirective {
@@ -113,7 +113,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 			Env: env,
 		},
 	}
-	inputs := []VFS{Build("contrib/tools/bison/bison"), Build("contrib/tools/m4/m4"), srcVFS}
+	inputs := []VFS{Intern("$(B)/contrib/tools/bison/bison"), Intern("$(B)/contrib/tools/m4/m4"), srcVFS}
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
 			CmdArgs: []string{
