@@ -18,7 +18,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 		generatedVFS := Build(instance.Path + "/" + generated)
 
 		confVFS := Source(instance.Path + "/" + conf)
-		inputs := []VFS{Source("build/scripts/check_config_h.py"), confVFS}
+		inputs := []VFS{Intern("$(S)/build/scripts/check_config_h.py"), confVFS}
 		inputs = append(inputs, walkClosure(ctx, instance, confVFS, in)...)
 
 		env := map[string]string{

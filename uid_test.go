@@ -60,7 +60,7 @@ func TestComputeUID_KnownVector(t *testing.T) {
 func TestNodeStatsUID_KnownVector(t *testing.T) {
 	n := &Node{
 		KV:       map[string]interface{}{"p": "LD"},
-		Outputs:  []VFS{Build("tools/archiver/archiver")},
+		Outputs:  []VFS{Intern("$(B)/tools/archiver/archiver")},
 		Platform: "default-linux-aarch64",
 		StatsTags: []string{
 			"FAKEID=sandboxing",
@@ -92,7 +92,7 @@ func TestNodeStatsUID_IgnoresUnrelatedTargetCLIFlags(t *testing.T) {
 
 		return &Node{
 			KV:        map[string]interface{}{"p": "LD"},
-			Outputs:   []VFS{Build("tools/archiver/archiver")},
+			Outputs:   []VFS{Intern("$(B)/tools/archiver/archiver")},
 			Platform:  string(p.Target),
 			StatsTags: statsTagsForPlatform(p),
 		}
@@ -131,7 +131,7 @@ func TestNodeStatsUID_UsesBaseTargetFlags(t *testing.T) {
 
 	n := &Node{
 		KV:        map[string]interface{}{"p": "LD"},
-		Outputs:   []VFS{Build("tools/archiver/archiver")},
+		Outputs:   []VFS{Intern("$(B)/tools/archiver/archiver")},
 		Platform:  string(p.Target),
 		StatsTags: statsTagsForPlatform(p),
 	}
@@ -154,7 +154,7 @@ func TestNodeStatsUID_UsesBaseTargetFlags(t *testing.T) {
 func TestNodeStatsUID_UsesLongRootOutputs(t *testing.T) {
 	n := &Node{
 		KV:       map[string]interface{}{"p": "LD"},
-		Outputs:  []VFS{Build("tools/archiver/archiver")},
+		Outputs:  []VFS{Intern("$(B)/tools/archiver/archiver")},
 		Platform: "default-linux-aarch64",
 		StatsTags: []string{
 			"FAKEID=sandboxing",
@@ -171,7 +171,7 @@ func TestNodeStatsUID_UsesLongRootOutputs(t *testing.T) {
 		n.Platform,
 		pythonStringListRepr(sortedStatsTags(n)),
 		"LD",
-		pythonStringListRepr([]string{Build("tools/archiver/archiver").String()}),
+		pythonStringListRepr([]string{Intern("$(B)/tools/archiver/archiver").String()}),
 	})
 	shortRootHash := md5.Sum([]byte(shortRootPreimage))
 	shortRootUID := encHex.EncodeToString(shortRootHash[:])

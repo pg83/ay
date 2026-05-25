@@ -15,11 +15,11 @@ func TestEmitFL_NodeShape(t *testing.T) {
 	_, header, cpp, bfbs := EmitFL(
 		instance,
 		"mod/File.fbs",
-		Source("mod/File.fbs"),
+		Intern("$(S)/mod/File.fbs"),
 		NodeRef{id: 9},
-		Build("contrib/libs/flatbuffers/flatc/flatc"),
+		Intern("$(B)/contrib/libs/flatbuffers/flatc/flatc"),
 		[]string{"--scoped-enums"},
-		[]VFS{Source("mod/Schema.fbs")},
+		[]VFS{Intern("$(S)/mod/Schema.fbs")},
 		e,
 	)
 

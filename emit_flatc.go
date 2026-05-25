@@ -8,8 +8,8 @@ import (
 const flatcModule = "contrib/libs/flatbuffers/flatc"
 
 var (
-	flatcWrapperVFS = Source("build/scripts/cpp_flatc_wrapper.py")
-	flatcRuntimeVFS = Source("contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h")
+	flatcWrapperVFS = Intern("$(S)/build/scripts/cpp_flatc_wrapper.py")
+	flatcRuntimeVFS = Intern("$(S)/contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h")
 )
 
 type flatcEmission struct {

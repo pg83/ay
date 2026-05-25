@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-var rodataScriptVFS = Source("build/scripts/rodata2asm.py")
+var rodataScriptVFS = Intern("$(S)/build/scripts/rodata2asm.py")
 
 func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 	base := instance.Path + "/" + srcRel

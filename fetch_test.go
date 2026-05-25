@@ -47,9 +47,9 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform, plan *resourceFe
 			Env:     map[string]string{},
 		}},
 		Env:              map[string]string{},
-		Inputs:           []VFS{Source("pkg/app/main.cpp")},
+		Inputs:           []VFS{Intern("$(S)/pkg/app/main.cpp")},
 		KV:               map[string]interface{}{"p": "CC"},
-		Outputs:          []VFS{Build("pkg/app/main.o")},
+		Outputs:          []VFS{Intern("$(B)/pkg/app/main.o")},
 		Requirements:     map[string]interface{}{},
 		TargetProperties: map[string]string{},
 	}, target))
@@ -100,7 +100,7 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 		items: []resourceFetch{{
 			Pattern: "YMAKE_PYTHON3",
 			URI:     "sbr:dummy-ymake-python3",
-			Output:  Build("resources/YMAKE_PYTHON3"),
+			Output:  Intern("$(B)/resources/YMAKE_PYTHON3"),
 		}},
 	}
 
@@ -112,9 +112,9 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 			Env:     map[string]string{},
 		}},
 		Env:              map[string]string{},
-		Inputs:           []VFS{Source("pkg/app/main.py")},
+		Inputs:           []VFS{Intern("$(S)/pkg/app/main.py")},
 		KV:               map[string]interface{}{"p": "CC"},
-		Outputs:          []VFS{Build("pkg/app/main.o")},
+		Outputs:          []VFS{Intern("$(B)/pkg/app/main.o")},
 		Requirements:     map[string]interface{}{},
 		TargetProperties: map[string]string{},
 	}, p))
@@ -145,9 +145,9 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 			Env:     map[string]string{},
 		}},
 		Env:              map[string]string{},
-		Inputs:           []VFS{Source("pkg/app/main.py")},
+		Inputs:           []VFS{Intern("$(S)/pkg/app/main.py")},
 		KV:               map[string]interface{}{"p": "CC"},
-		Outputs:          []VFS{Build("pkg/app/main.o")},
+		Outputs:          []VFS{Intern("$(B)/pkg/app/main.o")},
 		Requirements:     map[string]interface{}{},
 		TargetProperties: map[string]string{},
 	}, p))

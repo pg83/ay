@@ -161,7 +161,7 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 	}
 	for _, f := range stmt.OutputIncludes {
 		if vfsHasPrefix(f) {
-			f = ParseVFS(f).Rel()
+			f = Intern(f).Rel()
 		}
 		includes = append(includes, includeDirective{kind: includeQuoted, target: f})
 	}

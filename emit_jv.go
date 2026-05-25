@@ -8,14 +8,14 @@ import (
 // antlr4RuntimeHeaderVFS is the $(S)-rooted antlr4 C++ umbrella
 // header included by all ANTLR4-generated .h files; used as static
 // EmitsIncludes for JV .h outputs.
-var antlr4RuntimeHeaderVFS = Source("contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h")
+var antlr4RuntimeHeaderVFS = Intern("$(S)/contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h")
 var antlr4RuntimeHeaderPath = antlr4RuntimeHeaderVFS.String()
 
 // antlr4FsToolsVFS / antlr4ProcCmdVFS are build-script helpers
 // threaded into JV-derived CP/CC inputs, slotted after the JV primary
 // output and before the grammar .g4 files.
-var antlr4FsToolsVFS = Source("build/scripts/fs_tools.py")
-var antlr4ProcCmdVFS = Source("build/scripts/process_command_files.py")
+var antlr4FsToolsVFS = Intern("$(S)/build/scripts/fs_tools.py")
+var antlr4ProcCmdVFS = Intern("$(S)/build/scripts/process_command_files.py")
 var antlr4FsToolsPath = antlr4FsToolsVFS.String()
 var antlr4ProcCmdFiles = antlr4ProcCmdVFS.String()
 

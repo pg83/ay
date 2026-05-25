@@ -139,8 +139,8 @@ func emitResourceObjcopy(
 		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 
 		inputs := []VFS{
-			Build("tools/rescompiler/rescompiler"),
-			Build("tools/rescompressor/rescompressor"),
+			Intern("$(B)/tools/rescompiler/rescompiler"),
+			Intern("$(B)/tools/rescompressor/rescompressor"),
 		}
 		if len(cur.paths) <= 1 {
 			inputs = append(inputs, objcopyScriptVFS)
@@ -328,8 +328,8 @@ func emitKvOnlyObjcopyNode(
 
 	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 	inputs := []VFS{
-		Build("tools/rescompiler/rescompiler"),
-		Build("tools/rescompressor/rescompressor"),
+		Intern("$(B)/tools/rescompiler/rescompiler"),
+		Intern("$(B)/tools/rescompressor/rescompressor"),
 		objcopyScriptVFS,
 	}
 
@@ -659,8 +659,8 @@ func emitPySrcObjcopy(
 			}
 
 			inputs := []VFS{
-				Build("tools/rescompiler/rescompiler"),
-				Build("tools/rescompressor/rescompressor"),
+				Intern("$(B)/tools/rescompiler/rescompiler"),
+				Intern("$(B)/tools/rescompressor/rescompressor"),
 			}
 			for _, p := range ch.inps {
 				inputs = append(inputs, p)

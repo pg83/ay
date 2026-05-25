@@ -9,7 +9,7 @@ import (
 // consumer is the asmlib host-PIC branch (gated by asmlibYasmModules);
 // yasm's PROGRAM directory is stable.
 var (
-	yasmBinaryVFS  = Build("contrib/tools/yasm/yasm")
+	yasmBinaryVFS  = Intern("$(B)/contrib/tools/yasm/yasm")
 	yasmBinaryPath = yasmBinaryVFS.String()
 )
 

@@ -165,7 +165,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 // genPy3RegScriptVFS is the source-relative VFS path to the
 // gen_py3_reg.py script invoked by every PY_REGISTER's PY node
 // (mirror of macro _PY3_REGISTER at build/ymake.core.conf:4086-4089).
-var genPy3RegScriptVFS = Source("build/scripts/gen_py3_reg.py")
+var genPy3RegScriptVFS = Intern("$(S)/build/scripts/gen_py3_reg.py")
 var genPy3RegScriptPath = genPy3RegScriptVFS.String()
 
 // emitPyRegister emits PY+CC pair for each PY_REGISTER(arg) in

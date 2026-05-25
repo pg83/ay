@@ -5494,9 +5494,9 @@ const t17SwigTargetDir = "contrib/tools/swig"
 func TestReorderLDMembers_LegacyDoubleUnderscorePathsTrailRegularSources(t *testing.T) {
 	refs := []NodeRef{{id: 1}, {id: 2}, {id: 3}}
 	paths := []VFS{
-		Build("contrib/tools/swig/_/Source/CParse/cscanner.c.pic.o"),
-		Build("contrib/tools/swig/_/_/Source/CParse/parser.y.c.pic.o"),
-		Build("contrib/tools/swig/_/Source/CParse/templ.c.pic.o"),
+		Intern("$(B)/contrib/tools/swig/_/Source/CParse/cscanner.c.pic.o"),
+		Intern("$(B)/contrib/tools/swig/_/_/Source/CParse/parser.y.c.pic.o"),
+		Intern("$(B)/contrib/tools/swig/_/Source/CParse/templ.c.pic.o"),
 	}
 
 	gotRefs, gotPaths := reorderLDMembers(refs, paths)

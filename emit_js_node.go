@@ -16,8 +16,8 @@ package main
 // host-PROGRAM walk, so the generated node must carry the requested target
 // platform shape rather than the source instance's host tags.
 func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, emit Emitter) (NodeRef, VFS) {
-	joinSrcs := Source("build/scripts/gen_join_srcs.py")
-	procCmdFiles := Source("build/scripts/process_command_files.py")
+	joinSrcs := Intern("$(S)/build/scripts/gen_join_srcs.py")
+	procCmdFiles := Intern("$(S)/build/scripts/process_command_files.py")
 
 	outVFS := Build(instance.Path + "/" + allName)
 	platformID := instance.Platform.Target

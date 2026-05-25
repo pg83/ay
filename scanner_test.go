@@ -277,7 +277,7 @@ func TestScanner_BlockCommentIncludeIgnored(t *testing.T) {
 	// PR-M3-vfs-paths: scanDirectives takes a VFS path. The test file
 	// `<dir>/fake.h` becomes `$(S)/fake.h` under the scanner's
 	// dir-as-sourceRoot.
-	dirs := scanner.scanDirectives(Source("fake.h"))
+	dirs := scanner.scanDirectives(Intern("$(S)/fake.h"))
 
 	if len(dirs) != 1 {
 		t.Fatalf("got %d directives, want 1; directives=%+v", len(dirs), dirs)
@@ -290,10 +290,10 @@ func TestScanner_BlockCommentIncludeIgnored(t *testing.T) {
 
 func muslConsumerPeerAddIncl(isa ISA) []VFS {
 	return []VFS{
-		Source("contrib/libs/musl/arch/" + string(isa)),
-		Source("contrib/libs/musl/arch/generic"),
-		Source("contrib/libs/musl/include"),
-		Source("contrib/libs/musl/extra"),
+		Intern("$(S)/contrib/libs/musl/arch/" + string(isa)),
+		Intern("$(S)/contrib/libs/musl/arch/generic"),
+		Intern("$(S)/contrib/libs/musl/include"),
+		Intern("$(S)/contrib/libs/musl/extra"),
 	}
 }
 
@@ -599,9 +599,9 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 	})
 	d := includeDirective{kind: includeSystem, target: "foo.h"}
 
-	got1 := sc.resolveSearchPath(Source("pkg/a.cpp"), d)
-	got2 := sc.resolveSearchPath(Source("pkg/b.cpp"), d)
-	want := []VFS{Source("include/foo.h")}
+	got1 := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), d)
+	got2 := sc.resolveSearchPath(Intern("$(S)/pkg/b.cpp"), d)
+	want := []VFS{Intern("$(S)/include/foo.h")}
 
 	if len(got1) != len(want) || got1[0] != want[0] {
 		t.Fatalf("first resolve = %v, want %v", got1, want)
@@ -633,8 +633,8 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 	})
 	d := includeDirective{kind: includeSystem, target: "missing.h"}
 
-	got1 := sc.resolveSearchPath(Source("pkg/a.cpp"), d)
-	got2 := sc.resolveSearchPath(Source("pkg/b.cpp"), d)
+	got1 := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), d)
+	got2 := sc.resolveSearchPath(Intern("$(S)/pkg/b.cpp"), d)
 
 	if got1 != nil || got2 != nil {
 		t.Fatalf("missing header resolved unexpectedly: first=%v second=%v", got1, got2)
@@ -674,8 +674,8 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 	sc := scanner.NewScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"include"}),
 	})
-	got := sc.resolveSearchPath(Source("pkg/a.cpp"), includeDirective{kind: includeQuoted, target: "foo.h"})
-	want := []VFS{Source("pkg/foo.h")}
+	got := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), includeDirective{kind: includeQuoted, target: "foo.h"})
+	want := []VFS{Intern("$(S)/pkg/foo.h")}
 
 	if len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("quoted same-dir resolve = %v, want %v", got, want)
@@ -693,8 +693,8 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 func TestScannerInterner_VFSRoundTrip(t *testing.T) {
 	var si = newScannerInterner()
 
-	src := Source("a/b.h")
-	bld := Build("gen/x.pb.h")
+	src := Intern("$(S)/a/b.h")
+	bld := Intern("$(B)/gen/x.pb.h")
 
 	srcID1 := si.internVFS(src)
 	srcID2 := si.internVFS(src)
@@ -1351,7 +1351,7 @@ import weak 'c.proto';
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	dirs := scanner.scanDirectives(Source("src.proto"))
+	dirs := scanner.scanDirectives(Intern("$(S)/src.proto"))
 
 	if len(dirs) != 3 {
 		t.Fatalf("got %d directives, want 3; %+v", len(dirs), dirs)
@@ -1382,7 +1382,7 @@ import public "d.ev";
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	parsed := scanner.parsedIncludes(Source("src.proto"))
+	parsed := scanner.parsedIncludes(Intern("$(S)/src.proto"))
 	local := parsed.bucket(parsedIncludesLocal)
 	hcpp := parsed.bucket(parsedIncludesHCPP)
 
@@ -1420,7 +1420,7 @@ include "machine.rl";
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	parsed := scanner.parsedIncludes(Source("src.rl6"))
+	parsed := scanner.parsedIncludes(Intern("$(S)/src.rl6"))
 	local := parsed.bucket(parsedIncludesLocal)
 	hcpp := parsed.bucket(parsedIncludesHCPP)
 
@@ -1461,7 +1461,7 @@ func TestParsedIncludes_LeadingUTF8BOM(t *testing.T) {
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	local := scanner.parsedIncludes(Source("bom.cpp")).bucket(parsedIncludesLocal)
+	local := scanner.parsedIncludes(Intern("$(S)/bom.cpp")).bucket(parsedIncludesLocal)
 
 	if len(local) != 2 {
 		t.Fatalf("got %d local entries, want 2 (BOM not stripped?); %+v", len(local), local)
@@ -1487,7 +1487,7 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	parsed := scanner.parsedIncludes(Source("src.swg"))
+	parsed := scanner.parsedIncludes(Intern("$(S)/src.swg"))
 	local := parsed.bucket(parsedIncludesLocal)
 	hcpp := parsed.bucket(parsedIncludesHCPP)
 
@@ -1541,8 +1541,8 @@ func TestScanDirectives_DispatchByExtension(t *testing.T) {
 	scanner := NewIncludeScanner(dir, SysInclSet{})
 
 	// PR-M3-vfs-paths: scanDirectives takes a VFS path.
-	asmDirs := scanner.scanDirectives(Source("src.asm"))
-	hDirs := scanner.scanDirectives(Source("src.h"))
+	asmDirs := scanner.scanDirectives(Intern("$(S)/src.asm"))
+	hDirs := scanner.scanDirectives(Intern("$(S)/src.h"))
 
 	if len(asmDirs) != 1 || asmDirs[0].target != "defs.asm" {
 		t.Errorf("asm dispatch failed: got %+v, want one directive targeting defs.asm", asmDirs)
@@ -1569,7 +1569,7 @@ func TestScanDirectives_AsiDispatchesToYasm(t *testing.T) {
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
 	// PR-M3-vfs-paths: scanDirectives takes a VFS path.
-	dirs := scanner.scanDirectives(Source("src.asi"))
+	dirs := scanner.scanDirectives(Intern("$(S)/src.asi"))
 
 	if len(dirs) != 1 || dirs[0].target != "nested.asi" {
 		t.Errorf(".asi dispatch failed: got %+v, want one directive targeting nested.asi", dirs)
@@ -1591,7 +1591,7 @@ grammar X;
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	dirs := scanner.scanDirectives(Source("src.g4"))
+	dirs := scanner.scanDirectives(Intern("$(S)/src.g4"))
 
 	if len(dirs) != 0 {
 		t.Errorf(".g4 should use empty parser, got %+v", dirs)
@@ -1613,7 +1613,7 @@ grammar X;
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	dirs := scanner.scanDirectives(Source("src.g4.in"))
+	dirs := scanner.scanDirectives(Intern("$(S)/src.g4.in"))
 
 	if len(dirs) != 0 {
 		t.Errorf(".g4.in should inherit .g4 empty parser, got %+v", dirs)
@@ -1806,17 +1806,17 @@ func TestScanner_CythonNestedPxdUsesPy2StringSibling(t *testing.T) {
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel: "pkg/mod.pyx",
 		OwnAddIncl: []VFS{
-			Source(""),
-			Source("contrib/tools/cython/Cython/Includes"),
+			Intern("$(S)/"),
+			Intern("$(S)/contrib/tools/cython/Cython/Includes"),
 		},
 	})
 
-	assertHasVFS(t, closure, Source("util/generic/string.pxd"))
-	assertHasVFS(t, closure, Source("contrib/tools/cython_py2/Cython/Includes/libcpp/string.pxd"))
-	assertHasVFS(t, closure, Source("contrib/tools/cython_py2/Cython/Includes/libc/string.pxd"))
-	assertLacksVFS(t, closure, Source("contrib/tools/cython/Cython/Includes/libcpp/string.pxd"))
-	assertLacksVFS(t, closure, Source("contrib/tools/cython/Cython/Includes/libc/string.pxd"))
-	assertLacksVFS(t, closure, Source("contrib/tools/cython/Cython/Includes/libcpp/string_view.pxd"))
+	assertHasVFS(t, closure, Intern("$(S)/util/generic/string.pxd"))
+	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libcpp/string.pxd"))
+	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libc/string.pxd"))
+	assertLacksVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/string.pxd"))
+	assertLacksVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libc/string.pxd"))
+	assertLacksVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/string_view.pxd"))
 }
 
 func TestScanner_CythonPyxDirectStdlibStaysPy3WhileNestedPxdAddsPy2(t *testing.T) {
@@ -1835,15 +1835,15 @@ func TestScanner_CythonPyxDirectStdlibStaysPy3WhileNestedPxdAddsPy2(t *testing.T
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel: "pkg/mod.pyx",
 		OwnAddIncl: []VFS{
-			Source(""),
-			Source("contrib/tools/cython/Cython/Includes"),
+			Intern("$(S)/"),
+			Intern("$(S)/contrib/tools/cython/Cython/Includes"),
 		},
 	})
 
-	assertHasVFS(t, closure, Source("contrib/tools/cython/Cython/Includes/libcpp/pair.pxd"))
-	assertHasVFS(t, closure, Source("contrib/tools/cython/Cython/Includes/libcpp/utility.pxd"))
-	assertHasVFS(t, closure, Source("contrib/tools/cython_py2/Cython/Includes/libcpp/pair.pxd"))
-	assertHasVFS(t, closure, Source("contrib/tools/cython_py2/Cython/Includes/libcpp/utility.pxd"))
+	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/pair.pxd"))
+	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/utility.pxd"))
+	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libcpp/pair.pxd"))
+	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libcpp/utility.pxd"))
 }
 
 func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
@@ -1863,15 +1863,15 @@ func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel: "pkg/mod.pyx",
 		OwnAddIncl: []VFS{
-			Source(""),
-			Source("contrib/tools/cython/Cython/Includes"),
+			Intern("$(S)/"),
+			Intern("$(S)/contrib/tools/cython/Cython/Includes"),
 		},
 	})
 
-	assertHasVFS(t, closure, Source("contrib/tools/cython/Cython/Includes/libcpp/__init__.pxd"))
-	assertLacksVFS(t, closure, Source("contrib/tools/cython_py2/Cython/Includes/libcpp/__init__.pxd"))
-	assertHasVFS(t, closure, Source("contrib/tools/cython/Cython/Includes/libc/stdint.pxd"))
-	assertHasVFS(t, closure, Source("contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd"))
+	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/__init__.pxd"))
+	assertLacksVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libcpp/__init__.pxd"))
+	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libc/stdint.pxd"))
+	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd"))
 }
 
 // hyperscanPeerAddIncl returns the PeerAddIncl search paths for a
@@ -2034,8 +2034,8 @@ func TestScanner_HyperscanBoostFunctionTypes_ProductionParity(t *testing.T) {
 // These headers are reached via ordinary angle-bracket includes inside
 // fold.hpp and the container cpp03 dispatch layer:
 //
-//   fold.hpp → #include <boost/fusion/algorithm/iteration/detail/preprocessed/fold.hpp>
-//   (when BOOST_FUSION_DONT_USE_PREPROCESSED_FILES is absent, the normal case)
+//	fold.hpp → #include <boost/fusion/algorithm/iteration/detail/preprocessed/fold.hpp>
+//	(when BOOST_FUSION_DONT_USE_PREPROCESSED_FILES is absent, the normal case)
 //
 // Prior to c31218d the macro-form BOOST_PP_ITERATE() dispatcher that
 // feeds deque/vector/map/set cpp03 families was not resolved, so those

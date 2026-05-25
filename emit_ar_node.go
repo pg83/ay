@@ -20,7 +20,7 @@ func emitARNode(
 	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
-	scriptVFS := Source("build/scripts/link_lib.py")
+	scriptVFS := Intern("$(S)/build/scripts/link_lib.py")
 
 	cmdEnv := hostP.ToolEnv()
 	arTool, arType, arFormat := instance.Platform.ArchiverArgs()

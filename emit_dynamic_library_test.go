@@ -8,13 +8,13 @@ import (
 func TestComposeDynLibInputs_IncludesVcsAndHelperScripts(t *testing.T) {
 	got := composeDynLibInputs(
 		[]VFS{
-			Build("contrib/libs/libiconv/static/liblibs-libiconv-static.a"),
-			Build("build/cow/on/libbuild-cow-on.a"),
+			Intern("$(B)/contrib/libs/libiconv/static/liblibs-libiconv-static.a"),
+			Intern("$(B)/build/cow/on/libbuild-cow-on.a"),
 		},
 		[]VFS{
-			Build("contrib/libs/musl/include/musl.py.pyplugin"),
+			Intern("$(B)/contrib/libs/musl/include/musl.py.pyplugin"),
 		},
-		Build("tools/fix_elf/fix_elf"),
+		Intern("$(B)/tools/fix_elf/fix_elf"),
 		"contrib/libs/libiconv/dynamic",
 		"libiconv.exports",
 	)

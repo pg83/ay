@@ -40,7 +40,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	// the stub LD's outputs[0] above; PR-28-D01 makes this the
 	// caller's responsibility (the gen.go walker derives it from the
 	// host LD's own emission).
-	r6Ref, outPath := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, Build("contrib/tools/ragel6/ragel6"), nil, nil, e)
+	r6Ref, outPath := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, Intern("$(B)/contrib/tools/ragel6/ragel6"), nil, nil, e)
 
 	wantOut := "$(B)/util/_/datetime/parser.rl6.cpp"
 	if outPath.String() != wantOut {
@@ -145,7 +145,7 @@ func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
 
 	// Caller threads the (non-canonical) host LD output. EmitR6 must
 	// canonicalise to the reference shape.
-	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, Build("contrib/tools/ragel6/bin/ragel6"), nil, nil, e)
+	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, Intern("$(B)/contrib/tools/ragel6/bin/ragel6"), nil, nil, e)
 
 	got := e.nodes[r6Ref.id]
 
@@ -195,9 +195,9 @@ func TestCanonicalizeRagel6BinaryPath_PassThrough(t *testing.T) {
 
 	for _, c := range cases {
 		if !vfsHasPrefix(c.in) {
-			t.Fatalf("ParseVFS(%q): not a VFS token", c.in)
+			t.Fatalf("Intern(%q): not a VFS token", c.in)
 		}
-		got := canonicalizeRagel6Binary(ParseVFS(c.in)).String()
+		got := canonicalizeRagel6Binary(Intern(c.in)).String()
 		if got != c.want {
 			t.Errorf("canonicalizeRagel6Binary(%q) = %q, want %q", c.in, got, c.want)
 		}
@@ -227,7 +227,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 		targetInstance("devtools/ymake/lang/makelists"),
 		"makefile_lang.rl6",
 		ragel6LD,
-		Build("contrib/tools/ragel6/ragel6"),
+		Intern("$(B)/contrib/tools/ragel6/ragel6"),
 		[]string{"-lF1"},
 		nil,
 		e,
@@ -287,7 +287,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 		},
 		"datetime/parser.rl6",
 		ragel6LD,
-		Build("contrib/tools/ragel6/ragel6"),
+		Intern("$(B)/contrib/tools/ragel6/ragel6"),
 		nil,
 		nil,
 		e,
@@ -332,11 +332,11 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	})
 
 	closure := []VFS{
-		Source("util/datetime/parser.h"),
-		Source("util/generic/ymath.h"),
+		Intern("$(S)/util/datetime/parser.h"),
+		Intern("$(S)/util/generic/ymath.h"),
 	}
 
-	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, Build("contrib/tools/ragel6/ragel6"), nil, closure, e)
+	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, Intern("$(B)/contrib/tools/ragel6/ragel6"), nil, closure, e)
 
 	got := e.nodes[r6Ref.id]
 

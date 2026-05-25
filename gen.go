@@ -1647,8 +1647,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// UserGlobalPropagated. Fallback: when abseil-cpp is absent, append
 	// at the tail.
 	if instance.Path == "library/python/runtime_py3" {
-		buildRootPath := Build("library/python/runtime_py3")
-		abseilPath := Source("contrib/restricted/abseil-cpp")
+		buildRootPath := Intern("$(B)/library/python/runtime_py3")
+		abseilPath := Intern("$(S)/contrib/restricted/abseil-cpp")
 		spliced := make([]VFS, 0, len(effectiveAddInclGlobal)+1)
 		inserted := false
 
@@ -1697,8 +1697,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// libcxx's GLOBAL ADDINCL set on Linux with CXX_RT==libcxxrt
 		// — see `contrib/libs/cxxsupp/libcxx/ya.make:24-25, 78-85`.
 		injectAddIncl := []VFS{
-			Source("contrib/libs/cxxsupp/libcxx/include"),
-			Source("contrib/libs/cxxsupp/libcxxrt/include"),
+			Intern("$(S)/contrib/libs/cxxsupp/libcxx/include"),
+			Intern("$(S)/contrib/libs/cxxsupp/libcxxrt/include"),
 		}
 
 		for _, p := range injectAddIncl {
@@ -2240,35 +2240,35 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ldPeerArchiveRefs, ldPeerArchivePaths = moveArchivePathsAfter(
 				ldPeerArchiveRefs,
 				ldPeerArchivePaths,
-				Build("build/cow/on/libbuild-cow-on.a"),
+				Intern("$(B)/build/cow/on/libbuild-cow-on.a"),
 				[]VFS{
-					Build("library/cpp/malloc/api/libcpp-malloc-api.a"),
-					Build("contrib/libs/jemalloc/libcontrib-libs-jemalloc.a"),
-					Build("library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a"),
+					Intern("$(B)/library/cpp/malloc/api/libcpp-malloc-api.a"),
+					Intern("$(B)/contrib/libs/jemalloc/libcontrib-libs-jemalloc.a"),
+					Intern("$(B)/library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a"),
 				},
 			)
 			ldPeerLinkCmdPaths = movePathsAfter(
 				ldPeerLinkCmdPaths,
-				Build("build/cow/on/libbuild-cow-on.a"),
+				Intern("$(B)/build/cow/on/libbuild-cow-on.a"),
 				[]VFS{
-					Build("library/cpp/malloc/api/libcpp-malloc-api.a"),
-					Build("contrib/libs/jemalloc/libcontrib-libs-jemalloc.a"),
-					Build("library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a"),
+					Intern("$(B)/library/cpp/malloc/api/libcpp-malloc-api.a"),
+					Intern("$(B)/contrib/libs/jemalloc/libcontrib-libs-jemalloc.a"),
+					Intern("$(B)/library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a"),
 				},
 			)
 			ldPeerArchiveRefs, ldPeerArchivePaths = moveArchivePathsBefore(
 				ldPeerArchiveRefs,
 				ldPeerArchivePaths,
-				Build("library/cpp/json/common/libcpp-json-common.a"),
+				Intern("$(B)/library/cpp/json/common/libcpp-json-common.a"),
 				[]VFS{
-					Build("tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a"),
+					Intern("$(B)/tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a"),
 				},
 			)
 			ldPeerLinkCmdPaths = movePathsBefore(
 				ldPeerLinkCmdPaths,
-				Build("library/cpp/json/common/libcpp-json-common.a"),
+				Intern("$(B)/library/cpp/json/common/libcpp-json-common.a"),
 				[]VFS{
-					Build("tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a"),
+					Intern("$(B)/tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a"),
 				},
 			)
 		}

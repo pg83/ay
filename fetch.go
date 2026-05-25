@@ -47,7 +47,7 @@ func newResourceFetchPlan(_ string, conf *graphConf, host *Platform) *resourceFe
 		plan.items = append(plan.items, resourceFetch{
 			Pattern: r.Pattern,
 			URI:     uri,
-			Output:  Build("resources/" + r.Pattern),
+			Output:  Intern("$(B)/resources/" + r.Pattern),
 		})
 	}
 
@@ -132,13 +132,13 @@ func currentYatoolPath() string {
 
 func fetchScriptInputs() []VFS {
 	inputs := []VFS{
-		Source("build/mapping.conf.json"),
-		Source("build/scripts/error.py"),
-		Source("build/scripts/fetch_from.py"),
-		Source("build/scripts/fetch_from_mds.py"),
-		Source("build/scripts/fetch_from_sandbox.py"),
-		Source("build/scripts/process_command_files.py"),
-		Source("build/scripts/retry.py"),
+		Intern("$(S)/build/mapping.conf.json"),
+		Intern("$(S)/build/scripts/error.py"),
+		Intern("$(S)/build/scripts/fetch_from.py"),
+		Intern("$(S)/build/scripts/fetch_from_mds.py"),
+		Intern("$(S)/build/scripts/fetch_from_sandbox.py"),
+		Intern("$(S)/build/scripts/process_command_files.py"),
+		Intern("$(S)/build/scripts/retry.py"),
 	}
 
 	return inputs

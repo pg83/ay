@@ -304,7 +304,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 	ref := EmitLD(
 		hostInstance("some/prog"),
 		"", // empty falls back to lastPathComponent → "prog"
-		[]NodeRef{stub}, []VFS{Build("some/prog/main.cpp.o")},
+		[]NodeRef{stub}, []VFS{Intern("$(B)/some/prog/main.cpp.o")},
 		nil, nil,
 		nil,
 		nil, nil,
@@ -400,7 +400,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 	ldRef := EmitLD(
 		instance,
 		"",
-		[]NodeRef{mainRef}, []VFS{Build("some/prog/main.cpp.o")},
+		[]NodeRef{mainRef}, []VFS{Intern("$(B)/some/prog/main.cpp.o")},
 		nil, nil,
 		nil,
 		nil, nil,
@@ -453,12 +453,12 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 	wholeRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
 
 	instance := targetInstance("some/prog")
-	dupPath := Build("some/prog/libproto_cpp.a")
+	dupPath := Intern("$(B)/some/prog/libproto_cpp.a")
 
 	ldRef := EmitLD(
 		instance,
 		"",
-		[]NodeRef{mainRef}, []VFS{Build("some/prog/main.cpp.o")},
+		[]NodeRef{mainRef}, []VFS{Intern("$(B)/some/prog/main.cpp.o")},
 		[]NodeRef{peerRef}, []VFS{dupPath},
 		nil,
 		nil, nil,
