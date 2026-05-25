@@ -2024,3 +2024,84 @@ func TestScanner_HyperscanBoostFunctionTypes_ProductionParity(t *testing.T) {
 		}
 	}
 }
+
+// TestScanner_HyperscanBoostFusionIteration_ProductionParity pins the
+// fusion iteration and preprocessed-family headers that flow from
+// contrib/libs/hyperscan through boost/graph → boost/parameter →
+// boost/fusion into the algorithm/iteration detail and cpp03/preprocessed
+// families.
+//
+// These headers are reached via ordinary angle-bracket includes inside
+// fold.hpp and the container cpp03 dispatch layer:
+//
+//   fold.hpp → #include <boost/fusion/algorithm/iteration/detail/preprocessed/fold.hpp>
+//   (when BOOST_FUSION_DONT_USE_PREPROCESSED_FILES is absent, the normal case)
+//
+// Prior to c31218d the macro-form BOOST_PP_ITERATE() dispatcher that
+// feeds deque/vector/map/set cpp03 families was not resolved, so those
+// preprocessed NN.hpp files were absent from the closure. After c31218d
+// the macro-form directive flows through sysincl/macro.yml and all 203+
+// fusion+preprocessed headers land correctly.
+func TestScanner_HyperscanBoostFusionIteration_ProductionParity(t *testing.T) {
+	const sourceRoot = "/home/pg/monorepo/ydb"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
+		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
+	}
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "contrib/libs/hyperscan/src/nfa/limex_compile.cpp")); err != nil {
+		t.Skipf("hyperscan source not present: %v", err)
+	}
+
+	sysincl := LoadSysInclSetFor(sourceRoot, "x86_64", func(Warn) {})
+	scanner := NewIncludeScanner(sourceRoot, sysincl)
+
+	ctx := ScanContext{
+		SourceRel: "contrib/libs/hyperscan/src/nfa/limex_compile.cpp",
+		OwnAddIncl: VFSesFromStrings([]string{
+			"contrib/libs/hyperscan",
+			"contrib/libs/hyperscan/include",
+			"contrib/libs/hyperscan/src",
+		}),
+		PeerAddInclSet:  hyperscanPeerAddIncl(),
+		BaseSearchPaths: includeScannerBasePaths(),
+	}
+
+	closure := scanner.WalkClosure(ctx)
+
+	if len(closure) == 0 {
+		t.Fatalf("hyperscan closure unexpectedly empty")
+	}
+
+	// fold.hpp uses #ifndef BOOST_FUSION_DONT_USE_PREPROCESSED_FILES to
+	// select the preprocessed path; in a normal build both the iteration
+	// header and its preprocessed variant must be in the closure.
+	// The cpp03/preprocessed/{vector,deque,map,set,list}.hpp chains are
+	// pulled in via the BOOST_PP_ITERATE()-sourced macro.yml entries for
+	// "^contrib/restricted/boost/fusion" (installed by c31218d).
+	wantSuffixes := []string{
+		"boost/fusion/algorithm/iteration/fold.hpp",
+		"boost/fusion/algorithm/iteration/detail/preprocessed/fold.hpp",
+		"boost/fusion/container/vector/detail/cpp03/preprocessed/vector.hpp",
+		"boost/fusion/container/deque/detail/cpp03/preprocessed/deque.hpp",
+		"boost/fusion/container/map/detail/cpp03/preprocessed/map.hpp",
+		"boost/fusion/container/set/detail/cpp03/preprocessed/set.hpp",
+		"boost/fusion/container/list/detail/cpp03/preprocessed/list.hpp",
+	}
+
+	got := make(map[string]bool)
+	for _, p := range closure {
+		s := p.String()
+		for _, w := range wantSuffixes {
+			if strings.HasSuffix(s, w) {
+				got[w] = true
+			}
+		}
+	}
+
+	for _, w := range wantSuffixes {
+		if !got[w] {
+			t.Errorf("hyperscan closure missing %s (c31218d regression)", w)
+		}
+	}
+}
