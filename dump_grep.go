@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	stdjson "encoding/json"
 	"io"
 	"os"
 	"regexp"
@@ -133,8 +134,7 @@ func cmdDumpGrep(args []string) int {
 	if raw {
 		f := Throw2(os.Open(inPath))
 		defer func() { Throw(f.Close()) }()
-		dec := json.NewDecoder(bufio.NewReaderSize(f, 1<<20))
-		dec.UseNumber()
+		dec := newDumpDecoder(f)
 		seekToGraph(dec, inPath)
 		for dec.More() {
 			node := map[string]any{}
@@ -151,7 +151,7 @@ func cmdDumpGrep(args []string) int {
 		line, err := r.ReadString('\n')
 		if len(line) > 0 {
 			node := map[string]any{}
-			Throw(json.Unmarshal([]byte(line), &node))
+			Throw(stdjson.Unmarshal([]byte(line), &node))
 			emit(node)
 		}
 		if err == io.EOF {
