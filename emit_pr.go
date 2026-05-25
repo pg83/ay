@@ -263,7 +263,7 @@ func prEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, outFil
 
 	// IN files are module-relative; rebase to SOURCE_ROOT.
 	for _, f := range stmt.INFiles {
-		includes = append(includes, includeDirective{kind: includeQuoted, target: runProgramInputVFS(ctx, instance, d, f).Rel()})
+		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(runProgramInputVFS(ctx, instance, d, f).Rel())})
 	}
 
 	// OUTPUT_INCLUDES entries are repo-relative; expandStmtTokens may have
@@ -272,12 +272,12 @@ func prEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, outFil
 		if vfsHasPrefix(f) {
 			f = Intern(f).Rel()
 		}
-		includes = append(includes, includeDirective{kind: includeQuoted, target: f})
+		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(f)})
 	}
 
 	// Tool-declared INDUCED_DEPS (repo-relative).
 	for _, f := range toolInducedDeps {
-		includes = append(includes, includeDirective{kind: includeQuoted, target: f})
+		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(f)})
 	}
 
 	return includes

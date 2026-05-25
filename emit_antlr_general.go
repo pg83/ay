@@ -104,7 +104,7 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 			return
 		}
 		seen[target] = struct{}{}
-		parsed = append(parsed, includeDirective{kind: includeQuoted, target: target})
+		parsed = append(parsed, includeDirective{kind: includeQuoted, target: internString(target)})
 	}
 
 	if isCCSourceExt(outTok) {

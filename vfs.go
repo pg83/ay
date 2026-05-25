@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"unsafe"
 )
 
 // vfs.go — typed VFS path as an interned id.
@@ -84,6 +85,26 @@ func internString(s string) STR {
 
 	return id
 }
+
+// internBytes is internString from a byte slice without allocating a string for
+// the (common) hit: the lookup uses a non-retaining unsafe string view of b, and
+// only a first-sight miss copies. Used by the include parsers, where the same
+// target bytes recur across thousands of files.
+func internBytes(b []byte) STR {
+	if id, ok := internTable.ids[unsafe.String(unsafe.SliceData(b), len(b))]; ok {
+		return id
+	}
+
+	s := string(b)
+	id := STR(len(internTable.strs))
+	internTable.ids[s] = id
+	internTable.strs = append(internTable.strs, s)
+
+	return id
+}
+
+// String returns the interned string for id (a zero-alloc table read).
+func (id STR) String() string { return internTable.strs[id] }
 
 // interned returns s's id if it has already been interned, else nil — a
 // read-only probe that never mutates the table. Lets a caller ask "is this

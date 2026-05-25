@@ -27,7 +27,7 @@ func flatcDirectImportNames(pm *includeParserManager, srcRel string) []string {
 
 	out := make([]string, 0, len(direct))
 	for _, d := range direct {
-		out = append(out, d.target)
+		out = append(out, d.target.String())
 	}
 
 	return out
@@ -107,7 +107,7 @@ func flatcDirectGeneratedHeaderIncludes(pm *includeParserManager, fs *FS, srcRel
 		}
 		out = append(out, includeDirective{
 			kind:   includeQuoted,
-			target: resolved + ".h",
+			target: internString(resolved + ".h"),
 		})
 	}
 
@@ -257,9 +257,9 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 	// flatc INDUCED_DEPS (e.g. flatbuffers.h, flatbuffers_iter.h) must be
 	// included in the .fbs.cpp's parsed-include set so the scanner reaches them.
 	cppIncludes := make([]includeDirective, 0, 1+len(flatcRes.InducedDeps))
-	cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: headerVFS.Rel()})
+	cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: internString(headerVFS.Rel())})
 	for _, dep := range flatcRes.InducedDeps {
-		cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: dep})
+		cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: internString(dep)})
 	}
 	registerBoundGeneratedParsedOutput(ctx, instance, "FL", cppVFS, cppIncludes, flRef)
 	registerBoundGeneratedParsedOutput(ctx, instance, "FL", bfbsVFS, nil, flRef)

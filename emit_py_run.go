@@ -155,15 +155,15 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 		return nil
 	}
 
-	includes := []includeDirective{{kind: includeQuoted, target: scriptVFS.Rel()}}
+	includes := []includeDirective{{kind: includeQuoted, target: internString(scriptVFS.Rel())}}
 	for _, f := range stmt.INFiles {
-		includes = append(includes, includeDirective{kind: includeQuoted, target: runProgramInputVFS(ctx, instance, d, f).Rel()})
+		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(runProgramInputVFS(ctx, instance, d, f).Rel())})
 	}
 	for _, f := range stmt.OutputIncludes {
 		if vfsHasPrefix(f) {
 			f = Intern(f).Rel()
 		}
-		includes = append(includes, includeDirective{kind: includeQuoted, target: f})
+		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(f)})
 	}
 	return includes
 }

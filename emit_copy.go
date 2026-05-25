@@ -22,12 +22,12 @@ func copyFileParsedIncludes(fs *FS, modulePath string, entry copyFileEntry) []in
 	out := make([]includeDirective, 0, len(entry.OutputIncludes)+1)
 	if entry.WithContext {
 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
-		out = append(out, includeDirective{kind: includeQuoted, target: srcVFS.Rel()})
+		out = append(out, includeDirective{kind: includeQuoted, target: internString(srcVFS.Rel())})
 	}
 	for _, include := range entry.OutputIncludes {
 		out = append(out, includeDirective{
 			kind:   includeQuoted,
-			target: copyFileIncludeTarget(modulePath, include),
+			target: internString(copyFileIncludeTarget(modulePath, include)),
 		})
 	}
 	return out

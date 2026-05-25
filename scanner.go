@@ -47,7 +47,7 @@ const (
 type includeDirective struct {
 	kind   includeKind
 	next   bool
-	target string
+	target STR
 }
 
 // IncludeScanner is the per-walker include-resolver state. It owns the
@@ -535,7 +535,7 @@ func (s *IncludeScanner) IncludeDirectiveTargets(vfsPath VFS) []string {
 
 	out := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		out = append(out, entry.target)
+		out = append(out, entry.target.String())
 	}
 	return out
 }
@@ -926,7 +926,7 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 		s.onWarn(Warn{
 			Kind: WarnMissingInclude,
 			Message: fmt.Sprintf("%s: unresolved include %s%s%s — not found in source, build, search path, or sysincl",
-				includerAbs.String(), open, d.target, close),
+				includerAbs.String(), open, d.target.String(), close),
 		})
 	}()
 	// `#include_next` directives resolve to nothing. Every observed
@@ -960,7 +960,7 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	includerRel := includerAbs.Rel()
 	var mappings []VFS
 	var hasMultiTarget bool
-	mappings, hasMultiTarget, sysinclClaimed = s.sysinclLookup(includerRel, includerRel, d.target)
+	mappings, hasMultiTarget, sysinclClaimed = s.sysinclLookup(includerRel, includerRel, d.target.String())
 
 	// Quoted-include gate. For quoted includes with at least one local
 	// hit, sysincl is suppressed when:
@@ -980,9 +980,9 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 			var sameDirRel string
 
 			if incDir != "" {
-				sameDirRel = normalisePath(incDir + "/" + d.target)
+				sameDirRel = normalisePath(incDir + "/" + d.target.String())
 			} else {
-				sameDirRel = d.target
+				sameDirRel = d.target.String()
 			}
 
 			bypass = searchOut[0].Rel() == sameDirRel
@@ -1296,23 +1296,23 @@ func resolveCythonPy2Override(includerAbs VFS, d includeDirective) (string, bool
 
 	switch includerAbs.Rel() {
 	case "util/generic/string.pxd":
-		if d.target == "libcpp/string.pxd" {
+		if d.target.String() == "libcpp/string.pxd" {
 			return "contrib/tools/cython_py2/Cython/Includes/libcpp/string.pxd", true
 		}
 	case "util/generic/hash.pxd":
-		if d.target == "libcpp/pair.pxd" {
+		if d.target.String() == "libcpp/pair.pxd" {
 			return "contrib/tools/cython_py2/Cython/Includes/libcpp/pair.pxd", true
 		}
 	case "util/system/types.pxd":
-		if d.target == "libc/stdint.pxd" {
+		if d.target.String() == "libc/stdint.pxd" {
 			return "contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd", true
 		}
 	}
 
 	if strings.HasPrefix(includerAbs.Rel(), "contrib/tools/cython_py2/Cython/Includes/") {
-		switch d.target {
+		switch d.target.String() {
 		case "libc/string.pxd", "libcpp/string.pxd", "libcpp/pair.pxd", "libcpp/utility.pxd":
-			return "contrib/tools/cython_py2/Cython/Includes/" + d.target, true
+			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.String(), true
 		}
 	}
 
@@ -1400,8 +1400,8 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		searchPathFound = true
 	}
 
-	if includerAbs.IsBuild() && strings.Contains(d.target, "/") {
-		rel := normalisePath(d.target)
+	if includerAbs.IsBuild() && strings.Contains(d.target.String(), "/") {
+		rel := normalisePath(d.target.String())
 
 		if addBuildPath(rel) {
 			searchPathFound = true
@@ -1429,7 +1429,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		// set it, and gating the codegen probe on it would wrongly skip the
 		// same-dir build candidate.
 		matched := false
-		if rel, ok := s.resolveSourceUnder(incDir, d.target); ok {
+		if rel, ok := s.resolveSourceUnder(incDir, d.target.String()); ok {
 			if _, dup := seen[rel]; !dup {
 				seen[rel] = struct{}{}
 				out = append(out, Source(rel))
@@ -1439,7 +1439,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		}
 
 		if !matched {
-			if info := s.codegenUnder(incDir, d.target); info != nil {
+			if info := s.codegenUnder(incDir, d.target.String()); info != nil {
 				dedupKey := "B:" + info.OutputPath.Rel()
 				if _, dup := seen[dedupKey]; !dup {
 					seen[dedupKey] = struct{}{}
@@ -1451,7 +1451,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	}
 
 	if !searchPathFound {
-		tier := sc.resolveContextSearchTier(internString(d.target), d.target)
+		tier := sc.resolveContextSearchTier(d.target, d.target.String())
 		if tier.found {
 			out = append(out, tier.paths...)
 			searchPathFound = true
@@ -1466,7 +1466,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	if !searchPathFound && len(s.fallbackLocators) > 0 {
 		// BUILD-rooted candidate. The Exists locator is the codegen
 		// registry; its API still takes the string form.
-		abs := Build(d.target)
+		abs := Build(d.target.String())
 
 		for _, loc := range s.fallbackLocators {
 			if !loc.Exists(abs) {
@@ -1476,7 +1476,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 			// Use a distinct dedup key for BUILD-rooted entries (the
 			// rel-keyed `seen` would collide with a SOURCE rel of the
 			// same name). Prefix with "B:" so it's unique.
-			dedupKey := "B:" + d.target
+			dedupKey := "B:" + d.target.String()
 			if _, dup := seen[dedupKey]; !dup {
 				seen[dedupKey] = struct{}{}
 				out = append(out, abs)
@@ -1512,8 +1512,8 @@ func cythonPy2SiblingOverride(includerAbs VFS, d includeDirective) (string, bool
 	}
 
 	if hasPrefix(includerAbs.Rel(), "contrib/tools/cython_py2/Cython/Includes/") {
-		if hasPrefix(d.target, "libc/") || hasPrefix(d.target, "libcpp/") {
-			return "contrib/tools/cython_py2/Cython/Includes/" + d.target, true
+		if hasPrefix(d.target.String(), "libc/") || hasPrefix(d.target.String(), "libcpp/") {
+			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.String(), true
 		}
 
 		return "", false
@@ -1521,16 +1521,16 @@ func cythonPy2SiblingOverride(includerAbs VFS, d includeDirective) (string, bool
 
 	switch includerAbs.Rel() {
 	case "util/generic/string.pxd":
-		if d.target == "libcpp/string.pxd" {
-			return "contrib/tools/cython_py2/Cython/Includes/" + d.target, true
+		if d.target.String() == "libcpp/string.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.String(), true
 		}
 	case "util/generic/hash.pxd", "util/generic/hash_set.pxd":
-		if d.target == "libcpp/pair.pxd" {
-			return "contrib/tools/cython_py2/Cython/Includes/" + d.target, true
+		if d.target.String() == "libcpp/pair.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.String(), true
 		}
 	case "util/system/types.pxd":
-		if d.target == "libc/stdint.pxd" {
-			return "contrib/tools/cython_py2/Cython/Includes/" + d.target, true
+		if d.target.String() == "libc/stdint.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.String(), true
 		}
 	}
 

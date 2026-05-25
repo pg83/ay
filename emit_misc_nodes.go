@@ -56,7 +56,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 				} {
 					parsed := make([]includeDirective, 0, len(witnessIncludes))
 					for _, include := range witnessIncludes {
-						parsed = append(parsed, includeDirective{kind: includeQuoted, target: include.Rel()})
+						parsed = append(parsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 					}
 					registerBoundGeneratedParsedOutput(ctx, instance, "JV", Build(outPrefix+suffix), parsed, jvRef)
 				}
@@ -103,7 +103,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 				} {
 					parsed := make([]includeDirective, 0, len(witnessIncludes))
 					for _, include := range witnessIncludes {
-						parsed = append(parsed, includeDirective{kind: includeQuoted, target: include.Rel()})
+						parsed = append(parsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 					}
 					registerBoundGeneratedParsedOutput(ctx, instance, "JV", Build(outPrefix+suffix), parsed, jvRef)
 				}
@@ -136,9 +136,9 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		// consumer CC carries BI in deps[].
 		if reg != nil {
 			registerBoundGeneratedParsedOutput(ctx, instance, "BI", Build(outPrefix+*d.createBuildInfoFor), []includeDirective{
-				{kind: includeQuoted, target: buildInfoGenPyVFS.Rel()},
-				{kind: includeQuoted, target: xargsPyVFS.Rel()},
-				{kind: includeQuoted, target: yieldLinePyVFS.Rel()},
+				{kind: includeQuoted, target: internString(buildInfoGenPyVFS.Rel())},
+				{kind: includeQuoted, target: internString(xargsPyVFS.Rel())},
+				{kind: includeQuoted, target: internString(yieldLinePyVFS.Rel())},
 			}, biRef)
 		}
 	}
