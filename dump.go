@@ -11,11 +11,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-
-	// goccy/go-json keeps the dump encoder fast while preserving sorted-map
-	// output. Raw-graph decode stays on encoding/json because goccy's stream
-	// decoder has hit heap-corruption crashes on large sg5 inputs.
-	json "github.com/goccy/go-json"
 )
 
 // cmdDump routes `ay dump <normalize|sort>`. The dump family operates on
@@ -225,13 +220,25 @@ func canonContent(node map[string]any) map[string]any {
 	return canon
 }
 
-// marshalCompact emits compact JSON with sorted map keys (encoding/json
-// sorts map keys) and no HTML escaping, no trailing newline. Both OUR and
-// REF run through this identical path, so the byte form is shared.
+// marshalCompact emits compact JSON with sorted map keys and no HTML
+// escaping, no trailing newline. The dump path now keeps both decode and
+// encode on encoding/json so every shape the stdlib decoder produces is
+// serializable during large sg5 normalize runs.
 func marshalCompact(v any) []byte {
+	return marshalJSON(v, "")
+}
+
+func marshalPretty(v any) []byte {
+	return marshalJSON(v, "  ")
+}
+
+func marshalJSON(v any, indent string) []byte {
 	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
+	enc := stdjson.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
+	if indent != "" {
+		enc.SetIndent("", indent)
+	}
 	Throw(enc.Encode(v))
 
 	b := buf.Bytes()

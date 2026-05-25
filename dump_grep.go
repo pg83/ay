@@ -7,8 +7,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-
-	json "github.com/goccy/go-json"
 )
 
 // cmdDumpGrep prints, pretty-formatted, every node of a graph whose self_uid
@@ -127,7 +125,7 @@ func cmdDumpGrep(args []string) int {
 		if !hit {
 			return
 		}
-		Throw2(bw.Write(Throw2(json.MarshalIndent(node, "", "  "))))
+		Throw2(bw.Write(marshalPretty(node)))
 		Throw(bw.WriteByte('\n'))
 	}
 

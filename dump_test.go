@@ -1,6 +1,7 @@
 package main
 
 import (
+	stdjson "encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -109,6 +110,21 @@ func TestDumpNormalizeSemanticEquivalence(t *testing.T) {
 	}
 	if n := strings.Count(na, "\n"); n != 2 {
 		t.Fatalf("expected 2 nodes in closure, got %d lines:\n%s", n, na)
+	}
+}
+
+func TestMarshalCompactDecodedJSON(t *testing.T) {
+	var v map[string]any
+	dec := stdjson.NewDecoder(strings.NewReader(`{"z":"<tag>","a":[{"n":1,"inner":{"m":2}}],"b":{"c":3}}`))
+	dec.UseNumber()
+	if err := dec.Decode(&v); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	got := string(marshalCompact(v))
+	want := `{"a":[{"inner":{"m":2},"n":1}],"b":{"c":3},"z":"<tag>"}`
+	if got != want {
+		t.Fatalf("marshalCompact(decoded JSON) = %s, want %s", got, want)
 	}
 }
 
