@@ -62,14 +62,14 @@ type deferredCF struct {
 // emitters fire before CC emitters per PEERDIR-DFS order). The scanner
 // consults it as a third existence tier.
 type CodegenRegistry struct {
-	byOutput VFSMap[*GeneratedFileInfo]
+	byOutput map[VFS]*GeneratedFileInfo
 }
 
 // NewCodegenRegistry allocates an empty CodegenRegistry. Pre-sized for the
 // observed codegen output count in the devtools/ymake/bin closure.
 func NewCodegenRegistry() *CodegenRegistry {
 	return &CodegenRegistry{
-		byOutput: NewVFSMap[*GeneratedFileInfo](256),
+		byOutput: make(map[VFS]*GeneratedFileInfo, 256),
 	}
 }
 
@@ -80,18 +80,19 @@ func NewCodegenRegistry() *CodegenRegistry {
 // upstream's DupSrc diagnostic (macro_processor.cpp:957) and enforces the
 // build-system invariant that no two nodes produce the same output file.
 func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
-	if existing, dup := r.byOutput.Get(info.OutputPath); dup {
+	if existing, dup := r.byOutput[info.OutputPath]; dup {
 		ThrowFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
 			info.OutputPath.String(), existing.ProducerKvP, info.ProducerKvP)
 	}
 
-	r.byOutput.Set(info.OutputPath, info)
+	r.byOutput[info.OutputPath] = info
 }
 
 // Lookup returns the GeneratedFileInfo for path, or (nil, false) if path is
 // not registered. O(1) map lookup.
 func (r *CodegenRegistry) Lookup(path VFS) (*GeneratedFileInfo, bool) {
-	return r.byOutput.Get(path)
+	info, ok := r.byOutput[path]
+	return info, ok
 }
 
 // SetProducerRef backfills the ProducerRef for an already-registered path.
@@ -100,7 +101,7 @@ func (r *CodegenRegistry) Lookup(path VFS) (*GeneratedFileInfo, bool) {
 // existence-tier sees the output; this helper fills the NodeRef in after Emit
 // so resolveCodegenDepRefs can lift it into consumer CC `deps[]`.
 func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
-	info, ok := r.byOutput.Get(path)
+	info, ok := r.byOutput[path]
 	if !ok {
 		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.String())
 	}
@@ -119,7 +120,7 @@ func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
 // Allocates a new slice on each call; callers that need a stable snapshot
 // should retain the result.
 func (r *CodegenRegistry) All() []*GeneratedFileInfo {
-	out := make([]*GeneratedFileInfo, 0, r.byOutput.Len())
+	out := make([]*GeneratedFileInfo, 0, len(r.byOutput))
 
 	for _, info := range r.byOutput {
 		out = append(out, info)
@@ -134,7 +135,7 @@ func (r *CodegenRegistry) All() []*GeneratedFileInfo {
 
 // Len returns the number of registered entries.
 func (r *CodegenRegistry) Len() int {
-	return r.byOutput.Len()
+	return len(r.byOutput)
 }
 
 func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, parsed []includeDirective) {
