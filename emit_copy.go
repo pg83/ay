@@ -5,17 +5,17 @@ import (
 	"strings"
 )
 
-func copyFileAutoSourceVFS(modulePath string, d *moduleData, srcRel string) (VFS, bool) {
+func copyFileAutoSourceVFS(modulePath string, d *moduleData, srcRel string) *VFS {
 	if d == nil || d.copyFileAutoOutputs == nil {
-		return vfsNone, false
+		return nil
 	}
 
 	entry, ok := d.copyFileAutoOutputs[srcRel]
 	if !ok {
-		return vfsNone, false
+		return nil
 	}
 
-	return copyFileOutputVFS(modulePath, entry.Dst), true
+	return vfsPtr(copyFileOutputVFS(modulePath, entry.Dst))
 }
 
 func copyFileParsedIncludes(fs *FS, modulePath string, entry copyFileEntry) []includeDirective {
@@ -45,26 +45,26 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	}
 }
 
-func generatedModuleSourceVFS(ctx *genCtx, instance ModuleInstance, srcRel string) (VFS, bool) {
+func generatedModuleSourceVFS(ctx *genCtx, instance ModuleInstance, srcRel string) *VFS {
 	reg := codegenRegForInstance(ctx, instance)
 	if reg == nil {
-		return vfsNone, false
+		return nil
 	}
 
 	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path + "/" + srcRel)))
 	if _, found := reg.Lookup(buildVFS); found {
-		return buildVFS, true
+		return vfsPtr(buildVFS)
 	}
 
-	return vfsNone, false
+	return nil
 }
 
 func resolveModuleSourceVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, srcDir *string) VFS {
-	if buildVFS, ok := copyFileAutoSourceVFS(instance.Path, d, srcRel); ok {
-		return buildVFS
+	if buildVFS := copyFileAutoSourceVFS(instance.Path, d, srcRel); buildVFS != nil {
+		return *buildVFS
 	}
-	if buildVFS, ok := generatedModuleSourceVFS(ctx, instance, srcRel); ok {
-		return buildVFS
+	if buildVFS := generatedModuleSourceVFS(ctx, instance, srcRel); buildVFS != nil {
+		return *buildVFS
 	}
 
 	return resolveSourceVFS(ctx, instance, srcRel, srcDir)

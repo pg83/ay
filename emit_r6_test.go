@@ -194,11 +194,10 @@ func TestCanonicalizeRagel6BinaryPath_PassThrough(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		v, ok := ParseVFS(c.in)
-		if !ok {
-			t.Fatalf("ParseVFS(%q) failed", c.in)
+		if !vfsHasPrefix(c.in) {
+			t.Fatalf("ParseVFS(%q): not a VFS token", c.in)
 		}
-		got := canonicalizeRagel6Binary(v).String()
+		got := canonicalizeRagel6Binary(ParseVFS(c.in)).String()
 		if got != c.want {
 			t.Errorf("canonicalizeRagel6Binary(%q) = %q, want %q", c.in, got, c.want)
 		}

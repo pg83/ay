@@ -338,71 +338,71 @@ parsedFlags:
 	return out
 }
 
-func sourceInputVFS(fs *FS, modulePath string, path string) (VFS, bool) {
-	if vfs, ok := moduleRootedVFS(modulePath, path); ok {
-		return vfs, true
+func sourceInputVFS(fs *FS, modulePath string, path string) *VFS {
+	if vfs := moduleRootedVFS(modulePath, path); vfs != nil {
+		return vfs
 	}
 
 	clean := filepath.ToSlash(filepath.Clean(path))
 	if clean == "." || clean == "" {
-		return Source(modulePath), true
+		return vfsPtr(Source(modulePath))
 	}
 
 	if clean == modulePath || strings.HasPrefix(clean, modulePath+"/") {
-		return Source(clean), true
+		return vfsPtr(Source(clean))
 	}
 
 	if fs != nil {
 		moduleRel := filepath.ToSlash(filepath.Clean(modulePath + "/" + clean))
 		if fs.IsFile(moduleRel) {
-			return Source(moduleRel), true
+			return vfsPtr(Source(moduleRel))
 		}
 		if fs.IsFile(clean) {
-			return Source(clean), true
+			return vfsPtr(Source(clean))
 		}
 	}
 
-	return vfsNone, false
+	return nil
 }
 
 func copyFileInputVFS(fs *FS, modulePath string, src string) VFS {
-	if vfs, ok := sourceInputVFS(fs, modulePath, src); ok {
-		return vfs
+	if vfs := sourceInputVFS(fs, modulePath, src); vfs != nil {
+		return *vfs
 	}
 
 	return Source(filepath.ToSlash(filepath.Clean(modulePath + "/" + src)))
 }
 
-func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
-	if vfs, ok := ParseVFS(path); ok {
-		return vfs, true
+func moduleRootedVFS(modulePath string, path string) *VFS {
+	if vfsHasPrefix(path) {
+		return vfsPtr(ParseVFS(path))
 	}
 
 	switch {
 	case strings.HasPrefix(path, "${ARCADIA_ROOT}/"):
-		return Source(filepath.ToSlash(filepath.Clean(strings.TrimPrefix(path, "${ARCADIA_ROOT}/")))), true
+		return vfsPtr(Source(filepath.ToSlash(filepath.Clean(strings.TrimPrefix(path, "${ARCADIA_ROOT}/")))))
 	case strings.HasPrefix(path, "${CURDIR}/"):
-		return Source(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(path, "${CURDIR}/")))), true
+		return vfsPtr(Source(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(path, "${CURDIR}/")))))
 	case strings.HasPrefix(path, "${ARCADIA_BUILD_ROOT}/"):
-		return Build(filepath.ToSlash(filepath.Clean(strings.TrimPrefix(path, "${ARCADIA_BUILD_ROOT}/")))), true
+		return vfsPtr(Build(filepath.ToSlash(filepath.Clean(strings.TrimPrefix(path, "${ARCADIA_BUILD_ROOT}/")))))
 	case strings.HasPrefix(path, "${BINDIR}/"):
-		return Build(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(path, "${BINDIR}/")))), true
+		return vfsPtr(Build(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(path, "${BINDIR}/")))))
 	default:
-		return vfsNone, false
+		return nil
 	}
 }
 
 func copyFileOutputVFS(modulePath string, dst string) VFS {
-	if vfs, ok := moduleRootedVFS(modulePath, dst); ok {
-		return vfs
+	if vfs := moduleRootedVFS(modulePath, dst); vfs != nil {
+		return *vfs
 	}
 
 	return Build(filepath.ToSlash(filepath.Clean(modulePath + "/" + dst)))
 }
 
 func copyFileIncludeTarget(modulePath string, target string) string {
-	if vfs, ok := ParseVFS(target); ok {
-		return vfs.Rel()
+	if vfsHasPrefix(target) {
+		return ParseVFS(target).Rel()
 	}
 
 	switch {
@@ -2039,8 +2039,8 @@ func expandConfigVFSPaths(paths []string, env Environment) []VFS {
 }
 
 func parseModulePathVFS(path string) VFS {
-	if v, ok := ParseVFS(path); ok {
-		return v
+	if vfsHasPrefix(path) {
+		return ParseVFS(path)
 	}
 
 	return Source(path)

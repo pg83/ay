@@ -695,10 +695,10 @@ func (ex *executor) restoreInto(uid, where string) {
 	Throw(json.Unmarshal(data, &meta))
 
 	for outVFS, casLoc := range meta {
-		v, ok := ParseVFS(outVFS)
-		if !ok {
+		if !vfsHasPrefix(outVFS) {
 			ThrowFmt("malformed meta entry %q in %s", outVFS, metaPath)
 		}
+		v := ParseVFS(outVFS)
 
 		// Mount: $(B)/<rel> → where/<rel>; $(S)/<rel> → srcRoot/<rel>.
 		target := mountVFS(v, ex.srcRoot, where)

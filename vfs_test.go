@@ -214,8 +214,8 @@ func BenchmarkMapAccess_VFS2Bucket_Inline(b *testing.B) {
 // spell VFS values either as canonical "$(S)/..." / "$(B)/..." strings
 // or as bare source-relative paths.
 func ParseVFSOrSource(s string) VFS {
-	if v, ok := ParseVFS(s); ok {
-		return v
+	if vfsHasPrefix(s) {
+		return ParseVFS(s)
 	}
 
 	return Source(s)
