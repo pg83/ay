@@ -84,6 +84,11 @@ type includeParserManager struct {
 	// outputs. Emitters register `$(B)` paths here explicitly; parser
 	// lookup for build-rooted paths consults ONLY this map.
 	buildParsed map[string][]includeDirective
+	// readBuf is the single reusable file-read buffer for sourceParsedBuckets.
+	// Each source is read once, parsed immediately, and nothing aliases the
+	// bytes (targets are interned copies); gen is single-goroutine — so one
+	// buffer, grown to the largest source, replaces a per-file os.ReadFile.
+	readBuf []byte
 }
 
 type parserPerfStats struct {
@@ -121,7 +126,8 @@ func (pm *includeParserManager) sourceParsedBuckets(rel string) parsedIncludeSet
 
 	pm.cache.parsedMisses++
 
-	data, err := pm.fs.Read(rel)
+	data, err := pm.fs.ReadInto(rel, pm.readBuf)
+	pm.readBuf = data // retain the (possibly grown) buffer for the next read
 	if err != nil {
 		pm.cache.parsed[vfsPath] = nil
 
