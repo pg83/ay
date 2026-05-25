@@ -20,6 +20,7 @@ from dataclasses import dataclass
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+GO = os.path.join(REPO_ROOT, "go")
 AY = os.path.join(REPO_ROOT, "ay")
 
 # name, normalize target, raw upstream reference, xfail (see docstring for values)
@@ -124,7 +125,7 @@ def main() -> int:
     out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO_ROOT, ".out", "validate")
     os.makedirs(out_dir, exist_ok=True)
 
-    subprocess.run(["go", "build", "-o", "ay", "."], cwd=REPO_ROOT, check=True)
+    subprocess.run([GO, "build", "-o", "ay", "."], cwd=REPO_ROOT, check=True)
 
     status = 0
     for name, target, ref, xfail in CASES:
