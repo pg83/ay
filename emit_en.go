@@ -23,6 +23,11 @@ type enumSrcsResult struct {
 
 func resolveEnumHeaderInput(ctx *genCtx, instance ModuleInstance, headerRel string, srcDir *string) VFS {
 	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDir)
+	if !ctx.fs.IsFile(headerInput.Rel) {
+		if vfs, ok := sourceInputVFS(ctx.fs, instance.Path, headerRel); ok && vfs.IsSource() {
+			headerInput = vfs
+		}
+	}
 
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
 		buildHeader := Build(headerInput.Rel)
@@ -255,6 +260,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		enRef, enOutPaths := EmitEN(
 			instance,
 			headerInput,
+			headerRel,
 			moduleTag,
 			withHeader,
 			enumParserLD,

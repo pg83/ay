@@ -253,18 +253,11 @@ func emitResourceObjcopy(
 						cur.kvInputs = append(cur.kvInputs, Source(instance.Path+"/"+inner))
 					}
 				} else {
-					localPath := instance.Path + "/" + e.Path
-					var inputVFS VFS
-					if ctx.fs.IsFile(localPath) {
-						inputVFS = Source(localPath)
-					} else {
-						// e.Path is arcadia-root-absolute (e.g. ydb/library/ydb_issue/ydb_issue.txt)
-						inputVFS = Source(e.Path)
-					}
+					inputVFS := copyFileInputVFS(ctx.fs, instance.Path, e.Path)
 					var producerRef NodeRef
 					if d.prOutputProducer != nil {
 						if ref, ok := d.prOutputProducer[e.Path]; ok {
-							inputVFS = Build(instance.Path + "/" + e.Path)
+							inputVFS = copyFileOutputVFS(instance.Path, e.Path)
 							producerRef = ref
 							cur.extraInputs = mergeDedupVFS(cur.extraInputs, prResourceExtraInputs(d, e.Path))
 						}
