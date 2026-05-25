@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	stdjson "encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -11,10 +12,9 @@ import (
 	"strings"
 	"sync"
 
-	// goccy/go-json is a drop-in encoding/json replacement (~2-3x faster
-	// decode); its Delim/Token/RawMessage are aliases of encoding/json's,
-	// and it sorts map keys on marshal, so canonicalization stays
-	// deterministic. Used only by the dump streaming path.
+	// goccy/go-json keeps the dump encoder fast while preserving sorted-map
+	// output. Raw-graph decode stays on encoding/json because goccy's stream
+	// decoder has hit heap-corruption crashes on large sg5 inputs.
 	json "github.com/goccy/go-json"
 )
 
@@ -252,8 +252,7 @@ func streamGraphFanout[R any](path string, workers int, process func(map[string]
 	f := Throw2(os.Open(path))
 	defer func() { Throw(f.Close()) }()
 
-	dec := json.NewDecoder(bufio.NewReaderSize(f, 1<<20))
-	dec.UseNumber()
+	dec := newDumpDecoder(f)
 	seekToGraph(dec, path)
 
 	nodes := make(chan map[string]any, workers*2)
@@ -300,7 +299,7 @@ func streamJSONL(path string, fn func(map[string]any)) {
 		line, err := r.ReadString('\n')
 		if len(line) > 0 {
 			n := map[string]any{}
-			Throw(json.Unmarshal([]byte(line), &n))
+			Throw(stdjson.Unmarshal([]byte(line), &n))
 			fn(n)
 		}
 		if err == io.EOF {
@@ -308,6 +307,12 @@ func streamJSONL(path string, fn func(map[string]any)) {
 		}
 		Throw(err)
 	}
+}
+
+func newDumpDecoder(r io.Reader) *stdjson.Decoder {
+	dec := stdjson.NewDecoder(bufio.NewReaderSize(r, 1<<20))
+	dec.UseNumber()
+	return dec
 }
 
 // dumpContentFields are the canonical node fields that feed self_uid (deps,
@@ -326,9 +331,9 @@ func nodeKVP(n map[string]any) string {
 
 // seekToGraph advances dec to the first element of the top-level "graph"
 // array, skipping any other top-level keys (conf, inputs, result).
-func seekToGraph(dec *json.Decoder, path string) {
+func seekToGraph(dec *stdjson.Decoder, path string) {
 	tok := Throw2(dec.Token())
-	if d, ok := tok.(json.Delim); !ok || d != '{' {
+	if d, ok := tok.(stdjson.Delim); !ok || d != '{' {
 		ThrowFmt("dump: %s: expected top-level JSON object", path)
 	}
 
@@ -340,13 +345,13 @@ func seekToGraph(dec *json.Decoder, path string) {
 
 		if key == "graph" {
 			open := Throw2(dec.Token())
-			if d, ok := open.(json.Delim); !ok || d != '[' {
+			if d, ok := open.(stdjson.Delim); !ok || d != '[' {
 				ThrowFmt("dump: %s: graph is not an array", path)
 			}
 			return
 		}
 
-		var skip json.RawMessage
+		var skip stdjson.RawMessage
 		Throw(dec.Decode(&skip))
 	}
 
