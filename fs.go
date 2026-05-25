@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path"
 	"strings"
@@ -114,6 +115,41 @@ func (fs *FS) IsDir(rel string) bool {
 // Read returns the raw bytes of <sourceRoot>/<rel>. Uncached.
 func (fs *FS) Read(rel string) ([]byte, error) {
 	return os.ReadFile(fs.rootSlash + cleanRel(rel))
+}
+
+// ReadInto reads <sourceRoot>/<rel> into buf, reusing and growing it as needed,
+// and returns the bytes (which alias buf — valid only until buf is reused). For
+// the include scanner's parse path, which reads each source once, consumes it
+// immediately, and retains nothing: one caller-owned buffer then serves every
+// read with no per-file allocation.
+func (fs *FS) ReadInto(rel string, buf []byte) ([]byte, error) {
+	f, err := os.Open(fs.rootSlash + cleanRel(rel))
+	if err != nil {
+		return buf[:0], err
+	}
+	defer f.Close()
+
+	buf = buf[:0]
+	if fi, statErr := f.Stat(); statErr == nil {
+		if sz := int(fi.Size()); sz > cap(buf) {
+			buf = make([]byte, 0, sz)
+		}
+	}
+
+	for {
+		if len(buf) == cap(buf) {
+			buf = append(buf, 0)[:len(buf)] // grow capacity, keep length
+		}
+
+		n, err := f.Read(buf[len(buf):cap(buf)])
+		buf = buf[:len(buf)+n]
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return buf, err
+		}
+	}
 }
 
 // ReadAbs reads an absolute path. Paths under sourceRoot route through
