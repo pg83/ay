@@ -21,7 +21,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	}
 
 	visited := &idSet{}
-	visited.reset(scanner.interner.relIDBound())
+	visited.reset(internBound())
 	order := make([]uint32, 0, 1024)
 	srcAbsSet := make(map[uint32]struct{}, len(sources))
 
@@ -45,7 +45,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 		sc.cfg.SourceRel = srcRelOnDisk
 
 		srcAbs := Source(srcRelOnDisk)
-		srcID := scanner.interner.internVFS(srcAbs)
+		srcID := uint32(srcAbs)
 		srcAbsSet[srcID] = struct{}{}
 		sc.dfsID(srcID, visited, &order)
 	}
@@ -59,7 +59,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 		if _, isSrc := srcAbsSet[absID]; isSrc {
 			continue
 		}
-		out = append(out, scanner.interner.vfsByID(absID))
+		out = append(out, VFS(absID))
 	}
 
 	if len(out) == 0 {

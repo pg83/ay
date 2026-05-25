@@ -410,8 +410,7 @@ func TestScanner_AbseilTaskHClaimedByFreertosYml(t *testing.T) {
 		}
 	}
 
-	interner := newScannerInterner()
-	scanner := newIncludeScannerWith(newIncludeParserManager(sourceRoot), &interner, sysincl, onWarn)
+	scanner := newIncludeScannerWith(newIncludeParserManager(sourceRoot), sysincl, onWarn)
 
 	ctx := ScanContext{
 		SourceRel:       absSrc,
@@ -644,7 +643,7 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 		t.Fatalf("searchTierCache entries = %d, want 1", len(sc.searchTierCache))
 	}
 
-	if sc.searchTierCache[scanner.interner.internString("missing.h")].found {
+	if sc.searchTierCache[internString("missing.h")].found {
 		t.Fatalf("missing header cached as found")
 	}
 
@@ -690,35 +689,6 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 	}
 }
 
-func TestScannerInterner_VFSRoundTrip(t *testing.T) {
-	var si = newScannerInterner()
-
-	src := Intern("$(S)/a/b.h")
-	bld := Intern("$(B)/gen/x.pb.h")
-
-	srcID1 := si.internVFS(src)
-	srcID2 := si.internVFS(src)
-	bldID1 := si.internVFS(bld)
-	bldID2 := si.internVFS(bld)
-
-	if srcID1 != srcID2 {
-		t.Fatalf("source IDs differ: %d vs %d", srcID1, srcID2)
-	}
-
-	if bldID1 != bldID2 {
-		t.Fatalf("build IDs differ: %d vs %d", bldID1, bldID2)
-	}
-
-	if got := si.vfsByID(srcID1); got != src {
-		t.Fatalf("source round-trip = %v, want %v", got, src)
-	}
-
-	if got := si.vfsByID(bldID1); got != bld {
-		t.Fatalf("build round-trip = %v, want %v", got, bld)
-	}
-}
-
-// TestScanner_QuotedSysinclGated_LocalResolved pins the PR-35w
 // gate: a quoted include `#include "foo.h"` whose local search-path
 // resolution succeeded MUST NOT pick up the matching sysincl record's
 // alternate path. Quoted-form is a project-local include; the upstream

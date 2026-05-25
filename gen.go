@@ -178,11 +178,6 @@ type genCtx struct {
 	// bits/alltypes.h resolves arch-specifically).
 	scannerTarget *IncludeScanner
 	scannerHost   *IncludeScanner
-	// vfsInterner is the run-wide VFS interner shared by both scanners
-	// (one stable ID per path across host/target). Member-input dedup keys
-	// a map by interned ID instead of by the VFS struct (smaller key, faster
-	// hash).
-	vfsInterner *scannerInterner
 	// enOutputs maps an emitted EN node's $(B)-rooted output path to its
 	// NodeRef. Cross-EN header-inclusion deps look up previously emitted
 	// EN nodes whose outputs are included by the current header's
@@ -521,14 +516,12 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 	targetReg := NewCodegenRegistry()
 	hostReg := NewCodegenRegistry()
 
-	// One VFS interner for the whole run, shared by both scanners, so a
-	// given path has a single stable ID across host/target. genCtx holds it
-	// for non-scanner consumers (AR member-input idSet dedup).
-	vfsInterner := newScannerInterner()
-	targetScanner := newIncludeScannerWith(parsers, &vfsInterner, LoadSysInclSetForFS(fs, string(targetP.ISA), onWarn), onWarn)
+	// VFS ids are the global intern-table indices, so the two scanners share
+	// that id space with no per-run interner.
+	targetScanner := newIncludeScannerWith(parsers, LoadSysInclSetForFS(fs, string(targetP.ISA), onWarn), onWarn)
 	targetScanner.codegen = targetReg
 	targetScanner.fallbackLocators = []pathLocator{codegenLocator{reg: targetReg}}
-	hostScanner := newIncludeScannerWith(parsers, &vfsInterner, LoadSysInclSetForFS(fs, string(hostP.ISA), onWarn), onWarn)
+	hostScanner := newIncludeScannerWith(parsers, LoadSysInclSetForFS(fs, string(hostP.ISA), onWarn), onWarn)
 	hostScanner.codegen = hostReg
 	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
 
@@ -544,7 +537,6 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 		target:             targetP,
 		scannerTarget:      targetScanner,
 		scannerHost:        hostScanner,
-		vfsInterner:        &vfsInterner,
 		enOutputs:          make(map[VFS]NodeRef),
 		pbOutputs:          make(map[codegenOutputKey]NodeRef),
 		evOutputs:          make(map[codegenOutputKey]NodeRef),

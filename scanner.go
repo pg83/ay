@@ -50,77 +50,6 @@ type includeDirective struct {
 	target string
 }
 
-// scannerInterner assigns scanner-local numeric IDs to repeated strings,
-// VFS paths, and source-class signatures so hot cache keys stay compact
-// and avoid repeated string hashing in their own maps.
-type scannerInterner struct {
-	stringIDs map[string]uint32
-	strings   []string
-	nextStr   uint32
-}
-
-const scannerInternerBuildBit = uint32(1) << 31
-
-func newScannerInterner() scannerInterner {
-	return scannerInterner{
-		stringIDs: make(map[string]uint32, 32768),
-		strings:   make([]string, 1, 32769),
-	}
-}
-
-func (si *scannerInterner) internString(s string) uint32 {
-	if id, ok := si.stringIDs[s]; ok {
-		return id
-	}
-
-	if si.nextStr == scannerInternerBuildBit-1 {
-		panic("scannerInterner: exhausted 31-bit string ID space")
-	}
-
-	si.nextStr++
-	id := si.nextStr
-	si.stringIDs[s] = id
-	si.strings = append(si.strings, s)
-
-	return id
-}
-
-func (si *scannerInterner) internVFS(v VFS) uint32 {
-	relID := si.internString(v.Rel())
-
-	switch v.Root() {
-	case VFSRootSource:
-		return relID
-	case VFSRootBuild:
-		return relID | scannerInternerBuildBit
-	}
-
-	panic("scannerInterner.internVFS: zero-valued VFS")
-}
-
-// relIDBound returns an exclusive upper bound on relIDs interned so far,
-// suitable for sizing a relID-indexed idSet.
-func (si *scannerInterner) relIDBound() uint32 {
-	return si.nextStr + 1
-}
-
-// vfsByID reconstructs a VFS previously interned through internVFS.
-// The caller must pass an ID produced by internVFS, not a raw string ID.
-func (si *scannerInterner) vfsByID(id uint32) VFS {
-	build := id&scannerInternerBuildBit != 0
-	id &^= scannerInternerBuildBit
-
-	if id == 0 || id >= uint32(len(si.strings)) {
-		panic("scannerInterner.vfsByID: out-of-range VFS ID")
-	}
-
-	if build {
-		return Build(si.strings[id])
-	}
-
-	return Source(si.strings[id])
-}
-
 // IncludeScanner is the per-walker include-resolver state. It owns the
 // SysInclSet, the parser manager (SOURCE_ROOT FS access + raw scan), the
 // run-global per-file closure/children caches, scratch-buffer sync.Pools,
@@ -135,12 +64,6 @@ type IncludeScanner struct {
 	// ext-dispatch for raw include scanning. Shared between target/host
 	// scanners so they reuse the same source-tree work.
 	parsers *includeParserManager
-	// interner assigns numeric IDs for hot cache keys. Shared across the
-	// host/target scanners (one per program run) so a given VFS path has a
-	// single stable ID everywhere — the closure caches stay per-scanner, but
-	// the ID space is global, which lets non-scanner code (e.g. AR member-input
-	// dedup) key an idSet by interned ID without cross-scanner collisions.
-	interner *scannerInterner
 	// anySrcView is a PerSourceView prepared with an empty source path.
 	// Its `includerKeyed` slice is the canonical includer-keyed record
 	// list (every view derives the same slice); the `activeSourceKeyed`
@@ -266,38 +189,36 @@ type scanCtx struct {
 	searchTierCache map[uint32]searchTierResult
 }
 
-// idSet is a membership set over interned scanner IDs, used as the DFS
-// `visited` set. Interned IDs are NOT dense (build-VFS IDs carry
-// scannerInternerBuildBit), but the underlying relID space is, so the set
-// is backed by two generation-stamped slices indexed by relID — one for
-// source roots, one for build roots. Membership is O(1) array indexing
-// with no hashing, and reset is an O(1) epoch bump instead of an O(n) map
-// clear. Reused across walks via the scanner's idSet pool; large graphs
-// re-walk tainted subgraphs millions of times, so the per-access constant
-// dominates. Pass by pointer: add() may reallocate the backing slices.
+// idSet is a membership set over VFS ids, used as the DFS `visited` set.
+// VFS ids are dense indices into the global intern table (internTable), so the
+// set is a single generation-stamped slice indexed by the VFS id — source
+// and build roots already have distinct ids, so no per-root split is needed.
+// Membership is O(1) array indexing with no hashing, and reset is an O(1)
+// epoch bump instead of an O(n) map clear. Reused across walks via the
+// scanner's idSet pool; large graphs re-walk tainted subgraphs millions of
+// times, so the per-access constant dominates. Pass by pointer: add() may
+// reallocate the backing slice.
 type idSet struct {
-	srcGen []uint32
-	bldGen []uint32
-	epoch  uint32
+	gen   []uint32
+	epoch uint32
 }
 
-// reset clears the set in O(1) by bumping the epoch, ensuring backing
-// capacity for relIDs in [0, size). When the backing slices are too small
-// it grows them GEOMETRICALLY, not to the exact `size`: relIDBound creeps
-// up on nearly every walk as new files are interned, so exact-size
-// reallocation would re-grow the (hundreds-of-thousands-element) slices on
-// almost every reset — O(walks) full reallocations. Doubling makes it
-// O(log) per pooled set. On epoch wraparound (every 2^32 resets) the slices
-// are zeroed so stale stamps cannot alias the new epoch.
+// reset clears the set in O(1) by bumping the epoch, ensuring backing capacity
+// for ids in [0, size). When the backing slice is too small it grows
+// GEOMETRICALLY, not to the exact `size`: internBound creeps up on nearly
+// every walk as new paths are interned, so exact-size reallocation would
+// re-grow the (hundreds-of-thousands-element) slice on almost every reset —
+// O(walks) full reallocations. Doubling makes it O(log) per pooled set. On
+// epoch wraparound (every 2^32 resets) the slice is zeroed so stale stamps
+// cannot alias the new epoch.
 func (s *idSet) reset(size uint32) {
-	if uint32(len(s.srcGen)) < size {
-		grown := uint32(len(s.srcGen)) * 2
+	if uint32(len(s.gen)) < size {
+		grown := uint32(len(s.gen)) * 2
 		if grown < size {
 			grown = size
 		}
 
-		s.srcGen = make([]uint32, grown)
-		s.bldGen = make([]uint32, grown)
+		s.gen = make([]uint32, grown)
 		s.epoch = 1
 
 		return
@@ -305,9 +226,8 @@ func (s *idSet) reset(size uint32) {
 
 	s.epoch++
 	if s.epoch == 0 {
-		for i := range s.srcGen {
-			s.srcGen[i] = 0
-			s.bldGen[i] = 0
+		for i := range s.gen {
+			s.gen[i] = 0
 		}
 
 		s.epoch = 1
@@ -315,43 +235,24 @@ func (s *idSet) reset(size uint32) {
 }
 
 func (s *idSet) has(id uint32) bool {
-	if id&scannerInternerBuildBit != 0 {
-		rel := id &^ scannerInternerBuildBit
-
-		return rel < uint32(len(s.bldGen)) && s.bldGen[rel] == s.epoch
-	}
-
-	return id < uint32(len(s.srcGen)) && s.srcGen[id] == s.epoch
+	return id < uint32(len(s.gen)) && s.gen[id] == s.epoch
 }
 
-// add records id as a member, growing the backing slices if a freshly
-// interned relID outran the size pinned at reset.
+// add records id as a member, growing the backing slice if a freshly interned
+// VFS id outran the size pinned at reset.
 func (s *idSet) add(id uint32) {
-	rel := id
-	build := id&scannerInternerBuildBit != 0
-	if build {
-		rel = id &^ scannerInternerBuildBit
-	}
-
-	if rel >= uint32(len(s.srcGen)) {
-		grown := uint32(len(s.srcGen)) * 2
-		if grown <= rel {
-			grown = rel + 1
+	if id >= uint32(len(s.gen)) {
+		grown := uint32(len(s.gen)) * 2
+		if grown <= id {
+			grown = id + 1
 		}
 
-		src := make([]uint32, grown)
-		bld := make([]uint32, grown)
-		copy(src, s.srcGen)
-		copy(bld, s.bldGen)
-		s.srcGen = src
-		s.bldGen = bld
+		g := make([]uint32, grown)
+		copy(g, s.gen)
+		s.gen = g
 	}
 
-	if build {
-		s.bldGen[rel] = s.epoch
-	} else {
-		s.srcGen[rel] = s.epoch
-	}
+	s.gen[id] = s.epoch
 }
 
 type searchTierResult struct {
@@ -401,22 +302,20 @@ type scannerPerfStats struct {
 // source-root absolute path. Allocates a private parser manager; use
 // newIncludeScannerWith to share one between scanners.
 func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
-	interner := newScannerInterner()
-	return newIncludeScannerWith(newIncludeParserManager(sourceRoot), &interner, sysincl, func(Warn) {})
+	return newIncludeScannerWith(newIncludeParserManager(sourceRoot), sysincl, func(Warn) {})
 }
 
-// newIncludeScannerWith is the internal constructor used when a parser
-// manager and interner are provided externally (target/host pair in GenWith).
-// parsers and interner must be non-nil; both are shared by the scanner pair
-// so they reuse the same source-tree work and ID space.
-func newIncludeScannerWith(parsers *includeParserManager, interner *scannerInterner, sysincl SysInclSet, onWarn func(Warn)) *IncludeScanner {
+// newIncludeScannerWith is the internal constructor used when a parser manager
+// is provided externally (the target/host pair in GenWith shares one). parsers
+// must be non-nil; VFS ids are the global intern-table indices, so the two
+// scanners share that id space without any per-scanner interner.
+func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, onWarn func(Warn)) *IncludeScanner {
 	// Pre-sizes set to the upper bound of the observed working set for
 	// tools/archiver; sysinclSourceCache reaches ~328k entries on the
 	// target scanner, so pre-sizing past the peak eliminates rehashing.
 	s := &IncludeScanner{
 		sysincl:              sysincl,
 		parsers:              parsers,
-		interner:             interner,
 		sourceClassCache:     make(map[string]uint32, 1024),
 		sourceClassViews:     make(map[uint32]PerSourceView, 1024),
 		sourceClassBuckets:   make(map[uint64][]uint32, 1024),
@@ -582,11 +481,11 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 	}
 
 	visited := s.visitedIDPool.Get().(*idSet)
-	visited.reset(s.interner.relIDBound())
+	visited.reset(internBound())
 	orderP := s.orderIDPool.Get().(*[]uint32)
 
 	order := (*orderP)[:0]
-	rootID := s.interner.internVFS(vfsPath)
+	rootID := uint32(vfsPath)
 
 	sc.dfsID(rootID, visited, &order)
 
@@ -594,7 +493,7 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 	// exactly, so result[1:] carries no spare cap and an append by a
 	// headers-only consumer reallocates rather than aliasing this backing.
 	out := make([]VFS, 0, len(order))
-	out = append(out, s.interner.vfsByID(rootID))
+	out = append(out, VFS(rootID))
 
 	for _, absID := range order {
 		// Skip the root itself; it already occupies index 0.
@@ -602,7 +501,7 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 			continue
 		}
 
-		out = append(out, s.interner.vfsByID(absID))
+		out = append(out, VFS(absID))
 	}
 
 	// Return scratch buffers to the pool. The idSet is cleared lazily by
@@ -766,7 +665,7 @@ func (sc *scanCtx) dfsID(absID uint32, visited *idSet, order *[]uint32) {
 		return
 	}
 
-	absPath := sc.scanner.interner.vfsByID(absID)
+	absPath := VFS(absID)
 
 	if isSourceLike(absPath) {
 		sc.plainDfsID(absID, visited, order)
@@ -837,10 +736,10 @@ func (sc *scanCtx) forEachResolvedChildID(absID uint32, fn func(uint32)) {
 		return
 	}
 
-	vfsPath := s.interner.vfsByID(absID)
+	vfsPath := VFS(absID)
 	var children []uint32
 	sc.forEachResolvedChild(vfsPath, func(rabs VFS) {
-		children = append(children, s.interner.internVFS(rabs))
+		children = append(children, uint32(rabs))
 	})
 	s.childrenCache[absID] = children
 
@@ -950,7 +849,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 	}
 	members := s.tjStack[sccStart:]
 
-	s.tjClosure.reset(s.interner.relIDBound())
+	s.tjClosure.reset(internBound())
 	buf := s.tjBuf[:0]
 
 	for _, u := range members {
@@ -1214,7 +1113,7 @@ func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, b
 	classID, view := s.sourceClass(sourceRel)
 	key := sysinclSourceKey{
 		sourceClass: classID,
-		target:      s.interner.internString(target),
+		target:      internString(target),
 	}
 
 	if cached, ok := s.sysinclSourceCache[key]; ok {
@@ -1238,8 +1137,8 @@ func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, b
 
 func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) ([]VFS, bool, bool) {
 	key := sysinclIncluderKey{
-		includer: s.interner.internString(includerRel),
-		target:   s.interner.internString(target),
+		includer: internString(includerRel),
+		target:   internString(target),
 	}
 
 	if cached, ok := s.sysinclIncluderCache[key]; ok {
@@ -1524,7 +1423,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	}
 
 	if !searchPathFound {
-		tier := sc.resolveContextSearchTier(s.interner.internString(d.target), d.target)
+		tier := sc.resolveContextSearchTier(internString(d.target), d.target)
 		if tier.found {
 			out = append(out, tier.paths...)
 			searchPathFound = true
