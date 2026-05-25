@@ -38,7 +38,7 @@ const (
 )
 
 // VFS addresses a file by (root, root-relative path), encoded as a plain
-// interned id into vfsTable.full. It is always constructed via Intern() (or the
+// interned id into internTable.strs. It is always constructed via Intern() (or the
 // Source()/Build() wrappers); an optional VFS is a *VFS, nil when absent —
 // there is no in-band "none" VFS value.
 type VFS uint32
@@ -47,37 +47,49 @@ type VFS uint32
 // the discriminating byte ('S'/'B') sits at index 2.
 const vfsPrefixLen = len("$(S)/")
 
-// vfsTable is the process-global, append-only VFS intern table, keyed by the
-// full canonical "$(S)/<rel>" / "$(B)/<rel>" string; `full[id]` is that string.
-// Append-only and content-addressed (a given path always maps to the same id),
-// so it is a referentially-transparent flyweight, not mutable shared state. VFS
-// values are built only during the serial gen phase (the parallel dump path
-// decodes JSON into string maps and never builds a VFS), so no synchronisation
-// is required. Index 0 is reserved (full[0] == "") so VFS(0) stays unset.
-var vfsTable = struct {
+// internTable is the process-global, append-only string-intern table:
+// internString maps any string to a stable dense uint32 id. A VFS is the id
+// of a canonical "$(S)/<rel>" / "$(B)/<rel>" string; the include scanner reuses
+// the SAME table for compact cache keys (raw `#include` targets / includer
+// rels), so a string is hashed once and reused as a uint32 key everywhere.
+// Append-only and content-addressed (a given string always maps to the same
+// id), so it is a referentially-transparent flyweight, not mutable shared
+// state. Interning happens only during the serial gen phase (the parallel dump
+// path decodes JSON into string maps and never interns), so no synchronisation
+// is required. Index 0 is reserved (strs[0] == "") so the zero id is never a
+// real string.
+var internTable = struct {
 	ids  map[string]uint32
-	full []string
+	strs []string
 }{
 	ids:  make(map[string]uint32, 1<<16),
-	full: make([]string, 1, 1<<16),
+	strs: make([]string, 1, 1<<16),
 }
 
-// Intern returns the id for the full canonical "$(S)/<rel>" / "$(B)/<rel>"
-// string, interning it on first sight. A call with a literal argument —
-// Intern("$(S)/build/scripts/x.py") — keys the lookup on a compile-time
-// constant with no per-call concat; Source()/Build() are the wrappers for a
-// runtime rel. The precondition for a token of unknown shape is vfsHasPrefix.
-func Intern(full string) VFS {
-	if id, ok := vfsTable.ids[full]; ok {
-		return VFS(id)
+// internString returns the stable id for s, interning it on first sight.
+func internString(s string) uint32 {
+	if id, ok := internTable.ids[s]; ok {
+		return id
 	}
 
-	id := uint32(len(vfsTable.full))
-	vfsTable.ids[full] = id
-	vfsTable.full = append(vfsTable.full, full)
+	id := uint32(len(internTable.strs))
+	internTable.ids[s] = id
+	internTable.strs = append(internTable.strs, s)
 
-	return VFS(id)
+	return id
 }
+
+// internBound is an exclusive upper bound on interned ids — every live id is
+// in [1, internBound()). Used to size id-indexed scratch sets (the scanner's
+// DFS visited set).
+func internBound() uint32 { return uint32(len(internTable.strs)) }
+
+// Intern returns the VFS for the full canonical "$(S)/<rel>" / "$(B)/<rel>"
+// string. A literal call — Intern("$(S)/build/scripts/x.py") — keys the lookup
+// on a compile-time constant with no per-call concat; Source()/Build() are the
+// wrappers for a runtime rel. The precondition for a token of unknown shape is
+// vfsHasPrefix.
+func Intern(full string) VFS { return VFS(internString(full)) }
 
 // Source constructs a SOURCE_ROOT-rooted VFS from a runtime rel.
 func Source(rel string) VFS { return Intern("$(S)/" + rel) }
@@ -88,13 +100,13 @@ func Build(rel string) VFS { return Intern("$(B)/" + rel) }
 // Rel recovers the root-relative path as an O(1) slice of the interned full
 // string (strip the 5-byte "$(S)/"/"$(B)/" prefix).
 func (v VFS) Rel() string {
-	return vfsTable.full[uint32(v)][vfsPrefixLen:]
+	return internTable.strs[uint32(v)][vfsPrefixLen:]
 }
 
 // Root reports which root v is anchored under. The canonical prefix is "$(S)/"
 // or "$(B)/"; byte 2 ('S'/'B') discriminates.
 func (v VFS) Root() VFSRoot {
-	if vfsTable.full[uint32(v)][2] == 'B' {
+	if internTable.strs[uint32(v)][2] == 'B' {
 		return VFSRootBuild
 	}
 
@@ -111,7 +123,7 @@ func (v VFS) IsBuild() bool { return v.Root() == VFSRootBuild }
 // read of the interned full string, no allocation. The scanner / FS access
 // path keys on the bare rel via Rel() and never materialises.
 func (v VFS) String() string {
-	return vfsTable.full[uint32(v)]
+	return internTable.strs[uint32(v)]
 }
 
 // LongString materialises the legacy raw-graph root spelling used by the

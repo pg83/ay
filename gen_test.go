@@ -13,13 +13,6 @@ import (
 	"testing"
 )
 
-// freshInterner returns a standalone VFS interner for tests that drive
-// genModule directly (production sets genCtx.vfsInterner in GenWith).
-func freshInterner() *scannerInterner {
-	i := newScannerInterner()
-	return &i
-}
-
 // gen_test.go — end-to-end test for the M1 vertical slice. Parses
 // build/cow/on/ya.make, emits the 2-node CC+AR subgraph, and asserts
 // byte-exact L3 equality against the corresponding 2 nodes carved out
@@ -387,14 +380,13 @@ func TestGen_PeerdirCycle_Tolerated(t *testing.T) {
 	// back-edge: when b walks its PEERDIR(a) and a is still on the
 	// walking stack.
 	ctx := &genCtx{
-		sourceRoot:  root,
-		fs:          NewFS(root),
-		emit:        NewBufferedEmitter(),
-		memo:        make(map[ModuleInstance]*moduleEmitResult),
-		walking:     make(map[ModuleInstance]bool),
-		host:        testHostP,
-		target:      testTargetP,
-		vfsInterner: freshInterner(),
+		sourceRoot: root,
+		fs:         NewFS(root),
+		emit:       NewBufferedEmitter(),
+		memo:       make(map[ModuleInstance]*moduleEmitResult),
+		walking:    make(map[ModuleInstance]bool),
+		host:       testHostP,
+		target:     testTargetP,
 	}
 
 	seed := ModuleInstance{
@@ -1357,14 +1349,13 @@ func TestGen_HostWalk_AsmlibYasmWired(t *testing.T) {
 	// through ragel6/bin → musl/full → asmlib; this synthetic test
 	// shortcuts to the AS+yasm wiring.)
 	ctx := &genCtx{
-		sourceRoot:  root,
-		fs:          NewFS(root),
-		emit:        NewBufferedEmitter(),
-		memo:        make(map[ModuleInstance]*moduleEmitResult),
-		walking:     make(map[ModuleInstance]bool),
-		host:        testHostP,
-		target:      testTargetP,
-		vfsInterner: freshInterner(),
+		sourceRoot: root,
+		fs:         NewFS(root),
+		emit:       NewBufferedEmitter(),
+		memo:       make(map[ModuleInstance]*moduleEmitResult),
+		walking:    make(map[ModuleInstance]bool),
+		host:       testHostP,
+		target:     testTargetP,
 	}
 
 	hostAsmlib := ModuleInstance{
@@ -1423,14 +1414,13 @@ func TestGen_HostWalk_NonAsmlibAS_NoYasmDep(t *testing.T) {
 		[]byte("LIBRARY()\nNO_PLATFORM()\nSRCS(thing.S)\nEND()\n"), 0o644))
 
 	ctx := &genCtx{
-		sourceRoot:  root,
-		fs:          NewFS(root),
-		emit:        NewBufferedEmitter(),
-		memo:        make(map[ModuleInstance]*moduleEmitResult),
-		walking:     make(map[ModuleInstance]bool),
-		host:        testHostP,
-		target:      testTargetP,
-		vfsInterner: freshInterner(),
+		sourceRoot: root,
+		fs:         NewFS(root),
+		emit:       NewBufferedEmitter(),
+		memo:       make(map[ModuleInstance]*moduleEmitResult),
+		walking:    make(map[ModuleInstance]bool),
+		host:       testHostP,
+		target:     testTargetP,
 	}
 
 	hostInstance := ModuleInstance{
