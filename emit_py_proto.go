@@ -223,7 +223,13 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 	pyPBRef := ctx.emit.Emit(bindNodePlatform(pyPBNode, instance.Platform))
 
-	yapyRes := emitGeneratedPyProtoYapyc(ctx, instance, []VFS{pyOut, grpcPyOut}, pyPBRef, pyProtoSourceInputs(inputs))
+	// yapyc compiles only the .py outputs (pyOut + grpc stub), never the .pyi
+	// type stub; build that subset explicitly rather than with a zero sentinel.
+	pyYapyc := []VFS{pyOut}
+	if d.grpc {
+		pyYapyc = append(pyYapyc, grpcPyOut)
+	}
+	yapyRes := emitGeneratedPyProtoYapyc(ctx, instance, pyYapyc, pyPBRef, pyProtoSourceInputs(inputs))
 	if yapyRes == nil {
 		yapyRes = &generatedPyProtoYapycResult{}
 	}
@@ -252,10 +258,6 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 
 	res := &generatedPyProtoYapycResult{}
 	for i, pyOut := range pyOutputs {
-		if pyOut.Rel() == "" {
-			continue
-		}
-
 		out := Build(pyOut.Rel() + "." + suffix + ".yapyc3")
 		cmdArgs := []string{
 			py3ccBinary.String(),
@@ -282,7 +284,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 		// lists that module as an input. The message stub has no such sibling
 		// dependency, so it is added only for the non-first (grpc) output.
 		nodeInputs := append([]VFS{py3ccBinary, py3ccSlowBin, pyOut}, sourceInputs...)
-		if i > 0 && pyOutputs[0].Rel() != "" {
+		if i > 0 {
 			nodeInputs = append(nodeInputs, pyOutputs[0])
 		}
 

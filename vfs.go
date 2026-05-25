@@ -7,106 +7,90 @@ import (
 // vfs.go — typed VFS path as an interned id.
 //
 // A VFS value addresses a file in one of two virtual roots (SOURCE_ROOT /
-// BUILD_ROOT) by its root-relative path. The value is a `uint32`: bit 31 is
-// the BUILD_ROOT flag, bits 0..30 are the id of the root-relative path in a
-// process-global string-intern table. The zero value (VFS(0)) is the unset
-// sentinel — `String()`/`Rel()`/`Root()` treat it as VFSRootUnset, mirroring
-// the old struct's zero value. Materialisation to "$(S)/<rel>" / "$(B)/<rel>"
-// happens only at the serializer boundary (gjson_write.go); source-tree
-// existence and reads route through the FS abstraction (fs.go) keyed on the
-// bare rel, recovered via Rel().
+// BUILD_ROOT). The value is a plain `uint32` id into a process-global intern
+// table that stores the FULL canonical string ("$(S)/<rel>" / "$(B)/<rel>").
+// A VFS is always constructed via Source()/Build()/ParseVFS; there is no
+// "none" VFS — an optional path is a *VFS, nil when absent. Because the root
+// is baked into the interned string there is no root bit in the id, and
+// String() — by far
+// the hottest allocator in the serializer (~40% of all gen allocations) — is a
+// zero-alloc table read instead of a per-call "$(X)/"+rel concatenation.
 //
-// Replacing the old {Root, Rel string} struct with an id shrinks every VFS
-// from 24 to 4 bytes, turns map keys into mapaccess_fast32, and makes equality
-// an integer compare. Rel()/Root() recover the content via an O(1) slice
-// index — the round-trip is byte-exact by construction (same string → same id
-// → same backing bytes).
+// Rel() recovers the bare relative path as an O(1) slice of the interned full
+// string (strip the fixed 5-byte "$(S)/"/"$(B)/" prefix); Root() reads one
+// byte. The FS abstraction (fs.go) keys on the bare rel via Rel().
+//
+// One intern map is keyed by the full string: Source()/Build() concat the
+// "$(X)/" prefix to intern, while ParseVFS interns its already-full token with
+// no concat. VFS values are constructed only during the serial gen phase (the
+// parallel dump path decodes JSON into string maps and never builds a VFS), so
+// the table needs no synchronisation. Map keys turn into mapaccess_fast32 and
+// equality is an integer compare.
 
-// VFSRoot identifies which root a `VFS` is anchored under.
+// VFSRoot identifies which root a `VFS` is anchored under. A VFS is always
+// one of the two — there is no unset root (optionality is modelled with *VFS).
 type VFSRoot uint8
 
 const (
-	// VFSRootUnset is the zero value — a deliberate sentinel that
-	// causes `VFS.String()` to panic, so accidental uninitialised
-	// VFS values surface immediately rather than serialising as
-	// "/<rel>" or similar.
-	VFSRootUnset VFSRoot = iota
-	VFSRootSource
+	VFSRootSource VFSRoot = iota
 	VFSRootBuild
 )
 
-// VFS addresses a file by (root, root-relative path), encoded as an interned
-// id. Bit 31 = BUILD_ROOT; bits 0..30 = rel-id into vfsTable. VFS(0) is unset.
+// VFS addresses a file by (root, root-relative path), encoded as a plain
+// interned id into vfsTable.full. It is always constructed via Source()/Build()
+// (or ParseVFS); an optional VFS is a *VFS, nil when absent — there is no
+// in-band "none" VFS value.
 type VFS uint32
 
-const vfsBuildBit = uint32(1) << 31
+// vfsPrefixLen is the length of the "$(S)/" / "$(B)/" canonical root prefix;
+// the discriminating byte ('S'/'B') sits at index 2.
+const vfsPrefixLen = len("$(S)/")
 
-// vfsNone is the unset VFS — the replacement for the old `VFS{}` zero literal.
-const vfsNone = VFS(0)
-
-// vfsTable is the process-global, append-only VFS rel-string intern table.
-// Append-only and content-addressed (a given string always maps to the same
-// id), so it is a referentially-transparent flyweight, not mutable shared
-// state. VFS values are constructed only during the serial gen phase; the
-// parallel dump path decodes JSON into string maps and never builds a VFS, so
-// no synchronisation is required. Index 0 is reserved so VFS(0) stays unset.
+// vfsTable is the process-global, append-only VFS intern table, keyed by the
+// full canonical "$(S)/<rel>" / "$(B)/<rel>" string; `full[id]` is that string.
+// Append-only and content-addressed (a given path always maps to the same id),
+// so it is a referentially-transparent flyweight, not mutable shared state. VFS
+// values are built only during the serial gen phase (the parallel dump path
+// decodes JSON into string maps and never builds a VFS), so no synchronisation
+// is required. Index 0 is reserved (full[0] == "") so VFS(0) stays unset.
 var vfsTable = struct {
-	ids     map[string]uint32
-	strings []string
+	ids  map[string]uint32
+	full []string
 }{
-	ids:     make(map[string]uint32, 1<<16),
-	strings: make([]string, 1, 1<<16),
+	ids:  make(map[string]uint32, 1<<16),
+	full: make([]string, 1, 1<<16),
 }
 
-// vfsInternRel returns the stable id for rel, interning it on first sight.
-func vfsInternRel(rel string) uint32 {
-	if id, ok := vfsTable.ids[rel]; ok {
-		return id
+// vfsIntern returns the id for the full canonical "$(X)/<rel>" string,
+// interning it on first sight.
+func vfsIntern(full string) VFS {
+	if id, ok := vfsTable.ids[full]; ok {
+		return VFS(id)
 	}
 
-	id := uint32(len(vfsTable.strings))
-	if id >= vfsBuildBit {
-		panic("vfs: exhausted 31-bit rel-id space")
-	}
+	id := uint32(len(vfsTable.full))
+	vfsTable.ids[full] = id
+	vfsTable.full = append(vfsTable.full, full)
 
-	vfsTable.ids[rel] = id
-	vfsTable.strings = append(vfsTable.strings, rel)
-
-	return id
+	return VFS(id)
 }
 
 // Source constructs a SOURCE_ROOT-rooted VFS path.
-func Source(rel string) VFS { return VFS(vfsInternRel(rel)) }
+func Source(rel string) VFS { return vfsIntern("$(S)/" + rel) }
 
 // Build constructs a BUILD_ROOT-rooted VFS path.
-func Build(rel string) VFS { return VFS(vfsInternRel(rel) | vfsBuildBit) }
+func Build(rel string) VFS { return vfsIntern("$(B)/" + rel) }
 
-// relID returns the bits 0..30 rel-id (root flag masked off).
-func (v VFS) relID() uint32 { return uint32(v) &^ vfsBuildBit }
-
-// Rel recovers the root-relative path. The unset zero value returns "",
-// matching the old {Root, Rel string} struct's zero-value field read (only
-// String() panicked on unset). A non-zero but out-of-range id signals
-// corruption and panics.
+// Rel recovers the root-relative path as an O(1) slice of the interned full
+// string (strip the 5-byte "$(S)/"/"$(B)/" prefix).
 func (v VFS) Rel() string {
-	id := v.relID()
-	if id == 0 {
-		return ""
-	}
-	if id >= uint32(len(vfsTable.strings)) {
-		panic("VFS.Rel: out-of-range VFS id")
-	}
-
-	return vfsTable.strings[id]
+	return vfsTable.full[uint32(v)][vfsPrefixLen:]
 }
 
-// Root reports which root v is anchored under (VFSRootUnset for the zero value).
+// Root reports which root v is anchored under. The canonical prefix is "$(S)/"
+// or "$(B)/"; byte 2 ('S'/'B') discriminates.
 func (v VFS) Root() VFSRoot {
-	if v.relID() == 0 {
-		return VFSRootUnset
-	}
-
-	if uint32(v)&vfsBuildBit != 0 {
+	if vfsTable.full[uint32(v)][2] == 'B' {
 		return VFSRootBuild
 	}
 
@@ -119,55 +103,34 @@ func (v VFS) IsSource() bool { return v.Root() == VFSRootSource }
 // IsBuild reports whether v is anchored under BUILD_ROOT.
 func (v VFS) IsBuild() bool { return v.Root() == VFSRootBuild }
 
-// String materialises the canonical "$(S)/<rel>" or "$(B)/<rel>" form
-// used at the serializer boundary. The scanner / FS access path keys on
-// the bare rel via Rel() and never materialises.
-//
-// Panics on a zero-valued VFS. Construction MUST go through
-// Source()/Build().
+// String returns the canonical "$(S)/<rel>" / "$(B)/<rel>" form — a direct
+// read of the interned full string, no allocation. The scanner / FS access
+// path keys on the bare rel via Rel() and never materialises.
 func (v VFS) String() string {
-	switch v.Root() {
-	case VFSRootSource:
-		return "$(S)/" + v.Rel()
-	case VFSRootBuild:
-		return "$(B)/" + v.Rel()
-	}
-	panic("VFS.String: zero-valued VFS (missing Root)")
+	return vfsTable.full[uint32(v)]
 }
 
 // LongString materialises the legacy raw-graph root spelling used by the
 // upstream stats_uid preimage.
 func (v VFS) LongString() string {
-	switch v.Root() {
-	case VFSRootSource:
-		return "$(SOURCE_ROOT)/" + v.Rel()
-	case VFSRootBuild:
+	if v.Root() == VFSRootBuild {
 		return "$(BUILD_ROOT)/" + v.Rel()
 	}
-	panic("VFS.LongString: zero-valued VFS (missing Root)")
+
+	return "$(SOURCE_ROOT)/" + v.Rel()
 }
 
-// ParseVFS recognises s as a "$(S)/..." or "$(B)/..."
-// string and returns the corresponding VFS. Returns (vfsNone, false) when
-// s lacks both recognised prefixes — callers handling such tokens
-// (e.g. compound CmdArg substrings) keep them as strings.
-func ParseVFS(s string) (VFS, bool) {
-	if rel, ok := trimVFSPrefix(s, "$(S)/"); ok {
-		return Source(rel), true
-	}
-	if rel, ok := trimVFSPrefix(s, "$(B)/"); ok {
-		return Build(rel), true
-	}
-	return vfsNone, false
-}
+// ParseVFS interns the canonical "$(S)/<rel>" / "$(B)/<rel>" token s and
+// returns its VFS — identical to vfsIntern (the full string is what the table
+// stores). The precondition is that s carries one of the two root prefixes;
+// callers that must distinguish a VFS token from other strings (bare paths,
+// `${ARCADIA_ROOT}/…`, flags) gate the call on vfsHasPrefix.
+func ParseVFS(s string) VFS { return vfsIntern(s) }
 
-// trimVFSPrefix returns (s without prefix, true) when prefix matches;
-// (s, false) otherwise. Avoids the strings import dependency.
-func trimVFSPrefix(s, prefix string) (string, bool) {
-	if len(s) < len(prefix) || s[:len(prefix)] != prefix {
-		return s, false
-	}
-	return s[len(prefix):], true
+// vfsHasPrefix reports whether s carries a canonical "$(S)/" / "$(B)/" root
+// prefix and is therefore a ParseVFS-able token.
+func vfsHasPrefix(s string) bool {
+	return len(s) >= vfsPrefixLen && (s[:vfsPrefixLen] == "$(S)/" || s[:vfsPrefixLen] == "$(B)/")
 }
 
 // MarshalJSON makes VFS implement encoding/json.Marshaler so the

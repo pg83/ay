@@ -124,8 +124,8 @@ func TestPrEmitsIncludes_OutputIncludesVFSPrefixStripped(t *testing.T) {
 	}
 	for _, c := range cases {
 		got := c.input
-		if v, ok := ParseVFS(c.input); ok {
-			got = v.Rel()
+		if vfsHasPrefix(c.input) {
+			got = ParseVFS(c.input).Rel()
 		}
 		if got != c.want {
 			t.Errorf("VFS prefix strip(%q) = %q, want %q", c.input, got, c.want)
