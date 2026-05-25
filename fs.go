@@ -87,18 +87,17 @@ func (fs *FS) Listdir(rel string) map[string]bool {
 }
 
 // indexDirSplits records set (the child map of directory d, possibly nil for a
-// nonexistent d — the negative entry keeps later misses concat-free) under
-// every prefix/suffix split of d: (d,""), each internal (a,b), and ("",d). The
+// nonexistent d — the negative entry keeps later misses concat-free) under each
+// INTERNAL prefix/suffix split of d, i.e. every '/' boundary, where both sides
+// are non-empty: "a/b/c" → ("a","b/c"), ("a/b","c"). The empty-side splits
+// (d,"") and ("",d) are deliberately NOT stored — childrenAt reaches those via
+// joinRel without a concat anyway, so they would only bloat the index. The
 // fragment keys are substrings of d, so they share its backing — no copies.
 func (fs *FS) indexDirSplits(d string, set map[string]bool) {
-	fs.putDirSplit(d, "", set)
 	for i := 0; i < len(d); i++ {
 		if d[i] == '/' {
 			fs.putDirSplit(d[:i], d[i+1:], set)
 		}
-	}
-	if d != "" {
-		fs.putDirSplit("", d, set)
 	}
 }
 
