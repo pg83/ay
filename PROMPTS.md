@@ -9,6 +9,8 @@ case-insensitively; a section's body runs to the next `### ` header.
 
 DEBUG.md — how to debug divergences between the upstream graph and ours.
 
+Fresh worktrees may not expose Go on `PATH`. Use the repo-local `./go` shim for Go commands (`./go test ./...`, `./go build ...`); `./dev/validate.py` builds through the same shim.
+
 ### OVERSEER
 
 ### REPLANNER
