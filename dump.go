@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	stdjson "encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +10,12 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	// goccy/go-json is a drop-in encoding/json replacement (~2-3x faster
+	// decode); its Delim/Token/RawMessage are aliases of encoding/json's,
+	// and it sorts map keys on marshal, so canonicalization stays
+	// deterministic. Used only by the dump streaming path.
+	json "github.com/goccy/go-json"
 )
 
 // cmdDump routes `ay dump <normalize|sort>`. The dump family operates on
@@ -220,25 +225,13 @@ func canonContent(node map[string]any) map[string]any {
 	return canon
 }
 
-// marshalCompact emits compact JSON with sorted map keys and no HTML
-// escaping, no trailing newline. The dump path now keeps both decode and
-// encode on encoding/json so every shape the stdlib decoder produces is
-// serializable during large sg5 normalize runs.
+// marshalCompact emits compact JSON with sorted map keys (encoding/json
+// sorts map keys) and no HTML escaping, no trailing newline. Both OUR and
+// REF run through this identical path, so the byte form is shared.
 func marshalCompact(v any) []byte {
-	return marshalJSON(v, "")
-}
-
-func marshalPretty(v any) []byte {
-	return marshalJSON(v, "  ")
-}
-
-func marshalJSON(v any, indent string) []byte {
 	var buf bytes.Buffer
-	enc := stdjson.NewEncoder(&buf)
+	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
-	if indent != "" {
-		enc.SetIndent("", indent)
-	}
 	Throw(enc.Encode(v))
 
 	b := buf.Bytes()
@@ -259,7 +252,8 @@ func streamGraphFanout[R any](path string, workers int, process func(map[string]
 	f := Throw2(os.Open(path))
 	defer func() { Throw(f.Close()) }()
 
-	dec := newDumpDecoder(f)
+	dec := json.NewDecoder(bufio.NewReaderSize(f, 1<<20))
+	dec.UseNumber()
 	seekToGraph(dec, path)
 
 	nodes := make(chan map[string]any, workers*2)
@@ -306,7 +300,7 @@ func streamJSONL(path string, fn func(map[string]any)) {
 		line, err := r.ReadString('\n')
 		if len(line) > 0 {
 			n := map[string]any{}
-			Throw(stdjson.Unmarshal([]byte(line), &n))
+			Throw(json.Unmarshal([]byte(line), &n))
 			fn(n)
 		}
 		if err == io.EOF {
@@ -314,12 +308,6 @@ func streamJSONL(path string, fn func(map[string]any)) {
 		}
 		Throw(err)
 	}
-}
-
-func newDumpDecoder(r io.Reader) *stdjson.Decoder {
-	dec := stdjson.NewDecoder(bufio.NewReaderSize(r, 1<<20))
-	dec.UseNumber()
-	return dec
 }
 
 // dumpContentFields are the canonical node fields that feed self_uid (deps,
@@ -338,9 +326,9 @@ func nodeKVP(n map[string]any) string {
 
 // seekToGraph advances dec to the first element of the top-level "graph"
 // array, skipping any other top-level keys (conf, inputs, result).
-func seekToGraph(dec *stdjson.Decoder, path string) {
+func seekToGraph(dec *json.Decoder, path string) {
 	tok := Throw2(dec.Token())
-	if d, ok := tok.(stdjson.Delim); !ok || d != '{' {
+	if d, ok := tok.(json.Delim); !ok || d != '{' {
 		ThrowFmt("dump: %s: expected top-level JSON object", path)
 	}
 
@@ -352,13 +340,13 @@ func seekToGraph(dec *stdjson.Decoder, path string) {
 
 		if key == "graph" {
 			open := Throw2(dec.Token())
-			if d, ok := open.(stdjson.Delim); !ok || d != '[' {
+			if d, ok := open.(json.Delim); !ok || d != '[' {
 				ThrowFmt("dump: %s: graph is not an array", path)
 			}
 			return
 		}
 
-		var skip stdjson.RawMessage
+		var skip json.RawMessage
 		Throw(dec.Decode(&skip))
 	}
 

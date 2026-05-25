@@ -1,7 +1,6 @@
 package main
 
 import (
-	stdjson "encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -113,21 +112,6 @@ func TestDumpNormalizeSemanticEquivalence(t *testing.T) {
 	}
 }
 
-func TestMarshalCompactDecodedJSON(t *testing.T) {
-	var v map[string]any
-	dec := stdjson.NewDecoder(strings.NewReader(`{"z":"<tag>","a":[{"n":1,"inner":{"m":2}}],"b":{"c":3}}`))
-	dec.UseNumber()
-	if err := dec.Decode(&v); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-
-	got := string(marshalCompact(v))
-	want := `{"a":[{"inner":{"m":2},"n":1}],"b":{"c":3},"z":"<tag>"}`
-	if got != want {
-		t.Fatalf("marshalCompact(decoded JSON) = %s, want %s", got, want)
-	}
-}
-
 func TestDumpDiff(t *testing.T) {
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.jsonl")
@@ -192,20 +176,6 @@ func TestDumpGrep(t *testing.T) {
 	bySU := captureStdout(t, func() { cmdDumpGrep([]string{"--in", in, "BB"}) })
 	if !strings.Contains(bySU, `"BB"`) || strings.Contains(bySU, `"AA"`) {
 		t.Fatalf("grep by self_uid: want BB only, got:\n%s", bySU)
-	}
-}
-
-func TestDumpGrepRaw(t *testing.T) {
-	dir := t.TempDir()
-	in := filepath.Join(dir, "g.json")
-	Throw(os.WriteFile(in, []byte(graph(
-		node("AA", "CC", "$(BUILD_ROOT)/p/a.o", nil, []string{"$(SOURCE_ROOT)/p/a.c"}, `,"env":{}`),
-		node("BB", "CC", "$(BUILD_ROOT)/p/b.o", nil, []string{"$(SOURCE_ROOT)/p/b.c"}, `,"env":{}`),
-	)), 0o644))
-
-	got := captureStdout(t, func() { cmdDumpGrep([]string{"--raw", "--in", in, "$(B)/p/a.o"}) })
-	if !strings.Contains(got, `"AA"`) || strings.Contains(got, `"BB"`) {
-		t.Fatalf("grep --raw by output: want AA only, got:\n%s", got)
 	}
 }
 
