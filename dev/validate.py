@@ -28,9 +28,7 @@ AY = os.path.join(REPO_ROOT, "ay")
 # Host-wide, well-known lock path — shared across every worktree (all agents
 # run as the same user, so ~ resolves identically). NOT under the repo (each
 # worktree has its own .out) and NOT /tmp (read-only in some sandboxes).
-LOCK_PATH = os.path.join(
-    os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "ay", "validate.lock"
-)
+LOCK_PATH = '/var/run/dropbear/tmp/validate.lock'
 
 
 # Per-case generation wall-time budgets (seconds): a gen slower than
