@@ -60,27 +60,32 @@ type deferredCF struct {
 // emitters fire before CC emitters per PEERDIR-DFS order). The scanner
 // consults it as a third existence tier.
 type CodegenRegistry struct {
-	// byPath is the exact, root-aware index: the full Build VFS → its producer.
-	// Lookup/SetProducerRef probe it, so a $(S)/<rel> never matches a $(B)/<rel>
-	// output that shares its Rel().
-	byPath map[VFS]*GeneratedFileInfo
+	// byStr is the full-path index, keyed by interned-string id (STR). Each
+	// output goes in under two ids: STR(OutputPath) — the full Build VFS id,
+	// root-aware, what Lookup probes — and internString(OutputPath.Rel()) — the
+	// bare rel id, what LookupRel probes. The two never collide ("$(B)/<rel>"
+	// vs "<rel>").
+	byStr map[STR]*GeneratedFileInfo
 
-	// bySplit indexes every output under ALL prefix/suffix splits of its
-	// Build-relative path, so the scanner's search tier can ask "is
+	// bySplit answers the scanner's search-tier question "is
 	// <addinclDir>/<target> a generated output?" as the plain two-level read
-	// bySplit[addinclDir][target] — no candidate-path concatenation. An output
-	// a/b/c is registered as bySplit[""]["a/b/c"], bySplit["a"]["b/c"],
-	// bySplit["a/b"]["c"]. The split keys are substrings of the interned rel, so
-	// they share its backing array (no byte copies).
-	bySplit map[string]map[string]*GeneratedFileInfo
+	// bySplit[addinclDir][target] — no candidate-path concatenation. Each output
+	// is indexed under every NON-EMPTY-prefix split of its rel: a/b/c registers
+	// bySplit["a"]["b/c"] and bySplit["a/b"]["c"]. The empty-prefix (full-path)
+	// case is not stored here — that is LookupRel against byStr. Keyed by STR:
+	// Register interns each split fragment (a small, bounded load on the table),
+	// the maps stay compact uint32→uint32→ptr, and the caller resolves its
+	// operands through `interned` once — a never-interned fragment can't be a
+	// registered split, so it skips the lookup without a string compare.
+	bySplit map[STR]map[STR]*GeneratedFileInfo
 }
 
 // NewCodegenRegistry allocates an empty CodegenRegistry. Pre-sized for the
 // observed codegen output count in the devtools/ymake/bin closure.
 func NewCodegenRegistry() *CodegenRegistry {
 	return &CodegenRegistry{
-		byPath:  make(map[VFS]*GeneratedFileInfo, 256),
-		bySplit: make(map[string]map[string]*GeneratedFileInfo, 256),
+		byStr:   make(map[STR]*GeneratedFileInfo, 256),
+		bySplit: make(map[STR]map[STR]*GeneratedFileInfo, 256),
 	}
 }
 
@@ -91,57 +96,55 @@ func NewCodegenRegistry() *CodegenRegistry {
 // upstream's DupSrc diagnostic (macro_processor.cpp:957) and enforces the
 // build-system invariant that no two nodes produce the same output file.
 func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
-	if existing, dup := r.byPath[info.OutputPath]; dup {
+	full := STR(info.OutputPath)
+	if existing := r.byStr[full]; existing != nil {
 		ThrowFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
 			info.OutputPath.String(), existing.ProducerKvP, info.ProducerKvP)
 	}
 
-	r.byPath[info.OutputPath] = info
-
-	// Index every prefix/suffix split, including ("", rel).
 	rel := info.OutputPath.Rel()
-	r.putSplit("", rel, info)
+	r.byStr[full] = info
+	r.byStr[internString(rel)] = info
+
+	// Index every non-empty-prefix split into bySplit.
 	for i := 0; i < len(rel); i++ {
 		if rel[i] == '/' {
-			r.putSplit(rel[:i], rel[i+1:], info)
+			r.putSplit(internString(rel[:i]), internString(rel[i+1:]), info)
 		}
 	}
 }
 
-func (r *CodegenRegistry) putSplit(prefix, suffix string, info *GeneratedFileInfo) {
+func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) {
 	inner := r.bySplit[prefix]
 	if inner == nil {
-		inner = make(map[string]*GeneratedFileInfo, 2)
+		inner = make(map[STR]*GeneratedFileInfo, 2)
 		r.bySplit[prefix] = inner
 	}
 
 	inner[suffix] = info
 }
 
-// Lookup returns the GeneratedFileInfo for path, or (nil, false) if path is
-// not registered. O(1), keyed on the full (root-aware) VFS.
-func (r *CodegenRegistry) Lookup(path VFS) (*GeneratedFileInfo, bool) {
-	info, ok := r.byPath[path]
-	return info, ok
+// Lookup returns the producer for the full (root-aware) VFS path, or nil.
+func (r *CodegenRegistry) Lookup(path VFS) *GeneratedFileInfo {
+	return r.byStr[STR(path)]
 }
 
-// LookupSplit reports whether <prefix>/<suffix> is a registered output without
-// concatenating them: Register pre-indexed every split, so this is a plain
-// two-level map read. On a hit the caller reuses info.OutputPath (the interned
-// VFS recorded at Register time).
-func (r *CodegenRegistry) LookupSplit(prefix, suffix string) (*GeneratedFileInfo, bool) {
-	inner := r.bySplit[prefix]
-	if inner == nil {
-		return nil, false
+// LookupRel returns the producer for a full Build-relative path, or nil.
+func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
+	id := interned(rel)
+	if id == nil {
+		return nil
 	}
 
-	info, ok := inner[suffix]
-	return info, ok
+	return r.byStr[*id]
 }
 
-// LookupRel probes a full Build-relative path — the ("", rel) split.
-func (r *CodegenRegistry) LookupRel(rel string) (*GeneratedFileInfo, bool) {
-	return r.LookupSplit("", rel)
+// LookupSplit returns the producer for <prefix>/<suffix> — the two interned ids
+// of a non-empty addincl-dir and an include target — or nil. A plain two-level
+// map read; the caller resolves prefix/suffix to STR (and short-circuits a
+// never-interned target) before calling.
+func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
+	return r.bySplit[prefix][suffix]
 }
 
 // SetProducerRef backfills the ProducerRef for an already-registered path.
@@ -150,8 +153,8 @@ func (r *CodegenRegistry) LookupRel(rel string) (*GeneratedFileInfo, bool) {
 // existence-tier sees the output; this helper fills the NodeRef in after Emit
 // so resolveCodegenDepRefs can lift it into consumer CC `deps[]`.
 func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
-	info, ok := r.byPath[path]
-	if !ok {
+	info := r.byStr[STR(path)]
+	if info == nil {
 		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.String())
 	}
 

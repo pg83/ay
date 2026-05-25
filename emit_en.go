@@ -31,7 +31,7 @@ func resolveEnumHeaderInput(ctx *genCtx, instance ModuleInstance, headerRel stri
 
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
 		buildHeader := Build(headerInput.Rel())
-		if _, ok := reg.Lookup(buildHeader); ok {
+		if reg.Lookup(buildHeader) != nil {
 			// Upstream keeps generated protobuf-family headers as opaque
 			// EN inputs: the EN node depends on the PB/EV producer, but
 			// does not inline that generated header's full closure into

@@ -1215,17 +1215,34 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		return true
 	}
 
-	// addBuildSplit probes the codegen registry for <prefixRel>/<suffix>
-	// without concatenating them: the registry pre-indexed every output under
-	// all its prefix/suffix splits, so this is a plain two-level map read.
-	addBuildSplit := func(prefixRel, suffix string) bool {
-		if s.codegen == nil {
+	// $(B) probes resolve the target to its interned id once — it is the same
+	// for every prefix. A target that was never interned matches no output
+	// (neither a full rel nor any split suffix), so the whole build branch is
+	// skipped. normTarget is the cleaned form the registry's keys are built from.
+	var (
+		normTarget  string
+		buildSuffix *STR
+	)
+	if s.codegen != nil {
+		normTarget = normalisePath(target)
+		buildSuffix = interned(normTarget)
+	}
+
+	addBuild := func(prefixRel string) bool {
+		if buildSuffix == nil {
 			return false
 		}
 
-		suffix = normalisePath(suffix)
-		info, ok := s.codegen.LookupSplit(prefixRel, suffix)
-		if !ok {
+		var info *GeneratedFileInfo
+		if prefixRel == "" {
+			// Build-root prefix: the candidate is the bare target — a full-path
+			// lookup, not a (prefix, suffix) split.
+			info = s.codegen.LookupRel(normTarget)
+		} else if pid := interned(prefixRel); pid != nil {
+			info = s.codegen.LookupSplit(*pid, *buildSuffix)
+		}
+
+		if info == nil {
 			return false
 		}
 
@@ -1238,7 +1255,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 	addInclPath := func(prefix VFS) bool {
 		switch prefix.Root() {
 		case VFSRootBuild:
-			return addBuildSplit(prefix.Rel(), target)
+			return addBuild(prefix.Rel())
 		case VFSRootSource:
 			if prefix.Rel() == "" {
 				return addPath(target)
@@ -1350,8 +1367,8 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 			return false
 		}
 
-		info, ok := s.codegen.LookupRel(rel)
-		if !ok {
+		info := s.codegen.LookupRel(rel)
+		if info == nil {
 			return false
 		}
 
@@ -1616,9 +1633,7 @@ func (c codegenLocator) Exists(vfsPath VFS) bool {
 		return false
 	}
 
-	_, ok := c.reg.Lookup(vfsPath)
-
-	return ok
+	return c.reg.Lookup(vfsPath) != nil
 }
 
 // fileExistsByRel is the inner, rel-keyed existence check.
