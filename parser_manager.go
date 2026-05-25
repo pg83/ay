@@ -61,7 +61,7 @@ type sharedParseCache struct {
 	// parsed memoises raw parser results per VFS-rooted path
 	// ($(S)/<rel>). 8192 pre-size covers the tools/archiver peak
 	// (4354 target + 3559 host, mostly overlapping).
-	parsed VFSMap[parsedIncludeSet]
+	parsed map[VFS]parsedIncludeSet
 
 	// Perf counters are plain uint64: generation runs single-threaded.
 	parsedHits   uint64
@@ -73,7 +73,7 @@ type sharedParseCache struct {
 // by FS (shared across the entire Gen run).
 func newSharedParseCache() *sharedParseCache {
 	return &sharedParseCache{
-		parsed: NewVFSMap[parsedIncludeSet](8192),
+		parsed: make(map[VFS]parsedIncludeSet, 8192),
 	}
 }
 
@@ -114,7 +114,7 @@ func newIncludeParserManagerFS(fs *FS, cache *sharedParseCache) *includeParserMa
 // dangling sysincl mappings).
 func (pm *includeParserManager) sourceParsedBuckets(rel string) parsedIncludeSet {
 	vfsPath := Source(rel)
-	if cached, ok := pm.cache.parsed.Get(vfsPath); ok {
+	if cached, ok := pm.cache.parsed[vfsPath]; ok {
 		pm.cache.parsedHits++
 		return cached
 	}
@@ -123,7 +123,7 @@ func (pm *includeParserManager) sourceParsedBuckets(rel string) parsedIncludeSet
 
 	data, err := pm.fs.Read(rel)
 	if err != nil {
-		pm.cache.parsed.Set(vfsPath, nil)
+		pm.cache.parsed[vfsPath] = nil
 
 		return nil
 	}
@@ -138,7 +138,7 @@ func (pm *includeParserManager) sourceParsedBuckets(rel string) parsedIncludeSet
 	}
 
 	out := includeDirectiveParsers.parserFor(rel).Parse(rel, data)
-	pm.cache.parsed.Set(vfsPath, out)
+	pm.cache.parsed[vfsPath] = out
 
 	return out
 }
