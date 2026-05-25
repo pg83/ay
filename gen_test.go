@@ -5168,6 +5168,138 @@ END()
 	}
 }
 
+func TestCollectModule_BisonGeneratedHeaderExportedGlobally(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "gen/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(pire/re_parser.y)
+END()
+`)
+	writeTestModuleFile(t, root, "gen/pire/re_parser.y", `%{
+#include "re_lexer.h"
+%}
+%%
+`)
+	writeTestModuleFile(t, root, "gen/pire/re_lexer.h", "#pragma once\n")
+
+	fs := NewFS(root)
+	mf := Throw2(ParseFile(fs, filepath.Join(root, "gen", "ya.make")))
+	instance := ModuleInstance{Path: "gen", Kind: KindLib, Platform: testTargetP}
+	d := collectModule(fs, "gen", KindLib, mf.Stmts, buildIfEnv(instance))
+
+	for _, got := range [][]VFS{d.addIncl, d.addInclGlobal} {
+		if !slices.Contains(vfsStrings(got), "$(B)/gen/pire") {
+			t.Fatalf("generated bison include dir missing from %v", vfsStrings(got))
+		}
+	}
+}
+
+func TestGen_BisonGeneratedHeaderPreprocessAndPeerBuildRootInclude(t *testing.T) {
+	root := t.TempDir()
+
+	writeToolProgram(t, root, "contrib/tools/bison", "bison")
+	writeToolProgram(t, root, "contrib/tools/m4", "m4")
+	writeTestModuleFile(t, root, bisonPreprocessPyVFS.Rel, "print('stub')\n")
+	for _, input := range bisonCppSkeletonInputs {
+		body := ""
+		if strings.HasSuffix(input.Rel, "/stack.hh") {
+			body = `#include "skeleton-helper.h"` + "\n"
+		}
+		writeTestModuleFile(t, root, input.Rel, body)
+	}
+	writeTestModuleFile(t, root, "contrib/tools/bison/data/skeletons/skeleton-helper.h", "")
+
+	writeTestModuleFile(t, root, "genlib/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(pire/re_parser.y)
+END()
+`)
+	writeTestModuleFile(t, root, "genlib/pire/re_parser.y", `%{
+#include "re_lexer.h"
+#include "extra.h"
+%}
+%%
+`)
+	writeTestModuleFile(t, root, "genlib/pire/re_lexer.h", `#pragma once
+#include "deep.h"
+`)
+	writeTestModuleFile(t, root, "genlib/pire/extra.h", "#pragma once\n")
+	writeTestModuleFile(t, root, "genlib/pire/deep.h", "#pragma once\n")
+
+	writeTestModuleFile(t, root, "app/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(genlib)
+SRCS(use.cpp)
+END()
+`)
+	writeTestModuleFile(t, root, "app/use.cpp", "int use() { return 0; }\n")
+
+	g := testGen(root, "app")
+
+	yc := mustNodeByOutput(t, g, "$(B)/genlib/pire/re_parser.h")
+	if got := len(yc.Cmds); got != 2 {
+		t.Fatalf("bison YC cmd count = %d, want 2", got)
+	}
+	if !strings.HasSuffix(yc.Cmds[1].CmdArgs[0], "/python3") {
+		t.Fatalf("bison preprocess tool = %q, want a python3 binary", yc.Cmds[1].CmdArgs[0])
+	}
+	wantPreprocess := []string{
+		"$(S)/build/scripts/preprocess.py",
+		"$(B)/genlib/pire/re_parser.h",
+	}
+	if got := yc.Cmds[1].CmdArgs[1:]; !reflect.DeepEqual(got, wantPreprocess) {
+		t.Fatalf("bison preprocess cmd_args mismatch:\n  got:  %#v\n  want: %#v", got, wantPreprocess)
+	}
+	for _, want := range []string{
+		"$(S)/build/scripts/preprocess.py",
+		"$(S)/genlib/pire/re_parser.y",
+		"$(S)/contrib/tools/bison/data/skeletons/skeleton-helper.h",
+	} {
+		if !nodeHasInput(yc, want) {
+			t.Fatalf("bison YC inputs missing %q: %#v", want, yc.Inputs)
+		}
+	}
+	for _, unwanted := range []string{
+		"$(S)/genlib/pire/re_lexer.h",
+		"$(S)/genlib/pire/extra.h",
+		"$(S)/genlib/pire/deep.h",
+	} {
+		if nodeHasInput(yc, unwanted) {
+			t.Fatalf("bison YC inputs unexpectedly include grammar-local header %q: %#v", unwanted, yc.Inputs)
+		}
+	}
+	for _, want := range vfsStrings(bisonCppSkeletonInputs) {
+		if !nodeHasInput(yc, want) {
+			t.Fatalf("bison YC inputs missing skeleton %q", want)
+		}
+	}
+
+	use := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
+	if indexOfArg(use.Cmds[0].CmdArgs, "-I$(B)/genlib/pire") < 0 {
+		t.Fatalf("peer CC cmd_args missing generated bison build-root addincl: %#v", use.Cmds[0].CmdArgs)
+	}
+
+	parserObj := mustNodeByOutput(t, g, "$(B)/genlib/_/_/pire/re_parser.y.cpp.o")
+	for _, want := range []string{
+		"$(S)/build/scripts/preprocess.py",
+		"$(S)/genlib/pire/re_lexer.h",
+		"$(S)/genlib/pire/extra.h",
+		"$(S)/genlib/pire/deep.h",
+		"$(S)/contrib/tools/bison/data/skeletons/skeleton-helper.h",
+	} {
+		if !nodeHasInput(parserObj, want) {
+			t.Fatalf("generated parser object inputs missing %q: %#v", want, parserObj.Inputs)
+		}
+	}
+}
+
 func TestGen_ProtoLibrary_TransitiveHeadersNo_DepsHeaderUsesRuntimeRoot(t *testing.T) {
 	root := t.TempDir()
 

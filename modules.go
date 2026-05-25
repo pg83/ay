@@ -1008,16 +1008,11 @@ func addGeneratedHeaderIncludeCF(modulePath, dst string, d *moduleData) {
 }
 
 func addGeneratedOwnHeaderInclude(modulePath, dst string, d *moduleData) {
-	outVFS := copyFileOutputVFS(modulePath, dst)
-	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.Rel)))
-	rel := dir
-	if dir != "." && dir != "" {
-		rel = filepath.ToSlash(filepath.Clean(dir))
-	} else {
-		rel = modulePath
-	}
-
-	d.addIncl = append(d.addIncl, Build(rel))
+	// Bison-generated headers are peer-visible through upstream's
+	// `${addincl;...;output}` path injection, so mirror the regular
+	// generated-header registration rather than keeping the include-dir local
+	// to the declaring module.
+	addGeneratedHeaderInclude(modulePath, dst, d)
 }
 
 // applyUnknownStmt routes an UnknownStmt by name. NO_LIBC / NO_UTIL /
