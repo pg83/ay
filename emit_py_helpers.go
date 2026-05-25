@@ -9,11 +9,11 @@ const (
 
 // canonicalizePy3ccBinary maps the host walker's /bin/ output back to the canonical path.
 func canonicalizePy3ccBinary(v VFS) VFS {
-	if !v.IsBuild() || !strings.HasPrefix(v.Rel, py3ccBinSubrel) {
+	if !v.IsBuild() || !strings.HasPrefix(v.Rel(), py3ccBinSubrel) {
 		return v
 	}
 
-	return Build(py3ccCanonicalRel + v.Rel[len(py3ccBinSubrel):])
+	return Build(py3ccCanonicalRel + v.Rel()[len(py3ccBinSubrel):])
 }
 
 const runtimePy3ModulePath = "library/python/runtime_py3"

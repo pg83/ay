@@ -43,7 +43,7 @@ func TestSwigIncludeClosure_ParsesIAndSystemRoots(t *testing.T) {
 
 	got := make([]string, 0, len(closure))
 	for _, v := range closure {
-		got = append(got, v.Rel)
+		got = append(got, v.Rel())
 	}
 
 	want := []string{

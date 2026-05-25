@@ -121,10 +121,8 @@ func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
 func (r *CodegenRegistry) All() []*GeneratedFileInfo {
 	out := make([]*GeneratedFileInfo, 0, r.byOutput.Len())
 
-	for _, bucket := range r.byOutput {
-		for _, info := range bucket {
-			out = append(out, info)
-		}
+	for _, info := range r.byOutput {
+		out = append(out, info)
 	}
 
 	sort.Slice(out, func(i, j int) bool {
@@ -150,7 +148,7 @@ func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind st
 
 	scanner := ctx.scannerFor(instance)
 	if scanner != nil {
-		scanner.parsers.RegisterBuildParsedIncludes(output.Rel, parsed)
+		scanner.parsers.RegisterBuildParsedIncludes(output.Rel(), parsed)
 	}
 }
 
@@ -172,7 +170,7 @@ func registerDeferredCF(ctx *genCtx, instance ModuleInstance, output VFS, parsed
 
 	scanner := ctx.scannerFor(instance)
 	if scanner != nil {
-		scanner.parsers.RegisterBuildParsedIncludes(output.Rel, parsed)
+		scanner.parsers.RegisterBuildParsedIncludes(output.Rel(), parsed)
 	}
 }
 
@@ -198,7 +196,7 @@ func registerBoundGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, ki
 
 	scanner := ctx.scannerFor(instance)
 	if scanner != nil {
-		scanner.parsers.RegisterBuildParsedIncludes(output.Rel, parsed)
+		scanner.parsers.RegisterBuildParsedIncludes(output.Rel(), parsed)
 	}
 }
 

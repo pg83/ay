@@ -50,7 +50,7 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 		ccIn.PerSourceCFlags = append(append([]string(nil), in.PerSourceCFlags...), "-x", "c++")
 		ccIn.IncludeInputs = rawRes.AuxClosures[i]
 
-		ccRef, ccOut, _ := EmitCC(instance, aux.Rel[strings.LastIndex(aux.Rel, "/")+1:], aux, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := EmitCC(instance, aux.Rel()[strings.LastIndex(aux.Rel(), "/")+1:], aux, ccIn, ctx.host, ctx.emit)
 		res.Refs = append(res.Refs, ccRef)
 		res.Outputs = append(res.Outputs, ccOut)
 	}
@@ -122,9 +122,9 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 
 	for _, e := range entries {
 		key := "resfs/file/py/" + e.key
-		arcBuildPath := "${ARCADIA_BUILD_ROOT}/" + e.path.Rel
+		arcBuildPath := "${ARCADIA_BUILD_ROOT}/" + e.path.Rel()
 		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + arcBuildPath + "\"}"
-		kvCmd := "resfs/src/" + key + "=" + e.path.Rel
+		kvCmd := "resfs/src/" + key + "=" + e.path.Rel()
 
 		cur.hashInputs = append(cur.hashInputs, "-", kvHash)
 		cur.cmdArgs = append(cur.cmdArgs, "-", kvCmd)
@@ -203,7 +203,7 @@ func rawAuxInputClosure(ctx *genCtx, instance ModuleInstance, aux VFS, seed []VF
 		{kind: includeQuoted, target: "library/cpp/resource/registry.h"},
 	}
 	for _, v := range seed {
-		emits = append(emits, includeDirective{kind: includeQuoted, target: v.Rel})
+		emits = append(emits, includeDirective{kind: includeQuoted, target: v.Rel()})
 	}
 	registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits)
 

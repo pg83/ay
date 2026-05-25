@@ -271,7 +271,7 @@ func graphPrimaryOutputs(nodes []*Node) []string {
 		if len(node.Outputs) == 0 {
 			continue
 		}
-		out[i] = node.Outputs[0].Rel
+		out[i] = node.Outputs[0].Rel()
 	}
 
 	return out
@@ -280,7 +280,7 @@ func graphPrimaryOutputs(nodes []*Node) []string {
 func findGraphNodeByOutput(nodes []*Node, rel string) *Node {
 	for _, node := range nodes {
 		for _, out := range node.Outputs {
-			if out.Rel == rel {
+			if out.Rel() == rel {
 				return node
 			}
 		}

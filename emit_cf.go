@@ -23,7 +23,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	outVFS := copyFileOutputVFS(instance.Path, cf.Dst)
 	in.IncludeInputs = walkClosure(ctx, instance, srcVFS, in)
 
-	cfgVars := buildCFGVars(ctx.fs, srcVFS.Rel, d.setVars, d.defaultVars)
+	cfgVars := buildCFGVars(ctx.fs, srcVFS.Rel(), d.setVars, d.defaultVars)
 	cfRef, cfOut := EmitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path, ctx.emit)
 
 	if reg != nil {
@@ -35,10 +35,10 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		// follow (empty for pure @VAR@ headers like config.h /
 		// protocol_version_variables.h).
 		parsed := []includeDirective{
-			{kind: includeQuoted, target: srcVFS.Rel},
-			{kind: includeQuoted, target: configureFilePyVFS.Rel},
+			{kind: includeQuoted, target: srcVFS.Rel()},
+			{kind: includeQuoted, target: configureFilePyVFS.Rel()},
 		}
-		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, srcVFS.Rel)...)
+		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, srcVFS.Rel())...)
 		registerBoundGeneratedParsedOutput(ctx, instance, "CF", cfOut, parsed, cfRef)
 	}
 }

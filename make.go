@@ -584,7 +584,7 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 			continue
 		}
 
-		mounted := filepath.Join(tmp, out.Rel)
+		mounted := filepath.Join(tmp, out.Rel())
 		Throw(os.MkdirAll(filepath.Dir(mounted), 0o755))
 	}
 
@@ -665,7 +665,7 @@ func (ex *executor) storeOutputs(n *Node, tmp string) {
 			ThrowFmt("node %s: non-Build output %v", n.UID, out)
 		}
 
-		src := filepath.Join(tmp, out.Rel)
+		src := filepath.Join(tmp, out.Rel())
 		dst := casPath(ex.bldRoot, src)
 
 		Throw(os.MkdirAll(filepath.Dir(dst), 0o755))
@@ -726,11 +726,11 @@ func (ex *executor) installRoot(uid, where string) {
 //     exec time, or the install target at install time).
 func mountVFS(v VFS, srcRoot, bldRoot string) string {
 	if v.IsSource() {
-		return filepath.Join(srcRoot, v.Rel)
+		return filepath.Join(srcRoot, v.Rel())
 	}
 
 	if v.IsBuild() {
-		return filepath.Join(bldRoot, v.Rel)
+		return filepath.Join(bldRoot, v.Rel())
 	}
 
 	ThrowFmt("mountVFS: zero-rooted VFS")

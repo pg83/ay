@@ -86,9 +86,9 @@ func (si *scannerInterner) internString(s string) uint32 {
 }
 
 func (si *scannerInterner) internVFS(v VFS) uint32 {
-	relID := si.internString(v.Rel)
+	relID := si.internString(v.Rel())
 
-	switch v.Root {
+	switch v.Root() {
 	case VFSRootSource:
 		return relID
 	case VFSRootBuild:
@@ -107,17 +107,18 @@ func (si *scannerInterner) relIDBound() uint32 {
 // vfsByID reconstructs a VFS previously interned through internVFS.
 // The caller must pass an ID produced by internVFS, not a raw string ID.
 func (si *scannerInterner) vfsByID(id uint32) VFS {
-	root := VFSRootSource
-	if id&scannerInternerBuildBit != 0 {
-		root = VFSRootBuild
-		id &^= scannerInternerBuildBit
-	}
+	build := id&scannerInternerBuildBit != 0
+	id &^= scannerInternerBuildBit
 
 	if id == 0 || id >= uint32(len(si.strings)) {
 		panic("scannerInterner.vfsByID: out-of-range VFS ID")
 	}
 
-	return VFS{Root: root, Rel: si.strings[id]}
+	if build {
+		return Build(si.strings[id])
+	}
+
+	return Source(si.strings[id])
 }
 
 // IncludeScanner is the per-walker include-resolver state. It owns the
@@ -518,9 +519,9 @@ func hashScanContext(ctx *ScanContext) uint64 {
 
 	mixSlice := func(ss []VFS) {
 		for _, v := range ss {
-			h ^= uint64(v.Root)
+			h ^= uint64(v.Root())
 			h *= prime
-			mix(v.Rel)
+			mix(v.Rel())
 		}
 
 		h ^= 0xfe
@@ -577,7 +578,7 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 	// CURRENT source. For $(B)/ roots there is no meaningful source-rel,
 	// and forEachResolvedChild's BUILD branch never consults SourceRel.
 	if vfsPath.IsSource() {
-		sc.cfg.SourceRel = vfsPath.Rel
+		sc.cfg.SourceRel = vfsPath.Rel()
 	}
 
 	visited := s.visitedIDPool.Get().(*idSet)
@@ -1057,7 +1058,7 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	// makes a file's resolution a pure function of (file, ADDINCL ctx),
 	// independent of which target pulled it in — including generated $(B)
 	// includers, which key on their own build path just like upstream.
-	includerRel := includerAbs.Rel
+	includerRel := includerAbs.Rel()
 	var mappings []VFS
 	var hasMultiTarget bool
 	mappings, hasMultiTarget, sysinclClaimed = s.sysinclLookup(includerRel, includerRel, d.target)
@@ -1085,7 +1086,7 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 				sameDirRel = d.target
 			}
 
-			bypass = searchOut[0].Rel == sameDirRel
+			bypass = searchOut[0].Rel() == sameDirRel
 		}
 
 		if bypass {
@@ -1112,7 +1113,7 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 				}
 			}
 
-			if !s.fileExistsByRel(abs.Rel) {
+			if !s.fileExistsByRel(abs.Rel()) {
 				continue
 			}
 
@@ -1142,7 +1143,7 @@ mapLoop:
 			}
 		}
 
-		if !s.fileExistsByRel(abs.Rel) {
+		if !s.fileExistsByRel(abs.Rel()) {
 			continue
 		}
 
@@ -1333,19 +1334,19 @@ func (sc *scanCtx) resolveContextSearchTier(targetID uint32, target string) sear
 	}
 
 	addInclPath := func(prefix VFS) bool {
-		switch prefix.Root {
+		switch prefix.Root() {
 		case VFSRootBuild:
-			if prefix.Rel == "" {
+			if prefix.Rel() == "" {
 				return addBuildPath(target)
 			}
 
-			return addBuildPath(prefix.Rel + "/" + target)
+			return addBuildPath(prefix.Rel() + "/" + target)
 		case VFSRootSource:
-			if prefix.Rel == "" {
+			if prefix.Rel() == "" {
 				return addPath(target)
 			}
 
-			return addPath(prefix.Rel + "/" + target)
+			return addPath(prefix.Rel() + "/" + target)
 		}
 
 		panic("resolveContextSearchTier: zero-valued search path")
@@ -1382,7 +1383,7 @@ func resolveCythonPy2Override(includerAbs VFS, d includeDirective) (string, bool
 		return "", false
 	}
 
-	switch includerAbs.Rel {
+	switch includerAbs.Rel() {
 	case "util/generic/string.pxd":
 		if d.target == "libcpp/string.pxd" {
 			return "contrib/tools/cython_py2/Cython/Includes/libcpp/string.pxd", true
@@ -1397,7 +1398,7 @@ func resolveCythonPy2Override(includerAbs VFS, d includeDirective) (string, bool
 		}
 	}
 
-	if strings.HasPrefix(includerAbs.Rel, "contrib/tools/cython_py2/Cython/Includes/") {
+	if strings.HasPrefix(includerAbs.Rel(), "contrib/tools/cython_py2/Cython/Includes/") {
 		switch d.target {
 		case "libc/string.pxd", "libcpp/string.pxd", "libcpp/pair.pxd", "libcpp/utility.pxd":
 			return "contrib/tools/cython_py2/Cython/Includes/" + d.target, true
@@ -1505,7 +1506,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	if d.kind == includeQuoted {
 		// includerAbs is SOURCE-rooted here (BUILD_ROOT dispatches in
 		// forEachResolvedChild before reaching resolveSearchPath).
-		incDir := pathDir(includerAbs.Rel)
+		incDir := pathDir(includerAbs.Rel())
 
 		var candidate string
 
@@ -1583,7 +1584,7 @@ func cythonPy2SiblingOverride(includerAbs VFS, d includeDirective) (string, bool
 		return "", false
 	}
 
-	if hasPrefix(includerAbs.Rel, "contrib/tools/cython_py2/Cython/Includes/") {
+	if hasPrefix(includerAbs.Rel(), "contrib/tools/cython_py2/Cython/Includes/") {
 		if hasPrefix(d.target, "libc/") || hasPrefix(d.target, "libcpp/") {
 			return "contrib/tools/cython_py2/Cython/Includes/" + d.target, true
 		}
@@ -1591,7 +1592,7 @@ func cythonPy2SiblingOverride(includerAbs VFS, d includeDirective) (string, bool
 		return "", false
 	}
 
-	switch includerAbs.Rel {
+	switch includerAbs.Rel() {
 	case "util/generic/string.pxd":
 		if d.target == "libcpp/string.pxd" {
 			return "contrib/tools/cython_py2/Cython/Includes/" + d.target, true
@@ -1616,7 +1617,7 @@ func cythonPy2SiblingOverride(includerAbs VFS, d includeDirective) (string, bool
 // false and use the subgraph cache.
 func isSourceLike(absPath VFS) bool {
 	// VFS.Rel never contains the $(S)/ or $(B)/ prefix.
-	rel := absPath.Rel
+	rel := absPath.Rel()
 	idx := strings.LastIndexByte(rel, '.')
 
 	if idx < 0 {
@@ -1698,7 +1699,7 @@ func (f fsLocator) Exists(vfsPath VFS) bool {
 		return false
 	}
 
-	return f.scanner.fileExistsByRel(vfsPath.Rel)
+	return f.scanner.fileExistsByRel(vfsPath.Rel())
 }
 
 // codegenLocator answers Exists for $(B)/-rooted paths via the per-

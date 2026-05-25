@@ -203,7 +203,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	pbKV := map[string]interface{}{"p": "PB", "pc": "yellow"}
 	protoBaseName := filepath.Base(protoBase)
 	for i, out := range outputs {
-		pbKV["ext_out_name_for_"+filepath.Base(out.Rel)] = protoBaseName + suffixes[i]
+		pbKV["ext_out_name_for_"+filepath.Base(out.Rel())] = protoBaseName + suffixes[i]
 	}
 
 	pyPBNode := &Node{
@@ -252,16 +252,16 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 
 	res := &generatedPyProtoYapycResult{}
 	for i, pyOut := range pyOutputs {
-		if pyOut.Rel == "" {
+		if pyOut.Rel() == "" {
 			continue
 		}
 
-		out := Build(pyOut.Rel + "." + suffix + ".yapyc3")
+		out := Build(pyOut.Rel() + "." + suffix + ".yapyc3")
 		cmdArgs := []string{
 			py3ccBinary.String(),
 			"--slow-py3cc",
 			py3ccSlowBin.String(),
-			pyOut.Rel + "-",
+			pyOut.Rel() + "-",
 			pyOut.String(),
 			out.String(),
 		}
@@ -282,7 +282,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 		// lists that module as an input. The message stub has no such sibling
 		// dependency, so it is added only for the non-first (grpc) output.
 		nodeInputs := append([]VFS{py3ccBinary, py3ccSlowBin, pyOut}, sourceInputs...)
-		if i > 0 && pyOutputs[0].Rel != "" {
+		if i > 0 && pyOutputs[0].Rel() != "" {
 			nodeInputs = append(nodeInputs, pyOutputs[0])
 		}
 
@@ -324,7 +324,7 @@ func pyProtoAuxEntriesForSource(instance ModuleInstance, d *moduleData, src stri
 	if len(yapyOuts) > 0 {
 		addResource(yapyOuts[0], protoPythonResourceKey(instance, d, src, "_pb2.py.yapyc3"), yapyRefs[0])
 	}
-	if d.grpc && len(pyOutputs) > 2 && pyOutputs[1].Rel != "" {
+	if d.grpc && len(pyOutputs) > 2 && pyOutputs[1].Rel() != "" {
 		addResource(pyOutputs[1], protoPythonResourceKey(instance, d, src, "_pb2_grpc.py"), pyPBRef)
 		if len(yapyOuts) > 1 {
 			addResource(yapyOuts[1], protoPythonResourceKey(instance, d, src, "_pb2_grpc.py.yapyc3"), yapyRefs[1])
@@ -421,9 +421,9 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 
 	for _, e := range entries {
 		key := "resfs/file/py/" + e.key
-		arcBuildPath := "${ARCADIA_BUILD_ROOT}/" + e.path.Rel
+		arcBuildPath := "${ARCADIA_BUILD_ROOT}/" + e.path.Rel()
 		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + arcBuildPath + "\"}"
-		kvCmd := "resfs/src/" + key + "=" + e.path.Rel
+		kvCmd := "resfs/src/" + key + "=" + e.path.Rel()
 
 		cur.hashInputs = append(cur.hashInputs, "-", kvHash)
 		cur.cmdArgs = append(cur.cmdArgs, "-", kvCmd)
@@ -498,7 +498,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			ModuleTag:            stringPtr("py3_proto"),
 			IncludeInputs:        auxClosure,
 		}
-		ccRef, ccOut, _ := EmitCC(instance, aux.Rel[strings.LastIndex(aux.Rel, "/")+1:], aux, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := EmitCC(instance, aux.Rel()[strings.LastIndex(aux.Rel(), "/")+1:], aux, ccIn, ctx.host, ctx.emit)
 		res.Refs = append(res.Refs, ccRef)
 		res.Outputs = append(res.Outputs, ccOut)
 	}

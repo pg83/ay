@@ -42,7 +42,7 @@ func EmitEN(
 		enumParserBin.String(),
 		headerInput.String(),
 		"--include-path",
-		headerInput.Rel,
+		headerInput.Rel(),
 		"--output",
 		serializedCPPVFS.String(),
 	}

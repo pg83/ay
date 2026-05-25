@@ -90,7 +90,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{swRef}
-		cClosure := walkClosureWithSourceRel(ctx, instance, cOutVFS, srcVFS.Rel, in)
+		cClosure := walkClosureWithSourceRel(ctx, instance, cOutVFS, srcVFS.Rel(), in)
 		incl := make([]VFS, 0, len(cClosure)+len(swigClosure)+1)
 		incl = append(incl, cClosure...)
 		incl = append(incl, swigClosure...)
@@ -148,10 +148,10 @@ func swigIncludeClosure(ctx *genCtx, src VFS) []VFS {
 	}
 
 	for _, imp := range swigImplicitIncludes {
-		enqueue(imp, includeSystem, src.Rel)
+		enqueue(imp, includeSystem, src.Rel())
 	}
-	for _, d := range swigSourceParsedBuckets(ctx, src.Rel).bucket(parsedIncludesLocal) {
-		enqueue(d.target, d.kind, src.Rel)
+	for _, d := range swigSourceParsedBuckets(ctx, src.Rel()).bucket(parsedIncludesLocal) {
+		enqueue(d.target, d.kind, src.Rel())
 	}
 
 	for len(queue) > 0 {
@@ -194,9 +194,9 @@ func collectSwigInducedIncludes(ctx *genCtx, src VFS, closure []VFS) []includeDi
 		}
 	}
 
-	add(src.Rel)
+	add(src.Rel())
 	for _, v := range closure {
-		add(v.Rel)
+		add(v.Rel())
 	}
 
 	return out
@@ -285,7 +285,7 @@ func swigFilterExistingSources(fs *FS, in []VFS) []VFS {
 
 	out := make([]VFS, 0, len(in))
 	for _, v := range in {
-		if v.IsSource() && !fs.IsFile(v.Rel) {
+		if v.IsSource() && !fs.IsFile(v.Rel()) {
 			continue
 		}
 		out = append(out, v)

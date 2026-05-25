@@ -20,7 +20,7 @@ var (
 // non-nil) carries the original SRCDIR value used to compose the
 // case-3 output infix.
 func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs) (out, input VFS) {
-	if srcVFS.IsSource() && srcVFS.Rel != instance.Path+"/"+srcRel {
+	if srcVFS.IsSource() && srcVFS.Rel() != instance.Path+"/"+srcRel {
 		outputRel := composeSrcDirOutputRel(instance.Path, *in.SrcDir, srcRel)
 		return Build(instance.Path + "/" + outputRel + ".o"), srcVFS
 	}

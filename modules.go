@@ -362,7 +362,7 @@ func sourceInputVFS(fs *FS, modulePath string, path string) (VFS, bool) {
 		}
 	}
 
-	return VFS{}, false
+	return vfsNone, false
 }
 
 func copyFileInputVFS(fs *FS, modulePath string, src string) VFS {
@@ -388,7 +388,7 @@ func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
 	case strings.HasPrefix(path, "${BINDIR}/"):
 		return Build(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(path, "${BINDIR}/")))), true
 	default:
-		return VFS{}, false
+		return vfsNone, false
 	}
 }
 
@@ -402,7 +402,7 @@ func copyFileOutputVFS(modulePath string, dst string) VFS {
 
 func copyFileIncludeTarget(modulePath string, target string) string {
 	if vfs, ok := ParseVFS(target); ok {
-		return vfs.Rel
+		return vfs.Rel()
 	}
 
 	switch {
@@ -569,7 +569,7 @@ func filterExistingSourceDirs(fs *FS, paths []VFS) []VFS {
 
 	out := paths[:0]
 	for _, path := range paths {
-		if shouldCheckSourceDir(path) && !fs.IsDir(path.Rel) {
+		if shouldCheckSourceDir(path) && !fs.IsDir(path.Rel()) {
 			continue
 		}
 
@@ -583,10 +583,10 @@ func shouldCheckSourceDir(path VFS) bool {
 	if !path.IsSource() {
 		return false
 	}
-	if path.Rel == "" {
+	if path.Rel() == "" {
 		return false
 	}
-	if strings.Contains(path.Rel, "$") {
+	if strings.Contains(path.Rel(), "$") {
 		return false
 	}
 
@@ -1005,7 +1005,7 @@ func moduleStmtForKind(stmt *ModuleStmt, kind ModuleKind) *ModuleStmt {
 
 func addGeneratedHeaderInclude(modulePath, dst string, d *moduleData) {
 	outVFS := copyFileOutputVFS(modulePath, dst)
-	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.Rel)))
+	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.Rel())))
 	rel := dir
 	if dir != "." && dir != "" {
 		rel = filepath.ToSlash(filepath.Clean(dir))
@@ -1024,7 +1024,7 @@ func addGeneratedHeaderInclude(modulePath, dst string, d *moduleData) {
 // regular ADDINCL statements, mirroring ymake's output-registration phase.
 func addGeneratedHeaderIncludeCF(modulePath, dst string, d *moduleData) {
 	outVFS := copyFileOutputVFS(modulePath, dst)
-	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.Rel)))
+	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.Rel())))
 	rel := dir
 	if dir != "." && dir != "" {
 		rel = filepath.ToSlash(filepath.Clean(dir))
@@ -1188,8 +1188,8 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		if entry.Auto {
 			dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
 			prefix := modulePath + "/"
-			if strings.HasPrefix(dstVFS.Rel, prefix) {
-				dstRel := strings.TrimPrefix(dstVFS.Rel, prefix)
+			if strings.HasPrefix(dstVFS.Rel(), prefix) {
+				dstRel := strings.TrimPrefix(dstVFS.Rel(), prefix)
 				if isSourceEligibleForCopyAuto(dstRel) && !flagsContain(d.srcs, dstRel) {
 					d.srcs = append(d.srcs, dstRel)
 				}
@@ -1205,8 +1205,8 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			if entry.Auto {
 				dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
 				prefix := modulePath + "/"
-				if strings.HasPrefix(dstVFS.Rel, prefix) {
-					dstRel := strings.TrimPrefix(dstVFS.Rel, prefix)
+				if strings.HasPrefix(dstVFS.Rel(), prefix) {
+					dstRel := strings.TrimPrefix(dstVFS.Rel(), prefix)
 					if isSourceEligibleForCopyAuto(dstRel) && !flagsContain(d.srcs, dstRel) {
 						d.srcs = append(d.srcs, dstRel)
 					}

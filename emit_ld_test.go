@@ -500,13 +500,13 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 	cmdArgs := got.Cmds[2].CmdArgs
 	found := false
 	for i := 0; i+1 < len(cmdArgs); i++ {
-		if cmdArgs[i] == "--whole-archive-libs" && cmdArgs[i+1] == dupPath.Rel {
+		if cmdArgs[i] == "--whole-archive-libs" && cmdArgs[i+1] == dupPath.Rel() {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("cmd[2] missing whole-archive marker for %q: %#v", dupPath.Rel, cmdArgs)
+		t.Fatalf("cmd[2] missing whole-archive marker for %q: %#v", dupPath.Rel(), cmdArgs)
 	}
 }
 

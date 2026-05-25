@@ -243,7 +243,7 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 		"-Wl,--start-group",
 	)
 	for _, p := range peerLibPaths {
-		cmdArgs = append(cmdArgs, p.Rel)
+		cmdArgs = append(cmdArgs, p.Rel())
 	}
 	cmdArgs = append(cmdArgs, "-Wl,--end-group")
 	cmdArgs = append(cmdArgs,

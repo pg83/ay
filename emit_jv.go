@@ -43,7 +43,7 @@ func emitJVDownstreamCPCC(
 		srcH := pair.h
 
 		// Derive the .g4.cpp name: replace .cpp suffix with .g4.cpp.
-		base := strings.TrimSuffix(filepath.Base(srcCpp.Rel), ".cpp")
+		base := strings.TrimSuffix(filepath.Base(srcCpp.Rel()), ".cpp")
 		g4CppPath := Build(instance.Path + "/" + base + ".g4.cpp")
 		g4CppRel := base + ".g4.cpp"
 
@@ -51,7 +51,7 @@ func emitJVDownstreamCPCC(
 		// antlr4-runtime.h chain and the macro's OUTPUT_INCLUDES.
 		if reg != nil {
 			emits := make([]includeDirective, 0, 1+len(outputIncludes))
-			emits = append(emits, includeDirective{kind: includeQuoted, target: antlr4RuntimeHeaderVFS.Rel})
+			emits = append(emits, includeDirective{kind: includeQuoted, target: antlr4RuntimeHeaderVFS.Rel()})
 			for _, h := range outputIncludes {
 				emits = append(emits, includeDirective{kind: includeQuoted, target: h})
 			}

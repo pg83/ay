@@ -7,12 +7,12 @@ import (
 
 func copyFileAutoSourceVFS(modulePath string, d *moduleData, srcRel string) (VFS, bool) {
 	if d == nil || d.copyFileAutoOutputs == nil {
-		return VFS{}, false
+		return vfsNone, false
 	}
 
 	entry, ok := d.copyFileAutoOutputs[srcRel]
 	if !ok {
-		return VFS{}, false
+		return vfsNone, false
 	}
 
 	return copyFileOutputVFS(modulePath, entry.Dst), true
@@ -22,7 +22,7 @@ func copyFileParsedIncludes(fs *FS, modulePath string, entry copyFileEntry) []in
 	out := make([]includeDirective, 0, len(entry.OutputIncludes)+1)
 	if entry.WithContext {
 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
-		out = append(out, includeDirective{kind: includeQuoted, target: srcVFS.Rel})
+		out = append(out, includeDirective{kind: includeQuoted, target: srcVFS.Rel()})
 	}
 	for _, include := range entry.OutputIncludes {
 		out = append(out, includeDirective{
@@ -48,7 +48,7 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 func generatedModuleSourceVFS(ctx *genCtx, instance ModuleInstance, srcRel string) (VFS, bool) {
 	reg := codegenRegForInstance(ctx, instance)
 	if reg == nil {
-		return VFS{}, false
+		return vfsNone, false
 	}
 
 	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path + "/" + srcRel)))
@@ -56,7 +56,7 @@ func generatedModuleSourceVFS(ctx *genCtx, instance ModuleInstance, srcRel strin
 		return buildVFS, true
 	}
 
-	return VFS{}, false
+	return vfsNone, false
 }
 
 func resolveModuleSourceVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, srcDir *string) VFS {

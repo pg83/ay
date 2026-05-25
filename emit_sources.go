@@ -51,7 +51,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 		// Primary-first closure: full = [srcVFS, ...headers] (nil when the
 		// module has no scanner). Headers-only view is full[1:].
-		full := walkClosureRoot(ctx, srcInstance, srcVFS, srcVFS.Rel, srcIn)
+		full := walkClosureRoot(ctx, srcInstance, srcVFS, srcVFS.Rel(), srcIn)
 		if full != nil {
 			srcIn.IncludeInputs = full[1:]
 		}
@@ -113,11 +113,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		var r6Parsed []includeDirective
 		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
-			r6Parsed = scanner.parsers.sourceParsedBuckets(rl6SourceVFS.Rel).bucket(parsedIncludesHCPP)
+			r6Parsed = scanner.parsers.sourceParsedBuckets(rl6SourceVFS.Rel()).bucket(parsedIncludesHCPP)
 		}
 		registerGeneratedParsedOutput(ctx, srcInstance, "R6", r6Out, r6Parsed)
 
-		ccSrcRel := strings.TrimPrefix(r6Out.Rel, srcInstance.Path+"/")
+		ccSrcRel := strings.TrimPrefix(r6Out.Rel(), srcInstance.Path+"/")
 		ccIncludeInputs := walkClosure(ctx, srcInstance, r6Out, srcIn)
 
 		ccIn := srcIn
@@ -132,7 +132,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		return emitBisonY(ctx, srcInstance, srcRel, srcIn, srcIn.BisonGenExt)
 	case strings.HasSuffix(srcRel, ".ev"):
 		evSource := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
-		evRelPath := evSource.Rel
+		evRelPath := evSource.Rel()
 
 		protocLDRef, protocBinary := ctx.tool(pbProtocModule)
 		cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(pbCppStyleguideModule)
@@ -159,14 +159,14 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
 			evHParsed = append(evHParsed, directImports...)
 			for _, include := range protobufRuntimeHeaders {
-				evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 			}
 			evHParsed = append(evHParsed, evExtras...)
 			registerGeneratedParsedOutput(ctx, srcInstance, "EV", evH, evHParsed)
 			evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders))
-			evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: evH.Rel})
+			evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: evH.Rel()})
 			for _, include := range protobufRuntimeHeaders {
-				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 			}
 			registerGeneratedParsedOutput(ctx, srcInstance, "EV", evPbCC, evCCParsed)
 		}
@@ -202,11 +202,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5TmpOut, nil, r5Ref)
 		var r5Parsed []includeDirective
 		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
-			r5Parsed = scanner.parsers.sourceParsedBuckets(rlSourceVFS.Rel).bucket(parsedIncludesHCPP)
+			r5Parsed = scanner.parsers.sourceParsedBuckets(rlSourceVFS.Rel()).bucket(parsedIncludesHCPP)
 		}
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5CppOut, r5Parsed, r5Ref)
 
-		ccSrcRel := strings.TrimPrefix(r5CppOut.Rel, srcInstance.Path+"/")
+		ccSrcRel := strings.TrimPrefix(r5CppOut.Rel(), srcInstance.Path+"/")
 		ccIn := srcIn
 		ccClosure := walkClosure(ctx, srcInstance, r5CppOut, srcIn)
 		ccIn.IncludeInputs = append([]VFS{r5TmpOut}, ccClosure...)
@@ -225,14 +225,14 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		// keeps the header out of the declaring module's archive.
 		inSourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, inSourceVFS, srcIn)
-		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.Rel, srcIn.SetVars, srcIn.DefaultVars)
+		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.Rel(), srcIn.SetVars, srcIn.DefaultVars)
 		cfOut := Build(srcInstance.Path + "/" + strings.TrimSuffix(srcRel, ".in"))
 
 		parsed := []includeDirective{
-			{kind: includeQuoted, target: inSourceVFS.Rel},
-			{kind: includeQuoted, target: configureFilePyVFS.Rel},
+			{kind: includeQuoted, target: inSourceVFS.Rel()},
+			{kind: includeQuoted, target: configureFilePyVFS.Rel()},
 		}
-		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, inSourceVFS.Rel)...)
+		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, inSourceVFS.Rel())...)
 		registerDeferredCF(ctx, srcInstance, cfOut, parsed, &deferredCF{
 			instance:      srcInstance,
 			srcVFS:        inSourceVFS,
@@ -246,16 +246,16 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		strings.HasSuffix(srcRel, ".c.in"):
 		inSourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, inSourceVFS, srcIn)
-		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.Rel, srcIn.SetVars, srcIn.DefaultVars)
+		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.Rel(), srcIn.SetVars, srcIn.DefaultVars)
 		cfOut := Build(srcInstance.Path + "/" + strings.TrimSuffix(srcRel, ".in"))
 		cfRef, cfOut := EmitCF(srcInstance, inSourceVFS, cfOut, cfgVars, srcIn.IncludeInputs, srcInstance.Path, ctx.emit)
 
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{
-			{kind: includeQuoted, target: inSourceVFS.Rel},
-			{kind: includeQuoted, target: configureFilePyVFS.Rel},
+			{kind: includeQuoted, target: inSourceVFS.Rel()},
+			{kind: includeQuoted, target: configureFilePyVFS.Rel()},
 		}, cfRef)
 
-		ccSrcRel := strings.TrimPrefix(cfOut.Rel, srcInstance.Path+"/")
+		ccSrcRel := strings.TrimPrefix(cfOut.Rel(), srcInstance.Path+"/")
 		ccIn := srcIn
 		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, cfOut, srcIn)
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, cfRef)
@@ -280,7 +280,7 @@ func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	ccIn.IncludeInputs = walkClosure(ctx, instance, pb.pbCC, in)
 	ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)
 
-	ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel, instance.Path+"/")
+	ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel(), instance.Path+"/")
 	ccRef, ccOut, _ := EmitCC(instance, ccSrcRel, pb.pbCC, ccIn, ctx.host, ctx.emit)
 
 	return &sourceEmit{Ref: ccRef, OutPath: ccOut}
@@ -296,7 +296,7 @@ func emitLibraryFlatcSource(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	}
 	ccIn.ExtraDepRefs = append([]NodeRef{fl.flRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, fl.flRef)...)
 
-	ccSrcRel := strings.TrimPrefix(fl.cpp.Rel, instance.Path+"/")
+	ccSrcRel := strings.TrimPrefix(fl.cpp.Rel(), instance.Path+"/")
 	ccRef, ccOut, _ := EmitCC(instance, ccSrcRel, fl.cpp, ccIn, ctx.host, ctx.emit)
 
 	return &sourceEmit{Ref: ccRef, OutPath: ccOut}
