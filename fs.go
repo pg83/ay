@@ -23,16 +23,6 @@ type FS struct {
 	rootSlash  string
 	dirs       map[string]map[string]bool
 
-	// dirsSplit indexes each listed directory's child set under every
-	// prefix/suffix split of its path, so the include scanner's search tier can
-	// fetch the children of <addinclDir>/<targetDir> as dirsSplit[addinclDir]
-	// [targetDir] — no candidate-path concat, hits AND misses. The inner set is
-	// the SAME map stored in dirs (a shared alias, not a copy). Keyed by string,
-	// not STR: the directory tree has orders of magnitude more paths than the
-	// codegen registry, so interning every split fragment would bloat the global
-	// intern table (and idSet sizing) far more than it saves.
-	dirsSplit map[string]map[string]map[string]bool
-
 	listdirHits   uint64
 	listdirMisses uint64
 	existsHits    uint64
@@ -46,7 +36,6 @@ func NewFS(sourceRoot string) *FS {
 		sourceRoot: sourceRoot,
 		rootSlash:  sourceRoot + "/",
 		dirs:       make(map[string]map[string]bool, 1024),
-		dirsSplit:  make(map[string]map[string]map[string]bool, 1024),
 	}
 }
 
@@ -72,7 +61,6 @@ func (fs *FS) Listdir(rel string) map[string]bool {
 	entries, err := os.ReadDir(full)
 	if err != nil {
 		fs.dirs[rel] = nil
-		fs.indexDirSplits(rel, nil)
 		return nil
 	}
 
@@ -81,67 +69,8 @@ func (fs *FS) Listdir(rel string) map[string]bool {
 		out[e.Name()] = e.IsDir()
 	}
 	fs.dirs[rel] = out
-	fs.indexDirSplits(rel, out)
 
 	return out
-}
-
-// indexDirSplits records set (the child map of directory d, possibly nil for a
-// nonexistent d — the negative entry keeps later misses concat-free) under each
-// INTERNAL prefix/suffix split of d, i.e. every '/' boundary, where both sides
-// are non-empty: "a/b/c" → ("a","b/c"), ("a/b","c"). The empty-side splits
-// (d,"") and ("",d) are deliberately NOT stored — childrenAt reaches those via
-// joinRel without a concat anyway, so they would only bloat the index. The
-// fragment keys are substrings of d, so they share its backing — no copies.
-func (fs *FS) indexDirSplits(d string, set map[string]bool) {
-	for i := 0; i < len(d); i++ {
-		if d[i] == '/' {
-			fs.putDirSplit(d[:i], d[i+1:], set)
-		}
-	}
-}
-
-func (fs *FS) putDirSplit(prefix, suffix string, set map[string]bool) {
-	inner := fs.dirsSplit[prefix]
-	if inner == nil {
-		inner = make(map[string]map[string]bool, 4)
-		fs.dirsSplit[prefix] = inner
-	}
-
-	inner[suffix] = set
-}
-
-// childrenAt returns the child set of directory <prefix>/<suffix> without
-// concatenating them when that directory has been listed (the common case); on
-// a cold miss it lists it once (the only concat) and Listdir indexes the split
-// so subsequent probes are concat-free. nil ⇒ the directory does not exist.
-func (fs *FS) childrenAt(prefix, suffix string) map[string]bool {
-	if inner := fs.dirsSplit[prefix]; inner != nil {
-		if set, ok := inner[suffix]; ok {
-			return set
-		}
-	}
-
-	return fs.Listdir(joinRel(prefix, suffix))
-}
-
-// IsFileAt reports whether <prefix>/<suffix>/<name> is an existing regular file
-// — the concat-free existence probe for the include search tier.
-func (fs *FS) IsFileAt(prefix, suffix, name string) bool {
-	isDir, ok := fs.childrenAt(prefix, suffix)[name]
-	return ok && !isDir
-}
-
-// joinRel joins a prefix and suffix rel, either of which may be "".
-func joinRel(prefix, suffix string) string {
-	switch {
-	case prefix == "":
-		return suffix
-	case suffix == "":
-		return prefix
-	default:
-		return prefix + "/" + suffix
-	}
 }
 
 // Exists reports (present, isDir) for rel. Smart: routes through
@@ -295,4 +224,25 @@ func splitDirName(rel string) (string, string) {
 		return "", rel
 	}
 	return rel[:i], rel[i+1:]
+}
+
+// firstComponent returns p's leading path component (up to the first '/') and
+// whether more components follow. A substring of p — no allocation.
+func firstComponent(p string) (first string, more bool) {
+	if i := strings.IndexByte(p, '/'); i >= 0 {
+		return p[:i], true
+	}
+	return p, false
+}
+
+// joinRel joins a prefix and suffix rel, either of which may be "".
+func joinRel(prefix, suffix string) string {
+	switch {
+	case prefix == "":
+		return suffix
+	case suffix == "":
+		return prefix
+	default:
+		return prefix + "/" + suffix
+	}
 }
