@@ -10,9 +10,7 @@ package main
 // axes do not collide.
 //
 // Uniqueness invariant mirrors upstream's DupSrc (macro_processor.cpp:957):
-// duplicate Register throws. All() returns entries sorted by OutputPath.
-
-import "sort"
+// duplicate Register throws.
 
 // GeneratedFileInfo describes one codegen-emitted file. Populated during the
 // emit walk by each codegen emitter.
@@ -62,21 +60,25 @@ type deferredCF struct {
 // emitters fire before CC emitters per PEERDIR-DFS order). The scanner
 // consults it as a third existence tier.
 type CodegenRegistry struct {
-	byOutput map[VFS]*GeneratedFileInfo
-	// byRel indexes the same entries by the interned id of OutputPath.Rel()
-	// so the scanner can probe "is <rel> a generated output?" without
-	// interning a $(B)/<rel> VFS for every candidate it tests (most probes
-	// miss, and interning a miss would pollute the append-only intern table
-	// permanently). A miss is a single read-only `interned` lookup.
-	byRel map[STR]*GeneratedFileInfo
+	// byStr indexes every entry under two interned-string ids, both drawn from
+	// the shared intern table:
+	//   - the full Build VFS id (STR(OutputPath)) — root-aware, what Lookup and
+	//     SetProducerRef probe;
+	//   - the bare OutputPath.Rel() id — what the scanner's LookupRel probes for
+	//     a $(B)/<rel> candidate without constructing (and interning) a VFS.
+	// The two ids can never collide: a bare rel never starts with "$(", so it is
+	// a different string from any "$(B)/<rel>" full path. One map serves both
+	// access patterns; a LookupRel miss is a single read-only `interned` lookup
+	// that never mutates the append-only table.
+	byStr map[STR]*GeneratedFileInfo
 }
 
 // NewCodegenRegistry allocates an empty CodegenRegistry. Pre-sized for the
-// observed codegen output count in the devtools/ymake/bin closure.
+// observed codegen output count in the devtools/ymake/bin closure (two keys
+// per output).
 func NewCodegenRegistry() *CodegenRegistry {
 	return &CodegenRegistry{
-		byOutput: make(map[VFS]*GeneratedFileInfo, 256),
-		byRel:    make(map[STR]*GeneratedFileInfo, 256),
+		byStr: make(map[STR]*GeneratedFileInfo, 512),
 	}
 }
 
@@ -87,19 +89,21 @@ func NewCodegenRegistry() *CodegenRegistry {
 // upstream's DupSrc diagnostic (macro_processor.cpp:957) and enforces the
 // build-system invariant that no two nodes produce the same output file.
 func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
-	if existing, dup := r.byOutput[info.OutputPath]; dup {
+	full := STR(info.OutputPath)
+	if existing, dup := r.byStr[full]; dup {
 		ThrowFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
 			info.OutputPath.String(), existing.ProducerKvP, info.ProducerKvP)
 	}
 
-	r.byOutput[info.OutputPath] = info
-	r.byRel[internString(info.OutputPath.Rel())] = info
+	r.byStr[full] = info
+	r.byStr[internString(info.OutputPath.Rel())] = info
 }
 
 // Lookup returns the GeneratedFileInfo for path, or (nil, false) if path is
-// not registered. O(1) map lookup.
+// not registered. O(1) map lookup keyed on the full (root-aware) VFS id, so a
+// $(S)/<rel> never matches a $(B)/<rel> output that shares its Rel().
 func (r *CodegenRegistry) Lookup(path VFS) (*GeneratedFileInfo, bool) {
-	info, ok := r.byOutput[path]
+	info, ok := r.byStr[STR(path)]
 	return info, ok
 }
 
@@ -116,7 +120,7 @@ func (r *CodegenRegistry) LookupRel(rel string) (*GeneratedFileInfo, bool) {
 		return nil, false
 	}
 
-	info, ok := r.byRel[*id]
+	info, ok := r.byStr[*id]
 	return info, ok
 }
 
@@ -126,7 +130,7 @@ func (r *CodegenRegistry) LookupRel(rel string) (*GeneratedFileInfo, bool) {
 // existence-tier sees the output; this helper fills the NodeRef in after Emit
 // so resolveCodegenDepRefs can lift it into consumer CC `deps[]`.
 func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
-	info, ok := r.byOutput[path]
+	info, ok := r.byStr[STR(path)]
 	if !ok {
 		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.String())
 	}
@@ -138,29 +142,6 @@ func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
 
 	info.ProducerRef = ref
 	info.HasProducerRef = true
-}
-
-// All returns all registered entries sorted by OutputPath. Deterministic across
-// runs because OutputPath is derived from source file paths (which are fixed).
-// Allocates a new slice on each call; callers that need a stable snapshot
-// should retain the result.
-func (r *CodegenRegistry) All() []*GeneratedFileInfo {
-	out := make([]*GeneratedFileInfo, 0, len(r.byOutput))
-
-	for _, info := range r.byOutput {
-		out = append(out, info)
-	}
-
-	sort.Slice(out, func(i, j int) bool {
-		return lessVFS(out[i].OutputPath, out[j].OutputPath)
-	})
-
-	return out
-}
-
-// Len returns the number of registered entries.
-func (r *CodegenRegistry) Len() int {
-	return len(r.byOutput)
 }
 
 func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, parsed []includeDirective) {
