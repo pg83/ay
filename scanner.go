@@ -118,7 +118,7 @@ type IncludeScanner struct {
 	// include/errno.h) must not be reused by a config without that dir
 	// (which resolves errno.h via sysincl→musl). NewScanCtx fetches the
 	// inner map by config hash; the hot lookup is then target-keyed.
-	searchTierByConfig map[uint64]map[uint32]searchTierResult
+	searchTierByConfig map[uint64]map[STR]searchTierResult
 
 	// Tarjan SCC scratch, shared across closure explorations (gen scanning
 	// is single-goroutine). closureOf clears index/low/onStack and resets
@@ -186,7 +186,7 @@ type IncludeScanner struct {
 type scanCtx struct {
 	scanner         *IncludeScanner
 	cfg             ScanContext
-	searchTierCache map[uint32]searchTierResult
+	searchTierCache map[STR]searchTierResult
 }
 
 // idSet is a membership set over VFS ids, used as the DFS `visited` set.
@@ -262,12 +262,12 @@ type searchTierResult struct {
 
 type sysinclSourceKey struct {
 	sourceClass uint32
-	target      uint32
+	target      STR
 }
 
 type sysinclIncluderKey struct {
-	includer uint32
-	target   uint32
+	includer STR
+	target   STR
 }
 
 // sysinclCacheEntry stores resolved sysincl paths plus two flags.
@@ -324,7 +324,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		onWarn:               onWarn,
 		subgraphCache:        make(map[uint32][]uint32, 65536),
 		childrenCache:        make(map[uint32][]uint32, 65536),
-		searchTierByConfig:   make(map[uint64]map[uint32]searchTierResult, 1024),
+		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
 		tjIndex:              make(map[uint32]int32, 4096),
 		tjLow:                make(map[uint32]int32, 4096),
 		tjOnStack:            make(map[uint32]bool, 4096),
@@ -382,7 +382,7 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 	ctxHash := hashScanContext(&cfg)
 	searchTier := s.searchTierByConfig[ctxHash]
 	if searchTier == nil {
-		searchTier = make(map[uint32]searchTierResult, 256)
+		searchTier = make(map[STR]searchTierResult, 256)
 		s.searchTierByConfig[ctxHash] = searchTier
 	}
 
@@ -1191,7 +1191,7 @@ func (s *IncludeScanner) absifyRels(rels []string) []VFS {
 // never across differing configs. Same-directory quoted lookup and
 // BUILD-root direct handling stay in resolveSearchPath (they depend on the
 // includer).
-func (sc *scanCtx) resolveContextSearchTier(targetID uint32, target string) searchTierResult {
+func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchTierResult {
 	s := sc.scanner
 
 	if cached, ok := sc.searchTierCache[targetID]; ok {
@@ -1221,12 +1221,12 @@ func (sc *scanCtx) resolveContextSearchTier(targetID uint32, target string) sear
 			return false
 		}
 
-		v := Build(rel)
-		if _, ok := s.codegen.Lookup(v); !ok {
+		info, ok := s.codegen.LookupRel(rel)
+		if !ok {
 			return false
 		}
 
-		out.paths = []VFS{v}
+		out.paths = []VFS{info.OutputPath}
 		out.found = true
 
 		return true
@@ -1351,8 +1351,8 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 			return false
 		}
 
-		v := Build(rel)
-		if _, ok := s.codegen.Lookup(v); !ok {
+		info, ok := s.codegen.LookupRel(rel)
+		if !ok {
 			return false
 		}
 
@@ -1362,7 +1362,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		}
 
 		seen[dedupKey] = struct{}{}
-		out = append(out, v)
+		out = append(out, info.OutputPath)
 
 		return true
 	}
