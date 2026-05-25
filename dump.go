@@ -20,8 +20,8 @@ import (
 
 // cmdDump routes `ay dump <normalize|sort>`. The dump family operates on
 // build-graph JSON / canonical JSONL streams for L4 acceptance: `normalize`
-// canonicalizes a raw graph into per-node JSONL (semantically equivalent to
-// dev/normalize.py); `sort` is a generic external-merge line sorter.
+// canonicalizes a raw graph into per-node JSONL; `sort` is a generic
+// external-merge line sorter.
 func cmdDump(args []string) int {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: ay dump <normalize|sort|diff|grep> [flags]")
@@ -45,13 +45,13 @@ func cmdDump(args []string) int {
 
 // versionedResourceRe collapses sandbox-versioned resource roots
 // ($(CLANG-243881345) → $(CLANG)) so OUR and REF compare uniformly.
-// Mirrors dev/normalize.py's load-time regex.
+// Applied at normalize load time, before per-string canonicalization.
 var versionedResourceRe = regexp.MustCompile(`\$\((CLANG|LLD_ROOT|YMAKE_PYTHON3)-[0-9]+\)`)
 
-// normPath applies the non-semantic textual canonicalizations
-// dev/normalize.py runs over the raw bytes pre-parse, but per-string so the
-// streaming decoder never holds the whole file: $(BUILD_ROOT)→$(B),
-// $(SOURCE_ROOT)→$(S), and versioned-resource collapse.
+// normPath applies the non-semantic textual canonicalizations over the raw
+// bytes pre-parse, but per-string so the streaming decoder never holds the
+// whole file: $(BUILD_ROOT)→$(B), $(SOURCE_ROOT)→$(S), and versioned-resource
+// collapse.
 func normPath(s string) string {
 	if !strings.Contains(s, "$(") {
 		return s
@@ -193,7 +193,6 @@ func getString(node map[string]any, key string) string {
 // input: every kept field EXCEPT deps/uid/self_uid (those are folded /
 // assigned during re-uid). Drops stats_uid, cache, foreign_deps; omits
 // host_platform when false; forces sandboxing=true; sorts inputs/tags.
-// Mirrors dev/normalize.py::_strip_and_canonicalize (minus identity/deps).
 func canonContent(node map[string]any) map[string]any {
 	inputs := normSortedStrings(node["inputs"])
 	// AR/LD nodes consume only the objects/archives the command bundles plus

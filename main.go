@@ -62,7 +62,7 @@ Subcommands:
     help       Show this message.
 
 Use ay make -j 0 -G <target> > graph.json for graph-generation
-checks, then compare with ./dev/normalize.py for the canonical L0..L4
+checks, then 'ay dump normalize | ay dump sort' for the canonical L0..L4
 verdict.
 `)
 }

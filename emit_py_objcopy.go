@@ -400,7 +400,7 @@ func emitYaConfJSONObjcopy(
 
 	// Member order: the YA_CONF_JSON file resource first, then its formula
 	// resources sorted lexicographically by full formula path. Matches the
-	// REF .global.a cmd_args order; emission order is what normalize.py
+	// REF .global.a cmd_args order; emission order is what the normalizer
 	// preserves (inputs/deps are sorted, cmds are not).
 	var resources []yaConfResource
 	for _, file := range d.yaConfJSON {

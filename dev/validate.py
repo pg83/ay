@@ -24,7 +24,6 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 GO = os.path.join(REPO_ROOT, "go")
 AY = os.path.join(REPO_ROOT, "ay")
-NORMALIZE_PY = os.path.join(SCRIPT_DIR, "normalize.py")
 
 # Host-wide, well-known lock path — shared across every worktree (all agents
 # run as the same user, so ~ resolves identically). NOT under the repo (each
@@ -119,37 +118,11 @@ def _normalize_sort_go(raw, target, out):
     return False
 
 
-def _normalize_sort_py(raw, target, out):
-    tmp = out + ".tmp"
-    tmp_norm = out + ".py.tmp"
-    _remove_if_exists(tmp)
-    _remove_if_exists(tmp_norm)
-    subprocess.run(
-        [sys.executable, NORMALIZE_PY, "--in", raw, "--target", target, "--out", tmp_norm],
-        cwd=REPO_ROOT,
-        check=True,
-    )
-    with open(tmp_norm, "rb") as fh:
-        subprocess.run(
-            [AY, "dump", "sort", "--out", tmp],
-            cwd=REPO_ROOT,
-            stdin=fh,
-            check=True,
-        )
-    _remove_if_exists(tmp_norm)
-    os.replace(tmp, out)
-
-
-def normalize_pair(name, our_raw, ref_raw, target, our_out, ref_out, *, allow_fallback):
+def normalize_pair(name, our_raw, ref_raw, target, our_out, ref_out):
     if _normalize_sort_go(our_raw, target, our_out) and _normalize_sort_go(ref_raw, target, ref_out):
         return True
-    if not allow_fallback:
-        print(f"[{name}] FAIL (normalize)")
-        return False
-    print(f"[{name}] normalize fallback: ay dump normalize failed; retrying with dev/normalize.py")
-    _normalize_sort_py(our_raw, target, our_out)
-    _normalize_sort_py(ref_raw, target, ref_out)
-    return True
+    print(f"[{name}] FAIL (normalize)")
+    return False
 
 
 def _advance_line(handle):
@@ -253,7 +226,7 @@ def main() -> int:
                 status = 1
 
         print(f"[{name}] normalize our + ref")
-        if not normalize_pair(name, raw, ref, target, our_n, ref_n, allow_fallback=bool(xfail)):
+        if not normalize_pair(name, raw, ref, target, our_n, ref_n):
             if not xfail:
                 status = 1
             continue
