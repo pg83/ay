@@ -133,6 +133,35 @@ func TestPrEmitsIncludes_OutputIncludesVFSPrefixStripped(t *testing.T) {
 	}
 }
 
+func TestCopyFileInputVFS_ResolvesSourceRootPaths(t *testing.T) {
+	root := t.TempDir()
+	writeFile := func(rel string) {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", rel, err)
+		}
+		if err := os.WriteFile(path, []byte("stub\n"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	writeFile("mod/local.txt")
+	writeFile("shared/generated.txt")
+	writeFile("pkg/sub/codecs.h")
+
+	fs := NewFS(root)
+
+	if got := copyFileInputVFS(fs, "mod", "local.txt").String(); got != "$(S)/mod/local.txt" {
+		t.Fatalf("local copy input = %q, want $(S)/mod/local.txt", got)
+	}
+	if got := copyFileInputVFS(fs, "mod", "shared/generated.txt").String(); got != "$(S)/shared/generated.txt" {
+		t.Fatalf("root copy input = %q, want $(S)/shared/generated.txt", got)
+	}
+	if got := copyFileInputVFS(fs, "pkg/sub", "pkg/sub/codecs.h").String(); got != "$(S)/pkg/sub/codecs.h" {
+		t.Fatalf("module-qualified copy input = %q, want $(S)/pkg/sub/codecs.h", got)
+	}
+}
+
 func TestCollectModule_LibiconvUsesStaticPeerWithMergedYdbFlags(t *testing.T) {
 	const ydbSourceRoot = "/home/pg/monorepo/ydb"
 	if _, err := os.Stat(filepath.Join(ydbSourceRoot, "contrib/libs/libiconv/ya.make")); err != nil {

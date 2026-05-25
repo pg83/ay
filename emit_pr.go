@@ -130,7 +130,7 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// by the registry: each output's EmitsIncludes is the SOURCE_ROOT
 	// IN/OUTPUT_INCLUDES set; scanner follows real `#include`s from
 	// there. Non-CC outputs contribute nothing.
-	inputClosure := prInputClosure(ctx, instance, stmt, moduleInputs)
+	inputClosure := prInputClosure(ctx, instance, d, stmt, moduleInputs)
 
 	// Resolve codegen-producer refs reached via the PR's inputClosure.
 	// PR's deps[] must include any cross-module EN/PB/EV producer
@@ -190,11 +190,12 @@ func generatedOutputCarriesIncludes(p string) bool {
 }
 
 // prInputClosure returns the union of transitive include closures
-// over every CC-compilable PR output (OUT / OUT_NOAUTO / STDOUT).
-// Scanner walks registered EmitsIncludes (SOURCE_ROOT IN +
-// OUTPUT_INCLUDES) and follows `#include`s from there. Non-CC outputs
-// have nil EmitsIncludes and contribute nothing.
-func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []VFS {
+// reached from PR outputs that carry includes (registered via
+// EmitsIncludes) plus header-like IN files for opaque sidecar outputs
+// such as enum_parser's JSON dump. That keeps the PR node and any
+// downstream RESOURCE(objcopy) handoff aligned with upstream's header
+// closure on opaque RUN_PROGRAM outputs.
+func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []VFS {
 	// Use the consuming module's full scan-input bag so peer headers
 	// reachable from the PR output's EmitsIncludes chain resolve.
 	// Mirrors emitEnumSrcs (gen.go).
@@ -209,8 +210,13 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	var out []VFS
 	walkOne := func(rel string) {
-		buildRootPath := Build(instance.Path + "/" + rel)
+		buildRootPath := copyFileOutputVFS(instance.Path, rel)
 		sub := walkClosure(ctx, instance, buildRootPath, scanIn)
+		out = append(out, sub...)
+	}
+	walkInput := func(rel string) {
+		inputVFS := runProgramInputVFS(ctx, instance, d, rel)
+		sub := walkClosure(ctx, instance, inputVFS, scanIn)
 		out = append(out, sub...)
 	}
 
@@ -228,6 +234,12 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	}
 	if stmt.StdoutFile != nil && isCCSourceExt(*stmt.StdoutFile) {
 		walkOne(*stmt.StdoutFile)
+	}
+	for _, f := range stmt.INFiles {
+		if !generatedOutputCarriesIncludes(f) {
+			continue
+		}
+		walkInput(f)
 	}
 
 	if len(out) == 0 {
@@ -304,7 +316,7 @@ func runProgramInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, rel
 		strings.HasPrefix(rel, "${CURDIR}/"),
 		strings.HasPrefix(rel, "${ARCADIA_BUILD_ROOT}/"),
 		strings.HasPrefix(rel, "${BINDIR}/"):
-		return copyFileInputVFS(instance.Path, rel)
+		return copyFileInputVFS(ctx.fs, instance.Path, rel)
 	}
 
 	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path + "/" + rel)))

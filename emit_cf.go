@@ -19,7 +19,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		FS:              ctx.fs,
 	}
 
-	srcVFS := copyFileInputVFS(instance.Path, cf.Src)
+	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, cf.Src)
 	outVFS := copyFileOutputVFS(instance.Path, cf.Dst)
 	in.IncludeInputs = walkClosure(ctx, instance, srcVFS, in)
 
