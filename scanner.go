@@ -1203,10 +1203,22 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 
 	var out searchTierResult
 
-	addPath := func(rel string) bool {
-		rel = normalisePath(rel)
-		if !s.fileExistsByRel(rel) {
+	// Both branches work from the target's cleaned form, split into dir/base
+	// once — it is the same for every prefix probed below.
+	normTarget := normalisePath(target)
+	normTargetDir, normBase := splitDirName(normTarget)
+
+	addSource := func(prefixRel string) bool {
+		// Concat-free existence probe: children of <prefixRel>/<normTargetDir>
+		// then membership of normBase. Misses (the common case) allocate nothing.
+		if !s.isFileAt(prefixRel, normTargetDir, normBase) {
 			return false
+		}
+
+		// Hit (rare): materialise the resolved Source VFS — the only concat.
+		rel := normTarget
+		if prefixRel != "" {
+			rel = normalisePath(prefixRel + "/" + normTarget)
 		}
 
 		out.paths = []VFS{Source(rel)}
@@ -1215,16 +1227,11 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		return true
 	}
 
-	// $(B) probes resolve the target to its interned id once — it is the same
-	// for every prefix. A target that was never interned matches no output
-	// (neither a full rel nor any split suffix), so the whole build branch is
-	// skipped. normTarget is the cleaned form the registry's keys are built from.
-	var (
-		normTarget  string
-		buildSuffix *STR
-	)
+	// $(B) probes resolve the target to its interned id once. A target that was
+	// never interned matches no output (neither a full rel nor any split
+	// suffix), so the whole build branch is skipped.
+	var buildSuffix *STR
 	if s.codegen != nil {
-		normTarget = normalisePath(target)
 		buildSuffix = interned(normTarget)
 	}
 
@@ -1257,11 +1264,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		case VFSRootBuild:
 			return addBuild(prefix.Rel())
 		case VFSRootSource:
-			if prefix.Rel() == "" {
-				return addPath(target)
-			}
-
-			return addPath(prefix.Rel() + "/" + target)
+			return addSource(prefix.Rel())
 		}
 
 		panic("resolveContextSearchTier: zero-valued search path")
@@ -1639,4 +1642,11 @@ func (c codegenLocator) Exists(vfsPath VFS) bool {
 // fileExistsByRel is the inner, rel-keyed existence check.
 func (s *IncludeScanner) fileExistsByRel(rel string) bool {
 	return s.parsers.fileExistsByRel(rel)
+}
+
+// isFileAt is the concat-free existence probe: does <prefix>/<suffix>/<name>
+// resolve to a regular file? Used by the search tier so a (addinclDir, target)
+// candidate never has to be concatenated to test it.
+func (s *IncludeScanner) isFileAt(prefix, suffix, name string) bool {
+	return s.parsers.fs.IsFileAt(prefix, suffix, name)
 }
