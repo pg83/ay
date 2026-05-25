@@ -17,6 +17,7 @@ import fcntl
 import os
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -31,6 +32,23 @@ NORMALIZE_PY = os.path.join(SCRIPT_DIR, "normalize.py")
 LOCK_PATH = os.path.join(
     os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "ay", "validate.lock"
 )
+
+
+# Per-case generation wall-time budgets (seconds): the measured baseline for
+# `gen_<case>.sh` (which includes writing the raw graph to disk — sg5 is ~2.2
+# GB). A generation slower than GEN_TIME_SLACK * budget FAILs the case as a
+# performance regression: the generator code got slower and must be optimized —
+# do NOT bump the budget to silence it. Measured in-flow on the reference host
+# with the run lock held (validate runs serialized). sg4 carries extra cushion
+# because sub-second timing is dominated by process-startup noise.
+GEN_TIME_BUDGET = {
+    "sg2": 1.20,
+    "sg2_x86_64": 1.20,
+    "sg3": 2.00,
+    "sg4": 0.50,
+    "sg5": 8.80,
+}
+GEN_TIME_SLACK = 1.2
 
 
 def acquire_global_lock():
@@ -212,11 +230,27 @@ def main() -> int:
         gen = os.path.join(SCRIPT_DIR, f"gen_{name}.sh")
 
         print(f"[{name}] generate")
+        gen_start = time.monotonic()
         if run([gen, raw]).returncode != 0:
             print(f"[{name}] FAIL (generate)")
             if not xfail:
                 status = 1
             continue
+        gen_secs = time.monotonic() - gen_start
+
+        budget = GEN_TIME_BUDGET.get(name)
+        if budget is None:
+            print(f"[{name}] gen time {gen_secs:.2f}s (no budget)")
+        else:
+            limit = GEN_TIME_SLACK * budget
+            print(f"[{name}] gen time {gen_secs:.2f}s (budget {budget:.2f}s, limit {limit:.2f}s)")
+            if gen_secs > limit:
+                print(
+                    f"[{name}] FAIL (perf regression): generation took {gen_secs:.2f}s > "
+                    f"{GEN_TIME_SLACK:g}x budget {budget:.2f}s = {limit:.2f}s — the generator "
+                    f"got slower; optimize the code, do NOT raise the budget"
+                )
+                status = 1
 
         print(f"[{name}] normalize our + ref")
         if not normalize_pair(name, raw, ref, target, our_n, ref_n, allow_fallback=bool(xfail)):
