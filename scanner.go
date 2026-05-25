@@ -960,7 +960,7 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	includerRel := includerAbs.Rel()
 	var mappings []VFS
 	var hasMultiTarget bool
-	mappings, hasMultiTarget, sysinclClaimed = s.sysinclLookup(includerRel, includerRel, d.target.String())
+	mappings, hasMultiTarget, sysinclClaimed = s.sysinclLookup(includerRel, includerRel, d.target)
 
 	// Quoted-include gate. For quoted includes with at least one local
 	// hit, sysincl is suppressed when:
@@ -1070,7 +1070,7 @@ mapLoop:
 // hasMultiTarget is true when any contributing record maps `target` to
 // ≥ 2 non-empty paths — used by resolve()'s quoted-include gate.
 // Dedup uses linear scan because mapping lists are 1-3 entries.
-func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel, target string) (paths []VFS, hasMultiTarget, claimed bool) {
+func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel string, target STR) (paths []VFS, hasMultiTarget, claimed bool) {
 	srcMappings, srcMT, srcClaimed := s.sysinclSourceLookup(sourceRel, target)
 	incMappings, incMT, incClaimed := s.sysinclIncluderLookup(includerRel, target)
 	claimed = srcClaimed || incClaimed
@@ -1109,11 +1109,11 @@ func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel, target string) (p
 	return paths, hasMultiTarget, claimed
 }
 
-func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, bool, bool) {
+func (s *IncludeScanner) sysinclSourceLookup(sourceRel string, target STR) ([]VFS, bool, bool) {
 	classID, view := s.sourceClass(sourceRel)
 	key := sysinclSourceKey{
 		sourceClass: classID,
-		target:      internString(target),
+		target:      target,
 	}
 
 	if cached, ok := s.sysinclSourceCache[key]; ok {
@@ -1123,7 +1123,7 @@ func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, b
 
 	s.sysinclSourceMisses++
 
-	rels, claimed, hasMultiTarget := view.LookupSourceKeyed(target)
+	rels, claimed, hasMultiTarget := view.LookupSourceKeyed(target.String())
 
 	entry := sysinclCacheEntry{
 		paths:          s.absifyRels(rels),
@@ -1135,10 +1135,10 @@ func (s *IncludeScanner) sysinclSourceLookup(sourceRel, target string) ([]VFS, b
 	return entry.paths, entry.hasMultiTarget, entry.claimed
 }
 
-func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) ([]VFS, bool, bool) {
+func (s *IncludeScanner) sysinclIncluderLookup(includerRel string, target STR) ([]VFS, bool, bool) {
 	key := sysinclIncluderKey{
 		includer: internString(includerRel),
-		target:   internString(target),
+		target:   target,
 	}
 
 	if cached, ok := s.sysinclIncluderCache[key]; ok {
@@ -1151,7 +1151,7 @@ func (s *IncludeScanner) sysinclIncluderLookup(includerRel, target string) ([]VF
 	// PerSourceView's includerKeyed slice is identical regardless of
 	// which source it was prepared for. anySrcView (initialised once)
 	// gives access without going through perSourceView.
-	rels, claimed, hasMultiTarget := s.anySrcView.LookupIncluderKeyed(includerRel, target)
+	rels, claimed, hasMultiTarget := s.anySrcView.LookupIncluderKeyed(includerRel, target.String())
 
 	entry := sysinclCacheEntry{
 		paths:          s.absifyRels(rels),
