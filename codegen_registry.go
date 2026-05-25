@@ -60,25 +60,27 @@ type deferredCF struct {
 // emitters fire before CC emitters per PEERDIR-DFS order). The scanner
 // consults it as a third existence tier.
 type CodegenRegistry struct {
-	// byStr indexes every entry under two interned-string ids, both drawn from
-	// the shared intern table:
-	//   - the full Build VFS id (STR(OutputPath)) — root-aware, what Lookup and
-	//     SetProducerRef probe;
-	//   - the bare OutputPath.Rel() id — what the scanner's LookupRel probes for
-	//     a $(B)/<rel> candidate without constructing (and interning) a VFS.
-	// The two ids can never collide: a bare rel never starts with "$(", so it is
-	// a different string from any "$(B)/<rel>" full path. One map serves both
-	// access patterns; a LookupRel miss is a single read-only `interned` lookup
-	// that never mutates the append-only table.
-	byStr map[STR]*GeneratedFileInfo
+	// byPath is the exact, root-aware index: the full Build VFS → its producer.
+	// Lookup/SetProducerRef probe it, so a $(S)/<rel> never matches a $(B)/<rel>
+	// output that shares its Rel().
+	byPath map[VFS]*GeneratedFileInfo
+
+	// bySplit indexes every output under ALL prefix/suffix splits of its
+	// Build-relative path, so the scanner's search tier can ask "is
+	// <addinclDir>/<target> a generated output?" as the plain two-level read
+	// bySplit[addinclDir][target] — no candidate-path concatenation. An output
+	// a/b/c is registered as bySplit[""]["a/b/c"], bySplit["a"]["b/c"],
+	// bySplit["a/b"]["c"]. The split keys are substrings of the interned rel, so
+	// they share its backing array (no byte copies).
+	bySplit map[string]map[string]*GeneratedFileInfo
 }
 
 // NewCodegenRegistry allocates an empty CodegenRegistry. Pre-sized for the
-// observed codegen output count in the devtools/ymake/bin closure (two keys
-// per output).
+// observed codegen output count in the devtools/ymake/bin closure.
 func NewCodegenRegistry() *CodegenRegistry {
 	return &CodegenRegistry{
-		byStr: make(map[STR]*GeneratedFileInfo, 512),
+		byPath:  make(map[VFS]*GeneratedFileInfo, 256),
+		bySplit: make(map[string]map[string]*GeneratedFileInfo, 256),
 	}
 }
 
@@ -89,39 +91,57 @@ func NewCodegenRegistry() *CodegenRegistry {
 // upstream's DupSrc diagnostic (macro_processor.cpp:957) and enforces the
 // build-system invariant that no two nodes produce the same output file.
 func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
-	full := STR(info.OutputPath)
-	if existing, dup := r.byStr[full]; dup {
+	if existing, dup := r.byPath[info.OutputPath]; dup {
 		ThrowFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
 			info.OutputPath.String(), existing.ProducerKvP, info.ProducerKvP)
 	}
 
-	r.byStr[full] = info
-	r.byStr[internString(info.OutputPath.Rel())] = info
+	r.byPath[info.OutputPath] = info
+
+	// Index every prefix/suffix split, including ("", rel).
+	rel := info.OutputPath.Rel()
+	r.putSplit("", rel, info)
+	for i := 0; i < len(rel); i++ {
+		if rel[i] == '/' {
+			r.putSplit(rel[:i], rel[i+1:], info)
+		}
+	}
+}
+
+func (r *CodegenRegistry) putSplit(prefix, suffix string, info *GeneratedFileInfo) {
+	inner := r.bySplit[prefix]
+	if inner == nil {
+		inner = make(map[string]*GeneratedFileInfo, 2)
+		r.bySplit[prefix] = inner
+	}
+
+	inner[suffix] = info
 }
 
 // Lookup returns the GeneratedFileInfo for path, or (nil, false) if path is
-// not registered. O(1) map lookup keyed on the full (root-aware) VFS id, so a
-// $(S)/<rel> never matches a $(B)/<rel> output that shares its Rel().
+// not registered. O(1), keyed on the full (root-aware) VFS.
 func (r *CodegenRegistry) Lookup(path VFS) (*GeneratedFileInfo, bool) {
-	info, ok := r.byStr[STR(path)]
+	info, ok := r.byPath[path]
 	return info, ok
 }
 
-// LookupRel probes by Build-root-relative path without constructing a VFS.
-// `interned` converts the candidate to its id read-only — a rel that was never
-// interned cannot be a registered output, so it misses without touching the
-// table. On a hit the caller reuses info.OutputPath — the interned VFS recorded
-// at Register time — so a scanner search-tier probe interns nothing, whether it
-// hits or misses. (Every registered OutputPath is Build-rooted, so its Rel()
-// uniquely identifies it; $(S) paths never live here.)
-func (r *CodegenRegistry) LookupRel(rel string) (*GeneratedFileInfo, bool) {
-	id := interned(rel)
-	if id == nil {
+// LookupSplit reports whether <prefix>/<suffix> is a registered output without
+// concatenating them: Register pre-indexed every split, so this is a plain
+// two-level map read. On a hit the caller reuses info.OutputPath (the interned
+// VFS recorded at Register time).
+func (r *CodegenRegistry) LookupSplit(prefix, suffix string) (*GeneratedFileInfo, bool) {
+	inner := r.bySplit[prefix]
+	if inner == nil {
 		return nil, false
 	}
 
-	info, ok := r.byStr[*id]
+	info, ok := inner[suffix]
 	return info, ok
+}
+
+// LookupRel probes a full Build-relative path — the ("", rel) split.
+func (r *CodegenRegistry) LookupRel(rel string) (*GeneratedFileInfo, bool) {
+	return r.LookupSplit("", rel)
 }
 
 // SetProducerRef backfills the ProducerRef for an already-registered path.
@@ -130,7 +150,7 @@ func (r *CodegenRegistry) LookupRel(rel string) (*GeneratedFileInfo, bool) {
 // existence-tier sees the output; this helper fills the NodeRef in after Emit
 // so resolveCodegenDepRefs can lift it into consumer CC `deps[]`.
 func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
-	info, ok := r.byStr[STR(path)]
+	info, ok := r.byPath[path]
 	if !ok {
 		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.String())
 	}
