@@ -338,8 +338,35 @@ parsedFlags:
 	return out
 }
 
-func copyFileInputVFS(modulePath string, src string) VFS {
-	if vfs, ok := moduleRootedVFS(modulePath, src); ok {
+func sourceInputVFS(fs *FS, modulePath string, path string) (VFS, bool) {
+	if vfs, ok := moduleRootedVFS(modulePath, path); ok {
+		return vfs, true
+	}
+
+	clean := filepath.ToSlash(filepath.Clean(path))
+	if clean == "." || clean == "" {
+		return Source(modulePath), true
+	}
+
+	if clean == modulePath || strings.HasPrefix(clean, modulePath+"/") {
+		return Source(clean), true
+	}
+
+	if fs != nil {
+		moduleRel := filepath.ToSlash(filepath.Clean(modulePath + "/" + clean))
+		if fs.IsFile(moduleRel) {
+			return Source(moduleRel), true
+		}
+		if fs.IsFile(clean) {
+			return Source(clean), true
+		}
+	}
+
+	return VFS{}, false
+}
+
+func copyFileInputVFS(fs *FS, modulePath string, src string) VFS {
+	if vfs, ok := sourceInputVFS(fs, modulePath, src); ok {
 		return vfs
 	}
 
@@ -924,7 +951,10 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// RESOURCE pairs feed the objcopy packer as-is. Path "-" marks
 			// kv-only entries; otherwise (source path, raw key).
 			for _, pair := range v.Pairs {
-				d.resources = append(d.resources, resourceEntry{Path: pair.Path, Key: pair.Key})
+				d.resources = append(d.resources, resourceEntry{
+					Path: expandStmtToken(pair.Path, env),
+					Key:  pair.Key,
+				})
 			}
 		case *ResourceFilesStmt:
 			if d.firstResourceEvent < 0 {

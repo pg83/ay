@@ -12,7 +12,10 @@ package main
 // inputs: [dep-EN-outputs..., enumParserBin, $(S)/<hdr>, ...includeClosure]
 
 // EmitEN emits one EN node for a GENERATE_ENUM_SERIALIZATION(*) invocation.
-// headerInput.Rel drives serialized output paths and --include-path.
+// headerInput is the canonical source input VFS; headerRel is the raw macro
+// argument that upstream reuses for serialized output layout under
+// $(B)/<instance.Path>/...
+//
 // withHeader adds --header + .h output. enumParserLD may be zero when the
 // host walk failed. depENRefs/depENOutputs wire cross-EN serialized-header
 // deps; headerIncludeClosure is the include-scanner result for headerInput.
@@ -20,6 +23,7 @@ package main
 func EmitEN(
 	instance ModuleInstance,
 	headerInput VFS,
+	headerRel string,
 	moduleTag *string,
 	withHeader bool,
 	enumParserLD NodeRef,
@@ -30,8 +34,9 @@ func EmitEN(
 	emit Emitter,
 ) (NodeRef, []VFS) {
 	// The output path mirrors:
-	//   $(B)/<headerInput.Rel>_serialized.cpp[ .h with _WITH_HEADER]
-	serializedCPPVFS := Build(headerInput.Rel + "_serialized.cpp")
+	//   $(B)/<instance.Path>/<headerRel>_serialized.cpp
+	//   [ .h with _WITH_HEADER ]
+	serializedCPPVFS := Build(instance.Path + "/" + headerRel + "_serialized.cpp")
 
 	cmdArgs := []string{
 		enumParserBin.String(),
@@ -45,7 +50,7 @@ func EmitEN(
 	outputs := []VFS{serializedCPPVFS}
 
 	if withHeader {
-		serializedHVFS := Build(headerInput.Rel + "_serialized.h")
+		serializedHVFS := Build(instance.Path + "/" + headerRel + "_serialized.h")
 		cmdArgs = append(cmdArgs, "--header", serializedHVFS.String())
 		outputs = append(outputs, serializedHVFS)
 	}

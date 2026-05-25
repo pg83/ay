@@ -4923,6 +4923,69 @@ int copied() { return 0; }
 	}
 }
 
+func TestGen_CopyFileUsesSourceRootInputFromIncludedMacro(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+INCLUDE(${ARCADIA_ROOT}/shared/copy.ya.make.inc)
+END()
+`)
+	writeTestModuleFile(t, root, "shared/copy.ya.make.inc", `COPY_FILE(
+    TEXT
+    shared/generated.txt
+    ${BINDIR}/shared/generated.h
+)
+`)
+	writeTestModuleFile(t, root, "shared/generated.txt", "generated\n")
+
+	g := testGen(root, "mod")
+
+	cp := mustNodeByOutput(t, g, "$(B)/mod/shared/generated.h")
+	if !nodeHasInput(cp, "$(S)/shared/generated.txt") {
+		t.Fatalf("copy inputs missing source-root generated.txt: %#v", cp.Inputs)
+	}
+	if nodeHasInput(cp, "$(S)/mod/shared/generated.txt") {
+		t.Fatalf("copy inputs still carry duplicated module-prefixed generated.txt: %#v", cp.Inputs)
+	}
+}
+
+func TestGen_EnumSerializationRootQualifiedHeaderUsesCanonicalInput(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "pkg/sub/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+GENERATE_ENUM_SERIALIZATION(pkg/sub/codecs.h)
+SRCS(stub.cpp)
+END()
+`)
+	writeTestModuleFile(t, root, "pkg/sub/codecs.h", "enum class E { A = 0 };\n")
+	writeTestModuleFile(t, root, "pkg/sub/stub.cpp", "int stub(){return 0;}\n")
+	writeToolProgram(t, root, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(t, root, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(t, root, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	g := testGen(root, "pkg/sub")
+
+	en := mustNodeByOutput(t, g, "$(B)/pkg/sub/pkg/sub/codecs.h_serialized.cpp")
+	if !nodeHasInput(en, "$(S)/pkg/sub/codecs.h") {
+		t.Fatalf("enum inputs missing canonical header path: %#v", en.Inputs)
+	}
+	if nodeHasInput(en, "$(S)/pkg/sub/pkg/sub/codecs.h") {
+		t.Fatalf("enum inputs still carry duplicated header path: %#v", en.Inputs)
+	}
+	if got := en.Cmds[0].CmdArgs[1]; got != "$(S)/pkg/sub/codecs.h" {
+		t.Fatalf("enum parser input = %q, want $(S)/pkg/sub/codecs.h", got)
+	}
+	if idx := indexOfArg(en.Cmds[0].CmdArgs, "--include-path"); idx < 0 || idx+1 >= len(en.Cmds[0].CmdArgs) || en.Cmds[0].CmdArgs[idx+1] != "pkg/sub/codecs.h" {
+		t.Fatalf("enum --include-path mismatch: %#v", en.Cmds[0].CmdArgs)
+	}
+}
+
 func vfsStringsT3(in []VFS) []string {
 	out := make([]string, len(in))
 	for i, v := range in {
@@ -5986,6 +6049,148 @@ func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
 		if nodeHasInput(regularAR, absent) {
 			t.Errorf("libdb.a must not list %q (not an AR input): %#v", absent, regularAR.Inputs)
 		}
+	}
+}
+
+func TestGen_ResourceRelativeOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(t, root, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(t, root, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(t, root, "tools/json_gen/bin", "json_gen")
+
+	writeTestModuleFile(t, root, "db/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/json_gen/bin
+        --output
+        data.json
+    OUT_NOAUTO data.json
+)
+RESOURCE(
+    data.json /data.json
+)
+END()
+`)
+
+	g := testGen(root, "db")
+
+	objcopy := findNodeByOutputPrefix(g, "$(B)/db/objcopy_")
+	if objcopy == nil {
+		t.Fatal("graph is missing db objcopy output")
+	}
+	if !nodeHasInput(objcopy, "$(B)/db/data.json") {
+		t.Fatalf("objcopy inputs missing build-root data.json: %#v", objcopy.Inputs)
+	}
+	if nodeHasInput(objcopy, "$(S)/db/data.json") {
+		t.Fatalf("objcopy inputs still use source-root data.json: %#v", objcopy.Inputs)
+	}
+}
+
+func TestGen_ResourceBindirOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(t, root, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(t, root, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(t, root, "tools/json_gen/bin", "json_gen")
+
+	writeTestModuleFile(t, root, "db/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/json_gen/bin
+        --output
+        ${BINDIR}/data.json
+    OUT_NOAUTO ${BINDIR}/data.json
+)
+RESOURCE(
+    ${BINDIR}/data.json /data.json
+)
+END()
+`)
+
+	g := testGen(root, "db")
+
+	objcopy := findNodeByOutputPrefix(g, "$(B)/db/objcopy_")
+	if objcopy == nil {
+		t.Fatal("graph is missing db objcopy output")
+	}
+	if !nodeHasInput(objcopy, "$(B)/db/data.json") {
+		t.Fatalf("objcopy inputs missing build-root data.json: %#v", objcopy.Inputs)
+	}
+	for _, in := range objcopy.Inputs {
+		if strings.Contains(in.String(), "${BINDIR}") {
+			t.Fatalf("objcopy inputs still leak ${BINDIR}: %#v", objcopy.Inputs)
+		}
+	}
+}
+
+func TestGen_ResourceBindirRunProgramCarriesInputClosure(t *testing.T) {
+	root := t.TempDir()
+
+	writeTestModuleFile(t, root, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(t, root, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(t, root, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(t, root, "tools/json_gen/bin", "json_gen")
+
+	writeTestModuleFile(t, root, "dep/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(dep.cpp dep.h)
+END()
+`)
+	writeTestModuleFile(t, root, "dep/dep.cpp", "int dep(){return 0;}\n")
+	writeTestModuleFile(t, root, "dep/dep.h", "#pragma once\n")
+
+	writeTestModuleFile(t, root, "db/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(dep)
+RUN_PROGRAM(
+    tools/json_gen/bin
+        --output
+        ${BINDIR}/unused.cpp
+        --json-output
+        ${BINDIR}/data.json
+        gen.h
+    IN gen.h
+    OUT_NOAUTO ${BINDIR}/data.json
+)
+RESOURCE(
+    ${BINDIR}/data.json /data.json
+)
+END()
+`)
+	writeTestModuleFile(t, root, "db/gen.h", `#pragma once
+#include <dep/dep.h>
+`)
+
+	g := testGen(root, "db")
+
+	pr := mustNodeByOutput(t, g, "$(B)/db/data.json")
+	if !nodeHasInput(pr, "$(S)/db/gen.h") {
+		t.Fatalf("pr inputs missing direct gen.h input: %#v", pr.Inputs)
+	}
+	if !nodeHasInput(pr, "$(S)/dep/dep.h") {
+		t.Fatalf("pr inputs missing transitive dep/dep.h closure: %#v", pr.Inputs)
+	}
+
+	objcopy := findNodeByOutputPrefix(g, "$(B)/db/objcopy_")
+	if objcopy == nil {
+		t.Fatal("graph is missing db objcopy output")
+	}
+	if !nodeHasInput(objcopy, "$(B)/db/data.json") {
+		t.Fatalf("objcopy inputs missing build-root data.json: %#v", objcopy.Inputs)
+	}
+	if !nodeHasInput(objcopy, "$(S)/dep/dep.h") {
+		t.Fatalf("objcopy inputs missing transitive dep/dep.h closure: %#v", objcopy.Inputs)
 	}
 }
 
