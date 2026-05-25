@@ -1203,22 +1203,45 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 
 	var out searchTierResult
 
-	// Both branches work from the target's cleaned form, split into dir/base
-	// once — it is the same for every prefix probed below.
+	// Both branches work from the target's cleaned form — the same for every
+	// prefix probed below.
 	normTarget := normalisePath(target)
-	normTargetDir, normBase := splitDirName(normTarget)
 
 	addSource := func(prefixRel string) bool {
-		// Concat-free existence probe: children of <prefixRel>/<normTargetDir>
-		// then membership of normBase. Misses (the common case) allocate nothing.
-		if !s.isFileAt(prefixRel, normTargetDir, normBase) {
-			return false
+		// First-component filter: <prefixRel>/<target> can exist only if
+		// target's leading component is an entry of prefixRel's directory. That
+		// listing is already cached (prefixRel is an ADDINCL dir, reached with no
+		// concat), and for the overwhelming majority of probes the component is
+		// absent — reject with no path concatenation at all. Only a real match
+		// (rare) pays the concat for the full check. A leading ".." escapes the
+		// prefix and can't be filtered this way, so it skips to the full check.
+		first, more := firstComponent(normTarget)
+		if first != ".." {
+			isDir, ok := s.listdir(prefixRel)[first]
+			if !ok {
+				return false
+			}
+
+			if !more {
+				// Single-component target: the entry itself is the file.
+				if isDir {
+					return false
+				}
+
+				out.paths = []VFS{Source(joinRel(prefixRel, normTarget))}
+				out.found = true
+
+				return true
+			}
+
+			if !isDir {
+				return false // leading component is a file, can't be a parent dir
+			}
 		}
 
-		// Hit (rare): materialise the resolved Source VFS — the only concat.
-		rel := normTarget
-		if prefixRel != "" {
-			rel = normalisePath(prefixRel + "/" + normTarget)
+		rel := normalisePath(joinRel(prefixRel, normTarget))
+		if !s.fileExistsByRel(rel) {
+			return false
 		}
 
 		out.paths = []VFS{Source(rel)}
@@ -1644,9 +1667,7 @@ func (s *IncludeScanner) fileExistsByRel(rel string) bool {
 	return s.parsers.fileExistsByRel(rel)
 }
 
-// isFileAt is the concat-free existence probe: does <prefix>/<suffix>/<name>
-// resolve to a regular file? Used by the search tier so a (addinclDir, target)
-// candidate never has to be concatenated to test it.
-func (s *IncludeScanner) isFileAt(prefix, suffix, name string) bool {
-	return s.parsers.fs.IsFileAt(prefix, suffix, name)
+// listdir returns the (cached) child name→isDir map of directory rel.
+func (s *IncludeScanner) listdir(rel string) map[string]bool {
+	return s.parsers.fs.Listdir(rel)
 }
