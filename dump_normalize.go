@@ -12,9 +12,9 @@ import (
 
 const dumpUIDLen = 22
 
-// cmdDumpNormalize is a streaming, two-pass Go port of dev/normalize.py.
-// It does not reproduce normalize.py byte-for-byte; it reproduces its
-// SEMANTICS, so that two semantically-equal graphs (OUR vs REF) emit an
+// cmdDumpNormalize is the canonical L4 normalizer: a streaming, two-pass
+// canonicalization of a raw build graph into per-node JSONL. It canonicalizes
+// on SEMANTICS, so that two semantically-equal graphs (OUR vs REF) emit an
 // identical set of canonical JSONL node lines.
 //
 // Pass 1 streams every node, canonicalizes its content (minus deps/identity),
@@ -138,7 +138,7 @@ func cmdDumpNormalize(args []string) int {
 			}
 		})
 
-	// --- Resolve roots (mirror normalize.py::_find_roots) ---
+	// --- Resolve roots ---
 	roots := []string{}
 	if len(ldRoots) > 0 || len(arRoots) > 0 {
 		switch {

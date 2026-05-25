@@ -274,7 +274,7 @@ func cmdMake(args []string) int {
 	}
 
 	// `-j 0` is no-exec mode (Gen runs, no subprocesses):
-	//   - with `-G`: dump the graph as stable JSON for ./dev/normalize.py.
+	//   - with `-G`: dump the graph as stable JSON for `ay dump normalize`.
 	//   - without `-G`: Gen streams to a discard sink (smoke test).
 	onWarn := func(w Warn) {
 		// Unresolved includes are a build-stopping error by default —
