@@ -141,7 +141,7 @@ func (cIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 
 	if extras, ok := macroIndirectIncludes[rel]; ok {
 		for _, m := range extras {
-			out = append(out, includeDirective{kind: m.kind, target: m.target})
+			out = append(out, includeDirective{kind: m.kind, target: internString(m.target)})
 		}
 	}
 
@@ -161,7 +161,7 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 
 	if strings.HasSuffix(rel, ".pyx") {
 		base := strings.TrimSuffix(rel, ".pyx")
-		add(includeDirective{kind: includeQuoted, target: path.Base(base) + ".pxd"})
+		add(includeDirective{kind: includeQuoted, target: internString(path.Base(base) + ".pxd")})
 	}
 
 	eachLine(data, func(line []byte) {
@@ -171,20 +171,20 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 		}
 
 		if m := cythonIncludeRe.FindStringSubmatch(s); len(m) == 2 {
-			add(includeDirective{kind: includeQuoted, target: m[1]})
+			add(includeDirective{kind: includeQuoted, target: internString(m[1])})
 			return
 		}
 
 		if m := cythonExternFromRe.FindStringSubmatch(s); len(m) == 2 {
 			target, kind, ok := parseDelimitedIncludeTarget(m[1])
 			if ok {
-				add(includeDirective{kind: kind, target: target})
+				add(includeDirective{kind: kind, target: internString(target)})
 			}
 			return
 		}
 
 		if m := cythonCimportFromRe.FindStringSubmatch(s); len(m) == 2 {
-			add(includeDirective{kind: includeQuoted, target: cythonPxdTarget(m[1])})
+			add(includeDirective{kind: includeQuoted, target: internString(cythonPxdTarget(m[1]))})
 			return
 		}
 
@@ -197,7 +197,7 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 				if idx := strings.IndexAny(part, " \t"); idx >= 0 {
 					part = part[:idx]
 				}
-				add(includeDirective{kind: includeQuoted, target: cythonPxdTarget(part)})
+				add(includeDirective{kind: includeQuoted, target: internString(cythonPxdTarget(part))})
 			}
 		}
 	})
@@ -225,7 +225,7 @@ func (flatbuffersIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncl
 			return
 		}
 
-		out = append(out, includeDirective{kind: includeQuoted, target: string(m[1])})
+		out = append(out, includeDirective{kind: includeQuoted, target: internString(string(m[1]))})
 	})
 
 	return rawParsedIncludeSet(parsedIncludesLocal, out...)
@@ -241,7 +241,7 @@ func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet
 			return
 		}
 
-		local = append(local, includeDirective{kind: kind, target: target})
+		local = append(local, includeDirective{kind: kind, target: internString(target)})
 
 		// HCPP bucket carries the codegen schema: protoc-generated
 		// outputs `#include` the .pb.h / .ev.pb.h of each import.
@@ -250,9 +250,9 @@ func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet
 		// descriptor.proto special case.
 		switch {
 		case strings.HasSuffix(target, ".ev"):
-			hcpp = append(hcpp, includeDirective{kind: kind, target: strings.TrimSuffix(target, ".ev") + ".ev.pb.h"})
+			hcpp = append(hcpp, includeDirective{kind: kind, target: internString(strings.TrimSuffix(target, ".ev") + ".ev.pb.h")})
 		case strings.HasSuffix(target, ".proto"):
-			hcpp = append(hcpp, includeDirective{kind: kind, target: strings.TrimSuffix(target, ".proto") + ".pb.h"})
+			hcpp = append(hcpp, includeDirective{kind: kind, target: internString(strings.TrimSuffix(target, ".proto") + ".pb.h")})
 		}
 	})
 
@@ -298,14 +298,14 @@ func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeS
 			return
 		}
 		seenNative[target] = struct{}{}
-		local = append(local, includeDirective{kind: includeQuoted, target: target})
+		local = append(local, includeDirective{kind: includeQuoted, target: internString(target)})
 	})
 
 	var set parsedIncludeSet
 	set = appendParsedDirectives(set, parsedIncludesLocal, local...)
 	set = appendParsedDirectives(set, parsedIncludesHCPP, includeDirective{
 		kind:   includeQuoted,
-		target: rel,
+		target: internString(rel),
 	})
 
 	return set
@@ -325,7 +325,7 @@ func (swigIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet 
 		if !inBlock && (strings.HasPrefix(trimmed, "%include") || strings.HasPrefix(trimmed, "%import") || strings.HasPrefix(trimmed, "%insert")) {
 			target, kind, ok := parseSwigIncludeLine(trimmed)
 			if ok {
-				direct = append(direct, includeDirective{kind: kind, target: target})
+				direct = append(direct, includeDirective{kind: kind, target: internString(target)})
 			}
 		}
 
@@ -422,7 +422,7 @@ func parseCIncludes(data []byte) []includeDirective {
 				q++
 			}
 			if q > start && data[start] != '$' && !hasYIgnoreComment(data, q) {
-				out = append(out, includeDirective{kind: includeQuoted, target: string(data[start:q])})
+				out = append(out, includeDirective{kind: includeQuoted, target: internBytes(data[start:q])})
 			}
 			p = nextLineStart(data, q)
 			continue
@@ -446,7 +446,7 @@ func parseCIncludes(data []byte) []includeDirective {
 		}
 
 		if !hasYIgnoreComment(data, q) {
-			out = append(out, includeDirective{kind: kind, target: target})
+			out = append(out, includeDirective{kind: kind, target: internString(target)})
 		}
 
 		p = nextLineStart(data, q)
@@ -564,7 +564,7 @@ func parseYasmIncludes(data []byte) []includeDirective {
 		// only one capture group; m[0:2] is the full match span).
 		target := string(line[m[2]:m[3]])
 
-		out = append(out, includeDirective{kind: kind, next: false, target: target})
+		out = append(out, includeDirective{kind: kind, next: false, target: internString(target)})
 	})
 
 	return out

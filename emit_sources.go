@@ -159,14 +159,14 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
 			evHParsed = append(evHParsed, directImports...)
 			for _, include := range protobufRuntimeHeaders {
-				evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
+				evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 			}
 			evHParsed = append(evHParsed, evExtras...)
 			registerGeneratedParsedOutput(ctx, srcInstance, "EV", evH, evHParsed)
 			evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders))
-			evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: evH.Rel()})
+			evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internString(evH.Rel())})
 			for _, include := range protobufRuntimeHeaders {
-				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
+				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 			}
 			registerGeneratedParsedOutput(ctx, srcInstance, "EV", evPbCC, evCCParsed)
 		}
@@ -229,8 +229,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		cfOut := Build(srcInstance.Path + "/" + strings.TrimSuffix(srcRel, ".in"))
 
 		parsed := []includeDirective{
-			{kind: includeQuoted, target: inSourceVFS.Rel()},
-			{kind: includeQuoted, target: configureFilePyVFS.Rel()},
+			{kind: includeQuoted, target: internString(inSourceVFS.Rel())},
+			{kind: includeQuoted, target: internString(configureFilePyVFS.Rel())},
 		}
 		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, inSourceVFS.Rel())...)
 		registerDeferredCF(ctx, srcInstance, cfOut, parsed, &deferredCF{
@@ -251,8 +251,8 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		cfRef, cfOut := EmitCF(srcInstance, inSourceVFS, cfOut, cfgVars, srcIn.IncludeInputs, srcInstance.Path, ctx.emit)
 
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{
-			{kind: includeQuoted, target: inSourceVFS.Rel()},
-			{kind: includeQuoted, target: configureFilePyVFS.Rel()},
+			{kind: includeQuoted, target: internString(inSourceVFS.Rel())},
+			{kind: includeQuoted, target: internString(configureFilePyVFS.Rel())},
 		}, cfRef)
 
 		ccSrcRel := strings.TrimPrefix(cfOut.Rel(), srcInstance.Path+"/")

@@ -199,11 +199,11 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 
 func rawAuxInputClosure(ctx *genCtx, instance ModuleInstance, aux VFS, seed []VFS, in ModuleCCInputs) []VFS {
 	emits := []includeDirective{
-		{kind: includeQuoted, target: "library/cpp/resource/resource.h"},
-		{kind: includeQuoted, target: "library/cpp/resource/registry.h"},
+		{kind: includeQuoted, target: internString("library/cpp/resource/resource.h")},
+		{kind: includeQuoted, target: internString("library/cpp/resource/registry.h")},
 	}
 	for _, v := range seed {
-		emits = append(emits, includeDirective{kind: includeQuoted, target: v.Rel()})
+		emits = append(emits, includeDirective{kind: includeQuoted, target: internString(v.Rel())})
 	}
 	registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits)
 

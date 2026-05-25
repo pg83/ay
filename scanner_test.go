@@ -283,8 +283,8 @@ func TestScanner_BlockCommentIncludeIgnored(t *testing.T) {
 		t.Fatalf("got %d directives, want 1; directives=%+v", len(dirs), dirs)
 	}
 
-	if dirs[0].target != "real.h" {
-		t.Errorf("directive target = %q, want %q", dirs[0].target, "real.h")
+	if dirs[0].target.String() != "real.h" {
+		t.Errorf("directive target = %q, want %q", dirs[0].target.String(), "real.h")
 	}
 }
 
@@ -596,7 +596,7 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 	sc := scanner.NewScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"include"}),
 	})
-	d := includeDirective{kind: includeSystem, target: "foo.h"}
+	d := includeDirective{kind: includeSystem, target: internString("foo.h")}
 
 	got1 := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), d)
 	got2 := sc.resolveSearchPath(Intern("$(S)/pkg/b.cpp"), d)
@@ -630,7 +630,7 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 	sc := scanner.NewScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"include"}),
 	})
-	d := includeDirective{kind: includeSystem, target: "missing.h"}
+	d := includeDirective{kind: includeSystem, target: internString("missing.h")}
 
 	got1 := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), d)
 	got2 := sc.resolveSearchPath(Intern("$(S)/pkg/b.cpp"), d)
@@ -673,7 +673,7 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 	sc := scanner.NewScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"include"}),
 	})
-	got := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), includeDirective{kind: includeQuoted, target: "foo.h"})
+	got := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), includeDirective{kind: includeQuoted, target: internString("foo.h")})
 	want := []VFS{Intern("$(S)/pkg/foo.h")}
 
 	if len(got) != len(want) || got[0] != want[0] {
@@ -1191,8 +1191,8 @@ some_label:
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
 	}
 
-	if dirs[0].target != "defs.asm" {
-		t.Errorf("target = %q, want %q", dirs[0].target, "defs.asm")
+	if dirs[0].target.String() != "defs.asm" {
+		t.Errorf("target = %q, want %q", dirs[0].target.String(), "defs.asm")
 	}
 
 	if dirs[0].kind != includeQuoted {
@@ -1219,8 +1219,8 @@ func TestParseYasmIncludes_UppercaseDirective(t *testing.T) {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
 	}
 
-	if dirs[0].target != "randomah.asi" {
-		t.Errorf("target = %q, want %q", dirs[0].target, "randomah.asi")
+	if dirs[0].target.String() != "randomah.asi" {
+		t.Errorf("target = %q, want %q", dirs[0].target.String(), "randomah.asi")
 	}
 
 	if dirs[0].kind != includeQuoted {
@@ -1244,8 +1244,8 @@ func TestParseYasmIncludes_LineCommentIgnored(t *testing.T) {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
 	}
 
-	if dirs[0].target != "real.asm" {
-		t.Errorf("target = %q, want %q", dirs[0].target, "real.asm")
+	if dirs[0].target.String() != "real.asm" {
+		t.Errorf("target = %q, want %q", dirs[0].target.String(), "real.asm")
 	}
 }
 
@@ -1265,8 +1265,8 @@ func TestParseYasmIncludes_TrailingSemicolonComment(t *testing.T) {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
 	}
 
-	if dirs[0].target != "instrset64.asm" {
-		t.Errorf("target = %q, want %q", dirs[0].target, "instrset64.asm")
+	if dirs[0].target.String() != "instrset64.asm" {
+		t.Errorf("target = %q, want %q", dirs[0].target.String(), "instrset64.asm")
 	}
 }
 
@@ -1299,8 +1299,8 @@ func TestParseYasmIncludes_AngleBracketForm(t *testing.T) {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
 	}
 
-	if dirs[0].target != "sysmacros.asi" {
-		t.Errorf("target = %q, want %q", dirs[0].target, "sysmacros.asi")
+	if dirs[0].target.String() != "sysmacros.asi" {
+		t.Errorf("target = %q, want %q", dirs[0].target.String(), "sysmacros.asi")
 	}
 
 	if dirs[0].kind != includeSystem {
@@ -1327,7 +1327,7 @@ import weak 'c.proto';
 		t.Fatalf("got %d directives, want 3; %+v", len(dirs), dirs)
 	}
 
-	got := []string{dirs[0].target, dirs[1].target, dirs[2].target}
+	got := []string{dirs[0].target.String(), dirs[1].target.String(), dirs[2].target.String()}
 	want := []string{"a.proto", "b.proto", "c.proto"}
 	for i := range want {
 		if got[i] != want[i] {
@@ -1365,8 +1365,8 @@ import public "d.ev";
 
 	wantHCPP := []string{"a.pb.h", "b.pb.h", "c.pb.h", "d.ev.pb.h"}
 	for i, want := range wantHCPP {
-		if hcpp[i].target != want {
-			t.Fatalf("hcpp[%d].target = %q, want %q; all=%+v", i, hcpp[i].target, want, hcpp)
+		if hcpp[i].target.String() != want {
+			t.Fatalf("hcpp[%d].target.String() = %q, want %q; all=%+v", i, hcpp[i].target.String(), want, hcpp)
 		}
 		if hcpp[i].kind != includeQuoted {
 			t.Fatalf("hcpp[%d].kind = %v, want includeQuoted", i, hcpp[i].kind)
@@ -1401,8 +1401,8 @@ include "machine.rl";
 	wantLocalTargets := []string{"outer.h", "tail.h", "machine.rl", "machine2.rl"}
 	wantLocalKinds := []includeKind{includeSystem, includeQuoted, includeQuoted, includeQuoted}
 	for i := range wantLocalTargets {
-		if local[i].target != wantLocalTargets[i] {
-			t.Fatalf("local[%d].target = %q, want %q; all=%+v", i, local[i].target, wantLocalTargets[i], local)
+		if local[i].target.String() != wantLocalTargets[i] {
+			t.Fatalf("local[%d].target.String() = %q, want %q; all=%+v", i, local[i].target.String(), wantLocalTargets[i], local)
 		}
 		if local[i].kind != wantLocalKinds[i] {
 			t.Fatalf("local[%d].kind = %v, want %v", i, local[i].kind, wantLocalKinds[i])
@@ -1412,7 +1412,7 @@ include "machine.rl";
 	if len(hcpp) != 1 {
 		t.Fatalf("got %d h+cpp entries, want 1; %+v", len(hcpp), hcpp)
 	}
-	if hcpp[0].target != "src.rl6" || hcpp[0].kind != includeQuoted {
+	if hcpp[0].target.String() != "src.rl6" || hcpp[0].kind != includeQuoted {
 		t.Fatalf("h+cpp = %+v, want quoted self target \"src.rl6\"", hcpp)
 	}
 }
@@ -1436,7 +1436,7 @@ func TestParsedIncludes_LeadingUTF8BOM(t *testing.T) {
 	if len(local) != 2 {
 		t.Fatalf("got %d local entries, want 2 (BOM not stripped?); %+v", len(local), local)
 	}
-	if local[0].target != "sibling.h" || local[0].kind != includeQuoted {
+	if local[0].target.String() != "sibling.h" || local[0].kind != includeQuoted {
 		t.Fatalf("local[0] = %+v, want quoted \"sibling.h\"", local[0])
 	}
 }
@@ -1468,8 +1468,8 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 	wantLocalTargets := []string{"a.i", "b.i", "c.h"}
 	wantLocalKinds := []includeKind{includeQuoted, includeSystem, includeQuoted}
 	for i := range wantLocalTargets {
-		if local[i].target != wantLocalTargets[i] {
-			t.Fatalf("local[%d].target = %q, want %q; all=%+v", i, local[i].target, wantLocalTargets[i], local)
+		if local[i].target.String() != wantLocalTargets[i] {
+			t.Fatalf("local[%d].target.String() = %q, want %q; all=%+v", i, local[i].target.String(), wantLocalTargets[i], local)
 		}
 		if local[i].kind != wantLocalKinds[i] {
 			t.Fatalf("local[%d].kind = %v, want %v", i, local[i].kind, wantLocalKinds[i])
@@ -1479,7 +1479,7 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 	if len(hcpp) != 1 {
 		t.Fatalf("got %d h+cpp entries, want 1; %+v", len(hcpp), hcpp)
 	}
-	if hcpp[0].target != "block.h" || hcpp[0].kind != includeQuoted {
+	if hcpp[0].target.String() != "block.h" || hcpp[0].kind != includeQuoted {
 		t.Fatalf("h+cpp = %+v, want block.h quoted", hcpp)
 	}
 }
@@ -1514,11 +1514,11 @@ func TestScanDirectives_DispatchByExtension(t *testing.T) {
 	asmDirs := scanner.scanDirectives(Intern("$(S)/src.asm"))
 	hDirs := scanner.scanDirectives(Intern("$(S)/src.h"))
 
-	if len(asmDirs) != 1 || asmDirs[0].target != "defs.asm" {
+	if len(asmDirs) != 1 || asmDirs[0].target.String() != "defs.asm" {
 		t.Errorf("asm dispatch failed: got %+v, want one directive targeting defs.asm", asmDirs)
 	}
 
-	if len(hDirs) != 1 || hDirs[0].target != "real.h" {
+	if len(hDirs) != 1 || hDirs[0].target.String() != "real.h" {
 		t.Errorf("h dispatch failed: got %+v, want one directive targeting real.h", hDirs)
 	}
 }
@@ -1541,7 +1541,7 @@ func TestScanDirectives_AsiDispatchesToYasm(t *testing.T) {
 	// PR-M3-vfs-paths: scanDirectives takes a VFS path.
 	dirs := scanner.scanDirectives(Intern("$(S)/src.asi"))
 
-	if len(dirs) != 1 || dirs[0].target != "nested.asi" {
+	if len(dirs) != 1 || dirs[0].target.String() != "nested.asi" {
 		t.Errorf(".asi dispatch failed: got %+v, want one directive targeting nested.asi", dirs)
 	}
 }
@@ -1673,11 +1673,11 @@ func TestScanDirectives_MacroIndirectAugmentation(t *testing.T) {
 	var hasCrypto, hasUnistd bool
 
 	for _, d := range dirs {
-		if d.target == "openssl/crypto.h" && d.kind == includeSystem {
+		if d.target.String() == "openssl/crypto.h" && d.kind == includeSystem {
 			hasCrypto = true
 		}
 
-		if d.target == "unistd.h" && d.kind == includeSystem {
+		if d.target.String() == "unistd.h" && d.kind == includeSystem {
 			hasUnistd = true
 		}
 	}

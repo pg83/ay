@@ -624,12 +624,12 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	reg := codegenRegForInstance(ctx, instance)
 	if reg != nil {
 		emits := []includeDirective{
-			{kind: includeQuoted, target: "library/cpp/resource/resource.h"},
-			{kind: includeQuoted, target: "library/cpp/resource/registry.h"},
+			{kind: includeQuoted, target: internString("library/cpp/resource/resource.h")},
+			{kind: includeQuoted, target: internString("library/cpp/resource/registry.h")},
 		}
 		for _, in := range seed {
 			if in.IsSource() {
-				emits = append(emits, includeDirective{kind: includeQuoted, target: in.Rel()})
+				emits = append(emits, includeDirective{kind: includeQuoted, target: internString(in.Rel())})
 			}
 		}
 		registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits)

@@ -151,7 +151,7 @@ func swigIncludeClosure(ctx *genCtx, src VFS) []VFS {
 		enqueue(imp, includeSystem, src.Rel())
 	}
 	for _, d := range swigSourceParsedBuckets(ctx, src.Rel()).bucket(parsedIncludesLocal) {
-		enqueue(d.target, d.kind, src.Rel())
+		enqueue(d.target.String(), d.kind, src.Rel())
 	}
 
 	for len(queue) > 0 {
@@ -162,7 +162,7 @@ func swigIncludeClosure(ctx *genCtx, src VFS) []VFS {
 		}
 		seen[rel] = struct{}{}
 		for _, d := range swigSourceParsedBuckets(ctx, rel).bucket(parsedIncludesLocal) {
-			enqueue(d.target, d.kind, rel)
+			enqueue(d.target.String(), d.kind, rel)
 		}
 	}
 

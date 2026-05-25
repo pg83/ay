@@ -35,8 +35,8 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		// follow (empty for pure @VAR@ headers like config.h /
 		// protocol_version_variables.h).
 		parsed := []includeDirective{
-			{kind: includeQuoted, target: srcVFS.Rel()},
-			{kind: includeQuoted, target: configureFilePyVFS.Rel()},
+			{kind: includeQuoted, target: internString(srcVFS.Rel())},
+			{kind: includeQuoted, target: internString(configureFilePyVFS.Rel())},
 		}
 		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, srcVFS.Rel())...)
 		registerBoundGeneratedParsedOutput(ctx, instance, "CF", cfOut, parsed, cfRef)
@@ -60,7 +60,7 @@ func cfIncludeDirectives(pm *includeParserManager, rel string) []includeDirectiv
 	if len(out) == 0 {
 		return nil
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].target < out[j].target })
+	sort.Slice(out, func(i, j int) bool { return out[i].target.String() < out[j].target.String() })
 	return out
 }
 
