@@ -2,11 +2,12 @@ package main
 
 import (
 	"bufio"
-	stdjson "encoding/json"
 	"io"
 	"os"
 	"regexp"
 	"strings"
+
+	json "github.com/goccy/go-json"
 )
 
 // cmdDumpGrep prints, pretty-formatted, every node of a graph whose self_uid
@@ -125,14 +126,15 @@ func cmdDumpGrep(args []string) int {
 		if !hit {
 			return
 		}
-		Throw2(bw.Write(marshalPretty(node)))
+		Throw2(bw.Write(Throw2(json.MarshalIndent(node, "", "  "))))
 		Throw(bw.WriteByte('\n'))
 	}
 
 	if raw {
 		f := Throw2(os.Open(inPath))
 		defer func() { Throw(f.Close()) }()
-		dec := newDumpDecoder(f)
+		dec := json.NewDecoder(bufio.NewReaderSize(f, 1<<20))
+		dec.UseNumber()
 		seekToGraph(dec, inPath)
 		for dec.More() {
 			node := map[string]any{}
@@ -149,7 +151,7 @@ func cmdDumpGrep(args []string) int {
 		line, err := r.ReadString('\n')
 		if len(line) > 0 {
 			node := map[string]any{}
-			Throw(stdjson.Unmarshal([]byte(line), &node))
+			Throw(json.Unmarshal([]byte(line), &node))
 			emit(node)
 		}
 		if err == io.EOF {
