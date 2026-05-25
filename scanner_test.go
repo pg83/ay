@@ -1873,3 +1873,154 @@ func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
 	assertHasVFS(t, closure, Source("contrib/tools/cython/Cython/Includes/libc/stdint.pxd"))
 	assertHasVFS(t, closure, Source("contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd"))
 }
+
+// hyperscanPeerAddIncl returns the PeerAddIncl search paths for a
+// contrib/libs/hyperscan CC consumer, as extracted from sg5.json for
+// contrib/libs/hyperscan/_/src/nfa/limex_compile.cpp.o.
+func hyperscanPeerAddIncl() []VFS {
+	return VFSesFromStrings([]string{
+		"contrib/libs/cxxsupp/libcxx/include",
+		"contrib/libs/cxxsupp/libcxxrt/include",
+		"contrib/libs/clang20-rt/include",
+		"contrib/restricted/boost/dynamic_bitset/include",
+		"contrib/restricted/boost/assert/include",
+		"contrib/restricted/boost/config/include",
+		"contrib/restricted/boost/container_hash/include",
+		"contrib/restricted/boost/describe/include",
+		"contrib/restricted/boost/mp11/include",
+		"contrib/restricted/boost/core/include",
+		"contrib/restricted/boost/throw_exception/include",
+		"contrib/restricted/boost/graph/include",
+		"contrib/restricted/boost/algorithm/include",
+		"contrib/restricted/boost/array/include",
+		"contrib/restricted/boost/bind/include",
+		"contrib/restricted/boost/concept_check/include",
+		"contrib/restricted/boost/preprocessor/include",
+		"contrib/restricted/boost/type_traits/include",
+		"contrib/restricted/boost/exception/include",
+		"contrib/restricted/boost/smart_ptr/include",
+		"contrib/restricted/boost/tuple/include",
+		"contrib/restricted/boost/function/include",
+		"contrib/restricted/boost/iterator/include",
+		"contrib/restricted/boost/detail/include",
+		"contrib/restricted/boost/fusion/include",
+		"contrib/restricted/boost/function_types/include",
+		"contrib/restricted/boost/mpl/include",
+		"contrib/restricted/boost/predef/include",
+		"contrib/restricted/boost/utility/include",
+		"contrib/restricted/boost/io/include",
+		"contrib/restricted/boost/functional/include",
+		"contrib/restricted/boost/typeof/include",
+		"contrib/restricted/boost/optional/include",
+		"contrib/restricted/boost/range/include",
+		"contrib/restricted/boost/conversion/include",
+		"contrib/restricted/boost/regex/include",
+		"contrib/libs/icu/include",
+		"contrib/restricted/boost/unordered/include",
+		"contrib/restricted/boost/container/include",
+		"contrib/restricted/boost/intrusive/include",
+		"contrib/restricted/boost/move/include",
+		"contrib/restricted/boost/any/include",
+		"contrib/restricted/boost/type_index/include",
+		"contrib/restricted/boost/bimap/include",
+		"contrib/restricted/boost/lambda/include",
+		"contrib/restricted/boost/multi_index/include",
+		"contrib/restricted/boost/integer/include",
+		"contrib/restricted/boost/static_assert/include",
+		"contrib/restricted/boost/lexical_cast/include",
+		"contrib/restricted/boost/math/include",
+		"contrib/restricted/boost/random/include",
+		"contrib/restricted/boost/system/include",
+		"contrib/restricted/boost/variant2/include",
+		"contrib/restricted/boost/winapi/include",
+		"contrib/restricted/boost/parameter/include",
+		"contrib/restricted/boost/property_map/include",
+		"contrib/restricted/boost/property_tree/include",
+		"contrib/restricted/boost/serialization/include",
+		"contrib/restricted/boost/spirit/include",
+		"contrib/restricted/boost/endian/include",
+		"contrib/restricted/boost/phoenix/include",
+		"contrib/restricted/boost/proto/include",
+		"contrib/restricted/boost/pool/include",
+		"contrib/restricted/boost/thread/include",
+		"contrib/restricted/boost/atomic/include",
+		"contrib/restricted/boost/align/include",
+		"contrib/restricted/boost/chrono/include",
+		"contrib/restricted/boost/ratio/include",
+		"contrib/restricted/boost/date_time/include",
+		"contrib/restricted/boost/numeric_conversion/include",
+		"contrib/restricted/boost/tokenizer/include",
+		"contrib/restricted/boost/variant/include",
+		"contrib/restricted/boost/tti/include",
+		"contrib/restricted/boost/xpressive/include",
+		"contrib/restricted/boost/icl/include",
+		"contrib/restricted/boost/rational/include",
+		"contrib/restricted/boost/multi_array/include",
+	})
+}
+
+// TestScanner_HyperscanBoostFunctionTypes_ProductionParity pins the
+// macro-form include chain that flows from contrib/libs/hyperscan through
+// boost/graph → boost/tti → boost/function_types → the pp_loop / pp_al
+// detail headers. Those detail headers are reached exclusively through
+// `#include BOOST_FT_loop` / `#include BOOST_FT_AL_INCLUDE_FILE` directives
+// resolved via sysincl/macro.yml.
+//
+// Prior to c31218d ("Resolve macro `#include` via sysincl/macro.yml"),
+// the macro-form includes were unresolved and the function_types detail
+// headers were absent from the closure, causing ~41 missing inputs per
+// Hyperscan CC node vs the upstream sg5.json reference.
+func TestScanner_HyperscanBoostFunctionTypes_ProductionParity(t *testing.T) {
+	const sourceRoot = "/home/pg/monorepo/ydb"
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "build", "sysincl")); err != nil {
+		t.Skipf("sysincl tree %s not present: %v", sourceRoot, err)
+	}
+
+	if _, err := os.Stat(filepath.Join(sourceRoot, "contrib/libs/hyperscan/src/nfa/limex_compile.cpp")); err != nil {
+		t.Skipf("hyperscan source not present: %v", err)
+	}
+
+	sysincl := LoadSysInclSetFor(sourceRoot, "x86_64", func(Warn) {})
+	scanner := NewIncludeScanner(sourceRoot, sysincl)
+
+	ctx := ScanContext{
+		SourceRel: "contrib/libs/hyperscan/src/nfa/limex_compile.cpp",
+		OwnAddIncl: VFSesFromStrings([]string{
+			"contrib/libs/hyperscan",
+			"contrib/libs/hyperscan/include",
+			"contrib/libs/hyperscan/src",
+		}),
+		PeerAddInclSet:  hyperscanPeerAddIncl(),
+		BaseSearchPaths: includeScannerBasePaths(),
+	}
+
+	closure := scanner.WalkClosure(ctx)
+
+	if len(closure) == 0 {
+		t.Fatalf("hyperscan closure unexpectedly empty")
+	}
+
+	// These headers are only reachable through macro-form includes
+	// resolved via sysincl/macro.yml (BOOST_FT_AL_INCLUDE_FILE chain).
+	wantSuffixes := []string{
+		"boost/function_types/components.hpp",
+		"boost/function_types/detail/classifier_impl/master.hpp",
+	}
+
+	got := make(map[string]bool)
+	for _, p := range closure {
+		s := p.String()
+		for _, w := range wantSuffixes {
+			if strings.HasSuffix(s, w) {
+				got[w] = true
+			}
+		}
+	}
+
+	for _, w := range wantSuffixes {
+		if !got[w] {
+			t.Errorf("hyperscan closure missing %s (c31218d regression)", w)
+		}
+	}
+}
