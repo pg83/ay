@@ -52,7 +52,7 @@ func generatedModuleSourceVFS(ctx *genCtx, instance ModuleInstance, srcRel strin
 	}
 
 	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path + "/" + srcRel)))
-	if _, found := reg.Lookup(buildVFS); found {
+	if reg.Lookup(buildVFS) != nil {
 		return vfsPtr(buildVFS)
 	}
 

@@ -321,7 +321,7 @@ func runProgramInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, rel
 
 	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path + "/" + rel)))
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
-		if _, found := reg.Lookup(buildVFS); found {
+		if reg.Lookup(buildVFS) != nil {
 			return buildVFS
 		}
 	}

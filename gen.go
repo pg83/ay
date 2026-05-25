@@ -293,7 +293,7 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 		} else {
 			reg := codegenRegForInstance(ctx, consumer)
 			if reg != nil {
-				if info, found := reg.Lookup(v); found {
+				if info := reg.Lookup(v); info != nil {
 					if !info.HasProducerRef && info.DeferredCF != nil {
 						// First consumer to #include this generated header owns
 						// it: emit the CF node now with the consumer's module_dir
