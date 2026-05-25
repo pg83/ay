@@ -1215,13 +1215,16 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		return true
 	}
 
-	addBuildPath := func(rel string) bool {
-		rel = normalisePath(rel)
+	// addBuildSplit probes the codegen registry for <prefixRel>/<suffix>
+	// without concatenating them: the registry pre-indexed every output under
+	// all its prefix/suffix splits, so this is a plain two-level map read.
+	addBuildSplit := func(prefixRel, suffix string) bool {
 		if s.codegen == nil {
 			return false
 		}
 
-		info, ok := s.codegen.LookupRel(rel)
+		suffix = normalisePath(suffix)
+		info, ok := s.codegen.LookupSplit(prefixRel, suffix)
 		if !ok {
 			return false
 		}
@@ -1235,11 +1238,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 	addInclPath := func(prefix VFS) bool {
 		switch prefix.Root() {
 		case VFSRootBuild:
-			if prefix.Rel() == "" {
-				return addBuildPath(target)
-			}
-
-			return addBuildPath(prefix.Rel() + "/" + target)
+			return addBuildSplit(prefix.Rel(), target)
 		case VFSRootSource:
 			if prefix.Rel() == "" {
 				return addPath(target)
