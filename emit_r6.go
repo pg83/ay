@@ -26,11 +26,11 @@ const (
 // unchanged so canonical-shape paths (fallback literal, synthetic tests)
 // are not double-rewritten.
 func canonicalizeRagel6Binary(v VFS) VFS {
-	if !v.IsBuild() || !strings.HasPrefix(v.Rel, ragel6BinSubrel) {
+	if !v.IsBuild() || !strings.HasPrefix(v.Rel(), ragel6BinSubrel) {
 		return v
 	}
 
-	return Build(ragel6CanonicalRel + v.Rel[len(ragel6BinSubrel):])
+	return Build(ragel6CanonicalRel + v.Rel()[len(ragel6BinSubrel):])
 }
 
 // EmitR6 emits an R6 node generating `<srcRel>.cpp` from `<instance.Path>/<srcRel>`

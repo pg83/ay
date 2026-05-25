@@ -110,24 +110,24 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 	if isCCSourceExt(outTok) {
 		if headerTok := strings.TrimSuffix(outTok, filepath.Ext(outTok)) + ".h"; headerTok != outTok {
 			if headerVFS, ok := outVFSByToken[headerTok]; ok {
-				appendUnique(headerVFS.Rel)
+				appendUnique(headerVFS.Rel())
 			}
 		}
 	} else if isHeaderSource(outTok) {
 		base := strings.TrimSuffix(outTok, filepath.Ext(outTok))
 		for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
 			if cppVFS, ok := outVFSByToken[base+ext]; ok {
-				appendUnique(cppVFS.Rel)
+				appendUnique(cppVFS.Rel())
 				break
 			}
 		}
 	}
 
 	for _, input := range inputs {
-		appendUnique(input.Rel)
+		appendUnique(input.Rel())
 	}
-	appendUnique(stdout2stderrVFS.Rel)
-	appendUnique(jarVFS.Rel)
+	appendUnique(stdout2stderrVFS.Rel())
+	appendUnique(jarVFS.Rel())
 	for _, include := range run.OutputIncludes {
 		appendUnique(copyFileIncludeTarget(modulePath, include))
 	}
@@ -140,9 +140,9 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 
 func antlrOutputModuleRel(modulePath string, outVFS VFS) string {
 	prefix := modulePath + "/"
-	if strings.HasPrefix(outVFS.Rel, prefix) {
-		return strings.TrimPrefix(outVFS.Rel, prefix)
+	if strings.HasPrefix(outVFS.Rel(), prefix) {
+		return strings.TrimPrefix(outVFS.Rel(), prefix)
 	}
-	ThrowFmt("gen: antlr output %q is outside module %q", outVFS.Rel, modulePath)
+	ThrowFmt("gen: antlr output %q is outside module %q", outVFS.Rel(), modulePath)
 	return ""
 }

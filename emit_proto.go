@@ -46,13 +46,13 @@ func protoDirectPbHIncludes(pm *includeParserManager, srcRel, outputRoot string)
 // when hasDescriptor (caller computes this once via protoTransitiveImports).
 func pbHEmitsIncludesExtras(protoRelPath string, hasDescriptor bool) []includeDirective {
 	out := make([]includeDirective, 0, len(pbDescriptorImporterHeaders)+3)
-	out = append(out, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
+	out = append(out, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel()})
 	out = append(out, includeDirective{kind: includeQuoted, target: protoRelPath})
 	for _, v := range pbDescriptorImporterHeaders {
-		out = append(out, includeDirective{kind: includeQuoted, target: v.Rel})
+		out = append(out, includeDirective{kind: includeQuoted, target: v.Rel()})
 	}
 	if hasDescriptor {
-		out = append(out, includeDirective{kind: includeQuoted, target: pbDescriptorVFS.Rel})
+		out = append(out, includeDirective{kind: includeQuoted, target: pbDescriptorVFS.Rel()})
 	}
 	return out
 }
@@ -71,23 +71,23 @@ func cloneIncludeDirectives(parsed []includeDirective) []includeDirective {
 // outputs reuse the exact grpc parsed witness set so they carry the same
 // service/source closure as the built-in GRPC() path.
 func extraProtoOutputParsedIncludes(output, pbH, grpcPbH, grpcPbCC VFS, grpcHParsed, grpcCCParsed []includeDirective) []includeDirective {
-	switch output.Rel {
-	case grpcPbH.Rel:
+	switch output.Rel() {
+	case grpcPbH.Rel():
 		return cloneIncludeDirectives(grpcHParsed)
-	case grpcPbCC.Rel:
+	case grpcPbCC.Rel():
 		return cloneIncludeDirectives(grpcCCParsed)
 	}
 
 	switch {
-	case strings.HasSuffix(output.Rel, ".h"),
-		strings.HasSuffix(output.Rel, ".hh"),
-		strings.HasSuffix(output.Rel, ".hpp"),
-		strings.HasSuffix(output.Rel, ".hxx"),
-		strings.HasSuffix(output.Rel, ".inc"),
-		strings.HasSuffix(output.Rel, ".inl"):
-		return []includeDirective{{kind: includeQuoted, target: pbH.Rel}}
-	case isCCSourceExt(output.Rel):
-		return []includeDirective{{kind: includeQuoted, target: pbH.Rel}}
+	case strings.HasSuffix(output.Rel(), ".h"),
+		strings.HasSuffix(output.Rel(), ".hh"),
+		strings.HasSuffix(output.Rel(), ".hpp"),
+		strings.HasSuffix(output.Rel(), ".hxx"),
+		strings.HasSuffix(output.Rel(), ".inc"),
+		strings.HasSuffix(output.Rel(), ".inl"):
+		return []includeDirective{{kind: includeQuoted, target: pbH.Rel()}}
+	case isCCSourceExt(output.Rel()):
+		return []includeDirective{{kind: includeQuoted, target: pbH.Rel()}}
 	default:
 		return nil
 	}
@@ -373,7 +373,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		for _, suffix := range plugin.OutputSuffixes {
 			out := Build(protoBase + suffix)
 			extraOutputPaths = append(extraOutputPaths, out)
-			if isCCSourceExt(out.Rel) {
+			if isCCSourceExt(out.Rel()) {
 				extraSourceOutputs = append(extraSourceOutputs, out)
 			}
 			pbKey.path = out
@@ -383,7 +383,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 	needsGRPCParsed := cfg.grpc
 	if !needsGRPCParsed {
 		for _, out := range extraOutputPaths {
-			if out.Rel == grpcPbH.Rel || out.Rel == grpcPbCC.Rel {
+			if out.Rel() == grpcPbH.Rel() || out.Rel() == grpcPbCC.Rel() {
 				needsGRPCParsed = true
 				break
 			}
@@ -397,7 +397,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		pbHParsed := make([]includeDirective, 0, len(pbHImports)+len(protobufRuntimeHeaders)+len(extras)+len(grpcServiceHeaderIncludes))
 		pbHParsed = append(pbHParsed, pbHImports...)
 		for _, include := range protobufRuntimeHeaders {
-			pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+			pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 		}
 		pbHParsed = append(pbHParsed, extras...)
 		if cfg.grpc {
@@ -406,35 +406,35 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			// service headers alongside protobuf runtime), so every consumer
 			// of the .pb.h reaches the grpc closure.
 			for _, include := range grpcServiceHeaderIncludes {
-				pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 			}
 		}
 		registerGeneratedParsedOutput(ctx, instance, "PB", pbH, pbHParsed)
 		if liteHeaders {
 			depsParsed := make([]includeDirective, 0, 1+len(directImports))
-			depsParsed = append(depsParsed, includeDirective{kind: includeQuoted, target: pbH.Rel})
+			depsParsed = append(depsParsed, includeDirective{kind: includeQuoted, target: pbH.Rel()})
 			depsParsed = append(depsParsed, directImports...)
 			registerGeneratedParsedOutput(ctx, instance, "PB", pbDepsH, depsParsed)
 		}
 
 		pbCCParsed := make([]includeDirective, 0, 3+len(directImports)+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
-		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: pbH.Rel})
+		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: pbH.Rel()})
 		if liteHeaders {
 			pbCCParsed = append(pbCCParsed, directImports...)
 		}
 		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: protoRelPath})
-		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
+		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel()})
 		for _, include := range protobufRuntimeHeaders {
-			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 		}
 		for _, include := range pbCcDeepRuntimeHeaders {
-			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 		}
 		if cfg.grpc {
 			// OutTogether-shared grpcpp source headers from the sibling
 			// .grpc.pb.cc reach this message .pb.cc.o too.
 			for _, include := range grpcSourceExtraIncludes {
-				pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 			}
 		}
 		registerGeneratedParsedOutput(ctx, instance, "PB", pbCC, pbCCParsed)
@@ -445,17 +445,17 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			// The .grpc.pb.cc includes its message .pb.h (cross-sibling, not
 			// its own .grpc.pb.h, which is the OutTogether self) plus the
 			// grpcpp source preamble.
-			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: pbH.Rel})
+			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: pbH.Rel()})
 			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: protoRelPath})
-			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel})
+			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: pbWrapperVFS.Rel()})
 			for _, include := range protobufRuntimeHeaders {
-				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 			}
 			for _, include := range pbCcDeepRuntimeHeaders {
-				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 			}
 			for _, include := range grpcSourceExtraIncludes {
-				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 			}
 
 			// The .grpc.pb.h directly includes its message .pb.h plus the
@@ -463,10 +463,10 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			// recurses those into the full grpc/protobuf/abseil/libcxx
 			// closure for every CC that includes the .grpc.pb.h.
 			grpcHParsed = make([]includeDirective, 0, 2+len(directImports)+len(grpcServiceHeaderIncludes))
-			grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: pbH.Rel})
+			grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: pbH.Rel()})
 			grpcHParsed = append(grpcHParsed, directImports...)
 			for _, include := range grpcServiceHeaderIncludes {
-				grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+				grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 			}
 			grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: pbRuntimeBase + "google/protobuf/port_def.inc"})
 		}
@@ -524,10 +524,10 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	var codegenOutputs []protoCodegenOutput
 	codegenOutputSeen := make(map[string]struct{})
 	appendCodegenOutput := func(genRef NodeRef, pbCC VFS, srcRel string) {
-		if _, dup := codegenOutputSeen[pbCC.Rel]; dup {
+		if _, dup := codegenOutputSeen[pbCC.Rel()]; dup {
 			return
 		}
-		codegenOutputSeen[pbCC.Rel] = struct{}{}
+		codegenOutputSeen[pbCC.Rel()] = struct{}{}
 		codegenOutputs = append(codegenOutputs, protoCodegenOutput{
 			genRef: genRef,
 			pbCC:   pbCC,
@@ -549,14 +549,14 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	for _, src := range protoSrcs {
 		pb := emitProtoPB(ctx, instance, d, src, cfg)
 
-		ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel, cppInstance.Path+"/")
+		ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel(), cppInstance.Path+"/")
 		appendCodegenOutput(pb.pbRef, pb.pbCC, ccSrcRel)
 		if d.grpc {
-			grpcSrcRel := strings.TrimPrefix(pb.grpcPbCC.Rel, cppInstance.Path+"/")
+			grpcSrcRel := strings.TrimPrefix(pb.grpcPbCC.Rel(), cppInstance.Path+"/")
 			appendCodegenOutput(pb.pbRef, pb.grpcPbCC, grpcSrcRel)
 		}
 		for _, extraSrc := range pb.extraSourceCC {
-			extraSrcRel := strings.TrimPrefix(extraSrc.Rel, cppInstance.Path+"/")
+			extraSrcRel := strings.TrimPrefix(extraSrc.Rel(), cppInstance.Path+"/")
 			appendCodegenOutput(pb.pbRef, extraSrc, extraSrcRel)
 		}
 	}
@@ -595,22 +595,22 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 				evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders)+len(evExtras))
 				evHParsed = append(evHParsed, directImports...)
 				for _, include := range protobufRuntimeHeaders {
-					evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+					evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 				}
 				for _, include := range eventRuntimeHeaders {
-					evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+					evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 				}
 				evHParsed = append(evHParsed, evExtras...)
 				registerGeneratedParsedOutput(ctx, instance, "EV", evH, evHParsed)
 				// Register .ev.pb.cc: event2cpp emits `#include
 				// "<base>.ev.pb.h"` plus protobuf + event runtime headers.
 				evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
-				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: evH.Rel})
+				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: evH.Rel()})
 				for _, include := range protobufRuntimeHeaders {
-					evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+					evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 				}
 				for _, include := range eventRuntimeHeaders {
-					evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: include.Rel})
+					evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 				}
 				registerGeneratedParsedOutput(ctx, instance, "EV", evPbCC, evCCParsed)
 			}
@@ -673,7 +673,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		// .ev.pb.cc.o consumer must not carry its own .ev.pb.h in inputs[]
 		// (REF omits the self-include). Drop just the sibling header.
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
-			selfH := Build(strings.TrimSuffix(co.pbCC.Rel, ".cc") + ".h")
+			selfH := Build(strings.TrimSuffix(co.pbCC.Rel(), ".cc") + ".h")
 			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 			for _, in := range ccIn.IncludeInputs {
 				if in == selfH {

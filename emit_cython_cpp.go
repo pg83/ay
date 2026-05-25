@@ -35,7 +35,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(ctx, instance, srcVFS, sourceClosure, stmt.CMode, srcScanIn)
 		parsed := make([]includeDirective, 0, len(emitsIncludes))
 		for _, include := range emitsIncludes {
-			parsed = append(parsed, includeDirective{kind: includeQuoted, target: include.Rel})
+			parsed = append(parsed, includeDirective{kind: includeQuoted, target: include.Rel()})
 		}
 		registerGeneratedParsedOutput(ctx, instance, "CY", generatedVFS, parsed)
 
@@ -110,7 +110,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		}
 		scanIn := ccIn
 		scanIn.AddIncl = appendCythonScanAddIncl(in.AddIncl, d.cythonAddIncl, py23Variant)
-		ccIn.IncludeInputs = walkClosureWithSourceRel(ctx, instance, generatedVFS, srcVFS.Rel, scanIn)
+		ccIn.IncludeInputs = walkClosureWithSourceRel(ctx, instance, generatedVFS, srcVFS.Rel(), scanIn)
 
 		ccRef, ccOut, _ := EmitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
 
@@ -130,7 +130,7 @@ func cythonGeneratedOutputInputs(ctx *genCtx, instance ModuleInstance, src VFS, 
 	emitsIncludes = append(emitsIncludes, src)
 
 	for _, v := range py3CythonOutputIncludes {
-		if v.Rel == "contrib/tools/cython/generated_cpp_headers.h" && cMode {
+		if v.Rel() == "contrib/tools/cython/generated_cpp_headers.h" && cMode {
 			continue
 		}
 		toolInputs = append(toolInputs, v)

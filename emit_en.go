@@ -23,14 +23,14 @@ type enumSrcsResult struct {
 
 func resolveEnumHeaderInput(ctx *genCtx, instance ModuleInstance, headerRel string, srcDir *string) VFS {
 	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDir)
-	if !ctx.fs.IsFile(headerInput.Rel) {
+	if !ctx.fs.IsFile(headerInput.Rel()) {
 		if vfs, ok := sourceInputVFS(ctx.fs, instance.Path, headerRel); ok && vfs.IsSource() {
 			headerInput = vfs
 		}
 	}
 
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
-		buildHeader := Build(headerInput.Rel)
+		buildHeader := Build(headerInput.Rel())
 		if _, ok := reg.Lookup(buildHeader); ok {
 			// Upstream keeps generated protobuf-family headers as opaque
 			// EN inputs: the EN node depends on the PB/EV producer, but
@@ -97,10 +97,10 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			// form, e.g. "devtools/ymake/diag/stats_enums.h_serialized.h".
 			serializedHByRel := make(map[string]VFS, len(ctx.enOutputs))
 			for buildRootPath := range ctx.enOutputs {
-				if !buildRootPath.IsBuild() || !strings.HasSuffix(buildRootPath.Rel, "_serialized.h") {
+				if !buildRootPath.IsBuild() || !strings.HasSuffix(buildRootPath.Rel(), "_serialized.h") {
 					continue
 				}
-				serializedHByRel[buildRootPath.Rel] = buildRootPath
+				serializedHByRel[buildRootPath.Rel()] = buildRootPath
 			}
 
 			depSeen := map[NodeRef]struct{}{}
@@ -129,7 +129,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 						depENRefs = append(depENRefs, ref)
 						depENOutputs = append(depENOutputs, buildRootPath)
 						// Also include the corresponding _serialized.cpp path.
-						cppPath := Build(strings.TrimSuffix(buildRootPath.Rel, "_serialized.h") + "_serialized.cpp")
+						cppPath := Build(strings.TrimSuffix(buildRootPath.Rel(), "_serialized.h") + "_serialized.cpp")
 						if cppRef, ok2 := ctx.enOutputs[cppPath]; ok2 && cppRef == ref {
 							depENOutputs = append(depENOutputs, cppPath)
 						}
@@ -155,7 +155,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		}
 		if ctx.scannerTarget.codegen != nil {
 			cppParsed := []includeDirective{
-				{kind: includeQuoted, target: headerInput.Rel},
+				{kind: includeQuoted, target: headerInput.Rel()},
 				{kind: includeQuoted, target: "tools/enum_parser/enum_parser/stdlib_deps.h"},
 				{kind: includeQuoted, target: "tools/enum_parser/enum_serialization_runtime/dispatch_methods.h"},
 				{kind: includeQuoted, target: "tools/enum_parser/enum_serialization_runtime/enum_runtime.h"},
@@ -179,8 +179,8 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 				// the EN producer's .h and .cpp outputs together in
 				// every downstream CC's inputs.
 				hParsed := []includeDirective{
-					{kind: includeQuoted, target: headerInput.Rel},
-					{kind: includeQuoted, target: serializedCPPPath.Rel},
+					{kind: includeQuoted, target: headerInput.Rel()},
+					{kind: includeQuoted, target: serializedCPPPath.Rel()},
 					{kind: includeQuoted, target: "util/generic/serialized_enum.h"},
 				}
 				sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target < hParsed[j].target })
@@ -212,7 +212,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		}
 		var crossCppClosure []VFS
 		for _, depOut := range depENOutputs {
-			if !strings.HasSuffix(depOut.Rel, "_serialized.cpp") {
+			if !strings.HasSuffix(depOut.Rel(), "_serialized.cpp") {
 				continue
 			}
 			sub := walkClosure(ctx, instance, depOut, scanIn)

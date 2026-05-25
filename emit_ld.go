@@ -160,7 +160,7 @@ func EmitLD(
 
 	outputs := []VFS{outputVFS}
 	for _, p := range dynamicPaths {
-		outputs = append(outputs, Build(binaryDir+"/"+lastPathComponent(p.Rel)))
+		outputs = append(outputs, Build(binaryDir+"/"+lastPathComponent(p.Rel())))
 	}
 	if wantsSplitDwarf {
 		outputs = append(outputs, Build(binPrefix+binaryName+".debug"))
@@ -346,10 +346,10 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 		"--build-root", "$(B)",
 	)
 	for _, p := range wholeArchiveCmdPaths {
-		cmdArgs = append(cmdArgs, "--whole-archive-libs", p.Rel)
+		cmdArgs = append(cmdArgs, "--whole-archive-libs", p.Rel())
 	}
 	for _, p := range wholeArchivePaths {
-		cmdArgs = append(cmdArgs, "--whole-archive-libs", p.Rel)
+		cmdArgs = append(cmdArgs, "--whole-archive-libs", p.Rel())
 	}
 	cmdArgs = append(cmdArgs,
 		"--arch=LINUX",
@@ -359,7 +359,7 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 		"--ya-start-command-file",
 	)
 	for _, p := range globalPaths {
-		cmdArgs = append(cmdArgs, p.Rel)
+		cmdArgs = append(cmdArgs, p.Rel())
 	}
 	cmdArgs = append(cmdArgs,
 		"--ya-end-command-file",
@@ -370,7 +370,7 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 	// `${rootrel;ext=.o:SRCS_GLOBAL}` strips the $(B)/ prefix; VFS.Rel
 	// gives that form natively. The `inputs` slot retains the prefix.
 	for _, op := range objcopyPaths {
-		cmdArgs = append(cmdArgs, op.Rel)
+		cmdArgs = append(cmdArgs, op.Rel())
 	}
 
 	cmdArgs = append(cmdArgs, vcsOPath)
@@ -386,7 +386,7 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 
 	cmdArgs = append(cmdArgs, "-Wl,--start-group")
 	for _, p := range peerLinkCmdPaths {
-		cmdArgs = append(cmdArgs, p.Rel)
+		cmdArgs = append(cmdArgs, p.Rel())
 	}
 	cmdArgs = append(cmdArgs, "-Wl,--end-group")
 

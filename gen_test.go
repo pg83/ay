@@ -3556,7 +3556,7 @@ END()
 
 	hasObject := func(n *Node) bool {
 		for _, in := range n.Inputs {
-			if strings.HasSuffix(in.Rel, ".o") {
+			if strings.HasSuffix(in.Rel(), ".o") {
 				return true
 			}
 		}
@@ -5265,13 +5265,13 @@ func TestGen_BisonGeneratedHeaderPreprocessAndPeerBuildRootInclude(t *testing.T)
 
 	writeToolProgram(t, root, "contrib/tools/bison", "bison")
 	writeToolProgram(t, root, "contrib/tools/m4", "m4")
-	writeTestModuleFile(t, root, bisonPreprocessPyVFS.Rel, "print('stub')\n")
+	writeTestModuleFile(t, root, bisonPreprocessPyVFS.Rel(), "print('stub')\n")
 	for _, input := range bisonCppSkeletonInputs {
 		body := ""
-		if strings.HasSuffix(input.Rel, "/stack.hh") {
+		if strings.HasSuffix(input.Rel(), "/stack.hh") {
 			body = `#include "skeleton-helper.h"` + "\n"
 		}
-		writeTestModuleFile(t, root, input.Rel, body)
+		writeTestModuleFile(t, root, input.Rel(), body)
 	}
 	writeTestModuleFile(t, root, "contrib/tools/bison/data/skeletons/skeleton-helper.h", "")
 

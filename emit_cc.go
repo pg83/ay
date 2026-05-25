@@ -321,7 +321,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, suffix string) (out, input VFS) {
 	input = srcVFS
 
-	if srcVFS.IsSource() && srcVFS.Rel != instance.Path+"/"+srcRel {
+	if srcVFS.IsSource() && srcVFS.Rel() != instance.Path+"/"+srcRel {
 		// SRCDIR redirect: input lives outside the module dir.
 		// in.SrcDir is the original SRCDIR value (callers set it on
 		// ModuleCCInputs before invoking EmitCC).

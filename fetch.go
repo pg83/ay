@@ -241,7 +241,7 @@ func (p *resourceFetchPlan) mountMap() map[string]string {
 	}
 
 	for _, item := range p.items {
-		out[item.Pattern] = item.Output.Rel
+		out[item.Pattern] = item.Output.Rel()
 	}
 
 	return out

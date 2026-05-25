@@ -629,7 +629,7 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 		}
 		for _, in := range seed {
 			if in.IsSource() {
-				emits = append(emits, includeDirective{kind: includeQuoted, target: in.Rel})
+				emits = append(emits, includeDirective{kind: includeQuoted, target: in.Rel()})
 			}
 		}
 		registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits)

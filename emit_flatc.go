@@ -121,11 +121,11 @@ func flatcCCExtraInputs(ctx *genCtx, includeInputs []VFS) []VFS {
 
 	var out []VFS
 	for _, in := range includeInputs {
-		if !in.IsBuild() || !strings.HasSuffix(in.Rel, ".fbs.h") {
+		if !in.IsBuild() || !strings.HasSuffix(in.Rel(), ".fbs.h") {
 			continue
 		}
 
-		srcRel := strings.TrimSuffix(in.Rel, ".h")
+		srcRel := strings.TrimSuffix(in.Rel(), ".h")
 		if !ctx.fs.IsFile(srcRel) {
 			continue
 		}
@@ -146,7 +146,7 @@ func flatcResolvedModuleSourceRel(ctx *genCtx, instance ModuleInstance, d *modul
 		if !strings.HasSuffix(srcRel, ".fbs") {
 			continue
 		}
-		if resolveSourceVFS(ctx, instance, srcRel, d.srcDir).Rel == resolvedRel {
+		if resolveSourceVFS(ctx, instance, srcRel, d.srcDir).Rel() == resolvedRel {
 			return srcRel, true
 		}
 	}
@@ -231,15 +231,15 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 	srcVFS := resolveSourceVFS(ctx, instance, srcRel, d.srcDir)
 	key := codegenOutputKey{
 		platform: instance.Platform,
-		path:     Build(srcVFS.Rel + ".h"),
+		path:     Build(srcVFS.Rel() + ".h"),
 	}
 
 	if got, ok := ctx.flatcEmissions[key]; ok {
 		return got
 	}
 
-	for _, imp := range flatcDirectImportNames(ctx.parsers, srcVFS.Rel) {
-		resolved := resolveFlatcImportPath(ctx.fs, srcVFS.Rel, imp)
+	for _, imp := range flatcDirectImportNames(ctx.parsers, srcVFS.Rel()) {
+		resolved := resolveFlatcImportPath(ctx.fs, srcVFS.Rel(), imp)
 		if resolved == "" {
 			continue
 		}
@@ -250,14 +250,14 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 
 	flatcRes := ctx.toolResult(flatcModule)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
-	transitiveImports := flatcTransitiveImports(ctx.parsers, ctx.fs, srcVFS.Rel)
-	flRef, headerVFS, cppVFS, bfbsVFS := EmitFL(instance, srcVFS.Rel, srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, ctx.emit)
+	transitiveImports := flatcTransitiveImports(ctx.parsers, ctx.fs, srcVFS.Rel())
+	flRef, headerVFS, cppVFS, bfbsVFS := EmitFL(instance, srcVFS.Rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, ctx.emit)
 
-	registerBoundGeneratedParsedOutput(ctx, instance, "FL", headerVFS, flatcDirectGeneratedHeaderIncludes(ctx.parsers, ctx.fs, srcVFS.Rel), flRef)
+	registerBoundGeneratedParsedOutput(ctx, instance, "FL", headerVFS, flatcDirectGeneratedHeaderIncludes(ctx.parsers, ctx.fs, srcVFS.Rel()), flRef)
 	// flatc INDUCED_DEPS (e.g. flatbuffers.h, flatbuffers_iter.h) must be
 	// included in the .fbs.cpp's parsed-include set so the scanner reaches them.
 	cppIncludes := make([]includeDirective, 0, 1+len(flatcRes.InducedDeps))
-	cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: headerVFS.Rel})
+	cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: headerVFS.Rel()})
 	for _, dep := range flatcRes.InducedDeps {
 		cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: dep})
 	}
@@ -268,7 +268,7 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 		flRef:   flRef,
 		header:  headerVFS,
 		cpp:     cppVFS,
-		relPath: srcVFS.Rel,
+		relPath: srcVFS.Rel(),
 	}
 	ctx.flatcEmissions[key] = out
 

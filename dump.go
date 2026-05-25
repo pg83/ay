@@ -142,7 +142,7 @@ func nodeProgramKind(node map[string]any) string {
 var ldOwnScriptRels = func() map[string]bool {
 	m := map[string]bool{"build/scripts/link_dyn_lib.py": true}
 	for _, v := range ldScriptInputs {
-		m[v.Rel] = true
+		m[v.Rel()] = true
 	}
 	return m
 }()

@@ -2132,7 +2132,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// downstream CC's `Generator` so the CC carries an explicit
 		// dep on its source-generating JS node, matching REF (every
 		// JS-derived CC has DepRefs=[js UID]).
-		jsRel := strings.TrimPrefix(joinOutVFS.Rel, srcInstance.Path+"/")
+		jsRel := strings.TrimPrefix(joinOutVFS.Rel(), srcInstance.Path+"/")
 
 		// Thread (scripts + sources + closure) as the JS-derived CC's
 		// IncludeInputs so its full Inputs read [joinedCpp, scripts...,
@@ -2228,7 +2228,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ldPeerArchivePaths = make([]VFS, 0, len(peerArchivePaths))
 
 			for i, p := range peerArchivePaths {
-				if strings.HasPrefix(p.Rel, "library/cpp/malloc/api/") {
+				if strings.HasPrefix(p.Rel(), "library/cpp/malloc/api/") {
 					continue
 				}
 
@@ -2559,7 +2559,7 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 	ownPrefix := Build(instancePath)
 
 	for _, p := range own {
-		if p.IsBuild() && (p == ownPrefix || strings.HasPrefix(p.Rel, ownPrefix.Rel+"/")) {
+		if p.IsBuild() && (p == ownPrefix || strings.HasPrefix(p.Rel(), ownPrefix.Rel()+"/")) {
 			ownSet[p] = struct{}{}
 		}
 	}
@@ -2642,7 +2642,7 @@ func filterEnSerializedSiblings(in []VFS) []VFS {
 	out := make([]VFS, 0, len(in))
 
 	for _, p := range in {
-		if strings.HasSuffix(p.Rel, "_serialized.cpp") || strings.HasSuffix(p.Rel, "_serialized.h") {
+		if strings.HasSuffix(p.Rel(), "_serialized.cpp") || strings.HasSuffix(p.Rel(), "_serialized.h") {
 			continue
 		}
 
@@ -3266,7 +3266,7 @@ func reorderLDMembers(refs []NodeRef, paths []VFS) ([]NodeRef, []VFS) {
 		if i < len(refs) {
 			m.ref = refs[i]
 		}
-		if strings.Contains(path.Rel, "/_/_/") {
+		if strings.Contains(path.Rel(), "/_/_/") {
 			legacy = append(legacy, m)
 			continue
 		}
@@ -3315,7 +3315,7 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 
 	for i := 0; i < numSrcsDerived && i < len(paths); i++ {
 		m := member{refs[i], paths[i]}
-		rel := m.path.Rel
+		rel := m.path.Rel()
 		switch {
 		case strings.Contains(rel, "/_/_/"):
 			legacyR6 = append(legacyR6, m)

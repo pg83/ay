@@ -129,10 +129,10 @@ func newVFSMapNonGeneric(cap int) vfsMapNonGeneric {
 	}
 }
 func (m vfsMapNonGeneric) Has(v VFS) bool {
-	_, ok := m[v.Root-1][v.Rel]
+	_, ok := m[v.Root()-1][v.Rel()]
 	return ok
 }
-func (m vfsMapNonGeneric) Add(v VFS) { m[v.Root-1][v.Rel] = struct{}{} }
+func (m vfsMapNonGeneric) Add(v VFS) { m[v.Root()-1][v.Rel()] = struct{}{} }
 
 // vfsMap[T] generic wrapper. Each instantiation specialises to a
 // concrete map[string]T; lookups should land on mapaccess2_faststr.
@@ -145,10 +145,10 @@ func newVFSMap[T any](cap int) vfsMap[T] {
 	}
 }
 func (m vfsMap[T]) Get(v VFS) (T, bool) {
-	val, ok := m[v.Root-1][v.Rel]
+	val, ok := m[v.Root()-1][v.Rel()]
 	return val, ok
 }
-func (m vfsMap[T]) Set(v VFS, val T) { m[v.Root-1][v.Rel] = val }
+func (m vfsMap[T]) Set(v VFS, val T) { m[v.Root()-1][v.Rel()] = val }
 
 func BenchmarkMapAccess_VFS2Bucket_NonGeneric(b *testing.B) {
 	keys := bvKeys()
@@ -204,7 +204,7 @@ func BenchmarkMapAccess_VFS2Bucket_Inline(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		v := probes[i%bvN]
-		if _, ok := m[v.Root-1][v.Rel]; !ok {
+		if _, ok := m[v.Root()-1][v.Rel()]; !ok {
 			b.Fatalf("miss")
 		}
 	}

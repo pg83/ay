@@ -106,7 +106,7 @@ func isDumpGraphResourceFetchNode(node *Node) bool {
 	}
 
 	for _, out := range node.Outputs {
-		if !out.IsBuild() || !strings.HasPrefix(out.Rel, "resources/") {
+		if !out.IsBuild() || !strings.HasPrefix(out.Rel(), "resources/") {
 			return false
 		}
 	}
@@ -129,7 +129,7 @@ func isDumpGraphStandaloneLLVMPRNode(node *Node, nodeID int, incoming []int) boo
 	}
 
 	for _, out := range node.Outputs {
-		if isCCSourceExt(out.Rel) {
+		if isCCSourceExt(out.Rel()) {
 			return false
 		}
 	}

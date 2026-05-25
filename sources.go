@@ -130,7 +130,7 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 // mirrors cmd_args -I: own AddIncl + peer GLOBAL AddIncl + the small
 // scanner-only baseline for bundled fallbacks (repo-root + linux-headers).
 func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
-	return walkClosureWithSourceRel(ctx, srcInstance, vfsPath, vfsPath.Rel, in)
+	return walkClosureWithSourceRel(ctx, srcInstance, vfsPath, vfsPath.Rel(), in)
 }
 
 // walkClosureWithSourceRel returns the headers-only closure (root excluded):

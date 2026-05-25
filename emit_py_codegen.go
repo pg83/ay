@@ -55,7 +55,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		// SRCDIR-resolved source path. SRCDIR(devtools/ya) + PY_SRCS(entry/
 		// main.py) redirects the source to devtools/ya/entry/main.py, so
 		// the module-name arg follows the resolved rel, not modulePath/srcRel.
-		moduleName := srcAbs.Rel + "-"
+		moduleName := srcAbs.Rel() + "-"
 
 		// Output suffix: flat → .py.yapyc3; subdir →
 		// .py.<pathid($S/unit)[:4]>.yapyc3.

@@ -148,14 +148,14 @@ func (pm *includeParserManager) sourceParsedBuckets(rel string) parsedIncludeSet
 // BUILD-rooted paths expose only what emitters registered in buildParsed.
 func (pm *includeParserManager) parsedIncludes(vfsPath VFS) []includeDirective {
 	if vfsPath.IsBuild() {
-		if parsed, ok := pm.buildParsed[vfsPath.Rel]; ok {
+		if parsed, ok := pm.buildParsed[vfsPath.Rel()]; ok {
 			return parsed
 		}
 
 		return nil
 	}
 
-	return pm.sourceParsedBuckets(vfsPath.Rel).bucket(parsedIncludesLocal)
+	return pm.sourceParsedBuckets(vfsPath.Rel()).bucket(parsedIncludesLocal)
 }
 
 func (pm *includeParserManager) RegisterBuildParsedIncludes(rel string, parsed []includeDirective) {

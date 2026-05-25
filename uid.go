@@ -204,8 +204,8 @@ func (c *canonBuf) writeStringSlice(ss []string) {
 func (c *canonBuf) writeVFSSlice(vs []VFS) {
 	c.writeUint32(uint32(len(vs)))
 	for _, v := range vs {
-		c.writeByte(byte(v.Root))
-		c.writeBytes(v.Rel)
+		c.writeByte(byte(v.Root()))
+		c.writeBytes(v.Rel())
 	}
 }
 
