@@ -264,8 +264,14 @@ func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool, bool) {
 // `hasMultiTarget` is true when any contributing record has
 // HasMultiTarget=true AND maps `header` to ≥2 non-empty paths.
 func (v PerSourceView) LookupIncluderKeyed(includerPath, header string) ([]string, bool, bool) {
-	active := v.activeIncluderRecords(includerPath)
+	return unionIncluderMappings(v.activeIncluderRecords(includerPath), header)
+}
 
+// unionIncluderMappings unions the paths every record in `active` maps `header`
+// to (deduped, suppression-markers dropped). The result is a pure function of
+// (active, header) — which is exactly why the scanner keys its cache on the
+// active set's equivalence class rather than the includer path.
+func unionIncluderMappings(active []*SysIncl, header string) ([]string, bool, bool) {
 	var (
 		out            []string
 		found          bool

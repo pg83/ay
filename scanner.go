@@ -83,6 +83,17 @@ type IncludeScanner struct {
 	sourceClassBuckets map[uint64][]uint32
 	nextSourceClass    uint32
 	sourceKeyedCount   int
+
+	// Includer equivalence classes — the includer-keyed mirror of sourceClass.
+	// The includer-keyed result is a pure function of (active-record-set,
+	// header), so includers whose filters accept the same record set share one
+	// class and one sysinclIncluderCache row. Keying that cache by raw includer
+	// path instead gave a 4% hit rate (every path unique); by class it tracks
+	// the source side's ~94%.
+	includerClassCache   map[string]uint32
+	includerClassRecords map[uint32][]*SysIncl
+	includerClassBuckets map[uint64][]uint32
+	nextIncluderClass    uint32
 	// sysinclSourceCache memoises the source-keyed sysincl half by
 	// (sourceClass, target). Source-keyed records are includer-
 	// independent, so every source in the same active-record class hits
@@ -266,8 +277,8 @@ type sysinclSourceKey struct {
 }
 
 type sysinclIncluderKey struct {
-	includer STR
-	target   STR
+	class  uint32
+	target STR
 }
 
 // sysinclCacheEntry stores resolved sysincl paths plus two flags.
@@ -319,6 +330,9 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		sourceClassCache:     make(map[string]uint32, 1024),
 		sourceClassViews:     make(map[uint32]PerSourceView, 1024),
 		sourceClassBuckets:   make(map[uint64][]uint32, 1024),
+		includerClassCache:   make(map[string]uint32, 1024),
+		includerClassRecords: make(map[uint32][]*SysIncl, 256),
+		includerClassBuckets: make(map[uint64][]uint32, 256),
 		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 131072),
 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
 		onWarn:               onWarn,
@@ -562,13 +576,16 @@ func (s *IncludeScanner) emittedRel(abs string) string {
 // Two sources sharing this digest belong to the same equivalence class:
 // identical source-keyed mappings, identical resolve() outputs,
 // identical subgraphs.
-func sourceClassSignature(view PerSourceView) uint64 {
+// recordSliceSignature hashes the pointer sequence of an active sysincl record
+// slice into an equivalence-class signature. Order-independent in practice: the
+// active subset always preserves sysincl-load order, so two paths with the same
+// subset hash identically without sorting. Used by both the source-keyed
+// (sourceClass) and includer-keyed (includerClass) caches.
+func recordSliceSignature(active []*SysIncl) uint64 {
 	const (
 		offset uint64 = 1469598103934665603
 		prime  uint64 = 1099511628211
 	)
-
-	active := view.activeSourceKeyed
 
 	h := offset
 
@@ -598,11 +615,11 @@ func (s *IncludeScanner) sourceClass(sourceRel string) (uint32, PerSourceView) {
 	}
 
 	view := s.prepareSourceView(sourceRel)
-	sig := sourceClassSignature(view)
+	sig := recordSliceSignature(view.activeSourceKeyed)
 
 	for _, id := range s.sourceClassBuckets[sig] {
 		cached := s.sourceClassViews[id]
-		if sameSourceClassView(cached, view) {
+		if sameRecordSlice(cached.activeSourceKeyed, view.activeSourceKeyed) {
 			s.sourceClassCache[sourceRel] = id
 
 			return id, cached
@@ -616,6 +633,36 @@ func (s *IncludeScanner) sourceClass(sourceRel string) (uint32, PerSourceView) {
 	s.sourceClassBuckets[sig] = append(s.sourceClassBuckets[sig], id)
 
 	return id, view
+}
+
+// includerClass maps includerPath to its includer-keyed equivalence class —
+// the id of the active-record-set its filters accept — plus that record slice.
+// Includers accepting the same records resolve every header identically, so
+// they share a sysinclIncluderCache row. The includer-keyed mirror of
+// sourceClass (the filter walk runs once per distinct includerPath).
+func (s *IncludeScanner) includerClass(includerPath string) (uint32, []*SysIncl) {
+	if id, ok := s.includerClassCache[includerPath]; ok {
+		return id, s.includerClassRecords[id]
+	}
+
+	active := s.anySrcView.computeActiveIncluderRecords(includerPath)
+	sig := recordSliceSignature(active)
+
+	for _, id := range s.includerClassBuckets[sig] {
+		if sameRecordSlice(s.includerClassRecords[id], active) {
+			s.includerClassCache[includerPath] = id
+
+			return id, s.includerClassRecords[id]
+		}
+	}
+
+	s.nextIncluderClass++
+	id := s.nextIncluderClass
+	s.includerClassCache[includerPath] = id
+	s.includerClassRecords[id] = active
+	s.includerClassBuckets[sig] = append(s.includerClassBuckets[sig], id)
+
+	return id, active
 }
 
 func (s *IncludeScanner) prepareSourceView(sourceRel string) PerSourceView {
@@ -638,13 +685,13 @@ func (s *IncludeScanner) prepareSourceView(sourceRel string) PerSourceView {
 	return view
 }
 
-func sameSourceClassView(a, b PerSourceView) bool {
-	if len(a.activeSourceKeyed) != len(b.activeSourceKeyed) {
+func sameRecordSlice(a, b []*SysIncl) bool {
+	if len(a) != len(b) {
 		return false
 	}
 
-	for i, rec := range a.activeSourceKeyed {
-		if rec != b.activeSourceKeyed[i] {
+	for i, rec := range a {
+		if rec != b[i] {
 			return false
 		}
 	}
@@ -1136,9 +1183,13 @@ func (s *IncludeScanner) sysinclSourceLookup(sourceRel string, target STR) ([]VF
 }
 
 func (s *IncludeScanner) sysinclIncluderLookup(includerRel string, target STR) ([]VFS, bool, bool) {
+	// Key by the includer's equivalence class, not its raw path: the result
+	// depends only on which records the filters accept, so every includer in
+	// the same class shares one cache row (raw-path keying gave a 4% hit rate).
+	classID, active := s.includerClass(includerRel)
 	key := sysinclIncluderKey{
-		includer: internString(includerRel),
-		target:   target,
+		class:  classID,
+		target: target,
 	}
 
 	if cached, ok := s.sysinclIncluderCache[key]; ok {
@@ -1148,10 +1199,7 @@ func (s *IncludeScanner) sysinclIncluderLookup(includerRel string, target STR) (
 
 	s.sysinclIncluderMisses++
 
-	// PerSourceView's includerKeyed slice is identical regardless of
-	// which source it was prepared for. anySrcView (initialised once)
-	// gives access without going through perSourceView.
-	rels, claimed, hasMultiTarget := s.anySrcView.LookupIncluderKeyed(includerRel, target.String())
+	rels, claimed, hasMultiTarget := unionIncluderMappings(active, target.String())
 
 	entry := sysinclCacheEntry{
 		paths:          s.absifyRels(rels),
