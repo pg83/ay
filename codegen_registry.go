@@ -63,6 +63,12 @@ type deferredCF struct {
 // consults it as a third existence tier.
 type CodegenRegistry struct {
 	byOutput map[VFS]*GeneratedFileInfo
+	// byRel indexes the same entries by the interned id of OutputPath.Rel()
+	// so the scanner can probe "is <rel> a generated output?" without
+	// interning a $(B)/<rel> VFS for every candidate it tests (most probes
+	// miss, and interning a miss would pollute the append-only intern table
+	// permanently). A miss is a single read-only `interned` lookup.
+	byRel map[STR]*GeneratedFileInfo
 }
 
 // NewCodegenRegistry allocates an empty CodegenRegistry. Pre-sized for the
@@ -70,6 +76,7 @@ type CodegenRegistry struct {
 func NewCodegenRegistry() *CodegenRegistry {
 	return &CodegenRegistry{
 		byOutput: make(map[VFS]*GeneratedFileInfo, 256),
+		byRel:    make(map[STR]*GeneratedFileInfo, 256),
 	}
 }
 
@@ -86,12 +93,30 @@ func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 	}
 
 	r.byOutput[info.OutputPath] = info
+	r.byRel[internString(info.OutputPath.Rel())] = info
 }
 
 // Lookup returns the GeneratedFileInfo for path, or (nil, false) if path is
 // not registered. O(1) map lookup.
 func (r *CodegenRegistry) Lookup(path VFS) (*GeneratedFileInfo, bool) {
 	info, ok := r.byOutput[path]
+	return info, ok
+}
+
+// LookupRel probes by Build-root-relative path without constructing a VFS.
+// `interned` converts the candidate to its id read-only — a rel that was never
+// interned cannot be a registered output, so it misses without touching the
+// table. On a hit the caller reuses info.OutputPath — the interned VFS recorded
+// at Register time — so a scanner search-tier probe interns nothing, whether it
+// hits or misses. (Every registered OutputPath is Build-rooted, so its Rel()
+// uniquely identifies it; $(S) paths never live here.)
+func (r *CodegenRegistry) LookupRel(rel string) (*GeneratedFileInfo, bool) {
+	id := interned(rel)
+	if id == nil {
+		return nil, false
+	}
+
+	info, ok := r.byRel[*id]
 	return info, ok
 }
 

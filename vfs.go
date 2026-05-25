@@ -58,25 +58,43 @@ const vfsPrefixLen = len("$(S)/")
 // path decodes JSON into string maps and never interns), so no synchronisation
 // is required. Index 0 is reserved (strs[0] == "") so the zero id is never a
 // real string.
+// STR is the stable, dense id of an interned string — the value internString
+// returns and the key type for maps that want a string identity without
+// holding the string. A VFS is a STR whose string is a canonical
+// "$(S)/<rel>" / "$(B)/<rel>" path; both share this one table and id space.
+type STR uint32
+
 var internTable = struct {
-	ids  map[string]uint32
+	ids  map[string]STR
 	strs []string
 }{
-	ids:  make(map[string]uint32, 1<<16),
+	ids:  make(map[string]STR, 1<<16),
 	strs: make([]string, 1, 1<<16),
 }
 
 // internString returns the stable id for s, interning it on first sight.
-func internString(s string) uint32 {
+func internString(s string) STR {
 	if id, ok := internTable.ids[s]; ok {
 		return id
 	}
 
-	id := uint32(len(internTable.strs))
+	id := STR(len(internTable.strs))
 	internTable.ids[s] = id
 	internTable.strs = append(internTable.strs, s)
 
 	return id
+}
+
+// interned returns s's id if it has already been interned, else nil — a
+// read-only probe that never mutates the table. Lets a caller ask "is this
+// string known?" (and key an id-map by the result) without polluting the
+// append-only table with a one-shot lookup string.
+func interned(s string) *STR {
+	if id, ok := internTable.ids[s]; ok {
+		return &id
+	}
+
+	return nil
 }
 
 // internBound is an exclusive upper bound on interned ids — every live id is
