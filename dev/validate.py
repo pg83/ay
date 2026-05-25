@@ -244,14 +244,7 @@ def main() -> int:
             )
             diff_file = os.path.join(out_dir, f"{name}.diff.txt")
             run([AY, "dump", "diff", "--left", our_n, "--right", ref_n, "--out", diff_file])
-            print(f"[{name}] xfail — diff (not gating), first 200 lines:")
-            with open(diff_file) as fh:
-                for i, line in enumerate(fh):
-                    if i >= 200:
-                        break
-                    sys.stdout.write(line)
-            print(f"[{name}] full diff: {diff_file}")
-            print(f"[{name}] XFAIL")
+            print(f"[{name}] XFAIL (not gating) — full diff: {diff_file}")
             continue
 
         print(f"[{name}] compare")
