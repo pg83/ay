@@ -22,6 +22,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 GO = os.path.join(REPO_ROOT, "go")
 AY = os.path.join(REPO_ROOT, "ay")
+NORMALIZE_PY = os.path.join(SCRIPT_DIR, "normalize.py")
 
 # name, normalize target, raw upstream reference, xfail (see docstring for values)
 CASES = [
@@ -46,19 +47,66 @@ def run(cmd):
     return subprocess.run(cmd, cwd=REPO_ROOT)
 
 
-def normalize_sort(raw, target, out):
+def _remove_if_exists(path):
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+
+
+def _normalize_sort_go(raw, target, out):
     """ay dump normalize <raw> | ay dump sort > out (streaming, bounded mem)."""
+    tmp = out + ".tmp"
+    _remove_if_exists(tmp)
     p1 = subprocess.Popen(
         [AY, "dump", "normalize", "--in", raw, "--target", target, "--out", "-"],
         cwd=REPO_ROOT, stdout=subprocess.PIPE,
     )
     p2 = subprocess.Popen(
-        [AY, "dump", "sort", "--out", out],
+        [AY, "dump", "sort", "--out", tmp],
         cwd=REPO_ROOT, stdin=p1.stdout,
     )
     p1.stdout.close()
     p2.communicate()
-    p1.wait()
+    p1_rc = p1.wait()
+    if p1_rc == 0 and p2.returncode == 0:
+        os.replace(tmp, out)
+        return True
+    _remove_if_exists(tmp)
+    return False
+
+
+def _normalize_sort_py(raw, target, out):
+    tmp = out + ".tmp"
+    tmp_norm = out + ".py.tmp"
+    _remove_if_exists(tmp)
+    _remove_if_exists(tmp_norm)
+    subprocess.run(
+        [sys.executable, NORMALIZE_PY, "--in", raw, "--target", target, "--out", tmp_norm],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+    with open(tmp_norm, "rb") as fh:
+        subprocess.run(
+            [AY, "dump", "sort", "--out", tmp],
+            cwd=REPO_ROOT,
+            stdin=fh,
+            check=True,
+        )
+    _remove_if_exists(tmp_norm)
+    os.replace(tmp, out)
+
+
+def normalize_pair(name, our_raw, ref_raw, target, our_out, ref_out, *, allow_fallback):
+    if _normalize_sort_go(our_raw, target, our_out) and _normalize_sort_go(ref_raw, target, ref_out):
+        return True
+    if not allow_fallback:
+        print(f"[{name}] FAIL (normalize)")
+        return False
+    print(f"[{name}] normalize fallback: ay dump normalize failed; retrying with dev/normalize.py")
+    _normalize_sort_py(our_raw, target, our_out)
+    _normalize_sort_py(ref_raw, target, ref_out)
+    return True
 
 
 def _advance_line(handle):
@@ -142,8 +190,10 @@ def main() -> int:
             continue
 
         print(f"[{name}] normalize our + ref")
-        normalize_sort(raw, target, our_n)
-        normalize_sort(ref, target, ref_n)
+        if not normalize_pair(name, raw, ref, target, our_n, ref_n, allow_fallback=bool(xfail)):
+            if not xfail:
+                status = 1
+            continue
 
         if xfail:
             if xfail == "auto" and run(["cmp", "-s", our_n, ref_n]).returncode == 0:
