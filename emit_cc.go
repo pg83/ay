@@ -25,6 +25,10 @@ type ModuleCCInputs struct {
 	// this field rather than via ModuleInstance.
 	Flags   FlagSet
 	AddIncl []VFS
+	// InclArgs is the run-level -I memo (see inclArgMemo), set at every
+	// ModuleCCInputs construction from genCtx and threaded into composeTargetCC
+	// / composeASIncludes.
+	InclArgs inclArgMemo
 	// PeerAddInclGlobal is the union of every PEERDIR's transitive
 	// ADDINCL(GLOBAL ...) contributions in declaration order. Slotted
 	// AFTER own AddIncl and BEFORE ccIncludesSuffix (linux-headers).
@@ -244,6 +248,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		IsCxx:              isCxx,
 		NoCompilerWarnings: in.Flags.NoCompilerWarnings,
 		NoWShadow:          in.Flags.NoWShadow,
+		InclArgs:           in.InclArgs,
 	}
 	cmdArgs = composeTargetCC(args)
 
@@ -643,6 +648,7 @@ type ccComposeArgs struct {
 	IsCxx              bool
 	NoCompilerWarnings bool
 	NoWShadow          bool
+	InclArgs           inclArgMemo
 }
 
 func appendAutoPeerAndCPUFeatures(cmdArgs []string, bundle compileFlagBundle, autoPeerCFlags []string) []string {
@@ -694,9 +700,9 @@ func composeTargetCC(a ccComposeArgs) []string {
 		a.OutputPath,
 	)
 	cmdArgs = append(cmdArgs, ccIncludesPrefix...)
-	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl)
+	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl, a.InclArgs)
 	cmdArgs = append(cmdArgs, ccIncludesSuffix...)
-	cmdArgs = appendAddIncl(cmdArgs, a.PeerAddIncl)
+	cmdArgs = appendAddIncl(cmdArgs, a.PeerAddIncl, a.InclArgs)
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(a.NoCompilerWarnings, a.NoWShadow), bundle.Defines, a.OwnCFlags, a.AutoPeerCFlags)
 
 	// C sources: CONLYFLAGS (ownExtras) trails AFTER
@@ -770,14 +776,29 @@ func partitionPython3FromAutoPeer(autoPeer []string) ([]string, []string) {
 // library/python/runtime_py3's build-tree dir) pass through verbatim
 // under a literal `-I` prefix; SOURCE_ROOT wrapping would produce
 // `-I$(S)/$(B)/…` which mismatches REF.
-func appendAddIncl(cmdArgs []string, addIncl []VFS) []string {
+func appendAddIncl(cmdArgs []string, addIncl []VFS, memo inclArgMemo) []string {
 	for _, p := range addIncl {
-		cmdArgs = append(cmdArgs, includeArg(p))
+		cmdArgs = append(cmdArgs, memo.arg(p))
 	}
 
 	return cmdArgs
 }
 
-func includeArg(path VFS) string {
-	return "-I" + path.String()
+// inclArgMemo memoises the `-I<path>` compile flag per ADDINCL dir for a run.
+// The string depends only on path; a module's sources all share the same -I
+// block, so rendering it per source was the single largest source of allocated
+// objects in gen. Content-addressed and append-only; owned by genCtx and
+// threaded through every -I-composing path (never nil at a call site).
+type inclArgMemo map[VFS]string
+
+// arg returns the memoised `-I<path>` flag, rendering it on first sight.
+func (m inclArgMemo) arg(path VFS) string {
+	if s, ok := m[path]; ok {
+		return s
+	}
+
+	s := "-I" + path.String()
+	m[path] = s
+
+	return s
 }

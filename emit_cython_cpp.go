@@ -59,7 +59,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			"-I$(B)",
 			"-I$(S)",
 		)
-		cmdArgs = appendCythonAddIncl(cmdArgs, d.cythonAddIncl)
+		cmdArgs = appendCythonAddIncl(cmdArgs, d.cythonAddIncl, ctx.inclArgs)
 		cmdArgs = append(cmdArgs,
 			"-I$(S)/contrib/tools/cython/Cython/Includes",
 			srcVFS.String(),
@@ -174,9 +174,9 @@ func cythonImplicitFallthrough(stmt *CythonStmt, py23Variant bool) bool {
 	return !stmt.CMode && (hasSuffix(stmt.Src, ".pyx") || py23Variant)
 }
 
-func appendCythonAddIncl(cmdArgs []string, addIncl []VFS) []string {
+func appendCythonAddIncl(cmdArgs []string, addIncl []VFS, memo inclArgMemo) []string {
 	for _, path := range addIncl {
-		cmdArgs = append(cmdArgs, includeArg(path))
+		cmdArgs = append(cmdArgs, memo.arg(path))
 	}
 
 	return cmdArgs

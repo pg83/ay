@@ -39,6 +39,7 @@ func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	e := NewBufferedEmitter()
 	inst := muslHostInstance("contrib/libs/musl")
 	in := ModuleCCInputs{
+		InclArgs: inclArgMemo{},
 		AddIncl: []VFS{
 			Intern("$(S)/custom/musl/arch/x86_64"),
 			Intern("$(S)/custom/musl/include"),
@@ -162,7 +163,7 @@ func TestEmitAS_YasmLD_PopulatesDepRefs(t *testing.T) {
 		},
 	})
 
-	yasmTestIn := ModuleCCInputs{AddIncl: builtinsASOwnAddIncl}
+	yasmTestIn := ModuleCCInputs{InclArgs: inclArgMemo{}, AddIncl: builtinsASOwnAddIncl}
 	ref, _ := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", Intern("$(S)/contrib/libs/cxxsupp/builtins/aarch64/chkstk.S"), yasmTestIn, &yasmLDRef, testHostP, e)
 
 	// The AS node is at index 1 (yasmLD is at index 0).

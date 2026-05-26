@@ -121,6 +121,7 @@ func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 	emit := NewBufferedEmitter()
 	in := ModuleCCInputs{
+		InclArgs: inclArgMemo{},
 		AddIncl: []VFS{
 			Intern("$(S)/contrib/libs/musl/arch/aarch64"),
 			Intern("$(S)/contrib/libs/musl/arch/generic"),
@@ -154,6 +155,7 @@ func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	emit := NewBufferedEmitter()
 	inst := muslHostInstance("contrib/libs/musl")
 	in := ModuleCCInputs{
+		InclArgs: inclArgMemo{},
 		AddIncl: []VFS{
 			Intern("$(S)/custom/musl/arch/x86_64"),
 			Intern("$(S)/custom/musl/include"),

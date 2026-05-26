@@ -200,6 +200,7 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 	// reachable from the PR output's EmitsIncludes chain resolve.
 	// Mirrors emitEnumSrcs (gen.go).
 	scanIn := ModuleCCInputs{
+		InclArgs:          ctx.inclArgs,
 		Flags:             moduleInputs.Flags,
 		AddIncl:           moduleInputs.AddIncl,
 		PeerAddInclGlobal: moduleInputs.PeerAddInclGlobal,
