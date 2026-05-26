@@ -214,11 +214,11 @@ func swigSearchRoots(fs *FS) []string {
 	}
 
 	var subdirs []string
-	for name, isDir := range entries {
+	for nameSTR, isDir := range entries {
 		if !isDir {
 			continue
 		}
-		subdirs = append(subdirs, filepath.ToSlash(filepath.Clean(swigLibRoot+"/"+name)))
+		subdirs = append(subdirs, filepath.ToSlash(filepath.Clean(swigLibRoot+"/"+nameSTR.String())))
 	}
 	sort.Strings(subdirs)
 
