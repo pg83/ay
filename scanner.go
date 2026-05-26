@@ -84,6 +84,16 @@ type IncludeScanner struct {
 	nextSourceClass    uint32
 	sourceKeyedCount   int
 
+	// sysinclKeyBits[id] is true when the interned header id is a key in some
+	// case-sensitive record's Mappings — i.e. a header sysincl could possibly
+	// claim. The vast majority of include targets are ordinary source headers,
+	// never a sysincl key, so resolve gates on this []bool (STR-indexed, no
+	// hashing) to skip the per-class sysincl lookup entirely. sysinclKeyCI holds
+	// the lower-cased keys of case-insensitive records (windows.yml); empty on
+	// platforms that don't load them, so the lower-case fallback never runs.
+	sysinclKeyBits []bool
+	sysinclKeyCI   map[string]bool
+
 	// Includer equivalence classes — the includer-keyed mirror of sourceClass.
 	// The includer-keyed result is a pure function of (active-record-set,
 	// header), so includers whose filters accept the same record set share one
@@ -454,6 +464,31 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 			s.sourceKeyedCount++
 		}
 	}
+
+	// Build the "could sysincl ever claim this header" gate. Intern every
+	// case-sensitive Mappings key first (this may extend the intern table), then
+	// size the STR-indexed bitset to the final bound and mark them. Suppression
+	// markers are keys with an empty value, so they are included — gating them
+	// out would change `claimed`.
+	var csKeyIDs []STR
+	for i := range sysincl {
+		rec := &sysincl[i]
+		for k := range rec.Mappings {
+			if rec.CaseInsensitive {
+				if s.sysinclKeyCI == nil {
+					s.sysinclKeyCI = make(map[string]bool, len(rec.Mappings))
+				}
+				s.sysinclKeyCI[k] = true
+			} else {
+				csKeyIDs = append(csKeyIDs, internString(k))
+			}
+		}
+	}
+	s.sysinclKeyBits = make([]bool, internBound())
+	for _, id := range csKeyIDs {
+		s.sysinclKeyBits[id] = true
+	}
+
 	s.anySrcView = s.sysincl.PreparePerSource("")
 
 	// Pool factories preallocate the same capacity that the
@@ -1257,6 +1292,13 @@ mapLoop:
 // ≥ 2 non-empty paths — used by resolve()'s quoted-include gate.
 // Dedup uses linear scan because mapping lists are 1-3 entries.
 func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel string, target STR) (paths []VFS, hasMultiTarget, claimed bool) {
+	// Gate: if no record maps this header, every Mappings probe would miss and
+	// the lookup returns (nil,false,false). Skip the whole source/includer-class
+	// machinery for the common case (ordinary source headers, never a key).
+	if !s.sysinclMightClaim(target) {
+		return nil, false, false
+	}
+
 	srcMappings, srcMT, srcClaimed := s.sysinclSourceLookup(sourceRel, target)
 	incMappings, incMT, incClaimed := s.sysinclIncluderLookup(includerRel, target)
 	claimed = srcClaimed || incClaimed
@@ -1293,6 +1335,22 @@ func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel string, target STR
 	hasMultiTarget = srcMT || incMT || len(paths) >= 2
 
 	return paths, hasMultiTarget, claimed
+}
+
+// sysinclMightClaim reports whether some record's Mappings could key on target
+// — a necessary condition for sysinclLookup to return anything. Case-sensitive
+// keys are an O(1) STR-indexed bit test; the lower-cased CI fallback runs only
+// when case-insensitive records were loaded (otherwise sysinclKeyCI is empty).
+func (s *IncludeScanner) sysinclMightClaim(target STR) bool {
+	if int(target) < len(s.sysinclKeyBits) && s.sysinclKeyBits[target] {
+		return true
+	}
+
+	if len(s.sysinclKeyCI) != 0 {
+		return s.sysinclKeyCI[strings.ToLower(target.String())]
+	}
+
+	return false
 }
 
 func (s *IncludeScanner) sysinclSourceLookup(sourceRel string, target STR) ([]VFS, bool, bool) {
