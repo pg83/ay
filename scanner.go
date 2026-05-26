@@ -636,7 +636,7 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 	}
 
 	visited := s.visitedIDPool.Get().(*idSet)
-	visited.reset(internBound())
+	visited.reset(vfsBound())
 	orderP := s.orderIDPool.Get().(*[]uint32)
 
 	order := (*orderP)[:0]
@@ -980,7 +980,7 @@ func (sc *scanCtx) closureOf(absID uint32) []uint32 {
 	// Fresh exploration. Tarjan scratch is scanner-shared (gen scanning is
 	// single-goroutine) and reset per top-level miss; uncached descendants
 	// are reached via strongconnect recursion, not another closureOf call.
-	s.tj.reset(internBound())
+	s.tj.reset(vfsBound())
 	s.tjStack = s.tjStack[:0]
 	s.tjNext = 0
 
@@ -1068,7 +1068,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 	}
 	members := s.tjStack[sccStart:]
 
-	s.tjClosure.reset(internBound())
+	s.tjClosure.reset(vfsBound())
 	buf := s.tjBuf[:0]
 
 	for _, u := range members {

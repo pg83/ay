@@ -61,10 +61,11 @@ type deferredCF struct {
 // consults it as a third existence tier.
 type CodegenRegistry struct {
 	// byStr is the full-path index, keyed by interned-string id (STR). Each
-	// output goes in under two ids: STR(OutputPath) — the full Build VFS id,
-	// root-aware, what Lookup probes — and internString(OutputPath.Rel()) — the
-	// bare rel id, what LookupRel probes. The two never collide ("$(B)/<rel>"
-	// vs "<rel>").
+	// output goes in under two ids: OutputPath.strID() — the intern id of the
+	// full "$(B)/<rel>" string, root-aware, what Lookup probes — and
+	// internString(OutputPath.Rel()) — the bare rel id, what LookupRel probes.
+	// The two never collide ("$(B)/<rel>" vs "<rel>"). Both must be true intern
+	// ids (not raw VFS values, which pack a root bit and live in a 2x id space).
 	byStr map[STR]*GeneratedFileInfo
 
 	// bySplit answers the scanner's search-tier question "is
@@ -96,7 +97,7 @@ func NewCodegenRegistry() *CodegenRegistry {
 // upstream's DupSrc diagnostic (macro_processor.cpp:957) and enforces the
 // build-system invariant that no two nodes produce the same output file.
 func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
-	full := STR(info.OutputPath)
+	full := STR(info.OutputPath.strID())
 	if existing := r.byStr[full]; existing != nil {
 		ThrowFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
 			info.OutputPath.String(), existing.ProducerKvP, info.ProducerKvP)
@@ -126,7 +127,7 @@ func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) 
 
 // Lookup returns the producer for the full (root-aware) VFS path, or nil.
 func (r *CodegenRegistry) Lookup(path VFS) *GeneratedFileInfo {
-	return r.byStr[STR(path)]
+	return r.byStr[STR(path.strID())]
 }
 
 // LookupRel returns the producer for a full Build-relative path, or nil.
@@ -153,7 +154,7 @@ func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
 // existence-tier sees the output; this helper fills the NodeRef in after Emit
 // so resolveCodegenDepRefs can lift it into consumer CC `deps[]`.
 func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
-	info := r.byStr[STR(path)]
+	info := r.byStr[STR(path.strID())]
 	if info == nil {
 		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.String())
 	}
