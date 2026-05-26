@@ -126,13 +126,18 @@ func (pm *includeParserManager) sourceParsedBuckets(rel string) parsedIncludeSet
 
 	pm.cache.parsedMisses++
 
-	data, err := pm.fs.ReadInto(rel, pm.readBuf)
-	pm.readBuf = data // retain the (possibly grown) buffer for the next read
-	if err != nil {
+	// A closure root or a sysincl mapping can name a path with no file on disk;
+	// that is an absent optional source (nil includes), not a read error.
+	// Existence is a query — gate on it so ReadInto only ever Throws on a
+	// present-but-unreadable file.
+	if !pm.fs.IsFile(rel) {
 		pm.cache.parsed[vfsPath] = nil
 
 		return nil
 	}
+
+	data := pm.fs.ReadInto(rel, pm.readBuf)
+	pm.readBuf = data // retain the (possibly grown) buffer for the next read
 
 	// Strip a leading UTF-8 BOM (EF BB BF) before parsing: some sources
 	// (e.g. library/cpp/threading/future/subscription/subscription.cpp)

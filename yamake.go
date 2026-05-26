@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -414,7 +413,7 @@ func (e *ParseError) Error() string {
 // share the directory cache.
 func ParseFile(fs *FS, path string) (mf *MakeFile, err error) {
 	exc := Try(func() {
-		data := Throw2(fs.ReadAbs(path))
+		data := fs.ReadAbs(path)
 
 		abs, absErr := filepath.Abs(path)
 
@@ -1889,33 +1888,17 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 
 	rel := args[0]
 
-	// Resolve ${ARCADIA_ROOT}/... by walking up from dir(p.name) a
-	// bounded number of steps and testing each candidate join against
-	// the filesystem. The first existing candidate wins. If nothing
-	// resolves the original rel is left intact and the FS read below
-	// surfaces the error.
+	// ${ARCADIA_ROOT} IS the source root — resolve the suffix directly there
+	// (as modules.go does for ${ARCADIA_ROOT}-rooted targets). The previous
+	// walk-up from dir(p.name) climbed past the source root and probed sibling
+	// trees off-disk (e.g. a dead IF(USE_PREBUILT_TOOLS) branch's
+	// build/prebuilt/.../ya.make.prebuilt resolved into ../build/prebuilt
+	// outside the tree). A path outside the root is never valid here; if the
+	// in-tree target is absent the INCLUDE is an optional dead branch, skipped
+	// by the existence check below.
 	if strings.HasPrefix(rel, "${ARCADIA_ROOT}/") {
 		suffix := strings.TrimPrefix(rel, "${ARCADIA_ROOT}/")
-		dir := filepath.Dir(p.name)
-
-		for i := 0; i < 20; i++ {
-			candidate := filepath.Join(dir, suffix)
-
-			if present, _ := p.fs.ExistsAbs(candidate); present {
-				rel = candidate
-
-				break
-			}
-
-			parent := filepath.Dir(dir)
-			if parent == dir {
-				break
-			}
-
-			dir = parent
-		}
-		// If no candidate was found, rel still has ${ARCADIA_ROOT}/ prefix
-		// and the ReadAbs below will produce a clear parse error.
+		rel = filepath.Join(p.fs.SourceRoot(), suffix)
 	}
 
 	dir := filepath.Dir(p.name)
@@ -1956,20 +1939,16 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 		}
 	}
 
-	data, ioErr := p.fs.ReadAbs(absTarget)
-	if ioErr != nil {
-		// Silently skip optional includes (file missing). Handles
-		// conditional branches like
-		// `IF (USE_SYSTEM_OPENSSL) INCLUDE(system_openssl.ya.inc)` —
-		// the parser expands INCLUDE in both branches before
-		// evaluating the condition, so missing files in dead branches
-		// must not be fatal.
-		if os.IsNotExist(ioErr) {
-			return into
-		}
-
-		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE %q: %v", rel, ioErr)
+	// Silently skip optional includes (file missing). Handles conditional
+	// branches like `IF (USE_SYSTEM_OPENSSL) INCLUDE(system_openssl.ya.inc)` —
+	// the parser expands INCLUDE in both branches before evaluating the
+	// condition, so missing files in dead branches must not be fatal. Existence
+	// is a query (no error); a present-but-unreadable file Throws via ReadAbs.
+	if present, _ := p.fs.ExistsAbs(absTarget); !present {
+		return into
 	}
+
+	data := p.fs.ReadAbs(absTarget)
 
 	// Recurse with the updated chain propagated into the child parser so
 	// transitive cycles (a→b→a) are also caught.

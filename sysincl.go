@@ -476,12 +476,12 @@ func LoadSysInclSetForFS(fs *FS, arch string, onWarn func(Warn)) SysInclSet {
 			continue
 		}
 
-		data, err := fs.Read("build/sysincl/" + entry.file)
-		if err != nil {
-			continue
+		rel := "build/sysincl/" + entry.file
+		if !fs.IsFile(rel) {
+			continue // optional per-platform YAML absent from this checkout
 		}
 
-		records := parseSysInclYAML(entry.file, string(data), onWarn)
+		records := parseSysInclYAML(entry.file, string(fs.Read(rel)), onWarn)
 		set = append(set, records...)
 	}
 

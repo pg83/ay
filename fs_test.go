@@ -111,16 +111,13 @@ func TestFS_Read(t *testing.T) {
 	})
 	fs := NewFS(root)
 
-	data, err := fs.Read("file.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := fs.Read("file.txt")
 	if string(data) != "hello world" {
 		t.Errorf("got %q", string(data))
 	}
 
-	if _, err := fs.Read("missing.txt"); err == nil {
-		t.Error("missing file should error")
+	if exc := Try(func() { fs.Read("missing.txt") }); exc == nil {
+		t.Error("missing file should Throw")
 	}
 }
 
@@ -132,26 +129,19 @@ func TestFS_ReadAbsRoutesThroughRel(t *testing.T) {
 	fs := NewFS(root)
 
 	abs := filepath.Join(root, "foo.txt")
-	data, err := fs.ReadAbs(abs)
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := fs.ReadAbs(abs)
 	if string(data) != "abc" {
 		t.Errorf("got %q", string(data))
 	}
 
-	// Path outside sourceRoot: falls back to os.ReadFile.
+	// Path outside sourceRoot: Throws (no off-tree fallback).
 	other := t.TempDir()
 	outsideFile := filepath.Join(other, "x.txt")
 	if err := os.WriteFile(outsideFile, []byte("xyz"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	data, err = fs.ReadAbs(outsideFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != "xyz" {
-		t.Errorf("got %q", string(data))
+	if exc := Try(func() { fs.ReadAbs(outsideFile) }); exc == nil {
+		t.Error("path outside source root should Throw")
 	}
 }
 

@@ -221,10 +221,7 @@ func rootrelInputPath(kv string) (string, bool) {
 }
 
 func yaConfFormulaResources(fs *FS, confPath string) []string {
-	raw, err := fs.Read(confPath)
-	if err != nil {
-		return nil
-	}
+	raw := fs.Read(confPath)
 
 	var out []string
 	seen := map[string]struct{}{}
