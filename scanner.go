@@ -141,12 +141,10 @@ type IncludeScanner struct {
 	searchTierByConfig map[uint64]map[STR]searchTierResult
 
 	// Tarjan SCC scratch, shared across closure explorations (gen scanning
-	// is single-goroutine). closureOf clears index/low/onStack and resets
-	// stack/next per top-level exploration; tjClosure + tjBuf are the
+	// is single-goroutine). closureOf resets tj (an O(1) epoch bump) and
+	// resets stack/next per top-level exploration; tjClosure + tjBuf are the
 	// reusable dedup set + accumulator for an SCC's merged closure.
-	tjIndex   map[uint32]int32
-	tjLow     map[uint32]int32
-	tjOnStack map[uint32]bool
+	tj        tarjanScratch
 	tjStack   []uint32
 	tjNext    int32
 	tjClosure idSet
@@ -290,6 +288,92 @@ func (s *idSet) add(id uint32) {
 	s.gen[id] = s.epoch
 }
 
+// tarjanScratch holds per-node Tarjan SCC state — DFS index, lowlink, on-stack
+// flag — as epoch-stamped parallel slices instead of three maps. A node counts
+// as visited this run iff stamp[id]==epoch, which gates the index/low/onStack
+// reads. reset is an O(1) epoch bump (no map clear walking every entry per
+// top-level miss, no per-access hashing); the slices stay resident across the
+// whole run.
+type tarjanScratch struct {
+	stamp   []uint32
+	index   []int32
+	low     []int32
+	onStack []bool
+	epoch   uint32
+}
+
+// reset prepares the scratch for a fresh exploration over ids in [0, size).
+// Like idSet.reset: geometric growth (internBound creeps up per walk, so an
+// exact-size realloc would re-grow on nearly every reset), an O(1) epoch bump
+// otherwise, and a full zero of the stamps on epoch wraparound.
+func (t *tarjanScratch) reset(size uint32) {
+	if uint32(len(t.stamp)) < size {
+		grown := uint32(len(t.stamp)) * 2
+		if grown < size {
+			grown = size
+		}
+
+		t.stamp = make([]uint32, grown)
+		t.index = make([]int32, grown)
+		t.low = make([]int32, grown)
+		t.onStack = make([]bool, grown)
+		t.epoch = 1
+
+		return
+	}
+
+	t.epoch++
+	if t.epoch == 0 {
+		for i := range t.stamp {
+			t.stamp[i] = 0
+		}
+
+		t.epoch = 1
+	}
+}
+
+// visited reports whether id was discovered in the current exploration.
+func (t *tarjanScratch) visited(id uint32) bool {
+	return id < uint32(len(t.stamp)) && t.stamp[id] == t.epoch
+}
+
+// discover records id as freshly visited with DFS number idx (also its initial
+// lowlink) and marks it on-stack. Grows the backing slices if a path interned
+// mid-exploration outran the size pinned at reset.
+func (t *tarjanScratch) discover(id uint32, idx int32) {
+	if id >= uint32(len(t.stamp)) {
+		grown := uint32(len(t.stamp)) * 2
+		if grown <= id {
+			grown = id + 1
+		}
+
+		stamp := make([]uint32, grown)
+		copy(stamp, t.stamp)
+		t.stamp = stamp
+		index := make([]int32, grown)
+		copy(index, t.index)
+		t.index = index
+		low := make([]int32, grown)
+		copy(low, t.low)
+		t.low = low
+		onStack := make([]bool, grown)
+		copy(onStack, t.onStack)
+		t.onStack = onStack
+	}
+
+	t.stamp[id] = t.epoch
+	t.index[id] = idx
+	t.low[id] = idx
+	t.onStack[id] = true
+}
+
+// onStackHas reports whether id is currently on the Tarjan stack. False for any
+// node not visited this run, so stale stamps from a prior exploration never
+// alias as on-stack.
+func (t *tarjanScratch) onStackHas(id uint32) bool {
+	return t.visited(id) && t.onStack[id]
+}
+
 type searchTierResult struct {
 	paths []VFS
 	found bool
@@ -364,9 +448,6 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		subgraphCache:        make(map[uint32]closureRef, 65536),
 		childrenCache:        make(map[uint32][]uint32, 65536),
 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
-		tjIndex:              make(map[uint32]int32, 4096),
-		tjLow:                make(map[uint32]int32, 4096),
-		tjOnStack:            make(map[uint32]bool, 4096),
 	}
 	for i := range sysincl {
 		if sysincl[i].KeyBySource {
@@ -864,9 +945,7 @@ func (sc *scanCtx) closureOf(absID uint32) []uint32 {
 	// Fresh exploration. Tarjan scratch is scanner-shared (gen scanning is
 	// single-goroutine) and reset per top-level miss; uncached descendants
 	// are reached via strongconnect recursion, not another closureOf call.
-	clear(s.tjIndex)
-	clear(s.tjLow)
-	clear(s.tjOnStack)
+	s.tj.reset(internBound())
 	s.tjStack = s.tjStack[:0]
 	s.tjNext = 0
 
@@ -919,10 +998,8 @@ func (sc *scanCtx) strongconnect(v uint32) {
 	s := sc.scanner
 
 	s.tjNext++
-	s.tjIndex[v] = s.tjNext
-	s.tjLow[v] = s.tjNext
+	s.tj.discover(v, s.tjNext)
 	s.tjStack = append(s.tjStack, v)
-	s.tjOnStack[v] = true
 
 	sc.forEachResolvedChildID(v, func(w uint32) {
 		if _, cached := s.subgraphCache[w]; cached {
@@ -931,19 +1008,19 @@ func (sc *scanCtx) strongconnect(v uint32) {
 			return
 		}
 
-		if s.tjIndex[w] == 0 {
+		if !s.tj.visited(w) {
 			sc.strongconnect(w)
-			if s.tjLow[w] < s.tjLow[v] {
-				s.tjLow[v] = s.tjLow[w]
+			if s.tj.low[w] < s.tj.low[v] {
+				s.tj.low[v] = s.tj.low[w]
 			}
-		} else if s.tjOnStack[w] {
-			if s.tjIndex[w] < s.tjLow[v] {
-				s.tjLow[v] = s.tjIndex[w]
+		} else if s.tj.onStack[w] {
+			if s.tj.index[w] < s.tj.low[v] {
+				s.tj.low[v] = s.tj.index[w]
 			}
 		}
 	})
 
-	if s.tjLow[v] != s.tjIndex[v] {
+	if s.tj.low[v] != s.tj.index[v] {
 		return // not an SCC root; members stay on the stack
 	}
 
@@ -968,7 +1045,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 
 	for _, u := range members {
 		sc.forEachResolvedChildID(u, func(w uint32) {
-			if s.tjOnStack[w] {
+			if s.tj.onStackHas(w) {
 				return // same SCC; already added as a member
 			}
 
@@ -994,7 +1071,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 
 	for _, u := range members {
 		s.subgraphCache[u] = ref
-		s.tjOnStack[u] = false
+		s.tj.onStack[u] = false
 	}
 
 	s.tjStack = s.tjStack[:sccStart]
