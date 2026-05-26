@@ -16,6 +16,7 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"regexp/syntax"
 	"sort"
 	"strings"
 	"sync"
@@ -890,6 +891,105 @@ func literalContainsPattern(pat string) (string, bool) {
 	return mid, true
 }
 
+// maxLiteralAltExpansion caps the alternation blow-up an anchored
+// literal-alternation may expand to before we give up and keep the RE2 form.
+const maxLiteralAltExpansion = 64
+
+// literalAltsFromRegex returns the finite set of literal strings that an
+// anchored regex matches as a prefix, when it is built solely from a leading
+// `^`, literals, concatenation and `(a|b|…)` alternation (possibly nested) —
+// e.g. `^contrib/(libs/(ffmpeg-3|kyotocabinet)|tools/ag)` yields
+// {contrib/libs/ffmpeg-3, contrib/libs/kyotocabinet, contrib/tools/ag}, each a
+// HasPrefix filter equivalent to the regex. Returns (nil,false) for anything
+// else ($, ., char classes, repetition, case-folding), which keeps RE2.
+func literalAltsFromRegex(pat string) ([]string, bool) {
+	re, err := syntax.Parse(pat, syntax.Perl)
+	if err != nil {
+		return nil, false
+	}
+
+	// Must be `^`-anchored: a HasPrefix replacement is only equivalent when the
+	// regex matches at the start of the string.
+	if re.Op != syntax.OpConcat || len(re.Sub) == 0 || re.Sub[0].Op != syntax.OpBeginText {
+		return nil, false
+	}
+
+	acc := []string{""}
+	for _, sub := range re.Sub[1:] {
+		set, ok := literalSet(sub)
+		if !ok {
+			return nil, false
+		}
+
+		acc = crossConcat(acc, set)
+		if len(acc) > maxLiteralAltExpansion {
+			return nil, false
+		}
+	}
+
+	return acc, true
+}
+
+// literalSet returns the finite literal language of a regex AST node, or
+// (nil,false) if it is not a literal/concat/alternation tree.
+func literalSet(re *syntax.Regexp) ([]string, bool) {
+	switch re.Op {
+	case syntax.OpEmptyMatch:
+		return []string{""}, true
+	case syntax.OpLiteral:
+		if re.Flags&syntax.FoldCase != 0 {
+			return nil, false
+		}
+
+		return []string{string(re.Rune)}, true
+	case syntax.OpCapture:
+		return literalSet(re.Sub[0])
+	case syntax.OpConcat:
+		acc := []string{""}
+		for _, sub := range re.Sub {
+			set, ok := literalSet(sub)
+			if !ok {
+				return nil, false
+			}
+
+			acc = crossConcat(acc, set)
+			if len(acc) > maxLiteralAltExpansion {
+				return nil, false
+			}
+		}
+
+		return acc, true
+	case syntax.OpAlternate:
+		var out []string
+		for _, sub := range re.Sub {
+			set, ok := literalSet(sub)
+			if !ok {
+				return nil, false
+			}
+
+			out = append(out, set...)
+			if len(out) > maxLiteralAltExpansion {
+				return nil, false
+			}
+		}
+
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+func crossConcat(prefixes, suffixes []string) []string {
+	out := make([]string, 0, len(prefixes)*len(suffixes))
+	for _, p := range prefixes {
+		for _, s := range suffixes {
+			out = append(out, p+s)
+		}
+	}
+
+	return out
+}
+
 // setPositive fills alt's positive constraint from a RE2 pattern, preferring
 // cheaper string ops: a `.*LIT.*` substring becomes containsLit, and any other
 // pattern compiles to RE2 with its literal prefix cached as reGuard.
@@ -960,6 +1060,14 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 
 				if lit := extractLiteralAnchoredPrefix(altStr); lit != "" {
 					alt.literalPrefix = lit
+				} else if prefixes, ok := literalAltsFromRegex(altStr); ok {
+					// `^P(A|B|…)` of pure literals expands to one HasPrefix alt
+					// per branch — no RE2 at match time.
+					for _, p := range prefixes {
+						f.alts = append(f.alts, filterAlt{literalPrefix: p})
+					}
+
+					continue
 				} else {
 					alt.setPositive(name, lineno, altStr)
 				}
