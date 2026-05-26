@@ -484,6 +484,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		}, instance.Platform))
 
 		ccIn := ModuleCCInputs{
+			InclArgs:             ctx.inclArgs,
 			Flags:                d.flags,
 			AddIncl:              pyProtoAuxOwnAddIncl(d),
 			PeerAddInclGlobal:    pyProtoAuxPeerAddIncl(instance, peerContribs, d, cppSibling),

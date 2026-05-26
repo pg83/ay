@@ -159,10 +159,14 @@ func protoResultWholeArchiveCmdPaths(res *protoSrcsResult) []VFS {
 // `emitOneSource`; `genModule`'s memo prevents re-walking the same host
 // instance.
 type genCtx struct {
-	sourceRoot      string
-	fs              *FS
-	parsers         *includeParserManager
-	emit            Emitter
+	sourceRoot string
+	fs         *FS
+	parsers    *includeParserManager
+	emit       Emitter
+	// inclArgs memoises the compile-command -I block per ADDINCL dir for the
+	// run (see inclArgMemo): the block is module-invariant but composeTargetCC
+	// runs per source, so this collapses the per-source re-rendering.
+	inclArgs        inclArgMemo
 	memo            map[ModuleInstance]*moduleEmitResult
 	moduleTypeCache map[moduleTypeCacheKey]moduleTypeInfo
 	walking         map[ModuleInstance]bool
@@ -530,6 +534,7 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 		fs:                 fs,
 		parsers:            parsers,
 		emit:               resourceEmit,
+		inclArgs:           make(inclArgMemo, 4096),
 		memo:               make(map[ModuleInstance]*moduleEmitResult),
 		moduleTypeCache:    make(map[moduleTypeCacheKey]moduleTypeInfo),
 		walking:            make(map[ModuleInstance]bool),
@@ -885,6 +890,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// Any downstream CCs returned here are intentionally ignored:
 		// this branch models modules with no compilable own sources.
 		headerOnlyInputs := ModuleCCInputs{
+			InclArgs:          ctx.inclArgs,
 			Flags:             d.flags,
 			AddIncl:           d.addIncl,
 			PeerAddInclGlobal: peerContribs.addIncl,
@@ -1822,6 +1828,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	moduleInputs := ModuleCCInputs{
+		InclArgs:             ctx.inclArgs,
 		Flags:                d.flags,
 		AddIncl:              dedupedAddIncl,
 		PeerAddInclGlobal:    selfPeerAddInclGlobal,

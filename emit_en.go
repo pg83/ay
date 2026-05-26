@@ -59,6 +59,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 	// transitive peer libraries (abseil, protobuf) resolve correctly.
 	// Mirrors the ModuleCCInputs built for CC nodes in the same module.
 	scanIn := ModuleCCInputs{
+		InclArgs:          ctx.inclArgs,
 		Flags:             d.flags,
 		AddIncl:           d.addIncl,
 		PeerAddInclGlobal: peerAddInclGlobal,

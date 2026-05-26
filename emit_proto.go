@@ -640,6 +640,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
 
 	moduleInputs := ModuleCCInputs{
+		InclArgs:             ctx.inclArgs,
 		Flags:                d.flags,
 		AddIncl:              d.addIncl,
 		PeerAddInclGlobal:    peerContribs.addIncl,
