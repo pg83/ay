@@ -822,7 +822,14 @@ type sourceFilter struct {
 type filterAlt struct {
 	excludePrefixes []string
 	literalPrefix   string
-	re              *regexp.Regexp
+	// containsLit holds the literal of a `.*LIT.*` pattern, matched via
+	// strings.Contains instead of the RE2 backtracker (such substring filters
+	// match a large share of paths, so the saving is on the hot resolve path).
+	containsLit string
+	// reGuard is re.LiteralPrefix(): a necessary leading literal every match
+	// must start with, checked by HasPrefix to short-circuit MatchString.
+	reGuard string
+	re      *regexp.Regexp
 }
 
 // match returns true when the source path satisfies any alt.
@@ -851,11 +858,55 @@ func (a *filterAlt) matches(sourcePath string) bool {
 		return strings.HasPrefix(sourcePath, a.literalPrefix)
 	}
 
+	if a.containsLit != "" {
+		return strings.Contains(sourcePath, a.containsLit)
+	}
+
 	if a.re == nil {
 		return true
 	}
 
+	// Every match of an anchored regex begins with reGuard; a cheap HasPrefix
+	// reject avoids the RE2 engine's per-call setup for non-matching paths.
+	if a.reGuard != "" && !strings.HasPrefix(sourcePath, a.reGuard) {
+		return false
+	}
+
 	return a.re.MatchString(sourcePath)
+}
+
+// literalContainsPattern recognises `.*LIT.*` where LIT is metachar-free, so
+// the filter reduces to strings.Contains(path, LIT).
+func literalContainsPattern(pat string) (string, bool) {
+	mid, ok := strings.CutPrefix(pat, ".*")
+	if !ok {
+		return "", false
+	}
+	mid, ok = strings.CutSuffix(mid, ".*")
+	if !ok || mid == "" || regexp.QuoteMeta(mid) != mid {
+		return "", false
+	}
+
+	return mid, true
+}
+
+// setPositive fills alt's positive constraint from a RE2 pattern, preferring
+// cheaper string ops: a `.*LIT.*` substring becomes containsLit, and any other
+// pattern compiles to RE2 with its literal prefix cached as reGuard.
+func (alt *filterAlt) setPositive(name string, lineno int, pat string) {
+	if lit, ok := literalContainsPattern(pat); ok {
+		alt.containsLit = lit
+
+		return
+	}
+
+	re, err := regexp.Compile(pat)
+	if err != nil {
+		ThrowFmt("sysincl: %s:%d: cannot compile %q: %v", name, lineno, pat, err)
+	}
+
+	alt.re = re
+	alt.reGuard, _ = re.LiteralPrefix()
 }
 
 // compileSourceFilter parses a single source_filter regex. Throws on
@@ -899,13 +950,7 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 					} else if lit := extractLiteralAnchoredPrefix(residual); lit != "" {
 						alt.literalPrefix = lit
 					} else {
-						re, err := regexp.Compile(residual)
-
-						if err != nil {
-							ThrowFmt("sysincl: %s:%d: cannot compile alt residual %q: %v", name, lineno, residual, err)
-						}
-
-						alt.re = re
+						alt.setPositive(name, lineno, residual)
 					}
 				}
 			} else {
@@ -916,13 +961,7 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 				if lit := extractLiteralAnchoredPrefix(altStr); lit != "" {
 					alt.literalPrefix = lit
 				} else {
-					re, err := regexp.Compile(altStr)
-
-					if err != nil {
-						ThrowFmt("sysincl: %s:%d: cannot compile alt %q: %v", name, lineno, altStr, err)
-					}
-
-					alt.re = re
+					alt.setPositive(name, lineno, altStr)
 				}
 			}
 
