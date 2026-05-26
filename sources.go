@@ -21,7 +21,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	}
 
 	visited := &idSet{}
-	visited.reset(internBound())
+	visited.reset(vfsBound())
 	order := make([]uint32, 0, 1024)
 	srcAbsSet := make(map[uint32]struct{}, len(sources))
 

@@ -8,18 +8,22 @@ import (
 // vfs.go — typed VFS path as an interned id.
 //
 // A VFS value addresses a file in one of two virtual roots (SOURCE_ROOT /
-// BUILD_ROOT). The value is a plain `uint32` id into a process-global intern
-// table that stores the FULL canonical string ("$(S)/<rel>" / "$(B)/<rel>").
-// A VFS is always constructed via Intern() (or the Source()/Build() wrappers);
-// there is no "none" VFS — an optional path is a *VFS, nil when absent. Because
-// the root is baked into the interned string there is no root bit in the id,
-// and String() — by far the hottest allocator in the serializer (~40% of all
-// gen allocations) — is a zero-alloc table read instead of a per-call
-// "$(X)/"+rel concatenation.
+// BUILD_ROOT). The value packs an intern id and the root into a `uint32`:
+// v = internId<<1 | root, where the low bit is the root (0=Source, 1=Build)
+// and the intern id (high bits) points into a process-global table that stores
+// the FULL canonical string ("$(S)/<rel>" / "$(B)/<rel>"). A VFS is always
+// constructed via Intern() (or the Source()/Build() wrappers); there is no
+// "none" VFS — an optional path is a *VFS, nil when absent. Root() is a single
+// bit test with no memory access, while String() — by far the hottest allocator
+// in the serializer (~40% of all gen allocations) — stays a zero-alloc read of
+// the interned full string at strs[v>>1] (no per-call "$(X)/"+rel concat). The
+// root sits in the LOW bit deliberately: VFS ids stay in [0, 2*internBound),
+// dense enough to index the closure DFS scratch sets directly (a high root bit
+// would scatter ids across the full uint32 range and blow up those arrays).
 //
 // Rel() recovers the bare relative path as an O(1) slice of the interned full
-// string (strip the fixed 5-byte "$(S)/"/"$(B)/" prefix); Root() reads one
-// byte. The FS abstraction (fs.go) keys on the bare rel via Rel().
+// string (strip the fixed 5-byte "$(S)/"/"$(B)/" prefix); Root() tests the low
+// bit. The FS abstraction (fs.go) keys on the bare rel via Rel().
 //
 // The intern map is keyed by the full string. A call with a literal token,
 // Intern("$(S)/<lit>"), keys the lookup on a compile-time constant with no
@@ -118,17 +122,35 @@ func interned(s string) *STR {
 	return nil
 }
 
-// internBound is an exclusive upper bound on interned ids — every live id is
-// in [1, internBound()). Used to size id-indexed scratch sets (the scanner's
-// DFS visited set).
+// internBound is an exclusive upper bound on interned STR ids — every live id
+// is in [1, internBound()). Used to size STR-indexed scratch (e.g. the sysincl
+// could-claim bitset).
 func internBound() uint32 { return uint32(len(internTable.strs)) }
+
+// vfsBound is an exclusive upper bound on VFS ids. A VFS packs the intern id in
+// the high bits and the root in the low bit (v = internId<<1 | root), so VFS
+// ids reach 2*internBound. Used to size VFS-id-indexed scratch (the closure
+// DFS visited / Tarjan sets).
+func vfsBound() uint32 { return uint32(len(internTable.strs)) << 1 }
 
 // Intern returns the VFS for the full canonical "$(S)/<rel>" / "$(B)/<rel>"
 // string. A literal call — Intern("$(S)/build/scripts/x.py") — keys the lookup
 // on a compile-time constant with no per-call concat; Source()/Build() are the
 // wrappers for a runtime rel. The precondition for a token of unknown shape is
-// vfsHasPrefix.
-func Intern(full string) VFS { return VFS(internString(full)) }
+// vfsHasPrefix. The root (byte 2, 'S'/'B') is packed into the low bit so Root()
+// needs no table read.
+func Intern(full string) VFS {
+	root := VFSRootSource
+	if full[2] == 'B' {
+		root = VFSRootBuild
+	}
+
+	return VFS(uint32(internString(full))<<1 | uint32(root))
+}
+
+// strID is the intern id of v's full canonical string (the high bits; the low
+// bit is the root). v.String() == strID().String().
+func (v VFS) strID() uint32 { return uint32(v) >> 1 }
 
 // Source constructs a SOURCE_ROOT-rooted VFS from a runtime rel.
 func Source(rel string) VFS { return Intern("$(S)/" + rel) }
@@ -139,13 +161,13 @@ func Build(rel string) VFS { return Intern("$(B)/" + rel) }
 // Rel recovers the root-relative path as an O(1) slice of the interned full
 // string (strip the 5-byte "$(S)/"/"$(B)/" prefix).
 func (v VFS) Rel() string {
-	return internTable.strs[uint32(v)][vfsPrefixLen:]
+	return internTable.strs[v.strID()][vfsPrefixLen:]
 }
 
-// Root reports which root v is anchored under. The canonical prefix is "$(S)/"
-// or "$(B)/"; byte 2 ('S'/'B') discriminates.
+// Root reports which root v is anchored under — a test of the low bit, which
+// Intern set from the canonical "$(S)/" / "$(B)/" prefix.
 func (v VFS) Root() VFSRoot {
-	if internTable.strs[uint32(v)][2] == 'B' {
+	if uint32(v)&1 != 0 {
 		return VFSRootBuild
 	}
 
@@ -162,7 +184,7 @@ func (v VFS) IsBuild() bool { return v.Root() == VFSRootBuild }
 // read of the interned full string, no allocation. The scanner / FS access
 // path keys on the bare rel via Rel() and never materialises.
 func (v VFS) String() string {
-	return internTable.strs[uint32(v)]
+	return internTable.strs[v.strID()]
 }
 
 // LongString materialises the legacy raw-graph root spelling used by the
