@@ -687,7 +687,17 @@ func appendCompileFlagPipeline(cmdArgs []string, bundle compileFlagBundle, warni
 
 func composeTargetCC(a ccComposeArgs) []string {
 	bundle := compileFlagBundleFor(a.Platform)
-	cmdArgs := make([]string, 0, 101+len(a.OwnAddIncl)+len(a.PeerAddIncl)+len(a.OwnCFlags)+len(a.OwnExtras)+len(a.AutoPeerCFlags)+len(a.PeerExtras)+2*len(a.OwnGlobalBucket)+len(a.PerSrcCFlags)+4)
+	warningBundle := pickWarningFlags(a.NoCompilerWarnings, a.NoWShadow)
+	// Pre-size cmdArgs to its exact final length so the ~22k per-source builds
+	// never grow-realloc. The 101 covers the fixed literals + constant flag
+	// slices (compiler/target/-B/-c/-o + ccIncludes{Prefix,Suffix} + the
+	// pipeline's const blocks + std/catboost/datetime/macro-prefix-map); the
+	// rest are the platform/source-variable slices, counted at their append
+	// multiplicity (NoLibcBlock appears twice). Verified tight: max final
+	// length equals this cap, no call exceeds it.
+	argCap := 101 + len(a.OwnAddIncl) + len(a.PeerAddIncl) + len(a.OwnCFlags) + len(a.OwnExtras) + len(a.AutoPeerCFlags) + len(a.PeerExtras) + 2*len(a.OwnGlobalBucket) + len(a.PerSrcCFlags) + 4 +
+		len(bundle.ArchArgs) + len(bundle.CFlags) + len(bundle.Defines) + 2*len(bundle.NoLibcBlock) + len(bundle.CPUFeatures) + len(warningBundle)
+	cmdArgs := make([]string, 0, argCap)
 	cmdArgs = append(cmdArgs,
 		pickCompiler(a.Platform.Tools, a.IsCxx),
 		"--target="+a.Platform.Triple,
@@ -703,7 +713,7 @@ func composeTargetCC(a ccComposeArgs) []string {
 	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl, a.InclArgs)
 	cmdArgs = append(cmdArgs, ccIncludesSuffix...)
 	cmdArgs = appendAddIncl(cmdArgs, a.PeerAddIncl, a.InclArgs)
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(a.NoCompilerWarnings, a.NoWShadow), bundle.Defines, a.OwnCFlags, a.AutoPeerCFlags)
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningBundle, bundle.Defines, a.OwnCFlags, a.AutoPeerCFlags)
 
 	// C sources: CONLYFLAGS (ownExtras) trails AFTER
 	// macroPrefixMapFlags — base64 neon32/64/plain32/64 CC nodes show
