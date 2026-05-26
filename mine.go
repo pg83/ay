@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -288,7 +287,7 @@ func mineClangMajor(clang string) string {
 }
 
 func readYaConfSection(fs *FS, rel, wantSection string) map[string]string {
-	raw := Throw2(fs.Read(rel))
+	raw := fs.Read(rel)
 	out := map[string]string{}
 	section := ""
 
@@ -330,13 +329,10 @@ func readYaConfSections(fs *FS, wantSection string, rels ...string) map[string]s
 	out := map[string]string{}
 
 	for _, rel := range rels {
-		raw, err := fs.Read(rel)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			Throw(err)
+		if !fs.IsFile(rel) {
+			continue // optional ya.conf absent — skip, not an error
 		}
+		raw := fs.Read(rel)
 
 		section := ""
 		for _, line := range strings.Split(string(raw), "\n") {
@@ -382,7 +378,7 @@ type hostResourcesJSON struct {
 
 func readHostResourcesBundle(fs *FS, pattern, rel string, upperPlatform bool) graphConfResource {
 	var data hostResourcesJSON
-	raw := Throw2(fs.Read(rel))
+	raw := fs.Read(rel)
 	Throw(json.Unmarshal(raw, &data))
 
 	order := []string{

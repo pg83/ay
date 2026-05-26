@@ -112,21 +112,21 @@ func (fs *FS) IsDir(rel string) bool {
 	return p && d
 }
 
-// Read returns the raw bytes of <sourceRoot>/<rel>. Uncached.
-func (fs *FS) Read(rel string) ([]byte, error) {
-	return os.ReadFile(fs.rootSlash + cleanRel(rel))
+// Read returns the raw bytes of <sourceRoot>/<rel>. Uncached. Throws on any
+// read error (a missing file included): callers that legitimately tolerate an
+// absent file gate on Exists/IsFile first, which separates "optional file
+// absent" (a query) from "file present but unreadable" (an exception).
+func (fs *FS) Read(rel string) []byte {
+	return Throw2(os.ReadFile(fs.rootSlash + cleanRel(rel)))
 }
 
 // ReadInto reads <sourceRoot>/<rel> into buf, reusing and growing it as needed,
 // and returns the bytes (which alias buf — valid only until buf is reused). For
 // the include scanner's parse path, which reads each source once, consumes it
 // immediately, and retains nothing: one caller-owned buffer then serves every
-// read with no per-file allocation.
-func (fs *FS) ReadInto(rel string, buf []byte) ([]byte, error) {
-	f, err := os.Open(fs.rootSlash + cleanRel(rel))
-	if err != nil {
-		return buf[:0], err
-	}
+// read with no per-file allocation. Throws on any read error (see Read).
+func (fs *FS) ReadInto(rel string, buf []byte) []byte {
+	f := Throw2(os.Open(fs.rootSlash + cleanRel(rel)))
 	defer f.Close()
 
 	buf = buf[:0]
@@ -145,43 +145,41 @@ func (fs *FS) ReadInto(rel string, buf []byte) ([]byte, error) {
 		buf = buf[:len(buf)+n]
 		if err != nil {
 			if err == io.EOF {
-				err = nil
+				return buf
 			}
-			return buf, err
+			Throw(err)
 		}
 	}
 }
 
-// ReadAbs reads an absolute path. Paths under sourceRoot route through
-// Read so cache invariants stay consistent for callers that mix both
-// forms (yamake INCLUDE resolution).
-func (fs *FS) ReadAbs(absPath string) ([]byte, error) {
-	if rel, ok := fs.relForAbs(absPath); ok {
-		return fs.Read(rel)
-	}
-	return os.ReadFile(absPath)
+// ReadAbs reads an absolute path under sourceRoot, routing through Read so
+// cache invariants stay consistent for callers that mix both forms (yamake
+// INCLUDE resolution). Throws via relForAbs if the path is outside the root.
+func (fs *FS) ReadAbs(absPath string) []byte {
+	return fs.Read(fs.relForAbs(absPath))
 }
 
-// ExistsAbs is the absolute-path counterpart of Exists.
+// ExistsAbs is the absolute-path counterpart of Exists; Throws via relForAbs
+// if absPath is outside the source root.
 func (fs *FS) ExistsAbs(absPath string) (present bool, isDir bool) {
-	if rel, ok := fs.relForAbs(absPath); ok {
-		return fs.Exists(rel)
-	}
-	info, err := os.Stat(absPath)
-	if err != nil {
-		return false, false
-	}
-	return true, info.IsDir()
+	return fs.Exists(fs.relForAbs(absPath))
 }
 
-func (fs *FS) relForAbs(absPath string) (string, bool) {
+// relForAbs maps an absolute path to its SOURCE_ROOT-relative form. Every path
+// the generator touches lives under the root, so a path outside it is a
+// programming error, not a fallback case — Throw rather than silently reading
+// off-tree.
+func (fs *FS) relForAbs(absPath string) string {
 	if absPath == fs.sourceRoot {
-		return "", true
+		return ""
 	}
 	if strings.HasPrefix(absPath, fs.rootSlash) {
-		return absPath[len(fs.rootSlash):], true
+		return absPath[len(fs.rootSlash):]
 	}
-	return "", false
+
+	ThrowFmt("relForAbs: %q is outside source root %q", absPath, fs.sourceRoot)
+
+	return "" // unreachable
 }
 
 // Walk traverses the subtree rooted at rel in DFS order, invoking

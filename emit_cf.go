@@ -82,13 +82,12 @@ var cfgCmakeDefineRe = regexp.MustCompile(`#cmakedefine(?:01)?[ \t]+([A-Z_][A-Z0
 func buildCFGVars(fs *FS, rel string, setVars, defaultVars map[string]string) []string {
 	referenced := map[string]bool{}
 
-	if data, err := fs.Read(rel); err == nil {
-		for _, m := range cfgVarRefRe.FindAllSubmatch(data, -1) {
-			referenced[string(m[1])] = true
-		}
-		for _, m := range cfgCmakeDefineRe.FindAllSubmatch(data, -1) {
-			referenced[string(m[1])] = true
-		}
+	data := fs.Read(rel)
+	for _, m := range cfgVarRefRe.FindAllSubmatch(data, -1) {
+		referenced[string(m[1])] = true
+	}
+	for _, m := range cfgCmakeDefineRe.FindAllSubmatch(data, -1) {
+		referenced[string(m[1])] = true
 	}
 
 	var vars []string
