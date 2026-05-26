@@ -895,17 +895,87 @@ func (sc *scanCtx) plainDfsID(absID uint32, visited *idSet, order *[]uint32) {
 // forEachResolvedChild invokes `fn` once per resolved-child VFS path
 // of `vfsPath`. Parsing is delegated to the parser layer: per-extension
 // parser for source files, parser manager for generated $(B) outputs
-// (which serve the emitter-mounted include list). Each parser entry
-// then goes through resolve().
+// (which serve the emitter-mounted include list). The whole file's
+// directives are resolved as a batch via resolveAll.
 func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
-	s := sc.scanner
+	for _, rabs := range sc.resolveAll(vfsPath, sc.scanner.parsers.parsedIncludes(vfsPath)) {
+		fn(rabs)
+	}
+}
 
-	for _, entry := range s.parsers.parsedIncludes(vfsPath) {
-		resolved := sc.resolve(vfsPath, entry)
-		for _, rabs := range resolved {
-			fn(rabs)
+// resolveAll resolves every directive of a single file (includerAbs) against
+// that file's ADDINCL context, returning the concatenation of the per-directive
+// results in directive order. It is NOT deduplicated — the closure walk's
+// visited set drops repeats downstream, and the childrenCache stores the raw
+// sequence.
+//
+// This is the one place where the entire file's targets AND the ADDINCL search
+// path are both in hand, so the ADDINCL search tier (phase 2) runs as a single
+// batch across the directives the includer-local stages did not resolve, while
+// those local stages (phase 1) and the sysincl layering (phase 3) stay
+// per-directive. The phases share per-directive scratch (localOut/found/fbRel).
+// Today phase 2 still loops the per-directive tier; that loop is the seam the
+// inverted basename-index replaces.
+func (sc *scanCtx) resolveAll(includerAbs VFS, directives []includeDirective) []VFS {
+	n := len(directives)
+	if n == 0 {
+		return nil
+	}
+
+	localOut := make([][]VFS, n)
+	found := make([]bool, n)
+	fbRel := make([]string, n)
+
+	// Phase 1: includer-local stages (cython / BUILD-direct / quoted same-dir),
+	// per directive. By the resolveSearchPathLocal invariant, found[i]==false
+	// leaves localOut[i] empty.
+	//
+	// `#include_next` resolves to nothing and is excluded from every phase: each
+	// observed live use is the libcxx shadow-header pattern (libcxx/X.h does
+	// `#include_next <X.h>` to chain to the system's X.h), where the chained
+	// header is already reachable via the parallel C++ wrapper through sysincl;
+	// following it adds no new inputs in the live case and spurious ones inside a
+	// dead `#elif`. Not surfaced to onWarn — empty is intended.
+	for i := range directives {
+		d := directives[i]
+		if d.next {
+			continue
+		}
+		sc.scanner.resolveSearchPathCalls++
+		localOut[i], found[i], fbRel[i] = sc.resolveSearchPathLocal(includerAbs, d)
+	}
+
+	// Phase 2: ADDINCL search tier, batched across the directives phase 1 left
+	// unresolved. (Currently the per-directive resolveContextSearchTier; the
+	// inverted basename-index replaces this loop.)
+	for i := range directives {
+		d := directives[i]
+		if d.next || found[i] {
+			continue
+		}
+		tier := sc.resolveContextSearchTier(d.target, d.target.String())
+		if tier.found {
+			localOut[i] = append(localOut[i], tier.paths...)
+			found[i] = true
 		}
 	}
+
+	// Phase 3: BUILD-root fallback for the still-unresolved, then sysincl layering
+	// + unresolved diagnostic — both per directive.
+	var out []VFS
+	for i := range directives {
+		d := directives[i]
+		if d.next {
+			continue
+		}
+		searchOut := localOut[i]
+		if !found[i] {
+			searchOut = append(searchOut, sc.resolveSearchPathFallback(includerAbs, d, fbRel[i])...)
+		}
+		out = append(out, sc.applyResolveTail(includerAbs, d, searchOut)...)
+	}
+
+	return out
 }
 
 // forEachResolvedChildID invokes `fn` once per resolved-child ID of
@@ -1128,13 +1198,20 @@ func (sc *scanCtx) strongconnect(v uint32) {
 //     target sysincl, but multi-target sysincl (≥ 2 non-empty paths)
 //     IS unioned on top (e.g. `"cxxabi.h"` from libcxxabi-parts unions
 //     libcxxabi and libcxxrt).
-func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
+//
+// applyResolveTail layers sysincl mappings onto a directive's search-path result
+// (searchOut, already computed by the local / tier / fallback stages) and emits
+// the unresolved-include diagnostic. It is the post-search-path half of include
+// resolution, factored out of the old monolithic resolve() so resolveAll can
+// feed it a searchOut whose ADDINCL tier was computed in a batch. `#include_next`
+// directives never reach here — resolveAll drops them before any phase.
+func (sc *scanCtx) applyResolveTail(includerAbs VFS, d includeDirective, searchOut []VFS) (out []VFS) {
 	s := sc.scanner
 
 	// Unresolved-include diagnostic: surface every directive with no
 	// hit in source dir / build dir / search path AND not claimed by
 	// any sysincl record (bare-key suppression is an intentional empty
-	// result). Skipped when d.next is set.
+	// result).
 	var sysinclClaimed bool
 	defer func() {
 		if len(out) > 0 || d.next || sysinclClaimed {
@@ -1150,20 +1227,6 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 				includerAbs.String(), open, d.target.String(), close),
 		})
 	}()
-	// `#include_next` directives resolve to nothing. Every observed
-	// live use is the libcxx shadow-header pattern (libcxx/X.h does
-	// `#include_next <X.h>` to chain to the system's X.h); the chained
-	// header is always reachable via the parallel C++ wrapper, which
-	// resolves via sysincl. Following `#include_next` adds no new
-	// inputs in the live case and adds spurious ones when it sits
-	// inside an `#elif` the preprocessor never takes (e.g.
-	// __mbstate_t.h's dead branch under _LIBCPP_HAS_MUSL_LIBC).
-	// `#include_next` is NOT surfaced to onWarn — empty is intended.
-	if d.next {
-		return nil
-	}
-
-	searchOut := sc.resolveSearchPath(includerAbs, d)
 
 	// Sysincl: per-record source-vs-includer keying. Each SysIncl record
 	// carries a KeyBySource flag compiled from its source_filter shape
@@ -1564,16 +1627,49 @@ func resolveCythonPy2Override(includerAbs VFS, d includeDirective) (string, bool
 	return "", false
 }
 
-// resolveSearchPath returns the search-path-only resolved set for the
-// given directive. Not separately cached: the scanner-global childrenCache
-// resolves each file's includes once, so this runs at most once per
-// (file, directive); the per-target ADDINCL tier it consults is memoised in
-// the walk-local searchTierCache.
+// resolveSearchPath returns the search-path-only resolved set for the given
+// directive: the includer-local stages (resolveSearchPathLocal), then the
+// ADDINCL search tier (resolveContextSearchTier), then the BUILD-root fallback
+// (resolveSearchPathFallback) — first-match-wins in that order. Not separately
+// cached: the scanner-global childrenCache resolves each file's includes once,
+// so this runs at most once per (file, directive); the per-target ADDINCL tier
+// it consults is memoised in the walk-local searchTierCache. resolveAll drives
+// these three stages directly when batching a whole file's directives.
 func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS {
-	s := sc.scanner
-	s.resolveSearchPathCalls++
+	sc.scanner.resolveSearchPathCalls++
 
-	var out []VFS
+	out, found, buildRootFallbackRel := sc.resolveSearchPathLocal(includerAbs, d)
+
+	if !found {
+		tier := sc.resolveContextSearchTier(d.target, d.target.String())
+		if tier.found {
+			out = append(out, tier.paths...)
+			found = true
+		}
+	}
+
+	if !found {
+		out = append(out, sc.resolveSearchPathFallback(includerAbs, d, buildRootFallbackRel)...)
+	}
+
+	return out
+}
+
+// resolveSearchPathLocal runs the includer-local search stages that precede the
+// ADDINCL tier — first-match order: cython override, BUILD-root direct codegen
+// check, cython-py2 override, quoted same-directory probe. It returns the
+// resolved paths, whether any stage matched (found), and buildRootFallbackRel —
+// set when a BUILD-root includer's target with a path separator was NOT claimed
+// by the codegen registry, deferring the Source(rel) fallback until after the
+// ADDINCL tier (so e.g. llvm/IR/Value.h resolves via the module's GLOBAL ADDINCL
+// rather than the spurious $(S)/llvm/IR/Value.h).
+//
+// INVARIANT relied on by resolveAll's batching: every stage here sets found
+// exactly when it appends, so found==false implies out is empty — the tier and
+// fallback stages downstream always start from an empty set, needing no
+// cross-stage dedup.
+func (sc *scanCtx) resolveSearchPathLocal(includerAbs VFS, d includeDirective) (out []VFS, found bool, buildRootFallbackRel string) {
+	s := sc.scanner
 
 	// Pool the per-resolve dedup map. Keys are rel-form strings — what
 	// fileExistsByRel keys on too, so no extra VFS construction.
@@ -1624,39 +1720,22 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		return true
 	}
 
-	// First-match-wins across the search path. Order:
-	//   1. quoted-form: same directory as the includer
-	//   2. BUILD-root BUILD-only check (generated header in codegen registry)
-	//   3. module's own ADDINCL
-	//   4. peer-propagated GLOBAL ADDINCL
-	//   5. baseline fallback (repo-root/linux-headers)
-	//   6. BUILD-root Source fallback (after all search paths fail)
-	searchPathFound := false
-
-	// buildRootFallbackRel is set when the includer is a BUILD-root file
-	// and the target contains a path separator, but the BUILD-root codegen
-	// registry didn't claim it. We defer the Source(rel) fallback until
-	// after the ADDINCL tier so that headers like llvm/IR/Value.h resolve
-	// to $(S)/contrib/libs/llvm16/include/llvm/IR/Value.h (via the GLOBAL
-	// ADDINCL for that module) rather than the spurious $(S)/llvm/IR/Value.h.
-	var buildRootFallbackRel string
-
 	if candidate, ok := cythonPy2SiblingOverride(includerAbs, d); ok && addPath(candidate) {
-		searchPathFound = true
+		found = true
 	}
 
 	if includerAbs.IsBuild() && strings.Contains(d.target.String(), "/") {
 		rel := normalisePath(d.target.String())
 
 		if addBuildPath(rel) {
-			searchPathFound = true
+			found = true
 		} else {
 			buildRootFallbackRel = rel
 		}
 	}
 
 	if candidate, ok := resolveCythonPy2Override(includerAbs, d); ok && addPath(candidate) {
-		searchPathFound = true
+		found = true
 	}
 
 	if d.kind == includeQuoted {
@@ -1670,15 +1749,15 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		// Mirror the original addPath/addBuildPath else-if: try the source
 		// sibling, and only if it did NOT match (missing or already seen) fall
 		// back to the codegen sibling. Gate on a LOCAL `matched`, not the global
-		// searchPathFound — an earlier stage (e.g. the BUILD-root check) may have
-		// set it, and gating the codegen probe on it would wrongly skip the
-		// same-dir build candidate.
+		// `found` — an earlier stage (e.g. the BUILD-root check) may have set it,
+		// and gating the codegen probe on it would wrongly skip the same-dir
+		// build candidate.
 		matched := false
 		if rel, ok := s.resolveSourceUnder(incDir, d.target.String()); ok {
 			if _, dup := seen[rel]; !dup {
 				seen[rel] = struct{}{}
 				out = append(out, Source(rel))
-				searchPathFound = true
+				found = true
 				matched = true
 			}
 		}
@@ -1689,28 +1768,33 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 				if _, dup := seen[dedupKey]; !dup {
 					seen[dedupKey] = struct{}{}
 					out = append(out, info.OutputPath)
-					searchPathFound = true
+					found = true
 				}
 			}
 		}
 	}
 
-	if !searchPathFound {
-		tier := sc.resolveContextSearchTier(d.target, d.target.String())
-		if tier.found {
-			out = append(out, tier.paths...)
-			searchPathFound = true
-		}
-	}
+	// `clear()` drops every key without releasing the bucket allocation
+	// — next caller starts with empty-but-prewarmed state.
+	clear(seen)
+	s.seenPool.Put(seenP)
 
-	// VFS fallback tier — consult fallbackLocators (codegen registry)
-	// only when every on-disk search-path candidate missed. Generated
-	// files (.pb.h, _serialized.h, .ev.pb.h, ...) don't exist on disk
-	// at gen time. Locator is queried with the canonical $(B)/<target>
-	// form; consumers always use the full BUILD_ROOT-relative path.
-	if !searchPathFound && len(s.fallbackLocators) > 0 {
-		// BUILD-rooted candidate. The Exists locator is the codegen
-		// registry; its API still takes the string form.
+	return out, found, buildRootFallbackRel
+}
+
+// resolveSearchPathFallback runs the post-ADDINCL stages, reached only when the
+// local stages AND the ADDINCL tier all missed — so it starts from an empty set
+// and needs no dedup: the codegen fallbackLocators check (BUILD-rooted
+// generated files like .pb.h that don't exist on disk at gen time), then the
+// unconditional BUILD-root Source(rel) fallback for an unverifiable BUILD-root
+// generated-header include, both mirroring the upstream scanner.
+func (sc *scanCtx) resolveSearchPathFallback(includerAbs VFS, d includeDirective, buildRootFallbackRel string) (out []VFS) {
+	s := sc.scanner
+
+	// VFS fallback tier — consult fallbackLocators (codegen registry). Locator
+	// is queried with the canonical $(B)/<target> form; consumers always use the
+	// full BUILD_ROOT-relative path.
+	if len(s.fallbackLocators) > 0 {
 		abs := Build(d.target.String())
 
 		for _, loc := range s.fallbackLocators {
@@ -1718,35 +1802,15 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 				continue
 			}
 
-			// Use a distinct dedup key for BUILD-rooted entries (the
-			// rel-keyed `seen` would collide with a SOURCE rel of the
-			// same name). Prefix with "B:" so it's unique.
-			dedupKey := "B:" + d.target.String()
-			if _, dup := seen[dedupKey]; !dup {
-				seen[dedupKey] = struct{}{}
-				out = append(out, abs)
-			}
+			out = append(out, abs)
 
 			break
 		}
 	}
 
-	// BUILD-root Source fallback: after all on-disk search paths (ADDINCL,
-	// VFS locators) failed, emit Source(rel) unconditionally. The upstream
-	// scanner does the same for BUILD-root generated-header includes that
-	// cannot be verified on disk at graph-gen time.
-	if !searchPathFound && buildRootFallbackRel != "" {
-		if _, dup := seen[buildRootFallbackRel]; !dup {
-			seen[buildRootFallbackRel] = struct{}{}
-			out = append(out, Source(buildRootFallbackRel))
-		}
-		searchPathFound = true
+	if buildRootFallbackRel != "" {
+		out = append(out, Source(buildRootFallbackRel))
 	}
-
-	// `clear()` drops every key without releasing the bucket allocation
-	// — next caller starts with empty-but-prewarmed state.
-	clear(seen)
-	s.seenPool.Put(seenP)
 
 	return out
 }
