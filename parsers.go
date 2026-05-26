@@ -357,103 +357,185 @@ func (emptyIncludeDirectiveParser) Parse(_ string, _ []byte) parsedIncludeSet {
 	return nil
 }
 
-// parseCIncludes extracts C/C++ `#include` directives from `data` in a
-// single forward pass, mirroring upstream ymake's ScanCppIncludes (Ragel).
-// No comment-strip buffer and no regex: most lines are not directives and
-// are skipped to the next newline at memchr speed; `/* */` block comments
-// are consumed as whitespace at the directive position (so a commented-out
-// `#include` between the `#` and `<` is handled); the target excludes `\n`
-// and `$` (so macro-expanded includes like `<$X>` and protoc codegen
-// templates `R"(#include "$path$")"` are dropped); a trailing `// Y_IGNORE`
-// suppresses the directive. `#include_next`/`#import`-with-no-bracket and
-// bare-macro `#include FOO` simply fail to match (no bracket follows), as
-// upstream — those contribute nothing to the resolved closure here.
+// parseCIncludes extracts C/C++ `#include` / `#import` directives from `data`,
+// byte-for-byte matching upstream ymake's line-oriented ScanCppIncludes across
+// the whole ydb tree. It jumps to each '#' with a single IndexByte (most bytes
+// are not directives), then accepts it only when it is the first non-ws,
+// non-block-comment byte of its line (skipWSAndBlockComments(ls) == hi) AND is
+// not inside a multiline line-leading `/* */` block comment that opened earlier
+// (leadingBlockCoversHi). The target is read literally between the brackets, so
+// it excludes `\n` and `$` (macro-expanded `<$X>` and protoc templates like
+// `R"(#include "$path$")"` are dropped) but keeps embedded `//`; a trailing
+// `// Y_IGNORE` suppresses the directive. `#include_next`/bare-macro
+// `#include FOO` fall through as a macro-form token, as upstream.
+//
+// No comment-strip buffer and no regex: the line-leading rule sidesteps '#'
+// inside strings/code, and the literal target read avoids mis-stripping '//'
+// in include paths — both of which a comment-stripping scan gets wrong.
 func parseCIncludes(data []byte) []includeDirective {
 	out := make([]includeDirective, 0, 8)
 	n := len(data)
 	p := 0
+	clean := 0 // last position confirmed to be OUTSIDE any block comment
 
 	for p < n {
-		// main: ws '#' ws ("include"|"import")
-		q := skipWSAndBlockComments(data, p)
-		if q >= n {
+		rel := bytes.IndexByte(data[p:], '#')
+		if rel < 0 {
 			break
 		}
-		if data[q] != '#' {
-			p = nextLineStart(data, q)
+		hi := p + rel
+
+		ls := hi
+		for ls > 0 && data[ls-1] != '\n' {
+			ls--
+		}
+
+		if q0 := skipWSAndBlockComments(data, ls); q0 != hi {
+			// '#' is not the line's first real byte (it is in code/a string, or a
+			// leading block comment consumed past it). Resume past whatever the
+			// skip consumed — never inside it. Do NOT advance `clean`: ls may sit
+			// inside a multiline comment whose '/*' we have not yet seen.
+			p = nextLineStart(data, q0)
+
 			continue
 		}
-		q = skipWSAndBlockComments(data, q+1)
 
-		switch {
-		case bytesHasPrefixAt(data, q, "include"):
-			q += len("include")
-		case bytesHasPrefixAt(data, q, "import"):
-			q += len("import")
-		default:
-			p = nextLineStart(data, q)
+		// '#' is its line's first real byte. But a line-leading `/*` may have
+		// opened on an EARLIER line and still span hi (libcxx synopsis,
+		// simdjson's doc block). Scan [clean, hi) — clean is comment-clean and
+		// advances monotonically, so these gaps are disjoint (O(data) overall).
+		if end, covered := leadingBlockCoversHi(data, clean, hi); covered {
+			p, clean = end, end
+
 			continue
 		}
 
-		// incl: ws then '<'target'>' or '"'target'"'; target excludes \n,$.
-		q = skipWSAndBlockComments(data, q)
-		if q >= n {
-			break
+		d, ok, next := parseDirectiveInline(data, hi)
+		if ok {
+			out = append(out, d)
 		}
-		var closeCh byte
-		switch data[q] {
-		case '<':
-			closeCh = '>'
-		case '"':
-			closeCh = '"'
-		default:
-			// Macro-form include (`#include BOOST_PP_ITERATE()`): the target is
-			// a bare macro token, not a quoted/angled path. Upstream captures it
-			// verbatim (up to whitespace) as an ordinary include and resolves it
-			// through build/sysincl/macro.yml, which maps every such token
-			// (BOOST_*, Y_MSVC_INCLUDE_NEXT, …) to its header set. `$`-prefixed
-			// tokens (build vars) are dropped, mirroring upstream's
-			// StartsWith('$') skip.
-			start := q
-			for q < n {
-				if c := data[q]; c == ' ' || c == '\t' || c == '\v' || c == '\f' || c == '\r' || c == '\n' {
-					break
-				}
-				q++
-			}
-			if q > start && data[start] != '$' && !hasYIgnoreComment(data, q) {
-				out = append(out, includeDirective{kind: includeQuoted, target: internBytes(data[start:q])})
-			}
-			p = nextLineStart(data, q)
-			continue
-		}
-		q++
-
-		start := q
-		for q < n && data[q] != closeCh && data[q] != '\n' && data[q] != '$' {
-			q++
-		}
-		if q >= n || data[q] != closeCh {
-			p = nextLineStart(data, q)
-			continue
-		}
-		target := string(data[start:q])
-		q++ // past closing bracket
-
-		kind := includeSystem
-		if closeCh == '"' {
-			kind = includeQuoted
-		}
-
-		if !hasYIgnoreComment(data, q) {
-			out = append(out, includeDirective{kind: kind, target: internString(target)})
-		}
-
-		p = nextLineStart(data, q)
+		p, clean = next, next // hi was outside any comment, so `next` is clean
 	}
 
 	return out
 }
+
+// parseDirectiveInline parses the `#include`/`#import` directive at hashPos
+// (data[hashPos] == '#'), returning the directive (when matched), whether it
+// matched, and the resume position (start of the next line). Mirrors
+// parseCIncludes's per-directive grammar; interns the target from the slice.
+func parseDirectiveInline(data []byte, hashPos int) (includeDirective, bool, int) {
+	n := len(data)
+	q := skipWSAndBlockComments(data, hashPos+1)
+
+	switch {
+	case bytesHasPrefixAt(data, q, "include"):
+		q += len("include")
+	case bytesHasPrefixAt(data, q, "import"):
+		q += len("import")
+	default:
+		return includeDirective{}, false, nextLineStart(data, q)
+	}
+
+	q = skipWSAndBlockComments(data, q)
+	if q >= n {
+		return includeDirective{}, false, n
+	}
+
+	var closeCh byte
+	switch data[q] {
+	case '<':
+		closeCh = '>'
+	case '"':
+		closeCh = '"'
+	default:
+		start := q
+		for q < n {
+			if c := data[q]; c == ' ' || c == '\t' || c == '\v' || c == '\f' || c == '\r' || c == '\n' {
+				break
+			}
+			q++
+		}
+		if q > start && data[start] != '$' && !hasYIgnoreComment(data, q) {
+			return includeDirective{kind: includeQuoted, target: internBytes(data[start:q])}, true, nextLineStart(data, q)
+		}
+
+		return includeDirective{}, false, nextLineStart(data, q)
+	}
+	q++
+
+	start := q
+	for q < n && data[q] != closeCh && data[q] != '\n' && data[q] != '$' {
+		q++
+	}
+	if q >= n || data[q] != closeCh {
+		return includeDirective{}, false, nextLineStart(data, q)
+	}
+	targetBytes := data[start:q]
+	q++
+
+	kind := includeSystem
+	if closeCh == '"' {
+		kind = includeQuoted
+	}
+
+	if !hasYIgnoreComment(data, q) {
+		return includeDirective{kind: kind, target: internBytes(targetBytes)}, true, nextLineStart(data, q)
+	}
+
+	return includeDirective{}, false, nextLineStart(data, q)
+}
+
+// isCWSByte reports the C "whitespace" bytes the directive grammar skips
+// (matching skipWSAndBlockComments; newline is a line boundary, not ws).
+func isCWSByte(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\v' || c == '\f' || c == '\r'
+}
+
+// leadingBlockCoversHi reports whether hi falls inside a `/* ... */` block
+// comment whose `/*` is the first non-ws byte of its line (the only comment
+// shape the old parser consumes across lines) and which opens within [from,
+// hi). Returns the comment's end so the caller resumes past it. A mid-line
+// `/*` is ignored — the old parser does not track those, so neither do we.
+func leadingBlockCoversHi(data []byte, from, hi int) (int, bool) {
+	for i := from; i < hi; {
+		rel := bytes.Index(data[i:hi], blockCommentOpen)
+		if rel < 0 {
+			return 0, false
+		}
+		open := i + rel
+
+		lineLeading := true
+		for k := open; k > 0 && data[k-1] != '\n'; k-- {
+			if !isCWSByte(data[k-1]) {
+				lineLeading = false
+
+				break
+			}
+		}
+
+		end := len(data)
+		if cl := bytes.Index(data[open+2:], blockCommentClose); cl >= 0 {
+			end = open + 2 + cl + 2
+		}
+
+		if lineLeading {
+			if end > hi {
+				return end, true // the comment spans hi
+			}
+			i = end // line-leading comment that closed before hi; resume past it
+		} else {
+			i = open + 2 // mid-line '/*': not consumed by the old parser
+		}
+	}
+
+	return 0, false
+}
+
+var (
+	blockCommentOpen  = []byte("/*")
+	blockCommentClose = []byte("*/")
+)
 
 // skipWSAndBlockComments advances past spaces/tabs/\v/\f/\r and `/* */`
 // block comments (which may span newlines), mirroring the Ragel `ws` rule.
