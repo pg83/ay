@@ -20,8 +20,13 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 		return nil
 	}
 
-	visited := &idSet{}
+	// JOIN_SRCS walks are top-level and non-recursive (each member uses dfsID
+	// with the shared visited; nothing here re-enters WalkClosure or this
+	// function), so all calls can borrow the SAME idSet from the scanner pool
+	// instead of each allocating a fresh ~vfsBound-sized backing array.
+	visited := scanner.visitedIDPool.Get().(*idSet)
 	visited.reset(vfsBound())
+	defer scanner.visitedIDPool.Put(visited)
 	order := make([]uint32, 0, 1024)
 	srcAbsSet := make(map[uint32]struct{}, len(sources))
 
