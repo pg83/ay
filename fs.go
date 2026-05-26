@@ -241,6 +241,13 @@ func cleanRel(rel string) string {
 	if rel == "" || rel == "." {
 		return ""
 	}
+	// Fast path: most rels reaching the FS probe path are already clean.
+	// path.Clean is an O(n) scan that also sets up a lazybuf (heap alloc) on
+	// any rewrite; a single conservative scan returns the input untouched for
+	// the common case and only falls through to path.Clean when needed.
+	if pathIsClean(rel) {
+		return rel
+	}
 	rel = path.Clean(rel)
 	if rel == "." || rel == "/" {
 		return ""
@@ -248,6 +255,44 @@ func cleanRel(rel string) string {
 	rel = strings.TrimPrefix(rel, "/")
 	rel = strings.TrimSuffix(rel, "/")
 	return rel
+}
+
+// pathIsClean reports whether p is already a clean SOURCE_ROOT-relative path:
+// no leading/trailing '/', and no empty / "." / ".." segment. Conservative —
+// any uncertain case returns false and routes through path.Clean, so a false
+// negative only costs a slow path, never correctness.
+func pathIsClean(p string) bool {
+	if p[0] == '/' || p[len(p)-1] == '/' {
+		return false
+	}
+
+	// Leading segment: "." or ".." (no preceding '/').
+	if p[0] == '.' {
+		if len(p) == 1 || p[1] == '/' || (p[1] == '.' && (len(p) == 2 || p[2] == '/')) {
+			return false
+		}
+	}
+
+	// Interior segments: a '/' followed by '/', "./", "..", or a trailing ".".
+	for i := 0; i < len(p); i++ {
+		if p[i] != '/' {
+			continue
+		}
+		// p[len-1] != '/' (checked above), so i+1 is in range.
+		if p[i+1] == '/' {
+			return false
+		}
+		if p[i+1] == '.' {
+			if i+2 == len(p) || p[i+2] == '/' {
+				return false // "/." segment
+			}
+			if p[i+2] == '.' && (i+3 == len(p) || p[i+3] == '/') {
+				return false // "/.." segment
+			}
+		}
+	}
+
+	return true
 }
 
 // splitDirName splits a clean rel into (dir, name); dir is "" for
