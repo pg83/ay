@@ -130,10 +130,29 @@ func (fs *FS) ReadInto(rel string, buf []byte) []byte {
 	defer f.Close()
 
 	buf = buf[:0]
+
+	// Sources are immutable for the duration of a Gen run, so Stat's size is
+	// exact: read precisely that many bytes and skip the trailing zero-length
+	// EOF-probe read (one fewer syscall per file across ~44k files). Falls back
+	// to grow-and-loop-to-EOF only if Stat fails.
 	if fi, statErr := f.Stat(); statErr == nil {
-		if sz := int(fi.Size()); sz > cap(buf) {
+		sz := int(fi.Size())
+		if sz > cap(buf) {
 			buf = make([]byte, 0, sz)
 		}
+
+		for len(buf) < sz {
+			n, err := f.Read(buf[len(buf):sz])
+			buf = buf[:len(buf)+n]
+			if err != nil {
+				if err == io.EOF {
+					return buf
+				}
+				Throw(err)
+			}
+		}
+
+		return buf
 	}
 
 	for {
