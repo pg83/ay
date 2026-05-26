@@ -19,20 +19,10 @@ import (
 // once and every subsequent lookup against the same dir is O(1). Cache
 // never invalidates — sources are immutable for the duration of a Gen
 // run.
-// dirChildren maps an interned basename id to whether that child is a
-// directory. The id space is the global string-intern table (vfs.go), so a
-// child lookup keyed by an already-interned name — e.g. an include target's
-// STR — is a mapaccess_fast32 hit with no string hashing.
-type dirChildren map[STR]bool
-
 type FS struct {
 	sourceRoot string
 	rootSlash  string
-	// dirs maps an interned CLEAN dir-rel id to its children. A present key
-	// with a nil value is a cached negative: the dir is absent or not a
-	// directory. Keyed by STR so the hot existence-probe path (search-tier
-	// resolution) is integer-keyed once its dir id is in hand.
-	dirs map[STR]dirChildren
+	dirs       map[string]map[string]bool
 
 	listdirHits   uint64
 	listdirMisses uint64
@@ -46,26 +36,24 @@ func NewFS(sourceRoot string) *FS {
 	return &FS{
 		sourceRoot: sourceRoot,
 		rootSlash:  sourceRoot + "/",
-		dirs:       make(map[STR]dirChildren, 1024),
+		dirs:       make(map[string]map[string]bool, 1024),
 	}
 }
 
 // SourceRoot returns the configured absolute root path.
 func (fs *FS) SourceRoot() string { return fs.sourceRoot }
 
-// listdirSTR returns the children of the directory whose interned CLEAN rel is
-// dirSTR, reading and interning the entries on first use. A nil result is a
-// cached "absent / not a directory". The fast path is integer-keyed: a caller
-// holding a pre-interned dir id (a source search-path prefix) pays no string
-// hashing here.
-func (fs *FS) listdirSTR(dirSTR STR) dirChildren {
-	if cached, ok := fs.dirs[dirSTR]; ok {
+// Listdir returns the basename→isDir map for the directory at rel.
+// rel is SOURCE_ROOT-relative ("" addresses the root). Missing or
+// non-directory rels return nil. Cached.
+func (fs *FS) Listdir(rel string) map[string]bool {
+	rel = cleanRel(rel)
+	if cached, ok := fs.dirs[rel]; ok {
 		fs.listdirHits++
 		return cached
 	}
 	fs.listdirMisses++
 
-	rel := dirSTR.String()
 	full := fs.rootSlash + rel
 	if rel == "" {
 		full = fs.sourceRoot
@@ -73,45 +61,17 @@ func (fs *FS) listdirSTR(dirSTR STR) dirChildren {
 
 	entries, err := os.ReadDir(full)
 	if err != nil {
-		fs.dirs[dirSTR] = nil
+		fs.dirs[rel] = nil
 		return nil
 	}
 
-	out := make(dirChildren, len(entries))
+	out := make(map[string]bool, len(entries))
 	for _, e := range entries {
-		out[internString(e.Name())] = e.IsDir()
+		out[e.Name()] = e.IsDir()
 	}
-	fs.dirs[dirSTR] = out
+	fs.dirs[rel] = out
 
 	return out
-}
-
-// Listdir returns the basename→isDir map for the directory at rel (string entry
-// point — interns the cleaned rel and delegates to listdirSTR). rel is
-// SOURCE_ROOT-relative ("" addresses the root). Missing or non-directory rels
-// return nil. Cached.
-func (fs *FS) Listdir(rel string) dirChildren {
-	return fs.listdirSTR(internString(cleanRel(rel)))
-}
-
-// existsSTR reports (present, isDir) for basename nameSTR inside the directory
-// dirSTR — both pre-interned, so it is a pure integer lookup once the dir is
-// cached.
-func (fs *FS) existsSTR(dirSTR, nameSTR STR) (present bool, isDir bool) {
-	children := fs.listdirSTR(dirSTR)
-	if children == nil {
-		fs.existsMisses++
-		return false, false
-	}
-
-	isDir, ok := children[nameSTR]
-	if ok {
-		fs.existsHits++
-	} else {
-		fs.existsMisses++
-	}
-
-	return ok, isDir
 }
 
 // Exists reports (present, isDir) for rel. Smart: routes through
@@ -124,8 +84,20 @@ func (fs *FS) Exists(rel string) (present bool, isDir bool) {
 	}
 
 	dir, name := splitDirName(rel)
+	entries := fs.Listdir(dir)
+	if entries == nil {
+		fs.existsMisses++
+		return false, false
+	}
 
-	return fs.existsSTR(internString(dir), internString(name))
+	isDir, ok := entries[name]
+	if ok {
+		fs.existsHits++
+	} else {
+		fs.existsMisses++
+	}
+
+	return ok, isDir
 }
 
 // IsFile is the common-case shorthand for `present && !isDir`.
@@ -235,8 +207,8 @@ func (fs *FS) Walk(rel string, visit func(rel string, isDir bool)) {
 		prefix += "/"
 	}
 
-	for nameSTR, childIsDir := range fs.Listdir(rel) {
-		child := prefix + nameSTR.String()
+	for name, childIsDir := range fs.Listdir(rel) {
+		child := prefix + name
 		if childIsDir {
 			fs.Walk(child, visit)
 			continue

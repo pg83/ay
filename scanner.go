@@ -140,12 +140,6 @@ type IncludeScanner struct {
 	// inner map by config hash; the hot lookup is then target-keyed.
 	searchTierByConfig map[uint64]map[STR]searchTierResult
 
-	// dirRelKey memoises a source-dir VFS prefix → its bare-rel intern id, the
-	// key FS.dirs is keyed by. The search-tier loop probes the same ~dozens of
-	// prefixes across millions of targets; the memo turns each repeat from a
-	// string hash (v.Rel()) into a fast32 hit.
-	dirRelKey map[VFS]STR
-
 	// Tarjan SCC scratch, shared across closure explorations (gen scanning
 	// is single-goroutine). closureOf resets tj (an O(1) epoch bump) and
 	// resets stack/next per top-level exploration; tjClosure + tjBuf are the
@@ -454,7 +448,6 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		subgraphCache:        make(map[uint32]closureRef, 65536),
 		childrenCache:        make(map[uint32][]uint32, 65536),
 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
-		dirRelKey:            make(map[VFS]STR, 256),
 	}
 	for i := range sysincl {
 		if sysincl[i].KeyBySource {
@@ -1402,8 +1395,8 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 	// to resolveSourceUnder, which handles "." / ".." correctly.
 	normTarget := normalisePath(target)
 
-	addSource := func(prefix VFS) bool {
-		rel, ok := s.resolveSourceUnder(s.dirKey(prefix), prefix.Rel(), target, targetID)
+	addSource := func(prefixRel string) bool {
+		rel, ok := s.resolveSourceUnder(prefixRel, target)
 		if !ok {
 			return false
 		}
@@ -1451,7 +1444,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		case VFSRootBuild:
 			return addBuild(prefix.Rel())
 		case VFSRootSource:
-			return addSource(prefix)
+			return addSource(prefix.Rel())
 		}
 
 		panic("resolveContextSearchTier: zero-valued search path")
@@ -1623,7 +1616,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		// set it, and gating the codegen probe on it would wrongly skip the
 		// same-dir build candidate.
 		matched := false
-		if rel, ok := s.resolveSourceUnder(internString(incDir), incDir, d.target.String(), d.target); ok {
+		if rel, ok := s.resolveSourceUnder(incDir, d.target.String()); ok {
 			if _, dup := seen[rel]; !dup {
 				seen[rel] = struct{}{}
 				out = append(out, Source(rel))
@@ -1847,42 +1840,22 @@ func (s *IncludeScanner) fileExistsByRel(rel string) bool {
 	return s.parsers.fileExistsByRel(rel)
 }
 
-// dirKey returns the FS.dirs key (bare-rel intern id) for a source-dir VFS
-// prefix, memoised so a repeated search-path prefix costs a fast32 hit rather
-// than re-hashing v.Rel().
-func (s *IncludeScanner) dirKey(v VFS) STR {
-	if k, ok := s.dirRelKey[v]; ok {
-		return k
-	}
-
-	k := internString(v.Rel())
-	s.dirRelKey[v] = k
-
-	return k
+// listdir returns the (cached) child name→isDir map of directory rel.
+func (s *IncludeScanner) listdir(rel string) map[string]bool {
+	return s.parsers.fs.Listdir(rel)
 }
 
 // resolveSourceUnder reports whether <prefixDir>/<target> is an existing source
-// file, returning its normalised rel. prefixDirSTR is prefixDir's interned
-// bare-rel id (the FS.dirs key); targetID is target's interned id. The
-// concat-free first-component filter — "target's leading component must be a
-// child of prefixDir" — is only valid when target is a plain forward relative
-// path. A "." or ".." component can cancel or escape that segment (e.g.
-// "../common/x.h", "a/../x.h"), so those go straight to the full normalised
-// check. canRelFilter gates this; target is the RAW directive target (NOT
-// pre-normalised — normalising "../x" alone would drop the ".." and mislead the
-// filter).
-//
-// The child lookup is integer-keyed: for a single-component target the leading
-// component IS the whole target, so its id is targetID — no per-probe interning
-// (the dominant case, e.g. #include "foo.h" against ~dozens of search dirs).
-func (s *IncludeScanner) resolveSourceUnder(prefixDirSTR STR, prefixDir, target string, targetID STR) (string, bool) {
+// file, returning its normalised rel. The concat-free first-component filter —
+// "target's leading component must be a child of prefixDir" — is only valid when
+// target is a plain forward relative path. A "." or ".." component can cancel or
+// escape that segment (e.g. "../common/x.h", "a/../x.h"), so those go straight
+// to the full normalised check. canRelFilter gates this; target is the RAW
+// directive target (NOT pre-normalised — normalising "../x" alone would drop the
+// ".." and mislead the filter).
+func (s *IncludeScanner) resolveSourceUnder(prefixDir, target string) (string, bool) {
 	if first, more := firstComponent(target); canRelFilter(first, target) {
-		firstSTR := targetID
-		if more {
-			firstSTR = internString(first)
-		}
-
-		isDir, ok := s.parsers.fs.listdirSTR(prefixDirSTR)[firstSTR]
+		isDir, ok := s.listdir(prefixDir)[first]
 		if !ok {
 			return "", false
 		}
