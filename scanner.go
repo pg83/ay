@@ -118,8 +118,17 @@ type IncludeScanner struct {
 	//     slice); no node is re-walked. Order is irrelevant (normalize sorts).
 	//   childrenCache: forEachResolvedChildID's resolved-child ID list,
 	//     read twice per node (edge classification + SCC-finalize union).
-	subgraphCache map[uint32][]uint32
-	childrenCache map[uint32][]uint32
+	//
+	// Closures live in a chunked arena (fixed 1MB chunks, appended to, never
+	// realloc'd — so no growth-copy churn); subgraphCache maps a node to its
+	// {off,n} window. 35k separate []uint32 became ~N chunks + pointer-free map
+	// values, so the GC stops walking 35k slice headers. Each closure fits in
+	// one chunk (they are far smaller); a closure that would straddle a chunk
+	// boundary pads to the next chunk so windows stay contiguous.
+	subgraphChunks [][]uint32
+	subgraphLen    uint32
+	subgraphCache  map[uint32]closureRef
+	childrenCache  map[uint32][]uint32
 	// searchTierByConfig memoises the ADDINCL/peer/base search-tier
 	// resolution: config hash → (target → resolution). One inner map per
 	// distinct include config, shared by every walk with that config (so
@@ -212,6 +221,21 @@ type scanCtx struct {
 type idSet struct {
 	gen   []uint32
 	epoch uint32
+}
+
+// closureChunkLen is the fixed element count of one subgraph arena chunk
+// (256K uint32 = 1MB). Closures are far smaller, so each fits in a single
+// chunk; a closure that would straddle a boundary pads to the next chunk.
+const closureChunkLen = 1 << 18
+
+// closureRef is a node's window into the chunked subgraph arena: off is a
+// global element offset (padded so a window never crosses a chunk boundary),
+// resolved by closureWindow to subgraphChunks[off/closureChunkLen][...]. n is
+// the closure length. Pure integers — no pointer for the GC to chase, so
+// subgraphCache's value array is scanned but never followed.
+type closureRef struct {
+	off uint32
+	n   uint32
 }
 
 // reset clears the set in O(1) by bumping the epoch, ensuring backing capacity
@@ -336,7 +360,8 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 131072),
 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
 		onWarn:               onWarn,
-		subgraphCache:        make(map[uint32][]uint32, 65536),
+		subgraphChunks:       make([][]uint32, 0, 256),
+		subgraphCache:        make(map[uint32]closureRef, 65536),
 		childrenCache:        make(map[uint32][]uint32, 65536),
 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
 		tjIndex:              make(map[uint32]int32, 4096),
@@ -830,10 +855,10 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 // (dump normalize sorts inputs), so no sort.
 func (sc *scanCtx) closureOf(absID uint32) []uint32 {
 	s := sc.scanner
-	if cached, ok := s.subgraphCache[absID]; ok {
+	if ref, ok := s.subgraphCache[absID]; ok {
 		s.subgraphHits++
 
-		return cached
+		return s.closureWindow(ref)
 	}
 
 	// Fresh exploration. Tarjan scratch is scanner-shared (gen scanning is
@@ -847,7 +872,42 @@ func (sc *scanCtx) closureOf(absID uint32) []uint32 {
 
 	sc.strongconnect(absID)
 
-	return s.subgraphCache[absID]
+	ref := s.subgraphCache[absID]
+
+	return s.closureWindow(ref)
+}
+
+// closureWindow resolves a closureRef to its []uint32 slice inside the chunked
+// arena. The window never crosses a chunk boundary (appendClosure pads), so a
+// single chunk slice covers it.
+func (s *IncludeScanner) closureWindow(ref closureRef) []uint32 {
+	o := ref.off % closureChunkLen
+
+	return s.subgraphChunks[ref.off/closureChunkLen][o : o+ref.n]
+}
+
+// appendClosure copies buf into the arena as one contiguous window and returns
+// its ref. If buf would straddle the current chunk's tail it pads to the next
+// chunk (closures are far smaller than a chunk, so they always fit in one).
+// Chunks are write-once and never realloc'd — no growth-copy churn.
+func (s *IncludeScanner) appendClosure(buf []uint32) closureRef {
+	n := uint32(len(buf))
+	o := s.subgraphLen % closureChunkLen
+	if o+n > closureChunkLen {
+		s.subgraphLen += closureChunkLen - o // pad to the next chunk boundary
+		o = 0
+	}
+
+	ci := s.subgraphLen / closureChunkLen
+	for uint32(len(s.subgraphChunks)) <= ci {
+		s.subgraphChunks = append(s.subgraphChunks, make([]uint32, closureChunkLen))
+	}
+	copy(s.subgraphChunks[ci][o:], buf)
+
+	ref := closureRef{off: s.subgraphLen, n: n}
+	s.subgraphLen += n
+
+	return ref
 }
 
 // strongconnect is the recursive Tarjan core. It finalizes every SCC it
@@ -912,7 +972,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 				return // same SCC; already added as a member
 			}
 
-			for _, id := range s.subgraphCache[w] {
+			for _, id := range s.closureWindow(s.subgraphCache[w]) {
 				if !s.tjClosure.has(id) {
 					s.tjClosure.add(id)
 					buf = append(buf, id)
@@ -921,8 +981,10 @@ func (sc *scanCtx) strongconnect(v uint32) {
 		})
 	}
 
-	out := make([]uint32, len(buf))
-	copy(out, buf)
+	// Append the SCC's closure to the arena as one window; every member shares
+	// it. Reads of child windows above are done before this append. buf is
+	// reused (tjBuf), not stored.
+	ref := s.appendClosure(buf)
 	s.tjBuf = buf[:0]
 
 	s.subgraphMisses += uint64(len(members)) // nodes whose closure was computed
@@ -931,7 +993,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 	}
 
 	for _, u := range members {
-		s.subgraphCache[u] = out
+		s.subgraphCache[u] = ref
 		s.tjOnStack[u] = false
 	}
 
