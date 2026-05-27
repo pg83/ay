@@ -250,10 +250,18 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 		"-rdynamic",
 		"-Wl,--version-script=$(S)/"+modulePath+"/"+exportsScript,
 		"-Wl,--no-as-needed",
-		"-fPIC",
+	)
+	if p.PIC {
+		cmdArgs = append(cmdArgs, "-fPIC")
+	}
+	cmdArgs = append(cmdArgs,
 		"-Wl,--gdb-index",
 		"-Wl,-z,notext",
-		"-fPIC",
+	)
+	if p.PIC {
+		cmdArgs = append(cmdArgs, "-fPIC")
+	}
+	cmdArgs = append(cmdArgs,
 		"-fuse-ld=lld",
 		"--ld-path="+p.Tools.LLD,
 		"-Wl,--no-rosegment",

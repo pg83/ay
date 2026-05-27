@@ -336,60 +336,6 @@ func (p *Platform) ToolEnv() map[string]string {
 	return env
 }
 
-func (p *Platform) WithLinkerSelectionFlags(trailer []string) []string {
-	gdbIndex := p.LinkerSelectionGDBIndexFlags()
-	rest := p.LinkerSelectionTailFlags()
-	if len(gdbIndex) == 0 && len(rest) == 0 {
-		return trailer
-	}
-
-	flags := append(append([]string(nil), gdbIndex...), rest...)
-	if len(gdbIndex) == 0 {
-		flags = append([]string(nil), rest...)
-	}
-
-	if !p.UsesResourceLLD() {
-		return trailer
-	}
-
-	noAsNeededIdx := -1
-	for i, arg := range trailer {
-		if arg == "-Wl,--no-as-needed" {
-			noAsNeededIdx = i
-			break
-		}
-	}
-
-	if noAsNeededIdx >= 0 && len(trailer) > noAsNeededIdx+2 && trailer[noAsNeededIdx+1] == "-fPIC" && trailer[noAsNeededIdx+2] == "-fPIC" {
-		out := make([]string, 0, len(trailer)+len(flags))
-		out = append(out, trailer[:noAsNeededIdx+2]...)
-		out = append(out, gdbIndex...)
-		out = append(out, trailer[noAsNeededIdx+2])
-		out = append(out, rest...)
-		out = append(out, trailer[noAsNeededIdx+3:]...)
-
-		return out
-	}
-
-	insertAt := noAsNeededIdx + 1
-	if noAsNeededIdx < 0 {
-		insertAt = 0
-	}
-
-	if len(trailer) < insertAt {
-		return append(flags, trailer...)
-	}
-
-	out := make([]string, 0, len(trailer)+len(flags))
-	out = append(out, trailer[:insertAt]...)
-	out = append(out, flags...)
-	out = append(out, trailer[insertAt:]...)
-
-	out = append(out, p.LinkerSelectionNoPieFlags()...)
-
-	return out
-}
-
 func (p *Platform) LinkerSelectionGDBIndexFlags() []string {
 	if !p.UsesResourceLLD() {
 		return nil

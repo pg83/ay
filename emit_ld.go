@@ -406,25 +406,13 @@ func composeProgramLinkTrailer(p *Platform, dynamicPaths []VFS, peerLDFlagsGloba
 		systemLibs = []string{"-nodefaultlibs", "-lpthread", "-lc", "-lm"}
 	}
 	linkPrelude = append(linkPrelude, "-Wl,--no-as-needed")
-
-	if len(ownRPathFlags) == 0 && len(peerRPathFlagsGlobal) == 0 {
-		trailer := append([]string(nil), linkPrelude...)
-		if p.PIC {
-			trailer = append(trailer, "-fPIC", "-fPIC")
-		}
-		trailer = append(trailer, peerLDFlagsGlobal...)
-		trailer = append(trailer, ownLDFlags...)
-		trailer = append(trailer, objAddLibsGlobal...)
-		trailer = append(trailer, systemLibs...)
-		if wantsStrip {
-			trailer = append(trailer, "-Wl,--strip-all")
-		}
-		trailer = append(trailer, "-Wl,--gc-sections")
-
-		return p.WithLinkerSelectionFlags(trailer)
-	}
 	_ = dynamicPaths
 
+	// Upstream accumulates link flags in their natural concatenation order
+	// (build/conf/compilers/gnu_compiler.conf `LDFLAGS+=-fPIC`,
+	// build/ymake.core.conf `LDFLAGS+=-Wl,--gdb-index`, then the lld peer's
+	// -fuse-ld/--ld-path/--no-rosegment/--build-id), so the PIC build emits
+	// `-fPIC -Wl,--gdb-index -fPIC <lld flags>` directly — no reordering.
 	trailer := append([]string(nil), linkPrelude...)
 	trailer = append(trailer, ownRPathFlags...)
 	if p.PIC {
