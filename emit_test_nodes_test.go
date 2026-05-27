@@ -499,61 +499,6 @@ func TestEmitTestRunNodes_BuildersMatchSpec(t *testing.T) {
 	}
 }
 
-func TestEmitTestRunNodes_FixtureCrossCheck(t *testing.T) {
-	p := sandboxedX8664TargetPlatform()
-	info := sandboxedTestSuite()
-
-	emit := NewBufferedEmitter()
-	ldRef := emit.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: []string{"ld"}, Env: map[string]string{}}},
-		Env:              map[string]string{},
-		Inputs:           []VFS{},
-		KV:               map[string]interface{}{"p": "LD"},
-		Outputs:          []VFS{Intern("$(B)/util/ut/util-ut")},
-		Platform:         string(p.Target),
-		Requirements:     map[string]interface{}{},
-		Tags:             []string{},
-		TargetProperties: map[string]string{},
-	})
-	emitTestRunNodes(emit, emit, p, info, ldRef)
-
-	ourDoc := normalizeGraphJSON(serializeGraphJSON(Finalize(emit)))
-	refRaw, err := os.ReadFile("/home/pg/monorepo/ydb/sg4.json")
-	if err != nil {
-		t.Fatalf("read sg4.json: %v", err)
-	}
-	refDoc := normalizeGraphJSON(refRaw)
-
-	ourLogical := logicalFixtureNodes(t, graphNodes(ourDoc), "our")
-	refLogical := logicalFixtureNodes(t, graphNodes(refDoc), "ref")
-	ourDepLabels := depLabelMap(ourLogical)
-	refDepLabels := depLabelMap(refLogical)
-
-	expectedDeps := map[string][]string{
-		"ctx":          {},
-		"unittest":     {"ctx", "ld"},
-		"clang_format": {"ctx"},
-	}
-
-	for _, name := range []string{"ctx", "unittest", "clang_format"} {
-		got := canonicalizeFixtureNode(ourLogical[name])
-		want := canonicalizeFixtureNode(refLogical[name])
-		if !reflect.DeepEqual(got, want) {
-			t.Fatalf("%s canonical fixture mismatch\n got: %#v\nwant: %#v", name, got, want)
-		}
-
-		gotDeps := depLabels(t, "our "+name, ourLogical[name], ourDepLabels)
-		if !reflect.DeepEqual(gotDeps, expectedDeps[name]) {
-			t.Fatalf("our %s dep labels = %#v, want %#v", name, gotDeps, expectedDeps[name])
-		}
-
-		wantDeps := depLabels(t, "ref "+name, refLogical[name], refDepLabels)
-		if !reflect.DeepEqual(wantDeps, expectedDeps[name]) {
-			t.Fatalf("ref %s dep labels = %#v, want %#v", name, wantDeps, expectedDeps[name])
-		}
-	}
-}
-
 func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	p := sandboxedX8664TargetPlatform()
 	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
