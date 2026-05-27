@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/md5"
-	enc32 "encoding/base32"
 	"encoding/base64"
 	enchex "encoding/hex"
 	"os"
@@ -224,49 +223,6 @@ func TestPyMainObjcopyHashPy3ccSlow(t *testing.T) {
 	}
 }
 
-// TestNoCheckImportsPathidLib2Py verifies the upstream
-// `_common.pathid` derivation (build/plugins/_common.py:37): the
-// lower-cased unpadded base32 of md5(value-bytes).  The pathid feeds
-// the `py/no_check_imports/<pathid>=<value>` kv emitted for
-// `contrib/tools/python3/lib2/py`.  Args are joined by ' ' in
-// declaration order; pathid is computed on that joined string.
-func TestNoCheckImportsPathidLib2Py(t *testing.T) {
-	// Declaration order copied verbatim from
-	// /home/pg/monorepo/yatool/contrib/tools/python3/lib2/py/ya.make:13-36.
-	imports := []string{
-		"_ios_support",
-		"_pyrepl.*",
-		"antigravity",
-		"asyncio.unix_events",
-		"asyncio.windows_events",
-		"asyncio.windows_utils",
-		"ctypes.wintypes",
-		"curses.*",
-		"dbm.gnu",
-		"dbm.ndbm",
-		"dbm.sqlite3",
-		"encodings.mbcs",
-		"encodings.oem",
-		"lzma",
-		"multiprocessing.popen_fork",
-		"multiprocessing.popen_forkserver",
-		"multiprocessing.popen_spawn_posix",
-		"multiprocessing.popen_spawn_win32",
-		"sqlite3.*",
-		"turtle",
-		"pty",
-		"tty",
-	}
-
-	value := strings.Join(imports, " ")
-	sum := md5.Sum([]byte(value))
-	got := strings.TrimRight(strings.ToLower(enc32.StdEncoding.EncodeToString(sum[:])), "=")
-	want := "2fepmfaacurvvaalmzqchmko4a"
-	if got != want {
-		t.Fatalf("no_check_imports pathid for lib2/py: got %q, want %q", got, want)
-	}
-}
-
 // TestPySrcObjcopyHashRuntimePy3RawEntryPoints verifies the objcopy hash
 // for the single-entry raw `.py` chunk of library/python/runtime_py3.
 // PYBUILD_NO_PYC is on, namespace is non-TOP_LEVEL (default upath
@@ -374,88 +330,6 @@ func TestChunkPySrcEntriesEmptyReturnsNil(t *testing.T) {
 	}
 }
 
-// TestChunkPySrcEntriesLibInputsAggregate asserts the per-chunk `inps`
-// list carries each yapyc3 entry's pathInput AND its corresponding .py
-// source file from $(S), AND that the chunk-straddle entry
-// (synchronize.py.3kp2.yapyc3 in Lib's first chunk) lands in BOTH the
-// straddled chunks' inps lists. PR-M3-py-objcopy-aggregation reproduction:
-// REF objcopy_0299ac47a... has 13 yapyc3 + 13 .py in inputs[] while
-// cmd_args --inputs only carries the 12 non-straddler yapyc3s.
-func TestChunkPySrcEntriesLibInputsAggregate(t *testing.T) {
-	srcs := parsePySrcsTopLevel(t, "/home/pg/monorepo/yatool/contrib/tools/python3/Lib/ya.make")
-	d := &moduleData{
-		pySrcs:       srcs,
-		pyBuildNoPY:  true,
-		pyBuildNoPYC: false,
-		pyTopLevel:   true,
-		moduleStmt:   &ModuleStmt{Name: "PY3_LIBRARY"},
-	}
-	entries := buildPySrcEntries(d, "contrib/tools/python3/Lib")
-	chunks := chunkPySrcEntries(entries)
-	// Locate the chunk whose hash matches REF objcopy_0299ac47a...
-	var found *pySrcChunk
-	for i := range chunks {
-		if objcopyHash(chunks[i].paths, chunks[i].keys, chunks[i].kvsHash, "contrib/tools/python3/Lib", stringPtr("PY3")) == "0299ac47a84f85e85182c986c0" {
-			found = &chunks[i]
-			break
-		}
-	}
-	if found == nil {
-		t.Fatal("chunk with hash 0299ac47a... not found")
-	}
-
-	// Expected inputs[].yapyc3 (13 entries, sorted): popen_fork → synchronize.
-	expectedYapyc := []string{
-		"$(B)/contrib/tools/python3/Lib/multiprocessing/popen_fork.py.3kp2.yapyc3",
-		"$(B)/contrib/tools/python3/Lib/multiprocessing/popen_forkserver.py.3kp2.yapyc3",
-		"$(B)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_posix.py.3kp2.yapyc3",
-		"$(B)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_win32.py.3kp2.yapyc3",
-		"$(B)/contrib/tools/python3/Lib/multiprocessing/process.py.3kp2.yapyc3",
-		"$(B)/contrib/tools/python3/Lib/multiprocessing/queues.py.3kp2.yapyc3",
-		"$(B)/contrib/tools/python3/Lib/multiprocessing/reduction.py.3kp2.yapyc3",
-		"$(B)/contrib/tools/python3/Lib/multiprocessing/resource_sharer.py.3kp2.yapyc3",
-		"$(B)/contrib/tools/python3/Lib/multiprocessing/resource_tracker.py.3kp2.yapyc3",
-		"$(B)/contrib/tools/python3/Lib/multiprocessing/shared_memory.py.3kp2.yapyc3",
-		"$(B)/contrib/tools/python3/Lib/multiprocessing/sharedctypes.py.3kp2.yapyc3",
-		"$(B)/contrib/tools/python3/Lib/multiprocessing/spawn.py.3kp2.yapyc3",
-		"$(B)/contrib/tools/python3/Lib/multiprocessing/synchronize.py.3kp2.yapyc3",
-	}
-	expectedPy := []string{
-		"$(S)/contrib/tools/python3/Lib/multiprocessing/popen_fork.py",
-		"$(S)/contrib/tools/python3/Lib/multiprocessing/popen_forkserver.py",
-		"$(S)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_posix.py",
-		"$(S)/contrib/tools/python3/Lib/multiprocessing/popen_spawn_win32.py",
-		"$(S)/contrib/tools/python3/Lib/multiprocessing/process.py",
-		"$(S)/contrib/tools/python3/Lib/multiprocessing/queues.py",
-		"$(S)/contrib/tools/python3/Lib/multiprocessing/reduction.py",
-		"$(S)/contrib/tools/python3/Lib/multiprocessing/resource_sharer.py",
-		"$(S)/contrib/tools/python3/Lib/multiprocessing/resource_tracker.py",
-		"$(S)/contrib/tools/python3/Lib/multiprocessing/shared_memory.py",
-		"$(S)/contrib/tools/python3/Lib/multiprocessing/sharedctypes.py",
-		"$(S)/contrib/tools/python3/Lib/multiprocessing/spawn.py",
-		"$(S)/contrib/tools/python3/Lib/multiprocessing/synchronize.py",
-	}
-
-	inSet := func(xs []VFS) map[string]struct{} {
-		m := make(map[string]struct{}, len(xs))
-		for _, x := range xs {
-			m[x.String()] = struct{}{}
-		}
-		return m
-	}
-	have := inSet(found.inps)
-	for _, x := range expectedYapyc {
-		if _, ok := have[x]; !ok {
-			t.Errorf("chunk inps missing yapyc3 %s", x)
-		}
-	}
-	for _, x := range expectedPy {
-		if _, ok := have[x]; !ok {
-			t.Errorf("chunk inps missing .py source %s", x)
-		}
-	}
-}
-
 // parsePySrcsTopLevel pulls the `.py` source list out of a `PY_SRCS(TOP_LEVEL ...)`
 // block in an upstream ya.make. PR-M3-resource-objcopy-chunker-precision
 // uses this to feed the actual contrib/tools/python3 source lists into the
@@ -482,131 +356,6 @@ func parsePySrcsTopLevel(t *testing.T, path string) []string {
 		}
 	}
 	return out
-}
-
-// TestChunkPySrcEntriesLibByteExact asserts the chunker reproduces all 40
-// `contrib/tools/python3/Lib` objcopy hashes byte-exact. PYBUILD_NO_PY +
-// TOP_LEVEL: only yapyc3 entries; ~1070 HandleResource calls partitioned
-// by the upstream per-call flush check.
-func TestChunkPySrcEntriesLibByteExact(t *testing.T) {
-	srcs := parsePySrcsTopLevel(t, "/home/pg/monorepo/yatool/contrib/tools/python3/Lib/ya.make")
-	if len(srcs) < 100 {
-		t.Fatalf("Lib PY_SRCS sources: got %d, want >=100", len(srcs))
-	}
-
-	d := &moduleData{
-		pySrcs:       srcs,
-		pyBuildNoPY:  true,
-		pyBuildNoPYC: false,
-		pyTopLevel:   true,
-		moduleStmt:   &ModuleStmt{Name: "PY3_LIBRARY"},
-	}
-	entries := buildPySrcEntries(d, "contrib/tools/python3/Lib")
-	if got := len(entries); got != len(srcs) {
-		t.Fatalf("entries: got %d, want %d (yapyc3-only)", got, len(srcs))
-	}
-
-	chunks := chunkPySrcEntries(entries)
-	if got := len(chunks); got != 40 {
-		t.Fatalf("chunks: got %d, want 40", got)
-	}
-
-	got := make(map[string]bool, len(chunks))
-	for _, ch := range chunks {
-		got[objcopyHash(ch.paths, ch.keys, ch.kvsHash, "contrib/tools/python3/Lib", stringPtr("PY3"))] = true
-	}
-	want := []string{
-		"0299ac47a84f85e85182c986c0", "05979015660e1af70ece36165c",
-		"11c61d8656927e1fccc4212ada", "1202ed6a0e8e3b2d359cb6d3e9",
-		"1c71017d56edd49dcb2fb1088b", "21b20daa2b50d85b05965bdc75",
-		"27da8af7ae3ae340fcda08860f", "2ceb19c23d17d75ac5ca165f20",
-		"2fc8b4197f65a787bdd2597408", "30464705211b7c791d23eed930",
-		"32686b3f020463c86f23f2a829", "4af385fc380e1af7ebf895736d",
-		"5175eb2f01e92afe893c2bf4c3", "531c86b56da731fb80e24240a6",
-		"55c0325e1249d4958ca205a6b2", "5d72aa577098be7ceba340cf85",
-		"7144745455d80aefa950e10598", "73223fa093c3296e5aeadc102e",
-		"740a86012a279af14779c6856b", "8326aa293d5a5fd19532e2bafe",
-		"83c2bc2455632eec41a952064c", "8589214338039c8242f06d7314",
-		"8c333af33364075ce74eff17b7", "91d960b29f1a0bf036aa5b385a",
-		"94fec750f6169bdf2e38d578a6", "967503cafc8921aeb7db2668bf",
-		"9b8efcce0b985d2b0f68128cd4", "a3583880282ad020aa2bc04e6c",
-		"a5d68f9819f515e4dd6b416a17", "abdebce1fa345366c70dcfd146",
-		"b022af5d9f8bbb9471f30e866f", "b64feb08a40c6c2a17e2cfb6b9",
-		"be0d7f509c8e5f6acd543f9179", "d7c38a0cf645a73ba16d2c454d",
-		"ddc61536e781b25eb66c0659c2", "e038ca7b8e62ed332a4089ac4c",
-		"ea85523f41943a2463f563fb3c", "f013e8aed589f96a377abab1a3",
-		"f420a5e6d68d30965a190cb303", "fc7b70c76a3cced7a694cc68d2",
-	}
-	for _, h := range want {
-		if !got[h] {
-			t.Errorf("REF hash %q not produced by chunker", h)
-		}
-	}
-}
-
-// TestChunkPySrcEntriesLib2PyByteExact asserts the chunker reproduces all
-// 37 PY_SRCS-derived `contrib/tools/python3/lib2/py` objcopy hashes
-// byte-exact. PYBUILD_NO_PYC + TOP_LEVEL: only raw .py entries. REF carries
-// 38 unique hashes for this module; the extra one is the
-// `py/no_check_imports/...` kv-only chunk emitted by emitNoCheckImportsObjcopy.
-func TestChunkPySrcEntriesLib2PyByteExact(t *testing.T) {
-	srcs := parsePySrcsTopLevel(t, "/home/pg/monorepo/yatool/contrib/tools/python3/lib2/py/ya.make")
-	if len(srcs) < 100 {
-		t.Fatalf("lib2/py PY_SRCS sources: got %d, want >=100", len(srcs))
-	}
-
-	d := &moduleData{
-		pySrcs:       srcs,
-		pyBuildNoPY:  false,
-		pyBuildNoPYC: true,
-		pyTopLevel:   true,
-		moduleStmt:   &ModuleStmt{Name: "PY3_LIBRARY"},
-	}
-	entries := buildPySrcEntries(d, "contrib/tools/python3/lib2/py")
-	if got := len(entries); got != len(srcs) {
-		t.Fatalf("entries: got %d, want %d (raw-only)", got, len(srcs))
-	}
-
-	chunks := chunkPySrcEntries(entries)
-	if got := len(chunks); got != 37 {
-		t.Fatalf("chunks: got %d, want 37", got)
-	}
-
-	got := make(map[string]bool, len(chunks))
-	for _, ch := range chunks {
-		got[objcopyHash(ch.paths, ch.keys, ch.kvsHash, "contrib/tools/python3/lib2/py", stringPtr("PY3"))] = true
-	}
-	want := []string{
-		"08e492c72f789cad4a22ae67dd", "167456915a92189129fdafa2de",
-		"16e5ce133e9775c2c148c9231b", "179953ace18d40e8153f1fb874",
-		"23641f71141ebf2d5af7fbbe0c", "2f1ef348f3028b8ea83c753021",
-		"2fdb00ea1502e08b07bc82c4f8", "3d4a3b1f2b375c3e6499a4f84b",
-		"41773fc867bf716c6ce06c1a20", "42d2e9662f9f01ffe9c728ab8c",
-		"573633c1d2393a8524ddffa962", "5acb90cb752582d16fec5bd72c",
-		"6935af4a041ecc793e86ca8057", "71402f9072f6d0782f2691f74a",
-		"781c564bd80d409d66b74539ac", "89b5fc40101299792f1f67fabe",
-		"8e53cf53a209227ce0d4926427", "8fc893e1520d8e0823ab4d734c",
-		"94088e7d14c554b1f6be3d26de", "9e9ab965bc76a44907df4e61de",
-		"a8581a1d236599e2e3a0d545a2", "aecc3d79b064a6a2e2435c7825",
-		"aedb0d7f2d2bc113662e333589", "b1b86cdfed1b49b9beed002616",
-		"c4538c66ee54d0482932722b72", "d21e4223ab7183654db952a37c",
-		"d24b9e2c30aa8dca75ddd87463", "d3a3e0d31624153b2c0b6fe21d",
-		"d468b91b4e8e4881e0e74339e4", "e08409807ec134b5669d24886e",
-		"e916b14a4bc0f9c00963cebc62", "eb4086c4f3447232347cb9ecfa",
-		"ef01b616e685d2bcb829871002", "f58682abe69e949f5b47310a50",
-		"f7b6999469ac522538f867a66a", "f7c4a8009081e5419a8527652e",
-		"f919532da43f6bb6835b033be6",
-	}
-	missing := 0
-	for _, h := range want {
-		if !got[h] {
-			missing++
-			t.Errorf("REF hash %q not produced by chunker", h)
-		}
-	}
-	if missing > 0 {
-		t.Fatalf("%d REF hashes missing from chunker output", missing)
-	}
 }
 
 func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {

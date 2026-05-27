@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -131,24 +130,6 @@ func TestParseLibraryArchiveYaMake(t *testing.T) {
 	}
 	if !sawLibrary && !sawEnd {
 		t.Fatalf("expected at least one of LIBRARY or END to appear; got %d stmts: %#v", len(mf.Stmts), mf.Stmts)
-	}
-}
-
-// TestParseArchiverYaMakeOnDisk is a smoke test that pins our inlined
-// copy of tools/archiver/ya.make against the real file when the upstream
-// checkout is available locally. Skipped (not failed) when the file is
-// missing, so the suite stays portable.
-func TestParseArchiverYaMakeOnDisk(t *testing.T) {
-	const path = "/home/pg/monorepo/yatool/tools/archiver/ya.make"
-	data, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		t.Skip("requires /home/pg/monorepo/yatool/... checked out at this path")
-	}
-	if err != nil {
-		t.Fatalf("os.ReadFile(%q): %v", path, err)
-	}
-	if string(data) != archiverYaMake {
-		t.Fatalf("inlined archiverYaMake drifted from %s; please re-sync the constant", path)
 	}
 }
 

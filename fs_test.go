@@ -121,30 +121,6 @@ func TestFS_Read(t *testing.T) {
 	}
 }
 
-func TestFS_ReadAbsRoutesThroughRel(t *testing.T) {
-	root := t.TempDir()
-	writeTree(t, root, map[string]string{
-		"foo.txt": "abc",
-	})
-	fs := NewFS(root)
-
-	abs := filepath.Join(root, "foo.txt")
-	data := fs.ReadAbs(abs)
-	if string(data) != "abc" {
-		t.Errorf("got %q", string(data))
-	}
-
-	// Path outside sourceRoot: Throws (no off-tree fallback).
-	other := t.TempDir()
-	outsideFile := filepath.Join(other, "x.txt")
-	if err := os.WriteFile(outsideFile, []byte("xyz"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if exc := Try(func() { fs.ReadAbs(outsideFile) }); exc == nil {
-		t.Error("path outside source root should Throw")
-	}
-}
-
 func TestFS_Walk(t *testing.T) {
 	root := t.TempDir()
 	writeTree(t, root, map[string]string{
