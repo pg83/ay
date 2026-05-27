@@ -184,7 +184,17 @@ func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance, flags FlagSet, mus
 }
 
 func defaultPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
-	return defaultPeerdirsForWithState(ctx, instance, d.flags, d.muslEnabled)
+	inst := instance
+	// builtin_proto's PY3 variant (_PY3_PROTO : PY3_LIBRARY) EXCLUDE_TAGS'd
+	// CPP_PROTO, so it has no C++ sibling to supply the default runtime closure
+	// (libcxx/libcxxrt/musl/...). As a PY3_LIBRARY-derived C++ module compiling
+	// the resource auxcpp, it takes those defaults directly — walked before
+	// contrib/libs/python so the runtime precedes python's own Include.
+	if instance.Language == LangPy && d.usePython3 && d.moduleStmt != nil &&
+		d.moduleStmt.Name == "PROTO_LIBRARY" && moduleExcludesTag(d, "CPP_PROTO") {
+		inst.Language = LangCPP
+	}
+	return defaultPeerdirsForWithState(ctx, inst, d.flags, d.muslEnabled)
 }
 
 func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, flags FlagSet, muslOn bool) []string {

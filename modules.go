@@ -71,6 +71,7 @@ type moduleData struct {
 	noPythonIncl         bool     // NO_PYTHON_INCLUDES(); suppresses PY*_LIBRARY-implicit PEERDIR+=contrib/libs/python (build/conf/python.conf:741-743)
 	noImportTracing      bool     // NO_IMPORT_TRACING(); suppresses PY*_PROGRAM implicit import_tracing constructor peer
 	usePython3           bool     // USE_PYTHON3() or PY3-family module types; normalised by applyPython3AddIncl. Triggers _PYTHON3_ADDINCL (python.conf:1018-1023): -DUSE_PYTHON3 + contrib/libs/python/Include
+	moduleScopeCFlags    []string // module-body `CFLAGS+=` (ymake module scope) in eval order: _BASE_UNIT's -D_musl_/$SSE_CFLAGS, then _PYTHON3_ADDINCL's -DUSE_PYTHON3. applyPython3AddIncl seeds the python3 part; genModule prepends the platform-axis -D_musl_/SSE (has instance.Platform + d.muslEnabled). Emitted as the module-scope tail of $CFLAGS (between catboost and the 2nd NoLibcBlock copy).
 	pythonSQLite3        bool     // default-on; DISABLE(PYTHON_SQLITE3) flips off the implicit `_sqlite` peer for PY*_PROGRAM modules
 	pyNamespace          *string  // PY_NAMESPACE(...); used by py-proto resource key layout
 	protoNamespace       *string  // PROTO_NAMESPACE(...); drives py-proto --ns and output layout
@@ -466,6 +467,14 @@ func collectModule(pm *includeParserManager, modulePath string, kind ModuleKind,
 	}
 	d.muslEnabled = env.Bool("MUSL")
 
+	// PROTO_LIBRARY's PY3 variant is `_PY3_PROTO : PY3_LIBRARY` (proto.conf:800);
+	// the PY3_LIBRARY base runs _ARCADIA_PYTHON3_ADDINCL → _PYTHON3_ADDINCL.
+	// genModule re-collects that variant with PY3_PROTO set, so mark it python3
+	// to drive the same module-scope contribution as any PY3_LIBRARY.
+	if env.Bool("PY3_PROTO") {
+		d.usePython3 = true
+	}
+
 	applyPython3AddIncl(modulePath, d)
 	applyBuildInfoAddIncl(modulePath, d)
 
@@ -518,7 +527,15 @@ func collectModule(pm *includeParserManager, modulePath string, kind ModuleKind,
 	// types may declare .proto sources for codegen without compiling as
 	// protobuf-runtime consumers.
 	if hasProto && !hasEv && d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" {
-		d.peerdirs = append(d.peerdirs, "contrib/libs/protobuf")
+		// `_CPP_PROTO_CMD` fires for the CPP variant only; `_PY_PROTO_CMD`
+		// carries no `.PEERDIR=contrib/libs/protobuf`. The PY3 variant
+		// (_PY3_PROTO) reaches protobuf transitively via .PEERDIRSELF=CPP_PROTO
+		// when a CPP sibling exists; when CPP is EXCLUDE_TAGS'd (builtin_proto),
+		// it must not peer protobuf at all — otherwise $(S)/protobuf/src and
+		// abseil-tstring leak into the resource auxcpp's include set.
+		if !env.Bool("PY3_PROTO") {
+			d.peerdirs = append(d.peerdirs, "contrib/libs/protobuf")
+		}
 		if !d.optimizePyProtosSet {
 			d.optimizePyProtos = true
 		}
@@ -642,6 +659,9 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 	}
 
 	d.usePython3 = true
+	// _PYTHON3_ADDINCL's `CFLAGS+=-DUSE_PYTHON3` (python.conf:1019). The
+	// platform-axis -D_musl_/$SSE_CFLAGS prefix is prepended in genModule.
+	d.moduleScopeCFlags = append(d.moduleScopeCFlags, "-DUSE_PYTHON3")
 
 	d.addInclGlobal = append(d.addInclGlobal, Intern("$(S)/contrib/libs/python/Include"))
 	d.addIncl = append(d.addIncl, Intern("$(S)/contrib/libs/python/Include"))
