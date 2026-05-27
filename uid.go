@@ -184,6 +184,12 @@ func (c *canonBuf) writeUint32(n uint32) {
 	c.buf = append(c.buf, lenBuf[:]...)
 }
 
+func (c *canonBuf) writeUint64(n uint64) {
+	var b [8]byte
+	binary.LittleEndian.PutUint64(b[:], n)
+	c.buf = append(c.buf, b[:]...)
+}
+
 func (c *canonBuf) writeBool(b bool) {
 	if b {
 		c.buf = append(c.buf, 1)
@@ -207,8 +213,11 @@ func (c *canonBuf) writeStringSlice(ss []string) {
 func (c *canonBuf) writeVFSSlice(vs []VFS) {
 	c.writeUint32(uint32(len(vs)))
 	for _, v := range vs {
-		c.writeByte(byte(v.Root()))
-		c.writeBytes(v.Rel())
+		// Write the VFS's precomputed full-string content hash (root + rel are
+		// both encoded in the interned "$(S)/<rel>" / "$(B)/<rel>" string) rather
+		// than copying the path bytes. Fixed 8 bytes/input, no memmove, and the
+		// node closures here run to thousands of inputs.
+		c.writeUint64(internTable.hashes[v.strID()])
 	}
 }
 
