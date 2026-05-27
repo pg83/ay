@@ -47,10 +47,11 @@ func TestComputeUID_DifferentInputsDifferentOutputs(t *testing.T) {
 }
 
 func TestComputeUID_KnownVector(t *testing.T) {
-	// SHA1("") = da39a3ee5e6b4b0d3255bfef95601890afd80709
-	// base64url of those 20 bytes = "2jmj7l5rSw0yVb_vlWAYkK_YBwk", first 22 = "2jmj7l5rSw0yVb_vlWAYkK".
+	// xxh3-128("") = 16 bytes; base64url of them is 22 chars. The exact value is
+	// implementation-defined (we only require stability per content), pinned here
+	// as a regression guard against an accidental hash/encoding change.
 	got := computeUID([]byte(""))
-	const want = "2jmj7l5rSw0yVb_vlWAYkK"
+	const want = "maoG0wFHmNhgAcMkRo1Jfw"
 
 	if got != want {
 		t.Errorf("computeUID(\"\") = %q, want %q", got, want)
