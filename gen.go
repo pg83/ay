@@ -518,7 +518,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path)
 	}
 
-	d.moduleScopeCFlags = assembleModuleScopeCFlags(instance.Platform, d.muslEnabled, d.flags, d.moduleScopeCFlags)
+	d.moduleScopeCFlags = assembleModuleScopeCFlags(instance.Platform, d.muslOn(), d.moduleScopeCFlags)
 
 	if instance.Language == LangPy && d.moduleStmt.Name == "PROTO_LIBRARY" {
 		hasProtoSrc := false
@@ -539,10 +539,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	if d.moduleStmt.Name != "LIBRARY" && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) {
 		ThrowFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path, d.moduleStmt.Name)
-	}
-
-	if d.muslLite {
-		d.flags.NoUtil = true
 	}
 
 	if !d.hadAllocator && (d.moduleStmt.Name == "PY3_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN") {

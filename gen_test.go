@@ -982,10 +982,10 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"contrib/libs/musl/include",
 	}
 
-	gotDefaults := defaultPeerdirsFor(nil, plain, FlagSet{}, true)
+	gotDefaults := defaultPeerdirsForWithState(nil, plain, FlagSet{}, true)
 
 	if !stringSlicesEqual(gotDefaults, wantDefaults) {
-		t.Errorf("defaultPeerdirsFor(plain CPP) = %v, want %v", gotDefaults, wantDefaults)
+		t.Errorf("defaultPeerdirsForWithState(plain CPP) = %v, want %v", gotDefaults, wantDefaults)
 	}
 
 	consumerDir := filepath.Join(root, "consumer")
@@ -1165,10 +1165,10 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := defaultPeerdirsFor(nil, c.mi, c.flags, true)
+			got := defaultPeerdirsForWithState(nil, c.mi, c.flags, true)
 
 			if !stringSlicesEqual(got, c.want) {
-				t.Errorf("defaultPeerdirsFor(%+v, %+v) = %v, want %v", c.mi, c.flags, got, c.want)
+				t.Errorf("defaultPeerdirsForWithState(%+v, %+v) = %v, want %v", c.mi, c.flags, got, c.want)
 			}
 		})
 	}
@@ -1722,7 +1722,6 @@ func TestGen_PROGRAM_DefaultMuslFull_PeerEmitted(t *testing.T) {
 
 	Throw(os.MkdirAll(filepath.Join(tmp, "myprog"), 0o755))
 	Throw(os.WriteFile(filepath.Join(tmp, "myprog", "ya.make"), []byte(`PROGRAM(myprog)
-NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 ALLOCATOR(FAKE)
@@ -1763,7 +1762,6 @@ func TestGen_PROGRAM_DefaultAllocator_TcmallocTc(t *testing.T) {
 	Throw(os.MkdirAll(filepath.Join(tmp, "myprog"), 0o755))
 
 	Throw(os.WriteFile(filepath.Join(tmp, "myprog", "ya.make"), []byte(`PROGRAM(myprog)
-NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 SRCS(main.cpp)

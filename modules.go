@@ -132,6 +132,10 @@ type moduleData struct {
 	setVars map[string]string
 }
 
+func (d *moduleData) muslOn() bool {
+	return d.muslEnabled && !effectiveNoPlatform(d.flags)
+}
+
 type resourceEntry struct {
 	Path string
 	Key  string
@@ -399,6 +403,9 @@ func collectModule(pm *includeParserManager, modulePath string, kind ModuleKind,
 		d.allPySrcs = nil
 	}
 	d.muslEnabled = env.Bool("MUSL")
+	if d.muslLite {
+		d.flags.NoUtil = true
+	}
 
 	if env.Bool("PY3_PROTO") {
 		d.usePython3 = true

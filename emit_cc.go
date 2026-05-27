@@ -401,10 +401,6 @@ type ccComposeArgs struct {
 	InclArgs           inclArgMemo
 }
 
-func moduleMusl(muslEnabled bool, flags FlagSet) bool {
-	return muslEnabled && !effectiveNoPlatform(flags)
-}
-
 func cpuFeaturesFor(p *Platform) []string {
 	if p != nil && p.ISA == ISAX8664 {
 		return hostSseFeatures
@@ -413,10 +409,10 @@ func cpuFeaturesFor(p *Platform) []string {
 	return nil
 }
 
-func assembleModuleScopeCFlags(p *Platform, muslEnabled bool, flags FlagSet, collected []string) []string {
+func assembleModuleScopeCFlags(p *Platform, muslOn bool, collected []string) []string {
 	sse := cpuFeaturesFor(p)
 	out := make([]string, 0, 1+len(sse)+len(collected))
-	if moduleMusl(muslEnabled, flags) {
+	if muslOn {
 		out = append(out, "-D_musl_")
 	}
 	out = append(out, sse...)
