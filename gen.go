@@ -688,7 +688,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	mf := Throw2(ParseFile(ctx.fs, yamakePath))
 
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.fs, instance.Path, instance.Kind, mf.Stmts, env)
+	d := collectModule(ctx.parsers, instance.Path, instance.Kind, mf.Stmts, env)
 	for _, stmt := range d.allPySrcs {
 		applyAllPySrcs(ctx.fs, instance.Path, stmt, d)
 	}
@@ -702,7 +702,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// _CPP_PROTO module definition calls ENABLE(GEN_PROTO); gate IF(GEN_PROTO)
 		// branches (e.g. jsonpath's antlr3 CONFIGURE_FILE calls) the same way.
 		cppProtoEnv.SetBool("GEN_PROTO", true)
-		d = collectModule(ctx.fs, instance.Path, instance.Kind, mf.Stmts, cppProtoEnv)
+		d = collectModule(ctx.parsers, instance.Path, instance.Kind, mf.Stmts, cppProtoEnv)
 	}
 
 	if d.conflictMod != nil {

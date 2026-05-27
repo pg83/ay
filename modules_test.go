@@ -184,7 +184,7 @@ func TestCollectModule_LibiconvUsesStaticPeerWithMergedYdbFlags(t *testing.T) {
 	hostPlatform := NewPlatform(OSLinux, ISAX8664, flags, []string{"tool"}, "", "")
 	inst := ModuleInstance{Path: "contrib/libs/libiconv", Kind: KindLib, Platform: hostPlatform}
 	mf := Throw2(ParseFile(fs, filepath.Join(ydbSourceRoot, "contrib/libs/libiconv/ya.make")))
-	d := collectModule(fs, inst.Path, inst.Kind, mf.Stmts, buildIfEnv(inst))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), inst.Path, inst.Kind, mf.Stmts, buildIfEnv(inst))
 
 	hasStatic := false
 	for _, peer := range d.peerdirs {

@@ -80,6 +80,15 @@ func newSharedParseCache() *sharedParseCache {
 type includeParserManager struct {
 	fs    *FS
 	cache *sharedParseCache
+	// addinclIndex is the ONE global inverted ADDINCL index, shared across both
+	// scanners and every config: target rel (interned STR — same id space as parsed
+	// include targets) → the source ADDINCL dirs (VFS) that physically contain that
+	// file. Each ADDINCL dir is Walk'd exactly once (indexAddincl) and its files
+	// appended here, so there is no per-config rebuild. A resolve intersects this
+	// candidate list with the config's own ADDINCL set and takes the highest
+	// priority. addinclIndexed records which dirs are already folded in.
+	addinclIndex   map[STR][]VFS
+	addinclIndexed map[VFS]struct{}
 	// buildParsed is the parser-layer VFS overlay for generated
 	// outputs. Emitters register `$(B)` paths here explicitly; parser
 	// lookup for build-rooted paths consults ONLY this map.
@@ -107,9 +116,11 @@ func newIncludeParserManager(sourceRoot string) *includeParserManager {
 
 func newIncludeParserManagerFS(fs *FS, cache *sharedParseCache) *includeParserManager {
 	return &includeParserManager{
-		fs:          fs,
-		cache:       cache,
-		buildParsed: make(map[string][]includeDirective, 256),
+		fs:             fs,
+		cache:          cache,
+		buildParsed:    make(map[string][]includeDirective, 256),
+		addinclIndex:   make(map[STR][]VFS, 1<<16),
+		addinclIndexed: make(map[VFS]struct{}, 1024),
 	}
 }
 
@@ -171,6 +182,30 @@ func (pm *includeParserManager) parsedIncludes(vfsPath VFS) []includeDirective {
 
 func (pm *includeParserManager) RegisterBuildParsedIncludes(rel string, parsed []includeDirective) {
 	pm.buildParsed[rel] = parsed
+}
+
+// indexAddincl folds the SOURCE ADDINCL directory `a` into the global
+// addinclIndex once: Walk it and append `a` to the candidate list of every FILE
+// rel beneath it (interned). Idempotent — a dir seen by many configs is walked a
+// single time. Precondition: a is SOURCE-rooted with a non-empty rel (the
+// repo-root "$(S)/" ADDINCL is never indexed — its walk is the whole tree).
+func (pm *includeParserManager) indexAddincl(a VFS) {
+	if a.Root() != VFSRootSource || a.Rel() == "" {
+		return // BUILD-root resolves via codegen; repo-root walk is the whole tree
+	}
+	if _, done := pm.addinclIndexed[a]; done {
+		return
+	}
+	pm.addinclIndexed[a] = struct{}{}
+
+	base := a.Rel()
+	pm.fs.Walk(base, func(rel string, isDir bool) {
+		if isDir {
+			return
+		}
+		t := internString(rel[len(base)+1:])
+		pm.addinclIndex[t] = append(pm.addinclIndex[t], a)
+	})
 }
 
 // fileExistsByRel is the inner, rel-keyed existence check.

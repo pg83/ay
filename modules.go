@@ -424,7 +424,9 @@ func copyFileIncludeTarget(modulePath string, target string) string {
 //
 // The returned moduleData's `flags` accumulates from the parsed NO_*
 // macros — starting from a zero FlagSet.
-func collectModule(fs *FS, modulePath string, kind ModuleKind, stmts []Stmt, env Environment) *moduleData {
+func collectModule(pm *includeParserManager, modulePath string, kind ModuleKind, stmts []Stmt, env Environment) *moduleData {
+	fs := pm.fs
+
 	env.SetString("MODDIR", modulePath)
 	env.SetString("CURDIR", "${ARCADIA_ROOT}/"+modulePath)
 	env.SetString("BINDIR", "${ARCADIA_BUILD_ROOT}/"+modulePath)
@@ -477,6 +479,18 @@ func collectModule(fs *FS, modulePath string, kind ModuleKind, stmts []Stmt, env
 	// so consumers can share the slice.
 	d.addIncl = mergeDedupVFS(d.addIncl, nil)
 	d.addInclGlobal = mergeDedupVFS(d.addInclGlobal, nil)
+
+	// Fold this module's SOURCE ADDINCL dirs into the global inverted index
+	// (target rel → containing ADDINCL), once per dir, so include resolution is an
+	// index lookup rather than a per-target prefix probe. Own (d.addIncl) covers a
+	// consumer's OwnAddIncl; GLOBAL (d.addInclGlobal) reaches every peer's
+	// PeerAddInclSet, indexed here when the declaring peer is collected.
+	for _, a := range d.addIncl {
+		pm.indexAddincl(a)
+	}
+	for _, a := range d.addInclGlobal {
+		pm.indexAddincl(a)
+	}
 
 	// _CPP_EVLOG_CMD / _CPP_PROTO_EVLOG_CMD (build/conf/proto.conf:480-491)
 	// append `.PEERDIR=library/cpp/eventlog contrib/libs/protobuf` to
@@ -2343,7 +2357,7 @@ func moduleInfoForInstance(ctx *genCtx, instance ModuleInstance) moduleTypeInfo 
 	mf := Throw2(ParseFile(ctx.fs, yamakePath))
 
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.fs, instance.Path, instance.Kind, mf.Stmts, env)
+	d := collectModule(ctx.parsers, instance.Path, instance.Kind, mf.Stmts, env)
 	if d.conflictMod != nil {
 		ThrowFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path, d.moduleStmt.Name, d.conflictMod.Name)
 	}
