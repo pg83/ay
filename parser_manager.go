@@ -124,18 +124,23 @@ func newIncludeParserManagerFS(fs *FS, cache *sharedParseCache) *includeParserMa
 	}
 }
 
-// sourceParsedBuckets returns the full parser result for a SOURCE_ROOT-
-// relative file, dispatching to a per-extension parser from parsers.go.
-// Memoised by VFS path; returns nil for missing files (DFS may reach
-// dangling sysincl mappings).
-func (pm *includeParserManager) sourceParsedBuckets(rel string) parsedIncludeSet {
-	vfsPath := Source(rel)
+// sourceParsedBuckets returns the full parser result for a SOURCE-rooted file,
+// dispatching to a per-extension parser from parsers.go. Memoised by VFS path;
+// returns nil for missing files (DFS may reach dangling sysincl mappings).
+//
+// Keyed by the VFS the caller already holds — taking the VFS (not its rel)
+// avoids re-interning "$(S)/"+rel to reconstruct the cache key on every lookup,
+// which dominated the intern-map traffic. The bare rel is needed only on a cache
+// MISS (FS access + parser dispatch), so it is derived lazily there.
+func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSet {
 	if cached, ok := pm.cache.parsed[vfsPath]; ok {
 		pm.cache.parsedHits++
 		return cached
 	}
 
 	pm.cache.parsedMisses++
+
+	rel := vfsPath.Rel()
 
 	// A closure root or a sysincl mapping can name a path with no file on disk;
 	// that is an absent optional source (nil includes), not a read error.
@@ -177,7 +182,7 @@ func (pm *includeParserManager) parsedIncludes(vfsPath VFS) []includeDirective {
 		return nil
 	}
 
-	return pm.sourceParsedBuckets(vfsPath.Rel()).bucket(parsedIncludesLocal)
+	return pm.sourceParsedBuckets(vfsPath).bucket(parsedIncludesLocal)
 }
 
 func (pm *includeParserManager) RegisterBuildParsedIncludes(rel string, parsed []includeDirective) {

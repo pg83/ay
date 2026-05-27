@@ -113,7 +113,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		var r6Parsed []includeDirective
 		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
-			r6Parsed = scanner.parsers.sourceParsedBuckets(rl6SourceVFS.Rel()).bucket(parsedIncludesHCPP)
+			r6Parsed = scanner.parsers.sourceParsedBuckets(rl6SourceVFS).bucket(parsedIncludesHCPP)
 		}
 		registerGeneratedParsedOutput(ctx, srcInstance, "R6", r6Out, r6Parsed)
 
@@ -202,7 +202,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5TmpOut, nil, r5Ref)
 		var r5Parsed []includeDirective
 		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
-			r5Parsed = scanner.parsers.sourceParsedBuckets(rlSourceVFS.Rel()).bucket(parsedIncludesHCPP)
+			r5Parsed = scanner.parsers.sourceParsedBuckets(rlSourceVFS).bucket(parsedIncludesHCPP)
 		}
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5CppOut, r5Parsed, r5Ref)
 
