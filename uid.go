@@ -2,20 +2,23 @@ package main
 
 import (
 	"crypto/md5"
-	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
 	encHex "encoding/hex"
 	"math"
 	"sort"
 	"strings"
+
+	"github.com/zeebo/xxh3"
 )
 
 // uid.go — content-derived UID hashing.
 //
-// UID = base64url(sha1(canonical-node-bytes))[:22]. Canonical bytes are an
-// internal binary format (not JSON); the only contract is hash stability
-// per semantic node content.
+// UID = base64url(xxh3-128(canonical-node-bytes))[:22]. Canonical bytes are an
+// internal binary format (not JSON); the only contract is hash stability per
+// semantic node content — the hash is never compared to an external value (the
+// L4 normalizer recomputes/strips uids), so a fast non-cryptographic 128-bit
+// hash replaces SHA-1: a 16-byte digest base64url-encodes to exactly 22 chars.
 //
 // Field encoding is positional in alphabetical order (matching node.go);
 // variable-length items are 4-byte little-endian length-prefixed. UID,
@@ -23,11 +26,11 @@ import (
 
 const uidLength = 22
 
-// computeUID returns the 22-character base64url SHA-1 of the input
+// computeUID returns the 22-character base64url xxh3-128 of the input
 // bytes. Generic helper retained for tests that hand in their own
 // canonical bytes; the production emitter uses nodeUID directly.
 func computeUID(canonicalBytes []byte) string {
-	sum := sha1.Sum(canonicalBytes)
+	sum := xxh3.Hash128(canonicalBytes).Bytes()
 
 	return base64.RawURLEncoding.EncodeToString(sum[:])[:uidLength]
 }
@@ -42,7 +45,7 @@ func canonicalNodeBytes(n *Node) []byte {
 }
 
 // nodeUID derives a Node's content-UID by accumulating the canonical
-// form into a `canonBuf` and feeding the whole buffer to sha1 in one
+// form into a `canonBuf` and feeding the whole buffer to xxh3 in one
 // shot. Concrete-typed receiver avoids the per-write interface boxing
 // that `hash.Hash`-streaming carried.
 func nodeUID(n *Node) string {
@@ -58,7 +61,7 @@ func nodeUIDWithBuf(n *Node, c *canonBuf) string {
 	c.buf = c.buf[:0]
 	c.writeNode(n)
 
-	sum := sha1.Sum(c.buf)
+	sum := xxh3.Hash128(c.buf).Bytes()
 
 	return base64.RawURLEncoding.EncodeToString(sum[:])[:uidLength]
 }
