@@ -491,7 +491,6 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			PeerCFlagsGlobal:     pyProtoAuxPeerCFlags(ctx, instance, peerContribs),
 			PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
 			PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
-			AutoPeerCFlags:       consumerAutoPeerCFlags(true, true),
 			PerSourceCFlags:      []string{"-x", "c++"},
 			SourceRoot:           ctx.sourceRoot,
 			FS:                   ctx.fs,

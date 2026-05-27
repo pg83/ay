@@ -646,10 +646,6 @@ END()
 		t.Fatalf("muslEnabled = true, want false after SET(MUSL no)")
 	}
 
-	if got := defaultPeerCFlags(&genCtx{target: target}, instance, d); got != nil {
-		t.Fatalf("defaultPeerCFlags = %v, want nil", got)
-	}
-
 	defaults := defaultPeerdirsForModule(&genCtx{target: target}, instance, d)
 	for _, peer := range defaults {
 		if peer == "contrib/libs/musl/include" {

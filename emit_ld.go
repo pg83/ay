@@ -49,7 +49,6 @@ func EmitLD(
 	objcopyPaths []VFS,
 	moduleCFlags []string,
 	peerCFlagsGlobal []string,
-	autoPeerCFlags []string,
 	peerLDFlagsGlobal []string,
 	ownLDFlags []string,
 	ownRPathFlags []string,
@@ -113,7 +112,7 @@ func EmitLD(
 
 	tools := instance.Platform.Tools
 	cmd0 := composeLDCmdVcsInfo(tools, vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, autoPeerCFlags, noCompilerWarnings)
+	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, noCompilerWarnings)
 	cmd2 := composeLDCmdLinkExe(instance.Platform, outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, wantsStrip)
 	cmd3 := composeLDCmdLinkOrCopy(tools, binaryDir, dynamicPaths...)
 	splitDwarfCmds := composeLDSplitDwarfCmds(tools, outputPath, wantsSplitDwarf)
@@ -282,10 +281,8 @@ func composeLDCmdVcsInfo(tools Toolchain, vcsCPath string) []string {
 //
 // Mirrors upstream `_SRC_C_NODEPS_CMD` (gnu_compiler.conf:328): the
 // vcs compile is a regular C-compile that threads the per-module
-// auto-peer CFLAGS. `autoPeerCFlags` is the pre-resolved slice
-// produced by `defaultPeerCFlags` upstream of the caller; this
-// composer is agnostic about its contents.
-func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, autoPeerCFlags []string, noCompilerWarnings bool) []string {
+// auto-peer CFLAGS.
+func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal []string, noCompilerWarnings bool) []string {
 	bundle := compileFlagBundleFor(p)
 	cmdArgs := make([]string, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal))
 	cmdArgs = append(cmdArgs,
@@ -309,7 +306,7 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 	preNoLibcExtras = append(preNoLibcExtras, moduleCFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
 
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings, false), bundle.Defines, preNoLibcExtras, autoPeerCFlags)
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings, false), bundle.Defines, preNoLibcExtras)
 
 	return cmdArgs
 }
