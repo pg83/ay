@@ -45,7 +45,7 @@ func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 			Intern("$(S)/custom/musl/include"),
 		},
 	}
-	EmitAS(inst, "src/math/x86_64/ceill.s", Intern("$(S)/contrib/libs/musl/src/math/x86_64/ceill.s"), in, nil, testHostP, e)
+	EmitAS(inst, "src/math/x86_64/ceill.s", Intern("$(S)/contrib/libs/musl/src/math/x86_64/ceill.s"), in, testHostP, e)
 
 	args := e.nodes[0].Cmds[0].CmdArgs
 	wantTail := []string{
@@ -87,7 +87,7 @@ func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 // Empirical reference: contrib/libs/asmglibc/memchr.S.o (flat, no _/).
 func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitAS(targetInstance("some/module"), "flat.S", Intern("$(S)/some/module/flat.S"), ModuleCCInputs{}, nil, testHostP, e)
+	_, outPath := EmitAS(targetInstance("some/module"), "flat.S", Intern("$(S)/some/module/flat.S"), ModuleCCInputs{}, testHostP, e)
 	want := "$(B)/some/module/flat.S.o"
 
 	if outPath.String() != want {
@@ -98,7 +98,7 @@ func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 // TestEmitAS_OutputPath_NestedSrc verifies the nested-source output path.
 func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", Intern("$(S)/contrib/libs/cxxsupp/builtins/aarch64/chkstk.S"), ModuleCCInputs{}, nil, testHostP, e)
+	_, outPath := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", Intern("$(S)/contrib/libs/cxxsupp/builtins/aarch64/chkstk.S"), ModuleCCInputs{}, testHostP, e)
 	want := "$(B)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
 
 	if outPath.String() != want {
@@ -120,7 +120,6 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 		"tcmalloc/internal/percpu_rseq_asm.S",
 		Intern("$(S)/contrib/libs/tcmalloc/tcmalloc/internal/percpu_rseq_asm.S"),
 		in,
-		nil,
 		testHostP,
 		e,
 	)
@@ -140,16 +139,11 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 // tcmalloc/no_percpu_cache/__/tcmalloc/internal/percpu_rseq_asm.S.o.
 // This module uses SRCDIR(contrib/libs/tcmalloc) (ancestor), so the
 // output infix is __/ and the input comes from $(S)/contrib/libs/tcmalloc/...
-// TestEmitAS_YasmLD_PopulatesDepRefs verifies that when yasmLD is non-nil,
-// EmitAS wires it into both DepRefs and ForeignDepRefs["tool"] (PR-30 D02).
-// The L0 fingerprint reads only deps; the foreign-deps-only shape diverged
-// for asmlib's 25 AS nodes in the reference graph.
-func TestEmitAS_YasmLD_PopulatesDepRefs(t *testing.T) {
-	e := NewBufferedEmitter()
-
-	// Emit a minimal stand-in node to obtain a valid NodeRef for yasmLD.
-	// The node's content is irrelevant — we only need its identity.
-	yasmLDRef := e.Emit(&Node{
+// testYasmLDRef emits a minimal stand-in LD node and returns its NodeRef,
+// for tests that drive emitASYasm (which requires the yasm tool ref). The
+// node's content is irrelevant — only its identity matters.
+func testYasmLDRef(e *BufferedEmitter) NodeRef {
+	return e.Emit(&Node{
 		Cmds:         []Cmd{{CmdArgs: []string{"yasm"}, Env: map[string]string{}}},
 		Env:          map[string]string{},
 		Inputs:       ToVFSSlice([]string{}),
@@ -162,9 +156,18 @@ func TestEmitAS_YasmLD_PopulatesDepRefs(t *testing.T) {
 			"module_dir": "tools/yasm",
 		},
 	})
+}
+
+// TestEmitASYasm_YasmLD_PopulatesDepRefs verifies that emitASYasm wires the
+// yasm tool ref into both DepRefs and ForeignDepRefs["tool"] (PR-30 D02).
+// The L0 fingerprint reads only deps; the foreign-deps-only shape diverged
+// for asmlib's 25 AS nodes in the reference graph.
+func TestEmitASYasm_YasmLD_PopulatesDepRefs(t *testing.T) {
+	e := NewBufferedEmitter()
+	yasmLDRef := testYasmLDRef(e)
 
 	yasmTestIn := ModuleCCInputs{InclArgs: inclArgMemo{}, AddIncl: builtinsASOwnAddIncl}
-	ref, _ := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", Intern("$(S)/contrib/libs/cxxsupp/builtins/aarch64/chkstk.S"), yasmTestIn, &yasmLDRef, testHostP, e)
+	ref, _ := emitASYasm(hostInstance("contrib/libs/asmlib"), "memset64.asm", Intern("$(S)/contrib/libs/asmlib/memset64.asm"), yasmTestIn, yasmLDRef, e)
 
 	// The AS node is at index 1 (yasmLD is at index 0).
 	if len(e.nodes) != 2 {
@@ -191,7 +194,7 @@ func TestEmitAS_YasmLD_PopulatesDepRefs(t *testing.T) {
 // (p=AS, pc=light-green, no show_out) as observed in the reference graph.
 func TestEmitAS_KV(t *testing.T) {
 	e := NewBufferedEmitter()
-	EmitAS(targetInstance("some/module"), "aarch64/foo.S", Intern("$(S)/some/module/aarch64/foo.S"), ModuleCCInputs{}, nil, testHostP, e)
+	EmitAS(targetInstance("some/module"), "aarch64/foo.S", Intern("$(S)/some/module/aarch64/foo.S"), ModuleCCInputs{}, testHostP, e)
 
 	if len(e.nodes) != 1 {
 		t.Fatalf("emitter buffered %d nodes, want 1", len(e.nodes))
@@ -277,7 +280,7 @@ func TestEmitAS_KV(t *testing.T) {
 // rule.
 func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
 	e := NewBufferedEmitter()
-	_, outPath := EmitAS(hostInstance("contrib/libs/asmlib"), "memset64.asm", Intern("$(S)/contrib/libs/asmlib/memset64.asm"), ModuleCCInputs{}, nil, testHostP, e)
+	_, outPath := emitASYasm(hostInstance("contrib/libs/asmlib"), "memset64.asm", Intern("$(S)/contrib/libs/asmlib/memset64.asm"), ModuleCCInputs{}, testYasmLDRef(e), e)
 	want := "$(B)/contrib/libs/asmlib/memset64.pic.o"
 
 	if outPath.String() != want {
@@ -297,18 +300,19 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 		Language: LangCPP,
 		Platform: targetX86,
 	}
-	_, outPath := EmitAS(instance, "memset64.asm", Intern("$(S)/contrib/libs/asmlib/memset64.asm"), ModuleCCInputs{}, nil, testHostP, e)
+	_, outPath := emitASYasm(instance, "memset64.asm", Intern("$(S)/contrib/libs/asmlib/memset64.asm"), ModuleCCInputs{}, testYasmLDRef(e), e)
 	wantYasmPath := "$(B)/contrib/libs/asmlib/memset64.o"
 
 	if outPath.String() != wantYasmPath {
 		t.Errorf("outPath = %q, want %q", outPath, wantYasmPath)
 	}
 
-	if len(e.nodes) != 1 {
-		t.Fatalf("emitter buffered %d nodes, want 1", len(e.nodes))
+	// Node 0 is the stand-in yasm LD ref; the AS node is at index 1.
+	if len(e.nodes) != 2 {
+		t.Fatalf("emitter buffered %d nodes, want 2", len(e.nodes))
 	}
 
-	got := e.nodes[0]
+	got := e.nodes[1]
 
 	// Yasm path leaves cwd empty; clang AS sets "$(B)".
 	if got.Cmds[0].Cwd != "" {

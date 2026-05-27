@@ -3,8 +3,9 @@ package main
 import "strings"
 
 // emitASYasm composes the yasm-shaped AS node for a host-PIC `.asm`
-// source — the asmlib-only counterpart to the clang AS path.
-func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD *NodeRef, emit Emitter) (NodeRef, VFS) {
+// source — the asmlib-only counterpart to the clang AS path. It is the
+// only AS flavour that depends on the yasm tool (`yasmLD`).
+func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, emit Emitter) (NodeRef, VFS) {
 	stem := strings.TrimSuffix(srcRel, ".asm")
 	suffix := ".o"
 	if instance.Platform.PIC {
@@ -80,12 +81,10 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		},
 	}
 
-	if yasmLD != nil {
-		node.ForeignDepRefs = map[string][]NodeRef{
-			"tool": {*yasmLD},
-		}
-		node.DepRefs = []NodeRef{*yasmLD}
+	node.ForeignDepRefs = map[string][]NodeRef{
+		"tool": {yasmLD},
 	}
+	node.DepRefs = []NodeRef{yasmLD}
 
 	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS
 }

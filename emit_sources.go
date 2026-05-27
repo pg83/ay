@@ -78,13 +78,6 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 	case strings.HasSuffix(srcRel, ".S"),
 		strings.HasSuffix(srcRel, ".s"),
 		strings.HasSuffix(srcRel, ".asm"):
-		var yasmRef *NodeRef
-
-		if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
-			ldRef, _ := ctx.tool("contrib/tools/yasm")
-			yasmRef = &ldRef
-		}
-
 		asIn := srcIn
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 
@@ -99,7 +92,17 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		}
 
 		asIn.IncludeInputs = walkClosure(ctx, srcInstance, srcVFS, scanIn)
-		ref, outPath := EmitAS(srcInstance, srcRel, srcVFS, asIn, yasmRef, ctx.host, ctx.emit)
+
+		// Only the x86_64 `.asm` yasm flavour depends on the yasm tool; the
+		// GNU/clang-as path (.s/.S, non-x86 .asm) must not pull it in.
+		if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
+			yasmLD, _ := ctx.tool("contrib/tools/yasm")
+			ref, outPath := emitASYasm(srcInstance, srcRel, srcVFS, asIn, yasmLD, ctx.emit)
+
+			return &sourceEmit{Ref: ref, OutPath: outPath}
+		}
+
+		ref, outPath := EmitAS(srcInstance, srcRel, srcVFS, asIn, ctx.host, ctx.emit)
 
 		return &sourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".rl6"):
