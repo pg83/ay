@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"unsafe"
+
+	"github.com/zeebo/xxh3"
 )
 
 // vfs.go — typed VFS path as an interned id.
@@ -69,12 +71,19 @@ const vfsPrefixLen = len("$(S)/")
 // "$(S)/<rel>" / "$(B)/<rel>" path; both share this one table and id space.
 type STR uint32
 
+// hashes[id] is xxh3-64 of strs[id], computed once at intern time. The node
+// canonicalizer writes this fixed-width content hash for a VFS instead of
+// copying its (variable-length) path, so a node's UID preimage stays
+// content-stable across runs (it is a hash of the string body, not the
+// run-local id) while avoiding per-input memmove of the path bytes.
 var internTable = struct {
-	ids  map[string]STR
-	strs []string
+	ids    map[string]STR
+	strs   []string
+	hashes []uint64
 }{
-	ids:  make(map[string]STR, 1<<16),
-	strs: make([]string, 1, 1<<16),
+	ids:    make(map[string]STR, 1<<16),
+	strs:   make([]string, 1, 1<<16),
+	hashes: make([]uint64, 1, 1<<16),
 }
 
 // internString returns the stable id for s, interning it on first sight.
@@ -86,6 +95,7 @@ func internString(s string) STR {
 	id := STR(len(internTable.strs))
 	internTable.ids[s] = id
 	internTable.strs = append(internTable.strs, s)
+	internTable.hashes = append(internTable.hashes, xxh3.HashString(s))
 
 	return id
 }
@@ -103,6 +113,7 @@ func internBytes(b []byte) STR {
 	id := STR(len(internTable.strs))
 	internTable.ids[s] = id
 	internTable.strs = append(internTable.strs, s)
+	internTable.hashes = append(internTable.hashes, xxh3.Hash(b))
 
 	return id
 }
