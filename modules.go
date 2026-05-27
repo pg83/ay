@@ -641,9 +641,6 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 		return
 	}
 
-	// Normalise so downstream code (defaultPeerCFlags' AutoPeerCFlags
-	// slot injection) reads d.usePython3 instead of re-checking the
-	// module-type set.
 	d.usePython3 = true
 
 	d.addInclGlobal = append(d.addInclGlobal, Intern("$(S)/contrib/libs/python/Include"))

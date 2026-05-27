@@ -48,11 +48,10 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	warnBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
-	autoPeerCFlags := in.AutoPeerCFlags
 
 	includes := composeASIncludes(in)
 
-	betweenBlocks := len(catboostOpenSourceDefine) + len(autoPeerCFlags)
+	betweenBlocks := len(catboostOpenSourceDefine)
 	betweenBlocks += len(bundle.CPUFeatures)
 
 	fixed := prologueArgs + len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
@@ -63,7 +62,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	cmdArgs = append(cmdArgs, instance.Platform.Tools.CC, "--target="+instance.Platform.Triple)
 	cmdArgs = append(cmdArgs, bundle.ArchArgs...)
 	cmdArgs = append(cmdArgs, "-B"+binPath)
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, autoPeerCFlags)
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags)
 	cmdArgs = append(cmdArgs, in.SFlags...)
 	cmdArgs = append(cmdArgs, "-c", "-o", outputPath, inputPath)
 	cmdArgs = append(cmdArgs, includes...)

@@ -217,12 +217,11 @@ func noLibcBlock(p *Platform) []string {
 }
 
 type compileFlagBundle struct {
-	ArchArgs               []string
-	CFlags                 []string
-	Defines                []string
-	NoLibcBlock            []string
-	CPUFeatures            []string
-	SplitAutoPeerAroundCPU bool
+	ArchArgs    []string
+	CFlags      []string
+	Defines     []string
+	NoLibcBlock []string
+	CPUFeatures []string
 }
 
 func withSandboxingDebugCompression(base []string, p *Platform) []string {
@@ -255,11 +254,10 @@ func compileFlagBundleFor(p *Platform) compileFlagBundle {
 		}
 
 		return compileFlagBundle{
-			CFlags:                 withSandboxingDebugCompression(cflags, p),
-			Defines:                hostDefines,
-			NoLibcBlock:            noLibcBlock(p),
-			CPUFeatures:            hostSseFeatures,
-			SplitAutoPeerAroundCPU: true,
+			CFlags:      withSandboxingDebugCompression(cflags, p),
+			Defines:     hostDefines,
+			NoLibcBlock: noLibcBlock(p),
+			CPUFeatures: hostSseFeatures,
 		}
 	case ISAAArch64:
 		bundle := compileFlagBundle{

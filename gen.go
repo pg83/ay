@@ -1747,11 +1747,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// ride through it are not this node's inputs (the normalizer drops them
 	// from both graphs), so there is nothing to scan or fold here.
 
-	// Auto-injected peer-CFLAG -D_musl_ for every TARGET module that is
-	// not effectively NO_PLATFORM, when the CLI says MUSL=yes. Mirrors
-	// `_BASE_UNIT`'s `when ($MUSL == "yes") { CFLAGS+=-D_musl_ }`.
-	autoPeerCFlags := defaultPeerCFlags(ctx, instance, d)
-
 	// Thread the module's own non-GLOBAL CFLAGS and own GLOBAL
 	// CFLAGS / CXXFLAGS / CONLYFLAGS into ModuleCCInputs so the composer
 	// emits them on this module's own CC compiles.
@@ -1841,7 +1836,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		PeerCFlagsGlobal:     peerCFlagsGlobal,
 		PeerCXXFlagsGlobal:   peerCXXFlagsGlobal,
 		PeerCOnlyFlagsGlobal: peerCOnlyFlagsGlobal,
-		AutoPeerCFlags:       autoPeerCFlags,
 		SFlags:               d.sFlags,
 		SrcDir:               effectiveSrcDir,
 		SourceRoot:           ctx.sourceRoot,
@@ -2333,7 +2327,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ldObjcopyRefs, ldObjcopyPaths,
 			ownCFlags,
 			peerCFlagsGlobal,
-			autoPeerCFlags,
 			peerLDFlagsGlobal,
 			d.ldFlags,
 			ownRPathFlags,

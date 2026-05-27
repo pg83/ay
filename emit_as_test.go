@@ -252,7 +252,7 @@ func TestEmitAS_KV(t *testing.T) {
 // PR-35m: the per-module compile knobs are now passed via the same
 // `ModuleCCInputs` struct CC consumes (own AddIncl empty for util,
 // peer-GLOBAL = libcxx/libcxxrt + musl-arch-aarch64×4 + the user-
-// PEERDIR contributions, own CFlags = `-Wnarrowing`, AutoPeerCFlags =
+// PEERDIR contributions, own CFlags = `-Wnarrowing`, plus the consumer
 // `-D_musl_`). The util-specific path-sniff stopgap is retired.
 // TestEmitAS_AsmlibYasm_Cachesize_ByteExact (PR-35q) pins the yasm-
 // toolchain shape for asmlib's host-PIC `.asm` AS nodes against the

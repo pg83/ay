@@ -278,51 +278,6 @@ func useArcadiaCompilerRuntime(ctx *genCtx, instance ModuleInstance) bool {
 	return true
 }
 
-// defaultPeerCFlags returns the auto-injected peer-CFLAG set for
-// ModuleCCInputs.AutoPeerCFlags. Mirrors `_BASE_UNIT`'s
-// `when ($MUSL == "yes") { CFLAGS+=-D_musl_ }` (ymake.core.conf:781).
-// `-D_musl_` (no `=1`) is consumer-side; musl-self CC nodes get
-// `-D_musl_=1` separately, gated off this injection via the
-// effective-NO_PLATFORM check.
-func defaultPeerCFlags(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
-	if !d.muslEnabled {
-		return nil
-	}
-
-	if effectiveNoPlatform(d.flags) {
-		return nil
-	}
-
-	// `_PYTHON3_ADDINCL`'s `CFLAGS+=-DUSE_PYTHON3` (python.conf:1019,
-	// gated on $USE_ARCADIA_PYTHON == "yes"). Reference places it at
-	// the AutoPeerCFlags slot — right after `-D_musl_`, before the
-	// second `noLibcUndebugBlock`. `contrib/libs/python` is skipped via
-	// the modulePath guard in `applyPython3AddIncl`.
-	usePython3 := d.usePython3 && instance.Path != "contrib/libs/python"
-
-	return consumerAutoPeerCFlags(true, usePython3)
-}
-
-// consumerAutoPeerCFlags is the single source of literal strings for
-// the consumer-side auto-peer CFLAG slice. Predicate evaluation stays
-// at the caller; this helper just centralises flag names + ordering so
-// emitter composers cannot drift. Order: musl sentinel, then USE_PYTHON3.
-func consumerAutoPeerCFlags(muslOn, usePython3 bool) []string {
-	var out []string
-	if muslOn {
-		out = append(out, muslConsumerSentinel)
-	}
-	if usePython3 {
-		out = append(out, "-DUSE_PYTHON3")
-	}
-	return out
-}
-
-// muslConsumerSentinel is `-D_musl_`, auto-injected by `_BASE_UNIT`'s
-// `when ($MUSL == "yes")` into every non-NO_PLATFORM module's CFLAGS.
-// Distinct from `-D_musl_=1` (musl-self only).
-const muslConsumerSentinel = "-D_musl_"
-
 // implicitPeerCtx is the read-only view of a module instance that
 // implicitPeerRule predicates evaluate against. Engine-agnostic — same
 // shape for unit-level, program-level, and allocator-default rule sets.

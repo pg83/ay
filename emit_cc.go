@@ -81,16 +81,10 @@ type ModuleCCInputs struct {
 	// PeerCOnlyFlagsGlobal: transitive union of every PEERDIR's GLOBAL
 	// CONLYFLAGS. C / .S sources only.
 	PeerCOnlyFlagsGlobal []string
-	// AutoPeerCFlags is the auto-injected peer-CFLAG set derived from
-	// cliDefines + module flags. The load-bearing entry today is
-	// `-D_musl_` (mirror of `build/ymake.core.conf:781`'s
-	// `when ($MUSL == "yes") { CFLAGS+=-D_musl_ }`). Kept separate
-	// from PeerCFlagsGlobal so the source/from-where is auditable.
-	AutoPeerCFlags []string
 	// CFlags is the module's own non-GLOBAL CFLAGS. Applies to BOTH C
 	// and C++ sources (mirror of upstream's CFLAGS-applies-to-both
 	// rule). Slotted between commonDefines and the first
-	// noLibcUndebugBlock copy.
+	// noLibcBlock copy.
 	CFlags []string
 	// OwnCFlagsGlobal is the module's own GLOBAL CFLAGS. Emitted via
 	// the bucket model in composeTargetCC / composeHostCC. Also
@@ -228,7 +222,6 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	// One composer for every CC: host, target funnel through
 	// composeTargetCC with platform-specific differences expressed via
 	// Platform / ccComposeArgs fields.
-	autoPeerCFlags := in.AutoPeerCFlags
 	peerExtras := composePeerExtras(in, isCxx)
 	ownGlobalBucket := composeOwnAndPeerGlobalBucket(in, isCxx)
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
@@ -241,7 +234,6 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		PeerAddIncl:        in.PeerAddInclGlobal,
 		OwnCFlags:          ownCFlags,
 		OwnExtras:          ownExtras,
-		AutoPeerCFlags:     autoPeerCFlags,
 		PeerExtras:         peerExtras,
 		OwnGlobalBucket:    ownGlobalBucket,
 		PerSrcCFlags:       in.PerSourceCFlags,
@@ -498,9 +490,7 @@ func appendCxxStdAndOwn(cmdArgs []string, isCxx bool, noCompilerWarnings bool, i
 // composePeerExtras returns the peer-propagated GLOBAL CXXFLAGS /
 // CONLYFLAGS contribution per source-language axis. The CFlags axis
 // itself lives in the ownCFlags slot (see
-// composeOwnAndPeerCFlagsAtOwnSlot). AutoPeerCFlags (e.g. -D_musl_)
-// is NOT included here — it slots separately via the
-// `autoPeerCFlags` composer argument.
+// composeOwnAndPeerCFlagsAtOwnSlot).
 func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
 	if isCxx {
 		out := make([]string, 0, len(in.PeerCXXFlagsGlobal))
@@ -517,7 +507,7 @@ func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
 
 // composeOwnAndPeerCFlagsAtOwnSlot assembles the combined CFLAGS
 // bundle landing at the ownCFlags slot (between commonDefines and the
-// 1st noLibcUndebugBlock / ndebugPicBlock copy). Carries ALL CFLAGS
+// 1st noLibcBlock copy). Carries ALL CFLAGS
 // axes — own non-GLOBAL, own GLOBAL, peer-propagated GLOBAL — applying
 // to both C and C++ sources of the consumer.
 //
@@ -622,8 +612,7 @@ func composePostCatboostBucket(preBucket []string) []string {
 //
 // Slot layout (in addition to the static blocks):
 //   - `ownCFlags`: own non-GLOBAL CFLAGS, between commonDefines and
-//     the 1st noLibcUndebugBlock.
-//   - `autoPeerCFlags`: between catboost and 2nd noLibcUndebugBlock.
+//     the 1st noLibcBlock.
 //   - C++ only: `ownGlobalBucket` twice flanking a second
 //     `-DCATBOOST_OPENSOURCE=yes`, AFTER own CXXFLAGS / CONLYFLAGS.
 //   - C only: `peerExtras` once, no catboost-redux.
@@ -641,7 +630,6 @@ type ccComposeArgs struct {
 	PeerAddIncl        []VFS
 	OwnCFlags          []string
 	OwnExtras          []string
-	AutoPeerCFlags     []string
 	PeerExtras         []string
 	OwnGlobalBucket    []string
 	PerSrcCFlags       []string
@@ -651,26 +639,10 @@ type ccComposeArgs struct {
 	InclArgs           inclArgMemo
 }
 
-func appendAutoPeerAndCPUFeatures(cmdArgs []string, bundle compileFlagBundle, autoPeerCFlags []string) []string {
-	if !bundle.SplitAutoPeerAroundCPU {
-		cmdArgs = append(cmdArgs, autoPeerCFlags...)
-		cmdArgs = append(cmdArgs, bundle.CPUFeatures...)
-
-		return cmdArgs
-	}
-
-	preSse, postSse := partitionPython3FromAutoPeer(autoPeerCFlags)
-	cmdArgs = append(cmdArgs, preSse...)
-	cmdArgs = append(cmdArgs, bundle.CPUFeatures...)
-	cmdArgs = append(cmdArgs, postSse...)
-
-	return cmdArgs
-}
-
 // appendCompileFlagPipeline appends the shared ordered compile-flag
 // backbone used by the compose*CC variants. Callers keep ownership of
 // prologue/include slots and the language-specific tail.
-func appendCompileFlagPipeline(cmdArgs []string, bundle compileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, autoPeerCFlags []string) []string {
+func appendCompileFlagPipeline(cmdArgs []string, bundle compileFlagBundle, warningBundle, defineBundle, preNoLibcExtras []string) []string {
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
 	cmdArgs = append(cmdArgs, bundle.CFlags...)
@@ -679,7 +651,7 @@ func appendCompileFlagPipeline(cmdArgs []string, bundle compileFlagBundle, warni
 	cmdArgs = append(cmdArgs, preNoLibcExtras...)
 	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-	cmdArgs = appendAutoPeerAndCPUFeatures(cmdArgs, bundle, autoPeerCFlags)
+	cmdArgs = append(cmdArgs, bundle.CPUFeatures...)
 	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
 
 	return cmdArgs
@@ -695,7 +667,7 @@ func composeTargetCC(a ccComposeArgs) []string {
 	// rest are the platform/source-variable slices, counted at their append
 	// multiplicity (NoLibcBlock appears twice). Verified tight: max final
 	// length equals this cap, no call exceeds it.
-	argCap := 101 + len(a.OwnAddIncl) + len(a.PeerAddIncl) + len(a.OwnCFlags) + len(a.OwnExtras) + len(a.AutoPeerCFlags) + len(a.PeerExtras) + 2*len(a.OwnGlobalBucket) + len(a.PerSrcCFlags) + 4 +
+	argCap := 101 + len(a.OwnAddIncl) + len(a.PeerAddIncl) + len(a.OwnCFlags) + len(a.OwnExtras) + len(a.PeerExtras) + 2*len(a.OwnGlobalBucket) + len(a.PerSrcCFlags) + 4 +
 		len(bundle.ArchArgs) + len(bundle.CFlags) + len(bundle.Defines) + 2*len(bundle.NoLibcBlock) + len(bundle.CPUFeatures) + len(warningBundle)
 	cmdArgs := make([]string, 0, argCap)
 	cmdArgs = append(cmdArgs,
@@ -713,7 +685,7 @@ func composeTargetCC(a ccComposeArgs) []string {
 	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl, a.InclArgs)
 	cmdArgs = append(cmdArgs, ccIncludesSuffix...)
 	cmdArgs = appendAddIncl(cmdArgs, a.PeerAddIncl, a.InclArgs)
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningBundle, bundle.Defines, a.OwnCFlags, a.AutoPeerCFlags)
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningBundle, bundle.Defines, a.OwnCFlags)
 
 	// C sources: CONLYFLAGS (ownExtras) trails AFTER
 	// macroPrefixMapFlags — base64 neon32/64/plain32/64 CC nodes show
@@ -749,32 +721,6 @@ func composeTargetCC(a ccComposeArgs) []string {
 	cmdArgs = append(cmdArgs, a.InputPath)
 
 	return cmdArgs
-}
-
-// partitionPython3FromAutoPeer splits autoPeerCFlags into pre-SSE and
-// post-SSE halves for the HOST compose path. `-DUSE_PYTHON3` is
-// routed via defaultPeerCFlags but the host reference places it
-// AFTER hostSseFeatures (between -mcx16 and the 2nd ndebugPicBlock).
-// `-D_musl_` keeps its pre-SSE slot.
-func partitionPython3FromAutoPeer(autoPeer []string) ([]string, []string) {
-	if len(autoPeer) == 0 {
-		return autoPeer, nil
-	}
-
-	preSse := make([]string, 0, len(autoPeer))
-	var postSse []string
-
-	for _, f := range autoPeer {
-		if f == "-DUSE_PYTHON3" {
-			postSse = append(postSse, f)
-
-			continue
-		}
-
-		preSse = append(preSse, f)
-	}
-
-	return preSse, postSse
 }
 
 // appendAddIncl prepends `-I$(S)/` to each ADDINCL path and appends
