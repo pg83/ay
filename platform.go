@@ -336,6 +336,10 @@ func (p *Platform) ArchiverArgs() (string, string, string) {
 	return "ar", "GNU_AR", "None"
 }
 
+func (p *Platform) Musl() bool {
+	return p.Flags["MUSL"] == "yes"
+}
+
 func (p *Platform) UsesResourceClang() bool {
 	return strings.HasPrefix(p.Tools.CC, "$(") || strings.HasPrefix(p.Tools.CXX, "$(") || strings.HasPrefix(p.Tools.AR, "$(")
 }

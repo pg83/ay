@@ -98,10 +98,6 @@ func hoistRuntimeStackAddIncl(paths []VFS) []VFS {
 	return out
 }
 
-func defaultPeerdirsFor(ctx *genCtx, instance ModuleInstance, flags FlagSet, muslOn bool) []string {
-	return defaultPeerdirsForWithState(ctx, instance, flags, muslOn)
-}
-
 func defaultPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
 	inst := instance
 
@@ -123,7 +119,7 @@ func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, flags Fla
 		flags:             flags,
 		noPlatform:        noPlatform,
 		isRuntimeAncestor: isRuntimeAncestor(instance.Path),
-		muslOn:            muslOn,
+		muslOn:            muslOn && !noPlatform,
 	}
 
 	if rc.isRuntimeAncestor {
@@ -219,7 +215,7 @@ var unitImplicitPeers = []implicitPeerRule{
 		name: "musl/include",
 		peer: "contrib/libs/musl/include",
 		predicate: func(rc implicitPeerCtx) bool {
-			return rc.muslOn && !rc.noPlatform
+			return rc.muslOn
 		},
 	},
 }
@@ -279,11 +275,11 @@ var programAllocatorDefaults = []implicitPeerRule{
 	},
 }
 
-func defaultProgramPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData, includeMusl bool) []string {
-	return defaultProgramPeerdirsForWithState(ctx, instance, d.flags, d.hadAllocator, d.allocatorName, d.muslLite, includeMusl, d.muslEnabled)
+func defaultProgramPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData, postUser bool) []string {
+	return defaultProgramPeerdirsForWithState(ctx, instance, d.flags, d.hadAllocator, d.allocatorName, d.muslLite, postUser, d.muslEnabled)
 }
 
-func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, flags FlagSet, hadAllocator bool, allocatorName string, muslLiteOverride bool, includeMusl bool, muslOn bool) []string {
+func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, flags FlagSet, hadAllocator bool, allocatorName string, muslLiteOverride bool, postUser bool, muslOn bool) []string {
 	if instance.Language != LangCPP {
 		return nil
 	}
@@ -293,7 +289,7 @@ func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, fl
 
 	rc := implicitPeerCtx{
 		flags:         flags,
-		muslOn:        muslOn,
+		muslOn:        muslOn && !effectiveNoPlatform(flags),
 		muslLite:      muslLite,
 		osLinux:       env.Bool("OS_LINUX"),
 		archX8664:     env.Bool("ARCH_X86_64"),
@@ -303,7 +299,7 @@ func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, fl
 
 	var peers []string
 
-	if !includeMusl {
+	if !postUser {
 
 		peers = append(peers, "build/cow/on")
 

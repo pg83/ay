@@ -309,7 +309,7 @@ func composeProgramLinkTrailer(p *Platform, dynamicPaths []VFS, peerLDFlagsGloba
 		linkPrelude = append(linkPrelude, "-Wl,--compress-debug-sections=zstd")
 	}
 	systemLibs := []string{"-nostdlib", "-lm"}
-	if p == nil || p.Flags["MUSL"] != "yes" {
+	if p == nil || !p.Musl() {
 		linkPrelude = append(linkPrelude, "-ldl", "-lrt")
 		systemLibs = []string{"-nodefaultlibs", "-lpthread", "-lc", "-lm"}
 	}
