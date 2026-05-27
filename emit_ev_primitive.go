@@ -1,21 +1,6 @@
 package main
 
-// ev.go — emitter for EV (event-log .ev → .ev.pb.cc/.ev.pb.h) nodes.
-//
-// Structurally identical to PB but appends three extra cmd_args for the
-// event2cpp protoc plugin, and uses .ev.pb.cc/.ev.pb.h outputs (cc first).
-//
-// inputs = [cpp_styleguide, protoc, event2cpp, cpp_proto_wrapper.py,
-//   $(S)/<module_dir>/<src>, ...transitive imports..., descriptor.proto?]
-// Transitive imports come from scanning `import "..."` lines (then
-// recursing). events_extension.proto + descriptor.proto are reached
-// transitively. deps and foreign_deps["tool"] carry all three host LD refs.
-
 const (
-	// evEvent2cppModule is the ya.make path walked for the event2cpp host
-	// LD. tools/event2cpp/ya.make uses INCLUDE() which we don't expand;
-	// tools/event2cpp/bin/ya.make holds the PROGRAM declaration.
-	// ldBinaryDir lifts the output dir back to tools/event2cpp.
 	evEvent2cppModule = "tools/event2cpp/bin"
 )
 
@@ -24,10 +9,6 @@ var (
 	evEventlogIncludePath = evEventlogIncludeVFS.String()
 )
 
-// eventRuntimeHeaders is the SOURCE_ROOT header subset present in every
-// .ev.pb.cc CC node (intersection across reference consumers). Registered
-// as EmitsIncludes on the .ev.pb.h output so the scanner closure
-// propagates them into all .ev.pb.h consumers. Sorted lexicographically.
 var eventRuntimeHeaders = []VFS{
 	Intern("$(S)/library/cpp/eventlog/event_field_output.h"),
 	Intern("$(S)/library/cpp/eventlog/event_field_printer.h"),
@@ -99,9 +80,6 @@ var eventRuntimeHeaders = []VFS{
 	Intern("$(S)/util/system/yassert.h"),
 }
 
-// evExtraProtobufHeaders is the .ev.pb.h-specific protobuf header subset
-// appearing only in CC consumers of event-generated headers (from
-// event2cpp's reflection codegen + plugin scaffolding). Sorted lex.
 var evExtraProtobufHeaders = []VFS{
 	Source(pbRuntimeBase + "google/protobuf/io/printer.h"),
 	Source(pbRuntimeBase + "google/protobuf/io/zero_copy_sink.h"),
@@ -110,19 +88,11 @@ var evExtraProtobufHeaders = []VFS{
 	Source(pbRuntimeBase + "google/protobuf/stubs/strutil.h"),
 }
 
-// evAbseilCleanupHeaders is the abseil RAII-cleanup pair propagated through
-// every .ev.pb.h to its CC consumers (verified in sg2.json).
 var evAbseilCleanupHeaders = []VFS{
 	Intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/cleanup.h"),
 	Intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
 }
 
-// evWitnessExtras returns the .ev.pb.h-specific witness inputs propagated
-// through every .ev.pb.h to its CC consumers: cpp_proto_wrapper.py,
-// descriptor.proto, the .ev source, the companion .ev.pb.cc,
-// pbDescriptorImporterHeaders, evExtraProtobufHeaders, and
-// evAbseilCleanupHeaders. Every .ev imports descriptor.proto
-// transitively, so no source-scan is needed.
 func evWitnessExtras(evRelPath string, evPbCC VFS) []includeDirective {
 	out := make([]includeDirective, 0,
 		3+len(pbDescriptorImporterHeaders)+len(evExtraProtobufHeaders)+len(evAbseilCleanupHeaders))
@@ -143,7 +113,6 @@ func evWitnessExtras(evRelPath string, evPbCC VFS) []includeDirective {
 	return out
 }
 
-// EmitEV emits an EV node for `evRelPath` (a SOURCE_ROOT-relative .ev path).
 func EmitEV(
 	instance ModuleInstance,
 	evRelPath string,
@@ -159,7 +128,6 @@ func EmitEV(
 ) NodeRef {
 	moduleDir := instance.Path
 
-	// EV outputs: .ev.pb.cc first, then .ev.pb.h (reference order).
 	evCC := Build(evRelPath + ".pb.cc")
 	evH := Build(evRelPath + ".pb.h")
 	srcVFS := Source(evRelPath)
@@ -192,7 +160,6 @@ func EmitEV(
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
-	// Build inputs: tool binaries + wrapper + source + transitive imports.
 	inputs := []VFS{
 		cppStyleguideBinary,
 		protocBinary,
@@ -211,7 +178,6 @@ func EmitEV(
 		targetProps["module_tag"] = *moduleTag
 	}
 
-	// deps and foreign_deps carry all three tool refs.
 	var depRefs []NodeRef
 	var foreignDepRefs map[string][]NodeRef
 

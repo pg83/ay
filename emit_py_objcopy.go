@@ -9,9 +9,6 @@ import (
 	"strings"
 )
 
-// objcopyEmitResult collects the emitted objcopy node refs and output
-// `$(B)/...objcopy_*.o` paths. The objects ride into the consumer LD's
-// SRCS_GLOBAL slot; the archive itself carries no member source closure.
 type objcopyEmitResult struct {
 	Refs    []NodeRef
 	Outputs []VFS
@@ -22,9 +19,7 @@ func emitResourceObjcopy(
 	instance ModuleInstance,
 	d *moduleData,
 ) *objcopyEmitResult {
-	// Emit kv_only sibling shapes (PY_MAIN, py/namespace,
-	// py/no_check_imports) alongside RESOURCE/RESOURCE_FILES. Each
-	// sibling is independent and conditional on its own per-module data.
+
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
 		return nil
@@ -35,20 +30,10 @@ func emitResourceObjcopy(
 
 	out := &objcopyEmitResult{}
 
-	// kv_only siblings — each fires only when its trigger is present.
-	// PY_MAIN fires BEFORE py/namespace (upstream pybuild.py:395-398
-	// invokes py_main first; namespace is emitted at pybuild.py:587-594).
-	// Order affects the LD cmd[2] SRCS_GLOBAL emission sequence.
 	if nodeRes := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); nodeRes != nil {
 		out.Refs = append(out.Refs, nodeRes.Ref)
 		out.Outputs = append(out.Outputs, nodeRes.Out)
 	}
-
-	// py/namespace objcopy nodes are emitted by emitPySrcObjcopy, interleaved
-	// before each PY_SRCS group's py-source chunks (matches ya.make macro
-	// evaluation order: pybuild.py:587-594 emits the namespace resource
-	// immediately ahead of that group's resfs entries, and RESOURCE-class
-	// macros precede the PY_SRCS macros).
 
 	if nodeRes := emitNoCheckImportsObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); nodeRes != nil {
 		out.Refs = append(out.Refs, nodeRes.Ref)
@@ -61,8 +46,7 @@ func emitResourceObjcopy(
 	}
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 {
-		// Per-PY_SRCS resfs entry objcopy nodes. One node per packer-flush
-		// chunk; large modules (Lib, lib2/py) split via chunkPySrcEntries.
+
 		srcRes := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
 		if srcRes != nil {
 			out.Refs = append(out.Refs, srcRes.Refs...)
@@ -72,8 +56,6 @@ func emitResourceObjcopy(
 		return out
 	}
 
-	// Filter rejected entries (mirrors objcopy.h:84-96 CanHandle):
-	// drop entries whose path or name contains the BAD substrings.
 	bad := []string{"${ARCADIA_BUILD_ROOT}", "${ARCADIA_SOURCE_ROOT}", "conftest.py"}
 	contains := func(s string) bool {
 		for _, b := range bad {
@@ -89,9 +71,9 @@ func emitResourceObjcopy(
 		paths       []string
 		pathInputs  []VFS
 		extraInputs []VFS
-		kvInputs    []VFS // input=TEXT files from kv-only entries (graph inputs only, not --inputs)
+		kvInputs    []VFS
 		pathDeps    []NodeRef
-		keys        []string // base64-encoded (padded) keys for path entries
+		keys        []string
 		kvs         []string
 		cmdLen      int
 	}
@@ -152,9 +134,6 @@ func emitResourceObjcopy(
 			inputs = append(inputs, cur.extraInputs...)
 		}
 
-		// Fold in kv input=TEXT files not already present (path entries for
-		// non-straddling files dedup away; only the chunk-straddle file —
-		// kv in this chunk, path+key in the next — is genuinely new).
 		inputSeen := make(map[VFS]struct{}, len(inputs))
 		for _, p := range inputs {
 			inputSeen[p] = struct{}{}
@@ -172,9 +151,6 @@ func emitResourceObjcopy(
 			objcopyTags = append(objcopyTags, instance.Platform.Tags...)
 		}
 
-		// RESOURCE/RESOURCE_FILES objcopy nodes carry the same module_tag
-		// as the kv-only/PY_SRCS objcopy nodes: PY23 library variants → py3,
-		// PY3_PROGRAM → py3_bin. PY3_LIBRARY and non-PY modules emit none.
 		resTargetProps := map[string]string{"module_dir": instance.Path}
 		if d.moduleStmt != nil {
 			switch d.moduleStmt.Name {
@@ -243,12 +219,7 @@ func emitResourceObjcopy(
 				if e.Path == "-" {
 					cur.kvs = append(cur.kvs, e.Key)
 					cur.cmdLen += rootCmdLen + len(e.Key)
-					// The `resfs/src/...=${rootrel;...;input=TEXT:"P"}` kv
-					// (RESOURCE_FILES) registers P as a graph input via the
-					// input=TEXT modifier. Upstream lists P in inputs[] even
-					// when this kv lands in a different chunk than P's path+key
-					// add (chunk straddle). flush() folds these into inputs[]
-					// (deduped), but never into --inputs/__PATHS.
+
 					if inner, ok := rootrelInputPath(e.Key); ok {
 						cur.kvInputs = append(cur.kvInputs, Source(instance.Path+"/"+inner))
 					}
@@ -292,9 +263,6 @@ func emitResourceObjcopy(
 	return out
 }
 
-// objcopyEmit is the emit-product of a single kv-only objcopy sub-emitter
-// (PY_MAIN / namespace / no_check_imports). nil = trigger absent on this
-// module -> nothing emitted; non-nil = (NodeRef, output path) pair.
 type objcopyEmit struct {
 	Ref NodeRef
 	Out VFS
@@ -398,10 +366,6 @@ func emitYaConfJSONObjcopy(
 		hashPath   string
 	}
 
-	// Member order: the YA_CONF_JSON file resource first, then its formula
-	// resources sorted lexicographically by full formula path. Matches the
-	// REF .global.a cmd_args order; emission order is what the normalizer
-	// preserves (inputs/deps are sorted, cmds are not).
 	var resources []yaConfResource
 	for _, file := range d.yaConfJSON {
 		resources = append(resources, yaConfResource{
@@ -493,13 +457,6 @@ func emitYaConfJSONObjcopy(
 	return out
 }
 
-// emitPyNamespaceForGroup emits the `py/namespace/<mod_list_md5>/<unit>=<ns>.`
-// kv objcopy node for a single PY_SRCS group (pybuild.py:587-594). The
-// mod_list_md5 is a streaming md5 over each source's dotted `mod` UTF-8
-// bytes in declaration order. Returns nil when the group carries no `.py`
-// sources. The module-level namespace guards (noExtendedPySearch,
-// contrib/python*, contrib/tools/python3*, resourceModuleTag) are checked
-// by the caller (emitPySrcObjcopy) before invoking this.
 func emitPyNamespaceForGroup(
 	ctx *genCtx,
 	instance ModuleInstance,
@@ -547,8 +504,6 @@ func emitPyNamespaceForGroup(
 	return emitKvOnlyObjcopyNode(ctx, instance, []string{kvHash}, []string{kvCmd}, d, rescompilerLDRef, rescompressorLDRef)
 }
 
-// emitPyMainObjcopy emits the `PY_MAIN=<dotted>:<func>` kv objcopy node
-// per pybuild.py:759.
 func emitPyMainObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
@@ -564,8 +519,6 @@ func emitPyMainObjcopy(
 	return emitKvOnlyObjcopyNode(ctx, instance, []string{kv}, []string{kv}, d, rescompilerLDRef, rescompressorLDRef)
 }
 
-// emitNoCheckImportsObjcopy emits the
-// `py/no_check_imports/<pathid>=<args-space-joined>` kv objcopy node.
 func emitNoCheckImportsObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
@@ -588,9 +541,6 @@ func emitNoCheckImportsObjcopy(
 	return emitKvOnlyObjcopyNode(ctx, instance, []string{kvHash}, []string{kvCmd}, d, rescompilerLDRef, rescompressorLDRef)
 }
 
-// emitPySrcObjcopy emits one objcopy PY node per chunk of PY_SRCS-derived
-// resfs entries. Skipped when no PY_SRCS or when all entries are
-// suppressed by PYBUILD_NO_PY + PYBUILD_NO_PYC.
 func emitPySrcObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
@@ -610,11 +560,6 @@ func emitPySrcObjcopy(
 		groups = []pySrcGroup{{Srcs: d.pySrcs, TopLevel: d.pyTopLevel, Namespace: d.pyNamespace}}
 	}
 
-	// Per-group namespace objcopy nodes interleave ahead of that group's
-	// py-source chunks. The namespace guard set differs from the chunk
-	// guard: PY3_PROGRAM emits chunks but no namespace (resourceModuleTag
-	// returns nil for it), and noExtendedPySearch / contrib/python* /
-	// contrib/tools/python3* suppress only the namespace.
 	namespaceEnabled := !d.noExtendedPySearch &&
 		!strings.HasPrefix(instance.Path, "contrib/python") &&
 		!strings.HasPrefix(instance.Path, "contrib/tools/python3") &&

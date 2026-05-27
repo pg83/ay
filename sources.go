@@ -1,29 +1,15 @@
 package main
 
-// sources.go — helper layer for per-source dispatch and include-closure
-// composition used by emit_sources.go.
-
 import (
 	"path/filepath"
 )
 
-// joinSrcsIncludeClosure walks the include graph for a JOIN_SRCS
-// member set with a SHARED visited set across members, mirroring the
-// joined compile so total work is O(union closure).
-//
-// `scanPlatform` chooses scanner + sysincl ISA independently of
-// srcInstance.Platform so a JS-target override can resolve against
-// target-arch peer ADDINCL during a host-axis walk.
 func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerForPlatform(scanPlatform)
 	if scanner == nil {
 		return nil
 	}
 
-	// JOIN_SRCS walks are top-level and non-recursive (each member uses dfsID
-	// with the shared visited; nothing here re-enters WalkClosure or this
-	// function), so all calls can borrow the SAME idSet from the scanner pool
-	// instead of each allocating a fresh ~vfsBound-sized backing array.
 	visited := scanner.visitedIDPool.Get().(*idSet)
 	visited.reset(vfsBound())
 	defer scanner.visitedIDPool.Put(visited)
@@ -93,8 +79,6 @@ func appendVFSUnique(dst []VFS, src []VFS) []VFS {
 	return dst
 }
 
-// jsCCIncludeInputs assembles `[scripts..., sources..., closure...]`
-// for the JS-derived CC's include-inputs slot.
 func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []VFS) []VFS {
 	out := make([]VFS, 0, 2+len(sources)+len(closure))
 	out = append(out, Intern("$(S)/build/scripts/gen_join_srcs.py"))
@@ -109,12 +93,6 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []V
 	return out
 }
 
-// resolveSourceVFS composes the `$(S)/...` VFS path of a SRCS-declared
-// source with SRCDIR-aware fallback: when SRCDIR is set and no local
-// file exists at instance.Path/<srcRel>, resolve under SRCDIR.
-// Registration-time resolution — feeds path composition, not scanner
-// dispatch. The joined path is path-cleaned so `crypto/../asm/...`
-// collapses to `asm/...` (openssl AS sources use this form).
 func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDir *string) VFS {
 	srcRelOnDisk := srcInstance.Path + "/" + srcRel
 
@@ -128,18 +106,10 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 	return Source(srcRelOnDisk)
 }
 
-// walkClosure resolves the transitive include closure of a source
-// rooted at any VFS path — `$(S)/...` for FS-resident sources or
-// `$(B)/...` for codegen outputs registered in the CodegenRegistry.
-// Scanner's locator dispatches FS-vs-codegen internally. ScanContext
-// mirrors cmd_args -I: own AddIncl + peer GLOBAL AddIncl + the small
-// scanner-only baseline for bundled fallbacks (repo-root + linux-headers).
 func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
 	return walkClosureWithSourceRel(ctx, srcInstance, vfsPath, vfsPath.Rel(), in)
 }
 
-// walkClosureWithSourceRel returns the headers-only closure (root excluded):
-// the [1:] view of walkClosureRoot's primary-first slice.
 func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourceRel string, in ModuleCCInputs) []VFS {
 	full := walkClosureRoot(ctx, srcInstance, vfsPath, sourceRel, in)
 	if full == nil {
@@ -148,10 +118,6 @@ func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath V
 	return full[1:]
 }
 
-// walkClosureRoot is the primary-first driver: [vfsPath, ...headers], or nil
-// when the module has no scanner. The regular-source path adopts the full
-// slice as node.Inputs (ModuleCCInputs.NodeInputs); every other caller takes
-// the [1:] headers-only view via walkClosure/walkClosureWithSourceRel.
 func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourceRel string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerFor(srcInstance)
 	if scanner == nil {
@@ -168,13 +134,6 @@ func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourc
 	return scanner.NewScanCtx(cfg).WalkClosure(vfsPath)
 }
 
-// includeScannerBasePaths returns the scanner baseline NOT expected to
-// arrive via module/peer ADDINCL: a repo-root fallback (empty prefix,
-// mirrors `-I$(S)`) plus bundled linux-headers.
-//
-// Musl include roots are intentionally absent — upstream models them
-// through ordinary module/peer ADDINCL, so musl-self-only paths
-// (`src/include`, `src/internal`) never leak into arbitrary consumers.
 func includeScannerBasePaths() []VFS {
 	return []VFS{
 		Intern("$(S)/"),

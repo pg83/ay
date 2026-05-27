@@ -5,11 +5,8 @@ import (
 	"sort"
 )
 
-// emitExplicitCF emits a CF node for an explicit CONFIGURE_FILE(src dst)
-// declaration (not triggered by a .cpp.in source in SRCS).
 func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *moduleData, reg *CodegenRegistry) {
-	// Build a minimal ModuleCCInputs for the header-closure walk — only
-	// the scanner context matters; the compilation flags are not used.
+
 	in := ModuleCCInputs{
 		InclArgs:        ctx.inclArgs,
 		Flags:           d.flags,
@@ -28,13 +25,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	cfRef, cfOut := EmitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path, ctx.emit)
 
 	if reg != nil {
-		// The generated header carries its generation inputs (the .in
-		// template + configure_file.py) as parsed includes, so every CC
-		// that #includes it inherits them in its input closure — matching
-		// the SRCS .cpp.in/.h.in path (emit_sources.go) and ymake's
-		// transitive-input semantics. The template's own quoted #includes
-		// follow (empty for pure @VAR@ headers like config.h /
-		// protocol_version_variables.h).
+
 		parsed := []includeDirective{
 			{kind: includeQuoted, target: internString(srcVFS.Rel())},
 			{kind: includeQuoted, target: internString(configureFilePyVFS.Rel())},
@@ -44,11 +35,6 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	}
 }
 
-// cfIncludeDirectives returns the `#include "..."` directives of a
-// configure_file template (.cpp.in / .c.in) by reading the c parser's
-// already-cached `parsedIncludesLocal` bucket and filtering to quoted
-// entries (system includes resolve via the compiler search path, not
-// via the codegen registry).
 func cfIncludeDirectives(pm *includeParserManager, rel string) []includeDirective {
 	raw := pm.sourceParsedBuckets(Source(rel)).bucket(parsedIncludesLocal)
 	out := make([]includeDirective, 0, len(raw))
@@ -65,21 +51,10 @@ func cfIncludeDirectives(pm *includeParserManager, rel string) []includeDirectiv
 	return out
 }
 
-// cfgVarRefRe matches @VAR_NAME@ substitution markers in .in template files.
 var cfgVarRefRe = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
 
-// cfgCmakeDefineRe matches `#cmakedefine VAR` and `#cmakedefine01 VAR`
-// markers (configure_file.py handles both). ymake scans the template
-// textually for $CFG_VARS, so it picks these up regardless of any
-// surrounding `#ifdef` (e.g. config.h.in's `#ifdef __x86_64__` guard).
 var cfgCmakeDefineRe = regexp.MustCompile(`#cmakedefine(?:01)?[ \t]+([A-Z_][A-Z0-9_]*)`)
 
-// buildCFGVars filters the module's SET/DEFAULT declarations to vars
-// actually referenced in the .in template at rel — as `@VAR@` or
-// `#cmakedefine[01] VAR` — and emits `NAME=value` sorted alphabetically
-// (ymake's $CFG_VARS order). SET overrides DEFAULT. @BUILD_TYPE@ with no
-// declaration falls back to DEBUG. Reads the template via fs at the
-// walker layer — primitive emitters never touch FS.
 func buildCFGVars(fs *FS, rel string, setVars, defaultVars map[string]string) []string {
 	referenced := map[string]bool{}
 

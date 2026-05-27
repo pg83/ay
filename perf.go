@@ -9,12 +9,6 @@ import (
 	"time"
 )
 
-// cmdPerf hosts micro-benchmarks over a real source tree.
-//
-//	ay perf parser <dir>   time parseCIncludes over every C/C++ source under dir
-//
-// Honours YATOOL_CPUPROFILE / YATOOL_MEMPROFILE for profiling the parser in
-// isolation.
 func cmdPerf(args []string) int {
 	if len(args) < 2 || args[0] != "parser" {
 		fmt.Fprintln(os.Stderr, "usage: ay perf parser <dir>")
@@ -28,8 +22,6 @@ func cmdPerf(args []string) int {
 	return perfParser(args[1])
 }
 
-// cParserSource reports whether path is a C/C++ source the include parser
-// handles — the bulk of the scan.
 func cParserSource(path string) bool {
 	switch {
 	case strings.HasSuffix(path, ".cpp"),
@@ -45,9 +37,6 @@ func cParserSource(path string) bool {
 	return false
 }
 
-// perfParser reads every C/C++ source under dir into memory, then loops
-// parseCIncludes over them (after a warm-up pass) for a few seconds so a CPU
-// profile reflects steady-state parsing rather than I/O.
 func perfParser(dir string) int {
 	var (
 		datas [][]byte
@@ -68,7 +57,7 @@ func perfParser(dir string) int {
 		return nil
 	}))
 
-	for _, b := range datas { // warm the intern table
+	for _, b := range datas {
 		parseCIncludes(b)
 	}
 

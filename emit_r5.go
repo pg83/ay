@@ -2,10 +2,6 @@ package main
 
 import "strings"
 
-// EmitR5 emits an R5 node (two cmds: ragel5 → .tmp; rlgen-cd → .rl5.cpp).
-// tmpPath = $(B)/<modulePath>/<srcRel>.tmp
-// cppPath = $(B)/<modulePath>/<srcRel without .rl>.rl5.cpp
-// Returns (R5 NodeRef, tmpPath, cppPath).
 func EmitR5(
 	instance ModuleInstance,
 	srcRel string,

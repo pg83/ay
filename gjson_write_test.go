@@ -6,23 +6,6 @@ import (
 	"testing"
 )
 
-// gjson_write_test.go — pin writeGraphIndented to json.Encoder's
-// SetEscapeHTML(false) + SetIndent("", "    ") (4-space) byte-exact behaviour.
-// PR-L4-C/02 changed indent from 2 to 4 spaces; stdlib reference updated here.
-//
-// The fixture below covers every code path in gjson_write.go:
-//   - empty graph slice, non-empty graph slice with multiple nodes;
-//   - empty result slice, non-empty result slice;
-//   - Cmd with and without Cwd; Cmd with empty/non-empty CmdArgs and Env;
-//   - Node with HostPlatform on/off, ForeignDeps present/absent;
-//   - empty and non-empty maps for env / kv / target_properties;
-//   - string escapes: '"', '\\', '\b', '\f', '\n', '\r', '\t', 0x01,
-//     0x1f, U+2028, U+2029;
-//   - Requirements values float64(int-valued), float64(non-integer),
-//     string, bool true/false;
-//   - HTML-special bytes '<', '>', '&' that must NOT be escaped (D16
-//     constraint — UID-hash and on-disk bytes must agree).
-
 func encodeWithStdlib(g *Graph) []byte {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -30,8 +13,6 @@ func encodeWithStdlib(g *Graph) []byte {
 	enc.SetIndent("", "    ")
 	Throw(enc.Encode(g))
 
-	// The stdlib encoder always appends a trailing '\n'; strip it to match
-	// writeGraphIndented's no-trailing-newline contract (PR-L4-C/03).
 	b := buf.Bytes()
 	if len(b) > 0 && b[len(b)-1] == '\n' {
 		b = b[:len(b)-1]
@@ -47,9 +28,6 @@ func encodeWithHandRolled(g *Graph) []byte {
 	return buf.Bytes()
 }
 
-// TestWriteGraphIndented_ByteExact covers the full feature surface in
-// one fixture. A failure dumps a diff window so regressions are easy to
-// localise.
 func TestWriteGraphIndented_ByteExact(t *testing.T) {
 	g := &Graph{
 		Conf: map[string]interface{}{
@@ -127,7 +105,7 @@ func TestWriteGraphIndented_ByteExact(t *testing.T) {
 	got := encodeWithHandRolled(g)
 
 	if !bytes.Equal(want, got) {
-		// Find the first divergence.
+
 		minLen := len(want)
 		if len(got) < minLen {
 			minLen = len(got)
@@ -163,8 +141,6 @@ func TestWriteGraphIndented_ByteExact(t *testing.T) {
 	}
 }
 
-// TestWriteGraphIndented_EmptyGraph pins the empty-graph edge case
-// (Graph slice empty but non-nil, Result slice empty).
 func TestWriteGraphIndented_EmptyGraph(t *testing.T) {
 	g := &Graph{
 		Conf:   map[string]interface{}{},

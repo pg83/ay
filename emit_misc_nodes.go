@@ -5,16 +5,10 @@ import (
 	"strings"
 )
 
-// emitMiscNodes emits all module-level JV, CF, BI, PR nodes. With
-// non-nil consumerInputs, also emits the downstream CP+CC chain for
-// each JV grammar .cpp output, returning per-CC (refs, outputs) for the
-// caller's AR-member accumulators.
 func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS) {
 	outPrefix := instance.Path + "/"
 	reg := codegenRegForInstance(ctx, instance)
 
-	// CF: explicit CONFIGURE_FILE outputs must exist before generic
-	// RUN_ANTLR[4] nodes consume their configured grammar/templates.
 	for _, cf := range d.configureFiles {
 		emitExplicitCF(ctx, instance, cf, d, reg)
 	}
@@ -23,14 +17,10 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 	ccRefs = append(ccRefs, antlrCCRefs...)
 	ccOutputs = append(ccOutputs, antlrCCOutputs...)
 
-	// JV: emit one node per ANTLR4 grammar declaration.
 	for _, g := range d.antlr4Grammars {
 		if g.IsSplit {
 			jvRef := EmitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ctx.emit)
-			// Generated .h witness set: antlr4-runtime.h, sibling .cpp,
-			// stdout2stderr.py, antlr.jar, and the .g4 sources.
-			// ProducerRef = jvRef so consumer CC reaching a JV-generated
-			// .h transitively threads JV into deps[].
+
 			lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 			if reg != nil {
@@ -61,7 +51,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					registerBoundGeneratedParsedOutput(ctx, instance, "JV", Build(outPrefix+suffix), parsed, jvRef)
 				}
 			}
-			// Emit CP+CC for each grammar .cpp output.
+
 			if consumerInputs != nil {
 				jvInputs := []VFS{
 					Source(instance.Path + "/" + g.Lexer),
@@ -80,7 +70,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			}
 		} else {
 			jvRef := EmitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ctx.emit)
-			// Same witness set as the split path; ProducerRef = jvRef.
+
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 			if reg != nil {
 				grammarG4 := Source(instance.Path + "/" + g.Grammar)
@@ -108,7 +98,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					registerBoundGeneratedParsedOutput(ctx, instance, "JV", Build(outPrefix+suffix), parsed, jvRef)
 				}
 			}
-			// Emit CP+CC for each grammar .cpp output.
+
 			if consumerInputs != nil {
 				jvInputs := []VFS{
 					Source(instance.Path + "/" + g.Grammar),
@@ -127,13 +117,9 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		}
 	}
 
-	// BI: emit one node when CREATE_BUILDINFO_FOR was declared.
 	if d.createBuildInfoFor != nil {
 		biRef := EmitBI(instance, *d.createBuildInfoFor, biFlagsForInstance(instance.Platform), ctx.emit)
-		// Register BI output (buildinfo_data.h). The BI-script trio
-		// (build_info_gen.py + xargs.py + yield_line.py) flows up into
-		// CC consumers via EmitsIncludes. ProducerRef = biRef so the
-		// consumer CC carries BI in deps[].
+
 		if reg != nil {
 			registerBoundGeneratedParsedOutput(ctx, instance, "BI", Build(outPrefix+*d.createBuildInfoFor), []includeDirective{
 				{kind: includeQuoted, target: internString(buildInfoGenPyVFS.Rel())},
@@ -143,9 +129,6 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		}
 	}
 
-	// RUN_PROGRAM emission lives in emitRunProgramsForAR (gen.go) —
-	// ahead of AR so PR outputs with CC-compilable extensions can be
-	// threaded into the module's AR member list. No-op here.
 	_ = d.runPrograms
 	return
 }

@@ -5,17 +5,6 @@ import (
 	"testing"
 )
 
-// vfs_bench_test.go — microbenchmarks for the VFS-keyed map perf
-// regression hypothesis. Compares:
-//   - map[string]struct{} access via the "$(S)/<rel>" key
-//     (PREV scanner shape).
-//   - map[VFS]struct{} access where VFS = struct{Root uint8; Rel string}
-//     (HEAD scanner shape).
-//
-// Both maps hold the same number of entries with the same rel strings;
-// the lookup pattern is the same. Measures cumulative ns/op and
-// allocs/op via Go's testing.B.
-
 const bvN = 5000
 
 func bvKeys() []string {
@@ -81,9 +70,6 @@ func BenchmarkMapAccess_VFSStructKey(b *testing.B) {
 	}
 }
 
-// BenchmarkMapAccess_VFSStructKey_ConstructedAtProbe simulates the
-// scanner shape where the probe key is constructed inside the hot
-// loop (Source(rel) per lookup) rather than precomputed.
 func BenchmarkMapAccess_VFSStructKey_ConstructedAtProbe(b *testing.B) {
 	keys := bvKeys()
 	m := make(map[VFS]struct{}, bvN)
@@ -99,8 +85,6 @@ func BenchmarkMapAccess_VFSStructKey_ConstructedAtProbe(b *testing.B) {
 	}
 }
 
-// BenchmarkMapAccess_StringKey_ConstructedAtProbe simulates the alt
-// shape: keep map[string], but build the key via concat at each probe.
 func BenchmarkMapAccess_StringKey_ConstructedAtProbe(b *testing.B) {
 	keys := bvKeys()
 	m := make(map[string]struct{}, bvN)
@@ -116,10 +100,6 @@ func BenchmarkMapAccess_StringKey_ConstructedAtProbe(b *testing.B) {
 	}
 }
 
-// --- 2-bucket VFS map prototypes ---
-
-// vfsMapNonGeneric: hand-rolled, fixed value type (struct{}). Establishes
-// the upper bound — what the dispatched lookup costs with no generics.
 type vfsMapNonGeneric [2]map[string]struct{}
 
 func newVFSMapNonGeneric(cap int) vfsMapNonGeneric {
@@ -134,8 +114,6 @@ func (m vfsMapNonGeneric) Has(v VFS) bool {
 }
 func (m vfsMapNonGeneric) Add(v VFS) { m[v.Root()-1][v.Rel()] = struct{}{} }
 
-// vfsMap[T] generic wrapper. Each instantiation specialises to a
-// concrete map[string]T; lookups should land on mapaccess2_faststr.
 type vfsMap[T any] [2]map[string]T
 
 func newVFSMap[T any](cap int) vfsMap[T] {
@@ -186,9 +164,6 @@ func BenchmarkMapAccess_VFS2Bucket_Generic(b *testing.B) {
 	}
 }
 
-// BenchmarkMapAccess_VFS2Bucket_Inline: bypass method, do the dispatch
-// inline. Establishes the absolute floor — what the bucket-dispatch
-// shape costs with zero indirection.
 func BenchmarkMapAccess_VFS2Bucket_Inline(b *testing.B) {
 	keys := bvKeys()
 	var m [2]map[string]struct{}
@@ -210,9 +185,6 @@ func BenchmarkMapAccess_VFS2Bucket_Inline(b *testing.B) {
 	}
 }
 
-// ParseVFSOrSource is a test-only shim for legacy fixtures that still
-// spell VFS values either as canonical "$(S)/..." / "$(B)/..." strings
-// or as bare source-relative paths.
 func ParseVFSOrSource(s string) VFS {
 	if vfsHasPrefix(s) {
 		return Intern(s)
@@ -221,7 +193,6 @@ func ParseVFSOrSource(s string) VFS {
 	return Source(s)
 }
 
-// VFSesFromStrings is the bulk test helper variant of ParseVFSOrSource.
 func VFSesFromStrings(ss []string) []VFS {
 	out := make([]VFS, len(ss))
 	for i, s := range ss {
@@ -231,8 +202,6 @@ func VFSesFromStrings(ss []string) []VFS {
 	return out
 }
 
-// ToVFSSlice keeps old emitter/node test fixtures readable without
-// forcing every literal to be rewritten during production refactors.
 func ToVFSSlice(ss []string) []VFS {
 	out := make([]VFS, len(ss))
 	for i, s := range ss {

@@ -1,30 +1,10 @@
 package main
 
-// configureFilePy is the source-relative path to the configure_file.py
-// script used in all CF nodes.
 var configureFilePyVFS = Intern("$(S)/build/scripts/configure_file.py")
 var configureFilePyPath = configureFilePyVFS.String()
 
-// buildTypeDebug is injected when @BUILD_TYPE@ is referenced but not
-// DEFAULT-declared. Hardcoded to DEBUG.
 const buildTypeDebug = "BUILD_TYPE=DEBUG"
 
-// EmitCF emits a CF node expanding a .cpp.in / .c.in template via
-// configure_file.py. Output strips the .in suffix.
-//
-// cmd_args: [python3, configure_file.py, <src>, <dst>, <cfgVars...>].
-// cfgVars derive from DEFAULT(name value) declarations filtered to
-// vars actually @VAR@-referenced in the .in; BUILD_TYPE=DEBUG is
-// injected when referenced but not DEFAULT-declared.
-//
-// Returns (CF NodeRef, outputPath). cfgVars is the pre-filtered
-// `NAME=VALUE` cmd-arg fragment list (walker computes via
-// buildCFGVars); includeInputs is the source-closure already walked
-// from the .in template. moduleDir is the target_properties module_dir:
-// the declaring module for compiled-in-place templates (.cpp.in/.c.in,
-// explicit CONFIGURE_FILE) but the consuming module for a generated
-// header realized by a peer (.h.in) — ymake attributes a generated
-// header to the module that #includes it.
 func EmitCF(
 	instance ModuleInstance,
 	srcVFS VFS,

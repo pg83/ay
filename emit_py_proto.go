@@ -99,8 +99,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	protoRoot := protoPythonOutputRoot(instance, d)
 	if d.grpc {
-		// gRPC python protos resolve imports from the repo root (protoc -I
-		// and --*_out roots are empty) and pull in protoc's own proto tree.
+
 		protoRoot = ""
 	}
 	pyBase := protoBase + "__intpy3___pb2.py"
@@ -196,10 +195,6 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		inputs = append(inputs, mypyBinary)
 	}
 
-	// ext_out_name_for_<mangled output basename> maps each mangled python
-	// proto output back to its de-namespaced name (e.g.
-	// any__intpy3___pb2.py → any_pb2.py). outputs[i] aligns with
-	// suffixes[i] by construction above.
 	pbKV := map[string]interface{}{"p": "PB", "pc": "yellow"}
 	protoBaseName := filepath.Base(protoBase)
 	for i, out := range outputs {
@@ -223,8 +218,6 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 	pyPBRef := ctx.emit.Emit(bindNodePlatform(pyPBNode, instance.Platform))
 
-	// yapyc compiles only the .py outputs (pyOut + grpc stub), never the .pyi
-	// type stub; build that subset explicitly rather than with a zero sentinel.
 	pyYapyc := []VFS{pyOut}
 	if d.grpc {
 		pyYapyc = append(pyYapyc, grpcPyOut)
@@ -279,10 +272,6 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			toolRefs = append(toolRefs, py3ccSlowRef)
 		}
 
-		// The gRPC service stub (`_pb2_grpc.py`, pyOutputs[1]) imports the
-		// sibling message stub (`_pb2.py`, pyOutputs[0]); its bytecode compile
-		// lists that module as an input. The message stub has no such sibling
-		// dependency, so it is added only for the non-first (grpc) output.
 		nodeInputs := append([]VFS{py3ccBinary, py3ccSlowBin, pyOut}, sourceInputs...)
 		if i > 0 {
 			nodeInputs = append(nodeInputs, pyOutputs[0])
@@ -436,10 +425,6 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 	}
 	flush()
 
-	// _PY3_PROTO peers its CPP_PROTO sibling (.PEERDIRSELF=CPP_PROTO,
-	// proto.conf:940), so the sibling's GLOBAL ADDINCL closure (proto C++
-	// peers: grpc/abseil/c-ares/openssl/re2/protobuf, grouped) precedes the
-	// module's own peer closure (contrib/libs/python's transitive includes).
 	peerAddIncl := peerContribs.addIncl
 	if cppSibling != nil {
 		peerAddIncl = mergeDedupVFS(cppSibling.AddInclGlobal, peerContribs.addIncl)

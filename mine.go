@@ -10,14 +10,6 @@ import (
 	"strings"
 )
 
-// mine.go — toolchain discovery and flag mining.
-//
-// Resolves a fixed set of programs via $PATH and projects them into the
-// ymake-style flag namespace (BUILD_PYTHON_BIN, CLANG_TOOL,
-// CLANG_pl_pl_TOOL, etc.).
-
-// mineTools resolves each tool's absolute path via exec.LookPath.
-// Missing tools throw; the full set is required, no partial discovery.
 func mineTools() map[string]string {
 	names := []string{
 		"clang",
@@ -34,9 +26,6 @@ func mineTools() map[string]string {
 	for _, n := range names {
 		bin := n
 
-		// The ymake naming convention talks about "llvm-strip" etc.;
-		// resolve those by their actual command names while keeping
-		// the short logical key in the map.
 		switch n {
 		case "ar", "objcopy", "strip":
 			bin = "llvm-" + n
@@ -54,10 +43,6 @@ func mineTools() map[string]string {
 	return out
 }
 
-// commonFlags builds the ymake-style flag map from a mined tools map.
-// Each tool surfaces as `<UPPER>_TOOL` and `<UPPER>_TOOL_VENDOR` keys
-// (with `+` transliterated to `_pl` for ymake's `clang++` →
-// `CLANG_pl_pl_TOOL`), plus baseline scalars used by the conf templates.
 func commonFlags(tools map[string]string) map[string]string {
 	res := map[string]string{
 		"CONSISTENT_DEBUG":         "yes",
@@ -77,10 +62,7 @@ func commonFlags(tools map[string]string) map[string]string {
 	}
 
 	for k, v := range tools {
-		// ymake's convention is mixed-case for the `+` transliteration
-		// (`clang++` → `CLANG_pl_pl_TOOL`, NOT `CLANG_PL_PL_TOOL`); the
-		// `_pl` is a marker token, not a token to upper-case. Uppercase
-		// the alpha component first, then transliterate `+`.
+
 		key := strings.ReplaceAll(strings.ToUpper(k), "+", "_pl")
 		res[key+"_TOOL"] = canonicalizeResourcePatternRefs(v)
 		res[key+"_TOOL_VENDOR"] = canonicalizeResourcePatternRefs(v)
@@ -330,7 +312,7 @@ func readYaConfSections(fs *FS, wantSection string, rels ...string) map[string]s
 
 	for _, rel := range rels {
 		if !fs.IsFile(rel) {
-			continue // optional ya.conf absent — skip, not an error
+			continue
 		}
 		raw := fs.Read(rel)
 
@@ -416,11 +398,6 @@ func resourcePlatformName(key string, upper bool) string {
 	return strings.ToUpper(name)
 }
 
-// hostOS / hostISA / hostPlatformID surface the running process's
-// typed axes for the CLI fallback (when `--host-platform` is unset).
-// hostOS reads Go's runtime.GOOS verbatim; hostISA normalises Go's
-// runtime.GOARCH into the conventional ymake triple component
-// (amd64 → x86_64; arm64 → aarch64 on Linux, arm64 elsewhere).
 func hostOS() OS {
 	return OS(runtime.GOOS)
 }
@@ -439,18 +416,10 @@ func hostISA() ISA {
 	}
 }
 
-// hostPlatformID returns the canonical `default-<os>-<isa>` triple
-// for the running process. Used by `ay make` to seed
-// `GG_TARGET_PLATFORM` when the CLI flag is not supplied.
 func hostPlatformID() string {
 	return string(MakePlatformID(hostOS(), hostISA()))
 }
 
-// resolvePlatform parses the canonical `default-<os>-<isa>` form;
-// when the string is empty, mines OS/ISA from the running process
-// (hostOS / hostISA). The CLI caller threads the target's empty-
-// string fallback through this same function by passing the
-// already-resolved host's PlatformID string instead of "".
 func resolvePlatform(s string) (OS, ISA) {
 	if s == "" {
 		return hostOS(), hostISA()
@@ -458,9 +427,6 @@ func resolvePlatform(s string) (OS, ISA) {
 	return ParsePlatformID(s)
 }
 
-// mergeFlags returns a fresh map containing every entry from `base`
-// overlaid with `over` (over wins on conflict). Useful for merging
-// mined defaults with user-supplied -D flags.
 func mergeFlags(base, over map[string]string) map[string]string {
 	out := make(map[string]string, len(base)+len(over))
 

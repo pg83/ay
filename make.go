@@ -19,15 +19,6 @@ import (
 	"github.com/jon-codes/getopt"
 )
 
-// Pipelined Gen → Exec: the emitter streams finalised Nodes (dep-first)
-// into a per-node goroutine that waits on dep-futures then runs cmds.
-// The full []*Node is never materialised.
-//
-// Cache layout:
-//   <BldRoot>/cas/<sha256> — content-addressed output blobs
-//   <BldRoot>/uid/<uid>    — per-node meta JSON: {output → cas path}
-
-// makeFlags captures every CLI option `ay make` accepts.
 type makeFlags struct {
 	srcRoot     string
 	bldRoot     string
@@ -39,20 +30,17 @@ type makeFlags struct {
 	stats       bool
 	ninja       bool
 	musl        bool
-	buildType   string // release | debug | <custom xbuild value>
-	targetPlat  string // empty → host
-	hostPlat    string // empty → host
+	buildType   string
+	targetPlat  string
+	hostPlat    string
 	tflags      map[string]string
 	hflags      map[string]string
 	targets     []string
 	verbose     bool
-	testLevel   int  // count of -t (0=none, 1=small, 2=+medium, 3=+large); ydb passes -ttt
-	sandboxing  bool // --sandboxing: run test nodes under the fs sandbox
+	testLevel   int
+	sandboxing  bool
 }
 
-// Upstream prepare_tags() starts from tc['flags'] and only overlays
-// these extra target flags; arbitrary -D values must not perturb
-// raw-graph bytes.
 var targetStatsExtraFlagAllowlist = map[string]struct{}{
 	"ALLOCATOR": {},
 	"FAKEID":    {},
@@ -60,10 +48,6 @@ var targetStatsExtraFlagAllowlist = map[string]struct{}{
 	"RACE":      {},
 }
 
-// Platform.Flags carries far more than upstream tc['flags'] (tool paths,
-// repo defaults, and raw CLI extras all share one map locally), so keep the
-// base target copy to the tag-bearing keys that prepare_tags() actually
-// surfaces in stats_uid.
 var targetStatsBaseFlagAllowlist = map[string]struct{}{
 	"ALLOCATOR":      {},
 	"FAKEID":         {},
@@ -115,11 +99,7 @@ func buildHostStatsFlags(hostPlatformFlags, cliFlags map[string]string, sandboxi
 		"TOOL_BUILD_MODE":  "yes",
 		"TRAVERSE_RECURSE": "no",
 	}
-	// Upstream host stats_uids hash the merged host_platform_flags stream
-	// plus these fixed defaults. Build from the ya.conf + CLI host flag
-	// sources directly so toolchain paths from Platform.Flags never leak
-	// into stats_uid, while arbitrary explicit --host-platform-flag values
-	// still participate, including explicit KEY= empty values.
+
 	copyStatsFlags(flags, hostPlatformFlags)
 	copyStatsFlags(flags, cliFlags)
 	if sandboxing {
@@ -161,9 +141,6 @@ func shouldExposeSandboxingTargetTags(mf *makeFlags) bool {
 	return mf != nil && mf.sandboxing && mf.testLevel > 0
 }
 
-// cmdMake parses CLI args, runs Gen (host walks recurse implicitly), and
-// pipes the resulting node stream into the executor. Exit 0 on success;
-// throws on any subcommand failure so main's Catch prints + exits non-zero.
 func cmdMake(args []string) int {
 	defer startProfilesFromEnv()()
 
@@ -173,12 +150,8 @@ func cmdMake(args []string) int {
 		ThrowFmt("make: no targets supplied and current working directory is outside the source root")
 	}
 
-	// One FS for the whole run: shared by toolchain mining, ya.conf
-	// reads, sysincl loading, and every per-target Gen call.
 	fs := NewFS(mf.srcRoot)
 
-	// Toolchain flags feed both Platform halves (build-host invokes
-	// these binaries regardless of which axis the cmd_args belong to).
 	tools, conf := toolchainFlags(fs, nil)
 	rootHostYaFlags := readYaConfSection(fs, "ya.conf", "host_platform_flags")
 	rootTargetYaFlags := readYaConfSection(fs, "ya.conf", "flags")
@@ -189,19 +162,13 @@ func cmdMake(args []string) int {
 	var hostInternalYaFlags map[string]string
 	var targetInternalYaFlags map[string]string
 	if mf.testLevel == 0 {
-		// sg5's non-test reference graph carries build/internal/ya.conf,
-		// including USE_ICONV=static and the extra common compiler flags,
-		// while sg4's -ttt test build does not. Keep that split explicit
-		// so sg4 stays byte-exact.
+
 		hostInternalYaFlags = readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
 		targetInternalYaFlags = readOptionalYaConfSection(fs, "build/internal/ya.conf", "flags")
 		copyStatsFlags(hostYaFlags, hostInternalYaFlags)
 		copyStatsFlags(targetYaFlags, targetInternalYaFlags)
 	}
 
-	// Host platform: `--host-platform` selects axes (mined when empty),
-	// `--host-platform-flag KEY=VALUE` (mf.hflags) lands on host Flags,
-	// PIC=yes, baseline tag "tool".
 	hOS, hISA := resolvePlatform(mf.hostPlat)
 	hostFlags := make(map[string]string, len(tools)+len(hostYaFlags)+len(mf.hflags)+1)
 	for k, v := range tools {
@@ -228,10 +195,6 @@ func cmdMake(args []string) int {
 	hostP.StatsFlags = buildHostStatsFlags(hostYaFlags, mf.hflags, mf.sandboxing)
 	resourceFetches := newResourceFetchPlan(mf.srcRoot, conf, hostP)
 
-	// Target platform: `--target-platform` selects axes (defaults to
-	// host when empty), `-D KEY=VALUE` (mf.tflags) lands on target Flags,
-	// `--musl` toggles MUSL, `--xbuild` / `-r` / `-d` selects build type,
-	// PIC=no.
 	targetSpec := mf.targetPlat
 	if targetSpec == "" {
 		targetSpec = string(MakePlatformID(hOS, hISA))
@@ -273,13 +236,8 @@ func cmdMake(args []string) int {
 		targetP.Tags = sandboxingNodeTags(targetP)
 	}
 
-	// `-j 0` is no-exec mode (Gen runs, no subprocesses):
-	//   - with `-G`: dump the graph as stable JSON for `ay dump normalize`.
-	//   - without `-G`: Gen streams to a discard sink (smoke test).
 	onWarn := func(w Warn) {
-		// Unresolved includes are a build-stopping error by default —
-		// they signal a real resolver gap. `--keep-going` downgrades
-		// them to a warning (surfaced under `--verbose`).
+
 		if w.Kind == WarnMissingInclude && !mf.keepGoing {
 			ThrowFmt("%s: %s", w.Kind, w.Message)
 		}
@@ -339,10 +297,6 @@ func cmdMake(args []string) int {
 	return 0
 }
 
-// genStream runs in-process Gen for each target and streams finalized
-// nodes to onNode. Returns the union of root UIDs. Targets run serially;
-// the executor overlaps one target's emission with the previous one's
-// execution.
 func genStream(srcRoot string, targets []string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn), testMode bool) []string {
 	all := []string{}
 
@@ -361,7 +315,6 @@ func genStreamOne(srcRoot, target string, hostP, targetP *Platform, resources *r
 	return emitter.Finish()
 }
 
-// executor — schedules and runs Node executions.
 type executor struct {
 	srcRoot        string
 	bldRoot        string
@@ -402,11 +355,6 @@ func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, resourceM
 	}
 }
 
-// onNode registers a freshly-finalized Node and spawns its future-runner
-// so leaves start compiling while Gen is still emitting parents. The
-// goroutine blocks inside visit→execute on its deps; the streaming
-// emitter yields dep-first, so every dep is registered in byUID before
-// the parent looks it up.
 func (ex *executor) onNode(n *Node) {
 	f := &nodeFuture{node: n}
 
@@ -417,9 +365,6 @@ func (ex *executor) onNode(n *Node) {
 	go ex.fire(f)
 }
 
-// fire is the auto-spawned future-runner. It is a thin wrapper around
-// ex.visit so a node's once.Do is triggered as soon as registration
-// completes — without the caller (ex.run) needing to enumerate roots.
 func (ex *executor) fire(f *nodeFuture) {
 	Try(func() {
 		ex.visit(f.node.UID)
@@ -459,8 +404,6 @@ func (ex *executor) run(roots []string) {
 	}
 }
 
-// visit forces uid's future to run, blocking until it (and its
-// transitive deps) complete.
 func (ex *executor) visit(uid string) {
 	f := ex.lookup(uid)
 	if f == nil {
@@ -501,8 +444,6 @@ func (ex *executor) lookup(uid string) *nodeFuture {
 	return f
 }
 
-// execute is the core per-node lifecycle: wait on deps, check cache,
-// run cmds, store outputs.
 func (ex *executor) execute(n *Node) {
 	cachePath := filepath.Join(ex.bldRoot, "uid", n.UID)
 	if _, err := os.Stat(cachePath); err == nil {
@@ -536,7 +477,6 @@ func (ex *executor) execute(n *Node) {
 	_ = os.RemoveAll(tmp)
 	defer os.RemoveAll(tmp)
 
-	// Restore dep outputs into tmp.
 	for _, dep := range n.Deps {
 		ex.restoreInto(dep, tmp)
 	}
@@ -571,14 +511,9 @@ func (ex *executor) execute(n *Node) {
 	}
 }
 
-// runNode executes every Cmd in n. cwd / env / cmd_args paths are
-// substituted with the per-node tmp dir for $(B) and the configured
-// SrcRoot for $(S).
 func (ex *executor) runNode(n *Node, tmp string) commandResult {
 	var result commandResult
 
-	// Pre-create every output's parent directory inside the tmp area
-	// so subprocesses can write directly to their declared paths.
 	for _, out := range n.Outputs {
 		if !out.IsBuild() {
 			continue
@@ -653,10 +588,6 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 	return result
 }
 
-// storeOutputs moves each declared Build-rooted output from the tmp
-// area into the content-addressable store and writes the per-node
-// meta JSON. Source-rooted "outputs" never appear in production node
-// shapes; if they ever do, we throw rather than guess.
 func (ex *executor) storeOutputs(n *Node, tmp string) {
 	meta := make(map[string]string, len(n.Outputs))
 
@@ -683,9 +614,6 @@ func (ex *executor) storeOutputs(n *Node, tmp string) {
 	Throw(os.Rename(tmpPath, uidPath))
 }
 
-// restoreInto reads the dep's meta JSON and symlinks each declared
-// CAS-stored output back into `where` at its declared path. Used by
-// both per-node tmp-dir staging and `installRoot` for final install.
 func (ex *executor) restoreInto(uid, where string) {
 	metaPath := filepath.Join(ex.bldRoot, "uid", uid)
 	data := Throw2(os.ReadFile(metaPath))
@@ -700,7 +628,6 @@ func (ex *executor) restoreInto(uid, where string) {
 		}
 		v := Intern(outVFS)
 
-		// Mount: $(B)/<rel> → where/<rel>; $(S)/<rel> → srcRoot/<rel>.
 		target := mountVFS(v, ex.srcRoot, where)
 		Throw(os.MkdirAll(filepath.Dir(target), 0o755))
 		_ = os.Remove(target)
@@ -708,10 +635,6 @@ func (ex *executor) restoreInto(uid, where string) {
 	}
 }
 
-// installRoot resolves the root UID's outputs at their declared paths
-// under `where` (typically the source root or an explicit --install
-// target). This is the final step after `run` so users can run the
-// produced binary directly.
 func (ex *executor) installRoot(uid, where string) {
 	if where == "" {
 		return
@@ -720,10 +643,6 @@ func (ex *executor) installRoot(uid, where string) {
 	ex.restoreInto(uid, where)
 }
 
-// mountVFS materialises a VFS into a real filesystem path:
-//   - Source rels stay anchored at srcRoot.
-//   - Build rels stay anchored at bldRoot (the per-node tmp dir at
-//     exec time, or the install target at install time).
 func mountVFS(v VFS, srcRoot, bldRoot string) string {
 	if v.IsSource() {
 		return filepath.Join(srcRoot, v.Rel())
@@ -738,8 +657,6 @@ func mountVFS(v VFS, srcRoot, bldRoot string) string {
 	return ""
 }
 
-// mountString substitutes "$(S)/" → srcRoot+"/", "$(B)/" → bldRoot+"/"
-// inside a free-form cmd_arg / env value. Single pass per substring.
 func mountString(s, srcRoot, bldRoot string, resources map[string]string) string {
 	s = strings.ReplaceAll(s, "$(S)/", srcRoot+"/")
 	s = strings.ReplaceAll(s, "$(B)/", bldRoot+"/")
@@ -753,9 +670,6 @@ func mountString(s, srcRoot, bldRoot string, resources map[string]string) string
 	return s
 }
 
-// casPath returns the CAS storage path for the file at `src`. Each
-// output is stored under <bldRoot>/cas/<sha256> so identical bytes
-// across different uids share a single on-disk copy.
 func casPath(bldRoot, src string) string {
 	h := sha256.New()
 	info := Throw2(os.Stat(src))
@@ -811,16 +725,8 @@ type hashWriter interface {
 	Write([]byte) (int, error)
 }
 
-// --------------------------- CLI parsing ---------------------------
-
-// parseMakeFlags parses argv: short letters (-G/-r/-d/-k/-T) +
-// value-bearing short letters (-D/-j/-B/-o/-I) + long names. Bare
-// `-h`/`--help` prints usage and exits 0.
 func parseMakeFlags(args []string) *makeFlags {
-	// getopt's NewState convention: args[0] is the program name and is
-	// skipped by the iterator. dispatch() hands us argv[2:] (the user
-	// args only), so prepend a sentinel so the iterator sees every
-	// flag the user typed.
+
 	state := getopt.NewState(append([]string{"ay-make"}, args...))
 
 	config := getopt.Config{
@@ -891,7 +797,7 @@ func parseMakeFlags(args []string) *makeFlags {
 		case opt.Name == "sandboxing":
 			mf.sandboxing = true
 		case opt.Char == 1:
-			// Positional argument (target).
+
 			mf.targets = append(mf.targets, opt.OptArg)
 		default:
 			ThrowFmt("make: unhandled flag %v", opt)
@@ -914,7 +820,6 @@ func parseMakeFlags(args []string) *makeFlags {
 		mf.installRoot = mf.srcRoot
 	}
 
-	// Default targets to the current module dir under source-root.
 	if len(mf.targets) == 0 {
 		cwd, err := os.Getwd()
 		if err == nil && strings.HasPrefix(cwd, mf.srcRoot+"/") {
@@ -925,8 +830,6 @@ func parseMakeFlags(args []string) *makeFlags {
 	return mf
 }
 
-// parseKV splits `KEY=VALUE` on the first `=` and stores into `into`.
-// A bare `KEY` (no `=`) is treated as `KEY=yes`.
 func parseKV(into map[string]string, kv string) {
 	idx := strings.IndexByte(kv, '=')
 
@@ -969,8 +872,6 @@ Configuration flags:
     --host-platform-flag KEY=V    Host-axis -D flag (repeatable).
 `)
 }
-
-// --------------------------- colour helpers ---------------------------
 
 const (
 	ansiESC = "\x1b"

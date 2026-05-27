@@ -4,21 +4,11 @@ import (
 	"strings"
 )
 
-// yasmBinaryVFS is the canonical $(B)-relative host yasm binary path;
-// yasmBinaryPath is its String() form. Hardcoded because the only
-// consumer is the asmlib host-PIC branch (gated by asmlibYasmModules);
-// yasm's PROGRAM directory is stable.
 var (
 	yasmBinaryVFS  = Intern("$(B)/contrib/tools/yasm/yasm")
 	yasmBinaryPath = yasmBinaryVFS.String()
 )
 
-// composeASPaths derives (outputPath, inputPath) for the clang AS path.
-// `srcVFS` is the resolved input path; the output is computed from
-// (instance.Path, srcRel, srcVFS.Root) — SRCDIR redirect when
-// srcVFS.Rel diverges from `instance.Path/<srcRel>`. `in.SrcDir` (if
-// non-nil) carries the original SRCDIR value used to compose the
-// case-3 output infix.
 func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs) (out, input VFS) {
 	if srcVFS.IsSource() && srcVFS.Rel() != instance.Path+"/"+srcRel {
 		outputRel := composeSrcDirOutputRel(instance.Path, *in.SrcDir, srcRel)
@@ -40,7 +30,6 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	return Build(outRel), srcVFS
 }
 
-// composeASCmdArgs builds the cmd_args bundle.
 func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in ModuleCCInputs) []string {
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 3 + len(bundle.ArchArgs)
@@ -70,7 +59,6 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	return cmdArgs
 }
 
-// composeASIncludes derives the include-tail slice following the source path in cmd_args.
 func composeASIncludes(in ModuleCCInputs) []string {
 	out := make([]string, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(ccIncludesSuffix)+len(in.PeerAddInclGlobal))
 	out = append(out, ccIncludesPrefix...)

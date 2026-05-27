@@ -12,31 +12,14 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-// uid.go — content-derived UID hashing.
-//
-// UID = base64url(xxh3-128(canonical-node-bytes))[:22]. Canonical bytes are an
-// internal binary format (not JSON); the only contract is hash stability per
-// semantic node content — the hash is never compared to an external value (the
-// L4 normalizer recomputes/strips uids), so a fast non-cryptographic 128-bit
-// hash replaces SHA-1: a 16-byte digest base64url-encodes to exactly 22 chars.
-//
-// Field encoding is positional in alphabetical order (matching node.go);
-// variable-length items are 4-byte little-endian length-prefixed. UID,
-// SelfUID, StatsUID are excluded so the hash depends only on content.
-
 const uidLength = 22
 
-// computeUID returns the 22-character base64url xxh3-128 of the input
-// bytes. Generic helper retained for tests that hand in their own
-// canonical bytes; the production emitter uses nodeUID directly.
 func computeUID(canonicalBytes []byte) string {
 	sum := xxh3.Hash128(canonicalBytes).Bytes()
 
 	return base64.RawURLEncoding.EncodeToString(sum[:])[:uidLength]
 }
 
-// canonicalNodeBytes produces the byte sequence we hash to derive a
-// node's UID. Used by tests; production callers should use nodeUID.
 func canonicalNodeBytes(n *Node) []byte {
 	var c canonBuf
 	c.writeNode(n)
@@ -44,19 +27,12 @@ func canonicalNodeBytes(n *Node) []byte {
 	return c.buf
 }
 
-// nodeUID derives a Node's content-UID by accumulating the canonical
-// form into a `canonBuf` and feeding the whole buffer to xxh3 in one
-// shot. Concrete-typed receiver avoids the per-write interface boxing
-// that `hash.Hash`-streaming carried.
 func nodeUID(n *Node) string {
 	var c canonBuf
 
 	return nodeUIDWithBuf(n, &c)
 }
 
-// nodeUIDWithBuf is nodeUID with caller-owned scratch storage. Finalize
-// hashes thousands of nodes; reusing the canonicalization buffer avoids
-// repeatedly allocating large transient byte slices for wide input lists.
 func nodeUIDWithBuf(n *Node, c *canonBuf) string {
 	c.buf = c.buf[:0]
 	c.writeNode(n)
@@ -66,8 +42,6 @@ func nodeUIDWithBuf(n *Node, c *canonBuf) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])[:uidLength]
 }
 
-// nodeStatsUID mirrors upstream raw-graph stats_uid production:
-// md5(str([platform, str(sorted(tags)), kv.p, str(sorted(outputs))])).
 func nodeStatsUID(n *Node) string {
 	sum := md5.Sum([]byte(statsUIDPreimage(n)))
 
@@ -167,9 +141,6 @@ func pythonStringRepr(s string) string {
 	return b.String()
 }
 
-// canonBuf is a writable byte accumulator with concrete-typed
-// methods. All writeXxx methods compile to direct append calls — no
-// interface dispatch, no per-call scratch escaping.
 type canonBuf struct {
 	buf []byte
 }
@@ -213,10 +184,7 @@ func (c *canonBuf) writeStringSlice(ss []string) {
 func (c *canonBuf) writeVFSSlice(vs []VFS) {
 	c.writeUint32(uint32(len(vs)))
 	for _, v := range vs {
-		// Write the VFS's precomputed full-string content hash (root + rel are
-		// both encoded in the interned "$(S)/<rel>" / "$(B)/<rel>" string) rather
-		// than copying the path bytes. Fixed 8 bytes/input, no memmove, and the
-		// node closures here run to thousands of inputs.
+
 		c.writeUint64(internTable.hashes[v.strID()])
 	}
 }
@@ -288,13 +256,6 @@ func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
 	}
 }
 
-// writeNode emits the canonical form of n into c. Field order matches
-// node.go (alphabetical: cache, cmds, deps, env, foreign_deps, inputs,
-// kv, outputs, platform, requirements, sandboxing, tags,
-// target_properties); self_uid/uid/stats_uid are excluded. host-vs-target
-// discrimination flows through Tags ("tool" baseline on host; empty on
-// target). `omitempty` fields stream their "absent" form (Cache=nil →
-// 0x00, ForeignDeps=nil → count 0); position is always present.
 func (c *canonBuf) writeNode(n *Node) {
 	switch {
 	case n.Cache == nil:
@@ -319,8 +280,6 @@ func (c *canonBuf) writeNode(n *Node) {
 	c.writeStringMap(n.TargetProperties)
 }
 
-// canonKeysOf extracts and sorts a map's keys. Shared by every
-// map-encoding helper.
 func canonKeysOf[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {

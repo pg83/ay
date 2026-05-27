@@ -2,19 +2,6 @@ package main
 
 import "fmt"
 
-// macros.go — IF-predicate evaluator and DefaultIfEnv. Expr ADT lives
-// next to the parser in yamake.go.
-//
-// Contract: an unknown ALL_CAPS build variable defaults to empty/false,
-// matching ymake's practical "unset variable" behaviour for optional
-// feature toggles. Non-build-var names still throw so parser/evaluator
-// defects stay visible. Value space is {bool, string, int}; each binding
-// lives in exactly one of the three typed maps.
-
-// Environment binds IF-condition identifiers to their typed values.
-// Three disjoint maps so comparators (ExprEq, ExprLt) resolve operands of
-// differing types. Boolean-only callers (ExprIdent in predicate position,
-// ExprAnd/Or/Not) go through Bool, which throws on a non-bool binding.
 type Environment struct {
 	bools   map[string]bool
 	strings map[string]string
@@ -42,10 +29,6 @@ func isImplicitBuildVar(name string) bool {
 	return hasUpper
 }
 
-// Lookup returns the typed value bound to name (or throws). Return type
-// is `any` because callers (evalAtom, ExprEq operand resolution) branch
-// on dynamic type. EvalCond's ExprIdent path goes through Bool for a
-// typed value and a clean error.
 func (e Environment) Lookup(name string) any {
 	if v, ok := e.bools[name]; ok {
 		return v
@@ -65,13 +48,9 @@ func (e Environment) Lookup(name string) any {
 
 	ThrowFmt("macros: unknown IF identifier %q", name)
 
-	return nil // unreachable; ThrowFmt panics
+	return nil
 }
 
-// Bool returns the boolean binding for name. Bool bindings return directly;
-// strings coerce (empty → false, non-empty → true) per upstream semantics
-// for bare-ident use of a string variable. Int bindings in bool position
-// throw (defect).
 func (e Environment) Bool(name string) bool {
 	if v, ok := e.bools[name]; ok {
 		return v
@@ -91,7 +70,7 @@ func (e Environment) Bool(name string) bool {
 
 	ThrowFmt("macros: unknown IF identifier %q", name)
 
-	return false // unreachable
+	return false
 }
 
 func (e Environment) String(name string) string {
@@ -117,12 +96,9 @@ func (e Environment) String(name string) string {
 
 	ThrowFmt("macros: unknown IF identifier %q", name)
 
-	return "" // unreachable
+	return ""
 }
 
-// Clone returns a deep copy so callers can mutate per-instance (e.g. flip
-// ARCH_AARCH64 ↔ ARCH_X86_64 for host targets) without trampling
-// DefaultIfEnv. Maps are copied; contents are immutable scalars.
 func (e Environment) Clone() Environment {
 	out := Environment{
 		bools:   make(map[string]bool, len(e.bools)),
@@ -145,8 +121,6 @@ func (e Environment) Clone() Environment {
 	return out
 }
 
-// SetBool overrides (or adds) a boolean binding. Per-instance env tweaks
-// must Clone first to avoid leaking into DefaultIfEnv.
 func (e Environment) SetBool(name string, v bool) {
 	delete(e.strings, name)
 	delete(e.ints, name)
@@ -172,10 +146,6 @@ func (e Environment) SetFromString(name, v string) {
 	}
 }
 
-// HasBinding reports whether name has any typed binding in this env.
-// Used by the DEFAULT(name value) statement to mirror upstream's
-// `if (vars.Get1(args[0]).empty())` no-op-on-pre-existing semantics
-// (see devtools/ymake/lang/eval_context.cpp:335-339).
 func (e Environment) HasBinding(name string) bool {
 	if _, ok := e.bools[name]; ok {
 		return true
@@ -192,10 +162,6 @@ func (e Environment) HasBinding(name string) bool {
 	return false
 }
 
-// SetDefaultString implements DEFAULT(name value): binds only when no
-// prior binding exists, matching upstream
-// TEvalContext::SetStatement/NMacro::DEFAULT. Value is string; later
-// `IF (name)` coerces via Bool, `IF (name == "v")` via evalEq.
 func (e Environment) SetDefaultString(name, value string) {
 	if e.HasBinding(name) {
 		return
@@ -204,9 +170,6 @@ func (e Environment) SetDefaultString(name, value string) {
 	e.strings[name] = value
 }
 
-// EvalCond evaluates an IF predicate against a fixed env. Throws on:
-// unknown identifier; unhandled Expr type; bare ExprString/ExprInt in
-// predicate position; ExprEq/ExprLt with mismatched or non-numeric operands.
 func EvalCond(e Expr, env Environment) bool {
 	switch x := e.(type) {
 	case *ExprIdent:
@@ -236,13 +199,9 @@ func EvalCond(e Expr, env Environment) bool {
 
 	ThrowFmt("macros: unhandled Expr type %T", e)
 
-	return false // unreachable; ThrowFmt panics
+	return false
 }
 
-// evalAtom resolves a value-position Expr (operand of `==` or `<`) to its
-// dynamic value. ExprIdent → Lookup; literal nodes return carried values.
-// Anything else (bool combinator / nested comparator) throws — the parser
-// grammar should not produce such a shape.
 func evalAtom(e Expr, env Environment) any {
 	switch x := e.(type) {
 	case *ExprIdent:
@@ -262,9 +221,6 @@ func evalAtom(e Expr, env Environment) any {
 			return v
 		}
 
-		// Unbound implicit build vars (all-uppercase names) act as string
-		// literals equal to their own name: IF (ARCADIA_CURL_DNS_RESOLVER == ARES)
-		// evaluates correctly when ARCADIA_CURL_DNS_RESOLVER is "ARES".
 		if isImplicitBuildVar(x.Name) {
 			return x.Name
 		}
@@ -280,11 +236,9 @@ func evalAtom(e Expr, env Environment) any {
 
 	ThrowFmt("macros: unexpected Expr type %T in comparator operand position", e)
 
-	return nil // unreachable
+	return nil
 }
 
-// evalEq compares two atoms for equality. Same-type only; mixed types
-// throw so a parser-level type confusion surfaces immediately.
 func evalEq(x *ExprEq, env Environment) bool {
 	l := evalAtom(x.Left, env)
 	r := evalAtom(x.Right, env)
@@ -332,11 +286,9 @@ func evalEq(x *ExprEq, env Environment) bool {
 
 	ThrowFmt("macros: == operand has unsupported dynamic type %T", l)
 
-	return false // unreachable
+	return false
 }
 
-// evalLt enforces numeric `<`. Both sides must be int; anything else
-// throws.
 func evalLt(x *ExprLt, env Environment) bool {
 	l := evalAtom(x.Left, env)
 	r := evalAtom(x.Right, env)
@@ -351,17 +303,10 @@ func evalLt(x *ExprLt, env Environment) bool {
 	return li < ri
 }
 
-// DefaultIfEnv is the bound-variable environment for IF predicates —
-// per-build bindings independent of instance.Platform.ISA. Every ARCH_*
-// defaults to false; buildIfEnv (modules.go) flips the matching ISA's
-// bits per instance. Other shape (OS_LINUX, CLANG, …) reflects the
-// reference closure's build configuration (linux + clang); MUSL is
-// supplied per-platform via flags and defaults to "no" when absent.
-// Extend this set to teach EvalCond about a new identifier.
 var DefaultIfEnv = Environment{
 	bools: map[string]bool{
 		"OS_LINUX":      true,
-		"LINUX":         true, // legacy alias for OS_LINUX, used in some ya.make files
+		"LINUX":         true,
 		"OS_WINDOWS":    false,
 		"OS_DARWIN":     false,
 		"OS_IOS":        false,
@@ -371,8 +316,7 @@ var DefaultIfEnv = Environment{
 		"OS_CYGWIN":     false,
 		"SUN":           false,
 		"CYGWIN":        false,
-		// ARCH_ARM64 is the upstream alias for ARCH_AARCH64; buildIfEnv
-		// flips them in lockstep so IF predicates see consistent bindings.
+
 		"ARCH_AARCH64":                      false,
 		"ARCH_X86_64":                       false,
 		"ARCH_I386":                         false,
@@ -408,20 +352,14 @@ var DefaultIfEnv = Environment{
 		"DYNAMIC_BOOST":                     false,
 		"PROFILE_MEMORY_ALLOCATIONS":        false,
 		"USE_SSE4":                          true,
-		// MUSL_LITE=false → defaultProgramPeerdirsForModule picks contrib/libs/musl/full
-		// when MUSL=yes && !MUSL_LITE.
+
 		"MUSL_LITE":                        false,
 		"OPENSOURCE_REPLACE_LINUX_HEADERS": false,
-		// OPENSOURCE=true: source tree is the open-source Arcadia export.
-		// IF(NOT OPENSOURCE) branches that PEERDIR internal-only modules
-		// (e.g. library/cpp/xml/document) must take the false arm.
+
 		"OPENSOURCE":        true,
 		"YA_OPENSOURCE":     false,
 		"EXTERNAL_PY_FILES": false,
-		// USE_ARCADIA_PYTHON=true gates library/python/symbols/* PEERDIRs
-		// in contrib/libs/python/ya.make and the contrib/tools/python3
-		// PEERDIR + Include ADDINCL in stage0pycc / tools/py3cc/bin
-		// (each takes the ELSE arm when true).
+
 		"USE_ARCADIA_PYTHON":                true,
 		"PYTHON2":                           false,
 		"PYTHON3":                           true,
@@ -472,11 +410,7 @@ var DefaultIfEnv = Environment{
 		"ANDROID_ARMV7":                              false,
 		"ANDROID_I686":                               false,
 		"ARCADIA_OPENSSL_DISABLE_ARMV7_TICK":         false,
-		// ARCADIA_PCRE_ENABLE_JIT is intentionally NOT pre-bound.
-		// contrib/libs/pcre/ya.make does DEFAULT(ARCADIA_PCRE_ENABLE_JIT yes)
-		// then IF(ARCADIA_PCRE_ENABLE_JIT); the DEFAULT→IF env-bridge in
-		// collectStmts establishes the binding at DEFAULT time. Pre-binding
-		// would force HasBinding=true and DEFAULT no-ops.
+
 		"ARCH_I686":                          false,
 		"ARCH_PPC64LE":                       false,
 		"ARCH_TYPE_32":                       false,
@@ -496,37 +430,28 @@ var DefaultIfEnv = Environment{
 		"WINDOWS_I686":                       false,
 	},
 	strings: map[string]string{
-		// CXX_RT is SET-derived (linux + clang + non-Android + non-ARM6/7
-		// → libcxxrt); wired directly because SET is not evaluated.
+
 		"CXX_RT": "libcxxrt",
-		// OPENSOURCE_PROJECT selects per-project ya.make branches (e.g.
-		// library/cpp/svnversion yt-cpp-sdk variant); empty = standard build.
+
 		"OPENSOURCE_PROJECT": "",
-		// SANITIZER_TYPE="" means unsanitized; equality against the
-		// bare-ident sanitizer literals below evaluates to false.
+
 		"SANITIZER_TYPE": "",
-		// Bare-ident sanitizer type literals — each maps to its own name
-		// so `SANITIZER_TYPE == undefined` compares string-to-string.
+
 		"undefined": "undefined",
 		"memory":    "memory",
 		"address":   "address",
 		"thread":    "thread",
 		"leak":      "leak",
-		// MODULE_TAG=PY3 mirrors `module PY3_LIBRARY`'s SET(MODULE_LANG PY3)
-		// in build/conf/python.conf. contrib/libs/python/ya.make gates
-		// IF(MODULE_TAG == "PY2") and takes the ELSE arm here.
+
 		"MODULE_TAG": "PY3",
-		// _USE_ICONV=dynamic mirrors build/conf/opensource.conf under
-		// OPENSOURCE=yes; contrib/libs/libiconv/ya.make consumes it via
-		// DEFAULT(USE_ICONV ${_USE_ICONV}).
+
 		"_USE_ICONV": "dynamic",
 		"ALLOCATOR":  "",
-		"PY2":        "PY2", // bare-ident literal for IF (MODULE_TAG == "PY2").
+		"PY2":        "PY2",
 		"OS_SDK":     "",
 	},
 	ints: map[string]int{
-		// ANDROID_API: defensive default for libc_compat `<` branches;
-		// not reached because OS_ANDROID=false.
+
 		"ANDROID_API": 0,
 	},
 }

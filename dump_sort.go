@@ -10,13 +10,8 @@ import (
 	"strconv"
 )
 
-const defaultSortChunkBytes = 256 << 20 // 256 MiB per in-memory chunk
+const defaultSortChunkBytes = 256 << 20
 
-// cmdDumpSort is a generic external-merge line sorter: read lines, sort
-// fixed-size chunks in memory and spill each to a temp file, then k-way
-// merge the sorted chunks with a min-heap. Memory is bounded by the chunk
-// size plus one buffered reader per chunk — it never holds the whole input.
-// Comparison is bytewise (LC_ALL=C), matching Go string ordering.
 func cmdDumpSort(args []string) int {
 	var inPath, outPath string
 	chunkBytes := defaultSortChunkBytes
@@ -61,8 +56,7 @@ func cmdDumpSort(args []string) int {
 	}
 	tmpDir, err := os.MkdirTemp(tmpBase, "aysort-")
 	if err != nil {
-		// Output dir may be non-writable (e.g. --out /dev/null); fall back
-		// to the current directory.
+
 		tmpDir = Throw2(os.MkdirTemp(".", "aysort-"))
 	}
 	defer func() { Throw(os.RemoveAll(tmpDir)) }()
@@ -73,9 +67,6 @@ func cmdDumpSort(args []string) int {
 	return 0
 }
 
-// spillChunks reads all lines, sorting and writing each ~chunkBytes batch to
-// a temp file. Returns the chunk file paths. Each retained line keeps its
-// trailing newline so the merge reconstructs the stream verbatim.
 func spillChunks(in io.Reader, chunkBytes int, tmpDir string) []string {
 	r := bufio.NewReaderSize(in, 1<<20)
 
@@ -142,8 +133,6 @@ func (h *mergeHeap) Pop() any {
 	return it
 }
 
-// mergeChunks k-way merges the sorted chunk files into out via a min-heap,
-// holding one buffered reader and one pending line per chunk.
 func mergeChunks(chunks []string, out io.Writer) {
 	bw := bufio.NewWriterSize(out, 1<<20)
 	defer func() { Throw(bw.Flush()) }()

@@ -1,31 +1,14 @@
 package main
 
-// archiverToolPath is the upstream host-tool that the ARCHIVE() macro
-// invokes per `build/ymake.core.conf:4142-4145` (`$ARCH_TOOL`).
 const archiverToolPath = "tools/archiver"
 
-// emitArchives emits one AR node per `ARCHIVE(NAME <out> [DONTCOMPRESS]
-// files...)` declaration. Invokes the host archiver binary (resolved
-// by walking tools/archiver as a host PROGRAM).
-//
-// cmd_args: `archiver -q -x [-p] <file1>: [<file2>:] -o <out>`. Each
-// file gets a trailing colon (upstream `${suf=\:;input}`); PR-produced
-// files resolve to BUILD_ROOT, others to $(S)/<modulePath>/<file>.
-//
-// Inputs: PR outputs ($(B)) + archiver tool + producer-PR IN files
-// ($(S)). Deps: producer-PR NodeRef + archiver LDRef.
 func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	if len(d.archives) == 0 {
 		return
 	}
 
-	// Walk the archiver as a host program to resolve its binary path + LD ref.
 	toolLDRef, toolBinPath := ctx.tool(archiverToolPath)
 
-	// Aggregate SOURCE_ROOT-rooted IN files contributed by every PR
-	// in this module — REF includes the full upstream set in each
-	// ARCHIVE's inputs[], not just the producing PR's IN list. Dedup once
-	// in first-occurrence order (normalization sorts node inputs).
 	var prInSources []VFS
 	{
 		seen := map[VFS]struct{}{}
@@ -47,9 +30,6 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	}
 }
 
-// emitArchive emits a single AR node for one ARCHIVE() declaration.
-// Helper for emitArchives; split out so the tool-walk + shared input
-// aggregation runs once per module rather than once per ARCHIVE.
 func emitArchive(
 	instance ModuleInstance,
 	a archiveEntry,
@@ -63,26 +43,19 @@ func emitArchive(
 	archiveVFS := Build(instance.Path + "/" + a.Name)
 	archivePath := archiveVFS.String()
 
-	// Build cmd_args. Each archived file is rendered with a trailing
-	// colon per upstream `${suf=\:;input:Files}`.
 	cmdArgs := make([]string, 0, 4+len(a.Files)+2)
 	cmdArgs = append(cmdArgs, toolBinPath.String(), "-q", "-x")
 	if a.DontCompress {
 		cmdArgs = append(cmdArgs, "-p")
 	}
 
-	// Track the unique producer PRs so we can wire deps to all of them
-	// and add their BUILD_ROOT outputs to the AR's input set.
 	producerRefs := []NodeRef{}
 	producerSet := map[NodeRef]struct{}{}
 	pathPerFile := make([]VFS, 0, len(a.Files))
 	pathStrPerFile := make([]string, 0, len(a.Files))
 
 	for _, f := range a.Files {
-		// When the file matches a PR output of this module, resolve to
-		// the producer's BUILD_ROOT-rooted path and record the PR
-		// NodeRef for dep wiring. Otherwise treat as SOURCE_ROOT-
-		// relative to the module dir.
+
 		isPRProduced := false
 		if d.prOutputProducer != nil {
 			if ref, ok := d.prOutputProducer[f]; ok {
@@ -109,18 +82,9 @@ func emitArchive(
 	}
 	cmdArgs = append(cmdArgs, "-o", archivePath)
 
-	// REF's AR inputs include every upstream-PR output that is
-	// lexicographically ≤ the archive's explicitly-referenced file.
-	// ARCHIVE on `sitecustomize.pyc` lists sibling `__res.pyc`; the
-	// inverse (ARCHIVE on `__res.pyc`) does NOT include the later
-	// sibling. The lex gate keeps input ordering stable across
-	// multiple archives sharing a producer.
 	prSiblingOutputs := make([]VFS, 0)
 	{
-		// Largest archived file path (string form) becomes the upper
-		// bound — siblings whose .String() form is strictly greater
-		// are excluded. pathStrPerFile reuses the .String() materialised
-		// while building cmd_args, so we don't re-allocate here.
+
 		maxArchived := ""
 		for _, s := range pathStrPerFile {
 			if s > maxArchived {
@@ -178,18 +142,8 @@ func emitArchive(
 		}
 	}
 
-	// inputs: each archived file's resolved path, then any sibling PR
-	// outputs from the same producer (preserving REF's "all PR outputs
-	// appear in every consumer's inputs" shape — sitecustomize.pyc.inc
-	// lists __res.pyc even though it only archives sitecustomize.pyc),
-	// then the tool binary, then the producer PR's source `IN` files
-	// (rebased to SOURCE_ROOT, pre-aggregated by caller). Dedup
-	// against the per-file slot.
 	inputs := make([]VFS, 0, len(pathPerFile)+len(prSiblingOutputs)+1+len(prInSources))
-	// BUILD_ROOT block = pathPerFile ∪ prSiblingOutputs, deduped in
-	// first-occurrence order (pathPerFile then prSiblingOutputs).
-	// Normalization sorts node inputs, so order here is irrelevant to the
-	// gate; iterating the slices keeps it deterministic without a sort.
+
 	buildRootSeen := map[VFS]struct{}{}
 	for _, p := range pathPerFile {
 		if _, dup := buildRootSeen[p]; dup {
@@ -226,8 +180,6 @@ func emitArchive(
 
 	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 
-	// Empty `instance.Platform.Tags` keeps the slice non-nil so JSON
-	// serialises as `[]`, not `null`.
 	tags := instance.Platform.Tags
 
 	n := &Node{
@@ -259,12 +211,6 @@ func emitArchive(
 
 	arRef := emit.Emit(bindNodePlatform(n, instance.Platform))
 
-	// Register the AR's output (.pyc.inc header for runtime_py3) in
-	// the codegen registry. Consumer CCs (e.g. __res.cpp) carry the
-	// .pyc.inc path via runtimePy3CCExtraInputs;
-	// resolveCodegenDepRefs lifts ProducerRef into deps[].
-	// EmitsIncludes is nil — .pyc.inc is a RESOURCE-packed C array,
-	// not C-readable.
 	if reg != nil {
 		reg.Register(&GeneratedFileInfo{
 			ProducerKvP:    "AR",

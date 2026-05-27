@@ -31,18 +31,12 @@ const (
 	testMandatoryEnvVars      = "ASAN_OPTIONS:ASAN_SYMBOLIZER_PATH:LSAN_OPTIONS:LSAN_SYMBOLIZER_PATH:MSAN_OPTIONS:MSAN_SYMBOLIZER_PATH:TSAN_SYMBOLIZER_PATH:UBSAN_OPTIONS:UBSAN_SYMBOLIZER_PATH:YA_MANDATORY_ENV_VARS"
 )
 
-// testSuiteInfo is the module data emitTestRunNodes needs.
 type testSuiteInfo struct {
-	ProjectPath string   // "util/ut"
-	BinaryPath  string   // "$(B)/util/ut/util-ut"
-	CppSources  []string // ["util/ysafeptr_ut.cpp", "util/ysaveload_ut.cpp"]
+	ProjectPath string
+	BinaryPath  string
+	CppSources  []string
 }
 
-// emitTestRunNodes emits the test-context node and the per-suite run nodes
-// for a UNITTEST_FOR module, wiring deps to ldRef. Callers may pass different
-// emitters when they want the context node to participate in a different
-// resource/materialization policy than the run nodes. Returns the run-node
-// refs (unittest, clang_format) in result order.
 func emitTestRunNodes(ctxEmit Emitter, runEmit Emitter, p *Platform, info testSuiteInfo, ldRef NodeRef) []NodeRef {
 	ctxRef := ctxEmit.Emit(buildTestCtxNode(p))
 

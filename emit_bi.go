@@ -1,24 +1,14 @@
 package main
 
-// yieldLinePyPath is the source-relative path to the yield_line.py script.
 var yieldLinePyVFS = Intern("$(S)/build/scripts/yield_line.py")
 var yieldLinePyPath = yieldLinePyVFS.String()
 
-// xargsPyPath is the source-relative path to the xargs.py script.
 var xargsPyVFS = Intern("$(S)/build/scripts/xargs.py")
 var xargsPyPath = xargsPyVFS.String()
 
-// buildInfoGenPyPath is the source-relative path to the build_info_gen.py
-// script invoked by xargs.py in the BI node.
 var buildInfoGenPyVFS = Intern("$(S)/build/scripts/build_info_gen.py")
 var buildInfoGenPyPath = buildInfoGenPyVFS.String()
 
-// EmitBI emits a BI node for CREATE_BUILDINFO_FOR(outputHeader).
-// cmd[0] and cmd[1] stage the compiler invocation into <module>/__args via
-// yield_line.py; cmd[2] feeds those args to build_info_gen.py through xargs.py.
-// Flags come from the target CXX bundle (same as a target CC for this module,
-// minus -c, -o, input path). cache:false is required at top level; the
-// normalizer strips it during canonicalization so it doesn't affect hashes.
 func EmitBI(
 	instance ModuleInstance,
 	outputHeader string,
@@ -100,7 +90,6 @@ func EmitBI(
 	return emit.Emit(bindNodePlatform(node, instance.Platform))
 }
 
-// biFlagsForInstance composes the CXX flag bundle for a BI node.
 func biFlagsForInstance(targetP *Platform) []string {
 	bundle := compileFlagBundleFor(targetP)
 	flags := make([]string, 0, 100)

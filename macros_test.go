@@ -5,10 +5,6 @@ import (
 	"testing"
 )
 
-// parseCondForTest is a tiny helper that wraps the cond expression
-// from `IF (...)` parsing — the production parser builds Expr only as
-// part of an IF Stmt, so the test path goes through Parse and pulls
-// the cond out of the resulting *IfStmt.
 func parseCondForTest(t *testing.T, condSrc string) Expr {
 	t.Helper()
 
@@ -32,10 +28,6 @@ func parseCondForTest(t *testing.T, condSrc string) Expr {
 	return ifStmt.Cond
 }
 
-// TestEvalCond_AndOrNot pins the boolean combinators against the
-// canonical DefaultIfEnv values: CLANG=true, MSVC=false, GCC=false,
-// WITH_VALGRIND=false. The three cases exercise AND, OR, and the
-// NOT-AND combination.
 func TestEvalCond_AndOrNot(t *testing.T) {
 	cases := []struct {
 		name string
@@ -59,9 +51,6 @@ func TestEvalCond_AndOrNot(t *testing.T) {
 	}
 }
 
-// TestEvalCond_UnknownVarDefaultsFalse pins the ymake-compatible fallback
-// for unset ALL_CAPS build variables: they coerce to false/empty rather
-// than throwing.
 func TestEvalCond_UnknownVarDefaultsFalse(t *testing.T) {
 	expr := parseCondForTest(t, "UNKNOWN_VAR")
 	if EvalCond(expr, DefaultIfEnv) {
@@ -69,13 +58,6 @@ func TestEvalCond_UnknownVarDefaultsFalse(t *testing.T) {
 	}
 }
 
-// TestEvalCond_DefaultEnvCoversArchiverClosureCanaries pins the
-// build-wide canary identifiers that DefaultIfEnv MUST bind true.
-// These are independent of the instance ISA (OS_LINUX + clang);
-// ARCH_* booleans are deliberately not canaries since `buildIfEnv`
-// flips them per instance.Platform.ISA, and MUSL is per-platform
-// rather than a build-wide default — see TestEvalCond_ARCH_ARM64_Aliased
-// for the ISA-dispatch coverage.
 func TestEvalCond_DefaultEnvCoversArchiverClosureCanaries(t *testing.T) {
 	canaries := []string{"OS_LINUX", "CLANG"}
 
@@ -89,10 +71,6 @@ func TestEvalCond_DefaultEnvCoversArchiverClosureCanaries(t *testing.T) {
 	}
 }
 
-// TestEvalCond_NonMuslYdbIfBindings pins ticket-5 IF-flag bindings for the
-// ydb (non-musl, OS_SDK=local) walk: OS_FREERTOS/STATIC_STL bind false in
-// bool position, OS_SDK is a string (compared to SDK literals, not a bool),
-// and MUSL is no longer a build-wide always-true default.
 func TestEvalCond_NonMuslYdbIfBindings(t *testing.T) {
 	for _, name := range []string{"OS_FREERTOS", "STATIC_STL"} {
 		if EvalCond(&ExprIdent{Name: name}, DefaultIfEnv) {
@@ -123,9 +101,6 @@ func TestEvalCond_NonMuslYdbIfBindings(t *testing.T) {
 	}
 }
 
-// TestEvalCond_StringEquality (PR-27) pins string-equality semantics:
-// the env binds CXX_RT="libcxxrt"; an `IF (CXX_RT == "libcxxrt")`
-// evaluates true, and `IF (CXX_RT == "other")` evaluates false.
 func TestEvalCond_StringEquality(t *testing.T) {
 	cases := []struct {
 		name string
@@ -134,8 +109,7 @@ func TestEvalCond_StringEquality(t *testing.T) {
 	}{
 		{"matching_value", `CXX_RT == "libcxxrt"`, true},
 		{"non_matching_value", `CXX_RT == "libcxxabi"`, false},
-		// `undefined` is bound as a string equal to its own name —
-		// the libcxxrt sanitizer-type pattern. SANITIZER_TYPE is "" in M2.
+
 		{"sanitizer_type_undefined_false", `SANITIZER_TYPE == undefined`, false},
 		{"sanitizer_type_memory_false", `SANITIZER_TYPE == memory`, false},
 	}
@@ -152,10 +126,6 @@ func TestEvalCond_StringEquality(t *testing.T) {
 	}
 }
 
-// TestEvalCond_NumericLessThan (PR-27) pins int-comparison
-// semantics: env binds ANDROID_API=0; `IF (ANDROID_API < 28)` is
-// true, `IF (ANDROID_API < 0)` is false (strict less-than, not
-// less-or-equal).
 func TestEvalCond_NumericLessThan(t *testing.T) {
 	cases := []struct {
 		name string
@@ -180,10 +150,6 @@ func TestEvalCond_NumericLessThan(t *testing.T) {
 	}
 }
 
-// TestEvalCond_TypeMismatch (PR-27) pins the strict type-check on
-// comparator operands: a string compared to an int throws, as does
-// `<` applied to non-int operands. Silent coercion would mask
-// real ya.make errors; throwing surfaces them at evaluation time.
 func TestEvalCond_TypeMismatch(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -225,10 +191,6 @@ func TestEvalCond_TypeMismatch(t *testing.T) {
 	}
 }
 
-// TestEvalCond_BareLiteralInPredicateThrows (PR-27) pins that a
-// string or int literal cannot stand alone as a boolean predicate —
-// `IF ("foo")` and `IF (42)` are degenerate forms that the
-// evaluator rejects.
 func TestEvalCond_BareLiteralInPredicateThrows(t *testing.T) {
 	cases := []string{`"foo"`, `42`}
 
@@ -250,18 +212,10 @@ func TestEvalCond_BareLiteralInPredicateThrows(t *testing.T) {
 	}
 }
 
-// TestEnvironment_BoolMethodRejectsTypedBindings (PR-27) pins that
-// using a string- or int-typed binding in boolean position throws
-// (so a typo like `IF (CXX_RT)` instead of `IF (CXX_RT == "...")`
-// fails fast).
 func TestEnvironment_BoolMethodRejectsTypedBindings(t *testing.T) {
-	// PR-M3-A: string bindings are now coerced to bool (empty→false,
-	// non-empty→true) to match upstream ymake semantics for bare-ident
-	// use of string variables (e.g. `IF (SANITIZER_TYPE OR ...)`). The
-	// "string_in_bool_position" sub-case formerly expected a throw; it
-	// is now replaced by a coercion check.  Int bindings still throw.
+
 	t.Run("string_in_bool_position_coerces_not_throws", func(t *testing.T) {
-		// CXX_RT == "libcxxrt" in DefaultIfEnv → non-empty → coerced true.
+
 		expr := &ExprIdent{Name: "CXX_RT"}
 		exc := Try(func() {
 			got := EvalCond(expr, DefaultIfEnv)
@@ -275,7 +229,7 @@ func TestEnvironment_BoolMethodRejectsTypedBindings(t *testing.T) {
 	})
 
 	t.Run("empty_string_in_bool_position_coerces_false", func(t *testing.T) {
-		// SANITIZER_TYPE == "" in DefaultIfEnv → empty → coerced false.
+
 		expr := &ExprIdent{Name: "SANITIZER_TYPE"}
 		exc := Try(func() {
 			got := EvalCond(expr, DefaultIfEnv)

@@ -7,27 +7,8 @@ import (
 	"unicode/utf8"
 )
 
-// gjson_write.go — hand-rolled streaming JSON serializer, byte-identical
-// to json.Encoder with SetEscapeHTML(false) + SetIndent("", "    ") for
-// the Graph shape. Replaces json.Encoder's two-pass indent path; walks
-// Graph once with inline indentation and a reused per-Node buffer.
-//
-// Byte-exactness invariants:
-//   - Map keys alphabetical (json default).
-//   - omitempty fields (host_platform, foreign_deps, cache on Node;
-//     cwd, stdout on Cmd) dropped when zero.
-//   - Empty slices/maps render as `[]`/`{}` inline.
-//   - Strings: encoding/json escape table with EscapeHTML=false
-//     (U+2028/U+2029 still escaped; '<>&' pass through).
-//   - Floats: strconv.AppendFloat(_, 'f', -1, 64).
-//   - No trailing newline — final byte is '}'.
-
-// writeGraphIndented streams g as indented JSON to w. Errors from w
-// propagate via Throw (the make -G / writeGraph contract panics up to
-// main's Catch).
 func writeGraphIndented(w io.Writer, g *Graph) {
-	// Single reusable encode buffer. 1 MiB initial caps the largest
-	// observed node (~30 KiB) plus skeleton; grows by doubling.
+
 	buf := make([]byte, 0, 1<<20)
 
 	buf = append(buf, '{', '\n')
@@ -37,7 +18,6 @@ func writeGraphIndented(w io.Writer, g *Graph) {
 	buf = append(buf, ',')
 	buf = append(buf, '\n')
 
-	// "graph": [ ...nodes... ]
 	buf = append(buf, `    "graph": `...)
 
 	if len(g.Graph) == 0 {
@@ -54,9 +34,6 @@ func writeGraphIndented(w io.Writer, g *Graph) {
 
 			buf = append(buf, '\n')
 
-			// Flush periodically so we don't hold the whole 63 MiB output
-			// in RAM. 256 KiB stays above any single node's encoded size
-			// and aligns well with the bufio.Writer's chunks.
 			if len(buf) >= 256<<10 {
 				Throw2(w.Write(buf))
 				buf = buf[:0]
@@ -67,30 +44,23 @@ func writeGraphIndented(w io.Writer, g *Graph) {
 		buf = append(buf, '\n')
 	}
 
-	// "inputs": {} — always empty per emitter.go's Finalize contract.
 	buf = append(buf, `    "inputs": {},`...)
 	buf = append(buf, '\n')
 
-	// "result": [ ...uids... ]
 	buf = append(buf, `    "result": `...)
 	buf = appendStringSlice(buf, g.Result, "    ")
 	buf = append(buf, '\n')
 
-	// No trailing newline — REF's last byte is '}'.
 	buf = append(buf, '}')
 
 	Throw2(w.Write(buf))
 }
 
-// appendNode emits a single Node as a JSON object indented under `pad`.
-// Field order is alphabetical (declaration order in node.go). cache is
-// emitted only when n.Cache != nil (omitempty equivalent).
 func appendNode(buf []byte, n *Node, pad string) []byte {
 	innerPad := pad + "    "
 	buf = append(buf, pad...)
 	buf = append(buf, '{', '\n')
 
-	// cache: *bool, omitempty — emit only when explicitly set.
 	if n.Cache != nil {
 		buf = append(buf, innerPad...)
 		if *n.Cache {
@@ -101,25 +71,21 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 		buf = append(buf, '\n')
 	}
 
-	// cmds: []Cmd
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"cmds": `...)
 	buf = appendCmdSlice(buf, n.Cmds, innerPad)
 	buf = append(buf, ',', '\n')
 
-	// deps: []string
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"deps": `...)
 	buf = appendStringSlice(buf, n.Deps, innerPad)
 	buf = append(buf, ',', '\n')
 
-	// env: map[string]string
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"env": `...)
 	buf = appendStringMap(buf, n.Env, innerPad)
 	buf = append(buf, ',', '\n')
 
-	// foreign_deps: map[string][]string, omitempty
 	if len(n.ForeignDeps) > 0 {
 		buf = append(buf, innerPad...)
 		buf = append(buf, `"foreign_deps": `...)
@@ -127,46 +93,37 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 		buf = append(buf, ',', '\n')
 	}
 
-	// host_platform: derived from the presence of the "tool" tag (host
-	// nodes carry it baseline; target nodes don't). omitempty: emitted
-	// only when true.
 	if nodeHasHostTag(n.Tags) {
 		buf = append(buf, innerPad...)
 		buf = append(buf, `"host_platform": true,`...)
 		buf = append(buf, '\n')
 	}
 
-	// inputs: []VFS
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"inputs": `...)
 	buf = appendVFSSlice(buf, n.Inputs, innerPad)
 	buf = append(buf, ',', '\n')
 
-	// kv: map[string]interface{}
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"kv": `...)
 	buf = appendInterfaceMap(buf, n.KV, innerPad)
 	buf = append(buf, ',', '\n')
 
-	// outputs: []VFS
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"outputs": `...)
 	buf = appendVFSSlice(buf, n.Outputs, innerPad)
 	buf = append(buf, ',', '\n')
 
-	// platform: string
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"platform": `...)
 	buf = appendString(buf, n.Platform)
 	buf = append(buf, ',', '\n')
 
-	// requirements: map[string]interface{}
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"requirements": `...)
 	buf = appendInterfaceMap(buf, n.Requirements, innerPad)
 	buf = append(buf, ',', '\n')
 
-	// sandboxing: bool — emitted unconditionally to match REF.
 	buf = append(buf, innerPad...)
 	if n.Sandboxing {
 		buf = append(buf, `"sandboxing": true,`...)
@@ -175,31 +132,26 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 	}
 	buf = append(buf, '\n')
 
-	// self_uid: string
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"self_uid": `...)
 	buf = appendString(buf, n.SelfUID)
 	buf = append(buf, ',', '\n')
 
-	// stats_uid: upstream raw-graph field injected after self_uid.
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"stats_uid": `...)
 	buf = appendString(buf, n.StatsUID)
 	buf = append(buf, ',', '\n')
 
-	// tags: []string
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"tags": `...)
 	buf = appendStringSlice(buf, n.Tags, innerPad)
 	buf = append(buf, ',', '\n')
 
-	// target_properties: map[string]string
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"target_properties": `...)
 	buf = appendStringMap(buf, n.TargetProperties, innerPad)
 	buf = append(buf, ',', '\n')
 
-	// uid: string
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"uid": `...)
 	buf = appendString(buf, n.UID)
@@ -211,8 +163,6 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 	return buf
 }
 
-// appendCmdSlice emits []Cmd. Inner pad is the indent of the array's
-// opening '[' (cmd_args' indent inside each Cmd is innerPad+"        ").
 func appendCmdSlice(buf []byte, cmds []Cmd, pad string) []byte {
 	if len(cmds) == 0 {
 		return append(buf, '[', ']')
@@ -226,12 +176,10 @@ func appendCmdSlice(buf []byte, cmds []Cmd, pad string) []byte {
 		buf = append(buf, itemPad...)
 		buf = append(buf, '{', '\n')
 
-		// cmd_args: []string — always present, first key.
 		buf = append(buf, innerPad...)
 		buf = append(buf, `"cmd_args": `...)
 		buf = appendStringSlice(buf, c.CmdArgs, innerPad)
 
-		// cwd: string, omitempty
 		if c.Cwd != "" {
 			buf = append(buf, ',', '\n')
 			buf = append(buf, innerPad...)
@@ -239,7 +187,6 @@ func appendCmdSlice(buf []byte, cmds []Cmd, pad string) []byte {
 			buf = appendString(buf, c.Cwd)
 		}
 
-		// env: map[string]string, omitempty
 		if len(c.Env) > 0 {
 			buf = append(buf, ',', '\n')
 			buf = append(buf, innerPad...)
@@ -247,8 +194,6 @@ func appendCmdSlice(buf []byte, cmds []Cmd, pad string) []byte {
 			buf = appendStringMap(buf, c.Env, innerPad)
 		}
 
-		// stdout: omitempty; emitted after env for alphabetical key order
-		// (cmd_args, cwd, env, stdout).
 		if c.Stdout != "" {
 			buf = append(buf, ',', '\n')
 			buf = append(buf, innerPad...)
@@ -274,7 +219,6 @@ func appendCmdSlice(buf []byte, cmds []Cmd, pad string) []byte {
 	return buf
 }
 
-// appendStringSlice emits []string. Empty slice is `[]` on the same line.
 func appendStringSlice(buf []byte, ss []string, pad string) []byte {
 	if len(ss) == 0 {
 		return append(buf, '[', ']')
@@ -300,8 +244,6 @@ func appendStringSlice(buf []byte, ss []string, pad string) []byte {
 	return buf
 }
 
-// appendVFSSlice emits []VFS in the same shape as appendStringSlice —
-// each element renders as its canonical "$(S)/<rel>" or "$(B)/<rel>".
 func appendVFSSlice(buf []byte, vs []VFS, pad string) []byte {
 	if len(vs) == 0 {
 		return append(buf, '[', ']')
@@ -467,8 +409,6 @@ func appendGraphConfResourceURIs(buf []byte, resources []graphConfResourceURI, p
 	return buf
 }
 
-// appendVFS emits a single VFS in JSON-string form. Materialises the
-// canonical VFS string through VFS.String().
 func appendVFS(buf []byte, v VFS) []byte {
 	buf = append(buf, '"')
 	buf = appendStringEscapedBody(buf, v.String())
@@ -477,8 +417,6 @@ func appendVFS(buf []byte, v VFS) []byte {
 	return buf
 }
 
-// appendStringMap emits map[string]string with keys sorted (json default).
-// Empty map is `{}` on the same line.
 func appendStringMap(buf []byte, m map[string]string, pad string) []byte {
 	if len(m) == 0 {
 		return append(buf, '{', '}')
@@ -512,8 +450,6 @@ func appendStringMap(buf []byte, m map[string]string, pad string) []byte {
 	return buf
 }
 
-// appendStringSliceMap emits map[string][]string with keys sorted.
-// Empty map is `{}` on the same line.
 func appendStringSliceMap(buf []byte, m map[string][]string, pad string) []byte {
 	if len(m) == 0 {
 		return append(buf, '{', '}')
@@ -547,10 +483,6 @@ func appendStringSliceMap(buf []byte, m map[string][]string, pad string) []byte 
 	return buf
 }
 
-// appendInterfaceMap emits map[string]interface{} for Requirements. The
-// codebase stores only float64/string/bool here; any other dynamic type
-// throws so a future gap surfaces immediately rather than as a silent
-// byte-mismatch.
 func appendInterfaceMap(buf []byte, m map[string]interface{}, pad string) []byte {
 	if len(m) == 0 {
 		return append(buf, '{', '}')
@@ -598,13 +530,8 @@ func appendInterfaceMap(buf []byte, m map[string]interface{}, pad string) []byte
 	return buf
 }
 
-// hex is the lookup table for \u00xx escapes in appendString.
 const hex = "0123456789abcdef"
 
-// appendString emits s as a JSON-escaped string matching encoding/json
-// with EscapeHTML=false: 0x00..0x1f as \uXXXX (with \b\t\n\f\r shortcuts),
-// '"' and '\\' escaped, U+2028/U+2029 escaped (JS-compat carve-out),
-// invalid UTF-8 replaced with U+FFFD; '<>&' pass through.
 func appendString(buf []byte, s string) []byte {
 	buf = append(buf, '"')
 	buf = appendStringEscapedBody(buf, s)
@@ -612,14 +539,10 @@ func appendString(buf []byte, s string) []byte {
 	return buf
 }
 
-// appendStringEscapedBody emits the JSON-escaped BODY of a string,
-// without surrounding quotes. Extracted so concatenation callers (e.g.
-// appendVFS materialising "$(S)/" + rel) avoid heap concat: append
-// prefix body + rel body inside one shared pair of quotes.
 func appendStringEscapedBody(buf []byte, s string) []byte {
 	start := 0
 	for i := 0; i < len(s); {
-		// Fast ASCII path (no escape needed).
+
 		if b := s[i]; b < utf8.RuneSelf {
 			if htmlSafeNoEscape[b] {
 				i++
@@ -645,7 +568,7 @@ func appendStringEscapedBody(buf []byte, s string) []byte {
 			case '\t':
 				buf = append(buf, '\\', 't')
 			default:
-				// 0x00..0x1f minus the shortcuts above.
+
 				buf = append(buf, '\\', 'u', '0', '0', hex[b>>4], hex[b&0xf])
 			}
 
@@ -655,7 +578,6 @@ func appendStringEscapedBody(buf []byte, s string) []byte {
 			continue
 		}
 
-		// Multi-byte UTF-8.
 		c, size := utf8.DecodeRuneInString(s[i:])
 
 		if c == utf8.RuneError && size == 1 {
@@ -670,7 +592,6 @@ func appendStringEscapedBody(buf []byte, s string) []byte {
 			continue
 		}
 
-		// JSONP/JS line separator carve-out.
 		if c == ' ' || c == ' ' {
 			if start < i {
 				buf = append(buf, s[start:i]...)
@@ -693,9 +614,6 @@ func appendStringEscapedBody(buf []byte, s string) []byte {
 	return buf
 }
 
-// htmlSafeNoEscape[b] reports whether ASCII byte b can pass through
-// verbatim with EscapeHTML=false. False means escaping needed (control
-// char, '"', '\\'). We never index this table for b >= 0x80.
 var htmlSafeNoEscape = func() [128]bool {
 	var t [128]bool
 

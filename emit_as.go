@@ -1,12 +1,5 @@
 package main
 
-// EmitAS emits an AS node for assembling a GNU/clang-as `.s`/`.S` (or
-// non-x86 `.asm`) source `srcRel` (relative to instance.Path) into an
-// object file. The x86_64 `.asm` yasm flavour is emitASYasm — only that
-// path depends on the yasm tool, so this one never wires it. Synthetic
-// tests can pass ModuleCCInputs{} for "no per-module flags".
-//
-// Returns (NodeRef, outputPath).
 func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS) {
 	outVFS, inVFS := composeASPaths(instance, srcRel, srcVFS, in)
 	outputPath := outVFS.String()

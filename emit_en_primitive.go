@@ -1,25 +1,5 @@
 package main
 
-// en.go — emitter for EN (enum serialization) nodes.
-//
-// One EN node per GENERATE_ENUM_SERIALIZATION[_WITH_HEADER|_NOUTF] macro
-// invocation; runs enum_parser over the named header, producing
-// _serialized.cpp and (with _WITH_HEADER) _serialized.h.
-//
-// cmd_args: [enumParserBin, $(S)/<hdr>, --include-path, <hdr>,
-//            --output, $(B)/<hdr>_serialized.cpp,
-//            [--header, $(B)/<hdr>_serialized.h]]
-// inputs: [dep-EN-outputs..., enumParserBin, $(S)/<hdr>, ...includeClosure]
-
-// EmitEN emits one EN node for a GENERATE_ENUM_SERIALIZATION(*) invocation.
-// headerInput is the canonical source input VFS; headerRel is the raw macro
-// argument that upstream reuses for serialized output layout under
-// $(B)/<instance.Path>/...
-//
-// withHeader adds --header + .h output. enumParserLD may be zero when the
-// host walk failed. depENRefs/depENOutputs wire cross-EN serialized-header
-// deps; headerIncludeClosure is the include-scanner result for headerInput.
-// Returns NodeRef and output paths (1 or 2).
 func EmitEN(
 	instance ModuleInstance,
 	headerInput VFS,
@@ -33,9 +13,7 @@ func EmitEN(
 	headerIncludeClosure []VFS,
 	emit Emitter,
 ) (NodeRef, []VFS) {
-	// The output path mirrors:
-	//   $(B)/<instance.Path>/<headerRel>_serialized.cpp
-	//   [ .h with _WITH_HEADER ]
+
 	serializedCPPVFS := Build(instance.Path + "/" + headerRel + "_serialized.cpp")
 
 	cmdArgs := []string{
@@ -59,8 +37,6 @@ func EmitEN(
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
-	// inputs: dep-EN outputs (leading), then enum_parser binary,
-	// then the source header, then its transitive include closure.
 	inputs := make([]VFS, 0, len(depENOutputs)+2+len(headerIncludeClosure))
 	inputs = append(inputs, depENOutputs...)
 	inputs = append(inputs, enumParserBin)

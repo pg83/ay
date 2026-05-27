@@ -7,60 +7,47 @@ import (
 	"strings"
 )
 
-// MakeFile is the parsed representation of a ya.make file.
 type MakeFile struct {
-	Path  string // absolute path of the .ya.make file (or relative if caller passed relative)
-	Stmts []Stmt // top-level statements in source order
+	Path  string
+	Stmts []Stmt
 }
 
-// Stmt is the sealed-interface marker for ya.make statements.
 type Stmt interface {
-	stmtMarker() // unexported, just for sealed-interface discipline
+	stmtMarker()
 }
 
-// ModuleStmt represents bare module declarations like PROGRAM(), LIBRARY().
 type ModuleStmt struct {
-	Name string   // e.g. "PROGRAM", "LIBRARY"
-	Args []string // usually empty for our subset
-	Line int      // 1-based source line of the macro
+	Name string
+	Args []string
+	Line int
 }
 
-// PeerdirStmt represents PEERDIR(p1 p2 ...).
 type PeerdirStmt struct {
 	Paths []string
 	Line  int
 }
 
-// SrcsStmt represents SRCS(s1 s2 ...).
 type SrcsStmt struct {
 	Sources []string
 	Line    int
 }
 
-// SetStmt represents SET(NAME value...) or SET(NAME "value").
 type SetStmt struct {
 	Name  string
 	Value string
 	Line  int
 }
 
-// EndStmt represents END().
 type EndStmt struct {
 	Line int
 }
 
-// UnknownStmt is the catch-all for macros we recognize textually but do not
-// model semantically yet. Keeps the parser tolerant.
 type UnknownStmt struct {
 	Name string
 	Args []string
 	Line int
 }
 
-// IfStmt represents `IF (cond) ... ELSE ... ENDIF` (ELSEIF nests as
-// IfStmt in the Else branch). Body slices are parsed Stmts in source
-// order; IF without ELSE has nil Else. The evaluator
-// (`macros.go:EvalCond`) drops unreachable branches in Gen.
 type IfStmt struct {
 	Cond Expr
 	Then []Stmt
@@ -68,135 +55,86 @@ type IfStmt struct {
 	Line int
 }
 
-// IncludeStmt represents `INCLUDE(path)`. NOTE: Parse / ParseFile
-// NEVER emit this — includes are inline-expanded at parse time so
-// downstream walkers see a flat top-level Stmts list. See
-// expandInclude for path resolution.
 type IncludeStmt struct {
 	Path string
 	Line int
 }
 
-// JoinSrcsStmt represents `JOIN_SRCS(name srcs...)`. OutputName is the
-// first arg; Sources keeps the remaining args in declaration order
-// (NOT sorted — JOIN_SRCS preserves source order in the generated
-// translation unit; reference cmd_args are byte-exact-sensitive).
 type JoinSrcsStmt struct {
 	OutputName string
 	Sources    []string
 	Line       int
 }
 
-// AddInclStmt represents `ADDINCL(paths...)` with per-path GLOBAL
-// modifier. GLOBAL paths propagate to consumers via PEERDIR; OwnPaths
-// apply only to the declaring module.
 type AddInclStmt struct {
 	GlobalPaths []string
 	OwnPaths    []string
 	CythonPaths []string
 	AsmPaths    []string
-	// AllPaths preserves declaration order across the GLOBAL split, so
-	// own cmd_args emission gets -I slots in declaration-order layout
-	// (not Global-first).
+
 	AllPaths []string
 	Line     int
 }
 
-// CFlagsStmt represents `CFLAGS([GLOBAL] flags...)` with per-flag
-// GLOBAL modifier. A flag immediately after `GLOBAL` goes to
-// GlobalFlags; others go to OwnFlags. GlobalFlags propagates to
-// consumers via PEERDIR; OwnFlags applies only to the declaring
-// module.
 type CFlagsStmt struct {
 	GlobalFlags []string
 	OwnFlags    []string
 	Line        int
 }
 
-// CXXFlagsStmt represents `CXXFLAGS([GLOBAL] flags...)`. Same
-// per-flag GLOBAL semantics as CFlagsStmt; applies only to C++
-// sources (.cpp/.cc/.cxx) — CFLAGS applies to both C and C++.
 type CXXFlagsStmt struct {
 	GlobalFlags []string
 	OwnFlags    []string
 	Line        int
 }
 
-// CONLYFlagsStmt represents `CONLYFLAGS([GLOBAL] flags...)`. C-only
-// counterpart to CXXFlagsStmt: applies only to C / .S sources.
 type CONLYFlagsStmt struct {
 	GlobalFlags []string
 	OwnFlags    []string
 	Line        int
 }
 
-// LDFlagsStmt represents `LDFLAGS(flags...)`. No modifier — LDFLAGS in
-// the upstream macro vocabulary is always "global to the linked
-// module" and never carries a per-arg GLOBAL-ness toggle.
 type LDFlagsStmt struct {
 	Flags []string
 	Line  int
 }
 
-// SrcDirStmt represents `SRCDIR(dir)` — single-arg.
 type SrcDirStmt struct {
 	Dir  string
 	Line int
 }
 
-// GlobalSrcsStmt represents `GLOBAL_SRCS(srcs...)`.
 type GlobalSrcsStmt struct {
 	Sources []string
 	Line    int
 }
 
-// GenerateEnumSerializationStmt represents a GENERATE_ENUM_SERIALIZATION(*) macro.
-// Variant captures which of the three macro forms was used:
-//   - "plain"       → GENERATE_ENUM_SERIALIZATION
-//   - "with_header" → GENERATE_ENUM_SERIALIZATION_WITH_HEADER
-//   - "noutf"       → GENERATE_ENUM_SERIALIZATION_NOUTF
-//
-// Header is the single argument: the header path relative to the
-// module directory (e.g. "stats_enums.h" or "config/config.h").
 type GenerateEnumSerializationStmt struct {
 	Header  string
-	Variant string // "plain" | "with_header" | "noutf"
+	Variant string
 	Line    int
 }
 
-// DefaultVarStmt represents `DEFAULT(NAME value)`. Records a
-// configuration-variable default used by CONFIGURE_FILE's $CFG_VARS
-// expansion. The value is the second argument; quotes are stripped by
-// the parser so the stored value is the bare string (e.g.
-// `DEFAULT(KOSHER_SVN_VERSION "")` → Value="").
 type DefaultVarStmt struct {
 	VarName string
 	Value   string
 	Line    int
 }
 
-// RunProgramStmt represents `RUN_PROGRAM(tool args... [IN ...]
-// [OUT ...] [OUT_NOAUTO ...] [STDOUT file] [ENV k=v...] [CWD dir]
-// [OUTPUT_INCLUDES ...] [TOOL module...])`. ToolPath is the PROGRAM's
-// module-relative path; Args are positional args before the first
-// keyword. STDOUT (if any) goes to outputs[0] of the generated node.
 type RunProgramStmt struct {
 	ToolPath       string
 	Args           []string
 	INFiles        []string
 	OUTFiles       []string
 	OUTNoAutoFiles []string
-	StdoutFile     *string  // nil when STDOUT not specified
-	EnvPairs       []string // "KEY=VALUE" strings from ENV
+	StdoutFile     *string
+	EnvPairs       []string
 	CWD            *string
 	OutputIncludes []string
 	ToolPaths      []string
 	Line           int
 }
 
-// RunPythonStmt represents `RUN_PYTHON3(script args... [IN ...]
-// [OUT ...] [OUT_NOAUTO ...] [STDOUT file] [ENV k=v...] [CWD dir]
-// [OUTPUT_INCLUDES ...])`.
 type RunPythonStmt struct {
 	ScriptPath     string
 	Args           []string
@@ -210,54 +148,35 @@ type RunPythonStmt struct {
 	Line           int
 }
 
-// ConfigureFileStmt represents `CONFIGURE_FILE(src dst)`. Src is
-// SOURCE_ROOT-relative path to the .in template; Dst is BUILD_ROOT-
-// relative output. CONFIGURE_FILE is also the implicit handler for
-// .cpp.in/.c.in in SRCS — the parser synthesises a ConfigureFileStmt
-// with Src=<srcRel>, Dst=<srcRel without .in>.
 type ConfigureFileStmt struct {
-	Src  string // SOURCE_ROOT-relative
-	Dst  string // BUILD_ROOT-relative (module-dir-relative)
+	Src  string
+	Dst  string
 	Line int
 }
 
-// CreateBuildInfoStmt represents `CREATE_BUILDINFO_FOR(output_header)`.
-// OutputHeader is the name of the generated header (e.g.
-// "buildinfo_data.h").
 type CreateBuildInfoStmt struct {
 	OutputHeader string
 	Line         int
 }
 
-// RunAntlr4CppStmt represents `RUN_ANTLR4_CPP(grammar [options...])`.
-// Visitor/Listener track VISITOR/NO_LISTENER keywords. OutputIncludes
-// captures repo-relative headers from OUTPUT_INCLUDES — propagated into
-// the CP `.g4.cpp` registry entry so the CC consumer's include closure
-// inherits their transitive set.
 type RunAntlr4CppStmt struct {
-	Grammar        string   // e.g. "TConf.g4"
-	Options        []string // extra args (e.g. ["-package", "NConfReader"])
+	Grammar        string
+	Options        []string
 	Visitor        bool
 	Listener       bool
-	OutputIncludes []string // repo-relative (e.g. "util/generic/string.h")
+	OutputIncludes []string
 	Line           int
 }
 
-// RunAntlr4CppSplitStmt represents `RUN_ANTLR4_CPP_SPLIT(lexer parser
-// [VISITOR] [LISTENER] [OUTPUT_INCLUDES ...])`. Lexer and Parser are
-// the two .g4 grammar files; the generated outputs cover both.
 type RunAntlr4CppSplitStmt struct {
-	Lexer          string // e.g. "CmdLexer.g4"
-	Parser         string // e.g. "CmdParser.g4"
+	Lexer          string
+	Parser         string
 	Visitor        bool
 	Listener       bool
-	OutputIncludes []string // repo-relative
+	OutputIncludes []string
 	Line           int
 }
 
-// RunAntlrStmt represents the generic `RUN_ANTLR(...)` /
-// `RUN_ANTLR4(...)` forms. Args are the positional tool arguments
-// before the first keyword section (IN/OUT/OUT_NOAUTO/CWD/...).
 type RunAntlrStmt struct {
 	Macro          string
 	Args           []string
@@ -269,28 +188,16 @@ type RunAntlrStmt struct {
 	Line           int
 }
 
-// ResourcePair holds one (path, key) pair from a RESOURCE / RESOURCE_FILES
-// macro. The Path is the source-file path (module-relative) or "-" for a
-// kv-only entry; in the latter case Key carries the raw "name=value"
-// string fed to --kvs by the upstream packer.
 type ResourcePair struct {
 	Path string
 	Key  string
 }
 
-// ResourceStmt represents `RESOURCE([DONT_PARSE] [DONT_COMPRESS]
-// path1 key1 ...)`. Pairs preserves declaration order; DONT_PARSE /
-// DONT_COMPRESS are dropped (hash + cmd_args do not depend on them).
 type ResourceStmt struct {
 	Pairs []ResourcePair
 	Line  int
 }
 
-// ResourceFilesStmt represents `RESOURCE_FILES([DONT_COMPRESS]
-// [PREFIX p] [DEST d] [STRIP s] path1 ...)`. Args is the raw token
-// list; expansion into RESOURCE pairs (mirroring upstream
-// `build/plugins/res.py:onresource_files`) happens in
-// gen.go:collectStmts so downstream walkers see a uniform pair list.
 type ResourceFilesStmt struct {
 	Args []string
 	Line int
@@ -324,59 +231,38 @@ func (*RunAntlrStmt) stmtMarker()                  {}
 func (*ResourceStmt) stmtMarker()                  {}
 func (*ResourceFilesStmt) stmtMarker()             {}
 
-// Expr is the sealed-interface marker for IF-predicate AST nodes.
-// Evaluator: macros.go:EvalCond. Constructors: ident, NOT, AND, OR,
-// string/int literals, and the `==`, `!=`, `<` comparison operators.
 type Expr interface {
 	exprMarker()
 }
 
-// ExprIdent is a leaf identifier — typically a bound-var name like
-// `OS_LINUX` or `CLANG`. The evaluator throws on unknown idents
-// rather than silently defaulting to false.
 type ExprIdent struct {
 	Name string
 }
 
-// ExprNot is logical negation: `NOT X`.
 type ExprNot struct {
 	Of Expr
 }
 
-// ExprAnd is short-circuiting conjunction: `A AND B`.
 type ExprAnd struct {
 	Left, Right Expr
 }
 
-// ExprOr is short-circuiting disjunction: `A OR B`.
 type ExprOr struct {
 	Left, Right Expr
 }
 
-// ExprString is a string literal — `"libcxxrt"` in
-// `IF (CXX_RT == "libcxxrt")`. Only legal as an operand of ExprEq;
-// using it as a top-level cond throws at evaluation time (a bare
-// string has no boolean meaning).
 type ExprString struct {
 	Value string
 }
 
-// ExprInt is an integer literal — `28` in `IF (ANDROID_API < 28)`.
-// Unsigned (digits only); negative integers unsupported by the
-// current lexer.
 type ExprInt struct {
 	Value int
 }
 
-// ExprEq is equality comparison: `Left == Right`. Both operands must
-// resolve (via env or literal) to the same dynamic type — `string ==
-// string` or `int == int`. Mixed types throw at evaluation time.
 type ExprEq struct {
 	Left, Right Expr
 }
 
-// ExprLt is numeric less-than: `Left < Right`. Both operands must
-// resolve to int; non-int operands throw.
 type ExprLt struct {
 	Left, Right Expr
 }
@@ -390,11 +276,10 @@ func (*ExprInt) exprMarker()    {}
 func (*ExprEq) exprMarker()     {}
 func (*ExprLt) exprMarker()     {}
 
-// ParseError describes a syntactic problem with a ya.make file.
 type ParseError struct {
 	File    string
-	Line    int // 1-based
-	Col     int // 1-based
+	Line    int
+	Col     int
 	Message string
 }
 
@@ -406,11 +291,6 @@ func (e *ParseError) Error() string {
 	return fmt.Sprintf("%d:%d: %s", e.Line, e.Col, e.Message)
 }
 
-// ParseFile reads path through fs and parses it as a ya.make. Returns a
-// typed *ParseError for syntax errors (errors.As-able for line/col); I/O
-// errors surface as plain *fs.PathError. fs is required: INCLUDE
-// expansion threads it through the recursive parse so transitive reads
-// share the directory cache.
 func ParseFile(fs *FS, path string) (mf *MakeFile, err error) {
 	exc := Try(func() {
 		data := fs.ReadAbs(path)
@@ -418,7 +298,7 @@ func ParseFile(fs *FS, path string) (mf *MakeFile, err error) {
 		abs, absErr := filepath.Abs(path)
 
 		if absErr != nil {
-			// Fall back to caller-provided path if Abs fails for any reason.
+
 			abs = path
 		}
 
@@ -433,30 +313,26 @@ func ParseFile(fs *FS, path string) (mf *MakeFile, err error) {
 	return mf, err
 }
 
-// ----------------------------------------------------------------------
-// Lexer
-// ----------------------------------------------------------------------
-
 type tokKind int
 
 const (
 	tokEOF tokKind = iota
 	tokIdent
-	tokString // quoted string (without surrounding quotes)
-	tokWord   // bare path / identifier-like atom that's not a macro IDENT (e.g. "main.cpp", "library/cpp/archive")
+	tokString
+	tokWord
 	tokLParen
 	tokRParen
-	tokInt   // unsigned integer literal (e.g. IF (ANDROID_API < 28))
-	tokEq    // `==` operator (e.g. IF (CXX_RT == "libcxxrt"))
-	tokLt    // `<` operator (e.g. IF (ANDROID_API < 28))
-	tokNotEq // `!=` operator (e.g. IF (OS_SDK != "ubuntu-20"))
+	tokInt
+	tokEq
+	tokLt
+	tokNotEq
 )
 
 type token struct {
 	kind tokKind
-	val  string // textual value (for ident/string/word)
-	line int    // 1-based line of the token's first character
-	col  int    // 1-based column of the token's first character
+	val  string
+	line int
+	col  int
 }
 
 type lexer struct {
@@ -465,9 +341,7 @@ type lexer struct {
 	pos  int
 	line int
 	col  int
-	// prevByte: most recently consumed source byte. skipTrivia uses
-	// it to decide whether a '#' starts a comment (boundary) or is a
-	// word byte. 0 = start of file, treated like whitespace.
+
 	prevByte byte
 }
 
@@ -482,9 +356,6 @@ func newLexer(name string, src []byte) *lexer {
 	}
 }
 
-// throwParse raises a *ParseError-bearing exception. Callers that need
-// the typed value back (Parse, ParseFile) wrap their entry point in Try
-// and use errors.As to recover the *ParseError.
 func (l *lexer) throwParse(line, col int, format string, args ...any) {
 	pe := &ParseError{
 		File:    l.name,
@@ -496,10 +367,6 @@ func (l *lexer) throwParse(line, col int, format string, args ...any) {
 	New(pe).throw()
 }
 
-// advance consumes the byte at l.pos and updates line/col. It treats '\r',
-// '\n', and the two-byte sequence "\r\n" as a single line terminator that
-// bumps line by exactly 1 and resets col to 1. Returns the byte at the
-// original l.pos (the leading byte of any CRLF pair).
 func (l *lexer) advance() byte {
 	b := l.src[l.pos]
 	l.pos++
@@ -510,8 +377,7 @@ func (l *lexer) advance() byte {
 		l.col = 1
 		l.prevByte = b
 	case b == '\r':
-		// Lone CR is a newline. CRLF is also one newline: consume the
-		// trailing '\n' here without bumping line/col a second time.
+
 		l.line++
 		l.col = 1
 
@@ -541,11 +407,6 @@ func isIdentCont(b byte) bool {
 	return (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
 }
 
-// isWordByte tells whether b can appear inside a bare-word arg.
-// Inclusions: '{', '}' for ${VAR} interpolation; '#' is allowed
-// mid-word — skipTrivia's commentBoundary check distinguishes leading
-// '#' before classification. Quote-like and shell-metacharacter bytes
-// (' ` ; | & ^ < > [ ]) are excluded to surface real syntax errors.
 func isWordByte(b byte) bool {
 	switch {
 	case b >= 'a' && b <= 'z':
@@ -558,7 +419,7 @@ func isWordByte(b byte) bool {
 
 	switch b {
 	case '_', '-', '.', '/', '+', ':', '=', '*', '?', '$', '%', '~', ',', '!', '{', '}', '#',
-		// Backslash appears in -DFOO=\"bar\" compiler-flag tokens.
+
 		'\\':
 		return true
 	}
@@ -566,11 +427,6 @@ func isWordByte(b byte) bool {
 	return false
 }
 
-// skipTrivia advances past whitespace and comments. A '#' starts a
-// comment only at a trivia boundary (after whitespace, SOF, or '(');
-// anywhere else '#' is a word byte — so paths like "a/b#x" remain one
-// word. Without this discrimination a mid-word '#' would silently
-// swallow the rest of the macro call up to EOL.
 func (l *lexer) skipTrivia() {
 	for l.pos < len(l.src) {
 		b := l.src[l.pos]
@@ -579,9 +435,7 @@ func (l *lexer) skipTrivia() {
 		case isWhitespace(b):
 			l.advance()
 		case b == '#' && commentBoundary(l.prevByte):
-			// Comment to end-of-line. Stop just before any line
-			// terminator so the next iteration's whitespace branch
-			// consumes it (and updates line/col uniformly).
+
 			for l.pos < len(l.src) && l.src[l.pos] != '\n' && l.src[l.pos] != '\r' {
 				l.advance()
 			}
@@ -591,10 +445,6 @@ func (l *lexer) skipTrivia() {
 	}
 }
 
-// commentBoundary reports whether prev (the most recently consumed byte,
-// or 0 at start-of-file) is a trivia boundary that allows a following
-// '#' to start a comment. Whitespace, SOF, and '(' qualify; anything
-// else means the '#' is mid-word and must be treated as a literal.
 func commentBoundary(prev byte) bool {
 	if prev == 0 {
 		return true
@@ -607,9 +457,6 @@ func commentBoundary(prev byte) bool {
 	return isWhitespace(prev)
 }
 
-// next returns the next token. On EOF it returns a tokEOF token. On a
-// malformed token (e.g. unterminated string) it throws a
-// *ParseError-bearing exception that Parse/ParseFile recover via Try.
 func (l *lexer) next() token {
 	return l.readToken()
 }
@@ -636,27 +483,20 @@ func (l *lexer) readToken() token {
 	case b == '"' || b == '\'':
 		return l.readString(startLine, startCol, b)
 	case b == '<':
-		// `<` is the only single-character relational operator we
-		// model. `<=` and `>=` are not in the closure subset; if a
-		// future ya.make needs them, extend here and in parseCmp.
+
 		l.advance()
 
 		return token{kind: tokLt, line: startLine, col: startCol}
 	case b == '=' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '=':
-		// `==` only — bare `=` at a token boundary falls through to
-		// readWord (so flag-style values like "-D_X=1" still lex as a
-		// single word; bare `=` cannot start a token in any real
-		// ya.make we observe).
-		l.advance() // consume first '='
-		l.advance() // consume second '='
+
+		l.advance()
+		l.advance()
 
 		return token{kind: tokEq, line: startLine, col: startCol}
 	case b == '!' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '=':
-		// `!=` only — bare `!` at a token boundary falls through to
-		// readWord (e.g. CFLAGS values like "!suppressed"; not common
-		// in real ya.makes but kept lenient).
-		l.advance() // consume '!'
-		l.advance() // consume '='
+
+		l.advance()
+		l.advance()
 
 		return token{kind: tokNotEq, line: startLine, col: startCol}
 	case b >= '0' && b <= '9':
@@ -666,26 +506,16 @@ func (l *lexer) readToken() token {
 	case isWordByte(b):
 		return l.readWord(startLine, startCol)
 	default:
-		// Consume the offending byte so callers can keep advancing past
-		// malformed input if they want to (we always throw below).
+
 		l.advance()
 		l.throwParse(startLine, startCol, "unexpected character %q", b)
 
-		// Unreachable: throwParse panics. The bare return keeps the
-		// compiler happy without polluting the function's normal return
-		// paths.
 		return token{}
 	}
 }
 
-// readString reads a quoted string (val excludes the quotes). Both
-// single-quoted and double-quoted forms occur in real ya.makes.
-// Body is RAW — no escape processing. \X is two literal bytes; \" is
-// NOT an escape (pinned by TestStringHasNoEscapeProcessing). A literal
-// newline inside a string is rejected as "unterminated string" at the
-// opening-quote's line/col — ya.make strings are single-line.
 func (l *lexer) readString(startLine, startCol int, quote byte) token {
-	l.advance() // consume opening quote
+	l.advance()
 
 	var buf []byte
 
@@ -697,7 +527,7 @@ func (l *lexer) readString(startLine, startCol int, quote byte) token {
 		b := l.src[l.pos]
 
 		if b == quote {
-			l.advance() // consume closing quote
+			l.advance()
 
 			return token{kind: tokString, val: string(buf), line: startLine, col: startCol}
 		}
@@ -707,8 +537,7 @@ func (l *lexer) readString(startLine, startCol int, quote byte) token {
 		}
 
 		if b == '\\' && l.pos+1 < len(l.src) {
-			// Treat backslash + next byte as two literal bytes (no escapes).
-			// (See TestStringHasNoEscapeProcessing.)
+
 			buf = append(buf, l.advance())
 			buf = append(buf, l.advance())
 
@@ -719,10 +548,6 @@ func (l *lexer) readString(startLine, startCol int, quote byte) token {
 	}
 }
 
-// readIdentOrWord reads a token whose first byte is identifier-start.
-// Pure identifier-class bytes → tokIdent; any non-ident byte in the
-// run reclassifies the whole token as tokWord. Matches ya.make's
-// uppercase-macros vs lowercase-paths distribution.
 func (l *lexer) readIdentOrWord(startLine, startCol int) token {
 	var buf []byte
 	pureIdent := true
@@ -731,8 +556,7 @@ func (l *lexer) readIdentOrWord(startLine, startCol int) token {
 		b := l.src[l.pos]
 
 		if b == '\\' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '"' {
-			// `\"` inside an ident/word token — consume as two literal
-			// bytes (same as readWord). The `"` must not start a string.
+
 			pureIdent = false
 			buf = append(buf, l.advance())
 			buf = append(buf, l.advance())
@@ -766,7 +590,6 @@ func (l *lexer) readIdentOrWord(startLine, startCol int) token {
 	return token{kind: kind, val: val, line: startLine, col: startCol}
 }
 
-// readWord reads a bare-word token (path, lowercase identifier, etc.).
 func (l *lexer) readWord(startLine, startCol int) token {
 	var buf []byte
 
@@ -774,9 +597,7 @@ func (l *lexer) readWord(startLine, startCol int) token {
 		b := l.src[l.pos]
 
 		if b == '\\' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '"' {
-			// `\"` inside a bare-word token (e.g. -DFOO=\"bar\") is
-			// consumed as two literal bytes so the whole compiler flag
-			// remains one token. The embedded `"` must not start a string.
+
 			buf = append(buf, l.advance())
 			buf = append(buf, l.advance())
 
@@ -793,9 +614,6 @@ func (l *lexer) readWord(startLine, startCol int) token {
 	return token{kind: tokWord, val: string(buf), line: startLine, col: startCol}
 }
 
-// readNumberOrWord reads a token starting with a digit. Pure digit
-// run ending at a non-word boundary → tokInt; digits followed by
-// another word byte → tokWord (e.g. version literal "2025-06-20").
 func (l *lexer) readNumberOrWord(startLine, startCol int) token {
 	start := l.pos
 
@@ -804,9 +622,7 @@ func (l *lexer) readNumberOrWord(startLine, startCol int) token {
 	}
 
 	if l.pos < len(l.src) && isWordByte(l.src[l.pos]) {
-		// Continuation byte is a non-digit word byte — the whole run
-		// is a tokWord (e.g. version literal "2025-06-20" or a
-		// path component starting with a digit).
+
 		for l.pos < len(l.src) && isWordByte(l.src[l.pos]) {
 			l.advance()
 		}
@@ -817,14 +633,6 @@ func (l *lexer) readNumberOrWord(startLine, startCol int) token {
 	return token{kind: tokInt, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
 }
 
-// ----------------------------------------------------------------------
-// Parser
-// ----------------------------------------------------------------------
-
-// Parse parses src as a ya.make file. Returns a typed *ParseError on
-// syntactic problems (errors.As-able). Lexer/parser raise via throw;
-// Parse wraps the entry point in Try. fs is required for INCLUDE
-// expansion (transitive reads route through it).
 func Parse(fs *FS, name string, src []byte) (mf *MakeFile, err error) {
 	exc := Try(func() {
 		mf = parseInternal(fs, name, src)
@@ -863,9 +671,6 @@ func newIncludeState() *includeState {
 	return &includeState{once: map[string]struct{}{}}
 }
 
-// stmtTerminator names the boundary ending a Stmt sequence.
-// termTopLevel ends only at tokEOF; termIfBody (used by parseIf)
-// stops at ELSE, ELSEIF, or ENDIF.
 type stmtTerminator int
 
 const (
@@ -873,10 +678,6 @@ const (
 	termIfBody
 )
 
-// parseStmts collects Stmts until the terminator. For termIfBody it
-// returns the terminator macro's name token via endTok so parseIf can
-// decide between Else / ElseIf / ENDIF. INCLUDE expands inline (the
-// IncludeStmt itself is dropped from the result).
 func (p *parser) parseStmts(term stmtTerminator) (stmts []Stmt, endTok token) {
 	for {
 		tok := p.lex.next()
@@ -893,10 +694,6 @@ func (p *parser) parseStmts(term stmtTerminator) (stmts []Stmt, endTok token) {
 			p.lex.throwParse(tok.line, tok.col, "expected macro name, got %s", describeToken(tok))
 		}
 
-		// Inside an IF body, the keywords ELSE/ELSEIF/ENDIF are not
-		// macros — they are block boundaries. Detect them BEFORE we
-		// consume the `(...)` so parseIf can parse ELSEIF's condition
-		// arguments itself.
 		if term == termIfBody && (tok.val == "ELSE" || tok.val == "ELSEIF" || tok.val == "ENDIF") {
 			return stmts, tok
 		}
@@ -905,10 +702,6 @@ func (p *parser) parseStmts(term stmtTerminator) (stmts []Stmt, endTok token) {
 	}
 }
 
-// parseMacroInto consumes `(args...)` for nameTok and appends the
-// resulting Stmts to into. Most macros produce one Stmt; INCLUDE
-// expands inline (zero-or-more); IF reads its own block bodies via
-// parseStmts(termIfBody) so the caller's loop sees the IF as one Stmt.
 func (p *parser) parseMacroInto(into []Stmt, nameTok token) []Stmt {
 	switch nameTok.val {
 	case "IF":
@@ -950,9 +743,6 @@ func (p *parser) applyIncludeOnce(nameTok token) {
 	p.includes.once[abs] = struct{}{}
 }
 
-// parseMacroArgs reads `( args... )`. The leading `(` and the trailing
-// `)` are both consumed; the returned slice contains the bare-string
-// args (idents, words, strings) in source order.
 func (p *parser) parseMacroArgs(nameTok token) []string {
 	lp := p.lex.next()
 
@@ -980,10 +770,6 @@ func (p *parser) parseMacroArgs(nameTok token) []string {
 	}
 }
 
-// isIdentShapedName reports whether s could plausibly be a macro
-// identifier — non-empty, starting with letter or '_', containing only
-// letters, digits, and '_'. Used to decide whether a tokWord at top
-// level should be accepted as an UnknownStmt macro name.
 func isIdentShapedName(s string) bool {
 	if s == "" {
 		return false
@@ -1013,20 +799,15 @@ func isIdentShapedName(s string) bool {
 type parser struct {
 	lex          *lexer
 	name         string
-	includeStack []string // absolute paths of files being parsed, outermost first; used for cycle detection
+	includeStack []string
 	includes     *includeState
-	fs           *FS // source-tree FS for INCLUDE resolution; nil → direct os.{Stat,ReadFile} fallback
+	fs           *FS
 }
 
-// buildStmt routes recognized macro names to typed Stmt; everything else
-// becomes UnknownStmt. IF/INCLUDE are handled out-of-band by
-// parseMacroInto and never reach this function.
 func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 	switch nameTok.val {
 	case "PROGRAM", "LIBRARY",
-		// Other recognized module-declaration names. Each parses as a
-		// ModuleStmt and is dispatched in genModule by name and by the
-		// instance's Kind/Language.
+
 		"PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",
 		"PY3_PROGRAM_BIN", "PY2_PROGRAM", "PY3_PROGRAM",
 		"YQL_UDF_YDB", "YQL_UDF_CONTRIB",
@@ -1057,8 +838,6 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 			p.lex.throwParse(nameTok.line, nameTok.col, "JOIN_SRCS expects at least one argument (the output name)")
 		}
 
-		// Defensive copy: the caller's args slice is reused across
-		// branches; a sub-slice into it would alias.
 		sources := append([]string(nil), args[1:]...)
 
 		return &JoinSrcsStmt{OutputName: args[0], Sources: sources, Line: nameTok.line}
@@ -1107,9 +886,7 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 
 		return &GenerateEnumSerializationStmt{Header: args[0], Variant: "noutf", Line: nameTok.line}
 	case "DEFAULT":
-		// DEFAULT(NAME value) — configuration variable default.
-		// Accepts 1 or 2 args: name and optional value (empty string when
-		// the quoted value "" was stripped by the lexer).
+
 		varName := ""
 		value := ""
 		if len(args) >= 1 {
@@ -1120,29 +897,25 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		}
 		return &DefaultVarStmt{VarName: varName, Value: value, Line: nameTok.line}
 	case "CONFIGURE_FILE":
-		// CONFIGURE_FILE(src dst) — src is SOURCE_ROOT-relative path to
-		// the .in template; dst is the output name (BUILD_ROOT-relative to
-		// the module dir, no .in suffix).
+
 		if len(args) != 2 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "CONFIGURE_FILE expects exactly 2 arguments (src dst), got %d", len(args))
 		}
 		return &ConfigureFileStmt{Src: args[0], Dst: args[1], Line: nameTok.line}
 	case "CREATE_BUILDINFO_FOR":
-		// CREATE_BUILDINFO_FOR(output_header) — emits a BI node.
+
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "CREATE_BUILDINFO_FOR expects exactly 1 argument, got %d", len(args))
 		}
 		return &CreateBuildInfoStmt{OutputHeader: args[0], Line: nameTok.line}
 	case "RUN_ANTLR4_CPP":
-		// RUN_ANTLR4_CPP(grammar [-package pkg] [VISITOR] [NO_LISTENER] ...)
-		// The first arg is the .g4 grammar file; subsequent args are
-		// options (including VISITOR keyword and -package pairs).
+
 		if len(args) == 0 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_ANTLR4_CPP expects at least 1 argument (grammar)")
 		}
 		return parseRunAntlr4Cpp(args, nameTok.line)
 	case "RUN_ANTLR4_CPP_SPLIT":
-		// RUN_ANTLR4_CPP_SPLIT(lexer parser [VISITOR] [LISTENER] ...)
+
 		if len(args) < 2 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_ANTLR4_CPP_SPLIT expects at least 2 arguments (lexer parser)")
 		}
@@ -1153,9 +926,7 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		}
 		return parseRunAntlr(args, nameTok)
 	case "RUN_PROGRAM", "RUN_PY3_PROGRAM":
-		// RUN_PROGRAM(tool args... [IN files...]
-		//             [OUT files...] [OUT_NOAUTO files...] [STDOUT file] [ENV key=val...]
-		//             [CWD dir] [OUTPUT_INCLUDES files...])
+
 		if len(args) == 0 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "%s expects at least 1 argument (tool path)", nameTok.val)
 		}
@@ -1166,30 +937,16 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		}
 		return parseRunPython(args, nameTok.line)
 	case "RESOURCE":
-		// RESOURCE([DONT_PARSE] [DONT_COMPRESS] path1 key1 ...)
-		// Mirrors upstream `devtools/ymake/plugins/resource_handler/impl.cpp:23-26`
-		// Strips leading DONT_PARSE / DONT_COMPRESS, then pairs the
-		// remaining args as (path, key). Odd-count residual = parse
-		// error.
+
 		return parseResource(args, nameTok)
 	case "RESOURCE_FILES":
-		// RESOURCE_FILES([DONT_COMPRESS] [PREFIX p] [DEST d] [STRIP s]
-		//                path1 path2 ...)
-		// The plugin-side expansion into RESOURCE pairs (per `build/plugins/res.py`)
-		// happens at collect time in gen.go; here we just capture the raw
-		// arg list verbatim.
+
 		return &ResourceFilesStmt{Args: append([]string(nil), args...), Line: nameTok.line}
 	default:
 		return &UnknownStmt{Name: nameTok.val, Args: args, Line: nameTok.line}
 	}
 }
 
-// parseRunAntlr4Cpp parses RUN_ANTLR4_CPP args into a RunAntlr4CppStmt.
-// The grammar is args[0]; subsequent args may include VISITOR, NO_LISTENER,
-// OUTPUT_INCLUDES (and the files following it), and other option tokens
-// (e.g. -package, NConfReader) that are passed to antlr4 cmd_args.
-// Default is `-no-listener` unless LISTENER given (matches upstream
-// ymake.core.conf RUN_ANTLR4_CPP).
 func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
 	stmt := &RunAntlr4CppStmt{Grammar: args[0], Line: line}
 	i := 1
@@ -1199,9 +956,7 @@ func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
 			stmt.Visitor = true
 			i++
 		case "NO_LISTENER", "LISTENER":
-			// LISTENER is the positive form; NO_LISTENER suppresses it.
-			// RUN_ANTLR4_CPP default: -no-listener unless LISTENER given.
-			// The reference uses -visitor -no-listener, so track explicitly.
+
 			if args[i] == "NO_LISTENER" {
 				stmt.Listener = false
 			} else {
@@ -1209,16 +964,14 @@ func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
 			}
 			i++
 		case "OUTPUT_INCLUDES":
-			// Capture OUTPUT_INCLUDES section (repo-relative header paths).
-			// Threaded into the CP `.g4.cpp` registry entry so CC scan
-			// walks them transitively.
+
 			i++
 			for i < len(args) && !isRunAntlrKeyword(args[i]) {
 				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
 				i++
 			}
 		case "IN", "OUT", "OUT_NOAUTO", "INDUCED_DEPS", "TOOL":
-			// Skip keyword and its following arguments (until next keyword or end).
+
 			i++
 			for i < len(args) && !isRunAntlrKeyword(args[i]) {
 				i++
@@ -1231,10 +984,6 @@ func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
 	return stmt
 }
 
-// parseRunAntlr4CppSplit parses RUN_ANTLR4_CPP_SPLIT args.
-// Args[0]=lexer .g4, args[1]=parser .g4; remaining: VISITOR/LISTENER keywords
-// and OUTPUT_INCLUDES section. OUTPUT_INCLUDES tokens are captured for CP
-// registry use; other keyword sections are skipped.
 func parseRunAntlr4CppSplit(args []string, line int) *RunAntlr4CppSplitStmt {
 	stmt := &RunAntlr4CppSplitStmt{Lexer: args[0], Parser: args[1], Line: line}
 	for i := 2; i < len(args); i++ {
@@ -1244,22 +993,22 @@ func parseRunAntlr4CppSplit(args []string, line int) *RunAntlr4CppSplitStmt {
 		case "LISTENER":
 			stmt.Listener = true
 		case "NO_LISTENER":
-			// no-op: default is already no-listener
+
 		case "OUTPUT_INCLUDES":
-			// Capture repo-relative headers.
+
 			i++
 			for i < len(args) && !isRunAntlrKeyword(args[i]) {
 				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
 				i++
 			}
-			i-- // outer loop will i++
+			i--
 		case "IN", "OUT", "OUT_NOAUTO", "INDUCED_DEPS", "TOOL":
-			// skip keyword block
+
 			i++
 			for i < len(args) && !isRunAntlrKeyword(args[i]) {
 				i++
 			}
-			i-- // outer loop will i++
+			i--
 		}
 	}
 	return stmt
@@ -1294,8 +1043,6 @@ func parseRunAntlr(args []string, nameTok token) *RunAntlrStmt {
 	return stmt
 }
 
-// isRunAntlrKeyword reports whether s is a keyword that terminates a
-// positional-arg section in RUN_ANTLR4_CPP / RUN_ANTLR4_CPP_SPLIT.
 func isRunAntlrKeyword(s string) bool {
 	switch s {
 	case "VISITOR", "LISTENER", "NO_LISTENER", "OUTPUT_INCLUDES",
@@ -1324,10 +1071,6 @@ var runAntlrKeywords = map[string]bool{
 	"GRAMMAR_CWD":     true,
 }
 
-// runProgramKeywords is the set of keyword tokens in RUN_PROGRAM that
-// introduce a named argument list. When the parser encounters one of
-// these, subsequent tokens up to the next keyword (or end) belong to
-// that section rather than to the positional Args list.
 var runProgramKeywords = map[string]bool{
 	"IN":              true,
 	"IN_NOPARSE":      true,
@@ -1343,10 +1086,6 @@ var runProgramKeywords = map[string]bool{
 	"TOOL":            true,
 }
 
-// parseRunProgram parses RUN_PROGRAM args into a RunProgramStmt.
-// args[0] is the tool path (module-relative); remaining args are a mix
-// of positional args and keyword-headed sections (IN, OUT, OUT_NOAUTO,
-// STDOUT, ENV, CWD, OUTPUT_INCLUDES, INDUCED_DEPS, TOOL).
 func parseRunProgram(args []string, line int) *RunProgramStmt {
 	stmt := &RunProgramStmt{ToolPath: args[0], Line: line}
 	i := 1
@@ -1425,15 +1164,9 @@ func parseRunPython(args []string, line int) *RunPythonStmt {
 	return stmt
 }
 
-// parseResource parses RESOURCE(...) by stripping leading DONT_PARSE /
-// DONT_COMPRESS (per upstream
-// `devtools/ymake/plugins/resource_handler/impl.cpp:23-26`) and pairing
-// the remaining args. Odd-count residual = parse error.
 func parseResource(args []string, nameTok token) *ResourceStmt {
 	rest := args
-	// Strip up to two leading modifier tokens (DONT_PARSE, DONT_COMPRESS).
-	// Upstream caps the strip at two; we mirror that bound so a stray
-	// third keyword would round-trip as a (malformed) path token.
+
 	for i := 0; i < 2 && len(rest) > 0; i++ {
 		if rest[0] == "DONT_PARSE" || rest[0] == "DONT_COMPRESS" {
 			rest = rest[1:]
@@ -1458,10 +1191,6 @@ func parseResource(args []string, nameTok token) *ResourceStmt {
 	return &ResourceStmt{Pairs: pairs, Line: nameTok.line}
 }
 
-// splitGlobalModifier extracts a leading "GLOBAL" pseudo-arg.
-// Returns ("GLOBAL", rest) when args[0] is exactly "GLOBAL";
-// otherwise ("", args). Uppercase match deliberate: lowercase
-// "global" is a regular token, not a modifier.
 func splitGlobalModifier(args []string) (string, []string) {
 	if len(args) > 0 && args[0] == "GLOBAL" {
 		return "GLOBAL", append([]string(nil), args[1:]...)
@@ -1470,19 +1199,10 @@ func splitGlobalModifier(args []string) (string, []string) {
 	return "", append([]string(nil), args...)
 }
 
-// unescapeFlag converts backslash-quoted double-quotes (`\"`) to
-// bare double-quotes (`"`). ya.make source writes -DFOO=\"bar\" but
-// the reference stores the unescaped -DFOO="bar". Applied at the
-// flag-split boundary so downstream emitters see the unescaped form.
 func unescapeFlag(s string) string {
 	return strings.ReplaceAll(s, `\"`, `"`)
 }
 
-// splitFlagsByGlobal separates CFLAGS / CXXFLAGS / CONLYFLAGS args
-// into global and own slices using per-flag GLOBAL semantics.
-// Mirrors splitAddInclPaths. Each flag passes through unescapeFlag
-// so `\"…\"` becomes `"…"`, matching the reference cmd_args
-// encoding.
 func splitFlagsByGlobal(args []string) (globalFlags, ownFlags []string) {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "GLOBAL" {
@@ -1499,16 +1219,6 @@ func splitFlagsByGlobal(args []string) (globalFlags, ownFlags []string) {
 	return globalFlags, ownFlags
 }
 
-// splitAddInclPaths separates ADDINCL args into global and own path
-// lists using per-path GLOBAL semantics: a path immediately after
-// "GLOBAL" is global; all others are own.
-//
-//	ADDINCL(GLOBAL a b)  →  global=[a], own=[b]
-//
-// FOR cython paths feed only the CY command; FOR asm paths feed only the
-// assembler source scan (never a C/C++ -I). Other FOR <kind> qualifiers
-// keep the historic proto behaviour: drop the selector tokens, keep the path
-// as a normal include.
 func splitAddInclPaths(args []string) (globalPaths, ownPaths, cythonPaths, asmPaths, allPaths []string) {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "FOR" {
@@ -1520,26 +1230,20 @@ func splitAddInclPaths(args []string) (globalPaths, ownPaths, cythonPaths, asmPa
 			}
 
 			if i+2 < len(args) && args[i+1] == "asm" {
-				// FOR asm — assembler-only include (yasm/clang AS search
-				// path); never a C/C++ -I. Routed to asmPaths, consumed by
-				// the AS source scan; excluded from own/global/all so it
-				// does not leak onto CC compiles.
+
 				asmPaths = append(asmPaths, args[i+2])
 				i += 2
 
 				continue
 			}
 
-			// FOR <kind> — drop both tokens; the following path remains
-			// a normal include for the legacy proto shape.
-			i++ // skip kind
+			i++
 			continue
 		}
 
 		if args[i] == "GLOBAL" {
 			i++
 
-			// GLOBAL FOR <kind> <path>: skip the FOR <kind> pair.
 			if i < len(args) && args[i] == "FOR" {
 				if i+2 < len(args) && args[i+1] == "cython" {
 					cythonPaths = append(cythonPaths, args[i+2])
@@ -1555,8 +1259,8 @@ func splitAddInclPaths(args []string) (globalPaths, ownPaths, cythonPaths, asmPa
 					continue
 				}
 
-				i++ // skip FOR
-				i++ // skip kind
+				i++
+				i++
 			}
 
 			if i < len(args) {
@@ -1572,11 +1276,6 @@ func splitAddInclPaths(args []string) (globalPaths, ownPaths, cythonPaths, asmPa
 	return globalPaths, ownPaths, cythonPaths, asmPaths, allPaths
 }
 
-// parseIf is invoked with the `IF` name token already consumed. Reads
-// `(...)` args into an Expr, collects THEN body until ELSE/ELSEIF/
-// ENDIF, recurses for ELSEIF, reads ELSE body until ENDIF. ELSEIF =
-// "an IF inside the parent's Else"; chained ELSEIFs become
-// right-leaning nested IfStmts (like C's `else if`).
 func (p *parser) parseIf(ifTok token) *IfStmt {
 	condToks := p.readCondTokens(ifTok)
 
@@ -1608,27 +1307,18 @@ func (p *parser) parseIf(ifTok token) *IfStmt {
 
 		return node
 	case "ELSEIF":
-		// ELSEIF (cond) ... = an IF nested in the parent's Else.
-		// Recurse via parseIf — that handler reads the nested
-		// condition args, the nested THEN body, and any further
-		// ELSE/ELSEIF/ENDIF chain.
+
 		nested := p.parseIf(endTok)
 		node.Else = []Stmt{nested}
 
 		return node
 	}
 
-	// Unreachable: parseStmts(termIfBody) only returns one of the
-	// three terminator names above. A defensive throw makes the
-	// invariant explicit.
 	p.lex.throwParse(endTok.line, endTok.col, "internal: unexpected IF terminator %q", endTok.val)
 
 	return nil
 }
 
-// readCondTokens reads IF's `(...)` args, allowing arbitrary
-// inner-paren grouping. Returns tokens WITHOUT the outer `(`/`)`
-// pair; inner parens stay as tokLParen/tokRParen for parseCondExpr.
 func (p *parser) readCondTokens(ifTok token) []token {
 	lp := p.lex.next()
 
@@ -1664,30 +1354,17 @@ func (p *parser) readCondTokens(ifTok token) []token {
 	}
 }
 
-// consumeEmptyMacroArgs reads `()` after one of the IF block keywords
-// (ELSE/ELSEIF/ENDIF). ELSEIF's condition is parsed by `parseIf`
-// recursively. ELSE/ENDIF tolerate ymake's optional branch tag payload
-// (e.g. ELSE(OS_LINUX), ENDIF(OS_LINUX)) but ignore it semantically.
-// The caller passes the keyword token in for line/col error reporting.
 func (p *parser) consumeEmptyMacroArgs(kwTok token) {
 	_ = p.parseMacroArgs(kwTok)
 }
 
-// condParser is the cursor state for the IF-cond recursive-descent
-// parser below. It walks the token slice produced by readCondTokens.
 type condParser struct {
 	toks   []token
 	pos    int
-	parent *parser // for throwParse line/col reporting on the lexer
-	ifTok  token   // the IF keyword's token, used as fallback location
+	parent *parser
+	ifTok  token
 }
 
-// parseCondExpr parses IF condition tokens into an Expr ADT.
-// Precedence (lowest → highest): OR, AND, NOT, comparator (`==`, `!=`,
-// `<`), atom. Comparators bind tighter than NOT so `NOT X == Y`
-// parses as `NOT (X == Y)`. Comparators are non-associative:
-// `A == B == C` is a syntax error. AND/OR left-associative; NOT
-// right-associative.
 func parseCondExpr(parent *parser, ifTok token, toks []token) Expr {
 	cp := &condParser{toks: toks, parent: parent, ifTok: ifTok}
 	expr := cp.parseOr()
@@ -1759,9 +1436,6 @@ func (c *condParser) parseNot() Expr {
 	return c.parseCmp()
 }
 
-// parseCmp recognises a single `X op Y` (op = `==`, `!=`, `<`).
-// Non-associative: `A == B == C` throws. When no comparator follows
-// the leading atom, parseCmp returns it as-is.
 func (c *condParser) parseCmp() Expr {
 	left := c.parseAtom()
 
@@ -1785,9 +1459,7 @@ func (c *condParser) parseCmp() Expr {
 
 		return &ExprLt{Left: left, Right: right}
 	case tokNotEq:
-		// `X != Y` desugars to `NOT (X == Y)` so the evaluator only
-		// needs the ExprEq path; the negation is structural and the
-		// short-circuit semantics are unaffected.
+
 		c.consume()
 		right := c.parseAtom()
 		c.rejectChainedCmp(t)
@@ -1798,10 +1470,6 @@ func (c *condParser) parseCmp() Expr {
 	return left
 }
 
-// rejectChainedCmp throws when the token directly after a comparator's
-// RHS is itself another comparator — `A == B == C` and similar. Pinned
-// at the chain operator's location so the user sees exactly which
-// `==`/`<` was the second one.
 func (c *condParser) rejectChainedCmp(prev token) {
 	t, ok := c.peek()
 
@@ -1844,10 +1512,6 @@ func (c *condParser) parseAtom() Expr {
 	if t.kind == tokInt {
 		c.consume()
 
-		// Lexer guarantees t.val is non-empty and digits-only;
-		// strconv-style parsing inline would pull in a stdlib import
-		// for one call site. The hand-rolled parse keeps the
-		// parser's import set tight.
 		n := 0
 		for i := 0; i < len(t.val); i++ {
 			n = n*10 + int(t.val[i]-'0')
@@ -1857,9 +1521,7 @@ func (c *condParser) parseAtom() Expr {
 	}
 
 	if t.kind == tokIdent || (t.kind == tokWord && isIdentShapedName(t.val)) {
-		// AND/OR/NOT as bare atoms are an error — they're operators.
-		// A user typing `IF (AND)` should get a clear diagnostic, not
-		// silently bind an identifier called AND.
+
 		if t.val == "AND" || t.val == "OR" || t.val == "NOT" {
 			c.parent.lex.throwParse(t.line, t.col, "operator %q used as identifier in IF condition", t.val)
 		}
@@ -1871,14 +1533,9 @@ func (c *condParser) parseAtom() Expr {
 
 	c.parent.lex.throwParse(t.line, t.col, "unexpected %s in IF condition", describeToken(t))
 
-	return nil // unreachable
+	return nil
 }
 
-// expandInclude parses `INCLUDE(path)` and inlines the included
-// file's top-level Stmts so downstream walkers see a flat list.
-// Path resolution is relative to filepath.Dir(p.name). Cycles
-// (including transitive a→b→a) throw a *ParseError pinned at the
-// INCLUDE site — detection uses absolute paths in p.includeStack.
 func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 	args := p.parseMacroArgs(nameTok)
 
@@ -1888,14 +1545,6 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 
 	rel := args[0]
 
-	// ${ARCADIA_ROOT} IS the source root — resolve the suffix directly there
-	// (as modules.go does for ${ARCADIA_ROOT}-rooted targets). The previous
-	// walk-up from dir(p.name) climbed past the source root and probed sibling
-	// trees off-disk (e.g. a dead IF(USE_PREBUILT_TOOLS) branch's
-	// build/prebuilt/.../ya.make.prebuilt resolved into ../build/prebuilt
-	// outside the tree). A path outside the root is never valid here; if the
-	// in-tree target is absent the INCLUDE is an optional dead branch, skipped
-	// by the existence check below.
 	if strings.HasPrefix(rel, "${ARCADIA_ROOT}/") {
 		suffix := strings.TrimPrefix(rel, "${ARCADIA_ROOT}/")
 		rel = filepath.Join(p.fs.SourceRoot(), suffix)
@@ -1908,8 +1557,6 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 		full = filepath.Join(dir, rel)
 	}
 
-	// Normalise to an absolute path for reliable cycle detection
-	// across symlinks and "." components.
 	absTarget, absErr := filepath.Abs(full)
 	if absErr != nil {
 		absTarget = full
@@ -1918,15 +1565,11 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 		return into
 	}
 
-	// Chain = inherited stack + p.name (the file we're parsing right
-	// now, set by parseInternalWithStack); p.name is the chain's last
-	// element leading into this INCLUDE site.
 	chain := append(p.includeStack, p.name)
 
-	// Check for a cycle: does absTarget already appear anywhere in chain?
 	for _, visited := range chain {
 		if visited == absTarget {
-			// Format the cycle chain for the error message.
+
 			chainStr := ""
 			for i, v := range chain {
 				if i > 0 {
@@ -1939,19 +1582,12 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 		}
 	}
 
-	// Silently skip optional includes (file missing). Handles conditional
-	// branches like `IF (USE_SYSTEM_OPENSSL) INCLUDE(system_openssl.ya.inc)` —
-	// the parser expands INCLUDE in both branches before evaluating the
-	// condition, so missing files in dead branches must not be fatal. Existence
-	// is a query (no error); a present-but-unreadable file Throws via ReadAbs.
 	if present, _ := p.fs.ExistsAbs(absTarget); !present {
 		return into
 	}
 
 	data := p.fs.ReadAbs(absTarget)
 
-	// Recurse with the updated chain propagated into the child parser so
-	// transitive cycles (a→b→a) are also caught.
 	included := parseInternalWithState(p.fs, absTarget, data, chain, p.includes)
 
 	return append(into, included.Stmts...)

@@ -4,9 +4,6 @@ import (
 	"strings"
 )
 
-// sourceEmit is the emit-product of emitOneSource: a single
-// CC/AS/RD/R5/R6/CF/etc. node from one declared source. nil = silently
-// skipped (e.g. `.h` headers, deferred-kind sources).
 type sourceEmit struct {
 	Ref     NodeRef
 	OutPath VFS
@@ -49,8 +46,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		strings.HasSuffix(srcRel, ".cc"),
 		strings.HasSuffix(srcRel, ".cxx"):
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
-		// Primary-first closure: full = [srcVFS, ...headers] (nil when the
-		// module has no scanner). Headers-only view is full[1:].
+
 		full := walkClosureRoot(ctx, srcInstance, srcVFS, srcVFS.Rel(), srcIn)
 		if full != nil {
 			srcIn.IncludeInputs = full[1:]
@@ -63,10 +59,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		if len(extras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, extras)
 		}
-		// With no extras perturbing it, `full` is the exact [primary, ...headers]
-		// node.Inputs — hand it to EmitCC to skip the rebuild. An append above
-		// reallocated IncludeInputs away from full, so there leave NodeInputs nil
-		// and let EmitCC build from inVFS+headers.
+
 		if len(flatcExtras) == 0 && len(extras) == 0 {
 			srcIn.NodeInputs = full
 		}
@@ -81,11 +74,6 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		asIn := srcIn
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 
-		// FOR asm ADDINCL paths are assembler-only includes: they feed the
-		// AS source scan (so `%include "reg_sizes.asm"` resolves) but never
-		// the CC/CXX -I list. Re-merge them into the scan input here; cmd_args
-		// composition (yasm hardcodes -I; clang-AS unused by FOR-asm modules)
-		// is left untouched.
 		scanIn := srcIn
 		if len(d.asmAddIncl) > 0 {
 			scanIn.AddIncl = mergeDedupVFS(srcIn.AddIncl, d.asmAddIncl)
@@ -93,8 +81,6 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		asIn.IncludeInputs = walkClosure(ctx, srcInstance, srcVFS, scanIn)
 
-		// Only the x86_64 `.asm` yasm flavour depends on the yasm tool; the
-		// GNU/clang-as path (.s/.S, non-x86 .asm) must not pull it in.
 		if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
 			yasmLD, _ := ctx.tool("contrib/tools/yasm")
 			ref, outPath := emitASYasm(srcInstance, srcRel, srcVFS, asIn, yasmLD, ctx.emit)
@@ -220,12 +206,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ccRef, ccOut, _ := EmitCC(srcInstance, ccSrcRel, r5CppOut, ccIn, ctx.host, ctx.emit)
 		return &sourceEmit{Ref: ccRef, OutPath: ccOut}
 	case strings.HasSuffix(srcRel, ".h.in"):
-		// A generated header declared in SRCS is not compiled in its declaring
-		// module — ymake realizes it in the module that #includes it. Register
-		// it as a deferred CF: the scanner sees the output so consumer closures
-		// resolve it, but the CF node is emitted by the first consumer (with
-		// that consumer's module_dir) in resolveCodegenDepRefsExt. Returning nil
-		// keeps the header out of the declaring module's archive.
+
 		inSourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, inSourceVFS, srcIn)
 		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.Rel(), srcIn.SetVars, srcIn.DefaultVars)

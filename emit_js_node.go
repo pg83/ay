@@ -1,20 +1,5 @@
 package main
 
-// js.go — emitter for JS (JOIN_SRCS) nodes.
-//
-// One Node per JOIN_SRCS invocation; output is a single .cpp (named allName,
-// which already carries the .cpp suffix) that #includes all listed sources.
-// R13: sources stay in DECLARATION ORDER — never sort.
-
-// EmitJS emits a JS node for JOIN_SRCS(allName srcs...).
-// Sources compose against instance.Path so a SRCDIR-rebased instance flows
-// through transparently. Closure order matters only for the byte-exact JS
-// test pin in js_test.go (L2 compares Inputs as a multiset).
-//
-// `p` overrides the emitted node's platform/tags: JS anchors to the
-// outer-target axis even when the surrounding module is reached via a
-// host-PROGRAM walk, so the generated node must carry the requested target
-// platform shape rather than the source instance's host tags.
 func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, emit Emitter) (NodeRef, VFS) {
 	joinSrcs := Intern("$(S)/build/scripts/gen_join_srcs.py")
 	procCmdFiles := Intern("$(S)/build/scripts/process_command_files.py")

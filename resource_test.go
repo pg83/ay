@@ -11,11 +11,6 @@ import (
 	"testing"
 )
 
-// TestObjcopyHashCerts verifies the upstream
-// `TObjCopyResourcePacker::GetHashForOutput` derivation against the
-// REF sg2.json sample for the certs/ module's RESOURCE invocation.
-// Worked example documented in
-// `docs/drafts/20260511-2200-pr-resource-objcopy-research.md`.
 func TestObjcopyHashCerts(t *testing.T) {
 	paths := []string{"cacert.pem"}
 	keysB64 := []string{base64.StdEncoding.EncodeToString([]byte("/builtin/cacert"))}
@@ -30,11 +25,6 @@ func TestObjcopyHashCerts(t *testing.T) {
 	}
 }
 
-// TestObjcopyHashRapidjson verifies the hash derivation for the
-// `devtools/ymake/contrib/python-rapidjson` RESOURCE_FILES expansion
-// — the keys are base64-padded `resfs/file/...` strings, the kvs
-// preserve the literal `${rootrel;context=TEXT;input=TEXT:"..."}`
-// placeholder, and MODULE_TAG is "PY3" for PY3_LIBRARY.
 func TestObjcopyHashRapidjson(t *testing.T) {
 	paths := []string{
 		".dist-info/METADATA",
@@ -62,11 +52,6 @@ func TestObjcopyHashRapidjson(t *testing.T) {
 	}
 }
 
-// TestExpandResourceFilesRapidjson verifies the upstream
-// `build/plugins/res.py:onresource_files` expansion against the same
-// rapidjson REF sample.  PREFIX is folded into the per-path key; the
-// resulting pair list is consumed by emitResourceObjcopy and feeds
-// the hash test above.
 func TestExpandResourceFilesRapidjson(t *testing.T) {
 	args := []string{
 		"PREFIX", "devtools/ymake/contrib/python-rapidjson/",
@@ -100,11 +85,6 @@ func TestExpandResourceFilesRapidjson(t *testing.T) {
 	}
 }
 
-// TestPyNamespaceModListMD5RuntimePy3 verifies the upstream
-// `pybuild.py:560` streaming-md5 derivation against REF sg2.json for the
-// library/python/runtime_py3 PY3_LIBRARY: PY_SRCS(entry_points.py) with
-// the default `ns = upath_dotted + '.'`. The resulting hex digest is
-// the `<md5>` slot of the `py/namespace/<md5>/...` resource key.
 func TestPyNamespaceModListMD5RuntimePy3(t *testing.T) {
 	ns := "library.python.runtime_py3."
 	pys := []string{"entry_points.py"}
@@ -123,11 +103,6 @@ func TestPyNamespaceModListMD5RuntimePy3(t *testing.T) {
 	}
 }
 
-// TestPyNamespaceModListMD5SymbolsModule verifies the same derivation
-// for library/python/symbols/module (PY23_LIBRARY, PY_SRCS(__init__.py)).
-// Confirms that __init__.py keeps the `__init__` literal in the dotted
-// mod name (pybuild.py strips the `.py` extension but does not collapse
-// the package-init suffix).
 func TestPyNamespaceModListMD5SymbolsModule(t *testing.T) {
 	ns := "library.python.symbols.module."
 	pys := []string{"__init__.py"}
@@ -146,10 +121,6 @@ func TestPyNamespaceModListMD5SymbolsModule(t *testing.T) {
 	}
 }
 
-// TestPyNamespaceModListMD5Py3ccSlow verifies the same derivation for
-// tools/py3cc/slow (PY3_PROGRAM_BIN via INCLUDE(bin/ya.make),
-// PY_SRCS(MAIN main.py)).  Establishes that the MAIN modifier does
-// not change the mod_name (only emits an additional PY_MAIN= kv).
 func TestPyNamespaceModListMD5Py3ccSlow(t *testing.T) {
 	ns := "tools.py3cc.slow."
 	pys := []string{"main.py"}
@@ -168,16 +139,6 @@ func TestPyNamespaceModListMD5Py3ccSlow(t *testing.T) {
 	}
 }
 
-// TestPyNamespaceObjcopyHashRuntimePy3 verifies the kv_only objcopy
-// hash for library/python/runtime_py3 against REF:
-//
-//	output: $(B)/library/python/runtime_py3/objcopy_3b0561f75631281b973aa8b64e.o
-//	kv (hash, quoted):    py/namespace/<md5>/<path>="<ns>"
-//	kv (cmd_args, unquoted): py/namespace/<md5>/<path>=<ns>
-//
-// PY3_LIBRARY → MODULE_TAG = "PY3". The hash uses the quoted form per
-// pybuild.py:593; cmd_args uses the unquoted form (RUN_PYTHON3 template
-// strips the outer quotes).
 func TestPyNamespaceObjcopyHashRuntimePy3(t *testing.T) {
 	kv := `py/namespace/bd17cfe3d9af11d01ff7b15ebc3786a7/library/python/runtime_py3="library.python.runtime_py3."`
 
@@ -188,13 +149,6 @@ func TestPyNamespaceObjcopyHashRuntimePy3(t *testing.T) {
 	}
 }
 
-// TestNoCheckImportsObjcopyHashLib2Py verifies the kv_only objcopy
-// hash for contrib/tools/python3/lib2/py against REF:
-//
-//	output: $(B)/contrib/tools/python3/lib2/py/objcopy_cd47bcaec327e5eb9db4641ec8.o
-//	kv (hash):    py/no_check_imports/<pathid>="<value>"
-//
-// PY3_LIBRARY (with ENABLE(PYBUILD_NO_PYC)) → MODULE_TAG = "PY3".
 func TestNoCheckImportsObjcopyHashLib2Py(t *testing.T) {
 	value := "_ios_support _pyrepl.* antigravity asyncio.unix_events asyncio.windows_events asyncio.windows_utils ctypes.wintypes curses.* dbm.gnu dbm.ndbm dbm.sqlite3 encodings.mbcs encodings.oem lzma multiprocessing.popen_fork multiprocessing.popen_forkserver multiprocessing.popen_spawn_posix multiprocessing.popen_spawn_win32 sqlite3.* turtle pty tty"
 	kv := `py/no_check_imports/2fepmfaacurvvaalmzqchmko4a="` + value + `"`
@@ -206,13 +160,6 @@ func TestNoCheckImportsObjcopyHashLib2Py(t *testing.T) {
 	}
 }
 
-// TestPyMainObjcopyHashPy3ccSlow verifies the kv_only objcopy hash for
-// tools/py3cc/slow's PY_MAIN= kv against REF:
-//
-//	output: $(B)/tools/py3cc/slow/objcopy_4b1c18d0dc6973976969ad23be.o
-//	kv:     PY_MAIN=tools.py3cc.slow.main:main
-//
-// PY3_PROGRAM_BIN → MODULE_TAG = "PY3".
 func TestPyMainObjcopyHashPy3ccSlow(t *testing.T) {
 	kv := "PY_MAIN=tools.py3cc.slow.main:main"
 
@@ -223,17 +170,6 @@ func TestPyMainObjcopyHashPy3ccSlow(t *testing.T) {
 	}
 }
 
-// TestPySrcObjcopyHashRuntimePy3RawEntryPoints verifies the objcopy hash
-// for the single-entry raw `.py` chunk of library/python/runtime_py3.
-// PYBUILD_NO_PYC is on, namespace is non-TOP_LEVEL (default upath
-// prefix). REF:
-//
-//	output: $(B)/library/python/runtime_py3/objcopy_84a3659770bdea15f8ae77837d.o
-//	key:    resfs/file/py/library/python/runtime_py3/entry_points.py
-//	kv:     resfs/src/<key>=${rootrel;context=TEXT;input=TEXT:"entry_points.py"}
-//	paths:  [entry_points.py]   (the raw PY_SRCS argument, not srcRel+suffix)
-//
-// The hash uses the placeholder kv form; cmd_args use the expanded form.
 func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
 	d := &moduleData{
 		pySrcs:       []string{"entry_points.py"},
@@ -270,9 +206,6 @@ func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
 	}
 }
 
-// TestPySrcObjcopyHashPy3ccSlowMain verifies the single-entry raw .py
-// chunk for tools/py3cc/slow (PY3_PROGRAM_BIN, PYBUILD_NO_PYC, MAIN main.py).
-// REF: objcopy_c3a5182796bc68c054c676bcc0.o
 func TestPySrcObjcopyHashPy3ccSlowMain(t *testing.T) {
 	d := &moduleData{
 		pySrcs:       []string{"main.py"},
@@ -293,10 +226,6 @@ func TestPySrcObjcopyHashPy3ccSlowMain(t *testing.T) {
 	}
 }
 
-// TestPySrcObjcopyHashSymbolsModuleDualEntry verifies the dual-entry
-// (raw .py + .yapyc3) chunk for library/python/symbols/module.
-// PY23_LIBRARY (MODULE_TAG=PY3), no PYBUILD_NO_*, NOT TOP_LEVEL.
-// REF: objcopy_c325f0009e9625395005936d90.o
 func TestPySrcObjcopyHashSymbolsModuleDualEntry(t *testing.T) {
 	d := &moduleData{
 		pySrcs:       []string{"__init__.py"},
@@ -320,20 +249,12 @@ func TestPySrcObjcopyHashSymbolsModuleDualEntry(t *testing.T) {
 	}
 }
 
-// TestChunkPySrcEntriesEmptyReturnsNil ensures the chunker degenerates
-// cleanly on empty input — no allocations, returns nil. PR-M3-resource-
-// objcopy-C guard for modules where PYBUILD_NO_PY + PYBUILD_NO_PYC are
-// both set (an unobserved combo that produces zero entries).
 func TestChunkPySrcEntriesEmptyReturnsNil(t *testing.T) {
 	if got := chunkPySrcEntries(nil); got != nil {
 		t.Fatalf("chunkPySrcEntries(nil): got %+v, want nil", got)
 	}
 }
 
-// parsePySrcsTopLevel pulls the `.py` source list out of a `PY_SRCS(TOP_LEVEL ...)`
-// block in an upstream ya.make. PR-M3-resource-objcopy-chunker-precision
-// uses this to feed the actual contrib/tools/python3 source lists into the
-// chunker for byte-exact validation against the REF graph.
 func parsePySrcsTopLevel(t *testing.T, path string) []string {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -430,11 +351,6 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 	}
 }
 
-// TestRootrelInputPath pins the extractor that recovers the input=TEXT
-// path P from a `resfs/src/...=${rootrel;context=TEXT;input=TEXT:"P"}`
-// kv. emitResourceObjcopy folds P into a chunk-straddle node's inputs[]
-// (the upstream input=TEXT semantics), so the extractor must return P for
-// RESOURCE_FILES srcKvs and (",false) for every marker-less / malformed kv.
 func TestRootrelInputPath(t *testing.T) {
 	cases := []struct {
 		name   string

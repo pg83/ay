@@ -254,8 +254,7 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 	flRef, headerVFS, cppVFS, bfbsVFS := EmitFL(instance, srcVFS.Rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, ctx.emit)
 
 	registerBoundGeneratedParsedOutput(ctx, instance, "FL", headerVFS, flatcDirectGeneratedHeaderIncludes(ctx.parsers, ctx.fs, srcVFS.Rel()), flRef)
-	// flatc INDUCED_DEPS (e.g. flatbuffers.h, flatbuffers_iter.h) must be
-	// included in the .fbs.cpp's parsed-include set so the scanner reaches them.
+
 	cppIncludes := make([]includeDirective, 0, 1+len(flatcRes.InducedDeps))
 	cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: internString(headerVFS.Rel())})
 	for _, dep := range flatcRes.InducedDeps {

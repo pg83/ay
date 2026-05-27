@@ -82,9 +82,6 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 	}
 }
 
-// TestExpandConfigString_SetVar verifies Fix C5+C8: user-defined SET variables
-// (e.g. ORIG_SRC_DIR) are now expanded by expandConfigString, and SET values
-// that contain literal ${ARCADIA_ROOT} are also resolved to $(S).
 func TestExpandConfigString_SetVar(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 	env.SetFromString("MODDIR", "mymod")
@@ -100,7 +97,6 @@ func TestExpandConfigString_SetVar(t *testing.T) {
 		t.Fatalf("expandConfigString(${UNKNOWN_VAR}) = %q, want ${UNKNOWN_VAR} (no change)", got)
 	}
 
-	// SET value that still holds literal ${ARCADIA_ROOT}: must be re-expanded.
 	env.SetFromString("SRCDIR_RAW", "${ARCADIA_ROOT}/some/path")
 	got = expandConfigString("${SRCDIR_RAW}", env)
 	if got != "$(S)/some/path" {
@@ -108,10 +104,6 @@ func TestExpandConfigString_SetVar(t *testing.T) {
 	}
 }
 
-// TestPrEmitsIncludes_OutputIncludesVFSPrefixStripped verifies Fix C6:
-// OUTPUT_INCLUDES entries that carry a $(S)/ or $(B)/ prefix (produced by
-// expandStmtTokens expanding ${ARCADIA_ROOT} → $(S)/) have that prefix
-// stripped before they become include directive targets.
 func TestPrEmitsIncludes_OutputIncludesVFSPrefixStripped(t *testing.T) {
 	cases := []struct {
 		input string
@@ -120,7 +112,7 @@ func TestPrEmitsIncludes_OutputIncludesVFSPrefixStripped(t *testing.T) {
 		{"$(S)/util/generic/hash_set.h", "util/generic/hash_set.h"},
 		{"$(S)/yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h", "yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h"},
 		{"$(B)/generated/foo.pb.h", "generated/foo.pb.h"},
-		{"util/generic/string.h", "util/generic/string.h"}, // bare path unchanged
+		{"util/generic/string.h", "util/generic/string.h"},
 	}
 	for _, c := range cases {
 		got := c.input
