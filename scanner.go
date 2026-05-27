@@ -150,6 +150,12 @@ type IncludeScanner struct {
 	// inner map by config hash; the hot lookup is then target-keyed.
 	searchTierByConfig map[uint64]map[STR]searchTierResult
 
+	// resolveIndexByConfig holds the per-config inverted search index (built lazily
+	// from the parser layer's shared addinclWalk): target rel → the highest-priority
+	// Own/Peer source ADDINCL that holds it, replacing the per-target ×N-prefix
+	// probe with one lookup. One per distinct config, parallel to searchTierByConfig.
+	resolveIndexByConfig map[uint64]*cfgResolveIndex
+
 	// Tarjan SCC scratch, shared across closure explorations (gen scanning
 	// is single-goroutine). closureOf resets tj (an O(1) epoch bump) and
 	// resets stack/next per top-level exploration; tjClosure + tjBuf are the
@@ -215,6 +221,7 @@ type scanCtx struct {
 	scanner         *IncludeScanner
 	cfg             ScanContext
 	searchTierCache map[STR]searchTierResult
+	resolveIndex    *cfgResolveIndex // per-config inverted ADDINCL index (lazy)
 }
 
 // idSet is a membership set over VFS ids, used as the DFS `visited` set.
@@ -458,6 +465,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		subgraphCache:        make(map[uint32]closureRef, 65536),
 		childrenCache:        make(map[uint32][]uint32, 65536),
 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
+		resolveIndexByConfig: make(map[uint64]*cfgResolveIndex, 1024),
 	}
 	for i := range sysincl {
 		if sysincl[i].KeyBySource {
@@ -541,10 +549,31 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 		s.searchTierByConfig[ctxHash] = searchTier
 	}
 
+	ri := s.resolveIndexByConfig[ctxHash]
+	if ri == nil {
+		ri = buildCfgResolveIndex(&cfg)
+		s.resolveIndexByConfig[ctxHash] = ri
+
+		// Ensure this config's SOURCE ADDINCL are folded into the global index
+		// before any resolve. indexAddincl is idempotent: collectModule pre-warms
+		// most dirs at ya.make-collection time (the early request a future async
+		// walk wants); this catches any not yet folded in (derived/emitter dirs,
+		// and standalone-config unit tests). Once per config.
+		if ri.indexable {
+			for _, p := range cfg.OwnAddIncl {
+				s.parsers.indexAddincl(p)
+			}
+			for _, p := range cfg.PeerAddInclSet {
+				s.parsers.indexAddincl(p)
+			}
+		}
+	}
+
 	return &scanCtx{
 		scanner:         s,
 		cfg:             cfg,
 		searchTierCache: searchTier,
+		resolveIndex:    ri,
 	}
 }
 
@@ -1425,6 +1454,67 @@ func (s *IncludeScanner) absifyRels(rels []string) []VFS {
 	return out
 }
 
+// cfgResolveIndex is a config's own ADDINCL set with priority: rank maps each
+// SOURCE Own/Peer ADDINCL (VFS) to its position in the search order (lower =
+// higher priority). Resolution intersects this with the global addinclIndex
+// candidates for a target and takes the min rank, so it needs no per-target
+// prefix probe. Built once per config in NewScanCtx (buildCfgResolveIndex).
+// indexable is false for a config the index can't represent — a source ADDINCL
+// at the repo root, whose files are never folded into the global index; such
+// configs fall back to the full per-target probe.
+type cfgResolveIndex struct {
+	indexable bool
+	rank      map[VFS]int
+}
+
+// resolveNoRank is a sentinel greater than any real ADDINCL rank — a target with
+// no candidate in this config compares as if its rank were +∞.
+const resolveNoRank = int(^uint(0) >> 1)
+
+// buildCfgResolveIndex builds a config's ADDINCL rank set from its Own+Peer
+// SOURCE prefixes, first-occurrence wins (Own before Peer). No FS walk: the
+// global addinclIndex is populated at ya.make collection time; this only indexes
+// the config's own dozens of ADDINCL dirs. A repo-root source ADDINCL ("$(S)/")
+// is not invertible (its files are never folded into the global index) → the
+// config is marked not indexable and uses the full per-target probe.
+func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
+	idx := &cfgResolveIndex{}
+
+	for _, p := range cfg.OwnAddIncl {
+		if p.Root() == VFSRootSource && p.Rel() == "" {
+			return idx
+		}
+	}
+	for _, p := range cfg.PeerAddInclSet {
+		if p.Root() == VFSRootSource && p.Rel() == "" {
+			return idx
+		}
+	}
+
+	idx.indexable = true
+	idx.rank = make(map[VFS]int, len(cfg.OwnAddIncl)+len(cfg.PeerAddInclSet))
+
+	r := 0
+	add := func(p VFS) {
+		if p.Root() != VFSRootSource {
+			return // BUILD-root ADDINCL resolves via codegen — probed at lookup
+		}
+		if _, ok := idx.rank[p]; !ok {
+			idx.rank[p] = r
+			r++
+		}
+	}
+
+	for _, p := range cfg.OwnAddIncl {
+		add(p)
+	}
+	for _, p := range cfg.PeerAddInclSet {
+		add(p)
+	}
+
+	return idx
+}
+
 // resolveContextSearchTier resolves the search tiers for one target under
 // the current walk's module config:
 //  1. module's own ADDINCL
@@ -1508,6 +1598,64 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		panic("resolveContextSearchTier: zero-valued search path")
 	}
 
+	// Inverted-index fast path: a canonical target resolves to the highest-priority
+	// Own/Peer ADDINCL that holds it via one index lookup, skipping the per-prefix
+	// listdir probe. Non-canonical targets ("." / ".." / "//") and configs the
+	// index can't represent (a repo-root source ADDINCL) fall through to the full
+	// probe. BaseSearchPaths are never indexed (one is "$(S)/") — probed last.
+	first, _ := firstComponent(target)
+	if canRelFilter(first, target) && !strings.Contains(target, "/./") && !strings.Contains(target, "//") {
+		idx := sc.resolveIndex
+		if idx.indexable {
+			// Intersect the global "target → containing ADDINCL" candidates with this
+			// config's own ADDINCL set, taking the highest priority (min rank). The
+			// candidate list is tiny (often empty for system headers ⇒ no work).
+			bestRank := resolveNoRank
+			var bestAddincl VFS
+			for _, a := range s.parsers.addinclIndex[targetID] {
+				if r, ok := idx.rank[a]; ok && r < bestRank {
+					bestRank = r
+					bestAddincl = a
+				}
+			}
+
+			if bestRank != resolveNoRank {
+				// Candidate ⇒ the file exists under source ADDINCL bestAddincl; for a
+				// canonical target resolveSourceUnder would return joinRel(a, target).
+				out.paths = []VFS{Source(joinRel(bestAddincl.Rel(), target))}
+				out.found = true
+				sc.searchTierCache[targetID] = out
+				return out
+			}
+
+			// No source hit: probe the BUILD-root Own/Peer ADDINCL (codegen) in
+			// priority order, then base.
+			for _, p := range sc.cfg.OwnAddIncl {
+				if p.Root() == VFSRootBuild && addBuild(p.Rel()) {
+					sc.searchTierCache[targetID] = out
+					return out
+				}
+			}
+			for _, p := range sc.cfg.PeerAddInclSet {
+				if p.Root() == VFSRootBuild && addBuild(p.Rel()) {
+					sc.searchTierCache[targetID] = out
+					return out
+				}
+			}
+			for _, p := range sc.cfg.BaseSearchPaths {
+				if addInclPath(p) {
+					sc.searchTierCache[targetID] = out
+					return out
+				}
+			}
+
+			sc.searchTierCache[targetID] = out
+			return out
+		}
+	}
+
+	// Full per-target probe: non-canonical target, or a config the index cannot
+	// represent.
 	for _, p := range sc.cfg.OwnAddIncl {
 		if addInclPath(p) {
 			sc.searchTierCache[targetID] = out

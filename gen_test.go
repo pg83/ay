@@ -379,9 +379,11 @@ func TestGen_PeerdirCycle_Tolerated(t *testing.T) {
 	// after the walk (D02). The a→b→a cycle triggers exactly one
 	// back-edge: when b walks its PEERDIR(a) and a is still on the
 	// walking stack.
+	fs := NewFS(root)
 	ctx := &genCtx{
 		sourceRoot: root,
-		fs:         NewFS(root),
+		fs:         fs,
+		parsers:    newIncludeParserManagerFS(fs, newSharedParseCache()),
 		emit:       NewBufferedEmitter(),
 		memo:       make(map[ModuleInstance]*moduleEmitResult),
 		walking:    make(map[ModuleInstance]bool),
@@ -674,7 +676,7 @@ END()
 	// we want to see the flags that flow into EmitCC for "nolibcmod".)
 	mf := Throw2(ParseFile(NewFS(root), filepath.Join(modDir, "ya.make")))
 
-	d := collectModule(NewFS(root), "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManager(root), "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}))
 
 	if !d.flags.NoLibc {
 		t.Errorf("flags.NoLibc = false, want true (macro overlay should have flipped it)")
@@ -725,7 +727,7 @@ SRCS(x.cpp)
 END()
 `)))
 
-	d := collectModule(tmpFS, "bridge", instance.Kind, mf.Stmts, buildIfEnv(instance))
+	d := collectModule(newIncludeParserManagerFS(tmpFS, newSharedParseCache()), "bridge", instance.Kind, mf.Stmts, buildIfEnv(instance))
 
 	if d.muslEnabled {
 		t.Fatalf("muslEnabled = true, want false after SET(MUSL no)")
@@ -1348,9 +1350,11 @@ func TestGen_HostWalk_AsmlibYasmWired(t *testing.T) {
 	// fires under PIC=true. (The full demand-driven path would route
 	// through ragel6/bin → musl/full → asmlib; this synthetic test
 	// shortcuts to the AS+yasm wiring.)
+	fs := NewFS(root)
 	ctx := &genCtx{
 		sourceRoot: root,
-		fs:         NewFS(root),
+		fs:         fs,
+		parsers:    newIncludeParserManagerFS(fs, newSharedParseCache()),
 		emit:       NewBufferedEmitter(),
 		memo:       make(map[ModuleInstance]*moduleEmitResult),
 		walking:    make(map[ModuleInstance]bool),
@@ -1413,9 +1417,11 @@ func TestGen_HostWalk_NonAsmlibAS_NoYasmDep(t *testing.T) {
 	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"),
 		[]byte("LIBRARY()\nNO_PLATFORM()\nSRCS(thing.S)\nEND()\n"), 0o644))
 
+	fs := NewFS(root)
 	ctx := &genCtx{
 		sourceRoot: root,
-		fs:         NewFS(root),
+		fs:         fs,
+		parsers:    newIncludeParserManagerFS(fs, newSharedParseCache()),
 		emit:       NewBufferedEmitter(),
 		memo:       make(map[ModuleInstance]*moduleEmitResult),
 		walking:    make(map[ModuleInstance]bool),
@@ -4399,7 +4405,7 @@ END()
 
 	fs := NewFS(root)
 	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
-	d := collectModule(fs, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}))
 
 	want := []string{
 		"-DUSE_CURRENT_UDF_ABI_VERSION",
@@ -4430,7 +4436,7 @@ END()
 
 	fs := NewFS(root)
 	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
-	d := collectModule(fs, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}))
 
 	if d.moduleStmt == nil || d.moduleStmt.Name != "YQL_UDF_CONTRIB" {
 		t.Fatalf("moduleStmt = %#v, want YQL_UDF_CONTRIB", d.moduleStmt)
@@ -4471,7 +4477,7 @@ END()
 
 	fs := NewFS(root)
 	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
-	d := collectModule(fs, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(d.protocFlags, []string{"--fatal_warnings"}) {
 		t.Fatalf("protocFlags = %v, want [--fatal_warnings]", d.protocFlags)
@@ -4496,7 +4502,7 @@ END()
 
 	fs := NewFS(root)
 	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
-	d := collectModule(fs, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
 
 	if len(d.cppProtoPlugins) != 1 {
 		t.Fatalf("cppProtoPlugins = %d, want 1", len(d.cppProtoPlugins))
@@ -4541,7 +4547,7 @@ END()
 
 	fs := NewFS(root)
 	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
-	d := collectModule(fs, "flatcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "flatcmod", Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "flatcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "flatcmod", Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(d.flatcFlags, []string{"--scoped-enums", "--gen-all"}) {
 		t.Fatalf("flatcFlags = %v, want [--scoped-enums --gen-all]", d.flatcFlags)
@@ -4566,7 +4572,7 @@ END()
 
 	fs := NewFS(root)
 	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
-	d := collectModule(fs, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
 
 	if !containsString(d.peerdirs, "contrib/libs/googleapis-common-protos") {
 		t.Fatalf("peerdirs = %v, want contrib/libs/googleapis-common-protos", d.peerdirs)
@@ -4594,7 +4600,7 @@ END()
 	fs := NewFS(root)
 	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
 
-	bin := collectModule(fs, "pytool", KindBin, mf.Stmts, buildIfEnv(ModuleInstance{Path: "pytool", Kind: KindBin, Platform: testTargetP}))
+	bin := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "pytool", KindBin, mf.Stmts, buildIfEnv(ModuleInstance{Path: "pytool", Kind: KindBin, Platform: testTargetP}))
 	if got := bin.pyMain; got == nil || *got != "pytool.__main__:main" {
 		t.Fatalf("bin pyMain = %#v, want pytool.__main__:main", got)
 	}
@@ -4602,7 +4608,7 @@ END()
 		t.Fatalf("bin pySrcs = %v, want empty", bin.pySrcs)
 	}
 
-	lib := collectModule(fs, "pytool", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "pytool", Kind: KindLib, Platform: testTargetP}))
+	lib := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "pytool", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "pytool", Kind: KindLib, Platform: testTargetP}))
 	if lib.pyMain != nil {
 		t.Fatalf("lib pyMain = %#v, want nil", lib.pyMain)
 	}
@@ -4636,7 +4642,7 @@ END()
 
 	fs := NewFS(root)
 	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
-	d := collectModule(fs, "copymod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "copymod", Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "copymod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "copymod", Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(d.srcs, []string{"a.cpp", "b.h"}) {
 		t.Fatalf("srcs = %v, want [a.cpp b.h]", d.srcs)
@@ -5241,7 +5247,7 @@ END()
 	fs := NewFS(root)
 	mf := Throw2(ParseFile(fs, filepath.Join(root, "gen", "ya.make")))
 	instance := ModuleInstance{Path: "gen", Kind: KindLib, Platform: testTargetP}
-	d := collectModule(fs, "gen", KindLib, mf.Stmts, buildIfEnv(instance))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "gen", KindLib, mf.Stmts, buildIfEnv(instance))
 
 	for _, got := range [][]VFS{d.addIncl, d.addInclGlobal} {
 		if !slices.Contains(vfsStrings(got), "$(B)/gen/pire") {
@@ -5643,7 +5649,7 @@ func TestCollectModule_SETAPPENDRPathGlobal(t *testing.T) {
 	fs := NewFS(root)
 	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
 	instance := ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}
-	d := collectModule(fs, "mod", KindLib, mf.Stmts, buildIfEnv(instance))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "mod", KindLib, mf.Stmts, buildIfEnv(instance))
 
 	want := []string{"-Wl,-rpath,$ORIGIN"}
 	if !reflect.DeepEqual(d.rpathFlagsGlobal, want) {
