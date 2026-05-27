@@ -52,7 +52,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	includes := composeASIncludes(in)
 
 	betweenBlocks := len(catboostOpenSourceDefine)
-	betweenBlocks += len(bundle.CPUFeatures)
+	betweenBlocks += len(in.ModuleScopeCFlags)
 
 	fixed := prologueArgs + len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
 		len(bundle.CFlags) + len(warnBundle) + len(bundle.Defines) + len(ownCFlags) +
@@ -62,7 +62,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	cmdArgs = append(cmdArgs, instance.Platform.Tools.CC, "--target="+instance.Platform.Triple)
 	cmdArgs = append(cmdArgs, bundle.ArchArgs...)
 	cmdArgs = append(cmdArgs, "-B"+binPath)
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags)
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags)
 	cmdArgs = append(cmdArgs, in.SFlags...)
 	cmdArgs = append(cmdArgs, "-c", "-o", outputPath, inputPath)
 	cmdArgs = append(cmdArgs, includes...)

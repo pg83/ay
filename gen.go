@@ -703,6 +703,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// branches (e.g. jsonpath's antlr3 CONFIGURE_FILE calls) the same way.
 		cppProtoEnv.SetBool("GEN_PROTO", true)
 		d = collectModule(ctx.parsers, instance.Path, instance.Kind, mf.Stmts, cppProtoEnv)
+	} else if d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" && instance.Language == LangPy {
+		// PROTO_LIBRARY is a multimodule; its PY3 variant is
+		// `module _PY3_PROTO : PY3_LIBRARY` (proto.conf:800), which
+		// ENABLE(PY3_PROTO) and inherits the PY3_LIBRARY body. That body runs
+		// _ARCADIA_PYTHON3_ADDINCL → _PYTHON3_ADDINCL (python.conf:739,1004),
+		// whose module-scope CFLAGS+=-DUSE_PYTHON3 / ADDINCL+=python Include
+		// must apply to this variant's C++ compiles (the resource auxcpp).
+		// Re-collect with PY3_PROTO set so collectModule treats the variant as
+		// python3 and applyPython3AddIncl fires through the generic path.
+		py3ProtoEnv := env.Clone()
+		py3ProtoEnv.SetBool("PY3_PROTO", true)
+		d = collectModule(ctx.parsers, instance.Path, instance.Kind, mf.Stmts, py3ProtoEnv)
 	}
 
 	if d.conflictMod != nil {
@@ -712,6 +724,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if d.moduleStmt == nil {
 		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path)
 	}
+
+	// Prepend the platform-axis module-scope `CFLAGS+=` (_BASE_UNIT's
+	// -D_musl_/$SSE_CFLAGS) to the collected post-_BASE_UNIT appends
+	// (_PYTHON3_ADDINCL's -DUSE_PYTHON3). Done here: instance.Platform and
+	// d.muslEnabled are known, yielding the full module-scope tail.
+	d.moduleScopeCFlags = assembleModuleScopeCFlags(instance.Platform, d.muslEnabled, d.flags, d.moduleScopeCFlags)
 
 	// PY_PROTO / PY3_PROTO branches of PROTO_LIBRARY implicitly depend on
 	// the Python protobuf runtime; GRPC() extends that set with grpcio.
@@ -764,6 +782,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// upstream does NOT auto-PEERDIR contrib/libs/python and adding it
 	// would create a cycle (library/python/symbols/python → contrib/libs/
 	// python → library/python/symbols/python).
+	// PROTO_LIBRARY's PY3 variant is `_PY3_PROTO : PY3_LIBRARY` (proto.conf:800),
+	// so it inherits PY3_LIBRARY's implicit PEERDIR(contrib/libs/python). The
+	// CPP variant (_CPP_PROTO : LIBRARY) does not. d.usePython3 distinguishes
+	// the re-collected PY3 variant from the CPP one (same module name).
+	py3ProtoVariant := d.moduleStmt.Name == "PROTO_LIBRARY" && d.usePython3
 	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path != "contrib/libs/python" {
 		// Upstream `_BASE_PY3_LIBRARY` (and siblings) emits the implicit
 		// PEERDIR(contrib/libs/python) FROM the module-decl body BEFORE
@@ -772,6 +795,19 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// libs/python OWN GLOBAL) ahead of `re2/include` (user-peer
 		// transitive).
 		d.peerdirs = append([]string{"contrib/libs/python"}, d.peerdirs...)
+	} else if py3ProtoVariant && !d.noPythonIncl && instance.Path != "contrib/libs/python" {
+		// _PY3_PROTO inherits PY3_LIBRARY's PEERDIR(contrib/libs/python). When
+		// a CPP_PROTO sibling exists, the sibling's proto C++ closure (grpc/
+		// abseil/.../protobuf, merged via .PEERDIRSELF in emitPyProtoAuxChunks)
+		// precedes python, so python is appended. When CPP is EXCLUDE_TAGS'd
+		// (builtin_proto), there is no sibling closure; python is the primary
+		// peer and precedes the ya.make PEERDIRs' namespace-output dirs, so
+		// prepend (matching PY3_LIBRARY's early base PEERDIR).
+		if moduleExcludesTag(d, "CPP_PROTO") {
+			d.peerdirs = append([]string{"contrib/libs/python"}, d.peerdirs...)
+		} else {
+			d.peerdirs = append(d.peerdirs, "contrib/libs/python")
+		}
 	}
 
 	if d.moduleStmt.Name == "PY3_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
@@ -1836,6 +1872,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		PeerCFlagsGlobal:     peerCFlagsGlobal,
 		PeerCXXFlagsGlobal:   peerCXXFlagsGlobal,
 		PeerCOnlyFlagsGlobal: peerCOnlyFlagsGlobal,
+		ModuleScopeCFlags:    d.moduleScopeCFlags,
 		SFlags:               d.sFlags,
 		SrcDir:               effectiveSrcDir,
 		SourceRoot:           ctx.sourceRoot,
@@ -2327,6 +2364,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ldObjcopyRefs, ldObjcopyPaths,
 			ownCFlags,
 			peerCFlagsGlobal,
+			d.moduleScopeCFlags,
 			peerLDFlagsGlobal,
 			d.ldFlags,
 			ownRPathFlags,

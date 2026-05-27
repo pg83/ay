@@ -221,7 +221,6 @@ type compileFlagBundle struct {
 	CFlags      []string
 	Defines     []string
 	NoLibcBlock []string
-	CPUFeatures []string
 }
 
 func withSandboxingDebugCompression(base []string, p *Platform) []string {
@@ -257,7 +256,6 @@ func compileFlagBundleFor(p *Platform) compileFlagBundle {
 			CFlags:      withSandboxingDebugCompression(cflags, p),
 			Defines:     hostDefines,
 			NoLibcBlock: noLibcBlock(p),
-			CPUFeatures: hostSseFeatures,
 		}
 	case ISAAArch64:
 		bundle := compileFlagBundle{

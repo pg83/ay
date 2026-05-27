@@ -357,23 +357,6 @@ type pyProtoAuxChunksResult struct {
 	Outputs []VFS
 }
 
-// pyProtoAuxPeerCFlags returns peer-GLOBAL CFLAGS for the PY3_PROTO aux
-// compile: peerContribs.cFlags (PROTO_LIBRARY peers) ∪ contrib/libs/python
-// PY3-variant transitive. The python peer is injected here because PY3_PROTO
-// inherits PY3_LIBRARY's `PEERDIR(contrib/libs/python)` (python.conf:742) —
-// our parser doesn't add that implicit peer to `d.peerdirs`, so we resolve
-// it explicitly through genModule here.
-func pyProtoAuxPeerCFlags(ctx *genCtx, instance ModuleInstance, peerContribs peerGlobalContribs) []string {
-	pythonInstance := ModuleInstance{
-		Path:     "contrib/libs/python",
-		Kind:     KindLib,
-		Language: LangPy,
-		Platform: instance.Platform,
-	}
-	pythonResult := genModule(ctx, pythonInstance)
-	return mergeDedup(peerContribs.cFlags, pythonResult.CFlagsGlobal)
-}
-
 func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, entries []pyProtoAuxEntry, cppSibling *moduleEmitResult) *pyProtoAuxChunksResult {
 	if len(entries) == 0 {
 		return nil
@@ -453,10 +436,19 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 	}
 	flush()
 
+	// _PY3_PROTO peers its CPP_PROTO sibling (.PEERDIRSELF=CPP_PROTO,
+	// proto.conf:940), so the sibling's GLOBAL ADDINCL closure (proto C++
+	// peers: grpc/abseil/c-ares/openssl/re2/protobuf, grouped) precedes the
+	// module's own peer closure (contrib/libs/python's transitive includes).
+	peerAddIncl := peerContribs.addIncl
+	if cppSibling != nil {
+		peerAddIncl = mergeDedupVFS(cppSibling.AddInclGlobal, peerContribs.addIncl)
+	}
+
 	res := &pyProtoAuxChunksResult{}
 	for _, ch := range chunks {
 		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, "PY3_PROTO") + "_raw.auxcpp")
-		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, peerContribs, aux, ch.inputs, cppSibling)
+		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, aux, ch.inputs, peerAddIncl)
 		cmdArgs := []string{rescompilerBinPath, aux.String()}
 		cmdArgs = append(cmdArgs, ch.cmdArgs...)
 
@@ -486,11 +478,12 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		ccIn := ModuleCCInputs{
 			InclArgs:             ctx.inclArgs,
 			Flags:                d.flags,
-			AddIncl:              pyProtoAuxOwnAddIncl(d),
-			PeerAddInclGlobal:    pyProtoAuxPeerAddIncl(instance, peerContribs, d, cppSibling),
-			PeerCFlagsGlobal:     pyProtoAuxPeerCFlags(ctx, instance, peerContribs),
+			AddIncl:              d.addIncl,
+			PeerAddInclGlobal:    peerAddIncl,
+			PeerCFlagsGlobal:     peerContribs.cFlags,
 			PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
 			PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
+			ModuleScopeCFlags:    d.moduleScopeCFlags,
 			PerSourceCFlags:      []string{"-x", "c++"},
 			SourceRoot:           ctx.sourceRoot,
 			FS:                   ctx.fs,

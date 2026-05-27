@@ -81,11 +81,14 @@ type ModuleCCInputs struct {
 	// PeerCOnlyFlagsGlobal: transitive union of every PEERDIR's GLOBAL
 	// CONLYFLAGS. C / .S sources only.
 	PeerCOnlyFlagsGlobal []string
-	// CFlags is the module's own non-GLOBAL CFLAGS. Applies to BOTH C
-	// and C++ sources (mirror of upstream's CFLAGS-applies-to-both
-	// rule). Slotted between commonDefines and the first
-	// noLibcBlock copy.
+	// CFlags is the module's own non-GLOBAL CFLAGS (ya.make `CFLAGS()` =
+	// upstream USER_CFLAGS). Applies to BOTH C and C++ sources. Lands in the
+	// conf-base, between commonDefines and the first noLibcBlock copy.
 	CFlags []string
+	// ModuleScopeCFlags is d.moduleScopeCFlags (assembled): the module-scope
+	// `CFLAGS+=` tail `[-D_musl_?, $SSE_CFLAGS, -DUSE_PYTHON3?]`. Emitted as
+	// one slice between catboost and the 2nd noLibcBlock copy.
+	ModuleScopeCFlags []string
 	// OwnCFlagsGlobal is the module's own GLOBAL CFLAGS. Emitted via
 	// the bucket model in composeTargetCC / composeHostCC. Also
 	// peer-propagates to consumers via PeerCFlagsGlobal through the
@@ -237,6 +240,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		PeerExtras:         peerExtras,
 		OwnGlobalBucket:    ownGlobalBucket,
 		PerSrcCFlags:       in.PerSourceCFlags,
+		ModuleScopeCFlags:  in.ModuleScopeCFlags,
 		IsCxx:              isCxx,
 		NoCompilerWarnings: in.Flags.NoCompilerWarnings,
 		NoWShadow:          in.Flags.NoWShadow,
@@ -633,16 +637,61 @@ type ccComposeArgs struct {
 	PeerExtras         []string
 	OwnGlobalBucket    []string
 	PerSrcCFlags       []string
+	ModuleScopeCFlags  []string
 	IsCxx              bool
 	NoCompilerWarnings bool
 	NoWShadow          bool
 	InclArgs           inclArgMemo
 }
 
+// moduleMusl reports whether `_BASE_UNIT`'s
+// `when ($MUSL == "yes") { CFLAGS += -D_musl_ }` (ymake.core.conf:782)
+// fires: `muslEnabled` is the module's effective MUSL (env.Bool("MUSL"),
+// which honours SET(MUSL no)), and the module is not effectively
+// NO_PLATFORM.
+func moduleMusl(muslEnabled bool, flags FlagSet) bool {
+	return muslEnabled && !effectiveNoPlatform(flags)
+}
+
+// cpuFeaturesFor is `_BASE_UNIT`'s `$SSE_CFLAGS`/`$SSE4_CFLAGS`
+// (ymake.core.conf:824/826) — the x86_64 SSE set, empty elsewhere.
+func cpuFeaturesFor(p *Platform) []string {
+	if p != nil && p.ISA == ISAX8664 {
+		return hostSseFeatures
+	}
+
+	return nil
+}
+
+// assembleModuleScopeCFlags builds the module-scope `CFLAGS+=` tail in
+// ymake module-evaluation order: `_BASE_UNIT`'s `-D_musl_` (when musl) and
+// `$SSE_CFLAGS`, then the module's collected post-_BASE_UNIT appends
+// (`_PYTHON3_ADDINCL`'s `-DUSE_PYTHON3`). Built where platform + module
+// facts are known, so all three are plain module facts; the emitter just
+// appends the result as one slice.
+func assembleModuleScopeCFlags(p *Platform, muslEnabled bool, flags FlagSet, collected []string) []string {
+	sse := cpuFeaturesFor(p)
+	out := make([]string, 0, 1+len(sse)+len(collected))
+	if moduleMusl(muslEnabled, flags) {
+		out = append(out, "-D_musl_")
+	}
+	out = append(out, sse...)
+	out = append(out, collected...)
+
+	return out
+}
+
 // appendCompileFlagPipeline appends the shared ordered compile-flag
 // backbone used by the compose*CC variants. Callers keep ownership of
 // prologue/include slots and the language-specific tail.
-func appendCompileFlagPipeline(cmdArgs []string, bundle compileFlagBundle, warningBundle, defineBundle, preNoLibcExtras []string) []string {
+//
+// `moduleScopeCFlags` is the module-scope `CFLAGS+=` tail
+// (assembleModuleScopeCFlags): `[-D_musl_?, $SSE_CFLAGS, -DUSE_PYTHON3?]`.
+// The conf-conditional block (NoLibcBlock: -UNDEBUG/-DNDEBUG, -fPIC,
+// suppressions) brackets it — emitted twice, the ymake artifact of the
+// module scope re-expanding base $CFLAGS via BaseVal and re-running the
+// condition recalc.
+func appendCompileFlagPipeline(cmdArgs []string, bundle compileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags []string) []string {
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
 	cmdArgs = append(cmdArgs, bundle.CFlags...)
@@ -651,7 +700,7 @@ func appendCompileFlagPipeline(cmdArgs []string, bundle compileFlagBundle, warni
 	cmdArgs = append(cmdArgs, preNoLibcExtras...)
 	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
 	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-	cmdArgs = append(cmdArgs, bundle.CPUFeatures...)
+	cmdArgs = append(cmdArgs, moduleScopeCFlags...)
 	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
 
 	return cmdArgs
@@ -667,8 +716,8 @@ func composeTargetCC(a ccComposeArgs) []string {
 	// rest are the platform/source-variable slices, counted at their append
 	// multiplicity (NoLibcBlock appears twice). Verified tight: max final
 	// length equals this cap, no call exceeds it.
-	argCap := 101 + len(a.OwnAddIncl) + len(a.PeerAddIncl) + len(a.OwnCFlags) + len(a.OwnExtras) + len(a.PeerExtras) + 2*len(a.OwnGlobalBucket) + len(a.PerSrcCFlags) + 4 +
-		len(bundle.ArchArgs) + len(bundle.CFlags) + len(bundle.Defines) + 2*len(bundle.NoLibcBlock) + len(bundle.CPUFeatures) + len(warningBundle)
+	argCap := 101 + len(a.OwnAddIncl) + len(a.PeerAddIncl) + len(a.OwnCFlags) + len(a.OwnExtras) + len(a.PeerExtras) + 2*len(a.OwnGlobalBucket) + len(a.PerSrcCFlags) + len(a.ModuleScopeCFlags) + 4 +
+		len(bundle.ArchArgs) + len(bundle.CFlags) + len(bundle.Defines) + 2*len(bundle.NoLibcBlock) + len(warningBundle)
 	cmdArgs := make([]string, 0, argCap)
 	cmdArgs = append(cmdArgs,
 		pickCompiler(a.Platform.Tools, a.IsCxx),
@@ -685,7 +734,7 @@ func composeTargetCC(a ccComposeArgs) []string {
 	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl, a.InclArgs)
 	cmdArgs = append(cmdArgs, ccIncludesSuffix...)
 	cmdArgs = appendAddIncl(cmdArgs, a.PeerAddIncl, a.InclArgs)
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningBundle, bundle.Defines, a.OwnCFlags)
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningBundle, bundle.Defines, a.OwnCFlags, a.ModuleScopeCFlags)
 
 	// C sources: CONLYFLAGS (ownExtras) trails AFTER
 	// macroPrefixMapFlags — base64 neon32/64/plain32/64 CC nodes show

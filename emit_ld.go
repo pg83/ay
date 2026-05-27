@@ -49,6 +49,7 @@ func EmitLD(
 	objcopyPaths []VFS,
 	moduleCFlags []string,
 	peerCFlagsGlobal []string,
+	moduleScopeCFlags []string,
 	peerLDFlagsGlobal []string,
 	ownLDFlags []string,
 	ownRPathFlags []string,
@@ -112,7 +113,7 @@ func EmitLD(
 
 	tools := instance.Platform.Tools
 	cmd0 := composeLDCmdVcsInfo(tools, vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, noCompilerWarnings)
+	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings)
 	cmd2 := composeLDCmdLinkExe(instance.Platform, outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, wantsStrip)
 	cmd3 := composeLDCmdLinkOrCopy(tools, binaryDir, dynamicPaths...)
 	splitDwarfCmds := composeLDSplitDwarfCmds(tools, outputPath, wantsSplitDwarf)
@@ -280,11 +281,11 @@ func composeLDCmdVcsInfo(tools Toolchain, vcsCPath string) []string {
 // `__vcs_version__.c` → `__vcs_version__.c.o`.
 //
 // Mirrors upstream `_SRC_C_NODEPS_CMD` (gnu_compiler.conf:328): the
-// vcs compile is a regular C-compile that threads the per-module
-// auto-peer CFLAGS.
-func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal []string, noCompilerWarnings bool) []string {
+// vcs compile is a regular C-compile threading the per-module CFLAGS
+// (own + peer-global pre-block; the module-scope tail post-block).
+func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []string, noCompilerWarnings bool) []string {
 	bundle := compileFlagBundleFor(p)
-	cmdArgs := make([]string, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal))
+	cmdArgs := make([]string, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal)+len(moduleScopeCFlags))
 	cmdArgs = append(cmdArgs,
 		p.Tools.CC,
 		"--target="+p.Triple,
@@ -306,7 +307,7 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 	preNoLibcExtras = append(preNoLibcExtras, moduleCFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
 
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings, false), bundle.Defines, preNoLibcExtras)
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings, false), bundle.Defines, preNoLibcExtras, moduleScopeCFlags)
 
 	return cmdArgs
 }

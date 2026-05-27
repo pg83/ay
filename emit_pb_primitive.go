@@ -608,19 +608,7 @@ func protoSourceRelPath(fs *FS, instance ModuleInstance, d *moduleData, src stri
 	return filepath.ToSlash(filepath.Clean(baseDir + "/" + src))
 }
 
-func pyProtoAuxOwnAddIncl(d *moduleData) []VFS {
-	out := make([]VFS, 0, 2)
-	if d != nil && d.protoNamespace != nil {
-		base := filepath.ToSlash(filepath.Clean(*d.protoNamespace))
-		if base != "." && base != "" {
-			out = append(out, Build(base))
-		}
-	}
-	out = append(out, Intern("$(S)/contrib/libs/python/Include"))
-	return out
-}
-
-func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, aux VFS, seed []VFS, cppSibling *moduleEmitResult) []VFS {
+func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, aux VFS, seed []VFS, peerAddIncl []VFS) []VFS {
 	reg := codegenRegForInstance(ctx, instance)
 	if reg != nil {
 		emits := []includeDirective{
@@ -638,8 +626,8 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	scanIn := ModuleCCInputs{
 		InclArgs:          ctx.inclArgs,
 		Flags:             d.flags,
-		AddIncl:           pyProtoAuxOwnAddIncl(d),
-		PeerAddInclGlobal: pyProtoAuxPeerAddIncl(instance, peerContribs, d, cppSibling),
+		AddIncl:           d.addIncl,
+		PeerAddInclGlobal: peerAddIncl,
 		SourceRoot:        ctx.sourceRoot,
 		FS:                ctx.fs,
 	}
@@ -650,63 +638,6 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	}
 
 	return dedupVFS(closure)
-}
-
-// pyProtoAuxPeerAddIncl computes the peer-GLOBAL ADDINCL block for the
-// PY3_PROTO `.auxcpp.py3.o` C++ compile.
-//
-// When the module has a CPP_PROTO sibling (the common case), the sibling's
-// AddInclGlobal is the correctly-ordered C++ include block (grpc placed
-// late, abseil-cpp-tstring/protobuf/src inline) that the sibling's own
-// `.pb.cc.o` carries. The py3 peer set (`peerContribs.addIncl`) differs only
-// by grpc placement and adds the python-PEERDIR entries (python/Include,
-// runtime_py3, lzma, libffi) plus the $(B) protobuf/protoc generated roots;
-// `mergeDedupVFS` takes the cpp ordering for the shared entries and appends
-// the python-only tail.
-//
-// When CPP_PROTO is excluded (EXCLUDE_TAGS(CPP_PROTO), e.g. the protobuf
-// builtin protos), there is no sibling: rebuild from the py3 peer set,
-// stripping the protobuf/abseil entries that the hardcoded block (and the
-// PROTO_NAMESPACE tail) re-add in canonical order.
-func pyProtoAuxPeerAddIncl(instance ModuleInstance, peerContribs peerGlobalContribs, d *moduleData, cppSibling *moduleEmitResult) []VFS {
-	if cppSibling != nil {
-		return mergeDedupVFS(cppSibling.AddInclGlobal, peerContribs.addIncl)
-	}
-
-	out := make([]VFS, 0, len(peerContribs.addIncl)+8)
-	for _, p := range peerContribs.addIncl {
-		if p == Intern("$(S)/contrib/libs/protobuf/src") || p == Intern("$(B)/contrib/libs/protobuf/src") || p == Intern("$(S)/contrib/restricted/abseil-cpp-tstring") || p == Intern("$(S)/contrib/restricted/abseil-cpp") {
-			continue
-		}
-		out = append(out, p)
-	}
-	out = append(out,
-		Intern("$(S)/contrib/libs/python/Include"),
-		Intern("$(S)/contrib/restricted/abseil-cpp"),
-		Intern("$(B)/library/python/runtime_py3"),
-		Intern("$(S)/contrib/libs/lzma/liblzma/api"),
-		Intern("$(S)/contrib/libs/openssl/include"),
-		Intern("$(S)/contrib/restricted/libffi/include"),
-		Intern("$(S)/contrib/restricted/libffi/configs/"+libffiConfigTriple(instance.Platform)+"/include"),
-	)
-	if d != nil && d.protoNamespace != nil {
-		base := filepath.ToSlash(filepath.Clean(*d.protoNamespace))
-		if base != "." && base != "" && base != "contrib/libs/protobuf/src" {
-			out = append(out, Intern("$(B)/contrib/libs/protobuf/src"))
-		}
-	}
-	return out
-}
-
-func libffiConfigTriple(p *Platform) string {
-	switch p.ISA {
-	case ISAAArch64:
-		return "aarch64-unknown-linux-gnu"
-	case ISAX8664:
-		return "x86_64-unknown-linux-gnu"
-	default:
-		return p.Triple
-	}
 }
 
 func py3ccToolRefs(ctx *genCtx, instance ModuleInstance) (NodeRef, NodeRef, VFS, VFS) {
