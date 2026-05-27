@@ -16,7 +16,7 @@ import (
 // (parsers.go::protoIncludeDirectiveParser) extracts the raw mapping,
 // the walker applies the prefixes here.
 func protoPbHIncludes(pm *includeParserManager, srcRel, outputRoot string, bucket parsedIncludeBucket) []includeDirective {
-	hcpp := pm.sourceParsedBuckets(srcRel).bucket(bucket)
+	hcpp := pm.sourceParsedBuckets(Source(srcRel)).bucket(bucket)
 	if len(hcpp) == 0 {
 		return nil
 	}
@@ -228,7 +228,7 @@ func evTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) []VFS 
 // protoDirectImportNames returns the raw `import "..."` strings the
 // proto parser cached for srcRel.
 func protoDirectImportNames(pm *includeParserManager, srcRel string) []string {
-	direct := pm.sourceParsedBuckets(srcRel).bucket(parsedIncludesLocal)
+	direct := pm.sourceParsedBuckets(Source(srcRel)).bucket(parsedIncludesLocal)
 	if len(direct) == 0 {
 		return nil
 	}

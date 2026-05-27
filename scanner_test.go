@@ -1700,11 +1700,11 @@ func (s *IncludeScanner) scanDirectives(vfsPath VFS) []includeDirective {
 }
 
 func (s *IncludeScanner) parsedIncludes(vfsPath VFS) parsedIncludeSet {
-	return s.parsers.sourceParsedBuckets(vfsPath.Rel())
+	return s.parsers.sourceParsedBuckets(vfsPath)
 }
 
 func (s *IncludeScanner) sourceParsedBuckets(vfsPath VFS) parsedIncludeSet {
-	return s.parsers.sourceParsedBuckets(vfsPath.Rel())
+	return s.parsers.sourceParsedBuckets(vfsPath)
 }
 
 func writeFiles(t *testing.T, root string, files map[string]string) {

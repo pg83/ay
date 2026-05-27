@@ -20,7 +20,7 @@ type flatcEmission struct {
 }
 
 func flatcDirectImportNames(pm *includeParserManager, srcRel string) []string {
-	direct := pm.sourceParsedBuckets(srcRel).bucket(parsedIncludesLocal)
+	direct := pm.sourceParsedBuckets(Source(srcRel)).bucket(parsedIncludesLocal)
 	if len(direct) == 0 {
 		return nil
 	}
