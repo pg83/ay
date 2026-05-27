@@ -1,21 +1,13 @@
 package main
 
-import "strings"
-
-// EmitAS emits an AS node for assembling `srcRel` (relative to
-// instance.Path) into an object file. Synthetic tests can pass
-// ModuleCCInputs{} for "no per-module flags".
-//
-// `yasmLD` is the host yasm linker NodeRef (real for asmlib .pic.o, nil
-// elsewhere); when non-nil, wired into BOTH ForeignDepRefs["tool"] and
-// DepRefs — foreign-deps-only diverges on the L0 fingerprint.
+// EmitAS emits an AS node for assembling a GNU/clang-as `.s`/`.S` (or
+// non-x86 `.asm`) source `srcRel` (relative to instance.Path) into an
+// object file. The x86_64 `.asm` yasm flavour is emitASYasm — only that
+// path depends on the yasm tool, so this one never wires it. Synthetic
+// tests can pass ModuleCCInputs{} for "no per-module flags".
 //
 // Returns (NodeRef, outputPath).
-func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD *NodeRef, hostP *Platform, emit Emitter) (NodeRef, VFS) {
-	if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
-		return emitASYasm(instance, srcRel, srcVFS, in, yasmLD, emit)
-	}
-
+func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS) {
 	outVFS, inVFS := composeASPaths(instance, srcRel, srcVFS, in)
 	outputPath := outVFS.String()
 	inputPath := inVFS.String()
@@ -54,13 +46,6 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 			"network": "restricted",
 			"ram":     float64(32),
 		},
-	}
-
-	if yasmLD != nil {
-		node.ForeignDepRefs = map[string][]NodeRef{
-			"tool": {*yasmLD},
-		}
-		node.DepRefs = []NodeRef{*yasmLD}
 	}
 
 	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS
