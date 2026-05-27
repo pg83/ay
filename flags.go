@@ -166,9 +166,9 @@ var hostSseFeatures = []string{
 }
 
 // noLibcWarningSuppressions is the -Wno-* tail accompanying the no-libc/
-// no-runtime/no-util module flavour. Shared between target's
-// noLibcUndebugBlock and host's ndebugPicBlock — both wrap the same
-// suppressions in different prologues (-UNDEBUG vs -DNDEBUG -fPIC).
+// no-runtime/no-util module flavour. The shared tail of noLibcBlock,
+// which prepends a per-platform prologue (-UNDEBUG vs -DNDEBUG, then the
+// optional -mno-outline-atomics / -fPIC).
 var noLibcWarningSuppressions = []string{
 	"-Wno-array-parameter",
 	"-Wno-deprecate-lax-vec-conv-all",
@@ -192,24 +192,29 @@ var noLibcWarningSuppressions = []string{
 	"-Wno-strict-primary-template-shadow",
 }
 
-// noLibcUndebugBlock is the TARGET-build counterpart used by build/cow/on,
-// musl, and similar no-libc modules. Emitted twice in the reference
-// cmd_args (once before, once after `-DCATBOOST_OPENSOURCE=yes`).
-var noLibcUndebugBlock = func() []string {
-	out := make([]string, 0, 2+len(noLibcWarningSuppressions))
-	out = append(out, "-UNDEBUG", "-mno-outline-atomics")
+// noLibcBlock is the no-libc/no-runtime block, built per platform from
+// independent axes: the debug/release prologue (-UNDEBUG vs -DNDEBUG)
+// follows BuildRelease, -mno-outline-atomics is aarch64-specific, and
+// -fPIC follows PIC. The suppression tail (noLibcWarningSuppressions)
+// is shared. Emitted twice in cmd_args, so host (release+PIC) yields
+// the two `-DNDEBUG -fPIC …` copies of the reference graph.
+func noLibcBlock(p *Platform) []string {
+	out := make([]string, 0, 3+len(noLibcWarningSuppressions))
+	if p.BuildRelease {
+		out = append(out, "-DNDEBUG")
+	} else {
+		out = append(out, "-UNDEBUG")
+	}
+	if p.ISA == ISAAArch64 {
+		out = append(out, "-mno-outline-atomics")
+	}
+	if p.PIC {
+		out = append(out, "-fPIC")
+	}
 	out = append(out, noLibcWarningSuppressions...)
 
 	return out
-}()
-
-var x86NoLibcUndebugBlock = func() []string {
-	out := make([]string, 0, 1+len(noLibcWarningSuppressions))
-	out = append(out, "-UNDEBUG")
-	out = append(out, noLibcWarningSuppressions...)
-
-	return out
-}()
+}
 
 type compileFlagBundle struct {
 	ArchArgs               []string
@@ -242,22 +247,17 @@ func withSandboxingDebugCompression(base []string, p *Platform) []string {
 }
 
 func compileFlagBundleFor(p *Platform) compileFlagBundle {
-	if p.PIC {
-		return compileFlagBundle{
-			CFlags:                 hostCFlags,
-			Defines:                hostDefines,
-			NoLibcBlock:            ndebugPicBlock,
-			CPUFeatures:            hostSseFeatures,
-			SplitAutoPeerAroundCPU: true,
-		}
-	}
-
 	switch p.ISA {
 	case ISAX8664:
+		cflags := x86TargetCFlags
+		if p.BuildRelease {
+			cflags = hostCFlags
+		}
+
 		return compileFlagBundle{
-			CFlags:                 withSandboxingDebugCompression(x86TargetCFlags, p),
+			CFlags:                 withSandboxingDebugCompression(cflags, p),
 			Defines:                hostDefines,
-			NoLibcBlock:            x86NoLibcUndebugBlock,
+			NoLibcBlock:            noLibcBlock(p),
 			CPUFeatures:            hostSseFeatures,
 			SplitAutoPeerAroundCPU: true,
 		}
@@ -265,7 +265,7 @@ func compileFlagBundleFor(p *Platform) compileFlagBundle {
 		bundle := compileFlagBundle{
 			CFlags:      withSandboxingDebugCompression(commonCFlags, p),
 			Defines:     commonDefines,
-			NoLibcBlock: noLibcUndebugBlock,
+			NoLibcBlock: noLibcBlock(p),
 		}
 		if p.March != "" {
 			bundle.ArchArgs = []string{"-march=" + p.March}
@@ -278,22 +278,8 @@ func compileFlagBundleFor(p *Platform) compileFlagBundle {
 	return compileFlagBundle{}
 }
 
-// ndebugPicBlock is the HOST-build counterpart of noLibcUndebugBlock.
-// Replaces `-UNDEBUG -mno-outline-atomics` with `-DNDEBUG -fPIC` (host
-// is release + position-independent), keeping the same suppression
-// tail. Emitted twice in the host reference cmd_args, with
-// `hostSseFeatures` between the two copies instead of just
-// `catboostOpenSourceDefine`.
-var ndebugPicBlock = func() []string {
-	out := make([]string, 0, 2+len(noLibcWarningSuppressions))
-	out = append(out, "-DNDEBUG", "-fPIC")
-	out = append(out, noLibcWarningSuppressions...)
-
-	return out
-}()
-
 // catboostOpenSourceDefine is the single sentinel flag that sits
-// between the two copies of noLibcUndebugBlock (target) or, for host,
+// between the two copies of noLibcBlock (target) or, for host,
 // before the `hostSseFeatures` block.
 var catboostOpenSourceDefine = []string{
 	"-DCATBOOST_OPENSOURCE=yes",
