@@ -20,8 +20,7 @@ func TestComposeDynLibInputs_IncludesVcsAndHelperScripts(t *testing.T) {
 	)
 
 	want := []string{
-		// BUILD_ROOT block in first-occurrence (input) order, not sorted —
-		// node-input order is normalized away by the gate.
+
 		"$(B)/contrib/libs/libiconv/static/liblibs-libiconv-static.a",
 		"$(B)/build/cow/on/libbuild-cow-on.a",
 		"$(B)/contrib/libs/musl/include/musl.py.pyplugin",

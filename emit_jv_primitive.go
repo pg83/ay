@@ -5,22 +5,14 @@ import (
 	"strings"
 )
 
-// jdkResourcePath is the literal JDK17 resource path. The hash suffix
-// (564746473) is the resource bundle ID and is pinned byte-exact.
 const jdkResourcePath = "$(JDK17-564746473)/bin/java"
 
-// antlr4JarVFS is the source-relative VFS path to the ANTLR4 jar.
 var antlr4JarVFS = Intern("$(S)/contrib/java/antlr/antlr4/antlr.jar")
 var antlr3JarVFS = Intern("$(S)/contrib/java/antlr/antlr3/antlr.jar")
 
-// antlr4JarPath is the legacy string form (used in cmd_args). Equal
-// to antlr4JarVFS.String().
 var antlr4JarPath = antlr4JarVFS.String()
 var antlr3JarPath = antlr3JarVFS.String()
 
-// stdout2stderr is the wrapper script that redirects antlr4's stdout
-// to stderr (required so the build system captures diagnostic output
-// correctly).
 var stdout2stderrVFS = Intern("$(S)/build/scripts/stdout2stderr.py")
 var stdout2stderrPath = stdout2stderrVFS.String()
 
@@ -61,14 +53,6 @@ func emitJVNode(instance ModuleInstance, cmdArgs []string, inputs []VFS, outputs
 	return emit.Emit(bindNodePlatform(node, instance.Platform))
 }
 
-// EmitJV emits a JV node for a single RUN_ANTLR4_CPP grammar (.g4
-// relative to module dir). Options are extra cmd_args tokens.
-// visitor=true → -visitor; listener=false (default split) → -no-listener.
-//
-// cmd_args: [python3, stdout2stderr.py, jdk/bin/java, -jar, antlr4.jar,
-// <grammar>, -Dlanguage=Cpp, -o, $(B)/<modulePath>, ...options].
-// outputs: <grammar>{Lexer,Parser,Visitor,BaseVisitor}.{cpp,h}.
-// inputs: [grammar.g4, stdout2stderr.py, antlr4.jar]; cwd: $(B)/<modulePath>.
 func EmitJV(
 	instance ModuleInstance,
 	grammar string,
@@ -122,12 +106,6 @@ func EmitJV(
 	return emitJVNode(instance, cmdArgs, inputs, outputs, outDir, nil, emit)
 }
 
-// EmitJVSplit emits a JV node for RUN_ANTLR4_CPP_SPLIT (separate lexer
-// + parser .g4 files).
-//
-// cmd_args: [python3, stdout2stderr.py, jdk/bin/java, -jar, antlr4.jar,
-// <lexer>, <parser>, -Dlanguage=Cpp, -o, $(B)/<modulePath>, ...flags].
-// Outputs: {Lexer,Parser}.{cpp,h} + ParserVisitor.h, ParserBaseVisitor.h.
 func EmitJVSplit(
 	instance ModuleInstance,
 	lexer string,

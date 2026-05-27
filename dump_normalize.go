@@ -12,22 +12,6 @@ import (
 
 const dumpUIDLen = 22
 
-// cmdDumpNormalize is the canonical L4 normalizer: a streaming, two-pass
-// canonicalization of a raw build graph into per-node JSONL. It canonicalizes
-// on SEMANTICS, so that two semantically-equal graphs (OUR vs REF) emit an
-// identical set of canonical JSONL node lines.
-//
-// Pass 1 streams every node, canonicalizes its content (minus deps/identity),
-// and keeps only metadata in memory: uid→content-hash, uid→deps, the FETCH
-// set, and root candidates. Node bodies are not retained.
-//
-// Between passes: BFS the closure from the target root(s) over deps (FETCH
-// and dangling edges excluded), then assign new uids bottom-up — a Merkle
-// fold new_uid(n) = base64url(sha256(content_hash(n) ⧺ sorted(child new uids))).
-//
-// Pass 2 re-streams the file, and for each closure node emits one canonical
-// JSONL line with deps rewritten to new uids and uid=self_uid=new_uid. Output
-// is UNSORTED; pipe through `ay dump sort` for the canonical total order.
 func cmdDumpNormalize(args []string) int {
 	defer startProfilesFromEnv()()
 
@@ -53,12 +37,8 @@ func cmdDumpNormalize(args []string) int {
 		ThrowFmt("dump normalize: --in and --target are required")
 	}
 
-	// Decode is serial (one streaming decoder) and the heap is shared, so
-	// beyond a handful of workers GC contention eats the gains. 4 balances
-	// parallel canonicalization against allocation pressure.
 	const workers = 4
 
-	// --- Pass 1: content hashes, adjacency, FETCH set, root candidates ---
 	contentHash := map[string][32]byte{}
 	deps := map[string][]string{}
 	fetch := map[string]bool{}
@@ -74,14 +54,12 @@ func cmdDumpNormalize(args []string) int {
 	arInfix := "/" + target + "/"
 	tsPrefix := target + "/"
 
-	// Workers canonicalize + hash + classify each node in parallel; the
-	// single collector merges into the maps without locks.
 	type p1Result struct {
 		uid      string
 		deps     []string
 		content  [32]byte
 		isFetch  bool
-		rootKind byte // 'L' | 'A' | 'T', else 0
+		rootKind byte
 		arHost   bool
 	}
 
@@ -138,7 +116,6 @@ func cmdDumpNormalize(args []string) int {
 			}
 		})
 
-	// --- Resolve roots ---
 	roots := []string{}
 	if len(ldRoots) > 0 || len(arRoots) > 0 {
 		switch {
@@ -168,7 +145,6 @@ func cmdDumpNormalize(args []string) int {
 		ThrowFmt("dump normalize: no LD/AR/TS root node found for target %q", target)
 	}
 
-	// --- Closure: BFS over deps, FETCH + dangling edges excluded ---
 	closure := map[string]bool{}
 	queue := append([]string(nil), roots...)
 	for len(queue) > 0 {
@@ -188,10 +164,8 @@ func cmdDumpNormalize(args []string) int {
 		}
 	}
 
-	// --- Bottom-up re-uid (post-order Merkle fold) ---
 	newUID := reuidClosure(roots, closure, fetch, deps, contentHash)
 
-	// --- Pass 2: re-stream, emit canonical JSONL for closure nodes ---
 	var out io.Writer
 	if outPath == "" || outPath == "-" {
 		out = os.Stdout
@@ -202,8 +176,6 @@ func cmdDumpNormalize(args []string) int {
 	}
 	bw := bufio.NewWriterSize(out, 1<<20)
 
-	// Workers build canonical lines for closure nodes in parallel; the
-	// single collector writes them (order irrelevant — sorted downstream).
 	streamGraphFanout(inPath, workers,
 		func(node map[string]any) []byte {
 			uid := getString(node, "uid")
@@ -213,10 +185,7 @@ func cmdDumpNormalize(args []string) int {
 
 			canon := canonContent(node)
 			canon["deps"] = rewriteDeps(deps[uid], closure, fetch, newUID)
-			// uid = full Merkle (content + subtree); self_uid = intrinsic
-			// content hash (no deps) so diffs isolate root-cause content
-			// divergences from cascade. Both match for isomorphic nodes,
-			// so byte-exact cases stay byte-exact.
+
 			canon["uid"] = newUID[uid]
 			ch := contentHash[uid]
 			canon["self_uid"] = base64.RawURLEncoding.EncodeToString(ch[:])[:dumpUIDLen]
@@ -233,9 +202,6 @@ func cmdDumpNormalize(args []string) int {
 	return 0
 }
 
-// rewriteDeps maps a node's raw deps to canonical tokens: closure children
-// become their new uid, dangling edges keep the old uid, FETCH edges drop.
-// Result is sorted (canonical, independent of original uid assignment).
 func rewriteDeps(raw []string, closure, fetch map[string]bool, newUID map[string]string) []string {
 	out := make([]string, 0, len(raw))
 	for _, d := range raw {
@@ -252,11 +218,6 @@ func rewriteDeps(raw []string, closure, fetch map[string]bool, newUID map[string
 	return out
 }
 
-// reuidClosure computes new uids for every closure node via iterative
-// post-order DFS (children finished before parents). new_uid folds the
-// node's content hash with the sorted dep tokens (child new uids; dangling
-// edges keep old uid). Cycles: a back-edge child not yet finished keeps its
-// old uid in the fold.
 func reuidClosure(
 	roots []string,
 	closure, fetch map[string]bool,
@@ -293,7 +254,7 @@ func reuidClosure(
 					continue
 				}
 			}
-			tokens = append(tokens, d) // dangling or cycle back-edge
+			tokens = append(tokens, d)
 		}
 		sort.Strings(tokens)
 

@@ -7,7 +7,6 @@ const (
 	py3ccCanonicalRel = "tools/py3cc/"
 )
 
-// canonicalizePy3ccBinary maps the host walker's /bin/ output back to the canonical path.
 func canonicalizePy3ccBinary(v VFS) VFS {
 	if !v.IsBuild() || !strings.HasPrefix(v.Rel(), py3ccBinSubrel) {
 		return v
@@ -18,7 +17,6 @@ func canonicalizePy3ccBinary(v VFS) VFS {
 
 const runtimePy3ModulePath = "library/python/runtime_py3"
 
-// runtimePy3CCExtraInputs returns extra CC inputs for runtime_py3 wrappers.
 func runtimePy3CCExtraInputs(modulePath, srcRel string) []VFS {
 	if modulePath != runtimePy3ModulePath {
 		return nil

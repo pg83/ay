@@ -13,27 +13,6 @@ import (
 	"testing"
 )
 
-// gen_test.go — end-to-end test for the M1 vertical slice. Parses
-// build/cow/on/ya.make, emits the 2-node CC+AR subgraph, and asserts
-// byte-exact L3 equality against the corresponding 2 nodes carved out
-// of the upstream reference graph.
-//
-// Skip-if-missing pattern follows cc_test.go / ar_test.go: the reference
-// snapshot under /home/pg/monorepo/yatool is required; absence is a
-// host condition, not a test failure.
-
-// TestGen_AcceptsProgramModule_Synthetic verifies PR-24's PROGRAM →
-// LD wiring on a synthetic source tree:
-//   - PROGRAM() modules are accepted and emit an LD node (PR-24);
-//   - PEERDIR(...) is recursively walked, with the parent PROGRAM's
-//     LD node carrying the peer LIBRARY's AR UID as a dependency
-//     (peerLDRefs flow through to LD's DepRefs).
-//
-// The synthetic source tree has two modules — `mainprog` (PROGRAM
-// peering thelib) and `thelib` (LIBRARY) — each with a single
-// source. The expected closure is 4 nodes: thelib's CC + AR, then
-// mainprog's CC + LD. The root result is mainprog's LD (the binary
-// `$(B)/mainprog/mainprog`).
 func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	root := t.TempDir()
 
@@ -69,8 +48,6 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 		t.Fatalf("Gen produced %d results, want 1", len(g.Result))
 	}
 
-	// Locate nodes by output path so the assertions don't depend on
-	// emit order. Each path is unique within the synthetic tree.
 	nodesByOutput := make(map[string]*Node, len(g.Graph))
 
 	for _, n := range g.Graph {
@@ -96,8 +73,6 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 
 	rootLD := nodesByOutput[mainBinPath]
 
-	// Verify it really is an LD node, not an AR aliased to the
-	// binary path.
 	if rootLD.KV["p"] != "LD" {
 		t.Errorf("root node kv.p = %q, want LD", rootLD.KV["p"])
 	}
@@ -106,7 +81,6 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 		t.Errorf("root LD Cmds = %d, want 4", len(rootLD.Cmds))
 	}
 
-	// Result must point at the root LD node.
 	if g.Result[0] != rootLD.UID {
 		t.Errorf("result UID = %q, want mainprog LD uid %q", g.Result[0], rootLD.UID)
 	}
@@ -119,8 +93,6 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 		t.Errorf("root LD module_type = %q, want bin", rootLD.TargetProperties["module_type"])
 	}
 
-	// Root LD must depend on BOTH its own CC node AND the peer's
-	// AR node — that is the wiring contract PR-24 commits to.
 	mainCC := nodesByOutput[mainCCOut]
 	libAR := nodesByOutput[libARout]
 
@@ -138,13 +110,6 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	}
 }
 
-// TestGen_UnittestFor_Synthetic verifies T-1's UNITTEST_FOR desugaring:
-// UNITTEST_FOR(<dir>) parses as a program-like ModuleStmt (no
-// unsupported-macro throw), emits an LD, and implicitly PEERDIRs both
-// library/cpp/testing/unittest_main and the tested dir (their ARs land in
-// the LD link closure). The tested-dir argument is NOT used as the binary
-// name (it is a path), and source rebasing must not also inject a direct
-// `-I$(S)/<tested-dir>` onto the module's own compile.
 func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	root := t.TempDir()
 
@@ -188,8 +153,6 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	mkfile("contrib/libs/tcmalloc/no_percpu_cache/npc.cpp", "int no_percpu_cache() { return 0; }\n")
 	mkfile("library/cpp/testing/unittest_main/main.cpp", "int unittest_main() { return 0; }\n")
 
-	// Reaching the assertions at all proves UNITTEST_FOR did not trip the
-	// "does not yet support macro" throw (that would panic out of testGen).
 	g := testGen(root, "mod")
 
 	byOut := make(map[string]*Node, len(g.Graph))
@@ -199,8 +162,6 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		}
 	}
 
-	// Full-path naming keeps a single-component module as "mod", NOT the
-	// UNITTEST_FOR argument ("thelib").
 	ld := byOut["$(B)/mod/mod"]
 	if ld == nil {
 		t.Fatalf("missing UNITTEST_FOR LD output $(B)/mod/mod")
@@ -237,9 +198,6 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		t.Errorf("LD deps missing unittest_main AR uid %q (implicit PEERDIR not walked)", umAR.UID)
 	}
 
-	// UNITTEST_FOR sources resolve under the tested dir, while outputs stay
-	// under the declaring module via the SRCDIR-style composed path. With a
-	// sibling tested dir (`thelib`) that becomes `__/thelib/...`.
 	cc := byOut["$(B)/mod/__/thelib/a_ut.cpp.o"]
 	if cc == nil {
 		t.Fatal("missing own CC $(B)/mod/__/thelib/a_ut.cpp.o")
@@ -276,10 +234,6 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	}
 }
 
-// TestGen_SyntheticPROGRAM_EmitsLD verifies a PROGRAM module with
-// one source and zero PEERDIR emits exactly 2 nodes (1 CC + 1 LD)
-// per the PR-24 brief's synthetic-test acceptance line. The LD node
-// has 4 cmds and is the graph result.
 func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 	root := t.TempDir()
 
@@ -303,7 +257,6 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 		t.Fatalf("Gen produced %d results, want 1", len(g.Result))
 	}
 
-	// Locate nodes by kv.p.
 	var ld, cc *Node
 
 	for _, n := range g.Graph {
@@ -337,16 +290,6 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 	}
 }
 
-// TestGen_RejectsUnsupportedMacro verifies that any macro outside
-// PR-23's whitelist throws with a concrete deferred-to-PR-25
-// message. PR-13 introduced typed Stmts for IF / INCLUDE /
-// JOIN_SRCS / ADDINCL / CFLAGS / LDFLAGS / SRCDIR / GLOBAL_SRCS,
-// so `IF` is no longer the "unsupported macro" canary — gen.go now
-// hits its default `*Stmt` arm with an "unhandled Stmt type" message
-// for those. Any name NOT in `whitelistedMetadataMacros` AND NOT a
-// typed Stmt name still flows through `*UnknownStmt` and trips the
-// original whitelist check; a made-up macro name is the stable canary
-// for that path now that more real generated-source macros are typed.
 func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 	root := t.TempDir()
 
@@ -445,26 +388,9 @@ END()
 	}
 }
 
-// TestGen_DualInstantiation_BuildCowOn pins D31 — the same Path,
-// instantiated as TWO ModuleInstances (target + host), produces TWO
-// distinct memo entries and TWO distinct CC+AR pairs. PR-23 walker
-// (`Gen`) only emits the TARGET pair (host-tool recursion is wired
-// in PR-25 via the macro evaluator). PR-23's contract for this test
-// is therefore:
-//
-//  1. Gen with the target seed → 2 nodes (M1 acceptance preserved).
-//  2. A direct EmitCC + EmitAR call against a host instance against
-//     the SAME emitter buffer adds 2 more nodes byte-exact against
-//     the reference host pair.
-//
-// Together these prove that ModuleInstance addressing AND host
-// emission both work; PR-25 will fold the second half into the
-// walker.
 func TestGen_PeerdirDeclarationOrder_Preserved(t *testing.T) {
 	tmp := t.TempDir()
 
-	// Three modules: mainprog peers [zlib, alib] in non-alphabetical declaration order.
-	// Sort would put alib before zlib; declaration-order R14 invariant requires zlib first.
 	Throw(os.MkdirAll(filepath.Join(tmp, "mainprog"), 0755))
 	Throw(os.MkdirAll(filepath.Join(tmp, "zlib"), 0755))
 	Throw(os.MkdirAll(filepath.Join(tmp, "alib"), 0755))
@@ -484,10 +410,6 @@ END()
 
 	g := testGen(tmp, "mainprog")
 
-	// Find the AR nodes for zlib and alib by output path. Assert zlib AR appears
-	// BEFORE alib AR in g.Graph (post-Finalize topo order respects emit order +
-	// dep relationship; for two independent leaves visited in declaration order
-	// zlib should be emitted first, hence appear first in topo).
 	var zlibIdx, alibIdx int = -1, -1
 
 	for i, n := range g.Graph {
@@ -505,27 +427,11 @@ END()
 		t.Fatalf("expected both zlib and alib AR nodes; zlibIdx=%d alibIdx=%d", zlibIdx, alibIdx)
 	}
 
-	// NOTE: Finalize's topo order may sort by UID at tie-breaking points, so
-	// relative position of independent leaves can be UID-driven not declaration-driven.
-	// What we CAN reliably assert: emit order in BufferedEmitter is declaration order.
-	// The graph topology however constrains that BOTH zlib and alib are emitted before
-	// mainprog (they're its deps). The strongest declaration-order assertion that survives
-	// Finalize is by checking the BufferedEmitter directly... but Gen doesn't expose it.
-	//
-	// Pragmatic check: the synthetic produces 6 nodes (3 CC + 2 AR + 1 LD;
-	// mainprog is PROGRAM so closes with LD, two peer LIBRARYs close with AR).
-	// Verify count — catches regressions where a sort.Strings(peerdirs) collapses or
-	// breaks the walk.
 	if len(g.Graph) != 6 {
 		t.Errorf("expected 6 nodes (3 CC + 2 AR + 1 LD), got %d", len(g.Graph))
 	}
 }
 
-// TestGen_MacroEvaluation_IfStmt_TakeThen verifies that IF/ELSE
-// branches are evaluated against the per-instance env and only the
-// taken branch contributes sources. The ya.make picks SRCS(linux.c)
-// in the THEN arm and SRCS(other.c) in the ELSE arm; under the
-// default target env (OS_LINUX=true) only linux.c is emitted.
 func TestGen_MacroEvaluation_IfStmt_TakeThen(t *testing.T) {
 	root := t.TempDir()
 	modDir := filepath.Join(root, "ifmod")
@@ -568,8 +474,6 @@ END()
 	}
 }
 
-// TestGen_MacroEvaluation_NoLibcFlag verifies that NO_LIBC() in a
-// module's ya.make sets `d.flags.NoLibc=true` after collectModule.
 func TestGen_MacroEvaluation_NoLibcFlag(t *testing.T) {
 	root := t.TempDir()
 	modDir := filepath.Join(root, "nolibcmod")
@@ -584,9 +488,6 @@ END()
 `)
 	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
-	// Drive collectModule directly to inspect the FlagSet overlay
-	// outcome. (Gen's path goes through Finalize which strips refs;
-	// we want to see the flags that flow into EmitCC for "nolibcmod".)
 	mf := Throw2(ParseFile(NewFS(root), filepath.Join(modDir, "ya.make")))
 
 	d := collectModule(newIncludeParserManager(root), "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}))
@@ -603,10 +504,6 @@ END()
 		t.Errorf("flags.NoRuntime = false, want true")
 	}
 
-	// Sanity: a full Gen against this synthetic still produces a
-	// 2-node subgraph (1 CC + 1 AR). The CC's cmd_args composer is
-	// PR-26's job to keep aligned with the flag bag; PR-25 only
-	// verifies the bag itself is populated.
 	g := testGen(root, "nolibcmod")
 
 	if len(g.Graph) != 2 {
@@ -705,11 +602,6 @@ END()
 	}
 }
 
-// TestGen_JoinSrcs_EmitsJSAndCC verifies that JOIN_SRCS produces
-// (1 JS) + (1 CC for joined) + (1 CC for sibling) + (1 AR) = 4
-// nodes. The JS NodeRef must thread into the joined-CC's input
-// path; the sibling CC compiles regularly. The joined CC's source
-// path is `$(B)/<modulePath>/<allName>` per EmitJS.
 func TestGen_JoinSrcs_EmitsJSAndCC(t *testing.T) {
 	root := t.TempDir()
 	modDir := filepath.Join(root, "joinmod")
@@ -746,14 +638,6 @@ END()
 		t.Fatalf("total graph nodes = %d, want 4", len(g.Graph))
 	}
 
-	// Verify both expected CC sources surfaced. PR-25's joined CC
-	// uses SOURCE_ROOT-rooted input (the same as a regular SRCS);
-	// the upstream reference uses BUILD_ROOT for joined sources.
-	// That divergence is a known PR-26 byte-exact gap (the
-	// generated-source dep wiring needs EmitCC to learn a
-	// build-root variant + the JS NodeRef as an additional dep).
-	// PR-25 tests the structural fact: 1 JS + 2 CC + 1 AR with
-	// the correct sources surfacing.
 	var (
 		joinedInput string
 		otherInput  string
@@ -784,8 +668,6 @@ END()
 		t.Errorf("no CC node found whose input references other.cpp")
 	}
 
-	// Sanity: the JS node's output path is the joined .cpp under
-	// $(B)/<modulePath>/<allName>.
 	var jsOut string
 
 	for _, n := range g.Graph {
@@ -800,11 +682,6 @@ END()
 	}
 }
 
-// TestGen_GlobalSrcs_EmitsTwoARs verifies that a LIBRARY with both
-// SRCS and GLOBAL_SRCS emits two AR nodes — the regular `.a` and
-// the `.global.a`. The regular AR carries `module_lang=cpp,
-// module_type=lib`; the global AR additionally has
-// `module_tag=global` per `EmitARGlobal`.
 func TestGen_GlobalSrcs_EmitsTwoARs(t *testing.T) {
 	root := t.TempDir()
 	modDir := filepath.Join(root, "globalmod")
@@ -833,8 +710,6 @@ END()
 		t.Errorf("AR count = %d, want 2 (regular + global)", counts["AR"])
 	}
 
-	// Verify exactly one AR carries module_tag=global; the other
-	// has no module_tag.
 	var globalARs, regularARs int
 
 	for _, n := range g.Graph {
@@ -858,27 +733,13 @@ END()
 	}
 }
 
-// TestGen_HostToolRecursion_R6 verifies the cross-platform
-// recursion mechanism (D31). A synthetic ya.make with a `.rl6`
-// source forces the walker to recurse into a host instance of
-// `contrib/tools/ragel6`, walk a stub PROGRAM there, and thread the
-// resulting LD ref through EmitR6's `ForeignDepRefs["tool"]`. The
-// generated `.cpp` is then compiled by EmitCC, so the closure is:
-// host CC + host LD (the ragel6 stub) + R6 + target CC + target AR.
 func TestGen_HostToolRecursion_R6(t *testing.T) {
 	root := t.TempDir()
 
-	// Synthetic host ragel6 module at the real path
-	// `contrib/tools/ragel6/bin` (PR-28 D03 — the parent
-	// `contrib/tools/ragel6/ya.make` uses INCLUDE(${ARCADIA_ROOT}/...)
-	// which the parser does not yet expand). The PROGRAM(ragel6) macro
-	// argument pins PR-28-D01: the LD's binary name comes from the
-	// macro, not from the directory's last component ("bin").
 	ragelDir := filepath.Join(root, "contrib/tools/ragel6/bin")
 	Throw(os.MkdirAll(ragelDir, 0o755))
 	Throw(os.WriteFile(filepath.Join(ragelDir, "ya.make"), []byte("PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n"), 0o644))
 
-	// Target consumer with an .rl6 source.
 	consumerDir := filepath.Join(root, "consumer")
 	Throw(os.MkdirAll(consumerDir, 0o755))
 	Throw(os.WriteFile(filepath.Join(consumerDir, "ya.make"), []byte("LIBRARY()\nSRCS(parser.rl6)\nEND()\n"), 0o644))
@@ -899,9 +760,6 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		}
 	}
 
-	// Expected nodes:
-	//   target side: R6, CC (the generated .cpp), AR  → 3
-	//   host  side: CC (ragel6/main.cpp), LD (ragel6) → 2
 	if counts["R6"] != 1 {
 		t.Errorf("R6 count = %d, want 1", counts["R6"])
 	}
@@ -930,8 +788,6 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Errorf("host nodes (by platform) = %d, want 2", platforms[string(PlatformDefaultLinuxX8664)])
 	}
 
-	// Verify the R6 node's foreign_deps.tool is exactly the LD
-	// host ragel6 UID.
 	var (
 		r6Node *Node
 		ldNode *Node
@@ -954,8 +810,6 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Fatal("no host ragel6 LD node found")
 	}
 
-	// PR-L4-C/07: ragel6 host LD edge lives in both deps (for topology)
-	// and foreign_deps.tool (matching REF's shape for the R6 aarch64 node).
 	if len(r6Node.Deps) != 1 || r6Node.Deps[0] != ldNode.UID {
 		t.Errorf("R6 Deps = %v, want [%q]", r6Node.Deps, ldNode.UID)
 	}
@@ -964,20 +818,6 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Errorf("R6 ForeignDeps = %v, want {tool: [%q]}", r6Node.ForeignDeps, ldNode.UID)
 	}
 
-	// PR-28 D09: cmd_args[0] (the ragel6 invocation path) tracks the
-	// host LD's outputs[0] modulo PR-35j's `/bin/` canonicalisation.
-	// This pins the internal consistency between R6 dispatch and our
-	// own host-PROGRAM emission — without it a future regression in
-	// either side could produce a graph that compiles but invokes the
-	// wrong binary path. PR-35j (closure of PR-33-C2_07): when the
-	// host walker enters `contrib/tools/ragel6/bin` (because the
-	// parent ya.make's `INCLUDE` is not yet expanded), EmitR6
-	// canonicalises cmd_args[0] back to the reference-shaped parent
-	// path `$(B)/contrib/tools/ragel6/ragel6`. The host LD's
-	// outputs[0] keeps the walked `/bin/` path (the host LD itself is
-	// not an L*-pair lever for the util closure). The consistency
-	// invariant therefore compares the LD output through the same
-	// canonicaliser that EmitR6 applies.
 	if len(r6Node.Cmds) == 0 || len(r6Node.Cmds[0].CmdArgs) == 0 {
 		t.Fatalf("R6 node has no Cmds[0].CmdArgs; got Cmds=%v", r6Node.Cmds)
 	}
@@ -994,20 +834,15 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	}
 }
 
-// TestGen_PeerGlobalArchive_ThreadsToLD verifies D03: when a PROGRAM
-// peers a LIBRARY that has GLOBAL_SRCS, the LD node's DepRefs include
-// both the peer's regular AR and the peer's global AR.
 func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	root := t.TempDir()
 
-	// peerlib: LIBRARY with both SRCS and GLOBAL_SRCS.
 	peerDir := filepath.Join(root, "peerlib")
 	Throw(os.MkdirAll(peerDir, 0o755))
 	Throw(os.WriteFile(filepath.Join(peerDir, "ya.make"), []byte(
 		"LIBRARY()\nSRCS(regular.cpp)\nGLOBAL_SRCS(global.cpp)\nEND()\n",
 	), 0o644))
 
-	// consumer: PROGRAM that peers peerlib.
 	consumerDir := filepath.Join(root, "consumer")
 	Throw(os.MkdirAll(consumerDir, 0o755))
 	Throw(os.WriteFile(filepath.Join(consumerDir, "ya.make"), []byte(
@@ -1016,7 +851,6 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 
 	g := testGen(root, "consumer")
 
-	// Locate the LD node.
 	var ldNode *Node
 	for _, n := range g.Graph {
 		if n.KV["p"] == "LD" {
@@ -1028,7 +862,6 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 		t.Fatal("no LD node found in graph")
 	}
 
-	// Count AR nodes: expect 2 (regular peerlib.a + peerlib.global.a).
 	arCount := 0
 	for _, n := range g.Graph {
 		if n.KV["p"] == "AR" {
@@ -1040,17 +873,10 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 		t.Errorf("AR count = %d, want 2 (regular + global from peerlib)", arCount)
 	}
 
-	// The LD node's Deps must include at least one reference to each
-	// of the two peer ARs. With 1 CC (main.cpp.o) + 2 peer ARs
-	// (regular + global) wired in, the minimum resolved Deps count is 3.
-	// (Finalize resolves DepRefs into Deps UIDs and clears DepRefs.)
 	if len(ldNode.Deps) < 3 {
 		t.Errorf("LD Deps = %d, want >= 3 (own CC + peer AR + peer global AR)", len(ldNode.Deps))
 	}
 
-	// D08 regression guard: inputs must contain $(B)/peerlib/libpeerlib.global.a
-	// (single prefix, no double). composeLDInputs prepends $(B)/ itself, so
-	// GlobalPath must be BUILD_ROOT-relative (no $(B)/ prefix).
 	expectedInput := "$(B)/peerlib/libpeerlib.global.a"
 	foundInInputs := false
 
@@ -1065,17 +891,12 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 		t.Errorf("expected single-prefixed global archive in inputs; got: %v", ldNode.Inputs)
 	}
 
-	// Guard against double-prefixed entries (the original D08 defect).
 	for _, in := range ldNode.Inputs {
 		if strings.Contains(in.String(), "$(B)/$(B)") {
 			t.Errorf("double-prefixed input found: %q", in.String())
 		}
 	}
 
-	// D08 regression guard: cmd_args of link_exe.py (cmds[2]) must contain
-	// peerlib/libpeerlib.global.a without any $(B)/ prefix, because
-	// composeLDCmdLinkExe appends globalPaths verbatim into cmd_args and link_exe.py
-	// resolves them relative to $(B) (the cmd's Cwd).
 	if len(ldNode.Cmds) < 3 {
 		t.Fatalf("LD node has %d cmds, want >= 3", len(ldNode.Cmds))
 	}
@@ -1096,16 +917,9 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	}
 }
 
-// TestGen_AllocatorMacro_ResolvesToPeer pins D12: ALLOCATOR(MIM) must
-// append `library/cpp/malloc/mimalloc` to the module's PEERDIR list so
-// the walker descends into it. Synthetic fixture with a trivial peer
-// stub.
 func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
 	root := t.TempDir()
 
-	// PROGRAM with ALLOCATOR(MIM) and explicit minimal peers; the
-	// implicit DEFAULT_PEERDIR machinery is gated off by NO_PLATFORM
-	// so the synthetic graph stays narrow.
 	progDir := filepath.Join(root, "prog")
 	Throw(os.MkdirAll(progDir, 0o755))
 	Throw(os.WriteFile(filepath.Join(progDir, "ya.make"),
@@ -1133,19 +947,9 @@ func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
 	}
 }
 
-// TestGen_DefaultPeerdirs_SimpleLibrary verifies that a synthetic
-// LIBRARY without any NO_* macro receives the full set of implicit
-// default peers. The synthetic source tree contains stubbed
-// musl / builtins / malloc/api ya.makes (each a minimal LIBRARY)
-// so the walker can recurse into them. This is the only test in
-// the file that exercises the actual emit path of defaults; the
-// real-tree coverage lives in TestGen_ToolsArchiver_DoesNotCrash.
 func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	root := t.TempDir()
 
-	// Minimal ya.make for each default peer. They each declare
-	// effective NO_PLATFORM so they don't recursively trigger
-	// further defaults (which would require deeper stub trees).
 	stubLib := "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(stub.cpp)\nEND()\n"
 
 	for _, path := range []string{
@@ -1163,8 +967,6 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		Throw(os.WriteFile(filepath.Join(dir, "ya.make"), []byte(stubLib), 0o644))
 	}
 
-	// Helper assertion: defaultPeerdirsFor returns exactly the
-	// seven paths for a fresh CPP LIBRARY with zero NO_* flags.
 	plain := ModuleInstance{
 		Path:     "consumer",
 		Kind:     KindLib,
@@ -1172,10 +974,6 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		Platform: testTargetP,
 	}
 
-	// PR-42: contrib/libs/musl, contrib/libs/cxxsupp/builtins, and
-	// library/cpp/malloc/api are no longer direct implicit peers; they are
-	// reached transitively (musl via musl/full, builtins via libcxx, malloc/api
-	// via malloc/tcmalloc). PR-32 D03: musl/include is still appended directly.
 	wantDefaults := []string{
 		"contrib/libs/cxxsupp/libcxx",
 		"contrib/libs/cxxsupp/libcxxrt",
@@ -1190,8 +988,6 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		t.Errorf("defaultPeerdirsFor(plain CPP) = %v, want %v", gotDefaults, wantDefaults)
 	}
 
-	// End-to-end: walk a consumer LIBRARY and confirm the seven
-	// stubs were emitted.
 	consumerDir := filepath.Join(root, "consumer")
 
 	Throw(os.MkdirAll(consumerDir, 0o755))
@@ -1207,9 +1003,6 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		}
 	}
 
-	// PR-42: musl, builtins, malloc/api are no longer direct implicit peers of
-	// a plain LIBRARY; they arrive transitively through program-default parents
-	// (musl/full, libcxx, malloc/tcmalloc) which are not added for LIBRARYs.
 	for _, want := range []string{
 		"consumer",
 		"contrib/libs/cxxsupp/libcxx",
@@ -1223,26 +1016,8 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	}
 }
 
-// TestGen_DefaultPeerdirs_HelperSuppression exercises the full
-// suppression matrix of `defaultPeerdirsFor`. PR-27 widened the
-// default set (libcxx/libcxxrt/libunwind/util added, gated by
-// NoRuntime / NoUtil) and introduced runtime-ancestor self-suppression
-// — modules whose path sits in `runtimeAncestorPaths` get zero
-// implicit peers regardless of their FlagSet, matching the empirical
-// reference-graph fact that every such module has no peer-archive
-// deps in its AR.
-//
-//   - effective NO_PLATFORM (NoLibc+NoRuntime+NoUtil)  → empty set
-//   - explicit NO_PLATFORM                            → empty set
-//   - NO_LIBC only                                    → drops musl
-//   - NO_RUNTIME only                                 → drops builtins+libcxx*
-//   - NO_UTIL only                                    → drops util
-//   - non-CPP language                                → empty set
-//   - self-instance for any runtime ancestor          → empty set
 func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
-	// PR-42: musl, builtins, malloc/api are no longer direct implicit peers
-	// (reached transitively via program-default parents). PR-32 D03: musl/include
-	// remains a direct peer (conf-declared via _BASE_UNIT PEERDIR at ymake.core.conf:781).
+
 	fullSet := []string{
 		"contrib/libs/cxxsupp/libcxx",
 		"contrib/libs/cxxsupp/libcxxrt",
@@ -1286,8 +1061,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Platform: testTargetP,
 			},
 			flags: FlagSet{NoLibc: true},
-			// PR-42: musl was already removed from direct peers; NO_LIBC no
-			// longer changes the set. PR-32 D03: musl/include still fires.
+
 			want: fullSet,
 		},
 		{
@@ -1299,8 +1073,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Platform: testTargetP,
 			},
 			flags: FlagSet{NoRuntime: true},
-			// PR-42: musl and malloc/api removed from direct peers. NO_RUNTIME drops
-			// libcxx/libcxxrt/libunwind. PR-32 D03: musl/include still fires.
+
 			want: []string{"util", "contrib/libs/musl/include"},
 		},
 		{
@@ -1312,9 +1085,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			},
 			want: nil,
 		},
-		// `contrib/libs/musl` is a runtime ancestor with no NO_PLATFORM
-		// effective flags — only the implicit musl/include auto-peer
-		// fires.
+
 		{
 			name: "self_musl_runtime_ancestor",
 			mi: ModuleInstance{
@@ -1324,9 +1095,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			},
 			want: []string{"contrib/libs/musl/include"},
 		},
-		// `contrib/libs/musl/full` is not a literal runtime ancestor.
-		// When a test bypasses ya.make parsing, it must model the
-		// module's effective NO_PLATFORM flags explicitly.
+
 		{
 			name: "self_musl_subdir_runtime_ancestor",
 			mi: ModuleInstance{
@@ -1341,8 +1110,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			name:  "no_util_only",
 			mi:    ModuleInstance{Path: "x", Kind: KindLib, Language: LangCPP},
 			flags: FlagSet{NoUtil: true},
-			// PR-42: musl, builtins, malloc/api removed from direct peers.
-			// NO_UTIL drops util. PR-32 D03: musl/include still fires.
+
 			want: []string{
 				"contrib/libs/cxxsupp/libcxx",
 				"contrib/libs/cxxsupp/libcxxrt",
@@ -1350,20 +1118,13 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				"contrib/libs/musl/include",
 			},
 		},
-		// musl_extra is NOT in the runtime-ancestor set (the upstream
-		// reference includes it as a 2-node leaf rather than a
-		// runtime root); it gets the full default set.
+
 		{
 			name: "musl_extra_not_runtime_ancestor",
 			mi:   ModuleInstance{Path: "contrib/libs/musl_extra", Kind: KindLib, Language: LangCPP, Platform: testTargetP},
 			want: fullSet,
 		},
-		// PR-32 D03: non-NoStdInc runtime ancestors (builtins,
-		// malloc/api, libcxx, util) get the auto-PEERDIR
-		// `contrib/libs/musl/include` only — the runtime-stack peers
-		// stay suppressed. The two-phase peer-aggregation in the
-		// walker keeps the libcxx-include + libcxxrt-include slots
-		// ordered BEFORE the musl-arch paths in consumer cmd_args.
+
 		{
 			name: "self_builtins_runtime_ancestor",
 			mi: ModuleInstance{
@@ -1413,8 +1174,6 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 	}
 }
 
-// stringSlicesEqual compares two []string by length+order. nil and
-// empty are treated as equal.
 func stringSlicesEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -1438,7 +1197,6 @@ SRCS(a.cpp)
 END()
 `), 0644))
 
-	// Set up a stub musl ya.make so the recursion can resolve.
 	Throw(os.MkdirAll(filepath.Join(tmp, "contrib/libs/musl"), 0755))
 	Throw(os.WriteFile(filepath.Join(tmp, "contrib/libs/musl", "ya.make"), []byte(`LIBRARY()
 NO_LIBC()
@@ -1451,7 +1209,6 @@ END()
 
 	g := testGen(tmp, "lib1")
 
-	// Find lib1's AR; check its DepRefs.
 	var lib1AR *Node
 	for _, n := range g.Graph {
 		if n.KV["p"] == "AR" && n.TargetProperties["module_dir"] == "lib1" {
@@ -1464,12 +1221,6 @@ END()
 		t.Fatal("lib1 AR not found")
 	}
 
-	// PR-30 D05: peer-archive refs are NOT threaded into AR.DepRefs.
-	// The reference graph confirms every AR has zero AR-on-AR deps.
-	// The dedupe contract still applies upstream (defaultPeerdirsFor
-	// + explicit PEERDIR are deduped before walk), so the peer's
-	// genModule fires exactly once. We pin the new invariant: lib1's
-	// AR has zero AR-typed deps.
 	for _, ref := range lib1AR.Deps {
 		for _, n := range g.Graph {
 			if n.UID == ref && n.KV["p"] == "AR" {
@@ -1479,19 +1230,9 @@ END()
 	}
 }
 
-// TestGen_SrcDirRebasesSourceResolution pins PR-28-D02 / D11: when a
-// module declares SRCDIR(other/dir), per-source CC nodes (including
-// those from JOIN_SRCS) must emit module_dir = "other/dir" and inputs
-// rooted at "$(S)/other/dir/<src>". Without SRCDIR the
-// instance's own path must be used unchanged.
 func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	t.Run("with_srcdir", func(t *testing.T) {
-		// PR-30 D06: LIBRARY with non-ancestor SRCDIR keeps module_dir
-		// at instance.Path; per-source SRCDIR routing applies (input
-		// at $(S)/<srcdir>/<src>; output uses `__/<rel>`
-		// infix). The historical PR-28-D02 "always rebase" shape is
-		// retained ONLY for the PROGRAM-with-ancestor-SRCDIR pattern
-		// (ragel6/bin); see TestGen_SrcdirAncestor_RebasesModuleDir.
+
 		root := t.TempDir()
 
 		modDir := filepath.Join(root, "mymod")
@@ -1518,21 +1259,16 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		// Sibling SRCDIR: module_dir stays at instance.Path.
 		if ccNode.TargetProperties["module_dir"] != "mymod" {
 			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "mymod")
 		}
 
-		// Input path resolves under SRCDIR (foo.cpp doesn't exist
-		// locally at mymod/, so the composer takes the SRCDIR route).
 		wantInput := "$(S)/other/dir/foo.cpp"
 
 		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
 			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
 		}
 
-		// Output path uses `__/<rel>` infix; rel = relpath(other/dir/foo.cpp
-		// from mymod) = ../other/dir/foo.cpp → __/other/dir/foo.cpp.
 		wantOutput := "$(B)/mymod/__/other/dir/foo.cpp.o"
 
 		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].String() != wantOutput {
@@ -1567,7 +1303,6 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		// Without SRCDIR, module_dir must be instance.Path.
 		if ccNode.TargetProperties["module_dir"] != "basemod" {
 			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "basemod")
 		}
@@ -1580,11 +1315,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	})
 
 	t.Run("join_srcs_with_srcdir_library_non_ancestor", func(t *testing.T) {
-		// PR-30 D06: LIBRARY with non-ancestor SRCDIR + JOIN_SRCS keeps
-		// the JS module_dir at instance.Path. JS sources resolve at
-		// the LIBRARY's own dir per the upstream convention (the
-		// JOIN_SRCS-with-sibling-SRCDIR shape is unused in the M2
-		// closure; the test pins the LIBRARY-no-rebase invariant).
+
 		root := t.TempDir()
 
 		modDir := filepath.Join(root, "jsmod")
@@ -1618,7 +1349,6 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		// LIBRARY non-ancestor: JS module_dir stays at instance.Path.
 		if jsNode.TargetProperties["module_dir"] != "jsmod" {
 			t.Errorf("JS module_dir = %q, want %q", jsNode.TargetProperties["module_dir"], "jsmod")
 		}
@@ -1629,8 +1359,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	})
 
 	t.Run("ancestor_program_rebases_module_dir", func(t *testing.T) {
-		// PR-30 D06: PROGRAM with ancestor SRCDIR (ragel6/bin pattern)
-		// fully rebases — module_dir = SRCDIR, output at SRCDIR.
+
 		root := t.TempDir()
 
 		modDir := filepath.Join(root, "tools/r6/bin")
@@ -1653,7 +1382,6 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		// Ancestor PROGRAM: module_dir == SRCDIR; output at <srcdir>/<src>.o.
 		if ccNode.TargetProperties["module_dir"] != "tools/r6" {
 			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "tools/r6")
 		}
@@ -1707,23 +1435,12 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	})
 }
 
-// TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs pins the PR-33 D02
-// inversion of PR-29-D01: own GLOBAL CXXFLAGS / CONLYFLAGS DO appear
-// on the module's own cmd_args (via the (own ∪ peer) GLOBAL bucket
-// emitted twice flanking the catboost-redux). The literal `GLOBAL`
-// token must still NOT leak through (only the flag token following
-// it). Empirical anchor: libcxx algorithm.cpp.o cmd_args[101] +
-// [103] = `-nostdinc++` (own GLOBAL CXXFLAGS, emitted twice via the
-// bucket).
 func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 	t.Run("CXXFLAGS_GLOBAL_emitted_twice_no_literal_GLOBAL", func(t *testing.T) {
 		root := t.TempDir()
 		modDir := filepath.Join(root, "testlib")
 		Throw(os.MkdirAll(modDir, 0o755))
 
-		// CXXFLAGS(GLOBAL -nostdinc++) — PR-33 D02: own GLOBAL CXXFLAGS
-		// IS emitted on the module's own C++ CC node (twice, flanking
-		// the catboost-redux). The literal GLOBAL token must not leak.
 		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCXXFLAGS(GLOBAL -nostdinc++)\nSRCS(foo.cpp)\nEND()\n")
 		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
@@ -1759,8 +1476,6 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 			}
 		}
 
-		// PR-33 D02: own GLOBAL CXXFLAGS lands on own cmd_args twice
-		// (the bucket emitted on each side of the catboost-redux).
 		if nostdinccCount != 2 {
 			t.Errorf("expected 2 occurrences of -nostdinc++ in own cmd_args (bucket × 2), got %d", nostdinccCount)
 		}
@@ -1771,14 +1486,6 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 		modDir := filepath.Join(root, "testlib")
 		Throw(os.MkdirAll(modDir, 0o755))
 
-		// CONLYFLAGS(GLOBAL -Dfoo) — for C sources the empirical
-		// reference shows no catboost-redux and no second peerExtras
-		// emission (build/cow/on lib.c.o has no -DCATBOOST_OPENSOURCE
-		// duplicate; tcmalloc aligned_alloc.c.o likewise). PR-33 D02
-		// keeps the C path on the existing single peerExtras slot;
-		// the literal GLOBAL token still must not leak. Own GLOBAL
-		// CONLYFLAGS for C is not exercised in the M2 closure; if a
-		// future closure surfaces such a case, revisit.
 		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCONLYFLAGS(GLOBAL -Dfoo)\nSRCS(bar.c)\nEND()\n")
 		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
@@ -1814,7 +1521,6 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 		modDir := filepath.Join(root, "testlib")
 		Throw(os.MkdirAll(modDir, 0o755))
 
-		// CXXFLAGS(-DMINE) without GLOBAL — must reach cmd_args.
 		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCXXFLAGS(-DMINE)\nSRCS(foo.cpp)\nEND()\n")
 		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
 
@@ -1854,9 +1560,6 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 	})
 }
 
-// TestGen_GeneratorWiredIntoDepRefs_JS pins PR-30 D04: a JOIN_SRCS module's
-// downstream CC must carry the JS NodeRef as a DepRef (the reference shape:
-// every JS-derived CC has Deps=[js UID]).
 func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
 	root := t.TempDir()
 
@@ -1901,12 +1604,9 @@ func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
 	}
 }
 
-// TestGen_GeneratorWiredIntoDepRefs_R6 pins PR-30 D04: a `.rl6` source
-// emits a downstream CC node whose DepRefs contains the R6 NodeRef.
 func TestGen_GeneratorWiredIntoDepRefs_R6(t *testing.T) {
 	root := t.TempDir()
 
-	// Module that uses .rl6.
 	modDir := filepath.Join(root, "r6mod")
 	Throw(os.MkdirAll(modDir, 0o755))
 	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(`LIBRARY()
@@ -1917,11 +1617,6 @@ SRCS(thing.rl6)
 END()
 `), 0o644))
 
-	// Stub host ragel6 PROGRAM so the host-tool recursion has
-	// something to resolve. Its parse may fail in the synthetic
-	// fixture (no SET evaluator) — emitOneSource swallows ParseError
-	// and leaves ragelLDRef zero-valued; the downstream CC still
-	// receives r6Ref from the local EmitR6 call (HasGenerator=true).
 	Throw(os.MkdirAll(filepath.Join(root, "contrib/tools/ragel6/bin"), 0o755))
 	Throw(os.WriteFile(filepath.Join(root, "contrib/tools/ragel6/bin", "ya.make"), []byte(`PROGRAM(ragel6)
 NO_LIBC()
@@ -1941,9 +1636,7 @@ END()
 		case "R6":
 			r6Node = n
 		case "CC":
-			// Pick the CC whose input lives under $(B)
-			// (the R6-derived CC; the host ragel6 PROGRAM also
-			// emits a CC for its main.cpp under $(S)).
+
 			ip := ""
 			if len(n.Inputs) > 0 {
 				ip = n.Inputs[0].String()
@@ -1978,10 +1671,6 @@ END()
 	}
 }
 
-// TestEmitAR_NoPeerArchivesInDeps pins PR-30 D05: the LIBRARY AR call
-// site drops `peerArchiveRefs`. Reference confirms every AR has zero
-// AR-on-AR deps. Even when peers are declared and emit, lib1's AR
-// has zero AR-typed deps.
 func TestEmitAR_NoPeerArchivesInDeps(t *testing.T) {
 	tmp := t.TempDir()
 	Throw(os.MkdirAll(filepath.Join(tmp, "lib_consumer"), 0o755))
@@ -2028,14 +1717,9 @@ END()
 	}
 }
 
-// TestGen_PROGRAM_DefaultMuslFull_PeerEmitted pins PR-30 D02: a PROGRAM
-// in the M2 environment (MUSL=yes, !MUSL_LITE) implicitly peers
-// `contrib/libs/musl/full`. Synthetic fixture supplies the musl/full
-// ya.make so the implicit peer resolves.
 func TestGen_PROGRAM_DefaultMuslFull_PeerEmitted(t *testing.T) {
 	tmp := t.TempDir()
 
-	// Synthetic PROGRAM with no ALLOCATOR macro.
 	Throw(os.MkdirAll(filepath.Join(tmp, "myprog"), 0o755))
 	Throw(os.WriteFile(filepath.Join(tmp, "myprog", "ya.make"), []byte(`PROGRAM(myprog)
 NO_LIBC()
@@ -2046,7 +1730,6 @@ SRCS(main.cpp)
 END()
 `), 0o644))
 
-	// Synthetic musl/full ya.make.
 	Throw(os.MkdirAll(filepath.Join(tmp, "contrib/libs/musl/full"), 0o755))
 	Throw(os.WriteFile(filepath.Join(tmp, "contrib/libs/musl/full", "ya.make"), []byte(`LIBRARY()
 NO_LIBC()
@@ -2074,14 +1757,11 @@ END()
 	}
 }
 
-// TestGen_PROGRAM_DefaultAllocator_TcmallocTc pins PR-30 D03: a PROGRAM
-// without ALLOCATOR(...) defaults to TCMALLOC_TC, pulling
-// library/cpp/malloc/tcmalloc + contrib/libs/tcmalloc/no_percpu_cache.
 func TestGen_PROGRAM_DefaultAllocator_TcmallocTc(t *testing.T) {
 	tmp := t.TempDir()
 
 	Throw(os.MkdirAll(filepath.Join(tmp, "myprog"), 0o755))
-	// PROGRAM with no ALLOCATOR macro and no SRCDIR.
+
 	Throw(os.WriteFile(filepath.Join(tmp, "myprog", "ya.make"), []byte(`PROGRAM(myprog)
 NO_LIBC()
 NO_RUNTIME()
@@ -2090,7 +1770,6 @@ SRCS(main.cpp)
 END()
 `), 0o644))
 
-	// Synthetic stubs for the TCMALLOC_TC peers.
 	Throw(os.MkdirAll(filepath.Join(tmp, "library/cpp/malloc/tcmalloc"), 0o755))
 	Throw(os.WriteFile(filepath.Join(tmp, "library/cpp/malloc/tcmalloc", "ya.make"), []byte(`LIBRARY()
 NO_LIBC()
@@ -2140,9 +1819,6 @@ END()
 	}
 }
 
-// TestGen_PROGRAM_ExplicitAllocator_NoTcmallocDefault pins PR-30 D03:
-// a PROGRAM that explicitly types ALLOCATOR(FAKE) does NOT receive
-// the TCMALLOC_TC default-allocator peers.
 func TestGen_PROGRAM_ExplicitAllocator_NoTcmallocDefault(t *testing.T) {
 	tmp := t.TempDir()
 
@@ -2167,13 +1843,6 @@ END()
 	}
 }
 
-// TestGen_SrcdirSibling_KeepsModuleDir pins PR-30 D06: a LIBRARY whose
-// SRCDIR points at a sibling directory keeps its own module_dir on
-// per-source CC nodes; the source path uses `__/<rel>` infix.
-//
-// Synthetic fixture: instance=`mylib`, SRCDIR=`other`, source `src/foo.cpp`.
-// The composer takes the SRCDIR route because foo.cpp doesn't exist
-// at mylib/src/foo.cpp on disk.
 func TestGen_SrcdirSibling_KeepsModuleDir(t *testing.T) {
 	tmp := t.TempDir()
 
@@ -2220,10 +1889,6 @@ END()
 	}
 }
 
-// TestGen_SrcdirLocal_IgnoresSrcdir pins PR-30 D06: a LIBRARY with SRCDIR
-// where the source ALSO exists locally (in instance.Path) takes the
-// local-resolution path — SRCDIR is silently ignored. This is the
-// musl_extra / tcmalloc/no_percpu_cache `aligned_alloc.c` shape.
 func TestGen_SrcdirLocal_IgnoresSrcdir(t *testing.T) {
 	tmp := t.TempDir()
 
@@ -2237,8 +1902,6 @@ SRCS(local.c)
 END()
 `), 0o644))
 
-	// Place the actual source file at instance.Path so the composer's
-	// stat check finds it locally.
 	Throw(os.WriteFile(filepath.Join(tmp, "mylib", "local.c"), []byte("int x;\n"), 0o644))
 
 	g := testGen(tmp, "mylib")
@@ -2270,17 +1933,9 @@ END()
 	}
 }
 
-// TestGen_AddInclMixed_OwnPathStaysOwn pins PR-31 D13: a single
-// ADDINCL call carrying both a GLOBAL path and a module-own path must
-// NOT propagate the module-own path to consumers via PEERDIR.
-//
-// Setup: lib declares ADDINCL(GLOBAL lib/include\nlib/src). Consumer
-// peers lib. The consumer's CC node must have -I lib/include (from
-// the GLOBAL path) but must NOT have -I lib/src (the module-own path).
 func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	root := t.TempDir()
 
-	// lib/ya.make: LIBRARY with mixed ADDINCL — GLOBAL include, bare src.
 	libDir := filepath.Join(root, "lib")
 	Throw(os.MkdirAll(libDir, 0o755))
 	Throw(os.MkdirAll(filepath.Join(root, "lib/include"), 0o755))
@@ -2288,7 +1943,6 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 		"LIBRARY()\nADDINCL(\n    GLOBAL lib/include\n    lib/src\n)\nSRCS(lib.cpp)\nEND()\n",
 	), 0o644))
 
-	// consumer/ya.make: LIBRARY that peers lib.
 	consDir := filepath.Join(root, "consumer")
 	Throw(os.MkdirAll(consDir, 0o755))
 	Throw(os.WriteFile(filepath.Join(consDir, "ya.make"), []byte(
@@ -2297,7 +1951,6 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 
 	g := testGen(root, "consumer")
 
-	// Find the CC node for main.cpp (the consumer's own source).
 	var consumerCC *Node
 
 	for _, n := range g.Graph {
@@ -2315,7 +1968,6 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 		t.Fatal("consumer CC node for main.cpp not found")
 	}
 
-	// Collect -I flags from the first cmd's cmd_args.
 	var iFlags []string
 
 	if len(consumerCC.Cmds) > 0 {
@@ -2326,7 +1978,6 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 		}
 	}
 
-	// GLOBAL path must propagate.
 	wantGlobal := "-I$(S)/lib/include"
 	foundGlobal := false
 
@@ -2341,7 +1992,6 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 		t.Errorf("consumer CC -I flags = %v; want %q (GLOBAL ADDINCL must propagate to peers)", iFlags, wantGlobal)
 	}
 
-	// Module-own path must NOT propagate.
 	wantAbsent := "-I$(S)/lib/src"
 
 	for _, f := range iFlags {
@@ -2352,17 +2002,6 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	}
 }
 
-// TestGen_ToolsArchiver_L0_AtLeast95 is the M2 acceptance closer: PR-30
-// must lift L0 ≥ 95% on the tools/archiver target against the reference
-// graph at /home/pg/monorepo/yatool/sg.json.
-// TestIsRuntimeAncestor_LiteralOnly pins PR-33 D01: `isRuntimeAncestor`
-// matches only literal entries in `runtimeAncestorPaths`. Subtree
-// members (`util/charset`, `contrib/libs/musl/full`,
-// `contrib/libs/cxxsupp/libcxxabi-parts`) are NOT runtime ancestors;
-// they go through the normal `defaultPeerdirsFor` flow and pick up
-// libcxx / libcxxrt / libunwind / util as auto-peers. The literal
-// entries themselves still self-suppress via the
-// `instance.Path != "..."` guards inside `defaultPeerdirsFor`.
 func TestIsRuntimeAncestor_LiteralOnly(t *testing.T) {
 	literals := []string{
 		"contrib/libs/musl",
@@ -2385,7 +2024,6 @@ func TestIsRuntimeAncestor_LiteralOnly(t *testing.T) {
 		}
 	}
 
-	// Subtree members must NOT be classified as runtime ancestors.
 	subtree := []string{
 		"util/charset",
 		"util/datetime/parser.rl6.cpp.o",
@@ -2401,12 +2039,6 @@ func TestIsRuntimeAncestor_LiteralOnly(t *testing.T) {
 	}
 }
 
-// TestGen_SRC_AppendsExtraCFlags_PerSource verifies PR-35o's SRC
-// macro: `SRC(filename extra_cflags...)` registers the source AND
-// appends the extra flags to that source's compile cmd_args at the
-// per-source slot (right before the input path). Mirrors the
-// upstream `util/charset/ya.make` `SRC(wide_sse41.cpp -DSSE41_STUB)`
-// pattern that was the L0=99.71%→100% blocker before PR-35o.
 func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 	root := t.TempDir()
 
@@ -2443,9 +2075,7 @@ func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 	if len(args) < 2 {
 		t.Fatalf("CC cmd_args too short: %d", len(args))
 	}
-	// The per-source CFLAGS slot the composer places between
-	// macroPrefixMapFlags and the input path: -DSSE41_STUB must
-	// appear immediately before the source path at the tail.
+
 	wantInput := "$(S)/mod/foo.cpp"
 
 	if args[len(args)-1] != wantInput {
@@ -2457,11 +2087,6 @@ func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 	}
 }
 
-// TestGen_SRC_C_NO_LTO_RegistersSource verifies PR-35o's SRC_C_NO_LTO
-// macro: `SRC_C_NO_LTO(filename)` registers the source as a regular
-// CC member with NO per-source CFLAGS and a FLAT output path (no `_/`
-// infix even when the filename contains a `/`). Mirrors the upstream
-// `util/ya.make:341` `SRC_C_NO_LTO(system/compiler.cpp)` pattern.
 func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 	root := t.TempDir()
 
@@ -2497,14 +2122,13 @@ func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 	if len(cc.Outputs) != 1 {
 		t.Fatalf("CC outputs = %#v, want exactly 1", cc.Outputs)
 	}
-	// FLAT output path: no `_/` infix.
+
 	wantOut := "$(B)/mod/system/compiler.cpp.o"
 
 	if cc.Outputs[0].String() != wantOut {
 		t.Errorf("CC output = %q, want %q (SRC_C_NO_LTO uses flat output, not `mod/_/system/compiler.cpp.o`)", cc.Outputs[0].String(), wantOut)
 	}
-	// No per-source CFLAGS: last arg is the input path, second-to-last
-	// is the standard macro-prefix-map (NOT a per-source -D flag).
+
 	args := cc.Cmds[0].CmdArgs
 
 	if args[len(args)-1] != "$(S)/mod/system/compiler.cpp" {
@@ -2516,11 +2140,6 @@ func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 	}
 }
 
-// TestGen_SRC_FlatOutputPath verifies PR-35o's SRC macro emits a flat
-// output path (no `_/` infix) even for a slashed source filename.
-// Mirrors SRC_C_NO_LTO's flat-path semantics — both come from the
-// upstream `_SRC` macro family, distinct from `SRCS(subdir/foo.cpp)`
-// which emits `<modulePath>/_/subdir/foo.cpp.o`.
 func TestGen_SRC_FlatOutputPath(t *testing.T) {
 	root := t.TempDir()
 
@@ -2559,10 +2178,6 @@ func TestGen_SRC_FlatOutputPath(t *testing.T) {
 	}
 }
 
-// TestGen_SRC_RejectsZeroArgs verifies PR-35o's SRC macro throws on
-// SRC() with no filename — defensive: a SRC with an empty arg list is
-// almost certainly a typo / parse error upstream and silently ignoring
-// it would mask the bug.
 func TestGen_SRC_RejectsZeroArgs(t *testing.T) {
 	root := t.TempDir()
 
@@ -2591,12 +2206,6 @@ func TestGen_SRC_RejectsZeroArgs(t *testing.T) {
 	}
 }
 
-// TestEvalCond_ARCH_ARM64_Aliased pins the ARCH_ARM64↔ARCH_AARCH64
-// alias: the `contrib/libs/cxxsupp/builtins/ya.make` bf16 SRCS block is
-// guarded by `IF (ARCH_ARM64 OR ARCH_X86_64)` and Arcadia binds
-// ARCH_ARM64=true whenever ARCH_AARCH64=true. Without the alias 5
-// .c.o nodes would be silently dropped from the L0 closure on aarch64.
-// `buildIfEnv` flips both bits in lockstep per instance.Platform.ISA.
 func TestEvalCond_ARCH_ARM64_Aliased(t *testing.T) {
 	inst := ModuleInstance{Kind: KindLib, Platform: testTargetP}
 	env := buildIfEnv(inst)
@@ -2621,14 +2230,6 @@ func TestEvalCond_ARCH_ARM64_Aliased(t *testing.T) {
 	}
 }
 
-// TestGen_PR35y_R7_JoinSrcs_SuppressBuildRootShim pins PR-35y R7:
-// the AR's `inputs` slot does NOT include the BUILD_ROOT-staged
-// joined-cpp shim that the JS step produces. Reference graph
-// behaviour: util's `libyutil.a` lists `all_datetime.cpp.o` (the
-// compiled object) but NEVER `$(B)/util/all_datetime.cpp`
-// (the joined cpp source itself). Pre-PR-35y, our walker added this
-// path to the AR aggregator, leaving 16 OUR-only entries on util's
-// libyutil.a (15 JOIN_SRCS + 1 .rl6.cpp shim).
 func TestGen_PR35y_R7_JoinSrcs_SuppressBuildRootShim(t *testing.T) {
 	root := t.TempDir()
 	modDir := filepath.Join(root, "joinmod")
@@ -2664,9 +2265,6 @@ END()
 		}
 	}
 
-	// JS member sources are NOT in AR inputs either — an archive bundles the
-	// compiled objects, not source files; the member source/header closure is
-	// excluded from AR/LD inputs (normalizer + emission).
 	for _, src := range []string{"$(S)/joinmod/src1.cpp", "$(S)/joinmod/src2.cpp"} {
 		if nodeHasInput(arNode, src) {
 			t.Errorf("AR.Inputs must not contain JS member source %q: %#v", src, arNode.Inputs)
@@ -2674,22 +2272,15 @@ END()
 	}
 }
 
-// TestGen_PR35y_R7_RagelRl6_OriginalSourcePair pins PR-35y R7 for
-// the .rl6 case: the AR's `inputs` slot includes the original
-// `.rl6` source AND its `.h` companion (when present), but NOT the
-// BUILD_ROOT-staged generated `.rl6.cpp` shim. Reference graph
-// behaviour for util: `libyutil.a` lists `parser.rl6` and
-// `parser.h` but never `$(B)/util/_/datetime/parser.rl6.cpp`.
 func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	root := t.TempDir()
 	consumerDir := filepath.Join(root, "consumer")
 	Throw(os.MkdirAll(consumerDir, 0o755))
 	Throw(os.WriteFile(filepath.Join(consumerDir, "ya.make"), []byte("LIBRARY()\nSRCS(parser.rl6)\nEND()\n"), 0o644))
-	// Place the companion .h on disk so the walker discovers it.
+
 	Throw(os.WriteFile(filepath.Join(consumerDir, "parser.rl6"), []byte("// fixture\n"), 0o644))
 	Throw(os.WriteFile(filepath.Join(consumerDir, "parser.h"), []byte("// fixture\n"), 0o644))
 
-	// Synthetic host ragel6 stub so the host walk parses cleanly.
 	ragelDir := filepath.Join(root, "contrib/tools/ragel6/bin")
 	Throw(os.MkdirAll(ragelDir, 0o755))
 	Throw(os.WriteFile(filepath.Join(ragelDir, "ya.make"), []byte("PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n"), 0o644))
@@ -2718,8 +2309,6 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 		}
 	}
 
-	// Neither the .rl6 source nor its .h companion appear in AR.Inputs — an
-	// archive bundles the compiled objects, not member sources/headers.
 	for _, src := range []string{"$(S)/consumer/parser.rl6", "$(S)/consumer/parser.h"} {
 		if nodeHasInput(arNode, src) {
 			t.Errorf("AR.Inputs must not contain member source %q: %#v", src, arNode.Inputs)
@@ -2727,18 +2316,6 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	}
 }
 
-// TestGen_PR35y_R8_RegularARIncludesGlobalMemberInputs pins PR-35y
-// R8: the regular `.a` archive's memberInputs union BOTH regular
-// SRCS and GLOBAL_SRCS member inputs. Reference graph empirically
-// confirms this on tcmalloc/no_percpu_cache: its `.a` has 1313
-// inputs covering BOTH `aligned_alloc.c` (regular SRCS) closure AND
-// every `tcmalloc/*` GLOBAL_SRCS source closure (1311 shared
-// headers + the regular primary). Pre-PR-35y the regular AR was
-// missing the GLOBAL closure entirely.
-//
-// Conversely, the .global.a aggregator drops regular primaries
-// (the regular SRCS source files themselves) but keeps everyone's
-// header closure, mirroring the reference asymmetry.
 func TestGen_PR35y_R8_RegularARIncludesGlobalMemberInputs(t *testing.T) {
 	root := t.TempDir()
 	modDir := filepath.Join(root, "globalmod")
@@ -2789,9 +2366,6 @@ END()
 		globalSrc  = "$(S)/globalmod/global.cpp"
 	)
 
-	// AR inputs hold compiled objects + scripts, never member sources — so
-	// the regular/global .cpp sources (and the R8 regular-unions-global
-	// closure) no longer appear. Each AR still archives its own object.
 	for _, src := range []string{regularSrc, globalSrc} {
 		if regularInputs[src] {
 			t.Errorf("regular AR.Inputs must not contain member source %q: %#v", src, regularAR.Inputs)
@@ -2817,22 +2391,9 @@ END()
 	}
 }
 
-// TestGen_PR35y_R8_AsmSrcdirRebase pins PR-35y R8: when a LIBRARY
-// declares SRCDIR and a `.S` source resolves under that SRCDIR
-// (because no local file exists at instance.Path/<srcRel>), the AR
-// aggregator's view of the source path uses the SRCDIR-rebased
-// shape `$(S)/<srcDir>/<srcRel>`, not the unrebased
-// `$(S)/<instance.Path>/<srcRel>`. Empirical reference:
-// tcmalloc/no_percpu_cache (SRCDIR=`contrib/libs/tcmalloc`) — its
-// `tcmalloc/internal/percpu_rseq_asm.S` resolves at
-// `contrib/libs/tcmalloc/tcmalloc/internal/percpu_rseq_asm.S` in
-// the AR's inputs.
 func TestGen_PR35y_R8_AsmSrcdirRebase(t *testing.T) {
 	root := t.TempDir()
 
-	// Module at `mod/inner` declares SRCDIR pointing at `mod`. The
-	// `.S` source `sub/foo.S` does NOT exist at `mod/inner/sub/foo.S`,
-	// so the SRCDIR-rebased branch fires.
 	Throw(os.MkdirAll(filepath.Join(root, "mod/inner"), 0o755))
 	Throw(os.WriteFile(filepath.Join(root, "mod/inner", "ya.make"), []byte(`LIBRARY()
 NO_LIBC()
@@ -2843,19 +2404,12 @@ SRCDIR(mod)
 SRCS(sub/foo.S)
 END()
 `), 0o644))
-	// Place the actual source under SRCDIR (mod/sub/foo.S), NOT under
-	// instance.Path (mod/inner/sub/foo.S). The composer's
-	// sourceExistsLocally probe must return false at the local path
-	// so the SRCDIR branch wins.
+
 	Throw(os.MkdirAll(filepath.Join(root, "mod/sub"), 0o755))
 	Throw(os.WriteFile(filepath.Join(root, "mod/sub", "foo.S"), []byte("// asm\n"), 0o644))
 
 	g := testGen(root, "mod/inner")
 
-	// The SRCDIR rebase is observable on the AS node that compiles foo.S —
-	// its source input reads from the SRCDIR path, not the instance path.
-	// (AR inputs no longer carry member sources; the rebase lives on the
-	// compile node.)
 	var asNode *Node
 
 	for _, n := range g.Graph {
@@ -3032,9 +2586,7 @@ END()
 	if nodeHasInput(ar, "$(B)/proto/Generated.code0.cc") {
 		t.Fatalf("ar inputs still contain build-root generated source: %v", ar.Inputs)
 	}
-	// The generator toolchain closure is NOT carried into the AR — an archive
-	// bundles objects, not the codegen sources/tools/templates. (The CC node
-	// above still carries the closure; only AR/LD inputs are trimmed.)
+
 	for _, absent := range []string{
 		"$(S)/tools/multiproto.py",
 		"$(S)/contrib/java/antlr/antlr4/antlr.jar",
@@ -3496,7 +3048,7 @@ int use() { return 0; }
 	if !nodeHasInput(en, "$(S)/contrib/libs/protobuf/src/google/protobuf/message.h") {
 		t.Fatalf("enum node inputs missing protobuf runtime header message.h: %#v", en.Inputs)
 	}
-	// EN CC is emitted into the PROTO_LIBRARY archive.
+
 	if !nodeHasInput(ar, "$(B)/protos/main.pb.h_serialized.cpp.o") {
 		t.Fatalf("archive missing enum serialization object: %#v", ar.Inputs)
 	}
@@ -3571,13 +3123,6 @@ int use() { return 0; }
 		}
 	}
 }
-
-// gen_helpers_test.go — test-only shim that constructs the canonical
-// (host=linux-x86_64, target=linux-aarch64) Platform pair with the
-// shared testToolchainFlags and dispatches into Gen. Lives
-// alongside the test corpus rather than in production code: cmdMake
-// constructs platforms inline from CLI + mining, so a generic "Gen"
-// entry that hardcodes defaults would just be misleading.
 
 func testGen(sourceRoot, targetDir string) *Graph {
 	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
@@ -4195,8 +3740,6 @@ func vfsStringsT3(in []VFS) []string {
 	return out
 }
 
-// TestGen_CF_SetVarsReachCfgVars reproduces T9: SET(...)-derived vars must
-// reach the CFG_VARS of a CF node emitted through the SRCS .cpp.in path.
 func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
 	root := t.TempDir()
 	libDir := filepath.Join(root, "thelib")
@@ -4226,10 +3769,6 @@ func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
 	}
 }
 
-// TestGen_HInGeneratedHeader_RealizedInConsumer reproduces T13: a .h.in
-// generated header declared in SRCS of one module but #included only by a
-// PEERDIR consumer must have module_dir = the consuming module (not the
-// declaring one) and must NOT be archived into the declaring module's .a.
 func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 	root := t.TempDir()
 	genh := filepath.Join(root, "genh")
@@ -4238,18 +3777,18 @@ func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 	for _, d := range []string{genh, cons, app} {
 		Throw(os.MkdirAll(d, 0o755))
 	}
-	// declaring module: config.h.in in SRCS, plus a .cpp that does NOT include config.h
+
 	Throw(os.WriteFile(filepath.Join(genh, "ya.make"),
 		[]byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSET(MYVAR hello)\nSRCS(config.h.in own.cpp)\nEND()\n"), 0o644))
 	Throw(os.WriteFile(filepath.Join(genh, "config.h.in"), []byte("#include \"dep.h\"\n#define X @MYVAR@\n"), 0o644))
 	Throw(os.WriteFile(filepath.Join(genh, "dep.h"), []byte("#pragma once\n"), 0o644))
 	Throw(os.WriteFile(filepath.Join(genh, "own.cpp"), []byte("int g(){return 0;}\n"), 0o644))
-	// consuming module: #includes the generated header across PEERDIR
+
 	Throw(os.WriteFile(filepath.Join(cons, "ya.make"),
 		[]byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(genh)\nSRCS(use.cpp)\nEND()\n"), 0o644))
 	Throw(os.WriteFile(filepath.Join(cons, "use.cpp"),
 		[]byte("#include <genh/config.h>\nint u(){return 0;}\n"), 0o644))
-	// root program
+
 	Throw(os.WriteFile(filepath.Join(app, "ya.make"),
 		[]byte("PROGRAM()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(cons)\nSRCS(main.cpp)\nEND()\n"), 0o644))
 	Throw(os.WriteFile(filepath.Join(app, "main.cpp"), []byte("int main(){return 0;}\n"), 0o644))
@@ -5002,10 +4541,6 @@ func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
 		t.Fatal("graph is missing db objcopy output")
 	}
 
-	// Neither the resource source (data.sql) nor the objcopy node's script
-	// (objcopy.py) is an AR input — an archive bundles objects + its own
-	// script (link_lib.py), not member sources or other nodes' wrapper
-	// scripts. Both are dropped from AR inputs.
 	if !nodeHasInput(regularAR, "$(S)/build/scripts/link_lib.py") {
 		t.Fatalf("libdb.a inputs missing its own script link_lib.py: %#v", regularAR.Inputs)
 	}
@@ -5612,9 +5147,6 @@ func normalizeStatsUIDOutput(out string) string {
 	return out
 }
 
-// TestGen_ProtoLibrary_NamedArgUsedForArchive verifies Fix #1: when
-// PROTO_LIBRARY declares an explicit name argument the emitted archive uses
-// that name instead of the path-derived default.
 func TestGen_ProtoLibrary_NamedArgUsedForArchive(t *testing.T) {
 	root := t.TempDir()
 
@@ -5633,10 +5165,8 @@ message Ydb {}
 
 	g := testGen(root, "ydb/public/api/protos")
 
-	// Named archive: lib<name>.a not lib<path-derived>.a
 	mustNodeByOutput(t, g, "$(B)/ydb/public/api/protos/libapi-protos.a")
 
-	// Path-derived archive must NOT be present
 	for _, n := range g.Graph {
 		for _, o := range n.Outputs {
 			if o.String() == "$(B)/ydb/public/api/protos/libprotos.a" {
@@ -5646,9 +5176,6 @@ message Ydb {}
 	}
 }
 
-// TestGen_ProtoLibrary_UnnamedArgKeepsPathDerivedArchive verifies that
-// PROTO_LIBRARY() without a name argument continues to use the path-derived
-// archive name (regression guard for Fix #1).
 func TestGen_ProtoLibrary_UnnamedArgKeepsPathDerivedArchive(t *testing.T) {
 	root := t.TempDir()
 
@@ -5667,6 +5194,5 @@ message Ydb {}
 
 	g := testGen(root, "ydb/public/api/protos")
 
-	// Path-derived name: last 3 segments of ydb/public/api/protos → public-api-protos
 	mustNodeByOutput(t, g, "$(B)/ydb/public/api/protos/libpublic-api-protos.a")
 }

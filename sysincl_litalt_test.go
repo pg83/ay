@@ -6,10 +6,6 @@ import (
 	"testing"
 )
 
-// TestLiteralAltsFromRegex_ParityWithRegex verifies that the prefix set an
-// anchored literal-alternation expands to matches exactly what the original
-// RE2 pattern matches, for a spread of paths — the property the source-filter
-// optimisation relies on.
 func TestLiteralAltsFromRegex_ParityWithRegex(t *testing.T) {
 	expandable := []string{
 		`^contrib/(deprecated/onednn|libs/intel/onednn)`,
@@ -34,7 +30,7 @@ func TestLiteralAltsFromRegex_ParityWithRegex(t *testing.T) {
 		"contrib/libs/cxxsupp/libcxx/include/__config",
 		"util/generic/string.h",
 		"library/cpp/foo/bar.cpp",
-		"xcontrib/libs/openssl/ssl.c", // not at start
+		"xcontrib/libs/openssl/ssl.c",
 	}
 
 	for _, pat := range expandable {
@@ -65,15 +61,14 @@ func TestLiteralAltsFromRegex_ParityWithRegex(t *testing.T) {
 	}
 }
 
-// TestLiteralAltsFromRegex_BailsOnNonLiteral pins the forms that must keep RE2.
 func TestLiteralAltsFromRegex_BailsOnNonLiteral(t *testing.T) {
 	keepRegex := []string{
-		`.*contrib.*`,                  // unanchored substring
-		`[.]swg([.](h|c(c|pp|xx)?))?$`, // char class + $ anchor
-		`^contrib/.*`,                  // repetition
-		`^contrib/[a-z]+`,              // char class
-		`contrib/(a|b)`,                // not ^-anchored
-		`^contrib/(a|b)$`,              // $ anchor → full match, not prefix
+		`.*contrib.*`,
+		`[.]swg([.](h|c(c|pp|xx)?))?$`,
+		`^contrib/.*`,
+		`^contrib/[a-z]+`,
+		`contrib/(a|b)`,
+		`^contrib/(a|b)$`,
 	}
 
 	for _, pat := range keepRegex {

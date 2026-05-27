@@ -5,29 +5,8 @@ import (
 	"testing"
 )
 
-// as_test.go — byte-exact regression test for EmitAS against the
-// reference graph for contrib/libs/cxxsupp/builtins/aarch64/chkstk.S.
-//
-// The reference node is located by its output path
-// ("$(B)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o")
-// in /home/pg/monorepo/yatool/sg.json. If the file is absent the
-// test is skipped (per STYLE.md filter pattern), not failed.
-//
-// Comparison is field-by-field (not a single DeepEqual on the whole
-// Node) for the same reasons as cc_test.go: UID/SelfUID/StatsUID are
-// excluded (they are Finalize-computed), and per-field diff surfaces the
-// first mismatch precisely.
-
-// referenceASOutput is the output path used to locate the target AS node
-// in the reference graph.
 const referenceASOutput = "$(B)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
 
-// builtinsASOwnAddIncl is the own-ADDINCL slice cxxsupp/builtins
-// declares in its ya.make (the four musl-arch paths added under
-// `IF (MUSL)`). PR-35m: the AS composer assembles the full include
-// tail from these (own AddIncl) plus `ccIncludesPrefix`/`ccIncludesSuffix`
-// (BUILD_ROOT/SOURCE_ROOT + linux-headers pair) so the previously
-// pre-baked flat list now derives structurally.
 var builtinsASOwnAddIncl = []VFS{
 	Intern("$(S)/contrib/libs/musl/arch/aarch64"),
 	Intern("$(S)/contrib/libs/musl/arch/generic"),
@@ -78,13 +57,6 @@ func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	}
 }
 
-// loadReferenceASNode reads the on-disk reference graph and returns the
-// AS node whose first output is referenceASOutput. Returns nil and a
-// reason string when the file is absent (so the caller can t.Skip) or
-// when the node is not found.
-// TestEmitAS_OutputPath_FlatSrcRel verifies that a flat srcRel (no "/" component)
-// produces a flat output path with no _/ infix (PR-35r cluster 4 fix).
-// Empirical reference: contrib/libs/asmglibc/memchr.S.o (flat, no _/).
 func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 	e := NewBufferedEmitter()
 	_, outPath := EmitAS(targetInstance("some/module"), "flat.S", Intern("$(S)/some/module/flat.S"), ModuleCCInputs{}, testHostP, e)
@@ -95,7 +67,6 @@ func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 	}
 }
 
-// TestEmitAS_OutputPath_NestedSrc verifies the nested-source output path.
 func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 	e := NewBufferedEmitter()
 	_, outPath := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", Intern("$(S)/contrib/libs/cxxsupp/builtins/aarch64/chkstk.S"), ModuleCCInputs{}, testHostP, e)
@@ -106,14 +77,9 @@ func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 	}
 }
 
-// TestEmitAS_OutputPath_SrcDir verifies the __/ infix for ancestor-SRCDIR cases
-// (PR-35r cluster 5). When in.SrcDir is set and the source does not resolve
-// locally, the output path uses composeSrcDirOutputRel (same as CC case 3).
 func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 	e := NewBufferedEmitter()
-	// tcmalloc/no_percpu_cache: SRCDIR = contrib/libs/tcmalloc (ancestor).
-	// srcRel = tcmalloc/internal/percpu_rseq_asm.S
-	// Expected: __/tcmalloc/internal/percpu_rseq_asm.S.o
+
 	in := ModuleCCInputs{SrcDir: stringPtr("contrib/libs/tcmalloc"), FS: NewFS(t.TempDir())}
 	_, outPath := EmitAS(
 		targetInstance("contrib/libs/tcmalloc/no_percpu_cache"),
@@ -130,18 +96,6 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 	}
 }
 
-// TestEmitAS_AsmgLibc_Memchr_ByteExact (PR-35r cluster 4) pins the flat
-// output path for asmglibc/memchr.S.o against the reference graph.
-// asmglibc is a host-PIC (x86_64) clang AS module with a single-component
-// srcRel — the reference output is flat (no _/ infix).
-// TestEmitAS_TcmallocNopercpu_PercpuRseqAsm_ByteExact (PR-35r cluster 5)
-// pins the full cmd_args bundle and output path for
-// tcmalloc/no_percpu_cache/__/tcmalloc/internal/percpu_rseq_asm.S.o.
-// This module uses SRCDIR(contrib/libs/tcmalloc) (ancestor), so the
-// output infix is __/ and the input comes from $(S)/contrib/libs/tcmalloc/...
-// testYasmLDRef emits a minimal stand-in LD node and returns its NodeRef,
-// for tests that drive emitASYasm (which requires the yasm tool ref). The
-// node's content is irrelevant — only its identity matters.
 func testYasmLDRef(e *BufferedEmitter) NodeRef {
 	return e.Emit(&Node{
 		Cmds:         []Cmd{{CmdArgs: []string{"yasm"}, Env: map[string]string{}}},
@@ -158,10 +112,6 @@ func testYasmLDRef(e *BufferedEmitter) NodeRef {
 	})
 }
 
-// TestEmitASYasm_YasmLD_PopulatesDepRefs verifies that emitASYasm wires the
-// yasm tool ref into both DepRefs and ForeignDepRefs["tool"] (PR-30 D02).
-// The L0 fingerprint reads only deps; the foreign-deps-only shape diverged
-// for asmlib's 25 AS nodes in the reference graph.
 func TestEmitASYasm_YasmLD_PopulatesDepRefs(t *testing.T) {
 	e := NewBufferedEmitter()
 	yasmLDRef := testYasmLDRef(e)
@@ -169,7 +119,6 @@ func TestEmitASYasm_YasmLD_PopulatesDepRefs(t *testing.T) {
 	yasmTestIn := ModuleCCInputs{InclArgs: inclArgMemo{}, AddIncl: builtinsASOwnAddIncl}
 	ref, _ := emitASYasm(hostInstance("contrib/libs/asmlib"), "memset64.asm", Intern("$(S)/contrib/libs/asmlib/memset64.asm"), yasmTestIn, yasmLDRef, e)
 
-	// The AS node is at index 1 (yasmLD is at index 0).
 	if len(e.nodes) != 2 {
 		t.Fatalf("emitter buffered %d nodes, want 2", len(e.nodes))
 	}
@@ -177,12 +126,10 @@ func TestEmitASYasm_YasmLD_PopulatesDepRefs(t *testing.T) {
 	_ = ref
 	got := e.nodes[1]
 
-	// DepRefs must contain exactly the yasmLD ref.
 	if len(got.DepRefs) != 1 || got.DepRefs[0] != yasmLDRef {
 		t.Errorf("DepRefs = %v, want [%v]", got.DepRefs, yasmLDRef)
 	}
 
-	// ForeignDepRefs["tool"] must also contain the yasmLD ref.
 	toolRefs := got.ForeignDepRefs["tool"]
 
 	if len(toolRefs) != 1 || toolRefs[0] != yasmLDRef {
@@ -190,8 +137,6 @@ func TestEmitASYasm_YasmLD_PopulatesDepRefs(t *testing.T) {
 	}
 }
 
-// TestEmitAS_KV verifies that AS nodes carry the correct kv fields
-// (p=AS, pc=light-green, no show_out) as observed in the reference graph.
 func TestEmitAS_KV(t *testing.T) {
 	e := NewBufferedEmitter()
 	EmitAS(targetInstance("some/module"), "aarch64/foo.S", Intern("$(S)/some/module/aarch64/foo.S"), ModuleCCInputs{}, testHostP, e)
@@ -211,73 +156,6 @@ func TestEmitAS_KV(t *testing.T) {
 	}
 }
 
-// TestEmitAS_MuslHost_Ceill_ByteExact (PR-35a) pins the cmd_args bundle
-// for a host x86_64 musl-self assembly node against the reference graph
-// (`$(B)/contrib/libs/musl/_/src/math/x86_64/ceill.s.o`). Total
-// 109 args: x86_64 toolchain + hostCFlags / hostDefines / muslExtraDefines
-// + ndebugPicBlock × 2 with hostSseFeatures between + the tail
-// muslCcIncludesX8664 set. Verifies that:
-//
-//   - target triple is x86_64-linux-gnu (NOT aarch64-linux-gnu).
-//   - no `-march=` flag (host is generic x86_64).
-//   - `-D_musl_=1` is present (muslExtraDefines).
-//   - host_platform=true and tags=["tool"].
-//
-// TestEmitAS_HostNonMusl_X8664Chkstk_ByteExact (PR-35a / PR-35m closure)
-// pins the full cmd_args bundle for a host x86_64 non-musl AS node
-// (`$(B)/contrib/libs/cxxsupp/builtins/_/x86_64/chkstk.S.o`)
-// against the reference. PR-35m retired the prologue-only bound by
-// threading the include-tail (own AddIncl: musl-arch×4 x86_64 + linux-
-// headers via prefix/suffix) through ModuleCCInputs.
-// TestEmitAS_UtilContext_ByteExact (PR-35i / PR-33-C2_06 closure;
-// PR-35m generic threading) pins the cmd_args bundle for util's only
-// AS node (`$(B)/util/_/system/context_aarch64.S.o`) against
-// the reference graph. Total 106 args. util declares no
-// `NO_COMPILER_WARNINGS()` macro, so the warning bundle is the full
-// `-Werror`/`-Wall`/`-Wextra` set (NOT `-Wno-everything`); util's own
-// non-GLOBAL `CFLAGS(-Wnarrowing)` (util/ya.make:243) sits between
-// commonDefines and the first noLibcUndebugBlock copy; the consumer-
-// side `-D_musl_` sentinel sits between catboost and the second
-// noLibcUndebugBlock copy; the include tail (13 args) carries util's
-// linux-headers + runtime-stack + user-PEERDIR ADDINCL contributions.
-//
-// Verifies that:
-//
-//   - target triple is aarch64-linux-gnu with -march=armv8-a.
-//   - warning bundle is `warningFlags` (6 args, NOT `-Wno-everything`).
-//   - own CFLAG `-Wnarrowing` is present at the post-commonDefines slot.
-//   - `-D_musl_` (NOT `-D_musl_=1`) is present at the post-catboost slot.
-//   - includes tail matches the 13-arg reference set.
-//
-// PR-35m: the per-module compile knobs are now passed via the same
-// `ModuleCCInputs` struct CC consumes (own AddIncl empty for util,
-// peer-GLOBAL = libcxx/libcxxrt + musl-arch-aarch64×4 + the user-
-// PEERDIR contributions, own CFlags = `-Wnarrowing`, plus the consumer
-// `-D_musl_`). The util-specific path-sniff stopgap is retired.
-// TestEmitAS_AsmlibYasm_Cachesize_ByteExact (PR-35q) pins the yasm-
-// toolchain shape for asmlib's host-PIC `.asm` AS nodes against the
-// reference graph (`$(B)/contrib/libs/asmlib/cachesize64.pic.o`).
-//
-// Verifies the four shape divergences from the clang AS path:
-//
-//   - Output path is flat (`<modulePath>/<base>.pic.o`; no `_/` infix,
-//     `.asm` suffix stripped).
-//   - cmd_args is the 18-arg yasm invocation (NOT a 94/98/106/109-arg
-//     clang AS bundle).
-//   - Cwd is empty (the reference omits the `cwd` field for all 25
-//     asmlib yasm AS nodes; PR-35q must not set `Cwd: $(B)`).
-//   - Env is `ARCADIA_ROOT_DISTBUILD` + `YASM_TEST_SUITE` (no
-//     `DYLD_LIBRARY_PATH`).
-//
-// Inputs ordering (yasm binary at index 0) and downstream wiring
-// (DepRefs + ForeignDepRefs["tool"]) are pinned alongside.
-// TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix (PR-35q) verifies
-// that asmlib host-PIC `.asm` AS nodes use the FLAT output path
-// (`<base>.pic.o`) without the `_/` infix that the clang AS path
-// applies unconditionally. This is the inverse of
-// TestEmitAS_OutputPath_AlwaysHasUnderscore — the asmlib yasm branch
-// is the documented exception to the clang-AS unconditional infix
-// rule.
 func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
 	e := NewBufferedEmitter()
 	_, outPath := emitASYasm(hostInstance("contrib/libs/asmlib"), "memset64.asm", Intern("$(S)/contrib/libs/asmlib/memset64.asm"), ModuleCCInputs{}, testYasmLDRef(e), e)
@@ -288,9 +166,6 @@ func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
 	}
 }
 
-// TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix verifies that target
-// x86_64 `.asm` sources still use yasm, but keep target-shaped object
-// names without the host `.pic` suffix.
 func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 	e := NewBufferedEmitter()
 	targetX86 := newTestPlatform(OSLinux, ISAX8664, "no", nil)
@@ -307,14 +182,12 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 		t.Errorf("outPath = %q, want %q", outPath, wantYasmPath)
 	}
 
-	// Node 0 is the stand-in yasm LD ref; the AS node is at index 1.
 	if len(e.nodes) != 2 {
 		t.Fatalf("emitter buffered %d nodes, want 2", len(e.nodes))
 	}
 
 	got := e.nodes[1]
 
-	// Yasm path leaves cwd empty; clang AS sets "$(B)".
 	if got.Cmds[0].Cwd != "" {
 		t.Errorf("Cmds[0].Cwd = %q, want empty (yasm path)", got.Cmds[0].Cwd)
 	}

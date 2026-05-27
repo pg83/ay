@@ -5,17 +5,6 @@ import (
 	"strings"
 )
 
-// emitEnumSrcs emits one EN node per GENERATE_ENUM_SERIALIZATION(*).
-//
-// enum_parser walks as a HOST tool; the EN outputs themselves are
-// target-axis. Cross-EN deps surface when a previously emitted EN's
-// _serialized.h appears in the current header's include closure (the
-// scanner cannot resolve $(B)/_serialized.h, so the signal is a literal
-// `#include` match against known EN outputs).
-//
-// When `consumerInputs` is non-nil, also emit one downstream CC per
-// `_serialized.cpp` carrying the consuming module's full compile bag.
-// nil → EN nodes only.
 type enumSrcsResult struct {
 	CCRefs    []NodeRef
 	CCOutputs []VFS
@@ -32,11 +21,7 @@ func resolveEnumHeaderInput(ctx *genCtx, instance ModuleInstance, headerRel stri
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
 		buildHeader := Build(headerInput.Rel())
 		if reg.Lookup(buildHeader) != nil {
-			// Upstream keeps generated protobuf-family headers as opaque
-			// EN inputs: the EN node depends on the PB/EV producer, but
-			// does not inline that generated header's full closure into
-			// inputs[]. Preserve that shape while still resolving the
-			// header itself from $(B).
+
 			return buildHeader
 		}
 	}
@@ -51,13 +36,8 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 	const enumParserPath = "tools/enum_parser/enum_parser"
 
-	// Walk enum_parser as a HOST tool (x86_64).
 	enumParserLD, enumParserBin := ctx.tool(enumParserPath)
 
-	// Synthesize a ModuleCCInputs for the include scanner using the
-	// module's own ADDINCL + peer-global ADDINCL set so headers from
-	// transitive peer libraries (abseil, protobuf) resolve correctly.
-	// Mirrors the ModuleCCInputs built for CC nodes in the same module.
 	scanIn := ModuleCCInputs{
 		InclArgs:          ctx.inclArgs,
 		Flags:             d.flags,
@@ -74,28 +54,13 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		withHeader := stmt.Variant == "with_header"
 		headerInput := resolveEnumHeaderInput(ctx, instance, headerRel, scanIn.SrcDir)
 
-		// Scan the header's transitive include closure with the target
-		// scanner (EN nodes always compile on the target axis). For
-		// generated PB/EV headers, this walks through the codegen
-		// registry (protobuf runtime, grpc, direct imports) rather than
-		// the filesystem — the scanner dispatches FS-vs-codegen internally.
 		closure := walkClosure(ctx, instance, headerInput, scanIn)
 
-		// Cross-EN deps: when a previously emitted EN produced a
-		// _serialized.h (--header variant) and the current header's
-		// closure contains a file `#include`-ing that _serialized.h,
-		// the current EN deps on the prior one. The scanner cannot
-		// resolve $(B)/_serialized.h (absent at scan time); the signal
-		// is a literal `#include` in any closure file matching a known
-		// EN output.
 		var depENRefs []NodeRef
 		var depENOutputs []VFS
 
 		if len(ctx.enOutputs) > 0 {
-			// Build a map from bare rel-path suffix → buildRootPath for
-			// all known _serialized.h EN outputs. Key is the path a
-			// source header would write in an #include angle-bracket
-			// form, e.g. "devtools/ymake/diag/stats_enums.h_serialized.h".
+
 			serializedHByRel := make(map[string]VFS, len(ctx.enOutputs))
 			for buildRootPath := range ctx.enOutputs {
 				if !buildRootPath.IsBuild() || !strings.HasSuffix(buildRootPath.Rel(), "_serialized.h") {
@@ -107,10 +72,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			depSeen := map[NodeRef]struct{}{}
 
 			if len(serializedHByRel) > 0 {
-				// Consult the scanner's parsed-directive cache rather
-				// than re-opening each closure entry. The scanner
-				// already parsed each header while building `closure`;
-				// IncludeDirectiveTargets returns cached target strings.
+
 				enScanner := ctx.scannerTarget
 				for _, srcAbsPath := range closure {
 					targets := enScanner.IncludeDirectiveTargets(srcAbsPath)
@@ -129,7 +91,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 						depSeen[ref] = struct{}{}
 						depENRefs = append(depENRefs, ref)
 						depENOutputs = append(depENOutputs, buildRootPath)
-						// Also include the corresponding _serialized.cpp path.
+
 						cppPath := Build(strings.TrimSuffix(buildRootPath.Rel(), "_serialized.h") + "_serialized.cpp")
 						if cppRef, ok2 := ctx.enOutputs[cppPath]; ok2 && cppRef == ref {
 							depENOutputs = append(depENOutputs, cppPath)
@@ -139,16 +101,6 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			}
 		}
 
-		// Register EN outputs in the target scanner's CodegenRegistry
-		// with populated EmitsIncludes (EN emits on target axis).
-		// Per enum_parser/main.cpp::WriteHeader:
-		//   _serialized.h  → util/generic/serialized_enum.h + input header.
-		//   _serialized.cpp → enum_serialization_runtime headers + util.
-		//
-		// Registered BEFORE EmitEN so the EN node can walk its
-		// _serialized.cpp via the registry to augment its `inputs`
-		// closure (surfaces dispatch_methods.h / ordered_pairs.h /
-		// enum_runtime.h in the EN node's inputs).
 		serializedCPPPath := Build(instance.Path + "/" + headerRel + "_serialized.cpp")
 		var serializedHPath VFS
 		if withHeader {
@@ -173,12 +125,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.String() < cppParsed[j].target.String() })
 			registerGeneratedParsedOutput(ctx, instance, "EN", serializedCPPPath, cppParsed)
 			if withHeader {
-				// Include the sibling _serialized.cpp so CC consumers
-				// that #include the _serialized.h transitively pull the
-				// .cpp into their inputs and (via its EmitsIncludes) the
-				// enum_serialization_runtime header set. REF bundles
-				// the EN producer's .h and .cpp outputs together in
-				// every downstream CC's inputs.
+
 				hParsed := []includeDirective{
 					{kind: includeQuoted, target: internString(headerInput.Rel())},
 					{kind: includeQuoted, target: internString(serializedCPPPath.Rel())},
@@ -189,15 +136,6 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			}
 		}
 
-		// Walk each cross-EN dep's _serialized.cpp to fold its transitive
-		// closure into THIS EN node's `inputs`. The cross-EN dep's .cpp
-		// carries the enum_runtime.h closure (dispatch_methods.h,
-		// ordered_pairs.h). Leaf EN nodes (no cross-EN deps) keep REF's
-		// tight 2-input shape.
-		//
-		// Exclude headerSrc and depENOutputs (EmitEN appends them
-		// separately) and filter the source-header closure against
-		// depENOutputs to avoid multiset duplicates.
 		enClosureExcl := map[VFS]struct{}{
 			headerInput: {},
 		}
@@ -224,12 +162,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 				crossCppClosure = append(crossCppClosure, p)
 			}
 		}
-		// Walk OUR OWN _serialized.cpp output through the codegen
-		// registry to fold its transitive include closure into THIS EN
-		// node's `inputs`. REF's EN node inputs equal the consuming CC
-		// node's inputs for the plain variant; WITH_HEADER variants
-		// keep tight source-header-only inputs (consumers absorb the
-		// full closure on their side).
+
 		var ownOutputClosure []VFS
 		if !withHeader && ctx.scannerTarget.codegen != nil {
 			sub := walkClosure(ctx, instance, serializedCPPPath, scanIn)
@@ -243,11 +176,6 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		enClosure := mergeDedupVFS(filteredClosure, crossCppClosure)
 		enClosure = mergeDedupVFS(enClosure, ownOutputClosure)
 
-		// When this EN's transitive closure pulls in a PB/EV producer's
-		// $(B) output (e.g. EN whose header eventually #includes
-		// msg.ev.pb.h), the EN node deps on that producer. Include the
-		// root header itself so generated PB headers lift their owning PB
-		// node into deps[] too. Filter out refs already in depENRefs.
 		augmentedDepENRefs := depENRefs
 		enDepScan := append([]VFS{headerInput}, enClosure...)
 		if extra := resolveCodegenDepRefs(ctx, instance, enDepScan, depENRefs...); len(extra) > 0 {
@@ -272,19 +200,13 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			ctx.emit,
 		)
 
-		// Record outputs so later EN nodes can dep on them.
 		for _, p := range enOutPaths {
 			ctx.enOutputs[p] = enRef
 		}
 
-		// Emit the downstream CC compiling the EN-produced
-		// `_serialized.cpp` as an implicit module source. The CC
-		// inherits consumerInputs (full compile bag). depPrefix is the
-		// cross-EN dep set placed ahead of the consumer's own
-		// `_serialized.cpp` in the CC's inputs[].
 		if consumerInputs != nil {
 			cppRel := headerRel + "_serialized.cpp"
-			// DepRefs: own EN + cross-EN dep refs.
+
 			allDepRefs := make([]NodeRef, 0, 1+len(augmentedDepENRefs))
 			allDepRefs = append(allDepRefs, enRef)
 			allDepRefs = append(allDepRefs, augmentedDepENRefs...)

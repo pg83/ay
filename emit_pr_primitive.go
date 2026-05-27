@@ -2,16 +2,6 @@ package main
 
 import "strings"
 
-// EmitPR emits a PR node for a RUN_PROGRAM invocation.
-//
-// toolBinPath: BUILD_ROOT-absolute path to the tool binary (from
-// walking the tool PROGRAM's LDPath). toolLDRef: the tool's LD node.
-//
-// cmd_args: [toolBinPath, <args with ${ARCADIA_ROOT}→$(S)>]. Bare
-// filenames matching IN/OUT/OUT_NOAUTO/STDOUT are expanded via the
-// caller-supplied VFS maps. inputs: tool + IN abs paths + closure.
-// outputs: STDOUT or OUT/OUT_NOAUTO abs paths.
-// deps/foreign_deps.tool carry toolLDRef.
 type prEmitResult struct {
 	Ref    NodeRef
 	Inputs []VFS

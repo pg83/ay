@@ -6,15 +6,6 @@ import (
 	"strings"
 )
 
-// protoPbHIncludes returns a protoc-generated header include set by
-// transforming one of the proto parser's h+cpp buckets:
-//   - relative entries get the codegen output-root prefix applied;
-//   - well-known-type `google/protobuf/*.pb.h` headers are rebased onto the
-//     protobuf runtime tree (pre-committed headers, not codegen outputs).
-//
-// Mirrors upstream proto_processor.cpp::PrepareIncludes; the parser
-// (parsers.go::protoIncludeDirectiveParser) extracts the raw mapping,
-// the walker applies the prefixes here.
 func protoPbHIncludes(pm *includeParserManager, srcRel, outputRoot string, bucket parsedIncludeBucket) []includeDirective {
 	hcpp := pm.sourceParsedBuckets(Source(srcRel)).bucket(bucket)
 	if len(hcpp) == 0 {
@@ -39,11 +30,6 @@ func protoDirectPbHIncludes(pm *includeParserManager, srcRel, outputRoot string)
 	return protoPbHIncludes(pm, srcRel, outputRoot, parsedIncludesHCPP)
 }
 
-// pbHEmitsIncludesExtras returns the constant witness inputs propagated
-// through a protoc-generated .pb.h to its CC consumers:
-// pbDescriptorImporterHeaders (7 reflection-cluster headers),
-// cpp_proto_wrapper.py, the proto source itself, and descriptor.pb.h
-// when hasDescriptor (caller computes this once via protoTransitiveImports).
 func pbHEmitsIncludesExtras(protoRelPath string, hasDescriptor bool) []includeDirective {
 	out := make([]includeDirective, 0, len(pbDescriptorImporterHeaders)+3)
 	out = append(out, includeDirective{kind: includeQuoted, target: internString(pbWrapperVFS.Rel())})
@@ -65,11 +51,6 @@ func cloneIncludeDirectives(parsed []includeDirective) []includeDirective {
 	return append([]includeDirective(nil), parsed...)
 }
 
-// extraProtoOutputParsedIncludes gives output-bearing CPP_PROTO_PLUGIN*
-// outputs enough structure for downstream closure: generic plugin
-// headers/sources at least reach the sibling .pb.h, while grpc_cpp-style
-// outputs reuse the exact grpc parsed witness set so they carry the same
-// service/source closure as the built-in GRPC() path.
 func extraProtoOutputParsedIncludes(output, pbH, grpcPbH, grpcPbCC VFS, grpcHParsed, grpcCCParsed []includeDirective) []includeDirective {
 	switch output.Rel() {
 	case grpcPbH.Rel():
@@ -93,13 +74,6 @@ func extraProtoOutputParsedIncludes(output, pbH, grpcPbH, grpcPbCC VFS, grpcHPar
 	}
 }
 
-// protoTransitiveImports walks the .proto/.ev import graph starting at
-// srcRel and returns the deduplicated set of imported sources plus a
-// HasDescriptor flag (true iff `google/protobuf/descriptor.proto`
-// appears anywhere in the closure). Each per-file import list comes
-// from the parser_manager cache (parsedIncludesLocal); file-on-disk
-// resolution uses the proto-specific search list (yt/ prefix and the
-// protobuf runtime tree).
 func protoTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) ([]VFS, bool) {
 	rootImports := protoDirectImportNames(pm, srcRel)
 	if rootImports == nil {
@@ -172,11 +146,6 @@ func protoTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) ([]
 	return imports, hasDescriptor
 }
 
-// evTransitiveImports returns the deduplicated transitive import set
-// for a .ev/.proto file at srcRel: every imported file resolved against
-// the proto search list plus descriptor.pb.h when any chain reaches
-// `google/protobuf/descriptor.proto`. Per-file imports come from the
-// parser_manager cache.
 func evTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) []VFS {
 	visited := map[string]struct{}{}
 	order := make([]VFS, 0, 8)
@@ -225,8 +194,6 @@ func evTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) []VFS 
 	return order
 }
 
-// protoDirectImportNames returns the raw `import "..."` strings the
-// proto parser cached for srcRel.
 func protoDirectImportNames(pm *includeParserManager, srcRel string) []string {
 	direct := pm.sourceParsedBuckets(Source(srcRel)).bucket(parsedIncludesLocal)
 	if len(direct) == 0 {
@@ -239,9 +206,6 @@ func protoDirectImportNames(pm *includeParserManager, srcRel string) []string {
 	return out
 }
 
-// resolveProtoImportPath returns the SOURCE_ROOT-relative path of an
-// imported .proto/.ev file, searching the proto-specific candidate
-// list: bare, "yt/" prefix (Yandex namespacing), protobuf runtime base.
 func resolveProtoImportPath(fs *FS, importedRel string) string {
 	clean := filepath.ToSlash(filepath.Clean(importedRel))
 	candidates := []string{clean}
@@ -284,11 +248,6 @@ func protoTransitiveHeadersEnabled(d *moduleData) bool {
 	return true
 }
 
-// protoPBConfig parametrizes per-source PB-node emission for the two
-// dispatch points (regular SRCS-loop's .proto handling and the
-// PROTO_LIBRARY orchestrator). LIBRARY callers leave every field zero;
-// PROTO_LIBRARY callers fill in grpc / module_tag=cpp_proto / cppOutRoot
-// from PROTO_NAMESPACE / duplicateOutputRootInclude.
 type protoPBConfig struct {
 	grpc                       bool
 	moduleTag                  *string
@@ -296,9 +255,6 @@ type protoPBConfig struct {
 	duplicateOutputRootInclude bool
 }
 
-// protoPBEmission is what emitProtoPB returns to the caller: the PB
-// NodeRef + the .pb.cc output (and the .grpc.pb.cc when cfg.grpc) and
-// the resolved .proto source-relative path.
 type protoPBEmission struct {
 	pbRef         NodeRef
 	pbCC          VFS
@@ -307,11 +263,6 @@ type protoPBEmission struct {
 	relPath       string
 }
 
-// emitProtoPB emits the PB codegen node for `srcRel`, registers the
-// output paths in ctx.pbOutputs, and registers the .pb.h / .pb.cc parsed
-// includes in the codegen registry. Shared between the regular
-// SRCS-loop's .proto handling (cfg{}) and the PROTO_LIBRARY orchestrator
-// (cfg with grpc/moduleTag/cppOutRoot).
 func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, cfg protoPBConfig) protoPBEmission {
 	protocLDRef, protocBinary := ctx.tool(pbProtocModule)
 	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(pbCppStyleguideModule)
@@ -401,10 +352,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		}
 		pbHParsed = append(pbHParsed, extras...)
 		if cfg.grpc {
-			// A grpc PROTO_LIBRARY's message .pb.h carries the grpcpp service
-			// preamble (sg3.dep: runner.pb.h directly includes the grpcpp
-			// service headers alongside protobuf runtime), so every consumer
-			// of the .pb.h reaches the grpc closure.
+
 			for _, include := range grpcServiceHeaderIncludes {
 				pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 			}
@@ -431,8 +379,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 		}
 		if cfg.grpc {
-			// OutTogether-shared grpcpp source headers from the sibling
-			// .grpc.pb.cc reach this message .pb.cc.o too.
+
 			for _, include := range grpcSourceExtraIncludes {
 				pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 			}
@@ -442,9 +389,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		var grpcCCParsed, grpcHParsed []includeDirective
 		if needsGRPCParsed {
 			grpcCCParsed = make([]includeDirective, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders)+len(grpcSourceExtraIncludes))
-			// The .grpc.pb.cc includes its message .pb.h (cross-sibling, not
-			// its own .grpc.pb.h, which is the OutTogether self) plus the
-			// grpcpp source preamble.
+
 			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(pbH.Rel())})
 			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(protoRelPath)})
 			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(pbWrapperVFS.Rel())})
@@ -458,10 +403,6 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 			}
 
-			// The .grpc.pb.h directly includes its message .pb.h plus the
-			// fixed grpcpp service preamble (+ port_def.inc); the scanner
-			// recurses those into the full grpc/protobuf/abseil/libcxx
-			// closure for every CC that includes the .grpc.pb.h.
 			grpcHParsed = make([]includeDirective, 0, 2+len(directImports)+len(grpcServiceHeaderIncludes))
 			grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: internString(pbH.Rel())})
 			grpcHParsed = append(grpcHParsed, directImports...)
@@ -513,12 +454,11 @@ func emitProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCont
 }
 
 func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, protoSrcs, evSrcs []string) *protoSrcsResult {
-	// Collect per-codegen-source (genRef, .pb.cc path) pairs so the AR
-	// step can fold them into ccRefs/ccOutputs in declaration order.
+
 	type protoCodegenOutput struct {
-		genRef NodeRef // PB or EV node ref (used as Generator dep for the downstream CC)
-		pbCC   VFS     // generated .pb.cc / .ev.pb.cc BUILD_ROOT path
-		srcRel string  // module-relative source-with-codegen-suffix (".pb.cc" appended)
+		genRef NodeRef
+		pbCC   VFS
+		srcRel string
 	}
 
 	var codegenOutputs []protoCodegenOutput
@@ -561,7 +501,6 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		}
 	}
 
-	// Emit EV nodes (PROTO_LIBRARY with .ev sources → module_tag:"cpp_proto").
 	if len(evSrcs) > 0 {
 		protocLDRef, protocBinary := ctx.tool(pbProtocModule)
 		cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(pbCppStyleguideModule)
@@ -576,14 +515,9 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 				cppStyleguideBinary, protocBinary, event2cppBinary,
 				stringPtr("cpp_proto"), evImports, ctx.emit)
 
-			// Register .ev.pb.h with EmitsIncludes: .ev source's direct
-			// imports + protobuf runtime headers + EV-specific runtime
-			// headers (util/* + eventlog).
 			evH := Build(evRelPath + ".pb.h")
 			evPbCC := Build(evRelPath + ".pb.cc")
 
-			// Stash the EV NodeRef under both outputs on the emitting
-			// platform. See PB branch above for keying rationale.
 			evKey := codegenOutputKey{platform: instance.Platform}
 			evKey.path = evH
 			ctx.evOutputs[evKey] = evRef
@@ -602,8 +536,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 				}
 				evHParsed = append(evHParsed, evExtras...)
 				registerGeneratedParsedOutput(ctx, instance, "EV", evH, evHParsed)
-				// Register .ev.pb.cc: event2cpp emits `#include
-				// "<base>.ev.pb.h"` plus protobuf + event runtime headers.
+
 				evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
 				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internString(evH.Rel())})
 				for _, include := range protobufRuntimeHeaders {
@@ -626,15 +559,10 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		}
 	}
 
-	// For true PROTO_LIBRARY modules, emit the downstream CC per generated
-	// .pb.cc/.ev.pb.cc and the AR archiving them. LIBRARY callers handle
-	// their own downstream-CC + AR aggregation in emitOneSource.
 	if d.moduleStmt.Name != "PROTO_LIBRARY" || len(codegenOutputs) == 0 {
 		return nil
 	}
 
-	// Compose ModuleCCInputs for the downstream CCs. Per-axis peer-GLOBAL
-	// slices come from the header-only walker's peerContribs.
 	ownCFlagsGlobalSelf := d.cFlagsGlobal
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
@@ -663,7 +591,6 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		ModuleTag:            stringPtr("cpp_proto"),
 	}
 
-	// Per-source downstream-CC emission for the PROTO_LIBRARY context.
 	ccRefs := make([]NodeRef, 0, len(codegenOutputs))
 	ccOutputs := make([]VFS, 0, len(codegenOutputs))
 
@@ -671,8 +598,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	for _, co := range codegenOutputs {
 		ccIn := moduleInputs
 		ccIn.IncludeInputs = walkClosure(ctx, instance, co.pbCC, moduleInputs)
-		// .ev.pb.cc.o consumer must not carry its own .ev.pb.h in inputs[]
-		// (REF omits the self-include). Drop just the sibling header.
+
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
 			selfH := Build(strings.TrimSuffix(co.pbCC.Rel(), ".cc") + ".h")
 			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
@@ -684,28 +610,24 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			}
 			ccIn.IncludeInputs = filtered
 		}
-		// .ev.pb.cc gets wire_format.h post-closure (registry-side leaks through
-		// .ev.pb.h to over-emit; .pb.cc gets it via pbCcDeepRuntimeHeaders).
+
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
 			ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
 		}
-		// Generator + cross-codegen deps via .pb.h imports.
+
 		ccIn.ExtraDepRefs = append([]NodeRef{co.genRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, co.genRef)...)
 
 		ccRef, ccOut, _ := EmitCC(cppInstance, co.srcRel, co.pbCC, ccIn, ctx.host, ctx.emit)
 		ccRefs = append(ccRefs, ccRef)
 		ccOutputs = append(ccOutputs, ccOut)
 	}
-	// Wire EN-sourced CC into the archive when the module declares
-	// GENERATE_ENUM_SERIALIZATION. The EN source + CC are orphaned
-	// without this; normalization would exclude them, inflating ref_only.
+
 	enRes := emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, &moduleInputs)
 	if enRes != nil {
 		ccRefs = append(ccRefs, enRes.CCRefs...)
 		ccOutputs = append(ccOutputs, enRes.CCOutputs...)
 	}
 
-	// AR emission with module_tag=cpp_proto.
 	var protoLibName string
 	if len(d.moduleStmt.Args) > 0 {
 		protoLibName = d.moduleStmt.Args[0]

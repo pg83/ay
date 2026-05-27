@@ -1,14 +1,5 @@
 package main
 
-// Shared implementation behind EmitAR / EmitARNamed / EmitARNamedTagged /
-// EmitARGlobalNamedTagged. peerArchiveRefs go into DepRefs only (NOT
-// cmd_args/inputs): ar(1) archives .o files; peer archives are link-time
-// inputs for LD. objPaths (caller/declaration order) goes into cmd_args and
-// `inputs`, then the link script and optional ar plugin. The archive bundles
-// only those — no member source/header closure (node-input order is
-// normalized away, so `inputs` is not sorted).
-// peerArchiveRefs is nil in production (reference graph carries
-// zero AR-on-AR deps); parameter retained for tests.
 func emitARNode(
 	instance ModuleInstance,
 	archivePath VFS,

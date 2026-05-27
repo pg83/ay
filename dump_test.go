@@ -13,7 +13,7 @@ func TestNormPath(t *testing.T) {
 		"$(SOURCE_ROOT)/a/b.c":                  "$(S)/a/b.c",
 		"$(CLANG-243881345)/bin/clang":          "$(CLANG)/bin/clang",
 		"$(LLD_ROOT-12)/x $(YMAKE_PYTHON3-9)/p": "$(LLD_ROOT)/x $(YMAKE_PYTHON3)/p",
-		"/usr/bin/clang":                        "/usr/bin/clang", // no markers, untouched
+		"/usr/bin/clang":                        "/usr/bin/clang",
 	}
 	for in, want := range cases {
 		if got := normPath(in); got != want {
@@ -27,8 +27,6 @@ func TestDumpSortMergesChunks(t *testing.T) {
 	in := filepath.Join(dir, "in.txt")
 	out := filepath.Join(dir, "out.txt")
 
-	// Duplicates preserved, mixed order; tiny chunk size forces a real
-	// multi-chunk k-way merge rather than a single in-memory sort.
 	Throw(os.WriteFile(in, []byte("cherry\napple\nbanana\napple\ndate\n"), 0o644))
 
 	if exc := Try(func() { cmdDumpSort([]string{"--in", in, "--out", out, "--chunk-bytes", "8"}) }); exc != nil {
@@ -42,7 +40,6 @@ func TestDumpSortMergesChunks(t *testing.T) {
 	}
 }
 
-// node builds a minimal graph node JSON object literal.
 func node(uid, p, out string, deps, inputs []string, extra string) string {
 	q := func(ss []string) string {
 		parts := make([]string, len(ss))
@@ -80,18 +77,16 @@ func TestDumpNormalizeSemanticEquivalence(t *testing.T) {
 	dir := t.TempDir()
 	target := "pkg/app"
 
-	// A: our-form ($(B)/$(S)), order [ld, cc], versioned CLANG-123 in env.
 	a := graph(
 		node("u_ld", "LD", "$(B)/pkg/app/app", []string{"u_cc"}, []string{"$(B)/pkg/app/main.o"}, `,"env":{"X":"$(CLANG-123)/lib"}`),
 		node("u_cc", "CC", "$(B)/pkg/app/main.o", nil, []string{"$(S)/pkg/app/main.c"}, `,"env":{}`),
 	)
-	// B: ref-form (long roots), reversed order, different uids, extra
-	// stats_uid (dropped), different CLANG version — must normalize equal to A.
+
 	b := graph(
 		node("a2", "CC", "$(BUILD_ROOT)/pkg/app/main.o", nil, []string{"$(SOURCE_ROOT)/pkg/app/main.c"}, `,"env":{},"stats_uid":"deadbeef"`),
 		node("a1", "LD", "$(BUILD_ROOT)/pkg/app/app", []string{"a2"}, []string{"$(BUILD_ROOT)/pkg/app/main.o"}, `,"env":{"X":"$(CLANG-999)/lib"}`),
 	)
-	// C: semantically different — cc compiles a different source.
+
 	c := graph(
 		node("c_ld", "LD", "$(B)/pkg/app/app", []string{"c_cc"}, []string{"$(B)/pkg/app/main.o"}, `,"env":{"X":"$(CLANG-123)/lib"}`),
 		node("c_cc", "CC", "$(B)/pkg/app/main.o", nil, []string{"$(S)/pkg/app/other.c"}, `,"env":{}`),
@@ -166,13 +161,11 @@ func TestDumpGrep(t *testing.T) {
 		`{"self_uid":"AA","outputs":["$(B)/p/a.o"],"kv":{"p":"CC"}}`+"\n"+
 			`{"self_uid":"BB","outputs":["$(B)/p/b.o"],"kv":{"p":"CC"}}`+"\n"), 0o644))
 
-	// match by output, given in long form — normPath canonicalizes both sides
 	byOut := captureStdout(t, func() { cmdDumpGrep([]string{"--in", in, "$(BUILD_ROOT)/p/a.o"}) })
 	if !strings.Contains(byOut, `"AA"`) || strings.Contains(byOut, `"BB"`) {
 		t.Fatalf("grep by output: want AA only, got:\n%s", byOut)
 	}
 
-	// match by self_uid
 	bySU := captureStdout(t, func() { cmdDumpGrep([]string{"--in", in, "BB"}) })
 	if !strings.Contains(bySU, `"BB"`) || strings.Contains(bySU, `"AA"`) {
 		t.Fatalf("grep by self_uid: want BB only, got:\n%s", bySU)
@@ -186,7 +179,6 @@ func TestDumpGrepSubstrRegex(t *testing.T) {
 		`{"self_uid":"AA","outputs":["/a.o"],"cmds":[{"cmd_args":["clang","${SSE41_CFLAGS}"]}]}`+"\n"+
 			`{"self_uid":"BB","outputs":["/b.o"],"cmds":[{"cmd_args":["clang","-O2"]}]}`+"\n"), 0o644))
 
-	// --substr searches the whole node, so it finds a cmd_args token
 	sub := captureStdout(t, func() { cmdDumpGrep([]string{"--in", in, "--substr", "${SSE41_CFLAGS}"}) })
 	if !strings.Contains(sub, `"AA"`) || strings.Contains(sub, `"BB"`) {
 		t.Fatalf("grep --substr: want AA only, got:\n%s", sub)
@@ -308,8 +300,7 @@ func TestDumpDiffRoots(t *testing.T) {
 		return `{"self_uid":"` + su + `","uid":"` + uid + `","outputs":["` + output + `"],"deps":` + deps +
 			`,"inputs":[],"cmds":[],"tags":` + tags + `,"kv":{},"env":{},"platform":"x","requirements":{},"target_properties":{}}`
 	}
-	// /p depends on /c; both content-differ from right. /c is a leaf (no
-	// divergent child); /p is not (its child /c diverges).
+
 	Throw(os.WriteFile(left, []byte(node("Ps", "Pu", "/p", `["Cu"]`, `["a"]`)+"\n"+node("Cs", "Cu", "/c", `[]`, `["a"]`)+"\n"), 0o644))
 	Throw(os.WriteFile(right, []byte(node("Ps2", "Pu2", "/p", `["Cu2"]`, `[]`)+"\n"+node("Cs2", "Cu2", "/c", `[]`, `[]`)+"\n"), 0o644))
 

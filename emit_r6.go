@@ -2,18 +2,6 @@ package main
 
 import "strings"
 
-// r6.go — emitter for R6 (ragel6) generated-source nodes.
-//
-// Reference R6 node carries `deps=[ragel6 host LD UID]` and
-// `foreign_deps={tool:[…placeholder…]}`. The placeholder UID is unreachable
-// in the reference graph itself; we wire the same ragel6LD into both
-// DepRefs and ForeignDepRefs["tool"] to satisfy the topology fingerprint.
-
-// Reference R6 nodes invoke ragel6 at `$(B)/contrib/tools/ragel6/ragel6`,
-// while our walker builds it at `$(B)/contrib/tools/ragel6/bin/ragel6`
-// because the upstream INCLUDE() of `bin/ya.make` is not yet expanded.
-// EmitR6 rewrites the invocation path back to the canonical parent location
-// so cmd_args[0] matches the reference byte-exact.
 const (
 	ragel6BinSubrel            = "contrib/tools/ragel6/bin/"
 	ragel6CanonicalRel         = "contrib/tools/ragel6/"
@@ -21,10 +9,6 @@ const (
 	ragel6DefaultFlagDebug     = "-CT0"
 )
 
-// canonicalizeRagel6Binary maps `$(B)/contrib/tools/ragel6/bin/<base>`
-// back to `$(B)/contrib/tools/ragel6/<base>`. All other inputs pass through
-// unchanged so canonical-shape paths (fallback literal, synthetic tests)
-// are not double-rewritten.
 func canonicalizeRagel6Binary(v VFS) VFS {
 	if !v.IsBuild() || !strings.HasPrefix(v.Rel(), ragel6BinSubrel) {
 		return v
@@ -33,15 +17,6 @@ func canonicalizeRagel6Binary(v VFS) VFS {
 	return Build(ragel6CanonicalRel + v.Rel()[len(ragel6BinSubrel):])
 }
 
-// EmitR6 emits an R6 node generating `<srcRel>.cpp` from `<instance.Path>/<srcRel>`
-// via the host ragel6 binary referenced by ragel6LD at ragel6BinaryPath.
-//
-// closure is the SOURCE_ROOT-relative transitive header closure scanned from the
-// .rl6 source.
-//
-// ragel6Flags carries the per-module `SET(RAGEL6_FLAGS …)` override; empty falls
-// back to platform default. SET does not concatenate; upstream `_SRC("rl6", …)`
-// in build/ymake.core.conf:3284 expands $RAGEL6_FLAGS first.
 func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []string, closure []VFS, emit Emitter) (NodeRef, VFS) {
 	var outVFS VFS
 	if strings.Contains(srcRel, "/") {

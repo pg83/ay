@@ -10,12 +10,6 @@ import (
 	json "github.com/goccy/go-json"
 )
 
-// cmdDumpGrep prints, pretty-formatted, every node of a graph whose self_uid
-// or one of whose outputs matches a requested key. Keys come from positional
-// args, or stdin (one per line) when none are given — so `ay dump diff`
-// output can be piped straight in. Default input is JSONL (normalize output);
-// --raw streams a raw build-graph JSON. Output paths are matched modulo the
-// $(BUILD_ROOT)/$(B) canonicalization.
 func cmdDumpGrep(args []string) int {
 	var inPath string
 	raw, substr, useRegex := false, false, false
@@ -61,8 +55,6 @@ func cmdDumpGrep(args []string) int {
 		ThrowFmt("dump grep: no keys given (positional args or stdin)")
 	}
 
-	// matchStr tests one candidate string (a self_uid or a canonicalized
-	// output path) against the keys, per match mode.
 	var matchStr func(string) bool
 	switch {
 	case useRegex:
@@ -102,9 +94,6 @@ func cmdDumpGrep(args []string) int {
 	bw := bufio.NewWriterSize(os.Stdout, 1<<20)
 	defer func() { Throw(bw.Flush()) }()
 
-	// Exact mode finds a specific node by self_uid/output; substr/regex are
-	// general greps over the whole node (so they catch flags/${VAR} leaks in
-	// cmd_args, etc.).
 	exact := !substr && !useRegex
 	emit := func(node map[string]any) {
 		hit := false

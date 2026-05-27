@@ -1,16 +1,5 @@
 package main
 
-// cp.go — emitter for CP (file-copy) nodes.
-//
-// EmitCP produces a Node matching the shape ymake produces for a CP macro
-// invocation. Structurally correct for any src/dst; the byte-exact
-// regression pin covers the contrib/libs/musl/include musl.py → .pyplugin
-// case.
-
-// EmitJVCPG4 emits a CP node that renames an ANTLR-generated .cpp to its
-// .g4.cpp form (e.g. CmdLexer.cpp → CmdLexer.g4.cpp). Carries DepRefs=[jvRef]
-// and inputs [jvPrimary, (src if != jvPrimary), fsTools, procCmdFiles,
-// jvInputs..., closure...]; cmd_args copy srcAbsPath.
 func EmitJVCPG4(
 	instance ModuleInstance,
 	src VFS,
@@ -76,9 +65,6 @@ func EmitJVCPG4(
 	return emit.Emit(bindNodePlatform(node, instance.Platform))
 }
 
-// EmitCP emits a CP node copying srcAbsPath to dstAbsPath. Today exercised
-// only by contrib/libs/musl/include/ya.make (musl.py.pyplugin).
-// cmd_args: [python3, $(S)/build/scripts/fs_tools.py, copy, src, dst].
 func EmitCP(instance ModuleInstance, src VFS, dst VFS, emit Emitter) NodeRef {
 	return EmitCPWithDeps(instance, src, dst, nil, emit)
 }

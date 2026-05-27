@@ -17,19 +17,6 @@ type diffKindRec struct {
 	h    [10]uint64
 }
 
-// cmdDumpDiff compares two canonical JSONL graphs (left=ours, right=ref).
-// Modes:
-//
-//	(default)     three lists: self_uids / outputs only on one side, and
-//	              outputs in both with a differing self_uid.
-//	--summary     group the only-one-side outputs by kind / ext / dir.
-//	--by-field    pair nodes by output; count which content fields differ.
-//	--by-token    pair nodes by output; rank cmds/inputs/tags/outputs tokens
-//	              that are systematically only-ours / only-ref, by category.
-//	--by-kind     classify content divergence per node kind (kv.p).
-//	--roots       content-divergent outputs whose dependency children are all
-//	              non-divergent — the leaf-most root causes to fix first.
-//	--pair OUTPUT field-by-field diff of the single node producing OUTPUT.
 func cmdDumpDiff(args []string) int {
 	var leftPath, rightPath, outPath, mode, pairOut string
 
@@ -103,8 +90,6 @@ func cmdDumpDiff(args []string) int {
 	return 0
 }
 
-// --- default: three-list sections ---
-
 func diffSections(leftPath, rightPath string, bw *bufio.Writer) {
 	leftSelf, leftOut := scanDiffIndex(leftPath)
 	rightSelf, rightOut := scanDiffIndex(rightPath)
@@ -143,8 +128,6 @@ func scanDiffIndex(path string) (map[string]bool, map[string]map[string]bool) {
 	})
 	return selfUIDs, outToUIDs
 }
-
-// --- #6 summary: only-one-side outputs grouped by kind / ext / dir ---
 
 func diffSummary(leftPath, rightPath string, bw *bufio.Writer) {
 	leftKind := scanOutputKind(leftPath)
@@ -189,8 +172,6 @@ func scanOutputKind(path string) map[string]string {
 	})
 	return out
 }
-
-// --- #1 by-field: per-content-field mismatch counts over paired outputs ---
 
 func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
 	rExact := map[string]diffFieldHashes{}
@@ -255,10 +236,6 @@ func nodeFieldHashes(n map[string]any) [10]uint64 {
 	return h
 }
 
-// --- #2 by-token: systematic cmd_args / input token diffs ---
-
-// tokenFields are the list-valued node fields whose tokens by-token
-// multiset-diffs. cmds is flattened cmd_args; the rest are taken verbatim.
 var tokenFields = []string{"cmds", "inputs", "tags", "outputs"}
 
 func tokenize(n map[string]any, field string) []string {
@@ -317,7 +294,6 @@ func cmdArgTokens(n map[string]any) []string {
 	return out
 }
 
-// accumMultisetDiff adds (left-right) tokens to onlyL and (right-left) to onlyR.
 func accumMultisetDiff(left, right []string, onlyL, onlyR map[string]int) {
 	lc, rc := map[string]int{}, map[string]int{}
 	for _, t := range left {
@@ -394,8 +370,6 @@ func tokenCategory(t string) string {
 	}
 }
 
-// --- by-kind: classify content divergence per node kind (kv.p) ---
-
 func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 	rExact := map[string]diffKindRec{}
 	rAxis := map[string]diffKindRec{}
@@ -407,8 +381,8 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 		}
 	})
 
-	total := map[string]int{}   // kind -> paired nodes
-	diverge := map[string]int{} // kind -> nodes with any field diff
+	total := map[string]int{}
+	diverge := map[string]int{}
 	fieldDiff := map[string][]int{}
 	combo := map[string]map[string]int{}
 
@@ -462,7 +436,7 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 				parts = append(parts, fmt.Sprintf("%s:%d", f, fd[i]))
 			}
 		}
-		sort.Slice(parts, func(a, b int) bool { return parts[a] > parts[b] }) // rough: keep stable-ish
+		sort.Slice(parts, func(a, b int) bool { return parts[a] > parts[b] })
 		topCombo := ""
 		best := 0
 		for c, n := range combo[k] {
@@ -475,12 +449,10 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 	}
 }
 
-// --- #5 roots: leaf-most content-divergent outputs ---
-
 func diffRoots(leftPath, rightPath string, bw *bufio.Writer) {
 	rightExact := map[string]string{}
 	rightAxis := map[string]string{}
-	rightSelf := map[string]string{} // output -> self_uid
+	rightSelf := map[string]string{}
 	streamJSONL(rightPath, func(n map[string]any) {
 		su := getString(n, "self_uid")
 		for _, o := range toStrings(n["outputs"]) {
@@ -488,7 +460,6 @@ func diffRoots(leftPath, rightPath string, bw *bufio.Writer) {
 		}
 	})
 
-	// left graph structure + divergent outputs
 	divergent := map[string]bool{}
 	uidToDivergentOuts := map[string]map[string]bool{}
 	uidToDeps := map[string][]string{}
@@ -510,8 +481,6 @@ func diffRoots(leftPath, rightPath string, bw *bufio.Writer) {
 		}
 	})
 
-	// A divergent node is a leaf if none of its deps are themselves divergent.
-	// Emit each output path once even if multiple host/target variants map to it.
 	leafSet := map[string]bool{}
 	for uid, outs := range uidToDivergentOuts {
 		if len(outs) == 0 {
@@ -542,8 +511,6 @@ func diffRoots(leftPath, rightPath string, bw *bufio.Writer) {
 		Throw2(fmt.Fprintf(bw, "%s\n", o))
 	}
 }
-
-// --- #4 pair: field-by-field diff of one output's node ---
 
 func diffPair(leftPath, rightPath, output string, bw *bufio.Writer) {
 	want := normPath(output)
@@ -665,8 +632,6 @@ func findNodesByOutput(path, want string) []map[string]any {
 	})
 	return found
 }
-
-// --- shared helpers ---
 
 func dumpDiffNodeHostPlatform(n map[string]any) bool {
 	host, _ := n["host_platform"].(bool)

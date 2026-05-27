@@ -8,12 +8,6 @@ import (
 	"testing"
 )
 
-// TestStripComments_BlockCommentInclude pins PR-35u's primary motivator:
-// `#include <iostream>` inside a `/* ... */` block must not survive the
-// strip pass. The shape mirrors the upstream
-// `contrib/libs/cxxsupp/libcxx/include/__charconv/from_chars_integral.h:156-166`
-// snippet that floods the M2 closure with phantom <iostream>/<format>
-// when the regex picks the include up.
 func TestStripComments_BlockCommentInclude(t *testing.T) {
 	in := []byte(`#include <real.h>
 /*
@@ -26,8 +20,6 @@ func TestStripComments_BlockCommentInclude(t *testing.T) {
 
 	out := stripComments(append([]byte(nil), in...))
 
-	// The pre-comment include must survive intact; the post-comment one
-	// too. The body of the comment must NOT contain `#include` substrings.
 	s := string(out)
 
 	if !strings.Contains(s, "#include <real.h>") {
@@ -44,16 +36,11 @@ func TestStripComments_BlockCommentInclude(t *testing.T) {
 		}
 	}
 
-	// Newline count must equal the input — per-line `^\s*#` anchoring
-	// depends on line numbers staying aligned through stripped spans.
 	if got, want := bytes.Count(out, []byte{'\n'}), bytes.Count(in, []byte{'\n'}); got != want {
 		t.Errorf("newline count mismatch: got %d, want %d", got, want)
 	}
 }
 
-// TestStripComments_LineCommentInclude pins line-comment stripping.
-// `// #include <ghost>` after real code on the same line must lose
-// the ghost; the real include on a separate line is unaffected.
 func TestStripComments_LineCommentInclude(t *testing.T) {
 	in := []byte(`#include <real.h> // and not #include <ghost.h>
 int main() {} // unrelated #include <also-ghost.h>
@@ -71,14 +58,6 @@ int main() {} // unrelated #include <also-ghost.h>
 	}
 }
 
-// TestStripComments_StringLiteralTransparent pins PR-35u's "strings
-// are transparent, not stripped" rule. The bytes of a string literal
-// stay unchanged so that the include directive's quoted form
-// `#include "header.h"` survives intact (early prototype that stripped
-// string payloads erased every quoted include in the M2 closure).
-// What the string layer DOES guarantee: a `/*` inside a string body
-// must NOT enter block-comment state, so following code/comments are
-// scanned correctly.
 func TestStripComments_StringLiteralTransparent(t *testing.T) {
 	in := []byte(`#include "syscall.h"
 const char *msg = "this /* is not a comment */ end";
@@ -96,10 +75,6 @@ const char *msg = "this /* is not a comment */ end";
 		t.Errorf("post-string #include lost: %q", s)
 	}
 
-	// The `/* is not a comment */` is a string-literal substring.
-	// It MUST appear unmodified in the output — the string-literal
-	// state has to recognise the surrounding `"..."` so it does not
-	// enter block-comment state on the embedded `/*`.
 	if !strings.Contains(s, "/* is not a comment */") {
 		t.Errorf("string-literal contents modified or block-comment state entered: %q", s)
 	}
@@ -109,10 +84,6 @@ const char *msg = "this /* is not a comment */ end";
 	}
 }
 
-// TestStripComments_StringEscapedQuote pins escape handling — `\"`
-// inside a `"..."` does NOT terminate the string. A `/*` AFTER the
-// apparent escape (but inside the still-open string) must not enter
-// block-comment state.
 func TestStripComments_StringEscapedQuote(t *testing.T) {
 	in := []byte(`const char *s = "a \" /* still in string */ end";
 #include <real.h>
@@ -125,19 +96,11 @@ func TestStripComments_StringEscapedQuote(t *testing.T) {
 		t.Errorf("post-string #include lost: %q", s)
 	}
 
-	// The string body is preserved (transparent). The `/* still in string */`
-	// must NOT have been treated as a real block comment.
 	if !strings.Contains(s, "/* still in string */") {
 		t.Errorf("escape-quote handling broke: string body modified or comment state entered: %q", s)
 	}
 }
 
-// TestStripComments_RawStringLiteral exercises the C++11 raw-string
-// form `R"delim(...)delim"`. The body of a raw string can contain
-// unescaped `"` and `\`, so the regular double-quoted state machine
-// would mishandle it. The body bytes stay transparent (unchanged);
-// the only contract is that an unescaped `/*` or `//` inside a raw
-// body does NOT enter comment state.
 func TestStripComments_RawStringLiteral(t *testing.T) {
 	in := []byte(`const char *s = R"py(
 no escape needed: " or \ — /* not a real block comment */ done
@@ -152,11 +115,6 @@ no escape needed: " or \ — /* not a real block comment */ done
 		t.Errorf("post-raw-string #include lost: %q", s)
 	}
 
-	// Raw-string body is blanked (non-newline bytes → spaces) so a
-	// fake `#include` at the start of an inner line — common in
-	// protoc-style `p->Emit(R"(#include "$path$")")` codegen
-	// templates — never reaches parseCIncludes. The "not a real
-	// block comment" body bytes must therefore NOT survive.
 	if strings.Contains(s, "not a real block comment") {
 		t.Errorf("raw-string body bytes survived; expected blanked: %q", s)
 	}
@@ -166,9 +124,6 @@ no escape needed: " or \ — /* not a real block comment */ done
 	}
 }
 
-// TestStripComments_RawStringFakeIncludeBlanked pins the protoc-template
-// motivator: a `#include "X"` at the start of a line INSIDE a raw
-// string body must be blanked so parseCIncludes doesn't pick it up.
 func TestStripComments_RawStringFakeIncludeBlanked(t *testing.T) {
 	in := []byte(`p->Emit(R"(
 #include "$path$"
@@ -188,11 +143,6 @@ func TestStripComments_RawStringFakeIncludeBlanked(t *testing.T) {
 	}
 }
 
-// TestStripComments_QuotedIncludeSurvives is the hard pin against the
-// regression that motivated this test in the first place: the very
-// common shape `#include "syscall.h"` must round-trip the strip pass
-// unchanged. parseIncludes' regex relies on the closing `"` being
-// present at the captured target span.
 func TestStripComments_QuotedIncludeSurvives(t *testing.T) {
 	in := []byte("#include <sys/sendfile.h>\n#include \"syscall.h\"\n")
 
@@ -203,20 +153,12 @@ func TestStripComments_QuotedIncludeSurvives(t *testing.T) {
 	}
 }
 
-// TestStripComments_NestedBlockCommentNotAttempted documents that the
-// strip pass treats `/* */` as the only block-comment shape — C/C++
-// has no nested block comments by spec. A `/* outer /* inner */ rest */`
-// closes at the FIRST `*/`, leaving ` rest */` outside the comment.
-// This pins the simple state-machine behaviour against accidental
-// drift toward GCC's `-Wcomment` "nested" warning territory.
 func TestStripComments_NestedBlockCommentNotAttempted(t *testing.T) {
 	in := []byte(`/* outer /* inner */ rest */`)
 
 	out := stripComments(append([]byte(nil), in...))
 	s := string(out)
 
-	// First `*/` closes the comment. ` rest */` remains as code (the
-	// trailing `*/` is unmatched but the strip pass does not flag it).
 	if !strings.Contains(s, "rest") {
 		t.Errorf("post-first-`*/` code lost: %q", s)
 	}
@@ -226,11 +168,6 @@ func TestStripComments_NestedBlockCommentNotAttempted(t *testing.T) {
 	}
 }
 
-// TestStripComments_NoTriggers asserts the fast-path: a buffer with no
-// `/`, `"`, or `'` is returned unchanged (same backing slice). This is
-// performance-critical because every parseIncludes call runs the
-// pre-scan; for the rare trigger-free file (mostly empty headers and
-// pure preprocessor token files) the loop should never engage.
 func TestStripComments_NoTriggers(t *testing.T) {
 	in := []byte("#include <abc>\n#include <def>\n")
 	out := stripComments(in)
@@ -240,9 +177,6 @@ func TestStripComments_NoTriggers(t *testing.T) {
 	}
 }
 
-// TestStripComments_DivisionOperatorNotMistaken pins discrimination
-// between division (`a / b`) and the start of a comment. `/` followed
-// by anything other than `/` or `*` is plain code.
 func TestStripComments_DivisionOperatorNotMistaken(t *testing.T) {
 	in := []byte("int x = a / b;\n#include <real.h>\n")
 	out := stripComments(append([]byte(nil), in...))
@@ -371,21 +305,6 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 	}
 }
 
-// gate: a quoted include `#include "foo.h"` whose local search-path
-// resolution succeeded MUST NOT pick up the matching sysincl record's
-// alternate path. Quoted-form is a project-local include; the upstream
-// ymake scanner only consults sysincl alternates when the search-path
-// resolution fails. The text-blind union appended musl/libc/libcxxrt
-// alternates on top of legitimate local resolutions, producing 34
-// L2-divergent pairs in the M2 closure (R3 elf.h-style + R5
-// unwind.h-quoted-self subset).
-//
-// The synthetic tree mirrors the elf.h shape: yasm/elf.h exists and
-// is the legitimate target of `#include "elf.h"` from yasm/source.cpp;
-// sysincl maps `elf.h → musl/include/elf.h`. With the gate, the
-// scanner returns ONLY yasm/elf.h. Without the gate the closure would
-// also contain musl/include/elf.h — the exact L2-divergent
-// over-emission this PR closes.
 func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 	dir := t.TempDir()
 
@@ -412,9 +331,6 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 		t.Fatalf("write musl/include/elf.h: %v", err)
 	}
 
-	// Hand-build a sysincl set with one record: header `elf.h` maps to
-	// `musl/include/elf.h`. KeyBySource=false + nil filter so the
-	// record matches every (source, includer) pair.
 	sysincl := SysInclSet{
 		{
 			Filter:      nil,
@@ -451,22 +367,6 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 	}
 }
 
-// TestScanner_QuotedMultiTargetSysincl_OwnAddIncl pins the PR-36 fix:
-// a quoted include `#include "cxxabi.h"` resolved via OwnAddIncl (not
-// the same directory as the includer) MUST pick up sysincl multi-target
-// alternates. This mirrors the libcxxabi-parts pattern:
-//   - Source: libcxxabi-parts/src/abort_message.cpp
-//   - `abort_message.h` does `#include "cxxabi.h"` (quoted)
-//   - OwnAddIncl=libcxxabi/include → finds libcxxabi/include/cxxabi.h
-//   - stl-to-libcxx.yml maps cxxabi.h to BOTH libcxxabi/include/cxxabi.h
-//     AND libcxxrt/include/cxxabi.h (multi-target, ≥ 2 paths)
-//   - Reference graph includes both — the PR-35w gate was too aggressive.
-//
-// The synthetic tree: `src/` holds the source and header; `libcxxabi/include/`
-// holds the "local" cxxabi.h (via OwnAddIncl); `libcxxrt/include/` holds the
-// sysincl alternate. The sysincl record is multi-target (2 non-empty paths).
-// With the PR-36 fix, both paths appear in the closure. Without it, only
-// `libcxxabi/include/cxxabi.h` would appear (gate short-circuits sysincl).
 func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 	dir := t.TempDir()
 
@@ -482,8 +382,6 @@ func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 		}
 	}
 
-	// src/header.h does `#include "cxxabi.h"` (quoted). Same-dir
-	// `src/cxxabi.h` does NOT exist — forces OwnAddIncl resolution.
 	header := []byte(`#include "cxxabi.h"
 `)
 
@@ -506,9 +404,6 @@ func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 		t.Fatalf("write libcxxrt/include/cxxabi.h: %v", err)
 	}
 
-	// Multi-target sysincl: cxxabi.h maps to BOTH libcxxabi and libcxxrt.
-	// HasMultiTarget must be set explicitly on hand-built records (YAML
-	// loading sets it automatically via parseSysInclYAML's flushRecord).
 	sysincl := SysInclSet{
 		{
 			Filter:         nil,
@@ -551,15 +446,6 @@ func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 	}
 }
 
-// TestScanner_QuotedSameDirStillGated pins that the PR-36 bypass does
-// NOT fire when the quoted include was resolved via the SAME DIRECTORY
-// as the includer. Same-dir resolution means the file is literally
-// adjacent — sysincl alternates are inappropriate regardless of the
-// record's target count. This guards the libcxxrt/dwarf_eh.h → unwind.h
-// regression that PR-35w originally closed: `libcxxrt/unwind.h` exists
-// in the same directory as `dwarf_eh.h`, so the PR-36 multi-target bypass
-// must NOT fire (even though the stl-to-libcxx.yml unwind.h record is
-// multi-target) and `libcxx/include/unwind.h` must NOT appear.
 func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 	dir := t.TempDir()
 
@@ -574,8 +460,6 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 		}
 	}
 
-	// libcxxrt/dwarf_eh.h does `#include "unwind.h"` (quoted).
-	// libcxxrt/unwind.h EXISTS (same-dir) — same-dir resolution wins.
 	dwarf := []byte(`#include "unwind.h"
 `)
 	src := []byte(`#include "dwarf_eh.h"
@@ -589,7 +473,6 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 		t.Fatalf("write source.cc: %v", err)
 	}
 
-	// libcxxrt/unwind.h exists in the SAME DIR as dwarf_eh.h.
 	if err := os.WriteFile(filepath.Join(dir, "libcxxrt/unwind.h"), []byte("// libcxxrt unwind.h\n"), 0o644); err != nil {
 		t.Fatalf("write libcxxrt/unwind.h: %v", err)
 	}
@@ -598,9 +481,6 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 		t.Fatalf("write libcxx/include/unwind.h: %v", err)
 	}
 
-	// Multi-target sysincl: unwind.h maps to BOTH libcxx and libcxxrt.
-	// HasMultiTarget must be set explicitly on hand-built records (YAML
-	// loading sets it automatically via parseSysInclYAML's flushRecord).
 	sysincl := SysInclSet{
 		{
 			Filter:         nil,
@@ -643,14 +523,6 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 	}
 }
 
-// TestScanner_QuotedSysinclFiresOnLocalMiss is the converse pin: a
-// quoted include whose local search-path resolution FAILED must still
-// fall through to sysincl. The gate is "skip sysincl when local
-// resolved", not "skip sysincl entirely for quoted form" — the
-// upstream ymake scanner consults sysincl alternates when local lookup
-// fails, and we must preserve that behaviour or quoted-form headers
-// that only exist as sysincl entries (e.g. some musl-only forms)
-// would silently lose their inputs.
 func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 	dir := t.TempDir()
 
@@ -662,9 +534,6 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 		}
 	}
 
-	// `#include "absent.h"` from src/source.cpp — no local file at
-	// src/absent.h. The sysincl record provides musl/include/absent.h
-	// as the alternate; the gate must let it through.
 	src := []byte(`#include "absent.h"
 `)
 
@@ -706,14 +575,6 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 	}
 }
 
-// TestScanner_AngleSysinclUnaffected pins the asymmetry: an
-// angle-bracket include `#include <unwind.h>` whose local search-path
-// resolution succeeded must STILL pick up matching sysincl alternates.
-// libcxx/libcxxrt/libunwind ship multi-target sysincl records for the
-// same logical header — the reference scan unions the local and
-// sysincl resolutions, and the PR-35w gate is gated on QUOTED form
-// only. Using the same physical layout as the quoted-resolved test
-// but flipping `< >` MUST yield BOTH paths.
 func TestScanner_AngleSysinclUnaffected(t *testing.T) {
 	dir := t.TempDir()
 
@@ -725,9 +586,6 @@ func TestScanner_AngleSysinclUnaffected(t *testing.T) {
 		}
 	}
 
-	// `#include <unwind.h>` from libcxxrt/source.cpp — angle bracket.
-	// Local resolution succeeds via OwnAddIncl=libcxxrt; sysincl maps
-	// `unwind.h` → libunwind/include/unwind.h. Both must appear.
 	src := []byte(`#include <unwind.h>
 `)
 
@@ -780,9 +638,6 @@ func TestScanner_AngleSysinclUnaffected(t *testing.T) {
 	}
 }
 
-// TestParseYasmIncludes_LowercaseQuoted pins the basic NASM/yasm
-// `%include "foo"` form against the stand-alone parser. PR-35x's
-// asmlib motivator: `cachesize64.asm:1` is `%include "defs.asm"`.
 func TestParseYasmIncludes_LowercaseQuoted(t *testing.T) {
 	in := []byte(`%include "defs.asm"
 some_label:
@@ -808,11 +663,6 @@ some_label:
 	}
 }
 
-// TestParseYasmIncludes_UppercaseDirective pins case-insensitive
-// directive matching: NASM/yasm directives are case-insensitive, and
-// asmlib's `mersenne64.asm:64` / `mother64.asm:32` / `sfmt64.asm:29`
-// all use uppercase `%INCLUDE "randomah.asi"`. Without case-insensitive
-// matching those three sources would still miss `randomah.asi`.
 func TestParseYasmIncludes_UppercaseDirective(t *testing.T) {
 	in := []byte(`%INCLUDE "randomah.asi"
 `)
@@ -832,11 +682,6 @@ func TestParseYasmIncludes_UppercaseDirective(t *testing.T) {
 	}
 }
 
-// TestParseYasmIncludes_LineCommentIgnored asserts that yasm `;`
-// line comments do not produce phantom includes. A `;` at column zero
-// followed by `%include "ghost.asm"` text must not match — the
-// `^\s*%include` anchor requires `%` as the first non-whitespace
-// token; `;` blocks the regex from firing.
 func TestParseYasmIncludes_LineCommentIgnored(t *testing.T) {
 	in := []byte(`; %include "ghost.asm"
 %include "real.asm"
@@ -853,12 +698,6 @@ func TestParseYasmIncludes_LineCommentIgnored(t *testing.T) {
 	}
 }
 
-// TestParseYasmIncludes_TrailingSemicolonComment pins that a real
-// directive followed by an inline `; ...` comment still parses. The
-// regex anchors on the directive head and stops at the closing `"`,
-// so trailing trivia is naturally ignored. Mirrors
-// `instrset64.asm:26`'s `%include "instrset64.asm"              ;
-// include code for InstructionSet function`.
 func TestParseYasmIncludes_TrailingSemicolonComment(t *testing.T) {
 	in := []byte(`%include "instrset64.asm"              ; include code for InstructionSet function
 `)
@@ -874,11 +713,6 @@ func TestParseYasmIncludes_TrailingSemicolonComment(t *testing.T) {
 	}
 }
 
-// TestParseYasmIncludes_NoMatchOnCInclude is the cross-syntax pin: a
-// C-style `#include` on a yasm line must NOT match the yasm parser.
-// `parseYasmIncludes` is dispatched only for `.asm`/`.asi`, so a
-// stray `#` that does not begin with `%` should produce no
-// directive.
 func TestParseYasmIncludes_NoMatchOnCInclude(t *testing.T) {
 	in := []byte(`#include "foo.h"
 `)
@@ -890,9 +724,6 @@ func TestParseYasmIncludes_NoMatchOnCInclude(t *testing.T) {
 	}
 }
 
-// TestParseYasmIncludes_AngleBracketForm verifies the angle-bracket
-// branch. Not observed in asmlib but supported for parity with the
-// C scanner — yasm accepts `%include <foo>` for system-style search.
 func TestParseYasmIncludes_AngleBracketForm(t *testing.T) {
 	in := []byte(`%include <sysmacros.asi>
 `)
@@ -1025,10 +856,6 @@ func TestParsedIncludes_LeadingUTF8BOM(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bom.cpp")
 
-	// A UTF-8 BOM (EF BB BF) precedes the first directive — observed on
-	// library/cpp/threading/future/subscription/subscription.cpp. ymake
-	// ignores it; the scanner must too, or the whole include closure
-	// collapses (the file's first #include pulls everything).
 	content := append([]byte{0xEF, 0xBB, 0xBF}, []byte("#include \"sibling.h\"\n#include <system.h>\n")...)
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("write bom.cpp: %v", err)
@@ -1088,12 +915,6 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 	}
 }
 
-// TestScanDirectives_DispatchByExtension pins raw-scan dispatch
-// by file extension: a `.asm` file routes to the yasm parser; a `.h`
-// file routes to the C parser. The two parsers agree on the
-// `includeDirective` shape but only one fires per file. Without the
-// dispatch the asmlib AS scanner missed every `%include` (PR-35t R4
-// root cause).
 func TestScanDirectives_DispatchByExtension(t *testing.T) {
 	dir := t.TempDir()
 
@@ -1114,7 +935,6 @@ func TestScanDirectives_DispatchByExtension(t *testing.T) {
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
 
-	// PR-M3-vfs-paths: scanDirectives takes a VFS path.
 	asmDirs := scanner.scanDirectives(Intern("$(S)/src.asm"))
 	hDirs := scanner.scanDirectives(Intern("$(S)/src.h"))
 
@@ -1127,11 +947,6 @@ func TestScanDirectives_DispatchByExtension(t *testing.T) {
 	}
 }
 
-// TestScanDirectives_AsiDispatchesToYasm pins that `.asi` (yasm
-// include-only file) extension also routes to the yasm parser.
-// asmlib's `randomah.asi` is a `.asi` file; without `.asi` in the
-// dispatch list, transitive scans through it would silently miss any
-// nested `%include` it might hold.
 func TestScanDirectives_AsiDispatchesToYasm(t *testing.T) {
 	dir := t.TempDir()
 	asiPath := filepath.Join(dir, "src.asi")
@@ -1142,7 +957,7 @@ func TestScanDirectives_AsiDispatchesToYasm(t *testing.T) {
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	// PR-M3-vfs-paths: scanDirectives takes a VFS path.
+
 	dirs := scanner.scanDirectives(Intern("$(S)/src.asi"))
 
 	if len(dirs) != 1 || dirs[0].target.String() != "nested.asi" {
@@ -1150,10 +965,6 @@ func TestScanDirectives_AsiDispatchesToYasm(t *testing.T) {
 	}
 }
 
-// TestScanDirectives_G4UsesEmptyParser pins the upstream-like `.g4`
-// parser split: ANTLR grammars are not scanned as C/C++ text even if
-// they contain embedded `#include` snippets. Those snippets belong to
-// generated outputs, not to the grammar node itself.
 func TestScanDirectives_G4UsesEmptyParser(t *testing.T) {
 	dir := t.TempDir()
 	g4Path := filepath.Join(dir, "src.g4")
@@ -1172,10 +983,6 @@ grammar X;
 	}
 }
 
-// TestScanDirectives_InSuffixUsesUnderlyingExtension pins the upstream
-// `.in` dispatch rule: `foo.ext.in` must select the parser for
-// `foo.ext`, not the literal `.in` suffix. Without this, `src.g4.in`
-// would fall back to the default C parser and emit a phantom include.
 func TestScanDirectives_InSuffixUsesUnderlyingExtension(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "src.g4.in")
@@ -1194,11 +1001,6 @@ grammar X;
 	}
 }
 
-// TestScanDirectives_MacroIndirectAugmentation pins the
-// PR-M3-musl-self-closure behaviour: sources known to use macro-indirect
-// `#include MACRO_NAME` forms get synthetic includeDirectives appended
-// after the regex-extracted set. The text-blind regex parser cannot
-// expand the macro; the table-driven augmenter is the surgical fix.
 func TestScanDirectives_MacroIndirectAugmentation(t *testing.T) {
 	dir := t.TempDir()
 	rel := "contrib/libs/openssl/crypto/uid.c"
@@ -1239,10 +1041,6 @@ func TestScanDirectives_MacroIndirectAugmentation(t *testing.T) {
 		t.Errorf("macro-indirect unistd.h augmentation missing for openssl/crypto/uid.c: %+v", dirs)
 	}
 }
-
-// Test-only shims for parser-layer helpers that were removed from
-// production IncludeScanner. Tests still probe parser behaviour through
-// a scanner fixture because it already wires sourceRoot/sysincl setup.
 
 func (s *IncludeScanner) scanDirectives(vfsPath VFS) []includeDirective {
 	return s.parsers.parsedIncludes(vfsPath)
@@ -1393,9 +1191,6 @@ func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
 	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd"))
 }
 
-// hyperscanPeerAddIncl returns the PeerAddIncl search paths for a
-// contrib/libs/hyperscan CC consumer, as extracted from sg5.json for
-// contrib/libs/hyperscan/_/src/nfa/limex_compile.cpp.o.
 func hyperscanPeerAddIncl() []VFS {
 	return VFSesFromStrings([]string{
 		"contrib/libs/cxxsupp/libcxx/include",

@@ -9,28 +9,12 @@ import (
 	"strings"
 )
 
-// resource.go — emitter for objcopy PY nodes produced by upstream
-// `devtools/ymake/plugins/resource_handler/objcopy.h:TObjCopyResourcePacker`.
-// Handles `RESOURCE(path key)`, `RESOURCE_FILES(...)`, PY_SRCS chunking,
-// and kv-only sibling shapes (PY_MAIN / namespace / no_check_imports).
-
-// hashLen is the prefix length applied to the MD5 hex digest when
-// computing the objcopy node's output basename (matches upstream
-// `packer.h:73 LEN_LIMIT = 26`).
 const hashLen = 26
 
-// rootCmdLen is the per-entry cmd-length accumulator increment used
-// by upstream `TObjCopyResourcePacker::HandleResource` (`objcopy.h:22, 26`).
 const rootCmdLen = 200
 
-// maxCmdLen is the flush threshold the upstream packer applies to
-// `EstimatedCmdLen_`; once exceeded the accumulator emits a node and
-// resets (`objcopy.h:34, packer.h:98`).
 const maxCmdLen = 8000
 
-// objcopyScriptPath is the SOURCE_ROOT path to the upstream packer
-// script. Carried on every emitted objcopy node's `inputs` and
-// propagated into the enclosing module's `.global.a` member inputs.
 var (
 	objcopyScriptVFS  = Intern("$(S)/build/scripts/objcopy.py")
 	objcopyScriptPath = objcopyScriptVFS.String()
@@ -41,12 +25,6 @@ var (
 	rescompilerBinPath   = rescompilerBinVFS.String()
 )
 
-// objcopyHash computes the upstream `GetHashForOutput` digest used
-// to form the `objcopy_<hex>.o` output filename. The list is the
-// concatenation of (paths, base64-padded keys, raw kvs, "$S/" + unitPath);
-// it is sorted, comma-joined, suffixed with moduleTag, and MD5'd; the
-// first hashLen hex chars (lower-case) are returned. Mirrors
-// `devtools/ymake/plugins/resource_handler/packer.h:73-85`.
 func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string, moduleTag *string) string {
 	list := make([]string, 0, len(paths)+len(keysB64)+len(kvs)+1)
 	list = append(list, paths...)
@@ -65,16 +43,6 @@ func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string
 	return strings.ToLower(enchex.EncodeToString(sum[:]))[:hashLen]
 }
 
-// expandResourceFiles applies the upstream
-// `build/plugins/res.py:onresource_files` expansion. Keyword grammar:
-//
-//	DONT_COMPRESS (dropped), PREFIX <p>, DEST <d>, STRIP <p>, <path>.
-//
-// For each plain path P emits a kv-only entry (Path="-") plus a source
-// entry (Path=P, Key="resfs/file/<computed-key>"). computed-key =
-// (dest) | (prefix + (strip(P) or P)); DEST is per-path and resets
-// prefix. The `${rootrel;...}` placeholder is preserved verbatim
-// because objcopyHash consumes the pre-expansion form.
 func expandResourceFiles(args []string) []resourceEntry {
 	prefix := ""
 	prefixToStrip := ""
@@ -134,12 +102,6 @@ func expandResourceFiles(args []string) []resourceEntry {
 	return out
 }
 
-// resourceModuleTag returns the upstream MODULE_TAG seen by the packer.
-// Plain LIBRARY/PROGRAM → nil. PY3_LIBRARY/PY23_* → "PY3".
-// PY3_PROGRAM_BIN is the executable half of PY3_PROGRAM; upstream surfaces
-// `module_tag=py3_bin` there.
-// (`build/conf/python.conf:1126`). GEN_LIBRARY ("RESOURCE_LIB", core
-// conf:598) and DLL ("DLL", core conf:2197,2379) are not yet handled.
 func resourceModuleTag(modName string) *string {
 	switch modName {
 	case "PY3_LIBRARY", "PY3_PROGRAM_BIN", "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
@@ -175,11 +137,6 @@ func prResourceExtraInputs(d *moduleData, output string) []VFS {
 	return out
 }
 
-// expandRootrel substitutes the upstream
-// `${rootrel;context=TEXT;input=TEXT:"<P>"}` placeholder with its
-// expanded form `<unitPath>/<P>`. The placeholder is preserved by
-// `expandResourceFiles` and consumed by `objcopyHash` pre-expansion;
-// cmd_args consume the expanded form.
 func expandRootrel(kv string, unitPath string) string {
 	const marker = "${rootrel;context=TEXT;input=TEXT:\""
 	idx := strings.Index(kv, marker)
@@ -199,11 +156,6 @@ func expandRootrel(kv string, unitPath string) string {
 	return kv[:idx] + expanded + tail[end+len("\"}"):]
 }
 
-// rootrelInputPath extracts the unit-relative path P from a
-// `${rootrel;context=TEXT;input=TEXT:"P"}` placeholder embedded in a kv
-// value. The `input=TEXT:"P"` modifier registers P as a graph input of
-// the objcopy node even though P is not listed in `--inputs/__PATHS`.
-// Returns ("", false) when no such placeholder is present.
 func rootrelInputPath(kv string) (string, bool) {
 	const marker = "${rootrel;context=TEXT;input=TEXT:\""
 	idx := strings.Index(kv, marker)
@@ -239,32 +191,17 @@ func yaConfFormulaResources(fs *FS, confPath string) []string {
 
 var yaConfFormulaRE = regexp.MustCompile(`"formula"\s*:\s*"([^"]+\.json)"`)
 
-// pySrcEntry is one element of the per-PY_SRCS objcopy emission. Per
-// source: 1-2 entries by PYBUILD_NO_PY / PYBUILD_NO_PYC mode:
-//   - default: raw .py entry + .yapyc3 entry
-//   - PYBUILD_NO_PY: only .yapyc3
-//   - PYBUILD_NO_PYC: only raw .py
 type pySrcEntry struct {
-	pathHash  string // srcRel.yapyc3 (flat) or srcRel.<unit-pathid>.yapyc3 (subdir); used as `paths` for the hash
-	pathInput VFS    // cmd_args --inputs slot: $(B)/<actualUnit>/<srcRel>{.suffix} (yapyc3) or $(S)/<actualUnit>/<srcRel> (raw)
-	key       string // pre-base64 key: resfs/file/py/[<ns>/]<srcRel>[.yapyc3]
-	kvHash    string // pre-rootrel-expansion form (placeholder retained)
-	kvCmd     string // post-rootrel-expansion form
-	inputDep  VFS    // inputs[] graph slot: same as pathInput
+	pathHash  string
+	pathInput VFS
+	key       string
+	kvHash    string
+	kvCmd     string
+	inputDep  VFS
 
-	// extraSrcInput is the additional `.py` source-tree input the scanner
-	// threads into objcopy `inputs[]` whenever the entry's resfs target
-	// is a `.yapyc3` bytecode (built from the `.py` by
-	// on_py3_compile_bytecode). Nil for raw .py entries; for yapyc3
-	// entries non-nil `$(S)/<actualUnit>/<srcRel>`. REF Lib chunks: .py count
-	// matches .yapyc3 count one-to-one even across chunk straddles.
 	extraSrcInput *VFS
 }
 
-// buildPySrcEntries derives the ordered (kv,path,key) triples that the
-// upstream packer would receive for one PY_SRCS macro. The order is
-// declaration order (matches REF). Each entry is independent of chunk
-// boundaries — the chunker decides which chunk it lands in.
 func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 	return buildPySrcEntriesFor(d, modulePath, d.pySrcs, d.pyTopLevel, d.pyNamespace)
 }
@@ -279,9 +216,6 @@ func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLe
 		actualUnit = *d.srcDir
 	}
 
-	// keyPrefix is the dotted-module-path prefix prepended to each
-	// per-source resfs key. TOP_LEVEL strips the prefix, leaving the
-	// raw source path as the resfs key root.
 	keyPrefix := ""
 	if !topLevel {
 		if namespace != nil {
@@ -305,13 +239,6 @@ func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLe
 			suffix = "." + pySrcYapycSuffix(modulePath) + ".yapyc3"
 		}
 
-		// When both raw .py and .yapyc3 entries fire (default), REF
-		// places the raw .py FIRST in the packer's input list, driving
-		// --inputs / --keys / --kvs ordering. The chunk-hash sorts
-		// internally so objcopy_<hex>.o is invariant under this swap;
-		// only cmd_args (and inputs[]) ordering shifts.
-
-		// raw .py entry — emitted unless PYBUILD_NO_PY is set.
 		if !d.pyBuildNoPY {
 			pyKey := "resfs/file/py/" + keyPrefix + srcRel
 			pyPathInput := Source(actualUnit + "/" + srcRel)
@@ -333,12 +260,10 @@ func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLe
 			})
 		}
 
-		// yapyc3 entry — always emitted unless PYBUILD_NO_PYC is set.
 		if !d.pyBuildNoPYC {
 			ypKey := "resfs/file/py/" + keyPrefix + srcRel + ".yapyc3"
 			ypPathInput := Build(modulePath + "/" + srcRel + suffix)
-			// kv hash retains the ${rootrel;...} placeholder; cmd_args
-			// form expands to <actualUnit>/<srcRel><suffix>.
+
 			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
 			ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
 			extraSrcInput := vfsPtr(Source(actualUnit + "/" + srcRel))
@@ -361,33 +286,16 @@ func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLe
 	return out
 }
 
-// pySrcChunk holds the accumulator state for one objcopy node emitted
-// by chunkPySrcEntries — per-HandleResource-call flush chunker matching
-// upstream `TObjCopyResourcePacker::HandleResource` (`objcopy.h:17-29`).
 type pySrcChunk struct {
 	paths    []string
-	keys     []string // base64-padded
+	keys     []string
 	kvsHash  []string
 	kvsCmd   []string
 	pathInps []string
 
-	// inps holds the scanner-discovered `inputs[]` fragment for this
-	// chunk: every entry whose KV add OR path+key add lands here
-	// contributes its `pathInput` and (when present) `extraSrcInput`,
-	// in declaration order with per-chunk dedup. Captures chunk-straddle
-	// where an entry's KV is in chunk N but its path+key is in N+1
-	// (REF byte-exact, see resource_test.go).
 	inps []VFS
 }
 
-// chunkPySrcEntries partitions a declaration-ordered entry list into
-// chunks byte-exact with the upstream packer (`objcopy.h:17-29`).
-//
-// Per entry `HandleResource` is called twice — kv add then path+key
-// add — each bumping EstimatedCmdLen_ by ROOT_CMD_LEN+len(payload);
-// a flush at MAX_CMD_LEN can straddle a single entry across chunks
-// (kv in N, path+key in N+1). Accumulator uses pre-expansion forms
-// (kvHash retains `${rootrel;...}`, pathHash is source-relative).
 func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 	if len(entries) == 0 {
 		return nil
@@ -396,10 +304,7 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 	chunks := make([]pySrcChunk, 0)
 	cur := pySrcChunk{}
 	cmdLen := 0
-	// inpsSeen tracks paths already in `cur.inps` for the current chunk
-	// (reset on flush). A chunk-straddling entry still contributes to
-	// both kv-add chunk and path+key-add chunk because the map resets
-	// between them.
+
 	inpsSeen := make(map[VFS]struct{})
 
 	flush := func() {
@@ -412,9 +317,6 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 		inpsSeen = make(map[VFS]struct{})
 	}
 
-	// addInps records pathInput + extraSrcInput on `cur.inps`, deduped
-	// per-chunk by absolute path. Collapses same-chunk KV/path+key adds
-	// and cross-entry duplicates (yapyc3.extraSrcInput vs raw .py).
 	addInps := func(e pySrcEntry) {
 		if _, ok := inpsSeen[e.pathInput]; !ok {
 			cur.inps = append(cur.inps, e.pathInput)
@@ -430,7 +332,7 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 	}
 
 	for _, e := range entries {
-		// HandleResource("-", e.kvHash): kv add.
+
 		cur.kvsHash = append(cur.kvsHash, e.kvHash)
 		cur.kvsCmd = append(cur.kvsCmd, e.kvCmd)
 		addInps(e)
@@ -439,7 +341,6 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 			flush()
 		}
 
-		// HandleResource(e.pathHash, e.key): path+key add.
 		kb64 := encb64.StdEncoding.EncodeToString([]byte(e.key))
 		cur.paths = append(cur.paths, e.pathHash)
 		cur.keys = append(cur.keys, kb64)

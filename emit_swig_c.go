@@ -270,8 +270,6 @@ func swigSourceParsedBuckets(ctx *genCtx, rel string) parsedIncludeSet {
 		data = data[3:]
 	}
 
-	// Keep SWIG's `.i` parsing local to the emitter path: the shared parser
-	// registry intentionally leaves `.i` on the default C-like scanner.
 	return swigIncludeDirectiveParser{}.Parse(rel, data)
 }
 

@@ -5,69 +5,43 @@ import (
 	"strings"
 )
 
-// platform.go — the `(host, target)` Platform pair threaded from CLI
-// through every emitter. Tool sub-graphs are walked as (host, host).
-// Flags is the canonical source of truth; boolean shadows are read-only
-// caches populated at construction. Treat the struct as immutable
-// post-construction.
 type Platform struct {
-	OS     OS                // OS axis (linux / darwin / windows)
-	ISA    ISA               // ISA axis (x86_64 / aarch64 / arm64)
-	Target PlatformID        // = MakePlatformID(OS, ISA); surfaces as `node.platform`
-	Flags  map[string]string // canonical per-platform toggles ("PIC"="yes", …)
-	Tags   []string          // baseline tags every node on this platform carries (e.g. `["tool"]` on host). "tool" is the host-axis discriminant that surfaces as `node.host_platform`.
+	OS     OS
+	ISA    ISA
+	Target PlatformID
+	Flags  map[string]string
+	Tags   []string
 
-	// Hidden stats-preimage metadata. Upstream raw graphs hash a platform +
-	// build-type + platform-flag tag vector before public tag stripping, so
-	// the raw node serializer cannot reconstruct it from visible Tags alone.
 	StatsFlags     map[string]string
 	StatsExtraTags []string
 
-	// Tools is the absolute-path toolchain bound to this Platform. Populated
-	// by NewPlatform from Flags entries written by mine.go::commonFlags.
 	Tools Toolchain
 
-	// Shadow accessors derived from Flags at construction. Read-only.
 	PIC             bool
 	BuildType       string
 	BuildRelease    bool
 	BuildSanitized  bool
 	Ragel6Optimized bool
 
-	// Triple is the clang `--target=<triple>` arg (e.g. `aarch64-linux-gnu`),
-	// derived from `<isa>-<os>-gnu`. March is `-march=<arch>`; empty for
-	// ISAs that communicate baseline via other flags (x86_64 uses
-	// `-m64`/`-msseN` instead). When March=="" the arg is omitted entirely.
 	Triple string
 	March  string
 
-	// Raw compiler flags supplied by the caller (usually CFLAGS /
-	// CXXFLAGS from the environment) and parsed once at construction.
-	// They are target-platform inputs; host platforms normally pass
-	// empty strings so build tools stay byte-exact.
 	CFlags   []string
 	CXXFlags []string
 
 	ClangVer string
 }
 
-// Toolchain captures absolute paths embedded in cmd_args. Populated from
-// a Flags map keyed on ymake's `<TOOL>_TOOL` / `BUILD_PYTHON_BIN`
-// convention (mine.go::commonFlags). Empty fields are legal; consumers
-// fail loudly rather than silently embedding a stale snapshot path.
 type Toolchain struct {
-	Python3 string // BUILD_PYTHON_BIN
-	CC      string // CLANG_TOOL       — C compile driver
-	CXX     string // CLANG_pl_pl_TOOL — C++ compile driver
-	Objcopy string // OBJCOPY_TOOL     — debug-section strip / resource embed
-	AR      string // AR_TOOL          — archiver
-	Strip   string // STRIP_TOOL
-	LLD     string // LLD_TOOL         — linker
+	Python3 string
+	CC      string
+	CXX     string
+	Objcopy string
+	AR      string
+	Strip   string
+	LLD     string
 }
 
-// toolchainFromFlags reads tool paths out of a Flags map. Missing
-// entries land as empty strings; the consumer that actually needs the
-// tool is responsible for the error path.
 func toolchainFromFlags(flags map[string]string) Toolchain {
 	return Toolchain{
 		Python3: flags["BUILD_PYTHON_BIN"],
@@ -80,14 +54,6 @@ func toolchainFromFlags(flags map[string]string) Toolchain {
 	}
 }
 
-// NewPlatform constructs *Platform from an explicit (os, isa, flags,
-// tags) tuple and pre-fills boolean shadows. Host-vs-target discrimination
-// flows through `tags` — host platforms pass `["tool"]`, target platforms
-// pass nil. cflagsEnv / cxxflagsEnv are shell-like flag strings parsed
-// once into Platform.CFlags / Platform.CXXFlags. Caller must not mutate
-// flags or tags after construction (NewPlatform retains references).
-// Flag convention: "yes" is truthy; anything else (empty/missing/"no")
-// is falsy.
 func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsEnv, cxxflagsEnv string) *Platform {
 	if flags == nil {
 		flags = map[string]string{}
@@ -226,10 +192,6 @@ func platformBuildSanitized(flags map[string]string) bool {
 	return sanitizer != "" && sanitizer != "no" && sanitizer != "false" && sanitizer != "0"
 }
 
-// parseCompilerFlags splits a CFLAGS/CXXFLAGS-style string into argv
-// tokens. It supports whitespace separation, single/double quotes, and
-// backslash escaping. Quotes are not retained; backslash preserves the
-// following byte verbatim.
 func parseCompilerFlags(s string) []string {
 	if s == "" {
 		return nil
@@ -294,9 +256,6 @@ func parseCompilerFlags(s string) []string {
 	return out
 }
 
-// marchFor returns the `-march=<arg>` value for an ISA. Empty when the
-// ISA's architectural baseline is communicated by other flags
-// (x86_64 → `-m64` / `-msseN` bundles, not `-march=`).
 func marchFor(isa ISA) string {
 	switch isa {
 	case ISAAArch64:
@@ -306,11 +265,6 @@ func marchFor(isa ISA) string {
 	}
 }
 
-// MultiarchLibPath returns the `$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/<triple>`
-// path the reference graph embeds in DYLD_LIBRARY_PATH on every CC /
-// AR / LD / AS node. The path is the BUILD HOST's multiarch dir — the
-// machine running the build — so emitters call this on the host
-// Platform regardless of which axis the node belongs to.
 func (p *Platform) MultiarchLibPath() string {
 	path := "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/" + p.Triple
 
@@ -367,11 +321,6 @@ func (p *Platform) LinkerSelectionNoPieFlags() []string {
 	return []string{"-Wl,-no-pie"}
 }
 
-// ObjectSuffix is the upstream `$OBJECT_SUF` value (no `OBJ_SUF`
-// prefix — that prefix is set only inside Python LIBRARY variants by
-// upstream macros and is not modelled here).
-// `OBJECT_SUF=$OBJ_SUF$_CROSS_SUFFIX.o` (gnu_compiler.conf:215) with
-// `_CROSS_SUFFIX=.pic` for PIC builds (gnu_compiler.conf:26-34).
 func (p *Platform) ObjectSuffix() string {
 	if p.PIC {
 		return ".pic.o"
@@ -412,9 +361,6 @@ func (p *Platform) resourceClangRoot() string {
 	return resourcePatternRef(resourcePatternClangTool)
 }
 
-// ParsePlatformID splits a "default-<os>-<isa>" string into its OS
-// and ISA components. Throws on a malformed input; returns the
-// recognised typed pair on success.
 func ParsePlatformID(s string) (OS, ISA) {
 	if !strings.HasPrefix(s, "default-") {
 		ThrowFmt("ParsePlatformID: %q does not start with \"default-\"", s)

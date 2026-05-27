@@ -19,14 +19,6 @@ func main() {
 	})
 }
 
-// dispatch parses the command-line and routes to the per-subcommand
-// handler. It is the throw-style boundary between main()'s Try/Catch
-// wrapper and the rest of the program: any panic with an *Exception
-// bubbles up here and prints to stderr.
-//
-// Note: os.Exit from a subcommand bypasses outer-Try defers (only panics
-// propagate). If success-path cleanup needs to fire, dispatch must return
-// an exit code instead of calling os.Exit directly.
 func dispatch(argv []string) {
 	if len(argv) < 2 {
 		printUsage(os.Stderr)
@@ -97,11 +89,6 @@ func startProfilesFromEnv() func() {
 	}
 }
 
-// writeGraph encodes g as JSON to path (or stdout when path == "-").
-// Delegates to writeGraphIndented (gjson_write.go), a hand-rolled streaming
-// serializer that matches json.Encoder with SetEscapeHTML(false) +
-// SetIndent("", "    ") byte-for-byte in a single pass. Output is buffered
-// through a 1 MiB bufio.Writer.
 func writeGraph(out string, g *Graph) {
 	var w io.Writer
 

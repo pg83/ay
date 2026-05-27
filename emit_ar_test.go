@@ -6,11 +6,6 @@ import (
 	"testing"
 )
 
-// Canonical (host, target) Platform values for tests. The toolchain
-// is pinned to arbitrary placeholder paths so byte-exact cmd_args
-// pins in this package stay stable across hosts whose actual $PATH
-// discovery would resolve a different absolute path. Production
-// cmdMake mines $PATH instead.
 var testToolchainFlags = map[string]string{
 	"BUILD_PYTHON_BIN":  "/bin/python3",
 	"BUILD_PYTHON3_BIN": "/bin/python3",
@@ -46,7 +41,6 @@ func targetInstance(path string) ModuleInstance {
 	}
 }
 
-// helper to construct the canonical host instance for a path.
 func hostInstance(path string) ModuleInstance {
 	return ModuleInstance{
 		Path:     path,
@@ -56,14 +50,10 @@ func hostInstance(path string) ModuleInstance {
 	}
 }
 
-// testPlatformFor mirrors ctx.platformFor for tests.
 func testPlatformFor(i ModuleInstance) *Platform {
 	return i.Platform
 }
 
-// vfsStrings materialises a []VFS as a []string of canonical VFS forms
-// — convenience for test assertions that compare against literal
-// "$(S)/..." / "$(B)/..." strings.
 func vfsStrings(vs []VFS) []string {
 	out := make([]string, len(vs))
 	for i, v := range vs {
@@ -72,16 +62,6 @@ func vfsStrings(vs []VFS) []string {
 	return out
 }
 
-// TestEmitAR_BuildCowOn_Target_ByteExact verifies that EmitAR
-// produces a node that is field-for-field identical to the
-// reference TARGET AR node in /home/pg/monorepo/yatool/sg.json
-// for the build/cow/on module.
-// TestEmitAR_BuildCowOn_Host_ByteExact verifies the host AR for
-// build/cow/on. Reference uses the SAME archive name
-// (libbuild-cow-on.a, not .pic.a), but with platform=x86_64,
-// host_platform=true, tags=["tool"], and the .pic.o leaf path.
-// TestEmitAR_LengthMismatchPanics verifies that EmitAR throws when
-// objRefs and objPaths have different lengths.
 func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	e := NewBufferedEmitter()
 
@@ -111,27 +91,22 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	}
 }
 
-// TestArchiveName pins the ArchiveName rule for representative paths.
-// Rule: last min(3, depth) components joined with "-", prefixed "lib",
-// suffixed ".a". Sole exception: "util" → "libyutil.a".
-// Source: devtools/ymake/module_confs.cpp:48-57 (ThreeDirNames /
-// SetDefaultRealprjnameImpl with depth=2).
 func TestArchiveName(t *testing.T) {
 	cases := []struct {
 		moduleDir string
 		want      string
 	}{
-		// Special case: asymmetric "y" prefix hard-coded for util root.
+
 		{"util", "libyutil.a"},
-		// depth-2 path: all components used.
+
 		{"tools/archiver", "libtools-archiver.a"},
 		{"foo/bar", "libfoo-bar.a"},
-		// depth-1 path: sole component used.
+
 		{"foo", "libfoo.a"},
-		// depth-3 paths: all three components used.
+
 		{"build/cow/on", "libbuild-cow-on.a"},
 		{"util/charset", "libutil-charset.a"},
-		// depth-4+ paths: last 3 components (drop leading part).
+
 		{"contrib/libs/cxxsupp/libcxxrt", "liblibs-cxxsupp-libcxxrt.a"},
 		{"library/cpp/getopt/small", "libcpp-getopt-small.a"},
 		{"devtools/ymake/diag/common_display", "libymake-diag-common_display.a"},
@@ -146,9 +121,6 @@ func TestArchiveName(t *testing.T) {
 	}
 }
 
-// TestArchiveName_AllReferenceAR asserts that ArchiveName produces
-// the correct archive base name for all 38 unique module_dirs found
-// in the reference g.json.
 func TestArchiveName_AllReferenceAR(t *testing.T) {
 	cases := []struct {
 		moduleDir string
@@ -203,11 +175,6 @@ func TestArchiveName_AllReferenceAR(t *testing.T) {
 	}
 }
 
-// TestEmitAR_TcmallocGlobal_ByteExact loads g.json, locates the
-// contrib/libs/tcmalloc/no_percpu_cache global AR node, and asserts
-// that EmitARGlobal produces a field-by-field match.
-// TestEmitAR_PeerArchives_NotInCmdArgs verifies that peer archive
-// paths do NOT appear in cmd_args.
 func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 	e := NewBufferedEmitter()
 
@@ -258,8 +225,6 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 	}
 }
 
-// TestEmitAR_PeerArchives_InDepRefs verifies that peer archive
-// NodeRefs are included in the node's DepRefs.
 func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 	e := NewBufferedEmitter()
 
@@ -297,9 +262,6 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 	}
 }
 
-// TestEmitAR_InputsLeadWithObjPaths verifies that EmitAR's inputs lead with
-// the .o paths in caller (declaration) order. The emitter does not sort —
-// node-input order is normalized away by the gate.
 func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 	e := NewBufferedEmitter()
 
@@ -333,7 +295,6 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 
 	inputObjs := vfsStrings(inputs[:3])
 
-	// Inputs lead with objPaths in declaration order (z, m, a), not sorted.
 	wantInputObjs := []string{z.String(), m.String(), a.String()}
 
 	if !reflect.DeepEqual(inputObjs, wantInputObjs) {
@@ -341,9 +302,6 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 	}
 }
 
-// TestEmitAR_CmdArgsPreservesDeclarationOrder verifies that EmitAR
-// preserves the caller-supplied (SRCS declaration) order in
-// cmd_args[10:], not sorted.
 func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 	e := NewBufferedEmitter()
 

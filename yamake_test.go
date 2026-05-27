@@ -8,11 +8,6 @@ import (
 	"testing"
 )
 
-// archiverYaMake is the verbatim content of tools/archiver/ya.make from the
-// upstream ya checkout, inlined so the test does not depend on that path
-// existing on disk. See TestParseArchiverYaMakeOnDisk for the optional
-// disk-backed smoke test that pins this inlined copy against the real file
-// when available.
 const archiverYaMake = `PROGRAM()
 
 PEERDIR(
@@ -30,8 +25,6 @@ SET(IDE_FOLDER "_Builders")
 END()
 `
 
-// libraryArchiveYaMake mirrors library/cpp/archive/ya.make from the
-// upstream ya checkout, inlined for the same reason as archiverYaMake.
 const libraryArchiveYaMake = `LIBRARY()
 
 SRCS(
@@ -58,7 +51,6 @@ func TestParseArchiverYaMake(t *testing.T) {
 		t.Fatalf("len(Stmts) = %d, want %d (stmts=%#v)", got, want, mf.Stmts)
 	}
 
-	// 1: PROGRAM()
 	if m, ok := mf.Stmts[0].(*ModuleStmt); !ok {
 		t.Fatalf("Stmts[0] = %T, want *ModuleStmt", mf.Stmts[0])
 	} else {
@@ -73,7 +65,6 @@ func TestParseArchiverYaMake(t *testing.T) {
 		}
 	}
 
-	// 2: PEERDIR(library/cpp/archive library/cpp/digest/md5 library/cpp/getopt/small)
 	if p, ok := mf.Stmts[1].(*PeerdirStmt); !ok {
 		t.Fatalf("Stmts[1] = %T, want *PeerdirStmt", mf.Stmts[1])
 	} else {
@@ -83,7 +74,6 @@ func TestParseArchiverYaMake(t *testing.T) {
 		}
 	}
 
-	// 3: SRCS(main.cpp)
 	if s, ok := mf.Stmts[2].(*SrcsStmt); !ok {
 		t.Fatalf("Stmts[2] = %T, want *SrcsStmt", mf.Stmts[2])
 	} else {
@@ -93,7 +83,6 @@ func TestParseArchiverYaMake(t *testing.T) {
 		}
 	}
 
-	// 4: SET(IDE_FOLDER "_Builders")
 	if s, ok := mf.Stmts[3].(*SetStmt); !ok {
 		t.Fatalf("Stmts[3] = %T, want *SetStmt", mf.Stmts[3])
 	} else {
@@ -105,7 +94,6 @@ func TestParseArchiverYaMake(t *testing.T) {
 		}
 	}
 
-	// 5: END()
 	if _, ok := mf.Stmts[4].(*EndStmt); !ok {
 		t.Fatalf("Stmts[4] = %T, want *EndStmt", mf.Stmts[4])
 	}
@@ -171,7 +159,7 @@ func TestCommentHandling(t *testing.T) {
 	if m.Name != "PROGRAM" {
 		t.Errorf("ModuleStmt.Name = %q, want %q", m.Name, "PROGRAM")
 	}
-	// PROGRAM is on line 2; ensure line tracking advanced past the comment.
+
 	if m.Line != 2 {
 		t.Errorf("PROGRAM.Line = %d, want 2", m.Line)
 	}
@@ -234,8 +222,8 @@ func TestErrorCases(t *testing.T) {
 	cases := []struct {
 		name        string
 		src         string
-		wantSubstr  string // substring expected in the error message
-		wantNonZero bool   // line should be > 0
+		wantSubstr  string
+		wantNonZero bool
 	}{
 		{"unterminated string", `"hello`, "unterminated string", true},
 		{"unterminated macro", `PROGRAM(`, "unterminated macro", true},
@@ -282,11 +270,6 @@ func TestSetAllowsEmptyValue(t *testing.T) {
 	}
 }
 
-// TestLineEndings (D02) pins that LF, CRLF, and lone-CR sources all
-// produce identical line numbers for tokens. Regression test for the
-// earlier bug where '\r' was treated as plain whitespace and never
-// bumped the line counter, so CRLF sources reported every token on
-// line 1.
 func TestLineEndings(t *testing.T) {
 	cases := []struct {
 		name string
@@ -332,9 +315,6 @@ func TestLineEndings(t *testing.T) {
 	}
 }
 
-// TestStringRejectsNewline (D03) pins that an unterminated string
-// containing a literal newline returns a *ParseError pinned at the
-// opening quote, not silently consumed across lines.
 func TestStringRejectsNewline(t *testing.T) {
 	cases := []struct {
 		name string
@@ -357,8 +337,7 @@ func TestStringRejectsNewline(t *testing.T) {
 			if !strings.Contains(pe.Message, "unterminated string") {
 				t.Errorf("ParseError.Message = %q, want substring %q", pe.Message, "unterminated string")
 			}
-			// The error must be pinned at the opening quote on line 1,
-			// not at the closing-quote-that-never-arrived on later lines.
+
 			if pe.Line != 1 {
 				t.Errorf("ParseError.Line = %d, want 1 (the opening-quote line)", pe.Line)
 			}
@@ -366,9 +345,6 @@ func TestStringRejectsNewline(t *testing.T) {
 	}
 }
 
-// TestLowercaseAndMixedCaseMacro (D04) pins that lowercase- or
-// mixed-case-named macros parse as UnknownStmt rather than erroring at
-// the lexer level. Genuinely-broken input (e.g. "@@@()") still errors.
 func TestLowercaseAndMixedCaseMacro(t *testing.T) {
 	t.Run("lowercase", func(t *testing.T) {
 		mf, err := Parse(testParserFS, "test.input", []byte("lowercase_macro()\n"))
@@ -414,14 +390,12 @@ func TestLowercaseAndMixedCaseMacro(t *testing.T) {
 	})
 }
 
-// TestIsWordByteBoundary (D05) probes the accepted/rejected word-byte
-// set so future relaxations are forced through the test gate.
 func TestIsWordByteBoundary(t *testing.T) {
 	accepted := []byte{
 		'a', 'z', 'A', 'Z', '0', '9',
 		'_', '-', '.', '/', '+', ':', '=', '*', '?', '$', '%', '~', ',', '!',
-		'{', '}', // kept for ${VAR} interpolation
-		'#', // word byte mid-word; skipTrivia gates leading '#'
+		'{', '}',
+		'#',
 	}
 	rejected := []byte{
 		' ', '\t', '\n', '\r',
@@ -441,9 +415,6 @@ func TestIsWordByteBoundary(t *testing.T) {
 	}
 }
 
-// TestMidWordHashIsLiteral (D06) pins that a '#' which appears
-// mid-word is part of the word, not the start of a comment that
-// swallows the rest of the line up to (and past) the closing ')'.
 func TestMidWordHashIsLiteral(t *testing.T) {
 	src := []byte("PEERDIR(a/b#x  # this IS a comment\n)\n")
 	mf, err := Parse(testParserFS, "test.input", src)
@@ -463,10 +434,6 @@ func TestMidWordHashIsLiteral(t *testing.T) {
 	}
 }
 
-// TestStringHasNoEscapeProcessing (D08) pins the documented behavior
-// that string bodies are raw — backslash-X is two literal bytes, not
-// an escape sequence. If you ever want to change this, update the
-// comment in readString and update this test together.
 func TestStringHasNoEscapeProcessing(t *testing.T) {
 	src := []byte(`SET(N "ab\X")`)
 	mf, err := Parse(testParserFS, "test.input", src)
@@ -489,9 +456,6 @@ func TestStringHasNoEscapeProcessing(t *testing.T) {
 	}
 }
 
-// TestParseIfElseEndif (PR-13) pins the simple two-arm case:
-// `IF (FOO) ... ELSE ... ENDIF` produces a single *IfStmt with both
-// THEN and ELSE bodies populated.
 func TestParseIfElseEndif(t *testing.T) {
 	src := []byte(`IF (FOO)
     SRCS(then.cpp)
@@ -543,10 +507,6 @@ ENDIF()
 	}
 }
 
-// TestParseIfElseifEndif (PR-13) pins the chained-ELSEIF case:
-// `IF (A) ... ELSEIF (B) ... ELSE ... ENDIF` produces an outer IfStmt
-// whose Else body is a single nested IfStmt holding the ELSEIF cond
-// and ELSE body. Mirrors C's `else if` chain.
 func TestParseIfElseifEndif(t *testing.T) {
 	src := []byte(`IF (A)
     SRCS(a.cpp)
@@ -597,11 +557,6 @@ ENDIF()
 	}
 }
 
-// TestParseInclude_RelativePath (PR-13) pins INCLUDE's inline-expand
-// behavior: a parent ya.make with `INCLUDE(sub.inc)` and a sibling
-// `sub.inc` containing `SRCS(x.cpp)` parses into a Stmts slice that
-// CONTAINS the SrcsStmt and does NOT contain an IncludeStmt
-// (Parse/ParseFile drop the marker).
 func TestParseInclude_RelativePath(t *testing.T) {
 	dir := t.TempDir()
 
@@ -640,7 +595,6 @@ func TestParseInclude_RelativePath(t *testing.T) {
 	}
 }
 
-// TestParseJoinSrcs pins `JOIN_SRCS(name srcs...)` parsing.
 func TestParseJoinSrcs(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("JOIN_SRCS(allfoo a.cpp b.cpp)\n"))
 	if err != nil {
@@ -661,8 +615,6 @@ func TestParseJoinSrcs(t *testing.T) {
 	}
 }
 
-// TestParseJoinSrcs_RejectsEmpty pins that JOIN_SRCS with zero args
-// throws — at minimum the output name is required.
 func TestParseJoinSrcs_RejectsEmpty(t *testing.T) {
 	_, err := Parse(testParserFS, "test.input", []byte("JOIN_SRCS()\n"))
 	if err == nil {
@@ -677,8 +629,6 @@ func TestParseJoinSrcs_RejectsEmpty(t *testing.T) {
 	}
 }
 
-// TestParseAddIncl_AllGlobal pins ADDINCL where every path is prefixed
-// with GLOBAL (e.g. ADDINCL(GLOBAL include1 GLOBAL include2)).
 func TestParseAddIncl_AllGlobal(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("ADDINCL(GLOBAL include1 GLOBAL include2)\n"))
 	if err != nil {
@@ -703,7 +653,6 @@ func TestParseAddIncl_AllGlobal(t *testing.T) {
 	}
 }
 
-// TestParseAddIncl_NoGlobal pins ADDINCL without any GLOBAL prefix.
 func TestParseAddIncl_NoGlobal(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("ADDINCL(include1)\n"))
 	if err != nil {
@@ -724,17 +673,6 @@ func TestParseAddIncl_NoGlobal(t *testing.T) {
 	}
 }
 
-// TestParseAddIncl_Mixed pins the per-path GLOBAL split (PR-31 D13):
-// a single ADDINCL call may carry both GLOBAL and module-own paths.
-// The libcxx ya.make pattern:
-//
-//	ADDINCL(
-//	    GLOBAL contrib/libs/cxxsupp/libcxx/include
-//	    contrib/libs/cxxsupp/libcxx/src
-//	)
-//
-// Only the path immediately following the GLOBAL keyword is global;
-// the remaining paths are module-own and must NOT propagate to peers.
 func TestParseAddIncl_Mixed(t *testing.T) {
 	src := "ADDINCL(\n    GLOBAL libcxx/include\n    libcxx/src\n)\n"
 	mf, err := Parse(testParserFS, "test.input", []byte(src))
@@ -761,10 +699,6 @@ func TestParseAddIncl_Mixed(t *testing.T) {
 	}
 }
 
-// TestParseAddIncl_ForKindDropped (PR-M3-F-2) pins that a bare
-// `FOR <kind>` pair in ADDINCL is dropped entirely. The canonical
-// case is ADDINCL(FOR proto path) which must not emit -I.../FOR
-// or -I.../proto; only -I.../path is wanted.
 func TestParseAddIncl_ForKindDropped(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("ADDINCL(FOR proto contrib/libs/protobuf/src)\n"))
 	if err != nil {
@@ -782,10 +716,6 @@ func TestParseAddIncl_ForKindDropped(t *testing.T) {
 	}
 }
 
-// TestParseAddIncl_GlobalForKindDropped (PR-M3-F-2) pins that
-// GLOBAL FOR <kind> <path> correctly drops the FOR <kind> pair
-// and assigns <path> to GlobalPaths. Upstream pattern from
-// contrib/libs/protobuf/ya.make: ADDINCL(GLOBAL FOR proto path).
 func TestParseAddIncl_GlobalForKindDropped(t *testing.T) {
 	src := "ADDINCL(\n    GLOBAL contrib/libs/protobuf/src\n    GLOBAL FOR\n    proto\n    contrib/libs/protobuf/src\n)\n"
 	mf, err := Parse(testParserFS, "test.input", []byte(src))
@@ -796,7 +726,7 @@ func TestParseAddIncl_GlobalForKindDropped(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
-	// Both GLOBAL paths should be contrib/libs/protobuf/src (deduplicated later by gen.go).
+
 	if !equalStrings(a.GlobalPaths, []string{"contrib/libs/protobuf/src", "contrib/libs/protobuf/src"}) {
 		t.Errorf("GlobalPaths = %v, want [contrib/libs/protobuf/src contrib/libs/protobuf/src]", a.GlobalPaths)
 	}
@@ -805,10 +735,6 @@ func TestParseAddIncl_GlobalForKindDropped(t *testing.T) {
 	}
 }
 
-// TestParseAddIncl_ForAsmRouted (T11) pins that ADDINCL(FOR asm <path>)
-// routes <path> to AsmPaths (assembler-only) and keeps it out of the
-// own/global/all include buckets that feed CC -I args. Upstream pattern:
-// yt/yt/core/misc/isa_crc64/ya.make ADDINCL(FOR asm .../isa_crc64/include).
 func TestParseAddIncl_ForAsmRouted(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input",
 		[]byte("ADDINCL(FOR asm yt/yt/core/misc/isa_crc64/include)\n"))
@@ -833,9 +759,6 @@ func TestParseAddIncl_ForAsmRouted(t *testing.T) {
 	}
 }
 
-// TestParseAddIncl_GlobalForAsmRouted (T11) mirrors the bare-FOR case for
-// the GLOBAL FOR asm shape (no upstream user today; pinned for symmetry):
-// <path> routes to AsmPaths, GlobalPaths/AllPaths stay empty.
 func TestParseAddIncl_GlobalForAsmRouted(t *testing.T) {
 	src := "ADDINCL(\n    GLOBAL FOR\n    asm\n    yt/yt/core/misc/isa_crc64/include\n)\n"
 	mf, err := Parse(testParserFS, "test.input", []byte(src))
@@ -857,9 +780,6 @@ func TestParseAddIncl_GlobalForAsmRouted(t *testing.T) {
 	}
 }
 
-// TestParseCFlags_BackslashQuoteUnescaped (PR-M3-F-2) pins that
-// backslash-quoted double-quotes in CFLAGS tokens are unescaped
-// at the parse boundary. Source: -DFOO=\"bar\" → stored as -DFOO="bar".
 func TestParseCFlags_BackslashQuoteUnescaped(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("CFLAGS(-DENGINESDIR=\\\"/usr/local/lib/engines-1.1\\\")\n"))
 	if err != nil {
@@ -875,10 +795,6 @@ func TestParseCFlags_BackslashQuoteUnescaped(t *testing.T) {
 	}
 }
 
-// TestParseCFlags_Global pins CFLAGS with the GLOBAL modifier.
-// PR-32 D04: per-path GLOBAL semantics — flag immediately following
-// the literal `GLOBAL` keyword goes to GlobalFlags; later flags
-// without their own GLOBAL prefix go to OwnFlags.
 func TestParseCFlags_Global(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("CFLAGS(GLOBAL -O2 -Wall)\n"))
 	if err != nil {
@@ -896,7 +812,6 @@ func TestParseCFlags_Global(t *testing.T) {
 	}
 }
 
-// TestParseCFlags_NoModifier pins CFLAGS without the GLOBAL prefix.
 func TestParseCFlags_NoModifier(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("CFLAGS(-O2)\n"))
 	if err != nil {
@@ -914,10 +829,6 @@ func TestParseCFlags_NoModifier(t *testing.T) {
 	}
 }
 
-// TestParseCFlags_PerPathGlobal pins per-path GLOBAL semantics: each
-// flag preceded immediately by `GLOBAL` goes to GlobalFlags; tokens
-// without `GLOBAL` go to OwnFlags. Mirror of TestParseAddIncl_PerPath
-// (PR-31 D13).
 func TestParseCFlags_PerPathGlobal(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("CFLAGS(GLOBAL -DA -DB GLOBAL -DC)\n"))
 	if err != nil {
@@ -935,8 +846,6 @@ func TestParseCFlags_PerPathGlobal(t *testing.T) {
 	}
 }
 
-// TestParseCXXFlags_Global pins CXXFLAGS dispatch to *CXXFlagsStmt
-// with per-path GLOBAL semantics (PR-32 D05).
 func TestParseCXXFlags_Global(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("CXXFLAGS(GLOBAL -nostdinc++)\n"))
 	if err != nil {
@@ -954,8 +863,6 @@ func TestParseCXXFlags_Global(t *testing.T) {
 	}
 }
 
-// TestParseCONLYFlags_Own pins CONLYFLAGS dispatch to *CONLYFlagsStmt
-// (PR-32 D06).
 func TestParseCONLYFlags_Own(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("CONLYFLAGS(-Wno-pointer-sign)\n"))
 	if err != nil {
@@ -973,7 +880,6 @@ func TestParseCONLYFlags_Own(t *testing.T) {
 	}
 }
 
-// TestParseLDFlags pins LDFLAGS — no modifier, just a flat flag list.
 func TestParseLDFlags(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("LDFLAGS(-lpthread -lm)\n"))
 	if err != nil {
@@ -988,7 +894,6 @@ func TestParseLDFlags(t *testing.T) {
 	}
 }
 
-// TestParseSrcDir pins SRCDIR(dir) — single-arg, exposes the path.
 func TestParseSrcDir(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("SRCDIR(./xx)\n"))
 	if err != nil {
@@ -1003,8 +908,6 @@ func TestParseSrcDir(t *testing.T) {
 	}
 }
 
-// TestParseGlobalSrcs pins GLOBAL_SRCS — flat source list, no
-// modifier.
 func TestParseGlobalSrcs(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("GLOBAL_SRCS(a.cpp b.cpp c.cpp)\n"))
 	if err != nil {
@@ -1019,8 +922,6 @@ func TestParseGlobalSrcs(t *testing.T) {
 	}
 }
 
-// TestParseInclude_RejectsSelfCycle (PR-13-D01) pins that a self-referential
-// INCLUDE(a.inc) is caught as a cycle before the goroutine stack overflows.
 func TestParseInclude_RejectsSelfCycle(t *testing.T) {
 	tmp := t.TempDir()
 	Throw(os.WriteFile(filepath.Join(tmp, "a.inc"), []byte("INCLUDE(a.inc)\n"), 0644))
@@ -1036,9 +937,6 @@ func TestParseInclude_RejectsSelfCycle(t *testing.T) {
 	}
 }
 
-// TestParseInclude_RejectsTransitiveCycle (PR-13-D01) pins that a two-hop
-// cycle (a.inc → b.inc → a.inc) is also caught before the goroutine stack
-// overflows.
 func TestParseInclude_RejectsTransitiveCycle(t *testing.T) {
 	tmp := t.TempDir()
 	Throw(os.WriteFile(filepath.Join(tmp, "a.inc"), []byte("INCLUDE(b.inc)\n"), 0644))
@@ -1055,10 +953,6 @@ func TestParseInclude_RejectsTransitiveCycle(t *testing.T) {
 	}
 }
 
-// TestParseIf_StringEquality (PR-27) pins the parser handling of
-// `IF (X == "Y")` — the libcxx pattern. The condition expression
-// is an *ExprEq with an *ExprIdent left and an *ExprString right;
-// both arms parse cleanly and the THEN body's SRCS is preserved.
 func TestParseIf_StringEquality(t *testing.T) {
 	src := []byte(`IF (CXX_RT == "libcxxrt")
     SRCS(rt.c)
@@ -1096,8 +990,6 @@ ENDIF()
 	}
 }
 
-// TestParseIf_NumericLessThan (PR-27) pins the parser handling of
-// `IF (X < N)` — the libc_compat ANDROID_API pattern.
 func TestParseIf_NumericLessThan(t *testing.T) {
 	src := []byte(`IF (ANDROID_API < 28)
     SRCS(android.c)
@@ -1135,8 +1027,6 @@ ENDIF()
 	}
 }
 
-// TestParseIf_NotEqualDesugars (PR-27) pins the desugar of `X != Y`
-// to `NOT (X == Y)` at parse time — the libc_compat OS_SDK pattern.
 func TestParseIf_NotEqualDesugars(t *testing.T) {
 	src := []byte(`IF (OS_SDK != "ubuntu-20")
     SRCS(other_sdk.c)
@@ -1176,10 +1066,6 @@ ENDIF()
 	}
 }
 
-// TestParseIf_ChainedComparisonRejected (PR-27) pins the
-// non-associativity of comparators: `A == B == C` must be a syntax
-// error, not silently associated. The error pinpoints the second
-// `==` so the user knows which one is the chain offender.
 func TestParseIf_ChainedComparisonRejected(t *testing.T) {
 	_, err := Parse(testParserFS, "test.input", []byte("IF (A == B == C)\nENDIF()\n"))
 
@@ -1192,11 +1078,6 @@ func TestParseIf_ChainedComparisonRejected(t *testing.T) {
 	}
 }
 
-// TestParseIf_ComparisonInAndOr (PR-27) pins that comparisons bind
-// tighter than AND / OR — the libcxxrt pattern
-// `IF (SANITIZER_TYPE == undefined OR FUZZING)` must parse as
-// `(SANITIZER_TYPE == undefined) OR FUZZING`, not as `SANITIZER_TYPE
-// == (undefined OR FUZZING)`.
 func TestParseIf_ComparisonInAndOr(t *testing.T) {
 	src := []byte(`IF (SANITIZER_TYPE == undefined OR FUZZING)
     SRCS(x.c)
@@ -1226,11 +1107,6 @@ ENDIF()
 	}
 }
 
-// TestParseIf_VersionLiteralStillWord (PR-27) pins the lexer's
-// readNumberOrWord regression check: `VERSION(2025-06-20)` is a
-// macro arg that begins with a digit but contains non-digit word
-// bytes; it must still lex as a single tokWord, not be split into
-// tokInt + tokWord by the new digit-leading path.
 func TestParseIf_VersionLiteralStillWord(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("VERSION(2025-06-20)\n"))
 
@@ -1253,9 +1129,6 @@ func TestParseIf_VersionLiteralStillWord(t *testing.T) {
 	}
 }
 
-// TestParseIf_PureIntInMacroArg (PR-27) pins that a pure-digit
-// macro arg lexes as tokInt and is preserved verbatim when surfaced
-// as a string in UnknownStmt.Args (e.g. `IDE_FOLDER(42)`).
 func TestParseIf_PureIntInMacroArg(t *testing.T) {
 	mf, err := Parse(testParserFS, "test.input", []byte("IDE_FOLDER(42)\n"))
 
@@ -1270,7 +1143,6 @@ func TestParseIf_PureIntInMacroArg(t *testing.T) {
 	}
 }
 
-// equalStrings is a tiny helper to keep test output readable.
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -1283,7 +1155,6 @@ func equalStrings(a, b []string) bool {
 	return true
 }
 
-// equalInts is a tiny helper for integer-slice comparison in tests.
 func equalInts(a, b []int) bool {
 	if len(a) != len(b) {
 		return false

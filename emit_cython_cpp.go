@@ -141,10 +141,7 @@ func cythonGeneratedOutputInputs(ctx *genCtx, instance ModuleInstance, src VFS, 
 		v := Source(rel)
 		toolInputs = append(toolInputs, v)
 		emitsIncludes = append(emitsIncludes, v)
-		// The bundled utility code is inlined into the generated source, so
-		// its own #include closure (numpy via UFuncs_C.c, python internals
-		// via Coroutine.c, libcxx/musl via ModuleSetupCode.c) belongs in the
-		// CY node inputs. Scan each through the universal include scanner.
+
 		cl := walkClosure(ctx, instance, v, scanIn)
 		toolInputs = append(toolInputs, cl...)
 		emitsIncludes = append(emitsIncludes, cl...)
@@ -166,10 +163,6 @@ func cythonUsesPy23Variant(modName string) bool {
 	return false
 }
 
-// cythonImplicitFallthrough reports whether the cython-generated cpp compile
-// should carry -Wno-implicit-fallthrough, mirroring upstream
-// _LANG_CFLAGS_VALUE_NEW (ext .pyx / .pyx.py{2,3} / .py.py{2,3}). Plain
-// CYTHONIZE_PY .py in a PY3_LIBRARY (-> <src>.py.cpp) is excluded.
 func cythonImplicitFallthrough(stmt *CythonStmt, py23Variant bool) bool {
 	return !stmt.CMode && (hasSuffix(stmt.Src, ".pyx") || py23Variant)
 }
@@ -226,12 +219,7 @@ func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, py23 bool) []VF
 	out := make([]VFS, 0, len(addIncl)+len(cythonAddIncl)+3+len(cythonNumpyAddIncl))
 	out = append(out, addIncl...)
 	out = append(out, cythonAddIncl...)
-	// PY23_LIBRARY runs its cython step with $PYTHON3=no (the .py3.cpp
-	// suffix is cosmetic), so upstream `_CYTHON_SYS_INCLUDES` resolves to
-	// the cython_py2 tree; the rendered -I flag stays cython. The py2 tree
-	// precedes cython so cimports of files present in both (libc/string.pxd,
-	// libcpp/string.pxd, ...) resolve to cython_py2, while cython-only files
-	// fall through to cython. Pure PY3_LIBRARY keeps $PYTHON3=yes → cython.
+
 	if py23 {
 		out = append(out, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes"))
 	}

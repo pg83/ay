@@ -2,8 +2,6 @@ package main
 
 import "strings"
 
-// finalizeDumpGraph removes ay-local dump-only scaffolding before Finalize
-// hashes nodes, so the kept graph gets consistent uid/self_uid values.
 func finalizeDumpGraph(e *BufferedEmitter) *Graph {
 	if e == nil {
 		return &Graph{
@@ -17,9 +15,6 @@ func finalizeDumpGraph(e *BufferedEmitter) *Graph {
 		return Finalize(e)
 	}
 
-	// Keep Finalize's validation contract on the -G path: bogus refs,
-	// cycles, and pre-populated public dep fields must still throw
-	// against the original buffered graph before any prune/remap occurs.
 	order := finalizeOrder(e)
 
 	incoming := dumpGraphIncomingRefs(e.nodes)

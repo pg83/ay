@@ -6,21 +6,6 @@ import (
 	"testing"
 )
 
-// node_test.go — invariants on the on-disk JSON shape of Node.
-//
-// These tests pin down the contract that PR-04 (the JSON serializer) and
-// PR-12 (the comparator) will rely on:
-//   - Field order in the marshalled object matches the alphabetical key
-//     order observed in /home/pg/monorepo/yatool/sg.json.
-//   - foreign_deps is omitted when zero (per D5). host_platform is no
-//     longer a struct field — gjson_write derives it from Tags at
-//     serialization time and stdlib json.Marshal does not emit it.
-//   - All other fields are present even when empty (no omitempty), so
-//     empty arrays/maps render as []/{}.
-
-// expectedKeyOrder is the sequence of keys observed in the reference
-// sg.json (alphabetical, including the foreign_deps omitempty field).
-// Tests that supply non-zero values for foreign_deps expect this full order.
 var expectedKeyOrder = []string{
 	"cmds",
 	"deps",
@@ -39,8 +24,6 @@ var expectedKeyOrder = []string{
 	"uid",
 }
 
-// expectedKeyOrderMinimal is what we expect when foreign_deps is zero
-// (i.e. the typical "small" node shape).
 var expectedKeyOrderMinimal = []string{
 	"cmds",
 	"deps",
@@ -82,7 +65,7 @@ func extractKeyOrder(t *testing.T, raw []byte) []string {
 			t.Fatalf("expected key string, got %v", tok)
 		}
 		keys = append(keys, k)
-		// Skip the value (which may itself be an object/array).
+
 		var v interface{}
 		if err := dec.Decode(&v); err != nil {
 			t.Fatalf("skip value for %s: %v", k, err)
@@ -124,8 +107,7 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 }
 
 func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
-	// ForeignDeps=nil (zero) must drop the corresponding key.
-	// Everything else must remain present even with empty values.
+
 	n := &Node{
 		Cmds:             []Cmd{},
 		Deps:             []string{},
@@ -154,7 +136,7 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 			t.Errorf("key[%d] = %q, want %q (full order: %v)", i, keys[i], k, keys)
 		}
 	}
-	// Spot-check that empty arrays/maps render as []/{}.
+
 	s := string(raw)
 	for _, frag := range []string{`"cmds":[]`, `"deps":[]`, `"env":{}`, `"inputs":[]`, `"kv":{}`, `"outputs":[]`, `"requirements":{}`, `"stats_uid":""`, `"tags":[]`, `"target_properties":{}`} {
 		if !strings.Contains(s, frag) {

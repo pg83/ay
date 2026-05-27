@@ -7,17 +7,6 @@ import (
 	"strings"
 )
 
-// parsers.go — raw include-directive scanners, selected by file
-// extension before any resolution/search-path/sysincl logic runs.
-//
-// This mirrors the first half of upstream ymake's parser manager:
-// choose a parser by ext, scan raw directives, then feed the result into
-// the separate include resolver.
-
-// yasmIncludeRe matches NASM/yasm `%include` directives in `.asm` /
-// `.asi` sources. Token is case-insensitive (`%include` and `%INCLUDE`
-// both occur in asmlib). Both quoted and angle-bracket forms accepted;
-// only quoted appears in practice. Single capture group: target.
 var yasmIncludeRe = regexp.MustCompile(`(?i)^\s*%\s*include\s*[<"]([^>"]+)[>"]`)
 
 var swigIncludeRe = regexp.MustCompile(`^%(include|import|insert\s*\([^\)]*\))\s*([<"].*?[">])`)
@@ -27,13 +16,6 @@ var cythonIncludeRe = regexp.MustCompile(`^\s*include\s+["']([^"']+)["']`)
 var cythonExternFromRe = regexp.MustCompile(`^\s*cdef\s+extern\s+from\s+(<[^>]+>|"[^"]+"|'[^']+')`)
 var flatbuffersIncludeRe = regexp.MustCompile(`^\s*include\s+"([^"]+)"\s*;`)
 
-// macroIndirectIncludes augments the C-like raw scanner for sources
-// that use macro-indirect `#include MACRO_NAME` forms. The text-blind
-// scanner cannot expand macros, so e.g. `#include OPENSSL_UNISTD`
-// parses to nothing. Each entry lists the include targets the source's
-// macro-indirect lines expand to on a linux-musl target — what the
-// upstream scanner emits. Resolution flows through the normal
-// resolve()/sysincl pipeline.
 type macroIndirectInclude struct {
 	target string
 	kind   includeKind
@@ -42,13 +24,7 @@ type macroIndirectInclude struct {
 var macroIndirectIncludes = map[string][]macroIndirectInclude{
 	"contrib/libs/openssl/crypto/rand/rand_egd.c": {{target: "unistd.h", kind: includeSystem}},
 	"contrib/libs/openssl/crypto/uid.c":           {{target: "unistd.h", kind: includeSystem}},
-	// pugixml.hpp's header-only-mode trailer:
-	//   #if defined(PUGIXML_HEADER_ONLY) && !defined(PUGIXML_SOURCE)
-	//   #    define PUGIXML_SOURCE "pugixml.cpp"
-	//   #    include PUGIXML_SOURCE
-	// The macro-indirect `#include PUGIXML_SOURCE` expands to a quoted
-	// include of pugixml.cpp, which then pulls in the standard <float.h>
-	// + <setjmp.h> XPath dependencies — both reach musl-self on linux.
+
 	"contrib/libs/pugixml/pugixml.hpp": {{target: "pugixml.cpp", kind: includeQuoted}},
 }
 
@@ -85,9 +61,6 @@ func newIncludeDirectiveParserRegistry() includeDirectiveParserRegistry {
 		byExt:         make(map[string]includeDirectiveParser, 48),
 	}
 
-	// Keep the explicit ext table close to upstream parser_manager.cpp,
-	// but preserve current ay behaviour by falling back to the
-	// C-like parser for any not-yet-modelled extension.
 	r.register(cLike,
 		".cpp", ".cc", ".cxx", ".c", ".C", ".auxcpp",
 		".h", ".hh", ".hpp", ".cuh", ".H", ".hxx", ".xh", ".ipp", ".ixx", ".inl",
@@ -122,8 +95,7 @@ func (r includeDirectiveParserRegistry) parserFor(rel string) includeDirectivePa
 }
 
 func directiveParserExt(rel string) string {
-	// Match upstream parser-manager behaviour: `foo.ext.in` is scanned
-	// with the parser for `foo.ext`, not the literal `.in` suffix.
+
 	if strings.HasSuffix(rel, ".in") {
 		rel = strings.TrimSuffix(rel, ".in")
 	}
@@ -243,11 +215,6 @@ func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet
 
 		local = append(local, includeDirective{kind: kind, target: internString(target)})
 
-		// HCPP bucket carries the codegen schema: protoc-generated
-		// outputs `#include` the .pb.h / .ev.pb.h of each import.
-		// Paths are import-relative — the walker applies the codegen
-		// output-root prefix and the runtime-base prefix for the
-		// descriptor.proto special case.
 		switch {
 		case strings.HasSuffix(target, ".ev"):
 			hcpp = append(hcpp, includeDirective{kind: kind, target: internString(strings.TrimSuffix(target, ".ev") + ".ev.pb.h")})
@@ -357,26 +324,11 @@ func (emptyIncludeDirectiveParser) Parse(_ string, _ []byte) parsedIncludeSet {
 	return nil
 }
 
-// parseCIncludes extracts C/C++ `#include` / `#import` directives from `data`,
-// byte-for-byte matching upstream ymake's line-oriented ScanCppIncludes across
-// the whole ydb tree. It jumps to each '#' with a single IndexByte (most bytes
-// are not directives), then accepts it only when it is the first non-ws,
-// non-block-comment byte of its line (skipWSAndBlockComments(ls) == hi) AND is
-// not inside a multiline line-leading `/* */` block comment that opened earlier
-// (leadingBlockCoversHi). The target is read literally between the brackets, so
-// it excludes `\n` and `$` (macro-expanded `<$X>` and protoc templates like
-// `R"(#include "$path$")"` are dropped) but keeps embedded `//`; a trailing
-// `// Y_IGNORE` suppresses the directive. `#include_next`/bare-macro
-// `#include FOO` fall through as a macro-form token, as upstream.
-//
-// No comment-strip buffer and no regex: the line-leading rule sidesteps '#'
-// inside strings/code, and the literal target read avoids mis-stripping '//'
-// in include paths — both of which a comment-stripping scan gets wrong.
 func parseCIncludes(data []byte) []includeDirective {
 	out := make([]includeDirective, 0, 8)
 	n := len(data)
 	p := 0
-	clean := 0 // last position confirmed to be OUTSIDE any block comment
+	clean := 0
 
 	for p < n {
 		rel := bytes.IndexByte(data[p:], '#')
@@ -391,19 +343,12 @@ func parseCIncludes(data []byte) []includeDirective {
 		}
 
 		if q0 := skipWSAndBlockComments(data, ls); q0 != hi {
-			// '#' is not the line's first real byte (it is in code/a string, or a
-			// leading block comment consumed past it). Resume past whatever the
-			// skip consumed — never inside it. Do NOT advance `clean`: ls may sit
-			// inside a multiline comment whose '/*' we have not yet seen.
+
 			p = nextLineStart(data, q0)
 
 			continue
 		}
 
-		// '#' is its line's first real byte. But a line-leading `/*` may have
-		// opened on an EARLIER line and still span hi (libcxx synopsis,
-		// simdjson's doc block). Scan [clean, hi) — clean is comment-clean and
-		// advances monotonically, so these gaps are disjoint (O(data) overall).
 		if end, covered := leadingBlockCoversHi(data, clean, hi); covered {
 			p, clean = end, end
 
@@ -414,16 +359,12 @@ func parseCIncludes(data []byte) []includeDirective {
 		if ok {
 			out = append(out, d)
 		}
-		p, clean = next, next // hi was outside any comment, so `next` is clean
+		p, clean = next, next
 	}
 
 	return out
 }
 
-// parseDirectiveInline parses the `#include`/`#import` directive at hashPos
-// (data[hashPos] == '#'), returning the directive (when matched), whether it
-// matched, and the resume position (start of the next line). Mirrors
-// parseCIncludes's per-directive grammar; interns the target from the slice.
 func parseDirectiveInline(data []byte, hashPos int) (includeDirective, bool, int) {
 	n := len(data)
 	q := skipWSAndBlockComments(data, hashPos+1)
@@ -486,17 +427,10 @@ func parseDirectiveInline(data []byte, hashPos int) (includeDirective, bool, int
 	return includeDirective{}, false, nextLineStart(data, q)
 }
 
-// isCWSByte reports the C "whitespace" bytes the directive grammar skips
-// (matching skipWSAndBlockComments; newline is a line boundary, not ws).
 func isCWSByte(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\v' || c == '\f' || c == '\r'
 }
 
-// leadingBlockCoversHi reports whether hi falls inside a `/* ... */` block
-// comment whose `/*` is the first non-ws byte of its line (the only comment
-// shape the old parser consumes across lines) and which opens within [from,
-// hi). Returns the comment's end so the caller resumes past it. A mid-line
-// `/*` is ignored — the old parser does not track those, so neither do we.
 func leadingBlockCoversHi(data []byte, from, hi int) (int, bool) {
 	for i := from; i < hi; {
 		rel := bytes.Index(data[i:hi], blockCommentOpen)
@@ -521,11 +455,11 @@ func leadingBlockCoversHi(data []byte, from, hi int) (int, bool) {
 
 		if lineLeading {
 			if end > hi {
-				return end, true // the comment spans hi
+				return end, true
 			}
-			i = end // line-leading comment that closed before hi; resume past it
+			i = end
 		} else {
-			i = open + 2 // mid-line '/*': not consumed by the old parser
+			i = open + 2
 		}
 	}
 
@@ -537,9 +471,6 @@ var (
 	blockCommentClose = []byte("*/")
 )
 
-// skipWSAndBlockComments advances past spaces/tabs/\v/\f/\r and `/* */`
-// block comments (which may span newlines), mirroring the Ragel `ws` rule.
-// Newlines outside a block comment are NOT whitespace and stop the scan.
 func skipWSAndBlockComments(data []byte, i int) int {
 	n := len(data)
 	for i < n {
@@ -567,8 +498,6 @@ func skipWSAndBlockComments(data []byte, i int) int {
 	return i
 }
 
-// nextLineStart returns the index just past the next '\n' at or after i, or
-// len(data) if none — the include scanner's "skip the rest of this line".
 func nextLineStart(data []byte, i int) int {
 	if i >= len(data) {
 		return len(data)
@@ -580,7 +509,6 @@ func nextLineStart(data []byte, i int) int {
 	return i + nl + 1
 }
 
-// bytesHasPrefixAt reports whether data[i:] begins with s.
 func bytesHasPrefixAt(data []byte, i int, s string) bool {
 	if i+len(s) > len(data) {
 		return false
@@ -593,9 +521,6 @@ func bytesHasPrefixAt(data []byte, i int, s string) bool {
 	return true
 }
 
-// hasYIgnoreComment reports whether the text at i (after optional ws/block
-// comments) is `// Y_IGNORE` — upstream's marker to drop the just-parsed
-// include (Ragel `ws "//" ' '* "Y_IGNORE"`).
 func hasYIgnoreComment(data []byte, i int) bool {
 	n := len(data)
 	i = skipWSAndBlockComments(data, i)
@@ -609,20 +534,11 @@ func hasYIgnoreComment(data []byte, i int) bool {
 	return bytesHasPrefixAt(data, i, "Y_IGNORE")
 }
 
-// parseYasmIncludes extracts NASM/yasm `%include` directives from
-// `data`. Token matches case-insensitively; yasm's `;` line comments
-// are not stripped (the anchor cannot fire from a comment line, and
-// yasm has no C-style block comments). String literals are preserved
-// verbatim — the directive's quoted form IS a string literal at lexer
-// level. Result uses includeDirective with next=false (no
-// `%include_next` exists in NASM).
 func parseYasmIncludes(data []byte) []includeDirective {
 	out := make([]includeDirective, 0, 4)
 
 	eachLine(data, func(line []byte) {
-		// Short-circuit lines without `%` before invoking the regex
-		// engine — most yasm source lines are instruction mnemonics
-		// or labels that never start with `%`.
+
 		if bytes.IndexByte(line, '%') < 0 {
 			return
 		}
@@ -633,8 +549,6 @@ func parseYasmIncludes(data []byte) []includeDirective {
 			return
 		}
 
-		// Discriminate kind by bracket character. Practice is always
-		// quoted; angle-bracket branch is kept for C-scanner parity.
 		kind := includeSystem
 
 		idx := indexOfAngleOrQuote(line)
@@ -642,8 +556,6 @@ func parseYasmIncludes(data []byte) []includeDirective {
 			kind = includeQuoted
 		}
 
-		// m[2:4] are the target capture's byte offsets (the regex has
-		// only one capture group; m[0:2] is the full match span).
 		target := string(line[m[2]:m[3]])
 
 		out = append(out, includeDirective{kind: kind, next: false, target: internString(target)})
@@ -767,9 +679,6 @@ func isParserIdentContinuation(s string, idx int) bool {
 	}
 }
 
-// eachLine invokes `fn` for every newline-terminated record in `data`,
-// passing a sub-slice (no per-line alloc). Trailing `\r` stripped.
-// The callback must not retain the slice past invocation.
 func eachLine(data []byte, fn func(line []byte)) {
 	start := 0
 
@@ -790,8 +699,6 @@ func eachLine(data []byte, fn func(line []byte)) {
 	}
 }
 
-// indexOfAngleOrQuote returns the index of the first `<` or `"` in `b`,
-// or -1 when neither is present.
 func indexOfAngleOrQuote(b []byte) int {
 	for i := 0; i < len(b); i++ {
 		c := b[i]
@@ -804,13 +711,6 @@ func indexOfAngleOrQuote(b []byte) int {
 	return -1
 }
 
-// stripComments blanks C/C++ comment bytes (spaces, newlines preserved)
-// so the include regex cannot match inside non-code spans. String and
-// char literals are walked but left intact — `#include "header.h"` is
-// itself a string literal at lexer level. Raw string bodies
-// (`R"delim(...)delim"`) are blanked to suppress protoc codegen
-// templates like `R"(#include "$path$")"`. Mutates `data` in place. No
-// trigraphs, no line-continuation splicing, no `%:include`.
 func stripComments(data []byte) []byte {
 	hasTrigger := false
 

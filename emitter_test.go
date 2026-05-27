@@ -8,11 +8,6 @@ import (
 	"testing"
 )
 
-// emitter_test.go — exercises BufferedEmitter + Finalize end-to-end.
-
-// build3NodeDAG constructs A -> {B, C}, B -> C. C is a leaf, B depends
-// on C, A depends on both B and C. Returns the emitter and the refs in
-// (A, B, C) order so callers can assert against any of them.
 func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 	e := NewBufferedEmitter()
 	c := e.Emit(&Node{
@@ -61,13 +56,6 @@ func nodeNameByKV(g *Graph, idx int) string {
 	return name
 }
 
-// finalizeExc is a small helper that runs Finalize inside Try and
-// returns (graph, exception). Used by tests that need to inspect a
-// finalize-time error message; tests that expect success can call
-// Finalize directly.
-//
-// Success-path tests should call Finalize(e) directly so an unexpected
-// panic surfaces as a test failure rather than being silently captured by Try.
 func finalizeExc(e *BufferedEmitter) (g *Graph, exc *Exception) {
 	exc = Try(func() {
 		g = Finalize(e)
@@ -77,11 +65,7 @@ func finalizeExc(e *BufferedEmitter) (g *Graph, exc *Exception) {
 }
 
 func TestFinalize_TopoOrder_LeavesFirst(t *testing.T) {
-	// PR-L4-C/06: graph[] is now DFS preorder from result[0], visiting
-	// children in their as-emitted DepRefs order (which for non-LD/AR nodes
-	// is alphabetically sorted by UID). For the 3-node DAG A->{B,C}, B->C
-	// the root A must appear first; the order of B and C depends on their
-	// UID sort order.
+
 	e, _, _, _ := build3NodeDAG()
 	g := Finalize(e)
 
@@ -89,12 +73,10 @@ func TestFinalize_TopoOrder_LeavesFirst(t *testing.T) {
 		t.Fatalf("expected 3 nodes, got %d", len(g.Graph))
 	}
 
-	// A (the result root) must be first in DFS preorder.
 	if nodeNameByKV(g, 0) != "A" {
 		t.Errorf("graph[0] = %q, want A (DFS root)", nodeNameByKV(g, 0))
 	}
 
-	// The remaining two positions must be B and C in some order.
 	remaining := map[string]bool{nodeNameByKV(g, 1): true, nodeNameByKV(g, 2): true}
 	if !remaining["B"] || !remaining["C"] {
 		t.Errorf("graph[1..2] = [%q, %q], want {B, C} in some order",
@@ -115,7 +97,6 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 		t.Errorf("Finalize output not byte-stable across runs.\nrun1: %s\nrun2: %s", raw1, raw2)
 	}
 
-	// And every UID is content-derived (length 22).
 	for i, n := range g1.Graph {
 		if len(n.UID) != 22 {
 			t.Errorf("graph[%d].UID len = %d, want 22 (got %q)", i, len(n.UID), n.UID)
@@ -136,8 +117,6 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 		}
 	}
 
-	// Result is a single UID matching A (the DFS root, at graph[0]).
-	// PR-L4-C/06: graph[] is DFS preorder from result[0], so A is first.
 	if len(g1.Result) != 1 {
 		t.Fatalf("expected 1 result, got %d (%v)", len(g1.Result), g1.Result)
 	}
@@ -148,8 +127,7 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 }
 
 func TestFinalize_DepsAreSortedAlphabetically(t *testing.T) {
-	// Build A with two children whose UIDs we don't know up-front.
-	// Whatever the UIDs are, A.Deps must come out sorted.
+
 	e := NewBufferedEmitter()
 	mkLeaf := func(name string) NodeRef {
 		return e.Emit(&Node{
@@ -165,8 +143,6 @@ func TestFinalize_DepsAreSortedAlphabetically(t *testing.T) {
 	y := mkLeaf("Y")
 	z := mkLeaf("Z")
 
-	// Emit child refs in a deliberately unsorted-by-UID order. After
-	// Finalize the published Deps slice must be alphabetical.
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
@@ -179,7 +155,6 @@ func TestFinalize_DepsAreSortedAlphabetically(t *testing.T) {
 	e.Result(a)
 	g := Finalize(e)
 
-	// Find A in the graph.
 	var aNode *Node
 	for _, n := range g.Graph {
 		if n.KV["name"] == "A" {
@@ -219,7 +194,7 @@ func TestFinalize_DedupesDuplicateDeps(t *testing.T) {
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
-		DepRefs:          []NodeRef{c, c, c}, // intentional duplicates
+		DepRefs:          []NodeRef{c, c, c},
 	})
 	e.Result(a)
 	g := Finalize(e)
@@ -241,8 +216,7 @@ func TestFinalize_DedupesDuplicateDeps(t *testing.T) {
 }
 
 func TestFinalize_CycleReturnsError(t *testing.T) {
-	// A <-> B cycle. We need to mutate after Emit to install the
-	// back-edge, because Emit returns the ref by value.
+
 	e := NewBufferedEmitter()
 	aNode := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
@@ -281,7 +255,7 @@ func TestFinalize_OutOfRangeRefReturnsError(t *testing.T) {
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
-		DepRefs:          []NodeRef{{id: 999}}, // bogus
+		DepRefs:          []NodeRef{{id: 999}},
 	})
 	e.Result(a)
 
@@ -292,7 +266,7 @@ func TestFinalize_OutOfRangeRefReturnsError(t *testing.T) {
 }
 
 func TestFinalize_GraphTopLevelKeyOrder(t *testing.T) {
-	// The Graph wrapper must serialise as { conf, graph, inputs, result }.
+
 	e, _, _, _ := build3NodeDAG()
 	g := Finalize(e)
 	raw := Throw2(json.Marshal(g))
@@ -332,7 +306,7 @@ func TestFinalize_ForeignDepsResolvedAndSorted(t *testing.T) {
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
 		ForeignDepRefs: map[string][]NodeRef{
-			"tool": {t2, t1, t2}, // unsorted + duplicate
+			"tool": {t2, t1, t2},
 		},
 	})
 	e.Result(a)
@@ -360,10 +334,7 @@ func TestFinalize_ForeignDepsResolvedAndSorted(t *testing.T) {
 }
 
 func TestFinalize_RejectsPreSetDeps(t *testing.T) {
-	// Rules must express dependencies via DepRefs; a pre-populated Deps
-	// slice would corrupt the Merkle hash (Finalize would either
-	// overwrite it for nodes with refs or canonicalise the stale value
-	// for nodes without). Finalize must reject this up-front.
+
 	e := NewBufferedEmitter()
 	e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
@@ -386,7 +357,7 @@ func TestFinalize_RejectsPreSetDeps(t *testing.T) {
 }
 
 func TestFinalize_RejectsPreSetForeignDeps(t *testing.T) {
-	// Symmetric to TestFinalize_RejectsPreSetDeps but for ForeignDeps.
+
 	e := NewBufferedEmitter()
 	e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
@@ -409,9 +380,7 @@ func TestFinalize_RejectsPreSetForeignDeps(t *testing.T) {
 }
 
 func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
-	// Two leaf nodes with identical content hash to the same UID and
-	// must collapse into a single Graph entry — graph[uid] is a set,
-	// not a multiset.
+
 	e := NewBufferedEmitter()
 	mk := func() NodeRef {
 		return e.Emit(&Node{
@@ -435,9 +404,7 @@ func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
 }
 
 func TestFinalize_SecondCallErrors(t *testing.T) {
-	// The emitter is single-shot. A second Finalize must error out so
-	// callers don't silently get a stale graph after the *Refs slices
-	// have been cleared.
+
 	e, _, _, _ := build3NodeDAG()
 	Finalize(e)
 
@@ -452,10 +419,7 @@ func TestFinalize_SecondCallErrors(t *testing.T) {
 }
 
 func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
-	// A ForeignDepRefs key with an empty slice must NOT serialize as
-	// `foreign_deps:{key:[]}`; the whole foreign_deps field must be
-	// omitted (omitempty on a nil map). Pin via the resolved field
-	// being nil — equivalent to "the key never made it through".
+
 	e := NewBufferedEmitter()
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
@@ -464,7 +428,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
-		ForeignDepRefs:   map[string][]NodeRef{"tool": {}}, // empty slice
+		ForeignDepRefs:   map[string][]NodeRef{"tool": {}},
 	})
 	e.Result(a)
 	g := Finalize(e)
@@ -491,8 +455,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 }
 
 func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
-	// Result(ref) called twice on the same ref must produce exactly
-	// one entry in Graph.Result, preserving first-seen order.
+
 	e := NewBufferedEmitter()
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
@@ -503,7 +466,7 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 		TargetProperties: map[string]string{},
 	})
 	e.Result(a)
-	e.Result(a) // duplicate, must collapse
+	e.Result(a)
 	g := Finalize(e)
 
 	if len(g.Result) != 1 {
@@ -511,10 +474,6 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 	}
 }
 
-// TestEmitter_OnReady_BufferedNoOp verifies that BufferedEmitter's
-// OnReady channel does not close until Finalize runs (D37). Pre-
-// Finalize the channel must be open (a non-blocking <- must NOT
-// receive); post-Finalize every OnReady channel must be closed.
 func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 	e := NewBufferedEmitter()
 	r := e.Emit(&Node{
@@ -532,14 +491,14 @@ func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 	case <-ch:
 		t.Fatalf("OnReady channel closed pre-Finalize (BufferedEmitter contract)")
 	default:
-		// Expected: channel is still open.
+
 	}
 
 	Finalize(e)
 
 	select {
 	case <-ch:
-		// Expected: closed.
+
 	default:
 		t.Fatalf("OnReady channel not closed post-Finalize")
 	}
@@ -594,8 +553,7 @@ func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
 }
 
 func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
-	// Merkle property: changing a leaf must change its parent's UID
-	// (because the parent's canonical bytes include the leaf's UID).
+
 	e1 := NewBufferedEmitter()
 	c1 := e1.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"C", "v1"}, Env: map[string]string{}}},
@@ -615,13 +573,13 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 
 	e2 := NewBufferedEmitter()
 	c2 := e2.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"C", "v2"}, Env: map[string]string{}}}, // changed
+		Cmds: []Cmd{{CmdArgs: []string{"C", "v2"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]interface{}{},
 		Outputs: ToVFSSlice([]string{}), Requirements: map[string]interface{}{},
 		Tags: []string{}, TargetProperties: map[string]string{},
 	})
 	a2 := e2.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}}, // unchanged
+		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]interface{}{},
 		Outputs: ToVFSSlice([]string{}), Requirements: map[string]interface{}{},
 		Tags: []string{}, TargetProperties: map[string]string{},
@@ -630,7 +588,6 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 	e2.Result(a2)
 	g2 := Finalize(e2)
 
-	// Find A in each graph (it's the DFS root, graph[0] in DFS preorder).
 	a1uid := g1.Graph[0].UID
 	a2uid := g2.Graph[0].UID
 
@@ -639,25 +596,6 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 	}
 }
 
-// TestFinalize_HeapTopo_Determinism pins the DFS-preorder graph[] output
-// ordering. PR-L4-C/06 changed graph[] from Kahn topo (leaves first) to
-// DFS preorder rooted at result[0], visiting children in their Deps order
-// (sorted by UID for non-LD/AR nodes — D14 applies).
-//
-// Graph layout (Emit order is the buffer index; "A->B" means A depends on B):
-//
-//	idx 0: L0  (leaf)
-//	idx 1: L1  (leaf)
-//	idx 2: L2  (leaf)
-//	idx 3: M3  -> L0
-//	idx 4: M4  -> L1
-//	idx 5: T   -> L2, M3, M4
-//
-// Properties verified:
-//  1. T is graph[0] (DFS root = result[0]).
-//  2. Each node appears exactly once.
-//  3. DFS invariant: every node's children appear after it in the output.
-//  4. Two runs produce byte-identical output (determinism).
 func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 	e := NewBufferedEmitter()
 	mk := func(name string, deps ...NodeRef) NodeRef {
@@ -686,19 +624,16 @@ func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 		t.Fatalf("graph len = %d, want 6", len(g.Graph))
 	}
 
-	// T (the result root) must appear first in DFS preorder.
 	if g.Graph[0].KV["name"] != "T" {
 		t.Errorf("graph[0] = %q, want T (DFS root)", g.Graph[0].KV["name"])
 	}
 
-	// Build position map for DFS invariant check.
 	pos := make(map[string]int, 6)
 	for i, n := range g.Graph {
 		name, _ := n.KV["name"].(string)
 		pos[name] = i
 	}
 
-	// DFS invariant: every dep appears AFTER its parent in the output.
 	edges := map[string][]string{
 		"T":  {"L2", "M3", "M4"},
 		"M3": {"L0"},
@@ -713,7 +648,6 @@ func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 		}
 	}
 
-	// Verify all 6 nodes are present.
 	for _, name := range []string{"T", "L0", "L1", "L2", "M3", "M4"} {
 		if _, ok := pos[name]; !ok {
 			t.Errorf("node %q missing from graph", name)

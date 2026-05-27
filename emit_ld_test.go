@@ -6,33 +6,8 @@ import (
 	"testing"
 )
 
-// ld_test.go — byte-exact regression test for EmitLD against the
-// reference graph for `tools/archiver/archiver` (the M2 PROGRAM
-// target), plus a synthetic structural test.
-//
-// Strategy mirrors cc_test.go / as_test.go: the test does its own
-// os.ReadFile + json.Unmarshal of the reference graph, locates the LD
-// node by output path, and compares EmitLD's output field-by-field
-// (UID/SelfUID/StatsUID excluded, since they are Finalize-computed).
-//
-// Inputs to EmitLD are reconstructed from the reference: peer
-// archive paths in PEERDIR walk order extracted from cmd[2]'s
-// `--start-group ... --end-group` block; pluginPaths and globalPaths
-// extracted from the same cmd. Stub NodeRefs are wired through a
-// fresh BufferedEmitter so that the LD node can refer to them as
-// DepRefs without a real PEERDIR walk (which is PR-25's job — PR-24
-// just lands the rule).
-
-// referenceLDOutput is the output path used to locate the reference
-// LD node for `tools/archiver`.
 const referenceLDOutput = "$(B)/tools/archiver/archiver"
 
-// archiverPeerLibPaths are the 32 peer LIBRARY archive paths in the
-// exact PEERDIR walk order observed in the reference graph's cmd[2].
-// The order is NON-ALPHABETICAL (R14): it mirrors the recursive
-// PEERDIR-declaration walk that PR-25 will reproduce. PR-24 uses this
-// list verbatim to bypass the walker and pin EmitLD's output byte-
-// exact.
 var archiverPeerLibPaths = []string{
 	"contrib/libs/cxxsupp/libcxxabi-parts/liblibs-cxxsupp-libcxxabi-parts.a",
 	"contrib/libs/libunwind/libcontrib-libs-libunwind.a",
@@ -68,33 +43,14 @@ var archiverPeerLibPaths = []string{
 	"library/cpp/getopt/small/libcpp-getopt-small.a",
 }
 
-// archiverPluginPaths is the single plugin (musl pyplugin) referenced
-// by the archiver LD's `--start-plugins ... --end-plugins` block.
 var archiverPluginPaths = []string{
 	"$(B)/contrib/libs/musl/include/musl.py.pyplugin",
 }
 
-// archiverGlobalPaths is the single global archive (tcmalloc no-percpu
-// global) referenced by the archiver LD's `-Wl,--whole-archive`
-// section. BUILD_ROOT-relative (no $(B)/ prefix — link_exe.py
-// resolves these against `cwd: $(B)`).
 var archiverGlobalPaths = []string{
 	"contrib/libs/tcmalloc/no_percpu_cache/liblibs-tcmalloc-no_percpu_cache.global.a",
 }
 
-// loadReferenceLDNode reads the on-disk reference graph and returns the
-// LD node whose first output is referenceLDOutput. Returns nil and a
-// reason string when the file is absent (so the caller can t.Skip) or
-// when the node is missing.
-// TestEmitLD_ToolsArchiver_ByteExact pins the 4-cmd LD node against
-// the reference graph entry for `tools/archiver/archiver`. The test
-// supplies the peer-lib / plugin / global / cc paths directly (not
-// via Gen's recursion — that lands in PR-25). Stub NodeRefs are
-// minted via fresh BufferedEmitter Emit calls so the DepRef wiring
-// is exercised end-to-end.
-// ldFieldName builds a stable diagnostic name for a per-cmd field so
-// fieldEqual's mismatch report identifies which cmd index is at fault
-// without a freeform format string.
 func ldFieldName(ci int, suffix string) string {
 	switch ci {
 	case 0:
@@ -110,13 +66,6 @@ func ldFieldName(ci int, suffix string) string {
 	}
 }
 
-// TestEmitLD_SyntheticPROGRAM verifies the structural shape of the LD
-// node for a 1-source PROGRAM with zero PEERDIR. The synthetic case
-// does not match any reference (no archiver-style peer closure or
-// global archives), so the test asserts only that the four cmds are
-// present and carry the expected scaffolding (vcs_info / clang
-// compile / link_exe / fs_tools), the output path is correct, and the
-// node carries the LD kv markers.
 func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	emit := NewBufferedEmitter()
 	mainRef := emit.Emit(&Node{
@@ -128,7 +77,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 
 	ldRef := EmitLD(
 		instance,
-		"", // empty falls back to lastPathComponent → "prog"
+		"",
 		[]NodeRef{mainRef}, []VFS{ParseVFSOrSource(mainPath)},
 		nil, nil,
 		nil,
@@ -137,18 +86,18 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		nil, nil,
 		nil,
 		nil, nil,
-		nil, nil, // objcopy slot
-		nil,   // moduleCFlags
-		nil,   // peerCFlagsGlobal
-		nil,   // moduleScopeCFlags
-		nil,   // peerLDFlagsGlobal
-		nil,   // ownLDFlags
-		nil,   // ownRPathFlags
-		nil,   // peerRPathFlagsGlobal
-		nil,   // EXTRALIBS / OBJADDE_LIB_GLOBAL
-		false, // noCompilerWarnings
-		false, // wantsStrip (cpp PROGRAM)
-		false, // SPLIT_DWARF
+		nil, nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		false,
+		false,
+		false,
 		testHostP,
 		emit,
 	)
@@ -159,18 +108,15 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Fatalf("Cmds = %d, want 4", len(got.Cmds))
 	}
 
-	// cmd[0]: vcs_info.py
 	if got.Cmds[0].CmdArgs[1] != "$(S)/build/scripts/vcs_info.py" {
 		t.Errorf("cmd[0] does not invoke vcs_info.py: %q", got.Cmds[0].CmdArgs[1])
 	}
 
-	// cmd[1]: clang. With -c -o.
 	wantCC := testTargetP.Tools.CC
 	if got.Cmds[1].CmdArgs[0] != wantCC {
 		t.Errorf("cmd[1][0] = %q, want %q", got.Cmds[1].CmdArgs[0], wantCC)
 	}
 
-	// cmd[2]: link_exe.py.
 	if got.Cmds[2].CmdArgs[1] != "$(S)/build/scripts/link_exe.py" {
 		t.Errorf("cmd[2] does not invoke link_exe.py: %q", got.Cmds[2].CmdArgs[1])
 	}
@@ -179,12 +125,10 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Errorf("cmd[2].cwd = %q, want $(B)", got.Cmds[2].Cwd)
 	}
 
-	// cmd[3]: fs_tools.py
 	if got.Cmds[3].CmdArgs[1] != "$(S)/build/scripts/fs_tools.py" {
 		t.Errorf("cmd[3] does not invoke fs_tools.py: %q", got.Cmds[3].CmdArgs[1])
 	}
 
-	// Output path: $(B)/some/prog/prog.
 	wantOut := "$(B)/some/prog/prog"
 	if len(got.Outputs) != 1 || got.Outputs[0].String() != wantOut {
 		t.Errorf("outputs = %#v, want [%q]", got.Outputs, wantOut)
@@ -196,7 +140,6 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Fatalf("synthetic LD plugin markers = %v, want adjacent empty --start-plugins/--end-plugins", got.Cmds[2].CmdArgs)
 	}
 
-	// kv: p=LD, pc=light-blue, show_out=yes.
 	wantKV := map[string]string{"p": "LD", "pc": "light-blue", "show_out": "yes"}
 	for k, v := range wantKV {
 		if got.KV[k] != v {
@@ -204,12 +147,10 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		}
 	}
 
-	// target_properties: module_dir + module_lang + module_type=bin.
 	if got.TargetProperties["module_type"] != "bin" {
 		t.Errorf("target_properties.module_type = %q, want bin", got.TargetProperties["module_type"])
 	}
 
-	// DepRefs: 1 (the single own .cpp.o).
 	if len(got.DepRefs) != 1 {
 		t.Errorf("DepRefs = %d, want 1", len(got.DepRefs))
 	}
@@ -226,7 +167,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 
 	ldRef := EmitLD(
 		instance,
-		"", // empty falls back to lastPathComponent → "prog"
+		"",
 		[]NodeRef{mainRef}, []VFS{ParseVFSOrSource(mainPath)},
 		nil, nil,
 		nil,
@@ -235,18 +176,18 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 		nil, nil,
 		nil,
 		nil, nil,
-		nil, nil, // objcopy slot
-		nil,   // moduleCFlags
-		nil,   // peerCFlagsGlobal
-		nil,   // moduleScopeCFlags
-		nil,   // peerLDFlagsGlobal
-		nil,   // ownLDFlags
-		nil,   // ownRPathFlags
-		nil,   // peerRPathFlagsGlobal
-		nil,   // EXTRALIBS / OBJADDE_LIB_GLOBAL
-		false, // noCompilerWarnings
-		false, // wantsStrip
-		true,  // SPLIT_DWARF
+		nil, nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		false,
+		false,
+		true,
 		testHostP,
 		emit,
 	)
@@ -290,20 +231,13 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 	}
 }
 
-// TestEmitLD_AcceptsHostPIC verifies PR-25's lift of PR-24's
-// host-PIC guard. Cross-platform recursion (D31) requires building
-// host PROGRAM modules (ragel6/yasm), so EmitLD now accepts
-// `Platform.PIC=true`. The cmd_args bundle is still the target shape;
-// byte-exact host LD pinning is PR-26+ scope. This test only
-// asserts the call no longer throws and the resulting node carries
-// `host_platform=true`.
 func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 	emit := NewBufferedEmitter()
 	stub := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
 
 	ref := EmitLD(
 		hostInstance("some/prog"),
-		"", // empty falls back to lastPathComponent → "prog"
+		"",
 		[]NodeRef{stub}, []VFS{Intern("$(B)/some/prog/main.cpp.o")},
 		nil, nil,
 		nil,
@@ -312,18 +246,18 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		nil, nil,
 		nil,
 		nil, nil,
-		nil, nil, // objcopy slot
-		nil,   // moduleCFlags
-		nil,   // peerCFlagsGlobal
-		nil,   // moduleScopeCFlags
-		nil,   // peerLDFlagsGlobal
-		nil,   // ownLDFlags
-		nil,   // ownRPathFlags
-		nil,   // peerRPathFlagsGlobal
-		nil,   // EXTRALIBS / OBJADDE_LIB_GLOBAL
-		false, // noCompilerWarnings
-		false, // wantsStrip
-		false, // SPLIT_DWARF
+		nil, nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		false,
+		false,
+		false,
 		testHostP,
 		emit,
 	)
@@ -409,14 +343,14 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		nil,
 		nil, nil,
 		nil, nil,
-		nil, // moduleCFlags
-		nil, // peerCFlagsGlobal
-		nil, // moduleScopeCFlags
-		nil, // peerLDFlagsGlobal
-		nil, // ownLDFlags
-		nil, // ownRPathFlags
-		nil, // peerRPathFlagsGlobal
-		nil, // objAddLibsGlobal
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
 		false,
 		false,
 		false,
@@ -467,14 +401,14 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 		nil,
 		nil, nil,
 		nil, nil,
-		nil, // moduleCFlags
-		nil, // peerCFlagsGlobal
-		nil, // moduleScopeCFlags
-		nil, // peerLDFlagsGlobal
-		nil, // ownLDFlags
-		nil, // ownRPathFlags
-		nil, // peerRPathFlagsGlobal
-		nil, // objAddLibsGlobal
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
 		false,
 		false,
 		false,
@@ -510,8 +444,6 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 	}
 }
 
-// TestEmitLD_LengthMismatchPanics verifies the precondition checks on all
-// four ref/path slice pairs (cc, peerLD, plugin, global).
 func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 	tests := []struct {
 		name                                                string

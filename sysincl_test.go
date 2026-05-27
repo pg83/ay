@@ -4,9 +4,6 @@ import (
 	"testing"
 )
 
-// TestParseSysInclYAML_Synthetic exercises the parser on a hand-built
-// YAML that covers every supported construct: filter present/absent,
-// single mapping, fan-out, suppression, bare key.
 func TestParseSysInclYAML_Synthetic(t *testing.T) {
 	const yaml = `# leading comment
 - source_filter: "^contrib/libs/foo"
@@ -26,7 +23,6 @@ func TestParseSysInclYAML_Synthetic(t *testing.T) {
 		t.Fatalf("expected 2 records, got %d", len(recs))
 	}
 
-	// First record: filter-bound mappings.
 	r := recs[0]
 
 	if r.Filter == nil {
@@ -69,14 +65,11 @@ func TestParseSysInclYAML_Synthetic(t *testing.T) {
 		t.Errorf("bare.h: got %v, want nil (bare-key suppression)", got)
 	}
 
-	// Second record: no filter.
 	if recs[1].Filter != nil {
 		t.Errorf("second record: expected nil filter")
 	}
 }
 
-// TestSourceFilter_NegativeLookahead pins the ^(?!P) and
-// ^(?!(P1|P2|...)) translations.
 func TestSourceFilter_NegativeLookahead(t *testing.T) {
 	cases := []struct {
 		pat   string
@@ -88,7 +81,7 @@ func TestSourceFilter_NegativeLookahead(t *testing.T) {
 				"contrib/libs/foo/x.c":        true,
 				"contrib/libs/musl/src/y.c":   false,
 				"contrib/libs/musl/tests/z.c": true,
-				"contrib/libs/musl-other/w.c": false, // exclude prefix is just "contrib/libs/musl"
+				"contrib/libs/musl-other/w.c": false,
 			},
 		},
 		{
@@ -116,11 +109,6 @@ func TestSourceFilter_NegativeLookahead(t *testing.T) {
 	}
 }
 
-// stringSlicesEqualUnordered compares two []string ignoring order. The
-// LookupIncluderKeyed result order is deterministic per call (driven
-// by includerKeyed iteration order) but the test treats it as a set —
-// any record-ordering refactor inside the cache layer should not break
-// this assertion.
 func stringSlicesEqualUnordered(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

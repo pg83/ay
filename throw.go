@@ -66,9 +66,6 @@ func ThrowFmt(format string, args ...any) {
 	Fmt(format, args...).throw()
 }
 
-// HTTPError carries an HTTP status alongside the message. ThrowHTTP raises
-// 4xx client errors; outer Catch uses errors.As to distinguish them from
-// unexpected panics (default 500).
 type HTTPError struct {
 	Status int
 	Msg    string

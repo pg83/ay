@@ -9,37 +9,18 @@ import (
 	"strings"
 )
 
-// Emitter for PB (Protocol Buffers compile) nodes.
-//
-// One PB node per .proto in a PROTO_LIBRARY. Invokes cpp_proto_wrapper.py
-// driving protoc + cpp_styleguide (and grpc_cpp plugin when grpc is set),
-// all from contrib/tools/protoc. descriptor.proto is added to inputs when
-// the source imports it; deps and foreign_deps["tool"] carry the tool LD
-// refs.
-
 const (
-	// Tool module paths for host-walk recursion.
 	pbProtocModule        = "contrib/tools/protoc"
 	pbCppStyleguideModule = "contrib/tools/protoc/plugins/cpp_styleguide"
 	pbGrpcCppModule       = "contrib/tools/protoc/plugins/grpc_cpp"
 	pbGrpcPyModule        = "contrib/tools/protoc/plugins/grpc_python"
 	pbMypyModule          = "contrib/python/mypy-protobuf/bin/protoc-gen-mypy"
 
-	// pbRuntimeBase is the SOURCE_ROOT-relative prefix for all protobuf
-	// runtime headers (under contrib/libs/protobuf/src/). Combined with
-	// Source() at use-site to produce the VFS.
 	pbRuntimeBase = "contrib/libs/protobuf/src/"
 
-	// abslTstringBase is the SOURCE_ROOT prefix for abseil-cpp-tstring
-	// headers, reached transitively from the protobuf runtime via
-	// `port_def.inc → y_absl/strings/string_view.h → …`. Consumer
-	// PROTO_LIBRARYs do not peer abseil themselves; the scanner cannot
-	// resolve y_absl/... without pre-resolved EmitsIncludes.
 	abslTstringBase = "contrib/restricted/abseil-cpp-tstring/"
 )
 
-// pb tool/asset VFS constants. The `…Path` strings are derived once
-// via .String() for cmd_arg slots that take a raw string.
 var (
 	pbWrapperVFS    = Intern("$(S)/build/scripts/cpp_proto_wrapper.py")
 	pbPyWrapperVFS  = Intern("$(S)/build/scripts/gen_py_protos.py")
@@ -57,10 +38,6 @@ type resolvedCPPProtoPlugin struct {
 	Binary VFS
 }
 
-// protobufRuntimeHeaders is the set every protoc-generated .pb.h directly
-// #includes. Registered as EmitsIncludes on the .pb.h so the scanner
-// closure propagates them into every CC that includes the .pb.h; scanner
-// recursion finds their transitive includes. Sorted lex.
 var protobufRuntimeHeaders = []VFS{
 	Source(pbRuntimeBase + "google/protobuf/arena.h"),
 	Source(pbRuntimeBase + "google/protobuf/arenastring.h"),
@@ -76,12 +53,6 @@ var protobufRuntimeHeaders = []VFS{
 	Source(pbRuntimeBase + "google/protobuf/unknown_field_set.h"),
 }
 
-// grpcServiceHeaderIncludes is the fixed include preamble every protoc
-// grpc_cpp-generated .grpc.pb.h emits (contrib/libs/grpc cpp_generator.cc
-// GetHeaderIncludes): <functional> + the grpcpp service infrastructure.
-// Registered as EmitsIncludes on the .grpc.pb.h so the scanner propagates
-// the grpc + protobuf + abseil + libcxx closure into its CC consumers;
-// scanner recursion finds the transitive includes. Sorted lex.
 var grpcServiceHeaderIncludes = []VFS{
 	Intern("$(S)/contrib/libs/cxxsupp/libcxx/include/functional"),
 	Intern("$(S)/contrib/libs/grpc/include/grpcpp/client_context.h"),
@@ -103,21 +74,12 @@ var grpcServiceHeaderIncludes = []VFS{
 	Intern("$(S)/contrib/libs/grpc/include/grpcpp/support/sync_stream.h"),
 }
 
-// grpcSourceExtraIncludes are the grpcpp headers a protoc-generated
-// .grpc.pb.cc adds beyond the .grpc.pb.h preamble (cpp_generator.cc
-// GetSourceIncludes). They reach both .grpc.pb.cc.o and the sibling
-// message .pb.cc.o via the proto OutTogether output group.
 var grpcSourceExtraIncludes = []VFS{
 	Intern("$(S)/contrib/libs/grpc/include/grpcpp/impl/channel_interface.h"),
 	Intern("$(S)/contrib/libs/grpc/include/grpcpp/impl/client_unary_call.h"),
 	Intern("$(S)/contrib/libs/grpc/include/grpcpp/impl/rpc_service_method.h"),
 }
 
-// pbDescriptorImporterHeaders are the protobuf runtime headers in CC
-// consumers of any .pb.h whose source proto imports
-// "google/protobuf/descriptor.proto". Pull in the map/reflection_ops
-// cluster protoc emits in reflection metadata for extension-bearing
-// protos. Sorted lex.
 var pbDescriptorImporterHeaders = []VFS{
 	Source(pbRuntimeBase + "google/protobuf/generated_message_bases.h"),
 	Source(pbRuntimeBase + "google/protobuf/map_entry.h"),
@@ -128,12 +90,8 @@ var pbDescriptorImporterHeaders = []VFS{
 	Source(pbRuntimeBase + "google/protobuf/reflection_ops.h"),
 }
 
-// pbCcDeepRuntimeHeaders is the deep protobuf+abseil transitive set every
-// protoc-generated .pb.cc reaches. Registered as EmitsIncludes on the
-// .pb.cc ONLY — never on .pb.h, which has many non-protobuf CC consumers
-// that must not inherit the abseil closure. Sorted lex.
 var pbCcDeepRuntimeHeaders = []VFS{
-	// Group 1: deep protobuf transitive set.
+
 	Source(pbRuntimeBase + "google/protobuf/any.h"),
 	Source(pbRuntimeBase + "google/protobuf/arena_align.h"),
 	Source(pbRuntimeBase + "google/protobuf/arena_allocation_policy.h"),
@@ -177,8 +135,6 @@ var pbCcDeepRuntimeHeaders = []VFS{
 	Source(pbRuntimeBase + "google/protobuf/wire_format.h"),
 	Source(pbRuntimeBase + "google/protobuf/wire_format_lite.h"),
 
-	// Group 2: abseil-cpp-tstring deep transitive closure reached from
-	// port_def.inc → string_view.h → ... (145 entries).
 	Source(abslTstringBase + "y_absl/algorithm/algorithm.h"),
 	Source(abslTstringBase + "y_absl/algorithm/container.h"),
 	Source(abslTstringBase + "y_absl/base/attributes.h"),
@@ -326,16 +282,6 @@ var pbCcDeepRuntimeHeaders = []VFS{
 	Source(abslTstringBase + "y_absl/utility/utility.h"),
 }
 
-// EmitPB emits a PB node for `protoRelPath` (a SOURCE_ROOT-relative .proto path).
-// The *LDRef params are host LD NodeRefs (zeroed when the host walk failed);
-// the *Binary params are the corresponding $(B)-rooted tool paths. grpcCppLDRef
-// and grpcCppBinary are only used when grpc is true. moduleTag is "cpp_proto"
-// for PROTO_LIBRARY modules (nil when absent). transitiveProtoImports is the
-// caller-resolved set of imported .proto sources (Source-rooted); hasDescriptor
-// signals that descriptor.proto is in the transitive closure so its pre-built
-// .pb.h gets injected as an extra input. liteHeaders mirrors
-// PROTOC_TRANSITIVE_HEADERS=no and adds the extra `.deps.pb.h` output plus
-// the `proto_h=true:` cpp_out option ymake passes to protoc.
 func EmitPB(
 	instance ModuleInstance,
 	protoRelPath string,
@@ -357,7 +303,7 @@ func EmitPB(
 	emit Emitter,
 ) NodeRef {
 	moduleDir := instance.Path
-	// Output paths strip the .proto suffix: foo.proto → foo.pb.h / foo.pb.cc.
+
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 
 	pbH := Build(protoBase + ".pb.h")
@@ -411,10 +357,7 @@ func EmitPB(
 		}
 	}
 	cmdArgs = append(cmdArgs, "-I=$(S)/contrib/libs/protobuf/src")
-	// LIBRARY-embedded yt/ .proto (moduleTag == nil) gets -I=$(S)/yt after
-	// the first protobuf/src include. PROTO_LIBRARY modules with
-	// PROTO_NAMESPACE reach yt via the cppOutRoot path above; PROTO_LIBRARY
-	// without one (moduleTag == "cpp_proto") gets no -I=$(S)/yt.
+
 	if moduleTag == nil && strings.HasPrefix(protoRelPath, "yt/") {
 		cmdArgs = append(cmdArgs, "-I=$(S)/yt")
 	}
@@ -466,8 +409,6 @@ func EmitPB(
 	inputs = append(inputs, srcVFS)
 	inputs = append(inputs, transitiveProtoImports...)
 
-	// tags come from instance.Platform (["tool"] on host, [] on target);
-	// non-nil empty slice keeps JSON `[]`, not `null`.
 	tags := instance.Platform.Tags
 
 	targetProps := map[string]string{
@@ -478,7 +419,6 @@ func EmitPB(
 		targetProps["module_tag"] = *moduleTag
 	}
 
-	// deps and foreign_deps both carry the same tool refs.
 	var depRefs []NodeRef
 	var foreignDepRefs map[string][]NodeRef
 
@@ -578,9 +518,6 @@ func protoCPPOutRoot(d *moduleData) string {
 	return root
 }
 
-// protoSrcsResult carries the AR and whole-archive closure emitted for a
-// PROTO_LIBRARY's generated .pb.cc/.ev.pb.cc set, surfaced via
-// moduleEmitResult. ARRef/ARPath are zero when no .proto/.ev sources.
 type protoSrcsResult struct {
 	ARRef                NodeRef
 	ARPath               *VFS
