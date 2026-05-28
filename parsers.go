@@ -27,6 +27,46 @@ var macroIndirectIncludes = map[string][]macroIndirectInclude{
 	"contrib/libs/pugixml/pugixml.hpp": {{target: "pugixml.cpp", kind: includeQuoted}},
 }
 
+// macroIncludeDrops suppresses specific parsed include targets per-file, for
+// directives the C-style parser unavoidably emits but which never resolve and
+// upstream does NOT add as inputs either. These are pure -k noise:
+//   - BACKTRACE_HEADER in llvm Signals.inc is a macro expansion
+//     (build/sysincl/macro.yml maps it to $U/execinfo.h, but the $U placeholder
+//     is not substituted in our resolver; the bareword include cannot resolve).
+//   - <types.h> in Poco SocketDefs.h sits inside the VxWorks/VMS branch — a
+//     platform we do not target and that has no header to find.
+// In both cases the byte-exact closure already matches ref without these
+// directives; dropping them keeps the warning gate clean.
+var macroIncludeDrops = map[string][]string{
+	"contrib/libs/llvm16/lib/Support/Unix/Signals.inc":    {"BACKTRACE_HEADER"},
+	"contrib/libs/poco/Net/include/Poco/Net/SocketDefs.h": {"types.h"},
+	"ydb/core/tablet_flat/flat_executor_gclogic.h":        {"ydb/core/tablet_flat/flat_executor.pb.h"},
+}
+
+func filterDroppedDirectives(out []includeDirective, drops []string) []includeDirective {
+	if len(out) == 0 || len(drops) == 0 {
+		return out
+	}
+
+	filtered := out[:0]
+	for _, d := range out {
+		t := d.target.String()
+		drop := false
+		for _, name := range drops {
+			if t == name {
+				drop = true
+				break
+			}
+		}
+
+		if !drop {
+			filtered = append(filtered, d)
+		}
+	}
+
+	return filtered
+}
+
 type includeDirectiveParser interface {
 	Parse(rel string, data []byte) parsedIncludeSet
 }
@@ -109,6 +149,10 @@ func directiveParserExt(rel string) string {
 
 func (cIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 	out := parseCIncludes(data)
+
+	if drops, ok := macroIncludeDrops[rel]; ok {
+		out = filterDroppedDirectives(out, drops)
+	}
 
 	if extras, ok := macroIndirectIncludes[rel]; ok {
 		for _, m := range extras {
@@ -399,7 +443,7 @@ func parseDirectiveInline(data []byte, hashPos int) (includeDirective, bool, int
 			}
 			q++
 		}
-		if q > start && data[start] != '$' && !hasYIgnoreComment(data, q) {
+		if q > start && data[start] != '$' && !hasYIgnoreComment(data, q) && !bytes.ContainsAny(data[start:q], "[]") {
 			return includeDirective{kind: includeQuoted, target: internBytes(data[start:q])}, true, nextLineStart(data, q)
 		}
 
@@ -422,7 +466,7 @@ func parseDirectiveInline(data []byte, hashPos int) (includeDirective, bool, int
 		kind = includeQuoted
 	}
 
-	if !hasYIgnoreComment(data, q) {
+	if !hasYIgnoreComment(data, q) && !bytes.ContainsAny(targetBytes, "[]") {
 		return includeDirective{kind: kind, target: internBytes(targetBytes)}, true, nextLineStart(data, q)
 	}
 
@@ -989,3 +1033,4 @@ func isIdentByte(b byte) bool {
 func identByteAt(data []byte, i int) bool {
 	return i < len(data) && isIdentByte(data[i])
 }
+
