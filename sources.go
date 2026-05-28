@@ -153,6 +153,24 @@ func rewriteClosureCPSource(scanner *IncludeScanner, out []VFS) []VFS {
 	return out
 }
 
+// keepOnlySourceVFS drops any $(B) (build-tree) entry from a closure. CP
+// node inputs in upstream are purely source-level — generated files reach the
+// CP's cache key indirectly through their own producer nodes (deps), so any
+// $(B) hit picked up by transitive include resolution (typically tablegen
+// outputs like llvm/IR/Attributes.inc, which surface from a deep LLVM header
+// chain) does not belong as a direct CP input. Run AFTER rewriteClosureCPSource
+// so CP $(B) outputs already mapped to their SourcePath survive as sources.
+func keepOnlySourceVFS(out []VFS) []VFS {
+	w := out[:0]
+	for _, v := range out {
+		if !v.IsSource() {
+			continue
+		}
+		w = append(w, v)
+	}
+	return w
+}
+
 func includeScannerBasePaths() []VFS {
 	return []VFS{
 		Intern("$(S)/"),
