@@ -1357,7 +1357,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	ancestorRebase := d.srcDir != nil && d.moduleStmt.Name == "PROGRAM" && isAncestorPath(*d.srcDir, instance.Path)
 
-	emitCopyFiles(ctx, instance, d)
+	emitCopyFiles(ctx, instance, d, &moduleInputs)
 
 	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
 
