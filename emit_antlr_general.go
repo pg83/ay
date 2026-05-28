@@ -20,11 +20,31 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 
 		inVFSByToken := make(map[string]VFS, len(run.INFiles))
 		inputs := make([]VFS, 0, len(run.INFiles))
+		// Track CF-source extensions: when an INFile is a CF (CONFIGURE_FILE)
+		// output, upstream's JV node lists both the CF source (e.g. Cpp.stg.in)
+		// and the configure_file.py script as inputs alongside the dst. The
+		// CF entry's SourcePath was set at registration time (emit_cf.go).
+		var cfExtraInputs []VFS
+		cfExtraSeen := map[VFS]struct{}{}
+		appendCFExtra := func(v VFS) {
+			if _, dup := cfExtraSeen[v]; dup {
+				return
+			}
+			cfExtraSeen[v] = struct{}{}
+			cfExtraInputs = append(cfExtraInputs, v)
+		}
 		for _, inTok := range run.INFiles {
 			vfs := copyFileInputVFS(ctx.fs, instance.Path, inTok)
 			inVFSByToken[inTok] = vfs
 			inputs = append(inputs, vfs)
+			if reg != nil {
+				if info := reg.Lookup(vfs); info != nil && info.ProducerKvP == "CF" && info.SourcePath != 0 {
+					appendCFExtra(info.SourcePath)
+					appendCFExtra(configureFilePyVFS)
+				}
+			}
 		}
+		inputs = append(inputs, cfExtraInputs...)
 
 		outVFSByToken := make(map[string]VFS, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
 		outputs := make([]VFS, 0, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
