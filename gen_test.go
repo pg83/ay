@@ -313,8 +313,8 @@ func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 		t.Fatal("expected exception for unsupported macro, got nil")
 	}
 
-	if !strings.Contains(exc.Error(), "does not yet support macro") {
-		t.Errorf("error %q does not contain 'does not yet support macro'", exc.Error())
+	if !strings.Contains(exc.Error(), "not modelled") {
+		t.Errorf("error %q does not contain 'not modelled'", exc.Error())
 	}
 }
 
@@ -3236,8 +3236,11 @@ END()
 	if got := bin.pyMain; got == nil || *got != "pytool.__main__:main" {
 		t.Fatalf("bin pyMain = %#v, want pytool.__main__:main", got)
 	}
-	if len(bin.pySrcs) != 0 {
-		t.Fatalf("bin pySrcs = %v, want empty", bin.pySrcs)
+	// PY_SRCS stays populated on KindBin since 50cd9e9: the PROGRAM-side
+	// emitResourceObjcopy needs len(d.pySrcs)>0 to enter its hasKvOnly
+	// branch and surface the PY_MAIN objcopy_<hash>.o into LD inputs.
+	if !equalStrings(bin.pySrcs, []string{"__main__.py"}) {
+		t.Fatalf("bin pySrcs = %v, want [__main__.py]", bin.pySrcs)
 	}
 
 	lib := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "pytool", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "pytool", Kind: KindLib, Platform: testTargetP}))

@@ -42,6 +42,7 @@ type moduleData struct {
 	cythonAddIncl        []VFS
 	asmAddIncl           []VFS
 	protoAddInclGlobal   []VFS
+	unhandledMacros      map[string][]string
 	cFlags               []string
 	cFlagsGlobal         []string
 	cxxFlags             []string
@@ -920,6 +921,11 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *moduleData) {
 }
 
 func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Environment) {
+	// Surface every handled macro's service-word arguments to the audit
+	// (NAMESPACE, MAIN, GLOBAL, FOR, ONE_LEVEL, …); the default branch below
+	// adds the ignored-macro report separately. Cheap nil-check when the
+	// --dump-ignored-macros flag is off.
+	recordHandledMacro(v.Name, v.Args)
 	switch v.Name {
 	case "NO_LIBC":
 
@@ -1500,9 +1506,21 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			}
 		}
 	default:
-		if _, ok := whitelistedMetadataMacros[v.Name]; !ok {
-			ThrowFmt("gen: does not yet support macro %q (extend whitelistedMetadataMacros or add a typed Stmt)", v.Name)
+		// Acknowledged macro: stash its expanded args on the moduleData
+		// under d.unhandledMacros so later passes can inspect what was
+		// declared. Also record into the audit visible via
+		// --dump-ignored-macros. Anything outside acknowledgedMacros is
+		// considered a gen bug — open the upstream macro definition in
+		// yatool/build/conf or yatool/build/ymake.core.conf and add a typed
+		// handler.
+		if _, ok := acknowledgedMacros[v.Name]; !ok {
+			ThrowFmt("gen: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf)", v.Name)
 		}
+		if d.unhandledMacros == nil {
+			d.unhandledMacros = map[string][]string{}
+		}
+		d.unhandledMacros[v.Name] = append(d.unhandledMacros[v.Name], expandStmtTokens(v.Args, env)...)
+		recordIgnoredMacro(v.Name, v.Args)
 	}
 }
 
