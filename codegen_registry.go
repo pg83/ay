@@ -5,6 +5,13 @@ type GeneratedFileInfo struct {
 
 	OutputPath VFS
 
+	// SourcePath is the canonical pre-generation file when the producer is a
+	// pass-through (currently: CP / COPY_FILE). Upstream reports this — not
+	// OutputPath — as the input edge in transitive closures, so include walks
+	// rewrite OutputPath to SourcePath on the way out. Zero value means "no
+	// remapping; OutputPath is the canonical input edge".
+	SourcePath VFS
+
 	ProducerRef    NodeRef
 	HasProducerRef bool
 
@@ -133,11 +140,20 @@ func bindGeneratedOutput(ctx *genCtx, instance ModuleInstance, output VFS, ref N
 }
 
 func registerBoundGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, parsed []includeDirective, ref NodeRef) {
+	registerBoundGeneratedParsedOutputWithSource(ctx, instance, kind, output, 0, parsed, ref)
+}
+
+// registerBoundGeneratedParsedOutputWithSource is the CP variant that records
+// the COPY source alongside the dst so the closure walker can rewrite the
+// emitted input edge to the source. Pass sourcePath = 0 for non-CP producers
+// to fall back to OutputPath as the canonical edge.
+func registerBoundGeneratedParsedOutputWithSource(ctx *genCtx, instance ModuleInstance, kind string, output VFS, sourcePath VFS, parsed []includeDirective, ref NodeRef) {
 	reg := codegenRegForInstance(ctx, instance)
 	if reg != nil {
 		reg.Register(&GeneratedFileInfo{
 			ProducerKvP:    kind,
 			OutputPath:     output,
+			SourcePath:     sourcePath,
 			ProducerRef:    ref,
 			HasProducerRef: true,
 		})
