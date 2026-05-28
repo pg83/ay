@@ -12,8 +12,13 @@ type ModuleCCInputs struct {
 	InclArgs inclArgMemo
 
 	PeerAddInclGlobal []VFS
-	CXXFlags          []string
-	COnlyFlags        []string
+	// PeerProtoAddInclGlobal is the _PROTO__INCLUDE chain for proto compiles
+	// only (the $(S)/<PROTO_NAMESPACE> contribution of every transitively
+	// peered PROTO_LIBRARY / PROTO_NAMESPACE GLOBAL). Distinct from
+	// PeerAddInclGlobal which feeds the C++ compile pipeline.
+	PeerProtoAddInclGlobal []VFS
+	CXXFlags               []string
+	COnlyFlags             []string
 
 	ExtraDepRefs []NodeRef
 

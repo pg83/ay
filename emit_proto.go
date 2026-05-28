@@ -263,7 +263,7 @@ type protoPBEmission struct {
 	relPath       string
 }
 
-func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, cfg protoPBConfig) protoPBEmission {
+func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, cfg protoPBConfig, peerProtoAddIncl []VFS) protoPBEmission {
 	protocLDRef, protocBinary := ctx.tool(pbProtocModule)
 	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(pbCppStyleguideModule)
 	liteHeaders := !protoTransitiveHeadersEnabled(d)
@@ -293,7 +293,9 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		liteHeaders,
 		d.protocFlags,
 		extraPlugins,
-		transitiveImports, hasDescriptor, ctx.emit,
+		transitiveImports, hasDescriptor,
+		peerProtoAddIncl,
+		ctx.emit,
 	)
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
@@ -490,7 +492,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	cppInstance.Path = protoCPPModulePath(instance, d)
 
 	for _, src := range protoSrcs {
-		pb := emitProtoPB(ctx, instance, d, src, cfg)
+		pb := emitProtoPB(ctx, instance, d, src, cfg, peerContribs.protoAddIncl)
 
 		ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel(), cppInstance.Path+"/")
 		appendCodegenOutput(pb.pbRef, pb.pbCC, ccSrcRel)

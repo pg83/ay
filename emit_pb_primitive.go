@@ -300,6 +300,7 @@ func EmitPB(
 	extraPlugins []resolvedCPPProtoPlugin,
 	transitiveProtoImports []VFS,
 	hasDescriptor bool,
+	peerProtoAddIncl []VFS,
 	emit Emitter,
 ) NodeRef {
 	moduleDir := instance.Path
@@ -357,6 +358,14 @@ func EmitPB(
 		}
 	}
 	cmdArgs = append(cmdArgs, "-I=$(S)/contrib/libs/protobuf/src")
+
+	// Upstream's _PROTO__INCLUDE chain: every transitively peered
+	// PROTO_NAMESPACE GLOBAL (or PROTO_LIBRARY) contributes a -I=<$(S)/ns>
+	// here, between the first $PROTOBUF_INCLUDE_PATH and the trailing
+	// -I=$ARCADIA_BUILD_ROOT -I=$PROTOBUF_INCLUDE_PATH duplicate.
+	for _, p := range peerProtoAddIncl {
+		cmdArgs = append(cmdArgs, "-I="+p.String())
+	}
 
 	if moduleTag == nil && strings.HasPrefix(protoRelPath, "yt/") {
 		cmdArgs = append(cmdArgs, "-I=$(S)/yt")
