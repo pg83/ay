@@ -22,7 +22,7 @@ from dataclasses import dataclass
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
-GO = os.path.join(REPO_ROOT, "go")
+GO = "go"
 AY = os.path.join(REPO_ROOT, "ay")
 
 # Host-wide, well-known lock path — shared across every worktree (all agents
