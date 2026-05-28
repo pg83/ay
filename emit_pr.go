@@ -203,6 +203,57 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 		walkInput(f)
 	}
 
+	// OUTPUT_INCLUDES contribute to the PR node's AUTO_INPUT only when the
+	// target resolves to a codegen output (.pb.h from a peer PROTO_LIBRARY,
+	// .h registered by another PR, etc.). Source-tree headers in
+	// OUTPUT_INCLUDES — yql_*_expr_nodes_gen.h, util/generic/hash_set.h, any
+	// path that already lives in the C include graph — do NOT contribute
+	// here in upstream: the PR node's own include graph is rooted at IN, and
+	// pulling source-tree closures via OUTPUT_INCLUDES would massively
+	// over-emit (yql_*_expr_nodes.gen.h would gain libcxx).
+	//
+	// For .pb.h OUTPUT_INCLUDES, upstream tracks the listed .pb.h itself
+	// plus the TRANSITIVE .proto SOURCES of the proto-import graph rooted at
+	// that .pb.h's proto — but NOT the intermediate .pb.h headers along the
+	// chain (control_board_proto.h's OUTPUT_INCLUDES tablet.pb.h + config.pb.h
+	// lands tablet.pb.h, config.pb.h, and the 153 transitive .proto sources,
+	// without the 148 deep .pb.h headers our closure walk otherwise gathers).
+	// Filter the walk: keep the OUTPUT_INCLUDES VFS itself and every .proto
+	// reached through it; drop transitive .pb.h.
+	if reg := codegenRegForInstance(ctx, instance); reg != nil {
+		for _, oi := range stmt.OutputIncludes {
+			target := oi
+			if vfsHasPrefix(target) {
+				target = Intern(target).Rel()
+			}
+			candidate := Build(target)
+			info := reg.Lookup(candidate)
+			if info == nil {
+				continue
+			}
+			sub := walkClosure(ctx, instance, info.OutputPath, scanIn)
+			for _, v := range sub {
+				if !strings.HasSuffix(v.Rel(), ".proto") {
+					continue
+				}
+				out = append(out, v)
+				// Protobuf WKTs (google/protobuf/{any,duration,empty,struct,
+				// timestamp,...}.proto) ship pre-built `.pb.h` headers checked
+				// in alongside the .proto. Upstream lists both the .proto and
+				// the pre-built .pb.h as PR inputs when the chain transits
+				// through one. For purely-generated .pb.h's (no source-tree
+				// .pb.h sibling) the IsFile probe returns false, so this is a
+				// no-op outside the WKT path.
+				if v.IsSource() {
+					sibling := strings.TrimSuffix(v.Rel(), ".proto") + ".pb.h"
+					if ctx.fs.IsFile(sibling) {
+						out = append(out, Source(sibling))
+					}
+				}
+			}
+		}
+	}
+
 	if len(out) == 0 {
 		return nil
 	}
