@@ -357,20 +357,21 @@ func EmitPB(
 			cmdArgs = append(cmdArgs, "-I=$(S)/"+cppOutRoot)
 		}
 	}
-	// Upstream's _CPP_PROTO_CMDLINE_BASE (ymake.core.conf:612) orders the
-	// proto-namespace block as `${pre=-I=:_PROTO__INCLUDE}
-	// -I=$ARCADIA_BUILD_ROOT -I=$PROTOBUF_INCLUDE_PATH` — peer namespaces
-	// FIRST, then $(B), then protobuf-src. We emit the cppOutRoot
-	// duplicate (the legacy first PROTOBUF_INCLUDE_PATH slot for
-	// PROTO_NAMESPACE GLOBAL modules) above; from here on, peers come
-	// before the protobuf-src include so peer-namespace -I flags slot
-	// ahead of protobuf — matching REF on modules with peer .proto
-	// addincl (e.g. ydb/public/api/client/nc_private/annotations, which
-	// peers contrib/libs/googleapis-common-protos via USE_COMMON_GOOGLE_APIS).
+	// Upstream's _CPP_PROTO_CMDLINE_BASE (ymake.core.conf:612) emits
+	// `${pre=-I=:_PROTO__INCLUDE} -I=$ARCADIA_BUILD_ROOT
+	// -I=$PROTOBUF_INCLUDE_PATH` — peers first, then $(B), then protobuf-src.
+	// _PROTO__INCLUDE already contains protobuf-src for LIBRARY modules that
+	// transitively peer contrib/libs/protobuf (its ya.make declares
+	// `ADDINCL GLOBAL FOR proto contrib/libs/protobuf/src`), so the protobuf
+	// -I shows up via the peer loop AS WELL AS via the trailing macro
+	// expansion. PROTO_LIBRARY filters peers to CPP_PROTO-tagged modules
+	// (proto.conf:921), so contrib/libs/protobuf's FOR proto addincl does
+	// NOT enter its peer chain — only PROTO_LIBRARY-internal protos
+	// (which need it via `ADDINCL GLOBAL FOR proto contrib/libs/protobuf/src`
+	// from their own peers).
 	for _, p := range peerProtoAddIncl {
 		cmdArgs = append(cmdArgs, "-I="+p.String())
 	}
-	cmdArgs = append(cmdArgs, "-I=$(S)/contrib/libs/protobuf/src")
 
 	if moduleTag == nil && strings.HasPrefix(protoRelPath, "yt/") {
 		cmdArgs = append(cmdArgs, "-I=$(S)/yt")

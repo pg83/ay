@@ -41,6 +41,7 @@ type moduleData struct {
 	cfAddInclGlobal      []VFS
 	cythonAddIncl        []VFS
 	asmAddIncl           []VFS
+	protoAddInclGlobal   []VFS
 	cFlags               []string
 	cFlagsGlobal         []string
 	cxxFlags             []string
@@ -706,6 +707,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			d.addIncl = append(d.addIncl, expandConfigVFSPaths(v.AllPaths, env)...)
 			d.cythonAddIncl = append(d.cythonAddIncl, expandConfigVFSPaths(v.CythonPaths, env)...)
 			d.asmAddIncl = append(d.asmAddIncl, expandConfigVFSPaths(v.AsmPaths, env)...)
+			d.protoAddInclGlobal = append(d.protoAddInclGlobal, expandConfigVFSPaths(v.ProtoGlobalPaths, env)...)
 		case *CFlagsStmt:
 
 			d.cFlagsGlobal = append(d.cFlagsGlobal, expandStmtTokens(v.GlobalFlags, env)...)

@@ -67,11 +67,12 @@ type JoinSrcsStmt struct {
 }
 
 type AddInclStmt struct {
-	GlobalPaths   []string
-	OneLevelPaths []string
-	OwnPaths      []string
-	CythonPaths   []string
-	AsmPaths      []string
+	GlobalPaths      []string
+	OneLevelPaths    []string
+	OwnPaths         []string
+	CythonPaths      []string
+	AsmPaths         []string
+	ProtoGlobalPaths []string
 
 	AllPaths []string
 	Line     int
@@ -843,9 +844,9 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 
 		return &JoinSrcsStmt{OutputName: args[0], Sources: sources, Line: nameTok.line}
 	case "ADDINCL":
-		globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, allPaths := splitAddInclPaths(args)
+		globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, allPaths := splitAddInclPaths(args)
 
-		return &AddInclStmt{GlobalPaths: globalPaths, OneLevelPaths: oneLevelPaths, OwnPaths: ownPaths, CythonPaths: cythonPaths, AsmPaths: asmPaths, AllPaths: allPaths, Line: nameTok.line}
+		return &AddInclStmt{GlobalPaths: globalPaths, OneLevelPaths: oneLevelPaths, OwnPaths: ownPaths, CythonPaths: cythonPaths, AsmPaths: asmPaths, ProtoGlobalPaths: protoGlobalPaths, AllPaths: allPaths, Line: nameTok.line}
 	case "CFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
 
@@ -1220,7 +1221,7 @@ func splitFlagsByGlobal(args []string) (globalFlags, ownFlags []string) {
 	return globalFlags, ownFlags
 }
 
-func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, allPaths []string) {
+func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, allPaths []string) {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "ONE_LEVEL" {
 			i++
@@ -1271,6 +1272,20 @@ func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cyt
 					continue
 				}
 
+				// `GLOBAL FOR proto X` — upstream's PROTO_ADDINCL macro
+				// (yatool/build/conf/proto.conf:117-120) and contrib libs
+				// such as protobuf use this to add `-I=$X` to the protoc
+				// command in every transitive consumer's _PROTO__INCLUDE
+				// chain. Track these separately from the C++ GLOBAL chain
+				// (we were silently coalescing them, missing protobuf-src
+				// from tablet_flat's protoc cmd vs REF).
+				if i+2 < len(args) && args[i+1] == "proto" {
+					protoGlobalPaths = append(protoGlobalPaths, args[i+2])
+					i += 2
+
+					continue
+				}
+
 				i++
 				i++
 			}
@@ -1285,7 +1300,7 @@ func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cyt
 		}
 	}
 
-	return globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, allPaths
+	return globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, allPaths
 }
 
 func (p *parser) parseIf(ifTok token) *IfStmt {
