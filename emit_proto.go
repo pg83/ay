@@ -351,6 +351,9 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 		}
 		pbHParsed = append(pbHParsed, extras...)
+		for _, ti := range transitiveImports {
+			pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: internString(ti.Rel())})
+		}
 		if cfg.grpc {
 
 			for _, include := range grpcServiceHeaderIncludes {
