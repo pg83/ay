@@ -33,12 +33,18 @@ func copyFileParsedIncludes(fs *FS, modulePath string, entry copyFileEntry) []in
 	return out
 }
 
-func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData) {
+func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleInputs *ModuleCCInputs) {
 	for _, entry := range d.copyFiles {
 		srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
 		dstVFS := copyFileOutputVFS(instance.Path, entry.Dst)
 		depRefs := resolveCodegenDepRefsExt(ctx, instance, nil, []VFS{srcVFS})
-		ref := EmitCPWithDeps(instance, srcVFS, dstVFS, depRefs, ctx.emit)
+
+		var closure []VFS
+		if entry.WithContext && moduleInputs != nil {
+			closure = walkClosureRoot(ctx, instance, srcVFS, srcVFS.Rel(), *moduleInputs)
+		}
+
+		ref := EmitCPWithDeps(instance, srcVFS, dstVFS, depRefs, closure, ctx.emit)
 
 		parsed := copyFileParsedIncludes(ctx.fs, instance.Path, entry)
 		registerBoundGeneratedParsedOutput(ctx, instance, "CP", dstVFS, parsed, ref)

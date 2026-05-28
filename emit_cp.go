@@ -66,10 +66,14 @@ func EmitJVCPG4(
 }
 
 func EmitCP(instance ModuleInstance, src VFS, dst VFS, emit Emitter) NodeRef {
-	return EmitCPWithDeps(instance, src, dst, nil, emit)
+	return EmitCPWithDeps(instance, src, dst, nil, nil, emit)
 }
 
-func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, emit Emitter) NodeRef {
+// EmitCPWithDeps emits a CP (copy) node. extraInputs is the additional input
+// closure to attach (e.g. the source's transitive #include closure when the
+// COPY macro was declared WITH_CONTEXT, so that any header change retriggers
+// the copy).
+func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, emit Emitter) NodeRef {
 	fsTools := Intern("$(S)/build/scripts/fs_tools.py")
 	procCmdFiles := Intern("$(S)/build/scripts/process_command_files.py")
 
@@ -85,10 +89,14 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
-	inputs := []VFS{
-		fsTools,
-		procCmdFiles,
-		src,
+	inputs := make([]VFS, 0, 3+len(extraInputs))
+	inputs = append(inputs, fsTools, procCmdFiles, src)
+	for _, v := range extraInputs {
+		if v == src {
+			continue
+		}
+
+		inputs = append(inputs, v)
 	}
 
 	node := &Node{
