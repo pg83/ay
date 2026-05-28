@@ -1320,7 +1320,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
 
-	dedupedAddIncl := d.addIncl
+	// Per upstream TModuleIncDirs (devtools/ymake/addincls.h:135): module's
+	// own resolve uses BOTH local ADDINCL and ADDINCL(GLOBAL ...). The GLOBAL
+	// tag means "also exposes to peers"; it does NOT mean "skipped from own
+	// compile". We previously kept own and global in separate buckets, so a
+	// module that declared its destination ADDINCL only as GLOBAL (the common
+	// pattern for header.ya.make.inc COPY_FILE targets) couldn't resolve its
+	// own COPY destinations and fell through to a peer's COPY of the same
+	// header — emitting the wrong $(B) path in CC inputs.
+	dedupedAddIncl := mergeDedupVFS(d.addIncl, d.addInclGlobal)
 
 	isPy3NativeLib := d.moduleStmt.Name == "PY23_NATIVE_LIBRARY" ||
 		d.moduleStmt.Name == "PY23_LIBRARY"
