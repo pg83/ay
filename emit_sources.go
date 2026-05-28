@@ -51,6 +51,18 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		if full != nil {
 			srcIn.IncludeInputs = full[1:]
 		}
+		// AUTO COPY entries leave both the $(S) source and the $(B) destination
+		// on disk; upstream tracks both as CC inputs (the source is what the
+		// scanner reads — the copy is byte-identical content — but the $(B)
+		// destination is still cache-keyed via the include path because it
+		// physically exists at $(B)/<modpath>/<file>). Closure walks resolve
+		// only the source; pair it with the dst here for AUTO entries of this
+		// module so e.g. mkql_builtins.h's $(B)-copy enters mkql_builtins.cpp.o
+		// inputs alongside the $(S) original.
+		autoExtras := autoCopyDstExtras(srcInstance.Path, d, srcIn.IncludeInputs, srcVFS)
+		if len(autoExtras) > 0 {
+			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, autoExtras)
+		}
 		flatcExtras := flatcCCExtraInputs(ctx, srcIn.IncludeInputs)
 		if len(flatcExtras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, flatcExtras)
@@ -60,7 +72,13 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, extras)
 		}
 
-		if len(flatcExtras) == 0 && len(extras) == 0 {
+		// Fast-path: when no extras were appended, IncludeInputs == full[1:]
+		// (shares the same backing slice), so NodeInputs = full lets EmitCC
+		// emit the full input array directly with no extra allocation. When
+		// any extras are present, IncludeInputs has been reallocated past
+		// full[1:] and we leave NodeInputs nil so EmitCC rebuilds the full
+		// list from inVFS + IncludeInputs.
+		if len(autoExtras) == 0 && len(flatcExtras) == 0 && len(extras) == 0 {
 			srcIn.NodeInputs = full
 		}
 		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})

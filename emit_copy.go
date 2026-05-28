@@ -128,6 +128,42 @@ func resolveModuleSourceVFS(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	return resolveSourceVFS(ctx, instance, srcRel, srcDir)
 }
 
+// autoCopyDstExtras returns the $(B) destinations of this module's AUTO
+// COPY entries whose source paths appear in the given include closure. Each
+// AUTO copy leaves both the original $(S) source and the $(B) destination on
+// disk; the scanner naturally resolves to the source, but upstream's REF
+// tracks both paths as CC inputs (the dst is independently cache-keyed). The
+// rootDst arg is the CC compile's own input (the .cpp being compiled, which
+// is itself an AUTO copy dst); we skip it to avoid double-listing it through
+// the .cpp's own #include "X" chain pointing back at its source.
+func autoCopyDstExtras(modulePath string, d *moduleData, closure []VFS, rootDst VFS) []VFS {
+	if d == nil || len(d.copyFiles) == 0 || len(closure) == 0 {
+		return nil
+	}
+	srcToDst := make(map[VFS]VFS, len(d.copyFiles))
+	for _, entry := range d.copyFiles {
+		if !entry.Auto {
+			continue
+		}
+		srcVFS := Source(entry.Src)
+		dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
+		if dstVFS == srcVFS || dstVFS == rootDst {
+			continue
+		}
+		srcToDst[srcVFS] = dstVFS
+	}
+	if len(srcToDst) == 0 {
+		return nil
+	}
+	var extras []VFS
+	for _, v := range closure {
+		if dst, ok := srcToDst[v]; ok {
+			extras = append(extras, dst)
+		}
+	}
+	return extras
+}
+
 func isSourceEligibleForCopyAuto(srcRel string) bool {
 	return isHeaderSource(srcRel) ||
 		strings.HasSuffix(srcRel, ".c") ||
