@@ -26,6 +26,11 @@ type moduleEmitResult struct {
 
 	OwnAddInclGlobal []VFS
 
+	// AddInclOneLevel propagates to direct PEERDIR consumers only (one hop, not
+	// transitive). Direct consumers absorb these paths into their own effective
+	// addincl; they are NOT re-propagated via AddInclGlobal.
+	AddInclOneLevel []VFS
+
 	CFlagsGlobal     []string
 	CXXFlagsGlobal   []string
 	COnlyFlagsGlobal []string
@@ -721,6 +726,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			GlobalPath:       hOnlyGlobalPath,
 			AddInclGlobal:    mergeDedupVFS(d.addInclGlobal, peerContribs.addIncl),
 			OwnAddInclGlobal: cloneVFSs(d.addInclGlobal),
+			AddInclOneLevel:  cloneVFSs(d.addInclOneLevel),
 
 			CFlagsGlobal:                    mergeDedup(peerContribs.cFlags, d.cFlagsGlobal),
 			CXXFlagsGlobal:                  mergeDedup(peerContribs.cxxFlags, d.cxxFlagsGlobal),
@@ -994,6 +1000,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		for i, p := range peerResult.LDPluginPaths {
 			peerLDPluginAddPath(peerResult.LDPluginRefs[i], p)
 		}
+	}
+
+	// Direct PEERDIR consumers absorb the peer's AddInclOneLevel into their own
+	// addincl (one hop only — see moduleEmitResult.AddInclOneLevel comment).
+	// Goes through d.addIncl (own bag), so it reaches this module's CC compile
+	// flags but is NOT re-propagated via result.AddInclGlobal upstream.
+	for _, rp := range resolved {
+		if rp.kind != peerKindUserPeer {
+			continue
+		}
+
+		d.addIncl = append(d.addIncl, rp.result.AddInclOneLevel...)
 	}
 
 	archiveOrder := resolved
@@ -1678,6 +1696,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			LDPath:                          &ldPath,
 			AddInclGlobal:                   effectiveAddInclGlobal,
 			OwnAddInclGlobal:                cloneVFSs(d.addInclGlobal),
+			AddInclOneLevel:                 cloneVFSs(d.addInclOneLevel),
 			CFlagsGlobal:                    effectiveCFlagsGlobal,
 			CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
 			COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
@@ -1765,6 +1784,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		LDPath:                          arPath,
 		AddInclGlobal:                   effectiveAddInclGlobal,
 		OwnAddInclGlobal:                cloneVFSs(d.addInclGlobal),
+		AddInclOneLevel:                 cloneVFSs(d.addInclOneLevel),
 		CFlagsGlobal:                    effectiveCFlagsGlobal,
 		CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
 		COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,

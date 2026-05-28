@@ -36,6 +36,7 @@ type moduleData struct {
 	joinSrcs             []*JoinSrcsStmt
 	addIncl              []VFS
 	addInclGlobal        []VFS
+	addInclOneLevel      []VFS
 	cfAddIncl            []VFS
 	cfAddInclGlobal      []VFS
 	cythonAddIncl        []VFS
@@ -691,6 +692,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 		case *AddInclStmt:
 
 			d.addInclGlobal = append(d.addInclGlobal, expandConfigVFSPaths(v.GlobalPaths, env)...)
+			d.addInclOneLevel = append(d.addInclOneLevel, expandConfigVFSPaths(v.OneLevelPaths, env)...)
 			d.addIncl = append(d.addIncl, expandConfigVFSPaths(v.AllPaths, env)...)
 			d.cythonAddIncl = append(d.cythonAddIncl, expandConfigVFSPaths(v.CythonPaths, env)...)
 			d.asmAddIncl = append(d.asmAddIncl, expandConfigVFSPaths(v.AsmPaths, env)...)
