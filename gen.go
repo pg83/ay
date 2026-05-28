@@ -1445,33 +1445,47 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	pyCCRes := emitRunPythonForAR(ctx, instance, d, moduleInputs)
 	emitArchives(ctx, instance, d)
 
-	for _, src := range d.srcs {
-
-		srcInputs := moduleInputs
+	// Pass 2 splits d.srcs in two: non-codegen first (regular .cpp/.c/.h),
+	// codegen-produced ccRefs second (their preEmitted CC nodes from Pass 1).
+	// Upstream archives non-codegen objs first then codegen objs regardless
+	// of their relative position in SRCS — fast_sax (SRCS: parser.rl6,
+	// unescape.cpp) hands AR [unescape.cpp.o, parser.rl6.cpp.o]; tdigest
+	// (SRCS: tdigest.cpp, tdigest.proto) hands AR [tdigest.cpp.o,
+	// tdigest.pb.cc.o]. Iterating d.srcs in-order with `preEmitted[src]`
+	// preserves SRCS order, so rl6-before-cpp modules diverge. Two passes
+	// fix it without re-emitting and without changing any node content.
+	emitSrcInputs := func(src string) ModuleCCInputs {
+		si := moduleInputs
 		if extras, ok := d.perSrcCFlags[src]; ok {
-			srcInputs.PerSourceCFlags = extras
+			si.PerSourceCFlags = extras
 		}
-
-		isFlatNoLto := false
 		if _, ok := d.flatSrcs[src]; ok {
-			srcInputs.FlatOutput = true
-			isFlatNoLto = true
+			si.FlatOutput = true
 		}
-		srcInputs = adjustCythonCompanionSourceInputs(d, src, srcInputs)
-
-		emit, hadPre := preEmitted[src]
-		if !hadPre {
-			emit = emitOneSource(ctx, instance, d, src, srcInputs, ancestorRebase)
-		}
-
+		return adjustCythonCompanionSourceInputs(d, src, si)
+	}
+	appendCC := func(src string, emit *sourceEmit) {
 		if emit == nil {
-			continue
+			return
 		}
-
+		_, isFlatNoLto := d.flatSrcs[src]
 		ccRefs = append(ccRefs, emit.Ref)
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, isFlatNoLto)
 		ccIsCFGenerated = append(ccIsCFGenerated, strings.HasSuffix(src, ".cpp.in") || strings.HasSuffix(src, ".c.in"))
+	}
+	for _, src := range d.srcs {
+		if _, isCodegen := preEmitted[src]; isCodegen {
+			continue
+		}
+		appendCC(src, emitOneSource(ctx, instance, d, src, emitSrcInputs(src), ancestorRebase))
+	}
+	for _, src := range d.srcs {
+		emit, isCodegen := preEmitted[src]
+		if !isCodegen {
+			continue
+		}
+		appendCC(src, emit)
 	}
 
 	for _, emit := range emitCheckConfigH(ctx, instance, d, moduleInputs) {
