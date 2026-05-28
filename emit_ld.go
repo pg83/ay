@@ -27,6 +27,7 @@ func EmitLD(
 	ownRPathFlags []string,
 	peerRPathFlagsGlobal []string,
 	objAddLibsGlobal []string,
+	exportsScript *string,
 	noCompilerWarnings bool,
 	wantsStrip bool,
 	wantsSplitDwarf bool,
@@ -78,7 +79,7 @@ func EmitLD(
 	tools := instance.Platform.Tools
 	cmd0 := composeLDCmdVcsInfo(tools, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings)
-	cmd2 := composeLDCmdLinkExe(instance.Platform, outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, wantsStrip)
+	cmd2 := composeLDCmdLinkExe(instance.Platform, instance.Path, outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)
 	cmd3 := composeLDCmdLinkOrCopy(tools, binaryDir, dynamicPaths...)
 	splitDwarfCmds := composeLDSplitDwarfCmds(tools, outputPath, wantsSplitDwarf)
 
@@ -101,6 +102,9 @@ func EmitLD(
 	inputs := composeLDInputs(instance.Path, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths)
 
 	inputs = append(inputs, ldSvnversionHVFS)
+	if exportsScript != nil {
+		inputs = append(inputs, Source(*exportsScript))
+	}
 
 	depRefs := make([]NodeRef, 0, len(ccRefs)+len(pluginRefs)+len(globalRefs)+len(peerLDRefs)+len(dynamicRefs)+len(objcopyRefs))
 	depRefs = append(depRefs, ccRefs...)
@@ -240,7 +244,7 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 	return cmdArgs
 }
 
-func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []string, wantsStrip bool) []string {
+func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []string, exportsScript *string, wantsStrip bool) []string {
 
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
@@ -306,13 +310,24 @@ func composeLDCmdLinkExe(p *Platform, outputPath, vcsOPath string, ccPaths []VFS
 	}
 	cmdArgs = append(cmdArgs, "-Wl,--end-group")
 
-	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, dynamicPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, wantsStrip)...)
+	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, modulePath, dynamicPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)...)
 
 	return cmdArgs
 }
 
-func composeProgramLinkTrailer(p *Platform, dynamicPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []string, wantsStrip bool) []string {
+func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []string, exportsScript *string, wantsStrip bool) []string {
 	linkPrelude := []string{"-rdynamic"}
+	// EXPORTS_SCRIPT appends the version-script flag right after -rdynamic
+	// per upstream's EXPORTS_VALUE in build/conf/linkers/ld.conf:138 —
+	// $LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG -Wl,--version-script=${input:EXPORTS_FILE}.
+	// The macro arg is already a source-root-relative path (e.g.
+	// "ydb/apps/ydbd/exports.symlist"), not module-relative — upstream's
+	// ${input:EXPORTS_FILE} resolves from the source root, and ydbd's
+	// EXPORTS_SCRIPT line uses the full path.
+	_ = modulePath
+	if exportsScript != nil {
+		linkPrelude = append(linkPrelude, "-Wl,--version-script=$(S)/"+*exportsScript)
+	}
 	if p != nil && !p.PIC && p.Flags["SANDBOXING"] == "yes" {
 		linkPrelude = append(linkPrelude, "-Wl,--compress-debug-sections=zstd")
 	}
