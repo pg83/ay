@@ -134,6 +134,25 @@ func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourc
 	return scanner.NewScanCtx(cfg).WalkClosure(vfsPath)
 }
 
+// rewriteClosureCPSource maps any CP (COPY_FILE) output VFS in a closure to
+// its registered SourcePath. Used by CP-node emitters (where upstream reports
+// sibling COPY sources, not their $(B) outputs, as the canonical input). CC
+// compile closures must NOT use this — upstream tracks the $(B) COPY output
+// as the CC input directly (it is the file the compiler actually opens).
+func rewriteClosureCPSource(scanner *IncludeScanner, out []VFS) []VFS {
+	if scanner == nil || scanner.codegen == nil {
+		return out
+	}
+	for i, v := range out {
+		info := scanner.codegen.Lookup(v)
+		if info == nil || info.SourcePath == 0 {
+			continue
+		}
+		out[i] = info.SourcePath
+	}
+	return out
+}
+
 func includeScannerBasePaths() []VFS {
 	return []VFS{
 		Intern("$(S)/"),
