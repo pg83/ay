@@ -35,33 +35,44 @@ func copyFileParsedIncludes(fs *FS, modulePath string, entry copyFileEntry) []in
 
 func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleInputs *ModuleCCInputs) {
 	scanner := ctx.scannerFor(instance)
+	reg := codegenRegForInstance(ctx, instance)
 
+	// Pre-pass: register every COPY entry's parsed includes AND its codegen
+	// mapping (dst → src) before any closure walk runs. COPY entries reference
+	// each other through OUTPUT_INCLUDES (e.g. mkql_builtins_impl.h has
+	// mkql_builtins.h in OUTPUT_INCLUDES, mkql_builtins_decimal.h has
+	// mkql_builtins_impl.h, and the impl.h-closure must transit through
+	// decimal.h via header back-references). If we registered only when a
+	// COPY entry is reached, an entry's closure walk would silently miss
+	// any sibling defined later in the file.
+	type entryReg struct {
+		srcVFS VFS
+		dstVFS VFS
+		parsed []includeDirective
+	}
+	entries := make([]entryReg, 0, len(d.copyFiles))
 	for _, entry := range d.copyFiles {
 		srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
 		dstVFS := copyFileOutputVFS(instance.Path, entry.Dst)
-		depRefs := resolveCodegenDepRefsExt(ctx, instance, nil, []VFS{srcVFS})
 		parsed := copyFileParsedIncludes(ctx.fs, instance.Path, entry)
+		entries = append(entries, entryReg{srcVFS, dstVFS, parsed})
 
-		// Register the parsed includes on dst BEFORE walking, so:
-		//  - walking from dst dereferences its (source-rel + OUTPUT_INCLUDES) parsed entries;
-		//  - sibling COPY entries in this same module that include this dst by name
-		//    (resolved via the module's BUILD_ROOT/MODDIR ADDINCL) inherit its closure.
-		// Also pre-register the codegen mapping for this dst (with src) so the
-		// closure post-process in walkClosureRoot rewrites any sibling-CP hit
-		// to the source path. The full Register (with the producer ref) happens
-		// after EmitCPWithDeps below — that one is idempotent on the rel mapping.
 		if scanner != nil {
 			scanner.parsers.RegisterBuildParsedIncludes(dstVFS.Rel(), parsed)
 		}
-		if reg := codegenRegForInstance(ctx, instance); reg != nil {
-			if existing := reg.Lookup(dstVFS); existing == nil {
-				reg.Register(&GeneratedFileInfo{
-					ProducerKvP: "CP",
-					OutputPath:  dstVFS,
-					SourcePath:  srcVFS,
-				})
-			}
+		if reg != nil && reg.Lookup(dstVFS) == nil {
+			reg.Register(&GeneratedFileInfo{
+				ProducerKvP: "CP",
+				OutputPath:  dstVFS,
+				SourcePath:  srcVFS,
+			})
 		}
+	}
+
+	for i, entry := range d.copyFiles {
+		srcVFS := entries[i].srcVFS
+		dstVFS := entries[i].dstVFS
+		depRefs := resolveCodegenDepRefsExt(ctx, instance, nil, []VFS{srcVFS})
 
 		var closure []VFS
 		// COPY_FILE with WITH_CONTEXT pulls the source file's #include closure;
@@ -72,18 +83,18 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 		// sources (CP-specific — CC closures keep $(B)). keepOnlySourceVFS
 		// then drops the remaining $(B) entries: upstream's CP closure is
 		// source-only (tablegen .inc outputs etc. don't appear as direct CP
-		// inputs). The root dstVFS does not need a separate swap because
-		// EmitCPWithDeps drops dst from inputs.
+		// inputs). dedupVFS collapses repeated post-rewrite entries.
 		if moduleInputs != nil && (entry.WithContext || len(entry.OutputIncludes) > 0) {
 			closure = walkClosureRoot(ctx, instance, dstVFS, dstVFS.Rel(), *moduleInputs)
 			closure = rewriteClosureCPSource(scanner, closure)
 			closure = keepOnlySourceVFS(closure)
+			closure = dedupVFS(closure)
 		}
 
 		ref := EmitCPWithDeps(instance, srcVFS, dstVFS, depRefs, closure, ctx.emit)
 
 		// Promote the registration with the producer ref; SourcePath remains.
-		if reg := codegenRegForInstance(ctx, instance); reg != nil {
+		if reg != nil {
 			if info := reg.Lookup(dstVFS); info != nil {
 				info.ProducerRef = ref
 				info.HasProducerRef = true

@@ -171,6 +171,7 @@ func keepOnlySourceVFS(out []VFS) []VFS {
 	return w
 }
 
+
 func includeScannerBasePaths() []VFS {
 	return []VFS{
 		Intern("$(S)/"),
