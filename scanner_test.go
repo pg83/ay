@@ -747,7 +747,7 @@ import weak 'c.proto';
 	}
 
 	scanner := NewIncludeScanner(dir, SysInclSet{})
-	dirs := scanner.scanDirectives(Intern("$(S)/src.proto"))
+	dirs := scanner.sourceParsedBuckets(Intern("$(S)/src.proto")).bucket(parsedIncludesLocal)
 
 	if len(dirs) != 3 {
 		t.Fatalf("got %d directives, want 3; %+v", len(dirs), dirs)
