@@ -190,12 +190,14 @@ type antlrRunInfo struct {
 func parseCopyFileEntry(args []string, withContext bool, line int) copyFileEntry {
 	i := 0
 	auto := false
+	text := false
 	for i < len(args) {
 		switch args[i] {
 		case "AUTO":
 			auto = true
 			i++
 		case "TEXT":
+			text = true
 			i++
 		default:
 			goto parsedFlags
@@ -207,11 +209,15 @@ parsedFlags:
 		ThrowFmt("gen: COPY_FILE at line %d expects at least source and destination, got %d args", line, len(args))
 	}
 
+	// COPY_FILE(TEXT src dst …) semantically substitutes src's content into dst
+	// — consumers of dst must depend on src (and src's transitive #include
+	// closure) for any change to retrigger them. The closure plumbing matches
+	// COPY(WITH_CONTEXT …), so route TEXT through the same flag.
 	entry := copyFileEntry{
 		Src:         args[i],
 		Dst:         args[i+1],
 		Auto:        auto,
-		WithContext: withContext,
+		WithContext: withContext || text,
 	}
 	i += 2
 
