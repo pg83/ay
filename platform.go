@@ -29,6 +29,9 @@ type Platform struct {
 	CFlags   []string
 	CXXFlags []string
 
+	SystemLibs       []string
+	LinkPreludeExtra []string
+
 	ClangVer string
 }
 
@@ -65,25 +68,35 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsE
 	buildSanitized := platformBuildSanitized(flags)
 	buildRelease := isReleaseBuildType(buildType)
 
+	var systemLibs, linkPreludeExtra []string
+	if flags["MUSL"] == "yes" {
+		systemLibs = []string{"-nostdlib", "-lm"}
+	} else {
+		linkPreludeExtra = []string{"-ldl", "-lrt"}
+		systemLibs = []string{"-nodefaultlibs", "-lpthread", "-lc", "-lm"}
+	}
+
 	return &Platform{
-		OS:              os,
-		ISA:             isa,
-		Target:          MakePlatformID(os, isa),
-		Flags:           flags,
-		Tags:            tags,
-		StatsFlags:      map[string]string{},
-		StatsExtraTags:  defaultStatsExtraTags(flags),
-		Tools:           toolchainFromFlags(flags),
-		PIC:             flags["PIC"] == "yes",
-		BuildType:       buildType,
-		BuildRelease:    buildRelease,
-		BuildSanitized:  buildSanitized,
-		Ragel6Optimized: buildRelease && !buildSanitized,
-		Triple:          string(isa) + "-" + string(os) + "-gnu",
-		March:           marchFor(isa),
-		CFlags:          parseCompilerFlags(cflagsEnv),
-		CXXFlags:        parseCompilerFlags(cxxflagsEnv),
-		ClangVer:        platformClangVersion(flags),
+		OS:               os,
+		ISA:              isa,
+		Target:           MakePlatformID(os, isa),
+		Flags:            flags,
+		Tags:             tags,
+		StatsFlags:       map[string]string{},
+		StatsExtraTags:   defaultStatsExtraTags(flags),
+		Tools:            toolchainFromFlags(flags),
+		PIC:              flags["PIC"] == "yes",
+		BuildType:        buildType,
+		BuildRelease:     buildRelease,
+		BuildSanitized:   buildSanitized,
+		Ragel6Optimized:  buildRelease && !buildSanitized,
+		Triple:           string(isa) + "-" + string(os) + "-gnu",
+		March:            marchFor(isa),
+		CFlags:           parseCompilerFlags(cflagsEnv),
+		CXXFlags:         parseCompilerFlags(cxxflagsEnv),
+		SystemLibs:       systemLibs,
+		LinkPreludeExtra: linkPreludeExtra,
+		ClangVer:         platformClangVersion(flags),
 	}
 }
 
@@ -336,8 +349,8 @@ func (p *Platform) ArchiverArgs() (string, string, string) {
 	return "ar", "GNU_AR", "None"
 }
 
-func (p *Platform) Musl() bool {
-	return p.Flags["MUSL"] == "yes"
+func (p *Platform) ModuleScopeCFlagPrefix() []string {
+	return moduleScopeCFlagPrefix(p.Flags["MUSL"] == "yes", p.ISA == ISAX8664)
 }
 
 func (p *Platform) UsesResourceClang() bool {

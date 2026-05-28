@@ -308,12 +308,9 @@ func composeProgramLinkTrailer(p *Platform, dynamicPaths []VFS, peerLDFlagsGloba
 	if p != nil && !p.PIC && p.Flags["SANDBOXING"] == "yes" {
 		linkPrelude = append(linkPrelude, "-Wl,--compress-debug-sections=zstd")
 	}
-	systemLibs := []string{"-nostdlib", "-lm"}
-	if p == nil || !p.Musl() {
-		linkPrelude = append(linkPrelude, "-ldl", "-lrt")
-		systemLibs = []string{"-nodefaultlibs", "-lpthread", "-lc", "-lm"}
-	}
+	linkPrelude = append(linkPrelude, p.LinkPreludeExtra...)
 	linkPrelude = append(linkPrelude, "-Wl,--no-as-needed")
+	systemLibs := p.SystemLibs
 	_ = dynamicPaths
 
 	trailer := append([]string(nil), linkPrelude...)

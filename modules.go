@@ -136,6 +136,19 @@ func (d *moduleData) muslOn() bool {
 	return d.muslEnabled && !effectiveNoPlatform(d.flags)
 }
 
+func moduleScopeCFlagPrefix(muslOn bool, x8664 bool) []string {
+	out := make([]string, 0, 1+len(hostSseFeatures))
+	if muslOn {
+		out = append(out, "-D_musl_")
+	}
+
+	if x8664 {
+		out = append(out, hostSseFeatures...)
+	}
+
+	return out
+}
+
 type resourceEntry struct {
 	Path string
 	Key  string
@@ -413,6 +426,8 @@ func collectModule(pm *includeParserManager, modulePath string, kind ModuleKind,
 
 	applyPython3AddIncl(modulePath, d)
 	applyBuildInfoAddIncl(modulePath, d)
+
+	d.moduleScopeCFlags = append(moduleScopeCFlagPrefix(d.muslOn(), env.Bool("ARCH_X86_64")), d.moduleScopeCFlags...)
 
 	d.addIncl = mergeDedupVFS(d.addIncl, nil)
 	d.addInclGlobal = mergeDedupVFS(d.addInclGlobal, nil)

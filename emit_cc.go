@@ -401,26 +401,6 @@ type ccComposeArgs struct {
 	InclArgs           inclArgMemo
 }
 
-func cpuFeaturesFor(p *Platform) []string {
-	if p != nil && p.ISA == ISAX8664 {
-		return hostSseFeatures
-	}
-
-	return nil
-}
-
-func assembleModuleScopeCFlags(p *Platform, muslOn bool, collected []string) []string {
-	sse := cpuFeaturesFor(p)
-	out := make([]string, 0, 1+len(sse)+len(collected))
-	if muslOn {
-		out = append(out, "-D_musl_")
-	}
-	out = append(out, sse...)
-	out = append(out, collected...)
-
-	return out
-}
-
 func appendCompileFlagPipeline(cmdArgs []string, bundle compileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags []string) []string {
 	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
 	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
