@@ -185,6 +185,7 @@ func scannerFollowsImports(rel string) bool {
 	return true
 }
 
+
 func (pm *includeParserManager) RegisterBuildParsedIncludes(rel string, parsed []includeDirective) {
 	pm.buildParsed[rel] = parsed
 }
