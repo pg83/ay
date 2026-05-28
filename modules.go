@@ -723,6 +723,32 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			appendGlobalSrcGroup(d, expandStmtTokens(v.Sources, env))
 		case *GenerateEnumSerializationStmt:
 			d.enumSrcs = append(d.enumSrcs, v)
+			// Upstream's GENERATE_ENUM_SERIALIZATION macro expands inline to
+			// `PEERDIR(tools/enum_parser/enum_serialization_runtime)` (see
+			// yatool/build/ymake.core.conf:4518), so the peer enters the
+			// module's peerdir list at the macro's position in ya.make —
+			// BEFORE any later explicit PEERDIR block. We previously appended
+			// the peer at the END of genModule (gen.go:627-629), which placed
+			// enum_serialization_runtime after every explicit peer of the
+			// module and, by knock-on transitive DFS, shifted it by several
+			// slots in every consumer's LD link line (e.g.
+			// ydb-core-base-generated-codegen had enum_ser at pos 48 vs
+			// upstream's 42). Push the peer here, in declaration order, with
+			// per-module dedup so multiple GENERATE_ENUM_SERIALIZATION calls
+			// in the same ya.make don't reinsert it.
+			const enumSerPeer = "tools/enum_parser/enum_serialization_runtime"
+			if modulePath != enumSerPeer {
+				alreadyPeered := false
+				for _, existing := range d.peerdirs {
+					if existing == enumSerPeer {
+						alreadyPeered = true
+						break
+					}
+				}
+				if !alreadyPeered {
+					d.peerdirs = append(d.peerdirs, enumSerPeer)
+				}
+			}
 		case *DefaultVarStmt:
 
 			if d.defaultVars == nil {

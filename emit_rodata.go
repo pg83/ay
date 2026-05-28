@@ -13,7 +13,7 @@ func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 		base = instance.Path + "/_/" + srcRel
 	}
 
-	return Build(base + ".asm"), Build(base + ".o")
+	return Build(base + ".asm"), Build(base + instance.Platform.ObjectSuffix())
 }
 
 func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, emit Emitter) (NodeRef, VFS, VFS) {
