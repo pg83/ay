@@ -132,6 +132,19 @@ func (r includeDirectiveParserRegistry) parserFor(rel string) includeDirectivePa
 	return r.defaultParser
 }
 
+// hasRegisteredParser reports whether the parser dispatcher would return an
+// explicitly-registered parser (as opposed to falling back to the default
+// C-like parser) for a given file path. Used by callers that need a strict
+// gate on "is this file in the include graph?" — e.g. RUN_PROGRAM IN
+// walking, where unknown-extension data files (libmagic Magdir/cafebabe,
+// Jinja .jnj templates, JSON, etc.) must not be parsed for C-style
+// directives. The .in trail-strip in directiveParserExt makes .h.in and
+// .cpp.in dispatch correctly.
+func (r includeDirectiveParserRegistry) hasRegisteredParser(rel string) bool {
+	_, ok := r.byExt[directiveParserExt(rel)]
+	return ok
+}
+
 func directiveParserExt(rel string) string {
 
 	if strings.HasSuffix(rel, ".in") {
