@@ -935,7 +935,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"util",
 	}
 
-	gotDefaults := defaultPeerdirsForWithState(nil, plain, FlagSet{}, false)
+	gotDefaults := defaultPeerdirsForWithState(nil, plain, &moduleData{})
 
 	if !stringSlicesEqual(gotDefaults, wantDefaults) {
 		t.Errorf("defaultPeerdirsForWithState(plain CPP) = %v, want %v", gotDefaults, wantDefaults)
@@ -1089,7 +1089,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := defaultPeerdirsForWithState(nil, c.mi, c.flags, false)
+			got := defaultPeerdirsForWithState(nil, c.mi, &moduleData{flags: c.flags})
 
 			if !stringSlicesEqual(got, c.want) {
 				t.Errorf("defaultPeerdirsForWithState(%+v, %+v) = %v, want %v", c.mi, c.flags, got, c.want)

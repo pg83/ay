@@ -29,7 +29,6 @@ type makeFlags struct {
 	dumpGraph   bool
 	stats       bool
 	ninja       bool
-	musl        bool
 	buildType   string
 	targetPlat  string
 	hostPlat    string
@@ -209,9 +208,6 @@ func cmdMake(args []string) int {
 	}
 	for k, v := range mf.tflags {
 		targetFlags[k] = v
-	}
-	if mf.musl {
-		targetFlags["MUSL"] = "yes"
 	}
 	if mf.buildType != "" {
 		targetFlags["GG_BUILD_TYPE"] = mf.buildType
@@ -761,7 +757,7 @@ func parseMakeFlags(args []string) *makeFlags {
 		case opt.Name == "stats":
 			mf.stats = true
 		case opt.Name == "musl":
-			mf.musl = true
+			parseKV(mf.tflags, "MUSL=yes")
 		case opt.Char == 'T':
 			mf.ninja = true
 		case opt.Char == 't':

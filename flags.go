@@ -113,6 +113,14 @@ var hostDefines = []string{
 	"-D__LONG_LONG_SUPPORTED",
 }
 
+func sseBaseCFlags(x8664 bool) []string {
+	if x8664 {
+		return hostSseFeatures
+	}
+
+	return nil
+}
+
 var hostSseFeatures = []string{
 	"-msse2",
 	"-msse3",

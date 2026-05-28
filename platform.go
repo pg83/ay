@@ -349,10 +349,6 @@ func (p *Platform) ArchiverArgs() (string, string, string) {
 	return "ar", "GNU_AR", "None"
 }
 
-func (p *Platform) ModuleScopeCFlagPrefix() []string {
-	return moduleScopeCFlagPrefix(p.Flags["MUSL"] == "yes", p.ISA == ISAX8664)
-}
-
 func (p *Platform) UsesResourceClang() bool {
 	return strings.HasPrefix(p.Tools.CC, "$(") || strings.HasPrefix(p.Tools.CXX, "$(") || strings.HasPrefix(p.Tools.AR, "$(")
 }
