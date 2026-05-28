@@ -160,7 +160,29 @@ func (pm *includeParserManager) parsedIncludes(vfsPath VFS) []includeDirective {
 		return nil
 	}
 
+	rel := vfsPath.Rel()
+	if !scannerFollowsImports(rel) {
+		return nil
+	}
+
 	return pm.sourceParsedBuckets(vfsPath).bucket(parsedIncludesLocal)
+}
+
+// scannerFollowsImports reports whether the C/C++ include scanner should expand
+// a source file's parsed imports. Proto and SWIG sources have their dependency
+// closures modeled by the proto / SWIG codegen (emit_proto, swigIncludeClosure),
+// which read sourceParsedBuckets directly. The scanner must not re-walk those
+// imports: it lacks the proto/SWIG search roots and would only report spurious
+// unresolved includes for deps that already arrive via codegen (verified
+// byte-exact: e.g. sg3 google/protobuf/any.proto and swig Lib closures match
+// upstream exactly without the scanner's redundant walk).
+func scannerFollowsImports(rel string) bool {
+	switch directiveParserExt(rel) {
+	case ".proto", ".ev", ".gzt", ".gztproto", ".swg":
+		return false
+	}
+
+	return true
 }
 
 func (pm *includeParserManager) RegisterBuildParsedIncludes(rel string, parsed []includeDirective) {
