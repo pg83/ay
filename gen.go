@@ -624,9 +624,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		d.peerdirs = append(d.peerdirs, "library/python/import_tracing/constructor")
 	}
 
-	if len(d.enumSrcs) > 0 && instance.Path != "tools/enum_parser/enum_serialization_runtime" {
-		d.peerdirs = append(d.peerdirs, "tools/enum_parser/enum_serialization_runtime")
-	}
+	// (enum_serialization_runtime PEERDIR is added at GenerateEnumSerializationStmt
+	// processing time — see modules.go — to match upstream's macro position.)
 
 	if isSpecializedLibraryType(d.moduleStmt.Name) {
 		if d.moduleStmt.Name == "DYNAMIC_LIBRARY" {
