@@ -69,11 +69,15 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 		// declared OUTPUT_INCLUDES target. Both fall out of a single walk from
 		// dst because dst's registered parsedIncludes contain exactly those.
 		// rewriteClosureCPSource swaps sibling-CP $(B) hits for their $(S)
-		// sources (CP-specific — CC closures keep $(B)). The root dstVFS does
-		// not need swapping here because EmitCPWithDeps drops dst from inputs.
+		// sources (CP-specific — CC closures keep $(B)). keepOnlySourceVFS
+		// then drops the remaining $(B) entries: upstream's CP closure is
+		// source-only (tablegen .inc outputs etc. don't appear as direct CP
+		// inputs). The root dstVFS does not need a separate swap because
+		// EmitCPWithDeps drops dst from inputs.
 		if moduleInputs != nil && (entry.WithContext || len(entry.OutputIncludes) > 0) {
 			closure = walkClosureRoot(ctx, instance, dstVFS, dstVFS.Rel(), *moduleInputs)
 			closure = rewriteClosureCPSource(scanner, closure)
+			closure = keepOnlySourceVFS(closure)
 		}
 
 		ref := EmitCPWithDeps(instance, srcVFS, dstVFS, depRefs, closure, ctx.emit)
