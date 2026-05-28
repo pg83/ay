@@ -26,6 +26,15 @@ type moduleEmitResult struct {
 
 	OwnAddInclGlobal []VFS
 
+	// ProtoAddInclGlobal carries the $(S)-rooted PROTO_NAMESPACE this module
+	// contributes upstream for downstream proto compiles. Upstream calls the
+	// collected list _PROTO__INCLUDE and injects it via ${pre=-I=:_PROTO__INCLUDE}
+	// in PROTOC cmdlines, sitting between -I=$(S)/contrib/libs/protobuf/src and
+	// the trailing -I=$(B) / -I=$PROTOBUF_INCLUDE_PATH duplicate. A module
+	// contributes only when its PROTO_NAMESPACE was GLOBAL or its kind is
+	// PROTO_LIBRARY.
+	ProtoAddInclGlobal []VFS
+
 	// AddInclOneLevel propagates to direct PEERDIR consumers only (one hop, not
 	// transitive). Direct consumers absorb these paths into their own effective
 	// addincl; they are NOT re-propagated via AddInclGlobal.
@@ -718,15 +727,24 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerGlobalPathsH := peerContribs.globalPaths
 		peerGlobalRefsH := peerContribs.globalRefs
 
+		// Specialized-library path: same narrow rule — only an explicit
+		// PROTO_NAMESPACE GLOBAL contributes to _PROTO__INCLUDE.
+		var ownProtoAddInclH []VFS
+		if d.protoNamespace != nil && d.protoNamespaceGlobal {
+			ownProtoAddInclH = []VFS{Source(filepath.ToSlash(filepath.Clean(*d.protoNamespace)))}
+		}
+		effectiveProtoAddInclH := mergeDedupVFS(ownProtoAddInclH, peerContribs.protoAddIncl)
+
 		result := &moduleEmitResult{
-			isPyLibrary:      isPyLibraryType(d.moduleStmt.Name),
-			ARRef:            hOnlyARRef,
-			ARPath:           hOnlyARPath,
-			GlobalRef:        hOnlyGlobalRef,
-			GlobalPath:       hOnlyGlobalPath,
-			AddInclGlobal:    mergeDedupVFS(d.addInclGlobal, peerContribs.addIncl),
-			OwnAddInclGlobal: cloneVFSs(d.addInclGlobal),
-			AddInclOneLevel:  cloneVFSs(d.addInclOneLevel),
+			isPyLibrary:        isPyLibraryType(d.moduleStmt.Name),
+			ARRef:              hOnlyARRef,
+			ARPath:             hOnlyARPath,
+			GlobalRef:          hOnlyGlobalRef,
+			GlobalPath:         hOnlyGlobalPath,
+			AddInclGlobal:      mergeDedupVFS(d.addInclGlobal, peerContribs.addIncl),
+			OwnAddInclGlobal:   cloneVFSs(d.addInclGlobal),
+			ProtoAddInclGlobal: effectiveProtoAddInclH,
+			AddInclOneLevel:    cloneVFSs(d.addInclOneLevel),
 
 			CFlagsGlobal:                    mergeDedup(peerContribs.cFlags, d.cFlagsGlobal),
 			CXXFlagsGlobal:                  mergeDedup(peerContribs.cxxFlags, d.cxxFlagsGlobal),
@@ -1211,6 +1229,28 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	effectiveAddInclGlobal := mergeDedupVFS(d.addInclGlobal, peerAddInclGlobal)
 
+	// ProtoAddInclGlobal: this module's $(S)/<PROTO_NAMESPACE> contribution
+	// (only when GLOBAL was specified or the module is a PROTO_LIBRARY),
+	// unioned with everything peers reported (transitive — every peer's
+	// ProtoAddInclGlobal already includes its own peers' contributions).
+	// Mirrors upstream's _PROTO__INCLUDE chain and feeds the proto compile
+	// -I= block. peerContribs is not in scope here; iterate `resolved`.
+	// Only PROTO_LIBRARY modules that explicitly tagged their PROTO_NAMESPACE
+	// as GLOBAL propagate their namespace to consumers' proto compiles. A
+	// bare PROTO_LIBRARY (no explicit namespace / no GLOBAL tag) does not
+	// contribute, and a regular LIBRARY never does. Upstream's
+	// _PROTO__INCLUDE chain is narrower than the C++ ADDINCL chain.
+	var ownProtoAddIncl []VFS
+	if d.protoNamespace != nil && d.protoNamespaceGlobal {
+		ownProtoAddIncl = []VFS{Source(filepath.ToSlash(filepath.Clean(*d.protoNamespace)))}
+	}
+	protoAddInclSeen := map[VFS]struct{}{}
+	peerProtoAddInclGlobal := make([]VFS, 0, 4)
+	for _, rp := range resolved {
+		addEachVFS(protoAddInclSeen, &peerProtoAddInclGlobal, rp.result.ProtoAddInclGlobal)
+	}
+	effectiveProtoAddInclGlobal := mergeDedupVFS(ownProtoAddIncl, peerProtoAddInclGlobal)
+
 	if instance.Path == "library/python/runtime_py3" {
 		buildRootPath := Intern("$(B)/library/python/runtime_py3")
 		abseilPath := Intern("$(S)/contrib/restricted/abseil-cpp")
@@ -1321,10 +1361,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	moduleInputs := ModuleCCInputs{
-		InclArgs:             ctx.inclArgs,
-		Flags:                d.flags,
-		AddIncl:              dedupedAddIncl,
-		PeerAddInclGlobal:    selfPeerAddInclGlobal,
+		InclArgs:               ctx.inclArgs,
+		Flags:                  d.flags,
+		AddIncl:                dedupedAddIncl,
+		PeerAddInclGlobal:      selfPeerAddInclGlobal,
+		PeerProtoAddInclGlobal: effectiveProtoAddInclGlobal,
 		CFlags:               ownCFlags,
 		CXXFlags:             d.cxxFlags,
 		COnlyFlags:           d.cOnlyFlags,
@@ -1696,6 +1737,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			LDPath:                          &ldPath,
 			AddInclGlobal:                   effectiveAddInclGlobal,
 			OwnAddInclGlobal:                cloneVFSs(d.addInclGlobal),
+			ProtoAddInclGlobal:              effectiveProtoAddInclGlobal,
 			AddInclOneLevel:                 cloneVFSs(d.addInclOneLevel),
 			CFlagsGlobal:                    effectiveCFlagsGlobal,
 			CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
@@ -1784,6 +1826,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		LDPath:                          arPath,
 		AddInclGlobal:                   effectiveAddInclGlobal,
 		OwnAddInclGlobal:                cloneVFSs(d.addInclGlobal),
+		ProtoAddInclGlobal:              effectiveProtoAddInclGlobal,
 		AddInclOneLevel:                 cloneVFSs(d.addInclOneLevel),
 		CFlagsGlobal:                    effectiveCFlagsGlobal,
 		CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
@@ -2179,13 +2222,14 @@ func mergeLDPlugins(own, peer *ldPluginsResult) *ldPluginsResult {
 }
 
 type peerGlobalContribs struct {
-	addIncl    []VFS
-	cFlags     []string
-	cxxFlags   []string
-	cOnlyFlags []string
-	objAddLibs []string
-	ldFlags    []string
-	rpathFlags []string
+	addIncl      []VFS
+	protoAddIncl []VFS
+	cFlags       []string
+	cxxFlags     []string
+	cOnlyFlags   []string
+	objAddLibs   []string
+	ldFlags      []string
+	rpathFlags   []string
 
 	archiveRefs  []NodeRef
 	archivePaths []VFS
@@ -2211,6 +2255,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
 	out := peerGlobalContribs{}
 	addInclSeen := map[VFS]struct{}{}
+	protoAddInclSeen := map[VFS]struct{}{}
 	cFlagsSeen := map[string]struct{}{}
 	cxxFlagsSeen := map[string]struct{}{}
 	cOnlyFlagsSeen := map[string]struct{}{}
@@ -2308,6 +2353,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		peerInstance := derivePeerInstance(ctx, instance, d, peerPath)
 		peerResult := genModule(ctx, peerInstance)
 		addEachVFS(addInclSeen, &out.addIncl, peerResult.AddInclGlobal)
+		addEachVFS(protoAddInclSeen, &out.protoAddIncl, peerResult.ProtoAddInclGlobal)
 		addEach(cFlagsSeen, &out.cFlags, peerResult.CFlagsGlobal)
 		addEach(cxxFlagsSeen, &out.cxxFlags, peerResult.CXXFlagsGlobal)
 		addEach(cOnlyFlagsSeen, &out.cOnlyFlags, peerResult.COnlyFlagsGlobal)
