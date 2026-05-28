@@ -173,8 +173,18 @@ func keepOnlySourceVFS(out []VFS) []VFS {
 
 
 func includeScannerBasePaths() []VFS {
+	// Per upstream module_resolver.cpp:329-331, system/`<…>` includes resolve
+	// via MakeResolvePlan(fileConf.BldDir(), fileConf.SrcDir()) — BOTH the
+	// build and the source roots. Local `"…"` includes consult both too when
+	// IsRequiredBuildAndSrcRoots() is on (line 325). Without $(B) here, an
+	// angle include of a codegen-produced header — e.g. flat_boot_lease.cpp's
+	// <ydb/core/tablet_flat/flat_executor.pb.h> — falls through to the
+	// per-addincl Own/Peer build loops, which key on the addincl prefix and
+	// miss bare `$(B)/<full/path>` lookups that the codegen registry's
+	// LookupRel handles.
 	return []VFS{
 		Intern("$(S)/"),
+		Intern("$(B)/"),
 		Intern("$(S)/contrib/libs/linux-headers"),
 		Intern("$(S)/contrib/libs/linux-headers/_nf"),
 	}

@@ -1406,16 +1406,17 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	ancestorRebase := d.srcDir != nil && d.moduleStmt.Name == "PROGRAM" && isAncestorPath(*d.srcDir, instance.Path)
 
-	emitCopyFiles(ctx, instance, d, &moduleInputs)
-
-	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
-
-	jvCCRefs, jvCCOutputs := emitMiscNodes(ctx, instance, d, &moduleInputs)
-
-	prCCRes := emitRunProgramsForAR(ctx, instance, d, moduleInputs)
-	pyCCRes := emitRunPythonForAR(ctx, instance, d, moduleInputs)
-	emitArchives(ctx, instance, d)
-
+	// Pass 1 (codegen-producing srcs: .proto, .ev, .fbs, .rl, .cpp.in, .c.in, .y)
+	// runs BEFORE emitCopyFiles / emitEnumSrcs / emitMiscNodes. Those later
+	// emitters walkClosure across the module's headers, populating the SHARED
+	// childrenCache (scanner.childrenCache, keyed by file ID — not per-config).
+	// If a header includes a codegen output (e.g. `<X.pb.h>` from gclogic.h),
+	// the resolve must see the registered codegen entry; otherwise the empty
+	// children list is cached and every later scanCtx — including the eventual
+	// CC compile — reuses the stale "no pb.h" closure, AND the first scan also
+	// raises a spurious unresolved-include warning. Pass 1 registers all
+	// PB / EV / FL / RL / CF outputs in the codegen registry first, so the
+	// subsequent header walks resolve them correctly.
 	preEmitted := make(map[string]*sourceEmit, 4)
 
 	for _, src := range d.srcs {
@@ -1433,6 +1434,16 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		preEmitted[src] = emitOneSource(ctx, instance, d, src, srcInputs, ancestorRebase)
 	}
+
+	emitCopyFiles(ctx, instance, d, &moduleInputs)
+
+	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
+
+	jvCCRefs, jvCCOutputs := emitMiscNodes(ctx, instance, d, &moduleInputs)
+
+	prCCRes := emitRunProgramsForAR(ctx, instance, d, moduleInputs)
+	pyCCRes := emitRunPythonForAR(ctx, instance, d, moduleInputs)
+	emitArchives(ctx, instance, d)
 
 	for _, src := range d.srcs {
 

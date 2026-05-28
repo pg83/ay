@@ -40,7 +40,6 @@ var macroIndirectIncludes = map[string][]macroIndirectInclude{
 var macroIncludeDrops = map[string][]string{
 	"contrib/libs/llvm16/lib/Support/Unix/Signals.inc":    {"BACKTRACE_HEADER"},
 	"contrib/libs/poco/Net/include/Poco/Net/SocketDefs.h": {"types.h"},
-	"ydb/core/tablet_flat/flat_executor_gclogic.h":        {"ydb/core/tablet_flat/flat_executor.pb.h"},
 }
 
 func filterDroppedDirectives(out []includeDirective, drops []string) []includeDirective {
