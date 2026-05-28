@@ -74,7 +74,7 @@ func newIncludeDirectiveParserRegistry() includeDirectiveParserRegistry {
 	r.register(protoLike, ".proto", ".ev", ".gzt", ".gztproto")
 	r.register(swigLike, ".swg")
 	r.register(yasm, ".asm", ".asi")
-	r.register(empty, ".g4")
+	r.register(empty, ".g4", ".stg")
 
 	return r
 }
@@ -150,7 +150,9 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 		}
 
 		if m := cythonCimportFromRe.FindStringSubmatch(s); len(m) == 2 {
-			add(includeDirective{kind: includeQuoted, target: internString(cythonPxdTarget(m[1]))})
+			if t := cythonPxdTarget(m[1]); t != "" {
+				add(includeDirective{kind: includeQuoted, target: internString(t)})
+			}
 			return
 		}
 
@@ -163,7 +165,9 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 				if idx := strings.IndexAny(part, " \t"); idx >= 0 {
 					part = part[:idx]
 				}
-				add(includeDirective{kind: includeQuoted, target: internString(cythonPxdTarget(part))})
+				if t := cythonPxdTarget(part); t != "" {
+					add(includeDirective{kind: includeQuoted, target: internString(t)})
+				}
 			}
 		}
 	})
@@ -172,8 +176,12 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 }
 
 func cythonPxdTarget(module string) string {
+	if module == "cython" || strings.HasPrefix(module, "cython.") {
+		return ""
+	}
+
 	switch module {
-	case "cpython", "libc", "libcpp", "cython":
+	case "cpython", "libc", "libcpp":
 		return module + "/__init__.pxd"
 	default:
 		return strings.ReplaceAll(module, ".", "/") + ".pxd"
