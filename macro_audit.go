@@ -27,11 +27,13 @@ type macroAuditState struct {
 	mu       sync.Mutex
 	ignored  map[string]int            // macro name → invocation count
 	services map[string]map[string]int // macro name → service arg → count
+	unknown  map[string]map[string]int // macro name → unhandled service arg → count
 }
 
 var macroAudit = &macroAuditState{
 	ignored:  map[string]int{},
 	services: map[string]map[string]int{},
+	unknown:  map[string]map[string]int{},
 }
 
 func enableMacroAudit() {
@@ -41,23 +43,49 @@ func enableMacroAudit() {
 }
 
 // recordIgnoredMacro is called from applyUnknownStmt's default branch when
-// the macro name is in whitelistedMetadataMacros — i.e., gen sees it but
-// produces nothing from it.
-func recordIgnoredMacro(name string, args []string) {
+// the macro name is in acknowledgedMacros — i.e., gen sees it but produces
+// nothing from it. Service-word args of these macros are intentionally NOT
+// inspected: their argument grammar belongs to upstream's macro parser, not
+// ours, so listing tokens like `MIT` for LICENSE only generates noise.
+func recordIgnoredMacro(name string, _ []string) {
 	if !macroAudit.enabled {
 		return
 	}
 	macroAudit.mu.Lock()
 	defer macroAudit.mu.Unlock()
 	macroAudit.ignored[name]++
-	recordServiceArgsLocked(name, args)
 }
 
-// recordHandledMacro is called from every handled branch in applyUnknownStmt
-// (and the typed-stmt cases in collectStmts) so service keywords that gen
-// already routes still show up in the audit — confirming that the keyword
-// is part of the surface area we model.
+// macrosAcceptingUserFlags lists handled macros whose arguments are not
+// structural keywords but arbitrary user-defined flag names — ENABLE(MY_X)
+// and DISABLE(MY_X) translate into env.SetBool(MY_X, …) and accept anything
+// the ya.make author chose. The strict service-keyword check is suppressed
+// for these so a new project-specific flag does not need to be hard-coded.
+var macrosAcceptingUserFlags = map[string]struct{}{
+	"ENABLE":  {},
+	"DISABLE": {},
+}
+
+// recordHandledMacro is called for every macro whose typed branch in
+// applyUnknownStmt fired. It enforces "agent must immediately support all
+// macro flags": every uppercase service-keyword argument must already be
+// present as a "…" literal in this package's .go sources (mined via
+// macro_audit_known.go); an unknown keyword throws so the next agent run
+// is forced to model it before any graph is emitted. Macros listed in
+// macrosAcceptingUserFlags bypass the check. The audit buckets fill only
+// when --dump-ignored-macros is on.
 func recordHandledMacro(name string, args []string) {
+	if _, free := macrosAcceptingUserFlags[name]; !free {
+		known := knownServiceTokens()
+		for _, a := range args {
+			if !looksLikeServiceWord(a) {
+				continue
+			}
+			if _, ok := known[a]; !ok {
+				ThrowFmt("gen: macro %s received service-keyword %q that no handler models — open the upstream macro definition (yatool/build/conf, yatool/build/ymake.core.conf, yatool/build/plugins) and implement its semantics; only then drop the keyword as a \"…\" literal in the macro's handler", name, a)
+			}
+		}
+	}
 	if !macroAudit.enabled {
 		return
 	}
@@ -67,6 +95,7 @@ func recordHandledMacro(name string, args []string) {
 }
 
 func recordServiceArgsLocked(macroName string, args []string) {
+	known := knownServiceTokens()
 	for _, a := range args {
 		if !looksLikeServiceWord(a) {
 			continue
@@ -77,6 +106,16 @@ func recordServiceArgsLocked(macroName string, args []string) {
 			macroAudit.services[macroName] = bucket
 		}
 		bucket[a]++
+
+		if _, modelled := known[a]; modelled {
+			continue
+		}
+		unkBucket, ok := macroAudit.unknown[macroName]
+		if !ok {
+			unkBucket = map[string]int{}
+			macroAudit.unknown[macroName] = unkBucket
+		}
+		unkBucket[a]++
 	}
 }
 
@@ -132,15 +171,38 @@ func dumpMacroAudit(w io.Writer) {
 	fmt.Fprintln(w, "=== uppercase service-keyword arguments seen per macro ===")
 	if len(macroAudit.services) == 0 {
 		fmt.Fprintln(w, "  (none)")
+	} else {
+		macros := make([]string, 0, len(macroAudit.services))
+		for n := range macroAudit.services {
+			macros = append(macros, n)
+		}
+		sort.Strings(macros)
+		for _, m := range macros {
+			bucket := macroAudit.services[m]
+			args := make([]string, 0, len(bucket))
+			for a := range bucket {
+				args = append(args, a)
+			}
+			sort.Strings(args)
+			fmt.Fprintf(w, "  %s:\n", m)
+			for _, a := range args {
+				fmt.Fprintf(w, "      %-30s × %d\n", a, bucket[a])
+			}
+		}
+	}
+
+	fmt.Fprintln(w, "=== unhandled service-keyword arguments (not present as a \"…\" literal in *.go) ===")
+	if len(macroAudit.unknown) == 0 {
+		fmt.Fprintln(w, "  (none)")
 		return
 	}
-	macros := make([]string, 0, len(macroAudit.services))
-	for n := range macroAudit.services {
+	macros := make([]string, 0, len(macroAudit.unknown))
+	for n := range macroAudit.unknown {
 		macros = append(macros, n)
 	}
 	sort.Strings(macros)
 	for _, m := range macros {
-		bucket := macroAudit.services[m]
+		bucket := macroAudit.unknown[m]
 		args := make([]string, 0, len(bucket))
 		for a := range bucket {
 			args = append(args, a)
