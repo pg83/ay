@@ -357,15 +357,20 @@ func EmitPB(
 			cmdArgs = append(cmdArgs, "-I=$(S)/"+cppOutRoot)
 		}
 	}
-	cmdArgs = append(cmdArgs, "-I=$(S)/contrib/libs/protobuf/src")
-
-	// Upstream's _PROTO__INCLUDE chain: every transitively peered
-	// PROTO_NAMESPACE GLOBAL (or PROTO_LIBRARY) contributes a -I=<$(S)/ns>
-	// here, between the first $PROTOBUF_INCLUDE_PATH and the trailing
-	// -I=$ARCADIA_BUILD_ROOT -I=$PROTOBUF_INCLUDE_PATH duplicate.
+	// Upstream's _CPP_PROTO_CMDLINE_BASE (ymake.core.conf:612) orders the
+	// proto-namespace block as `${pre=-I=:_PROTO__INCLUDE}
+	// -I=$ARCADIA_BUILD_ROOT -I=$PROTOBUF_INCLUDE_PATH` — peer namespaces
+	// FIRST, then $(B), then protobuf-src. We emit the cppOutRoot
+	// duplicate (the legacy first PROTOBUF_INCLUDE_PATH slot for
+	// PROTO_NAMESPACE GLOBAL modules) above; from here on, peers come
+	// before the protobuf-src include so peer-namespace -I flags slot
+	// ahead of protobuf — matching REF on modules with peer .proto
+	// addincl (e.g. ydb/public/api/client/nc_private/annotations, which
+	// peers contrib/libs/googleapis-common-protos via USE_COMMON_GOOGLE_APIS).
 	for _, p := range peerProtoAddIncl {
 		cmdArgs = append(cmdArgs, "-I="+p.String())
 	}
+	cmdArgs = append(cmdArgs, "-I=$(S)/contrib/libs/protobuf/src")
 
 	if moduleTag == nil && strings.HasPrefix(protoRelPath, "yt/") {
 		cmdArgs = append(cmdArgs, "-I=$(S)/yt")
