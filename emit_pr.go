@@ -176,12 +176,12 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 		}
 		walkOne(f)
 	}
-	for _, f := range stmt.OUTNoAutoFiles {
-		if !isCCSourceExt(f) {
-			continue
-		}
-		walkOne(f)
-	}
+	// OUT_NOAUTO outputs use upstream's `${hide;noauto;output:OUT_NOAUTO}`
+	// modifier: registered as outputs but explicitly EXCLUDED from the
+	// auto-input/scan chain — the PR node does not walk their closures.
+	// (yql/.../v1_proto_split_antlr4 uses OUT_NOAUTO for .pb.h/.pb.cc, and
+	// upstream tracks only IN + tools as PR inputs; walking the .pb.cc here
+	// over-emits 1253 libcxx/protobuf headers via the parsed pb.h chain.)
 	if stmt.StdoutFile != nil && isCCSourceExt(*stmt.StdoutFile) {
 		walkOne(*stmt.StdoutFile)
 	}
