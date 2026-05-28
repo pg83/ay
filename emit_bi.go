@@ -93,7 +93,7 @@ func EmitBI(
 func biFlagsForInstance(targetP *Platform) []string {
 	bundle := compileFlagBundleFor(targetP)
 	flags := make([]string, 0, 100)
-	flags = appendCompileFlagPipeline(flags, bundle, warningFlags, bundle.Defines, nil, assembleModuleScopeCFlags(targetP, targetP.Musl(), nil))
+	flags = appendCompileFlagPipeline(flags, bundle, warningFlags, bundle.Defines, nil, targetP.ModuleScopeCFlagPrefix())
 	flags = append(flags, cxxStandardFlag)
 	flags = append(flags,
 		"-Wimport-preprocessor-directive-pedantic",

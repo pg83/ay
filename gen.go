@@ -518,8 +518,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path)
 	}
 
-	d.moduleScopeCFlags = assembleModuleScopeCFlags(instance.Platform, d.muslOn(), d.moduleScopeCFlags)
-
 	if instance.Language == LangPy && d.moduleStmt.Name == "PROTO_LIBRARY" {
 		hasProtoSrc := false
 		for _, src := range d.srcs {
