@@ -92,7 +92,7 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 	inputs := make([]VFS, 0, 3+len(extraInputs))
 	inputs = append(inputs, fsTools, procCmdFiles, src)
 	for _, v := range extraInputs {
-		if v == src {
+		if v == src || v == dst {
 			continue
 		}
 
