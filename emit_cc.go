@@ -189,7 +189,12 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, suffix string) (out, input VFS) {
 	input = srcVFS
 
-	if srcVFS.IsSource() && srcVFS.Rel() != instance.Path+"/"+srcRel {
+	// Compare against the canonical join (sources.go:resolveSourceVFS
+	// path-cleans `..` / `.` segments, so SRCS(../foo.cpp) yields a
+	// normalised srcVFS.Rel() like commands/foo.cpp — the bare
+	// instance.Path+"/"+srcRel would still carry the unnormalised tail).
+	canon := filepath.ToSlash(filepath.Clean(instance.Path + "/" + srcRel))
+	if srcVFS.IsSource() && srcVFS.Rel() != canon && in.SrcDir != nil {
 
 		outputRel := composeSrcDirOutputRel(instance.Path, *in.SrcDir, srcRel)
 		out = Build(instance.Path + "/" + outputRel + suffix)
