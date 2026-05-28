@@ -38,6 +38,16 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	cmdArgs = append(cmdArgs,
 		"-I", "$(B)",
 		"-I", "$(S)",
+	)
+	// Per-module `ADDINCL(FOR asm X)` entries arrive on in.AddIncl
+	// (emit_sources.go merges them when the source is .asm). Append after
+	// the base $(B)/$(S) pair so paths like
+	// yt/yt/core/misc/isa_crc64/include precede `-o output input` and the
+	// command shape matches REF.
+	for _, p := range in.AddIncl {
+		cmdArgs = append(cmdArgs, "-I", p.String())
+	}
+	cmdArgs = append(cmdArgs,
 		"-o", outputPath,
 		inputPath,
 	)
