@@ -103,6 +103,12 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 		}
 	}
 
+	// Normalise any literal `..` / `.` segments so SRCS(../foo.cpp) lands
+	// at the canonical source path (REF tracks the cleaned form, e.g.
+	// $(S)/ydb/public/lib/ydb_cli/commands/ydb_command.cpp, not the
+	// command_base/../ydb_command.cpp shape).
+	srcRelOnDisk = filepath.ToSlash(filepath.Clean(srcRelOnDisk))
+
 	return Source(srcRelOnDisk)
 }
 
