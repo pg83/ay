@@ -105,21 +105,22 @@ func defaultPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleDat
 		d.moduleStmt.Name == "PROTO_LIBRARY" && moduleExcludesTag(d, "CPP_PROTO") {
 		inst.Language = LangCPP
 	}
-	return defaultPeerdirsForWithState(ctx, inst, d.flags, d.muslEnabled)
+	return defaultPeerdirsForWithState(ctx, inst, d)
 }
 
-func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, flags FlagSet, muslOn bool) []string {
+func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
 	if instance.Language != LangCPP {
 		return nil
 	}
 
+	flags := d.flags
 	noPlatform := effectiveNoPlatform(flags)
 
 	rc := implicitPeerCtx{
 		flags:             flags,
 		noPlatform:        noPlatform,
 		isRuntimeAncestor: isRuntimeAncestor(instance.Path),
-		muslOn:            muslOn && !noPlatform,
+		muslOn:            d.muslEnabled && !noPlatform,
 	}
 
 	if rc.isRuntimeAncestor {
@@ -276,24 +277,26 @@ var programAllocatorDefaults = []implicitPeerRule{
 }
 
 func defaultProgramPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData, postUser bool) []string {
-	return defaultProgramPeerdirsForWithState(ctx, instance, d.flags, d.hadAllocator, d.allocatorName, d.muslLite, postUser, d.muslEnabled)
+	return defaultProgramPeerdirsForWithState(ctx, instance, d, postUser)
 }
 
-func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, flags FlagSet, hadAllocator bool, allocatorName string, muslLiteOverride bool, postUser bool, muslOn bool) []string {
+func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, d *moduleData, postUser bool) []string {
 	if instance.Language != LangCPP {
 		return nil
 	}
 
+	flags := d.flags
+	allocatorName := d.allocatorName
 	env := buildIfEnv(instance)
-	muslLite := env.Bool("MUSL_LITE") || muslLiteOverride
+	muslLite := env.Bool("MUSL_LITE") || d.muslLite
 
 	rc := implicitPeerCtx{
 		flags:         flags,
-		muslOn:        muslOn && !effectiveNoPlatform(flags),
+		muslOn:        d.muslEnabled && !effectiveNoPlatform(flags),
 		muslLite:      muslLite,
 		osLinux:       env.Bool("OS_LINUX"),
 		archX8664:     env.Bool("ARCH_X86_64"),
-		hadAllocator:  hadAllocator,
+		hadAllocator:  d.hadAllocator,
 		allocatorName: allocatorName,
 	}
 
