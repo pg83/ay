@@ -27,8 +27,8 @@ var archiverPeerLibPaths = []string{
 	"contrib/libs/tcmalloc/malloc_extension/liblibs-tcmalloc-malloc_extension.a",
 	"library/cpp/malloc/tcmalloc/libcpp-malloc-tcmalloc.a",
 	"contrib/libs/tcmalloc/no_percpu_cache/liblibs-tcmalloc-no_percpu_cache.a",
-	"contrib/libs/musl/libcontrib-libs-musl.a",
-	"contrib/libs/musl/full/liblibs-musl-full.a",
+	"contrib/libs/foolib/libcontrib-libs-foolib.a",
+	"contrib/libs/foolib/full/liblibs-foolib-full.a",
 	"library/cpp/archive/liblibrary-cpp-archive.a",
 	"contrib/libs/nayuki_md5/libcontrib-libs-nayuki_md5.a",
 	"contrib/libs/base64/avx2/liblibs-base64-avx2.a",
@@ -44,7 +44,7 @@ var archiverPeerLibPaths = []string{
 }
 
 var archiverPluginPaths = []string{
-	"$(B)/contrib/libs/musl/include/musl.py.pyplugin",
+	"$(B)/contrib/libs/foolib/include/foolib.py.pyplugin",
 }
 
 var archiverGlobalPaths = []string{

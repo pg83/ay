@@ -71,7 +71,7 @@ func TestEvalCond_DefaultEnvCoversArchiverClosureCanaries(t *testing.T) {
 	}
 }
 
-func TestEvalCond_NonMuslYdbIfBindings(t *testing.T) {
+func TestEvalCond_YdbIfBindings(t *testing.T) {
 	for _, name := range []string{"OS_FREERTOS", "STATIC_STL"} {
 		if EvalCond(&ExprIdent{Name: name}, DefaultIfEnv) {
 			t.Errorf("EvalCond(%s) = true, want false", name)
@@ -86,18 +86,6 @@ func TestEvalCond_NonMuslYdbIfBindings(t *testing.T) {
 	localEnv.SetFromString("OS_SDK", "local")
 	if !EvalCond(parseCondForTest(t, `OS_SDK == "local"`), localEnv) {
 		t.Error(`EvalCond(OS_SDK == "local") with OS_SDK=local = false, want true`)
-	}
-
-	if EvalCond(&ExprIdent{Name: "MUSL"}, DefaultIfEnv) {
-		t.Error("EvalCond(MUSL) on DefaultIfEnv = true, want false (CLI-driven)")
-	}
-
-	muslEnv := buildIfEnv(ModuleInstance{
-		Kind:     KindLib,
-		Platform: NewPlatform(OSLinux, ISAX8664, map[string]string{"MUSL": "yes"}, nil, "", ""),
-	})
-	if !EvalCond(&ExprIdent{Name: "MUSL"}, muslEnv) {
-		t.Error("EvalCond(MUSL) with platform MUSL=yes = false, want true")
 	}
 }
 

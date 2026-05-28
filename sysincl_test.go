@@ -76,21 +76,21 @@ func TestSourceFilter_NegativeLookahead(t *testing.T) {
 		match map[string]bool
 	}{
 		{
-			pat: `^(?!contrib/libs/musl)|^contrib/libs/musl/tests`,
+			pat: `^(?!contrib/libs/foolib)|^contrib/libs/foolib/tests`,
 			match: map[string]bool{
-				"contrib/libs/foo/x.c":        true,
-				"contrib/libs/musl/src/y.c":   false,
-				"contrib/libs/musl/tests/z.c": true,
-				"contrib/libs/musl-other/w.c": false,
+				"contrib/libs/foo/x.c":          true,
+				"contrib/libs/foolib/src/y.c":   false,
+				"contrib/libs/foolib/tests/z.c": true,
+				"contrib/libs/foolib-other/w.c": false,
 			},
 		},
 		{
-			pat: `^(?!(contrib/libs/musl|contrib/tools/yasm)).*|^contrib/libs/musl/tests`,
+			pat: `^(?!(contrib/libs/foolib|contrib/tools/yasm)).*|^contrib/libs/foolib/tests`,
 			match: map[string]bool{
-				"contrib/libs/foo/x.c":        true,
-				"contrib/libs/musl/src/y.c":   false,
-				"contrib/tools/yasm/main.c":   false,
-				"contrib/libs/musl/tests/z.c": true,
+				"contrib/libs/foo/x.c":          true,
+				"contrib/libs/foolib/src/y.c":   false,
+				"contrib/tools/yasm/main.c":     false,
+				"contrib/libs/foolib/tests/z.c": true,
 			},
 		},
 	}

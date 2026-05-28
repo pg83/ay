@@ -54,12 +54,11 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			flags := make(map[string]string, len(testToolchainFlags)+3)
+			flags := make(map[string]string, len(testToolchainFlags)+2)
 			for k, v := range testToolchainFlags {
 				flags[k] = v
 			}
 			flags["PIC"] = "no"
-			flags["MUSL"] = "yes"
 			flags[tt.resourceKey] = tt.resourceVal
 
 			platform := NewPlatform(OSLinux, ISAAArch64, flags, nil, "", "")

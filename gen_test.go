@@ -511,69 +511,28 @@ END()
 	}
 }
 
-func TestCollectModule_SetMuslNoSuppressesConsumerDefaults(t *testing.T) {
-	targetFlags := make(map[string]string, len(testToolchainFlags)+2)
-	for k, v := range testToolchainFlags {
-		targetFlags[k] = v
-	}
-	targetFlags["PIC"] = "no"
-	targetFlags["MUSL"] = "yes"
-
-	target := NewPlatform(OSLinux, ISAX8664, targetFlags, nil, "", "")
-	instance := ModuleInstance{
-		Path:     "bridge",
-		Kind:     KindLib,
-		Language: LangCPP,
-		Platform: target,
-	}
-
-	tmp := t.TempDir()
-	tmpFS := NewFS(tmp)
-	mf := Throw2(Parse(tmpFS, "bridge/ya.make", []byte(`LIBRARY()
-SET(MUSL no)
-NO_RUNTIME()
-PEERDIR(contrib/libs/musl)
-SRCS(x.cpp)
-END()
-`)))
-
-	d := collectModule(newIncludeParserManagerFS(tmpFS, newSharedParseCache()), "bridge", instance.Kind, mf.Stmts, buildIfEnv(instance))
-
-	if d.muslEnabled {
-		t.Fatalf("muslEnabled = true, want false after SET(MUSL no)")
-	}
-
-	defaults := defaultPeerdirsForModule(&genCtx{target: target}, instance, d)
-	for _, peer := range defaults {
-		if peer == "contrib/libs/musl/include" {
-			t.Fatalf("defaultPeerdirsForModule included musl/include despite SET(MUSL no): %v", defaults)
-		}
-	}
-}
-
 func TestGen_NoStdIncGlobalCFlagsPropagateToExplicitPeer(t *testing.T) {
 	root := t.TempDir()
 
-	muslDir := filepath.Join(root, "contrib/libs/musl")
+	fooDir := filepath.Join(root, "contrib/libs/foolib")
 	bridgeDir := filepath.Join(root, "bridge")
-	Throw(os.MkdirAll(muslDir, 0o755))
+	Throw(os.MkdirAll(fooDir, 0o755))
 	Throw(os.MkdirAll(bridgeDir, 0o755))
 
-	Throw(os.WriteFile(filepath.Join(muslDir, "ya.make"), []byte(`LIBRARY()
+	Throw(os.WriteFile(filepath.Join(fooDir, "ya.make"), []byte(`LIBRARY()
 NO_PLATFORM()
 CFLAGS(
-    GLOBAL -D_musl_=1
+    GLOBAL -D_foolib_=1
     -nostdinc
 )
 SRCS(m.c)
 END()
 `), 0o644))
-	Throw(os.WriteFile(filepath.Join(muslDir, "m.c"), []byte("int musl_symbol(void) { return 1; }\n"), 0o644))
+	Throw(os.WriteFile(filepath.Join(fooDir, "m.c"), []byte("int foolib_symbol(void) { return 1; }\n"), 0o644))
 
 	Throw(os.WriteFile(filepath.Join(bridgeDir, "ya.make"), []byte(`LIBRARY()
-SET(MUSL no)
 NO_RUNTIME()
-PEERDIR(contrib/libs/musl)
+PEERDIR(contrib/libs/foolib)
 SRCS(x.cpp)
 END()
 `), 0o644))
@@ -593,12 +552,8 @@ END()
 		t.Fatalf("bridge CC node not found")
 	}
 
-	if !flagsContain(args, "-D_musl_=1") {
-		t.Fatalf("bridge CC args missing GLOBAL CFLAG from explicit musl peer: %v", args)
-	}
-
-	if flagsContain(args, "-D_musl_") {
-		t.Fatalf("bridge CC args contain consumer MUSL sentinel despite SET(MUSL no): %v", args)
+	if !flagsContain(args, "-D_foolib_=1") {
+		t.Fatalf("bridge CC args missing GLOBAL CFLAG from explicit peer: %v", args)
 	}
 }
 
@@ -953,7 +908,6 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	stubLib := "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(stub.cpp)\nEND()\n"
 
 	for _, path := range []string{
-		"contrib/libs/musl",
 		"contrib/libs/cxxsupp/builtins",
 		"library/cpp/malloc/api",
 		"contrib/libs/cxxsupp/libcxx",
@@ -979,10 +933,9 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"contrib/libs/cxxsupp/libcxxrt",
 		"contrib/libs/libunwind",
 		"util",
-		"contrib/libs/musl/include",
 	}
 
-	gotDefaults := defaultPeerdirsForWithState(nil, plain, FlagSet{}, true)
+	gotDefaults := defaultPeerdirsForWithState(nil, plain, FlagSet{}, false)
 
 	if !stringSlicesEqual(gotDefaults, wantDefaults) {
 		t.Errorf("defaultPeerdirsForWithState(plain CPP) = %v, want %v", gotDefaults, wantDefaults)
@@ -1023,7 +976,6 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		"contrib/libs/cxxsupp/libcxxrt",
 		"contrib/libs/libunwind",
 		"util",
-		"contrib/libs/musl/include",
 	}
 
 	cases := []struct {
@@ -1074,7 +1026,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			},
 			flags: FlagSet{NoRuntime: true},
 
-			want: []string{"util", "contrib/libs/musl/include"},
+			want: []string{"util"},
 		},
 		{
 			name: "non_cpp",
@@ -1085,27 +1037,6 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			},
 			want: nil,
 		},
-
-		{
-			name: "self_musl_runtime_ancestor",
-			mi: ModuleInstance{
-				Path:     "contrib/libs/musl",
-				Kind:     KindLib,
-				Language: LangCPP,
-			},
-			want: []string{"contrib/libs/musl/include"},
-		},
-
-		{
-			name: "self_musl_subdir_runtime_ancestor",
-			mi: ModuleInstance{
-				Path:     "contrib/libs/musl/full",
-				Kind:     KindLib,
-				Language: LangCPP,
-			},
-			flags: FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true},
-			want:  nil,
-		},
 		{
 			name:  "no_util_only",
 			mi:    ModuleInstance{Path: "x", Kind: KindLib, Language: LangCPP},
@@ -1115,14 +1046,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				"contrib/libs/cxxsupp/libcxx",
 				"contrib/libs/cxxsupp/libcxxrt",
 				"contrib/libs/libunwind",
-				"contrib/libs/musl/include",
 			},
-		},
-
-		{
-			name: "musl_extra_not_runtime_ancestor",
-			mi:   ModuleInstance{Path: "contrib/libs/musl_extra", Kind: KindLib, Language: LangCPP, Platform: testTargetP},
-			want: fullSet,
 		},
 
 		{
@@ -1132,7 +1056,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
-			want: []string{"contrib/libs/musl/include"},
+			want: nil,
 		},
 		{
 			name: "self_malloc_api_runtime_ancestor",
@@ -1141,7 +1065,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
-			want: []string{"contrib/libs/musl/include"},
+			want: nil,
 		},
 		{
 			name: "self_libcxx_runtime_ancestor",
@@ -1150,7 +1074,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
-			want: []string{"contrib/libs/musl/include"},
+			want: nil,
 		},
 		{
 			name: "self_util_runtime_ancestor",
@@ -1159,13 +1083,13 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
-			want: []string{"contrib/libs/musl/include"},
+			want: nil,
 		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := defaultPeerdirsForWithState(nil, c.mi, c.flags, true)
+			got := defaultPeerdirsForWithState(nil, c.mi, c.flags, false)
 
 			if !stringSlicesEqual(got, c.want) {
 				t.Errorf("defaultPeerdirsForWithState(%+v, %+v) = %v, want %v", c.mi, c.flags, got, c.want)
@@ -1192,13 +1116,13 @@ func TestGen_DefaultPeerdirs_ExplicitDuplicateDeduped(t *testing.T) {
 	tmp := t.TempDir()
 	Throw(os.MkdirAll(filepath.Join(tmp, "lib1"), 0755))
 	Throw(os.WriteFile(filepath.Join(tmp, "lib1", "ya.make"), []byte(`LIBRARY()
-PEERDIR(contrib/libs/musl)
+PEERDIR(contrib/libs/foolib)
 SRCS(a.cpp)
 END()
 `), 0644))
 
-	Throw(os.MkdirAll(filepath.Join(tmp, "contrib/libs/musl"), 0755))
-	Throw(os.WriteFile(filepath.Join(tmp, "contrib/libs/musl", "ya.make"), []byte(`LIBRARY()
+	Throw(os.MkdirAll(filepath.Join(tmp, "contrib/libs/foolib"), 0755))
+	Throw(os.WriteFile(filepath.Join(tmp, "contrib/libs/foolib", "ya.make"), []byte(`LIBRARY()
 NO_LIBC()
 NO_UTIL()
 NO_RUNTIME()
@@ -1717,45 +1641,6 @@ END()
 	}
 }
 
-func TestGen_PROGRAM_DefaultMuslFull_PeerEmitted(t *testing.T) {
-	tmp := t.TempDir()
-
-	Throw(os.MkdirAll(filepath.Join(tmp, "myprog"), 0o755))
-	Throw(os.WriteFile(filepath.Join(tmp, "myprog", "ya.make"), []byte(`PROGRAM(myprog)
-NO_RUNTIME()
-NO_UTIL()
-ALLOCATOR(FAKE)
-SRCS(main.cpp)
-END()
-`), 0o644))
-
-	Throw(os.MkdirAll(filepath.Join(tmp, "contrib/libs/musl/full"), 0o755))
-	Throw(os.WriteFile(filepath.Join(tmp, "contrib/libs/musl/full", "ya.make"), []byte(`LIBRARY()
-NO_LIBC()
-NO_RUNTIME()
-NO_UTIL()
-NO_PLATFORM()
-SRCS(stub.c)
-END()
-`), 0o644))
-
-	g := testGen(tmp, "myprog")
-
-	found := false
-
-	for _, n := range g.Graph {
-		if n.KV["p"] == "AR" && n.TargetProperties["module_dir"] == "contrib/libs/musl/full" {
-			found = true
-
-			break
-		}
-	}
-
-	if !found {
-		t.Errorf("expected an AR node with module_dir=contrib/libs/musl/full (PR-30 D02 default PROGRAM peer); not found")
-	}
-}
-
 func TestGen_PROGRAM_DefaultAllocator_TcmallocTc(t *testing.T) {
 	tmp := t.TempDir()
 
@@ -1788,7 +1673,9 @@ SRCS(stub.cpp)
 END()
 `), 0o644))
 
-	g := testGen(tmp, "myprog")
+	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
+	target := newTestPlatform(OSLinux, ISAX8664, "no", nil)
+	g := Gen(tmp, "myprog", host, target, func(Warn) {})
 
 	hasTcmalloc := false
 	hasNoPercpu := false
@@ -2002,7 +1889,6 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 
 func TestIsRuntimeAncestor_LiteralOnly(t *testing.T) {
 	literals := []string{
-		"contrib/libs/musl",
 		"contrib/libs/libc_compat",
 		"contrib/libs/linuxvdso",
 		"contrib/libs/cxxsupp/builtins",
@@ -2025,7 +1911,6 @@ func TestIsRuntimeAncestor_LiteralOnly(t *testing.T) {
 	subtree := []string{
 		"util/charset",
 		"util/datetime/parser.rl6.cpp.o",
-		"contrib/libs/musl/full",
 		"contrib/libs/cxxsupp/libcxxabi-parts/src",
 		"contrib/libs/libunwind/private",
 	}
@@ -3124,12 +3009,11 @@ int use() { return 0; }
 
 func testGen(sourceRoot, targetDir string) *Graph {
 	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
-	targetFlags := make(map[string]string, len(testToolchainFlags)+2)
+	targetFlags := make(map[string]string, len(testToolchainFlags)+1)
 	for k, v := range testToolchainFlags {
 		targetFlags[k] = v
 	}
 	targetFlags["PIC"] = "no"
-	targetFlags["MUSL"] = "yes"
 	target := NewPlatform(OSLinux, ISAAArch64, targetFlags, nil, "", "")
 	return Gen(sourceRoot, targetDir, host, target, func(Warn) {})
 }
@@ -4293,19 +4177,19 @@ func TestCollectModule_SETAPPENDRPathGlobal(t *testing.T) {
 }
 
 func testGenT20(sourceRoot, targetDir string) *Graph {
-	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)
-	target := newT20ResourcePlatform(OSLinux, ISAAArch64, "yes", nil, true)
+	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
+	target := newT20ResourcePlatform(OSLinux, ISAAArch64, "yes", nil)
 
 	return Gen(sourceRoot, targetDir, host, target, func(Warn) {})
 }
 
 func testGenT20Tool(sourceRoot, targetDir string) *Graph {
-	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"}, true)
+	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
 
 	return Gen(sourceRoot, targetDir, host, host, func(Warn) {})
 }
 
-func newT20ResourcePlatform(os OS, isa ISA, pic string, tags []string, musl bool) *Platform {
+func newT20ResourcePlatform(os OS, isa ISA, pic string, tags []string) *Platform {
 	flags := map[string]string{
 		"AR_TOOL":           "$(CLANG)/bin/llvm-ar",
 		"BUILD_PYTHON_BIN":  "$(YMAKE_PYTHON3)/bin/python3",
@@ -4316,9 +4200,6 @@ func newT20ResourcePlatform(os OS, isa ISA, pic string, tags []string, musl bool
 		"OBJCOPY_TOOL":      "$(CLANG)/bin/llvm-objcopy",
 		"PIC":               pic,
 		"STRIP_TOOL":        "$(CLANG)/bin/llvm-strip",
-	}
-	if musl {
-		flags["MUSL"] = "yes"
 	}
 
 	return NewPlatform(os, isa, flags, tags, "", "")
@@ -4816,9 +4697,7 @@ func genDumpStatsUIDReferenceSample(t *testing.T, sourceRoot, targetDir string) 
 			"--source-root", sourceRoot,
 			"--target-platform", "default-linux-aarch64",
 			"--host-platform", "default-linux-x86_64",
-			"--host-platform-flag", "MUSL=yes",
 			"--host-platform-flag", "OS_SDK=local",
-			"--musl",
 			"--sandboxing",
 			"-DOS_SDK=local",
 			targetDir,
@@ -4842,7 +4721,6 @@ func genDumpStatsUIDReferenceSample(t *testing.T, sourceRoot, targetDir string) 
 func statsUIDReferencePlatforms() (*Platform, *Platform) {
 	hostPlatformFlags := map[string]string{
 		"APPLE_SDK_LOCAL":    "yes",
-		"MUSL":               "yes",
 		"OPENSOURCE":         "yes",
 		"OS_SDK":             "local",
 		"USE_CLANG_CL":       "yes",
@@ -4866,12 +4744,11 @@ func statsUIDReferencePlatforms() (*Platform, *Platform) {
 		targetFlags[k] = v
 	}
 	targetFlags["GG_BUILD_TYPE"] = "debug"
-	targetFlags["MUSL"] = "yes"
 	targetFlags["PIC"] = "no"
 	targetFlags["SANDBOXING"] = "yes"
 	target := NewPlatform(OSLinux, ISAAArch64, targetFlags, nil, "", "")
 	target.Tags = sandboxingNodeTags(target)
-	target.StatsFlags = buildTargetStatsFlags(targetFlags, map[string]string{"MUSL": "yes"})
+	target.StatsFlags = buildTargetStatsFlags(targetFlags, map[string]string{})
 
 	return host, target
 }

@@ -64,11 +64,11 @@ func TestNodeStatsUID_KnownVector(t *testing.T) {
 			"SANDBOXING=yes",
 			"debug",
 			"default-linux-aarch64",
-			"musl",
+			"race",
 		},
 	}
 
-	const want = "c76f8ebdc20cd1d452491e62afe5aa78"
+	const want = "b3107447d6cc0947f72c25f4ce0c059f"
 	if got := nodeStatsUID(n); got != want {
 		t.Fatalf("nodeStatsUID mismatch:\n got: %s\nwant: %s\npreimage: %s", got, want, statsUIDPreimage(n))
 	}
@@ -95,13 +95,13 @@ func TestNodeStatsUID_IgnoresUnrelatedTargetCLIFlags(t *testing.T) {
 		}
 	}
 
-	base := newNode(map[string]string{"MUSL": "yes"})
+	base := newNode(map[string]string{"RACE": "yes"})
 	withUnrelated := newNode(map[string]string{
-		"MUSL":      "yes",
+		"RACE":      "yes",
 		"UNRELATED": "yes",
 	})
 
-	const want = "c76f8ebdc20cd1d452491e62afe5aa78"
+	const want = "b3107447d6cc0947f72c25f4ce0c059f"
 	if got := nodeStatsUID(base); got != want {
 		t.Fatalf("base nodeStatsUID mismatch:\n got: %s\nwant: %s\npreimage: %s", got, want, statsUIDPreimage(base))
 	}
@@ -158,7 +158,7 @@ func TestNodeStatsUID_UsesLongRootOutputs(t *testing.T) {
 			"SANDBOXING=yes",
 			"debug",
 			"default-linux-aarch64",
-			"musl",
+			"race",
 		},
 	}
 

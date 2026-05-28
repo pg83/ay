@@ -186,15 +186,6 @@ func TestStripComments_DivisionOperatorNotMistaken(t *testing.T) {
 	}
 }
 
-func muslConsumerPeerAddIncl(isa ISA) []VFS {
-	return []VFS{
-		Intern("$(S)/contrib/libs/musl/arch/" + string(isa)),
-		Intern("$(S)/contrib/libs/musl/arch/generic"),
-		Intern("$(S)/contrib/libs/musl/include"),
-		Intern("$(S)/contrib/libs/musl/extra"),
-	}
-}
-
 func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 	dir := t.TempDir()
 
@@ -308,7 +299,7 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 	dir := t.TempDir()
 
-	mkdirs := []string{"yasm", "musl/include"}
+	mkdirs := []string{"yasm", "foolib/include"}
 
 	for _, p := range mkdirs {
 		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
@@ -327,8 +318,8 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 		t.Fatalf("write yasm/elf.h: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "musl/include/elf.h"), []byte("// musl elf.h\n"), 0o644); err != nil {
-		t.Fatalf("write musl/include/elf.h: %v", err)
+	if err := os.WriteFile(filepath.Join(dir, "foolib/include/elf.h"), []byte("// foolib elf.h\n"), 0o644); err != nil {
+		t.Fatalf("write foolib/include/elf.h: %v", err)
 	}
 
 	sysincl := SysInclSet{
@@ -336,7 +327,7 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 			Filter:      nil,
 			KeyBySource: false,
 			Mappings: map[string][]string{
-				"elf.h": {"musl/include/elf.h"},
+				"elf.h": {"foolib/include/elf.h"},
 			},
 		},
 	}
@@ -347,14 +338,14 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 	})
 
 	hasLocal := false
-	hasMusl := false
+	hasFoo := false
 
 	for _, p := range closure {
 		switch {
 		case strings.HasSuffix(p.String(), "/yasm/elf.h"):
 			hasLocal = true
-		case strings.HasSuffix(p.String(), "/musl/include/elf.h"):
-			hasMusl = true
+		case strings.HasSuffix(p.String(), "/foolib/include/elf.h"):
+			hasFoo = true
 		}
 	}
 
@@ -362,8 +353,8 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 		t.Errorf("closure missing local yasm/elf.h (search-path resolution broken): %v", closure)
 	}
 
-	if hasMusl {
-		t.Errorf("closure contains spurious musl/include/elf.h — PR-35w gate failed to suppress sysincl on locally-resolved quoted include: %v", closure)
+	if hasFoo {
+		t.Errorf("closure contains spurious foolib/include/elf.h — PR-35w gate failed to suppress sysincl on locally-resolved quoted include: %v", closure)
 	}
 }
 
@@ -526,7 +517,7 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 	dir := t.TempDir()
 
-	mkdirs := []string{"src", "musl/include"}
+	mkdirs := []string{"src", "foolib/include"}
 
 	for _, p := range mkdirs {
 		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
@@ -541,8 +532,8 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 		t.Fatalf("write source.cpp: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "musl/include/absent.h"), []byte("// musl absent.h\n"), 0o644); err != nil {
-		t.Fatalf("write musl/include/absent.h: %v", err)
+	if err := os.WriteFile(filepath.Join(dir, "foolib/include/absent.h"), []byte("// foolib absent.h\n"), 0o644); err != nil {
+		t.Fatalf("write foolib/include/absent.h: %v", err)
 	}
 
 	sysincl := SysInclSet{
@@ -550,7 +541,7 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 			Filter:      nil,
 			KeyBySource: false,
 			Mappings: map[string][]string{
-				"absent.h": {"musl/include/absent.h"},
+				"absent.h": {"foolib/include/absent.h"},
 			},
 		},
 	}
@@ -560,18 +551,18 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 		SourceRel: "src/source.cpp",
 	})
 
-	hasMusl := false
+	hasFoolib := false
 
 	for _, p := range closure {
-		if strings.HasSuffix(p.String(), "/musl/include/absent.h") {
-			hasMusl = true
+		if strings.HasSuffix(p.String(), "/foolib/include/absent.h") {
+			hasFoolib = true
 
 			break
 		}
 	}
 
-	if !hasMusl {
-		t.Errorf("closure missing musl/include/absent.h — gate over-suppresses sysincl when local resolution failed: %v", closure)
+	if !hasFoolib {
+		t.Errorf("closure missing foolib/include/absent.h — gate over-suppresses sysincl when local resolution failed: %v", closure)
 	}
 }
 

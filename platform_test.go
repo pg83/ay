@@ -39,19 +39,17 @@ func TestNewPlatform_ParsesCompilerFlags(t *testing.T) {
 func TestStatsTagsForPlatform_TargetSandboxing(t *testing.T) {
 	flags := map[string]string{
 		"GG_BUILD_TYPE": "debug",
-		"MUSL":          "yes",
 		"PIC":           "no",
 		"SANDBOXING":    "yes",
 	}
 	p := NewPlatform(OSLinux, ISAAArch64, flags, nil, "", "")
-	p.StatsFlags = buildTargetStatsFlags(flags, map[string]string{"MUSL": "yes"})
+	p.StatsFlags = buildTargetStatsFlags(flags, map[string]string{})
 
 	want := []string{
 		"default-linux-aarch64",
 		"debug",
 		"FAKEID=sandboxing",
 		"SANDBOXING=yes",
-		"musl",
 	}
 
 	if got := statsTagsForPlatform(p); !reflect.DeepEqual(got, want) {
@@ -81,7 +79,7 @@ func TestStatsTagsForPlatform_TargetBaseFlags(t *testing.T) {
 
 func TestStatsTagsForPlatform_HostTool(t *testing.T) {
 	p := NewPlatform(OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "")
-	p.StatsFlags = buildHostStatsFlags(map[string]string{"MUSL": "yes"}, nil, false)
+	p.StatsFlags = buildHostStatsFlags(map[string]string{}, nil, false)
 
 	want := []string{
 		"default-linux-x86_64",
@@ -92,7 +90,6 @@ func TestStatsTagsForPlatform_HostTool(t *testing.T) {
 		"TIDY=no",
 		"TOOL_BUILD_MODE=yes",
 		"TRAVERSE_RECURSE=no",
-		"musl",
 		"pic",
 	}
 
@@ -103,7 +100,7 @@ func TestStatsTagsForPlatform_HostTool(t *testing.T) {
 
 func TestStatsTagsForPlatform_HostSandboxing(t *testing.T) {
 	p := NewPlatform(OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "")
-	p.StatsFlags = buildHostStatsFlags(map[string]string{"MUSL": "yes"}, nil, true)
+	p.StatsFlags = buildHostStatsFlags(map[string]string{}, nil, true)
 
 	want := []string{
 		"default-linux-x86_64",
@@ -116,7 +113,6 @@ func TestStatsTagsForPlatform_HostSandboxing(t *testing.T) {
 		"TIDY=no",
 		"TOOL_BUILD_MODE=yes",
 		"TRAVERSE_RECURSE=no",
-		"musl",
 		"pic",
 	}
 
@@ -129,7 +125,6 @@ func TestStatsTagsForPlatform_HostPlatformFlagBundle(t *testing.T) {
 	p := NewPlatform(OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "")
 	p.StatsFlags = buildHostStatsFlags(map[string]string{
 		"APPLE_SDK_LOCAL":    "yes",
-		"MUSL":               "yes",
 		"OPENSOURCE":         "yes",
 		"OS_SDK":             "local",
 		"USE_CLANG_CL":       "yes",
@@ -152,7 +147,6 @@ func TestStatsTagsForPlatform_HostPlatformFlagBundle(t *testing.T) {
 		"TRAVERSE_RECURSE=no",
 		"USE_CLANG_CL=yes",
 		"USE_PREBUILT_TOOLS=no",
-		"musl",
 		"pic",
 	}
 
@@ -164,7 +158,6 @@ func TestStatsTagsForPlatform_HostPlatformFlagBundle(t *testing.T) {
 func TestStatsTagsForPlatform_HostCLIPlatformFlag(t *testing.T) {
 	p := NewPlatform(OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "")
 	p.StatsFlags = buildHostStatsFlags(map[string]string{
-		"MUSL":       "yes",
 		"OPENSOURCE": "yes",
 	}, map[string]string{
 		"USE_PYTHON3_PREV":   "yes",
@@ -187,7 +180,6 @@ func TestStatsTagsForPlatform_HostCLIPlatformFlag(t *testing.T) {
 		"USE_CLANG_CL=yes",
 		"USE_PREBUILT_TOOLS=no",
 		"USE_PYTHON3_PREV=yes",
-		"musl",
 		"pic",
 	}
 
@@ -199,7 +191,6 @@ func TestStatsTagsForPlatform_HostCLIPlatformFlag(t *testing.T) {
 func TestStatsTagsForPlatform_HostEmptyCLIPlatformFlag(t *testing.T) {
 	p := NewPlatform(OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "")
 	p.StatsFlags = buildHostStatsFlags(map[string]string{
-		"MUSL":       "yes",
 		"OPENSOURCE": "yes",
 	}, map[string]string{
 		"FOO": "",
@@ -218,7 +209,6 @@ func TestStatsTagsForPlatform_HostEmptyCLIPlatformFlag(t *testing.T) {
 		"TIDY=no",
 		"TOOL_BUILD_MODE=yes",
 		"TRAVERSE_RECURSE=no",
-		"musl",
 		"pic",
 	}
 
@@ -230,7 +220,6 @@ func TestStatsTagsForPlatform_HostEmptyCLIPlatformFlag(t *testing.T) {
 func TestStatsTagsForPlatform_HostCLIPlatformFlagOSSDK(t *testing.T) {
 	p := NewPlatform(OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "")
 	p.StatsFlags = buildHostStatsFlags(map[string]string{
-		"MUSL":       "yes",
 		"OPENSOURCE": "yes",
 	}, map[string]string{
 		"OS_SDK": "local",
@@ -249,7 +238,6 @@ func TestStatsTagsForPlatform_HostCLIPlatformFlagOSSDK(t *testing.T) {
 		"TIDY=no",
 		"TOOL_BUILD_MODE=yes",
 		"TRAVERSE_RECURSE=no",
-		"musl",
 		"pic",
 	}
 
