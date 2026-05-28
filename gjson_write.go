@@ -409,12 +409,33 @@ func appendGraphConfResourceURIs(buf []byte, resources []graphConfResourceURI, p
 	return buf
 }
 
-func appendVFS(buf []byte, v VFS) []byte {
-	buf = append(buf, '"')
-	buf = appendStringEscapedBody(buf, v.String())
-	buf = append(buf, '"')
+// vfsEscapedJSON caches the JSON-encoded form (`"…"`, escape-body included)
+// of each interned VFS string. writeGraph emits the same path many times —
+// up to ~1.3M emits in sg5 with the new CP closures — and JSON escape was
+// 27% of CPU until this cache went in. The intern table is append-only and
+// strID() is stable, so a slice indexed by strID is safe; we grow it lazily
+// to the current intern bound on the first miss past its length.
+var vfsEscapedJSON [][]byte
 
-	return buf
+func appendVFS(buf []byte, v VFS) []byte {
+	id := v.strID()
+	if int(id) < len(vfsEscapedJSON) {
+		if cached := vfsEscapedJSON[id]; cached != nil {
+			return append(buf, cached...)
+		}
+	} else {
+		nc := make([][]byte, internBound())
+		copy(nc, vfsEscapedJSON)
+		vfsEscapedJSON = nc
+	}
+
+	s := internTable.strs[id]
+	out := make([]byte, 0, len(s)+2)
+	out = append(out, '"')
+	out = appendStringEscapedBody(out, s)
+	out = append(out, '"')
+	vfsEscapedJSON[id] = out
+	return append(buf, out...)
 }
 
 func appendStringMap(buf []byte, m map[string]string, pad string) []byte {
