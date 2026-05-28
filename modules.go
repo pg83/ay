@@ -1103,7 +1103,17 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		}
 		d.protocFlags = append(d.protocFlags, "--fatal_warnings")
 	case "USE_COMMON_GOOGLE_APIS":
-		d.peerdirs = append(d.peerdirs, "contrib/libs/googleapis-common-protos")
+		// upstream's _CPP_PROTO module-definition body (proto.conf:741-743)
+		// runs `PEERDIR += contrib/libs/googleapis-common-protos` BEFORE
+		// any ya.make-body PEERDIR statements, so the googleapis dir lands
+		// first in the peer list. The USE_COMMON_GOOGLE_APIS macro itself
+		// just toggles the gate variable _COMMON_GOOGLE_APIS; the actual
+		// PEERDIR sits at the module definition. Prepend to mirror that
+		// ordering so consumers see googleapis ahead of other transitive
+		// peers' GLOBAL ADDINCLs (otherwise their CC -I list slots
+		// googleapis last and diverges from REF).
+		const googleapisPeer = "contrib/libs/googleapis-common-protos"
+		d.peerdirs = append([]string{googleapisPeer}, d.peerdirs...)
 	case "FLATC_FLAGS":
 		d.flatcFlags = append(d.flatcFlags, expandListVars(v.Args, env)...)
 	case "COPY_FILE", "COPY_FILE_WITH_CONTEXT":
