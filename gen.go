@@ -1723,6 +1723,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ownRPathFlags,
 			peerRPathFlagsGlobal,
 			peerObjAddLibsGlobal,
+			d.exportsScript,
 			d.flags.NoCompilerWarnings,
 			wantsStrip,
 			d.splitDwarf,

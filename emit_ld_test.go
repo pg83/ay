@@ -95,6 +95,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		false,
 		false,
 		false,
@@ -185,6 +186,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		false,
 		false,
 		true,
@@ -255,6 +257,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		false,
 		false,
 		false,
@@ -289,11 +292,13 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 
 	got := composeProgramLinkTrailer(
 		p,
+		"",
 		nil,
 		nil,
 		nil,
 		[]string{"-Wl,-rpath,$ORIGIN"},
 		[]string{"-Wl,-rpath,$ORIGIN"},
+		nil,
 		nil,
 		false,
 	)
@@ -343,6 +348,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		nil,
 		nil, nil,
 		nil, nil,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -409,6 +415,7 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 		nil,
 		nil,
 		nil,
+		nil,
 		false,
 		false,
 		false,
@@ -465,7 +472,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 			instance := targetInstance("test/prog")
 
 			exc := Try(func() {
-				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, nil, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, false, false, false, testHostP, e)
+				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, nil, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, false, false, false, testHostP, e)
 			})
 
 			if exc == nil {
