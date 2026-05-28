@@ -74,7 +74,7 @@ func extraProtoOutputParsedIncludes(output, pbH, grpcPbH, grpcPbCC VFS, grpcHPar
 	}
 }
 
-func protoTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) ([]VFS, bool) {
+func protoTransitiveImports(pm *includeParserManager, fs *FS, srcRel string, peerProtoAddIncl []VFS) ([]VFS, bool) {
 	rootImports := protoDirectImportNames(pm, srcRel)
 	if rootImports == nil {
 		return nil, false
@@ -99,7 +99,7 @@ func protoTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) ([]
 				hasDescriptor = true
 				continue
 			}
-			resolved := resolveProtoImportPath(fs, imp)
+			resolved := resolveProtoImportPath(fs, imp, peerProtoAddIncl)
 			if resolved == "" {
 				continue
 			}
@@ -113,7 +113,7 @@ func protoTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) ([]
 			if imp == "google/protobuf/descriptor.proto" {
 				continue
 			}
-			if resolved := resolveProtoImportPath(fs, imp); resolved != "" {
+			if resolved := resolveProtoImportPath(fs, imp, peerProtoAddIncl); resolved != "" {
 				walk(resolved)
 			}
 		}
@@ -124,7 +124,7 @@ func protoTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) ([]
 			hasDescriptor = true
 			continue
 		}
-		resolved := resolveProtoImportPath(fs, imp)
+		resolved := resolveProtoImportPath(fs, imp, peerProtoAddIncl)
 		if resolved == "" {
 			continue
 		}
@@ -138,7 +138,7 @@ func protoTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) ([]
 		if imp == "google/protobuf/descriptor.proto" {
 			continue
 		}
-		if resolved := resolveProtoImportPath(fs, imp); resolved != "" {
+		if resolved := resolveProtoImportPath(fs, imp, peerProtoAddIncl); resolved != "" {
 			walk(resolved)
 		}
 	}
@@ -206,13 +206,25 @@ func protoDirectImportNames(pm *includeParserManager, srcRel string) []string {
 	return out
 }
 
-func resolveProtoImportPath(fs *FS, importedRel string) string {
+func resolveProtoImportPath(fs *FS, importedRel string, peerProtoAddIncl []VFS) string {
 	clean := filepath.ToSlash(filepath.Clean(importedRel))
 	candidates := []string{clean}
 	if !strings.HasPrefix(clean, "yt/") {
 		candidates = append(candidates, filepath.ToSlash(filepath.Clean("yt/"+clean)))
 	}
 	candidates = append(candidates, filepath.ToSlash(filepath.Clean(pbRuntimeBase+clean)))
+	// Peer PROTO_NAMESPACE / PROTO_LIBRARY contributions land in protoc's -I
+	// flags (peerProtoAddIncl); mirror that here so transitive .proto inputs
+	// resolve through the same search prefix protoc does (e.g. opentelemetry's
+	// `import "opentelemetry/proto/common/v1/common.proto"` finds the file at
+	// $(S)/contrib/libs/opentelemetry-proto/opentelemetry/proto/common/v1/common.proto
+	// via the `contrib/libs/opentelemetry-proto` -I).
+	for _, p := range peerProtoAddIncl {
+		if p.Root() != VFSRootSource {
+			continue
+		}
+		candidates = append(candidates, filepath.ToSlash(filepath.Clean(p.Rel()+"/"+clean)))
+	}
 
 	for _, cand := range candidates {
 		if fs.IsFile(cand) {
@@ -284,7 +296,16 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 	}
 
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
-	transitiveImports, hasDescriptor := protoTransitiveImports(ctx.parsers, ctx.fs, protoRelPath)
+	// Search transitive .proto imports through the same -I prefixes protoc
+	// receives: the own PROTO_NAMESPACE (cppOutRoot) plus every peer-contributed
+	// proto namespace. Without the own namespace, opentelemetry-proto's
+	// `import "opentelemetry/proto/common/v1/common.proto"` from resource.proto
+	// would not resolve, even though protoc handles it via -I=$(S)/cppOutRoot.
+	protoSearchPaths := peerProtoAddIncl
+	if cfg.cppOutRoot != "" {
+		protoSearchPaths = append([]VFS{Source(cfg.cppOutRoot)}, peerProtoAddIncl...)
+	}
+	transitiveImports, hasDescriptor := protoTransitiveImports(ctx.parsers, ctx.fs, protoRelPath, protoSearchPaths)
 
 	pbRef := EmitPB(
 		instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
