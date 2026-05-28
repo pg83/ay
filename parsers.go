@@ -74,7 +74,7 @@ func newIncludeDirectiveParserRegistry() includeDirectiveParserRegistry {
 	r.register(protoLike, ".proto", ".ev", ".gzt", ".gztproto")
 	r.register(swigLike, ".swg")
 	r.register(yasm, ".asm", ".asi")
-	r.register(empty, ".g4", ".stg")
+	r.register(empty, ".g4", ".stg", ".m4")
 
 	return r
 }
