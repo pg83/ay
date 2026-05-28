@@ -35,15 +35,6 @@ func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
 	}
 }
 
-func muslHostInstance(path string) ModuleInstance {
-	return ModuleInstance{
-		Path:     path,
-		Kind:     KindLib,
-		Language: LangCPP,
-		Platform: testHostP,
-	}
-}
-
 func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 	emit := NewBufferedEmitter()
 	srcVFS := Intern("$(B)/util/_/datetime/parser.rl6.cpp")
@@ -79,10 +70,10 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 	in := ModuleCCInputs{
 		InclArgs: inclArgMemo{},
 		AddIncl: []VFS{
-			Intern("$(S)/contrib/libs/musl/arch/aarch64"),
-			Intern("$(S)/contrib/libs/musl/arch/generic"),
-			Intern("$(S)/contrib/libs/musl/include"),
-			Intern("$(S)/contrib/libs/musl/extra"),
+			Intern("$(S)/contrib/libs/foolib/arch/aarch64"),
+			Intern("$(S)/contrib/libs/foolib/arch/generic"),
+			Intern("$(S)/contrib/libs/foolib/include"),
+			Intern("$(S)/contrib/libs/foolib/extra"),
 		},
 	}
 	EmitCC(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/fp_mode.c", Intern("$(S)/contrib/libs/cxxsupp/builtins/aarch64/fp_mode.c"), in, testHostP, emit)
@@ -92,10 +83,10 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 	wantSlot := []string{
 		"-I$(B)",
 		"-I$(S)",
-		"-I$(S)/contrib/libs/musl/arch/aarch64",
-		"-I$(S)/contrib/libs/musl/arch/generic",
-		"-I$(S)/contrib/libs/musl/include",
-		"-I$(S)/contrib/libs/musl/extra",
+		"-I$(S)/contrib/libs/foolib/arch/aarch64",
+		"-I$(S)/contrib/libs/foolib/arch/generic",
+		"-I$(S)/contrib/libs/foolib/include",
+		"-I$(S)/contrib/libs/foolib/extra",
 		"-I$(S)/contrib/libs/linux-headers",
 		"-I$(S)/contrib/libs/linux-headers/_nf",
 	}
@@ -109,22 +100,22 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 
 func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	emit := NewBufferedEmitter()
-	inst := muslHostInstance("contrib/libs/musl")
+	inst := hostInstance("contrib/libs/foolib")
 	in := ModuleCCInputs{
 		InclArgs: inclArgMemo{},
 		AddIncl: []VFS{
-			Intern("$(S)/custom/musl/arch/x86_64"),
-			Intern("$(S)/custom/musl/include"),
+			Intern("$(S)/custom/foolib/arch/x86_64"),
+			Intern("$(S)/custom/foolib/include"),
 		},
 	}
-	EmitCC(inst, "src/string/strlen.c", Intern("$(S)/contrib/libs/musl/src/string/strlen.c"), in, testHostP, emit)
+	EmitCC(inst, "src/string/strlen.c", Intern("$(S)/contrib/libs/foolib/src/string/strlen.c"), in, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 	wantSlot := []string{
 		"-I$(B)",
 		"-I$(S)",
-		"-I$(S)/custom/musl/arch/x86_64",
-		"-I$(S)/custom/musl/include",
+		"-I$(S)/custom/foolib/arch/x86_64",
+		"-I$(S)/custom/foolib/include",
 		"-I$(S)/contrib/libs/linux-headers",
 		"-I$(S)/contrib/libs/linux-headers/_nf",
 	}
@@ -136,15 +127,15 @@ func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	}
 
 	for _, banned := range []string{
-		"-I$(S)/contrib/libs/musl/arch/x86_64",
-		"-I$(S)/contrib/libs/musl/arch/generic",
-		"-I$(S)/contrib/libs/musl/src/include",
-		"-I$(S)/contrib/libs/musl/src/internal",
-		"-I$(S)/contrib/libs/musl/include",
-		"-I$(S)/contrib/libs/musl/extra",
+		"-I$(S)/contrib/libs/foolib/arch/x86_64",
+		"-I$(S)/contrib/libs/foolib/arch/generic",
+		"-I$(S)/contrib/libs/foolib/src/include",
+		"-I$(S)/contrib/libs/foolib/src/internal",
+		"-I$(S)/contrib/libs/foolib/include",
+		"-I$(S)/contrib/libs/foolib/extra",
 	} {
 		if contains(args, banned) {
-			t.Fatalf("cmd_args unexpectedly contain hardcoded musl include %q: %v", banned, args)
+			t.Fatalf("cmd_args unexpectedly contain hardcoded foolib include %q: %v", banned, args)
 		}
 	}
 }
@@ -195,7 +186,7 @@ func TestEmitCC_CSource_UsesClang(t *testing.T) {
 	}
 }
 
-func TestEmitCC_NoCompilerWarnings_SelectsMuslWarningFlags(t *testing.T) {
+func TestEmitCC_NoCompilerWarnings_SelectsWarningSuppressionFlags(t *testing.T) {
 	emit := NewBufferedEmitter()
 	inst := targetInstance("contrib/libs/cxxsupp/libcxxrt")
 	EmitCC(inst, "exception.cc", Intern("$(S)/contrib/libs/cxxsupp/libcxxrt/exception.cc"), ModuleCCInputs{Flags: FlagSet{NoCompilerWarnings: true}}, testHostP, emit)

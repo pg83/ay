@@ -8,30 +8,30 @@ import (
 const referenceASOutput = "$(B)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
 
 var builtinsASOwnAddIncl = []VFS{
-	Intern("$(S)/contrib/libs/musl/arch/aarch64"),
-	Intern("$(S)/contrib/libs/musl/arch/generic"),
-	Intern("$(S)/contrib/libs/musl/include"),
-	Intern("$(S)/contrib/libs/musl/extra"),
+	Intern("$(S)/contrib/libs/foolib/arch/aarch64"),
+	Intern("$(S)/contrib/libs/foolib/arch/generic"),
+	Intern("$(S)/contrib/libs/foolib/include"),
+	Intern("$(S)/contrib/libs/foolib/extra"),
 }
 
 func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	e := NewBufferedEmitter()
-	inst := muslHostInstance("contrib/libs/musl")
+	inst := hostInstance("contrib/libs/foolib")
 	in := ModuleCCInputs{
 		InclArgs: inclArgMemo{},
 		AddIncl: []VFS{
-			Intern("$(S)/custom/musl/arch/x86_64"),
-			Intern("$(S)/custom/musl/include"),
+			Intern("$(S)/custom/foolib/arch/x86_64"),
+			Intern("$(S)/custom/foolib/include"),
 		},
 	}
-	EmitAS(inst, "src/math/x86_64/ceill.s", Intern("$(S)/contrib/libs/musl/src/math/x86_64/ceill.s"), in, testHostP, e)
+	EmitAS(inst, "src/math/x86_64/ceill.s", Intern("$(S)/contrib/libs/foolib/src/math/x86_64/ceill.s"), in, testHostP, e)
 
 	args := e.nodes[0].Cmds[0].CmdArgs
 	wantTail := []string{
 		"-I$(B)",
 		"-I$(S)",
-		"-I$(S)/custom/musl/arch/x86_64",
-		"-I$(S)/custom/musl/include",
+		"-I$(S)/custom/foolib/arch/x86_64",
+		"-I$(S)/custom/foolib/include",
 		"-I$(S)/contrib/libs/linux-headers",
 		"-I$(S)/contrib/libs/linux-headers/_nf",
 	}
@@ -44,15 +44,15 @@ func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	}
 
 	for _, banned := range []string{
-		"-I$(S)/contrib/libs/musl/arch/x86_64",
-		"-I$(S)/contrib/libs/musl/arch/generic",
-		"-I$(S)/contrib/libs/musl/src/include",
-		"-I$(S)/contrib/libs/musl/src/internal",
-		"-I$(S)/contrib/libs/musl/include",
-		"-I$(S)/contrib/libs/musl/extra",
+		"-I$(S)/contrib/libs/foolib/arch/x86_64",
+		"-I$(S)/contrib/libs/foolib/arch/generic",
+		"-I$(S)/contrib/libs/foolib/src/include",
+		"-I$(S)/contrib/libs/foolib/src/internal",
+		"-I$(S)/contrib/libs/foolib/include",
+		"-I$(S)/contrib/libs/foolib/extra",
 	} {
 		if contains(args, banned) {
-			t.Fatalf("cmd_args unexpectedly contain hardcoded musl include %q: %v", banned, args)
+			t.Fatalf("cmd_args unexpectedly contain hardcoded foolib include %q: %v", banned, args)
 		}
 	}
 }

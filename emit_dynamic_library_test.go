@@ -12,7 +12,7 @@ func TestComposeDynLibInputs_IncludesVcsAndHelperScripts(t *testing.T) {
 			Intern("$(B)/build/cow/on/libbuild-cow-on.a"),
 		},
 		[]VFS{
-			Intern("$(B)/contrib/libs/musl/include/musl.py.pyplugin"),
+			Intern("$(B)/contrib/libs/foolib/include/foolib.py.pyplugin"),
 		},
 		Intern("$(B)/tools/fix_elf/fix_elf"),
 		"contrib/libs/libiconv/dynamic",
@@ -23,7 +23,7 @@ func TestComposeDynLibInputs_IncludesVcsAndHelperScripts(t *testing.T) {
 
 		"$(B)/contrib/libs/libiconv/static/liblibs-libiconv-static.a",
 		"$(B)/build/cow/on/libbuild-cow-on.a",
-		"$(B)/contrib/libs/musl/include/musl.py.pyplugin",
+		"$(B)/contrib/libs/foolib/include/foolib.py.pyplugin",
 		"$(B)/tools/fix_elf/fix_elf",
 		"$(S)/build/scripts/vcs_info.py",
 		"$(S)/build/scripts/c_templates/svn_interface.c",

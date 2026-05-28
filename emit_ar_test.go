@@ -28,7 +28,6 @@ func newTestPlatform(os OS, isa ISA, pic string, tags []string) *Platform {
 		flags[k] = v
 	}
 	flags["PIC"] = pic
-	flags["MUSL"] = "yes"
 	return NewPlatform(os, isa, flags, tags, "", "")
 }
 
@@ -146,9 +145,9 @@ func TestArchiveName_AllReferenceAR(t *testing.T) {
 		{"contrib/libs/linuxvdso", "libcontrib-libs-linuxvdso.a"},
 		{"contrib/libs/linuxvdso/original", "liblibs-linuxvdso-original.a"},
 		{"contrib/libs/mimalloc", "libcontrib-libs-mimalloc.a"},
-		{"contrib/libs/musl", "libcontrib-libs-musl.a"},
-		{"contrib/libs/musl/full", "liblibs-musl-full.a"},
-		{"contrib/libs/musl_extra", "libcontrib-libs-musl_extra.a"},
+		{"contrib/libs/foolib", "libcontrib-libs-foolib.a"},
+		{"contrib/libs/foolib/full", "liblibs-foolib-full.a"},
+		{"contrib/libs/foolib_extra", "libcontrib-libs-foolib_extra.a"},
 		{"contrib/libs/nayuki_md5", "libcontrib-libs-nayuki_md5.a"},
 		{"contrib/libs/tcmalloc/malloc_extension", "liblibs-tcmalloc-malloc_extension.a"},
 		{"contrib/libs/tcmalloc/no_percpu_cache", "liblibs-tcmalloc-no_percpu_cache.a"},

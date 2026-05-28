@@ -13,7 +13,7 @@ func TestLiteralAltsFromRegex_ParityWithRegex(t *testing.T) {
 		`^(contrib/libs/cxxsupp/openmp|catboost/cuda/cuda_lib)`,
 		`^contrib/libs/(apache/apr|openssl)`,
 		`^contrib/libs/(kyotocabinet|minilzo)`,
-		`^(contrib/libs/musl|contrib/libs/cxxsupp/libcxx/include/__config)`,
+		`^(contrib/libs/foolib|contrib/libs/cxxsupp/libcxx/include/__config)`,
 	}
 
 	paths := []string{
@@ -26,7 +26,7 @@ func TestLiteralAltsFromRegex_ParityWithRegex(t *testing.T) {
 		"contrib/libs/openssl/ssl.c",
 		"contrib/libs/apache/apr/x.c",
 		"contrib/libs/minilzo/m.c",
-		"contrib/libs/musl/src/string/strlen.c",
+		"contrib/libs/foolib/src/string/strlen.c",
 		"contrib/libs/cxxsupp/libcxx/include/__config",
 		"util/generic/string.h",
 		"library/cpp/foo/bar.cpp",

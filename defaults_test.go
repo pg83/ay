@@ -5,23 +5,22 @@ import (
 	"testing"
 )
 
-func newAllocatorDefaultTestPlatform(os OS, isa ISA, musl string) *Platform {
-	flags := make(map[string]string, len(testToolchainFlags)+2)
+func newAllocatorDefaultTestPlatform(os OS, isa ISA) *Platform {
+	flags := make(map[string]string, len(testToolchainFlags)+1)
 	for k, v := range testToolchainFlags {
 		flags[k] = v
 	}
 	flags["PIC"] = "no"
-	flags["MUSL"] = musl
 
 	return NewPlatform(os, isa, flags, nil, "", "")
 }
 
-func TestDefaultProgramPeerdirsForWithState_NonMuslX8664GetsTcmallocDefault(t *testing.T) {
+func TestDefaultProgramPeerdirsForWithState_X8664GetsTcmallocDefault(t *testing.T) {
 	instance := ModuleInstance{
 		Path:     "prog",
 		Kind:     KindBin,
 		Language: LangCPP,
-		Platform: newAllocatorDefaultTestPlatform(OSLinux, ISAX8664, "no"),
+		Platform: newAllocatorDefaultTestPlatform(OSLinux, ISAX8664),
 	}
 
 	got := defaultProgramPeerdirsForWithState(nil, instance, FlagSet{}, false, "", false, false, false)
@@ -36,12 +35,12 @@ func TestDefaultProgramPeerdirsForWithState_NonMuslX8664GetsTcmallocDefault(t *t
 	}
 }
 
-func TestDefaultProgramPeerdirsForWithState_NonMuslAArch64SkipsTcmallocDefault(t *testing.T) {
+func TestDefaultProgramPeerdirsForWithState_AArch64SkipsTcmallocDefault(t *testing.T) {
 	instance := ModuleInstance{
 		Path:     "prog",
 		Kind:     KindBin,
 		Language: LangCPP,
-		Platform: newAllocatorDefaultTestPlatform(OSLinux, ISAAArch64, "no"),
+		Platform: newAllocatorDefaultTestPlatform(OSLinux, ISAAArch64),
 	}
 
 	got := defaultProgramPeerdirsForWithState(nil, instance, FlagSet{}, false, "", false, false, false)
