@@ -67,10 +67,11 @@ type JoinSrcsStmt struct {
 }
 
 type AddInclStmt struct {
-	GlobalPaths []string
-	OwnPaths    []string
-	CythonPaths []string
-	AsmPaths    []string
+	GlobalPaths   []string
+	OneLevelPaths []string
+	OwnPaths      []string
+	CythonPaths   []string
+	AsmPaths      []string
 
 	AllPaths []string
 	Line     int
@@ -842,9 +843,9 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 
 		return &JoinSrcsStmt{OutputName: args[0], Sources: sources, Line: nameTok.line}
 	case "ADDINCL":
-		globalPaths, ownPaths, cythonPaths, asmPaths, allPaths := splitAddInclPaths(args)
+		globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, allPaths := splitAddInclPaths(args)
 
-		return &AddInclStmt{GlobalPaths: globalPaths, OwnPaths: ownPaths, CythonPaths: cythonPaths, AsmPaths: asmPaths, AllPaths: allPaths, Line: nameTok.line}
+		return &AddInclStmt{GlobalPaths: globalPaths, OneLevelPaths: oneLevelPaths, OwnPaths: ownPaths, CythonPaths: cythonPaths, AsmPaths: asmPaths, AllPaths: allPaths, Line: nameTok.line}
 	case "CFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
 
@@ -1219,8 +1220,19 @@ func splitFlagsByGlobal(args []string) (globalFlags, ownFlags []string) {
 	return globalFlags, ownFlags
 }
 
-func splitAddInclPaths(args []string) (globalPaths, ownPaths, cythonPaths, asmPaths, allPaths []string) {
+func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, allPaths []string) {
 	for i := 0; i < len(args); i++ {
+		if args[i] == "ONE_LEVEL" {
+			i++
+			if i < len(args) {
+				oneLevelPaths = append(oneLevelPaths, args[i])
+				ownPaths = append(ownPaths, args[i])
+				allPaths = append(allPaths, args[i])
+			}
+
+			continue
+		}
+
 		if args[i] == "FOR" {
 			if i+2 < len(args) && args[i+1] == "cython" {
 				cythonPaths = append(cythonPaths, args[i+2])
@@ -1273,7 +1285,7 @@ func splitAddInclPaths(args []string) (globalPaths, ownPaths, cythonPaths, asmPa
 		}
 	}
 
-	return globalPaths, ownPaths, cythonPaths, asmPaths, allPaths
+	return globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, allPaths
 }
 
 func (p *parser) parseIf(ifTok token) *IfStmt {
