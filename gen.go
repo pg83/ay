@@ -263,98 +263,108 @@ var asmlibYasmModules = map[string]bool{
 	"contrib/libs/asmlib": true,
 }
 
-var whitelistedMetadataMacros = map[string]struct{}{
-	"NO_UTIL":               {},
-	"NO_LIBC":               {},
-	"NO_RUNTIME":            {},
-	"NO_PLATFORM":           {},
-	"NO_LTO":                {},
-	"NO_COMPILER_WARNINGS":  {},
-	"LICENSE":               {},
-	"LICENSE_TEXTS":         {},
-	"WITHOUT_LICENSE_TEXTS": {},
-	"VERSION":               {},
-	"ORIGINAL_SOURCE":       {},
-	"RECURSE":               {},
-	"RECURSE_FOR_TESTS":     {},
-	"RECURSE_ROOT_RELATIVE": {},
-	"ALLOCATOR_IMPL":        {},
-	"NEED_CHECK":            {},
-	"IDE_FOLDER":            {},
-	"EXTRALIBS":             {},
-	"HEADERS":               {},
-	"DISABLE":               {},
-	"NO_BUILD_IF":           {},
-	"NO_SANITIZE":           {},
-	"NO_SANITIZE_COVERAGE":  {},
-	"DEFAULT":               {},
-	"PROVIDES":              {},
-	"USE_CXX":               {},
-	"DEFINE_VARIABLE":       {},
-	"PYTHON3":               {},
-	"BUILD_ONLY_IF":         {},
-	"MESSAGE":               {},
-
-	"NO_CLANG_COVERAGE":      {},
-	"NO_CLANG_MCDC_COVERAGE": {},
-	"NO_PROFILE_RUNTIME":     {},
-	"WITHOUT_VERSION":        {},
-	"NO_CLANG_TIDY":          {},
-
-	"USE_PYTHON2":                    {},
-	"PYTHON3_ADDINCL":                {},
-	"PYTHON2_ADDINCL":                {},
-	"NO_PYTHON_COVERAGE":             {},
-	"NO_IMPORT_TRACING":              {},
-	"NO_LINT":                        {},
-	"STYLE_PYTHON":                   {},
-	"WINDOWS_LONG_PATH_MANIFEST":     {},
-	"INCLUDE_TAGS":                   {},
-	"INDUCED_DEPS":                   {},
-	"NO_PYTHON2":                     {},
-	"CHECK_DEPENDENT_DIRS":           {},
-	"SUBSCRIBER":                     {},
-	"OWNER":                          {},
-	"LICENSE_RESTRICTION_EXCEPTIONS": {},
-	"LICENSE_RESTRICTION":            {},
-	"RESTRICT_PATH":                  {},
-	"NO_OPTIMIZE":                    {},
-	"TASKLET":                        {},
-	"TASKLETSUPPORT":                 {},
-
-	"OPENSOURCE_PROJECT": {},
-	"SPLIT_FACTOR":       {},
-	"FORK_TESTS":         {},
-	"FORK_SUBTESTS":      {},
-	"SIZE":               {},
-	"TAG":                {},
-	"REQUIREMENTS":       {},
-	"TIMEOUT":            {},
-	"ENV":                {},
-	"DATA":               {},
-	"TEST_SRCS":          {},
-	"LINT":               {},
-	"NO_YMAKE_PYTHON":    {},
-	"USE_LIGHT_PY2CC":    {},
-
+// acknowledgedMacros names every ya.make macro the gen accepts without a
+// typed handler: each invocation lands in d.unhandledMacros[name] (its
+// args, expanded against the per-module Environment) so a later pass can
+// implement them properly, and the call is recorded in the audit visible
+// via --dump-ignored-macros. Any macro NOT in this set causes
+// applyUnknownStmt to throw — the right fix is to read upstream
+// (yatool/build/conf, yatool/build/ymake.core.conf) and add a typed branch,
+// not to extend this set lightly.
+//
+// Today's contents are macros we have empirically observed during sg2…sg5
+// generation that contribute nothing to the emitted graph today:
+//   * RECURSE / RECURSE_FOR_TESTS / RECURSE_ROOT_RELATIVE — re-target ya
+//     make at sibling dirs; we drive the module set from the command-line
+//     target plus the PEERDIR closure.
+//   * Pure metadata: LICENSE / LICENSE_TEXTS / WITHOUT_LICENSE_TEXTS /
+//     LICENSE_RESTRICTION / LICENSE_RESTRICTION_EXCEPTIONS / VERSION /
+//     ORIGINAL_SOURCE / PROVIDES / SUPPRESSIONS / FILES / HEADERS /
+//     NEED_CHECK / ENV / OWNER / SUBSCRIBER / MESSAGE / OPENSOURCE_PROJECT /
+//     OPENSOURCE_EXPORT_REPLACEMENT / IDE_FOLDER / TAG / SIZE / TIMEOUT /
+//     ALLOCATOR_IMPL.
+//   * Build-toggles we don't gate on: NO_LTO / NO_CLANG_COVERAGE /
+//     NO_CLANG_MCDC_COVERAGE / NO_CLANG_TIDY / NO_LINT / NO_PROFILE_RUNTIME /
+//     NO_PYTHON_COVERAGE / NO_SANITIZE / NO_SANITIZE_COVERAGE / NO_JOIN_SRC /
+//     STYLE_PYTHON / NO_OPTIMIZE / NO_OPTIMIZE_PY_PROTOS / NO_PYTHON2 /
+//     NO_MYPY / NO_YMAKE_PYTHON / USE_LIGHT_PY2CC / WITHOUT_VERSION /
+//     SPLIT_FACTOR / FORK_TESTS / FORK_SUBTESTS / REQUIREMENTS / DATA /
+//     TEST_SRCS / LINT / TASKLET / TASKLETSUPPORT / DEFAULT / USE_CXX /
+//     DEFINE_VARIABLE / PYTHON3 / MASMFLAGS / RESTRICT_PATH / JAVA_SRCS /
+//     JAVA_CLASSPATH_IGNORE_CONFLICTZ / DISABLE.
+//   * Tag/build-if filters we don't model: BUILD_ONLY_IF / NO_BUILD_IF /
+//     INCLUDE_TAGS / ONLY_TAGS / CHECK_DEPENDENT_DIRS / EXCLUDE_TAGS.
+//   * Windows-specific: WINDOWS_LONG_PATH_MANIFEST (ymake.core.conf:5590).
+var acknowledgedMacros = map[string]struct{}{
+	"RECURSE":                         {},
+	"RECURSE_FOR_TESTS":               {},
+	"RECURSE_ROOT_RELATIVE":           {},
+	"LICENSE":                         {},
+	"LICENSE_TEXTS":                   {},
+	"WITHOUT_LICENSE_TEXTS":           {},
+	"LICENSE_RESTRICTION":             {},
+	"LICENSE_RESTRICTION_EXCEPTIONS":  {},
+	"VERSION":                         {},
+	"ORIGINAL_SOURCE":                 {},
+	"PROVIDES":                        {},
 	"SUPPRESSIONS":                    {},
-	"OPENSOURCE_EXPORT_REPLACEMENT":   {},
-	"EXCLUDE_TAGS":                    {},
-	"ONLY_TAGS":                       {},
 	"FILES":                           {},
+	"HEADERS":                         {},
+	"NEED_CHECK":                      {},
+	"ENV":                             {},
+	"OWNER":                           {},
+	"SUBSCRIBER":                      {},
+	"MESSAGE":                         {},
+	"OPENSOURCE_PROJECT":              {},
+	"OPENSOURCE_EXPORT_REPLACEMENT":   {},
+	"IDE_FOLDER":                      {},
+	"TAG":                             {},
+	"SIZE":                            {},
+	"TIMEOUT":                         {},
+	"ALLOCATOR_IMPL":                  {},
+	"NO_LTO":                          {},
+	"NO_CLANG_COVERAGE":               {},
+	"NO_CLANG_MCDC_COVERAGE":          {},
+	"NO_CLANG_TIDY":                   {},
+	"NO_LINT":                         {},
+	"NO_PROFILE_RUNTIME":              {},
+	"NO_PYTHON_COVERAGE":              {},
+	"NO_SANITIZE":                     {},
+	"NO_SANITIZE_COVERAGE":            {},
 	"NO_JOIN_SRC":                     {},
-	"MASMFLAGS":                       {},
-	"NO_MYPY":                         {},
+	"STYLE_PYTHON":                    {},
+	"NO_OPTIMIZE":                     {},
 	"NO_OPTIMIZE_PY_PROTOS":           {},
-	"PROTO_NAMESPACE":                 {},
-	"PY_NAMESPACE":                    {},
-	"GRPC":                            {},
-	"CPP_PROTO_PLUGIN0":               {},
-	"CPP_PROTO_PLUGIN":                {},
-	"CPP_PROTO_PLUGIN2":               {},
-	"CPP_EV_PLUGIN":                   {},
+	"NO_PYTHON2":                      {},
+	"NO_MYPY":                         {},
+	"NO_YMAKE_PYTHON":                 {},
+	"USE_LIGHT_PY2CC":                 {},
+	"WITHOUT_VERSION":                 {},
+	"SPLIT_FACTOR":                    {},
+	"FORK_TESTS":                      {},
+	"FORK_SUBTESTS":                   {},
+	"REQUIREMENTS":                    {},
+	"DATA":                            {},
+	"TEST_SRCS":                       {},
+	"LINT":                            {},
+	"TASKLET":                         {},
+	"TASKLETSUPPORT":                  {},
+	"DEFAULT":                         {},
+	"USE_CXX":                         {},
+	"DEFINE_VARIABLE":                 {},
+	"PYTHON3":                         {},
+	"MASMFLAGS":                       {},
+	"RESTRICT_PATH":                   {},
 	"JAVA_SRCS":                       {},
 	"JAVA_CLASSPATH_IGNORE_CONFLICTZ": {},
+	"DISABLE":                         {},
+	"BUILD_ONLY_IF":                   {},
+	"NO_BUILD_IF":                     {},
+	"INCLUDE_TAGS":                    {},
+	"ONLY_TAGS":                       {},
+	"EXCLUDE_TAGS":                    {},
+	"CHECK_DEPENDENT_DIRS":            {},
+	"WINDOWS_LONG_PATH_MANIFEST":      {},
 }
 
 func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn)) NodeRef {

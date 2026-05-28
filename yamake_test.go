@@ -716,7 +716,13 @@ func TestParseAddIncl_ForKindDropped(t *testing.T) {
 	}
 }
 
-func TestParseAddIncl_GlobalForKindDropped(t *testing.T) {
+func TestParseAddIncl_GlobalForProtoRouted(t *testing.T) {
+	// `GLOBAL FOR proto X` is the upstream PROTO_ADDINCL idiom (see
+	// yatool/build/conf/proto.conf:117) — adds X to the proto-only
+	// _PROTO__INCLUDE chain and a plain GLOBAL ADDINCL is separately
+	// expected for the same X (contrib/libs/protobuf's ya.make declares
+	// both). The parser must split the FOR proto path into its own bucket
+	// so it does not double-show up in GlobalPaths (C++ ADDINCL).
 	src := "ADDINCL(\n    GLOBAL contrib/libs/protobuf/src\n    GLOBAL FOR\n    proto\n    contrib/libs/protobuf/src\n)\n"
 	mf, err := Parse(testParserFS, "test.input", []byte(src))
 	if err != nil {
@@ -727,8 +733,11 @@ func TestParseAddIncl_GlobalForKindDropped(t *testing.T) {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
 
-	if !equalStrings(a.GlobalPaths, []string{"contrib/libs/protobuf/src", "contrib/libs/protobuf/src"}) {
-		t.Errorf("GlobalPaths = %v, want [contrib/libs/protobuf/src contrib/libs/protobuf/src]", a.GlobalPaths)
+	if !equalStrings(a.GlobalPaths, []string{"contrib/libs/protobuf/src"}) {
+		t.Errorf("GlobalPaths = %v, want [contrib/libs/protobuf/src]", a.GlobalPaths)
+	}
+	if !equalStrings(a.ProtoGlobalPaths, []string{"contrib/libs/protobuf/src"}) {
+		t.Errorf("ProtoGlobalPaths = %v, want [contrib/libs/protobuf/src]", a.ProtoGlobalPaths)
 	}
 	if len(a.OwnPaths) != 0 {
 		t.Errorf("OwnPaths = %v, want empty", a.OwnPaths)

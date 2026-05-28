@@ -35,9 +35,10 @@ type makeFlags struct {
 	tflags      map[string]string
 	hflags      map[string]string
 	targets     []string
-	verbose     bool
-	testLevel   int
-	sandboxing  bool
+	verbose             bool
+	testLevel           int
+	sandboxing          bool
+	dumpIgnoredMacros   bool
 }
 
 var targetStatsExtraFlagAllowlist = map[string]struct{}{
@@ -253,6 +254,9 @@ func cmdMake(args []string) int {
 			genStream(mf.srcRoot, mf.targets, hostP, targetP, resourceFetches, func(*Node) {}, onWarn, mf.testLevel > 0)
 		}
 
+		if mf.dumpIgnoredMacros {
+			dumpMacroAudit(os.Stderr)
+		}
 		return 0
 	}
 
@@ -727,7 +731,7 @@ func parseMakeFlags(args []string) *makeFlags {
 
 	config := getopt.Config{
 		Opts:     getopt.OptStr("GrdktThD:j:B:o:I:"),
-		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing"),
+		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros"),
 		Mode:     getopt.ModeInOrder,
 		Func:     getopt.FuncGetOptLong,
 	}
@@ -792,6 +796,9 @@ func parseMakeFlags(args []string) *makeFlags {
 			mf.verbose = true
 		case opt.Name == "sandboxing":
 			mf.sandboxing = true
+		case opt.Name == "dump-ignored-macros":
+			mf.dumpIgnoredMacros = true
+			enableMacroAudit()
 		case opt.Char == 1:
 
 			mf.targets = append(mf.targets, opt.OptArg)

@@ -114,18 +114,6 @@ func antlrRunCmdArgs(instance ModuleInstance, run antlrRunInfo, inVFSByToken, ou
 }
 
 func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, outVFSByToken map[string]VFS, inputs []VFS, jarVFS VFS) []includeDirective {
-	// Only register parsedIncludes for outputs that participate in the C
-	// include graph (CC sources and headers); outputs like .proto have no
-	// `#include` content of their own — their REAL transitive deps come
-	// from imports parsed by the proto parser, not from the antlr IN files.
-	// If we registered the antlr IN files as parsedIncludes for the .proto
-	// output, any downstream walker hitting the .proto would follow them
-	// (a sibling RUN_PROGRAM PR's IN walk into .proto would gather .g and
-	// .stg in its closure where REF lists only IN + tools).
-	if !isCCSourceExt(outTok) && !isHeaderSource(outTok) {
-		return nil
-	}
-
 	var parsed []includeDirective
 	seen := map[string]struct{}{}
 	appendUnique := func(target string) {
