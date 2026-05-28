@@ -404,15 +404,19 @@ func collectModule(pm *includeParserManager, modulePath string, kind ModuleKind,
 	if kind == KindLib {
 
 		d.pyMain = nil
-	} else if kind == KindBin && d.moduleStmt != nil && d.moduleStmt.Name == "PY3_PROGRAM" {
-
-		d.pySrcs = nil
-		d.pySrcGroups = nil
-		d.pyPyiResources = nil
-		d.pyRegister = nil
-		d.pyRegisterExplicit = nil
-		d.allPySrcs = nil
 	}
+	// Previously cleared d.pySrcs / d.pySrcGroups / d.pyPyiResources /
+	// d.pyRegister / d.pyRegisterExplicit / d.allPySrcs when kind==KindBin &&
+	// PY3_PROGRAM. That suppressed emitResourceObjcopy on the PROGRAM
+	// genModule (its only `hasKvOnly` trigger was len(d.pySrcs)>0), so the
+	// PROGRAM's LD never threaded its objcopy_<hash>.o output into the link
+	// command — even though the LIBRARY genModule still emitted the objcopy
+	// node. Upstream's PY3_PROGRAM LD links the objcopy directly via the
+	// objcopyPaths slot (between -Wl,--no-whole-archive and vcs_o); keeping
+	// pySrcs populated on the PROGRAM lets emitResourceObjcopy return the
+	// same hash-derived path (dedup'd by Emitter on output path) so the
+	// LIBRARY's already-emitted node is reused, just with its ref/path now
+	// reaching LD.
 	d.muslEnabled = env.Bool("MUSL")
 	if d.muslLite {
 		d.flags.NoUtil = true
@@ -1392,6 +1396,25 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				}
 				d.pyMain = stringPtr(modName + ":main")
 				mainNext = false
+			} else if d.pyMain == nil && d.moduleStmt != nil &&
+				(d.moduleStmt.Name == "PY3_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN") &&
+				(src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
+				// Upstream's pybuild.py:397-398 auto-sets PY_MAIN for
+				// `__main__.py` in a PY3 PROGRAM-kind unit:
+				//   elif py3 and unit_needs_main and main_py:
+				//       py_main(unit, mod)
+				// `mod` is the dotted module path (no ":main" suffix —
+				// onpy_main appends that only on explicit PY_MAIN(...) calls).
+				// Without this, expr_nodes_gen/gen's PY3_PROGRAM had no
+				// d.pyMain, emitPyMainObjcopy skipped, and the LD missed the
+				// `--kvs PY_MAIN=...` objcopy_<hash>.o entry REF emits.
+				ns := strings.ReplaceAll(modulePath, "/", ".") + "."
+				if topLevel {
+					ns = ""
+				}
+				modName := strings.TrimSuffix(src, ".py")
+				modName = strings.ReplaceAll(modName, "/", ".")
+				d.pyMain = stringPtr(ns + modName)
 			}
 		}
 		if len(cythonDirectives) > 0 {

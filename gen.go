@@ -1711,8 +1711,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		var ldObjcopyPaths []VFS
 
 		if resourceModuleTagForData(d) != nil {
-			emitPySrcs(ctx, instance, d)
-
+			// PY3_PROGRAM's paired PY3_LIBRARY genModule (kind=KindLib,
+			// reached via the prepended self-PEERDIR at gen.go:610) already
+			// ran emitPySrcs and registered the .yapyc3 codegen outputs in
+			// the codegen registry. Re-emitting from the PROGRAM path would
+			// panic on Register duplicates — call only emitResourceObjcopy,
+			// which Emitter-dedups by output path so the LIBRARY's
+			// already-emitted objcopy_<hash>.o is reused and its ref/path
+			// reach this LD's objcopyPaths slot.
 			objcopyRes := emitResourceObjcopy(ctx, instance, d)
 
 			if objcopyRes != nil && len(objcopyRes.Refs) > 0 {
