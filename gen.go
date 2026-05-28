@@ -1243,6 +1243,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if d.protoNamespace != nil && d.protoNamespaceGlobal {
 		ownProtoAddIncl = []VFS{Source(filepath.ToSlash(filepath.Clean(*d.protoNamespace)))}
 	}
+	// `ADDINCL GLOBAL FOR proto X` (yatool/build/conf/proto.conf:117-120
+	// PROTO_ADDINCL macro; contrib/libs/protobuf ya.make) propagates an
+	// additional -I=$X into the protoc command of every transitive
+	// consumer. Append after the PROTO_NAMESPACE entry — declaration order
+	// matches upstream's PROTO_ADDINCL macro placement.
+	ownProtoAddIncl = append(ownProtoAddIncl, d.protoAddInclGlobal...)
 	protoAddInclSeen := map[VFS]struct{}{}
 	peerProtoAddInclGlobal := make([]VFS, 0, 4)
 	for _, rp := range resolved {
