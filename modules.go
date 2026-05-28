@@ -977,7 +977,21 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 	case "NO_EXTENDED_SOURCE_SEARCH":
 		d.noExtendedPySearch = true
 	case "STYLE_RUFF":
-
+		// upstream (yatool/build/conf/python.conf:390-398) defines
+		// STYLE_RUFF as an optional-kwarg linter macro:
+		//   STYLE_RUFF([CONFIG_TYPE config_type] [CHECK_FORMAT]
+		//              [RUN_IN_SOURCE_ROOT])
+		// We don't model the python lint pipeline today, so the call is a
+		// no-op on the emitted graph; walk the args just to acknowledge
+		// every legal kwarg as a known service-keyword.
+		for i := 0; i < len(v.Args); i++ {
+			switch v.Args[i] {
+			case "CONFIG_TYPE":
+				i++
+			case "CHECK_FORMAT":
+			case "RUN_IN_SOURCE_ROOT":
+			}
+		}
 	case "LLVM_BC":
 		// upstream's LLVM_BC is implemented as a Python plugin
 		// (yatool/build/plugins/llvm_bc.py): args split via sort_by_keywords
