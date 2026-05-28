@@ -223,7 +223,15 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 	)
 	cmdArgs = append(cmdArgs, "-I$(S)")
 
-	preNoLibcExtras := make([]string, 0, len(moduleCFlags)+len(peerCFlagsGlobal))
+	// The __vcs_version__.c compile sits at the LD node's "own slot": its
+	// own-CFLAGS bucket starts with platform-level CFlags (sourced from
+	// build/internal/ya.conf — -fno-omit-frame-pointer, -Wno-unknown-argument)
+	// just like a regular CC compile assembles via composeOwnAndPeerCFlagsAtOwnSlot.
+	// Forgetting p.CFlags here drops those two flags from this sub-cmd while
+	// the rest of the module's CC compiles keep them, producing the same
+	// post-defines tail divergence in every LD VCS sub-cmd.
+	preNoLibcExtras := make([]string, 0, len(p.CFlags)+len(moduleCFlags)+len(peerCFlagsGlobal))
+	preNoLibcExtras = append(preNoLibcExtras, p.CFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, moduleCFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
 
