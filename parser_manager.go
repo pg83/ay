@@ -1,5 +1,10 @@
 package main
 
+import (
+	"path"
+	"strings"
+)
+
 type parsedIncludeBucket string
 
 const (
@@ -111,9 +116,39 @@ func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSe
 	}
 
 	out := includeDirectiveParsers.parserFor(rel).Parse(rel, data)
+	out = pm.withCythonSibling(rel, out)
 	pm.cache.parsed[vfsPath] = out
 
 	return out
+}
+
+// withCythonSibling models Cython's implicit sibling .pxd: a .pyx uses its
+// same-named .pxd only when that file exists. Emitting it unconditionally (as a
+// pure parser must, lacking FS access) yields a spurious unresolved include
+// whenever the sibling is absent; gate it here, where the FS is available. .pyx
+// files are rare, so the extra existence probe is off the hot C/C++ parse path.
+func (pm *includeParserManager) withCythonSibling(rel string, set parsedIncludeSet) parsedIncludeSet {
+	if !strings.HasSuffix(rel, ".pyx") {
+		return set
+	}
+
+	sibling := rel[:len(rel)-len(".pyx")] + ".pxd"
+	if !pm.fs.IsFile(sibling) {
+		return set
+	}
+
+	d := includeDirective{kind: includeQuoted, target: internString(path.Base(sibling))}
+	local := set.bucket(parsedIncludesLocal)
+	merged := make([]includeDirective, 0, 1+len(local))
+	merged = append(merged, d)
+	merged = append(merged, local...)
+
+	if set == nil {
+		set = make(parsedIncludeSet)
+	}
+	set[parsedIncludesLocal] = merged
+
+	return set
 }
 
 func (pm *includeParserManager) parsedIncludes(vfsPath VFS) []includeDirective {
