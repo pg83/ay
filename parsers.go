@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"path"
 	"regexp"
 	"strings"
 )
@@ -129,11 +128,6 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 		}
 		seen[d] = struct{}{}
 		out = append(out, d)
-	}
-
-	if strings.HasSuffix(rel, ".pyx") {
-		base := strings.TrimSuffix(rel, ".pyx")
-		add(includeDirective{kind: includeQuoted, target: internString(path.Base(base) + ".pxd")})
 	}
 
 	eachLine(data, func(line []byte) {
@@ -370,9 +364,9 @@ func parseDirectiveInline(data []byte, hashPos int) (includeDirective, bool, int
 	q := skipWSAndBlockComments(data, hashPos+1)
 
 	switch {
-	case bytesHasPrefixAt(data, q, "include"):
+	case bytesHasPrefixAt(data, q, "include") && !identByteAt(data, q+len("include")):
 		q += len("include")
-	case bytesHasPrefixAt(data, q, "import"):
+	case bytesHasPrefixAt(data, q, "import") && !identByteAt(data, q+len("import")):
 		q += len("import")
 	default:
 		return includeDirective{}, false, nextLineStart(data, q)
@@ -982,4 +976,8 @@ func isIdentByte(b byte) bool {
 		(b >= 'A' && b <= 'Z') ||
 		(b >= '0' && b <= '9') ||
 		b == '_'
+}
+
+func identByteAt(data []byte, i int) bool {
+	return i < len(data) && isIdentByte(data[i])
 }
