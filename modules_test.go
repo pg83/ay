@@ -73,9 +73,16 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 				t.Fatalf("LLVM_LLC_TOOL = %q, want %q", got, tt.wantLLCTool)
 			}
 			if err := Try(func() {
-				applyUnknownStmt("mod", &UnknownStmt{Name: "LLVM_BC", Args: []string{"src.cpp", "generated.cpp"}}, data, env)
+				// LLVM_BC requires NAME per upstream (build/plugins/llvm_bc.py:8).
+				applyUnknownStmt("mod", &UnknownStmt{Name: "LLVM_BC", Args: []string{"src.cpp", "generated.cpp", "NAME", "Bytecode"}}, data, env)
 			}); err != nil {
 				t.Fatalf("applyUnknownStmt rejected configured LLVM_BC: %v", err)
+			}
+			if len(data.llvmBc) != 1 || data.llvmBc[0].Name != "Bytecode" {
+				t.Fatalf("LLVM_BC parse: data.llvmBc = %+v", data.llvmBc)
+			}
+			if got := data.llvmBc[0].Sources; !equalStrings(got, []string{"src.cpp", "generated.cpp"}) {
+				t.Fatalf("LLVM_BC sources = %v, want [src.cpp generated.cpp]", got)
 			}
 		})
 	}

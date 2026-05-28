@@ -43,6 +43,7 @@ type moduleData struct {
 	asmAddIncl           []VFS
 	protoAddInclGlobal   []VFS
 	unhandledMacros      map[string][]string
+	llvmBc               []*llvmBcStmt
 	cFlags               []string
 	cFlagsGlobal         []string
 	cxxFlags             []string
@@ -921,11 +922,18 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *moduleData) {
 }
 
 func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Environment) {
-	// Surface every handled macro's service-word arguments to the audit
-	// (NAMESPACE, MAIN, GLOBAL, FOR, ONE_LEVEL, …); the default branch below
-	// adds the ignored-macro report separately. Cheap nil-check when the
-	// --dump-ignored-macros flag is off.
-	recordHandledMacro(v.Name, v.Args)
+	// recordHandledMacro fires only when a typed case handles the macro —
+	// we deferr it and the default branch flips `handled = false` to
+	// suppress it. Logging service-keyword args of macros gen does NOT
+	// model (LICENSE, VERSION, …) would only generate noise — the right
+	// list for those is the one upstream's own macro parser implements,
+	// not ours.
+	handled := true
+	defer func() {
+		if handled {
+			recordHandledMacro(v.Name, v.Args)
+		}
+	}()
 	switch v.Name {
 	case "NO_LIBC":
 
@@ -971,12 +979,54 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 	case "STYLE_RUFF":
 
 	case "LLVM_BC":
-		if len(v.Args) < 2 {
-			ThrowFmt("LLVM_BC expects at least source and output, got %d", len(v.Args))
-		}
+		// upstream's LLVM_BC is implemented as a Python plugin
+		// (yatool/build/plugins/llvm_bc.py): args split via sort_by_keywords
+		// into {SYMBOLS: -1, NAME: 1, GENERATE_MACHINE_CODE: 0,
+		// NO_COMPILE: 0, SUFFIX: 1} plus the free-arg source list. The plugin
+		// then drives llvm_compile_c/cxx/ll → llvm_link → llvm_opt and
+		// finally either llvm_llc (GENERATE_MACHINE_CODE) or resource embed.
+		// We parse the keywords identically and stash the result on the
+		// moduleData; actual node emission is left to a follow-up.
 		if env.String("CLANG_BC_ROOT") == "" || env.String("LLVM_LLC_TOOL") == "" {
 			ThrowFmt("LLVM_BC requires USE_LLVM_BC16/18/20 before invocation")
 		}
+		stmt := &llvmBcStmt{}
+		i := 0
+		for i < len(v.Args) {
+			switch v.Args[i] {
+			case "NAME":
+				if i+1 >= len(v.Args) {
+					ThrowFmt("LLVM_BC NAME expects a value")
+				}
+				stmt.Name = v.Args[i+1]
+				i += 2
+			case "SUFFIX":
+				if i+1 >= len(v.Args) {
+					ThrowFmt("LLVM_BC SUFFIX expects a value")
+				}
+				stmt.Suffix = v.Args[i+1]
+				i += 2
+			case "SYMBOLS":
+				i++
+				for i < len(v.Args) && !isLlvmBcKeyword(v.Args[i]) {
+					stmt.Symbols = append(stmt.Symbols, v.Args[i])
+					i++
+				}
+			case "GENERATE_MACHINE_CODE":
+				stmt.GenerateMachineCode = true
+				i++
+			case "NO_COMPILE":
+				stmt.NoCompile = true
+				i++
+			default:
+				stmt.Sources = append(stmt.Sources, v.Args[i])
+				i++
+			}
+		}
+		if stmt.Name == "" {
+			ThrowFmt("LLVM_BC: NAME keyword is required (got args %v)", v.Args)
+		}
+		d.llvmBc = append(d.llvmBc, stmt)
 
 	case "MAVEN_GROUP_ID":
 
@@ -1097,10 +1147,21 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
 		}
 	case "EXCLUDE_TAGS":
+		// upstream uses EXCLUDE_TAGS to drop submodules of a multimodule
+		// from the build (per the PROTO_LIBRARY definition at
+		// yatool/build/conf/proto.conf:916-973: PROTO_LIBRARY emits CPP_PROTO
+		// + JAVA_PROTO + PY3_PROTO + GO_PROTO + … submodules; ydb's ya.makes
+		// disable GO_PROTO / JAVA_PROTO via EXCLUDE_TAGS so the build skips
+		// them). Our gen models only CPP_PROTO submodules so the call is a
+		// no-op on the graph; record the tag set for parity inspection.
 		if d.excludeTags == nil {
 			d.excludeTags = make(map[string]bool)
 		}
 		for _, arg := range v.Args {
+			switch arg {
+			case "GO_PROTO", "JAVA_PROTO":
+				// known multimodule submodule tags
+			}
 			d.excludeTags[arg] = true
 		}
 	case "YA_CONF_JSON":
@@ -1115,26 +1176,33 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 
 		applyArchiveStmt(v, d)
 	case "ENABLE":
-
+		// upstream pybuild plugins translate ENABLE(X) into
+		// `unit.set([X, 'yes'])` — a plain boolean env var, picked up by
+		// `when ($X == "yes") { … }` clauses. Args are user-defined flag
+		// NAMES (not structural keywords), so they're excluded from the
+		// strict service-keyword check in recordHandledMacro via
+		// macrosAcceptingUserFlags. The cases below keep the few flags
+		// whose ENABLE has a direct module-data side-effect.
 		for _, a := range v.Args {
-			if a == "MUSL_LITE" {
+			env.SetBool(a, true)
+			switch a {
+			case "MUSL_LITE":
 				d.muslLite = true
-			}
-			if a == "PYBUILD_NO_PYC" {
+			case "PYBUILD_NO_PYC":
 				d.pyBuildNoPYC = true
-			}
-			if a == "PYBUILD_NO_PY" {
+			case "PYBUILD_NO_PY":
 				d.pyBuildNoPY = true
-			}
-			if a == "PY_PROTO_MYPY_ENABLED" {
+			case "PY_PROTO_MYPY_ENABLED":
 				d.noMypy = false
-			}
-			if a == "PYTHON_SQLITE3" {
+			case "PYTHON_SQLITE3":
 				d.pythonSQLite3 = true
 			}
 		}
 	case "DISABLE":
+		// Counterpart to ENABLE: clears the env var (and the few specific
+		// module-data flags). Generic for the same reasons as ENABLE.
 		for _, a := range v.Args {
+			env.SetBool(a, false)
 			if a == "PYTHON_SQLITE3" {
 				d.pythonSQLite3 = false
 			}
@@ -1513,6 +1581,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		// considered a gen bug — open the upstream macro definition in
 		// yatool/build/conf or yatool/build/ymake.core.conf and add a typed
 		// handler.
+		handled = false
 		if _, ok := acknowledgedMacros[v.Name]; !ok {
 			ThrowFmt("gen: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf)", v.Name)
 		}
@@ -1522,6 +1591,28 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		d.unhandledMacros[v.Name] = append(d.unhandledMacros[v.Name], expandStmtTokens(v.Args, env)...)
 		recordIgnoredMacro(v.Name, v.Args)
 	}
+}
+
+// llvmBcStmt mirrors upstream's LLVM_BC keyword parse (build/plugins/llvm_bc.py).
+// Sources are the free args, Name is mandatory, Suffix overrides the default
+// OBJ_SUF, Symbols feeds the -internalize-public-api-list opt pass, and the
+// two booleans gate llvm-llc emission (GENERATE_MACHINE_CODE) and per-input
+// llvm_compile_* dispatch (NO_COMPILE).
+type llvmBcStmt struct {
+	Sources             []string
+	Name                string
+	Suffix              string
+	Symbols             []string
+	GenerateMachineCode bool
+	NoCompile           bool
+}
+
+func isLlvmBcKeyword(s string) bool {
+	switch s {
+	case "NAME", "SUFFIX", "SYMBOLS", "GENERATE_MACHINE_CODE", "NO_COMPILE":
+		return true
+	}
+	return false
 }
 
 func appendPyRegister(d *moduleData, name string, explicit bool) {
