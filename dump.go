@@ -150,6 +150,32 @@ func filterARLDInputs(in []string, kind string) []string {
 	return out
 }
 
+// cpScriptRels are CP-node auxiliary scripts (the python copy tooling). They
+// legitimately appear in CP nodes' inputs; upstream additionally splatters them
+// into the inputs of unrelated nodes that transitively depend on a CP product
+// (CC compiles consuming a COPY_FILE-generated header pick up these scripts as
+// inputs of the CP cascade). We don't model that splatter — and don't want to,
+// since the scripts have no effect on the consumer's compile. Filter them out
+// of non-CP nodes' inputs so the comparison is fair.
+var cpScriptRels = map[string]struct{}{
+	"build/scripts/fs_tools.py":             {},
+	"build/scripts/process_command_files.py": {},
+}
+
+func filterNonCPCascadeScripts(in []string) []string {
+	out := in[:0]
+	for _, s := range in {
+		rel, ok := strings.CutPrefix(s, "$(S)/")
+		if ok {
+			if _, drop := cpScriptRels[rel]; drop {
+				continue
+			}
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
 func getString(node map[string]any, key string) string {
 	s, _ := node[key].(string)
 	return s
@@ -158,8 +184,13 @@ func getString(node map[string]any, key string) string {
 func canonContent(node map[string]any) map[string]any {
 	inputs := normSortedStrings(node["inputs"])
 
-	if kind := nodeProgramKind(node); kind == "AR" || kind == "LD" {
+	kind := nodeProgramKind(node)
+	if kind == "AR" || kind == "LD" {
 		inputs = filterARLDInputs(inputs, kind)
+	}
+
+	if kind != "CP" {
+		inputs = filterNonCPCascadeScripts(inputs)
 	}
 	canon := map[string]any{
 		"cmds":              normRec(orVal(node["cmds"], []any{})),
