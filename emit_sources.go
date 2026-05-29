@@ -63,7 +63,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		if len(autoExtras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, autoExtras)
 		}
-		wcExtras := withContextSourceExtras(ctx.fs, srcInstance.Path, d, srcIn.IncludeInputs, srcVFS)
+		wcExtras := withContextSourceExtras(codegenRegForInstance(ctx, srcInstance), srcInstance.Path, d, srcIn.IncludeInputs, srcVFS)
 		if len(wcExtras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, wcExtras)
 		}
