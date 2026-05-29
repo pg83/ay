@@ -343,17 +343,13 @@ func (fs *memFS) Walk(rel string, visit func(rel string, isDir bool)) {
 
 func (fs *memFS) perfStats() fsPerfStats { return fsPerfStats{} }
 
-// testTree is the single shared in-memory mini-repo for every test that needs
-// an FS. Add entries here instead of writing files via t.TempDir() — paths
-// should mirror the real ydb/yatool layout so fixtures stay close to upstream
-// reality.
-var testTree = map[string]string{
-	// scanner.go ADDINCL-priority tests: contrib/libs/llvm16 commits OMP.inc
-	// as a source stub alongside the codegen-registered $(B) copy. Used as a
-	// real-world repro of the shadowing case (G1).
-	"contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc": "// committed stub\n",
+// newTestScanner spins up a scanner backed by the given FS (typically a per-
+// test memFS). Each call yields a fresh scanner so per-test CodegenRegistry /
+// cache state does not leak.
+func newTestScanner(fs FS, sysincl SysInclSet) *IncludeScanner {
+	return newIncludeScannerWith(
+		newIncludeParserManagerFS(fs, newSharedParseCache()),
+		sysincl,
+		func(Warn) {},
+	)
 }
-
-// testFS is the suite-wide shared fake FS. Safe to share across tests because
-// memFS methods never mutate.
-var testFS FS = newMemFS(testTree)

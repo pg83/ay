@@ -2,8 +2,6 @@ package main
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -558,19 +556,12 @@ ENDIF()
 }
 
 func TestParseInclude_RelativePath(t *testing.T) {
-	dir := t.TempDir()
+	fs := newMemFS(map[string]string{
+		"ya.make": "LIBRARY()\nINCLUDE(sub.inc)\nEND()\n",
+		"sub.inc": "SRCS(x.cpp)\n",
+	})
 
-	parentPath := filepath.Join(dir, "ya.make")
-	subPath := filepath.Join(dir, "sub.inc")
-
-	if err := os.WriteFile(parentPath, []byte("LIBRARY()\nINCLUDE(sub.inc)\nEND()\n"), 0o644); err != nil {
-		t.Fatalf("write parent: %v", err)
-	}
-	if err := os.WriteFile(subPath, []byte("SRCS(x.cpp)\n"), 0o644); err != nil {
-		t.Fatalf("write sub: %v", err)
-	}
-
-	mf, err := ParseFile(NewFS(dir), parentPath)
+	mf, err := ParseFile(fs, fs.SourceRoot()+"/ya.make")
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
 	}
@@ -932,10 +923,9 @@ func TestParseGlobalSrcs(t *testing.T) {
 }
 
 func TestParseInclude_RejectsSelfCycle(t *testing.T) {
-	tmp := t.TempDir()
-	Throw(os.WriteFile(filepath.Join(tmp, "a.inc"), []byte("INCLUDE(a.inc)\n"), 0644))
+	fs := newMemFS(map[string]string{"a.inc": "INCLUDE(a.inc)\n"})
 
-	_, err := ParseFile(NewFS(tmp), filepath.Join(tmp, "a.inc"))
+	_, err := ParseFile(fs, fs.SourceRoot()+"/a.inc")
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -947,11 +937,12 @@ func TestParseInclude_RejectsSelfCycle(t *testing.T) {
 }
 
 func TestParseInclude_RejectsTransitiveCycle(t *testing.T) {
-	tmp := t.TempDir()
-	Throw(os.WriteFile(filepath.Join(tmp, "a.inc"), []byte("INCLUDE(b.inc)\n"), 0644))
-	Throw(os.WriteFile(filepath.Join(tmp, "b.inc"), []byte("INCLUDE(a.inc)\n"), 0644))
+	fs := newMemFS(map[string]string{
+		"a.inc": "INCLUDE(b.inc)\n",
+		"b.inc": "INCLUDE(a.inc)\n",
+	})
 
-	_, err := ParseFile(NewFS(tmp), filepath.Join(tmp, "a.inc"))
+	_, err := ParseFile(fs, fs.SourceRoot()+"/a.inc")
 
 	if err == nil {
 		t.Fatal("expected error, got nil")

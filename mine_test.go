@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -34,19 +32,9 @@ func TestPrebuiltToolchainFlags_UseHashedResourcePatterns(t *testing.T) {
 }
 
 func TestGraphConfForToolchainFlags_HashesResourcePatternsAndKeepsVCSStub(t *testing.T) {
-	root := t.TempDir()
+	const bundleBody = `{"by_platform":{"linux-x86_64":{"uri":"sbr:linux"},"linux-aarch64":{"uri":"sbr:aarch64"},"darwin-x86_64":{"uri":"sbr:darwin"},"darwin-arm64":{"uri":"sbr:darwin-arm64"},"win32-x86_64":{"uri":"sbr:win32"}}}`
 
-	writeBundle := func(rel string) {
-		full := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
-		}
-		body := `{"by_platform":{"linux-x86_64":{"uri":"sbr:linux"},"linux-aarch64":{"uri":"sbr:aarch64"},"darwin-x86_64":{"uri":"sbr:darwin"},"darwin-arm64":{"uri":"sbr:darwin-arm64"},"win32-x86_64":{"uri":"sbr:win32"}}}`
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s: %v", rel, err)
-		}
-	}
-
+	files := map[string]string{}
 	for _, rel := range []string{
 		"build/platform/python/ymake_python3/resources.json",
 		"build/platform/clang/clang16.json",
@@ -55,10 +43,10 @@ func TestGraphConfForToolchainFlags_HashesResourcePatternsAndKeepsVCSStub(t *tes
 		"build/platform/clang/clang20.json",
 		"build/platform/java/jdk/jdk17/jdk.json",
 	} {
-		writeBundle(rel)
+		files[rel] = bundleBody
 	}
 
-	fs := NewFS(root)
+	fs := newMemFS(files)
 	conf := graphConfForToolchainFlags(fs, prebuiltToolchainFlags())
 	if conf == nil {
 		t.Fatal("graphConfForToolchainFlags returned nil")
@@ -89,28 +77,18 @@ func TestGraphConfForToolchainFlags_HashesResourcePatternsAndKeepsVCSStub(t *tes
 }
 
 func TestReadYaConfSections_MergesLaterFilesAndSkipsMissing(t *testing.T) {
-	root := t.TempDir()
-
-	write := func(rel, body string) {
-		full := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", rel, err)
-		}
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s: %v", rel, err)
-		}
-	}
-
-	write("ya.conf", `[flags]
+	fs := newMemFS(map[string]string{
+		"ya.conf": `[flags]
 ROOT_ONLY = "root"
 SHARED = "root"
-`)
-	write("build/internal/ya.conf", `[flags]
+`,
+		"build/internal/ya.conf": `[flags]
 INTERNAL_ONLY = "internal"
 SHARED = "internal"
-`)
+`,
+	})
 
-	got := readYaConfSections(NewFS(root), "flags", "ya.conf", "missing/ya.conf", "build/internal/ya.conf")
+	got := readYaConfSections(fs, "flags", "ya.conf", "missing/ya.conf", "build/internal/ya.conf")
 	want := map[string]string{
 		"ROOT_ONLY":     "root",
 		"INTERNAL_ONLY": "internal",
