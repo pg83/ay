@@ -69,8 +69,20 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		jvRef := EmitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, depRefs, cfModuleTag(d, instance), ctx.emit)
 
 		if reg != nil {
+			// The JV node's full $(S) input set = source-rooted IN/CF inputs plus
+			// the two implicit sources EmitJVGeneral appends (stdout2stderr.py and
+			// the antlr jar). Consumers compiling a JV output (e.g. a PB protoc
+			// node fed JsonPathParser.proto) inherit these as transitive sources.
+			jvSourceInputs := make([]VFS, 0, len(inputs)+2)
+			for _, v := range inputs {
+				if v.IsSource() {
+					jvSourceInputs = append(jvSourceInputs, v)
+				}
+			}
+			jvSourceInputs = append(jvSourceInputs, stdout2stderrVFS, jarVFS)
 			for outTok, outVFS := range outVFSByToken {
 				registerBoundGeneratedParsedOutput(ctx, instance, "JV", outVFS, antlrParsedIncludes(instance.Path, run, outTok, outVFSByToken, inputs, jarVFS), jvRef)
+				reg.SetSourceInputs(outVFS, jvSourceInputs)
 			}
 		}
 

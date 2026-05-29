@@ -15,6 +15,14 @@ type GeneratedFileInfo struct {
 	ProducerRef    NodeRef
 	HasProducerRef bool
 
+	// SourceInputs are the producer node's $(S)-rooted leaf inputs, propagated
+	// to consumers that compile this generated file. Upstream's flat input model
+	// lists the full transitive source closure on every node, so a node
+	// compiling a build-generated source (e.g. a PB protoc node fed a
+	// RUN_ANTLR-generated .proto) carries the generator's grammar / template /
+	// tool / script sources too. Zero len means "nothing to propagate".
+	SourceInputs []VFS
+
 	DeferredCF *deferredCF
 }
 
@@ -97,6 +105,14 @@ func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
 
 	info.ProducerRef = ref
 	info.HasProducerRef = true
+}
+
+func (r *CodegenRegistry) SetSourceInputs(path VFS, src []VFS) {
+	info := r.byStr[STR(path.strID())]
+	if info == nil {
+		ThrowFmt("CodegenRegistry: SetSourceInputs on unregistered path %q", path.String())
+	}
+	info.SourceInputs = src
 }
 
 func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, parsed []includeDirective) {

@@ -316,11 +316,13 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 	// producer ref as a PB dep.
 	var protoSrcOverride VFS
 	var extraProtoDeps []NodeRef
+	var protoProducerSourceInputs []VFS
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
 		buildProto := Build(protoRelPath)
 		if info := reg.Lookup(buildProto); info != nil && info.HasProducerRef {
 			protoSrcOverride = buildProto
 			extraProtoDeps = []NodeRef{info.ProducerRef}
+			protoProducerSourceInputs = info.SourceInputs
 		}
 	}
 
@@ -334,6 +336,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		transitiveImports, hasDescriptor,
 		peerProtoAddIncl,
 		extraProtoDeps,
+		protoProducerSourceInputs,
 		ctx.emit,
 	)
 
