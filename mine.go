@@ -92,7 +92,7 @@ type toolOverride struct {
 	Val string
 }
 
-func toolchainFlags(fs *FS, overrides []toolOverride) (map[string]string, *graphConf) {
+func toolchainFlags(fs FS, overrides []toolOverride) (map[string]string, *graphConf) {
 	flags := prebuiltToolchainFlags()
 
 	for _, o := range envToolOverrides() {
@@ -160,7 +160,7 @@ func prebuiltToolchainFlags() map[string]string {
 	return flags
 }
 
-func graphConfForToolchainFlags(fs *FS, flags map[string]string) *graphConf {
+func graphConfForToolchainFlags(fs FS, flags map[string]string) *graphConf {
 	resources := make([]graphConfResource, 0, 5)
 
 	if flagsUsePattern(flags, resourcePatternYMakePython3) {
@@ -268,7 +268,7 @@ func mineClangMajor(clang string) string {
 	return ""
 }
 
-func readYaConfSection(fs *FS, rel, wantSection string) map[string]string {
+func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
 	raw := fs.Read(rel)
 	out := map[string]string{}
 	section := ""
@@ -307,7 +307,7 @@ func readYaConfSection(fs *FS, rel, wantSection string) map[string]string {
 	return out
 }
 
-func readYaConfSections(fs *FS, wantSection string, rels ...string) map[string]string {
+func readYaConfSections(fs FS, wantSection string, rels ...string) map[string]string {
 	out := map[string]string{}
 
 	for _, rel := range rels {
@@ -358,7 +358,7 @@ type hostResourcesJSON struct {
 	} `json:"by_platform"`
 }
 
-func readHostResourcesBundle(fs *FS, pattern, rel string, upperPlatform bool) graphConfResource {
+func readHostResourcesBundle(fs FS, pattern, rel string, upperPlatform bool) graphConfResource {
 	var data hostResourcesJSON
 	raw := fs.Read(rel)
 	Throw(json.Unmarshal(raw, &data))

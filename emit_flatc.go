@@ -33,7 +33,7 @@ func flatcDirectImportNames(pm *includeParserManager, srcRel string) []string {
 	return out
 }
 
-func resolveFlatcImportPath(fs *FS, includerRel, importedRel string) string {
+func resolveFlatcImportPath(fs FS, includerRel, importedRel string) string {
 	candidates := []string{
 		filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(includerRel), importedRel))),
 		filepath.ToSlash(filepath.Clean(importedRel)),
@@ -48,7 +48,7 @@ func resolveFlatcImportPath(fs *FS, includerRel, importedRel string) string {
 	return ""
 }
 
-func flatcTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) []VFS {
+func flatcTransitiveImports(pm *includeParserManager, fs FS, srcRel string) []VFS {
 	rootImports := flatcDirectImportNames(pm, srcRel)
 	if len(rootImports) == 0 {
 		return nil
@@ -93,7 +93,7 @@ func flatcTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) []V
 	return imports
 }
 
-func flatcDirectGeneratedHeaderIncludes(pm *includeParserManager, fs *FS, srcRel string) []includeDirective {
+func flatcDirectGeneratedHeaderIncludes(pm *includeParserManager, fs FS, srcRel string) []includeDirective {
 	direct := flatcDirectImportNames(pm, srcRel)
 	if len(direct) == 0 {
 		return nil

@@ -1264,80 +1264,73 @@ func hyperscanPeerAddIncl() []VFS {
 	})
 }
 
+// newScannerOverTestFS builds an IncludeScanner backed by the suite-wide
+// testFS (fs_test.go). Each call gets a fresh scanner so per-test
+// CodegenRegistry / cache state does not leak.
+func newScannerOverTestFS(reg *CodegenRegistry) *IncludeScanner {
+	parsers := newIncludeParserManagerFS(testFS, newSharedParseCache())
+	scanner := newIncludeScannerWith(parsers, nil, func(Warn) {})
+	if reg != nil {
+		scanner.codegen = reg
+		scanner.fallbackLocators = []pathLocator{codegenLocator{reg: reg}}
+	}
+
+	return scanner
+}
+
 // TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist locks the upstream
 // resolve order: when ADDINCL declares a Build-rooted prefix BEFORE a
 // Source-rooted prefix and the target header exists under both (committed
-// source stub + codegen-registered generated output), upstream returns the
-// Build path because IncDirs are iterated in declaration order with first
-// match wins (devtools/ymake/module_resolver.cpp:371 → resolver/path_resolver
-// CheckByRoot). Reproduces the OMP.inc case in contrib/libs/llvm16.
+// source stub in testFS + codegen-registered generated output), upstream
+// returns the Build path because IncDirs are iterated in declaration order
+// with first match wins (devtools/ymake/module_resolver.cpp:371 →
+// resolver/path_resolver CheckByRoot). Real-world repro of the OMP.inc case
+// in contrib/libs/llvm16.
 func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
-	dir := t.TempDir()
-
-	if err := os.MkdirAll(filepath.Join(dir, "incroot/sub"), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "incroot/sub/header.inc"), []byte("// committed stub\n"), 0o644); err != nil {
-		t.Fatalf("write stub: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, nil)
 	reg := NewCodegenRegistry()
 	reg.Register(&GeneratedFileInfo{
 		ProducerKvP: "PR",
-		OutputPath:  Build("incroot/sub/header.inc"),
+		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
 	})
-	scanner.codegen = reg
-	scanner.fallbackLocators = []pathLocator{codegenLocator{reg: reg}}
 
+	scanner := newScannerOverTestFS(reg)
 	sc := scanner.NewScanCtx(ScanContext{
 		PeerAddInclSet: []VFS{
-			Build("incroot"),
-			Source("incroot"),
+			Build("contrib/libs/llvm16/include"),
+			Source("contrib/libs/llvm16/include"),
 		},
 	})
 
-	d := includeDirective{kind: includeQuoted, target: internString("sub/header.inc")}
-	got := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), d)
-	want := []VFS{Build("incroot/sub/header.inc")}
+	d := includeDirective{kind: includeQuoted, target: internString("llvm/Frontend/OpenMP/OMP.inc")}
+	got := sc.resolveSearchPath(Intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), d)
+	want := []VFS{Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc")}
 
 	if len(got) != 1 || got[0] != want[0] {
 		t.Fatalf("got=%v, want=%v (Build addincl declared first must win over Source stub)", got, want)
 	}
 }
 
-// TestScanner_AddInclSourceBeforeBuildKeepsSource is the symmetric anchor: when
-// Source is declared before Build, even if a Build registration exists for the
-// same target, Source must win (first-match-in-declaration-order).
+// TestScanner_AddInclSourceBeforeBuildKeepsSource is the symmetric anchor:
+// when Source is declared before Build, even if a Build registration exists
+// for the same target, Source must win (first-match-in-declaration-order).
 func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
-	dir := t.TempDir()
-
-	if err := os.MkdirAll(filepath.Join(dir, "incroot/sub"), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "incroot/sub/header.inc"), []byte("// committed stub\n"), 0o644); err != nil {
-		t.Fatalf("write stub: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, nil)
 	reg := NewCodegenRegistry()
 	reg.Register(&GeneratedFileInfo{
 		ProducerKvP: "PR",
-		OutputPath:  Build("incroot/sub/header.inc"),
+		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
 	})
-	scanner.codegen = reg
-	scanner.fallbackLocators = []pathLocator{codegenLocator{reg: reg}}
 
+	scanner := newScannerOverTestFS(reg)
 	sc := scanner.NewScanCtx(ScanContext{
 		PeerAddInclSet: []VFS{
-			Source("incroot"),
-			Build("incroot"),
+			Source("contrib/libs/llvm16/include"),
+			Build("contrib/libs/llvm16/include"),
 		},
 	})
 
-	d := includeDirective{kind: includeQuoted, target: internString("sub/header.inc")}
-	got := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), d)
-	want := []VFS{Source("incroot/sub/header.inc")}
+	d := includeDirective{kind: includeQuoted, target: internString("llvm/Frontend/OpenMP/OMP.inc")}
+	got := sc.resolveSearchPath(Intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), d)
+	want := []VFS{Source("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc")}
 
 	if len(got) != 1 || got[0] != want[0] {
 		t.Fatalf("got=%v, want=%v (Source addincl declared first must win)", got, want)
@@ -1345,36 +1338,28 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 }
 
 // TestScanner_AddInclBuildOnlyMatchesCodegen locks the OMP.h.inc-style case:
-// target lives only in codegen registry (no source stub). With Build addincl
-// declared first, resolution must return the Build/generated path. This case
-// already worked via the Build fallback loop; the new unified ranker must
-// preserve it.
+// target lives only in codegen registry (no source stub in testFS). With
+// Build addincl declared first, resolution must return the Build/generated
+// path. This case already worked via the Build fallback loop; the unified
+// ranker must preserve it.
 func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
-	dir := t.TempDir()
-
-	if err := os.MkdirAll(filepath.Join(dir, "incroot"), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, nil)
 	reg := NewCodegenRegistry()
 	reg.Register(&GeneratedFileInfo{
 		ProducerKvP: "PR",
-		OutputPath:  Build("incroot/sub/onlybuild.inc"),
+		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc"),
 	})
-	scanner.codegen = reg
-	scanner.fallbackLocators = []pathLocator{codegenLocator{reg: reg}}
 
+	scanner := newScannerOverTestFS(reg)
 	sc := scanner.NewScanCtx(ScanContext{
 		PeerAddInclSet: []VFS{
-			Build("incroot"),
-			Source("incroot"),
+			Build("contrib/libs/llvm16/include"),
+			Source("contrib/libs/llvm16/include"),
 		},
 	})
 
-	d := includeDirective{kind: includeQuoted, target: internString("sub/onlybuild.inc")}
-	got := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), d)
-	want := []VFS{Build("incroot/sub/onlybuild.inc")}
+	d := includeDirective{kind: includeQuoted, target: internString("llvm/Frontend/OpenMP/OMP.h.inc")}
+	got := sc.resolveSearchPath(Intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), d)
+	want := []VFS{Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc")}
 
 	if len(got) != 1 || got[0] != want[0] {
 		t.Fatalf("got=%v, want=%v (build-only target must resolve via codegen)", got, want)

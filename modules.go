@@ -325,7 +325,7 @@ parsedFlags:
 	return out
 }
 
-func sourceInputVFS(fs *FS, modulePath string, path string) *VFS {
+func sourceInputVFS(fs FS, modulePath string, path string) *VFS {
 	if vfs := moduleRootedVFS(modulePath, path); vfs != nil {
 		return vfs
 	}
@@ -352,7 +352,7 @@ func sourceInputVFS(fs *FS, modulePath string, path string) *VFS {
 	return nil
 }
 
-func copyFileInputVFS(fs *FS, modulePath string, src string) VFS {
+func copyFileInputVFS(fs FS, modulePath string, src string) VFS {
 	if vfs := sourceInputVFS(fs, modulePath, src); vfs != nil {
 		return *vfs
 	}
@@ -537,14 +537,14 @@ func ensureResourcePeer(modulePath string, d *moduleData) {
 	d.peerdirs = append(d.peerdirs, resourcePeer)
 }
 
-func filterInvalidAddIncl(fs *FS, d *moduleData) {
+func filterInvalidAddIncl(fs FS, d *moduleData) {
 	d.addIncl = filterExistingSourceDirs(fs, d.addIncl)
 	d.addInclGlobal = filterExistingSourceDirs(fs, d.addInclGlobal)
 	d.cythonAddIncl = filterExistingSourceDirs(fs, d.cythonAddIncl)
 	d.asmAddIncl = filterExistingSourceDirs(fs, d.asmAddIncl)
 }
 
-func filterExistingSourceDirs(fs *FS, paths []VFS) []VFS {
+func filterExistingSourceDirs(fs FS, paths []VFS) []VFS {
 	if len(paths) == 0 {
 		return paths
 	}
@@ -2205,7 +2205,7 @@ func expandListVars(items []string, env Environment) []string {
 	return out
 }
 
-func applyAllPySrcs(fs *FS, modulePath string, v *UnknownStmt, d *moduleData) {
+func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *moduleData) {
 	dirs := []string{"."}
 	noTestFiles := false
 

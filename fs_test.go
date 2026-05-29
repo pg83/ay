@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -174,3 +175,185 @@ func TestFS_CleanRel(t *testing.T) {
 }
 
 var testParserFS = NewFS("/")
+
+// memFS is the test-side FS implementation. It serves Listdir/Read/Walk/
+// Exists from in-memory maps populated once at construction; no method ever
+// reads the OS. Tests should not mutate the returned *memFS (the package-
+// level testFS is shared across the whole suite).
+type memFS struct {
+	sourceRoot string
+	rootSlash  string
+	files      map[string][]byte
+	dirs       map[string]map[string]bool
+}
+
+// newMemFS builds a *memFS from a flat path→content map. Every intermediate
+// directory is materialised so Exists / IsDir / Listdir match what an osFS
+// rooted at a real tree with the same shape would return.
+func newMemFS(files map[string]string) *memFS {
+	const root = "/__fake_repo__"
+
+	fs := &memFS{
+		sourceRoot: root,
+		rootSlash:  root + "/",
+		files:      make(map[string][]byte, len(files)),
+		dirs:       map[string]map[string]bool{"": {}},
+	}
+
+	addEntry := func(parent, name string, isDir bool) {
+		entries := fs.dirs[parent]
+		if entries == nil {
+			entries = map[string]bool{}
+			fs.dirs[parent] = entries
+		}
+
+		if prev, ok := entries[name]; !ok || (isDir && !prev) {
+			entries[name] = isDir
+		}
+	}
+
+	for rel, content := range files {
+		rel = cleanRel(rel)
+		fs.files[rel] = []byte(content)
+
+		cur := rel
+		isDirEntry := false
+
+		for {
+			parent, name := splitDirName(cur)
+			addEntry(parent, name, isDirEntry)
+
+			if parent == "" {
+				break
+			}
+
+			cur = parent
+			isDirEntry = true
+		}
+	}
+
+	return fs
+}
+
+func (fs *memFS) SourceRoot() string { return fs.sourceRoot }
+
+func (fs *memFS) Listdir(rel string) map[string]bool {
+	return fs.dirs[cleanRel(rel)]
+}
+
+func (fs *memFS) Exists(rel string) (present bool, isDir bool) {
+	rel = cleanRel(rel)
+	if rel == "" {
+		return true, true
+	}
+
+	dir, name := splitDirName(rel)
+	entries, ok := fs.dirs[dir]
+	if !ok {
+		return false, false
+	}
+
+	isDir, ok = entries[name]
+
+	return ok, isDir
+}
+
+func (fs *memFS) IsFile(rel string) bool {
+	p, d := fs.Exists(rel)
+	return p && !d
+}
+
+func (fs *memFS) IsDir(rel string) bool {
+	p, d := fs.Exists(rel)
+	return p && d
+}
+
+func (fs *memFS) Read(rel string) []byte {
+	data, ok := fs.files[cleanRel(rel)]
+	if !ok {
+		ThrowFmt("memFS: no such file %q", rel)
+	}
+
+	return append([]byte(nil), data...)
+}
+
+func (fs *memFS) ReadInto(rel string, buf []byte) []byte {
+	data, ok := fs.files[cleanRel(rel)]
+	if !ok {
+		ThrowFmt("memFS: no such file %q", rel)
+	}
+
+	if cap(buf) < len(data) {
+		buf = make([]byte, 0, len(data))
+	}
+
+	return append(buf[:0], data...)
+}
+
+func (fs *memFS) ReadAbs(absPath string) []byte {
+	return fs.Read(fs.relForAbs(absPath))
+}
+
+func (fs *memFS) ExistsAbs(absPath string) (present bool, isDir bool) {
+	return fs.Exists(fs.relForAbs(absPath))
+}
+
+func (fs *memFS) relForAbs(absPath string) string {
+	if absPath == fs.sourceRoot {
+		return ""
+	}
+
+	if strings.HasPrefix(absPath, fs.rootSlash) {
+		return absPath[len(fs.rootSlash):]
+	}
+
+	ThrowFmt("memFS.relForAbs: %q outside source root %q", absPath, fs.sourceRoot)
+
+	return ""
+}
+
+func (fs *memFS) Walk(rel string, visit func(rel string, isDir bool)) {
+	rel = cleanRel(rel)
+
+	present, isDir := fs.Exists(rel)
+	if !present {
+		return
+	}
+
+	visit(rel, isDir)
+
+	if !isDir {
+		return
+	}
+
+	prefix := rel
+	if prefix != "" {
+		prefix += "/"
+	}
+
+	for name, childIsDir := range fs.Listdir(rel) {
+		child := prefix + name
+		if childIsDir {
+			fs.Walk(child, visit)
+			continue
+		}
+		visit(child, false)
+	}
+}
+
+func (fs *memFS) perfStats() fsPerfStats { return fsPerfStats{} }
+
+// testTree is the single shared in-memory mini-repo for every test that needs
+// an FS. Add entries here instead of writing files via t.TempDir() — paths
+// should mirror the real ydb/yatool layout so fixtures stay close to upstream
+// reality.
+var testTree = map[string]string{
+	// scanner.go ADDINCL-priority tests: contrib/libs/llvm16 commits OMP.inc
+	// as a source stub alongside the codegen-registered $(B) copy. Used as a
+	// real-world repro of the shadowing case (G1).
+	"contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc": "// committed stub\n",
+}
+
+// testFS is the suite-wide shared fake FS. Safe to share across tests because
+// memFS methods never mutate.
+var testFS FS = newMemFS(testTree)

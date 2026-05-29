@@ -327,6 +327,6 @@ func effectiveNoPlatform(f FlagSet) bool {
 	return f.NoLibc && f.NoRuntime && f.NoUtil
 }
 
-func peerYaMakeExists(fs *FS, peerPath string) bool {
+func peerYaMakeExists(fs FS, peerPath string) bool {
 	return fs.IsFile(peerPath + "/ya.make")
 }
