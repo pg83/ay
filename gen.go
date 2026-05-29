@@ -1726,7 +1726,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		var ldObjcopyRefs []NodeRef
 		var ldObjcopyPaths []VFS
 
-		if resourceModuleTagForData(d) != nil {
+		if resourceLibTagForData(d) != nil {
 			// PY3_PROGRAM's paired PY3_LIBRARY genModule (kind=KindLib,
 			// reached via the prepended self-PEERDIR at gen.go:610) already
 			// ran emitPySrcs and registered the .yapyc3 codegen outputs in
@@ -1748,7 +1748,21 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ownRPathFlags = append([]string(nil), peerRPathFlagsGlobal...)
 		}
 
-		wantsStrip := d.moduleStmt.Name == "PY3_PROGRAM_BIN"
+		// Both PY3_PROGRAM (via its PY3_BIN submodule) and PY3_PROGRAM_BIN
+		// inherit _BASE_PY3_PROGRAM, which calls STRIP() at conf/python.conf:884
+		// (ENABLE(STRIP) → STRIP_FLAG=-Wl,--strip-all on linux per
+		// build/conf/linkers/ld.conf:22). ENABLE(NO_STRIP) or BUILD_TYPE=DEBUG
+		// reverts this (ymake.core.conf:2669).
+		wantsStrip := (d.moduleStmt.Name == "PY3_PROGRAM_BIN" || d.moduleStmt.Name == "PY3_PROGRAM") && !d.noStrip
+		// Upstream's PY3_BIN submodule (the PROGRAM side of the PY3_PROGRAM
+		// multimodule) has MODULE_TAG=PY3_BIN auto-set from the submodule
+		// name (lang/confreader.cpp:847-848). REF exposes it lowercased in
+		// the LD node's target_properties. The non-multimodule PY3_PROGRAM_BIN
+		// has no implicit MODULE_TAG, so it stays unset there.
+		var programModuleTag string
+		if d.moduleStmt.Name == "PY3_PROGRAM" {
+			programModuleTag = "py3_bin"
+		}
 		ldRef := EmitLD(
 			ldInstance,
 			binaryName,
@@ -1773,6 +1787,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			d.flags.NoCompilerWarnings,
 			wantsStrip,
 			d.splitDwarf,
+			programModuleTag,
 			ctx.host,
 			ctx.emit,
 		)
@@ -1916,6 +1931,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			globalTag = "py3_native_global"
 		case "YQL_UDF_YDB", "YQL_UDF_CONTRIB":
 			globalTag = "yql_udf_static_global"
+		}
+		// The PY3_BIN_LIB submodule (KindLib half of PY3_PROGRAM multimodule)
+		// composes its global.a tag from <MODULE_TAG>_global; the lang dump
+		// expects "py3_bin_lib_global".
+		if d.programPairedLib {
+			globalTag = "py3_bin_lib_global"
 		}
 
 		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))

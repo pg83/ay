@@ -31,6 +31,7 @@ func EmitLD(
 	noCompilerWarnings bool,
 	wantsStrip bool,
 	wantsSplitDwarf bool,
+	programModuleTag string,
 	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
@@ -148,8 +149,8 @@ func EmitLD(
 		DepRefs: depRefs,
 	}
 
-	if instance.Language == LangPy && !wantsStrip {
-		n.TargetProperties["module_tag"] = "py3_bin"
+	if programModuleTag != "" {
+		n.TargetProperties["module_tag"] = programModuleTag
 	}
 
 	return emit.Emit(bindNodePlatform(n, instance.Platform))

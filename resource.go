@@ -111,12 +111,36 @@ func resourceModuleTag(modName string) *string {
 	return nil
 }
 
-func resourceModuleTagForData(d *moduleData) *string {
+// resourceBinTagForData returns the MODULE_TAG used by PROGRAM-side resource
+// objcopy emissions (PY_MAIN, NO_CHECK_IMPORTS). For PY3_PROGRAM that's
+// "PY3_BIN" — upstream's PY3_BIN submodule has MODULE_TAG=PY3_BIN auto-set by
+// lang/confreader.cpp:847-848 since _PY_PROGRAM() doesn't override it (unlike
+// _ARCADIA_PYTHON3_ADDINCL which sets PY3; the submodule-name default is set
+// AFTER body execution, so it wins).
+func resourceBinTagForData(d *moduleData) *string {
 	if d == nil || d.moduleStmt == nil {
 		return nil
 	}
 	if d.moduleStmt.Name == "PY3_PROGRAM" {
 		return stringPtr("PY3_BIN")
+	}
+	return resourceModuleTag(d.moduleStmt.Name)
+}
+
+// resourceLibTagForData returns the MODULE_TAG used by LIBRARY-side resource
+// objcopy emissions (RESOURCE/RESOURCE_FILES, pysrc bytecode, py/namespace).
+// For PY3_PROGRAM's KindLib twin (the PY3_BIN_LIB submodule) it's
+// "PY3_BIN_LIB"; for real PY3_LIBRARY etc. it's "PY3". For the PY3_PROGRAM
+// PROGRAM-side path (when the LIBRARY-twin has already emitted the same
+// objcopy), returning "PY3_BIN_LIB" lets Emitter dedup the duplicate so the
+// PROGRAM's LD reuses the LIBRARY's emission rather than producing a tagged
+// twin with a non-REF hash.
+func resourceLibTagForData(d *moduleData) *string {
+	if d == nil || d.moduleStmt == nil {
+		return nil
+	}
+	if d.moduleStmt.Name == "PY3_PROGRAM" || d.programPairedLib {
+		return stringPtr("PY3_BIN_LIB")
 	}
 	return resourceModuleTag(d.moduleStmt.Name)
 }

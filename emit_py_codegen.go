@@ -97,6 +97,12 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				if d.moduleStmt.Name == "PY23_LIBRARY" {
 					tp["module_tag"] = "py3"
 				}
+				// PY3_BIN_LIB submodule of PY3_PROGRAM bundles pysrc bytecode
+				// under its lowercased MODULE_TAG, matching the surrounding
+				// objcopy/global.a target_properties.
+				if d.programPairedLib {
+					tp["module_tag"] = "py3_bin_lib"
+				}
 				return tp
 			}(),
 			Platform: string(instance.Platform.Target),

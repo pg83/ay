@@ -118,6 +118,19 @@ type moduleData struct {
 
 	pyMain *string
 
+	// noStrip mirrors ENABLE(NO_STRIP); see ymake.core.conf:2669 for the
+	// upstream guard that masks STRIP_FLAG when this is set.
+	noStrip bool
+
+	// programPairedLib marks the KindLib half of a PY3_PROGRAM multimodule.
+	// Upstream PY3_PROGRAM is a multimodule with two submodules: PY3_BIN
+	// (PROGRAM-side, emits PY_MAIN) and PY3_BIN_LIB (LIBRARY-side, emits
+	// pysrc + namespace + RESOURCE_FILES). The submodule's MODULE_TAG defaults
+	// to its own name (lang/confreader.cpp:847-848). We need this flag to
+	// emit PY3_BIN_LIB-tagged resource objcopy from the LIBRARY twin, while
+	// the PROGRAM-side keeps tag PY3_BIN for PY_MAIN.
+	programPairedLib bool
+
 	noCheckImports []string
 
 	noCheckImportsDisabled bool
@@ -421,6 +434,11 @@ func collectModule(pm *includeParserManager, modulePath string, kind ModuleKind,
 	// LIBRARY's already-emitted node is reused, just with its ref/path now
 	// reaching LD.
 	d.muslEnabled = env.Bool("MUSL")
+	// ENABLE(NO_STRIP) and BUILD_TYPE-driven STRIP_FLAG suppression
+	// (ymake.core.conf:2669 — when ($STRIP == "yes" && $NO_STRIP != "yes"))
+	// both clear -Wl,--strip-all. Track the effective NO_STRIP env value
+	// here so the LD emitter can honour it without re-reading env.
+	d.noStrip = env.Bool("NO_STRIP")
 	if d.muslLite {
 		d.flags.NoUtil = true
 	}
@@ -631,6 +649,9 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			}
 
 			d.moduleStmt = moduleStmtForKind(v, kind)
+			if v.Name == "PY3_PROGRAM" && kind == KindLib {
+				d.programPairedLib = true
+			}
 		case *SrcsStmt:
 
 			routeAllToGlobal := d.moduleStmt != nil && isYqlUdfStaticModule(d.moduleStmt.Name)
