@@ -47,6 +47,16 @@ func (set parsedIncludeSet) bucket(bucket parsedIncludeBucket) []includeDirectiv
 	return set[bucket]
 }
 
+// sharedParseCache memoizes the parsed-#include result of a source file by VFS
+// path alone. The parse step is context-free by construction — the directives
+// extracted from a file depend on the file content only, not on which module
+// requested the parse — so this cache is correct to share globally across all
+// scan contexts. It mirrors upstream's TParsersCache (see
+// yatool/devtools/ymake/include_processors/parsers_cache.h, key is
+// (parserId, fileId) with no module component). The single-visit invariant
+// enforced upstream by TUpdEntryStats::OnceProcessedAsFile (add_iter.h:377)
+// means each file is parsed exactly once per run; we get the same behaviour
+// from this map's first-write-wins semantics. Do not key by scan context.
 type sharedParseCache struct {
 	parsed map[VFS]parsedIncludeSet
 
