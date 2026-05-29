@@ -307,8 +307,25 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 	}
 	transitiveImports, hasDescriptor := protoTransitiveImports(ctx.parsers, ctx.fs, protoRelPath, protoSearchPaths)
 
+	// SRCS(X.proto) may name a build-generated .proto (e.g. jsonpath's
+	// RUN_ANTLR -language protobuf emits JsonPathParser.proto with no source
+	// committed). Without rewiring, EmitPB would feed protoc the source-rooted
+	// path and miss the producer dep, leaving the JV(.proto) unreachable from
+	// the LD root after finalize-DFS. Look the proto up in the codegen
+	// registry: if present, swap srcVFS to the build path and pin the
+	// producer ref as a PB dep.
+	var protoSrcOverride VFS
+	var extraProtoDeps []NodeRef
+	if reg := codegenRegForInstance(ctx, instance); reg != nil {
+		buildProto := Build(protoRelPath)
+		if info := reg.Lookup(buildProto); info != nil && info.HasProducerRef {
+			protoSrcOverride = buildProto
+			extraProtoDeps = []NodeRef{info.ProducerRef}
+		}
+	}
+
 	pbRef := EmitPB(
-		instance, protoRelPath, cppStyleguideLDRef, protocLDRef,
+		instance, protoRelPath, protoSrcOverride, cppStyleguideLDRef, protocLDRef,
 		grpcCppLDRef, cppStyleguideBinary, protocBinary, grpcCppBinary,
 		cfg.grpc, cfg.moduleTag, cfg.cppOutRoot, cfg.duplicateOutputRootInclude,
 		liteHeaders,
@@ -316,6 +333,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		extraPlugins,
 		transitiveImports, hasDescriptor,
 		peerProtoAddIncl,
+		extraProtoDeps,
 		ctx.emit,
 	)
 

@@ -9,6 +9,7 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 	EmitPB(
 		inst,
 		"pkg/proto/test.proto",
+		VFS(0),
 		NodeRef{id: 1},
 		NodeRef{id: 2},
 		NodeRef{},
@@ -24,6 +25,7 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 		nil,
 		nil,
 		false,
+		nil,
 		nil,
 		e,
 	)
@@ -44,6 +46,7 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 	EmitPB(
 		inst,
 		"pkg/proto/test.proto",
+		VFS(0),
 		NodeRef{id: 1},
 		NodeRef{id: 2},
 		NodeRef{},
@@ -59,6 +62,7 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 		nil,
 		nil,
 		false,
+		nil,
 		nil,
 		e,
 	)

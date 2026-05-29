@@ -285,6 +285,7 @@ var pbCcDeepRuntimeHeaders = []VFS{
 func EmitPB(
 	instance ModuleInstance,
 	protoRelPath string,
+	protoSrcOverride VFS,
 	cppStyleguideLDRef NodeRef,
 	protocLDRef NodeRef,
 	grpcCppLDRef NodeRef,
@@ -301,6 +302,7 @@ func EmitPB(
 	transitiveProtoImports []VFS,
 	hasDescriptor bool,
 	peerProtoAddIncl []VFS,
+	extraDepRefs []NodeRef,
 	emit Emitter,
 ) NodeRef {
 	moduleDir := instance.Path
@@ -313,6 +315,9 @@ func EmitPB(
 	grpcPbCC := Build(protoBase + ".grpc.pb.cc")
 	grpcPbH := Build(protoBase + ".grpc.pb.h")
 	srcVFS := Source(protoRelPath)
+	if protoSrcOverride != 0 {
+		srcVFS = protoSrcOverride
+	}
 
 	outputs := []VFS{pbH, pbCC}
 	if liteHeaders {
@@ -457,6 +462,11 @@ func EmitPB(
 		depRefs = append([]NodeRef(nil), toolRefs...)
 		foreignDepRefs = map[string][]NodeRef{"tool": toolRefs}
 	}
+
+	// Producer refs for build-generated proto sources (e.g. RUN_ANTLR -lang
+	// protobuf): without these the producer JV is unreachable from the LD
+	// root closure and gets DFS-pruned at finalize.
+	depRefs = append(depRefs, extraDepRefs...)
 
 	node := &Node{
 		Cmds: []Cmd{
