@@ -63,6 +63,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		if len(autoExtras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, autoExtras)
 		}
+		wcExtras := withContextSourceExtras(ctx.fs, srcInstance.Path, d, srcIn.IncludeInputs, srcVFS)
+		if len(wcExtras) > 0 {
+			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, wcExtras)
+		}
 		flatcExtras := flatcCCExtraInputs(ctx, srcIn.IncludeInputs)
 		if len(flatcExtras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, flatcExtras)
@@ -78,7 +82,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		// any extras are present, IncludeInputs has been reallocated past
 		// full[1:] and we leave NodeInputs nil so EmitCC rebuilds the full
 		// list from inVFS + IncludeInputs.
-		if len(autoExtras) == 0 && len(flatcExtras) == 0 && len(extras) == 0 {
+		if len(autoExtras) == 0 && len(wcExtras) == 0 && len(flatcExtras) == 0 && len(extras) == 0 {
 			srcIn.NodeInputs = full
 		}
 		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})
