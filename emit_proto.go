@@ -672,6 +672,32 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		ccOutputs = append(ccOutputs, enRes.CCOutputs...)
 	}
 
+	// RUN_ANTLR(... OUT *.cpp ...) inside a PROTO_LIBRARY's IF(GEN_PROTO)
+	// block: upstream auto-promotes those .cpp outputs to SRCS. Compile each
+	// here and archive the .o alongside .pb.cc.o (jsonpath:
+	// JsonPathParser.cpp / JsonPathLexer.cpp from the second RUN_ANTLR land
+	// in libproto_ast-gen-jsonpath.a).
+	if reg := codegenRegForInstance(ctx, instance); reg != nil {
+		for _, run := range d.antlrRuns {
+			for _, outTok := range run.OUTFiles {
+				if !isCCSourceExt(outTok) {
+					continue
+				}
+
+				outVFS := copyFileOutputVFS(instance.Path, outTok)
+				info := reg.Lookup(outVFS)
+				if info == nil || !info.HasProducerRef {
+					continue
+				}
+
+				cppRel := antlrOutputModuleRel(instance.Path, outVFS)
+				ccRef, ccOut := emitCodegenDownstreamCC(ctx, cppInstance, cppRel, nil, []NodeRef{info.ProducerRef}, moduleInputs)
+				ccRefs = append(ccRefs, ccRef)
+				ccOutputs = append(ccOutputs, ccOut)
+			}
+		}
+	}
+
 	var protoLibName string
 	if len(d.moduleStmt.Args) > 0 {
 		protoLibName = d.moduleStmt.Args[0]

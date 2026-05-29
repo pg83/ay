@@ -109,3 +109,101 @@ END()
 		t.Errorf("PB.Inputs does not include $(B)/.../JsonPathParser.proto: %v", pb.Inputs)
 	}
 }
+
+// TestEmitProtoSrcs_AntlrCppOutsCompileIntoProtoArchive locks the second
+// jsonpath G2 leg: RUN_ANTLR(... OUT *.cpp ...) inside a PROTO_LIBRARY's
+// IF(GEN_PROTO) block — upstream auto-promotes those .cpp outputs to SRCS,
+// compiling them and archiving the .o into the same proto-library AR
+// alongside .pb.cc.o (see jsonpath ya.make: SRCS lists only the .proto, but
+// JsonPathParser.cpp and JsonPathLexer.cpp from the second RUN_ANTLR land
+// in libproto_ast-gen-jsonpath.a).
+func TestEmitProtoSrcs_AntlrCppOutsCompileIntoProtoArchive(t *testing.T) {
+	const modPath = "yql/essentials/parser/proto_ast/gen/jsonpath"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	for path, body := range map[string]string{
+		modPath + "/ya.make": `PROTO_LIBRARY()
+
+IF (GEN_PROTO)
+    SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
+    SET(antlr_templates ${antlr_output}/org/antlr/codegen/templates)
+    SET(jsonpath_grammar ${ARCADIA_ROOT}/yql/essentials/minikql/jsonpath/JsonPath.g)
+
+    CONFIGURE_FILE(${ARCADIA_ROOT}/templates/Cpp.stg.in ${antlr_templates}/Cpp/Cpp.stg)
+    CONFIGURE_FILE(${ARCADIA_ROOT}/templates/protobuf.stg.in ${antlr_templates}/protobuf/protobuf.stg)
+
+    RUN_ANTLR(
+        ${jsonpath_grammar}
+        -lib .
+        -fo ${antlr_output}
+        -language protobuf
+        IN ${jsonpath_grammar} ${antlr_templates}/protobuf/protobuf.stg
+        OUT_NOAUTO JsonPathParser.proto
+        CWD ${antlr_output}
+    )
+
+    RUN_ANTLR(
+        ${jsonpath_grammar}
+        -lib .
+        -fo ${antlr_output}
+        IN ${jsonpath_grammar} ${antlr_templates}/Cpp/Cpp.stg
+        OUT JsonPathParser.cpp JsonPathLexer.cpp JsonPathParser.h JsonPathLexer.h
+        CWD ${antlr_output}
+    )
+ENDIF()
+
+SRCS(JsonPathParser.proto)
+
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+
+END()
+`,
+		"templates/Cpp.stg.in":                       "stub cpp stg\n",
+		"templates/protobuf.stg.in":                  "stub protobuf stg\n",
+		"yql/essentials/minikql/jsonpath/JsonPath.g": "stub grammar\n",
+		"contrib/libs/protobuf/ya.make":              "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n",
+	} {
+		files[path] = body
+	}
+
+	g := testGen(newMemFS(files), modPath)
+
+	byOut := make(map[string]*Node, len(g.Graph))
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 {
+			byOut[n.Outputs[0].String()] = n
+		}
+	}
+
+	for _, key := range []string{
+		"$(B)/" + modPath + "/JsonPathLexer.cpp.o",
+		"$(B)/" + modPath + "/JsonPathParser.cpp.o",
+	} {
+		if byOut[key] == nil {
+			t.Errorf("graph missing CC node with output %q", key)
+		}
+	}
+
+	ar := byOut["$(B)/"+modPath+"/libproto_ast-gen-jsonpath.a"]
+	if ar == nil {
+		t.Fatal("no proto AR node emitted")
+	}
+	for _, want := range []string{
+		"$(B)/" + modPath + "/JsonPathLexer.cpp.o",
+		"$(B)/" + modPath + "/JsonPathParser.cpp.o",
+		"$(B)/" + modPath + "/JsonPathParser.pb.cc.o",
+	} {
+		found := false
+		for _, in := range ar.Inputs {
+			if in.String() == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("proto AR inputs missing %q: %v", want, ar.Inputs)
+		}
+	}
+}
