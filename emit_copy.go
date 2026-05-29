@@ -207,8 +207,14 @@ func autoCopyDstExtras(modulePath string, d *moduleData, closure []VFS, rootDst 
 // without it ever being a traversed graph node. rootDst is the compile's own
 // $(B) input (the file being compiled, itself a WITH_CONTEXT copy dst); include
 // it so the compiled translation unit's $(S) source is attached too.
-func withContextSourceExtras(fs FS, modulePath string, d *moduleData, closure []VFS, rootDst VFS) []VFS {
-	if d == nil || len(d.copyFiles) == 0 {
+//
+// The dst→src mapping reuses the CodegenRegistry's SourcePath (recorded by
+// emitCopyFiles when the CP node was registered) rather than re-deriving the
+// source VFS from the raw entry.Src string — that keeps this leaf input
+// byte-identical to the CP node's own source edge and avoids a redundant
+// filesystem probe per entry.
+func withContextSourceExtras(reg *CodegenRegistry, modulePath string, d *moduleData, closure []VFS, rootDst VFS) []VFS {
+	if d == nil || len(d.copyFiles) == 0 || reg == nil {
 		return nil
 	}
 	dstToSrc := make(map[VFS]VFS, len(d.copyFiles))
@@ -217,11 +223,11 @@ func withContextSourceExtras(fs FS, modulePath string, d *moduleData, closure []
 			continue
 		}
 		dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
-		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
-		if dstVFS == srcVFS {
+		info := reg.Lookup(dstVFS)
+		if info == nil || info.SourcePath == 0 || info.SourcePath == dstVFS {
 			continue
 		}
-		dstToSrc[dstVFS] = srcVFS
+		dstToSrc[dstVFS] = info.SourcePath
 	}
 	if len(dstToSrc) == 0 {
 		return nil
