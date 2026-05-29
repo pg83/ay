@@ -66,6 +66,7 @@ type moduleData struct {
 	noPythonIncl         bool
 	noImportTracing      bool
 	usePython3           bool
+	useCommonGoogleAPIs  bool
 	moduleScopeCFlags    []string
 	pythonSQLite3        bool
 	pyNamespace          *string
@@ -1137,14 +1138,20 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		d.protocFlags = append(d.protocFlags, "--fatal_warnings")
 	case "USE_COMMON_GOOGLE_APIS":
 		// upstream's _CPP_PROTO module-definition body (proto.conf:741-743)
-		// runs `PEERDIR += contrib/libs/googleapis-common-protos` BEFORE
-		// any ya.make-body PEERDIR statements, so the googleapis dir lands
-		// first in the peer list. The USE_COMMON_GOOGLE_APIS macro itself
-		// just toggles the gate variable _COMMON_GOOGLE_APIS; the actual
-		// PEERDIR sits at the module definition. Prepend to mirror that
-		// ordering so consumers see googleapis ahead of other transitive
-		// peers' GLOBAL ADDINCLs (otherwise their CC -I list slots
-		// googleapis last and diverges from REF).
+		// runs `PEERDIR += contrib/libs/googleapis-common-protos` so the
+		// googleapis dir lands first in the resolved peer list — ahead of
+		// even the LIBRARY-chain default peers (linux-headers, libcxx, …).
+		// The USE_COMMON_GOOGLE_APIS macro itself just toggles the gate
+		// variable _COMMON_GOOGLE_APIS; the actual PEERDIR sits at the
+		// module definition. We mirror that:
+		//   * d.useCommonGoogleAPIs drives the GLOBAL-ADDINCL walk to visit
+		//     googleapis BEFORE language defaults (see gen.go), and the CC
+		//     emit floats `-I$(B)/contrib/libs/googleapis-common-protos`
+		//     ahead of the linux-headers suffix.
+		//   * Prepending into d.peerdirs preserves consumer peer-chain
+		//     propagation through PROTO_LIBRARY's specialized early-return
+		//     path (gen.go:Peerdirs).
+		d.useCommonGoogleAPIs = true
 		const googleapisPeer = "contrib/libs/googleapis-common-protos"
 		d.peerdirs = append([]string{googleapisPeer}, d.peerdirs...)
 	case "FLATC_FLAGS":
