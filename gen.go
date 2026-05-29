@@ -738,13 +738,17 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			hOnlyGlobalPath = vfsPtr(Build(instance.Path + "/" + globalBaseName))
 		}
 
+		// emitMiscNodes registers JV / CF outputs in the CodegenRegistry so
+		// emitProtoSrcs can wire SRCS(X.proto) that names a build-generated
+		// proto (e.g. jsonpath's RUN_ANTLR -language protobuf output) to its
+		// JV producer via the protoSrcOverride path in emit_proto.go.
+		emitMiscNodes(ctx, instance, d, nil)
+
 		protoResult := emitProtoSrcs(ctx, instance, d, peerContribs)
 
 		if d.moduleStmt.Name != "PROTO_LIBRARY" {
 			emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, nil)
 		}
-
-		emitMiscNodes(ctx, instance, d, nil)
 
 		hOnlyARRef := NodeRef{}
 		var hOnlyARPath *VFS
