@@ -160,6 +160,13 @@ func muslCFlags(on bool) []string {
 type resourceEntry struct {
 	Path string
 	Key  string
+	// EndsBatch is true on the LAST entry of one RESOURCE / RESOURCE_FILES
+	// statement. Forces the emit loop to flush the accumulating
+	// objcopy batch — upstream's TObjCopyResourcePacker is constructed
+	// fresh per macro invocation and flushed at its end, so each
+	// statement maps to its own objcopy_<hash>.o (see pg_catalog with
+	// 13 single-entry RESOURCE() calls → 13 objcopies in REF).
+	EndsBatch bool
 }
 
 type pySrcGroup struct {
@@ -865,10 +872,11 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 
 			ensureResourcePeer(modulePath, d)
 
-			for _, pair := range v.Pairs {
+			for i, pair := range v.Pairs {
 				d.resources = append(d.resources, resourceEntry{
-					Path: expandStmtToken(pair.Path, env),
-					Key:  pair.Key,
+					Path:      expandStmtToken(pair.Path, env),
+					Key:       pair.Key,
+					EndsBatch: i == len(v.Pairs)-1,
 				})
 			}
 		case *ResourceFilesStmt:
@@ -878,7 +886,11 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			d.globalEventSeq++
 			ensureResourcePeer(modulePath, d)
 
-			for _, e := range expandResourceFiles(v.Args) {
+			expanded := expandResourceFiles(v.Args)
+			for i, e := range expanded {
+				if i == len(expanded)-1 {
+					e.EndsBatch = true
+				}
 				d.resources = append(d.resources, e)
 			}
 		case *IfStmt:

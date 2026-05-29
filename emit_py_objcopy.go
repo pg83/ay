@@ -243,7 +243,7 @@ func emitResourceObjcopy(
 				}
 			}
 
-			if cur.cmdLen > maxCmdLen {
+			if cur.cmdLen > maxCmdLen || e.EndsBatch {
 				flush()
 			}
 		}
