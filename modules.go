@@ -874,8 +874,13 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			ensureResourcePeer(modulePath, d)
 
 			for i, pair := range v.Pairs {
+				// Upstream's TObjCopyResourcePacker stores RESOURCE() pairs raw
+				// (RAW ${BINDIR}/... form, not expanded), so the objcopy_<hash>
+				// is computed against ${BINDIR}/<name>. Pre-expanding here
+				// drifts the hash vs REF (e.g. yt provider yql_yt_op_settings).
+				// RESOURCE_FILES already stores raw — keep them aligned.
 				d.resources = append(d.resources, resourceEntry{
-					Path:      expandStmtToken(pair.Path, env),
+					Path:      pair.Path,
 					Key:       pair.Key,
 					EndsBatch: i == len(v.Pairs)-1,
 				})

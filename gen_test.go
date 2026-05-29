@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/md5"
+	enchex "encoding/hex"
 	"encoding/json"
 	"os"
 	"reflect"
@@ -4325,6 +4327,32 @@ END()
 			t.Fatalf("objcopy inputs still leak ${BINDIR}: %#v", objcopy.Inputs)
 		}
 	}
+
+	// Upstream's TObjCopyResourcePacker hashes RESOURCE() pair.Path raw, i.e.
+	// '${BINDIR}/data.json', NOT the expanded '$(B)/db/data.json'. Pre-
+	// expanding here drifts the objcopy_<hash> filename vs REF (caught on
+	// sg5: yt/yql/.../yt/provider/objcopy_da30... was 0288...). Lock the
+	// hash inputs we sort+md5 so a future "helpful" expansion regresses
+	// fast.
+	wantHashInputs := []string{
+		"${BINDIR}/data.json",
+		// base64 of "/data.json" — RESOURCE() Key is literal, not
+		// resfs/file/-prefixed (unlike RESOURCE_FILES).
+		"L2RhdGEuanNvbg==",
+		"$S/db",
+	}
+	sort.Strings(wantHashInputs)
+	wantHash := md5Hex(strings.Join(wantHashInputs, ","))[:hashLen]
+	wantOutput := "$(B)/db/objcopy_" + wantHash + ".o"
+	gotOutput := objcopy.Outputs[0].String()
+	if gotOutput != wantOutput {
+		t.Fatalf("objcopy output = %q, want %q (REF hashes RESOURCE Path RAW)", gotOutput, wantOutput)
+	}
+}
+
+func md5Hex(s string) string {
+	sum := md5.Sum([]byte(s))
+	return strings.ToLower(enchex.EncodeToString(sum[:]))
 }
 
 

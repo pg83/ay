@@ -225,9 +225,18 @@ func emitResourceObjcopy(
 					}
 				} else {
 					inputVFS := copyFileInputVFS(ctx.fs, instance.Path, e.Path)
+					// Producer keys (RUN_PROGRAM OUTFiles, COPY outputs, etc.)
+					// are stored in expanded form ($(B)/<unit>/X), but RESOURCE
+					// pair.Path is kept raw (${BINDIR}/X) to match upstream's
+					// objcopy_<hash>. Lookup canonicalizes by VFS string.
 					var producerRef NodeRef
 					if d.prOutputProducer != nil {
-						if ref, ok := d.prOutputProducer[e.Path]; ok {
+						canonKey := inputVFS.String()
+						if ref, ok := d.prOutputProducer[canonKey]; ok {
+							inputVFS = copyFileOutputVFS(instance.Path, e.Path)
+							producerRef = ref
+							cur.extraInputs = mergeDedupVFS(cur.extraInputs, prResourceExtraInputs(d, canonKey))
+						} else if ref, ok := d.prOutputProducer[e.Path]; ok {
 							inputVFS = copyFileOutputVFS(instance.Path, e.Path)
 							producerRef = ref
 							cur.extraInputs = mergeDedupVFS(cur.extraInputs, prResourceExtraInputs(d, e.Path))
