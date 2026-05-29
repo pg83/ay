@@ -15,6 +15,8 @@ func finalizeDumpGraph(e *BufferedEmitter) *Graph {
 		return Finalize(e)
 	}
 
+	overrideGeneratedModuleDir(e)
+
 	order := finalizeOrder(e)
 
 	incoming := dumpGraphIncomingRefs(e.nodes)

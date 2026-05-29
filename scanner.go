@@ -90,6 +90,16 @@ type IncludeScanner struct {
 
 	onWarn func(Warn)
 
+	// generatedFirstClaim records the first scan-context module path that
+	// resolved an include directive to a CodegenRegistry output. This mirrors
+	// upstream ymake's Node2Module rule (devtools/ymake/json_visitor.cpp:638
+	// — Node2Module gets set on first DFS leave by FindModule on the visitor
+	// stack), specifically applied to generated headers whose producer's
+	// `module_dir` would otherwise be the RUN_PROGRAM-owner module. Used by
+	// the finalize pass in attribute_generated.go to override producer-node
+	// target_properties.
+	generatedFirstClaim map[VFS]string
+
 	walkClosureCalls       uint64
 	dfsCalls               uint64
 	plainDfsCalls          uint64
@@ -286,6 +296,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 	s := &IncludeScanner{
 		sysincl:              sysincl,
 		parsers:              parsers,
+		generatedFirstClaim:  make(map[VFS]string, 2048),
 		sourceClassCache:     make(map[string]uint32, 1024),
 		sourceClassViews:     make(map[uint32]PerSourceView, 1024),
 		sourceClassBuckets:   make(map[uint64][]uint32, 1024),
@@ -352,6 +363,11 @@ type ScanContext struct {
 	OwnAddIncl      []VFS
 	PeerAddInclSet  []VFS
 	BaseSearchPaths []VFS
+	// OwnerModuleDir identifies the consumer module whose CC compile (or
+	// equivalent) triggered this scan. Used to populate
+	// IncludeScanner.generatedFirstClaim on the first resolve of any
+	// CodegenRegistry output — see that field's comment for the rationale.
+	OwnerModuleDir string
 }
 
 func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
@@ -1151,6 +1167,12 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 
 		out.paths = []VFS{info.OutputPath}
 		out.found = true
+
+		if sc.cfg.OwnerModuleDir != "" {
+			if _, ok := s.generatedFirstClaim[info.OutputPath]; !ok {
+				s.generatedFirstClaim[info.OutputPath] = sc.cfg.OwnerModuleDir
+			}
+		}
 
 		return true
 	}

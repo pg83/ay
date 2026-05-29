@@ -30,6 +30,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 			OwnAddIncl:      in.AddIncl,
 			PeerAddInclSet:  in.PeerAddInclGlobal,
 			BaseSearchPaths: includeScannerBasePaths(),
+			OwnerModuleDir:  srcInstance.Path,
 		}
 
 		sc := scanner.NewScanCtx(cfg)
@@ -135,6 +136,7 @@ func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourc
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
 		BaseSearchPaths: includeScannerBasePaths(),
+		OwnerModuleDir:  srcInstance.Path,
 	}
 
 	return scanner.NewScanCtx(cfg).WalkClosure(vfsPath)

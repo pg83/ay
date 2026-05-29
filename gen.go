@@ -428,7 +428,38 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 	}
 	reportPerfStats(ctx, parsers, targetScanner, hostScanner)
 
+	if be, ok := plainEmit.(*BufferedEmitter); ok {
+		be.generatedFirstClaim = mergeGeneratedFirstClaims(targetScanner, hostScanner)
+	}
+
 	return root.LDRef
+}
+
+// mergeGeneratedFirstClaims merges the per-scanner first-consumer claim maps.
+// On key conflict the target scanner wins — the host scanner only sees CC
+// compiles for tool builds, which are an orthogonal claim space.
+func mergeGeneratedFirstClaims(scanners ...*IncludeScanner) map[VFS]string {
+	var n int
+	for _, s := range scanners {
+		if s != nil {
+			n += len(s.generatedFirstClaim)
+		}
+	}
+	if n == 0 {
+		return nil
+	}
+	out := make(map[VFS]string, n)
+	for _, s := range scanners {
+		if s == nil {
+			continue
+		}
+		for k, v := range s.generatedFirstClaim {
+			if _, ok := out[k]; !ok {
+				out[k] = v
+			}
+		}
+	}
+	return out
 }
 
 func Gen(sourceRoot string, targetDir string, hostP, targetP *Platform, onWarn func(Warn)) *Graph {
