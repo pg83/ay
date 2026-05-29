@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"reflect"
 	"regexp"
 	"slices"
@@ -13,32 +12,15 @@ import (
 	"testing"
 )
 
+
+
 func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
-	root := t.TempDir()
+	fs := newMemFS(map[string]string{
+		"mainprog/ya.make": "PROGRAM()\nPEERDIR(thelib)\nSRCS(main.cpp)\nEND()\n",
+		"thelib/ya.make":   "LIBRARY()\nSRCS(lib.cpp)\nEND()\n",
+	})
 
-	mainProgDir := filepath.Join(root, "mainprog")
-	libDir := filepath.Join(root, "thelib")
-
-	if err := os.MkdirAll(mainProgDir, 0o755); err != nil {
-		t.Fatalf("mkdir mainprog: %v", err)
-	}
-
-	if err := os.MkdirAll(libDir, 0o755); err != nil {
-		t.Fatalf("mkdir thelib: %v", err)
-	}
-
-	mainYaMake := []byte("PROGRAM()\nPEERDIR(thelib)\nSRCS(main.cpp)\nEND()\n")
-	libYaMake := []byte("LIBRARY()\nSRCS(lib.cpp)\nEND()\n")
-
-	if err := os.WriteFile(filepath.Join(mainProgDir, "ya.make"), mainYaMake, 0o644); err != nil {
-		t.Fatalf("write mainprog/ya.make: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(libDir, "ya.make"), libYaMake, 0o644); err != nil {
-		t.Fatalf("write thelib/ya.make: %v", err)
-	}
-
-	g := testGen(root, "mainprog")
+	g := testGen(fs, "mainprog")
 
 	if len(g.Graph) != 4 {
 		t.Fatalf("Gen produced %d nodes, want 4 (2 CC + 1 AR + 1 LD)", len(g.Graph))
@@ -110,50 +92,31 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	}
 }
 
+
+
 func TestGen_UnittestFor_Synthetic(t *testing.T) {
-	root := t.TempDir()
+	fs := newMemFS(map[string]string{
+		"mod/ya.make":                                    "UNITTEST_FOR(thelib)\nSRCS(a_ut.cpp)\nEND()\n",
+		"thelib/ya.make":                                 "LIBRARY()\nSRCS(lib.cpp)\nEND()\n",
+		"build/cow/on/ya.make":                           "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(cow.cpp)\nEND()\n",
+		"library/cpp/malloc/api/ya.make":                 "LIBRARY()\nSRCS(api.cpp)\nEND()\n",
+		"library/cpp/malloc/tcmalloc/ya.make":            "LIBRARY()\nPEERDIR(library/cpp/malloc/api contrib/restricted/abseil-cpp contrib/libs/tcmalloc/malloc_extension contrib/libs/tcmalloc/no_percpu_cache)\nSRCS(tcmalloc.cpp)\nEND()\n",
+		"contrib/restricted/abseil-cpp/ya.make":          "LIBRARY()\nSRCS(absl.cpp)\nEND()\n",
+		"contrib/libs/tcmalloc/malloc_extension/ya.make": "LIBRARY()\nSRCS(ext.cpp)\nEND()\n",
+		"contrib/libs/tcmalloc/no_percpu_cache/ya.make":  "LIBRARY()\nSRCS(npc.cpp)\nEND()\n",
+		"library/cpp/testing/unittest_main/ya.make":      "LIBRARY()\nSRCS(main.cpp)\nEND()\n",
+		"thelib/a_ut.cpp":                                "int a_ut() { return 0; }\n",
+		"thelib/lib.cpp":                                 "int thelib() { return 0; }\n",
+		"build/cow/on/cow.cpp":                           "int cow() { return 0; }\n",
+		"library/cpp/malloc/api/api.cpp":                 "int malloc_api() { return 0; }\n",
+		"library/cpp/malloc/tcmalloc/tcmalloc.cpp":       "int tcmalloc_lib() { return 0; }\n",
+		"contrib/restricted/abseil-cpp/absl.cpp":         "int absl() { return 0; }\n",
+		"contrib/libs/tcmalloc/malloc_extension/ext.cpp": "int malloc_ext() { return 0; }\n",
+		"contrib/libs/tcmalloc/no_percpu_cache/npc.cpp":  "int no_percpu_cache() { return 0; }\n",
+		"library/cpp/testing/unittest_main/main.cpp":     "int unittest_main() { return 0; }\n",
+	})
 
-	mk := func(dir, body string) {
-		d := filepath.Join(root, dir)
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", dir, err)
-		}
-
-		if err := os.WriteFile(filepath.Join(d, "ya.make"), []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s/ya.make: %v", dir, err)
-		}
-	}
-
-	mkfile := func(rel, body string) {
-		full := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
-		}
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s: %v", rel, err)
-		}
-	}
-
-	mk("mod", "UNITTEST_FOR(thelib)\nSRCS(a_ut.cpp)\nEND()\n")
-	mk("thelib", "LIBRARY()\nSRCS(lib.cpp)\nEND()\n")
-	mk("build/cow/on", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(cow.cpp)\nEND()\n")
-	mk("library/cpp/malloc/api", "LIBRARY()\nSRCS(api.cpp)\nEND()\n")
-	mk("library/cpp/malloc/tcmalloc", "LIBRARY()\nPEERDIR(library/cpp/malloc/api contrib/restricted/abseil-cpp contrib/libs/tcmalloc/malloc_extension contrib/libs/tcmalloc/no_percpu_cache)\nSRCS(tcmalloc.cpp)\nEND()\n")
-	mk("contrib/restricted/abseil-cpp", "LIBRARY()\nSRCS(absl.cpp)\nEND()\n")
-	mk("contrib/libs/tcmalloc/malloc_extension", "LIBRARY()\nSRCS(ext.cpp)\nEND()\n")
-	mk("contrib/libs/tcmalloc/no_percpu_cache", "LIBRARY()\nSRCS(npc.cpp)\nEND()\n")
-	mk("library/cpp/testing/unittest_main", "LIBRARY()\nSRCS(main.cpp)\nEND()\n")
-	mkfile("thelib/a_ut.cpp", "int a_ut() { return 0; }\n")
-	mkfile("thelib/lib.cpp", "int thelib() { return 0; }\n")
-	mkfile("build/cow/on/cow.cpp", "int cow() { return 0; }\n")
-	mkfile("library/cpp/malloc/api/api.cpp", "int malloc_api() { return 0; }\n")
-	mkfile("library/cpp/malloc/tcmalloc/tcmalloc.cpp", "int tcmalloc_lib() { return 0; }\n")
-	mkfile("contrib/restricted/abseil-cpp/absl.cpp", "int absl() { return 0; }\n")
-	mkfile("contrib/libs/tcmalloc/malloc_extension/ext.cpp", "int malloc_ext() { return 0; }\n")
-	mkfile("contrib/libs/tcmalloc/no_percpu_cache/npc.cpp", "int no_percpu_cache() { return 0; }\n")
-	mkfile("library/cpp/testing/unittest_main/main.cpp", "int unittest_main() { return 0; }\n")
-
-	g := testGen(root, "mod")
+	g := testGen(fs, "mod")
 
 	byOut := make(map[string]*Node, len(g.Graph))
 	for _, n := range g.Graph {
@@ -234,20 +197,14 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	}
 }
 
+
+
 func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
-	root := t.TempDir()
+	fs := newMemFS(map[string]string{
+		"lone/ya.make": "PROGRAM()\nSRCS(main.cpp)\nEND()\n",
+	})
 
-	progDir := filepath.Join(root, "lone")
-	if err := os.MkdirAll(progDir, 0o755); err != nil {
-		t.Fatalf("mkdir lone: %v", err)
-	}
-
-	yamake := []byte("PROGRAM()\nSRCS(main.cpp)\nEND()\n")
-	if err := os.WriteFile(filepath.Join(progDir, "ya.make"), yamake, 0o644); err != nil {
-		t.Fatalf("write lone/ya.make: %v", err)
-	}
-
-	g := testGen(root, "lone")
+	g := testGen(fs, "lone")
 
 	if len(g.Graph) != 2 {
 		t.Fatalf("Gen produced %d nodes, want 2 (1 CC + 1 LD)", len(g.Graph))
@@ -290,23 +247,15 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 	}
 }
 
+
+
 func TestGen_RejectsUnsupportedMacro(t *testing.T) {
-	root := t.TempDir()
-
-	modDir := filepath.Join(root, "mod")
-
-	if err := os.MkdirAll(modDir, 0o755); err != nil {
-		t.Fatalf("mkdir mod: %v", err)
-	}
-
-	yamake := []byte("LIBRARY()\nTOTALLY_UNKNOWN(foo bar)\nSRCS(main.cpp)\nEND()\n")
-
-	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644); err != nil {
-		t.Fatalf("write mod/ya.make: %v", err)
-	}
+	fs := newMemFS(map[string]string{
+		"mod/ya.make": "LIBRARY()\nTOTALLY_UNKNOWN(foo bar)\nSRCS(main.cpp)\nEND()\n",
+	})
 
 	exc := Try(func() {
-		testGen(root, "mod")
+		testGen(fs, "mod")
 	})
 
 	if exc == nil {
@@ -318,18 +267,20 @@ func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 	}
 }
 
+
+
 func TestGen_RejectsMultipleModules(t *testing.T) {
-	tmp := t.TempDir()
-	Throw(os.MkdirAll(filepath.Join(tmp, "bad"), 0755))
-	Throw(os.WriteFile(filepath.Join(tmp, "bad", "ya.make"), []byte(`LIBRARY()
+	fs := newMemFS(map[string]string{
+		"bad/ya.make": `LIBRARY()
 SRCS(a.c)
 PROGRAM()
 SRCS(b.c)
 END()
-`), 0644))
+`,
+	})
 
 	exc := Try(func() {
-		testGen(tmp, "bad")
+		testGen(fs, "bad")
 	})
 
 	if exc == nil {
@@ -341,15 +292,17 @@ END()
 	}
 }
 
+
+
 func TestGen_RejectsZeroModule(t *testing.T) {
-	tmp := t.TempDir()
-	Throw(os.MkdirAll(filepath.Join(tmp, "noop"), 0755))
-	Throw(os.WriteFile(filepath.Join(tmp, "noop", "ya.make"), []byte(`SET(X y)
+	fs := newMemFS(map[string]string{
+		"noop/ya.make": `SET(X y)
 END()
-`), 0644))
+`,
+	})
 
 	exc := Try(func() {
-		testGen(tmp, "noop")
+		testGen(fs, "noop")
 	})
 
 	if exc == nil {
@@ -361,22 +314,23 @@ END()
 	}
 }
 
+
+
 func TestGen_RejectsProgramAsPeer(t *testing.T) {
-	tmp := t.TempDir()
-	Throw(os.MkdirAll(filepath.Join(tmp, "peerprog"), 0755))
-	Throw(os.MkdirAll(filepath.Join(tmp, "caller"), 0755))
-	Throw(os.WriteFile(filepath.Join(tmp, "peerprog", "ya.make"), []byte(`PROGRAM()
+	fs := newMemFS(map[string]string{
+		"peerprog/ya.make": `PROGRAM()
 SRCS(peer_main.cpp)
 END()
-`), 0644))
-	Throw(os.WriteFile(filepath.Join(tmp, "caller", "ya.make"), []byte(`PROGRAM()
+`,
+		"caller/ya.make": `PROGRAM()
 PEERDIR(peerprog)
 SRCS(caller_main.cpp)
 END()
-`), 0644))
+`,
+	})
 
 	exc := Try(func() {
-		testGen(tmp, "caller")
+		testGen(fs, "caller")
 	})
 
 	if exc == nil {
@@ -388,27 +342,26 @@ END()
 	}
 }
 
-func TestGen_PeerdirDeclarationOrder_Preserved(t *testing.T) {
-	tmp := t.TempDir()
 
-	Throw(os.MkdirAll(filepath.Join(tmp, "mainprog"), 0755))
-	Throw(os.MkdirAll(filepath.Join(tmp, "zlib"), 0755))
-	Throw(os.MkdirAll(filepath.Join(tmp, "alib"), 0755))
-	Throw(os.WriteFile(filepath.Join(tmp, "mainprog", "ya.make"), []byte(`PROGRAM()
+
+func TestGen_PeerdirDeclarationOrder_Preserved(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"mainprog/ya.make": `PROGRAM()
 PEERDIR(zlib alib)
 SRCS(main.cpp)
 END()
-`), 0644))
-	Throw(os.WriteFile(filepath.Join(tmp, "zlib", "ya.make"), []byte(`LIBRARY()
+`,
+		"zlib/ya.make": `LIBRARY()
 SRCS(zlib.c)
 END()
-`), 0644))
-	Throw(os.WriteFile(filepath.Join(tmp, "alib", "ya.make"), []byte(`LIBRARY()
+`,
+		"alib/ya.make": `LIBRARY()
 SRCS(alib.c)
 END()
-`), 0644))
+`,
+	})
 
-	g := testGen(tmp, "mainprog")
+	g := testGen(fs, "mainprog")
 
 	var zlibIdx, alibIdx int = -1, -1
 
@@ -432,22 +385,21 @@ END()
 	}
 }
 
-func TestGen_MacroEvaluation_IfStmt_TakeThen(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "ifmod")
-	Throw(os.MkdirAll(modDir, 0o755))
 
-	yamake := []byte(`LIBRARY()
+
+func TestGen_MacroEvaluation_IfStmt_TakeThen(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"ifmod/ya.make": `LIBRARY()
 IF (OS_LINUX)
     SRCS(linux.c)
 ELSE()
     SRCS(other.c)
 ENDIF()
 END()
-`)
-	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+`,
+	})
 
-	g := testGen(root, "ifmod")
+	g := testGen(fs, "ifmod")
 
 	if len(g.Graph) != 2 {
 		t.Fatalf("expected 2 nodes (1 CC + 1 AR), got %d", len(g.Graph))
@@ -474,23 +426,22 @@ END()
 	}
 }
 
-func TestGen_MacroEvaluation_NoLibcFlag(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "nolibcmod")
-	Throw(os.MkdirAll(modDir, 0o755))
 
-	yamake := []byte(`LIBRARY()
+
+func TestGen_MacroEvaluation_NoLibcFlag(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"nolibcmod/ya.make": `LIBRARY()
 NO_LIBC()
 NO_UTIL()
 NO_RUNTIME()
 SRCS(lib.c)
 END()
-`)
-	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+`,
+	})
 
-	mf := Throw2(ParseFile(NewFS(root), filepath.Join(modDir, "ya.make")))
+	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/nolibcmod/ya.make"))
 
-	d := collectModule(newIncludeParserManager(root), "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}))
 
 	if !d.flags.NoLibc {
 		t.Errorf("flags.NoLibc = false, want true (macro overlay should have flipped it)")
@@ -504,22 +455,18 @@ END()
 		t.Errorf("flags.NoRuntime = false, want true")
 	}
 
-	g := testGen(root, "nolibcmod")
+	g := testGen(fs, "nolibcmod")
 
 	if len(g.Graph) != 2 {
 		t.Errorf("Gen produced %d nodes, want 2 (1 CC + 1 AR)", len(g.Graph))
 	}
 }
 
+
+
 func TestGen_NoStdIncGlobalCFlagsPropagateToExplicitPeer(t *testing.T) {
-	root := t.TempDir()
-
-	fooDir := filepath.Join(root, "contrib/libs/foolib")
-	bridgeDir := filepath.Join(root, "bridge")
-	Throw(os.MkdirAll(fooDir, 0o755))
-	Throw(os.MkdirAll(bridgeDir, 0o755))
-
-	Throw(os.WriteFile(filepath.Join(fooDir, "ya.make"), []byte(`LIBRARY()
+	fs := newMemFS(map[string]string{
+		"contrib/libs/foolib/ya.make": `LIBRARY()
 NO_PLATFORM()
 CFLAGS(
     GLOBAL -D_foolib_=1
@@ -527,18 +474,18 @@ CFLAGS(
 )
 SRCS(m.c)
 END()
-`), 0o644))
-	Throw(os.WriteFile(filepath.Join(fooDir, "m.c"), []byte("int foolib_symbol(void) { return 1; }\n"), 0o644))
-
-	Throw(os.WriteFile(filepath.Join(bridgeDir, "ya.make"), []byte(`LIBRARY()
+`,
+		"contrib/libs/foolib/m.c": "int foolib_symbol(void) { return 1; }\n",
+		"bridge/ya.make": `LIBRARY()
 NO_RUNTIME()
 PEERDIR(contrib/libs/foolib)
 SRCS(x.cpp)
 END()
-`), 0o644))
-	Throw(os.WriteFile(filepath.Join(bridgeDir, "x.cpp"), []byte("int bridge_symbol(void) { return 2; }\n"), 0o644))
+`,
+		"bridge/x.cpp": "int bridge_symbol(void) { return 2; }\n",
+	})
 
-	g := testGen(root, "bridge")
+	g := testGen(fs, "bridge")
 	var args []string
 
 	for _, n := range g.Graph {
@@ -557,19 +504,18 @@ END()
 	}
 }
 
-func TestGen_JoinSrcs_EmitsJSAndCC(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "joinmod")
-	Throw(os.MkdirAll(modDir, 0o755))
 
-	yamake := []byte(`LIBRARY()
+
+func TestGen_JoinSrcs_EmitsJSAndCC(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"joinmod/ya.make": `LIBRARY()
 JOIN_SRCS(all_my.cpp src1.cpp src2.cpp)
 SRCS(other.cpp)
 END()
-`)
-	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+`,
+	})
 
-	g := testGen(root, "joinmod")
+	g := testGen(fs, "joinmod")
 
 	counts := make(map[string]int)
 	for _, n := range g.Graph {
@@ -637,19 +583,18 @@ END()
 	}
 }
 
-func TestGen_GlobalSrcs_EmitsTwoARs(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "globalmod")
-	Throw(os.MkdirAll(modDir, 0o755))
 
-	yamake := []byte(`LIBRARY()
+
+func TestGen_GlobalSrcs_EmitsTwoARs(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"globalmod/ya.make": `LIBRARY()
 GLOBAL_SRCS(global.cpp)
 SRCS(regular.cpp)
 END()
-`)
-	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+`,
+	})
 
-	g := testGen(root, "globalmod")
+	g := testGen(fs, "globalmod")
 
 	counts := make(map[string]int)
 	for _, n := range g.Graph {
@@ -688,18 +633,15 @@ END()
 	}
 }
 
+
+
 func TestGen_HostToolRecursion_R6(t *testing.T) {
-	root := t.TempDir()
+	fs := newMemFS(map[string]string{
+		"contrib/tools/ragel6/bin/ya.make": "PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n",
+		"consumer/ya.make":                 "LIBRARY()\nSRCS(parser.rl6)\nEND()\n",
+	})
 
-	ragelDir := filepath.Join(root, "contrib/tools/ragel6/bin")
-	Throw(os.MkdirAll(ragelDir, 0o755))
-	Throw(os.WriteFile(filepath.Join(ragelDir, "ya.make"), []byte("PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n"), 0o644))
-
-	consumerDir := filepath.Join(root, "consumer")
-	Throw(os.MkdirAll(consumerDir, 0o755))
-	Throw(os.WriteFile(filepath.Join(consumerDir, "ya.make"), []byte("LIBRARY()\nSRCS(parser.rl6)\nEND()\n"), 0o644))
-
-	g := testGen(root, "consumer")
+	g := testGen(fs, "consumer")
 
 	counts := make(map[string]int)
 	platforms := make(map[string]int)
@@ -789,22 +731,15 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	}
 }
 
+
+
 func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
-	root := t.TempDir()
+	fs := newMemFS(map[string]string{
+		"peerlib/ya.make":  "LIBRARY()\nSRCS(regular.cpp)\nGLOBAL_SRCS(global.cpp)\nEND()\n",
+		"consumer/ya.make": "PROGRAM()\nSRCS(main.cpp)\nPEERDIR(peerlib)\nEND()\n",
+	})
 
-	peerDir := filepath.Join(root, "peerlib")
-	Throw(os.MkdirAll(peerDir, 0o755))
-	Throw(os.WriteFile(filepath.Join(peerDir, "ya.make"), []byte(
-		"LIBRARY()\nSRCS(regular.cpp)\nGLOBAL_SRCS(global.cpp)\nEND()\n",
-	), 0o644))
-
-	consumerDir := filepath.Join(root, "consumer")
-	Throw(os.MkdirAll(consumerDir, 0o755))
-	Throw(os.WriteFile(filepath.Join(consumerDir, "ya.make"), []byte(
-		"PROGRAM()\nSRCS(main.cpp)\nPEERDIR(peerlib)\nEND()\n",
-	), 0o644))
-
-	g := testGen(root, "consumer")
+	g := testGen(fs, "consumer")
 
 	var ldNode *Node
 	for _, n := range g.Graph {
@@ -872,20 +807,15 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	}
 }
 
+
+
 func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
-	root := t.TempDir()
+	fs := newMemFS(map[string]string{
+		"prog/ya.make":                        "PROGRAM()\nNO_PLATFORM()\nALLOCATOR(MIM)\nSRCS(main.cpp)\nEND()\n",
+		"library/cpp/malloc/mimalloc/ya.make": "LIBRARY()\nNO_PLATFORM()\nSRCS(mim.cpp)\nEND()\n",
+	})
 
-	progDir := filepath.Join(root, "prog")
-	Throw(os.MkdirAll(progDir, 0o755))
-	Throw(os.WriteFile(filepath.Join(progDir, "ya.make"),
-		[]byte("PROGRAM()\nNO_PLATFORM()\nALLOCATOR(MIM)\nSRCS(main.cpp)\nEND()\n"), 0o644))
-
-	mimDir := filepath.Join(root, "library/cpp/malloc/mimalloc")
-	Throw(os.MkdirAll(mimDir, 0o755))
-	Throw(os.WriteFile(filepath.Join(mimDir, "ya.make"),
-		[]byte("LIBRARY()\nNO_PLATFORM()\nSRCS(mim.cpp)\nEND()\n"), 0o644))
-
-	g := testGen(root, "prog")
+	g := testGen(fs, "prog")
 
 	var sawMimDir bool
 
@@ -902,11 +832,14 @@ func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
 	}
 }
 
-func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
-	root := t.TempDir()
 
+
+func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	stubLib := "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(stub.cpp)\nEND()\n"
 
+	files := map[string]string{
+		"consumer/ya.make": "LIBRARY()\nSRCS(main.cpp)\nEND()\n",
+	}
 	for _, path := range []string{
 		"contrib/libs/cxxsupp/builtins",
 		"library/cpp/malloc/api",
@@ -915,11 +848,9 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"contrib/libs/libunwind",
 		"util",
 	} {
-		dir := filepath.Join(root, path)
-
-		Throw(os.MkdirAll(dir, 0o755))
-		Throw(os.WriteFile(filepath.Join(dir, "ya.make"), []byte(stubLib), 0o644))
+		files[path+"/ya.make"] = stubLib
 	}
+	fs := newMemFS(files)
 
 	plain := ModuleInstance{
 		Path:     "consumer",
@@ -941,12 +872,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		t.Errorf("defaultPeerdirsForWithState(plain CPP) = %v, want %v", gotDefaults, wantDefaults)
 	}
 
-	consumerDir := filepath.Join(root, "consumer")
-
-	Throw(os.MkdirAll(consumerDir, 0o755))
-	Throw(os.WriteFile(filepath.Join(consumerDir, "ya.make"), []byte("LIBRARY()\nSRCS(main.cpp)\nEND()\n"), 0o644))
-
-	g := testGen(root, "consumer")
+	g := testGen(fs, "consumer")
 
 	emittedDirs := make(map[string]bool)
 
@@ -968,6 +894,8 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		}
 	}
 }
+
+
 
 func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 
@@ -1098,6 +1026,8 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 	}
 }
 
+
+
 func stringSlicesEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -1112,26 +1042,26 @@ func stringSlicesEqual(a, b []string) bool {
 	return true
 }
 
+
+
 func TestGen_DefaultPeerdirs_ExplicitDuplicateDeduped(t *testing.T) {
-	tmp := t.TempDir()
-	Throw(os.MkdirAll(filepath.Join(tmp, "lib1"), 0755))
-	Throw(os.WriteFile(filepath.Join(tmp, "lib1", "ya.make"), []byte(`LIBRARY()
+	fs := newMemFS(map[string]string{
+		"lib1/ya.make": `LIBRARY()
 PEERDIR(contrib/libs/foolib)
 SRCS(a.cpp)
 END()
-`), 0644))
-
-	Throw(os.MkdirAll(filepath.Join(tmp, "contrib/libs/foolib"), 0755))
-	Throw(os.WriteFile(filepath.Join(tmp, "contrib/libs/foolib", "ya.make"), []byte(`LIBRARY()
+`,
+		"contrib/libs/foolib/ya.make": `LIBRARY()
 NO_LIBC()
 NO_UTIL()
 NO_RUNTIME()
 NO_PLATFORM()
 SRCS(stub.c)
 END()
-`), 0644))
+`,
+	})
 
-	g := testGen(tmp, "lib1")
+	g := testGen(fs, "lib1")
 
 	var lib1AR *Node
 	for _, n := range g.Graph {
@@ -1154,18 +1084,15 @@ END()
 	}
 }
 
+
+
 func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	t.Run("with_srcdir", func(t *testing.T) {
+		fs := newMemFS(map[string]string{
+			"mymod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCDIR(other/dir)\nSRCS(foo.cpp)\nEND()\n",
+		})
 
-		root := t.TempDir()
-
-		modDir := filepath.Join(root, "mymod")
-		Throw(os.MkdirAll(modDir, 0o755))
-
-		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCDIR(other/dir)\nSRCS(foo.cpp)\nEND()\n")
-		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
-
-		g := testGen(root, "mymod")
+		g := testGen(fs, "mymod")
 
 		if len(g.Graph) != 2 {
 			t.Fatalf("expected 2 nodes (1 CC + 1 AR), got %d", len(g.Graph))
@@ -1201,15 +1128,11 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	})
 
 	t.Run("without_srcdir_baseline", func(t *testing.T) {
-		root := t.TempDir()
+		fs := newMemFS(map[string]string{
+			"basemod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(bar.cpp)\nEND()\n",
+		})
 
-		modDir := filepath.Join(root, "basemod")
-		Throw(os.MkdirAll(modDir, 0o755))
-
-		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(bar.cpp)\nEND()\n")
-		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
-
-		g := testGen(root, "basemod")
+		g := testGen(fs, "basemod")
 
 		if len(g.Graph) != 2 {
 			t.Fatalf("expected 2 nodes (1 CC + 1 AR), got %d", len(g.Graph))
@@ -1239,16 +1162,11 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	})
 
 	t.Run("join_srcs_with_srcdir_library_non_ancestor", func(t *testing.T) {
+		fs := newMemFS(map[string]string{
+			"jsmod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCDIR(other/dir)\nJOIN_SRCS(all.cpp s1.cpp s2.cpp)\nEND()\n",
+		})
 
-		root := t.TempDir()
-
-		modDir := filepath.Join(root, "jsmod")
-		Throw(os.MkdirAll(modDir, 0o755))
-
-		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCDIR(other/dir)\nJOIN_SRCS(all.cpp s1.cpp s2.cpp)\nEND()\n")
-		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
-
-		g := testGen(root, "jsmod")
+		g := testGen(fs, "jsmod")
 
 		if len(g.Graph) != 3 {
 			t.Fatalf("expected 3 nodes (1 JS + 1 CC + 1 AR), got %d", len(g.Graph))
@@ -1283,16 +1201,11 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	})
 
 	t.Run("ancestor_program_rebases_module_dir", func(t *testing.T) {
+		fs := newMemFS(map[string]string{
+			"tools/r6/bin/ya.make": "PROGRAM(myprog)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nALLOCATOR(FAKE)\nSRCDIR(tools/r6)\nSRCS(main.cpp)\nEND()\n",
+		})
 
-		root := t.TempDir()
-
-		modDir := filepath.Join(root, "tools/r6/bin")
-		Throw(os.MkdirAll(modDir, 0o755))
-
-		yamake := []byte("PROGRAM(myprog)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nALLOCATOR(FAKE)\nSRCDIR(tools/r6)\nSRCS(main.cpp)\nEND()\n")
-		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
-
-		g := testGen(root, "tools/r6/bin")
+		g := testGen(fs, "tools/r6/bin")
 
 		var ccNode *Node
 
@@ -1322,17 +1235,12 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	})
 
 	t.Run("ancestor_program_nested_source_keeps_module_dir", func(t *testing.T) {
-		root := t.TempDir()
+		fs := newMemFS(map[string]string{
+			"tools/r6/bin/ya.make":  "PROGRAM(myprog)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nALLOCATOR(FAKE)\nSRCDIR(tools/r6)\nSRCS(sub/main.cpp)\nEND()\n",
+			"tools/r6/sub/main.cpp": "int main() { return 0; }\n",
+		})
 
-		modDir := filepath.Join(root, "tools/r6/bin")
-		Throw(os.MkdirAll(filepath.Join(root, "tools/r6/sub"), 0o755))
-		Throw(os.MkdirAll(modDir, 0o755))
-
-		yamake := []byte("PROGRAM(myprog)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nALLOCATOR(FAKE)\nSRCDIR(tools/r6)\nSRCS(sub/main.cpp)\nEND()\n")
-		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
-		Throw(os.WriteFile(filepath.Join(root, "tools/r6/sub/main.cpp"), []byte("int main() { return 0; }\n"), 0o644))
-
-		g := testGen(root, "tools/r6/bin")
+		g := testGen(fs, "tools/r6/bin")
 
 		var ccNode *Node
 		for _, n := range g.Graph {
@@ -1359,16 +1267,15 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	})
 }
 
+
+
 func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 	t.Run("CXXFLAGS_GLOBAL_emitted_twice_no_literal_GLOBAL", func(t *testing.T) {
-		root := t.TempDir()
-		modDir := filepath.Join(root, "testlib")
-		Throw(os.MkdirAll(modDir, 0o755))
+		fs := newMemFS(map[string]string{
+			"testlib/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCXXFLAGS(GLOBAL -nostdinc++)\nSRCS(foo.cpp)\nEND()\n",
+		})
 
-		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCXXFLAGS(GLOBAL -nostdinc++)\nSRCS(foo.cpp)\nEND()\n")
-		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
-
-		g := testGen(root, "testlib")
+		g := testGen(fs, "testlib")
 
 		var ccNode *Node
 
@@ -1406,14 +1313,11 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 	})
 
 	t.Run("CONLYFLAGS_GLOBAL_no_literal_GLOBAL_in_C", func(t *testing.T) {
-		root := t.TempDir()
-		modDir := filepath.Join(root, "testlib")
-		Throw(os.MkdirAll(modDir, 0o755))
+		fs := newMemFS(map[string]string{
+			"testlib/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCONLYFLAGS(GLOBAL -Dfoo)\nSRCS(bar.c)\nEND()\n",
+		})
 
-		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCONLYFLAGS(GLOBAL -Dfoo)\nSRCS(bar.c)\nEND()\n")
-		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
-
-		g := testGen(root, "testlib")
+		g := testGen(fs, "testlib")
 
 		var ccNode *Node
 
@@ -1441,14 +1345,11 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 	})
 
 	t.Run("CXXFLAGS_non_GLOBAL_still_applied", func(t *testing.T) {
-		root := t.TempDir()
-		modDir := filepath.Join(root, "testlib")
-		Throw(os.MkdirAll(modDir, 0o755))
+		fs := newMemFS(map[string]string{
+			"testlib/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCXXFLAGS(-DMINE)\nSRCS(foo.cpp)\nEND()\n",
+		})
 
-		yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nCXXFLAGS(-DMINE)\nSRCS(foo.cpp)\nEND()\n")
-		Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
-
-		g := testGen(root, "testlib")
+		g := testGen(fs, "testlib")
 
 		var ccNode *Node
 
@@ -1484,15 +1385,14 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 	})
 }
 
+
+
 func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
-	root := t.TempDir()
+	fs := newMemFS(map[string]string{
+		"jsmod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nJOIN_SRCS(all.cpp s1.cpp s2.cpp)\nEND()\n",
+	})
 
-	modDir := filepath.Join(root, "jsmod")
-	Throw(os.MkdirAll(modDir, 0o755))
-	yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nJOIN_SRCS(all.cpp s1.cpp s2.cpp)\nEND()\n")
-	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
-
-	g := testGen(root, "jsmod")
+	g := testGen(fs, "jsmod")
 
 	var jsNode, ccNode *Node
 
@@ -1528,30 +1428,28 @@ func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
 	}
 }
 
-func TestGen_GeneratorWiredIntoDepRefs_R6(t *testing.T) {
-	root := t.TempDir()
 
-	modDir := filepath.Join(root, "r6mod")
-	Throw(os.MkdirAll(modDir, 0o755))
-	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(`LIBRARY()
+
+func TestGen_GeneratorWiredIntoDepRefs_R6(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"r6mod/ya.make": `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 SRCS(thing.rl6)
 END()
-`), 0o644))
-
-	Throw(os.MkdirAll(filepath.Join(root, "contrib/tools/ragel6/bin"), 0o755))
-	Throw(os.WriteFile(filepath.Join(root, "contrib/tools/ragel6/bin", "ya.make"), []byte(`PROGRAM(ragel6)
+`,
+		"contrib/tools/ragel6/bin/ya.make": `PROGRAM(ragel6)
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 ALLOCATOR(FAKE)
 SRCS(main.cpp)
 END()
-`), 0o644))
+`,
+	})
 
-	g := testGen(root, "r6mod")
+	g := testGen(fs, "r6mod")
 
 	var r6Node, ccNode *Node
 
@@ -1595,28 +1493,28 @@ END()
 	}
 }
 
+
+
 func TestEmitAR_NoPeerArchivesInDeps(t *testing.T) {
-	tmp := t.TempDir()
-	Throw(os.MkdirAll(filepath.Join(tmp, "lib_consumer"), 0o755))
-	Throw(os.WriteFile(filepath.Join(tmp, "lib_consumer", "ya.make"), []byte(`LIBRARY()
+	fs := newMemFS(map[string]string{
+		"lib_consumer/ya.make": `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 PEERDIR(lib_peer)
 SRCS(c.cpp)
 END()
-`), 0o644))
-
-	Throw(os.MkdirAll(filepath.Join(tmp, "lib_peer"), 0o755))
-	Throw(os.WriteFile(filepath.Join(tmp, "lib_peer", "ya.make"), []byte(`LIBRARY()
+`,
+		"lib_peer/ya.make": `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 SRCS(p.cpp)
 END()
-`), 0o644))
+`,
+	})
 
-	g := testGen(tmp, "lib_consumer")
+	g := testGen(fs, "lib_consumer")
 
 	var consumerAR *Node
 
@@ -1641,41 +1539,37 @@ END()
 	}
 }
 
+
+
 func TestGen_PROGRAM_DefaultAllocator_TcmallocTc(t *testing.T) {
-	tmp := t.TempDir()
-
-	Throw(os.MkdirAll(filepath.Join(tmp, "myprog"), 0o755))
-
-	Throw(os.WriteFile(filepath.Join(tmp, "myprog", "ya.make"), []byte(`PROGRAM(myprog)
+	fs := newMemFS(map[string]string{
+		"myprog/ya.make": `PROGRAM(myprog)
 NO_RUNTIME()
 NO_UTIL()
 SRCS(main.cpp)
 END()
-`), 0o644))
-
-	Throw(os.MkdirAll(filepath.Join(tmp, "library/cpp/malloc/tcmalloc"), 0o755))
-	Throw(os.WriteFile(filepath.Join(tmp, "library/cpp/malloc/tcmalloc", "ya.make"), []byte(`LIBRARY()
+`,
+		"library/cpp/malloc/tcmalloc/ya.make": `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 NO_PLATFORM()
 SRCS(stub.cpp)
 END()
-`), 0o644))
-
-	Throw(os.MkdirAll(filepath.Join(tmp, "contrib/libs/tcmalloc/no_percpu_cache"), 0o755))
-	Throw(os.WriteFile(filepath.Join(tmp, "contrib/libs/tcmalloc/no_percpu_cache", "ya.make"), []byte(`LIBRARY()
+`,
+		"contrib/libs/tcmalloc/no_percpu_cache/ya.make": `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 NO_PLATFORM()
 SRCS(stub.cpp)
 END()
-`), 0o644))
+`,
+	})
 
 	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
 	target := newTestPlatform(OSLinux, ISAX8664, "no", nil)
-	g := Gen(tmp, "myprog", host, target, func(Warn) {})
+	g := Gen(fs, "myprog", host, target, func(Warn) {})
 
 	hasTcmalloc := false
 	hasNoPercpu := false
@@ -1704,20 +1598,21 @@ END()
 	}
 }
 
-func TestGen_PROGRAM_ExplicitAllocator_NoTcmallocDefault(t *testing.T) {
-	tmp := t.TempDir()
 
-	Throw(os.MkdirAll(filepath.Join(tmp, "myprog"), 0o755))
-	Throw(os.WriteFile(filepath.Join(tmp, "myprog", "ya.make"), []byte(`PROGRAM(myprog)
+
+func TestGen_PROGRAM_ExplicitAllocator_NoTcmallocDefault(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"myprog/ya.make": `PROGRAM(myprog)
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 ALLOCATOR(FAKE)
 SRCS(main.cpp)
 END()
-`), 0o644))
+`,
+	})
 
-	g := testGen(tmp, "myprog")
+	g := testGen(fs, "myprog")
 
 	for _, n := range g.Graph {
 		md := n.TargetProperties["module_dir"]
@@ -1728,20 +1623,21 @@ END()
 	}
 }
 
-func TestGen_SrcdirSibling_KeepsModuleDir(t *testing.T) {
-	tmp := t.TempDir()
 
-	Throw(os.MkdirAll(filepath.Join(tmp, "mylib"), 0o755))
-	Throw(os.WriteFile(filepath.Join(tmp, "mylib", "ya.make"), []byte(`LIBRARY()
+
+func TestGen_SrcdirSibling_KeepsModuleDir(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"mylib/ya.make": `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 SRCDIR(other)
 SRCS(src/foo.cpp)
 END()
-`), 0o644))
+`,
+	})
 
-	g := testGen(tmp, "mylib")
+	g := testGen(fs, "mylib")
 
 	var ccNode *Node
 
@@ -1774,22 +1670,22 @@ END()
 	}
 }
 
-func TestGen_SrcdirLocal_IgnoresSrcdir(t *testing.T) {
-	tmp := t.TempDir()
 
-	Throw(os.MkdirAll(filepath.Join(tmp, "mylib"), 0o755))
-	Throw(os.WriteFile(filepath.Join(tmp, "mylib", "ya.make"), []byte(`LIBRARY()
+
+func TestGen_SrcdirLocal_IgnoresSrcdir(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"mylib/ya.make": `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 SRCDIR(other)
 SRCS(local.c)
 END()
-`), 0o644))
+`,
+		"mylib/local.c": "int x;\n",
+	})
 
-	Throw(os.WriteFile(filepath.Join(tmp, "mylib", "local.c"), []byte("int x;\n"), 0o644))
-
-	g := testGen(tmp, "mylib")
+	g := testGen(fs, "mylib")
 
 	var ccNode *Node
 
@@ -1818,23 +1714,16 @@ END()
 	}
 }
 
+
+
 func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
-	root := t.TempDir()
+	fs := newMemFS(map[string]string{
+		"lib/ya.make":      "LIBRARY()\nADDINCL(\n    GLOBAL lib/include\n    lib/src\n)\nSRCS(lib.cpp)\nEND()\n",
+		"lib/include/.keep": "",
+		"consumer/ya.make": "LIBRARY()\nPEERDIR(lib)\nSRCS(main.cpp)\nEND()\n",
+	})
 
-	libDir := filepath.Join(root, "lib")
-	Throw(os.MkdirAll(libDir, 0o755))
-	Throw(os.MkdirAll(filepath.Join(root, "lib/include"), 0o755))
-	Throw(os.WriteFile(filepath.Join(libDir, "ya.make"), []byte(
-		"LIBRARY()\nADDINCL(\n    GLOBAL lib/include\n    lib/src\n)\nSRCS(lib.cpp)\nEND()\n",
-	), 0o644))
-
-	consDir := filepath.Join(root, "consumer")
-	Throw(os.MkdirAll(consDir, 0o755))
-	Throw(os.WriteFile(filepath.Join(consDir, "ya.make"), []byte(
-		"LIBRARY()\nPEERDIR(lib)\nSRCS(main.cpp)\nEND()\n",
-	), 0o644))
-
-	g := testGen(root, "consumer")
+	g := testGen(fs, "consumer")
 
 	var consumerCC *Node
 
@@ -1887,6 +1776,8 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	}
 }
 
+
+
 func TestIsRuntimeAncestor_LiteralOnly(t *testing.T) {
 	literals := []string{
 		"contrib/libs/libc_compat",
@@ -1922,22 +1813,14 @@ func TestIsRuntimeAncestor_LiteralOnly(t *testing.T) {
 	}
 }
 
+
+
 func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
-	root := t.TempDir()
+	fs := newMemFS(map[string]string{
+		"mod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRC(foo.cpp -DSSE41_STUB)\nEND()\n",
+	})
 
-	modDir := filepath.Join(root, "mod")
-
-	if err := os.MkdirAll(modDir, 0o755); err != nil {
-		t.Fatalf("mkdir mod: %v", err)
-	}
-
-	yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRC(foo.cpp -DSSE41_STUB)\nEND()\n")
-
-	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644); err != nil {
-		t.Fatalf("write mod/ya.make: %v", err)
-	}
-
-	g := testGen(root, "mod")
+	g := testGen(fs, "mod")
 
 	var cc *Node
 
@@ -1970,23 +1853,15 @@ func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 	}
 }
 
+
+
 func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
-	root := t.TempDir()
+	fs := newMemFS(map[string]string{
+		"mod/ya.make":             "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRC_C_NO_LTO(system/compiler.cpp)\nEND()\n",
+		"mod/system/.keep":        "",
+	})
 
-	modDir := filepath.Join(root, "mod")
-	subDir := filepath.Join(modDir, "system")
-
-	if err := os.MkdirAll(subDir, 0o755); err != nil {
-		t.Fatalf("mkdir mod/system: %v", err)
-	}
-
-	yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRC_C_NO_LTO(system/compiler.cpp)\nEND()\n")
-
-	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644); err != nil {
-		t.Fatalf("write mod/ya.make: %v", err)
-	}
-
-	g := testGen(root, "mod")
+	g := testGen(fs, "mod")
 
 	var cc *Node
 
@@ -2023,22 +1898,15 @@ func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 	}
 }
 
+
+
 func TestGen_SRC_FlatOutputPath(t *testing.T) {
-	root := t.TempDir()
+	fs := newMemFS(map[string]string{
+		"mod/ya.make":   "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRC(sub/x.cpp)\nEND()\n",
+		"mod/sub/.keep": "",
+	})
 
-	modDir := filepath.Join(root, "mod")
-
-	if err := os.MkdirAll(filepath.Join(modDir, "sub"), 0o755); err != nil {
-		t.Fatalf("mkdir mod/sub: %v", err)
-	}
-
-	yamake := []byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRC(sub/x.cpp)\nEND()\n")
-
-	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644); err != nil {
-		t.Fatalf("write mod/ya.make: %v", err)
-	}
-
-	g := testGen(root, "mod")
+	g := testGen(fs, "mod")
 
 	var cc *Node
 
@@ -2061,23 +1929,15 @@ func TestGen_SRC_FlatOutputPath(t *testing.T) {
 	}
 }
 
+
+
 func TestGen_SRC_RejectsZeroArgs(t *testing.T) {
-	root := t.TempDir()
-
-	modDir := filepath.Join(root, "mod")
-
-	if err := os.MkdirAll(modDir, 0o755); err != nil {
-		t.Fatalf("mkdir mod: %v", err)
-	}
-
-	yamake := []byte("LIBRARY()\nSRC()\nEND()\n")
-
-	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644); err != nil {
-		t.Fatalf("write mod/ya.make: %v", err)
-	}
+	fs := newMemFS(map[string]string{
+		"mod/ya.make": "LIBRARY()\nSRC()\nEND()\n",
+	})
 
 	exc := Try(func() {
-		testGen(root, "mod")
+		testGen(fs, "mod")
 	})
 
 	if exc == nil {
@@ -2088,6 +1948,8 @@ func TestGen_SRC_RejectsZeroArgs(t *testing.T) {
 		t.Errorf("error %q does not mention SRC()", exc.Error())
 	}
 }
+
+
 
 func TestEvalCond_ARCH_ARM64_Aliased(t *testing.T) {
 	inst := ModuleInstance{Kind: KindLib, Platform: testTargetP}
@@ -2113,18 +1975,17 @@ func TestEvalCond_ARCH_ARM64_Aliased(t *testing.T) {
 	}
 }
 
-func TestGen_PR35y_R7_JoinSrcs_SuppressBuildRootShim(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "joinmod")
-	Throw(os.MkdirAll(modDir, 0o755))
 
-	yamake := []byte(`LIBRARY()
+
+func TestGen_PR35y_R7_JoinSrcs_SuppressBuildRootShim(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"joinmod/ya.make": `LIBRARY()
 JOIN_SRCS(all_my.cpp src1.cpp src2.cpp)
 END()
-`)
-	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+`,
+	})
 
-	g := testGen(root, "joinmod")
+	g := testGen(fs, "joinmod")
 
 	var arNode *Node
 
@@ -2155,20 +2016,17 @@ END()
 	}
 }
 
+
+
 func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
-	root := t.TempDir()
-	consumerDir := filepath.Join(root, "consumer")
-	Throw(os.MkdirAll(consumerDir, 0o755))
-	Throw(os.WriteFile(filepath.Join(consumerDir, "ya.make"), []byte("LIBRARY()\nSRCS(parser.rl6)\nEND()\n"), 0o644))
+	fs := newMemFS(map[string]string{
+		"consumer/ya.make":                 "LIBRARY()\nSRCS(parser.rl6)\nEND()\n",
+		"consumer/parser.rl6":              "// fixture\n",
+		"consumer/parser.h":                "// fixture\n",
+		"contrib/tools/ragel6/bin/ya.make": "PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n",
+	})
 
-	Throw(os.WriteFile(filepath.Join(consumerDir, "parser.rl6"), []byte("// fixture\n"), 0o644))
-	Throw(os.WriteFile(filepath.Join(consumerDir, "parser.h"), []byte("// fixture\n"), 0o644))
-
-	ragelDir := filepath.Join(root, "contrib/tools/ragel6/bin")
-	Throw(os.MkdirAll(ragelDir, 0o755))
-	Throw(os.WriteFile(filepath.Join(ragelDir, "ya.make"), []byte("PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n"), 0o644))
-
-	g := testGen(root, "consumer")
+	g := testGen(fs, "consumer")
 
 	var arNode *Node
 
@@ -2199,19 +2057,18 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	}
 }
 
-func TestGen_PR35y_R8_RegularARIncludesGlobalMemberInputs(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "globalmod")
-	Throw(os.MkdirAll(modDir, 0o755))
 
-	yamake := []byte(`LIBRARY()
+
+func TestGen_PR35y_R8_RegularARIncludesGlobalMemberInputs(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"globalmod/ya.make": `LIBRARY()
 GLOBAL_SRCS(global.cpp)
 SRCS(regular.cpp)
 END()
-`)
-	Throw(os.WriteFile(filepath.Join(modDir, "ya.make"), yamake, 0o644))
+`,
+	})
 
-	g := testGen(root, "globalmod")
+	g := testGen(fs, "globalmod")
 
 	var (
 		regularAR *Node
@@ -2274,11 +2131,11 @@ END()
 	}
 }
 
-func TestGen_PR35y_R8_AsmSrcdirRebase(t *testing.T) {
-	root := t.TempDir()
 
-	Throw(os.MkdirAll(filepath.Join(root, "mod/inner"), 0o755))
-	Throw(os.WriteFile(filepath.Join(root, "mod/inner", "ya.make"), []byte(`LIBRARY()
+
+func TestGen_PR35y_R8_AsmSrcdirRebase(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"mod/inner/ya.make": `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
@@ -2286,12 +2143,11 @@ NO_PLATFORM()
 SRCDIR(mod)
 SRCS(sub/foo.S)
 END()
-`), 0o644))
+`,
+		"mod/sub/foo.S": "// asm\n",
+	})
 
-	Throw(os.MkdirAll(filepath.Join(root, "mod/sub"), 0o755))
-	Throw(os.WriteFile(filepath.Join(root, "mod/sub", "foo.S"), []byte("// asm\n"), 0o644))
-
-	g := testGen(root, "mod/inner")
+	g := testGen(fs, "mod/inner")
 
 	var asNode *Node
 
@@ -2318,21 +2174,16 @@ END()
 	}
 }
 
-func TestGen_ProtoAstStylePipelineExpandsLowercaseVarsAndRootedPaths(t *testing.T) {
-	root := t.TempDir()
 
+
+func TestGen_ProtoAstStylePipelineExpandsLowercaseVarsAndRootedPaths(t *testing.T) {
+	files := map[string]string{}
 	writeFile := func(rel, body string) {
-		full := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
-		}
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s: %v", rel, err)
-		}
+		files[rel] = body
 	}
 
-	writeToolProgram(t, root, "contrib/tools/protoc/bin", "protoc")
-	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "contrib/tools/protoc/bin", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
 
 	writeFile("proto/ya.make", `LIBRARY()
 SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
@@ -2381,7 +2232,7 @@ END()
 	writeFile("build/scripts/stdout2stderr.py", "print('stderr')\n")
 	writeFile("contrib/java/antlr/antlr4/antlr.jar", "")
 
-	g := testGen(root, "proto")
+	g := testGen(newMemFS(files), "proto")
 
 	cfTemplate := findGraphNodeByOutputs(t, g, "$(B)/proto/templates/Java/Java.stg")
 	cfGrammar := findGraphNodeByOutputs(t, g, "$(B)/proto/Grammar.g")
@@ -2520,26 +2371,28 @@ END()
 	assertNodeHasNoRawProtoAstPlaceholders(ar)
 }
 
-func TestGen_ProtoLibrary_CPPProtoPlugin0WiresToolDeps(t *testing.T) {
-	root := t.TempDir()
 
-	writeTestModuleFile(t, root, "protos/ya.make", `PROTO_LIBRARY()
+
+func TestGen_ProtoLibrary_CPPProtoPlugin0WiresToolDeps(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
 PROTOC_FATAL_WARNINGS()
 GRPC()
 CPP_PROTO_PLUGIN0(config_proto_plugin tools/config_plugin DEPS deps/generated_runtime)
 SRCS(test.proto)
 END()
 `)
-	writeTestModuleFile(t, root, "protos/test.proto", `syntax = "proto3";
+	writeTestModuleFile(files, "protos/test.proto", `syntax = "proto3";
 package test;
 message Row {}
 `)
 
-	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
-	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
-	writeToolProgram(t, root, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
 
-	writeTestModuleFile(t, root, "tools/config_plugin/ya.make", `PROGRAM(config_proto_plugin)
+	writeTestModuleFile(files, "tools/config_plugin/ya.make", `PROGRAM(config_proto_plugin)
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
@@ -2549,18 +2402,18 @@ PEERDIR(
 SRCS(main.cpp)
 END()
 `)
-	writeTestModuleFile(t, root, "tools/config_plugin/main.cpp", "int main(){return 0;}\n")
+	writeTestModuleFile(files, "tools/config_plugin/main.cpp", "int main(){return 0;}\n")
 
-	writeTestModuleFile(t, root, "contrib/libs/grpc/ya.make", "LIBRARY()\nSRCS(grpc.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "contrib/libs/grpc/grpc.cpp", "int grpc(){return 0;}\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
-	writeTestModuleFile(t, root, "deps/generated_runtime/ya.make", "LIBRARY()\nSRCS(gen.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "deps/generated_runtime/gen.cpp", "int gen(){return 0;}\n")
-	writeTestModuleFile(t, root, "deps/plugin_runtime/ya.make", "LIBRARY()\nSRCS(runtime.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "deps/plugin_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/grpc/ya.make", "LIBRARY()\nSRCS(grpc.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/grpc/grpc.cpp", "int grpc(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeTestModuleFile(files, "deps/generated_runtime/ya.make", "LIBRARY()\nSRCS(gen.cpp)\nEND()\n")
+	writeTestModuleFile(files, "deps/generated_runtime/gen.cpp", "int gen(){return 0;}\n")
+	writeTestModuleFile(files, "deps/plugin_runtime/ya.make", "LIBRARY()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "deps/plugin_runtime/runtime.cpp", "int runtime(){return 0;}\n")
 
-	g := testGen(root, "protos")
+	g := testGen(newMemFS(files), "protos")
 
 	pb := findGraphNodeByOutputs(t, g,
 		"$(B)/protos/test.pb.h",
@@ -2634,34 +2487,36 @@ END()
 	}
 }
 
-func TestGen_ProtoLibrary_CPPProtoPluginOutputsReachWrapper(t *testing.T) {
-	root := t.TempDir()
 
-	writeTestModuleFile(t, root, "protos/ya.make", `PROTO_LIBRARY()
+
+func TestGen_ProtoLibrary_CPPProtoPluginOutputsReachWrapper(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
 CPP_PROTO_PLUGIN(tasklet_cpp tools/tasklet_plugin .tasklet.h)
 SRCS(test.proto)
 END()
 `)
-	writeTestModuleFile(t, root, "protos/test.proto", `syntax = "proto3";
+	writeTestModuleFile(files, "protos/test.proto", `syntax = "proto3";
 package test;
 message Row {}
 `)
 
-	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
-	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	writeTestModuleFile(t, root, "tools/tasklet_plugin/ya.make", `PROGRAM(tasklet_cpp)
+	writeTestModuleFile(files, "tools/tasklet_plugin/ya.make", `PROGRAM(tasklet_cpp)
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 SRCS(main.cpp)
 END()
 `)
-	writeTestModuleFile(t, root, "tools/tasklet_plugin/main.cpp", "int main(){return 0;}\n")
+	writeTestModuleFile(files, "tools/tasklet_plugin/main.cpp", "int main(){return 0;}\n")
 
-	g := testGen(root, "protos")
+	g := testGen(newMemFS(files), "protos")
 
 	pb := findGraphNodeByOutputs(t, g,
 		"$(B)/protos/test.pb.h",
@@ -2686,10 +2541,12 @@ END()
 	}
 }
 
-func TestGen_ProtoLibrary_CPPProtoPlugin2HeaderConsumerInheritsProtoClosure(t *testing.T) {
-	root := t.TempDir()
 
-	writeTestModuleFile(t, root, "protos/ya.make", `PROTO_LIBRARY()
+
+func TestGen_ProtoLibrary_CPPProtoPlugin2HeaderConsumerInheritsProtoClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
 CPP_PROTO_PLUGIN2(grpc_cpp contrib/tools/protoc/plugins/grpc_cpp .grpc.pb.cc .grpc.pb.h DEPS contrib/libs/grpc)
 SRCS(
     dep.proto
@@ -2697,13 +2554,13 @@ SRCS(
 )
 END()
 `)
-	writeTestModuleFile(t, root, "protos/dep.proto", `syntax = "proto3";
+	writeTestModuleFile(files, "protos/dep.proto", `syntax = "proto3";
 package test;
 message Dep {
   string value = 1;
 }
 `)
-	writeTestModuleFile(t, root, "protos/main.proto", `syntax = "proto3";
+	writeTestModuleFile(files, "protos/main.proto", `syntax = "proto3";
 package test;
 import "dep.proto";
 message Main {
@@ -2713,26 +2570,26 @@ service TestService {
   rpc Ping(Main) returns (Main);
 }
 `)
-	writeTestModuleFile(t, root, "app/ya.make", `LIBRARY()
+	writeTestModuleFile(files, "app/ya.make", `LIBRARY()
 PEERDIR(protos)
 SRCS(use.cpp)
 END()
 `)
-	writeTestModuleFile(t, root, "app/use.cpp", `#include <protos/main.grpc.pb.h>
+	writeTestModuleFile(files, "app/use.cpp", `#include <protos/main.grpc.pb.h>
 int use() { return 0; }
 `)
 
-	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
-	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
-	writeToolProgram(t, root, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
 
-	writeTestModuleFile(t, root, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
-	writeTestModuleFile(t, root, "contrib/libs/grpc/ya.make", "LIBRARY()\nSRCS(grpc.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "contrib/libs/grpc/grpc.cpp", "int grpc(){return 0;}\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/grpc/ya.make", "LIBRARY()\nSRCS(grpc.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/grpc/grpc.cpp", "int grpc(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	g := testGen(root, "app")
+	g := testGen(newMemFS(files), "app")
 
 	useCC := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
 	mainPB := mustNodeByOutput(t, g, "$(B)/protos/main.pb.h")
@@ -2755,10 +2612,12 @@ int use() { return 0; }
 	}
 }
 
-func TestGen_ProtoLibrary_CPPProtoPlugin2GeneratedSourceCompilesAndArchives(t *testing.T) {
-	root := t.TempDir()
 
-	writeTestModuleFile(t, root, "protos/ya.make", `PROTO_LIBRARY()
+
+func TestGen_ProtoLibrary_CPPProtoPlugin2GeneratedSourceCompilesAndArchives(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
 CPP_PROTO_PLUGIN2(grpc_cpp contrib/tools/protoc/plugins/grpc_cpp .grpc.pb.cc .grpc.pb.h DEPS contrib/libs/grpc)
 SRCS(
     dep.proto
@@ -2766,13 +2625,13 @@ SRCS(
 )
 END()
 `)
-	writeTestModuleFile(t, root, "protos/dep.proto", `syntax = "proto3";
+	writeTestModuleFile(files, "protos/dep.proto", `syntax = "proto3";
 package test;
 message Dep {
   string value = 1;
 }
 `)
-	writeTestModuleFile(t, root, "protos/main.proto", `syntax = "proto3";
+	writeTestModuleFile(files, "protos/main.proto", `syntax = "proto3";
 package test;
 import "dep.proto";
 message Main {
@@ -2783,17 +2642,17 @@ service TestService {
 }
 `)
 
-	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
-	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
-	writeToolProgram(t, root, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
 
-	writeTestModuleFile(t, root, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
-	writeTestModuleFile(t, root, "contrib/libs/grpc/ya.make", "LIBRARY()\nSRCS(grpc.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "contrib/libs/grpc/grpc.cpp", "int grpc(){return 0;}\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/grpc/ya.make", "LIBRARY()\nSRCS(grpc.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/grpc/grpc.cpp", "int grpc(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	g := testGen(root, "protos")
+	g := testGen(newMemFS(files), "protos")
 
 	grpcCC := mustNodeByOutput(t, g, "$(B)/protos/main.grpc.pb.cc.o")
 	mainPB := mustNodeByOutput(t, g, "$(B)/protos/main.pb.h")
@@ -2821,10 +2680,12 @@ service TestService {
 	}
 }
 
-func TestGen_ProtoLibrary_TransitiveHeadersNoAddsDepsHeaderAndEnumUsesGeneratedPBHeader(t *testing.T) {
-	root := t.TempDir()
 
-	writeTestModuleFile(t, root, "protos/ya.make", `PROTO_LIBRARY()
+
+func TestGen_ProtoLibrary_TransitiveHeadersNoAddsDepsHeaderAndEnumUsesGeneratedPBHeader(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
 SET(PROTOC_TRANSITIVE_HEADERS "no")
 GRPC()
 GENERATE_ENUM_SERIALIZATION(main.pb.h)
@@ -2834,13 +2695,13 @@ SRCS(
 )
 END()
 `)
-	writeTestModuleFile(t, root, "protos/dep.proto", `syntax = "proto3";
+	writeTestModuleFile(files, "protos/dep.proto", `syntax = "proto3";
 package test;
 message Dep {
   string value = 1;
 }
 `)
-	writeTestModuleFile(t, root, "protos/main.proto", `syntax = "proto3";
+	writeTestModuleFile(files, "protos/main.proto", `syntax = "proto3";
 package test;
 import "dep.proto";
 enum Mode {
@@ -2855,29 +2716,29 @@ service TestService {
   rpc Ping(Main) returns (Main);
 }
 `)
-	writeTestModuleFile(t, root, "app/ya.make", `LIBRARY()
+	writeTestModuleFile(files, "app/ya.make", `LIBRARY()
 PEERDIR(protos)
 SRCS(use.cpp)
 END()
 `)
-	writeTestModuleFile(t, root, "app/use.cpp", `#include <protos/main.deps.pb.h>
+	writeTestModuleFile(files, "app/use.cpp", `#include <protos/main.deps.pb.h>
 int use() { return 0; }
 `)
 
-	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
-	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
-	writeToolProgram(t, root, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
-	writeToolProgram(t, root, "tools/enum_parser/enum_parser", "enum_parser")
-	writeTestModuleFile(t, root, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
 
-	writeTestModuleFile(t, root, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
-	writeTestModuleFile(t, root, "contrib/libs/grpc/ya.make", "LIBRARY()\nSRCS(grpc.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "contrib/libs/grpc/grpc.cpp", "int grpc(){return 0;}\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/grpc/ya.make", "LIBRARY()\nSRCS(grpc.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/grpc/grpc.cpp", "int grpc(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	g := testGen(root, "app")
+	g := testGen(newMemFS(files), "app")
 
 	pb := findGraphNodeByOutputs(t, g,
 		"$(B)/protos/main.pb.h",
@@ -2937,10 +2798,12 @@ int use() { return 0; }
 	}
 }
 
-func TestGen_ProtoLibrary_TransitiveHeadersNoKeepsPublicImportsOnLitePBHeader(t *testing.T) {
-	root := t.TempDir()
 
-	writeTestModuleFile(t, root, "protos/ya.make", `PROTO_LIBRARY()
+
+func TestGen_ProtoLibrary_TransitiveHeadersNoKeepsPublicImportsOnLitePBHeader(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
 SET(PROTOC_TRANSITIVE_HEADERS "no")
 SRCS(
     leaf.proto
@@ -2949,42 +2812,42 @@ SRCS(
 )
 END()
 `)
-	writeTestModuleFile(t, root, "protos/leaf.proto", `syntax = "proto3";
+	writeTestModuleFile(files, "protos/leaf.proto", `syntax = "proto3";
 package test;
 message Leaf {
   string value = 1;
 }
 `)
-	writeTestModuleFile(t, root, "protos/public.proto", `syntax = "proto3";
+	writeTestModuleFile(files, "protos/public.proto", `syntax = "proto3";
 package test;
 import public "leaf.proto";
 message PublicMessage {
   Leaf leaf = 1;
 }
 `)
-	writeTestModuleFile(t, root, "protos/main.proto", `syntax = "proto3";
+	writeTestModuleFile(files, "protos/main.proto", `syntax = "proto3";
 package test;
 import public "public.proto";
 message Main {
   PublicMessage message = 1;
 }
 `)
-	writeTestModuleFile(t, root, "app/ya.make", `LIBRARY()
+	writeTestModuleFile(files, "app/ya.make", `LIBRARY()
 PEERDIR(protos)
 SRCS(use.cpp)
 END()
 `)
-	writeTestModuleFile(t, root, "app/use.cpp", `#include <protos/main.pb.h>
+	writeTestModuleFile(files, "app/use.cpp", `#include <protos/main.pb.h>
 int use() { return 0; }
 `)
 
-	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
-	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
-	writeTestModuleFile(t, root, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	g := testGen(root, "app")
+	g := testGen(newMemFS(files), "app")
 
 	useCC := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
 	mainPB := mustNodeByOutput(t, g, "$(B)/protos/main.pb.h")
@@ -3007,7 +2870,9 @@ int use() { return 0; }
 	}
 }
 
-func testGen(sourceRoot, targetDir string) *Graph {
+
+
+func testGen(fs FS, targetDir string) *Graph {
 	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
 	targetFlags := make(map[string]string, len(testToolchainFlags)+1)
 	for k, v := range testToolchainFlags {
@@ -3015,28 +2880,21 @@ func testGen(sourceRoot, targetDir string) *Graph {
 	}
 	targetFlags["PIC"] = "no"
 	target := NewPlatform(OSLinux, ISAAArch64, targetFlags, nil, "", "")
-	return Gen(sourceRoot, targetDir, host, target, func(Warn) {})
+	return Gen(fs, targetDir, host, target, func(Warn) {})
 }
 
-func TestCollectModule_YqlAbiMacrosAppendCXXFlags(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "mod")
-	if err := os.MkdirAll(modDir, 0o755); err != nil {
-		t.Fatalf("mkdir mod: %v", err)
-	}
 
-	const yamake = `LIBRARY()
+
+func TestCollectModule_YqlAbiMacrosAppendCXXFlags(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"mod/ya.make": `LIBRARY()
 YQL_LAST_ABI_VERSION()
 YQL_ABI_VERSION(2 44 0)
 SRCS(lib.cpp)
 END()
-`
-	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
-		t.Fatalf("write ya.make: %v", err)
-	}
-
-	fs := NewFS(root)
-	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+`,
+	})
+	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/mod/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}))
 
 	want := []string{
@@ -3050,24 +2908,17 @@ END()
 	}
 }
 
-func TestCollectModule_YqlUdfStaticRoutesSrcsToGlobal(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "mod")
-	if err := os.MkdirAll(modDir, 0o755); err != nil {
-		t.Fatalf("mkdir mod: %v", err)
-	}
 
-	const yamake = `YQL_UDF_CONTRIB(my_udf)
+
+func TestCollectModule_YqlUdfStaticRoutesSrcsToGlobal(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"mod/ya.make": `YQL_UDF_CONTRIB(my_udf)
 SRCS(lib.cpp nested/extra.cpp)
 PEERDIR(custom/peer)
 END()
-`
-	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
-		t.Fatalf("write ya.make: %v", err)
-	}
-
-	fs := NewFS(root)
-	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+`,
+	})
+	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/mod/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}))
 
 	if d.moduleStmt == nil || d.moduleStmt.Name != "YQL_UDF_CONTRIB" {
@@ -3091,24 +2942,17 @@ END()
 	}
 }
 
-func TestCollectModule_ProtocFatalWarningsAddsProtoFlag(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "proto")
-	if err := os.MkdirAll(modDir, 0o755); err != nil {
-		t.Fatalf("mkdir proto: %v", err)
-	}
 
-	const yamake = `PROTO_LIBRARY()
+
+func TestCollectModule_ProtocFatalWarningsAddsProtoFlag(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"proto/ya.make": `PROTO_LIBRARY()
 PROTOC_FATAL_WARNINGS()
 SRCS(test.proto)
 END()
-`
-	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
-		t.Fatalf("write ya.make: %v", err)
-	}
-
-	fs := NewFS(root)
-	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+`,
+	})
+	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/proto/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(d.protocFlags, []string{"--fatal_warnings"}) {
@@ -3116,24 +2960,17 @@ END()
 	}
 }
 
-func TestCollectModule_CPPProtoPluginRecorded(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "proto")
-	if err := os.MkdirAll(modDir, 0o755); err != nil {
-		t.Fatalf("mkdir proto: %v", err)
-	}
 
-	const yamake = `PROTO_LIBRARY()
+
+func TestCollectModule_CPPProtoPluginRecorded(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"proto/ya.make": `PROTO_LIBRARY()
 CPP_PROTO_PLUGIN(validation ydb/public/lib/validation .validation.pb.h DEPS ydb/public/api/protos/annotations EXTRA_OUT_FLAG lite=true)
 SRCS(test.proto)
 END()
-`
-	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
-		t.Fatalf("write ya.make: %v", err)
-	}
-
-	fs := NewFS(root)
-	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+`,
+	})
+	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/proto/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
 
 	if len(d.cppProtoPlugins) != 1 {
@@ -3161,24 +2998,17 @@ END()
 	}
 }
 
-func TestCollectModule_FlatcFlagsRecorded(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "flatcmod")
-	if err := os.MkdirAll(modDir, 0o755); err != nil {
-		t.Fatalf("mkdir flatcmod: %v", err)
-	}
 
-	const yamake = `LIBRARY()
+
+func TestCollectModule_FlatcFlagsRecorded(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"flatcmod/ya.make": `LIBRARY()
 FLATC_FLAGS(--scoped-enums --gen-all)
 SRCS(Schema.fbs)
 END()
-`
-	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
-		t.Fatalf("write ya.make: %v", err)
-	}
-
-	fs := NewFS(root)
-	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+`,
+	})
+	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/flatcmod/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "flatcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "flatcmod", Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(d.flatcFlags, []string{"--scoped-enums", "--gen-all"}) {
@@ -3186,24 +3016,17 @@ END()
 	}
 }
 
-func TestCollectModule_UseCommonGoogleApisAddsPeer(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "proto")
-	if err := os.MkdirAll(modDir, 0o755); err != nil {
-		t.Fatalf("mkdir proto: %v", err)
-	}
 
-	const yamake = `PROTO_LIBRARY()
+
+func TestCollectModule_UseCommonGoogleApisAddsPeer(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"proto/ya.make": `PROTO_LIBRARY()
 USE_COMMON_GOOGLE_APIS(api/annotations)
 SRCS(test.proto)
 END()
-`
-	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
-		t.Fatalf("write ya.make: %v", err)
-	}
-
-	fs := NewFS(root)
-	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+`,
+	})
+	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/proto/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
 
 	if !containsString(d.peerdirs, "contrib/libs/googleapis-common-protos") {
@@ -3211,26 +3034,19 @@ END()
 	}
 }
 
-func TestCollectModule_Py3ProgramSplitsPyMainFromPySrcs(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "pytool")
-	if err := os.MkdirAll(modDir, 0o755); err != nil {
-		t.Fatalf("mkdir pytool: %v", err)
-	}
 
-	const yamake = `PY3_PROGRAM()
+
+func TestCollectModule_Py3ProgramSplitsPyMainFromPySrcs(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"pytool/ya.make": `PY3_PROGRAM()
 PY_SRCS(
     MAIN
     __main__.py
 )
 END()
-`
-	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
-		t.Fatalf("write ya.make: %v", err)
-	}
-
-	fs := NewFS(root)
-	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+`,
+	})
+	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/pytool/ya.make"))
 
 	bin := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "pytool", KindBin, mf.Stmts, buildIfEnv(ModuleInstance{Path: "pytool", Kind: KindBin, Platform: testTargetP}))
 	if got := bin.pyMain; got == nil || *got != "pytool.__main__:main" {
@@ -3252,14 +3068,11 @@ END()
 	}
 }
 
-func TestCollectModule_CopyExpandsVarsIntoAutoSources(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "copymod")
-	if err := os.MkdirAll(modDir, 0o755); err != nil {
-		t.Fatalf("mkdir copymod: %v", err)
-	}
 
-	const yamake = `LIBRARY()
+
+func TestCollectModule_CopyExpandsVarsIntoAutoSources(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"copymod/ya.make": `LIBRARY()
 SET(ORIG_SRC_DIR src)
 SET(ORIG_SOURCES a.cpp b.h)
 COPY(
@@ -3270,13 +3083,9 @@ COPY(
     OUTPUT_INCLUDES dep.h
 )
 END()
-`
-	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(yamake), 0o644); err != nil {
-		t.Fatalf("write ya.make: %v", err)
-	}
-
-	fs := NewFS(root)
-	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+`,
+	})
+	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/copymod/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "copymod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "copymod", Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(d.srcs, []string{"a.cpp", "b.h"}) {
@@ -3290,18 +3099,12 @@ END()
 	}
 }
 
-func TestGen_YqlUdfStatic_UsesGlobalArchiveOnly(t *testing.T) {
-	root := t.TempDir()
 
-	mkdirWrite := func(rel, body string) {
-		full := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
-		}
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s: %v", rel, err)
-		}
-	}
+
+func TestGen_YqlUdfStatic_UsesGlobalArchiveOnly(t *testing.T) {
+	files := map[string]string{}
+
+	mkdirWrite := func(rel, body string) { files[rel] = body }
 
 	mkdirWrite("udfmod/ya.make", `YQL_UDF_CONTRIB(my_udf)
 YQL_ABI_VERSION(2 44 0)
@@ -3312,7 +3115,7 @@ END()
 	mkdirWrite("yql/essentials/public/udf/ya.make", "LIBRARY()\nEND()\n")
 	mkdirWrite("yql/essentials/public/udf/support/ya.make", "LIBRARY()\nEND()\n")
 
-	g := testGen(root, "udfmod")
+	g := testGen(newMemFS(files), "udfmod")
 
 	cc := findGraphNodeByOutputs(t, g, "$(B)/udfmod/lib.cpp.udfs.o")
 	if cc.TargetProperties["module_tag"] != "yql_udf_static" {
@@ -3343,18 +3146,12 @@ END()
 	}
 }
 
-func TestGen_FlatcSourcesEmitConsumerInputsAndDeps(t *testing.T) {
-	root := t.TempDir()
 
-	mkdirWrite := func(rel, body string) {
-		full := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
-		}
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s: %v", rel, err)
-		}
-	}
+
+func TestGen_FlatcSourcesEmitConsumerInputsAndDeps(t *testing.T) {
+	files := map[string]string{}
+
+	mkdirWrite := func(rel, body string) { files[rel] = body }
 
 	mkdirWrite("mod/ya.make", `LIBRARY()
 FLATC_FLAGS(--scoped-enums)
@@ -3385,7 +3182,7 @@ root_type Bar;
 	mkdirWrite("contrib/libs/flatbuffers/flatc/ya.make", "PROGRAM(flatc)\nSRCS(main.cpp)\nEND()\n")
 	mkdirWrite("contrib/libs/flatbuffers/flatc/main.cpp", "int main() { return 0; }\n")
 
-	g := testGen(root, "mod")
+	g := testGen(newMemFS(files), "mod")
 
 	findGraphNodeByOutputs(t, g, "$(B)/mod/File.fbs.h", "$(B)/mod/File.fbs.cpp", "$(B)/mod/File.bfbs")
 	findGraphNodeByOutputs(t, g, "$(B)/mod/Schema.fbs.h", "$(B)/mod/Schema.fbs.cpp", "$(B)/mod/Schema.bfbs")
@@ -3425,18 +3222,12 @@ root_type Bar;
 	}
 }
 
-func TestGen_CopyFileWithContextAutoCompilesBuildOutput(t *testing.T) {
-	root := t.TempDir()
 
-	mkdirWrite := func(rel, body string) {
-		full := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
-		}
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s: %v", rel, err)
-		}
-	}
+
+func TestGen_CopyFileWithContextAutoCompilesBuildOutput(t *testing.T) {
+	files := map[string]string{}
+
+	mkdirWrite := func(rel, body string) { files[rel] = body }
 
 	mkdirWrite("mod/ya.make", `LIBRARY()
 COPY_FILE_WITH_CONTEXT(
@@ -3451,7 +3242,7 @@ int copied() { return 0; }
 `)
 	mkdirWrite("mod/dep.h", "#pragma once\n")
 
-	g := testGen(root, "mod")
+	g := testGen(newMemFS(files), "mod")
 
 	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
 	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
@@ -3468,18 +3259,12 @@ int copied() { return 0; }
 	}
 }
 
-func TestGen_CopyFileWithContextExpandsBuildRootModdirDestination(t *testing.T) {
-	root := t.TempDir()
 
-	mkdirWrite := func(rel, body string) {
-		full := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
-		}
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s: %v", rel, err)
-		}
-	}
+
+func TestGen_CopyFileWithContextExpandsBuildRootModdirDestination(t *testing.T) {
+	files := map[string]string{}
+
+	mkdirWrite := func(rel, body string) { files[rel] = body }
 
 	mkdirWrite("mod/ya.make", `LIBRARY()
 COPY_FILE_WITH_CONTEXT(
@@ -3494,7 +3279,7 @@ int copied() { return 0; }
 `)
 	mkdirWrite("mod/dep.h", "#pragma once\n")
 
-	g := testGen(root, "mod")
+	g := testGen(newMemFS(files), "mod")
 
 	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
 	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
@@ -3508,18 +3293,12 @@ int copied() { return 0; }
 	}
 }
 
-func TestGen_CopyFileAutoDoesNotPropagateSourceContext(t *testing.T) {
-	root := t.TempDir()
 
-	mkdirWrite := func(rel, body string) {
-		full := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
-		}
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s: %v", rel, err)
-		}
-	}
+
+func TestGen_CopyFileAutoDoesNotPropagateSourceContext(t *testing.T) {
+	files := map[string]string{}
+
+	mkdirWrite := func(rel, body string) { files[rel] = body }
 
 	mkdirWrite("mod/ya.make", `LIBRARY()
 COPY_FILE(
@@ -3534,7 +3313,7 @@ int copied() { return 0; }
 `)
 	mkdirWrite("mod/dep.h", "#pragma once\n")
 
-	g := testGen(root, "mod")
+	g := testGen(newMemFS(files), "mod")
 
 	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
 	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
@@ -3554,25 +3333,27 @@ int copied() { return 0; }
 	}
 }
 
-func TestGen_CopyFileUsesSourceRootInputFromIncludedMacro(t *testing.T) {
-	root := t.TempDir()
 
-	writeTestModuleFile(t, root, "mod/ya.make", `LIBRARY()
+
+func TestGen_CopyFileUsesSourceRootInputFromIncludedMacro(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 INCLUDE(${ARCADIA_ROOT}/shared/copy.ya.make.inc)
 END()
 `)
-	writeTestModuleFile(t, root, "shared/copy.ya.make.inc", `COPY_FILE(
+	writeTestModuleFile(files, "shared/copy.ya.make.inc", `COPY_FILE(
     TEXT
     shared/generated.txt
     ${BINDIR}/shared/generated.h
 )
 `)
-	writeTestModuleFile(t, root, "shared/generated.txt", "generated\n")
+	writeTestModuleFile(files, "shared/generated.txt", "generated\n")
 
-	g := testGen(root, "mod")
+	g := testGen(newMemFS(files), "mod")
 
 	cp := mustNodeByOutput(t, g, "$(B)/mod/shared/generated.h")
 	if !nodeHasInput(cp, "$(S)/shared/generated.txt") {
@@ -3583,10 +3364,12 @@ END()
 	}
 }
 
-func TestGen_EnumSerializationRootQualifiedHeaderUsesCanonicalInput(t *testing.T) {
-	root := t.TempDir()
 
-	writeTestModuleFile(t, root, "pkg/sub/ya.make", `LIBRARY()
+
+func TestGen_EnumSerializationRootQualifiedHeaderUsesCanonicalInput(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "pkg/sub/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
@@ -3594,13 +3377,13 @@ GENERATE_ENUM_SERIALIZATION(pkg/sub/codecs.h)
 SRCS(stub.cpp)
 END()
 `)
-	writeTestModuleFile(t, root, "pkg/sub/codecs.h", "enum class E { A = 0 };\n")
-	writeTestModuleFile(t, root, "pkg/sub/stub.cpp", "int stub(){return 0;}\n")
-	writeToolProgram(t, root, "tools/enum_parser/enum_parser", "enum_parser")
-	writeTestModuleFile(t, root, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+	writeTestModuleFile(files, "pkg/sub/codecs.h", "enum class E { A = 0 };\n")
+	writeTestModuleFile(files, "pkg/sub/stub.cpp", "int stub(){return 0;}\n")
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
 
-	g := testGen(root, "pkg/sub")
+	g := testGen(newMemFS(files), "pkg/sub")
 
 	en := mustNodeByOutput(t, g, "$(B)/pkg/sub/pkg/sub/codecs.h_serialized.cpp")
 	if !nodeHasInput(en, "$(S)/pkg/sub/codecs.h") {
@@ -3617,6 +3400,8 @@ END()
 	}
 }
 
+
+
 func vfsStringsT3(in []VFS) []string {
 	out := make([]string, len(in))
 	for i, v := range in {
@@ -3625,16 +3410,16 @@ func vfsStringsT3(in []VFS) []string {
 	return out
 }
 
-func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
-	root := t.TempDir()
-	libDir := filepath.Join(root, "thelib")
-	Throw(os.MkdirAll(libDir, 0o755))
-	Throw(os.WriteFile(filepath.Join(libDir, "ya.make"),
-		[]byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSET(MYVAR hello)\nDEFAULT(MYDEF world)\nSRCS(lib.cpp x.cpp.in)\nEND()\n"), 0o644))
-	Throw(os.WriteFile(filepath.Join(libDir, "lib.cpp"), []byte("int f(){return 0;}\n"), 0o644))
-	Throw(os.WriteFile(filepath.Join(libDir, "x.cpp.in"), []byte("int a = @MYVAR@;\nint b = @MYDEF@;\n"), 0o644))
 
-	g := testGen(root, "thelib")
+
+func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"thelib/ya.make":  "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSET(MYVAR hello)\nDEFAULT(MYDEF world)\nSRCS(lib.cpp x.cpp.in)\nEND()\n",
+		"thelib/lib.cpp":  "int f(){return 0;}\n",
+		"thelib/x.cpp.in": "int a = @MYVAR@;\nint b = @MYDEF@;\n",
+	})
+
+	g := testGen(fs, "thelib")
 	var cf *Node
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 && n.Outputs[0].String() == "$(B)/thelib/x.cpp" {
@@ -3654,31 +3439,21 @@ func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
 	}
 }
 
+
+
 func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
-	root := t.TempDir()
-	genh := filepath.Join(root, "genh")
-	cons := filepath.Join(root, "cons")
-	app := filepath.Join(root, "app")
-	for _, d := range []string{genh, cons, app} {
-		Throw(os.MkdirAll(d, 0o755))
-	}
+	fs := newMemFS(map[string]string{
+		"genh/ya.make":     "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSET(MYVAR hello)\nSRCS(config.h.in own.cpp)\nEND()\n",
+		"genh/config.h.in": "#include \"dep.h\"\n#define X @MYVAR@\n",
+		"genh/dep.h":       "#pragma once\n",
+		"genh/own.cpp":     "int g(){return 0;}\n",
+		"cons/ya.make":     "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(genh)\nSRCS(use.cpp)\nEND()\n",
+		"cons/use.cpp":     "#include <genh/config.h>\nint u(){return 0;}\n",
+		"app/ya.make":      "PROGRAM()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(cons)\nSRCS(main.cpp)\nEND()\n",
+		"app/main.cpp":     "int main(){return 0;}\n",
+	})
 
-	Throw(os.WriteFile(filepath.Join(genh, "ya.make"),
-		[]byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSET(MYVAR hello)\nSRCS(config.h.in own.cpp)\nEND()\n"), 0o644))
-	Throw(os.WriteFile(filepath.Join(genh, "config.h.in"), []byte("#include \"dep.h\"\n#define X @MYVAR@\n"), 0o644))
-	Throw(os.WriteFile(filepath.Join(genh, "dep.h"), []byte("#pragma once\n"), 0o644))
-	Throw(os.WriteFile(filepath.Join(genh, "own.cpp"), []byte("int g(){return 0;}\n"), 0o644))
-
-	Throw(os.WriteFile(filepath.Join(cons, "ya.make"),
-		[]byte("LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(genh)\nSRCS(use.cpp)\nEND()\n"), 0o644))
-	Throw(os.WriteFile(filepath.Join(cons, "use.cpp"),
-		[]byte("#include <genh/config.h>\nint u(){return 0;}\n"), 0o644))
-
-	Throw(os.WriteFile(filepath.Join(app, "ya.make"),
-		[]byte("PROGRAM()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(cons)\nSRCS(main.cpp)\nEND()\n"), 0o644))
-	Throw(os.WriteFile(filepath.Join(app, "main.cpp"), []byte("int main(){return 0;}\n"), 0o644))
-
-	g := testGen(root, "app")
+	g := testGen(fs, "app")
 
 	byOut := map[string]*Node{}
 	for _, n := range g.Graph {
@@ -3733,11 +3508,11 @@ func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 	}
 }
 
+
+
 func TestGen_CmdArgsExpandStmtVars(t *testing.T) {
-	root := t.TempDir()
-	mod := filepath.Join(root, "mod")
-	Throw(os.MkdirAll(mod, 0o755))
-	Throw(os.WriteFile(filepath.Join(mod, "ya.make"), []byte(`LIBRARY()
+	fs := newMemFS(map[string]string{
+		"mod/ya.make": `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
@@ -3751,10 +3526,11 @@ CFLAGS(
 )
 SRC(lib.cpp ${SSE41_CFLAGS} ${AVX2_CFLAGS})
 END()
-`), 0o644))
-	Throw(os.WriteFile(filepath.Join(mod, "lib.cpp"), []byte("int lib(){return 0;}\n"), 0o644))
+`,
+		"mod/lib.cpp": "int lib(){return 0;}\n",
+	})
 
-	g := testGen(root, "mod")
+	g := testGen(fs, "mod")
 	cc := mustNodeByOutput(t, g, "$(B)/mod/lib.cpp.o")
 	args := strings.Join(cc.Cmds[0].CmdArgs, " ")
 
@@ -3781,22 +3557,24 @@ END()
 	}
 }
 
+
+
 func TestGen_RunProgramHeaderOutputClosurePropagatesInputs(t *testing.T) {
-	root := t.TempDir()
+	files := map[string]string{}
 
-	writeToolProgram(t, root, "tools/genhdr", "genhdr")
+	writeToolProgram(files, "tools/genhdr", "genhdr")
 
-	writeTestModuleFile(t, root, "dep/ya.make", `LIBRARY()
+	writeTestModuleFile(files, "dep/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 SRCS(dep.cpp dep.h)
 END()
 `)
-	writeTestModuleFile(t, root, "dep/dep.cpp", "int dep(){return 0;}\n")
-	writeTestModuleFile(t, root, "dep/dep.h", "#pragma once\n")
+	writeTestModuleFile(files, "dep/dep.cpp", "int dep(){return 0;}\n")
+	writeTestModuleFile(files, "dep/dep.h", "#pragma once\n")
 
-	writeTestModuleFile(t, root, "gen/ya.make", `LIBRARY()
+	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
@@ -3814,9 +3592,9 @@ RUN_PROGRAM(
 )
 END()
 `)
-	writeTestModuleFile(t, root, "gen/template.h.in", "#pragma once\n")
+	writeTestModuleFile(files, "gen/template.h.in", "#pragma once\n")
 
-	writeTestModuleFile(t, root, "cons/ya.make", `LIBRARY()
+	writeTestModuleFile(files, "cons/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
@@ -3824,11 +3602,11 @@ PEERDIR(gen)
 SRCS(use.cpp)
 END()
 `)
-	writeTestModuleFile(t, root, "cons/use.cpp", `#include <gen/gen.h>
+	writeTestModuleFile(files, "cons/use.cpp", `#include <gen/gen.h>
 int use() { return 0; }
 `)
 
-	writeTestModuleFile(t, root, "app/ya.make", `PROGRAM()
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
@@ -3836,9 +3614,9 @@ PEERDIR(cons)
 SRCS(main.cpp)
 END()
 `)
-	writeTestModuleFile(t, root, "app/main.cpp", "int main(){return 0;}\n")
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
 
-	g := testGen(root, "app")
+	g := testGen(newMemFS(files), "app")
 	genH := mustNodeByOutput(t, g, "$(B)/gen/gen.h")
 	use := mustNodeByOutput(t, g, "$(B)/cons/use.cpp.o")
 
@@ -3856,25 +3634,27 @@ END()
 	}
 }
 
-func TestCollectModule_BisonGeneratedHeaderExportedGlobally(t *testing.T) {
-	root := t.TempDir()
 
-	writeTestModuleFile(t, root, "gen/ya.make", `LIBRARY()
+
+func TestCollectModule_BisonGeneratedHeaderExportedGlobally(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 SRCS(pire/re_parser.y)
 END()
 `)
-	writeTestModuleFile(t, root, "gen/pire/re_parser.y", `%{
+	writeTestModuleFile(files, "gen/pire/re_parser.y", `%{
 #include "re_lexer.h"
 %}
 %%
 `)
-	writeTestModuleFile(t, root, "gen/pire/re_lexer.h", "#pragma once\n")
+	writeTestModuleFile(files, "gen/pire/re_lexer.h", "#pragma once\n")
 
-	fs := NewFS(root)
-	mf := Throw2(ParseFile(fs, filepath.Join(root, "gen", "ya.make")))
+	fs := newMemFS(files)
+	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/gen/ya.make"))
 	instance := ModuleInstance{Path: "gen", Kind: KindLib, Platform: testTargetP}
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "gen", KindLib, mf.Stmts, buildIfEnv(instance))
 
@@ -3885,41 +3665,43 @@ END()
 	}
 }
 
-func TestGen_BisonGeneratedHeaderPreprocessAndPeerBuildRootInclude(t *testing.T) {
-	root := t.TempDir()
 
-	writeToolProgram(t, root, "contrib/tools/bison", "bison")
-	writeToolProgram(t, root, "contrib/tools/m4", "m4")
-	writeTestModuleFile(t, root, bisonPreprocessPyVFS.Rel(), "print('stub')\n")
+
+func TestGen_BisonGeneratedHeaderPreprocessAndPeerBuildRootInclude(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "contrib/tools/bison", "bison")
+	writeToolProgram(files, "contrib/tools/m4", "m4")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.Rel(), "print('stub')\n")
 	for _, input := range bisonCppSkeletonInputs {
 		body := ""
 		if strings.HasSuffix(input.Rel(), "/stack.hh") {
 			body = `#include "skeleton-helper.h"` + "\n"
 		}
-		writeTestModuleFile(t, root, input.Rel(), body)
+		writeTestModuleFile(files, input.Rel(), body)
 	}
-	writeTestModuleFile(t, root, "contrib/tools/bison/data/skeletons/skeleton-helper.h", "")
+	writeTestModuleFile(files, "contrib/tools/bison/data/skeletons/skeleton-helper.h", "")
 
-	writeTestModuleFile(t, root, "genlib/ya.make", `LIBRARY()
+	writeTestModuleFile(files, "genlib/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 SRCS(pire/re_parser.y)
 END()
 `)
-	writeTestModuleFile(t, root, "genlib/pire/re_parser.y", `%{
+	writeTestModuleFile(files, "genlib/pire/re_parser.y", `%{
 #include "re_lexer.h"
 #include "extra.h"
 %}
 %%
 `)
-	writeTestModuleFile(t, root, "genlib/pire/re_lexer.h", `#pragma once
+	writeTestModuleFile(files, "genlib/pire/re_lexer.h", `#pragma once
 #include "deep.h"
 `)
-	writeTestModuleFile(t, root, "genlib/pire/extra.h", "#pragma once\n")
-	writeTestModuleFile(t, root, "genlib/pire/deep.h", "#pragma once\n")
+	writeTestModuleFile(files, "genlib/pire/extra.h", "#pragma once\n")
+	writeTestModuleFile(files, "genlib/pire/deep.h", "#pragma once\n")
 
-	writeTestModuleFile(t, root, "app/ya.make", `LIBRARY()
+	writeTestModuleFile(files, "app/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
@@ -3927,9 +3709,9 @@ PEERDIR(genlib)
 SRCS(use.cpp)
 END()
 `)
-	writeTestModuleFile(t, root, "app/use.cpp", "int use() { return 0; }\n")
+	writeTestModuleFile(files, "app/use.cpp", "int use() { return 0; }\n")
 
-	g := testGen(root, "app")
+	g := testGen(newMemFS(files), "app")
 
 	yc := mustNodeByOutput(t, g, "$(B)/genlib/pire/re_parser.h")
 	if got := len(yc.Cmds); got != 2 {
@@ -3988,42 +3770,44 @@ END()
 	}
 }
 
-func TestGen_ProtoLibrary_TransitiveHeadersNo_DepsHeaderUsesRuntimeRoot(t *testing.T) {
-	root := t.TempDir()
 
-	writeTestModuleFile(t, root, "protos/ya.make", `PROTO_LIBRARY()
+
+func TestGen_ProtoLibrary_TransitiveHeadersNo_DepsHeaderUsesRuntimeRoot(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
 SET(PROTOC_TRANSITIVE_HEADERS "no")
 SRCS(test.proto)
 END()
 `)
-	writeTestModuleFile(t, root, "protos/test.proto", `syntax = "proto3";
+	writeTestModuleFile(files, "protos/test.proto", `syntax = "proto3";
 package test;
 import "google/protobuf/any.proto";
 message Row {
   google.protobuf.Any body = 1;
 }
 `)
-	writeTestModuleFile(t, root, "app/ya.make", `LIBRARY()
+	writeTestModuleFile(files, "app/ya.make", `LIBRARY()
 PEERDIR(protos)
 SRCS(use.cpp)
 END()
 `)
-	writeTestModuleFile(t, root, "app/use.cpp", `#include <protos/test.deps.pb.h>
+	writeTestModuleFile(files, "app/use.cpp", `#include <protos/test.deps.pb.h>
 int use() { return 0; }
 `)
 
-	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
-	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
-	writeTestModuleFile(t, root, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/src/google/protobuf/any.proto", `syntax = "proto3";
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/src/google/protobuf/any.proto", `syntax = "proto3";
 package google.protobuf;
 message Any {}
 `)
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/src/google/protobuf/any.pb.h", "#pragma once\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/src/google/protobuf/any.pb.h", "#pragma once\n")
 
-	g := testGen(root, "app")
+	g := testGen(newMemFS(files), "app")
 	pb := findGraphNodeByOutputs(t, g,
 		"$(B)/protos/test.pb.h",
 		"$(B)/protos/test.pb.cc",
@@ -4044,6 +3828,8 @@ message Any {}
 		t.Fatalf("use.cpp.o deps missing PB producer uid %q: %v", pb.UID, use.Deps)
 	}
 }
+
+
 
 func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 	t.Parallel()
@@ -4116,6 +3902,8 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 
 const t17SwigTargetDir = "contrib/tools/swig"
 
+
+
 func TestReorderLDMembers_LegacyDoubleUnderscorePathsTrailRegularSources(t *testing.T) {
 	refs := []NodeRef{{id: 1}, {id: 2}, {id: 3}}
 	paths := []VFS{
@@ -4156,20 +3944,14 @@ type t20RefNode struct {
 	UID     string      `json:"uid"`
 }
 
+
+
 func TestCollectModule_SETAPPENDRPathGlobal(t *testing.T) {
-	root := t.TempDir()
-	modDir := filepath.Join(root, "mod")
-	if err := os.MkdirAll(modDir, 0o755); err != nil {
-		t.Fatalf("mkdir mod: %v", err)
-	}
-
 	content := "RESOURCES_LIBRARY()\nSET_APPEND(RPATH_GLOBAL '-Wl,-rpath,${\"$\"}ORIGIN')\nEND()\n"
-	if err := os.WriteFile(filepath.Join(modDir, "ya.make"), []byte(content), 0o644); err != nil {
-		t.Fatalf("write ya.make: %v", err)
-	}
-
-	fs := NewFS(root)
-	mf := Throw2(ParseFile(fs, filepath.Join(modDir, "ya.make")))
+	fs := newMemFS(map[string]string{
+		"mod/ya.make": content,
+	})
+	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/mod/ya.make"))
 	instance := ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), "mod", KindLib, mf.Stmts, buildIfEnv(instance))
 
@@ -4179,18 +3961,24 @@ func TestCollectModule_SETAPPENDRPathGlobal(t *testing.T) {
 	}
 }
 
-func testGenT20(sourceRoot, targetDir string) *Graph {
+
+
+func testGenT20(fs FS, targetDir string) *Graph {
 	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
 	target := newT20ResourcePlatform(OSLinux, ISAAArch64, "yes", nil)
 
-	return Gen(sourceRoot, targetDir, host, target, func(Warn) {})
+	return Gen(fs, targetDir, host, target, func(Warn) {})
 }
 
-func testGenT20Tool(sourceRoot, targetDir string) *Graph {
+
+
+func testGenT20Tool(fs FS, targetDir string) *Graph {
 	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
 
-	return Gen(sourceRoot, targetDir, host, host, func(Warn) {})
+	return Gen(fs, targetDir, host, host, func(Warn) {})
 }
+
+
 
 func newT20ResourcePlatform(os OS, isa ISA, pic string, tags []string) *Platform {
 	flags := map[string]string{
@@ -4213,6 +4001,8 @@ type t20RefGraph struct {
 	byUID map[string]*t20RefNode
 }
 
+
+
 func findT20RefNodeByOutputs(t *testing.T, ref *t20RefGraph, wantOutputs ...string) *t20RefNode {
 	t.Helper()
 
@@ -4225,6 +4015,8 @@ func findT20RefNodeByOutputs(t *testing.T, ref *t20RefGraph, wantOutputs ...stri
 	t.Fatalf("reference node with outputs %v not found", wantOutputs)
 	return nil
 }
+
+
 
 func findGraphNodeByOutputs(t *testing.T, g *Graph, wantOutputs ...string) *Node {
 	t.Helper()
@@ -4252,6 +4044,8 @@ func findGraphNodeByOutputs(t *testing.T, g *Graph, wantOutputs ...string) *Node
 	return nil
 }
 
+
+
 func cmdArgsFrom[T interface{ ~[]string }](t *testing.T, args T, marker string) []string {
 	t.Helper()
 
@@ -4262,6 +4056,8 @@ func cmdArgsFrom[T interface{ ~[]string }](t *testing.T, args T, marker string) 
 
 	return append([]string(nil), args[idx:]...)
 }
+
+
 
 func normalizeT20Token(s string) string {
 	s = strings.NewReplacer(
@@ -4279,6 +4075,8 @@ func normalizeT20Token(s string) string {
 	})
 }
 
+
+
 func normalizeT20Strings(in []string) []string {
 	out := make([]string, len(in))
 	for i, s := range in {
@@ -4287,6 +4085,8 @@ func normalizeT20Strings(in []string) []string {
 
 	return out
 }
+
+
 
 func normalizeT20Env(in map[string]string) map[string]string {
 	if in == nil {
@@ -4301,12 +4101,16 @@ func normalizeT20Env(in map[string]string) map[string]string {
 	return out
 }
 
+
+
 func sortedStrings(in []string) []string {
 	out := append([]string(nil), in...)
 	sort.Strings(out)
 
 	return out
 }
+
+
 
 func assertCmdArgsAbsent(t *testing.T, args []string, banned ...string) {
 	t.Helper()
@@ -4317,6 +4121,8 @@ func assertCmdArgsAbsent(t *testing.T, args []string, banned ...string) {
 		}
 	}
 }
+
+
 
 func projectGraphDepOutputs(t *testing.T, g *Graph, deps []string) [][]string {
 	t.Helper()
@@ -4343,6 +4149,8 @@ func projectGraphDepOutputs(t *testing.T, g *Graph, deps []string) [][]string {
 	return out
 }
 
+
+
 func projectT20RefDepOutputs(t *testing.T, ref *t20RefGraph, deps []string) [][]string {
 	t.Helper()
 
@@ -4363,15 +4171,17 @@ func projectT20RefDepOutputs(t *testing.T, ref *t20RefGraph, deps []string) [][]
 	return out
 }
 
+
+
 func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
-	root := t.TempDir()
+	files := map[string]string{}
 
-	writeTestModuleFile(t, root, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
-	writeTestModuleFile(t, root, "pkg/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nSRCS(helper.cpp)\nPY_SRCS(NAMESPACE pkg mod.pyx)\nEND()\n")
-	writeTestModuleFile(t, root, "pkg/helper.cpp", "int f(){return 0;}\n")
-	writeTestModuleFile(t, root, "pkg/mod.pyx", "def f():\n    return 0\n")
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nSRCS(helper.cpp)\nPY_SRCS(NAMESPACE pkg mod.pyx)\nEND()\n")
+	writeTestModuleFile(files, "pkg/helper.cpp", "int f(){return 0;}\n")
+	writeTestModuleFile(files, "pkg/mod.pyx", "def f():\n    return 0\n")
 
-	g := testGen(root, "pkg")
+	g := testGen(newMemFS(files), "pkg")
 	helper := mustNodeByOutput(t, g, "$(B)/pkg/helper.cpp.o")
 	args := helper.Cmds[0].CmdArgs
 
@@ -4405,18 +4215,20 @@ func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
 	}
 }
 
+
+
 func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
-	root := t.TempDir()
+	files := map[string]string{}
 
-	writeTestModuleFile(t, root, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
-	writeToolProgram(t, root, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(t, root, "tools/rescompressor/bin", "rescompressor")
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
 
-	writeTestModuleFile(t, root, "db/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nRESOURCE(data.sql key)\nEND()\n")
-	writeTestModuleFile(t, root, "db/main.cpp", "int f(){return 0;}\n")
-	writeTestModuleFile(t, root, "db/data.sql", "select 1;\n")
+	writeTestModuleFile(files, "db/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nRESOURCE(data.sql key)\nEND()\n")
+	writeTestModuleFile(files, "db/main.cpp", "int f(){return 0;}\n")
+	writeTestModuleFile(files, "db/data.sql", "select 1;\n")
 
-	g := testGen(root, "db")
+	g := testGen(newMemFS(files), "db")
 	regularAR := mustNodeByOutput(t, g, "$(B)/db/libdb.a")
 	mustNodeByOutput(t, g, "$(B)/db/libdb.global.a")
 	if findNodeByOutputPrefix(g, "$(B)/db/objcopy_") == nil {
@@ -4433,15 +4245,17 @@ func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
 	}
 }
 
+
+
 func TestGen_ResourceRelativeOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
-	root := t.TempDir()
+	files := map[string]string{}
 
-	writeTestModuleFile(t, root, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
-	writeToolProgram(t, root, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(t, root, "tools/rescompressor/bin", "rescompressor")
-	writeToolProgram(t, root, "tools/json_gen/bin", "json_gen")
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/json_gen/bin", "json_gen")
 
-	writeTestModuleFile(t, root, "db/ya.make", `LIBRARY()
+	writeTestModuleFile(files, "db/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
@@ -4457,7 +4271,7 @@ RESOURCE(
 END()
 `)
 
-	g := testGen(root, "db")
+	g := testGen(newMemFS(files), "db")
 
 	objcopy := findNodeByOutputPrefix(g, "$(B)/db/objcopy_")
 	if objcopy == nil {
@@ -4471,15 +4285,17 @@ END()
 	}
 }
 
+
+
 func TestGen_ResourceBindirOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
-	root := t.TempDir()
+	files := map[string]string{}
 
-	writeTestModuleFile(t, root, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
-	writeToolProgram(t, root, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(t, root, "tools/rescompressor/bin", "rescompressor")
-	writeToolProgram(t, root, "tools/json_gen/bin", "json_gen")
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/json_gen/bin", "json_gen")
 
-	writeTestModuleFile(t, root, "db/ya.make", `LIBRARY()
+	writeTestModuleFile(files, "db/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
@@ -4495,7 +4311,7 @@ RESOURCE(
 END()
 `)
 
-	g := testGen(root, "db")
+	g := testGen(newMemFS(files), "db")
 
 	objcopy := findNodeByOutputPrefix(g, "$(B)/db/objcopy_")
 	if objcopy == nil {
@@ -4511,25 +4327,27 @@ END()
 	}
 }
 
+
+
 func TestGen_ResourceBindirRunProgramCarriesInputClosure(t *testing.T) {
-	root := t.TempDir()
+	files := map[string]string{}
 
-	writeTestModuleFile(t, root, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
-	writeToolProgram(t, root, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(t, root, "tools/rescompressor/bin", "rescompressor")
-	writeToolProgram(t, root, "tools/json_gen/bin", "json_gen")
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/json_gen/bin", "json_gen")
 
-	writeTestModuleFile(t, root, "dep/ya.make", `LIBRARY()
+	writeTestModuleFile(files, "dep/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 SRCS(dep.cpp dep.h)
 END()
 `)
-	writeTestModuleFile(t, root, "dep/dep.cpp", "int dep(){return 0;}\n")
-	writeTestModuleFile(t, root, "dep/dep.h", "#pragma once\n")
+	writeTestModuleFile(files, "dep/dep.cpp", "int dep(){return 0;}\n")
+	writeTestModuleFile(files, "dep/dep.h", "#pragma once\n")
 
-	writeTestModuleFile(t, root, "db/ya.make", `LIBRARY()
+	writeTestModuleFile(files, "db/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
@@ -4549,11 +4367,11 @@ RESOURCE(
 )
 END()
 `)
-	writeTestModuleFile(t, root, "db/gen.h", `#pragma once
+	writeTestModuleFile(files, "db/gen.h", `#pragma once
 #include <dep/dep.h>
 `)
 
-	g := testGen(root, "db")
+	g := testGen(newMemFS(files), "db")
 
 	pr := mustNodeByOutput(t, g, "$(B)/db/data.json")
 	if !nodeHasInput(pr, "$(S)/db/gen.h") {
@@ -4575,24 +4393,20 @@ END()
 	}
 }
 
-func writeToolProgram(t *testing.T, root, modulePath, binaryName string) {
-	t.Helper()
 
-	writeTestModuleFile(t, root, filepath.ToSlash(filepath.Join(modulePath, "ya.make")), "PROGRAM("+binaryName+")\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, filepath.ToSlash(filepath.Join(modulePath, "main.cpp")), "int main(){return 0;}\n")
+
+func writeToolProgram(files map[string]string, modulePath, binaryName string) {
+	files[modulePath+"/ya.make"] = "PROGRAM(" + binaryName + ")\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nEND()\n"
+	files[modulePath+"/main.cpp"] = "int main(){return 0;}\n"
 }
 
-func writeTestModuleFile(t *testing.T, root, rel, content string) {
-	t.Helper()
 
-	path := filepath.Join(root, filepath.FromSlash(rel))
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", path, err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write %s: %v", path, err)
-	}
+
+func writeTestModuleFile(files map[string]string, rel, content string) {
+	files[rel] = content
 }
+
+
 
 func mustNodeByOutput(t *testing.T, g *Graph, output string) *Node {
 	t.Helper()
@@ -4607,6 +4421,8 @@ func mustNodeByOutput(t *testing.T, g *Graph, output string) *Node {
 	return nil
 }
 
+
+
 func findNodeByOutputPrefix(g *Graph, prefix string) *Node {
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].String(), prefix) {
@@ -4616,6 +4432,8 @@ func findNodeByOutputPrefix(g *Graph, prefix string) *Node {
 
 	return nil
 }
+
+
 
 func nodeHasInput(n *Node, input string) bool {
 	for _, got := range n.Inputs {
@@ -4627,6 +4445,8 @@ func nodeHasInput(n *Node, input string) bool {
 	return false
 }
 
+
+
 func indexOfArg(args []string, want string) int {
 	for i, arg := range args {
 		if arg == want {
@@ -4636,6 +4456,8 @@ func indexOfArg(args []string, want string) int {
 
 	return -1
 }
+
+
 
 func TestIsHeaderSource_ExtendedHeaderExtensions(t *testing.T) {
 	for _, src := range []string{
@@ -4674,11 +4496,15 @@ type indexedStatsUIDNode struct {
 	StatsUID string
 }
 
-func genStatsUIDReferenceSample(sourceRoot, targetDir string) *Graph {
+
+
+func genStatsUIDReferenceSample(fs FS, targetDir string) *Graph {
 	host, target := statsUIDReferencePlatforms()
 
-	return Gen(sourceRoot, targetDir, host, target, func(Warn) {})
+	return Gen(fs, targetDir, host, target, func(Warn) {})
 }
+
+
 
 func genDumpStatsUIDReferenceSample(t *testing.T, sourceRoot, targetDir string) []statsUIDRefNode {
 	t.Helper()
@@ -4721,6 +4547,8 @@ func genDumpStatsUIDReferenceSample(t *testing.T, sourceRoot, targetDir string) 
 	return loadStatsUIDRefNodes(t, out.Name())
 }
 
+
+
 func statsUIDReferencePlatforms() (*Platform, *Platform) {
 	hostPlatformFlags := map[string]string{
 		"APPLE_SDK_LOCAL":    "yes",
@@ -4756,6 +4584,8 @@ func statsUIDReferencePlatforms() (*Platform, *Platform) {
 	return host, target
 }
 
+
+
 func loadStatsUIDRefNodes(t *testing.T, path string) []statsUIDRefNode {
 	t.Helper()
 
@@ -4773,6 +4603,8 @@ func loadStatsUIDRefNodes(t *testing.T, path string) []statsUIDRefNode {
 
 	return graph.Graph
 }
+
+
 
 func assertTargetStatsUIDsMatchReference(t *testing.T, our []*Node, ref []statsUIDRefNode, minCommon int, refName string) {
 	t.Helper()
@@ -4810,6 +4642,8 @@ func assertTargetStatsUIDsMatchReference(t *testing.T, our []*Node, ref []statsU
 	}
 }
 
+
+
 func assertHostStatsUIDsMatchReference(t *testing.T, our []*Node, ref []statsUIDRefNode, minCommon int, refName string) {
 	t.Helper()
 
@@ -4846,6 +4680,8 @@ func assertHostStatsUIDsMatchReference(t *testing.T, our []*Node, ref []statsUID
 	}
 }
 
+
+
 func indexTargetStatsUIDNodes(t *testing.T, nodes []*Node) map[statsUIDNodeKey]indexedStatsUIDNode {
 	t.Helper()
 
@@ -4865,6 +4701,8 @@ func indexTargetStatsUIDNodes(t *testing.T, nodes []*Node) map[statsUIDNodeKey]i
 
 	return out
 }
+
+
 
 func indexHostStatsUIDNodes(t *testing.T, nodes []*Node) map[statsUIDNodeKey]indexedStatsUIDNode {
 	t.Helper()
@@ -4886,6 +4724,8 @@ func indexHostStatsUIDNodes(t *testing.T, nodes []*Node) map[statsUIDNodeKey]ind
 	return out
 }
 
+
+
 func indexTargetStatsUIDRefNodes(t *testing.T, nodes []statsUIDRefNode) map[statsUIDNodeKey]indexedStatsUIDNode {
 	t.Helper()
 
@@ -4906,6 +4746,8 @@ func indexTargetStatsUIDRefNodes(t *testing.T, nodes []statsUIDRefNode) map[stat
 	return out
 }
 
+
+
 func indexHostStatsUIDRefNodes(t *testing.T, nodes []statsUIDRefNode) map[statsUIDNodeKey]indexedStatsUIDNode {
 	t.Helper()
 
@@ -4925,6 +4767,8 @@ func indexHostStatsUIDRefNodes(t *testing.T, nodes []statsUIDRefNode) map[statsU
 
 	return out
 }
+
+
 
 func diffStatsUIDNodeKeys(our, ref map[statsUIDNodeKey]indexedStatsUIDNode) ([]statsUIDNodeKey, []statsUIDNodeKey, []statsUIDNodeKey) {
 	commonKeys := make([]statsUIDNodeKey, 0, len(our))
@@ -4952,6 +4796,8 @@ func diffStatsUIDNodeKeys(our, ref map[statsUIDNodeKey]indexedStatsUIDNode) ([]s
 	return commonKeys, onlyOur, onlyRef
 }
 
+
+
 func sortStatsUIDNodeKeys(keys []statsUIDNodeKey) {
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].Outputs != keys[j].Outputs {
@@ -4967,12 +4813,16 @@ func sortStatsUIDNodeKeys(keys []statsUIDNodeKey) {
 	})
 }
 
+
+
 func statsUIDDescribeKey(key statsUIDNodeKey) string {
 	return "outputs=" + strings.Join(statsUIDOutputsFromKey(key), ",") +
 		" kind=" + key.Kind +
 		" host_platform=" + boolString(key.HostPlatform) +
 		" platform=" + key.Platform
 }
+
+
 
 func statsUIDOutputsFromKey(key statsUIDNodeKey) []string {
 	if key.Outputs == "" {
@@ -4981,12 +4831,16 @@ func statsUIDOutputsFromKey(key statsUIDNodeKey) []string {
 	return strings.Split(key.Outputs, "\x00")
 }
 
+
+
 func boolString(v bool) string {
 	if v {
 		return "true"
 	}
 	return "false"
 }
+
+
 
 func statsUIDOutputKey(outputs []string) string {
 	normalized := append([]string(nil), outputs...)
@@ -4997,6 +4851,8 @@ func statsUIDOutputKey(outputs []string) string {
 
 	return strings.Join(normalized, "\x00")
 }
+
+
 
 func statsUIDNodeKeyFromNode(node *Node) statsUIDNodeKey {
 	kind, _ := node.KV["p"].(string)
@@ -5009,6 +4865,8 @@ func statsUIDNodeKeyFromNode(node *Node) statsUIDNodeKey {
 	}
 }
 
+
+
 func statsUIDNodeKeyFromRef(node statsUIDRefNode) statsUIDNodeKey {
 	return statsUIDNodeKey{
 		Outputs:      statsUIDOutputKey(node.Outputs),
@@ -5018,6 +4876,8 @@ func statsUIDNodeKeyFromRef(node statsUIDRefNode) statsUIDNodeKey {
 	}
 }
 
+
+
 func normalizeStatsUIDOutput(out string) string {
 	out = strings.ReplaceAll(out, "$(BUILD_ROOT)", "$(B)")
 	out = strings.ReplaceAll(out, "$(SOURCE_ROOT)", "$(S)")
@@ -5025,23 +4885,25 @@ func normalizeStatsUIDOutput(out string) string {
 	return out
 }
 
-func TestGen_ProtoLibrary_NamedArgUsedForArchive(t *testing.T) {
-	root := t.TempDir()
 
-	writeTestModuleFile(t, root, "ydb/public/api/protos/ya.make", `PROTO_LIBRARY(api-protos)
+
+func TestGen_ProtoLibrary_NamedArgUsedForArchive(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "ydb/public/api/protos/ya.make", `PROTO_LIBRARY(api-protos)
 SRCS(ydb.proto)
 END()
 `)
-	writeTestModuleFile(t, root, "ydb/public/api/protos/ydb.proto", `syntax = "proto3";
+	writeTestModuleFile(files, "ydb/public/api/protos/ydb.proto", `syntax = "proto3";
 package test;
 message Ydb {}
 `)
-	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
-	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	g := testGen(root, "ydb/public/api/protos")
+	g := testGen(newMemFS(files), "ydb/public/api/protos")
 
 	mustNodeByOutput(t, g, "$(B)/ydb/public/api/protos/libapi-protos.a")
 
@@ -5054,23 +4916,25 @@ message Ydb {}
 	}
 }
 
-func TestGen_ProtoLibrary_UnnamedArgKeepsPathDerivedArchive(t *testing.T) {
-	root := t.TempDir()
 
-	writeTestModuleFile(t, root, "ydb/public/api/protos/ya.make", `PROTO_LIBRARY()
+
+func TestGen_ProtoLibrary_UnnamedArgKeepsPathDerivedArchive(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "ydb/public/api/protos/ya.make", `PROTO_LIBRARY()
 SRCS(ydb.proto)
 END()
 `)
-	writeTestModuleFile(t, root, "ydb/public/api/protos/ydb.proto", `syntax = "proto3";
+	writeTestModuleFile(files, "ydb/public/api/protos/ydb.proto", `syntax = "proto3";
 package test;
 message Ydb {}
 `)
-	writeToolProgram(t, root, "contrib/tools/protoc", "protoc")
-	writeToolProgram(t, root, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
-	writeTestModuleFile(t, root, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	g := testGen(root, "ydb/public/api/protos")
+	g := testGen(newMemFS(files), "ydb/public/api/protos")
 
 	mustNodeByOutput(t, g, "$(B)/ydb/public/api/protos/libpublic-api-protos.a")
 }
