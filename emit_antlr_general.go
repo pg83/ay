@@ -156,6 +156,16 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 	}
 
 	for _, input := range inputs {
+		// $(B)-rooted inputs are generator intermediates the RUN_ANTLR step
+		// itself consumed (e.g. the CONFIGURE_FILE'd protobuf.stg). Consumers
+		// that walk this output's closure (the proto-split RUN_PROGRAM protoc
+		// node, downstream CC) reach those intermediates through the producer
+		// dep edge, not as transitive source inputs — upstream lists only the
+		// $(S) leaf (the .stg's source .stg.in, also in `inputs`). Emitting the
+		// $(B) intermediate over-includes it and diverges the consumer self_uid.
+		if !input.IsSource() {
+			continue
+		}
 		appendUnique(input.Rel())
 	}
 	appendUnique(stdout2stderrVFS.Rel())
