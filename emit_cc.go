@@ -446,8 +446,13 @@ func composeTargetCC(a ccComposeArgs) []string {
 	)
 	cmdArgs = append(cmdArgs, ccIncludesPrefix...)
 	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl, a.InclArgs)
+	peerAddIncl := a.PeerAddIncl
+	if len(peerAddIncl) > 0 && peerAddIncl[0] == googleapisCommonProtosAddIncl {
+		cmdArgs = append(cmdArgs, a.InclArgs.arg(peerAddIncl[0]))
+		peerAddIncl = peerAddIncl[1:]
+	}
 	cmdArgs = append(cmdArgs, ccIncludesSuffix...)
-	cmdArgs = appendAddIncl(cmdArgs, a.PeerAddIncl, a.InclArgs)
+	cmdArgs = appendAddIncl(cmdArgs, peerAddIncl, a.InclArgs)
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningBundle, bundle.Defines, a.OwnCFlags, a.ModuleScopeCFlags)
 
 	var cOnlyExtras []string

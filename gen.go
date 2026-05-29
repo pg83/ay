@@ -2510,6 +2510,14 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		}
 	}
 
+	if d.useCommonGoogleAPIs && instance.Language == LangCPP {
+		const googleapisPeer = "contrib/libs/googleapis-common-protos"
+		if _, dup := seen[googleapisPeer]; !dup {
+			seen[googleapisPeer] = struct{}{}
+			walk(googleapisPeer)
+		}
+	}
+
 	for _, p := range defaults {
 		if _, dup := seen[p]; dup {
 			continue

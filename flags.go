@@ -14,6 +14,8 @@ var ccIncludesSuffix = []string{
 	"-I$(S)/contrib/libs/linux-headers/_nf",
 }
 
+var googleapisCommonProtosAddIncl = Intern("$(B)/contrib/libs/googleapis-common-protos")
+
 var debugPrefixMapFlags = []string{
 	"-fdebug-prefix-map=$(B)=/-B",
 	"-fdebug-prefix-map=$(S)=/-S",
