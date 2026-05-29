@@ -1,28 +1,13 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
-func writeTestResourceBundle(t *testing.T, root, rel string) {
-	t.Helper()
+func newTestToolchainResourceBundlesFS() FS {
+	const body = `{"by_platform":{"linux-x86_64":{"uri":"sbr:linux"}}}`
 
-	full := filepath.Join(root, rel)
-	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
-	}
-
-	body := `{"by_platform":{"linux-x86_64":{"uri":"sbr:linux"}}}`
-	if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-		t.Fatalf("write %s: %v", rel, err)
-	}
-}
-
-func writeTestToolchainResourceBundles(t *testing.T, root string) {
-	t.Helper()
-
+	files := map[string]string{}
 	for _, rel := range []string{
 		"build/platform/python/ymake_python3/resources.json",
 		"build/platform/clang/clang16.json",
@@ -31,8 +16,10 @@ func writeTestToolchainResourceBundles(t *testing.T, root string) {
 		"build/platform/clang/clang20.json",
 		"build/platform/java/jdk/jdk17/jdk.json",
 	} {
-		writeTestResourceBundle(t, root, rel)
+		files[rel] = body
 	}
+
+	return newMemFS(files)
 }
 
 func emitTestCompileGraph(t *testing.T, host, target *Platform, plan *resourceFetchPlan) *Graph {
@@ -181,25 +168,23 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 }
 
 func TestResourceGraphEmitter_OnlyMaterializesUsedFetchNodes(t *testing.T) {
-	root := t.TempDir()
-	writeTestToolchainResourceBundles(t, root)
+	fs := newTestToolchainResourceBundlesFS()
 
 	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
 	target := sandboxedX8664TargetPlatform()
-	conf := graphConfForToolchainFlags(NewFS(root), prebuiltToolchainFlags())
-	plan := newResourceFetchPlan(root, conf, host)
+	conf := graphConfForToolchainFlags(fs, prebuiltToolchainFlags())
+	plan := newResourceFetchPlan(fs.SourceRoot(), conf, host)
 
 	assertSingleUsedClangFetch(t, emitTestCompileGraph(t, host, target, plan))
 }
 
 func TestResourceGraphEmitter_ReusedPlanEmitsFetchPerEmitter(t *testing.T) {
-	root := t.TempDir()
-	writeTestToolchainResourceBundles(t, root)
+	fs := newTestToolchainResourceBundlesFS()
 
 	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
 	target := sandboxedX8664TargetPlatform()
-	conf := graphConfForToolchainFlags(NewFS(root), prebuiltToolchainFlags())
-	plan := newResourceFetchPlan(root, conf, host)
+	conf := graphConfForToolchainFlags(fs, prebuiltToolchainFlags())
+	plan := newResourceFetchPlan(fs.SourceRoot(), conf, host)
 
 	assertSingleUsedClangFetch(t, emitTestCompileGraph(t, host, target, plan))
 	assertSingleUsedClangFetch(t, emitTestCompileGraph(t, host, target, plan))

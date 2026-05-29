@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -187,19 +185,11 @@ func TestStripComments_DivisionOperatorNotMistaken(t *testing.T) {
 }
 
 func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
-	dir := t.TempDir()
+	fs := newMemFS(map[string]string{
+		"include/foo.h": "// foo\n",
+	})
 
-	for _, p := range []string{"pkg", "include"} {
-		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", p, err)
-		}
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "include/foo.h"), []byte("// foo\n"), 0o644); err != nil {
-		t.Fatalf("write include/foo.h: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, nil)
+	scanner := newTestScanner(fs, nil)
 	sc := scanner.NewScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"include"}),
 	})
@@ -227,13 +217,7 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 }
 
 func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
-	dir := t.TempDir()
-
-	if err := os.MkdirAll(filepath.Join(dir, "pkg"), 0o755); err != nil {
-		t.Fatalf("mkdir pkg: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, nil)
+	scanner := newTestScanner(newMemFS(nil), nil)
 	sc := scanner.NewScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"include"}),
 	})
@@ -260,23 +244,12 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 }
 
 func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
-	dir := t.TempDir()
+	fs := newMemFS(map[string]string{
+		"pkg/foo.h":     "// local\n",
+		"include/foo.h": "// addincl\n",
+	})
 
-	for _, p := range []string{"pkg", "include"} {
-		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", p, err)
-		}
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "pkg/foo.h"), []byte("// local\n"), 0o644); err != nil {
-		t.Fatalf("write pkg/foo.h: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "include/foo.h"), []byte("// addincl\n"), 0o644); err != nil {
-		t.Fatalf("write include/foo.h: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, nil)
+	scanner := newTestScanner(fs, nil)
 	sc := scanner.NewScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"include"}),
 	})
@@ -297,30 +270,11 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 }
 
 func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
-	dir := t.TempDir()
-
-	mkdirs := []string{"yasm", "foolib/include"}
-
-	for _, p := range mkdirs {
-		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", p, err)
-		}
-	}
-
-	src := []byte(`#include "elf.h"
-`)
-
-	if err := os.WriteFile(filepath.Join(dir, "yasm/source.cpp"), src, 0o644); err != nil {
-		t.Fatalf("write source.cpp: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "yasm/elf.h"), []byte("// local elf.h\n"), 0o644); err != nil {
-		t.Fatalf("write yasm/elf.h: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "foolib/include/elf.h"), []byte("// foolib elf.h\n"), 0o644); err != nil {
-		t.Fatalf("write foolib/include/elf.h: %v", err)
-	}
+	fs := newMemFS(map[string]string{
+		"yasm/source.cpp":         "#include \"elf.h\"\n",
+		"yasm/elf.h":              "// local elf.h\n",
+		"foolib/include/elf.h":    "// foolib elf.h\n",
+	})
 
 	sysincl := SysInclSet{
 		{
@@ -332,7 +286,7 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 		},
 	}
 
-	scanner := NewIncludeScanner(dir, sysincl)
+	scanner := newTestScanner(fs, sysincl)
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel: "yasm/source.cpp",
 	})
@@ -359,41 +313,12 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 }
 
 func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
-	dir := t.TempDir()
-
-	mkdirs := []string{
-		"src",
-		"libcxxabi/include",
-		"libcxxrt/include",
-	}
-
-	for _, p := range mkdirs {
-		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", p, err)
-		}
-	}
-
-	header := []byte(`#include "cxxabi.h"
-`)
-
-	src := []byte(`#include "header.h"
-`)
-
-	if err := os.WriteFile(filepath.Join(dir, "src/header.h"), header, 0o644); err != nil {
-		t.Fatalf("write header.h: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "src/source.cpp"), src, 0o644); err != nil {
-		t.Fatalf("write source.cpp: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "libcxxabi/include/cxxabi.h"), []byte("// libcxxabi cxxabi.h\n"), 0o644); err != nil {
-		t.Fatalf("write libcxxabi/include/cxxabi.h: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "libcxxrt/include/cxxabi.h"), []byte("// libcxxrt cxxabi.h\n"), 0o644); err != nil {
-		t.Fatalf("write libcxxrt/include/cxxabi.h: %v", err)
-	}
+	fs := newMemFS(map[string]string{
+		"src/header.h":                  "#include \"cxxabi.h\"\n",
+		"src/source.cpp":                "#include \"header.h\"\n",
+		"libcxxabi/include/cxxabi.h":    "// libcxxabi cxxabi.h\n",
+		"libcxxrt/include/cxxabi.h":     "// libcxxrt cxxabi.h\n",
+	})
 
 	sysincl := SysInclSet{
 		{
@@ -409,7 +334,7 @@ func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 		},
 	}
 
-	scanner := NewIncludeScanner(dir, sysincl)
+	scanner := newTestScanner(fs, sysincl)
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel:  "src/source.cpp",
 		OwnAddIncl: VFSesFromStrings([]string{"libcxxabi/include"}),
@@ -438,39 +363,12 @@ func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 }
 
 func TestScanner_QuotedSameDirStillGated(t *testing.T) {
-	dir := t.TempDir()
-
-	mkdirs := []string{
-		"libcxxrt",
-		"libcxx/include",
-	}
-
-	for _, p := range mkdirs {
-		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", p, err)
-		}
-	}
-
-	dwarf := []byte(`#include "unwind.h"
-`)
-	src := []byte(`#include "dwarf_eh.h"
-`)
-
-	if err := os.WriteFile(filepath.Join(dir, "libcxxrt/dwarf_eh.h"), dwarf, 0o644); err != nil {
-		t.Fatalf("write dwarf_eh.h: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "libcxxrt/source.cc"), src, 0o644); err != nil {
-		t.Fatalf("write source.cc: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "libcxxrt/unwind.h"), []byte("// libcxxrt unwind.h\n"), 0o644); err != nil {
-		t.Fatalf("write libcxxrt/unwind.h: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "libcxx/include/unwind.h"), []byte("// libcxx unwind.h\n"), 0o644); err != nil {
-		t.Fatalf("write libcxx/include/unwind.h: %v", err)
-	}
+	fs := newMemFS(map[string]string{
+		"libcxxrt/dwarf_eh.h":      "#include \"unwind.h\"\n",
+		"libcxxrt/source.cc":       "#include \"dwarf_eh.h\"\n",
+		"libcxxrt/unwind.h":        "// libcxxrt unwind.h\n",
+		"libcxx/include/unwind.h":  "// libcxx unwind.h\n",
+	})
 
 	sysincl := SysInclSet{
 		{
@@ -486,7 +384,7 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 		},
 	}
 
-	scanner := NewIncludeScanner(dir, sysincl)
+	scanner := newTestScanner(fs, sysincl)
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel:  "libcxxrt/source.cc",
 		OwnAddIncl: VFSesFromStrings([]string{"libcxxrt"}),
@@ -515,26 +413,10 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 }
 
 func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
-	dir := t.TempDir()
-
-	mkdirs := []string{"src", "foolib/include"}
-
-	for _, p := range mkdirs {
-		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", p, err)
-		}
-	}
-
-	src := []byte(`#include "absent.h"
-`)
-
-	if err := os.WriteFile(filepath.Join(dir, "src/source.cpp"), src, 0o644); err != nil {
-		t.Fatalf("write source.cpp: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "foolib/include/absent.h"), []byte("// foolib absent.h\n"), 0o644); err != nil {
-		t.Fatalf("write foolib/include/absent.h: %v", err)
-	}
+	fs := newMemFS(map[string]string{
+		"src/source.cpp":            "#include \"absent.h\"\n",
+		"foolib/include/absent.h":   "// foolib absent.h\n",
+	})
 
 	sysincl := SysInclSet{
 		{
@@ -546,7 +428,7 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 		},
 	}
 
-	scanner := NewIncludeScanner(dir, sysincl)
+	scanner := newTestScanner(fs, sysincl)
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel: "src/source.cpp",
 	})
@@ -567,30 +449,11 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 }
 
 func TestScanner_AngleSysinclUnaffected(t *testing.T) {
-	dir := t.TempDir()
-
-	mkdirs := []string{"libcxxrt", "libunwind/include"}
-
-	for _, p := range mkdirs {
-		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", p, err)
-		}
-	}
-
-	src := []byte(`#include <unwind.h>
-`)
-
-	if err := os.WriteFile(filepath.Join(dir, "libcxxrt/source.cpp"), src, 0o644); err != nil {
-		t.Fatalf("write source.cpp: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "libcxxrt/unwind.h"), []byte("// libcxxrt unwind.h\n"), 0o644); err != nil {
-		t.Fatalf("write libcxxrt/unwind.h: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "libunwind/include/unwind.h"), []byte("// libunwind unwind.h\n"), 0o644); err != nil {
-		t.Fatalf("write libunwind/include/unwind.h: %v", err)
-	}
+	fs := newMemFS(map[string]string{
+		"libcxxrt/source.cpp":          "#include <unwind.h>\n",
+		"libcxxrt/unwind.h":            "// libcxxrt unwind.h\n",
+		"libunwind/include/unwind.h":   "// libunwind unwind.h\n",
+	})
 
 	sysincl := SysInclSet{
 		{
@@ -602,7 +465,7 @@ func TestScanner_AngleSysinclUnaffected(t *testing.T) {
 		},
 	}
 
-	scanner := NewIncludeScanner(dir, sysincl)
+	scanner := newTestScanner(fs, sysincl)
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel:  "libcxxrt/source.cpp",
 		OwnAddIncl: VFSesFromStrings([]string{"libcxxrt"}),
@@ -735,18 +598,13 @@ func TestParseYasmIncludes_AngleBracketForm(t *testing.T) {
 }
 
 func TestScanDirectives_ProtoImports(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "src.proto")
-
-	if err := os.WriteFile(path, []byte(`import "a.proto";
+	scanner := newTestScanner(newMemFS(map[string]string{
+		"src.proto": `import "a.proto";
 import public "b.proto";
 import weak 'c.proto';
 // import "ghost.proto";
-`), 0o644); err != nil {
-		t.Fatalf("write src.proto: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+`,
+	}), SysInclSet{})
 	dirs := scanner.sourceParsedBuckets(Intern("$(S)/src.proto")).bucket(parsedIncludesLocal)
 
 	if len(dirs) != 3 {
@@ -766,18 +624,13 @@ import weak 'c.proto';
 }
 
 func TestParsedIncludes_ProtoBuckets(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "src.proto")
-
-	if err := os.WriteFile(path, []byte(`import "a.proto";
+	scanner := newTestScanner(newMemFS(map[string]string{
+		"src.proto": `import "a.proto";
 import public "b.proto";
 import weak "c.proto";
 import public "d.ev";
-`), 0o644); err != nil {
-		t.Fatalf("write src.proto: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+`,
+	}), SysInclSet{})
 	parsed := scanner.parsedIncludes(Intern("$(S)/src.proto"))
 	local := parsed.bucket(parsedIncludesLocal)
 	hcpp := parsed.bucket(parsedIncludesHCPP)
@@ -801,21 +654,16 @@ import public "d.ev";
 }
 
 func TestParsedIncludes_RagelBuckets(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "src.rl6")
-
-	if err := os.WriteFile(path, []byte(`#include <outer.h>
+	scanner := newTestScanner(newMemFS(map[string]string{
+		"src.rl6": `#include <outer.h>
 %%{
 include "machine.rl";
 include Foo "machine2.rl";
 include "machine.rl";
 }%%
 #include "tail.h"
-`), 0o644); err != nil {
-		t.Fatalf("write src.rl6: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+`,
+	}), SysInclSet{})
 	parsed := scanner.parsedIncludes(Intern("$(S)/src.rl6"))
 	local := parsed.bucket(parsedIncludesLocal)
 	hcpp := parsed.bucket(parsedIncludesHCPP)
@@ -844,15 +692,9 @@ include "machine.rl";
 }
 
 func TestParsedIncludes_LeadingUTF8BOM(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "bom.cpp")
-
-	content := append([]byte{0xEF, 0xBB, 0xBF}, []byte("#include \"sibling.h\"\n#include <system.h>\n")...)
-	if err := os.WriteFile(path, content, 0o644); err != nil {
-		t.Fatalf("write bom.cpp: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+	scanner := newTestScanner(newMemFS(map[string]string{
+		"bom.cpp": "\xef\xbb\xbf#include \"sibling.h\"\n#include <system.h>\n",
+	}), SysInclSet{})
 	local := scanner.parsedIncludes(Intern("$(S)/bom.cpp")).bucket(parsedIncludesLocal)
 
 	if len(local) != 2 {
@@ -864,21 +706,16 @@ func TestParsedIncludes_LeadingUTF8BOM(t *testing.T) {
 }
 
 func TestParsedIncludes_SwigBuckets(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "src.swg")
-
-	if err := os.WriteFile(path, []byte(`%module x
+	scanner := newTestScanner(newMemFS(map[string]string{
+		"src.swg": `%module x
 %include "a.i"
 %import <b.i>
 %insert(runtime) "c.h"
 %{
 #include "block.h"
 %}
-`), 0o644); err != nil {
-		t.Fatalf("write src.swg: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+`,
+	}), SysInclSet{})
 	parsed := scanner.parsedIncludes(Intern("$(S)/src.swg"))
 	local := parsed.bucket(parsedIncludesLocal)
 	hcpp := parsed.bucket(parsedIncludesHCPP)
@@ -907,24 +744,10 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 }
 
 func TestScanDirectives_DispatchByExtension(t *testing.T) {
-	dir := t.TempDir()
-
-	asmPath := filepath.Join(dir, "src.asm")
-	hPath := filepath.Join(dir, "src.h")
-
-	if err := os.WriteFile(asmPath, []byte(`%include "defs.asm"
-#include "should-not-match.h"
-`), 0o644); err != nil {
-		t.Fatalf("write src.asm: %v", err)
-	}
-
-	if err := os.WriteFile(hPath, []byte(`#include "real.h"
-%include "should-not-match.asm"
-`), 0o644); err != nil {
-		t.Fatalf("write src.h: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+	scanner := newTestScanner(newMemFS(map[string]string{
+		"src.asm": "%include \"defs.asm\"\n#include \"should-not-match.h\"\n",
+		"src.h":   "#include \"real.h\"\n%include \"should-not-match.asm\"\n",
+	}), SysInclSet{})
 
 	asmDirs := scanner.scanDirectives(Intern("$(S)/src.asm"))
 	hDirs := scanner.scanDirectives(Intern("$(S)/src.h"))
@@ -939,15 +762,9 @@ func TestScanDirectives_DispatchByExtension(t *testing.T) {
 }
 
 func TestScanDirectives_AsiDispatchesToYasm(t *testing.T) {
-	dir := t.TempDir()
-	asiPath := filepath.Join(dir, "src.asi")
-
-	if err := os.WriteFile(asiPath, []byte(`%include "nested.asi"
-`), 0o644); err != nil {
-		t.Fatalf("write src.asi: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+	scanner := newTestScanner(newMemFS(map[string]string{
+		"src.asi": "%include \"nested.asi\"\n",
+	}), SysInclSet{})
 
 	dirs := scanner.scanDirectives(Intern("$(S)/src.asi"))
 
@@ -957,16 +774,9 @@ func TestScanDirectives_AsiDispatchesToYasm(t *testing.T) {
 }
 
 func TestScanDirectives_G4UsesEmptyParser(t *testing.T) {
-	dir := t.TempDir()
-	g4Path := filepath.Join(dir, "src.g4")
-
-	if err := os.WriteFile(g4Path, []byte(`#include "ghost.h"
-grammar X;
-`), 0o644); err != nil {
-		t.Fatalf("write src.g4: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+	scanner := newTestScanner(newMemFS(map[string]string{
+		"src.g4": "#include \"ghost.h\"\ngrammar X;\n",
+	}), SysInclSet{})
 	dirs := scanner.scanDirectives(Intern("$(S)/src.g4"))
 
 	if len(dirs) != 0 {
@@ -975,16 +785,9 @@ grammar X;
 }
 
 func TestScanDirectives_InSuffixUsesUnderlyingExtension(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "src.g4.in")
-
-	if err := os.WriteFile(path, []byte(`#include "ghost.h"
-grammar X;
-`), 0o644); err != nil {
-		t.Fatalf("write src.g4.in: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+	scanner := newTestScanner(newMemFS(map[string]string{
+		"src.g4.in": "#include \"ghost.h\"\ngrammar X;\n",
+	}), SysInclSet{})
 	dirs := scanner.scanDirectives(Intern("$(S)/src.g4.in"))
 
 	if len(dirs) != 0 {
@@ -993,23 +796,11 @@ grammar X;
 }
 
 func TestScanDirectives_MacroIndirectAugmentation(t *testing.T) {
-	dir := t.TempDir()
-	rel := "contrib/libs/openssl/crypto/uid.c"
-	full := filepath.Join(dir, rel)
+	const rel = "contrib/libs/openssl/crypto/uid.c"
 
-	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-
-	src := []byte(`#include <openssl/crypto.h>
-# include OPENSSL_UNISTD
-`)
-
-	if err := os.WriteFile(full, src, 0o644); err != nil {
-		t.Fatalf("write uid.c: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+	scanner := newTestScanner(newMemFS(map[string]string{
+		rel: "#include <openssl/crypto.h>\n# include OPENSSL_UNISTD\n",
+	}), SysInclSet{})
 	dirs := scanner.scanDirectives(Source(rel))
 
 	var hasCrypto, hasUnistd bool
@@ -1043,20 +834,6 @@ func (s *IncludeScanner) parsedIncludes(vfsPath VFS) parsedIncludeSet {
 
 func (s *IncludeScanner) sourceParsedBuckets(vfsPath VFS) parsedIncludeSet {
 	return s.parsers.sourceParsedBuckets(vfsPath)
-}
-
-func writeFiles(t *testing.T, root string, files map[string]string) {
-	t.Helper()
-
-	for rel, data := range files {
-		abs := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
-		}
-		if err := os.WriteFile(abs, []byte(data), 0o644); err != nil {
-			t.Fatalf("write %s: %v", rel, err)
-		}
-	}
 }
 
 func assertHasIncludeDirective(t *testing.T, got []includeDirective, want includeDirective) {
@@ -1098,9 +875,7 @@ func assertLacksVFS(t *testing.T, closure []VFS, want VFS) {
 }
 
 func TestScanner_CythonNestedPxdUsesPy2StringSibling(t *testing.T) {
-	dir := t.TempDir()
-
-	writeFiles(t, dir, map[string]string{
+	scanner := newTestScanner(newMemFS(map[string]string{
 		"pkg/mod.pyx":             "from util.generic.string cimport TString\n",
 		"util/generic/string.pxd": "from libcpp.string cimport string as _std_string\n",
 		"contrib/tools/cython/Cython/Includes/libcpp/string.pxd":      "from libcpp.string_view cimport string_view\nfrom libc.string cimport memcpy\n",
@@ -1108,9 +883,7 @@ func TestScanner_CythonNestedPxdUsesPy2StringSibling(t *testing.T) {
 		"contrib/tools/cython/Cython/Includes/libc/string.pxd":        "# py3 libc string\n",
 		"contrib/tools/cython_py2/Cython/Includes/libcpp/string.pxd":  "from libc.string cimport memcpy\n",
 		"contrib/tools/cython_py2/Cython/Includes/libc/string.pxd":    "# py2 libc string\n",
-	})
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+	}), SysInclSet{})
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel: "pkg/mod.pyx",
 		OwnAddIncl: []VFS{
@@ -1128,18 +901,14 @@ func TestScanner_CythonNestedPxdUsesPy2StringSibling(t *testing.T) {
 }
 
 func TestScanner_CythonPyxDirectStdlibStaysPy3WhileNestedPxdAddsPy2(t *testing.T) {
-	dir := t.TempDir()
-
-	writeFiles(t, dir, map[string]string{
+	scanner := newTestScanner(newMemFS(map[string]string{
 		"pkg/mod.pyx":           "from libcpp.pair cimport pair\nfrom util.generic.hash cimport THashMap\n",
 		"util/generic/hash.pxd": "from libcpp.pair cimport pair\n",
 		"contrib/tools/cython/Cython/Includes/libcpp/pair.pxd":        "from libcpp.utility cimport move\n",
 		"contrib/tools/cython/Cython/Includes/libcpp/utility.pxd":     "# py3 utility\n",
 		"contrib/tools/cython_py2/Cython/Includes/libcpp/pair.pxd":    "from libcpp.utility cimport move\n",
 		"contrib/tools/cython_py2/Cython/Includes/libcpp/utility.pxd": "# py2 utility\n",
-	})
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+	}), SysInclSet{})
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel: "pkg/mod.pyx",
 		OwnAddIncl: []VFS{
@@ -1155,9 +924,7 @@ func TestScanner_CythonPyxDirectStdlibStaysPy3WhileNestedPxdAddsPy2(t *testing.T
 }
 
 func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
-	dir := t.TempDir()
-
-	writeFiles(t, dir, map[string]string{
+	scanner := newTestScanner(newMemFS(map[string]string{
 		"pkg/mod.pyx":            "from util.datetime.base cimport TInstant\nfrom util.system.types cimport ui64\n",
 		"util/datetime/base.pxd": "from libc.stdint cimport uint64_t\nfrom libcpp cimport bool as bool_t\n",
 		"util/system/types.pxd":  "from libc.stdint cimport uint64_t\n",
@@ -1165,9 +932,7 @@ func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
 		"contrib/tools/cython_py2/Cython/Includes/libcpp/__init__.pxd": "# py2 libcpp init\n",
 		"contrib/tools/cython/Cython/Includes/libc/stdint.pxd":         "# py3 stdint\n",
 		"contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd":     "# py2 stdint\n",
-	})
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+	}), SysInclSet{})
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel: "pkg/mod.pyx",
 		OwnAddIncl: []VFS{
@@ -1264,28 +1029,21 @@ func hyperscanPeerAddIncl() []VFS {
 	})
 }
 
-// newScannerOverTestFS builds an IncludeScanner backed by the suite-wide
-// testFS (fs_test.go). Each call gets a fresh scanner so per-test
-// CodegenRegistry / cache state does not leak.
-func newScannerOverTestFS(reg *CodegenRegistry) *IncludeScanner {
-	parsers := newIncludeParserManagerFS(testFS, newSharedParseCache())
-	scanner := newIncludeScannerWith(parsers, nil, func(Warn) {})
-	if reg != nil {
-		scanner.codegen = reg
-		scanner.fallbackLocators = []pathLocator{codegenLocator{reg: reg}}
-	}
-
-	return scanner
+// attachCodegen wires a CodegenRegistry onto an existing scanner the way the
+// real gen pipeline does (codegen field + codegenLocator fallback). Tests use
+// it together with newTestScanner.
+func attachCodegen(scanner *IncludeScanner, reg *CodegenRegistry) {
+	scanner.codegen = reg
+	scanner.fallbackLocators = []pathLocator{codegenLocator{reg: reg}}
 }
 
 // TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist locks the upstream
 // resolve order: when ADDINCL declares a Build-rooted prefix BEFORE a
 // Source-rooted prefix and the target header exists under both (committed
-// source stub in testFS + codegen-registered generated output), upstream
-// returns the Build path because IncDirs are iterated in declaration order
-// with first match wins (devtools/ymake/module_resolver.cpp:371 →
-// resolver/path_resolver CheckByRoot). Real-world repro of the OMP.inc case
-// in contrib/libs/llvm16.
+// source stub + codegen-registered generated output), upstream returns the
+// Build path because IncDirs are iterated in declaration order with first
+// match wins (devtools/ymake/module_resolver.cpp:371 → resolver/path_resolver
+// CheckByRoot). Real-world repro of the OMP.inc case in contrib/libs/llvm16.
 func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 	reg := NewCodegenRegistry()
 	reg.Register(&GeneratedFileInfo{
@@ -1293,7 +1051,11 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
 	})
 
-	scanner := newScannerOverTestFS(reg)
+	fs := newMemFS(map[string]string{
+		"contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc": "// committed stub\n",
+	})
+	scanner := newTestScanner(fs, nil)
+	attachCodegen(scanner, reg)
 	sc := scanner.NewScanCtx(ScanContext{
 		PeerAddInclSet: []VFS{
 			Build("contrib/libs/llvm16/include"),
@@ -1320,7 +1082,11 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
 	})
 
-	scanner := newScannerOverTestFS(reg)
+	fs := newMemFS(map[string]string{
+		"contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc": "// committed stub\n",
+	})
+	scanner := newTestScanner(fs, nil)
+	attachCodegen(scanner, reg)
 	sc := scanner.NewScanCtx(ScanContext{
 		PeerAddInclSet: []VFS{
 			Source("contrib/libs/llvm16/include"),
@@ -1338,10 +1104,10 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 }
 
 // TestScanner_AddInclBuildOnlyMatchesCodegen locks the OMP.h.inc-style case:
-// target lives only in codegen registry (no source stub in testFS). With
-// Build addincl declared first, resolution must return the Build/generated
-// path. This case already worked via the Build fallback loop; the unified
-// ranker must preserve it.
+// target lives only in codegen registry (no source stub). With Build addincl
+// declared first, resolution must return the Build/generated path. This case
+// already worked via the Build fallback loop; the unified ranker must
+// preserve it.
 func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 	reg := NewCodegenRegistry()
 	reg.Register(&GeneratedFileInfo{
@@ -1349,7 +1115,8 @@ func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc"),
 	})
 
-	scanner := newScannerOverTestFS(reg)
+	scanner := newTestScanner(newMemFS(nil), nil)
+	attachCodegen(scanner, reg)
 	sc := scanner.NewScanCtx(ScanContext{
 		PeerAddInclSet: []VFS{
 			Build("contrib/libs/llvm16/include"),

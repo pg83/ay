@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -41,26 +39,10 @@ func TestParseCIncludes_IncludeNextNotMisparsed(t *testing.T) {
 }
 
 func TestScanner_CythonExternFromQuotedAngleResolves(t *testing.T) {
-	dir := t.TempDir()
-
-	for _, rel := range []string{
-		"pkg",
-		"util/system",
-	} {
-		if err := os.MkdirAll(filepath.Join(dir, rel), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", rel, err)
-		}
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "pkg/error.pxd"), []byte("cdef extern from \"<util/system/error.h>\"\n"), 0o644); err != nil {
-		t.Fatalf("write pkg/error.pxd: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "util/system/error.h"), []byte("// error.h\n"), 0o644); err != nil {
-		t.Fatalf("write util/system/error.h: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+	scanner := newTestScanner(newMemFS(map[string]string{
+		"pkg/error.pxd":       "cdef extern from \"<util/system/error.h>\"\n",
+		"util/system/error.h": "// error.h\n",
+	}), SysInclSet{})
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel:  "pkg/error.pxd",
 		OwnAddIncl: []VFS{Intern("$(S)/")},
@@ -76,26 +58,10 @@ func TestScanner_CythonExternFromQuotedAngleResolves(t *testing.T) {
 }
 
 func TestScanner_CythonExternFromSingleQuotedResolves(t *testing.T) {
-	dir := t.TempDir()
-
-	for _, rel := range []string{
-		"pkg",
-		"library/cpp/logger",
-	} {
-		if err := os.MkdirAll(filepath.Join(dir, rel), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", rel, err)
-		}
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "pkg/logger.pxd"), []byte("cdef extern from 'library/cpp/logger/priority.h':\n"), 0o644); err != nil {
-		t.Fatalf("write pkg/logger.pxd: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "library/cpp/logger/priority.h"), []byte("// priority.h\n"), 0o644); err != nil {
-		t.Fatalf("write library/cpp/logger/priority.h: %v", err)
-	}
-
-	scanner := NewIncludeScanner(dir, SysInclSet{})
+	scanner := newTestScanner(newMemFS(map[string]string{
+		"pkg/logger.pxd":                "cdef extern from 'library/cpp/logger/priority.h':\n",
+		"library/cpp/logger/priority.h": "// priority.h\n",
+	}), SysInclSet{})
 	closure := scanner.WalkClosure(ScanContext{
 		SourceRel:  "pkg/logger.pxd",
 		OwnAddIncl: []VFS{Intern("$(S)/")},

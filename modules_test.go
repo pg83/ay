@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -132,22 +130,11 @@ func TestPrEmitsIncludes_OutputIncludesVFSPrefixStripped(t *testing.T) {
 }
 
 func TestCopyFileInputVFS_ResolvesSourceRootPaths(t *testing.T) {
-	root := t.TempDir()
-	writeFile := func(rel string) {
-		path := filepath.Join(root, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", rel, err)
-		}
-		if err := os.WriteFile(path, []byte("stub\n"), 0o644); err != nil {
-			t.Fatalf("write %s: %v", rel, err)
-		}
-	}
-
-	writeFile("mod/local.txt")
-	writeFile("shared/generated.txt")
-	writeFile("pkg/sub/codecs.h")
-
-	fs := NewFS(root)
+	fs := newMemFS(map[string]string{
+		"mod/local.txt":        "stub\n",
+		"shared/generated.txt": "stub\n",
+		"pkg/sub/codecs.h":     "stub\n",
+	})
 
 	if got := copyFileInputVFS(fs, "mod", "local.txt").String(); got != "$(S)/mod/local.txt" {
 		t.Fatalf("local copy input = %q, want $(S)/mod/local.txt", got)
