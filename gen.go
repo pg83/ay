@@ -367,15 +367,14 @@ var acknowledgedMacros = map[string]struct{}{
 	"WINDOWS_LONG_PATH_MANIFEST":      {},
 }
 
-func runGenInto(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn)) NodeRef {
-	return runGenIntoWithResources(srcRoot, targetDir, hostP, targetP, emitter, onWarn, nil, false, true)
+func runGenInto(fs FS, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn)) NodeRef {
+	return runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, nil, false, true)
 }
 
-func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) NodeRef {
+func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) NodeRef {
 	plainEmit := emitter
 	resourceEmit := resourceGraphEmitter(hostP, plainEmit, resources, materializeResourceFetches)
 
-	fs := NewFS(srcRoot)
 	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
 
 	targetReg := NewCodegenRegistry()
@@ -389,7 +388,7 @@ func runGenIntoWithResources(srcRoot, targetDir string, hostP, targetP *Platform
 	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
 
 	ctx := &genCtx{
-		sourceRoot:         srcRoot,
+		sourceRoot:         fs.SourceRoot(),
 		fs:                 fs,
 		parsers:            parsers,
 		emit:               resourceEmit,
@@ -462,24 +461,24 @@ func mergeGeneratedFirstClaims(scanners ...*IncludeScanner) map[VFS]string {
 	return out
 }
 
-func Gen(sourceRoot string, targetDir string, hostP, targetP *Platform, onWarn func(Warn)) *Graph {
-	return genWithResources(sourceRoot, targetDir, hostP, targetP, onWarn, nil, false, true)
+func Gen(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn)) *Graph {
+	return genWithResources(fs, targetDir, hostP, targetP, onWarn, nil, false, true)
 }
 
-func GenWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
-	return genWithResources(sourceRoot, targetDir, hostP, targetP, onWarn, resources, testMode, true)
+func GenWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
+	return genWithResources(fs, targetDir, hostP, targetP, onWarn, resources, testMode, true)
 }
 
-func GenDumpGraphWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
+func GenDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
 	emitter := NewBufferedEmitter()
-	runGenIntoWithResources(sourceRoot, targetDir, hostP, targetP, emitter, onWarn, resources, testMode, false)
+	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, resources, testMode, false)
 
 	return finalizeDumpGraph(emitter)
 }
 
-func genWithResources(sourceRoot string, targetDir string, hostP, targetP *Platform, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) *Graph {
+func genWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) *Graph {
 	emitter := NewBufferedEmitter()
-	runGenIntoWithResources(sourceRoot, targetDir, hostP, targetP, emitter, onWarn, resources, testMode, materializeResourceFetches)
+	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, resources, testMode, materializeResourceFetches)
 
 	return Finalize(emitter)
 }

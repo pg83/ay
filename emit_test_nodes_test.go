@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
@@ -502,35 +500,16 @@ func TestEmitTestRunNodes_BuildersMatchSpec(t *testing.T) {
 func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	p := sandboxedX8664TargetPlatform()
 	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
-	root := t.TempDir()
 
-	mk := func(dir, body string) {
-		path := filepath.Join(root, dir)
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", dir, err)
-		}
-		if err := os.WriteFile(filepath.Join(path, "ya.make"), []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s/ya.make: %v", dir, err)
-		}
-	}
-
-	mkfile := func(rel, body string) {
-		full := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", filepath.Dir(rel), err)
-		}
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s: %v", rel, err)
-		}
-	}
-
-	mk("util/ut", "UNITTEST_FOR(util)\nSRCS(ysafeptr_ut.cpp ysaveload_ut.cpp)\nEND()\n")
-	mk("util", "LIBRARY()\nSRCS(lib.cpp)\nEND()\n")
-	mk("library/cpp/testing/unittest_main", "LIBRARY()\nSRCS(main.cpp)\nEND()\n")
-	mkfile("util/ysafeptr_ut.cpp", "int ysafeptr_ut() { return 0; }\n")
-	mkfile("util/ysaveload_ut.cpp", "int ysaveload_ut() { return 0; }\n")
-	mkfile("util/lib.cpp", "int util_lib() { return 0; }\n")
-	mkfile("library/cpp/testing/unittest_main/main.cpp", "int unittest_main() { return 0; }\n")
+	fs := newMemFS(map[string]string{
+		"util/ut/ya.make":                            "UNITTEST_FOR(util)\nSRCS(ysafeptr_ut.cpp ysaveload_ut.cpp)\nEND()\n",
+		"util/ya.make":                               "LIBRARY()\nSRCS(lib.cpp)\nEND()\n",
+		"library/cpp/testing/unittest_main/ya.make":  "LIBRARY()\nSRCS(main.cpp)\nEND()\n",
+		"util/ysafeptr_ut.cpp":                       "int ysafeptr_ut() { return 0; }\n",
+		"util/ysaveload_ut.cpp":                      "int ysaveload_ut() { return 0; }\n",
+		"util/lib.cpp":                               "int util_lib() { return 0; }\n",
+		"library/cpp/testing/unittest_main/main.cpp": "int unittest_main() { return 0; }\n",
+	})
 
 	resources := &resourceFetchPlan{
 		items: []resourceFetch{{
@@ -540,7 +519,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		}},
 	}
 
-	g := GenWithResources(root, "util/ut", host, p, func(Warn) {}, resources, true)
+	g := GenWithResources(fs, "util/ut", host, p, func(Warn) {}, resources, true)
 	if len(g.Result) != 3 {
 		t.Fatalf("result len = %d, want 3", len(g.Result))
 	}
