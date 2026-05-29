@@ -1073,12 +1073,28 @@ func (s *IncludeScanner) absifyRels(rels []string) []VFS {
 }
 
 type cfgResolveIndex struct {
-	indexable bool
-	rank      map[VFS]int
+	indexable    bool
+	rank         map[VFS]int
+	buildEntries []cfgBuildAddincl
+}
+
+// cfgBuildAddincl is a Build-rooted addincl prefix paired with its rank in the
+// unified declaration order across OwnAddIncl ⨁ PeerAddInclSet. prefixID is
+// pre-interned so codegen.LookupSplit needs no per-resolve allocation.
+type cfgBuildAddincl struct {
+	prefix   VFS
+	prefixID STR
+	rank     int
 }
 
 const resolveNoRank = int(^uint(0) >> 1)
 
+// buildCfgResolveIndex assigns a single declaration-order rank to every addincl
+// entry (Source and Build both), so the fast path can pick the first-wins
+// match the way upstream's ResolveName(MakeResolvePlan(MakeIterPair(incDirs)))
+// does (devtools/ymake/module_resolver.cpp:371). Source entries keep their
+// existing inverted-index lookup; Build entries are collected separately for a
+// cheap codegen.LookupSplit pass over a typically tiny set (0–2 per module).
 func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 	idx := &cfgResolveIndex{}
 
@@ -1098,12 +1114,17 @@ func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 
 	r := 0
 	add := func(p VFS) {
-		if p.Root() != VFSRootSource {
+		if _, ok := idx.rank[p]; ok {
 			return
 		}
-		if _, ok := idx.rank[p]; !ok {
-			idx.rank[p] = r
-			r++
+		idx.rank[p] = r
+		r++
+		if p.Root() == VFSRootBuild {
+			idx.buildEntries = append(idx.buildEntries, cfgBuildAddincl{
+				prefix:   p,
+				prefixID: internString(p.Rel()),
+				rank:     idx.rank[p],
+			})
 		}
 	}
 
@@ -1193,6 +1214,8 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		idx := sc.resolveIndex
 		if idx.indexable {
 
+			// Source side: precomputed FS-existence inverted index keyed by
+			// target → addincl prefixes containing it. Pick the smallest rank.
 			bestRank := resolveNoRank
 			var bestAddincl VFS
 			for _, a := range s.parsers.addinclIndex[targetID] {
@@ -1201,27 +1224,49 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 					bestAddincl = a
 				}
 			}
+			bestIsSource := bestRank != resolveNoRank
+
+			// Build side: walk the (typically tiny) set of Build-rooted addincl
+			// entries in declaration order via the registry's 2-level split
+			// lookup. Take the smallest rank among hits — if it beats the Source
+			// best, the Build entry wins, mirroring upstream's first-match
+			// semantics over IncDirs (module_resolver.cpp:371).
+			var bestBuild *GeneratedFileInfo
+			if buildSuffix != nil {
+				for i := range idx.buildEntries {
+					b := &idx.buildEntries[i]
+					if b.rank >= bestRank {
+						continue
+					}
+
+					info := s.codegen.LookupSplit(b.prefixID, *buildSuffix)
+					if info == nil {
+						continue
+					}
+
+					bestRank = b.rank
+					bestBuild = info
+					bestIsSource = false
+				}
+			}
 
 			if bestRank != resolveNoRank {
+				if bestIsSource {
+					out.paths = []VFS{Source(joinRel(bestAddincl.Rel(), target))}
+				} else {
+					out.paths = []VFS{bestBuild.OutputPath}
+					if sc.cfg.OwnerModuleDir != "" {
+						if _, ok := s.generatedFirstClaim[bestBuild.OutputPath]; !ok {
+							s.generatedFirstClaim[bestBuild.OutputPath] = sc.cfg.OwnerModuleDir
+						}
+					}
+				}
 
-				out.paths = []VFS{Source(joinRel(bestAddincl.Rel(), target))}
 				out.found = true
 				sc.searchTierCache[targetID] = out
 				return out
 			}
 
-			for _, p := range sc.cfg.OwnAddIncl {
-				if p.Root() == VFSRootBuild && addBuild(p.Rel()) {
-					sc.searchTierCache[targetID] = out
-					return out
-				}
-			}
-			for _, p := range sc.cfg.PeerAddInclSet {
-				if p.Root() == VFSRootBuild && addBuild(p.Rel()) {
-					sc.searchTierCache[targetID] = out
-					return out
-				}
-			}
 			for _, p := range sc.cfg.BaseSearchPaths {
 				if addInclPath(p) {
 					sc.searchTierCache[targetID] = out
