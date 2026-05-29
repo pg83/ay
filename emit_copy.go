@@ -18,11 +18,24 @@ func copyFileAutoSourceVFS(modulePath string, d *moduleData, srcRel string) *VFS
 	return vfsPtr(copyFileOutputVFS(modulePath, entry.Dst))
 }
 
-func copyFileParsedIncludes(fs FS, modulePath string, entry copyFileEntry) []includeDirective {
+func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, entry copyFileEntry) []includeDirective {
 	out := make([]includeDirective, 0, len(entry.OutputIncludes)+1)
 	if entry.WithContext {
+		// WITH_CONTEXT (and TEXT) copies splice the source file's content into
+		// the destination. The destination must therefore carry the *source's
+		// own raw #include directives*, resolved in THIS module's context — the
+		// per-module dst is the unit of resolution (its absID is unique per
+		// module). Earlier we instead pointed the dst at the shared $(S) source
+		// node; that node is parsed-and-resolved exactly once and cached by
+		// absID (IncludeScanner.childrenCache), so the first module to reach a
+		// source copied by several siblings (e.g. the minikql llvm16 codegen
+		// *.h.txt templates) fixed every consumer's resolution to that first
+		// module's staging copies — a cross-module include leak. The source
+		// file itself is re-attached as a leaf input by withContextSourceExtras.
 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
-		out = append(out, includeDirective{kind: includeQuoted, target: internString(srcVFS.Rel())})
+		if scanner != nil {
+			out = append(out, scanner.parsers.parsedIncludes(srcVFS)...)
+		}
 	}
 	for _, include := range entry.OutputIncludes {
 		out = append(out, includeDirective{
@@ -54,7 +67,7 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 	for _, entry := range d.copyFiles {
 		srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
 		dstVFS := copyFileOutputVFS(instance.Path, entry.Dst)
-		parsed := copyFileParsedIncludes(ctx.fs, instance.Path, entry)
+		parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path, entry)
 		entries = append(entries, entryReg{srcVFS, dstVFS, parsed})
 
 		if scanner != nil {
@@ -178,6 +191,47 @@ func autoCopyDstExtras(modulePath string, d *moduleData, closure []VFS, rootDst 
 		if dst, ok := srcToDst[v]; ok {
 			extras = append(extras, dst)
 		} else if src, ok := dstToSrc[v]; ok {
+			extras = append(extras, src)
+		}
+	}
+	return extras
+}
+
+// withContextSourceExtras re-attaches the $(S) source of every WITH_CONTEXT
+// (incl. TEXT) copy whose destination participates in a closure. copyFileParsedIncludes
+// no longer routes the dst through the source node (that node's resolution is
+// cached globally, leaking sibling-module staging copies); it splices the
+// source's raw includes onto the dst instead. The source file is still a real
+// input of the copy — upstream's COPY_FILE_WITH_CONTEXT lists ${input:FILE} and
+// COPY_FILE(TEXT) lists ${input=TEXT:TEXT} — so re-add it here as a leaf input,
+// without it ever being a traversed graph node. rootDst is the compile's own
+// $(B) input (the file being compiled, itself a WITH_CONTEXT copy dst); include
+// it so the compiled translation unit's $(S) source is attached too.
+func withContextSourceExtras(fs FS, modulePath string, d *moduleData, closure []VFS, rootDst VFS) []VFS {
+	if d == nil || len(d.copyFiles) == 0 {
+		return nil
+	}
+	dstToSrc := make(map[VFS]VFS, len(d.copyFiles))
+	for _, entry := range d.copyFiles {
+		if !entry.WithContext {
+			continue
+		}
+		dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
+		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
+		if dstVFS == srcVFS {
+			continue
+		}
+		dstToSrc[dstVFS] = srcVFS
+	}
+	if len(dstToSrc) == 0 {
+		return nil
+	}
+	var extras []VFS
+	if src, ok := dstToSrc[rootDst]; ok {
+		extras = append(extras, src)
+	}
+	for _, v := range closure {
+		if src, ok := dstToSrc[v]; ok {
 			extras = append(extras, src)
 		}
 	}

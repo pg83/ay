@@ -3248,13 +3248,15 @@ int copied() { return 0; }
 
 	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
 	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
-	wantInputs := []string{
-		"$(B)/mod/copied.cpp",
-		"$(S)/mod/original.cpp",
-		"$(S)/mod/dep.h",
-	}
-	if got := vfsStringsT3(cc.Inputs); !reflect.DeepEqual(got[:len(wantInputs)], wantInputs) {
-		t.Fatalf("copied.cpp inputs prefix = %v, want %v", got[:len(wantInputs)], wantInputs)
+	// Input order is irrelevant to self_uid (normalization sorts inputs); assert
+	// membership. The WITH_CONTEXT source's #includes now resolve in the dst's
+	// own context (its raw directives are spliced onto the per-module dst), and
+	// the $(S) source is re-attached as a leaf input, so dep.h and original.cpp
+	// may appear in either relative order.
+	for _, want := range []string{"$(B)/mod/copied.cpp", "$(S)/mod/original.cpp", "$(S)/mod/dep.h"} {
+		if !nodeHasInput(cc, want) {
+			t.Fatalf("copied.cpp inputs missing %q: %v", want, vfsStringsT3(cc.Inputs))
+		}
 	}
 	if len(cc.Deps) != 1 {
 		t.Fatalf("len(copied.cpp deps) = %d, want 1 (copy producer)", len(cc.Deps))
@@ -3285,13 +3287,15 @@ int copied() { return 0; }
 
 	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
 	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
-	wantInputs := []string{
-		"$(B)/mod/copied.cpp",
-		"$(S)/mod/original.cpp",
-		"$(S)/mod/dep.h",
-	}
-	if got := vfsStringsT3(cc.Inputs); !reflect.DeepEqual(got[:len(wantInputs)], wantInputs) {
-		t.Fatalf("copied.cpp inputs prefix = %v, want %v", got[:len(wantInputs)], wantInputs)
+	// Input order is irrelevant to self_uid (normalization sorts inputs); assert
+	// membership. The WITH_CONTEXT source's #includes now resolve in the dst's
+	// own context (its raw directives are spliced onto the per-module dst), and
+	// the $(S) source is re-attached as a leaf input, so dep.h and original.cpp
+	// may appear in either relative order.
+	for _, want := range []string{"$(B)/mod/copied.cpp", "$(S)/mod/original.cpp", "$(S)/mod/dep.h"} {
+		if !nodeHasInput(cc, want) {
+			t.Fatalf("copied.cpp inputs missing %q: %v", want, vfsStringsT3(cc.Inputs))
+		}
 	}
 }
 
