@@ -66,7 +66,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			cwd = expandRunProgramCWD(instance, *run.CWD)
 		}
 
-		jvRef := EmitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, depRefs, ctx.emit)
+		jvRef := EmitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, depRefs, cfModuleTag(d, instance), ctx.emit)
 
 		if reg != nil {
 			for outTok, outVFS := range outVFSByToken {
