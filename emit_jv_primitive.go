@@ -16,7 +16,7 @@ var antlr3JarPath = antlr3JarVFS.String()
 var stdout2stderrVFS = Intern("$(S)/build/scripts/stdout2stderr.py")
 var stdout2stderrPath = stdout2stderrVFS.String()
 
-func emitJVNode(instance ModuleInstance, cmdArgs []string, inputs []VFS, outputs []VFS, cwd string, depRefs []NodeRef, emit Emitter) NodeRef {
+func emitJVNode(instance ModuleInstance, cmdArgs []string, inputs []VFS, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag string, emit Emitter) NodeRef {
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
@@ -38,9 +38,13 @@ func emitJVNode(instance ModuleInstance, cmdArgs []string, inputs []VFS, outputs
 		},
 		Outputs: outputs,
 		Tags:    []string{},
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
+		TargetProperties: func() map[string]string {
+			tp := map[string]string{"module_dir": instance.Path}
+			if moduleTag != "" {
+				tp["module_tag"] = moduleTag
+			}
+			return tp
+		}(),
 		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
@@ -59,6 +63,7 @@ func EmitJV(
 	options []string,
 	visitor bool,
 	listener bool,
+	moduleTag string,
 	emit Emitter,
 ) NodeRef {
 	grammarVFS := Source(instance.Path + "/" + grammar)
@@ -103,7 +108,7 @@ func EmitJV(
 		Build(outPrefix + "BaseVisitor.h"),
 	}
 
-	return emitJVNode(instance, cmdArgs, inputs, outputs, outDir, nil, emit)
+	return emitJVNode(instance, cmdArgs, inputs, outputs, outDir, nil, moduleTag, emit)
 }
 
 func EmitJVSplit(
@@ -112,6 +117,7 @@ func EmitJVSplit(
 	parser string,
 	visitor bool,
 	listener bool,
+	moduleTag string,
 	emit Emitter,
 ) NodeRef {
 	lexerVFS := Source(instance.Path + "/" + lexer)
@@ -160,7 +166,7 @@ func EmitJVSplit(
 		Build(outPrefix + visitorBase + "BaseVisitor.h"),
 	}
 
-	return emitJVNode(instance, cmdArgs, inputs, outputs, outDir, nil, emit)
+	return emitJVNode(instance, cmdArgs, inputs, outputs, outDir, nil, moduleTag, emit)
 }
 
 func EmitJVGeneral(
@@ -171,6 +177,7 @@ func EmitJVGeneral(
 	outputs []VFS,
 	cwd string,
 	depRefs []NodeRef,
+	moduleTag string,
 	emit Emitter,
 ) NodeRef {
 	cmdArgs := make([]string, 0, 5+len(args))
@@ -187,5 +194,5 @@ func EmitJVGeneral(
 	jvInputs = append(jvInputs, inputs...)
 	jvInputs = append(jvInputs, stdout2stderrVFS, jarVFS)
 
-	return emitJVNode(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, emit)
+	return emitJVNode(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, moduleTag, emit)
 }
