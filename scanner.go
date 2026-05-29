@@ -50,8 +50,28 @@ type IncludeScanner struct {
 
 	subgraphChunks [][]uint32
 	subgraphLen    uint32
-	subgraphCache  map[uint32]closureRef
-	childrenCache  map[uint32][]uint32
+	// subgraphCache (cached transitive closure under DFS) and childrenCache
+	// (cached immediate resolved children) are both keyed by includer absID
+	// ONLY — no scan-context component. This is the same invariant upstream
+	// ymake exploits: each File node is parsed-and-resolved exactly once across
+	// the whole add-iter (see TUpdEntryStats::OnceProcessedAsFile in
+	// yatool/devtools/ymake/add_iter.h:377, gate in
+	// add_iter.cpp:671 and the set in add_iter.cpp:548,681). Upstream's
+	// TParsersCache (include_processors/parsers_cache.h) likewise keys parse
+	// results by (parserId, fileId) with no module context, and its per-module
+	// TResolveCaches (resolver/resolve_cache.h) only dedupes resolves WITHIN a
+	// single module's visit — not across modules, because cross-module reentry
+	// is blocked by OnceProcessedAsFile.
+	//
+	// Do NOT add a scanCtx/hashScanContext component to these keys "for
+	// safety" — the load-bearing assumption is that the first scanner to reach
+	// a file is its semantic owner, the resolution is stable thereafter, and
+	// the closure stays valid for every subsequent context. Adding a context
+	// key collapses subgraph caching and regresses wall-time by an order of
+	// magnitude. If you suspect divergence is caused here, fix it upstream of
+	// the cache: parsedIncludes, sysincl rules, or searchTier construction.
+	subgraphCache map[uint32]closureRef
+	childrenCache map[uint32][]uint32
 
 	searchTierByConfig map[uint64]map[STR]searchTierResult
 
@@ -634,6 +654,11 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	}
 }
 
+// forEachResolvedChildID returns the resolved immediate children of absID,
+// caching by absID alone (no scan-context key). See the comment above
+// IncludeScanner.subgraphCache / childrenCache for the upstream-mirroring
+// invariant that makes this correct: each file is parse-and-resolved exactly
+// once per run.
 func (sc *scanCtx) forEachResolvedChildID(absID uint32, fn func(uint32)) {
 	s := sc.scanner
 	if cached, ok := s.childrenCache[absID]; ok {
