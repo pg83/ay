@@ -81,7 +81,7 @@ func emitResourceObjcopy(
 
 	var moduleTag *string
 	if d.moduleStmt != nil {
-		moduleTag = resourceModuleTagForData(d)
+		moduleTag = resourceLibTagForData(d)
 	}
 
 	flush := func() {
@@ -268,16 +268,34 @@ type objcopyEmit struct {
 	Out VFS
 }
 
+// kvOnlyKind selects the upstream submodule whose MODULE_TAG the kv-only
+// objcopy emission inherits — PY_MAIN / NO_CHECK_IMPORTS belong to the
+// PY3_BIN submodule (PROGRAM-side), py/namespace and RESOURCE_FILES belong to
+// PY3_BIN_LIB (LIBRARY-side).
+type kvOnlyKind int
+
+const (
+	kvOnlyBin kvOnlyKind = iota
+	kvOnlyLib
+)
+
 func emitKvOnlyObjcopyNode(
 	ctx *genCtx,
 	instance ModuleInstance,
+	kind kvOnlyKind,
 	kvsHash []string,
 	kvsCmd []string,
 	d *moduleData,
 	rescompilerLDRef NodeRef,
 	rescompressorLDRef NodeRef,
 ) *objcopyEmit {
-	moduleTag := resourceModuleTagForData(d)
+	var moduleTag *string
+	switch kind {
+	case kvOnlyLib:
+		moduleTag = resourceLibTagForData(d)
+	default:
+		moduleTag = resourceBinTagForData(d)
+	}
 	hash := objcopyHash(nil, nil, kvsHash, instance.Path, moduleTag)
 	outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
@@ -308,8 +326,12 @@ func emitKvOnlyObjcopyNode(
 	case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
 		targetProps["module_tag"] = "py3"
 	}
-	if d.moduleStmt.Name == "PY3_PROGRAM" {
-		targetProps["module_tag"] = "py3_bin"
+	if d.moduleStmt.Name == "PY3_PROGRAM" || d.programPairedLib {
+		if kind == kvOnlyLib {
+			targetProps["module_tag"] = "py3_bin_lib"
+		} else {
+			targetProps["module_tag"] = "py3_bin"
+		}
 	}
 
 	kvTags := []string{}
@@ -387,7 +409,7 @@ func emitYaConfJSONObjcopy(
 	out := make([]*objcopyEmit, 0, len(resources))
 	var moduleTag *string
 	if d.moduleStmt != nil {
-		moduleTag = resourceModuleTagForData(d)
+		moduleTag = resourceLibTagForData(d)
 	}
 
 	for _, res := range resources {
@@ -501,7 +523,7 @@ func emitPyNamespaceForGroup(
 	key := "py/namespace/" + modListMD5 + "/" + keyPath
 	kvHash := key + "=\"" + nsValue + "\""
 	kvCmd := key + "=" + nsValue
-	return emitKvOnlyObjcopyNode(ctx, instance, []string{kvHash}, []string{kvCmd}, d, rescompilerLDRef, rescompressorLDRef)
+	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyLib, []string{kvHash}, []string{kvCmd}, d, rescompilerLDRef, rescompressorLDRef)
 }
 
 func emitPyMainObjcopy(
@@ -516,7 +538,7 @@ func emitPyMainObjcopy(
 	}
 
 	kv := "PY_MAIN=" + *d.pyMain
-	return emitKvOnlyObjcopyNode(ctx, instance, []string{kv}, []string{kv}, d, rescompilerLDRef, rescompressorLDRef)
+	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyBin, []string{kv}, []string{kv}, d, rescompilerLDRef, rescompressorLDRef)
 }
 
 func emitNoCheckImportsObjcopy(
@@ -538,7 +560,7 @@ func emitNoCheckImportsObjcopy(
 	kvHash := key + "=\"" + value + "\""
 	kvCmd := key + "=" + value
 
-	return emitKvOnlyObjcopyNode(ctx, instance, []string{kvHash}, []string{kvCmd}, d, rescompilerLDRef, rescompressorLDRef)
+	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyBin, []string{kvHash}, []string{kvCmd}, d, rescompilerLDRef, rescompressorLDRef)
 }
 
 func emitPySrcObjcopy(
@@ -551,7 +573,18 @@ func emitPySrcObjcopy(
 	if len(d.pySrcs) == 0 || d.moduleStmt == nil {
 		return nil
 	}
-	if resourceModuleTagForData(d) == nil {
+	if resourceLibTagForData(d) == nil {
+		return nil
+	}
+	// PY3_PROGRAM PROGRAM-side mirrors upstream's PY3_BIN submodule, which has
+	// ENABLE(PROCESS_PY_MAIN_ONLY) (conf/python.conf:352). onpy_srcs honours
+	// that flag (pybuild.py:266,400) by skipping all pys/namespace processing
+	// after PY_MAIN handling — the LIBRARY twin (PY3_BIN_LIB) is responsible
+	// for emitting pysrc + namespace objcopies and packing them into its
+	// .global.a, which the PROGRAM links via PEERDIRSELF=PY3_BIN_LIB. Emitting
+	// from the PROGRAM side here would either double-link the objcopies into
+	// the LD command or produce a tag-divergent twin.
+	if d.moduleStmt.Name == "PY3_PROGRAM" && !d.programPairedLib {
 		return nil
 	}
 
@@ -565,7 +598,7 @@ func emitPySrcObjcopy(
 		!strings.HasPrefix(instance.Path, "contrib/tools/python3") &&
 		resourceModuleTag(d.moduleStmt.Name) != nil
 
-	moduleTag := resourceModuleTagForData(d)
+	moduleTag := resourceLibTagForData(d)
 	res := &objcopyEmitResult{}
 	for _, group := range groups {
 		if namespaceEnabled {
@@ -618,8 +651,11 @@ func emitPySrcObjcopy(
 			case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
 				targetProps["module_tag"] = "py3"
 			}
-			if d.moduleStmt.Name == "PY3_PROGRAM" {
-				targetProps["module_tag"] = "py3_bin"
+			// pysrc/namespace emissions for both the PY3_PROGRAM PROGRAM-side and
+			// its KindLib twin live under the PY3_BIN_LIB submodule in upstream;
+			// stamp them with that submodule's lowercased tag so the dump matches REF.
+			if d.moduleStmt.Name == "PY3_PROGRAM" || d.programPairedLib {
+				targetProps["module_tag"] = "py3_bin_lib"
 			}
 
 			pyTags := []string{}
