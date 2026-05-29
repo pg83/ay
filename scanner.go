@@ -1354,6 +1354,13 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 
 		if addBuildPath(rel) {
 			searchPathFound = true
+			if sc.cfg.OwnerModuleDir != "" && s.codegen != nil {
+				if info := s.codegen.LookupRel(rel); info != nil {
+					if _, ok := s.generatedFirstClaim[info.OutputPath]; !ok {
+						s.generatedFirstClaim[info.OutputPath] = sc.cfg.OwnerModuleDir
+					}
+				}
+			}
 		} else {
 			buildRootFallbackRel = rel
 		}
