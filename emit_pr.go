@@ -254,11 +254,34 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 		}
 	}
 
+	out = dropTransitiveGeneratedProto(out)
+
 	if len(out) == 0 {
 		return nil
 	}
 
 	out = mergeDedupVFS(out, nil)
+	return out
+}
+
+// dropTransitiveGeneratedProto removes build-generated .proto files reached
+// transitively in a RUN_PROGRAM/RUN_PYTHON3 closure (e.g. via a .pb.h/.pb.cc
+// whose protoc step lists the .proto as its IN). Such a .proto is a codegen
+// intermediate, not a real input of the walking node: upstream reaches it via
+// the producer dep edge and lists only the generator's $(S) sources — which the
+// closure already gathered by walking *through* the .proto. Keeping the $(B)
+// .proto would also make resolveCodegenDepRefs attach a spurious dep on its
+// RUN_ANTLR (JV) producer, diverging the node's deps (hence self_uid). A .proto
+// that is the node's own direct IN enters via inVFSs, not the closure, so it
+// survives. $(S) proto imports (the proto-import graph) are kept.
+func dropTransitiveGeneratedProto(in []VFS) []VFS {
+	out := in[:0]
+	for _, v := range in {
+		if v.IsBuild() && strings.HasSuffix(v.Rel(), ".proto") {
+			continue
+		}
+		out = append(out, v)
+	}
 	return out
 }
 

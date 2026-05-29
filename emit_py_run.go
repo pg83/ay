@@ -144,6 +144,8 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, m
 		walkOne(*stmt.StdoutFile)
 	}
 
+	out = dropTransitiveGeneratedProto(out)
+
 	if len(out) == 0 {
 		return nil
 	}
