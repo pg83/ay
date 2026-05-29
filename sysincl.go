@@ -330,7 +330,7 @@ func LoadSysInclSetFor(sourceRoot, arch string, onWarn func(Warn)) SysInclSet {
 	return LoadSysInclSetForFS(NewFS(sourceRoot), arch, onWarn)
 }
 
-func LoadSysInclSetForFS(fs *FS, arch string, onWarn func(Warn)) SysInclSet {
+func LoadSysInclSetForFS(fs FS, arch string, onWarn func(Warn)) SysInclSet {
 	if !fs.IsDir("build/sysincl") {
 		return nil
 	}

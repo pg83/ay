@@ -98,7 +98,7 @@ func protoResultWholeArchiveCmdPaths(res *protoSrcsResult) []VFS {
 
 type genCtx struct {
 	sourceRoot string
-	fs         *FS
+	fs         FS
 	parsers    *includeParserManager
 	emit       Emitter
 

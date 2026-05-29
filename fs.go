@@ -7,7 +7,24 @@ import (
 	"strings"
 )
 
-type FS struct {
+// FS is the source-tree filesystem facade. Production code drives an osFS
+// (rooted at a real directory and cached lazily); tests drive a memFS built
+// inline (testfs_test.go) so the suite does no disk I/O for fixture trees.
+type FS interface {
+	SourceRoot() string
+	Listdir(rel string) map[string]bool
+	Exists(rel string) (present bool, isDir bool)
+	IsFile(rel string) bool
+	IsDir(rel string) bool
+	Read(rel string) []byte
+	ReadInto(rel string, buf []byte) []byte
+	ReadAbs(absPath string) []byte
+	ExistsAbs(absPath string) (present bool, isDir bool)
+	Walk(rel string, visit func(rel string, isDir bool))
+	perfStats() fsPerfStats
+}
+
+type osFS struct {
 	sourceRoot string
 	rootSlash  string
 	dirs       map[string]map[string]bool
@@ -18,17 +35,17 @@ type FS struct {
 	existsMisses  uint64
 }
 
-func NewFS(sourceRoot string) *FS {
-	return &FS{
+func NewFS(sourceRoot string) FS {
+	return &osFS{
 		sourceRoot: sourceRoot,
 		rootSlash:  sourceRoot + "/",
 		dirs:       make(map[string]map[string]bool, 1024),
 	}
 }
 
-func (fs *FS) SourceRoot() string { return fs.sourceRoot }
+func (fs *osFS) SourceRoot() string { return fs.sourceRoot }
 
-func (fs *FS) Listdir(rel string) map[string]bool {
+func (fs *osFS) Listdir(rel string) map[string]bool {
 	rel = cleanRel(rel)
 	if cached, ok := fs.dirs[rel]; ok {
 		fs.listdirHits++
@@ -56,7 +73,7 @@ func (fs *FS) Listdir(rel string) map[string]bool {
 	return out
 }
 
-func (fs *FS) Exists(rel string) (present bool, isDir bool) {
+func (fs *osFS) Exists(rel string) (present bool, isDir bool) {
 	rel = cleanRel(rel)
 	if rel == "" {
 		return true, true
@@ -79,21 +96,21 @@ func (fs *FS) Exists(rel string) (present bool, isDir bool) {
 	return ok, isDir
 }
 
-func (fs *FS) IsFile(rel string) bool {
+func (fs *osFS) IsFile(rel string) bool {
 	p, d := fs.Exists(rel)
 	return p && !d
 }
 
-func (fs *FS) IsDir(rel string) bool {
+func (fs *osFS) IsDir(rel string) bool {
 	p, d := fs.Exists(rel)
 	return p && d
 }
 
-func (fs *FS) Read(rel string) []byte {
+func (fs *osFS) Read(rel string) []byte {
 	return Throw2(os.ReadFile(fs.rootSlash + cleanRel(rel)))
 }
 
-func (fs *FS) ReadInto(rel string, buf []byte) []byte {
+func (fs *osFS) ReadInto(rel string, buf []byte) []byte {
 	f := Throw2(os.Open(fs.rootSlash + cleanRel(rel)))
 	defer f.Close()
 
@@ -135,15 +152,15 @@ func (fs *FS) ReadInto(rel string, buf []byte) []byte {
 	}
 }
 
-func (fs *FS) ReadAbs(absPath string) []byte {
+func (fs *osFS) ReadAbs(absPath string) []byte {
 	return fs.Read(fs.relForAbs(absPath))
 }
 
-func (fs *FS) ExistsAbs(absPath string) (present bool, isDir bool) {
+func (fs *osFS) ExistsAbs(absPath string) (present bool, isDir bool) {
 	return fs.Exists(fs.relForAbs(absPath))
 }
 
-func (fs *FS) relForAbs(absPath string) string {
+func (fs *osFS) relForAbs(absPath string) string {
 	if absPath == fs.sourceRoot {
 		return ""
 	}
@@ -156,7 +173,7 @@ func (fs *FS) relForAbs(absPath string) string {
 	return ""
 }
 
-func (fs *FS) Walk(rel string, visit func(rel string, isDir bool)) {
+func (fs *osFS) Walk(rel string, visit func(rel string, isDir bool)) {
 	rel = cleanRel(rel)
 
 	present, isDir := fs.Exists(rel)
@@ -193,7 +210,7 @@ type fsPerfStats struct {
 	dirsCached    int
 }
 
-func (fs *FS) perfStats() fsPerfStats {
+func (fs *osFS) perfStats() fsPerfStats {
 	return fsPerfStats{
 		listdirHits:   fs.listdirHits,
 		listdirMisses: fs.listdirMisses,

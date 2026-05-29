@@ -74,7 +74,7 @@ func extraProtoOutputParsedIncludes(output, pbH, grpcPbH, grpcPbCC VFS, grpcHPar
 	}
 }
 
-func protoTransitiveImports(pm *includeParserManager, fs *FS, srcRel string, peerProtoAddIncl []VFS) ([]VFS, bool) {
+func protoTransitiveImports(pm *includeParserManager, fs FS, srcRel string, peerProtoAddIncl []VFS) ([]VFS, bool) {
 	rootImports := protoDirectImportNames(pm, srcRel)
 	if rootImports == nil {
 		return nil, false
@@ -146,7 +146,7 @@ func protoTransitiveImports(pm *includeParserManager, fs *FS, srcRel string, pee
 	return imports, hasDescriptor
 }
 
-func evTransitiveImports(pm *includeParserManager, fs *FS, srcRel string) []VFS {
+func evTransitiveImports(pm *includeParserManager, fs FS, srcRel string) []VFS {
 	visited := map[string]struct{}{}
 	order := make([]VFS, 0, 8)
 	descriptorAdded := false
@@ -206,7 +206,7 @@ func protoDirectImportNames(pm *includeParserManager, srcRel string) []string {
 	return out
 }
 
-func resolveProtoImportPath(fs *FS, importedRel string, peerProtoAddIncl []VFS) string {
+func resolveProtoImportPath(fs FS, importedRel string, peerProtoAddIncl []VFS) string {
 	clean := filepath.ToSlash(filepath.Clean(importedRel))
 	candidates := []string{clean}
 	if !strings.HasPrefix(clean, "yt/") {

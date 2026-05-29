@@ -196,7 +196,7 @@ func rootrelInputPath(kv string) (string, bool) {
 	return tail[:end], true
 }
 
-func yaConfFormulaResources(fs *FS, confPath string) []string {
+func yaConfFormulaResources(fs FS, confPath string) []string {
 	raw := fs.Read(confPath)
 
 	var out []string

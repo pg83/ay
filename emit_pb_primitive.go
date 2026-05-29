@@ -543,7 +543,7 @@ type protoSrcsResult struct {
 	WholeArchiveCmdPaths []VFS
 }
 
-func protoSourceRelPath(fs *FS, instance ModuleInstance, d *moduleData, src string) string {
+func protoSourceRelPath(fs FS, instance ModuleInstance, d *moduleData, src string) string {
 	moduleRel := filepath.ToSlash(filepath.Clean(instance.Path + "/" + src))
 	if fs.IsFile(moduleRel) {
 		return moduleRel

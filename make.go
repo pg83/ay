@@ -110,7 +110,7 @@ func buildHostStatsFlags(hostPlatformFlags, cliFlags map[string]string, sandboxi
 	return flags
 }
 
-func readOptionalYaConfSection(fs *FS, rel, wantSection string) map[string]string {
+func readOptionalYaConfSection(fs FS, rel, wantSection string) map[string]string {
 	if fs == nil || !fs.IsFile(rel) {
 		return nil
 	}

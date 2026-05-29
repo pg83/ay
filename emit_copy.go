@@ -18,7 +18,7 @@ func copyFileAutoSourceVFS(modulePath string, d *moduleData, srcRel string) *VFS
 	return vfsPtr(copyFileOutputVFS(modulePath, entry.Dst))
 }
 
-func copyFileParsedIncludes(fs *FS, modulePath string, entry copyFileEntry) []includeDirective {
+func copyFileParsedIncludes(fs FS, modulePath string, entry copyFileEntry) []includeDirective {
 	out := make([]includeDirective, 0, len(entry.OutputIncludes)+1)
 	if entry.WithContext {
 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)

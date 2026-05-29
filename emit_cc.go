@@ -26,7 +26,7 @@ type ModuleCCInputs struct {
 
 	SourceRoot string
 
-	FS *FS
+	FS FS
 
 	IncludeInputs []VFS
 
@@ -215,7 +215,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	return Build(outRel), input
 }
 
-func sourceExistsLocally(fs *FS, modulePath, srcRel string) bool {
+func sourceExistsLocally(fs FS, modulePath, srcRel string) bool {
 	return fs.IsFile(modulePath + "/" + srcRel)
 }
 

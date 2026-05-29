@@ -293,7 +293,7 @@ func (e *ParseError) Error() string {
 	return fmt.Sprintf("%d:%d: %s", e.Line, e.Col, e.Message)
 }
 
-func ParseFile(fs *FS, path string) (mf *MakeFile, err error) {
+func ParseFile(fs FS, path string) (mf *MakeFile, err error) {
 	exc := Try(func() {
 		data := fs.ReadAbs(path)
 
@@ -635,7 +635,7 @@ func (l *lexer) readNumberOrWord(startLine, startCol int) token {
 	return token{kind: tokInt, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
 }
 
-func Parse(fs *FS, name string, src []byte) (mf *MakeFile, err error) {
+func Parse(fs FS, name string, src []byte) (mf *MakeFile, err error) {
 	exc := Try(func() {
 		mf = parseInternal(fs, name, src)
 	})
@@ -648,15 +648,15 @@ func Parse(fs *FS, name string, src []byte) (mf *MakeFile, err error) {
 	return mf, err
 }
 
-func parseInternal(fs *FS, name string, src []byte) *MakeFile {
+func parseInternal(fs FS, name string, src []byte) *MakeFile {
 	return parseInternalWithStack(fs, name, src, nil)
 }
 
-func parseInternalWithStack(fs *FS, name string, src []byte, stack []string) *MakeFile {
+func parseInternalWithStack(fs FS, name string, src []byte, stack []string) *MakeFile {
 	return parseInternalWithState(fs, name, src, stack, newIncludeState())
 }
 
-func parseInternalWithState(fs *FS, name string, src []byte, stack []string, includes *includeState) *MakeFile {
+func parseInternalWithState(fs FS, name string, src []byte, stack []string, includes *includeState) *MakeFile {
 	src = bytes.TrimPrefix(src, []byte{0xEF, 0xBB, 0xBF})
 	p := &parser{lex: newLexer(name, src), name: name, includeStack: stack, includes: includes, fs: fs}
 	mf := &MakeFile{Path: name}
@@ -803,7 +803,7 @@ type parser struct {
 	name         string
 	includeStack []string
 	includes     *includeState
-	fs           *FS
+	fs           FS
 }
 
 func (p *parser) buildStmt(nameTok token, args []string) Stmt {

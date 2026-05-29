@@ -71,7 +71,7 @@ func newSharedParseCache() *sharedParseCache {
 }
 
 type includeParserManager struct {
-	fs    *FS
+	fs    FS
 	cache *sharedParseCache
 
 	addinclIndex   map[STR][]VFS
@@ -92,7 +92,7 @@ func newIncludeParserManager(sourceRoot string) *includeParserManager {
 	return newIncludeParserManagerFS(NewFS(sourceRoot), newSharedParseCache())
 }
 
-func newIncludeParserManagerFS(fs *FS, cache *sharedParseCache) *includeParserManager {
+func newIncludeParserManagerFS(fs FS, cache *sharedParseCache) *includeParserManager {
 	return &includeParserManager{
 		fs:             fs,
 		cache:          cache,

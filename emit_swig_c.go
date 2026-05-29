@@ -202,7 +202,7 @@ func collectSwigInducedIncludes(ctx *genCtx, src VFS, closure []VFS) []includeDi
 	return out
 }
 
-func swigSearchRoots(fs *FS) []string {
+func swigSearchRoots(fs FS) []string {
 	if fs == nil {
 		return nil
 	}
@@ -225,7 +225,7 @@ func swigSearchRoots(fs *FS) []string {
 	return append(roots, subdirs...)
 }
 
-func swigResolveCandidates(fs *FS, target, incRel string, roots []string) []string {
+func swigResolveCandidates(fs FS, target, incRel string, roots []string) []string {
 	if fs == nil {
 		return nil
 	}
@@ -273,7 +273,7 @@ func swigSourceParsedBuckets(ctx *genCtx, rel string) parsedIncludeSet {
 	return swigIncludeDirectiveParser{}.Parse(rel, data)
 }
 
-func swigFilterExistingSources(fs *FS, in []VFS) []VFS {
+func swigFilterExistingSources(fs FS, in []VFS) []VFS {
 	if fs == nil {
 		return in
 	}

@@ -59,7 +59,7 @@ var cfgVarRefRe = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
 
 var cfgCmakeDefineRe = regexp.MustCompile(`#cmakedefine(?:01)?[ \t]+([A-Z_][A-Z0-9_]*)`)
 
-func buildCFGVars(fs *FS, rel string, setVars, defaultVars map[string]string) []string {
+func buildCFGVars(fs FS, rel string, setVars, defaultVars map[string]string) []string {
 	referenced := map[string]bool{}
 
 	data := fs.Read(rel)
