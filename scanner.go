@@ -1385,6 +1385,17 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 					out = append(out, info.OutputPath)
 					searchPathFound = true
 				}
+				// Mirror resolveContextSearchTier's addBuild: when a
+				// quoted include resolves to a generated path via the
+				// includer-dir codegenUnder branch (e.g. X86CallingConv.cpp
+				// → X86GenCallingConv.inc), record the first consumer
+				// module so the attribute_generated.go finalize pass can
+				// re-attribute the .inc node's target_properties.module_dir.
+				if sc.cfg.OwnerModuleDir != "" {
+					if _, ok := s.generatedFirstClaim[info.OutputPath]; !ok {
+						s.generatedFirstClaim[info.OutputPath] = sc.cfg.OwnerModuleDir
+					}
+				}
 			}
 		}
 	}
