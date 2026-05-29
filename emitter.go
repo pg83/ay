@@ -35,6 +35,13 @@ type BufferedEmitter struct {
 	results   []int64
 	finalized bool
 
+	// generatedFirstClaim is populated by runGen after gen completes, merging
+	// the per-scanner generatedFirstClaim maps. finalizeDumpGraph reads it to
+	// override producer-node target_properties["module_dir"] with the first
+	// scan-time consumer's module path, mirroring upstream ymake's Node2Module
+	// rule (see scanner.go: generatedFirstClaim doc).
+	generatedFirstClaim map[VFS]string
+
 	readyCh chan struct{}
 }
 
