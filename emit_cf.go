@@ -3,6 +3,7 @@ package main
 import (
 	"regexp"
 	"sort"
+	"strings"
 )
 
 func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *moduleData, reg *CodegenRegistry) {
@@ -73,9 +74,9 @@ func buildCFGVars(fs *FS, rel string, setVars, defaultVars map[string]string) []
 	for name := range referenced {
 		switch {
 		case hasKey(setVars, name):
-			vars = append(vars, name+"="+setVars[name])
+			vars = append(vars, name+"="+cfgVarValue(setVars[name]))
 		case hasKey(defaultVars, name):
-			vars = append(vars, name+"="+defaultVars[name])
+			vars = append(vars, name+"="+cfgVarValue(defaultVars[name]))
 		case name == "BUILD_TYPE":
 			vars = append(vars, buildTypeDebug)
 		}
@@ -89,4 +90,19 @@ func buildCFGVars(fs *FS, rel string, setVars, defaultVars map[string]string) []
 func hasKey(m map[string]string, k string) bool {
 	_, ok := m[k]
 	return ok
+}
+
+// cfgVarValue strips one outer pair of escaped double-quotes plus the
+// surrounding literal `"…"` so that CONFIGURE_FILE's KEY=VALUE arg holds
+// the bare grammar / cmake replacement value. The lexer keeps `\"` literal
+// inside `"…"` so a SET(K "\"raw\"") line lands here as `\"raw\"`; that
+// shape would be passed verbatim to configure_file.py, polluting the
+// substituted file with stray quote chars.
+func cfgVarValue(v string) string {
+	if len(v) >= 4 && strings.HasPrefix(v, `\"`) && strings.HasSuffix(v, `\"`) {
+		v = v[2 : len(v)-2]
+	} else if len(v) >= 2 && strings.HasPrefix(v, `"`) && strings.HasSuffix(v, `"`) {
+		v = v[1 : len(v)-1]
+	}
+	return v
 }
