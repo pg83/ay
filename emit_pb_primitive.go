@@ -303,6 +303,7 @@ func EmitPB(
 	hasDescriptor bool,
 	peerProtoAddIncl []VFS,
 	extraDepRefs []NodeRef,
+	producerSourceInputs []VFS,
 	emit Emitter,
 ) NodeRef {
 	moduleDir := instance.Path
@@ -428,6 +429,11 @@ func EmitPB(
 	}
 	inputs = append(inputs, srcVFS)
 	inputs = append(inputs, transitiveProtoImports...)
+	// When srcVFS is build-generated, carry the producer's transitive $(S) leaf
+	// sources (e.g. the RUN_ANTLR grammar / template / jar / scripts behind a
+	// generated .proto) so the PB node's input set matches upstream's flat
+	// source closure.
+	inputs = append(inputs, producerSourceInputs...)
 
 	tags := instance.Platform.Tags
 
@@ -468,11 +474,19 @@ func EmitPB(
 	// root closure and gets DFS-pruned at finalize.
 	depRefs = append(depRefs, extraDepRefs...)
 
+	// A build-generated .proto (protoSrcOverride set) lives under $(B); protoc
+	// runs from $(B) so its relative `-I=./` and the proto path resolve to the
+	// generated tree. Source .protos run from $(S).
+	protocCwd := "$(S)"
+	if protoSrcOverride != 0 {
+		protocCwd = "$(B)"
+	}
+
 	node := &Node{
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
-				Cwd:     "$(S)",
+				Cwd:     protocCwd,
 				Env:     env,
 			},
 		},
