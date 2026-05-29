@@ -280,7 +280,14 @@ func TestEvalCond_BoolStringEqualityCoercion(t *testing.T) {
 	if !EvalCond(parseCondForTest(t, `USE_SSE4 == "yes"`), DefaultIfEnv) {
 		t.Fatalf(`EvalCond(USE_SSE4 == "yes") = false, want true`)
 	}
-	if !EvalCond(parseCondForTest(t, `PROFILE_MEMORY_ALLOCATIONS == "no"`), DefaultIfEnv) {
-		t.Fatalf(`EvalCond(PROFILE_MEMORY_ALLOCATIONS == "no") = false, want true`)
+
+	// Explicit bool=false coerces to "no" in evalEq's bool/string branch.
+	// Unset flags are NOT bool-typed (the IF namespace is lazy: unset names
+	// return literal name from evalAtom), so this test sets the flag
+	// explicitly via SetBool to exercise the coercion rule.
+	env := DefaultIfEnv.Clone()
+	env.SetBool("PROFILE_MEMORY_ALLOCATIONS", false)
+	if !EvalCond(parseCondForTest(t, `PROFILE_MEMORY_ALLOCATIONS == "no"`), env) {
+		t.Fatalf(`EvalCond(PROFILE_MEMORY_ALLOCATIONS=false == "no") = false, want true`)
 	}
 }

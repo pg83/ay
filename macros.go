@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type Environment struct {
 	bools   map[string]bool
@@ -29,48 +32,39 @@ func isImplicitBuildVar(name string) bool {
 	return hasUpper
 }
 
-func (e Environment) Lookup(name string) any {
-	if v, ok := e.bools[name]; ok {
-		return v
-	}
-
-	if v, ok := e.strings[name]; ok {
-		return v
-	}
-
-	if v, ok := e.ints[name]; ok {
-		return v
-	}
-
-	if isImplicitBuildVar(name) {
-		return ""
-	}
-
-	ThrowFmt("macros: unknown IF identifier %q", name)
-
-	return nil
-}
-
+// Bool reads name as a boolean IF-flag. The IF flag namespace is unified
+// and lazy: an unset name is indistinguishable from an explicit false
+// (mirroring upstream ymake — $X EvalValue returns "" for unbound vars,
+// and NYMake::IsTrue treats empty / any falseWord as false). The only
+// typed error is an int binding used in boolean position.
 func (e Environment) Bool(name string) bool {
 	if v, ok := e.bools[name]; ok {
 		return v
 	}
 
 	if v, ok := e.strings[name]; ok {
-		return v != ""
+		return stringIsTruthy(v)
 	}
 
 	if _, ok := e.ints[name]; ok {
 		ThrowFmt("macros: identifier %q has int binding but is used in boolean position", name)
 	}
 
-	if isImplicitBuildVar(name) {
+	return false
+}
+
+// stringIsTruthy mirrors upstream's NYMake::IsTrue + util/string/type
+// IsFalse: empty or any case-insensitive false-word reads as false; every
+// other non-empty value reads as true.
+func stringIsTruthy(v string) bool {
+	if v == "" {
 		return false
 	}
-
-	ThrowFmt("macros: unknown IF identifier %q", name)
-
-	return false
+	switch strings.ToLower(v) {
+	case "false", "f", "no", "n", "off", "0", "net":
+		return false
+	}
+	return true
 }
 
 func (e Environment) String(name string) string {
@@ -307,127 +301,17 @@ var DefaultIfEnv = Environment{
 	bools: map[string]bool{
 		"OS_LINUX":      true,
 		"LINUX":         true,
-		"OS_WINDOWS":    false,
-		"OS_DARWIN":     false,
-		"OS_IOS":        false,
-		"OS_ANDROID":    false,
-		"OS_EMSCRIPTEN": false,
-		"OS_FREEBSD":    false,
-		"OS_CYGWIN":     false,
-		"SUN":           false,
-		"CYGWIN":        false,
 
-		"ARCH_AARCH64":                      false,
-		"ARCH_X86_64":                       false,
-		"ARCH_I386":                         false,
-		"ARCH_ARM7":                         false,
-		"ARCH_ARM64":                        false,
-		"ARCH_ARM6":                         false,
-		"ARCH_WASM32":                       false,
-		"ARCH_WASM64":                       false,
 		"CLANG":                             true,
-		"CLANG_CL":                          false,
-		"GCC":                               false,
-		"MSVC":                              false,
-		"MUSL":                              false,
-		"USE_EAT_MY_DATA":                   false,
-		"WITH_MAPKIT":                       false,
-		"WITH_VALGRIND":                     false,
-		"TSTRING_IS_STD_STRING":             false,
-		"NO_CUSTOM_CHAR_PTR_STD_COMPARATOR": false,
-		"NEED_CHECK":                        false,
 		"TRUE":                              true,
-		"FALSE":                             false,
-		"FUZZING":                           false,
-		"EXPORT_CMAKE":                      false,
-		"NO_CXX_RTTI":                       false,
-		"NO_CXX_EXCEPTIONS":                 false,
-		"USE_ARCADIA_COMPILER_RUNTIME":      false,
-		"PROVIDE_REALLOCARRAY":              false,
-		"PROVIDE_GETRANDOM_GETENTROPY":      false,
-		"PROVIDE_QUEUE":                     false,
-		"PROVIDE_GETSERVBYNAME":             false,
-		"PROVIDE_MEMFD_CREATE":              false,
-		"DLL_FOR":                           false,
-		"DYNAMIC_BOOST":                     false,
-		"PROFILE_MEMORY_ALLOCATIONS":        false,
 		"USE_SSE4":                          true,
 
-		"MUSL_LITE":                        false,
-		"OPENSOURCE_REPLACE_LINUX_HEADERS": false,
 
 		"OPENSOURCE":        true,
-		"YA_OPENSOURCE":     false,
-		"EXTERNAL_PY_FILES": false,
 
 		"USE_ARCADIA_PYTHON":                true,
-		"PYTHON2":                           false,
 		"PYTHON3":                           true,
-		"USE_PYTHON3_PREV":                  false,
-		"PREBUILT":                          false,
-		"PY_PROTOS_FOR":                     false,
-		"YMAKE_DEBUG":                       false,
-		"USE_VANILLA_PROTOC":                false,
-		"USE_PREBUILT_TOOLS":                false,
-		"PYTHON_SQLITE3":                    false,
-		"USE_SYSTEM_OPENSSL":                false,
-		"OPENSOURCE_REPLACE_OPENSSL":        false,
-		"ARCADIA_ICONV_NOCJK":               false,
-		"PYBUILD_NO_PYC":                    false,
-		"USE_LIGHT_PY2CC":                   false,
-		"PYBIND_SRC":                        false,
-		"PYTHON_FORBIDDEN_PROTOBUFS":        false,
-		"SANITIZER_ADDRESS_USE_AFTER_SCOPE": false,
-		"ASAN":                              false,
-		"TSAN":                              false,
-		"MSAN":                              false,
-		"UBSAN":                             false,
-		"LSAN":                              false,
-		"HAVE_OPENSSL":                      false,
-		"NO_OPENSSL":                        false,
-		"YT_DISABLE_REF_COUNTED_TRACKING":   false,
-		"YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE": false,
-		"YT_CUSTOM_INTERNAL_BUILD":                   false,
-		"YT_ROPSAN_ENABLE_ACCESS_CHECK":              false,
-		"YT_ROPSAN_ENABLE_SERIALIZATION_CHECK":       false,
-		"YT_ROPSAN_ENABLE_LEAK_DETECTION":            false,
-		"YT_ROPSAN_ENABLE_PTR_TAGGING":               false,
-		"DARWIN_ARM64":                               false,
-		"DARWIN_X86_64":                              false,
-		"OS_HAIKU":                                   false,
-		"OS_NETBSD":                                  false,
-		"OS_OPENBSD":                                 false,
-		"OS_VXWORKS":                                 false,
-		"OS_ZOS":                                     false,
-		"CPU_ARM":                                    false,
-		"CPU_X86":                                    false,
-		"NO_CPU_CHECK":                               false,
-		"HAVE_POSIX_MEMALIGN":                        false,
-		"HAVE_MREMAP":                                false,
-		"NO_UTIL":                                    false,
-		"TCLANG":                                     false,
-		"CLANG_VER":                                  false,
-		"ANDROID_ARMV7":                              false,
-		"ANDROID_I686":                               false,
-		"ARCADIA_OPENSSL_DISABLE_ARMV7_TICK":         false,
 
-		"ARCH_I686":                          false,
-		"ARCH_PPC64LE":                       false,
-		"ARCH_TYPE_32":                       false,
-		"DISABLE_INSTRUCTION_SETS":           false,
-		"DONT_LINK_LEGACY_ZSTD06_BLOCKCODEC": false,
-		"IOS_ARMV7":                          false,
-		"IOS_I386":                           false,
-		"LINUX_ARMV7":                        false,
-		"MAPSMOBI_BUILD_TARGET":              false,
-		"OPENSOURCE_REPLACE_PROTOBUF":        false,
-		"OS_IOSSIM":                          false,
-		"OS_NONE":                            false,
-		"OS_FREERTOS":                        false,
-		"STATIC_STL":                         false,
-		"USE_LTO":                            false,
-		"USE_SYSTEM_PYTHON":                  false,
-		"WINDOWS_I686":                       false,
 	},
 	strings: map[string]string{
 
