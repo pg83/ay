@@ -1038,7 +1038,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		if env.String("CLANG_BC_ROOT") == "" || env.String("LLVM_LLC_TOOL") == "" {
 			ThrowFmt("LLVM_BC requires USE_LLVM_BC16/18/20 before invocation")
 		}
-		stmt := &llvmBcStmt{}
+		stmt := &llvmBcStmt{ClangBCRoot: env.String("CLANG_BC_ROOT")}
 		i := 0
 		for i < len(v.Args) {
 			switch v.Args[i] {
@@ -1052,7 +1052,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				if i+1 >= len(v.Args) {
 					ThrowFmt("LLVM_BC SUFFIX expects a value")
 				}
-				stmt.Suffix = v.Args[i+1]
+				stmt.Suffix = expandStmtToken(v.Args[i+1], env)
 				i += 2
 			case "SYMBOLS":
 				i++
@@ -1669,6 +1669,10 @@ type llvmBcStmt struct {
 	Symbols             []string
 	GenerateMachineCode bool
 	NoCompile           bool
+	// ClangBCRoot is CLANG_BC_ROOT captured at parse time (set by
+	// USE_LLVM_BC{16,18,20}). Looks like "CLANG16_RESOURCE_GLOBAL::$(CLANG16-...)".
+	// Strip everything before "::" to get the bin-root for clang++/llvm-link/opt.
+	ClangBCRoot string
 }
 
 func isLlvmBcKeyword(s string) bool {

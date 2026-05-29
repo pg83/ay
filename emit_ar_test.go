@@ -7,14 +7,15 @@ import (
 )
 
 var testToolchainFlags = map[string]string{
-	"BUILD_PYTHON_BIN":  "/bin/python3",
-	"BUILD_PYTHON3_BIN": "/bin/python3",
-	"CLANG_TOOL":        "/bin/clang",
-	"CLANG_pl_pl_TOOL":  "/bin/clang++",
-	"OBJCOPY_TOOL":      "/bin/llvm-objcopy",
-	"AR_TOOL":           "/bin/llvm-ar",
-	"STRIP_TOOL":        "/bin/llvm-strip",
-	"LLD_TOOL":          "/bin/lld",
+	"BUILD_PYTHON_BIN":        "/bin/python3",
+	"BUILD_PYTHON3_BIN":       "/bin/python3",
+	"CLANG_TOOL":              "/bin/clang",
+	"CLANG_pl_pl_TOOL":        "/bin/clang++",
+	"OBJCOPY_TOOL":            "/bin/llvm-objcopy",
+	"AR_TOOL":                 "/bin/llvm-ar",
+	"STRIP_TOOL":              "/bin/llvm-strip",
+	"LLD_TOOL":                "/bin/lld",
+	"CLANG16_RESOURCE_GLOBAL": "CLANG16_RESOURCE_GLOBAL::$(CLANG16-1380963495)",
 }
 
 var (

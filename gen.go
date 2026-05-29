@@ -1895,6 +1895,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		globalOutputs = append(globalOutputs, genPyAuxRes.Outputs...)
 	}
 
+	emitLLVMBC(ctx, instance, d)
+
 	objcopyRes := emitResourceObjcopy(ctx, instance, d)
 	if objcopyRes != nil {
 		globalRefs = append(globalRefs, objcopyRes.Refs...)
