@@ -12,6 +12,7 @@ func EmitCF(
 	cfgVars []string,
 	includeInputs []VFS,
 	moduleDir string,
+	moduleTag string,
 	emit Emitter,
 ) (NodeRef, VFS) {
 	env := map[string]string{
@@ -45,9 +46,13 @@ func EmitCF(
 		},
 		Outputs: []VFS{outVFS},
 		Tags:    []string{},
-		TargetProperties: map[string]string{
-			"module_dir": moduleDir,
-		},
+		TargetProperties: func() map[string]string {
+			tp := map[string]string{"module_dir": moduleDir}
+			if moduleTag != "" {
+				tp["module_tag"] = moduleTag
+			}
+			return tp
+		}(),
 		Platform: string(instance.Platform.Target),
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),

@@ -179,7 +179,7 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 					if !info.HasProducerRef && info.DeferredCF != nil {
 
 						def := info.DeferredCF
-						cfRef, _ := EmitCF(def.instance, def.srcVFS, def.outVFS, def.cfgVars, def.includeInputs, consumer.Path, ctx.emit)
+						cfRef, _ := EmitCF(def.instance, def.srcVFS, def.outVFS, def.cfgVars, def.includeInputs, consumer.Path, "", ctx.emit)
 						reg.SetProducerRef(v, cfRef)
 					}
 

@@ -258,7 +258,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, inSourceVFS, srcIn)
 		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.Rel(), srcIn.SetVars, srcIn.DefaultVars)
 		cfOut := Build(srcInstance.Path + "/" + strings.TrimSuffix(srcRel, ".in"))
-		cfRef, cfOut := EmitCF(srcInstance, inSourceVFS, cfOut, cfgVars, srcIn.IncludeInputs, srcInstance.Path, ctx.emit)
+		cfRef, cfOut := EmitCF(srcInstance, inSourceVFS, cfOut, cfgVars, srcIn.IncludeInputs, srcInstance.Path, cfModuleTag(d, srcInstance), ctx.emit)
 
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{
 			{kind: includeQuoted, target: internString(inSourceVFS.Rel())},

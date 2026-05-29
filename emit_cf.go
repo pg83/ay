@@ -23,7 +23,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	in.IncludeInputs = walkClosure(ctx, instance, srcVFS, in)
 
 	cfgVars := buildCFGVars(ctx.fs, srcVFS.Rel(), d.setVars, d.defaultVars)
-	cfRef, cfOut := EmitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path, ctx.emit)
+	cfRef, cfOut := EmitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path, cfModuleTag(d, instance), ctx.emit)
 
 	if reg != nil {
 
@@ -90,6 +90,21 @@ func buildCFGVars(fs *FS, rel string, setVars, defaultVars map[string]string) []
 func hasKey(m map[string]string, k string) bool {
 	_, ok := m[k]
 	return ok
+}
+
+// cfModuleTag returns the lowercased submodule tag (the upstream
+// `MODULE_TAG` lowercased) for the CF node's TargetProperties. PROTO_LIBRARY
+// in its CPP_PROTO instance lands under MODULE_TAG=CPP_PROTO (gen.go:557),
+// which surfaces in REF dumps as `cpp_proto`. CF emits from other module
+// types leave module_tag unset.
+func cfModuleTag(d *moduleData, instance ModuleInstance) string {
+	if d == nil || d.moduleStmt == nil {
+		return ""
+	}
+	if d.moduleStmt.Name == "PROTO_LIBRARY" && instance.Language != LangPy {
+		return "cpp_proto"
+	}
+	return ""
 }
 
 // cfgVarValue strips one outer pair of escaped double-quotes plus the
