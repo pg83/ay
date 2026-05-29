@@ -27,3 +27,4 @@ __pycache__/
 
 # Overseer orchestrator runtime (workspace clones, runs, task DB, messages)
 /root/
+.claude/
