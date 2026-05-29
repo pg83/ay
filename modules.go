@@ -187,6 +187,12 @@ type copyFileEntry struct {
 	Dst            string
 	Auto           bool
 	WithContext    bool
+	// Text marks COPY_FILE(TEXT) — a textual substitution copy. Unlike
+	// COPY(WITH_CONTEXT) of a .cpp+sibling.h (single-module, source-dir-relative
+	// quoted includes), TEXT copies are shared codegen templates (e.g. minikql
+	// llvm16 *.h.txt) copied by several sibling modules, so their includes must
+	// resolve in each consumer's own context — see copyFileParsedIncludes.
+	Text           bool
 	OutputIncludes []string
 }
 
@@ -242,6 +248,7 @@ parsedFlags:
 		Dst:         args[i+1],
 		Auto:        auto,
 		WithContext: withContext || text,
+		Text:        text,
 	}
 	i += 2
 
