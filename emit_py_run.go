@@ -69,19 +69,26 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 		outVFSByToken[*stmt.StdoutFile] = vfs
 	}
 
+	// Detect split-codegen pattern; precompute source inputs when matched.
+	hasCCShard, _ := splitCodegenDetect(stmt)
+	var splitSrcs []VFS
+	if hasCCShard {
+		splitSrcs = splitCodegenSrcs(ctx, instance, d, stmt, scriptVFS)
+	}
+
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			registerGeneratedParsedOutput(ctx, instance, "PY", outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS))
+			registerGeneratedParsedOutput(ctx, instance, "PY", outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS, splitSrcs, hasCCShard))
 		}
 		for _, f := range stmt.OUTNoAutoFiles {
-			registerGeneratedParsedOutput(ctx, instance, "PY", outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS))
+			registerGeneratedParsedOutput(ctx, instance, "PY", outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS, splitSrcs, hasCCShard))
 		}
 		if stmt.StdoutFile != nil {
-			registerGeneratedParsedOutput(ctx, instance, "PY", *stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, *stmt.StdoutFile, scriptVFS))
+			registerGeneratedParsedOutput(ctx, instance, "PY", *stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, *stmt.StdoutFile, scriptVFS, splitSrcs, hasCCShard))
 		}
 	}
 
-	inputClosure := pyInputClosure(ctx, instance, stmt, moduleInputs)
+	inputClosure := pyInputClosure(ctx, instance, stmt, d, moduleInputs)
 	codegenInputs := append([]VFS{scriptVFS}, inVFSs...)
 	extraDepRefs := resolveCodegenDepRefsExt(ctx, instance, inputClosure, codegenInputs)
 	result := EmitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, ctx.emit)
@@ -113,7 +120,7 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	return result.Ref
 }
 
-func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, moduleInputs ModuleCCInputs) []VFS {
+func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d *moduleData, moduleInputs ModuleCCInputs) []VFS {
 	scanIn := ModuleCCInputs{
 		InclArgs:          ctx.inclArgs,
 		Flags:             moduleInputs.Flags,
@@ -130,18 +137,36 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, m
 		out = append(out, walkClosure(ctx, instance, buildRootPath, scanIn)...)
 	}
 
-	for _, f := range stmt.OUTFiles {
-		if isCCSourceExt(f) {
-			walkOne(f)
+	hasCCShard, _ := splitCodegenDetect(stmt)
+	if hasCCShard {
+		// Split-codegen: the CC shard outputs are registered with splitSrcs
+		// (antlr chain + induced-dep source headers like arena.h) rather than
+		// the monolithic build-generated IN files (pb.h, pb.cc).  Walking the
+		// shard outputs here would cause forEachResolvedChildID to compute and
+		// CACHE closureOf(arena.h) with the current (potentially incomplete)
+		// scan context, breaking later consumers that reuse the cached closure.
+		// Instead, walk the IN files directly — the same include closure they
+		// contribute, without the caching side-effect.  pb.h and pb.cc are both
+		// build-generated IN files; walking them here (via their registered
+		// parsedIncludes) produces the correct PY-node input set.
+		for _, f := range stmt.INFiles {
+			vfs := runProgramInputVFS(ctx, instance, d, f)
+			out = append(out, walkClosure(ctx, instance, vfs, scanIn)...)
 		}
-	}
-	for _, f := range stmt.OUTNoAutoFiles {
-		if isCCSourceExt(f) {
-			walkOne(f)
+	} else {
+		for _, f := range stmt.OUTFiles {
+			if isCCSourceExt(f) {
+				walkOne(f)
+			}
 		}
-	}
-	if stmt.StdoutFile != nil && isCCSourceExt(*stmt.StdoutFile) {
-		walkOne(*stmt.StdoutFile)
+		for _, f := range stmt.OUTNoAutoFiles {
+			if isCCSourceExt(f) {
+				walkOne(f)
+			}
+		}
+		if stmt.StdoutFile != nil && isCCSourceExt(*stmt.StdoutFile) {
+			walkOne(*stmt.StdoutFile)
+		}
 	}
 
 	out = dropTransitiveGeneratedProto(out)
@@ -153,9 +178,150 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, m
 	return out
 }
 
-func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *RunPythonStmt, outFile string, scriptVFS VFS) []includeDirective {
+// splitCodegenDetect reports whether stmt matches the split-codegen pattern:
+// OUT_NOAUTO contains BOTH CC source shards (*.pb.codeN.cc, *.pb.data.cc)
+// AND header outputs (*.pb.main.h, *.pb.classes.h).
+func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
+	for _, f := range stmt.OUTNoAutoFiles {
+		if isCCSourceExt(f) {
+			hasCCShard = true
+		}
+		if isHeaderSource(f) {
+			hasHeader = true
+		}
+	}
+	return
+}
+
+// splitCodegenSrcs computes the source-level include directives for
+// split-codegen shard CC outputs.  It expands exactly ONE level of the
+// registered parsedIncludes for each build-generated IN file:
+//   - Source entries (toolInducedDeps like arena.h): added directly.
+//   - Build-generated entries (like $(B)/proto from RUN_ANTLR):
+//     their SourceInputs (antlr/configure chain sources) are used.
+//
+// We do NOT call walkClosure here.  walkClosure computes and caches
+// closures in the global subgraphCache with the current module's scan
+// context.  The pyInputClosure function (for the PY node) is now
+// responsible for walking pb.h directly so closureOf(arena.h) etc. are
+// cached with the full scan context BEFORE emitOneSource uses them.
+func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *RunPythonStmt, scriptVFS VFS) []VFS {
+	reg := codegenRegForInstance(ctx, instance)
+	scanner := ctx.scannerFor(instance)
+
+	seen := make(map[VFS]struct{}, 32)
+	var sources []VFS
+	addSource := func(v VFS) {
+		if !v.IsSource() {
+			return
+		}
+		if _, dup := seen[v]; dup {
+			return
+		}
+		seen[v] = struct{}{}
+		sources = append(sources, v)
+	}
+
+	addSource(scriptVFS)
+	if scanner == nil {
+		return sources
+	}
+	for _, f := range stmt.INFiles {
+		vfs := runProgramInputVFS(ctx, instance, d, f)
+		if vfs.IsSource() {
+			addSource(vfs)
+			continue
+		}
+		for _, pd := range scanner.parsers.parsedIncludes(vfs) {
+			target := pd.target.String()
+			if vfsHasPrefix(target) {
+				bvfs := Intern(target)
+				if bvfs.IsBuild() && reg != nil {
+					if info := reg.Lookup(bvfs); info != nil {
+						for _, si := range info.SourceInputs {
+							addSource(si)
+						}
+					}
+				}
+				continue
+			}
+			if ctx.fs.IsFile(target) {
+				addSource(Source(target))
+			} else if reg != nil {
+				if info := reg.LookupRel(target); info != nil {
+					for _, si := range info.SourceInputs {
+						addSource(si)
+					}
+				}
+			}
+		}
+	}
+	return sources
+}
+
+// pyEmitsIncludes returns the include directives to register for a generated
+// output file in a RUN_PYTHON3 statement.
+//
+// For the split-codegen pattern (OUT_NOAUTO has both CC shards and headers):
+//
+//   - Shard CC outputs (pb.codeN.cc, pb.data.cc): use splitSrcs (source-level
+//     generator inputs from the IN files' parsedIncludes).  Upstream CC compile
+//     nodes for shards carry only source-level inputs, not the monolithic pb.h
+//     or pb.cc.  pyInputClosure walks pb.h directly (before emitOneSource), so
+//     closureOf(arena.h) etc. are cached with the full scan context before the
+//     shard CC emitter encounters them.
+//
+//   - Header outputs (pb.main.h, pb.classes.h): register the FIRST CC shard
+//     as a meta-include so consumers carry it in their input closure; then
+//     splitSrcs for the actual include chain.  Only the first shard is
+//     registered — the others are linked via the AR dep edge.
+func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *RunPythonStmt, outFile string, scriptVFS VFS, splitSrcs []VFS, splitHasCCShard bool) []includeDirective {
 	if !generatedOutputCarriesIncludes(outFile) {
 		return nil
+	}
+
+	if splitHasCCShard && len(splitSrcs) > 0 {
+		// Find the first shard CC file (code0.cc or equivalent) once.
+		var firstShardFile string
+		var firstShardVFS VFS
+		for _, f := range stmt.OUTNoAutoFiles {
+			if isCCSourceExt(f) {
+				firstShardFile = f
+				firstShardVFS = copyFileOutputVFS(instance.Path, f)
+				break
+			}
+		}
+		if isCCSourceExt(outFile) {
+			// Non-first shards register code0.cc as their first parsedInclude so
+			// the scanner's closure walk adds code0.cc to their input set.
+			// Upstream shard CC nodes for code1..codeN and data carry code0.cc as
+			// an input; code0.cc itself carries only splitSrcs.
+			isNonFirst := outFile != firstShardFile
+			capacity := len(splitSrcs)
+			if isNonFirst {
+				capacity++
+			}
+			includes := make([]includeDirective, 0, capacity)
+			if isNonFirst && firstShardVFS != 0 {
+				includes = append(includes, includeDirective{kind: includeQuoted, target: internString(firstShardVFS.Rel())})
+			}
+			for _, src := range splitSrcs {
+				includes = append(includes, includeDirective{kind: includeQuoted, target: internString(src.Rel())})
+			}
+			return includes
+		}
+		if isHeaderSource(outFile) {
+			// First shard CC as meta-include so downstream consumers of pb.main.h
+			// carry code0.cc in their include-input closure.
+			includes := make([]includeDirective, 0, 1+len(splitSrcs))
+			if firstShardVFS != 0 {
+				includes = append(includes, includeDirective{kind: includeQuoted, target: internString(firstShardVFS.Rel())})
+			}
+			for _, src := range splitSrcs {
+				includes = append(includes, includeDirective{kind: includeQuoted, target: internString(src.Rel())})
+			}
+			return includes
+		}
 	}
 
 	includes := []includeDirective{{kind: includeQuoted, target: internString(scriptVFS.Rel())}}
