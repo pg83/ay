@@ -3939,7 +3939,86 @@ END()
 	}
 }
 
+// TestGen_BisonCppFlags verifies that the CC node compiling a bison-generated
+// C++ file carries the -Wno-unused-but-set-variable and -Wno-deprecated-copy
+// flags (upstream _LANG_CFLAGS_BISON).
+func TestGen_BisonCppFlags(t *testing.T) {
+	files := map[string]string{}
 
+	writeToolProgram(files, "contrib/tools/bison", "bison")
+	writeToolProgram(files, "contrib/tools/m4", "m4")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.Rel(), "print('stub')\n")
+	for _, input := range bisonCppSkeletonInputs {
+		writeTestModuleFile(files, input.Rel(), "")
+	}
+
+	writeTestModuleFile(files, "genlib/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(pire/re_parser.y)
+END()
+`)
+	writeTestModuleFile(files, "genlib/pire/re_parser.y", "%%\n")
+
+	g := testGen(newMemFS(files), "genlib")
+
+	parserObj := mustNodeByOutput(t, g, "$(B)/genlib/_/_/pire/re_parser.y.cpp.o")
+	for _, want := range []string{"-Wno-unused-but-set-variable", "-Wno-deprecated-copy"} {
+		if indexOfArg(parserObj.Cmds[0].CmdArgs, want) < 0 {
+			t.Fatalf("bison-generated CC cmd_args missing %q: %#v", want, parserObj.Cmds[0].CmdArgs)
+		}
+	}
+}
+
+// TestGen_BisonHeaderConsumerIncludesSourceY verifies that a CC node compiling
+// a file that includes a bison-generated header also receives the source .y
+// file as an input (upstream adds it transitively because the bison node that
+// produces the header depends on it).
+func TestGen_BisonHeaderConsumerIncludesSourceY(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "contrib/tools/bison", "bison")
+	writeToolProgram(files, "contrib/tools/m4", "m4")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.Rel(), "print('stub')\n")
+	for _, input := range bisonCppSkeletonInputs {
+		writeTestModuleFile(files, input.Rel(), "")
+	}
+
+	// genlib produces re_parser.y.h from re_parser.y
+	writeTestModuleFile(files, "genlib/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(pire/re_parser.y)
+END()
+`)
+	writeTestModuleFile(files, "genlib/pire/re_parser.y", "%%\n")
+
+	// app/re_lexer.cpp includes the generated re_parser.y.h header
+	writeTestModuleFile(files, "app/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(genlib)
+SRCS(re_lexer.cpp)
+END()
+`)
+	// The bison-generated header is $(B)/genlib/pire/re_parser.h; the peer
+	// addincl from genlib is $(B)/genlib/pire, so the include uses just the
+	// basename without the pire/ prefix.
+	writeTestModuleFile(files, "app/re_lexer.cpp", `#include <re_parser.h>
+int lex() { return 0; }
+`)
+
+	g := testGen(newMemFS(files), "app")
+
+	lexerObj := mustNodeByOutput(t, g, "$(B)/app/re_lexer.cpp.o")
+	want := "$(S)/genlib/pire/re_parser.y"
+	if !nodeHasInput(lexerObj, want) {
+		t.Fatalf("re_lexer.cpp.o inputs missing %q (bison source); got: %#v", want, lexerObj.Inputs)
+	}
+}
 
 func TestGen_ProtoLibrary_TransitiveHeadersNo_DepsHeaderUsesRuntimeRoot(t *testing.T) {
 	files := map[string]string{}
