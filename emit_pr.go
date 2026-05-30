@@ -274,6 +274,31 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 // RUN_ANTLR (JV) producer, diverging the node's deps (hence self_uid). A .proto
 // that is the node's own direct IN enters via inVFSs, not the closure, so it
 // survives. $(S) proto imports (the proto-import graph) are kept.
+// dropTransitiveGeneratedCPP removes build-generated C/C++ source files from a
+// CC include-input closure. Build-generated .cpp/.cc/.c files (from ANTLR, proto
+// codegen, etc.) that appear transitively in a DIFFERENT module's CC closure are
+// not real inputs of that compilation — they're compiled by their own producer
+// module. Upstream does not list them as CC inputs when they come through via a
+// generated header's parsedIncludes chain. The primary source file (srcVFS) is
+// excluded from filtering via the caller not including it in includeInputs.
+func dropTransitiveGeneratedCPP(in []VFS) []VFS {
+	out := in[:0]
+	for _, v := range in {
+		if v.IsBuild() && isCCSourceRel(v.Rel()) {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+func isCCSourceRel(rel string) bool {
+	return strings.HasSuffix(rel, ".cpp") ||
+		strings.HasSuffix(rel, ".cc") ||
+		strings.HasSuffix(rel, ".cxx") ||
+		strings.HasSuffix(rel, ".c")
+}
+
 func dropTransitiveGeneratedProto(in []VFS) []VFS {
 	out := in[:0]
 	for _, v := range in {

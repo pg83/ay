@@ -49,7 +49,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		full := walkClosureRoot(ctx, srcInstance, srcVFS, srcVFS.Rel(), srcIn)
 		if full != nil {
-			srcIn.IncludeInputs = full[1:]
+			// Drop build-generated .proto files reached transitively (e.g. via a
+			// .pb.h chain): they're codegen intermediates, not real CC inputs. The
+			// proto-import closure is already captured through the producer dep edge.
+			srcIn.IncludeInputs = dropTransitiveGeneratedProto(full[1:])
 		}
 		// AUTO COPY entries leave both the $(S) source and the $(B) destination
 		// on disk; upstream tracks both as CC inputs (the source is what the
@@ -76,13 +79,15 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, extras)
 		}
 
-		// Fast-path: when no extras were appended, IncludeInputs == full[1:]
-		// (shares the same backing slice), so NodeInputs = full lets EmitCC
-		// emit the full input array directly with no extra allocation. When
-		// any extras are present, IncludeInputs has been reallocated past
-		// full[1:] and we leave NodeInputs nil so EmitCC rebuilds the full
-		// list from inVFS + IncludeInputs.
-		if len(autoExtras) == 0 && len(wcExtras) == 0 && len(flatcExtras) == 0 && len(extras) == 0 {
+		// Fast-path: when no extras were appended AND dropTransitiveGeneratedProto
+		// dropped nothing, IncludeInputs == full[1:] (same backing slice), so
+		// NodeInputs = full lets EmitCC emit the full input array directly with
+		// no extra allocation. When extras are present or protos were dropped,
+		// IncludeInputs has been reallocated or compacted in-place (leaving a
+		// stale tail in full), so we leave NodeInputs nil for EmitCC to rebuild
+		// from inVFS + IncludeInputs.
+		protoDropped := full != nil && len(srcIn.IncludeInputs) < len(full)-1
+		if len(autoExtras) == 0 && len(wcExtras) == 0 && len(flatcExtras) == 0 && len(extras) == 0 && !protoDropped {
 			srcIn.NodeInputs = full
 		}
 		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})
@@ -137,6 +142,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			// into the closure), but we still need the ragel files themselves as deps.
 			rl6Closure = appendRagelNativeDeps(scanner, srcInstance, rl6SourceVFS, srcIn, rl6Closure)
 		}
+		// The ragel compiler only reads source files (the .rl6 source + any
+		// natively-included .rl6 files + C/C++ headers it parses). Build-generated
+		// files (proto .pb.h headers pulled in via the C++ include chain) must not
+		// appear as direct inputs — the ragel binary doesn't read them.
+		rl6Closure = keepOnlySourceVFS(rl6Closure)
 
 		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryVFS, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
 
@@ -300,7 +310,7 @@ func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	pb := emitProtoPB(ctx, instance, d, srcRel, protoPBConfig{}, in.PeerProtoAddInclGlobal)
 
 	ccIn := in
-	ccIn.IncludeInputs = walkClosure(ctx, instance, pb.pbCC, in)
+	ccIn.IncludeInputs = dropTransitiveGeneratedProto(walkClosure(ctx, instance, pb.pbCC, in))
 	ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)
 
 	ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel(), instance.Path+"/")
