@@ -5345,3 +5345,58 @@ END()
 		}
 	}
 }
+
+// TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs verifies that the resource objcopy
+// object appears BEFORE SRCS(GLOBAL) objects in the global archive cmd_args,
+// even when SRCS(GLOBAL) is declared before RESOURCE in the ya.make file.
+// Upstream always places objcopy objects first regardless of declaration order.
+func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
+	files := map[string]string{}
+	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	// GLOBAL_SRCS declared BEFORE RESOURCE — this is the breakpad pattern
+	writeTestModuleFile(files, "brkmod/ya.make", "LIBRARY()\nGLOBAL_SRCS(global.cpp)\nRESOURCE(data.txt somekey)\nEND()\n")
+	writeTestModuleFile(files, "brkmod/global.cpp", "int global(){return 0;}\n")
+	writeTestModuleFile(files, "brkmod/data.txt", "some data\n")
+
+	g := testGen(newMemFS(files), "brkmod")
+
+	var globalAR *Node
+	for _, n := range g.Graph {
+		if n.KV["p"] == "AR" && n.TargetProperties["module_tag"] == "global" {
+			globalAR = n
+			break
+		}
+	}
+	if globalAR == nil {
+		t.Fatal("no global AR node in graph")
+	}
+
+	args := globalAR.Cmds[0].CmdArgs
+	// cmd_args: [python3, script, ar_tool, ar_type, ar_format, $(B), None, --, --, archivePath, member0, ...]
+	if len(args) < 12 {
+		t.Fatalf("global AR cmd_args too short (%d): %v", len(args), args)
+	}
+	members := args[10:]
+
+	objcopyIdx, globalCppIdx := -1, -1
+	for i, m := range members {
+		if strings.Contains(m, "/objcopy_") && strings.HasSuffix(m, ".o") {
+			objcopyIdx = i
+		}
+		if strings.HasSuffix(m, "/global.cpp.o") {
+			globalCppIdx = i
+		}
+	}
+	if objcopyIdx < 0 {
+		t.Fatalf("global AR cmd_args missing objcopy member: %v", members)
+	}
+	if globalCppIdx < 0 {
+		t.Fatalf("global AR cmd_args missing global.cpp.o: %v", members)
+	}
+	if objcopyIdx >= globalCppIdx {
+		t.Errorf("objcopy (pos %d) must precede global.cpp.o (pos %d) in global AR cmd_args; members=%v",
+			objcopyIdx, globalCppIdx, members)
+	}
+}
