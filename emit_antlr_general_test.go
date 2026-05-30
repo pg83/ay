@@ -48,6 +48,56 @@ func TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs(t *testing.T) {
 	}
 }
 
+// TestAntlrParsedIncludes_LexerCrossIncludesParserCpp locks the ANTLR3
+// combined-grammar include convention observed in the reference graph: a
+// generated *Lexer.cpp's compile reaches the paired *Parser.cpp (which in turn
+// holds the protobuf header), and NEITHER the lexer nor the parser .cpp lists
+// the sibling generated .h files as inputs. Empirically, for jsonpath:
+//   JsonPathLexer.cpp.o inputs = {JsonPathLexer.cpp, JsonPathParser.cpp, .pb.h}
+//   JsonPathParser.cpp.o inputs = {JsonPathParser.cpp, .pb.h}
+// i.e. Lexer.cpp -> Parser.cpp (one direction only), no *.h, Parser.cpp does
+// not pull Lexer.cpp.
+func TestAntlrParsedIncludes_LexerCrossIncludesParserCpp(t *testing.T) {
+	const mod = "yql/essentials/parser/proto_ast/gen/jsonpath"
+	outByTok := map[string]VFS{
+		"JsonPathParser.cpp": Build(mod + "/JsonPathParser.cpp"),
+		"JsonPathLexer.cpp":  Build(mod + "/JsonPathLexer.cpp"),
+		"JsonPathParser.h":   Build(mod + "/JsonPathParser.h"),
+		"JsonPathLexer.h":    Build(mod + "/JsonPathLexer.h"),
+	}
+	run := antlrRunInfo{}
+
+	induced := func(outTok string) map[string]struct{} {
+		parsed := antlrParsedIncludes(mod, run, outTok, outByTok, nil, antlr3JarVFS)
+		got := make(map[string]struct{}, len(parsed))
+		for _, d := range parsed {
+			got[d.target.String()] = struct{}{}
+		}
+		return got
+	}
+
+	lexerRel := outByTok["JsonPathLexer.cpp"].Rel()
+	parserRel := outByTok["JsonPathParser.cpp"].Rel()
+	lexerHRel := outByTok["JsonPathLexer.h"].Rel()
+	parserHRel := outByTok["JsonPathParser.h"].Rel()
+
+	lex := induced("JsonPathLexer.cpp")
+	if _, ok := lex[parserRel]; !ok {
+		t.Errorf("Lexer.cpp must induce paired Parser.cpp %q: %v", parserRel, keysOf(lex))
+	}
+	if _, ok := lex[lexerHRel]; ok {
+		t.Errorf("Lexer.cpp must not induce sibling .h %q: %v", lexerHRel, keysOf(lex))
+	}
+
+	par := induced("JsonPathParser.cpp")
+	if _, ok := par[parserHRel]; ok {
+		t.Errorf("Parser.cpp must not induce sibling .h %q: %v", parserHRel, keysOf(par))
+	}
+	if _, ok := par[lexerRel]; ok {
+		t.Errorf("Parser.cpp must not induce Lexer.cpp %q: %v", lexerRel, keysOf(par))
+	}
+}
+
 func keysOf(m map[string]struct{}) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

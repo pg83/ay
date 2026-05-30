@@ -140,9 +140,19 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 	}
 
 	if isCCSourceExt(outTok) {
-		if headerTok := strings.TrimSuffix(outTok, filepath.Ext(outTok)) + ".h"; headerTok != outTok {
-			if headerVFS, ok := outVFSByToken[headerTok]; ok {
-				appendUnique(headerVFS.Rel())
+		// ANTLR combined-grammar convention (matches the reference graph): the
+		// generated *Lexer.cpp's compile reaches the paired *Parser.cpp — the
+		// parser TU is what carries the protobuf AST header, and the lexer
+		// delegates to it. The parser .cpp pulls the proto header directly via
+		// OUTPUT_INCLUDES. Neither generated .cpp lists the sibling generated .h
+		// as an input (the lexer→parser edge is one-directional).
+		base := strings.TrimSuffix(outTok, filepath.Ext(outTok))
+		if parserBase, isLexer := strings.CutSuffix(base, "Lexer"); isLexer {
+			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
+				if parserVFS, ok := outVFSByToken[parserBase+"Parser"+ext]; ok {
+					appendUnique(parserVFS.Rel())
+					break
+				}
 			}
 		}
 	} else if isHeaderSource(outTok) {
