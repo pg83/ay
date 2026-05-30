@@ -1780,6 +1780,229 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 
 
 
+// TestGen_OneLevelAddIncl_DeclOrderPreserved verifies that when a peer has mixed
+// ADDINCL(GLOBAL g ONE_LEVEL ol), the consumer sees g before ol — upstream ymake
+// preserves declaration order within UserGlobal (GLOBAL and ONE_LEVEL dirs are added
+// to UserGlobal in the order they appear in the ADDINCL call, not GLOBAL-first or
+// ONE_LEVEL-first). A prior implementation always emitted all ONE_LEVEL before all
+// GLOBAL for user peers, breaking declaration order for mixed peers.
+func TestGen_OneLevelAddIncl_DeclOrderPreserved(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		// Peer declares GLOBAL first, ONE_LEVEL second. Upstream preserves that order.
+		"peerlib/ya.make": "LIBRARY()\nADDINCL(\n    GLOBAL\n    peerlib/global_include\n    ONE_LEVEL\n    peerlib/onelevel_include\n)\nSRCS(peerlib.cpp)\nEND()\n",
+		"peerlib/peerlib.cpp":          "",
+		"peerlib/global_include/.keep": "", // directory must exist for filterExistingSourceDirs
+		"consumer/ya.make":             "LIBRARY()\nPEERDIR(peerlib)\nSRCS(consumer.cpp)\nEND()\n",
+		"consumer/consumer.cpp":        "",
+	})
+
+	g := testGen(fs, "consumer")
+
+	var consumerCC *Node
+	for _, n := range g.Graph {
+		if n.KV["p"] == "CC" {
+			for _, out := range n.Outputs {
+				if strings.Contains(out.String(), "consumer.cpp.o") {
+					consumerCC = n
+					break
+				}
+			}
+		}
+	}
+
+	if consumerCC == nil {
+		t.Fatal("consumer CC node for consumer.cpp.o not found")
+	}
+	if len(consumerCC.Cmds) == 0 {
+		t.Fatal("consumer CC node has no commands")
+	}
+
+	args := consumerCC.Cmds[0].CmdArgs
+	globalIdx := indexOfArg(args, "-I$(S)/peerlib/global_include")
+	oneLevelIdx := indexOfArg(args, "-I$(S)/peerlib/onelevel_include")
+
+	if globalIdx == -1 {
+		t.Fatal("consumer CC missing -I$(S)/peerlib/global_include (GLOBAL addincl from peer must propagate)")
+	}
+	if oneLevelIdx == -1 {
+		t.Fatal("consumer CC missing -I$(S)/peerlib/onelevel_include (ONE_LEVEL addincl from peer must propagate)")
+	}
+	// GLOBAL was declared before ONE_LEVEL; upstream UserGlobal preserves that order.
+	if globalIdx > oneLevelIdx {
+		t.Errorf("GLOBAL addincl at idx=%d comes AFTER ONE_LEVEL at idx=%d; want declaration order (GLOBAL before ONE_LEVEL)", globalIdx, oneLevelIdx)
+	}
+}
+
+// TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl verifies that a peer's implicit
+// own-global include dir (from SRCS(file.h.in)) appears before a later ADDINCL(ONE_LEVEL)
+// in the consumer's -I list. Upstream UserGlobal accumulates own-global dirs in declaration
+// order — generated-header build dirs are added when the SRCS statement is processed, so
+// they precede ADDINCL(ONE_LEVEL) declared later in the same ya.make.
+func TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		// peerlib: generated header declared before ONE_LEVEL ADDINCL.
+		// Upstream UserGlobal: generated-header build dir comes first, ONE_LEVEL second.
+		"peerlib/ya.make":       "LIBRARY()\nSRCS(gen.h.in)\nADDINCL(\n    ONE_LEVEL\n    peerlib/onelevel_dir\n)\nSRCS(peerlib.cpp)\nEND()\n",
+		"peerlib/gen.h.in":      "",
+		"peerlib/peerlib.cpp":   "",
+		"consumer/ya.make":      "LIBRARY()\nPEERDIR(peerlib)\nSRCS(consumer.cpp)\nEND()\n",
+		"consumer/consumer.cpp": "",
+	})
+
+	g := testGen(fs, "consumer")
+
+	var consumerCC *Node
+	for _, n := range g.Graph {
+		if n.KV["p"] == "CC" {
+			for _, out := range n.Outputs {
+				if strings.Contains(out.String(), "consumer.cpp.o") {
+					consumerCC = n
+					break
+				}
+			}
+		}
+	}
+
+	if consumerCC == nil {
+		t.Fatal("consumer CC node for consumer.cpp.o not found")
+	}
+	if len(consumerCC.Cmds) == 0 {
+		t.Fatal("consumer CC node has no commands")
+	}
+
+	args := consumerCC.Cmds[0].CmdArgs
+	// addGeneratedHeaderInclude("peerlib", "gen.h", d) produces Build("peerlib") = $(B)/peerlib.
+	genHdrIdx := indexOfArg(args, "-I$(B)/peerlib")
+	oneLevelIdx := indexOfArg(args, "-I$(S)/peerlib/onelevel_dir")
+
+	if genHdrIdx == -1 {
+		t.Fatal("consumer CC missing -I$(B)/peerlib (generated-header build dir from peer)")
+	}
+	if oneLevelIdx == -1 {
+		t.Fatal("consumer CC missing -I$(S)/peerlib/onelevel_dir (ONE_LEVEL addincl from peer)")
+	}
+	// Generated-header build dir was added before ONE_LEVEL; upstream UserGlobal preserves that order.
+	if genHdrIdx > oneLevelIdx {
+		t.Errorf("generated-header build include at idx=%d comes AFTER ONE_LEVEL at idx=%d; want own-global (UserGlobal) order before ONE_LEVEL", genHdrIdx, oneLevelIdx)
+	}
+}
+
+// TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl verifies that a peer's CF-generated
+// include dir (from CONFIGURE_FILE(non-header dst)) appears AFTER an explicit ADDINCL(GLOBAL)
+// in the consumer's -I list, even when CONFIGURE_FILE is declared first in the ya.make.
+//
+// Upstream ymake resolves addincl;output (from CONFIGURE_FILE) AFTER all explicit ADDINCL
+// statements, regardless of source-level declaration order. Our cfAddIncl deferred buffer
+// correctly models this: CF dirs are merged into addInclGlobal and addInclUserGlobal AFTER
+// collectStmts processes all ADDINCL statements.
+//
+// This test also verifies the CF dir IS present in AddInclUserGlobal (i.e. propagated to
+// direct consumers in the UserGlobal phase), not silently dropped.
+func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		// peerlib: CONFIGURE_FILE (non-header dst) declared BEFORE ADDINCL(GLOBAL).
+		// Upstream: ADDINCL dirs appear first in UserGlobal, CF dirs deferred after.
+		"peerlib/ya.make":          "LIBRARY()\nCONFIGURE_FILE(config.cfg.in config.cfg)\nADDINCL(\n    GLOBAL\n    peerlib/global_dir\n)\nSRCS(peerlib.cpp)\nEND()\n",
+		"peerlib/config.cfg.in":    "",
+		"peerlib/peerlib.cpp":      "",
+		"peerlib/global_dir/.keep": "", // must exist for filterExistingSourceDirs
+		"consumer/ya.make":         "LIBRARY()\nPEERDIR(peerlib)\nSRCS(consumer.cpp)\nEND()\n",
+		"consumer/consumer.cpp":    "",
+	})
+
+	g := testGen(fs, "consumer")
+
+	var consumerCC *Node
+	for _, n := range g.Graph {
+		if n.KV["p"] == "CC" {
+			for _, out := range n.Outputs {
+				if strings.Contains(out.String(), "consumer.cpp.o") {
+					consumerCC = n
+					break
+				}
+			}
+		}
+	}
+
+	if consumerCC == nil {
+		t.Fatal("consumer CC node for consumer.cpp.o not found")
+	}
+	if len(consumerCC.Cmds) == 0 {
+		t.Fatal("consumer CC node has no commands")
+	}
+
+	args := consumerCC.Cmds[0].CmdArgs
+	// addGeneratedHeaderIncludeCF("peerlib", "config.cfg", d) produces Build("peerlib") = $(B)/peerlib.
+	cfBuildIdx := indexOfArg(args, "-I$(B)/peerlib")
+	globalIdx := indexOfArg(args, "-I$(S)/peerlib/global_dir")
+
+	if cfBuildIdx == -1 {
+		t.Fatal("consumer CC missing -I$(B)/peerlib (CF-generated build dir from peer must be in UserGlobal)")
+	}
+	if globalIdx == -1 {
+		t.Fatal("consumer CC missing -I$(S)/peerlib/global_dir (explicit ADDINCL GLOBAL from peer)")
+	}
+	// Upstream defers CF-generated include dirs after explicit ADDINCL; GLOBAL must appear first.
+	if globalIdx > cfBuildIdx {
+		t.Errorf("ADDINCL GLOBAL at idx=%d comes AFTER CF build dir at idx=%d; want explicit ADDINCL before deferred CF dir", globalIdx, cfBuildIdx)
+	}
+}
+
+// TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot verifies that ADDINCL(ONE_LEVEL)
+// from a direct PEERDIR peer lands in the peer-include slot (after ccIncludesSuffix),
+// NOT in the own-include slot (before ccIncludesSuffix).
+// Upstream: ONE_LEVEL dirs go into UserGlobal → PropagateTo → UserGlobalPropagated of the
+// consumer, which renders after the consumer's own LocalUserGlobal. That puts them after
+// the fixed ccIncludesSuffix entries (-I$(S)/contrib/libs/linux-headers).
+func TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"peerlib/ya.make":  "LIBRARY()\nADDINCL(\n    ONE_LEVEL\n    peerlib/include\n)\nSRCS(peerlib.cpp)\nEND()\n",
+		"peerlib/peerlib.cpp": "",
+		"consumer/ya.make": "LIBRARY()\nPEERDIR(peerlib)\nSRCS(consumer.cpp)\nEND()\n",
+		"consumer/consumer.cpp": "",
+	})
+
+	g := testGen(fs, "consumer")
+
+	var consumerCC *Node
+	for _, n := range g.Graph {
+		if n.KV["p"] == "CC" {
+			for _, out := range n.Outputs {
+				if strings.Contains(out.String(), "consumer.cpp.o") {
+					consumerCC = n
+					break
+				}
+			}
+		}
+	}
+
+	if consumerCC == nil {
+		t.Fatal("consumer CC node for consumer.cpp.o not found")
+	}
+
+	if len(consumerCC.Cmds) == 0 {
+		t.Fatal("consumer CC node has no commands")
+	}
+
+	args := consumerCC.Cmds[0].CmdArgs
+
+	linuxHeadersIdx := indexOfArg(args, "-I$(S)/contrib/libs/linux-headers")
+	oneLevelIdx := indexOfArg(args, "-I$(S)/peerlib/include")
+
+	if oneLevelIdx == -1 {
+		t.Fatal("consumer CC missing -I$(S)/peerlib/include (ONE_LEVEL addincl from peer should propagate to direct consumer)")
+	}
+	if linuxHeadersIdx == -1 {
+		t.Fatal("consumer CC missing -I$(S)/contrib/libs/linux-headers (expected in ccIncludesSuffix)")
+	}
+	// ONE_LEVEL from peer must appear AFTER ccIncludesSuffix (linux-headers), not before.
+	// Before this fix, ONE_LEVEL was appended to d.addIncl (own bag) which lands before
+	// ccIncludesSuffix. After the fix it lands in peerAddInclGlobal after linux-headers.
+	if oneLevelIdx < linuxHeadersIdx {
+		t.Errorf("ONE_LEVEL addincl from peer at idx=%d, before linux-headers at idx=%d; want AFTER (peer-include slot, not own-include slot)", oneLevelIdx, linuxHeadersIdx)
+	}
+}
+
 func TestIsRuntimeAncestor_LiteralOnly(t *testing.T) {
 	literals := []string{
 		"contrib/libs/libc_compat",

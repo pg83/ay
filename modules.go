@@ -34,6 +34,7 @@ type moduleData struct {
 	addIncl              []VFS
 	addInclGlobal        []VFS
 	addInclOneLevel      []VFS
+	addInclUserGlobal    []VFS
 	cfAddIncl            []VFS
 	cfAddInclGlobal      []VFS
 	cythonAddIncl        []VFS
@@ -424,6 +425,10 @@ func collectModule(pm *includeParserManager, modulePath string, kind ModuleKind,
 
 	d.addIncl = append(d.addIncl, d.cfAddIncl...)
 	d.addInclGlobal = append(d.addInclGlobal, d.cfAddInclGlobal...)
+	// CF-generated include dirs join UserGlobal in the same deferred step as
+	// addInclGlobal, matching upstream ymake where addincl;output on CONFIGURE_FILE
+	// outputs is resolved after all explicit ADDINCL statements.
+	d.addInclUserGlobal = append(d.addInclUserGlobal, d.cfAddInclGlobal...)
 	d.cfAddIncl = nil
 	d.cfAddInclGlobal = nil
 	filterInvalidAddIncl(fs, d)
@@ -533,6 +538,29 @@ func filterInvalidAddIncl(fs FS, d *moduleData) {
 	d.addInclGlobal = filterExistingSourceDirs(fs, d.addInclGlobal)
 	d.cythonAddIncl = filterExistingSourceDirs(fs, d.cythonAddIncl)
 	d.asmAddIncl = filterExistingSourceDirs(fs, d.asmAddIncl)
+
+	// Rebuild addInclUserGlobal in declaration order, keeping only paths that
+	// survived the addInclGlobal filter (for GLOBAL paths) or are in
+	// addInclOneLevel (ONE_LEVEL paths, which are never filtered).
+	if len(d.addInclUserGlobal) > 0 {
+		validGlobal := make(map[VFS]struct{}, len(d.addInclGlobal))
+		for _, p := range d.addInclGlobal {
+			validGlobal[p] = struct{}{}
+		}
+		validOneLevel := make(map[VFS]struct{}, len(d.addInclOneLevel))
+		for _, p := range d.addInclOneLevel {
+			validOneLevel[p] = struct{}{}
+		}
+		out := d.addInclUserGlobal[:0]
+		for _, p := range d.addInclUserGlobal {
+			if _, ok := validGlobal[p]; ok {
+				out = append(out, p)
+			} else if _, ok := validOneLevel[p]; ok {
+				out = append(out, p)
+			}
+		}
+		d.addInclUserGlobal = out
+	}
 }
 
 func filterExistingSourceDirs(fs FS, paths []VFS) []VFS {
@@ -594,6 +622,7 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 	d.moduleScopeCFlags = append(d.moduleScopeCFlags, "-DUSE_PYTHON3")
 
 	d.addInclGlobal = append(d.addInclGlobal, Intern("$(S)/contrib/libs/python/Include"))
+	d.addInclUserGlobal = append(d.addInclUserGlobal, Intern("$(S)/contrib/libs/python/Include"))
 	d.addIncl = append(d.addIncl, Intern("$(S)/contrib/libs/python/Include"))
 
 	if modulePath == "library/python/runtime_py3" {
@@ -608,6 +637,7 @@ func applyBuildInfoAddIncl(modulePath string, d *moduleData) {
 	biDir := Build(modulePath)
 	d.addIncl = append(d.addIncl, biDir)
 	d.addInclGlobal = append(d.addInclGlobal, biDir)
+	d.addInclUserGlobal = append(d.addInclUserGlobal, biDir)
 }
 
 func pyModuleTypeUsesPython3(name string) bool {
@@ -726,6 +756,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 
 			d.addInclGlobal = append(d.addInclGlobal, expandConfigVFSPaths(v.GlobalPaths, env)...)
 			d.addInclOneLevel = append(d.addInclOneLevel, expandConfigVFSPaths(v.OneLevelPaths, env)...)
+			d.addInclUserGlobal = append(d.addInclUserGlobal, expandConfigVFSPaths(v.UserGlobalPaths, env)...)
 			d.addIncl = append(d.addIncl, expandConfigVFSPaths(v.AllPaths, env)...)
 			d.cythonAddIncl = append(d.cythonAddIncl, expandConfigVFSPaths(v.CythonPaths, env)...)
 			d.asmAddIncl = append(d.asmAddIncl, expandConfigVFSPaths(v.AsmPaths, env)...)
@@ -920,6 +951,7 @@ func addGeneratedHeaderInclude(modulePath, dst string, d *moduleData) {
 	include := Build(rel)
 	d.addIncl = append(d.addIncl, include)
 	d.addInclGlobal = append(d.addInclGlobal, include)
+	d.addInclUserGlobal = append(d.addInclUserGlobal, include)
 }
 
 func addGeneratedHeaderIncludeCF(modulePath, dst string, d *moduleData) {
@@ -1196,6 +1228,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		d.addIncl = append(d.addIncl, protoBuildRoot)
 		if d.protoNamespaceGlobal || (d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY") {
 			d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
+			d.addInclUserGlobal = append(d.addInclUserGlobal, protoBuildRoot)
 		}
 	case "EXCLUDE_TAGS":
 		// upstream uses EXCLUDE_TAGS to drop submodules of a multimodule
