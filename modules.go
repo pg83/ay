@@ -19,10 +19,7 @@ type cppProtoPlugin struct {
 type moduleData struct {
 	moduleStmt           *ModuleStmt
 	srcs                 []string
-	globalSrcs           []string
-	globalEventSeq       int
-	firstResourceEvent   int
-	firstGlobalSrcsEvent int
+	globalSrcs []string
 	pySrcs               []string
 	pySrcGroups          []pySrcGroup
 	pyGeneratedSrcs      map[string][]VFS
@@ -419,10 +416,8 @@ func collectModule(pm *includeParserManager, modulePath string, kind ModuleKind,
 	env.SetString("BINDIR", "${ARCADIA_BUILD_ROOT}/"+modulePath)
 
 	d := &moduleData{
-		pythonSQLite3:        true,
-		bisonGenExt:          ".cpp",
-		firstResourceEvent:   -1,
-		firstGlobalSrcsEvent: -1,
+		pythonSQLite3: true,
+		bisonGenExt:   ".cpp",
 	}
 
 	collectStmts(modulePath, kind, stmts, env, d)
@@ -511,21 +506,10 @@ func collectModule(pm *includeParserManager, modulePath string, kind ModuleKind,
 }
 
 func appendGlobalSrcEvent(d *moduleData, src string) {
-	if d.firstGlobalSrcsEvent < 0 {
-		d.firstGlobalSrcsEvent = d.globalEventSeq
-	}
-	d.globalEventSeq++
 	d.globalSrcs = append(d.globalSrcs, src)
 }
 
 func appendGlobalSrcGroup(d *moduleData, srcs []string) {
-	if len(srcs) == 0 {
-		return
-	}
-	if d.firstGlobalSrcsEvent < 0 {
-		d.firstGlobalSrcsEvent = d.globalEventSeq
-	}
-	d.globalEventSeq++
 	d.globalSrcs = append(d.globalSrcs, srcs...)
 }
 
@@ -873,11 +857,6 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			}
 			d.runPython = append(d.runPython, &expanded)
 		case *ResourceStmt:
-			if d.firstResourceEvent < 0 {
-				d.firstResourceEvent = d.globalEventSeq
-			}
-			d.globalEventSeq++
-
 			ensureResourcePeer(modulePath, d)
 
 			for i, pair := range v.Pairs {
@@ -893,10 +872,6 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				})
 			}
 		case *ResourceFilesStmt:
-			if d.firstResourceEvent < 0 {
-				d.firstResourceEvent = d.globalEventSeq
-			}
-			d.globalEventSeq++
 			ensureResourcePeer(modulePath, d)
 
 			expanded := expandResourceFiles(v.Args)
@@ -1595,10 +1570,6 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		d.pyMain = stringPtr(arg)
 	case "PY_CONSTRUCTOR":
 
-		if d.firstResourceEvent < 0 {
-			d.firstResourceEvent = d.globalEventSeq
-		}
-		d.globalEventSeq++
 		ensureResourcePeer(modulePath, d)
 		if len(v.Args) != 1 {
 			ThrowFmt("gen: PY_CONSTRUCTOR expects exactly 1 argument, got %d", len(v.Args))

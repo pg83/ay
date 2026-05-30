@@ -1909,7 +1909,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if objcopyRes != nil {
 		globalRefs = append(globalRefs, objcopyRes.Refs...)
 		globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
-		if resourceBeforeGlobalSrcs(d) && globalSrcMemberCount > 0 && len(objcopyRes.Refs) > 0 {
+		// Upstream always places RESOURCE objcopy objects before SRCS(GLOBAL)
+		// objects in the global archive regardless of their declaration order.
+		// This applies only when there are explicit RESOURCE entries (d.resources);
+		// pySrc objcopy from PY_SRCS follows declaration order instead.
+		if globalSrcMemberCount > 0 && len(objcopyRes.Refs) > 0 && len(d.resources) > 0 {
 			globalRefs = moveTailNodeRefsToFront(globalRefs, len(objcopyRes.Refs))
 			globalOutputs = moveTailVFSToFront(globalOutputs, len(objcopyRes.Outputs))
 		}
@@ -2261,12 +2265,6 @@ func movePathsBefore(paths []VFS, anchor VFS, moved []VFS) []VFS {
 	}
 
 	return outPaths
-}
-
-func resourceBeforeGlobalSrcs(d *moduleData) bool {
-	return d.firstResourceEvent >= 0 &&
-		d.firstGlobalSrcsEvent >= 0 &&
-		d.firstResourceEvent < d.firstGlobalSrcsEvent
 }
 
 func moveTailNodeRefsToFront(in []NodeRef, tailLen int) []NodeRef {
