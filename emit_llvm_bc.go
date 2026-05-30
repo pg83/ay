@@ -12,10 +12,7 @@ import "strings"
 //     d.resources, picked up by emitResourceObjcopy as a normal embed → emits
 //     the PY objcopy_<hash>.o, which then participates in the global archive
 //     (lib<...>.global.a) via the existing LIBRARY .global.a pipeline.
-//
-// Cmd contents are intentionally lean: sg5 parity is by output-set, not
-// byte-exact self_uid (which is covered by sg2/sg2_x86_64/sg3/sg4 gating).
-func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData) {
+func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) {
 	if len(d.llvmBc) == 0 {
 		return
 	}
@@ -39,28 +36,68 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		llvmLink := clangRoot + "/bin/llvm-link"
 		opt := clangRoot + "/bin/opt"
 
+		// clangWrapperVFS / optWrapperVFS correspond to ${input:"..."} in the
+		// upstream LLVM_COMPILE_CXX / LLVM_OPT macros: ymake adds the script as
+		// a direct node input alongside the compile/opt command.
+		clangWrapperVFS := Intern(clangWrapper)
+		optWrapperVFS := Intern(optWrapper)
+
+		// bcSourceInputs accumulates the $(S)-rooted inputs from every BC node for
+		// flat-input propagation to the OP node. Upstream OP carries all source
+		// closure files from the BC compilation steps directly as node inputs
+		// (ymake's flat input model); only $(B) generated files are excluded since
+		// the OP step does not directly open them.
+		var bcSourceInputs []VFS
+
 		bcRefs := make([]NodeRef, 0, len(stmt.Sources))
 		bcPaths := make([]VFS, 0, len(stmt.Sources))
 		for _, src := range stmt.Sources {
-			inputVFS := llvmBcInputVFS(ctx, instance, d, src)
+			inputVFS, producer := llvmBcSourceInfo(ctx, instance, d, src)
 			bcOut := Build(llvmBcRootRelArcSrc(ctx, instance, d, src) + stmt.Suffix + ".bc")
-			bcArgs := []string{
-				python, clangWrapper, "no", clangxx,
-				"-emit-llvm", "-c", inputVFS.String(), "-o", bcOut.String(),
+			bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS.String(), bcOut.String())
+
+			// Walk include closure (same as emitCodegenDownstreamCC for generated CC).
+			closure := walkClosure(ctx, instance, inputVFS, in)
+			closure = dropTransitiveGeneratedProto(closure)
+
+			// Add TEXT copy source files (e.g. mkql_computation_node_codegen.h.txt)
+			// that appear in the closure, matching emitOneSource's withContextSourceExtras.
+			wcExtras := withContextSourceExtras(codegenRegForInstance(ctx, instance), instance.Path, d, closure, inputVFS)
+
+			var depRefs []NodeRef
+			if producer != (NodeRef{}) {
+				depRefs = []NodeRef{producer}
 			}
+			if extra := resolveCodegenDepRefs(ctx, instance, closure, depRefs...); len(extra) > 0 {
+				depRefs = append(depRefs, extra...)
+			}
+
+			allInputs := make([]VFS, 0, 2+len(closure)+len(wcExtras))
+			allInputs = append(allInputs, inputVFS)
+			allInputs = append(allInputs, clangWrapperVFS) // ${input:"build/scripts/clang_wrapper.py"}
+			allInputs = append(allInputs, closure...)
+			if len(wcExtras) > 0 {
+				allInputs = appendVFSUnique(allInputs, wcExtras)
+			}
+
+			// Propagate $(S) inputs from this BC node to the OP flat-input set.
+			for _, v := range allInputs {
+				if v.IsSource() {
+					bcSourceInputs = append(bcSourceInputs, v)
+				}
+			}
+
 			node := &Node{
 				Cmds:             []Cmd{{CmdArgs: bcArgs, Env: env}},
 				Env:              env,
-				Inputs:           []VFS{inputVFS},
+				Inputs:           allInputs,
 				Outputs:          []VFS{bcOut},
 				KV:               map[string]interface{}{"p": "BC", "pc": "light-green"},
 				Tags:             []string{},
 				TargetProperties: cloneStringMap(tp),
 				Requirements:     reqs,
 				Sandboxing:       true,
-			}
-			if producer, ok := d.prOutputProducer[src]; ok {
-				node.DepRefs = append(node.DepRefs, producer)
+				DepRefs:          depRefs,
 			}
 			ref := ctx.emit.Emit(bindNodePlatform(node, instance.Platform))
 			bcRefs = append(bcRefs, ref)
@@ -95,11 +132,24 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			passes = append(passes, "internalize")
 			optArgs = append(optArgs, "-internalize-public-api-list="+strings.Join(stmt.Symbols, "#"))
 		}
-		optArgs = append(optArgs, "'-passes=\""+strings.Join(passes, "${__COMMA__}")+"\"'")
+		// ${__COMMA__} is a ymake macro that expands to literal ','; the outer
+		// single-quotes in the Python plugin are ymake argument syntax stripped
+		// before graph JSON is written. We emit the already-expanded form directly.
+		optArgs = append(optArgs, `-passes="`+strings.Join(passes, ",")+`"`)
+
+		// OP inputs: mergedBC + llvm_opt_wrapper.py + source-root BC closure inputs.
+		// Upstream OP carries the full $(S) closure from BC compilation (flat input
+		// model): excludes $(B) generated files (build-root source copy, proto
+		// headers, generated includes) which the optimizer doesn't open directly.
+		optInputs := make([]VFS, 0, 2+len(bcSourceInputs))
+		optInputs = append(optInputs, mergedOut)
+		optInputs = append(optInputs, optWrapperVFS) // ${input:"build/scripts/llvm_opt_wrapper.py"}
+		optInputs = appendVFSUnique(optInputs, bcSourceInputs)
+
 		optNode := &Node{
 			Cmds:             []Cmd{{CmdArgs: optArgs, Env: env}},
 			Env:              env,
-			Inputs:           []VFS{mergedOut},
+			Inputs:           optInputs,
 			Outputs:          []VFS{optOut},
 			KV:               map[string]interface{}{"p": "OP", "pc": "yellow"},
 			Tags:             []string{},
@@ -127,11 +177,105 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	}
 }
 
-func llvmBcInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, src string) VFS {
-	if producer := d.prOutputProducer[src]; producer != (NodeRef{}) {
-		return copyFileOutputVFS(instance.Path, src)
+// composeBCCompileCmd assembles the upstream LLVM_COMPILE_CXX command
+// (build/ymake.core.conf macro):
+//
+//	$YMAKE_PYTHON3 ${input:"build/scripts/clang_wrapper.py"} $WINDOWS
+//	  ${CLANG_BC_ROOT}/bin/clang++ ${pre=-I:_C__INCLUDE}
+//	  $BC_CXXFLAGS $C_FLAGS_PLATFORM
+//	  -Wno-unknown-warning-option $LLVM_OPTS ... -emit-llvm -c Input -o Output
+//
+// $BC_CXXFLAGS = $CXXFLAGS (same flags as a regular CXX compile: includes all
+// of debugPrefixMap, xclangDebug, bundle.CFlags, warningBundle, defines, etc.).
+// $C_FLAGS_PLATFORM = --target=... [ArchArgs] -B/usr/bin (comes AFTER $BC_CXXFLAGS, not before).
+//
+// Differences from CC compile command:
+//   - BC starts with python3/wrapper/no/clangBC instead of bare clangCC
+//   - --target and -B come AFTER all flags (not early like in CC)
+//   - No extra catboostOpenSourceDefine after OwnGlobalBucket (CC always adds one)
+//   - No builtinMacroDateTime
+//   - No macroPrefixMapFlags
+//   - No PerSrcCFlags
+//   - Ends with -Wno-unknown-warning-option -emit-llvm -c input -o output
+func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inputPath, outputPath string) []string {
+	bundle := compileFlagBundleFor(platform)
+	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
+
+	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, platform)
+	ownGlobalBucket := composeOwnAndPeerGlobalBucket(in, true /* isCxx */)
+
+	ownExtras := in.CXXFlags
+	if len(platform.CXXFlags) > 0 {
+		ownExtras = append(append([]string{}, ownExtras...), platform.CXXFlags...)
 	}
-	return copyFileInputVFS(ctx.fs, instance.Path, src)
+
+	args := make([]string, 0, 200+len(in.AddIncl)+len(in.PeerAddInclGlobal)+
+		len(bundle.Defines)+len(ownCFlags)+2*len(bundle.NoLibcBlock)+
+		len(in.ModuleScopeCFlags)+len(ownExtras)+len(ownGlobalBucket)+
+		len(bundle.ArchArgs)+len(bundle.CFlags)+len(warningBundle))
+
+	// Wrapper prefix: python3 clang_wrapper.py no clangBC++
+	args = append(args, python, clangWrapper, "no", clangBC)
+
+	// ${pre=-I:_C__INCLUDE}: include paths (same layout as CC compile)
+	args = append(args, ccIncludesPrefix...)
+	args = appendAddIncl(args, in.AddIncl, in.InclArgs)
+	peerAddIncl := in.PeerAddInclGlobal
+	if len(peerAddIncl) > 0 && peerAddIncl[0] == googleapisCommonProtosAddIncl {
+		args = append(args, in.InclArgs.arg(peerAddIncl[0]))
+		peerAddIncl = peerAddIncl[1:]
+	}
+	args = append(args, ccIncludesSuffix...)
+	args = appendAddIncl(args, peerAddIncl, in.InclArgs)
+
+	// $BC_CXXFLAGS = full CC flag pipeline (same as appendCompileFlagPipeline).
+	// The upstream macro passes the same CXXFLAGS set to the BC compile as to
+	// regular CC; the only structural differences are ordering of --target/-B
+	// and the omissions listed in the function comment above.
+	args = appendCompileFlagPipeline(args, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags)
+
+	args = appendCxxStdAndOwn(args, true, in.Flags.NoCompilerWarnings, true, ownExtras)
+
+	// OwnGlobalBucket + catboostOpenSourceDefine: same as CC compile — the
+	// upstream $BC_CXXFLAGS includes catboost from both the pipeline (inside
+	// appendCompileFlagPipeline) and from the OwnGlobalBucket/PeerCXXFlagsGlobal
+	// slot. The explicit catboostOpenSourceDefine ensures the flag is present even
+	// when PeerCXXFlagsGlobal is empty (same reason composeTargetCC always adds it).
+	args = append(args, ownGlobalBucket...)
+	args = append(args, catboostOpenSourceDefine...)
+	args = append(args, composePostCatboostBucket(ownGlobalBucket)...)
+
+	// $C_FLAGS_PLATFORM comes after $BC_CXXFLAGS (not before like in CC).
+	args = append(args, "--target="+platform.Triple)
+	args = append(args, bundle.ArchArgs...)
+	args = append(args, "-B"+binPath)
+
+	// BC-specific tail flags from upstream macro
+	args = append(args, "-Wno-unknown-warning-option", "-emit-llvm", "-c", inputPath, "-o", outputPath)
+
+	return args
+}
+
+// llvmBcSourceInfo returns the compile input VFS and optional producer NodeRef
+// for a given source in an LLVM_BC statement. Checks both the module's
+// prOutputProducer map (for RUN_PROGRAM / PR outputs) and the codegen registry
+// (for COPY WITH_CONTEXT generated sources like yt_codec_bc.cpp).
+func llvmBcSourceInfo(ctx *genCtx, instance ModuleInstance, d *moduleData, src string) (inputVFS VFS, producer NodeRef) {
+	// RUN_PROGRAM / PR generated output
+	if ref := d.prOutputProducer[src]; ref != (NodeRef{}) {
+		return copyFileOutputVFS(instance.Path, src), ref
+	}
+	// COPY WITH_CONTEXT generated source — build-root copy is authoritative
+	if buildVFS := generatedModuleSourceVFS(ctx, instance, src); buildVFS != nil {
+		ref := NodeRef{}
+		if reg := codegenRegForInstance(ctx, instance); reg != nil {
+			if info := reg.Lookup(*buildVFS); info != nil && info.HasProducerRef {
+				ref = info.ProducerRef
+			}
+		}
+		return *buildVFS, ref
+	}
+	return copyFileInputVFS(ctx.fs, instance.Path, src), NodeRef{}
 }
 
 // llvmBcRootRelArcSrc mirrors upstream's `rootrel_arc_src(src, unit)` quirk
@@ -144,6 +288,9 @@ func llvmBcInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 // canonical build-rooted case (sg5: $(B)/yt_codec_bc.cpp.16.bc).
 func llvmBcRootRelArcSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src string) string {
 	if _, ok := d.prOutputProducer[src]; ok {
+		return src
+	}
+	if generatedModuleSourceVFS(ctx, instance, src) != nil {
 		return src
 	}
 	if sourceInputVFS(ctx.fs, instance.Path, src) != nil {
