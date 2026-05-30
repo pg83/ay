@@ -8,9 +8,10 @@ import (
 type parsedIncludeBucket string
 
 const (
-	parsedIncludesLocal parsedIncludeBucket = "local"
-	parsedIncludesCPP   parsedIncludeBucket = "cpp"
-	parsedIncludesHCPP  parsedIncludeBucket = "h+cpp"
+	parsedIncludesLocal       parsedIncludeBucket = "local"
+	parsedIncludesCPP         parsedIncludeBucket = "cpp"
+	parsedIncludesHCPP        parsedIncludeBucket = "h+cpp"
+	parsedIncludesRagelNative parsedIncludeBucket = "ragel-native"
 )
 
 type parsedInclude = includeDirective

@@ -666,14 +666,15 @@ include "machine.rl";
 	}), SysInclSet{})
 	parsed := scanner.parsedIncludes(Intern("$(S)/src.rl6"))
 	local := parsed.bucket(parsedIncludesLocal)
+	native := parsed.bucket(parsedIncludesRagelNative)
 	hcpp := parsed.bucket(parsedIncludesHCPP)
 
-	if len(local) != 4 {
-		t.Fatalf("got %d local entries, want 4; %+v", len(local), local)
+	// C includes only (ragel-native goes to parsedIncludesRagelNative)
+	if len(local) != 2 {
+		t.Fatalf("got %d local entries, want 2 (C includes only); %+v", len(local), local)
 	}
-
-	wantLocalTargets := []string{"outer.h", "tail.h", "machine.rl", "machine2.rl"}
-	wantLocalKinds := []includeKind{includeSystem, includeQuoted, includeQuoted, includeQuoted}
+	wantLocalTargets := []string{"outer.h", "tail.h"}
+	wantLocalKinds := []includeKind{includeSystem, includeQuoted}
 	for i := range wantLocalTargets {
 		if local[i].target.String() != wantLocalTargets[i] {
 			t.Fatalf("local[%d].target.String() = %q, want %q; all=%+v", i, local[i].target.String(), wantLocalTargets[i], local)
@@ -683,11 +684,103 @@ include "machine.rl";
 		}
 	}
 
+	// Ragel-native includes (deduped) in their own bucket
+	if len(native) != 2 {
+		t.Fatalf("got %d ragel-native entries, want 2; %+v", len(native), native)
+	}
+	wantNativeTargets := []string{"machine.rl", "machine2.rl"}
+	for i := range wantNativeTargets {
+		if native[i].target.String() != wantNativeTargets[i] {
+			t.Fatalf("native[%d].target.String() = %q, want %q; all=%+v", i, native[i].target.String(), wantNativeTargets[i], native)
+		}
+		if native[i].kind != includeQuoted {
+			t.Fatalf("native[%d].kind = %v, want includeQuoted", i, native[i].kind)
+		}
+	}
+
 	if len(hcpp) != 1 {
 		t.Fatalf("got %d h+cpp entries, want 1; %+v", len(hcpp), hcpp)
 	}
 	if hcpp[0].target.String() != "src.rl6" || hcpp[0].kind != includeQuoted {
 		t.Fatalf("h+cpp = %+v, want quoted self target \"src.rl6\"", hcpp)
+	}
+}
+
+// TestScanner_RagelNativeInclude_DoesNotBleedCHeaders verifies that:
+//  1. The scanner closure of a ragel source file (main.rl6) contains the file's
+//     own C includes (vector → stl/vector) but does NOT contain C includes from
+//     ragel-native-included files (sub.rl6's numeric → stl/numeric).
+//  2. sub.rl6 is NOT in the raw scanner closure — the emit layer adds it
+//     explicitly via parsedIncludesRagelNative. This mirrors upstream ymake's
+//     TRagelIncludeProcessor separation of native deps vs ParsedIncls.
+//
+// The corresponding emit_sources.go code adds sub.rl6 (from
+// parsedIncludesRagelNative) after the scanner walk, keeping the ragel file as
+// a dependency without dragging in its C headers.
+func TestScanner_RagelNativeInclude_DoesNotBleedCHeaders(t *testing.T) {
+	sysincl := parseSysInclYAML("test.yml", `
+- includes:
+  - vector: stl/vector
+  - numeric: stl/numeric
+`, func(Warn) {})
+
+	fs := newMemFS(map[string]string{
+		"pkg/main.rl6": `#include <vector>
+%%{
+include "sub.rl6";
+}%%
+`,
+		"pkg/sub.rl6": `#include <numeric>
+%%{
+machine Sub;
+}%%
+`,
+		"stl/vector":  "// vector\n",
+		"stl/numeric": "// numeric\n",
+	})
+
+	scanner := newIncludeScannerWith(
+		newIncludeParserManagerFS(fs, newSharedParseCache()),
+		sysincl,
+		func(Warn) {},
+	)
+
+	sc := scanner.NewScanCtx(ScanContext{
+		OwnAddIncl: VFSesFromStrings([]string{"stl"}),
+	})
+
+	closure := sc.WalkClosure(Intern("$(S)/pkg/main.rl6"))
+
+	closureSet := make(map[string]bool, len(closure))
+	for _, v := range closure {
+		closureSet[v.String()] = true
+	}
+
+	// main.rl6 itself must be in closure
+	if !closureSet["$(S)/pkg/main.rl6"] {
+		t.Errorf("closure missing $(S)/pkg/main.rl6: %v", closure)
+	}
+
+	// vector (C include of main.rl6) must be in scanner closure
+	if !closureSet["$(S)/stl/vector"] {
+		t.Errorf("closure missing $(S)/stl/vector (C include of main.rl6): %v", closure)
+	}
+
+	// sub.rl6 is a ragel-native dep; it lives in parsedIncludesRagelNative and
+	// is added by emit_sources.go, NOT by the scanner's WalkClosure.
+	if closureSet["$(S)/pkg/sub.rl6"] {
+		t.Errorf("scanner closure should NOT contain $(S)/pkg/sub.rl6 (ragel-native dep added by emit layer, not scanner): %v", closure)
+	}
+
+	// numeric (C include of sub.rl6) must NOT bleed into closure
+	if closureSet["$(S)/stl/numeric"] {
+		t.Errorf("closure should NOT contain $(S)/stl/numeric (C header of ragel-native-included sub.rl6 must not bleed): %v", closure)
+	}
+
+	// parsedIncludesRagelNative of main.rl6 must contain sub.rl6
+	ragelNative := scanner.parsers.sourceParsedBuckets(Intern("$(S)/pkg/main.rl6")).bucket(parsedIncludesRagelNative)
+	if len(ragelNative) != 1 || ragelNative[0].target.String() != "sub.rl6" {
+		t.Errorf("parsedIncludesRagelNative of main.rl6 = %v, want [{sub.rl6}]", ragelNative)
 	}
 }
 
