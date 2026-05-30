@@ -3495,6 +3495,46 @@ END()
 
 
 
+func TestGen_EnumSerializationWithSRCDIRResolvesHeaderViaSourceDir(t *testing.T) {
+	// Reproduces the purecalc_no_pg_wrapper divergence: a module uses INCLUDE()
+	// to pull in a .ya.make.inc that contains SRCDIR() + GENERATE_ENUM_SERIALIZATION().
+	// The header must be resolved relative to the SRCDIR, not the including module's path.
+	files := map[string]string{}
+
+	// shared lib provides the header and the ya.make.inc
+	writeTestModuleFile(files, "shared/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(iface.cpp)\nGENERATE_ENUM_SERIALIZATION(iface.h)\nEND()\n")
+	writeTestModuleFile(files, "shared/iface.h", "enum class Mode { A = 0, B = 1 };\n")
+	writeTestModuleFile(files, "shared/iface.cpp", "int f(){return 0;}\n")
+	writeTestModuleFile(files, "shared/ya.make.inc", "SRCDIR(\n    shared\n)\nSRCS(iface.cpp)\nGENERATE_ENUM_SERIALIZATION(iface.h)\n")
+
+	// consumer module includes the ya.make.inc — SRCDIR remaps to "shared"
+	writeTestModuleFile(files, "consumer/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nINCLUDE(${ARCADIA_ROOT}/shared/ya.make.inc)\nSRCS(consumer.cpp)\nEND()\n")
+	writeTestModuleFile(files, "consumer/consumer.cpp", "int g(){return 0;}\n")
+
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "consumer")
+
+	// The EN node output is in the consumer module's path, but the header input
+	// must be from the SRCDIR (shared/iface.h), not consumer/iface.h (which doesn't exist).
+	en := mustNodeByOutput(t, g, "$(B)/consumer/iface.h_serialized.cpp")
+
+	// The header input must resolve to shared/iface.h via SRCDIR
+	if !nodeHasInput(en, "$(S)/shared/iface.h") {
+		t.Fatalf("EN node inputs: want $(S)/shared/iface.h (via SRCDIR), got: %v", en.Inputs)
+	}
+	// Must NOT use the consumer module path for the header
+	if nodeHasInput(en, "$(S)/consumer/iface.h") {
+		t.Fatalf("EN node inputs: got wrong path $(S)/consumer/iface.h (SRCDIR not applied): %v", en.Inputs)
+	}
+	// The enum_parser cmd arg[1] must be the correct source path
+	if got := en.Cmds[0].CmdArgs[1]; got != "$(S)/shared/iface.h" {
+		t.Fatalf("EN cmd_args[1] = %q, want $(S)/shared/iface.h", got)
+	}
+}
+
 func TestGen_EnumSerializationRootQualifiedHeaderUsesCanonicalInput(t *testing.T) {
 	files := map[string]string{}
 
@@ -4002,6 +4042,7 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 			gotRefs, gotPaths := reorderARMembers(
 				refs,
 				paths,
+				make([]bool, len(tc.paths)),
 				make([]bool, len(tc.paths)),
 				make([]bool, len(tc.paths)),
 				len(tc.paths),
@@ -5092,4 +5133,136 @@ message Ydb {}
 	g := testGen(newMemFS(files), "ydb/public/api/protos")
 
 	mustNodeByOutput(t, g, "$(B)/ydb/public/api/protos/libpublic-api-protos.a")
+}
+
+
+
+func TestGen_ARMemberOrder_PbCcAfterHSerialized(t *testing.T) {
+	// Reproduces the libydb-core-tablet_flat.a divergence: a LIBRARY with both
+	// a .proto SRCS entry (generates pb.cc.o) and GENERATE_ENUM_SERIALIZATION
+	// (generates h_serialized.cpp.o) must place pb.cc.o AFTER h_serialized.cpp.o
+	// in the AR command args. Upstream puts pb.cc.o last.
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "mylib/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(
+    plain.cpp
+    data.proto
+)
+GENERATE_ENUM_SERIALIZATION(flags.h)
+END()
+`)
+	writeTestModuleFile(files, "mylib/plain.cpp", "int plain(){return 0;}\n")
+	writeTestModuleFile(files, "mylib/data.proto", "syntax = \"proto3\";\npackage test;\nmessage Data {}\n")
+	writeTestModuleFile(files, "mylib/flags.h", "enum class Flag { A = 0 };\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "mylib")
+
+	ar := mustNodeByOutput(t, g, "$(B)/mylib/libmylib.a")
+
+	// Find positions of pb.cc.o and h_serialized.cpp.o in AR cmd_args
+	pbPos := -1
+	hSerPos := -1
+	for i, arg := range ar.Cmds[0].CmdArgs {
+		if strings.HasSuffix(arg, ".pb.cc.o") {
+			pbPos = i
+		}
+		if strings.HasSuffix(arg, ".h_serialized.cpp.o") {
+			hSerPos = i
+		}
+	}
+
+	if pbPos < 0 {
+		t.Fatal("AR cmd_args missing .pb.cc.o")
+	}
+	if hSerPos < 0 {
+		t.Fatal("AR cmd_args missing .h_serialized.cpp.o")
+	}
+	// Upstream order: h_serialized before pb.cc
+	if hSerPos > pbPos {
+		t.Errorf("AR ordering wrong: .h_serialized.cpp.o at pos %d, .pb.cc.o at pos %d — want h_serialized BEFORE pb.cc", hSerPos, pbPos)
+	}
+}
+
+// TestGen_CC_NoDuplicateInputsWhenBuildProtoDropped reproduces a fast-path
+// regression in emitOneSource: dropTransitiveGeneratedProto(full[1:]) compacts
+// the backing array in place, but the fast path then set NodeInputs=full (the
+// original, un-shrunk slice). The stale tail of full held copies of elements
+// that had been shifted forward, producing duplicate CC inputs. The trigger is
+// a $(B)-generated .proto appearing in a CC source's closure — here via a
+// PROTO_LIBRARY whose JsonPathParser.proto is emitted by RUN_ANTLR (not
+// present in source) so the closure walker reaches it through the codegen
+// fallback locator.
+func TestGen_CC_NoDuplicateInputsWhenBuildProtoDropped(t *testing.T) {
+	const protoModPath = "yql/essentials/parser/proto_ast/gen/jsonpath"
+	const appModPath = "app"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+
+	// PROTO_LIBRARY with a build-generated proto (RUN_ANTLR OUT_NOAUTO).
+	// GEN_PROTO is set to true for PROTO_LIBRARY collection so this block runs.
+	files[protoModPath+"/ya.make"] = `PROTO_LIBRARY()
+IF (GEN_PROTO)
+    SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
+    SET(antlr_templates ${antlr_output}/org/antlr/codegen/templates)
+    SET(jsonpath_grammar ${ARCADIA_ROOT}/yql/essentials/minikql/jsonpath/JsonPath.g)
+
+    CONFIGURE_FILE(${ARCADIA_ROOT}/templates/protobuf.stg.in ${antlr_templates}/protobuf/protobuf.stg)
+
+    RUN_ANTLR(
+        ${jsonpath_grammar}
+        -lib .
+        -fo ${antlr_output}
+        -language protobuf
+        IN ${jsonpath_grammar} ${antlr_templates}/protobuf/protobuf.stg
+        OUT_NOAUTO JsonPathParser.proto
+        CWD ${antlr_output}
+    )
+ENDIF()
+
+SRCS(JsonPathParser.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`
+	// Consumer LIBRARY: use.cpp includes the generated pb.h.
+	files[appModPath+"/ya.make"] = "LIBRARY()\nPEERDIR(" + protoModPath + ")\nSRCS(use.cpp)\nEND()\n"
+	files[appModPath+"/use.cpp"] = "#include <" + protoModPath + "/JsonPathParser.pb.h>\nint use() { return 0; }\n"
+
+	// Required source files for the ANTLR and proto chain.
+	files["templates/protobuf.stg.in"] = "stub stg\n"
+	files["yql/essentials/minikql/jsonpath/JsonPath.g"] = "stub grammar\n"
+	files["contrib/libs/protobuf/ya.make"] = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n"
+
+	// Put one of the pbDescriptorImporterHeaders in the memFS so it appears
+	// in the CC closure AFTER the $(B) proto. dropTransitiveGeneratedProto
+	// compacts the backing array in place; if the fast path reuses the
+	// un-shrunk full slice as NodeInputs, this header appears twice.
+	files["contrib/libs/protobuf/src/google/protobuf/reflection_ops.h"] = "// stub\n"
+
+	g := testGen(newMemFS(files), appModPath)
+
+	useCC := mustNodeByOutput(t, g, "$(B)/"+appModPath+"/use.cpp.o")
+
+	seen := make(map[string]int, len(useCC.Inputs))
+	for _, in := range useCC.Inputs {
+		seen[in.String()]++
+	}
+	for inp, count := range seen {
+		if count > 1 {
+			t.Errorf("use.cpp.o has duplicate input %q (appears %d times)", inp, count)
+		}
+	}
 }

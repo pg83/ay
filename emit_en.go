@@ -45,6 +45,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		PeerAddInclGlobal: peerAddInclGlobal,
 		SourceRoot:        ctx.sourceRoot,
 		FS:                ctx.fs,
+		SrcDir:            d.srcDir,
 	}
 
 	res := &enumSrcsResult{}
@@ -52,7 +53,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 	for _, stmt := range d.enumSrcs {
 		headerRel := stmt.Header
 		withHeader := stmt.Variant == "with_header"
-		headerInput := resolveEnumHeaderInput(ctx, instance, headerRel, scanIn.SrcDir)
+		headerInput := resolveEnumHeaderInput(ctx, instance, headerRel, d.srcDir)
 
 		closure := walkClosure(ctx, instance, headerInput, scanIn)
 

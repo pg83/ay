@@ -644,7 +644,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	wireFormatVFS := Source(pbRuntimeBase + "google/protobuf/wire_format.h")
 	for _, co := range codegenOutputs {
 		ccIn := moduleInputs
-		ccIn.IncludeInputs = walkClosure(ctx, instance, co.pbCC, moduleInputs)
+		ccIn.IncludeInputs = dropTransitiveGeneratedProto(walkClosure(ctx, instance, co.pbCC, moduleInputs))
 
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
 			selfH := Build(strings.TrimSuffix(co.pbCC.Rel(), ".cc") + ".h")

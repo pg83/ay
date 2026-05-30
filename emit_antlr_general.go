@@ -156,11 +156,26 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 			}
 		}
 	} else if isHeaderSource(outTok) {
+		// For the generated *Lexer.h header: register the paired *Parser.cpp
+		// directly (not the *Lexer.cpp sibling) so that cross-module CC nodes
+		// that include the header reach *Parser.cpp without listing *Lexer.cpp
+		// as an input. The *Lexer.cpp sibling is compiled separately by the ANTLR
+		// module and must not appear in other modules' CC inputs.
 		base := strings.TrimSuffix(outTok, filepath.Ext(outTok))
-		for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
-			if cppVFS, ok := outVFSByToken[base+ext]; ok {
-				appendUnique(cppVFS.Rel())
-				break
+		if parserBase, isLexerH := strings.CutSuffix(base, "Lexer"); isLexerH {
+			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
+				if parserVFS, ok := outVFSByToken[parserBase+"Parser"+ext]; ok {
+					appendUnique(parserVFS.Rel())
+					break
+				}
+			}
+		} else {
+			// Non-Lexer headers: register the sibling .cpp (general case)
+			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
+				if cppVFS, ok := outVFSByToken[base+ext]; ok {
+					appendUnique(cppVFS.Rel())
+					break
+				}
 			}
 		}
 	}
