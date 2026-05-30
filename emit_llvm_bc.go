@@ -169,6 +169,16 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			d.prOutputProducer = map[string]NodeRef{}
 		}
 		d.prOutputProducer[optOutName] = opRef
+		// Propagate the OP node's inputs into prOutputInputs so that
+		// emitResourceObjcopy's prResourceExtraInputs picks up the full BC
+		// compilation closure (clang_wrapper.py, llvm_opt_wrapper.py, and all
+		// header dependencies) and adds them as inputs to the PY objcopy node.
+		// Upstream ymake propagates producer inputs transitively via its
+		// ${input:...} resolution; our code uses the prOutputInputs map for this.
+		if d.prOutputInputs == nil {
+			d.prOutputInputs = map[string][]VFS{}
+		}
+		d.prOutputInputs[optOutName] = append([]VFS(nil), optInputs...)
 		d.resources = append(d.resources, resourceEntry{
 			Path:      optOutName,
 			Key:       "/llvm_bc/" + stmt.Name,
