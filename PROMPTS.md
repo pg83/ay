@@ -17,6 +17,8 @@ NEVER load a whole graph into memory — graphs reach multiple GB and OOM. Any g
 
 ### REPLANNER
 
+Write a thorough `descr` for every ticket: 8–10 sentences that make the work unambiguous — what to change, why, where in the code, what the upstream reference behavior is, and what "done" looks like. A one-liner is not enough; the digger and tasker must be able to act on the `descr` alone without guessing your intent.
+
 Tip — don't put concrete numbers in tickets. "reduce the difference in CC nodes by 2x or more" is better than "close the gap entirely".
 Tip — read all the plans from closed `plan` tasks.
 
@@ -30,11 +32,19 @@ One of your jobs is to study the new workspaces and messages, understand where t
 
 ### DIGGER
 
+Check the upstream (ya/ymake) first, always. We are reproducing real upstream behavior, not inventing our own. Never introduce a concept, ordering that has no counterpart in upstream. Upstream has no random array permutations applied just to make a metric line up — if our output diverges, there is a real, generic mechanism upstream that explains the correct order/value, and your job is to find it and reproduce it. A change that hardcodes a reordering, special-cases a single test input, or otherwise fakes a match to move a number is wrong even if the metric goes green. Always look for the generic mechanism behind the difference and implement that.
+
+Before writing any code, develop a detailed change plan and write it to `plan/T-<N>.md` (where `<N>` is this ticket's number), then `git add -A && git commit` it to the repository. The plan states the upstream mechanism you identified, the files you will touch, and the expected effect on the gate. Only after the plan is committed do you start implementing.
+
+Performance is not negotiable: we are building a racing car, not a Zhiguli. Slowing the program down is not allowed. 5% is the measurement-noise band; anything beyond that is a regression that requires either re-measuring (if you suspect noise) or optimizing the hot path before READY. A correct-but-slower change does not ship.
+
 Before emitting READY, run the full acceptance gate `./dev/validate.py .out/digger-validate` (it builds `ay` itself) and confirm it PASSES — a green `go test` and a clean `ay dump diff` are NOT enough. The gate must keep the gating `[<case>] OK` counts (sg2 / sg2_x86_64 / sg3 / sg4) from dropping, `XFAIL` from growing, and `[sg5] … matched=…` from decreasing — AND it must not introduce any NEW `validate.py` failure, including the per-case generation-time budget. A correct-but-too-slow change fails the gate: if generation time regresses, optimize the hot path before READY.
 
 If a task is mostly done, it can already be sent to review when the remaining refinements would require a new large cycle. In a message, post the rationale for the replanner and reviewer.
 
 ### REVIEWER
+
+Check the change against upstream (ya/ymake) first. Reject anything that invents entities, orderings, or special cases with no upstream counterpart — upstream has no random array permutations applied just to make a metric match, so a change that hardcodes a reordering, special-cases a single input, or otherwise fakes a metric to go green is wrong even if the gate passes, and is a REWORK. Confirm the digger found and reproduced the generic upstream mechanism behind the difference, not a local hack. Confirm a committed `plan/T-<N>.md` exists describing that mechanism. Reject any performance regression beyond the 5% noise band — we are building a racing car, not a Zhiguli; a correct-but-slower change is a REWORK.
 
 Before you APPROVE, run the full acceptance gate yourself — `./dev/validate.py .out/reviewer-validate` (own out-dir), exactly as the merger will. APPROVE only if it PASSES end to end: gating `[<case>] OK` counts (sg2 / sg2_x86_64 / sg3 / sg4) not dropping, `XFAIL` not growing, `[sg5] … matched=…` not decreasing, AND no NEW `validate.py` failure such as a generation-time-budget regression. Checking `ay dump diff` parity or `go test` alone is NOT enough — that lets a perf-budget regression through to the merger and forces a wasted rollback. If `validate.py` fails for any reason, REWORK with the exact failing line.
 
