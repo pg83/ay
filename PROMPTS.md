@@ -15,7 +15,7 @@ NEVER load a whole graph into memory — graphs reach multiple GB and OOM. Any g
 
 ### OVERSEER
 
-### REPLANNER
+### LEAD
 
 Write a thorough `descr` for every ticket: 8–10 sentences that make the work unambiguous — what to change, why, where in the code, what the upstream reference behavior is, and what "done" looks like. A one-liner is not enough; the digger and tasker must be able to act on the `descr` alone without guessing your intent.
 
@@ -46,7 +46,7 @@ Performance is not negotiable: we are building a racing car, not a Zhiguli. Slow
 
 Before emitting READY, run the full acceptance gate `./dev/validate.py .out/digger-validate` (it builds `ay` itself) and confirm it PASSES — a green `go test` and a clean `ay dump diff` are NOT enough. The gate must keep the gating `[<case>] OK` counts (sg2 / sg2_x86_64 / sg3 / sg4) from dropping, `XFAIL` from growing, and `[sg5] … matched=…` from decreasing — AND it must not introduce any NEW `validate.py` failure, including the per-case generation-time budget. A correct-but-too-slow change fails the gate: if generation time regresses, optimize the hot path before READY.
 
-If a task is mostly done, it can already be sent to review when the remaining refinements would require a new large cycle. In a message, post the rationale for the replanner and reviewer.
+If a task is mostly done, it can already be sent to review when the remaining refinements would require a new large cycle. In a message, post the rationale for the lead and reviewer.
 
 ### REVIEWER
 
@@ -56,9 +56,9 @@ Before you APPROVE, run the full acceptance gate yourself — `./dev/validate.py
 
 REWORK is expensive — it costs a full digger → review → merge cycle. Spend it ONLY on things that block the ticket's goal: wrong behavior, failing tests, or a change that diverges from the ticket intent. Everything else is a `message`, not a bounce.
 
-Do NOT REWORK for housekeeping: dead code or orphaned helpers / fields / constants left behind by the change, leftover hygiene, naming, style, or "this could be refactored". If the change is correct and the tests pass, APPROVE and note any such cleanup in a `message` — the replanner can spin a follow-up ticket if it's worth it.
+Do NOT REWORK for housekeeping: dead code or orphaned helpers / fields / constants left behind by the change, leftover hygiene, naming, style, or "this could be refactored". If the change is correct and the tests pass, APPROVE and note any such cleanup in a `message` — the lead can spin a follow-up ticket if it's worth it.
 
-If a task is mostly done, ship it when the remaining refinements would require a new large cycle; post the rationale for the replanner and merger in a `message`.
+If a task is mostly done, ship it when the remaining refinements would require a new large cycle; post the rationale for the lead and merger in a `message`.
 
 ### MERGER
 
