@@ -40,6 +40,11 @@ type moduleEmitResult struct {
 	// addincl; they are NOT re-propagated via AddInclGlobal.
 	AddInclOneLevel []VFS
 
+	// AddInclUserGlobal is the peer's own GLOBAL and ONE_LEVEL ADDINCL paths in
+	// declaration order — the equivalent of ymake's UserGlobal. Used by direct
+	// consumers to preserve upstream -I ordering (UserGlobal before GlobalPropagated).
+	AddInclUserGlobal []VFS
+
 	CFlagsGlobal     []string
 	CXXFlagsGlobal   []string
 	COnlyFlagsGlobal []string
@@ -788,6 +793,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			OwnAddInclGlobal:   cloneVFSs(d.addInclGlobal),
 			ProtoAddInclGlobal: effectiveProtoAddInclH,
 			AddInclOneLevel:    cloneVFSs(d.addInclOneLevel),
+			AddInclUserGlobal:  cloneVFSs(d.addInclUserGlobal),
 
 			CFlagsGlobal:                    mergeDedup(peerContribs.cFlags, d.cFlagsGlobal),
 			CXXFlagsGlobal:                  mergeDedup(peerContribs.cxxFlags, d.cxxFlagsGlobal),
@@ -1002,6 +1008,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	addInclSeen := map[VFS]struct{}{}
 	peerAddInclGlobal := make([]VFS, 0, 16)
+	// oneLevelOnlyPaths tracks paths added exclusively via ONE_LEVEL from direct user
+	// peers. Such paths appear in peerAddInclGlobal (for correct CC command ordering)
+	// but must be excluded from effectiveAddInclGlobal so they don't re-propagate
+	// transitively — upstream ONE_LEVEL propagates only one hop.
+	var oneLevelOnlyPaths map[VFS]struct{}
 
 	cFlagsSeen := map[string]struct{}{}
 	peerCFlagsGlobal := make([]string, 0, 16)
@@ -1061,18 +1072,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		for i, p := range peerResult.LDPluginPaths {
 			peerLDPluginAddPath(peerResult.LDPluginRefs[i], p)
 		}
-	}
-
-	// Direct PEERDIR consumers absorb the peer's AddInclOneLevel into their own
-	// addincl (one hop only — see moduleEmitResult.AddInclOneLevel comment).
-	// Goes through d.addIncl (own bag), so it reaches this module's CC compile
-	// flags but is NOT re-propagated via result.AddInclGlobal upstream.
-	for _, rp := range resolved {
-		if rp.kind != peerKindUserPeer {
-			continue
-		}
-
-		d.addIncl = append(d.addIncl, rp.result.AddInclOneLevel...)
 	}
 
 	archiveOrder := resolved
@@ -1221,7 +1220,35 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				continue
 			}
 
-			addEachVFS(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
+			// Emit peer's own GLOBAL+ONE_LEVEL in declaration order (UserGlobal),
+			// mirroring upstream PropagateTo which propagates UserGlobal before
+			// GlobalPropagated (transitive). Declaration order is preserved by
+			// AddInclUserGlobal (built from AddInclStmt.UserGlobalPaths).
+			for _, p := range rp.result.AddInclUserGlobal {
+				if _, dup := addInclSeen[p]; !dup {
+					addInclSeen[p] = struct{}{}
+					peerAddInclGlobal = append(peerAddInclGlobal, p)
+				}
+			}
+			// Track ONE_LEVEL-only paths so they are not re-propagated transitively
+			// (upstream one-hop semantics: ONE_LEVEL is not in GlobalPropagated).
+			for _, p := range rp.result.AddInclOneLevel {
+				if oneLevelOnlyPaths == nil {
+					oneLevelOnlyPaths = map[VFS]struct{}{}
+				}
+				oneLevelOnlyPaths[p] = struct{}{}
+			}
+			// Add transitive GLOBALs (GlobalPropagated). A path also exported as
+			// GLOBAL by any peer wins over ONE_LEVEL-only and should propagate.
+			for _, p := range rp.result.AddInclGlobal {
+				if _, dup := addInclSeen[p]; !dup {
+					addInclSeen[p] = struct{}{}
+					peerAddInclGlobal = append(peerAddInclGlobal, p)
+				}
+				if oneLevelOnlyPaths != nil {
+					delete(oneLevelOnlyPaths, p)
+				}
+			}
 		}
 	}
 
@@ -1270,7 +1297,20 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		addEach(rpathFlagsSeen, &peerRPathFlagsGlobal, rp.result.RPathFlagsGlobal)
 	}
 
-	effectiveAddInclGlobal := mergeDedupVFS(d.addInclGlobal, peerAddInclGlobal)
+	// ONE_LEVEL paths from direct user peers must not re-propagate to transitive
+	// consumers — upstream's one-hop semantics. Filter them from the list used for
+	// the module result (AddInclGlobal); they remain in peerAddInclGlobal only for
+	// the CC command of this module itself (via selfPeerAddInclGlobal below).
+	peerAddInclForProp := peerAddInclGlobal
+	if len(oneLevelOnlyPaths) > 0 {
+		peerAddInclForProp = make([]VFS, 0, len(peerAddInclGlobal))
+		for _, p := range peerAddInclGlobal {
+			if _, isOneLevel := oneLevelOnlyPaths[p]; !isOneLevel {
+				peerAddInclForProp = append(peerAddInclForProp, p)
+			}
+		}
+	}
+	effectiveAddInclGlobal := mergeDedupVFS(d.addInclGlobal, peerAddInclForProp)
 
 	// ProtoAddInclGlobal: this module's $(S)/<PROTO_NAMESPACE> contribution
 	// (only when GLOBAL was specified or the module is a PROTO_LIBRARY),
@@ -1851,6 +1891,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			OwnAddInclGlobal:                cloneVFSs(d.addInclGlobal),
 			ProtoAddInclGlobal:              effectiveProtoAddInclGlobal,
 			AddInclOneLevel:                 cloneVFSs(d.addInclOneLevel),
+			AddInclUserGlobal:               cloneVFSs(d.addInclUserGlobal),
 			CFlagsGlobal:                    effectiveCFlagsGlobal,
 			CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
 			COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
@@ -1946,6 +1987,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		OwnAddInclGlobal:                cloneVFSs(d.addInclGlobal),
 		ProtoAddInclGlobal:              effectiveProtoAddInclGlobal,
 		AddInclOneLevel:                 cloneVFSs(d.addInclOneLevel),
+		AddInclUserGlobal:               cloneVFSs(d.addInclUserGlobal),
 		CFlagsGlobal:                    effectiveCFlagsGlobal,
 		CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
 		COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,

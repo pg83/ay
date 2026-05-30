@@ -73,6 +73,9 @@ type AddInclStmt struct {
 	CythonPaths      []string
 	AsmPaths         []string
 	ProtoGlobalPaths []string
+	// UserGlobalPaths contains GLOBAL and ONE_LEVEL paths in declaration order —
+	// the equivalent of ymake's UserGlobal. Used to preserve upstream -I ordering.
+	UserGlobalPaths []string
 
 	AllPaths []string
 	Line     int
@@ -844,9 +847,9 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 
 		return &JoinSrcsStmt{OutputName: args[0], Sources: sources, Line: nameTok.line}
 	case "ADDINCL":
-		globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, allPaths := splitAddInclPaths(args)
+		globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths := splitAddInclPaths(args)
 
-		return &AddInclStmt{GlobalPaths: globalPaths, OneLevelPaths: oneLevelPaths, OwnPaths: ownPaths, CythonPaths: cythonPaths, AsmPaths: asmPaths, ProtoGlobalPaths: protoGlobalPaths, AllPaths: allPaths, Line: nameTok.line}
+		return &AddInclStmt{GlobalPaths: globalPaths, OneLevelPaths: oneLevelPaths, OwnPaths: ownPaths, CythonPaths: cythonPaths, AsmPaths: asmPaths, ProtoGlobalPaths: protoGlobalPaths, UserGlobalPaths: userGlobalPaths, AllPaths: allPaths, Line: nameTok.line}
 	case "CFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
 
@@ -1221,13 +1224,14 @@ func splitFlagsByGlobal(args []string) (globalFlags, ownFlags []string) {
 	return globalFlags, ownFlags
 }
 
-func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, allPaths []string) {
+func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths []string) {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "ONE_LEVEL" {
 			i++
 			if i < len(args) {
 				oneLevelPaths = append(oneLevelPaths, args[i])
 				ownPaths = append(ownPaths, args[i])
+				userGlobalPaths = append(userGlobalPaths, args[i])
 				allPaths = append(allPaths, args[i])
 			}
 
@@ -1292,6 +1296,7 @@ func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cyt
 
 			if i < len(args) {
 				globalPaths = append(globalPaths, args[i])
+				userGlobalPaths = append(userGlobalPaths, args[i])
 				allPaths = append(allPaths, args[i])
 			}
 		} else {
@@ -1300,7 +1305,7 @@ func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cyt
 		}
 	}
 
-	return globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, allPaths
+	return globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths
 }
 
 func (p *parser) parseIf(ifTok token) *IfStmt {
