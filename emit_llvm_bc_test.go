@@ -5,6 +5,162 @@ import (
 	"testing"
 )
 
+// TestEmitLLVMBC_OptPassesNoBraceComma verifies that the OP node's -passes arg
+// uses literal commas (not ${__COMMA__}) and has no spurious outer single-quotes.
+// Upstream: ymake expands ${__COMMA__} → , and strips shell-quoting before
+// writing graph JSON. Our code must emit the already-expanded form.
+func TestEmitLLVMBC_OptPassesNoBraceComma(t *testing.T) {
+	const modPath = "mod/llvm"
+
+	files := map[string]string{}
+	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	files[modPath+"/ya.make"] = `LIBRARY()
+USE_LLVM_BC16()
+LLVM_BC(
+    foo.cpp
+    NAME
+    Bar
+    SUFFIX .16
+    SYMBOLS
+    DoThing
+)
+SRCS(foo.cpp)
+END()
+`
+	files[modPath+"/foo.cpp"] = "int Bar(){return 0;}\n"
+
+	g := testGen(newMemFS(files), modPath)
+
+	var opNode *Node
+	for _, n := range g.Graph {
+		if p, _ := n.KV["p"].(string); p != "OP" {
+			continue
+		}
+		for _, o := range n.Outputs {
+			if strings.Contains(o.String(), "Bar_optimized") {
+				opNode = n
+				break
+			}
+		}
+		if opNode != nil {
+			break
+		}
+	}
+	if opNode == nil {
+		t.Fatal("graph missing OP node for Bar_optimized")
+	}
+
+	if len(opNode.Cmds) == 0 {
+		t.Fatal("OP node has no cmds")
+	}
+	args := opNode.Cmds[0].CmdArgs
+	var passesArg string
+	for _, a := range args {
+		if strings.HasPrefix(a, "-passes=") {
+			passesArg = a
+			break
+		}
+	}
+	if passesArg == "" {
+		t.Fatalf("OP cmd args contain no -passes= arg: %v", args)
+	}
+	if strings.Contains(passesArg, "${__COMMA__}") {
+		t.Errorf("-passes= arg still contains unexpanded ${__COMMA__}: %q", passesArg)
+	}
+	if strings.HasPrefix(passesArg, "'") || strings.HasSuffix(passesArg, "'") {
+		t.Errorf("-passes= arg has spurious outer single-quotes: %q", passesArg)
+	}
+	// Must contain commas as separator between passes.
+	if !strings.Contains(passesArg, ",") {
+		t.Errorf("-passes= arg has no comma separators: %q", passesArg)
+	}
+	want := `-passes="default<O2>,globalopt,globaldce,internalize"`
+	if passesArg != want {
+		t.Errorf("-passes= arg = %q, want %q", passesArg, want)
+	}
+}
+
+// TestEmitLLVMBC_BCNodeIncludesCompileFlags verifies that BC compile nodes include
+// the standard include paths and defines (like a full CC compile), not just the
+// bare -emit-llvm -c src -o out. Upstream LLVM_COMPILE_CXX macro includes
+// ${pre=-I:_C__INCLUDE} $BC_CXXFLAGS which is the full CXXFLAGS set.
+func TestEmitLLVMBC_BCNodeIncludesCompileFlags(t *testing.T) {
+	const modPath = "mod/llvm"
+
+	files := map[string]string{}
+	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	files[modPath+"/ya.make"] = `LIBRARY()
+USE_LLVM_BC16()
+LLVM_BC(
+    foo.cpp
+    NAME
+    Bar
+    SUFFIX .16
+)
+SRCS(foo.cpp)
+END()
+`
+	files[modPath+"/foo.cpp"] = "int Bar(){return 0;}\n"
+
+	g := testGen(newMemFS(files), modPath)
+
+	var bcNode *Node
+	for _, n := range g.Graph {
+		if p, _ := n.KV["p"].(string); p != "BC" {
+			continue
+		}
+		for _, o := range n.Outputs {
+			if strings.HasSuffix(o.String(), "foo.cpp.16.bc") {
+				bcNode = n
+				break
+			}
+		}
+		if bcNode != nil {
+			break
+		}
+	}
+	if bcNode == nil {
+		t.Fatal("graph missing BC node for foo.cpp.16.bc")
+	}
+
+	if len(bcNode.Cmds) == 0 {
+		t.Fatal("BC node has no cmds")
+	}
+	args := bcNode.Cmds[0].CmdArgs
+
+	// Must include standard include paths from ccIncludesPrefix.
+	hasIB := false
+	hasIS := false
+	for _, a := range args {
+		if a == "-I$(B)" {
+			hasIB = true
+		}
+		if a == "-I$(S)" {
+			hasIS = true
+		}
+	}
+	if !hasIB {
+		t.Errorf("BC compile cmd missing -I$(B): %v", args)
+	}
+	if !hasIS {
+		t.Errorf("BC compile cmd missing -I$(S): %v", args)
+	}
+
+	// Must include ARCADIA_ROOT define (from hostDefines / $BC_CXXFLAGS).
+	hasArcadiaRoot := false
+	for _, a := range args {
+		if a == "-DARCADIA_ROOT=$(S)" {
+			hasArcadiaRoot = true
+			break
+		}
+	}
+	if !hasArcadiaRoot {
+		t.Errorf("BC compile cmd missing -DARCADIA_ROOT=$(S): %v", args)
+	}
+}
+
 // TestEmitLLVMBC_PipelineProducesFiveNodes reproduces the G3 yt codec llvm16
 // gap: USE_LLVM_BC16 + LLVM_BC parses (modules.go:1029) but emission is
 // missing. Upstream `build/plugins/llvm_bc.py` drives the 5-step pipeline:
@@ -117,5 +273,213 @@ END()
 	}
 	if arNode == nil {
 		t.Errorf("graph missing AR .global.a node carrying the PY objcopy.o")
+	}
+}
+
+// TestEmitLLVMBC_BCNodeIncludesArchArgs verifies that the BC compile command
+// carries $C_FLAGS_PLATFORM arch flags (e.g. -march=armv8-a for AArch64).
+// testGen targets AArch64, so bundle.ArchArgs = ["-march=armv8-a"]; the BC
+// command must include that flag between --target=... and -B/usr/bin.
+func TestEmitLLVMBC_BCNodeIncludesArchArgs(t *testing.T) {
+	const modPath = "mod/llvm"
+
+	files := map[string]string{}
+	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	files[modPath+"/ya.make"] = `LIBRARY()
+USE_LLVM_BC16()
+LLVM_BC(
+    foo.cpp
+    NAME
+    Bar
+    SUFFIX .16
+)
+SRCS(foo.cpp)
+END()
+`
+	files[modPath+"/foo.cpp"] = "int Bar(){return 0;}\n"
+
+	g := testGen(newMemFS(files), modPath)
+
+	var bcNode *Node
+	for _, n := range g.Graph {
+		if p, _ := n.KV["p"].(string); p != "BC" {
+			continue
+		}
+		for _, o := range n.Outputs {
+			if strings.HasSuffix(o.String(), "foo.cpp.16.bc") {
+				bcNode = n
+				break
+			}
+		}
+		if bcNode != nil {
+			break
+		}
+	}
+	if bcNode == nil {
+		t.Fatal("graph missing BC node for foo.cpp.16.bc")
+	}
+
+	if len(bcNode.Cmds) == 0 {
+		t.Fatal("BC node has no cmds")
+	}
+	args := bcNode.Cmds[0].CmdArgs
+
+	// Must carry -march=armv8-a (AArch64 platform; testGen targets AArch64).
+	hasMarch := false
+	for _, a := range args {
+		if a == "-march=armv8-a" {
+			hasMarch = true
+			break
+		}
+	}
+	if !hasMarch {
+		t.Errorf("BC compile cmd missing -march=armv8-a (AArch64 ArchArgs): %v", args)
+	}
+
+	// The order must be: --target=... then -march=... then -B/usr/bin.
+	targetIdx, marchIdx, binIdx := -1, -1, -1
+	for i, a := range args {
+		switch {
+		case strings.HasPrefix(a, "--target="):
+			targetIdx = i
+		case a == "-march=armv8-a":
+			marchIdx = i
+		case strings.HasPrefix(a, "-B"):
+			binIdx = i
+		}
+	}
+	if targetIdx < 0 || marchIdx < 0 || binIdx < 0 {
+		t.Fatalf("args missing --target / -march / -B: idx %d/%d/%d in %v", targetIdx, marchIdx, binIdx, args)
+	}
+	if !(targetIdx < marchIdx && marchIdx < binIdx) {
+		t.Errorf("platform flag order wrong: --target[%d] -march[%d] -B[%d]; want --target < -march < -B", targetIdx, marchIdx, binIdx)
+	}
+}
+
+// TestEmitLLVMBC_BCNodeCarriesIncludeClosure verifies that the BC compile node
+// carries the full transitive include closure in Inputs, not just the single
+// source file. Upstream emits all header dependencies as direct node inputs so
+// any header change retriggers the BC compile. Our prior code used
+// Inputs: []VFS{inputVFS} — only the source — which diverged from upstream.
+func TestEmitLLVMBC_BCNodeCarriesIncludeClosure(t *testing.T) {
+	const modPath = "mod/llvm"
+
+	files := map[string]string{}
+	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	files[modPath+"/ya.make"] = `LIBRARY()
+USE_LLVM_BC16()
+LLVM_BC(
+    foo.cpp
+    NAME
+    Bar
+    SUFFIX .16
+)
+SRCS(foo.cpp)
+END()
+`
+	// foo.cpp includes foo.h; the closure must carry foo.h as an input.
+	files[modPath+"/foo.cpp"] = "#include \"foo.h\"\nint Bar(){return 0;}\n"
+	files[modPath+"/foo.h"] = "#pragma once\n"
+
+	g := testGen(newMemFS(files), modPath)
+
+	var bcNode *Node
+	for _, n := range g.Graph {
+		if p, _ := n.KV["p"].(string); p != "BC" {
+			continue
+		}
+		for _, o := range n.Outputs {
+			if strings.HasSuffix(o.String(), "foo.cpp.16.bc") {
+				bcNode = n
+				break
+			}
+		}
+		if bcNode != nil {
+			break
+		}
+	}
+	if bcNode == nil {
+		t.Fatal("graph missing BC node for foo.cpp.16.bc")
+	}
+
+	// BC node must carry the source file plus its include closure (foo.h).
+	// Before fix: Inputs was [foo.cpp] only — len == 1.
+	if len(bcNode.Inputs) < 2 {
+		t.Errorf("BC node Inputs has only %d entries; want source + closure: %v", len(bcNode.Inputs), vfsStringsT3(bcNode.Inputs))
+	}
+
+	// First input must be the source file.
+	if !strings.HasSuffix(bcNode.Inputs[0].String(), "foo.cpp") {
+		t.Errorf("BC node first input is not foo.cpp: %v", bcNode.Inputs[0])
+	}
+
+	// Closure must include foo.h.
+	if !nodeHasInput(bcNode, "$(S)/"+modPath+"/foo.h") {
+		t.Errorf("BC node Inputs missing foo.h from include closure: %v", vfsStringsT3(bcNode.Inputs))
+	}
+}
+
+// TestEmitLLVMBC_BCNodeGeneratedSourceClosure verifies that a BC source produced
+// by COPY_FILE(TEXT) (i.e. a build-root generated source like yt_codec_bc.cpp)
+// compiles the build-root copy as its primary input and carries its include
+// closure — both matching the upstream LLVM_COMPILE_CXX node shape.
+func TestEmitLLVMBC_BCNodeGeneratedSourceClosure(t *testing.T) {
+	const modPath = "mod/llvm"
+
+	files := map[string]string{}
+	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	// COPY_FILE(TEXT src.in dst) creates a build-root generated source.
+	// The scanner registers src.in's parsed includes for $(B)/mod/dst,
+	// so walkClosure on $(B)/mod/dst returns the transitive header set.
+	files[modPath+"/ya.make"] = `LIBRARY()
+USE_LLVM_BC16()
+COPY_FILE(TEXT gen.cpp.in gen.cpp)
+LLVM_BC(
+    gen.cpp
+    NAME
+    Gen
+    SUFFIX .16
+)
+END()
+`
+	files[modPath+"/gen.cpp.in"] = "#include \"gen.h\"\nint Gen(){return 0;}\n"
+	files[modPath+"/gen.h"] = "#pragma once\n"
+
+	g := testGen(newMemFS(files), modPath)
+
+	var bcNode *Node
+	for _, n := range g.Graph {
+		if p, _ := n.KV["p"].(string); p != "BC" {
+			continue
+		}
+		for _, o := range n.Outputs {
+			if strings.HasSuffix(o.String(), "gen.cpp.16.bc") {
+				bcNode = n
+				break
+			}
+		}
+		if bcNode != nil {
+			break
+		}
+	}
+	if bcNode == nil {
+		t.Fatal("graph missing BC node for gen.cpp.16.bc")
+	}
+
+	// Primary input must be the build-root generated copy, not the source.
+	if len(bcNode.Inputs) == 0 {
+		t.Fatal("BC node has no inputs")
+	}
+	primaryInput := bcNode.Inputs[0].String()
+	if !strings.HasPrefix(primaryInput, "$(B)/") || !strings.HasSuffix(primaryInput, "gen.cpp") {
+		t.Errorf("BC node primary input is not $(B)/.../gen.cpp: %q", primaryInput)
+	}
+
+	// BC node must also carry gen.h from the closure.
+	if !nodeHasInput(bcNode, "$(S)/"+modPath+"/gen.h") {
+		t.Errorf("BC node Inputs missing gen.h from closure: %v", vfsStringsT3(bcNode.Inputs))
 	}
 }
