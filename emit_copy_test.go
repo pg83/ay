@@ -16,6 +16,45 @@ import "testing"
 // Each module's COPY output must instead resolve the template's includes in ITS
 // OWN module context (the per-module dst is the unit of resolution), so a never
 // sees $(B)/b/dep.h and vice-versa.
+// TestGen_CrossModuleTextCopySourceTracked verifies that when a CC node in
+// module "consumer" includes a header produced by COPY_FILE(TEXT) in a
+// *different* module "owner", the original .txt source is tracked as a leaf
+// input of the CC node. This mirrors upstream ymake's behaviour: a TEXT-mode
+// copy whose source lives in another module still records the owning module's
+// .txt file as a real compiler input.
+func TestGen_CrossModuleTextCopySourceTracked(t *testing.T) {
+	files := map[string]string{}
+
+	// src/tmpl.h.txt lives at arcadia root; owner/ TEXT-copies it.
+	writeTestModuleFile(files, "src/tmpl.h.txt", "#pragma once\n// template\n")
+
+	// owner: TEXT-copies the arcadia-root source into $(B)/owner/sub/tmpl.h,
+	// then exports that directory globally so consumers can #include <sub/tmpl.h>.
+	writeTestModuleFile(files, "owner/ya.make",
+		"LIBRARY()\nADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/${MODDIR})\n"+
+			"COPY_FILE(TEXT src/tmpl.h.txt ${BINDIR}/sub/tmpl.h)\nEND()\n")
+
+	// consumer: PEERDIRs owner and includes the generated header.
+	writeTestModuleFile(files, "consumer/ya.make",
+		"LIBRARY()\nPEERDIR(owner)\nSRCS(consumer.cpp)\nEND()\n")
+	writeTestModuleFile(files, "consumer/consumer.cpp",
+		"#include <sub/tmpl.h>\nint f(){return 0;}\n")
+
+	writeTestModuleFile(files, "root/ya.make",
+		"PROGRAM()\nPEERDIR(consumer)\nSRCS(m.cpp)\nEND()\n")
+	writeTestModuleFile(files, "root/m.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "root")
+
+	consumerCC := mustNodeByOutput(t, g, "$(B)/consumer/consumer.cpp.o")
+
+	// The .h.txt source must appear as a leaf input — upstream always tracks it.
+	if !nodeHasInput(consumerCC, "$(S)/src/tmpl.h.txt") {
+		t.Errorf("consumer.cpp.o missing cross-module TEXT copy source $(S)/src/tmpl.h.txt: %v",
+			vfsStringsT3(consumerCC.Inputs))
+	}
+}
+
 func TestGen_TextCopyResolvesIncludesInConsumerContext(t *testing.T) {
 	files := map[string]string{}
 

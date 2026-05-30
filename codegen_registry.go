@@ -12,6 +12,13 @@ type GeneratedFileInfo struct {
 	// remapping; OutputPath is the canonical input edge".
 	SourcePath VFS
 
+	// IsText marks a COPY_FILE(TEXT) registration. TEXT copies expand the
+	// source content into the destination verbatim, so the .txt source is a
+	// real compiler input even when the COPY lives in a different module than
+	// the CC node that includes the generated header. withContextSourceExtras
+	// uses this flag to extend source-tracking across module boundaries.
+	IsText bool
+
 	ProducerRef    NodeRef
 	HasProducerRef bool
 

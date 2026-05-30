@@ -86,6 +86,7 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 				ProducerKvP: "CP",
 				OutputPath:  dstVFS,
 				SourcePath:  srcVFS,
+				IsText:      entry.Text,
 			})
 		}
 	}
@@ -228,31 +229,55 @@ func autoCopyDstExtras(modulePath string, d *moduleData, closure []VFS, rootDst 
 // source VFS from the raw entry.Src string — that keeps this leaf input
 // byte-identical to the CP node's own source edge and avoids a redundant
 // filesystem probe per entry.
+//
+// Cross-module TEXT copies: when a CC node includes a header produced by
+// COPY_FILE(TEXT) in a *different* module, the .txt source is still a real
+// compiler input. The registry carries IsText on every CP registration, so we
+// extend the lookup beyond d.copyFiles to cover those cross-module cases.
 func withContextSourceExtras(reg *CodegenRegistry, modulePath string, d *moduleData, closure []VFS, rootDst VFS) []VFS {
-	if d == nil || len(d.copyFiles) == 0 || reg == nil {
+	if reg == nil {
 		return nil
 	}
-	dstToSrc := make(map[VFS]VFS, len(d.copyFiles))
-	for _, entry := range d.copyFiles {
-		if !entry.Text {
-			continue
+	// Build a dst→src map from this module's own TEXT copy files.
+	var dstToSrc map[VFS]VFS
+	if d != nil {
+		for _, entry := range d.copyFiles {
+			if !entry.Text {
+				continue
+			}
+			dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
+			info := reg.Lookup(dstVFS)
+			if info == nil || info.SourcePath == 0 || info.SourcePath == dstVFS {
+				continue
+			}
+			if dstToSrc == nil {
+				dstToSrc = make(map[VFS]VFS, len(d.copyFiles))
+			}
+			dstToSrc[dstVFS] = info.SourcePath
 		}
-		dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
-		info := reg.Lookup(dstVFS)
-		if info == nil || info.SourcePath == 0 || info.SourcePath == dstVFS {
-			continue
-		}
-		dstToSrc[dstVFS] = info.SourcePath
 	}
-	if len(dstToSrc) == 0 {
-		return nil
+	// textSrc returns the .txt source for v if v is a TEXT copy dst (same or
+	// different module); second return is false when v is not a TEXT copy.
+	textSrc := func(v VFS) (VFS, bool) {
+		if src, ok := dstToSrc[v]; ok {
+			return src, true
+		}
+		// Cross-module: any $(B) path registered as IsText in the registry.
+		if v.IsSource() {
+			return 0, false
+		}
+		info := reg.Lookup(v)
+		if info == nil || !info.IsText || info.SourcePath == 0 || info.SourcePath == v {
+			return 0, false
+		}
+		return info.SourcePath, true
 	}
 	var extras []VFS
-	if src, ok := dstToSrc[rootDst]; ok {
+	if src, ok := textSrc(rootDst); ok {
 		extras = append(extras, src)
 	}
 	for _, v := range closure {
-		if src, ok := dstToSrc[v]; ok {
+		if src, ok := textSrc(v); ok {
 			extras = append(extras, src)
 		}
 	}
