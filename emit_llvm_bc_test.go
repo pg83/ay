@@ -421,6 +421,70 @@ END()
 	}
 }
 
+// TestEmitLLVMBC_ObjcopyNodeCarriesBCClosure verifies that the PY objcopy node
+// for the LLVM_BC resource embed carries the BC compilation closure scripts as
+// inputs, matching upstream's flat input propagation. Upstream ymake propagates
+// the OP node's inputs (which include the clang_wrapper.py and llvm_opt_wrapper.py
+// scripts plus all closure headers) into the PY objcopy node. In our code this
+// propagation flows through d.prOutputInputs, which emitLLVMBC must populate.
+func TestEmitLLVMBC_ObjcopyNodeCarriesBCClosure(t *testing.T) {
+	const modPath = "mod/llvm"
+
+	files := map[string]string{}
+	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	files[modPath+"/ya.make"] = `LIBRARY()
+USE_LLVM_BC16()
+LLVM_BC(
+    foo.cpp
+    NAME
+    Bar
+    SUFFIX .16
+)
+SRCS(foo.cpp)
+END()
+`
+	files[modPath+"/foo.cpp"] = "int Bar(){return 0;}\n"
+
+	g := testGen(newMemFS(files), modPath)
+
+	// Find the PY objcopy node that embeds the LLVM BC output.
+	var pyNode *Node
+	for _, n := range g.Graph {
+		if p, _ := n.KV["p"].(string); p != "PY" {
+			continue
+		}
+		for _, o := range n.Outputs {
+			if strings.HasPrefix(o.String(), "$(B)/"+modPath+"/objcopy_") &&
+				strings.HasSuffix(o.String(), ".o") {
+				pyNode = n
+				break
+			}
+		}
+		if pyNode != nil {
+			break
+		}
+	}
+	if pyNode == nil {
+		t.Fatal("graph missing PY objcopy node for LLVM_BC resource")
+	}
+
+	// The PY node must carry clang_wrapper.py (from BC inputs) and
+	// llvm_opt_wrapper.py (from OP inputs) as part of the propagated closure.
+	// Before fix: d.prOutputInputs[optOutName] is never set, so prResourceExtraInputs
+	// returns nil and neither script appears in the PY node's inputs.
+	wantInputs := []string{
+		"$(S)/build/scripts/clang_wrapper.py",
+		"$(S)/build/scripts/llvm_opt_wrapper.py",
+	}
+	for _, want := range wantInputs {
+		if !nodeHasInput(pyNode, want) {
+			t.Errorf("PY objcopy node missing BC closure input %q; inputs: %v",
+				want, vfsStringsT3(pyNode.Inputs))
+		}
+	}
+}
+
 // TestEmitLLVMBC_BCNodeGeneratedSourceClosure verifies that a BC source produced
 // by COPY_FILE(TEXT) (i.e. a build-root generated source like yt_codec_bc.cpp)
 // compiles the build-root copy as its primary input and carries its include
