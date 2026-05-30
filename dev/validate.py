@@ -93,12 +93,21 @@ def _remove_if_exists(path):
         pass
 
 
-def _normalize_sort_go(raw, target, out):
-    """ay dump normalize <raw> | ay dump sort > out (streaming, bounded mem)."""
+def _normalize_sort_go(raw, target, out, strip_deps=False):
+    """ay dump normalize <raw> | ay dump sort > out (streaming, bounded mem).
+
+    strip_deps (UPSTREAM graph only) drops dep edges whose target's output is not
+    among the consuming node's inputs — ymake's induced-codegen NodeDeps metadata
+    our generator does not model. Our graph is normalized WITHOUT it, so any
+    superfluous dep WE emit still shows up in the diff.
+    """
+    norm_cmd = [AY, "dump", "normalize", "--in", raw, "--target", target, "--out", "-"]
+    if strip_deps:
+        norm_cmd.append("--strip-unreferenced-deps")
     tmp = out + ".tmp"
     _remove_if_exists(tmp)
     p1 = subprocess.Popen(
-        [AY, "dump", "normalize", "--in", raw, "--target", target, "--out", "-"],
+        norm_cmd,
         cwd=REPO_ROOT, stdout=subprocess.PIPE,
     )
     p2 = subprocess.Popen(
@@ -116,7 +125,8 @@ def _normalize_sort_go(raw, target, out):
 
 
 def normalize_pair(name, our_raw, ref_raw, target, our_out, ref_out):
-    if _normalize_sort_go(our_raw, target, our_out) and _normalize_sort_go(ref_raw, target, ref_out):
+    # Our graph clean; upstream ref stripped of unmodeled build-order-only deps.
+    if _normalize_sort_go(our_raw, target, our_out) and _normalize_sort_go(ref_raw, target, ref_out, strip_deps=True):
         return True
     print(f"[{name}] FAIL (normalize)")
     return False

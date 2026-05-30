@@ -181,17 +181,26 @@ func getString(node map[string]any, key string) string {
 	return s
 }
 
-func canonContent(node map[string]any) map[string]any {
+// canonInputs returns a node's inputs after the same filtering canonContent
+// applies (AR/LD input pruning + non-CP cascade-script removal). The dep-strip
+// pass keys off this so it agrees with what the normalized node treats as a real
+// input — e.g. filterARLDInputs already drops the induced .pb.h from a link
+// node's inputs, so the matching dep edges are likewise build-order-only.
+func canonInputs(node map[string]any) []string {
 	inputs := normSortedStrings(node["inputs"])
-
 	kind := nodeProgramKind(node)
 	if kind == "AR" || kind == "LD" {
 		inputs = filterARLDInputs(inputs, kind)
 	}
-
 	if kind != "CP" {
 		inputs = filterNonCPCascadeScripts(inputs)
 	}
+	return inputs
+}
+
+func canonContent(node map[string]any) map[string]any {
+	inputs := canonInputs(node)
+
 	canon := map[string]any{
 		"cmds":              normRec(orVal(node["cmds"], []any{})),
 		"env":               normRec(orVal(node["env"], map[string]any{})),
