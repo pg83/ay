@@ -1364,6 +1364,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	ccIsCFGenerated := make([]bool, 0, len(d.srcs)+len(d.joinSrcs))
 
+	ccIsProtoGenerated := make([]bool, 0, len(d.srcs)+len(d.joinSrcs))
+
 	ownCFlags := d.cFlags
 	ownCFlagsGlobalSelf := d.cFlagsGlobal
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
@@ -1522,6 +1524,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, isFlatNoLto)
 		ccIsCFGenerated = append(ccIsCFGenerated, strings.HasSuffix(src, ".cpp.in") || strings.HasSuffix(src, ".c.in"))
+		ccIsProtoGenerated = append(ccIsProtoGenerated, strings.HasSuffix(src, ".proto"))
 	}
 	for _, src := range d.srcs {
 		if _, isCodegen := preEmitted[src]; isCodegen {
@@ -1542,7 +1545,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 		ccIsCFGenerated = append(ccIsCFGenerated, true)
-
+		ccIsProtoGenerated = append(ccIsProtoGenerated, false)
 	}
 
 	for _, emit := range emitCythonCpp(ctx, instance, d, moduleInputs) {
@@ -1550,7 +1553,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 		ccIsCFGenerated = append(ccIsCFGenerated, true)
-
+		ccIsProtoGenerated = append(ccIsProtoGenerated, false)
 	}
 
 	for _, emit := range emitSwigC(ctx, instance, d, moduleInputs) {
@@ -1558,7 +1561,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 		ccIsCFGenerated = append(ccIsCFGenerated, true)
-
+		ccIsProtoGenerated = append(ccIsProtoGenerated, false)
 	}
 
 	for i, ref := range jvCCRefs {
@@ -1566,6 +1569,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccOutputs = append(ccOutputs, jvCCOutputs[i])
 		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 		ccIsCFGenerated = append(ccIsCFGenerated, false)
+		ccIsProtoGenerated = append(ccIsProtoGenerated, false)
 	}
 
 	if enCCRes != nil {
@@ -1574,6 +1578,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ccOutputs = append(ccOutputs, enCCRes.CCOutputs[i])
 			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 			ccIsCFGenerated = append(ccIsCFGenerated, false)
+			ccIsProtoGenerated = append(ccIsProtoGenerated, false)
 		}
 	}
 
@@ -1583,6 +1588,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ccOutputs = append(ccOutputs, prCCRes.CCOutputs[i])
 			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 			ccIsCFGenerated = append(ccIsCFGenerated, false)
+			ccIsProtoGenerated = append(ccIsProtoGenerated, false)
 		}
 	}
 	if pyCCRes != nil {
@@ -1591,6 +1597,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ccOutputs = append(ccOutputs, pyCCRes.CCOutputs[i])
 			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
 			ccIsCFGenerated = append(ccIsCFGenerated, false)
+			ccIsProtoGenerated = append(ccIsProtoGenerated, false)
 		}
 	}
 
@@ -1614,6 +1621,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, true)
 		ccIsCFGenerated = append(ccIsCFGenerated, false)
+		ccIsProtoGenerated = append(ccIsProtoGenerated, false)
 	}
 
 	numSrcsDerived := len(ccOutputs)
@@ -1870,7 +1878,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		return result
 	}
 
-	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, ccIsFlatNoLto, ccIsCFGenerated, numSrcsDerived)
+	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, ccIsFlatNoLto, ccIsCFGenerated, ccIsProtoGenerated, numSrcsDerived)
 
 	var arRef NodeRef
 	arBaseName := arNameFn(instance.Path)
@@ -1975,7 +1983,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			globalTag = "py3_bin_lib_global"
 		}
 
-		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))
+		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))
 		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, ctx.host, ctx.emit)
 		result.GlobalRef = &globalRef
 		result.GlobalPath = vfsPtr(Build(instance.Path + "/" + globalBaseName))
@@ -2650,7 +2658,7 @@ func reorderLDMembers(refs []NodeRef, paths []VFS) ([]NodeRef, []VFS) {
 	return outRefs, outPaths
 }
 
-func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGenerated []bool, numSrcsDerived int) ([]NodeRef, []VFS) {
+func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGenerated []bool, isProtoGenerated []bool, numSrcsDerived int) ([]NodeRef, []VFS) {
 	if len(paths) == 0 {
 		return refs, paths
 	}
@@ -2660,7 +2668,7 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 		path VFS
 	}
 
-	var noLtoSrcs, regularSrcs, cfSrcs, g4Srcs, hSerSrcs, evPbSrcs, rl6Srcs, reg3Srcs, legacyR6 []member
+	var noLtoSrcs, regularSrcs, cfSrcs, g4Srcs, hSerSrcs, evPbSrcs, pbCCSrcs, rl6Srcs, reg3Srcs, legacyR6 []member
 
 	for i := 0; i < numSrcsDerived && i < len(paths); i++ {
 		m := member{refs[i], paths[i]}
@@ -2676,6 +2684,11 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 			rl6Srcs = append(rl6Srcs, m)
 		case strings.HasSuffix(rel, ".ev.pb.cc.o"):
 			evPbSrcs = append(evPbSrcs, m)
+		// pb.cc.o generated from a .proto SRCS entry (not a direct .pb.cc source
+		// file) goes after h_serialized — this matches upstream's ordering where
+		// the proto codegen output follows the enum serialization outputs.
+		case i < len(isProtoGenerated) && isProtoGenerated[i] && strings.HasSuffix(rel, ".pb.cc.o"):
+			pbCCSrcs = append(pbCCSrcs, m)
 		case strings.HasSuffix(rel, ".h_serialized.cpp.o"):
 			hSerSrcs = append(hSerSrcs, m)
 		case strings.HasSuffix(rel, ".g4.cpp.o"):
@@ -2700,6 +2713,7 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 	out = append(out, g4Srcs...)
 	out = append(out, hSerSrcs...)
 	out = append(out, evPbSrcs...)
+	out = append(out, pbCCSrcs...)
 	out = append(out, rl6Srcs...)
 	out = append(out, reg3Srcs...)
 	out = append(out, legacyR6...)
