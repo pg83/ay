@@ -672,6 +672,19 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// (enum_serialization_runtime PEERDIR is added at GenerateEnumSerializationStmt
 	// processing time — see modules.go — to match upstream's macro position.)
 
+	// Upstream's _CPP_FLATC_CMD (fbs.conf) carries .PEERDIR=contrib/libs/flatbuffers,
+	// adding it as an induced dep to every module with .fbs SRCS (e.g. apache/arrow).
+	// Append after explicit PEERDIRs so the peer archive closure puts flatbuffers
+	// after the module's last declared peer, matching upstream's link order.
+	if instance.Path != "contrib/libs/flatbuffers" {
+		for _, src := range d.srcs {
+			if strings.HasSuffix(src, ".fbs") {
+				d.peerdirs = append(d.peerdirs, "contrib/libs/flatbuffers")
+				break
+			}
+		}
+	}
+
 	if isSpecializedLibraryType(d.moduleStmt.Name) {
 		if d.moduleStmt.Name == "DYNAMIC_LIBRARY" {
 			result := emitDynamicLibrary(ctx, instance, d)

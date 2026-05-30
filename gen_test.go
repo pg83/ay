@@ -3527,6 +3527,8 @@ root_type Bar;
 `)
 	mkdirWrite("build/scripts/cpp_flatc_wrapper.py", "print('stub')\n")
 	mkdirWrite("contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h", "#pragma once\n")
+	mkdirWrite("contrib/libs/flatbuffers/ya.make", "LIBRARY()\nSRCS(fb.cpp)\nEND()\n")
+	mkdirWrite("contrib/libs/flatbuffers/fb.cpp", "int fb() { return 0; }\n")
 	mkdirWrite("contrib/libs/flatbuffers/flatc/ya.make", "PROGRAM(flatc)\nSRCS(main.cpp)\nEND()\n")
 	mkdirWrite("contrib/libs/flatbuffers/flatc/main.cpp", "int main() { return 0; }\n")
 
@@ -3567,6 +3569,71 @@ root_type Bar;
 	}
 	if len(consumerCC.Deps) != 2 {
 		t.Fatalf("len(consumer.cpp deps) = %d, want 2 (reachable flatc producers)", len(consumerCC.Deps))
+	}
+}
+
+// TestGen_FbsSrcsInduceFlatbuffersLinkDep verifies that a module with .fbs SRCS
+// gets contrib/libs/flatbuffers added as an induced PEERDIR (upstream's
+// _CPP_FLATC_CMD has .PEERDIR=contrib/libs/flatbuffers). The induced dep must
+// appear AFTER all explicit PEERDIRs so that in the LD link command flatbuffers
+// lands between the last explicit peer's transitive closure and the library
+// itself — matching the upstream link order that sg5 ref exhibits for arrow.
+func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
+	files := map[string]string{
+		// A program that peers a library with .fbs SRCS.
+		"prog/ya.make": "PROGRAM()\nPEERDIR(arrowlike)\nSRCS(main.cpp)\nEND()\n",
+		"prog/main.cpp": "int main() { return 0; }\n",
+		// arrowlike has an explicit peer (peer1) AND a .fbs source.
+		// The fix must insert flatbuffers AFTER peer1 in the link order.
+		"arrowlike/ya.make": "LIBRARY()\nPEERDIR(peer1)\nSRCS(lib.cpp Schema.fbs)\nEND()\n",
+		"arrowlike/lib.cpp": "int f() { return 0; }\n",
+		"arrowlike/Schema.fbs": "namespace test; table Foo { value:int; }\n",
+		"peer1/ya.make": "LIBRARY()\nSRCS(p1.cpp)\nEND()\n",
+		"peer1/p1.cpp": "int p1() { return 0; }\n",
+		// flatbuffers runtime — must have a ya.make so the peerdir resolves.
+		"contrib/libs/flatbuffers/ya.make": "LIBRARY()\nSRCS(flatbuffers.cpp)\nEND()\n",
+		"contrib/libs/flatbuffers/flatbuffers.cpp": "int fb() { return 0; }\n",
+		"contrib/libs/flatbuffers/flatc/ya.make": "PROGRAM(flatc)\nSRCS(main.cpp)\nEND()\n",
+		"contrib/libs/flatbuffers/flatc/main.cpp": "int main() { return 0; }\n",
+		"contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h": "#pragma once\n",
+		"build/scripts/cpp_flatc_wrapper.py": "print('stub')\n",
+	}
+
+	g := testGen(newMemFS(files), "prog")
+
+	// Find the LD node.
+	var ldNode *Node
+	for _, n := range g.Graph {
+		if n.KV["p"] == "LD" {
+			ldNode = n
+			break
+		}
+	}
+	if ldNode == nil {
+		t.Fatal("no LD node found in graph")
+	}
+
+	linkArgs := ldNode.Cmds[2].CmdArgs
+	peer1Idx := indexOfArg(linkArgs, "peer1/libpeer1.a")
+	fbIdx := indexOfArg(linkArgs, "contrib/libs/flatbuffers/libcontrib-libs-flatbuffers.a")
+	arrowlikeIdx := indexOfArg(linkArgs, "arrowlike/libarrowlike.a")
+
+	if peer1Idx < 0 {
+		t.Fatalf("link args missing peer1/libpeer1.a: %v", linkArgs)
+	}
+	if fbIdx < 0 {
+		t.Fatalf("link args missing contrib/libs/flatbuffers/libcontrib-libs-flatbuffers.a: "+
+			"induced peerdir from .fbs SRCS not added; args=%v", linkArgs)
+	}
+	if arrowlikeIdx < 0 {
+		t.Fatalf("link args missing arrowlike/libarrowlike.a: %v", linkArgs)
+	}
+	// Upstream order: peer1 (explicit), then flatbuffers (induced from .fbs), then arrowlike itself.
+	if peer1Idx > fbIdx {
+		t.Errorf("peer1 [%d] appears after flatbuffers [%d] in link args; want peer1 before flatbuffers", peer1Idx, fbIdx)
+	}
+	if fbIdx > arrowlikeIdx {
+		t.Errorf("flatbuffers [%d] appears after arrowlike [%d] in link args; want flatbuffers before the owning library", fbIdx, arrowlikeIdx)
 	}
 }
 
