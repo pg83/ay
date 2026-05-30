@@ -288,10 +288,8 @@ func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet
 
 func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 	local := parseCIncludes(data)
-	if len(local) == 0 {
-		local = make([]includeDirective, 0, 4)
-	}
 
+	var native []includeDirective
 	seenNative := make(map[string]struct{}, 4)
 	inSpecification := false
 
@@ -323,11 +321,12 @@ func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeS
 			return
 		}
 		seenNative[target] = struct{}{}
-		local = append(local, includeDirective{kind: includeQuoted, target: internString(target)})
+		native = append(native, includeDirective{kind: includeQuoted, target: internString(target)})
 	})
 
 	var set parsedIncludeSet
 	set = appendParsedDirectives(set, parsedIncludesLocal, local...)
+	set = appendParsedDirectives(set, parsedIncludesRagelNative, native...)
 	set = appendParsedDirectives(set, parsedIncludesHCPP, includeDirective{
 		kind:   includeQuoted,
 		target: internString(rel),

@@ -180,6 +180,60 @@ func keepOnlySourceVFS(out []VFS) []VFS {
 }
 
 
+// appendRagelNativeDeps resolves the ragel-native include directives of rl6VFS
+// (stored in parsedIncludesRagelNative) and appends the resulting ragel files to
+// existing, deduplicating against already-present entries. Also follows
+// transitive ragel-native includes. This keeps ragel-included files as
+// dependencies without following their C headers (the scanner does not walk
+// parsedIncludesRagelNative, only parsedIncludesLocal).
+func appendRagelNativeDeps(scanner *IncludeScanner, srcInstance ModuleInstance, rl6VFS VFS, in ModuleCCInputs, existing []VFS) []VFS {
+	directives := scanner.parsers.sourceParsedBuckets(rl6VFS).bucket(parsedIncludesRagelNative)
+	if len(directives) == 0 {
+		return existing
+	}
+
+	cfg := ScanContext{
+		SourceRel:       rl6VFS.Rel(),
+		OwnAddIncl:      in.AddIncl,
+		PeerAddInclSet:  in.PeerAddInclGlobal,
+		BaseSearchPaths: includeScannerBasePaths(),
+		OwnerModuleDir:  srcInstance.Path,
+	}
+	sc := scanner.NewScanCtx(cfg)
+
+	seen := make(map[VFS]bool, len(existing)+len(directives))
+	for _, v := range existing {
+		seen[v] = true
+	}
+
+	var queue []struct{ includer VFS; d includeDirective }
+	for _, d := range directives {
+		queue = append(queue, struct{ includer VFS; d includeDirective }{rl6VFS, d})
+	}
+
+	for len(queue) > 0 {
+		item := queue[0]
+		queue = queue[1:]
+
+		resolved := sc.resolve(item.includer, item.d)
+		for _, f := range resolved {
+			if seen[f] {
+				continue
+			}
+			seen[f] = true
+			existing = append(existing, f)
+
+			// Follow transitive ragel-native includes of f
+			sub := scanner.parsers.sourceParsedBuckets(f).bucket(parsedIncludesRagelNative)
+			for _, sd := range sub {
+				queue = append(queue, struct{ includer VFS; d includeDirective }{f, sd})
+			}
+		}
+	}
+
+	return existing
+}
+
 func includeScannerBasePaths() []VFS {
 	// Per upstream module_resolver.cpp:329-331, system/`<…>` includes resolve
 	// via MakeResolvePlan(fileConf.BldDir(), fileConf.SrcDir()) — BOTH the
