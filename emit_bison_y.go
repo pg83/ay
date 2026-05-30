@@ -84,6 +84,11 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		headerParsed = append(headerParsed, scanner.parsers.sourceParsedBuckets(srcVFS).bucket(parsedIncludesLocal)...)
 	}
 	registerGeneratedParsedOutput(ctx, instance, "YC", headerVFS, dedupIncludeDirectives(headerParsed))
+	if preprocessHeader {
+		if reg := codegenRegForInstance(ctx, instance); reg != nil {
+			reg.SetSourceInputs(headerVFS, []VFS{srcVFS})
+		}
+	}
 
 	generatedParsed := []includeDirective{{kind: includeQuoted, target: internString(headerVFS.Rel())}}
 	if preprocessHeader {
@@ -155,10 +160,33 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	ccIn := in
 	ccIn.ExtraDepRefs = []NodeRef{ycRef}
 	ccIn.IncludeInputs = walkClosure(ctx, instance, generatedVFS, in)
+	if preprocessHeader {
+		ccIn.PerSourceCFlags = append(append([]string(nil), in.PerSourceCFlags...), "-Wno-unused-but-set-variable", "-Wno-deprecated-copy")
+	}
 
 	ccRef, ccOut, _ := EmitCC(instance, generatedRel, generatedVFS, ccIn, ctx.host, ctx.emit)
 
 	return &sourceEmit{Ref: ccRef, OutPath: ccOut}
+}
+
+// bisonCCSourceInputs returns the bison source (.y) files that should be
+// added as inputs to CC nodes whose include closure reaches bison-generated
+// C++ headers. Upstream propagates the source .y file to any CC node that
+// includes the generated header (the header's SourceInputs records the .y).
+func bisonCCSourceInputs(ctx *genCtx, instance ModuleInstance, closure []VFS) []VFS {
+	reg := codegenRegForInstance(ctx, instance)
+	if reg == nil {
+		return nil
+	}
+	var extras []VFS
+	for _, v := range closure {
+		info := reg.Lookup(v)
+		if info == nil || len(info.SourceInputs) == 0 {
+			continue
+		}
+		extras = appendVFSUnique(extras, info.SourceInputs)
+	}
+	return extras
 }
 
 func bisonTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
