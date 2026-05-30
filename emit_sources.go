@@ -74,6 +74,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		if len(flatcExtras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, flatcExtras)
 		}
+		bisonExtras := bisonCCSourceInputs(ctx, srcInstance, srcIn.IncludeInputs)
+		if len(bisonExtras) > 0 {
+			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, bisonExtras)
+		}
 		extras := runtimePy3CCExtraInputs(srcInstance.Path, srcRel)
 		if len(extras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, extras)
@@ -87,7 +91,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		// stale tail in full), so we leave NodeInputs nil for EmitCC to rebuild
 		// from inVFS + IncludeInputs.
 		protoDropped := full != nil && len(srcIn.IncludeInputs) < len(full)-1
-		if len(autoExtras) == 0 && len(wcExtras) == 0 && len(flatcExtras) == 0 && len(extras) == 0 && !protoDropped {
+		if len(autoExtras) == 0 && len(wcExtras) == 0 && len(flatcExtras) == 0 && len(bisonExtras) == 0 && len(extras) == 0 && !protoDropped {
 			srcIn.NodeInputs = full
 		}
 		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})
