@@ -16,6 +16,7 @@ func cmdDumpNormalize(args []string) int {
 	defer startProfilesFromEnv()()
 
 	var inPath, target, outPath string
+	var stripDeps bool
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -28,6 +29,14 @@ func cmdDumpNormalize(args []string) int {
 		case "--out":
 			i++
 			outPath = arg(args, i)
+		case "--strip-unreferenced-deps":
+			// Drop build-order-only dep edges: an edge u->d is removed when none of
+			// d's outputs is among u's inputs (the files u's action reads). Intended
+			// for the UPSTREAM graph only, to discount ymake TJSONVisitor induced
+			// NodeDeps (e.g. ydbd's 350 .pb.h/.gen.h edges — never link inputs) that
+			// our generator does not model. Our graph is normalized WITHOUT this flag
+			// so any superfluous dep we emit still surfaces in the diff.
+			stripDeps = true
 		default:
 			ThrowFmt("dump normalize: unknown argument %q", args[i])
 		}
@@ -42,6 +51,10 @@ func cmdDumpNormalize(args []string) int {
 	contentHash := map[string][32]byte{}
 	deps := map[string][]string{}
 	fetch := map[string]bool{}
+	// outputsByUID (populated only under --strip-unreferenced-deps) maps each
+	// node to its output paths so the strip pass can resolve, for an edge u->d,
+	// what d produces and check it against u's inputs. Compact (1-3 strings/node).
+	outputsByUID := map[string][]string{}
 
 	var ldRoots, tsRoots []string
 	type arCand struct {
@@ -61,6 +74,7 @@ func cmdDumpNormalize(args []string) int {
 		isFetch  bool
 		rootKind byte
 		arHost   bool
+		outputs  []string
 	}
 
 	streamGraphFanout(inPath, workers,
@@ -80,6 +94,12 @@ func cmdDumpNormalize(args []string) int {
 			out0 := ""
 			if len(outs) > 0 {
 				out0 = normPath(outs[0])
+			}
+			if stripDeps {
+				r.outputs = make([]string, 0, len(outs))
+				for _, o := range outs {
+					r.outputs = append(r.outputs, normPath(o))
+				}
 			}
 
 			switch p {
@@ -103,6 +123,9 @@ func cmdDumpNormalize(args []string) int {
 		func(r p1Result) {
 			contentHash[r.uid] = r.content
 			deps[r.uid] = r.deps
+			if stripDeps {
+				outputsByUID[r.uid] = r.outputs
+			}
 			if r.isFetch {
 				fetch[r.uid] = true
 			}
@@ -115,6 +138,40 @@ func cmdDumpNormalize(args []string) int {
 				tsRoots = append(tsRoots, r.uid)
 			}
 		})
+
+	// Optional strip pass (upstream only): drop dep edges u->d where none of d's
+	// outputs is among u's inputs. The induced codegen .pb.h/.gen.h producers
+	// ymake hangs off a link node for cache-key Merkle folding are never link
+	// inputs, so they go; the real .o/.a (which ARE inputs, even though link
+	// commands pass them via a response file rather than naming them in cmd_args)
+	// stay. Runs before the Merkle re-uid. Reads inputs transiently; only the
+	// compact outputsByUID lives across the pass.
+	if stripDeps {
+		type stripResult struct {
+			uid  string
+			deps []string
+		}
+		streamGraphFanout(inPath, workers,
+			func(node map[string]any) stripResult {
+				uid := getString(node, "uid")
+				inputSet := make(map[string]struct{})
+				for _, in := range canonInputs(node) {
+					inputSet[in] = struct{}{}
+				}
+				raw := toStrings(node["deps"])
+				kept := make([]string, 0, len(raw))
+				for _, d := range raw {
+					outs := outputsByUID[d]
+					if fetch[d] || len(outs) == 0 || depOutputInInputs(outs, inputSet) {
+						kept = append(kept, d)
+					}
+				}
+				return stripResult{uid: uid, deps: kept}
+			},
+			func(r stripResult) {
+				deps[r.uid] = r.deps
+			})
+	}
 
 	roots := []string{}
 	if len(ldRoots) > 0 || len(arRoots) > 0 {
@@ -200,6 +257,20 @@ func cmdDumpNormalize(args []string) int {
 	Throw(bw.Flush())
 
 	return 0
+}
+
+// depOutputInInputs reports whether any of a dep's outputs is among the
+// consuming node's inputs (the files its action reads).
+func depOutputInInputs(depOutputs []string, inputSet map[string]struct{}) bool {
+	for _, o := range depOutputs {
+		if o == "" {
+			continue
+		}
+		if _, ok := inputSet[o]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func rewriteDeps(raw []string, closure, fetch map[string]bool, newUID map[string]string) []string {
