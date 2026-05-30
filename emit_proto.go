@@ -680,6 +680,15 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	// here and archive the .o alongside .pb.cc.o (jsonpath:
 	// JsonPathParser.cpp / JsonPathLexer.cpp from the second RUN_ANTLR land
 	// in libproto_ast-gen-jsonpath.a).
+	//
+	// These ANTLR .cpp objects are ordinary translation units (the "regular"
+	// archive phase) and upstream orders them BEFORE the proto .pb.cc.o objects
+	// (the proto-codegen phase): the reference jsonpath AR is
+	// [JsonPathParser.cpp.o, JsonPathLexer.cpp.o, JsonPathParser.pb.cc.o].
+	// Collect them separately and prepend, leaving the proto/enum objects built
+	// above in their existing relative order.
+	var antlrRefs []NodeRef
+	var antlrOutputs []VFS
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
 		for _, run := range d.antlrRuns {
 			for _, outTok := range run.OUTFiles {
@@ -695,10 +704,14 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 
 				cppRel := antlrOutputModuleRel(instance.Path, outVFS)
 				ccRef, ccOut := emitCodegenDownstreamCC(ctx, cppInstance, cppRel, nil, []NodeRef{info.ProducerRef}, moduleInputs)
-				ccRefs = append(ccRefs, ccRef)
-				ccOutputs = append(ccOutputs, ccOut)
+				antlrRefs = append(antlrRefs, ccRef)
+				antlrOutputs = append(antlrOutputs, ccOut)
 			}
 		}
+	}
+	if len(antlrRefs) > 0 {
+		ccRefs = append(antlrRefs, ccRefs...)
+		ccOutputs = append(antlrOutputs, ccOutputs...)
 	}
 
 	var protoLibName string

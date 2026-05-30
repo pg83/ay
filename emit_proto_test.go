@@ -282,4 +282,28 @@ END()
 			t.Errorf("proto AR inputs missing %q: %v", want, ar.Inputs)
 		}
 	}
+
+	// Member ORDER: the ANTLR-generated .cpp objects are ordinary translation
+	// units (regular archive phase) and upstream lists them BEFORE the proto
+	// .pb.cc.o (proto-codegen phase). Reference jsonpath AR order is
+	// [JsonPathParser.cpp.o, JsonPathLexer.cpp.o, JsonPathParser.pb.cc.o].
+	idxOf := func(rel string) int {
+		want := "$(B)/" + modPath + "/" + rel
+		for i, in := range ar.Inputs {
+			if in.String() == want {
+				return i
+			}
+		}
+		return -1
+	}
+	parserCpp := idxOf("JsonPathParser.cpp.o")
+	lexerCpp := idxOf("JsonPathLexer.cpp.o")
+	pbCC := idxOf("JsonPathParser.pb.cc.o")
+	if parserCpp < 0 || lexerCpp < 0 || pbCC < 0 {
+		t.Fatalf("missing AR member (parser=%d lexer=%d pb=%d): %v", parserCpp, lexerCpp, pbCC, ar.Inputs)
+	}
+	if !(parserCpp < pbCC && lexerCpp < pbCC) {
+		t.Errorf("ANTLR .cpp.o must precede .pb.cc.o in proto AR: parser=%d lexer=%d pb.cc=%d (%v)",
+			parserCpp, lexerCpp, pbCC, ar.Inputs)
+	}
 }
