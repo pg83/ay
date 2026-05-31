@@ -274,8 +274,27 @@ func resourceOutputName(uri string) string {
 	return name
 }
 
+// forceRemoveAll removes path even when it contains read-only directories.
+// Extracted sandbox resource trees (e.g. CLANG) are unpacked with their archived
+// permissions, which are frequently write-less on directories; plain
+// os.RemoveAll then cannot unlink the entries inside them ("permission denied").
+// On the first failure it walks the tree making every directory writable and
+// retries once.
+func forceRemoveAll(path string) error {
+	if err := os.RemoveAll(path); err == nil {
+		return nil
+	}
+	_ = filepath.Walk(path, func(p string, info os.FileInfo, err error) error {
+		if err == nil && info.IsDir() {
+			_ = os.Chmod(p, 0o755)
+		}
+		return nil
+	})
+	return os.RemoveAll(path)
+}
+
 func fetchResource(sourceRoot, uri, out string) {
-	Throw(os.RemoveAll(out))
+	Throw(forceRemoveAll(out))
 	Throw(os.MkdirAll(out, 0o755))
 
 	tmp := Throw2(os.MkdirTemp("", "ay-fetch-*"))
