@@ -210,7 +210,7 @@ func (c *canonBuf) writeVFSSlice(vs []VFS) {
 		// producing node's uid in deps, not here. ContentHash faults if the file
 		// was never read by the FS (the hash must have been recorded during gen).
 		if c.fs != nil && v.IsSource() {
-			c.writeUint64(c.fs.ContentHash(internString(v.Rel())))
+			c.writeUint64(c.fs.ContentHash(v))
 		}
 	}
 }
