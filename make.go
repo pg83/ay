@@ -356,9 +356,18 @@ func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, resourceM
 }
 
 func (ex *executor) onNode(n *Node) {
-	f := &nodeFuture{node: n}
-
+	// Dedup by uid: the generator may stream the same node (identical uid) more
+	// than once. Each uid is one action and must run in exactly one goroutine —
+	// two goroutines in the same tmp/<uid> would have one's forceRemoveAll wipe the
+	// other's in-flight output (manifesting as clang "unable to rename temporary
+	// … No such file or directory"). The first emit owns the future; later
+	// duplicates are ignored (visit reuses the registered future).
 	ex.mu.Lock()
+	if _, ok := ex.byUID[n.UID]; ok {
+		ex.mu.Unlock()
+		return
+	}
+	f := &nodeFuture{node: n}
 	ex.byUID[n.UID] = f
 	ex.mu.Unlock()
 
@@ -511,6 +520,56 @@ func (ex *executor) execute(n *Node) {
 	}
 }
 
+const (
+	cmdFileStartMarker = "--ya-start-command-file"
+	cmdFileEndMarker   = "--ya-end-command-file"
+)
+
+// packCommandFiles replaces every `--ya-start-command-file … --ya-end-command-file`
+// span with a single `@<buildRoot>/ya_command_file_<N>.args` argument whose file
+// holds the enclosed arguments one per line. This is the response-file mechanism
+// ya's runner applies before executing any command (NCommandFile::TCommandArgsPacker
+// in devtools/ya/yalibrary/runner/command_file/command_file.cpp): the wrapper
+// scripts (link_dyn_lib.py, …) and clang/lld consume `@file` but pass the markers
+// through verbatim, so they must be resolved here, not left in the command. Nested
+// spans recurse, the inner @file path being written into the outer file. counter is
+// shared across one node's commands so the file names are unique.
+func packCommandFiles(args []string, buildRoot string, counter *int) []string {
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		if args[i] == cmdFileStartMarker {
+			i++ // skip the start marker
+			out = append(out, consumeCommandFile(args, &i, buildRoot, counter))
+			continue
+		}
+		out = append(out, args[i])
+	}
+	return out
+}
+
+func consumeCommandFile(args []string, pos *int, buildRoot string, counter *int) string {
+	path := filepath.Join(buildRoot, "ya_command_file_"+strconv.Itoa(*counter)+".args")
+	*counter++
+
+	var b strings.Builder
+	for ; *pos < len(args); *pos++ {
+		switch args[*pos] {
+		case cmdFileStartMarker:
+			*pos++ // skip the nested start marker
+			b.WriteString(consumeCommandFile(args, pos, buildRoot, counter))
+		case cmdFileEndMarker:
+			Throw(os.WriteFile(path, []byte(b.String()), 0o644))
+			return "@" + path
+		default:
+			b.WriteString(args[*pos])
+		}
+		b.WriteByte('\n')
+	}
+
+	Throw(os.WriteFile(path, []byte(b.String()), 0o644))
+	return "@" + path
+}
+
 func (ex *executor) runNode(n *Node, tmp string) commandResult {
 	var result commandResult
 
@@ -523,11 +582,13 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 		Throw(os.MkdirAll(filepath.Dir(mounted), 0o755))
 	}
 
+	cmdFileCounter := 0
 	for _, c := range n.Cmds {
 		args := make([]string, len(c.CmdArgs))
 		for i, a := range c.CmdArgs {
 			args[i] = mountString(a, ex.srcRoot, tmp, ex.resourceMounts)
 		}
+		args = packCommandFiles(args, tmp, &cmdFileCounter)
 
 		dir := tmp
 		if c.Cwd != "" {
