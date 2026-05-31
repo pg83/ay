@@ -215,32 +215,6 @@ func filterARLDInputs(in []string, kind string, cmdBases map[string]struct{}) []
 	return out
 }
 
-// cpScriptRels are CP-node auxiliary scripts (the python copy tooling). They
-// legitimately appear in CP nodes' inputs; upstream additionally splatters them
-// into the inputs of unrelated nodes that transitively depend on a CP product
-// (CC compiles consuming a COPY_FILE-generated header pick up these scripts as
-// inputs of the CP cascade). We don't model that splatter — and don't want to,
-// since the scripts have no effect on the consumer's compile. Filter them out
-// of non-CP nodes' inputs so the comparison is fair.
-var cpScriptRels = map[string]struct{}{
-	"build/scripts/fs_tools.py":             {},
-	"build/scripts/process_command_files.py": {},
-}
-
-func filterNonCPCascadeScripts(in []string) []string {
-	out := in[:0]
-	for _, s := range in {
-		rel, ok := strings.CutPrefix(s, "$(S)/")
-		if ok {
-			if _, drop := cpScriptRels[rel]; drop {
-				continue
-			}
-		}
-		out = append(out, s)
-	}
-	return out
-}
-
 func getString(node map[string]any, key string) string {
 	s, _ := node[key].(string)
 	return s
@@ -251,16 +225,12 @@ func getString(node map[string]any, key string) string {
 // (refGraph) — it discounts inputs ymake lists on link/archive nodes that our
 // generator does not (or should not) model. Our graph is normalized faithfully so
 // that any genuine over- or under-emission surfaces as a diff, and so the filter
-// can be tightened to drop only what is really superfluous. The non-CP
-// cascade-script filter is applied to both (unchanged).
+// can be tightened to drop only what is really superfluous.
 func canonInputs(node map[string]any, refGraph bool) []string {
 	inputs := normSortedStrings(node["inputs"])
 	kind := nodeProgramKind(node)
 	if refGraph && (kind == "AR" || kind == "LD") {
 		inputs = filterARLDInputs(inputs, kind, nodeCmdBasenames(node))
-	}
-	if kind != "CP" {
-		inputs = filterNonCPCascadeScripts(inputs)
 	}
 	return inputs
 }

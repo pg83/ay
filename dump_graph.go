@@ -16,6 +16,7 @@ func finalizeDumpGraph(e *BufferedEmitter) *Graph {
 	}
 
 	overrideGeneratedModuleDir(e)
+	expandScriptClosures(e.nodes, e.scriptClosure)
 
 	order := finalizeOrder(e)
 

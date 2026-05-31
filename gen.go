@@ -434,6 +434,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 
 	if be, ok := plainEmit.(*BufferedEmitter); ok {
 		be.generatedFirstClaim = mergeGeneratedFirstClaims(targetScanner, hostScanner)
+		be.scriptClosure = buildScriptDepClosure(fs)
 	}
 
 	return root.LDRef

@@ -51,6 +51,10 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 		bcRefs := make([]NodeRef, 0, len(stmt.Sources))
 		bcPaths := make([]VFS, 0, len(stmt.Sources))
+		// linksCopy records whether any compiled .bc came from a COPY product; if so
+		// the merge node inherits the copy producer's fs_tools.py tool (matching the
+		// per-source BC node, which picks it up via wcExtras).
+		linksCopy := false
 		for _, src := range stmt.Sources {
 			inputVFS, producer := llvmBcSourceInfo(ctx, instance, d, src)
 			bcOut := Build(llvmBcRootRelArcSrc(ctx, instance, d, src) + stmt.Suffix + ".bc")
@@ -63,6 +67,12 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			// Add TEXT copy source files (e.g. mkql_computation_node_codegen.h.txt)
 			// that appear in the closure, matching emitOneSource's withContextSourceExtras.
 			wcExtras := withContextSourceExtras(codegenRegForInstance(ctx, instance), instance.Path, d, closure, inputVFS)
+			for _, e := range wcExtras {
+				if e == copyFsToolsVFS {
+					linksCopy = true
+					break
+				}
+			}
 
 			var depRefs []NodeRef
 			if producer != (NodeRef{}) {
@@ -110,10 +120,14 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			ldArgs = append(ldArgs, p.String())
 		}
 		ldArgs = append(ldArgs, "-o", mergedOut.String())
+		mergeInputs := append([]VFS(nil), bcPaths...)
+		if linksCopy {
+			mergeInputs = append(mergeInputs, copyFsToolsVFS)
+		}
 		ldNode := &Node{
 			Cmds:             []Cmd{{CmdArgs: ldArgs, Env: env}},
 			Env:              env,
-			Inputs:           append([]VFS(nil), bcPaths...),
+			Inputs:           mergeInputs,
 			Outputs:          []VFS{mergedOut},
 			KV:               map[string]interface{}{"p": "LD", "pc": "light-red"},
 			Tags:             []string{},
