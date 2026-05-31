@@ -86,7 +86,7 @@ func refacConsts(args []string) int {
 	// identifiers (so generated names never collide) and a canon->var map of vars
 	// already hoisted, with their declaring call nodes flagged so we don't re-hoist.
 	var parsed []*parsedFile
-	existing := map[string]string{}
+	existing := map[hoistKey]string{}
 	used := map[string]bool{}
 
 	for _, path := range files {
@@ -113,23 +113,23 @@ func refacConsts(args []string) int {
 	// left inline — hoisting it would create a var referenced exactly once, which is
 	// redundant indirection. The new var's declaration is attached to the file of its
 	// first free occurrence.
-	var newCanons []string
-	newVarFile := map[string]int{}
+	var newCanons []hoistKey
+	newVarFile := map[hoistKey]int{}
 
 	for _, o := range occs {
 		if !o.free {
 			continue
 		}
 
-		if _, ok := existing[o.canon]; ok {
+		if _, ok := existing[o.key]; ok {
 			continue
 		}
 
-		name := uniqueName(identForVFS(o.canon), used)
+		name := uniqueName(identForVFS(o.key), used)
 		used[name] = true
-		existing[o.canon] = name
-		newCanons = append(newCanons, o.canon)
-		newVarFile[o.canon] = o.fileIdx
+		existing[o.key] = name
+		newCanons = append(newCanons, o.key)
+		newVarFile[o.key] = o.fileIdx
 	}
 
 	// Phase 4: every occurrence whose canon now has a var (free or list element) is
@@ -137,7 +137,7 @@ func refacConsts(args []string) int {
 	editsByFile := make([][]constEdit, len(parsed))
 
 	for _, o := range occs {
-		name, ok := existing[o.canon]
+		name, ok := existing[o.key]
 
 		if !ok {
 			continue
@@ -148,9 +148,9 @@ func refacConsts(args []string) int {
 
 	addedByFile := make([][]newVar, len(parsed))
 
-	for _, canon := range newCanons {
-		fi := newVarFile[canon]
-		addedByFile[fi] = append(addedByFile[fi], newVar{existing[canon], constDef(canon)})
+	for _, key := range newCanons {
+		fi := newVarFile[key]
+		addedByFile[fi] = append(addedByFile[fi], newVar{existing[key], constDef(key)})
 	}
 
 	for fi, pf := range parsed {
@@ -166,7 +166,7 @@ func refacConsts(args []string) int {
 type occurrence struct {
 	fileIdx    int
 	start, end int
-	canon      string
+	key        hoistKey
 	free       bool // in a function body (justifies a var) vs a file-level-list element
 }
 
@@ -180,7 +180,7 @@ func collectOccurrences(pf *parsedFile, fileIdx int, occs *[]occurrence) {
 			return false // a direct-value var declaration; leave it and its subtree
 		}
 
-		fn, lit, ok := hoistCall(call)
+		key, ok := hoistCall(call)
 
 		if !ok {
 			return true
@@ -190,7 +190,7 @@ func collectOccurrences(pf *parsedFile, fileIdx int, occs *[]occurrence) {
 			fileIdx: fileIdx,
 			start:   pf.fset.Position(call.Pos()).Offset,
 			end:     pf.fset.Position(call.End()).Offset,
-			canon:   canonVFS(fn, lit),
+			key:     key,
 			free:    free,
 		})
 		return false // the only child is the string literal — nothing nested to hoist
@@ -242,7 +242,7 @@ type parsedFile struct {
 
 // parseRefacFile parses path and folds its top-level declarations into the shared
 // existing/used maps. Returns nil (with a warning) if the file fails to parse.
-func parseRefacFile(path string, existing map[string]string, used map[string]bool) *parsedFile {
+func parseRefacFile(path string, existing map[hoistKey]string, used map[string]bool) *parsedFile {
 	src := Throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
 	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
@@ -276,11 +276,9 @@ func parseRefacFile(path string, existing map[string]string, used map[string]boo
 								continue
 							}
 
-							if fn, lit, ok := hoistCall(call); ok {
-								canon := canonVFS(fn, lit)
-
-								if _, seen := existing[canon]; !seen {
-									existing[canon] = s.Names[i].Name
+							if key, ok := hoistCall(call); ok {
+								if _, seen := existing[key]; !seen {
+									existing[key] = s.Names[i].Name
 								}
 
 								declared[call] = true
@@ -295,59 +293,71 @@ func parseRefacFile(path string, existing map[string]string, used map[string]boo
 	return &parsedFile{path: path, src: src, fset: fset, f: f, declared: declared}
 }
 
-// hoistCall reports whether call is `Intern|Source|Build("<literal>")` and returns
-// the func name and the unquoted literal.
-func hoistCall(call *ast.CallExpr) (fn, lit string, ok bool) {
+// hoistKey identifies a hoistable literal call and is the dedup key. For
+// Intern/Source/Build, canon is the resolved VFS path ("$(S)/..."/"$(B)/...") so
+// Source("x") and Intern("$(S)/x") share one var; str is false. For internString,
+// canon is the raw literal and str is true — a separate namespace, since an
+// internString result is a STR, not a VFS, and must never share a var with one.
+type hoistKey struct {
+	str   bool
+	canon string
+}
+
+// hoistCall reports whether call is `Intern|Source|Build|internString("<literal>")`
+// and returns its dedup key.
+func hoistCall(call *ast.CallExpr) (hoistKey, bool) {
 	id, isID := call.Fun.(*ast.Ident)
 
-	if !isID || (id.Name != "Intern" && id.Name != "Source" && id.Name != "Build") {
-		return "", "", false
+	if !isID {
+		return hoistKey{}, false
 	}
 
 	if len(call.Args) != 1 {
-		return "", "", false
+		return hoistKey{}, false
 	}
 
 	bl, isLit := call.Args[0].(*ast.BasicLit)
 
 	if !isLit || bl.Kind != gotoken.STRING {
-		return "", "", false
+		return hoistKey{}, false
 	}
 
-	s, err := strconv.Unquote(bl.Value)
+	lit, err := strconv.Unquote(bl.Value)
 
 	if err != nil {
-		return "", "", false
+		return hoistKey{}, false
 	}
 
-	return id.Name, s, true
-}
-
-// canonVFS is the resolved VFS string for a hoistable call — the dedup key, so
-// Source("x") and Intern("$(S)/x") share one var.
-func canonVFS(fn, lit string) string {
-	switch fn {
+	switch id.Name {
+	case "Intern":
+		return hoistKey{canon: lit}, true
 	case "Source":
-		return "$(S)/" + lit
+		return hoistKey{canon: "$(S)/" + lit}, true
 	case "Build":
-		return "$(B)/" + lit
-	default:
-		return lit
+		return hoistKey{canon: "$(B)/" + lit}, true
+	case "internString":
+		return hoistKey{str: true, canon: lit}, true
 	}
+
+	return hoistKey{}, false
 }
 
-// constDef renders the var initializer for a canonical VFS, preferring the Source/
-// Build short forms.
-func constDef(canon string) string {
-	if rel, ok := strings.CutPrefix(canon, "$(S)/"); ok {
+// constDef renders the var initializer for a key, preferring the Source/Build short
+// forms for VFS paths.
+func constDef(key hoistKey) string {
+	if key.str {
+		return fmt.Sprintf("internString(%q)", key.canon)
+	}
+
+	if rel, ok := strings.CutPrefix(key.canon, "$(S)/"); ok {
 		return fmt.Sprintf("Source(%q)", rel)
 	}
 
-	if rel, ok := strings.CutPrefix(canon, "$(B)/"); ok {
+	if rel, ok := strings.CutPrefix(key.canon, "$(B)/"); ok {
 		return fmt.Sprintf("Build(%q)", rel)
 	}
 
-	return fmt.Sprintf("Intern(%q)", canon)
+	return fmt.Sprintf("Intern(%q)", key.canon)
 }
 
 type constEdit struct {
@@ -398,14 +408,17 @@ func applyRefacEdits(pf *parsedFile, edits []constEdit, added []newVar) bool {
 	return true
 }
 
-// identForVFS turns a resolved VFS path into a lowerCamel identifier: the $(S)/$(B)
-// prefix is dropped ($(B) becomes a leading "bld" word so source/build siblings get
-// distinct names), and every non-alphanumeric run separates words.
-func identForVFS(canon string) string {
-	s := canon
+// identForVFS turns a key into a lowerCamel identifier: the $(S)/$(B) prefix is
+// dropped ($(B) becomes a leading "bld" word so source/build siblings get distinct
+// names; an internString key becomes a leading "str" word so it never collides with
+// the same-path VFS var), and every non-alphanumeric run separates words.
+func identForVFS(key hoistKey) string {
+	s := key.canon
 	var words []string
 
-	if rel, ok := strings.CutPrefix(s, "$(S)/"); ok {
+	if key.str {
+		words = append(words, "str")
+	} else if rel, ok := strings.CutPrefix(s, "$(S)/"); ok {
 		s = rel
 	} else if rel, ok := strings.CutPrefix(s, "$(B)/"); ok {
 		s = rel
