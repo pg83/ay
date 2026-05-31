@@ -208,7 +208,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			d.prOutputInputs = map[string][]VFS{}
 		}
 
-		d.prOutputInputs[optOutName] = append([]VFS(nil), optInputs...)
+		d.prOutputInputs[optOutName] = optInputs // read-only consumers (node inputs + prResourceExtraInputs copies out)
 		d.resources = append(d.resources, resourceEntry{
 			Path:      optOutName,
 			Key:       "/llvm_bc/" + stmt.Name,

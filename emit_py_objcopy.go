@@ -494,7 +494,7 @@ func emitYaConfJSONObjcopy(
 		}
 
 		if len(instance.Platform.Tags) > 0 {
-			node.Tags = append([]string(nil), instance.Platform.Tags...)
+			node.Tags = instance.Platform.Tags // read-only; Platform.Tags is immutable during emit
 		}
 
 		if rescompilerLDRef != (NodeRef{}) {

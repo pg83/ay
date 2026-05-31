@@ -125,7 +125,7 @@ func fetchNode(host *Platform, item resourceFetch, scripts scriptDeps) *Node {
 		Platform:     string(host.Target),
 		Requirements: map[string]interface{}{"cpu": float64(1), "network": "full", "ram": float64(32)},
 		Sandboxing:   true,
-		Tags:         append([]string(nil), host.Tags...),
+		Tags:         host.Tags, // read-only; Platform.Tags is immutable during emit
 		TargetProperties: map[string]string{
 			"module_dir": "build/resources",
 		},

@@ -379,7 +379,7 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 	systemLibs := p.SystemLibs
 	_ = dynamicPaths
 
-	trailer := append([]string(nil), linkPrelude...)
+	trailer := linkPrelude // fresh local, unused after this point — keep appending in place
 	trailer = append(trailer, ownRPathFlags...)
 
 	if p.PIC {
