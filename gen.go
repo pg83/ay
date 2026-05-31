@@ -384,14 +384,15 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	// node's wrapper-script inputs to their helper closure at Emit time — before the
 	// streaming path hands the node to the executor (see expandNodeScriptClosure).
 	scriptClosure := buildScriptDepClosure(fs)
+	// Mix $(S) input content hashes into node uids in every mode so a source edit
+	// invalidates the cache (the dump path is re-uid'd from canonical content
+	// downstream, but the raw uids must still be content-correct).
 	switch e := plainEmit.(type) {
 	case *BufferedEmitter:
 		e.scriptClosure = scriptClosure
+		e.fs = fs
 	case *StreamingEmitter:
 		e.scriptClosure = scriptClosure
-		// Mix $(S) input content hashes into node uids on the streaming/executor
-		// path so a source edit invalidates the cache. The -G/BufferedEmitter path
-		// leaves fs nil (re-uid'd from canonical content downstream).
 		e.uidScratch.fs = fs
 	}
 

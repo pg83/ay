@@ -83,7 +83,11 @@ func (fs *osFS) ContentHash(s STR) uint64 {
 	// tablegen .td, python stdlib, tzdata, …) are listed on nodes but their content
 	// is never needed during graph construction. Read on first uid use (reusing one
 	// buffer) so the hash is recorded; a genuinely missing file faults here.
-	fs.chReadBuf = fs.ReadInto(internTable.strs[s], fs.chReadBuf)
+	rel := internTable.strs[s]
+	if fs.IsDir(rel) {
+		return 0 // directory inputs (e.g. a test data dir) have no content hash
+	}
+	fs.chReadBuf = fs.ReadInto(rel, fs.chReadBuf)
 	return fs.contentHashes[s]
 }
 
