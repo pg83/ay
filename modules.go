@@ -19,7 +19,7 @@ type cppProtoPlugin struct {
 type moduleData struct {
 	moduleStmt           *ModuleStmt
 	srcs                 []string
-	globalSrcs []string
+	globalSrcs           []string
 	pySrcs               []string
 	pySrcGroups          []pySrcGroup
 	pyGeneratedSrcs      map[string][]VFS
@@ -181,10 +181,10 @@ type archiveEntry struct {
 }
 
 type copyFileEntry struct {
-	Src            string
-	Dst            string
-	Auto           bool
-	WithContext    bool
+	Src         string
+	Dst         string
+	Auto        bool
+	WithContext bool
 	// Text marks COPY_FILE(TEXT) — a textual substitution copy. Unlike
 	// COPY(WITH_CONTEXT) of a .cpp+sibling.h (single-module, source-dir-relative
 	// quoted includes), TEXT copies are shared codegen templates (e.g. minikql
@@ -621,12 +621,12 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 
 	d.moduleScopeCFlags = append(d.moduleScopeCFlags, "-DUSE_PYTHON3")
 
-	d.addInclGlobal = append(d.addInclGlobal, Intern("$(S)/contrib/libs/python/Include"))
-	d.addInclUserGlobal = append(d.addInclUserGlobal, Intern("$(S)/contrib/libs/python/Include"))
-	d.addIncl = append(d.addIncl, Intern("$(S)/contrib/libs/python/Include"))
+	d.addInclGlobal = append(d.addInclGlobal, pythonIncludeDir)
+	d.addInclUserGlobal = append(d.addInclUserGlobal, pythonIncludeDir)
+	d.addIncl = append(d.addIncl, pythonIncludeDir)
 
 	if modulePath == "library/python/runtime_py3" {
-		d.addIncl = append(d.addIncl, Intern("$(B)/library/python/runtime_py3"))
+		d.addIncl = append(d.addIncl, bldLibraryPythonRuntimePy3)
 	}
 }
 

@@ -1,7 +1,7 @@
 package main
 
 func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, scripts scriptDeps, emit Emitter) (NodeRef, VFS) {
-	joinSrcs := Intern("$(S)/build/scripts/gen_join_srcs.py")
+	joinSrcs := buildScriptsGenJoinSrcsPy
 
 	outVFS := Build(instance.Path + "/" + allName)
 	platformID := instance.Platform.Target
@@ -70,3 +70,8 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	return emit.Emit(bindNodePlatform(node, statsPlatform)), outVFS
 }
+
+// Path constants hoisted by `ay refac consts`.
+var (
+	buildScriptsGenJoinSrcsPy = Source("build/scripts/gen_join_srcs.py")
+)

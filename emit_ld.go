@@ -441,10 +441,10 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, plugi
 // (thinlto_cache, process_command_files, process_whole_archive_option, …) is added
 // from the script table in composeLDInputs — not hand-listed here.
 var ldScriptInputs = []VFS{
-	Intern("$(S)/build/scripts/vcs_info.py"),
-	Intern("$(S)/build/scripts/c_templates/svn_interface.c"),
-	Intern("$(S)/build/scripts/link_exe.py"),
-	Intern("$(S)/build/scripts/fs_tools.py"),
+	ldVcsInfoVFS,
+	ldSvnInterfaceVFS,
+	ldLinkExeVFS,
+	copyFsToolsVFS,
 }
 
 var (

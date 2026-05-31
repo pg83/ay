@@ -118,7 +118,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 			Env: env,
 		},
 	}
-	inputs := []VFS{Intern("$(B)/contrib/tools/bison/bison"), Intern("$(B)/contrib/tools/m4/m4"), srcVFS}
+	inputs := []VFS{bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS}
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
 			CmdArgs: []string{
@@ -198,3 +198,9 @@ func m4Tool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
 	ref, bin := ctx.tool("contrib/tools/m4")
 	return ref, bin.String()
 }
+
+// Path constants hoisted by `ay refac consts`.
+var (
+	bldContribToolsBisonBison = Build("contrib/tools/bison/bison")
+	bldContribToolsM4M4       = Build("contrib/tools/m4/m4")
+)

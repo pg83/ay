@@ -124,7 +124,7 @@ func cythonGeneratedOutputInputs(ctx *genCtx, instance ModuleInstance, src VFS, 
 	toolInputs := make([]VFS, 0, 2+len(py3CythonEmbeddedFiles)+len(py3CythonOutputIncludes)+len(sourceClosure))
 	emitsIncludes := make([]VFS, 0, 1+len(py3CythonEmbeddedFiles)+len(py3CythonOutputIncludes)+len(sourceClosure))
 
-	cythonPy := Intern("$(S)/contrib/tools/cython/cython.py")
+	cythonPy := contribToolsCythonCythonPy
 	toolInputs = append(toolInputs, cythonPy)
 	emitsIncludes = append(emitsIncludes, cythonPy)
 	emitsIncludes = append(emitsIncludes, src)
@@ -221,10 +221,10 @@ func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, py23 bool) []VF
 	out = append(out, cythonAddIncl...)
 
 	if py23 {
-		out = append(out, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes"))
+		out = append(out, contribToolsCythonPy2CythonIncludes)
 	}
-	out = append(out, Intern("$(S)/contrib/tools/cython/Cython/Includes"))
-	out = append(out, Intern("$(S)/contrib/libs/cxxsupp/libcxx/include"))
+	out = append(out, contribToolsCythonCythonIncludes)
+	out = append(out, contribLibsCxxsuppLibcxxInclude)
 	out = append(out, cythonNumpyAddIncl...)
 
 	return dedupVFS(out)
@@ -331,3 +331,11 @@ var py3CythonEmbeddedFiles = []string{
 	"contrib/tools/cython/Cython/Utility/UFuncs_C.c",
 	"contrib/tools/cython/Cython/Utility/arrayarray.h",
 }
+
+// Path constants hoisted by `ay refac consts`.
+var (
+	contribLibsCxxsuppLibcxxInclude     = Source("contrib/libs/cxxsupp/libcxx/include")
+	contribToolsCythonCythonIncludes    = Source("contrib/tools/cython/Cython/Includes")
+	contribToolsCythonCythonPy          = Source("contrib/tools/cython/cython.py")
+	contribToolsCythonPy2CythonIncludes = Source("contrib/tools/cython_py2/Cython/Includes")
+)

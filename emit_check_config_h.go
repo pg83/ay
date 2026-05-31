@@ -18,7 +18,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 		generatedVFS := Build(instance.Path + "/" + generated)
 
 		confVFS := Source(instance.Path + "/" + conf)
-		inputs := []VFS{Intern("$(S)/build/scripts/check_config_h.py"), confVFS}
+		inputs := []VFS{buildScriptsCheckConfigHPy, confVFS}
 		inputs = append(inputs, walkClosure(ctx, instance, confVFS, in)...)
 
 		env := map[string]string{
@@ -71,3 +71,8 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 
 	return out
 }
+
+// Path constants hoisted by `ay refac consts`.
+var (
+	buildScriptsCheckConfigHPy = Source("build/scripts/check_config_h.py")
+)

@@ -135,9 +135,9 @@ func currentYatoolPath() string {
 // fetch_from_mds), each expanded to its import closure via the table — which pulls
 // in error.py, fetch_from.py, retry.py and process_command_files.py.
 func fetchScriptInputs(scripts scriptDeps) []VFS {
-	out := []VFS{Intern("$(S)/build/mapping.conf.json")}
-	out = append(out, scripts[Intern("$(S)/build/scripts/fetch_from_sandbox.py")]...)
-	out = append(out, scripts[Intern("$(S)/build/scripts/fetch_from_mds.py")]...)
+	out := []VFS{buildMappingConfJson}
+	out = append(out, scripts[buildScriptsFetchFromSandboxPy]...)
+	out = append(out, scripts[buildScriptsFetchFromMdsPy]...)
 	return out
 }
 
@@ -446,3 +446,10 @@ func copyFile(src, dst string) error {
 
 	return out.Close()
 }
+
+// Path constants hoisted by `ay refac consts`.
+var (
+	buildMappingConfJson           = Source("build/mapping.conf.json")
+	buildScriptsFetchFromMdsPy     = Source("build/scripts/fetch_from_mds.py")
+	buildScriptsFetchFromSandboxPy = Source("build/scripts/fetch_from_sandbox.py")
+)

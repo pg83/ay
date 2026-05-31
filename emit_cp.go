@@ -11,7 +11,7 @@ func EmitJVCPG4(
 	scripts scriptDeps,
 	emit Emitter,
 ) NodeRef {
-	fsTools := Intern("$(S)/build/scripts/fs_tools.py")
+	fsTools := copyFsToolsVFS
 
 	cmdArgs := []string{
 		instance.Platform.Tools.Python3,
@@ -74,7 +74,7 @@ func EmitCP(instance ModuleInstance, src VFS, dst VFS, scripts scriptDeps, emit 
 // COPY macro was declared WITH_CONTEXT, so that any header change retriggers
 // the copy).
 func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, scripts scriptDeps, emit Emitter) NodeRef {
-	fsTools := Intern("$(S)/build/scripts/fs_tools.py")
+	fsTools := copyFsToolsVFS
 
 	cmdArgs := []string{
 		instance.Platform.Tools.Python3,
