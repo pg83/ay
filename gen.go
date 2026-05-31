@@ -133,7 +133,7 @@ type genCtx struct {
 
 	// scripts maps each build/scripts script VFS to [self, …transitive import
 	// closure]; emit sites add a build script via append(inputs, scripts[v]...).
-	scripts map[VFS][]VFS
+	scripts scriptDeps
 
 	host   *Platform
 	target *Platform
@@ -1718,7 +1718,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		jsRel := strings.TrimPrefix(joinOutVFS.Rel(), srcInstance.Path+"/")
 
-		ccIncludeInputs := jsCCIncludeInputs(srcInstance, js.Sources, ccClosure)
+		ccIncludeInputs := jsCCIncludeInputs(srcInstance, js.Sources, ccClosure, ctx.scripts)
 
 		ccIn := moduleInputs
 		ccIn.ExtraDepRefs = []NodeRef{jsRef}
@@ -1899,6 +1899,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			d.splitDwarf,
 			programModuleTag,
 			ctx.host,
+			ctx.scripts,
 			ctx.emit,
 		)
 		ldPath := LDOutputPath(instance, binaryName)

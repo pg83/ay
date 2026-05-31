@@ -21,7 +21,7 @@ func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string) *l
 
 		ref, ok := ctx.ldPluginCPCache[dst]
 		if !ok {
-			ref = EmitCP(instance, src, dst, ctx.emit)
+			ref = EmitCP(instance, src, dst, ctx.scripts, ctx.emit)
 			ctx.ldPluginCPCache[dst] = ref
 		}
 

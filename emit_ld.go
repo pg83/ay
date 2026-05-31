@@ -33,6 +33,7 @@ func EmitLD(
 	wantsSplitDwarf bool,
 	programModuleTag string,
 	hostP *Platform,
+	scripts scriptDeps,
 	emit Emitter,
 ) NodeRef {
 
@@ -100,7 +101,7 @@ func EmitLD(
 	}
 	cmds = append(cmds, splitDwarfCmds...)
 
-	inputs := composeLDInputs(instance.Path, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths)
+	inputs := composeLDInputs(instance.Path, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts)
 
 	inputs = append(inputs, ldSvnversionHVFS)
 	if exportsScript != nil {
@@ -390,7 +391,7 @@ func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) [
 	}
 }
 
-func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS) []VFS {
+func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts scriptDeps) []VFS {
 
 	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(wholeArchivePaths)+len(dynamicPaths)+len(ccPaths)+len(objcopyPaths))
 	buildRootSeen := make(map[VFS]struct{}, cap(buildRootBlock))
@@ -415,22 +416,34 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, plugi
 
 	appendBuildRoot(objcopyPaths)
 
-	out := make([]VFS, 0, len(buildRootBlock)+len(ldScriptInputs))
+	out := make([]VFS, 0, len(buildRootBlock)+len(ldScriptInputs)+4)
 	out = append(out, buildRootBlock...)
-	out = append(out, ldScriptInputs...)
+	// ldScriptInputs seeds the link's $(S) tooling; expand each wrapper to its
+	// import closure via the table (e.g. link_exe -> process_command_files,
+	// thinlto_cache, process_whole_archive_option). Non-script entries
+	// (svn_interface.c) are not in the table and pass through. Dups (link_exe and
+	// fs_tools both import process_command_files) are dropped in normalization.
+	for _, s := range ldScriptInputs {
+		if cl := scripts[s]; cl != nil {
+			out = append(out, cl...)
+		} else {
+			out = append(out, s)
+		}
+	}
 
 	_ = modulePath
 
 	return out
 }
 
+// ldScriptInputs seeds the link node's $(S) tooling inputs: the wrapper scripts it
+// invokes plus the non-script vcs template. Each .py wrapper's import closure
+// (thinlto_cache, process_command_files, process_whole_archive_option, …) is added
+// from the script table in composeLDInputs — not hand-listed here.
 var ldScriptInputs = []VFS{
 	Intern("$(S)/build/scripts/vcs_info.py"),
 	Intern("$(S)/build/scripts/c_templates/svn_interface.c"),
 	Intern("$(S)/build/scripts/link_exe.py"),
-	Intern("$(S)/build/scripts/thinlto_cache.py"),
-	Intern("$(S)/build/scripts/process_command_files.py"),
-	Intern("$(S)/build/scripts/process_whole_archive_option.py"),
 	Intern("$(S)/build/scripts/fs_tools.py"),
 }
 

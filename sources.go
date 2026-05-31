@@ -80,10 +80,10 @@ func appendVFSUnique(dst []VFS, src []VFS) []VFS {
 	return dst
 }
 
-func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []VFS) []VFS {
+func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []VFS, scripts scriptDeps) []VFS {
 	out := make([]VFS, 0, 2+len(sources)+len(closure))
-	out = append(out, Intern("$(S)/build/scripts/gen_join_srcs.py"))
-	out = append(out, Intern("$(S)/build/scripts/process_command_files.py"))
+	// gen_join_srcs.py + its import closure (process_command_files.py).
+	out = append(out, scripts[Intern("$(S)/build/scripts/gen_join_srcs.py")]...)
 
 	for _, s := range sources {
 		out = append(out, Source(srcInstance.Path+"/"+s))

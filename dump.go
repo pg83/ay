@@ -124,17 +124,25 @@ func nodeProgramKind(node map[string]any) string {
 	return p
 }
 
-var ldOwnScriptRels = func() map[string]bool {
-	m := map[string]bool{"build/scripts/link_dyn_lib.py": true}
-	for _, v := range ldScriptInputs {
-		m[v.Rel()] = true
-	}
-	// The vcs-stamp header is a real LD input (included by the generated
-	// __vcs_version__.c the link compiles) present in both graphs, but the link
-	// command never names it — whitelist it so reference-graph pruning keeps it.
-	m[ldSvnversionHVFS.Rel()] = true
-	return m
-}()
+// ldOwnScriptRels is the reference-graph AR/LD input whitelist: the build/scripts
+// tooling (and the vcs templates) a link node legitimately carries but never names
+// on its command line, so reference-graph pruning keeps them. This is the FULL set
+// including the wrappers' import closures (link_exe imports process_command_files,
+// thinlto_cache, process_whole_archive_option; fs_tools imports
+// process_command_files). The normalizer is a standalone tool with no access to
+// build/scripts, so unlike the generator (which derives closures from the script
+// table) it must list them explicitly.
+var ldOwnScriptRels = map[string]bool{
+	"build/scripts/link_dyn_lib.py":               true,
+	"build/scripts/link_exe.py":                   true,
+	"build/scripts/process_command_files.py":      true,
+	"build/scripts/process_whole_archive_option.py": true,
+	"build/scripts/thinlto_cache.py":              true,
+	"build/scripts/fs_tools.py":                   true,
+	"build/scripts/vcs_info.py":                   true,
+	"build/scripts/c_templates/svn_interface.c":   true,
+	"build/scripts/c_templates/svnversion.h":      true,
+}
 
 // nodeCmdText flattens a node's command arguments into one NUL-joined, normPath'd
 // string for whole-path substring testing (used by the dep strip to detect a dep
