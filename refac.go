@@ -66,14 +66,121 @@ func refacConsts(args []string) int {
 		}
 	}
 
-	// Phase 2: rewrite each file's call sites, allocating new vars against the
-	// shared maps so later files reuse what earlier files introduced.
-	for _, pf := range parsed {
-		if rewriteRefacFile(pf, existing, used) {
+	// Phase 2: classify every hoist-eligible occurrence. A "free" occurrence sits in
+	// a function body; a non-free one is an element of a file-level var/const
+	// composite literal (a per-file interned list). Occurrences are gathered in
+	// (file, source-position) order for deterministic name allocation.
+	var occs []occurrence
+	for fi, pf := range parsed {
+		collectOccurrences(pf, fi, &occs)
+	}
+
+	// Phase 3: decide which canons get a package-level var. A canon is hoisted only
+	// if it already has a var (declared in source or seen earlier) OR it has at least
+	// one free occurrence. A canon that appears ONLY as a file-level-list element is
+	// left inline — hoisting it would create a var referenced exactly once, which is
+	// redundant indirection. The new var's declaration is attached to the file of its
+	// first free occurrence.
+	var newCanons []string
+	newVarFile := map[string]int{}
+	for _, o := range occs {
+		if !o.free {
+			continue
+		}
+		if _, ok := existing[o.canon]; ok {
+			continue
+		}
+		name := uniqueName(identForVFS(o.canon), used)
+		used[name] = true
+		existing[o.canon] = name
+		newCanons = append(newCanons, o.canon)
+		newVarFile[o.canon] = o.fileIdx
+	}
+
+	// Phase 4: every occurrence whose canon now has a var (free or list element) is
+	// rewritten to that var; list-only canons without a var stay inline.
+	editsByFile := make([][]constEdit, len(parsed))
+	for _, o := range occs {
+		name, ok := existing[o.canon]
+		if !ok {
+			continue
+		}
+		editsByFile[o.fileIdx] = append(editsByFile[o.fileIdx], constEdit{o.start, o.end, name})
+	}
+	addedByFile := make([][]newVar, len(parsed))
+	for _, canon := range newCanons {
+		fi := newVarFile[canon]
+		addedByFile[fi] = append(addedByFile[fi], newVar{existing[canon], constDef(canon)})
+	}
+
+	for fi, pf := range parsed {
+		if applyRefacEdits(pf, editsByFile[fi], addedByFile[fi]) {
 			fmt.Fprintf(os.Stderr, "refac consts: rewrote %s\n", pf.path)
 		}
 	}
 	return 0
+}
+
+// occurrence is one hoist-eligible call site, located by byte offset in its file.
+type occurrence struct {
+	fileIdx    int
+	start, end int
+	canon      string
+	free       bool // in a function body (justifies a var) vs a file-level-list element
+}
+
+// collectOccurrences appends every hoist-eligible call in pf to occs, tagging each
+// as free (inside a function body) or not (an element of a file-level var/const
+// composite literal). The direct-value vars recorded by parseRefacFile (declared)
+// are skipped — they ARE the hoisted vars, not call sites to rewrite.
+func collectOccurrences(pf *parsedFile, fileIdx int, occs *[]occurrence) {
+	record := func(call *ast.CallExpr, free bool) bool {
+		if pf.declared[call] {
+			return false // a direct-value var declaration; leave it and its subtree
+		}
+		fn, lit, ok := hoistCall(call)
+		if !ok {
+			return true
+		}
+		*occs = append(*occs, occurrence{
+			fileIdx: fileIdx,
+			start:   pf.fset.Position(call.Pos()).Offset,
+			end:     pf.fset.Position(call.End()).Offset,
+			canon:   canonVFS(fn, lit),
+			free:    free,
+		})
+		return false // the only child is the string literal — nothing nested to hoist
+	}
+
+	for _, decl := range pf.f.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			ast.Inspect(d, func(n ast.Node) bool {
+				if call, ok := n.(*ast.CallExpr); ok {
+					return record(call, true)
+				}
+				return true
+			})
+		case *ast.GenDecl:
+			if d.Tok != gotoken.VAR && d.Tok != gotoken.CONST {
+				continue
+			}
+			for _, spec := range d.Specs {
+				vs, ok := spec.(*ast.ValueSpec)
+				if !ok {
+					continue
+				}
+				for _, val := range vs.Values {
+					ast.Inspect(val, func(n ast.Node) bool {
+						if call, ok := n.(*ast.CallExpr); ok {
+							return record(call, false)
+						}
+						return true
+					})
+				}
+			}
+		}
+	}
 }
 
 type parsedFile struct {
@@ -184,41 +291,10 @@ type constEdit struct {
 
 type newVar struct{ name, def string }
 
-// rewriteRefacFile rewrites pf's hoist-eligible call sites to var references,
-// allocating new package-level vars (into the shared existing/used maps) for
-// canonical VFS values not already declared, and appending those new vars to pf.
-func rewriteRefacFile(pf *parsedFile, existing map[string]string, used map[string]bool) bool {
-	var edits []constEdit
-	var added []newVar
-
-	ast.Inspect(pf.f, func(n ast.Node) bool {
-		call, ok := n.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		if pf.declared[call] {
-			return true
-		}
-		fn, lit, ok := hoistCall(call)
-		if !ok {
-			return true
-		}
-		canon := canonVFS(fn, lit)
-		name := existing[canon]
-		if name == "" {
-			name = uniqueName(identForVFS(canon), used)
-			used[name] = true
-			existing[canon] = name
-			added = append(added, newVar{name: name, def: constDef(canon)})
-		}
-		edits = append(edits, constEdit{
-			start: pf.fset.Position(call.Pos()).Offset,
-			end:   pf.fset.Position(call.End()).Offset,
-			name:  name,
-		})
-		return false // the only child is the string literal — nothing to hoist inside
-	})
-
+// applyRefacEdits rewrites pf's recorded call sites to var references and appends
+// any new var declarations, then formats and writes the file. Returns whether the
+// file changed.
+func applyRefacEdits(pf *parsedFile, edits []constEdit, added []newVar) bool {
 	if len(edits) == 0 {
 		return false
 	}
