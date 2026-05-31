@@ -185,7 +185,9 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	}
 
 	if len(in.ExtraDepRefs) > 0 {
-		node.DepRefs = append([]NodeRef(nil), in.ExtraDepRefs...)
+		// Every caller passes a fresh ExtraDepRefs (literal/resolveCodegenDepRefs/
+		// prepend), and the CC node's DepRefs is never appended-to after — share it.
+		node.DepRefs = in.ExtraDepRefs
 	}
 
 	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS, allInputs
@@ -321,17 +323,13 @@ func appendCxxStdAndOwn(cmdArgs []string, isCxx bool, noCompilerWarnings bool, i
 }
 
 func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
+	// The result is only appended FROM into cmdArgs (read-only), so return the
+	// shared flag slice directly rather than copying it.
 	if isCxx {
-		out := make([]string, 0, len(in.PeerCXXFlagsGlobal))
-		out = append(out, in.PeerCXXFlagsGlobal...)
-
-		return out
+		return in.PeerCXXFlagsGlobal
 	}
 
-	out := make([]string, 0, len(in.PeerCOnlyFlagsGlobal))
-	out = append(out, in.PeerCOnlyFlagsGlobal...)
-
-	return out
+	return in.PeerCOnlyFlagsGlobal
 }
 
 func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []string {
