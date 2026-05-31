@@ -72,7 +72,7 @@ func buildTestCtxNode(p *Platform) *Node {
 		Env:      map[string]string{},
 		Inputs:   []VFS{Source(testAppendFileScriptRel)},
 		KV:       map[string]interface{}{"p": "CP", "pc": "light-blue"},
-		Outputs:  []VFS{Intern("$(B)/common_test.context")},
+		Outputs:  []VFS{bldCommonTestContext},
 		Platform: string(p.Target),
 		Requirements: map[string]interface{}{
 			"network": "restricted",
@@ -359,3 +359,8 @@ func testOutputs(projectPath, suite string) []VFS {
 		Build(path.Join(resultsDir, "testing_out_stuff.tar.zstd")),
 	}
 }
+
+// Path constants hoisted by `ay refac consts`.
+var (
+	bldCommonTestContext = Build("common_test.context")
+)

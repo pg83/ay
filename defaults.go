@@ -38,15 +38,15 @@ func isRuntimeAncestor(path string) bool {
 }
 
 var runtimeStackAddInclPaths = map[VFS]int{
-	Intern("$(S)/contrib/libs/cxxsupp/libcxx/include"):    0,
-	Intern("$(S)/contrib/libs/cxxsupp/libcxxrt/include"):  1,
+	contribLibsCxxsuppLibcxxInclude:                       0,
+	contribLibsCxxsuppLibcxxrtInclude:                     1,
 	Intern("$(S)/contrib/libs/cxxsupp/libcxxabi/include"): 2,
 	Intern("$(S)/contrib/libs/libunwind/include"):         3,
 }
 
 var bundledAddInclPaths = map[VFS]bool{
-	Intern("$(S)/contrib/libs/linux-headers"):     true,
-	Intern("$(S)/contrib/libs/linux-headers/_nf"): true,
+	contribLibsLinuxHeaders:   true,
+	contribLibsLinuxHeadersNf: true,
 }
 
 func suppressMallocAPIDefault(defaults []string, allocatorName string) []string {

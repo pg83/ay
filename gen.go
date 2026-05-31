@@ -283,16 +283,16 @@ var asmlibYasmModules = map[string]bool{
 //
 // Today's contents are macros we have empirically observed during sg2…sg5
 // generation that contribute nothing to the emitted graph today:
-//   * RECURSE / RECURSE_FOR_TESTS / RECURSE_ROOT_RELATIVE — re-target ya
+//   - RECURSE / RECURSE_FOR_TESTS / RECURSE_ROOT_RELATIVE — re-target ya
 //     make at sibling dirs; we drive the module set from the command-line
 //     target plus the PEERDIR closure.
-//   * Pure metadata: LICENSE / LICENSE_TEXTS / WITHOUT_LICENSE_TEXTS /
+//   - Pure metadata: LICENSE / LICENSE_TEXTS / WITHOUT_LICENSE_TEXTS /
 //     LICENSE_RESTRICTION / LICENSE_RESTRICTION_EXCEPTIONS / VERSION /
 //     ORIGINAL_SOURCE / PROVIDES / SUPPRESSIONS / FILES / HEADERS /
 //     NEED_CHECK / ENV / OWNER / SUBSCRIBER / MESSAGE / OPENSOURCE_PROJECT /
 //     OPENSOURCE_EXPORT_REPLACEMENT / IDE_FOLDER / TAG / SIZE / TIMEOUT /
 //     ALLOCATOR_IMPL.
-//   * Build-toggles we don't gate on: NO_LTO / NO_CLANG_COVERAGE /
+//   - Build-toggles we don't gate on: NO_LTO / NO_CLANG_COVERAGE /
 //     NO_CLANG_MCDC_COVERAGE / NO_CLANG_TIDY / NO_LINT / NO_PROFILE_RUNTIME /
 //     NO_PYTHON_COVERAGE / NO_SANITIZE / NO_SANITIZE_COVERAGE / NO_JOIN_SRC /
 //     STYLE_PYTHON / NO_OPTIMIZE / NO_OPTIMIZE_PY_PROTOS / NO_PYTHON2 /
@@ -301,9 +301,9 @@ var asmlibYasmModules = map[string]bool{
 //     TEST_SRCS / LINT / TASKLET / TASKLETSUPPORT / DEFAULT / USE_CXX /
 //     DEFINE_VARIABLE / PYTHON3 / MASMFLAGS / RESTRICT_PATH / JAVA_SRCS /
 //     JAVA_CLASSPATH_IGNORE_CONFLICTZ / DISABLE.
-//   * Tag/build-if filters we don't model: BUILD_ONLY_IF / NO_BUILD_IF /
+//   - Tag/build-if filters we don't model: BUILD_ONLY_IF / NO_BUILD_IF /
 //     INCLUDE_TAGS / ONLY_TAGS / CHECK_DEPENDENT_DIRS / EXCLUDE_TAGS.
-//   * Windows-specific: WINDOWS_LONG_PATH_MANIFEST (ymake.core.conf:5590).
+//   - Windows-specific: WINDOWS_LONG_PATH_MANIFEST (ymake.core.conf:5590).
 var acknowledgedMacros = map[string]struct{}{
 	"RECURSE":                         {},
 	"RECURSE_FOR_TESTS":               {},
@@ -1370,8 +1370,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	effectiveProtoAddInclGlobal := mergeDedupVFS(ownProtoAddIncl, peerProtoAddInclGlobal)
 
 	if instance.Path == "library/python/runtime_py3" {
-		buildRootPath := Intern("$(B)/library/python/runtime_py3")
-		abseilPath := Intern("$(S)/contrib/restricted/abseil-cpp")
+		buildRootPath := bldLibraryPythonRuntimePy3
+		abseilPath := contribRestrictedAbseilCpp
 		spliced := make([]VFS, 0, len(effectiveAddInclGlobal)+1)
 		inserted := false
 
@@ -1405,8 +1405,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		const nostdincPP = "-nostdinc++"
 
 		injectAddIncl := []VFS{
-			Intern("$(S)/contrib/libs/cxxsupp/libcxx/include"),
-			Intern("$(S)/contrib/libs/cxxsupp/libcxxrt/include"),
+			contribLibsCxxsuppLibcxxInclude,
+			contribLibsCxxsuppLibcxxrtInclude,
 		}
 
 		for _, p := range injectAddIncl {
@@ -1494,24 +1494,24 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		AddIncl:                dedupedAddIncl,
 		PeerAddInclGlobal:      selfPeerAddInclGlobal,
 		PeerProtoAddInclGlobal: effectiveProtoAddInclGlobal,
-		CFlags:               ownCFlags,
-		CXXFlags:             d.cxxFlags,
-		COnlyFlags:           d.cOnlyFlags,
-		OwnCFlagsGlobal:      ownCFlagsGlobalSelf,
-		OwnCXXFlagsGlobal:    ownCXXFlagsGlobalSelf,
-		OwnCOnlyFlagsGlobal:  ownCOnlyFlagsGlobalSelf,
-		PeerCFlagsGlobal:     peerCFlagsGlobal,
-		PeerCXXFlagsGlobal:   peerCXXFlagsGlobal,
-		PeerCOnlyFlagsGlobal: peerCOnlyFlagsGlobal,
-		ModuleScopeCFlags:    d.moduleScopeCFlags,
-		SFlags:               d.sFlags,
-		SrcDir:               effectiveSrcDir,
-		SourceRoot:           ctx.sourceRoot,
-		FS:                   ctx.fs,
-		DefaultVars:          d.defaultVars,
-		DefaultVarOrder:      d.defaultVarOrder,
-		SetVars:              d.setVars,
-		Py3Suffix:            isPy3NativeLib,
+		CFlags:                 ownCFlags,
+		CXXFlags:               d.cxxFlags,
+		COnlyFlags:             d.cOnlyFlags,
+		OwnCFlagsGlobal:        ownCFlagsGlobalSelf,
+		OwnCXXFlagsGlobal:      ownCXXFlagsGlobalSelf,
+		OwnCOnlyFlagsGlobal:    ownCOnlyFlagsGlobalSelf,
+		PeerCFlagsGlobal:       peerCFlagsGlobal,
+		PeerCXXFlagsGlobal:     peerCXXFlagsGlobal,
+		PeerCOnlyFlagsGlobal:   peerCOnlyFlagsGlobal,
+		ModuleScopeCFlags:      d.moduleScopeCFlags,
+		SFlags:                 d.sFlags,
+		SrcDir:                 effectiveSrcDir,
+		SourceRoot:             ctx.sourceRoot,
+		FS:                     ctx.fs,
+		DefaultVars:            d.defaultVars,
+		DefaultVarOrder:        d.defaultVarOrder,
+		SetVars:                d.setVars,
+		Py3Suffix:              isPy3NativeLib,
 		ObjectSuffixStem: func() *string {
 			if isYqlUdfStaticModule(d.moduleStmt.Name) {
 				return stringPtr("udfs")
@@ -1792,35 +1792,35 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ldPeerArchiveRefs, ldPeerArchivePaths = moveArchivePathsAfter(
 				ldPeerArchiveRefs,
 				ldPeerArchivePaths,
-				Intern("$(B)/build/cow/on/libbuild-cow-on.a"),
+				bldBuildCowOnLibbuildCowOnA,
 				[]VFS{
-					Intern("$(B)/library/cpp/malloc/api/libcpp-malloc-api.a"),
-					Intern("$(B)/contrib/libs/jemalloc/libcontrib-libs-jemalloc.a"),
-					Intern("$(B)/library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a"),
+					bldLibraryCppMallocApiLibcppMallocApiA,
+					bldContribLibsJemallocLibcontribLibsJemallocA,
+					bldLibraryCppMallocJemallocLibcppMallocJemallocA,
 				},
 			)
 			ldPeerLinkCmdPaths = movePathsAfter(
 				ldPeerLinkCmdPaths,
-				Intern("$(B)/build/cow/on/libbuild-cow-on.a"),
+				bldBuildCowOnLibbuildCowOnA,
 				[]VFS{
-					Intern("$(B)/library/cpp/malloc/api/libcpp-malloc-api.a"),
-					Intern("$(B)/contrib/libs/jemalloc/libcontrib-libs-jemalloc.a"),
-					Intern("$(B)/library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a"),
+					bldLibraryCppMallocApiLibcppMallocApiA,
+					bldContribLibsJemallocLibcontribLibsJemallocA,
+					bldLibraryCppMallocJemallocLibcppMallocJemallocA,
 				},
 			)
 			ldPeerArchiveRefs, ldPeerArchivePaths = moveArchivePathsBefore(
 				ldPeerArchiveRefs,
 				ldPeerArchivePaths,
-				Intern("$(B)/library/cpp/json/common/libcpp-json-common.a"),
+				bldLibraryCppJsonCommonLibcppJsonCommonA,
 				[]VFS{
-					Intern("$(B)/tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a"),
+					bldToolsEnumParserEnumSerializationRuntimeLibtoolsEnumParserEnumSerializationRuntimeA,
 				},
 			)
 			ldPeerLinkCmdPaths = movePathsBefore(
 				ldPeerLinkCmdPaths,
-				Intern("$(B)/library/cpp/json/common/libcpp-json-common.a"),
+				bldLibraryCppJsonCommonLibcppJsonCommonA,
 				[]VFS{
-					Intern("$(B)/tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a"),
+					bldToolsEnumParserEnumSerializationRuntimeLibtoolsEnumParserEnumSerializationRuntimeA,
 				},
 			)
 		}
@@ -2818,3 +2818,16 @@ func (ctx *genCtx) scannerForPlatform(p *Platform) *IncludeScanner {
 	}
 	return ctx.scannerTarget
 }
+
+// Path constants hoisted by `ay refac consts`.
+var (
+	bldBuildCowOnLibbuildCowOnA                                                           = Build("build/cow/on/libbuild-cow-on.a")
+	bldContribLibsJemallocLibcontribLibsJemallocA                                         = Build("contrib/libs/jemalloc/libcontrib-libs-jemalloc.a")
+	bldLibraryCppJsonCommonLibcppJsonCommonA                                              = Build("library/cpp/json/common/libcpp-json-common.a")
+	bldLibraryCppMallocApiLibcppMallocApiA                                                = Build("library/cpp/malloc/api/libcpp-malloc-api.a")
+	bldLibraryCppMallocJemallocLibcppMallocJemallocA                                      = Build("library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a")
+	bldLibraryPythonRuntimePy3                                                            = Build("library/python/runtime_py3")
+	bldToolsEnumParserEnumSerializationRuntimeLibtoolsEnumParserEnumSerializationRuntimeA = Build("tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a")
+	contribLibsCxxsuppLibcxxrtInclude                                                     = Source("contrib/libs/cxxsupp/libcxxrt/include")
+	contribRestrictedAbseilCpp                                                            = Source("contrib/restricted/abseil-cpp")
+)

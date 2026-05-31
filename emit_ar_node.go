@@ -11,7 +11,7 @@ func emitARNode(
 	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
-	scriptVFS := Intern("$(S)/build/scripts/link_lib.py")
+	scriptVFS := buildScriptsLinkLibPy
 
 	cmdEnv := hostP.ToolEnv()
 	arTool, arType, arFormat := instance.Platform.ArchiverArgs()
@@ -92,3 +92,8 @@ func emitARNode(
 
 	return emit.Emit(bindNodePlatform(n, instance.Platform))
 }
+
+// Path constants hoisted by `ay refac consts`.
+var (
+	buildScriptsLinkLibPy = Source("build/scripts/link_lib.py")
+)

@@ -25,17 +25,25 @@ func runtimePy3CCExtraInputs(modulePath, srcRel string) []VFS {
 	switch srcRel {
 	case "__res.cpp":
 		return []VFS{
-			Intern("$(B)/library/python/runtime_py3/__res.pyc.inc"),
-			Intern("$(S)/library/python/runtime_py3/__res.py"),
-			Intern("$(S)/library/python/runtime_py3/sitecustomize.py"),
+			bldLibraryPythonRuntimePy3ResPycInc,
+			libraryPythonRuntimePy3ResPy,
+			libraryPythonRuntimePy3SitecustomizePy,
 		}
 	case "sitecustomize.cpp":
 		return []VFS{
-			Intern("$(B)/library/python/runtime_py3/sitecustomize.pyc.inc"),
-			Intern("$(S)/library/python/runtime_py3/__res.py"),
-			Intern("$(S)/library/python/runtime_py3/sitecustomize.py"),
+			bldLibraryPythonRuntimePy3SitecustomizePycInc,
+			libraryPythonRuntimePy3ResPy,
+			libraryPythonRuntimePy3SitecustomizePy,
 		}
 	}
 
 	return nil
 }
+
+// Path constants hoisted by `ay refac consts`.
+var (
+	bldLibraryPythonRuntimePy3ResPycInc           = Build("library/python/runtime_py3/__res.pyc.inc")
+	bldLibraryPythonRuntimePy3SitecustomizePycInc = Build("library/python/runtime_py3/sitecustomize.pyc.inc")
+	libraryPythonRuntimePy3ResPy                  = Source("library/python/runtime_py3/__res.py")
+	libraryPythonRuntimePy3SitecustomizePy        = Source("library/python/runtime_py3/sitecustomize.py")
+)

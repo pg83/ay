@@ -83,7 +83,7 @@ func appendVFSUnique(dst []VFS, src []VFS) []VFS {
 func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []VFS, scripts scriptDeps) []VFS {
 	out := make([]VFS, 0, 2+len(sources)+len(closure))
 	// gen_join_srcs.py + its import closure (process_command_files.py).
-	out = append(out, scripts[Intern("$(S)/build/scripts/gen_join_srcs.py")]...)
+	out = append(out, scripts[buildScriptsGenJoinSrcsPy]...)
 
 	for _, s := range sources {
 		out = append(out, Source(srcInstance.Path+"/"+s))
@@ -179,7 +179,6 @@ func keepOnlySourceVFS(out []VFS) []VFS {
 	return w
 }
 
-
 // appendRagelNativeDeps resolves the ragel-native include directives of rl6VFS
 // (stored in parsedIncludesRagelNative) and appends the resulting ragel files to
 // existing, deduplicating against already-present entries. Also follows
@@ -206,9 +205,15 @@ func appendRagelNativeDeps(scanner *IncludeScanner, srcInstance ModuleInstance, 
 		seen[v] = true
 	}
 
-	var queue []struct{ includer VFS; d includeDirective }
+	var queue []struct {
+		includer VFS
+		d        includeDirective
+	}
 	for _, d := range directives {
-		queue = append(queue, struct{ includer VFS; d includeDirective }{rl6VFS, d})
+		queue = append(queue, struct {
+			includer VFS
+			d        includeDirective
+		}{rl6VFS, d})
 	}
 
 	for len(queue) > 0 {
@@ -226,7 +231,10 @@ func appendRagelNativeDeps(scanner *IncludeScanner, srcInstance ModuleInstance, 
 			// Follow transitive ragel-native includes of f
 			sub := scanner.parsers.sourceParsedBuckets(f).bucket(parsedIncludesRagelNative)
 			for _, sd := range sub {
-				queue = append(queue, struct{ includer VFS; d includeDirective }{f, sd})
+				queue = append(queue, struct {
+					includer VFS
+					d        includeDirective
+				}{f, sd})
 			}
 		}
 	}
@@ -245,9 +253,17 @@ func includeScannerBasePaths() []VFS {
 	// miss bare `$(B)/<full/path>` lookups that the codegen registry's
 	// LookupRel handles.
 	return []VFS{
-		Intern("$(S)/"),
-		Intern("$(B)/"),
-		Intern("$(S)/contrib/libs/linux-headers"),
-		Intern("$(S)/contrib/libs/linux-headers/_nf"),
+		v,
+		bld,
+		contribLibsLinuxHeaders,
+		contribLibsLinuxHeadersNf,
 	}
 }
+
+// Path constants hoisted by `ay refac consts`.
+var (
+	bld                       = Build("")
+	contribLibsLinuxHeaders   = Source("contrib/libs/linux-headers")
+	contribLibsLinuxHeadersNf = Source("contrib/libs/linux-headers/_nf")
+	v                         = Source("")
+)
