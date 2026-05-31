@@ -821,23 +821,22 @@ func lintTightBraces(path string) bool {
 		return l >= 1 && l <= len(lines) && strings.TrimSpace(lines[l-1]) == ""
 	}
 
-	// del holds 1-based line numbers to drop.
+	// del holds 1-based line numbers to drop. tighten removes blanks only strictly
+	// between a brace pair's lines, so a same-line pair (e.g. an empty `struct{}`
+	// inside a type expression) never touches the blank that follows it outside.
 	del := map[int]bool{}
-	dropAfter := func(brace gotoken.Pos) {
-		if !brace.IsValid() {
+	tighten := func(open, close gotoken.Pos) {
+		if !open.IsValid() || !close.IsValid() {
 			return
 		}
 
-		for l := lineOf(brace) + 1; isBlank(l); l++ {
+		openLine, closeLine := lineOf(open), lineOf(close)
+
+		for l := openLine + 1; l < closeLine && isBlank(l); l++ {
 			del[l] = true
 		}
-	}
-	dropBefore := func(brace gotoken.Pos) {
-		if !brace.IsValid() {
-			return
-		}
 
-		for l := lineOf(brace) - 1; isBlank(l); l-- {
+		for l := closeLine - 1; l > openLine && isBlank(l); l-- {
 			del[l] = true
 		}
 	}
@@ -845,20 +844,16 @@ func lintTightBraces(path string) bool {
 	ast.Inspect(f, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.BlockStmt:
-			dropAfter(x.Lbrace)
-			dropBefore(x.Rbrace)
+			tighten(x.Lbrace, x.Rbrace)
 		case *ast.CompositeLit:
-			dropAfter(x.Lbrace)
-			dropBefore(x.Rbrace)
+			tighten(x.Lbrace, x.Rbrace)
 		case *ast.StructType:
 			if x.Fields != nil {
-				dropAfter(x.Fields.Opening)
-				dropBefore(x.Fields.Closing)
+				tighten(x.Fields.Opening, x.Fields.Closing)
 			}
 		case *ast.InterfaceType:
 			if x.Methods != nil {
-				dropAfter(x.Methods.Opening)
-				dropBefore(x.Methods.Closing)
+				tighten(x.Methods.Opening, x.Methods.Closing)
 			}
 		}
 
