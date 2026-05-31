@@ -389,6 +389,10 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		e.scriptClosure = scriptClosure
 	case *StreamingEmitter:
 		e.scriptClosure = scriptClosure
+		// Mix $(S) input content hashes into node uids on the streaming/executor
+		// path so a source edit invalidates the cache. The -G/BufferedEmitter path
+		// leaves fs nil (re-uid'd from canonical content downstream).
+		e.uidScratch.fs = fs
 	}
 
 	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())

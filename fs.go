@@ -5,6 +5,8 @@ import (
 	"os"
 	"path"
 	"strings"
+
+	"github.com/zeebo/xxh3"
 )
 
 // FS is the source-tree filesystem facade. Production code drives an osFS
@@ -21,6 +23,11 @@ type FS interface {
 	ReadAbs(absPath string) []byte
 	ExistsAbs(absPath string) (present bool, isDir bool)
 	Walk(rel string, visit func(rel string, isDir bool))
+	// ContentHash returns the xxh3 of the file whose rel path interns to s (i.e.
+	// s == internString(vfs.Rel())), recorded when the FS last read that file. It
+	// faults if no content was ever read for s — the hash must exist by the time a
+	// node's uid is computed.
+	ContentHash(s STR) uint64
 	perfStats() fsPerfStats
 }
 
@@ -28,6 +35,15 @@ type osFS struct {
 	sourceRoot string
 	rootSlash  string
 	dirs       map[string]map[string]bool
+
+	// contentHashes is the xxh3 of each read file's content, indexed directly by the
+	// STR of its rel path (STR ids are dense, so a plain growing array beats a hash
+	// map). Slot 0 means "not recorded" — xxh3 is effectively never 0. Both writes
+	// (FS reads during gen) and reads (uid computation in StreamingEmitter.Emit)
+	// happen on the single gen goroutine — the executor goroutine is spawned only
+	// after a node's uid is computed — so no lock.
+	contentHashes []uint64
+	chReadBuf     []byte // reused by the lazy ContentHash read (gen goroutine only)
 
 	listdirHits   uint64
 	listdirMisses uint64
@@ -41,6 +57,34 @@ func NewFS(sourceRoot string) FS {
 		rootSlash:  sourceRoot + "/",
 		dirs:       make(map[string]map[string]bool, 1024),
 	}
+}
+
+// recordContentHash stores xxh3(data) at index STR(rel), growing the array as ids
+// advance.
+func (fs *osFS) recordContentHash(rel string, data []byte) {
+	s := internString(cleanRel(rel))
+	if int(s) >= len(fs.contentHashes) {
+		n := len(fs.contentHashes) * 2
+		if n <= int(s) {
+			n = int(s) + 1
+		}
+		grown := make([]uint64, n)
+		copy(grown, fs.contentHashes)
+		fs.contentHashes = grown
+	}
+	fs.contentHashes[s] = xxh3.Hash(data)
+}
+
+func (fs *osFS) ContentHash(s STR) uint64 {
+	if int(s) < len(fs.contentHashes) && fs.contentHashes[s] != 0 {
+		return fs.contentHashes[s]
+	}
+	// Lazily read inputs gen never scanned — many $(S) inputs (data files,
+	// tablegen .td, python stdlib, tzdata, …) are listed on nodes but their content
+	// is never needed during graph construction. Read on first uid use (reusing one
+	// buffer) so the hash is recorded; a genuinely missing file faults here.
+	fs.chReadBuf = fs.ReadInto(internTable.strs[s], fs.chReadBuf)
+	return fs.contentHashes[s]
 }
 
 func (fs *osFS) SourceRoot() string { return fs.sourceRoot }
@@ -107,10 +151,18 @@ func (fs *osFS) IsDir(rel string) bool {
 }
 
 func (fs *osFS) Read(rel string) []byte {
-	return Throw2(os.ReadFile(fs.rootSlash + cleanRel(rel)))
+	data := Throw2(os.ReadFile(fs.rootSlash + cleanRel(rel)))
+	fs.recordContentHash(rel, data)
+	return data
 }
 
 func (fs *osFS) ReadInto(rel string, buf []byte) []byte {
+	buf = fs.readIntoRaw(rel, buf)
+	fs.recordContentHash(rel, buf)
+	return buf
+}
+
+func (fs *osFS) readIntoRaw(rel string, buf []byte) []byte {
 	f := Throw2(os.Open(fs.rootSlash + cleanRel(rel)))
 	defer f.Close()
 

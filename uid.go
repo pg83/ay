@@ -143,6 +143,11 @@ func pythonStringRepr(s string) string {
 
 type canonBuf struct {
 	buf []byte
+	// fs, when set, makes writeVFSSlice mix each $(S) input's file-content hash
+	// (xxh3, recorded by the FS on read) into the node hash, so a source edit
+	// changes the node uid. Left nil where only the structural hash is wanted
+	// (e.g. the dump/-G path, which is re-uid'd from canonical content anyway).
+	fs FS
 }
 
 func (c *canonBuf) writeByte(b byte) {
@@ -184,8 +189,15 @@ func (c *canonBuf) writeStringSlice(ss []string) {
 func (c *canonBuf) writeVFSSlice(vs []VFS) {
 	c.writeUint32(uint32(len(vs)))
 	for _, v := range vs {
-
 		c.writeUint64(internTable.hashes[v.strID()])
+
+		// Mix the content hash of source inputs so editing a $(S) file changes the
+		// node uid. $(B) inputs are produced — their content is captured via the
+		// producing node's uid in deps, not here. ContentHash faults if the file
+		// was never read by the FS (the hash must have been recorded during gen).
+		if c.fs != nil && v.IsSource() {
+			c.writeUint64(c.fs.ContentHash(internString(v.Rel())))
+		}
 	}
 }
 
