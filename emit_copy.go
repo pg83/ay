@@ -281,8 +281,30 @@ func withContextSourceExtras(reg *CodegenRegistry, modulePath string, d *moduleD
 			extras = append(extras, src)
 		}
 	}
+	// A COPY product is produced by a `python3 fs_tools.py copy …` CP node; a unit
+	// that compiles a copied source, or consumes a TEXT-copied header, inherits the
+	// producer's $(S) tooling leaf input fs_tools.py (its process_command_files.py
+	// import is pulled in by the build/scripts dependency closure — see
+	// expandScriptClosures). Attach it when the compiled unit itself is a copy
+	// (TEXT or not — non-TEXT copies reach the closure via their source-node pointer
+	// but still carry the producer's tool) or when a TEXT-copy source was
+	// re-attached above.
+	if len(extras) > 0 || isCopyProduct(reg, rootDst) {
+		extras = append(extras, copyFsToolsVFS)
+	}
 	return extras
 }
+
+// isCopyProduct reports whether v is the $(B) output of a CP (COPY_FILE) node.
+func isCopyProduct(reg *CodegenRegistry, v VFS) bool {
+	if reg == nil || v.IsSource() {
+		return false
+	}
+	info := reg.Lookup(v)
+	return info != nil && info.ProducerKvP == "CP"
+}
+
+var copyFsToolsVFS = Intern("$(S)/build/scripts/fs_tools.py")
 
 func isSourceEligibleForCopyAuto(srcRel string) bool {
 	return isHeaderSource(srcRel) ||

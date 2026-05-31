@@ -42,6 +42,11 @@ type BufferedEmitter struct {
 	// rule (see scanner.go: generatedFirstClaim doc).
 	generatedFirstClaim map[VFS]string
 
+	// scriptClosure is the build/scripts import/exec dependency closure, populated
+	// by runGen after gen completes. finalizeDumpGraph applies it so every node
+	// listing a wrapper script also lists the helper scripts that wrapper pulls in.
+	scriptClosure scriptDepClosure
+
 	readyCh chan struct{}
 }
 
