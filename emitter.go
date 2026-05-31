@@ -42,11 +42,6 @@ type BufferedEmitter struct {
 	// rule (see scanner.go: generatedFirstClaim doc).
 	generatedFirstClaim map[VFS]string
 
-	// scriptClosure is the build/scripts import dependency closure, set by runGen
-	// before the gen walk. Emit applies it per node (expandNodeScriptClosure) so a
-	// node listing a wrapper script also lists that wrapper's helper scripts.
-	scriptClosure scriptDepClosure
-
 	// fs, set by runGen, lets finalizeNodesInOrder mix $(S) input content hashes
 	// into node uids (see canonBuf.fs).
 	fs FS
@@ -68,8 +63,6 @@ func (e *BufferedEmitter) Emit(n *Node) NodeRef {
 	if e.finalized {
 		panic("BufferedEmitter.Emit called after Finalize")
 	}
-
-	expandNodeScriptClosure(n, e.scriptClosure)
 
 	id := int64(len(e.nodes))
 	e.nodes = append(e.nodes, n)
@@ -360,7 +353,6 @@ type StreamingEmitter struct {
 	finalized     bool
 	readyCh       chan struct{}
 	uidScratch    canonBuf
-	scriptClosure scriptDepClosure
 }
 
 func NewStreamingEmitter(onNode func(*Node)) *StreamingEmitter {
@@ -375,8 +367,6 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 	if e.finalized {
 		panic("StreamingEmitter.Emit called after Finish")
 	}
-
-	expandNodeScriptClosure(n, e.scriptClosure)
 
 	id := int64(len(e.nodes))
 	e.nodes = append(e.nodes, n)

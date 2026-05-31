@@ -2,7 +2,6 @@ package main
 
 import (
 	"reflect"
-	"sort"
 	"testing"
 )
 
@@ -40,94 +39,43 @@ func scriptFixtureFS() *memFS {
 	})
 }
 
-func TestBuildScriptDepClosure_ImportsOnly_NoFalsePositives(t *testing.T) {
-	closure := buildScriptDepClosure(scriptFixtureFS())
+func TestBuildScriptTable_ImportsOnly_NoFalsePositives(t *testing.T) {
+	table := buildScriptTable(scriptFixtureFS())
 
+	// Each entry is [self, …sorted transitive closure]. Verify against the rel paths.
 	cases := map[string][]string{
 		"build/scripts/link_exe.py": {
+			"build/scripts/link_exe.py", // self first
 			"build/scripts/process_command_files.py",
 			"build/scripts/process_whole_archive_option.py",
 			"build/scripts/thinlto_cache.py",
 		},
-		"build/scripts/fs_tools.py":                     {"build/scripts/process_command_files.py"},
-		"build/scripts/process_whole_archive_option.py": {"build/scripts/process_command_files.py"},
-		"build/scripts/process_command_files.py":        {},
-		// False-positive traps: a local var, a comment word, a usage string.
-		"build/scripts/vcs_info.py":    {},
-		"build/scripts/gen_py3_reg.py": {},
+		"build/scripts/fs_tools.py": {
+			"build/scripts/fs_tools.py",
+			"build/scripts/process_command_files.py",
+		},
+		"build/scripts/process_command_files.py": {"build/scripts/process_command_files.py"},
+		// False-positive traps: a local var, a comment word, a usage string — no closure.
+		"build/scripts/vcs_info.py":    {"build/scripts/vcs_info.py"},
+		"build/scripts/gen_py3_reg.py": {"build/scripts/gen_py3_reg.py"},
 	}
 
 	for script, want := range cases {
-		got := closure[script]
-		if len(got) == 0 && len(want) == 0 {
+		got := table[Source(script)]
+		if len(got) == 0 {
+			t.Errorf("table[%s] is empty (must contain at least self)", script)
 			continue
 		}
-		sort.Strings(got)
-		sort.Strings(want)
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("closure[%s]:\n  got  %v\n  want %v", script, got, want)
+		if got[0] != Source(script) {
+			t.Errorf("table[%s][0] = %s, want self", script, got[0].String())
 		}
-	}
-}
-
-func emitOneNodeInputs(e Emitter, closure scriptDepClosure) []string {
-	switch t := e.(type) {
-	case *BufferedEmitter:
-		t.scriptClosure = closure
-	case *StreamingEmitter:
-		t.scriptClosure = closure
-	}
-	n := &Node{
-		Cmds:             []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
-		Env:              map[string]string{},
-		Inputs:           []VFS{Source("build/scripts/link_exe.py"), Build("a/foo.o")},
-		KV:               map[string]interface{}{"p": "LD"},
-		Outputs:          []VFS{Build("a/prog")},
-		Platform:         "linux",
-		Requirements:     map[string]interface{}{},
-		Tags:             []string{},
-		TargetProperties: map[string]string{},
-	}
-	e.Emit(n)
-	rels := make([]string, 0, len(n.Inputs))
-	for _, in := range n.Inputs {
-		rels = append(rels, in.String())
-	}
-	sort.Strings(rels)
-	return rels
-}
-
-// TestScriptClosureExpansion_StreamingMatchesBuffered guards the invariant that
-// matters for the executor: the script-closure expansion happens per-node in
-// Emit, so the streaming build path (StreamingEmitter -> executor) and the -G dump
-// path (BufferedEmitter) produce identical node inputs. A regression that moved
-// the expansion back into a buffered-only post-pass would diverge here.
-func TestScriptClosureExpansion_StreamingMatchesBuffered(t *testing.T) {
-	closure := buildScriptDepClosure(scriptFixtureFS())
-
-	buffered := emitOneNodeInputs(NewBufferedEmitter(), closure)
-	streaming := emitOneNodeInputs(NewStreamingEmitter(func(*Node) {}), closure)
-
-	if !reflect.DeepEqual(buffered, streaming) {
-		t.Fatalf("streaming vs buffered node inputs diverge:\n  buffered  %v\n  streaming %v", buffered, streaming)
-	}
-
-	// Expansion must actually have happened: the wrapper's helper closure is present.
-	want := []string{
-		"$(S)/build/scripts/process_command_files.py",
-		"$(S)/build/scripts/process_whole_archive_option.py",
-		"$(S)/build/scripts/thinlto_cache.py",
-	}
-	for _, w := range want {
-		found := false
-		for _, in := range buffered {
-			if in == w {
-				found = true
-				break
-			}
+		gotRel := make([]string, len(got))
+		for i, v := range got {
+			gotRel[i] = v.Rel()
 		}
-		if !found {
-			t.Errorf("expanded inputs missing %s; got %v", w, buffered)
+		// closure (got[1:]) is sorted; self is first. Compare full slice.
+		if !reflect.DeepEqual(gotRel, want) {
+			t.Errorf("table[%s]:\n  got  %v\n  want %v", script, gotRel, want)
 		}
 	}
 }

@@ -66,7 +66,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 			// Add TEXT copy source files (e.g. mkql_computation_node_codegen.h.txt)
 			// that appear in the closure, matching emitOneSource's withContextSourceExtras.
-			wcExtras := withContextSourceExtras(codegenRegForInstance(ctx, instance), instance.Path, d, closure, inputVFS)
+			wcExtras := withContextSourceExtras(codegenRegForInstance(ctx, instance), instance.Path, d, closure, inputVFS, ctx.scripts)
 			for _, e := range wcExtras {
 				if e == copyFsToolsVFS {
 					linksCopy = true
@@ -122,7 +122,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		ldArgs = append(ldArgs, "-o", mergedOut.String())
 		mergeInputs := append([]VFS(nil), bcPaths...)
 		if linksCopy {
-			mergeInputs = append(mergeInputs, copyFsToolsVFS)
+			mergeInputs = append(mergeInputs, ctx.scripts[copyFsToolsVFS]...)
 		}
 		ldNode := &Node{
 			Cmds:             []Cmd{{CmdArgs: ldArgs, Env: env}},
