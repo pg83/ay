@@ -232,6 +232,24 @@ Deferred-canonicalization подтверждён по обеим осям: emit 
 нужен local-intern (freeze не годится); emit-строки почти module-local (96%) →
 канонизация партиционируется и дёшева.
 
+## 7a. ЖЁСТКОЕ ОГРАНИЧЕНИЕ: streaming fast-start в `make` нарушать нельзя
+
+В реальном билде (`make.go`): `go ex.eventLoop()` стартует executor ДО `genStream`,
+а `genStream(..., ex.onNode, ...)` пихает каждую ноду в executor по мере эмиссии →
+**exec перекрывается с продолжающейся генерацией** (fast-start). uid считается inline
+в `StreamingEmitter.Emit`, сразу за ним `onNode`.
+
+Следствие: **batch-parallel-gen (буфер всех нод → параллельный emit/uid) сериализует
+gen→exec и убивает перекрытие.** Поэтому весь parallel-gen (включая параллельный uid)
+— только для **буферизованного пути** (`-G`/validate/CI/профиль), а реальный билд
+остаётся streaming. Для билда это не потеря: серийная стоимость gen там скрыта за exec.
+
+В коде разделение уже есть: `StreamingEmitter` (inline uid, fast-start, build) vs
+`BufferedEmitter` (`finalizeNodesInOrder`, batch). parallel-gen вешается ТОЛЬКО на
+`BufferedEmitter`; `StreamingEmitter.Emit` не трогаем. Риска для билда нет — это
+физически другой путь кода. Область выигрыша parallel-gen = скорость
+graph-generation, НЕ wall полевого билда.
+
 ## 8. Следующий риск — НЕ remap
 
 Узкое место архитектуры теперь не интернирование/remap (доказанно дёшевы), а:
