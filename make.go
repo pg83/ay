@@ -474,8 +474,8 @@ func (ex *executor) execute(n *Node) {
 	defer func() { <-ex.sema }()
 
 	tmp := filepath.Join(ex.bldRoot, "tmp", n.UID)
-	_ = os.RemoveAll(tmp)
-	defer os.RemoveAll(tmp)
+	_ = forceRemoveAll(tmp)
+	defer forceRemoveAll(tmp)
 
 	for _, dep := range n.Deps {
 		ex.restoreInto(dep, tmp)
@@ -600,7 +600,7 @@ func (ex *executor) storeOutputs(n *Node, tmp string) {
 		dst := casPath(ex.bldRoot, src)
 
 		Throw(os.MkdirAll(filepath.Dir(dst), 0o755))
-		_ = os.RemoveAll(dst)
+		_ = forceRemoveAll(dst)
 		Throw(os.Rename(src, dst))
 
 		meta[out.String()] = dst
@@ -626,9 +626,10 @@ func (ex *executor) restoreInto(uid, where string) {
 		if !vfsHasPrefix(outVFS) {
 			ThrowFmt("malformed meta entry %q in %s", outVFS, metaPath)
 		}
-		v := Intern(outVFS)
-
-		target := mountVFS(v, ex.srcRoot, where)
+		// Resolve the $(B)/… path directly from the string. Do NOT Intern here:
+		// execution goroutines run concurrently with the still-streaming generator,
+		// and the global intern table is not safe for concurrent writes.
+		target := mountString(outVFS, ex.srcRoot, where, nil)
 		Throw(os.MkdirAll(filepath.Dir(target), 0o755))
 		_ = os.Remove(target)
 		Throw(os.Symlink(casLoc, target))
@@ -641,20 +642,6 @@ func (ex *executor) installRoot(uid, where string) {
 	}
 
 	ex.restoreInto(uid, where)
-}
-
-func mountVFS(v VFS, srcRoot, bldRoot string) string {
-	if v.IsSource() {
-		return filepath.Join(srcRoot, v.Rel())
-	}
-
-	if v.IsBuild() {
-		return filepath.Join(bldRoot, v.Rel())
-	}
-
-	ThrowFmt("mountVFS: zero-rooted VFS")
-
-	return ""
 }
 
 func mountString(s, srcRoot, bldRoot string, resources map[string]string) string {
