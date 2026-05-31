@@ -19,42 +19,43 @@ import (
 	"github.com/jon-codes/getopt"
 )
 
-var (
-	targetStatsExtraFlagAllowlist = map[string]struct{}{
-		"ALLOCATOR": {},
-		"FAKEID":    {},
-		"MUSL":      {},
-		"RACE":      {},
-	}
-	targetStatsBaseFlagAllowlist = map[string]struct{}{
-		"ALLOCATOR":      {},
-		"FAKEID":         {},
-		"MUSL":           {},
-		"RACE":           {},
-		"SANDBOXING":     {},
-		"SANITIZER_TYPE": {},
-		"USE_AFL":        {},
-		"USE_LTO":        {},
-		"USE_THINLTO":    {},
-	}
-	fatalOnce sync.Once
-	ansiCols  = map[string]string{
-		"red":           ansiESC + "[31m",
-		"green":         ansiESC + "[32m",
-		"yellow":        ansiESC + "[33m",
-		"blue":          ansiESC + "[34m",
-		"magenta":       ansiESC + "[35m",
-		"cyan":          ansiESC + "[36m",
-		"white":         ansiESC + "[37m",
-		"light-red":     ansiESC + "[91m",
-		"light-green":   ansiESC + "[92m",
-		"light-yellow":  ansiESC + "[93m",
-		"light-blue":    ansiESC + "[94m",
-		"light-magenta": ansiESC + "[95m",
-		"light-cyan":    ansiESC + "[96m",
-		"light-white":   ansiESC + "[97m",
-	}
-)
+var targetStatsExtraFlagAllowlist = map[string]struct{}{
+	"ALLOCATOR": {},
+	"FAKEID":    {},
+	"MUSL":      {},
+	"RACE":      {},
+}
+
+var targetStatsBaseFlagAllowlist = map[string]struct{}{
+	"ALLOCATOR":      {},
+	"FAKEID":         {},
+	"MUSL":           {},
+	"RACE":           {},
+	"SANDBOXING":     {},
+	"SANITIZER_TYPE": {},
+	"USE_AFL":        {},
+	"USE_LTO":        {},
+	"USE_THINLTO":    {},
+}
+
+var fatalOnce sync.Once
+
+var ansiCols = map[string]string{
+	"red":           ansiESC + "[31m",
+	"green":         ansiESC + "[32m",
+	"yellow":        ansiESC + "[33m",
+	"blue":          ansiESC + "[34m",
+	"magenta":       ansiESC + "[35m",
+	"cyan":          ansiESC + "[36m",
+	"white":         ansiESC + "[37m",
+	"light-red":     ansiESC + "[91m",
+	"light-green":   ansiESC + "[92m",
+	"light-yellow":  ansiESC + "[93m",
+	"light-blue":    ansiESC + "[94m",
+	"light-magenta": ansiESC + "[95m",
+	"light-cyan":    ansiESC + "[96m",
+	"light-white":   ansiESC + "[97m",
+}
 
 type makeFlags struct {
 	srcRoot           string

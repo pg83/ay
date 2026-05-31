@@ -7,38 +7,37 @@ import (
 	"strings"
 )
 
-var (
-	runAntlrKeywords = map[string]bool{
-		"IN":              true,
-		"IN_NOPARSE":      true,
-		"IN_DEPS":         true,
-		"OUT":             true,
-		"OUT_NOAUTO":      true,
-		"CWD":             true,
-		"OUTPUT_INCLUDES": true,
-		"INDUCED_DEPS":    true,
-		"TOOL":            true,
-		"ENV":             true,
-		"STDOUT":          true,
-		"STDOUT_NOAUTO":   true,
-		"GRAMMAR_FILES":   true,
-		"GRAMMAR_CWD":     true,
-	}
-	runProgramKeywords = map[string]bool{
-		"IN":              true,
-		"IN_NOPARSE":      true,
-		"OUT":             true,
-		"OUT_NOAUTO":      true,
-		"STDOUT":          true,
-		"STDOUT_NOAUTO":   true,
-		"CWD":             true,
-		"ENV":             true,
-		"OUTPUT_INCLUDES": true,
-		"INDUCED_DEPS":    true,
-		"IN_DEPS":         true,
-		"TOOL":            true,
-	}
-)
+var runAntlrKeywords = map[string]bool{
+	"IN":              true,
+	"IN_NOPARSE":      true,
+	"IN_DEPS":         true,
+	"OUT":             true,
+	"OUT_NOAUTO":      true,
+	"CWD":             true,
+	"OUTPUT_INCLUDES": true,
+	"INDUCED_DEPS":    true,
+	"TOOL":            true,
+	"ENV":             true,
+	"STDOUT":          true,
+	"STDOUT_NOAUTO":   true,
+	"GRAMMAR_FILES":   true,
+	"GRAMMAR_CWD":     true,
+}
+
+var runProgramKeywords = map[string]bool{
+	"IN":              true,
+	"IN_NOPARSE":      true,
+	"OUT":             true,
+	"OUT_NOAUTO":      true,
+	"STDOUT":          true,
+	"STDOUT_NOAUTO":   true,
+	"CWD":             true,
+	"ENV":             true,
+	"OUTPUT_INCLUDES": true,
+	"INDUCED_DEPS":    true,
+	"IN_DEPS":         true,
+	"TOOL":            true,
+}
 
 type MakeFile struct {
 	Path  string

@@ -1,70 +1,73 @@
 package main
 
 var (
-	cythonNumpyAddIncl = []VFS{
-		Intern("$(S)/contrib/python/numpy/include/numpy/core/include"),
-		Intern("$(S)/contrib/python/numpy/include/numpy/core/include/numpy"),
-		Intern("$(S)/contrib/python/numpy/include/numpy/core/src/common"),
-		Intern("$(S)/contrib/python/numpy/include/numpy/core/src/npymath"),
-		Intern("$(S)/contrib/python/numpy/include/numpy/distutils/include"),
-	}
-	pythonIncludeDir        = Intern("$(S)/contrib/libs/python/Include")
-	py3CythonOutputIncludes = []VFS{
-		Intern("$(S)/contrib/tools/cython/generated_c_headers.h"),
-		Intern("$(S)/contrib/tools/cython/generated_cpp_headers.h"),
-		Intern("$(S)/contrib/libs/python/Include/compile.h"),
-		Intern("$(S)/contrib/libs/python/Include/frameobject.h"),
-		Intern("$(S)/contrib/libs/python/Include/longintrepr.h"),
-		Intern("$(S)/contrib/libs/python/Include/pyconfig.h"),
-		Intern("$(S)/contrib/libs/python/Include/Python.h"),
-		Intern("$(S)/contrib/libs/python/Include/pythread.h"),
-		Intern("$(S)/contrib/libs/python/Include/structmember.h"),
-		Intern("$(S)/contrib/libs/python/Include/traceback.h"),
-		Intern("$(S)/contrib/libs/cxxsupp/openmp/omp.h"),
-	}
-	py3CythonEmbeddedFiles = []string{
-		"contrib/tools/cython/Cython/Utility/arrayarray.h",
-		"contrib/tools/cython/Cython/Utility/AsyncGen.c",
-		"contrib/tools/cython/Cython/Utility/Buffer.c",
-		"contrib/tools/cython/Cython/Utility/Builtins.c",
-		"contrib/tools/cython/Cython/Utility/CConvert.pyx",
-		"contrib/tools/cython/Cython/Utility/CMath.c",
-		"contrib/tools/cython/Cython/Utility/CommonStructures.c",
-		"contrib/tools/cython/Cython/Utility/CommonTypes.c",
-		"contrib/tools/cython/Cython/Utility/Complex.c",
-		"contrib/tools/cython/Cython/Utility/Coroutine.c",
-		"contrib/tools/cython/Cython/Utility/CpdefEnums.pyx",
-		"contrib/tools/cython/Cython/Utility/CppConvert.pyx",
-		"contrib/tools/cython/Cython/Utility/CppSupport.cpp",
-		"contrib/tools/cython/Cython/Utility/CythonFunction.c",
-		"contrib/tools/cython/Cython/Utility/Dataclasses.c",
-		"contrib/tools/cython/Cython/Utility/Embed.c",
-		"contrib/tools/cython/Cython/Utility/Exceptions.c",
-		"contrib/tools/cython/Cython/Utility/ExtensionTypes.c",
-		"contrib/tools/cython/Cython/Utility/FunctionArguments.c",
-		"contrib/tools/cython/Cython/Utility/ImportExport.c",
-		"contrib/tools/cython/Cython/Utility/MemoryView.pyx",
-		"contrib/tools/cython/Cython/Utility/MemoryView_C.c",
-		"contrib/tools/cython/Cython/Utility/ModuleSetupCode.c",
-		"contrib/tools/cython/Cython/Utility/NumpyImportArray.c",
-		"contrib/tools/cython/Cython/Utility/ObjectHandling.c",
-		"contrib/tools/cython/Cython/Utility/Optimize.c",
-		"contrib/tools/cython/Cython/Utility/Overflow.c",
-		"contrib/tools/cython/Cython/Utility/Printing.c",
-		"contrib/tools/cython/Cython/Utility/Profile.c",
-		"contrib/tools/cython/Cython/Utility/StringTools.c",
-		"contrib/tools/cython/Cython/Utility/TestCyUtilityLoader.pyx",
-		"contrib/tools/cython/Cython/Utility/TestCythonScope.pyx",
-		"contrib/tools/cython/Cython/Utility/TestUtilityLoader.c",
-		"contrib/tools/cython/Cython/Utility/UFuncs_C.c",
-		"contrib/tools/cython/Cython/Utility/arrayarray.h",
-	}
+	pythonIncludeDir = Intern("$(S)/contrib/libs/python/Include")
 	// Path constants hoisted by `ay refac consts`.
 	contribLibsCxxsuppLibcxxInclude     = Source("contrib/libs/cxxsupp/libcxx/include")
 	contribToolsCythonCythonIncludes    = Source("contrib/tools/cython/Cython/Includes")
 	contribToolsCythonCythonPy          = Source("contrib/tools/cython/cython.py")
 	contribToolsCythonPy2CythonIncludes = Source("contrib/tools/cython_py2/Cython/Includes")
 )
+
+var cythonNumpyAddIncl = []VFS{
+	Intern("$(S)/contrib/python/numpy/include/numpy/core/include"),
+	Intern("$(S)/contrib/python/numpy/include/numpy/core/include/numpy"),
+	Intern("$(S)/contrib/python/numpy/include/numpy/core/src/common"),
+	Intern("$(S)/contrib/python/numpy/include/numpy/core/src/npymath"),
+	Intern("$(S)/contrib/python/numpy/include/numpy/distutils/include"),
+}
+
+var py3CythonOutputIncludes = []VFS{
+	Intern("$(S)/contrib/tools/cython/generated_c_headers.h"),
+	Intern("$(S)/contrib/tools/cython/generated_cpp_headers.h"),
+	Intern("$(S)/contrib/libs/python/Include/compile.h"),
+	Intern("$(S)/contrib/libs/python/Include/frameobject.h"),
+	Intern("$(S)/contrib/libs/python/Include/longintrepr.h"),
+	Intern("$(S)/contrib/libs/python/Include/pyconfig.h"),
+	Intern("$(S)/contrib/libs/python/Include/Python.h"),
+	Intern("$(S)/contrib/libs/python/Include/pythread.h"),
+	Intern("$(S)/contrib/libs/python/Include/structmember.h"),
+	Intern("$(S)/contrib/libs/python/Include/traceback.h"),
+	Intern("$(S)/contrib/libs/cxxsupp/openmp/omp.h"),
+}
+
+var py3CythonEmbeddedFiles = []string{
+	"contrib/tools/cython/Cython/Utility/arrayarray.h",
+	"contrib/tools/cython/Cython/Utility/AsyncGen.c",
+	"contrib/tools/cython/Cython/Utility/Buffer.c",
+	"contrib/tools/cython/Cython/Utility/Builtins.c",
+	"contrib/tools/cython/Cython/Utility/CConvert.pyx",
+	"contrib/tools/cython/Cython/Utility/CMath.c",
+	"contrib/tools/cython/Cython/Utility/CommonStructures.c",
+	"contrib/tools/cython/Cython/Utility/CommonTypes.c",
+	"contrib/tools/cython/Cython/Utility/Complex.c",
+	"contrib/tools/cython/Cython/Utility/Coroutine.c",
+	"contrib/tools/cython/Cython/Utility/CpdefEnums.pyx",
+	"contrib/tools/cython/Cython/Utility/CppConvert.pyx",
+	"contrib/tools/cython/Cython/Utility/CppSupport.cpp",
+	"contrib/tools/cython/Cython/Utility/CythonFunction.c",
+	"contrib/tools/cython/Cython/Utility/Dataclasses.c",
+	"contrib/tools/cython/Cython/Utility/Embed.c",
+	"contrib/tools/cython/Cython/Utility/Exceptions.c",
+	"contrib/tools/cython/Cython/Utility/ExtensionTypes.c",
+	"contrib/tools/cython/Cython/Utility/FunctionArguments.c",
+	"contrib/tools/cython/Cython/Utility/ImportExport.c",
+	"contrib/tools/cython/Cython/Utility/MemoryView.pyx",
+	"contrib/tools/cython/Cython/Utility/MemoryView_C.c",
+	"contrib/tools/cython/Cython/Utility/ModuleSetupCode.c",
+	"contrib/tools/cython/Cython/Utility/NumpyImportArray.c",
+	"contrib/tools/cython/Cython/Utility/ObjectHandling.c",
+	"contrib/tools/cython/Cython/Utility/Optimize.c",
+	"contrib/tools/cython/Cython/Utility/Overflow.c",
+	"contrib/tools/cython/Cython/Utility/Printing.c",
+	"contrib/tools/cython/Cython/Utility/Profile.c",
+	"contrib/tools/cython/Cython/Utility/StringTools.c",
+	"contrib/tools/cython/Cython/Utility/TestCyUtilityLoader.pyx",
+	"contrib/tools/cython/Cython/Utility/TestCythonScope.pyx",
+	"contrib/tools/cython/Cython/Utility/TestUtilityLoader.c",
+	"contrib/tools/cython/Cython/Utility/UFuncs_C.c",
+	"contrib/tools/cython/Cython/Utility/arrayarray.h",
+}
 
 type CythonStmt struct {
 	Src       string

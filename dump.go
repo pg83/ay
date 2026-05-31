@@ -16,36 +16,38 @@ import (
 
 var (
 	versionedResourceRe = regexp.MustCompile(`\$\((CLANG|LLD_ROOT|YMAKE_PYTHON3)-[0-9]+\)`)
-	// ldOwnScriptRels is the reference-graph AR/LD input whitelist: the build/scripts
-	// tooling (and the vcs templates) a link node legitimately carries but never names
-	// on its command line, so reference-graph pruning keeps them. This is the FULL set
-	// including the wrappers' import closures (link_exe imports process_command_files,
-	// thinlto_cache, process_whole_archive_option; fs_tools imports
-	// process_command_files). The normalizer is a standalone tool with no access to
-	// build/scripts, so unlike the generator (which derives closures from the script
-	// table) it must list them explicitly.
-	ldOwnScriptRels = map[string]bool{
-		"build/scripts/link_dyn_lib.py":                 true,
-		"build/scripts/link_exe.py":                     true,
-		"build/scripts/process_command_files.py":        true,
-		"build/scripts/process_whole_archive_option.py": true,
-		"build/scripts/thinlto_cache.py":                true,
-		"build/scripts/fs_tools.py":                     true,
-		"build/scripts/vcs_info.py":                     true,
-		"build/scripts/c_templates/svn_interface.c":     true,
-		"build/scripts/c_templates/svnversion.h":        true,
-	}
 	// cmdLiteralBasenames are bare-word command arguments that collide with a real
 	// input's basename but do NOT name that file: "gnu" is the llvm-ar archive-format
 	// selector (link_lib.py ... LLVM_AR gnu $(B) ...), not the magic-database source
 	// contrib/libs/libmagic/magic/Magdir/gnu. An input whose basename is one of these
 	// is never kept via the command-name rule.
 	cmdLiteralBasenames = map[string]bool{"gnu": true}
-	dumpContentFields   = []string{
-		"cmds", "env", "inputs", "kv", "outputs",
-		"platform", "requirements", "tags", "target_properties", "host_platform",
-	}
 )
+
+// ldOwnScriptRels is the reference-graph AR/LD input whitelist: the build/scripts
+// tooling (and the vcs templates) a link node legitimately carries but never names
+// on its command line, so reference-graph pruning keeps them. This is the FULL set
+// including the wrappers' import closures (link_exe imports process_command_files,
+// thinlto_cache, process_whole_archive_option; fs_tools imports
+// process_command_files). The normalizer is a standalone tool with no access to
+// build/scripts, so unlike the generator (which derives closures from the script
+// table) it must list them explicitly.
+var ldOwnScriptRels = map[string]bool{
+	"build/scripts/link_dyn_lib.py":                 true,
+	"build/scripts/link_exe.py":                     true,
+	"build/scripts/process_command_files.py":        true,
+	"build/scripts/process_whole_archive_option.py": true,
+	"build/scripts/thinlto_cache.py":                true,
+	"build/scripts/fs_tools.py":                     true,
+	"build/scripts/vcs_info.py":                     true,
+	"build/scripts/c_templates/svn_interface.c":     true,
+	"build/scripts/c_templates/svnversion.h":        true,
+}
+
+var dumpContentFields = []string{
+	"cmds", "env", "inputs", "kv", "outputs",
+	"platform", "requirements", "tags", "target_properties", "host_platform",
+}
 
 func cmdDump(args []string) int {
 	if len(args) < 1 {

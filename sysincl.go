@@ -9,44 +9,44 @@ import (
 	"sync"
 )
 
-var (
-	sysInclYamlSequence = []sysInclEntry{
-		{file: "macro.yml"},
-		{file: "libc-to-compat.yml"},
-		{file: "libc-to-nothing.yml"},
-		{file: "stl-to-libstdcxx.yml"},
-		{file: "stl-to-nothing.yml"},
-		{file: "windows.yml"},
-		{file: "darwin.yml"},
-		{file: "android.yml"},
-		{file: "freebsd.yml"},
-		{file: "freertos.yml"},
-		{file: "intrinsic.yml"},
-		{file: "nvidia.yml"},
-		{file: "misc.yml"},
-		{file: "unsorted.yml"},
-		{file: "swig.yml"},
-		{file: "libiconv.yml"},
-		{file: "libidn.yml"},
-		{file: "jdk-to-arcadia.yml"},
-		{file: "opensource.yml"},
-		{file: "libc-to-musl.yml"},
-		{file: "linux-musl-aarch64.yml", predicate: archIs("aarch64")},
-		{file: "linux-musl.yml", predicate: archIs("x86_64")},
-		{file: "emscripten-to-nothing.yml"},
-		{file: "nvidia-cccl.yml"},
-		{file: "stl-to-libcxx.yml"},
-		{file: "libc-musl-libcxx.yml"},
+var sysInclYamlSequence = []sysInclEntry{
+	{file: "macro.yml"},
+	{file: "libc-to-compat.yml"},
+	{file: "libc-to-nothing.yml"},
+	{file: "stl-to-libstdcxx.yml"},
+	{file: "stl-to-nothing.yml"},
+	{file: "windows.yml"},
+	{file: "darwin.yml"},
+	{file: "android.yml"},
+	{file: "freebsd.yml"},
+	{file: "freertos.yml"},
+	{file: "intrinsic.yml"},
+	{file: "nvidia.yml"},
+	{file: "misc.yml"},
+	{file: "unsorted.yml"},
+	{file: "swig.yml"},
+	{file: "libiconv.yml"},
+	{file: "libidn.yml"},
+	{file: "jdk-to-arcadia.yml"},
+	{file: "opensource.yml"},
+	{file: "libc-to-musl.yml"},
+	{file: "linux-musl-aarch64.yml", predicate: archIs("aarch64")},
+	{file: "linux-musl.yml", predicate: archIs("x86_64")},
+	{file: "emscripten-to-nothing.yml"},
+	{file: "nvidia-cccl.yml"},
+	{file: "stl-to-libcxx.yml"},
+	{file: "libc-musl-libcxx.yml"},
 
-		{file: "python-2-disable.yml"},
-		{file: "python-2-disable-numpy.yml"},
-	}
-	supportedSysInclArchs = map[string]struct{}{
-		"aarch64": {},
-		"x86_64":  {},
-	}
-	_ = sort.Strings
-)
+	{file: "python-2-disable.yml"},
+	{file: "python-2-disable-numpy.yml"},
+}
+
+var supportedSysInclArchs = map[string]struct{}{
+	"aarch64": {},
+	"x86_64":  {},
+}
+
+var _ = sort.Strings
 
 type SysIncl struct {
 	Filter         *sourceFilter

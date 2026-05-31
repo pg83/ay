@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+var (
+	PlatformDefaultLinuxAArch64 = MakePlatformID(OSLinux, ISAAArch64)
+	PlatformDefaultLinuxX8664   = MakePlatformID(OSLinux, ISAX8664)
+)
+
 type Language string
 
 const (
@@ -54,11 +59,6 @@ type PlatformID string
 func MakePlatformID(os OS, isa ISA) PlatformID {
 	return PlatformID("default-" + string(os) + "-" + string(isa))
 }
-
-var (
-	PlatformDefaultLinuxAArch64 = MakePlatformID(OSLinux, ISAAArch64)
-	PlatformDefaultLinuxX8664   = MakePlatformID(OSLinux, ISAX8664)
-)
 
 type FlagSet struct {
 	NoLibc             bool

@@ -2,6 +2,14 @@ package main
 
 import "strings"
 
+var (
+	// Path constants hoisted by `ay refac consts`.
+	bldLibraryPythonRuntimePy3ResPycInc           = Build("library/python/runtime_py3/__res.pyc.inc")
+	bldLibraryPythonRuntimePy3SitecustomizePycInc = Build("library/python/runtime_py3/sitecustomize.pyc.inc")
+	libraryPythonRuntimePy3ResPy                  = Source("library/python/runtime_py3/__res.py")
+	libraryPythonRuntimePy3SitecustomizePy        = Source("library/python/runtime_py3/sitecustomize.py")
+)
+
 const (
 	py3ccBinSubrel    = "tools/py3cc/bin/"
 	py3ccCanonicalRel = "tools/py3cc/"
@@ -39,11 +47,3 @@ func runtimePy3CCExtraInputs(modulePath, srcRel string) []VFS {
 
 	return nil
 }
-
-// Path constants hoisted by `ay refac consts`.
-var (
-	bldLibraryPythonRuntimePy3ResPycInc           = Build("library/python/runtime_py3/__res.pyc.inc")
-	bldLibraryPythonRuntimePy3SitecustomizePycInc = Build("library/python/runtime_py3/sitecustomize.pyc.inc")
-	libraryPythonRuntimePy3ResPy                  = Source("library/python/runtime_py3/__res.py")
-	libraryPythonRuntimePy3SitecustomizePy        = Source("library/python/runtime_py3/sitecustomize.py")
-)

@@ -13,19 +13,18 @@ import (
 	"strings"
 )
 
-var (
-	goKeyword = map[string]bool{
-		"break": true, "case": true, "chan": true, "const": true, "continue": true,
-		"default": true, "defer": true, "else": true, "fallthrough": true, "for": true,
-		"func": true, "go": true, "goto": true, "if": true, "import": true,
-		"interface": true, "map": true, "package": true, "range": true, "return": true,
-		"select": true, "struct": true, "switch": true, "type": true, "var": true,
-	}
-	// linters is the fixed set applied by `ay refac lint`, in order.
-	linters = []fileLinter{
-		{name: "consolidate-vars", run: lintConsolidateVars},
-	}
-)
+var goKeyword = map[string]bool{
+	"break": true, "case": true, "chan": true, "const": true, "continue": true,
+	"default": true, "defer": true, "else": true, "fallthrough": true, "for": true,
+	"func": true, "go": true, "goto": true, "if": true, "import": true,
+	"interface": true, "map": true, "package": true, "range": true, "return": true,
+	"select": true, "struct": true, "switch": true, "type": true, "var": true,
+}
+
+// linters is the fixed set applied by `ay refac lint`, in order.
+var linters = []fileLinter{
+	{name: "consolidate-vars", run: lintConsolidateVars},
+}
 
 // cmdRefac dispatches in-tree refactoring helpers. They mutate source files in
 // place; run them in a throwaway worktree and review the diff.

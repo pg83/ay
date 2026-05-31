@@ -7,31 +7,30 @@ import (
 	"unicode/utf8"
 )
 
-var (
-	// vfsEscapedJSON caches the JSON-encoded form (`"…"`, escape-body included)
-	// of each interned VFS string. writeGraph emits the same path many times —
-	// up to ~1.3M emits in sg5 with the new CP closures — and JSON escape was
-	// 27% of CPU until this cache went in. The intern table is append-only and
-	// strID() is stable, so a slice indexed by strID is safe; we grow it lazily
-	// to the current intern bound on the first miss past its length.
-	vfsEscapedJSON   [][]byte
-	htmlSafeNoEscape = func() [128]bool {
-		var t [128]bool
+// vfsEscapedJSON caches the JSON-encoded form (`"…"`, escape-body included)
+// of each interned VFS string. writeGraph emits the same path many times —
+// up to ~1.3M emits in sg5 with the new CP closures — and JSON escape was
+// 27% of CPU until this cache went in. The intern table is append-only and
+// strID() is stable, so a slice indexed by strID is safe; we grow it lazily
+// to the current intern bound on the first miss past its length.
+var vfsEscapedJSON [][]byte
 
-		for b := 0; b < 128; b++ {
-			switch {
-			case b < 0x20:
-				t[b] = false
-			case b == '"' || b == '\\':
-				t[b] = false
-			default:
-				t[b] = true
-			}
+var htmlSafeNoEscape = func() [128]bool {
+	var t [128]bool
+
+	for b := 0; b < 128; b++ {
+		switch {
+		case b < 0x20:
+			t[b] = false
+		case b == '"' || b == '\\':
+			t[b] = false
+		default:
+			t[b] = true
 		}
+	}
 
-		return t
-	}()
-)
+	return t
+}()
 
 func writeGraphIndented(w io.Writer, g *Graph) {
 

@@ -6,27 +6,28 @@ import (
 )
 
 var (
-	bisonPreprocessPyVFS   = Intern("$(S)/build/scripts/preprocess.py")
-	bisonCppSkeletonInputs = []VFS{
-		Intern("$(S)/contrib/tools/bison/data/m4sugar/foreach.m4"),
-		Intern("$(S)/contrib/tools/bison/data/m4sugar/m4sugar.m4"),
-		Intern("$(S)/contrib/tools/bison/data/skeletons/bison.m4"),
-		Intern("$(S)/contrib/tools/bison/data/skeletons/c++-skel.m4"),
-		Intern("$(S)/contrib/tools/bison/data/skeletons/c++.m4"),
-		Intern("$(S)/contrib/tools/bison/data/skeletons/c-like.m4"),
-		Intern("$(S)/contrib/tools/bison/data/skeletons/c-skel.m4"),
-		Intern("$(S)/contrib/tools/bison/data/skeletons/c.m4"),
-		Intern("$(S)/contrib/tools/bison/data/skeletons/glr.cc"),
-		Intern("$(S)/contrib/tools/bison/data/skeletons/lalr1.cc"),
-		Intern("$(S)/contrib/tools/bison/data/skeletons/location.cc"),
-		Intern("$(S)/contrib/tools/bison/data/skeletons/stack.hh"),
-		Intern("$(S)/contrib/tools/bison/data/skeletons/variant.hh"),
-		Intern("$(S)/contrib/tools/bison/data/skeletons/yacc.c"),
-	}
+	bisonPreprocessPyVFS = Intern("$(S)/build/scripts/preprocess.py")
 	// Path constants hoisted by `ay refac consts`.
 	bldContribToolsBisonBison = Build("contrib/tools/bison/bison")
 	bldContribToolsM4M4       = Build("contrib/tools/m4/m4")
 )
+
+var bisonCppSkeletonInputs = []VFS{
+	Intern("$(S)/contrib/tools/bison/data/m4sugar/foreach.m4"),
+	Intern("$(S)/contrib/tools/bison/data/m4sugar/m4sugar.m4"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/bison.m4"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/c++-skel.m4"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/c++.m4"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/c-like.m4"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/c-skel.m4"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/c.m4"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/glr.cc"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/lalr1.cc"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/location.cc"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/stack.hh"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/variant.hh"),
+	Intern("$(S)/contrib/tools/bison/data/skeletons/yacc.c"),
+}
 
 func dedupIncludeDirectives(directives []includeDirective) []includeDirective {
 	if len(directives) == 0 {
