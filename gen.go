@@ -380,6 +380,17 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	plainEmit := emitter
 	resourceEmit := resourceGraphEmitter(hostP, plainEmit, resources, materializeResourceFetches)
 
+	// Build the build/scripts import closure up front so the emitters can expand a
+	// node's wrapper-script inputs to their helper closure at Emit time — before the
+	// streaming path hands the node to the executor (see expandNodeScriptClosure).
+	scriptClosure := buildScriptDepClosure(fs)
+	switch e := plainEmit.(type) {
+	case *BufferedEmitter:
+		e.scriptClosure = scriptClosure
+	case *StreamingEmitter:
+		e.scriptClosure = scriptClosure
+	}
+
 	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
 
 	targetReg := NewCodegenRegistry()
@@ -434,7 +445,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 
 	if be, ok := plainEmit.(*BufferedEmitter); ok {
 		be.generatedFirstClaim = mergeGeneratedFirstClaims(targetScanner, hostScanner)
-		be.scriptClosure = buildScriptDepClosure(fs)
 	}
 
 	return root.LDRef
