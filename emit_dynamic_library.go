@@ -157,7 +157,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 			"pc":       "light-blue",
 			"show_out": "yes",
 		},
-		Tags:         append([]string(nil), instance.Platform.Tags...),
+		Tags:         instance.Platform.Tags, // read-only; Platform.Tags is immutable during emit
 		Platform:     string(instance.Platform.Target),
 		Requirements: map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
 		Sandboxing:   true,

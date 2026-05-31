@@ -122,16 +122,18 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		d.prOutputInputs = map[string][]VFS{}
 	}
 
+	// prResult.Inputs is a fresh, never-mutated slice; the reader
+	// (prResourceExtraInputs) copies out, so sharing it across keys is safe.
 	for _, f := range stmt.OUTFiles {
-		d.prOutputInputs[f] = append([]VFS(nil), prResult.Inputs...)
+		d.prOutputInputs[f] = prResult.Inputs
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		d.prOutputInputs[f] = append([]VFS(nil), prResult.Inputs...)
+		d.prOutputInputs[f] = prResult.Inputs
 	}
 
 	if stmt.StdoutFile != nil {
-		d.prOutputInputs[*stmt.StdoutFile] = append([]VFS(nil), prResult.Inputs...)
+		d.prOutputInputs[*stmt.StdoutFile] = prResult.Inputs
 	}
 
 	if reg != nil {
