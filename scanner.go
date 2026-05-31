@@ -53,10 +53,10 @@ type IncludeScanner struct {
 
 	sysinclIncluderCache map[sysinclIncluderKey]sysinclCacheEntry
 
-	subgraphChunks [][]uint32
+	subgraphChunks [][]VFS
 	subgraphLen    uint32
 	// subgraphCache (cached transitive closure under DFS) and childrenCache
-	// (cached immediate resolved children) are both keyed by includer absID
+	// (cached immediate resolved children) are both keyed by includer VFS
 	// ONLY — no scan-context component. This is the same invariant upstream
 	// ymake exploits: each File node is parsed-and-resolved exactly once across
 	// the whole add-iter (see TUpdEntryStats::OnceProcessedAsFile in
@@ -75,18 +75,18 @@ type IncludeScanner struct {
 	// key collapses subgraph caching and regresses wall-time by an order of
 	// magnitude. If you suspect divergence is caused here, fix it upstream of
 	// the cache: parsedIncludes, sysincl rules, or searchTier construction.
-	subgraphCache map[uint32]closureRef
-	childrenCache map[uint32][]uint32
+	subgraphCache map[VFS]closureRef
+	childrenCache map[VFS][]VFS
 
 	searchTierByConfig map[uint64]map[STR]searchTierResult
 
 	resolveIndexByConfig map[uint64]*cfgResolveIndex
 
 	tj        tarjanScratch
-	tjStack   []uint32
+	tjStack   []VFS
 	tjNext    int32
 	tjClosure idSet
-	tjBuf     []uint32
+	tjBuf     []VFS
 
 	visitedIDPool sync.Pool
 	orderIDPool   sync.Pool
@@ -169,11 +169,16 @@ func (s *idSet) reset(size uint32) {
 	}
 }
 
-func (s *idSet) has(id uint32) bool {
+// idSet is keyed by VFS value (the dense array is indexed by uint32(v)).
+func (s *idSet) has(v VFS) bool {
+	id := uint32(v)
+
 	return id < uint32(len(s.gen)) && s.gen[id] == s.epoch
 }
 
-func (s *idSet) add(id uint32) {
+func (s *idSet) add(v VFS) {
+	id := uint32(v)
+
 	if id >= uint32(len(s.gen)) {
 		grown := uint32(len(s.gen)) * 2
 
@@ -225,11 +230,16 @@ func (t *tarjanScratch) reset(size uint32) {
 	}
 }
 
-func (t *tarjanScratch) visited(id uint32) bool {
+// tarjanScratch is keyed by VFS value; every dense array is indexed by uint32(v).
+func (t *tarjanScratch) visited(v VFS) bool {
+	id := uint32(v)
+
 	return id < uint32(len(t.stamp)) && t.stamp[id] == t.epoch
 }
 
-func (t *tarjanScratch) discover(id uint32, idx int32) {
+func (t *tarjanScratch) discover(v VFS, idx int32) {
+	id := uint32(v)
+
 	if id >= uint32(len(t.stamp)) {
 		grown := uint32(len(t.stamp)) * 2
 
@@ -257,9 +267,15 @@ func (t *tarjanScratch) discover(id uint32, idx int32) {
 	t.onStack[id] = true
 }
 
-func (t *tarjanScratch) onStackHas(id uint32) bool {
-	return t.visited(id) && t.onStack[id]
+func (t *tarjanScratch) onStackHas(v VFS) bool {
+	return t.visited(v) && t.onStack[uint32(v)]
 }
+
+func (t *tarjanScratch) lowOf(v VFS) int32        { return t.low[uint32(v)] }
+func (t *tarjanScratch) indexOf(v VFS) int32      { return t.index[uint32(v)] }
+func (t *tarjanScratch) setLow(v VFS, x int32)    { t.low[uint32(v)] = x }
+func (t *tarjanScratch) onStackOf(v VFS) bool     { return t.onStack[uint32(v)] }
+func (t *tarjanScratch) setOnStack(v VFS, b bool) { t.onStack[uint32(v)] = b }
 
 type searchTierResult struct {
 	paths []VFS
@@ -316,9 +332,9 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 131072),
 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
 		onWarn:               onWarn,
-		subgraphChunks:       make([][]uint32, 0, 256),
-		subgraphCache:        make(map[uint32]closureRef, 65536),
-		childrenCache:        make(map[uint32][]uint32, 65536),
+		subgraphChunks:       make([][]VFS, 0, 256),
+		subgraphCache:        make(map[VFS]closureRef, 65536),
+		childrenCache:        make(map[VFS][]VFS, 65536),
 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
 		resolveIndexByConfig: make(map[uint64]*cfgResolveIndex, 1024),
 	}
@@ -360,7 +376,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 	}
 
 	s.orderIDPool.New = func() any {
-		o := make([]uint32, 0, 64)
+		o := make([]VFS, 0, 64)
 
 		return &o
 	}
@@ -473,22 +489,22 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 
 	visited := s.visitedIDPool.Get().(*idSet)
 	visited.reset(vfsBound())
-	orderP := s.orderIDPool.Get().(*[]uint32)
+	orderP := s.orderIDPool.Get().(*[]VFS)
 
 	order := (*orderP)[:0]
-	rootID := uint32(vfsPath)
+	root := vfsPath
 
-	sc.dfsID(rootID, visited, &order)
+	sc.dfsID(root, visited, &order)
 
 	out := make([]VFS, 0, len(order))
-	out = append(out, VFS(rootID))
+	out = append(out, root)
 
-	for _, absID := range order {
-		if absID == rootID {
+	for _, abs := range order {
+		if abs == root {
 			continue
 		}
 
-		out = append(out, VFS(absID))
+		out = append(out, abs)
 	}
 
 	*orderP = order[:0]
@@ -636,22 +652,20 @@ func sameRecordSlice(a, b []*SysIncl) bool {
 	return true
 }
 
-func (sc *scanCtx) dfsID(absID uint32, visited *idSet, order *[]uint32) {
+func (sc *scanCtx) dfsID(abs VFS, visited *idSet, order *[]VFS) {
 	sc.scanner.dfsCalls++
 
-	if visited.has(absID) {
+	if visited.has(abs) {
 		return
 	}
 
-	absPath := VFS(absID)
-
-	if isSourceLike(absPath) {
-		sc.plainDfsID(absID, visited, order)
+	if isSourceLike(abs) {
+		sc.plainDfsID(abs, visited, order)
 
 		return
 	}
 
-	for _, id := range sc.closureOf(absID) {
+	for _, id := range sc.closureOf(abs) {
 		if visited.has(id) {
 			continue
 		}
@@ -661,18 +675,18 @@ func (sc *scanCtx) dfsID(absID uint32, visited *idSet, order *[]uint32) {
 	}
 }
 
-func (sc *scanCtx) plainDfsID(absID uint32, visited *idSet, order *[]uint32) {
+func (sc *scanCtx) plainDfsID(abs VFS, visited *idSet, order *[]VFS) {
 	sc.scanner.plainDfsCalls++
 
-	if visited.has(absID) {
+	if visited.has(abs) {
 		return
 	}
 
-	visited.add(absID)
-	*order = append(*order, absID)
+	visited.add(abs)
+	*order = append(*order, abs)
 
-	sc.forEachResolvedChildID(absID, func(childID uint32) {
-		sc.dfsID(childID, visited, order)
+	sc.forEachResolvedChildID(abs, func(child VFS) {
+		sc.dfsID(child, visited, order)
 	})
 }
 
@@ -693,10 +707,10 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 // IncludeScanner.subgraphCache / childrenCache for the upstream-mirroring
 // invariant that makes this correct: each file is parse-and-resolved exactly
 // once per run.
-func (sc *scanCtx) forEachResolvedChildID(absID uint32, fn func(uint32)) {
+func (sc *scanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 	s := sc.scanner
 
-	if cached, ok := s.childrenCache[absID]; ok {
+	if cached, ok := s.childrenCache[abs]; ok {
 		for _, id := range cached {
 			fn(id)
 		}
@@ -704,12 +718,11 @@ func (sc *scanCtx) forEachResolvedChildID(absID uint32, fn func(uint32)) {
 		return
 	}
 
-	vfsPath := VFS(absID)
-	var children []uint32
-	sc.forEachResolvedChild(vfsPath, func(rabs VFS) {
-		children = append(children, uint32(rabs))
+	var children []VFS
+	sc.forEachResolvedChild(abs, func(rabs VFS) {
+		children = append(children, rabs)
 	})
-	s.childrenCache[absID] = children
+	s.childrenCache[abs] = children
 
 	for _, id := range children {
 		fn(id)
@@ -738,10 +751,10 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 	}
 }
 
-func (sc *scanCtx) closureOf(absID uint32) []uint32 {
+func (sc *scanCtx) closureOf(abs VFS) []VFS {
 	s := sc.scanner
 
-	if ref, ok := s.subgraphCache[absID]; ok {
+	if ref, ok := s.subgraphCache[abs]; ok {
 		s.subgraphHits++
 
 		return s.closureWindow(ref)
@@ -751,20 +764,20 @@ func (sc *scanCtx) closureOf(absID uint32) []uint32 {
 	s.tjStack = s.tjStack[:0]
 	s.tjNext = 0
 
-	sc.strongconnect(absID)
+	sc.strongconnect(abs)
 
-	ref := s.subgraphCache[absID]
+	ref := s.subgraphCache[abs]
 
 	return s.closureWindow(ref)
 }
 
-func (s *IncludeScanner) closureWindow(ref closureRef) []uint32 {
+func (s *IncludeScanner) closureWindow(ref closureRef) []VFS {
 	o := ref.off % closureChunkLen
 
 	return s.subgraphChunks[ref.off/closureChunkLen][o : o+ref.n]
 }
 
-func (s *IncludeScanner) appendClosure(buf []uint32) closureRef {
+func (s *IncludeScanner) appendClosure(buf []VFS) closureRef {
 	n := uint32(len(buf))
 	o := s.subgraphLen % closureChunkLen
 
@@ -776,7 +789,7 @@ func (s *IncludeScanner) appendClosure(buf []uint32) closureRef {
 	ci := s.subgraphLen / closureChunkLen
 
 	for uint32(len(s.subgraphChunks)) <= ci {
-		s.subgraphChunks = append(s.subgraphChunks, make([]uint32, closureChunkLen))
+		s.subgraphChunks = append(s.subgraphChunks, make([]VFS, closureChunkLen))
 	}
 
 	copy(s.subgraphChunks[ci][o:], buf)
@@ -786,14 +799,14 @@ func (s *IncludeScanner) appendClosure(buf []uint32) closureRef {
 	return ref
 }
 
-func (sc *scanCtx) strongconnect(v uint32) {
+func (sc *scanCtx) strongconnect(v VFS) {
 	s := sc.scanner
 
 	s.tjNext++
 	s.tj.discover(v, s.tjNext)
 	s.tjStack = append(s.tjStack, v)
 
-	sc.forEachResolvedChildID(v, func(w uint32) {
+	sc.forEachResolvedChildID(v, func(w VFS) {
 		if _, cached := s.subgraphCache[w]; cached {
 			s.subgraphHits++
 
@@ -803,17 +816,17 @@ func (sc *scanCtx) strongconnect(v uint32) {
 		if !s.tj.visited(w) {
 			sc.strongconnect(w)
 
-			if s.tj.low[w] < s.tj.low[v] {
-				s.tj.low[v] = s.tj.low[w]
+			if s.tj.lowOf(w) < s.tj.lowOf(v) {
+				s.tj.setLow(v, s.tj.lowOf(w))
 			}
-		} else if s.tj.onStack[w] {
-			if s.tj.index[w] < s.tj.low[v] {
-				s.tj.low[v] = s.tj.index[w]
+		} else if s.tj.onStackOf(w) {
+			if s.tj.indexOf(w) < s.tj.lowOf(v) {
+				s.tj.setLow(v, s.tj.indexOf(w))
 			}
 		}
 	})
 
-	if s.tj.low[v] != s.tj.index[v] {
+	if s.tj.lowOf(v) != s.tj.indexOf(v) {
 		return
 	}
 
@@ -836,7 +849,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 	}
 
 	for _, u := range members {
-		sc.forEachResolvedChildID(u, func(w uint32) {
+		sc.forEachResolvedChildID(u, func(w VFS) {
 			if s.tj.onStackHas(w) {
 				return
 			}
@@ -861,7 +874,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 
 	for _, u := range members {
 		s.subgraphCache[u] = ref
-		s.tj.onStack[u] = false
+		s.tj.setOnStack(u, false)
 	}
 
 	s.tjStack = s.tjStack[:sccStart]

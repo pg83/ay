@@ -22,8 +22,8 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	visited := scanner.visitedIDPool.Get().(*idSet)
 	visited.reset(vfsBound())
 	defer scanner.visitedIDPool.Put(visited)
-	order := make([]uint32, 0, 1024)
-	srcAbsSet := make(map[uint32]struct{}, len(sources))
+	order := make([]VFS, 0, 1024)
+	srcAbsSet := make(map[VFS]struct{}, len(sources))
 
 	for _, src := range sources {
 		srcRelOnDisk := srcInstance.Path + "/" + src
@@ -46,9 +46,8 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 		sc.cfg.SourceRel = srcRelOnDisk
 
 		srcAbs := Source(srcRelOnDisk)
-		srcID := uint32(srcAbs)
-		srcAbsSet[srcID] = struct{}{}
-		sc.dfsID(srcID, visited, &order)
+		srcAbsSet[srcAbs] = struct{}{}
+		sc.dfsID(srcAbs, visited, &order)
 	}
 
 	if len(order) == 0 {
@@ -57,12 +56,12 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 
 	out := make([]VFS, 0, len(order))
 
-	for _, absID := range order {
-		if _, isSrc := srcAbsSet[absID]; isSrc {
+	for _, abs := range order {
+		if _, isSrc := srcAbsSet[abs]; isSrc {
 			continue
 		}
 
-		out = append(out, VFS(absID))
+		out = append(out, abs)
 	}
 
 	if len(out) == 0 {
