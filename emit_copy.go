@@ -83,6 +83,7 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 		dstVFS := copyFileOutputVFS(instance.Path, entry.Dst)
 		parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path, entry)
 		entries = append(entries, entryReg{srcVFS, dstVFS, parsed})
+
 		if scanner != nil {
 			scanner.parsers.RegisterBuildParsedIncludes(dstVFS.Rel(), parsed)
 		}

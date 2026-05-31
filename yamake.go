@@ -613,6 +613,7 @@ func (l *lexer) readIdentOrWord(startLine, startCol int) token {
 	if !pureIdent {
 		kind = tokWord
 	}
+
 	return token{kind: kind, val: val, line: startLine, col: startCol}
 }
 
@@ -635,6 +636,7 @@ func (l *lexer) readWord(startLine, startCol int) token {
 
 		buf = append(buf, l.advance())
 	}
+
 	return token{kind: tokWord, val: string(buf), line: startLine, col: startCol}
 }
 
@@ -649,8 +651,10 @@ func (l *lexer) readNumberOrWord(startLine, startCol int) token {
 		for l.pos < len(l.src) && isWordByte(l.src[l.pos]) {
 			l.advance()
 		}
+
 		return token{kind: tokWord, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
 	}
+
 	return token{kind: tokInt, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
 }
 
@@ -762,6 +766,7 @@ func (p *parser) applyIncludeOnce(nameTok token) {
 	if err != nil {
 		abs = p.name
 	}
+
 	p.includes.once[abs] = struct{}{}
 }
 
@@ -852,6 +857,7 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		if len(args) > 1 {
 			value = strings.Join(args[1:], " ")
 		}
+
 		return &SetStmt{Name: args[0], Value: value, Line: nameTok.line}
 	case "END":
 		return &EndStmt{Line: nameTok.line}
@@ -880,6 +886,7 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "SRCDIR expects exactly 1 argument, got %d", len(args))
 		}
+
 		return &SrcDirStmt{Dir: args[0], Line: nameTok.line}
 	case "GLOBAL_SRCS":
 		return &GlobalSrcsStmt{Sources: append([]string(nil), args...), Line: nameTok.line}
@@ -887,16 +894,19 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
 		}
+
 		return &GenerateEnumSerializationStmt{Header: args[0], Variant: "plain", Line: nameTok.line}
 	case "GENERATE_ENUM_SERIALIZATION_WITH_HEADER":
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION_WITH_HEADER expects exactly 1 argument (header path), got %d", len(args))
 		}
+
 		return &GenerateEnumSerializationStmt{Header: args[0], Variant: "with_header", Line: nameTok.line}
 	case "GENERATE_ENUM_SERIALIZATION_NOUTF":
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION_NOUTF expects exactly 1 argument (header path), got %d", len(args))
 		}
+
 		return &GenerateEnumSerializationStmt{Header: args[0], Variant: "noutf", Line: nameTok.line}
 	case "DEFAULT":
 
@@ -910,18 +920,21 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		if len(args) >= 2 {
 			value = args[1]
 		}
+
 		return &DefaultVarStmt{VarName: varName, Value: value, Line: nameTok.line}
 	case "CONFIGURE_FILE":
 
 		if len(args) != 2 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "CONFIGURE_FILE expects exactly 2 arguments (src dst), got %d", len(args))
 		}
+
 		return &ConfigureFileStmt{Src: args[0], Dst: args[1], Line: nameTok.line}
 	case "CREATE_BUILDINFO_FOR":
 
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "CREATE_BUILDINFO_FOR expects exactly 1 argument, got %d", len(args))
 		}
+
 		return &CreateBuildInfoStmt{OutputHeader: args[0], Line: nameTok.line}
 	case "RUN_ANTLR4_CPP":
 
@@ -1010,6 +1023,7 @@ func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
 
 func parseRunAntlr4CppSplit(args []string, line int) *RunAntlr4CppSplitStmt {
 	stmt := &RunAntlr4CppSplitStmt{Lexer: args[0], Parser: args[1], Line: line}
+
 	for i := 2; i < len(args); i++ {
 		switch args[i] {
 		case "VISITOR":
@@ -1200,6 +1214,7 @@ func parseResource(args []string, nameTok token) *ResourceStmt {
 	for i := 0; i < len(rest); i += 2 {
 		pairs = append(pairs, ResourcePair{Path: rest[i], Key: rest[i+1]})
 	}
+
 	return &ResourceStmt{Pairs: pairs, Line: nameTok.line}
 }
 
@@ -1326,6 +1341,7 @@ func (p *parser) parseIf(ifTok token) *IfStmt {
 
 	thenBody, endTok := p.parseStmts(termIfBody)
 	node := &IfStmt{Cond: cond, Then: thenBody, Line: ifTok.line}
+
 	switch endTok.val {
 	case "ENDIF":
 		p.consumeEmptyMacroArgs(endTok)
@@ -1549,6 +1565,7 @@ func (c *condParser) parseAtom() Expr {
 		for i := 0; i < len(t.val); i++ {
 			n = n*10 + int(t.val[i]-'0')
 		}
+
 		return &ExprInt{Value: n}
 	}
 

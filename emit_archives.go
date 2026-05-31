@@ -34,6 +34,7 @@ func emitArchive(
 	if a.DontCompress {
 		cmdArgs = append(cmdArgs, "-p")
 	}
+
 	producerRefs := []NodeRef{}
 	producerSet := map[NodeRef]struct{}{}
 	pathPerFile := make([]VFS, 0, len(a.Files))
@@ -76,10 +77,12 @@ func emitArchive(
 	// not listed here.
 	inputs := make([]VFS, 0, len(pathPerFile)+1)
 	buildRootSeen := map[VFS]struct{}{}
+
 	for _, p := range pathPerFile {
 		if _, dup := buildRootSeen[p]; dup {
 			continue
 		}
+
 		buildRootSeen[p] = struct{}{}
 		inputs = append(inputs, p)
 	}
@@ -88,9 +91,11 @@ func emitArchive(
 
 	depRefs := make([]NodeRef, 0, len(producerRefs)+1)
 	depRefs = append(depRefs, producerRefs...)
+
 	if toolLDRef != (NodeRef{}) {
 		depRefs = append(depRefs, toolLDRef)
 	}
+
 	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 	tags := instance.Platform.Tags
 

@@ -148,6 +148,7 @@ func (pm *includeParserManager) withCythonSibling(rel string, set parsedIncludeS
 	if !pm.fs.IsFile(sibling) {
 		return set
 	}
+
 	d := includeDirective{kind: includeQuoted, target: internString(path.Base(sibling))}
 	local := set.bucket(parsedIncludesLocal)
 	merged := make([]includeDirective, 0, 1+len(local))
@@ -210,6 +211,7 @@ func (pm *includeParserManager) indexAddincl(a VFS) {
 	if _, done := pm.addinclIndexed[a]; done {
 		return
 	}
+
 	pm.addinclIndexed[a] = struct{}{}
 	base := a.Rel()
 	pm.fs.Walk(base, func(rel string, isDir bool) {

@@ -347,6 +347,7 @@ func dedupVFS(in []VFS) []VFS {
 		if _, ok := seen[p]; ok {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		out = append(out, p)
 	}

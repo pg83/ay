@@ -31,6 +31,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			if _, dup := cfExtraSeen[v]; dup {
 				return
 			}
+
 			cfExtraSeen[v] = struct{}{}
 			cfExtraInputs = append(cfExtraInputs, v)
 		}
@@ -151,6 +152,7 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 		if _, ok := seen[target]; ok {
 			return
 		}
+
 		seen[target] = struct{}{}
 		parsed = append(parsed, includeDirective{kind: includeQuoted, target: internString(target)})
 	}

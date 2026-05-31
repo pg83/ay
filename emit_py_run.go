@@ -11,6 +11,7 @@ func emitRunPythonForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in 
 
 	reg := codegenRegForInstance(ctx, instance)
 	res := &runProgramsForARResult{}
+
 	for _, rp := range d.runPython {
 		pyRef := emitRunPython(ctx, instance, rp, d, reg, in)
 
@@ -244,6 +245,7 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 		if _, dup := seen[v]; dup {
 			return
 		}
+
 		seen[v] = struct{}{}
 		sources = append(sources, v)
 	}
@@ -369,7 +371,9 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 			return includes
 		}
 	}
+
 	includes := []includeDirective{{kind: includeQuoted, target: internString(scriptVFS.Rel())}}
+
 	for _, f := range stmt.INFiles {
 		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(runProgramInputVFS(ctx, instance, d, f).Rel())})
 	}
@@ -378,6 +382,7 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 		if vfsHasPrefix(f) {
 			f = Intern(f).Rel()
 		}
+
 		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(f)})
 	}
 
@@ -408,7 +413,9 @@ func EmitPYRun(
 			env[kv] = ""
 		}
 	}
+
 	cmdArgs := []string{instance.Platform.Tools.Python3, scriptVFS.String()}
+
 	for _, a := range stmt.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
@@ -433,6 +440,7 @@ func EmitPYRun(
 		if _, ok := seen[vfs]; ok {
 			return
 		}
+
 		seen[vfs] = struct{}{}
 		inputs = append(inputs, vfs)
 	}
@@ -461,7 +469,9 @@ func EmitPYRun(
 	for _, f := range stmt.OUTNoAutoFiles {
 		outputs = append(outputs, outVFSByToken[f])
 	}
+
 	cmd := Cmd{CmdArgs: cmdArgs, Env: env}
+
 	if stdoutPath != "" {
 		cmd.Stdout = stdoutPath
 	}

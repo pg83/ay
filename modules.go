@@ -560,10 +560,13 @@ func filterInvalidAddIncl(fs FS, d *moduleData) {
 	// addInclOneLevel (ONE_LEVEL paths, which are never filtered).
 	if len(d.addInclUserGlobal) > 0 {
 		validGlobal := make(map[VFS]struct{}, len(d.addInclGlobal))
+
 		for _, p := range d.addInclGlobal {
 			validGlobal[p] = struct{}{}
 		}
+
 		validOneLevel := make(map[VFS]struct{}, len(d.addInclOneLevel))
+
 		for _, p := range d.addInclOneLevel {
 			validOneLevel[p] = struct{}{}
 		}
@@ -1103,6 +1106,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		if env.String("CLANG_BC_ROOT") == "" || env.String("LLVM_LLC_TOOL") == "" {
 			ThrowFmt("LLVM_BC requires USE_LLVM_BC16/18/20 before invocation")
 		}
+
 		stmt := &llvmBcStmt{ClangBCRoot: env.String("CLANG_BC_ROOT")}
 		i := 0
 
@@ -1387,7 +1391,9 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		if d.flatSrcs == nil {
 			d.flatSrcs = map[string]struct{}{}
 		}
+
 		d.flatSrcs[filename] = struct{}{}
+
 		if len(v.Args) > 1 {
 			if d.perSrcCFlags == nil {
 				d.perSrcCFlags = map[string][]string{}
@@ -1408,6 +1414,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		if d.flatSrcs == nil {
 			d.flatSrcs = map[string]struct{}{}
 		}
+
 		d.flatSrcs[filename] = struct{}{}
 	case "SRC_C_AVX", "SRC_C_AVX2", "SRC_C_AVX512", "SRC_C_AMX", "SRC_C_SSE2", "SRC_C_SSE3", "SRC_C_SSSE3",
 		"SRC_C_SSE4", "SRC_C_SSE41", "SRC_C_XOP":
@@ -1726,6 +1733,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		} else {
 			arg += "=init"
 		}
+
 		d.resources = append(d.resources, resourceEntry{Path: "-", Key: "py/constructors/" + arg})
 	case "NO_CHECK_IMPORTS":
 
@@ -2310,7 +2318,9 @@ func expandStmtTokens(items []string, env Environment) []string {
 				continue
 			}
 		}
+
 		fields := []string{expanded}
+
 		if fullVarRef(item) || (fullDollarVarRef(item) && env.HasBinding(item[1:])) {
 			fields = strings.Fields(expanded)
 		}
@@ -2491,7 +2501,9 @@ func moduleInfoForInstance(ctx *genCtx, instance ModuleInstance) moduleTypeInfo 
 	if d.moduleStmt == nil {
 		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path)
 	}
+
 	info := moduleTypeInfo{Name: d.moduleStmt.Name}
+
 	if len(d.excludeTags) > 0 {
 		info.ExcludeTags = make(map[string]bool, len(d.excludeTags))
 

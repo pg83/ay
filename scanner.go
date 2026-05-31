@@ -1125,6 +1125,7 @@ const resolveNoRank = int(^uint(0) >> 1)
 // cheap codegen.LookupSplit pass over a typically tiny set (0–2 per module).
 func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 	idx := &cfgResolveIndex{}
+
 	for _, p := range cfg.OwnAddIncl {
 		if p.Root() == VFSRootSource && p.Rel() == "" {
 			return idx
@@ -1189,6 +1190,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		if !ok {
 			return false
 		}
+
 		out.paths = []VFS{Source(rel)}
 		out.found = true
 
@@ -1217,6 +1219,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		if info == nil {
 			return false
 		}
+
 		out.paths = []VFS{info.OutputPath}
 		out.found = true
 
@@ -1292,6 +1295,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 					out.paths = []VFS{Source(joinRel(bestAddincl.Rel(), target))}
 				} else {
 					out.paths = []VFS{bestBuild.OutputPath}
+
 					if sc.cfg.OwnerModuleDir != "" {
 						if _, ok := s.generatedFirstClaim[bestBuild.OutputPath]; !ok {
 							s.generatedFirstClaim[bestBuild.OutputPath] = sc.cfg.OwnerModuleDir
@@ -1390,6 +1394,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		if !s.fileExistsByRel(rel) {
 			return false
 		}
+
 		seen[rel] = struct{}{}
 		out = append(out, Source(rel))
 
@@ -1414,6 +1419,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		if _, dup := seen[dedupKey]; dup {
 			return false
 		}
+
 		seen[dedupKey] = struct{}{}
 		out = append(out, info.OutputPath)
 

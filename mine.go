@@ -311,6 +311,7 @@ func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
 
 func readYaConfSections(fs FS, wantSection string, rels ...string) map[string]string {
 	out := map[string]string{}
+
 	for _, rel := range rels {
 		if !fs.IsFile(rel) {
 			continue
@@ -375,6 +376,7 @@ func readHostResourcesBundle(fs FS, pattern, rel string, upperPlatform bool) gra
 		"win32-x86_64",
 	}
 	res := graphConfResource{Pattern: pattern}
+
 	for _, key := range order {
 		item, ok := data.ByPlatform[key]
 

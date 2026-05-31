@@ -49,6 +49,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		SrcDir:            d.srcDir,
 	}
 	res := &enumSrcsResult{}
+
 	for _, stmt := range d.enumSrcs {
 		headerRel := stmt.Header
 		withHeader := stmt.Variant == "with_header"
@@ -69,7 +70,9 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 				serializedHByRel[buildRootPath.Rel()] = buildRootPath
 			}
+
 			depSeen := map[NodeRef]struct{}{}
+
 			if len(serializedHByRel) > 0 {
 				enScanner := ctx.scannerTarget
 
@@ -92,6 +95,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 						if _, dup := depSeen[ref]; dup {
 							continue
 						}
+
 						depSeen[ref] = struct{}{}
 						depENRefs = append(depENRefs, ref)
 						depENOutputs = append(depENOutputs, buildRootPath)
@@ -142,6 +146,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 				registerGeneratedParsedOutput(ctx, instance, "EN", serializedHPath, hParsed)
 			}
 		}
+
 		enClosureExcl := map[VFS]struct{}{
 			headerInput: {},
 		}
@@ -197,6 +202,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 		augmentedDepENRefs := depENRefs
 		enDepScan := append([]VFS{headerInput}, enClosure...)
+
 		if extra := resolveCodegenDepRefs(ctx, instance, enDepScan, depENRefs...); len(extra) > 0 {
 			augmentedDepENRefs = append(append([]NodeRef(nil), depENRefs...), extra...)
 		}

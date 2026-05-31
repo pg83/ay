@@ -319,6 +319,7 @@ func sandboxingNodeTags(p *Platform) []string {
 
 func targetPlatformDescriptor(p *Platform) string {
 	parts := []string{string(p.Target), p.BuildType}
+
 	if p != nil && p.Flags["SANDBOXING"] == "yes" {
 		parts = append(parts, "FAKEID=sandboxing", "SANDBOXING=yes")
 	}

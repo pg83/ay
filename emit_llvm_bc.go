@@ -30,6 +30,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		"ram":     float64(32),
 	}
 	tp := map[string]string{"module_dir": instance.Path}
+
 	for _, stmt := range d.llvmBc {
 		clangRoot := stripResourceName(stmt.ClangBCRoot)
 		clangxx := clangRoot + "/bin/clang++"
@@ -77,6 +78,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			}
 
 			var depRefs []NodeRef
+
 			if producer != (NodeRef{}) {
 				depRefs = []NodeRef{producer}
 			}
@@ -120,6 +122,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 		mergedOut := Build(instance.Path + "/" + stmt.Name + "_merged" + stmt.Suffix + ".bc")
 		ldArgs := []string{llvmLink}
+
 		for _, p := range bcPaths {
 			ldArgs = append(ldArgs, p.String())
 		}
@@ -149,6 +152,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		optOut := Build(instance.Path + "/" + optOutName)
 		optArgs := []string{python, optWrapper, opt, mergedOut.String(), "-o", optOut.String()}
 		passes := []string{"default<O2>", "globalopt", "globaldce"}
+
 		if len(stmt.Symbols) > 0 {
 			passes = append(passes, "internalize")
 			optArgs = append(optArgs, "-internalize-public-api-list="+strings.Join(stmt.Symbols, "#"))
@@ -308,6 +312,7 @@ func llvmBcSourceInfo(ctx *genCtx, instance ModuleInstance, d *moduleData, src s
 	// COPY WITH_CONTEXT generated source — build-root copy is authoritative
 	if buildVFS := generatedModuleSourceVFS(ctx, instance, src); buildVFS != nil {
 		ref := NodeRef{}
+
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
 			if info := reg.Lookup(*buildVFS); info != nil && info.HasProducerRef {
 				ref = info.ProducerRef
@@ -316,6 +321,7 @@ func llvmBcSourceInfo(ctx *genCtx, instance ModuleInstance, d *moduleData, src s
 
 		return *buildVFS, ref
 	}
+
 	return copyFileInputVFS(ctx.fs, instance.Path, src), NodeRef{}
 }
 

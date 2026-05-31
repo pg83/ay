@@ -67,6 +67,7 @@ func EmitPR(
 		if _, dup := seen[p]; dup {
 			return
 		}
+
 		seen[p] = struct{}{}
 		inputs = append(inputs, p)
 	}
@@ -110,6 +111,7 @@ func EmitPR(
 		if _, dup := seenToolRefs[ref]; dup {
 			return
 		}
+
 		seenToolRefs[ref] = struct{}{}
 		toolRefs = append(toolRefs, ref)
 	}

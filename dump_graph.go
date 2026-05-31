@@ -52,7 +52,9 @@ func dumpGraphResultRefs(results []int64) map[int64]struct{} {
 	if len(results) == 0 {
 		return nil
 	}
+
 	out := make(map[int64]struct{}, len(results))
+
 	for _, refID := range results {
 		out[refID] = struct{}{}
 	}
@@ -218,6 +220,7 @@ func trimDumpGraphNodeRefList(in []NodeRef, drop map[int64]struct{}, newIDs []in
 		if newID < 0 {
 			ThrowFmt("finalizeDumpGraph: kept ref id=%d missing after prune", ref.id)
 		}
+
 		out = append(out, NodeRef{id: newID})
 	}
 

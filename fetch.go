@@ -36,6 +36,7 @@ type resourceMappingConf struct {
 
 func newResourceFetchPlan(_ string, conf *graphConf, host *Platform) *resourceFetchPlan {
 	plan := &resourceFetchPlan{}
+
 	if conf == nil || len(conf.Resources) == 0 {
 		return plan
 	}
@@ -240,6 +241,7 @@ func nodeUsesResourcePattern(n *Node, pattern string) bool {
 
 func (p *resourceFetchPlan) mountMap() map[string]string {
 	out := map[string]string{}
+
 	if p == nil {
 		return out
 	}
