@@ -12,6 +12,13 @@ import (
 	"strings"
 )
 
+var (
+	// Path constants hoisted by `ay refac consts`.
+	buildMappingConfJson           = Source("build/mapping.conf.json")
+	buildScriptsFetchFromMdsPy     = Source("build/scripts/fetch_from_mds.py")
+	buildScriptsFetchFromSandboxPy = Source("build/scripts/fetch_from_sandbox.py")
+)
+
 type resourceFetch struct {
 	Pattern string
 	URI     string
@@ -446,10 +453,3 @@ func copyFile(src, dst string) error {
 
 	return out.Close()
 }
-
-// Path constants hoisted by `ay refac consts`.
-var (
-	buildMappingConfJson           = Source("build/mapping.conf.json")
-	buildScriptsFetchFromMdsPy     = Source("build/scripts/fetch_from_mds.py")
-	buildScriptsFetchFromSandboxPy = Source("build/scripts/fetch_from_sandbox.py")
-)

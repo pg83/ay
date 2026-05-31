@@ -5,12 +5,12 @@ import (
 	"strings"
 )
 
-const flatcModule = "contrib/libs/flatbuffers/flatc"
-
 var (
 	flatcWrapperVFS = Intern("$(S)/build/scripts/cpp_flatc_wrapper.py")
 	flatcRuntimeVFS = Intern("$(S)/contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h")
 )
+
+const flatcModule = "contrib/libs/flatbuffers/flatc"
 
 type flatcEmission struct {
 	flRef   NodeRef

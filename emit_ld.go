@@ -1,16 +1,6 @@
 package main
 
 var (
-	// ldScriptInputs seeds the link node's $(S) tooling inputs: the wrapper scripts it
-	// invokes plus the non-script vcs template. Each .py wrapper's import closure
-	// (thinlto_cache, process_command_files, process_whole_archive_option, …) is added
-	// from the script table in composeLDInputs — not hand-listed here.
-	ldScriptInputs = []VFS{
-		ldVcsInfoVFS,
-		ldSvnInterfaceVFS,
-		ldLinkExeVFS,
-		copyFsToolsVFS,
-	}
 	ldVcsInfoVFS       = Intern("$(S)/build/scripts/vcs_info.py")
 	ldSvnInterfaceVFS  = Intern("$(S)/build/scripts/c_templates/svn_interface.c")
 	ldLinkExeVFS       = Intern("$(S)/build/scripts/link_exe.py")
@@ -21,6 +11,17 @@ var (
 	ldLinkExePath      = ldLinkExeVFS.String()
 	ldFsToolsPath      = ldFsToolsVFS.String()
 )
+
+// ldScriptInputs seeds the link node's $(S) tooling inputs: the wrapper scripts it
+// invokes plus the non-script vcs template. Each .py wrapper's import closure
+// (thinlto_cache, process_command_files, process_whole_archive_option, …) is added
+// from the script table in composeLDInputs — not hand-listed here.
+var ldScriptInputs = []VFS{
+	ldVcsInfoVFS,
+	ldSvnInterfaceVFS,
+	ldLinkExeVFS,
+	copyFsToolsVFS,
+}
 
 func EmitLD(
 	instance ModuleInstance,
