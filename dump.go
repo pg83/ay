@@ -90,7 +90,17 @@ func normSortedStrings(v any) []string {
 		out[i] = normPath(out[i])
 	}
 	sort.Strings(out)
-	return out
+	// Dedup adjacent: a node may list the same input more than once — e.g. several
+	// wrapper scripts pulling in a shared helper (link_exe and fs_tools both import
+	// process_command_files) — but the canonical form is a set.
+	w := 0
+	for i := range out {
+		if i == 0 || out[i] != out[w-1] {
+			out[w] = out[i]
+			w++
+		}
+	}
+	return out[:w]
 }
 
 func normStringsKeepOrder(v any) []string {
