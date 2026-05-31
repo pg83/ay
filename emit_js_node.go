@@ -1,8 +1,7 @@
 package main
 
-func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, emit Emitter) (NodeRef, VFS) {
+func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, scripts scriptDeps, emit Emitter) (NodeRef, VFS) {
 	joinSrcs := Intern("$(S)/build/scripts/gen_join_srcs.py")
-	procCmdFiles := Intern("$(S)/build/scripts/process_command_files.py")
 
 	outVFS := Build(instance.Path + "/" + allName)
 	platformID := instance.Platform.Target
@@ -35,7 +34,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 	}
 
 	inputs := make([]VFS, 0, 2+len(sources)+len(closure))
-	inputs = append(inputs, joinSrcs, procCmdFiles)
+	inputs = append(inputs, scripts[joinSrcs]...)
 
 	for _, s := range sources {
 		inputs = append(inputs, Source(instance.Path+"/"+s))

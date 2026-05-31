@@ -9,9 +9,6 @@ var antlr4RuntimeHeaderVFS = Intern("$(S)/contrib/libs/antlr4_cpp_runtime/src/an
 var antlr4RuntimeHeaderPath = antlr4RuntimeHeaderVFS.String()
 
 var antlr4FsToolsVFS = Intern("$(S)/build/scripts/fs_tools.py")
-var antlr4ProcCmdVFS = Intern("$(S)/build/scripts/process_command_files.py")
-var antlr4FsToolsPath = antlr4FsToolsVFS.String()
-var antlr4ProcCmdFiles = antlr4ProcCmdVFS.String()
 
 func emitJVDownstreamCPCC(
 	ctx *genCtx,
