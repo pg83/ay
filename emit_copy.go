@@ -119,7 +119,7 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 			closure = dedupVFS(closure)
 		}
 
-		ref := EmitCPWithDeps(instance, srcVFS, dstVFS, depRefs, closure, ctx.emit)
+		ref := EmitCPWithDeps(instance, srcVFS, dstVFS, depRefs, closure, ctx.scripts, ctx.emit)
 
 		// Promote the registration with the producer ref; SourcePath remains.
 		if reg != nil {
@@ -234,7 +234,7 @@ func autoCopyDstExtras(modulePath string, d *moduleData, closure []VFS, rootDst 
 // COPY_FILE(TEXT) in a *different* module, the .txt source is still a real
 // compiler input. The registry carries IsText on every CP registration, so we
 // extend the lookup beyond d.copyFiles to cover those cross-module cases.
-func withContextSourceExtras(reg *CodegenRegistry, modulePath string, d *moduleData, closure []VFS, rootDst VFS, scripts map[VFS][]VFS) []VFS {
+func withContextSourceExtras(reg *CodegenRegistry, modulePath string, d *moduleData, closure []VFS, rootDst VFS, scripts scriptDeps) []VFS {
 	if reg == nil {
 		return nil
 	}
