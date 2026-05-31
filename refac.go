@@ -430,11 +430,46 @@ func refacLint(args []string) int {
 	return 0
 }
 
-// lintConsolidateVars merges every package-level var declaration in a file —
-// single-line vars and existing grouped var(...) blocks alike — into one var(...)
-// block placed immediately after the import declaration, before all other code.
-// Declaration order, doc comments, and trailing comments are preserved. It acts
-// only when the file has at least two package-level var declarations.
+// varItem is one package-level var spec extracted for consolidation. body holds the
+// spec without the `var` keyword ("name [type] = value"); doc and blockDoc are the
+// spec's own and its containing block's doc comments; multiline marks specs whose
+// value spans more than one line.
+type varItem struct {
+	blockDoc  string
+	doc       string
+	body      string
+	multiline bool
+}
+
+// render emits the item either as a group entry (inGroup, no `var` keyword) or as a
+// standalone declaration.
+func (it varItem) render(inGroup bool) string {
+	var b strings.Builder
+	if it.blockDoc != "" {
+		b.WriteString(it.blockDoc)
+		b.WriteByte('\n')
+	}
+	if it.doc != "" {
+		b.WriteString(it.doc)
+		b.WriteByte('\n')
+	}
+	if !inGroup {
+		b.WriteString("var ")
+	}
+	b.WriteString(it.body)
+	return b.String()
+}
+
+// lintConsolidateVars groups a file's single-line package-level vars into one
+// var(...) block placed immediately after the imports, before all other code. A var
+// whose value serialization spans multiple lines (composite literals such as
+// map[...]{...} or []T{...}, multi-line strings — anything that introduces a new
+// indentation level) is kept as its own standalone `var` declaration, emitted below
+// the group, since folding it into the block would add an extra indentation level
+// and hurt readability. Declaration order, doc comments, and trailing comments are
+// preserved. The grouped block is formed only when at least two single-line vars
+// exist; otherwise every var is emitted standalone. Acts only when the file has at
+// least two package-level var specs.
 func lintConsolidateVars(path string) bool {
 	src := Throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
@@ -445,12 +480,14 @@ func lintConsolidateVars(path string) bool {
 	}
 
 	var varDecls []*ast.GenDecl
+	totalSpecs := 0
 	for _, decl := range f.Decls {
 		if gd, ok := decl.(*ast.GenDecl); ok && gd.Tok == gotoken.VAR {
 			varDecls = append(varDecls, gd)
+			totalSpecs += len(gd.Specs)
 		}
 	}
-	if len(varDecls) < 2 {
+	if totalSpecs < 2 {
 		return false
 	}
 
@@ -458,7 +495,7 @@ func lintConsolidateVars(path string) bool {
 	text := func(lo, hi gotoken.Pos) string { return string(src[off(lo):off(hi)]) }
 
 	type span struct{ start, end int }
-	var entries []string
+	var items []varItem
 	var removals []span
 
 	for _, gd := range varDecls {
@@ -468,28 +505,14 @@ func lintConsolidateVars(path string) bool {
 		}
 		rmEnd := off(gd.End())
 
-		if gd.Lparen.IsValid() {
-			// Existing grouped block: keep its block-level doc as a comment line,
-			// then each spec (with its own doc/trailing comment) as an entry.
-			if gd.Doc != nil {
-				entries = append(entries, text(gd.Doc.Pos(), gd.Doc.End()))
-			}
-			for _, spec := range gd.Specs {
-				vs := spec.(*ast.ValueSpec)
-				lo := vs.Pos()
-				if vs.Doc != nil {
-					lo = vs.Doc.Pos()
-				}
-				hi := vs.End()
-				if vs.Comment != nil {
-					hi = vs.Comment.End()
-				}
-				entries = append(entries, text(lo, hi))
-			}
-		} else {
-			// Single-line var: emit the spec without the `var` keyword, keeping the
-			// declaration's doc comment above it.
-			vs := gd.Specs[0].(*ast.ValueSpec)
+		// A grouped block's own doc comment attaches once, to the first spec it yields.
+		blockDoc := ""
+		if gd.Lparen.IsValid() && gd.Doc != nil {
+			blockDoc = text(gd.Doc.Pos(), gd.Doc.End())
+		}
+
+		for _, spec := range gd.Specs {
+			vs := spec.(*ast.ValueSpec)
 			hi := vs.End()
 			if vs.Comment != nil {
 				hi = vs.Comment.End()
@@ -497,17 +520,55 @@ func lintConsolidateVars(path string) bool {
 					rmEnd = off(hi)
 				}
 			}
-			doc := gd.Doc
+			doc := ""
 			if vs.Doc != nil {
-				doc = vs.Doc
+				doc = text(vs.Doc.Pos(), vs.Doc.End())
+			} else if !gd.Lparen.IsValid() && gd.Doc != nil {
+				doc = text(gd.Doc.Pos(), gd.Doc.End())
 			}
-			entry := text(vs.Pos(), hi)
-			if doc != nil {
-				entry = text(doc.Pos(), doc.End()) + "\n" + entry
-			}
-			entries = append(entries, entry)
+			items = append(items, varItem{
+				blockDoc:  blockDoc,
+				doc:       doc,
+				body:      text(vs.Pos(), hi),
+				multiline: strings.IndexByte(text(vs.Pos(), vs.End()), '\n') >= 0,
+			})
+			blockDoc = "" // consumed by the first spec only
 		}
 		removals = append(removals, span{rmStart, rmEnd})
+	}
+
+	simpleCount := 0
+	for _, it := range items {
+		if !it.multiline {
+			simpleCount++
+		}
+	}
+	group := simpleCount >= 2
+
+	// Assemble the replacement: the grouped block first (single-line vars, in order),
+	// then standalone declarations for everything that stays ungrouped, in order.
+	var parts []string
+	if group {
+		var b strings.Builder
+		b.WriteString("var (\n")
+		for _, it := range items {
+			if it.multiline {
+				continue
+			}
+			b.WriteString(it.render(true))
+			b.WriteByte('\n')
+		}
+		b.WriteString(")")
+		parts = append(parts, b.String())
+		for _, it := range items {
+			if it.multiline {
+				parts = append(parts, it.render(false))
+			}
+		}
+	} else {
+		for _, it := range items {
+			parts = append(parts, it.render(false))
+		}
 	}
 
 	// Insert after the import declaration, or after the package clause if none.
@@ -520,21 +581,15 @@ func lintConsolidateVars(path string) bool {
 	}
 
 	// Delete the original declarations back-to-front (every removal starts after
-	// insOff, so the bytes up to insOff stay put), then splice in the merged block.
+	// insOff, so the bytes up to insOff stay put), then splice in the rebuilt vars.
 	out := append([]byte(nil), src...)
 	sort.Slice(removals, func(i, j int) bool { return removals[i].start > removals[j].start })
 	for _, r := range removals {
 		out = append(out[:r.start], out[r.end:]...)
 	}
 
-	var b strings.Builder
-	b.WriteString("\n\nvar (\n")
-	for _, e := range entries {
-		b.WriteString(e)
-		b.WriteByte('\n')
-	}
-	b.WriteString(")\n")
-	out = append(out[:insOff], append([]byte(b.String()), out[insOff:]...)...)
+	block := "\n\n" + strings.Join(parts, "\n\n") + "\n"
+	out = append(out[:insOff], append([]byte(block), out[insOff:]...)...)
 
 	formatted, err := format.Source(out)
 	if err != nil {
