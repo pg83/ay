@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+var (
+	cfgVarRefRe      = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
+	cfgCmakeDefineRe = regexp.MustCompile(`#cmakedefine(?:01)?[ \t]+([A-Z_][A-Z0-9_]*)`)
+)
+
 func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *moduleData, reg *CodegenRegistry) {
 
 	in := ModuleCCInputs{
@@ -54,10 +59,6 @@ func cfIncludeDirectives(pm *includeParserManager, rel string) []includeDirectiv
 	sort.Slice(out, func(i, j int) bool { return out[i].target.String() < out[j].target.String() })
 	return out
 }
-
-var cfgVarRefRe = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
-
-var cfgCmakeDefineRe = regexp.MustCompile(`#cmakedefine(?:01)?[ \t]+([A-Z_][A-Z0-9_]*)`)
 
 func buildCFGVars(fs FS, rel string, setVars, defaultVars map[string]string) []string {
 	referenced := map[string]bool{}

@@ -6,12 +6,16 @@ import (
 	"strings"
 )
 
+var (
+	swigImplicitIncludes = []string{"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg"}
+	// Path constants hoisted by `ay refac consts`.
+	bldContribToolsSwigSwig = Build("contrib/tools/swig/swig")
+)
+
 type swigSrc struct {
 	Src    string
 	Module string
 }
-
-var swigImplicitIncludes = []string{"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg"}
 
 const swigLibRoot = "contrib/tools/swig/Lib"
 
@@ -288,8 +292,3 @@ func swigFilterExistingSources(fs FS, in []VFS) []VFS {
 
 	return out
 }
-
-// Path constants hoisted by `ay refac consts`.
-var (
-	bldContribToolsSwigSwig = Build("contrib/tools/swig/swig")
-)

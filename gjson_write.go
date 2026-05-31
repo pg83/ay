@@ -7,6 +7,32 @@ import (
 	"unicode/utf8"
 )
 
+var (
+	// vfsEscapedJSON caches the JSON-encoded form (`"…"`, escape-body included)
+	// of each interned VFS string. writeGraph emits the same path many times —
+	// up to ~1.3M emits in sg5 with the new CP closures — and JSON escape was
+	// 27% of CPU until this cache went in. The intern table is append-only and
+	// strID() is stable, so a slice indexed by strID is safe; we grow it lazily
+	// to the current intern bound on the first miss past its length.
+	vfsEscapedJSON   [][]byte
+	htmlSafeNoEscape = func() [128]bool {
+		var t [128]bool
+
+		for b := 0; b < 128; b++ {
+			switch {
+			case b < 0x20:
+				t[b] = false
+			case b == '"' || b == '\\':
+				t[b] = false
+			default:
+				t[b] = true
+			}
+		}
+
+		return t
+	}()
+)
+
 func writeGraphIndented(w io.Writer, g *Graph) {
 
 	buf := make([]byte, 0, 1<<20)
@@ -409,14 +435,6 @@ func appendGraphConfResourceURIs(buf []byte, resources []graphConfResourceURI, p
 	return buf
 }
 
-// vfsEscapedJSON caches the JSON-encoded form (`"…"`, escape-body included)
-// of each interned VFS string. writeGraph emits the same path many times —
-// up to ~1.3M emits in sg5 with the new CP closures — and JSON escape was
-// 27% of CPU until this cache went in. The intern table is append-only and
-// strID() is stable, so a slice indexed by strID is safe; we grow it lazily
-// to the current intern bound on the first miss past its length.
-var vfsEscapedJSON [][]byte
-
 func appendVFS(buf []byte, v VFS) []byte {
 	id := v.strID()
 	if int(id) < len(vfsEscapedJSON) {
@@ -634,20 +652,3 @@ func appendStringEscapedBody(buf []byte, s string) []byte {
 
 	return buf
 }
-
-var htmlSafeNoEscape = func() [128]bool {
-	var t [128]bool
-
-	for b := 0; b < 128; b++ {
-		switch {
-		case b < 0x20:
-			t[b] = false
-		case b == '"' || b == '\\':
-			t[b] = false
-		default:
-			t[b] = true
-		}
-	}
-
-	return t
-}()

@@ -6,22 +6,20 @@ import (
 	"sync"
 )
 
-// goSources embeds every .go file in this package at build time so the
-// runtime audit can mine string literals out of the source without
-// depending on the binary's invocation cwd. Only used when
-// --dump-ignored-macros is on.
-//
-//go:embed *.go
-var goSources embed.FS
-
-// stringLiteralRE matches a Go double-quoted string literal that is
-// composed entirely of `[A-Z0-9_]+` and contains at least one ASCII
-// letter — i.e., the same shape we treat as a "service keyword" macro
-// argument. Trailing/leading whitespace is not allowed because Go
-// string literals don't contain them in our codebase for this idiom.
-var stringLiteralRE = regexp.MustCompile(`"([A-Z][A-Z0-9_]*|[A-Z0-9_]*[A-Z][A-Z0-9_]*)"`)
-
 var (
+	// goSources embeds every .go file in this package at build time so the
+	// runtime audit can mine string literals out of the source without
+	// depending on the binary's invocation cwd. Only used when
+	// --dump-ignored-macros is on.
+	//
+	//go:embed *.go
+	goSources embed.FS
+	// stringLiteralRE matches a Go double-quoted string literal that is
+	// composed entirely of `[A-Z0-9_]+` and contains at least one ASCII
+	// letter — i.e., the same shape we treat as a "service keyword" macro
+	// argument. Trailing/leading whitespace is not allowed because Go
+	// string literals don't contain them in our codebase for this idiom.
+	stringLiteralRE        = regexp.MustCompile(`"([A-Z][A-Z0-9_]*|[A-Z0-9_]*[A-Z][A-Z0-9_]*)"`)
 	knownServiceTokensOnce sync.Once
 	knownServiceTokensVal  map[string]struct{}
 )

@@ -8,6 +8,23 @@ import (
 	"sync"
 )
 
+var (
+	macroAudit = &macroAuditState{
+		ignored:  map[string]int{},
+		services: map[string]map[string]int{},
+		unknown:  map[string]map[string]int{},
+	}
+	// macrosAcceptingUserFlags lists handled macros whose arguments are not
+	// structural keywords but arbitrary user-defined flag names — ENABLE(MY_X)
+	// and DISABLE(MY_X) translate into env.SetBool(MY_X, …) and accept anything
+	// the ya.make author chose. The strict service-keyword check is suppressed
+	// for these so a new project-specific flag does not need to be hard-coded.
+	macrosAcceptingUserFlags = map[string]struct{}{
+		"ENABLE":  {},
+		"DISABLE": {},
+	}
+)
+
 // macroAudit collects two classes of ya.make traffic during gen:
 //   - macro invocations whose name lands in whitelistedMetadataMacros (i.e.,
 //     we accept the macro but emit nothing for it);
@@ -30,12 +47,6 @@ type macroAuditState struct {
 	unknown  map[string]map[string]int // macro name → unhandled service arg → count
 }
 
-var macroAudit = &macroAuditState{
-	ignored:  map[string]int{},
-	services: map[string]map[string]int{},
-	unknown:  map[string]map[string]int{},
-}
-
 func enableMacroAudit() {
 	macroAudit.mu.Lock()
 	defer macroAudit.mu.Unlock()
@@ -54,16 +65,6 @@ func recordIgnoredMacro(name string, _ []string) {
 	macroAudit.mu.Lock()
 	defer macroAudit.mu.Unlock()
 	macroAudit.ignored[name]++
-}
-
-// macrosAcceptingUserFlags lists handled macros whose arguments are not
-// structural keywords but arbitrary user-defined flag names — ENABLE(MY_X)
-// and DISABLE(MY_X) translate into env.SetBool(MY_X, …) and accept anything
-// the ya.make author chose. The strict service-keyword check is suppressed
-// for these so a new project-specific flag does not need to be hard-coded.
-var macrosAcceptingUserFlags = map[string]struct{}{
-	"ENABLE":  {},
-	"DISABLE": {},
 }
 
 // recordHandledMacro is called for every macro whose typed branch in

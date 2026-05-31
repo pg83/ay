@@ -1,13 +1,13 @@
 package main
 
-var yieldLinePyVFS = Intern("$(S)/build/scripts/yield_line.py")
-var yieldLinePyPath = yieldLinePyVFS.String()
-
-var xargsPyVFS = Intern("$(S)/build/scripts/xargs.py")
-var xargsPyPath = xargsPyVFS.String()
-
-var buildInfoGenPyVFS = Intern("$(S)/build/scripts/build_info_gen.py")
-var buildInfoGenPyPath = buildInfoGenPyVFS.String()
+var (
+	yieldLinePyVFS     = Intern("$(S)/build/scripts/yield_line.py")
+	yieldLinePyPath    = yieldLinePyVFS.String()
+	xargsPyVFS         = Intern("$(S)/build/scripts/xargs.py")
+	xargsPyPath        = xargsPyVFS.String()
+	buildInfoGenPyVFS  = Intern("$(S)/build/scripts/build_info_gen.py")
+	buildInfoGenPyPath = buildInfoGenPyVFS.String()
+)
 
 func EmitBI(
 	instance ModuleInstance,

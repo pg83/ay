@@ -4,6 +4,11 @@ import (
 	"strings"
 )
 
+var (
+	genPy3RegScriptVFS  = Intern("$(S)/build/scripts/gen_py3_reg.py")
+	genPy3RegScriptPath = genPy3RegScriptVFS.String()
+)
+
 func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	if len(d.pySrcs) == 0 {
 		return
@@ -139,9 +144,6 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		registerBoundGeneratedParsedOutput(ctx, instance, "PY", outputPath, nil, pyRef)
 	}
 }
-
-var genPy3RegScriptVFS = Intern("$(S)/build/scripts/gen_py3_reg.py")
-var genPy3RegScriptPath = genPy3RegScriptVFS.String()
 
 type pyRegisterResult struct {
 	Refs    []NodeRef

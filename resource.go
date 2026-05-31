@@ -9,21 +9,21 @@ import (
 	"strings"
 )
 
+var (
+	objcopyScriptVFS     = Intern("$(S)/build/scripts/objcopy.py")
+	objcopyScriptPath    = objcopyScriptVFS.String()
+	rescompressorBinVFS  = Intern("$(B)/tools/rescompressor/rescompressor")
+	rescompilerBinVFS    = Intern("$(B)/tools/rescompiler/rescompiler")
+	rescompressorBinPath = rescompressorBinVFS.String()
+	rescompilerBinPath   = rescompilerBinVFS.String()
+	yaConfFormulaRE      = regexp.MustCompile(`"formula"\s*:\s*"([^"]+\.json)"`)
+)
+
 const hashLen = 26
 
 const rootCmdLen = 200
 
 const maxCmdLen = 8000
-
-var (
-	objcopyScriptVFS  = Intern("$(S)/build/scripts/objcopy.py")
-	objcopyScriptPath = objcopyScriptVFS.String()
-
-	rescompressorBinVFS  = Intern("$(B)/tools/rescompressor/rescompressor")
-	rescompilerBinVFS    = Intern("$(B)/tools/rescompiler/rescompiler")
-	rescompressorBinPath = rescompressorBinVFS.String()
-	rescompilerBinPath   = rescompilerBinVFS.String()
-)
 
 func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string, moduleTag *string) string {
 	list := make([]string, 0, len(paths)+len(keysB64)+len(kvs)+1)
@@ -212,8 +212,6 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 
 	return out
 }
-
-var yaConfFormulaRE = regexp.MustCompile(`"formula"\s*:\s*"([^"]+\.json)"`)
 
 type pySrcEntry struct {
 	pathHash  string

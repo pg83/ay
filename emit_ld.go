@@ -1,5 +1,27 @@
 package main
 
+var (
+	// ldScriptInputs seeds the link node's $(S) tooling inputs: the wrapper scripts it
+	// invokes plus the non-script vcs template. Each .py wrapper's import closure
+	// (thinlto_cache, process_command_files, process_whole_archive_option, …) is added
+	// from the script table in composeLDInputs — not hand-listed here.
+	ldScriptInputs = []VFS{
+		ldVcsInfoVFS,
+		ldSvnInterfaceVFS,
+		ldLinkExeVFS,
+		copyFsToolsVFS,
+	}
+	ldVcsInfoVFS       = Intern("$(S)/build/scripts/vcs_info.py")
+	ldSvnInterfaceVFS  = Intern("$(S)/build/scripts/c_templates/svn_interface.c")
+	ldLinkExeVFS       = Intern("$(S)/build/scripts/link_exe.py")
+	ldFsToolsVFS       = Intern("$(S)/build/scripts/fs_tools.py")
+	ldSvnversionHVFS   = Intern("$(S)/build/scripts/c_templates/svnversion.h")
+	ldVcsInfoPath      = ldVcsInfoVFS.String()
+	ldSvnInterfacePath = ldSvnInterfaceVFS.String()
+	ldLinkExePath      = ldLinkExeVFS.String()
+	ldFsToolsPath      = ldFsToolsVFS.String()
+)
+
 func EmitLD(
 	instance ModuleInstance,
 	binaryName string,
@@ -435,27 +457,3 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, plugi
 
 	return out
 }
-
-// ldScriptInputs seeds the link node's $(S) tooling inputs: the wrapper scripts it
-// invokes plus the non-script vcs template. Each .py wrapper's import closure
-// (thinlto_cache, process_command_files, process_whole_archive_option, …) is added
-// from the script table in composeLDInputs — not hand-listed here.
-var ldScriptInputs = []VFS{
-	ldVcsInfoVFS,
-	ldSvnInterfaceVFS,
-	ldLinkExeVFS,
-	copyFsToolsVFS,
-}
-
-var (
-	ldVcsInfoVFS      = Intern("$(S)/build/scripts/vcs_info.py")
-	ldSvnInterfaceVFS = Intern("$(S)/build/scripts/c_templates/svn_interface.c")
-	ldLinkExeVFS      = Intern("$(S)/build/scripts/link_exe.py")
-	ldFsToolsVFS      = Intern("$(S)/build/scripts/fs_tools.py")
-	ldSvnversionHVFS  = Intern("$(S)/build/scripts/c_templates/svnversion.h")
-
-	ldVcsInfoPath      = ldVcsInfoVFS.String()
-	ldSvnInterfacePath = ldSvnInterfaceVFS.String()
-	ldLinkExePath      = ldLinkExeVFS.String()
-	ldFsToolsPath      = ldFsToolsVFS.String()
-)

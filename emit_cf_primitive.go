@@ -1,7 +1,9 @@
 package main
 
-var configureFilePyVFS = Intern("$(S)/build/scripts/configure_file.py")
-var configureFilePyPath = configureFilePyVFS.String()
+var (
+	configureFilePyVFS  = Intern("$(S)/build/scripts/configure_file.py")
+	configureFilePyPath = configureFilePyVFS.String()
+)
 
 const buildTypeDebug = "BUILD_TYPE=DEBUG"
 

@@ -5,24 +5,28 @@ import (
 	"strings"
 )
 
-var bisonPreprocessPyVFS = Intern("$(S)/build/scripts/preprocess.py")
-
-var bisonCppSkeletonInputs = []VFS{
-	Intern("$(S)/contrib/tools/bison/data/m4sugar/foreach.m4"),
-	Intern("$(S)/contrib/tools/bison/data/m4sugar/m4sugar.m4"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/bison.m4"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/c++-skel.m4"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/c++.m4"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/c-like.m4"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/c-skel.m4"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/c.m4"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/glr.cc"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/lalr1.cc"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/location.cc"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/stack.hh"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/variant.hh"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/yacc.c"),
-}
+var (
+	bisonPreprocessPyVFS   = Intern("$(S)/build/scripts/preprocess.py")
+	bisonCppSkeletonInputs = []VFS{
+		Intern("$(S)/contrib/tools/bison/data/m4sugar/foreach.m4"),
+		Intern("$(S)/contrib/tools/bison/data/m4sugar/m4sugar.m4"),
+		Intern("$(S)/contrib/tools/bison/data/skeletons/bison.m4"),
+		Intern("$(S)/contrib/tools/bison/data/skeletons/c++-skel.m4"),
+		Intern("$(S)/contrib/tools/bison/data/skeletons/c++.m4"),
+		Intern("$(S)/contrib/tools/bison/data/skeletons/c-like.m4"),
+		Intern("$(S)/contrib/tools/bison/data/skeletons/c-skel.m4"),
+		Intern("$(S)/contrib/tools/bison/data/skeletons/c.m4"),
+		Intern("$(S)/contrib/tools/bison/data/skeletons/glr.cc"),
+		Intern("$(S)/contrib/tools/bison/data/skeletons/lalr1.cc"),
+		Intern("$(S)/contrib/tools/bison/data/skeletons/location.cc"),
+		Intern("$(S)/contrib/tools/bison/data/skeletons/stack.hh"),
+		Intern("$(S)/contrib/tools/bison/data/skeletons/variant.hh"),
+		Intern("$(S)/contrib/tools/bison/data/skeletons/yacc.c"),
+	}
+	// Path constants hoisted by `ay refac consts`.
+	bldContribToolsBisonBison = Build("contrib/tools/bison/bison")
+	bldContribToolsM4M4       = Build("contrib/tools/m4/m4")
+)
 
 func dedupIncludeDirectives(directives []includeDirective) []includeDirective {
 	if len(directives) == 0 {
@@ -198,9 +202,3 @@ func m4Tool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
 	ref, bin := ctx.tool("contrib/tools/m4")
 	return ref, bin.String()
 }
-
-// Path constants hoisted by `ay refac consts`.
-var (
-	bldContribToolsBisonBison = Build("contrib/tools/bison/bison")
-	bldContribToolsM4M4       = Build("contrib/tools/m4/m4")
-)

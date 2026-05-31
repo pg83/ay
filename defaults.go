@@ -5,25 +5,80 @@ import (
 	"strings"
 )
 
-var runtimeAncestorPaths = map[string]bool{
-	"contrib/libs/musl":                    true,
-	"contrib/libs/libc_compat":             true,
-	"contrib/libs/linuxvdso":               true,
-	"contrib/libs/linuxvdso/original":      true,
-	"contrib/libs/cxxsupp/builtins":        true,
-	"contrib/libs/cxxsupp/libcxx":          true,
-	"contrib/libs/cxxsupp/libcxxrt":        true,
-	"contrib/libs/cxxsupp/libcxxabi":       true,
-	"contrib/libs/cxxsupp/libcxxabi-parts": true,
-	"contrib/libs/libunwind":               true,
-	"library/cpp/malloc/api":               true,
-	"library/cpp/sanitizer/include":        true,
-	"util":                                 true,
-}
-
-var runtimeAncestorCxxConsumers = map[string]bool{
-	"library/cpp/malloc/api": true,
-}
+var (
+	runtimeAncestorPaths = map[string]bool{
+		"contrib/libs/musl":                    true,
+		"contrib/libs/libc_compat":             true,
+		"contrib/libs/linuxvdso":               true,
+		"contrib/libs/linuxvdso/original":      true,
+		"contrib/libs/cxxsupp/builtins":        true,
+		"contrib/libs/cxxsupp/libcxx":          true,
+		"contrib/libs/cxxsupp/libcxxrt":        true,
+		"contrib/libs/cxxsupp/libcxxabi":       true,
+		"contrib/libs/cxxsupp/libcxxabi-parts": true,
+		"contrib/libs/libunwind":               true,
+		"library/cpp/malloc/api":               true,
+		"library/cpp/sanitizer/include":        true,
+		"util":                                 true,
+	}
+	runtimeAncestorCxxConsumers = map[string]bool{
+		"library/cpp/malloc/api": true,
+	}
+	runtimeStackAddInclPaths = map[VFS]int{
+		contribLibsCxxsuppLibcxxInclude:                       0,
+		contribLibsCxxsuppLibcxxrtInclude:                     1,
+		Intern("$(S)/contrib/libs/cxxsupp/libcxxabi/include"): 2,
+		Intern("$(S)/contrib/libs/libunwind/include"):         3,
+	}
+	bundledAddInclPaths = map[VFS]bool{
+		contribLibsLinuxHeaders:   true,
+		contribLibsLinuxHeadersNf: true,
+	}
+	unitImplicitPeers = []implicitPeerRule{
+		{
+			name: "musl/include",
+			peer: "contrib/libs/musl/include",
+			predicate: func(rc implicitPeerCtx) bool {
+				return rc.muslOn
+			},
+		},
+	}
+	programImplicitPeers = []implicitPeerRule{
+		{
+			name: "musl/full",
+			peer: "contrib/libs/musl/full",
+			predicate: func(rc implicitPeerCtx) bool {
+				return rc.muslOn && !rc.muslLite
+			},
+		},
+		{
+			name: "musl",
+			peer: "contrib/libs/musl",
+			predicate: func(rc implicitPeerCtx) bool {
+				return rc.muslOn && rc.muslLite
+			},
+		},
+	}
+	archDependentPeerAddInclPrefixes = []string{
+		"contrib/libs/musl/arch/",
+	}
+	programAllocatorDefaults = []implicitPeerRule{
+		{
+			name: "tcmalloc (TCMALLOC_TC default)",
+			peer: "library/cpp/malloc/tcmalloc",
+			predicate: func(rc implicitPeerCtx) bool {
+				return !rc.hadAllocator && rc.osLinux && (rc.muslOn || rc.archX8664)
+			},
+		},
+		{
+			name: "tcmalloc/no_percpu_cache (TCMALLOC_TC default)",
+			peer: "contrib/libs/tcmalloc/no_percpu_cache",
+			predicate: func(rc implicitPeerCtx) bool {
+				return !rc.hadAllocator && rc.osLinux && (rc.muslOn || rc.archX8664)
+			},
+		},
+	}
+)
 
 func isAncestorPath(srcDir, instancePath string) bool {
 	if srcDir == instancePath {
@@ -35,18 +90,6 @@ func isAncestorPath(srcDir, instancePath string) bool {
 
 func isRuntimeAncestor(path string) bool {
 	return runtimeAncestorPaths[path]
-}
-
-var runtimeStackAddInclPaths = map[VFS]int{
-	contribLibsCxxsuppLibcxxInclude:                       0,
-	contribLibsCxxsuppLibcxxrtInclude:                     1,
-	Intern("$(S)/contrib/libs/cxxsupp/libcxxabi/include"): 2,
-	Intern("$(S)/contrib/libs/libunwind/include"):         3,
-}
-
-var bundledAddInclPaths = map[VFS]bool{
-	contribLibsLinuxHeaders:   true,
-	contribLibsLinuxHeadersNf: true,
 }
 
 func suppressMallocAPIDefault(defaults []string, allocatorName string) []string {
@@ -211,37 +254,6 @@ func appendImplicitPeers(dst []string, rules []implicitPeerRule, rc implicitPeer
 	return dst
 }
 
-var unitImplicitPeers = []implicitPeerRule{
-	{
-		name: "musl/include",
-		peer: "contrib/libs/musl/include",
-		predicate: func(rc implicitPeerCtx) bool {
-			return rc.muslOn
-		},
-	},
-}
-
-var programImplicitPeers = []implicitPeerRule{
-	{
-		name: "musl/full",
-		peer: "contrib/libs/musl/full",
-		predicate: func(rc implicitPeerCtx) bool {
-			return rc.muslOn && !rc.muslLite
-		},
-	},
-	{
-		name: "musl",
-		peer: "contrib/libs/musl",
-		predicate: func(rc implicitPeerCtx) bool {
-			return rc.muslOn && rc.muslLite
-		},
-	},
-}
-
-var archDependentPeerAddInclPrefixes = []string{
-	"contrib/libs/musl/arch/",
-}
-
 func rebasePerArchPeerAddIncl(hostPeerAddIncl []VFS, from, to ISA) []VFS {
 	out := make([]VFS, len(hostPeerAddIncl))
 
@@ -257,23 +269,6 @@ func rebasePerArchPeerAddIncl(hostPeerAddIncl []VFS, from, to ISA) []VFS {
 	}
 
 	return out
-}
-
-var programAllocatorDefaults = []implicitPeerRule{
-	{
-		name: "tcmalloc (TCMALLOC_TC default)",
-		peer: "library/cpp/malloc/tcmalloc",
-		predicate: func(rc implicitPeerCtx) bool {
-			return !rc.hadAllocator && rc.osLinux && (rc.muslOn || rc.archX8664)
-		},
-	},
-	{
-		name: "tcmalloc/no_percpu_cache (TCMALLOC_TC default)",
-		peer: "contrib/libs/tcmalloc/no_percpu_cache",
-		predicate: func(rc implicitPeerCtx) bool {
-			return !rc.hadAllocator && rc.osLinux && (rc.muslOn || rc.archX8664)
-		},
-	},
 }
 
 func defaultProgramPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData, postUser bool) []string {

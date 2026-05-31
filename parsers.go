@@ -6,40 +6,43 @@ import (
 	"strings"
 )
 
-var yasmIncludeRe = regexp.MustCompile(`(?i)^\s*%\s*include\s*[<"]([^>"]+)[>"]`)
+var (
+	yasmIncludeRe         = regexp.MustCompile(`(?i)^\s*%\s*include\s*[<"]([^>"]+)[>"]`)
+	swigIncludeRe         = regexp.MustCompile(`^%(include|import|insert\s*\([^\)]*\))\s*([<"].*?[">])`)
+	cythonCimportFromRe   = regexp.MustCompile(`^\s*from\s+([A-Za-z0-9_\.]+)\s+cimport\b`)
+	cythonCimportRe       = regexp.MustCompile(`^\s*cimport\s+(.+)$`)
+	cythonIncludeRe       = regexp.MustCompile(`^\s*include\s+["']([^"']+)["']`)
+	cythonExternFromRe    = regexp.MustCompile(`^\s*cdef\s+extern\s+from\s+(<[^>]+>|"[^"]+"|'[^']+')`)
+	flatbuffersIncludeRe  = regexp.MustCompile(`^\s*include\s+"([^"]+)"\s*;`)
+	macroIndirectIncludes = map[string][]macroIndirectInclude{
+		"contrib/libs/openssl/crypto/rand/rand_egd.c": {{target: "unistd.h", kind: includeSystem}},
+		"contrib/libs/openssl/crypto/uid.c":           {{target: "unistd.h", kind: includeSystem}},
 
-var swigIncludeRe = regexp.MustCompile(`^%(include|import|insert\s*\([^\)]*\))\s*([<"].*?[">])`)
-var cythonCimportFromRe = regexp.MustCompile(`^\s*from\s+([A-Za-z0-9_\.]+)\s+cimport\b`)
-var cythonCimportRe = regexp.MustCompile(`^\s*cimport\s+(.+)$`)
-var cythonIncludeRe = regexp.MustCompile(`^\s*include\s+["']([^"']+)["']`)
-var cythonExternFromRe = regexp.MustCompile(`^\s*cdef\s+extern\s+from\s+(<[^>]+>|"[^"]+"|'[^']+')`)
-var flatbuffersIncludeRe = regexp.MustCompile(`^\s*include\s+"([^"]+)"\s*;`)
+		"contrib/libs/pugixml/pugixml.hpp": {{target: "pugixml.cpp", kind: includeQuoted}},
+	}
+	// macroIncludeDrops suppresses specific parsed include targets per-file, for
+	// directives the C-style parser unavoidably emits but which never resolve and
+	// upstream does NOT add as inputs either. These are pure -k noise:
+	//   - BACKTRACE_HEADER in llvm Signals.inc is a macro expansion
+	//     (build/sysincl/macro.yml maps it to $U/execinfo.h, but the $U placeholder
+	//     is not substituted in our resolver; the bareword include cannot resolve).
+	//   - <types.h> in Poco SocketDefs.h sits inside the VxWorks/VMS branch — a
+	//     platform we do not target and that has no header to find.
+	//
+	// In both cases the byte-exact closure already matches ref without these
+	// directives; dropping them keeps the warning gate clean.
+	macroIncludeDrops = map[string][]string{
+		"contrib/libs/llvm16/lib/Support/Unix/Signals.inc":    {"BACKTRACE_HEADER"},
+		"contrib/libs/poco/Net/include/Poco/Net/SocketDefs.h": {"types.h"},
+	}
+	includeDirectiveParsers = newIncludeDirectiveParserRegistry()
+	blockCommentOpen        = []byte("/*")
+	blockCommentClose       = []byte("*/")
+)
 
 type macroIndirectInclude struct {
 	target string
 	kind   includeKind
-}
-
-var macroIndirectIncludes = map[string][]macroIndirectInclude{
-	"contrib/libs/openssl/crypto/rand/rand_egd.c": {{target: "unistd.h", kind: includeSystem}},
-	"contrib/libs/openssl/crypto/uid.c":           {{target: "unistd.h", kind: includeSystem}},
-
-	"contrib/libs/pugixml/pugixml.hpp": {{target: "pugixml.cpp", kind: includeQuoted}},
-}
-
-// macroIncludeDrops suppresses specific parsed include targets per-file, for
-// directives the C-style parser unavoidably emits but which never resolve and
-// upstream does NOT add as inputs either. These are pure -k noise:
-//   - BACKTRACE_HEADER in llvm Signals.inc is a macro expansion
-//     (build/sysincl/macro.yml maps it to $U/execinfo.h, but the $U placeholder
-//     is not substituted in our resolver; the bareword include cannot resolve).
-//   - <types.h> in Poco SocketDefs.h sits inside the VxWorks/VMS branch — a
-//     platform we do not target and that has no header to find.
-// In both cases the byte-exact closure already matches ref without these
-// directives; dropping them keeps the warning gate clean.
-var macroIncludeDrops = map[string][]string{
-	"contrib/libs/llvm16/lib/Support/Unix/Signals.inc":    {"BACKTRACE_HEADER"},
-	"contrib/libs/poco/Net/include/Poco/Net/SocketDefs.h": {"types.h"},
 }
 
 func filterDroppedDirectives(out []includeDirective, drops []string) []includeDirective {
@@ -83,8 +86,6 @@ type ragelIncludeDirectiveParser struct{}
 type swigIncludeDirectiveParser struct{}
 type yasmIncludeDirectiveParser struct{}
 type emptyIncludeDirectiveParser struct{}
-
-var includeDirectiveParsers = newIncludeDirectiveParserRegistry()
 
 func newIncludeDirectiveParserRegistry() includeDirectiveParserRegistry {
 	cLike := cIncludeDirectiveParser{}
@@ -522,11 +523,6 @@ func leadingBlockCoversHi(data []byte, from, hi int) (int, bool) {
 
 	return 0, false
 }
-
-var (
-	blockCommentOpen  = []byte("/*")
-	blockCommentClose = []byte("*/")
-)
 
 func skipWSAndBlockComments(data []byte, i int) int {
 	n := len(data)
@@ -1044,4 +1040,3 @@ func isIdentByte(b byte) bool {
 func identByteAt(data []byte, i int) bool {
 	return i < len(data) && isIdentByte(data[i])
 }
-

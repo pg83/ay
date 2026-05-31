@@ -19,27 +19,64 @@ import (
 	"github.com/jon-codes/getopt"
 )
 
+var (
+	targetStatsExtraFlagAllowlist = map[string]struct{}{
+		"ALLOCATOR": {},
+		"FAKEID":    {},
+		"MUSL":      {},
+		"RACE":      {},
+	}
+	targetStatsBaseFlagAllowlist = map[string]struct{}{
+		"ALLOCATOR":      {},
+		"FAKEID":         {},
+		"MUSL":           {},
+		"RACE":           {},
+		"SANDBOXING":     {},
+		"SANITIZER_TYPE": {},
+		"USE_AFL":        {},
+		"USE_LTO":        {},
+		"USE_THINLTO":    {},
+	}
+	fatalOnce sync.Once
+	ansiCols  = map[string]string{
+		"red":           ansiESC + "[31m",
+		"green":         ansiESC + "[32m",
+		"yellow":        ansiESC + "[33m",
+		"blue":          ansiESC + "[34m",
+		"magenta":       ansiESC + "[35m",
+		"cyan":          ansiESC + "[36m",
+		"white":         ansiESC + "[37m",
+		"light-red":     ansiESC + "[91m",
+		"light-green":   ansiESC + "[92m",
+		"light-yellow":  ansiESC + "[93m",
+		"light-blue":    ansiESC + "[94m",
+		"light-magenta": ansiESC + "[95m",
+		"light-cyan":    ansiESC + "[96m",
+		"light-white":   ansiESC + "[97m",
+	}
+)
+
 type makeFlags struct {
-	srcRoot     string
-	bldRoot     string
-	outRoot     string
-	installRoot string
-	threads     int
-	keepGoing   bool
-	dumpGraph   bool
-	stats       bool
-	ninja       bool
-	buildType   string
-	targetPlat  string
-	hostPlat    string
-	tflags      map[string]string
-	hflags      map[string]string
-	targets     []string
-	verbose             bool
-	testLevel           int
-	sandboxing          bool
-	dumpIgnoredMacros   bool
-	cmdPrefixes         []cmdPrefix
+	srcRoot           string
+	bldRoot           string
+	outRoot           string
+	installRoot       string
+	threads           int
+	keepGoing         bool
+	dumpGraph         bool
+	stats             bool
+	ninja             bool
+	buildType         string
+	targetPlat        string
+	hostPlat          string
+	tflags            map[string]string
+	hflags            map[string]string
+	targets           []string
+	verbose           bool
+	testLevel         int
+	sandboxing        bool
+	dumpIgnoredMacros bool
+	cmdPrefixes       []cmdPrefix
 }
 
 // cmdPrefix prepends prefix tokens before any command argument whose path ends
@@ -50,25 +87,6 @@ type makeFlags struct {
 type cmdPrefix struct {
 	suffix string
 	prefix []string
-}
-
-var targetStatsExtraFlagAllowlist = map[string]struct{}{
-	"ALLOCATOR": {},
-	"FAKEID":    {},
-	"MUSL":      {},
-	"RACE":      {},
-}
-
-var targetStatsBaseFlagAllowlist = map[string]struct{}{
-	"ALLOCATOR":      {},
-	"FAKEID":         {},
-	"MUSL":           {},
-	"RACE":           {},
-	"SANDBOXING":     {},
-	"SANITIZER_TYPE": {},
-	"USE_AFL":        {},
-	"USE_LTO":        {},
-	"USE_THINLTO":    {},
 }
 
 func buildTargetStatsFlags(platformFlags, cliFlags map[string]string) map[string]string {
@@ -345,8 +363,6 @@ type executor struct {
 type commandResult struct {
 	Stderr string
 }
-
-var fatalOnce sync.Once
 
 type nodeFuture struct {
 	node *Node
@@ -978,23 +994,6 @@ const (
 	ansiESC = "\x1b"
 	ansiRST = ansiESC + "[0m"
 )
-
-var ansiCols = map[string]string{
-	"red":           ansiESC + "[31m",
-	"green":         ansiESC + "[32m",
-	"yellow":        ansiESC + "[33m",
-	"blue":          ansiESC + "[34m",
-	"magenta":       ansiESC + "[35m",
-	"cyan":          ansiESC + "[36m",
-	"white":         ansiESC + "[37m",
-	"light-red":     ansiESC + "[91m",
-	"light-green":   ansiESC + "[92m",
-	"light-yellow":  ansiESC + "[93m",
-	"light-blue":    ansiESC + "[94m",
-	"light-magenta": ansiESC + "[95m",
-	"light-cyan":    ansiESC + "[96m",
-	"light-white":   ansiESC + "[97m",
-}
 
 func color(name, s string) string {
 	c, ok := ansiCols[name]

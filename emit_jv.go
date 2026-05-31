@@ -5,10 +5,11 @@ import (
 	"strings"
 )
 
-var antlr4RuntimeHeaderVFS = Intern("$(S)/contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h")
-var antlr4RuntimeHeaderPath = antlr4RuntimeHeaderVFS.String()
-
-var antlr4FsToolsVFS = Intern("$(S)/build/scripts/fs_tools.py")
+var (
+	antlr4RuntimeHeaderVFS  = Intern("$(S)/contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h")
+	antlr4RuntimeHeaderPath = antlr4RuntimeHeaderVFS.String()
+	antlr4FsToolsVFS        = Intern("$(S)/build/scripts/fs_tools.py")
+)
 
 func emitJVDownstreamCPCC(
 	ctx *genCtx,
