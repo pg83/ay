@@ -907,7 +907,7 @@ func parseMakeFlags(args []string) *makeFlags {
 	}
 
 	if mf.bldRoot == "" {
-		mf.bldRoot = filepath.Join(mf.srcRoot, "obj")
+		mf.bldRoot = filepath.Join(Throw2(os.UserHomeDir()), ".ya", "ay")
 	}
 
 	if mf.outRoot == "" {
@@ -945,7 +945,7 @@ Build the targets in dependency order, executing per-node cmds.
 
 Layout flags:
     --source-root <path>          Source tree root.
-    -B, --build-dir <path>        Build directory (default: <source-root>/obj).
+    -B, --build-dir <path>        Build directory (default: ~/.ya/ay).
     -o, --output <path>           Output staging dir (default: <build-dir>/res).
     -I, --install <path>          Install outputs into this directory (default: source-root).
 
