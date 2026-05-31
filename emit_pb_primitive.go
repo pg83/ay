@@ -17,6 +17,9 @@ var (
 	pbWrapperPath     = pbWrapperVFS.String()
 	pbPyWrapperPath   = pbPyWrapperVFS.String()
 	pbDescriptorProto = pbDescriptorVFS.String()
+	// Path constants hoisted by `ay refac consts`.
+	strLibraryCppResourceRegistryH = internString("library/cpp/resource/registry.h")
+	strLibraryCppResourceResourceH = internString("library/cpp/resource/resource.h")
 )
 
 var protobufRuntimeHeaders = []VFS{
@@ -625,8 +628,8 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 
 	if reg != nil {
 		emits := []includeDirective{
-			{kind: includeQuoted, target: internString("library/cpp/resource/resource.h")},
-			{kind: includeQuoted, target: internString("library/cpp/resource/registry.h")},
+			{kind: includeQuoted, target: strLibraryCppResourceResourceH},
+			{kind: includeQuoted, target: strLibraryCppResourceRegistryH},
 		}
 
 		for _, in := range seed {

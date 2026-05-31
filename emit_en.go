@@ -5,6 +5,22 @@ import (
 	"strings"
 )
 
+var (
+	// Path constants hoisted by `ay refac consts`.
+	strToolsEnumParserEnumParserStdlibDepsH                    = internString("tools/enum_parser/enum_parser/stdlib_deps.h")
+	strToolsEnumParserEnumSerializationRuntimeDispatchMethodsH = internString("tools/enum_parser/enum_serialization_runtime/dispatch_methods.h")
+	strToolsEnumParserEnumSerializationRuntimeEnumRuntimeH     = internString("tools/enum_parser/enum_serialization_runtime/enum_runtime.h")
+	strToolsEnumParserEnumSerializationRuntimeOrderedPairsH    = internString("tools/enum_parser/enum_serialization_runtime/ordered_pairs.h")
+	strUtilGenericMapH                                         = internString("util/generic/map.h")
+	strUtilGenericSerializedEnumH                              = internString("util/generic/serialized_enum.h")
+	strUtilGenericSingletonH                                   = internString("util/generic/singleton.h")
+	strUtilGenericStringH                                      = internString("util/generic/string.h")
+	strUtilGenericTypetraitsH                                  = internString("util/generic/typetraits.h")
+	strUtilGenericVectorH                                      = internString("util/generic/vector.h")
+	strUtilStreamOutputH                                       = internString("util/stream/output.h")
+	strUtilStringCastH                                         = internString("util/string/cast.h")
+)
+
 type enumSrcsResult struct {
 	CCRefs    []NodeRef
 	CCOutputs []VFS
@@ -120,18 +136,18 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		if ctx.scannerTarget.codegen != nil {
 			cppParsed := []includeDirective{
 				{kind: includeQuoted, target: internString(headerInput.Rel())},
-				{kind: includeQuoted, target: internString("tools/enum_parser/enum_parser/stdlib_deps.h")},
-				{kind: includeQuoted, target: internString("tools/enum_parser/enum_serialization_runtime/dispatch_methods.h")},
-				{kind: includeQuoted, target: internString("tools/enum_parser/enum_serialization_runtime/enum_runtime.h")},
-				{kind: includeQuoted, target: internString("tools/enum_parser/enum_serialization_runtime/ordered_pairs.h")},
-				{kind: includeQuoted, target: internString("util/generic/map.h")},
-				{kind: includeQuoted, target: internString("util/generic/serialized_enum.h")},
-				{kind: includeQuoted, target: internString("util/generic/singleton.h")},
-				{kind: includeQuoted, target: internString("util/generic/string.h")},
-				{kind: includeQuoted, target: internString("util/generic/typetraits.h")},
-				{kind: includeQuoted, target: internString("util/generic/vector.h")},
-				{kind: includeQuoted, target: internString("util/stream/output.h")},
-				{kind: includeQuoted, target: internString("util/string/cast.h")},
+				{kind: includeQuoted, target: strToolsEnumParserEnumParserStdlibDepsH},
+				{kind: includeQuoted, target: strToolsEnumParserEnumSerializationRuntimeDispatchMethodsH},
+				{kind: includeQuoted, target: strToolsEnumParserEnumSerializationRuntimeEnumRuntimeH},
+				{kind: includeQuoted, target: strToolsEnumParserEnumSerializationRuntimeOrderedPairsH},
+				{kind: includeQuoted, target: strUtilGenericMapH},
+				{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
+				{kind: includeQuoted, target: strUtilGenericSingletonH},
+				{kind: includeQuoted, target: strUtilGenericStringH},
+				{kind: includeQuoted, target: strUtilGenericTypetraitsH},
+				{kind: includeQuoted, target: strUtilGenericVectorH},
+				{kind: includeQuoted, target: strUtilStreamOutputH},
+				{kind: includeQuoted, target: strUtilStringCastH},
 			}
 			sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.String() < cppParsed[j].target.String() })
 			registerGeneratedParsedOutput(ctx, instance, "EN", serializedCPPPath, cppParsed)
@@ -140,7 +156,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 				hParsed := []includeDirective{
 					{kind: includeQuoted, target: internString(headerInput.Rel())},
 					{kind: includeQuoted, target: internString(serializedCPPPath.Rel())},
-					{kind: includeQuoted, target: internString("util/generic/serialized_enum.h")},
+					{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
 				}
 				sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.String() < hParsed[j].target.String() })
 				registerGeneratedParsedOutput(ctx, instance, "EN", serializedHPath, hParsed)

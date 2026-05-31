@@ -221,8 +221,8 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 
 func rawAuxInputClosure(ctx *genCtx, instance ModuleInstance, aux VFS, seed []VFS, in ModuleCCInputs) []VFS {
 	emits := []includeDirective{
-		{kind: includeQuoted, target: internString("library/cpp/resource/resource.h")},
-		{kind: includeQuoted, target: internString("library/cpp/resource/registry.h")},
+		{kind: includeQuoted, target: strLibraryCppResourceResourceH},
+		{kind: includeQuoted, target: strLibraryCppResourceRegistryH},
 	}
 
 	for _, v := range seed {
