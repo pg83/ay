@@ -48,21 +48,17 @@ func dumpGraphIncomingRefs(nodes []*Node) []int {
 
 	return incoming
 }
-
 func dumpGraphResultRefs(results []int64) map[int64]struct{} {
 	if len(results) == 0 {
 		return nil
 	}
-
 	out := make(map[int64]struct{}, len(results))
-
 	for _, refID := range results {
 		out[refID] = struct{}{}
 	}
 
 	return out
 }
-
 func dumpGraphDropNodeRefs(nodes []*Node, incoming []int, results map[int64]struct{}) map[int64]struct{} {
 	drop := make(map[int64]struct{})
 	queue := make([]int, 0, len(nodes))
@@ -143,7 +139,6 @@ func isDumpGraphStandaloneLLVMPRNode(node *Node, nodeID int, incoming []int) boo
 
 	return true
 }
-
 func dumpGraphDropNodeDeps(refs []NodeRef, drop map[int64]struct{}, incoming []int, maybeDrop func(int)) {
 	for _, ref := range refs {
 		if _, ok := drop[ref.id]; ok {
@@ -169,7 +164,6 @@ func dumpGraphNodeKind(node *Node) string {
 	kind, _ := node.KV["p"].(string)
 	return kind
 }
-
 func pruneDumpGraphEmitterInPlace(e *BufferedEmitter, drop map[int64]struct{}, order []int) []int {
 	origNodes := e.nodes
 	keptNodes := make([]*Node, 0, len(origNodes)-len(drop))
@@ -207,7 +201,6 @@ func pruneDumpGraphEmitterInPlace(e *BufferedEmitter, drop map[int64]struct{}, o
 
 	return remapDumpGraphOrder(order, drop, newIDs)
 }
-
 func trimDumpGraphNodeRefList(in []NodeRef, drop map[int64]struct{}, newIDs []int64) []NodeRef {
 	if len(in) == 0 {
 		return nil
@@ -225,7 +218,6 @@ func trimDumpGraphNodeRefList(in []NodeRef, drop map[int64]struct{}, newIDs []in
 		if newID < 0 {
 			ThrowFmt("finalizeDumpGraph: kept ref id=%d missing after prune", ref.id)
 		}
-
 		out = append(out, NodeRef{id: newID})
 	}
 
@@ -235,7 +227,6 @@ func trimDumpGraphNodeRefList(in []NodeRef, drop map[int64]struct{}, newIDs []in
 
 	return out
 }
-
 func trimDumpGraphForeignDepRefs(in map[string][]NodeRef, drop map[int64]struct{}, newIDs []int64) map[string][]NodeRef {
 	if len(in) == 0 {
 		return nil
@@ -279,7 +270,6 @@ func trimDumpGraphResultRefs(in []int64, newIDs []int64) []int64 {
 
 	return out
 }
-
 func remapDumpGraphOrder(order []int, drop map[int64]struct{}, newIDs []int64) []int {
 	out := make([]int, 0, len(order)-len(drop))
 

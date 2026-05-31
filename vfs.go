@@ -56,9 +56,7 @@ func internBytes(b []byte) STR {
 
 	return id
 }
-
 func (id STR) String() string { return internTable.strs[id] }
-
 func interned(s string) *STR {
 	if id, ok := internTable.ids[s]; ok {
 		return &id
@@ -66,11 +64,8 @@ func interned(s string) *STR {
 
 	return nil
 }
-
 func internBound() uint32 { return uint32(len(internTable.strs)) }
-
-func vfsBound() uint32 { return uint32(len(internTable.strs)) << 1 }
-
+func vfsBound() uint32    { return uint32(len(internTable.strs)) << 1 }
 func Intern(full string) VFS {
 	root := VFSRootSource
 
@@ -80,13 +75,9 @@ func Intern(full string) VFS {
 
 	return VFS(uint32(internString(full))<<1 | uint32(root))
 }
-
 func (v VFS) strID() uint32 { return uint32(v) >> 1 }
-
 func Source(rel string) VFS { return Intern("$(S)/" + rel) }
-
-func Build(rel string) VFS { return Intern("$(B)/" + rel) }
-
+func Build(rel string) VFS  { return Intern("$(B)/" + rel) }
 func (v VFS) Rel() string {
 	return internTable.strs[v.strID()][vfsPrefixLen:]
 }
@@ -98,11 +89,8 @@ func (v VFS) Root() VFSRoot {
 
 	return VFSRootSource
 }
-
 func (v VFS) IsSource() bool { return v.Root() == VFSRootSource }
-
-func (v VFS) IsBuild() bool { return v.Root() == VFSRootBuild }
-
+func (v VFS) IsBuild() bool  { return v.Root() == VFSRootBuild }
 func (v VFS) String() string {
 	return internTable.strs[v.strID()]
 }

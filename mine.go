@@ -62,7 +62,6 @@ func commonFlags(tools map[string]string) map[string]string {
 	}
 
 	for k, v := range tools {
-
 		key := strings.ReplaceAll(strings.ToUpper(k), "+", "_pl")
 		res[key+"_TOOL"] = canonicalizeResourcePatternRefs(v)
 		res[key+"_TOOL_VENDOR"] = canonicalizeResourcePatternRefs(v)
@@ -193,7 +192,6 @@ func graphConfForToolchainFlags(fs FS, flags map[string]string) *graphConf {
 		Pattern:  "VCS",
 		Resource: "base64:vcs.json:e30=",
 	})
-
 	return &graphConf{Resources: resources}
 }
 
@@ -313,7 +311,6 @@ func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
 
 func readYaConfSections(fs FS, wantSection string, rels ...string) map[string]string {
 	out := map[string]string{}
-
 	for _, rel := range rels {
 		if !fs.IsFile(rel) {
 			continue
@@ -377,9 +374,7 @@ func readHostResourcesBundle(fs FS, pattern, rel string, upperPlatform bool) gra
 		"linux-aarch64",
 		"win32-x86_64",
 	}
-
 	res := graphConfResource{Pattern: pattern}
-
 	for _, key := range order {
 		item, ok := data.ByPlatform[key]
 

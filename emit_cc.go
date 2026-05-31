@@ -75,7 +75,6 @@ type ModuleCCInputs struct {
 }
 
 func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS, []VFS) {
-
 	suffix := ".o"
 
 	if instance.Platform.PIC {
@@ -170,7 +169,6 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Tags: instance.Platform.Tags,
 		TargetProperties: func() map[string]string {
 			tp := map[string]string{"module_dir": instance.Path}
-
 			if in.ModuleTag != nil {
 				tp["module_tag"] = *in.ModuleTag
 			}
@@ -178,7 +176,6 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 			return tp
 		}(),
 		Platform: string(instance.Platform.Target),
-
 		Requirements: map[string]interface{}{
 			"cpu":     float64(1),
 			"network": "restricted",
@@ -203,7 +200,6 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	canon := filepath.ToSlash(filepath.Clean(instance.Path + "/" + srcRel))
 
 	if srcVFS.IsSource() && srcVFS.Rel() != canon && in.SrcDir != nil {
-
 		outputRel := composeSrcDirOutputRel(instance.Path, *in.SrcDir, srcRel)
 		out = Build(instance.Path + "/" + outputRel + suffix)
 		return out, input
@@ -234,7 +230,6 @@ func composeSrcDirOutputRel(instancePath, srcDir, srcRel string) string {
 	rel, err := filepath.Rel(instancePath, target)
 
 	if err != nil {
-
 		return "_/" + srcRel
 	}
 
@@ -312,10 +307,8 @@ func appendCxxStdAndOwn(cmdArgs []string, isCxx bool, noCompilerWarnings bool, i
 
 		if injectCxxWarningBundle {
 			if noCompilerWarnings {
-
 				cmdArgs = append(cmdArgs, noWarningsBundle...)
 			} else {
-
 				cmdArgs = append(cmdArgs, cxxStandardWarnings...)
 			}
 		}
@@ -372,13 +365,11 @@ func composeOwnAndPeerGlobalBucket(in ModuleCCInputs, isCxx bool) []string {
 		len(in.OwnCXXFlagsGlobal)+len(in.PeerCXXFlagsGlobal)+
 			len(in.OwnCOnlyFlagsGlobal)+len(in.PeerCOnlyFlagsGlobal))
 	seen := make(map[string]struct{}, cap(out))
-
 	addEach := func(src []string) {
 		for _, x := range src {
 			if _, dup := seen[x]; dup {
 				continue
 			}
-
 			seen[x] = struct{}{}
 			out = append(out, x)
 		}
@@ -486,7 +477,6 @@ func composeTargetCC(a ccComposeArgs) []string {
 		cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
 		cmdArgs = append(cmdArgs, composePostCatboostBucket(a.OwnGlobalBucket)...)
 	} else {
-
 		cmdArgs = append(cmdArgs, a.PeerExtras...)
 	}
 

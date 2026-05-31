@@ -1,7 +1,6 @@
 package main
 
 func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
-
 	return emitCodegenDownstreamCC(ctx, instance, out, nil, []NodeRef{prRef}, in)
 }
 
@@ -19,12 +18,10 @@ func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string
 
 	includeInputs := make([]VFS, 0, len(depPrefix)+len(closure))
 	seen := make(map[VFS]struct{}, len(depPrefix)+len(closure))
-
 	for _, p := range depPrefix {
 		if _, dup := seen[p]; dup {
 			continue
 		}
-
 		seen[p] = struct{}{}
 		includeInputs = append(includeInputs, p)
 	}
@@ -33,7 +30,6 @@ func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string
 		if _, dup := seen[p]; dup {
 			continue
 		}
-
 		seen[p] = struct{}{}
 		includeInputs = append(includeInputs, p)
 	}

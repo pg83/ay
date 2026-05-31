@@ -59,7 +59,6 @@ func EmitLD(
 	scripts scriptDeps,
 	emit Emitter,
 ) NodeRef {
-
 	if len(ccRefs) != len(ccPaths) {
 		ThrowFmt("EmitLD: ccRefs/ccPaths length mismatch (%d vs %d)", len(ccRefs), len(ccPaths))
 	}
@@ -144,9 +143,7 @@ func EmitLD(
 	depRefs = append(depRefs, peerLDRefs...)
 	depRefs = append(depRefs, dynamicRefs...)
 	depRefs = append(depRefs, objcopyRefs...)
-
 	outputs := []VFS{outputVFS}
-
 	for _, p := range dynamicPaths {
 		outputs = append(outputs, Build(binaryDir+"/"+lastPathComponent(p.Rel())))
 	}
@@ -277,7 +274,6 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 }
 
 func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []string, exportsScript *string, wantsStrip bool) []string {
-
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	argCap += 2 + len(pluginPaths)
@@ -444,16 +440,13 @@ func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) [
 }
 
 func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts scriptDeps) []VFS {
-
 	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(wholeArchivePaths)+len(dynamicPaths)+len(ccPaths)+len(objcopyPaths))
 	buildRootSeen := make(map[VFS]struct{}, cap(buildRootBlock))
-
 	appendBuildRoot := func(paths []VFS) {
 		for _, p := range paths {
 			if _, dup := buildRootSeen[p]; dup {
 				continue
 			}
-
 			buildRootSeen[p] = struct{}{}
 			buildRootBlock = append(buildRootBlock, p)
 		}

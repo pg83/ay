@@ -193,7 +193,6 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		ccIn.IncludeInputs = walkClosureWithSourceRel(ctx, instance, generatedVFS, srcVFS.Rel(), scanIn)
 
 		ccRef, ccOut, _ := EmitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
-
 		out = append(out, &sourceEmit{Ref: ccRef, OutPath: ccOut})
 	}
 
@@ -348,7 +347,6 @@ func dedupVFS(in []VFS) []VFS {
 		if _, ok := seen[p]; ok {
 			continue
 		}
-
 		seen[p] = struct{}{}
 		out = append(out, p)
 	}

@@ -33,7 +33,6 @@ var htmlSafeNoEscape = func() [128]bool {
 }()
 
 func writeGraphIndented(w io.Writer, g *Graph) {
-
 	buf := make([]byte, 0, 1<<20)
 
 	buf = append(buf, '{', '\n')
@@ -297,7 +296,6 @@ func appendVFSSlice(buf []byte, vs []VFS, pad string) []byte {
 
 	return buf
 }
-
 func appendGraphConf(buf []byte, conf map[string]interface{}, pad string) []byte {
 	if len(conf) == 0 {
 		return append(buf, '{', '}')
@@ -531,7 +529,6 @@ func appendStringSliceMap(buf []byte, m map[string][]string, pad string) []byte 
 
 	return buf
 }
-
 func appendInterfaceMap(buf []byte, m map[string]interface{}, pad string) []byte {
 	if len(m) == 0 {
 		return append(buf, '{', '}')
@@ -594,7 +591,6 @@ func appendStringEscapedBody(buf []byte, s string) []byte {
 	start := 0
 
 	for i := 0; i < len(s); {
-
 		if b := s[i]; b < utf8.RuneSelf {
 			if htmlSafeNoEscape[b] {
 				i++

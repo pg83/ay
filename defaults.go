@@ -305,12 +305,10 @@ func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, d 
 	var peers []string
 
 	if !postUser {
-
 		peers = append(peers, "build/cow/on")
 
 		peers = appendImplicitPeers(peers, programAllocatorDefaults, rc)
 	} else {
-
 		peers = appendImplicitPeers(peers, programImplicitPeers, rc)
 
 		if env.Bool("ARCH_X86_64") && !flags.NoUtil && allocatorName != "FAKE" {

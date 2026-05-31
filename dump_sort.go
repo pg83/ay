@@ -38,9 +38,7 @@ func cmdDumpSort(args []string) int {
 		in = os.Stdin
 	} else {
 		f := Throw2(os.Open(inPath))
-
 		defer func() { Throw(f.Close()) }()
-
 		in = f
 	}
 
@@ -50,9 +48,7 @@ func cmdDumpSort(args []string) int {
 		out = os.Stdout
 	} else {
 		f := Throw2(os.Create(outPath))
-
 		defer func() { Throw(f.Close()) }()
-
 		out = f
 	}
 
@@ -65,12 +61,9 @@ func cmdDumpSort(args []string) int {
 	tmpDir, err := os.MkdirTemp(tmpBase, "aysort-")
 
 	if err != nil {
-
 		tmpDir = Throw2(os.MkdirTemp(".", "aysort-"))
 	}
-
 	defer func() { Throw(os.RemoveAll(tmpDir)) }()
-
 	chunks := spillChunks(in, chunkBytes, tmpDir)
 	mergeChunks(chunks, out)
 
@@ -153,9 +146,7 @@ func (h *mergeHeap) Pop() any {
 
 func mergeChunks(chunks []string, out io.Writer) {
 	bw := bufio.NewWriterSize(out, 1<<20)
-
 	defer func() { Throw(bw.Flush()) }()
-
 	h := &mergeHeap{}
 	heap.Init(h)
 
@@ -172,7 +163,6 @@ func mergeChunks(chunks []string, out io.Writer) {
 			Throw(f.Close())
 			continue
 		}
-
 		heap.Push(h, &mergeItem{line: line, reader: r, closer: f})
 	}
 

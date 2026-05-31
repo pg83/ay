@@ -24,7 +24,6 @@ func rawParsedIncludeSet(bucket parsedIncludeBucket, directives ...includeDirect
 	}
 
 	out := append([]includeDirective(nil), directives...)
-
 	return parsedIncludeSet{bucket: out}
 }
 
@@ -79,8 +78,7 @@ type includeParserManager struct {
 
 	addinclIndex   map[STR][]VFS
 	addinclIndexed map[VFS]struct{}
-
-	buildParsed map[string][]includeDirective
+	buildParsed    map[string][]includeDirective
 
 	readBuf []byte
 }
@@ -150,7 +148,6 @@ func (pm *includeParserManager) withCythonSibling(rel string, set parsedIncludeS
 	if !pm.fs.IsFile(sibling) {
 		return set
 	}
-
 	d := includeDirective{kind: includeQuoted, target: internString(path.Base(sibling))}
 	local := set.bucket(parsedIncludesLocal)
 	merged := make([]includeDirective, 0, 1+len(local))
@@ -213,9 +210,7 @@ func (pm *includeParserManager) indexAddincl(a VFS) {
 	if _, done := pm.addinclIndexed[a]; done {
 		return
 	}
-
 	pm.addinclIndexed[a] = struct{}{}
-
 	base := a.Rel()
 	pm.fs.Walk(base, func(rel string, isDir bool) {
 		if isDir {

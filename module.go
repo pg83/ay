@@ -76,10 +76,8 @@ func NewFlagSet(extra ...string) FlagSet {
 	if len(extra) == 0 {
 		return FlagSet{}
 	}
-
 	e := append([]string{}, extra...)
 	sort.Strings(e)
-
 	return FlagSet{Extra: strings.Join(e, "\n")}
 }
 

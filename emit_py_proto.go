@@ -106,7 +106,6 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	protoRoot := protoPythonOutputRoot(instance, d)
 
 	if d.grpc {
-
 		protoRoot = ""
 	}
 
@@ -114,10 +113,8 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	pyOut := Build(pyBase)
 	pyiOut := Build(protoBase + "__intpy3___pb2.pyi")
 	var grpcPyOut VFS
-
 	outputs := []VFS{pyOut}
 	suffixes := []string{"_pb2.py"}
-
 	if d.grpc {
 		grpcPyOut = Build(protoBase + "__intpy3___pb2_grpc.py")
 		outputs = append(outputs, grpcPyOut)
@@ -190,19 +187,15 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 
 	toolRefs := make([]NodeRef, 0, 3)
-
 	if protocLDRef != (NodeRef{}) {
 		toolRefs = append(toolRefs, protocLDRef)
 	}
-
 	if grpcPyRef != (NodeRef{}) {
 		toolRefs = append(toolRefs, grpcPyRef)
 	}
-
 	if !d.noMypy && mypyRef != (NodeRef{}) {
 		toolRefs = append(toolRefs, mypyRef)
 	}
-
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, Source(protoRelPath)}
 	transitive, hasDescriptor := protoTransitiveImports(ctx.parsers, ctx.fs, protoRelPath, nil)
 
@@ -219,7 +212,6 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	if !d.noMypy {
 		inputs = append(inputs, mypyBinary)
 	}
-
 	pbKV := map[string]interface{}{"p": "PB", "pc": "yellow"}
 	protoBaseName := filepath.Base(protoBase)
 
@@ -245,9 +237,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 
 	pyPBRef := ctx.emit.Emit(bindNodePlatform(pyPBNode, instance.Platform))
-
 	pyYapyc := []VFS{pyOut}
-
 	if d.grpc {
 		pyYapyc = append(pyYapyc, grpcPyOut)
 	}
@@ -281,9 +271,7 @@ type generatedPyProtoYapycResult struct {
 func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs []VFS, pyPBRef NodeRef, sourceInputs []VFS) *generatedPyProtoYapycResult {
 	py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin := py3ccToolRefs(ctx, instance)
 	suffix := protoPySuffix(instance.Path)
-
 	res := &generatedPyProtoYapycResult{}
-
 	for i, pyOut := range pyOutputs {
 		out := Build(pyOut.Rel() + "." + suffix + ".yapyc3")
 		cmdArgs := []string{
@@ -294,22 +282,17 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			pyOut.String(),
 			out.String(),
 		}
-
 		deps := []NodeRef{pyPBRef}
 		var toolRefs []NodeRef
-
 		if py3ccRef != (NodeRef{}) {
 			deps = append(deps, py3ccRef)
 			toolRefs = append(toolRefs, py3ccRef)
 		}
-
 		if py3ccSlowRef != (NodeRef{}) {
 			deps = append(deps, py3ccSlowRef)
 			toolRefs = append(toolRefs, py3ccSlowRef)
 		}
-
 		nodeInputs := append([]VFS{py3ccBinary, py3ccSlowBin, pyOut}, sourceInputs...)
-
 		if i > 0 {
 			nodeInputs = append(nodeInputs, pyOutputs[0])
 		}
@@ -370,7 +353,6 @@ func pyProtoAuxEntriesForSource(instance ModuleInstance, d *moduleData, src stri
 func pyProtoSourceInputs(inputs []VFS) []VFS {
 	out := make([]VFS, 0, len(inputs))
 	seen := map[VFS]struct{}{}
-
 	for _, input := range inputs {
 		if !input.IsSource() {
 			continue
@@ -379,7 +361,6 @@ func pyProtoSourceInputs(inputs []VFS) []VFS {
 		if _, ok := seen[input]; ok {
 			continue
 		}
-
 		seen[input] = struct{}{}
 		out = append(out, input)
 	}
@@ -410,12 +391,10 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 	cmdLen := 0
 	inputSeen := map[VFS]struct{}{}
 	depSeen := map[NodeRef]struct{}{}
-
 	addInput := func(v VFS) {
 		if _, ok := inputSeen[v]; ok {
 			return
 		}
-
 		inputSeen[v] = struct{}{}
 		cur.inputs = append(cur.inputs, v)
 	}
@@ -427,7 +406,6 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		if _, ok := depSeen[ref]; ok {
 			return
 		}
-
 		depSeen[ref] = struct{}{}
 		cur.deps = append(cur.deps, ref)
 	}
@@ -487,9 +465,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 	if cppSibling != nil {
 		peerAddIncl = mergeDedupVFS(cppSibling.AddInclGlobal, peerContribs.addIncl)
 	}
-
 	res := &pyProtoAuxChunksResult{}
-
 	for _, ch := range chunks {
 		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, "PY3_PROTO") + "_raw.auxcpp")
 		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, aux, ch.inputs, peerAddIncl)
@@ -497,11 +473,9 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		cmdArgs = append(cmdArgs, ch.cmdArgs...)
 
 		deps := append([]NodeRef(nil), ch.deps...)
-
 		if rescompilerRef != (NodeRef{}) {
 			deps = append(deps, rescompilerRef)
 		}
-
 		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 		inputs := append([]VFS(nil), ch.inputs...)
 		inputs = append(inputs, rescompilerBinVFS)

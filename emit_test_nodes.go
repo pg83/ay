@@ -47,7 +47,6 @@ func emitTestRunNodes(ctxEmit Emitter, runEmit Emitter, p *Platform, info testSu
 	clangFormat := buildClangFormatNode(p, info)
 	clangFormat.DepRefs = []NodeRef{ctxRef}
 	clangFormatRef := runEmit.Emit(clangFormat)
-
 	return []NodeRef{unittestRef, clangFormatRef}
 }
 
@@ -320,7 +319,6 @@ func sandboxingNodeTags(p *Platform) []string {
 
 func targetPlatformDescriptor(p *Platform) string {
 	parts := []string{string(p.Target), p.BuildType}
-
 	if p != nil && p.Flags["SANDBOXING"] == "yes" {
 		parts = append(parts, "FAKEID=sandboxing", "SANDBOXING=yes")
 	}
