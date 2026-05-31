@@ -335,7 +335,6 @@ func ParseFile(fs FS, path string) (mf *MakeFile, err error) {
 		abs, absErr := filepath.Abs(path)
 
 		if absErr != nil {
-
 			abs = path
 		}
 
@@ -511,30 +510,25 @@ func (l *lexer) readToken() token {
 	switch {
 	case b == '(':
 		l.advance()
-
 		return token{kind: tokLParen, line: startLine, col: startCol}
 	case b == ')':
 		l.advance()
-
 		return token{kind: tokRParen, line: startLine, col: startCol}
 	case b == '"' || b == '\'':
 		return l.readString(startLine, startCol, b)
 	case b == '<':
 
 		l.advance()
-
 		return token{kind: tokLt, line: startLine, col: startCol}
 	case b == '=' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '=':
 
 		l.advance()
 		l.advance()
-
 		return token{kind: tokEq, line: startLine, col: startCol}
 	case b == '!' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '=':
 
 		l.advance()
 		l.advance()
-
 		return token{kind: tokNotEq, line: startLine, col: startCol}
 	case b >= '0' && b <= '9':
 		return l.readNumberOrWord(startLine, startCol)
@@ -546,7 +540,6 @@ func (l *lexer) readToken() token {
 
 		l.advance()
 		l.throwParse(startLine, startCol, "unexpected character %q", b)
-
 		return token{}
 	}
 }
@@ -565,7 +558,6 @@ func (l *lexer) readString(startLine, startCol int, quote byte) token {
 
 		if b == quote {
 			l.advance()
-
 			return token{kind: tokString, val: string(buf), line: startLine, col: startCol}
 		}
 
@@ -574,7 +566,6 @@ func (l *lexer) readString(startLine, startCol int, quote byte) token {
 		}
 
 		if b == '\\' && l.pos+1 < len(l.src) {
-
 			buf = append(buf, l.advance())
 			buf = append(buf, l.advance())
 
@@ -593,7 +584,6 @@ func (l *lexer) readIdentOrWord(startLine, startCol int) token {
 		b := l.src[l.pos]
 
 		if b == '\\' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '"' {
-
 			pureIdent = false
 			buf = append(buf, l.advance())
 			buf = append(buf, l.advance())
@@ -623,7 +613,6 @@ func (l *lexer) readIdentOrWord(startLine, startCol int) token {
 	if !pureIdent {
 		kind = tokWord
 	}
-
 	return token{kind: kind, val: val, line: startLine, col: startCol}
 }
 
@@ -634,7 +623,6 @@ func (l *lexer) readWord(startLine, startCol int) token {
 		b := l.src[l.pos]
 
 		if b == '\\' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '"' {
-
 			buf = append(buf, l.advance())
 			buf = append(buf, l.advance())
 
@@ -647,7 +635,6 @@ func (l *lexer) readWord(startLine, startCol int) token {
 
 		buf = append(buf, l.advance())
 	}
-
 	return token{kind: tokWord, val: string(buf), line: startLine, col: startCol}
 }
 
@@ -659,14 +646,11 @@ func (l *lexer) readNumberOrWord(startLine, startCol int) token {
 	}
 
 	if l.pos < len(l.src) && isWordByte(l.src[l.pos]) {
-
 		for l.pos < len(l.src) && isWordByte(l.src[l.pos]) {
 			l.advance()
 		}
-
 		return token{kind: tokWord, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
 	}
-
 	return token{kind: tokInt, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
 }
 
@@ -778,7 +762,6 @@ func (p *parser) applyIncludeOnce(nameTok token) {
 	if err != nil {
 		abs = p.name
 	}
-
 	p.includes.once[abs] = struct{}{}
 }
 
@@ -869,7 +852,6 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		if len(args) > 1 {
 			value = strings.Join(args[1:], " ")
 		}
-
 		return &SetStmt{Name: args[0], Value: value, Line: nameTok.line}
 	case "END":
 		return &EndStmt{Line: nameTok.line}
@@ -879,23 +861,18 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		}
 
 		sources := append([]string(nil), args[1:]...)
-
 		return &JoinSrcsStmt{OutputName: args[0], Sources: sources, Line: nameTok.line}
 	case "ADDINCL":
 		globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths := splitAddInclPaths(args)
-
 		return &AddInclStmt{GlobalPaths: globalPaths, OneLevelPaths: oneLevelPaths, OwnPaths: ownPaths, CythonPaths: cythonPaths, AsmPaths: asmPaths, ProtoGlobalPaths: protoGlobalPaths, UserGlobalPaths: userGlobalPaths, AllPaths: allPaths, Line: nameTok.line}
 	case "CFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
-
 		return &CFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: nameTok.line}
 	case "CXXFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
-
 		return &CXXFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: nameTok.line}
 	case "CONLYFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
-
 		return &CONLYFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: nameTok.line}
 	case "LDFLAGS":
 		return &LDFlagsStmt{Flags: append([]string(nil), args...), Line: nameTok.line}
@@ -903,7 +880,6 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "SRCDIR expects exactly 1 argument, got %d", len(args))
 		}
-
 		return &SrcDirStmt{Dir: args[0], Line: nameTok.line}
 	case "GLOBAL_SRCS":
 		return &GlobalSrcsStmt{Sources: append([]string(nil), args...), Line: nameTok.line}
@@ -911,19 +887,16 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
 		}
-
 		return &GenerateEnumSerializationStmt{Header: args[0], Variant: "plain", Line: nameTok.line}
 	case "GENERATE_ENUM_SERIALIZATION_WITH_HEADER":
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION_WITH_HEADER expects exactly 1 argument (header path), got %d", len(args))
 		}
-
 		return &GenerateEnumSerializationStmt{Header: args[0], Variant: "with_header", Line: nameTok.line}
 	case "GENERATE_ENUM_SERIALIZATION_NOUTF":
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION_NOUTF expects exactly 1 argument (header path), got %d", len(args))
 		}
-
 		return &GenerateEnumSerializationStmt{Header: args[0], Variant: "noutf", Line: nameTok.line}
 	case "DEFAULT":
 
@@ -937,21 +910,18 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		if len(args) >= 2 {
 			value = args[1]
 		}
-
 		return &DefaultVarStmt{VarName: varName, Value: value, Line: nameTok.line}
 	case "CONFIGURE_FILE":
 
 		if len(args) != 2 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "CONFIGURE_FILE expects exactly 2 arguments (src dst), got %d", len(args))
 		}
-
 		return &ConfigureFileStmt{Src: args[0], Dst: args[1], Line: nameTok.line}
 	case "CREATE_BUILDINFO_FOR":
 
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "CREATE_BUILDINFO_FOR expects exactly 1 argument, got %d", len(args))
 		}
-
 		return &CreateBuildInfoStmt{OutputHeader: args[0], Line: nameTok.line}
 	case "RUN_ANTLR4_CPP":
 
@@ -990,7 +960,6 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 
 		return parseResource(args, nameTok)
 	case "RESOURCE_FILES":
-
 		return &ResourceFilesStmt{Args: append([]string(nil), args...), Line: nameTok.line}
 	default:
 		return &UnknownStmt{Name: nameTok.val, Args: args, Line: nameTok.line}
@@ -1041,7 +1010,6 @@ func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
 
 func parseRunAntlr4CppSplit(args []string, line int) *RunAntlr4CppSplitStmt {
 	stmt := &RunAntlr4CppSplitStmt{Lexer: args[0], Parser: args[1], Line: line}
-
 	for i := 2; i < len(args); i++ {
 		switch args[i] {
 		case "VISITOR":
@@ -1232,7 +1200,6 @@ func parseResource(args []string, nameTok token) *ResourceStmt {
 	for i := 0; i < len(rest); i += 2 {
 		pairs = append(pairs, ResourcePair{Path: rest[i], Key: rest[i+1]})
 	}
-
 	return &ResourceStmt{Pairs: pairs, Line: nameTok.line}
 }
 
@@ -1288,7 +1255,6 @@ func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cyt
 			}
 
 			if i+2 < len(args) && args[i+1] == "asm" {
-
 				asmPaths = append(asmPaths, args[i+2])
 				i += 2
 
@@ -1360,7 +1326,6 @@ func (p *parser) parseIf(ifTok token) *IfStmt {
 
 	thenBody, endTok := p.parseStmts(termIfBody)
 	node := &IfStmt{Cond: cond, Then: thenBody, Line: ifTok.line}
-
 	switch endTok.val {
 	case "ENDIF":
 		p.consumeEmptyMacroArgs(endTok)
@@ -1383,7 +1348,6 @@ func (p *parser) parseIf(ifTok token) *IfStmt {
 
 		nested := p.parseIf(endTok)
 		node.Else = []Stmt{nested}
-
 		return node
 	}
 
@@ -1502,7 +1466,6 @@ func (c *condParser) parseNot() Expr {
 
 	if ok && t.kind == tokIdent && t.val == "NOT" {
 		c.consume()
-
 		return &ExprNot{Of: c.parseNot()}
 	}
 
@@ -1523,20 +1486,17 @@ func (c *condParser) parseCmp() Expr {
 		c.consume()
 		right := c.parseAtom()
 		c.rejectChainedCmp(t)
-
 		return &ExprEq{Left: left, Right: right}
 	case tokLt:
 		c.consume()
 		right := c.parseAtom()
 		c.rejectChainedCmp(t)
-
 		return &ExprLt{Left: left, Right: right}
 	case tokNotEq:
 
 		c.consume()
 		right := c.parseAtom()
 		c.rejectChainedCmp(t)
-
 		return &ExprNot{Of: &ExprEq{Left: left, Right: right}}
 	}
 
@@ -1578,7 +1538,6 @@ func (c *condParser) parseAtom() Expr {
 
 	if t.kind == tokString {
 		c.consume()
-
 		return &ExprString{Value: t.val}
 	}
 
@@ -1590,18 +1549,15 @@ func (c *condParser) parseAtom() Expr {
 		for i := 0; i < len(t.val); i++ {
 			n = n*10 + int(t.val[i]-'0')
 		}
-
 		return &ExprInt{Value: n}
 	}
 
 	if t.kind == tokIdent || (t.kind == tokWord && isIdentShapedName(t.val)) {
-
 		if t.val == "AND" || t.val == "OR" || t.val == "NOT" {
 			c.parent.lex.throwParse(t.line, t.col, "operator %q used as identifier in IF condition", t.val)
 		}
 
 		c.consume()
-
 		return &ExprIdent{Name: t.val}
 	}
 
@@ -1645,7 +1601,6 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 
 	for _, visited := range chain {
 		if visited == absTarget {
-
 			chainStr := ""
 
 			for i, v := range chain {

@@ -56,7 +56,6 @@ func flatcTransitiveImports(pm *includeParserManager, fs FS, srcRel string) []VF
 	if len(rootImports) == 0 {
 		return nil
 	}
-
 	seen := map[string]struct{}{}
 	scanned := map[string]struct{}{}
 	imports := make([]VFS, 0, len(rootImports))
@@ -66,9 +65,7 @@ func flatcTransitiveImports(pm *includeParserManager, fs FS, srcRel string) []VF
 		if _, done := scanned[rel]; done {
 			return
 		}
-
 		scanned[rel] = struct{}{}
-
 		for _, imp := range flatcDirectImportNames(pm, rel) {
 			resolved := resolveFlatcImportPath(fs, rel, imp)
 
@@ -145,7 +142,6 @@ func flatcCCExtraInputs(ctx *genCtx, includeInputs []VFS) []VFS {
 		if !ctx.fs.IsFile(srcRel) {
 			continue
 		}
-
 		out = appendVFSUnique(out, []VFS{flatcWrapperVFS, Source(srcRel)})
 		out = appendVFSUnique(out, flatcTransitiveImports(ctx.parsers, ctx.fs, srcRel))
 		out = appendVFSUnique(out, []VFS{flatcRuntimeVFS})
@@ -201,13 +197,11 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
-
 	inputs := []VFS{flatcBinary, flatcWrapperVFS, srcVFS}
 	inputs = append(inputs, transitiveImports...)
 
 	var depRefs []NodeRef
 	var foreignDepRefs map[string][]NodeRef
-
 	if flatcLDRef != (NodeRef{}) {
 		depRefs = []NodeRef{flatcLDRef}
 		foreignDepRefs = map[string][]NodeRef{"tool": []NodeRef{flatcLDRef}}
@@ -289,7 +283,6 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 
 	cppIncludes := make([]includeDirective, 0, 1+len(flatcRes.InducedDeps))
 	cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: internString(headerVFS.Rel())})
-
 	for _, dep := range flatcRes.InducedDeps {
 		cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: internString(dep)})
 	}

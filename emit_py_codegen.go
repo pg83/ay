@@ -67,9 +67,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			"ARCADIA_ROOT_DISTBUILD": "$(S)",
 			"PYTHONHASHSEED":         "0",
 		}
-
 		inputs := []VFS{py3ccBinary, py3ccSlowBin, srcAbs}
-
 		if generatedInputs != nil {
 			inputs = []VFS{srcAbs}
 			inputs = append(inputs, generatedInputs...)
@@ -103,7 +101,6 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			Tags: instance.Platform.Tags,
 			TargetProperties: func() map[string]string {
 				tp := map[string]string{"module_dir": instance.Path}
-
 				if d.moduleStmt.Name == "PY23_LIBRARY" {
 					tp["module_tag"] = "py3"
 				}
@@ -126,12 +123,10 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		}
 
 		var toolRefs []NodeRef
-
 		if py3ccLDRef != (NodeRef{}) {
 			node.DepRefs = append(node.DepRefs, py3ccLDRef)
 			toolRefs = append(toolRefs, py3ccLDRef)
 		}
-
 		if py3ccSlowLDRef != (NodeRef{}) {
 			node.DepRefs = append(node.DepRefs, py3ccSlowLDRef)
 			toolRefs = append(toolRefs, py3ccSlowLDRef)
@@ -162,13 +157,9 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 	if len(d.pyRegister) == 0 {
 		return nil
 	}
-
 	res := &pyRegisterResult{}
-
 	for i, arg := range d.pyRegister {
-
 		priorShort := make(map[string]struct{}, i)
-
 		for j := 0; j < i; j++ {
 			if j < len(d.pyRegisterExplicit) && !d.pyRegisterExplicit[j] {
 				continue
@@ -238,9 +229,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		if len(d.cythonCpp) > 0 {
 			ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		}
-
 		ccIn.IncludeInputs = []VFS{genPy3RegScriptVFS}
-
 		if len(in.CFlags) > 0 {
 			filtered := make([]string, 0, len(in.CFlags))
 

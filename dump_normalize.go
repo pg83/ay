@@ -47,7 +47,6 @@ func cmdDumpNormalize(args []string) int {
 	}
 
 	const workers = 4
-
 	contentHash := map[string][32]byte{}
 	deps := map[string][]string{}
 	fetch := map[string]bool{}
@@ -55,7 +54,6 @@ func cmdDumpNormalize(args []string) int {
 	// node to its output paths so the strip pass can resolve, for an edge u->d,
 	// what d produces and check it against u's inputs. Compact (1-3 strings/node).
 	outputsByUID := map[string][]string{}
-
 	var ldRoots, tsRoots []string
 	type arCand struct {
 		uid  string
@@ -167,7 +165,6 @@ func cmdDumpNormalize(args []string) int {
 			func(node map[string]any) stripResult {
 				uid := getString(node, "uid")
 				inputSet := make(map[string]struct{})
-
 				for _, in := range canonInputs(node, refGraph) {
 					inputSet[in] = struct{}{}
 				}
@@ -184,16 +181,13 @@ func cmdDumpNormalize(args []string) int {
 						kept = append(kept, d)
 					}
 				}
-
 				return stripResult{uid: uid, deps: kept}
 			},
 			func(r stripResult) {
 				deps[r.uid] = r.deps
 			})
 	}
-
 	roots := []string{}
-
 	if len(ldRoots) > 0 || len(arRoots) > 0 {
 		switch {
 		case len(ldRoots) == 1:
@@ -225,7 +219,6 @@ func cmdDumpNormalize(args []string) int {
 	if len(roots) == 0 {
 		ThrowFmt("dump normalize: no LD/AR/TS root node found for target %q", target)
 	}
-
 	closure := map[string]bool{}
 	queue := append([]string(nil), roots...)
 
@@ -258,9 +251,7 @@ func cmdDumpNormalize(args []string) int {
 		out = os.Stdout
 	} else {
 		f := Throw2(os.Create(outPath))
-
 		defer func() { Throw(f.Close()) }()
-
 		out = f
 	}
 
@@ -411,7 +402,6 @@ func reuidClosure(
 		if !closure[r] || state[r] == done {
 			continue
 		}
-
 		stack := []frame{{uid: r, children: closureChildren(r)}}
 		state[r] = onStack
 

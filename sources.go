@@ -24,7 +24,6 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	defer scanner.visitedIDPool.Put(visited)
 	order := make([]uint32, 0, 1024)
 	srcAbsSet := make(map[uint32]struct{}, len(sources))
-
 	for _, src := range sources {
 		srcRelOnDisk := srcInstance.Path + "/" + src
 
@@ -74,7 +73,6 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 
 func appendVFSUnique(dst []VFS, src []VFS) []VFS {
 	seen := make(map[VFS]struct{}, len(dst)+len(src))
-
 	for _, v := range dst {
 		seen[v] = struct{}{}
 	}
@@ -83,7 +81,6 @@ func appendVFSUnique(dst []VFS, src []VFS) []VFS {
 		if _, dup := seen[v]; dup {
 			continue
 		}
-
 		seen[v] = struct{}{}
 		dst = append(dst, v)
 	}

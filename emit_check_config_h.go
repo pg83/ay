@@ -66,7 +66,6 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 		ccIn.IncludeInputs = inputs
 
 		ccRef, ccOut, _ := EmitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
-
 		out = append(out, &sourceEmit{Ref: ccRef, OutPath: ccOut})
 	}
 

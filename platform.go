@@ -123,9 +123,7 @@ func statsTagsForPlatform(p *Platform) []string {
 	if p == nil {
 		return nil
 	}
-
 	tags := []string{string(p.Target), p.BuildType}
-
 	if len(p.StatsFlags) > 0 {
 		formatted := make([]string, 0, len(p.StatsFlags))
 
@@ -314,7 +312,6 @@ func (p *Platform) LinkerSelectionGDBIndexFlags() []string {
 	if !p.UsesResourceLLD() {
 		return nil
 	}
-
 	return []string{"-Wl,--gdb-index"}
 }
 
@@ -337,7 +334,6 @@ func (p *Platform) LinkerSelectionNoPieFlags() []string {
 	if !p.UsesResourceLLD() || p.PIC {
 		return nil
 	}
-
 	return []string{"-Wl,-no-pie"}
 }
 

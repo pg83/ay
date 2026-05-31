@@ -102,7 +102,6 @@ func expandResourceFiles(args []string) []resourceEntry {
 
 			fileKey := "resfs/file/" + computedKey
 			srcKv := "resfs/src/" + fileKey + "=${rootrel;context=TEXT;input=TEXT:\"" + path + "\"}"
-
 			out = append(out, resourceEntry{Path: "-", Key: srcKv})
 			out = append(out, resourceEntry{Path: path, Key: fileKey})
 		}
@@ -219,14 +218,12 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 
 	var out []string
 	seen := map[string]struct{}{}
-
 	for _, m := range yaConfFormulaRE.FindAllSubmatch(raw, -1) {
 		formula := string(m[1])
 
 		if _, dup := seen[formula]; dup {
 			continue
 		}
-
 		seen[formula] = struct{}{}
 		out = append(out, formula)
 	}
@@ -358,9 +355,7 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 	chunks := make([]pySrcChunk, 0)
 	cur := pySrcChunk{}
 	cmdLen := 0
-
 	inpsSeen := make(map[VFS]struct{})
-
 	flush := func() {
 		if cmdLen == 0 {
 			return
@@ -389,7 +384,6 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 	}
 
 	for _, e := range entries {
-
 		cur.kvsHash = append(cur.kvsHash, e.kvHash)
 		cur.kvsCmd = append(cur.kvsCmd, e.kvCmd)
 		addInps(e)

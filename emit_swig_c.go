@@ -105,7 +105,6 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 		ccIn.IncludeInputs = swigFilterExistingSources(ctx.fs, dedupVFS(incl))
 
 		ccRef, ccOut, _ := EmitCC(instance, cOutRel, cOutVFS, ccIn, ctx.host, ctx.emit)
-
 		out = append(out, &sourceEmit{Ref: ccRef, OutPath: ccOut})
 	}
 
@@ -173,9 +172,7 @@ func swigIncludeClosure(ctx *genCtx, src VFS) []VFS {
 		if _, ok := seen[rel]; ok {
 			continue
 		}
-
 		seen[rel] = struct{}{}
-
 		for _, d := range swigSourceParsedBuckets(ctx, rel).bucket(parsedIncludesLocal) {
 			enqueue(d.target.String(), d.kind, rel)
 		}
@@ -207,7 +204,6 @@ func collectSwigInducedIncludes(ctx *genCtx, src VFS, closure []VFS) []includeDi
 			if _, ok := seen[d]; ok {
 				continue
 			}
-
 			seen[d] = struct{}{}
 			out = append(out, d)
 		}
@@ -226,7 +222,6 @@ func swigSearchRoots(fs FS) []string {
 	if fs == nil {
 		return nil
 	}
-
 	roots := []string{swigLibRoot}
 	entries := fs.Listdir(swigLibRoot)
 
@@ -253,7 +248,6 @@ func swigResolveCandidates(fs FS, target, incRel string, roots []string) []strin
 	if fs == nil {
 		return nil
 	}
-
 	seen := map[string]struct{}{}
 	out := make([]string, 0, 1+len(roots))
 	add := func(rel string) {
@@ -266,7 +260,6 @@ func swigResolveCandidates(fs FS, target, incRel string, roots []string) []strin
 		if _, ok := seen[rel]; ok {
 			return
 		}
-
 		seen[rel] = struct{}{}
 		out = append(out, rel)
 	}
@@ -300,7 +293,6 @@ func swigSourceParsedBuckets(ctx *genCtx, rel string) parsedIncludeSet {
 	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
 		data = data[3:]
 	}
-
 	return swigIncludeDirectiveParser{}.Parse(rel, data)
 }
 

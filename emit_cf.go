@@ -12,7 +12,6 @@ var (
 )
 
 func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *moduleData, reg *CodegenRegistry) {
-
 	in := ModuleCCInputs{
 		InclArgs:        ctx.inclArgs,
 		Flags:           d.flags,
@@ -31,7 +30,6 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	cfRef, cfOut := EmitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path, cfModuleTag(d, instance), ctx.emit)
 
 	if reg != nil {
-
 		parsed := []includeDirective{
 			{kind: includeQuoted, target: internString(srcVFS.Rel())},
 			{kind: includeQuoted, target: internString(configureFilePyVFS.Rel())},
@@ -59,14 +57,12 @@ func cfIncludeDirectives(pm *includeParserManager, rel string) []includeDirectiv
 	if len(out) == 0 {
 		return nil
 	}
-
 	sort.Slice(out, func(i, j int) bool { return out[i].target.String() < out[j].target.String() })
 	return out
 }
 
 func buildCFGVars(fs FS, rel string, setVars, defaultVars map[string]string) []string {
 	referenced := map[string]bool{}
-
 	data := fs.Read(rel)
 
 	for _, m := range cfgVarRefRe.FindAllSubmatch(data, -1) {

@@ -83,7 +83,6 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 		dstVFS := copyFileOutputVFS(instance.Path, entry.Dst)
 		parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path, entry)
 		entries = append(entries, entryReg{srcVFS, dstVFS, parsed})
-
 		if scanner != nil {
 			scanner.parsers.RegisterBuildParsedIncludes(dstVFS.Rel(), parsed)
 		}
@@ -102,7 +101,6 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 		srcVFS := entries[i].srcVFS
 		dstVFS := entries[i].dstVFS
 		depRefs := resolveCodegenDepRefsExt(ctx, instance, nil, []VFS{srcVFS})
-
 		var closure []VFS
 
 		// COPY_FILE with WITH_CONTEXT pulls the source file's #include closure;

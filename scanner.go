@@ -303,7 +303,6 @@ func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
 }
 
 func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, onWarn func(Warn)) *IncludeScanner {
-
 	s := &IncludeScanner{
 		sysincl:              sysincl,
 		parsers:              parsers,
@@ -368,7 +367,6 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 
 	s.seenPool.New = func() any {
 		m := make(map[string]struct{}, 8)
-
 		return &m
 	}
 
@@ -486,7 +484,6 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 	out = append(out, VFS(rootID))
 
 	for _, absID := range order {
-
 		if absID == rootID {
 			continue
 		}
@@ -783,7 +780,6 @@ func (s *IncludeScanner) appendClosure(buf []uint32) closureRef {
 	}
 
 	copy(s.subgraphChunks[ci][o:], buf)
-
 	ref := closureRef{off: s.subgraphLen, n: n}
 	s.subgraphLen += n
 
@@ -906,7 +902,6 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	mappings, hasMultiTarget, sysinclClaimed = s.sysinclLookup(includerRel, includerRel, d.target)
 
 	if d.kind == includeQuoted && len(searchOut) > 0 {
-
 		bypass := !hasMultiTarget
 
 		if !bypass && searchOut[0].IsSource() {
@@ -991,7 +986,6 @@ mapLoop:
 }
 
 func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel string, target STR) (paths []VFS, hasMultiTarget, claimed bool) {
-
 	if !s.sysinclMightClaim(target) {
 		return nil, false, false
 	}
@@ -1067,7 +1061,6 @@ func (s *IncludeScanner) sysinclSourceLookup(sourceRel string, target STR) ([]VF
 }
 
 func (s *IncludeScanner) sysinclIncluderLookup(includerRel string, target STR) ([]VFS, bool, bool) {
-
 	classID, active := s.includerClass(includerRel)
 	key := sysinclIncluderKey{
 		class:  classID,
@@ -1132,7 +1125,6 @@ const resolveNoRank = int(^uint(0) >> 1)
 // cheap codegen.LookupSplit pass over a typically tiny set (0–2 per module).
 func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 	idx := &cfgResolveIndex{}
-
 	for _, p := range cfg.OwnAddIncl {
 		if p.Root() == VFSRootSource && p.Rel() == "" {
 			return idx
@@ -1197,7 +1189,6 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		if !ok {
 			return false
 		}
-
 		out.paths = []VFS{Source(rel)}
 		out.found = true
 
@@ -1218,7 +1209,6 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		var info *GeneratedFileInfo
 
 		if prefixRel == "" {
-
 			info = s.codegen.LookupRel(normTarget)
 		} else if pid := interned(prefixRel); pid != nil {
 			info = s.codegen.LookupSplit(*pid, *buildSuffix)
@@ -1227,7 +1217,6 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		if info == nil {
 			return false
 		}
-
 		out.paths = []VFS{info.OutputPath}
 		out.found = true
 
@@ -1257,7 +1246,6 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		idx := sc.resolveIndex
 
 		if idx.indexable {
-
 			// Source side: precomputed FS-existence inverted index keyed by
 			// target → addincl prefixes containing it. Pick the smallest rank.
 			bestRank := resolveNoRank
@@ -1304,7 +1292,6 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 					out.paths = []VFS{Source(joinRel(bestAddincl.Rel(), target))}
 				} else {
 					out.paths = []VFS{bestBuild.OutputPath}
-
 					if sc.cfg.OwnerModuleDir != "" {
 						if _, ok := s.generatedFirstClaim[bestBuild.OutputPath]; !ok {
 							s.generatedFirstClaim[bestBuild.OutputPath] = sc.cfg.OwnerModuleDir
@@ -1390,12 +1377,10 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	s.resolveSearchPathCalls++
 
 	var out []VFS
-
 	seenP := s.seenPool.Get().(*map[string]struct{})
 	seen := *seenP
 
 	addPath := func(rel string) bool {
-
 		rel = normalisePath(rel)
 
 		if _, dup := seen[rel]; dup {
@@ -1405,9 +1390,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		if !s.fileExistsByRel(rel) {
 			return false
 		}
-
 		seen[rel] = struct{}{}
-
 		out = append(out, Source(rel))
 
 		return true
@@ -1431,7 +1414,6 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		if _, dup := seen[dedupKey]; dup {
 			return false
 		}
-
 		seen[dedupKey] = struct{}{}
 		out = append(out, info.OutputPath)
 
@@ -1469,7 +1451,6 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	}
 
 	if d.kind == includeQuoted {
-
 		incDir := pathDir(includerAbs.Rel())
 
 		matched := false
@@ -1518,7 +1499,6 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	}
 
 	if !searchPathFound && len(s.fallbackLocators) > 0 {
-
 		abs := Build(d.target.String())
 
 		for _, loc := range s.fallbackLocators {
@@ -1584,7 +1564,6 @@ func cythonPy2SiblingOverride(includerAbs VFS, d includeDirective) (string, bool
 }
 
 func isSourceLike(absPath VFS) bool {
-
 	rel := absPath.Rel()
 	idx := strings.LastIndexByte(rel, '.')
 

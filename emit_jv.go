@@ -34,7 +34,6 @@ func emitJVDownstreamCPCC(
 		if reg != nil {
 			emits := make([]includeDirective, 0, 1+len(outputIncludes))
 			emits = append(emits, includeDirective{kind: includeQuoted, target: internString(antlr4RuntimeHeaderVFS.Rel())})
-
 			for _, h := range outputIncludes {
 				emits = append(emits, includeDirective{kind: includeQuoted, target: internString(h)})
 			}
@@ -67,11 +66,8 @@ func emitJVDownstreamCPCC(
 		ccIncludeInputs = append(ccIncludeInputs, closure...)
 
 		ccIn.IncludeInputs = ccIncludeInputs
-
 		ccIn.ExtraDepRefs = []NodeRef{jvRef, cpRef}
-
 		ccIn.PerSourceCFlags = []string{"-Wno-unused-variable"}
-
 		ccRef, ccOut, _ := EmitCC(instance, g4CppRel, g4CppPath, ccIn, ctx.host, ctx.emit)
 
 		ccRefs = append(ccRefs, ccRef)

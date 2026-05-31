@@ -33,7 +33,6 @@ func dedupIncludeDirectives(directives []includeDirective) []includeDirective {
 	if len(directives) == 0 {
 		return nil
 	}
-
 	seen := make(map[includeDirective]struct{}, len(directives))
 	out := make([]includeDirective, 0, len(directives))
 
@@ -41,7 +40,6 @@ func dedupIncludeDirectives(directives []includeDirective) []includeDirective {
 		if _, ok := seen[d]; ok {
 			continue
 		}
-
 		seen[d] = struct{}{}
 		out = append(out, d)
 	}
@@ -87,7 +85,6 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	generatedVFS := Build(instance.Path + "/" + generatedRel)
 	srcVFS := Source(instance.Path + "/" + srcRel)
 	headerParsed := []includeDirective{{kind: includeQuoted, target: internString(srcVFS.Rel())}}
-
 	if preprocessHeader {
 		headerParsed = bisonCppHeaderParsed(srcVFS)
 	} else if scanner := ctx.scannerFor(instance); scanner != nil {
@@ -101,9 +98,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 			reg.SetSourceInputs(headerVFS, []VFS{srcVFS})
 		}
 	}
-
 	generatedParsed := []includeDirective{{kind: includeQuoted, target: internString(headerVFS.Rel())}}
-
 	if preprocessHeader {
 		generatedParsed = bisonGeneratedCPPParsed(ctx, instance, srcVFS, headerVFS)
 	}
@@ -133,7 +128,6 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		},
 	}
 	inputs := []VFS{bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS}
-
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
 			CmdArgs: []string{
@@ -181,7 +175,6 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	}
 
 	ccRef, ccOut, _ := EmitCC(instance, generatedRel, generatedVFS, ccIn, ctx.host, ctx.emit)
-
 	return &sourceEmit{Ref: ccRef, OutPath: ccOut}
 }
 

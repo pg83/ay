@@ -25,7 +25,6 @@ var targetStatsExtraFlagAllowlist = map[string]struct{}{
 	"MUSL":      {},
 	"RACE":      {},
 }
-
 var targetStatsBaseFlagAllowlist = map[string]struct{}{
 	"ALLOCATOR":      {},
 	"FAKEID":         {},
@@ -103,7 +102,6 @@ func buildTargetStatsFlags(platformFlags, cliFlags map[string]string) map[string
 
 	return flags
 }
-
 func copyAllowedStatsFlags(dst, src map[string]string, allowlist map[string]struct{}) {
 	for k, v := range src {
 		if v == "" {
@@ -197,7 +195,6 @@ func cmdMake(args []string) int {
 	var targetInternalYaFlags map[string]string
 
 	if mf.testLevel == 0 {
-
 		hostInternalYaFlags = readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
 		targetInternalYaFlags = readOptionalYaConfSection(fs, "build/internal/ya.conf", "flags")
 		copyStatsFlags(hostYaFlags, hostInternalYaFlags)
@@ -285,7 +282,6 @@ func cmdMake(args []string) int {
 	}
 
 	onWarn := func(w Warn) {
-
 		if w.Kind == WarnMissingInclude && !mf.keepGoing {
 			ThrowFmt("%s: %s", w.Kind, w.Message)
 		}
@@ -353,7 +349,6 @@ func cmdMake(args []string) int {
 
 func genStream(fs FS, targets []string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn), testMode bool) []string {
 	all := []string{}
-
 	for _, t := range targets {
 		ec := genStreamOne(fs, t, hostP, targetP, resources, onNode, onWarn, testMode)
 		all = append(all, ec...)
@@ -422,7 +417,6 @@ func (ex *executor) onNode(n *Node) {
 		ex.mu.Unlock()
 		return
 	}
-
 	f := &nodeFuture{node: n}
 	ex.byUID[n.UID] = f
 	ex.mu.Unlock()
@@ -445,7 +439,6 @@ func fatalException(e *Exception) {
 		fmt.Fprintf(os.Stderr, "\x1b[31m%s\x1b[0m\n", e.Error())
 		os.Exit(1)
 	})
-
 	select {}
 }
 
@@ -538,11 +531,8 @@ func (ex *executor) execute(n *Node) {
 			ex.visit(dep)
 		}
 	}
-
 	ex.sema <- struct{}{}
-
 	defer func() { <-ex.sema }()
-
 	tmp := filepath.Join(ex.bldRoot, "tmp", n.UID)
 	_ = forceRemoveAll(tmp)
 	defer forceRemoveAll(tmp)
@@ -590,7 +580,6 @@ func parseCmdPrefix(spec string) cmdPrefix {
 	if !ok || suffix == "" {
 		ThrowFmt("make: --cmd-prefix expects <suffix>=<prefix>, got %q", spec)
 	}
-
 	return cmdPrefix{suffix: suffix, prefix: strings.Fields(prefix)}
 }
 
@@ -861,17 +850,14 @@ func hashDir(h hashWriter, root string) {
 		rel := Throw2(filepath.Rel(root, path))
 		h.Write([]byte(rel))
 		h.Write([]byte{0})
-
 		if d.IsDir() {
 			h.Write([]byte("dir"))
 			h.Write([]byte{0})
-
 			return nil
 		}
 
 		h.Write([]byte("file"))
 		h.Write([]byte{0})
-
 		f := Throw2(os.Open(path))
 		defer f.Close()
 
@@ -886,9 +872,7 @@ type hashWriter interface {
 }
 
 func parseMakeFlags(args []string) *makeFlags {
-
 	state := getopt.NewState(append([]string{"ay-make"}, args...))
-
 	config := getopt.Config{
 		Opts:     getopt.OptStr("GrdktThD:j:B:o:I:"),
 		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,cmd-prefix:"),

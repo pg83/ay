@@ -97,9 +97,7 @@ func (fs *osFS) ContentHash(s STR) uint64 {
 	fs.chReadBuf = fs.ReadInto(rel, fs.chReadBuf)
 	return fs.contentHashes[s]
 }
-
 func (fs *osFS) SourceRoot() string { return fs.sourceRoot }
-
 func (fs *osFS) Listdir(rel string) map[string]bool {
 	rel = cleanRel(rel)
 

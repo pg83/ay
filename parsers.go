@@ -22,8 +22,7 @@ var (
 var macroIndirectIncludes = map[string][]macroIndirectInclude{
 	"contrib/libs/openssl/crypto/rand/rand_egd.c": {{target: "unistd.h", kind: includeSystem}},
 	"contrib/libs/openssl/crypto/uid.c":           {{target: "unistd.h", kind: includeSystem}},
-
-	"contrib/libs/pugixml/pugixml.hpp": {{target: "pugixml.cpp", kind: includeQuoted}},
+	"contrib/libs/pugixml/pugixml.hpp":            {{target: "pugixml.cpp", kind: includeQuoted}},
 }
 
 // macroIncludeDrops suppresses specific parsed include targets per-file, for
@@ -81,7 +80,6 @@ type includeDirectiveParserRegistry struct {
 	defaultParser includeDirectiveParser
 	byExt         map[string]includeDirectiveParser
 }
-
 type cIncludeDirectiveParser struct{}
 type cythonIncludeDirectiveParser struct{}
 type flatbuffersIncludeDirectiveParser struct{}
@@ -98,7 +96,6 @@ func newIncludeDirectiveParserRegistry() includeDirectiveParserRegistry {
 	swigLike := swigIncludeDirectiveParser{}
 	yasm := yasmIncludeDirectiveParser{}
 	empty := emptyIncludeDirectiveParser{}
-
 	r := includeDirectiveParserRegistry{
 		defaultParser: cLike,
 		byExt:         make(map[string]includeDirectiveParser, 48),
@@ -151,7 +148,6 @@ func (r includeDirectiveParserRegistry) hasRegisteredParser(rel string) bool {
 }
 
 func directiveParserExt(rel string) string {
-
 	if strings.HasSuffix(rel, ".in") {
 		rel = strings.TrimSuffix(rel, ".in")
 	}
@@ -188,7 +184,6 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 		if _, dup := seen[d]; dup {
 			return
 		}
-
 		seen[d] = struct{}{}
 		out = append(out, d)
 	}
@@ -269,7 +264,6 @@ func (flatbuffersIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncl
 		if len(m) != 2 {
 			return
 		}
-
 		out = append(out, includeDirective{kind: includeQuoted, target: internString(string(m[1]))})
 	})
 
@@ -286,9 +280,7 @@ func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet
 		if !ok {
 			return
 		}
-
 		local = append(local, includeDirective{kind: kind, target: internString(target)})
-
 		switch {
 		case strings.HasSuffix(target, ".ev"):
 			hcpp = append(hcpp, includeDirective{kind: kind, target: internString(strings.TrimSuffix(target, ".ev") + ".ev.pb.h")})
@@ -338,7 +330,6 @@ func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeS
 		if _, dup := seenNative[target]; dup {
 			return
 		}
-
 		seenNative[target] = struct{}{}
 		native = append(native, includeDirective{kind: includeQuoted, target: internString(target)})
 	})
@@ -424,7 +415,6 @@ func parseCIncludes(data []byte) []includeDirective {
 		}
 
 		if q0 := skipWSAndBlockComments(data, ls); q0 != hi {
-
 			p = nextLineStart(data, q0)
 
 			continue
@@ -488,7 +478,6 @@ func parseDirectiveInline(data []byte, hashPos int) (includeDirective, bool, int
 		if q > start && data[start] != '$' && !hasYIgnoreComment(data, q) && !bytes.ContainsAny(data[start:q], "[]") {
 			return includeDirective{kind: includeQuoted, target: internBytes(data[start:q])}, true, nextLineStart(data, q)
 		}
-
 		return includeDirective{}, false, nextLineStart(data, q)
 	}
 
@@ -516,7 +505,6 @@ func parseDirectiveInline(data []byte, hashPos int) (includeDirective, bool, int
 	if !hasYIgnoreComment(data, q) && !bytes.ContainsAny(targetBytes, "[]") {
 		return includeDirective{kind: kind, target: internBytes(targetBytes)}, true, nextLineStart(data, q)
 	}
-
 	return includeDirective{}, false, nextLineStart(data, q)
 }
 
@@ -646,7 +634,6 @@ func parseYasmIncludes(data []byte) []includeDirective {
 	out := make([]includeDirective, 0, 4)
 
 	eachLine(data, func(line []byte) {
-
 		if bytes.IndexByte(line, '%') < 0 {
 			return
 		}
@@ -666,7 +653,6 @@ func parseYasmIncludes(data []byte) []includeDirective {
 		}
 
 		target := string(line[m[2]:m[3]])
-
 		out = append(out, includeDirective{kind: kind, next: false, target: internString(target)})
 	})
 

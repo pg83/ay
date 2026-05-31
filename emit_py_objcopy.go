@@ -19,7 +19,6 @@ func emitResourceObjcopy(
 	instance ModuleInstance,
 	d *moduleData,
 ) *objcopyEmitResult {
-
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
@@ -28,9 +27,7 @@ func emitResourceObjcopy(
 
 	rescompilerLDRef, _ := ctx.tool("tools/rescompiler/bin")
 	rescompressorLDRef, _ := ctx.tool("tools/rescompressor/bin")
-
 	out := &objcopyEmitResult{}
-
 	if nodeRes := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); nodeRes != nil {
 		out.Refs = append(out.Refs, nodeRes.Ref)
 		out.Outputs = append(out.Outputs, nodeRes.Out)
@@ -47,7 +44,6 @@ func emitResourceObjcopy(
 	}
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 {
-
 		srcRes := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
 
 		if srcRes != nil {
@@ -57,7 +53,6 @@ func emitResourceObjcopy(
 
 		return out
 	}
-
 	bad := []string{"${ARCADIA_BUILD_ROOT}", "${ARCADIA_SOURCE_ROOT}", "conftest.py"}
 	contains := func(s string) bool {
 		for _, b := range bad {
@@ -80,7 +75,6 @@ func emitResourceObjcopy(
 		cmdLen      int
 	}
 	cur := acc{}
-
 	var moduleTag *string
 
 	if d.moduleStmt != nil {
@@ -124,9 +118,7 @@ func emitResourceObjcopy(
 				cmdArgs = append(cmdArgs, expandRootrel(kv, instance.Path))
 			}
 		}
-
 		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
-
 		inputs := []VFS{
 			rescompilerBinVFS,
 			rescompressorBinVFS,
@@ -141,9 +133,7 @@ func emitResourceObjcopy(
 			inputs = append(inputs, objcopyScriptVFS)
 			inputs = append(inputs, cur.extraInputs...)
 		}
-
 		inputSeen := make(map[VFS]struct{}, len(inputs))
-
 		for _, p := range inputs {
 			inputSeen[p] = struct{}{}
 		}
@@ -152,19 +142,14 @@ func emitResourceObjcopy(
 			if _, dup := inputSeen[p]; dup {
 				continue
 			}
-
 			inputSeen[p] = struct{}{}
 			inputs = append(inputs, p)
 		}
-
 		objcopyTags := []string{}
-
 		if len(instance.Platform.Tags) > 0 {
 			objcopyTags = append(objcopyTags, instance.Platform.Tags...)
 		}
-
 		resTargetProps := map[string]string{"module_dir": instance.Path}
-
 		if d.moduleStmt != nil {
 			switch d.moduleStmt.Name {
 			case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
@@ -198,17 +183,13 @@ func emitResourceObjcopy(
 				"ram":     float64(32),
 			},
 		}
-
 		if rescompilerLDRef != (NodeRef{}) {
 			node.DepRefs = append(node.DepRefs, rescompilerLDRef)
 		}
-
 		if rescompressorLDRef != (NodeRef{}) {
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
-
 		depSeen := map[NodeRef]struct{}{}
-
 		for _, ref := range cur.pathDeps {
 			if ref == (NodeRef{}) {
 				continue
@@ -217,7 +198,6 @@ func emitResourceObjcopy(
 			if _, dup := depSeen[ref]; dup {
 				continue
 			}
-
 			depSeen[ref] = struct{}{}
 			node.DepRefs = append(node.DepRefs, ref)
 		}
@@ -225,7 +205,6 @@ func emitResourceObjcopy(
 		r := ctx.emit.Emit(bindNodePlatform(node, instance.Platform))
 		out.Refs = append(out.Refs, r)
 		out.Outputs = append(out.Outputs, outputObj)
-
 		cur = acc{}
 	}
 
@@ -342,7 +321,6 @@ func emitKvOnlyObjcopyNode(
 		"--kvs",
 	}
 	cmdArgs = append(cmdArgs, kvsCmd...)
-
 	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 	inputs := []VFS{
 		rescompilerBinVFS,
@@ -366,9 +344,7 @@ func emitKvOnlyObjcopyNode(
 			targetProps["module_tag"] = "py3_bin"
 		}
 	}
-
 	kvTags := []string{}
-
 	if len(instance.Platform.Tags) > 0 {
 		kvTags = append(kvTags, instance.Platform.Tags...)
 	}
@@ -393,11 +369,9 @@ func emitKvOnlyObjcopyNode(
 			"ram":     float64(32),
 		},
 	}
-
 	if rescompilerLDRef != (NodeRef{}) {
 		node.DepRefs = append(node.DepRefs, rescompilerLDRef)
 	}
-
 	if rescompressorLDRef != (NodeRef{}) {
 		node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 	}
@@ -472,7 +446,6 @@ func emitYaConfJSONObjcopy(
 			"--keys", keyB64,
 			"--kvs", kvCmd,
 		}
-
 		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 		node := &Node{
 			Cmds: []Cmd{
@@ -504,15 +477,12 @@ func emitYaConfJSONObjcopy(
 		if len(instance.Platform.Tags) > 0 {
 			node.Tags = append([]string(nil), instance.Platform.Tags...)
 		}
-
 		if rescompilerLDRef != (NodeRef{}) {
 			node.DepRefs = append(node.DepRefs, rescompilerLDRef)
 		}
-
 		if rescompressorLDRef != (NodeRef{}) {
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
-
 		out = append(out, &objcopyEmit{Ref: ctx.emit.Emit(bindNodePlatform(node, instance.Platform)), Out: outputObj})
 	}
 
@@ -608,7 +578,6 @@ func emitNoCheckImportsObjcopy(
 	key := "py/no_check_imports/" + b32
 	kvHash := key + "=\"" + value + "\""
 	kvCmd := key + "=" + value
-
 	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyBin, []string{kvHash}, []string{kvCmd}, d, rescompilerLDRef, rescompressorLDRef)
 }
 
@@ -652,7 +621,6 @@ func emitPySrcObjcopy(
 
 	moduleTag := resourceLibTagForData(d)
 	res := &objcopyEmitResult{}
-
 	for _, group := range groups {
 		if namespaceEnabled {
 			if nsRes := emitPyNamespaceForGroup(ctx, instance, d, group, rescompilerLDRef, rescompressorLDRef); nsRes != nil {
@@ -702,10 +670,8 @@ func emitPySrcObjcopy(
 			}
 
 			inputs = append(inputs, objcopyScriptVFS)
-
 			env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 			targetProps := map[string]string{"module_dir": instance.Path}
-
 			switch d.moduleStmt.Name {
 			case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
 				targetProps["module_tag"] = "py3"
@@ -717,9 +683,7 @@ func emitPySrcObjcopy(
 			if d.moduleStmt.Name == "PY3_PROGRAM" || d.programPairedLib {
 				targetProps["module_tag"] = "py3_bin_lib"
 			}
-
 			pyTags := []string{}
-
 			if len(instance.Platform.Tags) > 0 {
 				pyTags = append(pyTags, instance.Platform.Tags...)
 			}
@@ -739,21 +703,16 @@ func emitPySrcObjcopy(
 					"ram":     float64(32),
 				},
 			}
-
 			if rescompilerLDRef != (NodeRef{}) {
 				node.DepRefs = append(node.DepRefs, rescompilerLDRef)
 			}
-
 			if rescompressorLDRef != (NodeRef{}) {
 				node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 			}
-
 			exclude := []NodeRef{}
-
 			if rescompilerLDRef != (NodeRef{}) {
 				exclude = append(exclude, rescompilerLDRef)
 			}
-
 			if rescompressorLDRef != (NodeRef{}) {
 				exclude = append(exclude, rescompressorLDRef)
 			}

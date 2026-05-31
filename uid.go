@@ -232,7 +232,6 @@ func (c *canonBuf) writeStringSliceMap(m map[string][]string) {
 		c.writeStringSlice(m[k])
 	}
 }
-
 func (c *canonBuf) writeInterfaceMap(m map[string]interface{}) {
 	c.writeUint32(uint32(len(m)))
 
@@ -256,7 +255,6 @@ func (c *canonBuf) writeInterfaceMap(m map[string]interface{}) {
 		}
 	}
 }
-
 func (c *canonBuf) writeKVMap(m map[string]interface{}) {
 	c.writeUint32(uint32(len(m)))
 

@@ -319,7 +319,6 @@ var DefaultIfEnv = Environment{
 		"PYTHON3":            true,
 	},
 	strings: map[string]string{
-
 		"CXX_RT": "libcxxrt",
 
 		"OPENSOURCE_PROJECT": "",
@@ -340,7 +339,6 @@ var DefaultIfEnv = Environment{
 		"OS_SDK":     "",
 	},
 	ints: map[string]int{
-
 		"ANDROID_API": 0,
 	},
 }

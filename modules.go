@@ -110,10 +110,8 @@ type moduleData struct {
 	copyFiles []copyFileEntry
 
 	copyFileAutoOutputs map[string]copyFileEntry
-
-	flatSrcs map[string]struct{}
-
-	resources []resourceEntry
+	flatSrcs            map[string]struct{}
+	resources           []resourceEntry
 
 	pyMain *string
 
@@ -447,7 +445,6 @@ func collectModule(pm *includeParserManager, modulePath string, kind ModuleKind,
 	filterInvalidAddIncl(fs, d)
 
 	if kind == KindLib {
-
 		d.pyMain = nil
 	}
 
@@ -512,7 +509,6 @@ func collectModule(pm *includeParserManager, modulePath string, kind ModuleKind,
 	}
 
 	if hasProto && !hasEv && d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" {
-
 		if !env.Bool("PY3_PROTO") {
 			d.peerdirs = append(d.peerdirs, "contrib/libs/protobuf")
 		}
@@ -564,13 +560,10 @@ func filterInvalidAddIncl(fs FS, d *moduleData) {
 	// addInclOneLevel (ONE_LEVEL paths, which are never filtered).
 	if len(d.addInclUserGlobal) > 0 {
 		validGlobal := make(map[VFS]struct{}, len(d.addInclGlobal))
-
 		for _, p := range d.addInclGlobal {
 			validGlobal[p] = struct{}{}
 		}
-
 		validOneLevel := make(map[VFS]struct{}, len(d.addInclOneLevel))
-
 		for _, p := range d.addInclOneLevel {
 			validOneLevel[p] = struct{}{}
 		}
@@ -695,7 +688,6 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			}
 
 			if v.Name == "UNITTEST_FOR" {
-
 				const unittestMainPeer = "library/cpp/testing/unittest_main"
 
 				d.peerdirs = append(d.peerdirs, unittestMainPeer)
@@ -751,7 +743,6 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			addInclNext := false
 
 			for _, p := range expandStmtTokens(v.Paths, env) {
-
 				if strings.Contains(p, "${") {
 					continue
 				}
@@ -784,7 +775,6 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			d.setVars[v.Name] = value
 
 			if v.Name == "RAGEL6_FLAGS" {
-
 				d.ragel6Flags = []string{value}
 			}
 		case *EndStmt:
@@ -857,7 +847,6 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			if strings.HasSuffix(expanded.Src, ".h.in") || strings.HasSuffix(expanded.Dst, ".h") {
 				addGeneratedHeaderInclude(modulePath, expanded.Dst, d)
 			} else {
-
 				addGeneratedHeaderIncludeCF(modulePath, expanded.Dst, d)
 			}
 		case *CreateBuildInfoStmt:
@@ -983,7 +972,6 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 }
 
 func moduleStmtForKind(stmt *ModuleStmt, kind ModuleKind) *ModuleStmt {
-
 	if stmt.Name == "PY3_PROGRAM" && kind == KindLib {
 		out := *stmt
 		out.Name = "PY3_LIBRARY"
@@ -1027,7 +1015,6 @@ func addGeneratedHeaderIncludeCF(modulePath, dst string, d *moduleData) {
 }
 
 func addGeneratedOwnHeaderInclude(modulePath, dst string, d *moduleData) {
-
 	addGeneratedHeaderInclude(modulePath, dst, d)
 }
 
@@ -1116,7 +1103,6 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		if env.String("CLANG_BC_ROOT") == "" || env.String("LLVM_LLC_TOOL") == "" {
 			ThrowFmt("LLVM_BC requires USE_LLVM_BC16/18/20 before invocation")
 		}
-
 		stmt := &llvmBcStmt{ClangBCRoot: env.String("CLANG_BC_ROOT")}
 		i := 0
 
@@ -1401,9 +1387,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		if d.flatSrcs == nil {
 			d.flatSrcs = map[string]struct{}{}
 		}
-
 		d.flatSrcs[filename] = struct{}{}
-
 		if len(v.Args) > 1 {
 			if d.perSrcCFlags == nil {
 				d.perSrcCFlags = map[string][]string{}
@@ -1424,7 +1408,6 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		if d.flatSrcs == nil {
 			d.flatSrcs = map[string]struct{}{}
 		}
-
 		d.flatSrcs[filename] = struct{}{}
 	case "SRC_C_AVX", "SRC_C_AVX2", "SRC_C_AVX512", "SRC_C_AMX", "SRC_C_SSE2", "SRC_C_SSE3", "SRC_C_SSSE3",
 		"SRC_C_SSE4", "SRC_C_SSE41", "SRC_C_XOP":
@@ -1660,7 +1643,6 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			groupSrcs = append(groupSrcs, src)
 
 			if mainNext {
-
 				ns := strings.ReplaceAll(modulePath, "/", ".") + "."
 
 				if topLevel {
@@ -1744,7 +1726,6 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		} else {
 			arg += "=init"
 		}
-
 		d.resources = append(d.resources, resourceEntry{Path: "-", Key: "py/constructors/" + arg})
 	case "NO_CHECK_IMPORTS":
 
@@ -1935,7 +1916,6 @@ func pythonModuleName(modulePath, src string, topLevel bool, namespace *string) 
 }
 
 func pythonInitSuffix(name string) string {
-
 	segs := strings.Split(name, ".")
 
 	if len(segs) == 1 {
@@ -1973,10 +1953,9 @@ var allocatorPeers = map[string][]string{
 	"C":                         {"library/cpp/malloc/calloc"},
 	"LOCKLESS":                  {"library/cpp/malloc/lockless"},
 	"YT":                        {"library/cpp/ytalloc/impl"},
-
-	"FAKE":    nil,
-	"SYSTEM":  {"library/cpp/malloc/system"},
-	"DEFAULT": nil,
+	"FAKE":                      nil,
+	"SYSTEM":                    {"library/cpp/malloc/system"},
+	"DEFAULT":                   nil,
 }
 
 func applyArchiveStmt(v *UnknownStmt, d *moduleData) {
@@ -2331,9 +2310,7 @@ func expandStmtTokens(items []string, env Environment) []string {
 				continue
 			}
 		}
-
 		fields := []string{expanded}
-
 		if fullVarRef(item) || (fullDollarVarRef(item) && env.HasBinding(item[1:])) {
 			fields = strings.Fields(expanded)
 		}
@@ -2514,9 +2491,7 @@ func moduleInfoForInstance(ctx *genCtx, instance ModuleInstance) moduleTypeInfo 
 	if d.moduleStmt == nil {
 		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path)
 	}
-
 	info := moduleTypeInfo{Name: d.moduleStmt.Name}
-
 	if len(d.excludeTags) > 0 {
 		info.ExcludeTags = make(map[string]bool, len(d.excludeTags))
 

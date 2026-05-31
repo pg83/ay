@@ -19,8 +19,7 @@ var simdVariants = map[string]simdVariant{
 		"-mamx-tile", "-mamx-int8",
 		"-mavx512f", "-mavx512cd", "-mavx512bw", "-mavx512dq", "-mavx512vl",
 	}},
-	"SRC_C_XOP": {Suffix: "xop", CFlags: []string{"-mxop"}},
-
+	"SRC_C_XOP":  {Suffix: "xop", CFlags: []string{"-mxop"}},
 	"SRC_C_SSE4": {Suffix: "sse4", CFlags: []string{"-msse4.1", "-msse4.2", "-mpopcnt", "-mcx16"}},
 }
 

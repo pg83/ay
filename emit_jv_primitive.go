@@ -40,7 +40,6 @@ func emitJVNode(instance ModuleInstance, cmdArgs []string, inputs []VFS, outputs
 		Tags:    []string{},
 		TargetProperties: func() map[string]string {
 			tp := map[string]string{"module_dir": instance.Path}
-
 			if moduleTag != "" {
 				tp["module_tag"] = moduleTag
 			}

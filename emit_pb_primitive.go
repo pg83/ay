@@ -72,7 +72,6 @@ var pbDescriptorImporterHeaders = []VFS{
 }
 
 var pbCcDeepRuntimeHeaders = []VFS{
-
 	Source(pbRuntimeBase + "google/protobuf/any.h"),
 	Source(pbRuntimeBase + "google/protobuf/arena_align.h"),
 	Source(pbRuntimeBase + "google/protobuf/arena_allocation_policy.h"),
@@ -319,9 +318,7 @@ func EmitPB(
 	if protoSrcOverride != 0 {
 		srcVFS = protoSrcOverride
 	}
-
 	outputs := []VFS{pbH, pbCC}
-
 	if liteHeaders {
 		outputs = append(outputs, pbDepsH)
 	}
@@ -469,18 +466,14 @@ func EmitPB(
 
 	var depRefs []NodeRef
 	var foreignDepRefs map[string][]NodeRef
-
 	if cppStyleguideLDRef != (NodeRef{}) || protocLDRef != (NodeRef{}) || grpcCppLDRef != (NodeRef{}) || len(extraPlugins) > 0 {
 		var toolRefs []NodeRef
-
 		if cppStyleguideLDRef != (NodeRef{}) {
 			toolRefs = append(toolRefs, cppStyleguideLDRef)
 		}
-
 		if grpcCppLDRef != (NodeRef{}) {
 			toolRefs = append(toolRefs, grpcCppLDRef)
 		}
-
 		if protocLDRef != (NodeRef{}) {
 			toolRefs = append(toolRefs, protocLDRef)
 		}
