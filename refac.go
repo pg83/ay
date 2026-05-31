@@ -25,6 +25,7 @@ var goKeyword = map[string]bool{
 var linters = []fileLinter{
 	{name: "consolidate-vars", run: lintConsolidateVars},
 	{name: "blank-around-blocks", run: lintControlBlankLines},
+	{name: "tight-braces", run: lintTightBraces},
 }
 
 // cmdRefac dispatches in-tree refactoring helpers. They mutate source files in
@@ -804,6 +805,98 @@ func lintControlBlankLines(path string) bool {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: blank-around-blocks format failed (left unchanged): %v\n", path, err)
+		return false
+	}
+
+	if bytes.Equal(formatted, src) {
+		return false
+	}
+
+	Throw(os.WriteFile(path, formatted, 0o644))
+	return true
+}
+
+// lintTightBraces removes blank lines immediately after an opening brace and
+// immediately before a closing brace, for every brace pair in the file —
+// block bodies, composite literals, struct and interface types. Brace positions
+// come from the parsed AST, so braces inside strings or comments are never matched.
+// gofmt does not strip these blanks, hence this pass.
+func lintTightBraces(path string) bool {
+	src := Throw2(os.ReadFile(path))
+	fset := gotoken.NewFileSet()
+	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
+		return false
+	}
+
+	lineOf := func(p gotoken.Pos) int { return fset.Position(p).Line }
+	lines := strings.Split(string(src), "\n")
+	isBlank := func(l int) bool { // l is 1-based
+		return l >= 1 && l <= len(lines) && strings.TrimSpace(lines[l-1]) == ""
+	}
+
+	// del holds 1-based line numbers to drop.
+	del := map[int]bool{}
+	dropAfter := func(brace gotoken.Pos) {
+		if !brace.IsValid() {
+			return
+		}
+
+		for l := lineOf(brace) + 1; isBlank(l); l++ {
+			del[l] = true
+		}
+	}
+	dropBefore := func(brace gotoken.Pos) {
+		if !brace.IsValid() {
+			return
+		}
+
+		for l := lineOf(brace) - 1; isBlank(l); l-- {
+			del[l] = true
+		}
+	}
+
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.BlockStmt:
+			dropAfter(x.Lbrace)
+			dropBefore(x.Rbrace)
+		case *ast.CompositeLit:
+			dropAfter(x.Lbrace)
+			dropBefore(x.Rbrace)
+		case *ast.StructType:
+			if x.Fields != nil {
+				dropAfter(x.Fields.Opening)
+				dropBefore(x.Fields.Closing)
+			}
+		case *ast.InterfaceType:
+			if x.Methods != nil {
+				dropAfter(x.Methods.Opening)
+				dropBefore(x.Methods.Closing)
+			}
+		}
+
+		return true
+	})
+
+	if len(del) == 0 {
+		return false
+	}
+
+	kept := make([]string, 0, len(lines))
+
+	for i, ln := range lines {
+		if del[i+1] {
+			continue
+		}
+
+		kept = append(kept, ln)
+	}
+
+	formatted, err := format.Source([]byte(strings.Join(kept, "\n")))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "refac lint: %s: tight-braces format failed (left unchanged): %v\n", path, err)
 		return false
 	}
 
