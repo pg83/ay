@@ -39,6 +39,17 @@ type makeFlags struct {
 	testLevel           int
 	sandboxing          bool
 	dumpIgnoredMacros   bool
+	cmdPrefixes         []cmdPrefix
+}
+
+// cmdPrefix prepends prefix tokens before any command argument whose path ends
+// with suffix. It lets the user run fetched binaries through an explicit ELF
+// loader on systems lacking the binary's default interpreter, e.g.
+// --cmd-prefix=bin/java=/bin/ld.linux-so.2 turns `… <JDK>/bin/java …` into
+// `… /bin/ld.linux-so.2 <JDK>/bin/java …`.
+type cmdPrefix struct {
+	suffix string
+	prefix []string
 }
 
 var targetStatsExtraFlagAllowlist = map[string]struct{}{
@@ -260,7 +271,7 @@ func cmdMake(args []string) int {
 		return 0
 	}
 
-	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, resourceFetches.mountMap())
+	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, resourceFetches.mountMap(), mf.cmdPrefixes)
 
 	go ex.eventLoop()
 
@@ -321,6 +332,7 @@ type executor struct {
 	sema           chan struct{}
 	keepGoing      bool
 	resourceMounts map[string]string
+	cmdPrefixes    []cmdPrefix
 
 	mu      sync.Mutex
 	byUID   map[string]*nodeFuture
@@ -342,13 +354,14 @@ type nodeFuture struct {
 	err  *Exception
 }
 
-func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, resourceMounts map[string]string) *executor {
+func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, resourceMounts map[string]string, cmdPrefixes []cmdPrefix) *executor {
 	return &executor{
 		srcRoot:        srcRoot,
 		bldRoot:        bldRoot,
 		sema:           make(chan struct{}, threads),
 		keepGoing:      keepGoing,
 		resourceMounts: resourceMounts,
+		cmdPrefixes:    cmdPrefixes,
 		byUID:          make(map[string]*nodeFuture, 8192),
 		events:         make(chan func(), 4096),
 		stats:          map[string][]time.Duration{},
@@ -520,6 +533,37 @@ func (ex *executor) execute(n *Node) {
 	}
 }
 
+// parseCmdPrefix parses a --cmd-prefix=<suffix>=<prefix tokens> value. The prefix
+// (everything after the first '=') is split on whitespace into tokens.
+func parseCmdPrefix(spec string) cmdPrefix {
+	suffix, prefix, ok := strings.Cut(spec, "=")
+	if !ok || suffix == "" {
+		ThrowFmt("make: --cmd-prefix expects <suffix>=<prefix>, got %q", spec)
+	}
+	return cmdPrefix{suffix: suffix, prefix: strings.Fields(prefix)}
+}
+
+// applyCmdPrefixes inserts a rule's prefix tokens before every argument whose path
+// ends with the rule's suffix. Operates on already-mounted (real-path) args, so a
+// fetched binary referenced anywhere in the command — including as an argument to a
+// wrapper that execs it — is run through the configured loader.
+func applyCmdPrefixes(args []string, rules []cmdPrefix) []string {
+	if len(rules) == 0 {
+		return args
+	}
+	out := make([]string, 0, len(args))
+	for _, a := range args {
+		for _, r := range rules {
+			if strings.HasSuffix(a, r.suffix) {
+				out = append(out, r.prefix...)
+				break
+			}
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
 const (
 	cmdFileStartMarker = "--ya-start-command-file"
 	cmdFileEndMarker   = "--ya-end-command-file"
@@ -588,6 +632,7 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 		for i, a := range c.CmdArgs {
 			args[i] = mountString(a, ex.srcRoot, tmp, ex.resourceMounts)
 		}
+		args = applyCmdPrefixes(args, ex.cmdPrefixes)
 		args = packCommandFiles(args, tmp, &cmdFileCounter)
 
 		dir := tmp
@@ -779,7 +824,7 @@ func parseMakeFlags(args []string) *makeFlags {
 
 	config := getopt.Config{
 		Opts:     getopt.OptStr("GrdktThD:j:B:o:I:"),
-		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros"),
+		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,cmd-prefix:"),
 		Mode:     getopt.ModeInOrder,
 		Func:     getopt.FuncGetOptLong,
 	}
@@ -822,6 +867,8 @@ func parseMakeFlags(args []string) *makeFlags {
 			mf.bldRoot = opt.OptArg
 		case opt.Name == "source-root":
 			mf.srcRoot = opt.OptArg
+		case opt.Name == "cmd-prefix":
+			mf.cmdPrefixes = append(mf.cmdPrefixes, parseCmdPrefix(opt.OptArg))
 		case opt.Char == 'D':
 			parseKV(mf.tflags, opt.OptArg)
 		case opt.Char == 'j':
@@ -905,6 +952,9 @@ Layout flags:
 Execution flags:
     -j, --jobs <N>                Parallel exec slots (default: NumCPU); 0 = build-only.
     -k, --keep-going              Continue past per-node failures.
+    --cmd-prefix <suffix>=<pfx>   Prepend <pfx> tokens before any command arg whose path
+                                  ends with <suffix> (repeatable). E.g. run fetched glibc
+                                  binaries through a loader: bin/java=/bin/ld.linux-so.2
     -T, --ninja                   Ninja-style per-line output (default: in-place repaint).
     -t, -tt, -ttt                 Generate test nodes (small / +medium / +large).
     --stats                       Print per-kind execution stats after the build.
