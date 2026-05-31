@@ -16,7 +16,7 @@ func cmdDumpNormalize(args []string) int {
 	defer startProfilesFromEnv()()
 
 	var inPath, target, outPath string
-	var stripDeps bool
+	var refGraph bool
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -29,14 +29,14 @@ func cmdDumpNormalize(args []string) int {
 		case "--out":
 			i++
 			outPath = arg(args, i)
-		case "--strip-unreferenced-deps":
-			// Drop build-order-only dep edges: an edge u->d is removed when none of
-			// d's outputs is among u's inputs (the files u's action reads). Intended
-			// for the UPSTREAM graph only, to discount ymake TJSONVisitor induced
-			// NodeDeps (e.g. ydbd's 350 .pb.h/.gen.h edges — never link inputs) that
-			// our generator does not model. Our graph is normalized WITHOUT this flag
-			// so any superfluous dep we emit still surfaces in the diff.
-			stripDeps = true
+		case "--ref-graph":
+			// Marks the input as the upstream reference (ymake) graph, enabling the
+			// reference-side normalizations that discount artifacts our generator
+			// does not model: filterARLDInputs (AR/LD input pruning, via canonInputs)
+			// and the build-order-only dep strip below. Our graph is normalized
+			// WITHOUT this flag (faithful), so any superfluous input/dep we emit, or
+			// any over-filtration on the reference side, surfaces as a diff.
+			refGraph = true
 		default:
 			ThrowFmt("dump normalize: unknown argument %q", args[i])
 		}
@@ -51,7 +51,7 @@ func cmdDumpNormalize(args []string) int {
 	contentHash := map[string][32]byte{}
 	deps := map[string][]string{}
 	fetch := map[string]bool{}
-	// outputsByUID (populated only under --strip-unreferenced-deps) maps each
+	// outputsByUID (populated only under --ref-graph) maps each
 	// node to its output paths so the strip pass can resolve, for an edge u->d,
 	// what d produces and check it against u's inputs. Compact (1-3 strings/node).
 	outputsByUID := map[string][]string{}
@@ -86,7 +86,7 @@ func cmdDumpNormalize(args []string) int {
 			r := p1Result{
 				uid:     uid,
 				deps:    toStrings(node["deps"]),
-				content: sha256.Sum256(marshalCompact(canonContent(node))),
+				content: sha256.Sum256(marshalCompact(canonContent(node, refGraph))),
 				isFetch: p == "FETCH",
 			}
 
@@ -95,7 +95,7 @@ func cmdDumpNormalize(args []string) int {
 			if len(outs) > 0 {
 				out0 = normPath(outs[0])
 			}
-			if stripDeps {
+			if refGraph {
 				r.outputs = make([]string, 0, len(outs))
 				for _, o := range outs {
 					r.outputs = append(r.outputs, normPath(o))
@@ -123,7 +123,7 @@ func cmdDumpNormalize(args []string) int {
 		func(r p1Result) {
 			contentHash[r.uid] = r.content
 			deps[r.uid] = r.deps
-			if stripDeps {
+			if refGraph {
 				outputsByUID[r.uid] = r.outputs
 			}
 			if r.isFetch {
@@ -140,13 +140,17 @@ func cmdDumpNormalize(args []string) int {
 		})
 
 	// Optional strip pass (upstream only): drop dep edges u->d where none of d's
-	// outputs is among u's inputs. The induced codegen .pb.h/.gen.h producers
-	// ymake hangs off a link node for cache-key Merkle folding are never link
-	// inputs, so they go; the real .o/.a (which ARE inputs, even though link
-	// commands pass them via a response file rather than naming them in cmd_args)
-	// stay. Runs before the Merkle re-uid. Reads inputs transiently; only the
-	// compact outputsByUID lives across the pass.
-	if stripDeps {
+	// outputs is referenced by u — neither among u's inputs nor named in u's
+	// command. The induced codegen .pb.h/.gen.h producers ymake hangs off a link
+	// node for cache-key Merkle folding satisfy neither (never a link input, never
+	// on the link command line), so they go; the real .o/.a stay (they ARE inputs,
+	// even though link commands pass them via a response file rather than naming
+	// them), and a dep whose output the command names directly but does not list as
+	// an input stays too (e.g. a TS run_test node's $(B)/common_test.context). The
+	// command check only ever keeps MORE edges than the inputs check alone, so it
+	// cannot collapse the closure. Runs before the Merkle re-uid. Reads inputs/cmds
+	// transiently; only the compact outputsByUID lives across the pass.
+	if refGraph {
 		type stripResult struct {
 			uid  string
 			deps []string
@@ -155,14 +159,16 @@ func cmdDumpNormalize(args []string) int {
 			func(node map[string]any) stripResult {
 				uid := getString(node, "uid")
 				inputSet := make(map[string]struct{})
-				for _, in := range canonInputs(node) {
+				for _, in := range canonInputs(node, refGraph) {
 					inputSet[in] = struct{}{}
 				}
+				cmdText := nodeCmdText(node)
 				raw := toStrings(node["deps"])
 				kept := make([]string, 0, len(raw))
 				for _, d := range raw {
 					outs := outputsByUID[d]
-					if fetch[d] || len(outs) == 0 || depOutputInInputs(outs, inputSet) {
+					if fetch[d] || len(outs) == 0 ||
+						depOutputInInputs(outs, inputSet) || depOutputInCmd(outs, cmdText) {
 						kept = append(kept, d)
 					}
 				}
@@ -240,7 +246,7 @@ func cmdDumpNormalize(args []string) int {
 				return nil
 			}
 
-			canon := canonContent(node)
+			canon := canonContent(node, refGraph)
 			canon["deps"] = rewriteDeps(deps[uid], closure, fetch, newUID)
 
 			canon["uid"] = newUID[uid]
@@ -267,6 +273,22 @@ func depOutputInInputs(depOutputs []string, inputSet map[string]struct{}) bool {
 			continue
 		}
 		if _, ok := inputSet[o]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// depOutputInCmd reports whether any of a dep's outputs is named in the consuming
+// node's command text (a normalized whole-path substring match). Catches deps a
+// node consumes by naming the path on its command line without listing it as an
+// input (e.g. a TS run_test node referencing $(B)/common_test.context).
+func depOutputInCmd(depOutputs []string, cmdText string) bool {
+	for _, o := range depOutputs {
+		if o == "" {
+			continue
+		}
+		if strings.Contains(cmdText, o) {
 			return true
 		}
 	}

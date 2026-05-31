@@ -113,7 +113,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		ldNode := &Node{
 			Cmds:             []Cmd{{CmdArgs: ldArgs, Env: env}},
 			Env:              env,
-			Inputs:           []VFS{},
+			Inputs:           append([]VFS(nil), bcPaths...),
 			Outputs:          []VFS{mergedOut},
 			KV:               map[string]interface{}{"p": "LD", "pc": "light-red"},
 			Tags:             []string{},
