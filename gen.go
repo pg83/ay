@@ -382,7 +382,8 @@ func runGenInto(fs FS, targetDir string, hostP, targetP *Platform, emitter Emitt
 
 func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) NodeRef {
 	plainEmit := emitter
-	resourceEmit := resourceGraphEmitter(hostP, plainEmit, resources, materializeResourceFetches)
+	scriptTbl := buildScriptTable(fs)
+	resourceEmit := resourceGraphEmitter(hostP, plainEmit, resources, materializeResourceFetches, scriptTbl)
 
 	// Mix $(S) input content hashes into node uids in every mode so a source edit
 	// invalidates the cache (the dump path is re-uid'd from canonical content
@@ -426,7 +427,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		pyRegisterOutputs:  make(map[VFS]NodeRef),
 		checkConfigOutputs: make(map[VFS]NodeRef),
 		ldPluginCPCache:    make(map[VFS]NodeRef),
-		scripts:            buildScriptTable(fs),
+		scripts:            scriptTbl,
 		testMode:           testMode,
 	}
 
@@ -1714,7 +1715,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, srcInstance, js.Sources, jsModuleInputs)
 		}
 
-		jsRef, joinOutVFS := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.target, ctx.emit)
+		jsRef, joinOutVFS := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.target, ctx.scripts, ctx.emit)
 
 		jsRel := strings.TrimPrefix(joinOutVFS.Rel(), srcInstance.Path+"/")
 

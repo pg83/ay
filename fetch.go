@@ -97,7 +97,7 @@ func hostResourcePlatformCandidates(host *Platform) []string {
 	}
 }
 
-func fetchNode(host *Platform, item resourceFetch) *Node {
+func fetchNode(host *Platform, item resourceFetch, scripts scriptDeps) *Node {
 	return bindNodePlatform(&Node{
 		Cmds: []Cmd{{
 			CmdArgs: []string{
@@ -111,7 +111,7 @@ func fetchNode(host *Platform, item resourceFetch) *Node {
 			Env: map[string]string{},
 		}},
 		Env:          map[string]string{},
-		Inputs:       fetchScriptInputs(),
+		Inputs:       fetchScriptInputs(scripts),
 		KV:           map[string]interface{}{"p": "FETCH", "pc": "yellow", "show_out": "yes"},
 		Outputs:      []VFS{item.Output},
 		Platform:     string(host.Target),
@@ -130,48 +130,47 @@ func currentYatoolPath() string {
 	return path
 }
 
-func fetchScriptInputs() []VFS {
-	inputs := []VFS{
-		Intern("$(S)/build/mapping.conf.json"),
-		Intern("$(S)/build/scripts/error.py"),
-		Intern("$(S)/build/scripts/fetch_from.py"),
-		Intern("$(S)/build/scripts/fetch_from_mds.py"),
-		Intern("$(S)/build/scripts/fetch_from_sandbox.py"),
-		Intern("$(S)/build/scripts/process_command_files.py"),
-		Intern("$(S)/build/scripts/retry.py"),
-	}
-
-	return inputs
+// fetchScriptInputs is the FETCH node's $(S) inputs: the resource-mapping config
+// plus the two fetch scripts `ay fetch` actually runs (fetch_from_sandbox /
+// fetch_from_mds), each expanded to its import closure via the table — which pulls
+// in error.py, fetch_from.py, retry.py and process_command_files.py.
+func fetchScriptInputs(scripts scriptDeps) []VFS {
+	out := []VFS{Intern("$(S)/build/mapping.conf.json")}
+	out = append(out, scripts[Intern("$(S)/build/scripts/fetch_from_sandbox.py")]...)
+	out = append(out, scripts[Intern("$(S)/build/scripts/fetch_from_mds.py")]...)
+	return out
 }
 
 type resourceAwareEmitter struct {
-	inner Emitter
-	plan  *resourceFetchPlan
-	host  *Platform
-	refs  []NodeRef
-	seen  []bool
+	inner   Emitter
+	plan    *resourceFetchPlan
+	host    *Platform
+	scripts scriptDeps
+	refs    []NodeRef
+	seen    []bool
 }
 
-func newResourceAwareEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan) Emitter {
+func newResourceAwareEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan, scripts scriptDeps) Emitter {
 	if plan == nil || len(plan.items) == 0 {
 		return inner
 	}
 
 	return &resourceAwareEmitter{
-		inner: inner,
-		plan:  plan,
-		host:  host,
-		refs:  make([]NodeRef, len(plan.items)),
-		seen:  make([]bool, len(plan.items)),
+		inner:   inner,
+		plan:    plan,
+		host:    host,
+		scripts: scripts,
+		refs:    make([]NodeRef, len(plan.items)),
+		seen:    make([]bool, len(plan.items)),
 	}
 }
 
-func resourceGraphEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan, materializeFetchNodes bool) Emitter {
+func resourceGraphEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan, materializeFetchNodes bool, scripts scriptDeps) Emitter {
 	if !materializeFetchNodes || plan == nil || len(plan.items) == 0 {
 		return inner
 	}
 
-	return newResourceAwareEmitter(host, inner, plan)
+	return newResourceAwareEmitter(host, inner, plan, scripts)
 }
 
 func (e *resourceAwareEmitter) Emit(n *Node) NodeRef {
@@ -195,7 +194,7 @@ func (e *resourceAwareEmitter) attachResourceDeps(n *Node) {
 		}
 
 		if !e.seen[i] {
-			e.refs[i] = e.inner.Emit(fetchNode(e.host, item))
+			e.refs[i] = e.inner.Emit(fetchNode(e.host, item, e.scripts))
 			e.seen[i] = true
 		}
 

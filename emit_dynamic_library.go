@@ -1,15 +1,8 @@
 package main
 
 var (
-	ldLinkDynLibVFS                = Intern("$(S)/build/scripts/link_dyn_lib.py")
-	ldThinltoCacheVFS              = Intern("$(S)/build/scripts/thinlto_cache.py")
-	ldProcessCommandFilesVFS       = Intern("$(S)/build/scripts/process_command_files.py")
-	ldProcessWholeArchiveOptionVFS = Intern("$(S)/build/scripts/process_whole_archive_option.py")
-
-	ldLinkDynLibPath                = ldLinkDynLibVFS.String()
-	ldThinltoCachePath              = ldThinltoCacheVFS.String()
-	ldProcessCommandFilesPath       = ldProcessCommandFilesVFS.String()
-	ldProcessWholeArchiveOptionPath = ldProcessWholeArchiveOptionVFS.String()
+	ldLinkDynLibVFS  = Intern("$(S)/build/scripts/link_dyn_lib.py")
+	ldLinkDynLibPath = ldLinkDynLibVFS.String()
 )
 
 func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *moduleEmitResult {
@@ -135,7 +128,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	envVcsOnly := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 	envFull := ctx.host.ToolEnv()
 
-	inputs := composeDynLibInputs(peerArchivePaths, pluginPaths, fixElfPath, instance.Path, *d.exportsScript)
+	inputs := composeDynLibInputs(peerArchivePaths, pluginPaths, fixElfPath, instance.Path, *d.exportsScript, ctx.scripts)
 
 	depRefs := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+1)
 	depRefs = append(depRefs, peerArchiveRefs...)
@@ -274,25 +267,27 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 	return cmdArgs
 }
 
-func composeDynLibInputs(peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string) []VFS {
+func composeDynLibInputs(peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string, scripts scriptDeps) []VFS {
 	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+1)
 	buildRootBlock = append(buildRootBlock, peerLibPaths...)
 	buildRootBlock = append(buildRootBlock, pluginPaths...)
 	buildRootBlock = append(buildRootBlock, fixElfPath)
 
-	inputs := make([]VFS, 0, len(buildRootBlock)+10)
+	inputs := make([]VFS, 0, len(buildRootBlock)+12)
 	inputs = append(inputs, buildRootBlock...)
+	// The scripts the link command actually runs (vcs stamp, the link_dyn_lib
+	// wrapper, the objcopy/strip fs_tools), each expanded to its import closure via
+	// the table — link_dyn_lib pulls in link_exe, process_command_files,
+	// thinlto_cache, process_whole_archive_option; fs_tools pulls in
+	// process_command_files. Dups are dropped in normalization.
+	for _, w := range []VFS{ldVcsInfoVFS, ldLinkDynLibVFS, ldFsToolsVFS} {
+		inputs = append(inputs, scripts[w]...)
+	}
+	// Non-script inputs: the vcs C template + header and the module's exports list.
 	inputs = append(inputs,
-		ldVcsInfoVFS,
 		ldSvnInterfaceVFS,
-		ldLinkDynLibVFS,
-		ldLinkExeVFS,
-		Source(modulePath+"/"+exportsScript),
-		ldThinltoCacheVFS,
-		ldProcessCommandFilesVFS,
-		ldProcessWholeArchiveOptionVFS,
-		ldFsToolsVFS,
 		ldSvnversionHVFS,
+		Source(modulePath+"/"+exportsScript),
 	)
 
 	return inputs
