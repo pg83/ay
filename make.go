@@ -856,7 +856,7 @@ func parseMakeFlags(args []string) *makeFlags {
 	}
 
 	if mf.srcRoot == "" {
-		ThrowFmt("make: --source-root is required")
+		mf.srcRoot = Throw2(os.Getwd())
 	}
 
 	if mf.bldRoot == "" {
