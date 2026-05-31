@@ -47,6 +47,10 @@ type BufferedEmitter struct {
 	// node listing a wrapper script also lists that wrapper's helper scripts.
 	scriptClosure scriptDepClosure
 
+	// fs, set by runGen, lets finalizeNodesInOrder mix $(S) input content hashes
+	// into node uids (see canonBuf.fs).
+	fs FS
+
 	readyCh chan struct{}
 }
 
@@ -118,7 +122,7 @@ func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) []
 	}
 
 	uids := make([]string, n)
-	var uidScratch canonBuf
+	uidScratch := canonBuf{fs: e.fs}
 
 	for _, i := range order {
 		node := e.nodes[i]

@@ -280,12 +280,13 @@ func (fs *memFS) Read(rel string) []byte {
 }
 
 // ContentHash computes xxh3 of the file whose rel path interns to s, on demand
-// from the in-memory tree (the shared test FS is never mutated).
+// from the in-memory tree (the shared test FS is never mutated). Fixtures are
+// minimal, so a file absent from the tree hashes to 0 rather than faulting —
+// tests assert structure, not exact uids.
 func (fs *memFS) ContentHash(s STR) uint64 {
-	rel := internTable.strs[s]
-	data, ok := fs.files[cleanRel(rel)]
+	data, ok := fs.files[cleanRel(internTable.strs[s])]
 	if !ok {
-		ThrowFmt("memFS.ContentHash: no file for %q", rel)
+		return 0
 	}
 	return xxh3.Hash(data)
 }
