@@ -234,7 +234,7 @@ func autoCopyDstExtras(modulePath string, d *moduleData, closure []VFS, rootDst 
 // COPY_FILE(TEXT) in a *different* module, the .txt source is still a real
 // compiler input. The registry carries IsText on every CP registration, so we
 // extend the lookup beyond d.copyFiles to cover those cross-module cases.
-func withContextSourceExtras(reg *CodegenRegistry, modulePath string, d *moduleData, closure []VFS, rootDst VFS) []VFS {
+func withContextSourceExtras(reg *CodegenRegistry, modulePath string, d *moduleData, closure []VFS, rootDst VFS, scripts map[VFS][]VFS) []VFS {
 	if reg == nil {
 		return nil
 	}
@@ -283,14 +283,11 @@ func withContextSourceExtras(reg *CodegenRegistry, modulePath string, d *moduleD
 	}
 	// A COPY product is produced by a `python3 fs_tools.py copy …` CP node; a unit
 	// that compiles a copied source, or consumes a TEXT-copied header, inherits the
-	// producer's $(S) tooling leaf input fs_tools.py (its process_command_files.py
-	// import is pulled in by the build/scripts dependency closure — see
-	// expandScriptClosures). Attach it when the compiled unit itself is a copy
-	// (TEXT or not — non-TEXT copies reach the closure via their source-node pointer
-	// but still carry the producer's tool) or when a TEXT-copy source was
-	// re-attached above.
+	// producer's $(S) tooling — fs_tools.py and its import closure (process_command_files.py).
+	// Attach it via the script table when the compiled unit itself is a copy (TEXT or
+	// not) or when a TEXT-copy source was re-attached above.
 	if len(extras) > 0 || isCopyProduct(reg, rootDst) {
-		extras = append(extras, copyFsToolsVFS)
+		extras = append(extras, scripts[copyFsToolsVFS]...)
 	}
 	return extras
 }

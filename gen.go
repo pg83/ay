@@ -131,6 +131,10 @@ type genCtx struct {
 
 	ldPluginCPCache map[VFS]NodeRef
 
+	// scripts maps each build/scripts script VFS to [self, …transitive import
+	// closure]; emit sites add a build script via append(inputs, scripts[v]...).
+	scripts map[VFS][]VFS
+
 	host   *Platform
 	target *Platform
 
@@ -380,19 +384,13 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	plainEmit := emitter
 	resourceEmit := resourceGraphEmitter(hostP, plainEmit, resources, materializeResourceFetches)
 
-	// Build the build/scripts import closure up front so the emitters can expand a
-	// node's wrapper-script inputs to their helper closure at Emit time — before the
-	// streaming path hands the node to the executor (see expandNodeScriptClosure).
-	scriptClosure := buildScriptDepClosure(fs)
 	// Mix $(S) input content hashes into node uids in every mode so a source edit
 	// invalidates the cache (the dump path is re-uid'd from canonical content
 	// downstream, but the raw uids must still be content-correct).
 	switch e := plainEmit.(type) {
 	case *BufferedEmitter:
-		e.scriptClosure = scriptClosure
 		e.fs = fs
 	case *StreamingEmitter:
-		e.scriptClosure = scriptClosure
 		e.uidScratch.fs = fs
 	}
 
@@ -428,6 +426,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		pyRegisterOutputs:  make(map[VFS]NodeRef),
 		checkConfigOutputs: make(map[VFS]NodeRef),
 		ldPluginCPCache:    make(map[VFS]NodeRef),
+		scripts:            buildScriptTable(fs),
 		testMode:           testMode,
 	}
 

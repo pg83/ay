@@ -7,19 +7,18 @@ import (
 
 const buildScriptsRoot = "build/scripts"
 
-// scriptDepClosure maps a build/scripts Python script (by its $(S)-relative path)
-// to the sorted set of OTHER build/scripts scripts it transitively imports. A
-// wrapper script the command names directly (link_exe.py, fs_tools.py, …) drags in
-// the helper modules it imports as genuine action inputs, even though the command
-// line never names those helpers (link_exe imports process_command_files,
-// thinlto_cache, process_whole_archive_option; fs_tools imports
-// process_command_files; …). Edges come from parsing real `import`/`from … import`
-// statements — NOT arbitrary textual occurrences, which would wrongly pick up a
-// local variable named `wrapper`, the word `error` in a comment, or a script name
-// printed in a usage string.
-type scriptDepClosure map[string][]string
-
-func buildScriptDepClosure(fs FS) scriptDepClosure {
+// buildScriptTable parses every build/scripts/*.py and returns, for each script's
+// VFS, a slice whose FIRST element is the script itself followed by its transitive
+// import closure (the other build/scripts it imports), all as VFS. Emit sites that
+// put a build script into a node's inputs use `append(inputs, scripts[v]...)`, so
+// the wrapper and the helper scripts it pulls in land in a single append. Edges come
+// from real `import`/`from … import` statements (see scriptImports), so a new import
+// is picked up automatically — no hand-maintained closure lists. Built once per gen.
+//
+// Multiple wrappers can share a helper (link_exe and fs_tools both import
+// process_command_files), so appending several scripts to one node can duplicate a
+// helper; canonInputs dedups, so callers need not.
+func buildScriptTable(fs FS) map[VFS][]VFS {
 	texts := map[string]string{}
 	fs.Walk(buildScriptsRoot, func(rel string, isDir bool) {
 		if isDir || !strings.HasSuffix(rel, ".py") {
@@ -45,7 +44,7 @@ func buildScriptDepClosure(fs FS) scriptDepClosure {
 		direct[rel] = deps
 	}
 
-	closure := make(scriptDepClosure, len(texts))
+	table := make(map[VFS][]VFS, len(texts))
 	for rel := range texts {
 		seen := map[string]bool{}
 		stack := make([]string, 0, len(direct[rel]))
@@ -65,14 +64,20 @@ func buildScriptDepClosure(fs FS) scriptDepClosure {
 				}
 			}
 		}
-		out := make([]string, 0, len(seen))
+		deps := make([]string, 0, len(seen))
 		for d := range seen {
-			out = append(out, d)
+			deps = append(deps, d)
 		}
-		sort.Strings(out)
-		closure[rel] = out
+		sort.Strings(deps)
+
+		out := make([]VFS, 1, 1+len(deps))
+		out[0] = Source(rel)
+		for _, d := range deps {
+			out = append(out, Source(d))
+		}
+		table[Source(rel)] = out
 	}
-	return closure
+	return table
 }
 
 // scriptImports parses the top-level module names a Python script imports via
@@ -115,39 +120,3 @@ func scriptImports(txt string) []string {
 	return out
 }
 
-// expandNodeScriptClosure adds, to a node that lists a build/scripts script as an
-// input, that script's transitive helper closure (see scriptDepClosure). Idempotent
-// and additive: scripts already present are not duplicated. Mirrors ymake attaching
-// a wrapper's imported helpers as inputs of the action that runs the wrapper.
-//
-// Applied per-node at emit time (by the emitters' Emit), NOT as a post-pass over
-// the finished graph: the streaming build path hands each node to the executor as
-// soon as its deps resolve, so a node's inputs must be complete by the time it is
-// emitted. Both the streaming executor path and the buffered -G dump path run this,
-// so they produce identical node content.
-func expandNodeScriptClosure(n *Node, closure scriptDepClosure) {
-	if len(closure) == 0 || n == nil {
-		return
-	}
-	present := make(map[string]struct{}, len(n.Inputs))
-	var seeds []string
-	for _, in := range n.Inputs {
-		if !in.IsSource() {
-			continue
-		}
-		rel := in.Rel()
-		present[rel] = struct{}{}
-		if _, ok := closure[rel]; ok {
-			seeds = append(seeds, rel)
-		}
-	}
-	for _, seed := range seeds {
-		for _, dep := range closure[seed] {
-			if _, ok := present[dep]; ok {
-				continue
-			}
-			present[dep] = struct{}{}
-			n.Inputs = append(n.Inputs, Source(dep))
-		}
-	}
-}
