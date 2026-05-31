@@ -24,6 +24,7 @@ var goKeyword = map[string]bool{
 // linters is the fixed set applied by `ay refac lint`, in order.
 var linters = []fileLinter{
 	{name: "consolidate-vars", run: lintConsolidateVars},
+	{name: "blank-around-blocks", run: lintControlBlankLines},
 }
 
 // cmdRefac dispatches in-tree refactoring helpers. They mutate source files in
@@ -593,6 +594,120 @@ func lintConsolidateVars(path string) bool {
 	formatted, err := format.Source(out)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: consolidate-vars format failed (left unchanged): %v\n", path, err)
+		return false
+	}
+	if bytes.Equal(formatted, src) {
+		return false
+	}
+	Throw(os.WriteFile(path, formatted, 0o644))
+	return true
+}
+
+// isControlBlockStmt reports whether stmt is one of the brace-block control
+// statements that STYLE.md requires blank lines around: if/for/range/switch/
+// type-switch/select, and go/defer of a func literal (a `go func(){...}()` block,
+// not a plain `defer f.Close()`). A labeled statement is judged by its inner stmt.
+func isControlBlockStmt(stmt ast.Stmt) bool {
+	switch s := stmt.(type) {
+	case *ast.IfStmt, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt:
+		return true
+	case *ast.GoStmt:
+		_, ok := s.Call.Fun.(*ast.FuncLit)
+		return ok
+	case *ast.DeferStmt:
+		_, ok := s.Call.Fun.(*ast.FuncLit)
+		return ok
+	case *ast.LabeledStmt:
+		return isControlBlockStmt(s.Stmt)
+	}
+
+	return false
+}
+
+// lintControlBlankLines enforces STYLE.md's "blank lines around control blocks":
+// before and after every control block (if/for/switch/select/go-func/defer-func),
+// except where the block is the first or last statement of its enclosing block.
+//
+// That before/after pair of rules, with their first/last exceptions, is exactly the
+// pairwise invariant: between any two adjacent statements in one statement list, if
+// either is a control block there must be a blank line. A control block that is the
+// first statement has no predecessor pair (so no blank is forced after the opening
+// brace), and one that is last has no successor pair (none before the closing brace).
+// The linter only inserts missing blanks; gofmt already collapses extra ones.
+func lintControlBlankLines(path string) bool {
+	src := Throw2(os.ReadFile(path))
+	fset := gotoken.NewFileSet()
+	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
+		return false
+	}
+
+	lineOf := func(p gotoken.Pos) int { return fset.Position(p).Line }
+
+	// Lines covered by a comment, so a control block's own leading comment block can
+	// be skipped over — the blank goes above the comment, keeping it attached.
+	commentLine := map[int]bool{}
+	for _, cg := range f.Comments {
+		for _, c := range cg.List {
+			for l := lineOf(c.Pos()); l <= lineOf(c.End()); l++ {
+				commentLine[l] = true
+			}
+		}
+	}
+
+	// insertBefore holds source line numbers that need a blank line inserted above.
+	insertBefore := map[int]bool{}
+	process := func(list []ast.Stmt) {
+		for i := 1; i < len(list); i++ {
+			a, b := list[i-1], list[i]
+			if !isControlBlockStmt(a) && !isControlBlockStmt(b) {
+				continue
+			}
+
+			aEnd := lineOf(a.End())
+			lead := lineOf(b.Pos())
+			for l := lead - 1; l > aEnd && commentLine[l]; l-- {
+				lead = l
+			}
+			if lead == aEnd+1 {
+				insertBefore[lead] = true
+			}
+		}
+	}
+
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.BlockStmt:
+			process(node.List)
+		case *ast.CaseClause:
+			process(node.Body)
+		case *ast.CommClause:
+			process(node.Body)
+		}
+
+		return true
+	})
+
+	if len(insertBefore) == 0 {
+		return false
+	}
+
+	lines := strings.Split(string(src), "\n")
+	var b strings.Builder
+	for i, ln := range lines {
+		if insertBefore[i+1] {
+			b.WriteByte('\n')
+		}
+		b.WriteString(ln)
+		if i < len(lines)-1 {
+			b.WriteByte('\n')
+		}
+	}
+
+	formatted, err := format.Source([]byte(b.String()))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "refac lint: %s: blank-around-blocks format failed (left unchanged): %v\n", path, err)
 		return false
 	}
 	if bytes.Equal(formatted, src) {
