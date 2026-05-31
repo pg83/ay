@@ -44,9 +44,11 @@ func EmitR5(
 	}
 	inputs := []VFS{ragel5BinPath, rlgenCdBinPath, srcVFS}
 	depRefs := make([]NodeRef, 0, 2)
+
 	if ragel5LD != (NodeRef{}) {
 		depRefs = append(depRefs, ragel5LD)
 	}
+
 	if rlgenCdLD != (NodeRef{}) {
 		depRefs = append(depRefs, rlgenCdLD)
 	}

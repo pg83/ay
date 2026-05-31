@@ -280,7 +280,9 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 	if len(includeInputs) == 0 && len(inputs) == 0 {
 		return nil
 	}
+
 	seen := make(map[NodeRef]struct{}, 4+len(exclude))
+
 	for _, r := range exclude {
 		seen[r] = struct{}{}
 	}
@@ -326,6 +328,7 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 		if _, dup := seen[ref]; dup {
 			return
 		}
+
 		seen[ref] = struct{}{}
 		out = append(out, ref)
 	}
@@ -571,6 +574,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		fmt.Fprintf(os.Stderr, "%sgenModule %s@%s  (from %s)\n", indent, instance.Path, instance.Platform.Target, caller)
 		ctx.traceStack = append(ctx.traceStack, instance.Path+"@"+string(instance.Platform.Target))
+
 		defer func() { ctx.traceStack = ctx.traceStack[:len(ctx.traceStack)-1] }()
 	}
 
@@ -813,6 +817,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if d.moduleStmt.Name != "PROTO_LIBRARY" {
 			emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, nil)
 		}
+
 		hOnlyARRef := NodeRef{}
 		var hOnlyARPath *VFS
 
@@ -909,6 +914,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if unitTestPeer != "" {
 		unitTestPeerCount = 1
 	}
+
 	seen := make(map[string]struct{}, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
 	allPeers := make([]string, 0, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
 
@@ -925,6 +931,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindLangDefault)
@@ -942,6 +949,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindProgramDefault)
@@ -951,6 +959,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindUserPeer)
@@ -960,6 +969,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindProgramDefault)
@@ -969,6 +979,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindUserPeer)
@@ -989,6 +1000,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := peerGlobalSeen[path]; dup {
 			return
 		}
+
 		peerGlobalSeen[path] = struct{}{}
 		peerGlobalRefs = append(peerGlobalRefs, ref)
 		peerGlobalPaths = append(peerGlobalPaths, path)
@@ -998,6 +1010,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := peerWholeArchiveSeen[path]; dup {
 			return
 		}
+
 		peerWholeArchiveSeen[path] = struct{}{}
 		peerWholeArchiveRefs = append(peerWholeArchiveRefs, ref)
 		peerWholeArchivePaths = append(peerWholeArchivePaths, path)
@@ -1007,6 +1020,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := peerWholeArchiveCmdSeen[path]; dup {
 			return
 		}
+
 		peerWholeArchiveCmdSeen[path] = struct{}{}
 		peerWholeArchiveCmdPaths = append(peerWholeArchiveCmdPaths, path)
 	}
@@ -1016,6 +1030,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := peerLinkCmdSeen[path]; dup {
 			return
 		}
+
 		peerLinkCmdSeen[path] = struct{}{}
 		peerLinkCmdPaths = append(peerLinkCmdPaths, path)
 	}
@@ -1023,6 +1038,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := peerDynamicSeen[path]; dup {
 			return
 		}
+
 		peerDynamicSeen[path] = struct{}{}
 		peerDynamicRefs = append(peerDynamicRefs, ref)
 		peerDynamicPaths = append(peerDynamicPaths, path)
@@ -1033,6 +1049,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := peerArchiveSeen[path]; dup {
 			return
 		}
+
 		peerArchiveSeen[path] = struct{}{}
 		peerArchiveRefs = append(peerArchiveRefs, ref)
 		peerArchivePaths = append(peerArchivePaths, path)
@@ -1046,6 +1063,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := peerLDPluginSeen[path]; dup {
 			return
 		}
+
 		peerLDPluginSeen[path] = struct{}{}
 		peerLDPluginRefs = append(peerLDPluginRefs, ref)
 		peerLDPluginPaths = append(peerLDPluginPaths, path)
@@ -1074,6 +1092,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			if _, dup := seenSet[x]; dup {
 				continue
 			}
+
 			seenSet[x] = struct{}{}
 			*dst = append(*dst, x)
 		}
@@ -1083,6 +1102,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			if _, dup := seenSet[x]; dup {
 				continue
 			}
+
 			seenSet[x] = struct{}{}
 			*dst = append(*dst, x)
 		}
@@ -1111,7 +1131,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if peerResult.isPROGRAM {
 			ThrowFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path, peerPath)
 		}
+
 		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult, kind: kind})
+
 		for i, p := range peerResult.LDPluginPaths {
 			peerLDPluginAddPath(peerResult.LDPluginRefs[i], p)
 		}
@@ -1154,6 +1176,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			archiveOrder = append(head, tail...)
 		case "PY3_PROGRAM":
 			allocatorExplicitSet := make(map[string]struct{}, len(allocatorExplicitPeers))
+
 			for _, p := range allocatorExplicitPeers {
 				allocatorExplicitSet[filepath.Clean(p)] = struct{}{}
 			}
@@ -1285,6 +1308,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				if oneLevelOnlyPaths == nil {
 					oneLevelOnlyPaths = map[VFS]struct{}{}
 				}
+
 				oneLevelOnlyPaths[p] = struct{}{}
 			}
 
@@ -1443,6 +1467,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			if _, dup := addInclSeen[p]; dup {
 				continue
 			}
+
 			addInclSeen[p] = struct{}{}
 			peerAddInclGlobal = append(peerAddInclGlobal, p)
 		}
@@ -2131,6 +2156,7 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 	if len(peer) == 0 {
 		return peer
 	}
+
 	ownSet := make(map[VFS]struct{}, len(own))
 	ownPrefix := Build(instancePath)
 
@@ -2160,10 +2186,12 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 func mergeDedupVFS(a, b []VFS) []VFS {
 	out := make([]VFS, 0, len(a)+len(b))
 	seen := make(map[VFS]struct{}, len(a)+len(b))
+
 	for _, x := range a {
 		if _, dup := seen[x]; dup {
 			continue
 		}
+
 		seen[x] = struct{}{}
 		out = append(out, x)
 	}
@@ -2172,6 +2200,7 @@ func mergeDedupVFS(a, b []VFS) []VFS {
 		if _, dup := seen[x]; dup {
 			continue
 		}
+
 		seen[x] = struct{}{}
 		out = append(out, x)
 	}
@@ -2182,10 +2211,12 @@ func mergeDedupVFS(a, b []VFS) []VFS {
 func mergeDedup(a, b []string) []string {
 	out := make([]string, 0, len(a)+len(b))
 	seen := make(map[string]struct{}, len(a)+len(b))
+
 	for _, x := range a {
 		if _, dup := seen[x]; dup {
 			continue
 		}
+
 		seen[x] = struct{}{}
 		out = append(out, x)
 	}
@@ -2194,6 +2225,7 @@ func mergeDedup(a, b []string) []string {
 		if _, dup := seen[x]; dup {
 			continue
 		}
+
 		seen[x] = struct{}{}
 		out = append(out, x)
 	}
@@ -2219,7 +2251,9 @@ func moveArchivePathsAfter(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS)
 	if len(moved) == 0 || len(refs) != len(paths) {
 		return refs, paths
 	}
+
 	moveSet := make(map[VFS]struct{}, len(moved))
+
 	for _, path := range moved {
 		moveSet[path] = struct{}{}
 	}
@@ -2260,7 +2294,9 @@ func movePathsAfter(paths []VFS, anchor VFS, moved []VFS) []VFS {
 	if len(moved) == 0 {
 		return paths
 	}
+
 	moveSet := make(map[VFS]struct{}, len(moved))
+
 	for _, path := range moved {
 		moveSet[path] = struct{}{}
 	}
@@ -2296,7 +2332,9 @@ func moveArchivePathsBefore(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS
 	if len(moved) == 0 || len(refs) != len(paths) {
 		return refs, paths
 	}
+
 	moveSet := make(map[VFS]struct{}, len(moved))
+
 	for _, path := range moved {
 		moveSet[path] = struct{}{}
 	}
@@ -2347,7 +2385,9 @@ func movePathsBefore(paths []VFS, anchor VFS, moved []VFS) []VFS {
 	if len(moved) == 0 {
 		return paths
 	}
+
 	moveSet := make(map[VFS]struct{}, len(moved))
+
 	for _, path := range moved {
 		moveSet[path] = struct{}{}
 	}
@@ -2435,6 +2475,7 @@ func mergeLDPlugins(own, peer *ldPluginsResult) *ldPluginsResult {
 	if len(ownPaths) == 0 && len(peerPaths) == 0 {
 		return nil
 	}
+
 	seen := make(map[VFS]struct{}, len(ownPaths)+len(peerPaths))
 	out := &ldPluginsResult{
 		Refs:  make([]NodeRef, 0, len(ownPaths)+len(peerPaths)),
@@ -2445,6 +2486,7 @@ func mergeLDPlugins(own, peer *ldPluginsResult) *ldPluginsResult {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		out.Refs = append(out.Refs, ownRefs[i])
 		out.Paths = append(out.Paths, p)
@@ -2454,6 +2496,7 @@ func mergeLDPlugins(own, peer *ldPluginsResult) *ldPluginsResult {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		out.Refs = append(out.Refs, peerRefs[i])
 		out.Paths = append(out.Paths, p)
@@ -2513,6 +2556,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 			if _, dup := seenSet[x]; dup {
 				continue
 			}
+
 			seenSet[x] = struct{}{}
 			*dst = append(*dst, x)
 		}
@@ -2522,6 +2566,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 			if _, dup := seenSet[x]; dup {
 				continue
 			}
+
 			seenSet[x] = struct{}{}
 			*dst = append(*dst, x)
 		}
@@ -2531,6 +2576,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		if _, dup := archiveSeen[path]; dup {
 			return
 		}
+
 		archiveSeen[path] = struct{}{}
 		out.archiveRefs = append(out.archiveRefs, ref)
 		out.archivePaths = append(out.archivePaths, path)
@@ -2540,6 +2586,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		if _, dup := globalSeen[path]; dup {
 			return
 		}
+
 		globalSeen[path] = struct{}{}
 		out.globalRefs = append(out.globalRefs, ref)
 		out.globalPaths = append(out.globalPaths, path)
@@ -2549,6 +2596,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		if _, dup := wholeArchiveSeen[path]; dup {
 			return
 		}
+
 		wholeArchiveSeen[path] = struct{}{}
 		out.wholeArchiveRefs = append(out.wholeArchiveRefs, ref)
 		out.wholeArchivePaths = append(out.wholeArchivePaths, path)
@@ -2558,6 +2606,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		if _, dup := wholeArchiveCmdSeen[path]; dup {
 			return
 		}
+
 		wholeArchiveCmdSeen[path] = struct{}{}
 		out.wholeArchiveCmdPaths = append(out.wholeArchiveCmdPaths, path)
 	}
@@ -2566,6 +2615,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		if _, dup := ldPluginSeen[path]; dup {
 			return
 		}
+
 		ldPluginSeen[path] = struct{}{}
 		out.ldPluginRefs = append(out.ldPluginRefs, ref)
 		out.ldPluginPaths = append(out.ldPluginPaths, path)
@@ -2575,6 +2625,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		if _, dup := dynamicSeen[path]; dup {
 			return
 		}
+
 		dynamicSeen[path] = struct{}{}
 		out.dynamicRefs = append(out.dynamicRefs, ref)
 		out.dynamicPaths = append(out.dynamicPaths, path)
@@ -2652,6 +2703,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		peerPath := filepath.Clean(p)
 
@@ -2666,6 +2718,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		walk(filepath.Clean(p))
 	}
@@ -2753,6 +2806,7 @@ func reorderLDMembers(refs []NodeRef, paths []VFS) ([]NodeRef, []VFS) {
 
 	for i, path := range paths {
 		m := member{path: path}
+
 		if i < len(refs) {
 			m.ref = refs[i]
 		}

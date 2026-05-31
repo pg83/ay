@@ -45,6 +45,7 @@ func buildScriptTable(fs FS) scriptDeps {
 
 	for rel, txt := range texts {
 		deps := map[string]bool{}
+
 		for _, mod := range scriptImports(txt) {
 			if target, ok := byStem[mod]; ok && target != rel {
 				deps[target] = true

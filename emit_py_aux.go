@@ -23,6 +23,7 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 
 		src := Build(instance.Path + "/" + srcRel)
 		entries = append(entries, pyProtoAuxEntry{path: src, key: generatedPyResourceKey(instance.Path, d, srcRel), inputs: genInputs})
+
 		if !d.pyBuildNoPYC {
 			suffix := ".yapyc3"
 
@@ -45,7 +46,9 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 	if rawRes == nil {
 		return nil
 	}
+
 	res := &generatedPyAuxChunksResult{}
+
 	for i, prRef := range rawRes.PRRefs {
 		aux := rawRes.PROutputs[i]
 		ccIn := in
@@ -101,6 +104,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 		if _, ok := inputSeen[v]; ok {
 			return
 		}
+
 		inputSeen[v] = struct{}{}
 		cur.inputs = append(cur.inputs, v)
 	}
@@ -112,6 +116,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 		if _, ok := depSeen[ref]; ok {
 			return
 		}
+
 		depSeen[ref] = struct{}{}
 		cur.deps = append(cur.deps, ref)
 	}
@@ -166,6 +171,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 
 	flush()
 	res := &rawAuxResourceChunksResult{}
+
 	for _, ch := range chunks {
 		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, moduleTag) + "_raw.auxcpp")
 		sourceInputs := pyProtoSourceInputs(ch.inputs)
@@ -175,9 +181,11 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 
 		chDeps := append([]NodeRef(nil), deps...)
 		chDeps = append(chDeps, ch.deps...)
+
 		if rescompilerRef != (NodeRef{}) {
 			chDeps = append(chDeps, rescompilerRef)
 		}
+
 		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 		inputs := append([]VFS(nil), ch.inputs...)
 		inputs = append(inputs, rescompilerBinVFS)

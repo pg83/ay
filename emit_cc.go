@@ -169,6 +169,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Tags: instance.Platform.Tags,
 		TargetProperties: func() map[string]string {
 			tp := map[string]string{"module_dir": instance.Path}
+
 			if in.ModuleTag != nil {
 				tp["module_tag"] = *in.ModuleTag
 			}
@@ -370,6 +371,7 @@ func composeOwnAndPeerGlobalBucket(in ModuleCCInputs, isCxx bool) []string {
 			if _, dup := seen[x]; dup {
 				continue
 			}
+
 			seen[x] = struct{}{}
 			out = append(out, x)
 		}

@@ -87,12 +87,14 @@ func FinalizeStream(e *BufferedEmitter, yield func(*Node)) []string {
 
 	results := make([]string, 0, len(e.results))
 	seen := map[string]struct{}{}
+
 	for _, rid := range e.results {
 		u := uids[rid]
 
 		if _, ok := seen[u]; ok {
 			continue
 		}
+
 		seen[u] = struct{}{}
 		results = append(results, u)
 	}
@@ -113,6 +115,7 @@ func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) []
 
 	uids := make([]string, n)
 	uidScratch := canonBuf{fs: e.fs}
+
 	for _, i := range order {
 		node := e.nodes[i]
 		uids[i] = resolveAndUID(node, uids, &uidScratch)
@@ -190,10 +193,12 @@ func finalizeOrder(e *BufferedEmitter) []int {
 
 	for i, node := range e.nodes {
 		seen := make(map[int64]struct{})
+
 		for _, r := range node.DepRefs {
 			if _, ok := seen[r.id]; ok {
 				continue
 			}
+
 			seen[r.id] = struct{}{}
 			addEdge(int(r.id), i)
 		}
@@ -211,6 +216,7 @@ func finalizeOrder(e *BufferedEmitter) []int {
 				if _, ok := seen[r.id]; ok {
 					continue
 				}
+
 				seen[r.id] = struct{}{}
 				addEdge(int(r.id), i)
 			}
@@ -272,6 +278,7 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 			if _, ok := seen[u]; ok {
 				continue
 			}
+
 			seen[u] = struct{}{}
 			ordered = append(ordered, u)
 		}
@@ -303,6 +310,7 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 
 		for _, k := range fkeys {
 			set := make(map[string]struct{})
+
 			for _, r := range node.ForeignDepRefs[k] {
 				set[uids[r.id]] = struct{}{}
 			}
@@ -384,6 +392,7 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 	if e.onNode != nil {
 		e.onNode(n)
 	}
+
 	return NodeRef{id: id}
 }
 
@@ -435,12 +444,14 @@ func (e *StreamingEmitter) Finish() []string {
 
 	results := make([]string, 0, len(e.results))
 	seen := map[string]struct{}{}
+
 	for _, rid := range e.results {
 		u := e.uids[rid]
 
 		if _, ok := seen[u]; ok {
 			continue
 		}
+
 		seen[u] = struct{}{}
 		results = append(results, u)
 	}
@@ -467,22 +478,27 @@ func graphFromFinalizedEmitter(e *BufferedEmitter, uids []string) *Graph {
 			uidToNode[u] = node
 		}
 	}
+
 	seenResult := map[string]struct{}{}
+
 	for _, rid := range e.results {
 		u := uids[rid]
 
 		if _, ok := seenResult[u]; ok {
 			continue
 		}
+
 		seenResult[u] = struct{}{}
 		out.Result = append(out.Result, u)
 	}
+
 	seenNode := make(map[string]struct{}, n)
 	var dfsVisit func(uid string)
 	dfsVisit = func(uid string) {
 		if _, ok := seenNode[uid]; ok {
 			return
 		}
+
 		seenNode[uid] = struct{}{}
 		node := uidToNode[uid]
 
@@ -525,5 +541,6 @@ func applyGraphConf(g *Graph, conf *graphConf) {
 	if conf == nil || len(conf.Resources) == 0 {
 		return
 	}
+
 	g.Conf = map[string]interface{}{"resources": conf.Resources}
 }

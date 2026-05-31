@@ -57,6 +57,7 @@ func cfIncludeDirectives(pm *includeParserManager, rel string) []includeDirectiv
 	if len(out) == 0 {
 		return nil
 	}
+
 	sort.Slice(out, func(i, j int) bool { return out[i].target.String() < out[j].target.String() })
 	return out
 }

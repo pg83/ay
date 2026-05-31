@@ -39,6 +39,7 @@ var sysInclYamlSequence = []sysInclEntry{
 	{file: "python-2-disable.yml"},
 	{file: "python-2-disable-numpy.yml"},
 }
+
 var supportedSysInclArchs = map[string]struct{}{
 	"aarch64": {},
 	"x86_64":  {},
@@ -139,10 +140,12 @@ func (v PerSourceView) Lookup(includerPath, header string) ([]string, bool) {
 
 	out := make([]string, 0, len(srcOut)+len(incOut))
 	seen := make(map[string]struct{}, len(srcOut)+len(incOut))
+
 	for _, p := range srcOut {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		out = append(out, p)
 	}
@@ -151,6 +154,7 @@ func (v PerSourceView) Lookup(includerPath, header string) ([]string, bool) {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		out = append(out, p)
 	}
@@ -201,6 +205,7 @@ func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool, bool) {
 			if _, dup := seen[p]; dup {
 				continue
 			}
+
 			seen[p] = struct{}{}
 			out = append(out, p)
 		}
@@ -256,6 +261,7 @@ func unionIncluderMappings(active []*SysIncl, header string) ([]string, bool, bo
 			if _, dup := seen[p]; dup {
 				continue
 			}
+
 			seen[p] = struct{}{}
 			out = append(out, p)
 		}
@@ -334,6 +340,7 @@ func LoadSysInclSetForFS(fs FS, arch string, onWarn func(Warn)) SysInclSet {
 	if _, ok := supportedSysInclArchs[arch]; !ok {
 		ThrowFmt("LoadSysInclSetFor: unsupported arch %q (want aarch64 or x86_64)", arch)
 	}
+
 	env := sysInclEnv{arch: arch}
 	var set SysInclSet
 
@@ -688,7 +695,9 @@ func literalAltsFromRegex(pat string) ([]string, bool) {
 	if re.Op != syntax.OpConcat || len(re.Sub) == 0 || re.Sub[0].Op != syntax.OpBeginText {
 		return nil, false
 	}
+
 	acc := []string{""}
+
 	for _, sub := range re.Sub[1:] {
 		set, ok := literalSet(sub)
 
@@ -714,11 +723,13 @@ func literalSet(re *syntax.Regexp) ([]string, bool) {
 		if re.Flags&syntax.FoldCase != 0 {
 			return nil, false
 		}
+
 		return []string{string(re.Rune)}, true
 	case syntax.OpCapture:
 		return literalSet(re.Sub[0])
 	case syntax.OpConcat:
 		acc := []string{""}
+
 		for _, sub := range re.Sub {
 			set, ok := literalSet(sub)
 
@@ -790,6 +801,7 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 	if pat == "" {
 		return nil
 	}
+
 	f := &sourceFilter{}
 	exc := Try(func() {
 		altStrs := splitTopLevelOr(pat)
@@ -797,6 +809,7 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 		for _, altStr := range altStrs {
 			excludes, residual, isExclude := extractNegativeLookahead(altStr)
 			alt := filterAlt{}
+
 			if isExclude {
 				alt.excludePrefixes = excludes
 

@@ -66,12 +66,16 @@ func cmdDumpDiff(args []string) int {
 
 	if outPath != "" && outPath != "-" {
 		f := Throw2(os.Create(outPath))
+
 		defer func() { Throw(f.Close()) }()
+
 		w = f
 	}
 
 	bw := bufio.NewWriterSize(w, 1<<20)
+
 	defer func() { Throw(bw.Flush()) }()
+
 	switch mode {
 	case "summary":
 		diffSummary(leftPath, rightPath, bw)
@@ -143,6 +147,7 @@ func diffSummary(leftPath, rightPath string, bw *bufio.Writer) {
 	summarize := func(title string, only map[string]string) {
 		Throw2(fmt.Fprintf(bw, "=== %s (%d) ===\n", title, len(only)))
 		byKind, byExt, byDir := map[string]int{}, map[string]int{}, map[string]int{}
+
 		for out, kind := range only {
 			byKind[kind]++
 			byExt[outputExt(out)]++
@@ -154,12 +159,15 @@ func diffSummary(leftPath, rightPath string, bw *bufio.Writer) {
 		writeCountMap(bw, "  by dir", byDir, 15)
 	}
 	onlyLeft := map[string]string{}
+
 	for out, k := range leftKind {
 		if _, ok := rightKind[out]; !ok {
 			onlyLeft[out] = k
 		}
 	}
+
 	onlyRight := map[string]string{}
+
 	for out, k := range rightKind {
 		if _, ok := leftKind[out]; !ok {
 			onlyRight[out] = k
@@ -228,7 +236,9 @@ func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
 	for i := range order {
 		order[i] = i
 	}
+
 	sort.Slice(order, func(a, b int) bool { return fieldDiff[order[a]] > fieldDiff[order[b]] })
+
 	for _, i := range order {
 		if fieldDiff[i] == 0 {
 			continue
@@ -273,6 +283,7 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer) {
 	ridx := map[string]map[string][]string{}
 	streamJSONL(rightPath, func(n map[string]any) {
 		rec := map[string][]string{}
+
 		for _, f := range tokenFields {
 			rec[f] = tokenize(n, f)
 		}
@@ -283,6 +294,7 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer) {
 	})
 	our := map[string]map[string]int{}
 	ref := map[string]map[string]int{}
+
 	for _, f := range tokenFields {
 		our[f], ref[f] = map[string]int{}, map[string]int{}
 	}
@@ -324,6 +336,7 @@ func cmdArgTokens(n map[string]any) []string {
 
 func accumMultisetDiff(left, right []string, onlyL, onlyR map[string]int) {
 	lc, rc := map[string]int{}, map[string]int{}
+
 	for _, t := range left {
 		lc[t]++
 	}
@@ -348,6 +361,7 @@ func accumMultisetDiff(left, right []string, onlyL, onlyR map[string]int) {
 func writeTokenRanking(bw *bufio.Writer, title string, m map[string]int) {
 	Throw2(fmt.Fprintf(bw, "\n[%s]  (token: #nodes, by category)\n", title))
 	byCat := map[string]int{}
+
 	for t := range m {
 		byCat[tokenCategory(t)] += m[t]
 	}
@@ -413,6 +427,7 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 	ridx := map[string]diffKindRec{}
 	streamJSONL(rightPath, func(n map[string]any) {
 		rr := diffKindRec{kind: nodeKVP(n), h: nodeFieldHashes(n)}
+
 		for _, o := range toStrings(n["outputs"]) {
 			setDumpDiffKindMatch(rExact, rAxis, ridx, o, n, rr)
 		}
@@ -471,6 +486,7 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 	for k := range total {
 		kinds = append(kinds, k)
 	}
+
 	sort.Slice(kinds, func(a, b int) bool { return total[kinds[a]] > total[kinds[b]] })
 	Throw2(fmt.Fprintf(bw, "=== by-kind: content divergence per node kind ===\n"))
 	Throw2(fmt.Fprintf(bw, "%-8s %8s %8s   %s\n", "kind", "paired", "diverge", "top differing fields / combos"))
@@ -484,6 +500,7 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 				parts = append(parts, fmt.Sprintf("%s:%d", f, fd[i]))
 			}
 		}
+
 		sort.Slice(parts, func(a, b int) bool { return parts[a] > parts[b] })
 		topCombo := ""
 		best := 0
@@ -536,6 +553,7 @@ func diffRoots(leftPath, rightPath string, bw *bufio.Writer) {
 		}
 	})
 	leafSet := map[string]bool{}
+
 	for uid, outs := range uidToDivergentOuts {
 		if len(outs) == 0 {
 			continue
@@ -772,6 +790,7 @@ func findDumpDiffFieldMatch(exact, axis, any map[string]diffFieldHashes, n map[s
 			return h, true
 		}
 	}
+
 	return diffFieldHashes{}, false
 }
 
@@ -843,6 +862,7 @@ func findDumpDiffKindMatch(exact, axis, any map[string]diffKindRec, n map[string
 			return rec, true
 		}
 	}
+
 	return diffKindRec{}, false
 }
 
@@ -901,6 +921,7 @@ func outputTopDir(p string) string {
 
 func outputExt(p string) string {
 	base := p[strings.LastIndex(p, "/")+1:]
+
 	for _, e := range []string{".pic.o", ".global.a", ".pb.cc", ".pb.h", ".o", ".a", ".so", ".cpp", ".c", ".h", ".py", ".pyc", ".bc"} {
 		if strings.HasSuffix(base, e) {
 			return e

@@ -107,6 +107,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		if len(autoExtras) == 0 && len(wcExtras) == 0 && len(flatcExtras) == 0 && len(bisonExtras) == 0 && len(extras) == 0 && !protoDropped {
 			srcIn.NodeInputs = full
 		}
+
 		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})
 		ref, outPath, _ := EmitCC(srcInstance, srcRel, srcVFS, srcIn, ctx.host, ctx.emit)
 		return &sourceEmit{Ref: ref, OutPath: outPath}
@@ -220,6 +221,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			registerGeneratedParsedOutput(ctx, srcInstance, "EV", evH, evHParsed)
 			evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders))
 			evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internString(evH.Rel())})
+
 			for _, include := range protobufRuntimeHeaders {
 				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 			}
@@ -344,6 +346,7 @@ func emitLibraryFlatcSource(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	if extras := flatcCCExtraInputs(ctx, ccIn.IncludeInputs); len(extras) > 0 {
 		ccIn.IncludeInputs = appendVFSUnique(ccIn.IncludeInputs, extras)
 	}
+
 	ccIn.ExtraDepRefs = append([]NodeRef{fl.flRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, fl.flRef)...)
 	ccSrcRel := strings.TrimPrefix(fl.cpp.Rel(), instance.Path+"/")
 	ccRef, ccOut, _ := EmitCC(instance, ccSrcRel, fl.cpp, ccIn, ctx.host, ctx.emit)

@@ -196,6 +196,7 @@ func nodeCmdText(node map[string]any) string {
 func nodeCmdBasenames(node map[string]any) map[string]struct{} {
 	cmds, _ := node["cmds"].([]any)
 	set := map[string]struct{}{}
+
 	for _, c := range cmds {
 		m, _ := c.(map[string]any)
 
@@ -324,7 +325,9 @@ func marshalCompact(v any) []byte {
 
 func streamGraphFanout[R any](path string, workers int, process func(map[string]any) R, collect func(R)) {
 	f := Throw2(os.Open(path))
+
 	defer func() { Throw(f.Close()) }()
+
 	dec := json.NewDecoder(bufio.NewReaderSize(f, 1<<20))
 	dec.UseNumber()
 	seekToGraph(dec, path)
@@ -345,7 +348,9 @@ func streamGraphFanout[R any](path string, workers int, process func(map[string]
 			}
 		}()
 	}
+
 	done := make(chan struct{})
+
 	go func() {
 		for r := range results {
 			collect(r)
@@ -368,7 +373,9 @@ func streamGraphFanout[R any](path string, workers int, process func(map[string]
 
 func streamJSONL(path string, fn func(map[string]any)) {
 	f := Throw2(os.Open(path))
+
 	defer func() { Throw(f.Close()) }()
+
 	r := bufio.NewReaderSize(f, 1<<20)
 
 	for {

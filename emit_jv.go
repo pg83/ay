@@ -34,6 +34,7 @@ func emitJVDownstreamCPCC(
 		if reg != nil {
 			emits := make([]includeDirective, 0, 1+len(outputIncludes))
 			emits = append(emits, includeDirective{kind: includeQuoted, target: internString(antlr4RuntimeHeaderVFS.Rel())})
+
 			for _, h := range outputIncludes {
 				emits = append(emits, includeDirective{kind: includeQuoted, target: internString(h)})
 			}

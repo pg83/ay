@@ -218,12 +218,14 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 
 	var out []string
 	seen := map[string]struct{}{}
+
 	for _, m := range yaConfFormulaRE.FindAllSubmatch(raw, -1) {
 		formula := string(m[1])
 
 		if _, dup := seen[formula]; dup {
 			continue
 		}
+
 		seen[formula] = struct{}{}
 		out = append(out, formula)
 	}

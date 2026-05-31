@@ -23,6 +23,7 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 
 	reg := codegenRegForInstance(ctx, instance)
 	res := &runProgramsForARResult{}
+
 	for _, rp := range d.runPrograms {
 		prRef := emitRunProgram(ctx, instance, rp, d, reg, in)
 
@@ -357,6 +358,7 @@ func prEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, outFil
 		if vfsHasPrefix(f) {
 			f = Intern(f).Rel()
 		}
+
 		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(f)})
 	}
 
@@ -374,10 +376,12 @@ func resolveRunProgramAuxTools(ctx *genCtx, toolPaths []string) []runProgramAuxT
 
 	out := make([]runProgramAuxTool, 0, len(toolPaths))
 	seen := make(map[string]struct{}, len(toolPaths))
+
 	for _, toolPath := range toolPaths {
 		if _, dup := seen[toolPath]; dup {
 			continue
 		}
+
 		seen[toolPath] = struct{}{}
 		res := ctx.toolResult(filepath.Clean(toolPath))
 		out = append(out, runProgramAuxTool{

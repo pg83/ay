@@ -144,6 +144,7 @@ func EmitLD(
 	depRefs = append(depRefs, dynamicRefs...)
 	depRefs = append(depRefs, objcopyRefs...)
 	outputs := []VFS{outputVFS}
+
 	for _, p := range dynamicPaths {
 		outputs = append(outputs, Build(binaryDir+"/"+lastPathComponent(p.Rel())))
 	}
@@ -447,6 +448,7 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, plugi
 			if _, dup := buildRootSeen[p]; dup {
 				continue
 			}
+
 			buildRootSeen[p] = struct{}{}
 			buildRootBlock = append(buildRootBlock, p)
 		}

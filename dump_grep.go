@@ -99,11 +99,14 @@ func cmdDumpGrep(args []string) int {
 		for _, k := range keys {
 			want[normPath(strings.TrimSpace(k))] = true
 		}
+
 		matchStr = func(s string) bool { return want[s] }
 	}
 
 	bw := bufio.NewWriterSize(os.Stdout, 1<<20)
+
 	defer func() { Throw(bw.Flush()) }()
+
 	exact := !substr && !useRegex
 	emit := func(node map[string]any) {
 		hit := false
@@ -136,7 +139,9 @@ func cmdDumpGrep(args []string) int {
 
 	if raw {
 		f := Throw2(os.Open(inPath))
+
 		defer func() { Throw(f.Close()) }()
+
 		dec := json.NewDecoder(bufio.NewReaderSize(f, 1<<20))
 		dec.UseNumber()
 		seekToGraph(dec, inPath)
@@ -151,7 +156,9 @@ func cmdDumpGrep(args []string) int {
 	}
 
 	f := Throw2(os.Open(inPath))
+
 	defer func() { Throw(f.Close()) }()
+
 	r := bufio.NewReaderSize(f, 1<<20)
 
 	for {

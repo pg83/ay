@@ -184,6 +184,7 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 		if _, dup := seen[d]; dup {
 			return
 		}
+
 		seen[d] = struct{}{}
 		out = append(out, d)
 	}
@@ -264,6 +265,7 @@ func (flatbuffersIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncl
 		if len(m) != 2 {
 			return
 		}
+
 		out = append(out, includeDirective{kind: includeQuoted, target: internString(string(m[1]))})
 	})
 
@@ -280,7 +282,9 @@ func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet
 		if !ok {
 			return
 		}
+
 		local = append(local, includeDirective{kind: kind, target: internString(target)})
+
 		switch {
 		case strings.HasSuffix(target, ".ev"):
 			hcpp = append(hcpp, includeDirective{kind: kind, target: internString(strings.TrimSuffix(target, ".ev") + ".ev.pb.h")})
@@ -330,6 +334,7 @@ func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeS
 		if _, dup := seenNative[target]; dup {
 			return
 		}
+
 		seenNative[target] = struct{}{}
 		native = append(native, includeDirective{kind: includeQuoted, target: internString(target)})
 	})
@@ -478,6 +483,7 @@ func parseDirectiveInline(data []byte, hashPos int) (includeDirective, bool, int
 		if q > start && data[start] != '$' && !hasYIgnoreComment(data, q) && !bytes.ContainsAny(data[start:q], "[]") {
 			return includeDirective{kind: includeQuoted, target: internBytes(data[start:q])}, true, nextLineStart(data, q)
 		}
+
 		return includeDirective{}, false, nextLineStart(data, q)
 	}
 
@@ -505,6 +511,7 @@ func parseDirectiveInline(data []byte, hashPos int) (includeDirective, bool, int
 	if !hasYIgnoreComment(data, q) && !bytes.ContainsAny(targetBytes, "[]") {
 		return includeDirective{kind: kind, target: internBytes(targetBytes)}, true, nextLineStart(data, q)
 	}
+
 	return includeDirective{}, false, nextLineStart(data, q)
 }
 
