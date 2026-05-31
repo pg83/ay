@@ -9,24 +9,9 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 	toolLDRef, toolBinPath := ctx.tool(archiverToolPath)
 
-	var prInSources []VFS
-	{
-		seen := map[VFS]struct{}{}
-		for _, rp := range d.runPrograms {
-			for _, f := range rp.INFiles {
-				p := Source(instance.Path + "/" + f)
-				if _, dup := seen[p]; dup {
-					continue
-				}
-				seen[p] = struct{}{}
-				prInSources = append(prInSources, p)
-			}
-		}
-	}
-
 	reg := codegenRegForInstance(ctx, instance)
 	for _, a := range d.archives {
-		emitArchive(instance, a, d, toolBinPath, toolLDRef, prInSources, ctx.emit, reg)
+		emitArchive(instance, a, d, toolBinPath, toolLDRef, ctx.emit, reg)
 	}
 }
 
@@ -36,7 +21,6 @@ func emitArchive(
 	d *moduleData,
 	toolBinPath VFS,
 	toolLDRef NodeRef,
-	prInSources []VFS,
 	emit Emitter,
 	reg *CodegenRegistry,
 ) {
@@ -52,7 +36,6 @@ func emitArchive(
 	producerRefs := []NodeRef{}
 	producerSet := map[NodeRef]struct{}{}
 	pathPerFile := make([]VFS, 0, len(a.Files))
-	pathStrPerFile := make([]string, 0, len(a.Files))
 
 	for _, f := range a.Files {
 
@@ -77,72 +60,16 @@ func emitArchive(
 		absStr := absVFS.String()
 
 		pathPerFile = append(pathPerFile, absVFS)
-		pathStrPerFile = append(pathStrPerFile, absStr)
 		cmdArgs = append(cmdArgs, absStr+":")
 	}
 	cmdArgs = append(cmdArgs, "-o", archivePath)
 
-	prSiblingOutputs := make([]VFS, 0)
-	{
-
-		maxArchived := ""
-		for _, s := range pathStrPerFile {
-			if s > maxArchived {
-				maxArchived = s
-			}
-		}
-		seen := map[VFS]struct{}{}
-		for _, p := range pathPerFile {
-			seen[p] = struct{}{}
-		}
-		for _, rp := range d.runPrograms {
-			rpProduces := false
-			for _, f := range rp.OUTFiles {
-				if _, ok := producerSet[d.prOutputProducer[f]]; ok {
-					rpProduces = true
-					break
-				}
-			}
-			if !rpProduces {
-				for _, f := range rp.OUTNoAutoFiles {
-					if _, ok := producerSet[d.prOutputProducer[f]]; ok {
-						rpProduces = true
-						break
-					}
-				}
-			}
-			if !rpProduces && rp.StdoutFile != nil {
-				if _, ok := producerSet[d.prOutputProducer[*rp.StdoutFile]]; ok {
-					rpProduces = true
-				}
-			}
-			if !rpProduces {
-				continue
-			}
-			collect := func(rel string) {
-				v := Build(instance.Path + "/" + rel)
-				if v.String() > maxArchived {
-					return
-				}
-				if _, dup := seen[v]; dup {
-					return
-				}
-				seen[v] = struct{}{}
-				prSiblingOutputs = append(prSiblingOutputs, v)
-			}
-			for _, f := range rp.OUTFiles {
-				collect(f)
-			}
-			for _, f := range rp.OUTNoAutoFiles {
-				collect(f)
-			}
-			if rp.StdoutFile != nil {
-				collect(*rp.StdoutFile)
-			}
-		}
-	}
-
-	inputs := make([]VFS, 0, len(pathPerFile)+len(prSiblingOutputs)+1+len(prInSources))
+	// Archive-node inputs are exactly the files the archiver reads (the archived
+	// members) plus the archiver tool. RUN_PROGRAM source INFiles and non-archived
+	// sibling PR outputs the command never names — they are build-order concerns
+	// carried by producerRefs / toolLDRef DepRefs, not action inputs — so they are
+	// not listed here.
+	inputs := make([]VFS, 0, len(pathPerFile)+1)
 
 	buildRootSeen := map[VFS]struct{}{}
 	for _, p := range pathPerFile {
@@ -152,25 +79,7 @@ func emitArchive(
 		buildRootSeen[p] = struct{}{}
 		inputs = append(inputs, p)
 	}
-	for _, p := range prSiblingOutputs {
-		if _, dup := buildRootSeen[p]; dup {
-			continue
-		}
-		buildRootSeen[p] = struct{}{}
-		inputs = append(inputs, p)
-	}
 	inputs = append(inputs, toolBinPath)
-	inSet := map[VFS]struct{}{}
-	for _, p := range inputs {
-		inSet[p] = struct{}{}
-	}
-	for _, p := range prInSources {
-		if _, dup := inSet[p]; dup {
-			continue
-		}
-		inSet[p] = struct{}{}
-		inputs = append(inputs, p)
-	}
 
 	depRefs := make([]NodeRef, 0, len(producerRefs)+1)
 	depRefs = append(depRefs, producerRefs...)

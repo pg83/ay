@@ -119,31 +119,96 @@ var ldOwnScriptRels = func() map[string]bool {
 	for _, v := range ldScriptInputs {
 		m[v.Rel()] = true
 	}
+	// The vcs-stamp header is a real LD input (included by the generated
+	// __vcs_version__.c the link compiles) present in both graphs, but the link
+	// command never names it — whitelist it so reference-graph pruning keeps it.
+	m[ldSvnversionHVFS.Rel()] = true
 	return m
 }()
 
-func arLDInputKept(s, kind string) bool {
-	if isHeaderSource(s) {
-		return false
+// nodeCmdText flattens a node's command arguments into one NUL-joined, normPath'd
+// string for whole-path substring testing (used by the dep strip to detect a dep
+// output the command names directly, e.g. a TS run_test --context path that is not
+// listed among the node's inputs).
+func nodeCmdText(node map[string]any) string {
+	cmds, _ := node["cmds"].([]any)
+	var b strings.Builder
+	for _, c := range cmds {
+		m, _ := c.(map[string]any)
+		for _, a := range toStrings(m["cmd_args"]) {
+			b.WriteString(normPath(a))
+			b.WriteByte('\x00')
+		}
 	}
+	return b.String()
+}
+
+// nodeCmdBasenames returns the set of file basenames named by a node's command
+// arguments. Each cmd_arg token contributes its basename (the part after the last
+// '/'); a trailing ':' (the resource archiver's "path:" syntax) is stripped.
+// The match is on whole basenames, not substrings, so a source input (foo.c) is
+// not spuriously matched against the object token that embeds its name (foo.c.o).
+func nodeCmdBasenames(node map[string]any) map[string]struct{} {
+	cmds, _ := node["cmds"].([]any)
+	set := map[string]struct{}{}
+	for _, c := range cmds {
+		m, _ := c.(map[string]any)
+		for _, a := range toStrings(m["cmd_args"]) {
+			b := strings.TrimRight(baseName(normPath(a)), ":")
+			set[b] = struct{}{}
+		}
+	}
+	return set
+}
+
+// cmdLiteralBasenames are bare-word command arguments that collide with a real
+// input's basename but do NOT name that file: "gnu" is the llvm-ar archive-format
+// selector (link_lib.py ... LLVM_AR gnu $(B) ...), not the magic-database source
+// contrib/libs/libmagic/magic/Magdir/gnu. An input whose basename is one of these
+// is never kept via the command-name rule.
+var cmdLiteralBasenames = map[string]bool{"gnu": true}
+
+// arLDInputKept decides whether a link/archive input survives reference-graph
+// pruning. Keep it if it is a real build artifact / known script (the white
+// list), OR if the command names its file — its basename matches a whole basename
+// token of the command (cmdBases). ymake propagates the full transitive
+// header/source set onto AR/LD nodes as inputs; those are never named by the
+// link/ar command (the .o/.a go through a response file, headers/protos aren't
+// passed at all), so they fall away — while genuinely-consumed inputs the command
+// DOES name (vcs svnversion.h, llvm-link .bc, exports.symlist, the archiver tool,
+// archived .pyc) are kept.
+func arLDInputKept(s, kind string, cmdBases map[string]struct{}) bool {
 	if strings.HasSuffix(s, ".o") || strings.HasSuffix(s, ".a") ||
 		strings.HasSuffix(s, ".pyplugin") || strings.HasSuffix(s, ".exports") {
 		return true
 	}
-	rel, ok := strings.CutPrefix(s, "$(S)/")
-	if !ok {
+	if rel, ok := strings.CutPrefix(s, "$(S)/"); ok {
+		if kind == "AR" && rel == "build/scripts/link_lib.py" {
+			return true
+		}
+		if kind == "LD" && ldOwnScriptRels[rel] {
+			return true
+		}
+	}
+	b := baseName(s)
+	if cmdLiteralBasenames[b] {
 		return false
 	}
-	if kind == "AR" {
-		return rel == "build/scripts/link_lib.py"
-	}
-	return ldOwnScriptRels[rel]
+	_, ok := cmdBases[b]
+	return ok
 }
 
-func filterARLDInputs(in []string, kind string) []string {
+func baseName(s string) string {
+	if i := strings.LastIndexByte(s, '/'); i >= 0 {
+		return s[i+1:]
+	}
+	return s
+}
+
+func filterARLDInputs(in []string, kind string, cmdBases map[string]struct{}) []string {
 	out := in[:0]
 	for _, s := range in {
-		if arLDInputKept(s, kind) {
+		if arLDInputKept(s, kind, cmdBases) {
 			out = append(out, s)
 		}
 	}
@@ -181,16 +246,18 @@ func getString(node map[string]any, key string) string {
 	return s
 }
 
-// canonInputs returns a node's inputs after the same filtering canonContent
-// applies (AR/LD input pruning + non-CP cascade-script removal). The dep-strip
-// pass keys off this so it agrees with what the normalized node treats as a real
-// input — e.g. filterARLDInputs already drops the induced .pb.h from a link
-// node's inputs, so the matching dep edges are likewise build-order-only.
-func canonInputs(node map[string]any) []string {
+// canonInputs returns a node's inputs after canonical filtering. filterARLDInputs
+// (AR/LD input pruning) is applied ONLY to the upstream reference graph
+// (refGraph) — it discounts inputs ymake lists on link/archive nodes that our
+// generator does not (or should not) model. Our graph is normalized faithfully so
+// that any genuine over- or under-emission surfaces as a diff, and so the filter
+// can be tightened to drop only what is really superfluous. The non-CP
+// cascade-script filter is applied to both (unchanged).
+func canonInputs(node map[string]any, refGraph bool) []string {
 	inputs := normSortedStrings(node["inputs"])
 	kind := nodeProgramKind(node)
-	if kind == "AR" || kind == "LD" {
-		inputs = filterARLDInputs(inputs, kind)
+	if refGraph && (kind == "AR" || kind == "LD") {
+		inputs = filterARLDInputs(inputs, kind, nodeCmdBasenames(node))
 	}
 	if kind != "CP" {
 		inputs = filterNonCPCascadeScripts(inputs)
@@ -198,8 +265,8 @@ func canonInputs(node map[string]any) []string {
 	return inputs
 }
 
-func canonContent(node map[string]any) map[string]any {
-	inputs := canonInputs(node)
+func canonContent(node map[string]any, refGraph bool) map[string]any {
+	inputs := canonInputs(node, refGraph)
 
 	canon := map[string]any{
 		"cmds":              normRec(orVal(node["cmds"], []any{})),
