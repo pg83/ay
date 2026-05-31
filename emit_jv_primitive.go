@@ -5,16 +5,16 @@ import (
 	"strings"
 )
 
+var (
+	antlr4JarVFS      = Intern("$(S)/contrib/java/antlr/antlr4/antlr.jar")
+	antlr3JarVFS      = Intern("$(S)/contrib/java/antlr/antlr3/antlr.jar")
+	antlr4JarPath     = antlr4JarVFS.String()
+	antlr3JarPath     = antlr3JarVFS.String()
+	stdout2stderrVFS  = Intern("$(S)/build/scripts/stdout2stderr.py")
+	stdout2stderrPath = stdout2stderrVFS.String()
+)
+
 const jdkResourcePath = "$(JDK17-564746473)/bin/java"
-
-var antlr4JarVFS = Intern("$(S)/contrib/java/antlr/antlr4/antlr.jar")
-var antlr3JarVFS = Intern("$(S)/contrib/java/antlr/antlr3/antlr.jar")
-
-var antlr4JarPath = antlr4JarVFS.String()
-var antlr3JarPath = antlr3JarVFS.String()
-
-var stdout2stderrVFS = Intern("$(S)/build/scripts/stdout2stderr.py")
-var stdout2stderrPath = stdout2stderrVFS.String()
 
 func emitJVNode(instance ModuleInstance, cmdArgs []string, inputs []VFS, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag string, emit Emitter) NodeRef {
 	env := map[string]string{

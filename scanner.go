@@ -8,6 +8,11 @@ import (
 	"unsafe"
 )
 
+var (
+	scannerStatsEnabled = os.Getenv("SCANNER_STATS") != ""
+	perfStatsEnabled    = os.Getenv("YATOOL_PERF_STATS") != ""
+)
+
 type includeKind int
 
 const (
@@ -502,10 +507,6 @@ func (s *IncludeScanner) IncludeDirectiveTargets(vfsPath VFS) []string {
 	}
 	return out
 }
-
-var scannerStatsEnabled = os.Getenv("SCANNER_STATS") != ""
-
-var perfStatsEnabled = os.Getenv("YATOOL_PERF_STATS") != ""
 
 func (s *IncludeScanner) emittedRel(abs string) string {
 	return abs
