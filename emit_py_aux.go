@@ -13,8 +13,10 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 	}
 
 	var entries []pyProtoAuxEntry
+
 	for _, srcRel := range d.pySrcs {
 		genInputs := d.pyGeneratedSrcs[srcRel]
+
 		if genInputs == nil {
 			continue
 		}
@@ -24,24 +26,29 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 
 		if !d.pyBuildNoPYC {
 			suffix := ".yapyc3"
+
 			if strings.Contains(srcRel, "/") {
 				suffix = "." + pySrcYapycSuffix(instance.Path) + ".yapyc3"
 			}
+
 			yp := Build(instance.Path + "/" + srcRel + suffix)
 			entries = append(entries, pyProtoAuxEntry{path: yp, key: generatedPyResourceKey(instance.Path, d, srcRel+".yapyc3"), inputs: genInputs})
 		}
 	}
+
 	if len(entries) == 0 {
 		return nil
 	}
 
 	rescompilerRef, _ := ctx.tool("tools/rescompiler/bin")
 	rawRes := emitRawAuxResourceChunks(ctx, instance, entries, "PY3", nil, in, rescompilerRef)
+
 	if rawRes == nil {
 		return nil
 	}
 
 	res := &generatedPyAuxChunksResult{}
+
 	for i, prRef := range rawRes.PRRefs {
 		aux := rawRes.PROutputs[i]
 		ccIn := in
@@ -60,9 +67,11 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 
 func generatedPyResourceKey(modulePath string, d *moduleData, srcRel string) string {
 	keyPrefix := ""
+
 	if !d.pyTopLevel {
 		keyPrefix = modulePath + "/"
 	}
+
 	return keyPrefix + srcRel
 }
 
@@ -96,6 +105,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 		if _, ok := inputSeen[v]; ok {
 			return
 		}
+
 		inputSeen[v] = struct{}{}
 		cur.inputs = append(cur.inputs, v)
 	}
@@ -103,9 +113,11 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 		if ref == (NodeRef{}) {
 			return
 		}
+
 		if _, ok := depSeen[ref]; ok {
 			return
 		}
+
 		depSeen[ref] = struct{}{}
 		cur.deps = append(cur.deps, ref)
 	}
@@ -113,6 +125,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 		if cmdLen == 0 {
 			return
 		}
+
 		chunks = append(chunks, cur)
 		cur = chunk{}
 		cmdLen = 0
@@ -129,11 +142,14 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 		cur.hashInputs = append(cur.hashInputs, "-", kvHash)
 		cur.cmdArgs = append(cur.cmdArgs, "-", kvCmd)
 		addInput(e.path)
+
 		for _, input := range e.inputs {
 			addInput(input)
 		}
+
 		addDep(e.producer)
 		cmdLen += rootCmdLen + len("-") + len(kvHash)
+
 		if cmdLen >= maxCmdLen {
 			flush()
 		}
@@ -141,18 +157,23 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 		cur.hashInputs = append(cur.hashInputs, arcBuildPath, "-"+key)
 		cur.cmdArgs = append(cur.cmdArgs, e.path.String(), "-"+key)
 		addInput(e.path)
+
 		for _, input := range e.inputs {
 			addInput(input)
 		}
+
 		addDep(e.producer)
 		cmdLen += rootCmdLen + len(arcBuildPath) + len(key)
+
 		if cmdLen >= maxCmdLen {
 			flush()
 		}
 	}
+
 	flush()
 
 	res := &rawAuxResourceChunksResult{}
+
 	for _, ch := range chunks {
 		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, moduleTag) + "_raw.auxcpp")
 		sourceInputs := pyProtoSourceInputs(ch.inputs)
@@ -162,6 +183,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 
 		chDeps := append([]NodeRef(nil), deps...)
 		chDeps = append(chDeps, ch.deps...)
+
 		if rescompilerRef != (NodeRef{}) {
 			chDeps = append(chDeps, rescompilerRef)
 		}
@@ -171,9 +193,11 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 		inputs = append(inputs, rescompilerBinVFS)
 		inputs = append(inputs, auxClosure...)
 		inputs = dedupVFS(inputs)
+
 		if extras := resolveCodegenDepRefsExt(ctx, instance, nil, ch.inputs, chDeps...); len(extras) > 0 {
 			chDeps = append(chDeps, extras...)
 		}
+
 		ref := ctx.emit.Emit(bindNodePlatform(&Node{
 			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
 			Env:              env,
@@ -202,12 +226,15 @@ func rawAuxInputClosure(ctx *genCtx, instance ModuleInstance, aux VFS, seed []VF
 		{kind: includeQuoted, target: internString("library/cpp/resource/resource.h")},
 		{kind: includeQuoted, target: internString("library/cpp/resource/registry.h")},
 	}
+
 	for _, v := range seed {
 		emits = append(emits, includeDirective{kind: includeQuoted, target: internString(v.Rel())})
 	}
+
 	registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits)
 
 	closure := walkClosure(ctx, instance, aux, in)
+
 	if len(closure) == 0 {
 		return nil
 	}

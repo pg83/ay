@@ -199,6 +199,7 @@ func graphConfForToolchainFlags(fs FS, flags map[string]string) *graphConf {
 
 func flagsUsePattern(flags map[string]string, pattern string) bool {
 	ref := resourcePatternRef(pattern)
+
 	for _, v := range flags {
 		if strings.Contains(v, ref) {
 			return true
@@ -233,6 +234,7 @@ func firstEnvToolPath(names ...string) string {
 
 func envToolPath(name string) string {
 	v := os.Getenv(name)
+
 	if v == "" {
 		return ""
 	}
@@ -254,6 +256,7 @@ func mineClangMajor(clang string) string {
 		}
 
 		major := fields[i+1]
+
 		if dot := strings.IndexByte(major, '.'); dot >= 0 {
 			major = major[:dot]
 		}
@@ -291,6 +294,7 @@ func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
 		}
 
 		key, val, ok := strings.Cut(line, "=")
+
 		if !ok {
 			continue
 		}
@@ -314,9 +318,11 @@ func readYaConfSections(fs FS, wantSection string, rels ...string) map[string]st
 		if !fs.IsFile(rel) {
 			continue
 		}
+
 		raw := fs.Read(rel)
 
 		section := ""
+
 		for _, line := range strings.Split(string(raw), "\n") {
 			line = strings.TrimSpace(line)
 
@@ -335,6 +341,7 @@ func readYaConfSections(fs FS, wantSection string, rels ...string) map[string]st
 			}
 
 			key, val, ok := strings.Cut(line, "=")
+
 			if !ok {
 				continue
 			}
@@ -375,6 +382,7 @@ func readHostResourcesBundle(fs FS, pattern, rel string, upperPlatform bool) gra
 
 	for _, key := range order {
 		item, ok := data.ByPlatform[key]
+
 		if !ok {
 			continue
 		}
@@ -410,6 +418,7 @@ func hostISA() ISA {
 		if runtime.GOOS == "darwin" || runtime.GOOS == "ios" {
 			return ISAArm64
 		}
+
 		return ISAAArch64
 	default:
 		return ISA(runtime.GOARCH)
@@ -424,6 +433,7 @@ func resolvePlatform(s string) (OS, ISA) {
 	if s == "" {
 		return hostOS(), hostISA()
 	}
+
 	return ParsePlatformID(s)
 }
 

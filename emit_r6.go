@@ -19,15 +19,18 @@ func canonicalizeRagel6Binary(v VFS) VFS {
 
 func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []string, closure []VFS, emit Emitter) (NodeRef, VFS) {
 	var outVFS VFS
+
 	if strings.Contains(srcRel, "/") {
 		outVFS = Build(instance.Path + "/_/" + srcRel + ".cpp")
 	} else {
 		outVFS = Build(instance.Path + "/" + srcRel + ".cpp")
 	}
+
 	inVFS := Source(instance.Path + "/" + srcRel)
 	canonicalBinary := canonicalizeRagel6Binary(ragel6BinaryPath)
 
 	effectiveFlags := ragel6Flags
+
 	if len(effectiveFlags) == 0 {
 		if instance.Platform.Ragel6Optimized {
 			effectiveFlags = []string{ragel6DefaultFlagOptimized}

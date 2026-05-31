@@ -30,12 +30,15 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 		if d.prOutputProducer == nil {
 			d.prOutputProducer = map[string]NodeRef{}
 		}
+
 		for _, f := range rp.OUTFiles {
 			d.prOutputProducer[f] = prRef
 		}
+
 		for _, f := range rp.OUTNoAutoFiles {
 			d.prOutputProducer[f] = prRef
 		}
+
 		if rp.StdoutFile != nil {
 			d.prOutputProducer[*rp.StdoutFile] = prRef
 		}
@@ -70,19 +73,25 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	auxTools := resolveRunProgramAuxTools(ctx, stmt.ToolPaths)
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
+
 	for _, f := range stmt.INFiles {
 		vfs := runProgramInputVFS(ctx, instance, d, f)
 		inVFSByToken[f] = vfs
 		inVFSs = append(inVFSs, vfs)
 	}
+
 	outVFSByToken := make(map[string]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
+
 	for _, f := range stmt.OUTFiles {
 		outVFSByToken[f] = copyFileOutputVFS(instance.Path, f)
 	}
+
 	for _, f := range stmt.OUTNoAutoFiles {
 		outVFSByToken[f] = copyFileOutputVFS(instance.Path, f)
 	}
+
 	var stdoutVFS *VFS
+
 	if stmt.StdoutFile != nil {
 		vfs := copyFileOutputVFS(instance.Path, *stmt.StdoutFile)
 		stdoutVFS = &vfs
@@ -93,9 +102,11 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		for _, f := range stmt.OUTFiles {
 			registerGeneratedParsedOutput(ctx, instance, "PR", outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt, toolInducedDeps))
 		}
+
 		for _, f := range stmt.OUTNoAutoFiles {
 			registerGeneratedParsedOutput(ctx, instance, "PR", outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt, toolInducedDeps))
 		}
+
 		if stmt.StdoutFile != nil {
 			registerGeneratedParsedOutput(ctx, instance, "PR", *stdoutVFS, prEmitsIncludes(ctx, instance, d, *stmt.StdoutFile, stmt, toolInducedDeps))
 		}
@@ -107,15 +118,19 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	prResult := EmitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, ctx.emit)
 	prRef := prResult.Ref
+
 	if d.prOutputInputs == nil {
 		d.prOutputInputs = map[string][]VFS{}
 	}
+
 	for _, f := range stmt.OUTFiles {
 		d.prOutputInputs[f] = append([]VFS(nil), prResult.Inputs...)
 	}
+
 	for _, f := range stmt.OUTNoAutoFiles {
 		d.prOutputInputs[f] = append([]VFS(nil), prResult.Inputs...)
 	}
+
 	if stmt.StdoutFile != nil {
 		d.prOutputInputs[*stmt.StdoutFile] = append([]VFS(nil), prResult.Inputs...)
 	}
@@ -124,9 +139,11 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		for _, f := range stmt.OUTFiles {
 			bindGeneratedOutput(ctx, instance, outVFSByToken[f], prRef)
 		}
+
 		for _, f := range stmt.OUTNoAutoFiles {
 			bindGeneratedOutput(ctx, instance, outVFSByToken[f], prRef)
 		}
+
 		if stmt.StdoutFile != nil {
 			bindGeneratedOutput(ctx, instance, *stdoutVFS, prRef)
 		}
@@ -174,8 +191,10 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 		if !isCCSourceExt(f) {
 			continue
 		}
+
 		walkOne(f)
 	}
+
 	// OUT_NOAUTO outputs use upstream's `${hide;noauto;output:OUT_NOAUTO}`
 	// modifier: registered as outputs but explicitly EXCLUDED from the
 	// auto-input/scan chain — the PR node does not walk their closures.
@@ -185,6 +204,7 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 	if stmt.StdoutFile != nil && isCCSourceExt(*stmt.StdoutFile) {
 		walkOne(*stmt.StdoutFile)
 	}
+
 	// Upstream's RUN_PROGRAM macro registers every IN as an input with
 	// scan-on-include (`${hide;input:IN}`); the scanner walks each IN's
 	// parsed-include closure when the file's extension is explicitly mapped
@@ -200,6 +220,7 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 		if !includeDirectiveParsers.hasRegisteredParser(f) {
 			continue
 		}
+
 		walkInput(f)
 	}
 
@@ -223,20 +244,27 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
 		for _, oi := range stmt.OutputIncludes {
 			target := oi
+
 			if vfsHasPrefix(target) {
 				target = Intern(target).Rel()
 			}
+
 			candidate := Build(target)
 			info := reg.Lookup(candidate)
+
 			if info == nil {
 				continue
 			}
+
 			sub := walkClosure(ctx, instance, info.OutputPath, scanIn)
+
 			for _, v := range sub {
 				if !strings.HasSuffix(v.Rel(), ".proto") {
 					continue
 				}
+
 				out = append(out, v)
+
 				// Protobuf WKTs (google/protobuf/{any,duration,empty,struct,
 				// timestamp,...}.proto) ship pre-built `.pb.h` headers checked
 				// in alongside the .proto. Upstream lists both the .proto and
@@ -246,6 +274,7 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 				// no-op outside the WKT path.
 				if v.IsSource() {
 					sibling := strings.TrimSuffix(v.Rel(), ".proto") + ".pb.h"
+
 					if ctx.fs.IsFile(sibling) {
 						out = append(out, Source(sibling))
 					}
@@ -283,12 +312,15 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 // excluded from filtering via the caller not including it in includeInputs.
 func dropTransitiveGeneratedCPP(in []VFS) []VFS {
 	out := in[:0]
+
 	for _, v := range in {
 		if v.IsBuild() && isCCSourceRel(v.Rel()) {
 			continue
 		}
+
 		out = append(out, v)
 	}
+
 	return out
 }
 
@@ -301,12 +333,15 @@ func isCCSourceRel(rel string) bool {
 
 func dropTransitiveGeneratedProto(in []VFS) []VFS {
 	out := in[:0]
+
 	for _, v := range in {
 		if v.IsBuild() && strings.HasSuffix(v.Rel(), ".proto") {
 			continue
 		}
+
 		out = append(out, v)
 	}
+
 	return out
 }
 
@@ -325,6 +360,7 @@ func prEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, outFil
 		if vfsHasPrefix(f) {
 			f = Intern(f).Rel()
 		}
+
 		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(f)})
 	}
 
@@ -347,6 +383,7 @@ func resolveRunProgramAuxTools(ctx *genCtx, toolPaths []string) []runProgramAuxT
 		if _, dup := seen[toolPath]; dup {
 			continue
 		}
+
 		seen[toolPath] = struct{}{}
 
 		res := ctx.toolResult(filepath.Clean(toolPath))
@@ -372,6 +409,7 @@ func runProgramInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, rel
 	}
 
 	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path + "/" + rel)))
+
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
 		if reg.Lookup(buildVFS) != nil {
 			return buildVFS

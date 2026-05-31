@@ -315,17 +315,21 @@ func EmitPB(
 	grpcPbCC := Build(protoBase + ".grpc.pb.cc")
 	grpcPbH := Build(protoBase + ".grpc.pb.h")
 	srcVFS := Source(protoRelPath)
+
 	if protoSrcOverride != 0 {
 		srcVFS = protoSrcOverride
 	}
 
 	outputs := []VFS{pbH, pbCC}
+
 	if liteHeaders {
 		outputs = append(outputs, pbDepsH)
 	}
+
 	if grpc {
 		outputs = append(outputs, grpcPbCC, grpcPbH)
 	}
+
 	for _, plugin := range extraPlugins {
 		for _, suffix := range plugin.Spec.OutputSuffixes {
 			outputs = append(outputs, Build(protoBase+suffix))
@@ -337,17 +341,23 @@ func EmitPB(
 		pbWrapperPath,
 		"--outputs",
 	}
+
 	for _, output := range outputs {
 		cmdArgs = append(cmdArgs, output.String())
 	}
+
 	includeRoot := ""
+
 	if cppOutRoot != "" {
 		includeRoot = cppOutRoot
 	}
+
 	cppOutArg := ":$(B)/" + cppOutRoot
+
 	if liteHeaders {
 		cppOutArg = "proto_h=true" + cppOutArg
 	}
+
 	cmdArgs = append(cmdArgs,
 		"--",
 		protocBinary.String(),
@@ -356,12 +366,15 @@ func EmitPB(
 		"-I=$(B)",
 		"-I=$(S)",
 	)
+
 	if cppOutRoot != "" {
 		cmdArgs = append(cmdArgs, "-I=$(S)/"+cppOutRoot)
+
 		if duplicateOutputRootInclude {
 			cmdArgs = append(cmdArgs, "-I=$(S)/"+cppOutRoot)
 		}
 	}
+
 	// Upstream's _CPP_PROTO_CMDLINE_BASE (ymake.core.conf:612) emits
 	// `${pre=-I=:_PROTO__INCLUDE} -I=$ARCADIA_BUILD_ROOT
 	// -I=$PROTOBUF_INCLUDE_PATH` — peers first, then $(B), then protobuf-src.
@@ -381,6 +394,7 @@ func EmitPB(
 	if moduleTag == nil && strings.HasPrefix(protoRelPath, "yt/") {
 		cmdArgs = append(cmdArgs, "-I=$(S)/yt")
 	}
+
 	cmdArgs = append(cmdArgs,
 		"-I=$(B)",
 		"-I=$(S)/contrib/libs/protobuf/src",
@@ -392,17 +406,20 @@ func EmitPB(
 		"--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.String(),
 		protoRelPath,
 	)
+
 	if grpc {
 		cmdArgs = append(cmdArgs,
 			"--plugin=protoc-gen-grpc_cpp="+grpcCppBinary.String(),
 			"--grpc_cpp_out=$(B)/"+cppOutRoot,
 		)
 	}
+
 	for _, plugin := range extraPlugins {
 		cmdArgs = append(cmdArgs,
 			"--plugin=protoc-gen-"+plugin.Spec.Name+"="+plugin.Binary.String(),
 			"--"+plugin.Spec.Name+"_out=$(B)/"+cppOutRoot,
 		)
+
 		if plugin.Spec.ExtraOutFlag != "" {
 			cmdArgs = append(cmdArgs, "--"+plugin.Spec.Name+"_opt=:"+plugin.Spec.ExtraOutFlag)
 		}
@@ -415,17 +432,23 @@ func EmitPB(
 	inputs := []VFS{
 		cppStyleguideBinary,
 	}
+
 	if grpc {
 		inputs = append(inputs, grpcCppBinary)
 	}
+
 	inputs = append(inputs, protocBinary)
+
 	for _, plugin := range extraPlugins {
 		inputs = append(inputs, plugin.Binary)
 	}
+
 	inputs = append(inputs, pbWrapperVFS)
+
 	if hasDescriptor {
 		inputs = append(inputs, pbDescriptorVFS)
 	}
+
 	inputs = append(inputs, srcVFS)
 	inputs = append(inputs, transitiveProtoImports...)
 	// When srcVFS is build-generated, carry the producer's transitive $(S) leaf
@@ -449,21 +472,27 @@ func EmitPB(
 
 	if cppStyleguideLDRef != (NodeRef{}) || protocLDRef != (NodeRef{}) || grpcCppLDRef != (NodeRef{}) || len(extraPlugins) > 0 {
 		var toolRefs []NodeRef
+
 		if cppStyleguideLDRef != (NodeRef{}) {
 			toolRefs = append(toolRefs, cppStyleguideLDRef)
 		}
+
 		if grpcCppLDRef != (NodeRef{}) {
 			toolRefs = append(toolRefs, grpcCppLDRef)
 		}
+
 		if protocLDRef != (NodeRef{}) {
 			toolRefs = append(toolRefs, protocLDRef)
 		}
+
 		for _, plugin := range extraPlugins {
 			if plugin.LDRef == (NodeRef{}) {
 				continue
 			}
+
 			toolRefs = append(toolRefs, plugin.LDRef)
 		}
+
 		depRefs = append([]NodeRef(nil), toolRefs...)
 		foreignDepRefs = map[string][]NodeRef{"tool": toolRefs}
 	}
@@ -477,6 +506,7 @@ func EmitPB(
 	// runs from $(B) so its relative `-I=./` and the proto path resolve to the
 	// generated tree. Source .protos run from $(S).
 	protocCwd := "$(S)"
+
 	if protoSrcOverride != 0 {
 		protocCwd = "$(B)"
 	}
@@ -517,6 +547,7 @@ func slicesContains(xs []string, want string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -526,6 +557,7 @@ func containsVFS(xs []VFS, want VFS) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -534,7 +566,9 @@ func protoCPPModulePath(instance ModuleInstance, d *moduleData) string {
 		if d.protoNamespaceGlobal {
 			return instance.Path
 		}
+
 		base := filepath.ToSlash(filepath.Clean(filepath.Dir(*d.protoNamespace)))
+
 		if base != "." && base != "" {
 			return base
 		}
@@ -549,6 +583,7 @@ func protoCPPOutRoot(d *moduleData) string {
 	}
 
 	root := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(*d.protoNamespace)), "/")
+
 	if root == "." {
 		return ""
 	}
@@ -568,13 +603,16 @@ type protoSrcsResult struct {
 
 func protoSourceRelPath(fs FS, instance ModuleInstance, d *moduleData, src string) string {
 	moduleRel := filepath.ToSlash(filepath.Clean(instance.Path + "/" + src))
+
 	if fs.IsFile(moduleRel) {
 		return moduleRel
 	}
 
 	baseDir := instance.Path
+
 	if d.srcDir != nil {
 		cleaned := filepath.Clean(*d.srcDir)
+
 		if cleaned != "." {
 			baseDir = cleaned
 		}
@@ -585,16 +623,19 @@ func protoSourceRelPath(fs FS, instance ModuleInstance, d *moduleData, src strin
 
 func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, aux VFS, seed []VFS, peerAddIncl []VFS) []VFS {
 	reg := codegenRegForInstance(ctx, instance)
+
 	if reg != nil {
 		emits := []includeDirective{
 			{kind: includeQuoted, target: internString("library/cpp/resource/resource.h")},
 			{kind: includeQuoted, target: internString("library/cpp/resource/registry.h")},
 		}
+
 		for _, in := range seed {
 			if in.IsSource() {
 				emits = append(emits, includeDirective{kind: includeQuoted, target: internString(in.Rel())})
 			}
 		}
+
 		registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits)
 	}
 
@@ -608,6 +649,7 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	}
 
 	closure := walkClosure(ctx, instance, aux, scanIn)
+
 	if len(closure) == 0 {
 		return nil
 	}

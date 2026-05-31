@@ -17,8 +17,10 @@ func isImplicitBuildVar(name string) bool {
 	}
 
 	hasUpper := false
+
 	for i := 0; i < len(name); i++ {
 		b := name[i]
+
 		switch {
 		case b >= 'A' && b <= 'Z':
 			hasUpper = true
@@ -60,10 +62,12 @@ func stringIsTruthy(v string) bool {
 	if v == "" {
 		return false
 	}
+
 	switch strings.ToLower(v) {
 	case "false", "f", "no", "n", "off", "0", "net":
 		return false
 	}
+
 	return true
 }
 
@@ -170,6 +174,7 @@ func EvalCond(e Expr, env Environment) bool {
 		if x.Name == "yes" {
 			return true
 		}
+
 		if x.Name == "no" {
 			return false
 		}
@@ -246,6 +251,7 @@ func evalEq(x *ExprEq, env Environment) bool {
 
 			return lv == "no"
 		}
+
 		rv, ok := r.(string)
 
 		if !ok {
@@ -269,6 +275,7 @@ func evalEq(x *ExprEq, env Environment) bool {
 
 			return "no" == rv
 		}
+
 		rv, ok := r.(bool)
 
 		if !ok {
@@ -299,19 +306,17 @@ func evalLt(x *ExprLt, env Environment) bool {
 
 var DefaultIfEnv = Environment{
 	bools: map[string]bool{
-		"OS_LINUX":      true,
-		"LINUX":         true,
+		"OS_LINUX": true,
+		"LINUX":    true,
 
-		"CLANG":                             true,
-		"TRUE":                              true,
-		"USE_SSE4":                          true,
+		"CLANG":    true,
+		"TRUE":     true,
+		"USE_SSE4": true,
 
+		"OPENSOURCE": true,
 
-		"OPENSOURCE":        true,
-
-		"USE_ARCADIA_PYTHON":                true,
-		"PYTHON3":                           true,
-
+		"USE_ARCADIA_PYTHON": true,
+		"PYTHON3":            true,
 	},
 	strings: map[string]string{
 

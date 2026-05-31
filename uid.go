@@ -61,6 +61,7 @@ func statsUIDPreimage(n *Node) string {
 
 func sortedStatsTags(n *Node) []string {
 	tags := n.Tags
+
 	if n.StatsTags != nil {
 		tags = n.StatsTags
 	}
@@ -73,9 +74,11 @@ func sortedStatsTags(n *Node) []string {
 
 func sortedLongOutputs(outputs []VFS) []string {
 	out := make([]string, len(outputs))
+
 	for i, v := range outputs {
 		out[i] = v.LongString()
 	}
+
 	sort.Strings(out)
 
 	return out
@@ -89,12 +92,15 @@ func pythonStringListRepr(items []string) string {
 	var b strings.Builder
 	b.Grow(len(items) * 8)
 	b.WriteByte('[')
+
 	for i, item := range items {
 		if i > 0 {
 			b.WriteString(", ")
 		}
+
 		b.WriteString(pythonStringRepr(item))
 	}
+
 	b.WriteByte(']')
 
 	return b.String()
@@ -102,6 +108,7 @@ func pythonStringListRepr(items []string) string {
 
 func pythonStringRepr(s string) string {
 	quote := byte('\'')
+
 	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
 		quote = '"'
 	}
@@ -109,8 +116,10 @@ func pythonStringRepr(s string) string {
 	var b strings.Builder
 	b.Grow(len(s) + 2)
 	b.WriteByte(quote)
+
 	for i := 0; i < len(s); i++ {
 		ch := s[i]
+
 		switch ch {
 		case '\\':
 			b.WriteString(`\\`)
@@ -126,6 +135,7 @@ func pythonStringRepr(s string) string {
 				b.WriteByte(ch)
 				continue
 			}
+
 			if ch < 0x20 || ch == 0x7f {
 				const hexDigits = "0123456789abcdef"
 				b.WriteString(`\x`)
@@ -133,9 +143,11 @@ func pythonStringRepr(s string) string {
 				b.WriteByte(hexDigits[ch&0x0f])
 				continue
 			}
+
 			b.WriteByte(ch)
 		}
 	}
+
 	b.WriteByte(quote)
 
 	return b.String()
@@ -181,6 +193,7 @@ func (c *canonBuf) writeBytes(s string) {
 
 func (c *canonBuf) writeStringSlice(ss []string) {
 	c.writeUint32(uint32(len(ss)))
+
 	for _, s := range ss {
 		c.writeBytes(s)
 	}
@@ -188,6 +201,7 @@ func (c *canonBuf) writeStringSlice(ss []string) {
 
 func (c *canonBuf) writeVFSSlice(vs []VFS) {
 	c.writeUint32(uint32(len(vs)))
+
 	for _, v := range vs {
 		c.writeUint64(internTable.hashes[v.strID()])
 
@@ -203,6 +217,7 @@ func (c *canonBuf) writeVFSSlice(vs []VFS) {
 
 func (c *canonBuf) writeStringMap(m map[string]string) {
 	c.writeUint32(uint32(len(m)))
+
 	for _, k := range canonKeysOf(m) {
 		c.writeBytes(k)
 		c.writeBytes(m[k])
@@ -211,6 +226,7 @@ func (c *canonBuf) writeStringMap(m map[string]string) {
 
 func (c *canonBuf) writeStringSliceMap(m map[string][]string) {
 	c.writeUint32(uint32(len(m)))
+
 	for _, k := range canonKeysOf(m) {
 		c.writeBytes(k)
 		c.writeStringSlice(m[k])
@@ -219,8 +235,10 @@ func (c *canonBuf) writeStringSliceMap(m map[string][]string) {
 
 func (c *canonBuf) writeInterfaceMap(m map[string]interface{}) {
 	c.writeUint32(uint32(len(m)))
+
 	for _, k := range canonKeysOf(m) {
 		c.writeBytes(k)
+
 		switch v := m[k].(type) {
 		case string:
 			c.writeByte('s')
@@ -241,8 +259,10 @@ func (c *canonBuf) writeInterfaceMap(m map[string]interface{}) {
 
 func (c *canonBuf) writeKVMap(m map[string]interface{}) {
 	c.writeUint32(uint32(len(m)))
+
 	for _, k := range canonKeysOf(m) {
 		c.writeBytes(k)
+
 		switch v := m[k].(type) {
 		case string:
 			c.writeBytes(v)
@@ -260,6 +280,7 @@ func (c *canonBuf) writeKVMap(m map[string]interface{}) {
 
 func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
 	c.writeUint32(uint32(len(cmds)))
+
 	for _, cm := range cmds {
 		c.writeStringSlice(cm.CmdArgs)
 		c.writeBytes(cm.Cwd)
@@ -294,9 +315,11 @@ func (c *canonBuf) writeNode(n *Node) {
 
 func canonKeysOf[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
+
 	for k := range m {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
 
 	return keys

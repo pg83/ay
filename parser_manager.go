@@ -32,9 +32,11 @@ func appendParsedDirectives(set parsedIncludeSet, bucket parsedIncludeBucket, di
 	if len(directives) == 0 {
 		return set
 	}
+
 	if set == nil {
 		set = make(parsedIncludeSet)
 	}
+
 	set[bucket] = append(set[bucket], directives...)
 
 	return set
@@ -144,6 +146,7 @@ func (pm *includeParserManager) withCythonSibling(rel string, set parsedIncludeS
 	}
 
 	sibling := rel[:len(rel)-len(".pyx")] + ".pxd"
+
 	if !pm.fs.IsFile(sibling) {
 		return set
 	}
@@ -157,6 +160,7 @@ func (pm *includeParserManager) withCythonSibling(rel string, set parsedIncludeS
 	if set == nil {
 		set = make(parsedIncludeSet)
 	}
+
 	set[parsedIncludesLocal] = merged
 
 	return set
@@ -172,6 +176,7 @@ func (pm *includeParserManager) parsedIncludes(vfsPath VFS) []includeDirective {
 	}
 
 	rel := vfsPath.Rel()
+
 	if !scannerFollowsImports(rel) {
 		return nil
 	}
@@ -196,7 +201,6 @@ func scannerFollowsImports(rel string) bool {
 	return true
 }
 
-
 func (pm *includeParserManager) RegisterBuildParsedIncludes(rel string, parsed []includeDirective) {
 	pm.buildParsed[rel] = parsed
 }
@@ -205,9 +209,11 @@ func (pm *includeParserManager) indexAddincl(a VFS) {
 	if a.Root() != VFSRootSource || a.Rel() == "" {
 		return
 	}
+
 	if _, done := pm.addinclIndexed[a]; done {
 		return
 	}
+
 	pm.addinclIndexed[a] = struct{}{}
 
 	base := a.Rel()
@@ -215,6 +221,7 @@ func (pm *includeParserManager) indexAddincl(a VFS) {
 		if isDir {
 			return
 		}
+
 		t := internString(rel[len(base)+1:])
 		pm.addinclIndex[t] = append(pm.addinclIndex[t], a)
 	})

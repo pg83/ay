@@ -11,6 +11,7 @@ func copyFileAutoSourceVFS(modulePath string, d *moduleData, srcRel string) *VFS
 	}
 
 	entry, ok := d.copyFileAutoOutputs[srcRel]
+
 	if !ok {
 		return nil
 	}
@@ -20,6 +21,7 @@ func copyFileAutoSourceVFS(modulePath string, d *moduleData, srcRel string) *VFS
 
 func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, entry copyFileEntry) []includeDirective {
 	out := make([]includeDirective, 0, len(entry.OutputIncludes)+1)
+
 	if entry.Text {
 		// COPY_FILE(TEXT) substitutes the source's content into the dst and is
 		// used for shared codegen templates (e.g. the minikql llvm16 *.h.txt
@@ -33,6 +35,7 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
 		// that first module's staging copies — a cross-module include leak. The
 		// source file is re-attached as a leaf input by withContextSourceExtras.
 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
+
 		if scanner != nil {
 			out = append(out, scanner.parsers.parsedIncludes(srcVFS)...)
 		}
@@ -45,12 +48,14 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
 		out = append(out, includeDirective{kind: includeQuoted, target: internString(srcVFS.Rel())})
 	}
+
 	for _, include := range entry.OutputIncludes {
 		out = append(out, includeDirective{
 			kind:   includeQuoted,
 			target: internString(copyFileIncludeTarget(modulePath, include)),
 		})
 	}
+
 	return out
 }
 
@@ -72,6 +77,7 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 		parsed []includeDirective
 	}
 	entries := make([]entryReg, 0, len(d.copyFiles))
+
 	for _, entry := range d.copyFiles {
 		srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
 		dstVFS := copyFileOutputVFS(instance.Path, entry.Dst)
@@ -81,6 +87,7 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 		if scanner != nil {
 			scanner.parsers.RegisterBuildParsedIncludes(dstVFS.Rel(), parsed)
 		}
+
 		if reg != nil && reg.Lookup(dstVFS) == nil {
 			reg.Register(&GeneratedFileInfo{
 				ProducerKvP: "CP",
@@ -97,6 +104,7 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 		depRefs := resolveCodegenDepRefsExt(ctx, instance, nil, []VFS{srcVFS})
 
 		var closure []VFS
+
 		// COPY_FILE with WITH_CONTEXT pulls the source file's #include closure;
 		// COPY_FILE with OUTPUT_INCLUDES additionally pulls the closure of every
 		// declared OUTPUT_INCLUDES target. Both fall out of a single walk from
@@ -109,12 +117,14 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 		if moduleInputs != nil && (entry.WithContext || len(entry.OutputIncludes) > 0) {
 			closure = walkClosureRoot(ctx, instance, dstVFS, dstVFS.Rel(), *moduleInputs)
 			closure = rewriteClosureCPSource(scanner, closure)
+
 			// Before dropping $(B) entries, extract flatc wrapper + .fbs sources for
 			// any $(B)/*.fbs.h entries in the closure — these are flatbuffers-generated
 			// headers whose source .fbs files and the wrapper script must be inputs.
 			if flatcExtras := flatcCCExtraInputs(ctx, closure); len(flatcExtras) > 0 {
 				closure = append(closure, flatcExtras...)
 			}
+
 			closure = keepOnlySourceVFS(closure)
 			closure = dedupVFS(closure)
 		}
@@ -133,11 +143,13 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 
 func generatedModuleSourceVFS(ctx *genCtx, instance ModuleInstance, srcRel string) *VFS {
 	reg := codegenRegForInstance(ctx, instance)
+
 	if reg == nil {
 		return nil
 	}
 
 	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path + "/" + srcRel)))
+
 	if reg.Lookup(buildVFS) != nil {
 		return vfsPtr(buildVFS)
 	}
@@ -149,6 +161,7 @@ func resolveModuleSourceVFS(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	if buildVFS := copyFileAutoSourceVFS(instance.Path, d, srcRel); buildVFS != nil {
 		return *buildVFS
 	}
+
 	if buildVFS := generatedModuleSourceVFS(ctx, instance, srcRel); buildVFS != nil {
 		return *buildVFS
 	}
@@ -173,12 +186,15 @@ func autoCopyDstExtras(modulePath string, d *moduleData, closure []VFS, rootDst 
 	if d == nil || len(d.copyFiles) == 0 || len(closure) == 0 {
 		return nil
 	}
+
 	srcToDst := make(map[VFS]VFS, len(d.copyFiles))
 	dstToSrc := make(map[VFS]VFS, len(d.copyFiles))
+
 	for _, entry := range d.copyFiles {
 		if !entry.Auto {
 			continue
 		}
+
 		// entry.Src is normally an arcadia-root-relative path
 		// (`yql/.../mkql_builtins.h.txt`). When it starts with `./` or `../`
 		// it's relative to the module dir and needs normalising — otherwise
@@ -187,21 +203,28 @@ func autoCopyDstExtras(modulePath string, d *moduleData, closure []VFS, rootDst 
 		// `../codegen_llvm_deps.h.txt` from .../codegen/llvm16 resolves to
 		// yql/essentials/minikql/codegen/codegen_llvm_deps.h.txt).
 		srcRel := entry.Src
+
 		if strings.HasPrefix(srcRel, "./") || strings.HasPrefix(srcRel, "../") {
 			srcRel = filepath.ToSlash(filepath.Clean(modulePath + "/" + srcRel))
 		}
+
 		srcVFS := Source(srcRel)
 		dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
+
 		if dstVFS == srcVFS || dstVFS == rootDst {
 			continue
 		}
+
 		srcToDst[srcVFS] = dstVFS
 		dstToSrc[dstVFS] = srcVFS
 	}
+
 	if len(srcToDst) == 0 {
 		return nil
 	}
+
 	var extras []VFS
+
 	for _, v := range closure {
 		if dst, ok := srcToDst[v]; ok {
 			extras = append(extras, dst)
@@ -209,6 +232,7 @@ func autoCopyDstExtras(modulePath string, d *moduleData, closure []VFS, rootDst 
 			extras = append(extras, src)
 		}
 	}
+
 	return extras
 }
 
@@ -238,49 +262,63 @@ func withContextSourceExtras(reg *CodegenRegistry, modulePath string, d *moduleD
 	if reg == nil {
 		return nil
 	}
+
 	// Build a dst→src map from this module's own TEXT copy files.
 	var dstToSrc map[VFS]VFS
+
 	if d != nil {
 		for _, entry := range d.copyFiles {
 			if !entry.Text {
 				continue
 			}
+
 			dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
 			info := reg.Lookup(dstVFS)
+
 			if info == nil || info.SourcePath == 0 || info.SourcePath == dstVFS {
 				continue
 			}
+
 			if dstToSrc == nil {
 				dstToSrc = make(map[VFS]VFS, len(d.copyFiles))
 			}
+
 			dstToSrc[dstVFS] = info.SourcePath
 		}
 	}
+
 	// textSrc returns the .txt source for v if v is a TEXT copy dst (same or
 	// different module); second return is false when v is not a TEXT copy.
 	textSrc := func(v VFS) (VFS, bool) {
 		if src, ok := dstToSrc[v]; ok {
 			return src, true
 		}
+
 		// Cross-module: any $(B) path registered as IsText in the registry.
 		if v.IsSource() {
 			return 0, false
 		}
+
 		info := reg.Lookup(v)
+
 		if info == nil || !info.IsText || info.SourcePath == 0 || info.SourcePath == v {
 			return 0, false
 		}
+
 		return info.SourcePath, true
 	}
 	var extras []VFS
+
 	if src, ok := textSrc(rootDst); ok {
 		extras = append(extras, src)
 	}
+
 	for _, v := range closure {
 		if src, ok := textSrc(v); ok {
 			extras = append(extras, src)
 		}
 	}
+
 	// A COPY product is produced by a `python3 fs_tools.py copy …` CP node; a unit
 	// that compiles a copied source, or consumes a TEXT-copied header, inherits the
 	// producer's $(S) tooling — fs_tools.py and its import closure (process_command_files.py).
@@ -289,6 +327,7 @@ func withContextSourceExtras(reg *CodegenRegistry, modulePath string, d *moduleD
 	if len(extras) > 0 || isCopyProduct(reg, rootDst) {
 		extras = append(extras, scripts[copyFsToolsVFS]...)
 	}
+
 	return extras
 }
 
@@ -297,6 +336,7 @@ func isCopyProduct(reg *CodegenRegistry, v VFS) bool {
 	if reg == nil || v.IsSource() {
 		return false
 	}
+
 	info := reg.Lookup(v)
 	return info != nil && info.ProducerKvP == "CP"
 }

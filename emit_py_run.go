@@ -14,21 +14,26 @@ func emitRunPythonForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in 
 
 	for _, rp := range d.runPython {
 		pyRef := emitRunPython(ctx, instance, rp, d, reg, in)
+
 		if d.prOutputProducer == nil {
 			d.prOutputProducer = map[string]NodeRef{}
 		}
+
 		for _, f := range rp.OUTFiles {
 			d.prOutputProducer[f] = pyRef
 		}
+
 		for _, f := range rp.OUTNoAutoFiles {
 			d.prOutputProducer[f] = pyRef
 		}
+
 		if rp.StdoutFile != nil {
 			d.prOutputProducer[*rp.StdoutFile] = pyRef
 		}
 
 		outs := make([]string, 0, len(rp.OUTFiles)+1)
 		outs = append(outs, rp.OUTFiles...)
+
 		if rp.StdoutFile != nil {
 			outs = append(outs, *rp.StdoutFile)
 		}
@@ -37,6 +42,7 @@ func emitRunPythonForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in 
 			if !isCCSourceExt(out) {
 				continue
 			}
+
 			ccRef, ccOut := emitPRDownstreamCC(ctx, instance, out, pyRef, in)
 			res.CCRefs = append(res.CCRefs, ccRef)
 			res.CCOutputs = append(res.CCOutputs, ccOut)
@@ -50,19 +56,25 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path, stmt.ScriptPath)
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
+
 	for _, f := range stmt.INFiles {
 		vfs := runProgramInputVFS(ctx, instance, d, f)
 		inVFSByToken[f] = vfs
 		inVFSs = append(inVFSs, vfs)
 	}
+
 	outVFSByToken := make(map[string]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
+
 	for _, f := range stmt.OUTFiles {
 		outVFSByToken[f] = copyFileOutputVFS(instance.Path, f)
 	}
+
 	for _, f := range stmt.OUTNoAutoFiles {
 		outVFSByToken[f] = copyFileOutputVFS(instance.Path, f)
 	}
+
 	var stdoutVFS *VFS
+
 	if stmt.StdoutFile != nil {
 		vfs := copyFileOutputVFS(instance.Path, *stmt.StdoutFile)
 		stdoutVFS = &vfs
@@ -72,6 +84,7 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	// Detect split-codegen pattern; precompute source inputs when matched.
 	hasCCShard, _ := splitCodegenDetect(stmt)
 	var splitSrcs []VFS
+
 	if hasCCShard {
 		splitSrcs = splitCodegenSrcs(ctx, instance, d, stmt, scriptVFS)
 	}
@@ -80,9 +93,11 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 		for _, f := range stmt.OUTFiles {
 			registerGeneratedParsedOutput(ctx, instance, "PY", outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS, splitSrcs, hasCCShard))
 		}
+
 		for _, f := range stmt.OUTNoAutoFiles {
 			registerGeneratedParsedOutput(ctx, instance, "PY", outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS, splitSrcs, hasCCShard))
 		}
+
 		if stmt.StdoutFile != nil {
 			registerGeneratedParsedOutput(ctx, instance, "PY", *stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, *stmt.StdoutFile, scriptVFS, splitSrcs, hasCCShard))
 		}
@@ -92,15 +107,19 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	codegenInputs := append([]VFS{scriptVFS}, inVFSs...)
 	extraDepRefs := resolveCodegenDepRefsExt(ctx, instance, inputClosure, codegenInputs)
 	result := EmitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, ctx.emit)
+
 	if d.prOutputInputs == nil {
 		d.prOutputInputs = map[string][]VFS{}
 	}
+
 	for _, f := range stmt.OUTFiles {
 		d.prOutputInputs[f] = append([]VFS(nil), result.Inputs...)
 	}
+
 	for _, f := range stmt.OUTNoAutoFiles {
 		d.prOutputInputs[f] = append([]VFS(nil), result.Inputs...)
 	}
+
 	if stmt.StdoutFile != nil {
 		d.prOutputInputs[*stmt.StdoutFile] = append([]VFS(nil), result.Inputs...)
 	}
@@ -109,9 +128,11 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 		for _, f := range stmt.OUTFiles {
 			bindGeneratedOutput(ctx, instance, outVFSByToken[f], result.Ref)
 		}
+
 		for _, f := range stmt.OUTNoAutoFiles {
 			bindGeneratedOutput(ctx, instance, outVFSByToken[f], result.Ref)
 		}
+
 		if stmt.StdoutFile != nil {
 			bindGeneratedOutput(ctx, instance, *stdoutVFS, result.Ref)
 		}
@@ -138,6 +159,7 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 	}
 
 	hasCCShard, _ := splitCodegenDetect(stmt)
+
 	if hasCCShard {
 		// Split-codegen: the CC shard outputs are registered with splitSrcs
 		// (antlr chain + induced-dep source headers like arena.h) rather than
@@ -159,11 +181,13 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 				walkOne(f)
 			}
 		}
+
 		for _, f := range stmt.OUTNoAutoFiles {
 			if isCCSourceExt(f) {
 				walkOne(f)
 			}
 		}
+
 		if stmt.StdoutFile != nil && isCCSourceExt(*stmt.StdoutFile) {
 			walkOne(*stmt.StdoutFile)
 		}
@@ -174,6 +198,7 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 	if len(out) == 0 {
 		return nil
 	}
+
 	out = mergeDedupVFS(out, nil)
 	return out
 }
@@ -186,10 +211,12 @@ func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
 		if isCCSourceExt(f) {
 			hasCCShard = true
 		}
+
 		if isHeaderSource(f) {
 			hasHeader = true
 		}
 	}
+
 	return
 }
 
@@ -215,27 +242,35 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 		if !v.IsSource() {
 			return
 		}
+
 		if _, dup := seen[v]; dup {
 			return
 		}
+
 		seen[v] = struct{}{}
 		sources = append(sources, v)
 	}
 
 	addSource(scriptVFS)
+
 	if scanner == nil {
 		return sources
 	}
+
 	for _, f := range stmt.INFiles {
 		vfs := runProgramInputVFS(ctx, instance, d, f)
+
 		if vfs.IsSource() {
 			addSource(vfs)
 			continue
 		}
+
 		for _, pd := range scanner.parsers.parsedIncludes(vfs) {
 			target := pd.target.String()
+
 			if vfsHasPrefix(target) {
 				bvfs := Intern(target)
+
 				if bvfs.IsBuild() && reg != nil {
 					if info := reg.Lookup(bvfs); info != nil {
 						for _, si := range info.SourceInputs {
@@ -243,8 +278,10 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 						}
 					}
 				}
+
 				continue
 			}
+
 			if ctx.fs.IsFile(target) {
 				addSource(Source(target))
 			} else if reg != nil {
@@ -256,6 +293,7 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 			}
 		}
 	}
+
 	return sources
 }
 
@@ -284,6 +322,7 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 		// Find the first shard CC file (code0.cc or equivalent) once.
 		var firstShardFile string
 		var firstShardVFS VFS
+
 		for _, f := range stmt.OUTNoAutoFiles {
 			if isCCSourceExt(f) {
 				firstShardFile = f
@@ -291,6 +330,7 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 				break
 			}
 		}
+
 		if isCCSourceExt(outFile) {
 			// Non-first shards register code0.cc as their first parsedInclude so
 			// the scanner's closure walk adds code0.cc to their input set.
@@ -298,42 +338,55 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 			// an input; code0.cc itself carries only splitSrcs.
 			isNonFirst := outFile != firstShardFile
 			capacity := len(splitSrcs)
+
 			if isNonFirst {
 				capacity++
 			}
+
 			includes := make([]includeDirective, 0, capacity)
+
 			if isNonFirst && firstShardVFS != 0 {
 				includes = append(includes, includeDirective{kind: includeQuoted, target: internString(firstShardVFS.Rel())})
 			}
+
 			for _, src := range splitSrcs {
 				includes = append(includes, includeDirective{kind: includeQuoted, target: internString(src.Rel())})
 			}
+
 			return includes
 		}
+
 		if isHeaderSource(outFile) {
 			// First shard CC as meta-include so downstream consumers of pb.main.h
 			// carry code0.cc in their include-input closure.
 			includes := make([]includeDirective, 0, 1+len(splitSrcs))
+
 			if firstShardVFS != 0 {
 				includes = append(includes, includeDirective{kind: includeQuoted, target: internString(firstShardVFS.Rel())})
 			}
+
 			for _, src := range splitSrcs {
 				includes = append(includes, includeDirective{kind: includeQuoted, target: internString(src.Rel())})
 			}
+
 			return includes
 		}
 	}
 
 	includes := []includeDirective{{kind: includeQuoted, target: internString(scriptVFS.Rel())}}
+
 	for _, f := range stmt.INFiles {
 		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(runProgramInputVFS(ctx, instance, d, f).Rel())})
 	}
+
 	for _, f := range stmt.OutputIncludes {
 		if vfsHasPrefix(f) {
 			f = Intern(f).Rel()
 		}
+
 		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(f)})
 	}
+
 	return includes
 }
 
@@ -351,8 +404,10 @@ func EmitPYRun(
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
+
 	for _, kv := range stmt.EnvPairs {
 		parts := strings.SplitN(kv, "=", 2)
+
 		if len(parts) == 2 {
 			env[parts[0]] = parts[1]
 		} else {
@@ -361,6 +416,7 @@ func EmitPYRun(
 	}
 
 	cmdArgs := []string{instance.Platform.Tools.Python3, scriptVFS.String()}
+
 	for _, a := range stmt.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
@@ -369,11 +425,13 @@ func EmitPYRun(
 		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path)
 		a = strings.ReplaceAll(a, "$CURDIR", Source(instance.Path).String())
 		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path).String())
+
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.String()
 		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.String()
 		}
+
 		cmdArgs = append(cmdArgs, a)
 	}
 
@@ -383,34 +441,42 @@ func EmitPYRun(
 		if _, ok := seen[vfs]; ok {
 			return
 		}
+
 		seen[vfs] = struct{}{}
 		inputs = append(inputs, vfs)
 	}
 	appendUnique(scriptVFS)
+
 	for _, f := range stmt.INFiles {
 		appendUnique(inVFSByToken[f])
 	}
+
 	for _, vfs := range inputClosure {
 		appendUnique(vfs)
 	}
 
 	var outputs []VFS
 	var stdoutPath string
+
 	if stdoutVFS != nil {
 		stdoutPath = stdoutVFS.String()
 		outputs = append(outputs, *stdoutVFS)
 	}
+
 	for _, f := range stmt.OUTFiles {
 		outputs = append(outputs, outVFSByToken[f])
 	}
+
 	for _, f := range stmt.OUTNoAutoFiles {
 		outputs = append(outputs, outVFSByToken[f])
 	}
 
 	cmd := Cmd{CmdArgs: cmdArgs, Env: env}
+
 	if stdoutPath != "" {
 		cmd.Stdout = stdoutPath
 	}
+
 	if stmt.CWD != nil {
 		cmd.Cwd = expandRunProgramCWD(instance, *stmt.CWD)
 	}

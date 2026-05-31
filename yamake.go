@@ -764,6 +764,7 @@ func (p *parser) applyIncludeOnce(nameTok token) {
 	if len(args) > 1 {
 		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE_ONCE expects 0 or 1 arguments, got %d", len(args))
 	}
+
 	if len(args) == 1 && args[0] == "no" {
 		enabled = false
 	}
@@ -773,6 +774,7 @@ func (p *parser) applyIncludeOnce(nameTok token) {
 	}
 
 	abs, err := filepath.Abs(p.name)
+
 	if err != nil {
 		abs = p.name
 	}
@@ -863,6 +865,7 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		}
 
 		value := ""
+
 		if len(args) > 1 {
 			value = strings.Join(args[1:], " ")
 		}
@@ -926,52 +929,62 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 
 		varName := ""
 		value := ""
+
 		if len(args) >= 1 {
 			varName = args[0]
 		}
+
 		if len(args) >= 2 {
 			value = args[1]
 		}
+
 		return &DefaultVarStmt{VarName: varName, Value: value, Line: nameTok.line}
 	case "CONFIGURE_FILE":
 
 		if len(args) != 2 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "CONFIGURE_FILE expects exactly 2 arguments (src dst), got %d", len(args))
 		}
+
 		return &ConfigureFileStmt{Src: args[0], Dst: args[1], Line: nameTok.line}
 	case "CREATE_BUILDINFO_FOR":
 
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "CREATE_BUILDINFO_FOR expects exactly 1 argument, got %d", len(args))
 		}
+
 		return &CreateBuildInfoStmt{OutputHeader: args[0], Line: nameTok.line}
 	case "RUN_ANTLR4_CPP":
 
 		if len(args) == 0 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_ANTLR4_CPP expects at least 1 argument (grammar)")
 		}
+
 		return parseRunAntlr4Cpp(args, nameTok.line)
 	case "RUN_ANTLR4_CPP_SPLIT":
 
 		if len(args) < 2 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_ANTLR4_CPP_SPLIT expects at least 2 arguments (lexer parser)")
 		}
+
 		return parseRunAntlr4CppSplit(args, nameTok.line)
 	case "RUN_ANTLR", "RUN_ANTLR4":
 		if len(args) == 0 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "%s expects at least 1 argument", nameTok.val)
 		}
+
 		return parseRunAntlr(args, nameTok)
 	case "RUN_PROGRAM", "RUN_PY3_PROGRAM":
 
 		if len(args) == 0 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "%s expects at least 1 argument (tool path)", nameTok.val)
 		}
+
 		return parseRunProgram(args, nameTok.line)
 	case "RUN_PYTHON3":
 		if len(args) == 0 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_PYTHON3 expects at least 1 argument (script path)")
 		}
+
 		return parseRunPython(args, nameTok.line)
 	case "RESOURCE":
 
@@ -987,6 +1000,7 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
 	stmt := &RunAntlr4CppStmt{Grammar: args[0], Line: line}
 	i := 1
+
 	for i < len(args) {
 		switch args[i] {
 		case "VISITOR":
@@ -999,10 +1013,12 @@ func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
 			} else {
 				stmt.Listener = true
 			}
+
 			i++
 		case "OUTPUT_INCLUDES":
 
 			i++
+
 			for i < len(args) && !isRunAntlrKeyword(args[i]) {
 				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
 				i++
@@ -1010,6 +1026,7 @@ func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
 		case "IN", "OUT", "OUT_NOAUTO", "INDUCED_DEPS", "TOOL":
 
 			i++
+
 			for i < len(args) && !isRunAntlrKeyword(args[i]) {
 				i++
 			}
@@ -1018,11 +1035,13 @@ func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
 			i++
 		}
 	}
+
 	return stmt
 }
 
 func parseRunAntlr4CppSplit(args []string, line int) *RunAntlr4CppSplitStmt {
 	stmt := &RunAntlr4CppSplitStmt{Lexer: args[0], Parser: args[1], Line: line}
+
 	for i := 2; i < len(args); i++ {
 		switch args[i] {
 		case "VISITOR":
@@ -1034,32 +1053,40 @@ func parseRunAntlr4CppSplit(args []string, line int) *RunAntlr4CppSplitStmt {
 		case "OUTPUT_INCLUDES":
 
 			i++
+
 			for i < len(args) && !isRunAntlrKeyword(args[i]) {
 				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
 				i++
 			}
+
 			i--
 		case "IN", "OUT", "OUT_NOAUTO", "INDUCED_DEPS", "TOOL":
 
 			i++
+
 			for i < len(args) && !isRunAntlrKeyword(args[i]) {
 				i++
 			}
+
 			i--
 		}
 	}
+
 	return stmt
 }
 
 func parseRunAntlr(args []string, nameTok token) *RunAntlrStmt {
 	stmt := &RunAntlrStmt{Macro: nameTok.val, Line: nameTok.line}
 	currentSection := "ARGS"
+
 	for i := 0; i < len(args); i++ {
 		tok := args[i]
+
 		if runAntlrKeywords[tok] {
 			currentSection = tok
 			continue
 		}
+
 		switch currentSection {
 		case "ARGS":
 			stmt.Args = append(stmt.Args, tok)
@@ -1077,6 +1104,7 @@ func parseRunAntlr(args []string, nameTok token) *RunAntlrStmt {
 			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
 		}
 	}
+
 	return stmt
 }
 
@@ -1088,6 +1116,7 @@ func isRunAntlrKeyword(s string) bool {
 		"STDOUT_NOAUTO", "GRAMMAR_FILES", "GRAMMAR_CWD":
 		return true
 	}
+
 	return false
 }
 
@@ -1095,13 +1124,16 @@ func parseRunProgram(args []string, line int) *RunProgramStmt {
 	stmt := &RunProgramStmt{ToolPath: args[0], Line: line}
 	i := 1
 	currentSection := "ARGS"
+
 	for i < len(args) {
 		tok := args[i]
+
 		if runProgramKeywords[tok] {
 			currentSection = tok
 			i++
 			continue
 		}
+
 		switch currentSection {
 		case "ARGS":
 			stmt.Args = append(stmt.Args, tok)
@@ -1126,8 +1158,10 @@ func parseRunProgram(args []string, line int) *RunProgramStmt {
 		case "TOOL":
 			stmt.ToolPaths = append(stmt.ToolPaths, tok)
 		}
+
 		i++
 	}
+
 	return stmt
 }
 
@@ -1135,13 +1169,16 @@ func parseRunPython(args []string, line int) *RunPythonStmt {
 	stmt := &RunPythonStmt{ScriptPath: args[0], Line: line}
 	i := 1
 	currentSection := "ARGS"
+
 	for i < len(args) {
 		tok := args[i]
+
 		if runProgramKeywords[tok] {
 			currentSection = tok
 			i++
 			continue
 		}
+
 		switch currentSection {
 		case "ARGS":
 			stmt.Args = append(stmt.Args, tok)
@@ -1164,8 +1201,10 @@ func parseRunPython(args []string, line int) *RunPythonStmt {
 		case "OUTPUT_INCLUDES", "INDUCED_DEPS", "TOOL":
 			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
 		}
+
 		i++
 	}
+
 	return stmt
 }
 
@@ -1189,6 +1228,7 @@ func parseResource(args []string, nameTok token) *ResourceStmt {
 	}
 
 	pairs := make([]ResourcePair, 0, len(rest)/2)
+
 	for i := 0; i < len(rest); i += 2 {
 		pairs = append(pairs, ResourcePair{Path: rest[i], Key: rest[i+1]})
 	}
@@ -1228,6 +1268,7 @@ func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cyt
 	for i := 0; i < len(args); i++ {
 		if args[i] == "ONE_LEVEL" {
 			i++
+
 			if i < len(args) {
 				oneLevelPaths = append(oneLevelPaths, args[i])
 				ownPaths = append(ownPaths, args[i])
@@ -1545,6 +1586,7 @@ func (c *condParser) parseAtom() Expr {
 		c.consume()
 
 		n := 0
+
 		for i := 0; i < len(t.val); i++ {
 			n = n*10 + int(t.val[i]-'0')
 		}
@@ -1590,9 +1632,11 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 	}
 
 	absTarget, absErr := filepath.Abs(full)
+
 	if absErr != nil {
 		absTarget = full
 	}
+
 	if _, skip := p.includes.once[absTarget]; skip {
 		return into
 	}
@@ -1603,12 +1647,15 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 		if visited == absTarget {
 
 			chainStr := ""
+
 			for i, v := range chain {
 				if i > 0 {
 					chainStr += " -> "
 				}
+
 				chainStr += v
 			}
+
 			chainStr += " -> " + absTarget
 			p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE cycle: %s", chainStr)
 		}

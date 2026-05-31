@@ -63,6 +63,7 @@ func recordKey(rec *SysIncl, k string) string {
 	if rec.CaseInsensitive {
 		return strings.ToLower(k)
 	}
+
 	return k
 }
 
@@ -70,6 +71,7 @@ func recordQuery(rec *SysIncl, header string) string {
 	if rec.CaseInsensitive {
 		return strings.ToLower(header)
 	}
+
 	return header
 }
 
@@ -351,6 +353,7 @@ func LoadSysInclSetForFS(fs FS, arch string, onWarn func(Warn)) SysInclSet {
 		}
 
 		rel := "build/sysincl/" + entry.file
+
 		if !fs.IsFile(rel) {
 			continue
 		}
@@ -385,6 +388,7 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 		}
 
 		key := recordKey(current, pendingKey)
+
 		if pendingPaths == nil {
 			current.Mappings[key] = nil
 		} else {
@@ -534,9 +538,11 @@ func handleRecordHeader(name string, lineno int, body string, rec *SysIncl, inIn
 
 	if strings.HasPrefix(body, "case_sensitive:") {
 		val := strings.TrimSpace(body[len("case_sensitive:"):])
+
 		if val == "false" {
 			rec.CaseInsensitive = true
 		}
+
 		return
 	}
 
@@ -672,10 +678,13 @@ func (a *filterAlt) matches(sourcePath string) bool {
 
 func literalContainsPattern(pat string) (string, bool) {
 	mid, ok := strings.CutPrefix(pat, ".*")
+
 	if !ok {
 		return "", false
 	}
+
 	mid, ok = strings.CutSuffix(mid, ".*")
+
 	if !ok || mid == "" || regexp.QuoteMeta(mid) != mid {
 		return "", false
 	}
@@ -687,6 +696,7 @@ const maxLiteralAltExpansion = 64
 
 func literalAltsFromRegex(pat string) ([]string, bool) {
 	re, err := syntax.Parse(pat, syntax.Perl)
+
 	if err != nil {
 		return nil, false
 	}
@@ -696,13 +706,16 @@ func literalAltsFromRegex(pat string) ([]string, bool) {
 	}
 
 	acc := []string{""}
+
 	for _, sub := range re.Sub[1:] {
 		set, ok := literalSet(sub)
+
 		if !ok {
 			return nil, false
 		}
 
 		acc = crossConcat(acc, set)
+
 		if len(acc) > maxLiteralAltExpansion {
 			return nil, false
 		}
@@ -725,13 +738,16 @@ func literalSet(re *syntax.Regexp) ([]string, bool) {
 		return literalSet(re.Sub[0])
 	case syntax.OpConcat:
 		acc := []string{""}
+
 		for _, sub := range re.Sub {
 			set, ok := literalSet(sub)
+
 			if !ok {
 				return nil, false
 			}
 
 			acc = crossConcat(acc, set)
+
 			if len(acc) > maxLiteralAltExpansion {
 				return nil, false
 			}
@@ -740,13 +756,16 @@ func literalSet(re *syntax.Regexp) ([]string, bool) {
 		return acc, true
 	case syntax.OpAlternate:
 		var out []string
+
 		for _, sub := range re.Sub {
 			set, ok := literalSet(sub)
+
 			if !ok {
 				return nil, false
 			}
 
 			out = append(out, set...)
+
 			if len(out) > maxLiteralAltExpansion {
 				return nil, false
 			}
@@ -760,6 +779,7 @@ func literalSet(re *syntax.Regexp) ([]string, bool) {
 
 func crossConcat(prefixes, suffixes []string) []string {
 	out := make([]string, 0, len(prefixes)*len(suffixes))
+
 	for _, p := range prefixes {
 		for _, s := range suffixes {
 			out = append(out, p+s)
@@ -777,6 +797,7 @@ func (alt *filterAlt) setPositive(name string, lineno int, pat string) {
 	}
 
 	re, err := regexp.Compile(pat)
+
 	if err != nil {
 		ThrowFmt("sysincl: %s:%d: cannot compile %q: %v", name, lineno, pat, err)
 	}

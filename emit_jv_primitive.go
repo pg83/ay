@@ -40,9 +40,11 @@ func emitJVNode(instance ModuleInstance, cmdArgs []string, inputs []VFS, outputs
 		Tags:    []string{},
 		TargetProperties: func() map[string]string {
 			tp := map[string]string{"module_dir": instance.Path}
+
 			if moduleTag != "" {
 				tp["module_tag"] = moduleTag
 			}
+
 			return tp
 		}(),
 		Platform: string(instance.Platform.Target),
@@ -81,14 +83,17 @@ func EmitJV(
 		"-o",
 		outDir,
 	}
+
 	if visitor {
 		cmdArgs = append(cmdArgs, "-visitor")
 	}
+
 	if !listener {
 		cmdArgs = append(cmdArgs, "-no-listener")
 	} else {
 		cmdArgs = append(cmdArgs, "-listener")
 	}
+
 	cmdArgs = append(cmdArgs, options...)
 
 	inputs := []VFS{
@@ -137,9 +142,11 @@ func EmitJVSplit(
 		"-o",
 		outDir,
 	}
+
 	if visitor {
 		cmdArgs = append(cmdArgs, "-visitor")
 	}
+
 	if !listener {
 		cmdArgs = append(cmdArgs, "-no-listener")
 	} else {

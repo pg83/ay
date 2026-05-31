@@ -56,6 +56,7 @@ func NewCodegenRegistry() *CodegenRegistry {
 
 func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 	full := STR(info.OutputPath.strID())
+
 	if existing := r.byStr[full]; existing != nil {
 		ThrowFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
 			info.OutputPath.String(), existing.ProducerKvP, info.ProducerKvP)
@@ -74,6 +75,7 @@ func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 
 func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) {
 	inner := r.bySplit[prefix]
+
 	if inner == nil {
 		inner = make(map[STR]*GeneratedFileInfo, 2)
 		r.bySplit[prefix] = inner
@@ -88,6 +90,7 @@ func (r *CodegenRegistry) Lookup(path VFS) *GeneratedFileInfo {
 
 func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
 	id := interned(rel)
+
 	if id == nil {
 		return nil
 	}
@@ -101,6 +104,7 @@ func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
 
 func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
 	info := r.byStr[STR(path.strID())]
+
 	if info == nil {
 		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.String())
 	}
@@ -116,14 +120,17 @@ func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
 
 func (r *CodegenRegistry) SetSourceInputs(path VFS, src []VFS) {
 	info := r.byStr[STR(path.strID())]
+
 	if info == nil {
 		ThrowFmt("CodegenRegistry: SetSourceInputs on unregistered path %q", path.String())
 	}
+
 	info.SourceInputs = src
 }
 
 func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, parsed []includeDirective) {
 	reg := codegenRegForInstance(ctx, instance)
+
 	if reg != nil {
 		reg.Register(&GeneratedFileInfo{
 			ProducerKvP: kind,
@@ -132,6 +139,7 @@ func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind st
 	}
 
 	scanner := ctx.scannerFor(instance)
+
 	if scanner != nil {
 		scanner.parsers.RegisterBuildParsedIncludes(output.Rel(), parsed)
 	}
@@ -139,6 +147,7 @@ func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind st
 
 func registerDeferredCF(ctx *genCtx, instance ModuleInstance, output VFS, parsed []includeDirective, def *deferredCF) {
 	reg := codegenRegForInstance(ctx, instance)
+
 	if reg != nil {
 		reg.Register(&GeneratedFileInfo{
 			ProducerKvP: "CF",
@@ -148,6 +157,7 @@ func registerDeferredCF(ctx *genCtx, instance ModuleInstance, output VFS, parsed
 	}
 
 	scanner := ctx.scannerFor(instance)
+
 	if scanner != nil {
 		scanner.parsers.RegisterBuildParsedIncludes(output.Rel(), parsed)
 	}
@@ -155,6 +165,7 @@ func registerDeferredCF(ctx *genCtx, instance ModuleInstance, output VFS, parsed
 
 func bindGeneratedOutput(ctx *genCtx, instance ModuleInstance, output VFS, ref NodeRef) {
 	reg := codegenRegForInstance(ctx, instance)
+
 	if reg == nil {
 		return
 	}
@@ -172,6 +183,7 @@ func registerBoundGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, ki
 // to fall back to OutputPath as the canonical edge.
 func registerBoundGeneratedParsedOutputWithSource(ctx *genCtx, instance ModuleInstance, kind string, output VFS, sourcePath VFS, parsed []includeDirective, ref NodeRef) {
 	reg := codegenRegForInstance(ctx, instance)
+
 	if reg != nil {
 		reg.Register(&GeneratedFileInfo{
 			ProducerKvP:    kind,
@@ -183,6 +195,7 @@ func registerBoundGeneratedParsedOutputWithSource(ctx *genCtx, instance ModuleIn
 	}
 
 	scanner := ctx.scannerFor(instance)
+
 	if scanner != nil {
 		scanner.parsers.RegisterBuildParsedIncludes(output.Rel(), parsed)
 	}
@@ -194,8 +207,10 @@ func generatedOutputClosure(ctx *genCtx, instance ModuleInstance, output VFS, in
 
 func codegenRegForInstance(ctx *genCtx, instance ModuleInstance) *CodegenRegistry {
 	sc := ctx.scannerFor(instance)
+
 	if sc == nil {
 		return nil
 	}
+
 	return sc.codegen
 }

@@ -33,32 +33,42 @@ func cmdDumpSort(args []string) int {
 	}
 
 	var in io.Reader
+
 	if inPath == "" || inPath == "-" {
 		in = os.Stdin
 	} else {
 		f := Throw2(os.Open(inPath))
+
 		defer func() { Throw(f.Close()) }()
+
 		in = f
 	}
 
 	var out io.Writer
+
 	if outPath == "" || outPath == "-" {
 		out = os.Stdout
 	} else {
 		f := Throw2(os.Create(outPath))
+
 		defer func() { Throw(f.Close()) }()
+
 		out = f
 	}
 
 	tmpBase := "."
+
 	if outPath != "" && outPath != "-" {
 		tmpBase = filepath.Dir(outPath)
 	}
+
 	tmpDir, err := os.MkdirTemp(tmpBase, "aysort-")
+
 	if err != nil {
 
 		tmpDir = Throw2(os.MkdirTemp(".", "aysort-"))
 	}
+
 	defer func() { Throw(os.RemoveAll(tmpDir)) }()
 
 	chunks := spillChunks(in, chunkBytes, tmpDir)
@@ -78,14 +88,17 @@ func spillChunks(in io.Reader, chunkBytes int, tmpDir string) []string {
 		if len(lines) == 0 {
 			return
 		}
+
 		sort.Strings(lines)
 
 		path := filepath.Join(tmpDir, "chunk-"+strconv.Itoa(len(chunks)))
 		f := Throw2(os.Create(path))
 		bw := bufio.NewWriterSize(f, 1<<20)
+
 		for _, ln := range lines {
 			Throw2(bw.WriteString(ln))
 		}
+
 		Throw(bw.Flush())
 		Throw(f.Close())
 
@@ -96,18 +109,23 @@ func spillChunks(in io.Reader, chunkBytes int, tmpDir string) []string {
 
 	for {
 		line, err := r.ReadString('\n')
+
 		if len(line) > 0 {
 			lines = append(lines, line)
 			size += len(line)
+
 			if size >= chunkBytes {
 				spill()
 			}
 		}
+
 		if err == io.EOF {
 			break
 		}
+
 		Throw(err)
 	}
+
 	spill()
 
 	return chunks
@@ -135,6 +153,7 @@ func (h *mergeHeap) Pop() any {
 
 func mergeChunks(chunks []string, out io.Writer) {
 	bw := bufio.NewWriterSize(out, 1<<20)
+
 	defer func() { Throw(bw.Flush()) }()
 
 	h := &mergeHeap{}
@@ -144,13 +163,16 @@ func mergeChunks(chunks []string, out io.Writer) {
 		f := Throw2(os.Open(path))
 		r := bufio.NewReaderSize(f, 1<<20)
 		line, err := r.ReadString('\n')
+
 		if err != nil && err != io.EOF {
 			Throw(err)
 		}
+
 		if line == "" && err == io.EOF {
 			Throw(f.Close())
 			continue
 		}
+
 		heap.Push(h, &mergeItem{line: line, reader: r, closer: f})
 	}
 
@@ -159,9 +181,11 @@ func mergeChunks(chunks []string, out io.Writer) {
 		Throw2(bw.WriteString(it.line))
 
 		next, err := it.reader.ReadString('\n')
+
 		if err != nil && err != io.EOF {
 			Throw(err)
 		}
+
 		if next != "" {
 			it.line = next
 			heap.Push(h, it)

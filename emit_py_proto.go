@@ -11,6 +11,7 @@ func protoPythonResourceKey(instance ModuleInstance, d *moduleData, src, suffix 
 	if d.pyNamespace == nil {
 		return instance.Path + "/" + base + suffix
 	}
+
 	if *d.pyNamespace == "." {
 		return base + suffix
 	}
@@ -35,6 +36,7 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 	if len(evSrcs) > 0 {
 		ThrowFmt("gen: py-addressed PROTO_LIBRARY %s with .ev sources is not modelled", instance.Path)
 	}
+
 	if len(protoSrcs) == 0 {
 		return nil
 	}
@@ -42,6 +44,7 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 	protocLDRef, protocBinary := ctx.tool(pbProtocModule)
 
 	var cppSibling *moduleEmitResult
+
 	if !moduleExcludesTag(d, "CPP_PROTO") {
 		cppInstance := instance
 		cppInstance.Language = LangCPP
@@ -57,6 +60,7 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 	}
 
 	auxRes := emitPyProtoAuxChunks(ctx, instance, d, peerContribs, auxEntries, cppSibling)
+
 	if auxRes != nil {
 		pyProtoRefs = append(pyProtoRefs, auxRes.Refs...)
 		pyProtoOutputs = append(pyProtoOutputs, auxRes.Outputs...)
@@ -76,9 +80,11 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 		GlobalRef:  &gRef,
 		GlobalPath: &globalPath,
 	}
+
 	if cppSibling != nil && cppSibling.ARPath != nil {
 		result.WholeArchiveRefs = append(result.WholeArchiveRefs, cppSibling.ARRef)
 		result.WholeArchivePaths = append(result.WholeArchivePaths, *cppSibling.ARPath)
+
 		if d.optimizePyProtos {
 			result.ARRef = cppSibling.ARRef
 			result.ARPath = cppSibling.ARPath
@@ -98,10 +104,12 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	protoRoot := protoPythonOutputRoot(instance, d)
+
 	if d.grpc {
 
 		protoRoot = ""
 	}
+
 	pyBase := protoBase + "__intpy3___pb2.py"
 	pyOut := Build(pyBase)
 	pyiOut := Build(protoBase + "__intpy3___pb2.pyi")
@@ -109,11 +117,13 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 
 	outputs := []VFS{pyOut}
 	suffixes := []string{"_pb2.py"}
+
 	if d.grpc {
 		grpcPyOut = Build(protoBase + "__intpy3___pb2_grpc.py")
 		outputs = append(outputs, grpcPyOut)
 		suffixes = append(suffixes, "_pb2_grpc.py")
 	}
+
 	if !d.noMypy {
 		outputs = append(outputs, pyiOut)
 		suffixes = append(suffixes, "_pb2.pyi")
@@ -121,9 +131,11 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 
 	var grpcPyBinary, mypyBinary VFS
 	var grpcPyRef, mypyRef NodeRef
+
 	if d.grpc {
 		grpcPyRef, grpcPyBinary = ctx.tool(pbGrpcPyModule)
 	}
+
 	if !d.noMypy {
 		mypyRef, mypyBinary = ctx.tool(pbMypyModule)
 	}
@@ -145,25 +157,31 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		"-I=$(B)",
 		"-I=$(S)",
 	)
+
 	if !d.grpc && protoRoot != "contrib/libs/protobuf/src" {
 		cmdArgs = append(cmdArgs, "-I=$(S)/"+protoRoot)
 	}
+
 	cmdArgs = append(cmdArgs, "-I=$(S)/contrib/libs/protobuf/src")
+
 	if d.grpc {
 		cmdArgs = append(cmdArgs, "-I=$(S)/contrib/libs/protoc/src")
 	}
+
 	cmdArgs = append(cmdArgs,
 		"-I=$(B)",
 		"-I=$(S)/contrib/libs/protobuf/src",
 		"--python_out=$(B)/"+protoRoot,
 		protoRelPath,
 	)
+
 	if d.grpc {
 		cmdArgs = append(cmdArgs,
 			"--plugin=protoc-gen-grpc_py="+grpcPyBinary.String(),
 			"--grpc_py_out=$(B)/"+protoRoot,
 		)
 	}
+
 	if !d.noMypy {
 		cmdArgs = append(cmdArgs,
 			"--plugin=protoc-gen-mypy="+mypyBinary.String(),
@@ -172,31 +190,39 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 
 	toolRefs := make([]NodeRef, 0, 3)
+
 	if protocLDRef != (NodeRef{}) {
 		toolRefs = append(toolRefs, protocLDRef)
 	}
+
 	if grpcPyRef != (NodeRef{}) {
 		toolRefs = append(toolRefs, grpcPyRef)
 	}
+
 	if !d.noMypy && mypyRef != (NodeRef{}) {
 		toolRefs = append(toolRefs, mypyRef)
 	}
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, Source(protoRelPath)}
 	transitive, hasDescriptor := protoTransitiveImports(ctx.parsers, ctx.fs, protoRelPath, nil)
+
 	if hasDescriptor {
 		inputs = append(inputs, pbDescriptorVFS)
 	}
+
 	inputs = append(inputs, transitive...)
+
 	if d.grpc {
 		inputs = append(inputs, grpcPyBinary)
 	}
+
 	if !d.noMypy {
 		inputs = append(inputs, mypyBinary)
 	}
 
 	pbKV := map[string]interface{}{"p": "PB", "pc": "yellow"}
 	protoBaseName := filepath.Base(protoBase)
+
 	for i, out := range outputs {
 		pbKV["ext_out_name_for_"+filepath.Base(out.Rel())] = protoBaseName + suffixes[i]
 	}
@@ -213,25 +239,32 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
 		DepRefs:          toolRefs,
 	}
+
 	if len(toolRefs) > 0 {
 		pyPBNode.ForeignDepRefs = map[string][]NodeRef{"tool": toolRefs}
 	}
+
 	pyPBRef := ctx.emit.Emit(bindNodePlatform(pyPBNode, instance.Platform))
 
 	pyYapyc := []VFS{pyOut}
+
 	if d.grpc {
 		pyYapyc = append(pyYapyc, grpcPyOut)
 	}
+
 	yapyRes := emitGeneratedPyProtoYapyc(ctx, instance, pyYapyc, pyPBRef, pyProtoSourceInputs(inputs))
+
 	if yapyRes == nil {
 		yapyRes = &generatedPyProtoYapycResult{}
 	}
+
 	return pyProtoAuxEntriesForSource(instance, d, src, pyPBRef, pyProtoSourceInputs(inputs), outputs, yapyRes.Refs, yapyRes.Outputs)
 }
 
 func protoPythonOutputRoot(instance ModuleInstance, d *moduleData) string {
 	if d != nil && d.protoNamespace != nil {
 		root := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(*d.protoNamespace)), "/")
+
 		if root != "." && root != "" {
 			return root
 		}
@@ -250,6 +283,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 	suffix := protoPySuffix(instance.Path)
 
 	res := &generatedPyProtoYapycResult{}
+
 	for i, pyOut := range pyOutputs {
 		out := Build(pyOut.Rel() + "." + suffix + ".yapyc3")
 		cmdArgs := []string{
@@ -263,16 +297,19 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 
 		deps := []NodeRef{pyPBRef}
 		var toolRefs []NodeRef
+
 		if py3ccRef != (NodeRef{}) {
 			deps = append(deps, py3ccRef)
 			toolRefs = append(toolRefs, py3ccRef)
 		}
+
 		if py3ccSlowRef != (NodeRef{}) {
 			deps = append(deps, py3ccSlowRef)
 			toolRefs = append(toolRefs, py3ccSlowRef)
 		}
 
 		nodeInputs := append([]VFS{py3ccBinary, py3ccSlowBin, pyOut}, sourceInputs...)
+
 		if i > 0 {
 			nodeInputs = append(nodeInputs, pyOutputs[0])
 		}
@@ -289,9 +326,11 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
 			DepRefs:          deps,
 		}
+
 		if len(toolRefs) > 0 {
 			node.ForeignDepRefs = map[string][]NodeRef{"tool": toolRefs}
 		}
+
 		res.Refs = append(res.Refs, ctx.emit.Emit(bindNodePlatform(node, instance.Platform)))
 		res.Outputs = append(res.Outputs, out)
 	}
@@ -312,11 +351,14 @@ func pyProtoAuxEntriesForSource(instance ModuleInstance, d *moduleData, src stri
 		entries = append(entries, pyProtoAuxEntry{path: srcPath, key: key, producer: producer, inputs: producerInputs})
 	}
 	addResource(pyOutputs[0], protoPythonResourceKey(instance, d, src, "_pb2.py"), pyPBRef)
+
 	if len(yapyOuts) > 0 {
 		addResource(yapyOuts[0], protoPythonResourceKey(instance, d, src, "_pb2.py.yapyc3"), yapyRefs[0])
 	}
+
 	if d.grpc && len(pyOutputs) > 2 && pyOutputs[1].Rel() != "" {
 		addResource(pyOutputs[1], protoPythonResourceKey(instance, d, src, "_pb2_grpc.py"), pyPBRef)
+
 		if len(yapyOuts) > 1 {
 			addResource(yapyOuts[1], protoPythonResourceKey(instance, d, src, "_pb2_grpc.py.yapyc3"), yapyRefs[1])
 		}
@@ -328,16 +370,20 @@ func pyProtoAuxEntriesForSource(instance ModuleInstance, d *moduleData, src stri
 func pyProtoSourceInputs(inputs []VFS) []VFS {
 	out := make([]VFS, 0, len(inputs))
 	seen := map[VFS]struct{}{}
+
 	for _, input := range inputs {
 		if !input.IsSource() {
 			continue
 		}
+
 		if _, ok := seen[input]; ok {
 			continue
 		}
+
 		seen[input] = struct{}{}
 		out = append(out, input)
 	}
+
 	return out
 }
 
@@ -369,6 +415,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		if _, ok := inputSeen[v]; ok {
 			return
 		}
+
 		inputSeen[v] = struct{}{}
 		cur.inputs = append(cur.inputs, v)
 	}
@@ -376,9 +423,11 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		if ref == (NodeRef{}) {
 			return
 		}
+
 		if _, ok := depSeen[ref]; ok {
 			return
 		}
+
 		depSeen[ref] = struct{}{}
 		cur.deps = append(cur.deps, ref)
 	}
@@ -386,6 +435,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		if cmdLen == 0 {
 			return
 		}
+
 		chunks = append(chunks, cur)
 		cur = chunk{}
 		cmdLen = 0
@@ -402,11 +452,14 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		cur.hashInputs = append(cur.hashInputs, "-", kvHash)
 		cur.cmdArgs = append(cur.cmdArgs, "-", kvCmd)
 		addInput(e.path)
+
 		for _, input := range e.inputs {
 			addInput(input)
 		}
+
 		addDep(e.producer)
 		cmdLen += rootCmdLen + len("-") + len(kvHash)
+
 		if cmdLen >= maxCmdLen {
 			flush()
 		}
@@ -414,23 +467,29 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		cur.hashInputs = append(cur.hashInputs, arcBuildPath, "-"+key)
 		cur.cmdArgs = append(cur.cmdArgs, e.path.String(), "-"+key)
 		addInput(e.path)
+
 		for _, input := range e.inputs {
 			addInput(input)
 		}
+
 		addDep(e.producer)
 		cmdLen += rootCmdLen + len(arcBuildPath) + len(key)
+
 		if cmdLen >= maxCmdLen {
 			flush()
 		}
 	}
+
 	flush()
 
 	peerAddIncl := peerContribs.addIncl
+
 	if cppSibling != nil {
 		peerAddIncl = mergeDedupVFS(cppSibling.AddInclGlobal, peerContribs.addIncl)
 	}
 
 	res := &pyProtoAuxChunksResult{}
+
 	for _, ch := range chunks {
 		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, "PY3_PROTO") + "_raw.auxcpp")
 		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, aux, ch.inputs, peerAddIncl)
@@ -438,6 +497,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		cmdArgs = append(cmdArgs, ch.cmdArgs...)
 
 		deps := append([]NodeRef(nil), ch.deps...)
+
 		if rescompilerRef != (NodeRef{}) {
 			deps = append(deps, rescompilerRef)
 		}

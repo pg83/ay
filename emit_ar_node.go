@@ -26,9 +26,11 @@ func emitARNode(
 		"None",
 		"--",
 	}
+
 	if arPluginPath != nil {
 		cmdArgs = append(cmdArgs, "--plugin", arPluginPath.String())
 	}
+
 	cmdArgs = append(cmdArgs, "--", archivePath.String())
 
 	for _, p := range objPaths {
@@ -38,6 +40,7 @@ func emitARNode(
 	inputs := make([]VFS, 0, len(objPaths)+2)
 	inputs = append(inputs, objPaths...)
 	inputs = append(inputs, scriptVFS)
+
 	if arPluginPath != nil {
 		inputs = append(inputs, *arPluginPath)
 	}

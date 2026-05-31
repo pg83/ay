@@ -28,9 +28,11 @@ func EmitJVCPG4(
 	inputCap := 2 + len(jvInputs) + len(closure) + 2
 	inputs := make([]VFS, 0, inputCap)
 	inputs = append(inputs, jvPrimary)
+
 	if src != jvPrimary {
 		inputs = append(inputs, src)
 	}
+
 	inputs = append(inputs, scripts[fsTools]...)
 	inputs = append(inputs, jvInputs...)
 	inputs = append(inputs, closure...)
@@ -91,6 +93,7 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 	inputs := make([]VFS, 0, 3+len(extraInputs))
 	inputs = append(inputs, scripts[fsTools]...)
 	inputs = append(inputs, src)
+
 	for _, v := range extraInputs {
 		if v == src || v == dst {
 			continue

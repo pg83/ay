@@ -77,9 +77,11 @@ type ModuleCCInputs struct {
 func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS, []VFS) {
 
 	suffix := ".o"
+
 	if instance.Platform.PIC {
 		suffix = ".pic.o"
 	}
+
 	if in.ObjectSuffixStem != nil {
 		if instance.Platform.PIC {
 			suffix = "." + *in.ObjectSuffixStem + ".pic.o"
@@ -105,11 +107,13 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	isCxx := in.ForceCxx || isCxxSource(srcRel)
 
 	var ownExtras []string
+
 	if isCxx {
 		ownExtras = in.CXXFlags
 	} else {
 		ownExtras = in.COnlyFlags
 	}
+
 	if isCxx && len(instance.Platform.CXXFlags) > 0 {
 		ownExtras = append(append([]string{}, ownExtras...), instance.Platform.CXXFlags...)
 	}
@@ -142,6 +146,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	env := hostP.ToolEnv()
 
 	allInputs := in.NodeInputs
+
 	if allInputs == nil {
 		allInputs = make([]VFS, 0, 1+len(in.IncludeInputs))
 		allInputs = append(allInputs, inVFS)
@@ -165,9 +170,11 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Tags: instance.Platform.Tags,
 		TargetProperties: func() map[string]string {
 			tp := map[string]string{"module_dir": instance.Path}
+
 			if in.ModuleTag != nil {
 				tp["module_tag"] = *in.ModuleTag
 			}
+
 			return tp
 		}(),
 		Platform: string(instance.Platform.Target),
@@ -194,6 +201,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	// normalised srcVFS.Rel() like commands/foo.cpp — the bare
 	// instance.Path+"/"+srcRel would still carry the unnormalised tail).
 	canon := filepath.ToSlash(filepath.Clean(instance.Path + "/" + srcRel))
+
 	if srcVFS.IsSource() && srcVFS.Rel() != canon && in.SrcDir != nil {
 
 		outputRel := composeSrcDirOutputRel(instance.Path, *in.SrcDir, srcRel)
@@ -202,6 +210,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	}
 
 	var outRel string
+
 	switch {
 	case in.FlatOutput:
 
@@ -212,6 +221,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	default:
 		outRel = instance.Path + "/" + srcRel + suffix
 	}
+
 	return Build(outRel), input
 }
 
@@ -231,6 +241,7 @@ func composeSrcDirOutputRel(instancePath, srcDir, srcRel string) string {
 	parts := strings.Split(rel, string(filepath.Separator))
 
 	hasParent := false
+
 	for i, p := range parts {
 		if p == ".." {
 			parts[i] = "__"
@@ -244,6 +255,7 @@ func composeSrcDirOutputRel(instancePath, srcDir, srcRel string) string {
 		if strings.Contains(joined, "/") {
 			return "_/" + joined
 		}
+
 		return joined
 	}
 
@@ -253,15 +265,18 @@ func composeSrcDirOutputRel(instancePath, srcDir, srcRel string) string {
 func normalizeDotDotSegments(rel string) string {
 	parts := strings.Split(rel, "/")
 	hasParent := false
+
 	for i, p := range parts {
 		if p == ".." {
 			parts[i] = "__"
 			hasParent = true
 		}
 	}
+
 	if !hasParent {
 		return "_/" + strings.Join(parts, "/")
 	}
+
 	return strings.Join(parts, "/")
 }
 
@@ -342,6 +357,7 @@ func platformCompilerFlags(p *Platform, isCxx bool) []string {
 
 	out := make([]string, 0, len(p.CFlags)+len(p.CXXFlags))
 	out = append(out, p.CFlags...)
+
 	if isCxx {
 		out = append(out, p.CXXFlags...)
 	}
@@ -447,15 +463,18 @@ func composeTargetCC(a ccComposeArgs) []string {
 	cmdArgs = append(cmdArgs, ccIncludesPrefix...)
 	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl, a.InclArgs)
 	peerAddIncl := a.PeerAddIncl
+
 	if len(peerAddIncl) > 0 && peerAddIncl[0] == googleapisCommonProtosAddIncl {
 		cmdArgs = append(cmdArgs, a.InclArgs.arg(peerAddIncl[0]))
 		peerAddIncl = peerAddIncl[1:]
 	}
+
 	cmdArgs = append(cmdArgs, ccIncludesSuffix...)
 	cmdArgs = appendAddIncl(cmdArgs, peerAddIncl, a.InclArgs)
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningBundle, bundle.Defines, a.OwnCFlags, a.ModuleScopeCFlags)
 
 	var cOnlyExtras []string
+
 	if a.IsCxx {
 		cmdArgs = appendCxxStdAndOwn(cmdArgs, true, a.NoCompilerWarnings, true, a.OwnExtras)
 	} else {

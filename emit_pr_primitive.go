@@ -23,8 +23,10 @@ func EmitPR(
 	env := map[string]string{
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
+
 	for _, kv := range stmt.EnvPairs {
 		parts := strings.SplitN(kv, "=", 2)
+
 		if len(parts) == 2 {
 			env[parts[0]] = parts[1]
 		} else {
@@ -34,6 +36,7 @@ func EmitPR(
 
 	cmdArgs := make([]string, 0, 1+len(stmt.Args))
 	cmdArgs = append(cmdArgs, toolBinPath.String())
+
 	for _, a := range stmt.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
@@ -42,16 +45,19 @@ func EmitPR(
 		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path)
 		a = strings.ReplaceAll(a, "$CURDIR", Source(instance.Path).String())
 		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path).String())
+
 		for _, tool := range auxTools {
 			if strings.Contains(a, tool.token) {
 				a = strings.ReplaceAll(a, tool.token, tool.bin.String())
 			}
 		}
+
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.String()
 		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.String()
 		}
+
 		cmdArgs = append(cmdArgs, a)
 	}
 
@@ -61,29 +67,36 @@ func EmitPR(
 		if _, dup := seen[p]; dup {
 			return
 		}
+
 		seen[p] = struct{}{}
 		inputs = append(inputs, p)
 	}
 	appendUnique(toolBinPath)
+
 	for _, tool := range auxTools {
 		appendUnique(tool.bin)
 	}
+
 	for _, f := range stmt.INFiles {
 		appendUnique(inVFSByToken[f])
 	}
+
 	for _, p := range inputClosure {
 		appendUnique(p)
 	}
 
 	var outputs []VFS
 	var stdoutPath string
+
 	if stdoutVFS != nil {
 		stdoutPath = stdoutVFS.String()
 		outputs = append(outputs, *stdoutVFS)
 	}
+
 	for _, f := range stmt.OUTFiles {
 		outputs = append(outputs, outVFSByToken[f])
 	}
+
 	for _, f := range stmt.OUTNoAutoFiles {
 		outputs = append(outputs, outVFSByToken[f])
 	}
@@ -94,15 +107,19 @@ func EmitPR(
 		if ref == (NodeRef{}) {
 			return
 		}
+
 		if _, dup := seenToolRefs[ref]; dup {
 			return
 		}
+
 		seenToolRefs[ref] = struct{}{}
 		toolRefs = append(toolRefs, ref)
 	}
+
 	for _, tool := range auxTools {
 		appendToolRef(tool.ref)
 	}
+
 	appendToolRef(toolLDRef)
 
 	depRefs := make([]NodeRef, 0, len(toolRefs)+len(extraDepRefs))
@@ -110,6 +127,7 @@ func EmitPR(
 	depRefs = append(depRefs, extraDepRefs...)
 
 	var foreignDepRefs map[string][]NodeRef
+
 	if len(toolRefs) > 0 {
 		foreignDepRefs = map[string][]NodeRef{"tool": append([]NodeRef(nil), toolRefs...)}
 	}
@@ -118,9 +136,11 @@ func EmitPR(
 		CmdArgs: cmdArgs,
 		Env:     env,
 	}
+
 	if stdoutPath != "" {
 		cmd.Stdout = stdoutPath
 	}
+
 	if stmt.CWD != nil {
 		cmd.Cwd = expandRunProgramCWD(instance, *stmt.CWD)
 	}

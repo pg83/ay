@@ -14,6 +14,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 
 	for _, run := range d.antlrRuns {
 		jarVFS := antlr4JarVFS
+
 		if run.Macro == "RUN_ANTLR" {
 			jarVFS = antlr3JarVFS
 		}
@@ -30,13 +31,16 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			if _, dup := cfExtraSeen[v]; dup {
 				return
 			}
+
 			cfExtraSeen[v] = struct{}{}
 			cfExtraInputs = append(cfExtraInputs, v)
 		}
+
 		for _, inTok := range run.INFiles {
 			vfs := copyFileInputVFS(ctx.fs, instance.Path, inTok)
 			inVFSByToken[inTok] = vfs
 			inputs = append(inputs, vfs)
+
 			if reg != nil {
 				if info := reg.Lookup(vfs); info != nil && info.ProducerKvP == "CF" && info.SourcePath != 0 {
 					appendCFExtra(info.SourcePath)
@@ -44,15 +48,18 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 				}
 			}
 		}
+
 		inputs = append(inputs, cfExtraInputs...)
 
 		outVFSByToken := make(map[string]VFS, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
 		outputs := make([]VFS, 0, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
+
 		for _, outTok := range run.OUTFiles {
 			vfs := copyFileOutputVFS(instance.Path, outTok)
 			outVFSByToken[outTok] = vfs
 			outputs = append(outputs, vfs)
 		}
+
 		for _, outTok := range run.OUTNoAutoFiles {
 			vfs := copyFileOutputVFS(instance.Path, outTok)
 			outVFSByToken[outTok] = vfs
@@ -62,6 +69,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		depRefs := resolveCodegenDepRefsExt(ctx, instance, nil, inputs)
 		args := antlrRunCmdArgs(instance, run, inVFSByToken, outVFSByToken)
 		cwd := ""
+
 		if run.CWD != nil {
 			cwd = expandRunProgramCWD(instance, *run.CWD)
 		}
@@ -74,12 +82,15 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			// the antlr jar). Consumers compiling a JV output (e.g. a PB protoc
 			// node fed JsonPathParser.proto) inherit these as transitive sources.
 			jvSourceInputs := make([]VFS, 0, len(inputs)+2)
+
 			for _, v := range inputs {
 				if v.IsSource() {
 					jvSourceInputs = append(jvSourceInputs, v)
 				}
 			}
+
 			jvSourceInputs = append(jvSourceInputs, stdout2stderrVFS, jarVFS)
+
 			for outTok, outVFS := range outVFSByToken {
 				registerBoundGeneratedParsedOutput(ctx, instance, "JV", outVFS, antlrParsedIncludes(instance.Path, run, outTok, outVFSByToken, inputs, jarVFS), jvRef)
 				reg.SetSourceInputs(outVFS, jvSourceInputs)
@@ -94,6 +105,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			if !isCCSourceExt(outTok) {
 				continue
 			}
+
 			outVFS := outVFSByToken[outTok]
 			cppRel := antlrOutputModuleRel(instance.Path, outVFS)
 			ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, cppRel, nil, []NodeRef{jvRef}, *consumerInputs)
@@ -107,6 +119,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 
 func antlrRunCmdArgs(instance ModuleInstance, run antlrRunInfo, inVFSByToken, outVFSByToken map[string]VFS) []string {
 	args := make([]string, 0, len(run.Args))
+
 	for _, a := range run.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
@@ -115,13 +128,16 @@ func antlrRunCmdArgs(instance ModuleInstance, run antlrRunInfo, inVFSByToken, ou
 		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path)
 		a = strings.ReplaceAll(a, "$CURDIR", Source(instance.Path).String())
 		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path).String())
+
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.String()
 		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.String()
 		}
+
 		args = append(args, a)
 	}
+
 	return args
 }
 
@@ -132,9 +148,11 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 		if target == "" {
 			return
 		}
+
 		if _, ok := seen[target]; ok {
 			return
 		}
+
 		seen[target] = struct{}{}
 		parsed = append(parsed, includeDirective{kind: includeQuoted, target: internString(target)})
 	}
@@ -147,6 +165,7 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 		// OUTPUT_INCLUDES. Neither generated .cpp lists the sibling generated .h
 		// as an input (the lexer→parser edge is one-directional).
 		base := strings.TrimSuffix(outTok, filepath.Ext(outTok))
+
 		if parserBase, isLexer := strings.CutSuffix(base, "Lexer"); isLexer {
 			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
 				if parserVFS, ok := outVFSByToken[parserBase+"Parser"+ext]; ok {
@@ -162,6 +181,7 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 		// as an input. The *Lexer.cpp sibling is compiled separately by the ANTLR
 		// module and must not appear in other modules' CC inputs.
 		base := strings.TrimSuffix(outTok, filepath.Ext(outTok))
+
 		if parserBase, isLexerH := strings.CutSuffix(base, "Lexer"); isLexerH {
 			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
 				if parserVFS, ok := outVFSByToken[parserBase+"Parser"+ext]; ok {
@@ -191,10 +211,13 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 		if !input.IsSource() {
 			continue
 		}
+
 		appendUnique(input.Rel())
 	}
+
 	appendUnique(stdout2stderrVFS.Rel())
 	appendUnique(jarVFS.Rel())
+
 	for _, include := range run.OutputIncludes {
 		appendUnique(copyFileIncludeTarget(modulePath, include))
 	}
@@ -202,14 +225,17 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 	if len(parsed) == 0 {
 		return nil
 	}
+
 	return parsed
 }
 
 func antlrOutputModuleRel(modulePath string, outVFS VFS) string {
 	prefix := modulePath + "/"
+
 	if strings.HasPrefix(outVFS.Rel(), prefix) {
 		return strings.TrimPrefix(outVFS.Rel(), prefix)
 	}
+
 	ThrowFmt("gen: antlr output %q is outside module %q", outVFS.Rel(), modulePath)
 	return ""
 }

@@ -147,6 +147,7 @@ type closureRef struct {
 func (s *idSet) reset(size uint32) {
 	if uint32(len(s.gen)) < size {
 		grown := uint32(len(s.gen)) * 2
+
 		if grown < size {
 			grown = size
 		}
@@ -158,6 +159,7 @@ func (s *idSet) reset(size uint32) {
 	}
 
 	s.epoch++
+
 	if s.epoch == 0 {
 		for i := range s.gen {
 			s.gen[i] = 0
@@ -174,6 +176,7 @@ func (s *idSet) has(id uint32) bool {
 func (s *idSet) add(id uint32) {
 	if id >= uint32(len(s.gen)) {
 		grown := uint32(len(s.gen)) * 2
+
 		if grown <= id {
 			grown = id + 1
 		}
@@ -197,6 +200,7 @@ type tarjanScratch struct {
 func (t *tarjanScratch) reset(size uint32) {
 	if uint32(len(t.stamp)) < size {
 		grown := uint32(len(t.stamp)) * 2
+
 		if grown < size {
 			grown = size
 		}
@@ -211,6 +215,7 @@ func (t *tarjanScratch) reset(size uint32) {
 	}
 
 	t.epoch++
+
 	if t.epoch == 0 {
 		for i := range t.stamp {
 			t.stamp[i] = 0
@@ -227,6 +232,7 @@ func (t *tarjanScratch) visited(id uint32) bool {
 func (t *tarjanScratch) discover(id uint32, idx int32) {
 	if id >= uint32(len(t.stamp)) {
 		grown := uint32(len(t.stamp)) * 2
+
 		if grown <= id {
 			grown = id + 1
 		}
@@ -317,6 +323,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
 		resolveIndexByConfig: make(map[uint64]*cfgResolveIndex, 1024),
 	}
+
 	for i := range sysincl {
 		if sysincl[i].KeyBySource {
 			s.sourceKeyedCount++
@@ -324,20 +331,25 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 	}
 
 	var csKeyIDs []STR
+
 	for i := range sysincl {
 		rec := &sysincl[i]
+
 		for k := range rec.Mappings {
 			if rec.CaseInsensitive {
 				if s.sysinclKeyCI == nil {
 					s.sysinclKeyCI = make(map[string]bool, len(rec.Mappings))
 				}
+
 				s.sysinclKeyCI[k] = true
 			} else {
 				csKeyIDs = append(csKeyIDs, internString(k))
 			}
 		}
 	}
+
 	s.sysinclKeyBits = make([]bool, internBound())
+
 	for _, id := range csKeyIDs {
 		s.sysinclKeyBits[id] = true
 	}
@@ -378,12 +390,14 @@ type ScanContext struct {
 func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 	ctxHash := hashScanContext(&cfg)
 	searchTier := s.searchTierByConfig[ctxHash]
+
 	if searchTier == nil {
 		searchTier = make(map[STR]searchTierResult, 256)
 		s.searchTierByConfig[ctxHash] = searchTier
 	}
 
 	ri := s.resolveIndexByConfig[ctxHash]
+
 	if ri == nil {
 		ri = buildCfgResolveIndex(&cfg)
 		s.resolveIndexByConfig[ctxHash] = ri
@@ -392,6 +406,7 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 			for _, p := range cfg.OwnAddIncl {
 				s.parsers.indexAddincl(p)
 			}
+
 			for _, p := range cfg.PeerAddInclSet {
 				s.parsers.indexAddincl(p)
 			}
@@ -497,14 +512,17 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 
 func (s *IncludeScanner) IncludeDirectiveTargets(vfsPath VFS) []string {
 	entries := s.parsers.parsedIncludes(vfsPath)
+
 	if len(entries) == 0 {
 		return nil
 	}
 
 	out := make([]string, 0, len(entries))
+
 	for _, entry := range entries {
 		out = append(out, entry.target.String())
 	}
+
 	return out
 }
 
@@ -545,6 +563,7 @@ func (s *IncludeScanner) sourceClass(sourceRel string) (uint32, PerSourceView) {
 
 	for _, id := range s.sourceClassBuckets[sig] {
 		cached := s.sourceClassViews[id]
+
 		if sameRecordSlice(cached.activeSourceKeyed, view.activeSourceKeyed) {
 			s.sourceClassCache[sourceRel] = id
 
@@ -665,6 +684,7 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 
 	for _, entry := range s.parsers.parsedIncludes(vfsPath) {
 		resolved := sc.resolve(vfsPath, entry)
+
 		for _, rabs := range resolved {
 			fn(rabs)
 		}
@@ -678,6 +698,7 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 // once per run.
 func (sc *scanCtx) forEachResolvedChildID(absID uint32, fn func(uint32)) {
 	s := sc.scanner
+
 	if cached, ok := s.childrenCache[absID]; ok {
 		for _, id := range cached {
 			fn(id)
@@ -722,6 +743,7 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 
 func (sc *scanCtx) closureOf(absID uint32) []uint32 {
 	s := sc.scanner
+
 	if ref, ok := s.subgraphCache[absID]; ok {
 		s.subgraphHits++
 
@@ -748,15 +770,18 @@ func (s *IncludeScanner) closureWindow(ref closureRef) []uint32 {
 func (s *IncludeScanner) appendClosure(buf []uint32) closureRef {
 	n := uint32(len(buf))
 	o := s.subgraphLen % closureChunkLen
+
 	if o+n > closureChunkLen {
 		s.subgraphLen += closureChunkLen - o
 		o = 0
 	}
 
 	ci := s.subgraphLen / closureChunkLen
+
 	for uint32(len(s.subgraphChunks)) <= ci {
 		s.subgraphChunks = append(s.subgraphChunks, make([]uint32, closureChunkLen))
 	}
+
 	copy(s.subgraphChunks[ci][o:], buf)
 
 	ref := closureRef{off: s.subgraphLen, n: n}
@@ -781,6 +806,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 
 		if !s.tj.visited(w) {
 			sc.strongconnect(w)
+
 			if s.tj.low[w] < s.tj.low[v] {
 				s.tj.low[v] = s.tj.low[w]
 			}
@@ -796,9 +822,11 @@ func (sc *scanCtx) strongconnect(v uint32) {
 	}
 
 	sccStart := len(s.tjStack) - 1
+
 	for s.tjStack[sccStart] != v {
 		sccStart--
 	}
+
 	members := s.tjStack[sccStart:]
 
 	s.tjClosure.reset(vfsBound())
@@ -830,6 +858,7 @@ func (sc *scanCtx) strongconnect(v uint32) {
 	s.tjBuf = buf[:0]
 
 	s.subgraphMisses += uint64(len(members))
+
 	if len(members) > 1 {
 		s.subgraphTainted++
 	}
@@ -846,14 +875,18 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	s := sc.scanner
 
 	var sysinclClaimed bool
+
 	defer func() {
 		if len(out) > 0 || d.next || sysinclClaimed {
 			return
 		}
+
 		open, close := `<`, `>`
+
 		if d.kind == includeQuoted {
 			open, close = `"`, `"`
 		}
+
 		s.onWarn(Warn{
 			Kind: WarnMissingInclude,
 			Message: fmt.Sprintf("%s: unresolved include %s%s%s — not found in source, build, search path, or sysincl",
@@ -875,6 +908,7 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 	if d.kind == includeQuoted && len(searchOut) > 0 {
 
 		bypass := !hasMultiTarget
+
 		if !bypass && searchOut[0].IsSource() {
 			incDir := pathDir(includerRel)
 
@@ -1104,6 +1138,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 			return idx
 		}
 	}
+
 	for _, p := range cfg.PeerAddInclSet {
 		if p.Root() == VFSRootSource && p.Rel() == "" {
 			return idx
@@ -1118,8 +1153,10 @@ func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 		if _, ok := idx.rank[p]; ok {
 			return
 		}
+
 		idx.rank[p] = r
 		r++
+
 		if p.Root() == VFSRootBuild {
 			idx.buildEntries = append(idx.buildEntries, cfgBuildAddincl{
 				prefix:   p,
@@ -1132,6 +1169,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 	for _, p := range cfg.OwnAddIncl {
 		add(p)
 	}
+
 	for _, p := range cfg.PeerAddInclSet {
 		add(p)
 	}
@@ -1155,6 +1193,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 
 	addSource := func(prefixRel string) bool {
 		rel, ok := s.resolveSourceUnder(prefixRel, target)
+
 		if !ok {
 			return false
 		}
@@ -1166,6 +1205,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 	}
 
 	var buildSuffix *STR
+
 	if s.codegen != nil {
 		buildSuffix = interned(normTarget)
 	}
@@ -1176,6 +1216,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		}
 
 		var info *GeneratedFileInfo
+
 		if prefixRel == "" {
 
 			info = s.codegen.LookupRel(normTarget)
@@ -1211,20 +1252,24 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 	}
 
 	first, _ := firstComponent(target)
+
 	if canRelFilter(first, target) && !strings.Contains(target, "/./") && !strings.Contains(target, "//") {
 		idx := sc.resolveIndex
+
 		if idx.indexable {
 
 			// Source side: precomputed FS-existence inverted index keyed by
 			// target → addincl prefixes containing it. Pick the smallest rank.
 			bestRank := resolveNoRank
 			var bestAddincl VFS
+
 			for _, a := range s.parsers.addinclIndex[targetID] {
 				if r, ok := idx.rank[a]; ok && r < bestRank {
 					bestRank = r
 					bestAddincl = a
 				}
 			}
+
 			bestIsSource := bestRank != resolveNoRank
 
 			// Build side: walk the (typically tiny) set of Build-rooted addincl
@@ -1233,14 +1278,17 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 			// best, the Build entry wins, mirroring upstream's first-match
 			// semantics over IncDirs (module_resolver.cpp:371).
 			var bestBuild *GeneratedFileInfo
+
 			if buildSuffix != nil {
 				for i := range idx.buildEntries {
 					b := &idx.buildEntries[i]
+
 					if b.rank >= bestRank {
 						continue
 					}
 
 					info := s.codegen.LookupSplit(b.prefixID, *buildSuffix)
+
 					if info == nil {
 						continue
 					}
@@ -1256,6 +1304,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 					out.paths = []VFS{Source(joinRel(bestAddincl.Rel(), target))}
 				} else {
 					out.paths = []VFS{bestBuild.OutputPath}
+
 					if sc.cfg.OwnerModuleDir != "" {
 						if _, ok := s.generatedFirstClaim[bestBuild.OutputPath]; !ok {
 							s.generatedFirstClaim[bestBuild.OutputPath] = sc.cfg.OwnerModuleDir
@@ -1372,11 +1421,13 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		}
 
 		info := s.codegen.LookupRel(rel)
+
 		if info == nil {
 			return false
 		}
 
 		dedupKey := "B:" + rel
+
 		if _, dup := seen[dedupKey]; dup {
 			return false
 		}
@@ -1400,6 +1451,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 
 		if addBuildPath(rel) {
 			searchPathFound = true
+
 			if sc.cfg.OwnerModuleDir != "" && s.codegen != nil {
 				if info := s.codegen.LookupRel(rel); info != nil {
 					if _, ok := s.generatedFirstClaim[info.OutputPath]; !ok {
@@ -1421,6 +1473,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		incDir := pathDir(includerAbs.Rel())
 
 		matched := false
+
 		if rel, ok := s.resolveSourceUnder(incDir, d.target.String()); ok {
 			if _, dup := seen[rel]; !dup {
 				seen[rel] = struct{}{}
@@ -1433,11 +1486,13 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		if !matched {
 			if info := s.codegenUnder(incDir, d.target.String()); info != nil {
 				dedupKey := "B:" + info.OutputPath.Rel()
+
 				if _, dup := seen[dedupKey]; !dup {
 					seen[dedupKey] = struct{}{}
 					out = append(out, info.OutputPath)
 					searchPathFound = true
 				}
+
 				// Mirror resolveContextSearchTier's addBuild: when a
 				// quoted include resolves to a generated path via the
 				// includer-dir codegenUnder branch (e.g. X86CallingConv.cpp
@@ -1455,6 +1510,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 
 	if !searchPathFound {
 		tier := sc.resolveContextSearchTier(d.target, d.target.String())
+
 		if tier.found {
 			out = append(out, tier.paths...)
 			searchPathFound = true
@@ -1471,6 +1527,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 			}
 
 			dedupKey := "B:" + d.target.String()
+
 			if _, dup := seen[dedupKey]; !dup {
 				seen[dedupKey] = struct{}{}
 				out = append(out, abs)
@@ -1485,6 +1542,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 			seen[buildRootFallbackRel] = struct{}{}
 			out = append(out, Source(buildRootFallbackRel))
 		}
+
 		searchPathFound = true
 	}
 
@@ -1622,6 +1680,7 @@ func (s *IncludeScanner) listdir(rel string) map[string]bool {
 func (s *IncludeScanner) resolveSourceUnder(prefixDir, target string) (string, bool) {
 	if first, more := firstComponent(target); canRelFilter(first, target) {
 		isDir, ok := s.listdir(prefixDir)[first]
+
 		if !ok {
 			return "", false
 		}
@@ -1640,6 +1699,7 @@ func (s *IncludeScanner) resolveSourceUnder(prefixDir, target string) (string, b
 	}
 
 	rel := normalisePath(joinRel(prefixDir, target))
+
 	if !s.fileExistsByRel(rel) {
 		return "", false
 	}
@@ -1655,11 +1715,13 @@ func (s *IncludeScanner) codegenUnder(prefixDir, target string) *GeneratedFileIn
 	if first, _ := firstComponent(target); prefixDir != "" && canRelFilter(first, target) &&
 		!strings.Contains(target, "/./") && !strings.Contains(target, "//") {
 		pid := interned(prefixDir)
+
 		if pid == nil {
 			return nil
 		}
 
 		sid := interned(target)
+
 		if sid == nil {
 			return nil
 		}

@@ -73,6 +73,7 @@ func vfsBound() uint32 { return uint32(len(internTable.strs)) << 1 }
 
 func Intern(full string) VFS {
 	root := VFSRootSource
+
 	if full[2] == 'B' {
 		root = VFSRootBuild
 	}
@@ -124,9 +125,11 @@ func (v VFS) MarshalJSON() ([]byte, error) {
 
 func vfsRelsSlice(vs []VFS) []string {
 	out := make([]string, len(vs))
+
 	for i, v := range vs {
 		out[i] = v.Rel()
 	}
+
 	return out
 }
 
@@ -134,9 +137,11 @@ func concatVFS(a, b []VFS) []VFS {
 	if len(a) == 0 {
 		return b
 	}
+
 	if len(b) == 0 {
 		return a
 	}
+
 	out := make([]VFS, 0, len(a)+len(b))
 	out = append(out, a...)
 	out = append(out, b...)
@@ -145,8 +150,10 @@ func concatVFS(a, b []VFS) []VFS {
 
 func lessVFS(a, b VFS) bool {
 	ra, rb := a.Root(), b.Root()
+
 	if ra != rb {
 		return ra == VFSRootBuild
 	}
+
 	return a.Rel() < b.Rel()
 }

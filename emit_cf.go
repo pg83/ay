@@ -47,15 +47,19 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 func cfIncludeDirectives(pm *includeParserManager, rel string) []includeDirective {
 	raw := pm.sourceParsedBuckets(Source(rel)).bucket(parsedIncludesLocal)
 	out := make([]includeDirective, 0, len(raw))
+
 	for _, d := range raw {
 		if d.kind != includeQuoted {
 			continue
 		}
+
 		out = append(out, d)
 	}
+
 	if len(out) == 0 {
 		return nil
 	}
+
 	sort.Slice(out, func(i, j int) bool { return out[i].target.String() < out[j].target.String() })
 	return out
 }
@@ -64,14 +68,17 @@ func buildCFGVars(fs FS, rel string, setVars, defaultVars map[string]string) []s
 	referenced := map[string]bool{}
 
 	data := fs.Read(rel)
+
 	for _, m := range cfgVarRefRe.FindAllSubmatch(data, -1) {
 		referenced[string(m[1])] = true
 	}
+
 	for _, m := range cfgCmakeDefineRe.FindAllSubmatch(data, -1) {
 		referenced[string(m[1])] = true
 	}
 
 	var vars []string
+
 	for name := range referenced {
 		switch {
 		case hasKey(setVars, name):
@@ -102,9 +109,11 @@ func cfModuleTag(d *moduleData, instance ModuleInstance) string {
 	if d == nil || d.moduleStmt == nil {
 		return ""
 	}
+
 	if d.moduleStmt.Name == "PROTO_LIBRARY" && instance.Language != LangPy {
 		return "cpp_proto"
 	}
+
 	return ""
 }
 
@@ -120,5 +129,6 @@ func cfgVarValue(v string) string {
 	} else if len(v) >= 2 && strings.HasPrefix(v, `"`) && strings.HasSuffix(v, `"`) {
 		v = v[1 : len(v)-1]
 	}
+
 	return v
 }

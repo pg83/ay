@@ -63,15 +63,19 @@ func NewFS(sourceRoot string) FS {
 // advance.
 func (fs *osFS) recordContentHash(rel string, data []byte) {
 	s := internString(cleanRel(rel))
+
 	if int(s) >= len(fs.contentHashes) {
 		n := len(fs.contentHashes) * 2
+
 		if n <= int(s) {
 			n = int(s) + 1
 		}
+
 		grown := make([]uint64, n)
 		copy(grown, fs.contentHashes)
 		fs.contentHashes = grown
 	}
+
 	fs.contentHashes[s] = xxh3.Hash(data)
 }
 
@@ -79,14 +83,17 @@ func (fs *osFS) ContentHash(s STR) uint64 {
 	if int(s) < len(fs.contentHashes) && fs.contentHashes[s] != 0 {
 		return fs.contentHashes[s]
 	}
+
 	// Lazily read inputs gen never scanned — many $(S) inputs (data files,
 	// tablegen .td, python stdlib, tzdata, …) are listed on nodes but their content
 	// is never needed during graph construction. Read on first uid use (reusing one
 	// buffer) so the hash is recorded; a genuinely missing file faults here.
 	rel := internTable.strs[s]
+
 	if fs.IsDir(rel) {
 		return 0 // directory inputs (e.g. a test data dir) have no content hash
 	}
+
 	fs.chReadBuf = fs.ReadInto(rel, fs.chReadBuf)
 	return fs.contentHashes[s]
 }
@@ -95,27 +102,33 @@ func (fs *osFS) SourceRoot() string { return fs.sourceRoot }
 
 func (fs *osFS) Listdir(rel string) map[string]bool {
 	rel = cleanRel(rel)
+
 	if cached, ok := fs.dirs[rel]; ok {
 		fs.listdirHits++
 		return cached
 	}
+
 	fs.listdirMisses++
 
 	full := fs.rootSlash + rel
+
 	if rel == "" {
 		full = fs.sourceRoot
 	}
 
 	entries, err := os.ReadDir(full)
+
 	if err != nil {
 		fs.dirs[rel] = nil
 		return nil
 	}
 
 	out := make(map[string]bool, len(entries))
+
 	for _, e := range entries {
 		out[e.Name()] = e.IsDir()
 	}
+
 	fs.dirs[rel] = out
 
 	return out
@@ -123,18 +136,21 @@ func (fs *osFS) Listdir(rel string) map[string]bool {
 
 func (fs *osFS) Exists(rel string) (present bool, isDir bool) {
 	rel = cleanRel(rel)
+
 	if rel == "" {
 		return true, true
 	}
 
 	dir, name := splitDirName(rel)
 	entries := fs.Listdir(dir)
+
 	if entries == nil {
 		fs.existsMisses++
 		return false, false
 	}
 
 	isDir, ok := entries[name]
+
 	if ok {
 		fs.existsHits++
 	} else {
@@ -174,6 +190,7 @@ func (fs *osFS) readIntoRaw(rel string, buf []byte) []byte {
 
 	if fi, statErr := f.Stat(); statErr == nil {
 		sz := int(fi.Size())
+
 		if sz > cap(buf) {
 			buf = make([]byte, 0, sz)
 		}
@@ -181,10 +198,12 @@ func (fs *osFS) readIntoRaw(rel string, buf []byte) []byte {
 		for len(buf) < sz {
 			n, err := f.Read(buf[len(buf):sz])
 			buf = buf[:len(buf)+n]
+
 			if err != nil {
 				if err == io.EOF {
 					return buf
 				}
+
 				Throw(err)
 			}
 		}
@@ -199,10 +218,12 @@ func (fs *osFS) readIntoRaw(rel string, buf []byte) []byte {
 
 		n, err := f.Read(buf[len(buf):cap(buf)])
 		buf = buf[:len(buf)+n]
+
 		if err != nil {
 			if err == io.EOF {
 				return buf
 			}
+
 			Throw(err)
 		}
 	}
@@ -220,6 +241,7 @@ func (fs *osFS) relForAbs(absPath string) string {
 	if absPath == fs.sourceRoot {
 		return ""
 	}
+
 	if strings.HasPrefix(absPath, fs.rootSlash) {
 		return absPath[len(fs.rootSlash):]
 	}
@@ -233,6 +255,7 @@ func (fs *osFS) Walk(rel string, visit func(rel string, isDir bool)) {
 	rel = cleanRel(rel)
 
 	present, isDir := fs.Exists(rel)
+
 	if !present {
 		return
 	}
@@ -244,16 +267,19 @@ func (fs *osFS) Walk(rel string, visit func(rel string, isDir bool)) {
 	}
 
 	prefix := rel
+
 	if prefix != "" {
 		prefix += "/"
 	}
 
 	for name, childIsDir := range fs.Listdir(rel) {
 		child := prefix + name
+
 		if childIsDir {
 			fs.Walk(child, visit)
 			continue
 		}
+
 		visit(child, false)
 	}
 }
@@ -284,10 +310,13 @@ func cleanRel(rel string) string {
 	if pathIsClean(rel) {
 		return rel
 	}
+
 	rel = path.Clean(rel)
+
 	if rel == "." || rel == "/" {
 		return ""
 	}
+
 	rel = strings.TrimPrefix(rel, "/")
 	rel = strings.TrimSuffix(rel, "/")
 	return rel
@@ -312,10 +341,12 @@ func pathIsClean(p string) bool {
 		if p[i+1] == '/' {
 			return false
 		}
+
 		if p[i+1] == '.' {
 			if i+2 == len(p) || p[i+2] == '/' {
 				return false
 			}
+
 			if p[i+2] == '.' && (i+3 == len(p) || p[i+3] == '/') {
 				return false
 			}
@@ -327,9 +358,11 @@ func pathIsClean(p string) bool {
 
 func splitDirName(rel string) (string, string) {
 	i := strings.LastIndexByte(rel, '/')
+
 	if i < 0 {
 		return "", rel
 	}
+
 	return rel[:i], rel[i+1:]
 }
 
@@ -337,6 +370,7 @@ func firstComponent(p string) (first string, more bool) {
 	if i := strings.IndexByte(p, '/'); i >= 0 {
 		return p[:i], true
 	}
+
 	return p, false
 }
 

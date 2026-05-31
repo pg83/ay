@@ -5,20 +5,25 @@ import "strings"
 func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, emit Emitter) (NodeRef, VFS) {
 	stem := strings.TrimSuffix(srcRel, ".asm")
 	suffix := ".o"
+
 	if instance.Platform.PIC {
 		suffix = ".pic.o"
 	}
+
 	var outVFS VFS
+
 	if strings.Contains(srcRel, "/") {
 		outVFS = Build(instance.Path + "/_/" + stem + suffix)
 	} else {
 		outVFS = Build(instance.Path + "/" + stem + suffix)
 	}
+
 	inVFS := srcVFS
 	outputPath := outVFS.String()
 	inputPath := inVFS.String()
 
 	var predefinedFlags []string
+
 	if !asmlibYasmModules[instance.Path] {
 		predefinedFlags = []string{"-g", "dwarf2"}
 	}
@@ -39,6 +44,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		"-I", "$(B)",
 		"-I", "$(S)",
 	)
+
 	// Per-module `ADDINCL(FOR asm X)` entries arrive on in.AddIncl
 	// (emit_sources.go merges them when the source is .asm). Append after
 	// the base $(B)/$(S) pair so paths like
@@ -47,6 +53,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	for _, p := range in.AddIncl {
 		cmdArgs = append(cmdArgs, "-I", p.String())
 	}
+
 	cmdArgs = append(cmdArgs,
 		"-o", outputPath,
 		inputPath,

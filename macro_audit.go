@@ -61,6 +61,7 @@ func recordIgnoredMacro(name string, _ []string) {
 	if !macroAudit.enabled {
 		return
 	}
+
 	macroAudit.mu.Lock()
 	defer macroAudit.mu.Unlock()
 	macroAudit.ignored[name]++
@@ -77,18 +78,22 @@ func recordIgnoredMacro(name string, _ []string) {
 func recordHandledMacro(name string, args []string) {
 	if _, free := macrosAcceptingUserFlags[name]; !free {
 		known := knownServiceTokens()
+
 		for _, a := range args {
 			if !looksLikeServiceWord(a) {
 				continue
 			}
+
 			if _, ok := known[a]; !ok {
 				ThrowFmt("gen: macro %s received service-keyword %q that no handler models — open the upstream macro definition (yatool/build/conf, yatool/build/ymake.core.conf, yatool/build/plugins) and implement its semantics; only then drop the keyword as a \"…\" literal in the macro's handler", name, a)
 			}
 		}
 	}
+
 	if !macroAudit.enabled {
 		return
 	}
+
 	macroAudit.mu.Lock()
 	defer macroAudit.mu.Unlock()
 	recordServiceArgsLocked(name, args)
@@ -96,25 +101,32 @@ func recordHandledMacro(name string, args []string) {
 
 func recordServiceArgsLocked(macroName string, args []string) {
 	known := knownServiceTokens()
+
 	for _, a := range args {
 		if !looksLikeServiceWord(a) {
 			continue
 		}
+
 		bucket, ok := macroAudit.services[macroName]
+
 		if !ok {
 			bucket = map[string]int{}
 			macroAudit.services[macroName] = bucket
 		}
+
 		bucket[a]++
 
 		if _, modelled := known[a]; modelled {
 			continue
 		}
+
 		unkBucket, ok := macroAudit.unknown[macroName]
+
 		if !ok {
 			unkBucket = map[string]int{}
 			macroAudit.unknown[macroName] = unkBucket
 		}
+
 		unkBucket[a]++
 	}
 }
@@ -127,9 +139,12 @@ func looksLikeServiceWord(s string) bool {
 	if s == "" {
 		return false
 	}
+
 	hasLetter := false
+
 	for i := 0; i < len(s); i++ {
 		c := s[i]
+
 		switch {
 		case c >= 'A' && c <= 'Z':
 			hasLetter = true
@@ -139,9 +154,11 @@ func looksLikeServiceWord(s string) bool {
 			return false
 		}
 	}
+
 	if !hasLetter {
 		return false
 	}
+
 	return s == strings.ToUpper(s)
 }
 
@@ -150,41 +167,53 @@ func looksLikeServiceWord(s string) bool {
 func dumpMacroAudit(w io.Writer) {
 	macroAudit.mu.Lock()
 	defer macroAudit.mu.Unlock()
+
 	if !macroAudit.enabled {
 		return
 	}
 
 	fmt.Fprintln(w, "=== ya.make macros gen acknowledges but emits nothing for ===")
+
 	if len(macroAudit.ignored) == 0 {
 		fmt.Fprintln(w, "  (none)")
 	} else {
 		names := make([]string, 0, len(macroAudit.ignored))
+
 		for n := range macroAudit.ignored {
 			names = append(names, n)
 		}
+
 		sort.Strings(names)
+
 		for _, n := range names {
 			fmt.Fprintf(w, "  %-40s × %d\n", n, macroAudit.ignored[n])
 		}
 	}
 
 	fmt.Fprintln(w, "=== uppercase service-keyword arguments seen per macro ===")
+
 	if len(macroAudit.services) == 0 {
 		fmt.Fprintln(w, "  (none)")
 	} else {
 		macros := make([]string, 0, len(macroAudit.services))
+
 		for n := range macroAudit.services {
 			macros = append(macros, n)
 		}
+
 		sort.Strings(macros)
+
 		for _, m := range macros {
 			bucket := macroAudit.services[m]
 			args := make([]string, 0, len(bucket))
+
 			for a := range bucket {
 				args = append(args, a)
 			}
+
 			sort.Strings(args)
 			fmt.Fprintf(w, "  %s:\n", m)
+
 			for _, a := range args {
 				fmt.Fprintf(w, "      %-30s × %d\n", a, bucket[a])
 			}
@@ -192,23 +221,31 @@ func dumpMacroAudit(w io.Writer) {
 	}
 
 	fmt.Fprintln(w, "=== unhandled service-keyword arguments (not present as a \"…\" literal in *.go) ===")
+
 	if len(macroAudit.unknown) == 0 {
 		fmt.Fprintln(w, "  (none)")
 		return
 	}
+
 	macros := make([]string, 0, len(macroAudit.unknown))
+
 	for n := range macroAudit.unknown {
 		macros = append(macros, n)
 	}
+
 	sort.Strings(macros)
+
 	for _, m := range macros {
 		bucket := macroAudit.unknown[m]
 		args := make([]string, 0, len(bucket))
+
 		for a := range bucket {
 			args = append(args, a)
 		}
+
 		sort.Strings(args)
 		fmt.Fprintf(w, "  %s:\n", m)
+
 		for _, a := range args {
 			fmt.Fprintf(w, "      %-30s × %d\n", a, bucket[a])
 		}

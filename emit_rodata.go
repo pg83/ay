@@ -9,6 +9,7 @@ var rodataScriptVFS = Intern("$(S)/build/scripts/rodata2asm.py")
 
 func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 	base := instance.Path + "/" + srcRel
+
 	if strings.Contains(srcRel, "/") {
 		base = instance.Path + "/_/" + srcRel
 	}

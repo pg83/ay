@@ -71,6 +71,7 @@ func cmdHelp(_ []string) int {
 
 func startProfilesFromEnv() func() {
 	var cpuFile *os.File
+
 	if path := os.Getenv("YATOOL_CPUPROFILE"); path != "" {
 		cpuFile = Throw2(os.Create(path))
 		Throw(pprof.StartCPUProfile(cpuFile))
@@ -98,9 +99,11 @@ func writeGraph(out string, g *Graph) {
 		w = os.Stdout
 	} else {
 		f := Throw2(os.Create(out))
+
 		defer func() {
 			Throw(f.Close())
 		}()
+
 		w = f
 	}
 

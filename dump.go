@@ -95,11 +95,13 @@ func normRec(v any) any {
 		for i := range t {
 			t[i] = normRec(t[i])
 		}
+
 		return t
 	case map[string]any:
 		for k := range t {
 			t[k] = normRec(t[k])
 		}
+
 		return t
 	default:
 		return v
@@ -109,38 +111,46 @@ func normRec(v any) any {
 func toStrings(v any) []string {
 	arr, _ := v.([]any)
 	out := make([]string, 0, len(arr))
+
 	for _, e := range arr {
 		if s, ok := e.(string); ok {
 			out = append(out, s)
 		}
 	}
+
 	return out
 }
 
 func normSortedStrings(v any) []string {
 	out := toStrings(v)
+
 	for i := range out {
 		out[i] = normPath(out[i])
 	}
+
 	sort.Strings(out)
 	// Dedup adjacent: a node may list the same input more than once — e.g. several
 	// wrapper scripts pulling in a shared helper (link_exe and fs_tools both import
 	// process_command_files) — but the canonical form is a set.
 	w := 0
+
 	for i := range out {
 		if i == 0 || out[i] != out[w-1] {
 			out[w] = out[i]
 			w++
 		}
 	}
+
 	return out[:w]
 }
 
 func normStringsKeepOrder(v any) []string {
 	out := toStrings(v)
+
 	for i := range out {
 		out[i] = normPath(out[i])
 	}
+
 	return out
 }
 
@@ -148,6 +158,7 @@ func orVal(v, def any) any {
 	if v == nil {
 		return def
 	}
+
 	return v
 }
 
@@ -164,13 +175,16 @@ func nodeProgramKind(node map[string]any) string {
 func nodeCmdText(node map[string]any) string {
 	cmds, _ := node["cmds"].([]any)
 	var b strings.Builder
+
 	for _, c := range cmds {
 		m, _ := c.(map[string]any)
+
 		for _, a := range toStrings(m["cmd_args"]) {
 			b.WriteString(normPath(a))
 			b.WriteByte('\x00')
 		}
 	}
+
 	return b.String()
 }
 
@@ -182,13 +196,16 @@ func nodeCmdText(node map[string]any) string {
 func nodeCmdBasenames(node map[string]any) map[string]struct{} {
 	cmds, _ := node["cmds"].([]any)
 	set := map[string]struct{}{}
+
 	for _, c := range cmds {
 		m, _ := c.(map[string]any)
+
 		for _, a := range toStrings(m["cmd_args"]) {
 			b := strings.TrimRight(baseName(normPath(a)), ":")
 			set[b] = struct{}{}
 		}
 	}
+
 	return set
 }
 
@@ -206,18 +223,23 @@ func arLDInputKept(s, kind string, cmdBases map[string]struct{}) bool {
 		strings.HasSuffix(s, ".pyplugin") || strings.HasSuffix(s, ".exports") {
 		return true
 	}
+
 	if rel, ok := strings.CutPrefix(s, "$(S)/"); ok {
 		if kind == "AR" && rel == "build/scripts/link_lib.py" {
 			return true
 		}
+
 		if kind == "LD" && ldOwnScriptRels[rel] {
 			return true
 		}
 	}
+
 	b := baseName(s)
+
 	if cmdLiteralBasenames[b] {
 		return false
 	}
+
 	_, ok := cmdBases[b]
 	return ok
 }
@@ -226,16 +248,19 @@ func baseName(s string) string {
 	if i := strings.LastIndexByte(s, '/'); i >= 0 {
 		return s[i+1:]
 	}
+
 	return s
 }
 
 func filterARLDInputs(in []string, kind string, cmdBases map[string]struct{}) []string {
 	out := in[:0]
+
 	for _, s := range in {
 		if arLDInputKept(s, kind, cmdBases) {
 			out = append(out, s)
 		}
 	}
+
 	return out
 }
 
@@ -253,9 +278,11 @@ func getString(node map[string]any, key string) string {
 func canonInputs(node map[string]any, refGraph bool) []string {
 	inputs := normSortedStrings(node["inputs"])
 	kind := nodeProgramKind(node)
+
 	if refGraph && (kind == "AR" || kind == "LD") {
 		inputs = filterARLDInputs(inputs, kind, nodeCmdBasenames(node))
 	}
+
 	return inputs
 }
 
@@ -289,14 +316,17 @@ func marshalCompact(v any) []byte {
 	Throw(enc.Encode(v))
 
 	b := buf.Bytes()
+
 	if n := len(b); n > 0 && b[n-1] == '\n' {
 		b = b[:n-1]
 	}
+
 	return b
 }
 
 func streamGraphFanout[R any](path string, workers int, process func(map[string]any) R, collect func(R)) {
 	f := Throw2(os.Open(path))
+
 	defer func() { Throw(f.Close()) }()
 
 	dec := json.NewDecoder(bufio.NewReaderSize(f, 1<<20))
@@ -307,10 +337,13 @@ func streamGraphFanout[R any](path string, workers int, process func(map[string]
 	results := make(chan R, workers*2)
 
 	var wg sync.WaitGroup
+
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
+
 			for n := range nodes {
 				results <- process(n)
 			}
@@ -318,10 +351,12 @@ func streamGraphFanout[R any](path string, workers int, process func(map[string]
 	}
 
 	done := make(chan struct{})
+
 	go func() {
 		for r := range results {
 			collect(r)
 		}
+
 		close(done)
 	}()
 
@@ -330,6 +365,7 @@ func streamGraphFanout[R any](path string, workers int, process func(map[string]
 		Throw(dec.Decode(&node))
 		nodes <- node
 	}
+
 	close(nodes)
 	wg.Wait()
 	close(results)
@@ -338,19 +374,24 @@ func streamGraphFanout[R any](path string, workers int, process func(map[string]
 
 func streamJSONL(path string, fn func(map[string]any)) {
 	f := Throw2(os.Open(path))
+
 	defer func() { Throw(f.Close()) }()
 
 	r := bufio.NewReaderSize(f, 1<<20)
+
 	for {
 		line, err := r.ReadString('\n')
+
 		if len(line) > 0 {
 			n := map[string]any{}
 			Throw(json.Unmarshal([]byte(line), &n))
 			fn(n)
 		}
+
 		if err == io.EOF {
 			break
 		}
+
 		Throw(err)
 	}
 }
@@ -363,21 +404,25 @@ func nodeKVP(n map[string]any) string {
 
 func seekToGraph(dec *json.Decoder, path string) {
 	tok := Throw2(dec.Token())
+
 	if d, ok := tok.(json.Delim); !ok || d != '{' {
 		ThrowFmt("dump: %s: expected top-level JSON object", path)
 	}
 
 	for dec.More() {
 		key, ok := Throw2(dec.Token()).(string)
+
 		if !ok {
 			ThrowFmt("dump: %s: expected object key", path)
 		}
 
 		if key == "graph" {
 			open := Throw2(dec.Token())
+
 			if d, ok := open.(json.Delim); !ok || d != '[' {
 				ThrowFmt("dump: %s: graph is not an array", path)
 			}
+
 			return
 		}
 

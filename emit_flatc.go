@@ -21,11 +21,13 @@ type flatcEmission struct {
 
 func flatcDirectImportNames(pm *includeParserManager, srcRel string) []string {
 	direct := pm.sourceParsedBuckets(Source(srcRel)).bucket(parsedIncludesLocal)
+
 	if len(direct) == 0 {
 		return nil
 	}
 
 	out := make([]string, 0, len(direct))
+
 	for _, d := range direct {
 		out = append(out, d.target.String())
 	}
@@ -50,6 +52,7 @@ func resolveFlatcImportPath(fs FS, includerRel, importedRel string) string {
 
 func flatcTransitiveImports(pm *includeParserManager, fs FS, srcRel string) []VFS {
 	rootImports := flatcDirectImportNames(pm, srcRel)
+
 	if len(rootImports) == 0 {
 		return nil
 	}
@@ -63,30 +66,37 @@ func flatcTransitiveImports(pm *includeParserManager, fs FS, srcRel string) []VF
 		if _, done := scanned[rel]; done {
 			return
 		}
+
 		scanned[rel] = struct{}{}
 
 		for _, imp := range flatcDirectImportNames(pm, rel) {
 			resolved := resolveFlatcImportPath(fs, rel, imp)
+
 			if resolved == "" {
 				continue
 			}
+
 			if _, ok := seen[resolved]; !ok {
 				seen[resolved] = struct{}{}
 				imports = append(imports, Source(resolved))
 			}
+
 			walk(resolved)
 		}
 	}
 
 	for _, imp := range rootImports {
 		resolved := resolveFlatcImportPath(fs, srcRel, imp)
+
 		if resolved == "" {
 			continue
 		}
+
 		if _, ok := seen[resolved]; !ok {
 			seen[resolved] = struct{}{}
 			imports = append(imports, Source(resolved))
 		}
+
 		walk(resolved)
 	}
 
@@ -95,16 +105,20 @@ func flatcTransitiveImports(pm *includeParserManager, fs FS, srcRel string) []VF
 
 func flatcDirectGeneratedHeaderIncludes(pm *includeParserManager, fs FS, srcRel string) []includeDirective {
 	direct := flatcDirectImportNames(pm, srcRel)
+
 	if len(direct) == 0 {
 		return nil
 	}
 
 	out := make([]includeDirective, 0, len(direct))
+
 	for _, imp := range direct {
 		resolved := resolveFlatcImportPath(fs, srcRel, imp)
+
 		if resolved == "" {
 			continue
 		}
+
 		out = append(out, includeDirective{
 			kind:   includeQuoted,
 			target: internString(resolved + ".h"),
@@ -120,12 +134,14 @@ func flatcCCExtraInputs(ctx *genCtx, includeInputs []VFS) []VFS {
 	}
 
 	var out []VFS
+
 	for _, in := range includeInputs {
 		if !in.IsBuild() || !strings.HasSuffix(in.Rel(), ".fbs.h") {
 			continue
 		}
 
 		srcRel := strings.TrimSuffix(in.Rel(), ".h")
+
 		if !ctx.fs.IsFile(srcRel) {
 			continue
 		}
@@ -146,6 +162,7 @@ func flatcResolvedModuleSourceRel(ctx *genCtx, instance ModuleInstance, d *modul
 		if !strings.HasSuffix(srcRel, ".fbs") {
 			continue
 		}
+
 		if resolveSourceVFS(ctx, instance, srcRel, d.srcDir).Rel() == resolvedRel {
 			return srcRel, true
 		}
@@ -190,6 +207,7 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 
 	var depRefs []NodeRef
 	var foreignDepRefs map[string][]NodeRef
+
 	if flatcLDRef != (NodeRef{}) {
 		depRefs = []NodeRef{flatcLDRef}
 		foreignDepRefs = map[string][]NodeRef{"tool": []NodeRef{flatcLDRef}}
@@ -240,9 +258,11 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 
 	for _, imp := range flatcDirectImportNames(ctx.parsers, srcVFS.Rel()) {
 		resolved := resolveFlatcImportPath(ctx.fs, srcVFS.Rel(), imp)
+
 		if resolved == "" {
 			continue
 		}
+
 		if moduleSrcRel, ok := flatcResolvedModuleSourceRel(ctx, instance, d, resolved); ok {
 			ensureFlatcEmission(ctx, instance, d, moduleSrcRel)
 		}
@@ -260,16 +280,20 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 	// transitively pulling the .h pick them up too (without this,
 	// flatbuffers_iter.h is missing from arrow IPC CC inputs and similar).
 	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, ctx.fs, srcVFS.Rel())
+
 	for _, dep := range flatcRes.InducedDeps {
 		headerIncludes = append(headerIncludes, includeDirective{kind: includeQuoted, target: internString(dep)})
 	}
+
 	registerBoundGeneratedParsedOutput(ctx, instance, "FL", headerVFS, headerIncludes, flRef)
 
 	cppIncludes := make([]includeDirective, 0, 1+len(flatcRes.InducedDeps))
 	cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: internString(headerVFS.Rel())})
+
 	for _, dep := range flatcRes.InducedDeps {
 		cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: internString(dep)})
 	}
+
 	registerBoundGeneratedParsedOutput(ctx, instance, "FL", cppVFS, cppIncludes, flRef)
 	registerBoundGeneratedParsedOutput(ctx, instance, "FL", bfbsVFS, nil, flRef)
 

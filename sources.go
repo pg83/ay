@@ -14,6 +14,7 @@ var (
 
 func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerForPlatform(scanPlatform)
+
 	if scanner == nil {
 		return nil
 	}
@@ -55,10 +56,12 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	}
 
 	out := make([]VFS, 0, len(order))
+
 	for _, absID := range order {
 		if _, isSrc := srcAbsSet[absID]; isSrc {
 			continue
 		}
+
 		out = append(out, VFS(absID))
 	}
 
@@ -107,6 +110,7 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 
 	if srcDir != nil && filepath.Clean(*srcDir) != "." && filepath.Clean(*srcDir) != srcInstance.Path {
 		cleanSrcDir := filepath.Clean(*srcDir)
+
 		if !ctx.fs.IsFile(srcInstance.Path + "/" + srcRel) {
 			srcRelOnDisk = filepath.ToSlash(filepath.Clean(cleanSrcDir + "/" + srcRel))
 		}
@@ -127,14 +131,17 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 
 func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourceRel string, in ModuleCCInputs) []VFS {
 	full := walkClosureRoot(ctx, srcInstance, vfsPath, sourceRel, in)
+
 	if full == nil {
 		return nil
 	}
+
 	return full[1:]
 }
 
 func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourceRel string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerFor(srcInstance)
+
 	if scanner == nil {
 		return nil
 	}
@@ -159,13 +166,17 @@ func rewriteClosureCPSource(scanner *IncludeScanner, out []VFS) []VFS {
 	if scanner == nil || scanner.codegen == nil {
 		return out
 	}
+
 	for i, v := range out {
 		info := scanner.codegen.Lookup(v)
+
 		if info == nil || info.SourcePath == 0 {
 			continue
 		}
+
 		out[i] = info.SourcePath
 	}
+
 	return out
 }
 
@@ -178,12 +189,15 @@ func rewriteClosureCPSource(scanner *IncludeScanner, out []VFS) []VFS {
 // so CP $(B) outputs already mapped to their SourcePath survive as sources.
 func keepOnlySourceVFS(out []VFS) []VFS {
 	w := out[:0]
+
 	for _, v := range out {
 		if !v.IsSource() {
 			continue
 		}
+
 		w = append(w, v)
 	}
+
 	return w
 }
 
@@ -195,6 +209,7 @@ func keepOnlySourceVFS(out []VFS) []VFS {
 // parsedIncludesRagelNative, only parsedIncludesLocal).
 func appendRagelNativeDeps(scanner *IncludeScanner, srcInstance ModuleInstance, rl6VFS VFS, in ModuleCCInputs, existing []VFS) []VFS {
 	directives := scanner.parsers.sourceParsedBuckets(rl6VFS).bucket(parsedIncludesRagelNative)
+
 	if len(directives) == 0 {
 		return existing
 	}
@@ -209,6 +224,7 @@ func appendRagelNativeDeps(scanner *IncludeScanner, srcInstance ModuleInstance, 
 	sc := scanner.NewScanCtx(cfg)
 
 	seen := make(map[VFS]bool, len(existing)+len(directives))
+
 	for _, v := range existing {
 		seen[v] = true
 	}
@@ -217,6 +233,7 @@ func appendRagelNativeDeps(scanner *IncludeScanner, srcInstance ModuleInstance, 
 		includer VFS
 		d        includeDirective
 	}
+
 	for _, d := range directives {
 		queue = append(queue, struct {
 			includer VFS
@@ -229,15 +246,18 @@ func appendRagelNativeDeps(scanner *IncludeScanner, srcInstance ModuleInstance, 
 		queue = queue[1:]
 
 		resolved := sc.resolve(item.includer, item.d)
+
 		for _, f := range resolved {
 			if seen[f] {
 				continue
 			}
+
 			seen[f] = true
 			existing = append(existing, f)
 
 			// Follow transitive ragel-native includes of f
 			sub := scanner.parsers.sourceParsedBuckets(f).bucket(parsedIncludesRagelNative)
+
 			for _, sd := range sub {
 				queue = append(queue, struct {
 					includer VFS

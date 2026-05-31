@@ -191,17 +191,21 @@ func sseBaseCFlags(x8664 bool) []string {
 
 func noLibcBlock(p *Platform) []string {
 	out := make([]string, 0, 3+len(noLibcWarningSuppressions))
+
 	if p.BuildRelease {
 		out = append(out, "-DNDEBUG")
 	} else {
 		out = append(out, "-UNDEBUG")
 	}
+
 	if p.ISA == ISAAArch64 {
 		out = append(out, "-mno-outline-atomics")
 	}
+
 	if p.PIC {
 		out = append(out, "-fPIC")
 	}
+
 	out = append(out, noLibcWarningSuppressions...)
 
 	return out
@@ -221,13 +225,16 @@ func withSandboxingDebugCompression(base []string, p *Platform) []string {
 
 	out := make([]string, 0, len(base)+1)
 	inserted := false
+
 	for _, flag := range base {
 		out = append(out, flag)
+
 		if !inserted && flag == "-g" {
 			out = append(out, "-gz=zstd")
 			inserted = true
 		}
 	}
+
 	if !inserted {
 		out = append(out, "-gz=zstd")
 	}
@@ -239,6 +246,7 @@ func compileFlagBundleFor(p *Platform) compileFlagBundle {
 	switch p.ISA {
 	case ISAX8664:
 		cflags := x86TargetCFlags
+
 		if p.BuildRelease {
 			cflags = hostCFlags
 		}
@@ -254,6 +262,7 @@ func compileFlagBundleFor(p *Platform) compileFlagBundle {
 			Defines:     commonDefines,
 			NoLibcBlock: noLibcBlock(p),
 		}
+
 		if p.March != "" {
 			bundle.ArchArgs = []string{"-march=" + p.March}
 		}

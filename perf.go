@@ -47,6 +47,7 @@ func perfParser(dir string) int {
 		if err != nil {
 			return err
 		}
+
 		if d.IsDir() || !cParserSource(p) {
 			return nil
 		}
@@ -64,12 +65,15 @@ func perfParser(dir string) int {
 	const minDur = 3 * time.Second
 	start := time.Now()
 	iters, sink := 0, 0
+
 	for time.Since(start) < minDur {
 		for _, b := range datas {
 			sink += len(parseCIncludes(b))
 		}
+
 		iters++
 	}
+
 	dur := time.Since(start)
 	_ = sink
 
