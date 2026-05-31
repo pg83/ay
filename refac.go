@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/format"
@@ -16,16 +17,35 @@ import (
 // place; run them in a throwaway worktree and review the diff.
 func cmdRefac(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: ay refac consts [files...]")
+		fmt.Fprintln(os.Stderr, "usage: ay refac consts|lint [files...]")
 		return 2
 	}
 	switch args[0] {
 	case "consts":
 		return refacConsts(args[1:])
+	case "lint":
+		return refacLint(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown refac subcommand: %s\n", args[0])
 		return 2
 	}
+}
+
+// goFilesFromArgs returns the explicit file args, or — when none are given —
+// every non-test .go file in the current directory, sorted.
+func goFilesFromArgs(args []string) []string {
+	if len(args) > 0 {
+		return args
+	}
+	var files []string
+	for _, e := range Throw2(os.ReadDir(".")) {
+		n := e.Name()
+		if !e.IsDir() && strings.HasSuffix(n, ".go") && !strings.HasSuffix(n, "_test.go") {
+			files = append(files, n)
+		}
+	}
+	sort.Strings(files)
+	return files
 }
 
 // refacConsts hoists every Intern/Source/Build call with a constant string literal
@@ -40,17 +60,7 @@ func cmdRefac(args []string) int {
 // the whole package. Files are processed in sorted order, so a new var lands in the
 // first file (alphabetically) that uses it.
 func refacConsts(args []string) int {
-	files := args
-	if len(files) == 0 {
-		ents := Throw2(os.ReadDir("."))
-		for _, e := range ents {
-			n := e.Name()
-			if !e.IsDir() && strings.HasSuffix(n, ".go") && !strings.HasSuffix(n, "_test.go") {
-				files = append(files, n)
-			}
-		}
-		sort.Strings(files)
-	}
+	files := goFilesFromArgs(args)
 
 	// Phase 1: parse every file and collect package-wide state — all top-level
 	// identifiers (so generated names never collide) and a canon->var map of vars
@@ -393,4 +403,146 @@ var goKeyword = map[string]bool{
 	"func": true, "go": true, "goto": true, "if": true, "import": true,
 	"interface": true, "map": true, "package": true, "range": true, "return": true,
 	"select": true, "struct": true, "switch": true, "type": true, "var": true,
+}
+
+// fileLinter rewrites one file in place and reports whether it changed it.
+type fileLinter struct {
+	name string
+	run  func(path string) bool
+}
+
+// linters is the fixed set applied by `ay refac lint`, in order.
+var linters = []fileLinter{
+	{name: "consolidate-vars", run: lintConsolidateVars},
+}
+
+// refacLint applies every linter, in order, to each file. With no file args it
+// processes every non-test .go file in the current directory.
+func refacLint(args []string) int {
+	for _, path := range goFilesFromArgs(args) {
+		for _, l := range linters {
+			if l.run(path) {
+				fmt.Fprintf(os.Stderr, "refac lint: %s: %s\n", l.name, path)
+			}
+		}
+	}
+	return 0
+}
+
+// lintConsolidateVars merges every package-level var declaration in a file —
+// single-line vars and existing grouped var(...) blocks alike — into one var(...)
+// block placed immediately after the import declaration, before all other code.
+// Declaration order, doc comments, and trailing comments are preserved. It acts
+// only when the file has at least two package-level var declarations.
+func lintConsolidateVars(path string) bool {
+	src := Throw2(os.ReadFile(path))
+	fset := gotoken.NewFileSet()
+	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
+		return false
+	}
+
+	var varDecls []*ast.GenDecl
+	for _, decl := range f.Decls {
+		if gd, ok := decl.(*ast.GenDecl); ok && gd.Tok == gotoken.VAR {
+			varDecls = append(varDecls, gd)
+		}
+	}
+	if len(varDecls) < 2 {
+		return false
+	}
+
+	off := func(p gotoken.Pos) int { return fset.Position(p).Offset }
+	text := func(lo, hi gotoken.Pos) string { return string(src[off(lo):off(hi)]) }
+
+	type span struct{ start, end int }
+	var entries []string
+	var removals []span
+
+	for _, gd := range varDecls {
+		rmStart := off(gd.Pos())
+		if gd.Doc != nil {
+			rmStart = off(gd.Doc.Pos())
+		}
+		rmEnd := off(gd.End())
+
+		if gd.Lparen.IsValid() {
+			// Existing grouped block: keep its block-level doc as a comment line,
+			// then each spec (with its own doc/trailing comment) as an entry.
+			if gd.Doc != nil {
+				entries = append(entries, text(gd.Doc.Pos(), gd.Doc.End()))
+			}
+			for _, spec := range gd.Specs {
+				vs := spec.(*ast.ValueSpec)
+				lo := vs.Pos()
+				if vs.Doc != nil {
+					lo = vs.Doc.Pos()
+				}
+				hi := vs.End()
+				if vs.Comment != nil {
+					hi = vs.Comment.End()
+				}
+				entries = append(entries, text(lo, hi))
+			}
+		} else {
+			// Single-line var: emit the spec without the `var` keyword, keeping the
+			// declaration's doc comment above it.
+			vs := gd.Specs[0].(*ast.ValueSpec)
+			hi := vs.End()
+			if vs.Comment != nil {
+				hi = vs.Comment.End()
+				if off(hi) > rmEnd {
+					rmEnd = off(hi)
+				}
+			}
+			doc := gd.Doc
+			if vs.Doc != nil {
+				doc = vs.Doc
+			}
+			entry := text(vs.Pos(), hi)
+			if doc != nil {
+				entry = text(doc.Pos(), doc.End()) + "\n" + entry
+			}
+			entries = append(entries, entry)
+		}
+		removals = append(removals, span{rmStart, rmEnd})
+	}
+
+	// Insert after the import declaration, or after the package clause if none.
+	insOff := off(f.Name.End())
+	for _, decl := range f.Decls {
+		if gd, ok := decl.(*ast.GenDecl); ok && gd.Tok == gotoken.IMPORT {
+			insOff = off(gd.End())
+			break
+		}
+	}
+
+	// Delete the original declarations back-to-front (every removal starts after
+	// insOff, so the bytes up to insOff stay put), then splice in the merged block.
+	out := append([]byte(nil), src...)
+	sort.Slice(removals, func(i, j int) bool { return removals[i].start > removals[j].start })
+	for _, r := range removals {
+		out = append(out[:r.start], out[r.end:]...)
+	}
+
+	var b strings.Builder
+	b.WriteString("\n\nvar (\n")
+	for _, e := range entries {
+		b.WriteString(e)
+		b.WriteByte('\n')
+	}
+	b.WriteString(")\n")
+	out = append(out[:insOff], append([]byte(b.String()), out[insOff:]...)...)
+
+	formatted, err := format.Source(out)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "refac lint: %s: consolidate-vars format failed (left unchanged): %v\n", path, err)
+		return false
+	}
+	if bytes.Equal(formatted, src) {
+		return false
+	}
+	Throw(os.WriteFile(path, formatted, 0o644))
+	return true
 }
