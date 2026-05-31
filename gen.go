@@ -282,6 +282,7 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 	}
 
 	seen := make(map[NodeRef]struct{}, 4+len(exclude))
+
 	for _, r := range exclude {
 		seen[r] = struct{}{}
 	}
@@ -304,6 +305,7 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 			ref, ok = r, true
 		} else {
 			reg := codegenRegForInstance(ctx, consumer)
+
 			if reg != nil {
 				if info := reg.Lookup(v); info != nil {
 					if !info.HasProducerRef && info.DeferredCF != nil {
@@ -335,6 +337,7 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 	for _, p := range includeInputs {
 		probe(p)
 	}
+
 	for _, p := range inputs {
 		probe(p)
 	}
@@ -454,11 +457,13 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	root := genModule(ctx, seed)
 
 	ctx.emit.Result(root.LDRef)
+
 	if ctx.testMode && root.testSuiteInfo != nil {
 		for _, ref := range emitTestRunNodes(resourceEmit, resourceEmit, targetP, *root.testSuiteInfo, root.LDRef) {
 			ctx.emit.Result(ref)
 		}
 	}
+
 	reportPerfStats(ctx, parsers, targetScanner, hostScanner)
 
 	if be, ok := plainEmit.(*BufferedEmitter); ok {
@@ -473,25 +478,31 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 // compiles for tool builds, which are an orthogonal claim space.
 func mergeGeneratedFirstClaims(scanners ...*IncludeScanner) map[VFS]string {
 	var n int
+
 	for _, s := range scanners {
 		if s != nil {
 			n += len(s.generatedFirstClaim)
 		}
 	}
+
 	if n == 0 {
 		return nil
 	}
+
 	out := make(map[VFS]string, n)
+
 	for _, s := range scanners {
 		if s == nil {
 			continue
 		}
+
 		for k, v := range s.generatedFirstClaim {
 			if _, ok := out[k]; !ok {
 				out[k] = v
 			}
 		}
 	}
+
 	return out
 }
 
@@ -535,6 +546,7 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 
 func programSourceDir(moduleStmt *ModuleStmt) *string {
 	peerPath := unittestForPeerPath(moduleStmt)
+
 	if peerPath == "" {
 		return nil
 	}
@@ -558,11 +570,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if os.Getenv("YATOOL_TRACE") == "1" {
 		indent := strings.Repeat("  ", len(ctx.traceStack))
 		caller := "(root)"
+
 		if len(ctx.traceStack) > 0 {
 			caller = ctx.traceStack[len(ctx.traceStack)-1]
 		}
+
 		fmt.Fprintf(os.Stderr, "%sgenModule %s@%s  (from %s)\n", indent, instance.Path, instance.Platform.Target, caller)
 		ctx.traceStack = append(ctx.traceStack, instance.Path+"@"+string(instance.Platform.Target))
+
 		defer func() { ctx.traceStack = ctx.traceStack[:len(ctx.traceStack)-1] }()
 	}
 
@@ -581,6 +596,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	env := buildIfEnv(instance)
 	d := collectModule(ctx.parsers, instance.Path, instance.Kind, mf.Stmts, env)
+
 	for _, stmt := range d.allPySrcs {
 		applyAllPySrcs(ctx.fs, instance.Path, stmt, d)
 	}
@@ -608,16 +624,19 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	if instance.Language == LangPy && d.moduleStmt.Name == "PROTO_LIBRARY" {
 		hasProtoSrc := false
+
 		for _, src := range d.srcs {
 			if strings.HasSuffix(src, ".proto") {
 				hasProtoSrc = true
 				break
 			}
 		}
+
 		if hasProtoSrc && !strings.HasPrefix(instance.Path, "contrib/libs/protobuf/builtin_proto") &&
 			!strings.HasPrefix(instance.Path, "contrib/python/protobuf") {
 			d.peerdirs = append(d.peerdirs, "contrib/python/protobuf")
 		}
+
 		if hasProtoSrc && d.grpc {
 			d.peerdirs = append(d.peerdirs, "contrib/python/grpcio")
 		}
@@ -633,6 +652,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	py3ProtoVariant := d.moduleStmt.Name == "PROTO_LIBRARY" && d.usePython3
+
 	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path != "contrib/libs/python" {
 
 		d.peerdirs = append([]string{"contrib/libs/python"}, d.peerdirs...)
@@ -648,26 +668,32 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if d.moduleStmt.Name == "PY3_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
 
 		var earlyPeers []string
+
 		if d.pythonSQLite3 {
 			earlyPeers = append(earlyPeers, "contrib/tools/python3/Modules/_sqlite")
 		}
+
 		earlyPeers = append(earlyPeers, "library/python/runtime_py3/main")
+
 		if !d.noImportTracing && instance.Path != "library/python/import_tracing/constructor" {
 			earlyPeers = append(earlyPeers, "library/python/import_tracing/constructor")
 		}
 
 		var latePeers []string
+
 		if !d.noCheckImportsDisabled {
 			latePeers = append(latePeers, "library/python/testing/import_test")
 		}
 
 		if d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
 			insertAt := 0
+
 			if len(d.peerdirs) > 0 && d.peerdirs[0] == "contrib/libs/python" {
 				insertAt = 1
 			}
 
 			filteredEarly := earlyPeers[:0]
+
 			for _, peer := range earlyPeers {
 				if instance.Path != peer {
 					filteredEarly = append(filteredEarly, peer)
@@ -729,6 +755,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			Refs:  peerContribs.ldPluginRefs,
 			Paths: peerContribs.ldPluginPaths,
 		})
+
 		if ldPlugins == nil {
 			ldPlugins = &ldPluginsResult{}
 		}
@@ -761,9 +788,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			arInstance := instance
 			var globalBaseName, tag string
 			archiveName := ""
+
 			if len(d.moduleStmt.Args) > 0 {
 				archiveName = d.moduleStmt.Args[0]
 			}
+
 			switch d.moduleStmt.Name {
 			case "PY23_NATIVE_LIBRARY":
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "libpy3c", archiveName)
@@ -780,6 +809,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "lib", archiveName)
 				tag = "global"
 			}
+
 			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, ctx.host, ctx.emit)
 			hOnlyGlobalRef = &gRef
 			hOnlyGlobalPath = vfsPtr(Build(instance.Path + "/" + globalBaseName))
@@ -799,15 +829,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		hOnlyARRef := NodeRef{}
 		var hOnlyARPath *VFS
+
 		if protoResult != nil {
 			if protoResult.ARPath != nil {
 				hOnlyARRef = protoResult.ARRef
 				hOnlyARPath = protoResult.ARPath
 			}
+
 			if protoResult.GlobalRef != nil && protoResult.GlobalPath != nil {
 				hOnlyGlobalRef = protoResult.GlobalRef
 				hOnlyGlobalPath = protoResult.GlobalPath
 			}
+
 			hOnlyWholeArchiveRefs = append(hOnlyWholeArchiveRefs, protoResult.WholeArchiveRefs...)
 			hOnlyWholeArchivePaths = append(hOnlyWholeArchivePaths, protoResult.WholeArchivePaths...)
 		}
@@ -820,9 +853,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// Specialized-library path: same narrow rule — only an explicit
 		// PROTO_NAMESPACE GLOBAL contributes to _PROTO__INCLUDE.
 		var ownProtoAddInclH []VFS
+
 		if d.protoNamespace != nil && d.protoNamespaceGlobal {
 			ownProtoAddInclH = []VFS{Source(filepath.ToSlash(filepath.Clean(*d.protoNamespace)))}
 		}
+
 		effectiveProtoAddInclH := mergeDedupVFS(ownProtoAddInclH, peerContribs.protoAddIncl)
 
 		result := &moduleEmitResult{
@@ -875,6 +910,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	var preUserProgDefaults []string
 	var postUserProgDefaults []string
+
 	if isProgram {
 		preUserProgDefaults = defaultProgramPeerdirsForModule(ctx, instance, d, false)
 		postUserProgDefaults = defaultProgramPeerdirsForModule(ctx, instance, d, true)
@@ -883,9 +919,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	allocatorExplicitPeers := allocatorPeers[d.allocatorName]
 
 	unitTestPeerCount := 0
+
 	if unitTestPeer != "" {
 		unitTestPeerCount = 1
 	}
+
 	seen := make(map[string]struct{}, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
 	allPeers := make([]string, 0, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
 
@@ -902,6 +940,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindLangDefault)
@@ -919,6 +958,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindProgramDefault)
@@ -928,6 +968,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindUserPeer)
@@ -937,6 +978,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindProgramDefault)
@@ -946,6 +988,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindUserPeer)
@@ -1105,6 +1148,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		peerInstance := derivePeerInstance(ctx, instance, d, peerPath)
 		peerResult := genModule(ctx, peerInstance)
+
 		if peerResult.isPROGRAM {
 			ThrowFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path, peerPath)
 		}
@@ -1117,6 +1161,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	archiveOrder := resolved
+
 	if d.moduleStmt != nil {
 
 		switch d.moduleStmt.Name {
@@ -1154,6 +1199,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		case "PY3_PROGRAM":
 
 			allocatorExplicitSet := make(map[string]struct{}, len(allocatorExplicitPeers))
+
 			for _, p := range allocatorExplicitPeers {
 				allocatorExplicitSet[filepath.Clean(p)] = struct{}{}
 			}
@@ -1191,6 +1237,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			archiveOrder = append(archiveOrder, pythonTail...)
 		}
 	}
+
 	for _, rp := range archiveOrder {
 		peerResult := rp.result
 
@@ -1209,18 +1256,23 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		for i, p := range peerResult.PeerWholeArchiveClosurePaths {
 			peerWholeArchiveAddPath(peerResult.PeerWholeArchiveClosureRefs[i], p)
 		}
+
 		for i, p := range peerResult.WholeArchivePaths {
 			peerWholeArchiveAddPath(peerResult.WholeArchiveRefs[i], p)
 		}
+
 		for _, p := range peerResult.PeerWholeArchiveCmdClosurePaths {
 			peerWholeArchiveAddCmdPath(p)
 		}
+
 		for _, p := range peerResult.WholeArchiveCmdPaths {
 			peerWholeArchiveAddCmdPath(p)
 		}
+
 		for i, p := range peerResult.PeerDynamicClosurePaths {
 			peerDynamicAddPath(peerResult.PeerDynamicClosureRefs[i], p)
 		}
+
 		if peerResult.ModuleStmtName == "DYNAMIC_LIBRARY" && peerResult.LDPath != nil {
 			peerDynamicAddPath(peerResult.LDRef, *peerResult.LDPath)
 		}
@@ -1272,14 +1324,17 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 					peerAddInclGlobal = append(peerAddInclGlobal, p)
 				}
 			}
+
 			// Track ONE_LEVEL-only paths so they are not re-propagated transitively
 			// (upstream one-hop semantics: ONE_LEVEL is not in GlobalPropagated).
 			for _, p := range rp.result.AddInclOneLevel {
 				if oneLevelOnlyPaths == nil {
 					oneLevelOnlyPaths = map[VFS]struct{}{}
 				}
+
 				oneLevelOnlyPaths[p] = struct{}{}
 			}
+
 			// Add transitive GLOBALs (GlobalPropagated). A path also exported as
 			// GLOBAL by any peer wins over ONE_LEVEL-only and should propagate.
 			for _, p := range rp.result.AddInclGlobal {
@@ -1287,6 +1342,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 					addInclSeen[p] = struct{}{}
 					peerAddInclGlobal = append(peerAddInclGlobal, p)
 				}
+
 				if oneLevelOnlyPaths != nil {
 					delete(oneLevelOnlyPaths, p)
 				}
@@ -1327,9 +1383,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	cflagsAggOrder := resolved
+
 	if d.moduleStmt != nil && d.moduleStmt.Name == "PY3_PROGRAM" {
 		cflagsAggOrder = archiveOrder
 	}
+
 	for _, rp := range cflagsAggOrder {
 		addEach(cFlagsSeen, &peerCFlagsGlobal, rp.result.CFlagsGlobal)
 		addEach(cxxFlagsSeen, &peerCXXFlagsGlobal, rp.result.CXXFlagsGlobal)
@@ -1344,14 +1402,17 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// the module result (AddInclGlobal); they remain in peerAddInclGlobal only for
 	// the CC command of this module itself (via selfPeerAddInclGlobal below).
 	peerAddInclForProp := peerAddInclGlobal
+
 	if len(oneLevelOnlyPaths) > 0 {
 		peerAddInclForProp = make([]VFS, 0, len(peerAddInclGlobal))
+
 		for _, p := range peerAddInclGlobal {
 			if _, isOneLevel := oneLevelOnlyPaths[p]; !isOneLevel {
 				peerAddInclForProp = append(peerAddInclForProp, p)
 			}
 		}
 	}
+
 	effectiveAddInclGlobal := mergeDedupVFS(d.addInclGlobal, peerAddInclForProp)
 
 	// ProtoAddInclGlobal: this module's $(S)/<PROTO_NAMESPACE> contribution
@@ -1366,9 +1427,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// contribute, and a regular LIBRARY never does. Upstream's
 	// _PROTO__INCLUDE chain is narrower than the C++ ADDINCL chain.
 	var ownProtoAddIncl []VFS
+
 	if d.protoNamespace != nil && d.protoNamespaceGlobal {
 		ownProtoAddIncl = []VFS{Source(filepath.ToSlash(filepath.Clean(*d.protoNamespace)))}
 	}
+
 	// `ADDINCL GLOBAL FOR proto X` (yatool/build/conf/proto.conf:117-120
 	// PROTO_ADDINCL macro; contrib/libs/protobuf ya.make) propagates an
 	// additional -I=$X into the protoc command of every transitive
@@ -1377,9 +1440,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ownProtoAddIncl = append(ownProtoAddIncl, d.protoAddInclGlobal...)
 	protoAddInclSeen := map[VFS]struct{}{}
 	peerProtoAddInclGlobal := make([]VFS, 0, 4)
+
 	for _, rp := range resolved {
 		addEachVFS(protoAddInclSeen, &peerProtoAddInclGlobal, rp.result.ProtoAddInclGlobal)
 	}
+
 	effectiveProtoAddInclGlobal := mergeDedupVFS(ownProtoAddIncl, peerProtoAddInclGlobal)
 
 	if instance.Path == "library/python/runtime_py3" {
@@ -1467,6 +1532,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		d.moduleStmt.Name == "PY23_LIBRARY"
 
 	var perModuleCCTag *string
+
 	switch d.moduleStmt.Name {
 	case "PY23_NATIVE_LIBRARY":
 		perModuleCCTag = stringPtr("py3_native")
@@ -1479,9 +1545,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	var arNameFn func(string) string
 	var globalArNameFn func(string) string
 	archiveName := ""
+
 	if len(d.moduleStmt.Args) > 0 {
 		archiveName = d.moduleStmt.Args[0]
 	}
+
 	switch d.moduleStmt.Name {
 	case "PY23_NATIVE_LIBRARY":
 		arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, "libpy3c", archiveName) }
@@ -1497,6 +1565,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path, peerAddInclGlobal, dedupedAddIncl)
 
 	effectiveSrcDir := d.srcDir
+
 	if effectiveSrcDir == nil {
 		effectiveSrcDir = programSourceDir(d.moduleStmt)
 	}
@@ -1558,9 +1627,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 
 		srcInputs := moduleInputs
+
 		if extras, ok := d.perSrcCFlags[src]; ok {
 			srcInputs.PerSourceCFlags = extras
 		}
+
 		if _, ok := d.flatSrcs[src]; ok {
 			srcInputs.FlatOutput = true
 		}
@@ -1589,18 +1660,22 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// fix it without re-emitting and without changing any node content.
 	emitSrcInputs := func(src string) ModuleCCInputs {
 		si := moduleInputs
+
 		if extras, ok := d.perSrcCFlags[src]; ok {
 			si.PerSourceCFlags = extras
 		}
+
 		if _, ok := d.flatSrcs[src]; ok {
 			si.FlatOutput = true
 		}
+
 		return adjustCythonCompanionSourceInputs(d, src, si)
 	}
 	appendCC := func(src string, emit *sourceEmit) {
 		if emit == nil {
 			return
 		}
+
 		_, isFlatNoLto := d.flatSrcs[src]
 		ccRefs = append(ccRefs, emit.Ref)
 		ccOutputs = append(ccOutputs, emit.OutPath)
@@ -1608,17 +1683,22 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ccIsCFGenerated = append(ccIsCFGenerated, strings.HasSuffix(src, ".cpp.in") || strings.HasSuffix(src, ".c.in"))
 		ccIsProtoGenerated = append(ccIsProtoGenerated, strings.HasSuffix(src, ".proto"))
 	}
+
 	for _, src := range d.srcs {
 		if _, isCodegen := preEmitted[src]; isCodegen {
 			continue
 		}
+
 		appendCC(src, emitOneSource(ctx, instance, d, src, emitSrcInputs(src), ancestorRebase))
 	}
+
 	for _, src := range d.srcs {
 		emit, isCodegen := preEmitted[src]
+
 		if !isCodegen {
 			continue
 		}
+
 		appendCC(src, emit)
 	}
 
@@ -1673,6 +1753,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ccIsProtoGenerated = append(ccIsProtoGenerated, false)
 		}
 	}
+
 	if pyCCRes != nil {
 		for i, ref := range pyCCRes.CCRefs {
 			ccRefs = append(ccRefs, ref)
@@ -1689,12 +1770,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		variantIn.Variant = stringPtr(e.Variant)
 
 		flags := append([]string(nil), e.CFlags...)
+
 		if extras, ok := d.perSrcCFlags[e.Src]; ok {
 			flags = append(flags, extras...)
 		}
+
 		variantIn.PerSourceCFlags = flags
 
 		emit := emitOneSource(ctx, instance, d, e.Src, variantIn, ancestorRebase)
+
 		if emit == nil {
 			continue
 		}
@@ -1759,10 +1843,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		globalOutputs = append(globalOutputs, emit.OutPath)
 
 	}
+
 	globalSrcMemberCount := len(globalRefs)
 
 	regCCPy3Suffix := isPy3NativeLib || d.moduleStmt.Name == "PY23_LIBRARY"
 	regRes := emitPyRegister(ctx, instance, d, moduleInputs, regCCPy3Suffix)
+
 	if regRes != nil {
 		for i, ref := range regRes.Refs {
 			globalRefs = append(globalRefs, ref)
@@ -1776,6 +1862,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		Refs:  peerLDPluginRefs,
 		Paths: peerLDPluginPaths,
 	})
+
 	if mergedLDPlugins == nil {
 		mergedLDPlugins = &ldPluginsResult{}
 	}
@@ -1801,6 +1888,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				ldPeerArchivePaths = append(ldPeerArchivePaths, p)
 			}
 		}
+
 		if d.moduleStmt.Name == "PY3_PROGRAM" && d.allocatorName == "J" {
 			ldPeerArchiveRefs, ldPeerArchivePaths = moveArchivePathsAfter(
 				ldPeerArchiveRefs,
@@ -1839,6 +1927,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 
 		ldInstance := instance
+
 		if d.moduleStmt.Name == "PY2_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
 			ldInstance.Language = LangPy
 		}
@@ -1868,6 +1957,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 
 		var ownRPathFlags []string
+
 		if len(peerDynamicPaths) > 0 {
 			ownRPathFlags = append([]string(nil), peerRPathFlagsGlobal...)
 		}
@@ -1884,9 +1974,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// the LD node's target_properties. The non-multimodule PY3_PROGRAM_BIN
 		// has no implicit MODULE_TAG, so it stays unset there.
 		var programModuleTag string
+
 		if d.moduleStmt.Name == "PY3_PROGRAM" {
 			programModuleTag = "py3_bin"
 		}
+
 		ldRef := EmitLD(
 			ldInstance,
 			binaryName,
@@ -1918,6 +2010,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		)
 		ldPath := LDOutputPath(instance, binaryName)
 		var suiteInfo *testSuiteInfo
+
 		if ctx.testMode && d.moduleStmt.Name == "UNITTEST_FOR" {
 
 			suiteInfo = buildTestSuiteInfo(instance, d, ldPath)
@@ -1968,12 +2061,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	arBaseName := arNameFn(instance.Path)
 
 	arInstance := instance
+
 	switch d.moduleStmt.Name {
 	case "PY3_LIBRARY", "PY2_LIBRARY", "PY23_LIBRARY", "PY2_PROGRAM", "PY3_PROGRAM":
 		arInstance.Language = LangPy
 	}
 
 	var arPluginVFS *VFS
+
 	if d.arPlugin != nil {
 		v := Source(instance.Path + "/" + *d.arPlugin)
 		arPluginVFS = &v
@@ -1982,6 +2077,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	emitPySrcs(ctx, instance, d)
 
 	genPyAuxRes := emitGeneratedPyAuxChunks(ctx, instance, d, moduleInputs)
+
 	if genPyAuxRes != nil {
 		globalRefs = append(globalRefs, genPyAuxRes.Refs...)
 		globalOutputs = append(globalOutputs, genPyAuxRes.Outputs...)
@@ -1990,9 +2086,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	emitLLVMBC(ctx, instance, d, moduleInputs)
 
 	objcopyRes := emitResourceObjcopy(ctx, instance, d)
+
 	if objcopyRes != nil {
 		globalRefs = append(globalRefs, objcopyRes.Refs...)
 		globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
+
 		// Upstream always places RESOURCE objcopy objects before SRCS(GLOBAL)
 		// objects in the global archive regardless of their declaration order.
 		// This applies only when there are explicit RESOURCE entries (d.resources);
@@ -2015,6 +2113,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	_ = peerArchiveRefs
 	var arPath *VFS
+
 	if len(ccRefs) > 0 {
 		arPath = vfsPtr(Build(instance.Path + "/" + arBaseName))
 	}
@@ -2052,11 +2151,13 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		Peerdirs:                        append([]string(nil), d.peerdirs...),
 		ModuleStmtName:                  d.moduleStmt.Name,
 	}
+
 	if len(globalRefs) > 0 {
 
 		globalBaseName := globalArNameFn(instance.Path)
 
 		globalTag := "global"
+
 		switch d.moduleStmt.Name {
 		case "PY23_LIBRARY":
 			globalTag = "py3_global"
@@ -2065,6 +2166,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		case "YQL_UDF_YDB", "YQL_UDF_CONTRIB":
 			globalTag = "yql_udf_static_global"
 		}
+
 		// The PY3_BIN_LIB submodule (KindLib half of PY3_PROGRAM multimodule)
 		// composes its global.a tag from <MODULE_TAG>_global; the lang dump
 		// expects "py3_bin_lib_global".
@@ -2184,6 +2286,7 @@ func moveArchivePathsAfter(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS)
 	}
 
 	moveSet := make(map[VFS]struct{}, len(moved))
+
 	for _, path := range moved {
 		moveSet[path] = struct{}{}
 	}
@@ -2202,6 +2305,7 @@ func moveArchivePathsAfter(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS)
 
 		outRefs = append(outRefs, refs[i])
 		outPaths = append(outPaths, path)
+
 		if path == anchor {
 			for _, movedPath := range moved {
 				if p, ok := movedPaths[movedPath]; ok {
@@ -2225,6 +2329,7 @@ func movePathsAfter(paths []VFS, anchor VFS, moved []VFS) []VFS {
 	}
 
 	moveSet := make(map[VFS]struct{}, len(moved))
+
 	for _, path := range moved {
 		moveSet[path] = struct{}{}
 	}
@@ -2239,6 +2344,7 @@ func movePathsAfter(paths []VFS, anchor VFS, moved []VFS) []VFS {
 		}
 
 		outPaths = append(outPaths, path)
+
 		if path == anchor {
 			for _, movedPath := range moved {
 				if p, ok := movedPaths[movedPath]; ok {
@@ -2261,12 +2367,14 @@ func moveArchivePathsBefore(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS
 	}
 
 	moveSet := make(map[VFS]struct{}, len(moved))
+
 	for _, path := range moved {
 		moveSet[path] = struct{}{}
 	}
 
 	movedRefs := make(map[VFS]NodeRef, len(moved))
 	movedPaths := make(map[VFS]VFS, len(moved))
+
 	for i, path := range paths {
 		if _, ok := moveSet[path]; ok {
 			movedRefs[path] = refs[i]
@@ -2312,11 +2420,13 @@ func movePathsBefore(paths []VFS, anchor VFS, moved []VFS) []VFS {
 	}
 
 	moveSet := make(map[VFS]struct{}, len(moved))
+
 	for _, path := range moved {
 		moveSet[path] = struct{}{}
 	}
 
 	movedPaths := make(map[VFS]VFS, len(moved))
+
 	for _, path := range paths {
 		if _, ok := moveSet[path]; ok {
 			movedPaths[path] = path
@@ -2381,16 +2491,20 @@ func moveTailVFSToFront(in []VFS, tailLen int) []VFS {
 func mergeLDPlugins(own, peer *ldPluginsResult) *ldPluginsResult {
 	var ownRefs []NodeRef
 	var ownPaths []VFS
+
 	if own != nil {
 		ownRefs = own.Refs
 		ownPaths = own.Paths
 	}
+
 	var peerRefs []NodeRef
 	var peerPaths []VFS
+
 	if peer != nil {
 		peerRefs = peer.Refs
 		peerPaths = peer.Paths
 	}
+
 	if len(ownPaths) == 0 && len(peerPaths) == 0 {
 		return nil
 	}
@@ -2585,12 +2699,15 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		for i, p := range peerResult.PeerWholeArchiveClosurePaths {
 			addWholeArchive(peerResult.PeerWholeArchiveClosureRefs[i], p)
 		}
+
 		for i, p := range peerResult.WholeArchivePaths {
 			addWholeArchive(peerResult.WholeArchiveRefs[i], p)
 		}
+
 		for _, p := range peerResult.PeerWholeArchiveCmdClosurePaths {
 			addWholeArchiveCmd(p)
 		}
+
 		for _, p := range peerResult.WholeArchiveCmdPaths {
 			addWholeArchiveCmd(p)
 		}
@@ -2598,9 +2715,11 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		for i, p := range peerResult.LDPluginPaths {
 			addLDPlugin(peerResult.LDPluginRefs[i], p)
 		}
+
 		for i, p := range peerResult.PeerDynamicClosurePaths {
 			addDynamic(peerResult.PeerDynamicClosureRefs[i], p)
 		}
+
 		if peerResult.ModuleStmtName == "DYNAMIC_LIBRARY" && peerResult.LDPath != nil {
 			addDynamic(peerResult.LDRef, *peerResult.LDPath)
 		}
@@ -2608,6 +2727,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 
 	if d.useCommonGoogleAPIs && instance.Language == LangCPP {
 		const googleapisPeer = "contrib/libs/googleapis-common-protos"
+
 		if _, dup := seen[googleapisPeer]; !dup {
 			seen[googleapisPeer] = struct{}{}
 			walk(googleapisPeer)
@@ -2718,21 +2838,26 @@ func reorderLDMembers(refs []NodeRef, paths []VFS) ([]NodeRef, []VFS) {
 
 	regular := make([]member, 0, len(paths))
 	legacy := make([]member, 0, len(paths))
+
 	for i, path := range paths {
 		m := member{path: path}
+
 		if i < len(refs) {
 			m.ref = refs[i]
 		}
+
 		if strings.Contains(path.Rel(), "/_/_/") {
 			legacy = append(legacy, m)
 			continue
 		}
+
 		regular = append(regular, m)
 	}
 
 	out := append(regular, legacy...)
 	outRefs := make([]NodeRef, len(out))
 	outPaths := make([]VFS, len(out))
+
 	for i, m := range out {
 		outRefs[i] = m.ref
 		outPaths[i] = m.path
@@ -2756,6 +2881,7 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 	for i := 0; i < numSrcsDerived && i < len(paths); i++ {
 		m := member{refs[i], paths[i]}
 		rel := m.path.Rel()
+
 		switch {
 		case strings.Contains(rel, "/_/_/"):
 			legacyR6 = append(legacyR6, m)
@@ -2784,6 +2910,7 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 	}
 
 	joinSrcs := make([]member, 0, len(paths)-numSrcsDerived)
+
 	for i := numSrcsDerived; i < len(paths); i++ {
 		joinSrcs = append(joinSrcs, member{refs[i], paths[i]})
 	}
@@ -2829,5 +2956,6 @@ func (ctx *genCtx) scannerForPlatform(p *Platform) *IncludeScanner {
 	if p == ctx.host {
 		return ctx.scannerHost
 	}
+
 	return ctx.scannerTarget
 }

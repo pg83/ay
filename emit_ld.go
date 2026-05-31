@@ -75,6 +75,7 @@ func EmitLD(
 	if len(globalRefs) != len(globalPaths) {
 		ThrowFmt("EmitLD: globalRefs/globalPaths length mismatch (%d vs %d)", len(globalRefs), len(globalPaths))
 	}
+
 	if len(wholeArchiveRefs) != len(wholeArchivePaths) {
 		ThrowFmt("EmitLD: wholeArchiveRefs/wholeArchivePaths length mismatch (%d vs %d)", len(wholeArchiveRefs), len(wholeArchivePaths))
 	}
@@ -82,6 +83,7 @@ func EmitLD(
 	if len(objcopyRefs) != len(objcopyPaths) {
 		ThrowFmt("EmitLD: objcopyRefs/objcopyPaths length mismatch (%d vs %d)", len(objcopyRefs), len(objcopyPaths))
 	}
+
 	if len(dynamicRefs) != len(dynamicPaths) {
 		ThrowFmt("EmitLD: dynamicRefs/dynamicPaths length mismatch (%d vs %d)", len(dynamicRefs), len(dynamicPaths))
 	}
@@ -119,14 +121,17 @@ func EmitLD(
 		{CmdArgs: cmd2, Cwd: "$(B)", Env: envFull},
 		{CmdArgs: cmd3, Env: envVcsOnly},
 	}
+
 	for i := range splitDwarfCmds {
 		splitDwarfCmds[i].Env = envVcsOnly
 	}
+
 	cmds = append(cmds, splitDwarfCmds...)
 
 	inputs := composeLDInputs(instance.Path, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts)
 
 	inputs = append(inputs, ldSvnversionHVFS)
+
 	if exportsScript != nil {
 		inputs = append(inputs, Source(*exportsScript))
 	}
@@ -141,9 +146,11 @@ func EmitLD(
 	depRefs = append(depRefs, objcopyRefs...)
 
 	outputs := []VFS{outputVFS}
+
 	for _, p := range dynamicPaths {
 		outputs = append(outputs, Build(binaryDir+"/"+lastPathComponent(p.Rel())))
 	}
+
 	if wantsSplitDwarf {
 		outputs = append(outputs, Build(binPrefix+binaryName+".debug"))
 	}
@@ -283,9 +290,11 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 	)
 
 	cmdArgs = append(cmdArgs, "--start-plugins")
+
 	for _, p := range pluginPaths {
 		cmdArgs = append(cmdArgs, p.String())
 	}
+
 	cmdArgs = append(cmdArgs, "--end-plugins")
 
 	cmdArgs = append(cmdArgs,
@@ -293,12 +302,15 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 		"--source-root", "$(S)",
 		"--build-root", "$(B)",
 	)
+
 	for _, p := range wholeArchiveCmdPaths {
 		cmdArgs = append(cmdArgs, "--whole-archive-libs", p.Rel())
 	}
+
 	for _, p := range wholeArchivePaths {
 		cmdArgs = append(cmdArgs, "--whole-archive-libs", p.Rel())
 	}
+
 	cmdArgs = append(cmdArgs,
 		"--arch=LINUX",
 		"--objcopy-exe", p.Tools.Objcopy,
@@ -306,9 +318,11 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 		"-Wl,--whole-archive",
 		"--ya-start-command-file",
 	)
+
 	for _, p := range globalPaths {
 		cmdArgs = append(cmdArgs, p.Rel())
 	}
+
 	cmdArgs = append(cmdArgs,
 		"--ya-end-command-file",
 		"-Wl,--no-whole-archive",
@@ -319,9 +333,11 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 	}
 
 	cmdArgs = append(cmdArgs, vcsOPath)
+
 	for _, cp := range ccPaths {
 		cmdArgs = append(cmdArgs, cp.String())
 	}
+
 	cmdArgs = append(cmdArgs, "-o", outputPath)
 
 	bundle := compileFlagBundleFor(p)
@@ -330,9 +346,11 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 	cmdArgs = append(cmdArgs, "-B"+binPath)
 
 	cmdArgs = append(cmdArgs, "-Wl,--start-group")
+
 	for _, p := range peerLinkCmdPaths {
 		cmdArgs = append(cmdArgs, p.Rel())
 	}
+
 	cmdArgs = append(cmdArgs, "-Wl,--end-group")
 
 	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, modulePath, dynamicPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)...)
@@ -350,12 +368,15 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 	// ${input:EXPORTS_FILE} resolves from the source root, and ydbd's
 	// EXPORTS_SCRIPT line uses the full path.
 	_ = modulePath
+
 	if exportsScript != nil {
 		linkPrelude = append(linkPrelude, "-Wl,--version-script=$(S)/"+*exportsScript)
 	}
+
 	if p != nil && !p.PIC && p.Flags["SANDBOXING"] == "yes" {
 		linkPrelude = append(linkPrelude, "-Wl,--compress-debug-sections=zstd")
 	}
+
 	linkPrelude = append(linkPrelude, p.LinkPreludeExtra...)
 	linkPrelude = append(linkPrelude, "-Wl,--no-as-needed")
 	systemLibs := p.SystemLibs
@@ -363,22 +384,28 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 
 	trailer := append([]string(nil), linkPrelude...)
 	trailer = append(trailer, ownRPathFlags...)
+
 	if p.PIC {
 		trailer = append(trailer, "-fPIC")
 	}
+
 	trailer = append(trailer, p.LinkerSelectionGDBIndexFlags()...)
 	trailer = append(trailer, peerRPathFlagsGlobal...)
+
 	if p.PIC {
 		trailer = append(trailer, "-fPIC")
 	}
+
 	trailer = append(trailer, p.LinkerSelectionTailFlags()...)
 	trailer = append(trailer, peerLDFlagsGlobal...)
 	trailer = append(trailer, ownLDFlags...)
 	trailer = append(trailer, objAddLibsGlobal...)
 	trailer = append(trailer, systemLibs...)
+
 	if wantsStrip {
 		trailer = append(trailer, "-Wl,--strip-all")
 	}
+
 	trailer = append(trailer, "-Wl,--gc-sections")
 	trailer = append(trailer, p.LinkerSelectionNoPieFlags()...)
 
@@ -392,9 +419,11 @@ func composeLDCmdLinkOrCopy(tools Toolchain, modulePath string, dynamicPaths ...
 		"link_or_copy_to_dir",
 		"--no-check",
 	}
+
 	for _, p := range dynamicPaths {
 		cmd = append(cmd, p.String())
 	}
+
 	cmd = append(cmd, Build(modulePath).String())
 
 	return cmd
@@ -441,6 +470,7 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, plugi
 
 	out := make([]VFS, 0, len(buildRootBlock)+len(ldScriptInputs)+4)
 	out = append(out, buildRootBlock...)
+
 	// ldScriptInputs seeds the link's $(S) tooling; expand each wrapper to its
 	// import closure via the table (e.g. link_exe -> process_command_files,
 	// thinlto_cache, process_whole_archive_option). Non-script entries

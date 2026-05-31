@@ -37,6 +37,7 @@ func nodeHasHostTag(tags []string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 

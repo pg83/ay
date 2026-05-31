@@ -23,6 +23,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 
 			lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
+
 			if reg != nil {
 				lexerG4 := Source(instance.Path + "/" + g.Lexer)
 				parserG4 := Source(instance.Path + "/" + g.Parser)
@@ -38,6 +39,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					lexerG4,
 					parserG4,
 				}
+
 				for _, suffix := range []string{
 					lexerBase + ".h",
 					parserBase + ".h",
@@ -45,9 +47,11 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					parserBase + "BaseVisitor.h",
 				} {
 					parsed := make([]includeDirective, 0, len(witnessIncludes))
+
 					for _, include := range witnessIncludes {
 						parsed = append(parsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 					}
+
 					registerBoundGeneratedParsedOutput(ctx, instance, "JV", Build(outPrefix+suffix), parsed, jvRef)
 				}
 			}
@@ -72,6 +76,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			jvRef := EmitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, cfModuleTag(d, instance), ctx.emit)
 
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
+
 			if reg != nil {
 				grammarG4 := Source(instance.Path + "/" + g.Grammar)
 				lexerCpp := Build(outPrefix + base + "Lexer.cpp")
@@ -85,6 +90,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					antlr4JarVFS,
 					grammarG4,
 				}
+
 				for _, suffix := range []string{
 					base + "Lexer.h",
 					base + "Parser.h",
@@ -92,9 +98,11 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					base + "BaseVisitor.h",
 				} {
 					parsed := make([]includeDirective, 0, len(witnessIncludes))
+
 					for _, include := range witnessIncludes {
 						parsed = append(parsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 					}
+
 					registerBoundGeneratedParsedOutput(ctx, instance, "JV", Build(outPrefix+suffix), parsed, jvRef)
 				}
 			}

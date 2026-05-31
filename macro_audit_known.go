@@ -39,23 +39,30 @@ func knownServiceTokens() map[string]struct{} {
 func mineServiceTokensFromSources() map[string]struct{} {
 	tokens := map[string]struct{}{}
 	entries, err := goSources.ReadDir(".")
+
 	if err != nil {
 		return tokens
 	}
+
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
+
 		data, err := goSources.ReadFile(e.Name())
+
 		if err != nil {
 			continue
 		}
+
 		for _, match := range stringLiteralRE.FindAllSubmatch(data, -1) {
 			tok := string(match[1])
+
 			if looksLikeServiceWord(tok) {
 				tokens[tok] = struct{}{}
 			}
 		}
 	}
+
 	return tokens
 }

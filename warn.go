@@ -20,5 +20,6 @@ func (k WarnKind) String() string {
 	case WarnMissingInclude:
 		return "missing-include"
 	}
+
 	return "warn"
 }

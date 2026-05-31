@@ -193,9 +193,11 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 		"--project-path", info.ProjectPath,
 		"--test-related-path", Source(testSVNInterfaceRel).String(),
 	}
+
 	for _, src := range info.CppSources {
 		cmdArgs = append(cmdArgs, "--test-related-path", Source(src).String())
 	}
+
 	cmdArgs = append(cmdArgs,
 		"--test-related-path", Source(testClangFormatConfigRel).String(),
 		"--test-related-path", Source(testClangFormatWrapperRel).String(),
@@ -227,9 +229,11 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 		"--global-resource", testClangFormatResource,
 		Source(testSVNInterfaceRel).String(),
 	)
+
 	for _, src := range info.CppSources {
 		cmdArgs = append(cmdArgs, Source(src).String())
 	}
+
 	cmdArgs = append(cmdArgs, "--ya-end-command-file")
 
 	inputs := []VFS{
@@ -238,6 +242,7 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 		Source(testClangFormatWrapperRel),
 		Source(info.ProjectPath),
 	}
+
 	for _, src := range info.CppSources {
 		inputs = append(inputs, Source(src))
 	}
@@ -315,6 +320,7 @@ func sandboxingNodeTags(p *Platform) []string {
 
 func targetPlatformDescriptor(p *Platform) string {
 	parts := []string{string(p.Target), p.BuildType}
+
 	if p != nil && p.Flags["SANDBOXING"] == "yes" {
 		parts = append(parts, "FAKEID=sandboxing", "SANDBOXING=yes")
 	}
@@ -328,6 +334,7 @@ func buildTestSuiteInfo(instance ModuleInstance, d *moduleData, ldPath VFS) *tes
 	}
 
 	srcBase := instance.Path
+
 	if d.moduleStmt.Name == "UNITTEST_FOR" && len(d.moduleStmt.Args) > 0 {
 		srcBase = path.Clean(d.moduleStmt.Args[0])
 	} else if d.srcDir != nil {
@@ -335,6 +342,7 @@ func buildTestSuiteInfo(instance ModuleInstance, d *moduleData, ldPath VFS) *tes
 	}
 
 	cppSources := make([]string, 0, len(d.srcs))
+
 	for _, src := range d.srcs {
 		switch strings.ToLower(path.Ext(src)) {
 		case ".c", ".cc", ".cpp", ".cxx":

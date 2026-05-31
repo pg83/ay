@@ -88,11 +88,13 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 
 	if n.Cache != nil {
 		buf = append(buf, innerPad...)
+
 		if *n.Cache {
 			buf = append(buf, `"cache": true,`...)
 		} else {
 			buf = append(buf, `"cache": false,`...)
 		}
+
 		buf = append(buf, '\n')
 	}
 
@@ -150,11 +152,13 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 	buf = append(buf, ',', '\n')
 
 	buf = append(buf, innerPad...)
+
 	if n.Sandboxing {
 		buf = append(buf, `"sandboxing": true,`...)
 	} else {
 		buf = append(buf, `"sandboxing": false,`...)
 	}
+
 	buf = append(buf, '\n')
 
 	buf = append(buf, innerPad...)
@@ -300,11 +304,13 @@ func appendGraphConf(buf []byte, conf map[string]interface{}, pad string) []byte
 	}
 
 	resourcesAny, ok := conf["resources"]
+
 	if !ok || len(conf) != 1 {
 		ThrowFmt("writeGraphIndented: unsupported conf shape")
 	}
 
 	resources, ok := resourcesAny.([]graphConfResource)
+
 	if !ok {
 		ThrowFmt("writeGraphIndented: unsupported conf.resources type %T", resourcesAny)
 	}
@@ -436,6 +442,7 @@ func appendGraphConfResourceURIs(buf []byte, resources []graphConfResourceURI, p
 
 func appendVFS(buf []byte, v VFS) []byte {
 	id := v.strID()
+
 	if int(id) < len(vfsEscapedJSON) {
 		if cached := vfsEscapedJSON[id]; cached != nil {
 			return append(buf, cached...)
@@ -461,9 +468,11 @@ func appendStringMap(buf []byte, m map[string]string, pad string) []byte {
 	}
 
 	keys := make([]string, 0, len(m))
+
 	for k := range m {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
 
 	buf = append(buf, '{', '\n')
@@ -494,9 +503,11 @@ func appendStringSliceMap(buf []byte, m map[string][]string, pad string) []byte 
 	}
 
 	keys := make([]string, 0, len(m))
+
 	for k := range m {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
 
 	buf = append(buf, '{', '\n')
@@ -527,9 +538,11 @@ func appendInterfaceMap(buf []byte, m map[string]interface{}, pad string) []byte
 	}
 
 	keys := make([]string, 0, len(m))
+
 	for k := range m {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
 
 	buf = append(buf, '{', '\n')
@@ -579,6 +592,7 @@ func appendString(buf []byte, s string) []byte {
 
 func appendStringEscapedBody(buf []byte, s string) []byte {
 	start := 0
+
 	for i := 0; i < len(s); {
 
 		if b := s[i]; b < utf8.RuneSelf {

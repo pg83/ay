@@ -36,10 +36,12 @@ func dedupIncludeDirectives(directives []includeDirective) []includeDirective {
 
 	seen := make(map[includeDirective]struct{}, len(directives))
 	out := make([]includeDirective, 0, len(directives))
+
 	for _, d := range directives {
 		if _, ok := seen[d]; ok {
 			continue
 		}
+
 		seen[d] = struct{}{}
 		out = append(out, d)
 	}
@@ -52,6 +54,7 @@ func bisonCppHeaderParsed(srcVFS VFS) []includeDirective {
 	parsed = append(parsed,
 		includeDirective{kind: includeQuoted, target: internString(bisonPreprocessPyVFS.Rel())},
 	)
+
 	for _, input := range bisonCppSkeletonInputs {
 		parsed = append(parsed, includeDirective{kind: includeQuoted, target: internString(input.Rel())})
 	}
@@ -64,6 +67,7 @@ func bisonGeneratedCPPParsed(ctx *genCtx, instance ModuleInstance, srcVFS, heade
 		{kind: includeQuoted, target: internString(headerVFS.Rel())},
 		{kind: includeQuoted, target: internString(srcVFS.Rel())},
 	}
+
 	if scanner := ctx.scannerFor(instance); scanner != nil {
 		parsed = append(parsed, scanner.parsers.sourceParsedBuckets(srcVFS).bucket(parsedIncludesLocal)...)
 	}
@@ -83,12 +87,15 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	generatedVFS := Build(instance.Path + "/" + generatedRel)
 	srcVFS := Source(instance.Path + "/" + srcRel)
 	headerParsed := []includeDirective{{kind: includeQuoted, target: internString(srcVFS.Rel())}}
+
 	if preprocessHeader {
 		headerParsed = bisonCppHeaderParsed(srcVFS)
 	} else if scanner := ctx.scannerFor(instance); scanner != nil {
 		headerParsed = append(headerParsed, scanner.parsers.sourceParsedBuckets(srcVFS).bucket(parsedIncludesLocal)...)
 	}
+
 	registerGeneratedParsedOutput(ctx, instance, "YC", headerVFS, dedupIncludeDirectives(headerParsed))
+
 	if preprocessHeader {
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
 			reg.SetSourceInputs(headerVFS, []VFS{srcVFS})
@@ -96,9 +103,11 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	}
 
 	generatedParsed := []includeDirective{{kind: includeQuoted, target: internString(headerVFS.Rel())}}
+
 	if preprocessHeader {
 		generatedParsed = bisonGeneratedCPPParsed(ctx, instance, srcVFS, headerVFS)
 	}
+
 	registerGeneratedParsedOutput(ctx, instance, "YC", generatedVFS, generatedParsed)
 
 	env := map[string]string{
@@ -124,6 +133,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		},
 	}
 	inputs := []VFS{bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS}
+
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
 			CmdArgs: []string{
@@ -165,6 +175,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	ccIn := in
 	ccIn.ExtraDepRefs = []NodeRef{ycRef}
 	ccIn.IncludeInputs = walkClosure(ctx, instance, generatedVFS, in)
+
 	if preprocessHeader {
 		ccIn.PerSourceCFlags = append(append([]string(nil), in.PerSourceCFlags...), "-Wno-unused-but-set-variable", "-Wno-deprecated-copy")
 	}
@@ -180,17 +191,23 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 // includes the generated header (the header's SourceInputs records the .y).
 func bisonCCSourceInputs(ctx *genCtx, instance ModuleInstance, closure []VFS) []VFS {
 	reg := codegenRegForInstance(ctx, instance)
+
 	if reg == nil {
 		return nil
 	}
+
 	var extras []VFS
+
 	for _, v := range closure {
 		info := reg.Lookup(v)
+
 		if info == nil || len(info.SourceInputs) == 0 {
 			continue
 		}
+
 		extras = appendVFSUnique(extras, info.SourceInputs)
 	}
+
 	return extras
 }
 

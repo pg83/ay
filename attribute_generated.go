@@ -24,36 +24,46 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 
 	for _, node := range e.nodes {
 		kind, _ := node.KV["p"].(string)
+
 		switch kind {
 		case "PR", "CF", "CP":
 		default:
 			continue
 		}
+
 		if len(node.Outputs) == 0 {
 			continue
 		}
+
 		current := node.TargetProperties["module_dir"]
 		var claim string
+
 		for _, out := range node.Outputs {
 			c, ok := e.generatedFirstClaim[out]
+
 			if !ok {
 				continue
 			}
+
 			if claim == "" {
 				claim = c
 				continue
 			}
+
 			if c != claim {
 				claim = ""
 				break
 			}
 		}
+
 		if claim == "" || claim == current {
 			continue
 		}
+
 		if node.TargetProperties == nil {
 			node.TargetProperties = map[string]string{}
 		}
+
 		node.TargetProperties["module_dir"] = claim
 	}
 }

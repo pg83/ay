@@ -153,6 +153,7 @@ func defaultPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleDat
 		d.moduleStmt.Name == "PROTO_LIBRARY" && moduleExcludesTag(d, "CPP_PROTO") {
 		inst.Language = LangCPP
 	}
+
 	return defaultPeerdirsForWithState(ctx, inst, d)
 }
 
@@ -256,6 +257,7 @@ func appendImplicitPeers(dst []string, rules []implicitPeerRule, rc implicitPeer
 			dst = append(dst, r.peer)
 		}
 	}
+
 	return dst
 }
 

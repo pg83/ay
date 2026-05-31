@@ -92,11 +92,14 @@ func cmdDumpNormalize(args []string) int {
 
 			outs := toStrings(node["outputs"])
 			out0 := ""
+
 			if len(outs) > 0 {
 				out0 = normPath(outs[0])
 			}
+
 			if refGraph {
 				r.outputs = make([]string, 0, len(outs))
+
 				for _, o := range outs {
 					r.outputs = append(r.outputs, normPath(o))
 				}
@@ -114,21 +117,26 @@ func cmdDumpNormalize(args []string) int {
 				}
 			case "TS":
 				path, _ := kv["path"].(string)
+
 				if strings.HasPrefix(path, tsPrefix) {
 					r.rootKind = 'T'
 				}
 			}
+
 			return r
 		},
 		func(r p1Result) {
 			contentHash[r.uid] = r.content
 			deps[r.uid] = r.deps
+
 			if refGraph {
 				outputsByUID[r.uid] = r.outputs
 			}
+
 			if r.isFetch {
 				fetch[r.uid] = true
 			}
+
 			switch r.rootKind {
 			case 'L':
 				ldRoots = append(ldRoots, r.uid)
@@ -159,19 +167,24 @@ func cmdDumpNormalize(args []string) int {
 			func(node map[string]any) stripResult {
 				uid := getString(node, "uid")
 				inputSet := make(map[string]struct{})
+
 				for _, in := range canonInputs(node, refGraph) {
 					inputSet[in] = struct{}{}
 				}
+
 				cmdText := nodeCmdText(node)
 				raw := toStrings(node["deps"])
 				kept := make([]string, 0, len(raw))
+
 				for _, d := range raw {
 					outs := outputsByUID[d]
+
 					if fetch[d] || len(outs) == 0 ||
 						depOutputInInputs(outs, inputSet) || depOutputInCmd(outs, cmdText) {
 						kept = append(kept, d)
 					}
 				}
+
 				return stripResult{uid: uid, deps: kept}
 			},
 			func(r stripResult) {
@@ -180,6 +193,7 @@ func cmdDumpNormalize(args []string) int {
 	}
 
 	roots := []string{}
+
 	if len(ldRoots) > 0 || len(arRoots) > 0 {
 		switch {
 		case len(ldRoots) == 1:
@@ -190,11 +204,13 @@ func cmdDumpNormalize(args []string) int {
 			roots = append(roots, arRoots[0].uid)
 		default:
 			var nonHost []string
+
 			for _, c := range arRoots {
 				if !c.host {
 					nonHost = append(nonHost, c.uid)
 				}
 			}
+
 			if len(nonHost) == 1 {
 				roots = append(roots, nonHost[0])
 			} else {
@@ -202,24 +218,31 @@ func cmdDumpNormalize(args []string) int {
 			}
 		}
 	}
+
 	roots = append(roots, tsRoots...)
 	roots = dedupKeepOrder(roots)
+
 	if len(roots) == 0 {
 		ThrowFmt("dump normalize: no LD/AR/TS root node found for target %q", target)
 	}
 
 	closure := map[string]bool{}
 	queue := append([]string(nil), roots...)
+
 	for len(queue) > 0 {
 		uid := queue[0]
 		queue = queue[1:]
+
 		if closure[uid] || fetch[uid] {
 			continue
 		}
+
 		if _, present := contentHash[uid]; !present {
 			continue
 		}
+
 		closure[uid] = true
+
 		for _, d := range deps[uid] {
 			if !fetch[d] && !closure[d] {
 				queue = append(queue, d)
@@ -230,18 +253,23 @@ func cmdDumpNormalize(args []string) int {
 	newUID := reuidClosure(roots, closure, fetch, deps, contentHash)
 
 	var out io.Writer
+
 	if outPath == "" || outPath == "-" {
 		out = os.Stdout
 	} else {
 		f := Throw2(os.Create(outPath))
+
 		defer func() { Throw(f.Close()) }()
+
 		out = f
 	}
+
 	bw := bufio.NewWriterSize(out, 1<<20)
 
 	streamGraphFanout(inPath, workers,
 		func(node map[string]any) []byte {
 			uid := getString(node, "uid")
+
 			if !closure[uid] {
 				return nil
 			}
@@ -272,10 +300,12 @@ func depOutputInInputs(depOutputs []string, inputSet map[string]struct{}) bool {
 		if o == "" {
 			continue
 		}
+
 		if _, ok := inputSet[o]; ok {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -288,25 +318,30 @@ func depOutputInCmd(depOutputs []string, cmdText string) bool {
 		if o == "" {
 			continue
 		}
+
 		if strings.Contains(cmdText, o) {
 			return true
 		}
 	}
+
 	return false
 }
 
 func rewriteDeps(raw []string, closure, fetch map[string]bool, newUID map[string]string) []string {
 	out := make([]string, 0, len(raw))
+
 	for _, d := range raw {
 		if fetch[d] {
 			continue
 		}
+
 		if closure[d] {
 			out = append(out, newUID[d])
 		} else {
 			out = append(out, d)
 		}
 	}
+
 	sort.Strings(out)
 	return out
 }
@@ -326,29 +361,35 @@ func reuidClosure(
 
 	closureChildren := func(uid string) []string {
 		var ch []string
+
 		for _, d := range deps[uid] {
 			if closure[d] && !fetch[d] {
 				ch = append(ch, d)
 			}
 		}
+
 		sort.Strings(ch)
 		return ch
 	}
 
 	finish := func(uid string) {
 		tokens := make([]string, 0, len(deps[uid]))
+
 		for _, d := range deps[uid] {
 			if fetch[d] {
 				continue
 			}
+
 			if closure[d] {
 				if nu, ok := newUID[d]; ok {
 					tokens = append(tokens, nu)
 					continue
 				}
 			}
+
 			tokens = append(tokens, d)
 		}
+
 		sort.Strings(tokens)
 
 		h := sha256.New()
@@ -376,15 +417,19 @@ func reuidClosure(
 
 		for len(stack) > 0 {
 			top := &stack[len(stack)-1]
+
 			if top.idx < len(top.children) {
 				child := top.children[top.idx]
 				top.idx++
+
 				if state[child] == 0 {
 					state[child] = onStack
 					stack = append(stack, frame{uid: child, children: closureChildren(child)})
 				}
+
 				continue
 			}
+
 			finish(top.uid)
 			stack = stack[:len(stack)-1]
 		}
@@ -396,13 +441,16 @@ func reuidClosure(
 func dedupKeepOrder(in []string) []string {
 	seen := make(map[string]bool, len(in))
 	out := in[:0]
+
 	for _, s := range in {
 		if seen[s] {
 			continue
 		}
+
 		seen[s] = true
 		out = append(out, s)
 	}
+
 	return out
 }
 
@@ -410,5 +458,6 @@ func arg(args []string, i int) string {
 	if i >= len(args) {
 		ThrowFmt("dump: missing value for flag %q", args[i-1])
 	}
+
 	return args[i]
 }

@@ -100,12 +100,15 @@ func evWitnessExtras(evRelPath string, evPbCC VFS) []includeDirective {
 	out = append(out, includeDirective{kind: includeQuoted, target: internString(pbDescriptorVFS.Rel())})
 	out = append(out, includeDirective{kind: includeQuoted, target: internString(evRelPath)})
 	out = append(out, includeDirective{kind: includeQuoted, target: internString(evPbCC.Rel())})
+
 	for _, v := range pbDescriptorImporterHeaders {
 		out = append(out, includeDirective{kind: includeQuoted, target: internString(v.Rel())})
 	}
+
 	for _, v := range evExtraProtobufHeaders {
 		out = append(out, includeDirective{kind: includeQuoted, target: internString(v.Rel())})
 	}
+
 	for _, v := range evAbseilCleanupHeaders {
 		out = append(out, includeDirective{kind: includeQuoted, target: internString(v.Rel())})
 	}
@@ -183,15 +186,19 @@ func EmitEV(
 
 	{
 		var toolRefs []NodeRef
+
 		if cppStyleguideLDRef != (NodeRef{}) {
 			toolRefs = append(toolRefs, cppStyleguideLDRef)
 		}
+
 		if protocLDRef != (NodeRef{}) {
 			toolRefs = append(toolRefs, protocLDRef)
 		}
+
 		if event2cppLDRef != (NodeRef{}) {
 			toolRefs = append(toolRefs, event2cppLDRef)
 		}
+
 		if len(toolRefs) > 0 {
 			depRefs = append([]NodeRef(nil), toolRefs...)
 			foreignDepRefs = map[string][]NodeRef{"tool": toolRefs}

@@ -21,6 +21,7 @@ func emitResourceObjcopy(
 ) *objcopyEmitResult {
 
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
+
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
 		return nil
 	}
@@ -48,6 +49,7 @@ func emitResourceObjcopy(
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 {
 
 		srcRes := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
+
 		if srcRes != nil {
 			out.Refs = append(out.Refs, srcRes.Refs...)
 			out.Outputs = append(out.Outputs, srcRes.Outputs...)
@@ -80,6 +82,7 @@ func emitResourceObjcopy(
 	cur := acc{}
 
 	var moduleTag *string
+
 	if d.moduleStmt != nil {
 		moduleTag = resourceLibTagForData(d)
 	}
@@ -88,6 +91,7 @@ func emitResourceObjcopy(
 		if cur.cmdLen == 0 {
 			return
 		}
+
 		hash := objcopyHash(cur.paths, cur.keys, cur.kvs, instance.Path, moduleTag)
 		outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
@@ -104,15 +108,18 @@ func emitResourceObjcopy(
 
 		if len(cur.paths) > 0 {
 			cmdArgs = append(cmdArgs, "--inputs")
+
 			for _, p := range cur.pathInputs {
 				cmdArgs = append(cmdArgs, p.String())
 			}
+
 			cmdArgs = append(cmdArgs, "--keys")
 			cmdArgs = append(cmdArgs, cur.keys...)
 		}
 
 		if len(cur.kvs) > 0 {
 			cmdArgs = append(cmdArgs, "--kvs")
+
 			for _, kv := range cur.kvs {
 				cmdArgs = append(cmdArgs, expandRootrel(kv, instance.Path))
 			}
@@ -124,6 +131,7 @@ func emitResourceObjcopy(
 			rescompilerBinVFS,
 			rescompressorBinVFS,
 		}
+
 		if len(cur.paths) <= 1 {
 			inputs = append(inputs, objcopyScriptVFS)
 			inputs = append(inputs, cur.pathInputs...)
@@ -135,23 +143,28 @@ func emitResourceObjcopy(
 		}
 
 		inputSeen := make(map[VFS]struct{}, len(inputs))
+
 		for _, p := range inputs {
 			inputSeen[p] = struct{}{}
 		}
+
 		for _, p := range cur.kvInputs {
 			if _, dup := inputSeen[p]; dup {
 				continue
 			}
+
 			inputSeen[p] = struct{}{}
 			inputs = append(inputs, p)
 		}
 
 		objcopyTags := []string{}
+
 		if len(instance.Platform.Tags) > 0 {
 			objcopyTags = append(objcopyTags, instance.Platform.Tags...)
 		}
 
 		resTargetProps := map[string]string{"module_dir": instance.Path}
+
 		if d.moduleStmt != nil {
 			switch d.moduleStmt.Name {
 			case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
@@ -195,13 +208,16 @@ func emitResourceObjcopy(
 		}
 
 		depSeen := map[NodeRef]struct{}{}
+
 		for _, ref := range cur.pathDeps {
 			if ref == (NodeRef{}) {
 				continue
 			}
+
 			if _, dup := depSeen[ref]; dup {
 				continue
 			}
+
 			depSeen[ref] = struct{}{}
 			node.DepRefs = append(node.DepRefs, ref)
 		}
@@ -230,8 +246,10 @@ func emitResourceObjcopy(
 					// pair.Path is kept raw (${BINDIR}/X) to match upstream's
 					// objcopy_<hash>. Lookup canonicalizes by VFS string.
 					var producerRef NodeRef
+
 					if d.prOutputProducer != nil {
 						canonKey := inputVFS.String()
+
 						if ref, ok := d.prOutputProducer[canonKey]; ok {
 							inputVFS = copyFileOutputVFS(instance.Path, e.Path)
 							producerRef = ref
@@ -263,10 +281,12 @@ func emitResourceObjcopy(
 	emitEntries(d.resources)
 
 	srcRes := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
+
 	if srcRes != nil {
 		out.Refs = append(out.Refs, srcRes.Refs...)
 		out.Outputs = append(out.Outputs, srcRes.Outputs...)
 	}
+
 	emitEntries(d.pyPyiResources)
 
 	return out
@@ -299,12 +319,14 @@ func emitKvOnlyObjcopyNode(
 	rescompressorLDRef NodeRef,
 ) *objcopyEmit {
 	var moduleTag *string
+
 	switch kind {
 	case kvOnlyLib:
 		moduleTag = resourceLibTagForData(d)
 	default:
 		moduleTag = resourceBinTagForData(d)
 	}
+
 	hash := objcopyHash(nil, nil, kvsHash, instance.Path, moduleTag)
 	outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
@@ -331,10 +353,12 @@ func emitKvOnlyObjcopyNode(
 	targetProps := map[string]string{
 		"module_dir": instance.Path,
 	}
+
 	switch d.moduleStmt.Name {
 	case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
 		targetProps["module_tag"] = "py3"
 	}
+
 	if d.moduleStmt.Name == "PY3_PROGRAM" || d.programPairedLib {
 		if kind == kvOnlyLib {
 			targetProps["module_tag"] = "py3_bin_lib"
@@ -344,6 +368,7 @@ func emitKvOnlyObjcopyNode(
 	}
 
 	kvTags := []string{}
+
 	if len(instance.Platform.Tags) > 0 {
 		kvTags = append(kvTags, instance.Platform.Tags...)
 	}
@@ -372,6 +397,7 @@ func emitKvOnlyObjcopyNode(
 	if rescompilerLDRef != (NodeRef{}) {
 		node.DepRefs = append(node.DepRefs, rescompilerLDRef)
 	}
+
 	if rescompressorLDRef != (NodeRef{}) {
 		node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 	}
@@ -398,6 +424,7 @@ func emitYaConfJSONObjcopy(
 	}
 
 	var resources []yaConfResource
+
 	for _, file := range d.yaConfJSON {
 		resources = append(resources, yaConfResource{
 			sourcePath: file,
@@ -406,6 +433,7 @@ func emitYaConfJSONObjcopy(
 		})
 		formulas := yaConfFormulaResources(ctx.fs, file)
 		sort.Strings(formulas)
+
 		for _, formula := range formulas {
 			resources = append(resources, yaConfResource{
 				sourcePath: formula,
@@ -417,6 +445,7 @@ func emitYaConfJSONObjcopy(
 
 	out := make([]*objcopyEmit, 0, len(resources))
 	var moduleTag *string
+
 	if d.moduleStmt != nil {
 		moduleTag = resourceLibTagForData(d)
 	}
@@ -475,9 +504,11 @@ func emitYaConfJSONObjcopy(
 		if len(instance.Platform.Tags) > 0 {
 			node.Tags = append([]string(nil), instance.Platform.Tags...)
 		}
+
 		if rescompilerLDRef != (NodeRef{}) {
 			node.DepRefs = append(node.DepRefs, rescompilerLDRef)
 		}
+
 		if rescompressorLDRef != (NodeRef{}) {
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
@@ -497,38 +528,47 @@ func emitPyNamespaceForGroup(
 	rescompressorLDRef NodeRef,
 ) *objcopyEmit {
 	pySources := make([]string, 0, len(group.Srcs))
+
 	for _, srcRel := range group.Srcs {
 		if strings.HasSuffix(srcRel, ".py") {
 			pySources = append(pySources, srcRel)
 		}
 	}
+
 	if len(pySources) == 0 {
 		return nil
 	}
 
 	nsPrefix := strings.ReplaceAll(instance.Path, "/", ".") + "."
+
 	if group.Namespace != nil {
 		nsPrefix = strings.TrimSuffix(*group.Namespace, ".") + "."
 	}
+
 	nsValue := nsPrefix
+
 	if group.TopLevel {
 		nsPrefix = ""
 		nsValue = "."
 	}
 
 	h := md5.New()
+
 	for _, srcRel := range pySources {
 		modName := strings.TrimSuffix(srcRel, ".py")
 		modName = strings.ReplaceAll(modName, "/", ".")
 		mod := nsPrefix + modName
 		h.Write([]byte(mod))
 	}
+
 	modListMD5 := enchex.EncodeToString(h.Sum(nil))
 
 	keyPath := instance.Path
+
 	if group.TopLevel && d.srcDir != nil {
 		keyPath = *d.srcDir
 	}
+
 	key := "py/namespace/" + modListMD5 + "/" + keyPath
 	kvHash := key + "=\"" + nsValue + "\""
 	kvCmd := key + "=" + nsValue
@@ -582,9 +622,11 @@ func emitPySrcObjcopy(
 	if len(d.pySrcs) == 0 || d.moduleStmt == nil {
 		return nil
 	}
+
 	if resourceLibTagForData(d) == nil {
 		return nil
 	}
+
 	// PY3_PROGRAM PROGRAM-side mirrors upstream's PY3_BIN submodule, which has
 	// ENABLE(PROCESS_PY_MAIN_ONLY) (conf/python.conf:352). onpy_srcs honours
 	// that flag (pybuild.py:266,400) by skipping all pys/namespace processing
@@ -598,6 +640,7 @@ func emitPySrcObjcopy(
 	}
 
 	groups := d.pySrcGroups
+
 	if len(groups) == 0 {
 		groups = []pySrcGroup{{Srcs: d.pySrcs, TopLevel: d.pyTopLevel, Namespace: d.pyNamespace}}
 	}
@@ -609,6 +652,7 @@ func emitPySrcObjcopy(
 
 	moduleTag := resourceLibTagForData(d)
 	res := &objcopyEmitResult{}
+
 	for _, group := range groups {
 		if namespaceEnabled {
 			if nsRes := emitPyNamespaceForGroup(ctx, instance, d, group, rescompilerLDRef, rescompressorLDRef); nsRes != nil {
@@ -618,9 +662,11 @@ func emitPySrcObjcopy(
 		}
 
 		entries := buildPySrcEntriesFor(d, instance.Path, group.Srcs, group.TopLevel, group.Namespace)
+
 		if len(entries) == 0 {
 			continue
 		}
+
 		for _, ch := range chunkPySrcEntries(entries) {
 			hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path, moduleTag)
 			outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
@@ -640,6 +686,7 @@ func emitPySrcObjcopy(
 			cmdArgs = append(cmdArgs, ch.pathInps...)
 			cmdArgs = append(cmdArgs, "--keys")
 			cmdArgs = append(cmdArgs, ch.keys...)
+
 			if len(ch.kvsCmd) > 0 {
 				cmdArgs = append(cmdArgs, "--kvs")
 				cmdArgs = append(cmdArgs, ch.kvsCmd...)
@@ -649,17 +696,21 @@ func emitPySrcObjcopy(
 				rescompilerBinVFS,
 				rescompressorBinVFS,
 			}
+
 			for _, p := range ch.inps {
 				inputs = append(inputs, p)
 			}
+
 			inputs = append(inputs, objcopyScriptVFS)
 
 			env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
 			targetProps := map[string]string{"module_dir": instance.Path}
+
 			switch d.moduleStmt.Name {
 			case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
 				targetProps["module_tag"] = "py3"
 			}
+
 			// pysrc/namespace emissions for both the PY3_PROGRAM PROGRAM-side and
 			// its KindLib twin live under the PY3_BIN_LIB submodule in upstream;
 			// stamp them with that submodule's lowercased tag so the dump matches REF.
@@ -668,6 +719,7 @@ func emitPySrcObjcopy(
 			}
 
 			pyTags := []string{}
+
 			if len(instance.Platform.Tags) > 0 {
 				pyTags = append(pyTags, instance.Platform.Tags...)
 			}
@@ -691,17 +743,21 @@ func emitPySrcObjcopy(
 			if rescompilerLDRef != (NodeRef{}) {
 				node.DepRefs = append(node.DepRefs, rescompilerLDRef)
 			}
+
 			if rescompressorLDRef != (NodeRef{}) {
 				node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 			}
 
 			exclude := []NodeRef{}
+
 			if rescompilerLDRef != (NodeRef{}) {
 				exclude = append(exclude, rescompilerLDRef)
 			}
+
 			if rescompressorLDRef != (NodeRef{}) {
 				exclude = append(exclude, rescompressorLDRef)
 			}
+
 			if extras := resolveCodegenDepRefsExt(ctx, instance, nil, ch.inps, exclude...); len(extras) > 0 {
 				node.DepRefs = append(node.DepRefs, extras...)
 			}

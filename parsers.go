@@ -53,9 +53,11 @@ func filterDroppedDirectives(out []includeDirective, drops []string) []includeDi
 	}
 
 	filtered := out[:0]
+
 	for _, d := range out {
 		t := d.target.String()
 		drop := false
+
 		for _, name := range drops {
 			if t == name {
 				drop = true
@@ -155,6 +157,7 @@ func directiveParserExt(rel string) string {
 	}
 
 	idx := strings.LastIndexByte(rel, '.')
+
 	if idx < 0 {
 		return ""
 	}
@@ -185,12 +188,14 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 		if _, dup := seen[d]; dup {
 			return
 		}
+
 		seen[d] = struct{}{}
 		out = append(out, d)
 	}
 
 	eachLine(data, func(line []byte) {
 		s := strings.TrimSpace(string(line))
+
 		if s == "" || strings.HasPrefix(s, "#") {
 			return
 		}
@@ -202,9 +207,11 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 
 		if m := cythonExternFromRe.FindStringSubmatch(s); len(m) == 2 {
 			target, kind, ok := parseDelimitedIncludeTarget(m[1])
+
 			if ok {
 				add(includeDirective{kind: kind, target: internString(target)})
 			}
+
 			return
 		}
 
@@ -212,18 +219,22 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 			if t := cythonPxdTarget(m[1]); t != "" {
 				add(includeDirective{kind: includeQuoted, target: internString(t)})
 			}
+
 			return
 		}
 
 		if m := cythonCimportRe.FindStringSubmatch(s); len(m) == 2 {
 			for _, part := range strings.Split(m[1], ",") {
 				part = strings.TrimSpace(part)
+
 				if part == "" {
 					continue
 				}
+
 				if idx := strings.IndexAny(part, " \t"); idx >= 0 {
 					part = part[:idx]
 				}
+
 				if t := cythonPxdTarget(part); t != "" {
 					add(includeDirective{kind: includeQuoted, target: internString(t)})
 				}
@@ -254,6 +265,7 @@ func (flatbuffersIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncl
 
 	eachLine(data, func(line []byte) {
 		m := flatbuffersIncludeRe.FindSubmatch(line)
+
 		if len(m) != 2 {
 			return
 		}
@@ -270,6 +282,7 @@ func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet
 
 	eachLine(data, func(line []byte) {
 		target, kind, ok := parseProtoImportLine(line)
+
 		if !ok {
 			return
 		}
@@ -298,6 +311,7 @@ func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeS
 
 	eachLine(data, func(line []byte) {
 		trimmed := strings.TrimLeft(string(line), " \t")
+
 		if trimmed == "" {
 			return
 		}
@@ -316,6 +330,7 @@ func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeS
 		}
 
 		target, ok := parseRagelNativeIncludeLine(trimmed)
+
 		if !ok {
 			return
 		}
@@ -323,6 +338,7 @@ func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeS
 		if _, dup := seenNative[target]; dup {
 			return
 		}
+
 		seenNative[target] = struct{}{}
 		native = append(native, includeDirective{kind: includeQuoted, target: internString(target)})
 	})
@@ -345,12 +361,14 @@ func (swigIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet 
 
 	eachLine(data, func(line []byte) {
 		trimmed := strings.TrimSpace(string(line))
+
 		if trimmed == "" {
 			return
 		}
 
 		if !inBlock && (strings.HasPrefix(trimmed, "%include") || strings.HasPrefix(trimmed, "%import") || strings.HasPrefix(trimmed, "%insert")) {
 			target, kind, ok := parseSwigIncludeLine(trimmed)
+
 			if ok {
 				direct = append(direct, includeDirective{kind: kind, target: internString(target)})
 			}
@@ -392,12 +410,15 @@ func parseCIncludes(data []byte) []includeDirective {
 
 	for p < n {
 		rel := bytes.IndexByte(data[p:], '#')
+
 		if rel < 0 {
 			break
 		}
+
 		hi := p + rel
 
 		ls := hi
+
 		for ls > 0 && data[ls-1] != '\n' {
 			ls--
 		}
@@ -416,9 +437,11 @@ func parseCIncludes(data []byte) []includeDirective {
 		}
 
 		d, ok, next := parseDirectiveInline(data, hi)
+
 		if ok {
 			out = append(out, d)
 		}
+
 		p, clean = next, next
 	}
 
@@ -439,11 +462,13 @@ func parseDirectiveInline(data []byte, hashPos int) (includeDirective, bool, int
 	}
 
 	q = skipWSAndBlockComments(data, q)
+
 	if q >= n {
 		return includeDirective{}, false, n
 	}
 
 	var closeCh byte
+
 	switch data[q] {
 	case '<':
 		closeCh = '>'
@@ -451,31 +476,39 @@ func parseDirectiveInline(data []byte, hashPos int) (includeDirective, bool, int
 		closeCh = '"'
 	default:
 		start := q
+
 		for q < n {
 			if c := data[q]; c == ' ' || c == '\t' || c == '\v' || c == '\f' || c == '\r' || c == '\n' {
 				break
 			}
+
 			q++
 		}
+
 		if q > start && data[start] != '$' && !hasYIgnoreComment(data, q) && !bytes.ContainsAny(data[start:q], "[]") {
 			return includeDirective{kind: includeQuoted, target: internBytes(data[start:q])}, true, nextLineStart(data, q)
 		}
 
 		return includeDirective{}, false, nextLineStart(data, q)
 	}
+
 	q++
 
 	start := q
+
 	for q < n && data[q] != closeCh && data[q] != '\n' && data[q] != '$' {
 		q++
 	}
+
 	if q >= n || data[q] != closeCh {
 		return includeDirective{}, false, nextLineStart(data, q)
 	}
+
 	targetBytes := data[start:q]
 	q++
 
 	kind := includeSystem
+
 	if closeCh == '"' {
 		kind = includeQuoted
 	}
@@ -494,12 +527,15 @@ func isCWSByte(c byte) bool {
 func leadingBlockCoversHi(data []byte, from, hi int) (int, bool) {
 	for i := from; i < hi; {
 		rel := bytes.Index(data[i:hi], blockCommentOpen)
+
 		if rel < 0 {
 			return 0, false
 		}
+
 		open := i + rel
 
 		lineLeading := true
+
 		for k := open; k > 0 && data[k-1] != '\n'; k-- {
 			if !isCWSByte(data[k-1]) {
 				lineLeading = false
@@ -509,6 +545,7 @@ func leadingBlockCoversHi(data []byte, from, hi int) (int, bool) {
 		}
 
 		end := len(data)
+
 		if cl := bytes.Index(data[open+2:], blockCommentClose); cl >= 0 {
 			end = open + 2 + cl + 2
 		}
@@ -517,6 +554,7 @@ func leadingBlockCoversHi(data []byte, from, hi int) (int, bool) {
 			if end > hi {
 				return end, true
 			}
+
 			i = end
 		} else {
 			i = open + 2
@@ -528,6 +566,7 @@ func leadingBlockCoversHi(data []byte, from, hi int) (int, bool) {
 
 func skipWSAndBlockComments(data []byte, i int) int {
 	n := len(data)
+
 	for i < n {
 		switch data[i] {
 		case ' ', '\t', '\v', '\f', '\r':
@@ -535,21 +574,26 @@ func skipWSAndBlockComments(data []byte, i int) int {
 		case '/':
 			if i+1 < n && data[i+1] == '*' {
 				i += 2
+
 				for i+1 < n && !(data[i] == '*' && data[i+1] == '/') {
 					i++
 				}
+
 				if i+1 < n {
 					i += 2
 				} else {
 					i = n
 				}
+
 				continue
 			}
+
 			return i
 		default:
 			return i
 		}
 	}
+
 	return i
 }
 
@@ -557,10 +601,13 @@ func nextLineStart(data []byte, i int) int {
 	if i >= len(data) {
 		return len(data)
 	}
+
 	nl := bytes.IndexByte(data[i:], '\n')
+
 	if nl < 0 {
 		return len(data)
 	}
+
 	return i + nl + 1
 }
 
@@ -568,24 +615,30 @@ func bytesHasPrefixAt(data []byte, i int, s string) bool {
 	if i+len(s) > len(data) {
 		return false
 	}
+
 	for k := 0; k < len(s); k++ {
 		if data[i+k] != s[k] {
 			return false
 		}
 	}
+
 	return true
 }
 
 func hasYIgnoreComment(data []byte, i int) bool {
 	n := len(data)
 	i = skipWSAndBlockComments(data, i)
+
 	if i+2 > n || data[i] != '/' || data[i+1] != '/' {
 		return false
 	}
+
 	i += 2
+
 	for i < n && data[i] == ' ' {
 		i++
 	}
+
 	return bytesHasPrefixAt(data, i, "Y_IGNORE")
 }
 
@@ -607,6 +660,7 @@ func parseYasmIncludes(data []byte) []includeDirective {
 		kind := includeSystem
 
 		idx := indexOfAngleOrQuote(line)
+
 		if idx >= 0 && line[idx] == '"' {
 			kind = includeQuoted
 		}
@@ -621,6 +675,7 @@ func parseYasmIncludes(data []byte) []includeDirective {
 
 func parseProtoImportLine(line []byte) (string, includeKind, bool) {
 	trimmed := strings.TrimSpace(string(line))
+
 	if trimmed == "" {
 		return "", includeSystem, false
 	}
@@ -635,6 +690,7 @@ func parseProtoImportLine(line []byte) (string, includeKind, bool) {
 	}
 
 	rest := strings.TrimSpace(trimmed[len("import"):])
+
 	if strings.HasPrefix(rest, "public") && !isParserIdentContinuation(rest, len("public")) {
 		rest = strings.TrimSpace(rest[len("public"):])
 	} else if strings.HasPrefix(rest, "weak") && !isParserIdentContinuation(rest, len("weak")) {
@@ -649,13 +705,16 @@ func parseRagelNativeIncludeLine(line string) (string, bool) {
 	if idx := strings.IndexByte(line, '#'); idx >= 0 {
 		line = line[:idx]
 	}
+
 	line = strings.TrimSpace(line)
+
 	if !strings.HasPrefix(line, "include") || isParserIdentContinuation(line, len("include")) {
 		return "", false
 	}
 
 	rest := strings.TrimSpace(line[len("include"):])
 	firstQuote := strings.IndexAny(rest, `"'`)
+
 	if firstQuote < 0 {
 		return "", false
 	}
@@ -666,6 +725,7 @@ func parseRagelNativeIncludeLine(line string) (string, bool) {
 
 func parseSwigIncludeLine(line string) (string, includeKind, bool) {
 	m := swigIncludeRe.FindStringSubmatch(line)
+
 	if len(m) != 3 {
 		return "", includeSystem, false
 	}
@@ -675,11 +735,13 @@ func parseSwigIncludeLine(line string) (string, includeKind, bool) {
 
 func parseDelimitedIncludeTarget(s string) (string, includeKind, bool) {
 	s = strings.TrimSpace(s)
+
 	if s == "" {
 		return "", includeSystem, false
 	}
 
 	kind := includeSystem
+
 	switch s[0] {
 	case '"', '\'':
 		kind = includeQuoted
@@ -690,25 +752,30 @@ func parseDelimitedIncludeTarget(s string) (string, includeKind, bool) {
 	}
 
 	close := s[0]
+
 	if close == '<' {
 		close = '>'
 	}
 
 	end := strings.IndexByte(s[1:], close)
+
 	if end < 0 {
 		return "", includeSystem, false
 	}
 
 	target := s[1 : 1+end]
+
 	if target == "" {
 		return "", includeSystem, false
 	}
 
 	if kind == includeQuoted && len(target) >= 2 && target[0] == '<' && target[len(target)-1] == '>' {
 		target = target[1 : len(target)-1]
+
 		if target == "" {
 			return "", includeSystem, false
 		}
+
 		kind = includeSystem
 	}
 
@@ -740,6 +807,7 @@ func eachLine(data []byte, fn func(line []byte)) {
 	for i := 0; i < len(data); i++ {
 		if data[i] == '\n' {
 			line := data[start:i]
+
 			if len(line) > 0 && line[len(line)-1] == '\r' {
 				line = line[:len(line)-1]
 			}
@@ -807,6 +875,7 @@ func stripComments(data []byte) []byte {
 				data[i] = ' '
 				i++
 			}
+
 			atLineStart = true
 
 			continue
@@ -832,6 +901,7 @@ func stripComments(data []byte) []byte {
 
 				i++
 			}
+
 			atLineStart = true
 
 			continue
@@ -872,6 +942,7 @@ func stripComments(data []byte) []byte {
 						for k := 0; k <= len(delim); k++ {
 							data[i+k] = ' '
 						}
+
 						data[i+1+len(delim)] = ' '
 						i += 1 + len(delim) + 1
 
@@ -882,6 +953,7 @@ func stripComments(data []byte) []byte {
 				if data[i] != '\n' {
 					data[i] = ' '
 				}
+
 				i++
 			}
 
@@ -950,6 +1022,7 @@ func stripComments(data []byte) []byte {
 func scanIncludeDirectiveTarget(data []byte, i int) (int, bool) {
 	n := len(data)
 	j := i
+
 	for j < n {
 		switch data[j] {
 		case ' ', '\t':
@@ -958,13 +1031,16 @@ func scanIncludeDirectiveTarget(data []byte, i int) (int, bool) {
 			goto nonSpace
 		}
 	}
+
 	return 0, false
 
 nonSpace:
 	if data[j] != '#' {
 		return 0, false
 	}
+
 	j++
+
 	for j < n {
 		switch data[j] {
 		case ' ', '\t':
@@ -973,6 +1049,7 @@ nonSpace:
 			goto directive
 		}
 	}
+
 	return 0, false
 
 directive:
@@ -984,6 +1061,7 @@ directive:
 	default:
 		return 0, false
 	}
+
 	for j < n {
 		switch data[j] {
 		case ' ', '\t':
@@ -992,13 +1070,16 @@ directive:
 			goto target
 		}
 	}
+
 	return 0, false
 
 target:
 	if j >= n {
 		return 0, false
 	}
+
 	var close byte
+
 	switch data[j] {
 	case '<':
 		close = '>'
@@ -1007,20 +1088,26 @@ target:
 	default:
 		return 0, false
 	}
+
 	j++
+
 	for j < n {
 		if data[j] == '\\' && close == '"' && j+1 < n && data[j+1] != '\n' {
 			j += 2
 			continue
 		}
+
 		if data[j] == close {
 			return j + 1, true
 		}
+
 		if data[j] == '\n' {
 			return 0, false
 		}
+
 		j++
 	}
+
 	return 0, false
 }
 

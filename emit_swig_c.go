@@ -27,6 +27,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 	swigRef, swigBin := swigTool(ctx, instance)
 
 	out := make([]*sourceEmit, 0, len(d.swigC))
+
 	for _, stmt := range d.swigC {
 		prefix := swigOutputPrefix(stmt.Src, stmt.Module)
 		cOutRel := prefix + ".swg.c"
@@ -84,9 +85,11 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 				"module_dir": instance.Path,
 			},
 		}, instance.Platform))
+
 		if d.pyGeneratedSrcs == nil {
 			d.pyGeneratedSrcs = make(map[string][]VFS)
 		}
+
 		d.pySrcs = append(d.pySrcs, pyOutRel)
 		d.pyGeneratedSrcs[pyOutRel] = append([]VFS{cOutVFS, srcVFS}, swigClosure...)
 		registerBoundGeneratedParsedOutput(ctx, instance, "SW", cOutVFS, collectSwigInducedIncludes(ctx, srcVFS, swigClosure), swRef)
@@ -116,6 +119,7 @@ func swigTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
 
 func swigOutputPrefix(src, module string) string {
 	dir := filepath.ToSlash(filepath.Dir(src))
+
 	if dir == "." {
 		return swigModuleName(module)
 	}
@@ -142,18 +146,22 @@ func swigIncludeClosure(ctx *genCtx, src VFS) []VFS {
 
 	enqueue := func(target string, kind includeKind, incRel string) {
 		candidates := swigResolveCandidates(ctx.fs, target, incRel, roots)
+
 		if kind == includeQuoted {
 			if len(candidates) > 0 {
 				queue = append(queue, candidates[0])
 			}
+
 			return
 		}
+
 		queue = append(queue, candidates...)
 	}
 
 	for _, imp := range swigImplicitIncludes {
 		enqueue(imp, includeSystem, src.Rel())
 	}
+
 	for _, d := range swigSourceParsedBuckets(ctx, src.Rel()).bucket(parsedIncludesLocal) {
 		enqueue(d.target.String(), d.kind, src.Rel())
 	}
@@ -161,22 +169,28 @@ func swigIncludeClosure(ctx *genCtx, src VFS) []VFS {
 	for len(queue) > 0 {
 		rel := queue[len(queue)-1]
 		queue = queue[:len(queue)-1]
+
 		if _, ok := seen[rel]; ok {
 			continue
 		}
+
 		seen[rel] = struct{}{}
+
 		for _, d := range swigSourceParsedBuckets(ctx, rel).bucket(parsedIncludesLocal) {
 			enqueue(d.target.String(), d.kind, rel)
 		}
 	}
 
 	order := make([]string, 0, len(seen))
+
 	for rel := range seen {
 		order = append(order, rel)
 	}
+
 	sort.Strings(order)
 
 	out := make([]VFS, 0, len(order))
+
 	for _, rel := range order {
 		out = append(out, Source(rel))
 	}
@@ -193,12 +207,14 @@ func collectSwigInducedIncludes(ctx *genCtx, src VFS, closure []VFS) []includeDi
 			if _, ok := seen[d]; ok {
 				continue
 			}
+
 			seen[d] = struct{}{}
 			out = append(out, d)
 		}
 	}
 
 	add(src.Rel())
+
 	for _, v := range closure {
 		add(v.Rel())
 	}
@@ -213,17 +229,21 @@ func swigSearchRoots(fs FS) []string {
 
 	roots := []string{swigLibRoot}
 	entries := fs.Listdir(swigLibRoot)
+
 	if len(entries) == 0 {
 		return roots
 	}
 
 	var subdirs []string
+
 	for name, isDir := range entries {
 		if !isDir {
 			continue
 		}
+
 		subdirs = append(subdirs, filepath.ToSlash(filepath.Clean(swigLibRoot+"/"+name)))
 	}
+
 	sort.Strings(subdirs)
 
 	return append(roots, subdirs...)
@@ -238,25 +258,31 @@ func swigResolveCandidates(fs FS, target, incRel string, roots []string) []strin
 	out := make([]string, 0, 1+len(roots))
 	add := func(rel string) {
 		rel = cleanRel(filepath.ToSlash(filepath.Clean(rel)))
+
 		if rel == "" || !fs.IsFile(rel) {
 			return
 		}
+
 		if _, ok := seen[rel]; ok {
 			return
 		}
+
 		seen[rel] = struct{}{}
 		out = append(out, rel)
 	}
 
 	dir := filepath.ToSlash(filepath.Dir(incRel))
+
 	if dir == "." {
 		dir = ""
 	}
+
 	if dir != "" {
 		add(dir + "/" + target)
 	} else {
 		add(target)
 	}
+
 	for _, root := range roots {
 		add(root + "/" + target)
 	}
@@ -270,6 +296,7 @@ func swigSourceParsedBuckets(ctx *genCtx, rel string) parsedIncludeSet {
 	}
 
 	data := ctx.fs.Read(rel)
+
 	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
 		data = data[3:]
 	}
@@ -283,10 +310,12 @@ func swigFilterExistingSources(fs FS, in []VFS) []VFS {
 	}
 
 	out := make([]VFS, 0, len(in))
+
 	for _, v := range in {
 		if v.IsSource() && !fs.IsFile(v.Rel()) {
 			continue
 		}
+
 		out = append(out, v)
 	}
 

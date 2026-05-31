@@ -61,14 +61,17 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsE
 	if flags == nil {
 		flags = map[string]string{}
 	}
+
 	if tags == nil {
 		tags = []string{}
 	}
+
 	buildType := platformBuildType(flags)
 	buildSanitized := platformBuildSanitized(flags)
 	buildRelease := isReleaseBuildType(buildType)
 
 	var systemLibs, linkPreludeExtra []string
+
 	if flags["MUSL"] == "yes" {
 		systemLibs = []string{"-nostdlib", "-lm"}
 	} else {
@@ -125,11 +128,13 @@ func statsTagsForPlatform(p *Platform) []string {
 
 	if len(p.StatsFlags) > 0 {
 		formatted := make([]string, 0, len(p.StatsFlags))
+
 		for k, v := range p.StatsFlags {
 			if tag := formatStatsTag(k, v); tag != "" {
 				formatted = append(formatted, tag)
 			}
 		}
+
 		sort.Strings(formatted)
 		tags = append(tags, formatted...)
 	}
@@ -149,6 +154,7 @@ func formatStatsTag(k, v string) string {
 	}
 
 	yes, ok := parseStatsBool(v)
+
 	if tag, mapped := statsFlagsMapping[k]; mapped {
 		if ok && yes {
 			return tag
@@ -183,6 +189,7 @@ func platformBuildType(flags map[string]string) string {
 	if v := flags["GG_BUILD_TYPE"]; v != "" {
 		return strings.ToLower(v)
 	}
+
 	if v := flags["BUILD_TYPE"]; v != "" {
 		return strings.ToLower(v)
 	}
@@ -338,6 +345,7 @@ func (p *Platform) ObjectSuffix() string {
 	if p.PIC {
 		return ".pic.o"
 	}
+
 	return ".o"
 }
 
@@ -378,10 +386,13 @@ func ParsePlatformID(s string) (OS, ISA) {
 	if !strings.HasPrefix(s, "default-") {
 		ThrowFmt("ParsePlatformID: %q does not start with \"default-\"", s)
 	}
+
 	rest := s[len("default-"):]
 	dash := strings.IndexByte(rest, '-')
+
 	if dash < 0 {
 		ThrowFmt("ParsePlatformID: %q lacks the <os>-<isa> separator", s)
 	}
+
 	return OS(rest[:dash]), ISA(rest[dash+1:])
 }

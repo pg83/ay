@@ -17,11 +17,13 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 	rebaseAncestorSource := ancestorRebase && !strings.Contains(srcRel, "/")
 
 	srcInstance := instance
+
 	if rebaseAncestorSource {
 		srcInstance.Path = *d.srcDir
 	}
 
 	srcIn := in
+
 	if rebaseAncestorSource {
 		srcIn.SrcDir = nil
 	}
@@ -48,12 +50,14 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 
 		full := walkClosureRoot(ctx, srcInstance, srcVFS, srcVFS.Rel(), srcIn)
+
 		if full != nil {
 			// Drop build-generated .proto files reached transitively (e.g. via a
 			// .pb.h chain): they're codegen intermediates, not real CC inputs. The
 			// proto-import closure is already captured through the producer dep edge.
 			srcIn.IncludeInputs = dropTransitiveGeneratedProto(full[1:])
 		}
+
 		// AUTO COPY entries leave both the $(S) source and the $(B) destination
 		// on disk; upstream tracks both as CC inputs (the source is what the
 		// scanner reads — the copy is byte-identical content — but the $(B)
@@ -63,22 +67,31 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		// module so e.g. mkql_builtins.h's $(B)-copy enters mkql_builtins.cpp.o
 		// inputs alongside the $(S) original.
 		autoExtras := autoCopyDstExtras(srcInstance.Path, d, srcIn.IncludeInputs, srcVFS)
+
 		if len(autoExtras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, autoExtras)
 		}
+
 		wcExtras := withContextSourceExtras(codegenRegForInstance(ctx, srcInstance), srcInstance.Path, d, srcIn.IncludeInputs, srcVFS, ctx.scripts)
+
 		if len(wcExtras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, wcExtras)
 		}
+
 		flatcExtras := flatcCCExtraInputs(ctx, srcIn.IncludeInputs)
+
 		if len(flatcExtras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, flatcExtras)
 		}
+
 		bisonExtras := bisonCCSourceInputs(ctx, srcInstance, srcIn.IncludeInputs)
+
 		if len(bisonExtras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, bisonExtras)
 		}
+
 		extras := runtimePy3CCExtraInputs(srcInstance.Path, srcRel)
+
 		if len(extras) > 0 {
 			srcIn.IncludeInputs = appendVFSUnique(srcIn.IncludeInputs, extras)
 		}
@@ -91,9 +104,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		// stale tail in full), so we leave NodeInputs nil for EmitCC to rebuild
 		// from inVFS + IncludeInputs.
 		protoDropped := full != nil && len(srcIn.IncludeInputs) < len(full)-1
+
 		if len(autoExtras) == 0 && len(wcExtras) == 0 && len(flatcExtras) == 0 && len(bisonExtras) == 0 && len(extras) == 0 && !protoDropped {
 			srcIn.NodeInputs = full
 		}
+
 		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})
 
 		ref, outPath, _ := EmitCC(srcInstance, srcRel, srcVFS, srcIn, ctx.host, ctx.emit)
@@ -106,6 +121,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 
 		scanIn := srcIn
+
 		if len(d.asmAddIncl) > 0 {
 			// `ADDINCL(FOR asm X)` (yatool/build/conf/proto.conf:104-106
 			// _ORDER_ADDINCL routes the FOR asm bucket via ADDINCL) feeds
@@ -138,6 +154,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		rl6Closure = filterEnSerializedSiblings(rl6Closure)
 
 		var r6Parsed []includeDirective
+
 		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
 			r6Parsed = scanner.parsers.sourceParsedBuckets(rl6SourceVFS).bucket(parsedIncludesHCPP)
 			// Ragel-native includes (e.g. include "parser.rl6" inside %%{...}%%)
@@ -146,6 +163,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			// into the closure), but we still need the ragel files themselves as deps.
 			rl6Closure = appendRagelNativeDeps(scanner, srcInstance, rl6SourceVFS, srcIn, rl6Closure)
 		}
+
 		// The ragel compiler only reads source files (the .rl6 source + any
 		// natively-included .rl6 files + C/C++ headers it parses). Build-generated
 		// files (proto .pb.h headers pulled in via the C++ include chain) must not
@@ -158,6 +176,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		ccSrcRel := strings.TrimPrefix(r6Out.Rel(), srcInstance.Path+"/")
 		ccIncludeInputs := walkClosure(ctx, srcInstance, r6Out, srcIn)
+
 		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
 			ccIncludeInputs = appendRagelNativeDeps(scanner, srcInstance, rl6SourceVFS, srcIn, ccIncludeInputs)
 		}
@@ -195,21 +214,26 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ctx.evOutputs[evKey] = evRef
 		evKey.path = evPbCC
 		ctx.evOutputs[evKey] = evRef
+
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, "")
 			evExtras := evWitnessExtras(evRelPath, evPbCC)
 			evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
 			evHParsed = append(evHParsed, directImports...)
+
 			for _, include := range protobufRuntimeHeaders {
 				evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 			}
+
 			evHParsed = append(evHParsed, evExtras...)
 			registerGeneratedParsedOutput(ctx, srcInstance, "EV", evH, evHParsed)
 			evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders))
 			evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internString(evH.Rel())})
+
 			for _, include := range protobufRuntimeHeaders {
 				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 			}
+
 			registerGeneratedParsedOutput(ctx, srcInstance, "EV", evPbCC, evCCParsed)
 		}
 
@@ -218,12 +242,15 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, evPbCC, srcIn)
 		{
 			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
+
 			for _, in := range ccIn.IncludeInputs {
 				if in == evH {
 					continue
 				}
+
 				filtered = append(filtered, in)
 			}
+
 			ccIn.IncludeInputs = filtered
 		}
 		wireFormatVFS := Source(pbRuntimeBase + "google/protobuf/wire_format.h")
@@ -243,9 +270,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		rlSourceVFS := Source(srcInstance.Path + "/" + srcRel)
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5TmpOut, nil, r5Ref)
 		var r5Parsed []includeDirective
+
 		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
 			r5Parsed = scanner.parsers.sourceParsedBuckets(rlSourceVFS).bucket(parsedIncludesHCPP)
 		}
+
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5CppOut, r5Parsed, r5Ref)
 
 		ccSrcRel := strings.TrimPrefix(r5CppOut.Rel(), srcInstance.Path+"/")
@@ -328,9 +357,11 @@ func emitLibraryFlatcSource(ctx *genCtx, instance ModuleInstance, d *moduleData,
 
 	ccIn := in
 	ccIn.IncludeInputs = walkClosure(ctx, instance, fl.cpp, in)
+
 	if extras := flatcCCExtraInputs(ctx, ccIn.IncludeInputs); len(extras) > 0 {
 		ccIn.IncludeInputs = appendVFSUnique(ccIn.IncludeInputs, extras)
 	}
+
 	ccIn.ExtraDepRefs = append([]NodeRef{fl.flRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, fl.flRef)...)
 
 	ccSrcRel := strings.TrimPrefix(fl.cpp.Rel(), instance.Path+"/")

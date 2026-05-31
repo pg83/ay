@@ -47,6 +47,7 @@ func newResourceFetchPlan(_ string, conf *graphConf, host *Platform) *resourceFe
 		}
 
 		uri := selectHostResourceURI(r.Resources, host)
+
 		if uri == "" {
 			continue
 		}
@@ -290,10 +291,12 @@ func forceRemoveAll(path string) error {
 	if err := os.RemoveAll(path); err == nil {
 		return nil
 	}
+
 	_ = filepath.Walk(path, func(p string, info os.FileInfo, err error) error {
 		if err == nil && info.IsDir() {
 			_ = os.Chmod(p, 0o755)
 		}
+
 		return nil
 	})
 	return os.RemoveAll(path)
@@ -349,6 +352,7 @@ func readResourceMappingMaybe(path string) resourceMappingConf {
 
 func (m resourceMappingConf) urlForSandboxID(id string) string {
 	tpl := m.Resources[id]
+
 	if tpl == "" {
 		return ""
 	}
@@ -435,17 +439,21 @@ func unpackResourceArchive(archivePath, out string) {
 
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
+
 	if err != nil {
 		return err
 	}
+
 	defer in.Close()
 
 	out, err := os.Create(dst)
+
 	if err != nil {
 		return err
 	}
 
 	_, err = io.Copy(out, in)
+
 	if err != nil {
 		_ = out.Close()
 		return err

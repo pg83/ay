@@ -9,23 +9,28 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	if len(d.moduleStmt.Args) == 0 {
 		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires a basename argument", instance.Path)
 	}
+
 	if len(d.dynamicLibraryFrom) == 0 {
 		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires DYNAMIC_LIBRARY_FROM(...)", instance.Path)
 	}
+
 	if d.exportsScript == nil {
 		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires EXPORTS_SCRIPT(...)", instance.Path)
 	}
 
 	dynLibRPathHelperPeers := []string{"build/platform/local_so"}
 	rpathHelperSet := make(map[string]struct{}, len(dynLibRPathHelperPeers))
+
 	for _, p := range dynLibRPathHelperPeers {
 		rpathHelperSet[p] = struct{}{}
 	}
 
 	peerPaths := make([]string, 0, 1+len(d.dynamicLibraryFrom))
+
 	if !effectiveNoPlatform(d.flags) {
 		peerPaths = append(peerPaths, "build/cow/on")
 	}
+
 	for _, p := range d.dynamicLibraryFrom {
 		if _, helper := rpathHelperSet[p]; helper {
 			continue
@@ -76,6 +81,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 
 		peerInstance := derivePeerInstance(ctx, instance, d, p)
@@ -96,6 +102,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 			if _, dup := pluginSeen[pp]; dup {
 				continue
 			}
+
 			pluginSeen[pp] = struct{}{}
 			pluginRefs = append(pluginRefs, peerResult.LDPluginRefs[i])
 			pluginPaths = append(pluginPaths, pp)
@@ -106,6 +113,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 
 		peerInstance := derivePeerInstance(ctx, instance, d, p)
@@ -133,6 +141,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	depRefs := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+1)
 	depRefs = append(depRefs, peerArchiveRefs...)
 	depRefs = append(depRefs, pluginRefs...)
+
 	if fixElfRef != (NodeRef{}) {
 		depRefs = append(depRefs, fixElfRef)
 	}
@@ -164,6 +173,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		},
 		DepRefs: depRefs,
 	}
+
 	if fixElfRef != (NodeRef{}) {
 		n.ForeignDepRefs = map[string][]NodeRef{"tool": {fixElfRef}}
 	}
@@ -206,16 +216,21 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 		ldLinkDynLibPath,
 		"--target", outputPath,
 	}
+
 	if len(pluginPaths) > 0 {
 		cmdArgs = append(cmdArgs, "--start-plugins")
+
 		for _, p := range pluginPaths {
 			cmdArgs = append(cmdArgs, p.String())
 		}
+
 		cmdArgs = append(cmdArgs, "--end-plugins")
 	}
+
 	for _, p := range wholeArchivePeers {
 		cmdArgs = append(cmdArgs, "--whole-archive-peers", p)
 	}
+
 	cmdArgs = append(cmdArgs,
 		"--source-root", "$(S)",
 		"--build-root", "$(B)",
@@ -235,25 +250,31 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 		"-B"+binPath,
 		"-Wl,--start-group",
 	)
+
 	for _, p := range peerLibPaths {
 		cmdArgs = append(cmdArgs, p.Rel())
 	}
+
 	cmdArgs = append(cmdArgs, "-Wl,--end-group")
 	cmdArgs = append(cmdArgs,
 		"-rdynamic",
 		"-Wl,--version-script=$(S)/"+modulePath+"/"+exportsScript,
 		"-Wl,--no-as-needed",
 	)
+
 	if p.PIC {
 		cmdArgs = append(cmdArgs, "-fPIC")
 	}
+
 	cmdArgs = append(cmdArgs,
 		"-Wl,--gdb-index",
 		"-Wl,-z,notext",
 	)
+
 	if p.PIC {
 		cmdArgs = append(cmdArgs, "-fPIC")
 	}
+
 	cmdArgs = append(cmdArgs,
 		"-fuse-ld=lld",
 		"--ld-path="+p.Tools.LLD,
@@ -275,6 +296,7 @@ func composeDynLibInputs(peerLibPaths, pluginPaths []VFS, fixElfPath VFS, module
 
 	inputs := make([]VFS, 0, len(buildRootBlock)+12)
 	inputs = append(inputs, buildRootBlock...)
+
 	// The scripts the link command actually runs (vcs stamp, the link_dyn_lib
 	// wrapper, the objcopy/strip fs_tools), each expanded to its import closure via
 	// the table — link_dyn_lib pulls in link_exe, process_command_files,
@@ -283,6 +305,7 @@ func composeDynLibInputs(peerLibPaths, pluginPaths []VFS, fixElfPath VFS, module
 	for _, w := range []VFS{ldVcsInfoVFS, ldLinkDynLibVFS, ldFsToolsVFS} {
 		inputs = append(inputs, scripts[w]...)
 	}
+
 	// Non-script inputs: the vcs C template + header and the module's exports list.
 	inputs = append(inputs,
 		ldSvnInterfaceVFS,

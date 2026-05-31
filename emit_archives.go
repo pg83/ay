@@ -10,6 +10,7 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	toolLDRef, toolBinPath := ctx.tool(archiverToolPath)
 
 	reg := codegenRegForInstance(ctx, instance)
+
 	for _, a := range d.archives {
 		emitArchive(instance, a, d, toolBinPath, toolLDRef, ctx.emit, reg)
 	}
@@ -29,6 +30,7 @@ func emitArchive(
 
 	cmdArgs := make([]string, 0, 4+len(a.Files)+2)
 	cmdArgs = append(cmdArgs, toolBinPath.String(), "-q", "-x")
+
 	if a.DontCompress {
 		cmdArgs = append(cmdArgs, "-p")
 	}
@@ -40,9 +42,11 @@ func emitArchive(
 	for _, f := range a.Files {
 
 		isPRProduced := false
+
 		if d.prOutputProducer != nil {
 			if ref, ok := d.prOutputProducer[f]; ok {
 				isPRProduced = true
+
 				if _, dup := producerSet[ref]; !dup {
 					producerSet[ref] = struct{}{}
 					producerRefs = append(producerRefs, ref)
@@ -52,16 +56,19 @@ func emitArchive(
 
 		rel := instance.Path + "/" + f
 		var absVFS VFS
+
 		if isPRProduced {
 			absVFS = Build(rel)
 		} else {
 			absVFS = Source(rel)
 		}
+
 		absStr := absVFS.String()
 
 		pathPerFile = append(pathPerFile, absVFS)
 		cmdArgs = append(cmdArgs, absStr+":")
 	}
+
 	cmdArgs = append(cmdArgs, "-o", archivePath)
 
 	// Archive-node inputs are exactly the files the archiver reads (the archived
@@ -72,17 +79,21 @@ func emitArchive(
 	inputs := make([]VFS, 0, len(pathPerFile)+1)
 
 	buildRootSeen := map[VFS]struct{}{}
+
 	for _, p := range pathPerFile {
 		if _, dup := buildRootSeen[p]; dup {
 			continue
 		}
+
 		buildRootSeen[p] = struct{}{}
 		inputs = append(inputs, p)
 	}
+
 	inputs = append(inputs, toolBinPath)
 
 	depRefs := make([]NodeRef, 0, len(producerRefs)+1)
 	depRefs = append(depRefs, producerRefs...)
+
 	if toolLDRef != (NodeRef{}) {
 		depRefs = append(depRefs, toolLDRef)
 	}

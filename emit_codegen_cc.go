@@ -19,17 +19,21 @@ func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string
 
 	includeInputs := make([]VFS, 0, len(depPrefix)+len(closure))
 	seen := make(map[VFS]struct{}, len(depPrefix)+len(closure))
+
 	for _, p := range depPrefix {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		includeInputs = append(includeInputs, p)
 	}
+
 	for _, p := range closure {
 		if _, dup := seen[p]; dup {
 			continue
 		}
+
 		seen[p] = struct{}{}
 		includeInputs = append(includeInputs, p)
 	}
@@ -39,6 +43,7 @@ func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string
 	ccIn.ExtraDepRefs = depRefs
 
 	extra := resolveCodegenDepRefs(ctx, instance, includeInputs, depRefs...)
+
 	if len(extra) > 0 {
 		ccIn.ExtraDepRefs = append(append([]NodeRef(nil), depRefs...), extra...)
 	}

@@ -93,6 +93,7 @@ func FinalizeStream(e *BufferedEmitter, yield func(*Node)) []string {
 
 	for _, rid := range e.results {
 		u := uids[rid]
+
 		if _, ok := seen[u]; ok {
 			continue
 		}
@@ -110,6 +111,7 @@ func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) []
 	}
 
 	n := len(e.nodes)
+
 	if len(order) != n {
 		ThrowFmt("finalize: order length %d does not match buffer size %d", len(order), n)
 	}
@@ -164,9 +166,11 @@ func finalizeOrder(e *BufferedEmitter) []int {
 		}
 
 		fkeys := make([]string, 0, len(node.ForeignDepRefs))
+
 		for k := range node.ForeignDepRefs {
 			fkeys = append(fkeys, k)
 		}
+
 		sort.Strings(fkeys)
 
 		for _, k := range fkeys {
@@ -194,6 +198,7 @@ func finalizeOrder(e *BufferedEmitter) []int {
 	for i, node := range e.nodes {
 
 		seen := make(map[int64]struct{})
+
 		for _, r := range node.DepRefs {
 
 			if _, ok := seen[r.id]; ok {
@@ -205,9 +210,11 @@ func finalizeOrder(e *BufferedEmitter) []int {
 		}
 
 		fkeys := make([]string, 0, len(node.ForeignDepRefs))
+
 		for k := range node.ForeignDepRefs {
 			fkeys = append(fkeys, k)
 		}
+
 		sort.Strings(fkeys)
 
 		for _, k := range fkeys {
@@ -224,14 +231,17 @@ func finalizeOrder(e *BufferedEmitter) []int {
 	}
 
 	queue := make(intHeap, 0, n)
+
 	for i := 0; i < n; i++ {
 		if indeg[i] == 0 {
 			queue = append(queue, i)
 		}
 	}
+
 	heap.Init(&queue)
 
 	order := make([]int, 0, n)
+
 	for queue.Len() > 0 {
 		i := heap.Pop(&queue).(int)
 		order = append(order, i)
@@ -272,6 +282,7 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 
 		for _, r := range node.DepRefs {
 			u := uids[r.id]
+
 			if _, ok := seen[u]; ok {
 				continue
 			}
@@ -296,14 +307,18 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 
 	if len(node.ForeignDepRefs) > 0 {
 		fkeys := make([]string, 0, len(node.ForeignDepRefs))
+
 		for k := range node.ForeignDepRefs {
 			fkeys = append(fkeys, k)
 		}
+
 		sort.Strings(fkeys)
 
 		resolved := make(map[string][]string, len(fkeys))
+
 		for _, k := range fkeys {
 			set := make(map[string]struct{})
+
 			for _, r := range node.ForeignDepRefs[k] {
 				set[uids[r.id]] = struct{}{}
 			}
@@ -313,9 +328,11 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 			}
 
 			vals := make([]string, 0, len(set))
+
 			for u := range set {
 				vals = append(vals, u)
 			}
+
 			sort.Strings(vals)
 			resolved[k] = vals
 		}
@@ -344,15 +361,15 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 }
 
 type StreamingEmitter struct {
-	nodes         []*Node
-	uids          []string
-	pendingIdx    []int64
-	pendingSet    map[int64]bool
-	results       []int64
-	onNode        func(*Node)
-	finalized     bool
-	readyCh       chan struct{}
-	uidScratch    canonBuf
+	nodes      []*Node
+	uids       []string
+	pendingIdx []int64
+	pendingSet map[int64]bool
+	results    []int64
+	onNode     func(*Node)
+	finalized  bool
+	readyCh    chan struct{}
+	uidScratch canonBuf
 }
 
 func NewStreamingEmitter(onNode func(*Node)) *StreamingEmitter {
@@ -379,6 +396,7 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 	}
 
 	e.uids[id] = resolveAndUID(n, e.uids, &e.uidScratch)
+
 	if e.onNode != nil {
 		e.onNode(n)
 	}
@@ -424,6 +442,7 @@ func (e *StreamingEmitter) Finish() []string {
 	for _, id := range e.pendingIdx {
 		n := e.nodes[id]
 		e.uids[id] = resolveAndUID(n, e.uids, &e.uidScratch)
+
 		if e.onNode != nil {
 			e.onNode(n)
 		}
@@ -437,6 +456,7 @@ func (e *StreamingEmitter) Finish() []string {
 
 	for _, rid := range e.results {
 		u := e.uids[rid]
+
 		if _, ok := seen[u]; ok {
 			continue
 		}
@@ -459,8 +479,10 @@ func graphFromFinalizedEmitter(e *BufferedEmitter, uids []string) *Graph {
 	}
 
 	uidToNode := make(map[string]*Node, n)
+
 	for i, node := range e.nodes {
 		u := uids[i]
+
 		if _, ok := uidToNode[u]; !ok {
 			uidToNode[u] = node
 		}
@@ -507,6 +529,7 @@ func graphFromFinalizedEmitter(e *BufferedEmitter, uids []string) *Graph {
 
 	for i, node := range e.nodes {
 		u := uids[i]
+
 		if _, ok := seenNode[u]; !ok {
 			seenNode[u] = struct{}{}
 			out.Graph = append(out.Graph, node)

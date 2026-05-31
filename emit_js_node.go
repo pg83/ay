@@ -6,11 +6,14 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 	outVFS := Build(instance.Path + "/" + allName)
 	platformID := instance.Platform.Target
 	tags := []string{}
+
 	if p != nil {
 		platformID = p.Target
 		tags = append(tags, p.Tags...)
 	}
+
 	statsPlatform := instance.Platform
+
 	if p != nil {
 		statsPlatform = p
 	}

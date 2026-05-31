@@ -26,6 +26,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 		}
 
 		chRef, ok := ctx.checkConfigOutputs[generatedVFS]
+
 		if !ok {
 			chRef = ctx.emit.Emit(bindNodePlatform(&Node{
 				Cmds: []Cmd{

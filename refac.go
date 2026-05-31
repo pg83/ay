@@ -34,6 +34,7 @@ func cmdRefac(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: ay refac consts|lint [files...]")
 		return 2
 	}
+
 	switch args[0] {
 	case "consts":
 		return refacConsts(args[1:])
@@ -51,13 +52,17 @@ func goFilesFromArgs(args []string) []string {
 	if len(args) > 0 {
 		return args
 	}
+
 	var files []string
+
 	for _, e := range Throw2(os.ReadDir(".")) {
 		n := e.Name()
+
 		if !e.IsDir() && strings.HasSuffix(n, ".go") && !strings.HasSuffix(n, "_test.go") {
 			files = append(files, n)
 		}
 	}
+
 	sort.Strings(files)
 	return files
 }
@@ -85,6 +90,7 @@ func refacConsts(args []string) int {
 
 	for _, path := range files {
 		pf := parseRefacFile(path, existing, used)
+
 		if pf != nil {
 			parsed = append(parsed, pf)
 		}
@@ -95,6 +101,7 @@ func refacConsts(args []string) int {
 	// composite literal (a per-file interned list). Occurrences are gathered in
 	// (file, source-position) order for deterministic name allocation.
 	var occs []occurrence
+
 	for fi, pf := range parsed {
 		collectOccurrences(pf, fi, &occs)
 	}
@@ -107,13 +114,16 @@ func refacConsts(args []string) int {
 	// first free occurrence.
 	var newCanons []string
 	newVarFile := map[string]int{}
+
 	for _, o := range occs {
 		if !o.free {
 			continue
 		}
+
 		if _, ok := existing[o.canon]; ok {
 			continue
 		}
+
 		name := uniqueName(identForVFS(o.canon), used)
 		used[name] = true
 		existing[o.canon] = name
@@ -124,14 +134,19 @@ func refacConsts(args []string) int {
 	// Phase 4: every occurrence whose canon now has a var (free or list element) is
 	// rewritten to that var; list-only canons without a var stay inline.
 	editsByFile := make([][]constEdit, len(parsed))
+
 	for _, o := range occs {
 		name, ok := existing[o.canon]
+
 		if !ok {
 			continue
 		}
+
 		editsByFile[o.fileIdx] = append(editsByFile[o.fileIdx], constEdit{o.start, o.end, name})
 	}
+
 	addedByFile := make([][]newVar, len(parsed))
+
 	for _, canon := range newCanons {
 		fi := newVarFile[canon]
 		addedByFile[fi] = append(addedByFile[fi], newVar{existing[canon], constDef(canon)})
@@ -142,6 +157,7 @@ func refacConsts(args []string) int {
 			fmt.Fprintf(os.Stderr, "refac consts: rewrote %s\n", pf.path)
 		}
 	}
+
 	return 0
 }
 
@@ -162,10 +178,13 @@ func collectOccurrences(pf *parsedFile, fileIdx int, occs *[]occurrence) {
 		if pf.declared[call] {
 			return false // a direct-value var declaration; leave it and its subtree
 		}
+
 		fn, lit, ok := hoistCall(call)
+
 		if !ok {
 			return true
 		}
+
 		*occs = append(*occs, occurrence{
 			fileIdx: fileIdx,
 			start:   pf.fset.Position(call.Pos()).Offset,
@@ -183,22 +202,27 @@ func collectOccurrences(pf *parsedFile, fileIdx int, occs *[]occurrence) {
 				if call, ok := n.(*ast.CallExpr); ok {
 					return record(call, true)
 				}
+
 				return true
 			})
 		case *ast.GenDecl:
 			if d.Tok != gotoken.VAR && d.Tok != gotoken.CONST {
 				continue
 			}
+
 			for _, spec := range d.Specs {
 				vs, ok := spec.(*ast.ValueSpec)
+
 				if !ok {
 					continue
 				}
+
 				for _, val := range vs.Values {
 					ast.Inspect(val, func(n ast.Node) bool {
 						if call, ok := n.(*ast.CallExpr); ok {
 							return record(call, false)
 						}
+
 						return true
 					})
 				}
@@ -221,12 +245,14 @@ func parseRefacFile(path string, existing map[string]string, used map[string]boo
 	src := Throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
 	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac consts: %s: parse: %v\n", path, err)
 		return nil
 	}
 
 	declared := map[*ast.CallExpr]bool{}
+
 	for _, decl := range f.Decls {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
@@ -240,17 +266,22 @@ func parseRefacFile(path string, existing map[string]string, used map[string]boo
 					for _, n := range s.Names {
 						used[n.Name] = true
 					}
+
 					if d.Tok == gotoken.VAR || d.Tok == gotoken.CONST {
 						for i, val := range s.Values {
 							call, isCall := val.(*ast.CallExpr)
+
 							if !isCall || i >= len(s.Names) {
 								continue
 							}
+
 							if fn, lit, ok := hoistCall(call); ok {
 								canon := canonVFS(fn, lit)
+
 								if _, seen := existing[canon]; !seen {
 									existing[canon] = s.Names[i].Name
 								}
+
 								declared[call] = true
 							}
 						}
@@ -259,6 +290,7 @@ func parseRefacFile(path string, existing map[string]string, used map[string]boo
 			}
 		}
 	}
+
 	return &parsedFile{path: path, src: src, fset: fset, f: f, declared: declared}
 }
 
@@ -266,20 +298,27 @@ func parseRefacFile(path string, existing map[string]string, used map[string]boo
 // the func name and the unquoted literal.
 func hoistCall(call *ast.CallExpr) (fn, lit string, ok bool) {
 	id, isID := call.Fun.(*ast.Ident)
+
 	if !isID || (id.Name != "Intern" && id.Name != "Source" && id.Name != "Build") {
 		return "", "", false
 	}
+
 	if len(call.Args) != 1 {
 		return "", "", false
 	}
+
 	bl, isLit := call.Args[0].(*ast.BasicLit)
+
 	if !isLit || bl.Kind != gotoken.STRING {
 		return "", "", false
 	}
+
 	s, err := strconv.Unquote(bl.Value)
+
 	if err != nil {
 		return "", "", false
 	}
+
 	return id.Name, s, true
 }
 
@@ -302,9 +341,11 @@ func constDef(canon string) string {
 	if rel, ok := strings.CutPrefix(canon, "$(S)/"); ok {
 		return fmt.Sprintf("Source(%q)", rel)
 	}
+
 	if rel, ok := strings.CutPrefix(canon, "$(B)/"); ok {
 		return fmt.Sprintf("Build(%q)", rel)
 	}
+
 	return fmt.Sprintf("Intern(%q)", canon)
 }
 
@@ -322,11 +363,13 @@ func applyRefacEdits(pf *parsedFile, edits []constEdit, added []newVar) bool {
 	if len(edits) == 0 {
 		return false
 	}
+
 	src := pf.src
 
 	// Apply call-site replacements back-to-front so earlier offsets stay valid.
 	sort.Slice(edits, func(i, j int) bool { return edits[i].start > edits[j].start })
 	out := append([]byte(nil), src...)
+
 	for _, e := range edits {
 		out = append(out[:e.start], append([]byte(e.name), out[e.end:]...)...)
 	}
@@ -335,18 +378,22 @@ func applyRefacEdits(pf *parsedFile, edits []constEdit, added []newVar) bool {
 		var b strings.Builder
 		b.WriteString("\n// Path constants hoisted by `ay refac consts`.\nvar (\n")
 		sort.Slice(added, func(i, j int) bool { return added[i].name < added[j].name })
+
 		for _, v := range added {
 			fmt.Fprintf(&b, "\t%s = %s\n", v.name, v.def)
 		}
+
 		b.WriteString(")\n")
 		out = append(out, b.String()...)
 	}
 
 	formatted, err := format.Source(out)
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac consts: %s: format failed (left unchanged): %v\n", pf.path, err)
 		return false
 	}
+
 	Throw(os.WriteFile(pf.path, formatted, 0o644))
 	return true
 }
@@ -357,6 +404,7 @@ func applyRefacEdits(pf *parsedFile, edits []constEdit, added []newVar) bool {
 func identForVFS(canon string) string {
 	s := canon
 	var words []string
+
 	if rel, ok := strings.CutPrefix(s, "$(S)/"); ok {
 		s = rel
 	} else if rel, ok := strings.CutPrefix(s, "$(B)/"); ok {
@@ -371,6 +419,7 @@ func identForVFS(canon string) string {
 			cur.Reset()
 		}
 	}
+
 	for _, r := range s {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
 			cur.WriteRune(r)
@@ -378,24 +427,31 @@ func identForVFS(canon string) string {
 			flush()
 		}
 	}
+
 	flush()
+
 	if len(words) == 0 {
 		words = []string{"v"}
 	}
 
 	var b strings.Builder
+
 	for i, w := range words {
 		w = strings.ToLower(w)
+
 		if i == 0 {
 			b.WriteString(w)
 		} else {
 			b.WriteString(strings.ToUpper(w[:1]) + w[1:])
 		}
 	}
+
 	id := b.String()
+
 	if c := id[0]; c >= '0' && c <= '9' {
 		id = "v" + id
 	}
+
 	return id
 }
 
@@ -403,8 +459,10 @@ func uniqueName(base string, used map[string]bool) string {
 	if !used[base] && !goKeyword[base] {
 		return base
 	}
+
 	for i := 2; ; i++ {
 		cand := base + strconv.Itoa(i)
+
 		if !used[cand] {
 			return cand
 		}
@@ -427,6 +485,7 @@ func refacLint(args []string) int {
 			}
 		}
 	}
+
 	return 0
 }
 
@@ -445,17 +504,21 @@ type varItem struct {
 // standalone declaration.
 func (it varItem) render(inGroup bool) string {
 	var b strings.Builder
+
 	if it.blockDoc != "" {
 		b.WriteString(it.blockDoc)
 		b.WriteByte('\n')
 	}
+
 	if it.doc != "" {
 		b.WriteString(it.doc)
 		b.WriteByte('\n')
 	}
+
 	if !inGroup {
 		b.WriteString("var ")
 	}
+
 	b.WriteString(it.body)
 	return b.String()
 }
@@ -474,6 +537,7 @@ func lintConsolidateVars(path string) bool {
 	src := Throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
 	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
 		return false
@@ -481,12 +545,14 @@ func lintConsolidateVars(path string) bool {
 
 	var varDecls []*ast.GenDecl
 	totalSpecs := 0
+
 	for _, decl := range f.Decls {
 		if gd, ok := decl.(*ast.GenDecl); ok && gd.Tok == gotoken.VAR {
 			varDecls = append(varDecls, gd)
 			totalSpecs += len(gd.Specs)
 		}
 	}
+
 	if totalSpecs < 2 {
 		return false
 	}
@@ -500,13 +566,16 @@ func lintConsolidateVars(path string) bool {
 
 	for _, gd := range varDecls {
 		rmStart := off(gd.Pos())
+
 		if gd.Doc != nil {
 			rmStart = off(gd.Doc.Pos())
 		}
+
 		rmEnd := off(gd.End())
 
 		// A grouped block's own doc comment attaches once, to the first spec it yields.
 		blockDoc := ""
+
 		if gd.Lparen.IsValid() && gd.Doc != nil {
 			blockDoc = text(gd.Doc.Pos(), gd.Doc.End())
 		}
@@ -514,18 +583,23 @@ func lintConsolidateVars(path string) bool {
 		for _, spec := range gd.Specs {
 			vs := spec.(*ast.ValueSpec)
 			hi := vs.End()
+
 			if vs.Comment != nil {
 				hi = vs.Comment.End()
+
 				if off(hi) > rmEnd {
 					rmEnd = off(hi)
 				}
 			}
+
 			doc := ""
+
 			if vs.Doc != nil {
 				doc = text(vs.Doc.Pos(), vs.Doc.End())
 			} else if !gd.Lparen.IsValid() && gd.Doc != nil {
 				doc = text(gd.Doc.Pos(), gd.Doc.End())
 			}
+
 			items = append(items, varItem{
 				blockDoc:  blockDoc,
 				doc:       doc,
@@ -534,32 +608,40 @@ func lintConsolidateVars(path string) bool {
 			})
 			blockDoc = "" // consumed by the first spec only
 		}
+
 		removals = append(removals, span{rmStart, rmEnd})
 	}
 
 	simpleCount := 0
+
 	for _, it := range items {
 		if !it.multiline {
 			simpleCount++
 		}
 	}
+
 	group := simpleCount >= 2
 
 	// Assemble the replacement: the grouped block first (single-line vars, in order),
 	// then standalone declarations for everything that stays ungrouped, in order.
 	var parts []string
+
 	if group {
 		var b strings.Builder
 		b.WriteString("var (\n")
+
 		for _, it := range items {
 			if it.multiline {
 				continue
 			}
+
 			b.WriteString(it.render(true))
 			b.WriteByte('\n')
 		}
+
 		b.WriteString(")")
 		parts = append(parts, b.String())
+
 		for _, it := range items {
 			if it.multiline {
 				parts = append(parts, it.render(false))
@@ -573,6 +655,7 @@ func lintConsolidateVars(path string) bool {
 
 	// Insert after the import declaration, or after the package clause if none.
 	insOff := off(f.Name.End())
+
 	for _, decl := range f.Decls {
 		if gd, ok := decl.(*ast.GenDecl); ok && gd.Tok == gotoken.IMPORT {
 			insOff = off(gd.End())
@@ -584,6 +667,7 @@ func lintConsolidateVars(path string) bool {
 	// insOff, so the bytes up to insOff stay put), then splice in the rebuilt vars.
 	out := append([]byte(nil), src...)
 	sort.Slice(removals, func(i, j int) bool { return removals[i].start > removals[j].start })
+
 	for _, r := range removals {
 		out = append(out[:r.start], out[r.end:]...)
 	}
@@ -592,13 +676,16 @@ func lintConsolidateVars(path string) bool {
 	out = append(out[:insOff], append([]byte(block), out[insOff:]...)...)
 
 	formatted, err := format.Source(out)
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: consolidate-vars format failed (left unchanged): %v\n", path, err)
 		return false
 	}
+
 	if bytes.Equal(formatted, src) {
 		return false
 	}
+
 	Throw(os.WriteFile(path, formatted, 0o644))
 	return true
 }
@@ -638,6 +725,7 @@ func lintControlBlankLines(path string) bool {
 	src := Throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
 	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
 		return false
@@ -648,6 +736,7 @@ func lintControlBlankLines(path string) bool {
 	// Lines covered by a comment, so a control block's own leading comment block can
 	// be skipped over — the blank goes above the comment, keeping it attached.
 	commentLine := map[int]bool{}
+
 	for _, cg := range f.Comments {
 		for _, c := range cg.List {
 			for l := lineOf(c.Pos()); l <= lineOf(c.End()); l++ {
@@ -661,15 +750,18 @@ func lintControlBlankLines(path string) bool {
 	process := func(list []ast.Stmt) {
 		for i := 1; i < len(list); i++ {
 			a, b := list[i-1], list[i]
+
 			if !isControlBlockStmt(a) && !isControlBlockStmt(b) {
 				continue
 			}
 
 			aEnd := lineOf(a.End())
 			lead := lineOf(b.Pos())
+
 			for l := lead - 1; l > aEnd && commentLine[l]; l-- {
 				lead = l
 			}
+
 			if lead == aEnd+1 {
 				insertBefore[lead] = true
 			}
@@ -695,24 +787,30 @@ func lintControlBlankLines(path string) bool {
 
 	lines := strings.Split(string(src), "\n")
 	var b strings.Builder
+
 	for i, ln := range lines {
 		if insertBefore[i+1] {
 			b.WriteByte('\n')
 		}
+
 		b.WriteString(ln)
+
 		if i < len(lines)-1 {
 			b.WriteByte('\n')
 		}
 	}
 
 	formatted, err := format.Source([]byte(b.String()))
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: blank-around-blocks format failed (left unchanged): %v\n", path, err)
 		return false
 	}
+
 	if bytes.Equal(formatted, src) {
 		return false
 	}
+
 	Throw(os.WriteFile(path, formatted, 0o644))
 	return true
 }

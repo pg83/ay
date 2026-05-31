@@ -35,9 +35,11 @@ func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string
 	sort.Strings(list)
 
 	stringify := strings.Join(list, ",")
+
 	if moduleTag != nil {
 		stringify += *moduleTag
 	}
+
 	sum := md5.Sum([]byte(stringify))
 
 	return strings.ToLower(enchex.EncodeToString(sum[:]))[:hashLen]
@@ -50,8 +52,10 @@ func expandResourceFiles(args []string) []resourceEntry {
 
 	out := make([]resourceEntry, 0, len(args))
 	i := 0
+
 	for i < len(args) {
 		tok := args[i]
+
 		switch tok {
 		case "DONT_COMPRESS":
 			i++
@@ -59,6 +63,7 @@ func expandResourceFiles(args []string) []resourceEntry {
 			if i+1 >= len(args) {
 				ThrowFmt("RESOURCE_FILES: PREFIX is the last token; expected a prefix value")
 			}
+
 			prefix = args[i+1]
 			dest = ""
 			i += 2
@@ -66,6 +71,7 @@ func expandResourceFiles(args []string) []resourceEntry {
 			if i+1 >= len(args) {
 				ThrowFmt("RESOURCE_FILES: DEST is the last token; expected a dest value")
 			}
+
 			dest = args[i+1]
 			prefix = ""
 			i += 2
@@ -73,6 +79,7 @@ func expandResourceFiles(args []string) []resourceEntry {
 			if i+1 >= len(args) {
 				ThrowFmt("RESOURCE_FILES: STRIP is the last token; expected a prefix-to-strip value")
 			}
+
 			prefixToStrip = args[i+1]
 			i += 2
 		default:
@@ -80,11 +87,13 @@ func expandResourceFiles(args []string) []resourceEntry {
 			i++
 
 			keyTail := path
+
 			if prefixToStrip != "" && strings.HasPrefix(keyTail, prefixToStrip) {
 				keyTail = keyTail[len(prefixToStrip):]
 			}
 
 			var computedKey string
+
 			if dest != "" {
 				computedKey = dest
 			} else {
@@ -121,9 +130,11 @@ func resourceBinTagForData(d *moduleData) *string {
 	if d == nil || d.moduleStmt == nil {
 		return nil
 	}
+
 	if d.moduleStmt.Name == "PY3_PROGRAM" {
 		return stringPtr("PY3_BIN")
 	}
+
 	return resourceModuleTag(d.moduleStmt.Name)
 }
 
@@ -139,9 +150,11 @@ func resourceLibTagForData(d *moduleData) *string {
 	if d == nil || d.moduleStmt == nil {
 		return nil
 	}
+
 	if d.moduleStmt.Name == "PY3_PROGRAM" || d.programPairedLib {
 		return stringPtr("PY3_BIN_LIB")
 	}
+
 	return resourceModuleTag(d.moduleStmt.Name)
 }
 
@@ -152,6 +165,7 @@ func prResourceExtraInputs(d *moduleData, output string) []VFS {
 
 	inputs := d.prOutputInputs[output]
 	out := make([]VFS, 0, len(inputs))
+
 	for _, p := range inputs {
 		if p.IsSource() {
 			out = append(out, p)
@@ -164,12 +178,14 @@ func prResourceExtraInputs(d *moduleData, output string) []VFS {
 func expandRootrel(kv string, unitPath string) string {
 	const marker = "${rootrel;context=TEXT;input=TEXT:\""
 	idx := strings.Index(kv, marker)
+
 	if idx < 0 {
 		return kv
 	}
 
 	tail := kv[idx+len(marker):]
 	end := strings.Index(tail, "\"}")
+
 	if end < 0 {
 		return kv
 	}
@@ -183,12 +199,14 @@ func expandRootrel(kv string, unitPath string) string {
 func rootrelInputPath(kv string) (string, bool) {
 	const marker = "${rootrel;context=TEXT;input=TEXT:\""
 	idx := strings.Index(kv, marker)
+
 	if idx < 0 {
 		return "", false
 	}
 
 	tail := kv[idx+len(marker):]
 	end := strings.Index(tail, "\"}")
+
 	if end < 0 {
 		return "", false
 	}
@@ -201,11 +219,14 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 
 	var out []string
 	seen := map[string]struct{}{}
+
 	for _, m := range yaConfFormulaRE.FindAllSubmatch(raw, -1) {
 		formula := string(m[1])
+
 		if _, dup := seen[formula]; dup {
 			continue
 		}
+
 		seen[formula] = struct{}{}
 		out = append(out, formula)
 	}
@@ -234,11 +255,13 @@ func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLe
 	}
 
 	actualUnit := modulePath
+
 	if d.srcDir != nil {
 		actualUnit = *d.srcDir
 	}
 
 	keyPrefix := ""
+
 	if !topLevel {
 		if namespace != nil {
 			keyPrefix = strings.ReplaceAll(strings.TrimSuffix(*namespace, "."), ".", "/") + "/"
@@ -248,15 +271,18 @@ func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLe
 	}
 
 	out := make([]pySrcEntry, 0, len(srcs)*2)
+
 	for _, srcRel := range srcs {
 		if strings.HasSuffix(srcRel, ".pyi") {
 			continue
 		}
+
 		if d.pyGeneratedSrcs[srcRel] != nil {
 			continue
 		}
 
 		suffix := ".yapyc3"
+
 		if strings.Contains(srcRel, "/") {
 			suffix = "." + pySrcYapycSuffix(modulePath) + ".yapyc3"
 		}
@@ -264,14 +290,18 @@ func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLe
 		if !d.pyBuildNoPY {
 			pyKey := "resfs/file/py/" + keyPrefix + srcRel
 			pyPathInput := Source(actualUnit + "/" + srcRel)
+
 			if d.pyGeneratedSrcs[srcRel] != nil {
 				pyPathInput = Build(modulePath + "/" + srcRel)
 			}
+
 			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
 			pyKvCmd := "resfs/src/" + pyKey + "=" + actualUnit + "/" + srcRel
+
 			if d.pyGeneratedSrcs[srcRel] != nil {
 				pyKvCmd = "resfs/src/" + pyKey + "=" + modulePath + "/" + srcRel
 			}
+
 			out = append(out, pySrcEntry{
 				pathHash:  srcRel,
 				pathInput: pyPathInput,
@@ -289,10 +319,12 @@ func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLe
 			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
 			ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
 			extraSrcInput := vfsPtr(Source(actualUnit + "/" + srcRel))
+
 			if d.pyGeneratedSrcs[srcRel] != nil {
 				ypKvCmd = "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
 				extraSrcInput = vfsPtr(Build(modulePath + "/" + srcRel))
 			}
+
 			out = append(out, pySrcEntry{
 				pathHash:      srcRel + suffix,
 				pathInput:     ypPathInput,
@@ -333,6 +365,7 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 		if cmdLen == 0 {
 			return
 		}
+
 		chunks = append(chunks, cur)
 		cur = pySrcChunk{}
 		cmdLen = 0
@@ -344,9 +377,11 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 			cur.inps = append(cur.inps, e.pathInput)
 			inpsSeen[e.pathInput] = struct{}{}
 		}
+
 		if e.extraSrcInput == nil {
 			return
 		}
+
 		if _, ok := inpsSeen[*e.extraSrcInput]; !ok {
 			cur.inps = append(cur.inps, *e.extraSrcInput)
 			inpsSeen[*e.extraSrcInput] = struct{}{}
@@ -359,6 +394,7 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 		cur.kvsCmd = append(cur.kvsCmd, e.kvCmd)
 		addInps(e)
 		cmdLen += rootCmdLen + len(e.kvHash)
+
 		if cmdLen >= maxCmdLen {
 			flush()
 		}
@@ -369,10 +405,12 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 		cur.pathInps = append(cur.pathInps, e.pathInput.String())
 		addInps(e)
 		cmdLen += rootCmdLen + len(e.pathHash) + len(kb64)
+
 		if cmdLen >= maxCmdLen {
 			flush()
 		}
 	}
+
 	flush()
 
 	return chunks

@@ -20,6 +20,7 @@ func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string) *l
 		dst := Build(instance.Path + "/" + name + ".pyplugin")
 
 		ref, ok := ctx.ldPluginCPCache[dst]
+
 		if !ok {
 			ref = EmitCP(instance, src, dst, ctx.scripts, ctx.emit)
 			ctx.ldPluginCPCache[dst] = ref

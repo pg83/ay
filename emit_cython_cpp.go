@@ -87,15 +87,19 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		generatedExplicit := stmt.Generated != nil
 		py23Variant := d.moduleStmt != nil && cythonUsesPy23Variant(d.moduleStmt.Name)
 		generated := stmt.Src + ".cpp"
+
 		if py23Variant {
 			generated = stmt.Src + ".py3.cpp"
 		}
+
 		if stmt.CMode {
 			generated = stmt.Src + ".c"
 		}
+
 		if generatedExplicit {
 			generated = *stmt.Generated
 		}
+
 		generatedVFS := Build(instance.Path + "/" + generated)
 		srcVFS := Source(instance.Path + "/" + stmt.Src)
 		srcScanIn := in
@@ -103,9 +107,11 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		sourceClosure := walkClosure(ctx, instance, srcVFS, srcScanIn)
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(ctx, instance, srcVFS, sourceClosure, stmt.CMode, srcScanIn)
 		parsed := make([]includeDirective, 0, len(emitsIncludes))
+
 		for _, include := range emitsIncludes {
 			parsed = append(parsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 		}
+
 		registerGeneratedParsedOutput(ctx, instance, "CY", generatedVFS, parsed)
 
 		env := map[string]string{
@@ -121,9 +127,11 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			"UNAME_SYSNAME=Linux",
 		}
 		cmdArgs = append(cmdArgs, stmt.Options...)
+
 		if !stmt.CMode {
 			cmdArgs = append(cmdArgs, "--cplus")
 		}
+
 		cmdArgs = append(cmdArgs,
 			"-I$(B)",
 			"-I$(S)",
@@ -139,6 +147,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		targetProps := map[string]string{
 			"module_dir": instance.Path,
 		}
+
 		if !stmt.CMode && !generatedExplicit && py23Variant {
 			targetProps["module_tag"] = "py3"
 		}
@@ -174,9 +183,11 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		ccIn.CFlags = filterPyRegisterCFlags(ccIn.CFlags)
 		ccIn.PerSourceCFlags = append([]string(nil), in.PerSourceCFlags...)
+
 		if cythonImplicitFallthrough(stmt, py23Variant) {
 			ccIn.PerSourceCFlags = append(ccIn.PerSourceCFlags, "-Wno-implicit-fallthrough")
 		}
+
 		scanIn := ccIn
 		scanIn.AddIncl = appendCythonScanAddIncl(in.AddIncl, d.cythonAddIncl, py23Variant)
 		ccIn.IncludeInputs = walkClosureWithSourceRel(ctx, instance, generatedVFS, srcVFS.Rel(), scanIn)
@@ -202,6 +213,7 @@ func cythonGeneratedOutputInputs(ctx *genCtx, instance ModuleInstance, src VFS, 
 		if v.Rel() == "contrib/tools/cython/generated_cpp_headers.h" && cMode {
 			continue
 		}
+
 		toolInputs = append(toolInputs, v)
 		emitsIncludes = append(emitsIncludes, v)
 	}
@@ -246,6 +258,7 @@ func appendCythonAddIncl(cmdArgs []string, addIncl []VFS, memo inclArgMemo) []st
 
 func appendCythonCCAddIncl(addIncl []VFS, numpyBeforeInclude bool) []VFS {
 	out := make([]VFS, 0, len(addIncl)+len(cythonNumpyAddIncl))
+
 	if numpyBeforeInclude {
 		for i, path := range addIncl {
 			if path == pythonIncludeDir {
@@ -256,6 +269,7 @@ func appendCythonCCAddIncl(addIncl []VFS, numpyBeforeInclude bool) []VFS {
 			}
 		}
 	}
+
 	out = append(out, addIncl...)
 	out = append(out, cythonNumpyAddIncl...)
 
@@ -292,6 +306,7 @@ func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, py23 bool) []VF
 	if py23 {
 		out = append(out, contribToolsCythonPy2CythonIncludes)
 	}
+
 	out = append(out, contribToolsCythonCythonIncludes)
 	out = append(out, contribLibsCxxsuppLibcxxInclude)
 	out = append(out, cythonNumpyAddIncl...)
@@ -305,10 +320,12 @@ func filterPyRegisterCFlags(cflags []string) []string {
 	}
 
 	out := make([]string, 0, len(cflags))
+
 	for _, flag := range cflags {
 		if hasPrefix(flag, "-DPyInit_") || hasPrefix(flag, "-Dinit_module_") {
 			continue
 		}
+
 		out = append(out, flag)
 	}
 

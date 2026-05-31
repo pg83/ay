@@ -94,6 +94,7 @@ func buildTargetStatsFlags(platformFlags, cliFlags map[string]string) map[string
 	flags := make(map[string]string, len(platformFlags)+len(cliFlags))
 	copyAllowedStatsFlags(flags, platformFlags, targetStatsBaseFlagAllowlist)
 	copyAllowedStatsFlags(flags, cliFlags, targetStatsExtraFlagAllowlist)
+
 	if yes, ok := parseStatsBool(flags["SANDBOXING"]); ok && yes {
 		if _, ok := flags["FAKEID"]; !ok {
 			flags["FAKEID"] = "sandboxing"
@@ -108,6 +109,7 @@ func copyAllowedStatsFlags(dst, src map[string]string, allowlist map[string]stru
 		if v == "" {
 			continue
 		}
+
 		if _, ok := allowlist[k]; ok {
 			dst[k] = v
 		}
@@ -132,6 +134,7 @@ func buildHostStatsFlags(hostPlatformFlags, cliFlags map[string]string, sandboxi
 
 	copyStatsFlags(flags, hostPlatformFlags)
 	copyStatsFlags(flags, cliFlags)
+
 	if sandboxing {
 		flags["SANDBOXING"] = "yes"
 		flags["FAKEID"] = "sandboxing"
@@ -153,6 +156,7 @@ func joinCompilerFlagStrings(parts ...string) string {
 
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
+
 		if part == "" {
 			continue
 		}
@@ -191,6 +195,7 @@ func cmdMake(args []string) int {
 	copyStatsFlags(targetYaFlags, rootTargetYaFlags)
 	var hostInternalYaFlags map[string]string
 	var targetInternalYaFlags map[string]string
+
 	if mf.testLevel == 0 {
 
 		hostInternalYaFlags = readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
@@ -201,19 +206,25 @@ func cmdMake(args []string) int {
 
 	hOS, hISA := resolvePlatform(mf.hostPlat)
 	hostFlags := make(map[string]string, len(tools)+len(hostYaFlags)+len(mf.hflags)+1)
+
 	for k, v := range tools {
 		hostFlags[k] = v
 	}
+
 	for k, v := range hostYaFlags {
 		hostFlags[k] = v
 	}
+
 	for k, v := range mf.hflags {
 		hostFlags[k] = v
 	}
+
 	hostFlags["PIC"] = "yes"
+
 	if _, ok := hostFlags["GG_BUILD_TYPE"]; !ok {
 		hostFlags["GG_BUILD_TYPE"] = "release"
 	}
+
 	hostP := NewPlatform(
 		hOS,
 		hISA,
@@ -226,29 +237,38 @@ func cmdMake(args []string) int {
 	resourceFetches := newResourceFetchPlan(mf.srcRoot, conf, hostP)
 
 	targetSpec := mf.targetPlat
+
 	if targetSpec == "" {
 		targetSpec = string(MakePlatformID(hOS, hISA))
 	}
+
 	tOS, tISA := resolvePlatform(targetSpec)
 	targetFlags := make(map[string]string, len(tools)+len(targetYaFlags)+len(mf.tflags)+3)
+
 	for k, v := range tools {
 		targetFlags[k] = v
 	}
+
 	for k, v := range targetYaFlags {
 		targetFlags[k] = v
 	}
+
 	for k, v := range mf.tflags {
 		targetFlags[k] = v
 	}
+
 	if mf.buildType != "" {
 		targetFlags["GG_BUILD_TYPE"] = mf.buildType
 	}
+
 	if mf.testLevel > 0 {
 		targetFlags["TESTS_REQUESTED"] = "yes"
 	}
+
 	if mf.sandboxing {
 		targetFlags["SANDBOXING"] = "yes"
 	}
+
 	targetFlags["PIC"] = "no"
 	targetP := NewPlatform(
 		tOS,
@@ -259,6 +279,7 @@ func cmdMake(args []string) int {
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
 	)
 	targetP.StatsFlags = buildTargetStatsFlags(targetFlags, mf.tflags)
+
 	if shouldExposeSandboxingTargetTags(mf) {
 		targetP.Tags = sandboxingNodeTags(targetP)
 	}
@@ -268,6 +289,7 @@ func cmdMake(args []string) int {
 		if w.Kind == WarnMissingInclude && !mf.keepGoing {
 			ThrowFmt("%s: %s", w.Kind, w.Message)
 		}
+
 		if mf.verbose {
 			fmt.Fprintf(os.Stderr, "\x1b[33m%s: %s\x1b[0m\n", w.Kind, w.Message)
 		}
@@ -287,6 +309,7 @@ func cmdMake(args []string) int {
 		if mf.dumpIgnoredMacros {
 			dumpMacroAudit(os.Stderr)
 		}
+
 		return 0
 	}
 
@@ -316,6 +339,7 @@ func cmdMake(args []string) int {
 	ex.run(results)
 
 	failedRoots := ex.failedRoots(results)
+
 	if len(failedRoots) > 0 {
 		ThrowFmt("build failed: %s", strings.Join(failedRoots, ", "))
 	}
@@ -393,10 +417,12 @@ func (ex *executor) onNode(n *Node) {
 	// … No such file or directory"). The first emit owns the future; later
 	// duplicates are ignored (visit reuses the registered future).
 	ex.mu.Lock()
+
 	if _, ok := ex.byUID[n.UID]; ok {
 		ex.mu.Unlock()
 		return
 	}
+
 	f := &nodeFuture{node: n}
 	ex.byUID[n.UID] = f
 	ex.mu.Unlock()
@@ -445,6 +471,7 @@ func (ex *executor) run(roots []string) {
 
 func (ex *executor) visit(uid string) {
 	f := ex.lookup(uid)
+
 	if f == nil {
 		ThrowFmt("executor: unknown UID %s", uid)
 	}
@@ -465,6 +492,7 @@ func (ex *executor) failedRoots(roots []string) []string {
 
 	for _, uid := range roots {
 		f := ex.lookup(uid)
+
 		if f == nil || f.err == nil {
 			continue
 		}
@@ -485,6 +513,7 @@ func (ex *executor) lookup(uid string) *nodeFuture {
 
 func (ex *executor) execute(n *Node) {
 	cachePath := filepath.Join(ex.bldRoot, "uid", n.UID)
+
 	if _, err := os.Stat(cachePath); err == nil {
 		return
 	}
@@ -497,6 +526,7 @@ func (ex *executor) execute(n *Node) {
 			exc := Try(func() {
 				ex.visit(dep)
 			})
+
 			if exc == nil {
 				continue
 			}
@@ -510,6 +540,7 @@ func (ex *executor) execute(n *Node) {
 	}
 
 	ex.sema <- struct{}{}
+
 	defer func() { <-ex.sema }()
 
 	tmp := filepath.Join(ex.bldRoot, "tmp", n.UID)
@@ -534,6 +565,7 @@ func (ex *executor) execute(n *Node) {
 	pending := ex.pending.Load()
 
 	outFirst := ""
+
 	if len(n.Outputs) > 0 {
 		outFirst = n.Outputs[0].String()
 	}
@@ -554,9 +586,11 @@ func (ex *executor) execute(n *Node) {
 // (everything after the first '=') is split on whitespace into tokens.
 func parseCmdPrefix(spec string) cmdPrefix {
 	suffix, prefix, ok := strings.Cut(spec, "=")
+
 	if !ok || suffix == "" {
 		ThrowFmt("make: --cmd-prefix expects <suffix>=<prefix>, got %q", spec)
 	}
+
 	return cmdPrefix{suffix: suffix, prefix: strings.Fields(prefix)}
 }
 
@@ -568,7 +602,9 @@ func applyCmdPrefixes(args []string, rules []cmdPrefix) []string {
 	if len(rules) == 0 {
 		return args
 	}
+
 	out := make([]string, 0, len(args))
+
 	for _, a := range args {
 		for _, r := range rules {
 			if strings.HasSuffix(a, r.suffix) {
@@ -576,8 +612,10 @@ func applyCmdPrefixes(args []string, rules []cmdPrefix) []string {
 				break
 			}
 		}
+
 		out = append(out, a)
 	}
+
 	return out
 }
 
@@ -597,14 +635,17 @@ const (
 // shared across one node's commands so the file names are unique.
 func packCommandFiles(args []string, buildRoot string, counter *int) []string {
 	out := make([]string, 0, len(args))
+
 	for i := 0; i < len(args); i++ {
 		if args[i] == cmdFileStartMarker {
 			i++ // skip the start marker
 			out = append(out, consumeCommandFile(args, &i, buildRoot, counter))
 			continue
 		}
+
 		out = append(out, args[i])
 	}
+
 	return out
 }
 
@@ -613,6 +654,7 @@ func consumeCommandFile(args []string, pos *int, buildRoot string, counter *int)
 	*counter++
 
 	var b strings.Builder
+
 	for ; *pos < len(args); *pos++ {
 		switch args[*pos] {
 		case cmdFileStartMarker:
@@ -624,6 +666,7 @@ func consumeCommandFile(args []string, pos *int, buildRoot string, counter *int)
 		default:
 			b.WriteString(args[*pos])
 		}
+
 		b.WriteByte('\n')
 	}
 
@@ -644,20 +687,25 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 	}
 
 	cmdFileCounter := 0
+
 	for _, c := range n.Cmds {
 		args := make([]string, len(c.CmdArgs))
+
 		for i, a := range c.CmdArgs {
 			args[i] = mountString(a, ex.srcRoot, tmp, ex.resourceMounts)
 		}
+
 		args = applyCmdPrefixes(args, ex.cmdPrefixes)
 		args = packCommandFiles(args, tmp, &cmdFileCounter)
 
 		dir := tmp
+
 		if c.Cwd != "" {
 			dir = mountString(c.Cwd, ex.srcRoot, tmp, ex.resourceMounts)
 		}
 
 		env := os.Environ()
+
 		for k, v := range n.Env {
 			env = append(env, k+"="+mountString(v, ex.srcRoot, tmp, ex.resourceMounts))
 		}
@@ -692,6 +740,7 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 
 		if err := cmd.Run(); err != nil {
 			msg := fmt.Sprintf("cmd failed (uid=%s): %v: %s", n.UID, err, strings.Join(args, " "))
+
 			if stderr.Len() > 0 {
 				msg += "\n" + strings.TrimRight(stderr.String(), "\n")
 			}
@@ -749,6 +798,7 @@ func (ex *executor) restoreInto(uid, where string) {
 		if !vfsHasPrefix(outVFS) {
 			ThrowFmt("malformed meta entry %q in %s", outVFS, metaPath)
 		}
+
 		// Resolve the $(B)/… path directly from the string. Do NOT Intern here:
 		// execution goroutines run concurrently with the still-streaming generator,
 		// and the global intern table is not safe for concurrent writes.
@@ -937,6 +987,7 @@ func parseMakeFlags(args []string) *makeFlags {
 
 	if len(mf.targets) == 0 {
 		cwd, err := os.Getwd()
+
 		if err == nil && strings.HasPrefix(cwd, mf.srcRoot+"/") {
 			mf.targets = []string{cwd[len(mf.srcRoot)+1:]}
 		}
@@ -998,6 +1049,7 @@ const (
 
 func color(name, s string) string {
 	c, ok := ansiCols[name]
+
 	if !ok {
 		return s
 	}

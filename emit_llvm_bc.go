@@ -3,15 +3,16 @@ package main
 import "strings"
 
 // emitLLVMBC emits the upstream LLVM_BC pipeline (build/plugins/llvm_bc.py):
-//   per source X.cpp:
-//     BC  llvm_compile_cxx   →  $(B)/<unit>/X<suffix>.bc
-//   once per stmt:
-//     LD  llvm-link          →  $(B)/<unit>/<NAME>_merged<suffix>.bc
-//     OP  llvm_opt_wrapper   →  $(B)/<unit>/<NAME>_optimized<suffix>.bc
-//     RESOURCE([<optimized.bc>, '/llvm_bc/'+NAME]) — synthesized into
-//     d.resources, picked up by emitResourceObjcopy as a normal embed → emits
-//     the PY objcopy_<hash>.o, which then participates in the global archive
-//     (lib<...>.global.a) via the existing LIBRARY .global.a pipeline.
+//
+//	per source X.cpp:
+//	  BC  llvm_compile_cxx   →  $(B)/<unit>/X<suffix>.bc
+//	once per stmt:
+//	  LD  llvm-link          →  $(B)/<unit>/<NAME>_merged<suffix>.bc
+//	  OP  llvm_opt_wrapper   →  $(B)/<unit>/<NAME>_optimized<suffix>.bc
+//	  RESOURCE([<optimized.bc>, '/llvm_bc/'+NAME]) — synthesized into
+//	  d.resources, picked up by emitResourceObjcopy as a normal embed → emits
+//	  the PY objcopy_<hash>.o, which then participates in the global archive
+//	  (lib<...>.global.a) via the existing LIBRARY .global.a pipeline.
 func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) {
 	if len(d.llvmBc) == 0 {
 		return
@@ -55,6 +56,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		// the merge node inherits the copy producer's fs_tools.py tool (matching the
 		// per-source BC node, which picks it up via wcExtras).
 		linksCopy := false
+
 		for _, src := range stmt.Sources {
 			inputVFS, producer := llvmBcSourceInfo(ctx, instance, d, src)
 			bcOut := Build(llvmBcRootRelArcSrc(ctx, instance, d, src) + stmt.Suffix + ".bc")
@@ -67,6 +69,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			// Add TEXT copy source files (e.g. mkql_computation_node_codegen.h.txt)
 			// that appear in the closure, matching emitOneSource's withContextSourceExtras.
 			wcExtras := withContextSourceExtras(codegenRegForInstance(ctx, instance), instance.Path, d, closure, inputVFS, ctx.scripts)
+
 			for _, e := range wcExtras {
 				if e == copyFsToolsVFS {
 					linksCopy = true
@@ -75,9 +78,11 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			}
 
 			var depRefs []NodeRef
+
 			if producer != (NodeRef{}) {
 				depRefs = []NodeRef{producer}
 			}
+
 			if extra := resolveCodegenDepRefs(ctx, instance, closure, depRefs...); len(extra) > 0 {
 				depRefs = append(depRefs, extra...)
 			}
@@ -86,6 +91,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			allInputs = append(allInputs, inputVFS)
 			allInputs = append(allInputs, clangWrapperVFS) // ${input:"build/scripts/clang_wrapper.py"}
 			allInputs = append(allInputs, closure...)
+
 			if len(wcExtras) > 0 {
 				allInputs = appendVFSUnique(allInputs, wcExtras)
 			}
@@ -116,14 +122,18 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 		mergedOut := Build(instance.Path + "/" + stmt.Name + "_merged" + stmt.Suffix + ".bc")
 		ldArgs := []string{llvmLink}
+
 		for _, p := range bcPaths {
 			ldArgs = append(ldArgs, p.String())
 		}
+
 		ldArgs = append(ldArgs, "-o", mergedOut.String())
 		mergeInputs := append([]VFS(nil), bcPaths...)
+
 		if linksCopy {
 			mergeInputs = append(mergeInputs, ctx.scripts[copyFsToolsVFS]...)
 		}
+
 		ldNode := &Node{
 			Cmds:             []Cmd{{CmdArgs: ldArgs, Env: env}},
 			Env:              env,
@@ -142,10 +152,12 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		optOut := Build(instance.Path + "/" + optOutName)
 		optArgs := []string{python, optWrapper, opt, mergedOut.String(), "-o", optOut.String()}
 		passes := []string{"default<O2>", "globalopt", "globaldce"}
+
 		if len(stmt.Symbols) > 0 {
 			passes = append(passes, "internalize")
 			optArgs = append(optArgs, "-internalize-public-api-list="+strings.Join(stmt.Symbols, "#"))
 		}
+
 		// ${__COMMA__} is a ymake macro that expands to literal ','; the outer
 		// single-quotes in the Python plugin are ymake argument syntax stripped
 		// before graph JSON is written. We emit the already-expanded form directly.
@@ -179,10 +191,13 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		}
 
 		ensureResourcePeer(instance.Path, d)
+
 		if d.prOutputProducer == nil {
 			d.prOutputProducer = map[string]NodeRef{}
 		}
+
 		d.prOutputProducer[optOutName] = opRef
+
 		// Propagate the OP node's inputs into prOutputInputs so that
 		// emitResourceObjcopy's prResourceExtraInputs picks up the full BC
 		// compilation closure (clang_wrapper.py, llvm_opt_wrapper.py, and all
@@ -192,6 +207,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		if d.prOutputInputs == nil {
 			d.prOutputInputs = map[string][]VFS{}
 		}
+
 		d.prOutputInputs[optOutName] = append([]VFS(nil), optInputs...)
 		d.resources = append(d.resources, resourceEntry{
 			Path:      optOutName,
@@ -229,6 +245,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	ownGlobalBucket := composeOwnAndPeerGlobalBucket(in, true /* isCxx */)
 
 	ownExtras := in.CXXFlags
+
 	if len(platform.CXXFlags) > 0 {
 		ownExtras = append(append([]string{}, ownExtras...), platform.CXXFlags...)
 	}
@@ -245,10 +262,12 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	args = append(args, ccIncludesPrefix...)
 	args = appendAddIncl(args, in.AddIncl, in.InclArgs)
 	peerAddIncl := in.PeerAddInclGlobal
+
 	if len(peerAddIncl) > 0 && peerAddIncl[0] == googleapisCommonProtosAddIncl {
 		args = append(args, in.InclArgs.arg(peerAddIncl[0]))
 		peerAddIncl = peerAddIncl[1:]
 	}
+
 	args = append(args, ccIncludesSuffix...)
 	args = appendAddIncl(args, peerAddIncl, in.InclArgs)
 
@@ -289,16 +308,20 @@ func llvmBcSourceInfo(ctx *genCtx, instance ModuleInstance, d *moduleData, src s
 	if ref := d.prOutputProducer[src]; ref != (NodeRef{}) {
 		return copyFileOutputVFS(instance.Path, src), ref
 	}
+
 	// COPY WITH_CONTEXT generated source — build-root copy is authoritative
 	if buildVFS := generatedModuleSourceVFS(ctx, instance, src); buildVFS != nil {
 		ref := NodeRef{}
+
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
 			if info := reg.Lookup(*buildVFS); info != nil && info.HasProducerRef {
 				ref = info.ProducerRef
 			}
 		}
+
 		return *buildVFS, ref
 	}
+
 	return copyFileInputVFS(ctx.fs, instance.Path, src), NodeRef{}
 }
 
@@ -314,12 +337,15 @@ func llvmBcRootRelArcSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 	if _, ok := d.prOutputProducer[src]; ok {
 		return src
 	}
+
 	if generatedModuleSourceVFS(ctx, instance, src) != nil {
 		return src
 	}
+
 	if sourceInputVFS(ctx.fs, instance.Path, src) != nil {
 		return instance.Path + "/" + src
 	}
+
 	return src
 }
 
@@ -327,13 +353,16 @@ func stripResourceName(s string) string {
 	if i := strings.Index(s, "::"); i >= 0 {
 		return s[i+2:]
 	}
+
 	return s
 }
 
 func cloneStringMap(m map[string]string) map[string]string {
 	out := make(map[string]string, len(m))
+
 	for k, v := range m {
 		out[k] = v
 	}
+
 	return out
 }

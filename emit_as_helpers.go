@@ -17,6 +17,7 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 
 	var outRel string
 	outName := srcRel + ".o"
+
 	if strings.HasSuffix(srcRel, ".asm") {
 		outName = strings.TrimSuffix(srcRel, ".asm") + ".o"
 	}

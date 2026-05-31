@@ -39,6 +39,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 		generatedInputs := d.pyGeneratedSrcs[srcRel]
 		srcAbs := resolveSourceVFS(ctx, instance, srcRel, d.srcDir)
+
 		if generatedInputs != nil {
 			srcAbs = Build(instance.Path + "/" + srcRel)
 		}
@@ -46,6 +47,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		moduleName := srcAbs.Rel() + "-"
 
 		var outputPath VFS
+
 		if strings.Contains(srcRel, "/") {
 			outputPath = Build(instance.Path + "/" + srcRel + "." + pySrcYapycSuffix(instance.Path) + ".yapyc3")
 		} else {
@@ -67,10 +69,12 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		}
 
 		inputs := []VFS{py3ccBinary, py3ccSlowBin, srcAbs}
+
 		if generatedInputs != nil {
 			inputs = []VFS{srcAbs}
 			inputs = append(inputs, generatedInputs...)
 			inputs = append(inputs, py3ccBinary, py3ccSlowBin)
+
 			if len(inputs) > 4 {
 				toolA := inputs[len(inputs)-2]
 				toolB := inputs[len(inputs)-1]
@@ -78,6 +82,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				inputs[2] = toolA
 				inputs[3] = toolB
 			}
+
 			inputs = dedupVFS(inputs)
 		}
 
@@ -102,12 +107,14 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				if d.moduleStmt.Name == "PY23_LIBRARY" {
 					tp["module_tag"] = "py3"
 				}
+
 				// PY3_BIN_LIB submodule of PY3_PROGRAM bundles pysrc bytecode
 				// under its lowercased MODULE_TAG, matching the surrounding
 				// objcopy/global.a target_properties.
 				if d.programPairedLib {
 					tp["module_tag"] = "py3_bin_lib"
 				}
+
 				return tp
 			}(),
 			Platform: string(instance.Platform.Target),
@@ -129,6 +136,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			node.DepRefs = append(node.DepRefs, py3ccSlowLDRef)
 			toolRefs = append(toolRefs, py3ccSlowLDRef)
 		}
+
 		if generatedInputs != nil {
 			if extras := resolveCodegenDepRefsExt(ctx, instance, nil, inputs, node.DepRefs...); len(extras) > 0 {
 				node.DepRefs = append(node.DepRefs, extras...)
@@ -160,10 +168,12 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 	for i, arg := range d.pyRegister {
 
 		priorShort := make(map[string]struct{}, i)
+
 		for j := 0; j < i; j++ {
 			if j < len(d.pyRegisterExplicit) && !d.pyRegisterExplicit[j] {
 				continue
 			}
+
 			prior := d.pyRegister[j]
 			priorShort[prior[strings.LastIndexByte(prior, '.')+1:]] = struct{}{}
 		}
@@ -184,6 +194,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		}
 
 		pyRef, ok := ctx.pyRegisterOutputs[regCppVFS]
+
 		if !ok {
 			pyInstance := instance
 			pyInstance.Platform = ctx.target
@@ -223,21 +234,26 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{pyRef}
 		ccIn.Py3Suffix = py3Suffix
+
 		if len(d.cythonCpp) > 0 {
 			ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		}
+
 		ccIn.IncludeInputs = []VFS{genPy3RegScriptVFS}
 
 		if len(in.CFlags) > 0 {
 			filtered := make([]string, 0, len(in.CFlags))
+
 			for _, f := range in.CFlags {
 				if short, ok := pyInitDefineShortname(f); ok {
 					if _, keep := priorShort[short]; !keep {
 						continue
 					}
 				}
+
 				filtered = append(filtered, f)
 			}
+
 			ccIn.CFlags = filtered
 		}
 
@@ -254,11 +270,14 @@ func pyInitDefineShortname(flag string) (string, bool) {
 	for _, pfx := range []string{"-DPyInit_", "-Dinit_module_"} {
 		if strings.HasPrefix(flag, pfx) {
 			rest := flag[len(pfx):]
+
 			if eq := strings.IndexByte(rest, '='); eq >= 0 {
 				return rest[:eq], true
 			}
+
 			return rest, true
 		}
 	}
+
 	return "", false
 }

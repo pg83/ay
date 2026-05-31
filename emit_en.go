@@ -12,6 +12,7 @@ type enumSrcsResult struct {
 
 func resolveEnumHeaderInput(ctx *genCtx, instance ModuleInstance, headerRel string, srcDir *string) VFS {
 	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDir)
+
 	if !ctx.fs.IsFile(headerInput.Rel()) {
 		if vfs := sourceInputVFS(ctx.fs, instance.Path, headerRel); vfs != nil && vfs.IsSource() {
 			headerInput = *vfs
@@ -20,6 +21,7 @@ func resolveEnumHeaderInput(ctx *genCtx, instance ModuleInstance, headerRel stri
 
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
 		buildHeader := Build(headerInput.Rel())
+
 		if reg.Lookup(buildHeader) != nil {
 
 			return buildHeader
@@ -63,10 +65,12 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		if len(ctx.enOutputs) > 0 {
 
 			serializedHByRel := make(map[string]VFS, len(ctx.enOutputs))
+
 			for buildRootPath := range ctx.enOutputs {
 				if !buildRootPath.IsBuild() || !strings.HasSuffix(buildRootPath.Rel(), "_serialized.h") {
 					continue
 				}
+
 				serializedHByRel[buildRootPath.Rel()] = buildRootPath
 			}
 
@@ -75,25 +79,33 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			if len(serializedHByRel) > 0 {
 
 				enScanner := ctx.scannerTarget
+
 				for _, srcAbsPath := range closure {
 					targets := enScanner.IncludeDirectiveTargets(srcAbsPath)
+
 					for _, includePath := range targets {
 						if !strings.HasSuffix(includePath, "_serialized.h") {
 							continue
 						}
+
 						buildRootPath, ok := serializedHByRel[includePath]
+
 						if !ok {
 							continue
 						}
+
 						ref := ctx.enOutputs[buildRootPath]
+
 						if _, dup := depSeen[ref]; dup {
 							continue
 						}
+
 						depSeen[ref] = struct{}{}
 						depENRefs = append(depENRefs, ref)
 						depENOutputs = append(depENOutputs, buildRootPath)
 
 						cppPath := Build(strings.TrimSuffix(buildRootPath.Rel(), "_serialized.h") + "_serialized.cpp")
+
 						if cppRef, ok2 := ctx.enOutputs[cppPath]; ok2 && cppRef == ref {
 							depENOutputs = append(depENOutputs, cppPath)
 						}
@@ -104,9 +116,11 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 		serializedCPPPath := Build(instance.Path + "/" + headerRel + "_serialized.cpp")
 		var serializedHPath VFS
+
 		if withHeader {
 			serializedHPath = Build(instance.Path + "/" + headerRel + "_serialized.h")
 		}
+
 		if ctx.scannerTarget.codegen != nil {
 			cppParsed := []includeDirective{
 				{kind: includeQuoted, target: internString(headerInput.Rel())},
@@ -125,6 +139,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			}
 			sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.String() < cppParsed[j].target.String() })
 			registerGeneratedParsedOutput(ctx, instance, "EN", serializedCPPPath, cppParsed)
+
 			if withHeader {
 
 				hParsed := []includeDirective{
@@ -140,49 +155,65 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		enClosureExcl := map[VFS]struct{}{
 			headerInput: {},
 		}
+
 		for _, p := range depENOutputs {
 			enClosureExcl[p] = struct{}{}
 		}
+
 		filteredClosure := make([]VFS, 0, len(closure))
+
 		for _, p := range closure {
 			if _, drop := enClosureExcl[p]; drop {
 				continue
 			}
+
 			filteredClosure = append(filteredClosure, p)
 		}
+
 		var crossCppClosure []VFS
+
 		for _, depOut := range depENOutputs {
 			if !strings.HasSuffix(depOut.Rel(), "_serialized.cpp") {
 				continue
 			}
+
 			sub := walkClosure(ctx, instance, depOut, scanIn)
+
 			for _, p := range sub {
 				if _, drop := enClosureExcl[p]; drop {
 					continue
 				}
+
 				crossCppClosure = append(crossCppClosure, p)
 			}
 		}
 
 		var ownOutputClosure []VFS
+
 		if !withHeader && ctx.scannerTarget.codegen != nil {
 			sub := walkClosure(ctx, instance, serializedCPPPath, scanIn)
+
 			for _, p := range sub {
 				if _, drop := enClosureExcl[p]; drop {
 					continue
 				}
+
 				ownOutputClosure = append(ownOutputClosure, p)
 			}
 		}
+
 		enClosure := mergeDedupVFS(filteredClosure, crossCppClosure)
 		enClosure = mergeDedupVFS(enClosure, ownOutputClosure)
 
 		augmentedDepENRefs := depENRefs
 		enDepScan := append([]VFS{headerInput}, enClosure...)
+
 		if extra := resolveCodegenDepRefs(ctx, instance, enDepScan, depENRefs...); len(extra) > 0 {
 			augmentedDepENRefs = append(append([]NodeRef(nil), depENRefs...), extra...)
 		}
+
 		var moduleTag *string
+
 		if d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" {
 			moduleTag = stringPtr("cpp_proto")
 		}

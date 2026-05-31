@@ -50,9 +50,11 @@ func EmitCF(
 		Tags:    []string{},
 		TargetProperties: func() map[string]string {
 			tp := map[string]string{"module_dir": moduleDir}
+
 			if moduleTag != "" {
 				tp["module_tag"] = moduleTag
 			}
+
 			return tp
 		}(),
 		Platform: string(instance.Platform.Target),

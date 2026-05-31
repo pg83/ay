@@ -44,12 +44,15 @@ func EmitEN(
 	inputs = append(inputs, headerIncludeClosure...)
 
 	depRefs := make([]NodeRef, 0, len(depENRefs)+1)
+
 	if enumParserLD != (NodeRef{}) {
 		depRefs = append(depRefs, enumParserLD)
 	}
+
 	depRefs = append(depRefs, depENRefs...)
 
 	var foreignDepRefs map[string][]NodeRef
+
 	if enumParserLD != (NodeRef{}) {
 		foreignDepRefs = map[string][]NodeRef{
 			"tool": {enumParserLD},
@@ -84,6 +87,7 @@ func EmitEN(
 		DepRefs:        depRefs,
 		ForeignDepRefs: foreignDepRefs,
 	}
+
 	if moduleTag != nil {
 		node.TargetProperties["module_tag"] = *moduleTag
 	}

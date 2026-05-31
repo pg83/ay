@@ -9,6 +9,7 @@ func archiveNameWithPrefix(moduleDir, prefix string) string {
 	}
 
 	parts := strings.Split(moduleDir, "/")
+
 	if len(parts) > 3 {
 		parts = parts[len(parts)-3:]
 	}
