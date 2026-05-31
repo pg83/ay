@@ -23,11 +23,12 @@ type FS interface {
 	ReadAbs(absPath string) []byte
 	ExistsAbs(absPath string) (present bool, isDir bool)
 	Walk(rel string, visit func(rel string, isDir bool))
-	// ContentHash returns the xxh3 of the file whose rel path interns to s (i.e.
-	// s == internString(vfs.Rel())), recorded when the FS last read that file. It
-	// faults if no content was ever read for s — the hash must exist by the time a
-	// node's uid is computed.
-	ContentHash(s STR) uint64
+	// ContentHash returns the xxh3 of source VFS v's file content, recorded when the
+	// FS last read that file. It is keyed by v.strID() (the full "$(S)/..." path STR),
+	// so the uid serializer passes the VFS directly — no per-input re-intern of the
+	// bare rel. It faults if no content was ever read for v — the hash must exist by
+	// the time a node's uid is computed.
+	ContentHash(v VFS) uint64
 	perfStats() fsPerfStats
 }
 
@@ -37,8 +38,10 @@ type osFS struct {
 	dirs       map[string]map[string]bool
 
 	// contentHashes is the xxh3 of each read file's content, indexed directly by the
-	// STR of its rel path (STR ids are dense, so a plain growing array beats a hash
-	// map). Slot 0 means "not recorded" — xxh3 is effectively never 0. Both writes
+	// STR of its full "$(S)/..." path — i.e. the source VFS's own strID, so the uid
+	// serializer indexes by v.strID() without re-interning the bare rel (STR ids are
+	// dense, so a plain growing array beats a hash map). Slot 0 means "not recorded"
+	// — xxh3 is effectively never 0. Both writes
 	// (FS reads during gen) and reads (uid computation in StreamingEmitter.Emit)
 	// happen on the single gen goroutine — the executor goroutine is spawned only
 	// after a node's uid is computed — so no lock.
@@ -59,10 +62,10 @@ func NewFS(sourceRoot string) FS {
 	}
 }
 
-// recordContentHash stores xxh3(data) at index STR(rel), growing the array as ids
-// advance.
+// recordContentHash stores xxh3(data) at the file's full-path STR (the source VFS
+// strID), growing the array as ids advance.
 func (fs *osFS) recordContentHash(rel string, data []byte) {
-	s := internString(cleanRel(rel))
+	s := internString("$(S)/" + cleanRel(rel))
 
 	if int(s) >= len(fs.contentHashes) {
 		n := len(fs.contentHashes) * 2
@@ -79,7 +82,9 @@ func (fs *osFS) recordContentHash(rel string, data []byte) {
 	fs.contentHashes[s] = xxh3.Hash(data)
 }
 
-func (fs *osFS) ContentHash(s STR) uint64 {
+func (fs *osFS) ContentHash(v VFS) uint64 {
+	s := v.strID()
+
 	if int(s) < len(fs.contentHashes) && fs.contentHashes[s] != 0 {
 		return fs.contentHashes[s]
 	}
@@ -88,7 +93,7 @@ func (fs *osFS) ContentHash(s STR) uint64 {
 	// tablegen .td, python stdlib, tzdata, …) are listed on nodes but their content
 	// is never needed during graph construction. Read on first uid use (reusing one
 	// buffer) so the hash is recorded; a genuinely missing file faults here.
-	rel := internTable.strs[s]
+	rel := v.Rel()
 
 	if fs.IsDir(rel) {
 		return 0 // directory inputs (e.g. a test data dir) have no content hash

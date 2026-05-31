@@ -279,12 +279,12 @@ func (fs *memFS) Read(rel string) []byte {
 	return append([]byte(nil), data...)
 }
 
-// ContentHash computes xxh3 of the file whose rel path interns to s, on demand
-// from the in-memory tree (the shared test FS is never mutated). Fixtures are
-// minimal, so a file absent from the tree hashes to 0 rather than faulting —
-// tests assert structure, not exact uids.
-func (fs *memFS) ContentHash(s STR) uint64 {
-	data, ok := fs.files[cleanRel(internTable.strs[s])]
+// ContentHash computes xxh3 of source VFS v's file content, on demand from the
+// in-memory tree (the shared test FS is never mutated). Fixtures are minimal, so a
+// file absent from the tree hashes to 0 rather than faulting — tests assert
+// structure, not exact uids.
+func (fs *memFS) ContentHash(v VFS) uint64 {
+	data, ok := fs.files[cleanRel(v.Rel())]
 	if !ok {
 		return 0
 	}
