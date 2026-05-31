@@ -115,39 +115,39 @@ func scriptImports(txt string) []string {
 	return out
 }
 
-// expandScriptClosures adds, to every node that already lists a build/scripts
-// script as an input, that script's transitive helper closure (see
-// scriptDepClosure). Idempotent and additive: scripts already present are not
-// duplicated. Mirrors ymake attaching a wrapper's imported/executed helpers as
-// inputs of the action that runs the wrapper.
-func expandScriptClosures(nodes []*Node, closure scriptDepClosure) {
-	if len(closure) == 0 {
+// expandNodeScriptClosure adds, to a node that lists a build/scripts script as an
+// input, that script's transitive helper closure (see scriptDepClosure). Idempotent
+// and additive: scripts already present are not duplicated. Mirrors ymake attaching
+// a wrapper's imported helpers as inputs of the action that runs the wrapper.
+//
+// Applied per-node at emit time (by the emitters' Emit), NOT as a post-pass over
+// the finished graph: the streaming build path hands each node to the executor as
+// soon as its deps resolve, so a node's inputs must be complete by the time it is
+// emitted. Both the streaming executor path and the buffered -G dump path run this,
+// so they produce identical node content.
+func expandNodeScriptClosure(n *Node, closure scriptDepClosure) {
+	if len(closure) == 0 || n == nil {
 		return
 	}
-	for _, n := range nodes {
-		present := make(map[string]struct{}, len(n.Inputs))
-		var seeds []string
-		for _, in := range n.Inputs {
-			if !in.IsSource() {
-				continue
-			}
-			rel := in.Rel()
-			present[rel] = struct{}{}
-			if _, ok := closure[rel]; ok {
-				seeds = append(seeds, rel)
-			}
-		}
-		if len(seeds) == 0 {
+	present := make(map[string]struct{}, len(n.Inputs))
+	var seeds []string
+	for _, in := range n.Inputs {
+		if !in.IsSource() {
 			continue
 		}
-		for _, seed := range seeds {
-			for _, dep := range closure[seed] {
-				if _, ok := present[dep]; ok {
-					continue
-				}
-				present[dep] = struct{}{}
-				n.Inputs = append(n.Inputs, Source(dep))
+		rel := in.Rel()
+		present[rel] = struct{}{}
+		if _, ok := closure[rel]; ok {
+			seeds = append(seeds, rel)
+		}
+	}
+	for _, seed := range seeds {
+		for _, dep := range closure[seed] {
+			if _, ok := present[dep]; ok {
+				continue
 			}
+			present[dep] = struct{}{}
+			n.Inputs = append(n.Inputs, Source(dep))
 		}
 	}
 }
