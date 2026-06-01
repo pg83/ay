@@ -93,9 +93,9 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 				enScanner := ctx.scannerTarget
 
 				for _, srcAbsPath := range closure {
-					targets := enScanner.IncludeDirectiveTargets(srcAbsPath)
+					for _, entry := range enScanner.parsers.parsedIncludes(srcAbsPath) {
+						includePath := entry.target.String()
 
-					for _, includePath := range targets {
 						if !strings.HasSuffix(includePath, "_serialized.h") {
 							continue
 						}

@@ -523,22 +523,6 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 	return out
 }
 
-func (s *IncludeScanner) IncludeDirectiveTargets(vfsPath VFS) []string {
-	entries := s.parsers.parsedIncludes(vfsPath)
-
-	if len(entries) == 0 {
-		return nil
-	}
-
-	out := make([]string, 0, len(entries))
-
-	for _, entry := range entries {
-		out = append(out, entry.target.String())
-	}
-
-	return out
-}
-
 func (s *IncludeScanner) emittedRel(abs string) string {
 	return abs
 }
