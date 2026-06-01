@@ -6,6 +6,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 var (
@@ -266,6 +267,12 @@ type genCtx struct {
 	// goroutine is single-threaded and resolveCodegenDepRefsExt does not re-enter
 	// itself (EmitCF emits no CC and calls no resolveCodegen*). Cleared per call.
 	codegenSeen map[NodeRef]struct{}
+
+	// peerArchiveSeenPool reuses the peer-archive dedup map in genModule's
+	// result-construction (was ~12.5MB churn). A pool, not a field: genModule
+	// recurses, and the map's live window does overlap a nested genModule, so a
+	// nested call must borrow a distinct map (a shared field corrupts the graph).
+	peerArchiveSeenPool sync.Pool
 }
 
 type codegenOutputKey struct {
@@ -1060,7 +1067,16 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerDynamicPaths = append(peerDynamicPaths, path)
 		peerLinkCmdAddPath(path)
 	}
-	peerArchiveSeen := map[VFS]struct{}{}
+	peerArchiveSeen, _ := ctx.peerArchiveSeenPool.Get().(map[VFS]struct{})
+
+	if peerArchiveSeen == nil {
+		peerArchiveSeen = make(map[VFS]struct{}, 64)
+	}
+
+	clear(peerArchiveSeen)
+
+	defer ctx.peerArchiveSeenPool.Put(peerArchiveSeen)
+
 	peerArchiveAddPath := func(ref NodeRef, path VFS) {
 		if _, dup := peerArchiveSeen[path]; dup {
 			return
