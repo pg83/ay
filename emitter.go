@@ -2,7 +2,6 @@ package main
 
 import (
 	"container/heap"
-	"sort"
 )
 
 type intHeap []int
@@ -162,18 +161,8 @@ func finalizeOrder(e *BufferedEmitter) []int {
 			checkRef(i, r)
 		}
 
-		fkeys := make([]string, 0, len(node.ForeignDepRefs))
-
-		for k := range node.ForeignDepRefs {
-			fkeys = append(fkeys, k)
-		}
-
-		sort.Strings(fkeys)
-
-		for _, k := range fkeys {
-			for _, r := range node.ForeignDepRefs[k] {
-				checkRef(i, r)
-			}
+		for _, r := range node.ForeignDepRefs {
+			checkRef(i, r)
 		}
 	}
 
@@ -203,23 +192,13 @@ func finalizeOrder(e *BufferedEmitter) []int {
 			addEdge(int(r.id), i)
 		}
 
-		fkeys := make([]string, 0, len(node.ForeignDepRefs))
-
-		for k := range node.ForeignDepRefs {
-			fkeys = append(fkeys, k)
-		}
-
-		sort.Strings(fkeys)
-
-		for _, k := range fkeys {
-			for _, r := range node.ForeignDepRefs[k] {
-				if _, ok := seen[r.id]; ok {
-					continue
-				}
-
-				seen[r.id] = struct{}{}
-				addEdge(int(r.id), i)
+		for _, r := range node.ForeignDepRefs {
+			if _, ok := seen[r.id]; ok {
+				continue
 			}
+
+			seen[r.id] = struct{}{}
+			addEdge(int(r.id), i)
 		}
 	}
 
@@ -279,25 +258,13 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 	}
 
 	if len(node.ForeignDepRefs) > 0 {
-		resolved := make(map[string][]string, len(node.ForeignDepRefs))
+		vals := make([]string, 0, len(node.ForeignDepRefs))
 
-		for k, refs := range node.ForeignDepRefs {
-			if len(refs) == 0 {
-				continue
-			}
-
-			vals := make([]string, 0, len(refs))
-
-			for _, r := range refs {
-				vals = append(vals, uids[r.id])
-			}
-
-			resolved[k] = vals
+		for _, r := range node.ForeignDepRefs {
+			vals = append(vals, uids[r.id])
 		}
 
-		if len(resolved) > 0 {
-			node.ForeignDeps = resolved
-		}
+		node.ForeignDeps = vals
 	}
 
 	node.Sandboxing = true
@@ -365,11 +332,9 @@ func (e *StreamingEmitter) hasUnresolvedDeps(n *Node) bool {
 		}
 	}
 
-	for _, refs := range n.ForeignDepRefs {
-		for _, r := range refs {
-			if e.uids[r.id] == "" {
-				return true
-			}
+	for _, r := range n.ForeignDepRefs {
+		if e.uids[r.id] == "" {
+			return true
 		}
 	}
 

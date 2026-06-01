@@ -85,7 +85,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 			"ram":     float64(32),
 		},
 		DepRefs:        []NodeRef{ragel6LD},
-		ForeignDepRefs: map[string][]NodeRef{"tool": {ragel6LD}},
+		ForeignDepRefs: []NodeRef{ragel6LD},
 	}
 
 	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS

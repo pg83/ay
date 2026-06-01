@@ -115,7 +115,7 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 	if len(n.ForeignDeps) > 0 {
 		buf = append(buf, innerPad...)
 		buf = append(buf, `"foreign_deps": `...)
-		buf = appendStringSliceMap(buf, n.ForeignDeps, innerPad)
+		buf = appendToolForeignDeps(buf, n.ForeignDeps, innerPad)
 		buf = append(buf, ',', '\n')
 	}
 
@@ -495,35 +495,17 @@ func appendStringMap(buf []byte, m map[string]string, pad string) []byte {
 	return buf
 }
 
-func appendStringSliceMap(buf []byte, m map[string][]string, pad string) []byte {
-	if len(m) == 0 {
-		return append(buf, '{', '}')
-	}
-
-	keys := make([]string, 0, len(m))
-
-	for k := range m {
-		keys = append(keys, k)
-	}
-
-	sort.Strings(keys)
-
+// appendToolForeignDeps writes the foreign-dep slice as the single-key object
+// {"tool": [...]} — the only key any node ever uses. Byte-identical to the old
+// map writer for a one-key "tool" map.
+func appendToolForeignDeps(buf []byte, deps []string, pad string) []byte {
 	buf = append(buf, '{', '\n')
 	itemPad := pad + "    "
-
-	for i, k := range keys {
-		buf = append(buf, itemPad...)
-		buf = appendString(buf, k)
-		buf = append(buf, ':', ' ')
-		buf = appendStringSlice(buf, m[k], itemPad)
-
-		if i < len(keys)-1 {
-			buf = append(buf, ',')
-		}
-
-		buf = append(buf, '\n')
-	}
-
+	buf = append(buf, itemPad...)
+	buf = appendString(buf, "tool")
+	buf = append(buf, ':', ' ')
+	buf = appendStringSlice(buf, deps, itemPad)
+	buf = append(buf, '\n')
 	buf = append(buf, pad...)
 	buf = append(buf, '}')
 

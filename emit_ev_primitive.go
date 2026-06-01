@@ -182,7 +182,7 @@ func EmitEV(
 	}
 
 	var depRefs []NodeRef
-	var foreignDepRefs map[string][]NodeRef
+	var foreignDepRefs []NodeRef
 
 	{
 		var toolRefs []NodeRef
@@ -201,7 +201,7 @@ func EmitEV(
 
 		if len(toolRefs) > 0 {
 			depRefs = append([]NodeRef(nil), toolRefs...)
-			foreignDepRefs = map[string][]NodeRef{"tool": toolRefs}
+			foreignDepRefs = toolRefs
 		}
 	}
 

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -59,10 +60,9 @@ func TestWriteGraphIndented_ByteExact(t *testing.T) {
 						Env:     map[string]string{},
 					},
 				},
-				Deps:        []string{"depUid1", "depUid2"},
-				Env:         map[string]string{"PATH": "/usr/bin"},
-				ForeignDeps: map[string][]string{"clone": {"u1", "u2"}, "tool": {"u3"}},
-				Inputs:      ToVFSSlice([]string{"in1", "in2"}),
+				Deps:   []string{"depUid1", "depUid2"},
+				Env:    map[string]string{"PATH": "/usr/bin"},
+				Inputs: ToVFSSlice([]string{"in1", "in2"}),
 				KV:          map[string]interface{}{"key1": "val1", "key2": "val2"},
 				Outputs:     ToVFSSlice([]string{"out1"}),
 				Platform:    "default-linux-x86_64",
@@ -138,6 +138,51 @@ func TestWriteGraphIndented_ByteExact(t *testing.T) {
 
 		t.Fatalf("byte mismatch at offset %d (want len=%d, got len=%d)\nwant[%d:%d]: %q\ngot [%d:%d]: %q",
 			div, len(want), len(got), from, toW, want[from:toW], from, toG, got[from:toG])
+	}
+}
+
+func TestWriteGraphIndented_ForeignDepsToolObject(t *testing.T) {
+	// ForeignDeps is a flat slice internally; the writer wraps it back into the
+	// single-key object {"tool": [...]} (the only key any node uses), emitted
+	// between "env" and "inputs". stdlib can't reproduce this (foreign_deps is
+	// json:"-"), so it is covered here rather than in the byte-exact-vs-stdlib test.
+	g := &Graph{
+		Conf: map[string]interface{}{},
+		Graph: []*Node{
+			{
+				Cmds:             []Cmd{},
+				Deps:             []string{},
+				Env:              map[string]string{},
+				ForeignDeps:      []string{"u1", "u2"},
+				Inputs:           ToVFSSlice([]string{}),
+				KV:               map[string]interface{}{},
+				Outputs:          ToVFSSlice([]string{}),
+				Platform:         "p",
+				Requirements:     map[string]interface{}{},
+				Sandboxing:       true,
+				SelfUID:          "s",
+				StatsUID:         "st",
+				Tags:             []string{},
+				TargetProperties: map[string]string{},
+				UID:              "u",
+			},
+		},
+		Inputs: map[string]interface{}{},
+		Result: []string{"u"},
+	}
+
+	got := string(encodeWithHandRolled(g))
+
+	want := "\"env\": {},\n" +
+		"            \"foreign_deps\": {\n" +
+		"                \"tool\": [\n" +
+		"                    \"u1\",\n" +
+		"                    \"u2\"\n" +
+		"                ]\n" +
+		"            },\n" +
+		"            \"inputs\": ["
+	if !strings.Contains(got, want) {
+		t.Fatalf("foreign_deps not wrapped as {\"tool\": [...]} between env and inputs.\ngot:\n%s", got)
 	}
 }
 

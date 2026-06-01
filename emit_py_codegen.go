@@ -143,7 +143,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		}
 
 		if len(toolRefs) > 0 {
-			node.ForeignDepRefs = map[string][]NodeRef{"tool": toolRefs}
+			node.ForeignDepRefs = toolRefs
 		}
 
 		pyRef := ctx.emit.Emit(bindNodePlatform(node, instance.Platform))

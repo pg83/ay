@@ -205,11 +205,11 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	inputs = append(inputs, transitiveImports...)
 
 	var depRefs []NodeRef
-	var foreignDepRefs map[string][]NodeRef
+	var foreignDepRefs []NodeRef
 
 	if flatcLDRef != (NodeRef{}) {
 		depRefs = []NodeRef{flatcLDRef}
-		foreignDepRefs = map[string][]NodeRef{"tool": []NodeRef{flatcLDRef}}
+		foreignDepRefs = []NodeRef{flatcLDRef}
 	}
 
 	node := &Node{

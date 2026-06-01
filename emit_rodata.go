@@ -83,9 +83,7 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 			"module_dir": instance.Path,
 		},
 		DepRefs: []NodeRef{yasmLD},
-		ForeignDepRefs: map[string][]NodeRef{
-			"tool": []NodeRef{yasmLD},
-		},
+		ForeignDepRefs: []NodeRef{yasmLD},
 	}
 
 	return emit.Emit(bindNodePlatform(node, instance.Platform)), asmVFS, outVFS
