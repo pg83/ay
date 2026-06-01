@@ -1,14 +1,92 @@
 package main
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 )
 
-type Environment struct {
-	bools   map[string]bool
-	strings map[string]string
-	ints    map[string]int
+// ENV interns IF/macro variable names into a small, dense id space (the conf's
+// fixed-ish flag set), separate from STR — analogous to STR/VFS. It lets
+// Environment store bindings in ENV-indexed slices instead of three string-keyed
+// maps, so Clone is a slice copy and Set/Get are array ops (the macro maps were
+// ~8% of map-probing CPU plus per-module Clone churn). Single-writer (gen
+// goroutine), like internTable.
+type ENV uint32
+
+var envTable = struct {
+	ids   map[string]ENV
+	names []string
+}{ids: make(map[string]ENV, 256), names: []string{""}} // index 0 reserved = "not interned"
+
+func internEnv(name string) ENV {
+	if id, ok := envTable.ids[name]; ok {
+		return id
+	}
+
+	id := ENV(len(envTable.names))
+	envTable.ids[name] = id
+	envTable.names = append(envTable.names, name)
+
+	return id
+}
+
+// identEnv returns the ENV for an IF identifier, preferring the id interned into
+// the node at parse time; a zero Env (e.g. an ExprIdent built outside the parser,
+// as in tests) falls back to interning the name on demand.
+func identEnv(x *ExprIdent) ENV {
+	if x.Env != 0 {
+		return x.Env
+	}
+
+	return internEnv(x.Name)
+}
+
+type envKind uint8
+
+const (
+	envAbsent envKind = iota
+	envStr            // string binding; bools fold to "yes"/"no" (evalEq normalizes them)
+	envInt            // integer binding, stored as its decimal STR
+)
+
+// envStore holds the ENV-indexed bindings behind a pointer so copies of an
+// Environment (a value type) share — and can grow — the same state, exactly as
+// the old shared maps did; Clone makes a fresh store.
+type envStore struct {
+	val  []STR
+	kind []envKind
+}
+
+type Environment struct{ s *envStore }
+
+func newEnvironment() Environment { return Environment{s: &envStore{}} }
+
+func (s *envStore) ensure(e ENV) {
+	if int(e) < len(s.kind) {
+		return
+	}
+
+	n := len(s.kind) * 2
+
+	if n <= int(e) {
+		n = int(e) + 1
+	}
+
+	nk := make([]envKind, n)
+	copy(nk, s.kind)
+	s.kind = nk
+
+	nv := make([]STR, n)
+	copy(nv, s.val)
+	s.val = nv
+}
+
+func (s *envStore) lookup(e ENV) (envKind, STR) {
+	if int(e) < len(s.kind) {
+		return s.kind[e], s.val[e]
+	}
+
+	return envAbsent, 0
 }
 
 func isImplicitBuildVar(name string) bool {
@@ -40,15 +118,16 @@ func isImplicitBuildVar(name string) bool {
 // and NYMake::IsTrue treats empty / any falseWord as false). The only
 // typed error is an int binding used in boolean position.
 func (e Environment) Bool(name string) bool {
-	if v, ok := e.bools[name]; ok {
-		return v
-	}
+	return e.boolID(internEnv(name), name)
+}
 
-	if v, ok := e.strings[name]; ok {
-		return stringIsTruthy(v)
-	}
-
-	if _, ok := e.ints[name]; ok {
+// boolID is Bool keyed by a pre-interned ENV (the IF-eval hot path passes the id
+// parsed into ExprIdent; name is only for the int-misuse error message).
+func (e Environment) boolID(id ENV, name string) bool {
+	switch k, v := e.s.lookup(id); k {
+	case envStr:
+		return stringIsTruthy(internTable.strs[v])
+	case envInt:
 		ThrowFmt("macros: identifier %q has int binding but is used in boolean position", name)
 	}
 
@@ -72,20 +151,10 @@ func stringIsTruthy(v string) bool {
 }
 
 func (e Environment) String(name string) string {
-	if v, ok := e.strings[name]; ok {
-		return v
-	}
-
-	if v, ok := e.bools[name]; ok {
-		if v {
-			return "yes"
-		}
-
-		return "no"
-	}
-
-	if v, ok := e.ints[name]; ok {
-		return fmt.Sprintf("%d", v)
+	// envStr stores the string (bools as "yes"/"no"); envInt stores the decimal
+	// form — both round-trip via the value STR.
+	if k, v := e.s.lookup(internEnv(name)); k != envAbsent {
+		return internTable.strs[v]
 	}
 
 	if isImplicitBuildVar(name) {
@@ -98,39 +167,39 @@ func (e Environment) String(name string) string {
 }
 
 func (e Environment) Clone() Environment {
-	out := Environment{
-		bools:   make(map[string]bool, len(e.bools)),
-		strings: make(map[string]string, len(e.strings)),
-		ints:    make(map[string]int, len(e.ints)),
-	}
+	return Environment{s: &envStore{
+		val:  append([]STR(nil), e.s.val...),
+		kind: append([]envKind(nil), e.s.kind...),
+	}}
+}
 
-	for k, v := range e.bools {
-		out.bools[k] = v
-	}
+// setStr binds name to a string value (the unified bool/string slot). SetBool
+// folds to "yes"/"no" — observably identical to the old bool binding, since
+// Bool reads via stringIsTruthy and String/evalEq map bool↔"yes"/"no".
+func (e Environment) setStr(name, v string) {
+	id := internEnv(name)
+	e.s.ensure(id)
+	e.s.kind[id] = envStr
+	e.s.val[id] = internString(v)
+}
 
-	for k, v := range e.strings {
-		out.strings[k] = v
-	}
-
-	for k, v := range e.ints {
-		out.ints[k] = v
-	}
-
-	return out
+func (e Environment) setInt(name string, n int) {
+	id := internEnv(name)
+	e.s.ensure(id)
+	e.s.kind[id] = envInt
+	e.s.val[id] = internString(strconv.Itoa(n))
 }
 
 func (e Environment) SetBool(name string, v bool) {
-	delete(e.strings, name)
-	delete(e.ints, name)
-
-	e.bools[name] = v
+	if v {
+		e.setStr(name, "yes")
+	} else {
+		e.setStr(name, "no")
+	}
 }
 
 func (e Environment) SetString(name, v string) {
-	delete(e.bools, name)
-	delete(e.ints, name)
-
-	e.strings[name] = v
+	e.setStr(name, v)
 }
 
 func (e Environment) SetFromString(name, v string) {
@@ -145,19 +214,9 @@ func (e Environment) SetFromString(name, v string) {
 }
 
 func (e Environment) HasBinding(name string) bool {
-	if _, ok := e.bools[name]; ok {
-		return true
-	}
+	k, _ := e.s.lookup(internEnv(name))
 
-	if _, ok := e.strings[name]; ok {
-		return true
-	}
-
-	if _, ok := e.ints[name]; ok {
-		return true
-	}
-
-	return false
+	return k != envAbsent
 }
 
 func (e Environment) SetDefaultString(name, value string) {
@@ -165,7 +224,7 @@ func (e Environment) SetDefaultString(name, value string) {
 		return
 	}
 
-	e.strings[name] = value
+	e.setStr(name, value)
 }
 
 func EvalCond(e Expr, env Environment) bool {
@@ -179,7 +238,7 @@ func EvalCond(e Expr, env Environment) bool {
 			return false
 		}
 
-		return env.Bool(x.Name)
+		return env.boolID(identEnv(x), x.Name)
 	case *ExprNot:
 		return !EvalCond(x.Of, env)
 	case *ExprAnd:
@@ -208,16 +267,13 @@ func evalAtom(e Expr, env Environment) any {
 			return x.Name
 		}
 
-		if v, ok := env.bools[x.Name]; ok {
-			return v
-		}
+		switch k, v := env.s.lookup(identEnv(x)); k {
+		case envStr:
+			return internTable.strs[v]
+		case envInt:
+			n, _ := strconv.Atoi(internTable.strs[v])
 
-		if v, ok := env.strings[x.Name]; ok {
-			return v
-		}
-
-		if v, ok := env.ints[x.Name]; ok {
-			return v
+			return n
 		}
 
 		if isImplicitBuildVar(x.Name) {
@@ -304,41 +360,35 @@ func evalLt(x *ExprLt, env Environment) bool {
 	return li < ri
 }
 
-var DefaultIfEnv = Environment{
-	bools: map[string]bool{
-		"OS_LINUX": true,
-		"LINUX":    true,
+var DefaultIfEnv = makeDefaultIfEnv()
 
-		"CLANG":    true,
-		"TRUE":     true,
-		"USE_SSE4": true,
+func makeDefaultIfEnv() Environment {
+	e := newEnvironment()
 
-		"OPENSOURCE": true,
+	for _, n := range []string{
+		"OS_LINUX", "LINUX",
+		"CLANG", "TRUE", "USE_SSE4",
+		"OPENSOURCE",
+		"USE_ARCADIA_PYTHON", "PYTHON3",
+	} {
+		e.SetBool(n, true)
+	}
 
-		"USE_ARCADIA_PYTHON": true,
-		"PYTHON3":            true,
-	},
-	strings: map[string]string{
-		"CXX_RT": "libcxxrt",
+	e.SetString("CXX_RT", "libcxxrt")
+	e.SetString("OPENSOURCE_PROJECT", "")
+	e.SetString("SANITIZER_TYPE", "")
+	e.SetString("undefined", "undefined")
+	e.SetString("memory", "memory")
+	e.SetString("address", "address")
+	e.SetString("thread", "thread")
+	e.SetString("leak", "leak")
+	e.SetString("MODULE_TAG", "PY3")
+	e.SetString("_USE_ICONV", "dynamic")
+	e.SetString("ALLOCATOR", "")
+	e.SetString("PY2", "PY2")
+	e.SetString("OS_SDK", "")
 
-		"OPENSOURCE_PROJECT": "",
+	e.setInt("ANDROID_API", 0)
 
-		"SANITIZER_TYPE": "",
-
-		"undefined": "undefined",
-		"memory":    "memory",
-		"address":   "address",
-		"thread":    "thread",
-		"leak":      "leak",
-
-		"MODULE_TAG": "PY3",
-
-		"_USE_ICONV": "dynamic",
-		"ALLOCATOR":  "",
-		"PY2":        "PY2",
-		"OS_SDK":     "",
-	},
-	ints: map[string]int{
-		"ANDROID_API": 0,
-	},
+	return e
 }
