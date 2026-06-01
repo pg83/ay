@@ -274,6 +274,9 @@ type Expr interface {
 
 type ExprIdent struct {
 	Name string
+	// Env is the macro name interned to its dense ENV id at parse time, so IF
+	// evaluation indexes the Environment array without re-hashing the string.
+	Env ENV
 }
 
 type ExprNot struct {
@@ -1575,7 +1578,7 @@ func (c *condParser) parseAtom() Expr {
 		}
 
 		c.consume()
-		return &ExprIdent{Name: t.val}
+		return &ExprIdent{Name: t.val, Env: internEnv(t.val)}
 	}
 
 	c.parent.lex.throwParse(t.line, t.col, "unexpected %s in IF condition", describeToken(t))
