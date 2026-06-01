@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"syscall"
 
 	"github.com/zeebo/xxh3"
 )
@@ -191,8 +192,12 @@ func (fs *osFS) readIntoRaw(rel string, buf []byte) []byte {
 
 	buf = buf[:0]
 
-	if fi, statErr := f.Stat(); statErr == nil {
-		sz := int(fi.Size())
+	// Fstat into a stack Stat_t instead of f.Stat() — the latter heap-allocates an
+	// *os.fileStat (FileInfo) per read (~10MB churn over a run). Linux-only path.
+	var st syscall.Stat_t
+
+	if statErr := syscall.Fstat(int(f.Fd()), &st); statErr == nil {
+		sz := int(st.Size)
 
 		if sz > cap(buf) {
 			buf = make([]byte, 0, sz)
