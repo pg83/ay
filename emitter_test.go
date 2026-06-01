@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -126,7 +126,7 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 	}
 }
 
-func TestFinalize_DepsAreSortedAlphabetically(t *testing.T) {
+func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 
 	e := NewBufferedEmitter()
 	mkLeaf := func(name string) NodeRef {
@@ -168,16 +168,22 @@ func TestFinalize_DepsAreSortedAlphabetically(t *testing.T) {
 		t.Fatalf("A not found in graph")
 	}
 
-	if len(aNode.Deps) != 3 {
-		t.Fatalf("A.Deps len = %d, want 3 (%v)", len(aNode.Deps), aNode.Deps)
+	byName := map[string]string{}
+	for _, n := range g.Graph {
+		if nm, ok := n.KV["name"].(string); ok {
+			byName[nm] = n.UID
+		}
 	}
 
-	if !sort.StringsAreSorted(aNode.Deps) {
-		t.Errorf("A.Deps not sorted: %v", aNode.Deps)
+	// Deps are the DepRefs resolved to uids in insertion order — no sort, no
+	// dedup (the dump-sort normalization owns ordering; the gate is the oracle).
+	want := []string{byName["Z"], byName["X"], byName["Y"]}
+	if !slices.Equal(aNode.Deps, want) {
+		t.Errorf("A.Deps = %v, want insertion order %v", aNode.Deps, want)
 	}
 }
 
-func TestFinalize_DedupesDuplicateDeps(t *testing.T) {
+func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 	e := NewBufferedEmitter()
 	c := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"C"}, Env: map[string]string{}}},
@@ -210,8 +216,10 @@ func TestFinalize_DedupesDuplicateDeps(t *testing.T) {
 		t.Fatalf("A not found")
 	}
 
-	if len(aNode.Deps) != 1 {
-		t.Errorf("expected duplicates collapsed; A.Deps = %v", aNode.Deps)
+	// resolveAndUID no longer dedups — duplicate DepRefs surface as duplicate
+	// Deps. Generators must not emit duplicate refs (see EmitLD whole-archive).
+	if len(aNode.Deps) != 3 {
+		t.Errorf("expected duplicates preserved (len 3); A.Deps = %v", aNode.Deps)
 	}
 }
 
@@ -281,55 +289,6 @@ func TestFinalize_GraphTopLevelKeyOrder(t *testing.T) {
 		if keys[i] != w {
 			t.Errorf("graph key[%d] = %q, want %q", i, keys[i], w)
 		}
-	}
-}
-
-func TestFinalize_ForeignDepsResolvedAndSorted(t *testing.T) {
-	e := NewBufferedEmitter()
-	mk := func(name string) NodeRef {
-		return e.Emit(&Node{
-			Cmds: []Cmd{{CmdArgs: []string{name}, Env: map[string]string{}}},
-			Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-			KV: map[string]interface{}{"name": name}, Outputs: ToVFSSlice([]string{}),
-			Requirements:     map[string]interface{}{},
-			Tags:             []string{},
-			TargetProperties: map[string]string{},
-		})
-	}
-	t1 := mk("T1")
-	t2 := mk("T2")
-	a := e.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
-		Requirements:     map[string]interface{}{},
-		Tags:             []string{},
-		TargetProperties: map[string]string{},
-		ForeignDepRefs: map[string][]NodeRef{
-			"tool": {t2, t1, t2},
-		},
-	})
-	e.Result(a)
-	g := Finalize(e)
-
-	var aNode *Node
-	for _, n := range g.Graph {
-		if n.KV["name"] == "A" {
-			aNode = n
-		}
-	}
-
-	if aNode == nil {
-		t.Fatalf("A not found")
-	}
-
-	got := aNode.ForeignDeps["tool"]
-	if len(got) != 2 {
-		t.Errorf("ForeignDeps[tool] not deduped: %v", got)
-	}
-
-	if !sort.StringsAreSorted(got) {
-		t.Errorf("ForeignDeps[tool] not sorted: %v", got)
 	}
 }
 

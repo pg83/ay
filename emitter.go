@@ -266,75 +266,32 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
 }
 
 func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
-	var insertionOrderDeps []string
-
 	if len(node.DepRefs) > 0 {
-		seen, _ := uidScratch.seenPool.Get().(map[string]struct{})
-
-		if seen == nil {
-			seen = make(map[string]struct{}, 16)
-		}
-
-		clear(seen)
-
 		ordered := make([]string, 0, len(node.DepRefs))
 
 		for _, r := range node.DepRefs {
-			u := uids[r.id]
-
-			if _, ok := seen[u]; ok {
-				continue
-			}
-
-			seen[u] = struct{}{}
-			ordered = append(ordered, u)
+			ordered = append(ordered, uids[r.id])
 		}
 
-		uidScratch.seenPool.Put(seen)
-
-		if node.KV["p"] == "LD" || node.KV["p"] == "AR" {
-			insertionOrderDeps = ordered
-			sorted := make([]string, len(ordered))
-			copy(sorted, ordered)
-			sort.Strings(sorted)
-			node.Deps = sorted
-		} else {
-			sort.Strings(ordered)
-			node.Deps = ordered
-		}
+		node.Deps = ordered
 	} else if node.Deps == nil {
 		node.Deps = []string{}
 	}
 
 	if len(node.ForeignDepRefs) > 0 {
-		fkeys := make([]string, 0, len(node.ForeignDepRefs))
+		resolved := make(map[string][]string, len(node.ForeignDepRefs))
 
-		for k := range node.ForeignDepRefs {
-			fkeys = append(fkeys, k)
-		}
-
-		sort.Strings(fkeys)
-
-		resolved := make(map[string][]string, len(fkeys))
-
-		for _, k := range fkeys {
-			set := make(map[string]struct{})
-
-			for _, r := range node.ForeignDepRefs[k] {
-				set[uids[r.id]] = struct{}{}
-			}
-
-			if len(set) == 0 {
+		for k, refs := range node.ForeignDepRefs {
+			if len(refs) == 0 {
 				continue
 			}
 
-			vals := make([]string, 0, len(set))
+			vals := make([]string, 0, len(refs))
 
-			for u := range set {
-				vals = append(vals, u)
+			for _, r := range refs {
+				vals = append(vals, uids[r.id])
 			}
 
-			sort.Strings(vals)
 			resolved[k] = vals
 		}
 
@@ -350,10 +307,6 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 
 	node.SelfUID = u
 	node.StatsUID = nodeStatsUID(node, uidScratch)
-
-	if insertionOrderDeps != nil {
-		node.Deps = insertionOrderDeps
-	}
 
 	node.DepRefs = nil
 	node.ForeignDepRefs = nil
