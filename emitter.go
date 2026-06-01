@@ -269,7 +269,14 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 	var insertionOrderDeps []string
 
 	if len(node.DepRefs) > 0 {
-		seen := make(map[string]struct{}, len(node.DepRefs))
+		seen, _ := uidScratch.seenPool.Get().(map[string]struct{})
+
+		if seen == nil {
+			seen = make(map[string]struct{}, 16)
+		}
+
+		clear(seen)
+
 		ordered := make([]string, 0, len(node.DepRefs))
 
 		for _, r := range node.DepRefs {
@@ -282,6 +289,8 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 			seen[u] = struct{}{}
 			ordered = append(ordered, u)
 		}
+
+		uidScratch.seenPool.Put(seen)
 
 		if node.KV["p"] == "LD" || node.KV["p"] == "AR" {
 			insertionOrderDeps = ordered
@@ -340,7 +349,7 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 	node.UID = u
 
 	node.SelfUID = u
-	node.StatsUID = nodeStatsUID(node)
+	node.StatsUID = nodeStatsUID(node, uidScratch)
 
 	if insertionOrderDeps != nil {
 		node.Deps = insertionOrderDeps

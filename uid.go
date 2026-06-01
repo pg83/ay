@@ -8,6 +8,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/zeebo/xxh3"
 )
@@ -42,20 +43,20 @@ func nodeUIDWithBuf(n *Node, c *canonBuf) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])[:uidLength]
 }
 
-func nodeStatsUID(n *Node) string {
-	sum := md5.Sum([]byte(statsUIDPreimage(n)))
+func nodeStatsUID(n *Node, c *canonBuf) string {
+	sum := md5.Sum([]byte(statsUIDPreimage(n, c)))
 
 	return encHex.EncodeToString(sum[:])
 }
 
-func statsUIDPreimage(n *Node) string {
+func statsUIDPreimage(n *Node, c *canonBuf) string {
 	kind, _ := n.KV["p"].(string)
 
-	return pythonStringListRepr([]string{
+	return pythonStringListRepr(c, []string{
 		n.Platform,
-		pythonStringListRepr(sortedStatsTags(n)),
+		pythonStringListRepr(c, sortedStatsTags(n)),
 		kind,
-		pythonStringListRepr(sortedLongOutputs(n.Outputs)),
+		pythonStringListRepr(c, sortedLongOutputs(n.Outputs)),
 	})
 }
 
@@ -84,73 +85,71 @@ func sortedLongOutputs(outputs []VFS) []string {
 	return out
 }
 
-func pythonStringListRepr(items []string) string {
+// pythonStringListRepr builds the python-list repr into c.strBuf (reused per call;
+// the result is copied out via string(), so the buffer is free to be overwritten
+// by the next call — including the nested calls in statsUIDPreimage, which each
+// copy out before the outer reuses the buffer).
+func pythonStringListRepr(c *canonBuf, items []string) string {
 	if len(items) == 0 {
 		return "[]"
 	}
 
-	var b strings.Builder
-	b.Grow(len(items) * 8)
-	b.WriteByte('[')
+	b := append(c.strBuf[:0], '[')
 
 	for i, item := range items {
 		if i > 0 {
-			b.WriteString(", ")
+			b = append(b, ',', ' ')
 		}
 
-		b.WriteString(pythonStringRepr(item))
+		b = appendPythonStringRepr(b, item)
 	}
 
-	b.WriteByte(']')
+	b = append(b, ']')
+	c.strBuf = b
 
-	return b.String()
+	return string(b)
 }
 
-func pythonStringRepr(s string) string {
+func appendPythonStringRepr(dst []byte, s string) []byte {
 	quote := byte('\'')
 
 	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
 		quote = '"'
 	}
 
-	var b strings.Builder
-	b.Grow(len(s) + 2)
-	b.WriteByte(quote)
+	dst = append(dst, quote)
 
 	for i := 0; i < len(s); i++ {
 		ch := s[i]
 
 		switch ch {
 		case '\\':
-			b.WriteString(`\\`)
+			dst = append(dst, '\\', '\\')
 		case '\n':
-			b.WriteString(`\n`)
+			dst = append(dst, '\\', 'n')
 		case '\r':
-			b.WriteString(`\r`)
+			dst = append(dst, '\\', 'r')
 		case '\t':
-			b.WriteString(`\t`)
+			dst = append(dst, '\\', 't')
 		default:
 			if ch == quote {
-				b.WriteByte('\\')
-				b.WriteByte(ch)
+				dst = append(dst, '\\', ch)
 				continue
 			}
 
 			if ch < 0x20 || ch == 0x7f {
 				const hexDigits = "0123456789abcdef"
-				b.WriteString(`\x`)
-				b.WriteByte(hexDigits[ch>>4])
-				b.WriteByte(hexDigits[ch&0x0f])
+				dst = append(dst, '\\', 'x', hexDigits[ch>>4], hexDigits[ch&0x0f])
 				continue
 			}
 
-			b.WriteByte(ch)
+			dst = append(dst, ch)
 		}
 	}
 
-	b.WriteByte(quote)
+	dst = append(dst, quote)
 
-	return b.String()
+	return dst
 }
 
 type canonBuf struct {
@@ -160,6 +159,13 @@ type canonBuf struct {
 	// changes the node uid. Left nil where only the structural hash is wanted
 	// (e.g. the dump/-G path, which is re-uid'd from canonical content anyway).
 	fs FS
+
+	// strBuf is a reused scratch for statsUIDPreimage's list serialization (each
+	// call resets it and copies the result out via string(), so reuse is safe).
+	strBuf []byte
+	// seenPool reuses the dep-uid dedup map in resolveAndUID. A pool (not a field)
+	// keeps the uid pass safe if it is ever parallelized over the dep DAG.
+	seenPool sync.Pool
 }
 
 func (c *canonBuf) writeByte(b byte) {

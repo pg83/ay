@@ -69,8 +69,8 @@ func TestNodeStatsUID_KnownVector(t *testing.T) {
 	}
 
 	const want = "b3107447d6cc0947f72c25f4ce0c059f"
-	if got := nodeStatsUID(n); got != want {
-		t.Fatalf("nodeStatsUID mismatch:\n got: %s\nwant: %s\npreimage: %s", got, want, statsUIDPreimage(n))
+	if got := nodeStatsUID(n, &canonBuf{}); got != want {
+		t.Fatalf("nodeStatsUID mismatch:\n got: %s\nwant: %s\npreimage: %s", got, want, statsUIDPreimage(n, &canonBuf{}))
 	}
 }
 
@@ -102,12 +102,12 @@ func TestNodeStatsUID_IgnoresUnrelatedTargetCLIFlags(t *testing.T) {
 	})
 
 	const want = "b3107447d6cc0947f72c25f4ce0c059f"
-	if got := nodeStatsUID(base); got != want {
-		t.Fatalf("base nodeStatsUID mismatch:\n got: %s\nwant: %s\npreimage: %s", got, want, statsUIDPreimage(base))
+	if got := nodeStatsUID(base, &canonBuf{}); got != want {
+		t.Fatalf("base nodeStatsUID mismatch:\n got: %s\nwant: %s\npreimage: %s", got, want, statsUIDPreimage(base, &canonBuf{}))
 	}
 
-	if got := nodeStatsUID(withUnrelated); got != want {
-		t.Fatalf("unrelated target flag perturbed stats_uid:\n got: %s\nwant: %s\npreimage: %s", got, want, statsUIDPreimage(withUnrelated))
+	if got := nodeStatsUID(withUnrelated, &canonBuf{}); got != want {
+		t.Fatalf("unrelated target flag perturbed stats_uid:\n got: %s\nwant: %s\npreimage: %s", got, want, statsUIDPreimage(withUnrelated, &canonBuf{}))
 	}
 
 	for _, tag := range withUnrelated.StatsTags {
@@ -143,8 +143,8 @@ func TestNodeStatsUID_UsesBaseTargetFlags(t *testing.T) {
 	}
 
 	const want = "bdbe1d8ab9fcd589050e754ac396dd57"
-	if got := nodeStatsUID(n); got != want {
-		t.Fatalf("base target flag stats_uid mismatch:\n got: %s\nwant: %s\npreimage: %s", got, want, statsUIDPreimage(n))
+	if got := nodeStatsUID(n, &canonBuf{}); got != want {
+		t.Fatalf("base target flag stats_uid mismatch:\n got: %s\nwant: %s\npreimage: %s", got, want, statsUIDPreimage(n, &canonBuf{}))
 	}
 }
 
@@ -162,13 +162,14 @@ func TestNodeStatsUID_UsesLongRootOutputs(t *testing.T) {
 		},
 	}
 
-	got := nodeStatsUID(n)
+	got := nodeStatsUID(n, &canonBuf{})
 
-	shortRootPreimage := pythonStringListRepr([]string{
+	pc := &canonBuf{}
+	shortRootPreimage := pythonStringListRepr(pc, []string{
 		n.Platform,
-		pythonStringListRepr(sortedStatsTags(n)),
+		pythonStringListRepr(pc, sortedStatsTags(n)),
 		"LD",
-		pythonStringListRepr([]string{Intern("$(B)/tools/archiver/archiver").String()}),
+		pythonStringListRepr(pc, []string{Intern("$(B)/tools/archiver/archiver").String()}),
 	})
 	shortRootHash := md5.Sum([]byte(shortRootPreimage))
 	shortRootUID := encHex.EncodeToString(shortRootHash[:])
