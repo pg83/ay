@@ -79,8 +79,6 @@ type includeParserManager struct {
 	addinclIndex   map[STR][]VFS
 	addinclIndexed map[VFS]struct{}
 	buildParsed    map[string][]includeDirective
-
-	readBuf []byte
 }
 
 type parserPerfStats struct {
@@ -119,8 +117,7 @@ func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSe
 		return nil
 	}
 
-	data := pm.fs.ReadInto(rel, pm.readBuf)
-	pm.readBuf = data
+	data := pm.fs.Read(rel)
 
 	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
 		data = data[3:]
