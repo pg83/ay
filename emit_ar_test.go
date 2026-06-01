@@ -15,7 +15,7 @@ var testToolchainFlags = map[string]string{
 	"AR_TOOL":                 "/bin/llvm-ar",
 	"STRIP_TOOL":              "/bin/llvm-strip",
 	"LLD_TOOL":                "/bin/lld",
-	"CLANG16_RESOURCE_GLOBAL": "CLANG16_RESOURCE_GLOBAL::$(CLANG16-1380963495)",
+	"CLANG16_RESOURCE_GLOBAL": "CLANG16_RESOURCE_GLOBAL::$(CLANG16)",
 }
 
 var (

@@ -52,8 +52,8 @@ func commonFlags(tools map[string]string) map[string]string {
 		"USE_ARCADIA_PYTHON":       "yes",
 		"USE_PREBUILT_TOOLS":       "no",
 		"USE_PYTHON3":              "yes",
-		"BUILD_PYTHON_BIN":         canonicalizeResourcePatternRefs(tools["python3"]),
-		"BUILD_PYTHON3_BIN":        canonicalizeResourcePatternRefs(tools["python3"]),
+		"BUILD_PYTHON_BIN":         tools["python3"],
+		"BUILD_PYTHON3_BIN":        tools["python3"],
 		"CLANG_VER":                mineClangMajor(tools["clang"]),
 		"CLANG16_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG16_RESOURCE_GLOBAL", resourcePatternClang16),
 		"CLANG18_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG18_RESOURCE_GLOBAL", resourcePatternClang18),
@@ -63,8 +63,8 @@ func commonFlags(tools map[string]string) map[string]string {
 
 	for k, v := range tools {
 		key := strings.ReplaceAll(strings.ToUpper(k), "+", "_pl")
-		res[key+"_TOOL"] = canonicalizeResourcePatternRefs(v)
-		res[key+"_TOOL_VENDOR"] = canonicalizeResourcePatternRefs(v)
+		res[key+"_TOOL"] = v
+		res[key+"_TOOL_VENDOR"] = v
 	}
 
 	return res
@@ -238,7 +238,7 @@ func envToolPath(name string) string {
 	}
 
 	if strings.HasPrefix(v, "$(") || filepath.IsAbs(v) || strings.ContainsRune(v, os.PathSeparator) {
-		return canonicalizeResourcePatternRefs(v)
+		return v
 	}
 
 	return ""

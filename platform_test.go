@@ -248,14 +248,14 @@ func TestStatsTagsForPlatform_HostCLIPlatformFlagOSSDK(t *testing.T) {
 func TestPlatformMultiarchLibPath_UsesCompilerRoot(t *testing.T) {
 	p := NewPlatform(OSLinux, ISAX8664, map[string]string{
 		"PIC":              "yes",
-		"BUILD_PYTHON_BIN": "$(YMAKE_PYTHON3-1002064631)/bin/python3",
-		"CLANG_TOOL":       "$(CLANG-1274503668)/bin/clang",
-		"CLANG_pl_pl_TOOL": "$(CLANG-1274503668)/bin/clang++",
-		"AR_TOOL":          "$(CLANG-1274503668)/bin/llvm-ar",
-		"LLD_TOOL":         "$(LLD_ROOT-3107549726)/bin/ld.lld",
+		"BUILD_PYTHON_BIN": "$(YMAKE_PYTHON3)/bin/python3",
+		"CLANG_TOOL":       "$(CLANG)/bin/clang",
+		"CLANG_pl_pl_TOOL": "$(CLANG)/bin/clang++",
+		"AR_TOOL":          "$(CLANG)/bin/llvm-ar",
+		"LLD_TOOL":         "$(LLD_ROOT)/bin/ld.lld",
 	}, []string{"tool"}, "", "")
 
-	if got, want := p.MultiarchLibPath(), "$(CLANG-1274503668)/lib:$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu"; got != want {
+	if got, want := p.MultiarchLibPath(), "$(CLANG)/lib:$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu"; got != want {
 		t.Fatalf("MultiarchLibPath = %q, want %q", got, want)
 	}
 }
@@ -263,15 +263,15 @@ func TestPlatformMultiarchLibPath_UsesCompilerRoot(t *testing.T) {
 func TestPlatformLinkerSelectionTailFlags_UsesConfiguredLLDPath(t *testing.T) {
 	p := NewPlatform(OSLinux, ISAX8664, map[string]string{
 		"PIC":              "no",
-		"CLANG_TOOL":       "$(CLANG-1274503668)/bin/clang",
-		"CLANG_pl_pl_TOOL": "$(CLANG-1274503668)/bin/clang++",
-		"AR_TOOL":          "$(CLANG-1274503668)/bin/llvm-ar",
-		"LLD_TOOL":         "$(LLD_ROOT-3107549726)/bin/ld.lld",
+		"CLANG_TOOL":       "$(CLANG)/bin/clang",
+		"CLANG_pl_pl_TOOL": "$(CLANG)/bin/clang++",
+		"AR_TOOL":          "$(CLANG)/bin/llvm-ar",
+		"LLD_TOOL":         "$(LLD_ROOT)/bin/ld.lld",
 	}, nil, "", "")
 
 	want := []string{
 		"-fuse-ld=lld",
-		"--ld-path=$(LLD_ROOT-3107549726)/bin/ld.lld",
+		"--ld-path=$(LLD_ROOT)/bin/ld.lld",
 		"-Wl,--no-rosegment",
 		"-Wl,--build-id=sha1",
 	}
