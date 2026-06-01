@@ -10,7 +10,6 @@ var expectedKeyOrder = []string{
 	"cmds",
 	"deps",
 	"env",
-	"foreign_deps",
 	"inputs",
 	"kv",
 	"outputs",
@@ -79,7 +78,6 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 		Cmds:             []Cmd{{CmdArgs: []string{"echo"}, Env: map[string]string{}}},
 		Deps:             []string{"dep1"},
 		Env:              map[string]string{"FOO": "bar"},
-		ForeignDeps:      map[string][]string{"tool": {"tooluid"}},
 		Inputs:           ToVFSSlice([]string{"in"}),
 		KV:               map[string]interface{}{"p": "LD"},
 		Outputs:          ToVFSSlice([]string{"out"}),
@@ -157,7 +155,7 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
 		DepRefs:          []NodeRef{{id: 7}},
-		ForeignDepRefs:   map[string][]NodeRef{"tool": {{id: 9}}},
+		ForeignDepRefs:   []NodeRef{{id: 9}},
 	}
 	raw, err := json.Marshal(n)
 	if err != nil {

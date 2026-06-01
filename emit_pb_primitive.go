@@ -470,7 +470,7 @@ func EmitPB(
 	}
 
 	var depRefs []NodeRef
-	var foreignDepRefs map[string][]NodeRef
+	var foreignDepRefs []NodeRef
 
 	if cppStyleguideLDRef != (NodeRef{}) || protocLDRef != (NodeRef{}) || grpcCppLDRef != (NodeRef{}) || len(extraPlugins) > 0 {
 		var toolRefs []NodeRef
@@ -496,7 +496,7 @@ func EmitPB(
 		}
 
 		depRefs = append([]NodeRef(nil), toolRefs...)
-		foreignDepRefs = map[string][]NodeRef{"tool": toolRefs}
+		foreignDepRefs = toolRefs
 	}
 
 	// Producer refs for build-generated proto sources (e.g. RUN_ANTLR -lang

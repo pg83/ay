@@ -325,7 +325,7 @@ func TestFinalize_RejectsPreSetForeignDeps(t *testing.T) {
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
-		ForeignDeps:      map[string][]string{"tool": {"FAKE"}},
+		ForeignDeps:      []string{"FAKE"},
 	})
 
 	_, exc := finalizeExc(e)
@@ -387,7 +387,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
-		ForeignDepRefs:   map[string][]NodeRef{"tool": {}},
+		ForeignDepRefs:   []NodeRef{},
 	})
 	e.Result(a)
 	g := Finalize(e)

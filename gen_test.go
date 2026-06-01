@@ -713,7 +713,7 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Errorf("R6 Deps = %v, want [%q]", r6Node.Deps, ldNode.UID)
 	}
 
-	if len(r6Node.ForeignDeps) != 1 || len(r6Node.ForeignDeps["tool"]) != 1 || r6Node.ForeignDeps["tool"][0] != ldNode.UID {
+	if len(r6Node.ForeignDeps) != 1 || len(r6Node.ForeignDeps) != 1 || r6Node.ForeignDeps[0] != ldNode.UID {
 		t.Errorf("R6 ForeignDeps = %v, want {tool: [%q]}", r6Node.ForeignDeps, ldNode.UID)
 	}
 
@@ -2818,7 +2818,7 @@ END()
 			t.Fatalf("pb deps = %v, missing %q", pb.Deps, want)
 		}
 	}
-	if got := pb.ForeignDeps["tool"]; len(got) != len(wantDeps) {
+	if got := pb.ForeignDeps; len(got) != len(wantDeps) {
 		t.Fatalf("pb foreign_deps[tool] len = %d, want %d (%v)", len(got), len(wantDeps), got)
 	} else {
 		for _, want := range wantDeps {

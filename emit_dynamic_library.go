@@ -171,7 +171,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	}
 
 	if fixElfRef != (NodeRef{}) {
-		n.ForeignDepRefs = map[string][]NodeRef{"tool": {fixElfRef}}
+		n.ForeignDepRefs = []NodeRef{fixElfRef}
 	}
 
 	ref := ctx.emit.Emit(bindNodePlatform(n, instance.Platform))

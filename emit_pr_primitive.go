@@ -126,12 +126,12 @@ func EmitPR(
 	depRefs = append(depRefs, toolRefs...)
 	depRefs = append(depRefs, extraDepRefs...)
 
-	var foreignDepRefs map[string][]NodeRef
+	var foreignDepRefs []NodeRef
 
 	if len(toolRefs) > 0 {
 		// toolRefs is a fresh local, not mutated after this; depRefs above already
 		// copied out of it, so the node may share it read-only.
-		foreignDepRefs = map[string][]NodeRef{"tool": toolRefs}
+		foreignDepRefs = toolRefs
 	}
 
 	cmd := Cmd{

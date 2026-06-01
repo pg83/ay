@@ -248,14 +248,6 @@ func (c *canonBuf) writeStringMap(m map[string]string) {
 	}
 }
 
-func (c *canonBuf) writeStringSliceMap(m map[string][]string) {
-	c.writeUint32(uint32(len(m)))
-
-	for _, k := range canonKeysOf(m) {
-		c.writeBytes(k)
-		c.writeStringSlice(m[k])
-	}
-}
 func (c *canonBuf) writeInterfaceMap(m map[string]interface{}) {
 	c.writeUint32(uint32(len(m)))
 
@@ -324,7 +316,7 @@ func (c *canonBuf) writeNode(n *Node) {
 	c.writeCmdSlice(n.Cmds)
 	c.writeStringSlice(n.Deps)
 	c.writeStringMap(n.Env)
-	c.writeStringSliceMap(n.ForeignDeps)
+	c.writeStringSlice(n.ForeignDeps)
 	c.writeVFSSlice(n.Inputs)
 	c.writeKVMap(n.KV)
 	c.writeVFSSlice(n.Outputs)

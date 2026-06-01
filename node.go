@@ -12,7 +12,10 @@ type Node struct {
 	Cmds             []Cmd                  `json:"cmds"`
 	Deps             []string               `json:"deps"`
 	Env              map[string]string      `json:"env"`
-	ForeignDeps      map[string][]string    `json:"foreign_deps,omitempty"`
+	// ForeignDeps is the resolved tool-dep uids. Every node that has foreign deps
+	// keys them under the single "tool" group, so this is a flat slice; the JSON
+	// writer (gjson_write) wraps it back into {"tool": [...]} for output.
+	ForeignDeps      []string               `json:"-"`
 	Inputs           []VFS                  `json:"inputs"`
 	KV               map[string]interface{} `json:"kv"`
 	Outputs          []VFS                  `json:"outputs"`
@@ -27,8 +30,8 @@ type Node struct {
 
 	StatsTags []string `json:"-"`
 
-	DepRefs        []NodeRef            `json:"-"`
-	ForeignDepRefs map[string][]NodeRef `json:"-"`
+	DepRefs        []NodeRef `json:"-"`
+	ForeignDepRefs []NodeRef `json:"-"`
 }
 
 func nodeHasHostTag(tags []string) bool {

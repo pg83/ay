@@ -49,7 +49,7 @@ func TestEmitFL_NodeShape(t *testing.T) {
 	if len(node.DepRefs) != 1 || node.DepRefs[0].id != 9 {
 		t.Fatalf("DepRefs = %#v, want flatc dep", node.DepRefs)
 	}
-	if got := len(node.ForeignDepRefs["tool"]); got != 1 {
+	if got := len(node.ForeignDepRefs); got != 1 {
 		t.Fatalf("foreign tool deps = %d, want 1", got)
 	}
 }

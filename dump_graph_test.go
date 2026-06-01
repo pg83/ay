@@ -44,9 +44,7 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 	consumer := emit.Emit(&Node{
 		Cmds:    []Cmd{{CmdArgs: []string{"clang"}}},
 		DepRefs: []NodeRef{fetchUsed, llvmReferenced},
-		ForeignDepRefs: map[string][]NodeRef{
-			"tool": {fetchUsed},
-		},
+		ForeignDepRefs: []NodeRef{fetchUsed},
 		KV:      map[string]interface{}{"p": "CC"},
 		Outputs: []VFS{Intern("$(B)/obj/consumer.o")},
 	})
@@ -224,7 +222,7 @@ func TestFinalizeDumpGraph_PreservesFinalizeValidation(t *testing.T) {
 					Outputs: []VFS{Intern("$(B)/resources/CLANG")},
 				})
 				root := emit.Emit(&Node{
-					ForeignDeps: map[string][]string{"tool": []string{"FAKE"}},
+					ForeignDeps: []string{"FAKE"},
 					KV:          map[string]interface{}{"p": "LD"},
 					Outputs:     []VFS{Intern("$(B)/bin/root")},
 				})

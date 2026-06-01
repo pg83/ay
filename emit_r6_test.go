@@ -78,8 +78,8 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 
 	if len(got.ForeignDepRefs) != 1 {
 		t.Errorf("ForeignDepRefs len = %d, want 1 (PR-L4-C/07 restores foreign_deps[tool])", len(got.ForeignDepRefs))
-	} else if len(got.ForeignDepRefs["tool"]) != 1 || got.ForeignDepRefs["tool"][0] != ragel6LD {
-		t.Errorf("ForeignDepRefs[tool] = %v, want [%v]", got.ForeignDepRefs["tool"], ragel6LD)
+	} else if len(got.ForeignDepRefs) != 1 || got.ForeignDepRefs[0] != ragel6LD {
+		t.Errorf("ForeignDepRefs[tool] = %v, want [%v]", got.ForeignDepRefs, ragel6LD)
 	}
 
 	if got.Requirements["network"] != "restricted" {

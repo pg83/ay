@@ -39,10 +39,8 @@ func dumpGraphIncomingRefs(nodes []*Node) []int {
 			incoming[int(dep.id)]++
 		}
 
-		for _, deps := range node.ForeignDepRefs {
-			for _, dep := range deps {
-				incoming[int(dep.id)]++
-			}
+		for _, dep := range node.ForeignDepRefs {
+			incoming[int(dep.id)]++
 		}
 	}
 
@@ -93,10 +91,7 @@ func dumpGraphDropNodeRefs(nodes []*Node, incoming []int, results map[int64]stru
 	for head := 0; head < len(queue); head++ {
 		node := nodes[queue[head]]
 		dumpGraphDropNodeDeps(node.DepRefs, drop, incoming, maybeDrop)
-
-		for _, deps := range node.ForeignDepRefs {
-			dumpGraphDropNodeDeps(deps, drop, incoming, maybeDrop)
-		}
+		dumpGraphDropNodeDeps(node.ForeignDepRefs, drop, incoming, maybeDrop)
 	}
 
 	return drop
@@ -195,7 +190,7 @@ func pruneDumpGraphEmitterInPlace(e *BufferedEmitter, drop map[int64]struct{}, o
 		node.SelfUID = ""
 		node.StatsUID = ""
 		node.DepRefs = trimDumpGraphNodeRefList(node.DepRefs, drop, newIDs)
-		node.ForeignDepRefs = trimDumpGraphForeignDepRefs(node.ForeignDepRefs, drop, newIDs)
+		node.ForeignDepRefs = trimDumpGraphNodeRefList(node.ForeignDepRefs, drop, newIDs)
 	}
 
 	e.nodes = keptNodes
@@ -230,30 +225,6 @@ func trimDumpGraphNodeRefList(in []NodeRef, drop map[int64]struct{}, newIDs []in
 
 	return out
 }
-func trimDumpGraphForeignDepRefs(in map[string][]NodeRef, drop map[int64]struct{}, newIDs []int64) map[string][]NodeRef {
-	if len(in) == 0 {
-		return nil
-	}
-
-	out := make(map[string][]NodeRef, len(in))
-
-	for key, deps := range in {
-		trimmed := trimDumpGraphNodeRefList(deps, drop, newIDs)
-
-		if len(trimmed) == 0 {
-			continue
-		}
-
-		out[key] = trimmed
-	}
-
-	if len(out) == 0 {
-		return nil
-	}
-
-	return out
-}
-
 func trimDumpGraphResultRefs(in []int64, newIDs []int64) []int64 {
 	if len(in) == 0 {
 		return nil

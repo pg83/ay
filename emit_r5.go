@@ -73,7 +73,7 @@ func EmitR5(
 			"ram":     float64(32),
 		},
 		DepRefs:        depRefs,
-		ForeignDepRefs: map[string][]NodeRef{"tool": depRefs},
+		ForeignDepRefs: depRefs,
 	}
 
 	return emit.Emit(bindNodePlatform(node, instance.Platform)), tmpVFS, cppVFS

@@ -239,7 +239,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 
 	if len(toolRefs) > 0 {
-		pyPBNode.ForeignDepRefs = map[string][]NodeRef{"tool": toolRefs}
+		pyPBNode.ForeignDepRefs = toolRefs
 	}
 
 	pyPBRef := ctx.emit.Emit(bindNodePlatform(pyPBNode, instance.Platform))
@@ -323,7 +323,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 		}
 
 		if len(toolRefs) > 0 {
-			node.ForeignDepRefs = map[string][]NodeRef{"tool": toolRefs}
+			node.ForeignDepRefs = toolRefs
 		}
 
 		res.Refs = append(res.Refs, ctx.emit.Emit(bindNodePlatform(node, instance.Platform)))

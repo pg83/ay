@@ -49,12 +49,10 @@ func EmitEN(
 
 	depRefs = append(depRefs, depENRefs...)
 
-	var foreignDepRefs map[string][]NodeRef
+	var foreignDepRefs []NodeRef
 
 	if enumParserLD != (NodeRef{}) {
-		foreignDepRefs = map[string][]NodeRef{
-			"tool": {enumParserLD},
-		}
+		foreignDepRefs = []NodeRef{enumParserLD}
 	}
 
 	node := &Node{
