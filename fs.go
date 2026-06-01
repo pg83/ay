@@ -19,8 +19,10 @@ type FS interface {
 	Exists(rel string) (present bool, isDir bool)
 	IsFile(rel string) bool
 	IsDir(rel string) bool
+	// Read returns the file content in a buffer reused across calls: the result is
+	// valid only until the next Read on this FS. Callers that retain content past
+	// another Read must copy (e.g. string(data), or ReadAbs for the parser).
 	Read(rel string) []byte
-	ReadInto(rel string, buf []byte) []byte
 	ReadAbs(absPath string) []byte
 	ExistsAbs(absPath string) (present bool, isDir bool)
 	Walk(rel string, visit func(rel string, isDir bool))
@@ -47,7 +49,7 @@ type osFS struct {
 	// happen on the single gen goroutine — the executor goroutine is spawned only
 	// after a node's uid is computed — so no lock.
 	contentHashes []uint64
-	chReadBuf     []byte // reused by the lazy ContentHash read (gen goroutine only)
+	readBuf       []byte // reused buffer returned by Read (gen goroutine only)
 
 	listdirHits   uint64
 	listdirMisses uint64
@@ -100,7 +102,7 @@ func (fs *osFS) ContentHash(v VFS) uint64 {
 		return 0 // directory inputs (e.g. a test data dir) have no content hash
 	}
 
-	fs.chReadBuf = fs.ReadInto(rel, fs.chReadBuf)
+	fs.Read(rel) // side effect: records the content hash into contentHashes[s]
 	return fs.contentHashes[s]
 }
 func (fs *osFS) SourceRoot() string { return fs.sourceRoot }
@@ -175,15 +177,9 @@ func (fs *osFS) IsDir(rel string) bool {
 }
 
 func (fs *osFS) Read(rel string) []byte {
-	data := Throw2(os.ReadFile(fs.rootSlash + cleanRel(rel)))
-	fs.recordContentHash(rel, data)
-	return data
-}
-
-func (fs *osFS) ReadInto(rel string, buf []byte) []byte {
-	buf = fs.readIntoRaw(rel, buf)
-	fs.recordContentHash(rel, buf)
-	return buf
+	fs.readBuf = fs.readIntoRaw(rel, fs.readBuf)
+	fs.recordContentHash(rel, fs.readBuf)
+	return fs.readBuf
 }
 
 func (fs *osFS) readIntoRaw(rel string, buf []byte) []byte {
@@ -237,8 +233,12 @@ func (fs *osFS) readIntoRaw(rel string, buf []byte) []byte {
 	}
 }
 
+// ReadAbs reads a file to be parsed. The yamake lexer holds its src lazily, and a
+// nested INCLUDE triggers another Read mid-parse — which would overwrite the reused
+// Read buffer the outer lexer still points at. So ReadAbs returns an owned copy that
+// survives those nested reads.
 func (fs *osFS) ReadAbs(absPath string) []byte {
-	return fs.Read(fs.relForAbs(absPath))
+	return append([]byte(nil), fs.Read(fs.relForAbs(absPath))...)
 }
 
 func (fs *osFS) ExistsAbs(absPath string) (present bool, isDir bool) {

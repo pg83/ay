@@ -291,19 +291,6 @@ func (fs *memFS) ContentHash(v VFS) uint64 {
 	return xxh3.Hash(data)
 }
 
-func (fs *memFS) ReadInto(rel string, buf []byte) []byte {
-	data, ok := fs.files[cleanRel(rel)]
-	if !ok {
-		ThrowFmt("memFS: no such file %q", rel)
-	}
-
-	if cap(buf) < len(data) {
-		buf = make([]byte, 0, len(data))
-	}
-
-	return append(buf[:0], data...)
-}
-
 func (fs *memFS) ReadAbs(absPath string) []byte {
 	return fs.Read(fs.relForAbs(absPath))
 }
