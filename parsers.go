@@ -174,7 +174,11 @@ func (cIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 		}
 	}
 
-	return rawParsedIncludeSet(parsedIncludesLocal, out...)
+	if len(out) == 0 {
+		return nil
+	}
+
+	return parsedIncludeSet{parsedIncludesLocal: out}
 }
 
 func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
@@ -238,7 +242,11 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 		}
 	})
 
-	return rawParsedIncludeSet(parsedIncludesLocal, out...)
+	if len(out) == 0 {
+		return nil
+	}
+
+	return parsedIncludeSet{parsedIncludesLocal: out}
 }
 
 func cythonPxdTarget(module string) string {
@@ -269,7 +277,11 @@ func (flatbuffersIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncl
 		out = append(out, includeDirective{kind: includeQuoted, target: internString(string(m[1]))})
 	})
 
-	return rawParsedIncludeSet(parsedIncludesLocal, out...)
+	if len(out) == 0 {
+		return nil
+	}
+
+	return parsedIncludeSet{parsedIncludesLocal: out}
 }
 
 func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet {
@@ -293,7 +305,12 @@ func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet
 		}
 	})
 
-	set := rawParsedIncludeSet(parsedIncludesLocal, local...)
+	var set parsedIncludeSet
+
+	if len(local) > 0 {
+		set = parsedIncludeSet{parsedIncludesLocal: local}
+	}
+
 	set = appendParsedDirectives(set, parsedIncludesHCPP, hcpp...)
 	return set
 }
@@ -391,7 +408,13 @@ func (swigIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet 
 }
 
 func (yasmIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet {
-	return rawParsedIncludeSet(parsedIncludesLocal, parseYasmIncludes(data)...)
+	out := parseYasmIncludes(data)
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	return parsedIncludeSet{parsedIncludesLocal: out}
 }
 
 func (emptyIncludeDirectiveParser) Parse(_ string, _ []byte) parsedIncludeSet {

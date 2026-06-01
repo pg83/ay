@@ -18,15 +18,6 @@ type parsedInclude = includeDirective
 
 type parsedIncludeSet map[parsedIncludeBucket][]includeDirective
 
-func rawParsedIncludeSet(bucket parsedIncludeBucket, directives ...includeDirective) parsedIncludeSet {
-	if len(directives) == 0 {
-		return nil
-	}
-
-	out := append([]includeDirective(nil), directives...)
-	return parsedIncludeSet{bucket: out}
-}
-
 func appendParsedDirectives(set parsedIncludeSet, bucket parsedIncludeBucket, directives ...includeDirective) parsedIncludeSet {
 	if len(directives) == 0 {
 		return set
