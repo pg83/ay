@@ -108,6 +108,6 @@ func writeGraph(out string, g *Graph) {
 	}
 
 	bw := bufio.NewWriterSize(w, 1<<20)
-	writeGraphIndented(bw, g)
+	writeGraphCompact(bw, g)
 	Throw(bw.Flush())
 }
