@@ -135,11 +135,14 @@ func EmitLD(
 		inputs = append(inputs, Source(*exportsScript))
 	}
 
+	// Whole-archive is a LINK ATTRIBUTE of a subset of the peer archives (the link
+	// command wraps them in --whole-archive), not an independent dependency source:
+	// every wholeArchiveRef is already in peerLDRefs. So it is NOT appended here —
+	// peerLDRefs already covers it, and appending would duplicate the dep.
 	depRefs := make([]NodeRef, 0, len(ccRefs)+len(pluginRefs)+len(globalRefs)+len(peerLDRefs)+len(dynamicRefs)+len(objcopyRefs))
 	depRefs = append(depRefs, ccRefs...)
 	depRefs = append(depRefs, pluginRefs...)
 	depRefs = append(depRefs, globalRefs...)
-	depRefs = append(depRefs, wholeArchiveRefs...)
 	depRefs = append(depRefs, peerLDRefs...)
 	depRefs = append(depRefs, dynamicRefs...)
 	depRefs = append(depRefs, objcopyRefs...)

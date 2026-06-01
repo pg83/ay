@@ -7,7 +7,6 @@ import (
 	encHex "encoding/hex"
 	"math"
 	"sort"
-	"sync"
 
 	"github.com/zeebo/xxh3"
 )
@@ -185,9 +184,6 @@ type canonBuf struct {
 	// into it — no intermediate strings.
 	strBuf  []byte
 	strBuf2 []byte
-	// seenPool reuses the dep-uid dedup map in resolveAndUID. A pool (not a field)
-	// keeps the uid pass safe if it is ever parallelized over the dep DAG.
-	seenPool sync.Pool
 }
 
 func (c *canonBuf) writeByte(b byte) {

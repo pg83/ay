@@ -337,6 +337,8 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 	emit := NewBufferedEmitter()
 	mainRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
+	// A whole-archive lib is one of the peer archives (linked with --whole-archive),
+	// so its ref is in BOTH peerLDRefs and wholeArchiveRefs — the same node.
 	wholeRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
 
 	instance := targetInstance("some/prog")
@@ -346,7 +348,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		instance,
 		"",
 		[]NodeRef{mainRef}, []VFS{Intern("$(B)/some/prog/main.cpp.o")},
-		nil, nil,
+		[]NodeRef{wholeRef}, []VFS{Build(wholeArchivePath)},
 		nil,
 		nil, nil,
 		nil, nil,
@@ -377,8 +379,16 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		t.Fatalf("inputs do not contain whole-archive path %q: %#v", wholeArchivePath, got.Inputs)
 	}
 
-	if !slices.Contains(got.DepRefs, wholeRef) {
-		t.Fatalf("DepRefs do not contain whole-archive ref %+v: %#v", wholeRef, got.DepRefs)
+	// The lib is a peer, so it is in DepRefs — exactly ONCE (whole-archive is a
+	// link attribute, not a second dep source).
+	depCount := 0
+	for _, r := range got.DepRefs {
+		if r == wholeRef {
+			depCount++
+		}
+	}
+	if depCount != 1 {
+		t.Fatalf("whole-archive/peer ref in DepRefs %d times, want 1: %#v", depCount, got.DepRefs)
 	}
 
 	cmdArgs := got.Cmds[2].CmdArgs
@@ -397,8 +407,8 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T) {
 	emit := NewBufferedEmitter()
 	mainRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
+	// Same node reached as both a peer archive and a whole-archive lib.
 	peerRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
-	wholeRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
 
 	instance := targetInstance("some/prog")
 	dupPath := Intern("$(B)/some/prog/libproto_cpp.a")
@@ -411,7 +421,7 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 		nil,
 		nil, nil,
 		nil, nil,
-		[]NodeRef{wholeRef}, []VFS{dupPath},
+		[]NodeRef{peerRef}, []VFS{dupPath},
 		nil,
 		nil, nil,
 		nil, nil,
@@ -444,8 +454,14 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 		t.Fatalf("inputs contain %d copies of %q, want 1: %#v", count, dupPath.String(), got.Inputs)
 	}
 
-	if !slices.Contains(got.DepRefs, wholeRef) {
-		t.Fatalf("DepRefs do not contain whole-archive ref %+v: %#v", wholeRef, got.DepRefs)
+	depCount := 0
+	for _, r := range got.DepRefs {
+		if r == peerRef {
+			depCount++
+		}
+	}
+	if depCount != 1 {
+		t.Fatalf("peer/whole-archive ref in DepRefs %d times, want 1: %#v", depCount, got.DepRefs)
 	}
 
 	cmdArgs := got.Cmds[2].CmdArgs
