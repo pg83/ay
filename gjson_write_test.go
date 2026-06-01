@@ -60,7 +60,7 @@ func TestWriteGraphIndented_ByteExact(t *testing.T) {
 						Env:     map[string]string{},
 					},
 				},
-				Deps:   []string{"depUid1", "depUid2"},
+				Deps:   []UID{tuid("depUid1"), tuid("depUid2")},
 				Env:    map[string]string{"PATH": "/usr/bin"},
 				Inputs: ToVFSSlice([]string{"in1", "in2"}),
 				KV:          map[string]interface{}{"key1": "val1", "key2": "val2"},
@@ -74,15 +74,15 @@ func TestWriteGraphIndented_ByteExact(t *testing.T) {
 					"flag":    true,
 				},
 				Sandboxing:       true,
-				SelfUID:          "selfUidXXXXXXXXXXXXXX1",
+				SelfUID:          tuid("selfUid1"),
 				StatsUID:         "statsUidXXXXXXXXXXXXXXXXXX1",
 				Tags:             []string{"tag1", "tag2"},
 				TargetProperties: map[string]string{"module_dir": "x/y", "module_lang": "cpp"},
-				UID:              "uidXXXXXXXXXXXXXXXXXX1",
+				UID:              tuid("uid1"),
 			},
 			{
 				Cmds:             []Cmd{},
-				Deps:             []string{},
+				Deps:             []UID{},
 				Env:              map[string]string{},
 				Inputs:           ToVFSSlice([]string{}),
 				KV:               map[string]interface{}{},
@@ -90,15 +90,15 @@ func TestWriteGraphIndented_ByteExact(t *testing.T) {
 				Platform:         "platform-with-control-and--and-\b-and-\f",
 				Requirements:     map[string]interface{}{},
 				Sandboxing:       true,
-				SelfUID:          "selfUidXXXXXXXXXXXXXX2",
+				SelfUID:          tuid("selfUid2"),
 				StatsUID:         "statsUidXXXXXXXXXXXXXXXXXX2",
 				Tags:             []string{},
 				TargetProperties: map[string]string{},
-				UID:              "uidXXXXXXXXXXXXXXXXXX2",
+				UID:              tuid("uid2"),
 			},
 		},
 		Inputs: map[string]interface{}{},
-		Result: []string{"uidXXXXXXXXXXXXXXXXXX1", "uidXXXXXXXXXXXXXXXXXX2"},
+		Result: []UID{tuid("uid1"), tuid("uid2")},
 	}
 
 	want := encodeWithStdlib(g)
@@ -151,24 +151,24 @@ func TestWriteGraphIndented_ForeignDepsToolObject(t *testing.T) {
 		Graph: []*Node{
 			{
 				Cmds:             []Cmd{},
-				Deps:             []string{},
+				Deps:             []UID{},
 				Env:              map[string]string{},
-				ForeignDeps:      []string{"u1", "u2"},
+				ForeignDeps:      []UID{tuid("u1"), tuid("u2")},
 				Inputs:           ToVFSSlice([]string{}),
 				KV:               map[string]interface{}{},
 				Outputs:          ToVFSSlice([]string{}),
 				Platform:         "p",
 				Requirements:     map[string]interface{}{},
 				Sandboxing:       true,
-				SelfUID:          "s",
+				SelfUID:          tuid("s"),
 				StatsUID:         "st",
 				Tags:             []string{},
 				TargetProperties: map[string]string{},
-				UID:              "u",
+				UID:              tuid("u"),
 			},
 		},
 		Inputs: map[string]interface{}{},
-		Result: []string{"u"},
+		Result: []UID{tuid("u")},
 	}
 
 	got := string(encodeWithHandRolled(g))
@@ -176,8 +176,8 @@ func TestWriteGraphIndented_ForeignDepsToolObject(t *testing.T) {
 	want := "\"env\": {},\n" +
 		"            \"foreign_deps\": {\n" +
 		"                \"tool\": [\n" +
-		"                    \"u1\",\n" +
-		"                    \"u2\"\n" +
+		"                    \"" + tuid("u1").String() + "\",\n" +
+		"                    \"" + tuid("u2").String() + "\"\n" +
 		"                ]\n" +
 		"            },\n" +
 		"            \"inputs\": ["
@@ -191,7 +191,7 @@ func TestWriteGraphIndented_EmptyGraph(t *testing.T) {
 		Conf:   map[string]interface{}{},
 		Graph:  []*Node{},
 		Inputs: map[string]interface{}{},
-		Result: []string{},
+		Result: []UID{},
 	}
 
 	want := encodeWithStdlib(g)

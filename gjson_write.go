@@ -72,7 +72,7 @@ func writeGraphIndented(w io.Writer, g *Graph) {
 	buf = append(buf, '\n')
 
 	buf = append(buf, `    "result": `...)
-	buf = appendStringSlice(buf, g.Result, "    ")
+	buf = appendUIDSlice(buf, g.Result, "    ")
 	buf = append(buf, '\n')
 
 	buf = append(buf, '}')
@@ -104,7 +104,7 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"deps": `...)
-	buf = appendStringSlice(buf, n.Deps, innerPad)
+	buf = appendUIDSlice(buf, n.Deps, innerPad)
 	buf = append(buf, ',', '\n')
 
 	buf = append(buf, innerPad...)
@@ -162,7 +162,7 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"self_uid": `...)
-	buf = appendString(buf, n.SelfUID)
+	buf = appendUID(buf, n.SelfUID)
 	buf = append(buf, ',', '\n')
 
 	buf = append(buf, innerPad...)
@@ -182,7 +182,7 @@ func appendNode(buf []byte, n *Node, pad string) []byte {
 
 	buf = append(buf, innerPad...)
 	buf = append(buf, `"uid": `...)
-	buf = appendString(buf, n.UID)
+	buf = appendUID(buf, n.UID)
 	buf = append(buf, '\n')
 
 	buf = append(buf, pad...)
@@ -260,6 +260,40 @@ func appendStringSlice(buf []byte, ss []string, pad string) []byte {
 		buf = appendString(buf, s)
 
 		if i < len(ss)-1 {
+			buf = append(buf, ',')
+		}
+
+		buf = append(buf, '\n')
+	}
+
+	buf = append(buf, pad...)
+	buf = append(buf, ']')
+
+	return buf
+}
+
+// appendUID appends the quoted base64 uid directly into buf (the encode lands in a
+// stack array inside UID.appendB64 — no per-uid string allocation).
+func appendUID(buf []byte, u UID) []byte {
+	buf = append(buf, '"')
+	buf = u.appendB64(buf)
+
+	return append(buf, '"')
+}
+
+func appendUIDSlice(buf []byte, us []UID, pad string) []byte {
+	if len(us) == 0 {
+		return append(buf, '[', ']')
+	}
+
+	buf = append(buf, '[', '\n')
+	itemPad := pad + "    "
+
+	for i, u := range us {
+		buf = append(buf, itemPad...)
+		buf = appendUID(buf, u)
+
+		if i < len(us)-1 {
 			buf = append(buf, ',')
 		}
 
@@ -498,13 +532,13 @@ func appendStringMap(buf []byte, m map[string]string, pad string) []byte {
 // appendToolForeignDeps writes the foreign-dep slice as the single-key object
 // {"tool": [...]} — the only key any node ever uses. Byte-identical to the old
 // map writer for a one-key "tool" map.
-func appendToolForeignDeps(buf []byte, deps []string, pad string) []byte {
+func appendToolForeignDeps(buf []byte, deps []UID, pad string) []byte {
 	buf = append(buf, '{', '\n')
 	itemPad := pad + "    "
 	buf = append(buf, itemPad...)
 	buf = appendString(buf, "tool")
 	buf = append(buf, ':', ' ')
-	buf = appendStringSlice(buf, deps, itemPad)
+	buf = appendUIDSlice(buf, deps, itemPad)
 	buf = append(buf, '\n')
 	buf = append(buf, pad...)
 	buf = append(buf, '}')

@@ -78,14 +78,14 @@ type Graph struct {
 	Conf   map[string]interface{} `json:"conf"`
 	Graph  []*Node                `json:"graph"`
 	Inputs map[string]interface{} `json:"inputs"`
-	Result []string               `json:"result"`
+	Result []UID                  `json:"result"`
 }
 
-func FinalizeStream(e *BufferedEmitter, yield func(*Node)) []string {
+func FinalizeStream(e *BufferedEmitter, yield func(*Node)) []UID {
 	uids := finalizeNodes(e, yield)
 
-	results := make([]string, 0, len(e.results))
-	seen := map[string]struct{}{}
+	results := make([]UID, 0, len(e.results))
+	seen := map[UID]struct{}{}
 
 	for _, rid := range e.results {
 		u := uids[rid]
@@ -101,7 +101,7 @@ func FinalizeStream(e *BufferedEmitter, yield func(*Node)) []string {
 	return results
 }
 
-func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) []string {
+func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) []UID {
 	if e.finalized {
 		ThrowFmt("finalize: emitter already finalized")
 	}
@@ -112,7 +112,7 @@ func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) []
 		ThrowFmt("finalize: order length %d does not match buffer size %d", len(order), n)
 	}
 
-	uids := make([]string, n)
+	uids := make([]UID, n)
 	uidScratch := canonBuf{fs: e.fs}
 
 	for _, i := range order {
@@ -240,13 +240,13 @@ func finalizeOrder(e *BufferedEmitter) []int {
 	return order
 }
 
-func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []string {
+func finalizeNodes(e *BufferedEmitter, yield func(*Node)) []UID {
 	return finalizeNodesInOrder(e, finalizeOrder(e), yield)
 }
 
-func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
+func resolveAndUID(node *Node, uids []UID, uidScratch *canonBuf) UID {
 	if len(node.DepRefs) > 0 {
-		ordered := make([]string, 0, len(node.DepRefs))
+		ordered := make([]UID, 0, len(node.DepRefs))
 
 		for _, r := range node.DepRefs {
 			ordered = append(ordered, uids[r.id])
@@ -254,11 +254,11 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 
 		node.Deps = ordered
 	} else if node.Deps == nil {
-		node.Deps = []string{}
+		node.Deps = []UID{}
 	}
 
 	if len(node.ForeignDepRefs) > 0 {
-		vals := make([]string, 0, len(node.ForeignDepRefs))
+		vals := make([]UID, 0, len(node.ForeignDepRefs))
 
 		for _, r := range node.ForeignDepRefs {
 			vals = append(vals, uids[r.id])
@@ -283,7 +283,8 @@ func resolveAndUID(node *Node, uids []string, uidScratch *canonBuf) string {
 
 type StreamingEmitter struct {
 	nodes      []*Node
-	uids       []string
+	uids       []UID
+	resolved   []bool // resolved[id]: uids[id] holds the computed uid (not a sentinel)
 	pendingIdx []int64
 	pendingSet map[int64]bool
 	results    []int64
@@ -308,7 +309,8 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 
 	id := int64(len(e.nodes))
 	e.nodes = append(e.nodes, n)
-	e.uids = append(e.uids, "")
+	e.uids = append(e.uids, UID{})
+	e.resolved = append(e.resolved, false)
 
 	if e.hasUnresolvedDeps(n) {
 		e.pendingSet[id] = true
@@ -317,6 +319,7 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 	}
 
 	e.uids[id] = resolveAndUID(n, e.uids, &e.uidScratch)
+	e.resolved[id] = true
 
 	if e.onNode != nil {
 		e.onNode(n)
@@ -327,13 +330,13 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 
 func (e *StreamingEmitter) hasUnresolvedDeps(n *Node) bool {
 	for _, r := range n.DepRefs {
-		if e.uids[r.id] == "" {
+		if !e.resolved[r.id] {
 			return true
 		}
 	}
 
 	for _, r := range n.ForeignDepRefs {
-		if e.uids[r.id] == "" {
+		if !e.resolved[r.id] {
 			return true
 		}
 	}
@@ -352,7 +355,7 @@ func (e *StreamingEmitter) OnReady(_ NodeRef) <-chan struct{} {
 	return e.readyCh
 }
 
-func (e *StreamingEmitter) Finish() []string {
+func (e *StreamingEmitter) Finish() []UID {
 	if e.finalized {
 		panic("StreamingEmitter.Finish called twice")
 	}
@@ -360,6 +363,7 @@ func (e *StreamingEmitter) Finish() []string {
 	for _, id := range e.pendingIdx {
 		n := e.nodes[id]
 		e.uids[id] = resolveAndUID(n, e.uids, &e.uidScratch)
+		e.resolved[id] = true
 
 		if e.onNode != nil {
 			e.onNode(n)
@@ -369,8 +373,8 @@ func (e *StreamingEmitter) Finish() []string {
 	e.finalized = true
 	close(e.readyCh)
 
-	results := make([]string, 0, len(e.results))
-	seen := map[string]struct{}{}
+	results := make([]UID, 0, len(e.results))
+	seen := map[UID]struct{}{}
 
 	for _, rid := range e.results {
 		u := e.uids[rid]
@@ -386,17 +390,17 @@ func (e *StreamingEmitter) Finish() []string {
 	return results
 }
 
-func graphFromFinalizedEmitter(e *BufferedEmitter, uids []string) *Graph {
+func graphFromFinalizedEmitter(e *BufferedEmitter, uids []UID) *Graph {
 	n := len(e.nodes)
 
 	out := &Graph{
 		Conf:   map[string]interface{}{},
 		Inputs: map[string]interface{}{},
 		Graph:  make([]*Node, 0, n),
-		Result: make([]string, 0, len(e.results)),
+		Result: make([]UID, 0, len(e.results)),
 	}
 
-	uidToNode := make(map[string]*Node, n)
+	uidToNode := make(map[UID]*Node, n)
 
 	for i, node := range e.nodes {
 		u := uids[i]
@@ -406,7 +410,7 @@ func graphFromFinalizedEmitter(e *BufferedEmitter, uids []string) *Graph {
 		}
 	}
 
-	seenResult := map[string]struct{}{}
+	seenResult := map[UID]struct{}{}
 
 	for _, rid := range e.results {
 		u := uids[rid]
@@ -419,9 +423,9 @@ func graphFromFinalizedEmitter(e *BufferedEmitter, uids []string) *Graph {
 		out.Result = append(out.Result, u)
 	}
 
-	seenNode := make(map[string]struct{}, n)
-	var dfsVisit func(uid string)
-	dfsVisit = func(uid string) {
+	seenNode := make(map[UID]struct{}, n)
+	var dfsVisit func(uid UID)
+	dfsVisit = func(uid UID) {
 		if _, ok := seenNode[uid]; ok {
 			return
 		}
