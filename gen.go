@@ -2215,26 +2215,25 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 	return out
 }
 
-func mergeDedupVFS(a, b []VFS) []VFS {
-	out := make([]VFS, 0, len(a)+len(b))
-	seen := make(map[VFS]struct{}, len(a)+len(b))
+func mergeDedupVFS(lists ...[]VFS) []VFS {
+	total := 0
 
-	for _, x := range a {
-		if _, dup := seen[x]; dup {
-			continue
-		}
-
-		seen[x] = struct{}{}
-		out = append(out, x)
+	for _, l := range lists {
+		total += len(l)
 	}
 
-	for _, x := range b {
-		if _, dup := seen[x]; dup {
-			continue
-		}
+	out := make([]VFS, 0, total)
+	seen := make(map[VFS]struct{}, total)
 
-		seen[x] = struct{}{}
-		out = append(out, x)
+	for _, l := range lists {
+		for _, x := range l {
+			if _, dup := seen[x]; dup {
+				continue
+			}
+
+			seen[x] = struct{}{}
+			out = append(out, x)
+		}
 	}
 
 	return out

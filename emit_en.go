@@ -213,8 +213,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			}
 		}
 
-		enClosure := mergeDedupVFS(filteredClosure, crossCppClosure)
-		enClosure = mergeDedupVFS(enClosure, ownOutputClosure)
+		enClosure := mergeDedupVFS(filteredClosure, crossCppClosure, ownOutputClosure)
 
 		augmentedDepENRefs := depENRefs
 		enDepScan := append([]VFS{headerInput}, enClosure...)
