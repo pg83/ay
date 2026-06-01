@@ -302,17 +302,24 @@ func (v PerSourceView) activeIncluderRecords(includerPath string) []*SysIncl {
 }
 
 func (v PerSourceView) computeActiveIncluderRecords(includerPath string) []*SysIncl {
-	var active []*SysIncl
+	return v.computeActiveIncluderRecordsInto(nil, includerPath)
+}
+
+// computeActiveIncluderRecordsInto appends the matching records into dst[:0], so a
+// caller can reuse a scratch slice across calls (includerClass discards the result
+// whenever the includer maps to an already-seen class — most paths).
+func (v PerSourceView) computeActiveIncluderRecordsInto(dst []*SysIncl, includerPath string) []*SysIncl {
+	dst = dst[:0]
 
 	for _, rec := range v.includerKeyed {
 		if rec.Filter != nil && !rec.Filter.match(includerPath) {
 			continue
 		}
 
-		active = append(active, rec)
+		dst = append(dst, rec)
 	}
 
-	return active
+	return dst
 }
 
 type sysInclEnv struct {

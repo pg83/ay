@@ -48,6 +48,10 @@ type IncludeScanner struct {
 	includerClassRecords map[uint32][]*SysIncl
 	includerClassBuckets map[uint64][]uint32
 	nextIncluderClass    uint32
+	// includerActiveScratch is reused by includerClass to compute the active
+	// record set for a fresh includer path; copied out only when a new class is
+	// created (most paths hit an existing class and discard it).
+	includerActiveScratch []*SysIncl
 
 	sysinclSourceCache map[sysinclSourceKey]sysinclCacheEntry
 
@@ -582,7 +586,8 @@ func (s *IncludeScanner) includerClass(includerPath string) (uint32, []*SysIncl)
 		return id, s.includerClassRecords[id]
 	}
 
-	active := s.anySrcView.computeActiveIncluderRecords(includerPath)
+	s.includerActiveScratch = s.anySrcView.computeActiveIncluderRecordsInto(s.includerActiveScratch, includerPath)
+	active := s.includerActiveScratch
 	sig := recordSliceSignature(active)
 
 	for _, id := range s.includerClassBuckets[sig] {
@@ -595,11 +600,12 @@ func (s *IncludeScanner) includerClass(includerPath string) (uint32, []*SysIncl)
 
 	s.nextIncluderClass++
 	id := s.nextIncluderClass
+	owned := append([]*SysIncl(nil), active...) // new class: copy out of the scratch
 	s.includerClassCache[includerPath] = id
-	s.includerClassRecords[id] = active
+	s.includerClassRecords[id] = owned
 	s.includerClassBuckets[sig] = append(s.includerClassBuckets[sig], id)
 
-	return id, active
+	return id, owned
 }
 
 func (s *IncludeScanner) prepareSourceView(sourceRel string) PerSourceView {
