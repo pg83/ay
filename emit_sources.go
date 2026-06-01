@@ -127,7 +127,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			// against nothing — and yasm's command misses `-I X` entirely,
 			// diverging from REF (e.g. yt/yt/core/misc/isa_crc64 needs
 			// -I=$(S)/yt/yt/core/misc/isa_crc64/include for reg_sizes.asm).
-			scanIn.AddIncl = mergeDedupVFS(srcIn.AddIncl, d.asmAddIncl)
+			scanIn.AddIncl = ctx.deduper.dedupVFS(srcIn.AddIncl, d.asmAddIncl)
 			asIn.AddIncl = scanIn.AddIncl
 		}
 

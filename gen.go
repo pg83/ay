@@ -273,6 +273,12 @@ type genCtx struct {
 	// recurses, and the map's live window does overlap a nested genModule, so a
 	// nested call must borrow a distinct map (a shared field corrupts the graph).
 	peerArchiveSeenPool sync.Pool
+
+	// deduper is the per-run VFS deduper (one idSet reused across all dedupVFS
+	// calls, replacing a fresh map per call). A single field is safe: dedupVFS is
+	// a leaf (pure slice/idSet ops, no callback re-enters it), and gen is
+	// single-threaded. collectModule lacks a ctx, so it receives &ctx.deduper.
+	deduper deDuper
 }
 
 type codegenOutputKey struct {
@@ -614,7 +620,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	mf := Throw2(ParseFile(ctx.fs, yamakePath))
 
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.parsers, instance.Path, instance.Kind, mf.Stmts, env)
+	d := collectModule(ctx.parsers, &ctx.deduper, instance.Path, instance.Kind, mf.Stmts, env)
 
 	for _, stmt := range d.allPySrcs {
 		applyAllPySrcs(ctx.fs, instance.Path, stmt, d)
@@ -625,11 +631,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		cppProtoEnv.SetString("MODULE_TAG", "CPP_PROTO")
 
 		cppProtoEnv.SetBool("GEN_PROTO", true)
-		d = collectModule(ctx.parsers, instance.Path, instance.Kind, mf.Stmts, cppProtoEnv)
+		d = collectModule(ctx.parsers, &ctx.deduper, instance.Path, instance.Kind, mf.Stmts, cppProtoEnv)
 	} else if d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" && instance.Language == LangPy {
 		py3ProtoEnv := env.Clone()
 		py3ProtoEnv.SetBool("PY3_PROTO", true)
-		d = collectModule(ctx.parsers, instance.Path, instance.Kind, mf.Stmts, py3ProtoEnv)
+		d = collectModule(ctx.parsers, &ctx.deduper, instance.Path, instance.Kind, mf.Stmts, py3ProtoEnv)
 	}
 
 	if d.conflictMod != nil {
@@ -872,7 +878,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ownProtoAddInclH = []VFS{Source(filepath.ToSlash(filepath.Clean(*d.protoNamespace)))}
 		}
 
-		effectiveProtoAddInclH := mergeDedupVFS(ownProtoAddInclH, peerContribs.protoAddIncl)
+		effectiveProtoAddInclH := ctx.deduper.dedupVFS(ownProtoAddInclH, peerContribs.protoAddIncl)
 
 		result := &moduleEmitResult{
 			isPyLibrary:        isPyLibraryType(d.moduleStmt.Name),
@@ -880,7 +886,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ARPath:             hOnlyARPath,
 			GlobalRef:          hOnlyGlobalRef,
 			GlobalPath:         hOnlyGlobalPath,
-			AddInclGlobal:      mergeDedupVFS(d.addInclGlobal, peerContribs.addIncl),
+			AddInclGlobal:      ctx.deduper.dedupVFS(d.addInclGlobal, peerContribs.addIncl),
 			OwnAddInclGlobal:   d.addInclGlobal,
 			ProtoAddInclGlobal: effectiveProtoAddInclH,
 			AddInclOneLevel:    d.addInclOneLevel,
@@ -1422,7 +1428,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
-	effectiveAddInclGlobal := mergeDedupVFS(d.addInclGlobal, peerAddInclForProp)
+	effectiveAddInclGlobal := ctx.deduper.dedupVFS(d.addInclGlobal, peerAddInclForProp)
 
 	// ProtoAddInclGlobal: this module's $(S)/<PROTO_NAMESPACE> contribution
 	// (only when GLOBAL was specified or the module is a PROTO_LIBRARY),
@@ -1454,7 +1460,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		addEachVFS(protoAddInclSeen, &peerProtoAddInclGlobal, rp.result.ProtoAddInclGlobal)
 	}
 
-	effectiveProtoAddInclGlobal := mergeDedupVFS(ownProtoAddIncl, peerProtoAddInclGlobal)
+	effectiveProtoAddInclGlobal := ctx.deduper.dedupVFS(ownProtoAddIncl, peerProtoAddInclGlobal)
 
 	if instance.Path == "library/python/runtime_py3" {
 		buildRootPath := bldLibraryPythonRuntimePy3
@@ -1534,7 +1540,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// pattern for header.ya.make.inc COPY_FILE targets) couldn't resolve its
 	// own COPY destinations and fell through to a peer's COPY of the same
 	// header — emitting the wrong $(B) path in CC inputs.
-	dedupedAddIncl := mergeDedupVFS(d.addIncl, d.addInclGlobal)
+	dedupedAddIncl := ctx.deduper.dedupVFS(d.addIncl, d.addInclGlobal)
 
 	isPy3NativeLib := d.moduleStmt.Name == "PY23_NATIVE_LIBRARY" ||
 		d.moduleStmt.Name == "PY23_LIBRARY"
@@ -2215,29 +2221,37 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 	return out
 }
 
-func mergeDedupVFS(lists ...[]VFS) []VFS {
+// deDuper dedups VFS slices via an epoch-stamped idSet instead of a fresh map per
+// call — the dense array is reused across calls (only the epoch bumps), killing the
+// per-call seen-map churn. Single-threaded use only (one idSet, reset per call).
+type deDuper struct {
+	seen idSet
+}
+
+func (dd *deDuper) dedupVFS(lists ...[]VFS) []VFS {
 	total := 0
 
 	for _, l := range lists {
 		total += len(l)
 	}
 
+	dd.seen.reset(vfsBound())
 	out := make([]VFS, 0, total)
-	seen := make(map[VFS]struct{}, total)
 
 	for _, l := range lists {
 		for _, x := range l {
-			if _, dup := seen[x]; dup {
+			if dd.seen.has(x) {
 				continue
 			}
 
-			seen[x] = struct{}{}
+			dd.seen.add(x)
 			out = append(out, x)
 		}
 	}
 
 	return out
 }
+
 
 func mergeDedup(a, b []string) []string {
 	out := make([]string, 0, len(a)+len(b))
