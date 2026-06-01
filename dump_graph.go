@@ -184,8 +184,6 @@ func pruneDumpGraphEmitterInPlace(e *BufferedEmitter, drop map[int64]struct{}, o
 			continue
 		}
 
-		node.Deps = nil
-		node.ForeignDeps = nil
 		node.UID = UID{}
 		node.SelfUID = UID{}
 		node.StatsUID = ""

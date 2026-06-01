@@ -271,9 +271,9 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 
 func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		"yasm/source.cpp":         "#include \"elf.h\"\n",
-		"yasm/elf.h":              "// local elf.h\n",
-		"foolib/include/elf.h":    "// foolib elf.h\n",
+		"yasm/source.cpp":      "#include \"elf.h\"\n",
+		"yasm/elf.h":           "// local elf.h\n",
+		"foolib/include/elf.h": "// foolib elf.h\n",
 	})
 
 	sysincl := SysInclSet{
@@ -314,10 +314,10 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 
 func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		"src/header.h":                  "#include \"cxxabi.h\"\n",
-		"src/source.cpp":                "#include \"header.h\"\n",
-		"libcxxabi/include/cxxabi.h":    "// libcxxabi cxxabi.h\n",
-		"libcxxrt/include/cxxabi.h":     "// libcxxrt cxxabi.h\n",
+		"src/header.h":               "#include \"cxxabi.h\"\n",
+		"src/source.cpp":             "#include \"header.h\"\n",
+		"libcxxabi/include/cxxabi.h": "// libcxxabi cxxabi.h\n",
+		"libcxxrt/include/cxxabi.h":  "// libcxxrt cxxabi.h\n",
 	})
 
 	sysincl := SysInclSet{
@@ -364,10 +364,10 @@ func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 
 func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		"libcxxrt/dwarf_eh.h":      "#include \"unwind.h\"\n",
-		"libcxxrt/source.cc":       "#include \"dwarf_eh.h\"\n",
-		"libcxxrt/unwind.h":        "// libcxxrt unwind.h\n",
-		"libcxx/include/unwind.h":  "// libcxx unwind.h\n",
+		"libcxxrt/dwarf_eh.h":     "#include \"unwind.h\"\n",
+		"libcxxrt/source.cc":      "#include \"dwarf_eh.h\"\n",
+		"libcxxrt/unwind.h":       "// libcxxrt unwind.h\n",
+		"libcxx/include/unwind.h": "// libcxx unwind.h\n",
 	})
 
 	sysincl := SysInclSet{
@@ -414,8 +414,8 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 
 func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		"src/source.cpp":            "#include \"absent.h\"\n",
-		"foolib/include/absent.h":   "// foolib absent.h\n",
+		"src/source.cpp":          "#include \"absent.h\"\n",
+		"foolib/include/absent.h": "// foolib absent.h\n",
 	})
 
 	sysincl := SysInclSet{
@@ -450,9 +450,9 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 
 func TestScanner_AngleSysinclUnaffected(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		"libcxxrt/source.cpp":          "#include <unwind.h>\n",
-		"libcxxrt/unwind.h":            "// libcxxrt unwind.h\n",
-		"libunwind/include/unwind.h":   "// libunwind unwind.h\n",
+		"libcxxrt/source.cpp":        "#include <unwind.h>\n",
+		"libcxxrt/unwind.h":          "// libcxxrt unwind.h\n",
+		"libunwind/include/unwind.h": "// libunwind unwind.h\n",
 	})
 
 	sysincl := SysInclSet{

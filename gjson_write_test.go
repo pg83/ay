@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"strings"
 	"testing"
 )
 
@@ -28,157 +27,143 @@ func encodeWithHandRolled(g *Graph) []byte {
 	return buf.Bytes()
 }
 
-func TestWriteGraphIndented_ByteExact(t *testing.T) {
-	g := &Graph{
-		Conf: map[string]interface{}{
-			"resources": []graphConfResource{
-				{
-					Pattern: "CLANG",
-					Resources: []graphConfResourceURI{
-						{Platform: "linux", Resource: "sbr:1"},
-						{Platform: "darwin", Resource: "sbr:2"},
-					},
-				},
-				{
-					Name:     "vcs",
-					Pattern:  "VCS",
-					Resource: "base64:vcs.json:e30=",
-				},
-			},
-		},
-		Graph: []*Node{
-			{
-				Cmds: []Cmd{
-					{
-						CmdArgs: []string{"a", "b<c>&d", "tab\there", "quote\"x", "back\\slash", "newline\nhere", "u2028   done"},
-						Cwd:     "$(B)",
-						Env:     map[string]string{"FOO": "bar", "BAZ": "qux"},
-					},
-					{
-						CmdArgs: []string{},
-						Env:     map[string]string{},
-					},
-				},
-				Deps:   []UID{tuid("depUid1"), tuid("depUid2")},
-				Env:    map[string]string{"PATH": "/usr/bin"},
-				Inputs: ToVFSSlice([]string{"in1", "in2"}),
-				KV:          map[string]interface{}{"key1": "val1", "key2": "val2"},
-				Outputs:     ToVFSSlice([]string{"out1"}),
-				Platform:    "default-linux-x86_64",
-				Requirements: map[string]interface{}{
-					"cpu":     float64(1),
-					"network": "restricted",
-					"ram":     float64(32),
-					"frac":    float64(1.5),
-					"flag":    true,
-				},
-				Sandboxing:       true,
-				SelfUID:          tuid("selfUid1"),
-				StatsUID:         "statsUidXXXXXXXXXXXXXXXXXX1",
-				Tags:             []string{"tag1", "tag2"},
-				TargetProperties: map[string]string{"module_dir": "x/y", "module_lang": "cpp"},
-				UID:              tuid("uid1"),
-			},
-			{
-				Cmds:             []Cmd{},
-				Deps:             []UID{},
-				Env:              map[string]string{},
-				Inputs:           ToVFSSlice([]string{}),
-				KV:               map[string]interface{}{},
-				Outputs:          ToVFSSlice([]string{}),
-				Platform:         "platform-with-control-and--and-\b-and-\f",
-				Requirements:     map[string]interface{}{},
-				Sandboxing:       true,
-				SelfUID:          tuid("selfUid2"),
-				StatsUID:         "statsUidXXXXXXXXXXXXXXXXXX2",
-				Tags:             []string{},
-				TargetProperties: map[string]string{},
-				UID:              tuid("uid2"),
-			},
-		},
-		Inputs: map[string]interface{}{},
-		Result: []UID{tuid("uid1"), tuid("uid2")},
+// TestWriteGraphCompact_RoundTrip builds a real graph (so deps/foreign_deps are
+// resolved from refs via the uid vector, not materialized) and checks: the output
+// is compact (no pretty-print whitespace), parses back as valid JSON, escapes
+// string values correctly, and resolves a node's deps/foreign_deps to the right
+// uids — the deps/foreign_deps paths cannot be covered by the stdlib oracle since
+// they are not struct fields.
+func TestWriteGraphCompact_RoundTrip(t *testing.T) {
+	trickyArgs := []string{"a", "b<c>&d", "tab\there", "quote\"x", "back\\slash", "newline\nhere"}
+
+	e := NewBufferedEmitter()
+	leaf := e.Emit(&Node{
+		Cmds:             []Cmd{},
+		Env:              map[string]string{},
+		Inputs:           ToVFSSlice([]string{}),
+		KV:               map[string]interface{}{"name": "leaf"},
+		Outputs:          ToVFSSlice([]string{"leaf.o"}),
+		Requirements:     map[string]interface{}{},
+		Tags:             []string{},
+		TargetProperties: map[string]string{},
+	})
+	main := e.Emit(&Node{
+		Cmds:             []Cmd{{CmdArgs: trickyArgs, Cwd: "$(B)", Env: map[string]string{"FOO": "bar"}}},
+		DepRefs:          []NodeRef{leaf},
+		ForeignDepRefs:   []NodeRef{leaf},
+		Env:              map[string]string{"PATH": "/usr/bin"},
+		Inputs:           ToVFSSlice([]string{"in1"}),
+		KV:               map[string]interface{}{"name": "main", "p": "CC"},
+		Outputs:          ToVFSSlice([]string{"main.o"}),
+		Requirements:     map[string]interface{}{"cpu": float64(1), "flag": true, "frac": float64(1.5)},
+		Tags:             []string{"tag1"},
+		TargetProperties: map[string]string{"module_lang": "cpp"},
+	})
+	e.Result(main)
+	g := Finalize(e)
+
+	out := encodeWithHandRolled(g)
+
+	// Compact: no pretty-print whitespace. Raw tabs/newlines in string values are
+	// escaped, so none should appear as literal bytes.
+	for _, b := range out {
+		if b == '\n' || b == '\t' {
+			t.Fatalf("output contains literal %q — not compact: %s", b, out)
+		}
 	}
 
-	want := encodeWithStdlib(g)
-	got := encodeWithHandRolled(g)
+	var parsed struct {
+		Graph []struct {
+			Cmds []struct {
+				CmdArgs []string `json:"cmd_args"`
+			} `json:"cmds"`
+			Deps        []string            `json:"deps"`
+			ForeignDeps map[string][]string `json:"foreign_deps"`
+			KV          map[string]any      `json:"kv"`
+		} `json:"graph"`
+		Result []string `json:"result"`
+	}
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		t.Fatalf("compact output does not parse: %v\n%s", err, out)
+	}
 
-	if !bytes.Equal(want, got) {
+	leafUID := g.uids.get(leaf.id).String()
+	mainUID := g.uids.get(main.id).String()
 
-		minLen := len(want)
-		if len(got) < minLen {
-			minLen = len(got)
+	var mainNode *struct {
+		Cmds []struct {
+			CmdArgs []string `json:"cmd_args"`
+		} `json:"cmds"`
+		Deps        []string            `json:"deps"`
+		ForeignDeps map[string][]string `json:"foreign_deps"`
+		KV          map[string]any      `json:"kv"`
+	}
+	for i := range parsed.Graph {
+		if parsed.Graph[i].KV["name"] == "main" {
+			mainNode = &parsed.Graph[i]
 		}
+	}
+	if mainNode == nil {
+		t.Fatal("main node missing from written graph")
+	}
 
-		div := minLen
-		for i := 0; i < minLen; i++ {
-			if want[i] != got[i] {
-				div = i
+	// deps resolved from DepRefs via the uid vector.
+	if len(mainNode.Deps) != 1 || mainNode.Deps[0] != leafUID {
+		t.Errorf("deps = %v, want [%s]", mainNode.Deps, leafUID)
+	}
 
-				break
-			}
-		}
+	// foreign_deps wrapped back into the single-key {"tool": [...]} object.
+	if got := mainNode.ForeignDeps["tool"]; len(got) != 1 || got[0] != leafUID {
+		t.Errorf("foreign_deps[tool] = %v, want [%s]", got, leafUID)
+	}
 
-		ctx := 80
-		from := div - ctx
-		if from < 0 {
-			from = 0
-		}
+	// escaping round-trips: decoded cmd args match the originals exactly.
+	if len(mainNode.Cmds) != 1 || !equalStrings(mainNode.Cmds[0].CmdArgs, trickyArgs) {
+		t.Errorf("cmd_args = %v, want %v", mainNode.Cmds[0].CmdArgs, trickyArgs)
+	}
 
-		toW := div + ctx
-		if toW > len(want) {
-			toW = len(want)
-		}
-
-		toG := div + ctx
-		if toG > len(got) {
-			toG = len(got)
-		}
-
-		t.Fatalf("byte mismatch at offset %d (want len=%d, got len=%d)\nwant[%d:%d]: %q\ngot [%d:%d]: %q",
-			div, len(want), len(got), from, toW, want[from:toW], from, toG, got[from:toG])
+	if len(parsed.Result) != 1 || parsed.Result[0] != mainUID {
+		t.Errorf("result = %v, want [%s]", parsed.Result, mainUID)
 	}
 }
 
-func TestWriteGraphIndented_ForeignDepsToolObject(t *testing.T) {
-	// ForeignDeps is a flat slice internally; the writer wraps it back into the
-	// single-key object {"tool": [...]} (the only key any node uses), emitted
-	// between "env" and "inputs". stdlib can't reproduce this (foreign_deps is
-	// json:"-"), so it is covered here rather than in the byte-exact-vs-stdlib test.
-	g := &Graph{
-		Conf: map[string]interface{}{},
-		Graph: []*Node{
-			{
-				Cmds:             []Cmd{},
-				Deps:             []UID{},
-				Env:              map[string]string{},
-				ForeignDeps:      []UID{tuid("u1"), tuid("u2")},
-				Inputs:           ToVFSSlice([]string{}),
-				KV:               map[string]interface{}{},
-				Outputs:          ToVFSSlice([]string{}),
-				Platform:         "p",
-				Requirements:     map[string]interface{}{},
-				Sandboxing:       true,
-				SelfUID:          tuid("s"),
-				StatsUID:         "st",
-				Tags:             []string{},
-				TargetProperties: map[string]string{},
-				UID:              tuid("u"),
-			},
-		},
-		Inputs: map[string]interface{}{},
-		Result: []UID{tuid("u")},
+// TestWriteGraphCompact_StringEscaping checks the hand-rolled escaper matches
+// stdlib (with HTML escaping off) for tricky inputs.
+func TestWriteGraphCompact_StringEscaping(t *testing.T) {
+	cases := []string{
+		"plain",
+		"a<b>&c",
+		"quote\"x",
+		"back\\slash",
+		"tab\tnl\ncr\r",
+		"\x00\x01\x1f",
+		"  ",
+		"unicode: ☃ é",
 	}
 
-	got := string(encodeWithHandRolled(g))
+	for _, s := range cases {
+		got := string(appendString(nil, s))
 
-	want := `"env":{},"foreign_deps":{"tool":["` + tuid("u1").String() + `","` + tuid("u2").String() + `"]},"inputs":[`
-	if !strings.Contains(got, want) {
-		t.Fatalf("foreign_deps not wrapped as {\"tool\": [...]} between env and inputs.\ngot:\n%s", got)
+		want, err := json.Marshal(s)
+		if err != nil {
+			t.Fatalf("stdlib marshal %q: %v", s, err)
+		}
+
+		// stdlib escapes <, >, & by default; our writer does not (SetEscapeHTML
+		// false equivalent). Compare against the non-HTML-escaped form.
+		var nb bytes.Buffer
+		enc := json.NewEncoder(&nb)
+		enc.SetEscapeHTML(false)
+		Throw(enc.Encode(s))
+		wantNoHTML := bytes.TrimRight(nb.Bytes(), "\n")
+
+		if got != string(wantNoHTML) {
+			t.Errorf("appendString(%q) = %s, want %s (stdlib-with-html=%s)", s, got, wantNoHTML, want)
+		}
 	}
 }
 
-func TestWriteGraphIndented_EmptyGraph(t *testing.T) {
+func TestWriteGraphCompact_EmptyGraph(t *testing.T) {
 	g := &Graph{
 		Conf:   map[string]interface{}{},
 		Graph:  []*Node{},

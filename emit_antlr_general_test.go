@@ -53,8 +53,10 @@ func TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs(t *testing.T) {
 // generated *Lexer.cpp's compile reaches the paired *Parser.cpp (which in turn
 // holds the protobuf header), and NEITHER the lexer nor the parser .cpp lists
 // the sibling generated .h files as inputs. Empirically, for jsonpath:
-//   JsonPathLexer.cpp.o inputs = {JsonPathLexer.cpp, JsonPathParser.cpp, .pb.h}
-//   JsonPathParser.cpp.o inputs = {JsonPathParser.cpp, .pb.h}
+//
+//	JsonPathLexer.cpp.o inputs = {JsonPathLexer.cpp, JsonPathParser.cpp, .pb.h}
+//	JsonPathParser.cpp.o inputs = {JsonPathParser.cpp, .pb.h}
+//
 // i.e. Lexer.cpp -> Parser.cpp (one direction only), no *.h, Parser.cpp does
 // not pull Lexer.cpp.
 func TestAntlrParsedIncludes_LexerCrossIncludesParserCpp(t *testing.T) {

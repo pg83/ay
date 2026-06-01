@@ -181,6 +181,10 @@ type canonBuf struct {
 	// into it — no intermediate strings.
 	strBuf  []byte
 	strBuf2 []byte
+
+	// uids resolves a node's DepRefs/ForeignDepRefs to dep uids for the preimage,
+	// so deps are never materialized onto the node. Set before writeNode.
+	uids *uidVec
 }
 
 func (c *canonBuf) writeByte(b byte) {
@@ -212,10 +216,13 @@ func (c *canonBuf) writeBytes(s string) {
 	c.buf = append(c.buf, s...)
 }
 
-func (c *canonBuf) writeUIDSlice(us []UID) {
-	c.writeUint32(uint32(len(us)))
+// writeRefUIDs serializes refs as their resolved dep uids (looked up by id in
+// c.uids), so Deps/ForeignDeps need not be materialized onto the node.
+func (c *canonBuf) writeRefUIDs(refs []NodeRef) {
+	c.writeUint32(uint32(len(refs)))
 
-	for _, u := range us {
+	for _, r := range refs {
+		u := c.uids.get(r.id)
 		c.writeUint64(u.Hi)
 		c.writeUint64(u.Lo)
 	}
@@ -320,9 +327,9 @@ func (c *canonBuf) writeNode(n *Node) {
 	}
 
 	c.writeCmdSlice(n.Cmds)
-	c.writeUIDSlice(n.Deps)
+	c.writeRefUIDs(n.DepRefs)
 	c.writeStringMap(n.Env)
-	c.writeUIDSlice(n.ForeignDeps)
+	c.writeRefUIDs(n.ForeignDepRefs)
 	c.writeVFSSlice(n.Inputs)
 	c.writeKVMap(n.KV)
 	c.writeVFSSlice(n.Outputs)

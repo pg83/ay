@@ -14,8 +14,6 @@ import (
 	"testing"
 )
 
-
-
 func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mainprog/ya.make": "PROGRAM()\nPEERDIR(thelib)\nSRCS(main.cpp)\nEND()\n",
@@ -80,21 +78,19 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	mainCC := nodesByOutput[mainCCOut]
 	libAR := nodesByOutput[libARout]
 
-	depSet := make(map[UID]struct{}, len(rootLD.Deps))
-	for _, d := range rootLD.Deps {
+	depSet := make(map[UID]struct{}, len(graphDeps(g, rootLD)))
+	for _, d := range graphDeps(g, rootLD) {
 		depSet[d] = struct{}{}
 	}
 
 	if _, ok := depSet[mainCC.UID]; !ok {
-		t.Errorf("root LD deps %v missing main.cpp.o uid %q", rootLD.Deps, mainCC.UID)
+		t.Errorf("root LD deps %v missing main.cpp.o uid %q", graphDeps(g, rootLD), mainCC.UID)
 	}
 
 	if _, ok := depSet[libAR.UID]; !ok {
-		t.Errorf("root LD deps %v missing thelib AR uid %q", rootLD.Deps, libAR.UID)
+		t.Errorf("root LD deps %v missing thelib AR uid %q", graphDeps(g, rootLD), libAR.UID)
 	}
 }
-
-
 
 func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -140,8 +136,8 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		t.Errorf("module_type = %q, want bin", ld.TargetProperties["module_type"])
 	}
 
-	deps := make(map[UID]struct{}, len(ld.Deps))
-	for _, d := range ld.Deps {
+	deps := make(map[UID]struct{}, len(graphDeps(g, ld)))
+	for _, d := range graphDeps(g, ld) {
 		deps[d] = struct{}{}
 	}
 
@@ -199,8 +195,6 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	}
 }
 
-
-
 func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"lone/ya.make": "PROGRAM()\nSRCS(main.cpp)\nEND()\n",
@@ -249,8 +243,6 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 	}
 }
 
-
-
 func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mod/ya.make": "LIBRARY()\nTOTALLY_UNKNOWN(foo bar)\nSRCS(main.cpp)\nEND()\n",
@@ -268,8 +260,6 @@ func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 		t.Errorf("error %q does not contain 'not modelled'", exc.Error())
 	}
 }
-
-
 
 func TestGen_RejectsMultipleModules(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -294,8 +284,6 @@ END()
 	}
 }
 
-
-
 func TestGen_RejectsZeroModule(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"noop/ya.make": `SET(X y)
@@ -315,8 +303,6 @@ END()
 		t.Errorf("unexpected error: %v", exc)
 	}
 }
-
-
 
 func TestGen_RejectsProgramAsPeer(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -343,8 +329,6 @@ END()
 		t.Errorf("unexpected error: %v", exc)
 	}
 }
-
-
 
 func TestGen_PeerdirDeclarationOrder_Preserved(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -387,8 +371,6 @@ END()
 	}
 }
 
-
-
 func TestGen_MacroEvaluation_IfStmt_TakeThen(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"ifmod/ya.make": `LIBRARY()
@@ -428,8 +410,6 @@ END()
 	}
 }
 
-
-
 func TestGen_MacroEvaluation_NoLibcFlag(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"nolibcmod/ya.make": `LIBRARY()
@@ -463,8 +443,6 @@ END()
 		t.Errorf("Gen produced %d nodes, want 2 (1 CC + 1 AR)", len(g.Graph))
 	}
 }
-
-
 
 func TestGen_NoStdIncGlobalCFlagsPropagateToExplicitPeer(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -505,8 +483,6 @@ END()
 		t.Fatalf("bridge CC args missing GLOBAL CFLAG from explicit peer: %v", args)
 	}
 }
-
-
 
 func TestGen_JoinSrcs_EmitsJSAndCC(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -585,8 +561,6 @@ END()
 	}
 }
 
-
-
 func TestGen_GlobalSrcs_EmitsTwoARs(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"globalmod/ya.make": `LIBRARY()
@@ -634,8 +608,6 @@ END()
 		t.Errorf("regular (no-tag) ARs = %d, want 1", regularARs)
 	}
 }
-
-
 
 func TestGen_HostToolRecursion_R6(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -709,12 +681,12 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Fatal("no host ragel6 LD node found")
 	}
 
-	if len(r6Node.Deps) != 1 || r6Node.Deps[0] != ldNode.UID {
-		t.Errorf("R6 Deps = %v, want [%q]", r6Node.Deps, ldNode.UID)
+	if len(graphDeps(g, r6Node)) != 1 || graphDeps(g, r6Node)[0] != ldNode.UID {
+		t.Errorf("R6 Deps = %v, want [%q]", graphDeps(g, r6Node), ldNode.UID)
 	}
 
-	if len(r6Node.ForeignDeps) != 1 || len(r6Node.ForeignDeps) != 1 || r6Node.ForeignDeps[0] != ldNode.UID {
-		t.Errorf("R6 ForeignDeps = %v, want {tool: [%q]}", r6Node.ForeignDeps, ldNode.UID)
+	if len(graphForeignDeps(g, r6Node)) != 1 || len(graphForeignDeps(g, r6Node)) != 1 || graphForeignDeps(g, r6Node)[0] != ldNode.UID {
+		t.Errorf("R6 ForeignDeps = %v, want {tool: [%q]}", graphForeignDeps(g, r6Node), ldNode.UID)
 	}
 
 	if len(r6Node.Cmds) == 0 || len(r6Node.Cmds[0].CmdArgs) == 0 {
@@ -732,8 +704,6 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 			r6Node.Cmds[0].CmdArgs[0], wantCmd0, ldNode.Outputs[0].String())
 	}
 }
-
-
 
 func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -765,8 +735,8 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 		t.Errorf("AR count = %d, want 2 (regular + global from peerlib)", arCount)
 	}
 
-	if len(ldNode.Deps) < 3 {
-		t.Errorf("LD Deps = %d, want >= 3 (own CC + peer AR + peer global AR)", len(ldNode.Deps))
+	if len(graphDeps(g, ldNode)) < 3 {
+		t.Errorf("LD Deps = %d, want >= 3 (own CC + peer AR + peer global AR)", len(graphDeps(g, ldNode)))
 	}
 
 	expectedInput := "$(B)/peerlib/libpeerlib.global.a"
@@ -809,8 +779,6 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	}
 }
 
-
-
 func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"prog/ya.make":                        "PROGRAM()\nNO_PLATFORM()\nALLOCATOR(MIM)\nSRCS(main.cpp)\nEND()\n",
@@ -833,8 +801,6 @@ func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
 		t.Errorf("expected ALLOCATOR(MIM) to add library/cpp/malloc/mimalloc as peer; got Graph with no such module_dir")
 	}
 }
-
-
 
 func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	stubLib := "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(stub.cpp)\nEND()\n"
@@ -896,8 +862,6 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		}
 	}
 }
-
-
 
 func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 
@@ -1028,8 +992,6 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 	}
 }
 
-
-
 func stringSlicesEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -1043,8 +1005,6 @@ func stringSlicesEqual(a, b []string) bool {
 
 	return true
 }
-
-
 
 func TestGen_DefaultPeerdirs_ExplicitDuplicateDeduped(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -1077,7 +1037,7 @@ END()
 		t.Fatal("lib1 AR not found")
 	}
 
-	for _, ref := range lib1AR.Deps {
+	for _, ref := range graphDeps(g, lib1AR) {
 		for _, n := range g.Graph {
 			if n.UID == ref && n.KV["p"] == "AR" {
 				t.Errorf("lib1 AR has AR-typed dep %q (module_dir=%q); reference invariant: zero AR-on-AR deps", ref, n.TargetProperties["module_dir"])
@@ -1085,8 +1045,6 @@ END()
 		}
 	}
 }
-
-
 
 func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	t.Run("with_srcdir", func(t *testing.T) {
@@ -1269,8 +1227,6 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	})
 }
 
-
-
 func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 	t.Run("CXXFLAGS_GLOBAL_emitted_twice_no_literal_GLOBAL", func(t *testing.T) {
 		fs := newMemFS(map[string]string{
@@ -1387,8 +1343,6 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 	})
 }
 
-
-
 func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"jsmod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nJOIN_SRCS(all.cpp s1.cpp s2.cpp)\nEND()\n",
@@ -1417,7 +1371,7 @@ func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
 
 	found := false
 
-	for _, dep := range ccNode.Deps {
+	for _, dep := range graphDeps(g, ccNode) {
 		if dep == jsNode.UID {
 			found = true
 
@@ -1426,11 +1380,9 @@ func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
 	}
 
 	if !found {
-		t.Errorf("CC.Deps = %v, want to contain JS UID %q (PR-30 D04 Generator wiring)", ccNode.Deps, jsNode.UID)
+		t.Errorf("graphDeps(g, CC) = %v, want to contain JS UID %q (PR-30 D04 Generator wiring)", graphDeps(g, ccNode), jsNode.UID)
 	}
 }
-
-
 
 func TestGen_GeneratorWiredIntoDepRefs_R6(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -1482,7 +1434,7 @@ END()
 
 	found := false
 
-	for _, dep := range ccNode.Deps {
+	for _, dep := range graphDeps(g, ccNode) {
 		if dep == r6Node.UID {
 			found = true
 
@@ -1491,11 +1443,9 @@ END()
 	}
 
 	if !found {
-		t.Errorf("R6-derived CC.Deps = %v, want to contain R6 UID %q (PR-30 D04 Generator wiring)", ccNode.Deps, r6Node.UID)
+		t.Errorf("R6-derived graphDeps(g, CC) = %v, want to contain R6 UID %q (PR-30 D04 Generator wiring)", graphDeps(g, ccNode), r6Node.UID)
 	}
 }
-
-
 
 func TestEmitAR_NoPeerArchivesInDeps(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -1532,7 +1482,7 @@ END()
 		t.Fatal("lib_consumer AR not found")
 	}
 
-	for _, dep := range consumerAR.Deps {
+	for _, dep := range graphDeps(g, consumerAR) {
 		for _, n := range g.Graph {
 			if n.UID == dep && n.KV["p"] == "AR" {
 				t.Errorf("lib_consumer AR has AR-typed dep (peer module_dir=%q); reference invariant: zero AR-on-AR deps", n.TargetProperties["module_dir"])
@@ -1540,8 +1490,6 @@ END()
 		}
 	}
 }
-
-
 
 func TestGen_PROGRAM_DefaultAllocator_TcmallocTc(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -1600,8 +1548,6 @@ END()
 	}
 }
 
-
-
 func TestGen_PROGRAM_ExplicitAllocator_NoTcmallocDefault(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"myprog/ya.make": `PROGRAM(myprog)
@@ -1624,8 +1570,6 @@ END()
 		}
 	}
 }
-
-
 
 func TestGen_SrcdirSibling_KeepsModuleDir(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -1672,8 +1616,6 @@ END()
 	}
 }
 
-
-
 func TestGen_SrcdirLocal_IgnoresSrcdir(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mylib/ya.make": `LIBRARY()
@@ -1716,13 +1658,11 @@ END()
 	}
 }
 
-
-
 func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		"lib/ya.make":      "LIBRARY()\nADDINCL(\n    GLOBAL lib/include\n    lib/src\n)\nSRCS(lib.cpp)\nEND()\n",
+		"lib/ya.make":       "LIBRARY()\nADDINCL(\n    GLOBAL lib/include\n    lib/src\n)\nSRCS(lib.cpp)\nEND()\n",
 		"lib/include/.keep": "",
-		"consumer/ya.make": "LIBRARY()\nPEERDIR(lib)\nSRCS(main.cpp)\nEND()\n",
+		"consumer/ya.make":  "LIBRARY()\nPEERDIR(lib)\nSRCS(main.cpp)\nEND()\n",
 	})
 
 	g := testGen(fs, "consumer")
@@ -1778,8 +1718,6 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	}
 }
 
-
-
 // TestGen_OneLevelAddIncl_DeclOrderPreserved verifies that when a peer has mixed
 // ADDINCL(GLOBAL g ONE_LEVEL ol), the consumer sees g before ol — upstream ymake
 // preserves declaration order within UserGlobal (GLOBAL and ONE_LEVEL dirs are added
@@ -1789,7 +1727,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 func TestGen_OneLevelAddIncl_DeclOrderPreserved(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		// Peer declares GLOBAL first, ONE_LEVEL second. Upstream preserves that order.
-		"peerlib/ya.make": "LIBRARY()\nADDINCL(\n    GLOBAL\n    peerlib/global_include\n    ONE_LEVEL\n    peerlib/onelevel_include\n)\nSRCS(peerlib.cpp)\nEND()\n",
+		"peerlib/ya.make":              "LIBRARY()\nADDINCL(\n    GLOBAL\n    peerlib/global_include\n    ONE_LEVEL\n    peerlib/onelevel_include\n)\nSRCS(peerlib.cpp)\nEND()\n",
 		"peerlib/peerlib.cpp":          "",
 		"peerlib/global_include/.keep": "", // directory must exist for filterExistingSourceDirs
 		"consumer/ya.make":             "LIBRARY()\nPEERDIR(peerlib)\nSRCS(consumer.cpp)\nEND()\n",
@@ -1956,9 +1894,9 @@ func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
 // the fixed ccIncludesSuffix entries (-I$(S)/contrib/libs/linux-headers).
 func TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		"peerlib/ya.make":  "LIBRARY()\nADDINCL(\n    ONE_LEVEL\n    peerlib/include\n)\nSRCS(peerlib.cpp)\nEND()\n",
-		"peerlib/peerlib.cpp": "",
-		"consumer/ya.make": "LIBRARY()\nPEERDIR(peerlib)\nSRCS(consumer.cpp)\nEND()\n",
+		"peerlib/ya.make":       "LIBRARY()\nADDINCL(\n    ONE_LEVEL\n    peerlib/include\n)\nSRCS(peerlib.cpp)\nEND()\n",
+		"peerlib/peerlib.cpp":   "",
+		"consumer/ya.make":      "LIBRARY()\nPEERDIR(peerlib)\nSRCS(consumer.cpp)\nEND()\n",
 		"consumer/consumer.cpp": "",
 	})
 
@@ -2038,8 +1976,6 @@ func TestIsRuntimeAncestor_LiteralOnly(t *testing.T) {
 	}
 }
 
-
-
 func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRC(foo.cpp -DSSE41_STUB)\nEND()\n",
@@ -2078,12 +2014,10 @@ func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 	}
 }
 
-
-
 func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		"mod/ya.make":             "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRC_C_NO_LTO(system/compiler.cpp)\nEND()\n",
-		"mod/system/.keep":        "",
+		"mod/ya.make":      "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRC_C_NO_LTO(system/compiler.cpp)\nEND()\n",
+		"mod/system/.keep": "",
 	})
 
 	g := testGen(fs, "mod")
@@ -2123,8 +2057,6 @@ func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 	}
 }
 
-
-
 func TestGen_SRC_FlatOutputPath(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mod/ya.make":   "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRC(sub/x.cpp)\nEND()\n",
@@ -2154,8 +2086,6 @@ func TestGen_SRC_FlatOutputPath(t *testing.T) {
 	}
 }
 
-
-
 func TestGen_SRC_RejectsZeroArgs(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mod/ya.make": "LIBRARY()\nSRC()\nEND()\n",
@@ -2173,8 +2103,6 @@ func TestGen_SRC_RejectsZeroArgs(t *testing.T) {
 		t.Errorf("error %q does not mention SRC()", exc.Error())
 	}
 }
-
-
 
 func TestEvalCond_ARCH_ARM64_Aliased(t *testing.T) {
 	inst := ModuleInstance{Kind: KindLib, Platform: testTargetP}
@@ -2199,8 +2127,6 @@ func TestEvalCond_ARCH_ARM64_Aliased(t *testing.T) {
 		t.Errorf("EvalCond(ARCH_X86_64) on x86_64 instance = false, want true")
 	}
 }
-
-
 
 func TestGen_PR35y_R7_JoinSrcs_SuppressBuildRootShim(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -2241,8 +2167,6 @@ END()
 	}
 }
 
-
-
 func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"consumer/ya.make":                 "LIBRARY()\nSRCS(parser.rl6)\nEND()\n",
@@ -2281,8 +2205,6 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 		}
 	}
 }
-
-
 
 func TestGen_PR35y_R8_RegularARIncludesGlobalMemberInputs(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -2356,8 +2278,6 @@ END()
 	}
 }
 
-
-
 func TestGen_PR35y_R8_AsmSrcdirRebase(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mod/inner/ya.make": `LIBRARY()
@@ -2398,8 +2318,6 @@ END()
 		t.Errorf("AS.Inputs missing %q — PR-35y R8 SRCDIR rebase for `.S` source: %#v", want, asNode.Inputs)
 	}
 }
-
-
 
 func TestGen_ProtoAstStylePipelineExpandsLowercaseVarsAndRootedPaths(t *testing.T) {
 	files := map[string]string{}
@@ -2595,8 +2513,6 @@ END()
 	assertNodeHasNoRawProtoAstPlaceholders(cc)
 	assertNodeHasNoRawProtoAstPlaceholders(ar)
 }
-
-
 
 // TestGen_SplitCodegenShardInputWiring reproduces the sg5 divergence where
 // pb.code0.cc.o carries $(B)/Proto.pb.cc and $(B)/Proto.pb.h as inputs but
@@ -2810,15 +2726,15 @@ END()
 	}
 
 	wantDeps := []UID{styleguide.UID, grpcCpp.UID, protoc.UID, configPlugin.UID}
-	if len(pb.Deps) != len(wantDeps) {
-		t.Fatalf("pb deps len = %d, want %d (%v)", len(pb.Deps), len(wantDeps), pb.Deps)
+	if len(graphDeps(g, pb)) != len(wantDeps) {
+		t.Fatalf("pb deps len = %d, want %d (%v)", len(graphDeps(g, pb)), len(wantDeps), graphDeps(g, pb))
 	}
 	for _, want := range wantDeps {
-		if !slices.Contains(pb.Deps, want) {
-			t.Fatalf("pb deps = %v, missing %q", pb.Deps, want)
+		if !slices.Contains(graphDeps(g, pb), want) {
+			t.Fatalf("pb deps = %v, missing %q", graphDeps(g, pb), want)
 		}
 	}
-	if got := pb.ForeignDeps; len(got) != len(wantDeps) {
+	if got := graphForeignDeps(g, pb); len(got) != len(wantDeps) {
 		t.Fatalf("pb foreign_deps[tool] len = %d, want %d (%v)", len(got), len(wantDeps), got)
 	} else {
 		for _, want := range wantDeps {
@@ -2830,12 +2746,10 @@ END()
 	if !nodeHasHostTag(configPlugin.Tags) {
 		t.Fatalf("config proto plugin tags = %v, want host tool tag", configPlugin.Tags)
 	}
-	if !slices.Contains(configPlugin.Deps, pluginRuntime.UID) {
-		t.Fatalf("config proto plugin deps = %v, want runtime peer uid %q", configPlugin.Deps, pluginRuntime.UID)
+	if !slices.Contains(graphDeps(g, configPlugin), pluginRuntime.UID) {
+		t.Fatalf("config proto plugin deps = %v, want runtime peer uid %q", graphDeps(g, configPlugin), pluginRuntime.UID)
 	}
 }
-
-
 
 func TestGen_ProtoLibrary_CPPProtoPluginOutputsReachWrapper(t *testing.T) {
 	files := map[string]string{}
@@ -2888,8 +2802,6 @@ END()
 		t.Fatalf("pb wrapper outputs = %v, want %v", gotWrapperOutputs, wantWrapperOutputs)
 	}
 }
-
-
 
 func TestGen_ProtoLibrary_CPPProtoPlugin2HeaderConsumerInheritsProtoClosure(t *testing.T) {
 	files := map[string]string{}
@@ -2954,13 +2866,11 @@ int use() { return 0; }
 	}
 
 	for _, want := range []UID{mainPB.UID, depPB.UID} {
-		if !slices.Contains(useCC.Deps, want) {
-			t.Fatalf("use.cpp.o deps missing %q: %v", want, useCC.Deps)
+		if !slices.Contains(graphDeps(g, useCC), want) {
+			t.Fatalf("use.cpp.o deps missing %q: %v", want, graphDeps(g, useCC))
 		}
 	}
 }
-
-
 
 func TestGen_ProtoLibrary_CPPProtoPlugin2GeneratedSourceCompilesAndArchives(t *testing.T) {
 	files := map[string]string{}
@@ -3018,8 +2928,8 @@ service TestService {
 	}
 
 	for _, want := range []UID{mainPB.UID, depPB.UID} {
-		if !slices.Contains(grpcCC.Deps, want) {
-			t.Fatalf("main.grpc.pb.cc.o deps missing %q: %v", want, grpcCC.Deps)
+		if !slices.Contains(graphDeps(g, grpcCC), want) {
+			t.Fatalf("main.grpc.pb.cc.o deps missing %q: %v", want, graphDeps(g, grpcCC))
 		}
 	}
 
@@ -3027,8 +2937,6 @@ service TestService {
 		t.Fatalf("archive inputs missing grpc object: %#v", ar.Inputs)
 	}
 }
-
-
 
 func TestGen_ProtoLibrary_TransitiveHeadersNoAddsDepsHeaderAndEnumUsesGeneratedPBHeader(t *testing.T) {
 	files := map[string]string{}
@@ -3113,8 +3021,8 @@ int use() { return 0; }
 		}
 	}
 	for _, want := range []UID{mainPB.UID, depPB.UID} {
-		if !slices.Contains(useCC.Deps, want) {
-			t.Fatalf("use.cpp.o deps missing %q: %v", want, useCC.Deps)
+		if !slices.Contains(graphDeps(g, useCC), want) {
+			t.Fatalf("use.cpp.o deps missing %q: %v", want, graphDeps(g, useCC))
 		}
 	}
 
@@ -3125,11 +3033,11 @@ int use() { return 0; }
 	if nodeHasInput(en, "$(S)/protos/main.pb.h") {
 		t.Fatalf("enum node still consumes source-root pb.h: %#v", en.Inputs)
 	}
-	if !slices.Contains(en.Deps, mainPB.UID) {
-		t.Fatalf("enum node deps missing pb producer uid %q: %v", mainPB.UID, en.Deps)
+	if !slices.Contains(graphDeps(g, en), mainPB.UID) {
+		t.Fatalf("enum node deps missing pb producer uid %q: %v", mainPB.UID, graphDeps(g, en))
 	}
-	if !slices.Contains(en.Deps, depPB.UID) {
-		t.Fatalf("enum node deps missing imported pb producer uid %q: %v", depPB.UID, en.Deps)
+	if !slices.Contains(graphDeps(g, en), depPB.UID) {
+		t.Fatalf("enum node deps missing imported pb producer uid %q: %v", depPB.UID, graphDeps(g, en))
 	}
 	if got := en.TargetProperties["module_tag"]; got != "cpp_proto" {
 		t.Fatalf("enum node module_tag = %q, want cpp_proto", got)
@@ -3145,8 +3053,6 @@ int use() { return 0; }
 		t.Fatalf("archive missing enum serialization object: %#v", ar.Inputs)
 	}
 }
-
-
 
 func TestGen_ProtoLibrary_TransitiveHeadersNoKeepsPublicImportsOnLitePBHeader(t *testing.T) {
 	files := map[string]string{}
@@ -3212,13 +3118,11 @@ int use() { return 0; }
 		}
 	}
 	for _, want := range []UID{mainPB.UID, publicPB.UID, leafPB.UID} {
-		if !slices.Contains(useCC.Deps, want) {
-			t.Fatalf("use.cpp.o deps missing %q: %v", want, useCC.Deps)
+		if !slices.Contains(graphDeps(g, useCC), want) {
+			t.Fatalf("use.cpp.o deps missing %q: %v", want, graphDeps(g, useCC))
 		}
 	}
 }
-
-
 
 func testGen(fs FS, targetDir string) *Graph {
 	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
@@ -3230,8 +3134,6 @@ func testGen(fs FS, targetDir string) *Graph {
 	target := NewPlatform(OSLinux, ISAAArch64, targetFlags, nil, "", "")
 	return Gen(fs, targetDir, host, target, func(Warn) {})
 }
-
-
 
 func TestCollectModule_YqlAbiMacrosAppendCXXFlags(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -3255,8 +3157,6 @@ END()
 		t.Fatalf("cxxFlags = %#v, want %#v", d.cxxFlags, want)
 	}
 }
-
-
 
 func TestCollectModule_YqlUdfStaticRoutesSrcsToGlobal(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -3290,8 +3190,6 @@ END()
 	}
 }
 
-
-
 func TestCollectModule_ProtocFatalWarningsAddsProtoFlag(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"proto/ya.make": `PROTO_LIBRARY()
@@ -3307,8 +3205,6 @@ END()
 		t.Fatalf("protocFlags = %v, want [--fatal_warnings]", d.protocFlags)
 	}
 }
-
-
 
 func TestCollectModule_CPPProtoPluginRecorded(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -3346,8 +3242,6 @@ END()
 	}
 }
 
-
-
 func TestCollectModule_FlatcFlagsRecorded(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"flatcmod/ya.make": `LIBRARY()
@@ -3364,8 +3258,6 @@ END()
 	}
 }
 
-
-
 func TestCollectModule_UseCommonGoogleApisAddsPeer(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"proto/ya.make": `PROTO_LIBRARY()
@@ -3381,8 +3273,6 @@ END()
 		t.Fatalf("peerdirs = %v, want contrib/libs/googleapis-common-protos", d.peerdirs)
 	}
 }
-
-
 
 func TestCollectModule_Py3ProgramSplitsPyMainFromPySrcs(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -3416,8 +3306,6 @@ END()
 	}
 }
 
-
-
 func TestCollectModule_CopyExpandsVarsIntoAutoSources(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"copymod/ya.make": `LIBRARY()
@@ -3446,8 +3334,6 @@ END()
 		t.Fatalf("copyFiles srcs = %#v", d.copyFiles)
 	}
 }
-
-
 
 func TestGen_YqlUdfStatic_UsesGlobalArchiveOnly(t *testing.T) {
 	files := map[string]string{}
@@ -3493,8 +3379,6 @@ END()
 		}
 	}
 }
-
-
 
 func TestGen_FlatcSourcesEmitConsumerInputsAndDeps(t *testing.T) {
 	files := map[string]string{}
@@ -3550,8 +3434,8 @@ root_type Bar;
 	if got := vfsStringsT3(fileCC.Inputs); !reflect.DeepEqual(got[:len(wantFileInputs)], wantFileInputs) {
 		t.Fatalf("File.fbs.cpp inputs prefix = %v, want %v", got[:len(wantFileInputs)], wantFileInputs)
 	}
-	if len(fileCC.Deps) != 2 {
-		t.Fatalf("len(File.fbs.cpp deps) = %d, want 2 (self + imported schema)", len(fileCC.Deps))
+	if len(graphDeps(g, fileCC)) != 2 {
+		t.Fatalf("len(File.fbs.cpp deps) = %d, want 2 (self + imported schema)", len(graphDeps(g, fileCC)))
 	}
 
 	consumerCC := findGraphNodeByOutputs(t, g, "$(B)/mod/consumer.cpp.o")
@@ -3567,8 +3451,8 @@ root_type Bar;
 	if got := vfsStringsT3(consumerCC.Inputs); !reflect.DeepEqual(got[:len(wantConsumerInputs)], wantConsumerInputs) {
 		t.Fatalf("consumer.cpp inputs prefix = %v, want %v", got[:len(wantConsumerInputs)], wantConsumerInputs)
 	}
-	if len(consumerCC.Deps) != 2 {
-		t.Fatalf("len(consumer.cpp deps) = %d, want 2 (reachable flatc producers)", len(consumerCC.Deps))
+	if len(graphDeps(g, consumerCC)) != 2 {
+		t.Fatalf("len(consumer.cpp deps) = %d, want 2 (reachable flatc producers)", len(graphDeps(g, consumerCC)))
 	}
 }
 
@@ -3581,22 +3465,22 @@ root_type Bar;
 func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 	files := map[string]string{
 		// A program that peers a library with .fbs SRCS.
-		"prog/ya.make": "PROGRAM()\nPEERDIR(arrowlike)\nSRCS(main.cpp)\nEND()\n",
+		"prog/ya.make":  "PROGRAM()\nPEERDIR(arrowlike)\nSRCS(main.cpp)\nEND()\n",
 		"prog/main.cpp": "int main() { return 0; }\n",
 		// arrowlike has an explicit peer (peer1) AND a .fbs source.
 		// The fix must insert flatbuffers AFTER peer1 in the link order.
-		"arrowlike/ya.make": "LIBRARY()\nPEERDIR(peer1)\nSRCS(lib.cpp Schema.fbs)\nEND()\n",
-		"arrowlike/lib.cpp": "int f() { return 0; }\n",
+		"arrowlike/ya.make":    "LIBRARY()\nPEERDIR(peer1)\nSRCS(lib.cpp Schema.fbs)\nEND()\n",
+		"arrowlike/lib.cpp":    "int f() { return 0; }\n",
 		"arrowlike/Schema.fbs": "namespace test; table Foo { value:int; }\n",
-		"peer1/ya.make": "LIBRARY()\nSRCS(p1.cpp)\nEND()\n",
-		"peer1/p1.cpp": "int p1() { return 0; }\n",
+		"peer1/ya.make":        "LIBRARY()\nSRCS(p1.cpp)\nEND()\n",
+		"peer1/p1.cpp":         "int p1() { return 0; }\n",
 		// flatbuffers runtime — must have a ya.make so the peerdir resolves.
-		"contrib/libs/flatbuffers/ya.make": "LIBRARY()\nSRCS(flatbuffers.cpp)\nEND()\n",
-		"contrib/libs/flatbuffers/flatbuffers.cpp": "int fb() { return 0; }\n",
-		"contrib/libs/flatbuffers/flatc/ya.make": "PROGRAM(flatc)\nSRCS(main.cpp)\nEND()\n",
-		"contrib/libs/flatbuffers/flatc/main.cpp": "int main() { return 0; }\n",
+		"contrib/libs/flatbuffers/ya.make":                           "LIBRARY()\nSRCS(flatbuffers.cpp)\nEND()\n",
+		"contrib/libs/flatbuffers/flatbuffers.cpp":                   "int fb() { return 0; }\n",
+		"contrib/libs/flatbuffers/flatc/ya.make":                     "PROGRAM(flatc)\nSRCS(main.cpp)\nEND()\n",
+		"contrib/libs/flatbuffers/flatc/main.cpp":                    "int main() { return 0; }\n",
 		"contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h": "#pragma once\n",
-		"build/scripts/cpp_flatc_wrapper.py": "print('stub')\n",
+		"build/scripts/cpp_flatc_wrapper.py":                         "print('stub')\n",
 	}
 
 	g := testGen(newMemFS(files), "prog")
@@ -3637,8 +3521,6 @@ func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 	}
 }
 
-
-
 func TestGen_CopyFileWithContextAutoCompilesBuildOutput(t *testing.T) {
 	files := map[string]string{}
 
@@ -3671,12 +3553,10 @@ int copied() { return 0; }
 			t.Fatalf("copied.cpp inputs missing %q: %v", want, vfsStringsT3(cc.Inputs))
 		}
 	}
-	if len(cc.Deps) != 1 {
-		t.Fatalf("len(copied.cpp deps) = %d, want 1 (copy producer)", len(cc.Deps))
+	if len(graphDeps(g, cc)) != 1 {
+		t.Fatalf("len(copied.cpp deps) = %d, want 1 (copy producer)", len(graphDeps(g, cc)))
 	}
 }
-
-
 
 func TestGen_CopyFileWithContextExpandsBuildRootModdirDestination(t *testing.T) {
 	files := map[string]string{}
@@ -3712,8 +3592,6 @@ int copied() { return 0; }
 	}
 }
 
-
-
 func TestGen_CopyFileAutoDoesNotPropagateSourceContext(t *testing.T) {
 	files := map[string]string{}
 
@@ -3747,12 +3625,10 @@ int copied() { return 0; }
 			}
 		}
 	}
-	if len(cc.Deps) != 1 {
-		t.Fatalf("len(copied.cpp deps) = %d, want 1 (copy producer)", len(cc.Deps))
+	if len(graphDeps(g, cc)) != 1 {
+		t.Fatalf("len(copied.cpp deps) = %d, want 1 (copy producer)", len(graphDeps(g, cc)))
 	}
 }
-
-
 
 func TestGen_CopyFileUsesSourceRootInputFromIncludedMacro(t *testing.T) {
 	files := map[string]string{}
@@ -3782,8 +3658,6 @@ END()
 		t.Fatalf("copy inputs still carry duplicated module-prefixed generated.txt: %#v", cp.Inputs)
 	}
 }
-
-
 
 func TestGen_EnumSerializationWithSRCDIRResolvesHeaderViaSourceDir(t *testing.T) {
 	// Reproduces the purecalc_no_pg_wrapper divergence: a module uses INCLUDE()
@@ -3859,8 +3733,6 @@ END()
 	}
 }
 
-
-
 func vfsStringsT3(in []VFS) []string {
 	out := make([]string, len(in))
 	for i, v := range in {
@@ -3868,8 +3740,6 @@ func vfsStringsT3(in []VFS) []string {
 	}
 	return out
 }
-
-
 
 func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -3897,8 +3767,6 @@ func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
 		t.Errorf("CF cmd_args missing DEFAULT var MYDEF=world; got: %s", args)
 	}
 }
-
-
 
 func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -3951,13 +3819,13 @@ func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 		t.Fatal("no CC node for cons/use.cpp")
 	}
 	found := false
-	for _, d := range use.Deps {
+	for _, d := range graphDeps(g, use) {
 		if d == cf.UID {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("use.cpp.o deps %v missing config.h CF uid %q", use.Deps, cf.UID)
+		t.Errorf("use.cpp.o deps %v missing config.h CF uid %q", graphDeps(g, use), cf.UID)
 	}
 	if !nodeHasInput(use, "$(S)/genh/config.h.in") {
 		t.Errorf("use.cpp.o inputs missing config.h.in: %#v", use.Inputs)
@@ -3966,8 +3834,6 @@ func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 		t.Errorf("use.cpp.o inputs missing dep.h from config.h.in closure: %#v", use.Inputs)
 	}
 }
-
-
 
 func TestGen_CmdArgsExpandStmtVars(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -4015,8 +3881,6 @@ END()
 		}
 	}
 }
-
-
 
 func TestGen_RunProgramHeaderOutputClosurePropagatesInputs(t *testing.T) {
 	files := map[string]string{}
@@ -4088,12 +3952,10 @@ END()
 			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, use.Inputs)
 		}
 	}
-	if !slices.Contains(use.Deps, genH.UID) {
-		t.Fatalf("use.cpp.o deps missing generated-header PR uid %q: %v", genH.UID, use.Deps)
+	if !slices.Contains(graphDeps(g, use), genH.UID) {
+		t.Fatalf("use.cpp.o deps missing generated-header PR uid %q: %v", genH.UID, graphDeps(g, use))
 	}
 }
-
-
 
 func TestCollectModule_BisonGeneratedHeaderExportedGlobally(t *testing.T) {
 	files := map[string]string{}
@@ -4123,8 +3985,6 @@ END()
 		}
 	}
 }
-
-
 
 func TestGen_BisonGeneratedHeaderPreprocessAndPeerBuildRootInclude(t *testing.T) {
 	files := map[string]string{}
@@ -4362,12 +4222,10 @@ message Any {}
 	if nodeHasInput(use, "$(S)/google/protobuf/any.pb.h") {
 		t.Fatalf("use.cpp.o inputs still contain unrebased WKT header path: %#v", use.Inputs)
 	}
-	if !slices.Contains(use.Deps, pb.UID) {
-		t.Fatalf("use.cpp.o deps missing PB producer uid %q: %v", pb.UID, use.Deps)
+	if !slices.Contains(graphDeps(g, use), pb.UID) {
+		t.Fatalf("use.cpp.o deps missing PB producer uid %q: %v", pb.UID, graphDeps(g, use))
 	}
 }
-
-
 
 func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 	t.Parallel()
@@ -4441,8 +4299,6 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 
 const t17SwigTargetDir = "contrib/tools/swig"
 
-
-
 func TestReorderLDMembers_LegacyDoubleUnderscorePathsTrailRegularSources(t *testing.T) {
 	refs := []NodeRef{{id: 1}, {id: 2}, {id: 3}}
 	paths := []VFS{
@@ -4483,8 +4339,6 @@ type t20RefNode struct {
 	UID     string      `json:"uid"`
 }
 
-
-
 func TestCollectModule_SETAPPENDRPathGlobal(t *testing.T) {
 	content := "RESOURCES_LIBRARY()\nSET_APPEND(RPATH_GLOBAL '-Wl,-rpath,${\"$\"}ORIGIN')\nEND()\n"
 	fs := newMemFS(map[string]string{
@@ -4500,8 +4354,6 @@ func TestCollectModule_SETAPPENDRPathGlobal(t *testing.T) {
 	}
 }
 
-
-
 func testGenT20(fs FS, targetDir string) *Graph {
 	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
 	target := newT20ResourcePlatform(OSLinux, ISAAArch64, "yes", nil)
@@ -4509,15 +4361,11 @@ func testGenT20(fs FS, targetDir string) *Graph {
 	return Gen(fs, targetDir, host, target, func(Warn) {})
 }
 
-
-
 func testGenT20Tool(fs FS, targetDir string) *Graph {
 	host := newT20ResourcePlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
 
 	return Gen(fs, targetDir, host, host, func(Warn) {})
 }
-
-
 
 func newT20ResourcePlatform(os OS, isa ISA, pic string, tags []string) *Platform {
 	flags := map[string]string{
@@ -4540,8 +4388,6 @@ type t20RefGraph struct {
 	byUID map[string]*t20RefNode
 }
 
-
-
 func findT20RefNodeByOutputs(t *testing.T, ref *t20RefGraph, wantOutputs ...string) *t20RefNode {
 	t.Helper()
 
@@ -4554,8 +4400,6 @@ func findT20RefNodeByOutputs(t *testing.T, ref *t20RefGraph, wantOutputs ...stri
 	t.Fatalf("reference node with outputs %v not found", wantOutputs)
 	return nil
 }
-
-
 
 func findGraphNodeByOutputs(t *testing.T, g *Graph, wantOutputs ...string) *Node {
 	t.Helper()
@@ -4583,8 +4427,6 @@ func findGraphNodeByOutputs(t *testing.T, g *Graph, wantOutputs ...string) *Node
 	return nil
 }
 
-
-
 func cmdArgsFrom[T interface{ ~[]string }](t *testing.T, args T, marker string) []string {
 	t.Helper()
 
@@ -4595,8 +4437,6 @@ func cmdArgsFrom[T interface{ ~[]string }](t *testing.T, args T, marker string) 
 
 	return append([]string(nil), args[idx:]...)
 }
-
-
 
 func normalizeT20Token(s string) string {
 	s = strings.NewReplacer(
@@ -4614,8 +4454,6 @@ func normalizeT20Token(s string) string {
 	})
 }
 
-
-
 func normalizeT20Strings(in []string) []string {
 	out := make([]string, len(in))
 	for i, s := range in {
@@ -4624,8 +4462,6 @@ func normalizeT20Strings(in []string) []string {
 
 	return out
 }
-
-
 
 func normalizeT20Env(in map[string]string) map[string]string {
 	if in == nil {
@@ -4640,16 +4476,12 @@ func normalizeT20Env(in map[string]string) map[string]string {
 	return out
 }
 
-
-
 func sortedStrings(in []string) []string {
 	out := append([]string(nil), in...)
 	sort.Strings(out)
 
 	return out
 }
-
-
 
 func assertCmdArgsAbsent(t *testing.T, args []string, banned ...string) {
 	t.Helper()
@@ -4660,8 +4492,6 @@ func assertCmdArgsAbsent(t *testing.T, args []string, banned ...string) {
 		}
 	}
 }
-
-
 
 func projectGraphDepOutputs(t *testing.T, g *Graph, deps []UID) [][]string {
 	t.Helper()
@@ -4688,8 +4518,6 @@ func projectGraphDepOutputs(t *testing.T, g *Graph, deps []UID) [][]string {
 	return out
 }
 
-
-
 func projectT20RefDepOutputs(t *testing.T, ref *t20RefGraph, deps []string) [][]string {
 	t.Helper()
 
@@ -4709,8 +4537,6 @@ func projectT20RefDepOutputs(t *testing.T, ref *t20RefGraph, deps []string) [][]
 
 	return out
 }
-
-
 
 func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
 	files := map[string]string{}
@@ -4754,8 +4580,6 @@ func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
 	}
 }
 
-
-
 func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
 	files := map[string]string{}
 
@@ -4783,8 +4607,6 @@ func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
 		}
 	}
 }
-
-
 
 func TestGen_ResourceRelativeOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
 	files := map[string]string{}
@@ -4823,8 +4645,6 @@ END()
 		t.Fatalf("objcopy inputs still use source-root data.json: %#v", objcopy.Inputs)
 	}
 }
-
-
 
 func TestGen_ResourceBindirOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
 	files := map[string]string{}
@@ -4892,8 +4712,6 @@ func md5Hex(s string) string {
 	return strings.ToLower(enchex.EncodeToString(sum[:]))
 }
 
-
-
 func TestGen_ResourceBindirRunProgramCarriesInputClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -4958,20 +4776,14 @@ END()
 	}
 }
 
-
-
 func writeToolProgram(files map[string]string, modulePath, binaryName string) {
 	files[modulePath+"/ya.make"] = "PROGRAM(" + binaryName + ")\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nEND()\n"
 	files[modulePath+"/main.cpp"] = "int main(){return 0;}\n"
 }
 
-
-
 func writeTestModuleFile(files map[string]string, rel, content string) {
 	files[rel] = content
 }
-
-
 
 func mustNodeByOutput(t *testing.T, g *Graph, output string) *Node {
 	t.Helper()
@@ -4986,8 +4798,6 @@ func mustNodeByOutput(t *testing.T, g *Graph, output string) *Node {
 	return nil
 }
 
-
-
 func findNodeByOutputPrefix(g *Graph, prefix string) *Node {
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].String(), prefix) {
@@ -4997,8 +4807,6 @@ func findNodeByOutputPrefix(g *Graph, prefix string) *Node {
 
 	return nil
 }
-
-
 
 func nodeHasInput(n *Node, input string) bool {
 	for _, got := range n.Inputs {
@@ -5010,8 +4818,6 @@ func nodeHasInput(n *Node, input string) bool {
 	return false
 }
 
-
-
 func indexOfArg(args []string, want string) int {
 	for i, arg := range args {
 		if arg == want {
@@ -5021,8 +4827,6 @@ func indexOfArg(args []string, want string) int {
 
 	return -1
 }
-
-
 
 func TestIsHeaderSource_ExtendedHeaderExtensions(t *testing.T) {
 	for _, src := range []string{
@@ -5061,15 +4865,11 @@ type indexedStatsUIDNode struct {
 	StatsUID string
 }
 
-
-
 func genStatsUIDReferenceSample(fs FS, targetDir string) *Graph {
 	host, target := statsUIDReferencePlatforms()
 
 	return Gen(fs, targetDir, host, target, func(Warn) {})
 }
-
-
 
 func genDumpStatsUIDReferenceSample(t *testing.T, sourceRoot, targetDir string) []statsUIDRefNode {
 	t.Helper()
@@ -5112,8 +4912,6 @@ func genDumpStatsUIDReferenceSample(t *testing.T, sourceRoot, targetDir string) 
 	return loadStatsUIDRefNodes(t, out.Name())
 }
 
-
-
 func statsUIDReferencePlatforms() (*Platform, *Platform) {
 	hostPlatformFlags := map[string]string{
 		"APPLE_SDK_LOCAL":    "yes",
@@ -5149,8 +4947,6 @@ func statsUIDReferencePlatforms() (*Platform, *Platform) {
 	return host, target
 }
 
-
-
 func loadStatsUIDRefNodes(t *testing.T, path string) []statsUIDRefNode {
 	t.Helper()
 
@@ -5168,8 +4964,6 @@ func loadStatsUIDRefNodes(t *testing.T, path string) []statsUIDRefNode {
 
 	return graph.Graph
 }
-
-
 
 func assertTargetStatsUIDsMatchReference(t *testing.T, our []*Node, ref []statsUIDRefNode, minCommon int, refName string) {
 	t.Helper()
@@ -5207,8 +5001,6 @@ func assertTargetStatsUIDsMatchReference(t *testing.T, our []*Node, ref []statsU
 	}
 }
 
-
-
 func assertHostStatsUIDsMatchReference(t *testing.T, our []*Node, ref []statsUIDRefNode, minCommon int, refName string) {
 	t.Helper()
 
@@ -5245,8 +5037,6 @@ func assertHostStatsUIDsMatchReference(t *testing.T, our []*Node, ref []statsUID
 	}
 }
 
-
-
 func indexTargetStatsUIDNodes(t *testing.T, nodes []*Node) map[statsUIDNodeKey]indexedStatsUIDNode {
 	t.Helper()
 
@@ -5266,8 +5056,6 @@ func indexTargetStatsUIDNodes(t *testing.T, nodes []*Node) map[statsUIDNodeKey]i
 
 	return out
 }
-
-
 
 func indexHostStatsUIDNodes(t *testing.T, nodes []*Node) map[statsUIDNodeKey]indexedStatsUIDNode {
 	t.Helper()
@@ -5289,8 +5077,6 @@ func indexHostStatsUIDNodes(t *testing.T, nodes []*Node) map[statsUIDNodeKey]ind
 	return out
 }
 
-
-
 func indexTargetStatsUIDRefNodes(t *testing.T, nodes []statsUIDRefNode) map[statsUIDNodeKey]indexedStatsUIDNode {
 	t.Helper()
 
@@ -5311,8 +5097,6 @@ func indexTargetStatsUIDRefNodes(t *testing.T, nodes []statsUIDRefNode) map[stat
 	return out
 }
 
-
-
 func indexHostStatsUIDRefNodes(t *testing.T, nodes []statsUIDRefNode) map[statsUIDNodeKey]indexedStatsUIDNode {
 	t.Helper()
 
@@ -5332,8 +5116,6 @@ func indexHostStatsUIDRefNodes(t *testing.T, nodes []statsUIDRefNode) map[statsU
 
 	return out
 }
-
-
 
 func diffStatsUIDNodeKeys(our, ref map[statsUIDNodeKey]indexedStatsUIDNode) ([]statsUIDNodeKey, []statsUIDNodeKey, []statsUIDNodeKey) {
 	commonKeys := make([]statsUIDNodeKey, 0, len(our))
@@ -5361,8 +5143,6 @@ func diffStatsUIDNodeKeys(our, ref map[statsUIDNodeKey]indexedStatsUIDNode) ([]s
 	return commonKeys, onlyOur, onlyRef
 }
 
-
-
 func sortStatsUIDNodeKeys(keys []statsUIDNodeKey) {
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].Outputs != keys[j].Outputs {
@@ -5378,16 +5158,12 @@ func sortStatsUIDNodeKeys(keys []statsUIDNodeKey) {
 	})
 }
 
-
-
 func statsUIDDescribeKey(key statsUIDNodeKey) string {
 	return "outputs=" + strings.Join(statsUIDOutputsFromKey(key), ",") +
 		" kind=" + key.Kind +
 		" host_platform=" + boolString(key.HostPlatform) +
 		" platform=" + key.Platform
 }
-
-
 
 func statsUIDOutputsFromKey(key statsUIDNodeKey) []string {
 	if key.Outputs == "" {
@@ -5396,16 +5172,12 @@ func statsUIDOutputsFromKey(key statsUIDNodeKey) []string {
 	return strings.Split(key.Outputs, "\x00")
 }
 
-
-
 func boolString(v bool) string {
 	if v {
 		return "true"
 	}
 	return "false"
 }
-
-
 
 func statsUIDOutputKey(outputs []string) string {
 	normalized := append([]string(nil), outputs...)
@@ -5416,8 +5188,6 @@ func statsUIDOutputKey(outputs []string) string {
 
 	return strings.Join(normalized, "\x00")
 }
-
-
 
 func statsUIDNodeKeyFromNode(node *Node) statsUIDNodeKey {
 	kind, _ := node.KV["p"].(string)
@@ -5430,8 +5200,6 @@ func statsUIDNodeKeyFromNode(node *Node) statsUIDNodeKey {
 	}
 }
 
-
-
 func statsUIDNodeKeyFromRef(node statsUIDRefNode) statsUIDNodeKey {
 	return statsUIDNodeKey{
 		Outputs:      statsUIDOutputKey(node.Outputs),
@@ -5441,16 +5209,12 @@ func statsUIDNodeKeyFromRef(node statsUIDRefNode) statsUIDNodeKey {
 	}
 }
 
-
-
 func normalizeStatsUIDOutput(out string) string {
 	out = strings.ReplaceAll(out, "$(BUILD_ROOT)", "$(B)")
 	out = strings.ReplaceAll(out, "$(SOURCE_ROOT)", "$(S)")
 
 	return out
 }
-
-
 
 func TestGen_ProtoLibrary_NamedArgUsedForArchive(t *testing.T) {
 	files := map[string]string{}
@@ -5481,8 +5245,6 @@ message Ydb {}
 	}
 }
 
-
-
 func TestGen_ProtoLibrary_UnnamedArgKeepsPathDerivedArchive(t *testing.T) {
 	files := map[string]string{}
 
@@ -5503,8 +5265,6 @@ message Ydb {}
 
 	mustNodeByOutput(t, g, "$(B)/ydb/public/api/protos/libpublic-api-protos.a")
 }
-
-
 
 func TestGen_ARMemberOrder_PbCcAfterHSerialized(t *testing.T) {
 	// Reproduces the libydb-core-tablet_flat.a divergence: a LIBRARY with both

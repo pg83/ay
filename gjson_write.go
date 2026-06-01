@@ -49,7 +49,7 @@ func writeGraphCompact(w io.Writer, g *Graph) {
 			buf = append(buf, ',')
 		}
 
-		buf = appendNode(buf, node)
+		buf = appendNode(buf, node, g.uids)
 
 		if len(buf) >= 256<<10 {
 			Throw2(w.Write(buf))
@@ -64,7 +64,7 @@ func writeGraphCompact(w io.Writer, g *Graph) {
 	Throw2(w.Write(buf))
 }
 
-func appendNode(buf []byte, n *Node) []byte {
+func appendNode(buf []byte, n *Node, uids *uidVec) []byte {
 	buf = append(buf, '{')
 
 	if n.Cache != nil {
@@ -79,14 +79,14 @@ func appendNode(buf []byte, n *Node) []byte {
 	buf = appendCmdSlice(buf, n.Cmds)
 
 	buf = append(buf, `,"deps":`...)
-	buf = appendUIDSlice(buf, n.Deps)
+	buf = appendRefUIDs(buf, n.DepRefs, uids)
 
 	buf = append(buf, `,"env":`...)
 	buf = appendStringMap(buf, n.Env)
 
-	if len(n.ForeignDeps) > 0 {
+	if len(n.ForeignDepRefs) > 0 {
 		buf = append(buf, `,"foreign_deps":`...)
-		buf = appendToolForeignDeps(buf, n.ForeignDeps)
+		buf = appendToolForeignDeps(buf, n.ForeignDepRefs, uids)
 	}
 
 	if nodeHasHostTag(n.Tags) {
@@ -196,6 +196,22 @@ func appendUIDSlice(buf []byte, us []UID) []byte {
 		}
 
 		buf = appendUID(buf, u)
+	}
+
+	return append(buf, ']')
+}
+
+// appendRefUIDs writes refs as the array of their resolved dep uids — direct
+// id->uid lookup, no materialized Deps slice on the node.
+func appendRefUIDs(buf []byte, refs []NodeRef, uids *uidVec) []byte {
+	buf = append(buf, '[')
+
+	for i, r := range refs {
+		if i > 0 {
+			buf = append(buf, ',')
+		}
+
+		buf = appendUID(buf, uids.get(r.id))
 	}
 
 	return append(buf, ']')
@@ -359,9 +375,9 @@ func appendStringMap(buf []byte, m map[string]string) []byte {
 
 // appendToolForeignDeps writes the foreign-dep slice as the single-key object
 // {"tool":[...]} — the only key any node ever uses.
-func appendToolForeignDeps(buf []byte, deps []UID) []byte {
+func appendToolForeignDeps(buf []byte, refs []NodeRef, uids *uidVec) []byte {
 	buf = append(buf, `{"tool":`...)
-	buf = appendUIDSlice(buf, deps)
+	buf = appendRefUIDs(buf, refs, uids)
 
 	return append(buf, '}')
 }

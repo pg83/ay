@@ -7,18 +7,18 @@ import (
 
 func TestSwigIncludeClosure_ParsesIAndSystemRoots(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		"mod/src.swg":                                "%module x\n%include \"local.i\"\n",
-		"mod/local.i":                                "%import <typemaps.i>\n%include \"nested.i\"\n",
-		"mod/nested.i":                               "%module nested\n",
-		"contrib/tools/swig/Lib/swig.swg":            "%module swig\n",
-		"contrib/tools/swig/Lib/go.swg":              "%module go\n",
-		"contrib/tools/swig/Lib/java.swg":            "%module java\n",
-		"contrib/tools/swig/Lib/perl5.swg":           "%include \"perl5/reference.i\"\n",
-		"contrib/tools/swig/Lib/python.swg":          "%module python\n",
-		"contrib/tools/swig/Lib/go/typemaps.i":       "%module gotypes\n",
-		"contrib/tools/swig/Lib/java/typemaps.i":     "%module javatypes\n",
-		"contrib/tools/swig/Lib/perl5/typemaps.i":    "%module perltypes\n",
-		"contrib/tools/swig/Lib/perl5/reference.i":   "%module perlref\n",
+		"mod/src.swg":                              "%module x\n%include \"local.i\"\n",
+		"mod/local.i":                              "%import <typemaps.i>\n%include \"nested.i\"\n",
+		"mod/nested.i":                             "%module nested\n",
+		"contrib/tools/swig/Lib/swig.swg":          "%module swig\n",
+		"contrib/tools/swig/Lib/go.swg":            "%module go\n",
+		"contrib/tools/swig/Lib/java.swg":          "%module java\n",
+		"contrib/tools/swig/Lib/perl5.swg":         "%include \"perl5/reference.i\"\n",
+		"contrib/tools/swig/Lib/python.swg":        "%module python\n",
+		"contrib/tools/swig/Lib/go/typemaps.i":     "%module gotypes\n",
+		"contrib/tools/swig/Lib/java/typemaps.i":   "%module javatypes\n",
+		"contrib/tools/swig/Lib/perl5/typemaps.i":  "%module perltypes\n",
+		"contrib/tools/swig/Lib/perl5/reference.i": "%module perlref\n",
 	})
 
 	ctx := &genCtx{fs: fs}

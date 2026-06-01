@@ -300,7 +300,7 @@ func cmdMake(args []string) int {
 				writeGraph("-", g)
 			}
 		} else {
-			genStream(fs, mf.targets, hostP, targetP, resourceFetches, func(*Node) {}, onWarn, mf.testLevel > 0)
+			genStream(fs, mf.targets, hostP, targetP, resourceFetches, func(*Node, *uidVec) {}, onWarn, mf.testLevel > 0)
 		}
 
 		if mf.dumpIgnoredMacros {
@@ -353,7 +353,7 @@ func cmdMake(args []string) int {
 	return 0
 }
 
-func genStream(fs FS, targets []string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn), testMode bool) []UID {
+func genStream(fs FS, targets []string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node, *uidVec), onWarn func(Warn), testMode bool) []UID {
 	all := []UID{}
 
 	for _, t := range targets {
@@ -364,7 +364,7 @@ func genStream(fs FS, targets []string, hostP, targetP *Platform, resources *res
 	return all
 }
 
-func genStreamOne(fs FS, target string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn), testMode bool) []UID {
+func genStreamOne(fs FS, target string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node, *uidVec), onWarn func(Warn), testMode bool) []UID {
 	emitter := NewStreamingEmitter(onNode)
 	runGenIntoWithResources(fs, target, hostP, targetP, emitter, onWarn, resources, testMode, true)
 
@@ -393,6 +393,7 @@ type commandResult struct {
 
 type nodeFuture struct {
 	node *Node
+	uids *uidVec // resolves node.DepRefs -> dep uids (per emitter; deps are not materialized)
 	once sync.Once
 	err  *Exception
 }
@@ -411,7 +412,7 @@ func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, resourceM
 	}
 }
 
-func (ex *executor) onNode(n *Node) {
+func (ex *executor) onNode(n *Node, uids *uidVec) {
 	// Dedup by uid: the generator may stream the same node (identical uid) more
 	// than once. Each uid is one action and must run in exactly one goroutine —
 	// two goroutines in the same tmp/<uid> would have one's forceRemoveAll wipe the
@@ -425,7 +426,7 @@ func (ex *executor) onNode(n *Node) {
 		return
 	}
 
-	f := &nodeFuture{node: n}
+	f := &nodeFuture{node: n, uids: uids}
 	ex.byUID[n.UID] = f
 	ex.mu.Unlock()
 
@@ -480,7 +481,7 @@ func (ex *executor) visit(uid UID) {
 
 	f.once.Do(func() {
 		f.err = Try(func() {
-			ex.execute(f.node)
+			ex.execute(f)
 		})
 	})
 
@@ -513,7 +514,8 @@ func (ex *executor) lookup(uid UID) *nodeFuture {
 	return f
 }
 
-func (ex *executor) execute(n *Node) {
+func (ex *executor) execute(f *nodeFuture) {
+	n := f.node
 	cachePath := filepath.Join(ex.bldRoot, "uid", n.UID.String())
 
 	if _, err := os.Stat(cachePath); err == nil {
@@ -524,7 +526,8 @@ func (ex *executor) execute(n *Node) {
 	defer ex.done.Add(1)
 
 	if ex.keepGoing {
-		for _, dep := range n.Deps {
+		for _, r := range n.DepRefs {
+			dep := f.uids.get(r.id)
 			exc := Try(func() {
 				ex.visit(dep)
 			})
@@ -536,8 +539,8 @@ func (ex *executor) execute(n *Node) {
 			ThrowFmt("deps failed: %s", dep)
 		}
 	} else {
-		for _, dep := range n.Deps {
-			ex.visit(dep)
+		for _, r := range n.DepRefs {
+			ex.visit(f.uids.get(r.id))
 		}
 	}
 
@@ -549,8 +552,8 @@ func (ex *executor) execute(n *Node) {
 	_ = forceRemoveAll(tmp)
 	defer forceRemoveAll(tmp)
 
-	for _, dep := range n.Deps {
-		ex.restoreInto(dep, tmp)
+	for _, r := range n.DepRefs {
+		ex.restoreInto(f.uids.get(r.id), tmp)
 	}
 
 	start := time.Now()

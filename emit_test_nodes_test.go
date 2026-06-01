@@ -502,8 +502,8 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
 
 	fs := newMemFS(map[string]string{
-		"util/ut/ya.make":                            "UNITTEST_FOR(util)\nSRCS(ysafeptr_ut.cpp ysaveload_ut.cpp)\nEND()\n",
-		"util/ya.make":                               "LIBRARY()\nSRCS(lib.cpp)\nEND()\n",
+		"util/ut/ya.make": "UNITTEST_FOR(util)\nSRCS(ysafeptr_ut.cpp ysaveload_ut.cpp)\nEND()\n",
+		"util/ya.make":    "LIBRARY()\nSRCS(lib.cpp)\nEND()\n",
 		"library/cpp/testing/unittest_main/ya.make":  "LIBRARY()\nSRCS(main.cpp)\nEND()\n",
 		"util/ysafeptr_ut.cpp":                       "int ysafeptr_ut() { return 0; }\n",
 		"util/ysaveload_ut.cpp":                      "int ysaveload_ut() { return 0; }\n",
@@ -560,16 +560,16 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		t.Fatalf("ld output = %q, want $(B)/util/ut/util-ut", got)
 	}
 
-	if len(ctxNode.Deps) != 1 || ctxNode.Deps[0] != fetchNode.UID {
-		t.Fatalf("ctx deps = %v, want [%s]", ctxNode.Deps, fetchNode.UID)
+	if len(graphDeps(g, ctxNode)) != 1 || graphDeps(g, ctxNode)[0] != fetchNode.UID {
+		t.Fatalf("ctx deps = %v, want [%s]", graphDeps(g, ctxNode), fetchNode.UID)
 	}
 
-	unittestDeps := make(map[UID]struct{}, len(unittestNode.Deps))
-	for _, dep := range unittestNode.Deps {
+	unittestDeps := make(map[UID]struct{}, len(graphDeps(g, unittestNode)))
+	for _, dep := range graphDeps(g, unittestNode) {
 		unittestDeps[dep] = struct{}{}
 	}
-	if len(unittestNode.Deps) != 2 {
-		t.Fatalf("unittest deps = %v, want exactly [ld ctx]", unittestNode.Deps)
+	if len(graphDeps(g, unittestNode)) != 2 {
+		t.Fatalf("unittest deps = %v, want exactly [ld ctx]", graphDeps(g, unittestNode))
 	}
 	if _, ok := unittestDeps[ldNode.UID]; !ok {
 		t.Fatalf("unittest deps missing LD uid %q", ldNode.UID)
@@ -580,8 +580,8 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	if _, ok := unittestDeps[fetchNode.UID]; ok {
 		t.Fatalf("unittest deps unexpectedly include fetch uid %q", fetchNode.UID)
 	}
-	if len(clangNode.Deps) != 1 || clangNode.Deps[0] != ctxNode.UID {
-		t.Fatalf("clang deps = %v, want [%s]", clangNode.Deps, ctxNode.UID)
+	if len(graphDeps(g, clangNode)) != 1 || graphDeps(g, clangNode)[0] != ctxNode.UID {
+		t.Fatalf("clang deps = %v, want [%s]", graphDeps(g, clangNode), ctxNode.UID)
 	}
 
 	unittestArgs := unittestNode.Cmds[0].CmdArgs
