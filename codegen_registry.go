@@ -42,14 +42,16 @@ type deferredCF struct {
 }
 
 type CodegenRegistry struct {
-	byStr map[STR]*GeneratedFileInfo
+	// byStr maps an interned path STR (full $(B)/… or its rel form) to its
+	// producer info. The hot Lookup (once per scanned include) was the top map
+	// in the CPU profile; a DenseMap keyed by STR drops the hashing/probing.
+	byStr DenseMap[STR, *GeneratedFileInfo]
 
 	bySplit map[STR]map[STR]*GeneratedFileInfo
 }
 
 func NewCodegenRegistry() *CodegenRegistry {
 	return &CodegenRegistry{
-		byStr:   make(map[STR]*GeneratedFileInfo, 256),
 		bySplit: make(map[STR]map[STR]*GeneratedFileInfo, 256),
 	}
 }
@@ -57,14 +59,14 @@ func NewCodegenRegistry() *CodegenRegistry {
 func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 	full := STR(info.OutputPath.strID())
 
-	if existing := r.byStr[full]; existing != nil {
+	if existing, ok := r.byStr.Get(full); ok {
 		ThrowFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
 			info.OutputPath.String(), existing.ProducerKvP, info.ProducerKvP)
 	}
 
 	rel := info.OutputPath.Rel()
-	r.byStr[full] = info
-	r.byStr[internString(rel)] = info
+	r.byStr.Put(full, info)
+	r.byStr.Put(internString(rel), info)
 
 	for i := 0; i < len(rel); i++ {
 		if rel[i] == '/' {
@@ -85,7 +87,9 @@ func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) 
 }
 
 func (r *CodegenRegistry) Lookup(path VFS) *GeneratedFileInfo {
-	return r.byStr[STR(path.strID())]
+	info, _ := r.byStr.Get(STR(path.strID()))
+
+	return info
 }
 
 func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
@@ -95,7 +99,9 @@ func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
 		return nil
 	}
 
-	return r.byStr[*id]
+	info, _ := r.byStr.Get(*id)
+
+	return info
 }
 
 func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
@@ -103,9 +109,9 @@ func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
 }
 
 func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
-	info := r.byStr[STR(path.strID())]
+	info, ok := r.byStr.Get(STR(path.strID()))
 
-	if info == nil {
+	if !ok {
 		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.String())
 	}
 
@@ -119,9 +125,9 @@ func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
 }
 
 func (r *CodegenRegistry) SetSourceInputs(path VFS, src []VFS) {
-	info := r.byStr[STR(path.strID())]
+	info, ok := r.byStr.Get(STR(path.strID()))
 
-	if info == nil {
+	if !ok {
 		ThrowFmt("CodegenRegistry: SetSourceInputs on unregistered path %q", path.String())
 	}
 
