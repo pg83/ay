@@ -471,7 +471,7 @@ func stringValue(v interface{}) string {
 
 func serializeGraphJSON(g *Graph) []byte {
 	var buf bytes.Buffer
-	writeGraphIndented(&buf, g)
+	writeGraphCompact(&buf, g)
 
 	return buf.Bytes()
 }

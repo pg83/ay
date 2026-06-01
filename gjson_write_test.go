@@ -11,7 +11,6 @@ func encodeWithStdlib(g *Graph) []byte {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "    ")
 	Throw(enc.Encode(g))
 
 	b := buf.Bytes()
@@ -24,7 +23,7 @@ func encodeWithStdlib(g *Graph) []byte {
 
 func encodeWithHandRolled(g *Graph) []byte {
 	var buf bytes.Buffer
-	writeGraphIndented(&buf, g)
+	writeGraphCompact(&buf, g)
 
 	return buf.Bytes()
 }
@@ -173,14 +172,7 @@ func TestWriteGraphIndented_ForeignDepsToolObject(t *testing.T) {
 
 	got := string(encodeWithHandRolled(g))
 
-	want := "\"env\": {},\n" +
-		"            \"foreign_deps\": {\n" +
-		"                \"tool\": [\n" +
-		"                    \"" + tuid("u1").String() + "\",\n" +
-		"                    \"" + tuid("u2").String() + "\"\n" +
-		"                ]\n" +
-		"            },\n" +
-		"            \"inputs\": ["
+	want := `"env":{},"foreign_deps":{"tool":["` + tuid("u1").String() + `","` + tuid("u2").String() + `"]},"inputs":[`
 	if !strings.Contains(got, want) {
 		t.Fatalf("foreign_deps not wrapped as {\"tool\": [...]} between env and inputs.\ngot:\n%s", got)
 	}

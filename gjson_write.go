@@ -32,244 +32,150 @@ var htmlSafeNoEscape = func() [128]bool {
 	return t
 }()
 
-func writeGraphIndented(w io.Writer, g *Graph) {
+// writeGraph emits the graph as compact JSON (single line, no whitespace between
+// tokens). The graph is consumed by `ay dump` / `ay make`, which parse it — the
+// formatting carries no meaning, so we drop it. Nodes are flushed incrementally
+// to keep the in-memory buffer bounded for multi-GB graphs.
+func writeGraphCompact(w io.Writer, g *Graph) {
 	buf := make([]byte, 0, 1<<20)
 
-	buf = append(buf, '{', '\n')
+	buf = append(buf, `{"conf":`...)
+	buf = appendGraphConf(buf, g.Conf)
 
-	buf = append(buf, `    "conf": `...)
-	buf = appendGraphConf(buf, g.Conf, "    ")
-	buf = append(buf, ',')
-	buf = append(buf, '\n')
+	buf = append(buf, `,"graph":[`...)
 
-	buf = append(buf, `    "graph": `...)
-
-	if len(g.Graph) == 0 {
-		buf = append(buf, '[', ']', ',', '\n')
-	} else {
-		buf = append(buf, '[', '\n')
-
-		for i, node := range g.Graph {
-			buf = appendNode(buf, node, "        ")
-
-			if i < len(g.Graph)-1 {
-				buf = append(buf, ',')
-			}
-
-			buf = append(buf, '\n')
-
-			if len(buf) >= 256<<10 {
-				Throw2(w.Write(buf))
-				buf = buf[:0]
-			}
+	for i, node := range g.Graph {
+		if i > 0 {
+			buf = append(buf, ',')
 		}
 
-		buf = append(buf, `    ],`...)
-		buf = append(buf, '\n')
+		buf = appendNode(buf, node)
+
+		if len(buf) >= 256<<10 {
+			Throw2(w.Write(buf))
+			buf = buf[:0]
+		}
 	}
 
-	buf = append(buf, `    "inputs": {},`...)
-	buf = append(buf, '\n')
-
-	buf = append(buf, `    "result": `...)
-	buf = appendUIDSlice(buf, g.Result, "    ")
-	buf = append(buf, '\n')
-
+	buf = append(buf, `],"inputs":{},"result":`...)
+	buf = appendUIDSlice(buf, g.Result)
 	buf = append(buf, '}')
 
 	Throw2(w.Write(buf))
 }
 
-func appendNode(buf []byte, n *Node, pad string) []byte {
-	innerPad := pad + "    "
-	buf = append(buf, pad...)
-	buf = append(buf, '{', '\n')
+func appendNode(buf []byte, n *Node) []byte {
+	buf = append(buf, '{')
 
 	if n.Cache != nil {
-		buf = append(buf, innerPad...)
-
 		if *n.Cache {
-			buf = append(buf, `"cache": true,`...)
+			buf = append(buf, `"cache":true,`...)
 		} else {
-			buf = append(buf, `"cache": false,`...)
+			buf = append(buf, `"cache":false,`...)
 		}
-
-		buf = append(buf, '\n')
 	}
 
-	buf = append(buf, innerPad...)
-	buf = append(buf, `"cmds": `...)
-	buf = appendCmdSlice(buf, n.Cmds, innerPad)
-	buf = append(buf, ',', '\n')
+	buf = append(buf, `"cmds":`...)
+	buf = appendCmdSlice(buf, n.Cmds)
 
-	buf = append(buf, innerPad...)
-	buf = append(buf, `"deps": `...)
-	buf = appendUIDSlice(buf, n.Deps, innerPad)
-	buf = append(buf, ',', '\n')
+	buf = append(buf, `,"deps":`...)
+	buf = appendUIDSlice(buf, n.Deps)
 
-	buf = append(buf, innerPad...)
-	buf = append(buf, `"env": `...)
-	buf = appendStringMap(buf, n.Env, innerPad)
-	buf = append(buf, ',', '\n')
+	buf = append(buf, `,"env":`...)
+	buf = appendStringMap(buf, n.Env)
 
 	if len(n.ForeignDeps) > 0 {
-		buf = append(buf, innerPad...)
-		buf = append(buf, `"foreign_deps": `...)
-		buf = appendToolForeignDeps(buf, n.ForeignDeps, innerPad)
-		buf = append(buf, ',', '\n')
+		buf = append(buf, `,"foreign_deps":`...)
+		buf = appendToolForeignDeps(buf, n.ForeignDeps)
 	}
 
 	if nodeHasHostTag(n.Tags) {
-		buf = append(buf, innerPad...)
-		buf = append(buf, `"host_platform": true,`...)
-		buf = append(buf, '\n')
+		buf = append(buf, `,"host_platform":true`...)
 	}
 
-	buf = append(buf, innerPad...)
-	buf = append(buf, `"inputs": `...)
-	buf = appendVFSSlice(buf, n.Inputs, innerPad)
-	buf = append(buf, ',', '\n')
+	buf = append(buf, `,"inputs":`...)
+	buf = appendVFSSlice(buf, n.Inputs)
 
-	buf = append(buf, innerPad...)
-	buf = append(buf, `"kv": `...)
-	buf = appendInterfaceMap(buf, n.KV, innerPad)
-	buf = append(buf, ',', '\n')
+	buf = append(buf, `,"kv":`...)
+	buf = appendInterfaceMap(buf, n.KV)
 
-	buf = append(buf, innerPad...)
-	buf = append(buf, `"outputs": `...)
-	buf = appendVFSSlice(buf, n.Outputs, innerPad)
-	buf = append(buf, ',', '\n')
+	buf = append(buf, `,"outputs":`...)
+	buf = appendVFSSlice(buf, n.Outputs)
 
-	buf = append(buf, innerPad...)
-	buf = append(buf, `"platform": `...)
+	buf = append(buf, `,"platform":`...)
 	buf = appendString(buf, n.Platform)
-	buf = append(buf, ',', '\n')
 
-	buf = append(buf, innerPad...)
-	buf = append(buf, `"requirements": `...)
-	buf = appendInterfaceMap(buf, n.Requirements, innerPad)
-	buf = append(buf, ',', '\n')
-
-	buf = append(buf, innerPad...)
+	buf = append(buf, `,"requirements":`...)
+	buf = appendInterfaceMap(buf, n.Requirements)
 
 	if n.Sandboxing {
-		buf = append(buf, `"sandboxing": true,`...)
+		buf = append(buf, `,"sandboxing":true`...)
 	} else {
-		buf = append(buf, `"sandboxing": false,`...)
+		buf = append(buf, `,"sandboxing":false`...)
 	}
 
-	buf = append(buf, '\n')
-
-	buf = append(buf, innerPad...)
-	buf = append(buf, `"self_uid": `...)
+	buf = append(buf, `,"self_uid":`...)
 	buf = appendUID(buf, n.SelfUID)
-	buf = append(buf, ',', '\n')
 
-	buf = append(buf, innerPad...)
-	buf = append(buf, `"stats_uid": `...)
+	buf = append(buf, `,"stats_uid":`...)
 	buf = appendString(buf, n.StatsUID)
-	buf = append(buf, ',', '\n')
 
-	buf = append(buf, innerPad...)
-	buf = append(buf, `"tags": `...)
-	buf = appendStringSlice(buf, n.Tags, innerPad)
-	buf = append(buf, ',', '\n')
+	buf = append(buf, `,"tags":`...)
+	buf = appendStringSlice(buf, n.Tags)
 
-	buf = append(buf, innerPad...)
-	buf = append(buf, `"target_properties": `...)
-	buf = appendStringMap(buf, n.TargetProperties, innerPad)
-	buf = append(buf, ',', '\n')
+	buf = append(buf, `,"target_properties":`...)
+	buf = appendStringMap(buf, n.TargetProperties)
 
-	buf = append(buf, innerPad...)
-	buf = append(buf, `"uid": `...)
+	buf = append(buf, `,"uid":`...)
 	buf = appendUID(buf, n.UID)
-	buf = append(buf, '\n')
 
-	buf = append(buf, pad...)
-	buf = append(buf, '}')
-
-	return buf
+	return append(buf, '}')
 }
 
-func appendCmdSlice(buf []byte, cmds []Cmd, pad string) []byte {
-	if len(cmds) == 0 {
-		return append(buf, '[', ']')
-	}
-
-	buf = append(buf, '[', '\n')
-	itemPad := pad + "    "
-	innerPad := itemPad + "    "
+func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
+	buf = append(buf, '[')
 
 	for i, c := range cmds {
-		buf = append(buf, itemPad...)
-		buf = append(buf, '{', '\n')
+		if i > 0 {
+			buf = append(buf, ',')
+		}
 
-		buf = append(buf, innerPad...)
-		buf = append(buf, `"cmd_args": `...)
-		buf = appendStringSlice(buf, c.CmdArgs, innerPad)
+		buf = append(buf, `{"cmd_args":`...)
+		buf = appendStringSlice(buf, c.CmdArgs)
 
 		if c.Cwd != "" {
-			buf = append(buf, ',', '\n')
-			buf = append(buf, innerPad...)
-			buf = append(buf, `"cwd": `...)
+			buf = append(buf, `,"cwd":`...)
 			buf = appendString(buf, c.Cwd)
 		}
 
 		if len(c.Env) > 0 {
-			buf = append(buf, ',', '\n')
-			buf = append(buf, innerPad...)
-			buf = append(buf, `"env": `...)
-			buf = appendStringMap(buf, c.Env, innerPad)
+			buf = append(buf, `,"env":`...)
+			buf = appendStringMap(buf, c.Env)
 		}
 
 		if c.Stdout != "" {
-			buf = append(buf, ',', '\n')
-			buf = append(buf, innerPad...)
-			buf = append(buf, `"stdout": `...)
+			buf = append(buf, `,"stdout":`...)
 			buf = appendString(buf, c.Stdout)
 		}
 
-		buf = append(buf, '\n')
-
-		buf = append(buf, itemPad...)
 		buf = append(buf, '}')
-
-		if i < len(cmds)-1 {
-			buf = append(buf, ',')
-		}
-
-		buf = append(buf, '\n')
 	}
 
-	buf = append(buf, pad...)
-	buf = append(buf, ']')
-
-	return buf
+	return append(buf, ']')
 }
 
-func appendStringSlice(buf []byte, ss []string, pad string) []byte {
-	if len(ss) == 0 {
-		return append(buf, '[', ']')
-	}
-
-	buf = append(buf, '[', '\n')
-	itemPad := pad + "    "
+func appendStringSlice(buf []byte, ss []string) []byte {
+	buf = append(buf, '[')
 
 	for i, s := range ss {
-		buf = append(buf, itemPad...)
-		buf = appendString(buf, s)
-
-		if i < len(ss)-1 {
+		if i > 0 {
 			buf = append(buf, ',')
 		}
 
-		buf = append(buf, '\n')
+		buf = appendString(buf, s)
 	}
 
-	buf = append(buf, pad...)
-	buf = append(buf, ']')
-
-	return buf
+	return append(buf, ']')
 }
 
 // appendUID appends the quoted base64 uid directly into buf (the encode lands in a
@@ -281,56 +187,35 @@ func appendUID(buf []byte, u UID) []byte {
 	return append(buf, '"')
 }
 
-func appendUIDSlice(buf []byte, us []UID, pad string) []byte {
-	if len(us) == 0 {
-		return append(buf, '[', ']')
-	}
-
-	buf = append(buf, '[', '\n')
-	itemPad := pad + "    "
+func appendUIDSlice(buf []byte, us []UID) []byte {
+	buf = append(buf, '[')
 
 	for i, u := range us {
-		buf = append(buf, itemPad...)
-		buf = appendUID(buf, u)
-
-		if i < len(us)-1 {
+		if i > 0 {
 			buf = append(buf, ',')
 		}
 
-		buf = append(buf, '\n')
+		buf = appendUID(buf, u)
 	}
 
-	buf = append(buf, pad...)
-	buf = append(buf, ']')
-
-	return buf
+	return append(buf, ']')
 }
 
-func appendVFSSlice(buf []byte, vs []VFS, pad string) []byte {
-	if len(vs) == 0 {
-		return append(buf, '[', ']')
-	}
-
-	buf = append(buf, '[', '\n')
-	itemPad := pad + "    "
+func appendVFSSlice(buf []byte, vs []VFS) []byte {
+	buf = append(buf, '[')
 
 	for i, v := range vs {
-		buf = append(buf, itemPad...)
-		buf = appendVFS(buf, v)
-
-		if i < len(vs)-1 {
+		if i > 0 {
 			buf = append(buf, ',')
 		}
 
-		buf = append(buf, '\n')
+		buf = appendVFS(buf, v)
 	}
 
-	buf = append(buf, pad...)
-	buf = append(buf, ']')
-
-	return buf
+	return append(buf, ']')
 }
-func appendGraphConf(buf []byte, conf map[string]interface{}, pad string) []byte {
+
+func appendGraphConf(buf []byte, conf map[string]interface{}) []byte {
 	if len(conf) == 0 {
 		return append(buf, '{', '}')
 	}
@@ -338,138 +223,88 @@ func appendGraphConf(buf []byte, conf map[string]interface{}, pad string) []byte
 	resourcesAny, ok := conf["resources"]
 
 	if !ok || len(conf) != 1 {
-		ThrowFmt("writeGraphIndented: unsupported conf shape")
+		ThrowFmt("writeGraph: unsupported conf shape")
 	}
 
 	resources, ok := resourcesAny.([]graphConfResource)
 
 	if !ok {
-		ThrowFmt("writeGraphIndented: unsupported conf.resources type %T", resourcesAny)
+		ThrowFmt("writeGraph: unsupported conf.resources type %T", resourcesAny)
 	}
 
-	buf = append(buf, '{', '\n')
-	itemPad := pad + "    "
+	buf = append(buf, `{"resources":`...)
+	buf = appendGraphConfResources(buf, resources)
 
-	buf = append(buf, itemPad...)
-	buf = append(buf, `"resources": `...)
-	buf = appendGraphConfResources(buf, resources, itemPad)
-	buf = append(buf, '\n')
-
-	buf = append(buf, pad...)
-	buf = append(buf, '}')
-
-	return buf
+	return append(buf, '}')
 }
 
-func appendGraphConfResources(buf []byte, resources []graphConfResource, pad string) []byte {
-	if len(resources) == 0 {
-		return append(buf, '[', ']')
-	}
-
-	buf = append(buf, '[', '\n')
-	itemPad := pad + "    "
+func appendGraphConfResources(buf []byte, resources []graphConfResource) []byte {
+	buf = append(buf, '[')
 
 	for i, r := range resources {
-		buf = appendGraphConfResource(buf, r, itemPad)
-
-		if i < len(resources)-1 {
+		if i > 0 {
 			buf = append(buf, ',')
 		}
 
-		buf = append(buf, '\n')
+		buf = appendGraphConfResource(buf, r)
 	}
 
-	buf = append(buf, pad...)
-	buf = append(buf, ']')
-
-	return buf
+	return append(buf, ']')
 }
 
-func appendGraphConfResource(buf []byte, r graphConfResource, pad string) []byte {
-	buf = append(buf, pad...)
-	buf = append(buf, '{', '\n')
-	itemPad := pad + "    "
+func appendGraphConfResource(buf []byte, r graphConfResource) []byte {
+	buf = append(buf, '{')
 
 	first := true
-	addComma := func() {
+	sep := func() {
 		if !first {
 			buf = append(buf, ',')
-			buf = append(buf, '\n')
 		}
 
 		first = false
 	}
 
 	if r.Name != "" {
-		addComma()
-		buf = append(buf, itemPad...)
-		buf = append(buf, `"name": `...)
+		sep()
+		buf = append(buf, `"name":`...)
 		buf = appendString(buf, r.Name)
 	}
 
-	addComma()
-	buf = append(buf, itemPad...)
-	buf = append(buf, `"pattern": `...)
+	sep()
+	buf = append(buf, `"pattern":`...)
 	buf = appendString(buf, r.Pattern)
 
 	if r.Resource != "" {
-		addComma()
-		buf = append(buf, itemPad...)
-		buf = append(buf, `"resource": `...)
+		sep()
+		buf = append(buf, `"resource":`...)
 		buf = appendString(buf, r.Resource)
 	}
 
 	if len(r.Resources) != 0 {
-		addComma()
-		buf = append(buf, itemPad...)
-		buf = append(buf, `"resources": `...)
-		buf = appendGraphConfResourceURIs(buf, r.Resources, itemPad)
+		sep()
+		buf = append(buf, `"resources":`...)
+		buf = appendGraphConfResourceURIs(buf, r.Resources)
 	}
 
-	buf = append(buf, '\n')
-	buf = append(buf, pad...)
-	buf = append(buf, '}')
-
-	return buf
+	return append(buf, '}')
 }
 
-func appendGraphConfResourceURIs(buf []byte, resources []graphConfResourceURI, pad string) []byte {
-	if len(resources) == 0 {
-		return append(buf, '[', ']')
-	}
-
-	buf = append(buf, '[', '\n')
-	itemPad := pad + "    "
+func appendGraphConfResourceURIs(buf []byte, resources []graphConfResourceURI) []byte {
+	buf = append(buf, '[')
 
 	for i, r := range resources {
-		buf = append(buf, itemPad...)
-		buf = append(buf, '{', '\n')
-		fieldPad := itemPad + "    "
-
-		buf = append(buf, fieldPad...)
-		buf = append(buf, `"platform": `...)
-		buf = appendString(buf, r.Platform)
-		buf = append(buf, ',', '\n')
-
-		buf = append(buf, fieldPad...)
-		buf = append(buf, `"resource": `...)
-		buf = appendString(buf, r.Resource)
-		buf = append(buf, '\n')
-
-		buf = append(buf, itemPad...)
-		buf = append(buf, '}')
-
-		if i < len(resources)-1 {
+		if i > 0 {
 			buf = append(buf, ',')
 		}
 
-		buf = append(buf, '\n')
+		buf = append(buf, `{"platform":`...)
+		buf = appendString(buf, r.Platform)
+		buf = append(buf, `,"resource":`...)
+		buf = appendString(buf, r.Resource)
+		buf = append(buf, '}')
 	}
 
-	buf = append(buf, pad...)
-	buf = append(buf, ']')
-
-	return buf
+	return append(buf, ']')
 }
 
 func appendVFS(buf []byte, v VFS) []byte {
@@ -494,7 +329,7 @@ func appendVFS(buf []byte, v VFS) []byte {
 	return append(buf, out...)
 }
 
-func appendStringMap(buf []byte, m map[string]string, pad string) []byte {
+func appendStringMap(buf []byte, m map[string]string) []byte {
 	if len(m) == 0 {
 		return append(buf, '{', '}')
 	}
@@ -507,45 +342,31 @@ func appendStringMap(buf []byte, m map[string]string, pad string) []byte {
 
 	sort.Strings(keys)
 
-	buf = append(buf, '{', '\n')
-	itemPad := pad + "    "
+	buf = append(buf, '{')
 
 	for i, k := range keys {
-		buf = append(buf, itemPad...)
-		buf = appendString(buf, k)
-		buf = append(buf, ':', ' ')
-		buf = appendString(buf, m[k])
-
-		if i < len(keys)-1 {
+		if i > 0 {
 			buf = append(buf, ',')
 		}
 
-		buf = append(buf, '\n')
+		buf = appendString(buf, k)
+		buf = append(buf, ':')
+		buf = appendString(buf, m[k])
 	}
 
-	buf = append(buf, pad...)
-	buf = append(buf, '}')
-
-	return buf
+	return append(buf, '}')
 }
 
 // appendToolForeignDeps writes the foreign-dep slice as the single-key object
-// {"tool": [...]} — the only key any node ever uses. Byte-identical to the old
-// map writer for a one-key "tool" map.
-func appendToolForeignDeps(buf []byte, deps []UID, pad string) []byte {
-	buf = append(buf, '{', '\n')
-	itemPad := pad + "    "
-	buf = append(buf, itemPad...)
-	buf = appendString(buf, "tool")
-	buf = append(buf, ':', ' ')
-	buf = appendUIDSlice(buf, deps, itemPad)
-	buf = append(buf, '\n')
-	buf = append(buf, pad...)
-	buf = append(buf, '}')
+// {"tool":[...]} — the only key any node ever uses.
+func appendToolForeignDeps(buf []byte, deps []UID) []byte {
+	buf = append(buf, `{"tool":`...)
+	buf = appendUIDSlice(buf, deps)
 
-	return buf
+	return append(buf, '}')
 }
-func appendInterfaceMap(buf []byte, m map[string]interface{}, pad string) []byte {
+
+func appendInterfaceMap(buf []byte, m map[string]interface{}) []byte {
 	if len(m) == 0 {
 		return append(buf, '{', '}')
 	}
@@ -558,13 +379,15 @@ func appendInterfaceMap(buf []byte, m map[string]interface{}, pad string) []byte
 
 	sort.Strings(keys)
 
-	buf = append(buf, '{', '\n')
-	itemPad := pad + "    "
+	buf = append(buf, '{')
 
 	for i, k := range keys {
-		buf = append(buf, itemPad...)
+		if i > 0 {
+			buf = append(buf, ',')
+		}
+
 		buf = appendString(buf, k)
-		buf = append(buf, ':', ' ')
+		buf = append(buf, ':')
 
 		switch v := m[k].(type) {
 		case string:
@@ -578,20 +401,11 @@ func appendInterfaceMap(buf []byte, m map[string]interface{}, pad string) []byte
 				buf = append(buf, 'f', 'a', 'l', 's', 'e')
 			}
 		default:
-			ThrowFmt("writeGraphIndented: unsupported requirement value type %T for key %q", v, k)
+			ThrowFmt("writeGraph: unsupported requirement value type %T for key %q", v, k)
 		}
-
-		if i < len(keys)-1 {
-			buf = append(buf, ',')
-		}
-
-		buf = append(buf, '\n')
 	}
 
-	buf = append(buf, pad...)
-	buf = append(buf, '}')
-
-	return buf
+	return append(buf, '}')
 }
 
 const hex = "0123456789abcdef"
