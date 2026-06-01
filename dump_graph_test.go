@@ -42,11 +42,11 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 		TargetProperties: map[string]string{"module_dir": "other/module"},
 	})
 	consumer := emit.Emit(&Node{
-		Cmds:    []Cmd{{CmdArgs: []string{"clang"}}},
-		DepRefs: []NodeRef{fetchUsed, llvmReferenced},
+		Cmds:           []Cmd{{CmdArgs: []string{"clang"}}},
+		DepRefs:        []NodeRef{fetchUsed, llvmReferenced},
 		ForeignDepRefs: []NodeRef{fetchUsed},
-		KV:      map[string]interface{}{"p": "CC"},
-		Outputs: []VFS{Intern("$(B)/obj/consumer.o")},
+		KV:             map[string]interface{}{"p": "CC"},
+		Outputs:        []VFS{Intern("$(B)/obj/consumer.o")},
 	})
 	root := emit.Emit(&Node{
 		Cmds:    []Cmd{{CmdArgs: []string{"ld"}}},
@@ -79,15 +79,15 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 		t.Fatal("llvm referenced node missing after finalizeDumpGraph")
 	}
 
-	if !reflect.DeepEqual(consumerNode.Deps, []UID{llvmNode.UID}) {
-		t.Fatalf("consumer deps = %v, want [%s]", consumerNode.Deps, llvmNode.UID)
+	if !reflect.DeepEqual(graphDeps(got, consumerNode), []UID{llvmNode.UID}) {
+		t.Fatalf("consumer deps = %v, want [%s]", graphDeps(got, consumerNode), llvmNode.UID)
 	}
-	if consumerNode.ForeignDeps != nil {
-		t.Fatalf("consumer foreign_deps = %v, want nil after fetch trim", consumerNode.ForeignDeps)
+	if len(consumerNode.ForeignDepRefs) != 0 {
+		t.Fatalf("consumer foreign_deps = %v, want none after fetch trim", graphForeignDeps(got, consumerNode))
 	}
 
-	assertUIDMatchesNode(t, consumerNode)
-	assertUIDMatchesNode(t, findGraphNodeByOutput(got.Graph, "bin/root"))
+	assertUIDMatchesNode(t, got, consumerNode)
+	assertUIDMatchesNode(t, got, findGraphNodeByOutput(got.Graph, "bin/root"))
 }
 
 func TestFinalizeDumpGraph_KeepsMatchingResultNode(t *testing.T) {
@@ -106,7 +106,7 @@ func TestFinalizeDumpGraph_KeepsMatchingResultNode(t *testing.T) {
 	if want := []string{expected}; !reflect.DeepEqual(graphPrimaryOutputs(got.Graph), want) {
 		t.Fatalf("dump graph outputs = %v, want %v", graphPrimaryOutputs(got.Graph), want)
 	}
-	assertUIDMatchesNode(t, findGraphNodeByOutput(got.Graph, expected))
+	assertUIDMatchesNode(t, got, findGraphNodeByOutput(got.Graph, expected))
 }
 
 func TestFinalizeDumpGraph_PrunesTransitiveStandaloneLLVM(t *testing.T) {
@@ -193,44 +193,6 @@ func TestFinalizeDumpGraph_PreservesFinalizeValidation(t *testing.T) {
 				return emit
 			},
 		},
-		{
-			name:   "PrepopulatedDeps",
-			needle: "pre-populated Deps",
-			build: func() *BufferedEmitter {
-				emit := NewBufferedEmitter()
-				emit.Emit(&Node{
-					KV:      map[string]interface{}{"p": "FETCH"},
-					Outputs: []VFS{Intern("$(B)/resources/CLANG")},
-				})
-				root := emit.Emit(&Node{
-					Deps:    []UID{tuid("FAKE")},
-					KV:      map[string]interface{}{"p": "LD"},
-					Outputs: []VFS{Intern("$(B)/bin/root")},
-				})
-				emit.Result(root)
-
-				return emit
-			},
-		},
-		{
-			name:   "PrepopulatedForeignDeps",
-			needle: "pre-populated ForeignDeps",
-			build: func() *BufferedEmitter {
-				emit := NewBufferedEmitter()
-				emit.Emit(&Node{
-					KV:      map[string]interface{}{"p": "FETCH"},
-					Outputs: []VFS{Intern("$(B)/resources/CLANG")},
-				})
-				root := emit.Emit(&Node{
-					ForeignDeps: []UID{tuid("FAKE")},
-					KV:          map[string]interface{}{"p": "LD"},
-					Outputs:     []VFS{Intern("$(B)/bin/root")},
-				})
-				emit.Result(root)
-
-				return emit
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -287,14 +249,15 @@ func findGraphNodeByOutput(nodes []*Node, rel string) *Node {
 	return nil
 }
 
-func assertUIDMatchesNode(t *testing.T, node *Node) {
+func assertUIDMatchesNode(t *testing.T, g *Graph, node *Node) {
 	t.Helper()
 
 	if node == nil {
 		t.Fatal("node missing")
 	}
 
-	if got, want := node.UID, nodeUID(node); got != want {
+	c := canonBuf{uids: g.uids}
+	if got, want := node.UID, nodeUIDWithBuf(node, &c); got != want {
 		t.Fatalf("uid = %q, want recomputed %q", got, want)
 	}
 	if node.SelfUID != node.UID {

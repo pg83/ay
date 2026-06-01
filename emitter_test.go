@@ -50,6 +50,26 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 	return e, a, b, c
 }
 
+// graphDeps / graphForeignDeps resolve a node's refs to dep uids via the graph's
+// uid vector — deps are no longer materialized on the node.
+func graphDeps(g *Graph, n *Node) []UID {
+	out := make([]UID, len(n.DepRefs))
+	for i, r := range n.DepRefs {
+		out[i] = g.uids.get(r.id)
+	}
+
+	return out
+}
+
+func graphForeignDeps(g *Graph, n *Node) []UID {
+	out := make([]UID, len(n.ForeignDepRefs))
+	for i, r := range n.ForeignDepRefs {
+		out[i] = g.uids.get(r.id)
+	}
+
+	return out
+}
+
 func nodeNameByKV(g *Graph, idx int) string {
 	name, _ := g.Graph[idx].KV["name"].(string)
 
@@ -178,8 +198,8 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 	// Deps are the DepRefs resolved to uids in insertion order — no sort, no
 	// dedup (the dump-sort normalization owns ordering; the gate is the oracle).
 	want := []UID{byName["Z"], byName["X"], byName["Y"]}
-	if !slices.Equal(aNode.Deps, want) {
-		t.Errorf("A.Deps = %v, want insertion order %v", aNode.Deps, want)
+	if !slices.Equal(graphDeps(g, aNode), want) {
+		t.Errorf("A.Deps = %v, want insertion order %v", graphDeps(g, aNode), want)
 	}
 }
 
@@ -218,8 +238,8 @@ func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 
 	// resolveAndUID no longer dedups — duplicate DepRefs surface as duplicate
 	// Deps. Generators must not emit duplicate refs (see EmitLD whole-archive).
-	if len(aNode.Deps) != 3 {
-		t.Errorf("expected duplicates preserved (len 3); A.Deps = %v", aNode.Deps)
+	if len(graphDeps(g, aNode)) != 3 {
+		t.Errorf("expected duplicates preserved (len 3); A.Deps = %v", graphDeps(g, aNode))
 	}
 }
 
@@ -292,52 +312,6 @@ func TestFinalize_GraphTopLevelKeyOrder(t *testing.T) {
 	}
 }
 
-func TestFinalize_RejectsPreSetDeps(t *testing.T) {
-
-	e := NewBufferedEmitter()
-	e.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
-		Requirements:     map[string]interface{}{},
-		Tags:             []string{},
-		TargetProperties: map[string]string{},
-		Deps:             []UID{tuid("FAKE")},
-	})
-
-	_, exc := finalizeExc(e)
-	if exc == nil {
-		t.Fatalf("Finalize accepted pre-populated Deps; want exception")
-	}
-
-	if !strings.Contains(exc.Error(), "pre-populated Deps") {
-		t.Errorf("error message %q does not mention pre-populated Deps", exc.Error())
-	}
-}
-
-func TestFinalize_RejectsPreSetForeignDeps(t *testing.T) {
-
-	e := NewBufferedEmitter()
-	e.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
-		Requirements:     map[string]interface{}{},
-		Tags:             []string{},
-		TargetProperties: map[string]string{},
-		ForeignDeps:      []UID{tuid("FAKE")},
-	})
-
-	_, exc := finalizeExc(e)
-	if exc == nil {
-		t.Fatalf("Finalize accepted pre-populated ForeignDeps; want exception")
-	}
-
-	if !strings.Contains(exc.Error(), "pre-populated ForeignDeps") {
-		t.Errorf("error message %q does not mention pre-populated ForeignDeps", exc.Error())
-	}
-}
-
 func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
 
 	e := NewBufferedEmitter()
@@ -403,13 +377,14 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 		t.Fatalf("A not found")
 	}
 
-	if aNode.ForeignDeps != nil {
-		t.Errorf("expected ForeignDeps==nil (omitempty drops the field); got %v", aNode.ForeignDeps)
+	if len(aNode.ForeignDepRefs) != 0 {
+		t.Errorf("expected empty ForeignDepRefs; got %v", aNode.ForeignDepRefs)
 	}
 
-	raw := Throw2(json.Marshal(aNode))
-	if bytes.Contains(raw, []byte(`"foreign_deps"`)) {
-		t.Errorf("foreign_deps key leaked into JSON for empty-only ForeignDepRefs: %s", raw)
+	var buf bytes.Buffer
+	writeGraphCompact(&buf, g)
+	if bytes.Contains(buf.Bytes(), []byte(`"foreign_deps"`)) {
+		t.Errorf("foreign_deps key leaked into JSON for empty ForeignDepRefs: %s", buf.Bytes())
 	}
 }
 

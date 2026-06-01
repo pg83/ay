@@ -168,8 +168,9 @@ END()
 //   - llvm_link         → $(B)/<mod>/<NAME>_merged.<suffix>.bc  kv.p=LD
 //   - llvm_opt          → $(B)/<mod>/<NAME>_optimized.<suffix>.bc kv.p=OP
 //   - onresource([out_bc, '/llvm_bc/'+NAME]) ⇒
-//        objcopy_<hash>.o   kv.p=PY  (handled by existing emitResourceObjcopy)
-//        lib<mod>.global.a  kv.p=AR  (handled by existing global-archive flow)
+//     objcopy_<hash>.o   kv.p=PY  (handled by existing emitResourceObjcopy)
+//     lib<mod>.global.a  kv.p=AR  (handled by existing global-archive flow)
+//
 // Test asserts all 5 nodes reachable from the LIBRARY's archive root.
 func TestEmitLLVMBC_PipelineProducesFiveNodes(t *testing.T) {
 	const modPath = "mod/llvm"
@@ -210,9 +211,9 @@ END()
 	}
 
 	want := map[string]string{
-		"$(B)/" + modPath + "/foo.cpp.16.bc":          "BC",
-		"$(B)/" + modPath + "/Bar_merged.16.bc":       "LD",
-		"$(B)/" + modPath + "/Bar_optimized.16.bc":    "OP",
+		"$(B)/" + modPath + "/foo.cpp.16.bc":       "BC",
+		"$(B)/" + modPath + "/Bar_merged.16.bc":    "LD",
+		"$(B)/" + modPath + "/Bar_optimized.16.bc": "OP",
 	}
 	for path, kvp := range want {
 		n := byOut[path]

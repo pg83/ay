@@ -10,12 +10,7 @@ type Cmd struct {
 type Node struct {
 	Cache            *bool                  `json:"cache,omitempty"`
 	Cmds             []Cmd                  `json:"cmds"`
-	Deps             []UID                  `json:"deps"`
 	Env              map[string]string      `json:"env"`
-	// ForeignDeps is the resolved tool-dep uids. Every node that has foreign deps
-	// keys them under the single "tool" group, so this is a flat slice; the JSON
-	// writer (gjson_write) wraps it back into {"tool": [...]} for output.
-	ForeignDeps      []UID                  `json:"-"`
 	Inputs           []VFS                  `json:"inputs"`
 	KV               map[string]interface{} `json:"kv"`
 	Outputs          []VFS                  `json:"outputs"`

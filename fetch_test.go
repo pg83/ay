@@ -63,8 +63,8 @@ func assertSingleUsedClangFetch(t *testing.T, graph *Graph) {
 	if cc == nil {
 		t.Fatal("execution graph missing expected CC node")
 	}
-	if len(cc.Deps) != 1 {
-		t.Fatalf("execution graph CC deps = %v, want single used-resource FETCH dep", cc.Deps)
+	if len(graphDeps(graph, cc)) != 1 {
+		t.Fatalf("execution graph CC deps = %v, want single used-resource FETCH dep", graphDeps(graph, cc))
 	}
 	if len(fetchOutputs) != 1 {
 		t.Fatalf("execution graph fetch outputs = %#v, want only the used CLANG fetch node", fetchOutputs)
@@ -120,8 +120,8 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 	if !foundFetch {
 		t.Fatalf("execution graph missing expected FETCH node")
 	}
-	if execCC == nil || len(execCC.Deps) != 1 {
-		t.Fatalf("execution graph CC deps = %v, want single FETCH dep", execCC.Deps)
+	if execCC == nil || len(graphDeps(execGraph, execCC)) != 1 {
+		t.Fatalf("execution graph CC deps = %v, want single FETCH dep", graphDeps(execGraph, execCC))
 	}
 
 	dumpEmit := NewBufferedEmitter()
@@ -151,7 +151,7 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 		t.Fatalf("dump graph len = %d, want 1 CC node", len(dumpGraph.Graph))
 	}
 
-	var uidScratch canonBuf
+	uidScratch := canonBuf{uids: dumpGraph.uids}
 	for _, node := range dumpGraph.Graph {
 		if got, want := nodeUIDWithBuf(node, &uidScratch), node.UID; got != want {
 			t.Fatalf("node UID drift after dump generation for %v:\n got: %s\nwant: %s", vfsStrings(node.Outputs), got, want)
@@ -159,7 +159,7 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 		if node.SelfUID != node.UID {
 			t.Fatalf("node SelfUID mismatch for %v:\n got: %s\nwant: %s", vfsStrings(node.Outputs), node.SelfUID, node.UID)
 		}
-		for _, dep := range node.Deps {
+		for _, dep := range graphDeps(dumpGraph, node) {
 			if _, ok := byUID[dep]; !ok {
 				t.Fatalf("node %v has unknown dep %q in dump graph", vfsStrings(node.Outputs), dep)
 			}

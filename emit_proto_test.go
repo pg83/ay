@@ -88,14 +88,14 @@ END()
 	}
 
 	found := false
-	for _, d := range pb.Deps {
+	for _, d := range graphDeps(g, pb) {
 		if d == jv.UID {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("PB.Deps %v does not include JV(.proto) uid %q", pb.Deps, jv.UID)
+		t.Errorf("graphDeps(g, PB) %v does not include JV(.proto) uid %q", graphDeps(g, pb), jv.UID)
 	}
 
 	hasBuildProto := false

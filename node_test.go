@@ -8,7 +8,6 @@ import (
 
 var expectedKeyOrder = []string{
 	"cmds",
-	"deps",
 	"env",
 	"inputs",
 	"kv",
@@ -25,7 +24,6 @@ var expectedKeyOrder = []string{
 
 var expectedKeyOrderMinimal = []string{
 	"cmds",
-	"deps",
 	"env",
 	"inputs",
 	"kv",
@@ -75,8 +73,8 @@ func extractKeyOrder(t *testing.T, raw []byte) []string {
 
 func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 	n := &Node{
-		Cmds:             []Cmd{{CmdArgs: []string{"echo"}, Env: map[string]string{}}},
-		Deps:             []UID{tuid("dep1")},
+		Cmds: []Cmd{{CmdArgs: []string{"echo"}, Env: map[string]string{}}},
+
 		Env:              map[string]string{"FOO": "bar"},
 		Inputs:           ToVFSSlice([]string{"in"}),
 		KV:               map[string]interface{}{"p": "LD"},
@@ -107,8 +105,8 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 
 	n := &Node{
-		Cmds:             []Cmd{},
-		Deps:             []UID{},
+		Cmds: []Cmd{},
+
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               map[string]interface{}{},
@@ -136,7 +134,7 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 	}
 
 	s := string(raw)
-	for _, frag := range []string{`"cmds":[]`, `"deps":[]`, `"env":{}`, `"inputs":[]`, `"kv":{}`, `"outputs":[]`, `"requirements":{}`, `"stats_uid":""`, `"tags":[]`, `"target_properties":{}`} {
+	for _, frag := range []string{`"cmds":[]`, `"env":{}`, `"inputs":[]`, `"kv":{}`, `"outputs":[]`, `"requirements":{}`, `"stats_uid":""`, `"tags":[]`, `"target_properties":{}`} {
 		if !strings.Contains(s, frag) {
 			t.Errorf("expected output to contain %q, got: %s", frag, s)
 		}
@@ -145,8 +143,8 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 
 func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 	n := &Node{
-		Cmds:             []Cmd{},
-		Deps:             []UID{},
+		Cmds: []Cmd{},
+
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               map[string]interface{}{},
