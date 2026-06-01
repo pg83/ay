@@ -260,6 +260,12 @@ type genCtx struct {
 	target *Platform
 
 	testMode bool
+
+	// codegenSeen is the reused dedup map for resolveCodegenDepRefsExt across its
+	// ~22k per-run calls (map growth was ~25MB churn). One field is safe: the gen
+	// goroutine is single-threaded and resolveCodegenDepRefsExt does not re-enter
+	// itself (EmitCF emits no CC and calls no resolveCodegen*). Cleared per call.
+	codegenSeen map[NodeRef]struct{}
 }
 
 type codegenOutputKey struct {
@@ -281,7 +287,17 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 		return nil
 	}
 
-	seen := make(map[NodeRef]struct{}, 4+len(exclude))
+	// Reuse the per-run dedup map (genCtx) instead of allocating one per call —
+	// its growth was ~25MB of churn across ~22k calls. Cleared on entry; keeps its
+	// grown buckets between calls.
+	seen := ctx.codegenSeen
+
+	if seen == nil {
+		seen = make(map[NodeRef]struct{}, 16)
+		ctx.codegenSeen = seen
+	}
+
+	clear(seen)
 
 	for _, r := range exclude {
 		seen[r] = struct{}{}
