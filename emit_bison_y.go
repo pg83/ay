@@ -145,7 +145,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		})
 		inputs = append(inputs, bisonPreprocessPyVFS)
 		inputs = append(inputs, bisonCppSkeletonInputs...)
-		inputs = mergeDedupVFS(inputs, generatedOutputClosure(ctx, instance, headerVFS, in))
+		inputs = ctx.deduper.dedupVFS(inputs, generatedOutputClosure(ctx, instance, headerVFS, in))
 	}
 
 	ycRef := ctx.emit.Emit(bindNodePlatform(&Node{
