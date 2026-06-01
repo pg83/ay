@@ -8,25 +8,25 @@ import (
 func TestPrebuiltToolchainFlags_UseHashedResourcePatterns(t *testing.T) {
 	flags := prebuiltToolchainFlags()
 
-	if got, want := flags["BUILD_PYTHON_BIN"], "$(YMAKE_PYTHON3-1002064631)/bin/python3"; got != want {
+	if got, want := flags["BUILD_PYTHON_BIN"], "$(YMAKE_PYTHON3)/bin/python3"; got != want {
 		t.Fatalf("BUILD_PYTHON_BIN = %q, want %q", got, want)
 	}
-	if got, want := flags["CLANG_TOOL"], "$(CLANG-1274503668)/bin/clang"; got != want {
+	if got, want := flags["CLANG_TOOL"], "$(CLANG)/bin/clang"; got != want {
 		t.Fatalf("CLANG_TOOL = %q, want %q", got, want)
 	}
-	if got, want := flags["LLD_TOOL"], "$(LLD_ROOT-3107549726)/bin/ld.lld"; got != want {
+	if got, want := flags["LLD_TOOL"], "$(LLD_ROOT)/bin/ld.lld"; got != want {
 		t.Fatalf("LLD_TOOL = %q, want %q", got, want)
 	}
-	if got, want := flags["CLANG16_RESOURCE_GLOBAL"], "CLANG16_RESOURCE_GLOBAL::$(CLANG16-1380963495)"; got != want {
+	if got, want := flags["CLANG16_RESOURCE_GLOBAL"], "CLANG16_RESOURCE_GLOBAL::$(CLANG16)"; got != want {
 		t.Fatalf("CLANG16_RESOURCE_GLOBAL = %q, want %q", got, want)
 	}
-	if got, want := flags["CLANG18_RESOURCE_GLOBAL"], "CLANG18_RESOURCE_GLOBAL::$(CLANG18-1866954364)"; got != want {
+	if got, want := flags["CLANG18_RESOURCE_GLOBAL"], "CLANG18_RESOURCE_GLOBAL::$(CLANG18)"; got != want {
 		t.Fatalf("CLANG18_RESOURCE_GLOBAL = %q, want %q", got, want)
 	}
-	if got, want := flags["CLANG20_RESOURCE_GLOBAL"], "CLANG20_RESOURCE_GLOBAL::$(CLANG20-178457234)"; got != want {
+	if got, want := flags["CLANG20_RESOURCE_GLOBAL"], "CLANG20_RESOURCE_GLOBAL::$(CLANG20)"; got != want {
 		t.Fatalf("CLANG20_RESOURCE_GLOBAL = %q, want %q", got, want)
 	}
-	if got, want := flags["LLD_ROOT_RESOURCE_GLOBAL"], "LLD_ROOT_RESOURCE_GLOBAL::$(LLD_ROOT-3107549726)"; got != want {
+	if got, want := flags["LLD_ROOT_RESOURCE_GLOBAL"], "LLD_ROOT_RESOURCE_GLOBAL::$(LLD_ROOT)"; got != want {
 		t.Fatalf("LLD_ROOT_RESOURCE_GLOBAL = %q, want %q", got, want)
 	}
 }
