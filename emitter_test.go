@@ -98,8 +98,8 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 	}
 
 	for i, n := range g1.Graph {
-		if len(n.UID) != 22 {
-			t.Errorf("graph[%d].UID len = %d, want 22 (got %q)", i, len(n.UID), n.UID)
+		if len(n.UID.String()) != 22 {
+			t.Errorf("graph[%d].UID len = %d, want 22 (got %q)", i, len(n.UID.String()), n.UID)
 		}
 
 		if n.SelfUID != n.UID {
@@ -168,7 +168,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 		t.Fatalf("A not found in graph")
 	}
 
-	byName := map[string]string{}
+	byName := map[string]UID{}
 	for _, n := range g.Graph {
 		if nm, ok := n.KV["name"].(string); ok {
 			byName[nm] = n.UID
@@ -177,7 +177,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 
 	// Deps are the DepRefs resolved to uids in insertion order — no sort, no
 	// dedup (the dump-sort normalization owns ordering; the gate is the oracle).
-	want := []string{byName["Z"], byName["X"], byName["Y"]}
+	want := []UID{byName["Z"], byName["X"], byName["Y"]}
 	if !slices.Equal(aNode.Deps, want) {
 		t.Errorf("A.Deps = %v, want insertion order %v", aNode.Deps, want)
 	}
@@ -302,7 +302,7 @@ func TestFinalize_RejectsPreSetDeps(t *testing.T) {
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
-		Deps:             []string{"FAKE"},
+		Deps:             []UID{tuid("FAKE")},
 	})
 
 	_, exc := finalizeExc(e)
@@ -325,7 +325,7 @@ func TestFinalize_RejectsPreSetForeignDeps(t *testing.T) {
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
-		ForeignDeps:      []string{"FAKE"},
+		ForeignDeps:      []UID{tuid("FAKE")},
 	})
 
 	_, exc := finalizeExc(e)

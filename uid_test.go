@@ -10,8 +10,11 @@ import (
 	"testing"
 )
 
+// tuid derives a deterministic UID from a label for test fixtures.
+func tuid(label string) UID { return computeUID([]byte(label)) }
+
 func TestComputeUID_LengthAndAlphabet(t *testing.T) {
-	got := computeUID([]byte("hello"))
+	got := computeUID([]byte("hello")).String()
 
 	if len(got) != 22 {
 		t.Errorf("computeUID length = %d, want 22 (got %q)", len(got), got)
@@ -46,7 +49,7 @@ func TestComputeUID_DifferentInputsDifferentOutputs(t *testing.T) {
 
 func TestComputeUID_KnownVector(t *testing.T) {
 
-	got := computeUID([]byte(""))
+	got := computeUID([]byte("")).String()
 	const want = "maoG0wFHmNhgAcMkRo1Jfw"
 
 	if got != want {
@@ -182,7 +185,7 @@ func TestNodeStatsUID_UsesLongRootOutputs(t *testing.T) {
 func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 	n := &Node{
 		Cmds:             []Cmd{},
-		Deps:             []string{},
+		Deps:             []UID{},
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               map[string]interface{}{},
@@ -190,20 +193,20 @@ func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
-		UID:              "should-not-appear-AAAAA",
-		SelfUID:          "should-not-appear-BBBBB",
+		UID:              tuid("AAAAA"),
+		SelfUID:          tuid("BBBBB"),
 		StatsUID:         "should-not-appear-CCCCC",
 	}
 	canon := canonicalNodeBytes(n)
 	s := string(canon)
 
-	for _, banned := range []string{"should-not-appear-AAAAA", "should-not-appear-BBBBB", "should-not-appear-CCCCC"} {
+	for _, banned := range []string{tuid("AAAAA").String(), tuid("BBBBB").String(), "should-not-appear-CCCCC"} {
 		if strings.Contains(s, banned) {
 			t.Errorf("canonicalNodeBytes leaked identity field value %q: %s", banned, s)
 		}
 	}
 
-	if n.UID == "" || n.SelfUID == "" || n.StatsUID == "" {
+	if n.UID == (UID{}) || n.SelfUID == (UID{}) || n.StatsUID == "" {
 		t.Errorf("canonicalNodeBytes mutated the original node: %+v", n)
 	}
 }
@@ -212,7 +215,7 @@ func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
 
 	n := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"sh", "-c", "echo <a> & echo b"}, Env: map[string]string{}}},
-		Deps: []string{}, Env: map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		Deps: []UID{}, Env: map[string]string{}, Inputs: ToVFSSlice([]string{}),
 		KV: map[string]interface{}{"p": "CC", "html": "a<b>c"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: map[string]interface{}{}, Tags: []string{},
 		TargetProperties: map[string]string{},
@@ -246,7 +249,7 @@ func TestCanonicalNodeBytes_DoesNotEscapeHTML(t *testing.T) {
 
 	n := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"sh", "-c", "echo <a> & echo b"}, Env: map[string]string{}}},
-		Deps: []string{}, Env: map[string]string{}, Inputs: ToVFSSlice([]string{}),
+		Deps: []UID{}, Env: map[string]string{}, Inputs: ToVFSSlice([]string{}),
 		KV: map[string]interface{}{}, Outputs: ToVFSSlice([]string{}),
 		Requirements: map[string]interface{}{}, Tags: []string{},
 		TargetProperties: map[string]string{},

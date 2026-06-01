@@ -338,7 +338,12 @@ func cmdMake(args []string) int {
 	failedRoots := ex.failedRoots(results)
 
 	if len(failedRoots) > 0 {
-		ThrowFmt("build failed: %s", strings.Join(failedRoots, ", "))
+		failedStrs := make([]string, len(failedRoots))
+		for i, u := range failedRoots {
+			failedStrs[i] = u.String()
+		}
+
+		ThrowFmt("build failed: %s", strings.Join(failedStrs, ", "))
 	}
 
 	for _, uid := range results {
@@ -348,8 +353,8 @@ func cmdMake(args []string) int {
 	return 0
 }
 
-func genStream(fs FS, targets []string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn), testMode bool) []string {
-	all := []string{}
+func genStream(fs FS, targets []string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn), testMode bool) []UID {
+	all := []UID{}
 
 	for _, t := range targets {
 		ec := genStreamOne(fs, t, hostP, targetP, resources, onNode, onWarn, testMode)
@@ -359,7 +364,7 @@ func genStream(fs FS, targets []string, hostP, targetP *Platform, resources *res
 	return all
 }
 
-func genStreamOne(fs FS, target string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn), testMode bool) []string {
+func genStreamOne(fs FS, target string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node), onWarn func(Warn), testMode bool) []UID {
 	emitter := NewStreamingEmitter(onNode)
 	runGenIntoWithResources(fs, target, hostP, targetP, emitter, onWarn, resources, testMode, true)
 
@@ -375,7 +380,7 @@ type executor struct {
 	cmdPrefixes    []cmdPrefix
 
 	mu      sync.Mutex
-	byUID   map[string]*nodeFuture
+	byUID   map[UID]*nodeFuture
 	events  chan func()
 	stats   map[string][]time.Duration
 	pending atomic.Uint64
@@ -400,7 +405,7 @@ func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, resourceM
 		keepGoing:      keepGoing,
 		resourceMounts: resourceMounts,
 		cmdPrefixes:    cmdPrefixes,
-		byUID:          make(map[string]*nodeFuture, 8192),
+		byUID:          make(map[UID]*nodeFuture, 8192),
 		events:         make(chan func(), 4096),
 		stats:          map[string][]time.Duration{},
 	}
@@ -456,7 +461,7 @@ func (ex *executor) close() {
 	close(ex.events)
 }
 
-func (ex *executor) run(roots []string) {
+func (ex *executor) run(roots []UID) {
 	if len(roots) == 0 {
 		return
 	}
@@ -466,7 +471,7 @@ func (ex *executor) run(roots []string) {
 	}
 }
 
-func (ex *executor) visit(uid string) {
+func (ex *executor) visit(uid UID) {
 	f := ex.lookup(uid)
 
 	if f == nil {
@@ -484,8 +489,8 @@ func (ex *executor) visit(uid string) {
 	}
 }
 
-func (ex *executor) failedRoots(roots []string) []string {
-	var failed []string
+func (ex *executor) failedRoots(roots []UID) []UID {
+	var failed []UID
 
 	for _, uid := range roots {
 		f := ex.lookup(uid)
@@ -500,7 +505,7 @@ func (ex *executor) failedRoots(roots []string) []string {
 	return failed
 }
 
-func (ex *executor) lookup(uid string) *nodeFuture {
+func (ex *executor) lookup(uid UID) *nodeFuture {
 	ex.mu.Lock()
 	f := ex.byUID[uid]
 	ex.mu.Unlock()
@@ -509,7 +514,7 @@ func (ex *executor) lookup(uid string) *nodeFuture {
 }
 
 func (ex *executor) execute(n *Node) {
-	cachePath := filepath.Join(ex.bldRoot, "uid", n.UID)
+	cachePath := filepath.Join(ex.bldRoot, "uid", n.UID.String())
 
 	if _, err := os.Stat(cachePath); err == nil {
 		return
@@ -540,7 +545,7 @@ func (ex *executor) execute(n *Node) {
 
 	defer func() { <-ex.sema }()
 
-	tmp := filepath.Join(ex.bldRoot, "tmp", n.UID)
+	tmp := filepath.Join(ex.bldRoot, "tmp", n.UID.String())
 	_ = forceRemoveAll(tmp)
 	defer forceRemoveAll(tmp)
 
@@ -775,7 +780,7 @@ func (ex *executor) storeOutputs(n *Node, tmp string) {
 		meta[out.String()] = dst
 	}
 
-	uidPath := filepath.Join(ex.bldRoot, "uid", n.UID)
+	uidPath := filepath.Join(ex.bldRoot, "uid", n.UID.String())
 	Throw(os.MkdirAll(filepath.Dir(uidPath), 0o755))
 
 	tmpPath := uidPath + ".tmp"
@@ -783,8 +788,8 @@ func (ex *executor) storeOutputs(n *Node, tmp string) {
 	Throw(os.Rename(tmpPath, uidPath))
 }
 
-func (ex *executor) restoreInto(uid, where string) {
-	metaPath := filepath.Join(ex.bldRoot, "uid", uid)
+func (ex *executor) restoreInto(uid UID, where string) {
+	metaPath := filepath.Join(ex.bldRoot, "uid", uid.String())
 	data := Throw2(os.ReadFile(metaPath))
 
 	var meta map[string]string
@@ -806,7 +811,7 @@ func (ex *executor) restoreInto(uid, where string) {
 	}
 }
 
-func (ex *executor) installRoot(uid, where string) {
+func (ex *executor) installRoot(uid UID, where string) {
 	if where == "" {
 		return
 	}

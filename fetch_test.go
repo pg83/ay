@@ -140,7 +140,7 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 	}, p))
 	dumpResourceEmit.Result(dumpRef)
 	dumpGraph := Finalize(dumpEmit)
-	byUID := make(map[string]*Node, len(dumpGraph.Graph))
+	byUID := make(map[UID]*Node, len(dumpGraph.Graph))
 	for _, node := range dumpGraph.Graph {
 		if len(node.Outputs) == 1 && node.Outputs[0].String() == "$(B)/resources/YMAKE_PYTHON3" {
 			t.Fatalf("dump graph unexpectedly contains FETCH node: %+v", node)

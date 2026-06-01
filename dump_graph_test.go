@@ -79,7 +79,7 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 		t.Fatal("llvm referenced node missing after finalizeDumpGraph")
 	}
 
-	if !reflect.DeepEqual(consumerNode.Deps, []string{llvmNode.UID}) {
+	if !reflect.DeepEqual(consumerNode.Deps, []UID{llvmNode.UID}) {
 		t.Fatalf("consumer deps = %v, want [%s]", consumerNode.Deps, llvmNode.UID)
 	}
 	if consumerNode.ForeignDeps != nil {
@@ -203,7 +203,7 @@ func TestFinalizeDumpGraph_PreservesFinalizeValidation(t *testing.T) {
 					Outputs: []VFS{Intern("$(B)/resources/CLANG")},
 				})
 				root := emit.Emit(&Node{
-					Deps:    []string{"FAKE"},
+					Deps:    []UID{tuid("FAKE")},
 					KV:      map[string]interface{}{"p": "LD"},
 					Outputs: []VFS{Intern("$(B)/bin/root")},
 				})
@@ -222,7 +222,7 @@ func TestFinalizeDumpGraph_PreservesFinalizeValidation(t *testing.T) {
 					Outputs: []VFS{Intern("$(B)/resources/CLANG")},
 				})
 				root := emit.Emit(&Node{
-					ForeignDeps: []string{"FAKE"},
+					ForeignDeps: []UID{tuid("FAKE")},
 					KV:          map[string]interface{}{"p": "LD"},
 					Outputs:     []VFS{Intern("$(B)/bin/root")},
 				})

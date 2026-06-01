@@ -8,7 +8,7 @@ func finalizeDumpGraph(e *BufferedEmitter) *Graph {
 			Conf:   map[string]interface{}{},
 			Inputs: map[string]interface{}{},
 			Graph:  []*Node{},
-			Result: []string{},
+			Result: []UID{},
 		}
 	}
 
@@ -186,8 +186,8 @@ func pruneDumpGraphEmitterInPlace(e *BufferedEmitter, drop map[int64]struct{}, o
 
 		node.Deps = nil
 		node.ForeignDeps = nil
-		node.UID = ""
-		node.SelfUID = ""
+		node.UID = UID{}
+		node.SelfUID = UID{}
 		node.StatsUID = ""
 		node.DepRefs = trimDumpGraphNodeRefList(node.DepRefs, drop, newIDs)
 		node.ForeignDepRefs = trimDumpGraphNodeRefList(node.ForeignDepRefs, drop, newIDs)

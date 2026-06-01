@@ -1,0 +1,54 @@
+package main
+
+import (
+	"encoding/base64"
+	"encoding/binary"
+)
+
+// UID is a node's 128-bit content address (the xxh3-128 of its canonical bytes),
+// carried as two uint64 halves instead of the old 22-char base64 string: equality
+// is two integer compares, it costs no allocation, and it makes a cheap map hash
+// (the value is already a hash — see uidMap). The base64 text form exists only at
+// the JSON boundary (appendUID / MarshalJSON).
+type UID struct {
+	Hi uint64
+	Lo uint64
+}
+
+const uidB64Len = 22 // base64.RawURLEncoding.EncodedLen(16)
+
+func (u UID) raw() [16]byte {
+	var b [16]byte
+	binary.BigEndian.PutUint64(b[0:8], u.Hi)
+	binary.BigEndian.PutUint64(b[8:16], u.Lo)
+
+	return b
+}
+
+// appendB64 appends the 22-char base64 text (no quotes) into buf without
+// allocating — the encode lands in a stack array first.
+func (u UID) appendB64(buf []byte) []byte {
+	raw := u.raw()
+	var enc [uidB64Len]byte
+	base64.RawURLEncoding.Encode(enc[:], raw[:])
+
+	return append(buf, enc[:]...)
+}
+
+func (u UID) String() string {
+	raw := u.raw()
+
+	return base64.RawURLEncoding.EncodeToString(raw[:])
+}
+
+// MarshalJSON emits the quoted base64 text. Used only by the stdlib encoder (tests
+// and the byte-exact oracle); the production graph writer uses appendUID, which
+// produces identical bytes without the intermediate allocation.
+func (u UID) MarshalJSON() ([]byte, error) {
+	out := make([]byte, 0, uidB64Len+2)
+	out = append(out, '"')
+	out = u.appendB64(out)
+	out = append(out, '"')
+
+	return out, nil
+}

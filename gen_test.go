@@ -80,7 +80,7 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	mainCC := nodesByOutput[mainCCOut]
 	libAR := nodesByOutput[libARout]
 
-	depSet := make(map[string]struct{}, len(rootLD.Deps))
+	depSet := make(map[UID]struct{}, len(rootLD.Deps))
 	for _, d := range rootLD.Deps {
 		depSet[d] = struct{}{}
 	}
@@ -140,7 +140,7 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		t.Errorf("module_type = %q, want bin", ld.TargetProperties["module_type"])
 	}
 
-	deps := make(map[string]struct{}, len(ld.Deps))
+	deps := make(map[UID]struct{}, len(ld.Deps))
 	for _, d := range ld.Deps {
 		deps[d] = struct{}{}
 	}
@@ -2809,12 +2809,12 @@ END()
 		t.Fatalf("pb inputs prefix = %v, want %v", inputs, wantInputsPrefix)
 	}
 
-	wantDeps := []string{styleguide.UID, grpcCpp.UID, protoc.UID, configPlugin.UID}
+	wantDeps := []UID{styleguide.UID, grpcCpp.UID, protoc.UID, configPlugin.UID}
 	if len(pb.Deps) != len(wantDeps) {
 		t.Fatalf("pb deps len = %d, want %d (%v)", len(pb.Deps), len(wantDeps), pb.Deps)
 	}
 	for _, want := range wantDeps {
-		if !containsString(pb.Deps, want) {
+		if !slices.Contains(pb.Deps, want) {
 			t.Fatalf("pb deps = %v, missing %q", pb.Deps, want)
 		}
 	}
@@ -2822,7 +2822,7 @@ END()
 		t.Fatalf("pb foreign_deps[tool] len = %d, want %d (%v)", len(got), len(wantDeps), got)
 	} else {
 		for _, want := range wantDeps {
-			if !containsString(got, want) {
+			if !slices.Contains(got, want) {
 				t.Fatalf("pb foreign_deps[tool] = %v, missing %q", got, want)
 			}
 		}
@@ -2830,7 +2830,7 @@ END()
 	if !nodeHasHostTag(configPlugin.Tags) {
 		t.Fatalf("config proto plugin tags = %v, want host tool tag", configPlugin.Tags)
 	}
-	if !containsString(configPlugin.Deps, pluginRuntime.UID) {
+	if !slices.Contains(configPlugin.Deps, pluginRuntime.UID) {
 		t.Fatalf("config proto plugin deps = %v, want runtime peer uid %q", configPlugin.Deps, pluginRuntime.UID)
 	}
 }
@@ -2953,8 +2953,8 @@ int use() { return 0; }
 		}
 	}
 
-	for _, want := range []string{mainPB.UID, depPB.UID} {
-		if !containsString(useCC.Deps, want) {
+	for _, want := range []UID{mainPB.UID, depPB.UID} {
+		if !slices.Contains(useCC.Deps, want) {
 			t.Fatalf("use.cpp.o deps missing %q: %v", want, useCC.Deps)
 		}
 	}
@@ -3017,8 +3017,8 @@ service TestService {
 		}
 	}
 
-	for _, want := range []string{mainPB.UID, depPB.UID} {
-		if !containsString(grpcCC.Deps, want) {
+	for _, want := range []UID{mainPB.UID, depPB.UID} {
+		if !slices.Contains(grpcCC.Deps, want) {
 			t.Fatalf("main.grpc.pb.cc.o deps missing %q: %v", want, grpcCC.Deps)
 		}
 	}
@@ -3112,8 +3112,8 @@ int use() { return 0; }
 			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, useCC.Inputs)
 		}
 	}
-	for _, want := range []string{mainPB.UID, depPB.UID} {
-		if !containsString(useCC.Deps, want) {
+	for _, want := range []UID{mainPB.UID, depPB.UID} {
+		if !slices.Contains(useCC.Deps, want) {
 			t.Fatalf("use.cpp.o deps missing %q: %v", want, useCC.Deps)
 		}
 	}
@@ -3125,10 +3125,10 @@ int use() { return 0; }
 	if nodeHasInput(en, "$(S)/protos/main.pb.h") {
 		t.Fatalf("enum node still consumes source-root pb.h: %#v", en.Inputs)
 	}
-	if !containsString(en.Deps, mainPB.UID) {
+	if !slices.Contains(en.Deps, mainPB.UID) {
 		t.Fatalf("enum node deps missing pb producer uid %q: %v", mainPB.UID, en.Deps)
 	}
-	if !containsString(en.Deps, depPB.UID) {
+	if !slices.Contains(en.Deps, depPB.UID) {
 		t.Fatalf("enum node deps missing imported pb producer uid %q: %v", depPB.UID, en.Deps)
 	}
 	if got := en.TargetProperties["module_tag"]; got != "cpp_proto" {
@@ -3211,8 +3211,8 @@ int use() { return 0; }
 			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, useCC.Inputs)
 		}
 	}
-	for _, want := range []string{mainPB.UID, publicPB.UID, leafPB.UID} {
-		if !containsString(useCC.Deps, want) {
+	for _, want := range []UID{mainPB.UID, publicPB.UID, leafPB.UID} {
+		if !slices.Contains(useCC.Deps, want) {
 			t.Fatalf("use.cpp.o deps missing %q: %v", want, useCC.Deps)
 		}
 	}
@@ -4088,7 +4088,7 @@ END()
 			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, use.Inputs)
 		}
 	}
-	if !containsString(use.Deps, genH.UID) {
+	if !slices.Contains(use.Deps, genH.UID) {
 		t.Fatalf("use.cpp.o deps missing generated-header PR uid %q: %v", genH.UID, use.Deps)
 	}
 }
@@ -4362,7 +4362,7 @@ message Any {}
 	if nodeHasInput(use, "$(S)/google/protobuf/any.pb.h") {
 		t.Fatalf("use.cpp.o inputs still contain unrebased WKT header path: %#v", use.Inputs)
 	}
-	if !containsString(use.Deps, pb.UID) {
+	if !slices.Contains(use.Deps, pb.UID) {
 		t.Fatalf("use.cpp.o deps missing PB producer uid %q: %v", pb.UID, use.Deps)
 	}
 }
@@ -4663,10 +4663,10 @@ func assertCmdArgsAbsent(t *testing.T, args []string, banned ...string) {
 
 
 
-func projectGraphDepOutputs(t *testing.T, g *Graph, deps []string) [][]string {
+func projectGraphDepOutputs(t *testing.T, g *Graph, deps []UID) [][]string {
 	t.Helper()
 
-	byUID := make(map[string]*Node, len(g.Graph))
+	byUID := make(map[UID]*Node, len(g.Graph))
 	for _, node := range g.Graph {
 		byUID[node.UID] = node
 	}

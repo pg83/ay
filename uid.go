@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/md5"
-	"encoding/base64"
 	"encoding/binary"
 	encHex "encoding/hex"
 	"math"
@@ -11,12 +10,10 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-const uidLength = 22
+func computeUID(canonicalBytes []byte) UID {
+	sum := xxh3.Hash128(canonicalBytes)
 
-func computeUID(canonicalBytes []byte) string {
-	sum := xxh3.Hash128(canonicalBytes).Bytes()
-
-	return base64.RawURLEncoding.EncodeToString(sum[:])[:uidLength]
+	return UID{Hi: sum.Hi, Lo: sum.Lo}
 }
 
 func canonicalNodeBytes(n *Node) []byte {
@@ -26,19 +23,19 @@ func canonicalNodeBytes(n *Node) []byte {
 	return c.buf
 }
 
-func nodeUID(n *Node) string {
+func nodeUID(n *Node) UID {
 	var c canonBuf
 
 	return nodeUIDWithBuf(n, &c)
 }
 
-func nodeUIDWithBuf(n *Node, c *canonBuf) string {
+func nodeUIDWithBuf(n *Node, c *canonBuf) UID {
 	c.buf = c.buf[:0]
 	c.writeNode(n)
 
-	sum := xxh3.Hash128(c.buf).Bytes()
+	sum := xxh3.Hash128(c.buf)
 
-	return base64.RawURLEncoding.EncodeToString(sum[:])[:uidLength]
+	return UID{Hi: sum.Hi, Lo: sum.Lo}
 }
 
 func nodeStatsUID(n *Node, c *canonBuf) string {
@@ -215,6 +212,15 @@ func (c *canonBuf) writeBytes(s string) {
 	c.buf = append(c.buf, s...)
 }
 
+func (c *canonBuf) writeUIDSlice(us []UID) {
+	c.writeUint32(uint32(len(us)))
+
+	for _, u := range us {
+		c.writeUint64(u.Hi)
+		c.writeUint64(u.Lo)
+	}
+}
+
 func (c *canonBuf) writeStringSlice(ss []string) {
 	c.writeUint32(uint32(len(ss)))
 
@@ -314,9 +320,9 @@ func (c *canonBuf) writeNode(n *Node) {
 	}
 
 	c.writeCmdSlice(n.Cmds)
-	c.writeStringSlice(n.Deps)
+	c.writeUIDSlice(n.Deps)
 	c.writeStringMap(n.Env)
-	c.writeStringSlice(n.ForeignDeps)
+	c.writeUIDSlice(n.ForeignDeps)
 	c.writeVFSSlice(n.Inputs)
 	c.writeKVMap(n.KV)
 	c.writeVFSSlice(n.Outputs)

@@ -525,7 +525,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	}
 
 	var ldNode, unittestNode, clangNode, ctxNode, fetchNode *Node
-	byUID := make(map[string]*Node, len(g.Graph))
+	byUID := make(map[UID]*Node, len(g.Graph))
 	byOutput := make(map[string]*Node, len(g.Graph))
 	for _, node := range g.Graph {
 		byUID[node.UID] = node
@@ -564,7 +564,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		t.Fatalf("ctx deps = %v, want [%s]", ctxNode.Deps, fetchNode.UID)
 	}
 
-	unittestDeps := make(map[string]struct{}, len(unittestNode.Deps))
+	unittestDeps := make(map[UID]struct{}, len(unittestNode.Deps))
 	for _, dep := range unittestNode.Deps {
 		unittestDeps[dep] = struct{}{}
 	}

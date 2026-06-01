@@ -76,18 +76,18 @@ func extractKeyOrder(t *testing.T, raw []byte) []string {
 func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 	n := &Node{
 		Cmds:             []Cmd{{CmdArgs: []string{"echo"}, Env: map[string]string{}}},
-		Deps:             []string{"dep1"},
+		Deps:             []UID{tuid("dep1")},
 		Env:              map[string]string{"FOO": "bar"},
 		Inputs:           ToVFSSlice([]string{"in"}),
 		KV:               map[string]interface{}{"p": "LD"},
 		Outputs:          ToVFSSlice([]string{"out"}),
 		Platform:         "default-linux-aarch64",
 		Requirements:     map[string]interface{}{"cpu": 1, "ram": 32},
-		SelfUID:          "selfuid",
+		SelfUID:          tuid("selfuid"),
 		StatsUID:         "statsuid",
 		Tags:             []string{},
 		TargetProperties: map[string]string{"module_lang": "cpp"},
-		UID:              "uid",
+		UID:              tuid("uid"),
 	}
 	raw, err := json.Marshal(n)
 	if err != nil {
@@ -108,18 +108,18 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 
 	n := &Node{
 		Cmds:             []Cmd{},
-		Deps:             []string{},
+		Deps:             []UID{},
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               map[string]interface{}{},
 		Outputs:          ToVFSSlice([]string{}),
 		Platform:         "",
 		Requirements:     map[string]interface{}{},
-		SelfUID:          "",
+		SelfUID:          UID{},
 		StatsUID:         "",
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
-		UID:              "",
+		UID:              UID{},
 	}
 	raw, err := json.Marshal(n)
 	if err != nil {
@@ -146,7 +146,7 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 	n := &Node{
 		Cmds:             []Cmd{},
-		Deps:             []string{},
+		Deps:             []UID{},
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               map[string]interface{}{},
