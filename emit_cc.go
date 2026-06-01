@@ -437,7 +437,16 @@ func composeTargetCC(a ccComposeArgs) []string {
 	bundle := compileFlagBundleFor(a.Platform)
 	warningBundle := pickWarningFlags(a.NoCompilerWarnings, a.NoWShadow)
 
-	argCap := 101 + len(a.OwnAddIncl) + len(a.PeerAddIncl) + len(a.OwnCFlags) + len(a.OwnExtras) + len(a.PeerExtras) + 2*len(a.OwnGlobalBucket) + len(a.PerSrcCFlags) + len(a.ModuleScopeCFlags) + 4 +
+	// Sum the actual fixed package slices appended below (count cxx-only ones
+	// unconditionally — a slight over-estimate beats an under-estimate realloc).
+	// 12 covers the literals (compiler, --target, -B/-c/-o/output/input,
+	// googleapis, cxxStandardFlag, post-catboost sentinel) plus slack.
+	argCap := 12 +
+		len(ccIncludesPrefix) + len(ccIncludesSuffix) +
+		len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
+		2*len(catboostOpenSourceDefine) + len(cxxStandardWarnings) +
+		len(builtinMacroDateTime) + len(macroPrefixMapFlags) +
+		len(a.OwnAddIncl) + len(a.PeerAddIncl) + len(a.OwnCFlags) + len(a.OwnExtras) + len(a.PeerExtras) + 2*len(a.OwnGlobalBucket) + len(a.PerSrcCFlags) + len(a.ModuleScopeCFlags) +
 		len(bundle.ArchArgs) + len(bundle.CFlags) + len(bundle.Defines) + 2*len(bundle.NoLibcBlock) + len(warningBundle)
 	cmdArgs := make([]string, 0, argCap)
 	cmdArgs = append(cmdArgs,
