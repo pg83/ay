@@ -7,7 +7,6 @@ import (
 	encHex "encoding/hex"
 	"math"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/zeebo/xxh3"
@@ -44,20 +43,37 @@ func nodeUIDWithBuf(n *Node, c *canonBuf) string {
 }
 
 func nodeStatsUID(n *Node, c *canonBuf) string {
-	sum := md5.Sum([]byte(statsUIDPreimage(n, c)))
+	c.strBuf = appendStatsPreimage(c.strBuf[:0], c, n)
+	sum := md5.Sum(c.strBuf)
 
 	return encHex.EncodeToString(sum[:])
 }
 
+// statsUIDPreimage returns the preimage as a string for test/diagnostic callers;
+// the hot path (nodeStatsUID) md5s the bytes directly.
 func statsUIDPreimage(n *Node, c *canonBuf) string {
+	return string(appendStatsPreimage(c.strBuf[:0], c, n))
+}
+
+// appendStatsPreimage builds the 4-element stats preimage into dst, with the two
+// nested list reprs built in c.strBuf2 and quoted into dst as bytes — equivalent
+// to the old nested pythonStringListRepr but with no intermediate strings.
+func appendStatsPreimage(dst []byte, c *canonBuf, n *Node) []byte {
 	kind, _ := n.KV["p"].(string)
 
-	return pythonStringListRepr(c, []string{
-		n.Platform,
-		pythonStringListRepr(c, sortedStatsTags(n)),
-		kind,
-		pythonStringListRepr(c, sortedLongOutputs(n.Outputs)),
-	})
+	dst = append(dst, '[')
+	dst = appendPyRepr(dst, n.Platform)
+	dst = append(dst, ',', ' ')
+	c.strBuf2 = appendPythonListRepr(c.strBuf2[:0], sortedStatsTags(n))
+	dst = appendPyRepr(dst, c.strBuf2)
+	dst = append(dst, ',', ' ')
+	dst = appendPyRepr(dst, kind)
+	dst = append(dst, ',', ' ')
+	c.strBuf2 = appendPythonListRepr(c.strBuf2[:0], sortedLongOutputs(n.Outputs))
+	dst = appendPyRepr(dst, c.strBuf2)
+	dst = append(dst, ']')
+
+	return dst
 }
 
 func sortedStatsTags(n *Node) []string {
@@ -85,35 +101,41 @@ func sortedLongOutputs(outputs []VFS) []string {
 	return out
 }
 
-// pythonStringListRepr builds the python-list repr into c.strBuf (reused per call;
-// the result is copied out via string(), so the buffer is free to be overwritten
-// by the next call — including the nested calls in statsUIDPreimage, which each
-// copy out before the outer reuses the buffer).
+// pythonStringListRepr returns the python-list repr as a string (test callers).
 func pythonStringListRepr(c *canonBuf, items []string) string {
-	if len(items) == 0 {
-		return "[]"
-	}
+	return string(appendPythonListRepr(c.strBuf[:0], items))
+}
 
-	b := append(c.strBuf[:0], '[')
+func appendPythonListRepr(dst []byte, items []string) []byte {
+	dst = append(dst, '[')
 
 	for i, item := range items {
 		if i > 0 {
-			b = append(b, ',', ' ')
+			dst = append(dst, ',', ' ')
 		}
 
-		b = appendPythonStringRepr(b, item)
+		dst = appendPyRepr(dst, item)
 	}
 
-	b = append(b, ']')
-	c.strBuf = b
-
-	return string(b)
+	return append(dst, ']')
 }
 
-func appendPythonStringRepr(dst []byte, s string) []byte {
+// appendPyRepr appends the python repr of s (a string or a []byte) to dst.
+func appendPyRepr[T ~string | ~[]byte](dst []byte, s T) []byte {
+	hasSingle, hasDouble := false, false
+
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\'':
+			hasSingle = true
+		case '"':
+			hasDouble = true
+		}
+	}
+
 	quote := byte('\'')
 
-	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
+	if hasSingle && !hasDouble {
 		quote = '"'
 	}
 
@@ -147,9 +169,7 @@ func appendPythonStringRepr(dst []byte, s string) []byte {
 		}
 	}
 
-	dst = append(dst, quote)
-
-	return dst
+	return append(dst, quote)
 }
 
 type canonBuf struct {
@@ -160,9 +180,11 @@ type canonBuf struct {
 	// (e.g. the dump/-G path, which is re-uid'd from canonical content anyway).
 	fs FS
 
-	// strBuf is a reused scratch for statsUIDPreimage's list serialization (each
-	// call resets it and copies the result out via string(), so reuse is safe).
-	strBuf []byte
+	// strBuf/strBuf2 are reused scratch for the stats-uid preimage: strBuf holds
+	// the outer list (md5'd directly), strBuf2 the two nested list reprs quoted
+	// into it — no intermediate strings.
+	strBuf  []byte
+	strBuf2 []byte
 	// seenPool reuses the dep-uid dedup map in resolveAndUID. A pool (not a field)
 	// keeps the uid pass safe if it is ever parallelized over the dep DAG.
 	seenPool sync.Pool
