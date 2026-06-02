@@ -382,8 +382,10 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 
 func (ctx *genCtx) perfScanCtxStats(scanner *IncludeScanner) scanCtxPerfStats {
 	return scanCtxPerfStats{
-		subgraphEntries: len(scanner.subgraphCache),
-		childrenEntries: len(scanner.childrenCache),
+		// subgraph and children now share one scanCache entry per node, so both
+		// report its distinct-key count.
+		subgraphEntries: scanner.scanCache.Len(),
+		childrenEntries: scanner.scanCache.Len(),
 		closureWindows:  len(scanner.subgraphClosures),
 	}
 }

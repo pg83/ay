@@ -63,8 +63,8 @@ type IncludeScanner struct {
 	// is just an index into this slice.
 	subgraphClosures [][]VFS
 	closureArena     *bumpAllocator[VFS]
-	// subgraphCache (cached transitive closure under DFS) and childrenCache
-	// (cached immediate resolved children) are both keyed by includer VFS
+	// scanCache holds both the cached transitive closure (under DFS) and the
+	// cached immediate resolved children per includer, keyed by includer
 	// ONLY — no scan-context component. This is the same invariant upstream
 	// ymake exploits: each File node is parsed-and-resolved exactly once across
 	// the whole add-iter (see TUpdEntryStats::OnceProcessedAsFile in
@@ -83,8 +83,15 @@ type IncludeScanner struct {
 	// key collapses subgraph caching and regresses wall-time by an order of
 	// magnitude. If you suspect divergence is caused here, fix it upstream of
 	// the cache: parsedIncludes, sysincl rules, or searchTier construction.
-	subgraphCache map[VFS]closureRef
-	childrenCache map[VFS][]VFS
+	//
+	// Both the cached closure and the cached children live in one scanCacheEntry
+	// under a single DenseMap keyed by the includer's STR (v.strID()): one idx
+	// array (sized to vfsBound — the expensive part) instead of two. strID is
+	// unique per VFS (the $(S)/$(B) prefix is part of the interned string) and
+	// lossless, halving idx versus the 2x-wider VFS space. The two fields are
+	// filled at different times (children during dfs pass 1, closure on pop), so
+	// each carries its own presence flag; absent is the zero entry.
+	scanCache DenseMap[STR, scanCacheEntry]
 
 	searchTierByConfig map[uint64]map[STR]searchTierResult
 
@@ -150,6 +157,51 @@ type idSet struct {
 
 // closureRef is an index into IncludeScanner.subgraphClosures.
 type closureRef uint32
+
+// scanCacheEntry holds both per-includer caches under one DenseMap key: the
+// resolved immediate children and the transitive-closure ref. The DenseMap's own
+// present/absent bit cannot serve as presence (the two fields are filled at
+// different points — children during dfs pass 1, closure when the node's SCC
+// pops), so each carries its own in-band sentinel: children is nil until
+// resolved (a resolved-but-empty child set is stored as noChildren, a shared
+// non-nil empty slice), and closure 0 means absent because subgraphClosures[0]
+// is reserved so real refs start at 1.
+type scanCacheEntry struct {
+	children []VFS
+	closure  closureRef
+}
+
+// noChildren marks a node resolved to zero children, distinct from a node not
+// yet resolved (nil); shared because it is only ever read.
+var noChildren = []VFS{}
+
+func (s *IncludeScanner) cachedChildren(v VFS) ([]VFS, bool) {
+	e, _ := s.scanCache.Get(STR(v.strID()))
+	return e.children, e.children != nil
+}
+
+func (s *IncludeScanner) putChildren(v VFS, children []VFS) {
+	if children == nil {
+		children = noChildren
+	}
+
+	key := STR(v.strID())
+	e, _ := s.scanCache.Get(key)
+	e.children = children
+	s.scanCache.Put(key, e)
+}
+
+func (s *IncludeScanner) cachedClosure(v VFS) (closureRef, bool) {
+	e, _ := s.scanCache.Get(STR(v.strID()))
+	return e.closure, e.closure != 0
+}
+
+func (s *IncludeScanner) putClosure(v VFS, ref closureRef) {
+	key := STR(v.strID())
+	e, _ := s.scanCache.Get(key)
+	e.closure = ref
+	s.scanCache.Put(key, e)
+}
 
 const (
 	// closureAllocHint is the per-closure reservation passed to the closure
@@ -267,10 +319,10 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 131072),
 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
 		onWarn:               onWarn,
-		subgraphClosures:     make([][]VFS, 0, 256),
+		// Index 0 reserved: scanCacheEntry.closure==0 means "no closure cached",
+		// so real refs must start at 1.
+		subgraphClosures:     make([][]VFS, 1, 256),
 		closureArena:         newBumpAllocator[VFS](closureArenaInitial),
-		subgraphCache:        make(map[VFS]closureRef, 65536),
-		childrenCache:        make(map[VFS][]VFS, 65536),
 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
 		resolveIndexByConfig: make(map[uint64]*cfgResolveIndex, 1024),
 		tjc:                  tjc,
@@ -532,13 +584,13 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 
 // forEachResolvedChildID returns the resolved immediate children of absID,
 // caching by absID alone (no scan-context key). See the comment above
-// IncludeScanner.subgraphCache / childrenCache for the upstream-mirroring
+// IncludeScanner.scanCache for the upstream-mirroring
 // invariant that makes this correct: each file is parse-and-resolved exactly
 // once per run.
 func (sc *scanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 	s := sc.scanner
 
-	if cached, ok := s.childrenCache[abs]; ok {
+	if cached, ok := s.cachedChildren(abs); ok {
 		for _, id := range cached {
 			fn(id)
 		}
@@ -550,7 +602,7 @@ func (sc *scanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 	sc.forEachResolvedChild(abs, func(rabs VFS) {
 		children = append(children, rabs)
 	})
-	s.childrenCache[abs] = children
+	s.putChildren(abs, children)
 
 	for _, id := range children {
 		fn(id)
@@ -620,7 +672,7 @@ func (sc *scanCtx) dfs(abs VFS) {
 	})
 
 	// Pass 2: every child is cached now, so splice its window straight from the
-	// cache — no temporary [][]VFS, and forEachResolvedChildID hits childrenCache
+	// cache — no temporary [][]VFS, and forEachResolvedChildID hits scanCache
 	// so nothing here allocates from closureArena while the block is open. tjClosure
 	// is the dedup set (shared with strongconnect): dfs's pass-2 use never overlaps
 	// a nested dfs/strongconnect (pass 1 has fully returned), so no pool is needed.
@@ -638,7 +690,9 @@ func (sc *scanCtx) dfs(abs VFS) {
 			return
 		}
 
-		for _, id := range s.closureWindow(s.subgraphCache[ch]) {
+		cref, _ := s.cachedClosure(ch)
+
+		for _, id := range s.closureWindow(cref) {
 			if s.tjc.closure.has(id) {
 				continue
 			}
@@ -652,20 +706,20 @@ func (sc *scanCtx) dfs(abs VFS) {
 	s.closureArena.commit(k)
 	ref := closureRef(len(s.subgraphClosures))
 	s.subgraphClosures = append(s.subgraphClosures, block[:k:k])
-	s.subgraphCache[abs] = ref
+	s.putClosure(abs, ref)
 }
 
 func (sc *scanCtx) closureOf(abs VFS) []VFS {
 	s := sc.scanner
 
-	ref, ok := s.subgraphCache[abs]
+	ref, ok := s.cachedClosure(abs)
 
 	if ok {
 		s.subgraphHits++
 	} else {
 		sc.dfs(abs)
 
-		ref = s.subgraphCache[abs]
+		ref, _ = s.cachedClosure(abs)
 	}
 
 	w := s.subgraphClosures[ref]
@@ -693,7 +747,7 @@ func (sc *scanCtx) closureOf(abs VFS) []VFS {
 
 		ref = closureRef(len(s.subgraphClosures))
 		s.subgraphClosures = append(s.subgraphClosures, straight)
-		s.subgraphCache[abs] = ref
+		s.putClosure(abs, ref)
 
 		return straight
 	}
@@ -713,7 +767,7 @@ func (sc *scanCtx) forEachChild(v VFS, fn func(VFS)) {
 }
 
 func (sc *scanCtx) cachedWindow(v VFS) ([]VFS, bool) {
-	ref, ok := sc.scanner.subgraphCache[v]
+	ref, ok := sc.scanner.cachedClosure(v)
 
 	if !ok {
 		return nil, false
@@ -742,7 +796,7 @@ func (sc *scanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 	}
 
 	for _, u := range members {
-		s.subgraphCache[u] = ref
+		s.putClosure(u, ref)
 	}
 }
 
