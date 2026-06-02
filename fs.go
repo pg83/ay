@@ -50,7 +50,10 @@ func dirKey(dir string) VFS { return Source(cleanRel(dir)) }
 type osFS struct {
 	sourceRoot string
 	rootSlash  string
-	dirs       map[VFS]map[string]bool
+	// dirs is keyed by the directory's STR (dir.strID()) rather than its VFS: a
+	// source dir is always Source-rooted (VFS == STR<<1), so the STR is lossless
+	// and halves DenseMap's idx array versus indexing the 2x-wider VFS space.
+	dirs DenseMap[STR, map[string]bool]
 
 	// contentHashes is the xxh3 of each read file's content, indexed directly by the
 	// STR of its full "$(S)/..." path — i.e. the source VFS's own strID, so the uid
@@ -73,7 +76,6 @@ func NewFS(sourceRoot string) FS {
 	return &osFS{
 		sourceRoot: sourceRoot,
 		rootSlash:  sourceRoot + "/",
-		dirs:       make(map[VFS]map[string]bool, 1024),
 	}
 }
 
@@ -123,7 +125,9 @@ func (fs *osFS) SourceRoot() string { return fs.sourceRoot }
 // ("$(S)/<cleandir>"). Keyed by VFS so the hot caller passes the addincl
 // VFS directly with no string hashing; expected to hit the cache.
 func (fs *osFS) Listdir(dir VFS) map[string]bool {
-	if cached, ok := fs.dirs[dir]; ok {
+	key := STR(dir.strID())
+
+	if cached, ok := fs.dirs.Get(key); ok {
 		fs.listdirHits++
 		return cached
 	}
@@ -140,7 +144,7 @@ func (fs *osFS) Listdir(dir VFS) map[string]bool {
 	entries, err := os.ReadDir(full)
 
 	if err != nil {
-		fs.dirs[dir] = nil
+		fs.dirs.Put(key, nil)
 		return nil
 	}
 
@@ -150,7 +154,7 @@ func (fs *osFS) Listdir(dir VFS) map[string]bool {
 		out[e.Name()] = e.IsDir()
 	}
 
-	fs.dirs[dir] = out
+	fs.dirs.Put(key, out)
 
 	return out
 }
@@ -398,7 +402,7 @@ func (fs *osFS) perfStats() fsPerfStats {
 		listdirMisses: fs.listdirMisses,
 		existsHits:    fs.existsHits,
 		existsMisses:  fs.existsMisses,
-		dirsCached:    len(fs.dirs),
+		dirsCached:    fs.dirs.Len(),
 	}
 }
 
