@@ -158,17 +158,31 @@ type idSet struct {
 // closureRef is an index into IncludeScanner.subgraphClosures.
 type closureRef uint32
 
-// scanCacheEntry holds both per-includer caches under one DenseMap key: the
-// resolved immediate children and the transitive-closure ref. The DenseMap's own
-// present/absent bit cannot serve as presence (the two fields are filled at
-// different points — children during dfs pass 1, closure when the node's SCC
-// pops), so each carries its own in-band sentinel: children is nil until
-// resolved (a resolved-but-empty child set is stored as noChildren, a shared
-// non-nil empty slice), and closure 0 means absent because subgraphClosures[0]
-// is reserved so real refs start at 1.
+// existState is the three-valued source-file existence memo: unknown (zero)
+// until first checked, then no/yes. Stored per-VFS so the sysincl resolve loops
+// and fsLocator do not re-check (and re-intern the parent dir of) the same
+// already-interned mapping VFS on every use; existence is global.
+type existState uint8
+
+const (
+	existUnknown existState = iota
+	existNo
+	existYes
+)
+
+// scanCacheEntry holds the per-VFS scanner caches under one DenseMap key: the
+// resolved immediate children, the transitive-closure ref, and source-file
+// existence. The DenseMap's own present/absent bit cannot serve as presence (the
+// fields are filled at different points — children during dfs pass 1, closure
+// when the node's SCC pops, exists on first existence probe), so each carries
+// its own in-band sentinel: children is nil until resolved (a resolved-but-empty
+// child set is stored as noChildren, a shared non-nil empty slice), closure 0
+// means absent because subgraphClosures[0] is reserved so real refs start at 1,
+// and exists is existUnknown until probed.
 type scanCacheEntry struct {
 	children []VFS
 	closure  closureRef
+	exists   existState
 }
 
 // noChildren marks a node resolved to zero children, distinct from a node not
@@ -201,6 +215,33 @@ func (s *IncludeScanner) putClosure(v VFS, ref closureRef) {
 	e, _ := s.scanCache.Get(key)
 	e.closure = ref
 	s.scanCache.Put(key, e)
+}
+
+// sourceFileExists memoizes IsFile(srcRootVFS, abs.Rel()) by the file VFS, so the
+// repeated existence checks of cached sysincl mappings (and fsLocator) probe the
+// FS — and intern the parent dir — only once per file.
+func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
+	key := STR(abs.strID())
+	e, _ := s.scanCache.Get(key)
+
+	switch e.exists {
+	case existYes:
+		return true
+	case existNo:
+		return false
+	}
+
+	v := s.parsers.fs.IsFile(srcRootVFS, abs.Rel())
+
+	if v {
+		e.exists = existYes
+	} else {
+		e.exists = existNo
+	}
+
+	s.scanCache.Put(key, e)
+
+	return v
 }
 
 const (
@@ -869,7 +910,7 @@ func (sc *scanCtx) resolve(includerAbs, incDir VFS, d includeDirective) (out []V
 				}
 			}
 
-			if !s.fileExistsByRel(abs.Rel()) {
+			if !s.sourceFileExists(abs) {
 				continue
 			}
 
@@ -899,7 +940,7 @@ mapLoop:
 			}
 		}
 
-		if !s.fileExistsByRel(abs.Rel()) {
+		if !s.sourceFileExists(abs) {
 			continue
 		}
 
@@ -1324,7 +1365,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 			return false
 		}
 
-		if !s.fileExistsByRel(rel) {
+		if !s.parsers.fs.IsFile(srcRootVFS, rel) {
 			return false
 		}
 
@@ -1548,7 +1589,7 @@ func (f fsLocator) Exists(vfsPath VFS) bool {
 		return false
 	}
 
-	return f.scanner.fileExistsByRel(vfsPath.Rel())
+	return f.scanner.sourceFileExists(vfsPath)
 }
 
 type codegenLocator struct {
@@ -1567,15 +1608,11 @@ func (c codegenLocator) Exists(vfsPath VFS) bool {
 	return c.reg.Lookup(vfsPath) != nil
 }
 
-func (s *IncludeScanner) fileExistsByRel(rel string) bool {
-	return s.parsers.fileExistsByRel(rel)
-}
-
 func (s *IncludeScanner) resolveSourceUnder(prefix VFS, target string) (string, bool) {
 	// IsFile(prefix, target) is exactly the gating this used to hand-roll
 	// (firstComponent + Listdir(prefix), then the deep check) — but keyed off the
 	// already-interned prefix VFS, so it skips the Listdir(srcRoot) + re-gating the
-	// prefix's own components that fileExistsByRel(joinRel(...)) did from the root.
+	// prefix's own components that IsFile(srcRootVFS, joinRel(...)) did from the root.
 	if !s.parsers.fs.IsFile(prefix, target) {
 		return "", false
 	}
