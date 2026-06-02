@@ -356,6 +356,6 @@ func newTestScanner(fs FS, sysincl SysInclSet) *IncludeScanner {
 		newIncludeParserManagerFS(fs, newSharedParseCache()),
 		sysincl,
 		func(Warn) {},
-		&tarjanScratch{},
+		&tarjanCtx{},
 	)
 }

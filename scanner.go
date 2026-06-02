@@ -90,16 +90,9 @@ type IncludeScanner struct {
 
 	resolveIndexByConfig map[uint64]*cfgResolveIndex
 
-	// tj points at the run-wide Tarjan scratch owned by genCtx and shared by the
-	// target and host scanners rather than one per scanner: its dense arrays grow
-	// to vfsBound, and gen is single-threaded, so a single instance halves the
-	// growth allocation. reset() (epoch bump, dfs:685) runs before every
-	// strongconnect, invalidating the other scanner's prior state. tjStack/tjNext/
-	// tjClosure stay per-scanner (tiny / independent dedup).
-	tj        *tarjanScratch
-	tjStack   []VFS
-	tjNext    int32
-	tjClosure idSet
+	// tjc points at the run-wide Tarjan/closure working state owned by genCtx and
+	// shared by the target and host scanners (see tarjanCtx).
+	tjc *tarjanCtx
 
 	// dfsActive marks the roots whose dfs is currently in flight. It is set-once
 	// (never reset): within one scanner a root is cached the moment its dfs
@@ -229,6 +222,20 @@ type tarjanScratch struct {
 	epoch   uint32
 }
 
+// tarjanCtx bundles the SCC + closure-splice working state used by dfs/
+// strongconnect. One instance is owned by genCtx and shared run-wide by the
+// target and host scanners: scratch and closure hold vfsBound-sized dense
+// arrays, and gen is single-threaded with reset() before every use (no nesting:
+// dfs pass 1 finishes before pass 2, and strongconnect only reads cached child
+// windows), so one instance avoids growing per-scanner duplicates. stack/next
+// are SCC-local.
+type tarjanCtx struct {
+	scratch tarjanScratch
+	stack   []VFS
+	next    int32
+	closure idSet
+}
+
 func (t *tarjanScratch) reset(size uint32) {
 	if uint32(len(t.stamp)) < size {
 		grown := uint32(len(t.stamp)) * 2
@@ -340,10 +347,10 @@ type scannerPerfStats struct {
 }
 
 func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
-	return newIncludeScannerWith(newIncludeParserManager(sourceRoot), sysincl, func(Warn) {}, &tarjanScratch{})
+	return newIncludeScannerWith(newIncludeParserManager(sourceRoot), sysincl, func(Warn) {}, &tarjanCtx{})
 }
 
-func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, onWarn func(Warn), tj *tarjanScratch) *IncludeScanner {
+func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, onWarn func(Warn), tjc *tarjanCtx) *IncludeScanner {
 	s := &IncludeScanner{
 		sysincl:              sysincl,
 		parsers:              parsers,
@@ -363,7 +370,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		childrenCache:        make(map[VFS][]VFS, 65536),
 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
 		resolveIndexByConfig: make(map[uint64]*cfgResolveIndex, 1024),
-		tj:                   tj,
+		tjc:                  tjc,
 	}
 
 	for i := range sysincl {
@@ -689,9 +696,9 @@ func (sc *scanCtx) dfs(abs VFS) {
 	s := sc.scanner
 
 	if s.dfsActive.has(abs) {
-		s.tj.reset(vfsBound())
-		s.tjStack = s.tjStack[:0]
-		s.tjNext = 0
+		s.tjc.scratch.reset(vfsBound())
+		s.tjc.stack = s.tjc.stack[:0]
+		s.tjc.next = 0
 
 		sc.strongconnect(abs)
 
@@ -718,12 +725,12 @@ func (sc *scanCtx) dfs(abs VFS) {
 	// so nothing here allocates from closureArena while the block is open. tjClosure
 	// is the dedup set (shared with strongconnect): dfs's pass-2 use never overlaps
 	// a nested dfs/strongconnect (pass 1 has fully returned), so no pool is needed.
-	s.tjClosure.reset(vfsBound())
+	s.tjc.closure.reset(vfsBound())
 
 	block := s.closureArena.alloc(closureAllocHint)
 	k := 0
 
-	s.tjClosure.add(abs)
+	s.tjc.closure.add(abs)
 	block[k] = abs
 	k++
 
@@ -733,11 +740,11 @@ func (sc *scanCtx) dfs(abs VFS) {
 		}
 
 		for _, id := range s.closureWindow(s.subgraphCache[ch]) {
-			if s.tjClosure.has(id) {
+			if s.tjc.closure.has(id) {
 				continue
 			}
 
-			s.tjClosure.add(id)
+			s.tjc.closure.add(id)
 			block[k] = id
 			k++
 		}
@@ -802,9 +809,9 @@ func (s *IncludeScanner) closureWindow(ref closureRef) []VFS {
 func (sc *scanCtx) strongconnect(v VFS) {
 	s := sc.scanner
 
-	s.tjNext++
-	s.tj.discover(v, s.tjNext)
-	s.tjStack = append(s.tjStack, v)
+	s.tjc.next++
+	s.tjc.scratch.discover(v, s.tjc.next)
+	s.tjc.stack = append(s.tjc.stack, v)
 
 	sc.forEachResolvedChildID(v, func(w VFS) {
 		if _, cached := s.subgraphCache[w]; cached {
@@ -813,32 +820,32 @@ func (sc *scanCtx) strongconnect(v VFS) {
 			return
 		}
 
-		if !s.tj.visited(w) {
+		if !s.tjc.scratch.visited(w) {
 			sc.strongconnect(w)
 
-			if s.tj.lowOf(w) < s.tj.lowOf(v) {
-				s.tj.setLow(v, s.tj.lowOf(w))
+			if s.tjc.scratch.lowOf(w) < s.tjc.scratch.lowOf(v) {
+				s.tjc.scratch.setLow(v, s.tjc.scratch.lowOf(w))
 			}
-		} else if s.tj.onStackOf(w) {
-			if s.tj.indexOf(w) < s.tj.lowOf(v) {
-				s.tj.setLow(v, s.tj.indexOf(w))
+		} else if s.tjc.scratch.onStackOf(w) {
+			if s.tjc.scratch.indexOf(w) < s.tjc.scratch.lowOf(v) {
+				s.tjc.scratch.setLow(v, s.tjc.scratch.indexOf(w))
 			}
 		}
 	})
 
-	if s.tj.lowOf(v) != s.tj.indexOf(v) {
+	if s.tjc.scratch.lowOf(v) != s.tjc.scratch.indexOf(v) {
 		return
 	}
 
-	sccStart := len(s.tjStack) - 1
+	sccStart := len(s.tjc.stack) - 1
 
-	for s.tjStack[sccStart] != v {
+	for s.tjc.stack[sccStart] != v {
 		sccStart--
 	}
 
-	members := s.tjStack[sccStart:]
+	members := s.tjc.stack[sccStart:]
 
-	s.tjClosure.reset(vfsBound())
+	s.tjc.closure.reset(vfsBound())
 
 	// Build the closure directly into an arena block (no scratch, no copy).
 	// alloc hands back a region of at least closureAllocHint; we write into it
@@ -848,8 +855,8 @@ func (sc *scanCtx) strongconnect(v VFS) {
 	k := 0
 
 	for _, u := range members {
-		if !s.tjClosure.has(u) {
-			s.tjClosure.add(u)
+		if !s.tjc.closure.has(u) {
+			s.tjc.closure.add(u)
 			block[k] = u
 			k++
 		}
@@ -857,13 +864,13 @@ func (sc *scanCtx) strongconnect(v VFS) {
 
 	for _, u := range members {
 		sc.forEachResolvedChildID(u, func(ch VFS) {
-			if s.tj.onStackHas(ch) {
+			if s.tjc.scratch.onStackHas(ch) {
 				return
 			}
 
 			for _, id := range s.closureWindow(s.subgraphCache[ch]) {
-				if !s.tjClosure.has(id) {
-					s.tjClosure.add(id)
+				if !s.tjc.closure.has(id) {
+					s.tjc.closure.add(id)
 					block[k] = id
 					k++
 				}
@@ -883,10 +890,10 @@ func (sc *scanCtx) strongconnect(v VFS) {
 
 	for _, u := range members {
 		s.subgraphCache[u] = ref
-		s.tj.setOnStack(u, false)
+		s.tjc.scratch.setOnStack(u, false)
 	}
 
-	s.tjStack = s.tjStack[:sccStart]
+	s.tjc.stack = s.tjc.stack[:sccStart]
 }
 
 func (sc *scanCtx) resolve(includerAbs, incDir VFS, d includeDirective) (out []VFS) {
