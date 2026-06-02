@@ -19,6 +19,8 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 		return nil
 	}
 
+	// Union each source's transitive closure (closureOf), deduping across
+	// sources with a reused idSet, then drop the source files themselves.
 	visited := scanner.visitedIDPool.Get().(*idSet)
 	visited.reset(vfsBound())
 	defer scanner.visitedIDPool.Put(visited)
@@ -43,11 +45,18 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 		}
 
 		sc := scanner.NewScanCtx(cfg)
-		sc.cfg.SourceRel = srcRelOnDisk
 
 		srcAbs := Source(srcRelOnDisk)
 		srcAbsSet[srcAbs] = struct{}{}
-		sc.dfsID(srcAbs, visited, &order)
+
+		for _, v := range sc.closureOf(srcAbs) {
+			if visited.has(v) {
+				continue
+			}
+
+			visited.add(v)
+			order = append(order, v)
+		}
 	}
 
 	if len(order) == 0 {
@@ -176,9 +185,9 @@ func rewriteClosureCPSource(scanner *IncludeScanner, out []VFS) []VFS {
 		return out
 	}
 
-	// out may be a shared cached closure (WalkClosure now returns closureOf's
-	// slice without copying), so clone on the first rewrite instead of mutating
-	// in place. The common case rewrites nothing and returns out untouched.
+	// out may be a shared cached closure (closureOf returns its slice without
+	// copying), so clone on the first rewrite instead of mutating in place. The
+	// common case rewrites nothing and returns out untouched.
 	var result []VFS
 
 	for i, v := range out {
@@ -211,7 +220,7 @@ func rewriteClosureCPSource(scanner *IncludeScanner, out []VFS) []VFS {
 // so CP $(B) outputs already mapped to their SourcePath survive as sources.
 func keepOnlySourceVFS(out []VFS) []VFS {
 	// Build a fresh slice rather than compacting out[:0] in place: out may be a
-	// shared cached closure (WalkClosure returns closureOf's slice uncopied).
+	// shared cached closure (closureOf returns its slice uncopied).
 	var w []VFS
 
 	for _, v := range out {
