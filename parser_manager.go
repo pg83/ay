@@ -217,10 +217,6 @@ func (pm *includeParserManager) indexAddincl(a VFS) {
 	})
 }
 
-func (pm *includeParserManager) fileExistsByRel(rel string) bool {
-	return pm.fs.IsFile(srcRootVFS, rel)
-}
-
 func (pm *includeParserManager) perfStats() parserPerfStats {
 	return parserPerfStats{
 		parsedHits:   pm.cache.parsedHits,
