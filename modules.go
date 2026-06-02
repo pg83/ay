@@ -2111,25 +2111,42 @@ func buildIfEnv(instance ModuleInstance) Environment {
 
 	useRuntime := instance.Platform.Flags[envUSE_ARCADIA_COMPILER_RUNTIME]
 	env.SetBool(envUSE_ARCADIA_COMPILER_RUNTIME, useRuntime != strNo)
-	env.SetString(envCOMPILER_VERSION, instance.Platform.ClangVer)
-	env.SetString(envBUILD_TYPE, strings.ToUpper(instance.Platform.BuildType))
+	env.SetStringID(envCOMPILER_VERSION, instance.Platform.ClangVerSTR)
+	env.SetStringID(envBUILD_TYPE, instance.Platform.BuildTypeUpperSTR)
 
 	if (instance.Platform.ISA == ISAX8664 || env.Bool(envARCH_I386)) &&
 		!env.Bool(envDISABLE_INSTRUCTION_SETS) {
-		env.SetString(envSSE41_CFLAGS, "-msse4.1")
-		env.SetString(envSSE42_CFLAGS, "-msse4.2")
-		env.SetString(envPOPCNT_CFLAGS, "-mpopcnt")
-		env.SetString(envCX16_FLAGS, "-mcx16")
-		env.SetString(envAVX_CFLAGS, "-mavx -mpclmul")
-		env.SetString(envAVX2_CFLAGS, "-mavx2 -mfma -mbmi -mbmi2")
-		env.SetString(envAVX512_CFLAGS, "-mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
-		env.SetString(envSSE_CFLAGS, "-msse2 -msse3 -mssse3")
-		env.SetString(envSSE4_CFLAGS, "-msse4.1 -msse4.2 -mpopcnt -mcx16")
-		env.SetString(envAMX_CFLAGS, "-mamx-tile -mamx-int8 -mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
+		env.SetStringID(envSSE41_CFLAGS, strSSE41CFlags)
+		env.SetStringID(envSSE42_CFLAGS, strSSE42CFlags)
+		env.SetStringID(envPOPCNT_CFLAGS, strPopcntCFlags)
+		env.SetStringID(envCX16_FLAGS, strCX16CFlags)
+		env.SetStringID(envAVX_CFLAGS, strAVXCFlags)
+		env.SetStringID(envAVX2_CFLAGS, strAVX2CFlags)
+		env.SetStringID(envAVX512_CFLAGS, strAVX512CFlags)
+		env.SetStringID(envSSE_CFLAGS, strSSECFlags)
+		env.SetStringID(envSSE4_CFLAGS, strSSE4CFlags)
+		env.SetStringID(envAMX_CFLAGS, strAMXCFlags)
 	}
 
 	return env
 }
+
+// Instruction-set CFLAGS values are platform-invariant string constants set on
+// every x86 module; intern them once and bind via SetStringID.
+var (
+	strSSE41CFlags  = internString("-msse4.1")
+	strSSE42CFlags  = internString("-msse4.2")
+	strPopcntCFlags = internString("-mpopcnt")
+	strCX16CFlags   = internString("-mcx16")
+	strAVXCFlags    = internString("-mavx -mpclmul")
+	strAVX2CFlags   = internString("-mavx2 -mfma -mbmi -mbmi2")
+	strAVX512CFlags = internString("-mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
+	strSSECFlags    = internString("-msse2 -msse3 -mssse3")
+	strSSE4CFlags   = internString("-msse4.1 -msse4.2 -mpopcnt -mcx16")
+	strAMXCFlags    = internString("-mamx-tile -mamx-int8 -mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
+
+	strCPPProto = internString("CPP_PROTO") // MODULE_TAG for the CPP PROTO_LIBRARY submodule
+)
 
 func expandConfigPaths(paths []string, env Environment) []string {
 	out := make([]string, 0, len(paths))
