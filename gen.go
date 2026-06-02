@@ -289,6 +289,7 @@ type codegenOutputKey struct {
 type scanCtxPerfStats struct {
 	subgraphEntries int
 	childrenEntries int
+	closureWindows  int
 }
 
 func resolveCodegenDepRefs(ctx *genCtx, consumer ModuleInstance, includeInputs []VFS, exclude ...NodeRef) []NodeRef {
@@ -377,6 +378,7 @@ func (ctx *genCtx) perfScanCtxStats(scanner *IncludeScanner) scanCtxPerfStats {
 	return scanCtxPerfStats{
 		subgraphEntries: len(scanner.subgraphCache),
 		childrenEntries: len(scanner.childrenCache),
+		closureWindows:  len(scanner.subgraphClosures),
 	}
 }
 
@@ -395,9 +397,10 @@ func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, 
 	reportScanner := func(label string, scanner *IncludeScanner) {
 		scanStats := scanner.perfStats()
 		ctxStats := ctx.perfScanCtxStats(scanner)
-		fmt.Fprintf(os.Stderr, "perf: scanner %s closureEntries=%d childrenEntries=%d walkClosure=%d closureHits=%d closureMisses=%d cyclicSCCs=%d searchTierHits=%d searchTierMisses=%d resolveCalls=%d sysinclSourceHits=%d sysinclSourceMisses=%d sysinclIncluderHits=%d sysinclIncluderMisses=%d\n",
+		fmt.Fprintf(os.Stderr, "perf: scanner %s closureEntries=%d closureWindows=%d childrenEntries=%d walkClosure=%d closureHits=%d closureMisses=%d cyclicSCCs=%d searchTierHits=%d searchTierMisses=%d resolveCalls=%d sysinclSourceHits=%d sysinclSourceMisses=%d sysinclIncluderHits=%d sysinclIncluderMisses=%d\n",
 			label,
 			ctxStats.subgraphEntries,
+			ctxStats.closureWindows,
 			ctxStats.childrenEntries,
 			scanStats.walkClosureCalls,
 			scanStats.subgraphHits,
