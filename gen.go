@@ -279,6 +279,12 @@ type genCtx struct {
 	// a leaf (pure slice/idSet ops, no callback re-enters it), and gen is
 	// single-threaded. collectModule lacks a ctx, so it receives &ctx.deduper.
 	deduper deDuper
+
+	// tarjan is the run-wide Tarjan scratch; both scanners hold a pointer to it
+	// (their tj field) so its vfsBound-sized arrays grow once, not once per
+	// scanner. reset() runs before every strongconnect, so the shared state is
+	// safe under single-threaded gen.
+	tarjan tarjanScratch
 }
 
 type codegenOutputKey struct {
@@ -444,12 +450,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	targetReg := NewCodegenRegistry()
 	hostReg := NewCodegenRegistry()
 
-	targetScanner := newIncludeScannerWith(parsers, LoadSysInclSetForFS(fs, string(targetP.ISA), onWarn), onWarn)
-	targetScanner.codegen = targetReg
-	targetScanner.fallbackLocators = []pathLocator{codegenLocator{reg: targetReg}}
-	hostScanner := newIncludeScannerWith(parsers, LoadSysInclSetForFS(fs, string(hostP.ISA), onWarn), onWarn)
-	hostScanner.codegen = hostReg
-	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
 	ctx := &genCtx{
 		sourceRoot:         fs.SourceRoot(),
 		fs:                 fs,
@@ -461,8 +461,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		walking:            make(map[ModuleInstance]bool),
 		host:               hostP,
 		target:             targetP,
-		scannerTarget:      targetScanner,
-		scannerHost:        hostScanner,
 		enOutputs:          make(map[VFS]NodeRef),
 		pbOutputs:          make(map[codegenOutputKey]NodeRef),
 		evOutputs:          make(map[codegenOutputKey]NodeRef),
@@ -473,6 +471,17 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		scripts:            scriptTbl,
 		testMode:           testMode,
 	}
+
+	// Both scanners share ctx.tarjan (the run-wide Tarjan scratch) so its
+	// vfsBound-sized arrays grow once, not once per scanner.
+	targetScanner := newIncludeScannerWith(parsers, LoadSysInclSetForFS(fs, string(targetP.ISA), onWarn), onWarn, &ctx.tarjan)
+	targetScanner.codegen = targetReg
+	targetScanner.fallbackLocators = []pathLocator{codegenLocator{reg: targetReg}}
+	hostScanner := newIncludeScannerWith(parsers, LoadSysInclSetForFS(fs, string(hostP.ISA), onWarn), onWarn, &ctx.tarjan)
+	hostScanner.codegen = hostReg
+	hostScanner.fallbackLocators = []pathLocator{codegenLocator{reg: hostReg}}
+	ctx.scannerTarget = targetScanner
+	ctx.scannerHost = hostScanner
 
 	seed := ModuleInstance{
 		Path:     filepath.Clean(targetDir),

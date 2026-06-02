@@ -90,7 +90,13 @@ type IncludeScanner struct {
 
 	resolveIndexByConfig map[uint64]*cfgResolveIndex
 
-	tj        tarjanScratch
+	// tj points at the run-wide Tarjan scratch owned by genCtx and shared by the
+	// target and host scanners rather than one per scanner: its dense arrays grow
+	// to vfsBound, and gen is single-threaded, so a single instance halves the
+	// growth allocation. reset() (epoch bump, dfs:685) runs before every
+	// strongconnect, invalidating the other scanner's prior state. tjStack/tjNext/
+	// tjClosure stay per-scanner (tiny / independent dedup).
+	tj        *tarjanScratch
 	tjStack   []VFS
 	tjNext    int32
 	tjClosure idSet
@@ -334,10 +340,10 @@ type scannerPerfStats struct {
 }
 
 func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
-	return newIncludeScannerWith(newIncludeParserManager(sourceRoot), sysincl, func(Warn) {})
+	return newIncludeScannerWith(newIncludeParserManager(sourceRoot), sysincl, func(Warn) {}, &tarjanScratch{})
 }
 
-func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, onWarn func(Warn)) *IncludeScanner {
+func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, onWarn func(Warn), tj *tarjanScratch) *IncludeScanner {
 	s := &IncludeScanner{
 		sysincl:              sysincl,
 		parsers:              parsers,
@@ -357,6 +363,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		childrenCache:        make(map[VFS][]VFS, 65536),
 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
 		resolveIndexByConfig: make(map[uint64]*cfgResolveIndex, 1024),
+		tj:                   tj,
 	}
 
 	for i := range sysincl {
