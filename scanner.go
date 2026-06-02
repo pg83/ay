@@ -95,12 +95,13 @@ type IncludeScanner struct {
 	tjNext    int32
 	tjClosure idSet
 
-	// dfsActive marks the source roots whose dfs is currently in flight. It is
-	// set-once (never reset): within one scanner a root is cached the moment its
-	// dfs finishes, so closureOf re-enters dfs(root) only along a source-source
-	// include cycle — which dfs hands to strongconnect. Per-scanner, not shared,
-	// so the host scanner does not see target's roots as spurious cycles.
-	dfsActive idSet
+	// dfsActive marks the roots whose dfs is currently in flight. It is set-once
+	// (never reset): within one scanner a root is cached the moment its dfs
+	// finishes, so closureOf re-enters dfs(root) only along an include cycle —
+	// which dfs hands to strongconnect. Per-scanner, not shared, so the host
+	// scanner does not see target's roots as spurious cycles. A bit set (1 bit/id)
+	// rather than an epoch idSet, since membership is permanent and binary.
+	dfsActive idBitSet
 
 	visitedIDPool sync.Pool
 
@@ -389,10 +390,6 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 	}
 
 	s.anySrcView = s.sysincl.PreparePerSource("")
-
-	// Prime dfsActive's epoch to 1 so has/add work as a permanent set (epoch 0
-	// would read every unset id as present). It is never reset after this.
-	s.dfsActive.reset(vfsBound())
 
 	s.visitedIDPool.New = func() any {
 		return &idSet{}
