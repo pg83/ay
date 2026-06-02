@@ -83,7 +83,7 @@ func TestEvalCond_YdbIfBindings(t *testing.T) {
 	}
 
 	localEnv := DefaultIfEnv.Clone()
-	localEnv.SetFromString("OS_SDK", "local")
+	localEnv.SetFromString(envOS_SDK, "local")
 	if !EvalCond(parseCondForTest(t, `OS_SDK == "local"`), localEnv) {
 		t.Error(`EvalCond(OS_SDK == "local") with OS_SDK=local = false, want true`)
 	}
@@ -271,7 +271,7 @@ func TestDefaultIfEnv_PROFILE_MEMORY_ALLOCATIONSDefaultsFalse(t *testing.T) {
 }
 
 func TestDefaultIfEnv_ALLOCATORDefaultsEmpty(t *testing.T) {
-	if got := DefaultIfEnv.String("ALLOCATOR"); got != "" {
+	if got := DefaultIfEnv.String(envALLOCATOR); got != "" {
 		t.Fatalf("DefaultIfEnv.String(ALLOCATOR) = %q, want empty", got)
 	}
 }
@@ -286,7 +286,7 @@ func TestEvalCond_BoolStringEqualityCoercion(t *testing.T) {
 	// return literal name from evalAtom), so this test sets the flag
 	// explicitly via SetBool to exercise the coercion rule.
 	env := DefaultIfEnv.Clone()
-	env.SetBool("PROFILE_MEMORY_ALLOCATIONS", false)
+	env.SetBool(envPROFILE_MEMORY_ALLOCATIONS, false)
 	if !EvalCond(parseCondForTest(t, `PROFILE_MEMORY_ALLOCATIONS == "no"`), env) {
 		t.Fatalf(`EvalCond(PROFILE_MEMORY_ALLOCATIONS=false == "no") = false, want true`)
 	}

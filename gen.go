@@ -640,13 +640,13 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	if d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" && instance.Language != LangPy {
 		cppProtoEnv := env.Clone()
-		cppProtoEnv.SetString("MODULE_TAG", "CPP_PROTO")
+		cppProtoEnv.SetString(envMODULE_TAG, "CPP_PROTO")
 
-		cppProtoEnv.SetBool("GEN_PROTO", true)
+		cppProtoEnv.SetBool(envGEN_PROTO, true)
 		d = collectModule(ctx.parsers, &ctx.deduper, instance.Path, instance.Kind, mf.Stmts, cppProtoEnv)
 	} else if d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" && instance.Language == LangPy {
 		py3ProtoEnv := env.Clone()
-		py3ProtoEnv.SetBool("PY3_PROTO", true)
+		py3ProtoEnv.SetBool(envPY3_PROTO, true)
 		d = collectModule(ctx.parsers, &ctx.deduper, instance.Path, instance.Kind, mf.Stmts, py3ProtoEnv)
 	}
 

@@ -290,14 +290,14 @@ func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, d 
 	flags := d.flags
 	allocatorName := d.allocatorName
 	env := buildIfEnv(instance)
-	muslLite := env.Bool("MUSL_LITE") || d.muslLite
+	muslLite := env.Bool(envMUSL_LITE) || d.muslLite
 
 	rc := implicitPeerCtx{
 		flags:         flags,
 		muslOn:        d.muslEnabled && !effectiveNoPlatform(flags),
 		muslLite:      muslLite,
-		osLinux:       env.Bool("OS_LINUX"),
-		archX8664:     env.Bool("ARCH_X86_64"),
+		osLinux:       env.Bool(envOS_LINUX),
+		archX8664:     env.Bool(envARCH_X86_64),
 		hadAllocator:  d.hadAllocator,
 		allocatorName: allocatorName,
 	}
@@ -311,7 +311,7 @@ func defaultProgramPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, d 
 	} else {
 		peers = appendImplicitPeers(peers, programImplicitPeers, rc)
 
-		if env.Bool("ARCH_X86_64") && !flags.NoUtil && allocatorName != "FAKE" {
+		if env.Bool(envARCH_X86_64) && !flags.NoUtil && allocatorName != "FAKE" {
 			peers = append(peers, "library/cpp/cpuid_check")
 		}
 	}

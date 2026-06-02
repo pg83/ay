@@ -64,10 +64,10 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			data := &moduleData{}
 
 			applyUnknownStmt("mod", &UnknownStmt{Name: tt.useMacro}, data, env)
-			if got := env.String("CLANG_BC_ROOT"); got != tt.resourceVal {
+			if got := env.String(envCLANG_BC_ROOT); got != tt.resourceVal {
 				t.Fatalf("CLANG_BC_ROOT = %q, want %q", got, tt.resourceVal)
 			}
-			if got := env.String("LLVM_LLC_TOOL"); got != tt.wantLLCTool {
+			if got := env.String(envLLVM_LLC_TOOL); got != tt.wantLLCTool {
 				t.Fatalf("LLVM_LLC_TOOL = %q, want %q", got, tt.wantLLCTool)
 			}
 			if err := Try(func() {
@@ -88,8 +88,8 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 
 func TestExpandConfigString_SetVar(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
-	env.SetFromString("MODDIR", "mymod")
-	env.SetFromString("ORIG_SRC_DIR", "$(S)/mylib/src")
+	env.SetFromString(envMODDIR, "mymod")
+	env.SetFromString(envORIG_SRC_DIR, "$(S)/mylib/src")
 
 	got := expandConfigString("${ORIG_SRC_DIR}", env)
 	if got != "$(S)/mylib/src" {
@@ -101,7 +101,7 @@ func TestExpandConfigString_SetVar(t *testing.T) {
 		t.Fatalf("expandConfigString(${UNKNOWN_VAR}) = %q, want ${UNKNOWN_VAR} (no change)", got)
 	}
 
-	env.SetFromString("SRCDIR_RAW", "${ARCADIA_ROOT}/some/path")
+	env.SetFromString(envSRCDIR_RAW, "${ARCADIA_ROOT}/some/path")
 	got = expandConfigString("${SRCDIR_RAW}", env)
 	if got != "$(S)/some/path" {
 		t.Fatalf("expandConfigString with raw ARCADIA_ROOT in SET = %q, want $(S)/some/path", got)
