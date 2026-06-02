@@ -253,14 +253,51 @@ func (e Environment) SetFromStringID(id ENV, v STR) {
 	e.setStrID(id, v)
 }
 
-func (e Environment) HasBinding(id ENV) bool {
+// internedEnv looks up name's ENV without interning it (envTable read-only,
+// like interned() for STR). Var-expansion probes arbitrary ${VAR} tokens that
+// are usually not env vars; interning to check would grow the ENV table with
+// junk, so presence is tested via this lookup first.
+func internedEnv(name string) (ENV, bool) {
+	id, ok := envTable.ids[name]
+
+	return id, ok
+}
+
+func (e Environment) hasBindingID(id ENV) bool {
 	k, _ := e.s.lookup(id)
 
 	return k != envAbsent
 }
 
+// HasBinding reports whether name is bound, taking a string: it first checks
+// whether name is interned at all, so a ${VAR} token that is not a known env
+// var is reported unbound without being interned.
+func (e Environment) HasBinding(name string) bool {
+	id, ok := internedEnv(name)
+
+	return ok && e.hasBindingID(id)
+}
+
+// Lookup returns name's bound value and whether it is bound, without interning
+// name (same non-polluting rationale as HasBinding).
+func (e Environment) Lookup(name string) (string, bool) {
+	id, ok := internedEnv(name)
+
+	if !ok {
+		return "", false
+	}
+
+	k, v := e.s.lookup(id)
+
+	if k == envAbsent {
+		return "", false
+	}
+
+	return internTable.strs[v], true
+}
+
 func (e Environment) SetDefaultString(id ENV, v string) {
-	if e.HasBinding(id) {
+	if e.hasBindingID(id) {
 		return
 	}
 

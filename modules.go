@@ -2181,13 +2181,13 @@ func expandConfigString(s string, env Environment) string {
 		end += start + 2
 		name := s[start+2 : end]
 
-		nameEnv := internEnv(name)
+		val, ok := env.Lookup(name)
 
-		if !env.HasBinding(nameEnv) {
+		if !ok {
 			break
 		}
 
-		s = s[:start] + env.String(nameEnv) + s[end+1:]
+		s = s[:start] + val + s[end+1:]
 	}
 
 	s = strings.ReplaceAll(s, "${ARCADIA_BUILD_ROOT}", "$(B)")
@@ -2210,8 +2210,10 @@ func expandStmtToken(s string, env Environment) string {
 		if strings.HasPrefix(s, "$") && !strings.HasPrefix(s, "${") {
 			name := strings.TrimPrefix(s, "$")
 
-			if nameEnv := internEnv(name); isExpandVarName(name) && env.HasBinding(nameEnv) {
-				s = env.String(nameEnv)
+			if isExpandVarName(name) {
+				if val, ok := env.Lookup(name); ok {
+					s = val
+				}
 			}
 		}
 
@@ -2233,11 +2235,13 @@ func expandStmtToken(s string, env Environment) string {
 			end += start + 2
 			name := s[start+2 : end]
 
-			if !isExpandVarName(name) || !env.HasBinding(internEnv(name)) {
+			val, ok := env.Lookup(name)
+
+			if !isExpandVarName(name) || !ok {
 				break
 			}
 
-			s = s[:start] + env.String(internEnv(name)) + s[end+1:]
+			s = s[:start] + val + s[end+1:]
 		}
 
 		s = expandConfigString(s, env)
@@ -2287,13 +2291,15 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 
 		name := s[i+1 : j]
 
-		if !env.HasBinding(internEnv(name)) {
+		val, ok := env.Lookup(name)
+
+		if !ok {
 			b.WriteString(s[i:j])
 			i = j
 			continue
 		}
 
-		b.WriteString(env.String(internEnv(name)))
+		b.WriteString(val)
 		i = j
 		changed = true
 	}
@@ -2316,14 +2322,14 @@ func expandStmtTokens(items []string, env Environment) []string {
 		}
 
 		if expanded == "" || expanded == "no" {
-			if fullVarRef(item) || (fullDollarVarRef(item) && env.HasBinding(internEnv(item[1:]))) {
+			if fullVarRef(item) || (fullDollarVarRef(item) && env.HasBinding(item[1:])) {
 				continue
 			}
 		}
 
 		fields := []string{expanded}
 
-		if fullVarRef(item) || (fullDollarVarRef(item) && env.HasBinding(internEnv(item[1:]))) {
+		if fullVarRef(item) || (fullDollarVarRef(item) && env.HasBinding(item[1:])) {
 			fields = strings.Fields(expanded)
 		}
 
@@ -2376,11 +2382,11 @@ func expandListVars(items []string, env Environment) []string {
 		if strings.HasPrefix(item, "${") && strings.HasSuffix(item, "}") {
 			name := strings.TrimSuffix(strings.TrimPrefix(item, "${"), "}")
 
-			if !env.HasBinding(internEnv(name)) {
+			value, ok := env.Lookup(name)
+
+			if !ok {
 				continue
 			}
-
-			value := env.String(internEnv(name))
 
 			if value == "" || value == "no" {
 				continue
