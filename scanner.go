@@ -112,8 +112,6 @@ type IncludeScanner struct {
 	generatedFirstClaim map[VFS]string
 
 	walkClosureCalls       uint64
-	dfsCalls               uint64
-	plainDfsCalls          uint64
 	subgraphHits           uint64
 	subgraphMisses         uint64
 	subgraphTainted        uint64
@@ -315,8 +313,6 @@ type sysinclCacheEntry struct {
 
 type scannerPerfStats struct {
 	walkClosureCalls       uint64
-	dfsCalls               uint64
-	plainDfsCalls          uint64
 	subgraphHits           uint64
 	subgraphMisses         uint64
 	subgraphTainted        uint64
@@ -596,51 +592,6 @@ func sameRecordSlice(a, b []*SysIncl) bool {
 	return true
 }
 
-func (sc *scanCtx) dfsID(abs VFS, visited *idSet, order *[]VFS) {
-	sc.scanner.dfsCalls++
-
-	if visited.has(abs) {
-		return
-	}
-
-	if isSourceLike(abs) {
-		sc.plainDfsID(abs, visited, order)
-
-		return
-	}
-
-	// Emit the queried node first: closureOf returns the SCC-shared closure
-	// (strongconnect maps every cycle member to the same slice), whose first
-	// element is the SCC representative, not necessarily abs. A walk root must
-	// lead its own closure — consumers identify it as element 0 and strip it.
-	visited.add(abs)
-	*order = append(*order, abs)
-
-	for _, id := range sc.closureOf(abs) {
-		if visited.has(id) {
-			continue
-		}
-
-		visited.add(id)
-		*order = append(*order, id)
-	}
-}
-
-func (sc *scanCtx) plainDfsID(abs VFS, visited *idSet, order *[]VFS) {
-	sc.scanner.plainDfsCalls++
-
-	if visited.has(abs) {
-		return
-	}
-
-	visited.add(abs)
-	*order = append(*order, abs)
-
-	sc.forEachResolvedChildID(abs, func(child VFS) {
-		sc.dfsID(child, visited, order)
-	})
-}
-
 func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
 
@@ -687,8 +638,6 @@ func (s *IncludeScanner) SubgraphCacheStats() (hits, misses, tainted uint64) {
 func (s *IncludeScanner) perfStats() scannerPerfStats {
 	return scannerPerfStats{
 		walkClosureCalls:       s.walkClosureCalls,
-		dfsCalls:               s.dfsCalls,
-		plainDfsCalls:          s.plainDfsCalls,
 		subgraphHits:           s.subgraphHits,
 		subgraphMisses:         s.subgraphMisses,
 		subgraphTainted:        s.subgraphTainted,
@@ -1532,24 +1481,6 @@ func cythonPy2SiblingOverride(includerAbs VFS, d includeDirective) (string, bool
 	}
 
 	return "", false
-}
-
-func isSourceLike(absPath VFS) bool {
-	rel := absPath.Rel()
-	idx := strings.LastIndexByte(rel, '.')
-
-	if idx < 0 {
-		return false
-	}
-
-	ext := rel[idx:]
-
-	switch ext {
-	case ".cpp", ".cc", ".cxx", ".c", ".C", ".S", ".s", ".m", ".mm":
-		return true
-	}
-
-	return false
 }
 
 func pathDir(p string) string {

@@ -775,7 +775,7 @@ machine Sub;
 	}
 
 	// sub.rl6 is a ragel-native dep; it lives in parsedIncludesRagelNative and
-	// is added by emit_sources.go, NOT by the scanner's WalkClosure.
+	// is added by emit_sources.go, NOT by the scanner's closure walk.
 	if closureSet["$(S)/pkg/sub.rl6"] {
 		t.Errorf("scanner closure should NOT contain $(S)/pkg/sub.rl6 (ragel-native dep added by emit layer, not scanner): %v", closure)
 	}
