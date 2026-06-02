@@ -30,6 +30,8 @@ func internEnv(name string) ENV {
 	return id
 }
 
+func (id ENV) String() string { return envTable.names[id] }
+
 // identEnv returns the ENV for an IF identifier, preferring the id interned into
 // the node at parse time; a zero Env (e.g. an ExprIdent built outside the parser,
 // as in tests) falls back to interning the name on demand.
@@ -40,6 +42,25 @@ func identEnv(x *ExprIdent) ENV {
 
 	return internEnv(x.Name)
 }
+
+// strYes/strNo are the pre-interned STR forms of the bool foldings, reused by
+// SetBool instead of re-interning "yes"/"no" on every per-module binding.
+var (
+	strYes = internString("yes")
+	strNo  = internString("no")
+)
+
+// intSTR holds the pre-interned decimal STR of the first len(intSTR) integers so
+// SetInt avoids strconv.Itoa + internString on the common small-int path.
+var intSTR = func() [1024]STR {
+	var a [1024]STR
+
+	for i := range a {
+		a[i] = internString(strconv.Itoa(i))
+	}
+
+	return a
+}()
 
 type envKind uint8
 
@@ -117,8 +138,8 @@ func isImplicitBuildVar(name string) bool {
 // (mirroring upstream ymake — $X EvalValue returns "" for unbound vars,
 // and NYMake::IsTrue treats empty / any falseWord as false). The only
 // typed error is an int binding used in boolean position.
-func (e Environment) Bool(name string) bool {
-	return e.boolID(internEnv(name), name)
+func (e Environment) Bool(id ENV) bool {
+	return e.boolID(id, id.String())
 }
 
 // boolID is Bool keyed by a pre-interned ENV (the IF-eval hot path passes the id
@@ -150,12 +171,14 @@ func stringIsTruthy(v string) bool {
 	return true
 }
 
-func (e Environment) String(name string) string {
+func (e Environment) String(id ENV) string {
 	// envStr stores the string (bools as "yes"/"no"); envInt stores the decimal
 	// form — both round-trip via the value STR.
-	if k, v := e.s.lookup(internEnv(name)); k != envAbsent {
+	if k, v := e.s.lookup(id); k != envAbsent {
 		return internTable.strs[v]
 	}
+
+	name := id.String()
 
 	if isImplicitBuildVar(name) {
 		return ""
@@ -173,58 +196,68 @@ func (e Environment) Clone() Environment {
 	}}
 }
 
-// setStr binds name to a string value (the unified bool/string slot). SetBool
-// folds to "yes"/"no" — observably identical to the old bool binding, since
-// Bool reads via stringIsTruthy and String/evalEq map bool↔"yes"/"no".
-func (e Environment) setStr(name, v string) {
-	id := internEnv(name)
+// setStrID binds id to the pre-interned string value v (the unified bool/string
+// slot). The whole env API is keyed by ENV and takes pre-interned STR values so
+// no name or constant value is re-interned per binding (per-module buildIfEnv
+// ran this thousands of times). SetBool folds to strYes/strNo — observably
+// identical to the old bool binding, since Bool reads via stringIsTruthy and
+// String/evalEq map bool↔"yes"/"no".
+func (e Environment) setStrID(id ENV, v STR) {
 	e.s.ensure(id)
 	e.s.kind[id] = envStr
-	e.s.val[id] = internString(v)
+	e.s.val[id] = v
 }
 
-func (e Environment) setInt(name string, n int) {
-	id := internEnv(name)
+// SetStringID binds a pre-interned constant value (hoisted STR var); SetString
+// is for computed values that must intern at the call.
+func (e Environment) SetStringID(id ENV, v STR) { e.setStrID(id, v) }
+
+func (e Environment) SetString(id ENV, v string) { e.setStrID(id, internString(v)) }
+
+func (e Environment) SetInt(id ENV, n int) {
 	e.s.ensure(id)
 	e.s.kind[id] = envInt
+
+	if uint(n) < uint(len(intSTR)) {
+		e.s.val[id] = intSTR[n]
+
+		return
+	}
+
 	e.s.val[id] = internString(strconv.Itoa(n))
 }
 
-func (e Environment) SetBool(name string, v bool) {
+func (e Environment) SetBool(id ENV, v bool) {
 	if v {
-		e.setStr(name, "yes")
+		e.setStrID(id, strYes)
 	} else {
-		e.setStr(name, "no")
+		e.setStrID(id, strNo)
 	}
 }
 
-func (e Environment) SetString(name, v string) {
-	e.setStr(name, v)
-}
-
-func (e Environment) SetFromString(name, v string) {
+func (e Environment) SetFromString(id ENV, v string) {
 	switch v {
 	case "yes":
-		e.SetBool(name, true)
+		e.SetBool(id, true)
 	case "no":
-		e.SetBool(name, false)
+		e.SetBool(id, false)
 	default:
-		e.SetString(name, v)
+		e.SetString(id, v)
 	}
 }
 
-func (e Environment) HasBinding(name string) bool {
-	k, _ := e.s.lookup(internEnv(name))
+func (e Environment) HasBinding(id ENV) bool {
+	k, _ := e.s.lookup(id)
 
 	return k != envAbsent
 }
 
-func (e Environment) SetDefaultString(name, value string) {
-	if e.HasBinding(name) {
+func (e Environment) SetDefaultString(id ENV, v string) {
+	if e.HasBinding(id) {
 		return
 	}
 
-	e.setStr(name, value)
+	e.SetString(id, v)
 }
 
 func EvalCond(e Expr, env Environment) bool {
@@ -365,30 +398,30 @@ var DefaultIfEnv = makeDefaultIfEnv()
 func makeDefaultIfEnv() Environment {
 	e := newEnvironment()
 
-	for _, n := range []string{
-		"OS_LINUX", "LINUX",
-		"CLANG", "TRUE", "USE_SSE4",
-		"OPENSOURCE",
-		"USE_ARCADIA_PYTHON", "PYTHON3",
+	for _, n := range []ENV{
+		envOS_LINUX, envLINUX,
+		envCLANG, envTRUE, envUSE_SSE4,
+		envOPENSOURCE,
+		envUSE_ARCADIA_PYTHON, envPYTHON3,
 	} {
 		e.SetBool(n, true)
 	}
 
-	e.SetString("CXX_RT", "libcxxrt")
-	e.SetString("OPENSOURCE_PROJECT", "")
-	e.SetString("SANITIZER_TYPE", "")
-	e.SetString("undefined", "undefined")
-	e.SetString("memory", "memory")
-	e.SetString("address", "address")
-	e.SetString("thread", "thread")
-	e.SetString("leak", "leak")
-	e.SetString("MODULE_TAG", "PY3")
-	e.SetString("_USE_ICONV", "dynamic")
-	e.SetString("ALLOCATOR", "")
-	e.SetString("PY2", "PY2")
-	e.SetString("OS_SDK", "")
+	e.SetString(envCXX_RT, "libcxxrt")
+	e.SetString(envOPENSOURCE_PROJECT, "")
+	e.SetString(envSANITIZER_TYPE, "")
+	e.SetString(envundefined, "undefined")
+	e.SetString(envmemory, "memory")
+	e.SetString(envaddress, "address")
+	e.SetString(envthread, "thread")
+	e.SetString(envleak, "leak")
+	e.SetString(envMODULE_TAG, "PY3")
+	e.SetString(env_USE_ICONV, "dynamic")
+	e.SetString(envALLOCATOR, "")
+	e.SetString(envPY2, "PY2")
+	e.SetString(envOS_SDK, "")
 
-	e.setInt("ANDROID_API", 0)
+	e.SetInt(envANDROID_API, 0)
 
 	return e
 }

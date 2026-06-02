@@ -423,9 +423,9 @@ func copyFileIncludeTarget(modulePath string, target string) string {
 func collectModule(pm *includeParserManager, dd *deDuper, modulePath string, kind ModuleKind, stmts []Stmt, env Environment) *moduleData {
 	fs := pm.fs
 
-	env.SetString("MODDIR", modulePath)
-	env.SetString("CURDIR", "${ARCADIA_ROOT}/"+modulePath)
-	env.SetString("BINDIR", "${ARCADIA_BUILD_ROOT}/"+modulePath)
+	env.SetString(envMODDIR, modulePath)
+	env.SetString(envCURDIR, "${ARCADIA_ROOT}/"+modulePath)
+	env.SetString(envBINDIR, "${ARCADIA_BUILD_ROOT}/"+modulePath)
 
 	d := &moduleData{
 		pythonSQLite3: true,
@@ -460,25 +460,25 @@ func collectModule(pm *includeParserManager, dd *deDuper, modulePath string, kin
 	// same hash-derived path (dedup'd by Emitter on output path) so the
 	// LIBRARY's already-emitted node is reused, just with its ref/path now
 	// reaching LD.
-	d.muslEnabled = env.Bool("MUSL")
+	d.muslEnabled = env.Bool(envMUSL)
 	// ENABLE(NO_STRIP) and BUILD_TYPE-driven STRIP_FLAG suppression
 	// (ymake.core.conf:2669 — when ($STRIP == "yes" && $NO_STRIP != "yes"))
 	// both clear -Wl,--strip-all. Track the effective NO_STRIP env value
 	// here so the LD emitter can honour it without re-reading env.
-	d.noStrip = env.Bool("NO_STRIP")
+	d.noStrip = env.Bool(envNO_STRIP)
 
 	if d.muslLite {
 		d.flags.NoUtil = true
 	}
 
-	if env.Bool("PY3_PROTO") {
+	if env.Bool(envPY3_PROTO) {
 		d.usePython3 = true
 	}
 
 	applyPython3AddIncl(modulePath, d)
 	applyBuildInfoAddIncl(modulePath, d)
 
-	cflagPrefix := append(muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags)), sseBaseCFlags(env.Bool("ARCH_X86_64"))...)
+	cflagPrefix := append(muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags)), sseBaseCFlags(env.Bool(envARCH_X86_64))...)
 	d.moduleScopeCFlags = append(cflagPrefix, d.moduleScopeCFlags...)
 
 	d.addIncl = dd.dedupVFS(d.addIncl, nil)
@@ -509,7 +509,7 @@ func collectModule(pm *includeParserManager, dd *deDuper, modulePath string, kin
 	}
 
 	if hasProto && !hasEv && d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" {
-		if !env.Bool("PY3_PROTO") {
+		if !env.Bool(envPY3_PROTO) {
 			d.peerdirs = append(d.peerdirs, "contrib/libs/protobuf")
 		}
 
@@ -769,7 +769,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 		case *SetStmt:
 
 			value := expandScalarVarRef(v.Value, env)
-			env.SetFromString(v.Name, value)
+			env.SetFromString(internEnv(v.Name), value)
 
 			if d.setVars == nil {
 				d.setVars = map[string]string{}
@@ -840,7 +840,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				d.defaultVarOrder = append(d.defaultVarOrder, v.VarName)
 			}
 
-			env.SetDefaultString(v.VarName, expandScalarVarRef(v.Value, env))
+			env.SetDefaultString(internEnv(v.VarName), expandScalarVarRef(v.Value, env))
 		case *ConfigureFileStmt:
 			expanded := *v
 			expanded.Src = expandStmtToken(v.Src, env)
@@ -1059,14 +1059,14 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 	case "NO_WSHADOW":
 		d.flags.NoWShadow = true
 	case "USE_LLVM_BC16":
-		env.SetString("CLANG_BC_ROOT", env.String("CLANG16_RESOURCE_GLOBAL"))
-		env.SetString("LLVM_LLC_TOOL", "contrib/libs/llvm16/tools/llc")
+		env.SetString(envCLANG_BC_ROOT, env.String(envCLANG16_RESOURCE_GLOBAL))
+		env.SetString(envLLVM_LLC_TOOL, "contrib/libs/llvm16/tools/llc")
 	case "USE_LLVM_BC18":
-		env.SetString("CLANG_BC_ROOT", env.String("CLANG18_RESOURCE_GLOBAL"))
-		env.SetString("LLVM_LLC_TOOL", "contrib/libs/llvm18/tools/llc")
+		env.SetString(envCLANG_BC_ROOT, env.String(envCLANG18_RESOURCE_GLOBAL))
+		env.SetString(envLLVM_LLC_TOOL, "contrib/libs/llvm18/tools/llc")
 	case "USE_LLVM_BC20":
-		env.SetString("CLANG_BC_ROOT", env.String("CLANG20_RESOURCE_GLOBAL"))
-		env.SetString("LLVM_LLC_TOOL", "contrib/libs/llvm20/tools/llc")
+		env.SetString(envCLANG_BC_ROOT, env.String(envCLANG20_RESOURCE_GLOBAL))
+		env.SetString(envLLVM_LLC_TOOL, "contrib/libs/llvm20/tools/llc")
 	case "SPLIT_DWARF":
 		d.splitDwarf = true
 	case "NO_SPLIT_DWARF":
@@ -1103,11 +1103,11 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		// finally either llvm_llc (GENERATE_MACHINE_CODE) or resource embed.
 		// We parse the keywords identically and stash the result on the
 		// moduleData; actual node emission is left to a follow-up.
-		if env.String("CLANG_BC_ROOT") == "" || env.String("LLVM_LLC_TOOL") == "" {
+		if env.String(envCLANG_BC_ROOT) == "" || env.String(envLLVM_LLC_TOOL) == "" {
 			ThrowFmt("LLVM_BC requires USE_LLVM_BC16/18/20 before invocation")
 		}
 
-		stmt := &llvmBcStmt{ClangBCRoot: env.String("CLANG_BC_ROOT")}
+		stmt := &llvmBcStmt{ClangBCRoot: env.String(envCLANG_BC_ROOT)}
 		i := 0
 
 		for i < len(v.Args) {
@@ -1346,7 +1346,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		// macrosAcceptingUserFlags. The cases below keep the few flags
 		// whose ENABLE has a direct module-data side-effect.
 		for _, a := range v.Args {
-			env.SetBool(a, true)
+			env.SetBool(internEnv(a), true)
 
 			switch a {
 			case "MUSL_LITE":
@@ -1365,7 +1365,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		// Counterpart to ENABLE: clears the env var (and the few specific
 		// module-data flags). Generic for the same reasons as ENABLE.
 		for _, a := range v.Args {
-			env.SetBool(a, false)
+			env.SetBool(internEnv(a), false)
 
 			if a == "PYTHON_SQLITE3" {
 				d.pythonSQLite3 = false
@@ -2090,42 +2090,42 @@ func buildIfEnv(instance ModuleInstance) Environment {
 	env := DefaultIfEnv.Clone()
 
 	for k, v := range instance.Platform.Flags {
-		env.SetFromString(k, v)
+		env.SetFromString(internEnv(k), v)
 	}
 
-	if env.Bool("OPENSOURCE") || env.String("OPENSOURCE_PROJECT") == "ymake" || env.String("OPENSOURCE_PROJECT") == "ya" {
-		env.SetBool("YA_OPENSOURCE", true)
+	if env.Bool(envOPENSOURCE) || env.String(envOPENSOURCE_PROJECT) == "ymake" || env.String(envOPENSOURCE_PROJECT) == "ya" {
+		env.SetBool(envYA_OPENSOURCE, true)
 	}
 
-	if env.Bool("OPENSOURCE") {
-		env.SetBool("CATBOOST_OPENSOURCE", true)
+	if env.Bool(envOPENSOURCE) {
+		env.SetBool(envCATBOOST_OPENSOURCE, true)
 	}
 
 	switch instance.Platform.ISA {
 	case ISAX8664:
-		env.SetBool("ARCH_X86_64", true)
+		env.SetBool(envARCH_X86_64, true)
 	case ISAAArch64:
-		env.SetBool("ARCH_AARCH64", true)
-		env.SetBool("ARCH_ARM64", true)
+		env.SetBool(envARCH_AARCH64, true)
+		env.SetBool(envARCH_ARM64, true)
 	}
 
 	useRuntime := instance.Platform.Flags["USE_ARCADIA_COMPILER_RUNTIME"]
-	env.SetBool("USE_ARCADIA_COMPILER_RUNTIME", useRuntime != "no")
-	env.SetString("COMPILER_VERSION", instance.Platform.ClangVer)
-	env.SetString("BUILD_TYPE", strings.ToUpper(instance.Platform.BuildType))
+	env.SetBool(envUSE_ARCADIA_COMPILER_RUNTIME, useRuntime != "no")
+	env.SetString(envCOMPILER_VERSION, instance.Platform.ClangVer)
+	env.SetString(envBUILD_TYPE, strings.ToUpper(instance.Platform.BuildType))
 
-	if (instance.Platform.ISA == ISAX8664 || env.Bool("ARCH_I386")) &&
-		!env.Bool("DISABLE_INSTRUCTION_SETS") {
-		env.SetString("SSE41_CFLAGS", "-msse4.1")
-		env.SetString("SSE42_CFLAGS", "-msse4.2")
-		env.SetString("POPCNT_CFLAGS", "-mpopcnt")
-		env.SetString("CX16_FLAGS", "-mcx16")
-		env.SetString("AVX_CFLAGS", "-mavx -mpclmul")
-		env.SetString("AVX2_CFLAGS", "-mavx2 -mfma -mbmi -mbmi2")
-		env.SetString("AVX512_CFLAGS", "-mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
-		env.SetString("SSE_CFLAGS", "-msse2 -msse3 -mssse3")
-		env.SetString("SSE4_CFLAGS", "-msse4.1 -msse4.2 -mpopcnt -mcx16")
-		env.SetString("AMX_CFLAGS", "-mamx-tile -mamx-int8 -mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
+	if (instance.Platform.ISA == ISAX8664 || env.Bool(envARCH_I386)) &&
+		!env.Bool(envDISABLE_INSTRUCTION_SETS) {
+		env.SetString(envSSE41_CFLAGS, "-msse4.1")
+		env.SetString(envSSE42_CFLAGS, "-msse4.2")
+		env.SetString(envPOPCNT_CFLAGS, "-mpopcnt")
+		env.SetString(envCX16_FLAGS, "-mcx16")
+		env.SetString(envAVX_CFLAGS, "-mavx -mpclmul")
+		env.SetString(envAVX2_CFLAGS, "-mavx2 -mfma -mbmi -mbmi2")
+		env.SetString(envAVX512_CFLAGS, "-mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
+		env.SetString(envSSE_CFLAGS, "-msse2 -msse3 -mssse3")
+		env.SetString(envSSE4_CFLAGS, "-msse4.1 -msse4.2 -mpopcnt -mcx16")
+		env.SetString(envAMX_CFLAGS, "-mamx-tile -mamx-int8 -mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
 	}
 
 	return env
@@ -2160,10 +2160,10 @@ func parseModulePathVFS(path string) VFS {
 }
 
 func expandConfigString(s string, env Environment) string {
-	s = strings.ReplaceAll(s, "${COMPILER_VERSION}", env.String("COMPILER_VERSION"))
+	s = strings.ReplaceAll(s, "${COMPILER_VERSION}", env.String(envCOMPILER_VERSION))
 	s = strings.ReplaceAll(s, "${ARCADIA_BUILD_ROOT}", "$(B)")
 	s = strings.ReplaceAll(s, "${ARCADIA_ROOT}", "$(S)")
-	s = strings.ReplaceAll(s, "${MODDIR}", env.String("MODDIR"))
+	s = strings.ReplaceAll(s, "${MODDIR}", env.String(envMODDIR))
 
 	for {
 		start := strings.Index(s, "${")
@@ -2181,11 +2181,13 @@ func expandConfigString(s string, env Environment) string {
 		end += start + 2
 		name := s[start+2 : end]
 
-		if !env.HasBinding(name) {
+		nameEnv := internEnv(name)
+
+		if !env.HasBinding(nameEnv) {
 			break
 		}
 
-		s = s[:start] + env.String(name) + s[end+1:]
+		s = s[:start] + env.String(nameEnv) + s[end+1:]
 	}
 
 	s = strings.ReplaceAll(s, "${ARCADIA_BUILD_ROOT}", "$(B)")
@@ -2208,8 +2210,8 @@ func expandStmtToken(s string, env Environment) string {
 		if strings.HasPrefix(s, "$") && !strings.HasPrefix(s, "${") {
 			name := strings.TrimPrefix(s, "$")
 
-			if isExpandVarName(name) && env.HasBinding(name) {
-				s = env.String(name)
+			if nameEnv := internEnv(name); isExpandVarName(name) && env.HasBinding(nameEnv) {
+				s = env.String(nameEnv)
 			}
 		}
 
@@ -2231,11 +2233,11 @@ func expandStmtToken(s string, env Environment) string {
 			end += start + 2
 			name := s[start+2 : end]
 
-			if !isExpandVarName(name) || !env.HasBinding(name) {
+			if !isExpandVarName(name) || !env.HasBinding(internEnv(name)) {
 				break
 			}
 
-			s = s[:start] + env.String(name) + s[end+1:]
+			s = s[:start] + env.String(internEnv(name)) + s[end+1:]
 		}
 
 		s = expandConfigString(s, env)
@@ -2285,13 +2287,13 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 
 		name := s[i+1 : j]
 
-		if !env.HasBinding(name) {
+		if !env.HasBinding(internEnv(name)) {
 			b.WriteString(s[i:j])
 			i = j
 			continue
 		}
 
-		b.WriteString(env.String(name))
+		b.WriteString(env.String(internEnv(name)))
 		i = j
 		changed = true
 	}
@@ -2314,14 +2316,14 @@ func expandStmtTokens(items []string, env Environment) []string {
 		}
 
 		if expanded == "" || expanded == "no" {
-			if fullVarRef(item) || (fullDollarVarRef(item) && env.HasBinding(item[1:])) {
+			if fullVarRef(item) || (fullDollarVarRef(item) && env.HasBinding(internEnv(item[1:]))) {
 				continue
 			}
 		}
 
 		fields := []string{expanded}
 
-		if fullVarRef(item) || (fullDollarVarRef(item) && env.HasBinding(item[1:])) {
+		if fullVarRef(item) || (fullDollarVarRef(item) && env.HasBinding(internEnv(item[1:]))) {
 			fields = strings.Fields(expanded)
 		}
 
@@ -2374,11 +2376,11 @@ func expandListVars(items []string, env Environment) []string {
 		if strings.HasPrefix(item, "${") && strings.HasSuffix(item, "}") {
 			name := strings.TrimSuffix(strings.TrimPrefix(item, "${"), "}")
 
-			if !env.HasBinding(name) {
+			if !env.HasBinding(internEnv(name)) {
 				continue
 			}
 
-			value := env.String(name)
+			value := env.String(internEnv(name))
 
 			if value == "" || value == "no" {
 				continue
