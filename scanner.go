@@ -599,11 +599,7 @@ func (sc *scanCtx) dfs(abs VFS) {
 	s := sc.scanner
 
 	if s.dfsActive.has(abs) {
-		s.tjc.scratch.reset(vfsBound())
-		s.tjc.stack = s.tjc.stack[:0]
-		s.tjc.next = 0
-
-		sc.strongconnect(abs)
+		s.subgraphHits += s.tjc.runSCC(sc, abs)
 
 		return
 	}
@@ -709,79 +705,33 @@ func (s *IncludeScanner) closureWindow(ref closureRef) []VFS {
 	return s.subgraphClosures[ref]
 }
 
-func (sc *scanCtx) strongconnect(v VFS) {
+// scanCtx implements closureSink (tarjan_ctx.go) so tarjanCtx.strongconnect can
+// build SCC closures without depending on scanner internals.
+
+func (sc *scanCtx) forEachChild(v VFS, fn func(VFS)) {
+	sc.forEachResolvedChildID(v, fn)
+}
+
+func (sc *scanCtx) cachedWindow(v VFS) ([]VFS, bool) {
+	ref, ok := sc.scanner.subgraphCache[v]
+
+	if !ok {
+		return nil, false
+	}
+
+	return sc.scanner.closureWindow(ref), true
+}
+
+// emitClosure reserves an arena block, lets fill write the deduped closure into
+// it (returning the count), then commits that prefix — an address-stable
+// sub-slice of the arena — into subgraphClosures and caches it for every member.
+func (sc *scanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 	s := sc.scanner
 
-	s.tjc.next++
-	s.tjc.scratch.discover(v, s.tjc.next)
-	s.tjc.stack = append(s.tjc.stack, v)
-
-	sc.forEachResolvedChildID(v, func(w VFS) {
-		if _, cached := s.subgraphCache[w]; cached {
-			s.subgraphHits++
-
-			return
-		}
-
-		if !s.tjc.scratch.visited(w) {
-			sc.strongconnect(w)
-
-			if s.tjc.scratch.lowOf(w) < s.tjc.scratch.lowOf(v) {
-				s.tjc.scratch.setLow(v, s.tjc.scratch.lowOf(w))
-			}
-		} else if s.tjc.scratch.onStackOf(w) {
-			if s.tjc.scratch.indexOf(w) < s.tjc.scratch.lowOf(v) {
-				s.tjc.scratch.setLow(v, s.tjc.scratch.indexOf(w))
-			}
-		}
-	})
-
-	if s.tjc.scratch.lowOf(v) != s.tjc.scratch.indexOf(v) {
-		return
-	}
-
-	sccStart := len(s.tjc.stack) - 1
-
-	for s.tjc.stack[sccStart] != v {
-		sccStart--
-	}
-
-	members := s.tjc.stack[sccStart:]
-
-	s.tjc.closure.reset(vfsBound())
-
-	// Build the closure directly into an arena block (no scratch, no copy).
-	// alloc hands back a region of at least closureAllocHint; we write into it
-	// by index, then commit the count actually written and store that prefix —
-	// itself an address-stable sub-slice of the arena — into subgraphClosures.
 	block := s.closureArena.alloc(closureAllocHint)
-	k := 0
-
-	for _, u := range members {
-		if !s.tjc.closure.has(u) {
-			s.tjc.closure.add(u)
-			block[k] = u
-			k++
-		}
-	}
-
-	for _, u := range members {
-		sc.forEachResolvedChildID(u, func(ch VFS) {
-			if s.tjc.scratch.onStackHas(ch) {
-				return
-			}
-
-			for _, id := range s.closureWindow(s.subgraphCache[ch]) {
-				if !s.tjc.closure.has(id) {
-					s.tjc.closure.add(id)
-					block[k] = id
-					k++
-				}
-			}
-		})
-	}
-
+	k := fill(block)
 	s.closureArena.commit(k)
+
 	ref := closureRef(len(s.subgraphClosures))
 	s.subgraphClosures = append(s.subgraphClosures, block[:k:k])
 
@@ -793,10 +743,7 @@ func (sc *scanCtx) strongconnect(v VFS) {
 
 	for _, u := range members {
 		s.subgraphCache[u] = ref
-		s.tjc.scratch.setOnStack(u, false)
 	}
-
-	s.tjc.stack = s.tjc.stack[:sccStart]
 }
 
 func (sc *scanCtx) resolve(includerAbs, incDir VFS, d includeDirective) (out []VFS) {
