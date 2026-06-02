@@ -71,7 +71,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		},
 	}
 
-	return emit.Emit(bindNodePlatform(node, statsPlatform)), outVFS
+	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), statsPlatform)), outVFS
 }
 
 // Path constants hoisted by `ay refac consts`.

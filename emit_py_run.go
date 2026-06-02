@@ -506,7 +506,7 @@ func EmitPYRun(
 	}
 
 	return prEmitResult{
-		Ref:    emit.Emit(bindNodePlatform(node, instance.Platform)),
+		Ref:    emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform)),
 		Inputs: append([]VFS(nil), inputs...),
 	}
 }

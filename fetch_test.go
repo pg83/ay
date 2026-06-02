@@ -39,6 +39,7 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform, plan *resourceFe
 		Outputs:          []VFS{Intern("$(B)/pkg/app/main.o")},
 		Requirements:     map[string]interface{}{},
 		TargetProperties: map[string]string{},
+		usesResources:    []string{resourcePatternClangTool},
 	}, target))
 	execResourceEmit.Result(ref)
 
@@ -104,6 +105,7 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 		Outputs:          []VFS{Intern("$(B)/pkg/app/main.o")},
 		Requirements:     map[string]interface{}{},
 		TargetProperties: map[string]string{},
+		usesResources:    []string{resourcePatternYMakePython3},
 	}, p))
 	execResourceEmit.Result(execRef)
 	execGraph := Finalize(execEmit)
@@ -137,6 +139,7 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 		Outputs:          []VFS{Intern("$(B)/pkg/app/main.o")},
 		Requirements:     map[string]interface{}{},
 		TargetProperties: map[string]string{},
+		usesResources:    []string{resourcePatternYMakePython3},
 	}, p))
 	dumpResourceEmit.Result(dumpRef)
 	dumpGraph := Finalize(dumpEmit)

@@ -93,7 +93,7 @@ func emitARNode(
 		DepRefs:          depRefs,
 	}
 
-	return emit.Emit(bindNodePlatform(n, instance.Platform))
+	return emit.Emit(bindNodePlatform(withResources(n, resourcePatternYMakePython3, resourcePatternClangTool), instance.Platform))
 }
 
 // Path constants hoisted by `ay refac consts`.

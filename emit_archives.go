@@ -126,7 +126,7 @@ func emitArchive(
 		DepRefs: depRefs,
 	}
 
-	arRef := emit.Emit(bindNodePlatform(n, instance.Platform))
+	arRef := emit.Emit(bindNodePlatform(withResources(n, resourcePatternYMakePython3, resourcePatternClangTool), instance.Platform))
 
 	if reg != nil {
 		reg.Register(&GeneratedFileInfo{

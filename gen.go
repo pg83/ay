@@ -2252,7 +2252,6 @@ func (dd *deDuper) dedupVFS(lists ...[]VFS) []VFS {
 	return out
 }
 
-
 func mergeDedup(a, b []string) []string {
 	out := make([]string, 0, len(a)+len(b))
 	seen := make(map[string]struct{}, len(a)+len(b))

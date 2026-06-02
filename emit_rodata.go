@@ -82,9 +82,9 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		TargetProperties: map[string]string{
 			"module_dir": instance.Path,
 		},
-		DepRefs: []NodeRef{yasmLD},
+		DepRefs:        []NodeRef{yasmLD},
 		ForeignDepRefs: []NodeRef{yasmLD},
 	}
 
-	return emit.Emit(bindNodePlatform(node, instance.Platform)), asmVFS, outVFS
+	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform)), asmVFS, outVFS
 }

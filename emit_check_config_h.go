@@ -28,7 +28,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 		chRef, ok := ctx.checkConfigOutputs[generatedVFS]
 
 		if !ok {
-			chRef = ctx.emit.Emit(bindNodePlatform(&Node{
+			chRef = ctx.emit.Emit(bindNodePlatform(withResources(&Node{
 				Cmds: []Cmd{
 					{
 						CmdArgs: []string{
@@ -57,7 +57,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 				TargetProperties: map[string]string{
 					"module_dir": instance.Path,
 				},
-			}, instance.Platform))
+			}, resourcePatternYMakePython3), instance.Platform))
 			ctx.checkConfigOutputs[generatedVFS] = chRef
 		}
 

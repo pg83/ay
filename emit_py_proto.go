@@ -242,7 +242,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		pyPBNode.ForeignDepRefs = toolRefs
 	}
 
-	pyPBRef := ctx.emit.Emit(bindNodePlatform(pyPBNode, instance.Platform))
+	pyPBRef := ctx.emit.Emit(bindNodePlatform(withResources(pyPBNode, resourcePatternYMakePython3), instance.Platform))
 	pyYapyc := []VFS{pyOut}
 
 	if d.grpc {
@@ -326,7 +326,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			node.ForeignDepRefs = toolRefs
 		}
 
-		res.Refs = append(res.Refs, ctx.emit.Emit(bindNodePlatform(node, instance.Platform)))
+		res.Refs = append(res.Refs, ctx.emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform)))
 		res.Outputs = append(res.Outputs, out)
 	}
 

@@ -174,7 +174,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		n.ForeignDepRefs = []NodeRef{fixElfRef}
 	}
 
-	ref := ctx.emit.Emit(bindNodePlatform(n, instance.Platform))
+	ref := ctx.emit.Emit(bindNodePlatform(withResources(n, resourcePatternClangTool, resourcePatternLLDRoot, resourcePatternYMakePython3), instance.Platform))
 	addInclGlobal := ctx.deduper.dedupVFS(d.addInclGlobal, peerAddInclGlobal)
 	cFlagsGlobal := mergeDedup(d.cFlagsGlobal, peerCFlagsGlobal)
 	cxxFlagsGlobal := mergeDedup(d.cxxFlagsGlobal, peerCXXFlagsGlobal)
