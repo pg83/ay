@@ -105,9 +105,8 @@ func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSe
 	pm.cache.parsedMisses++
 
 	rel := vfsPath.Rel()
-	dir, base := splitDirName(rel)
 
-	if !pm.fs.IsFile(dirKey(dir), base) {
+	if !pm.fs.IsFile(srcRootVFS, rel) {
 		pm.cache.parsed.Put(key, nil)
 
 		return nil
