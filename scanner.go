@@ -95,6 +95,13 @@ type IncludeScanner struct {
 	tjNext    int32
 	tjClosure idSet
 
+	// dfsActive marks the source roots whose dfs is currently in flight. It is
+	// set-once (never reset): within one scanner a root is cached the moment its
+	// dfs finishes, so closureOf re-enters dfs(root) only along a source-source
+	// include cycle — which dfs hands to strongconnect. Per-scanner, not shared,
+	// so the host scanner does not see target's roots as spurious cycles.
+	dfsActive idSet
+
 	visitedIDPool sync.Pool
 
 	seenPool sync.Pool
@@ -383,6 +390,10 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 
 	s.anySrcView = s.sysincl.PreparePerSource("")
 
+	// Prime dfsActive's epoch to 1 so has/add work as a permanent set (epoch 0
+	// would read every unset id as present). It is never reset after this.
+	s.dfsActive.reset(vfsBound())
+
 	s.visitedIDPool.New = func() any {
 		return &idSet{}
 	}
@@ -651,80 +662,81 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 	}
 }
 
-// isSourceLike reports whether absPath is a C/C++ compilation source
-// (.cpp/.cc/.cxx/.c/.C/.m/.mm) as opposed to a header. Such a source is not
-// #included by another translation unit, so it roots its own singleton SCC and
-// its closure can be built by a plain dfs rather than strongconnect. Assembly
-// (.S/.s) is deliberately excluded: boost.context ships arch-conditional .S
-// files that #include each other (e.g. jump_i386 <-> jump_x86_64), forming a
-// real source-source cycle the scanner sees lexically — those must stay on
-// strongconnect, which collapses the SCC correctly.
-func isSourceLike(absPath VFS) bool {
-	rel := absPath.Rel()
-	idx := strings.LastIndexByte(rel, '.')
-
-	if idx < 0 {
-		return false
-	}
-
-	switch rel[idx:] {
-	case ".cpp", ".cc", ".cxx", ".c", ".C", ".m", ".mm":
-		return true
-	}
-
-	return false
-}
-
-// dfs builds the transitive include closure of a source-like root (.cpp/.c/…)
-// directly, without Tarjan: a source is never included by another file, so it
-// roots a singleton SCC and needs no cycle/SCC bookkeeping. abs leads its own
+// dfs builds the transitive include closure of any root — closureOf routes every
+// uncached file here. Most files are acyclic (a node ∪ its children's windows),
+// so a flat dfs without Tarjan's SCC bookkeeping suffices: abs leads its own
 // closure (element 0), which the [1:] consumers strip, and the children's flat
-// windows are spliced in — sharing the same cached closures strongconnect built.
+// windows are spliced in — the same cached closures strongconnect builds.
 //
-// Two passes are required by the single-pending arena. Pass 1 resolves every
-// direct child's closure (closureOf there may recurse into strongconnect/dfs and
-// allocate from closureArena) and saves the arena-stable windows. Pass 2 reserves
-// our block and splices those saved windows — it allocates nothing else, so
-// holding the uncommitted block is safe. visited is a pooled idSet (not the tj
-// scratch, which pass-1 strongconnect resets).
+// When the subgraph below abs contains an include cycle, a flat window cannot
+// represent the SCC. dfsActive detects it: a cycle re-enters dfs(abs) before abs
+// is cached, so the guard hands abs to strongconnect, which collapses the SCC
+// (reusing every acyclic subtree dfs already cached). This covers header<->header
+// cycles, the arch-conditional .S sibling includes, and self-includes alike.
+//
+// Two passes are required by the single-pending arena. Pass 1 builds and caches
+// every direct child's closure (closureOf there may recurse into strongconnect/
+// dfs and allocate from closureArena). Pass 2 reserves our block and splices each
+// child's cached window in place — no temporary [][]VFS — and allocates nothing
+// else, so holding the uncommitted block is safe. tjClosure is the dedup set,
+// shared with strongconnect; dfs's pass-2 use never overlaps a nested call.
 func (sc *scanCtx) dfs(abs VFS) {
 	s := sc.scanner
 
-	var childClosures [][]VFS
+	if s.dfsActive.has(abs) {
+		s.tj.reset(vfsBound())
+		s.tjStack = s.tjStack[:0]
+		s.tjNext = 0
 
+		sc.strongconnect(abs)
+
+		return
+	}
+
+	s.dfsActive.add(abs)
+
+	// Pass 1: build and cache each child's closure. closureOf may recurse into
+	// dfs/strongconnect and allocate from closureArena, so it must finish before
+	// pass 2 reserves our block. Skip the self-edge (a source that #includes
+	// itself): abs is not cached yet, so closureOf(abs) would re-enter dfs(abs);
+	// abs leads the window below and its self-contribution is a dedup fixpoint.
 	sc.forEachResolvedChildID(abs, func(ch VFS) {
-		// Skip the self-edge: a source may #include itself, and abs is not cached
-		// yet, so closureOf(abs) would re-enter dfs(abs) and stack-overflow. abs is
-		// already led below; its self-contribution is a fixpoint the dedup drops.
 		if ch == abs {
 			return
 		}
 
-		childClosures = append(childClosures, sc.closureOf(ch))
+		sc.closureOf(ch)
 	})
 
-	visited := s.visitedIDPool.Get().(*idSet)
-	visited.reset(vfsBound())
-	defer s.visitedIDPool.Put(visited)
+	// Pass 2: every child is cached now, so splice its window straight from the
+	// cache — no temporary [][]VFS, and forEachResolvedChildID hits childrenCache
+	// so nothing here allocates from closureArena while the block is open. tjClosure
+	// is the dedup set (shared with strongconnect): dfs's pass-2 use never overlaps
+	// a nested dfs/strongconnect (pass 1 has fully returned), so no pool is needed.
+	s.tjClosure.reset(vfsBound())
 
 	block := s.closureArena.alloc(closureAllocHint)
 	k := 0
 
-	visited.add(abs)
+	s.tjClosure.add(abs)
 	block[k] = abs
 	k++
 
-	for _, w := range childClosures {
-		for _, id := range w {
-			if visited.has(id) {
+	sc.forEachResolvedChildID(abs, func(ch VFS) {
+		if ch == abs {
+			return
+		}
+
+		for _, id := range s.closureWindow(s.subgraphCache[ch]) {
+			if s.tjClosure.has(id) {
 				continue
 			}
 
-			visited.add(id)
+			s.tjClosure.add(id)
 			block[k] = id
 			k++
 		}
-	}
+	})
 
 	s.closureArena.commit(k)
 	ref := closureRef(len(s.subgraphClosures))
@@ -740,15 +752,7 @@ func (sc *scanCtx) closureOf(abs VFS) []VFS {
 	if ok {
 		s.subgraphHits++
 	} else {
-		if isSourceLike(abs) {
-			sc.dfs(abs)
-		} else {
-			s.tj.reset(vfsBound())
-			s.tjStack = s.tjStack[:0]
-			s.tjNext = 0
-
-			sc.strongconnect(abs)
-		}
+		sc.dfs(abs)
 
 		ref = s.subgraphCache[abs]
 	}

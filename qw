@@ -1,0 +1,6 @@
+func (sc *scanCtx) dfs(abs VFS) {
+    if (xxx.has(vfs)) {
+        sc.strongconnect(abs)
+        return
+    }
+    xxx.set(vfs)
