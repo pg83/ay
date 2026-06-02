@@ -33,31 +33,31 @@ func TestFS_ExistsAndIsDir(t *testing.T) {
 
 	fs := NewFS(root)
 
-	if !fs.IsFile("a/b/c.txt") {
+	if !fs.IsFile(dirKey(""), "a/b/c.txt") {
 		t.Errorf("c.txt should be a file")
 	}
-	if !fs.IsFile("top.txt") {
+	if !fs.IsFile(dirKey(""), "top.txt") {
 		t.Errorf("top.txt should be a file")
 	}
-	if !fs.IsDir("a") {
+	if !fs.IsDir(dirKey(""), "a") {
 		t.Errorf("a should be a dir")
 	}
-	if !fs.IsDir("a/b") {
+	if !fs.IsDir(dirKey(""), "a/b") {
 		t.Errorf("a/b should be a dir")
 	}
-	if !fs.IsDir("") {
+	if !fs.IsDir(dirKey(""), "") {
 		t.Errorf("root should be a dir")
 	}
-	if fs.IsFile("a") {
+	if fs.IsFile(dirKey(""), "a") {
 		t.Errorf("a is a dir, not a file")
 	}
-	if fs.IsDir("a/b/c.txt") {
+	if fs.IsDir(dirKey(""), "a/b/c.txt") {
 		t.Errorf("c.txt is a file, not a dir")
 	}
-	if fs.IsFile("a/b/missing") {
+	if fs.IsFile(dirKey(""), "a/b/missing") {
 		t.Errorf("missing should not exist")
 	}
-	if fs.IsFile("totally/missing/path") {
+	if fs.IsFile(dirKey(""), "totally/missing/path") {
 		t.Errorf("missing parent dir should not exist")
 	}
 }
@@ -72,13 +72,13 @@ func TestFS_ExistsRoutesThroughListdir(t *testing.T) {
 
 	fs := NewFS(root)
 
-	if !fs.IsFile("d/a.txt") {
+	if !fs.IsFile(dirKey("d"), "a.txt") {
 		t.Fatal("a missing")
 	}
-	if !fs.IsFile("d/b.txt") {
+	if !fs.IsFile(dirKey("d"), "b.txt") {
 		t.Fatal("b missing")
 	}
-	if !fs.IsFile("d/c.txt") {
+	if !fs.IsFile(dirKey("d"), "c.txt") {
 		t.Fatal("c missing")
 	}
 
@@ -95,10 +95,10 @@ func TestFS_ListdirCachesNegative(t *testing.T) {
 	root := t.TempDir()
 	fs := NewFS(root)
 
-	if fs.Listdir("nope") != nil {
+	if fs.Listdir(dirKey("nope")) != nil {
 		t.Error("missing dir should return nil listdir")
 	}
-	if fs.Listdir("nope") != nil {
+	if fs.Listdir(dirKey("nope")) != nil {
 		t.Error("missing dir should still return nil on cache hit")
 	}
 	stats := fs.perfStats()
@@ -239,12 +239,12 @@ func newMemFS(files map[string]string) *memFS {
 
 func (fs *memFS) SourceRoot() string { return fs.sourceRoot }
 
-func (fs *memFS) Listdir(rel string) map[string]bool {
-	return fs.dirs[cleanRel(rel)]
+func (fs *memFS) Listdir(dir VFS) map[string]bool {
+	return fs.dirs[dir.Rel()]
 }
 
-func (fs *memFS) Exists(rel string) (present bool, isDir bool) {
-	rel = cleanRel(rel)
+func (fs *memFS) existsRel(rel string) (present bool, isDir bool) {
+	rel = normalisePath(cleanRel(rel))
 	if rel == "" {
 		return true, true
 	}
@@ -260,13 +260,17 @@ func (fs *memFS) Exists(rel string) (present bool, isDir bool) {
 	return ok, isDir
 }
 
-func (fs *memFS) IsFile(rel string) bool {
-	p, d := fs.Exists(rel)
+func (fs *memFS) Exists(prefix VFS, suffix string) (present bool, isDir bool) {
+	return fs.existsRel(joinRel(prefix.Rel(), suffix))
+}
+
+func (fs *memFS) IsFile(prefix VFS, suffix string) bool {
+	p, d := fs.Exists(prefix, suffix)
 	return p && !d
 }
 
-func (fs *memFS) IsDir(rel string) bool {
-	p, d := fs.Exists(rel)
+func (fs *memFS) IsDir(prefix VFS, suffix string) bool {
+	p, d := fs.Exists(prefix, suffix)
 	return p && d
 }
 
@@ -296,7 +300,7 @@ func (fs *memFS) ReadAbs(absPath string) []byte {
 }
 
 func (fs *memFS) ExistsAbs(absPath string) (present bool, isDir bool) {
-	return fs.Exists(fs.relForAbs(absPath))
+	return fs.existsRel(fs.relForAbs(absPath))
 }
 
 func (fs *memFS) relForAbs(absPath string) string {
@@ -316,7 +320,7 @@ func (fs *memFS) relForAbs(absPath string) string {
 func (fs *memFS) Walk(rel string, visit func(rel string, isDir bool)) {
 	rel = cleanRel(rel)
 
-	present, isDir := fs.Exists(rel)
+	present, isDir := fs.existsRel(rel)
 	if !present {
 		return
 	}
@@ -332,7 +336,7 @@ func (fs *memFS) Walk(rel string, visit func(rel string, isDir bool)) {
 		prefix += "/"
 	}
 
-	for name, childIsDir := range fs.Listdir(rel) {
+	for name, childIsDir := range fs.dirs[rel] {
 		child := prefix + name
 		if childIsDir {
 			fs.Walk(child, visit)

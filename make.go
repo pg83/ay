@@ -143,7 +143,7 @@ func buildHostStatsFlags(hostPlatformFlags, cliFlags map[string]string, sandboxi
 }
 
 func readOptionalYaConfSection(fs FS, rel, wantSection string) map[string]string {
-	if fs == nil || !fs.IsFile(rel) {
+	if fs == nil || !fs.IsFile(dirKey(""), rel) {
 		return nil
 	}
 

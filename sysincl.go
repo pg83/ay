@@ -340,7 +340,7 @@ func LoadSysInclSetFor(sourceRoot, arch string, onWarn func(Warn)) SysInclSet {
 }
 
 func LoadSysInclSetForFS(fs FS, arch string, onWarn func(Warn)) SysInclSet {
-	if !fs.IsDir("build/sysincl") {
+	if !fs.IsDir(dirKey(""), "build/sysincl") {
 		return nil
 	}
 
@@ -350,6 +350,7 @@ func LoadSysInclSetForFS(fs FS, arch string, onWarn func(Warn)) SysInclSet {
 
 	env := sysInclEnv{arch: arch}
 	var set SysInclSet
+	sysinclDir := dirKey("build/sysincl")
 
 	for _, entry := range sysInclYamlSequence {
 		if entry.predicate != nil && !entry.predicate(env) {
@@ -358,7 +359,7 @@ func LoadSysInclSetForFS(fs FS, arch string, onWarn func(Warn)) SysInclSet {
 
 		rel := "build/sysincl/" + entry.file
 
-		if !fs.IsFile(rel) {
+		if !fs.IsFile(sysinclDir, entry.file) {
 			continue
 		}
 

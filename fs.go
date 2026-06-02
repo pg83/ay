@@ -15,10 +15,14 @@ import (
 // inline (testfs_test.go) so the suite does no disk I/O for fixture trees.
 type FS interface {
 	SourceRoot() string
-	Listdir(rel string) map[string]bool
-	Exists(rel string) (present bool, isDir bool)
-	IsFile(rel string) bool
-	IsDir(rel string) bool
+	// Listdir lists the directory named by its Source-rooted VFS ("$(S)/<dir>").
+	Listdir(dir VFS) map[string]bool
+	// Exists/IsFile/IsDir take a directory VFS prefix and a relative
+	// suffix, so callers thread an already-interned prefix instead of building and
+	// re-interning a concatenated path. See osFS.Exists for the gating algorithm.
+	Exists(prefix VFS, suffix string) (present bool, isDir bool)
+	IsFile(prefix VFS, suffix string) bool
+	IsDir(prefix VFS, suffix string) bool
 	// Read returns the file content in a buffer reused across calls: the result is
 	// valid only until the next Read on this FS. Callers that retain content past
 	// another Read must copy (e.g. string(data), or ReadAbs for the parser).
@@ -35,10 +39,18 @@ type FS interface {
 	perfStats() fsPerfStats
 }
 
+// dirKey returns the directory cache key: the Source VFS of the directory
+// ("$(S)/<cleandir>"). The hot resolve path already holds the addincl/includer
+// dir as a VFS, so it keys Listdir for free; string callers intern here,
+// bounded by the directory universe (~6k on sg5). cleanRel keeps the key
+// canonical so the two routes agree.
+
+func dirKey(dir string) VFS { return Source(cleanRel(dir)) }
+
 type osFS struct {
 	sourceRoot string
 	rootSlash  string
-	dirs       map[string]map[string]bool
+	dirs       map[VFS]map[string]bool
 
 	// contentHashes is the xxh3 of each read file's content, indexed directly by the
 	// STR of its full "$(S)/..." path — i.e. the source VFS's own strID, so the uid
@@ -61,7 +73,7 @@ func NewFS(sourceRoot string) FS {
 	return &osFS{
 		sourceRoot: sourceRoot,
 		rootSlash:  sourceRoot + "/",
-		dirs:       make(map[string]map[string]bool, 1024),
+		dirs:       make(map[VFS]map[string]bool, 1024),
 	}
 }
 
@@ -98,7 +110,7 @@ func (fs *osFS) ContentHash(v VFS) uint64 {
 	// buffer) so the hash is recorded; a genuinely missing file faults here.
 	rel := v.Rel()
 
-	if fs.IsDir(rel) {
+	if p, d := fs.existsRel(rel); p && d {
 		return 0 // directory inputs (e.g. a test data dir) have no content hash
 	}
 
@@ -106,16 +118,19 @@ func (fs *osFS) ContentHash(v VFS) uint64 {
 	return fs.contentHashes[s]
 }
 func (fs *osFS) SourceRoot() string { return fs.sourceRoot }
-func (fs *osFS) Listdir(rel string) map[string]bool {
-	rel = cleanRel(rel)
 
-	if cached, ok := fs.dirs[rel]; ok {
+// Listdir returns the entries of the directory whose Source-rooted path is dir
+// ("$(S)/<cleandir>"). Keyed by VFS so the hot caller passes the addincl
+// VFS directly with no string hashing; expected to hit the cache.
+func (fs *osFS) Listdir(dir VFS) map[string]bool {
+	if cached, ok := fs.dirs[dir]; ok {
 		fs.listdirHits++
 		return cached
 	}
 
 	fs.listdirMisses++
 
+	rel := dir.Rel()
 	full := fs.rootSlash + rel
 
 	if rel == "" {
@@ -125,7 +140,7 @@ func (fs *osFS) Listdir(rel string) map[string]bool {
 	entries, err := os.ReadDir(full)
 
 	if err != nil {
-		fs.dirs[rel] = nil
+		fs.dirs[dir] = nil
 		return nil
 	}
 
@@ -135,12 +150,102 @@ func (fs *osFS) Listdir(rel string) map[string]bool {
 		out[e.Name()] = e.IsDir()
 	}
 
-	fs.dirs[rel] = out
+	fs.dirs[dir] = out
 
 	return out
 }
 
-func (fs *osFS) Exists(rel string) (present bool, isDir bool) {
+func (fs *osFS) bumpExists(ok bool) {
+	if ok {
+		fs.existsHits++
+	} else {
+		fs.existsMisses++
+	}
+}
+
+// Exists reports whether prefix/suffix exists (and whether it is a directory).
+// prefix is a directory VFS; suffix is relative to it. For a clean
+// suffix it gates on the first component being a directory under prefix before
+// listing (and interning) the deeper directory — so dead candidate paths never
+// grow the intern table. A suffix carrying ../././// is normalised jointly with
+// prefix (the boundary-crossing case) and looked up directly.
+func (fs *osFS) Exists(prefix VFS, suffix string) (present bool, isDir bool) {
+	if suffix == "" {
+		return fs.Listdir(prefix) != nil, true
+	}
+
+	prefixRel := prefix.Rel()
+
+	if !pathIsClean(suffix) {
+		rel := normalisePath(joinRel(prefixRel, suffix))
+
+		if rel == "" {
+			return true, true
+		}
+
+		dir, name := splitDirName(rel)
+		entries := fs.Listdir(dirKey(dir))
+
+		if entries == nil {
+			fs.existsMisses++
+			return false, false
+		}
+
+		d, ok := entries[name]
+		fs.bumpExists(ok)
+
+		return ok, d
+	}
+
+	entries := fs.Listdir(prefix)
+
+	if entries == nil {
+		fs.existsMisses++
+		return false, false
+	}
+
+	first, more := firstComponent(suffix)
+
+	if !more {
+		d, ok := entries[first]
+		fs.bumpExists(ok)
+
+		return ok, d
+	}
+
+	if d, ok := entries[first]; !ok || !d {
+		fs.existsMisses++
+		return false, false
+	}
+
+	dname, base := splitDirName(suffix)
+	entries = fs.Listdir(dirKey(joinRel(prefixRel, dname)))
+
+	if entries == nil {
+		fs.existsMisses++
+		return false, false
+	}
+
+	d, ok := entries[base]
+	fs.bumpExists(ok)
+
+	return ok, d
+}
+
+func (fs *osFS) IsFile(prefix VFS, suffix string) bool {
+	p, d := fs.Exists(prefix, suffix)
+	return p && !d
+}
+
+func (fs *osFS) IsDir(prefix VFS, suffix string) bool {
+	p, d := fs.Exists(prefix, suffix)
+	return p && d
+}
+
+// existsRel / listdirRel are the string-rel internal helpers for cold callers
+// that hold a whole path (Walk, ExistsAbs, ContentHash): they split and intern
+// the directory directly, no gating.
+func (fs *osFS) existsRel(rel string) (present bool, isDir bool) {
 	rel = cleanRel(rel)
 
 	if rel == "" {
@@ -148,32 +253,19 @@ func (fs *osFS) Exists(rel string) (present bool, isDir bool) {
 	}
 
 	dir, name := splitDirName(rel)
-	entries := fs.Listdir(dir)
+	entries := fs.Listdir(dirKey(dir))
 
 	if entries == nil {
-		fs.existsMisses++
 		return false, false
 	}
 
-	isDir, ok := entries[name]
+	d, ok := entries[name]
 
-	if ok {
-		fs.existsHits++
-	} else {
-		fs.existsMisses++
-	}
-
-	return ok, isDir
+	return ok, d
 }
 
-func (fs *osFS) IsFile(rel string) bool {
-	p, d := fs.Exists(rel)
-	return p && !d
-}
-
-func (fs *osFS) IsDir(rel string) bool {
-	p, d := fs.Exists(rel)
-	return p && d
+func (fs *osFS) listdirRel(rel string) map[string]bool {
+	return fs.Listdir(dirKey(rel))
 }
 
 func (fs *osFS) Read(rel string) []byte {
@@ -242,7 +334,7 @@ func (fs *osFS) ReadAbs(absPath string) []byte {
 }
 
 func (fs *osFS) ExistsAbs(absPath string) (present bool, isDir bool) {
-	return fs.Exists(fs.relForAbs(absPath))
+	return fs.existsRel(fs.relForAbs(absPath))
 }
 
 func (fs *osFS) relForAbs(absPath string) string {
@@ -262,7 +354,7 @@ func (fs *osFS) relForAbs(absPath string) string {
 func (fs *osFS) Walk(rel string, visit func(rel string, isDir bool)) {
 	rel = cleanRel(rel)
 
-	present, isDir := fs.Exists(rel)
+	present, isDir := fs.existsRel(rel)
 
 	if !present {
 		return
@@ -280,7 +372,7 @@ func (fs *osFS) Walk(rel string, visit func(rel string, isDir bool)) {
 		prefix += "/"
 	}
 
-	for name, childIsDir := range fs.Listdir(rel) {
+	for name, childIsDir := range fs.listdirRel(rel) {
 		child := prefix + name
 
 		if childIsDir {

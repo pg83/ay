@@ -606,7 +606,7 @@ type protoSrcsResult struct {
 func protoSourceRelPath(fs FS, instance ModuleInstance, d *moduleData, src string) string {
 	moduleRel := filepath.ToSlash(filepath.Clean(instance.Path + "/" + src))
 
-	if fs.IsFile(moduleRel) {
+	if fs.IsFile(dirKey(instance.Path), src) {
 		return moduleRel
 	}
 

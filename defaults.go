@@ -328,5 +328,5 @@ func effectiveNoPlatform(f FlagSet) bool {
 }
 
 func peerYaMakeExists(fs FS, peerPath string) bool {
-	return fs.IsFile(peerPath + "/ya.make")
+	return fs.IsFile(dirKey(peerPath), "ya.make")
 }
