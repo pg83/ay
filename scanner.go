@@ -57,8 +57,12 @@ type IncludeScanner struct {
 
 	sysinclIncluderCache map[sysinclIncluderKey]sysinclCacheEntry
 
-	subgraphChunks [][]VFS
-	subgraphLen    uint32
+	// subgraphClosures holds each cached transitive closure as a slice. The
+	// slices are not owned arrays: they are address-stable sub-slices into
+	// closureArena (a bump allocator), so storing them costs no copy. closureRef
+	// is just an index into this slice.
+	subgraphClosures [][]VFS
+	closureArena     *bumpAllocator[VFS]
 	// subgraphCache (cached transitive closure under DFS) and childrenCache
 	// (cached immediate resolved children) are both keyed by includer VFS
 	// ONLY — no scan-context component. This is the same invariant upstream
@@ -90,7 +94,6 @@ type IncludeScanner struct {
 	tjStack   []VFS
 	tjNext    int32
 	tjClosure idSet
-	tjBuf     []VFS
 
 	visitedIDPool sync.Pool
 	orderIDPool   sync.Pool
@@ -141,12 +144,21 @@ type idSet struct {
 	epoch uint32
 }
 
-const closureChunkLen = 1 << 18
+// closureRef is an index into IncludeScanner.subgraphClosures.
+type closureRef uint32
 
-type closureRef struct {
-	off uint32
-	n   uint32
-}
+const (
+	// closureAllocHint is the per-closure reservation passed to the closure
+	// arena. A single transitive closure never exceeds this, so the arena always
+	// hands back a region large enough to build the closure into without
+	// overflow. Derived from the measured sg5 maximum closure size (3935) with a
+	// ~2x margin.
+	closureAllocHint = 1 << 13 // 8192
+
+	// closureArenaInitial is the first chunk size; the arena grows chunks by
+	// 1.5x from there without bound.
+	closureArenaInitial = closureAllocHint
+)
 
 func (s *idSet) reset(size uint32) {
 	if uint32(len(s.gen)) < size {
@@ -336,7 +348,8 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 131072),
 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
 		onWarn:               onWarn,
-		subgraphChunks:       make([][]VFS, 0, 256),
+		subgraphClosures:     make([][]VFS, 0, 256),
+		closureArena:         newBumpAllocator[VFS](closureArenaInitial),
 		subgraphCache:        make(map[VFS]closureRef, 65536),
 		childrenCache:        make(map[VFS][]VFS, 65536),
 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
@@ -762,31 +775,7 @@ func (sc *scanCtx) closureOf(abs VFS) []VFS {
 }
 
 func (s *IncludeScanner) closureWindow(ref closureRef) []VFS {
-	o := ref.off % closureChunkLen
-
-	return s.subgraphChunks[ref.off/closureChunkLen][o : o+ref.n]
-}
-
-func (s *IncludeScanner) appendClosure(buf []VFS) closureRef {
-	n := uint32(len(buf))
-	o := s.subgraphLen % closureChunkLen
-
-	if o+n > closureChunkLen {
-		s.subgraphLen += closureChunkLen - o
-		o = 0
-	}
-
-	ci := s.subgraphLen / closureChunkLen
-
-	for uint32(len(s.subgraphChunks)) <= ci {
-		s.subgraphChunks = append(s.subgraphChunks, make([]VFS, closureChunkLen))
-	}
-
-	copy(s.subgraphChunks[ci][o:], buf)
-	ref := closureRef{off: s.subgraphLen, n: n}
-	s.subgraphLen += n
-
-	return ref
+	return s.subgraphClosures[ref]
 }
 
 func (sc *scanCtx) strongconnect(v VFS) {
@@ -829,32 +818,41 @@ func (sc *scanCtx) strongconnect(v VFS) {
 	members := s.tjStack[sccStart:]
 
 	s.tjClosure.reset(vfsBound())
-	buf := s.tjBuf[:0]
+
+	// Build the closure directly into an arena block (no scratch, no copy).
+	// alloc hands back a region of at least closureAllocHint; we write into it
+	// by index, then commit the count actually written and store that prefix —
+	// itself an address-stable sub-slice of the arena — into subgraphClosures.
+	block := s.closureArena.alloc(closureAllocHint)
+	k := 0
 
 	for _, u := range members {
 		if !s.tjClosure.has(u) {
 			s.tjClosure.add(u)
-			buf = append(buf, u)
+			block[k] = u
+			k++
 		}
 	}
 
 	for _, u := range members {
-		sc.forEachResolvedChildID(u, func(w VFS) {
-			if s.tj.onStackHas(w) {
+		sc.forEachResolvedChildID(u, func(ch VFS) {
+			if s.tj.onStackHas(ch) {
 				return
 			}
 
-			for _, id := range s.closureWindow(s.subgraphCache[w]) {
+			for _, id := range s.closureWindow(s.subgraphCache[ch]) {
 				if !s.tjClosure.has(id) {
 					s.tjClosure.add(id)
-					buf = append(buf, id)
+					block[k] = id
+					k++
 				}
 			}
 		})
 	}
 
-	ref := s.appendClosure(buf)
-	s.tjBuf = buf[:0]
+	s.closureArena.commit(k)
+	ref := closureRef(len(s.subgraphClosures))
+	s.subgraphClosures = append(s.subgraphClosures, block[:k])
 
 	s.subgraphMisses += uint64(len(members))
 
