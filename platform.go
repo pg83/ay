@@ -38,6 +38,12 @@ type Platform struct {
 	LinkPreludeExtra []string
 
 	ClangVer string
+
+	// ClangVerSTR / BuildTypeUpperSTR are the interned forms of the COMPILER_VERSION
+	// and BUILD_TYPE env values, computed once per platform so buildIfEnv binds them
+	// via SetStringID instead of re-interning the same constant on every module.
+	ClangVerSTR       STR
+	BuildTypeUpperSTR STR
 }
 
 type Toolchain struct {
@@ -97,26 +103,28 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsE
 	}
 
 	return &Platform{
-		OS:               os,
-		ISA:              isa,
-		Target:           MakePlatformID(os, isa),
-		Flags:            internFlags(flags),
-		Tags:             tags,
-		StatsFlags:       map[string]string{},
-		StatsExtraTags:   defaultStatsExtraTags(flags),
-		Tools:            toolchainFromFlags(flags),
-		PIC:              flags["PIC"] == "yes",
-		BuildType:        buildType,
-		BuildRelease:     buildRelease,
-		BuildSanitized:   buildSanitized,
-		Ragel6Optimized:  buildRelease && !buildSanitized,
-		Triple:           string(isa) + "-" + string(os) + "-gnu",
-		March:            marchFor(isa),
-		CFlags:           parseCompilerFlags(cflagsEnv),
-		CXXFlags:         parseCompilerFlags(cxxflagsEnv),
-		SystemLibs:       systemLibs,
-		LinkPreludeExtra: linkPreludeExtra,
-		ClangVer:         platformClangVersion(flags),
+		OS:                os,
+		ISA:               isa,
+		Target:            MakePlatformID(os, isa),
+		Flags:             internFlags(flags),
+		Tags:              tags,
+		StatsFlags:        map[string]string{},
+		StatsExtraTags:    defaultStatsExtraTags(flags),
+		Tools:             toolchainFromFlags(flags),
+		PIC:               flags["PIC"] == "yes",
+		BuildType:         buildType,
+		BuildRelease:      buildRelease,
+		BuildSanitized:    buildSanitized,
+		Ragel6Optimized:   buildRelease && !buildSanitized,
+		Triple:            string(isa) + "-" + string(os) + "-gnu",
+		March:             marchFor(isa),
+		CFlags:            parseCompilerFlags(cflagsEnv),
+		CXXFlags:          parseCompilerFlags(cxxflagsEnv),
+		SystemLibs:        systemLibs,
+		LinkPreludeExtra:  linkPreludeExtra,
+		ClangVer:          platformClangVersion(flags),
+		ClangVerSTR:       internString(platformClangVersion(flags)),
+		BuildTypeUpperSTR: internString(strings.ToUpper(buildType)),
 	}
 }
 

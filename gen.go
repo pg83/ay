@@ -640,7 +640,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	if d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" && instance.Language != LangPy {
 		cppProtoEnv := env.Clone()
-		cppProtoEnv.SetString(envMODULE_TAG, "CPP_PROTO")
+		cppProtoEnv.SetStringID(envMODULE_TAG, strCPPProto)
 
 		cppProtoEnv.SetBool(envGEN_PROTO, true)
 		d = collectModule(ctx.parsers, &ctx.deduper, instance.Path, instance.Kind, mf.Stmts, cppProtoEnv)
