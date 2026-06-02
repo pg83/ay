@@ -6,6 +6,14 @@ import (
 	"testing"
 )
 
+// scanClosure returns the transitive include closure of cfg.SourceRel with the
+// root file stripped (element 0) — the shape tests previously got from the
+// removed IncludeScanner.WalkClosure helper, now expressed directly over
+// closureOf.
+func scanClosure(scanner *IncludeScanner, cfg ScanContext) []VFS {
+	return scanner.NewScanCtx(cfg).closureOf(Source(cfg.SourceRel))[1:]
+}
+
 func TestStripComments_BlockCommentInclude(t *testing.T) {
 	in := []byte(`#include <real.h>
 /*
@@ -287,7 +295,7 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanner.WalkClosure(ScanContext{
+	closure := scanClosure(scanner, ScanContext{
 		SourceRel: "yasm/source.cpp",
 	})
 
@@ -335,7 +343,7 @@ func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanner.WalkClosure(ScanContext{
+	closure := scanClosure(scanner, ScanContext{
 		SourceRel:  "src/source.cpp",
 		OwnAddIncl: VFSesFromStrings([]string{"libcxxabi/include"}),
 	})
@@ -385,7 +393,7 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanner.WalkClosure(ScanContext{
+	closure := scanClosure(scanner, ScanContext{
 		SourceRel:  "libcxxrt/source.cc",
 		OwnAddIncl: VFSesFromStrings([]string{"libcxxrt"}),
 	})
@@ -429,7 +437,7 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanner.WalkClosure(ScanContext{
+	closure := scanClosure(scanner, ScanContext{
 		SourceRel: "src/source.cpp",
 	})
 
@@ -466,7 +474,7 @@ func TestScanner_AngleSysinclUnaffected(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanner.WalkClosure(ScanContext{
+	closure := scanClosure(scanner, ScanContext{
 		SourceRel:  "libcxxrt/source.cpp",
 		OwnAddIncl: VFSesFromStrings([]string{"libcxxrt"}),
 	})
@@ -749,7 +757,7 @@ machine Sub;
 		OwnAddIncl: VFSesFromStrings([]string{"stl"}),
 	})
 
-	closure := sc.WalkClosure(Intern("$(S)/pkg/main.rl6"))
+	closure := sc.closureOf(Intern("$(S)/pkg/main.rl6"))
 
 	closureSet := make(map[string]bool, len(closure))
 	for _, v := range closure {
@@ -977,7 +985,7 @@ func TestScanner_CythonNestedPxdUsesPy2StringSibling(t *testing.T) {
 		"contrib/tools/cython_py2/Cython/Includes/libcpp/string.pxd":  "from libc.string cimport memcpy\n",
 		"contrib/tools/cython_py2/Cython/Includes/libc/string.pxd":    "# py2 libc string\n",
 	}), SysInclSet{})
-	closure := scanner.WalkClosure(ScanContext{
+	closure := scanClosure(scanner, ScanContext{
 		SourceRel: "pkg/mod.pyx",
 		OwnAddIncl: []VFS{
 			Intern("$(S)/"),
@@ -1002,7 +1010,7 @@ func TestScanner_CythonPyxDirectStdlibStaysPy3WhileNestedPxdAddsPy2(t *testing.T
 		"contrib/tools/cython_py2/Cython/Includes/libcpp/pair.pxd":    "from libcpp.utility cimport move\n",
 		"contrib/tools/cython_py2/Cython/Includes/libcpp/utility.pxd": "# py2 utility\n",
 	}), SysInclSet{})
-	closure := scanner.WalkClosure(ScanContext{
+	closure := scanClosure(scanner, ScanContext{
 		SourceRel: "pkg/mod.pyx",
 		OwnAddIncl: []VFS{
 			Intern("$(S)/"),
@@ -1026,7 +1034,7 @@ func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
 		"contrib/tools/cython/Cython/Includes/libc/stdint.pxd":         "# py3 stdint\n",
 		"contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd":     "# py2 stdint\n",
 	}), SysInclSet{})
-	closure := scanner.WalkClosure(ScanContext{
+	closure := scanClosure(scanner, ScanContext{
 		SourceRel: "pkg/mod.pyx",
 		OwnAddIncl: []VFS{
 			Intern("$(S)/"),

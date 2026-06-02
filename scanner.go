@@ -97,12 +97,6 @@ type IncludeScanner struct {
 
 	visitedIDPool sync.Pool
 
-	// walkOutArena backs the retained per-query WalkClosure outputs. It is
-	// SEPARATE from closureArena: WalkClosure's DFS populates the closure cache
-	// via closureArena as it walks, so the output cannot share that arena's bump
-	// cursor (the nested cache allocs would overwrite the in-progress output).
-	walkOutArena *bumpAllocator[VFS]
-
 	seenPool sync.Pool
 
 	onWarn func(Warn)
@@ -163,12 +157,6 @@ const (
 	// closureArenaInitial is the first chunk size; the arena grows chunks by
 	// 1.5x from there without bound.
 	closureArenaInitial = closureAllocHint
-
-	// walkClosureOutputHint is the per-call reservation for a WalkClosure output
-	// (the full per-source transitive closure, written directly into walkOutArena
-	// during the DFS). Derived from the measured sg5 maximum (4014) with a ~2x
-	// margin; an output exceeding it simply reallocates off-arena.
-	walkClosureOutputHint = 1 << 13 // 8192
 )
 
 func (s *idSet) reset(size uint32) {
@@ -361,7 +349,6 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		onWarn:               onWarn,
 		subgraphClosures:     make([][]VFS, 0, 256),
 		closureArena:         newBumpAllocator[VFS](closureArenaInitial),
-		walkOutArena:         newBumpAllocator[VFS](walkClosureOutputHint),
 		subgraphCache:        make(map[VFS]closureRef, 65536),
 		childrenCache:        make(map[VFS][]VFS, 65536),
 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
@@ -492,57 +479,6 @@ func hashScanContext(ctx *ScanContext) uint64 {
 	mixSlice(ctx.BaseSearchPaths)
 
 	return h
-}
-
-func (s *IncludeScanner) WalkClosure(cfg ScanContext) []VFS {
-	return s.NewScanCtx(cfg).WalkSource(cfg.SourceRel)
-}
-
-func (sc *scanCtx) WalkSource(sourceRel string) []VFS {
-	return sc.WalkClosure(Source(sourceRel))[1:]
-}
-
-func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
-	s := sc.scanner
-	s.walkClosureCalls++
-
-	if vfsPath.IsSource() {
-		sc.cfg.SourceRel = vfsPath.Rel()
-	}
-
-	visited := s.visitedIDPool.Get().(*idSet)
-	visited.reset(vfsBound())
-
-	// Build the retained closure output directly into walkOutArena: order's
-	// backing IS the arena block (cap = region length), so writes land in the
-	// arena with no copy. dfsID emits the root as order[0] (consumers strip it
-	// with [1:]). Cap the result at its exact length so a downstream append
-	// reallocates rather than writing into the arena's uncommitted tail.
-	region := s.walkOutArena.alloc(walkClosureOutputHint)
-	order := region[:0]
-
-	sc.dfsID(vfsPath, visited, &order)
-
-	n := len(order)
-	s.visitedIDPool.Put(visited)
-
-	if scannerStatsEnabled {
-		s.statsCallCount++
-
-		if s.statsCallCount%500 == 0 {
-			fmt.Fprintf(os.Stderr, "scanner-stats[%d]: subgraph hits=%d misses=%d tainted=%d cache=%d\n", s.statsCallCount, s.subgraphHits, s.subgraphMisses, s.subgraphTainted, len(s.subgraphCache))
-		}
-	}
-
-	if n > len(region) {
-		// Output exceeded the hint and reallocated to its own backing; leave the
-		// arena block uncommitted (the next alloc reuses it).
-		return order
-	}
-
-	s.walkOutArena.commit(n)
-
-	return region[:n:n]
 }
 
 func (s *IncludeScanner) emittedRel(abs string) string {
@@ -769,21 +705,37 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 func (sc *scanCtx) closureOf(abs VFS) []VFS {
 	s := sc.scanner
 
-	if ref, ok := s.subgraphCache[abs]; ok {
-		s.subgraphHits++
+	ref, ok := s.subgraphCache[abs]
 
-		return s.closureWindow(ref)
+	if ok {
+		s.subgraphHits++
+	} else {
+		s.tj.reset(vfsBound())
+		s.tjStack = s.tjStack[:0]
+		s.tjNext = 0
+
+		sc.strongconnect(abs)
+
+		ref = s.subgraphCache[abs]
 	}
 
-	s.tj.reset(vfsBound())
-	s.tjStack = s.tjStack[:0]
-	s.tjNext = 0
+	w := s.subgraphClosures[ref]
 
-	sc.strongconnect(abs)
+	// Lead the closure with the queried node. On a miss abs is the SCC root, so
+	// it is already first; the swap only fires on a HIT for a non-root member of
+	// a multi-node SCC (a real include cycle) — rare. Acyclic and miss paths hit
+	// w[0]==abs and skip the loop entirely.
+	if len(w) > 1 && w[0] != abs {
+		for i := 1; i < len(w); i++ {
+			if w[i] == abs {
+				w[0], w[i] = w[i], w[0]
 
-	ref := s.subgraphCache[abs]
+				break
+			}
+		}
+	}
 
-	return s.closureWindow(ref)
+	return w
 }
 
 func (s *IncludeScanner) closureWindow(ref closureRef) []VFS {
@@ -864,7 +816,7 @@ func (sc *scanCtx) strongconnect(v VFS) {
 
 	s.closureArena.commit(k)
 	ref := closureRef(len(s.subgraphClosures))
-	s.subgraphClosures = append(s.subgraphClosures, block[:k])
+	s.subgraphClosures = append(s.subgraphClosures, block[:k:k])
 
 	s.subgraphMisses += uint64(len(members))
 
