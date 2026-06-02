@@ -81,25 +81,6 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	return out
 }
 
-func appendVFSUnique(dst []VFS, src []VFS) []VFS {
-	seen := make(map[VFS]struct{}, len(dst)+len(src))
-
-	for _, v := range dst {
-		seen[v] = struct{}{}
-	}
-
-	for _, v := range src {
-		if _, dup := seen[v]; dup {
-			continue
-		}
-
-		seen[v] = struct{}{}
-		dst = append(dst, v)
-	}
-
-	return dst
-}
-
 func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []VFS, scripts scriptDeps) []VFS {
 	out := make([]VFS, 0, 2+len(sources)+len(closure))
 	// gen_join_srcs.py + its import closure (process_command_files.py).

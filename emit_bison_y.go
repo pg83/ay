@@ -204,7 +204,7 @@ func bisonCCSourceInputs(ctx *genCtx, instance ModuleInstance, closure []VFS) []
 			continue
 		}
 
-		extras = appendVFSUnique(extras, info.SourceInputs)
+		extras = ctx.deduper.dedupVFS(extras, info.SourceInputs)
 	}
 
 	return extras
