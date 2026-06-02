@@ -96,7 +96,12 @@ type IncludeScanner struct {
 	tjClosure idSet
 
 	visitedIDPool sync.Pool
-	orderIDPool   sync.Pool
+
+	// walkOutArena backs the retained per-query WalkClosure outputs. It is
+	// SEPARATE from closureArena: WalkClosure's DFS populates the closure cache
+	// via closureArena as it walks, so the output cannot share that arena's bump
+	// cursor (the nested cache allocs would overwrite the in-progress output).
+	walkOutArena *bumpAllocator[VFS]
 
 	seenPool sync.Pool
 
@@ -158,6 +163,12 @@ const (
 	// closureArenaInitial is the first chunk size; the arena grows chunks by
 	// 1.5x from there without bound.
 	closureArenaInitial = closureAllocHint
+
+	// walkClosureOutputHint is the per-call reservation for a WalkClosure output
+	// (the full per-source transitive closure, written directly into walkOutArena
+	// during the DFS). Derived from the measured sg5 maximum (4014) with a ~2x
+	// margin; an output exceeding it simply reallocates off-arena.
+	walkClosureOutputHint = 1 << 13 // 8192
 )
 
 func (s *idSet) reset(size uint32) {
@@ -350,6 +361,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		onWarn:               onWarn,
 		subgraphClosures:     make([][]VFS, 0, 256),
 		closureArena:         newBumpAllocator[VFS](closureArenaInitial),
+		walkOutArena:         newBumpAllocator[VFS](walkClosureOutputHint),
 		subgraphCache:        make(map[VFS]closureRef, 65536),
 		childrenCache:        make(map[VFS][]VFS, 65536),
 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
@@ -390,12 +402,6 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 
 	s.visitedIDPool.New = func() any {
 		return &idSet{}
-	}
-
-	s.orderIDPool.New = func() any {
-		o := make([]VFS, 0, 64)
-
-		return &o
 	}
 
 	s.seenPool.New = func() any {
@@ -506,28 +512,19 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 
 	visited := s.visitedIDPool.Get().(*idSet)
 	visited.reset(vfsBound())
-	orderP := s.orderIDPool.Get().(*[]VFS)
 
-	order := (*orderP)[:0]
-	root := vfsPath
+	// Build the retained closure output directly into walkOutArena: order's
+	// backing IS the arena block (cap = region length), so writes land in the
+	// arena with no copy. dfsID emits the root as order[0] (consumers strip it
+	// with [1:]). Cap the result at its exact length so a downstream append
+	// reallocates rather than writing into the arena's uncommitted tail.
+	region := s.walkOutArena.alloc(walkClosureOutputHint)
+	order := region[:0]
 
-	sc.dfsID(root, visited, &order)
+	sc.dfsID(vfsPath, visited, &order)
 
-	out := make([]VFS, 0, len(order))
-	out = append(out, root)
-
-	for _, abs := range order {
-		if abs == root {
-			continue
-		}
-
-		out = append(out, abs)
-	}
-
-	*orderP = order[:0]
-
+	n := len(order)
 	s.visitedIDPool.Put(visited)
-	s.orderIDPool.Put(orderP)
 
 	if scannerStatsEnabled {
 		s.statsCallCount++
@@ -537,7 +534,15 @@ func (sc *scanCtx) WalkClosure(vfsPath VFS) []VFS {
 		}
 	}
 
-	return out
+	if n > len(region) {
+		// Output exceeded the hint and reallocated to its own backing; leave the
+		// arena block uncommitted (the next alloc reuses it).
+		return order
+	}
+
+	s.walkOutArena.commit(n)
+
+	return region[:n:n]
 }
 
 func (s *IncludeScanner) emittedRel(abs string) string {
@@ -667,6 +672,13 @@ func (sc *scanCtx) dfsID(abs VFS, visited *idSet, order *[]VFS) {
 
 		return
 	}
+
+	// Emit the queried node first: closureOf returns the SCC-shared closure
+	// (strongconnect maps every cycle member to the same slice), whose first
+	// element is the SCC representative, not necessarily abs. A walk root must
+	// lead its own closure — consumers identify it as element 0 and strip it.
+	visited.add(abs)
+	*order = append(*order, abs)
 
 	for _, id := range sc.closureOf(abs) {
 		if visited.has(id) {
