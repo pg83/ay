@@ -47,6 +47,11 @@ type FS interface {
 
 func dirKey(dir string) VFS { return Source(cleanRel(dir)) }
 
+// srcRootVFS is the source root ("$(S)/"), i.e. what dirKey("") returns —
+// hoisted so the many IsFile(srcRootVFS, rel) call sites do not re-intern the
+// constant "$(S)/" on every call (~118k/run on sg5).
+var srcRootVFS = Source("")
+
 type osFS struct {
 	sourceRoot string
 	rootSlash  string

@@ -340,7 +340,7 @@ func LoadSysInclSetFor(sourceRoot, arch string, onWarn func(Warn)) SysInclSet {
 }
 
 func LoadSysInclSetForFS(fs FS, arch string, onWarn func(Warn)) SysInclSet {
-	if !fs.IsDir(dirKey(""), "build/sysincl") {
+	if !fs.IsDir(srcRootVFS, "build/sysincl") {
 		return nil
 	}
 

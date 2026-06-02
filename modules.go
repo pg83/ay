@@ -360,7 +360,7 @@ func sourceInputVFS(fs FS, modulePath string, path string) *VFS {
 			return vfsPtr(Source(moduleRel))
 		}
 
-		if fs.IsFile(dirKey(""), clean) {
+		if fs.IsFile(srcRootVFS, clean) {
 			return vfsPtr(Source(clean))
 		}
 	}

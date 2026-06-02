@@ -416,7 +416,7 @@ func runProgramInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, rel
 		}
 	}
 
-	if ctx.fs.IsFile(dirKey(""), rel) {
+	if ctx.fs.IsFile(srcRootVFS, rel) {
 		return Source(rel)
 	}
 

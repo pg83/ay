@@ -313,7 +313,7 @@ func readYaConfSections(fs FS, wantSection string, rels ...string) map[string]st
 	out := map[string]string{}
 
 	for _, rel := range rels {
-		if !fs.IsFile(dirKey(""), rel) {
+		if !fs.IsFile(srcRootVFS, rel) {
 			continue
 		}
 

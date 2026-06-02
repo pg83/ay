@@ -219,7 +219,7 @@ func (pm *includeParserManager) indexAddincl(a VFS) {
 }
 
 func (pm *includeParserManager) fileExistsByRel(rel string) bool {
-	return pm.fs.IsFile(dirKey(""), rel)
+	return pm.fs.IsFile(srcRootVFS, rel)
 }
 
 func (pm *includeParserManager) perfStats() parserPerfStats {

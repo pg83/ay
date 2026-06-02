@@ -269,7 +269,7 @@ func resolveProtoImportPath(fs FS, importedRel string, peerProtoAddIncl []VFS) s
 	rootCands = append(rootCands, filepath.ToSlash(filepath.Clean(pbRuntimeBase+clean)))
 
 	for _, cand := range rootCands {
-		if fs.IsFile(dirKey(""), cand) {
+		if fs.IsFile(srcRootVFS, cand) {
 			return cand
 		}
 	}
