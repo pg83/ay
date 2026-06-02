@@ -9,8 +9,13 @@ type Platform struct {
 	OS     OS
 	ISA    ISA
 	Target PlatformID
-	Flags  map[string]string
-	Tags   []string
+	// Flags is the interned IF/config flag set: keys are ENV, values STR. The raw
+	// CLI/conf string map is interned once here (internFlags) at platform
+	// construction — the single string boundary — so nothing downstream keys env
+	// by string. Toolchain/build-config derivations inside NewPlatform read the
+	// raw input map; everything past the platform uses ENV/STR.
+	Flags map[ENV]STR
+	Tags  []string
 
 	StatsFlags     map[string]string
 	StatsExtraTags []string
@@ -43,6 +48,18 @@ type Toolchain struct {
 	AR      string
 	Strip   string
 	LLD     string
+}
+
+// internFlags interns the raw CLI/conf flag map into the ENV/STR form stored on
+// Platform.Flags. The one place env-flag strings are interned.
+func internFlags(flags map[string]string) map[ENV]STR {
+	out := make(map[ENV]STR, len(flags))
+
+	for k, v := range flags {
+		out[internEnv(k)] = internString(v)
+	}
+
+	return out
 }
 
 func toolchainFromFlags(flags map[string]string) Toolchain {
@@ -83,7 +100,7 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsE
 		OS:               os,
 		ISA:              isa,
 		Target:           MakePlatformID(os, isa),
-		Flags:            flags,
+		Flags:            internFlags(flags),
 		Tags:             tags,
 		StatsFlags:       map[string]string{},
 		StatsExtraTags:   defaultStatsExtraTags(flags),

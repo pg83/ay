@@ -373,7 +373,7 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 		linkPrelude = append(linkPrelude, "-Wl,--version-script=$(S)/"+*exportsScript)
 	}
 
-	if p != nil && !p.PIC && p.Flags["SANDBOXING"] == "yes" {
+	if p != nil && !p.PIC && p.Flags[envSANDBOXING] == strYes {
 		linkPrelude = append(linkPrelude, "-Wl,--compress-debug-sections=zstd")
 	}
 

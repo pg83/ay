@@ -305,7 +305,7 @@ func testEnv(_ *Platform, testName string) map[string]string {
 }
 
 func sandboxingNodeTags(p *Platform) []string {
-	if p == nil || p.Flags["SANDBOXING"] != "yes" {
+	if p == nil || p.Flags[envSANDBOXING] != strYes {
 		return nil
 	}
 
@@ -320,7 +320,7 @@ func sandboxingNodeTags(p *Platform) []string {
 func targetPlatformDescriptor(p *Platform) string {
 	parts := []string{string(p.Target), p.BuildType}
 
-	if p != nil && p.Flags["SANDBOXING"] == "yes" {
+	if p != nil && p.Flags[envSANDBOXING] == strYes {
 		parts = append(parts, "FAKEID=sandboxing", "SANDBOXING=yes")
 	}
 

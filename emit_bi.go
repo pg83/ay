@@ -93,7 +93,7 @@ func EmitBI(
 func biFlagsForInstance(targetP *Platform) []string {
 	bundle := compileFlagBundleFor(targetP)
 	flags := make([]string, 0, 100)
-	cflagPrefix := append(muslCFlags(targetP.Flags["MUSL"] == "yes"), sseBaseCFlags(targetP.ISA == ISAX8664)...)
+	cflagPrefix := append(muslCFlags(targetP.Flags[envMUSL] == strYes), sseBaseCFlags(targetP.ISA == ISAX8664)...)
 	flags = appendCompileFlagPipeline(flags, bundle, warningFlags, bundle.Defines, targetP.CFlags, cflagPrefix)
 	flags = append(flags, cxxStandardFlag)
 	flags = append(flags,

@@ -65,9 +65,10 @@ type SrcsStmt struct {
 }
 
 type SetStmt struct {
-	Name  string
-	Value string
-	Line  int
+	Name    string
+	NameEnv ENV // interned Name, set at parse so gen never re-interns
+	Value   string
+	Line    int
 }
 
 type EndStmt struct {
@@ -154,6 +155,7 @@ type GenerateEnumSerializationStmt struct {
 
 type DefaultVarStmt struct {
 	VarName string
+	NameEnv ENV // interned VarName, set at parse so gen never re-interns
 	Value   string
 	Line    int
 }
@@ -861,7 +863,7 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 			value = strings.Join(args[1:], " ")
 		}
 
-		return &SetStmt{Name: args[0], Value: value, Line: nameTok.line}
+		return &SetStmt{Name: args[0], NameEnv: internEnv(args[0]), Value: value, Line: nameTok.line}
 	case "END":
 		return &EndStmt{Line: nameTok.line}
 	case "JOIN_SRCS":
@@ -924,7 +926,7 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 			value = args[1]
 		}
 
-		return &DefaultVarStmt{VarName: varName, Value: value, Line: nameTok.line}
+		return &DefaultVarStmt{VarName: varName, NameEnv: internEnv(varName), Value: value, Line: nameTok.line}
 	case "CONFIGURE_FILE":
 
 		if len(args) != 2 {

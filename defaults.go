@@ -217,8 +217,8 @@ func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, d *module
 
 func useArcadiaCompilerRuntime(ctx *genCtx, instance ModuleInstance) bool {
 	if instance.Platform != nil {
-		if v := instance.Platform.Flags["USE_ARCADIA_COMPILER_RUNTIME"]; v != "" {
-			return v != "no"
+		if v := instance.Platform.Flags[envUSE_ARCADIA_COMPILER_RUNTIME]; v != 0 {
+			return v != strNo
 		}
 	}
 
@@ -226,8 +226,8 @@ func useArcadiaCompilerRuntime(ctx *genCtx, instance ModuleInstance) bool {
 		return false
 	}
 
-	if v := ctx.target.Flags["USE_ARCADIA_COMPILER_RUNTIME"]; v != "" {
-		return v != "no"
+	if v := ctx.target.Flags[envUSE_ARCADIA_COMPILER_RUNTIME]; v != 0 {
+		return v != strNo
 	}
 
 	return true

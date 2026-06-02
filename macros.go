@@ -246,6 +246,13 @@ func (e Environment) SetFromString(id ENV, v string) {
 	}
 }
 
+// SetFromStringID is SetFromString for an already-interned value (Platform.Flags
+// iteration): no string compare, just map the STR to the stored slot, folding the
+// yes/no STRs to themselves (they already are strYes/strNo).
+func (e Environment) SetFromStringID(id ENV, v STR) {
+	e.setStrID(id, v)
+}
+
 func (e Environment) HasBinding(id ENV) bool {
 	k, _ := e.s.lookup(id)
 
