@@ -64,7 +64,7 @@ func EmitJVCPG4(
 		DepRefs: []NodeRef{jvRef},
 	}
 
-	return emit.Emit(bindNodePlatform(node, instance.Platform))
+	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
 }
 
 func EmitCP(instance ModuleInstance, src VFS, dst VFS, scripts scriptDeps, emit Emitter) NodeRef {
@@ -129,5 +129,5 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		DepRefs: depRefs,
 	}
 
-	return emit.Emit(bindNodePlatform(node, instance.Platform))
+	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
 }

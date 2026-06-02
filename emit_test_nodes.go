@@ -53,7 +53,7 @@ func emitTestRunNodes(ctxEmit Emitter, runEmit Emitter, p *Platform, info testSu
 func buildTestCtxNode(p *Platform) *Node {
 	cacheTrue := true
 
-	return bindNodePlatform(&Node{
+	return bindNodePlatform(withResources(&Node{
 		Cache: &cacheTrue,
 		Cmds: []Cmd{{
 			CmdArgs: []string{
@@ -78,7 +78,7 @@ func buildTestCtxNode(p *Platform) *Node {
 		},
 		Tags:             sandboxingNodeTags(p),
 		TargetProperties: map[string]string{},
-	}, p)
+	}, resourcePatternYMakePython3), p)
 }
 
 func buildUnittestNode(p *Platform, info testSuiteInfo) *Node {

@@ -217,7 +217,7 @@ func emitResourceObjcopy(
 			node.DepRefs = append(node.DepRefs, ref)
 		}
 
-		r := ctx.emit.Emit(bindNodePlatform(node, instance.Platform))
+		r := ctx.emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool), instance.Platform))
 		out.Refs = append(out.Refs, r)
 		out.Outputs = append(out.Outputs, outputObj)
 		cur = acc{}
@@ -395,7 +395,7 @@ func emitKvOnlyObjcopyNode(
 		node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 	}
 
-	ref := ctx.emit.Emit(bindNodePlatform(node, instance.Platform))
+	ref := ctx.emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool), instance.Platform))
 	return &objcopyEmit{Ref: ref, Out: outputObj}
 }
 
@@ -505,7 +505,7 @@ func emitYaConfJSONObjcopy(
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
 
-		out = append(out, &objcopyEmit{Ref: ctx.emit.Emit(bindNodePlatform(node, instance.Platform)), Out: outputObj})
+		out = append(out, &objcopyEmit{Ref: ctx.emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool), instance.Platform)), Out: outputObj})
 	}
 
 	return out
@@ -752,7 +752,7 @@ func emitPySrcObjcopy(
 				node.DepRefs = append(node.DepRefs, extras...)
 			}
 
-			r := ctx.emit.Emit(bindNodePlatform(node, instance.Platform))
+			r := ctx.emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool), instance.Platform))
 			res.Refs = append(res.Refs, r)
 			res.Outputs = append(res.Outputs, outputObj)
 		}

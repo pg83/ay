@@ -241,7 +241,7 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		},
 	}
 
-	return emit.Emit(bindNodePlatform(node, instance.Platform)), headerVFS, cppVFS, bfbsVFS
+	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform)), headerVFS, cppVFS, bfbsVFS
 }
 
 func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string) flatcEmission {

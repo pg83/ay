@@ -41,5 +41,5 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		},
 	}
 
-	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS
+	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternClangTool), instance.Platform)), outVFS
 }

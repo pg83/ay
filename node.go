@@ -27,6 +27,21 @@ type Node struct {
 
 	DepRefs        []NodeRef `json:"-"`
 	ForeignDepRefs []NodeRef `json:"-"`
+
+	// usesResources lists the fetched-resource patterns (bare names: CLANG,
+	// YMAKE_PYTHON3, LLD_ROOT, …) this node's command references. Builders declare
+	// it at the point they splice a $(PATTERN) tool path into cmd_args; the
+	// resource emitter turns each into a dependency on that resource's fetch node.
+	usesResources []string `json:"-"`
+}
+
+// withResources declares the fetched-resource patterns a node's command uses, at
+// the site that builds the command. The resource emitter turns each into a
+// dependency on that resource's fetch node (no command scanning).
+func withResources(n *Node, patterns ...string) *Node {
+	n.usesResources = append(n.usesResources, patterns...)
+
+	return n
 }
 
 func nodeHasHostTag(tags []string) bool {

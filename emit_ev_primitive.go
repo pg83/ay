@@ -232,5 +232,5 @@ func EmitEV(
 		ForeignDepRefs: foreignDepRefs,
 	}
 
-	return emit.Emit(bindNodePlatform(node, instance.Platform))
+	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
 }

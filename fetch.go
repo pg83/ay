@@ -26,7 +26,8 @@ type resourceFetch struct {
 }
 
 type resourceFetchPlan struct {
-	items []resourceFetch
+	items     []resourceFetch
+	byPattern map[string]int // bare pattern -> index into items
 }
 
 type resourceMappingConf struct {
@@ -62,6 +63,12 @@ func newResourceFetchPlan(_ string, conf *graphConf, host *Platform) *resourceFe
 	sort.Slice(plan.items, func(i, j int) bool {
 		return plan.items[i].Pattern < plan.items[j].Pattern
 	})
+
+	plan.byPattern = make(map[string]int, len(plan.items))
+
+	for i, it := range plan.items {
+		plan.byPattern[it.Pattern] = i
+	}
 
 	return plan
 }
@@ -178,6 +185,14 @@ func resourceGraphEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan
 		return inner
 	}
 
+	if plan.byPattern == nil {
+		plan.byPattern = make(map[string]int, len(plan.items))
+
+		for i, it := range plan.items {
+			plan.byPattern[it.Pattern] = i
+		}
+	}
+
 	return newResourceAwareEmitter(host, inner, plan, scripts)
 }
 
@@ -194,49 +209,25 @@ func (e *resourceAwareEmitter) OnReady(r NodeRef) <-chan struct{} {
 	return e.inner.OnReady(r)
 }
 
+// attachResourceDeps turns each resource pattern the node declared (at the
+// site that spliced $(PATTERN) into its command) into a dependency on that
+// resource's fetch node — emitting the fetch node once per pattern. No command
+// scanning: usesResources is the authoritative, builder-declared set.
 func (e *resourceAwareEmitter) attachResourceDeps(n *Node) {
-	for i, item := range e.plan.items {
-		if !nodeUsesResourcePattern(n, item.Pattern) {
-			continue
+	for _, pat := range n.usesResources {
+		i, ok := e.plan.byPattern[pat]
+
+		if !ok {
+			continue // resource not in this run's fetch plan (e.g. unselected host)
 		}
 
 		if !e.seen[i] {
-			e.refs[i] = e.inner.Emit(fetchNode(e.host, item, e.scripts))
+			e.refs[i] = e.inner.Emit(fetchNode(e.host, e.plan.items[i], e.scripts))
 			e.seen[i] = true
 		}
 
 		n.DepRefs = append(n.DepRefs, e.refs[i])
 	}
-}
-
-func nodeUsesResourcePattern(n *Node, pattern string) bool {
-	token := "$(" + pattern + ")"
-
-	for _, cmd := range n.Cmds {
-		if strings.Contains(cmd.Cwd, token) || strings.Contains(cmd.Stdout, token) {
-			return true
-		}
-
-		for _, arg := range cmd.CmdArgs {
-			if strings.Contains(arg, token) {
-				return true
-			}
-		}
-
-		for _, v := range cmd.Env {
-			if strings.Contains(v, token) {
-				return true
-			}
-		}
-	}
-
-	for _, v := range n.Env {
-		if strings.Contains(v, token) {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (p *resourceFetchPlan) mountMap() map[string]string {

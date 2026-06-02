@@ -56,7 +56,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []string, inputs []VFS, outputs
 		DepRefs: depRefs,
 	}
 
-	return emit.Emit(bindNodePlatform(node, instance.Platform))
+	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternJDK17), instance.Platform))
 }
 
 func EmitJV(
