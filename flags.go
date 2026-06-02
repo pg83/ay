@@ -219,7 +219,7 @@ type compileFlagBundle struct {
 }
 
 func withSandboxingDebugCompression(base []string, p *Platform) []string {
-	if p == nil || p.PIC || p.Flags["SANDBOXING"] != "yes" {
+	if p == nil || p.PIC || p.Flags[envSANDBOXING] != strYes {
 		return base
 	}
 

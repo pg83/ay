@@ -769,7 +769,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 		case *SetStmt:
 
 			value := expandScalarVarRef(v.Value, env)
-			env.SetFromString(internEnv(v.Name), value)
+			env.SetFromString(v.NameEnv, value)
 
 			if d.setVars == nil {
 				d.setVars = map[string]string{}
@@ -840,7 +840,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				d.defaultVarOrder = append(d.defaultVarOrder, v.VarName)
 			}
 
-			env.SetDefaultString(internEnv(v.VarName), expandScalarVarRef(v.Value, env))
+			env.SetDefaultString(v.NameEnv, expandScalarVarRef(v.Value, env))
 		case *ConfigureFileStmt:
 			expanded := *v
 			expanded.Src = expandStmtToken(v.Src, env)
@@ -2090,7 +2090,7 @@ func buildIfEnv(instance ModuleInstance) Environment {
 	env := DefaultIfEnv.Clone()
 
 	for k, v := range instance.Platform.Flags {
-		env.SetFromString(internEnv(k), v)
+		env.SetFromStringID(k, v)
 	}
 
 	if env.Bool(envOPENSOURCE) || env.String(envOPENSOURCE_PROJECT) == "ymake" || env.String(envOPENSOURCE_PROJECT) == "ya" {
@@ -2109,8 +2109,8 @@ func buildIfEnv(instance ModuleInstance) Environment {
 		env.SetBool(envARCH_ARM64, true)
 	}
 
-	useRuntime := instance.Platform.Flags["USE_ARCADIA_COMPILER_RUNTIME"]
-	env.SetBool(envUSE_ARCADIA_COMPILER_RUNTIME, useRuntime != "no")
+	useRuntime := instance.Platform.Flags[envUSE_ARCADIA_COMPILER_RUNTIME]
+	env.SetBool(envUSE_ARCADIA_COMPILER_RUNTIME, useRuntime != strNo)
 	env.SetString(envCOMPILER_VERSION, instance.Platform.ClangVer)
 	env.SetString(envBUILD_TYPE, strings.ToUpper(instance.Platform.BuildType))
 

@@ -45,6 +45,7 @@ var (
 	envPY2                          = internEnv("PY2")
 	envPY3_PROTO                    = internEnv("PY3_PROTO")
 	envPYTHON3                      = internEnv("PYTHON3")
+	envSANDBOXING                   = internEnv("SANDBOXING")
 	envSANITIZER_TYPE               = internEnv("SANITIZER_TYPE")
 	envSRCDIR_RAW                   = internEnv("SRCDIR_RAW")
 	envSSE41_CFLAGS                 = internEnv("SSE41_CFLAGS")
