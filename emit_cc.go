@@ -225,7 +225,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 }
 
 func sourceExistsLocally(fs FS, modulePath, srcRel string) bool {
-	return fs.IsFile(modulePath + "/" + srcRel)
+	return fs.IsFile(dirKey(modulePath), srcRel)
 }
 
 func composeSrcDirOutputRel(instancePath, srcDir, srcRel string) string {

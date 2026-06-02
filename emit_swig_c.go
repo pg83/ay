@@ -227,7 +227,7 @@ func swigSearchRoots(fs FS) []string {
 	}
 
 	roots := []string{swigLibRoot}
-	entries := fs.Listdir(swigLibRoot)
+	entries := fs.Listdir(dirKey(swigLibRoot))
 
 	if len(entries) == 0 {
 		return roots
@@ -258,7 +258,7 @@ func swigResolveCandidates(fs FS, target, incRel string, roots []string) []strin
 	add := func(rel string) {
 		rel = cleanRel(filepath.ToSlash(filepath.Clean(rel)))
 
-		if rel == "" || !fs.IsFile(rel) {
+		if rel == "" || !fs.IsFile(dirKey(""), rel) {
 			return
 		}
 
@@ -311,7 +311,7 @@ func swigFilterExistingSources(fs FS, in []VFS) []VFS {
 	out := make([]VFS, 0, len(in))
 
 	for _, v := range in {
-		if v.IsSource() && !fs.IsFile(v.Rel()) {
+		if v.IsSource() && !fs.IsFile(dirKey(""), v.Rel()) {
 			continue
 		}
 

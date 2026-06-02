@@ -42,7 +42,7 @@ func resolveFlatcImportPath(fs FS, includerRel, importedRel string) string {
 	}
 
 	for _, cand := range candidates {
-		if fs.IsFile(cand) {
+		if fs.IsFile(dirKey(""), cand) {
 			return cand
 		}
 	}
@@ -141,8 +141,9 @@ func flatcCCExtraInputs(ctx *genCtx, includeInputs []VFS) []VFS {
 		}
 
 		srcRel := strings.TrimSuffix(in.Rel(), ".h")
+		srcDir, srcBase := splitDirName(srcRel)
 
-		if !ctx.fs.IsFile(srcRel) {
+		if !ctx.fs.IsFile(dirKey(srcDir), srcBase) {
 			continue
 		}
 

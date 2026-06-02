@@ -602,9 +602,10 @@ func sameRecordSlice(a, b []*SysIncl) bool {
 
 func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
+	incDir := dirKey(pathDir(vfsPath.Rel()))
 
 	for _, entry := range s.parsers.parsedIncludes(vfsPath) {
-		resolved := sc.resolve(vfsPath, entry)
+		resolved := sc.resolve(vfsPath, incDir, entry)
 
 		for _, rabs := range resolved {
 			fn(rabs)
@@ -881,7 +882,7 @@ func (sc *scanCtx) strongconnect(v VFS) {
 	s.tjStack = s.tjStack[:sccStart]
 }
 
-func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
+func (sc *scanCtx) resolve(includerAbs, incDir VFS, d includeDirective) (out []VFS) {
 	s := sc.scanner
 
 	var sysinclClaimed bool
@@ -908,7 +909,7 @@ func (sc *scanCtx) resolve(includerAbs VFS, d includeDirective) (out []VFS) {
 		return nil
 	}
 
-	searchOut := sc.resolveSearchPath(includerAbs, d)
+	searchOut := sc.resolveSearchPath(includerAbs, incDir, d)
 
 	includerRel := includerAbs.Rel()
 	var mappings []VFS
@@ -1198,8 +1199,8 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 
 	normTarget := normalisePath(target)
 
-	addSource := func(prefixRel string) bool {
-		rel, ok := s.resolveSourceUnder(prefixRel, target)
+	addSource := func(prefix VFS) bool {
+		rel, ok := s.resolveSourceUnder(prefix, target)
 
 		if !ok {
 			return false
@@ -1251,7 +1252,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		case VFSRootBuild:
 			return addBuild(prefix.Rel())
 		case VFSRootSource:
-			return addSource(prefix.Rel())
+			return addSource(prefix)
 		}
 
 		panic("resolveContextSearchTier: zero-valued search path")
@@ -1390,7 +1391,7 @@ func resolveCythonPy2Override(includerAbs VFS, d includeDirective) (string, bool
 	return "", false
 }
 
-func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS {
+func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective) []VFS {
 	s := sc.scanner
 	s.resolveSearchPathCalls++
 
@@ -1471,8 +1472,6 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 	}
 
 	if d.kind == includeQuoted {
-		incDir := pathDir(includerAbs.Rel())
-
 		matched := false
 
 		if rel, ok := s.resolveSourceUnder(incDir, d.target.String()); ok {
@@ -1485,7 +1484,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs VFS, d includeDirective) []VFS 
 		}
 
 		if !matched {
-			if info := s.codegenUnder(incDir, d.target.String()); info != nil {
+			if info := s.codegenUnder(incDir.Rel(), d.target.String()); info != nil {
 				dedupKey := "B:" + info.OutputPath.Rel()
 
 				if _, dup := seen[dedupKey]; !dup {
@@ -1654,13 +1653,11 @@ func (s *IncludeScanner) fileExistsByRel(rel string) bool {
 	return s.parsers.fileExistsByRel(rel)
 }
 
-func (s *IncludeScanner) listdir(rel string) map[string]bool {
-	return s.parsers.fs.Listdir(rel)
-}
+func (s *IncludeScanner) resolveSourceUnder(prefix VFS, target string) (string, bool) {
+	prefixDir := prefix.Rel()
 
-func (s *IncludeScanner) resolveSourceUnder(prefixDir, target string) (string, bool) {
 	if first, more := firstComponent(target); canRelFilter(first, target) {
-		isDir, ok := s.listdir(prefixDir)[first]
+		isDir, ok := s.parsers.fs.Listdir(prefix)[first]
 
 		if !ok {
 			return "", false

@@ -356,11 +356,11 @@ func sourceInputVFS(fs FS, modulePath string, path string) *VFS {
 	if fs != nil {
 		moduleRel := filepath.ToSlash(filepath.Clean(modulePath + "/" + clean))
 
-		if fs.IsFile(moduleRel) {
+		if fs.IsFile(dirKey(modulePath), clean) {
 			return vfsPtr(Source(moduleRel))
 		}
 
-		if fs.IsFile(clean) {
+		if fs.IsFile(dirKey(""), clean) {
 			return vfsPtr(Source(clean))
 		}
 	}
@@ -593,7 +593,7 @@ func filterExistingSourceDirs(fs FS, paths []VFS) []VFS {
 	out := paths[:0]
 
 	for _, path := range paths {
-		if shouldCheckSourceDir(path) && !fs.IsDir(path.Rel()) {
+		if shouldCheckSourceDir(path) && !fs.IsDir(path, "") {
 			continue
 		}
 

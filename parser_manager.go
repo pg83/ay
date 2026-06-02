@@ -101,8 +101,9 @@ func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSe
 	pm.cache.parsedMisses++
 
 	rel := vfsPath.Rel()
+	dir, base := splitDirName(rel)
 
-	if !pm.fs.IsFile(rel) {
+	if !pm.fs.IsFile(dirKey(dir), base) {
 		pm.cache.parsed[vfsPath] = nil
 
 		return nil
@@ -132,8 +133,9 @@ func (pm *includeParserManager) withCythonSibling(rel string, set parsedIncludeS
 	}
 
 	sibling := rel[:len(rel)-len(".pyx")] + ".pxd"
+	sibDir, sibBase := splitDirName(sibling)
 
-	if !pm.fs.IsFile(sibling) {
+	if !pm.fs.IsFile(dirKey(sibDir), sibBase) {
 		return set
 	}
 
@@ -213,7 +215,7 @@ func (pm *includeParserManager) indexAddincl(a VFS) {
 }
 
 func (pm *includeParserManager) fileExistsByRel(rel string) bool {
-	return pm.fs.IsFile(rel)
+	return pm.fs.IsFile(dirKey(""), rel)
 }
 
 func (pm *includeParserManager) perfStats() parserPerfStats {

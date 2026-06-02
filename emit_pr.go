@@ -274,8 +274,9 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 				// no-op outside the WKT path.
 				if v.IsSource() {
 					sibling := strings.TrimSuffix(v.Rel(), ".proto") + ".pb.h"
+					sibDir, sibBase := splitDirName(sibling)
 
-					if ctx.fs.IsFile(sibling) {
+					if ctx.fs.IsFile(dirKey(sibDir), sibBase) {
 						out = append(out, Source(sibling))
 					}
 				}
@@ -415,7 +416,7 @@ func runProgramInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, rel
 		}
 	}
 
-	if ctx.fs.IsFile(rel) {
+	if ctx.fs.IsFile(dirKey(""), rel) {
 		return Source(rel)
 	}
 

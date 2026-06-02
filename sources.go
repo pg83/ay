@@ -26,12 +26,13 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	defer scanner.visitedIDPool.Put(visited)
 	order := make([]VFS, 0, 1024)
 	srcAbsSet := make(map[VFS]struct{}, len(sources))
+	modDirKey := dirKey(srcInstance.Path)
 
 	for _, src := range sources {
 		srcRelOnDisk := srcInstance.Path + "/" + src
 
 		if in.SrcDir != nil && *in.SrcDir != srcInstance.Path {
-			if !ctx.fs.IsFile(srcInstance.Path + "/" + src) {
+			if !ctx.fs.IsFile(modDirKey, src) {
 				srcRelOnDisk = *in.SrcDir + "/" + src
 			}
 		}
@@ -119,7 +120,7 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 	if srcDir != nil && filepath.Clean(*srcDir) != "." && filepath.Clean(*srcDir) != srcInstance.Path {
 		cleanSrcDir := filepath.Clean(*srcDir)
 
-		if !ctx.fs.IsFile(srcInstance.Path + "/" + srcRel) {
+		if !ctx.fs.IsFile(dirKey(srcInstance.Path), srcRel) {
 			srcRelOnDisk = filepath.ToSlash(filepath.Clean(cleanSrcDir + "/" + srcRel))
 		}
 	}
@@ -262,23 +263,24 @@ func appendRagelNativeDeps(scanner *IncludeScanner, srcInstance ModuleInstance, 
 		seen[v] = true
 	}
 
-	var queue []struct {
+	type ragelItem struct {
 		includer VFS
+		incDir   VFS
 		d        includeDirective
 	}
 
+	rl6Dir := dirKey(pathDir(rl6VFS.Rel()))
+	var queue []ragelItem
+
 	for _, d := range directives {
-		queue = append(queue, struct {
-			includer VFS
-			d        includeDirective
-		}{rl6VFS, d})
+		queue = append(queue, ragelItem{rl6VFS, rl6Dir, d})
 	}
 
 	for len(queue) > 0 {
 		item := queue[0]
 		queue = queue[1:]
 
-		resolved := sc.resolve(item.includer, item.d)
+		resolved := sc.resolve(item.includer, item.incDir, item.d)
 
 		for _, f := range resolved {
 			if seen[f] {
@@ -291,11 +293,14 @@ func appendRagelNativeDeps(scanner *IncludeScanner, srcInstance ModuleInstance, 
 			// Follow transitive ragel-native includes of f
 			sub := scanner.parsers.sourceParsedBuckets(f).bucket(parsedIncludesRagelNative)
 
+			if len(sub) == 0 {
+				continue
+			}
+
+			fDir := dirKey(pathDir(f.Rel()))
+
 			for _, sd := range sub {
-				queue = append(queue, struct {
-					includer VFS
-					d        includeDirective
-				}{f, sd})
+				queue = append(queue, ragelItem{f, fDir, sd})
 			}
 		}
 	}

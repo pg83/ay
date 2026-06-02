@@ -283,7 +283,7 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 				continue
 			}
 
-			if ctx.fs.IsFile(target) {
+			if ctx.fs.IsFile(dirKey(""), target) {
 				addSource(Source(target))
 			} else if reg != nil {
 				if info := reg.LookupRel(target); info != nil {

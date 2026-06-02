@@ -237,31 +237,34 @@ func protoDirectImportNames(pm *includeParserManager, srcRel string) []string {
 
 func resolveProtoImportPath(fs FS, importedRel string, peerProtoAddIncl []VFS) string {
 	clean := filepath.ToSlash(filepath.Clean(importedRel))
-	candidates := []string{clean}
+	rootCands := []string{clean}
 
 	if !strings.HasPrefix(clean, "yt/") {
-		candidates = append(candidates, filepath.ToSlash(filepath.Clean("yt/"+clean)))
+		rootCands = append(rootCands, filepath.ToSlash(filepath.Clean("yt/"+clean)))
 	}
 
-	candidates = append(candidates, filepath.ToSlash(filepath.Clean(pbRuntimeBase+clean)))
+	rootCands = append(rootCands, filepath.ToSlash(filepath.Clean(pbRuntimeBase+clean)))
+
+	for _, cand := range rootCands {
+		if fs.IsFile(dirKey(""), cand) {
+			return cand
+		}
+	}
 
 	// Peer PROTO_NAMESPACE / PROTO_LIBRARY contributions land in protoc's -I
 	// flags (peerProtoAddIncl); mirror that here so transitive .proto inputs
 	// resolve through the same search prefix protoc does (e.g. opentelemetry's
 	// `import "opentelemetry/proto/common/v1/common.proto"` finds the file at
 	// $(S)/contrib/libs/opentelemetry-proto/opentelemetry/proto/common/v1/common.proto
-	// via the `contrib/libs/opentelemetry-proto` -I).
+	// via the `contrib/libs/opentelemetry-proto` -I). p is already a VFS, so it
+	// keys Listdir directly — no per-candidate concat or re-intern.
 	for _, p := range peerProtoAddIncl {
 		if p.Root() != VFSRootSource {
 			continue
 		}
 
-		candidates = append(candidates, filepath.ToSlash(filepath.Clean(p.Rel()+"/"+clean)))
-	}
-
-	for _, cand := range candidates {
-		if fs.IsFile(cand) {
-			return cand
+		if fs.IsFile(p, clean) {
+			return filepath.ToSlash(filepath.Clean(p.Rel() + "/" + clean))
 		}
 	}
 
