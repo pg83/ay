@@ -6,6 +6,29 @@ import (
 	"strings"
 )
 
+// Parsed-include directives for the constant protobuf/grpc/event runtime header
+// lists, built once at init instead of re-interning each header's Rel() per
+// generated output (was ~260k internString/run on sg5: the 187-entry deep list
+// times every pb.cc/grpc.pb.cc). append copies these into the per-output slice,
+// so sharing the read-only backing is safe.
+var (
+	protobufRuntimeDirectives   = quotedDirectives(protobufRuntimeHeaders)
+	pbCcDeepRuntimeDirectives   = quotedDirectives(pbCcDeepRuntimeHeaders)
+	grpcServiceHeaderDirectives = quotedDirectives(grpcServiceHeaderIncludes)
+	grpcSourceExtraDirectives   = quotedDirectives(grpcSourceExtraIncludes)
+	eventRuntimeDirectives      = quotedDirectives(eventRuntimeHeaders)
+)
+
+func quotedDirectives(headers []VFS) []includeDirective {
+	out := make([]includeDirective, len(headers))
+
+	for i, h := range headers {
+		out[i] = includeDirective{kind: includeQuoted, target: internString(h.Rel())}
+	}
+
+	return out
+}
+
 func protoPbHIncludes(pm *includeParserManager, srcRel, outputRoot string, bucket parsedIncludeBucket) []includeDirective {
 	hcpp := pm.sourceParsedBuckets(Source(srcRel)).bucket(bucket)
 
@@ -442,11 +465,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		extras := pbHEmitsIncludesExtras(protoRelPath, hasDescriptor)
 		pbHParsed := make([]includeDirective, 0, len(pbHImports)+len(protobufRuntimeHeaders)+len(extras)+len(grpcServiceHeaderIncludes))
 		pbHParsed = append(pbHParsed, pbHImports...)
-
-		for _, include := range protobufRuntimeHeaders {
-			pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
-		}
-
+		pbHParsed = append(pbHParsed, protobufRuntimeDirectives...)
 		pbHParsed = append(pbHParsed, extras...)
 
 		for _, ti := range transitiveImports {
@@ -454,9 +473,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		}
 
 		if cfg.grpc {
-			for _, include := range grpcServiceHeaderIncludes {
-				pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
-			}
+			pbHParsed = append(pbHParsed, grpcServiceHeaderDirectives...)
 		}
 
 		registerGeneratedParsedOutput(ctx, instance, "PB", pbH, pbHParsed)
@@ -477,19 +494,11 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 
 		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internString(protoRelPath)})
 		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internString(pbWrapperVFS.Rel())})
-
-		for _, include := range protobufRuntimeHeaders {
-			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
-		}
-
-		for _, include := range pbCcDeepRuntimeHeaders {
-			pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
-		}
+		pbCCParsed = append(pbCCParsed, protobufRuntimeDirectives...)
+		pbCCParsed = append(pbCCParsed, pbCcDeepRuntimeDirectives...)
 
 		if cfg.grpc {
-			for _, include := range grpcSourceExtraIncludes {
-				pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
-			}
+			pbCCParsed = append(pbCCParsed, grpcSourceExtraDirectives...)
 		}
 
 		registerGeneratedParsedOutput(ctx, instance, "PB", pbCC, pbCCParsed)
@@ -501,27 +510,14 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(pbH.Rel())})
 			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(protoRelPath)})
 			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(pbWrapperVFS.Rel())})
-
-			for _, include := range protobufRuntimeHeaders {
-				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
-			}
-
-			for _, include := range pbCcDeepRuntimeHeaders {
-				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
-			}
-
-			for _, include := range grpcSourceExtraIncludes {
-				grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
-			}
+			grpcCCParsed = append(grpcCCParsed, protobufRuntimeDirectives...)
+			grpcCCParsed = append(grpcCCParsed, pbCcDeepRuntimeDirectives...)
+			grpcCCParsed = append(grpcCCParsed, grpcSourceExtraDirectives...)
 
 			grpcHParsed = make([]includeDirective, 0, 2+len(directImports)+len(grpcServiceHeaderIncludes))
 			grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: internString(pbH.Rel())})
 			grpcHParsed = append(grpcHParsed, directImports...)
-
-			for _, include := range grpcServiceHeaderIncludes {
-				grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
-			}
-
+			grpcHParsed = append(grpcHParsed, grpcServiceHeaderDirectives...)
 			grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: internString(pbRuntimeBase + "google/protobuf/port_def.inc")})
 		}
 
@@ -646,28 +642,15 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 				evExtras := evWitnessExtras(evRelPath, evPbCC)
 				evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders)+len(evExtras))
 				evHParsed = append(evHParsed, directImports...)
-
-				for _, include := range protobufRuntimeHeaders {
-					evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
-				}
-
-				for _, include := range eventRuntimeHeaders {
-					evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
-				}
-
+				evHParsed = append(evHParsed, protobufRuntimeDirectives...)
+				evHParsed = append(evHParsed, eventRuntimeDirectives...)
 				evHParsed = append(evHParsed, evExtras...)
 				registerGeneratedParsedOutput(ctx, instance, "EV", evH, evHParsed)
 
 				evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
 				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internString(evH.Rel())})
-
-				for _, include := range protobufRuntimeHeaders {
-					evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
-				}
-
-				for _, include := range eventRuntimeHeaders {
-					evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
-				}
+				evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
+				evCCParsed = append(evCCParsed, eventRuntimeDirectives...)
 
 				registerGeneratedParsedOutput(ctx, instance, "EV", evPbCC, evCCParsed)
 			}
