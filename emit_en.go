@@ -29,7 +29,7 @@ type enumSrcsResult struct {
 func resolveEnumHeaderInput(ctx *genCtx, instance ModuleInstance, headerRel string, srcDir *string) VFS {
 	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDir)
 
-	if !ctx.fs.IsFile(dirKey(""), headerInput.Rel()) {
+	if !ctx.fs.IsFile(srcRootVFS, headerInput.Rel()) {
 		if vfs := sourceInputVFS(ctx.fs, instance.Path, headerRel); vfs != nil && vfs.IsSource() {
 			headerInput = *vfs
 		}

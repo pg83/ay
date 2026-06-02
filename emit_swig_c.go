@@ -258,7 +258,7 @@ func swigResolveCandidates(fs FS, target, incRel string, roots []string) []strin
 	add := func(rel string) {
 		rel = cleanRel(filepath.ToSlash(filepath.Clean(rel)))
 
-		if rel == "" || !fs.IsFile(dirKey(""), rel) {
+		if rel == "" || !fs.IsFile(srcRootVFS, rel) {
 			return
 		}
 
@@ -311,7 +311,7 @@ func swigFilterExistingSources(fs FS, in []VFS) []VFS {
 	out := make([]VFS, 0, len(in))
 
 	for _, v := range in {
-		if v.IsSource() && !fs.IsFile(dirKey(""), v.Rel()) {
+		if v.IsSource() && !fs.IsFile(srcRootVFS, v.Rel()) {
 			continue
 		}
 

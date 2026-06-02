@@ -42,7 +42,7 @@ func resolveFlatcImportPath(fs FS, includerRel, importedRel string) string {
 	}
 
 	for _, cand := range candidates {
-		if fs.IsFile(dirKey(""), cand) {
+		if fs.IsFile(srcRootVFS, cand) {
 			return cand
 		}
 	}
