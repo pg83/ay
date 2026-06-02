@@ -147,9 +147,9 @@ func flatcCCExtraInputs(ctx *genCtx, includeInputs []VFS) []VFS {
 			continue
 		}
 
-		out = appendVFSUnique(out, []VFS{flatcWrapperVFS, Source(srcRel)})
-		out = appendVFSUnique(out, flatcTransitiveImports(ctx.parsers, ctx.fs, srcRel))
-		out = appendVFSUnique(out, []VFS{flatcRuntimeVFS})
+		out = ctx.deduper.dedupVFS(out, []VFS{flatcWrapperVFS, Source(srcRel)})
+		out = ctx.deduper.dedupVFS(out, flatcTransitiveImports(ctx.parsers, ctx.fs, srcRel))
+		out = ctx.deduper.dedupVFS(out, []VFS{flatcRuntimeVFS})
 	}
 
 	return out

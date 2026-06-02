@@ -51,16 +51,18 @@ func (set parsedIncludeSet) bucket(bucket parsedIncludeBucket) []includeDirectiv
 // means each file is parsed exactly once per run; we get the same behaviour
 // from this map's first-write-wins semantics. Do not key by scan context.
 type sharedParseCache struct {
-	parsed map[VFS]parsedIncludeSet
+	// parsed is keyed by the source file's STR (vfsPath.strID()): a parsed source
+	// is always Source-rooted (VFS == STR<<1), so the STR is lossless and halves
+	// DenseMap's idx array versus the 2x-wider VFS space. A present slot with a nil
+	// value is the negative cache (file does not exist), distinct from absent.
+	parsed DenseMap[STR, parsedIncludeSet]
 
 	parsedHits   uint64
 	parsedMisses uint64
 }
 
 func newSharedParseCache() *sharedParseCache {
-	return &sharedParseCache{
-		parsed: make(map[VFS]parsedIncludeSet, 8192),
-	}
+	return &sharedParseCache{}
 }
 
 type includeParserManager struct {
@@ -93,7 +95,9 @@ func newIncludeParserManagerFS(fs FS, cache *sharedParseCache) *includeParserMan
 }
 
 func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSet {
-	if cached, ok := pm.cache.parsed[vfsPath]; ok {
+	key := STR(vfsPath.strID())
+
+	if cached, ok := pm.cache.parsed.Get(key); ok {
 		pm.cache.parsedHits++
 		return cached
 	}
@@ -104,7 +108,7 @@ func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSe
 	dir, base := splitDirName(rel)
 
 	if !pm.fs.IsFile(dirKey(dir), base) {
-		pm.cache.parsed[vfsPath] = nil
+		pm.cache.parsed.Put(key, nil)
 
 		return nil
 	}
@@ -117,7 +121,7 @@ func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSe
 
 	out := includeDirectiveParsers.parserFor(rel).Parse(rel, data)
 	out = pm.withCythonSibling(rel, out)
-	pm.cache.parsed[vfsPath] = out
+	pm.cache.parsed.Put(key, out)
 
 	return out
 }

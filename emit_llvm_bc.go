@@ -93,7 +93,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			allInputs = append(allInputs, closure...)
 
 			if len(wcExtras) > 0 {
-				allInputs = appendVFSUnique(allInputs, wcExtras)
+				allInputs = ctx.deduper.dedupVFS(allInputs, wcExtras)
 			}
 
 			// Propagate $(S) inputs from this BC node to the OP flat-input set.
@@ -170,7 +170,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		optInputs := make([]VFS, 0, 2+len(bcSourceInputs))
 		optInputs = append(optInputs, mergedOut)
 		optInputs = append(optInputs, optWrapperVFS) // ${input:"build/scripts/llvm_opt_wrapper.py"}
-		optInputs = appendVFSUnique(optInputs, bcSourceInputs)
+		optInputs = ctx.deduper.dedupVFS(optInputs, bcSourceInputs)
 
 		optNode := &Node{
 			Cmds:             []Cmd{{CmdArgs: optArgs, Env: env}},
