@@ -1572,35 +1572,15 @@ func (s *IncludeScanner) fileExistsByRel(rel string) bool {
 }
 
 func (s *IncludeScanner) resolveSourceUnder(prefix VFS, target string) (string, bool) {
-	prefixDir := prefix.Rel()
-
-	if first, more := firstComponent(target); canRelFilter(first, target) {
-		isDir, ok := s.parsers.fs.Listdir(prefix)[first]
-
-		if !ok {
-			return "", false
-		}
-
-		if !more {
-			if isDir {
-				return "", false
-			}
-
-			return joinRel(prefixDir, target), true
-		}
-
-		if !isDir {
-			return "", false
-		}
-	}
-
-	rel := normalisePath(joinRel(prefixDir, target))
-
-	if !s.fileExistsByRel(rel) {
+	// IsFile(prefix, target) is exactly the gating this used to hand-roll
+	// (firstComponent + Listdir(prefix), then the deep check) — but keyed off the
+	// already-interned prefix VFS, so it skips the Listdir(srcRoot) + re-gating the
+	// prefix's own components that fileExistsByRel(joinRel(...)) did from the root.
+	if !s.parsers.fs.IsFile(prefix, target) {
 		return "", false
 	}
 
-	return rel, true
+	return normalisePath(joinRel(prefix.Rel(), target)), true
 }
 
 func (s *IncludeScanner) codegenUnder(prefixDir, target string) *GeneratedFileInfo {
