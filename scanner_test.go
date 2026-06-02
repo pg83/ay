@@ -751,7 +751,7 @@ machine Sub;
 		newIncludeParserManagerFS(fs, newSharedParseCache()),
 		sysincl,
 		func(Warn) {},
-		&tarjanScratch{},
+		&tarjanCtx{},
 	)
 
 	sc := scanner.NewScanCtx(ScanContext{

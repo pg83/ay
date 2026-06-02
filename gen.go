@@ -280,11 +280,11 @@ type genCtx struct {
 	// single-threaded. collectModule lacks a ctx, so it receives &ctx.deduper.
 	deduper deDuper
 
-	// tarjan is the run-wide Tarjan scratch; both scanners hold a pointer to it
-	// (their tj field) so its vfsBound-sized arrays grow once, not once per
-	// scanner. reset() runs before every strongconnect, so the shared state is
-	// safe under single-threaded gen.
-	tarjan tarjanScratch
+	// tarjan is the run-wide Tarjan/closure working state; both scanners hold a
+	// pointer to it (their tjc field) so its vfsBound-sized arrays grow once, not
+	// once per scanner. reset() runs before every use, so the shared state is safe
+	// under single-threaded gen.
+	tarjan tarjanCtx
 }
 
 type codegenOutputKey struct {
