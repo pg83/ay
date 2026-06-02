@@ -153,7 +153,17 @@ func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourc
 		OwnerModuleDir:  srcInstance.Path,
 	}
 
-	return scanner.NewScanCtx(cfg).WalkClosure(vfsPath)
+	sc := scanner.NewScanCtx(cfg)
+	scanner.walkClosureCalls++
+
+	if vfsPath.IsSource() {
+		sc.cfg.SourceRel = vfsPath.Rel()
+	}
+
+	// The closure is rooted at vfsPath (closureOf leads its result with the
+	// queried node); callers that want only the transitive includes strip
+	// element 0.
+	return sc.closureOf(vfsPath)
 }
 
 // rewriteClosureCPSource maps any CP (COPY_FILE) output VFS in a closure to
@@ -166,6 +176,11 @@ func rewriteClosureCPSource(scanner *IncludeScanner, out []VFS) []VFS {
 		return out
 	}
 
+	// out may be a shared cached closure (WalkClosure now returns closureOf's
+	// slice without copying), so clone on the first rewrite instead of mutating
+	// in place. The common case rewrites nothing and returns out untouched.
+	var result []VFS
+
 	for i, v := range out {
 		info := scanner.codegen.Lookup(v)
 
@@ -173,10 +188,18 @@ func rewriteClosureCPSource(scanner *IncludeScanner, out []VFS) []VFS {
 			continue
 		}
 
-		out[i] = info.SourcePath
+		if result == nil {
+			result = append(result, out...)
+		}
+
+		result[i] = info.SourcePath
 	}
 
-	return out
+	if result == nil {
+		return out
+	}
+
+	return result
 }
 
 // keepOnlySourceVFS drops any $(B) (build-tree) entry from a closure. CP
@@ -187,7 +210,9 @@ func rewriteClosureCPSource(scanner *IncludeScanner, out []VFS) []VFS {
 // chain) does not belong as a direct CP input. Run AFTER rewriteClosureCPSource
 // so CP $(B) outputs already mapped to their SourcePath survive as sources.
 func keepOnlySourceVFS(out []VFS) []VFS {
-	w := out[:0]
+	// Build a fresh slice rather than compacting out[:0] in place: out may be a
+	// shared cached closure (WalkClosure returns closureOf's slice uncopied).
+	var w []VFS
 
 	for _, v := range out {
 		if !v.IsSource() {

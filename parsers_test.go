@@ -43,7 +43,7 @@ func TestScanner_CythonExternFromQuotedAngleResolves(t *testing.T) {
 		"pkg/error.pxd":       "cdef extern from \"<util/system/error.h>\"\n",
 		"util/system/error.h": "// error.h\n",
 	}), SysInclSet{})
-	closure := scanner.WalkClosure(ScanContext{
+	closure := scanClosure(scanner, ScanContext{
 		SourceRel:  "pkg/error.pxd",
 		OwnAddIncl: []VFS{Intern("$(S)/")},
 	})
@@ -62,7 +62,7 @@ func TestScanner_CythonExternFromSingleQuotedResolves(t *testing.T) {
 		"pkg/logger.pxd":                "cdef extern from 'library/cpp/logger/priority.h':\n",
 		"library/cpp/logger/priority.h": "// priority.h\n",
 	}), SysInclSet{})
-	closure := scanner.WalkClosure(ScanContext{
+	closure := scanClosure(scanner, ScanContext{
 		SourceRel:  "pkg/logger.pxd",
 		OwnAddIncl: []VFS{Intern("$(S)/")},
 	})
