@@ -743,7 +743,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 				}
 
 				cppRel := antlrOutputModuleRel(instance.Path, outVFS)
-				ccRef, ccOut := emitCodegenDownstreamCC(ctx, cppInstance, cppRel, nil, []NodeRef{info.ProducerRef}, moduleInputs)
+				ccRef, ccOut := emitCodegenDownstreamCC(ctx, cppInstance, cppRel, []NodeRef{info.ProducerRef}, moduleInputs)
 				antlrRefs = append(antlrRefs, ccRef)
 				antlrOutputs = append(antlrOutputs, ccOut)
 			}
