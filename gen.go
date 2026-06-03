@@ -260,12 +260,6 @@ type genCtx struct {
 
 	testMode bool
 
-	// codegenSeen is the reused dedup map for resolveCodegenDepRefsExt across its
-	// ~22k per-run calls (map growth was ~25MB churn). One field is safe: the gen
-	// goroutine is single-threaded and resolveCodegenDepRefsExt does not re-enter
-	// itself (EmitCF emits no CC and calls no resolveCodegen*). Cleared per call.
-	codegenSeen map[NodeRef]struct{}
-
 	// deduper is the per-run VFS deduper (one idSet reused across all dedupVFS
 	// calls, replacing a fresh map per call). A single field is safe: dedupVFS is
 	// a leaf (pure slice/idSet ops, no callback re-enters it), and gen is
@@ -302,17 +296,14 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 	// Reuse the per-run dedup map (genCtx) instead of allocating one per call —
 	// its growth was ~25MB of churn across ~22k calls. Cleared on entry; keeps its
 	// grown buckets between calls.
-	seen := ctx.codegenSeen
-
-	if seen == nil {
-		seen = make(map[NodeRef]struct{}, 16)
-		ctx.codegenSeen = seen
-	}
-
-	clear(seen)
+	// Dedup the producer refs through the run-wide VFS deduper (NodeRef is a
+	// ~uint32 id, cast to VFS at the idSet boundary — a different typedef over the
+	// same dense space). probe touches no other deduper user (EmitCF takes no
+	// ctx), so reset-then-stream here is safe.
+	ctx.deduper.reset()
 
 	for _, r := range exclude {
-		seen[r] = struct{}{}
+		ctx.deduper.add(VFS(r))
 	}
 
 	var out []NodeRef
@@ -348,11 +339,10 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 			return
 		}
 
-		if _, dup := seen[ref]; dup {
+		if !ctx.deduper.add(VFS(ref)) {
 			return
 		}
 
-		seen[ref] = struct{}{}
 		out = append(out, ref)
 	}
 
