@@ -6,7 +6,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
 var (
@@ -267,12 +266,6 @@ type genCtx struct {
 	// goroutine is single-threaded and resolveCodegenDepRefsExt does not re-enter
 	// itself (EmitCF emits no CC and calls no resolveCodegen*). Cleared per call.
 	codegenSeen map[NodeRef]struct{}
-
-	// peerArchiveSeenPool reuses the peer-archive dedup map in genModule's
-	// result-construction (was ~12.5MB churn). A pool, not a field: genModule
-	// recurses, and the map's live window does overlap a nested genModule, so a
-	// nested call must borrow a distinct map (a shared field corrupts the graph).
-	peerArchiveSeenPool sync.Pool
 
 	// deduper is the per-run VFS deduper (one idSet reused across all dedupVFS
 	// calls, replacing a fresh map per call). A single field is safe: dedupVFS is
@@ -1036,94 +1029,25 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	peerDynamicRefs := make([]NodeRef, 0, len(allPeers))
 	peerDynamicPaths := make([]VFS, 0, len(allPeers))
 	peerLinkCmdPaths := make([]VFS, 0, len(allPeers))
-	peerGlobalSeen := map[VFS]struct{}{}
-	peerGlobalAddPath := func(ref NodeRef, path VFS) {
-		if _, dup := peerGlobalSeen[path]; dup {
-			return
-		}
-
-		peerGlobalSeen[path] = struct{}{}
-		peerGlobalRefs = append(peerGlobalRefs, ref)
-		peerGlobalPaths = append(peerGlobalPaths, path)
-	}
-	peerWholeArchiveSeen := map[VFS]struct{}{}
-	peerWholeArchiveAddPath := func(ref NodeRef, path VFS) {
-		if _, dup := peerWholeArchiveSeen[path]; dup {
-			return
-		}
-
-		peerWholeArchiveSeen[path] = struct{}{}
-		peerWholeArchiveRefs = append(peerWholeArchiveRefs, ref)
-		peerWholeArchivePaths = append(peerWholeArchivePaths, path)
-	}
-	peerWholeArchiveCmdSeen := map[VFS]struct{}{}
-	peerWholeArchiveAddCmdPath := func(path VFS) {
-		if _, dup := peerWholeArchiveCmdSeen[path]; dup {
-			return
-		}
-
-		peerWholeArchiveCmdSeen[path] = struct{}{}
-		peerWholeArchiveCmdPaths = append(peerWholeArchiveCmdPaths, path)
-	}
-	peerDynamicSeen := map[VFS]struct{}{}
-	peerLinkCmdSeen := map[VFS]struct{}{}
-	peerLinkCmdAddPath := func(path VFS) {
-		if _, dup := peerLinkCmdSeen[path]; dup {
-			return
-		}
-
-		peerLinkCmdSeen[path] = struct{}{}
-		peerLinkCmdPaths = append(peerLinkCmdPaths, path)
-	}
-	peerDynamicAddPath := func(ref NodeRef, path VFS) {
-		if _, dup := peerDynamicSeen[path]; dup {
-			return
-		}
-
-		peerDynamicSeen[path] = struct{}{}
-		peerDynamicRefs = append(peerDynamicRefs, ref)
-		peerDynamicPaths = append(peerDynamicPaths, path)
-		peerLinkCmdAddPath(path)
-	}
-	peerArchiveSeen, _ := ctx.peerArchiveSeenPool.Get().(map[VFS]struct{})
-
-	if peerArchiveSeen == nil {
-		peerArchiveSeen = make(map[VFS]struct{}, 64)
-	}
-
-	clear(peerArchiveSeen)
-
-	defer ctx.peerArchiveSeenPool.Put(peerArchiveSeen)
-
-	peerArchiveAddPath := func(ref NodeRef, path VFS) {
-		if _, dup := peerArchiveSeen[path]; dup {
-			return
-		}
-
-		peerArchiveSeen[path] = struct{}{}
-		peerArchiveRefs = append(peerArchiveRefs, ref)
-		peerArchivePaths = append(peerArchivePaths, path)
-		peerLinkCmdAddPath(path)
-	}
+	// The peer-collection dedup sets are built below, after the recursive peer
+	// genModule loop — each in its own inlined pass that resets the run-wide
+	// deduper and streams exactly one set through ctx.deduper.add. Running after
+	// the recursion lets the passes share one deduper (a nested genModule would
+	// otherwise reset it mid-pass) instead of allocating a map per set.
 
 	peerLDPluginRefs := make([]NodeRef, 0, 1)
 	peerLDPluginPaths := make([]VFS, 0, 1)
-	peerLDPluginSeen := map[VFS]struct{}{}
-	peerLDPluginAddPath := func(ref NodeRef, path VFS) {
-		if _, dup := peerLDPluginSeen[path]; dup {
-			return
-		}
-
-		peerLDPluginSeen[path] = struct{}{}
-		peerLDPluginRefs = append(peerLDPluginRefs, ref)
-		peerLDPluginPaths = append(peerLDPluginPaths, path)
-	}
 	objAddLibSeen := map[string]struct{}{}
 	peerObjAddLibsGlobal := make([]string, 0, 8)
 	ldFlagsSeen := map[string]struct{}{}
 	peerLDFlagsGlobal := make([]string, 0, 4)
 	rpathFlagsSeen := map[string]struct{}{}
 	peerRPathFlagsGlobal := make([]string, 0, 4)
+	// addInclSeen is NOT routed through ctx.deduper: peerAddInclGlobal's set lives
+	// from here until the late libcxx-injection below, spanning the proto pass and
+	// two intervening dedupVFS calls (which reset the shared deduper) plus the
+	// bundled-path filtering that drops entries from the slice but not the set. A
+	// dedicated map keeps that long-lived, specially-filtered membership intact.
 	addInclSeen := map[VFS]struct{}{}
 	peerAddInclGlobal := make([]VFS, 0, 16)
 	// oneLevelOnlyPaths tracks paths added exclusively via ONE_LEVEL from direct user
@@ -1183,9 +1107,16 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 
 		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult, kind: kind})
+	}
 
-		for i, p := range peerResult.LDPluginPaths {
-			peerLDPluginAddPath(peerResult.LDPluginRefs[i], p)
+	ctx.deduper.reset()
+
+	for _, rp := range resolved {
+		for i, p := range rp.result.LDPluginPaths {
+			if ctx.deduper.add(p) {
+				peerLDPluginRefs = append(peerLDPluginRefs, rp.result.LDPluginRefs[i])
+				peerLDPluginPaths = append(peerLDPluginPaths, p)
+			}
 		}
 	}
 
@@ -1265,47 +1196,131 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
+	// peerArchive: closure paths, then the peer's own AR output (per peer).
+	ctx.deduper.reset()
+
 	for _, rp := range archiveOrder {
-		peerResult := rp.result
+		pr := rp.result
 
-		for i, p := range peerResult.PeerArchiveClosurePaths {
-			peerArchiveAddPath(peerResult.PeerArchiveClosureRefs[i], p)
+		for i, p := range pr.PeerArchiveClosurePaths {
+			if ctx.deduper.add(p) {
+				peerArchiveRefs = append(peerArchiveRefs, pr.PeerArchiveClosureRefs[i])
+				peerArchivePaths = append(peerArchivePaths, p)
+			}
 		}
 
-		for i, p := range peerResult.PeerGlobalClosurePaths {
-			peerGlobalAddPath(peerResult.PeerGlobalClosureRefs[i], p)
+		if pr.ARPath != nil && ctx.deduper.add(*pr.ARPath) {
+			peerArchiveRefs = append(peerArchiveRefs, pr.ARRef)
+			peerArchivePaths = append(peerArchivePaths, *pr.ARPath)
+		}
+	}
+
+	// peerGlobal: closure paths, then the peer's own GLOBAL output.
+	ctx.deduper.reset()
+
+	for _, rp := range archiveOrder {
+		pr := rp.result
+
+		for i, p := range pr.PeerGlobalClosurePaths {
+			if ctx.deduper.add(p) {
+				peerGlobalRefs = append(peerGlobalRefs, pr.PeerGlobalClosureRefs[i])
+				peerGlobalPaths = append(peerGlobalPaths, p)
+			}
 		}
 
-		if peerResult.GlobalRef != nil && peerResult.GlobalPath != nil {
-			peerGlobalAddPath(*peerResult.GlobalRef, *peerResult.GlobalPath)
+		if pr.GlobalRef != nil && pr.GlobalPath != nil && ctx.deduper.add(*pr.GlobalPath) {
+			peerGlobalRefs = append(peerGlobalRefs, *pr.GlobalRef)
+			peerGlobalPaths = append(peerGlobalPaths, *pr.GlobalPath)
+		}
+	}
+
+	// peerWholeArchive: closure paths, then the peer's own whole-archive paths.
+	ctx.deduper.reset()
+
+	for _, rp := range archiveOrder {
+		pr := rp.result
+
+		for i, p := range pr.PeerWholeArchiveClosurePaths {
+			if ctx.deduper.add(p) {
+				peerWholeArchiveRefs = append(peerWholeArchiveRefs, pr.PeerWholeArchiveClosureRefs[i])
+				peerWholeArchivePaths = append(peerWholeArchivePaths, p)
+			}
 		}
 
-		for i, p := range peerResult.PeerWholeArchiveClosurePaths {
-			peerWholeArchiveAddPath(peerResult.PeerWholeArchiveClosureRefs[i], p)
+		for i, p := range pr.WholeArchivePaths {
+			if ctx.deduper.add(p) {
+				peerWholeArchiveRefs = append(peerWholeArchiveRefs, pr.WholeArchiveRefs[i])
+				peerWholeArchivePaths = append(peerWholeArchivePaths, p)
+			}
+		}
+	}
+
+	// peerWholeArchiveCmd: command-line whole-archive paths (no refs).
+	ctx.deduper.reset()
+
+	for _, rp := range archiveOrder {
+		pr := rp.result
+
+		for _, p := range pr.PeerWholeArchiveCmdClosurePaths {
+			if ctx.deduper.add(p) {
+				peerWholeArchiveCmdPaths = append(peerWholeArchiveCmdPaths, p)
+			}
 		}
 
-		for i, p := range peerResult.WholeArchivePaths {
-			peerWholeArchiveAddPath(peerResult.WholeArchiveRefs[i], p)
+		for _, p := range pr.WholeArchiveCmdPaths {
+			if ctx.deduper.add(p) {
+				peerWholeArchiveCmdPaths = append(peerWholeArchiveCmdPaths, p)
+			}
+		}
+	}
+
+	// peerDynamic: closure paths, then the peer's own DYNAMIC_LIBRARY output.
+	ctx.deduper.reset()
+
+	for _, rp := range archiveOrder {
+		pr := rp.result
+
+		for i, p := range pr.PeerDynamicClosurePaths {
+			if ctx.deduper.add(p) {
+				peerDynamicRefs = append(peerDynamicRefs, pr.PeerDynamicClosureRefs[i])
+				peerDynamicPaths = append(peerDynamicPaths, p)
+			}
 		}
 
-		for _, p := range peerResult.PeerWholeArchiveCmdClosurePaths {
-			peerWholeArchiveAddCmdPath(p)
+		if pr.ModuleStmtName == "DYNAMIC_LIBRARY" && pr.LDPath != nil && ctx.deduper.add(*pr.LDPath) {
+			peerDynamicRefs = append(peerDynamicRefs, pr.LDRef)
+			peerDynamicPaths = append(peerDynamicPaths, *pr.LDPath)
+		}
+	}
+
+	// peerLinkCmd is the dedup-union of the archive and dynamic paths, in the
+	// interleaved order they were originally fed: per peer, archive-closure then
+	// dynamic-closure then the peer's own dynamic-lib then its AR output. Its own
+	// pass re-walks those sources (reading them a second time is cheap) so it need
+	// not piggyback on the archive/dynamic passes.
+	ctx.deduper.reset()
+
+	for _, rp := range archiveOrder {
+		pr := rp.result
+
+		for _, p := range pr.PeerArchiveClosurePaths {
+			if ctx.deduper.add(p) {
+				peerLinkCmdPaths = append(peerLinkCmdPaths, p)
+			}
 		}
 
-		for _, p := range peerResult.WholeArchiveCmdPaths {
-			peerWholeArchiveAddCmdPath(p)
+		for _, p := range pr.PeerDynamicClosurePaths {
+			if ctx.deduper.add(p) {
+				peerLinkCmdPaths = append(peerLinkCmdPaths, p)
+			}
 		}
 
-		for i, p := range peerResult.PeerDynamicClosurePaths {
-			peerDynamicAddPath(peerResult.PeerDynamicClosureRefs[i], p)
+		if pr.ModuleStmtName == "DYNAMIC_LIBRARY" && pr.LDPath != nil && ctx.deduper.add(*pr.LDPath) {
+			peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.LDPath)
 		}
 
-		if peerResult.ModuleStmtName == "DYNAMIC_LIBRARY" && peerResult.LDPath != nil {
-			peerDynamicAddPath(peerResult.LDRef, *peerResult.LDPath)
-		}
-
-		if peerResult.ARPath != nil {
-			peerArchiveAddPath(peerResult.ARRef, *peerResult.ARPath)
+		if pr.ARPath != nil && ctx.deduper.add(*pr.ARPath) {
+			peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.ARPath)
 		}
 	}
 
@@ -1465,11 +1480,16 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// consumer. Append after the PROTO_NAMESPACE entry — declaration order
 	// matches upstream's PROTO_ADDINCL macro placement.
 	ownProtoAddIncl = append(ownProtoAddIncl, d.protoAddInclGlobal...)
-	protoAddInclSeen := map[VFS]struct{}{}
 	peerProtoAddInclGlobal := make([]VFS, 0, 4)
 
+	ctx.deduper.reset()
+
 	for _, rp := range resolved {
-		addEachVFS(protoAddInclSeen, &peerProtoAddInclGlobal, rp.result.ProtoAddInclGlobal)
+		for _, p := range rp.result.ProtoAddInclGlobal {
+			if ctx.deduper.add(p) {
+				peerProtoAddInclGlobal = append(peerProtoAddInclGlobal, p)
+			}
+		}
 	}
 
 	effectiveProtoAddInclGlobal := ctx.deduper.dedupVFS(ownProtoAddIncl, peerProtoAddInclGlobal)
@@ -2238,6 +2258,26 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 // per-call seen-map churn. Single-threaded use only (one idSet, reset per call).
 type deDuper struct {
 	seen idSet
+}
+
+// reset clears the deduper for a fresh single-set pass: callers then dedup an
+// incrementally-built set via add (one logical set per reset). Used by
+// genModule's peer-collection passes, which each reset then stream one set
+// through add — reusing this one run-wide idSet instead of a map per set.
+func (dd *deDuper) reset() {
+	dd.seen.reset(vfsBound())
+}
+
+// add reports whether v was newly added (absent before this call) since the last
+// reset; a false return means v is a duplicate within the current set.
+func (dd *deDuper) add(v VFS) bool {
+	if dd.seen.has(v) {
+		return false
+	}
+
+	dd.seen.add(v)
+
+	return true
 }
 
 func (dd *deDuper) dedupVFS(lists ...[]VFS) []VFS {
