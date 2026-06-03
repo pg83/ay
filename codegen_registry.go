@@ -59,14 +59,21 @@ type CodegenRegistry struct {
 	//     emitClosure), so they ride transitively to every consumer without being
 	//     traversed as children — replacing the per-CC-source closure re-walk that
 	//     withContextSourceExtras used to do.
-	// The two columns share one idx array (DenseMap2). strID losslessly encodes the
+	//   - column 3: a presence flag, keyed by a split-key PREFIX STR (the first
+	//     component rel[:i], not an output path), marking "this prefix occurs as a
+	//     bySplit key prefix". LookupSplit checks it first: a dense array probe
+	//     (idx[prefix]) short-circuits the uint64 bySplit hash-map lookup whenever
+	//     the prefix has no split entry at all — the common case on the hot resolve
+	//     path, where most addincl prefixes hold no codegen outputs.
+	// The columns share one idx array (DenseMap3). strID losslessly encodes the
 	// root (the interned string carries the $(S)/ or $(B)/ prefix), so a $(B) dst
 	// and a $(S) source never collide despite the shared STR key space.
-	byStr DenseMap2[STR, *GeneratedFileInfo, []VFS]
+	byStr DenseMap3[STR, *GeneratedFileInfo, []VFS, bool]
 
 	// bySplit maps a (prefix, suffix) STR pair to its producer info, packed into a
 	// single uint64 key (prefix << 32 | suffix) so a split lookup is one fast64 map
-	// probe instead of a two-level DenseMap-then-inner-map dance.
+	// probe instead of a two-level DenseMap-then-inner-map dance. Gated by byStr's
+	// column-3 prefix flag so the probe runs only for prefixes known to have one.
 	bySplit map[uint64]*GeneratedFileInfo
 }
 
@@ -97,6 +104,7 @@ func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 
 func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) {
 	r.bySplit[splitKey(prefix, suffix)] = info
+	r.byStr.Put3(prefix, true) // mark the prefix so LookupSplit can gate the probe
 }
 
 func (r *CodegenRegistry) Lookup(path VFS) *GeneratedFileInfo {
@@ -118,6 +126,12 @@ func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
 }
 
 func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
+	// Gate the uint64 hash-map probe on the dense prefix flag: most addincl
+	// prefixes hold no codegen split entry, so the array probe short-circuits.
+	if _, ok := r.byStr.Get3(prefix); !ok {
+		return nil
+	}
+
 	return r.bySplit[splitKey(prefix, suffix)]
 }
 
