@@ -47,14 +47,16 @@ type CodegenRegistry struct {
 	// in the CPU profile; a DenseMap keyed by STR drops the hashing/probing.
 	byStr DenseMap[STR, *GeneratedFileInfo]
 
-	// bySplit maps a path-prefix STR to its suffix→info table. The outer level is
-	// a DenseMap (prefix STRs are dense interned ids); the inner stays a small map
-	// (a handful of suffixes per prefix).
-	bySplit DenseMap[STR, map[STR]*GeneratedFileInfo]
+	// bySplit maps a (prefix, suffix) STR pair to its producer info, packed into a
+	// single uint64 key (prefix << 32 | suffix) so a split lookup is one fast64 map
+	// probe instead of a two-level DenseMap-then-inner-map dance.
+	bySplit map[uint64]*GeneratedFileInfo
 }
 
+func splitKey(prefix, suffix STR) uint64 { return uint64(prefix)<<32 | uint64(suffix) }
+
 func NewCodegenRegistry() *CodegenRegistry {
-	return &CodegenRegistry{}
+	return &CodegenRegistry{bySplit: make(map[uint64]*GeneratedFileInfo, 1<<14)}
 }
 
 func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
@@ -77,14 +79,7 @@ func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 }
 
 func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) {
-	inner, ok := r.bySplit.Get(prefix)
-
-	if !ok {
-		inner = make(map[STR]*GeneratedFileInfo, 2)
-		r.bySplit.Put(prefix, inner)
-	}
-
-	inner[suffix] = info
+	r.bySplit[splitKey(prefix, suffix)] = info
 }
 
 func (r *CodegenRegistry) Lookup(path VFS) *GeneratedFileInfo {
@@ -106,13 +101,7 @@ func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
 }
 
 func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
-	inner, ok := r.bySplit.Get(prefix)
-
-	if !ok {
-		return nil
-	}
-
-	return inner[suffix]
+	return r.bySplit[splitKey(prefix, suffix)]
 }
 
 func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
