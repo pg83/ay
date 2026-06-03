@@ -382,8 +382,8 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 
 func (ctx *genCtx) perfScanCtxStats(scanner *IncludeScanner) scanCtxPerfStats {
 	return scanCtxPerfStats{
-		// subgraph and children now share one scanCache entry per node, so both
-		// report its distinct-key count.
+		// subgraph and children are columns of one DenseMap3 keyed per node, so
+		// both report its distinct-key count.
 		subgraphEntries: scanner.scanCache.Len(),
 		childrenEntries: scanner.scanCache.Len(),
 		closureWindows:  len(scanner.subgraphClosures),
