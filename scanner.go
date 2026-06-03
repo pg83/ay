@@ -95,7 +95,16 @@ type IncludeScanner struct {
 	// own per-column presence rather than the map's shared key-present bit.
 	scanCache DenseMap3[STR, []VFS, closureRef, bool]
 
-	searchTierByConfig map[uint64]map[STR]searchTierResult
+	// searchTierFlat caches resolveContextSearchTier results in one scanner-wide
+	// map keyed by a composite uint64 (ctxNum<<32 | target STR), flattening the
+	// former two-level map[ctxHash]map[STR]. ctxNum is a dense per-distinct-config
+	// id (ctxNumByHash) instead of the 64-bit config hash. searchTierSeen is a
+	// 1-bit-per-target-STR presence gate (set once the target has any cached entry,
+	// in any config): a hit there means the composite map is worth probing, a miss
+	// short-circuits straight to the resolve (skipping the hash probe).
+	searchTierFlat map[uint64]searchTierResult
+	searchTierSeen idBitSet[STR]
+	ctxNumByHash   map[uint64]uint32
 
 	resolveIndexByConfig map[uint64]*cfgResolveIndex
 
@@ -118,7 +127,7 @@ type IncludeScanner struct {
 	// which dfs hands to strongconnect. Per-scanner, not shared, so the host
 	// scanner does not see target's roots as spurious cycles. A bit set (1 bit/id)
 	// rather than an epoch idSet, since membership is permanent and binary.
-	dfsActive idBitSet
+	dfsActive idBitSet[VFS]
 
 	visitedIDPool sync.Pool
 
@@ -155,10 +164,10 @@ type IncludeScanner struct {
 }
 
 type scanCtx struct {
-	scanner         *IncludeScanner
-	cfg             ScanContext
-	searchTierCache map[STR]searchTierResult
-	resolveIndex    *cfgResolveIndex
+	scanner      *IncludeScanner
+	cfg          ScanContext
+	ctxNum       uint32
+	resolveIndex *cfgResolveIndex
 }
 
 type idSet struct {
@@ -326,7 +335,8 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		// straighten path and closureWindow treat ref as a 1-based index).
 		subgraphClosures:     make([][]VFS, 1, 256),
 		closureArena:         newBumpAllocator[VFS](closureArenaInitial),
-		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
+		searchTierFlat:       make(map[uint64]searchTierResult, 4096),
+		ctxNumByHash:         make(map[uint64]uint32, 1024),
 		resolveIndexByConfig: make(map[uint64]*cfgResolveIndex, 1024),
 		sourceUnderCache:     make(map[uint64]string, 1<<16),
 		tjc:                  tjc,
@@ -390,11 +400,12 @@ type ScanContext struct {
 
 func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 	ctxHash := hashScanContext(&cfg)
-	searchTier := s.searchTierByConfig[ctxHash]
 
-	if searchTier == nil {
-		searchTier = make(map[STR]searchTierResult, 256)
-		s.searchTierByConfig[ctxHash] = searchTier
+	ctxNum, ok := s.ctxNumByHash[ctxHash]
+
+	if !ok {
+		ctxNum = uint32(len(s.ctxNumByHash)) // dense id: next == count of distinct configs
+		s.ctxNumByHash[ctxHash] = ctxNum
 	}
 
 	ri := s.resolveIndexByConfig[ctxHash]
@@ -415,10 +426,10 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 	}
 
 	return &scanCtx{
-		scanner:         s,
-		cfg:             cfg,
-		searchTierCache: searchTier,
-		resolveIndex:    ri,
+		scanner:      s,
+		cfg:          cfg,
+		ctxNum:       ctxNum,
+		resolveIndex: ri,
 	}
 }
 
@@ -1127,12 +1138,24 @@ func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 	return idx
 }
 
+func (sc *scanCtx) cacheSearchTier(targetID STR, out searchTierResult) searchTierResult {
+	s := sc.scanner
+	s.searchTierFlat[uint64(sc.ctxNum)<<32|uint64(targetID)] = out
+	s.searchTierSeen.add(targetID)
+
+	return out
+}
+
 func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchTierResult {
 	s := sc.scanner
 
-	if cached, ok := sc.searchTierCache[targetID]; ok {
-		s.searchTierHits++
-		return cached
+	// Gate the composite-key hash probe on the 1-bit per-target presence flag: a
+	// target never cached in any config skips straight to the resolve.
+	if s.searchTierSeen.has(targetID) {
+		if cached, ok := s.searchTierFlat[uint64(sc.ctxNum)<<32|uint64(targetID)]; ok {
+			s.searchTierHits++
+			return cached
+		}
 	}
 
 	s.searchTierMisses++
@@ -1261,46 +1284,38 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 				}
 
 				out.found = true
-				sc.searchTierCache[targetID] = out
-				return out
+				return sc.cacheSearchTier(targetID, out)
 			}
 
 			for _, p := range sc.cfg.BaseSearchPaths {
 				if addInclPath(p) {
-					sc.searchTierCache[targetID] = out
-					return out
+					return sc.cacheSearchTier(targetID, out)
 				}
 			}
 
-			sc.searchTierCache[targetID] = out
-			return out
+			return sc.cacheSearchTier(targetID, out)
 		}
 	}
 
 	for _, p := range sc.cfg.OwnAddIncl {
 		if addInclPath(p) {
-			sc.searchTierCache[targetID] = out
-			return out
+			return sc.cacheSearchTier(targetID, out)
 		}
 	}
 
 	for _, p := range sc.cfg.PeerAddInclSet {
 		if addInclPath(p) {
-			sc.searchTierCache[targetID] = out
-			return out
+			return sc.cacheSearchTier(targetID, out)
 		}
 	}
 
 	for _, p := range sc.cfg.BaseSearchPaths {
 		if addInclPath(p) {
-			sc.searchTierCache[targetID] = out
-			return out
+			return sc.cacheSearchTier(targetID, out)
 		}
 	}
 
-	sc.searchTierCache[targetID] = out
-
-	return out
+	return sc.cacheSearchTier(targetID, out)
 }
 
 func resolveCythonPy2Override(includerAbs VFS, d includeDirective) (string, bool) {

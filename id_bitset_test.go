@@ -3,7 +3,7 @@ package main
 import "testing"
 
 func TestIdBitSet_EmptyHasNothing(t *testing.T) {
-	var b idBitSet
+	var b idBitSet[VFS]
 
 	for _, v := range []VFS{0, 1, 63, 64, 65, 1000, 1 << 20} {
 		if b.has(v) {
@@ -13,7 +13,7 @@ func TestIdBitSet_EmptyHasNothing(t *testing.T) {
 }
 
 func TestIdBitSet_AddHas(t *testing.T) {
-	var b idBitSet
+	var b idBitSet[VFS]
 
 	ids := []VFS{0, 1, 63, 64, 65, 127, 128, 4095, 100000}
 
@@ -36,7 +36,7 @@ func TestIdBitSet_AddHas(t *testing.T) {
 }
 
 func TestIdBitSet_WordBoundary(t *testing.T) {
-	var b idBitSet
+	var b idBitSet[VFS]
 
 	// Bits 63 and 64 fall in different 64-bit words; check no cross-talk.
 	b.add(63)
@@ -53,7 +53,7 @@ func TestIdBitSet_WordBoundary(t *testing.T) {
 }
 
 func TestIdBitSet_GrowsPreservingEarlierBits(t *testing.T) {
-	var b idBitSet
+	var b idBitSet[VFS]
 
 	b.add(5)
 	b.add(1 << 20) // forces the backing slice to grow
@@ -68,7 +68,7 @@ func TestIdBitSet_GrowsPreservingEarlierBits(t *testing.T) {
 }
 
 func TestIdBitSet_AddIsIdempotent(t *testing.T) {
-	var b idBitSet
+	var b idBitSet[VFS]
 
 	b.add(42)
 	b.add(42)
@@ -79,7 +79,7 @@ func TestIdBitSet_AddIsIdempotent(t *testing.T) {
 }
 
 func TestIdBitSet_DenseFillRoundTrips(t *testing.T) {
-	var b idBitSet
+	var b idBitSet[VFS]
 
 	const n = 5000
 
