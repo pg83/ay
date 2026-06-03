@@ -31,6 +31,15 @@ type GeneratedFileInfo struct {
 	// tool / script sources too. Zero len means "nothing to propagate".
 	SourceInputs []VFS
 
+	// ClosureLeaves are extra VFS that must ride in this output's include-closure
+	// window as bare, non-expanded members — a "generated-from"/source input edge,
+	// not a C++ include. COPY_FILE(TEXT) registers its $(S) source (+ fs_tools.py
+	// tooling); a PB header registers the $(S) .proto it was generated from. The
+	// scanner splices these into the output's window at build time (dfs pass-2 /
+	// emitClosure) so they ride transitively to every consumer that includes the
+	// output, without their own #includes being re-resolved per consuming module.
+	ClosureLeaves []VFS
+
 	DeferredCF *deferredCF
 }
 
@@ -48,27 +57,18 @@ type CodegenRegistry struct {
 	//   - column 1: the producer info. The hot Lookup (once per scanned include)
 	//     was the top map in the CPU profile; a DenseMap keyed by STR drops the
 	//     hashing/probing.
-	//   - column 2: the output's non-expanded closure leaves — extra VFS that must
-	//     ride in its include-closure window as bare members. A COPY_FILE(TEXT) dst
-	//     registers its $(S) source (and the fs_tools.py copy tooling) here: the
-	//     dst's content is the source verbatim, so the source is a real compiler
-	//     input of every unit that includes the dst — but its own #include
-	//     directives must NOT be re-resolved per consuming module (that leaked
-	//     sibling staging copies, see copyFileParsedIncludes). The scanner splices
-	//     these leaves into the dst's window at build time (dfs pass-2 /
-	//     emitClosure), so they ride transitively to every consumer without being
-	//     traversed as children — replacing the per-CC-source closure re-walk that
-	//     withContextSourceExtras used to do.
-	//   - column 3: a presence flag, keyed by a split-key PREFIX STR (the first
+	//   - column 2: a presence flag, keyed by a split-key PREFIX STR (the first
 	//     component rel[:i], not an output path), marking "this prefix occurs as a
 	//     bySplit key prefix". LookupSplit checks it first: a dense array probe
 	//     (idx[prefix]) short-circuits the uint64 bySplit hash-map lookup whenever
 	//     the prefix has no split entry at all — the common case on the hot resolve
 	//     path, where most addincl prefixes hold no codegen outputs.
-	// The columns share one idx array (DenseMap3). strID losslessly encodes the
-	// root (the interned string carries the $(S)/ or $(B)/ prefix), so a $(B) dst
-	// and a $(S) source never collide despite the shared STR key space.
-	byStr DenseMap3[STR, *GeneratedFileInfo, []VFS, bool]
+	// Closure leaves are NOT a column here — they are a field on GeneratedFileInfo
+	// (per-output data), read via reg.Lookup. The two columns share one idx array
+	// (DenseMap2). strID losslessly encodes the root (the interned string carries
+	// the $(S)/ or $(B)/ prefix), so a $(B) dst and a $(S) source never collide
+	// despite the shared STR key space.
+	byStr DenseMap2[STR, *GeneratedFileInfo, bool]
 
 	// bySplit maps a (prefix, suffix) STR pair to its producer info, packed into a
 	// single uint64 key (prefix << 32 | suffix) so a split lookup is one fast64 map
@@ -104,7 +104,7 @@ func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 
 func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) {
 	r.bySplit[splitKey(prefix, suffix)] = info
-	r.byStr.Put3(prefix, true) // mark the prefix so LookupSplit can gate the probe
+	r.byStr.Put2(prefix, true) // mark the prefix so LookupSplit can gate the probe
 }
 
 func (r *CodegenRegistry) Lookup(path VFS) *GeneratedFileInfo {
@@ -128,27 +128,34 @@ func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
 func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
 	// Gate the uint64 hash-map probe on the dense prefix flag: most addincl
 	// prefixes hold no codegen split entry, so the array probe short-circuits.
-	if _, ok := r.byStr.Get3(prefix); !ok {
+	if _, ok := r.byStr.Get2(prefix); !ok {
 		return nil
 	}
 
 	return r.bySplit[splitKey(prefix, suffix)]
 }
 
-// AddClosureLeaf records leaf as a non-expanded member of node's closure window
-// (byStr column 2). Cold path (codegen registration); the scanner reads the
-// result on the hot path via ClosureLeaves.
+// AddClosureLeaf appends leaf to node's GeneratedFileInfo.ClosureLeaves. node
+// must already be registered (the producer info exists). Cold path (codegen
+// registration); the scanner reads the result on the hot path via ClosureLeaves.
 func (r *CodegenRegistry) AddClosureLeaf(node, leaf VFS) {
-	key := STR(node.strID())
-	leaves, _ := r.byStr.Get2(key)
-	r.byStr.Put2(key, append(leaves, leaf))
+	info, ok := r.byStr.Get1(STR(node.strID()))
+
+	if !ok {
+		ThrowFmt("CodegenRegistry: AddClosureLeaf on unregistered path %q", node.String())
+	}
+
+	info.ClosureLeaves = append(info.ClosureLeaves, leaf)
 }
 
-// ClosureLeaves returns the non-expanded closure-window members registered for
-// node (nil when none).
+// ClosureLeaves returns the non-expanded closure-window members of node (nil
+// when node is not a registered output or has none).
 func (r *CodegenRegistry) ClosureLeaves(node VFS) []VFS {
-	leaves, _ := r.byStr.Get2(STR(node.strID()))
-	return leaves
+	if info, ok := r.byStr.Get1(STR(node.strID())); ok {
+		return info.ClosureLeaves
+	}
+
+	return nil
 }
 
 func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
