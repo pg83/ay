@@ -15,8 +15,9 @@ type GeneratedFileInfo struct {
 	// IsText marks a COPY_FILE(TEXT) registration. TEXT copies expand the
 	// source content into the destination verbatim, so the .txt source is a
 	// real compiler input even when the COPY lives in a different module than
-	// the CC node that includes the generated header. withContextSourceExtras
-	// uses this flag to extend source-tracking across module boundaries.
+	// the CC node that includes the generated header. Such a dst registers its
+	// source as a closure leaf (see closureLeaves) so it rides across module
+	// boundaries with the dst's window.
 	IsText bool
 
 	ProducerRef    NodeRef
@@ -51,6 +52,18 @@ type CodegenRegistry struct {
 	// single uint64 key (prefix << 32 | suffix) so a split lookup is one fast64 map
 	// probe instead of a two-level DenseMap-then-inner-map dance.
 	bySplit map[uint64]*GeneratedFileInfo
+
+	// closureLeaves maps a generated $(B) output to extra VFS that must ride in
+	// its include-closure window as bare, non-expanded members. A COPY_FILE(TEXT)
+	// dst registers its $(S) source (and the fs_tools.py copy tooling) here: the
+	// dst's content is the source verbatim, so the source is a real compiler input
+	// of every unit that includes the dst — but its own #include directives must
+	// NOT be re-resolved per consuming module (that leaked sibling staging copies,
+	// see copyFileParsedIncludes). The scanner splices these leaves into the dst's
+	// window at build time (dfs pass-2 / emitClosure), so they ride transitively
+	// to every consumer without being traversed as children. This replaces the
+	// per-CC-source closure re-walk that withContextSourceExtras used to do.
+	closureLeaves DenseMap[VFS, []VFS]
 }
 
 func splitKey(prefix, suffix STR) uint64 { return uint64(prefix)<<32 | uint64(suffix) }
@@ -102,6 +115,22 @@ func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
 
 func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
 	return r.bySplit[splitKey(prefix, suffix)]
+}
+
+// AddClosureLeaf records leaf as a non-expanded member of node's closure window.
+// Cold path (codegen registration); the scanner reads the result on the hot path
+// via ClosureLeaves.
+func (r *CodegenRegistry) AddClosureLeaf(node, leaf VFS) {
+	leaves, _ := r.closureLeaves.Get(node)
+	r.closureLeaves.Put(node, append(leaves, leaf))
+}
+
+// ClosureLeaves returns the non-expanded closure-window members registered for
+// node (nil when none). Keyed by VFS — not strID — so a $(B) dst and a $(S)
+// source sharing the same path STR do not collide.
+func (r *CodegenRegistry) ClosureLeaves(node VFS) []VFS {
+	leaves, _ := r.closureLeaves.Get(node)
+	return leaves
 }
 
 func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
