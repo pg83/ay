@@ -215,8 +215,8 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 		t.Fatalf("second resolve = %v, want %v", got2, want)
 	}
 
-	if len(sc.searchTierCache) != 1 {
-		t.Fatalf("searchTierCache entries = %d, want 1 (shared by target)", len(sc.searchTierCache))
+	if len(scanner.searchTierFlat) != 1 {
+		t.Fatalf("searchTierFlat entries = %d, want 1 (shared by target)", len(scanner.searchTierFlat))
 	}
 
 	if scanner.searchTierMisses != 1 || scanner.searchTierHits != 1 {
@@ -238,11 +238,11 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 		t.Fatalf("missing header resolved unexpectedly: first=%v second=%v", got1, got2)
 	}
 
-	if len(sc.searchTierCache) != 1 {
-		t.Fatalf("searchTierCache entries = %d, want 1", len(sc.searchTierCache))
+	if len(scanner.searchTierFlat) != 1 {
+		t.Fatalf("searchTierFlat entries = %d, want 1", len(scanner.searchTierFlat))
 	}
 
-	if sc.searchTierCache[internString("missing.h")].found {
+	if scanner.searchTierFlat[uint64(sc.ctxNum)<<32|uint64(internString("missing.h"))].found {
 		t.Fatalf("missing header cached as found")
 	}
 
@@ -268,8 +268,8 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 		t.Fatalf("quoted same-dir resolve = %v, want %v", got, want)
 	}
 
-	if len(sc.searchTierCache) != 0 {
-		t.Fatalf("searchTierCache entries = %d, want 0 when same-dir quoted wins", len(sc.searchTierCache))
+	if len(scanner.searchTierFlat) != 0 {
+		t.Fatalf("searchTierFlat entries = %d, want 0 when same-dir quoted wins", len(scanner.searchTierFlat))
 	}
 
 	if scanner.searchTierHits != 0 || scanner.searchTierMisses != 0 {

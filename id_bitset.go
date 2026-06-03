@@ -1,22 +1,23 @@
 package main
 
-// idBitSet is a grow-on-demand set of ids (VFS values) backed by a bit vector —
-// one bit per id, indexed by uint32(v). At 1 bit/id it is 32x smaller than an
-// epoch-stamped idSet (which spends a uint32 per id). There is no epoch/reset:
-// the zero value is an empty set, has reports membership, add inserts. It suits
-// set-once, never-cleared usage (e.g. the dfs in-flight guard) where the dense
-// idSet's per-id word would only waste memory.
-type idBitSet struct {
+// idBitSet is a grow-on-demand set of dense ids (any ~uint32 — VFS or STR)
+// backed by a bit vector — one bit per id, indexed by uint32(v). At 1 bit/id it
+// is 32x smaller than an epoch-stamped idSet (which spends a uint32 per id).
+// There is no epoch/reset: the zero value is an empty set, has reports
+// membership, add inserts. It suits set-once, never-cleared usage (e.g. the dfs
+// in-flight guard, the searchTier presence gate) where the dense idSet's per-id
+// word would only waste memory.
+type idBitSet[K ~uint32] struct {
 	words []uint64
 }
 
-func (b *idBitSet) has(v VFS) bool {
+func (b *idBitSet[K]) has(v K) bool {
 	w := uint32(v) >> 6
 
 	return w < uint32(len(b.words)) && b.words[w]&(uint64(1)<<(uint32(v)&63)) != 0
 }
 
-func (b *idBitSet) add(v VFS) {
+func (b *idBitSet[K]) add(v K) {
 	w := uint32(v) >> 6
 
 	if w >= uint32(len(b.words)) {
