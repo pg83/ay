@@ -33,7 +33,8 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
 		// (cached by absID in IncludeScanner.childrenCache): the first module to
 		// reach the shared template fixed every consumer's <angle> includes to
 		// that first module's staging copies — a cross-module include leak. The
-		// source file is re-attached as a leaf input by withContextSourceExtras.
+		// source file rides as a non-expanded closure leaf of the dst instead
+		// (registered in emitCopyFiles; see CodegenRegistry.closureLeaves).
 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
 
 		if scanner != nil {
@@ -95,6 +96,20 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 				SourcePath:  srcVFS,
 				IsText:      entry.Text,
 			})
+
+			// COPY_FILE(TEXT): the .txt source content is substituted verbatim into
+			// the dst, so the source — and the fs_tools.py copy tooling — are real
+			// inputs of every unit including the dst. Register them as bare closure
+			// leaves so they ride transitively in the dst's window (scanner splices
+			// them in without expanding their own includes), instead of being
+			// re-attached per CC source by a full closure re-walk.
+			if entry.Text && srcVFS != dstVFS {
+				reg.AddClosureLeaf(dstVFS, srcVFS)
+
+				for _, tool := range ctx.scripts[copyFsToolsVFS] {
+					reg.AddClosureLeaf(dstVFS, tool)
+				}
+			}
 		}
 	}
 
@@ -235,99 +250,23 @@ func autoCopyDstExtras(modulePath string, d *moduleData, closure []VFS, rootDst 
 	return extras
 }
 
-// withContextSourceExtras re-attaches the $(S) source of every COPY_FILE(TEXT)
-// copy whose destination participates in a closure. For TEXT copies
-// copyFileParsedIncludes no longer routes the dst through the source node (that
-// node's resolution is cached globally, leaking sibling-module staging copies);
-// it splices the source's raw includes onto the dst instead. The source file is
-// still a real input of the copy — COPY_FILE(TEXT) lists ${input=TEXT:TEXT} — so
-// re-add it here as a leaf input, without it ever being a traversed graph node.
-// (Non-TEXT COPY(WITH_CONTEXT) keeps its source-node pointer, so its source
-// already reaches the closure and needs no re-attach here.) rootDst is the
-// compile's own $(B) input (the file being compiled, itself possibly a TEXT
-// copy dst); include it so the compiled unit's $(S) source is attached too.
+// copyProductToolingExtras returns the fs_tools.py copy tooling (fs_tools.py +
+// its import closure) when the compiled unit rootDst is itself a COPY product.
 //
-// The dst→src mapping reuses the CodegenRegistry's SourcePath (recorded by
-// emitCopyFiles when the CP node was registered) rather than re-deriving the
-// source VFS from the raw entry.Src string — that keeps this leaf input
-// byte-identical to the CP node's own source edge and avoids a redundant
-// filesystem probe per entry.
-//
-// Cross-module TEXT copies: when a CC node includes a header produced by
-// COPY_FILE(TEXT) in a *different* module, the .txt source is still a real
-// compiler input. The registry carries IsText on every CP registration, so we
-// extend the lookup beyond d.copyFiles to cover those cross-module cases.
-func withContextSourceExtras(reg *CodegenRegistry, modulePath string, d *moduleData, closure []VFS, rootDst VFS, scripts scriptDeps) []VFS {
-	if reg == nil {
+// The two cross-module attachments this used to also do — re-adding a
+// COPY_FILE(TEXT) dst's $(S) source, and the fs_tools tooling for a *consumed*
+// TEXT-copied header — now ride transitively as non-expanded closure leaves
+// (CodegenRegistry.closureLeaves, registered in emitCopyFiles and spliced into
+// the dst's window by the scanner). So a unit that merely includes a TEXT header
+// already carries both through its closure; the only case left here is the
+// compiled unit's own producer tooling when it is itself a copy (TEXT or not),
+// which has no dst-in-closure to ride from.
+func copyProductToolingExtras(reg *CodegenRegistry, rootDst VFS, scripts scriptDeps) []VFS {
+	if !isCopyProduct(reg, rootDst) {
 		return nil
 	}
 
-	// Build a dst→src map from this module's own TEXT copy files.
-	var dstToSrc map[VFS]VFS
-
-	if d != nil {
-		for _, entry := range d.copyFiles {
-			if !entry.Text {
-				continue
-			}
-
-			dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
-			info := reg.Lookup(dstVFS)
-
-			if info == nil || info.SourcePath == 0 || info.SourcePath == dstVFS {
-				continue
-			}
-
-			if dstToSrc == nil {
-				dstToSrc = make(map[VFS]VFS, len(d.copyFiles))
-			}
-
-			dstToSrc[dstVFS] = info.SourcePath
-		}
-	}
-
-	// textSrc returns the .txt source for v if v is a TEXT copy dst (same or
-	// different module); second return is false when v is not a TEXT copy.
-	textSrc := func(v VFS) (VFS, bool) {
-		if src, ok := dstToSrc[v]; ok {
-			return src, true
-		}
-
-		// Cross-module: any $(B) path registered as IsText in the registry.
-		if v.IsSource() {
-			return 0, false
-		}
-
-		info := reg.Lookup(v)
-
-		if info == nil || !info.IsText || info.SourcePath == 0 || info.SourcePath == v {
-			return 0, false
-		}
-
-		return info.SourcePath, true
-	}
-	var extras []VFS
-
-	if src, ok := textSrc(rootDst); ok {
-		extras = append(extras, src)
-	}
-
-	for _, v := range closure {
-		if src, ok := textSrc(v); ok {
-			extras = append(extras, src)
-		}
-	}
-
-	// A COPY product is produced by a `python3 fs_tools.py copy …` CP node; a unit
-	// that compiles a copied source, or consumes a TEXT-copied header, inherits the
-	// producer's $(S) tooling — fs_tools.py and its import closure (process_command_files.py).
-	// Attach it via the script table when the compiled unit itself is a copy (TEXT or
-	// not) or when a TEXT-copy source was re-attached above.
-	if len(extras) > 0 || isCopyProduct(reg, rootDst) {
-		extras = append(extras, scripts[copyFsToolsVFS]...)
-	}
-
-	return extras
+	return scripts[copyFsToolsVFS]
 }
 
 // isCopyProduct reports whether v is the $(B) output of a CP (COPY_FILE) node.

@@ -754,6 +754,17 @@ func (sc *scanCtx) dfs(abs VFS) {
 		}
 	})
 
+	// Splice non-expanded closure leaves (COPY_FILE(TEXT) $(B) dst → its $(S)
+	// source + copy tooling) for every $(B) member: bare window members that ride
+	// transitively to every consumer (which splices this cached window) but are
+	// never traversed as children — re-resolving their own #includes per consuming
+	// module leaked sibling staging copies.
+	for i := 0; i < k; i++ {
+		if block[i].IsBuild() {
+			k += copy(block[k:], s.codegen.ClosureLeaves(block[i]))
+		}
+	}
+
 	s.closureArena.commit(k)
 	ref := closureRef(len(s.subgraphClosures))
 	s.subgraphClosures = append(s.subgraphClosures, block[:k:k])
@@ -835,6 +846,15 @@ func (sc *scanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 
 	block := s.closureArena.alloc(closureAllocHint)
 	k := fill(block)
+
+	// Splice non-expanded closure leaves for every $(B) member (same as dfs
+	// pass-2; see there).
+	for i := 0; i < k; i++ {
+		if block[i].IsBuild() {
+			k += copy(block[k:], s.codegen.ClosureLeaves(block[i]))
+		}
+	}
+
 	s.closureArena.commit(k)
 
 	ref := closureRef(len(s.subgraphClosures))

@@ -66,16 +66,12 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			closure := walkClosure(ctx, instance, inputVFS, in)
 			closure = dropTransitiveGeneratedProto(closure)
 
-			// Add TEXT copy source files (e.g. mkql_computation_node_codegen.h.txt)
-			// that appear in the closure, matching emitOneSource's withContextSourceExtras.
-			wcExtras := withContextSourceExtras(codegenRegForInstance(ctx, instance), instance.Path, d, closure, inputVFS, ctx.scripts)
-
-			for _, e := range wcExtras {
-				if e == copyFsToolsVFS {
-					linksCopy = true
-					break
-				}
-			}
+			// A COPY_FILE(TEXT) source (e.g. mkql_computation_node_codegen.h.txt) and
+			// the fs_tools.py tooling for any consumed TEXT-copied header now ride
+			// transitively as closure leaves, so they are already in `closure`. Only
+			// the case where inputVFS is itself a copy product needs the tooling
+			// re-added here.
+			wcExtras := copyProductToolingExtras(codegenRegForInstance(ctx, instance), inputVFS, ctx.scripts)
 
 			var depRefs []NodeRef
 
@@ -97,9 +93,16 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			}
 
 			// Propagate $(S) inputs from this BC node to the OP flat-input set.
+			// fs_tools.py in the inputs (via a consumed TEXT header's leaf, or via
+			// wcExtras when inputVFS is itself a copy product) means this .bc came
+			// from a COPY product, so the merge node inherits the tooling too.
 			for _, v := range allInputs {
 				if v.IsSource() {
 					bcSourceInputs = append(bcSourceInputs, v)
+				}
+
+				if v == copyFsToolsVFS {
+					linksCopy = true
 				}
 			}
 

@@ -71,7 +71,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			srcIn.IncludeInputs = ctx.deduper.dedupVFS(srcIn.IncludeInputs, autoExtras)
 		}
 
-		wcExtras := withContextSourceExtras(codegenRegForInstance(ctx, srcInstance), srcInstance.Path, d, srcIn.IncludeInputs, srcVFS, ctx.scripts)
+		wcExtras := copyProductToolingExtras(codegenRegForInstance(ctx, srcInstance), srcVFS, ctx.scripts)
 
 		if len(wcExtras) > 0 {
 			srcIn.IncludeInputs = ctx.deduper.dedupVFS(srcIn.IncludeInputs, wcExtras)
