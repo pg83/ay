@@ -247,11 +247,11 @@ func emitResourceObjcopy(
 						if ref, ok := d.prOutputProducer[canonKey]; ok {
 							inputVFS = copyFileOutputVFS(instance.Path, e.Path)
 							producerRef = ref
-							cur.extraInputs = ctx.deduper.dedupVFS(cur.extraInputs, prResourceExtraInputs(d, canonKey))
+							cur.extraInputs = dedupVFS(cur.extraInputs, prResourceExtraInputs(d, canonKey))
 						} else if ref, ok := d.prOutputProducer[e.Path]; ok {
 							inputVFS = copyFileOutputVFS(instance.Path, e.Path)
 							producerRef = ref
-							cur.extraInputs = ctx.deduper.dedupVFS(cur.extraInputs, prResourceExtraInputs(d, e.Path))
+							cur.extraInputs = dedupVFS(cur.extraInputs, prResourceExtraInputs(d, e.Path))
 						}
 					}
 

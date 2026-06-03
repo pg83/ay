@@ -65,31 +65,31 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		autoExtras := autoCopyDstExtras(srcInstance.Path, d, srcIn.IncludeInputs, srcVFS)
 
 		if len(autoExtras) > 0 {
-			srcIn.IncludeInputs = ctx.deduper.dedupVFS(srcIn.IncludeInputs, autoExtras)
+			srcIn.IncludeInputs = dedupVFS(srcIn.IncludeInputs, autoExtras)
 		}
 
 		wcExtras := copyProductToolingExtras(codegenRegForInstance(ctx, srcInstance), srcVFS, ctx.scripts)
 
 		if len(wcExtras) > 0 {
-			srcIn.IncludeInputs = ctx.deduper.dedupVFS(srcIn.IncludeInputs, wcExtras)
+			srcIn.IncludeInputs = dedupVFS(srcIn.IncludeInputs, wcExtras)
 		}
 
 		flatcExtras := flatcCCExtraInputs(ctx, srcIn.IncludeInputs)
 
 		if len(flatcExtras) > 0 {
-			srcIn.IncludeInputs = ctx.deduper.dedupVFS(srcIn.IncludeInputs, flatcExtras)
+			srcIn.IncludeInputs = dedupVFS(srcIn.IncludeInputs, flatcExtras)
 		}
 
 		bisonExtras := bisonCCSourceInputs(ctx, srcInstance, srcIn.IncludeInputs)
 
 		if len(bisonExtras) > 0 {
-			srcIn.IncludeInputs = ctx.deduper.dedupVFS(srcIn.IncludeInputs, bisonExtras)
+			srcIn.IncludeInputs = dedupVFS(srcIn.IncludeInputs, bisonExtras)
 		}
 
 		extras := runtimePy3CCExtraInputs(srcInstance.Path, srcRel)
 
 		if len(extras) > 0 {
-			srcIn.IncludeInputs = ctx.deduper.dedupVFS(srcIn.IncludeInputs, extras)
+			srcIn.IncludeInputs = dedupVFS(srcIn.IncludeInputs, extras)
 		}
 
 		// Fast-path: when no extras were appended, IncludeInputs == full[1:] (same
@@ -120,7 +120,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			// against nothing — and yasm's command misses `-I X` entirely,
 			// diverging from REF (e.g. yt/yt/core/misc/isa_crc64 needs
 			// -I=$(S)/yt/yt/core/misc/isa_crc64/include for reg_sizes.asm).
-			scanIn.AddIncl = ctx.deduper.dedupVFS(srcIn.AddIncl, d.asmAddIncl)
+			scanIn.AddIncl = dedupVFS(srcIn.AddIncl, d.asmAddIncl)
 			asIn.AddIncl = scanIn.AddIncl
 		}
 
@@ -332,7 +332,7 @@ func emitLibraryFlatcSource(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	ccIn.IncludeInputs = walkClosure(ctx, instance, fl.cpp, in)
 
 	if extras := flatcCCExtraInputs(ctx, ccIn.IncludeInputs); len(extras) > 0 {
-		ccIn.IncludeInputs = ctx.deduper.dedupVFS(ccIn.IncludeInputs, extras)
+		ccIn.IncludeInputs = dedupVFS(ccIn.IncludeInputs, extras)
 	}
 
 	ccIn.ExtraDepRefs = append([]NodeRef{fl.flRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, fl.flRef)...)

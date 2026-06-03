@@ -339,18 +339,3 @@ func hasSuffix(s, suffix string) bool {
 	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
 }
 
-func dedupVFS(in []VFS) []VFS {
-	seen := make(map[VFS]struct{}, len(in))
-	out := make([]VFS, 0, len(in))
-
-	for _, p := range in {
-		if _, ok := seen[p]; ok {
-			continue
-		}
-
-		seen[p] = struct{}{}
-		out = append(out, p)
-	}
-
-	return out
-}

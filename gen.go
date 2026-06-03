@@ -260,12 +260,6 @@ type genCtx struct {
 
 	testMode bool
 
-	// deduper is the per-run VFS deduper (one idSet reused across all dedupVFS
-	// calls, replacing a fresh map per call). A single field is safe: dedupVFS is
-	// a leaf (pure slice/idSet ops, no callback re-enters it), and gen is
-	// single-threaded. collectModule lacks a ctx, so it receives &ctx.deduper.
-	deduper deDuper
-
 	// tarjan is the run-wide Tarjan/closure working state; both scanners hold a
 	// pointer to it (their tjc field) so its vfsBound-sized arrays grow once, not
 	// once per scanner. reset() runs before every use, so the shared state is safe
@@ -300,10 +294,10 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 	// ~uint32 id, cast to VFS at the idSet boundary — a different typedef over the
 	// same dense space). probe touches no other deduper user (EmitCF takes no
 	// ctx), so reset-then-stream here is safe.
-	ctx.deduper.reset()
+	deduper.reset()
 
 	for _, r := range exclude {
-		ctx.deduper.add(VFS(r))
+		deduper.add(VFS(r))
 	}
 
 	var out []NodeRef
@@ -339,7 +333,7 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 			return
 		}
 
-		if !ctx.deduper.add(VFS(ref)) {
+		if !deduper.add(VFS(ref)) {
 			return
 		}
 
@@ -607,7 +601,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	mf := Throw2(ParseFile(ctx.fs, yamakePath))
 
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.parsers, &ctx.deduper, instance.Path, instance.Kind, mf.Stmts, env)
+	d := collectModule(ctx.parsers, &deduper, instance.Path, instance.Kind, mf.Stmts, env)
 
 	for _, stmt := range d.allPySrcs {
 		applyAllPySrcs(ctx.fs, instance.Path, stmt, d)
@@ -618,11 +612,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		cppProtoEnv.SetStringID(envMODULE_TAG, strCPPProto)
 
 		cppProtoEnv.SetBool(envGEN_PROTO, true)
-		d = collectModule(ctx.parsers, &ctx.deduper, instance.Path, instance.Kind, mf.Stmts, cppProtoEnv)
+		d = collectModule(ctx.parsers, &deduper, instance.Path, instance.Kind, mf.Stmts, cppProtoEnv)
 	} else if d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" && instance.Language == LangPy {
 		py3ProtoEnv := env.Clone()
 		py3ProtoEnv.SetBool(envPY3_PROTO, true)
-		d = collectModule(ctx.parsers, &ctx.deduper, instance.Path, instance.Kind, mf.Stmts, py3ProtoEnv)
+		d = collectModule(ctx.parsers, &deduper, instance.Path, instance.Kind, mf.Stmts, py3ProtoEnv)
 	}
 
 	if d.conflictMod != nil {
@@ -865,7 +859,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ownProtoAddInclH = []VFS{Source(filepath.ToSlash(filepath.Clean(*d.protoNamespace)))}
 		}
 
-		effectiveProtoAddInclH := ctx.deduper.dedupVFS(ownProtoAddInclH, peerContribs.protoAddIncl)
+		effectiveProtoAddInclH := dedupVFS(ownProtoAddInclH, peerContribs.protoAddIncl)
 
 		result := &moduleEmitResult{
 			isPyLibrary:        isPyLibraryType(d.moduleStmt.Name),
@@ -873,7 +867,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ARPath:             hOnlyARPath,
 			GlobalRef:          hOnlyGlobalRef,
 			GlobalPath:         hOnlyGlobalPath,
-			AddInclGlobal:      ctx.deduper.dedupVFS(d.addInclGlobal, peerContribs.addIncl),
+			AddInclGlobal:      dedupVFS(d.addInclGlobal, peerContribs.addIncl),
 			OwnAddInclGlobal:   d.addInclGlobal,
 			ProtoAddInclGlobal: effectiveProtoAddInclH,
 			AddInclOneLevel:    d.addInclOneLevel,
@@ -1013,7 +1007,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	peerLinkCmdPaths := make([]VFS, 0, len(allPeers))
 	// The peer-collection dedup sets are built below, after the recursive peer
 	// genModule loop — each in its own inlined pass that resets the run-wide
-	// deduper and streams exactly one set through ctx.deduper.add. Running after
+	// deduper and streams exactly one set through deduper.add. Running after
 	// the recursion lets the passes share one deduper (a nested genModule would
 	// otherwise reset it mid-pass) instead of allocating a map per set.
 
@@ -1091,11 +1085,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult, kind: kind})
 	}
 
-	ctx.deduper.reset()
+	deduper.reset()
 
 	for _, rp := range resolved {
 		for i, p := range rp.result.LDPluginPaths {
-			if ctx.deduper.add(p) {
+			if deduper.add(p) {
 				peerLDPluginRefs = append(peerLDPluginRefs, rp.result.LDPluginRefs[i])
 				peerLDPluginPaths = append(peerLDPluginPaths, p)
 			}
@@ -1179,58 +1173,58 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	// peerArchive: closure paths, then the peer's own AR output (per peer).
-	ctx.deduper.reset()
+	deduper.reset()
 
 	for _, rp := range archiveOrder {
 		pr := rp.result
 
 		for i, p := range pr.PeerArchiveClosurePaths {
-			if ctx.deduper.add(p) {
+			if deduper.add(p) {
 				peerArchiveRefs = append(peerArchiveRefs, pr.PeerArchiveClosureRefs[i])
 				peerArchivePaths = append(peerArchivePaths, p)
 			}
 		}
 
-		if pr.ARPath != nil && ctx.deduper.add(*pr.ARPath) {
+		if pr.ARPath != nil && deduper.add(*pr.ARPath) {
 			peerArchiveRefs = append(peerArchiveRefs, pr.ARRef)
 			peerArchivePaths = append(peerArchivePaths, *pr.ARPath)
 		}
 	}
 
 	// peerGlobal: closure paths, then the peer's own GLOBAL output.
-	ctx.deduper.reset()
+	deduper.reset()
 
 	for _, rp := range archiveOrder {
 		pr := rp.result
 
 		for i, p := range pr.PeerGlobalClosurePaths {
-			if ctx.deduper.add(p) {
+			if deduper.add(p) {
 				peerGlobalRefs = append(peerGlobalRefs, pr.PeerGlobalClosureRefs[i])
 				peerGlobalPaths = append(peerGlobalPaths, p)
 			}
 		}
 
-		if pr.GlobalRef != nil && pr.GlobalPath != nil && ctx.deduper.add(*pr.GlobalPath) {
+		if pr.GlobalRef != nil && pr.GlobalPath != nil && deduper.add(*pr.GlobalPath) {
 			peerGlobalRefs = append(peerGlobalRefs, *pr.GlobalRef)
 			peerGlobalPaths = append(peerGlobalPaths, *pr.GlobalPath)
 		}
 	}
 
 	// peerWholeArchive: closure paths, then the peer's own whole-archive paths.
-	ctx.deduper.reset()
+	deduper.reset()
 
 	for _, rp := range archiveOrder {
 		pr := rp.result
 
 		for i, p := range pr.PeerWholeArchiveClosurePaths {
-			if ctx.deduper.add(p) {
+			if deduper.add(p) {
 				peerWholeArchiveRefs = append(peerWholeArchiveRefs, pr.PeerWholeArchiveClosureRefs[i])
 				peerWholeArchivePaths = append(peerWholeArchivePaths, p)
 			}
 		}
 
 		for i, p := range pr.WholeArchivePaths {
-			if ctx.deduper.add(p) {
+			if deduper.add(p) {
 				peerWholeArchiveRefs = append(peerWholeArchiveRefs, pr.WholeArchiveRefs[i])
 				peerWholeArchivePaths = append(peerWholeArchivePaths, p)
 			}
@@ -1238,38 +1232,38 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	// peerWholeArchiveCmd: command-line whole-archive paths (no refs).
-	ctx.deduper.reset()
+	deduper.reset()
 
 	for _, rp := range archiveOrder {
 		pr := rp.result
 
 		for _, p := range pr.PeerWholeArchiveCmdClosurePaths {
-			if ctx.deduper.add(p) {
+			if deduper.add(p) {
 				peerWholeArchiveCmdPaths = append(peerWholeArchiveCmdPaths, p)
 			}
 		}
 
 		for _, p := range pr.WholeArchiveCmdPaths {
-			if ctx.deduper.add(p) {
+			if deduper.add(p) {
 				peerWholeArchiveCmdPaths = append(peerWholeArchiveCmdPaths, p)
 			}
 		}
 	}
 
 	// peerDynamic: closure paths, then the peer's own DYNAMIC_LIBRARY output.
-	ctx.deduper.reset()
+	deduper.reset()
 
 	for _, rp := range archiveOrder {
 		pr := rp.result
 
 		for i, p := range pr.PeerDynamicClosurePaths {
-			if ctx.deduper.add(p) {
+			if deduper.add(p) {
 				peerDynamicRefs = append(peerDynamicRefs, pr.PeerDynamicClosureRefs[i])
 				peerDynamicPaths = append(peerDynamicPaths, p)
 			}
 		}
 
-		if pr.ModuleStmtName == "DYNAMIC_LIBRARY" && pr.LDPath != nil && ctx.deduper.add(*pr.LDPath) {
+		if pr.ModuleStmtName == "DYNAMIC_LIBRARY" && pr.LDPath != nil && deduper.add(*pr.LDPath) {
 			peerDynamicRefs = append(peerDynamicRefs, pr.LDRef)
 			peerDynamicPaths = append(peerDynamicPaths, *pr.LDPath)
 		}
@@ -1280,28 +1274,28 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// dynamic-closure then the peer's own dynamic-lib then its AR output. Its own
 	// pass re-walks those sources (reading them a second time is cheap) so it need
 	// not piggyback on the archive/dynamic passes.
-	ctx.deduper.reset()
+	deduper.reset()
 
 	for _, rp := range archiveOrder {
 		pr := rp.result
 
 		for _, p := range pr.PeerArchiveClosurePaths {
-			if ctx.deduper.add(p) {
+			if deduper.add(p) {
 				peerLinkCmdPaths = append(peerLinkCmdPaths, p)
 			}
 		}
 
 		for _, p := range pr.PeerDynamicClosurePaths {
-			if ctx.deduper.add(p) {
+			if deduper.add(p) {
 				peerLinkCmdPaths = append(peerLinkCmdPaths, p)
 			}
 		}
 
-		if pr.ModuleStmtName == "DYNAMIC_LIBRARY" && pr.LDPath != nil && ctx.deduper.add(*pr.LDPath) {
+		if pr.ModuleStmtName == "DYNAMIC_LIBRARY" && pr.LDPath != nil && deduper.add(*pr.LDPath) {
 			peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.LDPath)
 		}
 
-		if pr.ARPath != nil && ctx.deduper.add(*pr.ARPath) {
+		if pr.ARPath != nil && deduper.add(*pr.ARPath) {
 			peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.ARPath)
 		}
 	}
@@ -1437,7 +1431,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
-	effectiveAddInclGlobal := ctx.deduper.dedupVFS(d.addInclGlobal, peerAddInclForProp)
+	effectiveAddInclGlobal := dedupVFS(d.addInclGlobal, peerAddInclForProp)
 
 	// ProtoAddInclGlobal: this module's $(S)/<PROTO_NAMESPACE> contribution
 	// (only when GLOBAL was specified or the module is a PROTO_LIBRARY),
@@ -1464,17 +1458,17 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ownProtoAddIncl = append(ownProtoAddIncl, d.protoAddInclGlobal...)
 	peerProtoAddInclGlobal := make([]VFS, 0, 4)
 
-	ctx.deduper.reset()
+	deduper.reset()
 
 	for _, rp := range resolved {
 		for _, p := range rp.result.ProtoAddInclGlobal {
-			if ctx.deduper.add(p) {
+			if deduper.add(p) {
 				peerProtoAddInclGlobal = append(peerProtoAddInclGlobal, p)
 			}
 		}
 	}
 
-	effectiveProtoAddInclGlobal := ctx.deduper.dedupVFS(ownProtoAddIncl, peerProtoAddInclGlobal)
+	effectiveProtoAddInclGlobal := dedupVFS(ownProtoAddIncl, peerProtoAddInclGlobal)
 
 	if instance.Path == "library/python/runtime_py3" {
 		buildRootPath := bldLibraryPythonRuntimePy3
@@ -1554,7 +1548,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// pattern for header.ya.make.inc COPY_FILE targets) couldn't resolve its
 	// own COPY destinations and fell through to a peer's COPY of the same
 	// header — emitting the wrong $(B) path in CC inputs.
-	dedupedAddIncl := ctx.deduper.dedupVFS(d.addIncl, d.addInclGlobal)
+	dedupedAddIncl := dedupVFS(d.addIncl, d.addInclGlobal)
 
 	isPy3NativeLib := d.moduleStmt.Name == "PY23_NATIVE_LIBRARY" ||
 		d.moduleStmt.Name == "PY23_LIBRARY"
@@ -2230,57 +2224,6 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 		}
 
 		out = append(out, p)
-	}
-
-	return out
-}
-
-// deDuper dedups VFS slices via an epoch-stamped idSet instead of a fresh map per
-// call — the dense array is reused across calls (only the epoch bumps), killing the
-// per-call seen-map churn. Single-threaded use only (one idSet, reset per call).
-type deDuper struct {
-	seen idSet
-}
-
-// reset clears the deduper for a fresh single-set pass: callers then dedup an
-// incrementally-built set via add (one logical set per reset). Used by
-// genModule's peer-collection passes, which each reset then stream one set
-// through add — reusing this one run-wide idSet instead of a map per set.
-func (dd *deDuper) reset() {
-	dd.seen.reset(vfsBound())
-}
-
-// add reports whether v was newly added (absent before this call) since the last
-// reset; a false return means v is a duplicate within the current set.
-func (dd *deDuper) add(v VFS) bool {
-	if dd.seen.has(v) {
-		return false
-	}
-
-	dd.seen.add(v)
-
-	return true
-}
-
-func (dd *deDuper) dedupVFS(lists ...[]VFS) []VFS {
-	total := 0
-
-	for _, l := range lists {
-		total += len(l)
-	}
-
-	dd.seen.reset(vfsBound())
-	out := make([]VFS, 0, total)
-
-	for _, l := range lists {
-		for _, x := range l {
-			if dd.seen.has(x) {
-				continue
-			}
-
-			dd.seen.add(x)
-			out = append(out, x)
-		}
 	}
 
 	return out
