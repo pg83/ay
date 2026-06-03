@@ -413,24 +413,6 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 	pbDepsH := Build(protoBase + ".deps.pb.h")
 	grpcPbH := Build(protoBase + ".grpc.pb.h")
 	grpcPbCC := Build(protoBase + ".grpc.pb.cc")
-	pbKey := codegenOutputKey{platform: instance.Platform}
-	pbKey.path = pbH
-	ctx.pbOutputs[pbKey] = pbRef
-	pbKey.path = pbCC
-	ctx.pbOutputs[pbKey] = pbRef
-
-	if liteHeaders {
-		pbKey.path = pbDepsH
-		ctx.pbOutputs[pbKey] = pbRef
-	}
-
-	if cfg.grpc {
-		pbKey.path = grpcPbH
-		ctx.pbOutputs[pbKey] = pbRef
-		pbKey.path = grpcPbCC
-		ctx.pbOutputs[pbKey] = pbRef
-	}
-
 	extraOutputPaths := make([]VFS, 0, 4)
 	extraSourceOutputs := make([]VFS, 0, 2)
 
@@ -442,9 +424,6 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			if isCCSourceExt(out.Rel()) {
 				extraSourceOutputs = append(extraSourceOutputs, out)
 			}
-
-			pbKey.path = out
-			ctx.pbOutputs[pbKey] = pbRef
 		}
 	}
 
@@ -476,13 +455,13 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			pbHParsed = append(pbHParsed, grpcServiceHeaderDirectives...)
 		}
 
-		registerGeneratedParsedOutput(ctx, instance, "PB", pbH, pbHParsed)
+		registerBoundGeneratedParsedOutput(ctx, instance, "PB", pbH, pbHParsed, pbRef)
 
 		if liteHeaders {
 			depsParsed := make([]includeDirective, 0, 1+len(directImports))
 			depsParsed = append(depsParsed, includeDirective{kind: includeQuoted, target: internString(pbH.Rel())})
 			depsParsed = append(depsParsed, directImports...)
-			registerGeneratedParsedOutput(ctx, instance, "PB", pbDepsH, depsParsed)
+			registerBoundGeneratedParsedOutput(ctx, instance, "PB", pbDepsH, depsParsed, pbRef)
 		}
 
 		pbCCParsed := make([]includeDirective, 0, 3+len(directImports)+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
@@ -501,7 +480,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			pbCCParsed = append(pbCCParsed, grpcSourceExtraDirectives...)
 		}
 
-		registerGeneratedParsedOutput(ctx, instance, "PB", pbCC, pbCCParsed)
+		registerBoundGeneratedParsedOutput(ctx, instance, "PB", pbCC, pbCCParsed, pbRef)
 
 		var grpcCCParsed, grpcHParsed []includeDirective
 
@@ -522,12 +501,12 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		}
 
 		if cfg.grpc {
-			registerGeneratedParsedOutput(ctx, instance, "PB", grpcPbCC, grpcCCParsed)
-			registerGeneratedParsedOutput(ctx, instance, "PB", grpcPbH, grpcHParsed)
+			registerBoundGeneratedParsedOutput(ctx, instance, "PB", grpcPbCC, grpcCCParsed, pbRef)
+			registerBoundGeneratedParsedOutput(ctx, instance, "PB", grpcPbH, grpcHParsed, pbRef)
 		}
 
 		for _, out := range extraOutputPaths {
-			registerGeneratedParsedOutput(ctx, instance, "PB", out, extraProtoOutputParsedIncludes(out, pbH, grpcPbH, grpcPbCC, grpcHParsed, grpcCCParsed))
+			registerBoundGeneratedParsedOutput(ctx, instance, "PB", out, extraProtoOutputParsedIncludes(out, pbH, grpcPbH, grpcPbCC, grpcHParsed, grpcCCParsed), pbRef)
 		}
 	}
 
@@ -631,11 +610,6 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 
 			evH := Build(evRelPath + ".pb.h")
 			evPbCC := Build(evRelPath + ".pb.cc")
-			evKey := codegenOutputKey{platform: instance.Platform}
-			evKey.path = evH
-			ctx.evOutputs[evKey] = evRef
-			evKey.path = evPbCC
-			ctx.evOutputs[evKey] = evRef
 
 			if reg := codegenRegForInstance(ctx, instance); reg != nil {
 				directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
@@ -645,14 +619,14 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 				evHParsed = append(evHParsed, protobufRuntimeDirectives...)
 				evHParsed = append(evHParsed, eventRuntimeDirectives...)
 				evHParsed = append(evHParsed, evExtras...)
-				registerGeneratedParsedOutput(ctx, instance, "EV", evH, evHParsed)
+				registerBoundGeneratedParsedOutput(ctx, instance, "EV", evH, evHParsed, evRef)
 
 				evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
 				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internString(evH.Rel())})
 				evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
 				evCCParsed = append(evCCParsed, eventRuntimeDirectives...)
 
-				registerGeneratedParsedOutput(ctx, instance, "EV", evPbCC, evCCParsed)
+				registerBoundGeneratedParsedOutput(ctx, instance, "EV", evPbCC, evCCParsed, evRef)
 			}
 
 			cppInstance := instance
