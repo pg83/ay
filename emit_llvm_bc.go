@@ -64,7 +64,6 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 			// Walk include closure (same as emitCodegenDownstreamCC for generated CC).
 			closure := walkClosure(ctx, instance, inputVFS, in)
-			closure = dropTransitiveGeneratedProto(closure)
 
 			// A COPY_FILE(TEXT) source (e.g. mkql_computation_node_codegen.h.txt) and
 			// the fs_tools.py tooling for any consumed TEXT-copied header now ride

@@ -7,14 +7,7 @@ func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef 
 func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
 	cppPath := Build(instance.Path + "/" + cppRel)
 
-	closure := walkClosure(ctx, instance, cppPath, in)
-	// A RUN_ANTLR .cpp reaches the generated .proto transitively through its
-	// .pb.h (the proto-split protoc step induces the .proto onto .pb.*). The
-	// $(B) .proto is a codegen intermediate, not a real input of this compile —
-	// drop it (and the spurious dep on its RUN_ANTLR producer that
-	// resolveCodegenDepRefs would otherwise add); the generator's $(S) sources
-	// the walk gathered through it stay. See dropTransitiveGeneratedProto.
-	includeInputs := dropTransitiveGeneratedProto(closure)
+	includeInputs := walkClosure(ctx, instance, cppPath, in)
 
 	ccIn := in
 	ccIn.IncludeInputs = includeInputs
