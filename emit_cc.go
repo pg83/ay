@@ -508,15 +508,27 @@ func appendAddIncl(cmdArgs []string, addIncl []VFS, memo inclArgMemo) []string {
 	return cmdArgs
 }
 
-type inclArgMemo map[VFS]string
+// inclArgMemo caches the "-I<path>" compiler flag per addincl VFS — a pure
+// function of the path, shared run-wide across both scanners' CC emission. The
+// backing DenseMap (a plain array probe instead of the hot map[VFS]string hash)
+// is owned by genCtx so further VFS-keyed value columns can share its idx array;
+// inclArgMemo just holds a pointer to it, so it stays copyable by value.
+type inclArgMemo struct {
+	m *DenseMap[VFS, string]
+}
+
+// newInclArgMemo builds a standalone memo with its own backing store. Production
+// code uses ctx.inclArgs (backed by ctx.inclArgValues); this is for tests that
+// emit CC/AS nodes without a genCtx.
+func newInclArgMemo() inclArgMemo { return inclArgMemo{m: &DenseMap[VFS, string]{}} }
 
 func (m inclArgMemo) arg(path VFS) string {
-	if s, ok := m[path]; ok {
+	if s, ok := m.m.Get(path); ok {
 		return s
 	}
 
 	s := "-I" + path.String()
-	m[path] = s
+	m.m.Put(path, s)
 
 	return s
 }

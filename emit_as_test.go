@@ -18,7 +18,7 @@ func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	e := NewBufferedEmitter()
 	inst := hostInstance("contrib/libs/foolib")
 	in := ModuleCCInputs{
-		InclArgs: inclArgMemo{},
+		InclArgs: newInclArgMemo(),
 		AddIncl: []VFS{
 			Intern("$(S)/custom/foolib/arch/x86_64"),
 			Intern("$(S)/custom/foolib/include"),
@@ -116,7 +116,7 @@ func TestEmitASYasm_YasmLD_PopulatesDepRefs(t *testing.T) {
 	e := NewBufferedEmitter()
 	yasmLDRef := testYasmLDRef(e)
 
-	yasmTestIn := ModuleCCInputs{InclArgs: inclArgMemo{}, AddIncl: builtinsASOwnAddIncl}
+	yasmTestIn := ModuleCCInputs{InclArgs: newInclArgMemo(), AddIncl: builtinsASOwnAddIncl}
 	ref, _ := emitASYasm(hostInstance("contrib/libs/asmlib"), "memset64.asm", Intern("$(S)/contrib/libs/asmlib/memset64.asm"), yasmTestIn, yasmLDRef, e)
 
 	if len(e.nodes) != 2 {

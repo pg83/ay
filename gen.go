@@ -228,6 +228,9 @@ type genCtx struct {
 	parsers    *includeParserManager
 	emit       Emitter
 
+	// inclArgValues backs inclArgMemo (the "-I<path>" cache); owned here so future
+	// VFS-keyed value columns can share its idx array. inclArgs points at it.
+	inclArgValues   DenseMap[VFS, string]
 	inclArgs        inclArgMemo
 	memo            map[ModuleInstance]*moduleEmitResult
 	moduleTypeCache map[moduleTypeCacheKey]moduleTypeInfo
@@ -450,7 +453,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		fs:                 fs,
 		parsers:            parsers,
 		emit:               resourceEmit,
-		inclArgs:           make(inclArgMemo, 4096),
 		memo:               make(map[ModuleInstance]*moduleEmitResult),
 		moduleTypeCache:    make(map[moduleTypeCacheKey]moduleTypeInfo),
 		walking:            make(map[ModuleInstance]bool),
@@ -466,6 +468,8 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		scripts:            scriptTbl,
 		testMode:           testMode,
 	}
+
+	ctx.inclArgs = inclArgMemo{m: &ctx.inclArgValues}
 
 	// Both scanners share ctx.tarjan (the run-wide Tarjan scratch) so its
 	// vfsBound-sized arrays grow once, not once per scanner.
