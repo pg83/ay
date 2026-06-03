@@ -61,7 +61,6 @@ func protoDirectPbHIncludes(pm *includeParserManager, srcRel, outputRoot string)
 func pbHEmitsIncludesExtras(protoRelPath string, hasDescriptor bool) []includeDirective {
 	out := make([]includeDirective, 0, len(pbDescriptorImporterHeaders)+3)
 	out = append(out, includeDirective{kind: includeQuoted, target: internString(pbWrapperVFS.Rel())})
-	out = append(out, includeDirective{kind: includeQuoted, target: internString(protoRelPath)})
 
 	for _, v := range pbDescriptorImporterHeaders {
 		out = append(out, includeDirective{kind: includeQuoted, target: internString(v.Rel())})
@@ -457,6 +456,26 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 
 		registerBoundGeneratedParsedOutput(ctx, instance, "PB", pbH, pbHParsed, pbRef)
 
+		// The source a generated header is produced FROM is a real input of every
+		// unit that includes that header — a generated-from edge, not a C++ include.
+		// Ride it as a non-expanded closure leaf of pb.h (everything reaches pb.h:
+		// pb.cc/grpc include it, consumers include it), instead of the old fake
+		// `#include "X.proto"` that also dragged the $(B) generated .proto into the
+		// closure. For a real $(S) .proto that source is the .proto itself; for a
+		// generated $(B) .proto (protoSrcOverride != 0) the .proto is a codegen
+		// intermediate (reached via the producer dep edge), so ride the generator's
+		// own $(S) sources instead — the grammar/template/tool/scripts that
+		// produced it (protoProducerSourceInputs = the $(B) .proto's SourceInputs).
+		if reg := codegenRegForInstance(ctx, instance); reg != nil {
+			if protoSrcOverride == 0 {
+				reg.AddClosureLeaf(pbH, Source(protoRelPath))
+			} else {
+				for _, s := range protoProducerSourceInputs {
+					reg.AddClosureLeaf(pbH, s)
+				}
+			}
+		}
+
 		if liteHeaders {
 			depsParsed := make([]includeDirective, 0, 1+len(directImports))
 			depsParsed = append(depsParsed, includeDirective{kind: includeQuoted, target: internString(pbH.Rel())})
@@ -471,7 +490,6 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			pbCCParsed = append(pbCCParsed, directImports...)
 		}
 
-		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internString(protoRelPath)})
 		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internString(pbWrapperVFS.Rel())})
 		pbCCParsed = append(pbCCParsed, protobufRuntimeDirectives...)
 		pbCCParsed = append(pbCCParsed, pbCcDeepRuntimeDirectives...)
@@ -487,7 +505,6 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		if needsGRPCParsed {
 			grpcCCParsed = make([]includeDirective, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders)+len(grpcSourceExtraIncludes))
 			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(pbH.Rel())})
-			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(protoRelPath)})
 			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(pbWrapperVFS.Rel())})
 			grpcCCParsed = append(grpcCCParsed, protobufRuntimeDirectives...)
 			grpcCCParsed = append(grpcCCParsed, pbCcDeepRuntimeDirectives...)

@@ -90,26 +90,24 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 		}
 
 		if reg != nil && reg.Lookup(dstVFS) == nil {
-			reg.Register(&GeneratedFileInfo{
+			info := &GeneratedFileInfo{
 				ProducerKvP: "CP",
 				OutputPath:  dstVFS,
 				SourcePath:  srcVFS,
 				IsText:      entry.Text,
-			})
+			}
 
 			// COPY_FILE(TEXT): the .txt source content is substituted verbatim into
 			// the dst, so the source — and the fs_tools.py copy tooling — are real
-			// inputs of every unit including the dst. Register them as bare closure
-			// leaves so they ride transitively in the dst's window (scanner splices
-			// them in without expanding their own includes), instead of being
-			// re-attached per CC source by a full closure re-walk.
+			// inputs of every unit including the dst. Ride them as bare closure
+			// leaves so they reach every consumer transitively through the dst's
+			// window (scanner splices them in without expanding their own includes),
+			// instead of being re-attached per CC source by a full closure re-walk.
 			if entry.Text && srcVFS != dstVFS {
-				reg.AddClosureLeaf(dstVFS, srcVFS)
-
-				for _, tool := range ctx.scripts[copyFsToolsVFS] {
-					reg.AddClosureLeaf(dstVFS, tool)
-				}
+				info.ClosureLeaves = append([]VFS{srcVFS}, ctx.scripts[copyFsToolsVFS]...)
 			}
+
+			reg.Register(info)
 		}
 	}
 
