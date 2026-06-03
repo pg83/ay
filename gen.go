@@ -244,9 +244,6 @@ type genCtx struct {
 
 	enOutputs map[VFS]NodeRef
 
-	pbOutputs map[codegenOutputKey]NodeRef
-	evOutputs map[codegenOutputKey]NodeRef
-
 	flatcEmissions map[codegenOutputKey]flatcEmission
 
 	pyRegisterOutputs map[VFS]NodeRef
@@ -331,11 +328,10 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 
 		if r, found := ctx.enOutputs[v]; found {
 			ref, ok = r, true
-		} else if r, found := ctx.pbOutputs[codegenOutputKey{platform: consumer.Platform, path: v}]; found {
-			ref, ok = r, true
-		} else if r, found := ctx.evOutputs[codegenOutputKey{platform: consumer.Platform, path: v}]; found {
-			ref, ok = r, true
 		} else {
+			// PB/EV (and CP/CF) producer refs live on the codegen registry entry
+			// (ProducerRef), so one reg.Lookup replaces the former per-platform
+			// pbOutputs/evOutputs probes.
 			reg := codegenRegForInstance(ctx, consumer)
 
 			if reg != nil {
@@ -459,8 +455,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		host:               hostP,
 		target:             targetP,
 		enOutputs:          make(map[VFS]NodeRef),
-		pbOutputs:          make(map[codegenOutputKey]NodeRef),
-		evOutputs:          make(map[codegenOutputKey]NodeRef),
 		flatcEmissions:     make(map[codegenOutputKey]flatcEmission),
 		pyRegisterOutputs:  make(map[VFS]NodeRef),
 		checkConfigOutputs: make(map[VFS]NodeRef),

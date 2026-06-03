@@ -201,11 +201,6 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		evH := Build(evRelPath + ".pb.h")
 		evPbCC := Build(evRelPath + ".pb.cc")
-		evKey := codegenOutputKey{platform: srcInstance.Platform}
-		evKey.path = evH
-		ctx.evOutputs[evKey] = evRef
-		evKey.path = evPbCC
-		ctx.evOutputs[evKey] = evRef
 
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, "")
@@ -218,7 +213,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			}
 
 			evHParsed = append(evHParsed, evExtras...)
-			registerGeneratedParsedOutput(ctx, srcInstance, "EV", evH, evHParsed)
+			registerBoundGeneratedParsedOutput(ctx, srcInstance, "EV", evH, evHParsed, evRef)
 			evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders))
 			evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internString(evH.Rel())})
 
@@ -226,7 +221,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
 			}
 
-			registerGeneratedParsedOutput(ctx, srcInstance, "EV", evPbCC, evCCParsed)
+			registerBoundGeneratedParsedOutput(ctx, srcInstance, "EV", evPbCC, evCCParsed, evRef)
 		}
 
 		evPbCCSuffix := srcRel + ".pb.cc"
