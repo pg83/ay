@@ -844,7 +844,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, nil)
 		}
 
-		hOnlyARRef := NodeRef{}
+		hOnlyARRef := NodeRef(0)
 		var hOnlyARPath *VFS
 
 		if protoResult != nil {

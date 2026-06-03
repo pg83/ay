@@ -105,7 +105,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		emit,
 	)
 
-	got := emit.nodes[ldRef.id]
+	got := emit.nodes[ldRef]
 
 	if len(got.Cmds) != 4 {
 		t.Fatalf("Cmds = %d, want 4", len(got.Cmds))
@@ -198,7 +198,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 		emit,
 	)
 
-	got := emit.nodes[ldRef.id]
+	got := emit.nodes[ldRef]
 
 	if len(got.Cmds) != 7 {
 		t.Fatalf("Cmds = %d, want 7", len(got.Cmds))
@@ -271,7 +271,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		emit,
 	)
 
-	got := emit.nodes[ref.id]
+	got := emit.nodes[ref]
 
 	if got.Platform != string(PlatformDefaultLinuxX8664) {
 		t.Errorf("platform = %q, want %q", got.Platform, PlatformDefaultLinuxX8664)
@@ -374,7 +374,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		emit,
 	)
 
-	got := emit.nodes[ldRef.id]
+	got := emit.nodes[ldRef]
 	if !slices.Contains(got.Inputs, Build(wholeArchivePath)) {
 		t.Fatalf("inputs do not contain whole-archive path %q: %#v", wholeArchivePath, got.Inputs)
 	}
@@ -443,7 +443,7 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 		emit,
 	)
 
-	got := emit.nodes[ldRef.id]
+	got := emit.nodes[ldRef]
 	count := 0
 	for _, input := range got.Inputs {
 		if input == dupPath {
@@ -485,11 +485,11 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 		peerPaths, pluginPaths, globalPaths, wholePaths     []VFS
 		wantSubstr                                          string
 	}{
-		{name: "ccRefs vs ccPaths", ccRefs: []NodeRef{{}}, wantSubstr: "ccRefs"},
-		{name: "peerLDRefs vs peerLibPaths", peerRefs: []NodeRef{{}}, wantSubstr: "peerLD"},
-		{name: "pluginRefs vs pluginPaths", pluginRefs: []NodeRef{{}}, wantSubstr: "plugin"},
-		{name: "globalRefs vs globalPaths", globalRefs: []NodeRef{{}}, wantSubstr: "global"},
-		{name: "wholeArchiveRefs vs wholeArchivePaths", wholeRefs: []NodeRef{{}}, wantSubstr: "wholeArchive"},
+		{name: "ccRefs vs ccPaths", ccRefs: []NodeRef{0}, wantSubstr: "ccRefs"},
+		{name: "peerLDRefs vs peerLibPaths", peerRefs: []NodeRef{0}, wantSubstr: "peerLD"},
+		{name: "pluginRefs vs pluginPaths", pluginRefs: []NodeRef{0}, wantSubstr: "plugin"},
+		{name: "globalRefs vs globalPaths", globalRefs: []NodeRef{0}, wantSubstr: "global"},
+		{name: "wholeArchiveRefs vs wholeArchivePaths", wholeRefs: []NodeRef{0}, wantSubstr: "wholeArchive"},
 	}
 
 	for _, tc := range tests {

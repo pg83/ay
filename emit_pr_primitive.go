@@ -104,7 +104,7 @@ func EmitPR(
 	toolRefs := make([]NodeRef, 0, len(auxTools)+1)
 	seenToolRefs := make(map[NodeRef]struct{}, len(auxTools)+1)
 	appendToolRef := func(ref NodeRef) {
-		if ref == (NodeRef{}) {
+		if ref == (NodeRef(0)) {
 			return
 		}
 

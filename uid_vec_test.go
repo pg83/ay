@@ -20,7 +20,7 @@ func TestPageOffset_GeometricLayout(t *testing.T) {
 			size = int64(1) << uint(wantPage)
 		}
 
-		p, off := pageOffset(id)
+		p, off := pageOffset(NodeRef(id))
 
 		if p != wantPage {
 			t.Fatalf("id=%d page=%d, want %d", id, p, wantPage)
@@ -41,11 +41,11 @@ func TestUidVec_SetGetRoundTrip(t *testing.T) {
 	const n = 1 << 14
 
 	for id := int64(0); id < n; id++ {
-		v.set(id, UID{Hi: uint64(id) * 2, Lo: uint64(id)*2 + 1})
+		v.set(NodeRef(id), UID{Hi: uint64(id) * 2, Lo: uint64(id)*2 + 1})
 	}
 
 	for id := int64(0); id < n; id++ {
-		got := v.get(id)
+		got := v.get(NodeRef(id))
 		want := UID{Hi: uint64(id) * 2, Lo: uint64(id)*2 + 1}
 
 		if got != want {
@@ -116,14 +116,14 @@ func TestUidVec_ConcurrentGetDuringSet(t *testing.T) {
 	}
 
 	for id := int64(1); id < n; id++ {
-		v.set(id, UID{Hi: uint64(id)})
+		v.set(NodeRef(id), UID{Hi: uint64(id)})
 	}
 
 	close(stop)
 	wg.Wait()
 
 	for id := int64(0); id < n; id++ {
-		if got := v.get(id); got.Hi != uint64(id) {
+		if got := v.get(NodeRef(id)); got.Hi != uint64(id) {
 			t.Fatalf("get(%d).Hi = %d, want %d", id, got.Hi, id)
 		}
 	}

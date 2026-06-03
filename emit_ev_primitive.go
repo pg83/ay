@@ -187,15 +187,15 @@ func EmitEV(
 	{
 		var toolRefs []NodeRef
 
-		if cppStyleguideLDRef != (NodeRef{}) {
+		if cppStyleguideLDRef != (NodeRef(0)) {
 			toolRefs = append(toolRefs, cppStyleguideLDRef)
 		}
 
-		if protocLDRef != (NodeRef{}) {
+		if protocLDRef != (NodeRef(0)) {
 			toolRefs = append(toolRefs, protocLDRef)
 		}
 
-		if event2cppLDRef != (NodeRef{}) {
+		if event2cppLDRef != (NodeRef(0)) {
 			toolRefs = append(toolRefs, event2cppLDRef)
 		}
 

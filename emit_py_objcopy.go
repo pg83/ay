@@ -194,18 +194,18 @@ func emitResourceObjcopy(
 			},
 		}
 
-		if rescompilerLDRef != (NodeRef{}) {
+		if rescompilerLDRef != (NodeRef(0)) {
 			node.DepRefs = append(node.DepRefs, rescompilerLDRef)
 		}
 
-		if rescompressorLDRef != (NodeRef{}) {
+		if rescompressorLDRef != (NodeRef(0)) {
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
 
 		depSeen := map[NodeRef]struct{}{}
 
 		for _, ref := range cur.pathDeps {
-			if ref == (NodeRef{}) {
+			if ref == (NodeRef(0)) {
 				continue
 			}
 
@@ -387,11 +387,11 @@ func emitKvOnlyObjcopyNode(
 		},
 	}
 
-	if rescompilerLDRef != (NodeRef{}) {
+	if rescompilerLDRef != (NodeRef(0)) {
 		node.DepRefs = append(node.DepRefs, rescompilerLDRef)
 	}
 
-	if rescompressorLDRef != (NodeRef{}) {
+	if rescompressorLDRef != (NodeRef(0)) {
 		node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 	}
 
@@ -497,11 +497,11 @@ func emitYaConfJSONObjcopy(
 			node.Tags = instance.Platform.Tags // read-only; Platform.Tags is immutable during emit
 		}
 
-		if rescompilerLDRef != (NodeRef{}) {
+		if rescompilerLDRef != (NodeRef(0)) {
 			node.DepRefs = append(node.DepRefs, rescompilerLDRef)
 		}
 
-		if rescompressorLDRef != (NodeRef{}) {
+		if rescompressorLDRef != (NodeRef(0)) {
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
 
@@ -730,21 +730,21 @@ func emitPySrcObjcopy(
 				},
 			}
 
-			if rescompilerLDRef != (NodeRef{}) {
+			if rescompilerLDRef != (NodeRef(0)) {
 				node.DepRefs = append(node.DepRefs, rescompilerLDRef)
 			}
 
-			if rescompressorLDRef != (NodeRef{}) {
+			if rescompressorLDRef != (NodeRef(0)) {
 				node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 			}
 
 			exclude := []NodeRef{}
 
-			if rescompilerLDRef != (NodeRef{}) {
+			if rescompilerLDRef != (NodeRef(0)) {
 				exclude = append(exclude, rescompilerLDRef)
 			}
 
-			if rescompressorLDRef != (NodeRef{}) {
+			if rescompressorLDRef != (NodeRef(0)) {
 				exclude = append(exclude, rescompressorLDRef)
 			}
 

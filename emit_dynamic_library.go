@@ -138,7 +138,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	depRefs = append(depRefs, peerArchiveRefs...)
 	depRefs = append(depRefs, pluginRefs...)
 
-	if fixElfRef != (NodeRef{}) {
+	if fixElfRef != (NodeRef(0)) {
 		depRefs = append(depRefs, fixElfRef)
 	}
 
@@ -170,7 +170,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		DepRefs: depRefs,
 	}
 
-	if fixElfRef != (NodeRef{}) {
+	if fixElfRef != (NodeRef(0)) {
 		n.ForeignDepRefs = []NodeRef{fixElfRef}
 	}
 

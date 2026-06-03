@@ -527,7 +527,7 @@ func (ex *executor) execute(f *nodeFuture) {
 
 	if ex.keepGoing {
 		for _, r := range n.DepRefs {
-			dep := f.uids.get(r.id)
+			dep := f.uids.get(r)
 			exc := Try(func() {
 				ex.visit(dep)
 			})
@@ -540,7 +540,7 @@ func (ex *executor) execute(f *nodeFuture) {
 		}
 	} else {
 		for _, r := range n.DepRefs {
-			ex.visit(f.uids.get(r.id))
+			ex.visit(f.uids.get(r))
 		}
 	}
 
@@ -553,7 +553,7 @@ func (ex *executor) execute(f *nodeFuture) {
 	defer forceRemoveAll(tmp)
 
 	for _, r := range n.DepRefs {
-		ex.restoreInto(f.uids.get(r.id), tmp)
+		ex.restoreInto(f.uids.get(r), tmp)
 	}
 
 	start := time.Now()

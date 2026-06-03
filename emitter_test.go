@@ -55,7 +55,7 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 func graphDeps(g *Graph, n *Node) []UID {
 	out := make([]UID, len(n.DepRefs))
 	for i, r := range n.DepRefs {
-		out[i] = g.uids.get(r.id)
+		out[i] = g.uids.get(r)
 	}
 
 	return out
@@ -64,7 +64,7 @@ func graphDeps(g *Graph, n *Node) []UID {
 func graphForeignDeps(g *Graph, n *Node) []UID {
 	out := make([]UID, len(n.ForeignDepRefs))
 	for i, r := range n.ForeignDepRefs {
-		out[i] = g.uids.get(r.id)
+		out[i] = g.uids.get(r)
 	}
 
 	return out
@@ -283,7 +283,7 @@ func TestFinalize_OutOfRangeRefReturnsError(t *testing.T) {
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
-		DepRefs:          []NodeRef{{id: 999}},
+		DepRefs:          []NodeRef{999},
 	})
 	e.Result(a)
 

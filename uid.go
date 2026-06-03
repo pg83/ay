@@ -222,7 +222,7 @@ func (c *canonBuf) writeRefUIDs(refs []NodeRef) {
 	c.writeUint32(uint32(len(refs)))
 
 	for _, r := range refs {
-		u := c.uids.get(r.id)
+		u := c.uids.get(r)
 		c.writeUint64(u.Hi)
 		c.writeUint64(u.Lo)
 	}

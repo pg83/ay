@@ -92,7 +92,7 @@ func emitArchive(
 	depRefs := make([]NodeRef, 0, len(producerRefs)+1)
 	depRefs = append(depRefs, producerRefs...)
 
-	if toolLDRef != (NodeRef{}) {
+	if toolLDRef != (NodeRef(0)) {
 		depRefs = append(depRefs, toolLDRef)
 	}
 

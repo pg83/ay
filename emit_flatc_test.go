@@ -16,7 +16,7 @@ func TestEmitFL_NodeShape(t *testing.T) {
 		instance,
 		"mod/File.fbs",
 		Intern("$(S)/mod/File.fbs"),
-		NodeRef{id: 9},
+		NodeRef(9),
 		Intern("$(B)/contrib/libs/flatbuffers/flatc/flatc"),
 		[]string{"--scoped-enums"},
 		[]VFS{Intern("$(S)/mod/Schema.fbs")},
@@ -46,7 +46,7 @@ func TestEmitFL_NodeShape(t *testing.T) {
 	if got := node.Cmds[0].CmdArgs; got[len(got)-3] != "-o" || got[len(got)-2] != "$(B)/mod/File.fbs.h" || got[len(got)-1] != "$(S)/mod/File.fbs" {
 		t.Fatalf("unexpected cmd arg tail: %v", got[len(got)-5:])
 	}
-	if len(node.DepRefs) != 1 || node.DepRefs[0].id != 9 {
+	if len(node.DepRefs) != 1 || node.DepRefs[0] != 9 {
 		t.Fatalf("DepRefs = %#v, want flatc dep", node.DepRefs)
 	}
 	if got := len(node.ForeignDepRefs); got != 1 {

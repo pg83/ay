@@ -202,7 +202,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 	peerArchiveRefs := []NodeRef{peer1, peer2}
 
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, testHostP, e)
-	got := e.nodes[arRef.id]
+	got := e.nodes[arRef]
 
 	cmdArgs := got.Cmds[0].CmdArgs
 	wantLen := 9 + 1 + len(objPaths)
@@ -252,7 +252,7 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 	peerArchiveRefs := []NodeRef{peer1, peer2}
 
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, testHostP, e)
-	got := e.nodes[arRef.id]
+	got := e.nodes[arRef]
 
 	wantDepRefs := len(objRefs) + len(peerArchiveRefs)
 
@@ -286,7 +286,7 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 	objRefs := []NodeRef{makeLeaf(z), makeLeaf(m), makeLeaf(a)}
 
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, testHostP, e)
-	got := e.nodes[arRef.id]
+	got := e.nodes[arRef]
 
 	inputs := got.Inputs
 	if len(inputs) != 4 {
@@ -326,7 +326,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 	objRefs := []NodeRef{makeLeaf(z), makeLeaf(m), makeLeaf(a)}
 
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, testHostP, e)
-	got := e.nodes[arRef.id]
+	got := e.nodes[arRef]
 
 	cmdArgs := got.Cmds[0].CmdArgs
 	if len(cmdArgs) != 13 {

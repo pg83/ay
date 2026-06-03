@@ -4262,7 +4262,7 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 			refs := make([]NodeRef, len(tc.paths))
 			paths := make([]VFS, len(tc.paths))
 			for i, rel := range tc.paths {
-				refs[i] = NodeRef{id: int64(i + 1)}
+				refs[i] = NodeRef(int64(i + 1))
 				paths[i] = Build(rel)
 			}
 
@@ -4300,7 +4300,7 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 const t17SwigTargetDir = "contrib/tools/swig"
 
 func TestReorderLDMembers_LegacyDoubleUnderscorePathsTrailRegularSources(t *testing.T) {
-	refs := []NodeRef{{id: 1}, {id: 2}, {id: 3}}
+	refs := []NodeRef{1, 2, 3}
 	paths := []VFS{
 		Intern("$(B)/contrib/tools/swig/_/Source/CParse/cscanner.c.pic.o"),
 		Intern("$(B)/contrib/tools/swig/_/_/Source/CParse/parser.y.c.pic.o"),
@@ -4309,7 +4309,7 @@ func TestReorderLDMembers_LegacyDoubleUnderscorePathsTrailRegularSources(t *test
 
 	gotRefs, gotPaths := reorderLDMembers(refs, paths)
 
-	wantRefs := []NodeRef{{id: 1}, {id: 3}, {id: 2}}
+	wantRefs := []NodeRef{1, 3, 2}
 	if !reflect.DeepEqual(gotRefs, wantRefs) {
 		t.Fatalf("ld refs mismatch:\n  got:  %#v\n  want: %#v", gotRefs, wantRefs)
 	}

@@ -189,15 +189,15 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 
 	toolRefs := make([]NodeRef, 0, 3)
 
-	if protocLDRef != (NodeRef{}) {
+	if protocLDRef != (NodeRef(0)) {
 		toolRefs = append(toolRefs, protocLDRef)
 	}
 
-	if grpcPyRef != (NodeRef{}) {
+	if grpcPyRef != (NodeRef(0)) {
 		toolRefs = append(toolRefs, grpcPyRef)
 	}
 
-	if !d.noMypy && mypyRef != (NodeRef{}) {
+	if !d.noMypy && mypyRef != (NodeRef(0)) {
 		toolRefs = append(toolRefs, mypyRef)
 	}
 
@@ -293,12 +293,12 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 		deps := []NodeRef{pyPBRef}
 		var toolRefs []NodeRef
 
-		if py3ccRef != (NodeRef{}) {
+		if py3ccRef != (NodeRef(0)) {
 			deps = append(deps, py3ccRef)
 			toolRefs = append(toolRefs, py3ccRef)
 		}
 
-		if py3ccSlowRef != (NodeRef{}) {
+		if py3ccSlowRef != (NodeRef(0)) {
 			deps = append(deps, py3ccSlowRef)
 			toolRefs = append(toolRefs, py3ccSlowRef)
 		}
@@ -414,7 +414,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		cur.inputs = append(cur.inputs, v)
 	}
 	addDep := func(ref NodeRef) {
-		if ref == (NodeRef{}) {
+		if ref == (NodeRef(0)) {
 			return
 		}
 
@@ -492,7 +492,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 
 		deps := append([]NodeRef(nil), ch.deps...)
 
-		if rescompilerRef != (NodeRef{}) {
+		if rescompilerRef != (NodeRef(0)) {
 			deps = append(deps, rescompilerRef)
 		}
 

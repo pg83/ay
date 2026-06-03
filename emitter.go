@@ -19,9 +19,10 @@ func (h *intHeap) Pop() interface{} {
 	return x
 }
 
-type NodeRef struct {
-	id int64
-}
+// NodeRef is a node's index into the emitter's node buffer. uint32 (not a
+// struct) so it is a dense ~uint32 id: small (4 bytes), usable directly as a
+// slice index, and dedupable through idSet/idBitSet without a side map.
+type NodeRef uint32
 
 type Emitter interface {
 	Emit(n *Node) NodeRef
@@ -31,7 +32,7 @@ type Emitter interface {
 
 type BufferedEmitter struct {
 	nodes     []*Node
-	results   []int64
+	results   []NodeRef
 	finalized bool
 
 	// generatedFirstClaim is populated by runGen after gen completes, merging
@@ -61,9 +62,9 @@ func (e *BufferedEmitter) Emit(n *Node) NodeRef {
 		panic("BufferedEmitter.Emit called after Finalize")
 	}
 
-	id := int64(len(e.nodes))
+	id := NodeRef(len(e.nodes))
 	e.nodes = append(e.nodes, n)
-	return NodeRef{id: id}
+	return id
 }
 
 func (e *BufferedEmitter) Result(r NodeRef) {
@@ -71,7 +72,7 @@ func (e *BufferedEmitter) Result(r NodeRef) {
 		panic("BufferedEmitter.Result called after Finalize")
 	}
 
-	e.results = append(e.results, r.id)
+	e.results = append(e.results, r)
 }
 
 type Graph struct {
@@ -121,7 +122,7 @@ func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) *u
 
 	for _, i := range order {
 		node := e.nodes[i]
-		uids.set(int64(i), resolveAndUID(node, uids, &uidScratch))
+		uids.set(NodeRef(i), resolveAndUID(node, uids, &uidScratch))
 
 		if yield != nil {
 			yield(node)
@@ -145,8 +146,8 @@ func finalizeOrder(e *BufferedEmitter) []int {
 	n := len(e.nodes)
 
 	checkRef := func(owner int, r NodeRef) {
-		if r.id < 0 || r.id >= int64(n) {
-			ThrowFmt("node %d references out-of-range NodeRef id=%d (buffer size %d)", owner, r.id, n)
+		if int(r) >= n {
+			ThrowFmt("node %d references out-of-range NodeRef id=%d (buffer size %d)", owner, r, n)
 		}
 	}
 
@@ -161,7 +162,7 @@ func finalizeOrder(e *BufferedEmitter) []int {
 	}
 
 	for i, rid := range e.results {
-		if rid < 0 || rid >= int64(n) {
+		if int(rid) >= n {
 			ThrowFmt("result %d references out-of-range NodeRef id=%d (buffer size %d)", i, rid, n)
 		}
 	}
@@ -175,24 +176,24 @@ func finalizeOrder(e *BufferedEmitter) []int {
 	}
 
 	for i, node := range e.nodes {
-		seen := make(map[int64]struct{})
+		seen := make(map[NodeRef]struct{})
 
 		for _, r := range node.DepRefs {
-			if _, ok := seen[r.id]; ok {
+			if _, ok := seen[r]; ok {
 				continue
 			}
 
-			seen[r.id] = struct{}{}
-			addEdge(int(r.id), i)
+			seen[r] = struct{}{}
+			addEdge(int(r), i)
 		}
 
 		for _, r := range node.ForeignDepRefs {
-			if _, ok := seen[r.id]; ok {
+			if _, ok := seen[r]; ok {
 				continue
 			}
 
-			seen[r.id] = struct{}{}
-			addEdge(int(r.id), i)
+			seen[r] = struct{}{}
+			addEdge(int(r), i)
 		}
 	}
 
@@ -260,9 +261,9 @@ type StreamingEmitter struct {
 	nodes      []*Node
 	uids       *uidVec
 	resolved   []bool // resolved[id]: uids has the computed uid for id (gen-goroutine only)
-	pendingIdx []int64
-	pendingSet map[int64]bool
-	results    []int64
+	pendingIdx []NodeRef
+	pendingSet map[NodeRef]bool
+	results    []NodeRef
 	onNode     func(*Node, *uidVec)
 	finalized  bool
 	readyCh    chan struct{}
@@ -272,7 +273,7 @@ type StreamingEmitter struct {
 func NewStreamingEmitter(onNode func(*Node, *uidVec)) *StreamingEmitter {
 	return &StreamingEmitter{
 		uids:       &uidVec{},
-		pendingSet: map[int64]bool{},
+		pendingSet: map[NodeRef]bool{},
 		onNode:     onNode,
 		readyCh:    make(chan struct{}),
 	}
@@ -283,14 +284,14 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 		panic("StreamingEmitter.Emit called after Finish")
 	}
 
-	id := int64(len(e.nodes))
+	id := NodeRef(len(e.nodes))
 	e.nodes = append(e.nodes, n)
 	e.resolved = append(e.resolved, false)
 
 	if e.hasUnresolvedDeps(n) {
 		e.pendingSet[id] = true
 		e.pendingIdx = append(e.pendingIdx, id)
-		return NodeRef{id: id}
+		return id
 	}
 
 	e.uids.set(id, resolveAndUID(n, e.uids, &e.uidScratch))
@@ -300,18 +301,18 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 		e.onNode(n, e.uids)
 	}
 
-	return NodeRef{id: id}
+	return id
 }
 
 func (e *StreamingEmitter) hasUnresolvedDeps(n *Node) bool {
 	for _, r := range n.DepRefs {
-		if !e.resolved[r.id] {
+		if !e.resolved[r] {
 			return true
 		}
 	}
 
 	for _, r := range n.ForeignDepRefs {
-		if !e.resolved[r.id] {
+		if !e.resolved[r] {
 			return true
 		}
 	}
@@ -324,7 +325,7 @@ func (e *StreamingEmitter) Result(r NodeRef) {
 		panic("StreamingEmitter.Result called after Finish")
 	}
 
-	e.results = append(e.results, r.id)
+	e.results = append(e.results, r)
 }
 func (e *StreamingEmitter) OnReady(_ NodeRef) <-chan struct{} {
 	return e.readyCh
@@ -393,8 +394,8 @@ func graphFromFinalizedEmitter(e *BufferedEmitter, uids *uidVec) *Graph {
 	// each distinct content-address appears once. Graph order is irrelevant —
 	// downstream `ay dump sort` re-sorts.
 	seenNode := make(map[UID]struct{}, n)
-	var dfsVisit func(id int64)
-	dfsVisit = func(id int64) {
+	var dfsVisit func(id NodeRef)
+	dfsVisit = func(id NodeRef) {
 		node := e.nodes[id]
 		u := uids.get(id)
 
@@ -406,7 +407,7 @@ func graphFromFinalizedEmitter(e *BufferedEmitter, uids *uidVec) *Graph {
 		out.Graph = append(out.Graph, node)
 
 		for _, r := range node.DepRefs {
-			dfsVisit(r.id)
+			dfsVisit(r)
 		}
 	}
 
@@ -415,7 +416,7 @@ func graphFromFinalizedEmitter(e *BufferedEmitter, uids *uidVec) *Graph {
 	}
 
 	for i := range e.nodes {
-		dfsVisit(int64(i))
+		dfsVisit(NodeRef(i))
 	}
 
 	return out

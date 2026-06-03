@@ -472,23 +472,23 @@ func EmitPB(
 	var depRefs []NodeRef
 	var foreignDepRefs []NodeRef
 
-	if cppStyleguideLDRef != (NodeRef{}) || protocLDRef != (NodeRef{}) || grpcCppLDRef != (NodeRef{}) || len(extraPlugins) > 0 {
+	if cppStyleguideLDRef != (NodeRef(0)) || protocLDRef != (NodeRef(0)) || grpcCppLDRef != (NodeRef(0)) || len(extraPlugins) > 0 {
 		var toolRefs []NodeRef
 
-		if cppStyleguideLDRef != (NodeRef{}) {
+		if cppStyleguideLDRef != (NodeRef(0)) {
 			toolRefs = append(toolRefs, cppStyleguideLDRef)
 		}
 
-		if grpcCppLDRef != (NodeRef{}) {
+		if grpcCppLDRef != (NodeRef(0)) {
 			toolRefs = append(toolRefs, grpcCppLDRef)
 		}
 
-		if protocLDRef != (NodeRef{}) {
+		if protocLDRef != (NodeRef(0)) {
 			toolRefs = append(toolRefs, protocLDRef)
 		}
 
 		for _, plugin := range extraPlugins {
-			if plugin.LDRef == (NodeRef{}) {
+			if plugin.LDRef == (NodeRef(0)) {
 				continue
 			}
 
