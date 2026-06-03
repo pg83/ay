@@ -656,7 +656,8 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 		return nil
 	}
 
-	return dedupVFS(closure)
+	// walkClosure already returns a deduplicated window — no further dedup needed.
+	return closure
 }
 
 func py3ccToolRefs(ctx *genCtx, instance ModuleInstance) (NodeRef, NodeRef, VFS, VFS) {

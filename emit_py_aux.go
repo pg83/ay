@@ -237,5 +237,6 @@ func rawAuxInputClosure(ctx *genCtx, instance ModuleInstance, aux VFS, seed []VF
 		return nil
 	}
 
-	return dedupVFS(closure)
+	// walkClosure already returns a deduplicated window — no further dedup needed.
+	return closure
 }
