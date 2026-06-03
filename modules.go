@@ -2517,7 +2517,7 @@ func moduleInfoForInstance(ctx *genCtx, instance ModuleInstance) moduleTypeInfo 
 	mf := Throw2(ParseFile(ctx.fs, yamakePath))
 
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.parsers, &ctx.deduper, instance.Path, instance.Kind, mf.Stmts, env)
+	d := collectModule(ctx.parsers, &deduper, instance.Path, instance.Kind, mf.Stmts, env)
 
 	if d.conflictMod != nil {
 		ThrowFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path, d.moduleStmt.Name, d.conflictMod.Name)

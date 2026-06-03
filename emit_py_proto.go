@@ -479,7 +479,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 	peerAddIncl := peerContribs.addIncl
 
 	if cppSibling != nil {
-		peerAddIncl = ctx.deduper.dedupVFS(cppSibling.AddInclGlobal, peerContribs.addIncl)
+		peerAddIncl = dedupVFS(cppSibling.AddInclGlobal, peerContribs.addIncl)
 	}
 
 	res := &pyProtoAuxChunksResult{}
