@@ -21,15 +21,15 @@ type uidVec struct {
 	pages [64][]UID
 }
 
-// pageOffset maps a non-negative id to its page and in-page offset.
-func pageOffset(id int64) (page int, off int64) {
+// pageOffset maps a node id to its page and in-page offset.
+func pageOffset(id NodeRef) (page int, off int64) {
 	n := uint64(id) + 1
 	p := bits.Len64(n) - 1
 
 	return p, int64(n - (uint64(1) << uint(p)))
 }
 
-func (v *uidVec) set(id int64, u UID) {
+func (v *uidVec) set(id NodeRef, u UID) {
 	p, off := pageOffset(id)
 
 	if v.pages[p] == nil {
@@ -39,7 +39,7 @@ func (v *uidVec) set(id int64, u UID) {
 	v.pages[p][off] = u
 }
 
-func (v *uidVec) get(id int64) UID {
+func (v *uidVec) get(id NodeRef) UID {
 	p, off := pageOffset(id)
 
 	return v.pages[p][off]

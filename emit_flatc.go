@@ -208,7 +208,7 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	var depRefs []NodeRef
 	var foreignDepRefs []NodeRef
 
-	if flatcLDRef != (NodeRef{}) {
+	if flatcLDRef != (NodeRef(0)) {
 		depRefs = []NodeRef{flatcLDRef}
 		foreignDepRefs = []NodeRef{flatcLDRef}
 	}

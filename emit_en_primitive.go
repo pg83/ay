@@ -41,7 +41,7 @@ func EmitEN(
 
 	depRefs := make([]NodeRef, 0, len(depENRefs)+1)
 
-	if enumParserLD != (NodeRef{}) {
+	if enumParserLD != (NodeRef(0)) {
 		depRefs = append(depRefs, enumParserLD)
 	}
 
@@ -49,7 +49,7 @@ func EmitEN(
 
 	var foreignDepRefs []NodeRef
 
-	if enumParserLD != (NodeRef{}) {
+	if enumParserLD != (NodeRef(0)) {
 		foreignDepRefs = []NodeRef{enumParserLD}
 	}
 

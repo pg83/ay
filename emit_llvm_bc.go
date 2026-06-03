@@ -74,7 +74,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 			var depRefs []NodeRef
 
-			if producer != (NodeRef{}) {
+			if producer != (NodeRef(0)) {
 				depRefs = []NodeRef{producer}
 			}
 
@@ -307,13 +307,13 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 // (for COPY WITH_CONTEXT generated sources like yt_codec_bc.cpp).
 func llvmBcSourceInfo(ctx *genCtx, instance ModuleInstance, d *moduleData, src string) (inputVFS VFS, producer NodeRef) {
 	// RUN_PROGRAM / PR generated output
-	if ref := d.prOutputProducer[src]; ref != (NodeRef{}) {
+	if ref := d.prOutputProducer[src]; ref != (NodeRef(0)) {
 		return copyFileOutputVFS(instance.Path, src), ref
 	}
 
 	// COPY WITH_CONTEXT generated source — build-root copy is authoritative
 	if buildVFS := generatedModuleSourceVFS(ctx, instance, src); buildVFS != nil {
-		ref := NodeRef{}
+		ref := NodeRef(0)
 
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
 			if info := reg.Lookup(*buildVFS); info != nil && info.HasProducerRef {
@@ -324,7 +324,7 @@ func llvmBcSourceInfo(ctx *genCtx, instance ModuleInstance, d *moduleData, src s
 		return *buildVFS, ref
 	}
 
-	return copyFileInputVFS(ctx.fs, instance.Path, src), NodeRef{}
+	return copyFileInputVFS(ctx.fs, instance.Path, src), NodeRef(0)
 }
 
 // llvmBcRootRelArcSrc mirrors upstream's `rootrel_arc_src(src, unit)` quirk

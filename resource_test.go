@@ -315,7 +315,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		Language: LangCPP,
 		Platform: testTargetP,
 	}
-	res := emitPySrcObjcopy(ctx, instance, d, NodeRef{}, NodeRef{})
+	res := emitPySrcObjcopy(ctx, instance, d, NodeRef(0), NodeRef(0))
 	if res == nil {
 		t.Fatal("emitPySrcObjcopy returned nil")
 	}

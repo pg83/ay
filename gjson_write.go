@@ -211,7 +211,7 @@ func appendRefUIDs(buf []byte, refs []NodeRef, uids *uidVec) []byte {
 			buf = append(buf, ',')
 		}
 
-		buf = appendUID(buf, uids.get(r.id))
+		buf = appendUID(buf, uids.get(r))
 	}
 
 	return append(buf, ']')

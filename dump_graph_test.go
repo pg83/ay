@@ -165,7 +165,7 @@ func TestFinalizeDumpGraph_PreservesFinalizeValidation(t *testing.T) {
 					Outputs: []VFS{Intern("$(B)/obj/leaf.o")},
 				})
 				root := emit.Emit(&Node{
-					DepRefs: []NodeRef{leaf, NodeRef{id: 99}},
+					DepRefs: []NodeRef{leaf, NodeRef(99)},
 					KV:      map[string]interface{}{"p": "LD"},
 					Outputs: []VFS{Intern("$(B)/bin/root")},
 				})
@@ -188,7 +188,7 @@ func TestFinalizeDumpGraph_PreservesFinalizeValidation(t *testing.T) {
 					Outputs: []VFS{Intern("$(B)/bin/root")},
 				})
 				emit.Result(root)
-				emit.Result(NodeRef{id: 99})
+				emit.Result(NodeRef(99))
 
 				return emit
 			},

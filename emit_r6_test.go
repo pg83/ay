@@ -26,7 +26,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		t.Errorf("outPath = %q, want %q", outPath.String(), wantOut)
 	}
 
-	got := e.nodes[r6Ref.id]
+	got := e.nodes[r6Ref]
 
 	if len(got.Cmds[0].CmdArgs) != 7 {
 		t.Errorf("cmd_args length = %d, want 7", len(got.Cmds[0].CmdArgs))
@@ -100,7 +100,7 @@ func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
 
 	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, Intern("$(B)/contrib/tools/ragel6/bin/ragel6"), nil, nil, e)
 
-	got := e.nodes[r6Ref.id]
+	got := e.nodes[r6Ref]
 
 	wantCmd0 := "$(B)/contrib/tools/ragel6/ragel6"
 
@@ -172,7 +172,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 		e,
 	)
 
-	got := e.nodes[r6Ref.id]
+	got := e.nodes[r6Ref]
 
 	if got.Cmds[0].CmdArgs[1] != "-lF1" {
 		t.Errorf("cmd_args[1] = %q, want -lF1 (per-module SET(RAGEL6_FLAGS) override)", got.Cmds[0].CmdArgs[1])
@@ -223,7 +223,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 		e,
 	)
 
-	got := e.nodes[r6Ref.id]
+	got := e.nodes[r6Ref]
 
 	if got.Cmds[0].CmdArgs[1] != "-CG2" {
 		t.Errorf("cmd_args[1] = %q, want -CG2 (x86_64 host = release = optimized)", got.Cmds[0].CmdArgs[1])
@@ -256,7 +256,7 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 
 	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, Intern("$(B)/contrib/tools/ragel6/ragel6"), nil, closure, e)
 
-	got := e.nodes[r6Ref.id]
+	got := e.nodes[r6Ref]
 
 	wantInputs := []string{
 		"$(B)/contrib/tools/ragel6/ragel6",

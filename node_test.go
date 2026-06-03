@@ -152,8 +152,8 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 		Requirements:     map[string]interface{}{},
 		Tags:             []string{},
 		TargetProperties: map[string]string{},
-		DepRefs:          []NodeRef{{id: 7}},
-		ForeignDepRefs:   []NodeRef{{id: 9}},
+		DepRefs:          []NodeRef{7},
+		ForeignDepRefs:   []NodeRef{9},
 	}
 	raw, err := json.Marshal(n)
 	if err != nil {

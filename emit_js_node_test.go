@@ -10,7 +10,7 @@ func TestEmitJS_UsesRequestedPlatformTags(t *testing.T) {
 	target := newTestPlatform(OSLinux, ISAX8664, "no", []string{"default-linux-x86_64", "debug", "SANDBOXING=yes"})
 
 	ref, _ := EmitJS(hostInstance("joinmod"), "all.cpp", []string{"a.cpp"}, nil, target, nil, emit)
-	got := emit.nodes[ref.id]
+	got := emit.nodes[ref]
 
 	if got.Platform != string(target.Target) {
 		t.Fatalf("JS platform = %q, want %q", got.Platform, target.Target)

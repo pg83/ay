@@ -109,7 +109,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 		cur.inputs = append(cur.inputs, v)
 	}
 	addDep := func(ref NodeRef) {
-		if ref == (NodeRef{}) {
+		if ref == (NodeRef(0)) {
 			return
 		}
 
@@ -182,7 +182,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 		chDeps := append([]NodeRef(nil), deps...)
 		chDeps = append(chDeps, ch.deps...)
 
-		if rescompilerRef != (NodeRef{}) {
+		if rescompilerRef != (NodeRef(0)) {
 			chDeps = append(chDeps, rescompilerRef)
 		}
 
