@@ -97,6 +97,15 @@ type IncludeScanner struct {
 
 	resolveIndexByConfig map[uint64]*cfgResolveIndex
 
+	// sourceUnderCache memoizes the includer-local quoted-include resolve
+	// (resolveSourceUnder(incDir, target)) — the hottest existence probe (~505k/run,
+	// 92% of resolveSourceUnder), since incDir (the includer's own dir) is rarely an
+	// addincl, so the addincl index can't cover it. The result is a pure function of
+	// (incDir, target) and the FS, so it's context-free and run-wide. Key packs the
+	// two 32-bit ids (incDir VFS << 32 | target STR); value is the resolved source
+	// rel, or "" for "does not resolve here" (joinRel never yields "").
+	sourceUnderCache map[uint64]string
+
 	// tjc points at the run-wide Tarjan/closure working state owned by genCtx and
 	// shared by the target and host scanners (see tarjanCtx).
 	tjc *tarjanCtx
@@ -366,6 +375,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		closureArena:         newBumpAllocator[VFS](closureArenaInitial),
 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
 		resolveIndexByConfig: make(map[uint64]*cfgResolveIndex, 1024),
+		sourceUnderCache:     make(map[uint64]string, 1<<16),
 		tjc:                  tjc,
 	}
 
@@ -1433,7 +1443,20 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 	if d.kind == includeQuoted {
 		matched := false
 
-		if rel, ok := s.resolveSourceUnder(incDir, d.target.String()); ok {
+		// Memoize the includer-local resolve by (incDir, target) — both 32-bit ids
+		// packed into one key. "" means "does not resolve under incDir".
+		suKey := uint64(incDir)<<32 | uint64(d.target)
+		rel, suHit := s.sourceUnderCache[suKey]
+
+		if !suHit {
+			if r, ok := s.resolveSourceUnder(incDir, d.target.String()); ok {
+				rel = r
+			}
+
+			s.sourceUnderCache[suKey] = rel
+		}
+
+		if rel != "" {
 			if _, dup := seen[rel]; !dup {
 				seen[rel] = struct{}{}
 				out = append(out, Source(rel))
