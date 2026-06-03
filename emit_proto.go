@@ -696,7 +696,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 
 	for _, co := range codegenOutputs {
 		ccIn := moduleInputs
-		ccIn.IncludeInputs = dropTransitiveGeneratedProto(walkClosure(ctx, instance, co.pbCC, moduleInputs))
+		ccIn.IncludeInputs = walkClosure(ctx, instance, co.pbCC, moduleInputs)
 
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
 			selfH := Build(strings.TrimSuffix(co.pbCC.Rel(), ".cc") + ".h")

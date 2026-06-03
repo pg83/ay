@@ -51,10 +51,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		full := walkClosureRoot(ctx, srcInstance, srcVFS, srcVFS.Rel(), srcIn)
 
 		if full != nil {
-			// Drop build-generated .proto files reached transitively (e.g. via a
-			// .pb.h chain): they're codegen intermediates, not real CC inputs. The
-			// proto-import closure is already captured through the producer dep edge.
-			srcIn.IncludeInputs = dropTransitiveGeneratedProto(full[1:])
+			srcIn.IncludeInputs = full[1:]
 		}
 
 		// AUTO COPY entries leave both the $(S) source and the $(B) destination
@@ -95,16 +92,12 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			srcIn.IncludeInputs = ctx.deduper.dedupVFS(srcIn.IncludeInputs, extras)
 		}
 
-		// Fast-path: when no extras were appended AND dropTransitiveGeneratedProto
-		// dropped nothing, IncludeInputs == full[1:] (same backing slice), so
-		// NodeInputs = full lets EmitCC emit the full input array directly with
-		// no extra allocation. When extras are present or protos were dropped,
-		// IncludeInputs has been reallocated or compacted in-place (leaving a
-		// stale tail in full), so we leave NodeInputs nil for EmitCC to rebuild
-		// from inVFS + IncludeInputs.
-		protoDropped := full != nil && len(srcIn.IncludeInputs) < len(full)-1
-
-		if len(autoExtras) == 0 && len(wcExtras) == 0 && len(flatcExtras) == 0 && len(bisonExtras) == 0 && len(extras) == 0 && !protoDropped {
+		// Fast-path: when no extras were appended, IncludeInputs == full[1:] (same
+		// backing slice), so NodeInputs = full lets EmitCC emit the full input
+		// array directly with no extra allocation. When extras are present
+		// IncludeInputs has been reallocated, so leave NodeInputs nil for EmitCC to
+		// rebuild from inVFS + IncludeInputs.
+		if len(autoExtras) == 0 && len(wcExtras) == 0 && len(flatcExtras) == 0 && len(bisonExtras) == 0 && len(extras) == 0 {
 			srcIn.NodeInputs = full
 		}
 
@@ -325,7 +318,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, in ModuleCCInputs) *sourceEmit {
 	pb := emitProtoPB(ctx, instance, d, srcRel, protoPBConfig{}, in.PeerProtoAddInclGlobal)
 	ccIn := in
-	ccIn.IncludeInputs = dropTransitiveGeneratedProto(walkClosure(ctx, instance, pb.pbCC, in))
+	ccIn.IncludeInputs = walkClosure(ctx, instance, pb.pbCC, in)
 	ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)
 	ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel(), instance.Path+"/")
 	ccRef, ccOut, _ := EmitCC(instance, ccSrcRel, pb.pbCC, ccIn, ctx.host, ctx.emit)

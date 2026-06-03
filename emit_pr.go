@@ -294,44 +294,19 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 	return out
 }
 
-// dropTransitiveGeneratedProto removes build-generated .proto files reached
-// transitively in a RUN_PROGRAM/RUN_PYTHON3 closure (e.g. via a .pb.h/.pb.cc
-// whose protoc step lists the .proto as its IN). Such a .proto is a codegen
-// intermediate, not a real input of the walking node: upstream reaches it via
-// the producer dep edge and lists only the generator's $(S) sources — which the
-// closure already gathered by walking *through* the .proto. Keeping the $(B)
-// .proto would also make resolveCodegenDepRefs attach a spurious dep on its
-// RUN_ANTLR (JV) producer, diverging the node's deps (hence self_uid). A .proto
-// that is the node's own direct IN enters via inVFSs, not the closure, so it
-// survives. $(S) proto imports (the proto-import graph) are kept.
-// dropTransitiveGeneratedCPP removes build-generated C/C++ source files from a
-// CC include-input closure. Build-generated .cpp/.cc/.c files (from ANTLR, proto
-// codegen, etc.) that appear transitively in a DIFFERENT module's CC closure are
-// not real inputs of that compilation — they're compiled by their own producer
-// module. Upstream does not list them as CC inputs when they come through via a
-// generated header's parsedIncludes chain. The primary source file (srcVFS) is
-// excluded from filtering via the caller not including it in includeInputs.
-func dropTransitiveGeneratedCPP(in []VFS) []VFS {
-	out := in[:0]
-
-	for _, v := range in {
-		if v.IsBuild() && isCCSourceRel(v.Rel()) {
-			continue
-		}
-
-		out = append(out, v)
-	}
-
-	return out
-}
-
-func isCCSourceRel(rel string) bool {
-	return strings.HasSuffix(rel, ".cpp") ||
-		strings.HasSuffix(rel, ".cc") ||
-		strings.HasSuffix(rel, ".cxx") ||
-		strings.HasSuffix(rel, ".c")
-}
-
+// dropTransitiveGeneratedProto removes a build-generated .proto a RUN_PROGRAM /
+// RUN_PYTHON3 codegen node surfaces by walking its own generated .proto INFile
+// (the protoc-split step takes the $(B) .proto as input, and walkClosure of that
+// .proto returns the .proto itself — the scanner does not expand .proto imports).
+// Such a $(B) .proto is a codegen intermediate, not a graph input of the walking
+// node: upstream reaches it via the producer dep edge. Keeping it would also make
+// resolveCodegenDepRefs attach a spurious dep on its RUN_ANTLR (JV) producer,
+// diverging the node's deps (hence self_uid). $(S) proto imports stay.
+//
+// CC consumers no longer need this: a generated header used to fake-include its
+// .proto, dragging the $(B) intermediate into every CC closure; that include is
+// gone (the .proto rides as a closure leaf instead), so the only live callers are
+// the two codegen-node sites above.
 func dropTransitiveGeneratedProto(in []VFS) []VFS {
 	out := in[:0]
 
