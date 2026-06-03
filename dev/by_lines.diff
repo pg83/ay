@@ -1,528 +1,673 @@
-diff --git a/dev/by_lines.diff b/dev/by_lines.diff
-index fff3a5f..e69de29 100644
---- a/dev/by_lines.diff
-+++ b/dev/by_lines.diff
-@@ -1,364 +0,0 @@
--diff --git a/codegen_registry.go b/codegen_registry.go
--index 5e4f8d3..65cb994 100644
----- a/codegen_registry.go
--+++ b/codegen_registry.go
--@@ -15,8 +15,9 @@ type GeneratedFileInfo struct {
-- 	// IsText marks a COPY_FILE(TEXT) registration. TEXT copies expand the
-- 	// source content into the destination verbatim, so the .txt source is a
-- 	// real compiler input even when the COPY lives in a different module than
---	// the CC node that includes the generated header. withContextSourceExtras
---	// uses this flag to extend source-tracking across module boundaries.
--+	// the CC node that includes the generated header. Such a dst registers its
--+	// source as a closure leaf (see closureLeaves) so it rides across module
--+	// boundaries with the dst's window.
-- 	IsText bool
-- 
-- 	ProducerRef    NodeRef
--@@ -51,6 +52,18 @@ type CodegenRegistry struct {
-- 	// single uint64 key (prefix << 32 | suffix) so a split lookup is one fast64 map
-- 	// probe instead of a two-level DenseMap-then-inner-map dance.
-- 	bySplit map[uint64]*GeneratedFileInfo
--+
--+	// closureLeaves maps a generated $(B) output to extra VFS that must ride in
--+	// its include-closure window as bare, non-expanded members. A COPY_FILE(TEXT)
--+	// dst registers its $(S) source (and the fs_tools.py copy tooling) here: the
--+	// dst's content is the source verbatim, so the source is a real compiler input
--+	// of every unit that includes the dst — but its own #include directives must
--+	// NOT be re-resolved per consuming module (that leaked sibling staging copies,
--+	// see copyFileParsedIncludes). The scanner splices these leaves into the dst's
--+	// window at build time (dfs pass-2 / emitClosure), so they ride transitively
--+	// to every consumer without being traversed as children. This replaces the
--+	// per-CC-source closure re-walk that withContextSourceExtras used to do.
--+	closureLeaves DenseMap[VFS, []VFS]
-- }
-- 
-- func splitKey(prefix, suffix STR) uint64 { return uint64(prefix)<<32 | uint64(suffix) }
--@@ -104,6 +117,22 @@ func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
-- 	return r.bySplit[splitKey(prefix, suffix)]
-- }
-- 
--+// AddClosureLeaf records leaf as a non-expanded member of node's closure window.
--+// Cold path (codegen registration); the scanner reads the result on the hot path
--+// via ClosureLeaves.
--+func (r *CodegenRegistry) AddClosureLeaf(node, leaf VFS) {
--+	leaves, _ := r.closureLeaves.Get(node)
--+	r.closureLeaves.Put(node, append(leaves, leaf))
--+}
--+
--+// ClosureLeaves returns the non-expanded closure-window members registered for
--+// node (nil when none). Keyed by VFS — not strID — so a $(B) dst and a $(S)
--+// source sharing the same path STR do not collide.
--+func (r *CodegenRegistry) ClosureLeaves(node VFS) []VFS {
--+	leaves, _ := r.closureLeaves.Get(node)
--+	return leaves
--+}
--+
-- func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
-- 	info, ok := r.byStr.Get(STR(path.strID()))
-- 
--diff --git a/dev/by_lines.diff b/dev/by_lines.diff
--index 009292c..de03d0b 100644
----- a/dev/by_lines.diff
--+++ b/dev/by_lines.diff
--@@ -1,57 +0,0 @@
---diff --git a/codegen_registry.go b/codegen_registry.go
---index 02ed6eb..5e4f8d3 100644
------ a/codegen_registry.go
---+++ b/codegen_registry.go
---@@ -47,14 +47,16 @@ type CodegenRegistry struct {
--- 	// in the CPU profile; a DenseMap keyed by STR drops the hashing/probing.
--- 	byStr DenseMap[STR, *GeneratedFileInfo]
--- 
----	// bySplit maps a path-prefix STR to its suffix→info table. The outer level is
----	// a DenseMap (prefix STRs are dense interned ids); the inner stays a small map
----	// (a handful of suffixes per prefix).
----	bySplit DenseMap[STR, map[STR]*GeneratedFileInfo]
---+	// bySplit maps a (prefix, suffix) STR pair to its producer info, packed into a
---+	// single uint64 key (prefix << 32 | suffix) so a split lookup is one fast64 map
---+	// probe instead of a two-level DenseMap-then-inner-map dance.
---+	bySplit map[uint64]*GeneratedFileInfo
--- }
--- 
---+func splitKey(prefix, suffix STR) uint64 { return uint64(prefix)<<32 | uint64(suffix) }
---+
--- func NewCodegenRegistry() *CodegenRegistry {
----	return &CodegenRegistry{}
---+	return &CodegenRegistry{bySplit: make(map[uint64]*GeneratedFileInfo, 1<<14)}
--- }
--- 
--- func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
---@@ -77,14 +79,7 @@ func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
--- }
--- 
--- func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) {
----	inner, ok := r.bySplit.Get(prefix)
----
----	if !ok {
----		inner = make(map[STR]*GeneratedFileInfo, 2)
----		r.bySplit.Put(prefix, inner)
----	}
----
----	inner[suffix] = info
---+	r.bySplit[splitKey(prefix, suffix)] = info
--- }
--- 
--- func (r *CodegenRegistry) Lookup(path VFS) *GeneratedFileInfo {
---@@ -106,13 +101,7 @@ func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
--- }
--- 
--- func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
----	inner, ok := r.bySplit.Get(prefix)
----
----	if !ok {
----		return nil
----	}
----
----	return inner[suffix]
---+	return r.bySplit[splitKey(prefix, suffix)]
--- }
--- 
--- func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
--diff --git a/emit_copy.go b/emit_copy.go
--index ac05bd7..04b00e5 100644
----- a/emit_copy.go
--+++ b/emit_copy.go
--@@ -33,7 +33,8 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
-- 		// (cached by absID in IncludeScanner.childrenCache): the first module to
-- 		// reach the shared template fixed every consumer's <angle> includes to
-- 		// that first module's staging copies — a cross-module include leak. The
---		// source file is re-attached as a leaf input by withContextSourceExtras.
--+		// source file rides as a non-expanded closure leaf of the dst instead
--+		// (registered in emitCopyFiles; see CodegenRegistry.closureLeaves).
-- 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
-- 
-- 		if scanner != nil {
--@@ -95,6 +96,20 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
-- 				SourcePath:  srcVFS,
-- 				IsText:      entry.Text,
-- 			})
--+
--+			// COPY_FILE(TEXT): the .txt source content is substituted verbatim into
--+			// the dst, so the source — and the fs_tools.py copy tooling — are real
--+			// inputs of every unit including the dst. Register them as bare closure
--+			// leaves so they ride transitively in the dst's window (scanner splices
--+			// them in without expanding their own includes), instead of being
--+			// re-attached per CC source by a full closure re-walk.
--+			if entry.Text && srcVFS != dstVFS {
--+				reg.AddClosureLeaf(dstVFS, srcVFS)
--+
--+				for _, tool := range ctx.scripts[copyFsToolsVFS] {
--+					reg.AddClosureLeaf(dstVFS, tool)
--+				}
--+			}
-- 		}
-- 	}
-- 
--@@ -235,99 +250,23 @@ func autoCopyDstExtras(modulePath string, d *moduleData, closure []VFS, rootDst
-- 	return extras
-- }
-- 
---// withContextSourceExtras re-attaches the $(S) source of every COPY_FILE(TEXT)
---// copy whose destination participates in a closure. For TEXT copies
---// copyFileParsedIncludes no longer routes the dst through the source node (that
---// node's resolution is cached globally, leaking sibling-module staging copies);
---// it splices the source's raw includes onto the dst instead. The source file is
---// still a real input of the copy — COPY_FILE(TEXT) lists ${input=TEXT:TEXT} — so
---// re-add it here as a leaf input, without it ever being a traversed graph node.
---// (Non-TEXT COPY(WITH_CONTEXT) keeps its source-node pointer, so its source
---// already reaches the closure and needs no re-attach here.) rootDst is the
---// compile's own $(B) input (the file being compiled, itself possibly a TEXT
---// copy dst); include it so the compiled unit's $(S) source is attached too.
---//
---// The dst→src mapping reuses the CodegenRegistry's SourcePath (recorded by
---// emitCopyFiles when the CP node was registered) rather than re-deriving the
---// source VFS from the raw entry.Src string — that keeps this leaf input
---// byte-identical to the CP node's own source edge and avoids a redundant
---// filesystem probe per entry.
--+// copyProductToolingExtras returns the fs_tools.py copy tooling (fs_tools.py +
--+// its import closure) when the compiled unit rootDst is itself a COPY product.
-- //
---// Cross-module TEXT copies: when a CC node includes a header produced by
---// COPY_FILE(TEXT) in a *different* module, the .txt source is still a real
---// compiler input. The registry carries IsText on every CP registration, so we
---// extend the lookup beyond d.copyFiles to cover those cross-module cases.
---func withContextSourceExtras(reg *CodegenRegistry, modulePath string, d *moduleData, closure []VFS, rootDst VFS, scripts scriptDeps) []VFS {
---	if reg == nil {
--+// The two cross-module attachments this used to also do — re-adding a
--+// COPY_FILE(TEXT) dst's $(S) source, and the fs_tools tooling for a *consumed*
--+// TEXT-copied header — now ride transitively as non-expanded closure leaves
--+// (CodegenRegistry.closureLeaves, registered in emitCopyFiles and spliced into
--+// the dst's window by the scanner). So a unit that merely includes a TEXT header
--+// already carries both through its closure; the only case left here is the
--+// compiled unit's own producer tooling when it is itself a copy (TEXT or not),
--+// which has no dst-in-closure to ride from.
--+func copyProductToolingExtras(reg *CodegenRegistry, rootDst VFS, scripts scriptDeps) []VFS {
--+	if !isCopyProduct(reg, rootDst) {
-- 		return nil
-- 	}
-- 
---	// Build a dst→src map from this module's own TEXT copy files.
---	var dstToSrc map[VFS]VFS
---
---	if d != nil {
---		for _, entry := range d.copyFiles {
---			if !entry.Text {
---				continue
---			}
---
---			dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
---			info := reg.Lookup(dstVFS)
---
---			if info == nil || info.SourcePath == 0 || info.SourcePath == dstVFS {
---				continue
---			}
---
---			if dstToSrc == nil {
---				dstToSrc = make(map[VFS]VFS, len(d.copyFiles))
---			}
---
---			dstToSrc[dstVFS] = info.SourcePath
---		}
---	}
---
---	// textSrc returns the .txt source for v if v is a TEXT copy dst (same or
---	// different module); second return is false when v is not a TEXT copy.
---	textSrc := func(v VFS) (VFS, bool) {
---		if src, ok := dstToSrc[v]; ok {
---			return src, true
---		}
---
---		// Cross-module: any $(B) path registered as IsText in the registry.
---		if v.IsSource() {
---			return 0, false
---		}
---
---		info := reg.Lookup(v)
---
---		if info == nil || !info.IsText || info.SourcePath == 0 || info.SourcePath == v {
---			return 0, false
---		}
---
---		return info.SourcePath, true
---	}
---	var extras []VFS
---
---	if src, ok := textSrc(rootDst); ok {
---		extras = append(extras, src)
---	}
---
---	for _, v := range closure {
---		if src, ok := textSrc(v); ok {
---			extras = append(extras, src)
---		}
---	}
---
---	// A COPY product is produced by a `python3 fs_tools.py copy …` CP node; a unit
---	// that compiles a copied source, or consumes a TEXT-copied header, inherits the
---	// producer's $(S) tooling — fs_tools.py and its import closure (process_command_files.py).
---	// Attach it via the script table when the compiled unit itself is a copy (TEXT or
---	// not) or when a TEXT-copy source was re-attached above.
---	if len(extras) > 0 || isCopyProduct(reg, rootDst) {
---		extras = append(extras, scripts[copyFsToolsVFS]...)
---	}
---
---	return extras
--+	return scripts[copyFsToolsVFS]
-- }
-- 
-- // isCopyProduct reports whether v is the $(B) output of a CP (COPY_FILE) node.
--diff --git a/emit_llvm_bc.go b/emit_llvm_bc.go
--index db02e04..2dcf356 100644
----- a/emit_llvm_bc.go
--+++ b/emit_llvm_bc.go
--@@ -66,16 +66,12 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
-- 			closure := walkClosure(ctx, instance, inputVFS, in)
-- 			closure = dropTransitiveGeneratedProto(closure)
-- 
---			// Add TEXT copy source files (e.g. mkql_computation_node_codegen.h.txt)
---			// that appear in the closure, matching emitOneSource's withContextSourceExtras.
---			wcExtras := withContextSourceExtras(codegenRegForInstance(ctx, instance), instance.Path, d, closure, inputVFS, ctx.scripts)
---
---			for _, e := range wcExtras {
---				if e == copyFsToolsVFS {
---					linksCopy = true
---					break
---				}
---			}
--+			// A COPY_FILE(TEXT) source (e.g. mkql_computation_node_codegen.h.txt) and
--+			// the fs_tools.py tooling for any consumed TEXT-copied header now ride
--+			// transitively as closure leaves, so they are already in `closure`. Only
--+			// the case where inputVFS is itself a copy product needs the tooling
--+			// re-added here.
--+			wcExtras := copyProductToolingExtras(codegenRegForInstance(ctx, instance), inputVFS, ctx.scripts)
-- 
-- 			var depRefs []NodeRef
-- 
--@@ -97,10 +93,17 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
-- 			}
-- 
-- 			// Propagate $(S) inputs from this BC node to the OP flat-input set.
--+			// fs_tools.py in the inputs (via a consumed TEXT header's leaf, or via
--+			// wcExtras when inputVFS is itself a copy product) means this .bc came
--+			// from a COPY product, so the merge node inherits the tooling too.
-- 			for _, v := range allInputs {
-- 				if v.IsSource() {
-- 					bcSourceInputs = append(bcSourceInputs, v)
-- 				}
--+
--+				if v == copyFsToolsVFS {
--+					linksCopy = true
--+				}
-- 			}
-- 
-- 			node := &Node{
--diff --git a/emit_sources.go b/emit_sources.go
--index f72218b..f1e4de9 100644
----- a/emit_sources.go
--+++ b/emit_sources.go
--@@ -71,7 +71,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
-- 			srcIn.IncludeInputs = ctx.deduper.dedupVFS(srcIn.IncludeInputs, autoExtras)
-- 		}
-- 
---		wcExtras := withContextSourceExtras(codegenRegForInstance(ctx, srcInstance), srcInstance.Path, d, srcIn.IncludeInputs, srcVFS, ctx.scripts)
--+		wcExtras := copyProductToolingExtras(codegenRegForInstance(ctx, srcInstance), srcVFS, ctx.scripts)
-- 
-- 		if len(wcExtras) > 0 {
-- 			srcIn.IncludeInputs = ctx.deduper.dedupVFS(srcIn.IncludeInputs, wcExtras)
--diff --git a/scanner.go b/scanner.go
--index ad80c93..ddc298c 100644
----- a/scanner.go
--+++ b/scanner.go
--@@ -754,6 +754,17 @@ func (sc *scanCtx) dfs(abs VFS) {
-- 		}
-- 	})
-- 
--+	// Splice non-expanded closure leaves (COPY_FILE(TEXT) $(B) dst → its $(S)
--+	// source + copy tooling) for every $(B) member: bare window members that ride
--+	// transitively to every consumer (which splices this cached window) but are
--+	// never traversed as children — re-resolving their own #includes per consuming
--+	// module leaked sibling staging copies.
--+	for i := 0; i < k; i++ {
--+		if block[i].IsBuild() {
--+			k += copy(block[k:], s.codegen.ClosureLeaves(block[i]))
--+		}
--+	}
--+
-- 	s.closureArena.commit(k)
-- 	ref := closureRef(len(s.subgraphClosures))
-- 	s.subgraphClosures = append(s.subgraphClosures, block[:k:k])
--@@ -835,6 +846,15 @@ func (sc *scanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
-- 
-- 	block := s.closureArena.alloc(closureAllocHint)
-- 	k := fill(block)
--+
--+	// Splice non-expanded closure leaves for every $(B) member (same as dfs
--+	// pass-2; see there).
--+	for i := 0; i < k; i++ {
--+		if block[i].IsBuild() {
--+			k += copy(block[k:], s.codegen.ClosureLeaves(block[i]))
--+		}
--+	}
--+
-- 	s.closureArena.commit(k)
-- 
-- 	ref := closureRef(len(s.subgraphClosures))
-diff --git a/gen.go b/gen.go
-index b151a21..066fa91 100644
---- a/gen.go
-+++ b/gen.go
-@@ -382,8 +382,8 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
+diff --git a/codegen_registry.go b/codegen_registry.go
+index 65cb994..6549cc5 100644
+--- a/codegen_registry.go
++++ b/codegen_registry.go
+@@ -16,7 +16,7 @@ type GeneratedFileInfo struct {
+ 	// source content into the destination verbatim, so the .txt source is a
+ 	// real compiler input even when the COPY lives in a different module than
+ 	// the CC node that includes the generated header. Such a dst registers its
+-	// source as a closure leaf (see closureLeaves) so it rides across module
++	// source as a closure leaf (see AddClosureLeaf) so it rides across module
+ 	// boundaries with the dst's window.
+ 	IsText bool
  
- func (ctx *genCtx) perfScanCtxStats(scanner *IncludeScanner) scanCtxPerfStats {
- 	return scanCtxPerfStats{
--		// subgraph and children now share one scanCache entry per node, so both
--		// report its distinct-key count.
-+		// subgraph and children are columns of one DenseMap3 keyed per node, so
-+		// both report its distinct-key count.
- 		subgraphEntries: scanner.scanCache.Len(),
- 		childrenEntries: scanner.scanCache.Len(),
- 		closureWindows:  len(scanner.subgraphClosures),
-diff --git a/scanner.go b/scanner.go
-index ddc298c..3375726 100644
---- a/scanner.go
-+++ b/scanner.go
-@@ -84,14 +84,16 @@ type IncludeScanner struct {
- 	// magnitude. If you suspect divergence is caused here, fix it upstream of
- 	// the cache: parsedIncludes, sysincl rules, or searchTier construction.
- 	//
--	// Both the cached closure and the cached children live in one scanCacheEntry
--	// under a single DenseMap keyed by the includer's STR (v.strID()): one idx
--	// array (sized to vfsBound — the expensive part) instead of two. strID is
--	// unique per VFS (the $(S)/$(B) prefix is part of the interned string) and
--	// lossless, halving idx versus the 2x-wider VFS space. The two fields are
--	// filled at different times (children during dfs pass 1, closure on pop), so
--	// each carries its own presence flag; absent is the zero entry.
--	scanCache DenseMap[STR, scanCacheEntry]
-+	// All three caches live in one DenseMap3 keyed by the includer's STR
-+	// (v.strID()): column 1 the resolved immediate children, column 2 the
-+	// transitive-closure ref, column 3 source-file existence. One idx array
-+	// (sized to vfsBound — the expensive part) is shared by all three columns
-+	// instead of one per cache. strID is unique per VFS (the $(S)/$(B) prefix is
-+	// part of the interned string) and lossless, halving idx versus the 2x-wider
-+	// VFS space. The columns are filled at different times (children during dfs
-+	// pass 1, closure on pop, existence on first probe), so each relies on its
-+	// own per-column presence rather than the map's shared key-present bit.
-+	scanCache DenseMap3[STR, []VFS, closureRef, bool]
- 
- 	searchTierByConfig map[uint64]map[STR]searchTierResult
- 
-@@ -167,88 +169,39 @@ type idSet struct {
- // closureRef is an index into IncludeScanner.subgraphClosures.
- type closureRef uint32
- 
--// existState is the three-valued source-file existence memo: unknown (zero)
--// until first checked, then no/yes. Stored per-VFS so the sysincl resolve loops
--// and fsLocator do not re-check (and re-intern the parent dir of) the same
--// already-interned mapping VFS on every use; existence is global.
--type existState uint8
--
--const (
--	existUnknown existState = iota
--	existNo
--	existYes
--)
--
--// scanCacheEntry holds the per-VFS scanner caches under one DenseMap key: the
--// resolved immediate children, the transitive-closure ref, and source-file
--// existence. The DenseMap's own present/absent bit cannot serve as presence (the
--// fields are filled at different points — children during dfs pass 1, closure
--// when the node's SCC pops, exists on first existence probe), so each carries
--// its own in-band sentinel: children is nil until resolved (a resolved-but-empty
--// child set is stored as noChildren, a shared non-nil empty slice), closure 0
--// means absent because subgraphClosures[0] is reserved so real refs start at 1,
--// and exists is existUnknown until probed.
--type scanCacheEntry struct {
--	children []VFS
--	closure  closureRef
--	exists   existState
--}
--
--// noChildren marks a node resolved to zero children, distinct from a node not
--// yet resolved (nil); shared because it is only ever read.
--var noChildren = []VFS{}
--
-+// cachedChildren returns the resolved immediate children of v (column 1). A
-+// resolved-but-empty child set reads back present with a nil/empty slice, since
-+// presence is the column slot, not nil-ness — so no sentinel slice is needed.
- func (s *IncludeScanner) cachedChildren(v VFS) ([]VFS, bool) {
--	e, _ := s.scanCache.Get(STR(v.strID()))
--	return e.children, e.children != nil
-+	return s.scanCache.Get1(STR(v.strID()))
+@@ -43,27 +43,31 @@ type deferredCF struct {
  }
  
- func (s *IncludeScanner) putChildren(v VFS, children []VFS) {
--	if children == nil {
--		children = noChildren
--	}
+ type CodegenRegistry struct {
+-	// byStr maps an interned path STR (full $(B)/… or its rel form) to its
+-	// producer info. The hot Lookup (once per scanned include) was the top map
+-	// in the CPU profile; a DenseMap keyed by STR drops the hashing/probing.
+-	byStr DenseMap[STR, *GeneratedFileInfo]
++	// byStr maps an interned path STR (full $(B)/… or its rel form) to two columns
++	// keyed by that same STR:
++	//   - column 1: the producer info. The hot Lookup (once per scanned include)
++	//     was the top map in the CPU profile; a DenseMap keyed by STR drops the
++	//     hashing/probing.
++	//   - column 2: the output's non-expanded closure leaves — extra VFS that must
++	//     ride in its include-closure window as bare members. A COPY_FILE(TEXT) dst
++	//     registers its $(S) source (and the fs_tools.py copy tooling) here: the
++	//     dst's content is the source verbatim, so the source is a real compiler
++	//     input of every unit that includes the dst — but its own #include
++	//     directives must NOT be re-resolved per consuming module (that leaked
++	//     sibling staging copies, see copyFileParsedIncludes). The scanner splices
++	//     these leaves into the dst's window at build time (dfs pass-2 /
++	//     emitClosure), so they ride transitively to every consumer without being
++	//     traversed as children — replacing the per-CC-source closure re-walk that
++	//     withContextSourceExtras used to do.
++	// The two columns share one idx array (DenseMap2). strID losslessly encodes the
++	// root (the interned string carries the $(S)/ or $(B)/ prefix), so a $(B) dst
++	// and a $(S) source never collide despite the shared STR key space.
++	byStr DenseMap2[STR, *GeneratedFileInfo, []VFS]
+ 
+ 	// bySplit maps a (prefix, suffix) STR pair to its producer info, packed into a
+ 	// single uint64 key (prefix << 32 | suffix) so a split lookup is one fast64 map
+ 	// probe instead of a two-level DenseMap-then-inner-map dance.
+ 	bySplit map[uint64]*GeneratedFileInfo
 -
--	key := STR(v.strID())
--	e, _ := s.scanCache.Get(key)
--	e.children = children
--	s.scanCache.Put(key, e)
-+	s.scanCache.Put1(STR(v.strID()), children)
+-	// closureLeaves maps a generated $(B) output to extra VFS that must ride in
+-	// its include-closure window as bare, non-expanded members. A COPY_FILE(TEXT)
+-	// dst registers its $(S) source (and the fs_tools.py copy tooling) here: the
+-	// dst's content is the source verbatim, so the source is a real compiler input
+-	// of every unit that includes the dst — but its own #include directives must
+-	// NOT be re-resolved per consuming module (that leaked sibling staging copies,
+-	// see copyFileParsedIncludes). The scanner splices these leaves into the dst's
+-	// window at build time (dfs pass-2 / emitClosure), so they ride transitively
+-	// to every consumer without being traversed as children. This replaces the
+-	// per-CC-source closure re-walk that withContextSourceExtras used to do.
+-	closureLeaves DenseMap[VFS, []VFS]
  }
  
- func (s *IncludeScanner) cachedClosure(v VFS) (closureRef, bool) {
--	e, _ := s.scanCache.Get(STR(v.strID()))
--	return e.closure, e.closure != 0
-+	return s.scanCache.Get2(STR(v.strID()))
- }
+ func splitKey(prefix, suffix STR) uint64 { return uint64(prefix)<<32 | uint64(suffix) }
+@@ -75,14 +79,14 @@ func NewCodegenRegistry() *CodegenRegistry {
+ func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
+ 	full := STR(info.OutputPath.strID())
  
- func (s *IncludeScanner) putClosure(v VFS, ref closureRef) {
--	key := STR(v.strID())
--	e, _ := s.scanCache.Get(key)
--	e.closure = ref
--	s.scanCache.Put(key, e)
-+	s.scanCache.Put2(STR(v.strID()), ref)
- }
- 
--// sourceFileExists memoizes IsFile(srcRootVFS, abs.Rel()) by the file VFS, so the
--// repeated existence checks of cached sysincl mappings (and fsLocator) probe the
--// FS — and intern the parent dir — only once per file.
-+// sourceFileExists memoizes IsFile(srcRootVFS, abs.Rel()) by the file VFS
-+// (column 3), so the repeated existence checks of cached sysincl mappings (and
-+// fsLocator) probe the FS — and intern the parent dir — only once per file. The
-+// column's own presence is the "already probed" bit; an absent column means not
-+// yet checked.
- func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
- 	key := STR(abs.strID())
--	e, _ := s.scanCache.Get(key)
- 
--	switch e.exists {
--	case existYes:
--		return true
--	case existNo:
--		return false
-+	if exists, probed := s.scanCache.Get3(key); probed {
-+		return exists
+-	if existing, ok := r.byStr.Get(full); ok {
++	if existing, ok := r.byStr.Get1(full); ok {
+ 		ThrowFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
+ 			info.OutputPath.String(), existing.ProducerKvP, info.ProducerKvP)
  	}
  
- 	v := s.parsers.fs.IsFile(srcRootVFS, abs.Rel())
--
--	if v {
--		e.exists = existYes
--	} else {
--		e.exists = existNo
--	}
--
--	s.scanCache.Put(key, e)
-+	s.scanCache.Put3(key, v)
+ 	rel := info.OutputPath.Rel()
+-	r.byStr.Put(full, info)
+-	r.byStr.Put(internString(rel), info)
++	r.byStr.Put1(full, info)
++	r.byStr.Put1(internString(rel), info)
  
- 	return v
+ 	for i := 0; i < len(rel); i++ {
+ 		if rel[i] == '/' {
+@@ -96,7 +100,7 @@ func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo)
  }
-@@ -369,8 +322,8 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
- 		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 131072),
- 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
- 		onWarn:               onWarn,
--		// Index 0 reserved: scanCacheEntry.closure==0 means "no closure cached",
--		// so real refs must start at 1.
-+		// Index 0 reserved so a fresh closureRef is always >= 1 (closureOf's
-+		// straighten path and closureWindow treat ref as a 1-based index).
- 		subgraphClosures:     make([][]VFS, 1, 256),
- 		closureArena:         newBumpAllocator[VFS](closureArenaInitial),
- 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
+ 
+ func (r *CodegenRegistry) Lookup(path VFS) *GeneratedFileInfo {
+-	info, _ := r.byStr.Get(STR(path.strID()))
++	info, _ := r.byStr.Get1(STR(path.strID()))
+ 
+ 	return info
+ }
+@@ -108,7 +112,7 @@ func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
+ 		return nil
+ 	}
+ 
+-	info, _ := r.byStr.Get(*id)
++	info, _ := r.byStr.Get1(*id)
+ 
+ 	return info
+ }
+@@ -117,24 +121,24 @@ func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
+ 	return r.bySplit[splitKey(prefix, suffix)]
+ }
+ 
+-// AddClosureLeaf records leaf as a non-expanded member of node's closure window.
+-// Cold path (codegen registration); the scanner reads the result on the hot path
+-// via ClosureLeaves.
++// AddClosureLeaf records leaf as a non-expanded member of node's closure window
++// (byStr column 2). Cold path (codegen registration); the scanner reads the
++// result on the hot path via ClosureLeaves.
+ func (r *CodegenRegistry) AddClosureLeaf(node, leaf VFS) {
+-	leaves, _ := r.closureLeaves.Get(node)
+-	r.closureLeaves.Put(node, append(leaves, leaf))
++	key := STR(node.strID())
++	leaves, _ := r.byStr.Get2(key)
++	r.byStr.Put2(key, append(leaves, leaf))
+ }
+ 
+ // ClosureLeaves returns the non-expanded closure-window members registered for
+-// node (nil when none). Keyed by VFS — not strID — so a $(B) dst and a $(S)
+-// source sharing the same path STR do not collide.
++// node (nil when none).
+ func (r *CodegenRegistry) ClosureLeaves(node VFS) []VFS {
+-	leaves, _ := r.closureLeaves.Get(node)
++	leaves, _ := r.byStr.Get2(STR(node.strID()))
+ 	return leaves
+ }
+ 
+ func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
+-	info, ok := r.byStr.Get(STR(path.strID()))
++	info, ok := r.byStr.Get1(STR(path.strID()))
+ 
+ 	if !ok {
+ 		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.String())
+@@ -150,7 +154,7 @@ func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
+ }
+ 
+ func (r *CodegenRegistry) SetSourceInputs(path VFS, src []VFS) {
+-	info, ok := r.byStr.Get(STR(path.strID()))
++	info, ok := r.byStr.Get1(STR(path.strID()))
+ 
+ 	if !ok {
+ 		ThrowFmt("CodegenRegistry: SetSourceInputs on unregistered path %q", path.String())
+diff --git a/dev/by_lines.diff b/dev/by_lines.diff
+index a514faf..b181e32 100644
+--- a/dev/by_lines.diff
++++ b/dev/by_lines.diff
+@@ -1,528 +0,0 @@
+-diff --git a/dev/by_lines.diff b/dev/by_lines.diff
+-index fff3a5f..e69de29 100644
+---- a/dev/by_lines.diff
+-+++ b/dev/by_lines.diff
+-@@ -1,364 +0,0 @@
+--diff --git a/codegen_registry.go b/codegen_registry.go
+--index 5e4f8d3..65cb994 100644
+----- a/codegen_registry.go
+--+++ b/codegen_registry.go
+--@@ -15,8 +15,9 @@ type GeneratedFileInfo struct {
+-- 	// IsText marks a COPY_FILE(TEXT) registration. TEXT copies expand the
+-- 	// source content into the destination verbatim, so the .txt source is a
+-- 	// real compiler input even when the COPY lives in a different module than
+---	// the CC node that includes the generated header. withContextSourceExtras
+---	// uses this flag to extend source-tracking across module boundaries.
+--+	// the CC node that includes the generated header. Such a dst registers its
+--+	// source as a closure leaf (see closureLeaves) so it rides across module
+--+	// boundaries with the dst's window.
+-- 	IsText bool
+-- 
+-- 	ProducerRef    NodeRef
+--@@ -51,6 +52,18 @@ type CodegenRegistry struct {
+-- 	// single uint64 key (prefix << 32 | suffix) so a split lookup is one fast64 map
+-- 	// probe instead of a two-level DenseMap-then-inner-map dance.
+-- 	bySplit map[uint64]*GeneratedFileInfo
+--+
+--+	// closureLeaves maps a generated $(B) output to extra VFS that must ride in
+--+	// its include-closure window as bare, non-expanded members. A COPY_FILE(TEXT)
+--+	// dst registers its $(S) source (and the fs_tools.py copy tooling) here: the
+--+	// dst's content is the source verbatim, so the source is a real compiler input
+--+	// of every unit that includes the dst — but its own #include directives must
+--+	// NOT be re-resolved per consuming module (that leaked sibling staging copies,
+--+	// see copyFileParsedIncludes). The scanner splices these leaves into the dst's
+--+	// window at build time (dfs pass-2 / emitClosure), so they ride transitively
+--+	// to every consumer without being traversed as children. This replaces the
+--+	// per-CC-source closure re-walk that withContextSourceExtras used to do.
+--+	closureLeaves DenseMap[VFS, []VFS]
+-- }
+-- 
+-- func splitKey(prefix, suffix STR) uint64 { return uint64(prefix)<<32 | uint64(suffix) }
+--@@ -104,6 +117,22 @@ func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
+-- 	return r.bySplit[splitKey(prefix, suffix)]
+-- }
+-- 
+--+// AddClosureLeaf records leaf as a non-expanded member of node's closure window.
+--+// Cold path (codegen registration); the scanner reads the result on the hot path
+--+// via ClosureLeaves.
+--+func (r *CodegenRegistry) AddClosureLeaf(node, leaf VFS) {
+--+	leaves, _ := r.closureLeaves.Get(node)
+--+	r.closureLeaves.Put(node, append(leaves, leaf))
+--+}
+--+
+--+// ClosureLeaves returns the non-expanded closure-window members registered for
+--+// node (nil when none). Keyed by VFS — not strID — so a $(B) dst and a $(S)
+--+// source sharing the same path STR do not collide.
+--+func (r *CodegenRegistry) ClosureLeaves(node VFS) []VFS {
+--+	leaves, _ := r.closureLeaves.Get(node)
+--+	return leaves
+--+}
+--+
+-- func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
+-- 	info, ok := r.byStr.Get(STR(path.strID()))
+-- 
+--diff --git a/dev/by_lines.diff b/dev/by_lines.diff
+--index 009292c..de03d0b 100644
+----- a/dev/by_lines.diff
+--+++ b/dev/by_lines.diff
+--@@ -1,57 +0,0 @@
+---diff --git a/codegen_registry.go b/codegen_registry.go
+---index 02ed6eb..5e4f8d3 100644
+------ a/codegen_registry.go
+---+++ b/codegen_registry.go
+---@@ -47,14 +47,16 @@ type CodegenRegistry struct {
+--- 	// in the CPU profile; a DenseMap keyed by STR drops the hashing/probing.
+--- 	byStr DenseMap[STR, *GeneratedFileInfo]
+--- 
+----	// bySplit maps a path-prefix STR to its suffix→info table. The outer level is
+----	// a DenseMap (prefix STRs are dense interned ids); the inner stays a small map
+----	// (a handful of suffixes per prefix).
+----	bySplit DenseMap[STR, map[STR]*GeneratedFileInfo]
+---+	// bySplit maps a (prefix, suffix) STR pair to its producer info, packed into a
+---+	// single uint64 key (prefix << 32 | suffix) so a split lookup is one fast64 map
+---+	// probe instead of a two-level DenseMap-then-inner-map dance.
+---+	bySplit map[uint64]*GeneratedFileInfo
+--- }
+--- 
+---+func splitKey(prefix, suffix STR) uint64 { return uint64(prefix)<<32 | uint64(suffix) }
+---+
+--- func NewCodegenRegistry() *CodegenRegistry {
+----	return &CodegenRegistry{}
+---+	return &CodegenRegistry{bySplit: make(map[uint64]*GeneratedFileInfo, 1<<14)}
+--- }
+--- 
+--- func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
+---@@ -77,14 +79,7 @@ func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
+--- }
+--- 
+--- func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) {
+----	inner, ok := r.bySplit.Get(prefix)
+----
+----	if !ok {
+----		inner = make(map[STR]*GeneratedFileInfo, 2)
+----		r.bySplit.Put(prefix, inner)
+----	}
+----
+----	inner[suffix] = info
+---+	r.bySplit[splitKey(prefix, suffix)] = info
+--- }
+--- 
+--- func (r *CodegenRegistry) Lookup(path VFS) *GeneratedFileInfo {
+---@@ -106,13 +101,7 @@ func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
+--- }
+--- 
+--- func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
+----	inner, ok := r.bySplit.Get(prefix)
+----
+----	if !ok {
+----		return nil
+----	}
+----
+----	return inner[suffix]
+---+	return r.bySplit[splitKey(prefix, suffix)]
+--- }
+--- 
+--- func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
+--diff --git a/emit_copy.go b/emit_copy.go
+--index ac05bd7..04b00e5 100644
+----- a/emit_copy.go
+--+++ b/emit_copy.go
+--@@ -33,7 +33,8 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
+-- 		// (cached by absID in IncludeScanner.childrenCache): the first module to
+-- 		// reach the shared template fixed every consumer's <angle> includes to
+-- 		// that first module's staging copies — a cross-module include leak. The
+---		// source file is re-attached as a leaf input by withContextSourceExtras.
+--+		// source file rides as a non-expanded closure leaf of the dst instead
+--+		// (registered in emitCopyFiles; see CodegenRegistry.closureLeaves).
+-- 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
+-- 
+-- 		if scanner != nil {
+--@@ -95,6 +96,20 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
+-- 				SourcePath:  srcVFS,
+-- 				IsText:      entry.Text,
+-- 			})
+--+
+--+			// COPY_FILE(TEXT): the .txt source content is substituted verbatim into
+--+			// the dst, so the source — and the fs_tools.py copy tooling — are real
+--+			// inputs of every unit including the dst. Register them as bare closure
+--+			// leaves so they ride transitively in the dst's window (scanner splices
+--+			// them in without expanding their own includes), instead of being
+--+			// re-attached per CC source by a full closure re-walk.
+--+			if entry.Text && srcVFS != dstVFS {
+--+				reg.AddClosureLeaf(dstVFS, srcVFS)
+--+
+--+				for _, tool := range ctx.scripts[copyFsToolsVFS] {
+--+					reg.AddClosureLeaf(dstVFS, tool)
+--+				}
+--+			}
+-- 		}
+-- 	}
+-- 
+--@@ -235,99 +250,23 @@ func autoCopyDstExtras(modulePath string, d *moduleData, closure []VFS, rootDst
+-- 	return extras
+-- }
+-- 
+---// withContextSourceExtras re-attaches the $(S) source of every COPY_FILE(TEXT)
+---// copy whose destination participates in a closure. For TEXT copies
+---// copyFileParsedIncludes no longer routes the dst through the source node (that
+---// node's resolution is cached globally, leaking sibling-module staging copies);
+---// it splices the source's raw includes onto the dst instead. The source file is
+---// still a real input of the copy — COPY_FILE(TEXT) lists ${input=TEXT:TEXT} — so
+---// re-add it here as a leaf input, without it ever being a traversed graph node.
+---// (Non-TEXT COPY(WITH_CONTEXT) keeps its source-node pointer, so its source
+---// already reaches the closure and needs no re-attach here.) rootDst is the
+---// compile's own $(B) input (the file being compiled, itself possibly a TEXT
+---// copy dst); include it so the compiled unit's $(S) source is attached too.
+---//
+---// The dst→src mapping reuses the CodegenRegistry's SourcePath (recorded by
+---// emitCopyFiles when the CP node was registered) rather than re-deriving the
+---// source VFS from the raw entry.Src string — that keeps this leaf input
+---// byte-identical to the CP node's own source edge and avoids a redundant
+---// filesystem probe per entry.
+--+// copyProductToolingExtras returns the fs_tools.py copy tooling (fs_tools.py +
+--+// its import closure) when the compiled unit rootDst is itself a COPY product.
+-- //
+---// Cross-module TEXT copies: when a CC node includes a header produced by
+---// COPY_FILE(TEXT) in a *different* module, the .txt source is still a real
+---// compiler input. The registry carries IsText on every CP registration, so we
+---// extend the lookup beyond d.copyFiles to cover those cross-module cases.
+---func withContextSourceExtras(reg *CodegenRegistry, modulePath string, d *moduleData, closure []VFS, rootDst VFS, scripts scriptDeps) []VFS {
+---	if reg == nil {
+--+// The two cross-module attachments this used to also do — re-adding a
+--+// COPY_FILE(TEXT) dst's $(S) source, and the fs_tools tooling for a *consumed*
+--+// TEXT-copied header — now ride transitively as non-expanded closure leaves
+--+// (CodegenRegistry.closureLeaves, registered in emitCopyFiles and spliced into
+--+// the dst's window by the scanner). So a unit that merely includes a TEXT header
+--+// already carries both through its closure; the only case left here is the
+--+// compiled unit's own producer tooling when it is itself a copy (TEXT or not),
+--+// which has no dst-in-closure to ride from.
+--+func copyProductToolingExtras(reg *CodegenRegistry, rootDst VFS, scripts scriptDeps) []VFS {
+--+	if !isCopyProduct(reg, rootDst) {
+-- 		return nil
+-- 	}
+-- 
+---	// Build a dst→src map from this module's own TEXT copy files.
+---	var dstToSrc map[VFS]VFS
+---
+---	if d != nil {
+---		for _, entry := range d.copyFiles {
+---			if !entry.Text {
+---				continue
+---			}
+---
+---			dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
+---			info := reg.Lookup(dstVFS)
+---
+---			if info == nil || info.SourcePath == 0 || info.SourcePath == dstVFS {
+---				continue
+---			}
+---
+---			if dstToSrc == nil {
+---				dstToSrc = make(map[VFS]VFS, len(d.copyFiles))
+---			}
+---
+---			dstToSrc[dstVFS] = info.SourcePath
+---		}
+---	}
+---
+---	// textSrc returns the .txt source for v if v is a TEXT copy dst (same or
+---	// different module); second return is false when v is not a TEXT copy.
+---	textSrc := func(v VFS) (VFS, bool) {
+---		if src, ok := dstToSrc[v]; ok {
+---			return src, true
+---		}
+---
+---		// Cross-module: any $(B) path registered as IsText in the registry.
+---		if v.IsSource() {
+---			return 0, false
+---		}
+---
+---		info := reg.Lookup(v)
+---
+---		if info == nil || !info.IsText || info.SourcePath == 0 || info.SourcePath == v {
+---			return 0, false
+---		}
+---
+---		return info.SourcePath, true
+---	}
+---	var extras []VFS
+---
+---	if src, ok := textSrc(rootDst); ok {
+---		extras = append(extras, src)
+---	}
+---
+---	for _, v := range closure {
+---		if src, ok := textSrc(v); ok {
+---			extras = append(extras, src)
+---		}
+---	}
+---
+---	// A COPY product is produced by a `python3 fs_tools.py copy …` CP node; a unit
+---	// that compiles a copied source, or consumes a TEXT-copied header, inherits the
+---	// producer's $(S) tooling — fs_tools.py and its import closure (process_command_files.py).
+---	// Attach it via the script table when the compiled unit itself is a copy (TEXT or
+---	// not) or when a TEXT-copy source was re-attached above.
+---	if len(extras) > 0 || isCopyProduct(reg, rootDst) {
+---		extras = append(extras, scripts[copyFsToolsVFS]...)
+---	}
+---
+---	return extras
+--+	return scripts[copyFsToolsVFS]
+-- }
+-- 
+-- // isCopyProduct reports whether v is the $(B) output of a CP (COPY_FILE) node.
+--diff --git a/emit_llvm_bc.go b/emit_llvm_bc.go
+--index db02e04..2dcf356 100644
+----- a/emit_llvm_bc.go
+--+++ b/emit_llvm_bc.go
+--@@ -66,16 +66,12 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
+-- 			closure := walkClosure(ctx, instance, inputVFS, in)
+-- 			closure = dropTransitiveGeneratedProto(closure)
+-- 
+---			// Add TEXT copy source files (e.g. mkql_computation_node_codegen.h.txt)
+---			// that appear in the closure, matching emitOneSource's withContextSourceExtras.
+---			wcExtras := withContextSourceExtras(codegenRegForInstance(ctx, instance), instance.Path, d, closure, inputVFS, ctx.scripts)
+---
+---			for _, e := range wcExtras {
+---				if e == copyFsToolsVFS {
+---					linksCopy = true
+---					break
+---				}
+---			}
+--+			// A COPY_FILE(TEXT) source (e.g. mkql_computation_node_codegen.h.txt) and
+--+			// the fs_tools.py tooling for any consumed TEXT-copied header now ride
+--+			// transitively as closure leaves, so they are already in `closure`. Only
+--+			// the case where inputVFS is itself a copy product needs the tooling
+--+			// re-added here.
+--+			wcExtras := copyProductToolingExtras(codegenRegForInstance(ctx, instance), inputVFS, ctx.scripts)
+-- 
+-- 			var depRefs []NodeRef
+-- 
+--@@ -97,10 +93,17 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
+-- 			}
+-- 
+-- 			// Propagate $(S) inputs from this BC node to the OP flat-input set.
+--+			// fs_tools.py in the inputs (via a consumed TEXT header's leaf, or via
+--+			// wcExtras when inputVFS is itself a copy product) means this .bc came
+--+			// from a COPY product, so the merge node inherits the tooling too.
+-- 			for _, v := range allInputs {
+-- 				if v.IsSource() {
+-- 					bcSourceInputs = append(bcSourceInputs, v)
+-- 				}
+--+
+--+				if v == copyFsToolsVFS {
+--+					linksCopy = true
+--+				}
+-- 			}
+-- 
+-- 			node := &Node{
+--diff --git a/emit_sources.go b/emit_sources.go
+--index f72218b..f1e4de9 100644
+----- a/emit_sources.go
+--+++ b/emit_sources.go
+--@@ -71,7 +71,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
+-- 			srcIn.IncludeInputs = ctx.deduper.dedupVFS(srcIn.IncludeInputs, autoExtras)
+-- 		}
+-- 
+---		wcExtras := withContextSourceExtras(codegenRegForInstance(ctx, srcInstance), srcInstance.Path, d, srcIn.IncludeInputs, srcVFS, ctx.scripts)
+--+		wcExtras := copyProductToolingExtras(codegenRegForInstance(ctx, srcInstance), srcVFS, ctx.scripts)
+-- 
+-- 		if len(wcExtras) > 0 {
+-- 			srcIn.IncludeInputs = ctx.deduper.dedupVFS(srcIn.IncludeInputs, wcExtras)
+--diff --git a/scanner.go b/scanner.go
+--index ad80c93..ddc298c 100644
+----- a/scanner.go
+--+++ b/scanner.go
+--@@ -754,6 +754,17 @@ func (sc *scanCtx) dfs(abs VFS) {
+-- 		}
+-- 	})
+-- 
+--+	// Splice non-expanded closure leaves (COPY_FILE(TEXT) $(B) dst → its $(S)
+--+	// source + copy tooling) for every $(B) member: bare window members that ride
+--+	// transitively to every consumer (which splices this cached window) but are
+--+	// never traversed as children — re-resolving their own #includes per consuming
+--+	// module leaked sibling staging copies.
+--+	for i := 0; i < k; i++ {
+--+		if block[i].IsBuild() {
+--+			k += copy(block[k:], s.codegen.ClosureLeaves(block[i]))
+--+		}
+--+	}
+--+
+-- 	s.closureArena.commit(k)
+-- 	ref := closureRef(len(s.subgraphClosures))
+-- 	s.subgraphClosures = append(s.subgraphClosures, block[:k:k])
+--@@ -835,6 +846,15 @@ func (sc *scanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
+-- 
+-- 	block := s.closureArena.alloc(closureAllocHint)
+-- 	k := fill(block)
+--+
+--+	// Splice non-expanded closure leaves for every $(B) member (same as dfs
+--+	// pass-2; see there).
+--+	for i := 0; i < k; i++ {
+--+		if block[i].IsBuild() {
+--+			k += copy(block[k:], s.codegen.ClosureLeaves(block[i]))
+--+		}
+--+	}
+--+
+-- 	s.closureArena.commit(k)
+-- 
+-- 	ref := closureRef(len(s.subgraphClosures))
+-diff --git a/gen.go b/gen.go
+-index b151a21..066fa91 100644
+---- a/gen.go
+-+++ b/gen.go
+-@@ -382,8 +382,8 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
+- 
+- func (ctx *genCtx) perfScanCtxStats(scanner *IncludeScanner) scanCtxPerfStats {
+- 	return scanCtxPerfStats{
+--		// subgraph and children now share one scanCache entry per node, so both
+--		// report its distinct-key count.
+-+		// subgraph and children are columns of one DenseMap3 keyed per node, so
+-+		// both report its distinct-key count.
+- 		subgraphEntries: scanner.scanCache.Len(),
+- 		childrenEntries: scanner.scanCache.Len(),
+- 		closureWindows:  len(scanner.subgraphClosures),
+-diff --git a/scanner.go b/scanner.go
+-index ddc298c..3375726 100644
+---- a/scanner.go
+-+++ b/scanner.go
+-@@ -84,14 +84,16 @@ type IncludeScanner struct {
+- 	// magnitude. If you suspect divergence is caused here, fix it upstream of
+- 	// the cache: parsedIncludes, sysincl rules, or searchTier construction.
+- 	//
+--	// Both the cached closure and the cached children live in one scanCacheEntry
+--	// under a single DenseMap keyed by the includer's STR (v.strID()): one idx
+--	// array (sized to vfsBound — the expensive part) instead of two. strID is
+--	// unique per VFS (the $(S)/$(B) prefix is part of the interned string) and
+--	// lossless, halving idx versus the 2x-wider VFS space. The two fields are
+--	// filled at different times (children during dfs pass 1, closure on pop), so
+--	// each carries its own presence flag; absent is the zero entry.
+--	scanCache DenseMap[STR, scanCacheEntry]
+-+	// All three caches live in one DenseMap3 keyed by the includer's STR
+-+	// (v.strID()): column 1 the resolved immediate children, column 2 the
+-+	// transitive-closure ref, column 3 source-file existence. One idx array
+-+	// (sized to vfsBound — the expensive part) is shared by all three columns
+-+	// instead of one per cache. strID is unique per VFS (the $(S)/$(B) prefix is
+-+	// part of the interned string) and lossless, halving idx versus the 2x-wider
+-+	// VFS space. The columns are filled at different times (children during dfs
+-+	// pass 1, closure on pop, existence on first probe), so each relies on its
+-+	// own per-column presence rather than the map's shared key-present bit.
+-+	scanCache DenseMap3[STR, []VFS, closureRef, bool]
+- 
+- 	searchTierByConfig map[uint64]map[STR]searchTierResult
+- 
+-@@ -167,88 +169,39 @@ type idSet struct {
+- // closureRef is an index into IncludeScanner.subgraphClosures.
+- type closureRef uint32
+- 
+--// existState is the three-valued source-file existence memo: unknown (zero)
+--// until first checked, then no/yes. Stored per-VFS so the sysincl resolve loops
+--// and fsLocator do not re-check (and re-intern the parent dir of) the same
+--// already-interned mapping VFS on every use; existence is global.
+--type existState uint8
+--
+--const (
+--	existUnknown existState = iota
+--	existNo
+--	existYes
+--)
+--
+--// scanCacheEntry holds the per-VFS scanner caches under one DenseMap key: the
+--// resolved immediate children, the transitive-closure ref, and source-file
+--// existence. The DenseMap's own present/absent bit cannot serve as presence (the
+--// fields are filled at different points — children during dfs pass 1, closure
+--// when the node's SCC pops, exists on first existence probe), so each carries
+--// its own in-band sentinel: children is nil until resolved (a resolved-but-empty
+--// child set is stored as noChildren, a shared non-nil empty slice), closure 0
+--// means absent because subgraphClosures[0] is reserved so real refs start at 1,
+--// and exists is existUnknown until probed.
+--type scanCacheEntry struct {
+--	children []VFS
+--	closure  closureRef
+--	exists   existState
+--}
+--
+--// noChildren marks a node resolved to zero children, distinct from a node not
+--// yet resolved (nil); shared because it is only ever read.
+--var noChildren = []VFS{}
+--
+-+// cachedChildren returns the resolved immediate children of v (column 1). A
+-+// resolved-but-empty child set reads back present with a nil/empty slice, since
+-+// presence is the column slot, not nil-ness — so no sentinel slice is needed.
+- func (s *IncludeScanner) cachedChildren(v VFS) ([]VFS, bool) {
+--	e, _ := s.scanCache.Get(STR(v.strID()))
+--	return e.children, e.children != nil
+-+	return s.scanCache.Get1(STR(v.strID()))
+- }
+- 
+- func (s *IncludeScanner) putChildren(v VFS, children []VFS) {
+--	if children == nil {
+--		children = noChildren
+--	}
+--
+--	key := STR(v.strID())
+--	e, _ := s.scanCache.Get(key)
+--	e.children = children
+--	s.scanCache.Put(key, e)
+-+	s.scanCache.Put1(STR(v.strID()), children)
+- }
+- 
+- func (s *IncludeScanner) cachedClosure(v VFS) (closureRef, bool) {
+--	e, _ := s.scanCache.Get(STR(v.strID()))
+--	return e.closure, e.closure != 0
+-+	return s.scanCache.Get2(STR(v.strID()))
+- }
+- 
+- func (s *IncludeScanner) putClosure(v VFS, ref closureRef) {
+--	key := STR(v.strID())
+--	e, _ := s.scanCache.Get(key)
+--	e.closure = ref
+--	s.scanCache.Put(key, e)
+-+	s.scanCache.Put2(STR(v.strID()), ref)
+- }
+- 
+--// sourceFileExists memoizes IsFile(srcRootVFS, abs.Rel()) by the file VFS, so the
+--// repeated existence checks of cached sysincl mappings (and fsLocator) probe the
+--// FS — and intern the parent dir — only once per file.
+-+// sourceFileExists memoizes IsFile(srcRootVFS, abs.Rel()) by the file VFS
+-+// (column 3), so the repeated existence checks of cached sysincl mappings (and
+-+// fsLocator) probe the FS — and intern the parent dir — only once per file. The
+-+// column's own presence is the "already probed" bit; an absent column means not
+-+// yet checked.
+- func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
+- 	key := STR(abs.strID())
+--	e, _ := s.scanCache.Get(key)
+- 
+--	switch e.exists {
+--	case existYes:
+--		return true
+--	case existNo:
+--		return false
+-+	if exists, probed := s.scanCache.Get3(key); probed {
+-+		return exists
+- 	}
+- 
+- 	v := s.parsers.fs.IsFile(srcRootVFS, abs.Rel())
+--
+--	if v {
+--		e.exists = existYes
+--	} else {
+--		e.exists = existNo
+--	}
+--
+--	s.scanCache.Put(key, e)
+-+	s.scanCache.Put3(key, v)
+- 
+- 	return v
+- }
+-@@ -369,8 +322,8 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
+- 		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 131072),
+- 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
+- 		onWarn:               onWarn,
+--		// Index 0 reserved: scanCacheEntry.closure==0 means "no closure cached",
+--		// so real refs must start at 1.
+-+		// Index 0 reserved so a fresh closureRef is always >= 1 (closureOf's
+-+		// straighten path and closureWindow treat ref as a 1-based index).
+- 		subgraphClosures:     make([][]VFS, 1, 256),
+- 		closureArena:         newBumpAllocator[VFS](closureArenaInitial),
+- 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
