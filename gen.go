@@ -242,7 +242,6 @@ type genCtx struct {
 	scannerTarget *IncludeScanner
 	scannerHost   *IncludeScanner
 
-	enOutputs map[VFS]NodeRef
 
 	flatcEmissions map[codegenOutputKey]flatcEmission
 
@@ -326,25 +325,21 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 		var ref NodeRef
 		var ok bool
 
-		if r, found := ctx.enOutputs[v]; found {
-			ref, ok = r, true
-		} else {
-			// PB/EV (and CP/CF) producer refs live on the codegen registry entry
-			// (ProducerRef), so one reg.Lookup replaces the former per-platform
-			// pbOutputs/evOutputs probes.
-			reg := codegenRegForInstance(ctx, consumer)
+		// All codegen producer refs (PB/EV/EN, and CP/CF) live on the codegen
+		// registry entry's ProducerRef, so one reg.Lookup resolves every kind —
+		// no per-kind side maps.
+		reg := codegenRegForInstance(ctx, consumer)
 
-			if reg != nil {
-				if info := reg.Lookup(v); info != nil {
-					if !info.HasProducerRef && info.DeferredCF != nil {
-						def := info.DeferredCF
-						cfRef, _ := EmitCF(def.instance, def.srcVFS, def.outVFS, def.cfgVars, def.includeInputs, consumer.Path, "", ctx.emit)
-						reg.SetProducerRef(v, cfRef)
-					}
+		if reg != nil {
+			if info := reg.Lookup(v); info != nil {
+				if !info.HasProducerRef && info.DeferredCF != nil {
+					def := info.DeferredCF
+					cfRef, _ := EmitCF(def.instance, def.srcVFS, def.outVFS, def.cfgVars, def.includeInputs, consumer.Path, "", ctx.emit)
+					reg.SetProducerRef(v, cfRef)
+				}
 
-					if info.HasProducerRef {
-						ref, ok = info.ProducerRef, true
-					}
+				if info.HasProducerRef {
+					ref, ok = info.ProducerRef, true
 				}
 			}
 		}
@@ -454,7 +449,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		walking:            make(map[ModuleInstance]bool),
 		host:               hostP,
 		target:             targetP,
-		enOutputs:          make(map[VFS]NodeRef),
 		flatcEmissions:     make(map[codegenOutputKey]flatcEmission),
 		pyRegisterOutputs:  make(map[VFS]NodeRef),
 		checkConfigOutputs: make(map[VFS]NodeRef),

@@ -9,7 +9,6 @@ func EmitEN(
 	enumParserLD NodeRef,
 	enumParserBin VFS,
 	depENRefs []NodeRef,
-	depENOutputs []VFS,
 	headerIncludeClosure []VFS,
 	emit Emitter,
 ) (NodeRef, []VFS) {
@@ -35,8 +34,7 @@ func EmitEN(
 		"ARCADIA_ROOT_DISTBUILD": "$(S)",
 	}
 
-	inputs := make([]VFS, 0, len(depENOutputs)+2+len(headerIncludeClosure))
-	inputs = append(inputs, depENOutputs...)
+	inputs := make([]VFS, 0, 2+len(headerIncludeClosure))
 	inputs = append(inputs, enumParserBin)
 	inputs = append(inputs, headerInput)
 	inputs = append(inputs, headerIncludeClosure...)

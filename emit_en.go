@@ -2,7 +2,6 @@ package main
 
 import (
 	"sort"
-	"strings"
 )
 
 var (
@@ -73,59 +72,6 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 		closure := walkClosure(ctx, instance, headerInput, scanIn)
 
-		var depENRefs []NodeRef
-		var depENOutputs []VFS
-
-		if len(ctx.enOutputs) > 0 {
-			serializedHByRel := make(map[string]VFS, len(ctx.enOutputs))
-
-			for buildRootPath := range ctx.enOutputs {
-				if !buildRootPath.IsBuild() || !strings.HasSuffix(buildRootPath.Rel(), "_serialized.h") {
-					continue
-				}
-
-				serializedHByRel[buildRootPath.Rel()] = buildRootPath
-			}
-
-			depSeen := map[NodeRef]struct{}{}
-
-			if len(serializedHByRel) > 0 {
-				enScanner := ctx.scannerTarget
-
-				for _, srcAbsPath := range closure {
-					for _, entry := range enScanner.parsers.parsedIncludes(srcAbsPath) {
-						includePath := entry.target.String()
-
-						if !strings.HasSuffix(includePath, "_serialized.h") {
-							continue
-						}
-
-						buildRootPath, ok := serializedHByRel[includePath]
-
-						if !ok {
-							continue
-						}
-
-						ref := ctx.enOutputs[buildRootPath]
-
-						if _, dup := depSeen[ref]; dup {
-							continue
-						}
-
-						depSeen[ref] = struct{}{}
-						depENRefs = append(depENRefs, ref)
-						depENOutputs = append(depENOutputs, buildRootPath)
-
-						cppPath := Build(strings.TrimSuffix(buildRootPath.Rel(), "_serialized.h") + "_serialized.cpp")
-
-						if cppRef, ok2 := ctx.enOutputs[cppPath]; ok2 && cppRef == ref {
-							depENOutputs = append(depENOutputs, cppPath)
-						}
-					}
-				}
-			}
-		}
-
 		serializedCPPPath := Build(instance.Path + "/" + headerRel + "_serialized.cpp")
 		var serializedHPath VFS
 
@@ -163,40 +109,14 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			}
 		}
 
-		enClosureExcl := map[VFS]struct{}{
-			headerInput: {},
-		}
-
-		for _, p := range depENOutputs {
-			enClosureExcl[p] = struct{}{}
-		}
-
 		filteredClosure := make([]VFS, 0, len(closure))
 
 		for _, p := range closure {
-			if _, drop := enClosureExcl[p]; drop {
+			if p == headerInput {
 				continue
 			}
 
 			filteredClosure = append(filteredClosure, p)
-		}
-
-		var crossCppClosure []VFS
-
-		for _, depOut := range depENOutputs {
-			if !strings.HasSuffix(depOut.Rel(), "_serialized.cpp") {
-				continue
-			}
-
-			sub := walkClosure(ctx, instance, depOut, scanIn)
-
-			for _, p := range sub {
-				if _, drop := enClosureExcl[p]; drop {
-					continue
-				}
-
-				crossCppClosure = append(crossCppClosure, p)
-			}
 		}
 
 		var ownOutputClosure []VFS
@@ -205,7 +125,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			sub := walkClosure(ctx, instance, serializedCPPPath, scanIn)
 
 			for _, p := range sub {
-				if _, drop := enClosureExcl[p]; drop {
+				if p == headerInput {
 					continue
 				}
 
@@ -213,14 +133,10 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			}
 		}
 
-		enClosure := ctx.deduper.dedupVFS(filteredClosure, crossCppClosure, ownOutputClosure)
+		enClosure := ctx.deduper.dedupVFS(filteredClosure, ownOutputClosure)
 
-		augmentedDepENRefs := depENRefs
 		enDepScan := append([]VFS{headerInput}, enClosure...)
-
-		if extra := resolveCodegenDepRefs(ctx, instance, enDepScan, depENRefs...); len(extra) > 0 {
-			augmentedDepENRefs = append(append([]NodeRef(nil), depENRefs...), extra...)
-		}
+		augmentedDepENRefs := resolveCodegenDepRefs(ctx, instance, enDepScan)
 
 		var moduleTag *string
 
@@ -237,13 +153,14 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			enumParserLD,
 			enumParserBin,
 			augmentedDepENRefs,
-			depENOutputs,
 			enClosure,
 			ctx.emit,
 		)
 
-		for _, p := range enOutPaths {
-			ctx.enOutputs[p] = enRef
+		if reg := codegenRegForInstance(ctx, instance); reg != nil {
+			for _, p := range enOutPaths {
+				reg.SetProducerRef(p, enRef)
+			}
 		}
 
 		if consumerInputs != nil {
@@ -252,7 +169,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			allDepRefs := make([]NodeRef, 0, 1+len(augmentedDepENRefs))
 			allDepRefs = append(allDepRefs, enRef)
 			allDepRefs = append(allDepRefs, augmentedDepENRefs...)
-			ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, cppRel, depENOutputs, allDepRefs, *consumerInputs)
+			ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, cppRel, allDepRefs, *consumerInputs)
 			res.CCRefs = append(res.CCRefs, ccRef)
 			res.CCOutputs = append(res.CCOutputs, ccOut)
 		}

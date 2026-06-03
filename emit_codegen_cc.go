@@ -1,10 +1,10 @@
 package main
 
 func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
-	return emitCodegenDownstreamCC(ctx, instance, out, nil, []NodeRef{prRef}, in)
+	return emitCodegenDownstreamCC(ctx, instance, out, []NodeRef{prRef}, in)
 }
 
-func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string, depPrefix []VFS, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
+func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
 	cppPath := Build(instance.Path + "/" + cppRel)
 
 	closure := walkClosure(ctx, instance, cppPath, in)
@@ -14,28 +14,7 @@ func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string
 	// drop it (and the spurious dep on its RUN_ANTLR producer that
 	// resolveCodegenDepRefs would otherwise add); the generator's $(S) sources
 	// the walk gathered through it stay. See dropTransitiveGeneratedProto.
-	closure = dropTransitiveGeneratedProto(closure)
-
-	includeInputs := make([]VFS, 0, len(depPrefix)+len(closure))
-	seen := make(map[VFS]struct{}, len(depPrefix)+len(closure))
-
-	for _, p := range depPrefix {
-		if _, dup := seen[p]; dup {
-			continue
-		}
-
-		seen[p] = struct{}{}
-		includeInputs = append(includeInputs, p)
-	}
-
-	for _, p := range closure {
-		if _, dup := seen[p]; dup {
-			continue
-		}
-
-		seen[p] = struct{}{}
-		includeInputs = append(includeInputs, p)
-	}
+	includeInputs := dropTransitiveGeneratedProto(closure)
 
 	ccIn := in
 	ccIn.IncludeInputs = includeInputs
