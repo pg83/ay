@@ -84,14 +84,16 @@ type IncludeScanner struct {
 	// magnitude. If you suspect divergence is caused here, fix it upstream of
 	// the cache: parsedIncludes, sysincl rules, or searchTier construction.
 	//
-	// Both the cached closure and the cached children live in one scanCacheEntry
-	// under a single DenseMap keyed by the includer's STR (v.strID()): one idx
-	// array (sized to vfsBound — the expensive part) instead of two. strID is
-	// unique per VFS (the $(S)/$(B) prefix is part of the interned string) and
-	// lossless, halving idx versus the 2x-wider VFS space. The two fields are
-	// filled at different times (children during dfs pass 1, closure on pop), so
-	// each carries its own presence flag; absent is the zero entry.
-	scanCache DenseMap[STR, scanCacheEntry]
+	// All three caches live in one DenseMap3 keyed by the includer's STR
+	// (v.strID()): column 1 the resolved immediate children, column 2 the
+	// transitive-closure ref, column 3 source-file existence. One idx array
+	// (sized to vfsBound — the expensive part) is shared by all three columns
+	// instead of one per cache. strID is unique per VFS (the $(S)/$(B) prefix is
+	// part of the interned string) and lossless, halving idx versus the 2x-wider
+	// VFS space. The columns are filled at different times (children during dfs
+	// pass 1, closure on pop, existence on first probe), so each relies on its
+	// own per-column presence rather than the map's shared key-present bit.
+	scanCache DenseMap3[STR, []VFS, closureRef, bool]
 
 	searchTierByConfig map[uint64]map[STR]searchTierResult
 
@@ -167,88 +169,39 @@ type idSet struct {
 // closureRef is an index into IncludeScanner.subgraphClosures.
 type closureRef uint32
 
-// existState is the three-valued source-file existence memo: unknown (zero)
-// until first checked, then no/yes. Stored per-VFS so the sysincl resolve loops
-// and fsLocator do not re-check (and re-intern the parent dir of) the same
-// already-interned mapping VFS on every use; existence is global.
-type existState uint8
-
-const (
-	existUnknown existState = iota
-	existNo
-	existYes
-)
-
-// scanCacheEntry holds the per-VFS scanner caches under one DenseMap key: the
-// resolved immediate children, the transitive-closure ref, and source-file
-// existence. The DenseMap's own present/absent bit cannot serve as presence (the
-// fields are filled at different points — children during dfs pass 1, closure
-// when the node's SCC pops, exists on first existence probe), so each carries
-// its own in-band sentinel: children is nil until resolved (a resolved-but-empty
-// child set is stored as noChildren, a shared non-nil empty slice), closure 0
-// means absent because subgraphClosures[0] is reserved so real refs start at 1,
-// and exists is existUnknown until probed.
-type scanCacheEntry struct {
-	children []VFS
-	closure  closureRef
-	exists   existState
-}
-
-// noChildren marks a node resolved to zero children, distinct from a node not
-// yet resolved (nil); shared because it is only ever read.
-var noChildren = []VFS{}
-
+// cachedChildren returns the resolved immediate children of v (column 1). A
+// resolved-but-empty child set reads back present with a nil/empty slice, since
+// presence is the column slot, not nil-ness — so no sentinel slice is needed.
 func (s *IncludeScanner) cachedChildren(v VFS) ([]VFS, bool) {
-	e, _ := s.scanCache.Get(STR(v.strID()))
-	return e.children, e.children != nil
+	return s.scanCache.Get1(STR(v.strID()))
 }
 
 func (s *IncludeScanner) putChildren(v VFS, children []VFS) {
-	if children == nil {
-		children = noChildren
-	}
-
-	key := STR(v.strID())
-	e, _ := s.scanCache.Get(key)
-	e.children = children
-	s.scanCache.Put(key, e)
+	s.scanCache.Put1(STR(v.strID()), children)
 }
 
 func (s *IncludeScanner) cachedClosure(v VFS) (closureRef, bool) {
-	e, _ := s.scanCache.Get(STR(v.strID()))
-	return e.closure, e.closure != 0
+	return s.scanCache.Get2(STR(v.strID()))
 }
 
 func (s *IncludeScanner) putClosure(v VFS, ref closureRef) {
-	key := STR(v.strID())
-	e, _ := s.scanCache.Get(key)
-	e.closure = ref
-	s.scanCache.Put(key, e)
+	s.scanCache.Put2(STR(v.strID()), ref)
 }
 
-// sourceFileExists memoizes IsFile(srcRootVFS, abs.Rel()) by the file VFS, so the
-// repeated existence checks of cached sysincl mappings (and fsLocator) probe the
-// FS — and intern the parent dir — only once per file.
+// sourceFileExists memoizes IsFile(srcRootVFS, abs.Rel()) by the file VFS
+// (column 3), so the repeated existence checks of cached sysincl mappings (and
+// fsLocator) probe the FS — and intern the parent dir — only once per file. The
+// column's own presence is the "already probed" bit; an absent column means not
+// yet checked.
 func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
 	key := STR(abs.strID())
-	e, _ := s.scanCache.Get(key)
 
-	switch e.exists {
-	case existYes:
-		return true
-	case existNo:
-		return false
+	if exists, probed := s.scanCache.Get3(key); probed {
+		return exists
 	}
 
 	v := s.parsers.fs.IsFile(srcRootVFS, abs.Rel())
-
-	if v {
-		e.exists = existYes
-	} else {
-		e.exists = existNo
-	}
-
-	s.scanCache.Put(key, e)
+	s.scanCache.Put3(key, v)
 
 	return v
 }
@@ -369,8 +322,8 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 131072),
 		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
 		onWarn:               onWarn,
-		// Index 0 reserved: scanCacheEntry.closure==0 means "no closure cached",
-		// so real refs must start at 1.
+		// Index 0 reserved so a fresh closureRef is always >= 1 (closureOf's
+		// straighten path and closureWindow treat ref as a 1-based index).
 		subgraphClosures:     make([][]VFS, 1, 256),
 		closureArena:         newBumpAllocator[VFS](closureArenaInitial),
 		searchTierByConfig:   make(map[uint64]map[STR]searchTierResult, 1024),
