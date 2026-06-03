@@ -16,7 +16,7 @@ type GeneratedFileInfo struct {
 	// source content into the destination verbatim, so the .txt source is a
 	// real compiler input even when the COPY lives in a different module than
 	// the CC node that includes the generated header. Such a dst registers its
-	// source as a closure leaf (see closureLeaves) so it rides across module
+	// source as a closure leaf (see AddClosureLeaf) so it rides across module
 	// boundaries with the dst's window.
 	IsText bool
 
@@ -43,27 +43,31 @@ type deferredCF struct {
 }
 
 type CodegenRegistry struct {
-	// byStr maps an interned path STR (full $(B)/… or its rel form) to its
-	// producer info. The hot Lookup (once per scanned include) was the top map
-	// in the CPU profile; a DenseMap keyed by STR drops the hashing/probing.
-	byStr DenseMap[STR, *GeneratedFileInfo]
+	// byStr maps an interned path STR (full $(B)/… or its rel form) to two columns
+	// keyed by that same STR:
+	//   - column 1: the producer info. The hot Lookup (once per scanned include)
+	//     was the top map in the CPU profile; a DenseMap keyed by STR drops the
+	//     hashing/probing.
+	//   - column 2: the output's non-expanded closure leaves — extra VFS that must
+	//     ride in its include-closure window as bare members. A COPY_FILE(TEXT) dst
+	//     registers its $(S) source (and the fs_tools.py copy tooling) here: the
+	//     dst's content is the source verbatim, so the source is a real compiler
+	//     input of every unit that includes the dst — but its own #include
+	//     directives must NOT be re-resolved per consuming module (that leaked
+	//     sibling staging copies, see copyFileParsedIncludes). The scanner splices
+	//     these leaves into the dst's window at build time (dfs pass-2 /
+	//     emitClosure), so they ride transitively to every consumer without being
+	//     traversed as children — replacing the per-CC-source closure re-walk that
+	//     withContextSourceExtras used to do.
+	// The two columns share one idx array (DenseMap2). strID losslessly encodes the
+	// root (the interned string carries the $(S)/ or $(B)/ prefix), so a $(B) dst
+	// and a $(S) source never collide despite the shared STR key space.
+	byStr DenseMap2[STR, *GeneratedFileInfo, []VFS]
 
 	// bySplit maps a (prefix, suffix) STR pair to its producer info, packed into a
 	// single uint64 key (prefix << 32 | suffix) so a split lookup is one fast64 map
 	// probe instead of a two-level DenseMap-then-inner-map dance.
 	bySplit map[uint64]*GeneratedFileInfo
-
-	// closureLeaves maps a generated $(B) output to extra VFS that must ride in
-	// its include-closure window as bare, non-expanded members. A COPY_FILE(TEXT)
-	// dst registers its $(S) source (and the fs_tools.py copy tooling) here: the
-	// dst's content is the source verbatim, so the source is a real compiler input
-	// of every unit that includes the dst — but its own #include directives must
-	// NOT be re-resolved per consuming module (that leaked sibling staging copies,
-	// see copyFileParsedIncludes). The scanner splices these leaves into the dst's
-	// window at build time (dfs pass-2 / emitClosure), so they ride transitively
-	// to every consumer without being traversed as children. This replaces the
-	// per-CC-source closure re-walk that withContextSourceExtras used to do.
-	closureLeaves DenseMap[VFS, []VFS]
 }
 
 func splitKey(prefix, suffix STR) uint64 { return uint64(prefix)<<32 | uint64(suffix) }
@@ -75,14 +79,14 @@ func NewCodegenRegistry() *CodegenRegistry {
 func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 	full := STR(info.OutputPath.strID())
 
-	if existing, ok := r.byStr.Get(full); ok {
+	if existing, ok := r.byStr.Get1(full); ok {
 		ThrowFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
 			info.OutputPath.String(), existing.ProducerKvP, info.ProducerKvP)
 	}
 
 	rel := info.OutputPath.Rel()
-	r.byStr.Put(full, info)
-	r.byStr.Put(internString(rel), info)
+	r.byStr.Put1(full, info)
+	r.byStr.Put1(internString(rel), info)
 
 	for i := 0; i < len(rel); i++ {
 		if rel[i] == '/' {
@@ -96,7 +100,7 @@ func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) 
 }
 
 func (r *CodegenRegistry) Lookup(path VFS) *GeneratedFileInfo {
-	info, _ := r.byStr.Get(STR(path.strID()))
+	info, _ := r.byStr.Get1(STR(path.strID()))
 
 	return info
 }
@@ -108,7 +112,7 @@ func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
 		return nil
 	}
 
-	info, _ := r.byStr.Get(*id)
+	info, _ := r.byStr.Get1(*id)
 
 	return info
 }
@@ -117,24 +121,24 @@ func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
 	return r.bySplit[splitKey(prefix, suffix)]
 }
 
-// AddClosureLeaf records leaf as a non-expanded member of node's closure window.
-// Cold path (codegen registration); the scanner reads the result on the hot path
-// via ClosureLeaves.
+// AddClosureLeaf records leaf as a non-expanded member of node's closure window
+// (byStr column 2). Cold path (codegen registration); the scanner reads the
+// result on the hot path via ClosureLeaves.
 func (r *CodegenRegistry) AddClosureLeaf(node, leaf VFS) {
-	leaves, _ := r.closureLeaves.Get(node)
-	r.closureLeaves.Put(node, append(leaves, leaf))
+	key := STR(node.strID())
+	leaves, _ := r.byStr.Get2(key)
+	r.byStr.Put2(key, append(leaves, leaf))
 }
 
 // ClosureLeaves returns the non-expanded closure-window members registered for
-// node (nil when none). Keyed by VFS — not strID — so a $(B) dst and a $(S)
-// source sharing the same path STR do not collide.
+// node (nil when none).
 func (r *CodegenRegistry) ClosureLeaves(node VFS) []VFS {
-	leaves, _ := r.closureLeaves.Get(node)
+	leaves, _ := r.byStr.Get2(STR(node.strID()))
 	return leaves
 }
 
 func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
-	info, ok := r.byStr.Get(STR(path.strID()))
+	info, ok := r.byStr.Get1(STR(path.strID()))
 
 	if !ok {
 		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.String())
@@ -150,7 +154,7 @@ func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
 }
 
 func (r *CodegenRegistry) SetSourceInputs(path VFS, src []VFS) {
-	info, ok := r.byStr.Get(STR(path.strID()))
+	info, ok := r.byStr.Get1(STR(path.strID()))
 
 	if !ok {
 		ThrowFmt("CodegenRegistry: SetSourceInputs on unregistered path %q", path.String())
