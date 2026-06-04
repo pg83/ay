@@ -45,7 +45,9 @@ type FS interface {
 // bounded by the directory universe (~6k on sg5). cleanRel keeps the key
 // canonical so the two routes agree.
 
-func dirKey(dir string) VFS { return Source(cleanRel(dir)) }
+func dirKey(dir string) VFS {
+	return Source(cleanRel(dir))
+}
 
 // srcRootVFS is the source root ("$(S)/"), i.e. what dirKey("") returns —
 // hoisted so the many IsFile(srcRootVFS, rel) call sites do not re-intern the
@@ -124,7 +126,10 @@ func (fs *osFS) ContentHash(v VFS) uint64 {
 	fs.Read(rel) // side effect: records the content hash into contentHashes[s]
 	return fs.contentHashes[s]
 }
-func (fs *osFS) SourceRoot() string { return fs.sourceRoot }
+
+func (fs *osFS) SourceRoot() string {
+	return fs.sourceRoot
+}
 
 // Listdir returns the entries of the directory whose Source-rooted path is dir
 // ("$(S)/<cleandir>"). Keyed by VFS so the hot caller passes the addincl

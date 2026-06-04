@@ -49,6 +49,7 @@ func dumpGraphIncomingRefs(nodes []*Node) []int {
 
 	return incoming
 }
+
 func dumpGraphResultRefs(results []NodeRef) map[NodeRef]struct{} {
 	if len(results) == 0 {
 		return nil
@@ -62,6 +63,7 @@ func dumpGraphResultRefs(results []NodeRef) map[NodeRef]struct{} {
 
 	return out
 }
+
 func dumpGraphDropNodeRefs(nodes []*Node, incoming []int, results map[NodeRef]struct{}) map[NodeRef]struct{} {
 	drop := make(map[NodeRef]struct{})
 	queue := make([]int, 0, len(nodes))
@@ -139,6 +141,7 @@ func isDumpGraphStandaloneLLVMPRNode(node *Node, nodeID int, incoming []int) boo
 
 	return true
 }
+
 func dumpGraphDropNodeDeps(refs []NodeRef, drop map[NodeRef]struct{}, incoming []int, maybeDrop func(int)) {
 	for _, ref := range refs {
 		if _, ok := drop[ref]; ok {
@@ -164,6 +167,7 @@ func dumpGraphNodeKind(node *Node) string {
 	kind, _ := node.KV["p"].(string)
 	return kind
 }
+
 func pruneDumpGraphEmitterInPlace(e *BufferedEmitter, drop map[NodeRef]struct{}, order []int) []int {
 	origNodes := e.nodes
 	keptNodes := make([]*Node, 0, len(origNodes)-len(drop))
@@ -199,6 +203,7 @@ func pruneDumpGraphEmitterInPlace(e *BufferedEmitter, drop map[NodeRef]struct{},
 
 	return remapDumpGraphOrder(order, drop, newIDs)
 }
+
 func trimDumpGraphNodeRefList(in []NodeRef, drop map[NodeRef]struct{}, newIDs []NodeRef) []NodeRef {
 	if len(in) == 0 {
 		return nil
@@ -226,6 +231,7 @@ func trimDumpGraphNodeRefList(in []NodeRef, drop map[NodeRef]struct{}, newIDs []
 
 	return out
 }
+
 func trimDumpGraphResultRefs(in []NodeRef, newIDs []NodeRef) []NodeRef {
 	if len(in) == 0 {
 		return nil
@@ -245,6 +251,7 @@ func trimDumpGraphResultRefs(in []NodeRef, newIDs []NodeRef) []NodeRef {
 
 	return out
 }
+
 func remapDumpGraphOrder(order []int, drop map[NodeRef]struct{}, newIDs []NodeRef) []int {
 	out := make([]int, 0, len(order)-len(drop))
 

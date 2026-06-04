@@ -6,10 +6,22 @@ import (
 
 type intHeap []int
 
-func (h intHeap) Len() int            { return len(h) }
-func (h intHeap) Less(i, j int) bool  { return h[i] < h[j] }
-func (h intHeap) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
-func (h *intHeap) Push(x interface{}) { *h = append(*h, x.(int)) }
+func (h intHeap) Len() int {
+	return len(h)
+}
+
+func (h intHeap) Less(i, j int) bool {
+	return h[i] < h[j]
+}
+
+func (h intHeap) Swap(i, j int) {
+	h[i], h[j] = h[j], h[i]
+}
+
+func (h *intHeap) Push(x interface{}) {
+	*h = append(*h, x.(int))
+}
+
 func (h *intHeap) Pop() interface{} {
 	old := *h
 	n := len(old)
@@ -53,6 +65,7 @@ func NewBufferedEmitter() *BufferedEmitter {
 		readyCh: make(chan struct{}),
 	}
 }
+
 func (e *BufferedEmitter) OnReady(_ NodeRef) <-chan struct{} {
 	return e.readyCh
 }
@@ -307,6 +320,7 @@ func (e *StreamingEmitter) Result(r NodeRef) {
 
 	e.results = append(e.results, r)
 }
+
 func (e *StreamingEmitter) OnReady(_ NodeRef) <-chan struct{} {
 	return e.readyCh
 }

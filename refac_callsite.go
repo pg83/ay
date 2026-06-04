@@ -26,18 +26,21 @@ func refacCallSite(args []string) int {
 
 	for _, p := range files {
 		base := filepath.Base(p)
+
 		if base == "callsite_probe.go" || base == "refac_callsite.go" ||
 			base == "refac.go" || base == "mapinstr_probe.go" || base == "refac_mapinstr.go" {
 			continue
 		}
 
 		src, err := os.ReadFile(p)
+
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "callsite: read %s: %v\n", p, err)
 			return 1
 		}
 
 		f, err := goparser.ParseFile(fset, p, src, 0)
+
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "callsite: parse %s: %v\n", p, err)
 			return 1
@@ -51,6 +54,7 @@ func refacCallSite(args []string) int {
 
 		for _, decl := range f.Decls {
 			fd, ok := decl.(*ast.FuncDecl)
+
 			if !ok || fd.Body == nil {
 				continue
 			}

@@ -1,9 +1,9 @@
 package main
 
-// ENV name constants, pre-interned once at init (hoisted from per-call
-// internEnv). Generated from the env-API call sites; keep in sync if new IF
-// variable names are referenced.
 var (
+	// ENV name constants, pre-interned once at init (hoisted from per-call
+	// internEnv). Generated from the env-API call sites; keep in sync if new IF
+	// variable names are referenced.
 	envALLOCATOR                    = internEnv("ALLOCATOR")
 	envAMX_CFLAGS                   = internEnv("AMX_CFLAGS")
 	envANDROID_API                  = internEnv("ANDROID_API")

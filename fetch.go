@@ -205,6 +205,7 @@ func (e *resourceAwareEmitter) Emit(n *Node) NodeRef {
 func (e *resourceAwareEmitter) Result(r NodeRef) {
 	e.inner.Result(r)
 }
+
 func (e *resourceAwareEmitter) OnReady(r NodeRef) <-chan struct{} {
 	return e.inner.OnReady(r)
 }

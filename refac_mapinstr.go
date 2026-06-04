@@ -30,12 +30,14 @@ func refacMapInstr(args []string) int {
 
 	for _, p := range files {
 		b, err := os.ReadFile(p)
+
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "mapinstr: read %s: %v\n", p, err)
 			return 1
 		}
 
 		f, err := goparser.ParseFile(fset, p, b, goparser.ParseComments)
+
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "mapinstr: parse %s: %v\n", p, err)
 			return 1
@@ -47,6 +49,7 @@ func refacMapInstr(args []string) int {
 	}
 
 	collect := make([]*ast.File, 0, len(asts))
+
 	for _, p := range order {
 		collect = append(collect, asts[p])
 	}
@@ -68,6 +71,7 @@ func refacMapInstr(args []string) int {
 		// Don't instrument the probe file itself (its counter map would recurse)
 		// nor the refac tooling (not on the gen path).
 		base := filepath.Base(p)
+
 		if base == "mapinstr_probe.go" || base == "refac_mapinstr.go" || base == "refac.go" {
 			continue
 		}
@@ -89,6 +93,7 @@ func refacMapInstr(args []string) int {
 					writeIdx[ix] = true
 				}
 			}
+
 			return true
 		})
 
@@ -96,12 +101,14 @@ func refacMapInstr(args []string) int {
 			ps := fset.Position(keyExpr.Pos())
 			pe := fset.Position(keyExpr.End())
 			fn := "mapKR"
+
 			if write {
 				fn = "mapKW"
 				writes++
 			} else {
 				reads++
 			}
+
 			edits[p] = append(edits[p], edit{ps.Offset, pe.Offset, fn, fmt.Sprintf("%s:%d", base, ps.Line)})
 		}
 
@@ -116,6 +123,7 @@ func refacMapInstr(args []string) int {
 					add(x.Args[1], true)
 				}
 			}
+
 			return true
 		})
 	}
@@ -124,11 +132,13 @@ func refacMapInstr(args []string) int {
 		// Apply in reverse offset order so earlier offsets stay valid.
 		sort.Slice(es, func(i, j int) bool { return es[i].start > es[j].start })
 		b := src[p]
+
 		for _, e := range es {
 			key := string(b[e.start:e.end])
 			repl := fmt.Sprintf("%s(%s, %q)", e.fn, key, e.site)
 			b = append(b[:e.start:e.start], append([]byte(repl), b[e.end:]...)...)
 		}
+
 		if err := os.WriteFile(p, b, 0o644); err != nil {
 			fmt.Fprintf(os.Stderr, "mapinstr: write %s: %v\n", p, err)
 			return 1
@@ -142,6 +152,7 @@ func refacMapInstr(args []string) int {
 
 func isMapExpr(info *types.Info, e ast.Expr) bool {
 	t := info.TypeOf(e)
+
 	if t == nil {
 		return false
 	}

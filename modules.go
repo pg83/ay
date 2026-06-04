@@ -8,6 +8,49 @@ import (
 	"strings"
 )
 
+var (
+	// Instruction-set CFLAGS values are platform-invariant string constants set on
+	// every x86 module; intern them once and bind via SetStringID.
+	strSSE41CFlags  = internString("-msse4.1")
+	strSSE42CFlags  = internString("-msse4.2")
+	strPopcntCFlags = internString("-mpopcnt")
+	strCX16CFlags   = internString("-mcx16")
+	strAVXCFlags    = internString("-mavx -mpclmul")
+	strAVX2CFlags   = internString("-mavx2 -mfma -mbmi -mbmi2")
+	strAVX512CFlags = internString("-mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
+	strSSECFlags    = internString("-msse2 -msse3 -mssse3")
+	strSSE4CFlags   = internString("-msse4.1 -msse4.2 -mpopcnt -mcx16")
+	strAMXCFlags    = internString("-mamx-tile -mamx-int8 -mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
+	strCPPProto     = internString("CPP_PROTO") // MODULE_TAG for the CPP PROTO_LIBRARY submodule
+)
+
+var allocatorPeers = map[string][]string{
+	"MIM":                       {"library/cpp/malloc/mimalloc"},
+	"MIM_SDC":                   {"library/cpp/malloc/mimalloc_sdc"},
+	"HU":                        {"library/cpp/malloc/hu"},
+	"PROFILED_HU":               {"library/cpp/malloc/profiled_hu"},
+	"THREAD_PROFILED_HU":        {"library/cpp/malloc/thread_profiled_hu"},
+	"TCMALLOC_256K":             {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc"},
+	"TCMALLOC_SMALL_BUT_SLOW":   {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/small_but_slow"},
+	"TCMALLOC_NUMA_256K":        {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/numa_256k"},
+	"TCMALLOC_NUMA_LARGE_PAGES": {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/numa_large_pages"},
+	"TCMALLOC":                  {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/default"},
+	"TCMALLOC_TC":               {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/no_percpu_cache"},
+	"GOOGLE":                    {"library/cpp/malloc/galloc"},
+	"J":                         {"library/cpp/malloc/jemalloc"},
+	"LF":                        {"library/cpp/lfalloc"},
+	"LF_YT":                     {"library/cpp/lfalloc/yt"},
+	"LF_DBG":                    {"library/cpp/lfalloc/dbg"},
+	"B":                         {"library/cpp/balloc"},
+	"BM":                        {"library/cpp/balloc_market"},
+	"C":                         {"library/cpp/malloc/calloc"},
+	"LOCKLESS":                  {"library/cpp/malloc/lockless"},
+	"YT":                        {"library/cpp/ytalloc/impl"},
+	"FAKE":                      nil,
+	"SYSTEM":                    {"library/cpp/malloc/system"},
+	"DEFAULT":                   nil,
+}
+
 type cppProtoPlugin struct {
 	Name           string
 	ToolPath       string
@@ -1939,33 +1982,6 @@ func pythonInitSuffix(name string) string {
 	return mangled.String()
 }
 
-var allocatorPeers = map[string][]string{
-	"MIM":                       {"library/cpp/malloc/mimalloc"},
-	"MIM_SDC":                   {"library/cpp/malloc/mimalloc_sdc"},
-	"HU":                        {"library/cpp/malloc/hu"},
-	"PROFILED_HU":               {"library/cpp/malloc/profiled_hu"},
-	"THREAD_PROFILED_HU":        {"library/cpp/malloc/thread_profiled_hu"},
-	"TCMALLOC_256K":             {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc"},
-	"TCMALLOC_SMALL_BUT_SLOW":   {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/small_but_slow"},
-	"TCMALLOC_NUMA_256K":        {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/numa_256k"},
-	"TCMALLOC_NUMA_LARGE_PAGES": {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/numa_large_pages"},
-	"TCMALLOC":                  {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/default"},
-	"TCMALLOC_TC":               {"library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/no_percpu_cache"},
-	"GOOGLE":                    {"library/cpp/malloc/galloc"},
-	"J":                         {"library/cpp/malloc/jemalloc"},
-	"LF":                        {"library/cpp/lfalloc"},
-	"LF_YT":                     {"library/cpp/lfalloc/yt"},
-	"LF_DBG":                    {"library/cpp/lfalloc/dbg"},
-	"B":                         {"library/cpp/balloc"},
-	"BM":                        {"library/cpp/balloc_market"},
-	"C":                         {"library/cpp/malloc/calloc"},
-	"LOCKLESS":                  {"library/cpp/malloc/lockless"},
-	"YT":                        {"library/cpp/ytalloc/impl"},
-	"FAKE":                      nil,
-	"SYSTEM":                    {"library/cpp/malloc/system"},
-	"DEFAULT":                   nil,
-}
-
 func applyArchiveStmt(v *UnknownStmt, d *moduleData) {
 	var (
 		entry      archiveEntry
@@ -2130,23 +2146,6 @@ func buildIfEnv(instance ModuleInstance) Environment {
 
 	return env
 }
-
-// Instruction-set CFLAGS values are platform-invariant string constants set on
-// every x86 module; intern them once and bind via SetStringID.
-var (
-	strSSE41CFlags  = internString("-msse4.1")
-	strSSE42CFlags  = internString("-msse4.2")
-	strPopcntCFlags = internString("-mpopcnt")
-	strCX16CFlags   = internString("-mcx16")
-	strAVXCFlags    = internString("-mavx -mpclmul")
-	strAVX2CFlags   = internString("-mavx2 -mfma -mbmi -mbmi2")
-	strAVX512CFlags = internString("-mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
-	strSSECFlags    = internString("-msse2 -msse3 -mssse3")
-	strSSE4CFlags   = internString("-msse4.1 -msse4.2 -mpopcnt -mcx16")
-	strAMXCFlags    = internString("-mamx-tile -mamx-int8 -mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
-
-	strCPPProto = internString("CPP_PROTO") // MODULE_TAG for the CPP PROTO_LIBRARY submodule
-)
 
 func expandConfigVFSPaths(paths []string, env Environment) []VFS {
 	out := make([]VFS, 0, len(paths))

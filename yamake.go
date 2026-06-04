@@ -242,33 +242,86 @@ type ResourceFilesStmt struct {
 	Line int
 }
 
-func (*ModuleStmt) stmtMarker()                    {}
-func (*PeerdirStmt) stmtMarker()                   {}
-func (*SrcsStmt) stmtMarker()                      {}
-func (*SetStmt) stmtMarker()                       {}
-func (*EndStmt) stmtMarker()                       {}
-func (*UnknownStmt) stmtMarker()                   {}
-func (*IfStmt) stmtMarker()                        {}
-func (*IncludeStmt) stmtMarker()                   {}
-func (*JoinSrcsStmt) stmtMarker()                  {}
-func (*AddInclStmt) stmtMarker()                   {}
-func (*CFlagsStmt) stmtMarker()                    {}
-func (*CXXFlagsStmt) stmtMarker()                  {}
-func (*CONLYFlagsStmt) stmtMarker()                {}
-func (*LDFlagsStmt) stmtMarker()                   {}
-func (*SrcDirStmt) stmtMarker()                    {}
-func (*GlobalSrcsStmt) stmtMarker()                {}
-func (*GenerateEnumSerializationStmt) stmtMarker() {}
-func (*DefaultVarStmt) stmtMarker()                {}
-func (*RunProgramStmt) stmtMarker()                {}
-func (*RunPythonStmt) stmtMarker()                 {}
-func (*ConfigureFileStmt) stmtMarker()             {}
-func (*CreateBuildInfoStmt) stmtMarker()           {}
-func (*RunAntlr4CppStmt) stmtMarker()              {}
-func (*RunAntlr4CppSplitStmt) stmtMarker()         {}
-func (*RunAntlrStmt) stmtMarker()                  {}
-func (*ResourceStmt) stmtMarker()                  {}
-func (*ResourceFilesStmt) stmtMarker()             {}
+func (*ModuleStmt) stmtMarker() {
+}
+
+func (*PeerdirStmt) stmtMarker() {
+}
+
+func (*SrcsStmt) stmtMarker() {
+}
+
+func (*SetStmt) stmtMarker() {
+}
+
+func (*EndStmt) stmtMarker() {
+}
+
+func (*UnknownStmt) stmtMarker() {
+}
+
+func (*IfStmt) stmtMarker() {
+}
+
+func (*IncludeStmt) stmtMarker() {
+}
+
+func (*JoinSrcsStmt) stmtMarker() {
+}
+
+func (*AddInclStmt) stmtMarker() {
+}
+
+func (*CFlagsStmt) stmtMarker() {
+}
+
+func (*CXXFlagsStmt) stmtMarker() {
+}
+
+func (*CONLYFlagsStmt) stmtMarker() {
+}
+
+func (*LDFlagsStmt) stmtMarker() {
+}
+
+func (*SrcDirStmt) stmtMarker() {
+}
+
+func (*GlobalSrcsStmt) stmtMarker() {
+}
+
+func (*GenerateEnumSerializationStmt) stmtMarker() {
+}
+
+func (*DefaultVarStmt) stmtMarker() {
+}
+
+func (*RunProgramStmt) stmtMarker() {
+}
+
+func (*RunPythonStmt) stmtMarker() {
+}
+
+func (*ConfigureFileStmt) stmtMarker() {
+}
+
+func (*CreateBuildInfoStmt) stmtMarker() {
+}
+
+func (*RunAntlr4CppStmt) stmtMarker() {
+}
+
+func (*RunAntlr4CppSplitStmt) stmtMarker() {
+}
+
+func (*RunAntlrStmt) stmtMarker() {
+}
+
+func (*ResourceStmt) stmtMarker() {
+}
+
+func (*ResourceFilesStmt) stmtMarker() {
+}
 
 type Expr interface {
 	exprMarker()
@@ -309,14 +362,29 @@ type ExprLt struct {
 	Left, Right Expr
 }
 
-func (*ExprIdent) exprMarker()  {}
-func (*ExprNot) exprMarker()    {}
-func (*ExprAnd) exprMarker()    {}
-func (*ExprOr) exprMarker()     {}
-func (*ExprString) exprMarker() {}
-func (*ExprInt) exprMarker()    {}
-func (*ExprEq) exprMarker()     {}
-func (*ExprLt) exprMarker()     {}
+func (*ExprIdent) exprMarker() {
+}
+
+func (*ExprNot) exprMarker() {
+}
+
+func (*ExprAnd) exprMarker() {
+}
+
+func (*ExprOr) exprMarker() {
+}
+
+func (*ExprString) exprMarker() {
+}
+
+func (*ExprInt) exprMarker() {
+}
+
+func (*ExprEq) exprMarker() {
+}
+
+func (*ExprLt) exprMarker() {
+}
 
 type ParseError struct {
 	File    string

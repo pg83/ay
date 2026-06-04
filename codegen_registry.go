@@ -76,7 +76,9 @@ type CodegenRegistry struct {
 	bySplit map[uint64]*GeneratedFileInfo
 }
 
-func splitKey(prefix, suffix STR) uint64 { return uint64(prefix)<<32 | uint64(suffix) }
+func splitKey(prefix, suffix STR) uint64 {
+	return uint64(prefix)<<32 | uint64(suffix)
+}
 
 func NewCodegenRegistry() *CodegenRegistry {
 	return &CodegenRegistry{bySplit: make(map[uint64]*GeneratedFileInfo, 1<<14)}
