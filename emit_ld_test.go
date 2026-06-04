@@ -51,21 +51,6 @@ var archiverGlobalPaths = []string{
 	"contrib/libs/tcmalloc/no_percpu_cache/liblibs-tcmalloc-no_percpu_cache.global.a",
 }
 
-func ldFieldName(ci int, suffix string) string {
-	switch ci {
-	case 0:
-		return "cmds[0]." + suffix
-	case 1:
-		return "cmds[1]." + suffix
-	case 2:
-		return "cmds[2]." + suffix
-	case 3:
-		return "cmds[3]." + suffix
-	default:
-		return "cmds[?]." + suffix
-	}
-}
-
 func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	emit := NewBufferedEmitter()
 	mainRef := emit.Emit(&Node{

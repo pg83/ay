@@ -86,26 +86,6 @@ type Graph struct {
 	uids *uidVec `json:"-"`
 }
 
-func FinalizeStream(e *BufferedEmitter, yield func(*Node)) []UID {
-	uids := finalizeNodes(e, yield)
-
-	results := make([]UID, 0, len(e.results))
-	seen := map[UID]struct{}{}
-
-	for _, rid := range e.results {
-		u := uids.get(rid)
-
-		if _, ok := seen[u]; ok {
-			continue
-		}
-
-		seen[u] = struct{}{}
-		results = append(results, u)
-	}
-
-	return results
-}
-
 func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) *uidVec {
 	if e.finalized {
 		ThrowFmt("finalize: emitter already finalized")

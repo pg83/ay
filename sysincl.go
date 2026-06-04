@@ -335,10 +335,6 @@ func archIs(want string) func(sysInclEnv) bool {
 	return func(e sysInclEnv) bool { return e.arch == want }
 }
 
-func LoadSysInclSetFor(sourceRoot, arch string, onWarn func(Warn)) SysInclSet {
-	return LoadSysInclSetForFS(NewFS(sourceRoot), arch, onWarn)
-}
-
 func LoadSysInclSetForFS(fs FS, arch string, onWarn func(Warn)) SysInclSet {
 	if !fs.IsDir(srcRootVFS, "build/sysincl") {
 		return nil

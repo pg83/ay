@@ -338,4 +338,3 @@ func hasPrefix(s, prefix string) bool {
 func hasSuffix(s, suffix string) bool {
 	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
 }
-

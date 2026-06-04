@@ -50,10 +50,6 @@ func hostInstance(path string) ModuleInstance {
 	}
 }
 
-func testPlatformFor(i ModuleInstance) *Platform {
-	return i.Platform
-}
-
 func vfsStrings(vs []VFS) []string {
 	out := make([]string, len(vs))
 	for i, v := range vs {

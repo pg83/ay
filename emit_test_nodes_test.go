@@ -1,11 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"reflect"
 	"regexp"
-	"sort"
 	"testing"
 )
 
@@ -317,50 +314,6 @@ func assertNodeFields(t *testing.T, name string, got, want *Node) {
 	}
 }
 
-func normalizeGraphJSON(raw []byte) map[string]interface{} {
-	s := string(raw)
-	s = testNodeResourceRefPattern.ReplaceAllString(s, "$$($1)")
-	s = regexp.MustCompile(`\$\((BUILD_ROOT|SOURCE_ROOT)\)`).ReplaceAllStringFunc(s, func(m string) string {
-		if m == "$(BUILD_ROOT)" {
-			return "$(B)"
-		}
-
-		return "$(S)"
-	})
-
-	var out map[string]interface{}
-	if err := json.Unmarshal([]byte(s), &out); err != nil {
-		panic(err)
-	}
-
-	return out
-}
-
-func graphNodes(doc map[string]interface{}) []map[string]interface{} {
-	rawNodes, _ := doc["graph"].([]interface{})
-	nodes := make([]map[string]interface{}, 0, len(rawNodes))
-	for _, raw := range rawNodes {
-		node, _ := raw.(map[string]interface{})
-		nodes = append(nodes, node)
-	}
-
-	return nodes
-}
-
-func findSerializedNode(t *testing.T, nodes []map[string]interface{}, predicate func(map[string]interface{}) bool, name string) map[string]interface{} {
-	t.Helper()
-
-	for _, node := range nodes {
-		if predicate(node) {
-			return node
-		}
-	}
-
-	t.Fatalf("missing %s node", name)
-
-	return nil
-}
-
 type canonicalFixtureNode struct {
 	Cmds             interface{}
 	Env              map[string]interface{}
@@ -371,109 +324,6 @@ type canonicalFixtureNode struct {
 	Requirements     map[string]interface{}
 	Tags             []string
 	TargetProperties map[string]interface{}
-}
-
-func logicalFixtureNodes(t *testing.T, nodes []map[string]interface{}, scope string) map[string]map[string]interface{} {
-	t.Helper()
-
-	return map[string]map[string]interface{}{
-		"ctx": findSerializedNode(t, nodes, func(node map[string]interface{}) bool {
-			outputs := stringSlice(node["outputs"])
-			return len(outputs) == 1 && outputs[0] == "$(B)/common_test.context"
-		}, scope+" ctx"),
-		"unittest": findSerializedNode(t, nodes, func(node map[string]interface{}) bool {
-			return stringValue(mapStringAny(node["kv"])["path"]) == "util/ut/unittest"
-		}, scope+" unittest"),
-		"clang_format": findSerializedNode(t, nodes, func(node map[string]interface{}) bool {
-			return stringValue(mapStringAny(node["kv"])["path"]) == "util/ut/clang_format"
-		}, scope+" clang_format"),
-		"ld": findSerializedNode(t, nodes, func(node map[string]interface{}) bool {
-			outputs := stringSlice(node["outputs"])
-			return len(outputs) == 1 && outputs[0] == "$(B)/util/ut/util-ut"
-		}, scope+" ld"),
-	}
-}
-
-func depLabelMap(logical map[string]map[string]interface{}) map[string]string {
-	out := make(map[string]string, len(logical))
-	for label, node := range logical {
-		out[stringValue(node["uid"])] = label
-	}
-
-	return out
-}
-
-func depLabels(t *testing.T, name string, node map[string]interface{}, uidToLabel map[string]string) []string {
-	t.Helper()
-
-	deps := stringSlice(node["deps"])
-	labels := make([]string, 0, len(deps))
-	for _, dep := range deps {
-		label, ok := uidToLabel[dep]
-		if !ok {
-			t.Fatalf("%s has unknown dep uid %q", name, dep)
-		}
-		labels = append(labels, label)
-	}
-	sort.Strings(labels)
-
-	return labels
-}
-
-func canonicalizeFixtureNode(node map[string]interface{}) canonicalFixtureNode {
-	inputs := stringSlice(node["inputs"])
-	sort.Strings(inputs)
-
-	tags := stringSlice(node["tags"])
-	if len(tags) > 0 {
-		sort.Strings(tags)
-	}
-
-	return canonicalFixtureNode{
-		Cmds:             node["cmds"],
-		Env:              mapStringAny(node["env"]),
-		KV:               mapStringAny(node["kv"]),
-		Inputs:           inputs,
-		Outputs:          stringSlice(node["outputs"]),
-		Platform:         stringValue(node["platform"]),
-		Requirements:     mapStringAny(node["requirements"]),
-		Tags:             tags,
-		TargetProperties: mapStringAny(node["target_properties"]),
-	}
-}
-
-func stringSlice(v interface{}) []string {
-	raw, _ := v.([]interface{})
-	out := make([]string, 0, len(raw))
-	for _, item := range raw {
-		if s, ok := item.(string); ok {
-			out = append(out, s)
-		}
-	}
-
-	return out
-}
-
-func mapStringAny(v interface{}) map[string]interface{} {
-	raw, _ := v.(map[string]interface{})
-	if raw == nil {
-		return map[string]interface{}{}
-	}
-
-	return raw
-}
-
-func stringValue(v interface{}) string {
-	s, _ := v.(string)
-
-	return s
-}
-
-func serializeGraphJSON(g *Graph) []byte {
-	var buf bytes.Buffer
-	writeGraphCompact(&buf, g)
-
-	return buf.Bytes()
 }
 
 func TestEmitTestRunNodes_BuildersMatchSpec(t *testing.T) {

@@ -242,7 +242,6 @@ type genCtx struct {
 	scannerTarget *IncludeScanner
 	scannerHost   *IncludeScanner
 
-
 	flatcEmissions map[codegenOutputKey]flatcEmission
 
 	pyRegisterOutputs map[VFS]NodeRef
@@ -397,10 +396,6 @@ func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, 
 
 	reportScanner("target", targetScanner)
 	reportScanner("host", hostScanner)
-}
-
-func runGenInto(fs FS, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn)) NodeRef {
-	return runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, nil, false, true)
 }
 
 func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) NodeRef {
@@ -2794,22 +2789,6 @@ func isCodegenProducingSrc(srcRel string) bool {
 		strings.HasSuffix(srcRel, ".y") ||
 		strings.HasSuffix(srcRel, ".cpp.in") ||
 		strings.HasSuffix(srcRel, ".c.in")
-}
-
-func hasSkippedSource(d *moduleData) bool {
-	for _, s := range d.srcs {
-		if isSkippedSource(s) {
-			return true
-		}
-	}
-
-	for _, s := range d.globalSrcs {
-		if isSkippedSource(s) {
-			return true
-		}
-	}
-
-	return false
 }
 
 func reorderLDMembers(refs []NodeRef, paths []VFS) ([]NodeRef, []VFS) {

@@ -110,38 +110,3 @@ func vfsHasPrefix(s string) bool {
 func (v VFS) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.String())
 }
-
-func vfsRelsSlice(vs []VFS) []string {
-	out := make([]string, len(vs))
-
-	for i, v := range vs {
-		out[i] = v.Rel()
-	}
-
-	return out
-}
-
-func concatVFS(a, b []VFS) []VFS {
-	if len(a) == 0 {
-		return b
-	}
-
-	if len(b) == 0 {
-		return a
-	}
-
-	out := make([]VFS, 0, len(a)+len(b))
-	out = append(out, a...)
-	out = append(out, b...)
-	return out
-}
-
-func lessVFS(a, b VFS) bool {
-	ra, rb := a.Root(), b.Root()
-
-	if ra != rb {
-		return ra == VFSRootBuild
-	}
-
-	return a.Rel() < b.Rel()
-}

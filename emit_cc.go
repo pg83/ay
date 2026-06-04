@@ -224,10 +224,6 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	return Build(outRel), input
 }
 
-func sourceExistsLocally(fs FS, modulePath, srcRel string) bool {
-	return fs.IsFile(dirKey(modulePath), srcRel)
-}
-
 func composeSrcDirOutputRel(instancePath, srcDir, srcRel string) string {
 	target := filepath.Join(srcDir, srcRel)
 	rel, err := filepath.Rel(instancePath, target)
@@ -338,21 +334,6 @@ func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []string {
 	out = append(out, in.CFlags...)
 	out = append(out, in.PeerCFlagsGlobal...)
 	out = append(out, in.OwnCFlagsGlobal...)
-
-	return out
-}
-
-func platformCompilerFlags(p *Platform, isCxx bool) []string {
-	if len(p.CFlags) == 0 && (!isCxx || len(p.CXXFlags) == 0) {
-		return nil
-	}
-
-	out := make([]string, 0, len(p.CFlags)+len(p.CXXFlags))
-	out = append(out, p.CFlags...)
-
-	if isCxx {
-		out = append(out, p.CXXFlags...)
-	}
 
 	return out
 }

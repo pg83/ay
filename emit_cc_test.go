@@ -1,19 +1,10 @@
 package main
 
 import (
-	"reflect"
 	"testing"
 )
 
 const referenceCCOutput = "$(B)/build/cow/on/lib.c.o"
-
-func fieldEqual(t *testing.T, name string, got, want interface{}) {
-	t.Helper()
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("field %s mismatch:\n  got:  %#v\n  want: %#v", name, got, want)
-	}
-}
 
 func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 	e := NewBufferedEmitter()
