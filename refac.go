@@ -24,6 +24,8 @@ var goKeyword = map[string]bool{
 // linters is the fixed set applied by `ay refac lint`, in order.
 var linters = []fileLinter{
 	{name: "consolidate-vars", run: lintConsolidateVars},
+	{name: "expand-func-bodies", run: lintExpandFuncBodies},
+	{name: "func-blank-lines", run: lintFuncBlankLines},
 	{name: "blank-around-blocks", run: lintControlBlankLines},
 	{name: "tight-braces", run: lintTightBraces},
 }
@@ -908,6 +910,154 @@ func lintTightBraces(path string) bool {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: tight-braces format failed (left unchanged): %v\n", path, err)
+		return false
+	}
+
+	if bytes.Equal(formatted, src) {
+		return false
+	}
+
+	Throw(os.WriteFile(path, formatted, 0o644))
+	return true
+}
+
+// lintExpandFuncBodies rewrites single-line top-level function bodies
+// (`func f() T { stmt }`) into the multi-line form. gofmt preserves a one-line
+// body but never produces the expansion itself, so this pass inserts a newline
+// after the opening brace and before the closing one and lets gofmt reindent and
+// split any `;`-separated statements. Empty bodies (`{}`) are left alone.
+func lintExpandFuncBodies(path string) bool {
+	src := Throw2(os.ReadFile(path))
+	fset := gotoken.NewFileSet()
+	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
+		return false
+	}
+
+	lineOf := func(p gotoken.Pos) int { return fset.Position(p).Line }
+	offOf := func(p gotoken.Pos) int { return fset.Position(p).Offset }
+
+	var offs []int // byte offsets to insert "\n" at (each opens or closes a body)
+
+	for _, d := range f.Decls {
+		fn, ok := d.(*ast.FuncDecl)
+
+		if !ok || fn.Body == nil {
+			continue
+		}
+
+		if lineOf(fn.Body.Lbrace) != lineOf(fn.Body.Rbrace) {
+			continue // already multi-line
+		}
+
+		if len(fn.Body.List) == 0 {
+			// empty body `{}` -> `{\n}` (gofmt keeps the expanded empty body);
+			// Rbrace offset == Lbrace offset + 1, so one insertion suffices.
+			offs = append(offs, offOf(fn.Body.Rbrace))
+
+			continue
+		}
+
+		offs = append(offs, offOf(fn.Body.Lbrace)+1, offOf(fn.Body.Rbrace))
+	}
+
+	if len(offs) == 0 {
+		return false
+	}
+
+	// Insert from the highest offset down so earlier offsets stay valid.
+	sort.Sort(sort.Reverse(sort.IntSlice(offs)))
+	b := src
+
+	for _, off := range offs {
+		b = append(b[:off:off], append([]byte("\n"), b[off:]...)...)
+	}
+
+	formatted, err := format.Source(b)
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "refac lint: %s: expand-func-bodies format failed (left unchanged): %v\n", path, err)
+		return false
+	}
+
+	if bytes.Equal(formatted, src) {
+		return false
+	}
+
+	Throw(os.WriteFile(path, formatted, 0o644))
+	return true
+}
+
+// lintFuncBlankLines ensures a blank line before and after every top-level
+// function declaration — before its doc comment (if any) and after its closing
+// brace. gofmt does not separate top-level decls itself; it does collapse any
+// duplicate blanks these inserts create.
+func lintFuncBlankLines(path string) bool {
+	src := Throw2(os.ReadFile(path))
+	fset := gotoken.NewFileSet()
+	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
+		return false
+	}
+
+	lineOf := func(p gotoken.Pos) int { return fset.Position(p).Line }
+	lines := strings.Split(string(src), "\n")
+	isBlank := func(l int) bool {
+		return l >= 1 && l <= len(lines) && strings.TrimSpace(lines[l-1]) == ""
+	}
+
+	insertBefore := map[int]bool{}
+
+	for _, d := range f.Decls {
+		fn, ok := d.(*ast.FuncDecl)
+
+		if !ok {
+			continue
+		}
+
+		top := lineOf(fn.Pos())
+
+		if fn.Doc != nil {
+			top = lineOf(fn.Doc.Pos())
+		}
+
+		if top > 1 && !isBlank(top-1) {
+			insertBefore[top] = true
+		}
+
+		end := lineOf(fn.End())
+
+		if end+1 <= len(lines) && !isBlank(end+1) {
+			insertBefore[end+1] = true
+		}
+	}
+
+	if len(insertBefore) == 0 {
+		return false
+	}
+
+	var b strings.Builder
+
+	for i, ln := range lines {
+		if insertBefore[i+1] {
+			b.WriteByte('\n')
+		}
+
+		b.WriteString(ln)
+
+		if i < len(lines)-1 {
+			b.WriteByte('\n')
+		}
+	}
+
+	formatted, err := format.Source([]byte(b.String()))
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "refac lint: %s: func-blank-lines format failed (left unchanged): %v\n", path, err)
 		return false
 	}
 
