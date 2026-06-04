@@ -43,6 +43,15 @@ type IncludeScanner struct {
 
 	sysinclKeyBits []bool
 	sysinclKeyCI   map[string]bool
+	// sysinclCIGate is a sound prefilter for the case-insensitive branch of
+	// sysinclMightClaim, keyed by uint16(raw[0])*len + uint16(raw[1]) over the
+	// include target's RAW bytes — no ToLower. It is built over both case variants
+	// of each CI key's first two bytes, so any case-insensitive match passes; a
+	// miss proves the target is not a CI header and skips the ToLower + map probe.
+	// The sysinclCIMaxLen length gate runs first, so len <= 45 here and the uint16
+	// key never overflows.
+	sysinclCIGate   idBitSet[uint16]
+	sysinclCIMaxLen int // longest CI key; targets longer cannot match (cheap reject before the multiply)
 
 	includerClassCache   map[string]uint32
 	includerClassRecords map[uint32][]*SysIncl
@@ -366,6 +375,24 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 
 	for _, id := range csKeyIDs {
 		s.sysinclKeyBits[id] = true
+	}
+
+	for k := range s.sysinclKeyCI {
+		if len(k) > s.sysinclCIMaxLen {
+			s.sysinclCIMaxLen = len(k)
+		}
+
+		if len(k) < 2 {
+			continue
+		}
+
+		l := uint16(len(k))
+
+		for _, x0 := range caseVariants(k[0]) {
+			for _, x1 := range caseVariants(k[1]) {
+				s.sysinclCIGate.add(uint16(x0)*l + uint16(x1))
+			}
+		}
 	}
 
 	s.anySrcView = s.sysincl.PreparePerSource("")
@@ -988,10 +1015,33 @@ func (s *IncludeScanner) sysinclMightClaim(target STR) bool {
 	}
 
 	if len(s.sysinclKeyCI) != 0 {
-		return s.sysinclKeyCI[strings.ToLower(target.String())]
+		raw := target.String()
+
+		if len(raw) > s.sysinclCIMaxLen {
+			return false
+		}
+
+		if len(raw) >= 2 && !s.sysinclCIGate.has(uint16(raw[0])*uint16(len(raw))+uint16(raw[1])) {
+			return false
+		}
+
+		return s.sysinclKeyCI[strings.ToLower(raw)]
 	}
 
 	return false
+}
+
+// caseVariants returns b plus, for an ASCII letter, its opposite-case form — the
+// byte values a case-insensitive include target could carry at that position.
+func caseVariants(b byte) []byte {
+	switch {
+	case b >= 'a' && b <= 'z':
+		return []byte{b, b - 32}
+	case b >= 'A' && b <= 'Z':
+		return []byte{b, b + 32}
+	default:
+		return []byte{b}
+	}
 }
 
 func (s *IncludeScanner) sysinclSourceLookup(sourceRel string, target STR) ([]VFS, bool, bool) {
