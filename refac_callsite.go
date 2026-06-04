@@ -60,7 +60,10 @@ func refacCallSite(args []string) int {
 			allSites = append(allSites, site)
 
 			lbrace := fset.Position(fd.Body.Lbrace).Offset
-			inserts = append(inserts, ins{lbrace + 1, fmt.Sprintf("\n\trecordCall(%q)", site)})
+			// Terminate with ';' so the call is a complete statement even when
+			// the body is a one-liner (func f() T { return x }) where the
+			// original code stays on the same line as the splice point.
+			inserts = append(inserts, ins{lbrace + 1, fmt.Sprintf("\n\trecordCall(%q);", site)})
 		}
 
 		// Apply in reverse offset order so earlier offsets stay valid.
