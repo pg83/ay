@@ -37,40 +37,6 @@ func TestIntMapOverwrite(t *testing.T) {
 	}
 }
 
-func TestIntMapZeroKey(t *testing.T) {
-	m := NewIntMap[int](0)
-
-	if _, ok := m.Get(0); ok {
-		t.Fatalf("Get(0) ok on empty map")
-	}
-
-	m.Put(0, 555)
-
-	if v, ok := m.Get(0); !ok || v != 555 {
-		t.Fatalf("Get(0) = %d,%v want 555,true", v, ok)
-	}
-
-	if m.Len() != 1 {
-		t.Fatalf("Len = %d want 1", m.Len())
-	}
-
-	// Zero key coexists with non-zero keys and overwrites independently.
-	m.Put(1, 1)
-	m.Put(0, 777)
-
-	if v, _ := m.Get(0); v != 777 {
-		t.Fatalf("Get(0) = %d want 777 after overwrite", v)
-	}
-
-	if v, _ := m.Get(1); v != 1 {
-		t.Fatalf("Get(1) = %d want 1", v)
-	}
-
-	if m.Len() != 2 {
-		t.Fatalf("Len = %d want 2", m.Len())
-	}
-}
-
 func TestIntMapCapacityIsPowerOfTwo(t *testing.T) {
 	for _, hint := range []int{0, 1, 7, 8, 100, 1000, 1 << 20} {
 		m := NewIntMap[int](hint)
@@ -128,15 +94,15 @@ func TestIntMapGrowKeepsAll(t *testing.T) {
 }
 
 // Differential test: behave identically to the builtin map across a random
-// mix of inserts, overwrites and lookups (positive and negative), including
-// the zero key (k can be 0 via the modulo).
+// mix of inserts, overwrites and lookups (positive and negative). Key 0 is
+// reserved (empty sentinel), so keys are kept non-zero.
 func TestIntMapMatchesBuiltin(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	ref := map[uint64]int64{}
 	m := NewIntMap[int64](0)
 
 	for i := 0; i < 300_000; i++ {
-		k := rng.Uint64() % 40_000 // small space → many collisions + overwrites
+		k := rng.Uint64()%40_000 + 1 // small space → many collisions + overwrites; non-zero
 		v := rng.Int63()
 		ref[k] = v
 		m.Put(k, v)
@@ -153,9 +119,9 @@ func TestIntMapMatchesBuiltin(t *testing.T) {
 		}
 	}
 
-	// Negative lookups over the full 64-bit space (mostly absent).
+	// Negative lookups over the full 64-bit space (mostly absent), non-zero.
 	for i := 0; i < 100_000; i++ {
-		k := rng.Uint64()
+		k := rng.Uint64() | 1
 		_, refOK := ref[k]
 		_, gotOK := m.Get(k)
 

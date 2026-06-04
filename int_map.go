@@ -9,18 +9,17 @@ package main
 // which is cache-friendly at the moderate load factor used here.
 //
 // Single-goroutine use only (no internal locking). There is no delete — the
-// callers (intern table, codegen split, search-tier and source-under caches) are
-// insert/lookup only.
+// callers are insert/lookup only.
 //
-// Key 0 doubles as the empty-slot sentinel, so it is stored out of band
-// (freeVal/hasFree) and stays a usable key.
+// Key 0 is reserved as the empty-slot sentinel and must not be inserted; Get(0)
+// is undefined. Callers whose keys can be 0 handle that out of band — the intern
+// table, the sole caller, absorbs a 0 hi-hash through its lo-verify + exact
+// string overflow, so it never reaches IntMap with key 0.
 type IntMap[V any] struct {
 	data     []intMapEntry[V]
 	mask     uint64
-	count    int // entries in data (excludes the out-of-band zero key)
+	count    int // number of stored keys
 	resizeAt int // grow once count reaches this
-	freeVal  V
-	hasFree  bool
 }
 
 type intMapEntry[V any] struct {
@@ -60,10 +59,6 @@ func (m *IntMap[V]) alloc(capacity int) {
 
 // Get returns the value stored for k and whether it was present.
 func (m *IntMap[V]) Get(k uint64) (V, bool) {
-	if k == 0 {
-		return m.freeVal, m.hasFree
-	}
-
 	for i := k & m.mask; ; i = (i + 1) & m.mask {
 		switch m.data[i].k {
 		case k:
@@ -78,13 +73,6 @@ func (m *IntMap[V]) Get(k uint64) (V, bool) {
 
 // Put inserts or overwrites the value for k.
 func (m *IntMap[V]) Put(k uint64, v V) {
-	if k == 0 {
-		m.freeVal = v
-		m.hasFree = true
-
-		return
-	}
-
 	for i := k & m.mask; ; i = (i + 1) & m.mask {
 		switch m.data[i].k {
 		case k:
@@ -104,8 +92,7 @@ func (m *IntMap[V]) Put(k uint64, v V) {
 	}
 }
 
-// grow doubles the table and reinserts the live entries. The zero key lives out
-// of band, so it survives untouched and is not part of the rehash.
+// grow doubles the table and reinserts the live entries.
 func (m *IntMap[V]) grow() {
 	old := m.data
 	m.alloc(len(old) * 2)
@@ -119,12 +106,4 @@ func (m *IntMap[V]) grow() {
 }
 
 // Len reports the number of distinct keys stored.
-func (m *IntMap[V]) Len() int {
-	n := m.count
-
-	if m.hasFree {
-		n++
-	}
-
-	return n
-}
+func (m *IntMap[V]) Len() int { return m.count }
