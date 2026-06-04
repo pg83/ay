@@ -218,6 +218,120 @@ func (v PerSourceView) LookupIncluderKeyed(includerPath, header string) ([]strin
 	return unionIncluderMappings(v.activeIncluderRecords(includerPath), header)
 }
 
+// includerContribution is one includer-keyed record's mapping for a header
+// bucket, carrying the record's Filter so activeness is decided at query time.
+type includerContribution struct {
+	paths  []string
+	filter *sourceFilter // nil = applies to every includer
+	rawKey string        // the record's stored key (lowercase for CI records)
+	order  int           // index in includerKeyed — preserves union order
+	ci     bool
+	multi  bool // record.HasMultiTarget
+}
+
+// mergedIncluderIndex folds ALL includer-keyed records into one header-keyed
+// index built once (not per includer class), so a lookup is a single map probe
+// plus a tiny bucket scan instead of unionIncluderMappings' per-record fan-out
+// over the ~33 active records. Keyed by ToLower(header); each bucket holds every
+// record whose key folds to it, sorted by record order. A matched entry must
+// (a) be active for the includer (filter), (b) match case (CI = whole bucket,
+// non-CI = exact rawKey) — exactly reproducing activeIncluderRecords +
+// unionIncluderMappings (recordQuery + union/dedup, in order).
+type mergedIncluderIndex struct {
+	byLower map[string][]includerContribution
+}
+
+func buildMergedIncluderIndex(includerKeyed []*SysIncl) *mergedIncluderIndex {
+	m := &mergedIncluderIndex{byLower: make(map[string][]includerContribution)}
+
+	for order, rec := range includerKeyed {
+		for k, paths := range rec.Mappings {
+			lc := k
+
+			if !rec.CaseInsensitive {
+				lc = strings.ToLower(k)
+			}
+
+			m.byLower[lc] = append(m.byLower[lc], includerContribution{
+				paths:  paths,
+				filter: rec.Filter,
+				rawKey: k,
+				order:  order,
+				ci:     rec.CaseInsensitive,
+				multi:  rec.HasMultiTarget,
+			})
+		}
+	}
+
+	for _, bucket := range m.byLower {
+		sort.Slice(bucket, func(i, j int) bool { return bucket[i].order < bucket[j].order })
+	}
+
+	return m
+}
+
+func (m *mergedIncluderIndex) lookup(includerPath, header string) ([]string, bool, bool) {
+	bucket := m.byLower[strings.ToLower(header)]
+
+	if bucket == nil {
+		return nil, false, false
+	}
+
+	var (
+		out            []string
+		found          bool
+		hasMultiTarget bool
+		seen           map[string]struct{}
+	)
+
+	for i := range bucket {
+		c := &bucket[i]
+
+		if !c.ci && c.rawKey != header {
+			continue
+		}
+
+		if c.filter != nil && !c.filter.match(includerPath) {
+			continue
+		}
+
+		found = true
+
+		if c.multi {
+			count := 0
+
+			for _, p := range c.paths {
+				if p != "" {
+					count++
+				}
+			}
+
+			if count >= 2 {
+				hasMultiTarget = true
+			}
+		}
+
+		for _, p := range c.paths {
+			if p == "" {
+				continue
+			}
+
+			if seen == nil {
+				seen = make(map[string]struct{}, 4)
+			}
+
+			if _, dup := seen[p]; dup {
+				continue
+			}
+
+			seen[p] = struct{}{}
+			out = append(out, p)
+		}
+	}
+
+	return out, found, hasMultiTarget
+}
+
 func unionIncluderMappings(active []*SysIncl, header string) ([]string, bool, bool) {
 	var (
 		out            []string

@@ -57,6 +57,10 @@ type IncludeScanner struct {
 	includerClassRecords map[uint32][]*SysIncl
 	includerClassBuckets map[uint64][]uint32
 	nextIncluderClass    uint32
+	// mergedIncluder folds all includer-keyed sysincl records into one
+	// header-keyed index (built once), so an includer lookup is a single probe
+	// plus a tiny filtered bucket scan instead of a fan-out over ~33 records.
+	mergedIncluder *mergedIncluderIndex
 	// includerActiveScratch is reused by includerClass to compute the active
 	// record set for a fresh includer path; copied out only when a new class is
 	// created (most paths hit an existing class and discard it).
@@ -396,6 +400,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 	}
 
 	s.anySrcView = s.sysincl.PreparePerSource("")
+	s.mergedIncluder = buildMergedIncluderIndex(s.anySrcView.includerKeyed)
 
 	s.visitedIDPool.New = func() any {
 		return &idSet{}
@@ -1071,7 +1076,7 @@ func (s *IncludeScanner) sysinclSourceLookup(sourceRel string, target STR) ([]VF
 }
 
 func (s *IncludeScanner) sysinclIncluderLookup(includerRel string, target STR) ([]VFS, bool, bool) {
-	classID, active := s.includerClass(includerRel)
+	classID, _ := s.includerClass(includerRel)
 	key := sysinclIncluderKey{
 		class:  classID,
 		target: target,
@@ -1084,7 +1089,7 @@ func (s *IncludeScanner) sysinclIncluderLookup(includerRel string, target STR) (
 
 	s.sysinclIncluderMisses++
 
-	rels, claimed, hasMultiTarget := unionIncluderMappings(active, target.String())
+	rels, claimed, hasMultiTarget := s.mergedIncluder.lookup(includerRel, target.String())
 
 	entry := sysinclCacheEntry{
 		paths:          s.absifyRels(rels),
