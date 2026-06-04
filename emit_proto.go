@@ -6,12 +6,12 @@ import (
 	"strings"
 )
 
-// Parsed-include directives for the constant protobuf/grpc/event runtime header
-// lists, built once at init instead of re-interning each header's Rel() per
-// generated output (was ~260k internString/run on sg5: the 187-entry deep list
-// times every pb.cc/grpc.pb.cc). append copies these into the per-output slice,
-// so sharing the read-only backing is safe.
 var (
+	// Parsed-include directives for the constant protobuf/grpc/event runtime header
+	// lists, built once at init instead of re-interning each header's Rel() per
+	// generated output (was ~260k internString/run on sg5: the 187-entry deep list
+	// times every pb.cc/grpc.pb.cc). append copies these into the per-output slice,
+	// so sharing the read-only backing is safe.
 	protobufRuntimeDirectives   = quotedDirectives(protobufRuntimeHeaders)
 	pbCcDeepRuntimeDirectives   = quotedDirectives(pbCcDeepRuntimeHeaders)
 	grpcServiceHeaderDirectives = quotedDirectives(grpcServiceHeaderIncludes)

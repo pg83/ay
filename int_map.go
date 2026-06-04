@@ -129,4 +129,6 @@ func (m *IntMap[V]) grow() {
 }
 
 // Len reports the number of distinct keys stored.
-func (m *IntMap[V]) Len() int { return m.count }
+func (m *IntMap[V]) Len() int {
+	return m.count
+}

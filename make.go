@@ -103,6 +103,7 @@ func buildTargetStatsFlags(platformFlags, cliFlags map[string]string) map[string
 
 	return flags
 }
+
 func copyAllowedStatsFlags(dst, src map[string]string, allowlist map[string]struct{}) {
 	for k, v := range src {
 		if v == "" {
@@ -339,6 +340,7 @@ func cmdMake(args []string) int {
 
 	if len(failedRoots) > 0 {
 		failedStrs := make([]string, len(failedRoots))
+
 		for i, u := range failedRoots {
 			failedStrs[i] = u.String()
 		}

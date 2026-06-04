@@ -257,6 +257,7 @@ func baseName(s string) string {
 
 	return s
 }
+
 func filterARLDInputs(in []string, kind string, cmdBases map[string]struct{}) []string {
 	out := in[:0]
 

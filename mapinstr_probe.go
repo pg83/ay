@@ -19,10 +19,12 @@ var mapProbeCounts = map[string]*mapProbeEntry{}
 
 func mapProbeAt(site string, write bool) {
 	e := mapProbeCounts[site]
+
 	if e == nil {
 		e = &mapProbeEntry{}
 		mapProbeCounts[site] = e
 	}
+
 	if write {
 		e.writes++
 	} else {
@@ -34,6 +36,7 @@ func mapKR[K any](k K, site string) K {
 	if perfStatsEnabled {
 		mapProbeAt(site, false)
 	}
+
 	return k
 }
 
@@ -41,6 +44,7 @@ func mapKW[K any](k K, site string) K {
 	if perfStatsEnabled {
 		mapProbeAt(site, true)
 	}
+
 	return k
 }
 
@@ -51,10 +55,13 @@ func reportMapProbe() {
 		writes uint64
 	}
 	rows := make([]row, 0, len(mapProbeCounts))
+
 	for s, e := range mapProbeCounts {
 		rows = append(rows, row{s, e.reads, e.writes})
 	}
+
 	sort.Slice(rows, func(i, j int) bool { return rows[i].reads+rows[i].writes > rows[j].reads+rows[j].writes })
+
 	for _, r := range rows {
 		fmt.Fprintf(os.Stderr, "mapop\t%d\t%d\t%s\n", r.reads, r.writes, r.site)
 	}

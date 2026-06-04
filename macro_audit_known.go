@@ -35,6 +35,7 @@ func knownServiceTokens() map[string]struct{} {
 	})
 	return knownServiceTokensVal
 }
+
 func mineServiceTokensFromSources() map[string]struct{} {
 	tokens := map[string]struct{}{}
 	entries, err := goSources.ReadDir(".")

@@ -94,11 +94,25 @@ func (t *tarjanScratch) onStackHas(v VFS) bool {
 	return t.visited(v) && t.onStack[uint32(v)]
 }
 
-func (t *tarjanScratch) lowOf(v VFS) int32        { return t.low[uint32(v)] }
-func (t *tarjanScratch) indexOf(v VFS) int32      { return t.index[uint32(v)] }
-func (t *tarjanScratch) setLow(v VFS, x int32)    { t.low[uint32(v)] = x }
-func (t *tarjanScratch) onStackOf(v VFS) bool     { return t.onStack[uint32(v)] }
-func (t *tarjanScratch) setOnStack(v VFS, b bool) { t.onStack[uint32(v)] = b }
+func (t *tarjanScratch) lowOf(v VFS) int32 {
+	return t.low[uint32(v)]
+}
+
+func (t *tarjanScratch) indexOf(v VFS) int32 {
+	return t.index[uint32(v)]
+}
+
+func (t *tarjanScratch) setLow(v VFS, x int32) {
+	t.low[uint32(v)] = x
+}
+
+func (t *tarjanScratch) onStackOf(v VFS) bool {
+	return t.onStack[uint32(v)]
+}
+
+func (t *tarjanScratch) setOnStack(v VFS, b bool) {
+	t.onStack[uint32(v)] = b
+}
 
 // closureSink is the scanner surface strongconnect needs: walk a node's
 // resolved children, read an already-built child closure, and materialize a new

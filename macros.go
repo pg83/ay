@@ -5,6 +5,31 @@ import (
 	"strings"
 )
 
+var (
+	// strYes/strNo are the pre-interned STR forms of the bool foldings, reused by
+	// SetBool instead of re-interning "yes"/"no" on every per-module binding.
+	strYes       = internString("yes")
+	strNo        = internString("no")
+	DefaultIfEnv = makeDefaultIfEnv()
+)
+
+var envTable = struct {
+	ids   map[string]ENV
+	names []string
+}{ids: make(map[string]ENV, 256), names: []string{""}} // index 0 reserved = "not interned"
+
+// intSTR holds the pre-interned decimal STR of the first len(intSTR) integers so
+// SetInt avoids strconv.Itoa + internString on the common small-int path.
+var intSTR = func() [1024]STR {
+	var a [1024]STR
+
+	for i := range a {
+		a[i] = internString(strconv.Itoa(i))
+	}
+
+	return a
+}()
+
 // ENV interns IF/macro variable names into a small, dense id space (the conf's
 // fixed-ish flag set), separate from STR — analogous to STR/VFS. It lets
 // Environment store bindings in ENV-indexed slices instead of three string-keyed
@@ -12,11 +37,6 @@ import (
 // ~8% of map-probing CPU plus per-module Clone churn). Single-writer (gen
 // goroutine), like internTable.
 type ENV uint32
-
-var envTable = struct {
-	ids   map[string]ENV
-	names []string
-}{ids: make(map[string]ENV, 256), names: []string{""}} // index 0 reserved = "not interned"
 
 func internEnv(name string) ENV {
 	if id, ok := envTable.ids[name]; ok {
@@ -30,7 +50,9 @@ func internEnv(name string) ENV {
 	return id
 }
 
-func (id ENV) String() string { return envTable.names[id] }
+func (id ENV) String() string {
+	return envTable.names[id]
+}
 
 // identEnv returns the ENV for an IF identifier, preferring the id interned into
 // the node at parse time; a zero Env (e.g. an ExprIdent built outside the parser,
@@ -42,25 +64,6 @@ func identEnv(x *ExprIdent) ENV {
 
 	return internEnv(x.Name)
 }
-
-// strYes/strNo are the pre-interned STR forms of the bool foldings, reused by
-// SetBool instead of re-interning "yes"/"no" on every per-module binding.
-var (
-	strYes = internString("yes")
-	strNo  = internString("no")
-)
-
-// intSTR holds the pre-interned decimal STR of the first len(intSTR) integers so
-// SetInt avoids strconv.Itoa + internString on the common small-int path.
-var intSTR = func() [1024]STR {
-	var a [1024]STR
-
-	for i := range a {
-		a[i] = internString(strconv.Itoa(i))
-	}
-
-	return a
-}()
 
 type envKind uint8
 
@@ -80,7 +83,9 @@ type envStore struct {
 
 type Environment struct{ s *envStore }
 
-func newEnvironment() Environment { return Environment{s: &envStore{}} }
+func newEnvironment() Environment {
+	return Environment{s: &envStore{}}
+}
 
 func (s *envStore) ensure(e ENV) {
 	if int(e) < len(s.kind) {
@@ -210,9 +215,13 @@ func (e Environment) setStrID(id ENV, v STR) {
 
 // SetStringID binds a pre-interned constant value (hoisted STR var); SetString
 // is for computed values that must intern at the call.
-func (e Environment) SetStringID(id ENV, v STR) { e.setStrID(id, v) }
+func (e Environment) SetStringID(id ENV, v STR) {
+	e.setStrID(id, v)
+}
 
-func (e Environment) SetString(id ENV, v string) { e.setStrID(id, internString(v)) }
+func (e Environment) SetString(id ENV, v string) {
+	e.setStrID(id, internString(v))
+}
 
 func (e Environment) SetInt(id ENV, n int) {
 	e.s.ensure(id)
@@ -436,8 +445,6 @@ func evalLt(x *ExprLt, env Environment) bool {
 
 	return li < ri
 }
-
-var DefaultIfEnv = makeDefaultIfEnv()
 
 func makeDefaultIfEnv() Environment {
 	e := newEnvironment()
