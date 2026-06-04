@@ -57,16 +57,18 @@ func (m *IntMap[V]) alloc(capacity int) {
 	m.resizeAt = capacity * intMapFillNum / intMapFillDen
 }
 
-// Get returns the value stored for k and whether it was present.
-func (m *IntMap[V]) Get(k uint64) (V, bool) {
+// Get returns a pointer to the value stored for k, or nil if k is absent.
+// Returning a pointer (rather than (V, bool)) avoids materialising a zero V on a
+// miss and copying V on a hit — which matters when V is large. The pointer is
+// valid only until the next mutating call (Put/Cell may grow and move the
+// backing array).
+func (m *IntMap[V]) Get(k uint64) *V {
 	for i := k & m.mask; ; i = (i + 1) & m.mask {
 		switch m.data[i].k {
 		case k:
-			return m.data[i].v, true
+			return &m.data[i].v
 		case 0:
-			var zero V
-
-			return zero, false
+			return nil
 		}
 	}
 }

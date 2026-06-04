@@ -20,15 +20,14 @@ func NewIntValueMap[V any](hint int) *IntValueMap[V] {
 	}
 }
 
-// Get returns the value for k and whether it was present.
-func (m *IntValueMap[V]) Get(k uint64) (V, bool) {
-	if i, ok := m.idx.Get(k); ok {
-		return m.vals[i], true
+// Get returns a pointer to the value for k (into the side vals slice), or nil if
+// k is absent. The pointer is valid until the next Put grows vals.
+func (m *IntValueMap[V]) Get(k uint64) *V {
+	if i := m.idx.Get(k); i != nil {
+		return &m.vals[*i]
 	}
 
-	var zero V
-
-	return zero, false
+	return nil
 }
 
 // Put inserts or overwrites the value for k. A new key appends to vals and

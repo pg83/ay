@@ -8,14 +8,14 @@ import (
 func TestIntMapBasicPutGet(t *testing.T) {
 	m := NewIntMap[int](0)
 
-	if _, ok := m.Get(42); ok {
-		t.Fatalf("Get on empty map returned ok")
+	if m.Get(42) != nil {
+		t.Fatalf("Get on empty map returned non-nil")
 	}
 
 	m.Put(42, 100)
 
-	if v, ok := m.Get(42); !ok || v != 100 {
-		t.Fatalf("Get(42) = %d,%v want 100,true", v, ok)
+	if p := m.Get(42); p == nil || *p != 100 {
+		t.Fatalf("Get(42) = %v want *100", p)
 	}
 
 	if m.Len() != 1 {
@@ -28,8 +28,8 @@ func TestIntMapOverwrite(t *testing.T) {
 	m.Put(7, "a")
 	m.Put(7, "b")
 
-	if v, ok := m.Get(7); !ok || v != "b" {
-		t.Fatalf("Get(7) = %q,%v want \"b\",true", v, ok)
+	if p := m.Get(7); p == nil || *p != "b" {
+		t.Fatalf("Get(7) = %v want *\"b\"", p)
 	}
 
 	if m.Len() != 1 {
@@ -64,8 +64,8 @@ func TestIntMapCollisionAndWraparound(t *testing.T) {
 	}
 
 	for i, k := range keys {
-		if v, ok := m.Get(k); !ok || v != i {
-			t.Fatalf("Get(%d) = %d,%v want %d,true", k, v, ok, i)
+		if p := m.Get(k); p == nil || *p != i {
+			t.Fatalf("Get(%d) = %v want *%d", k, p, i)
 		}
 	}
 }
@@ -83,13 +83,13 @@ func TestIntMapGrowKeepsAll(t *testing.T) {
 	}
 
 	for i := uint64(1); i <= n; i++ {
-		if v, ok := m.Get(i * 0x9E3779B97F4A7C15); !ok || v != i {
-			t.Fatalf("after grow Get(key %d) = %d,%v want %d,true", i, v, ok, i)
+		if p := m.Get(i * 0x9E3779B97F4A7C15); p == nil || *p != i {
+			t.Fatalf("after grow Get(key %d) = %v want *%d", i, p, i)
 		}
 	}
 
-	if _, ok := m.Get(0xdeadbeefdeadbeef); ok {
-		t.Fatalf("Get of absent key returned ok")
+	if m.Get(0xdeadbeefdeadbeef) != nil {
+		t.Fatalf("Get of absent key returned non-nil")
 	}
 }
 
@@ -113,9 +113,8 @@ func TestIntMapMatchesBuiltin(t *testing.T) {
 	}
 
 	for k, v := range ref {
-		got, ok := m.Get(k)
-		if !ok || got != v {
-			t.Fatalf("Get(%d) = %d,%v want %d,true", k, got, ok, v)
+		if p := m.Get(k); p == nil || *p != v {
+			t.Fatalf("Get(%d) = %v want *%d", k, p, v)
 		}
 	}
 
@@ -123,7 +122,7 @@ func TestIntMapMatchesBuiltin(t *testing.T) {
 	for i := 0; i < 100_000; i++ {
 		k := rng.Uint64() | 1
 		_, refOK := ref[k]
-		_, gotOK := m.Get(k)
+		gotOK := m.Get(k) != nil
 
 		if refOK != gotOK {
 			t.Fatalf("presence mismatch for %d: builtin=%v intmap=%v", k, refOK, gotOK)
@@ -147,8 +146,8 @@ func TestIntMapCell(t *testing.T) {
 
 	*p = 99
 
-	if v, ok := m.Get(5); !ok || v != 99 {
-		t.Fatalf("Get(5) after Cell write = %d,%v want 99,true", v, ok)
+	if g := m.Get(5); g == nil || *g != 99 {
+		t.Fatalf("Get(5) after Cell write = %v want *99", g)
 	}
 
 	p2, existed2 := m.Cell(5)
@@ -158,8 +157,8 @@ func TestIntMapCell(t *testing.T) {
 
 	*p2 = 100
 
-	if v, _ := m.Get(5); v != 100 {
-		t.Fatalf("update via Cell = %d want 100", v)
+	if g := m.Get(5); g == nil || *g != 100 {
+		t.Fatalf("update via Cell = %v want *100", g)
 	}
 
 	if m.Len() != 1 {
@@ -186,8 +185,8 @@ func TestIntMapCellGrows(t *testing.T) {
 	}
 
 	for i := 1; i <= n; i++ {
-		if v, ok := m.Get(uint64(i) * 0x9E3779B97F4A7C15); !ok || v != i {
-			t.Fatalf("Get(key %d) = %d,%v want %d,true", i, v, ok, i)
+		if p := m.Get(uint64(i) * 0x9E3779B97F4A7C15); p == nil || *p != i {
+			t.Fatalf("Get(key %d) = %v want *%d", i, p, i)
 		}
 	}
 }
@@ -200,11 +199,11 @@ func TestIntMapPointerValues(t *testing.T) {
 	b := &box{n: 9}
 	m.Put(123, b)
 
-	if got, ok := m.Get(123); !ok || got != b {
+	if p := m.Get(123); p == nil || *p != b {
 		t.Fatalf("pointer value not round-tripped")
 	}
 
-	if got, ok := m.Get(124); ok || got != nil {
-		t.Fatalf("absent pointer Get = %v,%v want nil,false", got, ok)
+	if m.Get(124) != nil {
+		t.Fatalf("absent pointer Get returned non-nil")
 	}
 }
