@@ -1014,12 +1014,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	peerLDFlagsGlobal := make([]string, 0, 4)
 	rpathFlagsSeen := map[string]struct{}{}
 	peerRPathFlagsGlobal := make([]string, 0, 4)
-	// addInclSeen is NOT routed through ctx.deduper: peerAddInclGlobal's set lives
-	// from here until the late libcxx-injection below, spanning the proto pass and
-	// two intervening dedupVFS calls (which reset the shared deduper) plus the
-	// bundled-path filtering that drops entries from the slice but not the set. A
-	// dedicated map keeps that long-lived, specially-filtered membership intact.
-	addInclSeen := map[VFS]struct{}{}
+	// peerAddInclGlobal aggregation routes through the run-global deduper. The
+	// whole add sequence — lang/test/program/user peers plus the libc++ injection,
+	// which is hoisted above the effectiveAddInclGlobal dedupVFS so it lands in the
+	// same reset-free window — runs contiguously before that first dedupVFS reset.
+	// Bundled-path filtering drops entries from the slice but never from the
+	// deduper, so the membership stays broader than the slice, as required.
 	peerAddInclGlobal := make([]VFS, 0, 16)
 	// oneLevelOnlyPaths tracks paths added exclusively via ONE_LEVEL from direct user
 	// peers. Such paths appear in peerAddInclGlobal (for correct CC command ordering)
@@ -1042,17 +1042,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			*dst = append(*dst, x)
 		}
 	}
-	addEachVFS := func(seenSet map[VFS]struct{}, dst *[]VFS, src []VFS) {
-		for _, x := range src {
-			if _, dup := seenSet[x]; dup {
-				continue
-			}
-
-			seenSet[x] = struct{}{}
-			*dst = append(*dst, x)
-		}
-	}
-
 	type resolvedPeer struct {
 		path   string
 		result *moduleEmitResult
@@ -1295,87 +1284,93 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
+	// Seed the run-global deduper for the peerAddInclGlobal aggregation; the
+	// peer-collection dedup passes above left it in an arbitrary state.
+	deduper.reset()
+
+	// Aggregate every peer's propagated ADDINCL(GLOBAL) into peerAddInclGlobal,
+	// deduping through the run-global deduper (seeded above). The passes run in a
+	// fixed kind order — lang defaults, unit-test, program defaults, user peers —
+	// and that order is load-bearing (it sets the -I order on the CC command).
+	// Each pass sweeps all resolved peers of one kind, so the kinds stay grouped
+	// even though `resolved` interleaves program-default and user peers.
+
+	// Lang defaults: own GLOBAL across all, then transitive GLOBAL across all (two
+	// sweeps so every own-GLOBAL path precedes every transitive-GLOBAL one).
 	for _, rp := range resolved {
-		if rp.kind != peerKindLangDefault {
-			continue
-		}
-
-		addEachVFS(addInclSeen, &peerAddInclGlobal, rp.result.OwnAddInclGlobal)
-	}
-
-	for _, rp := range resolved {
-		if rp.kind != peerKindLangDefault {
-			continue
-		}
-
-		addEachVFS(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
-	}
-
-	emitUnitTestPeers := func() {
-		for _, rp := range resolved {
-			if rp.kind != peerKindUnitTestPeer {
-				continue
-			}
-
-			addEachVFS(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
-		}
-	}
-
-	emitUserPeers := func() {
-		for _, rp := range resolved {
-			if rp.kind != peerKindUserPeer {
-				continue
-			}
-
-			// Emit peer's own GLOBAL+ONE_LEVEL in declaration order (UserGlobal),
-			// mirroring upstream PropagateTo which propagates UserGlobal before
-			// GlobalPropagated (transitive). Declaration order is preserved by
-			// AddInclUserGlobal (built from AddInclStmt.UserGlobalPaths).
-			for _, p := range rp.result.AddInclUserGlobal {
-				if _, dup := addInclSeen[p]; !dup {
-					addInclSeen[p] = struct{}{}
+		if rp.kind == peerKindLangDefault {
+			for _, p := range rp.result.OwnAddInclGlobal {
+				if deduper.add(p) {
 					peerAddInclGlobal = append(peerAddInclGlobal, p)
 				}
 			}
+		}
+	}
 
-			// Track ONE_LEVEL-only paths so they are not re-propagated transitively
-			// (upstream one-hop semantics: ONE_LEVEL is not in GlobalPropagated).
-			for _, p := range rp.result.AddInclOneLevel {
-				if oneLevelOnlyPaths == nil {
-					oneLevelOnlyPaths = map[VFS]struct{}{}
-				}
-
-				oneLevelOnlyPaths[p] = struct{}{}
-			}
-
-			// Add transitive GLOBALs (GlobalPropagated). A path also exported as
-			// GLOBAL by any peer wins over ONE_LEVEL-only and should propagate.
+	for _, rp := range resolved {
+		if rp.kind == peerKindLangDefault {
 			for _, p := range rp.result.AddInclGlobal {
-				if _, dup := addInclSeen[p]; !dup {
-					addInclSeen[p] = struct{}{}
+				if deduper.add(p) {
 					peerAddInclGlobal = append(peerAddInclGlobal, p)
 				}
+			}
+		}
+	}
 
-				if oneLevelOnlyPaths != nil {
-					delete(oneLevelOnlyPaths, p)
+	// Unit-test peer: transitive GLOBAL.
+	for _, rp := range resolved {
+		if rp.kind == peerKindUnitTestPeer {
+			for _, p := range rp.result.AddInclGlobal {
+				if deduper.add(p) {
+					peerAddInclGlobal = append(peerAddInclGlobal, p)
 				}
 			}
 		}
 	}
 
-	emitProgramDefaults := func() {
-		for _, rp := range resolved {
-			if rp.kind != peerKindProgramDefault {
-				continue
+	// Program defaults: transitive GLOBAL.
+	for _, rp := range resolved {
+		if rp.kind == peerKindProgramDefault {
+			for _, p := range rp.result.AddInclGlobal {
+				if deduper.add(p) {
+					peerAddInclGlobal = append(peerAddInclGlobal, p)
+				}
 			}
-
-			addEachVFS(addInclSeen, &peerAddInclGlobal, rp.result.AddInclGlobal)
 		}
 	}
 
-	emitUnitTestPeers()
-	emitProgramDefaults()
-	emitUserPeers()
+	// User peers: UserGlobal in declaration order (upstream PropagateTo propagates
+	// UserGlobal before GlobalPropagated), ONE_LEVEL tracked for one-hop semantics,
+	// then transitive GLOBAL (a GLOBAL re-export beats ONE_LEVEL-only).
+	for _, rp := range resolved {
+		if rp.kind != peerKindUserPeer {
+			continue
+		}
+
+		for _, p := range rp.result.AddInclUserGlobal {
+			if deduper.add(p) {
+				peerAddInclGlobal = append(peerAddInclGlobal, p)
+			}
+		}
+
+		for _, p := range rp.result.AddInclOneLevel {
+			if oneLevelOnlyPaths == nil {
+				oneLevelOnlyPaths = map[VFS]struct{}{}
+			}
+
+			oneLevelOnlyPaths[p] = struct{}{}
+		}
+
+		for _, p := range rp.result.AddInclGlobal {
+			if deduper.add(p) {
+				peerAddInclGlobal = append(peerAddInclGlobal, p)
+			}
+
+			if oneLevelOnlyPaths != nil {
+				delete(oneLevelOnlyPaths, p)
+			}
+		}
+	}
 
 	if len(peerAddInclGlobal) > 0 {
 		filtered := peerAddInclGlobal[:0]
@@ -1422,6 +1417,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		for _, p := range peerAddInclGlobal {
 			if _, isOneLevel := oneLevelOnlyPaths[p]; !isOneLevel {
 				peerAddInclForProp = append(peerAddInclForProp, p)
+			}
+		}
+	}
+
+	// libc++ include dirs for runtime-ancestor C++ consumers are local-only — kept
+	// out of effectiveAddInclGlobal by injecting after the peerAddInclForProp
+	// snapshot above — but deduped through the same run-global deduper as the rest
+	// of the peer-addincl aggregation, before the dedupVFS below resets it.
+	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path] {
+		for _, p := range []VFS{contribLibsCxxsuppLibcxxInclude, contribLibsCxxsuppLibcxxrtInclude} {
+			if deduper.add(p) {
+				peerAddInclGlobal = append(peerAddInclGlobal, p)
 			}
 		}
 	}
@@ -1499,20 +1506,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path] {
 		const nostdincPP = "-nostdinc++"
 
-		injectAddIncl := []VFS{
-			contribLibsCxxsuppLibcxxInclude,
-			contribLibsCxxsuppLibcxxrtInclude,
-		}
-
-		for _, p := range injectAddIncl {
-			if _, dup := addInclSeen[p]; dup {
-				continue
-			}
-
-			addInclSeen[p] = struct{}{}
-			peerAddInclGlobal = append(peerAddInclGlobal, p)
-		}
-
+		// The libc++ addincl dirs are injected above (before effectiveAddInclGlobal);
+		// only the matching -nostdinc++ flag and the runtime-stack hoist remain here.
 		if _, dup := cxxFlagsSeen[nostdincPP]; !dup {
 			cxxFlagsSeen[nostdincPP] = struct{}{}
 			peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, nostdincPP)
