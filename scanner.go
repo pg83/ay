@@ -109,13 +109,15 @@ type IncludeScanner struct {
 	scanCache DenseMap3[STR, []VFS, closureRef, bool]
 
 	// searchTierFlat caches resolveContextSearchTier results in one scanner-wide
-	// map keyed by a composite uint64 (ctxNum<<32 | target STR), flattening the
-	// former two-level map[ctxHash]map[STR]. ctxNum is a dense per-distinct-config
-	// id (ctxNumByHash) instead of the 64-bit config hash. searchTierSeen is a
-	// 1-bit-per-target-STR presence gate (set once the target has any cached entry,
-	// in any config): a hit there means the composite map is worth probing, a miss
-	// short-circuits straight to the resolve (skipping the hash probe).
-	searchTierFlat map[uint64]searchTierResult
+	// table keyed by morton(ctxNum, target STR) — the two dense ids bit-interleaved
+	// (Z-order) rather than shift-packed, so the key's low bits mix BOTH ids and an
+	// identity-hashed IntValueMap spreads (ctx, target) pairs instead of clustering
+	// them by target. ctxNum is a dense per-distinct-config id (ctxNumByHash). The
+	// value (a searchTierResult) lives in IntValueMap's side slice, so table entries
+	// stay small. searchTierSeen is a 1-bit-per-target-STR presence gate (set once
+	// the target has any cached entry, in any config): a hit there means the table
+	// is worth probing, a miss short-circuits straight to the resolve.
+	searchTierFlat *IntValueMap[searchTierResult]
 	searchTierSeen idBitSet[STR]
 	ctxNumByHash   map[uint64]uint32
 
@@ -344,7 +346,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		// straighten path and closureWindow treat ref as a 1-based index).
 		subgraphClosures:     make([][]VFS, 1, 256),
 		closureArena:         newBumpAllocator[VFS](closureArenaInitial),
-		searchTierFlat:       make(map[uint64]searchTierResult, 4096),
+		searchTierFlat:       NewIntValueMap[searchTierResult](4096),
 		ctxNumByHash:         make(map[uint64]uint32, 1024),
 		resolveIndexByConfig: make(map[uint64]*cfgResolveIndex, 1024),
 		sourceUnderCache:     make(map[uint64]string, 1<<16),
@@ -1187,7 +1189,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 
 func (sc *scanCtx) cacheSearchTier(targetID STR, out searchTierResult) searchTierResult {
 	s := sc.scanner
-	s.searchTierFlat[uint64(sc.ctxNum)<<32|uint64(targetID)] = out
+	s.searchTierFlat.Put(morton(sc.ctxNum, uint32(targetID)), out)
 	s.searchTierSeen.add(targetID)
 
 	return out
@@ -1199,9 +1201,9 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 	// Gate the composite-key hash probe on the 1-bit per-target presence flag: a
 	// target never cached in any config skips straight to the resolve.
 	if s.searchTierSeen.has(targetID) {
-		if cached, ok := s.searchTierFlat[uint64(sc.ctxNum)<<32|uint64(targetID)]; ok {
+		if cached := s.searchTierFlat.Get(morton(sc.ctxNum, uint32(targetID))); cached != nil {
 			s.searchTierHits++
-			return cached
+			return *cached
 		}
 	}
 
