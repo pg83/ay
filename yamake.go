@@ -1223,14 +1223,6 @@ func parseResource(args []string, nameTok token) *ResourceStmt {
 	return &ResourceStmt{Pairs: pairs, Line: nameTok.line}
 }
 
-func splitGlobalModifier(args []string) (string, []string) {
-	if len(args) > 0 && args[0] == "GLOBAL" {
-		return "GLOBAL", append([]string(nil), args[1:]...)
-	}
-
-	return "", append([]string(nil), args...)
-}
-
 func unescapeFlag(s string) string {
 	return strings.ReplaceAll(s, `\"`, `"`)
 }

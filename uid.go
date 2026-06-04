@@ -23,12 +23,6 @@ func canonicalNodeBytes(n *Node) []byte {
 	return c.buf
 }
 
-func nodeUID(n *Node) UID {
-	var c canonBuf
-
-	return nodeUIDWithBuf(n, &c)
-}
-
 func nodeUIDWithBuf(n *Node, c *canonBuf) UID {
 	c.buf = c.buf[:0]
 	c.writeNode(n)

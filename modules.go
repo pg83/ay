@@ -2148,16 +2148,6 @@ var (
 	strCPPProto = internString("CPP_PROTO") // MODULE_TAG for the CPP PROTO_LIBRARY submodule
 )
 
-func expandConfigPaths(paths []string, env Environment) []string {
-	out := make([]string, 0, len(paths))
-
-	for _, path := range paths {
-		out = append(out, expandConfigString(path, env))
-	}
-
-	return out
-}
-
 func expandConfigVFSPaths(paths []string, env Environment) []VFS {
 	out := make([]VFS, 0, len(paths))
 
@@ -2540,10 +2530,6 @@ func moduleInfoForInstance(ctx *genCtx, instance ModuleInstance) moduleTypeInfo 
 	ctx.moduleTypeCache[key] = info
 
 	return info
-}
-
-func moduleTypeForInstance(ctx *genCtx, instance ModuleInstance) string {
-	return moduleInfoForInstance(ctx, instance).Name
 }
 
 func peerLanguageFor(ctx *genCtx, parent ModuleInstance, parentModuleName, peerPath string) Language {

@@ -313,10 +313,6 @@ type scannerPerfStats struct {
 	sysinclIncluderMisses  uint64
 }
 
-func NewIncludeScanner(sourceRoot string, sysincl SysInclSet) *IncludeScanner {
-	return newIncludeScannerWith(newIncludeParserManager(sourceRoot), sysincl, func(Warn) {}, &tarjanCtx{})
-}
-
 func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, onWarn func(Warn), tjc *tarjanCtx) *IncludeScanner {
 	s := &IncludeScanner{
 		sysincl:              sysincl,
@@ -467,10 +463,6 @@ func hashScanContext(ctx *ScanContext) uint64 {
 	mixSlice(ctx.BaseSearchPaths)
 
 	return h
-}
-
-func (s *IncludeScanner) emittedRel(abs string) string {
-	return abs
 }
 
 func recordSliceSignature(active []*SysIncl) uint64 {
@@ -1593,14 +1585,6 @@ type pathLocator interface {
 
 type fsLocator struct {
 	scanner *IncludeScanner
-}
-
-func (f fsLocator) Exists(vfsPath VFS) bool {
-	if !vfsPath.IsSource() {
-		return false
-	}
-
-	return f.scanner.sourceFileExists(vfsPath)
 }
 
 type codegenLocator struct {

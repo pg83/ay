@@ -56,12 +56,6 @@ func Throw2[T any](val T, err error) T {
 	return val
 }
 
-func Throw3[T1, T2 any](v1 T1, v2 T2, err error) (T1, T2) {
-	Throw(err)
-
-	return v1, v2
-}
-
 func ThrowFmt(format string, args ...any) {
 	Fmt(format, args...).throw()
 }
@@ -69,14 +63,6 @@ func ThrowFmt(format string, args ...any) {
 type HTTPError struct {
 	Status int
 	Msg    string
-}
-
-func (e *HTTPError) Error() string {
-	return e.Msg
-}
-
-func ThrowHTTP(status int, format string, args ...any) {
-	New(&HTTPError{Status: status, Msg: fmt.Sprintf(format, args...)}).throw()
 }
 
 func Try(cb func()) (err *Exception) {

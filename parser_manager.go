@@ -80,10 +80,6 @@ type parserPerfStats struct {
 	buildParsed  int
 }
 
-func newIncludeParserManager(sourceRoot string) *includeParserManager {
-	return newIncludeParserManagerFS(NewFS(sourceRoot), newSharedParseCache())
-}
-
 func newIncludeParserManagerFS(fs FS, cache *sharedParseCache) *includeParserManager {
 	return &includeParserManager{
 		fs:             fs,

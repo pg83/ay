@@ -29,24 +29,6 @@ func ArchiveName(moduleDir string) string {
 	return archiveNameWithPrefix(moduleDir, "lib")
 }
 
-func Py3ArchiveName(moduleDir string) string {
-	return archiveNameWithPrefix(moduleDir, "libpy3")
-}
-
-func Py3cArchiveName(moduleDir string) string {
-	return archiveNameWithPrefix(moduleDir, "libpy3c")
-}
-
-func globalArchiveName(moduleDir string) string {
-	base := ArchiveName(moduleDir)
-	return base[:len(base)-2] + ".global.a"
-}
-
-func globalArchiveNameWithPrefix(moduleDir, prefix string) string {
-	base := archiveNameWithPrefix(moduleDir, prefix)
-	return base[:len(base)-2] + ".global.a"
-}
-
 func globalArchiveNameWithPrefixOrName(moduleDir, prefix, name string) string {
 	base := archiveNameWithPrefixOrName(moduleDir, prefix, name)
 	return base[:len(base)-2] + ".global.a"

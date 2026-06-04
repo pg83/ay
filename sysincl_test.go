@@ -108,25 +108,3 @@ func TestSourceFilter_NegativeLookahead(t *testing.T) {
 		})
 	}
 }
-
-func stringSlicesEqualUnordered(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	seen := make(map[string]int, len(a))
-
-	for _, s := range a {
-		seen[s]++
-	}
-
-	for _, s := range b {
-		seen[s]--
-
-		if seen[s] < 0 {
-			return false
-		}
-	}
-
-	return true
-}

@@ -10,66 +10,6 @@ import (
 	"strings"
 )
 
-func mineTools() map[string]string {
-	names := []string{
-		"clang",
-		"clang++",
-		"ar",
-		"objcopy",
-		"strip",
-		"python3",
-		"lld",
-	}
-
-	out := make(map[string]string, len(names))
-
-	for _, n := range names {
-		bin := n
-
-		switch n {
-		case "ar", "objcopy", "strip":
-			bin = "llvm-" + n
-		}
-
-		path, err := exec.LookPath(bin)
-
-		if err != nil {
-			ThrowFmt("mineTools: %q not found in PATH: %v", bin, err)
-		}
-
-		out[n] = path
-	}
-
-	return out
-}
-
-func commonFlags(tools map[string]string) map[string]string {
-	res := map[string]string{
-		"CONSISTENT_DEBUG":         "yes",
-		"NO_DEBUGINFO":             "yes",
-		"OS_SDK":                   "local",
-		"TIDY":                     "no",
-		"USE_ARCADIA_PYTHON":       "yes",
-		"USE_PREBUILT_TOOLS":       "no",
-		"USE_PYTHON3":              "yes",
-		"BUILD_PYTHON_BIN":         tools["python3"],
-		"BUILD_PYTHON3_BIN":        tools["python3"],
-		"CLANG_VER":                mineClangMajor(tools["clang"]),
-		"CLANG16_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG16_RESOURCE_GLOBAL", resourcePatternClang16),
-		"CLANG18_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG18_RESOURCE_GLOBAL", resourcePatternClang18),
-		"CLANG20_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG20_RESOURCE_GLOBAL", resourcePatternClang20),
-		"LLD_ROOT_RESOURCE_GLOBAL": resourceGlobalRef("LLD_ROOT_RESOURCE_GLOBAL", resourcePatternLLDRoot),
-	}
-
-	for k, v := range tools {
-		key := strings.ReplaceAll(strings.ToUpper(k), "+", "_pl")
-		res[key+"_TOOL"] = v
-		res[key+"_TOOL_VENDOR"] = v
-	}
-
-	return res
-}
-
 type graphConfResource struct {
 	Name      string                 `json:"name,omitempty"`
 	Pattern   string                 `json:"pattern"`
@@ -422,28 +362,10 @@ func hostISA() ISA {
 	}
 }
 
-func hostPlatformID() string {
-	return string(MakePlatformID(hostOS(), hostISA()))
-}
-
 func resolvePlatform(s string) (OS, ISA) {
 	if s == "" {
 		return hostOS(), hostISA()
 	}
 
 	return ParsePlatformID(s)
-}
-
-func mergeFlags(base, over map[string]string) map[string]string {
-	out := make(map[string]string, len(base)+len(over))
-
-	for k, v := range base {
-		out[k] = v
-	}
-
-	for k, v := range over {
-		out[k] = v
-	}
-
-	return out
 }

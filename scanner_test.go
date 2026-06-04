@@ -938,28 +938,6 @@ func (s *IncludeScanner) sourceParsedBuckets(vfsPath VFS) parsedIncludeSet {
 	return s.parsers.sourceParsedBuckets(vfsPath)
 }
 
-func assertHasIncludeDirective(t *testing.T, got []includeDirective, want includeDirective) {
-	t.Helper()
-
-	for _, d := range got {
-		if d == want {
-			return
-		}
-	}
-
-	t.Fatalf("parsed includes missing %+v; got=%+v", want, got)
-}
-
-func assertLacksIncludeDirective(t *testing.T, got []includeDirective, want includeDirective) {
-	t.Helper()
-
-	for _, d := range got {
-		if d == want {
-			t.Fatalf("parsed includes unexpectedly contain %+v; got=%+v", want, got)
-		}
-	}
-}
-
 func assertHasVFS(t *testing.T, closure []VFS, want VFS) {
 	t.Helper()
 
@@ -1047,88 +1025,6 @@ func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
 	assertLacksVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libcpp/__init__.pxd"))
 	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libc/stdint.pxd"))
 	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd"))
-}
-
-func hyperscanPeerAddIncl() []VFS {
-	return VFSesFromStrings([]string{
-		"contrib/libs/cxxsupp/libcxx/include",
-		"contrib/libs/cxxsupp/libcxxrt/include",
-		"contrib/libs/clang20-rt/include",
-		"contrib/restricted/boost/dynamic_bitset/include",
-		"contrib/restricted/boost/assert/include",
-		"contrib/restricted/boost/config/include",
-		"contrib/restricted/boost/container_hash/include",
-		"contrib/restricted/boost/describe/include",
-		"contrib/restricted/boost/mp11/include",
-		"contrib/restricted/boost/core/include",
-		"contrib/restricted/boost/throw_exception/include",
-		"contrib/restricted/boost/graph/include",
-		"contrib/restricted/boost/algorithm/include",
-		"contrib/restricted/boost/array/include",
-		"contrib/restricted/boost/bind/include",
-		"contrib/restricted/boost/concept_check/include",
-		"contrib/restricted/boost/preprocessor/include",
-		"contrib/restricted/boost/type_traits/include",
-		"contrib/restricted/boost/exception/include",
-		"contrib/restricted/boost/smart_ptr/include",
-		"contrib/restricted/boost/tuple/include",
-		"contrib/restricted/boost/function/include",
-		"contrib/restricted/boost/iterator/include",
-		"contrib/restricted/boost/detail/include",
-		"contrib/restricted/boost/fusion/include",
-		"contrib/restricted/boost/function_types/include",
-		"contrib/restricted/boost/mpl/include",
-		"contrib/restricted/boost/predef/include",
-		"contrib/restricted/boost/utility/include",
-		"contrib/restricted/boost/io/include",
-		"contrib/restricted/boost/functional/include",
-		"contrib/restricted/boost/typeof/include",
-		"contrib/restricted/boost/optional/include",
-		"contrib/restricted/boost/range/include",
-		"contrib/restricted/boost/conversion/include",
-		"contrib/restricted/boost/regex/include",
-		"contrib/libs/icu/include",
-		"contrib/restricted/boost/unordered/include",
-		"contrib/restricted/boost/container/include",
-		"contrib/restricted/boost/intrusive/include",
-		"contrib/restricted/boost/move/include",
-		"contrib/restricted/boost/any/include",
-		"contrib/restricted/boost/type_index/include",
-		"contrib/restricted/boost/bimap/include",
-		"contrib/restricted/boost/lambda/include",
-		"contrib/restricted/boost/multi_index/include",
-		"contrib/restricted/boost/integer/include",
-		"contrib/restricted/boost/static_assert/include",
-		"contrib/restricted/boost/lexical_cast/include",
-		"contrib/restricted/boost/math/include",
-		"contrib/restricted/boost/random/include",
-		"contrib/restricted/boost/system/include",
-		"contrib/restricted/boost/variant2/include",
-		"contrib/restricted/boost/winapi/include",
-		"contrib/restricted/boost/parameter/include",
-		"contrib/restricted/boost/property_map/include",
-		"contrib/restricted/boost/property_tree/include",
-		"contrib/restricted/boost/serialization/include",
-		"contrib/restricted/boost/spirit/include",
-		"contrib/restricted/boost/endian/include",
-		"contrib/restricted/boost/phoenix/include",
-		"contrib/restricted/boost/proto/include",
-		"contrib/restricted/boost/pool/include",
-		"contrib/restricted/boost/thread/include",
-		"contrib/restricted/boost/atomic/include",
-		"contrib/restricted/boost/align/include",
-		"contrib/restricted/boost/chrono/include",
-		"contrib/restricted/boost/ratio/include",
-		"contrib/restricted/boost/date_time/include",
-		"contrib/restricted/boost/numeric_conversion/include",
-		"contrib/restricted/boost/tokenizer/include",
-		"contrib/restricted/boost/variant/include",
-		"contrib/restricted/boost/tti/include",
-		"contrib/restricted/boost/xpressive/include",
-		"contrib/restricted/boost/icl/include",
-		"contrib/restricted/boost/rational/include",
-		"contrib/restricted/boost/multi_array/include",
-	})
 }
 
 // attachCodegen wires a CodegenRegistry onto an existing scanner the way the

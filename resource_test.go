@@ -4,9 +4,7 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	enchex "encoding/hex"
-	"os"
 	"reflect"
-	"regexp"
 	"strings"
 	"testing"
 )
@@ -253,30 +251,6 @@ func TestChunkPySrcEntriesEmptyReturnsNil(t *testing.T) {
 	if got := chunkPySrcEntries(nil); got != nil {
 		t.Fatalf("chunkPySrcEntries(nil): got %+v, want nil", got)
 	}
-}
-
-func parsePySrcsTopLevel(t *testing.T, path string) []string {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
-	}
-	re := regexp.MustCompile(`(?s)PY_SRCS\(\s*TOP_LEVEL\s*(.*?)\)`)
-	m := re.FindSubmatch(data)
-	if m == nil {
-		t.Fatalf("no PY_SRCS(TOP_LEVEL ...) block in %s", path)
-	}
-	out := make([]string, 0, 600)
-	for _, line := range strings.Split(string(m[1]), "\n") {
-		s := strings.TrimSpace(line)
-		if s == "" || strings.HasPrefix(s, "#") {
-			continue
-		}
-		if strings.HasSuffix(s, ".py") {
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
