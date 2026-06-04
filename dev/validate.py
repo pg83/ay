@@ -69,7 +69,7 @@ CASES = [
     ("sg2_x86_64", "devtools/ymake/bin", "/home/pg/monorepo/yatool/sg2_x86_64.json", False),
     ("sg3", "devtools/ya/bin", "/home/pg/monorepo/yatool/sg3.json", False),
     ("sg4", "util/ut", "/home/pg/monorepo/ydb/sg4.json", False),
-    ("sg5", "ydb/apps/ydbd", "/home/pg/monorepo/ydb/sg5.json", "auto"),
+    ("sg5", "ydb/apps/ydbd", "/home/pg/monorepo/ydb/sg5.json", False),
 ]
 
 

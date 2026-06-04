@@ -54,20 +54,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			srcIn.IncludeInputs = full[1:]
 		}
 
-		// AUTO COPY entries leave both the $(S) source and the $(B) destination
-		// on disk; upstream tracks both as CC inputs (the source is what the
-		// scanner reads — the copy is byte-identical content — but the $(B)
-		// destination is still cache-keyed via the include path because it
-		// physically exists at $(B)/<modpath>/<file>). Closure walks resolve
-		// only the source; pair it with the dst here for AUTO entries of this
-		// module so e.g. mkql_builtins.h's $(B)-copy enters mkql_builtins.cpp.o
-		// inputs alongside the $(S) original.
-		autoExtras := autoCopyDstExtras(srcInstance.Path, d, srcIn.IncludeInputs, srcVFS)
-
-		if len(autoExtras) > 0 {
-			srcIn.IncludeInputs = dedupVFS(srcIn.IncludeInputs, autoExtras)
-		}
-
+		// AUTO COPY companion paths (the $(B) dst's $(S) source) now ride
+		// transitively as non-expanded closure leaves of the dst (registered in
+		// emitCopyFiles, spliced into the dst's cached window by the scanner), so
+		// no per-source companion rescan is needed here.
 		wcExtras := copyProductToolingExtras(codegenRegForInstance(ctx, srcInstance), srcVFS, ctx.scripts)
 
 		if len(wcExtras) > 0 {
@@ -97,7 +87,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		// array directly with no extra allocation. When extras are present
 		// IncludeInputs has been reallocated, so leave NodeInputs nil for EmitCC to
 		// rebuild from inVFS + IncludeInputs.
-		if len(autoExtras) == 0 && len(wcExtras) == 0 && len(flatcExtras) == 0 && len(bisonExtras) == 0 && len(extras) == 0 {
+		if len(wcExtras) == 0 && len(flatcExtras) == 0 && len(bisonExtras) == 0 && len(extras) == 0 {
 			srcIn.NodeInputs = full
 		}
 

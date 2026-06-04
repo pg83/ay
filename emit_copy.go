@@ -107,6 +107,16 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 				info.ClosureLeaves = append([]VFS{srcVFS}, ctx.scripts[copyFsToolsVFS]...)
 			}
 
+			// AUTO COPY (COPY/COPY_FILE … AUTO) materializes both the $(S) source
+			// and the $(B) dst; upstream lists both as inputs of any unit whose
+			// include-closure resolves to the dst. Ride the source as a non-expanded
+			// closure leaf of the dst so it reaches every consumer transitively
+			// through the dst's cached window, replacing the former per-CC-source
+			// companion rescan (autoCopyDstExtras).
+			if entry.Auto && !entry.Text && srcVFS != dstVFS {
+				info.ClosureLeaves = append(info.ClosureLeaves, srcVFS)
+			}
+
 			reg.Register(info)
 		}
 	}
@@ -179,73 +189,6 @@ func resolveModuleSourceVFS(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	}
 
 	return resolveSourceVFS(ctx, instance, srcRel, srcDir)
-}
-
-// autoCopyDstExtras returns AUTO COPY companion paths for entries hit by
-// the include closure. Each AUTO copy leaves both the original $(S) source
-// and the $(B) destination on disk; upstream's REF tracks both. The scanner
-// resolves to whichever path satisfies the #include resolution:
-//   - same-extension copies (e.g. .cpp → .cpp): the scanner finds the source
-//     in $(S); we add the dst.
-//   - extension-changing copies (e.g. .h.txt → .h, codegen_llvm_deps): the
-//     scanner can only find the dst in $(B) (the #include uses the dst's
-//     extension); we add the source.
-//
-// The rootDst arg is the CC compile's own input (the .cpp being compiled,
-// which is itself an AUTO copy dst); we skip it to avoid double-listing it
-// through the .cpp's own #include "X" chain pointing back at its source.
-func autoCopyDstExtras(modulePath string, d *moduleData, closure []VFS, rootDst VFS) []VFS {
-	if d == nil || len(d.copyFiles) == 0 || len(closure) == 0 {
-		return nil
-	}
-
-	srcToDst := make(map[VFS]VFS, len(d.copyFiles))
-	dstToSrc := make(map[VFS]VFS, len(d.copyFiles))
-
-	for _, entry := range d.copyFiles {
-		if !entry.Auto {
-			continue
-		}
-
-		// entry.Src is normally an arcadia-root-relative path
-		// (`yql/.../mkql_builtins.h.txt`). When it starts with `./` or `../`
-		// it's relative to the module dir and needs normalising — otherwise
-		// Source(entry.Src) yields `$(S)/../…` which can't satisfy a closure
-		// match against the canonical source path (e.g. codegen_llvm_deps's
-		// `../codegen_llvm_deps.h.txt` from .../codegen/llvm16 resolves to
-		// yql/essentials/minikql/codegen/codegen_llvm_deps.h.txt).
-		srcRel := entry.Src
-
-		if strings.HasPrefix(srcRel, "./") || strings.HasPrefix(srcRel, "../") {
-			srcRel = filepath.ToSlash(filepath.Clean(modulePath + "/" + srcRel))
-		}
-
-		srcVFS := Source(srcRel)
-		dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
-
-		if dstVFS == srcVFS || dstVFS == rootDst {
-			continue
-		}
-
-		srcToDst[srcVFS] = dstVFS
-		dstToSrc[dstVFS] = srcVFS
-	}
-
-	if len(srcToDst) == 0 {
-		return nil
-	}
-
-	var extras []VFS
-
-	for _, v := range closure {
-		if dst, ok := srcToDst[v]; ok {
-			extras = append(extras, dst)
-		} else if src, ok := dstToSrc[v]; ok {
-			extras = append(extras, src)
-		}
-	}
-
-	return extras
 }
 
 // copyProductToolingExtras returns the fs_tools.py copy tooling (fs_tools.py +
