@@ -69,19 +69,20 @@ type CodegenRegistry struct {
 	// than a bool DenseMap column: the value is always true, only presence matters.
 	splitPrefixSeen idBitSet[STR]
 
-	// bySplit maps a (prefix, suffix) STR pair to its producer info, packed into a
-	// single uint64 key (prefix << 32 | suffix) so a split lookup is one fast64 map
-	// probe instead of a two-level DenseMap-then-inner-map dance. Gated by
-	// splitPrefixSeen so the probe runs only for prefixes known to have one.
-	bySplit map[uint64]*GeneratedFileInfo
+	// bySplit maps a (prefix, suffix) STR pair to its producer info, keyed by
+	// morton(prefix, suffix) — the two ids bit-interleaved so the key's low bits
+	// mix both, letting an identity-hashed IntMap spread the pairs (a shift-packed
+	// key would cluster by suffix). Gated by splitPrefixSeen so the probe runs only
+	// for prefixes known to have an entry.
+	bySplit *IntMap[*GeneratedFileInfo]
 }
 
 func splitKey(prefix, suffix STR) uint64 {
-	return uint64(prefix)<<32 | uint64(suffix)
+	return morton(uint32(prefix), uint32(suffix))
 }
 
 func NewCodegenRegistry() *CodegenRegistry {
-	return &CodegenRegistry{bySplit: make(map[uint64]*GeneratedFileInfo, 1<<14)}
+	return &CodegenRegistry{bySplit: NewIntMap[*GeneratedFileInfo](1 << 14)}
 }
 
 func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
@@ -104,7 +105,7 @@ func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 }
 
 func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) {
-	r.bySplit[splitKey(prefix, suffix)] = info
+	r.bySplit.Put(splitKey(prefix, suffix), info)
 	r.splitPrefixSeen.add(prefix) // mark the prefix so LookupSplit can gate the probe
 }
 
@@ -133,7 +134,11 @@ func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
 		return nil
 	}
 
-	return r.bySplit[splitKey(prefix, suffix)]
+	if info := r.bySplit.Get(splitKey(prefix, suffix)); info != nil {
+		return *info
+	}
+
+	return nil
 }
 
 // AddClosureLeaf appends leaf to node's GeneratedFileInfo.ClosureLeaves. node
