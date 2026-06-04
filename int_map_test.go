@@ -131,6 +131,67 @@ func TestIntMapMatchesBuiltin(t *testing.T) {
 	}
 }
 
+// Cell is the find-or-insert primitive: it returns a writable pointer to the
+// value cell and whether the key existed.
+func TestIntMapCell(t *testing.T) {
+	m := NewIntMap[int](0)
+
+	p, existed := m.Cell(5)
+	if existed {
+		t.Fatalf("Cell(5) existed on empty map")
+	}
+
+	if *p != 0 {
+		t.Fatalf("new cell = %d want 0", *p)
+	}
+
+	*p = 99
+
+	if v, ok := m.Get(5); !ok || v != 99 {
+		t.Fatalf("Get(5) after Cell write = %d,%v want 99,true", v, ok)
+	}
+
+	p2, existed2 := m.Cell(5)
+	if !existed2 || *p2 != 99 {
+		t.Fatalf("Cell(5) again = %d,%v want 99,true", *p2, existed2)
+	}
+
+	*p2 = 100
+
+	if v, _ := m.Get(5); v != 100 {
+		t.Fatalf("update via Cell = %d want 100", v)
+	}
+
+	if m.Len() != 1 {
+		t.Fatalf("Len = %d want 1", m.Len())
+	}
+}
+
+// Cell must keep inserting correctly across the grows it triggers.
+func TestIntMapCellGrows(t *testing.T) {
+	m := NewIntMap[int](0)
+	const n = 50_000
+
+	for i := 1; i <= n; i++ {
+		p, existed := m.Cell(uint64(i) * 0x9E3779B97F4A7C15)
+		if existed {
+			t.Fatalf("Cell reported existing for fresh key %d", i)
+		}
+
+		*p = i
+	}
+
+	if m.Len() != n {
+		t.Fatalf("Len = %d want %d", m.Len(), n)
+	}
+
+	for i := 1; i <= n; i++ {
+		if v, ok := m.Get(uint64(i) * 0x9E3779B97F4A7C15); !ok || v != i {
+			t.Fatalf("Get(key %d) = %d,%v want %d,true", i, v, ok, i)
+		}
+	}
+}
+
 // Pointer value type round-trips (the codegen split map stores *GeneratedFileInfo).
 func TestIntMapPointerValues(t *testing.T) {
 	type box struct{ n int }
