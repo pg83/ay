@@ -51,9 +51,9 @@ func internAppend(s string, lo uint64) STR {
 func internString(s string) STR {
 	h := xxh3.HashString128(s)
 
-	if id, ok := internTable.ids.Get(h.Hi); ok {
-		if internTable.los[id] == h.Lo {
-			return id
+	if p := internTable.ids.Get(h.Hi); p != nil {
+		if internTable.los[*p] == h.Lo {
+			return *p
 		}
 
 		// hi-collision: distinct strings share h.Hi; fall back to an exact
@@ -77,9 +77,9 @@ func internString(s string) STR {
 func internBytes(b []byte) STR {
 	h := xxh3.Hash128(b)
 
-	if id, ok := internTable.ids.Get(h.Hi); ok {
-		if internTable.los[id] == h.Lo {
-			return id
+	if p := internTable.ids.Get(h.Hi); p != nil {
+		if internTable.los[*p] == h.Lo {
+			return *p
 		}
 
 		if oid, ok := internTable.overflow[string(b)]; ok {
@@ -101,8 +101,10 @@ func (id STR) String() string { return internTable.strs[id] }
 func interned(s string) *STR {
 	h := xxh3.HashString128(s)
 
-	if id, ok := internTable.ids.Get(h.Hi); ok {
-		if internTable.los[id] == h.Lo {
+	if p := internTable.ids.Get(h.Hi); p != nil {
+		if internTable.los[*p] == h.Lo {
+			id := *p
+
 			return &id
 		}
 
