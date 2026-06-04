@@ -27,12 +27,12 @@ type STR uint32
 // through the exact string-keyed overflow map, so identity is exact (no 128-bit
 // false-merge) while the hot path pays only an 8-byte-key map probe.
 var internTable = struct {
-	ids      map[uint64]STR // hi 64 bits of xxh3-128(s) → STR
+	ids      *IntMap[STR]   // hi 64 bits of xxh3-128(s) → STR, identity-hashed (hi is already a hash)
 	overflow map[string]STR // exact fallback for the rare hi-collision
 	los      []uint64       // low 64 bits of xxh3-128(s), indexed by STR; also the per-path hash mixed into node UIDs
 	strs     []string
 }{
-	ids:      make(map[uint64]STR, 1<<16),
+	ids:      NewIntMap[STR](1 << 16),
 	overflow: make(map[string]STR),
 	los:      make([]uint64, 1, 1<<16),
 	strs:     make([]string, 1, 1<<16),
@@ -51,7 +51,7 @@ func internAppend(s string, lo uint64) STR {
 func internString(s string) STR {
 	h := xxh3.HashString128(s)
 
-	if id, ok := internTable.ids[h.Hi]; ok {
+	if id, ok := internTable.ids.Get(h.Hi); ok {
 		if internTable.los[id] == h.Lo {
 			return id
 		}
@@ -69,7 +69,7 @@ func internString(s string) STR {
 	}
 
 	id := internAppend(s, h.Lo)
-	internTable.ids[h.Hi] = id
+	internTable.ids.Put(h.Hi, id)
 
 	return id
 }
@@ -77,7 +77,7 @@ func internString(s string) STR {
 func internBytes(b []byte) STR {
 	h := xxh3.Hash128(b)
 
-	if id, ok := internTable.ids[h.Hi]; ok {
+	if id, ok := internTable.ids.Get(h.Hi); ok {
 		if internTable.los[id] == h.Lo {
 			return id
 		}
@@ -93,7 +93,7 @@ func internBytes(b []byte) STR {
 	}
 
 	id := internAppend(string(b), h.Lo)
-	internTable.ids[h.Hi] = id
+	internTable.ids.Put(h.Hi, id)
 
 	return id
 }
@@ -101,7 +101,7 @@ func (id STR) String() string { return internTable.strs[id] }
 func interned(s string) *STR {
 	h := xxh3.HashString128(s)
 
-	if id, ok := internTable.ids[h.Hi]; ok {
+	if id, ok := internTable.ids.Get(h.Hi); ok {
 		if internTable.los[id] == h.Lo {
 			return &id
 		}
