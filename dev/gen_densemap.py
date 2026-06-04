@@ -24,7 +24,9 @@ import subprocess
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-N_MIN, N_MAX = 2, 5
+# Arities to generate. Only DenseMap3 is used in the tree (scanCache); 2/4/5 were
+# generated but unused and removed. Add the arity here and re-run if one is needed.
+ARITIES = [3]
 
 
 def type_params(n):
@@ -182,7 +184,7 @@ def gen_test(n):
 def main():
     written = []
 
-    for n in range(N_MIN, N_MAX + 1):
+    for n in ARITIES:
         for path, body in (
             (os.path.join(REPO_ROOT, f"dense_map_{n}.go"), gen(n)),
             (os.path.join(REPO_ROOT, f"dense_map_{n}_test.go"), gen_test(n)),
