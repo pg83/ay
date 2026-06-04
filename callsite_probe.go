@@ -12,7 +12,19 @@ import (
 
 var callCounts = map[string]int{}
 
-func recordCall(site string) { callCounts[site]++ }
+// callRecording gates recordCall so only the single-threaded `make -G` gen path
+// records. Other handlers (notably `dump`, whose streamGraphFanout runs many
+// goroutines) would otherwise concurrently write callCounts and crash the
+// runtime with "concurrent map writes". cmdMake sets it true.
+var callRecording = false
+
+func recordCall(site string) {
+	if !callRecording {
+		return
+	}
+
+	callCounts[site]++
+}
 
 func dumpCalls() {
 	path := os.Getenv("CALLSITE_OUT")
