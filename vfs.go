@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"unsafe"
 
 	"github.com/zeebo/xxh3"
 )
@@ -20,46 +19,96 @@ const vfsPrefixLen = len("$(S)/")
 
 type STR uint32
 
+// internTable maps strings to dense STR ids without a string-keyed map on the
+// hot path. The lookup map is keyed by the high 64 bits of the xxh3-128 of the
+// string; los holds the low 64 bits per STR, so a hit is verified by a uint64
+// compare rather than a string compare. A hi-collision (distinct strings sharing
+// the hi half — ~1e-8 at this scale) is detected by the lo mismatch and resolved
+// through the exact string-keyed overflow map, so identity is exact (no 128-bit
+// false-merge) while the hot path pays only an 8-byte-key map probe.
 var internTable = struct {
-	ids    map[string]STR
-	strs   []string
-	hashes []uint64
+	ids      map[uint64]STR // hi 64 bits of xxh3-128(s) → STR
+	overflow map[string]STR // exact fallback for the rare hi-collision
+	los      []uint64       // low 64 bits of xxh3-128(s), indexed by STR; also the per-path hash mixed into node UIDs
+	strs     []string
 }{
-	ids:    make(map[string]STR, 1<<16),
-	strs:   make([]string, 1, 1<<16),
-	hashes: make([]uint64, 1, 1<<16),
+	ids:      make(map[uint64]STR, 1<<16),
+	overflow: make(map[string]STR),
+	los:      make([]uint64, 1, 1<<16),
+	strs:     make([]string, 1, 1<<16),
+}
+
+// internAppend allocates the next STR slot for s, recording its lo half (the
+// collision-verify key, reused as the per-path hash in node UIDs).
+func internAppend(s string, lo uint64) STR {
+	id := STR(len(internTable.strs))
+	internTable.strs = append(internTable.strs, s)
+	internTable.los = append(internTable.los, lo)
+
+	return id
 }
 
 func internString(s string) STR {
-	if id, ok := internTable.ids[s]; ok {
+	h := xxh3.HashString128(s)
+
+	if id, ok := internTable.ids[h.Hi]; ok {
+		if internTable.los[id] == h.Lo {
+			return id
+		}
+
+		// hi-collision: distinct strings share h.Hi; fall back to an exact
+		// string-keyed lookup (essentially never populated).
+		if oid, ok := internTable.overflow[s]; ok {
+			return oid
+		}
+
+		id := internAppend(s, h.Lo)
+		internTable.overflow[s] = id
+
 		return id
 	}
 
-	id := STR(len(internTable.strs))
-	internTable.ids[s] = id
-	internTable.strs = append(internTable.strs, s)
-	internTable.hashes = append(internTable.hashes, xxh3.HashString(s))
+	id := internAppend(s, h.Lo)
+	internTable.ids[h.Hi] = id
 
 	return id
 }
 
 func internBytes(b []byte) STR {
-	if id, ok := internTable.ids[unsafe.String(unsafe.SliceData(b), len(b))]; ok {
+	h := xxh3.Hash128(b)
+
+	if id, ok := internTable.ids[h.Hi]; ok {
+		if internTable.los[id] == h.Lo {
+			return id
+		}
+
+		if oid, ok := internTable.overflow[string(b)]; ok {
+			return oid
+		}
+
+		id := internAppend(string(b), h.Lo)
+		internTable.overflow[string(b)] = id
+
 		return id
 	}
 
-	s := string(b)
-	id := STR(len(internTable.strs))
-	internTable.ids[s] = id
-	internTable.strs = append(internTable.strs, s)
-	internTable.hashes = append(internTable.hashes, xxh3.Hash(b))
+	id := internAppend(string(b), h.Lo)
+	internTable.ids[h.Hi] = id
 
 	return id
 }
 func (id STR) String() string { return internTable.strs[id] }
 func interned(s string) *STR {
-	if id, ok := internTable.ids[s]; ok {
-		return &id
+	h := xxh3.HashString128(s)
+
+	if id, ok := internTable.ids[h.Hi]; ok {
+		if internTable.los[id] == h.Lo {
+			return &id
+		}
+
+		if oid, ok := internTable.overflow[s]; ok {
+			return &oid
+		}
 	}
 
 	return nil

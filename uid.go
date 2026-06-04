@@ -234,7 +234,7 @@ func (c *canonBuf) writeVFSSlice(vs []VFS) {
 	c.writeUint32(uint32(len(vs)))
 
 	for _, v := range vs {
-		c.writeUint64(internTable.hashes[v.strID()])
+		c.writeUint64(internTable.los[v.strID()])
 
 		// Mix the content hash of source inputs so editing a $(S) file changes the
 		// node uid. $(B) inputs are produced — their content is captured via the
