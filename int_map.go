@@ -71,25 +71,46 @@ func (m *IntMap[V]) Get(k uint64) (V, bool) {
 	}
 }
 
-// Put inserts or overwrites the value for k.
-func (m *IntMap[V]) Put(k uint64, v V) {
-	for i := k & m.mask; ; i = (i + 1) & m.mask {
-		switch m.data[i].k {
-		case k:
-			m.data[i].v = v
+// Cell returns a pointer to the value cell for k and whether k was already
+// present, inserting a zero-valued entry when absent. It is the single-probe
+// find-or-insert primitive — Go's analogue of C++ `map[k]` returning a writable
+// reference — so the caller initialises or updates the value by writing through
+// the returned pointer. The pointer is valid only for the caller's immediate
+// use: Cell grows the table *before* returning (so the returned cell is never in
+// a soon-to-be-reallocated array), but the next Put/Cell may move it.
+func (m *IntMap[V]) Cell(k uint64) (*V, bool) {
+	for {
+		i := k & m.mask
 
-			return
-		case 0:
-			m.data[i] = intMapEntry[V]{k, v}
-			m.count++
+		for {
+			ek := m.data[i].k
 
-			if m.count >= m.resizeAt {
-				m.grow()
+			if ek == k {
+				return &m.data[i].v, true
 			}
 
-			return
+			if ek == 0 {
+				if m.count < m.resizeAt {
+					m.data[i].k = k
+					m.count++
+
+					return &m.data[i].v, false
+				}
+
+				break // at capacity — grow, then re-probe in the larger table
+			}
+
+			i = (i + 1) & m.mask
 		}
+
+		m.grow()
 	}
+}
+
+// Put inserts or overwrites the value for k.
+func (m *IntMap[V]) Put(k uint64, v V) {
+	cell, _ := m.Cell(k)
+	*cell = v
 }
 
 // grow doubles the table and reinserts the live entries.
