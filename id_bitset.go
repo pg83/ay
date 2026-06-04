@@ -1,13 +1,13 @@
 package main
 
-// idBitSet is a grow-on-demand set of dense ids (any ~uint32 — VFS or STR)
-// backed by a bit vector — one bit per id, indexed by uint32(v). At 1 bit/id it
-// is 32x smaller than an epoch-stamped idSet (which spends a uint32 per id).
-// There is no epoch/reset: the zero value is an empty set, has reports
-// membership, add inserts. It suits set-once, never-cleared usage (e.g. the dfs
-// in-flight guard, the searchTier presence gate) where the dense idSet's per-id
-// word would only waste memory.
-type idBitSet[K ~uint32] struct {
+// idBitSet is a grow-on-demand set of dense ids (any ~uint16/~uint32 — VFS, STR,
+// or a small composite key) backed by a bit vector — one bit per id, indexed by
+// uint32(v). At 1 bit/id it is 32x smaller than an epoch-stamped idSet (which
+// spends a uint32 per id). There is no epoch/reset: the zero value is an empty
+// set, has reports membership, add inserts. It suits set-once, never-cleared
+// usage (e.g. the dfs in-flight guard, the searchTier presence gate) where the
+// dense idSet's per-id word would only waste memory.
+type idBitSet[K ~uint16 | ~uint32] struct {
 	words []uint64
 }
 
