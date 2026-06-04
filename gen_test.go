@@ -3589,7 +3589,7 @@ int copied() { return 0; }
 	}
 }
 
-func TestGen_CopyFileAutoDoesNotPropagateSourceContext(t *testing.T) {
+func TestGen_CopyFileAutoRidesSourceAsNonExpandedLeaf(t *testing.T) {
 	files := map[string]string{}
 
 	mkdirWrite := func(rel, body string) { files[rel] = body }
@@ -3615,11 +3615,16 @@ int copied() { return 0; }
 	if got := vfsStringsT3(cc.Inputs); !reflect.DeepEqual(got[:len(wantInputs)], wantInputs) {
 		t.Fatalf("copied.cpp inputs prefix = %v, want %v", got[:len(wantInputs)], wantInputs)
 	}
-	for _, unexpected := range []string{"$(S)/mod/original.cpp", "$(S)/mod/dep.h"} {
-		for _, in := range vfsStringsT3(cc.Inputs) {
-			if in == unexpected {
-				t.Fatalf("copied.cpp inputs unexpectedly contain %s: %v", unexpected, vfsStringsT3(cc.Inputs))
-			}
+	// AUTO COPY materializes both $(S)/mod/original.cpp and $(B)/mod/copied.cpp;
+	// upstream lists both, so the source rides as a closure leaf of the dst.
+	if !slicesContains(vfsStringsT3(cc.Inputs), "$(S)/mod/original.cpp") {
+		t.Fatalf("copied.cpp inputs should contain the AUTO source $(S)/mod/original.cpp: %v", vfsStringsT3(cc.Inputs))
+	}
+	// The leaf is NON-expanded: original.cpp's own #include "dep.h" must not be
+	// followed, so $(S)/mod/dep.h does not leak into the dst's inputs.
+	for _, in := range vfsStringsT3(cc.Inputs) {
+		if in == "$(S)/mod/dep.h" {
+			t.Fatalf("copied.cpp inputs unexpectedly contain non-expanded-leaf's include $(S)/mod/dep.h: %v", vfsStringsT3(cc.Inputs))
 		}
 	}
 	if len(graphDeps(g, cc)) != 1 {
