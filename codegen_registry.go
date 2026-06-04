@@ -52,28 +52,27 @@ type deferredCF struct {
 }
 
 type CodegenRegistry struct {
-	// byStr maps an interned path STR (full $(B)/… or its rel form) to two columns
-	// keyed by that same STR:
-	//   - column 1: the producer info. The hot Lookup (once per scanned include)
-	//     was the top map in the CPU profile; a DenseMap keyed by STR drops the
-	//     hashing/probing.
-	//   - column 2: a presence flag, keyed by a split-key PREFIX STR (the first
-	//     component rel[:i], not an output path), marking "this prefix occurs as a
-	//     bySplit key prefix". LookupSplit checks it first: a dense array probe
-	//     (idx[prefix]) short-circuits the uint64 bySplit hash-map lookup whenever
-	//     the prefix has no split entry at all — the common case on the hot resolve
-	//     path, where most addincl prefixes hold no codegen outputs.
-	// Closure leaves are NOT a column here — they are a field on GeneratedFileInfo
-	// (per-output data), read via reg.Lookup. The two columns share one idx array
-	// (DenseMap2). strID losslessly encodes the root (the interned string carries
-	// the $(S)/ or $(B)/ prefix), so a $(B) dst and a $(S) source never collide
-	// despite the shared STR key space.
-	byStr DenseMap2[STR, *GeneratedFileInfo, bool]
+	// byStr maps an interned path STR (full $(B)/… or its rel form) to the producer
+	// info. The hot Lookup (once per scanned include) was the top map in the CPU
+	// profile; a DenseMap keyed by STR drops the hashing/probing. strID losslessly
+	// encodes the root (the interned string carries the $(S)/ or $(B)/ prefix), so a
+	// $(B) dst and a $(S) source never collide despite the shared STR key space.
+	// Closure leaves are NOT stored here — they are a field on GeneratedFileInfo
+	// (per-output data), read via reg.Lookup.
+	byStr DenseMap[STR, *GeneratedFileInfo]
+
+	// splitPrefixSeen marks split-key PREFIX STRs (the first component rel[:i], not
+	// an output path) that occur as a bySplit key prefix. LookupSplit checks it
+	// first: a 1-bit-per-STR probe short-circuits the uint64 bySplit hash-map lookup
+	// whenever the prefix has no split entry — the common case on the hot resolve
+	// path, where most addincl prefixes hold no codegen outputs. A bitset rather
+	// than a bool DenseMap column: the value is always true, only presence matters.
+	splitPrefixSeen idBitSet[STR]
 
 	// bySplit maps a (prefix, suffix) STR pair to its producer info, packed into a
 	// single uint64 key (prefix << 32 | suffix) so a split lookup is one fast64 map
-	// probe instead of a two-level DenseMap-then-inner-map dance. Gated by byStr's
-	// column-3 prefix flag so the probe runs only for prefixes known to have one.
+	// probe instead of a two-level DenseMap-then-inner-map dance. Gated by
+	// splitPrefixSeen so the probe runs only for prefixes known to have one.
 	bySplit map[uint64]*GeneratedFileInfo
 }
 
@@ -86,14 +85,14 @@ func NewCodegenRegistry() *CodegenRegistry {
 func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 	full := STR(info.OutputPath.strID())
 
-	if existing, ok := r.byStr.Get1(full); ok {
+	if existing, ok := r.byStr.Get(full); ok {
 		ThrowFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
 			info.OutputPath.String(), existing.ProducerKvP, info.ProducerKvP)
 	}
 
 	rel := info.OutputPath.Rel()
-	r.byStr.Put1(full, info)
-	r.byStr.Put1(internString(rel), info)
+	r.byStr.Put(full, info)
+	r.byStr.Put(internString(rel), info)
 
 	for i := 0; i < len(rel); i++ {
 		if rel[i] == '/' {
@@ -104,11 +103,11 @@ func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 
 func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) {
 	r.bySplit[splitKey(prefix, suffix)] = info
-	r.byStr.Put2(prefix, true) // mark the prefix so LookupSplit can gate the probe
+	r.splitPrefixSeen.add(prefix) // mark the prefix so LookupSplit can gate the probe
 }
 
 func (r *CodegenRegistry) Lookup(path VFS) *GeneratedFileInfo {
-	info, _ := r.byStr.Get1(STR(path.strID()))
+	info, _ := r.byStr.Get(STR(path.strID()))
 
 	return info
 }
@@ -120,7 +119,7 @@ func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
 		return nil
 	}
 
-	info, _ := r.byStr.Get1(*id)
+	info, _ := r.byStr.Get(*id)
 
 	return info
 }
@@ -128,7 +127,7 @@ func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
 func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
 	// Gate the uint64 hash-map probe on the dense prefix flag: most addincl
 	// prefixes hold no codegen split entry, so the array probe short-circuits.
-	if _, ok := r.byStr.Get2(prefix); !ok {
+	if !r.splitPrefixSeen.has(prefix) {
 		return nil
 	}
 
@@ -139,7 +138,7 @@ func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
 // must already be registered (the producer info exists). Cold path (codegen
 // registration); the scanner reads the result on the hot path via ClosureLeaves.
 func (r *CodegenRegistry) AddClosureLeaf(node, leaf VFS) {
-	info, ok := r.byStr.Get1(STR(node.strID()))
+	info, ok := r.byStr.Get(STR(node.strID()))
 
 	if !ok {
 		ThrowFmt("CodegenRegistry: AddClosureLeaf on unregistered path %q", node.String())
@@ -151,7 +150,7 @@ func (r *CodegenRegistry) AddClosureLeaf(node, leaf VFS) {
 // ClosureLeaves returns the non-expanded closure-window members of node (nil
 // when node is not a registered output or has none).
 func (r *CodegenRegistry) ClosureLeaves(node VFS) []VFS {
-	if info, ok := r.byStr.Get1(STR(node.strID())); ok {
+	if info, ok := r.byStr.Get(STR(node.strID())); ok {
 		return info.ClosureLeaves
 	}
 
@@ -159,7 +158,7 @@ func (r *CodegenRegistry) ClosureLeaves(node VFS) []VFS {
 }
 
 func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
-	info, ok := r.byStr.Get1(STR(path.strID()))
+	info, ok := r.byStr.Get(STR(path.strID()))
 
 	if !ok {
 		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.String())
@@ -175,7 +174,7 @@ func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
 }
 
 func (r *CodegenRegistry) SetSourceInputs(path VFS, src []VFS) {
-	info, ok := r.byStr.Get1(STR(path.strID()))
+	info, ok := r.byStr.Get(STR(path.strID()))
 
 	if !ok {
 		ThrowFmt("CodegenRegistry: SetSourceInputs on unregistered path %q", path.String())
