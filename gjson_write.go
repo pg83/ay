@@ -3,7 +3,6 @@ package main
 import (
 	"io"
 	"sort"
-	"strconv"
 	"unicode/utf8"
 )
 
@@ -97,7 +96,7 @@ func appendNode(buf []byte, n *Node, uids *uidVec) []byte {
 	buf = appendVFSSlice(buf, n.Inputs)
 
 	buf = append(buf, `,"kv":`...)
-	buf = appendInterfaceMap(buf, n.KV)
+	buf = appendKV(buf, n.KV)
 
 	buf = append(buf, `,"outputs":`...)
 	buf = appendVFSSlice(buf, n.Outputs)
@@ -106,7 +105,7 @@ func appendNode(buf []byte, n *Node, uids *uidVec) []byte {
 	buf = appendString(buf, n.Platform)
 
 	buf = append(buf, `,"requirements":`...)
-	buf = appendInterfaceMap(buf, n.Requirements)
+	buf = appendRequirements(buf, n.Requirements)
 
 	if n.Sandboxing {
 		buf = append(buf, `,"sandboxing":true`...)
@@ -124,7 +123,7 @@ func appendNode(buf []byte, n *Node, uids *uidVec) []byte {
 	buf = appendStringSlice(buf, n.Tags)
 
 	buf = append(buf, `,"target_properties":`...)
-	buf = appendStringMap(buf, n.TargetProperties)
+	buf = appendTargetProperties(buf, n.TargetProperties)
 
 	buf = append(buf, `,"uid":`...)
 	buf = appendUID(buf, n.UID)
@@ -378,48 +377,6 @@ func appendStringMap(buf []byte, m map[string]string) []byte {
 func appendToolForeignDeps(buf []byte, refs []NodeRef, uids *uidVec) []byte {
 	buf = append(buf, `{"tool":`...)
 	buf = appendRefUIDs(buf, refs, uids)
-
-	return append(buf, '}')
-}
-
-func appendInterfaceMap(buf []byte, m map[string]interface{}) []byte {
-	if len(m) == 0 {
-		return append(buf, '{', '}')
-	}
-
-	keys := make([]string, 0, len(m))
-
-	for k := range m {
-		keys = append(keys, k)
-	}
-
-	sort.Strings(keys)
-
-	buf = append(buf, '{')
-
-	for i, k := range keys {
-		if i > 0 {
-			buf = append(buf, ',')
-		}
-
-		buf = appendString(buf, k)
-		buf = append(buf, ':')
-
-		switch v := m[k].(type) {
-		case string:
-			buf = appendString(buf, v)
-		case float64:
-			buf = strconv.AppendFloat(buf, v, 'f', -1, 64)
-		case bool:
-			if v {
-				buf = append(buf, 't', 'r', 'u', 'e')
-			} else {
-				buf = append(buf, 'f', 'a', 'l', 's', 'e')
-			}
-		default:
-			ThrowFmt("writeGraph: unsupported requirement value type %T for key %q", v, k)
-		}
-	}
 
 	return append(buf, '}')
 }

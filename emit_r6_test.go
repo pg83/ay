@@ -11,12 +11,12 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		Cmds:             []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
-		KV:               map[string]interface{}{"p": "LD"},
+		KV:               KV{P: "LD"},
 		Outputs:          ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 		Platform:         "default-linux-x86_64",
-		Requirements:     map[string]interface{}{},
+		Requirements:     Requirements{},
 		Tags:             []string{"tool"},
-		TargetProperties: map[string]string{"module_dir": "contrib/tools/ragel6"},
+		TargetProperties: TargetProperties{ModuleDir: "contrib/tools/ragel6"},
 	})
 
 	r6Ref, outPath := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, Intern("$(B)/contrib/tools/ragel6/ragel6"), nil, nil, e)
@@ -48,12 +48,12 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		}
 	}
 
-	if got.KV["p"] != "R6" {
-		t.Errorf("kv.p = %q, want R6", got.KV["p"])
+	if got.KV.P != "R6" {
+		t.Errorf("kv.p = %q, want R6", got.KV.P)
 	}
 
-	if got.KV["pc"] != "yellow" {
-		t.Errorf("kv.pc = %q, want yellow", got.KV["pc"])
+	if got.KV.PC != "yellow" {
+		t.Errorf("kv.pc = %q, want yellow", got.KV.PC)
 	}
 
 	if got.Platform != string(PlatformDefaultLinuxAArch64) {
@@ -82,8 +82,8 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		t.Errorf("ForeignDepRefs[tool] = %v, want [%v]", got.ForeignDepRefs, ragel6LD)
 	}
 
-	if got.Requirements["network"] != "restricted" {
-		t.Errorf("requirements.network = %v, want restricted", got.Requirements["network"])
+	if got.Requirements.Network != "restricted" {
+		t.Errorf("requirements.network = %v, want restricted", got.Requirements.Network)
 	}
 }
 
@@ -94,7 +94,7 @@ func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:     map[string]string{},
 		Inputs:  ToVFSSlice([]string{}),
-		KV:      map[string]interface{}{"p": "LD"},
+		KV:      KV{P: "LD"},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/bin/ragel6"}),
 	})
 
@@ -158,7 +158,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:     map[string]string{},
 		Inputs:  ToVFSSlice([]string{}),
-		KV:      map[string]interface{}{"p": "LD"},
+		KV:      KV{P: "LD"},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
@@ -196,7 +196,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:     map[string]string{},
 		Inputs:  ToVFSSlice([]string{}),
-		KV:      map[string]interface{}{"p": "LD"},
+		KV:      KV{P: "LD"},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
@@ -245,7 +245,7 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
 		Env:     map[string]string{},
 		Inputs:  ToVFSSlice([]string{}),
-		KV:      map[string]interface{}{"p": "LD"},
+		KV:      KV{P: "LD"},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 

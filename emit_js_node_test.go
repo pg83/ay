@@ -18,7 +18,7 @@ func TestEmitJS_UsesRequestedPlatformTags(t *testing.T) {
 	if !reflect.DeepEqual(got.Tags, target.Tags) {
 		t.Fatalf("JS tags = %#v, want %#v", got.Tags, target.Tags)
 	}
-	if got.TargetProperties["module_dir"] != "joinmod" {
-		t.Fatalf("JS module_dir = %q, want joinmod", got.TargetProperties["module_dir"])
+	if got.TargetProperties.ModuleDir != "joinmod" {
+		t.Fatalf("JS module_dir = %q, want joinmod", got.TargetProperties.ModuleDir)
 	}
 }

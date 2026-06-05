@@ -76,23 +76,14 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 				Env:     env,
 			},
 		},
-		Env:     env,
-		Inputs:  allInputs,
-		Outputs: []VFS{outVFS},
-		KV: map[string]interface{}{
-			"p":  "AS",
-			"pc": "light-green",
-		},
-		Tags: instance.Platform.Tags,
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
+		Env:              env,
+		Inputs:           allInputs,
+		Outputs:          []VFS{outVFS},
+		KV:               KV{P: "AS", PC: "light-green"},
+		Tags:             instance.Platform.Tags,
+		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 	}
 
 	node.ForeignDepRefs = []NodeRef{yasmLD}

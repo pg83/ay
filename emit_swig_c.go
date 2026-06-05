@@ -66,24 +66,15 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 					},
 				},
 			},
-			DepRefs: []NodeRef{swigRef},
-			Env:     map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"},
-			Inputs:  inputs,
-			Outputs: []VFS{cOutVFS, pyOutVFS},
-			KV: map[string]interface{}{
-				"p":  "SW",
-				"pc": "yellow",
-			},
-			Platform: string(instance.Platform.Target),
-			Requirements: map[string]interface{}{
-				"cpu":     float64(1),
-				"network": "restricted",
-				"ram":     float64(32),
-			},
-			Tags: instance.Platform.Tags,
-			TargetProperties: map[string]string{
-				"module_dir": instance.Path,
-			},
+			DepRefs:          []NodeRef{swigRef},
+			Env:              map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"},
+			Inputs:           inputs,
+			Outputs:          []VFS{cOutVFS, pyOutVFS},
+			KV:               KV{P: "SW", PC: "yellow"},
+			Platform:         string(instance.Platform.Target),
+			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+			Tags:             instance.Platform.Tags,
+			TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		}, instance.Platform))
 
 		if d.pyGeneratedSrcs == nil {

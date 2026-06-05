@@ -4,7 +4,6 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	encHex "encoding/hex"
-	"math"
 	"sort"
 
 	"github.com/zeebo/xxh3"
@@ -49,7 +48,7 @@ func statsUIDPreimage(n *Node, c *canonBuf) string {
 // nested list reprs built in c.strBuf2 and quoted into dst as bytes — equivalent
 // to the old nested pythonStringListRepr but with no intermediate strings.
 func appendStatsPreimage(dst []byte, c *canonBuf, n *Node) []byte {
-	kind, _ := n.KV["p"].(string)
+	kind := n.KV.P
 
 	dst = append(dst, '[')
 	dst = appendPyRepr(dst, n.Platform)
@@ -255,51 +254,6 @@ func (c *canonBuf) writeStringMap(m map[string]string) {
 	}
 }
 
-func (c *canonBuf) writeInterfaceMap(m map[string]interface{}) {
-	c.writeUint32(uint32(len(m)))
-
-	for _, k := range canonKeysOf(m) {
-		c.writeBytes(k)
-
-		switch v := m[k].(type) {
-		case string:
-			c.writeByte('s')
-			c.writeBytes(v)
-		case float64:
-			c.writeByte('f')
-			var fBuf [8]byte
-			binary.LittleEndian.PutUint64(fBuf[:], math.Float64bits(v))
-			c.buf = append(c.buf, fBuf[:]...)
-		case bool:
-			c.writeByte('b')
-			c.writeBool(v)
-		default:
-			ThrowFmt("canonBuf.writeInterfaceMap: unsupported value type %T for key %q", v, k)
-		}
-	}
-}
-
-func (c *canonBuf) writeKVMap(m map[string]interface{}) {
-	c.writeUint32(uint32(len(m)))
-
-	for _, k := range canonKeysOf(m) {
-		c.writeBytes(k)
-
-		switch v := m[k].(type) {
-		case string:
-			c.writeBytes(v)
-		case bool:
-			if v {
-				c.writeBytes("true")
-			} else {
-				c.writeBytes("false")
-			}
-		default:
-			ThrowFmt("canonBuf.writeKVMap: unsupported value type %T for key %q", v, k)
-		}
-	}
-}
-
 func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
 	c.writeUint32(uint32(len(cmds)))
 
@@ -326,13 +280,13 @@ func (c *canonBuf) writeNode(n *Node) {
 	c.writeStringMap(n.Env)
 	c.writeRefUIDs(n.ForeignDepRefs)
 	c.writeVFSSlice(n.Inputs)
-	c.writeKVMap(n.KV)
+	c.writeKV(n.KV)
 	c.writeVFSSlice(n.Outputs)
 	c.writeBytes(n.Platform)
-	c.writeInterfaceMap(n.Requirements)
+	c.writeRequirements(n.Requirements)
 	c.writeBool(n.Sandboxing)
 	c.writeStringSlice(n.Tags)
-	c.writeStringMap(n.TargetProperties)
+	c.writeTargetProperties(n.TargetProperties)
 }
 
 func canonKeysOf[V any](m map[string]V) []string {

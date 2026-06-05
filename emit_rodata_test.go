@@ -25,8 +25,8 @@ func TestEmitRD_NodeShape(t *testing.T) {
 	}
 
 	node := e.nodes[0]
-	if node.KV["p"] != "RD" {
-		t.Fatalf("kv.p = %q, want RD", node.KV["p"])
+	if node.KV.P != "RD" {
+		t.Fatalf("kv.p = %q, want RD", node.KV.P)
 	}
 	if len(node.Cmds) != 2 {
 		t.Fatalf("len(Cmds) = %d, want 2", len(node.Cmds))

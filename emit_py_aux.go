@@ -201,11 +201,11 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 			Env:              env,
 			Inputs:           inputs,
 			Outputs:          []VFS{aux},
-			KV:               map[string]interface{}{"p": "PR", "pc": "yellow", "show_out": "yes"},
+			KV:               KV{P: "PR", PC: "yellow", ShowOut: "yes"},
 			Tags:             instance.Platform.Tags,
-			TargetProperties: map[string]string{"module_dir": instance.Path},
+			TargetProperties: TargetProperties{ModuleDir: instance.Path},
 			Platform:         string(instance.Platform.Target),
-			Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
+			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			DepRefs:          chDeps,
 		}, instance.Platform))
 		bindGeneratedOutput(ctx, instance, aux, ref)

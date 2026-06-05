@@ -95,33 +95,26 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			Env:     env,
 			Inputs:  inputs,
 			Outputs: []VFS{outputPath},
-			KV: map[string]interface{}{
-				"p":  "PY",
-				"pc": "yellow",
-			},
-			Tags: instance.Platform.Tags,
-			TargetProperties: func() map[string]string {
-				tp := map[string]string{"module_dir": instance.Path}
+			KV:      KV{P: "PY", PC: "yellow"},
+			Tags:    instance.Platform.Tags,
+			TargetProperties: func() TargetProperties {
+				tp := TargetProperties{ModuleDir: instance.Path}
 
 				if d.moduleStmt.Name == "PY23_LIBRARY" {
-					tp["module_tag"] = "py3"
+					tp.ModuleTag = "py3"
 				}
 
 				// PY3_BIN_LIB submodule of PY3_PROGRAM bundles pysrc bytecode
 				// under its lowercased MODULE_TAG, matching the surrounding
 				// objcopy/global.a target_properties.
 				if d.programPairedLib {
-					tp["module_tag"] = "py3_bin_lib"
+					tp.ModuleTag = "py3_bin_lib"
 				}
 
 				return tp
 			}(),
-			Platform: string(instance.Platform.Target),
-			Requirements: map[string]interface{}{
-				"cpu":     float64(1),
-				"network": "restricted",
-				"ram":     float64(32),
-			},
+			Platform:     string(instance.Platform.Target),
+			Requirements: Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		}
 
 		var toolRefs []NodeRef
@@ -201,28 +194,19 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 				Cmds: []Cmd{
 					{CmdArgs: pyCmdArgs, Env: env},
 				},
-				Env:     env,
-				Inputs:  []VFS{genPy3RegScriptVFS},
-				Outputs: []VFS{regCppVFS},
-				KV: map[string]interface{}{
-					"p":  "PY",
-					"pc": "yellow",
-				},
-				Tags: []string{},
-				TargetProperties: map[string]string{
-					"module_dir": instance.Path,
-				},
-				Platform: string(pyInstance.Platform.Target),
-				Requirements: map[string]interface{}{
-					"cpu":     float64(1),
-					"network": "restricted",
-					"ram":     float64(32),
-				},
-				DepRefs: []NodeRef{},
+				Env:              env,
+				Inputs:           []VFS{genPy3RegScriptVFS},
+				Outputs:          []VFS{regCppVFS},
+				KV:               KV{P: "PY", PC: "yellow"},
+				Tags:             []string{},
+				TargetProperties: TargetProperties{ModuleDir: instance.Path},
+				Platform:         string(pyInstance.Platform.Target),
+				Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+				DepRefs:          []NodeRef{},
 			}
 
 			if py3Suffix {
-				pyNode.TargetProperties["module_tag"] = "py3"
+				pyNode.TargetProperties.ModuleTag = "py3"
 			}
 
 			pyRef = ctx.emit.Emit(bindNodePlatform(withResources(pyNode, resourcePatternYMakePython3), pyInstance.Platform))

@@ -173,12 +173,10 @@ func EmitEV(
 
 	inputs = append(inputs, transitiveImports...)
 
-	targetProps := map[string]string{
-		"module_dir": moduleDir,
-	}
+	targetProps := TargetProperties{ModuleDir: moduleDir}
 
 	if moduleTag != nil {
-		targetProps["module_tag"] = *moduleTag
+		targetProps.ModuleTag = *moduleTag
 	}
 
 	var depRefs []NodeRef
@@ -213,23 +211,16 @@ func EmitEV(
 				Env:     env,
 			},
 		},
-		Env:     env,
-		Inputs:  inputs,
-		Outputs: []VFS{evCC, evH},
-		KV: map[string]interface{}{
-			"p":  "EV",
-			"pc": "yellow",
-		},
+		Env:              env,
+		Inputs:           inputs,
+		Outputs:          []VFS{evCC, evH},
+		KV:               KV{P: "EV", PC: "yellow"},
 		Tags:             instance.Platform.Tags,
 		TargetProperties: targetProps,
 		Platform:         string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		DepRefs:        depRefs,
-		ForeignDepRefs: foreignDepRefs,
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		DepRefs:          depRefs,
+		ForeignDepRefs:   foreignDepRefs,
 	}
 
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))

@@ -67,25 +67,16 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 				Env:     env,
 			},
 		},
-		Env:     env,
-		Inputs:  inputs,
-		Outputs: []VFS{outVFS},
-		KV: map[string]interface{}{
-			"p":  "R6",
-			"pc": "yellow",
-		},
-		Tags: tags,
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		DepRefs:        []NodeRef{ragel6LD},
-		ForeignDepRefs: []NodeRef{ragel6LD},
+		Env:              env,
+		Inputs:           inputs,
+		Outputs:          []VFS{outVFS},
+		KV:               KV{P: "R6", PC: "yellow"},
+		Tags:             tags,
+		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		DepRefs:          []NodeRef{ragel6LD},
+		ForeignDepRefs:   []NodeRef{ragel6LD},
 	}
 
 	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS

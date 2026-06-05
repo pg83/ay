@@ -149,25 +149,16 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 			{CmdArgs: cmd2, Cwd: "$(B)", Env: envFull},
 			{CmdArgs: cmd3, Env: envVcsOnly},
 		},
-		Env:     envFull,
-		Inputs:  inputs,
-		Outputs: []VFS{Build(instance.Path + "/" + outputName)},
-		KV: map[string]interface{}{
-			"p":        "LD",
-			"pc":       "light-blue",
-			"show_out": "yes",
-		},
-		Tags:         instance.Platform.Tags, // read-only; Platform.Tags is immutable during emit
-		Platform:     string(instance.Platform.Target),
-		Requirements: map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
-		Sandboxing:   true,
-		TargetProperties: map[string]string{
-			"module_dir":  instance.Path,
-			"module_lang": "cpp",
-			"module_tag":  "dll",
-			"module_type": "so",
-		},
-		DepRefs: depRefs,
+		Env:              envFull,
+		Inputs:           inputs,
+		Outputs:          []VFS{Build(instance.Path + "/" + outputName)},
+		KV:               KV{P: "LD", PC: "light-blue", ShowOut: "yes"},
+		Tags:             instance.Platform.Tags, // read-only; Platform.Tags is immutable during emit
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Sandboxing:       true,
+		TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleLang: "cpp", ModuleTag: "dll", ModuleType: "so"},
+		DepRefs:          depRefs,
 	}
 
 	if fixElfRef != (NodeRef(0)) {

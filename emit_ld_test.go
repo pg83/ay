@@ -54,7 +54,7 @@ var archiverGlobalPaths = []string{
 func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	emit := NewBufferedEmitter()
 	mainRef := emit.Emit(&Node{
-		KV: map[string]interface{}{"p": "STUB"},
+		KV: KV{P: "STUB"},
 	})
 	mainPath := "$(B)/some/prog/main.cpp.o"
 
@@ -128,15 +128,12 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Fatalf("synthetic LD plugin markers = %v, want adjacent empty --start-plugins/--end-plugins", got.Cmds[2].CmdArgs)
 	}
 
-	wantKV := map[string]string{"p": "LD", "pc": "light-blue", "show_out": "yes"}
-	for k, v := range wantKV {
-		if got.KV[k] != v {
-			t.Errorf("kv[%q] = %q, want %q", k, got.KV[k], v)
-		}
+	if got.KV.P != "LD" || got.KV.PC != "light-blue" || got.KV.ShowOut != "yes" {
+		t.Errorf("kv = %+v, want {P:LD PC:light-blue ShowOut:yes}", got.KV)
 	}
 
-	if got.TargetProperties["module_type"] != "bin" {
-		t.Errorf("target_properties.module_type = %q, want bin", got.TargetProperties["module_type"])
+	if got.TargetProperties.ModuleType != "bin" {
+		t.Errorf("target_properties.module_type = %q, want bin", got.TargetProperties.ModuleType)
 	}
 
 	if len(got.DepRefs) != 1 {
@@ -147,7 +144,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 	emit := NewBufferedEmitter()
 	mainRef := emit.Emit(&Node{
-		KV: map[string]interface{}{"p": "STUB"},
+		KV: KV{P: "STUB"},
 	})
 	mainPath := "$(B)/some/prog/main.cpp.o"
 
@@ -224,7 +221,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 
 func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 	emit := NewBufferedEmitter()
-	stub := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
+	stub := emit.Emit(&Node{KV: KV{P: "STUB"}})
 
 	ref := EmitLD(
 		hostInstance("some/prog"),
@@ -321,10 +318,10 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 
 func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 	emit := NewBufferedEmitter()
-	mainRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
+	mainRef := emit.Emit(&Node{KV: KV{P: "STUB"}})
 	// A whole-archive lib is one of the peer archives (linked with --whole-archive),
 	// so its ref is in BOTH peerLDRefs and wholeArchiveRefs — the same node.
-	wholeRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
+	wholeRef := emit.Emit(&Node{KV: KV{P: "STUB"}})
 
 	instance := targetInstance("some/prog")
 	wholeArchivePath := "some/prog/libproto_cpp.a"
@@ -391,9 +388,9 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 
 func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T) {
 	emit := NewBufferedEmitter()
-	mainRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
+	mainRef := emit.Emit(&Node{KV: KV{P: "STUB"}})
 	// Same node reached as both a peer archive and a whole-archive lib.
-	peerRef := emit.Emit(&Node{KV: map[string]interface{}{"p": "STUB"}})
+	peerRef := emit.Emit(&Node{KV: KV{P: "STUB"}})
 
 	instance := targetInstance("some/prog")
 	dupPath := Intern("$(B)/some/prog/libproto_cpp.a")

@@ -144,12 +144,10 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			generatedVFS.String(),
 		)
 
-		targetProps := map[string]string{
-			"module_dir": instance.Path,
-		}
+		targetProps := TargetProperties{ModuleDir: instance.Path}
 
 		if !stmt.CMode && !generatedExplicit && py23Variant {
-			targetProps["module_tag"] = "py3"
+			targetProps.ModuleTag = "py3"
 		}
 
 		cyRef := ctx.emit.Emit(bindNodePlatform(withResources(&Node{
@@ -159,19 +157,12 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 					Env:     env,
 				},
 			},
-			Env:     env,
-			Inputs:  toolInputs,
-			Outputs: []VFS{generatedVFS},
-			KV: map[string]interface{}{
-				"p":  "CY",
-				"pc": "yellow",
-			},
-			Platform: string(instance.Platform.Target),
-			Requirements: map[string]interface{}{
-				"cpu":     float64(1),
-				"network": "restricted",
-				"ram":     float64(32),
-			},
+			Env:              env,
+			Inputs:           toolInputs,
+			Outputs:          []VFS{generatedVFS},
+			KV:               KV{P: "CY", PC: "yellow"},
+			Platform:         string(instance.Platform.Target),
+			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			Tags:             instance.Platform.Tags,
 			TargetProperties: targetProps,
 		}, resourcePatternYMakePython3), instance.Platform))

@@ -125,7 +125,7 @@ func isDumpGraphStandaloneLLVMPRNode(node *Node, nodeID int, incoming []int) boo
 		return false
 	}
 
-	if node.TargetProperties["module_dir"] != "contrib/libs/llvm16/include" {
+	if node.TargetProperties.ModuleDir != "contrib/libs/llvm16/include" {
 		return false
 	}
 
@@ -164,7 +164,7 @@ func dumpGraphNodeKind(node *Node) string {
 		return ""
 	}
 
-	kind, _ := node.KV["p"].(string)
+	kind := node.KV.P
 	return kind
 }
 

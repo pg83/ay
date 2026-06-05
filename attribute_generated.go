@@ -23,7 +23,7 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 	}
 
 	for _, node := range e.nodes {
-		kind, _ := node.KV["p"].(string)
+		kind := node.KV.P
 
 		switch kind {
 		case "PR", "CF", "CP":
@@ -35,7 +35,7 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 			continue
 		}
 
-		current := node.TargetProperties["module_dir"]
+		current := node.TargetProperties.ModuleDir
 		var claim string
 
 		for _, out := range node.Outputs {
@@ -60,10 +60,6 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 			continue
 		}
 
-		if node.TargetProperties == nil {
-			node.TargetProperties = map[string]string{}
-		}
-
-		node.TargetProperties["module_dir"] = claim
+		node.TargetProperties.ModuleDir = claim
 	}
 }

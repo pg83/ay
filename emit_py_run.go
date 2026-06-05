@@ -483,26 +483,16 @@ func EmitPYRun(
 	}
 
 	node := &Node{
-		Cmds:   []Cmd{cmd},
-		Env:    env,
-		Inputs: inputs,
-		KV: map[string]interface{}{
-			"p":        "PY",
-			"pc":       "yellow",
-			"show_out": "yes",
-		},
-		Outputs: outputs,
-		Tags:    instance.Platform.Tags,
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		DepRefs: extraDepRefs,
+		Cmds:             []Cmd{cmd},
+		Env:              env,
+		Inputs:           inputs,
+		KV:               KV{P: "PY", PC: "yellow", ShowOut: "yes"},
+		Outputs:          outputs,
+		Tags:             instance.Platform.Tags,
+		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		DepRefs:          extraDepRefs,
 	}
 
 	return prEmitResult{

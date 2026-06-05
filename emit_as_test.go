@@ -98,17 +98,15 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 
 func testYasmLDRef(e *BufferedEmitter) NodeRef {
 	return e.Emit(&Node{
-		Cmds:         []Cmd{{CmdArgs: []string{"yasm"}, Env: map[string]string{}}},
-		Env:          map[string]string{},
-		Inputs:       ToVFSSlice([]string{}),
-		Outputs:      ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
-		KV:           map[string]interface{}{"p": "LD", "pc": "light-cyan"},
-		Tags:         []string{"tool"},
-		Platform:     string(PlatformDefaultLinuxX8664),
-		Requirements: map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
-		TargetProperties: map[string]string{
-			"module_dir": "tools/yasm",
-		},
+		Cmds:             []Cmd{{CmdArgs: []string{"yasm"}, Env: map[string]string{}}},
+		Env:              map[string]string{},
+		Inputs:           ToVFSSlice([]string{}),
+		Outputs:          ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
+		KV:               KV{P: "LD", PC: "light-cyan"},
+		Tags:             []string{"tool"},
+		Platform:         string(PlatformDefaultLinuxX8664),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		TargetProperties: TargetProperties{ModuleDir: "tools/yasm"},
 	})
 }
 
@@ -146,10 +144,7 @@ func TestEmitAS_KV(t *testing.T) {
 	}
 
 	got := e.nodes[0]
-	want := map[string]interface{}{
-		"p":  "AS",
-		"pc": "light-green",
-	}
+	want := KV{P: "AS", PC: "light-green"}
 
 	if !reflect.DeepEqual(got.KV, want) {
 		t.Errorf("kv:\n  got:  %#v\n  want: %#v", got.KV, want)

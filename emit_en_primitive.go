@@ -60,30 +60,21 @@ func EmitEN(
 				Env:     env,
 			},
 		},
-		Env:    env,
-		Inputs: inputs,
-		KV: map[string]interface{}{
-			"p":  "EN",
-			"pc": "yellow",
-		},
-		Outputs:  outputs,
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		Sandboxing: true,
-		Tags:       instance.Platform.Tags,
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
-		DepRefs:        depRefs,
-		ForeignDepRefs: foreignDepRefs,
+		Env:              env,
+		Inputs:           inputs,
+		KV:               KV{P: "EN", PC: "yellow"},
+		Outputs:          outputs,
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Sandboxing:       true,
+		Tags:             instance.Platform.Tags,
+		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		DepRefs:          depRefs,
+		ForeignDepRefs:   foreignDepRefs,
 	}
 
 	if moduleTag != nil {
-		node.TargetProperties["module_tag"] = *moduleTag
+		node.TargetProperties.ModuleTag = *moduleTag
 	}
 
 	return emit.Emit(bindNodePlatform(node, instance.Platform)), outputs

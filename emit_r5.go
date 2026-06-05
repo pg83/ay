@@ -54,26 +54,17 @@ func EmitR5(
 	}
 
 	node := &Node{
-		Cmds:    []Cmd{cmd0, cmd1},
-		Env:     env,
-		Inputs:  inputs,
-		Outputs: []VFS{tmpVFS, cppVFS},
-		KV: map[string]interface{}{
-			"p":  "R5",
-			"pc": "yellow",
-		},
-		Tags: []string{"tool"},
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		DepRefs:        depRefs,
-		ForeignDepRefs: depRefs,
+		Cmds:             []Cmd{cmd0, cmd1},
+		Env:              env,
+		Inputs:           inputs,
+		Outputs:          []VFS{tmpVFS, cppVFS},
+		KV:               KV{P: "R5", PC: "yellow"},
+		Tags:             []string{"tool"},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		DepRefs:          depRefs,
+		ForeignDepRefs:   depRefs,
 	}
 
 	return emit.Emit(bindNodePlatform(node, instance.Platform)), tmpVFS, cppVFS

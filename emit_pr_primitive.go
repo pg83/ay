@@ -150,27 +150,17 @@ func EmitPR(
 	tags := instance.Platform.Tags
 
 	node := &Node{
-		Cmds:    []Cmd{cmd},
-		Env:     env,
-		Inputs:  inputs,
-		Outputs: outputs,
-		KV: map[string]interface{}{
-			"p":        "PR",
-			"pc":       "yellow",
-			"show_out": "yes",
-		},
-		Tags: tags,
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		DepRefs:        depRefs,
-		ForeignDepRefs: foreignDepRefs,
+		Cmds:             []Cmd{cmd},
+		Env:              env,
+		Inputs:           inputs,
+		Outputs:          outputs,
+		KV:               KV{P: "PR", PC: "yellow", ShowOut: "yes"},
+		Tags:             tags,
+		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		DepRefs:          depRefs,
+		ForeignDepRefs:   foreignDepRefs,
 	}
 
 	return prEmitResult{

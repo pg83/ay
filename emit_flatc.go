@@ -221,25 +221,16 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 				Env:     env,
 			},
 		},
-		DepRefs:        depRefs,
-		Env:            env,
-		ForeignDepRefs: foreignDepRefs,
-		Inputs:         inputs,
-		KV: map[string]interface{}{
-			"p":  "FL",
-			"pc": "light-green",
-		},
-		Outputs:  []VFS{headerVFS, cppVFS, bfbsVFS},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		Tags: instance.Platform.Tags,
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
+		DepRefs:          depRefs,
+		Env:              env,
+		ForeignDepRefs:   foreignDepRefs,
+		Inputs:           inputs,
+		KV:               KV{P: "FL", PC: "light-green"},
+		Outputs:          []VFS{headerVFS, cppVFS, bfbsVFS},
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Tags:             instance.Platform.Tags,
+		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 	}
 
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform)), headerVFS, cppVFS, bfbsVFS

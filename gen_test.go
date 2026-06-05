@@ -52,8 +52,8 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 
 	rootLD := nodesByOutput[mainBinPath]
 
-	if rootLD.KV["p"] != "LD" {
-		t.Errorf("root node kv.p = %q, want LD", rootLD.KV["p"])
+	if rootLD.KV.P != "LD" {
+		t.Errorf("root node kv.p = %q, want LD", rootLD.KV.P)
 	}
 
 	if len(rootLD.Cmds) != 4 {
@@ -64,12 +64,12 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 		t.Errorf("result UID = %q, want mainprog LD uid %q", g.Result[0], rootLD.UID)
 	}
 
-	if rootLD.TargetProperties["module_dir"] != "mainprog" {
-		t.Errorf("root LD module_dir = %q, want %q", rootLD.TargetProperties["module_dir"], "mainprog")
+	if rootLD.TargetProperties.ModuleDir != "mainprog" {
+		t.Errorf("root LD module_dir = %q, want %q", rootLD.TargetProperties.ModuleDir, "mainprog")
 	}
 
-	if rootLD.TargetProperties["module_type"] != "bin" {
-		t.Errorf("root LD module_type = %q, want bin", rootLD.TargetProperties["module_type"])
+	if rootLD.TargetProperties.ModuleType != "bin" {
+		t.Errorf("root LD module_type = %q, want bin", rootLD.TargetProperties.ModuleType)
 	}
 
 	mainCC := nodesByOutput[mainCCOut]
@@ -125,12 +125,12 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		t.Fatalf("missing UNITTEST_FOR LD output $(B)/mod/mod")
 	}
 
-	if ld.KV["p"] != "LD" {
-		t.Errorf("root node kv.p = %q, want LD", ld.KV["p"])
+	if ld.KV.P != "LD" {
+		t.Errorf("root node kv.p = %q, want LD", ld.KV.P)
 	}
 
-	if ld.TargetProperties["module_type"] != "bin" {
-		t.Errorf("module_type = %q, want bin", ld.TargetProperties["module_type"])
+	if ld.TargetProperties.ModuleType != "bin" {
+		t.Errorf("module_type = %q, want bin", ld.TargetProperties.ModuleType)
 	}
 
 	deps := make(map[UID]struct{}, len(graphDeps(g, ld)))
@@ -161,8 +161,8 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		t.Fatal("missing own CC $(B)/mod/__/thelib/a_ut.cpp.o")
 	}
 
-	if cc.TargetProperties["module_dir"] != "mod" {
-		t.Fatalf("cc module_dir = %q, want mod", cc.TargetProperties["module_dir"])
+	if cc.TargetProperties.ModuleDir != "mod" {
+		t.Fatalf("cc module_dir = %q, want mod", cc.TargetProperties.ModuleDir)
 	}
 
 	inputs := make([]string, 0, len(cc.Inputs))
@@ -210,7 +210,7 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 	var ld, cc *Node
 
 	for _, n := range g.Graph {
-		switch n.KV["p"] {
+		switch n.KV.P {
 		case "LD":
 			ld = n
 		case "CC":
@@ -350,10 +350,10 @@ END()
 
 	for i, n := range g.Graph {
 		if len(n.Outputs) > 0 {
-			if strings.Contains(n.Outputs[0].String(), "/zlib/") && n.KV["p"] == "AR" {
+			if strings.Contains(n.Outputs[0].String(), "/zlib/") && n.KV.P == "AR" {
 				zlibIdx = i
 			}
-			if strings.Contains(n.Outputs[0].String(), "/alib/") && n.KV["p"] == "AR" {
+			if strings.Contains(n.Outputs[0].String(), "/alib/") && n.KV.P == "AR" {
 				alibIdx = i
 			}
 		}
@@ -389,7 +389,7 @@ END()
 	var ccInputs []string
 
 	for _, n := range g.Graph {
-		if n.KV["p"] == "CC" {
+		if n.KV.P == "CC" {
 			ccInputs = append(ccInputs, vfsStrings(n.Inputs)...)
 		}
 	}
@@ -494,7 +494,7 @@ END()
 
 	counts := make(map[string]int)
 	for _, n := range g.Graph {
-		p, _ := n.KV["p"].(string)
+		p := n.KV.P
 		counts[p]++
 	}
 
@@ -520,7 +520,7 @@ END()
 	)
 
 	for _, n := range g.Graph {
-		if n.KV["p"] != "CC" {
+		if n.KV.P != "CC" {
 			continue
 		}
 
@@ -547,7 +547,7 @@ END()
 	var jsOut string
 
 	for _, n := range g.Graph {
-		if n.KV["p"] == "JS" && len(n.Outputs) > 0 {
+		if n.KV.P == "JS" && len(n.Outputs) > 0 {
 			jsOut = n.Outputs[0].String()
 		}
 	}
@@ -571,7 +571,7 @@ END()
 
 	counts := make(map[string]int)
 	for _, n := range g.Graph {
-		p, _ := n.KV["p"].(string)
+		p := n.KV.P
 		counts[p]++
 	}
 
@@ -586,13 +586,13 @@ END()
 	var globalARs, regularARs int
 
 	for _, n := range g.Graph {
-		if n.KV["p"] != "AR" {
+		if n.KV.P != "AR" {
 			continue
 		}
 
-		if n.TargetProperties["module_tag"] == "global" {
+		if n.TargetProperties.ModuleTag == "global" {
 			globalARs++
-		} else if _, has := n.TargetProperties["module_tag"]; !has {
+		} else if n.TargetProperties.ModuleTag == "" {
 			regularARs++
 		}
 	}
@@ -619,7 +619,7 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	hostNodes := 0
 
 	for _, n := range g.Graph {
-		p, _ := n.KV["p"].(string)
+		p := n.KV.P
 		counts[p]++
 		platforms[n.Platform]++
 
@@ -662,7 +662,7 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	)
 
 	for _, n := range g.Graph {
-		switch n.KV["p"] {
+		switch n.KV.P {
 		case "R6":
 			r6Node = n
 		case "LD":
@@ -712,7 +712,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 
 	var ldNode *Node
 	for _, n := range g.Graph {
-		if n.KV["p"] == "LD" {
+		if n.KV.P == "LD" {
 			ldNode = n
 		}
 	}
@@ -723,7 +723,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 
 	arCount := 0
 	for _, n := range g.Graph {
-		if n.KV["p"] == "AR" {
+		if n.KV.P == "AR" {
 			arCount++
 		}
 	}
@@ -787,7 +787,7 @@ func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
 	var sawMimDir bool
 
 	for _, n := range g.Graph {
-		if n.TargetProperties["module_dir"] == "library/cpp/malloc/mimalloc" {
+		if n.TargetProperties.ModuleDir == "library/cpp/malloc/mimalloc" {
 			sawMimDir = true
 
 			break
@@ -842,7 +842,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	emittedDirs := make(map[string]bool)
 
 	for _, n := range g.Graph {
-		if md, ok := n.TargetProperties["module_dir"]; ok {
+		if md := n.TargetProperties.ModuleDir; md != "" {
 			emittedDirs[md] = true
 		}
 	}
@@ -1024,7 +1024,7 @@ END()
 
 	var lib1AR *Node
 	for _, n := range g.Graph {
-		if n.KV["p"] == "AR" && n.TargetProperties["module_dir"] == "lib1" {
+		if n.KV.P == "AR" && n.TargetProperties.ModuleDir == "lib1" {
 			lib1AR = n
 			break
 		}
@@ -1036,8 +1036,8 @@ END()
 
 	for _, ref := range graphDeps(g, lib1AR) {
 		for _, n := range g.Graph {
-			if n.UID == ref && n.KV["p"] == "AR" {
-				t.Errorf("lib1 AR has AR-typed dep %q (module_dir=%q); reference invariant: zero AR-on-AR deps", ref, n.TargetProperties["module_dir"])
+			if n.UID == ref && n.KV.P == "AR" {
+				t.Errorf("lib1 AR has AR-typed dep %q (module_dir=%q); reference invariant: zero AR-on-AR deps", ref, n.TargetProperties.ModuleDir)
 			}
 		}
 	}
@@ -1058,7 +1058,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
-			if n.KV["p"] == "CC" {
+			if n.KV.P == "CC" {
 				ccNode = n
 			}
 		}
@@ -1067,8 +1067,8 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		if ccNode.TargetProperties["module_dir"] != "mymod" {
-			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "mymod")
+		if ccNode.TargetProperties.ModuleDir != "mymod" {
+			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "mymod")
 		}
 
 		wantInput := "$(S)/other/dir/foo.cpp"
@@ -1098,7 +1098,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
-			if n.KV["p"] == "CC" {
+			if n.KV.P == "CC" {
 				ccNode = n
 			}
 		}
@@ -1107,8 +1107,8 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		if ccNode.TargetProperties["module_dir"] != "basemod" {
-			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "basemod")
+		if ccNode.TargetProperties.ModuleDir != "basemod" {
+			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "basemod")
 		}
 
 		wantInput := "$(S)/basemod/bar.cpp"
@@ -1132,7 +1132,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		var jsNode, ccNode *Node
 
 		for _, n := range g.Graph {
-			switch n.KV["p"] {
+			switch n.KV.P {
 			case "JS":
 				jsNode = n
 			case "CC":
@@ -1148,12 +1148,12 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		if jsNode.TargetProperties["module_dir"] != "jsmod" {
-			t.Errorf("JS module_dir = %q, want %q", jsNode.TargetProperties["module_dir"], "jsmod")
+		if jsNode.TargetProperties.ModuleDir != "jsmod" {
+			t.Errorf("JS module_dir = %q, want %q", jsNode.TargetProperties.ModuleDir, "jsmod")
 		}
 
-		if ccNode.TargetProperties["module_dir"] != "jsmod" {
-			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "jsmod")
+		if ccNode.TargetProperties.ModuleDir != "jsmod" {
+			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "jsmod")
 		}
 	})
 
@@ -1167,7 +1167,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
-			if n.KV["p"] == "CC" {
+			if n.KV.P == "CC" {
 				ccNode = n
 			}
 		}
@@ -1176,8 +1176,8 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		if ccNode.TargetProperties["module_dir"] != "tools/r6" {
-			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "tools/r6")
+		if ccNode.TargetProperties.ModuleDir != "tools/r6" {
+			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "tools/r6")
 		}
 
 		wantInput := "$(S)/tools/r6/main.cpp"
@@ -1201,7 +1201,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		var ccNode *Node
 		for _, n := range g.Graph {
-			if n.KV["p"] == "CC" {
+			if n.KV.P == "CC" {
 				ccNode = n
 				break
 			}
@@ -1210,8 +1210,8 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		if ccNode.TargetProperties["module_dir"] != "tools/r6/bin" {
-			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties["module_dir"], "tools/r6/bin")
+		if ccNode.TargetProperties.ModuleDir != "tools/r6/bin" {
+			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "tools/r6/bin")
 		}
 
 		if got := ccNode.Inputs[0].String(); got != "$(S)/tools/r6/sub/main.cpp" {
@@ -1235,7 +1235,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
-			if n.KV["p"] == "CC" {
+			if n.KV.P == "CC" {
 				ccNode = n
 
 				break
@@ -1277,7 +1277,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
-			if n.KV["p"] == "CC" {
+			if n.KV.P == "CC" {
 				ccNode = n
 
 				break
@@ -1309,7 +1309,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
-			if n.KV["p"] == "CC" {
+			if n.KV.P == "CC" {
 				ccNode = n
 
 				break
@@ -1350,7 +1350,7 @@ func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
 	var jsNode, ccNode *Node
 
 	for _, n := range g.Graph {
-		switch n.KV["p"] {
+		switch n.KV.P {
 		case "JS":
 			jsNode = n
 		case "CC":
@@ -1405,7 +1405,7 @@ END()
 	var r6Node, ccNode *Node
 
 	for _, n := range g.Graph {
-		switch n.KV["p"] {
+		switch n.KV.P {
 		case "R6":
 			r6Node = n
 		case "CC":
@@ -1468,7 +1468,7 @@ END()
 	var consumerAR *Node
 
 	for _, n := range g.Graph {
-		if n.KV["p"] == "AR" && n.TargetProperties["module_dir"] == "lib_consumer" {
+		if n.KV.P == "AR" && n.TargetProperties.ModuleDir == "lib_consumer" {
 			consumerAR = n
 
 			break
@@ -1481,8 +1481,8 @@ END()
 
 	for _, dep := range graphDeps(g, consumerAR) {
 		for _, n := range g.Graph {
-			if n.UID == dep && n.KV["p"] == "AR" {
-				t.Errorf("lib_consumer AR has AR-typed dep (peer module_dir=%q); reference invariant: zero AR-on-AR deps", n.TargetProperties["module_dir"])
+			if n.UID == dep && n.KV.P == "AR" {
+				t.Errorf("lib_consumer AR has AR-typed dep (peer module_dir=%q); reference invariant: zero AR-on-AR deps", n.TargetProperties.ModuleDir)
 			}
 		}
 	}
@@ -1522,9 +1522,9 @@ END()
 	hasNoPercpu := false
 
 	for _, n := range g.Graph {
-		md := n.TargetProperties["module_dir"]
+		md := n.TargetProperties.ModuleDir
 
-		if n.KV["p"] != "AR" {
+		if n.KV.P != "AR" {
 			continue
 		}
 
@@ -1560,7 +1560,7 @@ END()
 	g := testGen(fs, "myprog")
 
 	for _, n := range g.Graph {
-		md := n.TargetProperties["module_dir"]
+		md := n.TargetProperties.ModuleDir
 
 		if md == "library/cpp/malloc/tcmalloc" || md == "contrib/libs/tcmalloc/no_percpu_cache" {
 			t.Errorf("PROGRAM with ALLOCATOR(FAKE) emitted unexpected node module_dir=%q (TCMALLOC_TC default must be suppressed)", md)
@@ -1585,7 +1585,7 @@ END()
 	var ccNode *Node
 
 	for _, n := range g.Graph {
-		if n.KV["p"] == "CC" {
+		if n.KV.P == "CC" {
 			ccNode = n
 
 			break
@@ -1596,7 +1596,7 @@ END()
 		t.Fatal("no CC node emitted")
 	}
 
-	if got := ccNode.TargetProperties["module_dir"]; got != "mylib" {
+	if got := ccNode.TargetProperties.ModuleDir; got != "mylib" {
 		t.Errorf("CC module_dir = %q, want %q (sibling SRCDIR — module_dir stays at instance.Path)", got, "mylib")
 	}
 
@@ -1631,7 +1631,7 @@ END()
 	var ccNode *Node
 
 	for _, n := range g.Graph {
-		if n.KV["p"] == "CC" {
+		if n.KV.P == "CC" {
 			ccNode = n
 
 			break
@@ -1667,7 +1667,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	var consumerCC *Node
 
 	for _, n := range g.Graph {
-		if n.KV["p"] == "CC" {
+		if n.KV.P == "CC" {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.String(), "main.cpp.o") {
 					consumerCC = n
@@ -1735,7 +1735,7 @@ func TestGen_OneLevelAddIncl_DeclOrderPreserved(t *testing.T) {
 
 	var consumerCC *Node
 	for _, n := range g.Graph {
-		if n.KV["p"] == "CC" {
+		if n.KV.P == "CC" {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.String(), "consumer.cpp.o") {
 					consumerCC = n
@@ -1788,7 +1788,7 @@ func TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl(t *testing.T) {
 
 	var consumerCC *Node
 	for _, n := range g.Graph {
-		if n.KV["p"] == "CC" {
+		if n.KV.P == "CC" {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.String(), "consumer.cpp.o") {
 					consumerCC = n
@@ -1849,7 +1849,7 @@ func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
 
 	var consumerCC *Node
 	for _, n := range g.Graph {
-		if n.KV["p"] == "CC" {
+		if n.KV.P == "CC" {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.String(), "consumer.cpp.o") {
 					consumerCC = n
@@ -1901,7 +1901,7 @@ func TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot(t *testing.T) {
 
 	var consumerCC *Node
 	for _, n := range g.Graph {
-		if n.KV["p"] == "CC" {
+		if n.KV.P == "CC" {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.String(), "consumer.cpp.o") {
 					consumerCC = n
@@ -1983,7 +1983,7 @@ func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 	var cc *Node
 
 	for _, n := range g.Graph {
-		if n.KV["p"] == "CC" {
+		if n.KV.P == "CC" {
 			cc = n
 
 			break
@@ -2022,7 +2022,7 @@ func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 	var cc *Node
 
 	for _, n := range g.Graph {
-		if n.KV["p"] == "CC" {
+		if n.KV.P == "CC" {
 			cc = n
 
 			break
@@ -2065,7 +2065,7 @@ func TestGen_SRC_FlatOutputPath(t *testing.T) {
 	var cc *Node
 
 	for _, n := range g.Graph {
-		if n.KV["p"] == "CC" {
+		if n.KV.P == "CC" {
 			cc = n
 
 			break
@@ -2138,7 +2138,7 @@ END()
 	var arNode *Node
 
 	for _, n := range g.Graph {
-		if n.KV["p"] == "AR" {
+		if n.KV.P == "AR" {
 			arNode = n
 
 			break
@@ -2177,7 +2177,7 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	var arNode *Node
 
 	for _, n := range g.Graph {
-		if n.KV["p"] == "AR" && n.TargetProperties["module_dir"] == "consumer" {
+		if n.KV.P == "AR" && n.TargetProperties.ModuleDir == "consumer" {
 			arNode = n
 
 			break
@@ -2220,11 +2220,11 @@ END()
 	)
 
 	for _, n := range g.Graph {
-		if n.KV["p"] != "AR" {
+		if n.KV.P != "AR" {
 			continue
 		}
 
-		if n.TargetProperties["module_tag"] == "global" {
+		if n.TargetProperties.ModuleTag == "global" {
 			globalAR = n
 		} else {
 			regularAR = n
@@ -2294,7 +2294,7 @@ END()
 	var asNode *Node
 
 	for _, n := range g.Graph {
-		if n.KV["p"] == "AS" {
+		if n.KV.P == "AS" {
 			asNode = n
 
 			break
@@ -2494,10 +2494,10 @@ END()
 
 		for _, value := range values {
 			if strings.Contains(value, "${") {
-				t.Fatalf("%s contains unresolved placeholder %q", node.KV["p"], value)
+				t.Fatalf("%s contains unresolved placeholder %q", node.KV.P, value)
 			}
 			if strings.Contains(value, "/$(S)/") || strings.Contains(value, "/$(B)/") {
-				t.Fatalf("%s contains duplicated rooted path %q", node.KV["p"], value)
+				t.Fatalf("%s contains duplicated rooted path %q", node.KV.P, value)
 			}
 		}
 	}
@@ -3036,7 +3036,7 @@ int use() { return 0; }
 	if !slices.Contains(graphDeps(g, en), depPB.UID) {
 		t.Fatalf("enum node deps missing imported pb producer uid %q: %v", depPB.UID, graphDeps(g, en))
 	}
-	if got := en.TargetProperties["module_tag"]; got != "cpp_proto" {
+	if got := en.TargetProperties.ModuleTag; got != "cpp_proto" {
 		t.Fatalf("enum node module_tag = %q, want cpp_proto", got)
 	}
 	if !nodeHasInput(en, "$(B)/protos/dep.pb.h") {
@@ -3349,8 +3349,8 @@ END()
 	g := testGen(newMemFS(files), "udfmod")
 
 	cc := findGraphNodeByOutputs(t, g, "$(B)/udfmod/lib.cpp.udfs.o")
-	if cc.TargetProperties["module_tag"] != "yql_udf_static" {
-		t.Fatalf("cc module_tag = %q, want yql_udf_static", cc.TargetProperties["module_tag"])
+	if cc.TargetProperties.ModuleTag != "yql_udf_static" {
+		t.Fatalf("cc module_tag = %q, want yql_udf_static", cc.TargetProperties.ModuleTag)
 	}
 
 	for _, want := range []string{
@@ -3364,8 +3364,8 @@ END()
 	}
 
 	globalAR := findGraphNodeByOutputs(t, g, "$(B)/udfmod/libmy_udf.global.a")
-	if globalAR.TargetProperties["module_tag"] != "yql_udf_static_global" {
-		t.Fatalf("global AR module_tag = %q, want yql_udf_static_global", globalAR.TargetProperties["module_tag"])
+	if globalAR.TargetProperties.ModuleTag != "yql_udf_static_global" {
+		t.Fatalf("global AR module_tag = %q, want yql_udf_static_global", globalAR.TargetProperties.ModuleTag)
 	}
 
 	for _, n := range g.Graph {
@@ -3485,7 +3485,7 @@ func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 	// Find the LD node.
 	var ldNode *Node
 	for _, n := range g.Graph {
-		if n.KV["p"] == "LD" {
+		if n.KV.P == "LD" {
 			ldNode = n
 			break
 		}
@@ -3795,7 +3795,7 @@ func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 	if cf == nil {
 		t.Fatal("no CF node emitted for genh/config.h")
 	}
-	if got := cf.TargetProperties["module_dir"]; got != "cons" {
+	if got := cf.TargetProperties.ModuleDir; got != "cons" {
 		t.Errorf("config.h module_dir = %q, want %q (consuming module)", got, "cons")
 	}
 
@@ -4919,7 +4919,7 @@ func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 
 	var globalAR *Node
 	for _, n := range g.Graph {
-		if n.KV["p"] == "AR" && n.TargetProperties["module_tag"] == "global" {
+		if n.KV.P == "AR" && n.TargetProperties.ModuleTag == "global" {
 			globalAR = n
 			break
 		}

@@ -218,11 +218,14 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		inputs = append(inputs, mypyBinary)
 	}
 
-	pbKV := map[string]interface{}{"p": "PB", "pc": "yellow"}
+	pbKV := KV{P: "PB", PC: "yellow"}
 	protoBaseName := filepath.Base(protoBase)
 
 	for i, out := range outputs {
-		pbKV["ext_out_name_for_"+filepath.Base(out.Rel())] = protoBaseName + suffixes[i]
+		pbKV.ExtOut = append(pbKV.ExtOut, KVExt{
+			Key: "ext_out_name_for_" + filepath.Base(out.Rel()),
+			Val: protoBaseName + suffixes[i],
+		})
 	}
 
 	pyPBNode := &Node{
@@ -232,9 +235,9 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		Outputs:          outputs,
 		KV:               pbKV,
 		Tags:             instance.Platform.Tags,
-		TargetProperties: map[string]string{"module_dir": instance.Path, "module_tag": "py3_proto"},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
 		Platform:         string(instance.Platform.Target),
-		Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          toolRefs,
 	}
 
@@ -314,11 +317,11 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			Env:              map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)", "PYTHONHASHSEED": "0"},
 			Inputs:           nodeInputs,
 			Outputs:          []VFS{out},
-			KV:               map[string]interface{}{"p": "PY", "pc": "yellow"},
+			KV:               KV{P: "PY", PC: "yellow"},
 			Tags:             instance.Platform.Tags,
-			TargetProperties: map[string]string{"module_dir": instance.Path, "module_tag": "py3_proto"},
+			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
 			Platform:         string(instance.Platform.Target),
-			Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
+			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			DepRefs:          deps,
 		}
 
@@ -506,11 +509,11 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			Env:              env,
 			Inputs:           inputs,
 			Outputs:          []VFS{aux},
-			KV:               map[string]interface{}{"p": "PR", "pc": "yellow", "show_out": "yes"},
+			KV:               KV{P: "PR", PC: "yellow", ShowOut: "yes"},
 			Tags:             instance.Platform.Tags,
-			TargetProperties: map[string]string{"module_dir": instance.Path, "module_tag": "py3_proto"},
+			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
 			Platform:         string(instance.Platform.Target),
-			Requirements:     map[string]interface{}{"cpu": float64(1), "network": "restricted", "ram": float64(32)},
+			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			DepRefs:          deps,
 		}, instance.Platform))
 

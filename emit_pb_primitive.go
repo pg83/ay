@@ -461,12 +461,10 @@ func EmitPB(
 
 	tags := instance.Platform.Tags
 
-	targetProps := map[string]string{
-		"module_dir": moduleDir,
-	}
+	targetProps := TargetProperties{ModuleDir: moduleDir}
 
 	if moduleTag != nil {
-		targetProps["module_tag"] = *moduleTag
+		targetProps.ModuleTag = *moduleTag
 	}
 
 	var depRefs []NodeRef
@@ -521,23 +519,16 @@ func EmitPB(
 				Env:     env,
 			},
 		},
-		Env:     env,
-		Inputs:  inputs,
-		Outputs: outputs,
-		KV: map[string]interface{}{
-			"p":  "PB",
-			"pc": "yellow",
-		},
+		Env:              env,
+		Inputs:           inputs,
+		Outputs:          outputs,
+		KV:               KV{P: "PB", PC: "yellow"},
 		Tags:             tags,
 		TargetProperties: targetProps,
 		Platform:         string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		DepRefs:        depRefs,
-		ForeignDepRefs: foreignDepRefs,
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		DepRefs:          depRefs,
+		ForeignDepRefs:   foreignDepRefs,
 	}
 
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))

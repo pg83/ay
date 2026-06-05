@@ -35,10 +35,10 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform, plan *resourceFe
 		}},
 		Env:              map[string]string{},
 		Inputs:           []VFS{Intern("$(S)/pkg/app/main.cpp")},
-		KV:               map[string]interface{}{"p": "CC"},
+		KV:               KV{P: "CC"},
 		Outputs:          []VFS{Intern("$(B)/pkg/app/main.o")},
-		Requirements:     map[string]interface{}{},
-		TargetProperties: map[string]string{},
+		Requirements:     Requirements{},
+		TargetProperties: TargetProperties{},
 		usesResources:    []string{resourcePatternClangTool},
 	}, target))
 	execResourceEmit.Result(ref)
@@ -101,10 +101,10 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 		}},
 		Env:              map[string]string{},
 		Inputs:           []VFS{Intern("$(S)/pkg/app/main.py")},
-		KV:               map[string]interface{}{"p": "CC"},
+		KV:               KV{P: "CC"},
 		Outputs:          []VFS{Intern("$(B)/pkg/app/main.o")},
-		Requirements:     map[string]interface{}{},
-		TargetProperties: map[string]string{},
+		Requirements:     Requirements{},
+		TargetProperties: TargetProperties{},
 		usesResources:    []string{resourcePatternYMakePython3},
 	}, p))
 	execResourceEmit.Result(execRef)
@@ -135,10 +135,10 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 		}},
 		Env:              map[string]string{},
 		Inputs:           []VFS{Intern("$(S)/pkg/app/main.py")},
-		KV:               map[string]interface{}{"p": "CC"},
+		KV:               KV{P: "CC"},
 		Outputs:          []VFS{Intern("$(B)/pkg/app/main.o")},
-		Requirements:     map[string]interface{}{},
-		TargetProperties: map[string]string{},
+		Requirements:     Requirements{},
+		TargetProperties: TargetProperties{},
 		usesResources:    []string{resourcePatternYMakePython3},
 	}, p))
 	dumpResourceEmit.Result(dumpRef)

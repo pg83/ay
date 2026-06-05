@@ -157,32 +157,20 @@ func EmitLD(
 	}
 
 	n := &Node{
-		Cmds:    cmds,
-		Env:     envFull,
-		Inputs:  inputs,
-		Outputs: outputs,
-		KV: map[string]interface{}{
-			"p":        "LD",
-			"pc":       "light-blue",
-			"show_out": "yes",
-		},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		Tags: instance.Platform.Tags,
-		TargetProperties: map[string]string{
-			"module_dir":  binaryDir,
-			"module_lang": ldModuleLang(instance),
-			"module_type": "bin",
-		},
-		DepRefs: depRefs,
+		Cmds:             cmds,
+		Env:              envFull,
+		Inputs:           inputs,
+		Outputs:          outputs,
+		KV:               KV{P: "LD", PC: "light-blue", ShowOut: "yes"},
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Tags:             instance.Platform.Tags,
+		TargetProperties: TargetProperties{ModuleDir: binaryDir, ModuleLang: ldModuleLang(instance), ModuleType: "bin"},
+		DepRefs:          depRefs,
 	}
 
 	if programModuleTag != "" {
-		n.TargetProperties["module_tag"] = programModuleTag
+		n.TargetProperties.ModuleTag = programModuleTag
 	}
 
 	return emit.Emit(bindNodePlatform(withResources(n, resourcePatternClangTool, resourcePatternLLDRoot, resourcePatternYMakePython3), instance.Platform))

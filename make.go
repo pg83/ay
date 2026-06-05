@@ -564,8 +564,8 @@ func (ex *executor) execute(f *nodeFuture) {
 
 	ex.storeOutputs(n, tmp)
 
-	col, _ := n.KV["pc"].(string)
-	kind, _ := n.KV["p"].(string)
+	col := n.KV.PC
+	kind := n.KV.P
 	display := color(col, kind)
 
 	done := ex.done.Load() + 1

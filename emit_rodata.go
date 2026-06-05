@@ -67,23 +67,14 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 			rodataScriptVFS,
 			srcVFS,
 		},
-		KV: map[string]interface{}{
-			"p":  "RD",
-			"pc": "light-green",
-		},
-		Outputs:  []VFS{asmVFS, outVFS},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		Tags: instance.Platform.Tags,
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
-		DepRefs:        []NodeRef{yasmLD},
-		ForeignDepRefs: []NodeRef{yasmLD},
+		KV:               KV{P: "RD", PC: "light-green"},
+		Outputs:          []VFS{asmVFS, outVFS},
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Tags:             instance.Platform.Tags,
+		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		DepRefs:          []NodeRef{yasmLD},
+		ForeignDepRefs:   []NodeRef{yasmLD},
 	}
 
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform)), asmVFS, outVFS
