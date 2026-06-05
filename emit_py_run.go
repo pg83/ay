@@ -484,7 +484,7 @@ func EmitPYRun(
 		Cmds:             []Cmd{cmd},
 		Env:              env,
 		Inputs:           inputs,
-		KV:               KV{P: "PY", PC: "yellow", ShowOut: "yes"},
+		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: "yes"},
 		Outputs:          outputs,
 		Tags:             instance.Platform.Tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},

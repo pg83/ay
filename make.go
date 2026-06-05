@@ -566,7 +566,7 @@ func (ex *executor) execute(f *nodeFuture) {
 
 	col := n.KV.PC
 	kind := n.KV.P
-	display := color(col, kind)
+	display := color(col.String(), kind.String())
 
 	done := ex.done.Load() + 1
 	pending := ex.pending.Load()
@@ -584,7 +584,7 @@ func (ex *executor) execute(f *nodeFuture) {
 			fmt.Fprintln(os.Stderr, cmdResult.Stderr)
 		}
 
-		ex.stats[kind] = append(ex.stats[kind], dur)
+		ex.stats[kind.String()] = append(ex.stats[kind.String()], dur)
 		fmt.Fprintln(os.Stderr, rec)
 	}
 }

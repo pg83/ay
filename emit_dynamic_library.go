@@ -152,7 +152,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		Env:              envFull,
 		Inputs:           inputs,
 		Outputs:          []VFS{Build(instance.Path + "/" + outputName)},
-		KV:               KV{P: "LD", PC: "light-blue", ShowOut: "yes"},
+		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: "yes"},
 		Tags:             instance.Platform.Tags, // read-only; Platform.Tags is immutable during emit
 		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},

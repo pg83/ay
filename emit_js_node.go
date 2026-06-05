@@ -52,7 +52,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		},
 		Env:              env,
 		Inputs:           inputs,
-		KV:               KV{P: "JS", PC: "magenta"},
+		KV:               KV{P: pkJS, PC: pcMagenta},
 		Outputs:          []VFS{outVFS},
 		Platform:         string(platformID),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},

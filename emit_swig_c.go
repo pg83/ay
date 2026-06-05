@@ -68,7 +68,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 			Env:              EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}},
 			Inputs:           inputs,
 			Outputs:          []VFS{cOutVFS, pyOutVFS},
-			KV:               KV{P: "SW", PC: "yellow"},
+			KV:               KV{P: pkSW, PC: pcYellow},
 			Platform:         string(instance.Platform.Target),
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			Tags:             instance.Platform.Tags,

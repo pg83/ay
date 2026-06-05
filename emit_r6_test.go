@@ -11,7 +11,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		Cmds:             []Cmd{{CmdArgs: []string{"link"}, Env: nil}},
 		Env:              nil,
 		Inputs:           ToVFSSlice([]string{}),
-		KV:               KV{P: "LD"},
+		KV:               KV{P: pkLD},
 		Outputs:          ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 		Platform:         "default-linux-x86_64",
 		Requirements:     Requirements{},
@@ -48,11 +48,11 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		}
 	}
 
-	if got.KV.P != "R6" {
+	if got.KV.P != pkR6 {
 		t.Errorf("kv.p = %q, want R6", got.KV.P)
 	}
 
-	if got.KV.PC != "yellow" {
+	if got.KV.PC != pcYellow {
 		t.Errorf("kv.pc = %q, want yellow", got.KV.PC)
 	}
 
@@ -94,7 +94,7 @@ func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: nil}},
 		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
-		KV:      KV{P: "LD"},
+		KV:      KV{P: pkLD},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/bin/ragel6"}),
 	})
 
@@ -158,7 +158,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: nil}},
 		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
-		KV:      KV{P: "LD"},
+		KV:      KV{P: pkLD},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
@@ -196,7 +196,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: nil}},
 		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
-		KV:      KV{P: "LD"},
+		KV:      KV{P: pkLD},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
@@ -245,7 +245,7 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: nil}},
 		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
-		KV:      KV{P: "LD"},
+		KV:      KV{P: pkLD},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 

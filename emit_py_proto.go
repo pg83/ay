@@ -218,7 +218,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		inputs = append(inputs, mypyBinary)
 	}
 
-	pbKV := KV{P: "PB", PC: "yellow"}
+	pbKV := KV{P: pkPB, PC: pcYellow}
 	protoBaseName := filepath.Base(protoBase)
 
 	for i, out := range outputs {
@@ -317,7 +317,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			Env:              EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "PYTHONHASHSEED", Value: "0"}},
 			Inputs:           nodeInputs,
 			Outputs:          []VFS{out},
-			KV:               KV{P: "PY", PC: "yellow"},
+			KV:               KV{P: pkPY, PC: pcYellow},
 			Tags:             instance.Platform.Tags,
 			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
 			Platform:         string(instance.Platform.Target),
@@ -509,7 +509,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			Env:              env,
 			Inputs:           inputs,
 			Outputs:          []VFS{aux},
-			KV:               KV{P: "PR", PC: "yellow", ShowOut: "yes"},
+			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: "yes"},
 			Tags:             instance.Platform.Tags,
 			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
 			Platform:         string(instance.Platform.Target),

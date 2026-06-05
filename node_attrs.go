@@ -74,13 +74,83 @@ type TargetProperties struct {
 	ModuleType string
 }
 
+// ProcKind is a node's process kind (the kv "p" value): a small fixed set of
+// codes the executor and dumps dispatch on. A uint8 enum (1 byte stored per
+// node, integer compares) expanded to its string only at JSON emit / hash; the
+// zero value pkNone means absent (empty kv has no "p").
+type ProcKind uint8
+
+const (
+	pkNone ProcKind = iota
+	pkAS
+	pkAR
+	pkBI
+	pkBC
+	pkCC
+	pkCF
+	pkCH
+	pkCP
+	pkCY
+	pkEN
+	pkEV
+	pkFETCH
+	pkFL
+	pkJS
+	pkJV
+	pkLD
+	pkOP
+	pkPB
+	pkPR
+	pkPY
+	pkR5
+	pkR6
+	pkRD
+	pkSTUB
+	pkSW
+	pkTEST
+	pkTEST2
+	pkTS
+	pkYC
+)
+
+var procKindStr = [...]string{
+	pkNone: "", pkAS: "AS", pkAR: "AR", pkBI: "BI", pkBC: "BC", pkCC: "CC",
+	pkCF: "CF", pkCH: "CH", pkCP: "CP", pkCY: "CY", pkEN: "EN", pkEV: "EV",
+	pkFETCH: "FETCH", pkFL: "FL", pkJS: "JS", pkJV: "JV", pkLD: "LD", pkOP: "OP",
+	pkPB: "PB", pkPR: "PR", pkPY: "PY", pkR5: "R5", pkR6: "R6", pkRD: "RD",
+	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
+}
+
+func (k ProcKind) String() string { return procKindStr[k] }
+
+// PColor is a node's display colour (the kv "pc" value); same uint8-enum scheme.
+type PColor uint8
+
+const (
+	pcNone PColor = iota
+	pcGreen
+	pcLightBlue
+	pcLightCyan
+	pcLightGreen
+	pcLightRed
+	pcMagenta
+	pcYellow
+)
+
+var pColorStr = [...]string{
+	pcNone: "", pcGreen: "green", pcLightBlue: "light-blue", pcLightCyan: "light-cyan",
+	pcLightGreen: "light-green", pcLightRed: "light-red", pcMagenta: "magenta", pcYellow: "yellow",
+}
+
+func (c PColor) String() string { return pColorStr[c] }
+
 // KV is a node's kv block. P (process kind) is on every node; PC/ShowOut/Name/
 // Path/DisableCache are optional string keys; RunTestNode and the bool form of
 // show_out (ShowOutBool) and the present-but-empty special_runner appear on test
 // nodes; ExtOut carries the dynamic "ext_out_name_for_<file>" entries (py-proto).
 type KV struct {
-	P                string
-	PC               string
+	P                ProcKind
+	PC               PColor
 	ShowOut          string // "yes" string form
 	ShowOutBool      bool   // test nodes emit show_out as bool true (used iff ShowOut == "")
 	Name             string
@@ -204,9 +274,9 @@ func appendKV(buf []byte, kv KV) []byte {
 	}
 
 	o.str("name", kv.Name)
-	o.str("p", kv.P)
+	o.str("p", kv.P.String())
 	o.str("path", kv.Path)
-	o.str("pc", kv.PC)
+	o.str("pc", kv.PC.String())
 	o.boolTrue("run_test_node", kv.RunTestNode)
 
 	if kv.ShowOut != "" {
@@ -251,8 +321,8 @@ func (c *canonBuf) writeTargetProperties(t TargetProperties) {
 }
 
 func (c *canonBuf) writeKV(kv KV) {
-	c.writeBytes(kv.P)
-	c.writeBytes(kv.PC)
+	c.writeByte(byte(kv.P))
+	c.writeByte(byte(kv.PC))
 	c.writeBytes(kv.ShowOut)
 	c.writeBool(kv.ShowOutBool)
 	c.writeBytes(kv.Name)

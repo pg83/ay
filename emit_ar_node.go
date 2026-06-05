@@ -72,7 +72,7 @@ func emitARNode(
 		},
 		Env:              topEnv,
 		Inputs:           inputs,
-		KV:               KV{P: "AR", PC: "light-red", ShowOut: "yes"},
+		KV:               KV{P: pkAR, PC: pcLightRed, ShowOut: "yes"},
 		Outputs:          []VFS{archivePath},
 		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},

@@ -152,7 +152,7 @@ func EmitPR(
 		Env:              env,
 		Inputs:           inputs,
 		Outputs:          outputs,
-		KV:               KV{P: "PR", PC: "yellow", ShowOut: "yes"},
+		KV:               KV{P: pkPR, PC: pcYellow, ShowOut: "yes"},
 		Tags:             tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Platform:         string(instance.Platform.Target),

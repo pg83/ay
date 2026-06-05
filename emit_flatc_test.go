@@ -37,7 +37,7 @@ func TestEmitFL_NodeShape(t *testing.T) {
 	}
 
 	node := e.nodes[0]
-	if node.KV.P != "FL" {
+	if node.KV.P != pkFL {
 		t.Fatalf("kv.p = %q, want FL", node.KV.P)
 	}
 	if got := node.Cmds[0].CmdArgs; !contains(got, "--scoped-enums") {

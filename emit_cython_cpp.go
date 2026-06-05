@@ -158,7 +158,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			Env:              env,
 			Inputs:           toolInputs,
 			Outputs:          []VFS{generatedVFS},
-			KV:               KV{P: "CY", PC: "yellow"},
+			KV:               KV{P: pkCY, PC: pcYellow},
 			Platform:         string(instance.Platform.Target),
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			Tags:             instance.Platform.Tags,

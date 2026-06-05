@@ -66,7 +66,7 @@ func expectedTestCtxNode() *Node {
 		}},
 		Env:              nil,
 		Inputs:           []VFS{Intern("$(S)/build/scripts/append_file.py")},
-		KV:               KV{P: "CP", PC: "light-blue"},
+		KV:               KV{P: pkCP, PC: pcLightBlue},
 		Outputs:          []VFS{Intern("$(B)/common_test.context")},
 		Platform:         "default-linux-x86_64",
 		Requirements:     Requirements{Network: "restricted"},
@@ -135,7 +135,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 		}},
 		Env:    expectedTestEnv("unittest"),
 		Inputs: []VFS{Intern("$(S)/util/ut")},
-		KV:     KV{P: "TS", Path: "util/ut/unittest", PC: "yellow", RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true},
+		KV:     KV{P: pkTS, Path: "util/ut/unittest", PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true},
 		Outputs: []VFS{
 			Intern("$(B)/util/ut/test-results/unittest/meta.json"),
 			Intern("$(B)/util/ut/test-results/unittest/ytest.report.trace"),
@@ -215,7 +215,7 @@ func expectedClangFormatNode() *Node {
 			Intern("$(S)/util/ysafeptr_ut.cpp"),
 			Intern("$(S)/util/ysaveload_ut.cpp"),
 		},
-		KV: KV{P: "TS", Path: "util/ut/clang_format", PC: "yellow", RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true},
+		KV: KV{P: pkTS, Path: "util/ut/clang_format", PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true},
 		Outputs: []VFS{
 			Intern("$(B)/util/ut/test-results/clang_format/meta.json"),
 			Intern("$(B)/util/ut/test-results/clang_format/ytest.report.trace"),
@@ -332,7 +332,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 
 		kvPath := node.KV.Path
 		switch {
-		case node.KV.P == "LD":
+		case node.KV.P == pkLD:
 			ldNode = node
 		case kvPath == "util/ut/unittest":
 			unittestNode = node

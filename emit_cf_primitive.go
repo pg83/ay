@@ -40,7 +40,7 @@ func EmitCF(
 		},
 		Env:     env,
 		Inputs:  inputs,
-		KV:      KV{P: "CF", PC: "yellow"},
+		KV:      KV{P: pkCF, PC: pcYellow},
 		Outputs: []VFS{outVFS},
 		Tags:    []string{},
 		TargetProperties: func() TargetProperties {
