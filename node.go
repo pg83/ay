@@ -1,27 +1,27 @@
 package main
 
 type Cmd struct {
-	CmdArgs []string          `json:"cmd_args"`
-	Cwd     string            `json:"cwd,omitempty"`
-	Env     map[string]string `json:"env,omitempty"`
-	Stdout  string            `json:"stdout,omitempty"`
+	CmdArgs []string `json:"cmd_args"`
+	Cwd     string   `json:"cwd,omitempty"`
+	Env     EnvVars  `json:"env,omitempty"`
+	Stdout  string   `json:"stdout,omitempty"`
 }
 
 type Node struct {
-	Cache            *bool             `json:"cache,omitempty"`
-	Cmds             []Cmd             `json:"cmds"`
-	Env              map[string]string `json:"env"`
-	Inputs           []VFS             `json:"inputs"`
-	KV               KV                `json:"kv"`
-	Outputs          []VFS             `json:"outputs"`
-	Platform         string            `json:"platform"`
-	Requirements     Requirements      `json:"requirements"`
-	Sandboxing       bool              `json:"sandboxing"`
-	SelfUID          UID               `json:"self_uid"`
-	StatsUID         string            `json:"stats_uid"`
-	Tags             []string          `json:"tags"`
-	TargetProperties TargetProperties  `json:"target_properties"`
-	UID              UID               `json:"uid"`
+	Cache            *bool            `json:"cache,omitempty"`
+	Cmds             []Cmd            `json:"cmds"`
+	Env              EnvVars          `json:"env"`
+	Inputs           []VFS            `json:"inputs"`
+	KV               KV               `json:"kv"`
+	Outputs          []VFS            `json:"outputs"`
+	Platform         string           `json:"platform"`
+	Requirements     Requirements     `json:"requirements"`
+	Sandboxing       bool             `json:"sandboxing"`
+	SelfUID          UID              `json:"self_uid"`
+	StatsUID         string           `json:"stats_uid"`
+	Tags             []string         `json:"tags"`
+	TargetProperties TargetProperties `json:"target_properties"`
+	UID              UID              `json:"uid"`
 
 	StatsTags []string `json:"-"`
 

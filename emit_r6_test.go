@@ -8,8 +8,8 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	ragel6LD := e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
-		Env:              map[string]string{},
+		Cmds:             []Cmd{{CmdArgs: []string{"link"}, Env: nil}},
+		Env:              nil,
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               KV{P: "LD"},
 		Outputs:          ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
@@ -91,8 +91,8 @@ func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	ragel6LD := e.Emit(&Node{
-		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
-		Env:     map[string]string{},
+		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: nil}},
+		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
 		KV:      KV{P: "LD"},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/bin/ragel6"}),
@@ -155,8 +155,8 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	ragel6LD := e.Emit(&Node{
-		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
-		Env:     map[string]string{},
+		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: nil}},
+		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
 		KV:      KV{P: "LD"},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
@@ -193,8 +193,8 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	ragel6LD := e.Emit(&Node{
-		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
-		Env:     map[string]string{},
+		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: nil}},
+		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
 		KV:      KV{P: "LD"},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
@@ -242,8 +242,8 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	ragel6LD := e.Emit(&Node{
-		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: map[string]string{}}},
-		Env:     map[string]string{},
+		Cmds:    []Cmd{{CmdArgs: []string{"link"}, Env: nil}},
+		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
 		KV:      KV{P: "LD"},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),

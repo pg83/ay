@@ -6,12 +6,50 @@ import (
 	"strconv"
 )
 
-// Typed replacements for the former map-valued Node fields. Env stays a
-// map[string]string (its keys are genuinely dynamic — RUN_PROGRAM/CONFIGURE_FILE
-// env pairs). These structs drop the per-node map iteration, key sort and
-// interface{} boxing the canonical-hash and JSON-write paths paid when KV,
-// Requirements and TargetProperties were string-keyed maps. The fields and their
-// types mirror exactly what upstream ymake emits (see the sg* reference graphs).
+// Typed replacements for the former map-valued Node fields. These drop the
+// per-node map iteration, key sort and interface{} boxing the canonical-hash and
+// JSON-write paths paid when KV, Requirements, TargetProperties and Env were
+// string-keyed maps. The fields and their types mirror exactly what upstream
+// ymake emits (see the sg* reference graphs).
+
+// EnvVar is one environment binding. Node.Env and Cmd.Env are ordered []EnvVar
+// rather than maps: nothing looks them up by key (they are only iterated — to
+// serialize, to hash and to set the child process env), so a slice is cheaper to
+// store (nil for the common empty case, no per-node map alloc) and to write (no
+// key sort). The gate re-parses the env JSON object into a map before hashing, so
+// the emission order is free.
+type EnvVar struct {
+	Name  string
+	Value string
+}
+
+// EnvVars is the ordered binding list for Node.Env / Cmd.Env.
+type EnvVars []EnvVar
+
+func appendEnv(buf []byte, env EnvVars) []byte {
+	buf = append(buf, '{')
+
+	for i, e := range env {
+		if i > 0 {
+			buf = append(buf, ',')
+		}
+
+		buf = appendString(buf, e.Name)
+		buf = append(buf, ':')
+		buf = appendString(buf, e.Value)
+	}
+
+	return append(buf, '}')
+}
+
+func (c *canonBuf) writeEnv(env EnvVars) {
+	c.writeUint32(uint32(len(env)))
+
+	for _, e := range env {
+		c.writeBytes(e.Name)
+		c.writeBytes(e.Value)
+	}
+}
 
 // Requirements is a node's scheduler resource set. The zero value (no flags set)
 // is the empty set, serialized as {}.
@@ -188,6 +226,7 @@ func appendKV(buf []byte, kv KV) []byte {
 // writer (appendKV/appendRequirements/appendTargetProperties) — so json.Marshal
 // of a Node emits {} for the empty case and the sorted keys otherwise, instead
 // of the struct's Go field names.
+func (e EnvVars) MarshalJSON() ([]byte, error)          { return appendEnv(nil, e), nil }
 func (kv KV) MarshalJSON() ([]byte, error)              { return appendKV(nil, kv), nil }
 func (r Requirements) MarshalJSON() ([]byte, error)     { return appendRequirements(nil, r), nil }
 func (t TargetProperties) MarshalJSON() ([]byte, error) { return appendTargetProperties(nil, t), nil }

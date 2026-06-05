@@ -114,9 +114,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 
 		registerGeneratedParsedOutput(ctx, instance, "CY", generatedVFS, parsed)
 
-		env := map[string]string{
-			"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		}
+		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 		cmdArgs := []string{
 			instance.Platform.Tools.Python3,

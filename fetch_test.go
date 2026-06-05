@@ -31,9 +31,9 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform, plan *resourceFe
 	ref := execResourceEmit.Emit(bindNodePlatform(&Node{
 		Cmds: []Cmd{{
 			CmdArgs: []string{clangTool, "-c", "$(S)/pkg/app/main.cpp", "-o", "$(B)/pkg/app/main.o"},
-			Env:     map[string]string{},
+			Env:     nil,
 		}},
-		Env:              map[string]string{},
+		Env:              nil,
 		Inputs:           []VFS{Intern("$(S)/pkg/app/main.cpp")},
 		KV:               KV{P: "CC"},
 		Outputs:          []VFS{Intern("$(B)/pkg/app/main.o")},
@@ -97,9 +97,9 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 	execRef := execResourceEmit.Emit(bindNodePlatform(&Node{
 		Cmds: []Cmd{{
 			CmdArgs: []string{"$(YMAKE_PYTHON3)/bin/python3", "$(S)/pkg/app/main.py"},
-			Env:     map[string]string{},
+			Env:     nil,
 		}},
-		Env:              map[string]string{},
+		Env:              nil,
 		Inputs:           []VFS{Intern("$(S)/pkg/app/main.py")},
 		KV:               KV{P: "CC"},
 		Outputs:          []VFS{Intern("$(B)/pkg/app/main.o")},
@@ -131,9 +131,9 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 	dumpRef := dumpResourceEmit.Emit(bindNodePlatform(&Node{
 		Cmds: []Cmd{{
 			CmdArgs: []string{"$(YMAKE_PYTHON3)/bin/python3", "$(S)/pkg/app/main.py"},
-			Env:     map[string]string{},
+			Env:     nil,
 		}},
-		Env:              map[string]string{},
+		Env:              nil,
 		Inputs:           []VFS{Intern("$(S)/pkg/app/main.py")},
 		KV:               KV{P: "CC"},
 		Outputs:          []VFS{Intern("$(B)/pkg/app/main.o")},

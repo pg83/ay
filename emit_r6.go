@@ -50,9 +50,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		inVFS.String(),
 	)
 
-	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-	}
+	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	inputs := make([]VFS, 0, 2+len(closure))
 	inputs = append(inputs, canonicalBinary, inVFS)

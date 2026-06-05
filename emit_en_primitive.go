@@ -30,9 +30,7 @@ func EmitEN(
 		outputs = append(outputs, serializedHVFS)
 	}
 
-	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-	}
+	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	inputs := make([]VFS, 0, 2+len(headerIncludeClosure))
 	inputs = append(inputs, enumParserBin)

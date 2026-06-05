@@ -245,22 +245,13 @@ func (c *canonBuf) writeVFSSlice(vs []VFS) {
 	}
 }
 
-func (c *canonBuf) writeStringMap(m map[string]string) {
-	c.writeUint32(uint32(len(m)))
-
-	for _, k := range canonKeysOf(m) {
-		c.writeBytes(k)
-		c.writeBytes(m[k])
-	}
-}
-
 func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
 	c.writeUint32(uint32(len(cmds)))
 
 	for _, cm := range cmds {
 		c.writeStringSlice(cm.CmdArgs)
 		c.writeBytes(cm.Cwd)
-		c.writeStringMap(cm.Env)
+		c.writeEnv(cm.Env)
 		c.writeBytes(cm.Stdout)
 	}
 }
@@ -277,7 +268,7 @@ func (c *canonBuf) writeNode(n *Node) {
 
 	c.writeCmdSlice(n.Cmds)
 	c.writeRefUIDs(n.DepRefs)
-	c.writeStringMap(n.Env)
+	c.writeEnv(n.Env)
 	c.writeRefUIDs(n.ForeignDepRefs)
 	c.writeVFSSlice(n.Inputs)
 	c.writeKV(n.KV)
@@ -287,16 +278,4 @@ func (c *canonBuf) writeNode(n *Node) {
 	c.writeBool(n.Sandboxing)
 	c.writeStringSlice(n.Tags)
 	c.writeTargetProperties(n.TargetProperties)
-}
-
-func canonKeysOf[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-
-	for k := range m {
-		keys = append(keys, k)
-	}
-
-	sort.Strings(keys)
-
-	return keys
 }

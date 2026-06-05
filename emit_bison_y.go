@@ -110,14 +110,8 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	registerGeneratedParsedOutput(ctx, instance, "YC", generatedVFS, generatedParsed)
 
-	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		"BISON_PKGDATADIR":       "$(S)/contrib/tools/bison/data",
-		"M4":                     m4Bin,
-	}
-	preprocessEnv := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-	}
+	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "BISON_PKGDATADIR", Value: "$(S)/contrib/tools/bison/data"}, {Name: "M4", Value: m4Bin}}
+	preprocessEnv := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	cmds := []Cmd{
 		{

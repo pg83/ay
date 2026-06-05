@@ -713,12 +713,12 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 
 		env := os.Environ()
 
-		for k, v := range n.Env {
-			env = append(env, k+"="+mountString(v, ex.srcRoot, tmp, ex.resourceMounts))
+		for _, e := range n.Env {
+			env = append(env, e.Name+"="+mountString(e.Value, ex.srcRoot, tmp, ex.resourceMounts))
 		}
 
-		for k, v := range c.Env {
-			env = append(env, k+"="+mountString(v, ex.srcRoot, tmp, ex.resourceMounts))
+		for _, e := range c.Env {
+			env = append(env, e.Name+"="+mountString(e.Value, ex.srcRoot, tmp, ex.resourceMounts))
 		}
 
 		cmd := &exec.Cmd{

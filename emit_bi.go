@@ -20,9 +20,7 @@ func EmitBI(
 	outVFS := Build(outPrefix + outputHeader)
 	argsFile := argsFileVFS.String()
 
-	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-	}
+	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	cmd0Args := []string{
 		instance.Platform.Tools.Python3,

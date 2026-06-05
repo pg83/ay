@@ -62,8 +62,8 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	objRefs := []NodeRef{e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
-		Env:              map[string]string{},
+		Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: nil}},
+		Env:              nil,
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{"$(B)/build/cow/on/lib.c.o"}),
@@ -176,8 +176,8 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
-			Env:              map[string]string{},
+			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: nil}},
+			Env:              nil,
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               KV{},
 			Outputs:          []VFS{out},
@@ -226,8 +226,8 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
-			Env:              map[string]string{},
+			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: nil}},
+			Env:              nil,
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               KV{},
 			Outputs:          []VFS{out},
@@ -263,8 +263,8 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
-			Env:              map[string]string{},
+			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: nil}},
+			Env:              nil,
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               KV{},
 			Outputs:          []VFS{out},
@@ -303,8 +303,8 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
-			Env:              map[string]string{},
+			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: nil}},
+			Env:              nil,
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               KV{},
 			Outputs:          []VFS{out},

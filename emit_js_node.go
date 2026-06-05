@@ -32,9 +32,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	cmdArgs = append(cmdArgs, "--ya-end-command-file")
 
-	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-	}
+	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	inputs := make([]VFS, 0, 2+len(sources)+len(closure))
 	inputs = append(inputs, scripts[joinSrcs]...)

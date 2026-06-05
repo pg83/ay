@@ -402,17 +402,15 @@ func EmitPYRun(
 	extraDepRefs []NodeRef,
 	emit Emitter,
 ) prEmitResult {
-	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-	}
+	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	for _, kv := range stmt.EnvPairs {
 		parts := strings.SplitN(kv, "=", 2)
 
 		if len(parts) == 2 {
-			env[parts[0]] = parts[1]
+			env = append(env, EnvVar{Name: parts[0], Value: parts[1]})
 		} else {
-			env[kv] = ""
+			env = append(env, EnvVar{Name: kv})
 		}
 	}
 

@@ -2,7 +2,6 @@ package main
 
 import (
 	"io"
-	"sort"
 	"unicode/utf8"
 )
 
@@ -81,7 +80,7 @@ func appendNode(buf []byte, n *Node, uids *uidVec) []byte {
 	buf = appendRefUIDs(buf, n.DepRefs, uids)
 
 	buf = append(buf, `,"env":`...)
-	buf = appendStringMap(buf, n.Env)
+	buf = appendEnv(buf, n.Env)
 
 	if len(n.ForeignDepRefs) > 0 {
 		buf = append(buf, `,"foreign_deps":`...)
@@ -149,7 +148,7 @@ func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
 
 		if len(c.Env) > 0 {
 			buf = append(buf, `,"env":`...)
-			buf = appendStringMap(buf, c.Env)
+			buf = appendEnv(buf, c.Env)
 		}
 
 		if c.Stdout != "" {
@@ -342,34 +341,6 @@ func appendVFS(buf []byte, v VFS) []byte {
 	out = append(out, '"')
 	vfsEscapedJSON[id] = out
 	return append(buf, out...)
-}
-
-func appendStringMap(buf []byte, m map[string]string) []byte {
-	if len(m) == 0 {
-		return append(buf, '{', '}')
-	}
-
-	keys := make([]string, 0, len(m))
-
-	for k := range m {
-		keys = append(keys, k)
-	}
-
-	sort.Strings(keys)
-
-	buf = append(buf, '{')
-
-	for i, k := range keys {
-		if i > 0 {
-			buf = append(buf, ',')
-		}
-
-		buf = appendString(buf, k)
-		buf = append(buf, ':')
-		buf = appendString(buf, m[k])
-	}
-
-	return append(buf, '}')
 }
 
 // appendToolForeignDeps writes the foreign-dep slice as the single-key object
