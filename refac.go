@@ -43,10 +43,6 @@ func cmdRefac(args []string) int {
 		return refacConsts(args[1:])
 	case "lint":
 		return refacLint(args[1:])
-	case "mapinstr":
-		return refacMapInstr(args[1:])
-	case "callsite":
-		return refacCallSite(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown refac subcommand: %s\n", args[0])
 		return 2

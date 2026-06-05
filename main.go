@@ -38,6 +38,8 @@ func dispatch(argv []string) {
 		os.Exit(cmdPerf(argv[2:]))
 	case "refac":
 		os.Exit(cmdRefac(argv[2:]))
+	case "probe":
+		os.Exit(cmdProbe(argv[2:]))
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", argv[1])
 		printUsage(os.Stderr)

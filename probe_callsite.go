@@ -11,14 +11,14 @@ import (
 	"strings"
 )
 
-// refacCallSite instruments every top-level function: it splices a
+// probeCallSite instruments every top-level function: it splices a
 // recordCall("file:line") call as the first statement of each func body. Run the
 // whole gate with the instrumented binary (CALLSITE_OUT=<file>) and union the
 // recorded sites; any site in callsites_all.txt NOT in the union is reachable
 // code the gate never exercises — refactor garbage. Throwaway: apply, measure,
-// revert. callsite_probe.go provides recordCall/dumpCalls; dumpCalls must be
-// wired into the cmd exit path (see the make/dump cmds).
-func refacCallSite(args []string) int {
+// revert. The recordCall/dumpCalls helpers below provide the runtime; dumpCalls
+// must be wired into the cmd exit path (see the make/dump cmds).
+func probeCallSite(args []string) int {
 	files := goFilesFromArgs(args)
 	fset := gotoken.NewFileSet()
 
@@ -27,8 +27,7 @@ func refacCallSite(args []string) int {
 	for _, p := range files {
 		base := filepath.Base(p)
 
-		if base == "callsite_probe.go" || base == "refac_callsite.go" ||
-			base == "refac.go" || base == "mapinstr_probe.go" || base == "refac_mapinstr.go" {
+		if base == "probe_callsite.go" || base == "probe_mapinstr.go" || base == "probe.go" {
 			continue
 		}
 
@@ -94,4 +93,47 @@ func refacCallSite(args []string) int {
 	fmt.Fprintf(os.Stderr, "callsite: injected %d sites across %d files\n", len(allSites), len(files))
 
 	return 0
+}
+
+// --- runtime probe: populated by `ay probe callsite` above wrapping each
+// top-level func with recordCall. dumpCalls flushes the called set (append) to
+// $CALLSITE_OUT on cmd exit; union across the gate's runs, diff vs
+// callsites_all.txt to find reachable-but-never-exercised (gate-garbage)
+// functions. Throwaway. ---
+
+var (
+	callCounts = map[string]int{}
+	// callRecording gates recordCall so only the single-threaded `make -G` gen path
+	// records. Other handlers (notably `dump`, whose streamGraphFanout runs many
+	// goroutines) would otherwise concurrently write callCounts and crash the
+	// runtime with "concurrent map writes". cmdMake sets it true.
+	callRecording = false
+)
+
+func recordCall(site string) {
+	if !callRecording {
+		return
+	}
+
+	callCounts[site]++
+}
+
+func dumpCalls() {
+	path := os.Getenv("CALLSITE_OUT")
+
+	if path == "" {
+		return
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+
+	if err != nil {
+		return
+	}
+
+	for s := range callCounts {
+		fmt.Fprintln(f, s)
+	}
+
+	f.Close()
 }
