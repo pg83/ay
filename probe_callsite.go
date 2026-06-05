@@ -14,12 +14,18 @@ import (
 // probeCallSite instruments every top-level function: it splices a
 // recordCall("file:line") call as the first statement of each func body. Run the
 // whole gate with the instrumented binary (CALLSITE_OUT=<file>) and union the
-// recorded sites; any site in callsites_all.txt NOT in the union is reachable
-// code the gate never exercises — refactor garbage. Throwaway: apply, measure,
-// revert. The recordCall/dumpCalls helpers below provide the runtime; dumpCalls
-// must be wired into the cmd exit path (see the make/dump cmds).
+// recorded sites; any site in the all-sites file (first arg) NOT in the union is
+// reachable code the gate never exercises — refactor garbage. Throwaway: apply,
+// measure, revert. The recordCall/dumpCalls helpers below provide the runtime;
+// dumpCalls must be wired into the cmd exit path (see the make/dump cmds).
 func probeCallSite(args []string) int {
-	files := goFilesFromArgs(args)
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "usage: ay probe callsite <all-sites-out> [files...]")
+		return 2
+	}
+
+	outPath := args[0]
+	files := goFilesFromArgs(args[1:])
 	fset := gotoken.NewFileSet()
 
 	var allSites []string
@@ -85,7 +91,14 @@ func probeCallSite(args []string) int {
 
 	sort.Strings(allSites)
 
-	if err := os.WriteFile("dev/.out/callsites_all.txt", []byte(strings.Join(allSites, "\n")+"\n"), 0o644); err != nil {
+	if dir := filepath.Dir(outPath); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "callsite: mkdir %s: %v\n", dir, err)
+			return 1
+		}
+	}
+
+	if err := os.WriteFile(outPath, []byte(strings.Join(allSites, "\n")+"\n"), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "callsite: write all-sites: %v\n", err)
 		return 1
 	}
