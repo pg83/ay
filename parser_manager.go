@@ -116,34 +116,9 @@ func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSe
 
 	out := includeDirectiveParsers.parserFor(rel).Parse(rel, data)
 	out = pm.withCythonSibling(rel, out)
-
-	// Drop identical (kind, target) directives once, here, before the result is
-	// cached and shared by both scanners — boost's PP iteration files repeat one
-	// #include up to 1024x. In-place compaction over the global VFS deduper; no
-	// copy, no per-file map.
-	if local := out[parsedIncludesLocal]; len(local) > 1 {
-		deduper.reset()
-		kept := local[:0]
-
-		for _, d := range local {
-			if deduper.add(directiveID(d)) {
-				kept = append(kept, d)
-			}
-		}
-
-		out[parsedIncludesLocal] = kept
-	}
-
 	pm.cache.parsed.Put(key, out)
 
 	return out
-}
-
-// directiveID packs one directive's (kind, target) into a VFS — the same
-// STR<<1|bit shape — so identical directives dedup through the global VFS deduper
-// by a plain cast, no separate set.
-func directiveID(d includeDirective) VFS {
-	return VFS(uint32(d.target)<<1 | uint32(d.kind))
 }
 
 // withCythonSibling models Cython's implicit sibling .pxd: a .pyx uses its
