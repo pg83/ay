@@ -350,7 +350,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		searchTierFlat:       NewIntValueMap[searchTierResult](4096),
 		ctxNumByHash:         make(map[uint64]uint32, 1024),
 		resolveIndexByConfig: make(map[uint64]*cfgResolveIndex, 1024),
-		sourceUnderCache:     NewIntValueMap[string](1<<16),
+		sourceUnderCache:     NewIntValueMap[string](1 << 16),
 		tjc:                  tjc,
 	}
 
