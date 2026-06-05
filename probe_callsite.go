@@ -12,12 +12,12 @@ import (
 )
 
 // probeCallSite instruments every top-level function: it splices a
-// recordCall("file:line") call as the first statement of each func body. Run the
-// whole gate with the instrumented binary (CALLSITE_OUT=<file>) and union the
-// recorded sites; any site in the all-sites file (first arg) NOT in the union is
-// reachable code the gate never exercises — refactor garbage. Throwaway: apply,
-// measure, revert. The recordCall/dumpCalls helpers below provide the runtime;
-// dumpCalls must be wired into the cmd exit path (see the make/dump cmds).
+// recordCall("file:line") call as the first statement of each func body. Then run
+// the whole gate with the instrumented binary under --probe=callsite (which
+// enables recording and dumps on exit) and CALLSITE_OUT=<file>; union the
+// recorded sites across runs. Any site in the all-sites file (first arg) NOT in
+// the union is reachable code the gate never exercises — refactor garbage.
+// Throwaway: apply, measure, revert.
 func probeCallSite(args []string) int {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: ay probe callsite <all-sites-out> [files...]")
@@ -114,20 +114,13 @@ func probeCallSite(args []string) int {
 // callsites_all.txt to find reachable-but-never-exercised (gate-garbage)
 // functions. Throwaway. ---
 
-var (
-	callCounts = map[string]int{}
-	// callRecording gates recordCall so only the single-threaded `make -G` gen path
-	// records. Other handlers (notably `dump`, whose streamGraphFanout runs many
-	// goroutines) would otherwise concurrently write callCounts and crash the
-	// runtime with "concurrent map writes". cmdMake sets it true.
-	callRecording = false
-)
+// callCounts is the per-site call tally. It is not goroutine-safe, so only
+// instrument single-threaded paths (the `make -G` gen path, not `dump`, whose
+// streamGraphFanout runs many goroutines and would race with "concurrent map
+// writes").
+var callCounts = map[string]int{}
 
 func recordCall(site string) {
-	if !callRecording {
-		return
-	}
-
 	callCounts[site]++
 }
 
