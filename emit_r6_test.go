@@ -206,7 +206,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	}
 	releaseHostFlags["PIC"] = "yes"
 	releaseHostFlags["GG_BUILD_TYPE"] = "release"
-	releaseHost := NewPlatform(OSLinux, ISAX8664, releaseHostFlags, []string{"tool"}, "", "")
+	releaseHost := NewPlatform(OSLinux, ISAX8664, releaseHostFlags, []string{"tool"}, "", "", nil)
 
 	r6Ref, _ := EmitR6(
 		ModuleInstance{

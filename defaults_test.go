@@ -12,7 +12,7 @@ func newAllocatorDefaultTestPlatform(os OS, isa ISA) *Platform {
 	}
 	flags["PIC"] = "no"
 
-	return NewPlatform(os, isa, flags, nil, "", "")
+	return NewPlatform(os, isa, flags, nil, "", "", nil)
 }
 
 func TestDefaultProgramPeerdirsForWithState_X8664GetsTcmallocDefault(t *testing.T) {

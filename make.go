@@ -231,8 +231,8 @@ func cmdMake(args []string) int {
 		[]string{"tool"},
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
+		buildHostStatsFlags(hostYaFlags, mf.hflags, mf.sandboxing),
 	)
-	hostP.StatsFlags = buildHostStatsFlags(hostYaFlags, mf.hflags, mf.sandboxing)
 	resourceFetches := newResourceFetchPlan(mf.srcRoot, conf, hostP)
 
 	targetSpec := mf.targetPlat
@@ -276,8 +276,8 @@ func cmdMake(args []string) int {
 		nil,
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS")),
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
+		buildTargetStatsFlags(targetFlags, mf.tflags),
 	)
-	targetP.StatsFlags = buildTargetStatsFlags(targetFlags, mf.tflags)
 
 	if shouldExposeSandboxingTargetTags(mf) {
 		targetP.Tags = sandboxingNodeTags(targetP)

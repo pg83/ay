@@ -19,6 +19,10 @@ type Platform struct {
 
 	StatsFlags     map[string]string
 	StatsExtraTags []string
+	// StatsTags is the per-platform stats-UID tag list, computed once in
+	// NewPlatform from StatsFlags/StatsExtraTags (a platform constant). Nodes copy
+	// it in bindNodePlatform instead of recomputing statsTagsForPlatform per node.
+	StatsTags []string
 
 	Tools Toolchain
 
@@ -80,13 +84,17 @@ func toolchainFromFlags(flags map[string]string) Toolchain {
 	}
 }
 
-func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsEnv, cxxflagsEnv string) *Platform {
+func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsEnv, cxxflagsEnv string, statsFlags map[string]string) *Platform {
 	if flags == nil {
 		flags = map[string]string{}
 	}
 
 	if tags == nil {
 		tags = []string{}
+	}
+
+	if statsFlags == nil {
+		statsFlags = map[string]string{}
 	}
 
 	buildType := platformBuildType(flags)
@@ -102,13 +110,13 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsE
 		systemLibs = []string{"-nodefaultlibs", "-lpthread", "-lc", "-lm"}
 	}
 
-	return &Platform{
+	p := &Platform{
 		OS:                os,
 		ISA:               isa,
 		Target:            MakePlatformID(os, isa),
 		Flags:             internFlags(flags),
 		Tags:              tags,
-		StatsFlags:        map[string]string{},
+		StatsFlags:        statsFlags,
 		StatsExtraTags:    defaultStatsExtraTags(flags),
 		Tools:             toolchainFromFlags(flags),
 		PIC:               flags["PIC"] == "yes",
@@ -126,6 +134,10 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsE
 		ClangVerSTR:       internString(platformClangVersion(flags)),
 		BuildTypeUpperSTR: internString(strings.ToUpper(buildType)),
 	}
+
+	p.StatsTags = statsTagsForPlatform(p)
+
+	return p
 }
 
 var statsFlagsMapping = map[string]string{
