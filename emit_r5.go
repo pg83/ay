@@ -56,7 +56,7 @@ func EmitR5(
 		Env:              env,
 		Inputs:           inputs,
 		Outputs:          []VFS{tmpVFS, cppVFS},
-		KV:               KV{P: "R5", PC: "yellow"},
+		KV:               KV{P: pkR5, PC: pcYellow},
 		Tags:             []string{"tool"},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Platform:         string(instance.Platform.Target),

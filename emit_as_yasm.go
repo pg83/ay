@@ -76,7 +76,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		Env:              env,
 		Inputs:           allInputs,
 		Outputs:          []VFS{outVFS},
-		KV:               KV{P: "AS", PC: "light-green"},
+		KV:               KV{P: pkAS, PC: pcLightGreen},
 		Tags:             instance.Platform.Tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Platform:         string(instance.Platform.Target),

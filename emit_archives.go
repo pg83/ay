@@ -108,7 +108,7 @@ func emitArchive(
 		},
 		Env:              env,
 		Inputs:           inputs,
-		KV:               KV{P: "AR", PC: "light-red"},
+		KV:               KV{P: pkAR, PC: pcLightRed},
 		Outputs:          []VFS{archiveVFS},
 		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},

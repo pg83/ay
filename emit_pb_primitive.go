@@ -520,7 +520,7 @@ func EmitPB(
 		Env:              env,
 		Inputs:           inputs,
 		Outputs:          outputs,
-		KV:               KV{P: "PB", PC: "yellow"},
+		KV:               KV{P: pkPB, PC: pcYellow},
 		Tags:             tags,
 		TargetProperties: targetProps,
 		Platform:         string(instance.Platform.Target),

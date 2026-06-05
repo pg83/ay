@@ -29,7 +29,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []string, inputs []VFS, outputs
 		},
 		Env:     env,
 		Inputs:  inputs,
-		KV:      KV{P: "JV", PC: "light-blue", ShowOut: "yes"},
+		KV:      KV{P: pkJV, PC: pcLightBlue, ShowOut: "yes"},
 		Outputs: outputs,
 		Tags:    []string{},
 		TargetProperties: func() TargetProperties {

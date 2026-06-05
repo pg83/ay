@@ -164,8 +164,7 @@ func dumpGraphNodeKind(node *Node) string {
 		return ""
 	}
 
-	kind := node.KV.P
-	return kind
+	return node.KV.P.String()
 }
 
 func pruneDumpGraphEmitterInPlace(e *BufferedEmitter, drop map[NodeRef]struct{}, order []int) []int {

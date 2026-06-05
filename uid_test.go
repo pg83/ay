@@ -59,7 +59,7 @@ func TestComputeUID_KnownVector(t *testing.T) {
 
 func TestNodeStatsUID_KnownVector(t *testing.T) {
 	n := &Node{
-		KV:       KV{P: "LD"},
+		KV:       KV{P: pkLD},
 		Outputs:  []VFS{Intern("$(B)/tools/archiver/archiver")},
 		Platform: "default-linux-aarch64",
 		StatsTags: []string{
@@ -91,7 +91,7 @@ func TestNodeStatsUID_IgnoresUnrelatedTargetCLIFlags(t *testing.T) {
 		p.StatsFlags = buildTargetStatsFlags(flags, cliFlags)
 
 		return &Node{
-			KV:        KV{P: "LD"},
+			KV:        KV{P: pkLD},
 			Outputs:   []VFS{Intern("$(B)/tools/archiver/archiver")},
 			Platform:  string(p.Target),
 			StatsTags: statsTagsForPlatform(p),
@@ -130,7 +130,7 @@ func TestNodeStatsUID_UsesBaseTargetFlags(t *testing.T) {
 	p.StatsFlags = buildTargetStatsFlags(flags, map[string]string{"UNRELATED": "yes"})
 
 	n := &Node{
-		KV:        KV{P: "LD"},
+		KV:        KV{P: pkLD},
 		Outputs:   []VFS{Intern("$(B)/tools/archiver/archiver")},
 		Platform:  string(p.Target),
 		StatsTags: statsTagsForPlatform(p),
@@ -153,7 +153,7 @@ func TestNodeStatsUID_UsesBaseTargetFlags(t *testing.T) {
 
 func TestNodeStatsUID_UsesLongRootOutputs(t *testing.T) {
 	n := &Node{
-		KV:       KV{P: "LD"},
+		KV:       KV{P: pkLD},
 		Outputs:  []VFS{Intern("$(B)/tools/archiver/archiver")},
 		Platform: "default-linux-aarch64",
 		StatsTags: []string{
@@ -216,7 +216,7 @@ func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
 	n := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"sh", "-c", "echo <a> & echo b"}, Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
-		KV: KV{P: "CC", Name: "a<b>c"}, Outputs: ToVFSSlice([]string{}),
+		KV: KV{P: pkCC, Name: "a<b>c"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: Requirements{}, Tags: []string{},
 		TargetProperties: TargetProperties{},
 	}

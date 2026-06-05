@@ -440,7 +440,7 @@ func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 
 func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
 	e := NewBufferedEmitter()
-	e.Emit(&Node{KV: KV{P: "TEST"}})
+	e.Emit(&Node{KV: KV{P: pkTEST}})
 	Finalize(e)
 
 	defer func() {
@@ -459,12 +459,12 @@ func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
 		}
 	}()
 
-	e.Emit(&Node{KV: KV{P: "TEST2"}})
+	e.Emit(&Node{KV: KV{P: pkTEST2}})
 }
 
 func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
 	e := NewBufferedEmitter()
-	ref := e.Emit(&Node{KV: KV{P: "TEST"}})
+	ref := e.Emit(&Node{KV: KV{P: pkTEST}})
 	Finalize(e)
 
 	defer func() {

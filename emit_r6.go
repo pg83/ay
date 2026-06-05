@@ -68,7 +68,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		Env:              env,
 		Inputs:           inputs,
 		Outputs:          []VFS{outVFS},
-		KV:               KV{P: "R6", PC: "yellow"},
+		KV:               KV{P: pkR6, PC: pcYellow},
 		Tags:             tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Platform:         string(instance.Platform.Target),

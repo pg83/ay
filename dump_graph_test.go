@@ -10,34 +10,34 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 	emit := NewBufferedEmitter()
 
 	fetchUsed := emit.Emit(&Node{
-		KV:      KV{P: "FETCH"},
+		KV:      KV{P: pkFETCH},
 		Outputs: []VFS{Intern("$(B)/resources/YMAKE_PYTHON3")},
 	})
 	emit.Emit(&Node{
-		KV:      KV{P: "FETCH"},
+		KV:      KV{P: pkFETCH},
 		Outputs: []VFS{Intern("$(B)/resources/CLANG")},
 	})
 	emit.Emit(&Node{
-		KV:      KV{P: "FETCH"},
+		KV:      KV{P: pkFETCH},
 		Outputs: []VFS{Intern("$(B)/tool-cache/CLANG")},
 	})
 	emit.Emit(&Node{
-		KV:               KV{P: "PR"},
+		KV:               KV{P: pkPR},
 		Outputs:          []VFS{Intern("$(B)/contrib/libs/llvm16/include/llvm/IR/Attributes.inc")},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
 	})
 	llvmReferenced := emit.Emit(&Node{
-		KV:               KV{P: "PR"},
+		KV:               KV{P: pkPR},
 		Outputs:          []VFS{Intern("$(B)/contrib/libs/llvm16/include/llvm/IR/IntrinsicsX86.h")},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
 	})
 	emit.Emit(&Node{
-		KV:               KV{P: "PR"},
+		KV:               KV{P: pkPR},
 		Outputs:          []VFS{Intern("$(B)/contrib/libs/llvm16/include/generated.cpp")},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
 	})
 	emit.Emit(&Node{
-		KV:               KV{P: "PR"},
+		KV:               KV{P: pkPR},
 		Outputs:          []VFS{Intern("$(B)/other/module/generated.inc")},
 		TargetProperties: TargetProperties{ModuleDir: "other/module"},
 	})
@@ -45,13 +45,13 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 		Cmds:           []Cmd{{CmdArgs: []string{"clang"}}},
 		DepRefs:        []NodeRef{fetchUsed, llvmReferenced},
 		ForeignDepRefs: []NodeRef{fetchUsed},
-		KV:             KV{P: "CC"},
+		KV:             KV{P: pkCC},
 		Outputs:        []VFS{Intern("$(B)/obj/consumer.o")},
 	})
 	root := emit.Emit(&Node{
 		Cmds:    []Cmd{{CmdArgs: []string{"ld"}}},
 		DepRefs: []NodeRef{consumer},
-		KV:      KV{P: "LD"},
+		KV:      KV{P: pkLD},
 		Outputs: []VFS{Intern("$(B)/bin/root")},
 	})
 	emit.Result(root)
@@ -95,7 +95,7 @@ func TestFinalizeDumpGraph_KeepsMatchingResultNode(t *testing.T) {
 	expected := "contrib/libs/llvm16/include/llvm/IR/Attributes.inc"
 
 	root := emit.Emit(&Node{
-		KV:               KV{P: "PR"},
+		KV:               KV{P: pkPR},
 		Outputs:          []VFS{Build(expected)},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
 	})
@@ -116,18 +116,18 @@ func TestFinalizeDumpGraph_PrunesTransitiveStandaloneLLVM(t *testing.T) {
 	parent := "contrib/libs/llvm16/include/llvm/IR/Parent.inc"
 
 	leafRef := emit.Emit(&Node{
-		KV:               KV{P: "PR"},
+		KV:               KV{P: pkPR},
 		Outputs:          []VFS{Build(leaf)},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
 	})
 	emit.Emit(&Node{
 		DepRefs:          []NodeRef{leafRef},
-		KV:               KV{P: "PR"},
+		KV:               KV{P: pkPR},
 		Outputs:          []VFS{Build(parent)},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
 	})
 	root := emit.Emit(&Node{
-		KV:      KV{P: "LD"},
+		KV:      KV{P: pkLD},
 		Outputs: []VFS{Intern("$(B)/bin/root")},
 	})
 	emit.Result(root)
@@ -157,16 +157,16 @@ func TestFinalizeDumpGraph_PreservesFinalizeValidation(t *testing.T) {
 			build: func() *BufferedEmitter {
 				emit := NewBufferedEmitter()
 				emit.Emit(&Node{
-					KV:      KV{P: "FETCH"},
+					KV:      KV{P: pkFETCH},
 					Outputs: []VFS{Intern("$(B)/resources/CLANG")},
 				})
 				leaf := emit.Emit(&Node{
-					KV:      KV{P: "PR"},
+					KV:      KV{P: pkPR},
 					Outputs: []VFS{Intern("$(B)/obj/leaf.o")},
 				})
 				root := emit.Emit(&Node{
 					DepRefs: []NodeRef{leaf, NodeRef(99)},
-					KV:      KV{P: "LD"},
+					KV:      KV{P: pkLD},
 					Outputs: []VFS{Intern("$(B)/bin/root")},
 				})
 				emit.Result(root)
@@ -180,11 +180,11 @@ func TestFinalizeDumpGraph_PreservesFinalizeValidation(t *testing.T) {
 			build: func() *BufferedEmitter {
 				emit := NewBufferedEmitter()
 				emit.Emit(&Node{
-					KV:      KV{P: "FETCH"},
+					KV:      KV{P: pkFETCH},
 					Outputs: []VFS{Intern("$(B)/resources/CLANG")},
 				})
 				root := emit.Emit(&Node{
-					KV:      KV{P: "LD"},
+					KV:      KV{P: pkLD},
 					Outputs: []VFS{Intern("$(B)/bin/root")},
 				})
 				emit.Result(root)

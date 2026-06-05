@@ -25,7 +25,7 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Env:              env,
 		Inputs:           allInputs,
 		Outputs:          []VFS{outVFS},
-		KV:               KV{P: "AS", PC: "light-green"},
+		KV:               KV{P: pkAS, PC: pcLightGreen},
 		Tags:             tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Platform:         string(instance.Platform.Target),

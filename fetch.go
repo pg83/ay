@@ -127,7 +127,7 @@ func fetchNode(host *Platform, item resourceFetch, scripts scriptDeps) *Node {
 		}},
 		Env:              nil,
 		Inputs:           fetchScriptInputs(scripts),
-		KV:               KV{P: "FETCH", PC: "yellow", ShowOut: "yes"},
+		KV:               KV{P: pkFETCH, PC: pcYellow, ShowOut: "yes"},
 		Outputs:          []VFS{item.Output},
 		Platform:         string(host.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "full", RAM: float64(32)},

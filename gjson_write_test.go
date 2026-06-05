@@ -53,7 +53,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		ForeignDepRefs:   []NodeRef{leaf},
 		Env:              EnvVars{{Name: "PATH", Value: "/usr/bin"}},
 		Inputs:           ToVFSSlice([]string{"in1"}),
-		KV:               KV{Name: "main", P: "CC"},
+		KV:               KV{Name: "main", P: pkCC},
 		Outputs:          ToVFSSlice([]string{"main.o"}),
 		Requirements:     Requirements{CPU: 1, RAM: 32, Network: "restricted"},
 		Tags:             []string{"tag1"},

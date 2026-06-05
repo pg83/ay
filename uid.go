@@ -48,7 +48,7 @@ func statsUIDPreimage(n *Node, c *canonBuf) string {
 // nested list reprs built in c.strBuf2 and quoted into dst as bytes — equivalent
 // to the old nested pythonStringListRepr but with no intermediate strings.
 func appendStatsPreimage(dst []byte, c *canonBuf, n *Node) []byte {
-	kind := n.KV.P
+	kind := n.KV.P.String()
 
 	dst = append(dst, '[')
 	dst = appendPyRepr(dst, n.Platform)

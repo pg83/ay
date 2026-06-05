@@ -212,7 +212,7 @@ func EmitEV(
 		Env:              env,
 		Inputs:           inputs,
 		Outputs:          []VFS{evCC, evH},
-		KV:               KV{P: "EV", PC: "yellow"},
+		KV:               KV{P: pkEV, PC: pcYellow},
 		Tags:             instance.Platform.Tags,
 		TargetProperties: targetProps,
 		Platform:         string(instance.Platform.Target),

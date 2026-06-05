@@ -26,7 +26,7 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 		kind := node.KV.P
 
 		switch kind {
-		case "PR", "CF", "CP":
+		case pkPR, pkCF, pkCP:
 		default:
 			continue
 		}

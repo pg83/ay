@@ -77,7 +77,7 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 
 		Env:              EnvVars{{Name: "FOO", Value: "bar"}},
 		Inputs:           ToVFSSlice([]string{"in"}),
-		KV:               KV{P: "LD"},
+		KV:               KV{P: pkLD},
 		Outputs:          ToVFSSlice([]string{"out"}),
 		Platform:         "default-linux-aarch64",
 		Requirements:     Requirements{CPU: 1, RAM: 32},

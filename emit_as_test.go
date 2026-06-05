@@ -102,7 +102,7 @@ func testYasmLDRef(e *BufferedEmitter) NodeRef {
 		Env:              nil,
 		Inputs:           ToVFSSlice([]string{}),
 		Outputs:          ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
-		KV:               KV{P: "LD", PC: "light-cyan"},
+		KV:               KV{P: pkLD, PC: pcLightCyan},
 		Tags:             []string{"tool"},
 		Platform:         string(PlatformDefaultLinuxX8664),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
@@ -144,7 +144,7 @@ func TestEmitAS_KV(t *testing.T) {
 	}
 
 	got := e.nodes[0]
-	want := KV{P: "AS", PC: "light-green"}
+	want := KV{P: pkAS, PC: pcLightGreen}
 
 	if !reflect.DeepEqual(got.KV, want) {
 		t.Errorf("kv:\n  got:  %#v\n  want: %#v", got.KV, want)

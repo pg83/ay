@@ -65,7 +65,7 @@ func EmitBI(
 		},
 		Env:              env,
 		Inputs:           inputs,
-		KV:               KV{P: "BI", PC: "yellow", ShowOut: "yes", DisableCache: "yes"},
+		KV:               KV{P: pkBI, PC: pcYellow, ShowOut: "yes", DisableCache: "yes"},
 		Outputs:          []VFS{outVFS},
 		Tags:             []string{},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},

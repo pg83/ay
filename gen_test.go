@@ -52,7 +52,7 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 
 	rootLD := nodesByOutput[mainBinPath]
 
-	if rootLD.KV.P != "LD" {
+	if rootLD.KV.P != pkLD {
 		t.Errorf("root node kv.p = %q, want LD", rootLD.KV.P)
 	}
 
@@ -125,7 +125,7 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		t.Fatalf("missing UNITTEST_FOR LD output $(B)/mod/mod")
 	}
 
-	if ld.KV.P != "LD" {
+	if ld.KV.P != pkLD {
 		t.Errorf("root node kv.p = %q, want LD", ld.KV.P)
 	}
 
@@ -210,7 +210,7 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 	var ld, cc *Node
 
 	for _, n := range g.Graph {
-		switch n.KV.P {
+		switch n.KV.P.String() {
 		case "LD":
 			ld = n
 		case "CC":
@@ -350,10 +350,10 @@ END()
 
 	for i, n := range g.Graph {
 		if len(n.Outputs) > 0 {
-			if strings.Contains(n.Outputs[0].String(), "/zlib/") && n.KV.P == "AR" {
+			if strings.Contains(n.Outputs[0].String(), "/zlib/") && n.KV.P == pkAR {
 				zlibIdx = i
 			}
-			if strings.Contains(n.Outputs[0].String(), "/alib/") && n.KV.P == "AR" {
+			if strings.Contains(n.Outputs[0].String(), "/alib/") && n.KV.P == pkAR {
 				alibIdx = i
 			}
 		}
@@ -389,7 +389,7 @@ END()
 	var ccInputs []string
 
 	for _, n := range g.Graph {
-		if n.KV.P == "CC" {
+		if n.KV.P == pkCC {
 			ccInputs = append(ccInputs, vfsStrings(n.Inputs)...)
 		}
 	}
@@ -494,7 +494,7 @@ END()
 
 	counts := make(map[string]int)
 	for _, n := range g.Graph {
-		p := n.KV.P
+		p := n.KV.P.String()
 		counts[p]++
 	}
 
@@ -520,7 +520,7 @@ END()
 	)
 
 	for _, n := range g.Graph {
-		if n.KV.P != "CC" {
+		if n.KV.P != pkCC {
 			continue
 		}
 
@@ -547,7 +547,7 @@ END()
 	var jsOut string
 
 	for _, n := range g.Graph {
-		if n.KV.P == "JS" && len(n.Outputs) > 0 {
+		if n.KV.P == pkJS && len(n.Outputs) > 0 {
 			jsOut = n.Outputs[0].String()
 		}
 	}
@@ -571,7 +571,7 @@ END()
 
 	counts := make(map[string]int)
 	for _, n := range g.Graph {
-		p := n.KV.P
+		p := n.KV.P.String()
 		counts[p]++
 	}
 
@@ -586,7 +586,7 @@ END()
 	var globalARs, regularARs int
 
 	for _, n := range g.Graph {
-		if n.KV.P != "AR" {
+		if n.KV.P != pkAR {
 			continue
 		}
 
@@ -619,7 +619,7 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	hostNodes := 0
 
 	for _, n := range g.Graph {
-		p := n.KV.P
+		p := n.KV.P.String()
 		counts[p]++
 		platforms[n.Platform]++
 
@@ -662,7 +662,7 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	)
 
 	for _, n := range g.Graph {
-		switch n.KV.P {
+		switch n.KV.P.String() {
 		case "R6":
 			r6Node = n
 		case "LD":
@@ -712,7 +712,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 
 	var ldNode *Node
 	for _, n := range g.Graph {
-		if n.KV.P == "LD" {
+		if n.KV.P == pkLD {
 			ldNode = n
 		}
 	}
@@ -723,7 +723,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 
 	arCount := 0
 	for _, n := range g.Graph {
-		if n.KV.P == "AR" {
+		if n.KV.P == pkAR {
 			arCount++
 		}
 	}
@@ -1024,7 +1024,7 @@ END()
 
 	var lib1AR *Node
 	for _, n := range g.Graph {
-		if n.KV.P == "AR" && n.TargetProperties.ModuleDir == "lib1" {
+		if n.KV.P == pkAR && n.TargetProperties.ModuleDir == "lib1" {
 			lib1AR = n
 			break
 		}
@@ -1036,7 +1036,7 @@ END()
 
 	for _, ref := range graphDeps(g, lib1AR) {
 		for _, n := range g.Graph {
-			if n.UID == ref && n.KV.P == "AR" {
+			if n.UID == ref && n.KV.P == pkAR {
 				t.Errorf("lib1 AR has AR-typed dep %q (module_dir=%q); reference invariant: zero AR-on-AR deps", ref, n.TargetProperties.ModuleDir)
 			}
 		}
@@ -1058,7 +1058,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
-			if n.KV.P == "CC" {
+			if n.KV.P == pkCC {
 				ccNode = n
 			}
 		}
@@ -1098,7 +1098,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
-			if n.KV.P == "CC" {
+			if n.KV.P == pkCC {
 				ccNode = n
 			}
 		}
@@ -1132,7 +1132,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		var jsNode, ccNode *Node
 
 		for _, n := range g.Graph {
-			switch n.KV.P {
+			switch n.KV.P.String() {
 			case "JS":
 				jsNode = n
 			case "CC":
@@ -1167,7 +1167,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
-			if n.KV.P == "CC" {
+			if n.KV.P == pkCC {
 				ccNode = n
 			}
 		}
@@ -1201,7 +1201,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		var ccNode *Node
 		for _, n := range g.Graph {
-			if n.KV.P == "CC" {
+			if n.KV.P == pkCC {
 				ccNode = n
 				break
 			}
@@ -1235,7 +1235,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
-			if n.KV.P == "CC" {
+			if n.KV.P == pkCC {
 				ccNode = n
 
 				break
@@ -1277,7 +1277,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
-			if n.KV.P == "CC" {
+			if n.KV.P == pkCC {
 				ccNode = n
 
 				break
@@ -1309,7 +1309,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
-			if n.KV.P == "CC" {
+			if n.KV.P == pkCC {
 				ccNode = n
 
 				break
@@ -1350,7 +1350,7 @@ func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
 	var jsNode, ccNode *Node
 
 	for _, n := range g.Graph {
-		switch n.KV.P {
+		switch n.KV.P.String() {
 		case "JS":
 			jsNode = n
 		case "CC":
@@ -1405,7 +1405,7 @@ END()
 	var r6Node, ccNode *Node
 
 	for _, n := range g.Graph {
-		switch n.KV.P {
+		switch n.KV.P.String() {
 		case "R6":
 			r6Node = n
 		case "CC":
@@ -1468,7 +1468,7 @@ END()
 	var consumerAR *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == "AR" && n.TargetProperties.ModuleDir == "lib_consumer" {
+		if n.KV.P == pkAR && n.TargetProperties.ModuleDir == "lib_consumer" {
 			consumerAR = n
 
 			break
@@ -1481,7 +1481,7 @@ END()
 
 	for _, dep := range graphDeps(g, consumerAR) {
 		for _, n := range g.Graph {
-			if n.UID == dep && n.KV.P == "AR" {
+			if n.UID == dep && n.KV.P == pkAR {
 				t.Errorf("lib_consumer AR has AR-typed dep (peer module_dir=%q); reference invariant: zero AR-on-AR deps", n.TargetProperties.ModuleDir)
 			}
 		}
@@ -1524,7 +1524,7 @@ END()
 	for _, n := range g.Graph {
 		md := n.TargetProperties.ModuleDir
 
-		if n.KV.P != "AR" {
+		if n.KV.P != pkAR {
 			continue
 		}
 
@@ -1585,7 +1585,7 @@ END()
 	var ccNode *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == "CC" {
+		if n.KV.P == pkCC {
 			ccNode = n
 
 			break
@@ -1631,7 +1631,7 @@ END()
 	var ccNode *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == "CC" {
+		if n.KV.P == pkCC {
 			ccNode = n
 
 			break
@@ -1667,7 +1667,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	var consumerCC *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == "CC" {
+		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.String(), "main.cpp.o") {
 					consumerCC = n
@@ -1735,7 +1735,7 @@ func TestGen_OneLevelAddIncl_DeclOrderPreserved(t *testing.T) {
 
 	var consumerCC *Node
 	for _, n := range g.Graph {
-		if n.KV.P == "CC" {
+		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.String(), "consumer.cpp.o") {
 					consumerCC = n
@@ -1788,7 +1788,7 @@ func TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl(t *testing.T) {
 
 	var consumerCC *Node
 	for _, n := range g.Graph {
-		if n.KV.P == "CC" {
+		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.String(), "consumer.cpp.o") {
 					consumerCC = n
@@ -1849,7 +1849,7 @@ func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
 
 	var consumerCC *Node
 	for _, n := range g.Graph {
-		if n.KV.P == "CC" {
+		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.String(), "consumer.cpp.o") {
 					consumerCC = n
@@ -1901,7 +1901,7 @@ func TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot(t *testing.T) {
 
 	var consumerCC *Node
 	for _, n := range g.Graph {
-		if n.KV.P == "CC" {
+		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.String(), "consumer.cpp.o") {
 					consumerCC = n
@@ -1983,7 +1983,7 @@ func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 	var cc *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == "CC" {
+		if n.KV.P == pkCC {
 			cc = n
 
 			break
@@ -2022,7 +2022,7 @@ func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 	var cc *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == "CC" {
+		if n.KV.P == pkCC {
 			cc = n
 
 			break
@@ -2065,7 +2065,7 @@ func TestGen_SRC_FlatOutputPath(t *testing.T) {
 	var cc *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == "CC" {
+		if n.KV.P == pkCC {
 			cc = n
 
 			break
@@ -2138,7 +2138,7 @@ END()
 	var arNode *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == "AR" {
+		if n.KV.P == pkAR {
 			arNode = n
 
 			break
@@ -2177,7 +2177,7 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	var arNode *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == "AR" && n.TargetProperties.ModuleDir == "consumer" {
+		if n.KV.P == pkAR && n.TargetProperties.ModuleDir == "consumer" {
 			arNode = n
 
 			break
@@ -2220,7 +2220,7 @@ END()
 	)
 
 	for _, n := range g.Graph {
-		if n.KV.P != "AR" {
+		if n.KV.P != pkAR {
 			continue
 		}
 
@@ -2294,7 +2294,7 @@ END()
 	var asNode *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == "AS" {
+		if n.KV.P == pkAS {
 			asNode = n
 
 			break
@@ -3485,7 +3485,7 @@ func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 	// Find the LD node.
 	var ldNode *Node
 	for _, n := range g.Graph {
-		if n.KV.P == "LD" {
+		if n.KV.P == pkLD {
 			ldNode = n
 			break
 		}
@@ -4919,7 +4919,7 @@ func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 
 	var globalAR *Node
 	for _, n := range g.Graph {
-		if n.KV.P == "AR" && n.TargetProperties.ModuleTag == "global" {
+		if n.KV.P == pkAR && n.TargetProperties.ModuleTag == "global" {
 			globalAR = n
 			break
 		}
