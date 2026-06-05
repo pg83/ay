@@ -73,85 +73,22 @@ func recordQuery(rec *SysIncl, header string) string {
 	return header
 }
 
+// PerSourceView holds the includer-keyed sysincl records (source-keyed records
+// are matched inline in sysinclSourceLookup, so they are not collected here).
 type PerSourceView struct {
-	activeSourceKeyed []*SysIncl
-
 	includerKeyed []*SysIncl
 }
 
-func (s SysInclSet) PreparePerSource(sourcePath string) PerSourceView {
-	view := PerSourceView{
-		activeSourceKeyed: make([]*SysIncl, 0, len(s)),
-		includerKeyed:     make([]*SysIncl, 0, len(s)),
-	}
+func (s SysInclSet) includerKeyedView() PerSourceView {
+	view := PerSourceView{includerKeyed: make([]*SysIncl, 0, len(s))}
 
 	for i := range s {
-		rec := &s[i]
-
-		if rec.KeyBySource {
-			if rec.Filter == nil || rec.Filter.match(sourcePath) {
-				view.activeSourceKeyed = append(view.activeSourceKeyed, rec)
-			}
-
-			continue
+		if !s[i].KeyBySource {
+			view.includerKeyed = append(view.includerKeyed, &s[i])
 		}
-
-		view.includerKeyed = append(view.includerKeyed, rec)
 	}
 
 	return view
-}
-
-func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool, bool) {
-	var (
-		out            []string
-		found          bool
-		hasMultiTarget bool
-		seen           map[string]struct{}
-	)
-
-	for _, rec := range v.activeSourceKeyed {
-		paths, ok := rec.Mappings[recordQuery(rec, header)]
-
-		if !ok {
-			continue
-		}
-
-		found = true
-
-		if rec.HasMultiTarget {
-			count := 0
-
-			for _, p := range paths {
-				if p != "" {
-					count++
-				}
-			}
-
-			if count >= 2 {
-				hasMultiTarget = true
-			}
-		}
-
-		for _, p := range paths {
-			if p == "" {
-				continue
-			}
-
-			if seen == nil {
-				seen = make(map[string]struct{}, 4)
-			}
-
-			if _, dup := seen[p]; dup {
-				continue
-			}
-
-			seen[p] = struct{}{}
-			out = append(out, p)
-		}
-	}
-
-	return out, found, hasMultiTarget
 }
 
 // includerContribution is one includer-keyed record's mapping for a header

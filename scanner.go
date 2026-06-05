@@ -32,8 +32,6 @@ type IncludeScanner struct {
 
 	anySrcView PerSourceView
 
-	sourceKeyedCount int
-
 	sysinclKeyBits []bool
 	sysinclKeyCI   map[string]bool
 	// sysinclCIGate is a sound prefilter for the case-insensitive branch of
@@ -304,12 +302,6 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		tjc:                  tjc,
 	}
 
-	for i := range sysincl {
-		if sysincl[i].KeyBySource {
-			s.sourceKeyedCount++
-		}
-	}
-
 	var csKeyIDs []STR
 
 	for i := range sysincl {
@@ -352,7 +344,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		}
 	}
 
-	s.anySrcView = s.sysincl.PreparePerSource("")
+	s.anySrcView = s.sysincl.includerKeyedView()
 	s.mergedIncluder = buildMergedIncluderIndex(s.anySrcView.includerKeyed)
 
 	s.visitedIDPool.New = func() any {
@@ -448,26 +440,6 @@ func hashScanContext(ctx *ScanContext) uint64 {
 	mixSlice(ctx.BaseSearchPaths)
 
 	return h
-}
-
-func (s *IncludeScanner) prepareSourceView(sourceRel string) PerSourceView {
-	view := PerSourceView{
-		activeSourceKeyed: make([]*SysIncl, 0, s.sourceKeyedCount),
-	}
-
-	for i := range s.sysincl {
-		rec := &s.sysincl[i]
-
-		if !rec.KeyBySource {
-			continue
-		}
-
-		if rec.Filter == nil || rec.Filter.match(sourceRel) {
-			view.activeSourceKeyed = append(view.activeSourceKeyed, rec)
-		}
-	}
-
-	return view
 }
 
 func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
@@ -908,10 +880,67 @@ func caseVariants(b byte) []byte {
 }
 
 func (s *IncludeScanner) sysinclSourceLookup(sourceRel string, target STR) ([]VFS, bool, bool) {
-	view := s.prepareSourceView(sourceRel)
-	rels, claimed, hasMultiTarget := view.LookupSourceKeyed(target.String())
+	header := target.String()
 
-	return s.absifyRels(rels), hasMultiTarget, claimed
+	var (
+		out            []VFS
+		found          bool
+		hasMultiTarget bool
+		seen           map[string]struct{}
+	)
+
+	for i := range s.sysincl {
+		rec := &s.sysincl[i]
+
+		if !rec.KeyBySource {
+			continue
+		}
+
+		if rec.Filter != nil && !rec.Filter.match(sourceRel) {
+			continue
+		}
+
+		paths, ok := rec.Mappings[recordQuery(rec, header)]
+
+		if !ok {
+			continue
+		}
+
+		found = true
+
+		if rec.HasMultiTarget {
+			count := 0
+
+			for _, p := range paths {
+				if p != "" {
+					count++
+				}
+			}
+
+			if count >= 2 {
+				hasMultiTarget = true
+			}
+		}
+
+		for _, p := range paths {
+			if p == "" {
+				continue
+			}
+
+			if seen == nil {
+				seen = make(map[string]struct{}, 4)
+			}
+
+			if _, dup := seen[p]; dup {
+				continue
+			}
+
+			seen[p] = struct{}{}
+			out = append(out, Source(normalisePath(p)))
+		}
+	}
+
+	return out, hasMultiTarget, found
 }
 
 func (s *IncludeScanner) sysinclIncluderLookup(includerRel string, target STR) ([]VFS, bool, bool) {
