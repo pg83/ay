@@ -39,7 +39,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 	e := NewBufferedEmitter()
 	leaf := e.Emit(&Node{
 		Cmds:             []Cmd{},
-		Env:              map[string]string{},
+		Env:              nil,
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               KV{Name: "leaf"},
 		Outputs:          ToVFSSlice([]string{"leaf.o"}),
@@ -48,10 +48,10 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		TargetProperties: TargetProperties{},
 	})
 	main := e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: trickyArgs, Cwd: "$(B)", Env: map[string]string{"FOO": "bar"}}},
+		Cmds:             []Cmd{{CmdArgs: trickyArgs, Cwd: "$(B)", Env: EnvVars{{Name: "FOO", Value: "bar"}}}},
 		DepRefs:          []NodeRef{leaf},
 		ForeignDepRefs:   []NodeRef{leaf},
-		Env:              map[string]string{"PATH": "/usr/bin"},
+		Env:              EnvVars{{Name: "PATH", Value: "/usr/bin"}},
 		Inputs:           ToVFSSlice([]string{"in1"}),
 		KV:               KV{Name: "main", P: "CC"},
 		Outputs:          ToVFSSlice([]string{"main.o"}),

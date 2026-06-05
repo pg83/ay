@@ -17,9 +17,7 @@ func EmitCF(
 	moduleTag string,
 	emit Emitter,
 ) (NodeRef, VFS) {
-	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-	}
+	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	cmdArgs := []string{
 		instance.Platform.Tools.Python3,

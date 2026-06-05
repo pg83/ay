@@ -427,9 +427,7 @@ func EmitPB(
 		}
 	}
 
-	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-	}
+	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	inputs := []VFS{
 		cppStyleguideBinary,

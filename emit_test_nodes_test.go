@@ -45,31 +45,8 @@ func expectedTargetPlatformDescriptor() string {
 	return "default-linux-x86_64-debug-FAKEID=sandboxing-SANDBOXING=yes"
 }
 
-func expectedTestEnv(testName string) map[string]string {
-	return map[string]string{
-		"ARCADIA_BUILD_ROOT":     "$(B)",
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		"ARCADIA_SOURCE_ROOT":    "$(S)",
-		"ASAN_OPTIONS":           "exitcode=100",
-		"ASAN_SYMBOLIZER_PATH":   "$(CLANG-1274503668)/bin/llvm-symbolizer",
-		"GORACE":                 "halt_on_error=1",
-		"LSAN_OPTIONS":           "exitcode=100",
-		"LSAN_SYMBOLIZER_PATH":   "$(CLANG-1274503668)/bin/llvm-symbolizer",
-		"MSAN_OPTIONS":           "exitcode=100:report_umrs=1",
-		"MSAN_SYMBOLIZER_PATH":   "$(CLANG-1274503668)/bin/llvm-symbolizer",
-		"TESTING_SAVE_OUTPUT":    "yes",
-		"TEST_NAME":              testName,
-		"TSAN_SYMBOLIZER_PATH":   "$(CLANG-1274503668)/bin/llvm-symbolizer",
-		"UBSAN_OPTIONS":          "exitcode=100:print_stacktrace=1,halt_on_error=1",
-		"UBSAN_SYMBOLIZER_PATH":  "$(CLANG-1274503668)/bin/llvm-symbolizer",
-		"YA_CC":                  "$(CLANG-1274503668)/bin/clang",
-		"YA_CXX":                 "$(CLANG-1274503668)/bin/clang++",
-		"YA_MANDATORY_ENV_VARS":  "ASAN_OPTIONS:ASAN_SYMBOLIZER_PATH:LSAN_OPTIONS:LSAN_SYMBOLIZER_PATH:MSAN_OPTIONS:MSAN_SYMBOLIZER_PATH:TSAN_SYMBOLIZER_PATH:UBSAN_OPTIONS:UBSAN_SYMBOLIZER_PATH:YA_MANDATORY_ENV_VARS",
-		"YA_NO_RESPAWN":          "yes",
-		"YA_PYTHON_BIN":          "$(PYTHON)/python",
-		"YA_TC":                  "no",
-		"YA_TEST_RUNNER":         "1",
-	}
+func expectedTestEnv(testName string) EnvVars {
+	return EnvVars{{Name: "ARCADIA_BUILD_ROOT", Value: "$(B)"}, {Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "ARCADIA_SOURCE_ROOT", Value: "$(S)"}, {Name: "ASAN_OPTIONS", Value: "exitcode=100"}, {Name: "ASAN_SYMBOLIZER_PATH", Value: "$(CLANG-1274503668)/bin/llvm-symbolizer"}, {Name: "GORACE", Value: "halt_on_error=1"}, {Name: "LSAN_OPTIONS", Value: "exitcode=100"}, {Name: "LSAN_SYMBOLIZER_PATH", Value: "$(CLANG-1274503668)/bin/llvm-symbolizer"}, {Name: "MSAN_OPTIONS", Value: "exitcode=100:report_umrs=1"}, {Name: "MSAN_SYMBOLIZER_PATH", Value: "$(CLANG-1274503668)/bin/llvm-symbolizer"}, {Name: "TESTING_SAVE_OUTPUT", Value: "yes"}, {Name: "TEST_NAME", Value: testName}, {Name: "TSAN_SYMBOLIZER_PATH", Value: "$(CLANG-1274503668)/bin/llvm-symbolizer"}, {Name: "UBSAN_OPTIONS", Value: "exitcode=100:print_stacktrace=1,halt_on_error=1"}, {Name: "UBSAN_SYMBOLIZER_PATH", Value: "$(CLANG-1274503668)/bin/llvm-symbolizer"}, {Name: "YA_CC", Value: "$(CLANG-1274503668)/bin/clang"}, {Name: "YA_CXX", Value: "$(CLANG-1274503668)/bin/clang++"}, {Name: "YA_MANDATORY_ENV_VARS", Value: "ASAN_OPTIONS:ASAN_SYMBOLIZER_PATH:LSAN_OPTIONS:LSAN_SYMBOLIZER_PATH:MSAN_OPTIONS:MSAN_SYMBOLIZER_PATH:TSAN_SYMBOLIZER_PATH:UBSAN_OPTIONS:UBSAN_SYMBOLIZER_PATH:YA_MANDATORY_ENV_VARS"}, {Name: "YA_NO_RESPAWN", Value: "yes"}, {Name: "YA_PYTHON_BIN", Value: "$(PYTHON)/python"}, {Name: "YA_TC", Value: "no"}, {Name: "YA_TEST_RUNNER", Value: "1"}}
 }
 
 func expectedTestCtxNode() *Node {
@@ -87,7 +64,7 @@ func expectedTestCtxNode() *Node {
 				"}",
 			},
 		}},
-		Env:              map[string]string{},
+		Env:              nil,
 		Inputs:           []VFS{Intern("$(S)/build/scripts/append_file.py")},
 		KV:               KV{P: "CP", PC: "light-blue"},
 		Outputs:          []VFS{Intern("$(B)/common_test.context")},

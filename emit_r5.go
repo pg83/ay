@@ -19,9 +19,7 @@ func EmitR5(
 	cppPath := cppVFS.String()
 	srcPath := srcVFS.String()
 
-	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-	}
+	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	cmd0 := Cmd{
 		CmdArgs: []string{

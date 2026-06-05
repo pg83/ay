@@ -129,7 +129,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings)
 	cmd2 := composeDynLibCmd(instance.Platform, instance.Path, outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, *d.exportsScript, fixElfPath.String())
 	cmd3 := composeLDCmdLinkOrCopy(instance.Platform.Tools, instance.Path)
-	envVcsOnly := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
+	envVcsOnly := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 	envFull := ctx.host.ToolEnv()
 
 	inputs := composeDynLibInputs(peerArchivePaths, pluginPaths, fixElfPath, instance.Path, *d.exportsScript, ctx.scripts)

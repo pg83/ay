@@ -73,9 +73,9 @@ func extractKeyOrder(t *testing.T, raw []byte) []string {
 
 func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 	n := &Node{
-		Cmds: []Cmd{{CmdArgs: []string{"echo"}, Env: map[string]string{}}},
+		Cmds: []Cmd{{CmdArgs: []string{"echo"}, Env: nil}},
 
-		Env:              map[string]string{"FOO": "bar"},
+		Env:              EnvVars{{Name: "FOO", Value: "bar"}},
 		Inputs:           ToVFSSlice([]string{"in"}),
 		KV:               KV{P: "LD"},
 		Outputs:          ToVFSSlice([]string{"out"}),
@@ -107,7 +107,7 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 	n := &Node{
 		Cmds: []Cmd{},
 
-		Env:              map[string]string{},
+		Env:              nil,
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{}),
@@ -145,7 +145,7 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 	n := &Node{
 		Cmds: []Cmd{},
 
-		Env:              map[string]string{},
+		Env:              nil,
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{}),
@@ -168,7 +168,7 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 }
 
 func TestCmdJSONKeyOrder(t *testing.T) {
-	c := Cmd{CmdArgs: []string{"echo", "hi"}, Env: map[string]string{"K": "V"}}
+	c := Cmd{CmdArgs: []string{"echo", "hi"}, Env: EnvVars{{Name: "K", Value: "V"}}}
 	raw, err := json.Marshal(c)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)

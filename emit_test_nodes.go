@@ -68,7 +68,7 @@ func buildTestCtxNode(p *Platform) *Node {
 				"}",
 			},
 		}},
-		Env:              map[string]string{},
+		Env:              nil,
 		Inputs:           []VFS{Source(testAppendFileScriptRel)},
 		KV:               KV{P: "CP", PC: "light-blue"},
 		Outputs:          []VFS{bldCommonTestContext},
@@ -271,31 +271,8 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 	}, p)
 }
 
-func testEnv(_ *Platform, testName string) map[string]string {
-	return map[string]string{
-		"ARCADIA_BUILD_ROOT":     testBuildRoot,
-		"ARCADIA_ROOT_DISTBUILD": testSourceRoot,
-		"ARCADIA_SOURCE_ROOT":    testSourceRoot,
-		"ASAN_OPTIONS":           "exitcode=100",
-		"ASAN_SYMBOLIZER_PATH":   testClangSymbolizerPath,
-		"GORACE":                 "halt_on_error=1",
-		"LSAN_OPTIONS":           "exitcode=100",
-		"LSAN_SYMBOLIZER_PATH":   testClangSymbolizerPath,
-		"MSAN_OPTIONS":           "exitcode=100:report_umrs=1",
-		"MSAN_SYMBOLIZER_PATH":   testClangSymbolizerPath,
-		"TESTING_SAVE_OUTPUT":    "yes",
-		"TEST_NAME":              testName,
-		"TSAN_SYMBOLIZER_PATH":   testClangSymbolizerPath,
-		"UBSAN_OPTIONS":          "exitcode=100:print_stacktrace=1,halt_on_error=1",
-		"UBSAN_SYMBOLIZER_PATH":  testClangSymbolizerPath,
-		"YA_CC":                  testClangCCPath,
-		"YA_CXX":                 testClangCXXPath,
-		"YA_MANDATORY_ENV_VARS":  testMandatoryEnvVars,
-		"YA_NO_RESPAWN":          "yes",
-		"YA_PYTHON_BIN":          testPythonBin,
-		"YA_TC":                  "no",
-		"YA_TEST_RUNNER":         "1",
-	}
+func testEnv(_ *Platform, testName string) EnvVars {
+	return EnvVars{{Name: "ARCADIA_BUILD_ROOT", Value: testBuildRoot}, {Name: "ARCADIA_ROOT_DISTBUILD", Value: testSourceRoot}, {Name: "ARCADIA_SOURCE_ROOT", Value: testSourceRoot}, {Name: "ASAN_OPTIONS", Value: "exitcode=100"}, {Name: "ASAN_SYMBOLIZER_PATH", Value: testClangSymbolizerPath}, {Name: "GORACE", Value: "halt_on_error=1"}, {Name: "LSAN_OPTIONS", Value: "exitcode=100"}, {Name: "LSAN_SYMBOLIZER_PATH", Value: testClangSymbolizerPath}, {Name: "MSAN_OPTIONS", Value: "exitcode=100:report_umrs=1"}, {Name: "MSAN_SYMBOLIZER_PATH", Value: testClangSymbolizerPath}, {Name: "TESTING_SAVE_OUTPUT", Value: "yes"}, {Name: "TEST_NAME", Value: testName}, {Name: "TSAN_SYMBOLIZER_PATH", Value: testClangSymbolizerPath}, {Name: "UBSAN_OPTIONS", Value: "exitcode=100:print_stacktrace=1,halt_on_error=1"}, {Name: "UBSAN_SYMBOLIZER_PATH", Value: testClangSymbolizerPath}, {Name: "YA_CC", Value: testClangCCPath}, {Name: "YA_CXX", Value: testClangCXXPath}, {Name: "YA_MANDATORY_ENV_VARS", Value: testMandatoryEnvVars}, {Name: "YA_NO_RESPAWN", Value: "yes"}, {Name: "YA_PYTHON_BIN", Value: testPythonBin}, {Name: "YA_TC", Value: "no"}, {Name: "YA_TEST_RUNNER", Value: "1"}}
 }
 
 func sandboxingNodeTags(p *Platform) []string {

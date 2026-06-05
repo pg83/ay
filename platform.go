@@ -332,16 +332,18 @@ func (p *Platform) MultiarchLibPath() string {
 	return path
 }
 
-func (p *Platform) ToolEnv() map[string]string {
-	env := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		"DYLD_LIBRARY_PATH":      p.MultiarchLibPath(),
+func (p *Platform) ToolEnv() EnvVars {
+	env := EnvVars{
+		{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"},
+		{Name: "DYLD_LIBRARY_PATH", Value: p.MultiarchLibPath()},
 	}
 
 	if p.UsesResourceClang() {
-		env["CPATH"] = ""
-		env["LIBRARY_PATH"] = ""
-		env["SDKROOT"] = ""
+		env = append(env,
+			EnvVar{Name: "CPATH"},
+			EnvVar{Name: "LIBRARY_PATH"},
+			EnvVar{Name: "SDKROOT"},
+		)
 	}
 
 	return env

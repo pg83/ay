@@ -109,9 +109,7 @@ func EmitLD(
 	cmd3 := composeLDCmdLinkOrCopy(tools, binaryDir, dynamicPaths...)
 	splitDwarfCmds := composeLDSplitDwarfCmds(tools, outputPath, wantsSplitDwarf)
 
-	envVcsOnly := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-	}
+	envVcsOnly := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 	envFull := hostP.ToolEnv()
 
 	cmds := []Cmd{

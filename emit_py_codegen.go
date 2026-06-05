@@ -63,10 +63,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			outputPath.String(),
 		}
 
-		env := map[string]string{
-			"ARCADIA_ROOT_DISTBUILD": "$(S)",
-			"PYTHONHASHSEED":         "0",
-		}
+		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "PYTHONHASHSEED", Value: "0"}}
 		inputs := []VFS{py3ccBinary, py3ccSlowBin, srcAbs}
 
 		if generatedInputs != nil {
@@ -173,9 +170,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		regCppVFS := Build(instance.Path + "/" + regCpp)
 		regCppAbs := regCppVFS.String()
 
-		env := map[string]string{
-			"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		}
+		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 		pyCmdArgs := []string{
 			instance.Platform.Tools.Python3,

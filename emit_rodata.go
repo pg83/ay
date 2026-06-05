@@ -21,13 +21,8 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 	asmVFS, outVFS := composeRodataOutputs(instance, srcRel)
 	toolName := path.Base(strings.TrimSuffix(srcRel, ".rodata"))
 
-	pythonEnv := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-	}
-	yasmEnv := map[string]string{
-		"ARCADIA_ROOT_DISTBUILD": "$(S)",
-		"YASM_TEST_SUITE":        "1",
-	}
+	pythonEnv := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+	yasmEnv := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "YASM_TEST_SUITE", Value: "1"}}
 
 	node := &Node{
 		Cmds: []Cmd{

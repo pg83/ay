@@ -229,8 +229,8 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 
 	pyPBNode := &Node{
-		Cmds:             []Cmd{{CmdArgs: cmdArgs, Cwd: "$(S)", Env: map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}}},
-		Env:              map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"},
+		Cmds:             []Cmd{{CmdArgs: cmdArgs, Cwd: "$(S)", Env: EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}}},
+		Env:              EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}},
 		Inputs:           inputs,
 		Outputs:          outputs,
 		KV:               pbKV,
@@ -313,8 +313,8 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 		}
 
 		node := &Node{
-			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)", "PYTHONHASHSEED": "0"}}},
-			Env:              map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)", "PYTHONHASHSEED": "0"},
+			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "PYTHONHASHSEED", Value: "0"}}}},
+			Env:              EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "PYTHONHASHSEED", Value: "0"}},
 			Inputs:           nodeInputs,
 			Outputs:          []VFS{out},
 			KV:               KV{P: "PY", PC: "yellow"},
@@ -499,7 +499,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			deps = append(deps, rescompilerRef)
 		}
 
-		env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
+		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 		inputs := append([]VFS(nil), ch.inputs...)
 		inputs = append(inputs, rescompilerBinVFS)
 		inputs = append(inputs, auxClosure...)

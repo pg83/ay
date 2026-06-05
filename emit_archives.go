@@ -96,7 +96,7 @@ func emitArchive(
 		depRefs = append(depRefs, toolLDRef)
 	}
 
-	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
+	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 	tags := instance.Platform.Tags
 
 	n := &Node{
