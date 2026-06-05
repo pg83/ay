@@ -183,14 +183,8 @@ func (cIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 
 func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 	out := make([]includeDirective, 0, 8)
-	seen := make(map[includeDirective]struct{}, 8)
 	add := func(d includeDirective) {
-		if _, dup := seen[d]; dup {
-			return
-		}
-
-		seen[d] = struct{}{}
-		out = append(out, d)
+		out = append(out, d) // identical (kind, target) deduped centrally in sourceParsedBuckets
 	}
 
 	eachLine(data, func(line []byte) {
