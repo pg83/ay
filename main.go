@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/pprof"
+	"strings"
 )
 
 func main() {
@@ -20,30 +21,69 @@ func main() {
 }
 
 func dispatch(argv []string) {
-	if len(argv) < 2 {
+	probes, rest := parseGlobalFlags(argv[1:])
+
+	if len(rest) == 0 {
 		printUsage(os.Stderr)
 		os.Exit(2)
 	}
 
-	switch argv[1] {
+	code := runCommand(rest[0], rest[1:])
+
+	dumpProbes(probes) // flush enabled probe stats before exit (cmds os.Exit-free)
+	os.Exit(code)
+}
+
+// parseGlobalFlags consumes the leading -flags before the subcommand (program-
+// wide options) and returns the requested --probe values plus the remaining
+// argv (subcommand + its args). The first non-flag arg ends the global section;
+// -h/--help/help fall through to runCommand as the help subcommand.
+func parseGlobalFlags(argv []string) (probes []string, rest []string) {
+	i := 0
+
+	for ; i < len(argv); i++ {
+		a := argv[i]
+
+		if a == "" || a[0] != '-' || a == "-h" || a == "--help" {
+			break
+		}
+
+		k, v, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
+
+		switch {
+		case k == "probe" && (v == "map" || v == "callsite"):
+			probes = append(probes, v)
+		case k == "probe":
+			ThrowFmt("unknown --probe=%q (want map|callsite)", v)
+		default:
+			ThrowFmt("unknown global flag %q", a)
+		}
+	}
+
+	return probes, argv[i:]
+}
+
+func runCommand(name string, args []string) int {
+	switch name {
 	case "help", "-h", "--help":
-		os.Exit(cmdHelp(argv[2:]))
+		return cmdHelp(args)
 	case "fetch":
-		os.Exit(cmdFetch(argv[2:]))
+		return cmdFetch(args)
 	case "make":
-		os.Exit(cmdMake(argv[2:]))
+		return cmdMake(args)
 	case "dump":
-		os.Exit(cmdDump(argv[2:]))
+		return cmdDump(args)
 	case "perf":
-		os.Exit(cmdPerf(argv[2:]))
+		return cmdPerf(args)
 	case "refac":
-		os.Exit(cmdRefac(argv[2:]))
+		return cmdRefac(args)
 	case "probe":
-		os.Exit(cmdProbe(argv[2:]))
+		return cmdProbe(args)
 	default:
-		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", argv[1])
+		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", name)
 		printUsage(os.Stderr)
-		os.Exit(2)
+
+		return 2
 	}
 }
 

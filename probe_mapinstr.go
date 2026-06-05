@@ -19,8 +19,8 @@ import (
 // (single read, comma-ok read, LHS assign, m[k]++), so the edit is a pure text
 // splice with no AST surgery. Type info (go/types) is used to instrument only
 // real maps, not slices/arrays. Throwaway: run in a worktree, build, measure,
-// revert. The mapKR/mapKW/reportMapProbe helpers below + a reportMapProbe()
-// wiring on the cmd exit path must exist.
+// revert. mapKR/mapKW always tally; the --probe=map global flag dumps the tally
+// (reportMapProbe) on exit, e.g. ay --probe=map make …
 func probeMapInstr(args []string) int {
 	files := goFilesFromArgs(args)
 
@@ -190,17 +190,13 @@ func mapProbeAt(site string, write bool) {
 }
 
 func mapKR[K any](k K, site string) K {
-	if perfStatsEnabled {
-		mapProbeAt(site, false)
-	}
+	mapProbeAt(site, false)
 
 	return k
 }
 
 func mapKW[K any](k K, site string) K {
-	if perfStatsEnabled {
-		mapProbeAt(site, true)
-	}
+	mapProbeAt(site, true)
 
 	return k
 }
