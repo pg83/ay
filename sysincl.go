@@ -73,21 +73,6 @@ func recordQuery(rec *SysIncl, header string) string {
 	return header
 }
 
-// includerKeyedRecords returns the includer-keyed sysincl records (source-keyed
-// ones are matched inline in sysinclSourceLookup). They feed the merged index
-// built once at scanner construction.
-func (s SysInclSet) includerKeyedRecords() []*SysIncl {
-	out := make([]*SysIncl, 0, len(s))
-
-	for i := range s {
-		if !s[i].KeyBySource {
-			out = append(out, &s[i])
-		}
-	}
-
-	return out
-}
-
 type sysInclEnv struct {
 	arch string
 }
