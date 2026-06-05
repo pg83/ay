@@ -6,7 +6,6 @@ import (
 	"regexp/syntax"
 	"sort"
 	"strings"
-	"sync"
 )
 
 var sysInclYamlSequence = []sysInclEntry{
@@ -74,35 +73,16 @@ func recordQuery(rec *SysIncl, header string) string {
 	return header
 }
 
-func (s SysInclSet) Lookup(sourcePath, includerPath, header string) ([]string, bool) {
-	view := s.PreparePerSource(sourcePath)
-
-	return view.Lookup(includerPath, header)
-}
-
 type PerSourceView struct {
 	activeSourceKeyed []*SysIncl
 
 	includerKeyed []*SysIncl
-
-	includerFilterCache *includerFilterCache
-}
-
-type includerFilterCache struct {
-	mu sync.RWMutex
-
-	active map[string][]*SysIncl
-}
-
-func newIncluderFilterCache() *includerFilterCache {
-	return &includerFilterCache{active: make(map[string][]*SysIncl, 64)}
 }
 
 func (s SysInclSet) PreparePerSource(sourcePath string) PerSourceView {
 	view := PerSourceView{
-		activeSourceKeyed:   make([]*SysIncl, 0, len(s)),
-		includerKeyed:       make([]*SysIncl, 0, len(s)),
-		includerFilterCache: newIncluderFilterCache(),
+		activeSourceKeyed: make([]*SysIncl, 0, len(s)),
+		includerKeyed:     make([]*SysIncl, 0, len(s)),
 	}
 
 	for i := range s {
@@ -120,46 +100,6 @@ func (s SysInclSet) PreparePerSource(sourcePath string) PerSourceView {
 	}
 
 	return view
-}
-
-func (v PerSourceView) Lookup(includerPath, header string) ([]string, bool) {
-	srcOut, srcFound, _ := v.LookupSourceKeyed(header)
-	incOut, incFound, _ := v.LookupIncluderKeyed(includerPath, header)
-
-	if !srcFound && !incFound {
-		return nil, false
-	}
-
-	if len(srcOut) == 0 {
-		return incOut, true
-	}
-
-	if len(incOut) == 0 {
-		return srcOut, true
-	}
-
-	out := make([]string, 0, len(srcOut)+len(incOut))
-	seen := make(map[string]struct{}, len(srcOut)+len(incOut))
-
-	for _, p := range srcOut {
-		if _, dup := seen[p]; dup {
-			continue
-		}
-
-		seen[p] = struct{}{}
-		out = append(out, p)
-	}
-
-	for _, p := range incOut {
-		if _, dup := seen[p]; dup {
-			continue
-		}
-
-		seen[p] = struct{}{}
-		out = append(out, p)
-	}
-
-	return out, true
 }
 
 func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool, bool) {
@@ -214,10 +154,6 @@ func (v PerSourceView) LookupSourceKeyed(header string) ([]string, bool, bool) {
 	return out, found, hasMultiTarget
 }
 
-func (v PerSourceView) LookupIncluderKeyed(includerPath, header string) ([]string, bool, bool) {
-	return unionIncluderMappings(v.activeIncluderRecords(includerPath), header)
-}
-
 // includerContribution is one includer-keyed record's mapping for a header
 // bucket, carrying the record's Filter so activeness is decided at query time.
 type includerContribution struct {
@@ -230,13 +166,12 @@ type includerContribution struct {
 }
 
 // mergedIncluderIndex folds ALL includer-keyed records into one header-keyed
-// index built once (not per includer class), so a lookup is a single map probe
-// plus a tiny bucket scan instead of unionIncluderMappings' per-record fan-out
-// over the ~33 active records. Keyed by ToLower(header); each bucket holds every
-// record whose key folds to it, sorted by record order. A matched entry must
-// (a) be active for the includer (filter), (b) match case (CI = whole bucket,
-// non-CI = exact rawKey) — exactly reproducing activeIncluderRecords +
-// unionIncluderMappings (recordQuery + union/dedup, in order).
+// index built once, so an includer lookup is a single map probe plus a tiny
+// bucket scan instead of a per-record fan-out. Keyed by ToLower(header); each
+// bucket holds every record whose key folds to it, sorted by record order. A
+// matched entry must (a) be active for the includer (filter), (b) match case
+// (CI = whole bucket, non-CI = exact rawKey). This is the includer-keyed sysincl
+// lookup — the scanner calls m.lookup directly, per resolve.
 type mergedIncluderIndex struct {
 	byLower map[string][]includerContribution
 }
@@ -330,110 +265,6 @@ func (m *mergedIncluderIndex) lookup(includerPath, header string) ([]string, boo
 	}
 
 	return out, found, hasMultiTarget
-}
-
-func unionIncluderMappings(active []*SysIncl, header string) ([]string, bool, bool) {
-	var (
-		out            []string
-		found          bool
-		hasMultiTarget bool
-		seen           map[string]struct{}
-	)
-
-	for _, rec := range active {
-		paths, ok := rec.Mappings[recordQuery(rec, header)]
-
-		if !ok {
-			continue
-		}
-
-		found = true
-
-		if rec.HasMultiTarget {
-			count := 0
-
-			for _, p := range paths {
-				if p != "" {
-					count++
-				}
-			}
-
-			if count >= 2 {
-				hasMultiTarget = true
-			}
-		}
-
-		for _, p := range paths {
-			if p == "" {
-				continue
-			}
-
-			if seen == nil {
-				seen = make(map[string]struct{}, 4)
-			}
-
-			if _, dup := seen[p]; dup {
-				continue
-			}
-
-			seen[p] = struct{}{}
-			out = append(out, p)
-		}
-	}
-
-	return out, found, hasMultiTarget
-}
-
-func (v PerSourceView) activeIncluderRecords(includerPath string) []*SysIncl {
-	if v.includerFilterCache == nil {
-		return v.computeActiveIncluderRecords(includerPath)
-	}
-
-	c := v.includerFilterCache
-
-	c.mu.RLock()
-	cached, ok := c.active[includerPath]
-	c.mu.RUnlock()
-
-	if ok {
-		return cached
-	}
-
-	active := v.computeActiveIncluderRecords(includerPath)
-
-	c.mu.Lock()
-
-	if existing, dup := c.active[includerPath]; dup {
-		c.mu.Unlock()
-
-		return existing
-	}
-
-	c.active[includerPath] = active
-	c.mu.Unlock()
-
-	return active
-}
-
-func (v PerSourceView) computeActiveIncluderRecords(includerPath string) []*SysIncl {
-	return v.computeActiveIncluderRecordsInto(nil, includerPath)
-}
-
-// computeActiveIncluderRecordsInto appends the matching records into dst[:0], so a
-// caller can reuse a scratch slice across calls (includerClass discards the result
-// whenever the includer maps to an already-seen class — most paths).
-func (v PerSourceView) computeActiveIncluderRecordsInto(dst []*SysIncl, includerPath string) []*SysIncl {
-	dst = dst[:0]
-
-	for _, rec := range v.includerKeyed {
-		if rec.Filter != nil && !rec.Filter.match(includerPath) {
-			continue
-		}
-
-		dst = append(dst, rec)
-	}
-
-	return dst
 }
 
 type sysInclEnv struct {
