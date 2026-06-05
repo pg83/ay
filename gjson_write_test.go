@@ -41,11 +41,11 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		Cmds:             []Cmd{},
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
-		KV:               map[string]interface{}{"name": "leaf"},
+		KV:               KV{Name: "leaf"},
 		Outputs:          ToVFSSlice([]string{"leaf.o"}),
-		Requirements:     map[string]interface{}{},
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 	})
 	main := e.Emit(&Node{
 		Cmds:             []Cmd{{CmdArgs: trickyArgs, Cwd: "$(B)", Env: map[string]string{"FOO": "bar"}}},
@@ -53,11 +53,11 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		ForeignDepRefs:   []NodeRef{leaf},
 		Env:              map[string]string{"PATH": "/usr/bin"},
 		Inputs:           ToVFSSlice([]string{"in1"}),
-		KV:               map[string]interface{}{"name": "main", "p": "CC"},
+		KV:               KV{Name: "main", P: "CC"},
 		Outputs:          ToVFSSlice([]string{"main.o"}),
-		Requirements:     map[string]interface{}{"cpu": float64(1), "flag": true, "frac": float64(1.5)},
+		Requirements:     Requirements{CPU: 1, RAM: 32, Network: "restricted"},
 		Tags:             []string{"tag1"},
-		TargetProperties: map[string]string{"module_lang": "cpp"},
+		TargetProperties: TargetProperties{ModuleLang: "cpp"},
 	})
 	e.Result(main)
 	g := Finalize(e)

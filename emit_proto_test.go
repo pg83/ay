@@ -70,7 +70,7 @@ END()
 
 	var pb *Node
 	for _, n := range g.Graph {
-		if n.KV["p"] == "PB" && strings.HasSuffix(n.Outputs[0].String(), "JsonPathParser.pb.h") {
+		if n.KV.P == "PB" && strings.HasSuffix(n.Outputs[0].String(), "JsonPathParser.pb.h") {
 			pb = n
 			break
 		}
@@ -83,8 +83,8 @@ END()
 	if jv == nil {
 		t.Fatal("no JV node producing JsonPathParser.proto")
 	}
-	if jv.KV["p"] != "JV" {
-		t.Errorf("expected JV kv.p, got %v", jv.KV["p"])
+	if jv.KV.P != "JV" {
+		t.Errorf("expected JV kv.p, got %v", jv.KV.P)
 	}
 
 	found := false
@@ -160,7 +160,7 @@ END()
 
 	var pb *Node
 	for _, n := range g.Graph {
-		if n.KV["p"] == "PB" && strings.HasSuffix(n.Outputs[0].String(), "JsonPathParser.pb.h") {
+		if n.KV.P == "PB" && strings.HasSuffix(n.Outputs[0].String(), "JsonPathParser.pb.h") {
 			pb = n
 			break
 		}

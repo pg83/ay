@@ -47,18 +47,14 @@ func emitARNode(
 
 	topEnv := hostP.ToolEnv()
 
-	targetProperties := map[string]string{
-		"module_dir":  instance.Path,
-		"module_lang": "cpp",
-		"module_type": "lib",
-	}
+	targetProperties := TargetProperties{ModuleDir: instance.Path, ModuleLang: "cpp", ModuleType: "lib"}
 
 	if instance.Language == LangPy {
-		targetProperties["module_lang"] = "py3"
+		targetProperties.ModuleLang = "py3"
 	}
 
 	if tag != nil {
-		targetProperties["module_tag"] = *tag
+		targetProperties.ModuleTag = *tag
 	}
 
 	depRefs := make([]NodeRef, 0, len(objRefs)+len(peerArchiveRefs))
@@ -74,20 +70,12 @@ func emitARNode(
 				Env:     cmdEnv,
 			},
 		},
-		Env:    topEnv,
-		Inputs: inputs,
-		KV: map[string]interface{}{
-			"p":        "AR",
-			"pc":       "light-red",
-			"show_out": "yes",
-		},
-		Outputs:  []VFS{archivePath},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
+		Env:              topEnv,
+		Inputs:           inputs,
+		KV:               KV{P: "AR", PC: "light-red", ShowOut: "yes"},
+		Outputs:          []VFS{archivePath},
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		Tags:             tags,
 		TargetProperties: targetProperties,
 		DepRefs:          depRefs,

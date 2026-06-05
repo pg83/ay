@@ -65,26 +65,15 @@ func EmitBI(
 			{CmdArgs: cmd1Args, Env: env},
 			{CmdArgs: cmd2Args, Env: env},
 		},
-		Env:    env,
-		Inputs: inputs,
-		KV: map[string]interface{}{
-			"disable_cache": "yes",
-			"p":             "BI",
-			"pc":            "yellow",
-			"show_out":      "yes",
-		},
-		Outputs: []VFS{outVFS},
-		Tags:    []string{},
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		DepRefs: []NodeRef{},
+		Env:              env,
+		Inputs:           inputs,
+		KV:               KV{P: "BI", PC: "yellow", ShowOut: "yes", DisableCache: "yes"},
+		Outputs:          []VFS{outVFS},
+		Tags:             []string{},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		DepRefs:          []NodeRef{},
 	}
 
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool), instance.Platform))

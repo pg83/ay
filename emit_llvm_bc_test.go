@@ -34,7 +34,7 @@ END()
 
 	var opNode *Node
 	for _, n := range g.Graph {
-		if p, _ := n.KV["p"].(string); p != "OP" {
+		if p := n.KV.P; p != "OP" {
 			continue
 		}
 		for _, o := range n.Outputs {
@@ -108,7 +108,7 @@ END()
 
 	var bcNode *Node
 	for _, n := range g.Graph {
-		if p, _ := n.KV["p"].(string); p != "BC" {
+		if p := n.KV.P; p != "BC" {
 			continue
 		}
 		for _, o := range n.Outputs {
@@ -221,14 +221,14 @@ END()
 			t.Errorf("graph missing %s node with output %q", kvp, path)
 			continue
 		}
-		if got, _ := n.KV["p"].(string); got != kvp {
+		if got := n.KV.P; got != kvp {
 			t.Errorf("output %q kv.p = %q, want %q", path, got, kvp)
 		}
 	}
 
 	var pyNode *Node
 	for _, n := range g.Graph {
-		if got, _ := n.KV["p"].(string); got != "PY" {
+		if got := n.KV.P; got != "PY" {
 			continue
 		}
 		for _, o := range n.Outputs {
@@ -259,7 +259,7 @@ END()
 
 	var arNode *Node
 	for _, n := range g.Graph {
-		if got, _ := n.KV["p"].(string); got != "AR" {
+		if got := n.KV.P; got != "AR" {
 			continue
 		}
 		for _, o := range n.Outputs {
@@ -304,7 +304,7 @@ END()
 
 	var bcNode *Node
 	for _, n := range g.Graph {
-		if p, _ := n.KV["p"].(string); p != "BC" {
+		if p := n.KV.P; p != "BC" {
 			continue
 		}
 		for _, o := range n.Outputs {
@@ -388,7 +388,7 @@ END()
 
 	var bcNode *Node
 	for _, n := range g.Graph {
-		if p, _ := n.KV["p"].(string); p != "BC" {
+		if p := n.KV.P; p != "BC" {
 			continue
 		}
 		for _, o := range n.Outputs {
@@ -452,7 +452,7 @@ END()
 	// Find the PY objcopy node that embeds the LLVM BC output.
 	var pyNode *Node
 	for _, n := range g.Graph {
-		if p, _ := n.KV["p"].(string); p != "PY" {
+		if p := n.KV.P; p != "PY" {
 			continue
 		}
 		for _, o := range n.Outputs {
@@ -517,7 +517,7 @@ END()
 
 	var bcNode *Node
 	for _, n := range g.Graph {
-		if p, _ := n.KV["p"].(string); p != "BC" {
+		if p := n.KV.P; p != "BC" {
 			continue
 		}
 		for _, o := range n.Outputs {

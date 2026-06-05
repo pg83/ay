@@ -8,20 +8,20 @@ type Cmd struct {
 }
 
 type Node struct {
-	Cache            *bool                  `json:"cache,omitempty"`
-	Cmds             []Cmd                  `json:"cmds"`
-	Env              map[string]string      `json:"env"`
-	Inputs           []VFS                  `json:"inputs"`
-	KV               map[string]interface{} `json:"kv"`
-	Outputs          []VFS                  `json:"outputs"`
-	Platform         string                 `json:"platform"`
-	Requirements     map[string]interface{} `json:"requirements"`
-	Sandboxing       bool                   `json:"sandboxing"`
-	SelfUID          UID                    `json:"self_uid"`
-	StatsUID         string                 `json:"stats_uid"`
-	Tags             []string               `json:"tags"`
-	TargetProperties map[string]string      `json:"target_properties"`
-	UID              UID                    `json:"uid"`
+	Cache            *bool             `json:"cache,omitempty"`
+	Cmds             []Cmd             `json:"cmds"`
+	Env              map[string]string `json:"env"`
+	Inputs           []VFS             `json:"inputs"`
+	KV               KV                `json:"kv"`
+	Outputs          []VFS             `json:"outputs"`
+	Platform         string            `json:"platform"`
+	Requirements     Requirements      `json:"requirements"`
+	Sandboxing       bool              `json:"sandboxing"`
+	SelfUID          UID               `json:"self_uid"`
+	StatsUID         string            `json:"stats_uid"`
+	Tags             []string          `json:"tags"`
+	TargetProperties TargetProperties  `json:"target_properties"`
+	UID              UID               `json:"uid"`
 
 	StatsTags []string `json:"-"`
 

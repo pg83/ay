@@ -68,16 +68,14 @@ func buildTestCtxNode(p *Platform) *Node {
 				"}",
 			},
 		}},
-		Env:      map[string]string{},
-		Inputs:   []VFS{Source(testAppendFileScriptRel)},
-		KV:       map[string]interface{}{"p": "CP", "pc": "light-blue"},
-		Outputs:  []VFS{bldCommonTestContext},
-		Platform: string(p.Target),
-		Requirements: map[string]interface{}{
-			"network": "restricted",
-		},
+		Env:              map[string]string{},
+		Inputs:           []VFS{Source(testAppendFileScriptRel)},
+		KV:               KV{P: "CP", PC: "light-blue"},
+		Outputs:          []VFS{bldCommonTestContext},
+		Platform:         string(p.Target),
+		Requirements:     Requirements{Network: "restricted"},
 		Tags:             sandboxingNodeTags(p),
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 	}, resourcePatternYMakePython3), p)
 }
 
@@ -147,26 +145,24 @@ func buildUnittestNode(p *Platform, info testSuiteInfo) *Node {
 		}},
 		Env:    testEnv(p, "unittest"),
 		Inputs: []VFS{Source(info.ProjectPath)},
-		KV: map[string]interface{}{
-			"p":              "TS",
-			"path":           path.Join(info.ProjectPath, "unittest"),
-			"pc":             "yellow",
-			"run_test_node":  true,
-			"show_out":       true,
-			"special_runner": "",
+		KV: KV{
+			P:                "TS",
+			Path:             path.Join(info.ProjectPath, "unittest"),
+			PC:               "yellow",
+			RunTestNode:      true,
+			ShowOutBool:      true,
+			HasSpecialRunner: true,
 		},
 		Outputs:  testOutputs(info.ProjectPath, "unittest"),
 		Platform: string(p.Target),
-		Requirements: map[string]interface{}{
-			"cpu":      float64(1),
-			"network":  "restricted",
-			"ram":      float64(8),
-			"ram_disk": float64(0),
+		Requirements: Requirements{
+			CPU:        1,
+			Network:    "restricted",
+			RAM:        8,
+			HasRAMDisk: true,
 		},
-		Tags: sandboxingNodeTags(p),
-		TargetProperties: map[string]string{
-			"module_lang": "cpp",
-		},
+		Tags:             sandboxingNodeTags(p),
+		TargetProperties: TargetProperties{ModuleLang: "cpp"},
 	}, p)
 }
 
@@ -254,26 +250,24 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 		}},
 		Env:    testEnv(p, "clang_format"),
 		Inputs: inputs,
-		KV: map[string]interface{}{
-			"p":              "TS",
-			"path":           path.Join(info.ProjectPath, "clang_format"),
-			"pc":             "yellow",
-			"run_test_node":  true,
-			"show_out":       true,
-			"special_runner": "",
+		KV: KV{
+			P:                "TS",
+			Path:             path.Join(info.ProjectPath, "clang_format"),
+			PC:               "yellow",
+			RunTestNode:      true,
+			ShowOutBool:      true,
+			HasSpecialRunner: true,
 		},
 		Outputs:  testOutputs(info.ProjectPath, "clang_format"),
 		Platform: string(p.Target),
-		Requirements: map[string]interface{}{
-			"cpu":      float64(1),
-			"network":  "restricted",
-			"ram":      float64(8),
-			"ram_disk": float64(0),
+		Requirements: Requirements{
+			CPU:        1,
+			Network:    "restricted",
+			RAM:        8,
+			HasRAMDisk: true,
 		},
-		Tags: nil,
-		TargetProperties: map[string]string{
-			"module_lang": "unknown",
-		},
+		Tags:             nil,
+		TargetProperties: TargetProperties{ModuleLang: "unknown"},
 	}, p)
 }
 

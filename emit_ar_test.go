@@ -65,12 +65,12 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 		Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
-		KV:               map[string]interface{}{},
+		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{"$(B)/build/cow/on/lib.c.o"}),
 		Platform:         "default-linux-aarch64",
-		Requirements:     map[string]interface{}{},
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 	})}
 	objPaths := []VFS{Intern("$(B)/o1.o"), Intern("$(B)/o2.o")}
 
@@ -179,12 +179,12 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
 			Env:              map[string]string{},
 			Inputs:           ToVFSSlice([]string{}),
-			KV:               map[string]interface{}{},
+			KV:               KV{},
 			Outputs:          []VFS{out},
 			Platform:         "default-linux-aarch64",
-			Requirements:     map[string]interface{}{},
+			Requirements:     Requirements{},
 			Tags:             []string{},
-			TargetProperties: map[string]string{},
+			TargetProperties: TargetProperties{},
 		})
 	}
 
@@ -229,12 +229,12 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
 			Env:              map[string]string{},
 			Inputs:           ToVFSSlice([]string{}),
-			KV:               map[string]interface{}{},
+			KV:               KV{},
 			Outputs:          []VFS{out},
 			Platform:         "default-linux-aarch64",
-			Requirements:     map[string]interface{}{},
+			Requirements:     Requirements{},
 			Tags:             []string{},
-			TargetProperties: map[string]string{},
+			TargetProperties: TargetProperties{},
 		})
 	}
 
@@ -266,12 +266,12 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
 			Env:              map[string]string{},
 			Inputs:           ToVFSSlice([]string{}),
-			KV:               map[string]interface{}{},
+			KV:               KV{},
 			Outputs:          []VFS{out},
 			Platform:         "default-linux-aarch64",
-			Requirements:     map[string]interface{}{},
+			Requirements:     Requirements{},
 			Tags:             []string{},
-			TargetProperties: map[string]string{},
+			TargetProperties: TargetProperties{},
 		})
 	}
 
@@ -306,12 +306,12 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: map[string]string{}}},
 			Env:              map[string]string{},
 			Inputs:           ToVFSSlice([]string{}),
-			KV:               map[string]interface{}{},
+			KV:               KV{},
 			Outputs:          []VFS{out},
 			Platform:         "default-linux-aarch64",
-			Requirements:     map[string]interface{}{},
+			Requirements:     Requirements{},
 			Tags:             []string{},
-			TargetProperties: map[string]string{},
+			TargetProperties: TargetProperties{},
 		})
 	}
 

@@ -162,26 +162,19 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Env:     env,
 		Inputs:  allInputs,
 		Outputs: []VFS{outVFS},
-		KV: map[string]interface{}{
-			"p":  "CC",
-			"pc": "green",
-		},
-		Tags: instance.Platform.Tags,
-		TargetProperties: func() map[string]string {
-			tp := map[string]string{"module_dir": instance.Path}
+		KV:      KV{P: "CC", PC: "green"},
+		Tags:    instance.Platform.Tags,
+		TargetProperties: func() TargetProperties {
+			tp := TargetProperties{ModuleDir: instance.Path}
 
 			if in.ModuleTag != nil {
-				tp["module_tag"] = *in.ModuleTag
+				tp.ModuleTag = *in.ModuleTag
 			}
 
 			return tp
 		}(),
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
+		Platform:     string(instance.Platform.Target),
+		Requirements: Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 	}
 
 	if len(in.ExtraDepRefs) > 0 {

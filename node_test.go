@@ -77,14 +77,14 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 
 		Env:              map[string]string{"FOO": "bar"},
 		Inputs:           ToVFSSlice([]string{"in"}),
-		KV:               map[string]interface{}{"p": "LD"},
+		KV:               KV{P: "LD"},
 		Outputs:          ToVFSSlice([]string{"out"}),
 		Platform:         "default-linux-aarch64",
-		Requirements:     map[string]interface{}{"cpu": 1, "ram": 32},
+		Requirements:     Requirements{CPU: 1, RAM: 32},
 		SelfUID:          tuid("selfuid"),
 		StatsUID:         "statsuid",
 		Tags:             []string{},
-		TargetProperties: map[string]string{"module_lang": "cpp"},
+		TargetProperties: TargetProperties{ModuleLang: "cpp"},
 		UID:              tuid("uid"),
 	}
 	raw, err := json.Marshal(n)
@@ -109,14 +109,14 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
-		KV:               map[string]interface{}{},
+		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{}),
 		Platform:         "",
-		Requirements:     map[string]interface{}{},
+		Requirements:     Requirements{},
 		SelfUID:          UID{},
 		StatsUID:         "",
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 		UID:              UID{},
 	}
 	raw, err := json.Marshal(n)
@@ -147,11 +147,11 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
-		KV:               map[string]interface{}{},
+		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{}),
-		Requirements:     map[string]interface{}{},
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 		DepRefs:          []NodeRef{7},
 		ForeignDepRefs:   []NodeRef{9},
 	}

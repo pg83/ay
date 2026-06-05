@@ -52,23 +52,14 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 				Env:     env,
 			},
 		},
-		Env:    env,
-		Inputs: inputs,
-		KV: map[string]interface{}{
-			"p":  "JS",
-			"pc": "magenta",
-		},
-		Outputs:  []VFS{outVFS},
-		Platform: string(platformID),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		Tags: tags,
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
+		Env:              env,
+		Inputs:           inputs,
+		KV:               KV{P: "JS", PC: "magenta"},
+		Outputs:          []VFS{outVFS},
+		Platform:         string(platformID),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Tags:             tags,
+		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 	}
 
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), statsPlatform)), outVFS

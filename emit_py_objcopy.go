@@ -158,14 +158,14 @@ func emitResourceObjcopy(
 			objcopyTags = append(objcopyTags, instance.Platform.Tags...)
 		}
 
-		resTargetProps := map[string]string{"module_dir": instance.Path}
+		resTargetProps := TargetProperties{ModuleDir: instance.Path}
 
 		if d.moduleStmt != nil {
 			switch d.moduleStmt.Name {
 			case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
-				resTargetProps["module_tag"] = "py3"
+				resTargetProps.ModuleTag = "py3"
 			case "PY3_PROGRAM":
-				resTargetProps["module_tag"] = "py3_bin"
+				resTargetProps.ModuleTag = "py3_bin"
 			}
 		}
 
@@ -176,22 +176,14 @@ func emitResourceObjcopy(
 					Env:     env,
 				},
 			},
-			Env:     env,
-			Inputs:  inputs,
-			Outputs: []VFS{outputObj},
-			KV: map[string]interface{}{
-				"p":        "PY",
-				"pc":       "yellow",
-				"show_out": "yes",
-			},
+			Env:              env,
+			Inputs:           inputs,
+			Outputs:          []VFS{outputObj},
+			KV:               KV{P: "PY", PC: "yellow", ShowOut: "yes"},
 			Tags:             objcopyTags,
 			TargetProperties: resTargetProps,
 			Platform:         string(instance.Platform.Target),
-			Requirements: map[string]interface{}{
-				"cpu":     float64(1),
-				"network": "restricted",
-				"ram":     float64(32),
-			},
+			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		}
 
 		if rescompilerLDRef != (NodeRef(0)) {
@@ -343,20 +335,18 @@ func emitKvOnlyObjcopyNode(
 		objcopyScriptVFS,
 	}
 
-	targetProps := map[string]string{
-		"module_dir": instance.Path,
-	}
+	targetProps := TargetProperties{ModuleDir: instance.Path}
 
 	switch d.moduleStmt.Name {
 	case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
-		targetProps["module_tag"] = "py3"
+		targetProps.ModuleTag = "py3"
 	}
 
 	if d.moduleStmt.Name == "PY3_PROGRAM" || d.programPairedLib {
 		if kind == kvOnlyLib {
-			targetProps["module_tag"] = "py3_bin_lib"
+			targetProps.ModuleTag = "py3_bin_lib"
 		} else {
-			targetProps["module_tag"] = "py3_bin"
+			targetProps.ModuleTag = "py3_bin"
 		}
 	}
 
@@ -376,15 +366,11 @@ func emitKvOnlyObjcopyNode(
 		Env:              env,
 		Inputs:           inputs,
 		Outputs:          []VFS{outputObj},
-		KV:               map[string]interface{}{"p": "PY", "pc": "yellow", "show_out": "yes"},
+		KV:               KV{P: "PY", PC: "yellow", ShowOut: "yes"},
 		Tags:             kvTags,
 		TargetProperties: targetProps,
 		Platform:         string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 	}
 
 	if rescompilerLDRef != (NodeRef(0)) {
@@ -473,24 +459,14 @@ func emitYaConfJSONObjcopy(
 					Env:     env,
 				},
 			},
-			Env:     env,
-			Inputs:  []VFS{rescompilerBinVFS, rescompressorBinVFS, input, objcopyScriptVFS},
-			Outputs: []VFS{outputObj},
-			KV: map[string]interface{}{
-				"p":        "PY",
-				"pc":       "yellow",
-				"show_out": "yes",
-			},
-			Tags: []string{},
-			TargetProperties: map[string]string{
-				"module_dir": instance.Path,
-			},
-			Platform: string(instance.Platform.Target),
-			Requirements: map[string]interface{}{
-				"cpu":     float64(1),
-				"network": "restricted",
-				"ram":     float64(32),
-			},
+			Env:              env,
+			Inputs:           []VFS{rescompilerBinVFS, rescompressorBinVFS, input, objcopyScriptVFS},
+			Outputs:          []VFS{outputObj},
+			KV:               KV{P: "PY", PC: "yellow", ShowOut: "yes"},
+			Tags:             []string{},
+			TargetProperties: TargetProperties{ModuleDir: instance.Path},
+			Platform:         string(instance.Platform.Target),
+			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		}
 
 		if len(instance.Platform.Tags) > 0 {
@@ -694,18 +670,18 @@ func emitPySrcObjcopy(
 
 			inputs = append(inputs, objcopyScriptVFS)
 			env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
-			targetProps := map[string]string{"module_dir": instance.Path}
+			targetProps := TargetProperties{ModuleDir: instance.Path}
 
 			switch d.moduleStmt.Name {
 			case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
-				targetProps["module_tag"] = "py3"
+				targetProps.ModuleTag = "py3"
 			}
 
 			// pysrc/namespace emissions for both the PY3_PROGRAM PROGRAM-side and
 			// its KindLib twin live under the PY3_BIN_LIB submodule in upstream;
 			// stamp them with that submodule's lowercased tag so the dump matches REF.
 			if d.moduleStmt.Name == "PY3_PROGRAM" || d.programPairedLib {
-				targetProps["module_tag"] = "py3_bin_lib"
+				targetProps.ModuleTag = "py3_bin_lib"
 			}
 
 			pyTags := []string{}
@@ -719,15 +695,11 @@ func emitPySrcObjcopy(
 				Env:              env,
 				Inputs:           inputs,
 				Outputs:          []VFS{outputObj},
-				KV:               map[string]interface{}{"p": "PY", "pc": "yellow", "show_out": "yes"},
+				KV:               KV{P: "PY", PC: "yellow", ShowOut: "yes"},
 				Tags:             pyTags,
 				TargetProperties: targetProps,
 				Platform:         string(instance.Platform.Target),
-				Requirements: map[string]interface{}{
-					"cpu":     float64(1),
-					"network": "restricted",
-					"ram":     float64(32),
-				},
+				Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			}
 
 			if rescompilerLDRef != (NodeRef(0)) {

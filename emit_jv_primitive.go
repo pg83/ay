@@ -29,31 +29,23 @@ func emitJVNode(instance ModuleInstance, cmdArgs []string, inputs []VFS, outputs
 				Cwd:     cwd,
 			},
 		},
-		Env:    env,
-		Inputs: inputs,
-		KV: map[string]interface{}{
-			"p":        "JV",
-			"pc":       "light-blue",
-			"show_out": "yes",
-		},
+		Env:     env,
+		Inputs:  inputs,
+		KV:      KV{P: "JV", PC: "light-blue", ShowOut: "yes"},
 		Outputs: outputs,
 		Tags:    []string{},
-		TargetProperties: func() map[string]string {
-			tp := map[string]string{"module_dir": instance.Path}
+		TargetProperties: func() TargetProperties {
+			tp := TargetProperties{ModuleDir: instance.Path}
 
 			if moduleTag != "" {
-				tp["module_tag"] = moduleTag
+				tp.ModuleTag = moduleTag
 			}
 
 			return tp
 		}(),
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		DepRefs: depRefs,
+		Platform:     string(instance.Platform.Target),
+		Requirements: Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		DepRefs:      depRefs,
 	}
 
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternJDK17), instance.Platform))

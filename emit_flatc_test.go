@@ -37,8 +37,8 @@ func TestEmitFL_NodeShape(t *testing.T) {
 	}
 
 	node := e.nodes[0]
-	if node.KV["p"] != "FL" {
-		t.Fatalf("kv.p = %q, want FL", node.KV["p"])
+	if node.KV.P != "FL" {
+		t.Fatalf("kv.p = %q, want FL", node.KV.P)
 	}
 	if got := node.Cmds[0].CmdArgs; !contains(got, "--scoped-enums") {
 		t.Fatalf("cmd args missing --scoped-enums: %v", got)

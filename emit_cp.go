@@ -44,24 +44,15 @@ func EmitJVCPG4(
 				Env:     env,
 			},
 		},
-		Env:    env,
-		Inputs: inputs,
-		KV: map[string]interface{}{
-			"p":  "CP",
-			"pc": "light-cyan",
-		},
-		Outputs:  []VFS{dst},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		Tags: []string{},
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
-		DepRefs: []NodeRef{jvRef},
+		Env:              env,
+		Inputs:           inputs,
+		KV:               KV{P: "CP", PC: "light-cyan"},
+		Outputs:          []VFS{dst},
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Tags:             []string{},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		DepRefs:          []NodeRef{jvRef},
 	}
 
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
@@ -109,24 +100,15 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 				Env:     env,
 			},
 		},
-		Env:    env,
-		Inputs: inputs,
-		KV: map[string]interface{}{
-			"p":  "CP",
-			"pc": "light-cyan",
-		},
-		Outputs:  []VFS{dst},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		Tags: []string{},
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
-		DepRefs: depRefs,
+		Env:              env,
+		Inputs:           inputs,
+		KV:               KV{P: "CP", PC: "light-cyan"},
+		Outputs:          []VFS{dst},
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Tags:             []string{},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		DepRefs:          depRefs,
 	}
 
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))

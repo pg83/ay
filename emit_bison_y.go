@@ -149,25 +149,16 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	}
 
 	ycRef := ctx.emit.Emit(bindNodePlatform(withResources(&Node{
-		Cmds:    cmds,
-		DepRefs: []NodeRef{bisonRef, m4Ref},
-		Env:     env,
-		Inputs:  inputs,
-		Outputs: []VFS{headerVFS, generatedVFS},
-		KV: map[string]interface{}{
-			"p":  "YC",
-			"pc": "light-green",
-		},
-		Platform: string(instance.Platform.Target),
-		Requirements: map[string]interface{}{
-			"cpu":     float64(1),
-			"network": "restricted",
-			"ram":     float64(32),
-		},
-		Tags: instance.Platform.Tags,
-		TargetProperties: map[string]string{
-			"module_dir": instance.Path,
-		},
+		Cmds:             cmds,
+		DepRefs:          []NodeRef{bisonRef, m4Ref},
+		Env:              env,
+		Inputs:           inputs,
+		Outputs:          []VFS{headerVFS, generatedVFS},
+		KV:               KV{P: "YC", PC: "light-green"},
+		Platform:         string(instance.Platform.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Tags:             instance.Platform.Tags,
+		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 	}, resourcePatternYMakePython3), instance.Platform))
 	bindGeneratedOutput(ctx, instance, headerVFS, ycRef)
 	bindGeneratedOutput(ctx, instance, generatedVFS, ycRef)

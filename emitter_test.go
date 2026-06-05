@@ -14,35 +14,35 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 		Cmds:             []Cmd{{CmdArgs: []string{"build", "C"}, Env: map[string]string{}}},
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{"c.in"}),
-		KV:               map[string]interface{}{"name": "C"},
+		KV:               KV{Name: "C"},
 		Outputs:          ToVFSSlice([]string{"c.out"}),
 		Platform:         "linux",
-		Requirements:     map[string]interface{}{},
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 	})
 	b := e.Emit(&Node{
 		Cmds:             []Cmd{{CmdArgs: []string{"build", "B"}, Env: map[string]string{}}},
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{"b.in"}),
-		KV:               map[string]interface{}{"name": "B"},
+		KV:               KV{Name: "B"},
 		Outputs:          ToVFSSlice([]string{"b.out"}),
 		Platform:         "linux",
-		Requirements:     map[string]interface{}{},
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 		DepRefs:          []NodeRef{c},
 	})
 	a := e.Emit(&Node{
 		Cmds:             []Cmd{{CmdArgs: []string{"build", "A"}, Env: map[string]string{}}},
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{"a.in"}),
-		KV:               map[string]interface{}{"name": "A"},
+		KV:               KV{Name: "A"},
 		Outputs:          ToVFSSlice([]string{"a.out"}),
 		Platform:         "linux",
-		Requirements:     map[string]interface{}{},
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 		DepRefs:          []NodeRef{b, c},
 	})
 	e.Result(a)
@@ -71,7 +71,7 @@ func graphForeignDeps(g *Graph, n *Node) []UID {
 }
 
 func nodeNameByKV(g *Graph, idx int) string {
-	name, _ := g.Graph[idx].KV["name"].(string)
+	name := g.Graph[idx].KV.Name
 
 	return name
 }
@@ -153,10 +153,10 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds:   []Cmd{{CmdArgs: []string{name}, Env: map[string]string{}}},
 			Env:    map[string]string{},
-			Inputs: ToVFSSlice([]string{}), KV: map[string]interface{}{"name": name},
+			Inputs: ToVFSSlice([]string{}), KV: KV{Name: name},
 			Outputs:      ToVFSSlice([]string{}),
-			Requirements: map[string]interface{}{}, Tags: []string{},
-			TargetProperties: map[string]string{},
+			Requirements: Requirements{}, Tags: []string{},
+			TargetProperties: TargetProperties{},
 		})
 	}
 	x := mkLeaf("X")
@@ -166,10 +166,10 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
-		Requirements:     map[string]interface{}{},
+		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 		DepRefs:          []NodeRef{z, x, y},
 	})
 	e.Result(a)
@@ -177,7 +177,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 
 	var aNode *Node
 	for _, n := range g.Graph {
-		if n.KV["name"] == "A" {
+		if n.KV.Name == "A" {
 			aNode = n
 
 			break
@@ -190,7 +190,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 
 	byName := map[string]UID{}
 	for _, n := range g.Graph {
-		if nm, ok := n.KV["name"].(string); ok {
+		if nm := n.KV.Name; nm != "" {
 			byName[nm] = n.UID
 		}
 	}
@@ -208,18 +208,18 @@ func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 	c := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"C"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]interface{}{"name": "C"}, Outputs: ToVFSSlice([]string{}),
-		Requirements:     map[string]interface{}{},
+		KV: KV{Name: "C"}, Outputs: ToVFSSlice([]string{}),
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 	})
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
-		Requirements:     map[string]interface{}{},
+		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 		DepRefs:          []NodeRef{c, c, c},
 	})
 	e.Result(a)
@@ -227,7 +227,7 @@ func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 
 	var aNode *Node
 	for _, n := range g.Graph {
-		if n.KV["name"] == "A" {
+		if n.KV.Name == "A" {
 			aNode = n
 		}
 	}
@@ -249,18 +249,18 @@ func TestFinalize_CycleReturnsError(t *testing.T) {
 	aNode := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
-		Requirements:     map[string]interface{}{},
+		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 	}
 	bNode := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"B"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]interface{}{"name": "B"}, Outputs: ToVFSSlice([]string{}),
-		Requirements:     map[string]interface{}{},
+		KV: KV{Name: "B"}, Outputs: ToVFSSlice([]string{}),
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 	}
 	a := e.Emit(aNode)
 	b := e.Emit(bNode)
@@ -279,10 +279,10 @@ func TestFinalize_OutOfRangeRefReturnsError(t *testing.T) {
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
-		Requirements:     map[string]interface{}{},
+		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 		DepRefs:          []NodeRef{999},
 	})
 	e.Result(a)
@@ -319,10 +319,10 @@ func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds: []Cmd{{CmdArgs: []string{"identical"}, Env: map[string]string{}}},
 			Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-			KV: map[string]interface{}{"name": "L"}, Outputs: ToVFSSlice([]string{}),
-			Requirements:     map[string]interface{}{},
+			KV: KV{Name: "L"}, Outputs: ToVFSSlice([]string{}),
+			Requirements:     Requirements{},
 			Tags:             []string{},
-			TargetProperties: map[string]string{},
+			TargetProperties: TargetProperties{},
 		})
 	}
 	r1 := mk()
@@ -357,10 +357,10 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
-		Requirements:     map[string]interface{}{},
+		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 		ForeignDepRefs:   []NodeRef{},
 	})
 	e.Result(a)
@@ -368,7 +368,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 
 	var aNode *Node
 	for _, n := range g.Graph {
-		if n.KV["name"] == "A" {
+		if n.KV.Name == "A" {
 			aNode = n
 		}
 	}
@@ -394,10 +394,10 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 	a := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]interface{}{"name": "A"}, Outputs: ToVFSSlice([]string{}),
-		Requirements:     map[string]interface{}{},
+		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 	})
 	e.Result(a)
 	e.Result(a)
@@ -413,9 +413,9 @@ func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 	r := e.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"X"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]interface{}{"name": "X"}, Outputs: ToVFSSlice([]string{}),
-		Requirements: map[string]interface{}{},
-		Tags:         []string{}, TargetProperties: map[string]string{},
+		KV: KV{Name: "X"}, Outputs: ToVFSSlice([]string{}),
+		Requirements: Requirements{},
+		Tags:         []string{}, TargetProperties: TargetProperties{},
 	})
 	e.Result(r)
 
@@ -440,7 +440,7 @@ func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 
 func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
 	e := NewBufferedEmitter()
-	e.Emit(&Node{KV: map[string]interface{}{"p": "TEST"}})
+	e.Emit(&Node{KV: KV{P: "TEST"}})
 	Finalize(e)
 
 	defer func() {
@@ -459,12 +459,12 @@ func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
 		}
 	}()
 
-	e.Emit(&Node{KV: map[string]interface{}{"p": "TEST2"}})
+	e.Emit(&Node{KV: KV{P: "TEST2"}})
 }
 
 func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
 	e := NewBufferedEmitter()
-	ref := e.Emit(&Node{KV: map[string]interface{}{"p": "TEST"}})
+	ref := e.Emit(&Node{KV: KV{P: "TEST"}})
 	Finalize(e)
 
 	defer func() {
@@ -491,15 +491,15 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 	e1 := NewBufferedEmitter()
 	c1 := e1.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"C", "v1"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]interface{}{},
-		Outputs: ToVFSSlice([]string{}), Requirements: map[string]interface{}{},
-		Tags: []string{}, TargetProperties: map[string]string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: KV{},
+		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
+		Tags: []string{}, TargetProperties: TargetProperties{},
 	})
 	a1 := e1.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]interface{}{},
-		Outputs: ToVFSSlice([]string{}), Requirements: map[string]interface{}{},
-		Tags: []string{}, TargetProperties: map[string]string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: KV{},
+		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
+		Tags: []string{}, TargetProperties: TargetProperties{},
 		DepRefs: []NodeRef{c1},
 	})
 	e1.Result(a1)
@@ -508,15 +508,15 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 	e2 := NewBufferedEmitter()
 	c2 := e2.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"C", "v2"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]interface{}{},
-		Outputs: ToVFSSlice([]string{}), Requirements: map[string]interface{}{},
-		Tags: []string{}, TargetProperties: map[string]string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: KV{},
+		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
+		Tags: []string{}, TargetProperties: TargetProperties{},
 	})
 	a2 := e2.Emit(&Node{
 		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: map[string]string{}}},
-		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: map[string]interface{}{},
-		Outputs: ToVFSSlice([]string{}), Requirements: map[string]interface{}{},
-		Tags: []string{}, TargetProperties: map[string]string{},
+		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}), KV: KV{},
+		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
+		Tags: []string{}, TargetProperties: TargetProperties{},
 		DepRefs: []NodeRef{c2},
 	})
 	e2.Result(a2)
@@ -537,11 +537,11 @@ func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 			Cmds:             []Cmd{{CmdArgs: []string{name}, Env: map[string]string{}}},
 			Env:              map[string]string{},
 			Inputs:           ToVFSSlice([]string{}),
-			KV:               map[string]interface{}{"name": name},
+			KV:               KV{Name: name},
 			Outputs:          ToVFSSlice([]string{}),
-			Requirements:     map[string]interface{}{},
+			Requirements:     Requirements{},
 			Tags:             []string{},
-			TargetProperties: map[string]string{},
+			TargetProperties: TargetProperties{},
 			DepRefs:          deps,
 		})
 	}
@@ -558,13 +558,13 @@ func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 		t.Fatalf("graph len = %d, want 6", len(g.Graph))
 	}
 
-	if g.Graph[0].KV["name"] != "T" {
-		t.Errorf("graph[0] = %q, want T (DFS root)", g.Graph[0].KV["name"])
+	if g.Graph[0].KV.Name != "T" {
+		t.Errorf("graph[0] = %q, want T (DFS root)", g.Graph[0].KV.Name)
 	}
 
 	pos := make(map[string]int, 6)
 	for i, n := range g.Graph {
-		name, _ := n.KV["name"].(string)
+		name := n.KV.Name
 		pos[name] = i
 	}
 

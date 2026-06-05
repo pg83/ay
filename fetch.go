@@ -125,17 +125,15 @@ func fetchNode(host *Platform, item resourceFetch, scripts scriptDeps) *Node {
 			},
 			Env: map[string]string{},
 		}},
-		Env:          map[string]string{},
-		Inputs:       fetchScriptInputs(scripts),
-		KV:           map[string]interface{}{"p": "FETCH", "pc": "yellow", "show_out": "yes"},
-		Outputs:      []VFS{item.Output},
-		Platform:     string(host.Target),
-		Requirements: map[string]interface{}{"cpu": float64(1), "network": "full", "ram": float64(32)},
-		Sandboxing:   true,
-		Tags:         host.Tags, // read-only; Platform.Tags is immutable during emit
-		TargetProperties: map[string]string{
-			"module_dir": "build/resources",
-		},
+		Env:              map[string]string{},
+		Inputs:           fetchScriptInputs(scripts),
+		KV:               KV{P: "FETCH", PC: "yellow", ShowOut: "yes"},
+		Outputs:          []VFS{item.Output},
+		Platform:         string(host.Target),
+		Requirements:     Requirements{CPU: float64(1), Network: "full", RAM: float64(32)},
+		Sandboxing:       true,
+		Tags:             host.Tags, // read-only; Platform.Tags is immutable during emit
+		TargetProperties: TargetProperties{ModuleDir: "build/resources"},
 	}, host)
 }
 

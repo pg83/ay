@@ -87,16 +87,14 @@ func expectedTestCtxNode() *Node {
 				"}",
 			},
 		}},
-		Env:      map[string]string{},
-		Inputs:   []VFS{Intern("$(S)/build/scripts/append_file.py")},
-		KV:       map[string]interface{}{"p": "CP", "pc": "light-blue"},
-		Outputs:  []VFS{Intern("$(B)/common_test.context")},
-		Platform: "default-linux-x86_64",
-		Requirements: map[string]interface{}{
-			"network": "restricted",
-		},
+		Env:              map[string]string{},
+		Inputs:           []VFS{Intern("$(S)/build/scripts/append_file.py")},
+		KV:               KV{P: "CP", PC: "light-blue"},
+		Outputs:          []VFS{Intern("$(B)/common_test.context")},
+		Platform:         "default-linux-x86_64",
+		Requirements:     Requirements{Network: "restricted"},
 		Tags:             expectedSandboxingTags(),
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 	}
 }
 
@@ -160,31 +158,17 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 		}},
 		Env:    expectedTestEnv("unittest"),
 		Inputs: []VFS{Intern("$(S)/util/ut")},
-		KV: map[string]interface{}{
-			"p":              "TS",
-			"path":           "util/ut/unittest",
-			"pc":             "yellow",
-			"run_test_node":  true,
-			"show_out":       true,
-			"special_runner": "",
-		},
+		KV:     KV{P: "TS", Path: "util/ut/unittest", PC: "yellow", RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true},
 		Outputs: []VFS{
 			Intern("$(B)/util/ut/test-results/unittest/meta.json"),
 			Intern("$(B)/util/ut/test-results/unittest/ytest.report.trace"),
 			Intern("$(B)/util/ut/test-results/unittest/run_test.log"),
 			Intern("$(B)/util/ut/test-results/unittest/testing_out_stuff.tar.zstd"),
 		},
-		Platform: "default-linux-x86_64",
-		Requirements: map[string]interface{}{
-			"cpu":      float64(1),
-			"network":  "restricted",
-			"ram":      float64(8),
-			"ram_disk": float64(0),
-		},
-		Tags: expectedSandboxingTags(),
-		TargetProperties: map[string]string{
-			"module_lang": "cpp",
-		},
+		Platform:         "default-linux-x86_64",
+		Requirements:     Requirements{CPU: 1, Network: "restricted", RAM: 8, HasRAMDisk: true},
+		Tags:             expectedSandboxingTags(),
+		TargetProperties: TargetProperties{ModuleLang: "cpp"},
 	}
 }
 
@@ -254,31 +238,17 @@ func expectedClangFormatNode() *Node {
 			Intern("$(S)/util/ysafeptr_ut.cpp"),
 			Intern("$(S)/util/ysaveload_ut.cpp"),
 		},
-		KV: map[string]interface{}{
-			"p":              "TS",
-			"path":           "util/ut/clang_format",
-			"pc":             "yellow",
-			"run_test_node":  true,
-			"show_out":       true,
-			"special_runner": "",
-		},
+		KV: KV{P: "TS", Path: "util/ut/clang_format", PC: "yellow", RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true},
 		Outputs: []VFS{
 			Intern("$(B)/util/ut/test-results/clang_format/meta.json"),
 			Intern("$(B)/util/ut/test-results/clang_format/ytest.report.trace"),
 			Intern("$(B)/util/ut/test-results/clang_format/run_test.log"),
 			Intern("$(B)/util/ut/test-results/clang_format/testing_out_stuff.tar.zstd"),
 		},
-		Platform: "default-linux-x86_64",
-		Requirements: map[string]interface{}{
-			"cpu":      float64(1),
-			"network":  "restricted",
-			"ram":      float64(8),
-			"ram_disk": float64(0),
-		},
-		Tags: nil,
-		TargetProperties: map[string]string{
-			"module_lang": "unknown",
-		},
+		Platform:         "default-linux-x86_64",
+		Requirements:     Requirements{CPU: 1, Network: "restricted", RAM: 8, HasRAMDisk: true},
+		Tags:             nil,
+		TargetProperties: TargetProperties{ModuleLang: "unknown"},
 	}
 }
 
@@ -383,9 +353,9 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 			byOutput[node.Outputs[0].String()] = node
 		}
 
-		kvPath, _ := node.KV["path"].(string)
+		kvPath := node.KV.Path
 		switch {
-		case node.KV["p"] == "LD":
+		case node.KV.P == "LD":
 			ldNode = node
 		case kvPath == "util/ut/unittest":
 			unittestNode = node
@@ -515,8 +485,8 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		if ccNode == nil {
 			t.Fatalf("missing rebased test-object output %q", spec.output)
 		}
-		if ccNode.TargetProperties["module_dir"] != "util/ut" {
-			t.Fatalf("cc module_dir for %q = %q, want util/ut", spec.output, ccNode.TargetProperties["module_dir"])
+		if ccNode.TargetProperties.ModuleDir != "util/ut" {
+			t.Fatalf("cc module_dir for %q = %q, want util/ut", spec.output, ccNode.TargetProperties.ModuleDir)
 		}
 		if !reflect.DeepEqual(ccNode.Tags, expectedSandboxingTags()) {
 			t.Fatalf("cc tags for %q = %v, want %v", spec.output, ccNode.Tags, expectedSandboxingTags())

@@ -59,7 +59,7 @@ func TestComputeUID_KnownVector(t *testing.T) {
 
 func TestNodeStatsUID_KnownVector(t *testing.T) {
 	n := &Node{
-		KV:       map[string]interface{}{"p": "LD"},
+		KV:       KV{P: "LD"},
 		Outputs:  []VFS{Intern("$(B)/tools/archiver/archiver")},
 		Platform: "default-linux-aarch64",
 		StatsTags: []string{
@@ -91,7 +91,7 @@ func TestNodeStatsUID_IgnoresUnrelatedTargetCLIFlags(t *testing.T) {
 		p.StatsFlags = buildTargetStatsFlags(flags, cliFlags)
 
 		return &Node{
-			KV:        map[string]interface{}{"p": "LD"},
+			KV:        KV{P: "LD"},
 			Outputs:   []VFS{Intern("$(B)/tools/archiver/archiver")},
 			Platform:  string(p.Target),
 			StatsTags: statsTagsForPlatform(p),
@@ -130,7 +130,7 @@ func TestNodeStatsUID_UsesBaseTargetFlags(t *testing.T) {
 	p.StatsFlags = buildTargetStatsFlags(flags, map[string]string{"UNRELATED": "yes"})
 
 	n := &Node{
-		KV:        map[string]interface{}{"p": "LD"},
+		KV:        KV{P: "LD"},
 		Outputs:   []VFS{Intern("$(B)/tools/archiver/archiver")},
 		Platform:  string(p.Target),
 		StatsTags: statsTagsForPlatform(p),
@@ -153,7 +153,7 @@ func TestNodeStatsUID_UsesBaseTargetFlags(t *testing.T) {
 
 func TestNodeStatsUID_UsesLongRootOutputs(t *testing.T) {
 	n := &Node{
-		KV:       map[string]interface{}{"p": "LD"},
+		KV:       KV{P: "LD"},
 		Outputs:  []VFS{Intern("$(B)/tools/archiver/archiver")},
 		Platform: "default-linux-aarch64",
 		StatsTags: []string{
@@ -188,11 +188,11 @@ func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 
 		Env:              map[string]string{},
 		Inputs:           ToVFSSlice([]string{}),
-		KV:               map[string]interface{}{},
+		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{}),
-		Requirements:     map[string]interface{}{},
+		Requirements:     Requirements{},
 		Tags:             []string{},
-		TargetProperties: map[string]string{},
+		TargetProperties: TargetProperties{},
 		UID:              tuid("AAAAA"),
 		SelfUID:          tuid("BBBBB"),
 		StatsUID:         "should-not-appear-CCCCC",
@@ -216,9 +216,9 @@ func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
 	n := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"sh", "-c", "echo <a> & echo b"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]interface{}{"p": "CC", "html": "a<b>c"}, Outputs: ToVFSSlice([]string{}),
-		Requirements: map[string]interface{}{}, Tags: []string{},
-		TargetProperties: map[string]string{},
+		KV: KV{P: "CC", Name: "a<b>c"}, Outputs: ToVFSSlice([]string{}),
+		Requirements: Requirements{}, Tags: []string{},
+		TargetProperties: TargetProperties{},
 	}
 	canon := canonicalNodeBytes(n)
 
@@ -250,9 +250,9 @@ func TestCanonicalNodeBytes_DoesNotEscapeHTML(t *testing.T) {
 	n := &Node{
 		Cmds: []Cmd{{CmdArgs: []string{"sh", "-c", "echo <a> & echo b"}, Env: map[string]string{}}},
 		Env:  map[string]string{}, Inputs: ToVFSSlice([]string{}),
-		KV: map[string]interface{}{}, Outputs: ToVFSSlice([]string{}),
-		Requirements: map[string]interface{}{}, Tags: []string{},
-		TargetProperties: map[string]string{},
+		KV: KV{}, Outputs: ToVFSSlice([]string{}),
+		Requirements: Requirements{}, Tags: []string{},
+		TargetProperties: TargetProperties{},
 	}
 	canon := canonicalNodeBytes(n)
 	s := string(canon)

@@ -24,12 +24,8 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 	)
 	python := ctx.host.Tools.Python3
 	env := map[string]string{"ARCADIA_ROOT_DISTBUILD": "$(S)"}
-	reqs := map[string]interface{}{
-		"cpu":     float64(1),
-		"network": "restricted",
-		"ram":     float64(32),
-	}
-	tp := map[string]string{"module_dir": instance.Path}
+	reqs := Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)}
+	tp := TargetProperties{ModuleDir: instance.Path}
 
 	for _, stmt := range d.llvmBc {
 		clangRoot := stripResourceName(stmt.ClangBCRoot)
@@ -110,9 +106,9 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 				Env:              env,
 				Inputs:           allInputs,
 				Outputs:          []VFS{bcOut},
-				KV:               map[string]interface{}{"p": "BC", "pc": "light-green"},
+				KV:               KV{P: "BC", PC: "light-green"},
 				Tags:             []string{},
-				TargetProperties: cloneStringMap(tp),
+				TargetProperties: tp,
 				Requirements:     reqs,
 				Sandboxing:       true,
 				DepRefs:          depRefs,
@@ -141,9 +137,9 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			Env:              env,
 			Inputs:           mergeInputs,
 			Outputs:          []VFS{mergedOut},
-			KV:               map[string]interface{}{"p": "LD", "pc": "light-red"},
+			KV:               KV{P: "LD", PC: "light-red"},
 			Tags:             []string{},
-			TargetProperties: cloneStringMap(tp),
+			TargetProperties: tp,
 			Requirements:     reqs,
 			Sandboxing:       true,
 			DepRefs:          append([]NodeRef(nil), bcRefs...),
@@ -179,9 +175,9 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			Env:              env,
 			Inputs:           optInputs,
 			Outputs:          []VFS{optOut},
-			KV:               map[string]interface{}{"p": "OP", "pc": "yellow"},
+			KV:               KV{P: "OP", PC: "yellow"},
 			Tags:             []string{},
-			TargetProperties: cloneStringMap(tp),
+			TargetProperties: tp,
 			Requirements:     reqs,
 			Sandboxing:       true,
 			DepRefs:          []NodeRef{ldRef},
@@ -357,14 +353,4 @@ func stripResourceName(s string) string {
 	}
 
 	return s
-}
-
-func cloneStringMap(m map[string]string) map[string]string {
-	out := make(map[string]string, len(m))
-
-	for k, v := range m {
-		out[k] = v
-	}
-
-	return out
 }
