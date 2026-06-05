@@ -657,7 +657,7 @@ func (sc *scanCtx) resolve(includerAbs, incDir VFS, d includeDirective) (out []V
 	includerRel := includerAbs.Rel()
 	var mappings []VFS
 	var hasMultiTarget bool
-	mappings, hasMultiTarget, sysinclClaimed = s.sysincl.lookup(includerRel, includerRel, d.target)
+	mappings, hasMultiTarget, sysinclClaimed = s.sysincl.lookup(includerRel, d.target)
 
 	if d.kind == includeQuoted && len(searchOut) > 0 {
 		bypass := !hasMultiTarget

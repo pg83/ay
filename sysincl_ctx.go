@@ -5,14 +5,15 @@ import (
 	"strings"
 )
 
-// sysinclCtx owns the sysincl rule set and the indexes that drive include
-// resolution overrides. Built once per scanner from a SysInclSet:
+// sysinclCtx owns the sysincl rule set's lookup indexes. Built once per scanner:
 //   - mightClaim — a cheap, sound prefilter over the rule keys;
-//   - sourceLookup — source-keyed records, matched inline;
-//   - includerLookup — includer-keyed records, via the header-first merged index.
+//   - merged — ALL records (source- and includer-keyed) in one header-first index.
+//
+// The scanner matches every filter against the includer's own path, so the
+// source/includer rule split needs no separate handling — it falls out of each
+// record's filter. Result order is irrelevant (the gate sorts node inputs), so
+// both rule kinds share one index.
 type sysinclCtx struct {
-	set SysInclSet
-
 	// keyBits/keyCI/ciGate/ciMaxLen back mightClaim: a "could any record map this
 	// target" gate evaluated before the full lookup.
 	keyBits  []bool          // case-sensitive keys, indexed by target STR
@@ -20,12 +21,11 @@ type sysinclCtx struct {
 	ciGate   idBitSet[uint16]
 	ciMaxLen int // longest CI key; longer targets cannot match (cheap reject)
 
-	// merged folds all includer-keyed records into one header-keyed index.
-	merged *mergedIncluderIndex
+	merged *sysinclIndex
 }
 
 func newSysinclCtx(set SysInclSet) *sysinclCtx {
-	c := &sysinclCtx{set: set}
+	c := &sysinclCtx{}
 
 	var csKeyIDs []STR
 
@@ -74,7 +74,7 @@ func newSysinclCtx(set SysInclSet) *sysinclCtx {
 		}
 	}
 
-	c.merged = buildMergedIncluderIndex(set.includerKeyedRecords())
+	c.merged = buildSysinclIndex(set)
 
 	return c
 }
@@ -103,114 +103,16 @@ func (c *sysinclCtx) mightClaim(target STR) bool {
 	return false
 }
 
-// lookup resolves target's sysincl override for a file at sourceRel / includerRel
-// (the scanner passes the includer's own path for both), unioning the source-keyed
-// and includer-keyed results.
-func (c *sysinclCtx) lookup(sourceRel, includerRel string, target STR) (paths []VFS, hasMultiTarget, claimed bool) {
+// lookup resolves target's sysincl override for a file at path (the scanner uses
+// the includer's own path) via the merged header-first index over all records.
+func (c *sysinclCtx) lookup(path string, target STR) ([]VFS, bool, bool) {
 	if !c.mightClaim(target) {
 		return nil, false, false
 	}
 
-	srcMappings, srcMT, srcClaimed := c.sourceLookup(sourceRel, target)
-	incMappings, incMT, incClaimed := c.includerLookup(includerRel, target)
-	claimed = srcClaimed || incClaimed
+	rels, claimed, hasMultiTarget := c.merged.lookup(path, target.String())
 
-	switch {
-	case len(srcMappings) == 0:
-		paths = incMappings
-	case len(incMappings) == 0:
-		paths = srcMappings
-	default:
-		out := make([]VFS, 0, len(srcMappings)+len(incMappings))
-		out = append(out, srcMappings...)
-
-	incLoop:
-		for _, p := range incMappings {
-			for _, q := range out {
-				if p == q {
-					continue incLoop
-				}
-			}
-
-			out = append(out, p)
-		}
-
-		paths = out
-	}
-
-	hasMultiTarget = srcMT || incMT || len(paths) >= 2
-
-	return paths, hasMultiTarget, claimed
-}
-
-func (c *sysinclCtx) sourceLookup(sourceRel string, target STR) ([]VFS, bool, bool) {
-	header := target.String()
-
-	var (
-		out            []VFS
-		found          bool
-		hasMultiTarget bool
-		seen           map[string]struct{}
-	)
-
-	for i := range c.set {
-		rec := &c.set[i]
-
-		if !rec.KeyBySource {
-			continue
-		}
-
-		if rec.Filter != nil && !rec.Filter.match(sourceRel) {
-			continue
-		}
-
-		paths, ok := rec.Mappings[recordQuery(rec, header)]
-
-		if !ok {
-			continue
-		}
-
-		found = true
-
-		if rec.HasMultiTarget {
-			count := 0
-
-			for _, p := range paths {
-				if p != "" {
-					count++
-				}
-			}
-
-			if count >= 2 {
-				hasMultiTarget = true
-			}
-		}
-
-		for _, p := range paths {
-			if p == "" {
-				continue
-			}
-
-			if seen == nil {
-				seen = make(map[string]struct{}, 4)
-			}
-
-			if _, dup := seen[p]; dup {
-				continue
-			}
-
-			seen[p] = struct{}{}
-			out = append(out, Source(normalisePath(p)))
-		}
-	}
-
-	return out, hasMultiTarget, found
-}
-
-func (c *sysinclCtx) includerLookup(includerRel string, target STR) ([]VFS, bool, bool) {
-	rels, claimed, hasMultiTarget := c.merged.lookup(includerRel, target.String())
-
-	return absifyRels(rels), hasMultiTarget, claimed
+	return absifyRels(rels), hasMultiTarget || len(rels) >= 2, claimed
 }
 
 // caseVariants returns b plus, for an ASCII letter, its opposite-case form — the
@@ -240,32 +142,34 @@ func absifyRels(rels []string) []VFS {
 	return out
 }
 
-// includerContribution is one includer-keyed record's mapping for a header
-// bucket, carrying the record's Filter so activeness is decided at query time.
-type includerContribution struct {
+// sysinclContribution is one sysincl record's mapping for a header bucket,
+// carrying the record's Filter so activeness is decided per query against the
+// includer path.
+type sysinclContribution struct {
 	paths  []string
-	filter *sourceFilter // nil = applies to every includer
+	filter *sourceFilter // nil = applies to every path
 	rawKey string        // the record's stored key (lowercase for CI records)
-	order  int           // index in includerKeyed — preserves union order
+	order  int           // index in the rule set
 	ci     bool
 	multi  bool // record.HasMultiTarget
 }
 
-// mergedIncluderIndex folds ALL includer-keyed records into one header-keyed
-// index built once, so an includer lookup is a single map probe plus a tiny
+// sysinclIndex folds ALL sysincl records (source- and includer-keyed) into one
+// header-keyed index built once, so a lookup is a single map probe plus a tiny
 // bucket scan instead of a per-record fan-out. Keyed by ToLower(header); each
 // bucket holds every record whose key folds to it, sorted by record order. A
-// matched entry must (a) be active for the includer (filter), (b) match case
-// (CI = whole bucket, non-CI = exact rawKey). This is the includer-keyed sysincl
-// lookup — the scanner calls m.lookup directly, per resolve.
-type mergedIncluderIndex struct {
-	byLower map[string][]includerContribution
+// matched entry must (a) match the path (filter), (b) match case (CI = whole
+// bucket, non-CI = exact rawKey).
+type sysinclIndex struct {
+	byLower map[string][]sysinclContribution
 }
 
-func buildMergedIncluderIndex(includerKeyed []*SysIncl) *mergedIncluderIndex {
-	m := &mergedIncluderIndex{byLower: make(map[string][]includerContribution)}
+func buildSysinclIndex(set SysInclSet) *sysinclIndex {
+	m := &sysinclIndex{byLower: make(map[string][]sysinclContribution)}
 
-	for order, rec := range includerKeyed {
+	for order := range set {
+		rec := &set[order]
+
 		for k, paths := range rec.Mappings {
 			lc := k
 
@@ -273,7 +177,7 @@ func buildMergedIncluderIndex(includerKeyed []*SysIncl) *mergedIncluderIndex {
 				lc = strings.ToLower(k)
 			}
 
-			m.byLower[lc] = append(m.byLower[lc], includerContribution{
+			m.byLower[lc] = append(m.byLower[lc], sysinclContribution{
 				paths:  paths,
 				filter: rec.Filter,
 				rawKey: k,
@@ -291,7 +195,7 @@ func buildMergedIncluderIndex(includerKeyed []*SysIncl) *mergedIncluderIndex {
 	return m
 }
 
-func (m *mergedIncluderIndex) lookup(includerPath, header string) ([]string, bool, bool) {
+func (m *sysinclIndex) lookup(path, header string) ([]string, bool, bool) {
 	bucket := m.byLower[strings.ToLower(header)]
 
 	if bucket == nil {
@@ -312,7 +216,7 @@ func (m *mergedIncluderIndex) lookup(includerPath, header string) ([]string, boo
 			continue
 		}
 
-		if c.filter != nil && !c.filter.match(includerPath) {
+		if c.filter != nil && !c.filter.match(path) {
 			continue
 		}
 
