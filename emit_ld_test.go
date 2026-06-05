@@ -279,7 +279,7 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 	flags["LLD_TOOL"] = "$(LLD_ROOT)/bin/ld.lld"
 	flags["PIC"] = "no"
 
-	p := NewPlatform(OSLinux, ISAAArch64, flags, nil, "", "")
+	p := NewPlatform(OSLinux, ISAAArch64, flags, nil, "", "", nil)
 
 	got := composeProgramLinkTrailer(
 		p,

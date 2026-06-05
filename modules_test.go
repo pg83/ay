@@ -59,7 +59,7 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			flags["PIC"] = "no"
 			flags[tt.resourceKey] = tt.resourceVal
 
-			platform := NewPlatform(OSLinux, ISAAArch64, flags, nil, "", "")
+			platform := NewPlatform(OSLinux, ISAAArch64, flags, nil, "", "", nil)
 			env := buildIfEnv(ModuleInstance{Platform: platform})
 			data := &moduleData{}
 

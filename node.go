@@ -60,7 +60,7 @@ func bindNodePlatform(n *Node, p *Platform) *Node {
 	}
 
 	n.Platform = string(p.Target)
-	n.StatsTags = statsTagsForPlatform(p)
+	n.StatsTags = p.StatsTags
 
 	return n
 }
