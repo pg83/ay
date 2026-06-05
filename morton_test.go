@@ -13,8 +13,8 @@ func TestMortonInterleave(t *testing.T) {
 		want uint64
 	}{
 		{0, 0, 0},
-		{0, 1, 1},                           // s bit0 -> bit0
-		{1, 0, 2},                           // p bit0 -> bit1
+		{0, 1, 1}, // s bit0 -> bit0
+		{1, 0, 2}, // p bit0 -> bit1
 		{1, 1, 3},
 		{0, 0xFFFFFFFF, 0x5555555555555555}, // all s -> even bits
 		{0xFFFFFFFF, 0, 0xAAAAAAAAAAAAAAAA}, // all p -> odd bits
