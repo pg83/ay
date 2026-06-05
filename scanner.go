@@ -30,8 +30,6 @@ type IncludeScanner struct {
 
 	parsers *includeParserManager
 
-	anySrcView PerSourceView
-
 	sysinclKeyBits []bool
 	sysinclKeyCI   map[string]bool
 	// sysinclCIGate is a sound prefilter for the case-insensitive branch of
@@ -344,8 +342,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		}
 	}
 
-	s.anySrcView = s.sysincl.includerKeyedView()
-	s.mergedIncluder = buildMergedIncluderIndex(s.anySrcView.includerKeyed)
+	s.mergedIncluder = buildMergedIncluderIndex(s.sysincl.includerKeyedRecords())
 
 	s.visitedIDPool.New = func() any {
 		return &idSet{}

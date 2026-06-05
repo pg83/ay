@@ -73,22 +73,19 @@ func recordQuery(rec *SysIncl, header string) string {
 	return header
 }
 
-// PerSourceView holds the includer-keyed sysincl records (source-keyed records
-// are matched inline in sysinclSourceLookup, so they are not collected here).
-type PerSourceView struct {
-	includerKeyed []*SysIncl
-}
-
-func (s SysInclSet) includerKeyedView() PerSourceView {
-	view := PerSourceView{includerKeyed: make([]*SysIncl, 0, len(s))}
+// includerKeyedRecords returns the includer-keyed sysincl records (source-keyed
+// ones are matched inline in sysinclSourceLookup). They feed the merged index
+// built once at scanner construction.
+func (s SysInclSet) includerKeyedRecords() []*SysIncl {
+	out := make([]*SysIncl, 0, len(s))
 
 	for i := range s {
 		if !s[i].KeyBySource {
-			view.includerKeyed = append(view.includerKeyed, &s[i])
+			out = append(out, &s[i])
 		}
 	}
 
-	return view
+	return out
 }
 
 // includerContribution is one includer-keyed record's mapping for a header
