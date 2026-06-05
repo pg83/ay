@@ -91,13 +91,21 @@ func printUsage(w io.Writer) {
 	fmt.Fprint(w, `ay — recreate ymake build-graph generator
 
 Usage:
-    ay <subcommand> [flags]
+    ay [global flags] <subcommand> [flags]
 
 Subcommands:
+    make       Generate (and execute) the build graph for a target.
+    dump       Graph tools: normalize | sort | diff | grep | graph.
     fetch      Fetch and unpack an external resource.
-    make       Generate and execute the build graph for a target.
-    dump       Graph tools: dump normalize | sort | diff | grep.
+    perf       Benchmark the ya.make parser over a directory tree.
+    refac      In-house source tooling: consts | lint.
+    probe      Instrument the package's own source: mapinstr | callsite.
     help       Show this message.
+
+Global flags (before the subcommand):
+    --probe=map|callsite   Dump the named instrumentation tally on exit;
+                           repeatable. Requires a binary built after the
+                           matching 'ay probe <map|callsite>' instrumentation.
 
 Use ay make -j 0 -G <target> > graph.json for graph-generation
 checks, then 'ay dump normalize | ay dump sort' for the canonical L0..L4
