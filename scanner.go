@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"unsafe"
 )
 
 var (
@@ -33,13 +32,7 @@ type IncludeScanner struct {
 
 	anySrcView PerSourceView
 
-	sourceClassCache map[string]uint32
-
-	sourceClassViews map[uint32]PerSourceView
-
-	sourceClassBuckets map[uint64][]uint32
-	nextSourceClass    uint32
-	sourceKeyedCount   int
+	sourceKeyedCount int
 
 	sysinclKeyBits []bool
 	sysinclKeyCI   map[string]bool
@@ -53,22 +46,11 @@ type IncludeScanner struct {
 	sysinclCIGate   idBitSet[uint16]
 	sysinclCIMaxLen int // longest CI key; targets longer cannot match (cheap reject before the multiply)
 
-	includerClassCache   map[string]uint32
-	includerClassRecords map[uint32][]*SysIncl
-	includerClassBuckets map[uint64][]uint32
-	nextIncluderClass    uint32
 	// mergedIncluder folds all includer-keyed sysincl records into one
-	// header-keyed index (built once), so an includer lookup is a single probe
-	// plus a tiny filtered bucket scan instead of a fan-out over ~33 records.
+	// header-keyed index (built once): an includer lookup is a single probe plus a
+	// tiny filtered bucket scan. The full lookup runs per resolve — no class/cache
+	// layer in front of it.
 	mergedIncluder *mergedIncluderIndex
-	// includerActiveScratch is reused by includerClass to compute the active
-	// record set for a fresh includer path; copied out only when a new class is
-	// created (most paths hit an existing class and discard it).
-	includerActiveScratch []*SysIncl
-
-	sysinclSourceCache map[sysinclSourceKey]sysinclCacheEntry
-
-	sysinclIncluderCache map[sysinclIncluderKey]sysinclCacheEntry
 
 	// subgraphClosures holds each cached transitive closure as a slice. The
 	// slices are not owned arrays: they are address-stable sub-slices into
@@ -168,10 +150,6 @@ type IncludeScanner struct {
 	searchTierHits         uint64
 	searchTierMisses       uint64
 	resolveSearchPathCalls uint64
-	sysinclSourceHits      uint64
-	sysinclSourceMisses    uint64
-	sysinclIncluderHits    uint64
-	sysinclIncluderMisses  uint64
 	statsCallCount         uint64
 
 	codegen *CodegenRegistry
@@ -299,22 +277,6 @@ type searchTierResult struct {
 	found bool
 }
 
-type sysinclSourceKey struct {
-	sourceClass uint32
-	target      STR
-}
-
-type sysinclIncluderKey struct {
-	class  uint32
-	target STR
-}
-
-type sysinclCacheEntry struct {
-	paths          []VFS
-	hasMultiTarget bool
-	claimed        bool
-}
-
 type scannerPerfStats struct {
 	walkClosureCalls       uint64
 	subgraphHits           uint64
@@ -323,26 +285,14 @@ type scannerPerfStats struct {
 	searchTierHits         uint64
 	searchTierMisses       uint64
 	resolveSearchPathCalls uint64
-	sysinclSourceHits      uint64
-	sysinclSourceMisses    uint64
-	sysinclIncluderHits    uint64
-	sysinclIncluderMisses  uint64
 }
 
 func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, onWarn func(Warn), tjc *tarjanCtx) *IncludeScanner {
 	s := &IncludeScanner{
-		sysincl:              sysincl,
-		parsers:              parsers,
-		generatedFirstClaim:  make(map[VFS]string, 2048),
-		sourceClassCache:     make(map[string]uint32, 1024),
-		sourceClassViews:     make(map[uint32]PerSourceView, 1024),
-		sourceClassBuckets:   make(map[uint64][]uint32, 1024),
-		includerClassCache:   make(map[string]uint32, 1024),
-		includerClassRecords: make(map[uint32][]*SysIncl, 256),
-		includerClassBuckets: make(map[uint64][]uint32, 256),
-		sysinclSourceCache:   make(map[sysinclSourceKey]sysinclCacheEntry, 131072),
-		sysinclIncluderCache: make(map[sysinclIncluderKey]sysinclCacheEntry, 8192),
-		onWarn:               onWarn,
+		sysincl:             sysincl,
+		parsers:             parsers,
+		generatedFirstClaim: make(map[VFS]string, 2048),
+		onWarn:              onWarn,
 		// Index 0 reserved so a fresh closureRef is always >= 1 (closureOf's
 		// straighten path and closureWindow treat ref as a 1-based index).
 		subgraphClosures:     make([][]VFS, 1, 256),
@@ -500,83 +450,6 @@ func hashScanContext(ctx *ScanContext) uint64 {
 	return h
 }
 
-func recordSliceSignature(active []*SysIncl) uint64 {
-	const (
-		offset uint64 = 1469598103934665603
-		prime  uint64 = 1099511628211
-	)
-
-	h := offset
-
-	for _, rec := range active {
-		addr := uintptr(unsafe.Pointer(rec))
-
-		for i := 0; i < 8; i++ {
-			h ^= uint64(byte(addr >> (i * 8)))
-			h *= prime
-		}
-	}
-
-	h ^= 0xfd
-	h *= prime
-
-	return h
-}
-
-func (s *IncludeScanner) sourceClass(sourceRel string) (uint32, PerSourceView) {
-	if id, ok := s.sourceClassCache[sourceRel]; ok {
-		return id, s.sourceClassViews[id]
-	}
-
-	view := s.prepareSourceView(sourceRel)
-	sig := recordSliceSignature(view.activeSourceKeyed)
-
-	for _, id := range s.sourceClassBuckets[sig] {
-		cached := s.sourceClassViews[id]
-
-		if sameRecordSlice(cached.activeSourceKeyed, view.activeSourceKeyed) {
-			s.sourceClassCache[sourceRel] = id
-
-			return id, cached
-		}
-	}
-
-	s.nextSourceClass++
-	id := s.nextSourceClass
-	s.sourceClassCache[sourceRel] = id
-	s.sourceClassViews[id] = view
-	s.sourceClassBuckets[sig] = append(s.sourceClassBuckets[sig], id)
-
-	return id, view
-}
-
-func (s *IncludeScanner) includerClass(includerPath string) (uint32, []*SysIncl) {
-	if id, ok := s.includerClassCache[includerPath]; ok {
-		return id, s.includerClassRecords[id]
-	}
-
-	s.includerActiveScratch = s.anySrcView.computeActiveIncluderRecordsInto(s.includerActiveScratch, includerPath)
-	active := s.includerActiveScratch
-	sig := recordSliceSignature(active)
-
-	for _, id := range s.includerClassBuckets[sig] {
-		if sameRecordSlice(s.includerClassRecords[id], active) {
-			s.includerClassCache[includerPath] = id
-
-			return id, s.includerClassRecords[id]
-		}
-	}
-
-	s.nextIncluderClass++
-	id := s.nextIncluderClass
-	owned := append([]*SysIncl(nil), active...) // new class: copy out of the scratch
-	s.includerClassCache[includerPath] = id
-	s.includerClassRecords[id] = owned
-	s.includerClassBuckets[sig] = append(s.includerClassBuckets[sig], id)
-
-	return id, owned
-}
-
 func (s *IncludeScanner) prepareSourceView(sourceRel string) PerSourceView {
 	view := PerSourceView{
 		activeSourceKeyed: make([]*SysIncl, 0, s.sourceKeyedCount),
@@ -595,20 +468,6 @@ func (s *IncludeScanner) prepareSourceView(sourceRel string) PerSourceView {
 	}
 
 	return view
-}
-
-func sameRecordSlice(a, b []*SysIncl) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	for i, rec := range a {
-		if rec != b[i] {
-			return false
-		}
-	}
-
-	return true
 }
 
 func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
@@ -664,10 +523,6 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 		searchTierHits:         s.searchTierHits,
 		searchTierMisses:       s.searchTierMisses,
 		resolveSearchPathCalls: s.resolveSearchPathCalls,
-		sysinclSourceHits:      s.sysinclSourceHits,
-		sysinclSourceMisses:    s.sysinclSourceMisses,
-		sysinclIncluderHits:    s.sysinclIncluderHits,
-		sysinclIncluderMisses:  s.sysinclIncluderMisses,
 	}
 }
 
@@ -1053,55 +908,16 @@ func caseVariants(b byte) []byte {
 }
 
 func (s *IncludeScanner) sysinclSourceLookup(sourceRel string, target STR) ([]VFS, bool, bool) {
-	classID, view := s.sourceClass(sourceRel)
-	key := sysinclSourceKey{
-		sourceClass: classID,
-		target:      target,
-	}
-
-	if cached, ok := s.sysinclSourceCache[key]; ok {
-		s.sysinclSourceHits++
-		return cached.paths, cached.hasMultiTarget, cached.claimed
-	}
-
-	s.sysinclSourceMisses++
-
+	view := s.prepareSourceView(sourceRel)
 	rels, claimed, hasMultiTarget := view.LookupSourceKeyed(target.String())
 
-	entry := sysinclCacheEntry{
-		paths:          s.absifyRels(rels),
-		hasMultiTarget: hasMultiTarget,
-		claimed:        claimed,
-	}
-	s.sysinclSourceCache[key] = entry
-
-	return entry.paths, entry.hasMultiTarget, entry.claimed
+	return s.absifyRels(rels), hasMultiTarget, claimed
 }
 
 func (s *IncludeScanner) sysinclIncluderLookup(includerRel string, target STR) ([]VFS, bool, bool) {
-	classID, _ := s.includerClass(includerRel)
-	key := sysinclIncluderKey{
-		class:  classID,
-		target: target,
-	}
-
-	if cached, ok := s.sysinclIncluderCache[key]; ok {
-		s.sysinclIncluderHits++
-		return cached.paths, cached.hasMultiTarget, cached.claimed
-	}
-
-	s.sysinclIncluderMisses++
-
 	rels, claimed, hasMultiTarget := s.mergedIncluder.lookup(includerRel, target.String())
 
-	entry := sysinclCacheEntry{
-		paths:          s.absifyRels(rels),
-		hasMultiTarget: hasMultiTarget,
-		claimed:        claimed,
-	}
-	s.sysinclIncluderCache[key] = entry
-
-	return entry.paths, entry.hasMultiTarget, entry.claimed
+	return s.absifyRels(rels), hasMultiTarget, claimed
 }
 
 func (s *IncludeScanner) absifyRels(rels []string) []VFS {
