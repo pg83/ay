@@ -174,6 +174,8 @@ func (cIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 		}
 	}
 
+	out = dedupDirectives(out)
+
 	if len(out) == 0 {
 		return nil
 	}
@@ -181,10 +183,38 @@ func (cIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 	return parsedIncludeSet{parsedIncludesLocal: out}
 }
 
+// directiveID packs one directive's (kind, target) into a VFS — the same
+// STR<<1|bit shape — so identical directives dedup through the global VFS deduper
+// by a plain cast, no separate set.
+func directiveID(d includeDirective) VFS {
+	return VFS(uint32(d.target)<<1 | uint32(d.kind))
+}
+
+// dedupDirectives drops repeated (kind, target) directives in place over the
+// global VFS deduper — boost's PP iteration files (forwardN_1024.hpp) repeat one
+// #include up to 1024x, and each survivor otherwise drives a redundant resolve.
+// In-place compaction, no array copy, no per-file map. Single-threaded gen only.
+func dedupDirectives(out []includeDirective) []includeDirective {
+	if len(out) < 2 {
+		return out
+	}
+
+	deduper.reset()
+	kept := out[:0]
+
+	for _, d := range out {
+		if deduper.add(directiveID(d)) {
+			kept = append(kept, d)
+		}
+	}
+
+	return kept
+}
+
 func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 	out := make([]includeDirective, 0, 8)
 	add := func(d includeDirective) {
-		out = append(out, d) // identical (kind, target) deduped centrally in sourceParsedBuckets
+		out = append(out, d)
 	}
 
 	eachLine(data, func(line []byte) {
@@ -235,6 +265,8 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 			}
 		}
 	})
+
+	out = dedupDirectives(out)
 
 	if len(out) == 0 {
 		return nil
