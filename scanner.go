@@ -26,27 +26,10 @@ type includeDirective struct {
 }
 
 type IncludeScanner struct {
-	sysincl SysInclSet
+	// sysincl owns the sysincl rule set + its lookup indexes (see sysincl_ctx.go).
+	sysincl *sysinclCtx
 
 	parsers *includeParserManager
-
-	sysinclKeyBits []bool
-	sysinclKeyCI   map[string]bool
-	// sysinclCIGate is a sound prefilter for the case-insensitive branch of
-	// sysinclMightClaim, keyed by uint16(raw[0])*len + uint16(raw[1]) over the
-	// include target's RAW bytes — no ToLower. It is built over both case variants
-	// of each CI key's first two bytes, so any case-insensitive match passes; a
-	// miss proves the target is not a CI header and skips the ToLower + map probe.
-	// The sysinclCIMaxLen length gate runs first, so len <= 45 here and the uint16
-	// key never overflows.
-	sysinclCIGate   idBitSet[uint16]
-	sysinclCIMaxLen int // longest CI key; targets longer cannot match (cheap reject before the multiply)
-
-	// mergedIncluder folds all includer-keyed sysincl records into one
-	// header-keyed index (built once): an includer lookup is a single probe plus a
-	// tiny filtered bucket scan. The full lookup runs per resolve — no class/cache
-	// layer in front of it.
-	mergedIncluder *mergedIncluderIndex
 
 	// subgraphClosures holds each cached transitive closure as a slice. The
 	// slices are not owned arrays: they are address-stable sub-slices into
@@ -285,7 +268,7 @@ type scannerPerfStats struct {
 
 func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, onWarn func(Warn), tjc *tarjanCtx) *IncludeScanner {
 	s := &IncludeScanner{
-		sysincl:             sysincl,
+		sysincl:             newSysinclCtx(sysincl),
 		parsers:             parsers,
 		generatedFirstClaim: make(map[VFS]string, 2048),
 		onWarn:              onWarn,
@@ -299,50 +282,6 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		sourceUnderCache:     NewIntValueMap[string](1 << 16),
 		tjc:                  tjc,
 	}
-
-	var csKeyIDs []STR
-
-	for i := range sysincl {
-		rec := &sysincl[i]
-
-		for k := range rec.Mappings {
-			if rec.CaseInsensitive {
-				if s.sysinclKeyCI == nil {
-					s.sysinclKeyCI = make(map[string]bool, len(rec.Mappings))
-				}
-
-				s.sysinclKeyCI[k] = true
-			} else {
-				csKeyIDs = append(csKeyIDs, internString(k))
-			}
-		}
-	}
-
-	s.sysinclKeyBits = make([]bool, internBound())
-
-	for _, id := range csKeyIDs {
-		s.sysinclKeyBits[id] = true
-	}
-
-	for k := range s.sysinclKeyCI {
-		if len(k) > s.sysinclCIMaxLen {
-			s.sysinclCIMaxLen = len(k)
-		}
-
-		if len(k) < 2 {
-			continue
-		}
-
-		l := uint16(len(k))
-
-		for _, x0 := range caseVariants(k[0]) {
-			for _, x1 := range caseVariants(k[1]) {
-				s.sysinclCIGate.add(uint16(x0)*l + uint16(x1))
-			}
-		}
-	}
-
-	s.mergedIncluder = buildMergedIncluderIndex(s.sysincl.includerKeyedRecords())
 
 	s.visitedIDPool.New = func() any {
 		return &idSet{}
@@ -718,7 +657,7 @@ func (sc *scanCtx) resolve(includerAbs, incDir VFS, d includeDirective) (out []V
 	includerRel := includerAbs.Rel()
 	var mappings []VFS
 	var hasMultiTarget bool
-	mappings, hasMultiTarget, sysinclClaimed = s.sysinclLookup(includerRel, includerRel, d.target)
+	mappings, hasMultiTarget, sysinclClaimed = s.sysincl.lookup(includerRel, includerRel, d.target)
 
 	if d.kind == includeQuoted && len(searchOut) > 0 {
 		bypass := !hasMultiTarget
@@ -799,162 +738,6 @@ mapLoop:
 
 	if out == nil {
 		return searchOut
-	}
-
-	return out
-}
-
-func (s *IncludeScanner) sysinclLookup(sourceRel, includerRel string, target STR) (paths []VFS, hasMultiTarget, claimed bool) {
-	if !s.sysinclMightClaim(target) {
-		return nil, false, false
-	}
-
-	srcMappings, srcMT, srcClaimed := s.sysinclSourceLookup(sourceRel, target)
-	incMappings, incMT, incClaimed := s.sysinclIncluderLookup(includerRel, target)
-	claimed = srcClaimed || incClaimed
-
-	switch {
-	case len(srcMappings) == 0:
-		paths = incMappings
-	case len(incMappings) == 0:
-		paths = srcMappings
-	default:
-		out := make([]VFS, 0, len(srcMappings)+len(incMappings))
-		out = append(out, srcMappings...)
-
-	incLoop:
-		for _, p := range incMappings {
-			for _, q := range out {
-				if p == q {
-					continue incLoop
-				}
-			}
-
-			out = append(out, p)
-		}
-
-		paths = out
-	}
-
-	hasMultiTarget = srcMT || incMT || len(paths) >= 2
-
-	return paths, hasMultiTarget, claimed
-}
-
-func (s *IncludeScanner) sysinclMightClaim(target STR) bool {
-	if int(target) < len(s.sysinclKeyBits) && s.sysinclKeyBits[target] {
-		return true
-	}
-
-	if len(s.sysinclKeyCI) != 0 {
-		raw := target.String()
-
-		if len(raw) > s.sysinclCIMaxLen {
-			return false
-		}
-
-		if len(raw) >= 2 && !s.sysinclCIGate.has(uint16(raw[0])*uint16(len(raw))+uint16(raw[1])) {
-			return false
-		}
-
-		return s.sysinclKeyCI[strings.ToLower(raw)]
-	}
-
-	return false
-}
-
-// caseVariants returns b plus, for an ASCII letter, its opposite-case form — the
-// byte values a case-insensitive include target could carry at that position.
-func caseVariants(b byte) []byte {
-	switch {
-	case b >= 'a' && b <= 'z':
-		return []byte{b, b - 32}
-	case b >= 'A' && b <= 'Z':
-		return []byte{b, b + 32}
-	default:
-		return []byte{b}
-	}
-}
-
-func (s *IncludeScanner) sysinclSourceLookup(sourceRel string, target STR) ([]VFS, bool, bool) {
-	header := target.String()
-
-	var (
-		out            []VFS
-		found          bool
-		hasMultiTarget bool
-		seen           map[string]struct{}
-	)
-
-	for i := range s.sysincl {
-		rec := &s.sysincl[i]
-
-		if !rec.KeyBySource {
-			continue
-		}
-
-		if rec.Filter != nil && !rec.Filter.match(sourceRel) {
-			continue
-		}
-
-		paths, ok := rec.Mappings[recordQuery(rec, header)]
-
-		if !ok {
-			continue
-		}
-
-		found = true
-
-		if rec.HasMultiTarget {
-			count := 0
-
-			for _, p := range paths {
-				if p != "" {
-					count++
-				}
-			}
-
-			if count >= 2 {
-				hasMultiTarget = true
-			}
-		}
-
-		for _, p := range paths {
-			if p == "" {
-				continue
-			}
-
-			if seen == nil {
-				seen = make(map[string]struct{}, 4)
-			}
-
-			if _, dup := seen[p]; dup {
-				continue
-			}
-
-			seen[p] = struct{}{}
-			out = append(out, Source(normalisePath(p)))
-		}
-	}
-
-	return out, hasMultiTarget, found
-}
-
-func (s *IncludeScanner) sysinclIncluderLookup(includerRel string, target STR) ([]VFS, bool, bool) {
-	rels, claimed, hasMultiTarget := s.mergedIncluder.lookup(includerRel, target.String())
-
-	return s.absifyRels(rels), hasMultiTarget, claimed
-}
-
-func (s *IncludeScanner) absifyRels(rels []string) []VFS {
-	if len(rels) == 0 {
-		return nil
-	}
-
-	out := make([]VFS, 0, len(rels))
-
-	for _, rel := range rels {
-		out = append(out, Source(normalisePath(rel)))
 	}
 
 	return out
