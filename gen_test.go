@@ -825,6 +825,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	}
 
 	wantDefaults := []string{
+		"contrib/libs/linux-headers",
 		"contrib/libs/cxxsupp/libcxx",
 		"contrib/libs/cxxsupp/libcxxrt",
 		"contrib/libs/libunwind",
@@ -883,7 +884,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Language: LangCPP,
 			},
 			flags: FlagSet{NoLibc: true, NoRuntime: true, NoUtil: true},
-			want:  nil,
+			want:  []string{"contrib/libs/linux-headers"},
 		},
 		{
 			name: "explicit_no_platform",
@@ -893,7 +894,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Language: LangCPP,
 			},
 			flags: FlagSet{NoPlatform: true},
-			want:  nil,
+			want:  []string{"contrib/libs/linux-headers"},
 		},
 		{
 			name: "no_libc_only",
@@ -905,7 +906,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			},
 			flags: FlagSet{NoLibc: true},
 
-			want: fullSet,
+			want: append([]string{"contrib/libs/linux-headers"}, fullSet...),
 		},
 		{
 			name: "no_runtime_only",
@@ -917,7 +918,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			},
 			flags: FlagSet{NoRuntime: true},
 
-			want: []string{"util"},
+			want: []string{"contrib/libs/linux-headers", "util"},
 		},
 		{
 			name: "non_cpp",
@@ -926,7 +927,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Kind:     KindLib,
 				Language: LangProto,
 			},
-			want: nil,
+			want: []string{"contrib/libs/linux-headers"},
 		},
 		{
 			name:  "no_util_only",
@@ -934,47 +935,73 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			flags: FlagSet{NoUtil: true},
 
 			want: []string{
+				"contrib/libs/linux-headers",
 				"contrib/libs/cxxsupp/libcxx",
 				"contrib/libs/cxxsupp/libcxxrt",
 				"contrib/libs/libunwind",
 			},
 		},
 
+		// Runtime-ancestor paths no longer take a restricted peer set; suppression
+		// is driven purely by NO_RUNTIME/NO_UTIL/NO_PLATFORM flags (none set here),
+		// so these exercise self-exclusion: a module never peers itself.
 		{
-			name: "self_builtins_runtime_ancestor",
+			name: "self_builtins_not_in_stack",
 			mi: ModuleInstance{
 				Path:     "contrib/libs/cxxsupp/builtins",
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
-			want: nil,
+			want: []string{
+				"contrib/libs/linux-headers",
+				"contrib/libs/cxxsupp/libcxx",
+				"contrib/libs/cxxsupp/libcxxrt",
+				"contrib/libs/libunwind",
+				"util",
+			},
 		},
 		{
-			name: "self_malloc_api_runtime_ancestor",
+			name: "self_malloc_api_not_in_stack",
 			mi: ModuleInstance{
 				Path:     "library/cpp/malloc/api",
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
-			want: nil,
+			want: []string{
+				"contrib/libs/linux-headers",
+				"contrib/libs/cxxsupp/libcxx",
+				"contrib/libs/cxxsupp/libcxxrt",
+				"contrib/libs/libunwind",
+				"util",
+			},
 		},
 		{
-			name: "self_libcxx_runtime_ancestor",
+			name: "self_libcxx_excluded",
 			mi: ModuleInstance{
 				Path:     "contrib/libs/cxxsupp/libcxx",
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
-			want: nil,
+			want: []string{
+				"contrib/libs/linux-headers",
+				"contrib/libs/cxxsupp/libcxxrt",
+				"contrib/libs/libunwind",
+				"util",
+			},
 		},
 		{
-			name: "self_util_runtime_ancestor",
+			name: "self_util_excluded",
 			mi: ModuleInstance{
 				Path:     "util",
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
-			want: nil,
+			want: []string{
+				"contrib/libs/linux-headers",
+				"contrib/libs/cxxsupp/libcxx",
+				"contrib/libs/cxxsupp/libcxxrt",
+				"contrib/libs/libunwind",
+			},
 		},
 	}
 
@@ -1884,17 +1911,19 @@ func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
 }
 
 // TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot verifies that ADDINCL(ONE_LEVEL)
-// from a direct PEERDIR peer lands in the peer-include slot (after ccIncludesSuffix),
-// NOT in the own-include slot (before ccIncludesSuffix).
+// from a direct PEERDIR peer lands in the peer-include slot, AFTER the platform
+// linux-headers (which leads peerAddInclGlobal as a language default), NOT in the
+// own-include slot before it.
 // Upstream: ONE_LEVEL dirs go into UserGlobal → PropagateTo → UserGlobalPropagated of the
-// consumer, which renders after the consumer's own LocalUserGlobal. That puts them after
-// the fixed ccIncludesSuffix entries (-I$(S)/contrib/libs/linux-headers).
+// consumer, which renders after the consumer's own LocalUserGlobal and after the
+// platform linux-headers global addincl.
 func TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		"peerlib/ya.make":       "LIBRARY()\nADDINCL(\n    ONE_LEVEL\n    peerlib/include\n)\nSRCS(peerlib.cpp)\nEND()\n",
-		"peerlib/peerlib.cpp":   "",
-		"consumer/ya.make":      "LIBRARY()\nPEERDIR(peerlib)\nSRCS(consumer.cpp)\nEND()\n",
-		"consumer/consumer.cpp": "",
+		"peerlib/ya.make":                    "LIBRARY()\nADDINCL(\n    ONE_LEVEL\n    peerlib/include\n)\nSRCS(peerlib.cpp)\nEND()\n",
+		"peerlib/peerlib.cpp":                "",
+		"consumer/ya.make":                   "LIBRARY()\nPEERDIR(peerlib)\nSRCS(consumer.cpp)\nEND()\n",
+		"consumer/consumer.cpp":              "",
+		"contrib/libs/linux-headers/ya.make": "LIBRARY()\nADDINCL(\n    GLOBAL contrib/libs/linux-headers\n    GLOBAL contrib/libs/linux-headers/_nf\n)\nEND()\n",
 	})
 
 	g := testGen(fs, "consumer")
@@ -1928,11 +1957,11 @@ func TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot(t *testing.T) {
 		t.Fatal("consumer CC missing -I$(S)/peerlib/include (ONE_LEVEL addincl from peer should propagate to direct consumer)")
 	}
 	if linuxHeadersIdx == -1 {
-		t.Fatal("consumer CC missing -I$(S)/contrib/libs/linux-headers (expected in ccIncludesSuffix)")
+		t.Fatal("consumer CC missing -I$(S)/contrib/libs/linux-headers (expected from the platform linux-headers language default)")
 	}
-	// ONE_LEVEL from peer must appear AFTER ccIncludesSuffix (linux-headers), not before.
-	// Before this fix, ONE_LEVEL was appended to d.addIncl (own bag) which lands before
-	// ccIncludesSuffix. After the fix it lands in peerAddInclGlobal after linux-headers.
+	// ONE_LEVEL from peer must appear AFTER linux-headers, not before. Before this fix,
+	// ONE_LEVEL was appended to d.addIncl (own bag) which lands before the peer slot;
+	// it lands in peerAddInclGlobal after the leading linux-headers default.
 	if oneLevelIdx < linuxHeadersIdx {
 		t.Errorf("ONE_LEVEL addincl from peer at idx=%d, before linux-headers at idx=%d; want AFTER (peer-include slot, not own-include slot)", oneLevelIdx, linuxHeadersIdx)
 	}

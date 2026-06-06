@@ -1368,24 +1368,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
-	if len(peerAddInclGlobal) > 0 {
-		filtered := peerAddInclGlobal[:0]
-
-		for _, p := range peerAddInclGlobal {
-			if bundledAddInclPaths[p] {
-				continue
-			}
-
-			filtered = append(filtered, p)
-		}
-
-		peerAddInclGlobal = filtered
-	}
-
-	if isRuntimeAncestor(instance.Path) {
-		peerAddInclGlobal = hoistRuntimeStackAddIncl(peerAddInclGlobal)
-	}
-
 	cflagsAggOrder := resolved
 
 	if d.moduleStmt != nil && d.moduleStmt.Name == "PY3_PROGRAM" {
@@ -1508,8 +1490,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			cxxFlagsSeen[nostdincPP] = struct{}{}
 			peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, nostdincPP)
 		}
-
-		peerAddInclGlobal = hoistRuntimeStackAddIncl(peerAddInclGlobal)
 	}
 
 	ccRefs := make([]NodeRef, 0, len(d.srcs)+len(d.joinSrcs))
@@ -2728,20 +2708,6 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 
 		seen[p] = struct{}{}
 		walk(filepath.Clean(p))
-	}
-
-	if len(out.addIncl) > 0 {
-		filtered := out.addIncl[:0]
-
-		for _, p := range out.addIncl {
-			if bundledAddInclPaths[p] {
-				continue
-			}
-
-			filtered = append(filtered, p)
-		}
-
-		out.addIncl = filtered
 	}
 
 	return out
