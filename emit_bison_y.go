@@ -98,7 +98,11 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	if preprocessHeader {
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
-			reg.SetSourceInputs(headerVFS, []VFS{srcVFS})
+			// The .y source is a real input of any unit whose include-closure reaches
+			// this preprocessed header. Ride it as a non-expanded closure leaf so every
+			// consumer picks it up transitively through the cached window, instead of
+			// the former per-CC-source pull (bisonCCSourceInputs).
+			reg.AddClosureLeaf(headerVFS, srcVFS)
 		}
 	}
 
@@ -167,32 +171,6 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	ccRef, ccOut, _ := EmitCC(instance, generatedRel, generatedVFS, ccIn, ctx.host, ctx.emit)
 	return &sourceEmit{Ref: ccRef, OutPath: ccOut}
-}
-
-// bisonCCSourceInputs returns the bison source (.y) files that should be
-// added as inputs to CC nodes whose include closure reaches bison-generated
-// C++ headers. Upstream propagates the source .y file to any CC node that
-// includes the generated header (the header's SourceInputs records the .y).
-func bisonCCSourceInputs(ctx *genCtx, instance ModuleInstance, closure []VFS) []VFS {
-	reg := codegenRegForInstance(ctx, instance)
-
-	if reg == nil {
-		return nil
-	}
-
-	var extras []VFS
-
-	for _, v := range closure {
-		info := reg.Lookup(v)
-
-		if info == nil || len(info.SourceInputs) == 0 {
-			continue
-		}
-
-		extras = dedupVFS(extras, info.SourceInputs)
-	}
-
-	return extras
 }
 
 func bisonTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
