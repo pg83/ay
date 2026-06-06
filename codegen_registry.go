@@ -181,6 +181,10 @@ func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
 }
 
 func (r *CodegenRegistry) SetSourceInputs(path VFS, src []VFS) {
+	if len(src) == 0 {
+		return
+	}
+
 	info, ok := r.byStr.Get(STR(path.strID()))
 
 	if !ok {

@@ -97,17 +97,32 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		outVFSByToken[*stmt.StdoutFile] = vfs
 	}
 
+	// The run's $(S) source inputs are real inputs of any unit that transitively
+	// consumes a generated output (directly, or after the output is archived into
+	// an .inc that a CC unit #includes). Record them on each output so the archive
+	// emit can propagate them as closure leaves (see emitArchive).
+	var prSourceInputs []VFS
+
+	for _, v := range inVFSs {
+		if v.IsSource() {
+			prSourceInputs = append(prSourceInputs, v)
+		}
+	}
+
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
 			registerGeneratedParsedOutput(ctx, instance, "PR", outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt, toolInducedDeps))
+			reg.SetSourceInputs(outVFSByToken[f], prSourceInputs)
 		}
 
 		for _, f := range stmt.OUTNoAutoFiles {
 			registerGeneratedParsedOutput(ctx, instance, "PR", outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt, toolInducedDeps))
+			reg.SetSourceInputs(outVFSByToken[f], prSourceInputs)
 		}
 
 		if stmt.StdoutFile != nil {
 			registerGeneratedParsedOutput(ctx, instance, "PR", *stdoutVFS, prEmitsIncludes(ctx, instance, d, *stmt.StdoutFile, stmt, toolInducedDeps))
+			reg.SetSourceInputs(*stdoutVFS, prSourceInputs)
 		}
 	}
 
