@@ -297,10 +297,6 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		return &sourceEmit{Ref: ccRef, OutPath: ccOut}
 	}
 
-	if isSkippedSource(srcRel) {
-		return nil
-	}
-
 	ThrowFmt("gen: %s: unsupported source extension in %q", instance.Path, srcRel)
 	return nil
 }

@@ -73,37 +73,6 @@ func pbHEmitsIncludesExtras(protoRelPath string, hasDescriptor bool) []includeDi
 	return out
 }
 
-func cloneIncludeDirectives(parsed []includeDirective) []includeDirective {
-	if len(parsed) == 0 {
-		return nil
-	}
-
-	return append([]includeDirective(nil), parsed...)
-}
-
-func extraProtoOutputParsedIncludes(output, pbH, grpcPbH, grpcPbCC VFS, grpcHParsed, grpcCCParsed []includeDirective) []includeDirective {
-	switch output.Rel() {
-	case grpcPbH.Rel():
-		return cloneIncludeDirectives(grpcHParsed)
-	case grpcPbCC.Rel():
-		return cloneIncludeDirectives(grpcCCParsed)
-	}
-
-	switch {
-	case strings.HasSuffix(output.Rel(), ".h"),
-		strings.HasSuffix(output.Rel(), ".hh"),
-		strings.HasSuffix(output.Rel(), ".hpp"),
-		strings.HasSuffix(output.Rel(), ".hxx"),
-		strings.HasSuffix(output.Rel(), ".inc"),
-		strings.HasSuffix(output.Rel(), ".inl"):
-		return []includeDirective{{kind: includeQuoted, target: internString(pbH.Rel())}}
-	case isCCSourceExt(output.Rel()):
-		return []includeDirective{{kind: includeQuoted, target: internString(pbH.Rel())}}
-	default:
-		return nil
-	}
-}
-
 func protoTransitiveImports(pm *includeParserManager, fs FS, srcRel string, peerProtoAddIncl []VFS) ([]VFS, bool) {
 	rootImports := protoDirectImportNames(pm, srcRel)
 
@@ -520,10 +489,6 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		if cfg.grpc {
 			registerBoundGeneratedParsedOutput(ctx, instance, "PB", grpcPbCC, grpcCCParsed, pbRef)
 			registerBoundGeneratedParsedOutput(ctx, instance, "PB", grpcPbH, grpcHParsed, pbRef)
-		}
-
-		for _, out := range extraOutputPaths {
-			registerBoundGeneratedParsedOutput(ctx, instance, "PB", out, extraProtoOutputParsedIncludes(out, pbH, grpcPbH, grpcPbCC, grpcHParsed, grpcCCParsed), pbRef)
 		}
 	}
 

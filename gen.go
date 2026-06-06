@@ -2718,12 +2718,6 @@ func isHeaderSource(srcRel string) bool {
 	return false
 }
 
-func isSkippedSource(srcRel string) bool {
-	return strings.HasSuffix(srcRel, ".ev") ||
-		strings.HasSuffix(srcRel, ".py") ||
-		strings.HasSuffix(srcRel, ".g4")
-}
-
 func isCodegenProducingSrc(srcRel string) bool {
 	return strings.HasSuffix(srcRel, ".proto") ||
 		strings.HasSuffix(srcRel, ".fbs") ||
