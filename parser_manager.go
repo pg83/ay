@@ -69,7 +69,7 @@ type includeParserManager struct {
 	fs    FS
 	cache *sharedParseCache
 
-	addinclIndex   map[STR][]VFS
+	addinclIndex   DenseMap[STR, []VFS]
 	addinclIndexed map[VFS]struct{}
 	buildParsed    map[string][]includeDirective
 }
@@ -85,7 +85,6 @@ func newIncludeParserManagerFS(fs FS, cache *sharedParseCache) *includeParserMan
 		fs:             fs,
 		cache:          cache,
 		buildParsed:    make(map[string][]includeDirective, 256),
-		addinclIndex:   make(map[STR][]VFS, 1<<16),
 		addinclIndexed: make(map[VFS]struct{}, 1024),
 	}
 }
@@ -209,7 +208,8 @@ func (pm *includeParserManager) indexAddincl(a VFS) {
 		}
 
 		t := internString(rel[len(base)+1:])
-		pm.addinclIndex[t] = append(pm.addinclIndex[t], a)
+		cur, _ := pm.addinclIndex.Get(t)
+		pm.addinclIndex.Put(t, append(cur, a))
 	})
 }
 

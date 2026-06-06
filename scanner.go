@@ -909,7 +909,9 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 			bestRank := resolveNoRank
 			var bestAddincl VFS
 
-			for _, a := range s.parsers.addinclIndex[targetID] {
+			cands, _ := s.parsers.addinclIndex.Get(targetID)
+
+			for _, a := range cands {
 				if r, ok := idx.rank[a]; ok && r < bestRank {
 					bestRank = r
 					bestAddincl = a
