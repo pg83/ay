@@ -1594,7 +1594,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// raises a spurious unresolved-include warning. Pass 1 registers all
 	// PB / EV / FL / RL / CF outputs in the codegen registry first, so the
 	// subsequent header walks resolve them correctly.
-	preEmitted := make(map[string]*sourceEmit, 4)
+	type codegenEmit struct {
+		src  string
+		emit *sourceEmit
+	}
+
+	// Collected in SRCS order so pass 2 appends them without a side map: a source's
+	// codegen-ness is exactly isCodegenProducingSrc(src), so pass 2 needs no
+	// membership set, only this ordered list of the pre-emitted nodes.
+	codegenEmits := make([]codegenEmit, 0, 4)
 
 	for _, src := range d.srcs {
 		if !isCodegenProducingSrc(src) {
@@ -1611,7 +1619,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			srcInputs.FlatOutput = true
 		}
 
-		preEmitted[src] = emitOneSource(ctx, instance, d, src, srcInputs, ancestorRebase)
+		codegenEmits = append(codegenEmits, codegenEmit{src, emitOneSource(ctx, instance, d, src, srcInputs, ancestorRebase)})
 	}
 
 	emitCopyFiles(ctx, instance, d, &moduleInputs)
@@ -1660,21 +1668,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	for _, src := range d.srcs {
-		if _, isCodegen := preEmitted[src]; isCodegen {
+		if isCodegenProducingSrc(src) {
 			continue
 		}
 
 		appendCC(src, emitOneSource(ctx, instance, d, src, emitSrcInputs(src), ancestorRebase))
 	}
 
-	for _, src := range d.srcs {
-		emit, isCodegen := preEmitted[src]
-
-		if !isCodegen {
-			continue
-		}
-
-		appendCC(src, emit)
+	for _, ce := range codegenEmits {
+		appendCC(ce.src, ce.emit)
 	}
 
 	for _, emit := range emitCheckConfigH(ctx, instance, d, moduleInputs) {
