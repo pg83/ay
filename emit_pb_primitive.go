@@ -532,16 +532,6 @@ func EmitPB(
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
 }
 
-func slicesContains(xs []string, want string) bool {
-	for _, x := range xs {
-		if x == want {
-			return true
-		}
-	}
-
-	return false
-}
-
 func containsVFS(xs []VFS, want VFS) bool {
 	for _, x := range xs {
 		if x == want {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"sort"
 	"strings"
 )
 
@@ -70,16 +69,6 @@ type FlagSet struct {
 	IsCpp              bool
 
 	Extra string
-}
-
-func NewFlagSet(extra ...string) FlagSet {
-	if len(extra) == 0 {
-		return FlagSet{}
-	}
-
-	e := append([]string{}, extra...)
-	sort.Strings(e)
-	return FlagSet{Extra: strings.Join(e, "\n")}
 }
 
 type ModuleInstance struct {

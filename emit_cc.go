@@ -493,9 +493,6 @@ type inclArgMemo struct {
 // newInclArgMemo builds a standalone memo with its own backing store. Production
 // code uses ctx.inclArgs (backed by ctx.inclArgValues); this is for tests that
 // emit CC/AS nodes without a genCtx.
-func newInclArgMemo() inclArgMemo {
-	return inclArgMemo{m: &DenseMap[VFS, string]{}}
-}
 
 func (m inclArgMemo) arg(path VFS) string {
 	if s, ok := m.m.Get(path); ok {
