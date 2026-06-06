@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // probeCallSite instruments every top-level function: it splices a
@@ -114,56 +115,37 @@ func probeCallSite(args []string) int {
 // callsites_all.txt to find reachable-but-never-exercised (gate-garbage)
 // functions. Throwaway. ---
 
-// Goroutine-safe site recording: every recordCall (from any goroutine — the
-// make gen path AND dump's streamGraphFanout) sends its site over a buffered
-// channel; one drain goroutine owns the seen-set and the output file, so there
-// is no shared mutable state and no "concurrent map writes". Active only when
-// CALLSITE_OUT is set (i.e. under --probe=callsite); otherwise recordCall is a
-// cheap nil check. dumpCalls closes the channel and waits for the drain+flush.
-var (
-	callSiteCh      chan string
-	callSiteDrained = make(chan struct{})
-)
+// callSiteSeen is the recorded reach-set. A sync.Map (not a channel) because it
+// must be usable from the package's very first instruction: package-var
+// initializers — e.g. includeDirectiveParsers = newIncludeDirectiveParserRegistry()
+// — run before any init(), so a channel/goroutine set up in init() would miss
+// those init-time calls and report init-reached funcs as dead. sync.Map's zero
+// value is ready at load and safe for the concurrent stores from make's gen path
+// and dump's streamGraphFanout. Store is idempotent (reachability, not counts).
+var callSiteSeen sync.Map
 
-func init() {
+func recordCall(site string) {
+	callSiteSeen.Store(site, struct{}{})
+}
+
+func dumpCalls() {
 	path := os.Getenv("CALLSITE_OUT")
 
 	if path == "" {
 		return
 	}
 
-	callSiteCh = make(chan string, 1<<20)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 
-	go func() {
-		seen := map[string]struct{}{}
-
-		for s := range callSiteCh {
-			seen[s] = struct{}{}
-		}
-
-		if f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
-			for s := range seen {
-				fmt.Fprintln(f, s)
-			}
-
-			f.Close()
-		}
-
-		close(callSiteDrained)
-	}()
-}
-
-func recordCall(site string) {
-	if callSiteCh != nil {
-		callSiteCh <- site
-	}
-}
-
-func dumpCalls() {
-	if callSiteCh == nil {
+	if err != nil {
 		return
 	}
 
-	close(callSiteCh)
-	<-callSiteDrained
+	callSiteSeen.Range(func(k, _ any) bool {
+		fmt.Fprintln(f, k.(string))
+
+		return true
+	})
+
+	f.Close()
 }
