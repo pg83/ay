@@ -17,7 +17,6 @@ var (
 	bldLibraryCppMallocJemallocLibcppMallocJemallocA                                      = Build("library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a")
 	bldLibraryPythonRuntimePy3                                                            = Build("library/python/runtime_py3")
 	bldToolsEnumParserEnumSerializationRuntimeLibtoolsEnumParserEnumSerializationRuntimeA = Build("tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a")
-	contribLibsCxxsuppLibcxxrtInclude                                                     = Source("contrib/libs/cxxsupp/libcxxrt/include")
 	contribRestrictedAbseilCpp                                                            = Source("contrib/restricted/abseil-cpp")
 )
 
@@ -1395,18 +1394,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		for _, p := range peerAddInclGlobal {
 			if _, isOneLevel := oneLevelOnlyPaths[p]; !isOneLevel {
 				peerAddInclForProp = append(peerAddInclForProp, p)
-			}
-		}
-	}
-
-	// libc++ include dirs for runtime-ancestor C++ consumers are local-only — kept
-	// out of effectiveAddInclGlobal by injecting after the peerAddInclForProp
-	// snapshot above — but deduped through the same run-global deduper as the rest
-	// of the peer-addincl aggregation, before the dedupVFS below resets it.
-	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path] {
-		for _, p := range []VFS{contribLibsCxxsuppLibcxxInclude, contribLibsCxxsuppLibcxxrtInclude} {
-			if deduper.add(p) {
-				peerAddInclGlobal = append(peerAddInclGlobal, p)
 			}
 		}
 	}
