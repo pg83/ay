@@ -185,13 +185,19 @@ func directiveParserExt(rel string) string {
 func (cIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 	out := parseCIncludes(data)
 
-	if drops, ok := macroIncludeDrops[rel]; ok {
-		out = filterDroppedDirectives(out, drops)
-	}
+	// Every macroIncludeDrops / macroIndirectIncludes key lives under contrib/, so
+	// gate both probes on a 2-byte prefix: the vast majority of files (ydb/,
+	// library/, util/, …) skip the two map lookups. A non-key "co…" path just does
+	// a harmless not-found probe, so this stays byte-exact.
+	if strings.HasPrefix(rel, "co") {
+		if drops, ok := macroIncludeDrops[rel]; ok {
+			out = filterDroppedDirectives(out, drops)
+		}
 
-	if extras, ok := macroIndirectIncludes[rel]; ok {
-		for _, m := range extras {
-			out = append(out, includeDirective{kind: m.kind, target: internString(m.target)})
+		if extras, ok := macroIndirectIncludes[rel]; ok {
+			for _, m := range extras {
+				out = append(out, includeDirective{kind: m.kind, target: internString(m.target)})
+			}
 		}
 	}
 
