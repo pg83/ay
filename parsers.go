@@ -79,6 +79,15 @@ type includeDirectiveParser interface {
 type includeDirectiveParserRegistry struct {
 	defaultParser includeDirectiveParser
 	byExt         map[string]includeDirectiveParser
+
+	// lastExt/lastParser memoize the previous parserFor resolution. Parsed files
+	// arrive in scan order, where one extension tends to run consecutively (a
+	// .cpp's includes are mostly .h), so this one-entry cache skips most byExt
+	// probes. lastValid distinguishes "not cached" from a cached empty extension.
+	// Single-goroutine gen, so no locking.
+	lastExt    string
+	lastParser includeDirectiveParser
+	lastValid  bool
 }
 type cIncludeDirectiveParser struct{}
 type cythonIncludeDirectiveParser struct{}
@@ -126,12 +135,24 @@ func (r includeDirectiveParserRegistry) register(parser includeDirectiveParser, 
 	}
 }
 
-func (r includeDirectiveParserRegistry) parserFor(rel string) includeDirectiveParser {
-	if parser, ok := r.byExt[directiveParserExt(rel)]; ok {
-		return parser
+func (r *includeDirectiveParserRegistry) parserFor(rel string) includeDirectiveParser {
+	ext := directiveParserExt(rel)
+
+	if r.lastValid && ext == r.lastExt {
+		return r.lastParser
 	}
 
-	return r.defaultParser
+	parser := r.defaultParser
+
+	if p, ok := r.byExt[ext]; ok {
+		parser = p
+	}
+
+	r.lastExt = ext
+	r.lastParser = parser
+	r.lastValid = true
+
+	return parser
 }
 
 // hasRegisteredParser reports whether the parser dispatcher would return an
