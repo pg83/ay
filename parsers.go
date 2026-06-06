@@ -177,7 +177,7 @@ func (cIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 	out = dedupDirectives(out)
 
 	if len(out) == 0 {
-		return nil
+		return parsedIncludeSet{}
 	}
 
 	return parsedIncludeSet{parsedIncludesLocal: out}
@@ -269,7 +269,7 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 	out = dedupDirectives(out)
 
 	if len(out) == 0 {
-		return nil
+		return parsedIncludeSet{}
 	}
 
 	return parsedIncludeSet{parsedIncludesLocal: out}
@@ -304,7 +304,7 @@ func (flatbuffersIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncl
 	})
 
 	if len(out) == 0 {
-		return nil
+		return parsedIncludeSet{}
 	}
 
 	return parsedIncludeSet{parsedIncludesLocal: out}
@@ -437,14 +437,14 @@ func (yasmIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet 
 	out := parseYasmIncludes(data)
 
 	if len(out) == 0 {
-		return nil
+		return parsedIncludeSet{}
 	}
 
 	return parsedIncludeSet{parsedIncludesLocal: out}
 }
 
 func (emptyIncludeDirectiveParser) Parse(_ string, _ []byte) parsedIncludeSet {
-	return nil
+	return parsedIncludeSet{}
 }
 
 func parseCIncludes(data []byte) []includeDirective {
