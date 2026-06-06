@@ -5,11 +5,6 @@ var ccIncludesPrefix = []string{
 	"-I$(S)",
 }
 
-var ccIncludesSuffix = []string{
-	"-I$(S)/contrib/libs/linux-headers",
-	"-I$(S)/contrib/libs/linux-headers/_nf",
-}
-
 var googleapisCommonProtosAddIncl = Intern("$(B)/contrib/libs/googleapis-common-protos")
 
 var debugPrefixMapFlags = []string{

@@ -32,8 +32,6 @@ func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 		"-I$(S)",
 		"-I$(S)/custom/foolib/arch/x86_64",
 		"-I$(S)/custom/foolib/include",
-		"-I$(S)/contrib/libs/linux-headers",
-		"-I$(S)/contrib/libs/linux-headers/_nf",
 	}
 	start := len(args) - len(wantTail)
 

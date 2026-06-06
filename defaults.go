@@ -1,7 +1,6 @@
 package main
 
 import (
-	"sort"
 	"strings"
 )
 
@@ -23,18 +22,6 @@ var runtimeAncestorPaths = map[string]bool{
 
 var runtimeAncestorCxxConsumers = map[string]bool{
 	"library/cpp/malloc/api": true,
-}
-
-var runtimeStackAddInclPaths = map[VFS]int{
-	contribLibsCxxsuppLibcxxInclude:                       0,
-	contribLibsCxxsuppLibcxxrtInclude:                     1,
-	Intern("$(S)/contrib/libs/cxxsupp/libcxxabi/include"): 2,
-	Intern("$(S)/contrib/libs/libunwind/include"):         3,
-}
-
-var bundledAddInclPaths = map[VFS]bool{
-	contribLibsLinuxHeaders:   true,
-	contribLibsLinuxHeadersNf: true,
 }
 
 var unitImplicitPeers = []implicitPeerRule{
@@ -115,37 +102,6 @@ func suppressMallocAPIDefault(defaults []string, allocatorName string) []string 
 	return out
 }
 
-func hoistRuntimeStackAddIncl(paths []VFS) []VFS {
-	if len(paths) == 0 {
-		return paths
-	}
-
-	hoisted := make([]VFS, 0, len(paths))
-	rest := make([]VFS, 0, len(paths))
-
-	for _, p := range paths {
-		if _, ok := runtimeStackAddInclPaths[p]; ok {
-			hoisted = append(hoisted, p)
-		} else {
-			rest = append(rest, p)
-		}
-	}
-
-	if len(hoisted) == 0 {
-		return paths
-	}
-
-	sort.SliceStable(hoisted, func(i, j int) bool {
-		return runtimeStackAddInclPaths[hoisted[i]] < runtimeStackAddInclPaths[hoisted[j]]
-	})
-
-	out := make([]VFS, 0, len(paths))
-	out = append(out, hoisted...)
-	out = append(out, rest...)
-
-	return out
-}
-
 func defaultPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
 	inst := instance
 
@@ -158,33 +114,41 @@ func defaultPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleDat
 }
 
 func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, d *moduleData) []string {
-	if instance.Language != LangCPP {
-		return nil
-	}
-
 	flags := d.flags
 	noPlatform := effectiveNoPlatform(flags)
 
-	rc := implicitPeerCtx{
-		flags:             flags,
-		noPlatform:        noPlatform,
-		isRuntimeAncestor: isRuntimeAncestor(instance.Path),
-		muslOn:            d.muslEnabled && !noPlatform,
-	}
+	// contrib/libs/linux-headers is a header-only platform PEERDIR (upstream
+	// _BASE_UNIT: when OS_LINUX && NEED_PLATFORM_PEERDIRS), independent of module
+	// language — every C/C++/ASM compile on Linux receives its GLOBAL ADDINCL. The
+	// gate is NEED_PLATFORM_PEERDIRS, which NO_PLATFORM()/NO_LIBC()/NO_RUNTIME() do
+	// NOT clear (only _BARE_MODULE/PACKAGE/UNION fakes do, and those do not
+	// compile), so it is NOT gated on noPlatform. It leads the platform peerdirs
+	// (before cxxsupp/util/musl), contributes no link objects (header-only), and
+	// must not peer itself.
+	addLinuxHeaders := instance.Path != "contrib/libs/linux-headers" &&
+		!strings.HasPrefix(instance.Path, "contrib/libs/linux-headers/")
 
-	if rc.isRuntimeAncestor {
-		var only []string
-
-		only = appendImplicitPeers(only, unitImplicitPeers, rc)
-
-		if runtimeAncestorCxxConsumers[instance.Path] && useArcadiaCompilerRuntime(ctx, instance) && instance.Path != "library/cpp/sanitizer/include" {
-			only = append(only, "library/cpp/sanitizer/include")
+	// The cxxsupp/libcxx/util language defaults below are C++-only; linux-headers
+	// is not, so it is decided ahead of the language gate.
+	if instance.Language != LangCPP {
+		if addLinuxHeaders {
+			return []string{"contrib/libs/linux-headers"}
 		}
 
-		return only
+		return nil
+	}
+
+	rc := implicitPeerCtx{
+		flags:      flags,
+		noPlatform: noPlatform,
+		muslOn:     d.muslEnabled && !noPlatform,
 	}
 
 	var peers []string
+
+	if addLinuxHeaders {
+		peers = append(peers, "contrib/libs/linux-headers")
+	}
 
 	if !flags.NoRuntime && !noPlatform {
 		if instance.Path != "contrib/libs/cxxsupp/libcxx" && !strings.HasPrefix(instance.Path, "contrib/libs/cxxsupp/libcxx/") {
@@ -234,15 +198,14 @@ func useArcadiaCompilerRuntime(ctx *genCtx, instance ModuleInstance) bool {
 }
 
 type implicitPeerCtx struct {
-	flags             FlagSet
-	noPlatform        bool
-	isRuntimeAncestor bool
-	muslOn            bool
-	muslLite          bool
-	osLinux           bool
-	archX8664         bool
-	hadAllocator      bool
-	allocatorName     string
+	flags         FlagSet
+	noPlatform    bool
+	muslOn        bool
+	muslLite      bool
+	osLinux       bool
+	archX8664     bool
+	hadAllocator  bool
+	allocatorName string
 }
 
 type implicitPeerRule struct {

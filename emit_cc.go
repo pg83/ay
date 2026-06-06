@@ -416,7 +416,7 @@ func composeTargetCC(a ccComposeArgs) []string {
 	// 12 covers the literals (compiler, --target, -B/-c/-o/output/input,
 	// googleapis, cxxStandardFlag, post-catboost sentinel) plus slack.
 	argCap := 12 +
-		len(ccIncludesPrefix) + len(ccIncludesSuffix) +
+		len(ccIncludesPrefix) +
 		len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
 		2*len(catboostOpenSourceDefine) + len(cxxStandardWarnings) +
 		len(builtinMacroDateTime) + len(macroPrefixMapFlags) +
@@ -443,7 +443,6 @@ func composeTargetCC(a ccComposeArgs) []string {
 		peerAddIncl = peerAddIncl[1:]
 	}
 
-	cmdArgs = append(cmdArgs, ccIncludesSuffix...)
 	cmdArgs = appendAddIncl(cmdArgs, peerAddIncl, a.InclArgs)
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningBundle, bundle.Defines, a.OwnCFlags, a.ModuleScopeCFlags)
 

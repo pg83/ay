@@ -266,7 +266,6 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 		peerAddIncl = peerAddIncl[1:]
 	}
 
-	args = append(args, ccIncludesSuffix...)
 	args = appendAddIncl(args, peerAddIncl, in.InclArgs)
 
 	// $BC_CXXFLAGS = full CC flag pipeline (same as appendCompileFlagPipeline).

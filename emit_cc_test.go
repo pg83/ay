@@ -78,8 +78,6 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 		"-I$(S)/contrib/libs/foolib/arch/generic",
 		"-I$(S)/contrib/libs/foolib/include",
 		"-I$(S)/contrib/libs/foolib/extra",
-		"-I$(S)/contrib/libs/linux-headers",
-		"-I$(S)/contrib/libs/linux-headers/_nf",
 	}
 
 	for i, want := range wantSlot {
@@ -107,8 +105,6 @@ func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 		"-I$(S)",
 		"-I$(S)/custom/foolib/arch/x86_64",
 		"-I$(S)/custom/foolib/include",
-		"-I$(S)/contrib/libs/linux-headers",
-		"-I$(S)/contrib/libs/linux-headers/_nf",
 	}
 
 	for i, want := range wantSlot {

@@ -61,10 +61,9 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 }
 
 func composeASIncludes(in ModuleCCInputs) []string {
-	out := make([]string, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(ccIncludesSuffix)+len(in.PeerAddInclGlobal))
+	out := make([]string, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(in.PeerAddInclGlobal))
 	out = append(out, ccIncludesPrefix...)
 	out = appendAddIncl(out, in.AddIncl, in.InclArgs)
-	out = append(out, ccIncludesSuffix...)
 	out = appendAddIncl(out, in.PeerAddInclGlobal, in.InclArgs)
 
 	return out
