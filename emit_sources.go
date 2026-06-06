@@ -54,12 +54,6 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			srcIn.IncludeInputs = full[1:]
 		}
 
-		bisonExtras := bisonCCSourceInputs(ctx, srcInstance, srcIn.IncludeInputs)
-
-		if len(bisonExtras) > 0 {
-			srcIn.IncludeInputs = dedupVFS(srcIn.IncludeInputs, bisonExtras)
-		}
-
 		extras := runtimePy3CCExtraInputs(srcInstance.Path, srcRel)
 
 		if len(extras) > 0 {
@@ -71,7 +65,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		// array directly with no extra allocation. When extras are present
 		// IncludeInputs has been reallocated, so leave NodeInputs nil for EmitCC to
 		// rebuild from inVFS + IncludeInputs.
-		if len(bisonExtras) == 0 && len(extras) == 0 {
+		if len(extras) == 0 {
 			srcIn.NodeInputs = full
 		}
 
