@@ -160,7 +160,7 @@ type resourceAwareEmitter struct {
 	host    *Platform
 	scripts scriptDeps
 	refs    []NodeRef
-	seen    []bool
+	seen    BitSet
 }
 
 func newResourceAwareEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan, scripts scriptDeps) Emitter {
@@ -174,7 +174,6 @@ func newResourceAwareEmitter(host *Platform, inner Emitter, plan *resourceFetchP
 		host:    host,
 		scripts: scripts,
 		refs:    make([]NodeRef, len(plan.items)),
-		seen:    make([]bool, len(plan.items)),
 	}
 }
 
@@ -220,9 +219,9 @@ func (e *resourceAwareEmitter) attachResourceDeps(n *Node) {
 			continue // resource not in this run's fetch plan (e.g. unselected host)
 		}
 
-		if !e.seen[i] {
+		if !e.seen.has(uint32(i)) {
 			e.refs[i] = e.inner.Emit(fetchNode(e.host, e.plan.items[i], e.scripts))
-			e.seen[i] = true
+			e.seen.add(uint32(i))
 		}
 
 		n.DepRefs = append(n.DepRefs, e.refs[i])

@@ -79,7 +79,7 @@ type IncludeScanner struct {
 	// the target has any cached entry, in any config): a hit there means the table
 	// is worth probing, a miss short-circuits straight to the resolve.
 	searchTierFlat *IntValueMap[searchTierResult]
-	searchTierSeen idBitSet[STR]
+	searchTierSeen BitSet
 	ctxNumByHash   map[uint64]uint32
 
 	resolveIndexByConfig map[uint64]*cfgResolveIndex
@@ -104,7 +104,7 @@ type IncludeScanner struct {
 	// which dfs hands to strongconnect. Per-scanner, not shared, so the host
 	// scanner does not see target's roots as spurious cycles. A bit set (1 bit/id)
 	// rather than an epoch idSet, since membership is permanent and binary.
-	dfsActive idBitSet[VFS]
+	dfsActive BitSet
 
 	visitedIDPool sync.Pool
 
@@ -455,13 +455,13 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 func (sc *scanCtx) dfs(abs VFS) {
 	s := sc.scanner
 
-	if s.dfsActive.has(abs) {
+	if s.dfsActive.has(uint32(abs)) {
 		s.subgraphHits += s.tjc.runSCC(sc, abs)
 
 		return
 	}
 
-	s.dfsActive.add(abs)
+	s.dfsActive.add(uint32(abs))
 
 	// Pass 1: build and cache each child's closure. closureOf may recurse into
 	// dfs/strongconnect and allocate from closureArena, so it must finish before
@@ -816,7 +816,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 func (sc *scanCtx) cacheSearchTier(targetID STR, out searchTierResult) searchTierResult {
 	s := sc.scanner
 	s.searchTierFlat.Put(morton(sc.ctxNum, uint32(targetID)), out)
-	s.searchTierSeen.add(targetID)
+	s.searchTierSeen.add(uint32(targetID))
 
 	return out
 }
@@ -826,7 +826,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 
 	// Gate the composite-key hash probe on the 1-bit per-target presence flag: a
 	// target never cached in any config skips straight to the resolve.
-	if s.searchTierSeen.has(targetID) {
+	if s.searchTierSeen.has(uint32(targetID)) {
 		if cached := s.searchTierFlat.Get(morton(sc.ctxNum, uint32(targetID))); cached != nil {
 			s.searchTierHits++
 			return *cached

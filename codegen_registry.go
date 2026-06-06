@@ -67,7 +67,7 @@ type CodegenRegistry struct {
 	// whenever the prefix has no split entry — the common case on the hot resolve
 	// path, where most addincl prefixes hold no codegen outputs. A bitset rather
 	// than a bool DenseMap column: the value is always true, only presence matters.
-	splitPrefixSeen idBitSet[STR]
+	splitPrefixSeen BitSet
 
 	// bySplit maps a (prefix, suffix) STR pair to its producer info, keyed by
 	// morton(prefix, suffix) — the two ids bit-interleaved so the key's low bits
@@ -106,7 +106,7 @@ func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 
 func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) {
 	r.bySplit.Put(splitKey(prefix, suffix), info)
-	r.splitPrefixSeen.add(prefix) // mark the prefix so LookupSplit can gate the probe
+	r.splitPrefixSeen.add(uint32(prefix)) // mark the prefix so LookupSplit can gate the probe
 }
 
 func (r *CodegenRegistry) Lookup(path VFS) *GeneratedFileInfo {
@@ -130,7 +130,7 @@ func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
 func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
 	// Gate the uint64 hash-map probe on the dense prefix flag: most addincl
 	// prefixes hold no codegen split entry, so the array probe short-circuits.
-	if !r.splitPrefixSeen.has(prefix) {
+	if !r.splitPrefixSeen.has(uint32(prefix)) {
 		return nil
 	}
 
