@@ -1611,11 +1611,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		srcInputs := moduleInputs
 
-		if extras, ok := d.perSrcCFlags[src]; ok {
-			srcInputs.PerSourceCFlags = extras
+		if extras := d.perSrcCFlagsFor(src); extras != nil {
+			srcInputs.PerSourceCFlags = *extras
 		}
 
-		if _, ok := d.flatSrcs[src]; ok {
+		if d.flatSrc(src) {
 			srcInputs.FlatOutput = true
 		}
 
@@ -1644,11 +1644,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	emitSrcInputs := func(src string) ModuleCCInputs {
 		si := moduleInputs
 
-		if extras, ok := d.perSrcCFlags[src]; ok {
-			si.PerSourceCFlags = extras
+		if extras := d.perSrcCFlagsFor(src); extras != nil {
+			si.PerSourceCFlags = *extras
 		}
 
-		if _, ok := d.flatSrcs[src]; ok {
+		if d.flatSrc(src) {
 			si.FlatOutput = true
 		}
 
@@ -1659,7 +1659,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			return
 		}
 
-		_, isFlatNoLto := d.flatSrcs[src]
+		isFlatNoLto := d.flatSrc(src)
 		ccRefs = append(ccRefs, emit.Ref)
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, isFlatNoLto)
@@ -1748,8 +1748,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		flags := append([]string(nil), e.CFlags...)
 
-		if extras, ok := d.perSrcCFlags[e.Src]; ok {
-			flags = append(flags, extras...)
+		if extras := d.perSrcCFlagsFor(e.Src); extras != nil {
+			flags = append(flags, *extras...)
 		}
 
 		variantIn.PerSourceCFlags = flags
