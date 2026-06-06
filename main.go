@@ -24,7 +24,7 @@ func dispatch(argv []string) {
 	probes, rest := parseGlobalFlags(argv[1:])
 
 	if len(rest) == 0 {
-		printUsage(os.Stderr)
+		fmt.Fprintln(os.Stderr, "usage: ay <subcommand> [flags]")
 		os.Exit(2)
 	}
 
@@ -66,8 +66,6 @@ func parseGlobalFlags(argv []string) (probes []string, rest []string) {
 
 func runCommand(name string, args []string) int {
 	switch name {
-	case "help", "-h", "--help":
-		return cmdHelp(args)
 	case "fetch":
 		return cmdFetch(args)
 	case "make":
@@ -82,42 +80,9 @@ func runCommand(name string, args []string) int {
 		return cmdProbe(args)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", name)
-		printUsage(os.Stderr)
 
 		return 2
 	}
-}
-
-func printUsage(w io.Writer) {
-	fmt.Fprint(w, `ay — recreate ymake build-graph generator
-
-Usage:
-    ay [global flags] <subcommand> [flags]
-
-Subcommands:
-    make       Generate (and execute) the build graph for a target.
-    dump       Graph tools: normalize | sort | diff | grep | graph.
-    fetch      Fetch and unpack an external resource.
-    perf       Benchmark the ya.make parser over a directory tree.
-    refac      In-house source tooling: consts | lint.
-    probe      Instrument the package's own source: mapinstr | callsite.
-    help       Show this message.
-
-Global flags (before the subcommand):
-    --probe=map|callsite   Dump the named instrumentation tally on exit;
-                           repeatable. Requires a binary built after the
-                           matching 'ay probe <map|callsite>' instrumentation.
-
-Use ay make -j 0 -G <target> > graph.json for graph-generation
-checks, then 'ay dump normalize | ay dump sort' for the canonical L0..L4
-verdict.
-`)
-}
-
-func cmdHelp(_ []string) int {
-	printUsage(os.Stdout)
-
-	return 0
 }
 
 func startProfilesFromEnv() func() {

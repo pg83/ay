@@ -65,14 +65,6 @@ func recordKey(rec *SysIncl, k string) string {
 	return k
 }
 
-func recordQuery(rec *SysIncl, header string) string {
-	if rec.CaseInsensitive {
-		return strings.ToLower(header)
-	}
-
-	return header
-}
-
 type sysInclEnv struct {
 	arch string
 }
