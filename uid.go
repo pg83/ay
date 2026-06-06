@@ -9,19 +9,6 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-func computeUID(canonicalBytes []byte) UID {
-	sum := xxh3.Hash128(canonicalBytes)
-
-	return UID{Hi: sum.Hi, Lo: sum.Lo}
-}
-
-func canonicalNodeBytes(n *Node) []byte {
-	var c canonBuf
-	c.writeNode(n)
-
-	return c.buf
-}
-
 func nodeUIDWithBuf(n *Node, c *canonBuf) UID {
 	c.buf = c.buf[:0]
 	c.writeNode(n)
@@ -40,9 +27,6 @@ func nodeStatsUID(n *Node, c *canonBuf) string {
 
 // statsUIDPreimage returns the preimage as a string for test/diagnostic callers;
 // the hot path (nodeStatsUID) md5s the bytes directly.
-func statsUIDPreimage(n *Node, c *canonBuf) string {
-	return string(appendStatsPreimage(c.strBuf[:0], c, n))
-}
 
 // appendStatsPreimage builds the 4-element stats preimage into dst, with the two
 // nested list reprs built in c.strBuf2 and quoted into dst as bytes — equivalent
@@ -91,9 +75,6 @@ func sortedLongOutputs(outputs []VFS) []string {
 }
 
 // pythonStringListRepr returns the python-list repr as a string (test callers).
-func pythonStringListRepr(c *canonBuf, items []string) string {
-	return string(appendPythonListRepr(c.strBuf[:0], items))
-}
 
 func appendPythonListRepr(dst []byte, items []string) []byte {
 	dst = append(dst, '[')

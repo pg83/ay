@@ -501,14 +501,6 @@ func mergeGeneratedFirstClaims(scanners ...*IncludeScanner) map[VFS]string {
 	return out
 }
 
-func Gen(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn)) *Graph {
-	return genWithResources(fs, targetDir, hostP, targetP, onWarn, nil, false, true)
-}
-
-func GenWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
-	return genWithResources(fs, targetDir, hostP, targetP, onWarn, resources, testMode, true)
-}
-
 func GenDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
 	emitter := NewBufferedEmitter()
 	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, resources, testMode, false)

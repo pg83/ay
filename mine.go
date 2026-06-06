@@ -249,54 +249,6 @@ func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
 	return out
 }
 
-func readYaConfSections(fs FS, wantSection string, rels ...string) map[string]string {
-	out := map[string]string{}
-
-	for _, rel := range rels {
-		if !fs.IsFile(srcRootVFS, rel) {
-			continue
-		}
-
-		raw := fs.Read(rel)
-
-		section := ""
-
-		for _, line := range strings.Split(string(raw), "\n") {
-			line = strings.TrimSpace(line)
-
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-
-			if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-				section = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "["), "]"))
-
-				continue
-			}
-
-			if section != wantSection {
-				continue
-			}
-
-			key, val, ok := strings.Cut(line, "=")
-
-			if !ok {
-				continue
-			}
-
-			key = strings.TrimSpace(key)
-			val = strings.TrimSpace(val)
-			val = strings.Trim(val, `"`)
-
-			if key != "" {
-				out[key] = val
-			}
-		}
-	}
-
-	return out
-}
-
 type hostResourcesJSON struct {
 	ByPlatform map[string]struct {
 		URI string `json:"uri"`

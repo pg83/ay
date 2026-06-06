@@ -244,10 +244,6 @@ type pySrcEntry struct {
 	extraSrcInput *VFS
 }
 
-func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
-	return buildPySrcEntriesFor(d, modulePath, d.pySrcs, d.pyTopLevel, d.pyNamespace)
-}
-
 func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLevel bool, namespace *string) []pySrcEntry {
 	if len(srcs) == 0 {
 		return nil

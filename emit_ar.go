@@ -1,22 +1,5 @@
 package main
 
-func EmitAR(
-	instance ModuleInstance,
-	objRefs []NodeRef,
-	objPaths []VFS,
-	peerArchiveRefs []NodeRef,
-	hostP *Platform,
-	emit Emitter,
-) NodeRef {
-	if len(objRefs) != len(objPaths) {
-		ThrowFmt("EmitAR: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
-	}
-
-	archivePath := Build(instance.Path + "/" + ArchiveName(instance.Path))
-
-	return emitARNode(instance, archivePath, nil, objRefs, objPaths, peerArchiveRefs, nil, hostP, emit)
-}
-
 func EmitARNamed(
 	instance ModuleInstance,
 	archiveBaseName string,
