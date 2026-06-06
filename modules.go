@@ -189,6 +189,31 @@ type moduleData struct {
 	setVars map[string]string
 }
 
+// perSrcCFlagsFor / flatSrc gate the sparse per-source attribute maps on len, so
+// modules with no SRC-level CFLAGS and no flat-output markers (the vast majority)
+// skip the probe. Identical to a direct probe — an empty/nil map yields not-found.
+func (d *moduleData) perSrcCFlagsFor(src string) *[]string {
+	if len(d.perSrcCFlags) == 0 {
+		return nil
+	}
+
+	if v, ok := d.perSrcCFlags[src]; ok {
+		return &v
+	}
+
+	return nil
+}
+
+func (d *moduleData) flatSrc(src string) bool {
+	if len(d.flatSrcs) == 0 {
+		return false
+	}
+
+	_, ok := d.flatSrcs[src]
+
+	return ok
+}
+
 func muslCFlags(on bool) []string {
 	if on {
 		return []string{"-D_musl_"}
