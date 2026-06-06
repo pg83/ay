@@ -97,24 +97,18 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 				IsText:      entry.Text,
 			}
 
-			// COPY_FILE(TEXT): the .txt source content is substituted verbatim into
-			// the dst, so the source — and the fs_tools.py copy tooling — are real
-			// inputs of every unit including the dst. Ride them as bare closure
-			// leaves so they reach every consumer transitively through the dst's
-			// window (scanner splices them in without expanding their own includes),
-			// instead of being re-attached per CC source by a full closure re-walk.
-			if entry.Text && srcVFS != dstVFS {
-				info.ClosureLeaves = append([]VFS{srcVFS}, ctx.scripts[copyFsToolsVFS]...)
-			}
+			// The fs_tools.py copy tooling is a real input of every copy product, so
+			// ride it as a non-expanded closure leaf of the dst — it then reaches the
+			// dst's own compile (and every consumer) transitively through the dst's
+			// cached window, instead of being re-attached per CC/BC source.
+			// COPY_FILE(TEXT) and AUTO COPY additionally materialize the $(S) source,
+			// which upstream lists alongside, so add it as a leaf too.
+			if srcVFS != dstVFS {
+				info.ClosureLeaves = append(info.ClosureLeaves, ctx.scripts[copyFsToolsVFS]...)
 
-			// AUTO COPY (COPY/COPY_FILE … AUTO) materializes both the $(S) source
-			// and the $(B) dst; upstream lists both as inputs of any unit whose
-			// include-closure resolves to the dst. Ride the source as a non-expanded
-			// closure leaf of the dst so it reaches every consumer transitively
-			// through the dst's cached window, replacing the former per-CC-source
-			// companion rescan (autoCopyDstExtras).
-			if entry.Auto && !entry.Text && srcVFS != dstVFS {
-				info.ClosureLeaves = append(info.ClosureLeaves, srcVFS)
+				if entry.Text || entry.Auto {
+					info.ClosureLeaves = append(info.ClosureLeaves, srcVFS)
+				}
 			}
 
 			reg.Register(info)
@@ -189,35 +183,6 @@ func resolveModuleSourceVFS(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	}
 
 	return resolveSourceVFS(ctx, instance, srcRel, srcDir)
-}
-
-// copyProductToolingExtras returns the fs_tools.py copy tooling (fs_tools.py +
-// its import closure) when the compiled unit rootDst is itself a COPY product.
-//
-// The two cross-module attachments this used to also do — re-adding a
-// COPY_FILE(TEXT) dst's $(S) source, and the fs_tools tooling for a *consumed*
-// TEXT-copied header — now ride transitively as non-expanded closure leaves
-// (CodegenRegistry.closureLeaves, registered in emitCopyFiles and spliced into
-// the dst's window by the scanner). So a unit that merely includes a TEXT header
-// already carries both through its closure; the only case left here is the
-// compiled unit's own producer tooling when it is itself a copy (TEXT or not),
-// which has no dst-in-closure to ride from.
-func copyProductToolingExtras(reg *CodegenRegistry, rootDst VFS, scripts scriptDeps) []VFS {
-	if !isCopyProduct(reg, rootDst) {
-		return nil
-	}
-
-	return scripts[copyFsToolsVFS]
-}
-
-// isCopyProduct reports whether v is the $(B) output of a CP (COPY_FILE) node.
-func isCopyProduct(reg *CodegenRegistry, v VFS) bool {
-	if reg == nil || v.IsSource() {
-		return false
-	}
-
-	info := reg.Lookup(v)
-	return info != nil && info.ProducerKvP == "CP"
 }
 
 var copyFsToolsVFS = Intern("$(S)/build/scripts/fs_tools.py")

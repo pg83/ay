@@ -61,13 +61,6 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			// Walk include closure (same as emitCodegenDownstreamCC for generated CC).
 			closure := walkClosure(ctx, instance, inputVFS, in)
 
-			// A COPY_FILE(TEXT) source (e.g. mkql_computation_node_codegen.h.txt) and
-			// the fs_tools.py tooling for any consumed TEXT-copied header now ride
-			// transitively as closure leaves, so they are already in `closure`. Only
-			// the case where inputVFS is itself a copy product needs the tooling
-			// re-added here.
-			wcExtras := copyProductToolingExtras(codegenRegForInstance(ctx, instance), inputVFS, ctx.scripts)
-
 			var depRefs []NodeRef
 
 			if producer != (NodeRef(0)) {
@@ -78,14 +71,10 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 				depRefs = append(depRefs, extra...)
 			}
 
-			allInputs := make([]VFS, 0, 2+len(closure)+len(wcExtras))
+			allInputs := make([]VFS, 0, 2+len(closure))
 			allInputs = append(allInputs, inputVFS)
 			allInputs = append(allInputs, clangWrapperVFS) // ${input:"build/scripts/clang_wrapper.py"}
 			allInputs = append(allInputs, closure...)
-
-			if len(wcExtras) > 0 {
-				allInputs = dedupVFS(allInputs, wcExtras)
-			}
 
 			// Propagate $(S) inputs from this BC node to the OP flat-input set.
 			// fs_tools.py in the inputs (via a consumed TEXT header's leaf, or via

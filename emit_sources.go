@@ -54,16 +54,6 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			srcIn.IncludeInputs = full[1:]
 		}
 
-		// AUTO COPY companion paths (the $(B) dst's $(S) source) now ride
-		// transitively as non-expanded closure leaves of the dst (registered in
-		// emitCopyFiles, spliced into the dst's cached window by the scanner), so
-		// no per-source companion rescan is needed here.
-		wcExtras := copyProductToolingExtras(codegenRegForInstance(ctx, srcInstance), srcVFS, ctx.scripts)
-
-		if len(wcExtras) > 0 {
-			srcIn.IncludeInputs = dedupVFS(srcIn.IncludeInputs, wcExtras)
-		}
-
 		flatcExtras := flatcCCExtraInputs(ctx, srcIn.IncludeInputs)
 
 		if len(flatcExtras) > 0 {
@@ -87,7 +77,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		// array directly with no extra allocation. When extras are present
 		// IncludeInputs has been reallocated, so leave NodeInputs nil for EmitCC to
 		// rebuild from inVFS + IncludeInputs.
-		if len(wcExtras) == 0 && len(flatcExtras) == 0 && len(bisonExtras) == 0 && len(extras) == 0 {
+		if len(flatcExtras) == 0 && len(bisonExtras) == 0 && len(extras) == 0 {
 			srcIn.NodeInputs = full
 		}
 
