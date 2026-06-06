@@ -5,26 +5,27 @@ import (
 	"strings"
 )
 
-type parsedIncludeBucket string
+// parsedIncludeBucket enumerates the fixed, compile-time-known groups a parser
+// sorts a file's #include directives into. Used as the index of parsedIncludeSet.
+type parsedIncludeBucket uint8
 
 const (
-	parsedIncludesLocal       parsedIncludeBucket = "local"
-	parsedIncludesCPP         parsedIncludeBucket = "cpp"
-	parsedIncludesHCPP        parsedIncludeBucket = "h+cpp"
-	parsedIncludesRagelNative parsedIncludeBucket = "ragel-native"
+	parsedIncludesLocal parsedIncludeBucket = iota
+	parsedIncludesHCPP
+	parsedIncludesRagelNative
+	parsedIncludeBucketCount
 )
 
 type parsedInclude = includeDirective
 
-type parsedIncludeSet map[parsedIncludeBucket][]includeDirective
+// parsedIncludeSet groups a source file's parsed directives by bucket. The bucket
+// set is fixed at compile time, so it is a flat array indexed by the bucket enum —
+// a direct index, not a map probe. The zero value is the empty set.
+type parsedIncludeSet [parsedIncludeBucketCount][]includeDirective
 
 func appendParsedDirectives(set parsedIncludeSet, bucket parsedIncludeBucket, directives ...includeDirective) parsedIncludeSet {
 	if len(directives) == 0 {
 		return set
-	}
-
-	if set == nil {
-		set = make(parsedIncludeSet)
 	}
 
 	set[bucket] = append(set[bucket], directives...)
@@ -33,10 +34,6 @@ func appendParsedDirectives(set parsedIncludeSet, bucket parsedIncludeBucket, di
 }
 
 func (set parsedIncludeSet) bucket(bucket parsedIncludeBucket) []includeDirective {
-	if set == nil {
-		return nil
-	}
-
 	return set[bucket]
 }
 
@@ -53,8 +50,10 @@ func (set parsedIncludeSet) bucket(bucket parsedIncludeBucket) []includeDirectiv
 type sharedParseCache struct {
 	// parsed is keyed by the source file's STR (vfsPath.strID()): a parsed source
 	// is always Source-rooted (VFS == STR<<1), so the STR is lossless and halves
-	// DenseMap's idx array versus the 2x-wider VFS space. A present slot with a nil
-	// value is the negative cache (file does not exist), distinct from absent.
+	// DenseMap's idx array versus the 2x-wider VFS space. A present slot with an
+	// empty set is the negative cache (file does not exist or has no directives),
+	// distinct from absent (not yet parsed); the DenseMap present/absent bool, not
+	// the value, gates the re-stat.
 	parsed DenseMap[STR, parsedIncludeSet]
 
 	parsedHits   uint64
@@ -102,9 +101,9 @@ func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSe
 	rel := vfsPath.Rel()
 
 	if !pm.fs.IsFile(srcRootVFS, rel) {
-		pm.cache.parsed.Put(key, nil)
+		pm.cache.parsed.Put(key, parsedIncludeSet{})
 
-		return nil
+		return parsedIncludeSet{}
 	}
 
 	data := pm.fs.Read(rel)
@@ -142,10 +141,6 @@ func (pm *includeParserManager) withCythonSibling(rel string, set parsedIncludeS
 	merged := make([]includeDirective, 0, 1+len(local))
 	merged = append(merged, d)
 	merged = append(merged, local...)
-
-	if set == nil {
-		set = make(parsedIncludeSet)
-	}
 
 	set[parsedIncludesLocal] = merged
 

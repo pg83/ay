@@ -279,10 +279,6 @@ func swigResolveCandidates(fs FS, target, incRel string, roots []string) []strin
 }
 
 func swigSourceParsedBuckets(ctx *genCtx, rel string) parsedIncludeSet {
-	if ctx == nil || ctx.fs == nil {
-		return nil
-	}
-
 	data := ctx.fs.Read(rel)
 
 	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
