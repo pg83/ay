@@ -133,14 +133,6 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 		if moduleInputs != nil && (entry.WithContext || len(entry.OutputIncludes) > 0) {
 			closure = walkClosureRoot(ctx, instance, dstVFS, dstVFS.Rel(), *moduleInputs)
 			closure = rewriteClosureCPSource(scanner, closure)
-
-			// Before dropping $(B) entries, extract flatc wrapper + .fbs sources for
-			// any $(B)/*.fbs.h entries in the closure — these are flatbuffers-generated
-			// headers whose source .fbs files and the wrapper script must be inputs.
-			if flatcExtras := flatcCCExtraInputs(ctx, closure); len(flatcExtras) > 0 {
-				closure = append(closure, flatcExtras...)
-			}
-
 			closure = keepOnlySourceVFS(closure)
 			closure = dedupVFS(closure)
 		}
