@@ -31,6 +31,7 @@ func dispatch(argv []string) {
 	code := runCommand(rest[0], rest[1:])
 
 	dumpProbes(probes) // flush enabled probe stats before exit (cmds os.Exit-free)
+	dumpCalls()        // flush callsite reachability when CALLSITE_OUT is set (env-driven)
 	os.Exit(code)
 }
 
