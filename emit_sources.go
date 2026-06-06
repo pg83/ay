@@ -54,20 +54,10 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			srcIn.IncludeInputs = full[1:]
 		}
 
-		extras := runtimePy3CCExtraInputs(srcInstance.Path, srcRel)
-
-		if len(extras) > 0 {
-			srcIn.IncludeInputs = dedupVFS(srcIn.IncludeInputs, extras)
-		}
-
-		// Fast-path: when no extras were appended, IncludeInputs == full[1:] (same
-		// backing slice), so NodeInputs = full lets EmitCC emit the full input
-		// array directly with no extra allocation. When extras are present
-		// IncludeInputs has been reallocated, so leave NodeInputs nil for EmitCC to
-		// rebuild from inVFS + IncludeInputs.
-		if len(extras) == 0 {
-			srcIn.NodeInputs = full
-		}
+		// Fast-path: IncludeInputs == full[1:] (same backing slice), so NodeInputs =
+		// full lets EmitCC emit the full input array directly with no extra
+		// allocation.
+		srcIn.NodeInputs = full
 
 		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})
 		ref, outPath, _ := EmitCC(srcInstance, srcRel, srcVFS, srcIn, ctx.host, ctx.emit)

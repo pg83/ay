@@ -120,11 +120,25 @@ func emitArchive(
 	arRef := emit.Emit(bindNodePlatform(withResources(n, resourcePatternYMakePython3, resourcePatternClangTool), instance.Platform))
 
 	if reg != nil {
+		// Propagate each archived member's source inputs (e.g. the .py behind a
+		// .pyc compiled by a RUN_PROGRAM) as non-expanded closure leaves of the
+		// archive output, so a CC unit that #includes the archived .inc picks them
+		// up transitively through the cached window — replacing the former
+		// per-CC-source fixup for the runtime_py3 bootstrap.
+		var leaves []VFS
+
+		for _, p := range pathPerFile {
+			if info := reg.Lookup(p); info != nil && len(info.SourceInputs) > 0 {
+				leaves = dedupVFS(leaves, info.SourceInputs)
+			}
+		}
+
 		reg.Register(&GeneratedFileInfo{
 			ProducerKvP:    "AR",
 			OutputPath:     archiveVFS,
 			ProducerRef:    arRef,
 			HasProducerRef: true,
+			ClosureLeaves:  leaves,
 		})
 	}
 }
