@@ -54,12 +54,6 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			srcIn.IncludeInputs = full[1:]
 		}
 
-		flatcExtras := flatcCCExtraInputs(ctx, srcIn.IncludeInputs)
-
-		if len(flatcExtras) > 0 {
-			srcIn.IncludeInputs = dedupVFS(srcIn.IncludeInputs, flatcExtras)
-		}
-
 		bisonExtras := bisonCCSourceInputs(ctx, srcInstance, srcIn.IncludeInputs)
 
 		if len(bisonExtras) > 0 {
@@ -77,7 +71,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		// array directly with no extra allocation. When extras are present
 		// IncludeInputs has been reallocated, so leave NodeInputs nil for EmitCC to
 		// rebuild from inVFS + IncludeInputs.
-		if len(flatcExtras) == 0 && len(bisonExtras) == 0 && len(extras) == 0 {
+		if len(bisonExtras) == 0 && len(extras) == 0 {
 			srcIn.NodeInputs = full
 		}
 
@@ -306,10 +300,6 @@ func emitLibraryFlatcSource(ctx *genCtx, instance ModuleInstance, d *moduleData,
 
 	ccIn := in
 	ccIn.IncludeInputs = walkClosure(ctx, instance, fl.cpp, in)
-
-	if extras := flatcCCExtraInputs(ctx, ccIn.IncludeInputs); len(extras) > 0 {
-		ccIn.IncludeInputs = dedupVFS(ccIn.IncludeInputs, extras)
-	}
 
 	ccIn.ExtraDepRefs = append([]NodeRef{fl.flRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, fl.flRef)...)
 	ccSrcRel := strings.TrimPrefix(fl.cpp.Rel(), instance.Path+"/")

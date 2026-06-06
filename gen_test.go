@@ -3323,8 +3323,13 @@ root_type Bar;
 		"$(S)/mod/Schema.fbs",
 		"$(S)/contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h",
 	}
-	if got := vfsStringsT3(fileCC.Inputs); !reflect.DeepEqual(got[:len(wantFileInputs)], wantFileInputs) {
-		t.Fatalf("File.fbs.cpp inputs prefix = %v, want %v", got[:len(wantFileInputs)], wantFileInputs)
+	// The flatc tooling, sources and runtime header ride to the consumer as
+	// non-expanded closure leaves of the .fbs.h (registered in ensureFlatcEmission);
+	// leaves bypass the closure dedup, so the raw input list is order- and
+	// dup-agnostic — assert membership, mirroring the gate's normalized (sorted,
+	// deduped) comparison.
+	if got := vfsStringsT3(fileCC.Inputs); !vfsInputsContainAll(got, wantFileInputs) {
+		t.Fatalf("File.fbs.cpp inputs = %v, want all of %v", got, wantFileInputs)
 	}
 	if len(graphDeps(g, fileCC)) != 2 {
 		t.Fatalf("len(File.fbs.cpp deps) = %d, want 2 (self + imported schema)", len(graphDeps(g, fileCC)))
@@ -3340,8 +3345,8 @@ root_type Bar;
 		"$(S)/mod/Schema.fbs",
 		"$(S)/contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h",
 	}
-	if got := vfsStringsT3(consumerCC.Inputs); !reflect.DeepEqual(got[:len(wantConsumerInputs)], wantConsumerInputs) {
-		t.Fatalf("consumer.cpp inputs prefix = %v, want %v", got[:len(wantConsumerInputs)], wantConsumerInputs)
+	if got := vfsStringsT3(consumerCC.Inputs); !vfsInputsContainAll(got, wantConsumerInputs) {
+		t.Fatalf("consumer.cpp inputs = %v, want all of %v", got, wantConsumerInputs)
 	}
 	if len(graphDeps(g, consumerCC)) != 2 {
 		t.Fatalf("len(consumer.cpp deps) = %d, want 2 (reachable flatc producers)", len(graphDeps(g, consumerCC)))
@@ -3636,6 +3641,21 @@ func vfsStringsT3(in []VFS) []string {
 		out[i] = v.String()
 	}
 	return out
+}
+
+// vfsInputsContainAll reports whether got contains every entry of want,
+// order- and duplicate-agnostic (mirrors the gate's normalized comparison).
+func vfsInputsContainAll(got, want []string) bool {
+	set := make(map[string]struct{}, len(got))
+	for _, g := range got {
+		set[g] = struct{}{}
+	}
+	for _, w := range want {
+		if _, ok := set[w]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {

@@ -128,33 +128,6 @@ func flatcDirectGeneratedHeaderIncludes(pm *includeParserManager, fs FS, srcRel 
 	return out
 }
 
-func flatcCCExtraInputs(ctx *genCtx, includeInputs []VFS) []VFS {
-	if len(includeInputs) == 0 {
-		return nil
-	}
-
-	var out []VFS
-
-	for _, in := range includeInputs {
-		if !in.IsBuild() || !strings.HasSuffix(in.Rel(), ".fbs.h") {
-			continue
-		}
-
-		srcRel := strings.TrimSuffix(in.Rel(), ".h")
-		srcDir, srcBase := splitDirName(srcRel)
-
-		if !ctx.fs.IsFile(dirKey(srcDir), srcBase) {
-			continue
-		}
-
-		out = dedupVFS(out, []VFS{flatcWrapperVFS, Source(srcRel)})
-		out = dedupVFS(out, flatcTransitiveImports(ctx.parsers, ctx.fs, srcRel))
-		out = dedupVFS(out, []VFS{flatcRuntimeVFS})
-	}
-
-	return out
-}
-
 func flatcResolvedModuleSourceRel(ctx *genCtx, instance ModuleInstance, d *moduleData, resolvedRel string) (string, bool) {
 	candidates := append([]string(nil), d.srcs...)
 	candidates = append(candidates, d.globalSrcs...)
@@ -275,6 +248,20 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 	}
 
 	registerBoundGeneratedParsedOutput(ctx, instance, "FL", headerVFS, headerIncludes, flRef)
+
+	// The flatc tooling, the .fbs source and its transitive imports, plus the
+	// flatbuffers runtime header are real inputs of any unit whose include-closure
+	// reaches this generated header. Ride them as non-expanded closure leaves of
+	// the .h so every consumer picks them up transitively through the cached
+	// window, instead of the former per-CC-source rewalk (flatcCCExtraInputs).
+	reg := codegenRegForInstance(ctx, instance)
+	reg.AddClosureLeaf(headerVFS, flatcWrapperVFS)
+	reg.AddClosureLeaf(headerVFS, srcVFS)
+	reg.AddClosureLeaf(headerVFS, flatcRuntimeVFS)
+
+	for _, imp := range transitiveImports {
+		reg.AddClosureLeaf(headerVFS, imp)
+	}
 
 	cppIncludes := make([]includeDirective, 0, 1+len(flatcRes.InducedDeps))
 	cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: internString(headerVFS.Rel())})
