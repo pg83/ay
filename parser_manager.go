@@ -69,7 +69,7 @@ type includeParserManager struct {
 	cache *sharedParseCache
 
 	addinclIndex   DenseMap[STR, []VFS]
-	addinclIndexed map[VFS]struct{}
+	addinclIndexed BitSet
 	buildParsed    map[string][]includeDirective
 }
 
@@ -81,10 +81,9 @@ type parserPerfStats struct {
 
 func newIncludeParserManagerFS(fs FS, cache *sharedParseCache) *includeParserManager {
 	return &includeParserManager{
-		fs:             fs,
-		cache:          cache,
-		buildParsed:    make(map[string][]includeDirective, 256),
-		addinclIndexed: make(map[VFS]struct{}, 1024),
+		fs:          fs,
+		cache:       cache,
+		buildParsed: make(map[string][]includeDirective, 256),
 	}
 }
 
@@ -191,11 +190,11 @@ func (pm *includeParserManager) indexAddincl(a VFS) {
 		return
 	}
 
-	if _, done := pm.addinclIndexed[a]; done {
+	if pm.addinclIndexed.has(uint32(a)) {
 		return
 	}
 
-	pm.addinclIndexed[a] = struct{}{}
+	pm.addinclIndexed.add(uint32(a))
 	base := a.Rel()
 	pm.fs.Walk(base, func(rel string, isDir bool) {
 		if isDir {
