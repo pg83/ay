@@ -114,32 +114,56 @@ func probeCallSite(args []string) int {
 // callsites_all.txt to find reachable-but-never-exercised (gate-garbage)
 // functions. Throwaway. ---
 
-// callCounts is the per-site call tally. It is not goroutine-safe, so only
-// instrument single-threaded paths (the `make -G` gen path, not `dump`, whose
-// streamGraphFanout runs many goroutines and would race with "concurrent map
-// writes").
-var callCounts = map[string]int{}
+// Goroutine-safe site recording: every recordCall (from any goroutine — the
+// make gen path AND dump's streamGraphFanout) sends its site over a buffered
+// channel; one drain goroutine owns the seen-set and the output file, so there
+// is no shared mutable state and no "concurrent map writes". Active only when
+// CALLSITE_OUT is set (i.e. under --probe=callsite); otherwise recordCall is a
+// cheap nil check. dumpCalls closes the channel and waits for the drain+flush.
+var (
+	callSiteCh      chan string
+	callSiteDrained = make(chan struct{})
+)
 
-func recordCall(site string) {
-	callCounts[site]++
-}
-
-func dumpCalls() {
+func init() {
 	path := os.Getenv("CALLSITE_OUT")
 
 	if path == "" {
 		return
 	}
 
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	callSiteCh = make(chan string, 1<<20)
 
-	if err != nil {
+	go func() {
+		seen := map[string]struct{}{}
+
+		for s := range callSiteCh {
+			seen[s] = struct{}{}
+		}
+
+		if f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
+			for s := range seen {
+				fmt.Fprintln(f, s)
+			}
+
+			f.Close()
+		}
+
+		close(callSiteDrained)
+	}()
+}
+
+func recordCall(site string) {
+	if callSiteCh != nil {
+		callSiteCh <- site
+	}
+}
+
+func dumpCalls() {
+	if callSiteCh == nil {
 		return
 	}
 
-	for s := range callCounts {
-		fmt.Fprintln(f, s)
-	}
-
-	f.Close()
+	close(callSiteCh)
+	<-callSiteDrained
 }
