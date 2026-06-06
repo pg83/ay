@@ -736,7 +736,7 @@ func parseYasmIncludes(data []byte) []includeDirective {
 		}
 
 		target := string(line[m[2]:m[3]])
-		out = append(out, includeDirective{kind: kind, next: false, target: internString(target)})
+		out = append(out, includeDirective{kind: kind, target: internString(target)})
 	})
 
 	return out
