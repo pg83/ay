@@ -204,7 +204,6 @@ func (m *sysinclIndex) lookup(path, header string) ([]string, bool, bool) {
 		out            []string
 		found          bool
 		hasMultiTarget bool
-		seen           map[string]struct{}
 	)
 
 	for i := range bucket {
@@ -239,15 +238,6 @@ func (m *sysinclIndex) lookup(path, header string) ([]string, bool, bool) {
 				continue
 			}
 
-			if seen == nil {
-				seen = make(map[string]struct{}, 4)
-			}
-
-			if _, dup := seen[p]; dup {
-				continue
-			}
-
-			seen[p] = struct{}{}
 			out = append(out, p)
 		}
 	}
