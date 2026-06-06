@@ -21,7 +21,6 @@ const (
 
 type includeDirective struct {
 	kind   includeKind
-	next   bool
 	target STR
 }
 
@@ -132,8 +131,6 @@ type IncludeScanner struct {
 	statsCallCount         uint64
 
 	codegen *CodegenRegistry
-
-	fallbackLocators []pathLocator
 }
 
 type scanCtx struct {
@@ -171,10 +168,9 @@ func (s *IncludeScanner) putClosure(v VFS, ref closureRef) {
 }
 
 // sourceFileExists memoizes IsFile(srcRootVFS, abs.Rel()) by the file VFS
-// (column 3), so the repeated existence checks of cached sysincl mappings (and
-// fsLocator) probe the FS — and intern the parent dir — only once per file. The
-// column's own presence is the "already probed" bit; an absent column means not
-// yet checked.
+// (column 3), so the repeated existence checks of cached sysincl mappings probe
+// the FS — and intern the parent dir — only once per file. The column's own
+// presence is the "already probed" bit; an absent column means not yet checked.
 func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
 	key := STR(abs.strID())
 
@@ -631,7 +627,7 @@ func (sc *scanCtx) resolve(includerAbs, incDir VFS, d includeDirective) (out []V
 	var sysinclClaimed bool
 
 	defer func() {
-		if len(out) > 0 || d.next || sysinclClaimed {
+		if len(out) > 0 || sysinclClaimed {
 			return
 		}
 
@@ -647,10 +643,6 @@ func (sc *scanCtx) resolve(includerAbs, incDir VFS, d includeDirective) (out []V
 				includerAbs.String(), open, d.target.String(), close),
 		})
 	}()
-
-	if d.next {
-		return nil
-	}
 
 	searchOut := sc.resolveSearchPath(includerAbs, incDir, d)
 
@@ -995,36 +987,6 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 	return sc.cacheSearchTier(targetID, out)
 }
 
-func resolveCythonPy2Override(includerAbs VFS, d includeDirective) (string, bool) {
-	if !includerAbs.IsSource() || d.kind != includeQuoted {
-		return "", false
-	}
-
-	switch includerAbs.Rel() {
-	case "util/generic/string.pxd":
-		if d.target.String() == "libcpp/string.pxd" {
-			return "contrib/tools/cython_py2/Cython/Includes/libcpp/string.pxd", true
-		}
-	case "util/generic/hash.pxd":
-		if d.target.String() == "libcpp/pair.pxd" {
-			return "contrib/tools/cython_py2/Cython/Includes/libcpp/pair.pxd", true
-		}
-	case "util/system/types.pxd":
-		if d.target.String() == "libc/stdint.pxd" {
-			return "contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd", true
-		}
-	}
-
-	if strings.HasPrefix(includerAbs.Rel(), "contrib/tools/cython_py2/Cython/Includes/") {
-		switch d.target.String() {
-		case "libc/string.pxd", "libcpp/string.pxd", "libcpp/pair.pxd", "libcpp/utility.pxd":
-			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.String(), true
-		}
-	}
-
-	return "", false
-}
-
 func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective) []VFS {
 	s := sc.scanner
 	s.resolveSearchPathCalls++
@@ -1077,8 +1039,6 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 
 	searchPathFound := false
 
-	var buildRootFallbackRel string
-
 	if candidate, ok := cythonPy2SiblingOverride(includerAbs, d); ok && addPath(candidate) {
 		searchPathFound = true
 	}
@@ -1096,13 +1056,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 					}
 				}
 			}
-		} else {
-			buildRootFallbackRel = rel
 		}
-	}
-
-	if candidate, ok := resolveCythonPy2Override(includerAbs, d); ok && addPath(candidate) {
-		searchPathFound = true
 	}
 
 	if d.kind == includeQuoted {
@@ -1124,12 +1078,9 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 		}
 
 		if rel != "" {
-			if _, dup := seen[rel]; !dup {
-				seen[rel] = struct{}{}
-				out = append(out, Source(rel))
-				searchPathFound = true
-				matched = true
-			}
+			out = append(out, Source(rel))
+			searchPathFound = true
+			matched = true
 		}
 
 		if !matched {
@@ -1164,34 +1115,6 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 			out = append(out, tier.paths...)
 			searchPathFound = true
 		}
-	}
-
-	if !searchPathFound && len(s.fallbackLocators) > 0 {
-		abs := Build(d.target.String())
-
-		for _, loc := range s.fallbackLocators {
-			if !loc.Exists(abs) {
-				continue
-			}
-
-			dedupKey := "B:" + d.target.String()
-
-			if _, dup := seen[dedupKey]; !dup {
-				seen[dedupKey] = struct{}{}
-				out = append(out, abs)
-			}
-
-			break
-		}
-	}
-
-	if !searchPathFound && buildRootFallbackRel != "" {
-		if _, dup := seen[buildRootFallbackRel]; !dup {
-			seen[buildRootFallbackRel] = struct{}{}
-			out = append(out, Source(buildRootFallbackRel))
-		}
-
-		searchPathFound = true
 	}
 
 	clear(seen)
@@ -1264,30 +1187,6 @@ func normalisePath(p string) string {
 	}
 
 	return strings.Join(out, "/")
-}
-
-type pathLocator interface {
-	Exists(vfsPath VFS) bool
-}
-
-type fsLocator struct {
-	scanner *IncludeScanner
-}
-
-type codegenLocator struct {
-	reg *CodegenRegistry
-}
-
-func (c codegenLocator) Exists(vfsPath VFS) bool {
-	if c.reg == nil {
-		return false
-	}
-
-	if !vfsPath.IsBuild() {
-		return false
-	}
-
-	return c.reg.Lookup(vfsPath) != nil
 }
 
 func (s *IncludeScanner) resolveSourceUnder(prefix VFS, target string) (string, bool) {

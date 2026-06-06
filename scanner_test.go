@@ -519,10 +519,6 @@ some_label:
 	if dirs[0].kind != includeQuoted {
 		t.Errorf("kind = %v, want includeQuoted", dirs[0].kind)
 	}
-
-	if dirs[0].next {
-		t.Errorf("next = true, want false (yasm has no %%include_next)")
-	}
 }
 
 func TestParseYasmIncludes_UppercaseDirective(t *testing.T) {
@@ -1028,11 +1024,10 @@ func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
 }
 
 // attachCodegen wires a CodegenRegistry onto an existing scanner the way the
-// real gen pipeline does (codegen field + codegenLocator fallback). Tests use
-// it together with newTestScanner.
+// real gen pipeline does (the codegen field). Tests use it together with
+// newTestScanner.
 func attachCodegen(scanner *IncludeScanner, reg *CodegenRegistry) {
 	scanner.codegen = reg
-	scanner.fallbackLocators = []pathLocator{codegenLocator{reg: reg}}
 }
 
 // TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist locks the upstream
