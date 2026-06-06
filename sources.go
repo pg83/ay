@@ -19,16 +19,20 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 		return nil
 	}
 
-	// Union each source's transitive closure (closureOf), deduping across
-	// sources with a reused idSet, then drop the source files themselves.
+	// Union each source's transitive closure (closureOf), deduping across sources
+	// with a reused idSet. The source files themselves drop out for free: seed the
+	// idSet with every source VFS up front, so the union loop's visited-skip leaves
+	// them out — no post-filter, no side set. Seeding ALL sources before any
+	// closure walk also excludes a source that is a transitive dep of an earlier
+	// source (an incremental seed would miss it; the old full-set filter caught it).
 	visited := scanner.visitedIDPool.Get().(*idSet)
 	visited.reset(vfsBound())
 	defer scanner.visitedIDPool.Put(visited)
-	order := make([]VFS, 0, 1024)
-	srcAbsSet := make(map[VFS]struct{}, len(sources))
 	modDirKey := dirKey(srcInstance.Path)
 
-	for _, src := range sources {
+	srcRels := make([]string, len(sources))
+
+	for i, src := range sources {
 		srcRelOnDisk := srcInstance.Path + "/" + src
 
 		if in.SrcDir != nil && *in.SrcDir != srcInstance.Path {
@@ -37,6 +41,13 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 			}
 		}
 
+		srcRels[i] = srcRelOnDisk
+		visited.add(Source(srcRelOnDisk))
+	}
+
+	order := make([]VFS, 0, 1024)
+
+	for _, srcRelOnDisk := range srcRels {
 		cfg := ScanContext{
 			SourceRel:       srcRelOnDisk,
 			OwnAddIncl:      in.AddIncl,
@@ -47,10 +58,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 
 		sc := scanner.NewScanCtx(cfg)
 
-		srcAbs := Source(srcRelOnDisk)
-		srcAbsSet[srcAbs] = struct{}{}
-
-		for _, v := range sc.closureOf(srcAbs) {
+		for _, v := range sc.closureOf(Source(srcRelOnDisk)) {
 			if visited.has(v) {
 				continue
 			}
@@ -64,21 +72,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 		return nil
 	}
 
-	out := make([]VFS, 0, len(order))
-
-	for _, abs := range order {
-		if _, isSrc := srcAbsSet[abs]; isSrc {
-			continue
-		}
-
-		out = append(out, abs)
-	}
-
-	if len(out) == 0 {
-		return nil
-	}
-
-	return out
+	return order
 }
 
 func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []VFS, scripts scriptDeps) []VFS {
