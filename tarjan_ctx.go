@@ -7,7 +7,7 @@ type tarjanScratch struct {
 	stamp   []uint32
 	index   []int32
 	low     []int32
-	onStack []bool
+	onStack BitSet
 	epoch   uint32
 }
 
@@ -36,7 +36,7 @@ func (t *tarjanScratch) reset(size uint32) {
 		t.stamp = make([]uint32, grown)
 		t.index = make([]int32, grown)
 		t.low = make([]int32, grown)
-		t.onStack = make([]bool, grown)
+		t.onStack = BitSet{}
 		t.epoch = 1
 
 		return
@@ -79,19 +79,16 @@ func (t *tarjanScratch) discover(v VFS, idx int32) {
 		low := make([]int32, grown)
 		copy(low, t.low)
 		t.low = low
-		onStack := make([]bool, grown)
-		copy(onStack, t.onStack)
-		t.onStack = onStack
 	}
 
 	t.stamp[id] = t.epoch
 	t.index[id] = idx
 	t.low[id] = idx
-	t.onStack[id] = true
+	t.onStack.add(id)
 }
 
 func (t *tarjanScratch) onStackHas(v VFS) bool {
-	return t.visited(v) && t.onStack[uint32(v)]
+	return t.visited(v) && t.onStack.has(uint32(v))
 }
 
 func (t *tarjanScratch) lowOf(v VFS) int32 {
@@ -107,11 +104,11 @@ func (t *tarjanScratch) setLow(v VFS, x int32) {
 }
 
 func (t *tarjanScratch) onStackOf(v VFS) bool {
-	return t.onStack[uint32(v)]
+	return t.onStack.has(uint32(v))
 }
 
 func (t *tarjanScratch) setOnStack(v VFS, b bool) {
-	t.onStack[uint32(v)] = b
+	t.onStack.set(uint32(v), b)
 }
 
 // closureSink is the scanner surface strongconnect needs: walk a node's

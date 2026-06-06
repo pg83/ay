@@ -33,7 +33,7 @@ func (h *intHeap) Pop() interface{} {
 
 // NodeRef is a node's index into the emitter's node buffer. uint32 (not a
 // struct) so it is a dense ~uint32 id: small (4 bytes), usable directly as a
-// slice index, and dedupable through idSet/idBitSet without a side map.
+// slice index, and dedupable through idSet/BitSet without a side map.
 type NodeRef uint32
 
 type Emitter interface {
@@ -253,7 +253,7 @@ func resolveAndUID(node *Node, uids *uidVec, uidScratch *canonBuf) UID {
 type StreamingEmitter struct {
 	nodes      []*Node
 	uids       *uidVec
-	resolved   []bool // resolved[id]: uids has the computed uid for id (gen-goroutine only)
+	resolved   BitSet // resolved.has(id): uids has the computed uid for id (gen-goroutine only)
 	pendingIdx []NodeRef
 	pendingSet map[NodeRef]bool
 	results    []NodeRef
@@ -279,7 +279,6 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 
 	id := NodeRef(len(e.nodes))
 	e.nodes = append(e.nodes, n)
-	e.resolved = append(e.resolved, false)
 
 	if e.hasUnresolvedDeps(n) {
 		e.pendingSet[id] = true
@@ -288,7 +287,7 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 	}
 
 	e.uids.set(id, resolveAndUID(n, e.uids, &e.uidScratch))
-	e.resolved[id] = true
+	e.resolved.add(uint32(id))
 
 	if e.onNode != nil {
 		e.onNode(n, e.uids)
@@ -299,13 +298,13 @@ func (e *StreamingEmitter) Emit(n *Node) NodeRef {
 
 func (e *StreamingEmitter) hasUnresolvedDeps(n *Node) bool {
 	for _, r := range n.DepRefs {
-		if !e.resolved[r] {
+		if !e.resolved.has(uint32(r)) {
 			return true
 		}
 	}
 
 	for _, r := range n.ForeignDepRefs {
-		if !e.resolved[r] {
+		if !e.resolved.has(uint32(r)) {
 			return true
 		}
 	}
@@ -333,7 +332,7 @@ func (e *StreamingEmitter) Finish() []UID {
 	for _, id := range e.pendingIdx {
 		n := e.nodes[id]
 		e.uids.set(id, resolveAndUID(n, e.uids, &e.uidScratch))
-		e.resolved[id] = true
+		e.resolved.add(uint32(id))
 
 		if e.onNode != nil {
 			e.onNode(n, e.uids)

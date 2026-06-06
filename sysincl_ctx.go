@@ -16,9 +16,9 @@ import (
 type sysinclCtx struct {
 	// keyBits/keyCI/ciGate/ciMaxLen back mightClaim: a "could any record map this
 	// target" gate evaluated before the full lookup.
-	keyBits  []bool          // case-sensitive keys, indexed by target STR
+	keyBits  BitSet          // case-sensitive keys, indexed by target STR
 	keyCI    map[string]bool // case-insensitive keys (lowercased)
-	ciGate   idBitSet[uint16]
+	ciGate   BitSet
 	ciMaxLen int // longest CI key; longer targets cannot match (cheap reject)
 
 	merged *sysinclIndex
@@ -45,10 +45,8 @@ func newSysinclCtx(set SysInclSet) *sysinclCtx {
 		}
 	}
 
-	c.keyBits = make([]bool, internBound())
-
 	for _, id := range csKeyIDs {
-		c.keyBits[id] = true
+		c.keyBits.add(uint32(id))
 	}
 
 	for k := range c.keyCI {
@@ -69,7 +67,7 @@ func newSysinclCtx(set SysInclSet) *sysinclCtx {
 		// len <= 45 here and the uint16 key never overflows.
 		for _, x0 := range caseVariants(k[0]) {
 			for _, x1 := range caseVariants(k[1]) {
-				c.ciGate.add(uint16(x0)*l + uint16(x1))
+				c.ciGate.add(uint32(uint16(x0)*l + uint16(x1)))
 			}
 		}
 	}
@@ -82,7 +80,7 @@ func newSysinclCtx(set SysInclSet) *sysinclCtx {
 // mightClaim is a sound, cheap prefilter: a false result guarantees no sysincl
 // record can map target, so the caller skips the full lookup.
 func (c *sysinclCtx) mightClaim(target STR) bool {
-	if int(target) < len(c.keyBits) && c.keyBits[target] {
+	if c.keyBits.has(uint32(target)) {
 		return true
 	}
 
@@ -93,7 +91,7 @@ func (c *sysinclCtx) mightClaim(target STR) bool {
 			return false
 		}
 
-		if len(raw) >= 2 && !c.ciGate.has(uint16(raw[0])*uint16(len(raw))+uint16(raw[1])) {
+		if len(raw) >= 2 && !c.ciGate.has(uint32(uint16(raw[0])*uint16(len(raw))+uint16(raw[1]))) {
 			return false
 		}
 
