@@ -4,7 +4,6 @@ package main
 // production sources (gate-dead) so they no longer ship in the binary.
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/zeebo/xxh3"
@@ -87,16 +86,6 @@ func readYaConfSections(fs FS, wantSection string, rels ...string) map[string]st
 	}
 
 	return out
-}
-
-func NewFlagSet(extra ...string) FlagSet {
-	if len(extra) == 0 {
-		return FlagSet{}
-	}
-
-	e := append([]string{}, extra...)
-	sort.Strings(e)
-	return FlagSet{Extra: strings.Join(e, "\n")}
 }
 
 func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {

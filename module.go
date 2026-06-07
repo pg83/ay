@@ -67,8 +67,6 @@ type FlagSet struct {
 	NoCompilerWarnings bool
 	NoWShadow          bool
 	IsCpp              bool
-
-	Extra string
 }
 
 type ModuleInstance struct {

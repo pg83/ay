@@ -168,7 +168,7 @@ type moduleEmitResult struct {
 	CFlagsGlobal     []ARG
 	CXXFlagsGlobal   []ARG
 	COnlyFlagsGlobal []ARG
-	ObjAddLibsGlobal []string
+	ObjAddLibsGlobal []ARG
 
 	LDFlagsGlobal []ARG
 
@@ -856,7 +856,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			CFlagsGlobal:                    dedupARG(peerContribs.cFlags, d.cFlagsGlobal),
 			CXXFlagsGlobal:                  dedupARG(peerContribs.cxxFlags, d.cxxFlagsGlobal),
 			COnlyFlagsGlobal:                dedupARG(peerContribs.cOnlyFlags, d.cOnlyFlagsGlobal),
-			ObjAddLibsGlobal:                mergeDedup(peerContribs.objAddLibs, d.objAddLibsGlobal),
+			ObjAddLibsGlobal:                dedupARG(peerContribs.objAddLibs, d.objAddLibsGlobal),
 			LDFlagsGlobal:                   dedupARG(peerContribs.ldFlags, d.ldFlags),
 			RPathFlagsGlobal:                dedupARG(peerContribs.rpathFlags, d.rpathFlagsGlobal),
 			PeerArchiveClosureRefs:          peerArchiveRefsH,
@@ -993,8 +993,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	peerLDPluginRefs := make([]NodeRef, 0, 1)
 	peerLDPluginPaths := make([]VFS, 0, 1)
-	objAddLibSeen := map[string]struct{}{}
-	peerObjAddLibsGlobal := make([]string, 0, 8)
+	var objAddLibSeen BitSet
+	peerObjAddLibsGlobal := make([]ARG, 0, 8)
 	var ldFlagsSeen BitSet
 	peerLDFlagsGlobal := make([]ARG, 0, 4)
 	var rpathFlagsSeen BitSet
@@ -1017,16 +1017,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	peerCXXFlagsGlobal := make([]ARG, 0, 16)
 	var cOnlyFlagsSeen BitSet
 	peerCOnlyFlagsGlobal := make([]ARG, 0, 16)
-	addEach := func(seenSet map[string]struct{}, dst *[]string, src []string) {
-		for _, x := range src {
-			if _, dup := seenSet[x]; dup {
-				continue
-			}
-
-			seenSet[x] = struct{}{}
-			*dst = append(*dst, x)
-		}
-	}
 	type resolvedPeer struct {
 		path   string
 		result *moduleEmitResult
@@ -1367,7 +1357,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		addEachARG(&cFlagsSeen, &peerCFlagsGlobal, rp.result.CFlagsGlobal)
 		addEachARG(&cxxFlagsSeen, &peerCXXFlagsGlobal, rp.result.CXXFlagsGlobal)
 		addEachARG(&cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, rp.result.COnlyFlagsGlobal)
-		addEach(objAddLibSeen, &peerObjAddLibsGlobal, rp.result.ObjAddLibsGlobal)
+		addEachARG(&objAddLibSeen, &peerObjAddLibsGlobal, rp.result.ObjAddLibsGlobal)
 		addEachARG(&ldFlagsSeen, &peerLDFlagsGlobal, rp.result.LDFlagsGlobal)
 		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, rp.result.RPathFlagsGlobal)
 	}
@@ -1990,7 +1980,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			CFlagsGlobal:                    effectiveCFlagsGlobal,
 			CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
 			COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
-			ObjAddLibsGlobal:                mergeDedup(peerObjAddLibsGlobal, d.objAddLibsGlobal),
+			ObjAddLibsGlobal:                dedupARG(peerObjAddLibsGlobal, d.objAddLibsGlobal),
 			LDFlagsGlobal:                   dedupARG(peerLDFlagsGlobal, d.ldFlags),
 			RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
 			PeerArchiveClosureRefs:          peerArchiveRefs,
@@ -2090,7 +2080,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		CFlagsGlobal:                    effectiveCFlagsGlobal,
 		CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
 		COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
-		ObjAddLibsGlobal:                mergeDedup(peerObjAddLibsGlobal, d.objAddLibsGlobal),
+		ObjAddLibsGlobal:                dedupARG(peerObjAddLibsGlobal, d.objAddLibsGlobal),
 		LDFlagsGlobal:                   dedupARG(peerLDFlagsGlobal, d.ldFlags),
 		RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
 		PeerArchiveClosureRefs:          peerArchiveRefs,
@@ -2167,31 +2157,6 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 		}
 
 		out = append(out, p)
-	}
-
-	return out
-}
-
-func mergeDedup(a, b []string) []string {
-	out := make([]string, 0, len(a)+len(b))
-	seen := make(map[string]struct{}, len(a)+len(b))
-
-	for _, x := range a {
-		if _, dup := seen[x]; dup {
-			continue
-		}
-
-		seen[x] = struct{}{}
-		out = append(out, x)
-	}
-
-	for _, x := range b {
-		if _, dup := seen[x]; dup {
-			continue
-		}
-
-		seen[x] = struct{}{}
-		out = append(out, x)
 	}
 
 	return out
@@ -2475,7 +2440,7 @@ type peerGlobalContribs struct {
 	cFlags       []ARG
 	cxxFlags     []ARG
 	cOnlyFlags   []ARG
-	objAddLibs   []string
+	objAddLibs   []ARG
 	ldFlags      []ARG
 	rpathFlags   []ARG
 
@@ -2506,7 +2471,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	var cFlagsSeen BitSet
 	var cxxFlagsSeen BitSet
 	var cOnlyFlagsSeen BitSet
-	objAddLibSeen := map[string]struct{}{}
+	var objAddLibSeen BitSet
 	var ldFlagsSeen BitSet
 	var rpathFlagsSeen BitSet
 	archiveSeen := map[VFS]struct{}{}
@@ -2515,16 +2480,6 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	wholeArchiveCmdSeen := map[VFS]struct{}{}
 	ldPluginSeen := map[VFS]struct{}{}
 	dynamicSeen := map[VFS]struct{}{}
-	addEach := func(seenSet map[string]struct{}, dst *[]string, src []string) {
-		for _, x := range src {
-			if _, dup := seenSet[x]; dup {
-				continue
-			}
-
-			seenSet[x] = struct{}{}
-			*dst = append(*dst, x)
-		}
-	}
 	addEachVFS := func(seenSet map[VFS]struct{}, dst *[]VFS, src []VFS) {
 		for _, x := range src {
 			if _, dup := seenSet[x]; dup {
@@ -2603,7 +2558,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		addEachARG(&cFlagsSeen, &out.cFlags, peerResult.CFlagsGlobal)
 		addEachARG(&cxxFlagsSeen, &out.cxxFlags, peerResult.CXXFlagsGlobal)
 		addEachARG(&cOnlyFlagsSeen, &out.cOnlyFlags, peerResult.COnlyFlagsGlobal)
-		addEach(objAddLibSeen, &out.objAddLibs, peerResult.ObjAddLibsGlobal)
+		addEachARG(&objAddLibSeen, &out.objAddLibs, peerResult.ObjAddLibsGlobal)
 		addEachARG(&ldFlagsSeen, &out.ldFlags, peerResult.LDFlagsGlobal)
 		addEachARG(&rpathFlagsSeen, &out.rpathFlags, peerResult.RPathFlagsGlobal)
 

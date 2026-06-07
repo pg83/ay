@@ -49,7 +49,7 @@ func EmitLD(
 	ownLDFlags []ARG,
 	ownRPathFlags []ARG,
 	peerRPathFlagsGlobal []ARG,
-	objAddLibsGlobal []string,
+	objAddLibsGlobal []ARG,
 	exportsScript *string,
 	noCompilerWarnings bool,
 	wantsStrip bool,
@@ -263,7 +263,7 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 	return cmdArgs
 }
 
-func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal []ARG, objAddLibsGlobal []string, exportsScript *string, wantsStrip bool) []string {
+func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *string, wantsStrip bool) []string {
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	argCap += 2 + len(pluginPaths)
@@ -344,7 +344,7 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 	return cmdArgs
 }
 
-func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal []ARG, objAddLibsGlobal []string, exportsScript *string, wantsStrip bool) []string {
+func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *string, wantsStrip bool) []string {
 	linkPrelude := []string{"-rdynamic"}
 	// EXPORTS_SCRIPT appends the version-script flag right after -rdynamic
 	// per upstream's EXPORTS_VALUE in build/conf/linkers/ld.conf:138 —
@@ -384,7 +384,7 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 
 	trailer = append(trailer, p.LinkerSelectionTailFlags()...)
 	trailer = appendArgStrs(trailer, peerLDFlagsGlobal, ownLDFlags)
-	trailer = append(trailer, objAddLibsGlobal...)
+	trailer = appendArgStrs(trailer, objAddLibsGlobal)
 	trailer = append(trailer, systemLibs...)
 
 	if wantsStrip {
