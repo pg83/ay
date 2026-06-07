@@ -176,7 +176,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, moduleTag) + "_raw.auxcpp")
 		sourceInputs := pyProtoSourceInputs(ch.inputs)
 		auxClosure := rawAuxInputClosure(ctx, instance, aux, sourceInputs, in)
-		cmdArgs := []ANY{stringAny(rescompilerBinPath), vfsAny(aux)}
+		cmdArgs := []ANY{internAny(rescompilerBinPath), vfsAny(aux)}
 		cmdArgs = appendStringAny(cmdArgs, ch.cmdArgs)
 
 		chDeps := append([]NodeRef(nil), deps...)

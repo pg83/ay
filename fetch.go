@@ -18,7 +18,7 @@ var (
 	buildScriptsFetchFromMdsPy     = Source("build/scripts/fetch_from_mds.py")
 	buildScriptsFetchFromSandboxPy = Source("build/scripts/fetch_from_sandbox.py")
 	// Path constants hoisted by `ay refac consts`.
-	anyFetch = stringAny("fetch")
+	anyFetch = internAny("fetch")
 )
 
 type resourceFetch struct {
@@ -118,11 +118,11 @@ func fetchNode(host *Platform, item resourceFetch, scripts scriptDeps) *Node {
 	return bindNodePlatform(&Node{
 		Cmds: []Cmd{{
 			CmdArgs: []ANY{
-				stringAny(currentYatoolPath()),
+				internAny(currentYatoolPath()),
 				anyFetch,
 				anyB,
 				anyS,
-				stringAny(item.URI),
+				internAny(item.URI),
 				vfsAny(item.Output),
 			},
 			Env: nil,

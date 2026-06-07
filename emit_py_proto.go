@@ -7,12 +7,12 @@ import (
 
 var (
 	// Path constants hoisted by `ay refac consts`.
-	anyISContribLibsProtocSrc = stringAny("-I=$(S)/contrib/libs/protoc/src")
-	anyInput                  = stringAny("--input")
-	anyNs                     = stringAny("--ns")
-	anyPy3                    = stringAny("py3")
-	anyPyVer                  = stringAny("--py_ver")
-	anySuffixes               = stringAny("--suffixes")
+	anyISContribLibsProtocSrc = internAny("-I=$(S)/contrib/libs/protoc/src")
+	anyInput                  = internAny("--input")
+	anyNs                     = internAny("--ns")
+	anyPy3                    = internAny("py3")
+	anyPyVer                  = internAny("--py_ver")
+	anySuffixes               = internAny("--suffixes")
 )
 
 func protoPythonResourceKey(instance ModuleInstance, d *moduleData, src, suffix string) string {
@@ -149,25 +149,25 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 
 	cmdArgs := []ANY{
-		stringAny(instance.Platform.Tools.Python3),
-		stringAny(pbPyWrapperPath),
+		internAny(instance.Platform.Tools.Python3),
+		internAny(pbPyWrapperPath),
 		anyPyVer, anyPy3,
 		anySuffixes,
 	}
 	cmdArgs = appendStringAny(cmdArgs, suffixes)
 	cmdArgs = append(cmdArgs,
-		anyInput, stringAny(protoRelPath),
-		anyNs, stringAny(protoPythonNamespaceArg(d)),
+		anyInput, internAny(protoRelPath),
+		anyNs, internAny(protoPythonNamespaceArg(d)),
 		any2,
 		vfsAny(protocBinary),
-		stringAny("-I=./"+protoRoot),
-		stringAny("-I=$(S)/"+protoRoot),
+		internAny("-I=./"+protoRoot),
+		internAny("-I=$(S)/"+protoRoot),
 		anyIB2,
 		anyIS3,
 	)
 
 	if !d.grpc && protoRoot != "contrib/libs/protobuf/src" {
-		cmdArgs = append(cmdArgs, stringAny("-I=$(S)/"+protoRoot))
+		cmdArgs = append(cmdArgs, internAny("-I=$(S)/"+protoRoot))
 	}
 
 	cmdArgs = append(cmdArgs, anyISContribLibsProtobufSrc)
@@ -179,21 +179,21 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	cmdArgs = append(cmdArgs,
 		anyIB2,
 		anyISContribLibsProtobufSrc,
-		stringAny("--python_out=$(B)/"+protoRoot),
-		stringAny(protoRelPath),
+		internAny("--python_out=$(B)/"+protoRoot),
+		internAny(protoRelPath),
 	)
 
 	if d.grpc {
 		cmdArgs = append(cmdArgs,
-			stringAny("--plugin=protoc-gen-grpc_py="+grpcPyBinary.String()),
-			stringAny("--grpc_py_out=$(B)/"+protoRoot),
+			internAny("--plugin=protoc-gen-grpc_py="+grpcPyBinary.String()),
+			internAny("--grpc_py_out=$(B)/"+protoRoot),
 		)
 	}
 
 	if !d.noMypy {
 		cmdArgs = append(cmdArgs,
-			stringAny("--plugin=protoc-gen-mypy="+mypyBinary.String()),
-			stringAny("--mypy_out=$(B)/"+protoRoot),
+			internAny("--plugin=protoc-gen-mypy="+mypyBinary.String()),
+			internAny("--mypy_out=$(B)/"+protoRoot),
 		)
 	}
 
@@ -299,7 +299,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			vfsAny(py3ccBinary),
 			anySlowPy3cc,
 			vfsAny(py3ccSlowBin),
-			stringAny(pyOut.Rel() + "-"),
+			internAny(pyOut.Rel() + "-"),
 			vfsAny(pyOut),
 			vfsAny(out),
 		}
@@ -500,7 +500,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 	for _, ch := range chunks {
 		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, "PY3_PROTO") + "_raw.auxcpp")
 		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, aux, ch.inputs, peerAddIncl)
-		cmdArgs := []ANY{stringAny(rescompilerBinPath), vfsAny(aux)}
+		cmdArgs := []ANY{internAny(rescompilerBinPath), vfsAny(aux)}
 		cmdArgs = appendStringAny(cmdArgs, ch.cmdArgs)
 
 		deps := append([]NodeRef(nil), ch.deps...)

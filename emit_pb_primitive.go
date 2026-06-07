@@ -21,7 +21,7 @@ var (
 	strLibraryCppResourceRegistryH = internString("library/cpp/resource/registry.h")
 	strLibraryCppResourceResourceH = internString("library/cpp/resource/resource.h")
 	// Path constants hoisted by `ay refac consts`.
-	anyISYt = stringAny("-I=$(S)/yt")
+	anyISYt = internAny("-I=$(S)/yt")
 )
 
 var protobufRuntimeHeaders = []VFS{
@@ -341,8 +341,8 @@ func EmitPB(
 	}
 
 	cmdArgs := []ANY{
-		stringAny(instance.Platform.Tools.Python3),
-		stringAny(pbWrapperPath),
+		internAny(instance.Platform.Tools.Python3),
+		internAny(pbWrapperPath),
 		anyOutputs,
 	}
 
@@ -365,17 +365,17 @@ func EmitPB(
 	cmdArgs = append(cmdArgs,
 		any2,
 		vfsAny(protocBinary),
-		stringAny("-I=./"+includeRoot),
-		stringAny("-I=$(S)/"+includeRoot),
+		internAny("-I=./"+includeRoot),
+		internAny("-I=$(S)/"+includeRoot),
 		anyIB2,
 		anyIS3,
 	)
 
 	if cppOutRoot != "" {
-		cmdArgs = append(cmdArgs, stringAny("-I=$(S)/"+cppOutRoot))
+		cmdArgs = append(cmdArgs, internAny("-I=$(S)/"+cppOutRoot))
 
 		if duplicateOutputRootInclude {
-			cmdArgs = append(cmdArgs, stringAny("-I=$(S)/"+cppOutRoot))
+			cmdArgs = append(cmdArgs, internAny("-I=$(S)/"+cppOutRoot))
 		}
 	}
 
@@ -392,7 +392,7 @@ func EmitPB(
 	// (which need it via `ADDINCL GLOBAL FOR proto contrib/libs/protobuf/src`
 	// from their own peers).
 	for _, p := range peerProtoAddIncl {
-		cmdArgs = append(cmdArgs, stringAny("-I="+p.String()))
+		cmdArgs = append(cmdArgs, internAny("-I="+p.String()))
 	}
 
 	if moduleTag == nil && strings.HasPrefix(protoRelPath, "yt/") {
@@ -402,30 +402,30 @@ func EmitPB(
 	cmdArgs = append(cmdArgs,
 		anyIB2,
 		anyISContribLibsProtobufSrc,
-		stringAny("--cpp_out="+cppOutArg),
+		internAny("--cpp_out="+cppOutArg),
 	)
 	cmdArgs = appendArgAny(cmdArgs, extraProtocFlags)
 	cmdArgs = append(cmdArgs,
-		stringAny("--cpp_styleguide_out=:$(B)/"+cppOutRoot),
-		stringAny("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.String()),
-		stringAny(protoRelPath),
+		internAny("--cpp_styleguide_out=:$(B)/"+cppOutRoot),
+		internAny("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.String()),
+		internAny(protoRelPath),
 	)
 
 	if grpc {
 		cmdArgs = append(cmdArgs,
-			stringAny("--plugin=protoc-gen-grpc_cpp="+grpcCppBinary.String()),
-			stringAny("--grpc_cpp_out=$(B)/"+cppOutRoot),
+			internAny("--plugin=protoc-gen-grpc_cpp="+grpcCppBinary.String()),
+			internAny("--grpc_cpp_out=$(B)/"+cppOutRoot),
 		)
 	}
 
 	for _, plugin := range extraPlugins {
 		cmdArgs = append(cmdArgs,
-			stringAny("--plugin=protoc-gen-"+plugin.Spec.Name+"="+plugin.Binary.String()),
-			stringAny("--"+plugin.Spec.Name+"_out=$(B)/"+cppOutRoot),
+			internAny("--plugin=protoc-gen-"+plugin.Spec.Name+"="+plugin.Binary.String()),
+			internAny("--"+plugin.Spec.Name+"_out=$(B)/"+cppOutRoot),
 		)
 
 		if plugin.Spec.ExtraOutFlag != "" {
-			cmdArgs = append(cmdArgs, stringAny("--"+plugin.Spec.Name+"_opt=:"+plugin.Spec.ExtraOutFlag))
+			cmdArgs = append(cmdArgs, internAny("--"+plugin.Spec.Name+"_opt=:"+plugin.Spec.ExtraOutFlag))
 		}
 	}
 

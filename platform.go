@@ -141,9 +141,9 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsE
 		BuildTypeUpperSTR: internString(strings.ToUpper(buildType)),
 	}
 
-	p.CCArg = stringAny(p.Tools.CC)
-	p.CXXArg = stringAny(p.Tools.CXX)
-	p.TargetArg = stringAny("--target=" + p.Triple)
+	p.CCArg = internAny(p.Tools.CC)
+	p.CXXArg = internAny(p.Tools.CXX)
+	p.TargetArg = internAny("--target=" + p.Triple)
 
 	p.StatsTags = statsTagsForPlatform(p)
 

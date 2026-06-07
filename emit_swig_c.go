@@ -11,11 +11,11 @@ var (
 	// Path constants hoisted by `ay refac consts`.
 	bldContribToolsSwigSwig = Build("contrib/tools/swig/swig")
 	// Path constants hoisted by `ay refac consts`.
-	anyISContribToolsSwigLib       = stringAny("-I$(S)/contrib/tools/swig/Lib")
-	anyISContribToolsSwigLibPython = stringAny("-I$(S)/contrib/tools/swig/Lib/python")
-	anyInterface                   = stringAny("-interface")
-	anyModule                      = stringAny("-module")
-	anyPython                      = stringAny("-python")
+	anyISContribToolsSwigLib       = internAny("-I$(S)/contrib/tools/swig/Lib")
+	anyISContribToolsSwigLibPython = internAny("-I$(S)/contrib/tools/swig/Lib/python")
+	anyInterface                   = internAny("-interface")
+	anyModule                      = internAny("-module")
+	anyPython                      = internAny("-python")
 )
 
 type swigSrc struct {
@@ -48,16 +48,16 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 		inputs = append(inputs, swigClosure...)
 
 		cmdArgs := []ANY{
-			stringAny(swigBin),
+			internAny(swigBin),
 			anyIB,
 			anyIS,
 			anyISContribToolsSwigLibPython,
 			anyISContribToolsSwigLib,
 			anyPython,
 			anyModule,
-			stringAny(swigModuleName(stmt.Module)),
+			internAny(swigModuleName(stmt.Module)),
 			anyInterface,
-			stringAny(swigModuleName(stmt.Module) + "_swg"),
+			internAny(swigModuleName(stmt.Module) + "_swg"),
 			argDashO,
 			vfsAny(cOutVFS),
 			vfsAny(srcVFS),

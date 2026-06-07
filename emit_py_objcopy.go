@@ -11,14 +11,14 @@ import (
 
 var (
 	// Path constants hoisted by `ay refac consts`.
-	anyCompiler    = stringAny("--compiler")
-	anyCompressor  = stringAny("--compressor")
-	anyInputs      = stringAny("--inputs")
-	anyKeys        = stringAny("--keys")
-	anyKvs         = stringAny("--kvs")
-	anyObjcopy     = stringAny("--objcopy")
-	anyOutputObj   = stringAny("--output_obj")
-	anyRescompiler = stringAny("--rescompiler")
+	anyCompiler    = internAny("--compiler")
+	anyCompressor  = internAny("--compressor")
+	anyInputs      = internAny("--inputs")
+	anyKeys        = internAny("--keys")
+	anyKvs         = internAny("--kvs")
+	anyObjcopy     = internAny("--objcopy")
+	anyOutputObj   = internAny("--output_obj")
+	anyRescompiler = internAny("--rescompiler")
 )
 
 type objcopyEmitResult struct {
@@ -104,14 +104,14 @@ func emitResourceObjcopy(
 		outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
 		cmdArgs := []ANY{
-			stringAny(instance.Platform.Tools.Python3),
-			stringAny(objcopyScriptPath),
-			anyCompiler, stringAny(instance.Platform.Tools.CXX),
-			anyObjcopy, stringAny(instance.Platform.Tools.Objcopy),
-			anyCompressor, stringAny(rescompressorBinPath),
-			anyRescompiler, stringAny(rescompilerBinPath),
+			internAny(instance.Platform.Tools.Python3),
+			internAny(objcopyScriptPath),
+			anyCompiler, internAny(instance.Platform.Tools.CXX),
+			anyObjcopy, internAny(instance.Platform.Tools.Objcopy),
+			anyCompressor, internAny(rescompressorBinPath),
+			anyRescompiler, internAny(rescompilerBinPath),
 			anyOutputObj, vfsAny(outputObj),
-			anyTarget, stringAny(instance.Platform.Triple),
+			anyTarget, internAny(instance.Platform.Triple),
 		}
 
 		if len(cur.paths) > 0 {
@@ -129,7 +129,7 @@ func emitResourceObjcopy(
 			cmdArgs = append(cmdArgs, anyKvs)
 
 			for _, kv := range cur.kvs {
-				cmdArgs = append(cmdArgs, stringAny(expandRootrel(kv, instance.Path)))
+				cmdArgs = append(cmdArgs, internAny(expandRootrel(kv, instance.Path)))
 			}
 		}
 
@@ -329,14 +329,14 @@ func emitKvOnlyObjcopyNode(
 	outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
 	cmdArgs := []ANY{
-		stringAny(instance.Platform.Tools.Python3),
-		stringAny(objcopyScriptPath),
-		anyCompiler, stringAny(instance.Platform.Tools.CXX),
-		anyObjcopy, stringAny(instance.Platform.Tools.Objcopy),
-		anyCompressor, stringAny(rescompressorBinPath),
-		anyRescompiler, stringAny(rescompilerBinPath),
+		internAny(instance.Platform.Tools.Python3),
+		internAny(objcopyScriptPath),
+		anyCompiler, internAny(instance.Platform.Tools.CXX),
+		anyObjcopy, internAny(instance.Platform.Tools.Objcopy),
+		anyCompressor, internAny(rescompressorBinPath),
+		anyRescompiler, internAny(rescompilerBinPath),
 		anyOutputObj, vfsAny(outputObj),
-		anyTarget, stringAny(instance.Platform.Triple),
+		anyTarget, internAny(instance.Platform.Triple),
 		anyKvs,
 	}
 	cmdArgs = appendStringAny(cmdArgs, kvsCmd)
@@ -451,17 +451,17 @@ func emitYaConfJSONObjcopy(
 		input := Source(res.sourcePath)
 
 		cmdArgs := []ANY{
-			stringAny(instance.Platform.Tools.Python3),
-			stringAny(objcopyScriptPath),
-			anyCompiler, stringAny(instance.Platform.Tools.CXX),
-			anyObjcopy, stringAny(instance.Platform.Tools.Objcopy),
-			anyCompressor, stringAny(rescompressorBinPath),
-			anyRescompiler, stringAny(rescompilerBinPath),
+			internAny(instance.Platform.Tools.Python3),
+			internAny(objcopyScriptPath),
+			anyCompiler, internAny(instance.Platform.Tools.CXX),
+			anyObjcopy, internAny(instance.Platform.Tools.Objcopy),
+			anyCompressor, internAny(rescompressorBinPath),
+			anyRescompiler, internAny(rescompilerBinPath),
 			anyOutputObj, vfsAny(outputObj),
-			anyTarget, stringAny(instance.Platform.Triple),
+			anyTarget, internAny(instance.Platform.Triple),
 			anyInputs, vfsAny(input),
-			anyKeys, stringAny(keyB64),
-			anyKvs, stringAny(kvCmd),
+			anyKeys, internAny(keyB64),
+			anyKvs, internAny(kvCmd),
 		}
 		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 		node := &Node{
@@ -651,14 +651,14 @@ func emitPySrcObjcopy(
 			outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
 			cmdArgs := []ANY{
-				stringAny(instance.Platform.Tools.Python3),
-				stringAny(objcopyScriptPath),
-				anyCompiler, stringAny(instance.Platform.Tools.CXX),
-				anyObjcopy, stringAny(instance.Platform.Tools.Objcopy),
-				anyCompressor, stringAny(rescompressorBinPath),
-				anyRescompiler, stringAny(rescompilerBinPath),
+				internAny(instance.Platform.Tools.Python3),
+				internAny(objcopyScriptPath),
+				anyCompiler, internAny(instance.Platform.Tools.CXX),
+				anyObjcopy, internAny(instance.Platform.Tools.Objcopy),
+				anyCompressor, internAny(rescompressorBinPath),
+				anyRescompiler, internAny(rescompilerBinPath),
 				anyOutputObj, vfsAny(outputObj),
-				anyTarget, stringAny(instance.Platform.Triple),
+				anyTarget, internAny(instance.Platform.Triple),
 			}
 
 			cmdArgs = append(cmdArgs, anyInputs)

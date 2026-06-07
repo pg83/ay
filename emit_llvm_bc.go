@@ -4,9 +4,9 @@ import "strings"
 
 var (
 	// Path constants hoisted by `ay refac consts`.
-	anyEmitLlvm                = stringAny("-emit-llvm")
-	anyNo                      = stringAny("no")
-	anyWnoUnknownWarningOption = stringAny("-Wno-unknown-warning-option")
+	anyEmitLlvm                = internAny("-emit-llvm")
+	anyNo                      = internAny("no")
+	anyWnoUnknownWarningOption = internAny("-Wno-unknown-warning-option")
 )
 
 // emitLLVMBC emits the upstream LLVM_BC pipeline (build/plugins/llvm_bc.py):
@@ -115,7 +115,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		}
 
 		mergedOut := Build(instance.Path + "/" + stmt.Name + "_merged" + stmt.Suffix + ".bc")
-		ldArgs := []ANY{stringAny(llvmLink)}
+		ldArgs := []ANY{internAny(llvmLink)}
 
 		for _, p := range bcPaths {
 			ldArgs = append(ldArgs, vfsAny(p))
@@ -144,18 +144,18 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 		optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
 		optOut := Build(instance.Path + "/" + optOutName)
-		optArgs := []ANY{stringAny(python), stringAny(optWrapper), stringAny(opt), vfsAny(mergedOut), argDashO, vfsAny(optOut)}
+		optArgs := []ANY{internAny(python), internAny(optWrapper), internAny(opt), vfsAny(mergedOut), argDashO, vfsAny(optOut)}
 		passes := []string{"default<O2>", "globalopt", "globaldce"}
 
 		if len(stmt.Symbols) > 0 {
 			passes = append(passes, "internalize")
-			optArgs = append(optArgs, stringAny("-internalize-public-api-list="+strings.Join(stmt.Symbols, "#")))
+			optArgs = append(optArgs, internAny("-internalize-public-api-list="+strings.Join(stmt.Symbols, "#")))
 		}
 
 		// ${__COMMA__} is a ymake macro that expands to literal ','; the outer
 		// single-quotes in the Python plugin are ymake argument syntax stripped
 		// before graph JSON is written. We emit the already-expanded form directly.
-		optArgs = append(optArgs, stringAny(`-passes="`+strings.Join(passes, ",")+`"`))
+		optArgs = append(optArgs, internAny(`-passes="`+strings.Join(passes, ",")+`"`))
 
 		// OP inputs: mergedBC + llvm_opt_wrapper.py + source-root BC closure inputs.
 		// Upstream OP carries the full $(S) closure from BC compilation (flat input
@@ -250,7 +250,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 		len(bundle.ArchArgs)+len(bundle.CFlags)+len(warningBundle))
 
 	// Wrapper prefix: python3 clang_wrapper.py no clangBC++
-	args = append(args, stringAny(python), stringAny(clangWrapper), anyNo, stringAny(clangBC))
+	args = append(args, internAny(python), internAny(clangWrapper), anyNo, internAny(clangBC))
 
 	// ${pre=-I:_C__INCLUDE}: include paths (same layout as CC compile)
 	args = appendArgAny(args, ccIncludesPrefix)

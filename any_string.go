@@ -41,9 +41,9 @@ func vfsAny(v VFS) ANY {
 	return ANY(uint32(v)<<anyTagBits | anyTagVFS)
 }
 
-// stringAny interns a computed/raw string and boxes it as a STR-tagged ANY —
+// internAny interns a computed/raw string and boxes it as a STR-tagged ANY —
 // the entry point for cmd args assembled from non-interned strings.
-func stringAny(s string) ANY {
+func internAny(s string) ANY {
 	return strAny(internString(s))
 }
 
@@ -84,7 +84,7 @@ func appendArgAny(dst []ANY, srcs ...[]ARG) []ANY {
 // not pre-interned, so this is the string→ANY boundary.
 func appendStringAny(dst []ANY, ss []string) []ANY {
 	for _, s := range ss {
-		dst = append(dst, stringAny(s))
+		dst = append(dst, internAny(s))
 	}
 
 	return dst

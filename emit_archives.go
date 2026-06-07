@@ -2,9 +2,9 @@ package main
 
 var (
 	// Path constants hoisted by `ay refac consts`.
-	anyP = stringAny("-p")
-	anyQ = stringAny("-q")
-	anyX = stringAny("-x")
+	anyP = internAny("-p")
+	anyQ = internAny("-q")
+	anyX = internAny("-x")
 )
 
 const archiverToolPath = "tools/archiver"
@@ -72,10 +72,10 @@ func emitArchive(
 		absStr := absVFS.String()
 
 		pathPerFile = append(pathPerFile, absVFS)
-		cmdArgs = append(cmdArgs, stringAny(absStr+":"))
+		cmdArgs = append(cmdArgs, internAny(absStr+":"))
 	}
 
-	cmdArgs = append(cmdArgs, argDashO, stringAny(archivePath))
+	cmdArgs = append(cmdArgs, argDashO, internAny(archivePath))
 
 	// Archive-node inputs are exactly the files the archiver reads (the archived
 	// members) plus the archiver tool. RUN_PROGRAM source INFiles and non-archived

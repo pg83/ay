@@ -8,15 +8,15 @@ var (
 	contribToolsCythonCythonPy          = Source("contrib/tools/cython/cython.py")
 	contribToolsCythonPy2CythonIncludes = Source("contrib/tools/cython_py2/Cython/Includes")
 	// Path constants hoisted by `ay refac consts`.
-	anyCplus                              = stringAny("--cplus")
-	anyE                                  = stringAny("-E")
-	anyIB                                 = stringAny("-I$(B)")
-	anyIS                                 = stringAny("-I$(S)")
-	anyISContribToolsCythonCythonIncludes = stringAny("-I$(S)/contrib/tools/cython/Cython/Includes")
-	anyLegacyImplicitNoexceptTrue         = stringAny("legacy_implicit_noexcept=True")
-	anySContribToolsCythonCythonPy        = stringAny("$(S)/contrib/tools/cython/cython.py")
-	anyUnameSysnameLinux                  = stringAny("UNAME_SYSNAME=Linux")
-	anyX2                                 = stringAny("-X")
+	anyCplus                              = internAny("--cplus")
+	anyE                                  = internAny("-E")
+	anyIB                                 = internAny("-I$(B)")
+	anyIS                                 = internAny("-I$(S)")
+	anyISContribToolsCythonCythonIncludes = internAny("-I$(S)/contrib/tools/cython/Cython/Includes")
+	anyLegacyImplicitNoexceptTrue         = internAny("legacy_implicit_noexcept=True")
+	anySContribToolsCythonCythonPy        = internAny("$(S)/contrib/tools/cython/cython.py")
+	anyUnameSysnameLinux                  = internAny("UNAME_SYSNAME=Linux")
+	anyX2                                 = internAny("-X")
 )
 
 var cythonNumpyAddIncl = []VFS{
@@ -127,7 +127,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 		cmdArgs := []ANY{
-			stringAny(instance.Platform.Tools.Python3),
+			internAny(instance.Platform.Tools.Python3),
 			anySContribToolsCythonCythonPy,
 			anyX2,
 			anyLegacyImplicitNoexceptTrue,

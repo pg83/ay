@@ -4,15 +4,15 @@ var (
 	evEventlogIncludeVFS  = Intern("$(S)/library/cpp/eventlog")
 	evEventlogIncludePath = evEventlogIncludeVFS.String()
 	// Path constants hoisted by `ay refac consts`.
-	anyCppOutB                  = stringAny("--cpp_out=:$(B)/")
-	anyCppStyleguideOutB        = stringAny("--cpp_styleguide_out=:$(B)/")
-	anyEvent2cppOutB            = stringAny("--event2cpp_out=$(B)")
-	anyI2                       = stringAny("-I=./")
-	anyIB2                      = stringAny("-I=$(B)")
-	anyIS2                      = stringAny("-I=$(S)/")
-	anyIS3                      = stringAny("-I=$(S)")
-	anyISContribLibsProtobufSrc = stringAny("-I=$(S)/contrib/libs/protobuf/src")
-	anyOutputs                  = stringAny("--outputs")
+	anyCppOutB                  = internAny("--cpp_out=:$(B)/")
+	anyCppStyleguideOutB        = internAny("--cpp_styleguide_out=:$(B)/")
+	anyEvent2cppOutB            = internAny("--event2cpp_out=$(B)")
+	anyI2                       = internAny("-I=./")
+	anyIB2                      = internAny("-I=$(B)")
+	anyIS2                      = internAny("-I=$(S)/")
+	anyIS3                      = internAny("-I=$(S)")
+	anyISContribLibsProtobufSrc = internAny("-I=$(S)/contrib/libs/protobuf/src")
+	anyOutputs                  = internAny("--outputs")
 )
 
 var eventRuntimeHeaders = []VFS{
@@ -146,8 +146,8 @@ func EmitEV(
 	srcVFS := Source(evRelPath)
 
 	cmdArgs := []ANY{
-		stringAny(instance.Platform.Tools.Python3),
-		stringAny(pbWrapperPath),
+		internAny(instance.Platform.Tools.Python3),
+		internAny(pbWrapperPath),
 		anyOutputs,
 		vfsAny(evCC),
 		vfsAny(evH),
@@ -162,11 +162,11 @@ func EmitEV(
 		anyISContribLibsProtobufSrc,
 		anyCppOutB,
 		anyCppStyleguideOutB,
-		stringAny("--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary.String()),
-		stringAny(evRelPath),
-		stringAny("--plugin=protoc-gen-event2cpp=" + event2cppBinary.String()),
+		internAny("--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary.String()),
+		internAny(evRelPath),
+		internAny("--plugin=protoc-gen-event2cpp=" + event2cppBinary.String()),
 		anyEvent2cppOutB,
-		stringAny("-I=" + evEventlogIncludePath),
+		internAny("-I=" + evEventlogIncludePath),
 	}
 
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}

@@ -4,16 +4,16 @@ import "strings"
 
 var (
 	// Path constants hoisted by `ay refac consts`.
-	anyD                = stringAny("-D")
-	anyDYasm            = stringAny("-D_YASM_")
-	anyElf64            = stringAny("elf64")
-	anyF                = stringAny("-f")
-	anyI                = stringAny("-I")
-	anyReplaceBB        = stringAny("--replace=$(B)=/-B")
-	anyReplaceSS        = stringAny("--replace=$(S)=/-S")
-	anyReplaceToolRootT = stringAny("--replace=$(TOOL_ROOT)=/-T")
-	anyS                = stringAny("$(S)")
-	anyUnix             = stringAny("UNIX")
+	anyD                = internAny("-D")
+	anyDYasm            = internAny("-D_YASM_")
+	anyElf64            = internAny("elf64")
+	anyF                = internAny("-f")
+	anyI                = internAny("-I")
+	anyReplaceBB        = internAny("--replace=$(B)=/-B")
+	anyReplaceSS        = internAny("--replace=$(S)=/-S")
+	anyReplaceToolRootT = internAny("--replace=$(TOOL_ROOT)=/-T")
+	anyS                = internAny("$(S)")
+	anyUnix             = internAny("UNIX")
 )
 
 func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, emit Emitter) (NodeRef, VFS) {
@@ -44,13 +44,13 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 	cmdArgs := make([]ANY, 0, 20+len(predefinedFlags))
 	cmdArgs = append(cmdArgs,
-		stringAny(yasmBinaryPath),
+		internAny(yasmBinaryPath),
 		anyF, anyElf64,
 		anyD, anyUnix,
 		anyReplaceBB,
 		anyReplaceSS,
 		anyReplaceToolRootT,
-		anyD, stringAny("_"+string(instance.Platform.ISA)+"_"),
+		anyD, internAny("_"+string(instance.Platform.ISA)+"_"),
 		anyDYasm,
 	)
 	cmdArgs = appendStringAny(cmdArgs, predefinedFlags)
@@ -69,8 +69,8 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	}
 
 	cmdArgs = append(cmdArgs,
-		argDashO, stringAny(outputPath),
-		stringAny(inputPath),
+		argDashO, internAny(outputPath),
+		internAny(inputPath),
 	)
 
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "YASM_TEST_SUITE", Value: "1"}}

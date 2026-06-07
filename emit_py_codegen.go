@@ -8,7 +8,7 @@ var (
 	genPy3RegScriptVFS  = Intern("$(S)/build/scripts/gen_py3_reg.py")
 	genPy3RegScriptPath = genPy3RegScriptVFS.String()
 	// Path constants hoisted by `ay refac consts`.
-	anySlowPy3cc = stringAny("--slow-py3cc")
+	anySlowPy3cc = internAny("--slow-py3cc")
 )
 
 func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
@@ -60,7 +60,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			vfsAny(py3ccBinary),
 			anySlowPy3cc,
 			vfsAny(py3ccSlowBin),
-			stringAny(moduleName),
+			internAny(moduleName),
 			vfsAny(srcAbs),
 			vfsAny(outputPath),
 		}
@@ -175,10 +175,10 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 		pyCmdArgs := []ANY{
-			stringAny(instance.Platform.Tools.Python3),
+			internAny(instance.Platform.Tools.Python3),
 			vfsAny(genPy3RegScriptVFS),
-			stringAny(arg),
-			stringAny(regCppAbs),
+			internAny(arg),
+			internAny(regCppAbs),
 		}
 
 		pyRef, ok := ctx.pyRegisterOutputs[regCppVFS]
