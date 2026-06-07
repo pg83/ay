@@ -412,16 +412,12 @@ func (sc *scanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)
 		return
 	}
 
-	// A header output takes only the h+cpp induced group; a translation unit takes
-	// both h+cpp and the cpp-only group (matching INDUCED_DEPS(cpp …) vs (h+cpp …)).
-	header := isHeaderSource(vfsPath.Rel())
+	// A header output reads the Header induced bucket; a translation unit reads Cpp.
+	// (h+cpp …) deps live in both buckets, so a single read per output suffices.
+	bucket := parsedIncludesCpp
 
-	resolveBucket := func(deps []includeDirective) {
-		for _, entry := range deps {
-			for _, rabs := range sc.resolve(vfsPath, incDir, entry) {
-				fn(rabs)
-			}
-		}
+	if isHeaderSource(vfsPath.Rel()) {
+		bucket = parsedIncludesHeader
 	}
 
 	for _, gref := range info.GeneratorRefs {
@@ -431,10 +427,10 @@ func (sc *scanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)
 			continue
 		}
 
-		resolveBucket(tool.InducedDeps.bucket(parsedIncludesHCPP))
-
-		if !header {
-			resolveBucket(tool.InducedDeps.bucket(parsedIncludesCpp))
+		for _, entry := range tool.InducedDeps.bucket(bucket) {
+			for _, rabs := range sc.resolve(vfsPath, incDir, entry) {
+				fn(rabs)
+			}
 		}
 	}
 }

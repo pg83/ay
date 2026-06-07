@@ -304,16 +304,15 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 			}
 		}
 
-		// The IN file's producing tools' INDUCED_DEPS (e.g. protoc's pbCcDeep set
-		// for a generated .pb.h) are no longer woven into its parsedIncludes; pull
-		// the source-rooted ones in directly here, mirroring the scanner's
-		// resolveInducedDeps. Shards are translation units, so take both the cpp and
-		// h+cpp groups.
+		// The IN file's producing tools' INDUCED_DEPS (e.g. protoc's runtime set for
+		// a generated .pb.cc) are no longer woven into its parsedIncludes; pull the
+		// source-rooted ones in directly here, mirroring the scanner's
+		// resolveInducedDeps. Shards are translation units, so take the Cpp bucket
+		// (which holds both the cpp-only and the h+cpp induced groups).
 		if reg != nil {
 			if info := reg.Lookup(vfs); info != nil {
 				for _, gref := range info.GeneratorRefs {
 					if tool, ok := ctx.moduleByRef.Get(gref); ok {
-						addInducedSources(tool.InducedDeps.bucket(parsedIncludesHCPP))
 						addInducedSources(tool.InducedDeps.bucket(parsedIncludesCpp))
 					}
 				}
