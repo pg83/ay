@@ -1,7 +1,7 @@
 package main
 
-// ANY views of ARG constants (see arg_consts.go), boxed via ARG.any() for CmdArgs.
 var (
+	// ANY views of ARG constants (see arg_consts.go), boxed via ARG.any() for CmdArgs.
 	any0                                  = arg0.any()
 	any1                                  = arg1.any()
 	any100000                             = arg100000.any()

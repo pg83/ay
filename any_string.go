@@ -34,7 +34,9 @@ func argAny(a ARG) ANY {
 }
 
 // any boxes an ARG into an ANY for placement in CmdArgs.
-func (a ARG) any() ANY { return argAny(a) }
+func (a ARG) any() ANY {
+	return argAny(a)
+}
 
 func strAny(s STR) ANY {
 	return ANY(uint32(s)<<anyTagBits | anyTagSTR)
