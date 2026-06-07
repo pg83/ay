@@ -77,10 +77,10 @@ func TestCollectSwigInducedIncludes_DedupsAcrossClosure(t *testing.T) {
 	closure := swigIncludeClosure(ctx, Intern("$(S)/mod/src.swg"))
 	got := collectSwigInducedIncludes(ctx, Intern("$(S)/mod/src.swg"), closure)
 	want := []includeDirective{
-		{kind: includeSystem, target: internString("Python.h")},
-		{kind: includeQuoted, target: internString("archive.h")},
-		{kind: includeSystem, target: internString("jni.h")},
-		{kind: includeQuoted, target: internString("archive_entry.h")},
+		{kind: includeSystem, target: internStr("Python.h")},
+		{kind: includeQuoted, target: internStr("archive.h")},
+		{kind: includeSystem, target: internStr("jni.h")},
+		{kind: includeQuoted, target: internStr("archive_entry.h")},
 	}
 
 	if !reflect.DeepEqual(got, want) {

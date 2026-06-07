@@ -36,8 +36,8 @@ func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	start := len(args) - len(wantTail)
 
 	for i, want := range wantTail {
-		if args[start+i] != want {
-			t.Fatalf("cmd_args[%d] = %q, want %q; args=%v", start+i, args[start+i], want, args)
+		if args[start+i].String() != want {
+			t.Fatalf("cmd_args[%d] = %q, want %q; args=%v", start+i, args[start+i].String(), want, args)
 		}
 	}
 
@@ -96,7 +96,7 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 
 func testYasmLDRef(e *BufferedEmitter) NodeRef {
 	return e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: []string{"yasm"}, Env: nil}},
+		Cmds:             []Cmd{{CmdArgs: anys("yasm"), Env: nil}},
 		Env:              nil,
 		Inputs:           ToVFSSlice([]string{}),
 		Outputs:          ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),

@@ -52,7 +52,7 @@ func expectedTestEnv(testName string) EnvVars {
 func expectedTestCtxNode() *Node {
 	return &Node{
 		Cmds: []Cmd{{
-			CmdArgs: []string{
+			CmdArgs: anys(
 				"$(YMAKE_PYTHON3)/bin/python3",
 				"$(S)/build/scripts/append_file.py",
 				"$(B)/common_test.context",
@@ -62,7 +62,7 @@ func expectedTestCtxNode() *Node {
 				`    "TESTS_REQUESTED": "yes"`,
 				"  }",
 				"}",
-			},
+			),
 		}},
 		Env:              nil,
 		Inputs:           []VFS{Intern("$(S)/build/scripts/append_file.py")},
@@ -79,7 +79,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 	return &Node{
 		Cmds: []Cmd{{
 			Cwd: "$(B)",
-			CmdArgs: []string{
+			CmdArgs: anys(
 				"$(TEST_TOOL_HOST-sbr:12080295773)/test_tool",
 				"run_test",
 				"--ya-start-command-file",
@@ -131,7 +131,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 				"--verbose",
 				"--gdb-path", "$(GDB)/gdb/bin/gdb",
 				"--ya-end-command-file",
-			},
+			),
 		}},
 		Env:    expectedTestEnv("unittest"),
 		Inputs: []VFS{Intern("$(S)/util/ut")},
@@ -153,7 +153,7 @@ func expectedClangFormatNode() *Node {
 	return &Node{
 		Cmds: []Cmd{{
 			Cwd: "$(B)",
-			CmdArgs: []string{
+			CmdArgs: anys(
 				"$(TEST_TOOL_HOST-sbr:12080295773)/test_tool",
 				"run_test",
 				"--ya-start-command-file",
@@ -204,7 +204,7 @@ func expectedClangFormatNode() *Node {
 				"$(S)/util/ysafeptr_ut.cpp",
 				"$(S)/util/ysaveload_ut.cpp",
 				"--ya-end-command-file",
-			},
+			),
 		}},
 		Env: expectedTestEnv("clang_format"),
 		Inputs: []VFS{
@@ -229,10 +229,34 @@ func expectedClangFormatNode() *Node {
 	}
 }
 
+// cmdsEqual compares two Cmd slices treating CmdArgs by their materialized string
+// content (an arg's ANY tag — STR vs VFS vs ARG — is irrelevant to the emitted
+// command; only the string matters), and the remaining Cmd fields structurally.
+func cmdsEqual(got, want []Cmd) bool {
+	if len(got) != len(want) {
+		return false
+	}
+
+	for i := range got {
+		if !reflect.DeepEqual(anyStrs(got[i].CmdArgs), anyStrs(want[i].CmdArgs)) {
+			return false
+		}
+
+		g, w := got[i], want[i]
+		g.CmdArgs, w.CmdArgs = nil, nil
+
+		if !reflect.DeepEqual(g, w) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func assertNodeFields(t *testing.T, name string, got, want *Node) {
 	t.Helper()
 
-	if !reflect.DeepEqual(got.Cmds, want.Cmds) {
+	if !cmdsEqual(got.Cmds, want.Cmds) {
 		t.Fatalf("%s cmds mismatch\n got: %#v\nwant: %#v", name, got.Cmds, want.Cmds)
 	}
 	if !reflect.DeepEqual(got.Env, want.Env) {
@@ -381,7 +405,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		t.Fatalf("clang deps = %v, want [%s]", graphDeps(g, clangNode), ctxNode.UID)
 	}
 
-	unittestArgs := unittestNode.Cmds[0].CmdArgs
+	unittestArgs := anyStrs(unittestNode.Cmds[0].CmdArgs)
 	binaryValue := ""
 	for i := 0; i+1 < len(unittestArgs); i++ {
 		if unittestArgs[i] == "--binary" {
@@ -408,7 +432,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		}
 	}
 
-	clangArgs := clangNode.Cmds[0].CmdArgs
+	clangArgs := anyStrs(clangNode.Cmds[0].CmdArgs)
 	var relatedPaths []string
 	for i := 0; i+1 < len(clangArgs); i++ {
 		if clangArgs[i] == "--test-related-path" {
@@ -478,7 +502,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		if containsString(ccInputs, spec.bad) {
 			t.Fatalf("cc inputs for %q unexpectedly include %q in %v", spec.output, spec.bad, ccInputs)
 		}
-		if !containsString(ccNode.Cmds[0].CmdArgs, "-gz=zstd") {
+		if !containsString(anyStrs(ccNode.Cmds[0].CmdArgs), "-gz=zstd") {
 			t.Fatalf("cc cmd for %q missing -gz=zstd: %v", spec.output, ccNode.Cmds[0].CmdArgs)
 		}
 	}
@@ -491,11 +515,11 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	if !reflect.DeepEqual(ldNode.Tags, expectedSandboxingTags()) {
 		t.Fatalf("ld tags = %v, want %v", ldNode.Tags, expectedSandboxingTags())
 	}
-	if !containsString(ldNode.Cmds[1].CmdArgs, "-gz=zstd") {
+	if !containsString(anyStrs(ldNode.Cmds[1].CmdArgs), "-gz=zstd") {
 		t.Fatalf("ld vcs compile cmd missing -gz=zstd: %v", ldNode.Cmds[1].CmdArgs)
 	}
 
-	linkArgs := ldNode.Cmds[2].CmdArgs
+	linkArgs := anyStrs(ldNode.Cmds[2].CmdArgs)
 	wantLinkPrefix := []string{
 		"$(S)/build/scripts/link_exe.py",
 		"--start-plugins",

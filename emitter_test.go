@@ -11,7 +11,7 @@ import (
 func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 	e := NewBufferedEmitter()
 	c := e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: []string{"build", "C"}, Env: nil}},
+		Cmds:             []Cmd{{CmdArgs: anys("build", "C"), Env: nil}},
 		Env:              nil,
 		Inputs:           ToVFSSlice([]string{"c.in"}),
 		KV:               KV{Name: "C"},
@@ -22,7 +22,7 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 		TargetProperties: TargetProperties{},
 	})
 	b := e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: []string{"build", "B"}, Env: nil}},
+		Cmds:             []Cmd{{CmdArgs: anys("build", "B"), Env: nil}},
 		Env:              nil,
 		Inputs:           ToVFSSlice([]string{"b.in"}),
 		KV:               KV{Name: "B"},
@@ -34,7 +34,7 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 		DepRefs:          []NodeRef{c},
 	})
 	a := e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: []string{"build", "A"}, Env: nil}},
+		Cmds:             []Cmd{{CmdArgs: anys("build", "A"), Env: nil}},
 		Env:              nil,
 		Inputs:           ToVFSSlice([]string{"a.in"}),
 		KV:               KV{Name: "A"},
@@ -151,7 +151,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 	e := NewBufferedEmitter()
 	mkLeaf := func(name string) NodeRef {
 		return e.Emit(&Node{
-			Cmds:   []Cmd{{CmdArgs: []string{name}, Env: nil}},
+			Cmds:   []Cmd{{CmdArgs: anys(name), Env: nil}},
 			Env:    nil,
 			Inputs: ToVFSSlice([]string{}), KV: KV{Name: name},
 			Outputs:      ToVFSSlice([]string{}),
@@ -164,7 +164,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 	z := mkLeaf("Z")
 
 	a := e.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("A"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
 		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -206,7 +206,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 	e := NewBufferedEmitter()
 	c := e.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"C"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("C"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
 		KV: KV{Name: "C"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -214,7 +214,7 @@ func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 		TargetProperties: TargetProperties{},
 	})
 	a := e.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("A"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
 		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -247,7 +247,7 @@ func TestFinalize_CycleReturnsError(t *testing.T) {
 
 	e := NewBufferedEmitter()
 	aNode := &Node{
-		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("A"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
 		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -255,7 +255,7 @@ func TestFinalize_CycleReturnsError(t *testing.T) {
 		TargetProperties: TargetProperties{},
 	}
 	bNode := &Node{
-		Cmds: []Cmd{{CmdArgs: []string{"B"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("B"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
 		KV: KV{Name: "B"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -277,7 +277,7 @@ func TestFinalize_CycleReturnsError(t *testing.T) {
 func TestFinalize_OutOfRangeRefReturnsError(t *testing.T) {
 	e := NewBufferedEmitter()
 	a := e.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("A"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
 		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -317,7 +317,7 @@ func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
 	e := NewBufferedEmitter()
 	mk := func() NodeRef {
 		return e.Emit(&Node{
-			Cmds: []Cmd{{CmdArgs: []string{"identical"}, Env: nil}},
+			Cmds: []Cmd{{CmdArgs: anys("identical"), Env: nil}},
 			Env:  nil, Inputs: ToVFSSlice([]string{}),
 			KV: KV{Name: "L"}, Outputs: ToVFSSlice([]string{}),
 			Requirements:     Requirements{},
@@ -355,7 +355,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 
 	e := NewBufferedEmitter()
 	a := e.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("A"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
 		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -392,7 +392,7 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 
 	e := NewBufferedEmitter()
 	a := e.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("A"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
 		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -411,7 +411,7 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 	e := NewBufferedEmitter()
 	r := e.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"X"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("X"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
 		KV: KV{Name: "X"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: Requirements{},
@@ -490,13 +490,13 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 
 	e1 := NewBufferedEmitter()
 	c1 := e1.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"C", "v1"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("C", "v1"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}), KV: KV{},
 		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
 		Tags: []string{}, TargetProperties: TargetProperties{},
 	})
 	a1 := e1.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("A"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}), KV: KV{},
 		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
 		Tags: []string{}, TargetProperties: TargetProperties{},
@@ -507,13 +507,13 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 
 	e2 := NewBufferedEmitter()
 	c2 := e2.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"C", "v2"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("C", "v2"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}), KV: KV{},
 		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
 		Tags: []string{}, TargetProperties: TargetProperties{},
 	})
 	a2 := e2.Emit(&Node{
-		Cmds: []Cmd{{CmdArgs: []string{"A"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("A"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}), KV: KV{},
 		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
 		Tags: []string{}, TargetProperties: TargetProperties{},
@@ -534,7 +534,7 @@ func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 	e := NewBufferedEmitter()
 	mk := func(name string, deps ...NodeRef) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: []string{name}, Env: nil}},
+			Cmds:             []Cmd{{CmdArgs: anys(name), Env: nil}},
 			Env:              nil,
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               KV{Name: name},

@@ -62,7 +62,7 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	objRefs := []NodeRef{e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: nil}},
+		Cmds:             []Cmd{{CmdArgs: anys("cc"), Env: nil}},
 		Env:              nil,
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               KV{},
@@ -176,7 +176,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: nil}},
+			Cmds:             []Cmd{{CmdArgs: anys("cc"), Env: nil}},
 			Env:              nil,
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               KV{},
@@ -214,7 +214,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 
 	for _, pp := range peerPaths {
 		for _, arg := range cmdArgs {
-			if arg == pp {
+			if arg.String() == pp {
 				t.Errorf("peer archive path %q unexpectedly present in cmd_args", pp)
 			}
 		}
@@ -226,7 +226,7 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: nil}},
+			Cmds:             []Cmd{{CmdArgs: anys("cc"), Env: nil}},
 			Env:              nil,
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               KV{},
@@ -263,7 +263,7 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: nil}},
+			Cmds:             []Cmd{{CmdArgs: anys("cc"), Env: nil}},
 			Env:              nil,
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               KV{},
@@ -303,7 +303,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: []string{"cc"}, Env: nil}},
+			Cmds:             []Cmd{{CmdArgs: anys("cc"), Env: nil}},
 			Env:              nil,
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               KV{},
@@ -329,7 +329,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 		t.Fatalf("cmd_args len = %d, want 13", len(cmdArgs))
 	}
 
-	trailing := cmdArgs[10:]
+	trailing := anyStrs(cmdArgs[10:])
 	wantTrailing := []string{z.String(), m.String(), a.String()}
 
 	if !reflect.DeepEqual(trailing, wantTrailing) {

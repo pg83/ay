@@ -51,8 +51,8 @@ func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 
 	args := got.Cmds[0].CmdArgs
 
-	if args[len(args)-1] != wantInput {
-		t.Errorf("cmd_args[last] = %q, want %q", args[len(args)-1], wantInput)
+	if args[len(args)-1].String() != wantInput {
+		t.Errorf("cmd_args[last] = %q, want %q", args[len(args)-1].String(), wantInput)
 	}
 }
 
@@ -81,8 +81,8 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 	}
 
 	for i, want := range wantSlot {
-		if args[7+i] != want {
-			t.Errorf("cmd_args[%d] = %q, want %q", 7+i, args[7+i], want)
+		if args[7+i].String() != want {
+			t.Errorf("cmd_args[%d] = %q, want %q", 7+i, args[7+i].String(), want)
 		}
 	}
 }
@@ -108,8 +108,8 @@ func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	}
 
 	for i, want := range wantSlot {
-		if args[6+i] != want {
-			t.Fatalf("cmd_args[%d] = %q, want %q; args=%v", 6+i, args[6+i], want, args)
+		if args[6+i].String() != want {
+			t.Fatalf("cmd_args[%d] = %q, want %q; args=%v", 6+i, args[6+i].String(), want, args)
 		}
 	}
 
@@ -134,14 +134,14 @@ func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
 	wantCxx := testTargetP.Tools.CXX
-	if args[0] != wantCxx {
-		t.Errorf("compiler = %q, want %q", args[0], wantCxx)
+	if args[0].String() != wantCxx {
+		t.Errorf("compiler = %q, want %q", args[0].String(), wantCxx)
 	}
 
 	found := false
 
 	for _, a := range args {
-		if a == cxxStandardFlag.String() {
+		if a.String() == cxxStandardFlag.String() {
 			found = true
 
 			break
@@ -160,12 +160,12 @@ func TestEmitCC_CSource_UsesClang(t *testing.T) {
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
 	wantCC := testTargetP.Tools.CC
-	if args[0] != wantCC {
-		t.Errorf("compiler = %q, want %q", args[0], wantCC)
+	if args[0].String() != wantCC {
+		t.Errorf("compiler = %q, want %q", args[0].String(), wantCC)
 	}
 
 	for _, a := range args {
-		if a == cxxStandardFlag.String() {
+		if a.String() == cxxStandardFlag.String() {
 			t.Errorf("cmd_args contains %q for a .c source", cxxStandardFlag)
 
 			break
@@ -181,7 +181,7 @@ func TestEmitCC_NoCompilerWarnings_SelectsWarningSuppressionFlags(t *testing.T) 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
 	for _, a := range args {
-		if a == "-Werror" {
+		if a.String() == "-Werror" {
 			t.Errorf("cmd_args contains -Werror despite NoCompilerWarnings=true")
 		}
 	}
@@ -189,7 +189,7 @@ func TestEmitCC_NoCompilerWarnings_SelectsWarningSuppressionFlags(t *testing.T) 
 	wnoCount := 0
 
 	for _, a := range args {
-		if a == "-Wno-everything" {
+		if a.String() == "-Wno-everything" {
 			wnoCount++
 		}
 	}
@@ -215,7 +215,7 @@ func TestEmitCC_OwnCXXFlags_SlotsAfterSuppressionBlock(t *testing.T) {
 	idxBuiltinDate := -1
 
 	for i, a := range args {
-		switch a {
+		switch a.String() {
 		case "-D_LIBCPP_BUILDING_LIBRARY":
 			idxOwn = i
 		case "-Wno-strict-primary-template-shadow":
@@ -298,9 +298,9 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 	}
 }
 
-func contains(xs []string, target string) bool {
+func contains(xs []ANY, target string) bool {
 	for _, x := range xs {
-		if x == target {
+		if x.String() == target {
 			return true
 		}
 	}

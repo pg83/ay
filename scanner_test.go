@@ -201,7 +201,7 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 	sc := scanner.NewScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"include"}),
 	})
-	d := includeDirective{kind: includeSystem, target: internString("foo.h")}
+	d := includeDirective{kind: includeSystem, target: internStr("foo.h")}
 
 	got1 := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
 	got2 := sc.resolveSearchPath(Intern("$(S)/pkg/b.cpp"), dirKey("pkg"), d)
@@ -229,7 +229,7 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 	sc := scanner.NewScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"include"}),
 	})
-	d := includeDirective{kind: includeSystem, target: internString("missing.h")}
+	d := includeDirective{kind: includeSystem, target: internStr("missing.h")}
 
 	got1 := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
 	got2 := sc.resolveSearchPath(Intern("$(S)/pkg/b.cpp"), dirKey("pkg"), d)
@@ -242,7 +242,7 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 		t.Fatalf("searchTierFlat entries = %d, want 1", scanner.searchTierFlat.Len())
 	}
 
-	if e := scanner.searchTierFlat.Get(morton(sc.ctxNum, uint32(internString("missing.h")))); e != nil && e.found {
+	if e := scanner.searchTierFlat.Get(morton(sc.ctxNum, uint32(internStr("missing.h")))); e != nil && e.found {
 		t.Fatalf("missing header cached as found")
 	}
 
@@ -261,7 +261,7 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 	sc := scanner.NewScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"include"}),
 	})
-	got := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), dirKey("pkg"), includeDirective{kind: includeQuoted, target: internString("foo.h")})
+	got := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), dirKey("pkg"), includeDirective{kind: includeQuoted, target: internStr("foo.h")})
 	want := []VFS{Intern("$(S)/pkg/foo.h")}
 
 	if len(got) != len(want) || got[0] != want[0] {
@@ -1056,7 +1056,7 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 		},
 	})
 
-	d := includeDirective{kind: includeQuoted, target: internString("llvm/Frontend/OpenMP/OMP.inc")}
+	d := includeDirective{kind: includeQuoted, target: internStr("llvm/Frontend/OpenMP/OMP.inc")}
 	got := sc.resolveSearchPath(Intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP"), d)
 	want := []VFS{Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc")}
 
@@ -1087,7 +1087,7 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 		},
 	})
 
-	d := includeDirective{kind: includeQuoted, target: internString("llvm/Frontend/OpenMP/OMP.inc")}
+	d := includeDirective{kind: includeQuoted, target: internStr("llvm/Frontend/OpenMP/OMP.inc")}
 	got := sc.resolveSearchPath(Intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP"), d)
 	want := []VFS{Source("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc")}
 
@@ -1117,7 +1117,7 @@ func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 		},
 	})
 
-	d := includeDirective{kind: includeQuoted, target: internString("llvm/Frontend/OpenMP/OMP.h.inc")}
+	d := includeDirective{kind: includeQuoted, target: internStr("llvm/Frontend/OpenMP/OMP.h.inc")}
 	got := sc.resolveSearchPath(Intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP"), d)
 	want := []VFS{Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc")}
 
