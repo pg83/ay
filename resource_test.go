@@ -174,7 +174,7 @@ func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
 		pyBuildNoPYC: true,
 		pyBuildNoPY:  false,
 		pyTopLevel:   false,
-		moduleStmt:   &ModuleStmt{Name: "PY3_LIBRARY"},
+		moduleStmt:   &ModuleStmt{Name: tokPy3Library},
 	}
 	entries := buildPySrcEntries(d, "library/python/runtime_py3")
 	if len(entries) != 1 {
@@ -210,7 +210,7 @@ func TestPySrcObjcopyHashPy3ccSlowMain(t *testing.T) {
 		pyBuildNoPYC: true,
 		pyBuildNoPY:  false,
 		pyTopLevel:   false,
-		moduleStmt:   &ModuleStmt{Name: "PY3_PROGRAM_BIN"},
+		moduleStmt:   &ModuleStmt{Name: tokPy3ProgramBin},
 	}
 	entries := buildPySrcEntries(d, "tools/py3cc/slow")
 	chunks := chunkPySrcEntries(entries)
@@ -230,7 +230,7 @@ func TestPySrcObjcopyHashSymbolsModuleDualEntry(t *testing.T) {
 		pyBuildNoPYC: false,
 		pyBuildNoPY:  false,
 		pyTopLevel:   false,
-		moduleStmt:   &ModuleStmt{Name: "PY23_LIBRARY"},
+		moduleStmt:   &ModuleStmt{Name: tokPy23Library},
 	}
 	entries := buildPySrcEntries(d, "library/python/symbols/module")
 	if len(entries) != 2 {
@@ -267,7 +267,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		pyBuildNoPY:  false,
 		pyBuildNoPYC: false,
 		pyTopLevel:   true,
-		moduleStmt:   &ModuleStmt{Name: "PY3_LIBRARY"},
+		moduleStmt:   &ModuleStmt{Name: tokPy3Library},
 	}
 
 	entries := buildPySrcEntries(d, "contrib/python/shellingham")

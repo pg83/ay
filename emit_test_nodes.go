@@ -305,7 +305,7 @@ func buildTestSuiteInfo(instance ModuleInstance, d *moduleData, ldPath VFS) *tes
 
 	srcBase := instance.Path
 
-	if d.moduleStmt.Name == "UNITTEST_FOR" && len(d.moduleStmt.Args) > 0 {
+	if d.moduleStmt.Name == tokUnittestFor && len(d.moduleStmt.Args) > 0 {
 		srcBase = path.Clean(d.moduleStmt.Args[0])
 	} else if d.srcDir != nil {
 		srcBase = path.Clean(*d.srcDir)

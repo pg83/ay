@@ -110,9 +110,9 @@ func expandResourceFiles(args []string) []resourceEntry {
 	return out
 }
 
-func resourceModuleTag(modName string) *string {
+func resourceModuleTag(modName TOK) *string {
 	switch modName {
-	case "PY3_LIBRARY", "PY3_PROGRAM_BIN", "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
+	case tokPy3Library, tokPy3ProgramBin, tokPy23Library, tokPy23NativeLibrary:
 		return stringPtr("PY3")
 	}
 
@@ -130,7 +130,7 @@ func resourceBinTagForData(d *moduleData) *string {
 		return nil
 	}
 
-	if d.moduleStmt.Name == "PY3_PROGRAM" {
+	if d.moduleStmt.Name == tokPy3Program {
 		return stringPtr("PY3_BIN")
 	}
 
@@ -150,7 +150,7 @@ func resourceLibTagForData(d *moduleData) *string {
 		return nil
 	}
 
-	if d.moduleStmt.Name == "PY3_PROGRAM" || d.programPairedLib {
+	if d.moduleStmt.Name == tokPy3Program || d.programPairedLib {
 		return stringPtr("PY3_BIN_LIB")
 	}
 

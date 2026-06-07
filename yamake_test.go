@@ -52,7 +52,7 @@ func TestParseArchiverYaMake(t *testing.T) {
 	if m, ok := mf.Stmts[0].(*ModuleStmt); !ok {
 		t.Fatalf("Stmts[0] = %T, want *ModuleStmt", mf.Stmts[0])
 	} else {
-		if m.Name != "PROGRAM" {
+		if m.Name != tokProgram {
 			t.Errorf("Stmts[0].Name = %q, want %q", m.Name, "PROGRAM")
 		}
 		if len(m.Args) != 0 {
@@ -107,7 +107,7 @@ func TestParseLibraryArchiveYaMake(t *testing.T) {
 	for _, s := range mf.Stmts {
 		switch v := s.(type) {
 		case *ModuleStmt:
-			if v.Name == "LIBRARY" {
+			if v.Name == tokLibrary {
 				sawLibrary = true
 			}
 		case *EndStmt:
@@ -120,7 +120,10 @@ func TestParseLibraryArchiveYaMake(t *testing.T) {
 }
 
 func TestUnknownMacro(t *testing.T) {
-	src := []byte("FROBNICATE(foo bar)\n")
+	// NO_LINT is a real, recognized-but-untyped macro: it lands in UnknownStmt
+	// with its args. (A name outside the closed TOK set now fails fast at parse —
+	// see TestUnknownMacroNameFailsFast.)
+	src := []byte("NO_LINT(foo bar)\n")
 	mf, err := Parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -132,12 +135,20 @@ func TestUnknownMacro(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *UnknownStmt", mf.Stmts[0])
 	}
-	if u.Name != "FROBNICATE" {
-		t.Errorf("UnknownStmt.Name = %q, want %q", u.Name, "FROBNICATE")
+	if u.Name != tokNoLint {
+		t.Errorf("UnknownStmt.Name = %q, want %q", u.Name, tokNoLint)
 	}
 	want := []string{"foo", "bar"}
 	if !equalStrings(u.Args, want) {
 		t.Errorf("UnknownStmt.Args = %v, want %v", u.Args, want)
+	}
+}
+
+func TestUnknownMacroNameFailsFast(t *testing.T) {
+	// A macro name outside the closed TOK set is a parser/corpus gap and must
+	// fail fast (internTok), rather than silently parsing to an UnknownStmt.
+	if _, err := Parse(testParserFS, "test.input", []byte("FROBNICATE(foo bar)\n")); err == nil {
+		t.Fatal("Parse accepted an unknown macro name; want fail-fast error")
 	}
 }
 
@@ -154,7 +165,7 @@ func TestCommentHandling(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *ModuleStmt", mf.Stmts[0])
 	}
-	if m.Name != "PROGRAM" {
+	if m.Name != tokProgram {
 		t.Errorf("ModuleStmt.Name = %q, want %q", m.Name, "PROGRAM")
 	}
 
@@ -344,40 +355,16 @@ func TestStringRejectsNewline(t *testing.T) {
 }
 
 func TestLowercaseAndMixedCaseMacro(t *testing.T) {
+	// The lexer reads lowercase/mixed-case macro identifiers, but such names are
+	// outside the closed TOK set, so the parser fails fast at internTok.
 	t.Run("lowercase", func(t *testing.T) {
-		mf, err := Parse(testParserFS, "test.input", []byte("lowercase_macro()\n"))
-		if err != nil {
-			t.Fatalf("Parse failed: %v", err)
-		}
-		if len(mf.Stmts) != 1 {
-			t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
-		}
-		u, ok := mf.Stmts[0].(*UnknownStmt)
-		if !ok {
-			t.Fatalf("Stmts[0] = %T, want *UnknownStmt", mf.Stmts[0])
-		}
-		if u.Name != "lowercase_macro" {
-			t.Errorf("UnknownStmt.Name = %q, want %q", u.Name, "lowercase_macro")
+		if _, err := Parse(testParserFS, "test.input", []byte("lowercase_macro()\n")); err == nil {
+			t.Fatal("Parse accepted lowercase non-TOK macro; want fail-fast error")
 		}
 	})
 	t.Run("mixed_case_with_args", func(t *testing.T) {
-		mf, err := Parse(testParserFS, "test.input", []byte(`Mixed_Case(arg1 "arg2")`))
-		if err != nil {
-			t.Fatalf("Parse failed: %v", err)
-		}
-		if len(mf.Stmts) != 1 {
-			t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
-		}
-		u, ok := mf.Stmts[0].(*UnknownStmt)
-		if !ok {
-			t.Fatalf("Stmts[0] = %T, want *UnknownStmt", mf.Stmts[0])
-		}
-		if u.Name != "Mixed_Case" {
-			t.Errorf("UnknownStmt.Name = %q, want %q", u.Name, "Mixed_Case")
-		}
-		want := []string{"arg1", "arg2"}
-		if !equalStrings(u.Args, want) {
-			t.Errorf("UnknownStmt.Args = %v, want %v", u.Args, want)
+		if _, err := Parse(testParserFS, "test.input", []byte(`Mixed_Case(arg1 "arg2")`)); err == nil {
+			t.Fatal("Parse accepted mixed-case non-TOK macro; want fail-fast error")
 		}
 	})
 	t.Run("garbage_still_errors", func(t *testing.T) {
@@ -1202,8 +1189,8 @@ func TestParseYqlUdfModuleStmts(t *testing.T) {
 			if !ok {
 				t.Fatalf("Stmts[0] = %T, want *ModuleStmt", mf.Stmts[0])
 			}
-			if m.Name != tc.wantName {
-				t.Fatalf("ModuleStmt.Name = %q, want %q", m.Name, tc.wantName)
+			if m.Name.String() != tc.wantName {
+				t.Fatalf("ModuleStmt.Name = %q, want %q", m.Name.String(), tc.wantName)
 			}
 			if !equalStrings(m.Args, tc.wantArgs) {
 				t.Fatalf("ModuleStmt.Args = %v, want %v", m.Args, tc.wantArgs)

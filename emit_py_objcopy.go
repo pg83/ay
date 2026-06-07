@@ -162,9 +162,9 @@ func emitResourceObjcopy(
 
 		if d.moduleStmt != nil {
 			switch d.moduleStmt.Name {
-			case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
+			case tokPy23Library, tokPy23NativeLibrary:
 				resTargetProps.ModuleTag = "py3"
-			case "PY3_PROGRAM":
+			case tokPy3Program:
 				resTargetProps.ModuleTag = "py3_bin"
 			}
 		}
@@ -338,11 +338,11 @@ func emitKvOnlyObjcopyNode(
 	targetProps := TargetProperties{ModuleDir: instance.Path}
 
 	switch d.moduleStmt.Name {
-	case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
+	case tokPy23Library, tokPy23NativeLibrary:
 		targetProps.ModuleTag = "py3"
 	}
 
-	if d.moduleStmt.Name == "PY3_PROGRAM" || d.programPairedLib {
+	if d.moduleStmt.Name == tokPy3Program || d.programPairedLib {
 		if kind == kvOnlyLib {
 			targetProps.ModuleTag = "py3_bin_lib"
 		} else {
@@ -602,7 +602,7 @@ func emitPySrcObjcopy(
 	// .global.a, which the PROGRAM links via PEERDIRSELF=PY3_BIN_LIB. Emitting
 	// from the PROGRAM side here would either double-link the objcopies into
 	// the LD command or produce a tag-divergent twin.
-	if d.moduleStmt.Name == "PY3_PROGRAM" && !d.programPairedLib {
+	if d.moduleStmt.Name == tokPy3Program && !d.programPairedLib {
 		return nil
 	}
 
@@ -673,14 +673,14 @@ func emitPySrcObjcopy(
 			targetProps := TargetProperties{ModuleDir: instance.Path}
 
 			switch d.moduleStmt.Name {
-			case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
+			case tokPy23Library, tokPy23NativeLibrary:
 				targetProps.ModuleTag = "py3"
 			}
 
 			// pysrc/namespace emissions for both the PY3_PROGRAM PROGRAM-side and
 			// its KindLib twin live under the PY3_BIN_LIB submodule in upstream;
 			// stamp them with that submodule's lowercased tag so the dump matches REF.
-			if d.moduleStmt.Name == "PY3_PROGRAM" || d.programPairedLib {
+			if d.moduleStmt.Name == tokPy3Program || d.programPairedLib {
 				targetProps.ModuleTag = "py3_bin_lib"
 			}
 

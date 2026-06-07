@@ -9,7 +9,7 @@ func TestApplyUnknownStmt_LLVMBCRequiresConfiguredVersion(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 
 	err := Try(func() {
-		applyUnknownStmt("mod", &UnknownStmt{Name: "LLVM_BC", Args: []string{"src.cpp", "generated.cpp"}}, &moduleData{}, env)
+		applyUnknownStmt("mod", &UnknownStmt{Name: tokLlvmBc, Args: []string{"src.cpp", "generated.cpp"}}, &moduleData{}, env)
 	})
 	if err == nil {
 		t.Fatal("applyUnknownStmt unexpectedly accepted LLVM_BC without USE_LLVM_BC*")
@@ -63,7 +63,7 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			env := buildIfEnv(ModuleInstance{Platform: platform})
 			data := &moduleData{}
 
-			applyUnknownStmt("mod", &UnknownStmt{Name: tt.useMacro}, data, env)
+			applyUnknownStmt("mod", &UnknownStmt{Name: internTok(tt.useMacro)}, data, env)
 			if got := env.String(envCLANG_BC_ROOT); got != tt.resourceVal {
 				t.Fatalf("CLANG_BC_ROOT = %q, want %q", got, tt.resourceVal)
 			}
@@ -72,7 +72,7 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			}
 			if err := Try(func() {
 				// LLVM_BC requires NAME per upstream (build/plugins/llvm_bc.py:8).
-				applyUnknownStmt("mod", &UnknownStmt{Name: "LLVM_BC", Args: []string{"src.cpp", "generated.cpp", "NAME", "Bytecode"}}, data, env)
+				applyUnknownStmt("mod", &UnknownStmt{Name: tokLlvmBc, Args: []string{"src.cpp", "generated.cpp", "NAME", "Bytecode"}}, data, env)
 			}); err != nil {
 				t.Fatalf("applyUnknownStmt rejected configured LLVM_BC: %v", err)
 			}

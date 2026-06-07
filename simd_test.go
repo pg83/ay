@@ -3,7 +3,7 @@ package main
 import "testing"
 
 func TestSimdVariantForAVX2(t *testing.T) {
-	v, ok := simdVariantFor("SRC_C_AVX2")
+	v, ok := simdVariantFor(tokSrcCAvx2)
 	if !ok {
 		t.Fatal("simdVariantFor(SRC_C_AVX2) = miss, want hit")
 	}
@@ -16,7 +16,7 @@ func TestSimdVariantForAVX2(t *testing.T) {
 }
 
 func TestSimdVariantForAVX512(t *testing.T) {
-	v, ok := simdVariantFor("SRC_C_AVX512")
+	v, ok := simdVariantFor(tokSrcCAvx512)
 	if !ok {
 		t.Fatal("simdVariantFor(SRC_C_AVX512) = miss, want hit")
 	}
@@ -29,7 +29,7 @@ func TestSimdVariantForAVX512(t *testing.T) {
 }
 
 func TestSimdVariantForAMX(t *testing.T) {
-	v, ok := simdVariantFor("SRC_C_AMX")
+	v, ok := simdVariantFor(tokSrcCAmx)
 	if !ok {
 		t.Fatal("simdVariantFor(SRC_C_AMX) = miss, want hit")
 	}

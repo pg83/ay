@@ -622,7 +622,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		}
 	}
 
-	if d.moduleStmt.Name != "PROTO_LIBRARY" || len(codegenOutputs) == 0 {
+	if d.moduleStmt.Name != tokProtoLibrary || len(codegenOutputs) == 0 {
 		return nil
 	}
 

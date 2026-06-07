@@ -23,8 +23,8 @@ var simdVariants = map[string]simdVariant{
 	"SRC_C_SSE4": {Suffix: "sse4", CFlags: []string{"-msse4.1", "-msse4.2", "-mpopcnt", "-mcx16"}},
 }
 
-func simdVariantFor(macroName string) (simdVariant, bool) {
-	v, ok := simdVariants[macroName]
+func simdVariantFor(macroName TOK) (simdVariant, bool) {
+	v, ok := simdVariants[macroName.String()]
 	return v, ok
 }
 

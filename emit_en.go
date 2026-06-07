@@ -140,7 +140,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 		var moduleTag *string
 
-		if d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" {
+		if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary {
 			moduleTag = stringPtr("cpp_proto")
 		}
 

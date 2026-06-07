@@ -196,7 +196,7 @@ type moduleEmitResult struct {
 
 	Peerdirs []string
 
-	ModuleStmtName string
+	ModuleStmtName TOK
 
 	testSuiteInfo *testSuiteInfo
 }
@@ -520,7 +520,7 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 		return ""
 	}
 
-	if moduleStmt.Name == "UNITTEST_FOR" {
+	if moduleStmt.Name == tokUnittestFor {
 		return strings.ReplaceAll(path.Clean(instance.Path), "/", "-")
 	}
 
@@ -542,7 +542,7 @@ func programSourceDir(moduleStmt *ModuleStmt) *string {
 }
 
 func unittestForPeerPath(moduleStmt *ModuleStmt) string {
-	if moduleStmt == nil || moduleStmt.Name != "UNITTEST_FOR" || len(moduleStmt.Args) == 0 {
+	if moduleStmt == nil || moduleStmt.Name != tokUnittestFor || len(moduleStmt.Args) == 0 {
 		return ""
 	}
 
@@ -587,13 +587,13 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		applyAllPySrcs(ctx.fs, instance.Path, stmt, d)
 	}
 
-	if d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" && instance.Language != LangPy {
+	if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && instance.Language != LangPy {
 		cppProtoEnv := env.Clone()
 		cppProtoEnv.SetStringID(envMODULE_TAG, strCPPProto)
 
 		cppProtoEnv.SetBool(envGEN_PROTO, true)
 		d = collectModule(ctx.parsers, &deduper, instance.Path, instance.Kind, mf.Stmts, cppProtoEnv)
-	} else if d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" && instance.Language == LangPy {
+	} else if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy {
 		py3ProtoEnv := env.Clone()
 		py3ProtoEnv.SetBool(envPY3_PROTO, true)
 		d = collectModule(ctx.parsers, &deduper, instance.Path, instance.Kind, mf.Stmts, py3ProtoEnv)
@@ -607,7 +607,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path)
 	}
 
-	if instance.Language == LangPy && d.moduleStmt.Name == "PROTO_LIBRARY" {
+	if instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary {
 		hasProtoSrc := false
 
 		for _, src := range d.srcs {
@@ -627,16 +627,16 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
-	if d.moduleStmt.Name != "LIBRARY" && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) {
+	if d.moduleStmt.Name != tokLibrary && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) {
 		ThrowFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path, d.moduleStmt.Name)
 	}
 
-	if !d.hadAllocator && (d.moduleStmt.Name == "PY3_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN") {
+	if !d.hadAllocator && (d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) {
 		d.hadAllocator = true
 		d.allocatorName = "J"
 	}
 
-	py3ProtoVariant := d.moduleStmt.Name == "PROTO_LIBRARY" && d.usePython3
+	py3ProtoVariant := d.moduleStmt.Name == tokProtoLibrary && d.usePython3
 
 	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path != "contrib/libs/python" {
 		d.peerdirs = append([]string{"contrib/libs/python"}, d.peerdirs...)
@@ -648,7 +648,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
-	if d.moduleStmt.Name == "PY3_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+	if d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin {
 		var earlyPeers []string
 
 		if d.pythonSQLite3 {
@@ -667,7 +667,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			latePeers = append(latePeers, "library/python/testing/import_test")
 		}
 
-		if d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+		if d.moduleStmt.Name == tokPy3ProgramBin {
 			insertAt := 0
 
 			if len(d.peerdirs) > 0 && d.peerdirs[0] == "contrib/libs/python" {
@@ -702,7 +702,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
-	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && d.moduleStmt.Name != "PY3_PROGRAM" && d.moduleStmt.Name != "PY3_PROGRAM_BIN" && !d.noImportTracing && instance.Path != "library/python/import_tracing/constructor" {
+	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && d.moduleStmt.Name != tokPy3Program && d.moduleStmt.Name != tokPy3ProgramBin && !d.noImportTracing && instance.Path != "library/python/import_tracing/constructor" {
 		d.peerdirs = append(d.peerdirs, "library/python/import_tracing/constructor")
 	}
 
@@ -723,7 +723,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	if isSpecializedLibraryType(d.moduleStmt.Name) {
-		if d.moduleStmt.Name == "DYNAMIC_LIBRARY" {
+		if d.moduleStmt.Name == tokDynamicLibrary {
 			result := emitDynamicLibrary(ctx, instance, d)
 			ctx.memo[instance] = result
 
@@ -775,14 +775,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 
 			switch d.moduleStmt.Name {
-			case "PY23_NATIVE_LIBRARY":
+			case tokPy23NativeLibrary:
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "libpy3c", archiveName)
 				tag = "py3_native_global"
-			case "PY23_LIBRARY":
+			case tokPy23Library:
 				arInstance.Language = LangPy
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", archiveName)
 				tag = "py3_global"
-			case "PY3_LIBRARY", "PY2_LIBRARY", "PY2_PROGRAM", "PY3_PROGRAM":
+			case tokPy3Library, tokPy2Library, tokPy2Program, tokPy3Program:
 				arInstance.Language = LangPy
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", archiveName)
 				tag = "global"
@@ -804,7 +804,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		protoResult := emitProtoSrcs(ctx, instance, d, peerContribs)
 
-		if d.moduleStmt.Name != "PROTO_LIBRARY" {
+		if d.moduleStmt.Name != tokProtoLibrary {
 			emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, nil)
 		}
 
@@ -1059,7 +1059,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	if d.moduleStmt != nil {
 		switch d.moduleStmt.Name {
-		case "PY2_PROGRAM":
+		case tokPy2Program:
 			head := make([]resolvedPeer, 0, len(resolved))
 			tail := make([]resolvedPeer, 0, 2)
 
@@ -1074,7 +1074,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 
 			archiveOrder = append(head, tail...)
-		case "PY3_PROGRAM_BIN":
+		case tokPy3ProgramBin:
 
 			head := make([]resolvedPeer, 0, len(resolved))
 			tail := make([]resolvedPeer, 0, 2)
@@ -1090,7 +1090,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 
 			archiveOrder = append(head, tail...)
-		case "PY3_PROGRAM":
+		case tokPy3Program:
 			allocatorExplicitSet := make(map[string]struct{}, len(allocatorExplicitPeers))
 
 			for _, p := range allocatorExplicitPeers {
@@ -1222,7 +1222,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 		}
 
-		if pr.ModuleStmtName == "DYNAMIC_LIBRARY" && pr.LDPath != nil && deduper.add(*pr.LDPath) {
+		if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(*pr.LDPath) {
 			peerDynamicRefs = append(peerDynamicRefs, pr.LDRef)
 			peerDynamicPaths = append(peerDynamicPaths, *pr.LDPath)
 		}
@@ -1250,7 +1250,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 		}
 
-		if pr.ModuleStmtName == "DYNAMIC_LIBRARY" && pr.LDPath != nil && deduper.add(*pr.LDPath) {
+		if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(*pr.LDPath) {
 			peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.LDPath)
 		}
 
@@ -1349,7 +1349,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	cflagsAggOrder := resolved
 
-	if d.moduleStmt != nil && d.moduleStmt.Name == "PY3_PROGRAM" {
+	if d.moduleStmt != nil && d.moduleStmt.Name == tokPy3Program {
 		cflagsAggOrder = archiveOrder
 	}
 
@@ -1481,17 +1481,17 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// header — emitting the wrong $(B) path in CC inputs.
 	dedupedAddIncl := dedupVFS(d.addIncl, d.addInclGlobal)
 
-	isPy3NativeLib := d.moduleStmt.Name == "PY23_NATIVE_LIBRARY" ||
-		d.moduleStmt.Name == "PY23_LIBRARY"
+	isPy3NativeLib := d.moduleStmt.Name == tokPy23NativeLibrary ||
+		d.moduleStmt.Name == tokPy23Library
 
 	var perModuleCCTag *string
 
 	switch d.moduleStmt.Name {
-	case "PY23_NATIVE_LIBRARY":
+	case tokPy23NativeLibrary:
 		perModuleCCTag = stringPtr("py3_native")
-	case "PY23_LIBRARY":
+	case tokPy23Library:
 		perModuleCCTag = stringPtr("py3")
-	case "YQL_UDF_YDB", "YQL_UDF_CONTRIB":
+	case tokYqlUdfYdb, tokYqlUdfContrib:
 		perModuleCCTag = stringPtr("yql_udf_static")
 	}
 
@@ -1504,10 +1504,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	switch d.moduleStmt.Name {
-	case "PY23_NATIVE_LIBRARY":
+	case tokPy23NativeLibrary:
 		arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, "libpy3c", archiveName) }
 		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, "libpy3c", archiveName) }
-	case "PY3_LIBRARY", "PY2_LIBRARY", "PY23_LIBRARY", "PY2_PROGRAM", "PY3_PROGRAM":
+	case tokPy3Library, tokPy2Library, tokPy23Library, tokPy2Program, tokPy3Program:
 		arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, "libpy3", archiveName) }
 		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, "libpy3", archiveName) }
 	default:
@@ -1559,7 +1559,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		BisonGenExt: d.bisonGenExt,
 	}
 
-	ancestorRebase := d.srcDir != nil && d.moduleStmt.Name == "PROGRAM" && isAncestorPath(*d.srcDir, instance.Path)
+	ancestorRebase := d.srcDir != nil && d.moduleStmt.Name == tokProgram && isAncestorPath(*d.srcDir, instance.Path)
 
 	// Pass 1 (codegen-producing srcs: .proto, .ev, .fbs, .rl, .cpp.in, .c.in, .y)
 	// runs BEFORE emitCopyFiles / emitEnumSrcs / emitMiscNodes. Those later
@@ -1798,7 +1798,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	globalSrcMemberCount := len(globalRefs)
 
-	regCCPy3Suffix := isPy3NativeLib || d.moduleStmt.Name == "PY23_LIBRARY"
+	regCCPy3Suffix := isPy3NativeLib || d.moduleStmt.Name == tokPy23Library
 	regRes := emitPyRegister(ctx, instance, d, moduleInputs, regCCPy3Suffix)
 
 	if regRes != nil {
@@ -1839,7 +1839,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 		}
 
-		if d.moduleStmt.Name == "PY3_PROGRAM" && d.allocatorName == "J" {
+		if d.moduleStmt.Name == tokPy3Program && d.allocatorName == "J" {
 			ldPeerArchiveRefs, ldPeerArchivePaths = moveArchivePathsAfter(
 				ldPeerArchiveRefs,
 				ldPeerArchivePaths,
@@ -1878,7 +1878,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		ldInstance := instance
 
-		if d.moduleStmt.Name == "PY2_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN" {
+		if d.moduleStmt.Name == tokPy2Program || d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin {
 			ldInstance.Language = LangPy
 		}
 
@@ -1917,7 +1917,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// (ENABLE(STRIP) → STRIP_FLAG=-Wl,--strip-all on linux per
 		// build/conf/linkers/ld.conf:22). ENABLE(NO_STRIP) or BUILD_TYPE=DEBUG
 		// reverts this (ymake.core.conf:2669).
-		wantsStrip := (d.moduleStmt.Name == "PY3_PROGRAM_BIN" || d.moduleStmt.Name == "PY3_PROGRAM") && !d.noStrip
+		wantsStrip := (d.moduleStmt.Name == tokPy3ProgramBin || d.moduleStmt.Name == tokPy3Program) && !d.noStrip
 		// Upstream's PY3_BIN submodule (the PROGRAM side of the PY3_PROGRAM
 		// multimodule) has MODULE_TAG=PY3_BIN auto-set from the submodule
 		// name (lang/confreader.cpp:847-848). REF exposes it lowercased in
@@ -1925,7 +1925,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// has no implicit MODULE_TAG, so it stays unset there.
 		var programModuleTag string
 
-		if d.moduleStmt.Name == "PY3_PROGRAM" {
+		if d.moduleStmt.Name == tokPy3Program {
 			programModuleTag = "py3_bin"
 		}
 
@@ -1961,7 +1961,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ldPath := LDOutputPath(instance, binaryName)
 		var suiteInfo *testSuiteInfo
 
-		if ctx.testMode && d.moduleStmt.Name == "UNITTEST_FOR" {
+		if ctx.testMode && d.moduleStmt.Name == tokUnittestFor {
 			suiteInfo = buildTestSuiteInfo(instance, d, ldPath)
 		}
 
@@ -2012,7 +2012,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	arInstance := instance
 
 	switch d.moduleStmt.Name {
-	case "PY3_LIBRARY", "PY2_LIBRARY", "PY23_LIBRARY", "PY2_PROGRAM", "PY3_PROGRAM":
+	case tokPy3Library, tokPy2Library, tokPy23Library, tokPy2Program, tokPy3Program:
 		arInstance.Language = LangPy
 	}
 
@@ -2105,11 +2105,11 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		globalTag := "global"
 
 		switch d.moduleStmt.Name {
-		case "PY23_LIBRARY":
+		case tokPy23Library:
 			globalTag = "py3_global"
-		case "PY23_NATIVE_LIBRARY":
+		case tokPy23NativeLibrary:
 			globalTag = "py3_native_global"
-		case "YQL_UDF_YDB", "YQL_UDF_CONTRIB":
+		case tokYqlUdfYdb, tokYqlUdfContrib:
 			globalTag = "yql_udf_static_global"
 		}
 
@@ -2604,7 +2604,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 			addDynamic(peerResult.PeerDynamicClosureRefs[i], p)
 		}
 
-		if peerResult.ModuleStmtName == "DYNAMIC_LIBRARY" && peerResult.LDPath != nil {
+		if peerResult.ModuleStmtName == tokDynamicLibrary && peerResult.LDPath != nil {
 			addDynamic(peerResult.LDRef, *peerResult.LDPath)
 		}
 	}

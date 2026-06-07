@@ -576,7 +576,7 @@ func collectModule(pm *includeParserManager, dd *deDuper, modulePath string, kin
 		d.peerdirs = append(d.peerdirs, "library/cpp/eventlog", "contrib/libs/protobuf")
 	}
 
-	if hasProto && !hasEv && d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY" {
+	if hasProto && !hasEv && d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary {
 		if !env.Bool(envPY3_PROTO) {
 			d.peerdirs = append(d.peerdirs, "contrib/libs/protobuf")
 		}
@@ -734,10 +734,10 @@ func applyBuildInfoAddIncl(modulePath string, d *moduleData) {
 	d.addInclUserGlobal = append(d.addInclUserGlobal, biDir)
 }
 
-func pyModuleTypeUsesPython3(name string) bool {
+func pyModuleTypeUsesPython3(name TOK) bool {
 	switch name {
-	case "PY3_LIBRARY", "PY3_PROGRAM", "PY3_PROGRAM_BIN",
-		"PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
+	case tokPy3Library, tokPy3Program, tokPy3ProgramBin,
+		tokPy23Library, tokPy23NativeLibrary:
 		return true
 	}
 
@@ -754,11 +754,11 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				return
 			}
 
-			if v.Name == "PY3_PROGRAM" && kind == KindBin {
+			if v.Name == tokPy3Program && kind == KindBin {
 				d.peerdirs = append([]string{modulePath}, d.peerdirs...)
 			}
 
-			if v.Name == "UNITTEST_FOR" {
+			if v.Name == tokUnittestFor {
 				const unittestMainPeer = "library/cpp/testing/unittest_main"
 
 				d.peerdirs = append(d.peerdirs, unittestMainPeer)
@@ -774,7 +774,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 
 			d.moduleStmt = moduleStmtForKind(v, kind)
 
-			if v.Name == "PY3_PROGRAM" && kind == KindLib {
+			if v.Name == tokPy3Program && kind == KindLib {
 				d.programPairedLib = true
 			}
 		case *SrcsStmt:
@@ -1043,9 +1043,9 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 }
 
 func moduleStmtForKind(stmt *ModuleStmt, kind ModuleKind) *ModuleStmt {
-	if stmt.Name == "PY3_PROGRAM" && kind == KindLib {
+	if stmt.Name == tokPy3Program && kind == KindLib {
 		out := *stmt
-		out.Name = "PY3_LIBRARY"
+		out.Name = tokPy3Library
 		return &out
 	}
 
@@ -1100,53 +1100,53 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 
 	defer func() {
 		if handled {
-			recordHandledMacro(v.Name, v.Args)
+			recordHandledMacro(v.Name.String(), v.Args)
 		}
 	}()
 
 	switch v.Name {
-	case "NO_LIBC":
+	case tokNoLibc:
 
 		d.flags.NoLibc = true
 		d.flags.NoRuntime = true
 		d.flags.NoUtil = true
-	case "NO_UTIL":
+	case tokNoUtil:
 		d.flags.NoUtil = true
-	case "NO_RUNTIME":
+	case tokNoRuntime:
 
 		d.flags.NoRuntime = true
 		d.flags.NoUtil = true
-	case "NO_PLATFORM":
+	case tokNoPlatform:
 
 		d.flags.NoPlatform = true
 		d.flags.NoLibc = true
 		d.flags.NoRuntime = true
 		d.flags.NoUtil = true
-	case "NO_COMPILER_WARNINGS":
+	case tokNoCompilerWarnings:
 		d.flags.NoCompilerWarnings = true
-	case "NO_WSHADOW":
+	case tokNoWshadow:
 		d.flags.NoWShadow = true
-	case "USE_LLVM_BC16":
+	case tokUseLlvmBc16:
 		env.SetString(envCLANG_BC_ROOT, env.String(envCLANG16_RESOURCE_GLOBAL))
 		env.SetString(envLLVM_LLC_TOOL, "contrib/libs/llvm16/tools/llc")
-	case "USE_LLVM_BC18":
+	case tokUseLlvmBc18:
 		env.SetString(envCLANG_BC_ROOT, env.String(envCLANG18_RESOURCE_GLOBAL))
 		env.SetString(envLLVM_LLC_TOOL, "contrib/libs/llvm18/tools/llc")
-	case "USE_LLVM_BC20":
+	case tokUseLlvmBc20:
 		env.SetString(envCLANG_BC_ROOT, env.String(envCLANG20_RESOURCE_GLOBAL))
 		env.SetString(envLLVM_LLC_TOOL, "contrib/libs/llvm20/tools/llc")
-	case "SPLIT_DWARF":
+	case tokSplitDwarf:
 		d.splitDwarf = true
-	case "NO_SPLIT_DWARF":
+	case tokNoSplitDwarf:
 		d.splitDwarf = false
-	case "NO_PYTHON_INCLUDES":
+	case tokNoPythonIncludes:
 
 		d.noPythonIncl = true
-	case "NO_IMPORT_TRACING":
+	case tokNoImportTracing:
 		d.noImportTracing = true
-	case "NO_EXTENDED_SOURCE_SEARCH":
+	case tokNoExtendedSourceSearch:
 		d.noExtendedPySearch = true
-	case "STYLE_RUFF":
+	case tokStyleRuff:
 		// upstream (yatool/build/conf/python.conf:390-398) defines
 		// STYLE_RUFF as an optional-kwarg linter macro:
 		//   STYLE_RUFF([CONFIG_TYPE config_type] [CHECK_FORMAT]
@@ -1162,7 +1162,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			case "RUN_IN_SOURCE_ROOT":
 			}
 		}
-	case "LLVM_BC":
+	case tokLlvmBc:
 		// upstream's LLVM_BC is implemented as a Python plugin
 		// (yatool/build/plugins/llvm_bc.py): args split via sort_by_keywords
 		// into {SYMBOLS: -1, NAME: 1, GENERATE_MACHINE_CODE: 0,
@@ -1219,15 +1219,15 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 
 		d.llvmBc = append(d.llvmBc, stmt)
 
-	case "MAVEN_GROUP_ID":
+	case tokMavenGroupId:
 
-	case "CHECK_CONFIG_H":
+	case tokCheckConfigH:
 		if len(v.Args) != 1 {
 			ThrowFmt("CHECK_CONFIG_H expects exactly 1 argument, got %d", len(v.Args))
 		}
 
 		d.checkConfigHeaders = append(d.checkConfigHeaders, expandStmtToken(v.Args[0], env))
-	case "BUILDWITH_CYTHON_CPP":
+	case tokBuildwithCythonCpp:
 		if len(v.Args) == 0 {
 			ThrowFmt("BUILDWITH_CYTHON_CPP expects at least 1 argument")
 		}
@@ -1237,7 +1237,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			Options: expandStmtTokens(v.Args[1:], env),
 		})
 		d.cythonNumpyBeforeInclude = true
-	case "BUILDWITH_CYTHON_C":
+	case tokBuildwithCythonC:
 		if len(v.Args) == 0 {
 			ThrowFmt("BUILDWITH_CYTHON_C expects at least 1 argument")
 		}
@@ -1248,26 +1248,26 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			CMode:   true,
 		})
 		d.cythonNumpyBeforeInclude = true
-	case "BISON_GEN_C":
+	case tokBisonGenC:
 		d.bisonGenExt = ".c"
-	case "BISON_GEN_CPP":
+	case tokBisonGenCpp:
 		d.bisonGenExt = ".cpp"
-	case "GRPC":
+	case tokGrpc:
 		d.grpc = true
 		d.peerdirs = append(d.peerdirs, "contrib/libs/grpc")
-	case "PY_NAMESPACE":
+	case tokPyNamespace:
 		if len(v.Args) != 1 {
 			ThrowFmt("gen: PY_NAMESPACE expects exactly 1 argument, got %d", len(v.Args))
 		}
 
 		d.pyNamespace = stringPtr(expandStmtToken(v.Args[0], env))
-	case "YQL_LAST_ABI_VERSION":
+	case tokYqlLastAbiVersion:
 		if len(v.Args) != 0 {
 			ThrowFmt("YQL_LAST_ABI_VERSION expects exactly 0 arguments, got %d", len(v.Args))
 		}
 
 		d.cxxFlags = append(d.cxxFlags, internArg("-DUSE_CURRENT_UDF_ABI_VERSION"))
-	case "YQL_ABI_VERSION":
+	case tokYqlAbiVersion:
 		if len(v.Args) != 3 {
 			ThrowFmt("YQL_ABI_VERSION expects exactly 3 arguments, got %d", len(v.Args))
 		}
@@ -1277,13 +1277,13 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			internArg("-DUDF_ABI_VERSION_MINOR="+v.Args[1]),
 			internArg("-DUDF_ABI_VERSION_PATCH="+v.Args[2]),
 		)
-	case "PROTOC_FATAL_WARNINGS":
+	case tokProtocFatalWarnings:
 		if len(v.Args) != 0 {
 			ThrowFmt("PROTOC_FATAL_WARNINGS expects exactly 0 arguments, got %d", len(v.Args))
 		}
 
 		d.protocFlags = append(d.protocFlags, internArg("--fatal_warnings"))
-	case "USE_COMMON_GOOGLE_APIS":
+	case tokUseCommonGoogleApis:
 		// upstream's _CPP_PROTO module-definition body (proto.conf:741-743)
 		// runs `PEERDIR += contrib/libs/googleapis-common-protos` so the
 		// googleapis dir lands first in the resolved peer list — ahead of
@@ -1301,16 +1301,16 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		d.useCommonGoogleAPIs = true
 		const googleapisPeer = "contrib/libs/googleapis-common-protos"
 		d.peerdirs = append([]string{googleapisPeer}, d.peerdirs...)
-	case "FLATC_FLAGS":
+	case tokFlatcFlags:
 		d.flatcFlags = append(d.flatcFlags, internArgs(expandListVars(v.Args, env))...)
-	case "COPY_FILE", "COPY_FILE_WITH_CONTEXT":
+	case tokCopyFile, tokCopyFileWithContext:
 		args := expandListVars(v.Args, env)
 
 		for i := range args {
 			args[i] = expandConfigString(args[i], env)
 		}
 
-		entry := parseCopyFileEntry(args, v.Name == "COPY_FILE_WITH_CONTEXT", v.Line)
+		entry := parseCopyFileEntry(args, v.Name == tokCopyFileWithContext, v.Line)
 		d.copyFiles = append(d.copyFiles, entry)
 
 		if entry.Auto {
@@ -1331,7 +1331,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				d.copyFileAutoOutputs[dstRel] = entry
 			}
 		}
-	case "COPY":
+	case tokCopy:
 		for _, entry := range parseCopyEntries(expandListVars(v.Args, env), v.Line) {
 			d.copyFiles = append(d.copyFiles, entry)
 
@@ -1354,7 +1354,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				}
 			}
 		}
-	case "PROTO_NAMESPACE":
+	case tokProtoNamespace:
 		if len(v.Args) == 0 {
 			ThrowFmt("gen: PROTO_NAMESPACE expects at least 1 argument")
 		}
@@ -1370,11 +1370,11 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		protoBuildRoot := Build(filepath.ToSlash(filepath.Clean(*d.protoNamespace)))
 		d.addIncl = append(d.addIncl, protoBuildRoot)
 
-		if d.protoNamespaceGlobal || (d.moduleStmt != nil && d.moduleStmt.Name == "PROTO_LIBRARY") {
+		if d.protoNamespaceGlobal || (d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary) {
 			d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
 			d.addInclUserGlobal = append(d.addInclUserGlobal, protoBuildRoot)
 		}
-	case "EXCLUDE_TAGS":
+	case tokExcludeTags:
 		// upstream uses EXCLUDE_TAGS to drop submodules of a multimodule
 		// from the build (per the PROTO_LIBRARY definition at
 		// yatool/build/conf/proto.conf:916-973: PROTO_LIBRARY emits CPP_PROTO
@@ -1394,18 +1394,18 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 
 			d.excludeTags[arg] = true
 		}
-	case "YA_CONF_JSON":
+	case tokYaConfJson:
 		if len(v.Args) != 1 {
 			ThrowFmt("YA_CONF_JSON expects exactly 1 argument, got %d", len(v.Args))
 		}
 
 		d.yaConfJSON = append(d.yaConfJSON, expandStmtToken(v.Args[0], env))
-	case "ALLOCATOR":
+	case tokAllocator:
 		applyAllocatorStmt(v, d)
-	case "ARCHIVE":
+	case tokArchive:
 
 		applyArchiveStmt(v, d)
-	case "ENABLE":
+	case tokEnable:
 		// upstream pybuild plugins translate ENABLE(X) into
 		// `unit.set([X, 'yes'])` — a plain boolean env var, picked up by
 		// `when ($X == "yes") { … }` clauses. Args are user-defined flag
@@ -1429,7 +1429,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				d.pythonSQLite3 = true
 			}
 		}
-	case "DISABLE":
+	case tokDisable:
 		// Counterpart to ENABLE: clears the env var (and the few specific
 		// module-data flags). Generic for the same reasons as ENABLE.
 		for _, a := range v.Args {
@@ -1439,15 +1439,15 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				d.pythonSQLite3 = false
 			}
 		}
-	case "NO_MYPY":
+	case tokNoMypy:
 		d.noMypy = true
-	case "NO_OPTIMIZE_PY_PROTOS":
+	case tokNoOptimizePyProtos:
 		d.optimizePyProtos = false
 		d.optimizePyProtosSet = true
-	case "OPTIMIZE_PY_PROTOS":
+	case tokOptimizePyProtos:
 		d.optimizePyProtos = true
 		d.optimizePyProtosSet = true
-	case "SRC":
+	case tokSrc:
 
 		if len(v.Args) == 0 {
 			ThrowFmt("gen: SRC() requires at least 1 argument (filename); got 0 at line %d", v.Line)
@@ -1470,7 +1470,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			extras := internArgs(expandStmtTokens(v.Args[1:], env))
 			d.perSrcCFlags[filename] = append(d.perSrcCFlags[filename], extras...)
 		}
-	case "SRC_C_NO_LTO":
+	case tokSrcCNoLto:
 
 		if len(v.Args) != 1 {
 			ThrowFmt("gen: SRC_C_NO_LTO expects exactly 1 argument (filename); got %d at line %d", len(v.Args), v.Line)
@@ -1484,8 +1484,8 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		}
 
 		d.flatSrcs[filename] = struct{}{}
-	case "SRC_C_AVX", "SRC_C_AVX2", "SRC_C_AVX512", "SRC_C_AMX", "SRC_C_SSE2", "SRC_C_SSE3", "SRC_C_SSSE3",
-		"SRC_C_SSE4", "SRC_C_SSE41", "SRC_C_XOP":
+	case tokSrcCAvx, tokSrcCAvx2, tokSrcCAvx512, tokSrcCAmx, tokSrcCSse2, tokSrcCSse3, tokSrcCSsse3,
+		tokSrcCSse4, tokSrcCSse41, tokSrcCXop:
 
 		variant, ok := simdVariantFor(v.Name)
 
@@ -1508,30 +1508,30 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			CFlags:  flags,
 			Line:    v.Line,
 		})
-	case "LD_PLUGIN":
+	case tokLdPlugin:
 
 		d.ldPlugins = append(d.ldPlugins, v.Args...)
-	case "AR_PLUGIN":
+	case tokArPlugin:
 
 		if len(v.Args) != 1 {
 			ThrowFmt("gen: AR_PLUGIN expects exactly 1 argument, got %d", len(v.Args))
 		}
 
 		d.arPlugin = stringPtr(v.Args[0] + ".pyplugin")
-	case "DYNAMIC_LIBRARY_FROM":
+	case tokDynamicLibraryFrom:
 		if len(v.Args) == 0 {
 			ThrowFmt("gen: DYNAMIC_LIBRARY_FROM expects at least 1 argument")
 		}
 
 		d.dynamicLibraryFrom = append(d.dynamicLibraryFrom, v.Args...)
 		d.peerdirs = append(d.peerdirs, v.Args...)
-	case "EXPORTS_SCRIPT":
+	case tokExportsScript:
 		if len(v.Args) != 1 {
 			ThrowFmt("gen: EXPORTS_SCRIPT expects exactly 1 argument, got %d", len(v.Args))
 		}
 
 		d.exportsScript = stringPtr(v.Args[0])
-	case "EXTRALIBS":
+	case tokExtralibs:
 		for _, arg := range v.Args {
 			lib := arg
 
@@ -1541,7 +1541,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 
 			d.objAddLibsGlobal = append(d.objAddLibsGlobal, internArg(lib))
 		}
-	case "USE_PYTHON3":
+	case tokUsePython3:
 
 		d.peerdirs = append(d.peerdirs,
 			"contrib/libs/python",
@@ -1549,7 +1549,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		)
 
 		d.usePython3 = true
-	case "PY_SRCS":
+	case tokPySrcs:
 
 		topLevel := false
 		mainNext := false
@@ -1733,7 +1733,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				d.pyMain = stringPtr(modName + ":main")
 				mainNext = false
 			} else if d.pyMain == nil && d.moduleStmt != nil &&
-				(d.moduleStmt.Name == "PY3_PROGRAM" || d.moduleStmt.Name == "PY3_PROGRAM_BIN") &&
+				(d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) &&
 				(src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
 				// Upstream's pybuild.py:397-398 auto-sets PY_MAIN for
 				// `__main__.py` in a PY3 PROGRAM-kind unit:
@@ -1769,9 +1769,9 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				Namespace: namespace,
 			})
 		}
-	case "ALL_PY_SRCS":
+	case tokAllPySrcs:
 		d.allPySrcs = append(d.allPySrcs, v)
-	case "PY_MAIN":
+	case tokPyMain:
 
 		if len(v.Args) != 1 {
 			ThrowFmt("gen: PY_MAIN expects exactly 1 argument, got %d", len(v.Args))
@@ -1784,7 +1784,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		}
 
 		d.pyMain = stringPtr(arg)
-	case "PY_CONSTRUCTOR":
+	case tokPyConstructor:
 
 		ensureResourcePeer(modulePath, d)
 
@@ -1801,23 +1801,23 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		}
 
 		d.resources = append(d.resources, resourceEntry{Path: "-", Key: "py/constructors/" + arg})
-	case "NO_CHECK_IMPORTS":
+	case tokNoCheckImports:
 
 		if len(v.Args) > 0 {
 			d.noCheckImports = append(d.noCheckImports, v.Args...)
 		} else {
 			d.noCheckImportsDisabled = true
 		}
-	case "CPP_PROTO_PLUGIN0", "CPP_PROTO_PLUGIN", "CPP_PROTO_PLUGIN2":
+	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2:
 		plugin := parseCPPProtoPlugin(v)
 		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 		d.peerdirs = append(d.peerdirs, plugin.Deps...)
-	case "PY_REGISTER":
+	case tokPyRegister:
 
 		for _, name := range v.Args {
 			appendPyRegister(d, name, true)
 		}
-	case "SET_APPEND":
+	case tokSetAppend:
 
 		if len(v.Args) >= 2 {
 			switch v.Args[0] {
@@ -1832,7 +1832,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				}
 			}
 		}
-	case "INDUCED_DEPS":
+	case tokInducedDeps:
 
 		if len(v.Args) >= 2 {
 			for _, p := range v.Args[1:] {
@@ -1850,16 +1850,16 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		// handler.
 		handled = false
 
-		if _, ok := acknowledgedMacros[v.Name]; !ok {
-			ThrowFmt("gen: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf)", v.Name)
+		if _, ok := acknowledgedMacros[v.Name.String()]; !ok {
+			ThrowFmt("gen: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf)", v.Name.String())
 		}
 
 		if d.unhandledMacros == nil {
 			d.unhandledMacros = map[string][]string{}
 		}
 
-		d.unhandledMacros[v.Name] = append(d.unhandledMacros[v.Name], expandStmtTokens(v.Args, env)...)
-		recordIgnoredMacro(v.Name, v.Args)
+		d.unhandledMacros[v.Name.String()] = append(d.unhandledMacros[v.Name.String()], expandStmtTokens(v.Args, env)...)
+		recordIgnoredMacro(v.Name.String(), v.Args)
 	}
 }
 
@@ -1913,12 +1913,12 @@ func parseCPPProtoPlugin(v *UnknownStmt) cppProtoPlugin {
 	outputSuffixes := 0
 
 	switch v.Name {
-	case "CPP_PROTO_PLUGIN0":
+	case tokCppProtoPlugin0:
 		requiredArgs = 2
-	case "CPP_PROTO_PLUGIN":
+	case tokCppProtoPlugin:
 		requiredArgs = 3
 		outputSuffixes = 1
-	case "CPP_PROTO_PLUGIN2":
+	case tokCppProtoPlugin2:
 		requiredArgs = 4
 		outputSuffixes = 2
 	default:
@@ -2057,18 +2057,18 @@ func applyAllocatorStmt(v *UnknownStmt, d *moduleData) {
 	d.allocatorName = name
 }
 
-func isProgramModuleType(name string) bool {
+func isProgramModuleType(name TOK) bool {
 	switch name {
-	case "PROGRAM", "PY2_PROGRAM", "PY3_PROGRAM", "PY3_PROGRAM_BIN", "UNITTEST_FOR":
+	case tokProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokUnittestFor:
 		return true
 	}
 
 	return false
 }
 
-func isYqlUdfStaticModule(name string) bool {
+func isYqlUdfStaticModule(name TOK) bool {
 	switch name {
-	case "YQL_UDF_YDB", "YQL_UDF_CONTRIB":
+	case tokYqlUdfYdb, tokYqlUdfContrib:
 		return true
 	}
 
@@ -2082,43 +2082,43 @@ func yqlUdfImplicitPeers() []string {
 	}
 }
 
-func isPyLibraryType(name string) bool {
+func isPyLibraryType(name TOK) bool {
 	switch name {
-	case "PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",
-		"PY2_PROGRAM", "PY3_PROGRAM":
+	case tokPy23NativeLibrary, tokPy3Library, tokPy23Library, tokPy2Library,
+		tokPy2Program, tokPy3Program:
 		return true
 	}
 
 	return false
 }
 
-func pyLibraryAutoPythonPeer(name string) bool {
+func pyLibraryAutoPythonPeer(name TOK) bool {
 	switch name {
-	case "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY", "PY3_PROGRAM_BIN",
-		"PY2_PROGRAM", "PY3_PROGRAM":
+	case tokPy3Library, tokPy23Library, tokPy2Library, tokPy3ProgramBin,
+		tokPy2Program, tokPy3Program:
 		return true
 	}
 
 	return false
 }
 
-func isPythonModuleType(name string) bool {
-	return isPyLibraryType(name) || name == "PY3_PROGRAM_BIN"
+func isPythonModuleType(name TOK) bool {
+	return isPyLibraryType(name) || name == tokPy3ProgramBin
 }
 
-func isSpecializedLibraryType(name string) bool {
+func isSpecializedLibraryType(name TOK) bool {
 	switch name {
-	case "PROTO_LIBRARY",
-		"DLL", "SO_PROGRAM", "DYNAMIC_LIBRARY":
+	case tokProtoLibrary,
+		tokDll, tokSoProgram, tokDynamicLibrary:
 		return true
 	}
 
 	return false
 }
 
-func isResourceContainerType(name string) bool {
+func isResourceContainerType(name TOK) bool {
 	switch name {
-	case "PACKAGE", "UNION", "RESOURCES_LIBRARY":
+	case tokPackage, tokUnion, tokResourcesLibrary:
 		return true
 	}
 
@@ -2506,7 +2506,7 @@ type moduleTypeCacheKey struct {
 }
 
 type moduleTypeInfo struct {
-	Name        string
+	Name        TOK
 	ExcludeTags map[string]bool
 }
 
@@ -2554,7 +2554,7 @@ func moduleInfoForInstance(ctx *genCtx, instance ModuleInstance) moduleTypeInfo 
 	return info
 }
 
-func peerLanguageFor(ctx *genCtx, parent ModuleInstance, parentModuleName, peerPath string) Language {
+func peerLanguageFor(ctx *genCtx, parent ModuleInstance, parentModuleName TOK, peerPath string) Language {
 	if !peerYaMakeExists(ctx.fs, peerPath) {
 		return LangCPP
 	}
@@ -2568,7 +2568,7 @@ func peerLanguageFor(ctx *genCtx, parent ModuleInstance, parentModuleName, peerP
 
 	peerInfo := moduleInfoForInstance(ctx, peerSeed)
 
-	if peerInfo.Name != "PROTO_LIBRARY" {
+	if peerInfo.Name != tokProtoLibrary {
 		return LangCPP
 	}
 
@@ -2576,7 +2576,7 @@ func peerLanguageFor(ctx *genCtx, parent ModuleInstance, parentModuleName, peerP
 		return LangPy
 	}
 
-	if parentModuleName == "PROTO_LIBRARY" && parent.Language == LangPy {
+	if parentModuleName == tokProtoLibrary && parent.Language == LangPy {
 		return LangPy
 	}
 
