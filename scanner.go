@@ -783,15 +783,16 @@ func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 		}
 
 		idx.rank[p] = r
-		r++
 
 		if p.Root() == VFSRootBuild {
 			idx.buildEntries = append(idx.buildEntries, cfgBuildAddincl{
 				prefix:   p,
 				prefixID: internString(p.Rel()),
-				rank:     idx.rank[p],
+				rank:     r,
 			})
 		}
+
+		r++
 	}
 
 	for _, p := range cfg.OwnAddIncl {
