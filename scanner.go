@@ -660,7 +660,7 @@ func (sc *scanCtx) resolve(includerAbs, incDir VFS, d includeDirective) (out []V
 			var sameDirRel string
 
 			if incDir != "" {
-				sameDirRel = normalisePath(incDir + "/" + d.target.String())
+				sameDirRel = incDir + "/" + d.target.String()
 			} else {
 				sameDirRel = d.target.String()
 			}
@@ -1014,8 +1014,6 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 	}
 
 	addBuildPath := func(rel string) bool {
-		rel = normalisePath(rel)
-
 		if s.codegen == nil {
 			return false
 		}
@@ -1045,7 +1043,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 	}
 
 	if includerAbs.IsBuild() && strings.Contains(d.target.String(), "/") {
-		rel := normalisePath(d.target.String())
+		rel := d.target.String()
 
 		if addBuildPath(rel) {
 			searchPathFound = true
