@@ -96,7 +96,7 @@ type moduleData struct {
 	flatcFlags           []ARG
 	ldFlags              []ARG
 	rpathFlagsGlobal     []ARG
-	objAddLibsGlobal     []string
+	objAddLibsGlobal     []ARG
 	srcDir               *string
 	flags                FlagSet
 	hadAllocator         bool
@@ -1539,9 +1539,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				lib = "-l" + lib
 			}
 
-			if !flagsContain(d.objAddLibsGlobal, lib) {
-				d.objAddLibsGlobal = append(d.objAddLibsGlobal, lib)
-			}
+			d.objAddLibsGlobal = append(d.objAddLibsGlobal, internArg(lib))
 		}
 	case "USE_PYTHON3":
 

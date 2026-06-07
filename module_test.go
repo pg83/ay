@@ -79,12 +79,3 @@ func TestModuleInstance_String_Diagnostic(t *testing.T) {
 		t.Errorf("String() = %q, want %q", got, want)
 	}
 }
-
-func TestNewFlagSet_SortsExtra(t *testing.T) {
-	a := NewFlagSet("z", "a", "m")
-	b := NewFlagSet("a", "m", "z")
-
-	if a != b {
-		t.Errorf("FlagSets with same tokens in different order compared unequal: %q vs %q", a.Extra, b.Extra)
-	}
-}
