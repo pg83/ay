@@ -168,7 +168,11 @@ type moduleData struct {
 	ragel6Flags []ARG
 	conflictMod *ModuleStmt
 
-	inducedDeps []string
+	// inducedDeps are the module's INDUCED_DEPS, bucketed by the macro's consumer
+	// type: INDUCED_DEPS(cpp …) -> parsedIncludesCpp (translation units only),
+	// INDUCED_DEPS(h+cpp …) / (h …) -> parsedIncludesHCPP. resolveInducedDeps picks
+	// the buckets matching each generated output's kind.
+	inducedDeps parsedIncludeSet
 
 	setVars map[string]string
 }
@@ -1819,9 +1823,15 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 	case tokInducedDeps:
 
 		if len(v.Args) >= 2 {
+			bucket := parsedIncludesHCPP
+
+			if v.Args[0] == "cpp" {
+				bucket = parsedIncludesCpp
+			}
+
 			for _, p := range v.Args[1:] {
 				p = strings.TrimPrefix(p, "${ARCADIA_ROOT}/")
-				d.inducedDeps = append(d.inducedDeps, p)
+				d.inducedDeps = appendParsedDirectives(d.inducedDeps, bucket, includeDirective{kind: includeQuoted, target: internStr(p)})
 			}
 		}
 	default:

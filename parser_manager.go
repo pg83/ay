@@ -13,6 +13,10 @@ const (
 	parsedIncludesLocal parsedIncludeBucket = iota
 	parsedIncludesHCPP
 	parsedIncludesRagelNative
+	// parsedIncludesCpp holds INDUCED_DEPS(cpp …) directives — induced deps that
+	// apply only to a tool's translation-unit (.cc/.cpp) outputs, not its headers.
+	// parsedIncludesHCPP doubles as the INDUCED_DEPS(h+cpp …) group (both .h and .cc).
+	parsedIncludesCpp
 	parsedIncludeBucketCount
 )
 
