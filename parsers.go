@@ -17,60 +17,10 @@ var (
 	includeDirectiveParsers = newIncludeDirectiveParserRegistry()
 	blockCommentOpen        = []byte("/*")
 	blockCommentClose       = []byte("*/")
+	backtraceHeaderInclude  = []byte("BACKTRACE_HEADER")
+	opensslUnistdInclude    = []byte("OPENSSL_UNISTD")
+	opensslUnistdTarget     = internString("unistd.h")
 )
-
-var macroIndirectIncludes = map[string][]macroIndirectInclude{
-	"contrib/libs/openssl/crypto/rand/rand_egd.c": {{target: "unistd.h", kind: includeSystem}},
-	"contrib/libs/openssl/crypto/uid.c":           {{target: "unistd.h", kind: includeSystem}},
-	"contrib/libs/pugixml/pugixml.hpp":            {{target: "pugixml.cpp", kind: includeQuoted}},
-}
-
-// macroIncludeDrops suppresses specific parsed include targets per-file, for
-// directives the C-style parser unavoidably emits but which never resolve and
-// upstream does NOT add as inputs either. These are pure -k noise:
-//   - BACKTRACE_HEADER in llvm Signals.inc is a macro expansion
-//     (build/sysincl/macro.yml maps it to $U/execinfo.h, but the $U placeholder
-//     is not substituted in our resolver; the bareword include cannot resolve).
-//   - <types.h> in Poco SocketDefs.h sits inside the VxWorks/VMS branch — a
-//     platform we do not target and that has no header to find.
-//
-// In both cases the byte-exact closure already matches ref without these
-// directives; dropping them keeps the warning gate clean.
-var macroIncludeDrops = map[string][]string{
-	"contrib/libs/llvm16/lib/Support/Unix/Signals.inc":    {"BACKTRACE_HEADER"},
-	"contrib/libs/poco/Net/include/Poco/Net/SocketDefs.h": {"types.h"},
-}
-
-type macroIndirectInclude struct {
-	target string
-	kind   includeKind
-}
-
-func filterDroppedDirectives(out []includeDirective, drops []string) []includeDirective {
-	if len(out) == 0 || len(drops) == 0 {
-		return out
-	}
-
-	filtered := out[:0]
-
-	for _, d := range out {
-		t := d.target.String()
-		drop := false
-
-		for _, name := range drops {
-			if t == name {
-				drop = true
-				break
-			}
-		}
-
-		if !drop {
-			filtered = append(filtered, d)
-		}
-	}
-
-	return filtered
-}
 
 type includeDirectiveParser interface {
 	Parse(rel string, data []byte) parsedIncludeSet
@@ -184,22 +134,6 @@ func directiveParserExt(rel string) string {
 
 func (cIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 	out := parseCIncludes(data)
-
-	// Every macroIncludeDrops / macroIndirectIncludes key lives under contrib/, so
-	// gate both probes on a 2-byte prefix: the vast majority of files (ydb/,
-	// library/, util/, …) skip the two map lookups. A non-key "co…" path just does
-	// a harmless not-found probe, so this stays byte-exact.
-	if strings.HasPrefix(rel, "co") {
-		if drops, ok := macroIncludeDrops[rel]; ok {
-			out = filterDroppedDirectives(out, drops)
-		}
-
-		if extras, ok := macroIndirectIncludes[rel]; ok {
-			for _, m := range extras {
-				out = append(out, includeDirective{kind: m.kind, target: internString(m.target)})
-			}
-		}
-	}
 
 	out = dedupDirectives(out)
 
@@ -557,6 +491,22 @@ func parseDirectiveInline(data []byte, hashPos int) (includeDirective, bool, int
 		}
 
 		if q > start && data[start] != '$' && !hasYIgnoreComment(data, q) && !bytes.ContainsAny(data[start:q], "[]") {
+			// `#include BACKTRACE_HEADER` (llvm Signals.inc) is a macro-form
+			// (computed) include, not a path — it never resolves and upstream does
+			// not list it as an input. Drop it here so the scanner doesn't fail-fast
+			// on the unresolved bareword. Cheap first-byte gate before the full
+			// compare keeps the hot path (every bareword include) to one byte check.
+			if data[start] == 'B' && bytes.Equal(data[start:q], backtraceHeaderInclude) {
+				return includeDirective{}, false, nextLineStart(data, q)
+			}
+
+			// `#include OPENSSL_UNISTD` (openssl) is a macro that expands to
+			// <unistd.h>; resolve it to that here so the unistd.h input is picked
+			// up without a per-file fixup. Same cheap first-byte gate.
+			if data[start] == 'O' && bytes.Equal(data[start:q], opensslUnistdInclude) {
+				return includeDirective{kind: includeSystem, target: opensslUnistdTarget}, true, nextLineStart(data, q)
+			}
+
 			return includeDirective{kind: includeQuoted, target: internBytes(data[start:q])}, true, nextLineStart(data, q)
 		}
 

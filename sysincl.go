@@ -572,6 +572,18 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 						alt.setPositive(name, lineno, residual)
 					}
 				}
+			} else if lit, ex, res, okP := extractPrefixedNegativeLookahead(altStr); okP {
+				// `^<literal>(?!<alts>)`: require the literal prefix, reject any
+				// literal+alt. The full excluded prefix is literal+alt.
+				alt.literalPrefix = lit
+
+				for _, e := range ex {
+					alt.excludePrefixes = append(alt.excludePrefixes, lit+e)
+				}
+
+				if res != "" && res != ".*" {
+					ThrowFmt("sysincl: %s:%d: unsupported residual %q after prefixed negative lookahead in %q", name, lineno, res, altStr)
+				}
 			} else {
 				if strings.Contains(altStr, "(?!") {
 					ThrowFmt("sysincl: %s:%d: unsupported negative lookahead position in %q", name, lineno, altStr)
@@ -634,6 +646,40 @@ func splitTopLevelOr(pat string) []string {
 	out = append(out, pat[last:])
 
 	return out
+}
+
+// extractPrefixedNegativeLookahead handles the well-known form
+// `^<literal>(?!<alt1|alt2|…>)<residual>`, where a regex-meta-free literal sits
+// between the anchor and the lookahead (e.g. `^contrib(?!/restricted/libnl)`).
+// RE2 has no lookahead, so it is matched in Go as: starts-with <literal> AND not
+// starts-with <literal><alt> for any alt. Returns the literal, the excluded
+// suffixes (relative to the literal), the residual after the group, and ok.
+func extractPrefixedNegativeLookahead(pat string) (literal string, excludes []string, residual string, ok bool) {
+	if !strings.HasPrefix(pat, "^") {
+		return "", nil, "", false
+	}
+
+	body := pat[1:]
+	i := strings.Index(body, "(?!")
+
+	if i <= 0 { // i<0: no lookahead; i==0: the bare ^(?! form (handled by extractNegativeLookahead)
+		return "", nil, "", false
+	}
+
+	literal = body[:i]
+
+	if containsRegexMeta(literal) {
+		return "", nil, "", false
+	}
+
+	// Reuse the group scan + alt split by re-anchoring the lookahead tail.
+	ex, res, isExc := extractNegativeLookahead("^" + body[i:])
+
+	if !isExc {
+		return "", nil, "", false
+	}
+
+	return literal, ex, res, true
 }
 
 func extractNegativeLookahead(pat string) ([]string, string, bool) {
