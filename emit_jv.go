@@ -37,7 +37,7 @@ func emitJVDownstreamCPCC(
 				emits = append(emits, includeDirective{kind: includeQuoted, target: internStr(h)})
 			}
 
-			registerGeneratedParsedOutput(ctx, instance, "CP", g4CppPath, emits)
+			registerGeneratedParsedOutput(ctx, instance, "CP", g4CppPath, emits, nil)
 		}
 
 		ccIn := in

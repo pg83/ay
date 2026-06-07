@@ -202,13 +202,14 @@ func (r *CodegenRegistry) SetSourceInputs(path VFS, src []VFS) {
 	info.SourceInputs = src
 }
 
-func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, parsed []includeDirective) {
+func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, parsed []includeDirective, generatorRefs []NodeRef) {
 	reg := codegenRegForInstance(ctx, instance)
 
 	if reg != nil {
 		reg.Register(&GeneratedFileInfo{
-			ProducerKvP: kind,
-			OutputPath:  output,
+			ProducerKvP:   kind,
+			OutputPath:    output,
+			GeneratorRefs: generatorRefs,
 		})
 	}
 

@@ -2800,11 +2800,13 @@ func (ctx *genCtx) toolResult(modulePath ARG) *moduleEmitResult {
 	}
 
 	res := genModule(ctx, NewToolInstance(ctx.host, modulePath.String()))
-	ctx.tools.Put(modulePath, res)
 
-	// Map the tool's LD node back to its result only once it really built (a
-	// tolerated PEERDIR cycle yields an empty stub with LDRef 0).
+	// Cache (and map the tool's LD node back to its result) only once it really
+	// built: a tolerated PEERDIR cycle yields an empty stub with LDRef 0 that
+	// genModule does NOT memoize, so caching it here would poison later lookups
+	// (the tool would keep its empty InducedDeps forever instead of rebuilding).
 	if res.LDRef != NodeRef(0) {
+		ctx.tools.Put(modulePath, res)
 		ctx.moduleByRef.Put(res.LDRef, res)
 	}
 

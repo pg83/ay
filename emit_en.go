@@ -78,7 +78,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 				{kind: includeQuoted, target: strUtilStringCastH},
 			}
 			sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.String() < cppParsed[j].target.String() })
-			registerGeneratedParsedOutput(ctx, instance, "EN", serializedCPPPath, cppParsed)
+			registerGeneratedParsedOutput(ctx, instance, "EN", serializedCPPPath, cppParsed, nil)
 
 			if withHeader {
 				hParsed := []includeDirective{
@@ -87,7 +87,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 					{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
 				}
 				sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.String() < hParsed[j].target.String() })
-				registerGeneratedParsedOutput(ctx, instance, "EN", serializedHPath, hParsed)
+				registerGeneratedParsedOutput(ctx, instance, "EN", serializedHPath, hParsed, nil)
 			}
 		}
 

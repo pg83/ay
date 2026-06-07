@@ -229,7 +229,7 @@ func rawAuxInputClosure(ctx *genCtx, instance ModuleInstance, aux VFS, seed []VF
 		emits = append(emits, includeDirective{kind: includeQuoted, target: internStr(v.Rel())})
 	}
 
-	registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits)
+	registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits, nil)
 
 	closure := walkClosure(ctx, instance, aux, in)
 

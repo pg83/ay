@@ -604,7 +604,7 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 			}
 		}
 
-		registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits)
+		registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits, nil)
 	}
 
 	scanIn := ModuleCCInputs{

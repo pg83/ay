@@ -91,15 +91,15 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			registerGeneratedParsedOutput(ctx, instance, "PY", outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS, splitSrcs, hasCCShard))
+			registerGeneratedParsedOutput(ctx, instance, "PY", outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS, splitSrcs, hasCCShard), nil)
 		}
 
 		for _, f := range stmt.OUTNoAutoFiles {
-			registerGeneratedParsedOutput(ctx, instance, "PY", outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS, splitSrcs, hasCCShard))
+			registerGeneratedParsedOutput(ctx, instance, "PY", outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS, splitSrcs, hasCCShard), nil)
 		}
 
 		if stmt.StdoutFile != nil {
-			registerGeneratedParsedOutput(ctx, instance, "PY", *stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, *stmt.StdoutFile, scriptVFS, splitSrcs, hasCCShard))
+			registerGeneratedParsedOutput(ctx, instance, "PY", *stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, *stmt.StdoutFile, scriptVFS, splitSrcs, hasCCShard), nil)
 		}
 	}
 
@@ -289,6 +289,24 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 				if info := reg.LookupRel(target); info != nil {
 					for _, si := range info.SourceInputs {
 						addSource(si)
+					}
+				}
+			}
+		}
+
+		// The IN file's producing tools' INDUCED_DEPS (e.g. protoc's pbCcDeep set
+		// for a generated .pb.h) are no longer woven into its parsedIncludes; pull
+		// the source-rooted ones in directly here, mirroring the scanner's
+		// resolveInducedDeps, so the shard CC sources still carry them.
+		if reg != nil {
+			if info := reg.Lookup(vfs); info != nil {
+				for _, gref := range info.GeneratorRefs {
+					if tool, ok := ctx.moduleByRef.Get(gref); ok {
+						for _, dep := range tool.InducedDeps {
+							if ctx.fs.IsFile(srcRootVFS, dep) {
+								addSource(Source(dep))
+							}
+						}
 					}
 				}
 			}
