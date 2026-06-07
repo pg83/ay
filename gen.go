@@ -437,8 +437,10 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	// vfsBound-sized arrays grow once, not once per scanner.
 	targetScanner := newIncludeScannerWith(parsers, LoadSysInclSetForFS(fs, string(targetP.ISA), onWarn), onWarn, &ctx.tarjan)
 	targetScanner.codegen = targetReg
+	targetScanner.moduleByRef = &ctx.moduleByRef
 	hostScanner := newIncludeScannerWith(parsers, LoadSysInclSetForFS(fs, string(hostP.ISA), onWarn), onWarn, &ctx.tarjan)
 	hostScanner.codegen = hostReg
+	hostScanner.moduleByRef = &ctx.moduleByRef
 	ctx.scannerTarget = targetScanner
 	ctx.scannerHost = hostScanner
 

@@ -16,7 +16,6 @@ var (
 	pbCcDeepRuntimeDirectives   = quotedDirectives(pbCcDeepRuntimeHeaders)
 	grpcServiceHeaderDirectives = quotedDirectives(grpcServiceHeaderIncludes)
 	grpcSourceExtraDirectives   = quotedDirectives(grpcSourceExtraIncludes)
-	eventRuntimeDirectives      = quotedDirectives(eventRuntimeHeaders)
 )
 
 func quotedDirectives(headers []VFS) []includeDirective {
@@ -596,17 +595,15 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			if reg := codegenRegForInstance(ctx, instance); reg != nil {
 				directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
 				evExtras := evWitnessExtras(evRelPath, evPbCC)
-				evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders)+len(evExtras))
+				evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
 				evHParsed = append(evHParsed, directImports...)
 				evHParsed = append(evHParsed, protobufRuntimeDirectives...)
-				evHParsed = append(evHParsed, eventRuntimeDirectives...)
 				evHParsed = append(evHParsed, evExtras...)
 				registerBoundGeneratedParsedOutput(ctx, instance, "EV", evH, evHParsed, evRef, []NodeRef{event2cppLDRef})
 
-				evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
+				evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders))
 				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internStr(evH.Rel())})
 				evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
-				evCCParsed = append(evCCParsed, eventRuntimeDirectives...)
 
 				registerBoundGeneratedParsedOutput(ctx, instance, "EV", evPbCC, evCCParsed, evRef, []NodeRef{event2cppLDRef})
 			}

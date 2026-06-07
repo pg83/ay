@@ -131,6 +131,11 @@ type IncludeScanner struct {
 	statsCallCount         uint64
 
 	codegen *CodegenRegistry
+
+	// moduleByRef points at genCtx.moduleByRef: a generated file's producing tools
+	// (GeneratedFileInfo.GeneratorRefs) are looked up here to mix their declared
+	// INDUCED_DEPS into the file's resolved children. nil in standalone scanners.
+	moduleByRef *DenseMap[NodeRef, *moduleEmitResult]
 }
 
 type scanCtx struct {
@@ -383,6 +388,43 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 
 		for _, rabs := range resolved {
 			fn(rabs)
+		}
+	}
+
+	sc.resolveInducedDeps(vfsPath, incDir, fn)
+}
+
+// resolveInducedDeps mixes the INDUCED_DEPS of a generated file's producing tools
+// into its resolved children, so a tool's runtime headers (and their closure) come
+// from the tool's declared INDUCED_DEPS rather than a hardcoded list woven into the
+// registered parsed includes. Only build outputs with a codegen registry entry and
+// recorded GeneratorRefs contribute.
+func (sc *scanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)) {
+	s := sc.scanner
+
+	if !vfsPath.IsBuild() || s.codegen == nil || s.moduleByRef == nil {
+		return
+	}
+
+	info := s.codegen.Lookup(vfsPath)
+
+	if info == nil {
+		return
+	}
+
+	for _, gref := range info.GeneratorRefs {
+		tool, ok := s.moduleByRef.Get(gref)
+
+		if !ok {
+			continue
+		}
+
+		for _, dep := range tool.InducedDeps {
+			entry := includeDirective{kind: includeQuoted, target: internStr(dep)}
+
+			for _, rabs := range sc.resolve(vfsPath, incDir, entry) {
+				fn(rabs)
+			}
 		}
 	}
 }
