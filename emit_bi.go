@@ -1,11 +1,8 @@
 package main
 
 var (
-	yieldLinePyVFS     = Intern("$(S)/build/scripts/yield_line.py")
 	yieldLinePyPath    = yieldLinePyVFS.String()
-	xargsPyVFS         = Intern("$(S)/build/scripts/xargs.py")
 	xargsPyPath        = xargsPyVFS.String()
-	buildInfoGenPyVFS  = Intern("$(S)/build/scripts/build_info_gen.py")
 	buildInfoGenPyPath = buildInfoGenPyVFS.String()
 )
 

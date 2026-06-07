@@ -1,12 +1,5 @@
 package main
 
-var (
-	// Path constants hoisted by `ay refac consts`.
-	anyP = internAny("-p")
-	anyQ = internAny("-q")
-	anyX = internAny("-x")
-)
-
 const archiverToolPath = "tools/archiver"
 
 func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {

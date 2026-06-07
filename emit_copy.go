@@ -177,8 +177,6 @@ func resolveModuleSourceVFS(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	return resolveSourceVFS(ctx, instance, srcRel, srcDir)
 }
 
-var copyFsToolsVFS = Intern("$(S)/build/scripts/fs_tools.py")
-
 func isSourceEligibleForCopyAuto(srcRel string) bool {
 	return isHeaderSource(srcRel) ||
 		strings.HasSuffix(srcRel, ".c") ||

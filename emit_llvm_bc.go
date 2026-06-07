@@ -2,13 +2,6 @@ package main
 
 import "strings"
 
-var (
-	// Path constants hoisted by `ay refac consts`.
-	anyEmitLlvm                = internAny("-emit-llvm")
-	anyNo                      = internAny("no")
-	anyWnoUnknownWarningOption = internAny("-Wno-unknown-warning-option")
-)
-
 // emitLLVMBC emits the upstream LLVM_BC pipeline (build/plugins/llvm_bc.py):
 //
 //	per source X.cpp:

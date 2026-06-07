@@ -1,19 +1,6 @@
 package main
 
-var (
-	evEventlogIncludeVFS  = Intern("$(S)/library/cpp/eventlog")
-	evEventlogIncludePath = evEventlogIncludeVFS.String()
-	// Path constants hoisted by `ay refac consts`.
-	anyCppOutB                  = internAny("--cpp_out=:$(B)/")
-	anyCppStyleguideOutB        = internAny("--cpp_styleguide_out=:$(B)/")
-	anyEvent2cppOutB            = internAny("--event2cpp_out=$(B)")
-	anyI2                       = internAny("-I=./")
-	anyIB2                      = internAny("-I=$(B)")
-	anyIS2                      = internAny("-I=$(S)/")
-	anyIS3                      = internAny("-I=$(S)")
-	anyISContribLibsProtobufSrc = internAny("-I=$(S)/contrib/libs/protobuf/src")
-	anyOutputs                  = internAny("--outputs")
-)
+var evEventlogIncludePath = evEventlogIncludeVFS.String()
 
 var eventRuntimeHeaders = []VFS{
 	Intern("$(S)/library/cpp/eventlog/event_field_output.h"),

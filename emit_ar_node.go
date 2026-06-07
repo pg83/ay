@@ -1,15 +1,5 @@
 package main
 
-var (
-	// Path constants hoisted by `ay refac consts`.
-	buildScriptsLinkLibPy = Source("build/scripts/link_lib.py")
-	// Path constants hoisted by `ay refac consts`.
-	any2      = internAny("--")
-	anyB      = internAny("$(B)")
-	anyNone   = internAny("None")
-	anyPlugin = internAny("--plugin")
-)
-
 func emitARNode(
 	instance ModuleInstance,
 	archivePath VFS,

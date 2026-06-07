@@ -19,7 +19,6 @@ var (
 	blockCommentClose       = []byte("*/")
 	backtraceHeaderInclude  = []byte("BACKTRACE_HEADER")
 	opensslUnistdInclude    = []byte("OPENSSL_UNISTD")
-	opensslUnistdTarget     = internStr("unistd.h")
 )
 
 type includeDirectiveParser interface {

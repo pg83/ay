@@ -6,11 +6,7 @@ import (
 )
 
 var (
-	argNoShadow         = internArg("-Wno-shadow")
-	baseUnitCxxNostdinc = internArg("-nostdinc++")
-	argDashC            = internAny("-c")
-	argDashO            = internAny("-o")
-	argDashBBin         = internAny("-B" + binPath)
+	argDashBBin = internAny("-B" + binPath)
 )
 
 type ModuleCCInputs struct {

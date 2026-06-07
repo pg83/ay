@@ -4,22 +4,6 @@ import (
 	"sort"
 )
 
-var (
-	// Path constants hoisted by `ay refac consts`.
-	strToolsEnumParserEnumParserStdlibDepsH                    = internStr("tools/enum_parser/enum_parser/stdlib_deps.h")
-	strToolsEnumParserEnumSerializationRuntimeDispatchMethodsH = internStr("tools/enum_parser/enum_serialization_runtime/dispatch_methods.h")
-	strToolsEnumParserEnumSerializationRuntimeEnumRuntimeH     = internStr("tools/enum_parser/enum_serialization_runtime/enum_runtime.h")
-	strToolsEnumParserEnumSerializationRuntimeOrderedPairsH    = internStr("tools/enum_parser/enum_serialization_runtime/ordered_pairs.h")
-	strUtilGenericMapH                                         = internStr("util/generic/map.h")
-	strUtilGenericSerializedEnumH                              = internStr("util/generic/serialized_enum.h")
-	strUtilGenericSingletonH                                   = internStr("util/generic/singleton.h")
-	strUtilGenericStringH                                      = internStr("util/generic/string.h")
-	strUtilGenericTypetraitsH                                  = internStr("util/generic/typetraits.h")
-	strUtilGenericVectorH                                      = internStr("util/generic/vector.h")
-	strUtilStreamOutputH                                       = internStr("util/stream/output.h")
-	strUtilStringCastH                                         = internStr("util/string/cast.h")
-)
-
 type enumSrcsResult struct {
 	CCRefs    []NodeRef
 	CCOutputs []VFS

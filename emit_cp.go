@@ -109,8 +109,3 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
 }
-
-// Path constants hoisted by `ay refac consts`.
-var (
-	anyCopy = internAny("copy")
-)

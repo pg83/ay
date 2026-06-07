@@ -1,24 +1,5 @@
 package main
 
-var (
-	pythonIncludeDir = Intern("$(S)/contrib/libs/python/Include")
-	// Path constants hoisted by `ay refac consts`.
-	contribLibsCxxsuppLibcxxInclude     = Source("contrib/libs/cxxsupp/libcxx/include")
-	contribToolsCythonCythonIncludes    = Source("contrib/tools/cython/Cython/Includes")
-	contribToolsCythonCythonPy          = Source("contrib/tools/cython/cython.py")
-	contribToolsCythonPy2CythonIncludes = Source("contrib/tools/cython_py2/Cython/Includes")
-	// Path constants hoisted by `ay refac consts`.
-	anyCplus                              = internAny("--cplus")
-	anyE                                  = internAny("-E")
-	anyIB                                 = internAny("-I$(B)")
-	anyIS                                 = internAny("-I$(S)")
-	anyISContribToolsCythonCythonIncludes = internAny("-I$(S)/contrib/tools/cython/Cython/Includes")
-	anyLegacyImplicitNoexceptTrue         = internAny("legacy_implicit_noexcept=True")
-	anySContribToolsCythonCythonPy        = internAny("$(S)/contrib/tools/cython/cython.py")
-	anyUnameSysnameLinux                  = internAny("UNAME_SYSNAME=Linux")
-	anyX2                                 = internAny("-X")
-)
-
 var cythonNumpyAddIncl = []VFS{
 	Intern("$(S)/contrib/python/numpy/include/numpy/core/include"),
 	Intern("$(S)/contrib/python/numpy/include/numpy/core/include/numpy"),
@@ -184,7 +165,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		ccIn.PerSourceCFlags = append([]ARG(nil), in.PerSourceCFlags...)
 
 		if cythonImplicitFallthrough(stmt, py23Variant) {
-			ccIn.PerSourceCFlags = append(ccIn.PerSourceCFlags, internArg("-Wno-implicit-fallthrough"))
+			ccIn.PerSourceCFlags = append(ccIn.PerSourceCFlags, argWnoImplicitFallthrough)
 		}
 
 		scanIn := ccIn

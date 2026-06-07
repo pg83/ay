@@ -1,35 +1,7 @@
 package main
 
 var (
-	ldLinkDynLibVFS  = Intern("$(S)/build/scripts/link_dyn_lib.py")
 	ldLinkDynLibPath = ldLinkDynLibVFS.String()
-	// Path constants hoisted by `ay refac consts`.
-	anyArchLinux          = internAny("--arch=LINUX")
-	anyBuildRoot          = internAny("--build-root")
-	anyEndPlugins         = internAny("--end-plugins")
-	anyFixElf             = internAny("--fix-elf")
-	anyFuseLdLld          = internAny("-fuse-ld=lld")
-	anyLm                 = internAny("-lm")
-	anyNostdlib           = internAny("-nostdlib")
-	anyObjcopyExe         = internAny("--objcopy-exe")
-	anyRdynamic           = internAny("-rdynamic")
-	anyShared             = internAny("-shared")
-	anySourceRoot         = internAny("--source-root")
-	anyStartPlugins       = internAny("--start-plugins")
-	anyTarget             = internAny("--target")
-	anyWholeArchivePeers  = internAny("--whole-archive-peers")
-	anyWlBuildIdSha1      = internAny("-Wl,--build-id=sha1")
-	anyWlEndGroup         = internAny("-Wl,--end-group")
-	anyWlGcSections       = internAny("-Wl,--gc-sections")
-	anyWlGdbIndex         = internAny("-Wl,--gdb-index")
-	anyWlNoAsNeeded       = internAny("-Wl,--no-as-needed")
-	anyWlNoRosegment      = internAny("-Wl,--no-rosegment")
-	anyWlNoWholeArchive   = internAny("-Wl,--no-whole-archive")
-	anyWlStartGroup       = internAny("-Wl,--start-group")
-	anyWlWholeArchive     = internAny("-Wl,--whole-archive")
-	anyWlZNotext          = internAny("-Wl,-z,notext")
-	anyYaEndCommandFile   = internAny("--ya-end-command-file")
-	anyYaStartCommandFile = internAny("--ya-start-command-file")
 )
 
 func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *moduleEmitResult {

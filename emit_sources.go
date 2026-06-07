@@ -129,7 +129,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		ccIn := srcIn
 		ccIn.IncludeInputs = ccIncludeInputs
-		ccIn.PerSourceCFlags = append(append([]ARG(nil), srcIn.PerSourceCFlags...), internArg("-Wno-implicit-fallthrough"))
+		ccIn.PerSourceCFlags = append(append([]ARG(nil), srcIn.PerSourceCFlags...), argWnoImplicitFallthrough)
 		ccIn.ExtraDepRefs = append([]NodeRef{r6Ref}, resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r6Ref)...)
 		ccRef, ccOut, _ := EmitCC(srcInstance, ccSrcRel, r6Out, ccIn, ctx.host, ctx.emit)
 		return &sourceEmit{Ref: ccRef, OutPath: ccOut}
@@ -217,7 +217,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ccIn := srcIn
 		ccClosure := walkClosure(ctx, srcInstance, r5CppOut, srcIn)
 		ccIn.IncludeInputs = append([]VFS{r5TmpOut}, ccClosure...)
-		ccIn.PerSourceCFlags = append(append([]ARG(nil), srcIn.PerSourceCFlags...), internArg("-Wno-implicit-fallthrough"))
+		ccIn.PerSourceCFlags = append(append([]ARG(nil), srcIn.PerSourceCFlags...), argWnoImplicitFallthrough)
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r5Ref)
 		ccIn.ExtraDepRefs = append([]NodeRef{r5Ref}, ccIn.ExtraDepRefs...)
 		ccRef, ccOut, _ := EmitCC(srcInstance, ccSrcRel, r5CppOut, ccIn, ctx.host, ctx.emit)

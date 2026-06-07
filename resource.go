@@ -10,10 +10,7 @@ import (
 )
 
 var (
-	objcopyScriptVFS     = Intern("$(S)/build/scripts/objcopy.py")
 	objcopyScriptPath    = objcopyScriptVFS.String()
-	rescompressorBinVFS  = Intern("$(B)/tools/rescompressor/rescompressor")
-	rescompilerBinVFS    = Intern("$(B)/tools/rescompiler/rescompiler")
 	rescompressorBinPath = rescompressorBinVFS.String()
 	rescompilerBinPath   = rescompilerBinVFS.String()
 	yaConfFormulaRE      = regexp.MustCompile(`"formula"\s*:\s*"([^"]+\.json)"`)
