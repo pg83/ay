@@ -134,7 +134,7 @@ func absifyRels(rels []string) []VFS {
 	out := make([]VFS, 0, len(rels))
 
 	for _, rel := range rels {
-		out = append(out, Source(normalisePath(rel)))
+		out = append(out, Source(rel))
 	}
 
 	return out
