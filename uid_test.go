@@ -214,7 +214,7 @@ func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
 
 	n := &Node{
-		Cmds: []Cmd{{CmdArgs: []string{"sh", "-c", "echo <a> & echo b"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("sh", "-c", "echo <a> & echo b"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
 		KV: KV{P: pkCC, Name: "a<b>c"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: Requirements{}, Tags: []string{},
@@ -248,7 +248,7 @@ func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
 func TestCanonicalNodeBytes_DoesNotEscapeHTML(t *testing.T) {
 
 	n := &Node{
-		Cmds: []Cmd{{CmdArgs: []string{"sh", "-c", "echo <a> & echo b"}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: anys("sh", "-c", "echo <a> & echo b"), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
 		KV: KV{}, Outputs: ToVFSSlice([]string{}),
 		Requirements: Requirements{}, Tags: []string{},

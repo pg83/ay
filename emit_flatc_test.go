@@ -43,7 +43,7 @@ func TestEmitFL_NodeShape(t *testing.T) {
 	if got := node.Cmds[0].CmdArgs; !contains(got, "--scoped-enums") {
 		t.Fatalf("cmd args missing --scoped-enums: %v", got)
 	}
-	if got := node.Cmds[0].CmdArgs; got[len(got)-3] != "-o" || got[len(got)-2] != "$(B)/mod/File.fbs.h" || got[len(got)-1] != "$(S)/mod/File.fbs" {
+	if got := node.Cmds[0].CmdArgs; got[len(got)-3].String() != "-o" || got[len(got)-2].String() != "$(B)/mod/File.fbs.h" || got[len(got)-1].String() != "$(S)/mod/File.fbs" {
 		t.Fatalf("unexpected cmd arg tail: %v", got[len(got)-5:])
 	}
 	if len(node.DepRefs) != 1 || node.DepRefs[0] != 9 {

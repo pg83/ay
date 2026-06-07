@@ -42,14 +42,14 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 		TargetProperties: TargetProperties{ModuleDir: "other/module"},
 	})
 	consumer := emit.Emit(&Node{
-		Cmds:           []Cmd{{CmdArgs: []string{"clang"}}},
+		Cmds:           []Cmd{{CmdArgs: anys("clang")}},
 		DepRefs:        []NodeRef{fetchUsed, llvmReferenced},
 		ForeignDepRefs: []NodeRef{fetchUsed},
 		KV:             KV{P: pkCC},
 		Outputs:        []VFS{Intern("$(B)/obj/consumer.o")},
 	})
 	root := emit.Emit(&Node{
-		Cmds:    []Cmd{{CmdArgs: []string{"ld"}}},
+		Cmds:    []Cmd{{CmdArgs: anys("ld")}},
 		DepRefs: []NodeRef{consumer},
 		KV:      KV{P: pkLD},
 		Outputs: []VFS{Intern("$(B)/bin/root")},
