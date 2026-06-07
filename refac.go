@@ -295,18 +295,29 @@ func parseRefacFile(path string, existing map[hoistKey]string, used map[string]b
 	return &parsedFile{path: path, src: src, fset: fset, f: f, declared: declared}
 }
 
+// hoistKind is the result-type namespace of a hoistable literal call. Calls of
+// different kinds never share a var even when their canon matches, since their
+// results have distinct Go types.
+type hoistKind uint8
+
+const (
+	hoistVFS hoistKind = iota // Intern/Source/Build -> VFS
+	hoistStr                  // internString -> STR
+	hoistAny                  // stringAny -> ANY
+)
+
 // hoistKey identifies a hoistable literal call and is the dedup key. For
-// Intern/Source/Build, canon is the resolved VFS path ("$(S)/..."/"$(B)/...") so
-// Source("x") and Intern("$(S)/x") share one var; str is false. For internString,
-// canon is the raw literal and str is true — a separate namespace, since an
-// internString result is a STR, not a VFS, and must never share a var with one.
+// hoistVFS, canon is the resolved VFS path ("$(S)/..."/"$(B)/...") so Source("x")
+// and Intern("$(S)/x") share one var. For hoistStr/hoistAny, canon is the raw
+// literal — each in its own namespace, since a STR and an ANY must never share a
+// var with one another or with a VFS.
 type hoistKey struct {
-	str   bool
+	kind  hoistKind
 	canon string
 }
 
-// hoistCall reports whether call is `Intern|Source|Build|internString("<literal>")`
-// and returns its dedup key.
+// hoistCall reports whether call is
+// `Intern|Source|Build|internString|stringAny("<literal>")` and returns its dedup key.
 func hoistCall(call *ast.CallExpr) (hoistKey, bool) {
 	id, isID := call.Fun.(*ast.Ident)
 
@@ -332,13 +343,15 @@ func hoistCall(call *ast.CallExpr) (hoistKey, bool) {
 
 	switch id.Name {
 	case "Intern":
-		return hoistKey{canon: lit}, true
+		return hoistKey{kind: hoistVFS, canon: lit}, true
 	case "Source":
-		return hoistKey{canon: "$(S)/" + lit}, true
+		return hoistKey{kind: hoistVFS, canon: "$(S)/" + lit}, true
 	case "Build":
-		return hoistKey{canon: "$(B)/" + lit}, true
+		return hoistKey{kind: hoistVFS, canon: "$(B)/" + lit}, true
 	case "internString":
-		return hoistKey{str: true, canon: lit}, true
+		return hoistKey{kind: hoistStr, canon: lit}, true
+	case "stringAny":
+		return hoistKey{kind: hoistAny, canon: lit}, true
 	}
 
 	return hoistKey{}, false
@@ -347,8 +360,11 @@ func hoistCall(call *ast.CallExpr) (hoistKey, bool) {
 // constDef renders the var initializer for a key, preferring the Source/Build short
 // forms for VFS paths.
 func constDef(key hoistKey) string {
-	if key.str {
+	switch key.kind {
+	case hoistStr:
 		return fmt.Sprintf("internString(%q)", key.canon)
+	case hoistAny:
+		return fmt.Sprintf("stringAny(%q)", key.canon)
 	}
 
 	if rel, ok := strings.CutPrefix(key.canon, "$(S)/"); ok {
@@ -412,19 +428,25 @@ func applyRefacEdits(pf *parsedFile, edits []constEdit, added []newVar) bool {
 
 // identForVFS turns a key into a lowerCamel identifier: the $(S)/$(B) prefix is
 // dropped ($(B) becomes a leading "bld" word so source/build siblings get distinct
-// names; an internString key becomes a leading "str" word so it never collides with
-// the same-path VFS var), and every non-alphanumeric run separates words.
+// names; an internString key becomes a leading "str" word and a stringAny key a
+// leading "any" word so neither collides with the same-path VFS var or each other),
+// and every non-alphanumeric run separates words.
 func identForVFS(key hoistKey) string {
 	s := key.canon
 	var words []string
 
-	if key.str {
+	switch {
+	case key.kind == hoistStr:
 		words = append(words, "str")
-	} else if rel, ok := strings.CutPrefix(s, "$(S)/"); ok {
-		s = rel
-	} else if rel, ok := strings.CutPrefix(s, "$(B)/"); ok {
-		s = rel
-		words = append(words, "bld")
+	case key.kind == hoistAny:
+		words = append(words, "any")
+	default:
+		if rel, ok := strings.CutPrefix(s, "$(S)/"); ok {
+			s = rel
+		} else if rel, ok := strings.CutPrefix(s, "$(B)/"); ok {
+			s = rel
+			words = append(words, "bld")
+		}
 	}
 
 	var cur strings.Builder
