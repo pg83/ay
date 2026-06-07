@@ -637,7 +637,7 @@ import public "d.ev";
 	}), SysInclSet{})
 	parsed := scanner.parsedIncludes(Intern("$(S)/src.proto"))
 	local := parsed.bucket(parsedIncludesLocal)
-	hcpp := parsed.bucket(parsedIncludesHCPP)
+	hcpp := parsed.bucket(parsedIncludesHeader)
 
 	if len(local) != 4 {
 		t.Fatalf("got %d local entries, want 4; %+v", len(local), local)
@@ -671,7 +671,7 @@ include "machine.rl";
 	parsed := scanner.parsedIncludes(Intern("$(S)/src.rl6"))
 	local := parsed.bucket(parsedIncludesLocal)
 	native := parsed.bucket(parsedIncludesRagelNative)
-	hcpp := parsed.bucket(parsedIncludesHCPP)
+	hcpp := parsed.bucket(parsedIncludesHeader)
 
 	// C includes only (ragel-native goes to parsedIncludesRagelNative)
 	if len(local) != 2 {
@@ -816,7 +816,7 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 	}), SysInclSet{})
 	parsed := scanner.parsedIncludes(Intern("$(S)/src.swg"))
 	local := parsed.bucket(parsedIncludesLocal)
-	hcpp := parsed.bucket(parsedIncludesHCPP)
+	hcpp := parsed.bucket(parsedIncludesHeader)
 
 	if len(local) != 3 {
 		t.Fatalf("got %d local entries, want 3; %+v", len(local), local)
