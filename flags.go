@@ -1,174 +1,174 @@
 package main
 
-var ccIncludesPrefix = internArgs([]string{
-	"-I$(B)",
-	"-I$(S)",
-})
+var ccIncludesPrefix = []ARG{
+	argIB,
+	argIS,
+}
 
-var debugPrefixMapFlags = internArgs([]string{
-	"-fdebug-prefix-map=$(B)=/-B",
-	"-fdebug-prefix-map=$(S)=/-S",
-	"-fdebug-prefix-map=$(TOOL_ROOT)=/-T",
-})
+var debugPrefixMapFlags = []ARG{
+	argFdebugPrefixMapBB,
+	argFdebugPrefixMapSS,
+	argFdebugPrefixMapToolRootT,
+}
 
-var xclangDebugCompilationDir = internArgs([]string{
-	"-Xclang",
-	"-fdebug-compilation-dir",
-	"-Xclang",
-	"/tmp",
-})
+var xclangDebugCompilationDir = []ARG{
+	argXclang,
+	argFdebugCompilationDir,
+	argXclang,
+	argTmp,
+}
 
-var commonCFlags = internArgs([]string{
-	"-pipe",
-	"-g",
-	"-fdebug-default-version=4",
-	"-ggnu-pubnames",
-	"-fno-common",
-	"-ffunction-sections",
-	"-fdata-sections",
-	"-fsigned-char",
-	"-fsized-deallocation",
-	"-fexceptions",
-	"-fuse-init-array",
-	"-fcolor-diagnostics",
-	"-faligned-allocation",
-	"-fstack-protector",
-})
+var commonCFlags = []ARG{
+	argPipe,
+	argDashG,
+	argFdebugDefaultVersion4,
+	argGgnuPubnames,
+	argFnoCommon,
+	argFfunctionSections,
+	argFdataSections,
+	argFsignedChar,
+	argFsizedDeallocation,
+	argFexceptions,
+	argFuseInitArray,
+	argFcolorDiagnostics,
+	argFalignedAllocation,
+	argFstackProtector,
+}
 
-var x86TargetCFlags = internArgs([]string{
-	"-pipe",
-	"-m64",
-	"-g",
-	"-fdebug-default-version=4",
-	"-ggnu-pubnames",
-	"-fno-common",
-	"-ffunction-sections",
-	"-fdata-sections",
-	"-fsized-deallocation",
-	"-fexceptions",
-	"-fuse-init-array",
-	"-fcolor-diagnostics",
-	"-faligned-allocation",
-	"-fstack-protector",
-})
+var x86TargetCFlags = []ARG{
+	argPipe,
+	argM64,
+	argDashG,
+	argFdebugDefaultVersion4,
+	argGgnuPubnames,
+	argFnoCommon,
+	argFfunctionSections,
+	argFdataSections,
+	argFsizedDeallocation,
+	argFexceptions,
+	argFuseInitArray,
+	argFcolorDiagnostics,
+	argFalignedAllocation,
+	argFstackProtector,
+}
 
-var hostCFlags = internArgs([]string{
-	"-pipe",
-	"-m64",
-	"-O3",
-	"-fno-common",
-	"-ffunction-sections",
-	"-fdata-sections",
-	"-fsized-deallocation",
-	"-fexceptions",
-	"-fuse-init-array",
-	"-fcolor-diagnostics",
-	"-faligned-allocation",
-})
+var hostCFlags = []ARG{
+	argPipe,
+	argM64,
+	argO3,
+	argFnoCommon,
+	argFfunctionSections,
+	argFdataSections,
+	argFsizedDeallocation,
+	argFexceptions,
+	argFuseInitArray,
+	argFcolorDiagnostics,
+	argFalignedAllocation,
+}
 
-var warningFlags = internArgs([]string{
-	"-Werror",
-	"-Wall",
-	"-Wextra",
-	"-Wno-parentheses",
-	"-Wno-implicit-const-int-float-conversion",
-	"-Wno-unknown-warning-option",
-})
+var warningFlags = []ARG{
+	argWerror,
+	argWall,
+	argWextra,
+	argWnoParentheses,
+	argWnoImplicitConstIntFloatConversion,
+	argWnoUnknownWarningOption,
+}
 
-var commonDefines = internArgs([]string{
-	"-DARCADIA_ROOT=$(S)",
-	"-DARCADIA_BUILD_ROOT=$(B)",
-	"-D_THREAD_SAFE",
-	"-D_PTHREADS",
-	"-D_REENTRANT",
-	"-D_LARGEFILE_SOURCE",
-	"-D__STDC_CONSTANT_MACROS",
-	"-D__STDC_FORMAT_MACROS",
-	"-D_FILE_OFFSET_BITS=64",
-	"-D_GNU_SOURCE",
-	"-D__LONG_LONG_SUPPORTED",
-})
+var commonDefines = []ARG{
+	argDarcadiaRootS,
+	argDarcadiaBuildRootB,
+	argDThreadSafe,
+	argDPthreads,
+	argDReentrant,
+	argDLargefileSource,
+	argDStdcConstantMacros,
+	argDStdcFormatMacros,
+	argDFileOffsetBits64,
+	argDGnuSource,
+	argDLongLongSupported,
+}
 
-var hostDefines = internArgs([]string{
-	"-DARCADIA_ROOT=$(S)",
-	"-DARCADIA_BUILD_ROOT=$(B)",
-	"-D_THREAD_SAFE",
-	"-D_PTHREADS",
-	"-D_REENTRANT",
-	"-D_LARGEFILE_SOURCE",
-	"-D__STDC_CONSTANT_MACROS",
-	"-D__STDC_FORMAT_MACROS",
-	"-D_FILE_OFFSET_BITS=64",
-	"-D_GNU_SOURCE",
-	"-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE",
-	"-D__LONG_LONG_SUPPORTED",
-})
+var hostDefines = []ARG{
+	argDarcadiaRootS,
+	argDarcadiaBuildRootB,
+	argDThreadSafe,
+	argDPthreads,
+	argDReentrant,
+	argDLargefileSource,
+	argDStdcConstantMacros,
+	argDStdcFormatMacros,
+	argDFileOffsetBits64,
+	argDGnuSource,
+	argDYndxLibunwindEnableExceptionBacktrace,
+	argDLongLongSupported,
+}
 
-var hostSseFeatures = internArgs([]string{
-	"-msse2",
-	"-msse3",
-	"-mssse3",
-	"-msse4.1",
-	"-msse4.2",
-	"-mpopcnt",
-	"-mcx16",
-})
+var hostSseFeatures = []ARG{
+	argMsse2,
+	argMsse3,
+	argMssse3,
+	argMsse41,
+	argMsse42,
+	argMpopcnt,
+	argMcx16,
+}
 
-var noLibcWarningSuppressions = internArgs([]string{
-	"-Wno-array-parameter",
-	"-Wno-deprecate-lax-vec-conv-all",
-	"-Wno-unqualified-std-cast-call",
-	"-Wno-unused-but-set-parameter",
-	"-Wno-implicit-function-declaration",
-	"-Wno-int-conversion",
-	"-Wno-incompatible-function-pointer-types",
-	"-Wno-address-of-packed-member",
-	"-Wno-deprecated-this-capture",
-	"-Wno-missing-designated-field-initializers",
-	"-Wno-format",
-	"-Wno-vla-cxx-extension",
-	"-Wno-invalid-offsetof",
-	"-Wno-alias-template-in-declaration-name",
-	"-Wno-cast-function-type-mismatch",
-	"-Wno-explicit-specialization-storage-class",
-	"-Wno-extraneous-template-head",
-	"-Wno-missing-template-arg-list-after-template-kw",
-	"-Wno-nontrivial-memcall",
-	"-Wno-strict-primary-template-shadow",
-})
+var noLibcWarningSuppressions = []ARG{
+	argWnoArrayParameter,
+	argWnoDeprecateLaxVecConvAll,
+	argWnoUnqualifiedStdCastCall,
+	argWnoUnusedButSetParameter,
+	argWnoImplicitFunctionDeclaration,
+	argWnoIntConversion,
+	argWnoIncompatibleFunctionPointerTypes,
+	argWnoAddressOfPackedMember,
+	argWnoDeprecatedThisCapture,
+	argWnoMissingDesignatedFieldInitializers,
+	argWnoFormat,
+	argWnoVlaCxxExtension,
+	argWnoInvalidOffsetof,
+	argWnoAliasTemplateInDeclarationName,
+	argWnoCastFunctionTypeMismatch,
+	argWnoExplicitSpecializationStorageClass,
+	argWnoExtraneousTemplateHead,
+	argWnoMissingTemplateArgListAfterTemplateKw,
+	argWnoNontrivialMemcall,
+	argWnoStrictPrimaryTemplateShadow,
+}
 
-var catboostOpenSourceDefine = internArgs([]string{
-	"-DCATBOOST_OPENSOURCE=yes",
-})
+var catboostOpenSourceDefine = []ARG{
+	argDcatboostOpensourceYes,
+}
 
-var builtinMacroDateTime = internArgs([]string{
-	"-Wno-builtin-macro-redefined",
-	`-D__DATE__="Jan 10 2019"`,
-	`-D__TIME__="00:00:00"`,
-})
+var builtinMacroDateTime = []ARG{
+	argWnoBuiltinMacroRedefined,
+	argDDateJan102019,
+	argDTime000000,
+}
 
-var macroPrefixMapFlags = internArgs([]string{
-	"-fmacro-prefix-map=$(B)/=",
-	"-fmacro-prefix-map=$(S)/=",
-	"-fmacro-prefix-map=$(TOOL_ROOT)/=",
-})
+var macroPrefixMapFlags = []ARG{
+	argFmacroPrefixMapB,
+	argFmacroPrefixMapS,
+	argFmacroPrefixMapToolRoot,
+}
 
-var noWarningsBundle = internArgs([]string{
-	"-Wno-everything",
-})
+var noWarningsBundle = []ARG{
+	argWnoEverything,
+}
 
-var cxxStandardWarnings = internArgs([]string{
-	"-Wimport-preprocessor-directive-pedantic",
-	"-Woverloaded-virtual",
-	"-Wno-ambiguous-reversed-operator",
-	"-Wno-defaulted-function-deleted",
-	"-Wno-deprecated-anon-enum-enum-conversion",
-	"-Wno-deprecated-enum-enum-conversion",
-	"-Wno-deprecated-enum-float-conversion",
-	"-Wno-deprecated-volatile",
-	"-Wno-pessimizing-move",
-	"-Wno-undefined-var-template",
-})
+var cxxStandardWarnings = []ARG{
+	argWimportPreprocessorDirectivePedantic,
+	argWoverloadedVirtual,
+	argWnoAmbiguousReversedOperator,
+	argWnoDefaultedFunctionDeleted,
+	argWnoDeprecatedAnonEnumEnumConversion,
+	argWnoDeprecatedEnumEnumConversion,
+	argWnoDeprecatedEnumFloatConversion,
+	argWnoDeprecatedVolatile,
+	argWnoPessimizingMove,
+	argWnoUndefinedVarTemplate,
+}
 
 const binPath = "/usr/bin"
 
