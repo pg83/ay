@@ -8,6 +8,16 @@ import (
 var (
 	flatcWrapperVFS = Intern("$(S)/build/scripts/cpp_flatc_wrapper.py")
 	flatcRuntimeVFS = Intern("$(S)/contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h")
+	// Path constants hoisted by `ay refac consts`.
+	anyB2             = stringAny("-b")
+	anyCpp            = stringAny("--cpp")
+	anyFbs            = stringAny(".fbs")
+	anyFilenameSuffix = stringAny("--filename-suffix")
+	anyGenMutable     = stringAny("--gen-mutable")
+	anyGenObjectApi   = stringAny("--gen-object-api")
+	anyKeepPrefix     = stringAny("--keep-prefix")
+	anyNoWarnings     = stringAny("--no-warnings")
+	anySchema         = stringAny("--schema")
 )
 
 const flatcModule = "contrib/libs/flatbuffers/flatc"
@@ -154,20 +164,20 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		stringAny(instance.Platform.Tools.Python3),
 		vfsAny(flatcWrapperVFS),
 		vfsAny(flatcBinary),
-		stringAny("--no-warnings"),
-		stringAny("--cpp"),
-		stringAny("--keep-prefix"),
-		stringAny("--gen-mutable"),
-		stringAny("--schema"),
-		stringAny("-b"),
-		stringAny("--gen-object-api"),
-		stringAny("--filename-suffix"),
-		stringAny(".fbs"),
+		anyNoWarnings,
+		anyCpp,
+		anyKeepPrefix,
+		anyGenMutable,
+		anySchema,
+		anyB2,
+		anyGenObjectApi,
+		anyFilenameSuffix,
+		anyFbs,
 	}
 	cmdArgs = appendArgAny(cmdArgs, flatcFlags)
 	cmdArgs = append(cmdArgs,
-		stringAny("-I"), stringAny("$(B)"),
-		stringAny("-I"), stringAny("$(S)"),
+		anyI, anyB,
+		anyI, anyS,
 		argDashO, vfsAny(headerVFS),
 		vfsAny(srcVFS),
 	)

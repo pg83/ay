@@ -7,6 +7,16 @@ var (
 	contribToolsCythonCythonIncludes    = Source("contrib/tools/cython/Cython/Includes")
 	contribToolsCythonCythonPy          = Source("contrib/tools/cython/cython.py")
 	contribToolsCythonPy2CythonIncludes = Source("contrib/tools/cython_py2/Cython/Includes")
+	// Path constants hoisted by `ay refac consts`.
+	anyCplus                              = stringAny("--cplus")
+	anyE                                  = stringAny("-E")
+	anyIB                                 = stringAny("-I$(B)")
+	anyIS                                 = stringAny("-I$(S)")
+	anyISContribToolsCythonCythonIncludes = stringAny("-I$(S)/contrib/tools/cython/Cython/Includes")
+	anyLegacyImplicitNoexceptTrue         = stringAny("legacy_implicit_noexcept=True")
+	anySContribToolsCythonCythonPy        = stringAny("$(S)/contrib/tools/cython/cython.py")
+	anyUnameSysnameLinux                  = stringAny("UNAME_SYSNAME=Linux")
+	anyX2                                 = stringAny("-X")
 )
 
 var cythonNumpyAddIncl = []VFS{
@@ -118,25 +128,25 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 
 		cmdArgs := []ANY{
 			stringAny(instance.Platform.Tools.Python3),
-			stringAny("$(S)/contrib/tools/cython/cython.py"),
-			stringAny("-X"),
-			stringAny("legacy_implicit_noexcept=True"),
-			stringAny("-E"),
-			stringAny("UNAME_SYSNAME=Linux"),
+			anySContribToolsCythonCythonPy,
+			anyX2,
+			anyLegacyImplicitNoexceptTrue,
+			anyE,
+			anyUnameSysnameLinux,
 		}
 		cmdArgs = appendStringAny(cmdArgs, stmt.Options)
 
 		if !stmt.CMode {
-			cmdArgs = append(cmdArgs, stringAny("--cplus"))
+			cmdArgs = append(cmdArgs, anyCplus)
 		}
 
 		cmdArgs = append(cmdArgs,
-			stringAny("-I$(B)"),
-			stringAny("-I$(S)"),
+			anyIB,
+			anyIS,
 		)
 		cmdArgs = appendCythonAddIncl(cmdArgs, d.cythonAddIncl, ctx.inclArgs)
 		cmdArgs = append(cmdArgs,
-			stringAny("-I$(S)/contrib/tools/cython/Cython/Includes"),
+			anyISContribToolsCythonCythonIncludes,
 			vfsAny(srcVFS),
 			argDashO,
 			vfsAny(generatedVFS),

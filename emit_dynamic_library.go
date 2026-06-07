@@ -3,6 +3,33 @@ package main
 var (
 	ldLinkDynLibVFS  = Intern("$(S)/build/scripts/link_dyn_lib.py")
 	ldLinkDynLibPath = ldLinkDynLibVFS.String()
+	// Path constants hoisted by `ay refac consts`.
+	anyArchLinux          = stringAny("--arch=LINUX")
+	anyBuildRoot          = stringAny("--build-root")
+	anyEndPlugins         = stringAny("--end-plugins")
+	anyFixElf             = stringAny("--fix-elf")
+	anyFuseLdLld          = stringAny("-fuse-ld=lld")
+	anyLm                 = stringAny("-lm")
+	anyNostdlib           = stringAny("-nostdlib")
+	anyObjcopyExe         = stringAny("--objcopy-exe")
+	anyRdynamic           = stringAny("-rdynamic")
+	anyShared             = stringAny("-shared")
+	anySourceRoot         = stringAny("--source-root")
+	anyStartPlugins       = stringAny("--start-plugins")
+	anyTarget             = stringAny("--target")
+	anyWholeArchivePeers  = stringAny("--whole-archive-peers")
+	anyWlBuildIdSha1      = stringAny("-Wl,--build-id=sha1")
+	anyWlEndGroup         = stringAny("-Wl,--end-group")
+	anyWlGcSections       = stringAny("-Wl,--gc-sections")
+	anyWlGdbIndex         = stringAny("-Wl,--gdb-index")
+	anyWlNoAsNeeded       = stringAny("-Wl,--no-as-needed")
+	anyWlNoRosegment      = stringAny("-Wl,--no-rosegment")
+	anyWlNoWholeArchive   = stringAny("-Wl,--no-whole-archive")
+	anyWlStartGroup       = stringAny("-Wl,--start-group")
+	anyWlWholeArchive     = stringAny("-Wl,--whole-archive")
+	anyWlZNotext          = stringAny("-Wl,-z,notext")
+	anyYaEndCommandFile   = stringAny("--ya-end-command-file")
+	anyYaStartCommandFile = stringAny("--ya-start-command-file")
 )
 
 func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *moduleEmitResult {
@@ -191,52 +218,52 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 	cmdArgs := []ANY{
 		stringAny(p.Tools.Python3),
 		stringAny(ldLinkDynLibPath),
-		stringAny("--target"), stringAny(outputPath),
+		anyTarget, stringAny(outputPath),
 	}
 
 	if len(pluginPaths) > 0 {
-		cmdArgs = append(cmdArgs, stringAny("--start-plugins"))
+		cmdArgs = append(cmdArgs, anyStartPlugins)
 
 		for _, p := range pluginPaths {
 			cmdArgs = append(cmdArgs, vfsAny(p))
 		}
 
-		cmdArgs = append(cmdArgs, stringAny("--end-plugins"))
+		cmdArgs = append(cmdArgs, anyEndPlugins)
 	}
 
 	for _, peer := range wholeArchivePeers {
-		cmdArgs = append(cmdArgs, stringAny("--whole-archive-peers"), stringAny(peer))
+		cmdArgs = append(cmdArgs, anyWholeArchivePeers, stringAny(peer))
 	}
 
 	cmdArgs = append(cmdArgs,
-		stringAny("--source-root"), stringAny("$(S)"),
-		stringAny("--build-root"), stringAny("$(B)"),
-		stringAny("--arch=LINUX"),
-		stringAny("--objcopy-exe"), stringAny(p.Tools.Objcopy),
-		stringAny("--fix-elf"), stringAny(fixElfPath),
+		anySourceRoot, anyS,
+		anyBuildRoot, anyB,
+		anyArchLinux,
+		anyObjcopyExe, stringAny(p.Tools.Objcopy),
+		anyFixElf, stringAny(fixElfPath),
 		p.CXXArg,
-		stringAny("-Wl,--whole-archive"),
-		stringAny("--ya-start-command-file"),
-		stringAny("--ya-end-command-file"),
-		stringAny("-Wl,--no-whole-archive"),
+		anyWlWholeArchive,
+		anyYaStartCommandFile,
+		anyYaEndCommandFile,
+		anyWlNoWholeArchive,
 		stringAny(vcsOPath),
 		argDashO, stringAny(outputPath),
-		stringAny("-shared"),
+		anyShared,
 		stringAny("-Wl,-soname,"+outputName),
 		p.TargetArg,
 		argDashBBin,
-		stringAny("-Wl,--start-group"),
+		anyWlStartGroup,
 	)
 
 	for _, p := range peerLibPaths {
 		cmdArgs = append(cmdArgs, stringAny(p.Rel()))
 	}
 
-	cmdArgs = append(cmdArgs, stringAny("-Wl,--end-group"))
+	cmdArgs = append(cmdArgs, anyWlEndGroup)
 	cmdArgs = append(cmdArgs,
-		stringAny("-rdynamic"),
+		anyRdynamic,
 		stringAny("-Wl,--version-script=$(S)/"+modulePath+"/"+exportsScript),
-		stringAny("-Wl,--no-as-needed"),
+		anyWlNoAsNeeded,
 	)
 
 	if p.PIC {
@@ -244,8 +271,8 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 	}
 
 	cmdArgs = append(cmdArgs,
-		stringAny("-Wl,--gdb-index"),
-		stringAny("-Wl,-z,notext"),
+		anyWlGdbIndex,
+		anyWlZNotext,
 	)
 
 	if p.PIC {
@@ -253,13 +280,13 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 	}
 
 	cmdArgs = append(cmdArgs,
-		stringAny("-fuse-ld=lld"),
+		anyFuseLdLld,
 		stringAny("--ld-path="+p.Tools.LLD),
-		stringAny("-Wl,--no-rosegment"),
-		stringAny("-Wl,--build-id=sha1"),
-		stringAny("-nostdlib"),
-		stringAny("-lm"),
-		stringAny("-Wl,--gc-sections"),
+		anyWlNoRosegment,
+		anyWlBuildIdSha1,
+		anyNostdlib,
+		anyLm,
+		anyWlGcSections,
 	)
 
 	return cmdArgs

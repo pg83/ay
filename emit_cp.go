@@ -16,7 +16,7 @@ func EmitJVCPG4(
 	cmdArgs := []ANY{
 		stringAny(instance.Platform.Tools.Python3),
 		vfsAny(fsTools),
-		stringAny("copy"),
+		anyCopy,
 		vfsAny(src),
 		vfsAny(dst),
 	}
@@ -70,7 +70,7 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 	cmdArgs := []ANY{
 		stringAny(instance.Platform.Tools.Python3),
 		vfsAny(fsTools),
-		stringAny("copy"),
+		anyCopy,
 		vfsAny(src),
 		vfsAny(dst),
 	}
@@ -109,3 +109,8 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
 }
+
+// Path constants hoisted by `ay refac consts`.
+var (
+	anyCopy = stringAny("copy")
+)

@@ -10,6 +10,8 @@ var (
 	// Path constants hoisted by `ay refac consts`.
 	bldContribToolsBisonBison = Build("contrib/tools/bison/bison")
 	bldContribToolsM4M4       = Build("contrib/tools/m4/m4")
+	// Path constants hoisted by `ay refac consts`.
+	anyV = stringAny("-v")
 )
 
 var bisonCppSkeletonInputs = []VFS{
@@ -121,7 +123,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		{
 			CmdArgs: []ANY{
 				stringAny(bisonBin),
-				stringAny("-v"),
+				anyV,
 				stringAny("--defines=" + headerVFS.String()),
 				argDashO,
 				vfsAny(generatedVFS),

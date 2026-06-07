@@ -10,6 +10,12 @@ var (
 	swigImplicitIncludes = []string{"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg"}
 	// Path constants hoisted by `ay refac consts`.
 	bldContribToolsSwigSwig = Build("contrib/tools/swig/swig")
+	// Path constants hoisted by `ay refac consts`.
+	anyISContribToolsSwigLib       = stringAny("-I$(S)/contrib/tools/swig/Lib")
+	anyISContribToolsSwigLibPython = stringAny("-I$(S)/contrib/tools/swig/Lib/python")
+	anyInterface                   = stringAny("-interface")
+	anyModule                      = stringAny("-module")
+	anyPython                      = stringAny("-python")
 )
 
 type swigSrc struct {
@@ -43,14 +49,14 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 
 		cmdArgs := []ANY{
 			stringAny(swigBin),
-			stringAny("-I$(B)"),
-			stringAny("-I$(S)"),
-			stringAny("-I$(S)/contrib/tools/swig/Lib/python"),
-			stringAny("-I$(S)/contrib/tools/swig/Lib"),
-			stringAny("-python"),
-			stringAny("-module"),
+			anyIB,
+			anyIS,
+			anyISContribToolsSwigLibPython,
+			anyISContribToolsSwigLib,
+			anyPython,
+			anyModule,
 			stringAny(swigModuleName(stmt.Module)),
-			stringAny("-interface"),
+			anyInterface,
 			stringAny(swigModuleName(stmt.Module) + "_swg"),
 			argDashO,
 			vfsAny(cOutVFS),

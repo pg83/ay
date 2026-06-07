@@ -1,12 +1,5 @@
 package main
 
-// ARG is a dense interned id for a single compiler/linker argument token (e.g.
-// "-mavx2", "-DFOO=1"). Args are few and string identity is exact, so the table
-// is a plain map + vector — no hashing games. One global namespace; args never
-// share the VFS/STR path-intern space. The string form is recovered only when a
-// node's CmdArgs are built (emit/compose), analogous to VFS→string at JSON write.
-type ARG uint32
-
 var argTable = struct {
 	ids  map[string]ARG
 	strs []string
@@ -14,6 +7,19 @@ var argTable = struct {
 	ids:  make(map[string]ARG, 256),
 	strs: make([]string, 1, 256), // index 0 reserved: zero-value ARG is the empty arg
 }
+
+// argDedupeSeen dedups []ARG preserving first-occurrence order, via a reused
+// epoch idSet sized to the arg space (ARG is uint32, cast to VFS only as the
+// set's key). Single-threaded gen, leaf use (reset → scan → return); kept
+// separate from the VFS deduper so the two uint32 id-spaces never interleave.
+var argDedupeSeen idSet
+
+// ARG is a dense interned id for a single compiler/linker argument token (e.g.
+// "-mavx2", "-DFOO=1"). Args are few and string identity is exact, so the table
+// is a plain map + vector — no hashing games. One global namespace; args never
+// share the VFS/STR path-intern space. The string form is recovered only when a
+// node's CmdArgs are built (emit/compose), analogous to VFS→string at JSON write.
+type ARG uint32
 
 func internArg(s string) ARG {
 	if id, ok := argTable.ids[s]; ok {
@@ -80,12 +86,6 @@ func argStrs(as []ARG) []string {
 func argBound() uint32 {
 	return uint32(len(argTable.strs))
 }
-
-// argDedupeSeen dedups []ARG preserving first-occurrence order, via a reused
-// epoch idSet sized to the arg space (ARG is uint32, cast to VFS only as the
-// set's key). Single-threaded gen, leaf use (reset → scan → return); kept
-// separate from the VFS deduper so the two uint32 id-spaces never interleave.
-var argDedupeSeen idSet
 
 // addEachARG appends each arg of src not already in seen to *dst, recording it
 // in seen — the order-preserving union used by the peer-flag aggregation. seen

@@ -20,7 +20,7 @@ func EmitR5(
 	cmd0 := Cmd{
 		CmdArgs: []ANY{
 			vfsAny(ragel5BinPath),
-			stringAny("-o"),
+			argDashO,
 			vfsAny(tmpVFS),
 			vfsAny(srcVFS),
 		},
@@ -29,8 +29,8 @@ func EmitR5(
 	cmd1 := Cmd{
 		CmdArgs: []ANY{
 			vfsAny(rlgenCdBinPath),
-			stringAny("-G2"),
-			stringAny("-o"),
+			anyG2,
+			argDashO,
 			vfsAny(cppVFS),
 			vfsAny(tmpVFS),
 		},
@@ -63,3 +63,8 @@ func EmitR5(
 
 	return emit.Emit(bindNodePlatform(node, instance.Platform)), tmpVFS, cppVFS
 }
+
+// Path constants hoisted by `ay refac consts`.
+var (
+	anyG2 = stringAny("-G2")
+)

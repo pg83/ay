@@ -43,9 +43,9 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	cmdArgs = append(cmdArgs, vfsAny(canonicalBinary))
 	cmdArgs = appendArgAny(cmdArgs, effectiveFlags)
 	cmdArgs = append(cmdArgs,
-		stringAny("-L"),
-		stringAny("-I$(S)"),
-		stringAny("-o"),
+		anyL,
+		anyIS,
+		argDashO,
 		vfsAny(outVFS),
 		vfsAny(inVFS),
 	)
@@ -79,3 +79,8 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 
 	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS
 }
+
+// Path constants hoisted by `ay refac consts`.
+var (
+	anyL = stringAny("-L")
+)

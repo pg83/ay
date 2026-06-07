@@ -5,6 +5,74 @@ import (
 	"strings"
 )
 
+var (
+	// Path constants hoisted by `ay refac consts`.
+	bldCommonTestContext = Build("common_test.context")
+	// Path constants hoisted by `ay refac consts`.
+	any0                        = stringAny("0")
+	any1                        = stringAny("1")
+	any100000                   = stringAny("100000")
+	any3                        = stringAny("{")
+	any30                       = stringAny("30")
+	any4                        = stringAny("  }")
+	any5                        = stringAny("}")
+	any60                       = stringAny("60")
+	any8                        = stringAny("8")
+	anyBinary                   = stringAny("--binary")
+	anyClangFormat              = stringAny("clang_format")
+	anyCompressionFilter        = stringAny("--compression-filter")
+	anyCompressionLevel         = stringAny("--compression-level")
+	anyConfig                   = stringAny("--config")
+	anyContextFilename          = stringAny("--context-filename")
+	anyDepends                  = stringAny("--depends")
+	anyFlags                    = stringAny("  \"flags\": {")
+	anyGdbPath                  = stringAny("--gdb-path")
+	anyGlobalResource           = stringAny("--global-resource")
+	anyLintName                 = stringAny("--lint-name")
+	anyListTimeout              = stringAny("--list-timeout")
+	anyLogPath                  = stringAny("--log-path")
+	anyMeta                     = stringAny("--meta")
+	anyModulo                   = stringAny("--modulo")
+	anyModuloIndex              = stringAny("--modulo-index")
+	anyNinja                    = stringAny("ninja")
+	anyOutPath                  = stringAny("--out-path")
+	anyOutputDir                = stringAny("--output-dir")
+	anyOutputStyle              = stringAny("--output-style")
+	anyPartitionMode            = stringAny("--partition-mode")
+	anyProjectPath              = stringAny("--project-path")
+	anyPythonBin                = stringAny("--python-bin")
+	anyRamLimitGb               = stringAny("--ram-limit-gb")
+	anyRemoveTos                = stringAny("--remove-tos")
+	anyResultMaxFileSize        = stringAny("--result-max-file-size")
+	anyRunCustomLint            = stringAny("run_custom_lint")
+	anyRunTest                  = stringAny("run_test")
+	anyRunUt                    = stringAny("run_ut")
+	anySequential               = stringAny("SEQUENTIAL")
+	anySigusr2                  = stringAny("SIGUSR2")
+	anySmall                    = stringAny("small")
+	anySmoothShutdownSignals    = stringAny("--smooth-shutdown-signals")
+	anyStyle                    = stringAny("style")
+	anySupportsTestParameters   = stringAny("--supports-test-parameters")
+	anyTar                      = stringAny("--tar")
+	anyTargetPlatformDescriptor = stringAny("--target-platform-descriptor")
+	anyTest                     = stringAny("test")
+	anyTestCiType               = stringAny("--test-ci-type")
+	anyTestRelatedPath          = stringAny("--test-related-path")
+	anyTestSize                 = stringAny("--test-size")
+	anyTestSuiteName            = stringAny("--test-suite-name")
+	anyTestType                 = stringAny("--test-type")
+	anyTestsLimitInChunk        = stringAny("--tests-limit-in-chunk")
+	anyTestsRequestedYes        = stringAny("    \"TESTS_REQUESTED\": \"yes\"")
+	anyTimeout                  = stringAny("--timeout")
+	anyTrace                    = stringAny("--trace")
+	anyTracePath                = stringAny("--trace-path")
+	anyUnittest                 = stringAny("unittest")
+	anyVerbose                  = stringAny("--verbose")
+	anyVerifyResults            = stringAny("--verify-results")
+	anyWrapperScript            = stringAny("--wrapper-script")
+	anyZstd                     = stringAny("zstd")
+)
+
 const (
 	testToolHostPath          = "$(TEST_TOOL_HOST-sbr:12080295773)/test_tool"
 	testContextPath           = "$(B)/common_test.context"
@@ -60,12 +128,12 @@ func buildTestCtxNode(p *Platform) *Node {
 				stringAny(testYMakePython3),
 				vfsAny(Source(testAppendFileScriptRel)),
 				stringAny(testContextPath),
-				stringAny("{"),
+				any3,
 				stringAny(`  "build_type": "` + p.BuildType + `",`),
-				stringAny(`  "flags": {`),
-				stringAny(`    "TESTS_REQUESTED": "yes"`),
-				stringAny("  }"),
-				stringAny("}"),
+				anyFlags,
+				anyTestsRequestedYes,
+				any4,
+				any5,
 			},
 		}},
 		Env:              nil,
@@ -85,56 +153,56 @@ func buildUnittestNode(p *Platform, info testSuiteInfo) *Node {
 
 	cmdArgs := []ANY{
 		stringAny(testToolHostPath),
-		stringAny("run_test"),
-		stringAny("--ya-start-command-file"),
-		stringAny("--meta"), vfsAny(Build(path.Join(resultsDir, "meta.json"))),
-		stringAny("--trace"), vfsAny(Build(path.Join(resultsDir, "ytest.report.trace"))),
-		stringAny("--timeout"), stringAny("60"),
-		stringAny("--log-path"), vfsAny(Build(path.Join(resultsDir, "run_test.log"))),
-		stringAny("--test-size"), stringAny("small"),
-		stringAny("--test-type"), stringAny("unittest"),
-		stringAny("--test-ci-type"), stringAny("test"),
-		stringAny("--context-filename"), stringAny(testContextPath),
-		stringAny("--source-root"), stringAny(testSourceRoot),
-		stringAny("--build-root"), stringAny(testBuildRoot),
-		stringAny("--test-suite-name"), stringAny("unittest"),
-		stringAny("--project-path"), stringAny(info.ProjectPath),
-		stringAny("--test-related-path"), vfsAny(Source(info.ProjectPath)),
-		stringAny("--target-platform-descriptor"), stringAny(targetPlatformDescriptor(p)),
-		stringAny("--remove-tos"),
-		stringAny("--gdb-path"), stringAny(testGDBPath),
-		stringAny("--result-max-file-size"), stringAny("0"),
-		stringAny("--verify-results"),
-		stringAny("--tests-limit-in-chunk"), stringAny("100000"),
-		stringAny("--output-style"), stringAny("ninja"),
-		stringAny("--python-bin"), stringAny(testPythonBin),
-		stringAny("--supports-test-parameters"),
-		stringAny("--smooth-shutdown-signals"), stringAny("SIGUSR2"),
-		stringAny("--compression-filter"), stringAny("zstd"),
-		stringAny("--compression-level"), stringAny("1"),
-		stringAny("--global-resource"), stringAny(testClang14Resource),
-		stringAny("--global-resource"), stringAny(testClang16Resource),
-		stringAny("--global-resource"), stringAny(testClang18Resource),
-		stringAny("--global-resource"), stringAny(testClang20Resource),
-		stringAny("--global-resource"), stringAny(testClangFormatResource),
-		stringAny("--global-resource"), stringAny(testClangResource),
-		stringAny("--global-resource"), stringAny(testLLDRootResource),
-		stringAny("--global-resource"), stringAny(testYMakePython3Resource),
-		stringAny("--ram-limit-gb"), stringAny("8"),
-		stringAny("--tar"), vfsAny(Build(path.Join(resultsDir, "testing_out_stuff.tar.zstd"))),
+		anyRunTest,
+		anyYaStartCommandFile,
+		anyMeta, vfsAny(Build(path.Join(resultsDir, "meta.json"))),
+		anyTrace, vfsAny(Build(path.Join(resultsDir, "ytest.report.trace"))),
+		anyTimeout, any60,
+		anyLogPath, vfsAny(Build(path.Join(resultsDir, "run_test.log"))),
+		anyTestSize, anySmall,
+		anyTestType, anyUnittest,
+		anyTestCiType, anyTest,
+		anyContextFilename, stringAny(testContextPath),
+		anySourceRoot, stringAny(testSourceRoot),
+		anyBuildRoot, stringAny(testBuildRoot),
+		anyTestSuiteName, anyUnittest,
+		anyProjectPath, stringAny(info.ProjectPath),
+		anyTestRelatedPath, vfsAny(Source(info.ProjectPath)),
+		anyTargetPlatformDescriptor, stringAny(targetPlatformDescriptor(p)),
+		anyRemoveTos,
+		anyGdbPath, stringAny(testGDBPath),
+		anyResultMaxFileSize, any0,
+		anyVerifyResults,
+		anyTestsLimitInChunk, any100000,
+		anyOutputStyle, anyNinja,
+		anyPythonBin, stringAny(testPythonBin),
+		anySupportsTestParameters,
+		anySmoothShutdownSignals, anySigusr2,
+		anyCompressionFilter, anyZstd,
+		anyCompressionLevel, any1,
+		anyGlobalResource, stringAny(testClang14Resource),
+		anyGlobalResource, stringAny(testClang16Resource),
+		anyGlobalResource, stringAny(testClang18Resource),
+		anyGlobalResource, stringAny(testClang20Resource),
+		anyGlobalResource, stringAny(testClangFormatResource),
+		anyGlobalResource, stringAny(testClangResource),
+		anyGlobalResource, stringAny(testLLDRootResource),
+		anyGlobalResource, stringAny(testYMakePython3Resource),
+		anyRamLimitGb, any8,
+		anyTar, vfsAny(Build(path.Join(resultsDir, "testing_out_stuff.tar.zstd"))),
 		stringAny(testToolHostPath),
-		stringAny("run_ut"),
-		stringAny("--binary"), stringAny(info.BinaryPath),
-		stringAny("--trace-path"), vfsAny(Build(path.Join(resultsDir, "ytest.report.trace"))),
-		stringAny("--output-dir"), vfsAny(Build(path.Join(resultsDir, "testing_out_stuff"))),
-		stringAny("--modulo"), stringAny("1"),
-		stringAny("--modulo-index"), stringAny("0"),
-		stringAny("--partition-mode"), stringAny("SEQUENTIAL"),
-		stringAny("--project-path"), stringAny(info.ProjectPath),
-		stringAny("--list-timeout"), stringAny("30"),
-		stringAny("--verbose"),
-		stringAny("--gdb-path"), stringAny(testGDBPath),
-		stringAny("--ya-end-command-file"),
+		anyRunUt,
+		anyBinary, stringAny(info.BinaryPath),
+		anyTracePath, vfsAny(Build(path.Join(resultsDir, "ytest.report.trace"))),
+		anyOutputDir, vfsAny(Build(path.Join(resultsDir, "testing_out_stuff"))),
+		anyModulo, any1,
+		anyModuloIndex, any0,
+		anyPartitionMode, anySequential,
+		anyProjectPath, stringAny(info.ProjectPath),
+		anyListTimeout, any30,
+		anyVerbose,
+		anyGdbPath, stringAny(testGDBPath),
+		anyYaEndCommandFile,
 	}
 
 	return bindNodePlatform(&Node{
@@ -172,56 +240,56 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 
 	cmdArgs := []ANY{
 		stringAny(testToolHostPath),
-		stringAny("run_test"),
-		stringAny("--ya-start-command-file"),
-		stringAny("--meta"), vfsAny(Build(path.Join(resultsDir, "meta.json"))),
-		stringAny("--trace"), vfsAny(Build(path.Join(resultsDir, "ytest.report.trace"))),
-		stringAny("--timeout"), stringAny("60"),
-		stringAny("--log-path"), vfsAny(Build(path.Join(resultsDir, "run_test.log"))),
-		stringAny("--test-size"), stringAny("small"),
-		stringAny("--test-type"), stringAny("clang_format"),
-		stringAny("--test-ci-type"), stringAny("style"),
-		stringAny("--context-filename"), stringAny(testContextPath),
-		stringAny("--source-root"), stringAny(testSourceRoot),
-		stringAny("--build-root"), stringAny(testBuildRoot),
-		stringAny("--test-suite-name"), stringAny("clang_format"),
-		stringAny("--project-path"), stringAny(info.ProjectPath),
-		stringAny("--test-related-path"), vfsAny(Source(testSVNInterfaceRel)),
+		anyRunTest,
+		anyYaStartCommandFile,
+		anyMeta, vfsAny(Build(path.Join(resultsDir, "meta.json"))),
+		anyTrace, vfsAny(Build(path.Join(resultsDir, "ytest.report.trace"))),
+		anyTimeout, any60,
+		anyLogPath, vfsAny(Build(path.Join(resultsDir, "run_test.log"))),
+		anyTestSize, anySmall,
+		anyTestType, anyClangFormat,
+		anyTestCiType, anyStyle,
+		anyContextFilename, stringAny(testContextPath),
+		anySourceRoot, stringAny(testSourceRoot),
+		anyBuildRoot, stringAny(testBuildRoot),
+		anyTestSuiteName, anyClangFormat,
+		anyProjectPath, stringAny(info.ProjectPath),
+		anyTestRelatedPath, vfsAny(Source(testSVNInterfaceRel)),
 	}
 
 	for _, src := range info.CppSources {
-		cmdArgs = append(cmdArgs, stringAny("--test-related-path"), vfsAny(Source(src)))
+		cmdArgs = append(cmdArgs, anyTestRelatedPath, vfsAny(Source(src)))
 	}
 
 	cmdArgs = append(cmdArgs,
-		stringAny("--test-related-path"), vfsAny(Source(testClangFormatConfigRel)),
-		stringAny("--test-related-path"), vfsAny(Source(testClangFormatWrapperRel)),
-		stringAny("--target-platform-descriptor"), stringAny(targetPlatformDescriptor(p)),
-		stringAny("--remove-tos"),
-		stringAny("--gdb-path"), stringAny(testGDBPath),
-		stringAny("--result-max-file-size"), stringAny("0"),
-		stringAny("--verify-results"),
-		stringAny("--tests-limit-in-chunk"), stringAny("100000"),
-		stringAny("--output-style"), stringAny("ninja"),
-		stringAny("--python-bin"), stringAny(testPythonBin),
-		stringAny("--supports-test-parameters"),
-		stringAny("--compression-filter"), stringAny("zstd"),
-		stringAny("--compression-level"), stringAny("1"),
-		stringAny("--global-resource"), stringAny(testClangFormatResource),
-		stringAny("--ram-limit-gb"), stringAny("8"),
-		stringAny("--tar"), vfsAny(Build(path.Join(resultsDir, "testing_out_stuff.tar.zstd"))),
+		anyTestRelatedPath, vfsAny(Source(testClangFormatConfigRel)),
+		anyTestRelatedPath, vfsAny(Source(testClangFormatWrapperRel)),
+		anyTargetPlatformDescriptor, stringAny(targetPlatformDescriptor(p)),
+		anyRemoveTos,
+		anyGdbPath, stringAny(testGDBPath),
+		anyResultMaxFileSize, any0,
+		anyVerifyResults,
+		anyTestsLimitInChunk, any100000,
+		anyOutputStyle, anyNinja,
+		anyPythonBin, stringAny(testPythonBin),
+		anySupportsTestParameters,
+		anyCompressionFilter, anyZstd,
+		anyCompressionLevel, any1,
+		anyGlobalResource, stringAny(testClangFormatResource),
+		anyRamLimitGb, any8,
+		anyTar, vfsAny(Build(path.Join(resultsDir, "testing_out_stuff.tar.zstd"))),
 		stringAny(testToolHostPath),
-		stringAny("run_custom_lint"),
-		stringAny("--source-root"), stringAny(testSourceRoot),
-		stringAny("--build-root"), stringAny(testBuildRoot),
-		stringAny("--project-path"), vfsAny(Source(info.ProjectPath)),
-		stringAny("--trace-path"), vfsAny(Build(path.Join(resultsDir, "ytest.report.trace"))),
-		stringAny("--out-path"), vfsAny(Build(path.Join(resultsDir, "testing_out_stuff"))),
-		stringAny("--lint-name"), stringAny("clang_format"),
-		stringAny("--wrapper-script"), stringAny(testClangFormatWrapperRel),
-		stringAny("--depends"), stringAny(info.ProjectPath),
-		stringAny("--config"), vfsAny(Source(testClangFormatConfigRel)),
-		stringAny("--global-resource"), stringAny(testClangFormatResource),
+		anyRunCustomLint,
+		anySourceRoot, stringAny(testSourceRoot),
+		anyBuildRoot, stringAny(testBuildRoot),
+		anyProjectPath, vfsAny(Source(info.ProjectPath)),
+		anyTracePath, vfsAny(Build(path.Join(resultsDir, "ytest.report.trace"))),
+		anyOutPath, vfsAny(Build(path.Join(resultsDir, "testing_out_stuff"))),
+		anyLintName, anyClangFormat,
+		anyWrapperScript, stringAny(testClangFormatWrapperRel),
+		anyDepends, stringAny(info.ProjectPath),
+		anyConfig, vfsAny(Source(testClangFormatConfigRel)),
+		anyGlobalResource, stringAny(testClangFormatResource),
 		vfsAny(Source(testSVNInterfaceRel)),
 	)
 
@@ -229,7 +297,7 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 		cmdArgs = append(cmdArgs, vfsAny(Source(src)))
 	}
 
-	cmdArgs = append(cmdArgs, stringAny("--ya-end-command-file"))
+	cmdArgs = append(cmdArgs, anyYaEndCommandFile)
 
 	inputs := []VFS{
 		Source(testClangFormatConfigRel),
@@ -337,8 +405,3 @@ func testOutputs(projectPath, suite string) []VFS {
 		Build(path.Join(resultsDir, "testing_out_stuff.tar.zstd")),
 	}
 }
-
-// Path constants hoisted by `ay refac consts`.
-var (
-	bldCommonTestContext = Build("common_test.context")
-)

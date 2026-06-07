@@ -23,14 +23,14 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		stringAny(instance.Platform.Tools.Python3),
 		vfsAny(joinSrcs),
 		vfsAny(outVFS),
-		stringAny("--ya-start-command-file"),
+		anyYaStartCommandFile,
 	)
 
 	for _, s := range sources {
 		cmdArgs = append(cmdArgs, stringAny(instance.Path+"/"+s))
 	}
 
-	cmdArgs = append(cmdArgs, stringAny("--ya-end-command-file"))
+	cmdArgs = append(cmdArgs, anyYaEndCommandFile)
 
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 

@@ -5,7 +5,13 @@ import (
 	"strings"
 )
 
-var rodataScriptVFS = Intern("$(S)/build/scripts/rodata2asm.py")
+var (
+	rodataScriptVFS = Intern("$(S)/build/scripts/rodata2asm.py")
+	// Path constants hoisted by `ay refac consts`.
+	anyDwarf2 = stringAny("dwarf2")
+	anyElf    = stringAny("--elf")
+	anyG      = stringAny("-g")
+)
 
 func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 	base := instance.Path + "/" + srcRel
@@ -30,7 +36,7 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 				CmdArgs: []ANY{
 					stringAny(instance.Platform.Tools.Python3),
 					vfsAny(rodataScriptVFS),
-					stringAny("--elf"),
+					anyElf,
 					stringAny(toolName),
 					vfsAny(srcVFS),
 					vfsAny(asmVFS),
@@ -40,16 +46,16 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 			{
 				CmdArgs: []ANY{
 					stringAny(yasmBinaryPath),
-					stringAny("-f"), stringAny("elf64"),
-					stringAny("-D"), stringAny("UNIX"),
-					stringAny("--replace=$(B)=/-B"),
-					stringAny("--replace=$(S)=/-S"),
-					stringAny("--replace=$(TOOL_ROOT)=/-T"),
-					stringAny("-D"), stringAny("_" + string(instance.Platform.ISA) + "_"),
-					stringAny("-D_YASM_"),
-					stringAny("-g"), stringAny("dwarf2"),
-					stringAny("-I"), stringAny("$(B)"),
-					stringAny("-I"), stringAny("$(S)"),
+					anyF, anyElf64,
+					anyD, anyUnix,
+					anyReplaceBB,
+					anyReplaceSS,
+					anyReplaceToolRootT,
+					anyD, stringAny("_" + string(instance.Platform.ISA) + "_"),
+					anyDYasm,
+					anyG, anyDwarf2,
+					anyI, anyB,
+					anyI, anyS,
 					argDashO, vfsAny(outVFS),
 					vfsAny(asmVFS),
 				},

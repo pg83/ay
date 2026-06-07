@@ -21,15 +21,31 @@ const (
 	anyTagMask = 1<<anyTagBits - 1
 )
 
-func envAny(e ENV) ANY { return ANY(uint32(e)<<anyTagBits | anyTagENV) }
-func tokAny(t TOK) ANY { return ANY(uint32(t)<<anyTagBits | anyTagTOK) }
-func argAny(a ARG) ANY { return ANY(uint32(a)<<anyTagBits | anyTagARG) }
-func strAny(s STR) ANY { return ANY(uint32(s)<<anyTagBits | anyTagSTR) }
-func vfsAny(v VFS) ANY { return ANY(uint32(v)<<anyTagBits | anyTagVFS) }
+func envAny(e ENV) ANY {
+	return ANY(uint32(e)<<anyTagBits | anyTagENV)
+}
+
+func tokAny(t TOK) ANY {
+	return ANY(uint32(t)<<anyTagBits | anyTagTOK)
+}
+
+func argAny(a ARG) ANY {
+	return ANY(uint32(a)<<anyTagBits | anyTagARG)
+}
+
+func strAny(s STR) ANY {
+	return ANY(uint32(s)<<anyTagBits | anyTagSTR)
+}
+
+func vfsAny(v VFS) ANY {
+	return ANY(uint32(v)<<anyTagBits | anyTagVFS)
+}
 
 // stringAny interns a computed/raw string and boxes it as a STR-tagged ANY —
 // the entry point for cmd args assembled from non-interned strings.
-func stringAny(s string) ANY { return strAny(internString(s)) }
+func stringAny(s string) ANY {
+	return strAny(internString(s))
+}
 
 func (a ANY) String() string {
 	id := uint32(a) >> anyTagBits

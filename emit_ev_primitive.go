@@ -3,6 +3,16 @@ package main
 var (
 	evEventlogIncludeVFS  = Intern("$(S)/library/cpp/eventlog")
 	evEventlogIncludePath = evEventlogIncludeVFS.String()
+	// Path constants hoisted by `ay refac consts`.
+	anyCppOutB                  = stringAny("--cpp_out=:$(B)/")
+	anyCppStyleguideOutB        = stringAny("--cpp_styleguide_out=:$(B)/")
+	anyEvent2cppOutB            = stringAny("--event2cpp_out=$(B)")
+	anyI2                       = stringAny("-I=./")
+	anyIB2                      = stringAny("-I=$(B)")
+	anyIS2                      = stringAny("-I=$(S)/")
+	anyIS3                      = stringAny("-I=$(S)")
+	anyISContribLibsProtobufSrc = stringAny("-I=$(S)/contrib/libs/protobuf/src")
+	anyOutputs                  = stringAny("--outputs")
 )
 
 var eventRuntimeHeaders = []VFS{
@@ -138,24 +148,24 @@ func EmitEV(
 	cmdArgs := []ANY{
 		stringAny(instance.Platform.Tools.Python3),
 		stringAny(pbWrapperPath),
-		stringAny("--outputs"),
+		anyOutputs,
 		vfsAny(evCC),
 		vfsAny(evH),
-		stringAny("--"),
+		any2,
 		vfsAny(protocBinary),
-		stringAny("-I=./"),
-		stringAny("-I=$(S)/"),
-		stringAny("-I=$(B)"),
-		stringAny("-I=$(S)"),
-		stringAny("-I=$(S)/contrib/libs/protobuf/src"),
-		stringAny("-I=$(B)"),
-		stringAny("-I=$(S)/contrib/libs/protobuf/src"),
-		stringAny("--cpp_out=:$(B)/"),
-		stringAny("--cpp_styleguide_out=:$(B)/"),
+		anyI2,
+		anyIS2,
+		anyIB2,
+		anyIS3,
+		anyISContribLibsProtobufSrc,
+		anyIB2,
+		anyISContribLibsProtobufSrc,
+		anyCppOutB,
+		anyCppStyleguideOutB,
 		stringAny("--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary.String()),
 		stringAny(evRelPath),
 		stringAny("--plugin=protoc-gen-event2cpp=" + event2cppBinary.String()),
-		stringAny("--event2cpp_out=$(B)"),
+		anyEvent2cppOutB,
 		stringAny("-I=" + evEventlogIncludePath),
 	}
 

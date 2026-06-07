@@ -2,6 +2,20 @@ package main
 
 import "strings"
 
+var (
+	// Path constants hoisted by `ay refac consts`.
+	anyD                = stringAny("-D")
+	anyDYasm            = stringAny("-D_YASM_")
+	anyElf64            = stringAny("elf64")
+	anyF                = stringAny("-f")
+	anyI                = stringAny("-I")
+	anyReplaceBB        = stringAny("--replace=$(B)=/-B")
+	anyReplaceSS        = stringAny("--replace=$(S)=/-S")
+	anyReplaceToolRootT = stringAny("--replace=$(TOOL_ROOT)=/-T")
+	anyS                = stringAny("$(S)")
+	anyUnix             = stringAny("UNIX")
+)
+
 func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, emit Emitter) (NodeRef, VFS) {
 	stem := strings.TrimSuffix(srcRel, ".asm")
 	suffix := ".o"
@@ -31,18 +45,18 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	cmdArgs := make([]ANY, 0, 20+len(predefinedFlags))
 	cmdArgs = append(cmdArgs,
 		stringAny(yasmBinaryPath),
-		stringAny("-f"), stringAny("elf64"),
-		stringAny("-D"), stringAny("UNIX"),
-		stringAny("--replace=$(B)=/-B"),
-		stringAny("--replace=$(S)=/-S"),
-		stringAny("--replace=$(TOOL_ROOT)=/-T"),
-		stringAny("-D"), stringAny("_"+string(instance.Platform.ISA)+"_"),
-		stringAny("-D_YASM_"),
+		anyF, anyElf64,
+		anyD, anyUnix,
+		anyReplaceBB,
+		anyReplaceSS,
+		anyReplaceToolRootT,
+		anyD, stringAny("_"+string(instance.Platform.ISA)+"_"),
+		anyDYasm,
 	)
 	cmdArgs = appendStringAny(cmdArgs, predefinedFlags)
 	cmdArgs = append(cmdArgs,
-		stringAny("-I"), stringAny("$(B)"),
-		stringAny("-I"), stringAny("$(S)"),
+		anyI, anyB,
+		anyI, anyS,
 	)
 
 	// Per-module `ADDINCL(FOR asm X)` entries arrive on in.AddIncl
@@ -51,7 +65,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	// yt/yt/core/misc/isa_crc64/include precede `-o output input` and the
 	// command shape matches REF.
 	for _, p := range in.AddIncl {
-		cmdArgs = append(cmdArgs, stringAny("-I"), vfsAny(p))
+		cmdArgs = append(cmdArgs, anyI, vfsAny(p))
 	}
 
 	cmdArgs = append(cmdArgs,

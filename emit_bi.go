@@ -25,7 +25,7 @@ func EmitBI(
 	cmd0Args := []ANY{
 		stringAny(instance.Platform.Tools.Python3),
 		vfsAny(yieldLinePyVFS),
-		stringAny("--"),
+		any2,
 		stringAny(argsFile),
 		instance.Platform.CXXArg,
 	}
@@ -34,7 +34,7 @@ func EmitBI(
 	cmd1Args = append(cmd1Args,
 		stringAny(instance.Platform.Tools.Python3),
 		vfsAny(yieldLinePyVFS),
-		stringAny("--"),
+		any2,
 		stringAny(argsFile),
 	)
 	cmd1Args = append(cmd1Args, cxxFlags...)
@@ -42,7 +42,7 @@ func EmitBI(
 	cmd2Args := []ANY{
 		stringAny(instance.Platform.Tools.Python3),
 		vfsAny(xargsPyVFS),
-		stringAny("--"),
+		any2,
 		stringAny(argsFile),
 		stringAny(instance.Platform.Tools.Python3),
 		vfsAny(buildInfoGenPyVFS),

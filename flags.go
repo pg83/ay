@@ -1,11 +1,21 @@
 package main
 
+var (
+	googleapisCommonProtosAddIncl = Intern("$(B)/contrib/libs/googleapis-common-protos")
+	cxxStandardFlag               = internArg("-std=c++20")
+	// arg tokens compared/inserted by withSandboxingDebugCompression.
+	argDashG            = internArg("-g")
+	argGzZstd           = internArg("-gz=zstd")
+	argNDEBUG           = internArg("-DNDEBUG")
+	argUNDEBUG          = internArg("-UNDEBUG")
+	argNoOutlineAtomics = internArg("-mno-outline-atomics")
+	argFPIC             = internArg("-fPIC")
+)
+
 var ccIncludesPrefix = internArgs([]string{
 	"-I$(B)",
 	"-I$(S)",
 })
-
-var googleapisCommonProtosAddIncl = Intern("$(B)/contrib/libs/googleapis-common-protos")
 
 var debugPrefixMapFlags = internArgs([]string{
 	"-fdebug-prefix-map=$(B)=/-B",
@@ -172,19 +182,7 @@ var cxxStandardWarnings = internArgs([]string{
 	"-Wno-undefined-var-template",
 })
 
-var cxxStandardFlag = internArg("-std=c++20")
-
 const binPath = "/usr/bin"
-
-// arg tokens compared/inserted by withSandboxingDebugCompression.
-var (
-	argDashG            = internArg("-g")
-	argGzZstd           = internArg("-gz=zstd")
-	argNDEBUG           = internArg("-DNDEBUG")
-	argUNDEBUG          = internArg("-UNDEBUG")
-	argNoOutlineAtomics = internArg("-mno-outline-atomics")
-	argFPIC             = internArg("-fPIC")
-)
 
 func sseBaseCFlags(x8664 bool) []ARG {
 	if x8664 {
