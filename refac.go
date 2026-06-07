@@ -133,8 +133,18 @@ func refacConsts(args []string) int {
 		collectOccurrences(pf, fi, &occs)
 	}
 
-	// Phase 3: decide which canons get a package-level var. A canon is hoisted only
-	// if it already has a var (declared in source or seen earlier) OR it has at least
+	// emit gathers every const a dest file must declare: all existing package-level
+	// hoist vars (relocated as-is, preserving their names — so duplicate-canon vars
+	// like the several fs_tools aliases each survive and their by-name references stay
+	// valid) plus the new ones hoisted below.
+	var emit []hoistedVar
+
+	for _, pf := range parsed {
+		emit = append(emit, pf.vars...)
+	}
+
+	// Phase 3: decide which canons get a NEW package-level var. A canon is hoisted only
+	// if it lacks a var (none declared in source, none seen earlier) and it has at least
 	// one free occurrence. A canon that appears ONLY as a file-level-list element is
 	// left inline — hoisting it would create a var referenced exactly once, which is
 	// redundant indirection.
@@ -150,6 +160,7 @@ func refacConsts(args []string) int {
 		name := uniqueName(identForVFS(o.key), used)
 		used[name] = true
 		existing[o.key] = name
+		emit = append(emit, hoistedVar{name, o.key})
 	}
 
 	// Phase 4: per non-dest file, rewrite every occurrence whose canon now has a var
@@ -181,10 +192,10 @@ func refacConsts(args []string) int {
 		}
 	}
 
-	// Phase 5: regenerate each per-kind dest file from the full set of hoisted keys
+	// Phase 5: regenerate each per-kind dest file from the full set of hoisted vars
 	// of that kind.
 	for kind, fname := range constFileForKind {
-		generateConstFile(fname, kind, existing)
+		generateConstFile(fname, kind, emit)
 	}
 
 	return 0
@@ -266,6 +277,14 @@ type parsedFile struct {
 	fset     *gotoken.FileSet
 	f        *ast.File
 	declared map[*ast.CallExpr]bool // hoist-eligible calls that already ARE package-level var values
+	vars     []hoistedVar           // every package-level single-literal hoist declaration, in source order
+}
+
+// hoistedVar is a package-level const owned by a per-kind dest file: its var name
+// and the literal key it wraps.
+type hoistedVar struct {
+	name string
+	key  hoistKey
 }
 
 // parseRefacFile parses path and folds its top-level declarations into the shared
@@ -281,6 +300,7 @@ func parseRefacFile(path string, existing map[hoistKey]string, used map[string]b
 	}
 
 	declared := map[*ast.CallExpr]bool{}
+	var vars []hoistedVar
 
 	for _, decl := range f.Decls {
 		switch d := decl.(type) {
@@ -310,6 +330,7 @@ func parseRefacFile(path string, existing map[hoistKey]string, used map[string]b
 								}
 
 								declared[call] = true
+								vars = append(vars, hoistedVar{s.Names[i].Name, key})
 							}
 						}
 					}
@@ -318,7 +339,7 @@ func parseRefacFile(path string, existing map[hoistKey]string, used map[string]b
 		}
 	}
 
-	return &parsedFile{path: path, src: src, fset: fset, f: f, declared: declared}
+	return &parsedFile{path: path, src: src, fset: fset, f: f, declared: declared, vars: vars}
 }
 
 // hoistKind is the result-type namespace of a hoistable literal call. Calls of
@@ -571,20 +592,19 @@ func applyConstEdits(pf *parsedFile, edits []constEdit) bool {
 	return true
 }
 
-// generateConstFile (re)writes path with every hoisted const of kind, sorted by
-// var name. A file with no consts of its kind is removed if present.
-func generateConstFile(path string, kind hoistKind, existing map[hoistKey]string) {
-	type item struct {
-		name string
-		key  hoistKey
-	}
+// generateConstFile (re)writes path with every hoisted var of kind, deduplicated by
+// name and sorted by name. A file with no vars of its kind is removed if present.
+func generateConstFile(path string, kind hoistKind, vars []hoistedVar) {
+	var items []hoistedVar
+	seen := map[string]bool{}
 
-	var items []item
-
-	for key, name := range existing {
-		if key.kind == kind {
-			items = append(items, item{name, key})
+	for _, v := range vars {
+		if v.key.kind != kind || seen[v.name] {
+			continue
 		}
+
+		seen[v.name] = true
+		items = append(items, v)
 	}
 
 	if len(items) == 0 {
