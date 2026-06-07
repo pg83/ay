@@ -116,7 +116,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 				internAny(bisonBin),
 				anyV,
 				internAny("--defines=" + headerVFS.String()),
-				argDashO,
+				anyDashO,
 				vfsAny(generatedVFS),
 				vfsAny(srcVFS),
 			},

@@ -45,7 +45,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	cmdArgs = append(cmdArgs,
 		anyL,
 		anyIS,
-		argDashO,
+		anyDashO,
 		vfsAny(outVFS),
 		vfsAny(inVFS),
 	)

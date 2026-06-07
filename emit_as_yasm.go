@@ -55,7 +55,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	}
 
 	cmdArgs = append(cmdArgs,
-		argDashO, internAny(outputPath),
+		anyDashO, internAny(outputPath),
 		internAny(inputPath),
 	)
 

@@ -67,7 +67,7 @@ func EmitJV(
 		internAny(antlr4JarPath),
 		vfsAny(grammarVFS),
 		anyDlanguageCpp,
-		argDashO,
+		anyDashO,
 		internAny(outDir),
 	}
 
@@ -126,7 +126,7 @@ func EmitJVSplit(
 		vfsAny(lexerVFS),
 		vfsAny(parserVFS),
 		anyDlanguageCpp,
-		argDashO,
+		anyDashO,
 		internAny(outDir),
 	}
 
