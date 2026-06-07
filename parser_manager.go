@@ -11,11 +11,13 @@ type parsedIncludeBucket uint8
 
 const (
 	parsedIncludesLocal parsedIncludeBucket = iota
-	parsedIncludesHCPP
 	parsedIncludesRagelNative
-	// parsedIncludesCpp holds INDUCED_DEPS(cpp …) directives — induced deps that
-	// apply only to a tool's translation-unit (.cc/.cpp) outputs, not its headers.
-	// parsedIncludesHCPP doubles as the INDUCED_DEPS(h+cpp …) group (both .h and .cc).
+	// parsedIncludesHeader is consumed by header (.h) outputs; parsedIncludesCpp by
+	// translation-unit (.cc/.cpp) outputs. INDUCED_DEPS(h …) lands in Header only,
+	// (cpp …) in Cpp only, and (h+cpp …) is split into BOTH. Parse-derived directives
+	// that apply to either consumer (proto/ev .pb.h, ragel self-include, swig induced)
+	// are likewise written to both buckets.
+	parsedIncludesHeader
 	parsedIncludesCpp
 	parsedIncludeBucketCount
 )

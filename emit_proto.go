@@ -51,7 +51,7 @@ func protoPbHIncludes(pm *includeParserManager, srcRel, outputRoot string, bucke
 }
 
 func protoDirectPbHIncludes(pm *includeParserManager, srcRel, outputRoot string) []includeDirective {
-	return protoPbHIncludes(pm, srcRel, outputRoot, parsedIncludesHCPP)
+	return protoPbHIncludes(pm, srcRel, outputRoot, parsedIncludesHeader)
 }
 
 func pbHEmitsIncludesExtras(protoRelPath string, hasDescriptor bool) []includeDirective {

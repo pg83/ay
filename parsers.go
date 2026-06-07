@@ -297,7 +297,8 @@ func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet
 		set = parsedIncludeSet{parsedIncludesLocal: local}
 	}
 
-	set = appendParsedDirectives(set, parsedIncludesHCPP, hcpp...)
+	set = appendParsedDirectives(set, parsedIncludesHeader, hcpp...)
+	set = appendParsedDirectives(set, parsedIncludesCpp, hcpp...)
 	return set
 }
 
@@ -345,10 +346,9 @@ func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeS
 	var set parsedIncludeSet
 	set = appendParsedDirectives(set, parsedIncludesLocal, local...)
 	set = appendParsedDirectives(set, parsedIncludesRagelNative, native...)
-	set = appendParsedDirectives(set, parsedIncludesHCPP, includeDirective{
-		kind:   includeQuoted,
-		target: internStr(rel),
-	})
+	selfInclude := includeDirective{kind: includeQuoted, target: internStr(rel)}
+	set = appendParsedDirectives(set, parsedIncludesHeader, selfInclude)
+	set = appendParsedDirectives(set, parsedIncludesCpp, selfInclude)
 
 	return set
 }
@@ -388,7 +388,8 @@ func (swigIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet 
 
 	var set parsedIncludeSet
 	set = appendParsedDirectives(set, parsedIncludesLocal, direct...)
-	set = appendParsedDirectives(set, parsedIncludesHCPP, induced...)
+	set = appendParsedDirectives(set, parsedIncludesHeader, induced...)
+	set = appendParsedDirectives(set, parsedIncludesCpp, induced...)
 
 	return set
 }

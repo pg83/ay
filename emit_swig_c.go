@@ -189,7 +189,7 @@ func collectSwigInducedIncludes(ctx *genCtx, src VFS, closure []VFS) []includeDi
 	var out []includeDirective
 
 	add := func(rel string) {
-		for _, d := range swigSourceParsedBuckets(ctx, rel).bucket(parsedIncludesHCPP) {
+		for _, d := range swigSourceParsedBuckets(ctx, rel).bucket(parsedIncludesCpp) {
 			if _, ok := seen[d]; ok {
 				continue
 			}

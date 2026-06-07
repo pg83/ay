@@ -102,7 +102,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		var r6Parsed []includeDirective
 
 		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
-			r6Parsed = scanner.parsers.sourceParsedBuckets(rl6SourceVFS).bucket(parsedIncludesHCPP)
+			r6Parsed = scanner.parsers.sourceParsedBuckets(rl6SourceVFS).bucket(parsedIncludesCpp)
 			// Ragel-native includes (e.g. include "parser.rl6" inside %%{...}%%)
 			// are tracked in parsedIncludesRagelNative rather than parsedIncludesLocal.
 			// The C/C++ scanner does not follow them (so their C headers don't bleed
@@ -208,7 +208,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		var r5Parsed []includeDirective
 
 		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
-			r5Parsed = scanner.parsers.sourceParsedBuckets(rlSourceVFS).bucket(parsedIncludesHCPP)
+			r5Parsed = scanner.parsers.sourceParsedBuckets(rlSourceVFS).bucket(parsedIncludesCpp)
 		}
 
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5CppOut, r5Parsed, r5Ref, nil)

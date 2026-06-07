@@ -169,9 +169,8 @@ type moduleData struct {
 	conflictMod *ModuleStmt
 
 	// inducedDeps are the module's INDUCED_DEPS, bucketed by the macro's consumer
-	// type: INDUCED_DEPS(cpp …) -> parsedIncludesCpp (translation units only),
-	// INDUCED_DEPS(h+cpp …) / (h …) -> parsedIncludesHCPP. resolveInducedDeps picks
-	// the buckets matching each generated output's kind.
+	// type: (cpp …) -> parsedIncludesCpp, (h …) -> parsedIncludesHeader, (h+cpp …) ->
+	// both. resolveInducedDeps reads one bucket per generated output's kind.
 	inducedDeps parsedIncludeSet
 
 	setVars map[string]string
@@ -1823,15 +1822,22 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 	case tokInducedDeps:
 
 		if len(v.Args) >= 2 {
-			bucket := parsedIncludesHCPP
-
-			if v.Args[0] == "cpp" {
-				bucket = parsedIncludesCpp
-			}
+			// INDUCED_DEPS(h …) -> header consumers; (cpp …) -> translation units;
+			// (h+cpp …) -> both. resolveInducedDeps then reads a single bucket per output.
+			toHeader := v.Args[0] != "cpp"
+			toCpp := v.Args[0] != "h"
 
 			for _, p := range v.Args[1:] {
 				p = strings.TrimPrefix(p, "${ARCADIA_ROOT}/")
-				d.inducedDeps = appendParsedDirectives(d.inducedDeps, bucket, includeDirective{kind: includeQuoted, target: internStr(p)})
+				dir := includeDirective{kind: includeQuoted, target: internStr(p)}
+
+				if toHeader {
+					d.inducedDeps = appendParsedDirectives(d.inducedDeps, parsedIncludesHeader, dir)
+				}
+
+				if toCpp {
+					d.inducedDeps = appendParsedDirectives(d.inducedDeps, parsedIncludesCpp, dir)
+				}
 			}
 		}
 	default:
