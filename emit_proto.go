@@ -409,9 +409,8 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		directImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, cfg.cppOutRoot)
 		pbHImports := directImports
 		extras := pbHEmitsIncludesExtras(protoRelPath, hasDescriptor)
-		pbHParsed := make([]includeDirective, 0, len(pbHImports)+len(protobufRuntimeHeaders)+len(extras)+len(grpcServiceHeaderIncludes))
+		pbHParsed := make([]includeDirective, 0, len(pbHImports)+len(extras)+len(grpcServiceHeaderIncludes))
 		pbHParsed = append(pbHParsed, pbHImports...)
-		pbHParsed = append(pbHParsed, protobufRuntimeDirectives...)
 		pbHParsed = append(pbHParsed, extras...)
 
 		for _, ti := range transitiveImports {
@@ -422,7 +421,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			pbHParsed = append(pbHParsed, grpcServiceHeaderDirectives...)
 		}
 
-		registerBoundGeneratedParsedOutput(ctx, instance, "PB", pbH, pbHParsed, pbRef, nil)
+		registerBoundGeneratedParsedOutput(ctx, instance, "PB", pbH, pbHParsed, pbRef, []NodeRef{protocLDRef})
 
 		// The source a generated header is produced FROM is a real input of every
 		// unit that includes that header — a generated-from edge, not a C++ include.
@@ -451,7 +450,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			registerBoundGeneratedParsedOutput(ctx, instance, "PB", pbDepsH, depsParsed, pbRef, nil)
 		}
 
-		pbCCParsed := make([]includeDirective, 0, 3+len(directImports)+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
+		pbCCParsed := make([]includeDirective, 0, 3+len(directImports))
 		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internStr(pbH.Rel())})
 
 		if liteHeaders {
@@ -459,23 +458,19 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		}
 
 		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.Rel())})
-		pbCCParsed = append(pbCCParsed, protobufRuntimeDirectives...)
-		pbCCParsed = append(pbCCParsed, pbCcDeepRuntimeDirectives...)
 
 		if cfg.grpc {
 			pbCCParsed = append(pbCCParsed, grpcSourceExtraDirectives...)
 		}
 
-		registerBoundGeneratedParsedOutput(ctx, instance, "PB", pbCC, pbCCParsed, pbRef, nil)
+		registerBoundGeneratedParsedOutput(ctx, instance, "PB", pbCC, pbCCParsed, pbRef, []NodeRef{protocLDRef})
 
 		var grpcCCParsed, grpcHParsed []includeDirective
 
 		if needsGRPCParsed {
-			grpcCCParsed = make([]includeDirective, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders)+len(grpcSourceExtraIncludes))
+			grpcCCParsed = make([]includeDirective, 0, 3+len(grpcSourceExtraIncludes))
 			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internStr(pbH.Rel())})
 			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.Rel())})
-			grpcCCParsed = append(grpcCCParsed, protobufRuntimeDirectives...)
-			grpcCCParsed = append(grpcCCParsed, pbCcDeepRuntimeDirectives...)
 			grpcCCParsed = append(grpcCCParsed, grpcSourceExtraDirectives...)
 
 			grpcHParsed = make([]includeDirective, 0, 2+len(directImports)+len(grpcServiceHeaderIncludes))
@@ -486,7 +481,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		}
 
 		if cfg.grpc {
-			registerBoundGeneratedParsedOutput(ctx, instance, "PB", grpcPbCC, grpcCCParsed, pbRef, nil)
+			registerBoundGeneratedParsedOutput(ctx, instance, "PB", grpcPbCC, grpcCCParsed, pbRef, []NodeRef{protocLDRef})
 			registerBoundGeneratedParsedOutput(ctx, instance, "PB", grpcPbH, grpcHParsed, pbRef, nil)
 		}
 	}
