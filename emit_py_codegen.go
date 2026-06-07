@@ -54,13 +54,13 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			outputPath = Build(instance.Path + "/" + srcRel + ".yapyc3")
 		}
 
-		cmdArgs := []string{
-			py3ccBinary.String(),
-			"--slow-py3cc",
-			py3ccSlowBin.String(),
-			moduleName,
-			srcAbs.String(),
-			outputPath.String(),
+		cmdArgs := []ANY{
+			vfsAny(py3ccBinary),
+			stringAny("--slow-py3cc"),
+			vfsAny(py3ccSlowBin),
+			stringAny(moduleName),
+			vfsAny(srcAbs),
+			vfsAny(outputPath),
 		}
 
 		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "PYTHONHASHSEED", Value: "0"}}
@@ -172,11 +172,11 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 
 		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
-		pyCmdArgs := []string{
-			instance.Platform.Tools.Python3,
-			genPy3RegScriptPath,
-			arg,
-			regCppAbs,
+		pyCmdArgs := []ANY{
+			stringAny(instance.Platform.Tools.Python3),
+			vfsAny(genPy3RegScriptVFS),
+			stringAny(arg),
+			stringAny(regCppAbs),
 		}
 
 		pyRef, ok := ctx.pyRegisterOutputs[regCppVFS]

@@ -91,33 +91,33 @@ func emitResourceObjcopy(
 		hash := objcopyHash(cur.paths, cur.keys, cur.kvs, instance.Path, moduleTag)
 		outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
-		cmdArgs := []string{
-			instance.Platform.Tools.Python3,
-			objcopyScriptPath,
-			"--compiler", instance.Platform.Tools.CXX,
-			"--objcopy", instance.Platform.Tools.Objcopy,
-			"--compressor", rescompressorBinPath,
-			"--rescompiler", rescompilerBinPath,
-			"--output_obj", outputObj.String(),
-			"--target", instance.Platform.Triple,
+		cmdArgs := []ANY{
+			stringAny(instance.Platform.Tools.Python3),
+			stringAny(objcopyScriptPath),
+			stringAny("--compiler"), stringAny(instance.Platform.Tools.CXX),
+			stringAny("--objcopy"), stringAny(instance.Platform.Tools.Objcopy),
+			stringAny("--compressor"), stringAny(rescompressorBinPath),
+			stringAny("--rescompiler"), stringAny(rescompilerBinPath),
+			stringAny("--output_obj"), vfsAny(outputObj),
+			stringAny("--target"), stringAny(instance.Platform.Triple),
 		}
 
 		if len(cur.paths) > 0 {
-			cmdArgs = append(cmdArgs, "--inputs")
+			cmdArgs = append(cmdArgs, stringAny("--inputs"))
 
 			for _, p := range cur.pathInputs {
-				cmdArgs = append(cmdArgs, p.String())
+				cmdArgs = append(cmdArgs, vfsAny(p))
 			}
 
-			cmdArgs = append(cmdArgs, "--keys")
-			cmdArgs = append(cmdArgs, cur.keys...)
+			cmdArgs = append(cmdArgs, stringAny("--keys"))
+			cmdArgs = appendStringAny(cmdArgs, cur.keys)
 		}
 
 		if len(cur.kvs) > 0 {
-			cmdArgs = append(cmdArgs, "--kvs")
+			cmdArgs = append(cmdArgs, stringAny("--kvs"))
 
 			for _, kv := range cur.kvs {
-				cmdArgs = append(cmdArgs, expandRootrel(kv, instance.Path))
+				cmdArgs = append(cmdArgs, stringAny(expandRootrel(kv, instance.Path)))
 			}
 		}
 
@@ -316,18 +316,18 @@ func emitKvOnlyObjcopyNode(
 	hash := objcopyHash(nil, nil, kvsHash, instance.Path, moduleTag)
 	outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
-	cmdArgs := []string{
-		instance.Platform.Tools.Python3,
-		objcopyScriptPath,
-		"--compiler", instance.Platform.Tools.CXX,
-		"--objcopy", instance.Platform.Tools.Objcopy,
-		"--compressor", rescompressorBinPath,
-		"--rescompiler", rescompilerBinPath,
-		"--output_obj", outputObj.String(),
-		"--target", instance.Platform.Triple,
-		"--kvs",
+	cmdArgs := []ANY{
+		stringAny(instance.Platform.Tools.Python3),
+		stringAny(objcopyScriptPath),
+		stringAny("--compiler"), stringAny(instance.Platform.Tools.CXX),
+		stringAny("--objcopy"), stringAny(instance.Platform.Tools.Objcopy),
+		stringAny("--compressor"), stringAny(rescompressorBinPath),
+		stringAny("--rescompiler"), stringAny(rescompilerBinPath),
+		stringAny("--output_obj"), vfsAny(outputObj),
+		stringAny("--target"), stringAny(instance.Platform.Triple),
+		stringAny("--kvs"),
 	}
-	cmdArgs = append(cmdArgs, kvsCmd...)
+	cmdArgs = appendStringAny(cmdArgs, kvsCmd)
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 	inputs := []VFS{
 		rescompilerBinVFS,
@@ -438,18 +438,18 @@ func emitYaConfJSONObjcopy(
 		outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 		input := Source(res.sourcePath)
 
-		cmdArgs := []string{
-			instance.Platform.Tools.Python3,
-			objcopyScriptPath,
-			"--compiler", instance.Platform.Tools.CXX,
-			"--objcopy", instance.Platform.Tools.Objcopy,
-			"--compressor", rescompressorBinPath,
-			"--rescompiler", rescompilerBinPath,
-			"--output_obj", outputObj.String(),
-			"--target", instance.Platform.Triple,
-			"--inputs", input.String(),
-			"--keys", keyB64,
-			"--kvs", kvCmd,
+		cmdArgs := []ANY{
+			stringAny(instance.Platform.Tools.Python3),
+			stringAny(objcopyScriptPath),
+			stringAny("--compiler"), stringAny(instance.Platform.Tools.CXX),
+			stringAny("--objcopy"), stringAny(instance.Platform.Tools.Objcopy),
+			stringAny("--compressor"), stringAny(rescompressorBinPath),
+			stringAny("--rescompiler"), stringAny(rescompilerBinPath),
+			stringAny("--output_obj"), vfsAny(outputObj),
+			stringAny("--target"), stringAny(instance.Platform.Triple),
+			stringAny("--inputs"), vfsAny(input),
+			stringAny("--keys"), stringAny(keyB64),
+			stringAny("--kvs"), stringAny(kvCmd),
 		}
 		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 		node := &Node{
@@ -638,25 +638,25 @@ func emitPySrcObjcopy(
 			hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path, moduleTag)
 			outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
-			cmdArgs := []string{
-				instance.Platform.Tools.Python3,
-				objcopyScriptPath,
-				"--compiler", instance.Platform.Tools.CXX,
-				"--objcopy", instance.Platform.Tools.Objcopy,
-				"--compressor", rescompressorBinPath,
-				"--rescompiler", rescompilerBinPath,
-				"--output_obj", outputObj.String(),
-				"--target", instance.Platform.Triple,
+			cmdArgs := []ANY{
+				stringAny(instance.Platform.Tools.Python3),
+				stringAny(objcopyScriptPath),
+				stringAny("--compiler"), stringAny(instance.Platform.Tools.CXX),
+				stringAny("--objcopy"), stringAny(instance.Platform.Tools.Objcopy),
+				stringAny("--compressor"), stringAny(rescompressorBinPath),
+				stringAny("--rescompiler"), stringAny(rescompilerBinPath),
+				stringAny("--output_obj"), vfsAny(outputObj),
+				stringAny("--target"), stringAny(instance.Platform.Triple),
 			}
 
-			cmdArgs = append(cmdArgs, "--inputs")
-			cmdArgs = append(cmdArgs, ch.pathInps...)
-			cmdArgs = append(cmdArgs, "--keys")
-			cmdArgs = append(cmdArgs, ch.keys...)
+			cmdArgs = append(cmdArgs, stringAny("--inputs"))
+			cmdArgs = appendStringAny(cmdArgs, ch.pathInps)
+			cmdArgs = append(cmdArgs, stringAny("--keys"))
+			cmdArgs = appendStringAny(cmdArgs, ch.keys)
 
 			if len(ch.kvsCmd) > 0 {
-				cmdArgs = append(cmdArgs, "--kvs")
-				cmdArgs = append(cmdArgs, ch.kvsCmd...)
+				cmdArgs = append(cmdArgs, stringAny("--kvs"))
+				cmdArgs = appendStringAny(cmdArgs, ch.kvsCmd)
 			}
 
 			inputs := []VFS{

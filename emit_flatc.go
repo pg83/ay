@@ -150,26 +150,26 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	cppVFS := Build(srcRel + ".cpp")
 	bfbsVFS := Build(strings.TrimSuffix(srcRel, ".fbs") + ".bfbs")
 
-	cmdArgs := []string{
-		instance.Platform.Tools.Python3,
-		flatcWrapperVFS.String(),
-		flatcBinary.String(),
-		"--no-warnings",
-		"--cpp",
-		"--keep-prefix",
-		"--gen-mutable",
-		"--schema",
-		"-b",
-		"--gen-object-api",
-		"--filename-suffix",
-		".fbs",
+	cmdArgs := []ANY{
+		stringAny(instance.Platform.Tools.Python3),
+		vfsAny(flatcWrapperVFS),
+		vfsAny(flatcBinary),
+		stringAny("--no-warnings"),
+		stringAny("--cpp"),
+		stringAny("--keep-prefix"),
+		stringAny("--gen-mutable"),
+		stringAny("--schema"),
+		stringAny("-b"),
+		stringAny("--gen-object-api"),
+		stringAny("--filename-suffix"),
+		stringAny(".fbs"),
 	}
-	cmdArgs = appendArgStrs(cmdArgs, flatcFlags)
+	cmdArgs = appendArgAny(cmdArgs, flatcFlags)
 	cmdArgs = append(cmdArgs,
-		"-I", "$(B)",
-		"-I", "$(S)",
-		"-o", headerVFS.String(),
-		srcVFS.String(),
+		stringAny("-I"), stringAny("$(B)"),
+		stringAny("-I"), stringAny("$(S)"),
+		argDashO, vfsAny(headerVFS),
+		vfsAny(srcVFS),
 	)
 
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}

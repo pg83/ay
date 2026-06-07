@@ -13,12 +13,12 @@ func EmitJVCPG4(
 ) NodeRef {
 	fsTools := copyFsToolsVFS
 
-	cmdArgs := []string{
-		instance.Platform.Tools.Python3,
-		fsTools.String(),
-		"copy",
-		src.String(),
-		dst.String(),
+	cmdArgs := []ANY{
+		stringAny(instance.Platform.Tools.Python3),
+		vfsAny(fsTools),
+		stringAny("copy"),
+		vfsAny(src),
+		vfsAny(dst),
 	}
 
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
@@ -67,12 +67,12 @@ func EmitCP(instance ModuleInstance, src VFS, dst VFS, scripts scriptDeps, emit 
 func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, scripts scriptDeps, emit Emitter) NodeRef {
 	fsTools := copyFsToolsVFS
 
-	cmdArgs := []string{
-		instance.Platform.Tools.Python3,
-		fsTools.String(),
-		"copy",
-		src.String(),
-		dst.String(),
+	cmdArgs := []ANY{
+		stringAny(instance.Platform.Tools.Python3),
+		vfsAny(fsTools),
+		stringAny("copy"),
+		vfsAny(src),
+		vfsAny(dst),
 	}
 
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}

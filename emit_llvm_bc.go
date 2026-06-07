@@ -56,7 +56,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		for _, src := range stmt.Sources {
 			inputVFS, producer := llvmBcSourceInfo(ctx, instance, d, src)
 			bcOut := Build(llvmBcRootRelArcSrc(ctx, instance, d, src) + stmt.Suffix + ".bc")
-			bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS.String(), bcOut.String())
+			bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
 
 			// Walk include closure (same as emitCodegenDownstreamCC for generated CC).
 			closure := walkClosure(ctx, instance, inputVFS, in)
@@ -108,13 +108,13 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		}
 
 		mergedOut := Build(instance.Path + "/" + stmt.Name + "_merged" + stmt.Suffix + ".bc")
-		ldArgs := []string{llvmLink}
+		ldArgs := []ANY{stringAny(llvmLink)}
 
 		for _, p := range bcPaths {
-			ldArgs = append(ldArgs, p.String())
+			ldArgs = append(ldArgs, vfsAny(p))
 		}
 
-		ldArgs = append(ldArgs, "-o", mergedOut.String())
+		ldArgs = append(ldArgs, argDashO, vfsAny(mergedOut))
 		mergeInputs := append([]VFS(nil), bcPaths...)
 
 		if linksCopy {
@@ -137,18 +137,18 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 		optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
 		optOut := Build(instance.Path + "/" + optOutName)
-		optArgs := []string{python, optWrapper, opt, mergedOut.String(), "-o", optOut.String()}
+		optArgs := []ANY{stringAny(python), stringAny(optWrapper), stringAny(opt), vfsAny(mergedOut), argDashO, vfsAny(optOut)}
 		passes := []string{"default<O2>", "globalopt", "globaldce"}
 
 		if len(stmt.Symbols) > 0 {
 			passes = append(passes, "internalize")
-			optArgs = append(optArgs, "-internalize-public-api-list="+strings.Join(stmt.Symbols, "#"))
+			optArgs = append(optArgs, stringAny("-internalize-public-api-list="+strings.Join(stmt.Symbols, "#")))
 		}
 
 		// ${__COMMA__} is a ymake macro that expands to literal ','; the outer
 		// single-quotes in the Python plugin are ymake argument syntax stripped
 		// before graph JSON is written. We emit the already-expanded form directly.
-		optArgs = append(optArgs, `-passes="`+strings.Join(passes, ",")+`"`)
+		optArgs = append(optArgs, stringAny(`-passes="`+strings.Join(passes, ",")+`"`))
 
 		// OP inputs: mergedBC + llvm_opt_wrapper.py + source-root BC closure inputs.
 		// Upstream OP carries the full $(S) closure from BC compilation (flat input
@@ -224,7 +224,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 //   - No macroPrefixMapFlags
 //   - No PerSrcCFlags
 //   - Ends with -Wno-unknown-warning-option -emit-llvm -c input -o output
-func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inputPath, outputPath string) []string {
+func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS) []ANY {
 	bundle := compileFlagBundleFor(platform)
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 
@@ -237,16 +237,16 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 		ownExtras = append(append([]ARG{}, ownExtras...), platform.CXXFlags...)
 	}
 
-	args := make([]string, 0, 200+len(in.AddIncl)+len(in.PeerAddInclGlobal)+
+	args := make([]ANY, 0, 200+len(in.AddIncl)+len(in.PeerAddInclGlobal)+
 		len(bundle.Defines)+len(ownCFlags)+2*len(bundle.NoLibcBlock)+
 		len(in.ModuleScopeCFlags)+len(ownExtras)+len(ownGlobalBucket)+
 		len(bundle.ArchArgs)+len(bundle.CFlags)+len(warningBundle))
 
 	// Wrapper prefix: python3 clang_wrapper.py no clangBC++
-	args = append(args, python, clangWrapper, "no", clangBC)
+	args = append(args, stringAny(python), stringAny(clangWrapper), stringAny("no"), stringAny(clangBC))
 
 	// ${pre=-I:_C__INCLUDE}: include paths (same layout as CC compile)
-	args = appendArgStrs(args, ccIncludesPrefix)
+	args = appendArgAny(args, ccIncludesPrefix)
 	args = appendAddIncl(args, in.AddIncl, in.InclArgs)
 	peerAddIncl := in.PeerAddInclGlobal
 
@@ -270,15 +270,15 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	// appendCompileFlagPipeline) and from the OwnGlobalBucket/PeerCXXFlagsGlobal
 	// slot. The explicit catboostOpenSourceDefine ensures the flag is present even
 	// when PeerCXXFlagsGlobal is empty (same reason composeTargetCC always adds it).
-	args = appendArgStrs(args, ownGlobalBucket, catboostOpenSourceDefine, composePostCatboostBucket(ownGlobalBucket))
+	args = appendArgAny(args, ownGlobalBucket, catboostOpenSourceDefine, composePostCatboostBucket(ownGlobalBucket))
 
 	// $C_FLAGS_PLATFORM comes after $BC_CXXFLAGS (not before like in CC).
-	args = append(args, "--target="+platform.Triple)
-	args = appendArgStrs(args, bundle.ArchArgs)
-	args = append(args, "-B"+binPath)
+	args = append(args, platform.TargetArg)
+	args = appendArgAny(args, bundle.ArchArgs)
+	args = append(args, argDashBBin)
 
 	// BC-specific tail flags from upstream macro
-	args = append(args, "-Wno-unknown-warning-option", "-emit-llvm", "-c", inputPath, "-o", outputPath)
+	args = append(args, stringAny("-Wno-unknown-warning-option"), stringAny("-emit-llvm"), argDashC, vfsAny(inVFS), argDashO, vfsAny(outVFS))
 
 	return args
 }

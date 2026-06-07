@@ -39,15 +39,15 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		}
 	}
 
-	cmdArgs := make([]string, 0, 5+len(effectiveFlags)+1)
-	cmdArgs = append(cmdArgs, canonicalBinary.String())
-	cmdArgs = appendArgStrs(cmdArgs, effectiveFlags)
+	cmdArgs := make([]ANY, 0, 5+len(effectiveFlags)+1)
+	cmdArgs = append(cmdArgs, vfsAny(canonicalBinary))
+	cmdArgs = appendArgAny(cmdArgs, effectiveFlags)
 	cmdArgs = append(cmdArgs,
-		"-L",
-		"-I$(S)",
-		"-o",
-		outVFS.String(),
-		inVFS.String(),
+		stringAny("-L"),
+		stringAny("-I$(S)"),
+		stringAny("-o"),
+		vfsAny(outVFS),
+		vfsAny(inVFS),
 	)
 
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}

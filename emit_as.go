@@ -2,10 +2,8 @@ package main
 
 func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS) {
 	outVFS, inVFS := composeASPaths(instance, srcRel, srcVFS, in)
-	outputPath := outVFS.String()
-	inputPath := inVFS.String()
 
-	cmdArgs := composeASCmdArgs(instance, outputPath, inputPath, in)
+	cmdArgs := composeASCmdArgs(instance, outVFS, inVFS, in)
 	env := hostP.ToolEnv()
 
 	allInputs := make([]VFS, 0, 1+len(in.IncludeInputs))

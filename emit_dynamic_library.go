@@ -187,79 +187,79 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	}
 }
 
-func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath string, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript, fixElfPath string) []string {
-	cmdArgs := []string{
-		p.Tools.Python3,
-		ldLinkDynLibPath,
-		"--target", outputPath,
+func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath string, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript, fixElfPath string) []ANY {
+	cmdArgs := []ANY{
+		stringAny(p.Tools.Python3),
+		stringAny(ldLinkDynLibPath),
+		stringAny("--target"), stringAny(outputPath),
 	}
 
 	if len(pluginPaths) > 0 {
-		cmdArgs = append(cmdArgs, "--start-plugins")
+		cmdArgs = append(cmdArgs, stringAny("--start-plugins"))
 
 		for _, p := range pluginPaths {
-			cmdArgs = append(cmdArgs, p.String())
+			cmdArgs = append(cmdArgs, vfsAny(p))
 		}
 
-		cmdArgs = append(cmdArgs, "--end-plugins")
+		cmdArgs = append(cmdArgs, stringAny("--end-plugins"))
 	}
 
-	for _, p := range wholeArchivePeers {
-		cmdArgs = append(cmdArgs, "--whole-archive-peers", p)
+	for _, peer := range wholeArchivePeers {
+		cmdArgs = append(cmdArgs, stringAny("--whole-archive-peers"), stringAny(peer))
 	}
 
 	cmdArgs = append(cmdArgs,
-		"--source-root", "$(S)",
-		"--build-root", "$(B)",
-		"--arch=LINUX",
-		"--objcopy-exe", p.Tools.Objcopy,
-		"--fix-elf", fixElfPath,
-		p.Tools.CXX,
-		"-Wl,--whole-archive",
-		"--ya-start-command-file",
-		"--ya-end-command-file",
-		"-Wl,--no-whole-archive",
-		vcsOPath,
-		"-o", outputPath,
-		"-shared",
-		"-Wl,-soname,"+outputName,
-		"--target="+p.Triple,
-		"-B"+binPath,
-		"-Wl,--start-group",
+		stringAny("--source-root"), stringAny("$(S)"),
+		stringAny("--build-root"), stringAny("$(B)"),
+		stringAny("--arch=LINUX"),
+		stringAny("--objcopy-exe"), stringAny(p.Tools.Objcopy),
+		stringAny("--fix-elf"), stringAny(fixElfPath),
+		p.CXXArg,
+		stringAny("-Wl,--whole-archive"),
+		stringAny("--ya-start-command-file"),
+		stringAny("--ya-end-command-file"),
+		stringAny("-Wl,--no-whole-archive"),
+		stringAny(vcsOPath),
+		argDashO, stringAny(outputPath),
+		stringAny("-shared"),
+		stringAny("-Wl,-soname,"+outputName),
+		p.TargetArg,
+		argDashBBin,
+		stringAny("-Wl,--start-group"),
 	)
 
 	for _, p := range peerLibPaths {
-		cmdArgs = append(cmdArgs, p.Rel())
+		cmdArgs = append(cmdArgs, stringAny(p.Rel()))
 	}
 
-	cmdArgs = append(cmdArgs, "-Wl,--end-group")
+	cmdArgs = append(cmdArgs, stringAny("-Wl,--end-group"))
 	cmdArgs = append(cmdArgs,
-		"-rdynamic",
-		"-Wl,--version-script=$(S)/"+modulePath+"/"+exportsScript,
-		"-Wl,--no-as-needed",
+		stringAny("-rdynamic"),
+		stringAny("-Wl,--version-script=$(S)/"+modulePath+"/"+exportsScript),
+		stringAny("-Wl,--no-as-needed"),
 	)
 
 	if p.PIC {
-		cmdArgs = append(cmdArgs, "-fPIC")
+		cmdArgs = append(cmdArgs, argAny(argFPIC))
 	}
 
 	cmdArgs = append(cmdArgs,
-		"-Wl,--gdb-index",
-		"-Wl,-z,notext",
+		stringAny("-Wl,--gdb-index"),
+		stringAny("-Wl,-z,notext"),
 	)
 
 	if p.PIC {
-		cmdArgs = append(cmdArgs, "-fPIC")
+		cmdArgs = append(cmdArgs, argAny(argFPIC))
 	}
 
 	cmdArgs = append(cmdArgs,
-		"-fuse-ld=lld",
-		"--ld-path="+p.Tools.LLD,
-		"-Wl,--no-rosegment",
-		"-Wl,--build-id=sha1",
-		"-nostdlib",
-		"-lm",
-		"-Wl,--gc-sections",
+		stringAny("-fuse-ld=lld"),
+		stringAny("--ld-path="+p.Tools.LLD),
+		stringAny("-Wl,--no-rosegment"),
+		stringAny("-Wl,--build-id=sha1"),
+		stringAny("-nostdlib"),
+		stringAny("-lm"),
+		stringAny("-Wl,--gc-sections"),
 	)
 
 	return cmdArgs

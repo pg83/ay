@@ -116,30 +116,30 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 
 		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
-		cmdArgs := []string{
-			instance.Platform.Tools.Python3,
-			"$(S)/contrib/tools/cython/cython.py",
-			"-X",
-			"legacy_implicit_noexcept=True",
-			"-E",
-			"UNAME_SYSNAME=Linux",
+		cmdArgs := []ANY{
+			stringAny(instance.Platform.Tools.Python3),
+			stringAny("$(S)/contrib/tools/cython/cython.py"),
+			stringAny("-X"),
+			stringAny("legacy_implicit_noexcept=True"),
+			stringAny("-E"),
+			stringAny("UNAME_SYSNAME=Linux"),
 		}
-		cmdArgs = append(cmdArgs, stmt.Options...)
+		cmdArgs = appendStringAny(cmdArgs, stmt.Options)
 
 		if !stmt.CMode {
-			cmdArgs = append(cmdArgs, "--cplus")
+			cmdArgs = append(cmdArgs, stringAny("--cplus"))
 		}
 
 		cmdArgs = append(cmdArgs,
-			"-I$(B)",
-			"-I$(S)",
+			stringAny("-I$(B)"),
+			stringAny("-I$(S)"),
 		)
 		cmdArgs = appendCythonAddIncl(cmdArgs, d.cythonAddIncl, ctx.inclArgs)
 		cmdArgs = append(cmdArgs,
-			"-I$(S)/contrib/tools/cython/Cython/Includes",
-			srcVFS.String(),
-			"-o",
-			generatedVFS.String(),
+			stringAny("-I$(S)/contrib/tools/cython/Cython/Includes"),
+			vfsAny(srcVFS),
+			argDashO,
+			vfsAny(generatedVFS),
 		)
 
 		targetProps := TargetProperties{ModuleDir: instance.Path}
@@ -236,7 +236,7 @@ func cythonImplicitFallthrough(stmt *CythonStmt, py23Variant bool) bool {
 	return !stmt.CMode && (hasSuffix(stmt.Src, ".pyx") || py23Variant)
 }
 
-func appendCythonAddIncl(cmdArgs []string, addIncl []VFS, memo inclArgMemo) []string {
+func appendCythonAddIncl(cmdArgs []ANY, addIncl []VFS, memo inclArgMemo) []ANY {
 	for _, path := range addIncl {
 		cmdArgs = append(cmdArgs, memo.arg(path))
 	}

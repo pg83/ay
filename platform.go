@@ -35,6 +35,12 @@ type Platform struct {
 	Triple string
 	March  string
 
+	// Pre-boxed cmd-arg tokens, computed once per platform so the per-CC-node
+	// compile line doesn't re-intern the (constant) compiler path and --target.
+	CCArg     ANY
+	CXXArg    ANY
+	TargetArg ANY
+
 	CFlags   []ARG
 	CXXFlags []ARG
 
@@ -134,6 +140,10 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsE
 		ClangVerSTR:       internString(platformClangVersion(flags)),
 		BuildTypeUpperSTR: internString(strings.ToUpper(buildType)),
 	}
+
+	p.CCArg = stringAny(p.Tools.CC)
+	p.CXXArg = stringAny(p.Tools.CXX)
+	p.TargetArg = stringAny("--target=" + p.Triple)
 
 	p.StatsTags = statsTagsForPlatform(p)
 

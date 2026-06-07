@@ -31,7 +31,7 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	return Build(outRel), srcVFS
 }
 
-func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in ModuleCCInputs) []string {
+func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInputs) []ANY {
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 3 + len(bundle.ArchArgs)
 
@@ -47,22 +47,22 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	fixed := prologueArgs + len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
 		len(bundle.CFlags) + len(warnBundle) + len(bundle.Defines) + len(ownCFlags) +
 		len(bundle.NoLibcBlock) + betweenBlocks + len(bundle.NoLibcBlock) + len(in.SFlags) + 4
-	cmdArgs := make([]string, 0, fixed+len(includes))
+	cmdArgs := make([]ANY, 0, fixed+len(includes))
 
-	cmdArgs = append(cmdArgs, instance.Platform.Tools.CC, "--target="+instance.Platform.Triple)
-	cmdArgs = appendArgStrs(cmdArgs, bundle.ArchArgs)
-	cmdArgs = append(cmdArgs, "-B"+binPath)
+	cmdArgs = append(cmdArgs, instance.Platform.CCArg, instance.Platform.TargetArg)
+	cmdArgs = appendArgAny(cmdArgs, bundle.ArchArgs)
+	cmdArgs = append(cmdArgs, argDashBBin)
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags)
-	cmdArgs = appendArgStrs(cmdArgs, in.SFlags)
-	cmdArgs = append(cmdArgs, "-c", "-o", outputPath, inputPath)
+	cmdArgs = appendArgAny(cmdArgs, in.SFlags)
+	cmdArgs = append(cmdArgs, argDashC, argDashO, vfsAny(outVFS), vfsAny(inVFS))
 	cmdArgs = append(cmdArgs, includes...)
 
 	return cmdArgs
 }
 
-func composeASIncludes(in ModuleCCInputs) []string {
-	out := make([]string, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(in.PeerAddInclGlobal))
-	out = appendArgStrs(out, ccIncludesPrefix)
+func composeASIncludes(in ModuleCCInputs) []ANY {
+	out := make([]ANY, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(in.PeerAddInclGlobal))
+	out = appendArgAny(out, ccIncludesPrefix)
 	out = appendAddIncl(out, in.AddIncl, in.InclArgs)
 	out = appendAddIncl(out, in.PeerAddInclGlobal, in.InclArgs)
 

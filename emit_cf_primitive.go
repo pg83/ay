@@ -19,13 +19,13 @@ func EmitCF(
 ) (NodeRef, VFS) {
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
-	cmdArgs := []string{
-		instance.Platform.Tools.Python3,
-		configureFilePyPath,
-		srcVFS.String(),
-		outVFS.String(),
+	cmdArgs := []ANY{
+		stringAny(instance.Platform.Tools.Python3),
+		vfsAny(configureFilePyVFS),
+		vfsAny(srcVFS),
+		vfsAny(outVFS),
 	}
-	cmdArgs = append(cmdArgs, cfgVars...)
+	cmdArgs = appendStringAny(cmdArgs, cfgVars)
 
 	inputs := make([]VFS, 0, 2+len(includeInputs))
 	inputs = append(inputs, configureFilePyVFS, srcVFS)

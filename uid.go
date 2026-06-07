@@ -210,6 +210,17 @@ func (c *canonBuf) writeStringSlice(ss []string) {
 	}
 }
 
+// writeAnySlice canonicalises boxed cmd args by their materialized string, so a
+// node's UID is identical whether an arg was boxed as ARG/STR/VFS — the same
+// flag string hashes the same regardless of which namespace produced it.
+func (c *canonBuf) writeAnySlice(as []ANY) {
+	c.writeUint32(uint32(len(as)))
+
+	for _, a := range as {
+		c.writeBytes(a.String())
+	}
+}
+
 func (c *canonBuf) writeVFSSlice(vs []VFS) {
 	c.writeUint32(uint32(len(vs)))
 
@@ -230,7 +241,7 @@ func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
 	c.writeUint32(uint32(len(cmds)))
 
 	for _, cm := range cmds {
-		c.writeStringSlice(cm.CmdArgs)
+		c.writeAnySlice(cm.CmdArgs)
 		c.writeBytes(cm.Cwd)
 		c.writeEnv(cm.Env)
 		c.writeBytes(cm.Stdout)

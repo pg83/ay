@@ -41,20 +41,20 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 		inputs = append(inputs, bldContribToolsSwigSwig, srcVFS)
 		inputs = append(inputs, swigClosure...)
 
-		cmdArgs := []string{
-			swigBin,
-			"-I$(B)",
-			"-I$(S)",
-			"-I$(S)/contrib/tools/swig/Lib/python",
-			"-I$(S)/contrib/tools/swig/Lib",
-			"-python",
-			"-module",
-			swigModuleName(stmt.Module),
-			"-interface",
-			swigModuleName(stmt.Module) + "_swg",
-			"-o",
-			cOutVFS.String(),
-			srcVFS.String(),
+		cmdArgs := []ANY{
+			stringAny(swigBin),
+			stringAny("-I$(B)"),
+			stringAny("-I$(S)"),
+			stringAny("-I$(S)/contrib/tools/swig/Lib/python"),
+			stringAny("-I$(S)/contrib/tools/swig/Lib"),
+			stringAny("-python"),
+			stringAny("-module"),
+			stringAny(swigModuleName(stmt.Module)),
+			stringAny("-interface"),
+			stringAny(swigModuleName(stmt.Module) + "_swg"),
+			argDashO,
+			vfsAny(cOutVFS),
+			vfsAny(srcVFS),
 		}
 
 		swRef := ctx.emit.Emit(bindNodePlatform(&Node{
