@@ -20,14 +20,14 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	cmdArgs := make([]ANY, 0, 4+len(sources))
 	cmdArgs = append(cmdArgs,
-		stringAny(instance.Platform.Tools.Python3),
+		internAny(instance.Platform.Tools.Python3),
 		vfsAny(joinSrcs),
 		vfsAny(outVFS),
 		anyYaStartCommandFile,
 	)
 
 	for _, s := range sources {
-		cmdArgs = append(cmdArgs, stringAny(instance.Path+"/"+s))
+		cmdArgs = append(cmdArgs, internAny(instance.Path+"/"+s))
 	}
 
 	cmdArgs = append(cmdArgs, anyYaEndCommandFile)

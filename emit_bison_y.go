@@ -11,7 +11,7 @@ var (
 	bldContribToolsBisonBison = Build("contrib/tools/bison/bison")
 	bldContribToolsM4M4       = Build("contrib/tools/m4/m4")
 	// Path constants hoisted by `ay refac consts`.
-	anyV = stringAny("-v")
+	anyV = internAny("-v")
 )
 
 var bisonCppSkeletonInputs = []VFS{
@@ -122,9 +122,9 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	cmds := []Cmd{
 		{
 			CmdArgs: []ANY{
-				stringAny(bisonBin),
+				internAny(bisonBin),
 				anyV,
-				stringAny("--defines=" + headerVFS.String()),
+				internAny("--defines=" + headerVFS.String()),
 				argDashO,
 				vfsAny(generatedVFS),
 				vfsAny(srcVFS),
@@ -137,7 +137,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
 			CmdArgs: []ANY{
-				stringAny(instance.Platform.Tools.Python3),
+				internAny(instance.Platform.Tools.Python3),
 				vfsAny(bisonPreprocessPyVFS),
 				vfsAny(headerVFS),
 			},

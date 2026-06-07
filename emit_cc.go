@@ -8,9 +8,9 @@ import (
 var (
 	argNoShadow         = internArg("-Wno-shadow")
 	baseUnitCxxNostdinc = internArg("-nostdinc++")
-	argDashC            = stringAny("-c")
-	argDashO            = stringAny("-o")
-	argDashBBin         = stringAny("-B" + binPath)
+	argDashC            = internAny("-c")
+	argDashO            = internAny("-o")
+	argDashBBin         = internAny("-B" + binPath)
 )
 
 type ModuleCCInputs struct {
@@ -472,7 +472,7 @@ func (m inclArgMemo) arg(path VFS) ANY {
 		return a
 	}
 
-	a := stringAny("-I" + path.String())
+	a := internAny("-I" + path.String())
 	m.m.Put(path, a)
 
 	return a

@@ -23,28 +23,28 @@ func EmitBI(
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	cmd0Args := []ANY{
-		stringAny(instance.Platform.Tools.Python3),
+		internAny(instance.Platform.Tools.Python3),
 		vfsAny(yieldLinePyVFS),
 		any2,
-		stringAny(argsFile),
+		internAny(argsFile),
 		instance.Platform.CXXArg,
 	}
 
 	cmd1Args := make([]ANY, 0, 4+len(cxxFlags))
 	cmd1Args = append(cmd1Args,
-		stringAny(instance.Platform.Tools.Python3),
+		internAny(instance.Platform.Tools.Python3),
 		vfsAny(yieldLinePyVFS),
 		any2,
-		stringAny(argsFile),
+		internAny(argsFile),
 	)
 	cmd1Args = append(cmd1Args, cxxFlags...)
 
 	cmd2Args := []ANY{
-		stringAny(instance.Platform.Tools.Python3),
+		internAny(instance.Platform.Tools.Python3),
 		vfsAny(xargsPyVFS),
 		any2,
-		stringAny(argsFile),
-		stringAny(instance.Platform.Tools.Python3),
+		internAny(argsFile),
+		internAny(instance.Platform.Tools.Python3),
 		vfsAny(buildInfoGenPyVFS),
 		vfsAny(outVFS),
 	}

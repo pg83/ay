@@ -56,7 +56,7 @@ func EmitPR(
 			a = vfs.String()
 		}
 
-		cmdArgs = append(cmdArgs, stringAny(a))
+		cmdArgs = append(cmdArgs, internAny(a))
 	}
 
 	inputs := make([]VFS, 0, 1+len(auxTools)+len(stmt.INFiles)+len(inputClosure))

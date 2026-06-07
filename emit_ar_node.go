@@ -4,10 +4,10 @@ var (
 	// Path constants hoisted by `ay refac consts`.
 	buildScriptsLinkLibPy = Source("build/scripts/link_lib.py")
 	// Path constants hoisted by `ay refac consts`.
-	any2      = stringAny("--")
-	anyB      = stringAny("$(B)")
-	anyNone   = stringAny("None")
-	anyPlugin = stringAny("--plugin")
+	any2      = internAny("--")
+	anyB      = internAny("$(B)")
+	anyNone   = internAny("None")
+	anyPlugin = internAny("--plugin")
 )
 
 func emitARNode(
@@ -27,11 +27,11 @@ func emitARNode(
 	arTool, arType, arFormat := instance.Platform.ArchiverArgs()
 
 	cmdArgs := []ANY{
-		stringAny(instance.Platform.Tools.Python3),
+		internAny(instance.Platform.Tools.Python3),
 		vfsAny(scriptVFS),
-		stringAny(arTool),
-		stringAny(arType),
-		stringAny(arFormat),
+		internAny(arTool),
+		internAny(arType),
+		internAny(arFormat),
 		anyB,
 		anyNone,
 		any2,

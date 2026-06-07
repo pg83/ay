@@ -11,17 +11,17 @@ var (
 	ldLinkExePath      = ldLinkExeVFS.String()
 	ldFsToolsPath      = ldFsToolsVFS.String()
 	// Path constants hoisted by `ay refac consts`.
-	anyAddGnuDebuglink             = stringAny("--add-gnu-debuglink")
-	anyClangVer                    = stringAny("--clang-ver")
-	anyLinkOrCopyToDir             = stringAny("link_or_copy_to_dir")
-	anyNoCheck                     = stringAny("--no-check")
-	anyOnlyKeepDebug               = stringAny("--only-keep-debug")
-	anyRemoveSectionGnuDebuglink   = stringAny("--remove-section=.gnu_debuglink")
-	anyStripDebug                  = stringAny("--strip-debug")
-	anyVcsVcsJson                  = stringAny("$(VCS)/vcs.json")
-	anyWholeArchiveLibs            = stringAny("--whole-archive-libs")
-	anyWlCompressDebugSectionsZstd = stringAny("-Wl,--compress-debug-sections=zstd")
-	anyWlStripAll                  = stringAny("-Wl,--strip-all")
+	anyAddGnuDebuglink             = internAny("--add-gnu-debuglink")
+	anyClangVer                    = internAny("--clang-ver")
+	anyLinkOrCopyToDir             = internAny("link_or_copy_to_dir")
+	anyNoCheck                     = internAny("--no-check")
+	anyOnlyKeepDebug               = internAny("--only-keep-debug")
+	anyRemoveSectionGnuDebuglink   = internAny("--remove-section=.gnu_debuglink")
+	anyStripDebug                  = internAny("--strip-debug")
+	anyVcsVcsJson                  = internAny("$(VCS)/vcs.json")
+	anyWholeArchiveLibs            = internAny("--whole-archive-libs")
+	anyWlCompressDebugSectionsZstd = internAny("-Wl,--compress-debug-sections=zstd")
+	anyWlStripAll                  = internAny("-Wl,--strip-all")
 )
 
 // ldScriptInputs seeds the link node's $(S) tooling inputs: the wrapper scripts it
@@ -233,10 +233,10 @@ func lastPathComponent(p string) string {
 
 func composeLDCmdVcsInfo(tools Toolchain, vcsCPath string) []ANY {
 	return []ANY{
-		stringAny(tools.Python3),
+		internAny(tools.Python3),
 		vfsAny(ldVcsInfoVFS),
 		anyVcsVcsJson,
-		stringAny(vcsCPath),
+		internAny(vcsCPath),
 		vfsAny(ldSvnInterfaceVFS),
 	}
 }
@@ -250,8 +250,8 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 		argDashBBin,
 		argDashC,
 		argDashO,
-		stringAny(vcsOPath),
-		stringAny(vcsCPath),
+		internAny(vcsOPath),
+		internAny(vcsCPath),
 	)
 	cmdArgs = append(cmdArgs, anyIS)
 
@@ -280,7 +280,7 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 	cmdArgs := make([]ANY, 0, argCap)
 
 	cmdArgs = append(cmdArgs,
-		stringAny(p.Tools.Python3),
+		internAny(p.Tools.Python3),
 		vfsAny(ldLinkExeVFS),
 	)
 
@@ -293,29 +293,29 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 	cmdArgs = append(cmdArgs, anyEndPlugins)
 
 	cmdArgs = append(cmdArgs,
-		anyClangVer, stringAny(p.ClangVer),
+		anyClangVer, internAny(p.ClangVer),
 		anySourceRoot, anyS,
 		anyBuildRoot, anyB,
 	)
 
 	for _, p := range wholeArchiveCmdPaths {
-		cmdArgs = append(cmdArgs, anyWholeArchiveLibs, stringAny(p.Rel()))
+		cmdArgs = append(cmdArgs, anyWholeArchiveLibs, internAny(p.Rel()))
 	}
 
 	for _, p := range wholeArchivePaths {
-		cmdArgs = append(cmdArgs, anyWholeArchiveLibs, stringAny(p.Rel()))
+		cmdArgs = append(cmdArgs, anyWholeArchiveLibs, internAny(p.Rel()))
 	}
 
 	cmdArgs = append(cmdArgs,
 		anyArchLinux,
-		anyObjcopyExe, stringAny(p.Tools.Objcopy),
-		stringAny(p.Tools.CXX),
+		anyObjcopyExe, internAny(p.Tools.Objcopy),
+		internAny(p.Tools.CXX),
 		anyWlWholeArchive,
 		anyYaStartCommandFile,
 	)
 
 	for _, p := range globalPaths {
-		cmdArgs = append(cmdArgs, stringAny(p.Rel()))
+		cmdArgs = append(cmdArgs, internAny(p.Rel()))
 	}
 
 	cmdArgs = append(cmdArgs,
@@ -324,16 +324,16 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 	)
 
 	for _, op := range objcopyPaths {
-		cmdArgs = append(cmdArgs, stringAny(op.Rel()))
+		cmdArgs = append(cmdArgs, internAny(op.Rel()))
 	}
 
-	cmdArgs = append(cmdArgs, stringAny(vcsOPath))
+	cmdArgs = append(cmdArgs, internAny(vcsOPath))
 
 	for _, cp := range ccPaths {
 		cmdArgs = append(cmdArgs, vfsAny(cp))
 	}
 
-	cmdArgs = append(cmdArgs, argDashO, stringAny(outputPath))
+	cmdArgs = append(cmdArgs, argDashO, internAny(outputPath))
 
 	bundle := compileFlagBundleFor(p)
 	cmdArgs = append(cmdArgs, p.TargetArg)
@@ -343,7 +343,7 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 	cmdArgs = append(cmdArgs, anyWlStartGroup)
 
 	for _, p := range peerLinkCmdPaths {
-		cmdArgs = append(cmdArgs, stringAny(p.Rel()))
+		cmdArgs = append(cmdArgs, internAny(p.Rel()))
 	}
 
 	cmdArgs = append(cmdArgs, anyWlEndGroup)
@@ -363,7 +363,7 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 	trailer := []ANY{anyRdynamic}
 
 	if exportsScript != nil {
-		trailer = append(trailer, stringAny("-Wl,--version-script=$(S)/"+*exportsScript))
+		trailer = append(trailer, internAny("-Wl,--version-script=$(S)/"+*exportsScript))
 	}
 
 	if p != nil && !p.PIC && p.Flags[envSANDBOXING] == strYes {
@@ -401,7 +401,7 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 
 func composeLDCmdLinkOrCopy(tools Toolchain, modulePath string, dynamicPaths ...VFS) []ANY {
 	cmd := []ANY{
-		stringAny(tools.Python3),
+		internAny(tools.Python3),
 		vfsAny(ldFsToolsVFS),
 		anyLinkOrCopyToDir,
 		anyNoCheck,
@@ -424,9 +424,9 @@ func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) [
 	debugPath := outputPath + ".debug"
 
 	return []Cmd{
-		{CmdArgs: []ANY{stringAny(tools.Objcopy), anyOnlyKeepDebug, stringAny(outputPath), stringAny(debugPath)}},
-		{CmdArgs: []ANY{stringAny(tools.Strip), anyStripDebug, stringAny(outputPath)}},
-		{CmdArgs: []ANY{stringAny(tools.Objcopy), anyRemoveSectionGnuDebuglink, anyAddGnuDebuglink, stringAny(debugPath), stringAny(outputPath)}},
+		{CmdArgs: []ANY{internAny(tools.Objcopy), anyOnlyKeepDebug, internAny(outputPath), internAny(debugPath)}},
+		{CmdArgs: []ANY{internAny(tools.Strip), anyStripDebug, internAny(outputPath)}},
+		{CmdArgs: []ANY{internAny(tools.Objcopy), anyRemoveSectionGnuDebuglink, anyAddGnuDebuglink, internAny(debugPath), internAny(outputPath)}},
 	}
 }
 

@@ -20,7 +20,7 @@ func EmitCF(
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	cmdArgs := []ANY{
-		stringAny(instance.Platform.Tools.Python3),
+		internAny(instance.Platform.Tools.Python3),
 		vfsAny(configureFilePyVFS),
 		vfsAny(srcVFS),
 		vfsAny(outVFS),

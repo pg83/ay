@@ -66,5 +66,5 @@ func EmitR5(
 
 // Path constants hoisted by `ay refac consts`.
 var (
-	anyG2 = stringAny("-G2")
+	anyG2 = internAny("-G2")
 )

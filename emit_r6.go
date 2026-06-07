@@ -82,5 +82,5 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 
 // Path constants hoisted by `ay refac consts`.
 var (
-	anyL = stringAny("-L")
+	anyL = internAny("-L")
 )

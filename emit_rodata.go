@@ -8,9 +8,9 @@ import (
 var (
 	rodataScriptVFS = Intern("$(S)/build/scripts/rodata2asm.py")
 	// Path constants hoisted by `ay refac consts`.
-	anyDwarf2 = stringAny("dwarf2")
-	anyElf    = stringAny("--elf")
-	anyG      = stringAny("-g")
+	anyDwarf2 = internAny("dwarf2")
+	anyElf    = internAny("--elf")
+	anyG      = internAny("-g")
 )
 
 func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
@@ -34,10 +34,10 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		Cmds: []Cmd{
 			{
 				CmdArgs: []ANY{
-					stringAny(instance.Platform.Tools.Python3),
+					internAny(instance.Platform.Tools.Python3),
 					vfsAny(rodataScriptVFS),
 					anyElf,
-					stringAny(toolName),
+					internAny(toolName),
 					vfsAny(srcVFS),
 					vfsAny(asmVFS),
 				},
@@ -45,13 +45,13 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 			},
 			{
 				CmdArgs: []ANY{
-					stringAny(yasmBinaryPath),
+					internAny(yasmBinaryPath),
 					anyF, anyElf64,
 					anyD, anyUnix,
 					anyReplaceBB,
 					anyReplaceSS,
 					anyReplaceToolRootT,
-					anyD, stringAny("_" + string(instance.Platform.ISA) + "_"),
+					anyD, internAny("_" + string(instance.Platform.ISA) + "_"),
 					anyDYasm,
 					anyG, anyDwarf2,
 					anyI, anyB,

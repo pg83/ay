@@ -2,9 +2,9 @@ package main
 
 var (
 	// Path constants hoisted by `ay refac consts`.
-	anyHeader      = stringAny("--header")
-	anyIncludePath = stringAny("--include-path")
-	anyOutput      = stringAny("--output")
+	anyHeader      = internAny("--header")
+	anyIncludePath = internAny("--include-path")
+	anyOutput      = internAny("--output")
 )
 
 func EmitEN(
@@ -25,7 +25,7 @@ func EmitEN(
 		vfsAny(enumParserBin),
 		vfsAny(headerInput),
 		anyIncludePath,
-		stringAny(headerInput.Rel()),
+		internAny(headerInput.Rel()),
 		anyOutput,
 		vfsAny(serializedCPPVFS),
 	}

@@ -414,7 +414,7 @@ func EmitPYRun(
 		}
 	}
 
-	cmdArgs := []ANY{stringAny(instance.Platform.Tools.Python3), vfsAny(scriptVFS)}
+	cmdArgs := []ANY{internAny(instance.Platform.Tools.Python3), vfsAny(scriptVFS)}
 
 	for _, a := range stmt.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
@@ -431,7 +431,7 @@ func EmitPYRun(
 			a = vfs.String()
 		}
 
-		cmdArgs = append(cmdArgs, stringAny(a))
+		cmdArgs = append(cmdArgs, internAny(a))
 	}
 
 	inputs := make([]VFS, 0, 1+len(stmt.INFiles)+len(inputClosure))

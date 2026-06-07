@@ -9,68 +9,68 @@ var (
 	// Path constants hoisted by `ay refac consts`.
 	bldCommonTestContext = Build("common_test.context")
 	// Path constants hoisted by `ay refac consts`.
-	any0                        = stringAny("0")
-	any1                        = stringAny("1")
-	any100000                   = stringAny("100000")
-	any3                        = stringAny("{")
-	any30                       = stringAny("30")
-	any4                        = stringAny("  }")
-	any5                        = stringAny("}")
-	any60                       = stringAny("60")
-	any8                        = stringAny("8")
-	anyBinary                   = stringAny("--binary")
-	anyClangFormat              = stringAny("clang_format")
-	anyCompressionFilter        = stringAny("--compression-filter")
-	anyCompressionLevel         = stringAny("--compression-level")
-	anyConfig                   = stringAny("--config")
-	anyContextFilename          = stringAny("--context-filename")
-	anyDepends                  = stringAny("--depends")
-	anyFlags                    = stringAny("  \"flags\": {")
-	anyGdbPath                  = stringAny("--gdb-path")
-	anyGlobalResource           = stringAny("--global-resource")
-	anyLintName                 = stringAny("--lint-name")
-	anyListTimeout              = stringAny("--list-timeout")
-	anyLogPath                  = stringAny("--log-path")
-	anyMeta                     = stringAny("--meta")
-	anyModulo                   = stringAny("--modulo")
-	anyModuloIndex              = stringAny("--modulo-index")
-	anyNinja                    = stringAny("ninja")
-	anyOutPath                  = stringAny("--out-path")
-	anyOutputDir                = stringAny("--output-dir")
-	anyOutputStyle              = stringAny("--output-style")
-	anyPartitionMode            = stringAny("--partition-mode")
-	anyProjectPath              = stringAny("--project-path")
-	anyPythonBin                = stringAny("--python-bin")
-	anyRamLimitGb               = stringAny("--ram-limit-gb")
-	anyRemoveTos                = stringAny("--remove-tos")
-	anyResultMaxFileSize        = stringAny("--result-max-file-size")
-	anyRunCustomLint            = stringAny("run_custom_lint")
-	anyRunTest                  = stringAny("run_test")
-	anyRunUt                    = stringAny("run_ut")
-	anySequential               = stringAny("SEQUENTIAL")
-	anySigusr2                  = stringAny("SIGUSR2")
-	anySmall                    = stringAny("small")
-	anySmoothShutdownSignals    = stringAny("--smooth-shutdown-signals")
-	anyStyle                    = stringAny("style")
-	anySupportsTestParameters   = stringAny("--supports-test-parameters")
-	anyTar                      = stringAny("--tar")
-	anyTargetPlatformDescriptor = stringAny("--target-platform-descriptor")
-	anyTest                     = stringAny("test")
-	anyTestCiType               = stringAny("--test-ci-type")
-	anyTestRelatedPath          = stringAny("--test-related-path")
-	anyTestSize                 = stringAny("--test-size")
-	anyTestSuiteName            = stringAny("--test-suite-name")
-	anyTestType                 = stringAny("--test-type")
-	anyTestsLimitInChunk        = stringAny("--tests-limit-in-chunk")
-	anyTestsRequestedYes        = stringAny("    \"TESTS_REQUESTED\": \"yes\"")
-	anyTimeout                  = stringAny("--timeout")
-	anyTrace                    = stringAny("--trace")
-	anyTracePath                = stringAny("--trace-path")
-	anyUnittest                 = stringAny("unittest")
-	anyVerbose                  = stringAny("--verbose")
-	anyVerifyResults            = stringAny("--verify-results")
-	anyWrapperScript            = stringAny("--wrapper-script")
-	anyZstd                     = stringAny("zstd")
+	any0                        = internAny("0")
+	any1                        = internAny("1")
+	any100000                   = internAny("100000")
+	any3                        = internAny("{")
+	any30                       = internAny("30")
+	any4                        = internAny("  }")
+	any5                        = internAny("}")
+	any60                       = internAny("60")
+	any8                        = internAny("8")
+	anyBinary                   = internAny("--binary")
+	anyClangFormat              = internAny("clang_format")
+	anyCompressionFilter        = internAny("--compression-filter")
+	anyCompressionLevel         = internAny("--compression-level")
+	anyConfig                   = internAny("--config")
+	anyContextFilename          = internAny("--context-filename")
+	anyDepends                  = internAny("--depends")
+	anyFlags                    = internAny("  \"flags\": {")
+	anyGdbPath                  = internAny("--gdb-path")
+	anyGlobalResource           = internAny("--global-resource")
+	anyLintName                 = internAny("--lint-name")
+	anyListTimeout              = internAny("--list-timeout")
+	anyLogPath                  = internAny("--log-path")
+	anyMeta                     = internAny("--meta")
+	anyModulo                   = internAny("--modulo")
+	anyModuloIndex              = internAny("--modulo-index")
+	anyNinja                    = internAny("ninja")
+	anyOutPath                  = internAny("--out-path")
+	anyOutputDir                = internAny("--output-dir")
+	anyOutputStyle              = internAny("--output-style")
+	anyPartitionMode            = internAny("--partition-mode")
+	anyProjectPath              = internAny("--project-path")
+	anyPythonBin                = internAny("--python-bin")
+	anyRamLimitGb               = internAny("--ram-limit-gb")
+	anyRemoveTos                = internAny("--remove-tos")
+	anyResultMaxFileSize        = internAny("--result-max-file-size")
+	anyRunCustomLint            = internAny("run_custom_lint")
+	anyRunTest                  = internAny("run_test")
+	anyRunUt                    = internAny("run_ut")
+	anySequential               = internAny("SEQUENTIAL")
+	anySigusr2                  = internAny("SIGUSR2")
+	anySmall                    = internAny("small")
+	anySmoothShutdownSignals    = internAny("--smooth-shutdown-signals")
+	anyStyle                    = internAny("style")
+	anySupportsTestParameters   = internAny("--supports-test-parameters")
+	anyTar                      = internAny("--tar")
+	anyTargetPlatformDescriptor = internAny("--target-platform-descriptor")
+	anyTest                     = internAny("test")
+	anyTestCiType               = internAny("--test-ci-type")
+	anyTestRelatedPath          = internAny("--test-related-path")
+	anyTestSize                 = internAny("--test-size")
+	anyTestSuiteName            = internAny("--test-suite-name")
+	anyTestType                 = internAny("--test-type")
+	anyTestsLimitInChunk        = internAny("--tests-limit-in-chunk")
+	anyTestsRequestedYes        = internAny("    \"TESTS_REQUESTED\": \"yes\"")
+	anyTimeout                  = internAny("--timeout")
+	anyTrace                    = internAny("--trace")
+	anyTracePath                = internAny("--trace-path")
+	anyUnittest                 = internAny("unittest")
+	anyVerbose                  = internAny("--verbose")
+	anyVerifyResults            = internAny("--verify-results")
+	anyWrapperScript            = internAny("--wrapper-script")
+	anyZstd                     = internAny("zstd")
 )
 
 const (
@@ -125,11 +125,11 @@ func buildTestCtxNode(p *Platform) *Node {
 		Cache: &cacheTrue,
 		Cmds: []Cmd{{
 			CmdArgs: []ANY{
-				stringAny(testYMakePython3),
+				internAny(testYMakePython3),
 				vfsAny(Source(testAppendFileScriptRel)),
-				stringAny(testContextPath),
+				internAny(testContextPath),
 				any3,
-				stringAny(`  "build_type": "` + p.BuildType + `",`),
+				internAny(`  "build_type": "` + p.BuildType + `",`),
 				anyFlags,
 				anyTestsRequestedYes,
 				any4,
@@ -152,7 +152,7 @@ func buildUnittestNode(p *Platform, info testSuiteInfo) *Node {
 	resultsDir := path.Join(info.ProjectPath, "test-results", "unittest")
 
 	cmdArgs := []ANY{
-		stringAny(testToolHostPath),
+		internAny(testToolHostPath),
 		anyRunTest,
 		anyYaStartCommandFile,
 		anyMeta, vfsAny(Build(path.Join(resultsDir, "meta.json"))),
@@ -162,46 +162,46 @@ func buildUnittestNode(p *Platform, info testSuiteInfo) *Node {
 		anyTestSize, anySmall,
 		anyTestType, anyUnittest,
 		anyTestCiType, anyTest,
-		anyContextFilename, stringAny(testContextPath),
-		anySourceRoot, stringAny(testSourceRoot),
-		anyBuildRoot, stringAny(testBuildRoot),
+		anyContextFilename, internAny(testContextPath),
+		anySourceRoot, internAny(testSourceRoot),
+		anyBuildRoot, internAny(testBuildRoot),
 		anyTestSuiteName, anyUnittest,
-		anyProjectPath, stringAny(info.ProjectPath),
+		anyProjectPath, internAny(info.ProjectPath),
 		anyTestRelatedPath, vfsAny(Source(info.ProjectPath)),
-		anyTargetPlatformDescriptor, stringAny(targetPlatformDescriptor(p)),
+		anyTargetPlatformDescriptor, internAny(targetPlatformDescriptor(p)),
 		anyRemoveTos,
-		anyGdbPath, stringAny(testGDBPath),
+		anyGdbPath, internAny(testGDBPath),
 		anyResultMaxFileSize, any0,
 		anyVerifyResults,
 		anyTestsLimitInChunk, any100000,
 		anyOutputStyle, anyNinja,
-		anyPythonBin, stringAny(testPythonBin),
+		anyPythonBin, internAny(testPythonBin),
 		anySupportsTestParameters,
 		anySmoothShutdownSignals, anySigusr2,
 		anyCompressionFilter, anyZstd,
 		anyCompressionLevel, any1,
-		anyGlobalResource, stringAny(testClang14Resource),
-		anyGlobalResource, stringAny(testClang16Resource),
-		anyGlobalResource, stringAny(testClang18Resource),
-		anyGlobalResource, stringAny(testClang20Resource),
-		anyGlobalResource, stringAny(testClangFormatResource),
-		anyGlobalResource, stringAny(testClangResource),
-		anyGlobalResource, stringAny(testLLDRootResource),
-		anyGlobalResource, stringAny(testYMakePython3Resource),
+		anyGlobalResource, internAny(testClang14Resource),
+		anyGlobalResource, internAny(testClang16Resource),
+		anyGlobalResource, internAny(testClang18Resource),
+		anyGlobalResource, internAny(testClang20Resource),
+		anyGlobalResource, internAny(testClangFormatResource),
+		anyGlobalResource, internAny(testClangResource),
+		anyGlobalResource, internAny(testLLDRootResource),
+		anyGlobalResource, internAny(testYMakePython3Resource),
 		anyRamLimitGb, any8,
 		anyTar, vfsAny(Build(path.Join(resultsDir, "testing_out_stuff.tar.zstd"))),
-		stringAny(testToolHostPath),
+		internAny(testToolHostPath),
 		anyRunUt,
-		anyBinary, stringAny(info.BinaryPath),
+		anyBinary, internAny(info.BinaryPath),
 		anyTracePath, vfsAny(Build(path.Join(resultsDir, "ytest.report.trace"))),
 		anyOutputDir, vfsAny(Build(path.Join(resultsDir, "testing_out_stuff"))),
 		anyModulo, any1,
 		anyModuloIndex, any0,
 		anyPartitionMode, anySequential,
-		anyProjectPath, stringAny(info.ProjectPath),
+		anyProjectPath, internAny(info.ProjectPath),
 		anyListTimeout, any30,
 		anyVerbose,
-		anyGdbPath, stringAny(testGDBPath),
+		anyGdbPath, internAny(testGDBPath),
 		anyYaEndCommandFile,
 	}
 
@@ -239,7 +239,7 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 	resultsDir := path.Join(info.ProjectPath, "test-results", "clang_format")
 
 	cmdArgs := []ANY{
-		stringAny(testToolHostPath),
+		internAny(testToolHostPath),
 		anyRunTest,
 		anyYaStartCommandFile,
 		anyMeta, vfsAny(Build(path.Join(resultsDir, "meta.json"))),
@@ -249,11 +249,11 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 		anyTestSize, anySmall,
 		anyTestType, anyClangFormat,
 		anyTestCiType, anyStyle,
-		anyContextFilename, stringAny(testContextPath),
-		anySourceRoot, stringAny(testSourceRoot),
-		anyBuildRoot, stringAny(testBuildRoot),
+		anyContextFilename, internAny(testContextPath),
+		anySourceRoot, internAny(testSourceRoot),
+		anyBuildRoot, internAny(testBuildRoot),
 		anyTestSuiteName, anyClangFormat,
-		anyProjectPath, stringAny(info.ProjectPath),
+		anyProjectPath, internAny(info.ProjectPath),
 		anyTestRelatedPath, vfsAny(Source(testSVNInterfaceRel)),
 	}
 
@@ -264,32 +264,32 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 	cmdArgs = append(cmdArgs,
 		anyTestRelatedPath, vfsAny(Source(testClangFormatConfigRel)),
 		anyTestRelatedPath, vfsAny(Source(testClangFormatWrapperRel)),
-		anyTargetPlatformDescriptor, stringAny(targetPlatformDescriptor(p)),
+		anyTargetPlatformDescriptor, internAny(targetPlatformDescriptor(p)),
 		anyRemoveTos,
-		anyGdbPath, stringAny(testGDBPath),
+		anyGdbPath, internAny(testGDBPath),
 		anyResultMaxFileSize, any0,
 		anyVerifyResults,
 		anyTestsLimitInChunk, any100000,
 		anyOutputStyle, anyNinja,
-		anyPythonBin, stringAny(testPythonBin),
+		anyPythonBin, internAny(testPythonBin),
 		anySupportsTestParameters,
 		anyCompressionFilter, anyZstd,
 		anyCompressionLevel, any1,
-		anyGlobalResource, stringAny(testClangFormatResource),
+		anyGlobalResource, internAny(testClangFormatResource),
 		anyRamLimitGb, any8,
 		anyTar, vfsAny(Build(path.Join(resultsDir, "testing_out_stuff.tar.zstd"))),
-		stringAny(testToolHostPath),
+		internAny(testToolHostPath),
 		anyRunCustomLint,
-		anySourceRoot, stringAny(testSourceRoot),
-		anyBuildRoot, stringAny(testBuildRoot),
+		anySourceRoot, internAny(testSourceRoot),
+		anyBuildRoot, internAny(testBuildRoot),
 		anyProjectPath, vfsAny(Source(info.ProjectPath)),
 		anyTracePath, vfsAny(Build(path.Join(resultsDir, "ytest.report.trace"))),
 		anyOutPath, vfsAny(Build(path.Join(resultsDir, "testing_out_stuff"))),
 		anyLintName, anyClangFormat,
-		anyWrapperScript, stringAny(testClangFormatWrapperRel),
-		anyDepends, stringAny(info.ProjectPath),
+		anyWrapperScript, internAny(testClangFormatWrapperRel),
+		anyDepends, internAny(info.ProjectPath),
 		anyConfig, vfsAny(Source(testClangFormatConfigRel)),
-		anyGlobalResource, stringAny(testClangFormatResource),
+		anyGlobalResource, internAny(testClangFormatResource),
 		vfsAny(Source(testSVNInterfaceRel)),
 	)
 

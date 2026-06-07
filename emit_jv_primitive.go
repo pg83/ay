@@ -13,11 +13,11 @@ var (
 	stdout2stderrVFS  = Intern("$(S)/build/scripts/stdout2stderr.py")
 	stdout2stderrPath = stdout2stderrVFS.String()
 	// Path constants hoisted by `ay refac consts`.
-	anyDlanguageCpp = stringAny("-Dlanguage=Cpp")
-	anyJar          = stringAny("-jar")
-	anyListener     = stringAny("-listener")
-	anyNoListener   = stringAny("-no-listener")
-	anyVisitor      = stringAny("-visitor")
+	anyDlanguageCpp = internAny("-Dlanguage=Cpp")
+	anyJar          = internAny("-jar")
+	anyListener     = internAny("-listener")
+	anyNoListener   = internAny("-no-listener")
+	anyVisitor      = internAny("-visitor")
 )
 
 const jdkResourcePath = "$(JDK17-564746473)/bin/java"
@@ -69,15 +69,15 @@ func EmitJV(
 	outDir := outDirVFS.String()
 
 	cmdArgs := []ANY{
-		stringAny(instance.Platform.Tools.Python3),
-		stringAny(stdout2stderrPath),
-		stringAny(jdkResourcePath),
+		internAny(instance.Platform.Tools.Python3),
+		internAny(stdout2stderrPath),
+		internAny(jdkResourcePath),
 		anyJar,
-		stringAny(antlr4JarPath),
+		internAny(antlr4JarPath),
 		vfsAny(grammarVFS),
 		anyDlanguageCpp,
 		argDashO,
-		stringAny(outDir),
+		internAny(outDir),
 	}
 
 	if visitor {
@@ -127,16 +127,16 @@ func EmitJVSplit(
 	outDir := outDirVFS.String()
 
 	cmdArgs := []ANY{
-		stringAny(instance.Platform.Tools.Python3),
-		stringAny(stdout2stderrPath),
-		stringAny(jdkResourcePath),
+		internAny(instance.Platform.Tools.Python3),
+		internAny(stdout2stderrPath),
+		internAny(jdkResourcePath),
 		anyJar,
-		stringAny(antlr4JarPath),
+		internAny(antlr4JarPath),
 		vfsAny(lexerVFS),
 		vfsAny(parserVFS),
 		anyDlanguageCpp,
 		argDashO,
-		stringAny(outDir),
+		internAny(outDir),
 	}
 
 	if visitor {
@@ -185,9 +185,9 @@ func EmitJVGeneral(
 ) NodeRef {
 	cmdArgs := make([]ANY, 0, 5+len(args))
 	cmdArgs = append(cmdArgs,
-		stringAny(instance.Platform.Tools.Python3),
-		stringAny(stdout2stderrPath),
-		stringAny(jdkResourcePath),
+		internAny(instance.Platform.Tools.Python3),
+		internAny(stdout2stderrPath),
+		internAny(jdkResourcePath),
 		anyJar,
 		vfsAny(jarVFS),
 	)

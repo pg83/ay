@@ -14,7 +14,7 @@ func EmitJVCPG4(
 	fsTools := copyFsToolsVFS
 
 	cmdArgs := []ANY{
-		stringAny(instance.Platform.Tools.Python3),
+		internAny(instance.Platform.Tools.Python3),
 		vfsAny(fsTools),
 		anyCopy,
 		vfsAny(src),
@@ -68,7 +68,7 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 	fsTools := copyFsToolsVFS
 
 	cmdArgs := []ANY{
-		stringAny(instance.Platform.Tools.Python3),
+		internAny(instance.Platform.Tools.Python3),
 		vfsAny(fsTools),
 		anyCopy,
 		vfsAny(src),
@@ -112,5 +112,5 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 
 // Path constants hoisted by `ay refac consts`.
 var (
-	anyCopy = stringAny("copy")
+	anyCopy = internAny("copy")
 )
