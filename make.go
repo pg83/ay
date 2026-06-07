@@ -699,7 +699,7 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 		args := make([]string, len(c.CmdArgs))
 
 		for i, a := range c.CmdArgs {
-			args[i] = mountString(a, ex.srcRoot, tmp, ex.resourceMounts)
+			args[i] = mountString(a.String(), ex.srcRoot, tmp, ex.resourceMounts)
 		}
 
 		args = applyCmdPrefixes(args, ex.cmdPrefixes)

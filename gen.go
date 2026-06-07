@@ -229,7 +229,7 @@ type genCtx struct {
 
 	// inclArgValues backs inclArgMemo (the "-I<path>" cache); owned here so future
 	// VFS-keyed value columns can share its idx array. inclArgs points at it.
-	inclArgValues   DenseMap[VFS, string]
+	inclArgValues   DenseMap[VFS, ANY]
 	inclArgs        inclArgMemo
 	memo            map[ModuleInstance]*moduleEmitResult
 	moduleTypeCache map[moduleTypeCacheKey]moduleTypeInfo

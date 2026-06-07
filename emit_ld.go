@@ -219,32 +219,29 @@ func lastPathComponent(p string) string {
 	return p
 }
 
-func composeLDCmdVcsInfo(tools Toolchain, vcsCPath string) []string {
-	return []string{
-		tools.Python3,
-		ldVcsInfoPath,
-		"$(VCS)/vcs.json",
-		vcsCPath,
-		ldSvnInterfacePath,
+func composeLDCmdVcsInfo(tools Toolchain, vcsCPath string) []ANY {
+	return []ANY{
+		stringAny(tools.Python3),
+		vfsAny(ldVcsInfoVFS),
+		stringAny("$(VCS)/vcs.json"),
+		stringAny(vcsCPath),
+		vfsAny(ldSvnInterfaceVFS),
 	}
 }
 
-func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings bool) []string {
+func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings bool) []ANY {
 	bundle := compileFlagBundleFor(p)
-	cmdArgs := make([]string, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal)+len(moduleScopeCFlags))
+	cmdArgs := make([]ANY, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal)+len(moduleScopeCFlags))
+	cmdArgs = append(cmdArgs, p.CCArg, p.TargetArg)
+	cmdArgs = appendArgAny(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs,
-		p.Tools.CC,
-		"--target="+p.Triple,
+		argDashBBin,
+		argDashC,
+		argDashO,
+		stringAny(vcsOPath),
+		stringAny(vcsCPath),
 	)
-	cmdArgs = appendArgStrs(cmdArgs, bundle.ArchArgs)
-	cmdArgs = append(cmdArgs,
-		"-B"+binPath,
-		"-c",
-		"-o",
-		vcsOPath,
-		vcsCPath,
-	)
-	cmdArgs = append(cmdArgs, "-I$(S)")
+	cmdArgs = append(cmdArgs, stringAny("-I$(S)"))
 
 	// The __vcs_version__.c compile sits at the LD node's "own slot": its
 	// own-CFLAGS bucket starts with platform-level CFlags (sourced from
@@ -263,153 +260,146 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 	return cmdArgs
 }
 
-func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *string, wantsStrip bool) []string {
+func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *string, wantsStrip bool) []ANY {
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	argCap += 2 + len(pluginPaths)
 
-	cmdArgs := make([]string, 0, argCap)
+	cmdArgs := make([]ANY, 0, argCap)
 
 	cmdArgs = append(cmdArgs,
-		p.Tools.Python3,
-		ldLinkExePath,
+		stringAny(p.Tools.Python3),
+		vfsAny(ldLinkExeVFS),
 	)
 
-	cmdArgs = append(cmdArgs, "--start-plugins")
+	cmdArgs = append(cmdArgs, stringAny("--start-plugins"))
 
 	for _, p := range pluginPaths {
-		cmdArgs = append(cmdArgs, p.String())
+		cmdArgs = append(cmdArgs, vfsAny(p))
 	}
 
-	cmdArgs = append(cmdArgs, "--end-plugins")
+	cmdArgs = append(cmdArgs, stringAny("--end-plugins"))
 
 	cmdArgs = append(cmdArgs,
-		"--clang-ver", p.ClangVer,
-		"--source-root", "$(S)",
-		"--build-root", "$(B)",
+		stringAny("--clang-ver"), stringAny(p.ClangVer),
+		stringAny("--source-root"), stringAny("$(S)"),
+		stringAny("--build-root"), stringAny("$(B)"),
 	)
 
 	for _, p := range wholeArchiveCmdPaths {
-		cmdArgs = append(cmdArgs, "--whole-archive-libs", p.Rel())
+		cmdArgs = append(cmdArgs, stringAny("--whole-archive-libs"), stringAny(p.Rel()))
 	}
 
 	for _, p := range wholeArchivePaths {
-		cmdArgs = append(cmdArgs, "--whole-archive-libs", p.Rel())
+		cmdArgs = append(cmdArgs, stringAny("--whole-archive-libs"), stringAny(p.Rel()))
 	}
 
 	cmdArgs = append(cmdArgs,
-		"--arch=LINUX",
-		"--objcopy-exe", p.Tools.Objcopy,
-		p.Tools.CXX,
-		"-Wl,--whole-archive",
-		"--ya-start-command-file",
+		stringAny("--arch=LINUX"),
+		stringAny("--objcopy-exe"), stringAny(p.Tools.Objcopy),
+		stringAny(p.Tools.CXX),
+		stringAny("-Wl,--whole-archive"),
+		stringAny("--ya-start-command-file"),
 	)
 
 	for _, p := range globalPaths {
-		cmdArgs = append(cmdArgs, p.Rel())
+		cmdArgs = append(cmdArgs, stringAny(p.Rel()))
 	}
 
 	cmdArgs = append(cmdArgs,
-		"--ya-end-command-file",
-		"-Wl,--no-whole-archive",
+		stringAny("--ya-end-command-file"),
+		stringAny("-Wl,--no-whole-archive"),
 	)
 
 	for _, op := range objcopyPaths {
-		cmdArgs = append(cmdArgs, op.Rel())
+		cmdArgs = append(cmdArgs, stringAny(op.Rel()))
 	}
 
-	cmdArgs = append(cmdArgs, vcsOPath)
+	cmdArgs = append(cmdArgs, stringAny(vcsOPath))
 
 	for _, cp := range ccPaths {
-		cmdArgs = append(cmdArgs, cp.String())
+		cmdArgs = append(cmdArgs, vfsAny(cp))
 	}
 
-	cmdArgs = append(cmdArgs, "-o", outputPath)
+	cmdArgs = append(cmdArgs, argDashO, stringAny(outputPath))
 
 	bundle := compileFlagBundleFor(p)
-	cmdArgs = append(cmdArgs, "--target="+p.Triple)
-	cmdArgs = appendArgStrs(cmdArgs, bundle.ArchArgs)
-	cmdArgs = append(cmdArgs, "-B"+binPath)
+	cmdArgs = append(cmdArgs, p.TargetArg)
+	cmdArgs = appendArgAny(cmdArgs, bundle.ArchArgs)
+	cmdArgs = append(cmdArgs, argDashBBin)
 
-	cmdArgs = append(cmdArgs, "-Wl,--start-group")
+	cmdArgs = append(cmdArgs, stringAny("-Wl,--start-group"))
 
 	for _, p := range peerLinkCmdPaths {
-		cmdArgs = append(cmdArgs, p.Rel())
+		cmdArgs = append(cmdArgs, stringAny(p.Rel()))
 	}
 
-	cmdArgs = append(cmdArgs, "-Wl,--end-group")
+	cmdArgs = append(cmdArgs, stringAny("-Wl,--end-group"))
 
 	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, modulePath, dynamicPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)...)
 
 	return cmdArgs
 }
 
-func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *string, wantsStrip bool) []string {
-	linkPrelude := []string{"-rdynamic"}
+func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *string, wantsStrip bool) []ANY {
 	// EXPORTS_SCRIPT appends the version-script flag right after -rdynamic
-	// per upstream's EXPORTS_VALUE in build/conf/linkers/ld.conf:138 —
-	// $LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG -Wl,--version-script=${input:EXPORTS_FILE}.
-	// The macro arg is already a source-root-relative path (e.g.
-	// "ydb/apps/ydbd/exports.symlist"), not module-relative — upstream's
-	// ${input:EXPORTS_FILE} resolves from the source root, and ydbd's
-	// EXPORTS_SCRIPT line uses the full path.
+	// per upstream's EXPORTS_VALUE in build/conf/linkers/ld.conf:138. The macro
+	// arg is already a source-root-relative path, not module-relative.
 	_ = modulePath
+	_ = dynamicPaths
+
+	trailer := []ANY{stringAny("-rdynamic")}
 
 	if exportsScript != nil {
-		linkPrelude = append(linkPrelude, "-Wl,--version-script=$(S)/"+*exportsScript)
+		trailer = append(trailer, stringAny("-Wl,--version-script=$(S)/"+*exportsScript))
 	}
 
 	if p != nil && !p.PIC && p.Flags[envSANDBOXING] == strYes {
-		linkPrelude = append(linkPrelude, "-Wl,--compress-debug-sections=zstd")
+		trailer = append(trailer, stringAny("-Wl,--compress-debug-sections=zstd"))
 	}
 
-	linkPrelude = append(linkPrelude, p.LinkPreludeExtra...)
-	linkPrelude = append(linkPrelude, "-Wl,--no-as-needed")
-	systemLibs := p.SystemLibs
-	_ = dynamicPaths
-
-	trailer := linkPrelude // fresh local, unused after this point — keep appending in place
-	trailer = appendArgStrs(trailer, ownRPathFlags)
+	trailer = appendStringAny(trailer, p.LinkPreludeExtra)
+	trailer = append(trailer, stringAny("-Wl,--no-as-needed"))
+	trailer = appendArgAny(trailer, ownRPathFlags)
 
 	if p.PIC {
-		trailer = append(trailer, "-fPIC")
+		trailer = append(trailer, argAny(argFPIC))
 	}
 
-	trailer = append(trailer, p.LinkerSelectionGDBIndexFlags()...)
-	trailer = appendArgStrs(trailer, peerRPathFlagsGlobal)
+	trailer = appendStringAny(trailer, p.LinkerSelectionGDBIndexFlags())
+	trailer = appendArgAny(trailer, peerRPathFlagsGlobal)
 
 	if p.PIC {
-		trailer = append(trailer, "-fPIC")
+		trailer = append(trailer, argAny(argFPIC))
 	}
 
-	trailer = append(trailer, p.LinkerSelectionTailFlags()...)
-	trailer = appendArgStrs(trailer, peerLDFlagsGlobal, ownLDFlags)
-	trailer = appendArgStrs(trailer, objAddLibsGlobal)
-	trailer = append(trailer, systemLibs...)
+	trailer = appendStringAny(trailer, p.LinkerSelectionTailFlags())
+	trailer = appendArgAny(trailer, peerLDFlagsGlobal, ownLDFlags, objAddLibsGlobal)
+	trailer = appendStringAny(trailer, p.SystemLibs)
 
 	if wantsStrip {
-		trailer = append(trailer, "-Wl,--strip-all")
+		trailer = append(trailer, stringAny("-Wl,--strip-all"))
 	}
 
-	trailer = append(trailer, "-Wl,--gc-sections")
-	trailer = append(trailer, p.LinkerSelectionNoPieFlags()...)
+	trailer = append(trailer, stringAny("-Wl,--gc-sections"))
+	trailer = appendStringAny(trailer, p.LinkerSelectionNoPieFlags())
 
 	return trailer
 }
 
-func composeLDCmdLinkOrCopy(tools Toolchain, modulePath string, dynamicPaths ...VFS) []string {
-	cmd := []string{
-		tools.Python3,
-		ldFsToolsPath,
-		"link_or_copy_to_dir",
-		"--no-check",
+func composeLDCmdLinkOrCopy(tools Toolchain, modulePath string, dynamicPaths ...VFS) []ANY {
+	cmd := []ANY{
+		stringAny(tools.Python3),
+		vfsAny(ldFsToolsVFS),
+		stringAny("link_or_copy_to_dir"),
+		stringAny("--no-check"),
 	}
 
 	for _, p := range dynamicPaths {
-		cmd = append(cmd, p.String())
+		cmd = append(cmd, vfsAny(p))
 	}
 
-	cmd = append(cmd, Build(modulePath).String())
+	cmd = append(cmd, vfsAny(Build(modulePath)))
 
 	return cmd
 }
@@ -422,9 +412,9 @@ func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) [
 	debugPath := outputPath + ".debug"
 
 	return []Cmd{
-		{CmdArgs: []string{tools.Objcopy, "--only-keep-debug", outputPath, debugPath}},
-		{CmdArgs: []string{tools.Strip, "--strip-debug", outputPath}},
-		{CmdArgs: []string{tools.Objcopy, "--remove-section=.gnu_debuglink", "--add-gnu-debuglink", debugPath, outputPath}},
+		{CmdArgs: []ANY{stringAny(tools.Objcopy), stringAny("--only-keep-debug"), stringAny(outputPath), stringAny(debugPath)}},
+		{CmdArgs: []ANY{stringAny(tools.Strip), stringAny("--strip-debug"), stringAny(outputPath)}},
+		{CmdArgs: []ANY{stringAny(tools.Objcopy), stringAny("--remove-section=.gnu_debuglink"), stringAny("--add-gnu-debuglink"), stringAny(debugPath), stringAny(outputPath)}},
 	}
 }
 

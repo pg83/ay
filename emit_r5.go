@@ -15,28 +15,24 @@ func EmitR5(
 	tmpVFS := Build(instance.Path + "/" + srcRel + ".tmp")
 	cppVFS := Build(instance.Path + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp")
 
-	tmpPath := tmpVFS.String()
-	cppPath := cppVFS.String()
-	srcPath := srcVFS.String()
-
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	cmd0 := Cmd{
-		CmdArgs: []string{
-			ragel5BinPath.String(),
-			"-o",
-			tmpPath,
-			srcPath,
+		CmdArgs: []ANY{
+			vfsAny(ragel5BinPath),
+			stringAny("-o"),
+			vfsAny(tmpVFS),
+			vfsAny(srcVFS),
 		},
 		Env: env,
 	}
 	cmd1 := Cmd{
-		CmdArgs: []string{
-			rlgenCdBinPath.String(),
-			"-G2",
-			"-o",
-			cppPath,
-			tmpPath,
+		CmdArgs: []ANY{
+			vfsAny(rlgenCdBinPath),
+			stringAny("-G2"),
+			stringAny("-o"),
+			vfsAny(cppVFS),
+			vfsAny(tmpVFS),
 		},
 		Env: env,
 	}

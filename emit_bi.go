@@ -12,7 +12,7 @@ var (
 func EmitBI(
 	instance ModuleInstance,
 	outputHeader string,
-	cxxFlags []string,
+	cxxFlags []ANY,
 	emit Emitter,
 ) NodeRef {
 	outPrefix := instance.Path + "/"
@@ -22,31 +22,31 @@ func EmitBI(
 
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
-	cmd0Args := []string{
-		instance.Platform.Tools.Python3,
-		yieldLinePyPath,
-		"--",
-		argsFile,
-		instance.Platform.Tools.CXX,
+	cmd0Args := []ANY{
+		stringAny(instance.Platform.Tools.Python3),
+		vfsAny(yieldLinePyVFS),
+		stringAny("--"),
+		stringAny(argsFile),
+		instance.Platform.CXXArg,
 	}
 
-	cmd1Args := make([]string, 0, 4+len(cxxFlags))
+	cmd1Args := make([]ANY, 0, 4+len(cxxFlags))
 	cmd1Args = append(cmd1Args,
-		instance.Platform.Tools.Python3,
-		yieldLinePyPath,
-		"--",
-		argsFile,
+		stringAny(instance.Platform.Tools.Python3),
+		vfsAny(yieldLinePyVFS),
+		stringAny("--"),
+		stringAny(argsFile),
 	)
 	cmd1Args = append(cmd1Args, cxxFlags...)
 
-	cmd2Args := []string{
-		instance.Platform.Tools.Python3,
-		xargsPyPath,
-		"--",
-		argsFile,
-		instance.Platform.Tools.Python3,
-		buildInfoGenPyPath,
-		outVFS.String(),
+	cmd2Args := []ANY{
+		stringAny(instance.Platform.Tools.Python3),
+		vfsAny(xargsPyVFS),
+		stringAny("--"),
+		stringAny(argsFile),
+		stringAny(instance.Platform.Tools.Python3),
+		vfsAny(buildInfoGenPyVFS),
+		vfsAny(outVFS),
 	}
 
 	inputs := []VFS{
@@ -77,26 +77,15 @@ func EmitBI(
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool), instance.Platform))
 }
 
-func biFlagsForInstance(targetP *Platform) []string {
+func biFlagsForInstance(targetP *Platform) []ANY {
 	bundle := compileFlagBundleFor(targetP)
-	flags := make([]string, 0, 100)
+	flags := make([]ANY, 0, 100)
 	cflagPrefix := append(muslCFlags(targetP.Flags[envMUSL] == strYes), sseBaseCFlags(targetP.ISA == ISAX8664)...)
 	flags = appendCompileFlagPipeline(flags, bundle, warningFlags, bundle.Defines, targetP.CFlags, cflagPrefix)
-	flags = append(flags, cxxStandardFlag.String())
-	flags = append(flags,
-		"-Wimport-preprocessor-directive-pedantic",
-		"-Woverloaded-virtual",
-		"-Wno-ambiguous-reversed-operator",
-		"-Wno-defaulted-function-deleted",
-		"-Wno-deprecated-anon-enum-enum-conversion",
-		"-Wno-deprecated-enum-enum-conversion",
-		"-Wno-deprecated-enum-float-conversion",
-		"-Wno-deprecated-volatile",
-		"-Wno-pessimizing-move",
-		"-Wno-undefined-var-template",
-	)
-	flags = append(flags, "-nostdinc++")
-	flags = appendArgStrs(flags, catboostOpenSourceDefine)
-	flags = append(flags, "-nostdinc++")
+	flags = append(flags, argAny(cxxStandardFlag))
+	flags = appendArgAny(flags, cxxStandardWarnings)
+	flags = append(flags, argAny(baseUnitCxxNostdinc))
+	flags = appendArgAny(flags, catboostOpenSourceDefine)
+	flags = append(flags, argAny(baseUnitCxxNostdinc))
 	return flags
 }

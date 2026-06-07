@@ -29,11 +29,11 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 			chRef = ctx.emit.Emit(bindNodePlatform(withResources(&Node{
 				Cmds: []Cmd{
 					{
-						CmdArgs: []string{
-							instance.Platform.Tools.Python3,
-							"$(S)/build/scripts/check_config_h.py",
-							instance.Path + "/" + conf,
-							generatedVFS.String(),
+						CmdArgs: []ANY{
+							stringAny(instance.Platform.Tools.Python3),
+							stringAny("$(S)/build/scripts/check_config_h.py"),
+							stringAny(instance.Path + "/" + conf),
+							vfsAny(generatedVFS),
 						},
 						Env: env,
 					},

@@ -115,13 +115,13 @@ func hostResourcePlatformCandidates(host *Platform) []string {
 func fetchNode(host *Platform, item resourceFetch, scripts scriptDeps) *Node {
 	return bindNodePlatform(&Node{
 		Cmds: []Cmd{{
-			CmdArgs: []string{
-				currentYatoolPath(),
-				"fetch",
-				"$(B)",
-				"$(S)",
-				item.URI,
-				item.Output.String(),
+			CmdArgs: []ANY{
+				stringAny(currentYatoolPath()),
+				stringAny("fetch"),
+				stringAny("$(B)"),
+				stringAny("$(S)"),
+				stringAny(item.URI),
+				vfsAny(item.Output),
 			},
 			Env: nil,
 		}},
