@@ -180,7 +180,7 @@ type moduleEmitResult struct {
 	PeerDynamicClosureRefs  []NodeRef
 	PeerDynamicClosurePaths []VFS
 
-	InducedDeps []string
+	InducedDeps parsedIncludeSet
 
 	Peerdirs []string
 

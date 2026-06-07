@@ -180,7 +180,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		PeerWholeArchiveClosurePaths: nil,
 		LDPluginRefs:                 pluginRefs,
 		LDPluginPaths:                pluginPaths,
-		InducedDeps:                  append([]string(nil), d.inducedDeps...),
+		InducedDeps:                  d.inducedDeps,
 		Peerdirs:                     append([]string(nil), d.peerdirs...),
 		ModuleStmtName:               d.moduleStmt.Name,
 	}
