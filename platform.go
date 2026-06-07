@@ -1,9 +1,27 @@
 package main
 
 import (
+	"bytes"
 	"sort"
 	"strings"
 )
+
+// gzZstdRule is the verbatim line in a repo's build/ymake_conf.py that appends the
+// -gz=zstd debug-section-compression flag for non-release Linux targets. ydb's conf
+// carries it; yatool's does not — the sole config-level reason the flag appears in
+// some builds and not others. confCompressesDebug detects its presence.
+const gzZstdRule = "debug_info_flags.append('-gz=zstd')"
+
+// confCompressesDebug reports whether the source repo's build/ymake_conf.py adds
+// -gz=zstd to the debug-info flags. The conf is an optional file at the source-root
+// boundary (a minimal repo or test tree may lack it), so absence means "no rule".
+func confCompressesDebug(fs FS) bool {
+	if !fs.IsFile(srcRootVFS, "build/ymake_conf.py") {
+		return false
+	}
+
+	return bytes.Contains(fs.Read("build/ymake_conf.py"), []byte(gzZstdRule))
+}
 
 type Platform struct {
 	OS     OS
@@ -43,6 +61,15 @@ type Platform struct {
 
 	CFlags   []ARG
 	CXXFlags []ARG
+
+	// DebugInfoFlags is the platform's debug-info flag group (-g, optional
+	// -gz=zstd, -fdebug-default-version=4, -ggnu-pubnames), derived once at
+	// construction from the build type and the source repo's ymake_conf.py.
+	// CompileCFlags is the full compile C flag vector with that group spliced
+	// into its natural slot, composed once so the per-source line needn't rebuild
+	// it. See buildDebugInfoFlags / composeCompileCFlags.
+	DebugInfoFlags []ARG
+	CompileCFlags  []ARG
 
 	SystemLibs       []string
 	LinkPreludeExtra []string
@@ -90,7 +117,7 @@ func toolchainFromFlags(flags map[string]string) Toolchain {
 	}
 }
 
-func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsEnv, cxxflagsEnv string, statsFlags map[string]string) *Platform {
+func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, cflagsEnv, cxxflagsEnv string, statsFlags map[string]string) *Platform {
 	if flags == nil {
 		flags = map[string]string{}
 	}
@@ -144,6 +171,9 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsE
 	p.CCArg = internAny(p.Tools.CC)
 	p.CXXArg = internAny(p.Tools.CXX)
 	p.TargetArg = internAny("--target=" + p.Triple)
+
+	p.DebugInfoFlags = buildDebugInfoFlags(os, buildRelease, confCompressesDebug(fs))
+	p.CompileCFlags = composeCompileCFlags(isa, buildRelease, p.DebugInfoFlags)
 
 	p.StatsTags = statsTagsForPlatform(p)
 

@@ -87,7 +87,7 @@ func TestNodeStatsUID_IgnoresUnrelatedTargetCLIFlags(t *testing.T) {
 		for k, v := range cliFlags {
 			flags[k] = v
 		}
-		p := NewPlatform(OSLinux, ISAAArch64, flags, nil, "", "", nil)
+		p := NewPlatform(testFS, OSLinux, ISAAArch64, flags, nil, "", "", nil)
 		p.StatsFlags = buildTargetStatsFlags(flags, cliFlags)
 
 		return &Node{
@@ -126,7 +126,7 @@ func TestNodeStatsUID_UsesBaseTargetFlags(t *testing.T) {
 		"PIC":           "no",
 		"USE_LTO":       "yes",
 	}
-	p := NewPlatform(OSLinux, ISAAArch64, flags, nil, "", "", nil)
+	p := NewPlatform(testFS, OSLinux, ISAAArch64, flags, nil, "", "", nil)
 	p.StatsFlags = buildTargetStatsFlags(flags, map[string]string{"UNRELATED": "yes"})
 
 	n := &Node{

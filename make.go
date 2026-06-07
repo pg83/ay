@@ -225,6 +225,7 @@ func cmdMake(args []string) int {
 	}
 
 	hostP := NewPlatform(
+		fs,
 		hOS,
 		hISA,
 		hostFlags,
@@ -270,6 +271,7 @@ func cmdMake(args []string) int {
 
 	targetFlags["PIC"] = "no"
 	targetP := NewPlatform(
+		fs,
 		tOS,
 		tISA,
 		targetFlags,

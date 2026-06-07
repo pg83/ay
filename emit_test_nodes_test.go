@@ -18,7 +18,7 @@ func sandboxedX8664TargetPlatform() *Platform {
 	flags["SANDBOXING"] = "yes"
 	flags["TESTS_REQUESTED"] = "yes"
 
-	return NewPlatform(OSLinux, ISAX8664, flags, expectedSandboxingTags(), "", "", nil)
+	return NewPlatform(testGzFS, OSLinux, ISAX8664, flags, expectedSandboxingTags(), "", "", nil)
 }
 
 func sandboxedTestSuite() testSuiteInfo {
