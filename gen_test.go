@@ -3025,7 +3025,7 @@ func testGen(fs FS, targetDir string) *Graph {
 		targetFlags[k] = v
 	}
 	targetFlags["PIC"] = "no"
-	target := NewPlatform(OSLinux, ISAAArch64, targetFlags, nil, "", "", nil)
+	target := NewPlatform(fs, OSLinux, ISAAArch64, targetFlags, nil, "", "", nil)
 	return Gen(fs, targetDir, host, target, func(Warn) {})
 }
 

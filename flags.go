@@ -18,11 +18,16 @@ var xclangDebugCompilationDir = []ARG{
 	argTmp,
 }
 
-var commonCFlags = []ARG{
+// commonCFlags / x86TargetCFlags are the debug-build C flag vectors with the
+// debug-info group factored out: the bundle is composed as Pre + Platform.
+// DebugInfoFlags + Post (see composeCompileCFlags), so the debug-info flags
+// (-g, optional -gz=zstd, …) land in their natural slot by construction rather
+// than being spliced in afterward.
+var commonCFlagsPre = []ARG{
 	argPipe,
-	argDashG,
-	argFdebugDefaultVersion4,
-	argGgnuPubnames,
+}
+
+var commonCFlagsPost = []ARG{
 	argFnoCommon,
 	argFfunctionSections,
 	argFdataSections,
@@ -35,12 +40,12 @@ var commonCFlags = []ARG{
 	argFstackProtector,
 }
 
-var x86TargetCFlags = []ARG{
+var x86TargetCFlagsPre = []ARG{
 	argPipe,
 	argM64,
-	argDashG,
-	argFdebugDefaultVersion4,
-	argGgnuPubnames,
+}
+
+var x86TargetCFlagsPost = []ARG{
 	argFnoCommon,
 	argFfunctionSections,
 	argFdataSections,
@@ -209,25 +214,59 @@ type compileFlagBundle struct {
 	NoLibcBlock []ARG
 }
 
-func withSandboxingDebugCompression(base []ARG, p *Platform) []ARG {
-	if p == nil || p.PIC || p.Flags[envSANDBOXING] != strYes {
-		return base
-	}
+// buildDebugInfoFlags mirrors ymake_conf.py's GnuCompiler.debug_info_flags: -g,
+// then -gz=zstd for a non-release Linux target IF the source repo's
+// build/ymake_conf.py carries that rule (compress; see confCompressesDebug —
+// yatool's conf omits it, ydb's has it), then -fdebug-default-version=4 (clang>=14,
+// always here) and -ggnu-pubnames (clang && linux). The release-only
+// -fdebug-info-for-profiling is not modelled: release targets use hostCFlags, which
+// carry no debug-info group.
+func buildDebugInfoFlags(os OS, release, compress bool) []ARG {
+	out := make([]ARG, 0, 4)
+	out = append(out, argDashG)
 
-	out := make([]ARG, 0, len(base)+1)
-	inserted := false
-
-	for _, flag := range base {
-		out = append(out, flag)
-
-		if !inserted && flag == argDashG {
-			out = append(out, argGzZstd)
-			inserted = true
-		}
-	}
-
-	if !inserted {
+	if compress && !release && os == OSLinux {
 		out = append(out, argGzZstd)
+	}
+
+	out = append(out, argFdebugDefaultVersion4)
+
+	if os == OSLinux {
+		out = append(out, argGgnuPubnames)
+	}
+
+	return out
+}
+
+// composeCompileCFlags builds the platform's compile C flag vector once, splicing
+// the debug-info group into its natural slot (Pre + debugInfo + Post). Release x86
+// uses hostCFlags, which has no debug-info group.
+func composeCompileCFlags(isa ISA, release bool, debugInfo []ARG) []ARG {
+	switch isa {
+	case ISAX8664:
+		if release {
+			return hostCFlags
+		}
+
+		return concatARG(x86TargetCFlagsPre, debugInfo, x86TargetCFlagsPost)
+	case ISAAArch64:
+		return concatARG(commonCFlagsPre, debugInfo, commonCFlagsPost)
+	}
+
+	return nil
+}
+
+func concatARG(parts ...[]ARG) []ARG {
+	n := 0
+
+	for _, p := range parts {
+		n += len(p)
+	}
+
+	out := make([]ARG, 0, n)
+
+	for _, p := range parts {
+		out = append(out, p...)
 	}
 
 	return out
@@ -236,20 +275,14 @@ func withSandboxingDebugCompression(base []ARG, p *Platform) []ARG {
 func compileFlagBundleFor(p *Platform) compileFlagBundle {
 	switch p.ISA {
 	case ISAX8664:
-		cflags := x86TargetCFlags
-
-		if p.BuildRelease {
-			cflags = hostCFlags
-		}
-
 		return compileFlagBundle{
-			CFlags:      withSandboxingDebugCompression(cflags, p),
+			CFlags:      p.CompileCFlags,
 			Defines:     hostDefines,
 			NoLibcBlock: noLibcBlock(p),
 		}
 	case ISAAArch64:
 		bundle := compileFlagBundle{
-			CFlags:      withSandboxingDebugCompression(commonCFlags, p),
+			CFlags:      p.CompileCFlags,
 			Defines:     commonDefines,
 			NoLibcBlock: noLibcBlock(p),
 		}
