@@ -1,6 +1,8 @@
 #!/usr/bin/env sh
 
-go build .
+set -xue
+
+go build -o ay .
 ./ay refac consts
 ./ay refac lint
-gofmt .
+gofmt -w .
