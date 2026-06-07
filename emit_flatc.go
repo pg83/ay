@@ -145,7 +145,7 @@ func flatcResolvedModuleSourceRel(ctx *genCtx, instance ModuleInstance, d *modul
 	return "", false
 }
 
-func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []string, transitiveImports []VFS, emit Emitter) (NodeRef, VFS, VFS, VFS) {
+func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, emit Emitter) (NodeRef, VFS, VFS, VFS) {
 	headerVFS := Build(srcRel + ".h")
 	cppVFS := Build(srcRel + ".cpp")
 	bfbsVFS := Build(strings.TrimSuffix(srcRel, ".fbs") + ".bfbs")
@@ -164,7 +164,7 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		"--filename-suffix",
 		".fbs",
 	}
-	cmdArgs = append(cmdArgs, flatcFlags...)
+	cmdArgs = appendArgStrs(cmdArgs, flatcFlags)
 	cmdArgs = append(cmdArgs,
 		"-I", "$(B)",
 		"-I", "$(S)",

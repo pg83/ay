@@ -526,7 +526,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
 			PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
 			ModuleScopeCFlags:    d.moduleScopeCFlags,
-			PerSourceCFlags:      []string{"-x", "c++"},
+			PerSourceCFlags:      []ARG{internArg("-x"), internArg("c++")},
 			SourceRoot:           ctx.sourceRoot,
 			FS:                   ctx.fs,
 			ExtraDepRefs:         []NodeRef{ref},

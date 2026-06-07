@@ -18,7 +18,7 @@ func TestEmitFL_NodeShape(t *testing.T) {
 		Intern("$(S)/mod/File.fbs"),
 		NodeRef(9),
 		Intern("$(B)/contrib/libs/flatbuffers/flatc/flatc"),
-		[]string{"--scoped-enums"},
+		internArgs([]string{"--scoped-enums"}),
 		[]VFS{Intern("$(S)/mod/Schema.fbs")},
 		e,
 	)

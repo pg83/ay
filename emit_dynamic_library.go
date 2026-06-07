@@ -46,25 +46,15 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	pluginPaths := []VFS{}
 	pluginSeen := map[VFS]struct{}{}
 	addInclSeen := map[VFS]struct{}{}
-	cFlagsSeen := map[string]struct{}{}
-	cxxFlagsSeen := map[string]struct{}{}
-	cOnlyFlagsSeen := map[string]struct{}{}
-	rpathFlagsSeen := map[string]struct{}{}
+	var cFlagsSeen BitSet
+	var cxxFlagsSeen BitSet
+	var cOnlyFlagsSeen BitSet
+	var rpathFlagsSeen BitSet
 	var peerAddInclGlobal []VFS
-	var peerCFlagsGlobal []string
-	var peerCXXFlagsGlobal []string
-	var peerCOnlyFlagsGlobal []string
-	var peerRPathFlagsGlobal []string
-	addEach := func(seenSet map[string]struct{}, dst *[]string, src []string) {
-		for _, x := range src {
-			if _, dup := seenSet[x]; dup {
-				continue
-			}
-
-			seenSet[x] = struct{}{}
-			*dst = append(*dst, x)
-		}
-	}
+	var peerCFlagsGlobal []ARG
+	var peerCXXFlagsGlobal []ARG
+	var peerCOnlyFlagsGlobal []ARG
+	var peerRPathFlagsGlobal []ARG
 	addEachVFS := func(seenSet map[VFS]struct{}, dst *[]VFS, src []VFS) {
 		for _, x := range src {
 			if _, dup := seenSet[x]; dup {
@@ -91,10 +81,10 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		}
 
 		addEachVFS(addInclSeen, &peerAddInclGlobal, peerResult.AddInclGlobal)
-		addEach(cFlagsSeen, &peerCFlagsGlobal, peerResult.CFlagsGlobal)
-		addEach(cxxFlagsSeen, &peerCXXFlagsGlobal, peerResult.CXXFlagsGlobal)
-		addEach(cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, peerResult.COnlyFlagsGlobal)
-		addEach(rpathFlagsSeen, &peerRPathFlagsGlobal, peerResult.RPathFlagsGlobal)
+		addEachARG(&cFlagsSeen, &peerCFlagsGlobal, peerResult.CFlagsGlobal)
+		addEachARG(&cxxFlagsSeen, &peerCXXFlagsGlobal, peerResult.CXXFlagsGlobal)
+		addEachARG(&cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, peerResult.COnlyFlagsGlobal)
+		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, peerResult.RPathFlagsGlobal)
 
 		for i, pp := range peerResult.LDPluginPaths {
 			if _, dup := pluginSeen[pp]; dup {
@@ -115,7 +105,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		seen[p] = struct{}{}
 		peerInstance := derivePeerInstance(ctx, instance, d, p)
 		peerResult := genModule(ctx, peerInstance)
-		addEach(rpathFlagsSeen, &peerRPathFlagsGlobal, peerResult.RPathFlagsGlobal)
+		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, peerResult.RPathFlagsGlobal)
 	}
 
 	fixElfRef, fixElfPath := ctx.tool("tools/fix_elf")
@@ -167,9 +157,9 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 
 	ref := ctx.emit.Emit(bindNodePlatform(withResources(n, resourcePatternClangTool, resourcePatternLLDRoot, resourcePatternYMakePython3), instance.Platform))
 	addInclGlobal := dedupVFS(d.addInclGlobal, peerAddInclGlobal)
-	cFlagsGlobal := mergeDedup(d.cFlagsGlobal, peerCFlagsGlobal)
-	cxxFlagsGlobal := mergeDedup(d.cxxFlagsGlobal, peerCXXFlagsGlobal)
-	cOnlyFlagsGlobal := mergeDedup(d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
+	cFlagsGlobal := dedupARG(d.cFlagsGlobal, peerCFlagsGlobal)
+	cxxFlagsGlobal := dedupARG(d.cxxFlagsGlobal, peerCXXFlagsGlobal)
+	cOnlyFlagsGlobal := dedupARG(d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
 
 	return &moduleEmitResult{
 		ARPath:                       nil,
@@ -181,7 +171,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		CFlagsGlobal:                 cFlagsGlobal,
 		CXXFlagsGlobal:               cxxFlagsGlobal,
 		COnlyFlagsGlobal:             cOnlyFlagsGlobal,
-		RPathFlagsGlobal:             mergeDedup(peerRPathFlagsGlobal, d.rpathFlagsGlobal),
+		RPathFlagsGlobal:             dedupARG(peerRPathFlagsGlobal, d.rpathFlagsGlobal),
 		PeerArchiveClosureRefs:       nil,
 		PeerArchiveClosurePaths:      nil,
 		isPyLibrary:                  false,

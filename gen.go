@@ -165,14 +165,14 @@ type moduleEmitResult struct {
 	// consumers to preserve upstream -I ordering (UserGlobal before GlobalPropagated).
 	AddInclUserGlobal []VFS
 
-	CFlagsGlobal     []string
-	CXXFlagsGlobal   []string
-	COnlyFlagsGlobal []string
+	CFlagsGlobal     []ARG
+	CXXFlagsGlobal   []ARG
+	COnlyFlagsGlobal []ARG
 	ObjAddLibsGlobal []string
 
-	LDFlagsGlobal []string
+	LDFlagsGlobal []ARG
 
-	RPathFlagsGlobal []string
+	RPathFlagsGlobal []ARG
 
 	PeerArchiveClosureRefs  []NodeRef
 	PeerArchiveClosurePaths []VFS
@@ -853,12 +853,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			AddInclOneLevel:    d.addInclOneLevel,
 			AddInclUserGlobal:  d.addInclUserGlobal,
 
-			CFlagsGlobal:                    mergeDedup(peerContribs.cFlags, d.cFlagsGlobal),
-			CXXFlagsGlobal:                  mergeDedup(peerContribs.cxxFlags, d.cxxFlagsGlobal),
-			COnlyFlagsGlobal:                mergeDedup(peerContribs.cOnlyFlags, d.cOnlyFlagsGlobal),
+			CFlagsGlobal:                    dedupARG(peerContribs.cFlags, d.cFlagsGlobal),
+			CXXFlagsGlobal:                  dedupARG(peerContribs.cxxFlags, d.cxxFlagsGlobal),
+			COnlyFlagsGlobal:                dedupARG(peerContribs.cOnlyFlags, d.cOnlyFlagsGlobal),
 			ObjAddLibsGlobal:                mergeDedup(peerContribs.objAddLibs, d.objAddLibsGlobal),
-			LDFlagsGlobal:                   mergeDedup(peerContribs.ldFlags, d.ldFlags),
-			RPathFlagsGlobal:                mergeDedup(peerContribs.rpathFlags, d.rpathFlagsGlobal),
+			LDFlagsGlobal:                   dedupARG(peerContribs.ldFlags, d.ldFlags),
+			RPathFlagsGlobal:                dedupARG(peerContribs.rpathFlags, d.rpathFlagsGlobal),
 			PeerArchiveClosureRefs:          peerArchiveRefsH,
 			PeerArchiveClosurePaths:         peerArchivePathsH,
 			PeerGlobalClosureRefs:           peerGlobalRefsH,
@@ -995,10 +995,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	peerLDPluginPaths := make([]VFS, 0, 1)
 	objAddLibSeen := map[string]struct{}{}
 	peerObjAddLibsGlobal := make([]string, 0, 8)
-	ldFlagsSeen := map[string]struct{}{}
-	peerLDFlagsGlobal := make([]string, 0, 4)
-	rpathFlagsSeen := map[string]struct{}{}
-	peerRPathFlagsGlobal := make([]string, 0, 4)
+	var ldFlagsSeen BitSet
+	peerLDFlagsGlobal := make([]ARG, 0, 4)
+	var rpathFlagsSeen BitSet
+	peerRPathFlagsGlobal := make([]ARG, 0, 4)
 	// peerAddInclGlobal aggregation routes through the run-global deduper. The
 	// whole add sequence — lang/test/program/user peers plus the libc++ injection,
 	// which is hoisted above the effectiveAddInclGlobal dedupVFS so it lands in the
@@ -1011,12 +1011,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// but must be excluded from effectiveAddInclGlobal so they don't re-propagate
 	// transitively — upstream ONE_LEVEL propagates only one hop.
 	var oneLevelOnlyPaths map[VFS]struct{}
-	cFlagsSeen := map[string]struct{}{}
-	peerCFlagsGlobal := make([]string, 0, 16)
-	cxxFlagsSeen := map[string]struct{}{}
-	peerCXXFlagsGlobal := make([]string, 0, 16)
-	cOnlyFlagsSeen := map[string]struct{}{}
-	peerCOnlyFlagsGlobal := make([]string, 0, 16)
+	var cFlagsSeen BitSet
+	peerCFlagsGlobal := make([]ARG, 0, 16)
+	var cxxFlagsSeen BitSet
+	peerCXXFlagsGlobal := make([]ARG, 0, 16)
+	var cOnlyFlagsSeen BitSet
+	peerCOnlyFlagsGlobal := make([]ARG, 0, 16)
 	addEach := func(seenSet map[string]struct{}, dst *[]string, src []string) {
 		for _, x := range src {
 			if _, dup := seenSet[x]; dup {
@@ -1364,12 +1364,12 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	for _, rp := range cflagsAggOrder {
-		addEach(cFlagsSeen, &peerCFlagsGlobal, rp.result.CFlagsGlobal)
-		addEach(cxxFlagsSeen, &peerCXXFlagsGlobal, rp.result.CXXFlagsGlobal)
-		addEach(cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, rp.result.COnlyFlagsGlobal)
+		addEachARG(&cFlagsSeen, &peerCFlagsGlobal, rp.result.CFlagsGlobal)
+		addEachARG(&cxxFlagsSeen, &peerCXXFlagsGlobal, rp.result.CXXFlagsGlobal)
+		addEachARG(&cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, rp.result.COnlyFlagsGlobal)
 		addEach(objAddLibSeen, &peerObjAddLibsGlobal, rp.result.ObjAddLibsGlobal)
-		addEach(ldFlagsSeen, &peerLDFlagsGlobal, rp.result.LDFlagsGlobal)
-		addEach(rpathFlagsSeen, &peerRPathFlagsGlobal, rp.result.RPathFlagsGlobal)
+		addEachARG(&ldFlagsSeen, &peerLDFlagsGlobal, rp.result.LDFlagsGlobal)
+		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, rp.result.RPathFlagsGlobal)
 	}
 
 	// ONE_LEVEL paths from direct user peers must not re-propagate to transitive
@@ -1453,19 +1453,17 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		effectiveAddInclGlobal = spliced
 	}
 
-	effectiveCFlagsGlobal := mergeDedup(peerCFlagsGlobal, d.cFlagsGlobal)
-	effectiveCXXFlagsGlobal := mergeDedup(peerCXXFlagsGlobal, d.cxxFlagsGlobal)
-	effectiveCOnlyFlagsGlobal := mergeDedup(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
-	effectiveRPathFlagsGlobal := mergeDedup(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
+	effectiveCFlagsGlobal := dedupARG(peerCFlagsGlobal, d.cFlagsGlobal)
+	effectiveCXXFlagsGlobal := dedupARG(peerCXXFlagsGlobal, d.cxxFlagsGlobal)
+	effectiveCOnlyFlagsGlobal := dedupARG(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
+	effectiveRPathFlagsGlobal := dedupARG(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
 
 	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path] {
-		const nostdincPP = "-nostdinc++"
-
 		// The libc++ addincl dirs are injected above (before effectiveAddInclGlobal);
 		// only the matching -nostdinc++ flag and the runtime-stack hoist remain here.
-		if _, dup := cxxFlagsSeen[nostdincPP]; !dup {
-			cxxFlagsSeen[nostdincPP] = struct{}{}
-			peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, nostdincPP)
+		if !cxxFlagsSeen.has(uint32(baseUnitCxxNostdinc)) {
+			cxxFlagsSeen.add(uint32(baseUnitCxxNostdinc))
+			peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, baseUnitCxxNostdinc)
 		}
 	}
 
@@ -1736,7 +1734,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		variantIn.FlatOutput = true
 		variantIn.Variant = stringPtr(e.Variant)
 
-		flags := append([]string(nil), e.CFlags...)
+		flags := internArgs(e.CFlags)
 
 		if extras := d.perSrcCFlagsFor(e.Src); extras != nil {
 			flags = append(flags, *extras...)
@@ -1918,10 +1916,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 		}
 
-		var ownRPathFlags []string
+		var ownRPathFlags []ARG
 
 		if len(peerDynamicPaths) > 0 {
-			ownRPathFlags = append([]string(nil), peerRPathFlagsGlobal...)
+			ownRPathFlags = append([]ARG(nil), peerRPathFlagsGlobal...)
 		}
 
 		// Both PY3_PROGRAM (via its PY3_BIN submodule) and PY3_PROGRAM_BIN
@@ -1993,7 +1991,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
 			COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
 			ObjAddLibsGlobal:                mergeDedup(peerObjAddLibsGlobal, d.objAddLibsGlobal),
-			LDFlagsGlobal:                   mergeDedup(peerLDFlagsGlobal, d.ldFlags),
+			LDFlagsGlobal:                   dedupARG(peerLDFlagsGlobal, d.ldFlags),
 			RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
 			PeerArchiveClosureRefs:          peerArchiveRefs,
 			PeerArchiveClosurePaths:         peerArchivePaths,
@@ -2093,7 +2091,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
 		COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
 		ObjAddLibsGlobal:                mergeDedup(peerObjAddLibsGlobal, d.objAddLibsGlobal),
-		LDFlagsGlobal:                   mergeDedup(peerLDFlagsGlobal, d.ldFlags),
+		LDFlagsGlobal:                   dedupARG(peerLDFlagsGlobal, d.ldFlags),
 		RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
 		PeerArchiveClosureRefs:          peerArchiveRefs,
 		PeerArchiveClosurePaths:         peerArchivePaths,
@@ -2474,12 +2472,12 @@ func mergeLDPlugins(own, peer *ldPluginsResult) *ldPluginsResult {
 type peerGlobalContribs struct {
 	addIncl      []VFS
 	protoAddIncl []VFS
-	cFlags       []string
-	cxxFlags     []string
-	cOnlyFlags   []string
+	cFlags       []ARG
+	cxxFlags     []ARG
+	cOnlyFlags   []ARG
 	objAddLibs   []string
-	ldFlags      []string
-	rpathFlags   []string
+	ldFlags      []ARG
+	rpathFlags   []ARG
 
 	archiveRefs  []NodeRef
 	archivePaths []VFS
@@ -2505,12 +2503,12 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	out := peerGlobalContribs{}
 	addInclSeen := map[VFS]struct{}{}
 	protoAddInclSeen := map[VFS]struct{}{}
-	cFlagsSeen := map[string]struct{}{}
-	cxxFlagsSeen := map[string]struct{}{}
-	cOnlyFlagsSeen := map[string]struct{}{}
+	var cFlagsSeen BitSet
+	var cxxFlagsSeen BitSet
+	var cOnlyFlagsSeen BitSet
 	objAddLibSeen := map[string]struct{}{}
-	ldFlagsSeen := map[string]struct{}{}
-	rpathFlagsSeen := map[string]struct{}{}
+	var ldFlagsSeen BitSet
+	var rpathFlagsSeen BitSet
 	archiveSeen := map[VFS]struct{}{}
 	globalSeen := map[VFS]struct{}{}
 	wholeArchiveSeen := map[VFS]struct{}{}
@@ -2602,12 +2600,12 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		peerResult := genModule(ctx, peerInstance)
 		addEachVFS(addInclSeen, &out.addIncl, peerResult.AddInclGlobal)
 		addEachVFS(protoAddInclSeen, &out.protoAddIncl, peerResult.ProtoAddInclGlobal)
-		addEach(cFlagsSeen, &out.cFlags, peerResult.CFlagsGlobal)
-		addEach(cxxFlagsSeen, &out.cxxFlags, peerResult.CXXFlagsGlobal)
-		addEach(cOnlyFlagsSeen, &out.cOnlyFlags, peerResult.COnlyFlagsGlobal)
+		addEachARG(&cFlagsSeen, &out.cFlags, peerResult.CFlagsGlobal)
+		addEachARG(&cxxFlagsSeen, &out.cxxFlags, peerResult.CXXFlagsGlobal)
+		addEachARG(&cOnlyFlagsSeen, &out.cOnlyFlags, peerResult.COnlyFlagsGlobal)
 		addEach(objAddLibSeen, &out.objAddLibs, peerResult.ObjAddLibsGlobal)
-		addEach(ldFlagsSeen, &out.ldFlags, peerResult.LDFlagsGlobal)
-		addEach(rpathFlagsSeen, &out.rpathFlags, peerResult.RPathFlagsGlobal)
+		addEachARG(&ldFlagsSeen, &out.ldFlags, peerResult.LDFlagsGlobal)
+		addEachARG(&rpathFlagsSeen, &out.rpathFlags, peerResult.RPathFlagsGlobal)
 
 		for i, p := range peerResult.PeerArchiveClosurePaths {
 			addArchive(peerResult.PeerArchiveClosureRefs[i], p)

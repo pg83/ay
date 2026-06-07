@@ -82,7 +82,7 @@ func biFlagsForInstance(targetP *Platform) []string {
 	flags := make([]string, 0, 100)
 	cflagPrefix := append(muslCFlags(targetP.Flags[envMUSL] == strYes), sseBaseCFlags(targetP.ISA == ISAX8664)...)
 	flags = appendCompileFlagPipeline(flags, bundle, warningFlags, bundle.Defines, targetP.CFlags, cflagPrefix)
-	flags = append(flags, cxxStandardFlag)
+	flags = append(flags, cxxStandardFlag.String())
 	flags = append(flags,
 		"-Wimport-preprocessor-directive-pedantic",
 		"-Woverloaded-virtual",
@@ -96,7 +96,7 @@ func biFlagsForInstance(targetP *Platform) []string {
 		"-Wno-undefined-var-template",
 	)
 	flags = append(flags, "-nostdinc++")
-	flags = append(flags, catboostOpenSourceDefine...)
+	flags = appendArgStrs(flags, catboostOpenSourceDefine)
 	flags = append(flags, "-nostdinc++")
 	return flags
 }
