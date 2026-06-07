@@ -48,7 +48,7 @@ func internAppend(s string, lo uint64) STR {
 	return id
 }
 
-func internString(s string) STR {
+func internStr(s string) STR {
 	h := xxh3.HashString128(s)
 
 	if p := internTable.ids.Get(h.Hi); p != nil {
@@ -135,7 +135,7 @@ func Intern(full string) VFS {
 		root = VFSRootBuild
 	}
 
-	return VFS(uint32(internString(full))<<1 | uint32(root))
+	return VFS(uint32(internStr(full))<<1 | uint32(root))
 }
 
 func (v VFS) strID() uint32 {

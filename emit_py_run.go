@@ -347,11 +347,11 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 			includes := make([]includeDirective, 0, capacity)
 
 			if isNonFirst && firstShardVFS != 0 {
-				includes = append(includes, includeDirective{kind: includeQuoted, target: internString(firstShardVFS.Rel())})
+				includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(firstShardVFS.Rel())})
 			}
 
 			for _, src := range splitSrcs {
-				includes = append(includes, includeDirective{kind: includeQuoted, target: internString(src.Rel())})
+				includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(src.Rel())})
 			}
 
 			return includes
@@ -363,21 +363,21 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 			includes := make([]includeDirective, 0, 1+len(splitSrcs))
 
 			if firstShardVFS != 0 {
-				includes = append(includes, includeDirective{kind: includeQuoted, target: internString(firstShardVFS.Rel())})
+				includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(firstShardVFS.Rel())})
 			}
 
 			for _, src := range splitSrcs {
-				includes = append(includes, includeDirective{kind: includeQuoted, target: internString(src.Rel())})
+				includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(src.Rel())})
 			}
 
 			return includes
 		}
 	}
 
-	includes := []includeDirective{{kind: includeQuoted, target: internString(scriptVFS.Rel())}}
+	includes := []includeDirective{{kind: includeQuoted, target: internStr(scriptVFS.Rel())}}
 
 	for _, f := range stmt.INFiles {
-		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(runProgramInputVFS(ctx, instance, d, f).Rel())})
+		includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(runProgramInputVFS(ctx, instance, d, f).Rel())})
 	}
 
 	for _, f := range stmt.OutputIncludes {
@@ -385,7 +385,7 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 			f = Intern(f).Rel()
 		}
 
-		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(f)})
+		includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(f)})
 	}
 
 	return includes

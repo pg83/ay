@@ -31,8 +31,8 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 
 	if reg != nil {
 		parsed := []includeDirective{
-			{kind: includeQuoted, target: internString(srcVFS.Rel())},
-			{kind: includeQuoted, target: internString(configureFilePyVFS.Rel())},
+			{kind: includeQuoted, target: internStr(srcVFS.Rel())},
+			{kind: includeQuoted, target: internStr(configureFilePyVFS.Rel())},
 		}
 		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, srcVFS.Rel())...)
 		// Record CF source on the GeneratedFileInfo so antlr / similar

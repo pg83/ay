@@ -6,18 +6,18 @@ import (
 
 var (
 	// Path constants hoisted by `ay refac consts`.
-	strToolsEnumParserEnumParserStdlibDepsH                    = internString("tools/enum_parser/enum_parser/stdlib_deps.h")
-	strToolsEnumParserEnumSerializationRuntimeDispatchMethodsH = internString("tools/enum_parser/enum_serialization_runtime/dispatch_methods.h")
-	strToolsEnumParserEnumSerializationRuntimeEnumRuntimeH     = internString("tools/enum_parser/enum_serialization_runtime/enum_runtime.h")
-	strToolsEnumParserEnumSerializationRuntimeOrderedPairsH    = internString("tools/enum_parser/enum_serialization_runtime/ordered_pairs.h")
-	strUtilGenericMapH                                         = internString("util/generic/map.h")
-	strUtilGenericSerializedEnumH                              = internString("util/generic/serialized_enum.h")
-	strUtilGenericSingletonH                                   = internString("util/generic/singleton.h")
-	strUtilGenericStringH                                      = internString("util/generic/string.h")
-	strUtilGenericTypetraitsH                                  = internString("util/generic/typetraits.h")
-	strUtilGenericVectorH                                      = internString("util/generic/vector.h")
-	strUtilStreamOutputH                                       = internString("util/stream/output.h")
-	strUtilStringCastH                                         = internString("util/string/cast.h")
+	strToolsEnumParserEnumParserStdlibDepsH                    = internStr("tools/enum_parser/enum_parser/stdlib_deps.h")
+	strToolsEnumParserEnumSerializationRuntimeDispatchMethodsH = internStr("tools/enum_parser/enum_serialization_runtime/dispatch_methods.h")
+	strToolsEnumParserEnumSerializationRuntimeEnumRuntimeH     = internStr("tools/enum_parser/enum_serialization_runtime/enum_runtime.h")
+	strToolsEnumParserEnumSerializationRuntimeOrderedPairsH    = internStr("tools/enum_parser/enum_serialization_runtime/ordered_pairs.h")
+	strUtilGenericMapH                                         = internStr("util/generic/map.h")
+	strUtilGenericSerializedEnumH                              = internStr("util/generic/serialized_enum.h")
+	strUtilGenericSingletonH                                   = internStr("util/generic/singleton.h")
+	strUtilGenericStringH                                      = internStr("util/generic/string.h")
+	strUtilGenericTypetraitsH                                  = internStr("util/generic/typetraits.h")
+	strUtilGenericVectorH                                      = internStr("util/generic/vector.h")
+	strUtilStreamOutputH                                       = internStr("util/stream/output.h")
+	strUtilStringCastH                                         = internStr("util/string/cast.h")
 )
 
 type enumSrcsResult struct {
@@ -81,7 +81,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 		if ctx.scannerTarget.codegen != nil {
 			cppParsed := []includeDirective{
-				{kind: includeQuoted, target: internString(headerInput.Rel())},
+				{kind: includeQuoted, target: internStr(headerInput.Rel())},
 				{kind: includeQuoted, target: strToolsEnumParserEnumParserStdlibDepsH},
 				{kind: includeQuoted, target: strToolsEnumParserEnumSerializationRuntimeDispatchMethodsH},
 				{kind: includeQuoted, target: strToolsEnumParserEnumSerializationRuntimeEnumRuntimeH},
@@ -100,8 +100,8 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 			if withHeader {
 				hParsed := []includeDirective{
-					{kind: includeQuoted, target: internString(headerInput.Rel())},
-					{kind: includeQuoted, target: internString(serializedCPPPath.Rel())},
+					{kind: includeQuoted, target: internStr(headerInput.Rel())},
+					{kind: includeQuoted, target: internStr(serializedCPPPath.Rel())},
 					{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
 				}
 				sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.String() < hParsed[j].target.String() })

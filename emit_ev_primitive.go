@@ -106,21 +106,21 @@ const (
 func evWitnessExtras(evRelPath string, evPbCC VFS) []includeDirective {
 	out := make([]includeDirective, 0,
 		3+len(pbDescriptorImporterHeaders)+len(evExtraProtobufHeaders)+len(evAbseilCleanupHeaders))
-	out = append(out, includeDirective{kind: includeQuoted, target: internString(pbWrapperVFS.Rel())})
-	out = append(out, includeDirective{kind: includeQuoted, target: internString(pbDescriptorVFS.Rel())})
-	out = append(out, includeDirective{kind: includeQuoted, target: internString(evRelPath)})
-	out = append(out, includeDirective{kind: includeQuoted, target: internString(evPbCC.Rel())})
+	out = append(out, includeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.Rel())})
+	out = append(out, includeDirective{kind: includeQuoted, target: internStr(pbDescriptorVFS.Rel())})
+	out = append(out, includeDirective{kind: includeQuoted, target: internStr(evRelPath)})
+	out = append(out, includeDirective{kind: includeQuoted, target: internStr(evPbCC.Rel())})
 
 	for _, v := range pbDescriptorImporterHeaders {
-		out = append(out, includeDirective{kind: includeQuoted, target: internString(v.Rel())})
+		out = append(out, includeDirective{kind: includeQuoted, target: internStr(v.Rel())})
 	}
 
 	for _, v := range evExtraProtobufHeaders {
-		out = append(out, includeDirective{kind: includeQuoted, target: internString(v.Rel())})
+		out = append(out, includeDirective{kind: includeQuoted, target: internStr(v.Rel())})
 	}
 
 	for _, v := range evAbseilCleanupHeaders {
-		out = append(out, includeDirective{kind: includeQuoted, target: internString(v.Rel())})
+		out = append(out, includeDirective{kind: includeQuoted, target: internStr(v.Rel())})
 	}
 
 	return out

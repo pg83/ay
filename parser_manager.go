@@ -135,7 +135,7 @@ func (pm *includeParserManager) withCythonSibling(rel string, set parsedIncludeS
 		return set
 	}
 
-	d := includeDirective{kind: includeQuoted, target: internString(path.Base(sibling))}
+	d := includeDirective{kind: includeQuoted, target: internStr(path.Base(sibling))}
 	local := set.bucket(parsedIncludesLocal)
 	merged := make([]includeDirective, 0, 1+len(local))
 	merged = append(merged, d)
@@ -201,7 +201,7 @@ func (pm *includeParserManager) indexAddincl(a VFS) {
 			return
 		}
 
-		t := internString(rel[len(base)+1:])
+		t := internStr(rel[len(base)+1:])
 		cur, _ := pm.addinclIndex.Get(t)
 		pm.addinclIndex.Put(t, append(cur, a))
 	})

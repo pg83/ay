@@ -9,7 +9,7 @@ import (
 var (
 	// Parsed-include directives for the constant protobuf/grpc/event runtime header
 	// lists, built once at init instead of re-interning each header's Rel() per
-	// generated output (was ~260k internString/run on sg5: the 187-entry deep list
+	// generated output (was ~260k internStr/run on sg5: the 187-entry deep list
 	// times every pb.cc/grpc.pb.cc). append copies these into the per-output slice,
 	// so sharing the read-only backing is safe.
 	protobufRuntimeDirectives   = quotedDirectives(protobufRuntimeHeaders)
@@ -23,7 +23,7 @@ func quotedDirectives(headers []VFS) []includeDirective {
 	out := make([]includeDirective, len(headers))
 
 	for i, h := range headers {
-		out[i] = includeDirective{kind: includeQuoted, target: internString(h.Rel())}
+		out[i] = includeDirective{kind: includeQuoted, target: internStr(h.Rel())}
 	}
 
 	return out
@@ -47,7 +47,7 @@ func protoPbHIncludes(pm *includeParserManager, srcRel, outputRoot string, bucke
 			target = protoOutputRel(outputRoot, target)
 		}
 
-		out = append(out, includeDirective{kind: d.kind, target: internString(target)})
+		out = append(out, includeDirective{kind: d.kind, target: internStr(target)})
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].target.String() < out[j].target.String() })
@@ -60,14 +60,14 @@ func protoDirectPbHIncludes(pm *includeParserManager, srcRel, outputRoot string)
 
 func pbHEmitsIncludesExtras(protoRelPath string, hasDescriptor bool) []includeDirective {
 	out := make([]includeDirective, 0, len(pbDescriptorImporterHeaders)+3)
-	out = append(out, includeDirective{kind: includeQuoted, target: internString(pbWrapperVFS.Rel())})
+	out = append(out, includeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.Rel())})
 
 	for _, v := range pbDescriptorImporterHeaders {
-		out = append(out, includeDirective{kind: includeQuoted, target: internString(v.Rel())})
+		out = append(out, includeDirective{kind: includeQuoted, target: internStr(v.Rel())})
 	}
 
 	if hasDescriptor {
-		out = append(out, includeDirective{kind: includeQuoted, target: internString(pbDescriptorVFS.Rel())})
+		out = append(out, includeDirective{kind: includeQuoted, target: internStr(pbDescriptorVFS.Rel())})
 	}
 
 	return out
@@ -416,7 +416,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		pbHParsed = append(pbHParsed, extras...)
 
 		for _, ti := range transitiveImports {
-			pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: internString(ti.Rel())})
+			pbHParsed = append(pbHParsed, includeDirective{kind: includeQuoted, target: internStr(ti.Rel())})
 		}
 
 		if cfg.grpc {
@@ -447,19 +447,19 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 
 		if liteHeaders {
 			depsParsed := make([]includeDirective, 0, 1+len(directImports))
-			depsParsed = append(depsParsed, includeDirective{kind: includeQuoted, target: internString(pbH.Rel())})
+			depsParsed = append(depsParsed, includeDirective{kind: includeQuoted, target: internStr(pbH.Rel())})
 			depsParsed = append(depsParsed, directImports...)
 			registerBoundGeneratedParsedOutput(ctx, instance, "PB", pbDepsH, depsParsed, pbRef)
 		}
 
 		pbCCParsed := make([]includeDirective, 0, 3+len(directImports)+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders))
-		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internString(pbH.Rel())})
+		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internStr(pbH.Rel())})
 
 		if liteHeaders {
 			pbCCParsed = append(pbCCParsed, directImports...)
 		}
 
-		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internString(pbWrapperVFS.Rel())})
+		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.Rel())})
 		pbCCParsed = append(pbCCParsed, protobufRuntimeDirectives...)
 		pbCCParsed = append(pbCCParsed, pbCcDeepRuntimeDirectives...)
 
@@ -473,17 +473,17 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 
 		if needsGRPCParsed {
 			grpcCCParsed = make([]includeDirective, 0, 3+len(protobufRuntimeHeaders)+len(pbCcDeepRuntimeHeaders)+len(grpcSourceExtraIncludes))
-			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(pbH.Rel())})
-			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internString(pbWrapperVFS.Rel())})
+			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internStr(pbH.Rel())})
+			grpcCCParsed = append(grpcCCParsed, includeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.Rel())})
 			grpcCCParsed = append(grpcCCParsed, protobufRuntimeDirectives...)
 			grpcCCParsed = append(grpcCCParsed, pbCcDeepRuntimeDirectives...)
 			grpcCCParsed = append(grpcCCParsed, grpcSourceExtraDirectives...)
 
 			grpcHParsed = make([]includeDirective, 0, 2+len(directImports)+len(grpcServiceHeaderIncludes))
-			grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: internString(pbH.Rel())})
+			grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: internStr(pbH.Rel())})
 			grpcHParsed = append(grpcHParsed, directImports...)
 			grpcHParsed = append(grpcHParsed, grpcServiceHeaderDirectives...)
-			grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: internString(pbRuntimeBase + "google/protobuf/port_def.inc")})
+			grpcHParsed = append(grpcHParsed, includeDirective{kind: includeQuoted, target: internStr(pbRuntimeBase + "google/protobuf/port_def.inc")})
 		}
 
 		if cfg.grpc {
@@ -604,7 +604,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 				registerBoundGeneratedParsedOutput(ctx, instance, "EV", evH, evHParsed, evRef)
 
 				evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders)+len(eventRuntimeHeaders))
-				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internString(evH.Rel())})
+				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internStr(evH.Rel())})
 				evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
 				evCCParsed = append(evCCParsed, eventRuntimeDirectives...)
 

@@ -226,7 +226,7 @@ func rawAuxInputClosure(ctx *genCtx, instance ModuleInstance, aux VFS, seed []VF
 	}
 
 	for _, v := range seed {
-		emits = append(emits, includeDirective{kind: includeQuoted, target: internString(v.Rel())})
+		emits = append(emits, includeDirective{kind: includeQuoted, target: internStr(v.Rel())})
 	}
 
 	registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits)

@@ -119,7 +119,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		parsed := make([]includeDirective, 0, len(emitsIncludes))
 
 		for _, include := range emitsIncludes {
-			parsed = append(parsed, includeDirective{kind: includeQuoted, target: internString(include.Rel())})
+			parsed = append(parsed, includeDirective{kind: includeQuoted, target: internStr(include.Rel())})
 		}
 
 		registerGeneratedParsedOutput(ctx, instance, "CY", generatedVFS, parsed)

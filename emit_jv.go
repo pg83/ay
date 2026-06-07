@@ -33,10 +33,10 @@ func emitJVDownstreamCPCC(
 
 		if reg != nil {
 			emits := make([]includeDirective, 0, 1+len(outputIncludes))
-			emits = append(emits, includeDirective{kind: includeQuoted, target: internString(antlr4RuntimeHeaderVFS.Rel())})
+			emits = append(emits, includeDirective{kind: includeQuoted, target: internStr(antlr4RuntimeHeaderVFS.Rel())})
 
 			for _, h := range outputIncludes {
-				emits = append(emits, includeDirective{kind: includeQuoted, target: internString(h)})
+				emits = append(emits, includeDirective{kind: includeQuoted, target: internStr(h)})
 			}
 
 			registerGeneratedParsedOutput(ctx, instance, "CP", g4CppPath, emits)

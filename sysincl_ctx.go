@@ -40,7 +40,7 @@ func newSysinclCtx(set SysInclSet) *sysinclCtx {
 
 				c.keyCI[k] = true
 			} else {
-				csKeyIDs = append(csKeyIDs, internString(k))
+				csKeyIDs = append(csKeyIDs, internStr(k))
 			}
 		}
 	}

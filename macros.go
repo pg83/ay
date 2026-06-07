@@ -8,8 +8,8 @@ import (
 var (
 	// strYes/strNo are the pre-interned STR forms of the bool foldings, reused by
 	// SetBool instead of re-interning "yes"/"no" on every per-module binding.
-	strYes       = internString("yes")
-	strNo        = internString("no")
+	strYes       = internStr("yes")
+	strNo        = internStr("no")
 	DefaultIfEnv = makeDefaultIfEnv()
 )
 
@@ -19,12 +19,12 @@ var envTable = struct {
 }{ids: make(map[string]ENV, 256), names: []string{""}} // index 0 reserved = "not interned"
 
 // intSTR holds the pre-interned decimal STR of the first len(intSTR) integers so
-// SetInt avoids strconv.Itoa + internString on the common small-int path.
+// SetInt avoids strconv.Itoa + internStr on the common small-int path.
 var intSTR = func() [1024]STR {
 	var a [1024]STR
 
 	for i := range a {
-		a[i] = internString(strconv.Itoa(i))
+		a[i] = internStr(strconv.Itoa(i))
 	}
 
 	return a
@@ -220,7 +220,7 @@ func (e Environment) SetStringID(id ENV, v STR) {
 }
 
 func (e Environment) SetString(id ENV, v string) {
-	e.setStrID(id, internString(v))
+	e.setStrID(id, internStr(v))
 }
 
 func (e Environment) SetInt(id ENV, n int) {
@@ -233,7 +233,7 @@ func (e Environment) SetInt(id ENV, n int) {
 		return
 	}
 
-	e.s.val[id] = internString(strconv.Itoa(n))
+	e.s.val[id] = internStr(strconv.Itoa(n))
 }
 
 func (e Environment) SetBool(id ENV, v bool) {

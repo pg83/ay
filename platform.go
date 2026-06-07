@@ -72,7 +72,7 @@ func internFlags(flags map[string]string) map[ENV]STR {
 	out := make(map[ENV]STR, len(flags))
 
 	for k, v := range flags {
-		out[internEnv(k)] = internString(v)
+		out[internEnv(k)] = internStr(v)
 	}
 
 	return out
@@ -137,8 +137,8 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsE
 		SystemLibs:        systemLibs,
 		LinkPreludeExtra:  linkPreludeExtra,
 		ClangVer:          platformClangVersion(flags),
-		ClangVerSTR:       internString(platformClangVersion(flags)),
-		BuildTypeUpperSTR: internString(strings.ToUpper(buildType)),
+		ClangVerSTR:       internStr(platformClangVersion(flags)),
+		BuildTypeUpperSTR: internStr(strings.ToUpper(buildType)),
 	}
 
 	p.CCArg = internAny(p.Tools.CC)

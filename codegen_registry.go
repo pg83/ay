@@ -95,11 +95,11 @@ func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 
 	rel := info.OutputPath.Rel()
 	r.byStr.Put(full, info)
-	r.byStr.Put(internString(rel), info)
+	r.byStr.Put(internStr(rel), info)
 
 	for i := 0; i < len(rel); i++ {
 		if rel[i] == '/' {
-			r.putSplit(internString(rel[:i]), internString(rel[i+1:]), info)
+			r.putSplit(internStr(rel[:i]), internStr(rel[i+1:]), info)
 		}
 	}
 }
