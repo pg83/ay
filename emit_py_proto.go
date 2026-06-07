@@ -97,7 +97,7 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 }
 
 func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src string, protocLDRef NodeRef, protocBinary VFS) []pyProtoAuxEntry {
-	if d.moduleStmt == nil || d.moduleStmt.Name != "PROTO_LIBRARY" {
+	if d.moduleStmt == nil || d.moduleStmt.Name != tokProtoLibrary {
 		return nil
 	}
 

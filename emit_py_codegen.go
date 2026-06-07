@@ -97,7 +97,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			TargetProperties: func() TargetProperties {
 				tp := TargetProperties{ModuleDir: instance.Path}
 
-				if d.moduleStmt.Name == "PY23_LIBRARY" {
+				if d.moduleStmt.Name == tokPy23Library {
 					tp.ModuleTag = "py3"
 				}
 

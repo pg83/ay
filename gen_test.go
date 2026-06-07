@@ -253,8 +253,10 @@ func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 		t.Fatal("expected exception for unsupported macro, got nil")
 	}
 
-	if !strings.Contains(exc.Error(), "not modelled") {
-		t.Errorf("error %q does not contain 'not modelled'", exc.Error())
+	// A name outside the closed TOK set fails fast at parse (internTok), before
+	// any gen-time modelling check.
+	if !strings.Contains(exc.Error(), "unknown macro name") {
+		t.Errorf("error %q does not contain 'unknown macro name'", exc.Error())
 	}
 }
 
@@ -3061,7 +3063,7 @@ END()
 	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/mod/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}))
 
-	if d.moduleStmt == nil || d.moduleStmt.Name != "YQL_UDF_CONTRIB" {
+	if d.moduleStmt == nil || d.moduleStmt.Name != tokYqlUdfContrib {
 		t.Fatalf("moduleStmt = %#v, want YQL_UDF_CONTRIB", d.moduleStmt)
 	}
 	if !equalStrings(d.moduleStmt.Args, []string{"my_udf"}) {

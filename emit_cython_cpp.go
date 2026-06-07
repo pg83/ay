@@ -223,9 +223,9 @@ func cythonGeneratedOutputInputs(ctx *genCtx, instance ModuleInstance, src VFS, 
 	return dedupVFS(toolInputs), dedupVFS(emitsIncludes)
 }
 
-func cythonUsesPy23Variant(modName string) bool {
+func cythonUsesPy23Variant(modName TOK) bool {
 	switch modName {
-	case "PY23_LIBRARY", "PY23_NATIVE_LIBRARY":
+	case tokPy23Library, tokPy23NativeLibrary:
 		return true
 	}
 

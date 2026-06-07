@@ -107,7 +107,7 @@ func cfModuleTag(d *moduleData, instance ModuleInstance) string {
 		return ""
 	}
 
-	if d.moduleStmt.Name == "PROTO_LIBRARY" && instance.Language != LangPy {
+	if d.moduleStmt.Name == tokProtoLibrary && instance.Language != LangPy {
 		return "cpp_proto"
 	}
 

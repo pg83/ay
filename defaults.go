@@ -106,7 +106,7 @@ func defaultPeerdirsForModule(ctx *genCtx, instance ModuleInstance, d *moduleDat
 	inst := instance
 
 	if instance.Language == LangPy && d.usePython3 && d.moduleStmt != nil &&
-		d.moduleStmt.Name == "PROTO_LIBRARY" && moduleExcludesTag(d, "CPP_PROTO") {
+		d.moduleStmt.Name == tokProtoLibrary && moduleExcludesTag(d, "CPP_PROTO") {
 		inst.Language = LangCPP
 	}
 

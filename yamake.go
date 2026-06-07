@@ -49,7 +49,7 @@ type Stmt interface {
 }
 
 type ModuleStmt struct {
-	Name string
+	Name TOK
 	Args []string
 	Line int
 }
@@ -76,7 +76,7 @@ type EndStmt struct {
 }
 
 type UnknownStmt struct {
-	Name string
+	Name TOK
 	Args []string
 	Line int
 }
@@ -915,7 +915,7 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		"DLL", "SO_PROGRAM", "DYNAMIC_LIBRARY",
 		"PACKAGE", "UNION", "RESOURCES_LIBRARY",
 		"UNITTEST_FOR":
-		return &ModuleStmt{Name: nameTok.val, Args: args, Line: nameTok.line}
+		return &ModuleStmt{Name: internTok(nameTok.val), Args: args, Line: nameTok.line}
 	case "PEERDIR":
 		return &PeerdirStmt{Paths: args, Line: nameTok.line}
 	case "SRCS":
@@ -1048,7 +1048,7 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 	case "RESOURCE_FILES":
 		return &ResourceFilesStmt{Args: append([]string(nil), args...), Line: nameTok.line}
 	default:
-		return &UnknownStmt{Name: nameTok.val, Args: args, Line: nameTok.line}
+		return &UnknownStmt{Name: internTok(nameTok.val), Args: args, Line: nameTok.line}
 	}
 }
 
