@@ -20,7 +20,7 @@ func EmitR5(
 	cmd0 := Cmd{
 		CmdArgs: []ANY{
 			vfsAny(ragel5BinPath),
-			argDashO,
+			anyDashO,
 			vfsAny(tmpVFS),
 			vfsAny(srcVFS),
 		},
@@ -30,7 +30,7 @@ func EmitR5(
 		CmdArgs: []ANY{
 			vfsAny(rlgenCdBinPath),
 			anyG2,
-			argDashO,
+			anyDashO,
 			vfsAny(cppVFS),
 			vfsAny(tmpVFS),
 		},

@@ -68,7 +68,7 @@ func emitArchive(
 		cmdArgs = append(cmdArgs, internAny(absStr+":"))
 	}
 
-	cmdArgs = append(cmdArgs, argDashO, internAny(archivePath))
+	cmdArgs = append(cmdArgs, anyDashO, internAny(archivePath))
 
 	// Archive-node inputs are exactly the files the archiver reads (the archived
 	// members) plus the archiver tool. RUN_PROGRAM source INFiles and non-archived

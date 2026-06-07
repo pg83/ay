@@ -231,8 +231,8 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 	cmdArgs = appendArgAny(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs,
 		argDashBBin,
-		argDashC,
-		argDashO,
+		anyDashC,
+		anyDashO,
 		internAny(vcsOPath),
 		internAny(vcsCPath),
 	)
@@ -316,7 +316,7 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 		cmdArgs = append(cmdArgs, vfsAny(cp))
 	}
 
-	cmdArgs = append(cmdArgs, argDashO, internAny(outputPath))
+	cmdArgs = append(cmdArgs, anyDashO, internAny(outputPath))
 
 	bundle := compileFlagBundleFor(p)
 	cmdArgs = append(cmdArgs, p.TargetArg)

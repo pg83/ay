@@ -409,7 +409,7 @@ func composeTargetCC(a ccComposeArgs) []ANY {
 	cmdArgs := make([]ANY, 0, argCap)
 	cmdArgs = append(cmdArgs, pickCompilerAny(a.Platform, a.IsCxx), a.Platform.TargetArg)
 	cmdArgs = appendArgAny(cmdArgs, bundle.ArchArgs)
-	cmdArgs = append(cmdArgs, argDashBBin, argDashC, argDashO, vfsAny(a.OutVFS))
+	cmdArgs = append(cmdArgs, argDashBBin, anyDashC, anyDashO, vfsAny(a.OutVFS))
 	cmdArgs = appendArgAny(cmdArgs, ccIncludesPrefix)
 	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl, a.InclArgs)
 	peerAddIncl := a.PeerAddIncl

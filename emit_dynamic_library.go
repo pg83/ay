@@ -219,7 +219,7 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 		anyYaEndCommandFile,
 		anyWlNoWholeArchive,
 		internAny(vcsOPath),
-		argDashO, internAny(outputPath),
+		anyDashO, internAny(outputPath),
 		anyShared,
 		internAny("-Wl,-soname,"+outputName),
 		p.TargetArg,

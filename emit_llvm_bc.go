@@ -114,7 +114,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			ldArgs = append(ldArgs, vfsAny(p))
 		}
 
-		ldArgs = append(ldArgs, argDashO, vfsAny(mergedOut))
+		ldArgs = append(ldArgs, anyDashO, vfsAny(mergedOut))
 		mergeInputs := append([]VFS(nil), bcPaths...)
 
 		if linksCopy {
@@ -137,7 +137,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 		optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
 		optOut := Build(instance.Path + "/" + optOutName)
-		optArgs := []ANY{internAny(python), internAny(optWrapper), internAny(opt), vfsAny(mergedOut), argDashO, vfsAny(optOut)}
+		optArgs := []ANY{internAny(python), internAny(optWrapper), internAny(opt), vfsAny(mergedOut), anyDashO, vfsAny(optOut)}
 		passes := []string{"default<O2>", "globalopt", "globaldce"}
 
 		if len(stmt.Symbols) > 0 {
@@ -278,7 +278,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	args = append(args, argDashBBin)
 
 	// BC-specific tail flags from upstream macro
-	args = append(args, anyWnoUnknownWarningOption, anyEmitLlvm, argDashC, vfsAny(inVFS), argDashO, vfsAny(outVFS))
+	args = append(args, anyWnoUnknownWarningOption, anyEmitLlvm, anyDashC, vfsAny(inVFS), anyDashO, vfsAny(outVFS))
 
 	return args
 }

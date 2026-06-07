@@ -163,7 +163,7 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	cmdArgs = append(cmdArgs,
 		anyI, anyB,
 		anyI, anyS,
-		argDashO, vfsAny(headerVFS),
+		anyDashO, vfsAny(headerVFS),
 		vfsAny(srcVFS),
 	)
 

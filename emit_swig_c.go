@@ -50,7 +50,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 			internAny(swigModuleName(stmt.Module)),
 			anyInterface,
 			internAny(swigModuleName(stmt.Module) + "_swg"),
-			argDashO,
+			anyDashO,
 			vfsAny(cOutVFS),
 			vfsAny(srcVFS),
 		}

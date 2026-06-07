@@ -129,7 +129,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		cmdArgs = append(cmdArgs,
 			anyISContribToolsCythonCythonIncludes,
 			vfsAny(srcVFS),
-			argDashO,
+			anyDashO,
 			vfsAny(generatedVFS),
 		)
 
