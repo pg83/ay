@@ -6,6 +6,19 @@ import (
 	"strconv"
 )
 
+var procKindStr = [...]string{
+	pkNone: "", pkAS: "AS", pkAR: "AR", pkBI: "BI", pkBC: "BC", pkCC: "CC",
+	pkCF: "CF", pkCH: "CH", pkCP: "CP", pkCY: "CY", pkEN: "EN", pkEV: "EV",
+	pkFETCH: "FETCH", pkFL: "FL", pkJS: "JS", pkJV: "JV", pkLD: "LD", pkOP: "OP",
+	pkPB: "PB", pkPR: "PR", pkPY: "PY", pkR5: "R5", pkR6: "R6", pkRD: "RD",
+	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
+}
+
+var pColorStr = [...]string{
+	pcNone: "", pcGreen: "green", pcLightBlue: "light-blue", pcLightCyan: "light-cyan",
+	pcLightGreen: "light-green", pcLightRed: "light-red", pcMagenta: "magenta", pcYellow: "yellow",
+}
+
 // Typed replacements for the former map-valued Node fields. These drop the
 // per-node map iteration, key sort and interface{} boxing the canonical-hash and
 // JSON-write paths paid when KV, Requirements, TargetProperties and Env were
@@ -113,15 +126,9 @@ const (
 	pkYC
 )
 
-var procKindStr = [...]string{
-	pkNone: "", pkAS: "AS", pkAR: "AR", pkBI: "BI", pkBC: "BC", pkCC: "CC",
-	pkCF: "CF", pkCH: "CH", pkCP: "CP", pkCY: "CY", pkEN: "EN", pkEV: "EV",
-	pkFETCH: "FETCH", pkFL: "FL", pkJS: "JS", pkJV: "JV", pkLD: "LD", pkOP: "OP",
-	pkPB: "PB", pkPR: "PR", pkPY: "PY", pkR5: "R5", pkR6: "R6", pkRD: "RD",
-	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
+func (k ProcKind) String() string {
+	return procKindStr[k]
 }
-
-func (k ProcKind) String() string { return procKindStr[k] }
 
 // PColor is a node's display colour (the kv "pc" value); same uint8-enum scheme.
 type PColor uint8
@@ -137,12 +144,9 @@ const (
 	pcYellow
 )
 
-var pColorStr = [...]string{
-	pcNone: "", pcGreen: "green", pcLightBlue: "light-blue", pcLightCyan: "light-cyan",
-	pcLightGreen: "light-green", pcLightRed: "light-red", pcMagenta: "magenta", pcYellow: "yellow",
+func (c PColor) String() string {
+	return pColorStr[c]
 }
-
-func (c PColor) String() string { return pColorStr[c] }
 
 // KV is a node's kv block. P (process kind) is on every node; PC/ShowOut/Name/
 // Path/DisableCache are optional string keys; RunTestNode and the bool form of
@@ -296,10 +300,21 @@ func appendKV(buf []byte, kv KV) []byte {
 // writer (appendKV/appendRequirements/appendTargetProperties) — so json.Marshal
 // of a Node emits {} for the empty case and the sorted keys otherwise, instead
 // of the struct's Go field names.
-func (e EnvVars) MarshalJSON() ([]byte, error)          { return appendEnv(nil, e), nil }
-func (kv KV) MarshalJSON() ([]byte, error)              { return appendKV(nil, kv), nil }
-func (r Requirements) MarshalJSON() ([]byte, error)     { return appendRequirements(nil, r), nil }
-func (t TargetProperties) MarshalJSON() ([]byte, error) { return appendTargetProperties(nil, t), nil }
+func (e EnvVars) MarshalJSON() ([]byte, error) {
+	return appendEnv(nil, e), nil
+}
+
+func (kv KV) MarshalJSON() ([]byte, error) {
+	return appendKV(nil, kv), nil
+}
+
+func (r Requirements) MarshalJSON() ([]byte, error) {
+	return appendRequirements(nil, r), nil
+}
+
+func (t TargetProperties) MarshalJSON() ([]byte, error) {
+	return appendTargetProperties(nil, t), nil
+}
 
 // --- canonical hash (gen-time self_uid): a fixed-field deterministic encoding.
 // The gate recomputes content hashes from the JSON, so only determinism matters

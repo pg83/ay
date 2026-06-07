@@ -5,6 +5,14 @@ import (
 	"strings"
 )
 
+var (
+	argNoShadow         = internArg("-Wno-shadow")
+	baseUnitCxxNostdinc = internArg("-nostdinc++")
+	argDashC            = stringAny("-c")
+	argDashO            = stringAny("-o")
+	argDashBBin         = stringAny("-B" + binPath)
+)
+
 type ModuleCCInputs struct {
 	Flags   FlagSet
 	AddIncl []VFS
@@ -277,8 +285,6 @@ func pickCompiler(tools Toolchain, isCxx bool) string {
 	return tools.CC
 }
 
-var argNoShadow = internArg("-Wno-shadow")
-
 func pickWarningFlags(noCompilerWarnings bool, noWShadow bool) []ARG {
 	if noCompilerWarnings {
 		return noWarningsBundle
@@ -329,8 +335,6 @@ func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []ARG {
 	return out
 }
 
-var baseUnitCxxNostdinc = internArg("-nostdinc++")
-
 func composeOwnAndPeerGlobalBucket(in ModuleCCInputs, isCxx bool) []ARG {
 	out := make([]ARG, 0,
 		len(in.OwnCXXFlagsGlobal)+len(in.PeerCXXFlagsGlobal)+
@@ -360,12 +364,6 @@ func composePostCatboostBucket(preBucket []ARG) []ARG {
 
 	return out
 }
-
-var (
-	argDashC    = stringAny("-c")
-	argDashO    = stringAny("-o")
-	argDashBBin = stringAny("-B" + binPath)
-)
 
 func pickCompilerAny(p *Platform, isCxx bool) ANY {
 	if isCxx {

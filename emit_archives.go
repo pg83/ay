@@ -1,5 +1,12 @@
 package main
 
+var (
+	// Path constants hoisted by `ay refac consts`.
+	anyP = stringAny("-p")
+	anyQ = stringAny("-q")
+	anyX = stringAny("-x")
+)
+
 const archiverToolPath = "tools/archiver"
 
 func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
@@ -29,10 +36,10 @@ func emitArchive(
 	archivePath := archiveVFS.String()
 
 	cmdArgs := make([]ANY, 0, 4+len(a.Files)+2)
-	cmdArgs = append(cmdArgs, vfsAny(toolBinPath), stringAny("-q"), stringAny("-x"))
+	cmdArgs = append(cmdArgs, vfsAny(toolBinPath), anyQ, anyX)
 
 	if a.DontCompress {
-		cmdArgs = append(cmdArgs, stringAny("-p"))
+		cmdArgs = append(cmdArgs, anyP)
 	}
 
 	producerRefs := []NodeRef{}

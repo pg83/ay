@@ -17,6 +17,8 @@ var (
 	buildMappingConfJson           = Source("build/mapping.conf.json")
 	buildScriptsFetchFromMdsPy     = Source("build/scripts/fetch_from_mds.py")
 	buildScriptsFetchFromSandboxPy = Source("build/scripts/fetch_from_sandbox.py")
+	// Path constants hoisted by `ay refac consts`.
+	anyFetch = stringAny("fetch")
 )
 
 type resourceFetch struct {
@@ -117,9 +119,9 @@ func fetchNode(host *Platform, item resourceFetch, scripts scriptDeps) *Node {
 		Cmds: []Cmd{{
 			CmdArgs: []ANY{
 				stringAny(currentYatoolPath()),
-				stringAny("fetch"),
-				stringAny("$(B)"),
-				stringAny("$(S)"),
+				anyFetch,
+				anyB,
+				anyS,
 				stringAny(item.URI),
 				vfsAny(item.Output),
 			},

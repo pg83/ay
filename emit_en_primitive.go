@@ -1,5 +1,12 @@
 package main
 
+var (
+	// Path constants hoisted by `ay refac consts`.
+	anyHeader      = stringAny("--header")
+	anyIncludePath = stringAny("--include-path")
+	anyOutput      = stringAny("--output")
+)
+
 func EmitEN(
 	instance ModuleInstance,
 	headerInput VFS,
@@ -17,16 +24,16 @@ func EmitEN(
 	cmdArgs := []ANY{
 		vfsAny(enumParserBin),
 		vfsAny(headerInput),
-		stringAny("--include-path"),
+		anyIncludePath,
 		stringAny(headerInput.Rel()),
-		stringAny("--output"),
+		anyOutput,
 		vfsAny(serializedCPPVFS),
 	}
 	outputs := []VFS{serializedCPPVFS}
 
 	if withHeader {
 		serializedHVFS := Build(instance.Path + "/" + headerRel + "_serialized.h")
-		cmdArgs = append(cmdArgs, stringAny("--header"), vfsAny(serializedHVFS))
+		cmdArgs = append(cmdArgs, anyHeader, vfsAny(serializedHVFS))
 		outputs = append(outputs, serializedHVFS)
 	}
 

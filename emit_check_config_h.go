@@ -5,6 +5,13 @@ import (
 	"strings"
 )
 
+var (
+	// Path constants hoisted by `ay refac consts`.
+	buildScriptsCheckConfigHPy = Source("build/scripts/check_config_h.py")
+	// Path constants hoisted by `ay refac consts`.
+	anySBuildScriptsCheckConfigHPy = stringAny("$(S)/build/scripts/check_config_h.py")
+)
+
 func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) []*sourceEmit {
 	if len(d.checkConfigHeaders) == 0 {
 		return nil
@@ -31,7 +38,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 					{
 						CmdArgs: []ANY{
 							stringAny(instance.Platform.Tools.Python3),
-							stringAny("$(S)/build/scripts/check_config_h.py"),
+							anySBuildScriptsCheckConfigHPy,
 							stringAny(instance.Path + "/" + conf),
 							vfsAny(generatedVFS),
 						},
@@ -60,8 +67,3 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 
 	return out
 }
-
-// Path constants hoisted by `ay refac consts`.
-var (
-	buildScriptsCheckConfigHPy = Source("build/scripts/check_config_h.py")
-)

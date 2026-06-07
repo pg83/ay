@@ -2,6 +2,13 @@ package main
 
 import "strings"
 
+var (
+	// Path constants hoisted by `ay refac consts`.
+	anyEmitLlvm                = stringAny("-emit-llvm")
+	anyNo                      = stringAny("no")
+	anyWnoUnknownWarningOption = stringAny("-Wno-unknown-warning-option")
+)
+
 // emitLLVMBC emits the upstream LLVM_BC pipeline (build/plugins/llvm_bc.py):
 //
 //	per source X.cpp:
@@ -243,7 +250,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 		len(bundle.ArchArgs)+len(bundle.CFlags)+len(warningBundle))
 
 	// Wrapper prefix: python3 clang_wrapper.py no clangBC++
-	args = append(args, stringAny(python), stringAny(clangWrapper), stringAny("no"), stringAny(clangBC))
+	args = append(args, stringAny(python), stringAny(clangWrapper), anyNo, stringAny(clangBC))
 
 	// ${pre=-I:_C__INCLUDE}: include paths (same layout as CC compile)
 	args = appendArgAny(args, ccIncludesPrefix)
@@ -278,7 +285,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	args = append(args, argDashBBin)
 
 	// BC-specific tail flags from upstream macro
-	args = append(args, stringAny("-Wno-unknown-warning-option"), stringAny("-emit-llvm"), argDashC, vfsAny(inVFS), argDashO, vfsAny(outVFS))
+	args = append(args, anyWnoUnknownWarningOption, anyEmitLlvm, argDashC, vfsAny(inVFS), argDashO, vfsAny(outVFS))
 
 	return args
 }

@@ -20,6 +20,8 @@ var (
 	// Path constants hoisted by `ay refac consts`.
 	strLibraryCppResourceRegistryH = internString("library/cpp/resource/registry.h")
 	strLibraryCppResourceResourceH = internString("library/cpp/resource/resource.h")
+	// Path constants hoisted by `ay refac consts`.
+	anyISYt = stringAny("-I=$(S)/yt")
 )
 
 var protobufRuntimeHeaders = []VFS{
@@ -341,7 +343,7 @@ func EmitPB(
 	cmdArgs := []ANY{
 		stringAny(instance.Platform.Tools.Python3),
 		stringAny(pbWrapperPath),
-		stringAny("--outputs"),
+		anyOutputs,
 	}
 
 	for _, output := range outputs {
@@ -361,12 +363,12 @@ func EmitPB(
 	}
 
 	cmdArgs = append(cmdArgs,
-		stringAny("--"),
+		any2,
 		vfsAny(protocBinary),
 		stringAny("-I=./"+includeRoot),
 		stringAny("-I=$(S)/"+includeRoot),
-		stringAny("-I=$(B)"),
-		stringAny("-I=$(S)"),
+		anyIB2,
+		anyIS3,
 	)
 
 	if cppOutRoot != "" {
@@ -394,12 +396,12 @@ func EmitPB(
 	}
 
 	if moduleTag == nil && strings.HasPrefix(protoRelPath, "yt/") {
-		cmdArgs = append(cmdArgs, stringAny("-I=$(S)/yt"))
+		cmdArgs = append(cmdArgs, anyISYt)
 	}
 
 	cmdArgs = append(cmdArgs,
-		stringAny("-I=$(B)"),
-		stringAny("-I=$(S)/contrib/libs/protobuf/src"),
+		anyIB2,
+		anyISContribLibsProtobufSrc,
 		stringAny("--cpp_out="+cppOutArg),
 	)
 	cmdArgs = appendArgAny(cmdArgs, extraProtocFlags)

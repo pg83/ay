@@ -5,6 +5,16 @@ import (
 	"strings"
 )
 
+var (
+	// Path constants hoisted by `ay refac consts`.
+	anyISContribLibsProtocSrc = stringAny("-I=$(S)/contrib/libs/protoc/src")
+	anyInput                  = stringAny("--input")
+	anyNs                     = stringAny("--ns")
+	anyPy3                    = stringAny("py3")
+	anyPyVer                  = stringAny("--py_ver")
+	anySuffixes               = stringAny("--suffixes")
+)
+
 func protoPythonResourceKey(instance ModuleInstance, d *moduleData, src, suffix string) string {
 	base := strings.TrimSuffix(src, ".proto")
 
@@ -141,34 +151,34 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	cmdArgs := []ANY{
 		stringAny(instance.Platform.Tools.Python3),
 		stringAny(pbPyWrapperPath),
-		stringAny("--py_ver"), stringAny("py3"),
-		stringAny("--suffixes"),
+		anyPyVer, anyPy3,
+		anySuffixes,
 	}
 	cmdArgs = appendStringAny(cmdArgs, suffixes)
 	cmdArgs = append(cmdArgs,
-		stringAny("--input"), stringAny(protoRelPath),
-		stringAny("--ns"), stringAny(protoPythonNamespaceArg(d)),
-		stringAny("--"),
+		anyInput, stringAny(protoRelPath),
+		anyNs, stringAny(protoPythonNamespaceArg(d)),
+		any2,
 		vfsAny(protocBinary),
 		stringAny("-I=./"+protoRoot),
 		stringAny("-I=$(S)/"+protoRoot),
-		stringAny("-I=$(B)"),
-		stringAny("-I=$(S)"),
+		anyIB2,
+		anyIS3,
 	)
 
 	if !d.grpc && protoRoot != "contrib/libs/protobuf/src" {
 		cmdArgs = append(cmdArgs, stringAny("-I=$(S)/"+protoRoot))
 	}
 
-	cmdArgs = append(cmdArgs, stringAny("-I=$(S)/contrib/libs/protobuf/src"))
+	cmdArgs = append(cmdArgs, anyISContribLibsProtobufSrc)
 
 	if d.grpc {
-		cmdArgs = append(cmdArgs, stringAny("-I=$(S)/contrib/libs/protoc/src"))
+		cmdArgs = append(cmdArgs, anyISContribLibsProtocSrc)
 	}
 
 	cmdArgs = append(cmdArgs,
-		stringAny("-I=$(B)"),
-		stringAny("-I=$(S)/contrib/libs/protobuf/src"),
+		anyIB2,
+		anyISContribLibsProtobufSrc,
 		stringAny("--python_out=$(B)/"+protoRoot),
 		stringAny(protoRelPath),
 	)
@@ -287,7 +297,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 		out := Build(pyOut.Rel() + "." + suffix + ".yapyc3")
 		cmdArgs := []ANY{
 			vfsAny(py3ccBinary),
-			stringAny("--slow-py3cc"),
+			anySlowPy3cc,
 			vfsAny(py3ccSlowBin),
 			stringAny(pyOut.Rel() + "-"),
 			vfsAny(pyOut),

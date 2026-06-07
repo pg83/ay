@@ -1,5 +1,15 @@
 package main
 
+var (
+	// Path constants hoisted by `ay refac consts`.
+	buildScriptsLinkLibPy = Source("build/scripts/link_lib.py")
+	// Path constants hoisted by `ay refac consts`.
+	any2      = stringAny("--")
+	anyB      = stringAny("$(B)")
+	anyNone   = stringAny("None")
+	anyPlugin = stringAny("--plugin")
+)
+
 func emitARNode(
 	instance ModuleInstance,
 	archivePath VFS,
@@ -22,16 +32,16 @@ func emitARNode(
 		stringAny(arTool),
 		stringAny(arType),
 		stringAny(arFormat),
-		stringAny("$(B)"),
-		stringAny("None"),
-		stringAny("--"),
+		anyB,
+		anyNone,
+		any2,
 	}
 
 	if arPluginPath != nil {
-		cmdArgs = append(cmdArgs, stringAny("--plugin"), vfsAny(*arPluginPath))
+		cmdArgs = append(cmdArgs, anyPlugin, vfsAny(*arPluginPath))
 	}
 
-	cmdArgs = append(cmdArgs, stringAny("--"), vfsAny(archivePath))
+	cmdArgs = append(cmdArgs, any2, vfsAny(archivePath))
 
 	for _, p := range objPaths {
 		cmdArgs = append(cmdArgs, vfsAny(p))
@@ -83,8 +93,3 @@ func emitARNode(
 
 	return emit.Emit(bindNodePlatform(withResources(n, resourcePatternYMakePython3, resourcePatternClangTool), instance.Platform))
 }
-
-// Path constants hoisted by `ay refac consts`.
-var (
-	buildScriptsLinkLibPy = Source("build/scripts/link_lib.py")
-)

@@ -12,6 +12,12 @@ var (
 	antlr3JarPath     = antlr3JarVFS.String()
 	stdout2stderrVFS  = Intern("$(S)/build/scripts/stdout2stderr.py")
 	stdout2stderrPath = stdout2stderrVFS.String()
+	// Path constants hoisted by `ay refac consts`.
+	anyDlanguageCpp = stringAny("-Dlanguage=Cpp")
+	anyJar          = stringAny("-jar")
+	anyListener     = stringAny("-listener")
+	anyNoListener   = stringAny("-no-listener")
+	anyVisitor      = stringAny("-visitor")
 )
 
 const jdkResourcePath = "$(JDK17-564746473)/bin/java"
@@ -66,22 +72,22 @@ func EmitJV(
 		stringAny(instance.Platform.Tools.Python3),
 		stringAny(stdout2stderrPath),
 		stringAny(jdkResourcePath),
-		stringAny("-jar"),
+		anyJar,
 		stringAny(antlr4JarPath),
 		vfsAny(grammarVFS),
-		stringAny("-Dlanguage=Cpp"),
+		anyDlanguageCpp,
 		argDashO,
 		stringAny(outDir),
 	}
 
 	if visitor {
-		cmdArgs = append(cmdArgs, stringAny("-visitor"))
+		cmdArgs = append(cmdArgs, anyVisitor)
 	}
 
 	if !listener {
-		cmdArgs = append(cmdArgs, stringAny("-no-listener"))
+		cmdArgs = append(cmdArgs, anyNoListener)
 	} else {
-		cmdArgs = append(cmdArgs, stringAny("-listener"))
+		cmdArgs = append(cmdArgs, anyListener)
 	}
 
 	cmdArgs = appendStringAny(cmdArgs, options)
@@ -124,23 +130,23 @@ func EmitJVSplit(
 		stringAny(instance.Platform.Tools.Python3),
 		stringAny(stdout2stderrPath),
 		stringAny(jdkResourcePath),
-		stringAny("-jar"),
+		anyJar,
 		stringAny(antlr4JarPath),
 		vfsAny(lexerVFS),
 		vfsAny(parserVFS),
-		stringAny("-Dlanguage=Cpp"),
+		anyDlanguageCpp,
 		argDashO,
 		stringAny(outDir),
 	}
 
 	if visitor {
-		cmdArgs = append(cmdArgs, stringAny("-visitor"))
+		cmdArgs = append(cmdArgs, anyVisitor)
 	}
 
 	if !listener {
-		cmdArgs = append(cmdArgs, stringAny("-no-listener"))
+		cmdArgs = append(cmdArgs, anyNoListener)
 	} else {
-		cmdArgs = append(cmdArgs, stringAny("-listener"))
+		cmdArgs = append(cmdArgs, anyListener)
 	}
 
 	inputs := []VFS{
@@ -182,7 +188,7 @@ func EmitJVGeneral(
 		stringAny(instance.Platform.Tools.Python3),
 		stringAny(stdout2stderrPath),
 		stringAny(jdkResourcePath),
-		stringAny("-jar"),
+		anyJar,
 		vfsAny(jarVFS),
 	)
 	cmdArgs = appendStringAny(cmdArgs, args)
