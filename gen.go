@@ -237,6 +237,18 @@ type genCtx struct {
 
 	ldPluginCPCache map[VFS]NodeRef
 
+	// moduleByRef maps a module's LD NodeRef back to its emit result, populated in
+	// toolResult (so every codegen tool resolved via ctx.tool is reachable by ref).
+	// The include scanner uses it to pull a generated file's producing tools'
+	// INDUCED_DEPS into the file's closure, via GeneratedFileInfo.GeneratorRefs —
+	// so a tool's induced runtime headers come from its declared INDUCED_DEPS, not
+	// a per-emitter hardcoded list. Scanners hold a pointer to it.
+	moduleByRef DenseMap[NodeRef, *moduleEmitResult]
+
+	// tools caches a codegen tool's emit result by its module-path ARG, so repeated
+	// ctx.tool(argX) lookups skip rebuilding the ModuleInstance + memo probe.
+	tools DenseMap[ARG, *moduleEmitResult]
+
 	// scripts maps each build/scripts script VFS to [self, …transitive import
 	// closure]; emit sites add a build script via append(inputs, scripts[v]...).
 	scripts scriptDeps
@@ -2775,13 +2787,26 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 	return outRefs, outPaths
 }
 
-func (ctx *genCtx) tool(modulePath string) (NodeRef, VFS) {
+func (ctx *genCtx) tool(modulePath ARG) (NodeRef, VFS) {
 	res := ctx.toolResult(modulePath)
 	return res.LDRef, *res.LDPath
 }
 
-func (ctx *genCtx) toolResult(modulePath string) *moduleEmitResult {
-	return genModule(ctx, NewToolInstance(ctx.host, modulePath))
+func (ctx *genCtx) toolResult(modulePath ARG) *moduleEmitResult {
+	if res, ok := ctx.tools.Get(modulePath); ok {
+		return res
+	}
+
+	res := genModule(ctx, NewToolInstance(ctx.host, modulePath.String()))
+	ctx.tools.Put(modulePath, res)
+
+	// Map the tool's LD node back to its result only once it really built (a
+	// tolerated PEERDIR cycle yields an empty stub with LDRef 0).
+	if res.LDRef != NodeRef(0) {
+		ctx.moduleByRef.Put(res.LDRef, res)
+	}
+
+	return res
 }
 
 func (ctx *genCtx) scannerFor(instance ModuleInstance) *IncludeScanner {

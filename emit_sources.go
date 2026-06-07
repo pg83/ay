@@ -38,7 +38,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			ThrowFmt("gen: unsupported .rodata platform %s for %q", instance.Platform.ISA, srcRel)
 		}
 
-		yasmLDRef, _ := ctx.tool("contrib/tools/yasm")
+		yasmLDRef, _ := ctx.tool(argContribToolsYasm)
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 		ref, _, outPath := EmitRD(srcInstance, srcRel, srcVFS, yasmLDRef, ctx.emit)
 		return &sourceEmit{Ref: ref, OutPath: outPath}
@@ -85,7 +85,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		asIn.IncludeInputs = walkClosure(ctx, srcInstance, srcVFS, scanIn)
 
 		if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
-			yasmLD, _ := ctx.tool("contrib/tools/yasm")
+			yasmLD, _ := ctx.tool(argContribToolsYasm)
 			ref, outPath := emitASYasm(srcInstance, srcRel, srcVFS, asIn, yasmLD, ctx.emit)
 			return &sourceEmit{Ref: ref, OutPath: outPath}
 		}
@@ -93,7 +93,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ref, outPath := EmitAS(srcInstance, srcRel, srcVFS, asIn, ctx.host, ctx.emit)
 		return &sourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".rl6"):
-		ragelLDRef, ragelBinaryVFS := ctx.tool("contrib/tools/ragel6/bin")
+		ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6Bin)
 
 		rl6SourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 		rl6Closure := walkClosure(ctx, srcInstance, rl6SourceVFS, srcIn)
@@ -139,9 +139,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		evSource := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 		evRelPath := evSource.Rel()
 
-		protocLDRef, protocBinary := ctx.tool(pbProtocModule)
-		cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(pbCppStyleguideModule)
-		event2cppLDRef, event2cppBinary := ctx.tool(evEvent2cppModule)
+		protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
+		cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
+		event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cppBin)
 
 		evImports := evTransitiveImports(ctx.parsers, ctx.fs, evRelPath)
 		evRef := EmitEV(
@@ -164,7 +164,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			}
 
 			evHParsed = append(evHParsed, evExtras...)
-			registerBoundGeneratedParsedOutput(ctx, srcInstance, "EV", evH, evHParsed, evRef)
+			registerBoundGeneratedParsedOutput(ctx, srcInstance, "EV", evH, evHParsed, evRef, []NodeRef{event2cppLDRef})
 			evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders))
 			evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internStr(evH.Rel())})
 
@@ -172,7 +172,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internStr(include.Rel())})
 			}
 
-			registerBoundGeneratedParsedOutput(ctx, srcInstance, "EV", evPbCC, evCCParsed, evRef)
+			registerBoundGeneratedParsedOutput(ctx, srcInstance, "EV", evPbCC, evCCParsed, evRef, []NodeRef{event2cppLDRef})
 		}
 
 		evPbCCSuffix := srcRel + ".pb.cc"
@@ -197,21 +197,21 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ref, outPath, _ := EmitCC(srcInstance, evPbCCSuffix, evPbCC, ccIn, ctx.host, ctx.emit)
 		return &sourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".rl"):
-		ragel5LDRef, ragel5BinVFS := ctx.tool("contrib/tools/ragel5/ragel")
-		rlgenCdLDRef, rlgenCdBinVFS := ctx.tool("contrib/tools/ragel5/rlgen-cd")
+		ragel5LDRef, ragel5BinVFS := ctx.tool(argContribToolsRagel5Ragel)
+		rlgenCdLDRef, rlgenCdBinVFS := ctx.tool(argContribToolsRagel5RlgenCd)
 
 		r5Ref, r5TmpOut, r5CppOut := EmitR5(srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
 		_ = r5Ref
 
 		rlSourceVFS := Source(srcInstance.Path + "/" + srcRel)
-		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5TmpOut, nil, r5Ref)
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5TmpOut, nil, r5Ref, nil)
 		var r5Parsed []includeDirective
 
 		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
 			r5Parsed = scanner.parsers.sourceParsedBuckets(rlSourceVFS).bucket(parsedIncludesHCPP)
 		}
 
-		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5CppOut, r5Parsed, r5Ref)
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5CppOut, r5Parsed, r5Ref, nil)
 
 		ccSrcRel := strings.TrimPrefix(r5CppOut.Rel(), srcInstance.Path+"/")
 		ccIn := srcIn
@@ -254,7 +254,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{
 			{kind: includeQuoted, target: internStr(inSourceVFS.Rel())},
 			{kind: includeQuoted, target: internStr(configureFilePyVFS.Rel())},
-		}, cfRef)
+		}, cfRef, nil)
 
 		ccSrcRel := strings.TrimPrefix(cfOut.Rel(), srcInstance.Path+"/")
 		ccIn := srcIn

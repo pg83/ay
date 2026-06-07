@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-const flatcModule = "contrib/libs/flatbuffers/flatc"
-
 type flatcEmission struct {
 	flRef   NodeRef
 	header  VFS
@@ -225,7 +223,7 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 		}
 	}
 
-	flatcRes := ctx.toolResult(flatcModule)
+	flatcRes := ctx.toolResult(argContribLibsFlatbuffersFlatc)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
 	transitiveImports := flatcTransitiveImports(ctx.parsers, ctx.fs, srcVFS.Rel())
 	flRef, headerVFS, cppVFS, bfbsVFS := EmitFL(instance, srcVFS.Rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, ctx.emit)
@@ -242,7 +240,7 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 		headerIncludes = append(headerIncludes, includeDirective{kind: includeQuoted, target: internStr(dep)})
 	}
 
-	registerBoundGeneratedParsedOutput(ctx, instance, "FL", headerVFS, headerIncludes, flRef)
+	registerBoundGeneratedParsedOutput(ctx, instance, "FL", headerVFS, headerIncludes, flRef, nil)
 
 	// The flatc tooling, the .fbs source and its transitive imports, plus the
 	// flatbuffers runtime header are real inputs of any unit whose include-closure
@@ -265,8 +263,8 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 		cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: internStr(dep)})
 	}
 
-	registerBoundGeneratedParsedOutput(ctx, instance, "FL", cppVFS, cppIncludes, flRef)
-	registerBoundGeneratedParsedOutput(ctx, instance, "FL", bfbsVFS, nil, flRef)
+	registerBoundGeneratedParsedOutput(ctx, instance, "FL", cppVFS, cppIncludes, flRef, nil)
+	registerBoundGeneratedParsedOutput(ctx, instance, "FL", bfbsVFS, nil, flRef, nil)
 
 	out := flatcEmission{
 		flRef:   flRef,

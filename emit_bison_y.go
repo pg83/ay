@@ -167,11 +167,11 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 }
 
 func bisonTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
-	ref, bin := ctx.tool("contrib/tools/bison")
+	ref, bin := ctx.tool(argContribToolsBison)
 	return ref, bin.String()
 }
 
 func m4Tool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
-	ref, bin := ctx.tool("contrib/tools/m4")
+	ref, bin := ctx.tool(argContribToolsM4)
 	return ref, bin.String()
 }

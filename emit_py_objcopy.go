@@ -25,8 +25,8 @@ func emitResourceObjcopy(
 		return nil
 	}
 
-	rescompilerLDRef, _ := ctx.tool("tools/rescompiler/bin")
-	rescompressorLDRef, _ := ctx.tool("tools/rescompressor/bin")
+	rescompilerLDRef, _ := ctx.tool(argToolsRescompilerBin)
+	rescompressorLDRef, _ := ctx.tool(argToolsRescompressorBin)
 	out := &objcopyEmitResult{}
 
 	if nodeRes := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); nodeRes != nil {

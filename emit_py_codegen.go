@@ -17,19 +17,14 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		return
 	}
 
-	const (
-		py3ccBinPath  = "tools/py3cc/bin"
-		py3ccSlowPath = "tools/py3cc/slow"
-	)
-
-	py3ccLDRef, py3ccRaw := ctx.tool(py3ccBinPath)
+	py3ccLDRef, py3ccRaw := ctx.tool(argToolsPy3ccBin)
 	py3ccBinary := canonicalizePy3ccBinary(py3ccRaw)
 
-	py3ccSlowLDRef, py3ccSlowBin := ctx.tool(py3ccSlowPath)
+	py3ccSlowLDRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
 
-	ctx.tool("tools/rescompiler/bin")
-	ctx.tool("tools/rescompressor/bin")
-	ctx.tool("tools/archiver")
+	ctx.tool(argToolsRescompilerBin)
+	ctx.tool(argToolsRescompressorBin)
+	ctx.tool(argToolsArchiver)
 
 	for _, srcRel := range d.pySrcs {
 		if strings.HasSuffix(srcRel, ".pyi") {
@@ -137,7 +132,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 		pyRef := ctx.emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
 
-		registerBoundGeneratedParsedOutput(ctx, instance, "PY", outputPath, nil, pyRef)
+		registerBoundGeneratedParsedOutput(ctx, instance, "PY", outputPath, nil, pyRef, nil)
 	}
 }
 

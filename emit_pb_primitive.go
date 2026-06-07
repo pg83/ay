@@ -259,12 +259,6 @@ var pbCcDeepRuntimeHeaders = []VFS{
 }
 
 const (
-	pbProtocModule        = "contrib/tools/protoc"
-	pbCppStyleguideModule = "contrib/tools/protoc/plugins/cpp_styleguide"
-	pbGrpcCppModule       = "contrib/tools/protoc/plugins/grpc_cpp"
-	pbGrpcPyModule        = "contrib/tools/protoc/plugins/grpc_python"
-	pbMypyModule          = "contrib/python/mypy-protobuf/bin/protoc-gen-mypy"
-
 	pbRuntimeBase = "contrib/libs/protobuf/src/"
 
 	abslTstringBase = "contrib/restricted/abseil-cpp-tstring/"
@@ -633,9 +627,9 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 }
 
 func py3ccToolRefs(ctx *genCtx, instance ModuleInstance) (NodeRef, NodeRef, VFS, VFS) {
-	py3ccRef, py3ccRaw := ctx.tool("tools/py3cc/bin")
+	py3ccRef, py3ccRaw := ctx.tool(argToolsPy3ccBin)
 	py3ccBinary := canonicalizePy3ccBinary(py3ccRaw)
-	py3ccSlowRef, py3ccSlowBin := ctx.tool("tools/py3cc/slow")
+	py3ccSlowRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
 	return py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin
 }
 

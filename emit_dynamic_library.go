@@ -107,7 +107,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, peerResult.RPathFlagsGlobal)
 	}
 
-	fixElfRef, fixElfPath := ctx.tool("tools/fix_elf")
+	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 
 	outputName := "lib" + d.moduleStmt.Args[0] + ".so"
 	outputPath := Build(instance.Path + "/" + outputName).String()

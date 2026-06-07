@@ -86,10 +86,6 @@ var evAbseilCleanupHeaders = []VFS{
 	Intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
 }
 
-const (
-	evEvent2cppModule = "tools/event2cpp/bin"
-)
-
 func evWitnessExtras(evRelPath string, evPbCC VFS) []includeDirective {
 	out := make([]includeDirective, 0,
 		3+len(pbDescriptorImporterHeaders)+len(evExtraProtobufHeaders)+len(evAbseilCleanupHeaders))
