@@ -34,9 +34,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		return nil
 	}
 
-	const enumParserPath = "tools/enum_parser/enum_parser"
-
-	enumParserLD, enumParserBin := ctx.tool(enumParserPath)
+	enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
 
 	scanIn := ModuleCCInputs{
 		InclArgs:          ctx.inclArgs,

@@ -41,7 +41,7 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 		return nil
 	}
 
-	protocLDRef, protocBinary := ctx.tool(pbProtocModule)
+	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 
 	var cppSibling *moduleEmitResult
 
@@ -131,11 +131,11 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	var grpcPyRef, mypyRef NodeRef
 
 	if d.grpc {
-		grpcPyRef, grpcPyBinary = ctx.tool(pbGrpcPyModule)
+		grpcPyRef, grpcPyBinary = ctx.tool(argContribToolsProtocPluginsGrpcPython)
 	}
 
 	if !d.noMypy {
-		mypyRef, mypyBinary = ctx.tool(pbMypyModule)
+		mypyRef, mypyBinary = ctx.tool(argContribPythonMypyProtobufBinProtocGenMypy)
 	}
 
 	cmdArgs := []ANY{
@@ -395,7 +395,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		return nil
 	}
 
-	rescompilerRef, _ := ctx.tool("tools/rescompiler/bin")
+	rescompilerRef, _ := ctx.tool(argToolsRescompilerBin)
 	type chunk struct {
 		hashInputs []string
 		cmdArgs    []string

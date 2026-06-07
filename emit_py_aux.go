@@ -40,7 +40,7 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 		return nil
 	}
 
-	rescompilerRef, _ := ctx.tool("tools/rescompiler/bin")
+	rescompilerRef, _ := ctx.tool(argToolsRescompilerBin)
 	rawRes := emitRawAuxResourceChunks(ctx, instance, entries, "PY3", nil, in, rescompilerRef)
 
 	if rawRes == nil {

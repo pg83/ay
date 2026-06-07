@@ -1,13 +1,11 @@
 package main
 
-const archiverToolPath = "tools/archiver"
-
 func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	if len(d.archives) == 0 {
 		return
 	}
 
-	toolLDRef, toolBinPath := ctx.tool(archiverToolPath)
+	toolLDRef, toolBinPath := ctx.tool(argToolsArchiver)
 
 	reg := codegenRegForInstance(ctx, instance)
 

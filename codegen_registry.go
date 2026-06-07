@@ -23,6 +23,14 @@ type GeneratedFileInfo struct {
 	ProducerRef    NodeRef
 	HasProducerRef bool
 
+	// GeneratorRefs are the NodeRefs of the codegen TOOLS that produce this file
+	// (e.g. event2cpp/protoc/cpp_styleguide for a .ev.pb.h), as returned by
+	// ctx.tool(). The include scanner resolves each tool's INDUCED_DEPS
+	// (genCtx.toolInduced[ref]) into this file's child set generically, so the
+	// producing emitter need not hand-weave the tools' runtime headers into the
+	// registered parsed includes.
+	GeneratorRefs []NodeRef
+
 	// SourceInputs are the producer node's $(S)-rooted leaf inputs, propagated
 	// to consumers that compile this generated file. Upstream's flat input model
 	// lists the full transitive source closure on every node, so a node
@@ -239,15 +247,17 @@ func bindGeneratedOutput(ctx *genCtx, instance ModuleInstance, output VFS, ref N
 	reg.SetProducerRef(output, ref)
 }
 
-func registerBoundGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, parsed []includeDirective, ref NodeRef) {
-	registerBoundGeneratedParsedOutputWithSource(ctx, instance, kind, output, 0, parsed, ref)
+func registerBoundGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, parsed []includeDirective, ref NodeRef, generatorRefs []NodeRef) {
+	registerBoundGeneratedParsedOutputWithSource(ctx, instance, kind, output, 0, parsed, ref, generatorRefs)
 }
 
 // registerBoundGeneratedParsedOutputWithSource is the CP variant that records
 // the COPY source alongside the dst so the closure walker can rewrite the
 // emitted input edge to the source. Pass sourcePath = 0 for non-CP producers
-// to fall back to OutputPath as the canonical edge.
-func registerBoundGeneratedParsedOutputWithSource(ctx *genCtx, instance ModuleInstance, kind string, output VFS, sourcePath VFS, parsed []includeDirective, ref NodeRef) {
+// to fall back to OutputPath as the canonical edge. generatorRefs are the codegen
+// tools whose INDUCED_DEPS the scanner mixes into this output's closure (nil when
+// the producer has no induced-deps tool).
+func registerBoundGeneratedParsedOutputWithSource(ctx *genCtx, instance ModuleInstance, kind string, output VFS, sourcePath VFS, parsed []includeDirective, ref NodeRef, generatorRefs []NodeRef) {
 	reg := codegenRegForInstance(ctx, instance)
 
 	if reg != nil {
@@ -257,6 +267,7 @@ func registerBoundGeneratedParsedOutputWithSource(ctx *genCtx, instance ModuleIn
 			SourcePath:     sourcePath,
 			ProducerRef:    ref,
 			HasProducerRef: true,
+			GeneratorRefs:  generatorRefs,
 		})
 	}
 

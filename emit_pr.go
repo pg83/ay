@@ -65,7 +65,7 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 }
 
 func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, d *moduleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
-	res := ctx.toolResult(filepath.Clean(stmt.ToolPath))
+	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath)))
 	toolLDRef := res.LDRef
 	toolBinPath := *res.LDPath
 	toolInducedDeps := res.InducedDeps
@@ -376,7 +376,7 @@ func resolveRunProgramAuxTools(ctx *genCtx, toolPaths []string) []runProgramAuxT
 		}
 
 		seen[toolPath] = struct{}{}
-		res := ctx.toolResult(filepath.Clean(toolPath))
+		res := ctx.toolResult(internArg(filepath.Clean(toolPath)))
 		out = append(out, runProgramAuxTool{
 			token: toolPath,
 			ref:   res.LDRef,

@@ -92,7 +92,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			jvSourceInputs = append(jvSourceInputs, stdout2stderrVFS, jarVFS)
 
 			for outTok, outVFS := range outVFSByToken {
-				registerBoundGeneratedParsedOutput(ctx, instance, "JV", outVFS, antlrParsedIncludes(instance.Path, run, outTok, outVFSByToken, inputs, jarVFS), jvRef)
+				registerBoundGeneratedParsedOutput(ctx, instance, "JV", outVFS, antlrParsedIncludes(instance.Path, run, outTok, outVFSByToken, inputs, jarVFS), jvRef, nil)
 				reg.SetSourceInputs(outVFS, jvSourceInputs)
 			}
 		}
