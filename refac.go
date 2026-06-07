@@ -203,6 +203,7 @@ func refacConsts(args []string) int {
 		}
 
 		editsByFile[fi] = append(editsByFile[fi], removalEdits(pf)...)
+		editsByFile[fi] = append(editsByFile[fi], internArgsRewrites(pf, existing, used, &emit)...)
 
 		if applyConstEdits(pf, editsByFile[fi]) {
 			fmt.Fprintf(os.Stderr, "refac consts: rewrote %s\n", pf.path)
@@ -456,6 +457,83 @@ func constDef(key hoistKey) string {
 type constEdit struct {
 	start, end int
 	name       string
+}
+
+// internArgsRewrites finds every `internArgs([]string{<all string literals>})` call
+// in pf, registers each element string as a hoistArg const (reusing the existing arg
+// const for that string, else allocating a new one appended to *emit), and returns
+// edits rewriting each call to a `[]ARG{argA, argB, …}` literal of those consts — so
+// a static flag bundle becomes a vector of pre-interned ARG consts instead of a
+// runtime internArgs() over a string slice. A call whose slice has any non-literal
+// element (a variable or concatenation) or a non-composite argument is left untouched.
+func internArgsRewrites(pf *parsedFile, existing map[hoistKey]string, used map[string]bool, emit *[]hoistedVar) []constEdit {
+	off := func(p gotoken.Pos) int { return pf.fset.Position(p).Offset }
+
+	var edits []constEdit
+
+	ast.Inspect(pf.f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+
+		if !ok {
+			return true
+		}
+
+		id, isID := call.Fun.(*ast.Ident)
+
+		if !isID || id.Name != "internArgs" || len(call.Args) != 1 {
+			return true
+		}
+
+		cl, isComposite := call.Args[0].(*ast.CompositeLit)
+
+		if !isComposite || len(cl.Elts) == 0 {
+			return true
+		}
+
+		names := make([]string, 0, len(cl.Elts))
+
+		for _, el := range cl.Elts {
+			bl, isLit := el.(*ast.BasicLit)
+
+			if !isLit || bl.Kind != gotoken.STRING {
+				return true // a non-literal element — leave the whole call untouched
+			}
+
+			lit, err := strconv.Unquote(bl.Value)
+
+			if err != nil {
+				return true
+			}
+
+			key := hoistKey{kind: hoistArg, canon: lit}
+			name, seen := existing[key]
+
+			if !seen {
+				name = uniqueName(identForVFS(key), used)
+				used[name] = true
+				existing[key] = name
+				*emit = append(*emit, hoistedVar{name, key})
+			}
+
+			names = append(names, name)
+		}
+
+		var b strings.Builder
+		b.WriteString("[]ARG{")
+
+		for _, nm := range names {
+			b.WriteByte('\n')
+			b.WriteString(nm)
+			b.WriteByte(',')
+		}
+
+		b.WriteString("\n}")
+		edits = append(edits, constEdit{off(call.Pos()), off(call.End()), b.String()})
+
+		return false
+	})
+
+	return edits
 }
 
 // specRemovable reports whether spec is a `name = Call("<literal>")` package-level
