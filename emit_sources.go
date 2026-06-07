@@ -118,7 +118,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryVFS, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
 
-		registerGeneratedParsedOutput(ctx, srcInstance, "R6", r6Out, r6Parsed)
+		registerGeneratedParsedOutput(ctx, srcInstance, "R6", r6Out, r6Parsed, nil)
 
 		ccSrcRel := strings.TrimPrefix(r6Out.Rel(), srcInstance.Path+"/")
 		ccIncludeInputs := walkClosure(ctx, srcInstance, r6Out, srcIn)

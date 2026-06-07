@@ -68,7 +68,6 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath)))
 	toolLDRef := res.LDRef
 	toolBinPath := *res.LDPath
-	toolInducedDeps := res.InducedDeps
 	auxTools := resolveRunProgramAuxTools(ctx, stmt.ToolPaths)
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
@@ -111,17 +110,17 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			registerGeneratedParsedOutput(ctx, instance, "PR", outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt, toolInducedDeps))
+			registerGeneratedParsedOutput(ctx, instance, "PR", outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt), []NodeRef{toolLDRef})
 			reg.SetSourceInputs(outVFSByToken[f], prSourceInputs)
 		}
 
 		for _, f := range stmt.OUTNoAutoFiles {
-			registerGeneratedParsedOutput(ctx, instance, "PR", outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt, toolInducedDeps))
+			registerGeneratedParsedOutput(ctx, instance, "PR", outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt), []NodeRef{toolLDRef})
 			reg.SetSourceInputs(outVFSByToken[f], prSourceInputs)
 		}
 
 		if stmt.StdoutFile != nil {
-			registerGeneratedParsedOutput(ctx, instance, "PR", *stdoutVFS, prEmitsIncludes(ctx, instance, d, *stmt.StdoutFile, stmt, toolInducedDeps))
+			registerGeneratedParsedOutput(ctx, instance, "PR", *stdoutVFS, prEmitsIncludes(ctx, instance, d, *stmt.StdoutFile, stmt), []NodeRef{toolLDRef})
 			reg.SetSourceInputs(*stdoutVFS, prSourceInputs)
 		}
 	}
@@ -336,12 +335,12 @@ func dropTransitiveGeneratedProto(in []VFS) []VFS {
 	return out
 }
 
-func prEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, outFile string, stmt *RunProgramStmt, toolInducedDeps []string) []includeDirective {
+func prEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, outFile string, stmt *RunProgramStmt) []includeDirective {
 	if !generatedOutputCarriesIncludes(outFile) {
 		return nil
 	}
 
-	includes := make([]includeDirective, 0, len(stmt.INFiles)+len(stmt.OutputIncludes)+len(toolInducedDeps))
+	includes := make([]includeDirective, 0, len(stmt.INFiles)+len(stmt.OutputIncludes))
 
 	for _, f := range stmt.INFiles {
 		includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(runProgramInputVFS(ctx, instance, d, f).Rel())})
@@ -352,10 +351,6 @@ func prEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, outFil
 			f = Intern(f).Rel()
 		}
 
-		includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(f)})
-	}
-
-	for _, f := range toolInducedDeps {
 		includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(f)})
 	}
 
