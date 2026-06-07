@@ -141,7 +141,7 @@ func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 	found := false
 
 	for _, a := range args {
-		if a == cxxStandardFlag {
+		if a == cxxStandardFlag.String() {
 			found = true
 
 			break
@@ -165,7 +165,7 @@ func TestEmitCC_CSource_UsesClang(t *testing.T) {
 	}
 
 	for _, a := range args {
-		if a == cxxStandardFlag {
+		if a == cxxStandardFlag.String() {
 			t.Errorf("cmd_args contains %q for a .c source", cxxStandardFlag)
 
 			break
@@ -203,7 +203,7 @@ func TestEmitCC_OwnCXXFlags_SlotsAfterSuppressionBlock(t *testing.T) {
 	emit := NewBufferedEmitter()
 	in := ModuleCCInputs{
 		Flags:    FlagSet{NoCompilerWarnings: true},
-		CXXFlags: []string{"-D_LIBCPP_BUILDING_LIBRARY"},
+		CXXFlags: internArgs([]string{"-D_LIBCPP_BUILDING_LIBRARY"}),
 	}
 	inst := targetInstance("contrib/libs/cxxsupp/libcxx")
 	EmitCC(inst, "src/algorithm.cpp", Intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), in, testHostP, emit)
@@ -241,7 +241,7 @@ func TestEmitCC_OwnCXXFlags_SlotsAfterSuppressionBlock(t *testing.T) {
 }
 
 func TestEmitCC_COnlyFlags_AppliesOnlyToCSources(t *testing.T) {
-	in := ModuleCCInputs{COnlyFlags: []string{"-Wno-narrowing"}}
+	in := ModuleCCInputs{COnlyFlags: internArgs([]string{"-Wno-narrowing"})}
 
 	emitC := NewBufferedEmitter()
 	EmitCC(targetInstance("build/cow/on"), "lib.c", Intern("$(S)/build/cow/on/lib.c"), in, testHostP, emitC)

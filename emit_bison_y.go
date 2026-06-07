@@ -166,7 +166,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	ccIn.IncludeInputs = walkClosure(ctx, instance, generatedVFS, in)
 
 	if preprocessHeader {
-		ccIn.PerSourceCFlags = append(append([]string(nil), in.PerSourceCFlags...), "-Wno-unused-but-set-variable", "-Wno-deprecated-copy")
+		ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), internArg("-Wno-unused-but-set-variable"), internArg("-Wno-deprecated-copy"))
 	}
 
 	ccRef, ccOut, _ := EmitCC(instance, generatedRel, generatedVFS, ccIn, ctx.host, ctx.emit)

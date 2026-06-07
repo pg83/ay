@@ -3045,8 +3045,8 @@ END()
 		"-DUDF_ABI_VERSION_MINOR=44",
 		"-DUDF_ABI_VERSION_PATCH=0",
 	}
-	if !reflect.DeepEqual(d.cxxFlags, want) {
-		t.Fatalf("cxxFlags = %#v, want %#v", d.cxxFlags, want)
+	if !reflect.DeepEqual(argStrs(d.cxxFlags), want) {
+		t.Fatalf("cxxFlags = %#v, want %#v", argStrs(d.cxxFlags), want)
 	}
 }
 
@@ -3093,7 +3093,7 @@ END()
 	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/proto/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
 
-	if !equalStrings(d.protocFlags, []string{"--fatal_warnings"}) {
+	if !equalStrings(argStrs(d.protocFlags), []string{"--fatal_warnings"}) {
 		t.Fatalf("protocFlags = %v, want [--fatal_warnings]", d.protocFlags)
 	}
 }
@@ -3145,7 +3145,7 @@ END()
 	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/flatcmod/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "flatcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "flatcmod", Kind: KindLib, Platform: testTargetP}))
 
-	if !equalStrings(d.flatcFlags, []string{"--scoped-enums", "--gen-all"}) {
+	if !equalStrings(argStrs(d.flatcFlags), []string{"--scoped-enums", "--gen-all"}) {
 		t.Fatalf("flatcFlags = %v, want [--scoped-enums --gen-all]", d.flatcFlags)
 	}
 }
@@ -4266,8 +4266,8 @@ func TestCollectModule_SETAPPENDRPathGlobal(t *testing.T) {
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(instance))
 
 	want := []string{"-Wl,-rpath,$ORIGIN"}
-	if !reflect.DeepEqual(d.rpathFlagsGlobal, want) {
-		t.Fatalf("rpathFlagsGlobal mismatch:\n  got:  %#v\n  want: %#v", d.rpathFlagsGlobal, want)
+	if !reflect.DeepEqual(argStrs(d.rpathFlagsGlobal), want) {
+		t.Fatalf("rpathFlagsGlobal mismatch:\n  got:  %#v\n  want: %#v", argStrs(d.rpathFlagsGlobal), want)
 	}
 }
 

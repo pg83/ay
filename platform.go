@@ -35,8 +35,8 @@ type Platform struct {
 	Triple string
 	March  string
 
-	CFlags   []string
-	CXXFlags []string
+	CFlags   []ARG
+	CXXFlags []ARG
 
 	SystemLibs       []string
 	LinkPreludeExtra []string
@@ -126,8 +126,8 @@ func NewPlatform(os OS, isa ISA, flags map[string]string, tags []string, cflagsE
 		Ragel6Optimized:   buildRelease && !buildSanitized,
 		Triple:            string(isa) + "-" + string(os) + "-gnu",
 		March:             marchFor(isa),
-		CFlags:            parseCompilerFlags(cflagsEnv),
-		CXXFlags:          parseCompilerFlags(cxxflagsEnv),
+		CFlags:            internArgs(parseCompilerFlags(cflagsEnv)),
+		CXXFlags:          internArgs(parseCompilerFlags(cxxflagsEnv)),
 		SystemLibs:        systemLibs,
 		LinkPreludeExtra:  linkPreludeExtra,
 		ClangVer:          platformClangVersion(flags),

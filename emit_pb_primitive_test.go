@@ -21,7 +21,7 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 		"",
 		false,
 		false,
-		[]string{"--fatal_warnings"},
+		internArgs([]string{"--fatal_warnings"}),
 		nil,
 		nil,
 		false,

@@ -234,7 +234,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	ownExtras := in.CXXFlags
 
 	if len(platform.CXXFlags) > 0 {
-		ownExtras = append(append([]string{}, ownExtras...), platform.CXXFlags...)
+		ownExtras = append(append([]ARG{}, ownExtras...), platform.CXXFlags...)
 	}
 
 	args := make([]string, 0, 200+len(in.AddIncl)+len(in.PeerAddInclGlobal)+
@@ -246,7 +246,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	args = append(args, python, clangWrapper, "no", clangBC)
 
 	// ${pre=-I:_C__INCLUDE}: include paths (same layout as CC compile)
-	args = append(args, ccIncludesPrefix...)
+	args = appendArgStrs(args, ccIncludesPrefix)
 	args = appendAddIncl(args, in.AddIncl, in.InclArgs)
 	peerAddIncl := in.PeerAddInclGlobal
 
@@ -270,13 +270,11 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	// appendCompileFlagPipeline) and from the OwnGlobalBucket/PeerCXXFlagsGlobal
 	// slot. The explicit catboostOpenSourceDefine ensures the flag is present even
 	// when PeerCXXFlagsGlobal is empty (same reason composeTargetCC always adds it).
-	args = append(args, ownGlobalBucket...)
-	args = append(args, catboostOpenSourceDefine...)
-	args = append(args, composePostCatboostBucket(ownGlobalBucket)...)
+	args = appendArgStrs(args, ownGlobalBucket, catboostOpenSourceDefine, composePostCatboostBucket(ownGlobalBucket))
 
 	// $C_FLAGS_PLATFORM comes after $BC_CXXFLAGS (not before like in CC).
 	args = append(args, "--target="+platform.Triple)
-	args = append(args, bundle.ArchArgs...)
+	args = appendArgStrs(args, bundle.ArchArgs)
 	args = append(args, "-B"+binPath)
 
 	// BC-specific tail flags from upstream macro

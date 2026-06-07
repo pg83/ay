@@ -17,8 +17,8 @@ type ModuleCCInputs struct {
 	// peered PROTO_LIBRARY / PROTO_NAMESPACE GLOBAL). Distinct from
 	// PeerAddInclGlobal which feeds the C++ compile pipeline.
 	PeerProtoAddInclGlobal []VFS
-	CXXFlags               []string
-	COnlyFlags             []string
+	CXXFlags               []ARG
+	COnlyFlags             []ARG
 
 	ExtraDepRefs []NodeRef
 
@@ -32,25 +32,25 @@ type ModuleCCInputs struct {
 
 	NodeInputs []VFS
 
-	PeerCFlagsGlobal []string
+	PeerCFlagsGlobal []ARG
 
-	PeerCXXFlagsGlobal []string
+	PeerCXXFlagsGlobal []ARG
 
-	PeerCOnlyFlagsGlobal []string
+	PeerCOnlyFlagsGlobal []ARG
 
-	CFlags []string
+	CFlags []ARG
 
-	ModuleScopeCFlags []string
+	ModuleScopeCFlags []ARG
 
-	OwnCFlagsGlobal []string
+	OwnCFlagsGlobal []ARG
 
-	OwnCXXFlagsGlobal []string
+	OwnCXXFlagsGlobal []ARG
 
-	OwnCOnlyFlagsGlobal []string
+	OwnCOnlyFlagsGlobal []ARG
 
-	SFlags []string
+	SFlags []ARG
 
-	PerSourceCFlags []string
+	PerSourceCFlags []ARG
 
 	FlatOutput bool
 
@@ -69,7 +69,7 @@ type ModuleCCInputs struct {
 
 	Variant *string
 
-	Ragel6Flags []string
+	Ragel6Flags []ARG
 
 	BisonGenExt string
 }
@@ -105,7 +105,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 	isCxx := in.ForceCxx || isCxxSource(srcRel)
 
-	var ownExtras []string
+	var ownExtras []ARG
 
 	if isCxx {
 		ownExtras = in.CXXFlags
@@ -114,7 +114,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	}
 
 	if isCxx && len(instance.Platform.CXXFlags) > 0 {
-		ownExtras = append(append([]string{}, ownExtras...), instance.Platform.CXXFlags...)
+		ownExtras = append(append([]ARG{}, ownExtras...), instance.Platform.CXXFlags...)
 	}
 
 	var cmdArgs []string
@@ -281,37 +281,39 @@ func pickCompiler(tools Toolchain, isCxx bool) string {
 	return tools.CC
 }
 
-func pickWarningFlags(noCompilerWarnings bool, noWShadow bool) []string {
+var argNoShadow = internArg("-Wno-shadow")
+
+func pickWarningFlags(noCompilerWarnings bool, noWShadow bool) []ARG {
 	if noCompilerWarnings {
 		return noWarningsBundle
 	}
 
 	if noWShadow {
-		return append(append([]string{}, warningFlags...), "-Wno-shadow")
+		return append(append([]ARG{}, warningFlags...), argNoShadow)
 	}
 
 	return warningFlags
 }
 
-func appendCxxStdAndOwn(cmdArgs []string, isCxx bool, noCompilerWarnings bool, injectCxxWarningBundle bool, ownExtras []string) []string {
+func appendCxxStdAndOwn(cmdArgs []string, isCxx bool, noCompilerWarnings bool, injectCxxWarningBundle bool, ownExtras []ARG) []string {
 	if isCxx {
-		cmdArgs = append(cmdArgs, cxxStandardFlag)
+		cmdArgs = append(cmdArgs, cxxStandardFlag.String())
 
 		if injectCxxWarningBundle {
 			if noCompilerWarnings {
-				cmdArgs = append(cmdArgs, noWarningsBundle...)
+				cmdArgs = appendArgStrs(cmdArgs, noWarningsBundle)
 			} else {
-				cmdArgs = append(cmdArgs, cxxStandardWarnings...)
+				cmdArgs = appendArgStrs(cmdArgs, cxxStandardWarnings)
 			}
 		}
 	}
 
-	cmdArgs = append(cmdArgs, ownExtras...)
+	cmdArgs = appendArgStrs(cmdArgs, ownExtras)
 
 	return cmdArgs
 }
 
-func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
+func composePeerExtras(in ModuleCCInputs, isCxx bool) []ARG {
 	// The result is only appended FROM into cmdArgs (read-only), so return the
 	// shared flag slice directly rather than copying it.
 	if isCxx {
@@ -321,8 +323,8 @@ func composePeerExtras(in ModuleCCInputs, isCxx bool) []string {
 	return in.PeerCOnlyFlagsGlobal
 }
 
-func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []string {
-	out := make([]string, 0, len(p.CFlags)+len(in.CFlags)+len(in.PeerCFlagsGlobal)+len(in.OwnCFlagsGlobal))
+func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []ARG {
+	out := make([]ARG, 0, len(p.CFlags)+len(in.CFlags)+len(in.PeerCFlagsGlobal)+len(in.OwnCFlagsGlobal))
 	out = append(out, p.CFlags...)
 	out = append(out, in.CFlags...)
 	out = append(out, in.PeerCFlagsGlobal...)
@@ -331,43 +333,32 @@ func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []string {
 	return out
 }
 
-const baseUnitCxxNostdinc = "-nostdinc++"
+var baseUnitCxxNostdinc = internArg("-nostdinc++")
 
-func composeOwnAndPeerGlobalBucket(in ModuleCCInputs, isCxx bool) []string {
-	out := make([]string, 0,
+func composeOwnAndPeerGlobalBucket(in ModuleCCInputs, isCxx bool) []ARG {
+	out := make([]ARG, 0,
 		len(in.OwnCXXFlagsGlobal)+len(in.PeerCXXFlagsGlobal)+
 			len(in.OwnCOnlyFlagsGlobal)+len(in.PeerCOnlyFlagsGlobal))
-	seen := make(map[string]struct{}, cap(out))
-	addEach := func(src []string) {
-		for _, x := range src {
-			if _, dup := seen[x]; dup {
-				continue
-			}
-
-			seen[x] = struct{}{}
-			out = append(out, x)
-		}
-	}
 
 	if isCxx {
-		addEach(in.OwnCXXFlagsGlobal)
-		addEach(in.PeerCXXFlagsGlobal)
+		out = append(out, in.OwnCXXFlagsGlobal...)
+		out = append(out, in.PeerCXXFlagsGlobal...)
 	} else {
-		addEach(in.OwnCOnlyFlagsGlobal)
-		addEach(in.PeerCOnlyFlagsGlobal)
+		out = append(out, in.OwnCOnlyFlagsGlobal...)
+		out = append(out, in.PeerCOnlyFlagsGlobal...)
 	}
 
-	return out
+	return dedupARG(out)
 }
 
-func composePostCatboostBucket(preBucket []string) []string {
+func composePostCatboostBucket(preBucket []ARG) []ARG {
 	for _, x := range preBucket {
 		if x == baseUnitCxxNostdinc {
 			return preBucket
 		}
 	}
 
-	out := make([]string, 0, len(preBucket)+1)
+	out := make([]ARG, 0, len(preBucket)+1)
 	out = append(out, preBucket...)
 	out = append(out, baseUnitCxxNostdinc)
 
@@ -380,29 +371,20 @@ type ccComposeArgs struct {
 	InputPath          string
 	OwnAddIncl         []VFS
 	PeerAddIncl        []VFS
-	OwnCFlags          []string
-	OwnExtras          []string
-	PeerExtras         []string
-	OwnGlobalBucket    []string
-	PerSrcCFlags       []string
-	ModuleScopeCFlags  []string
+	OwnCFlags          []ARG
+	OwnExtras          []ARG
+	PeerExtras         []ARG
+	OwnGlobalBucket    []ARG
+	PerSrcCFlags       []ARG
+	ModuleScopeCFlags  []ARG
 	IsCxx              bool
 	NoCompilerWarnings bool
 	NoWShadow          bool
 	InclArgs           inclArgMemo
 }
 
-func appendCompileFlagPipeline(cmdArgs []string, bundle compileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags []string) []string {
-	cmdArgs = append(cmdArgs, debugPrefixMapFlags...)
-	cmdArgs = append(cmdArgs, xclangDebugCompilationDir...)
-	cmdArgs = append(cmdArgs, bundle.CFlags...)
-	cmdArgs = append(cmdArgs, warningBundle...)
-	cmdArgs = append(cmdArgs, defineBundle...)
-	cmdArgs = append(cmdArgs, preNoLibcExtras...)
-	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
-	cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-	cmdArgs = append(cmdArgs, moduleScopeCFlags...)
-	cmdArgs = append(cmdArgs, bundle.NoLibcBlock...)
+func appendCompileFlagPipeline(cmdArgs []string, bundle compileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags []ARG) []string {
+	cmdArgs = appendArgStrs(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir, bundle.CFlags, warningBundle, defineBundle, preNoLibcExtras, bundle.NoLibcBlock, catboostOpenSourceDefine, moduleScopeCFlags, bundle.NoLibcBlock)
 
 	return cmdArgs
 }
@@ -427,14 +409,14 @@ func composeTargetCC(a ccComposeArgs) []string {
 		pickCompiler(a.Platform.Tools, a.IsCxx),
 		"--target="+a.Platform.Triple,
 	)
-	cmdArgs = append(cmdArgs, bundle.ArchArgs...)
+	cmdArgs = appendArgStrs(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs,
 		"-B"+binPath,
 		"-c",
 		"-o",
 		a.OutputPath,
 	)
-	cmdArgs = append(cmdArgs, ccIncludesPrefix...)
+	cmdArgs = appendArgStrs(cmdArgs, ccIncludesPrefix)
 	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl, a.InclArgs)
 	peerAddIncl := a.PeerAddIncl
 
@@ -446,7 +428,7 @@ func composeTargetCC(a ccComposeArgs) []string {
 	cmdArgs = appendAddIncl(cmdArgs, peerAddIncl, a.InclArgs)
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningBundle, bundle.Defines, a.OwnCFlags, a.ModuleScopeCFlags)
 
-	var cOnlyExtras []string
+	var cOnlyExtras []ARG
 
 	if a.IsCxx {
 		cmdArgs = appendCxxStdAndOwn(cmdArgs, true, a.NoCompilerWarnings, true, a.OwnExtras)
@@ -455,19 +437,12 @@ func composeTargetCC(a ccComposeArgs) []string {
 	}
 
 	if a.IsCxx {
-		cmdArgs = append(cmdArgs, a.OwnGlobalBucket...)
-		cmdArgs = append(cmdArgs, catboostOpenSourceDefine...)
-		cmdArgs = append(cmdArgs, composePostCatboostBucket(a.OwnGlobalBucket)...)
+		cmdArgs = appendArgStrs(cmdArgs, a.OwnGlobalBucket, catboostOpenSourceDefine, composePostCatboostBucket(a.OwnGlobalBucket))
 	} else {
-		cmdArgs = append(cmdArgs, a.PeerExtras...)
+		cmdArgs = appendArgStrs(cmdArgs, a.PeerExtras)
 	}
 
-	cmdArgs = append(cmdArgs, builtinMacroDateTime...)
-	cmdArgs = append(cmdArgs, macroPrefixMapFlags...)
-
-	cmdArgs = append(cmdArgs, a.PerSrcCFlags...)
-
-	cmdArgs = append(cmdArgs, cOnlyExtras...)
+	cmdArgs = appendArgStrs(cmdArgs, builtinMacroDateTime, macroPrefixMapFlags, a.PerSrcCFlags, cOnlyExtras)
 	cmdArgs = append(cmdArgs, a.InputPath)
 
 	return cmdArgs

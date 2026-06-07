@@ -17,7 +17,7 @@ func canonicalizeRagel6Binary(v VFS) VFS {
 	return Build(ragel6CanonicalRel + v.Rel()[len(ragel6BinSubrel):])
 }
 
-func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []string, closure []VFS, emit Emitter) (NodeRef, VFS) {
+func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, emit Emitter) (NodeRef, VFS) {
 	var outVFS VFS
 
 	if strings.Contains(srcRel, "/") {
@@ -33,15 +33,15 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 
 	if len(effectiveFlags) == 0 {
 		if instance.Platform.Ragel6Optimized {
-			effectiveFlags = []string{ragel6DefaultFlagOptimized}
+			effectiveFlags = []ARG{internArg(ragel6DefaultFlagOptimized)}
 		} else {
-			effectiveFlags = []string{ragel6DefaultFlagDebug}
+			effectiveFlags = []ARG{internArg(ragel6DefaultFlagDebug)}
 		}
 	}
 
 	cmdArgs := make([]string, 0, 5+len(effectiveFlags)+1)
 	cmdArgs = append(cmdArgs, canonicalBinary.String())
-	cmdArgs = append(cmdArgs, effectiveFlags...)
+	cmdArgs = appendArgStrs(cmdArgs, effectiveFlags)
 	cmdArgs = append(cmdArgs,
 		"-L",
 		"-I$(S)",

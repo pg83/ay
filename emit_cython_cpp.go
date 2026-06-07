@@ -171,10 +171,10 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		ccIn.Py3Suffix = !stmt.CMode && !generatedExplicit && py23Variant
 		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		ccIn.CFlags = filterPyRegisterCFlags(ccIn.CFlags)
-		ccIn.PerSourceCFlags = append([]string(nil), in.PerSourceCFlags...)
+		ccIn.PerSourceCFlags = append([]ARG(nil), in.PerSourceCFlags...)
 
 		if cythonImplicitFallthrough(stmt, py23Variant) {
-			ccIn.PerSourceCFlags = append(ccIn.PerSourceCFlags, "-Wno-implicit-fallthrough")
+			ccIn.PerSourceCFlags = append(ccIn.PerSourceCFlags, internArg("-Wno-implicit-fallthrough"))
 		}
 
 		scanIn := ccIn
@@ -302,15 +302,17 @@ func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, py23 bool) []VF
 	return dedupVFS(out)
 }
 
-func filterPyRegisterCFlags(cflags []string) []string {
+func filterPyRegisterCFlags(cflags []ARG) []ARG {
 	if len(cflags) == 0 {
 		return cflags
 	}
 
-	out := make([]string, 0, len(cflags))
+	out := make([]ARG, 0, len(cflags))
 
 	for _, flag := range cflags {
-		if hasPrefix(flag, "-DPyInit_") || hasPrefix(flag, "-Dinit_module_") {
+		s := flag.String()
+
+		if hasPrefix(s, "-DPyInit_") || hasPrefix(s, "-Dinit_module_") {
 			continue
 		}
 

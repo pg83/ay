@@ -167,7 +167,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 		"makefile_lang.rl6",
 		ragel6LD,
 		Intern("$(B)/contrib/tools/ragel6/ragel6"),
-		[]string{"-lF1"},
+		internArgs([]string{"-lF1"}),
 		nil,
 		e,
 	)

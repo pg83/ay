@@ -219,10 +219,10 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		ccIn.IncludeInputs = []VFS{genPy3RegScriptVFS}
 
 		if len(in.CFlags) > 0 {
-			filtered := make([]string, 0, len(in.CFlags))
+			filtered := make([]ARG, 0, len(in.CFlags))
 
 			for _, f := range in.CFlags {
-				if short, ok := pyInitDefineShortname(f); ok {
+				if short, ok := pyInitDefineShortname(f.String()); ok {
 					if _, keep := priorShort[short]; !keep {
 						continue
 					}

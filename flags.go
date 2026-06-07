@@ -1,26 +1,26 @@
 package main
 
-var ccIncludesPrefix = []string{
+var ccIncludesPrefix = internArgs([]string{
 	"-I$(B)",
 	"-I$(S)",
-}
+})
 
 var googleapisCommonProtosAddIncl = Intern("$(B)/contrib/libs/googleapis-common-protos")
 
-var debugPrefixMapFlags = []string{
+var debugPrefixMapFlags = internArgs([]string{
 	"-fdebug-prefix-map=$(B)=/-B",
 	"-fdebug-prefix-map=$(S)=/-S",
 	"-fdebug-prefix-map=$(TOOL_ROOT)=/-T",
-}
+})
 
-var xclangDebugCompilationDir = []string{
+var xclangDebugCompilationDir = internArgs([]string{
 	"-Xclang",
 	"-fdebug-compilation-dir",
 	"-Xclang",
 	"/tmp",
-}
+})
 
-var commonCFlags = []string{
+var commonCFlags = internArgs([]string{
 	"-pipe",
 	"-g",
 	"-fdebug-default-version=4",
@@ -35,9 +35,9 @@ var commonCFlags = []string{
 	"-fcolor-diagnostics",
 	"-faligned-allocation",
 	"-fstack-protector",
-}
+})
 
-var x86TargetCFlags = []string{
+var x86TargetCFlags = internArgs([]string{
 	"-pipe",
 	"-m64",
 	"-g",
@@ -52,9 +52,9 @@ var x86TargetCFlags = []string{
 	"-fcolor-diagnostics",
 	"-faligned-allocation",
 	"-fstack-protector",
-}
+})
 
-var hostCFlags = []string{
+var hostCFlags = internArgs([]string{
 	"-pipe",
 	"-m64",
 	"-O3",
@@ -66,18 +66,18 @@ var hostCFlags = []string{
 	"-fuse-init-array",
 	"-fcolor-diagnostics",
 	"-faligned-allocation",
-}
+})
 
-var warningFlags = []string{
+var warningFlags = internArgs([]string{
 	"-Werror",
 	"-Wall",
 	"-Wextra",
 	"-Wno-parentheses",
 	"-Wno-implicit-const-int-float-conversion",
 	"-Wno-unknown-warning-option",
-}
+})
 
-var commonDefines = []string{
+var commonDefines = internArgs([]string{
 	"-DARCADIA_ROOT=$(S)",
 	"-DARCADIA_BUILD_ROOT=$(B)",
 	"-D_THREAD_SAFE",
@@ -89,9 +89,9 @@ var commonDefines = []string{
 	"-D_FILE_OFFSET_BITS=64",
 	"-D_GNU_SOURCE",
 	"-D__LONG_LONG_SUPPORTED",
-}
+})
 
-var hostDefines = []string{
+var hostDefines = internArgs([]string{
 	"-DARCADIA_ROOT=$(S)",
 	"-DARCADIA_BUILD_ROOT=$(B)",
 	"-D_THREAD_SAFE",
@@ -104,9 +104,9 @@ var hostDefines = []string{
 	"-D_GNU_SOURCE",
 	"-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE",
 	"-D__LONG_LONG_SUPPORTED",
-}
+})
 
-var hostSseFeatures = []string{
+var hostSseFeatures = internArgs([]string{
 	"-msse2",
 	"-msse3",
 	"-mssse3",
@@ -114,9 +114,9 @@ var hostSseFeatures = []string{
 	"-msse4.2",
 	"-mpopcnt",
 	"-mcx16",
-}
+})
 
-var noLibcWarningSuppressions = []string{
+var noLibcWarningSuppressions = internArgs([]string{
 	"-Wno-array-parameter",
 	"-Wno-deprecate-lax-vec-conv-all",
 	"-Wno-unqualified-std-cast-call",
@@ -137,29 +137,29 @@ var noLibcWarningSuppressions = []string{
 	"-Wno-missing-template-arg-list-after-template-kw",
 	"-Wno-nontrivial-memcall",
 	"-Wno-strict-primary-template-shadow",
-}
+})
 
-var catboostOpenSourceDefine = []string{
+var catboostOpenSourceDefine = internArgs([]string{
 	"-DCATBOOST_OPENSOURCE=yes",
-}
+})
 
-var builtinMacroDateTime = []string{
+var builtinMacroDateTime = internArgs([]string{
 	"-Wno-builtin-macro-redefined",
 	`-D__DATE__="Jan 10 2019"`,
 	`-D__TIME__="00:00:00"`,
-}
+})
 
-var macroPrefixMapFlags = []string{
+var macroPrefixMapFlags = internArgs([]string{
 	"-fmacro-prefix-map=$(B)/=",
 	"-fmacro-prefix-map=$(S)/=",
 	"-fmacro-prefix-map=$(TOOL_ROOT)/=",
-}
+})
 
-var noWarningsBundle = []string{
+var noWarningsBundle = internArgs([]string{
 	"-Wno-everything",
-}
+})
 
-var cxxStandardWarnings = []string{
+var cxxStandardWarnings = internArgs([]string{
 	"-Wimport-preprocessor-directive-pedantic",
 	"-Woverloaded-virtual",
 	"-Wno-ambiguous-reversed-operator",
@@ -170,13 +170,23 @@ var cxxStandardWarnings = []string{
 	"-Wno-deprecated-volatile",
 	"-Wno-pessimizing-move",
 	"-Wno-undefined-var-template",
-}
+})
 
-const cxxStandardFlag = "-std=c++20"
+var cxxStandardFlag = internArg("-std=c++20")
 
 const binPath = "/usr/bin"
 
-func sseBaseCFlags(x8664 bool) []string {
+// arg tokens compared/inserted by withSandboxingDebugCompression.
+var (
+	argDashG            = internArg("-g")
+	argGzZstd           = internArg("-gz=zstd")
+	argNDEBUG           = internArg("-DNDEBUG")
+	argUNDEBUG          = internArg("-UNDEBUG")
+	argNoOutlineAtomics = internArg("-mno-outline-atomics")
+	argFPIC             = internArg("-fPIC")
+)
+
+func sseBaseCFlags(x8664 bool) []ARG {
 	if x8664 {
 		return hostSseFeatures
 	}
@@ -184,21 +194,21 @@ func sseBaseCFlags(x8664 bool) []string {
 	return nil
 }
 
-func noLibcBlock(p *Platform) []string {
-	out := make([]string, 0, 3+len(noLibcWarningSuppressions))
+func noLibcBlock(p *Platform) []ARG {
+	out := make([]ARG, 0, 3+len(noLibcWarningSuppressions))
 
 	if p.BuildRelease {
-		out = append(out, "-DNDEBUG")
+		out = append(out, argNDEBUG)
 	} else {
-		out = append(out, "-UNDEBUG")
+		out = append(out, argUNDEBUG)
 	}
 
 	if p.ISA == ISAAArch64 {
-		out = append(out, "-mno-outline-atomics")
+		out = append(out, argNoOutlineAtomics)
 	}
 
 	if p.PIC {
-		out = append(out, "-fPIC")
+		out = append(out, argFPIC)
 	}
 
 	out = append(out, noLibcWarningSuppressions...)
@@ -207,31 +217,31 @@ func noLibcBlock(p *Platform) []string {
 }
 
 type compileFlagBundle struct {
-	ArchArgs    []string
-	CFlags      []string
-	Defines     []string
-	NoLibcBlock []string
+	ArchArgs    []ARG
+	CFlags      []ARG
+	Defines     []ARG
+	NoLibcBlock []ARG
 }
 
-func withSandboxingDebugCompression(base []string, p *Platform) []string {
+func withSandboxingDebugCompression(base []ARG, p *Platform) []ARG {
 	if p == nil || p.PIC || p.Flags[envSANDBOXING] != strYes {
 		return base
 	}
 
-	out := make([]string, 0, len(base)+1)
+	out := make([]ARG, 0, len(base)+1)
 	inserted := false
 
 	for _, flag := range base {
 		out = append(out, flag)
 
-		if !inserted && flag == "-g" {
-			out = append(out, "-gz=zstd")
+		if !inserted && flag == argDashG {
+			out = append(out, argGzZstd)
 			inserted = true
 		}
 	}
 
 	if !inserted {
-		out = append(out, "-gz=zstd")
+		out = append(out, argGzZstd)
 	}
 
 	return out
@@ -259,7 +269,7 @@ func compileFlagBundleFor(p *Platform) compileFlagBundle {
 		}
 
 		if p.March != "" {
-			bundle.ArchArgs = []string{"-march=" + p.March}
+			bundle.ArchArgs = []ARG{internArg("-march=" + p.March)}
 		}
 
 		return bundle

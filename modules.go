@@ -85,17 +85,17 @@ type moduleData struct {
 	protoAddInclGlobal   []VFS
 	unhandledMacros      map[string][]string
 	llvmBc               []*llvmBcStmt
-	cFlags               []string
-	cFlagsGlobal         []string
-	cxxFlags             []string
-	cxxFlagsGlobal       []string
-	cOnlyFlags           []string
-	cOnlyFlagsGlobal     []string
-	sFlags               []string
-	protocFlags          []string
-	flatcFlags           []string
-	ldFlags              []string
-	rpathFlagsGlobal     []string
+	cFlags               []ARG
+	cFlagsGlobal         []ARG
+	cxxFlags             []ARG
+	cxxFlagsGlobal       []ARG
+	cOnlyFlags           []ARG
+	cOnlyFlagsGlobal     []ARG
+	sFlags               []ARG
+	protocFlags          []ARG
+	flatcFlags           []ARG
+	ldFlags              []ARG
+	rpathFlagsGlobal     []ARG
 	objAddLibsGlobal     []string
 	srcDir               *string
 	flags                FlagSet
@@ -108,7 +108,7 @@ type moduleData struct {
 	noImportTracing      bool
 	usePython3           bool
 	useCommonGoogleAPIs  bool
-	moduleScopeCFlags    []string
+	moduleScopeCFlags    []ARG
 	pythonSQLite3        bool
 	pyNamespace          *string
 	protoNamespace       *string
@@ -123,7 +123,7 @@ type moduleData struct {
 	ldPlugins            []string
 	arPlugin             *string
 
-	perSrcCFlags map[string][]string
+	perSrcCFlags map[string][]ARG
 
 	defaultVars map[string]string
 
@@ -181,7 +181,7 @@ type moduleData struct {
 
 	simdSrcs []simdSrc
 
-	ragel6Flags []string
+	ragel6Flags []ARG
 	conflictMod *ModuleStmt
 
 	inducedDeps []string
@@ -192,7 +192,7 @@ type moduleData struct {
 // perSrcCFlagsFor / flatSrc gate the sparse per-source attribute maps on len, so
 // modules with no SRC-level CFLAGS and no flat-output markers (the vast majority)
 // skip the probe. Identical to a direct probe — an empty/nil map yields not-found.
-func (d *moduleData) perSrcCFlagsFor(src string) *[]string {
+func (d *moduleData) perSrcCFlagsFor(src string) *[]ARG {
 	if len(d.perSrcCFlags) == 0 {
 		return nil
 	}
@@ -214,9 +214,9 @@ func (d *moduleData) flatSrc(src string) bool {
 	return ok
 }
 
-func muslCFlags(on bool) []string {
+func muslCFlags(on bool) []ARG {
 	if on {
-		return []string{"-D_musl_"}
+		return []ARG{internArg("-D_musl_")}
 	}
 
 	return nil
@@ -712,7 +712,7 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 
 	d.usePython3 = true
 
-	d.moduleScopeCFlags = append(d.moduleScopeCFlags, "-DUSE_PYTHON3")
+	d.moduleScopeCFlags = append(d.moduleScopeCFlags, internArg("-DUSE_PYTHON3"))
 
 	d.addInclGlobal = append(d.addInclGlobal, pythonIncludeDir)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, pythonIncludeDir)
@@ -846,7 +846,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			d.setVars[v.Name] = value
 
 			if v.Name == "RAGEL6_FLAGS" {
-				d.ragel6Flags = []string{value}
+				d.ragel6Flags = []ARG{internArg(value)}
 			}
 		case *EndStmt:
 
@@ -865,18 +865,18 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			d.protoAddInclGlobal = append(d.protoAddInclGlobal, expandConfigVFSPaths(v.ProtoGlobalPaths, env)...)
 		case *CFlagsStmt:
 
-			d.cFlagsGlobal = append(d.cFlagsGlobal, expandStmtTokens(v.GlobalFlags, env)...)
-			d.cFlags = append(d.cFlags, expandStmtTokens(v.OwnFlags, env)...)
+			d.cFlagsGlobal = append(d.cFlagsGlobal, internArgs(expandStmtTokens(v.GlobalFlags, env))...)
+			d.cFlags = append(d.cFlags, internArgs(expandStmtTokens(v.OwnFlags, env))...)
 		case *CXXFlagsStmt:
 
-			d.cxxFlagsGlobal = append(d.cxxFlagsGlobal, expandStmtTokens(v.GlobalFlags, env)...)
-			d.cxxFlags = append(d.cxxFlags, expandStmtTokens(v.OwnFlags, env)...)
+			d.cxxFlagsGlobal = append(d.cxxFlagsGlobal, internArgs(expandStmtTokens(v.GlobalFlags, env))...)
+			d.cxxFlags = append(d.cxxFlags, internArgs(expandStmtTokens(v.OwnFlags, env))...)
 		case *CONLYFlagsStmt:
 
-			d.cOnlyFlagsGlobal = append(d.cOnlyFlagsGlobal, expandStmtTokens(v.GlobalFlags, env)...)
-			d.cOnlyFlags = append(d.cOnlyFlags, expandStmtTokens(v.OwnFlags, env)...)
+			d.cOnlyFlagsGlobal = append(d.cOnlyFlagsGlobal, internArgs(expandStmtTokens(v.GlobalFlags, env))...)
+			d.cOnlyFlags = append(d.cOnlyFlags, internArgs(expandStmtTokens(v.OwnFlags, env))...)
 		case *LDFlagsStmt:
-			d.ldFlags = append(d.ldFlags, expandStmtTokens(v.Flags, env)...)
+			d.ldFlags = append(d.ldFlags, internArgs(expandStmtTokens(v.Flags, env))...)
 		case *SrcDirStmt:
 
 			d.srcDir = &v.Dir
@@ -1266,23 +1266,23 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			ThrowFmt("YQL_LAST_ABI_VERSION expects exactly 0 arguments, got %d", len(v.Args))
 		}
 
-		d.cxxFlags = append(d.cxxFlags, "-DUSE_CURRENT_UDF_ABI_VERSION")
+		d.cxxFlags = append(d.cxxFlags, internArg("-DUSE_CURRENT_UDF_ABI_VERSION"))
 	case "YQL_ABI_VERSION":
 		if len(v.Args) != 3 {
 			ThrowFmt("YQL_ABI_VERSION expects exactly 3 arguments, got %d", len(v.Args))
 		}
 
 		d.cxxFlags = append(d.cxxFlags,
-			"-DUDF_ABI_VERSION_MAJOR="+v.Args[0],
-			"-DUDF_ABI_VERSION_MINOR="+v.Args[1],
-			"-DUDF_ABI_VERSION_PATCH="+v.Args[2],
+			internArg("-DUDF_ABI_VERSION_MAJOR="+v.Args[0]),
+			internArg("-DUDF_ABI_VERSION_MINOR="+v.Args[1]),
+			internArg("-DUDF_ABI_VERSION_PATCH="+v.Args[2]),
 		)
 	case "PROTOC_FATAL_WARNINGS":
 		if len(v.Args) != 0 {
 			ThrowFmt("PROTOC_FATAL_WARNINGS expects exactly 0 arguments, got %d", len(v.Args))
 		}
 
-		d.protocFlags = append(d.protocFlags, "--fatal_warnings")
+		d.protocFlags = append(d.protocFlags, internArg("--fatal_warnings"))
 	case "USE_COMMON_GOOGLE_APIS":
 		// upstream's _CPP_PROTO module-definition body (proto.conf:741-743)
 		// runs `PEERDIR += contrib/libs/googleapis-common-protos` so the
@@ -1302,7 +1302,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		const googleapisPeer = "contrib/libs/googleapis-common-protos"
 		d.peerdirs = append([]string{googleapisPeer}, d.peerdirs...)
 	case "FLATC_FLAGS":
-		d.flatcFlags = append(d.flatcFlags, expandListVars(v.Args, env)...)
+		d.flatcFlags = append(d.flatcFlags, internArgs(expandListVars(v.Args, env))...)
 	case "COPY_FILE", "COPY_FILE_WITH_CONTEXT":
 		args := expandListVars(v.Args, env)
 
@@ -1464,10 +1464,10 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 
 		if len(v.Args) > 1 {
 			if d.perSrcCFlags == nil {
-				d.perSrcCFlags = map[string][]string{}
+				d.perSrcCFlags = map[string][]ARG{}
 			}
 
-			extras := expandStmtTokens(v.Args[1:], env)
+			extras := internArgs(expandStmtTokens(v.Args[1:], env))
 			d.perSrcCFlags[filename] = append(d.perSrcCFlags[filename], extras...)
 		}
 	case "SRC_C_NO_LTO":
@@ -1824,13 +1824,13 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		if len(v.Args) >= 2 {
 			switch v.Args[0] {
 			case "SFLAGS":
-				d.sFlags = append(d.sFlags, expandStmtTokens(v.Args[1:], env)...)
+				d.sFlags = append(d.sFlags, internArgs(expandStmtTokens(v.Args[1:], env))...)
 			case "_PROTOC_FLAGS":
-				d.protocFlags = append(d.protocFlags, expandStmtTokens(v.Args[1:], env)...)
+				d.protocFlags = append(d.protocFlags, internArgs(expandStmtTokens(v.Args[1:], env))...)
 			case "RPATH_GLOBAL":
 				for _, arg := range expandStmtTokens(v.Args[1:], env) {
 					arg = strings.ReplaceAll(arg, `${"$"}`, "$")
-					d.rpathFlagsGlobal = append(d.rpathFlagsGlobal, arg)
+					d.rpathFlagsGlobal = append(d.rpathFlagsGlobal, internArg(arg))
 				}
 			}
 		}
@@ -1905,8 +1905,8 @@ func appendPyRegister(d *moduleData, name string, explicit bool) {
 	shortname := name[dot+1:]
 	mangled := pythonInitSuffix(name)
 	d.cFlags = append(d.cFlags,
-		"-DPyInit_"+shortname+"=PyInit_"+mangled,
-		"-Dinit_module_"+shortname+"=init_module_"+mangled,
+		internArg("-DPyInit_"+shortname+"=PyInit_"+mangled),
+		internArg("-Dinit_module_"+shortname+"=init_module_"+mangled),
 	)
 }
 

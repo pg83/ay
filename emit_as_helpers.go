@@ -50,10 +50,10 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 	cmdArgs := make([]string, 0, fixed+len(includes))
 
 	cmdArgs = append(cmdArgs, instance.Platform.Tools.CC, "--target="+instance.Platform.Triple)
-	cmdArgs = append(cmdArgs, bundle.ArchArgs...)
+	cmdArgs = appendArgStrs(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, "-B"+binPath)
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags)
-	cmdArgs = append(cmdArgs, in.SFlags...)
+	cmdArgs = appendArgStrs(cmdArgs, in.SFlags)
 	cmdArgs = append(cmdArgs, "-c", "-o", outputPath, inputPath)
 	cmdArgs = append(cmdArgs, includes...)
 
@@ -62,7 +62,7 @@ func composeASCmdArgs(instance ModuleInstance, outputPath, inputPath string, in 
 
 func composeASIncludes(in ModuleCCInputs) []string {
 	out := make([]string, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(in.PeerAddInclGlobal))
-	out = append(out, ccIncludesPrefix...)
+	out = appendArgStrs(out, ccIncludesPrefix)
 	out = appendAddIncl(out, in.AddIncl, in.InclArgs)
 	out = appendAddIncl(out, in.PeerAddInclGlobal, in.InclArgs)
 

@@ -42,13 +42,13 @@ func EmitLD(
 	dynamicPaths []VFS,
 	objcopyRefs []NodeRef,
 	objcopyPaths []VFS,
-	moduleCFlags []string,
-	peerCFlagsGlobal []string,
-	moduleScopeCFlags []string,
-	peerLDFlagsGlobal []string,
-	ownLDFlags []string,
-	ownRPathFlags []string,
-	peerRPathFlagsGlobal []string,
+	moduleCFlags []ARG,
+	peerCFlagsGlobal []ARG,
+	moduleScopeCFlags []ARG,
+	peerLDFlagsGlobal []ARG,
+	ownLDFlags []ARG,
+	ownRPathFlags []ARG,
+	peerRPathFlagsGlobal []ARG,
 	objAddLibsGlobal []string,
 	exportsScript *string,
 	noCompilerWarnings bool,
@@ -229,14 +229,14 @@ func composeLDCmdVcsInfo(tools Toolchain, vcsCPath string) []string {
 	}
 }
 
-func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []string, noCompilerWarnings bool) []string {
+func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings bool) []string {
 	bundle := compileFlagBundleFor(p)
 	cmdArgs := make([]string, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal)+len(moduleScopeCFlags))
 	cmdArgs = append(cmdArgs,
 		p.Tools.CC,
 		"--target="+p.Triple,
 	)
-	cmdArgs = append(cmdArgs, bundle.ArchArgs...)
+	cmdArgs = appendArgStrs(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs,
 		"-B"+binPath,
 		"-c",
@@ -253,7 +253,7 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 	// Forgetting p.CFlags here drops those two flags from this sub-cmd while
 	// the rest of the module's CC compiles keep them, producing the same
 	// post-defines tail divergence in every LD VCS sub-cmd.
-	preNoLibcExtras := make([]string, 0, len(p.CFlags)+len(moduleCFlags)+len(peerCFlagsGlobal))
+	preNoLibcExtras := make([]ARG, 0, len(p.CFlags)+len(moduleCFlags)+len(peerCFlagsGlobal))
 	preNoLibcExtras = append(preNoLibcExtras, p.CFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, moduleCFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
@@ -263,7 +263,7 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 	return cmdArgs
 }
 
-func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []string, exportsScript *string, wantsStrip bool) []string {
+func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal []ARG, objAddLibsGlobal []string, exportsScript *string, wantsStrip bool) []string {
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	argCap += 2 + len(pluginPaths)
@@ -328,7 +328,7 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 
 	bundle := compileFlagBundleFor(p)
 	cmdArgs = append(cmdArgs, "--target="+p.Triple)
-	cmdArgs = append(cmdArgs, bundle.ArchArgs...)
+	cmdArgs = appendArgStrs(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, "-B"+binPath)
 
 	cmdArgs = append(cmdArgs, "-Wl,--start-group")
@@ -344,7 +344,7 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 	return cmdArgs
 }
 
-func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []string, exportsScript *string, wantsStrip bool) []string {
+func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal []ARG, objAddLibsGlobal []string, exportsScript *string, wantsStrip bool) []string {
 	linkPrelude := []string{"-rdynamic"}
 	// EXPORTS_SCRIPT appends the version-script flag right after -rdynamic
 	// per upstream's EXPORTS_VALUE in build/conf/linkers/ld.conf:138 —
@@ -369,22 +369,21 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 	_ = dynamicPaths
 
 	trailer := linkPrelude // fresh local, unused after this point — keep appending in place
-	trailer = append(trailer, ownRPathFlags...)
+	trailer = appendArgStrs(trailer, ownRPathFlags)
 
 	if p.PIC {
 		trailer = append(trailer, "-fPIC")
 	}
 
 	trailer = append(trailer, p.LinkerSelectionGDBIndexFlags()...)
-	trailer = append(trailer, peerRPathFlagsGlobal...)
+	trailer = appendArgStrs(trailer, peerRPathFlagsGlobal)
 
 	if p.PIC {
 		trailer = append(trailer, "-fPIC")
 	}
 
 	trailer = append(trailer, p.LinkerSelectionTailFlags()...)
-	trailer = append(trailer, peerLDFlagsGlobal...)
-	trailer = append(trailer, ownLDFlags...)
+	trailer = appendArgStrs(trailer, peerLDFlagsGlobal, ownLDFlags)
 	trailer = append(trailer, objAddLibsGlobal...)
 	trailer = append(trailer, systemLibs...)
 
